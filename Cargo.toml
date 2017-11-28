@@ -1,0 +1,6 @@
+[package]
+name = "gbas"
+version = "0.1.0"
+authors = ["Yaron Tausky <yaron.tausky@gmail.com>"]
+
+[dependencies]
