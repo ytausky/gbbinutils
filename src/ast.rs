@@ -1,6 +1,7 @@
 #[derive(Debug, PartialEq)]
 pub struct EmitBytes {
-    mnemonic: String,
+    pub mnemonic: String,
 }
 
+#[cfg(test)]
 pub type AssemblyCommands = Vec<EmitBytes>;
