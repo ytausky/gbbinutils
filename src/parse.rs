@@ -6,17 +6,26 @@ fn parse_src(src: &str) -> ast::AssemblyCommands {
     let trimmed_src = src.trim();
     if let Some(first_space) = trimmed_src.find(' ') {
         let (mnemonic, operands) = trimmed_src.split_at(first_space);
-        let parsed_operands = match operands.trim() {
-            "bc" => vec![ast::Operand::RegisterPair(ast::RegisterPair::Bc)],
-            _ => vec![],
-        };
-        vec![make_emit_bytes(mnemonic, &parsed_operands)]
+        vec![make_emit_bytes(mnemonic, &parse_operands(operands))]
     } else {
         match trimmed_src {
             "nop" | "halt" | "stop" => vec![make_emit_bytes(trimmed_src, &[])],
             _ => vec![]
         }
     }
+}
+
+#[cfg(test)]
+fn parse_operands(src: &str) -> Vec<ast::Operand> {
+    let mut operands = vec![];
+    for op in src.split(',') {
+        match op.trim() {
+            "a" => operands.push(ast::Operand::Register(ast::Register::A)),
+            "bc" => operands.push(ast::Operand::RegisterPair(ast::RegisterPair::Bc)),
+            _ => panic!(),
+        }
+    }
+    operands
 }
 
 #[cfg(test)]
@@ -77,5 +86,12 @@ mod tests {
     #[test]
     fn parse_push_bc() {
         assert_ast_eq("push bc", &[("push", &[BC])])
+    }
+
+    const A: ast::Operand = ast::Operand::Register(ast::Register::A);
+
+    #[test]
+    fn parse_ld_a_a() {
+        assert_ast_eq("ld a, a", &[("ld", &[A, A])])
     }
 }

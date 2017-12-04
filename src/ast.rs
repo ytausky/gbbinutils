@@ -7,7 +7,15 @@ pub struct EmitBytes {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Operand {
     #[cfg(test)]
+    Register(Register),
+    #[cfg(test)]
     RegisterPair(RegisterPair),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Register {
+    #[cfg(test)]
+    A,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
