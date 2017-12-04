@@ -16,10 +16,10 @@ fn parse_src(src: &str) -> ast::AssemblyCommands {
 }
 
 #[cfg(test)]
-fn make_emit_bytes(mnemonic: &str, arguments: &[&str]) -> ast::EmitBytes {
+fn make_emit_bytes(mnemonic: &str, operands: &[&str]) -> ast::EmitBytes {
     ast::EmitBytes {
         mnemonic: mnemonic.to_owned(),
-        arguments: arguments.iter().map(|&x| x.to_owned()).collect(),
+        operands: operands.iter().map(|&x| x.to_owned()).collect(),
     }
 }
 
@@ -29,7 +29,7 @@ mod tests {
 
     fn assert_ast_eq(src: &str, commands: &[(&str, &[&str])]) {
         let expected_ast = commands.iter()
-                                   .map(|&(mnemonic, arguments)| make_emit_bytes(mnemonic, arguments))
+                                   .map(|&(mnemonic, operands)| make_emit_bytes(mnemonic, operands))
                                    .collect::<Vec<ast::EmitBytes>>();
         assert_eq!(parse_src(src), expected_ast)
     }
