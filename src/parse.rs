@@ -3,10 +3,12 @@ use ast;
 
 #[cfg(test)]
 fn parse_src(src: &str) -> ast::AssemblyCommands {
-    if src == "nop" {
-        vec![make_emit_bytes("nop")]
-    } else {
-        vec![]
+    let trimmed_src = src.trim();
+    match trimmed_src {
+        "nop" => vec![make_emit_bytes("nop")],
+        "halt" => vec![make_emit_bytes("halt")],
+        "stop" => vec![make_emit_bytes("stop")],
+        _ => vec![]
     }
 }
 
@@ -38,11 +40,25 @@ mod tests {
 
     #[test]
     fn parse_nop() {
-        assert_ast_eq("nop", &["nop"])
+        parse_nullary_instruction("nop")
     }
 
     #[test]
-    fn parse_nop_after_whitespace () {
+    fn parse_nop_after_whitespace() {
         assert_ast_eq("    nop", &["nop"])
+    }
+
+    #[test]
+    fn parse_halt() {
+        parse_nullary_instruction("halt")
+    }
+
+    #[test]
+    fn parse_stop() {
+        parse_nullary_instruction("stop")
+    }
+
+    fn parse_nullary_instruction(src: &str) {
+        assert_ast_eq(src, &[src])
     }
 }
