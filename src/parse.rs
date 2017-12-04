@@ -6,7 +6,11 @@ fn parse_src(src: &str) -> ast::AssemblyCommands {
     let trimmed_src = src.trim();
     if let Some(first_space) = trimmed_src.find(' ') {
         let (mnemonic, operands) = trimmed_src.split_at(first_space);
-        vec![make_emit_bytes(mnemonic, &[operands.trim()])]
+        let parsed_operands = match operands.trim() {
+            "bc" => vec![ast::Operand::RegisterPair(ast::RegisterPair::Bc)],
+            _ => vec![],
+        };
+        vec![make_emit_bytes(mnemonic, &parsed_operands)]
     } else {
         match trimmed_src {
             "nop" | "halt" | "stop" => vec![make_emit_bytes(trimmed_src, &[])],
@@ -16,10 +20,10 @@ fn parse_src(src: &str) -> ast::AssemblyCommands {
 }
 
 #[cfg(test)]
-fn make_emit_bytes(mnemonic: &str, operands: &[&str]) -> ast::EmitBytes {
+fn make_emit_bytes(mnemonic: &str, operands: &[ast::Operand]) -> ast::EmitBytes {
     ast::EmitBytes {
         mnemonic: mnemonic.to_owned(),
-        operands: operands.iter().map(|&x| x.to_owned()).collect(),
+        operands: operands.iter().map(|&x| x).collect(),
     }
 }
 
@@ -27,7 +31,7 @@ fn make_emit_bytes(mnemonic: &str, operands: &[&str]) -> ast::EmitBytes {
 mod tests {
     use super::*;
 
-    fn assert_ast_eq(src: &str, commands: &[(&str, &[&str])]) {
+    fn assert_ast_eq(src: &str, commands: &[(&str, &[ast::Operand])]) {
         let expected_ast = commands.iter()
                                    .map(|&(mnemonic, operands)| make_emit_bytes(mnemonic, operands))
                                    .collect::<Vec<ast::EmitBytes>>();
@@ -68,8 +72,10 @@ mod tests {
         assert_ast_eq(src, &[(src, &[])])
     }
 
+    const BC: ast::Operand = ast::Operand::RegisterPair(ast::RegisterPair::Bc);
+
     #[test]
     fn parse_push_bc() {
-        assert_ast_eq("push bc", &[("push", &["bc"])])
+        assert_ast_eq("push bc", &[("push", &[BC])])
     }
 }
