@@ -6,10 +6,10 @@ fn parse_src(src: &str) -> ast::AssemblyCommands {
     let trimmed_src = src.trim();
     if let Some(first_space) = trimmed_src.find(' ') {
         let (mnemonic, operands) = trimmed_src.split_at(first_space);
-        vec![make_emit_bytes(mnemonic, &parse_operands(operands))]
+        vec![ast::make_emit_bytes(mnemonic, &parse_operands(operands))]
     } else {
         match trimmed_src {
-            "nop" | "halt" | "stop" => vec![make_emit_bytes(trimmed_src, &[])],
+            "nop" | "halt" | "stop" => vec![ast::make_emit_bytes(trimmed_src, &[])],
             _ => vec![]
         }
     }
@@ -17,22 +17,16 @@ fn parse_src(src: &str) -> ast::AssemblyCommands {
 
 #[cfg(test)]
 fn parse_operands(src: &str) -> Vec<ast::Operand> {
-    let mut operands = vec![];
-    for op in src.split(',') {
-        match op.trim() {
-            "a" => operands.push(ast::Operand::Register(ast::Register::A)),
-            "bc" => operands.push(ast::Operand::RegisterPair(ast::RegisterPair::Bc)),
-            _ => panic!(),
-        }
-    }
-    operands
+    src.split(',').map(|op| parse_operand(op).unwrap()).collect()
 }
 
 #[cfg(test)]
-fn make_emit_bytes(mnemonic: &str, operands: &[ast::Operand]) -> ast::EmitBytes {
-    ast::EmitBytes {
-        mnemonic: mnemonic.to_owned(),
-        operands: operands.iter().map(|&x| x).collect(),
+fn parse_operand(src: &str) -> Option<ast::Operand> {
+    match src.trim() {
+        "a" => Some(ast::Operand::Register(ast::Register::A)),
+        "b" => Some(ast::Operand::Register(ast::Register::B)),
+        "bc" => Some(ast::Operand::RegisterPair(ast::RegisterPair::Bc)),
+        _ => None,
     }
 }
 
@@ -40,11 +34,14 @@ fn make_emit_bytes(mnemonic: &str, operands: &[ast::Operand]) -> ast::EmitBytes 
 mod tests {
     use super::*;
 
+    type Command<'a> = (&'a str, &'a[ast::Operand]);
+
+    fn make_ast(commands: &[Command]) -> ast::AssemblyCommands {
+        commands.iter().map(|&(mnemonic, operands)| ast::make_emit_bytes(mnemonic, operands)).collect()
+    }
+
     fn assert_ast_eq(src: &str, commands: &[(&str, &[ast::Operand])]) {
-        let expected_ast = commands.iter()
-                                   .map(|&(mnemonic, operands)| make_emit_bytes(mnemonic, operands))
-                                   .collect::<Vec<ast::EmitBytes>>();
-        assert_eq!(parse_src(src), expected_ast)
+        assert_eq!(parse_src(src), make_ast(commands))
     }
 
     #[test]
@@ -89,9 +86,15 @@ mod tests {
     }
 
     const A: ast::Operand = ast::Operand::Register(ast::Register::A);
+    const B: ast::Operand = ast::Operand::Register(ast::Register::B);
 
     #[test]
     fn parse_ld_a_a() {
         assert_ast_eq("ld a, a", &[("ld", &[A, A])])
+    }
+
+    #[test]
+    fn parse_ld_a_b() {
+        assert_ast_eq("ld a, b", &[("ld", &[A, B])])
     }
 }

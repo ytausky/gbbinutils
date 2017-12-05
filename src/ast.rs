@@ -16,6 +16,8 @@ pub enum Operand {
 pub enum Register {
     #[cfg(test)]
     A,
+    #[cfg(test)]
+    B,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -26,3 +28,11 @@ pub enum RegisterPair {
 
 #[cfg(test)]
 pub type AssemblyCommands = Vec<EmitBytes>;
+
+#[cfg(test)]
+pub fn make_emit_bytes(mnemonic: &str, operands: &[Operand]) -> EmitBytes {
+    EmitBytes {
+        mnemonic: mnemonic.to_owned(),
+        operands: operands.iter().cloned().collect(),
+    }
+}
