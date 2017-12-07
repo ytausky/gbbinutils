@@ -22,6 +22,7 @@ fn encode_ld(src: ast::Operand) -> u8 {
             match register {
                 ast::Register::A => 0x7f,
                 ast::Register::B => 0x78,
+                ast::Register::C => 0x79,
             }
         },
         _ => panic!(),
@@ -66,5 +67,10 @@ mod tests {
     #[test]
     fn encode_ld_a_b() {
         test_instruction("ld", &[ast::A, ast::B], &[0x78])
+    }
+
+    #[test]
+    fn encode_ld_a_c() {
+        test_instruction("ld", &[ast::A, ast::C], &[0x79])
     }
 }

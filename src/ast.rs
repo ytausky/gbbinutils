@@ -28,6 +28,8 @@ pub enum Register {
     A,
     #[cfg(test)]
     B,
+    #[cfg(test)]
+    C,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -40,6 +42,8 @@ pub enum RegisterPair {
 pub const A: Operand = Operand::Register(Register::A);
 #[cfg(test)]
 pub const B: Operand = Operand::Register(Register::B);
+#[cfg(test)]
+pub const C: Operand = Operand::Register(Register::C);
 
 #[cfg(test)]
 pub type AssemblyCommands = Vec<EmitBytes>;
