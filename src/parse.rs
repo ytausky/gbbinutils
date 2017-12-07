@@ -6,10 +6,10 @@ fn parse_src(src: &str) -> ast::AssemblyCommands {
     let trimmed_src = src.trim();
     if let Some(first_space) = trimmed_src.find(' ') {
         let (mnemonic, operands) = trimmed_src.split_at(first_space);
-        vec![ast::make_emit_bytes(mnemonic, &parse_operands(operands))]
+        vec![ast::EmitBytes::new(mnemonic, &parse_operands(operands))]
     } else {
         match trimmed_src {
-            "nop" | "halt" | "stop" => vec![ast::make_emit_bytes(trimmed_src, &[])],
+            "nop" | "halt" | "stop" => vec![ast::EmitBytes::new(trimmed_src, &[])],
             _ => vec![]
         }
     }
@@ -37,7 +37,7 @@ mod tests {
     type Command<'a> = (&'a str, &'a[ast::Operand]);
 
     fn make_ast(commands: &[Command]) -> ast::AssemblyCommands {
-        commands.iter().map(|&(mnemonic, operands)| ast::make_emit_bytes(mnemonic, operands)).collect()
+        commands.iter().map(|&(mnemonic, operands)| ast::EmitBytes::new(mnemonic, operands)).collect()
     }
 
     fn assert_ast_eq(src: &str, commands: &[(&str, &[ast::Operand])]) {

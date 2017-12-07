@@ -12,7 +12,7 @@ mod tests {
 
     #[test]
     fn encode_nop() {
-        let ast = ast::make_emit_bytes("nop", &[]);
+        let ast = ast::EmitBytes::new("nop", &[]);
         let mut code = vec![];
         generate_code(&ast, |byte| code.push(byte));
         assert_eq!(code, [0x00])

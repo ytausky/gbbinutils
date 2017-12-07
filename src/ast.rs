@@ -4,6 +4,16 @@ pub struct EmitBytes {
     pub operands: Vec<Operand>,
 }
 
+impl EmitBytes {
+    #[cfg(test)]
+    pub fn new(mnemonic: &str, operands: &[Operand]) -> EmitBytes {
+        EmitBytes {
+            mnemonic: mnemonic.to_owned(),
+            operands: operands.iter().cloned().collect(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Operand {
     #[cfg(test)]
@@ -28,11 +38,3 @@ pub enum RegisterPair {
 
 #[cfg(test)]
 pub type AssemblyCommands = Vec<EmitBytes>;
-
-#[cfg(test)]
-pub fn make_emit_bytes(mnemonic: &str, operands: &[Operand]) -> EmitBytes {
-    EmitBytes {
-        mnemonic: mnemonic.to_owned(),
-        operands: operands.iter().cloned().collect(),
-    }
-}
