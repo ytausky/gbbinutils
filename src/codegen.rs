@@ -2,7 +2,10 @@
 use ast;
 
 #[cfg(test)]
-fn generate_code<F: FnMut(u8)>(_ast_node: &ast::EmitBytes, mut sink: F) {
+fn generate_code<F: FnMut(u8)>(ast_node: &ast::EmitBytes, mut sink: F) {
+    if ast_node.mnemonic == "stop" {
+        sink(0x10)
+    };
     sink(0x00)
 }
 
@@ -16,5 +19,13 @@ mod tests {
         let mut code = vec![];
         generate_code(&ast, |byte| code.push(byte));
         assert_eq!(code, [0x00])
+    }
+
+    #[test]
+    fn encode_stop() {
+        let ast = ast::EmitBytes::new("stop", &[]);
+        let mut code = vec![];
+        generate_code(&ast, |byte| code.push(byte));
+        assert_eq!(code, [0x10, 0x00])
     }
 }
