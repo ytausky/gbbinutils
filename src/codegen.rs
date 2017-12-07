@@ -17,27 +17,25 @@ fn generate_code<F: FnMut(u8)>(ast_node: &ast::EmitBytes, mut sink: F) {
 mod tests {
     use super::*;
 
-    #[test]
-    fn encode_nop() {
-        let ast = ast::EmitBytes::new("nop", &[]);
+    fn test_nullary_instruction(mnemonic: &str, bytes: &[u8]) {
+        let ast = ast::EmitBytes::new(mnemonic, &[]);
         let mut code = vec![];
         generate_code(&ast, |byte| code.push(byte));
-        assert_eq!(code, [0x00])
+        assert_eq!(code, bytes)
+    }
+
+    #[test]
+    fn encode_nop() {
+        test_nullary_instruction("nop", &[0x00])
     }
 
     #[test]
     fn encode_stop() {
-        let ast = ast::EmitBytes::new("stop", &[]);
-        let mut code = vec![];
-        generate_code(&ast, |byte| code.push(byte));
-        assert_eq!(code, [0x10, 0x00])
+        test_nullary_instruction("stop", &[0x10, 0x00])
     }
 
     #[test]
     fn encode_halt() {
-        let ast = ast::EmitBytes::new("halt", &[]);
-        let mut code = vec![];
-        generate_code(&ast, |byte| code.push(byte));
-        assert_eq!(code, [0x76])
+        test_nullary_instruction("halt", &[0x76])
     }
 }
