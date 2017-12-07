@@ -5,13 +5,23 @@ use ast;
 fn generate_code<F: FnMut(u8)>(ast_node: &ast::EmitBytes, mut sink: F) {
     match ast_node.mnemonic.as_ref() {
         "halt" => sink(0x76),
-        "ld" => sink(0x7f),
+        "ld" => {
+            match ast_node.operands[1] {
+                ast::Operand::Register(register) => {
+                    match register {
+                        ast::Register::A => sink(0x7f),
+                        ast::Register::B => sink(0x78),
+                    }
+                },
+                _ => panic!(),
+            }
+        },
         _ => {
             if ast_node.mnemonic == "stop" {
                 sink(0x10)
             }
             sink(0x00)
-        }
+        },
     }
 }
 
@@ -48,5 +58,10 @@ mod tests {
     #[test]
     fn encode_ld_a_a() {
         test_instruction("ld", &[ast::A, ast::A], &[0x7f])
+    }
+
+    #[test]
+    fn encode_ld_a_b() {
+        test_instruction("ld", &[ast::A, ast::B], &[0x78])
     }
 }
