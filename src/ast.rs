@@ -37,4 +37,9 @@ pub enum RegisterPair {
 }
 
 #[cfg(test)]
+pub const A: Operand = Operand::Register(Register::A);
+#[cfg(test)]
+pub const B: Operand = Operand::Register(Register::B);
+
+#[cfg(test)]
 pub type AssemblyCommands = Vec<EmitBytes>;

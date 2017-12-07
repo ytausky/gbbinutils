@@ -106,16 +106,13 @@ mod tests {
         assert_ast_eq("push bc", &[("push", &[BC])])
     }
 
-    const A: ast::Operand = ast::Operand::Register(ast::Register::A);
-    const B: ast::Operand = ast::Operand::Register(ast::Register::B);
-
     #[test]
     fn parse_ld_a_a() {
-        assert_ast_eq("ld a, a", &[("ld", &[A, A])])
+        assert_ast_eq("ld a, a", &[("ld", &[ast::A, ast::A])])
     }
 
     #[test]
     fn parse_ld_a_b() {
-        assert_ast_eq("ld a, b", &[("ld", &[A, B])])
+        assert_ast_eq("ld a, b", &[("ld", &[ast::A, ast::B])])
     }
 }
