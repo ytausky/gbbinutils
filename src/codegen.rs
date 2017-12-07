@@ -18,14 +18,17 @@ fn generate_code<F: FnMut(u8)>(ast_node: &ast::EmitBytes, mut sink: F) {
 #[cfg(test)]
 fn encode_ld(src: ast::Operand) -> u8 {
     match src {
-        ast::Operand::Register(register) => {
-            match register {
-                ast::Register::A => 0x7f,
-                ast::Register::B => 0x78,
-                ast::Register::C => 0x79,
-            }
-        },
+        ast::Operand::Register(register) => 0b01_111_000 | encode_register(register),
         _ => panic!(),
+    }
+}
+
+#[cfg(test)]
+fn encode_register(register: ast::Register) -> u8 {
+    match register {
+        ast::Register::A => 0b111,
+        ast::Register::B => 0b000,
+        ast::Register::C => 0b001,
     }
 }
 
