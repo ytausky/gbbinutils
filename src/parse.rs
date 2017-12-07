@@ -2,15 +2,32 @@
 use ast;
 
 #[cfg(test)]
-fn parse_src(src: &str) -> ast::AssemblyCommands {
-    let trimmed_src = src.trim();
-    if let Some(first_space) = trimmed_src.find(' ') {
-        let (mnemonic, operands) = trimmed_src.split_at(first_space);
-        vec![ast::EmitBytes::new(mnemonic, &parse_operands(operands))]
-    } else {
-        match trimmed_src {
-            "nop" | "halt" | "stop" => vec![ast::EmitBytes::new(trimmed_src, &[])],
-            _ => vec![]
+fn parse_src(src: &str) -> Parser {
+    Parser {
+        src,
+    }
+}
+
+#[cfg(test)]
+struct Parser<'a> {
+    src: &'a str,
+}
+
+#[cfg(test)]
+impl<'a> Iterator for Parser<'a> {
+    type Item = ast::EmitBytes;
+
+    fn next(&mut self) -> Option<ast::EmitBytes> {
+        let trimmed_src = self.src.trim();
+        self.src = &"";
+        if let Some(first_space) = trimmed_src.find(' ') {
+            let (mnemonic, operands) = trimmed_src.split_at(first_space);
+            Some(ast::EmitBytes::new(mnemonic, &parse_operands(operands)))
+        } else {
+            match trimmed_src {
+                "nop" | "halt" | "stop" => Some(ast::EmitBytes::new(trimmed_src, &[])),
+                _ => None
+            }
         }
     }
 }
@@ -37,11 +54,15 @@ mod tests {
     type Command<'a> = (&'a str, &'a[ast::Operand]);
 
     fn make_ast(commands: &[Command]) -> ast::AssemblyCommands {
-        commands.iter().map(|&(mnemonic, operands)| ast::EmitBytes::new(mnemonic, operands)).collect()
+        commands.iter()
+                .map(|&(mnemonic, operands)| ast::EmitBytes::new(mnemonic, operands))
+                .collect()
     }
 
     fn assert_ast_eq(src: &str, commands: &[(&str, &[ast::Operand])]) {
-        assert_eq!(parse_src(src), make_ast(commands))
+        let actual = parse_src(src).collect::<Vec<ast::EmitBytes>>();
+        let expected = make_ast(commands);
+        assert_eq!(actual, expected)
     }
 
     #[test]
