@@ -30,6 +30,14 @@ pub enum Register {
     B,
     #[cfg(test)]
     C,
+    #[cfg(test)]
+    D,
+    #[cfg(test)]
+    E,
+    #[cfg(test)]
+    H,
+    #[cfg(test)]
+    L,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -44,6 +52,14 @@ pub const A: Operand = Operand::Register(Register::A);
 pub const B: Operand = Operand::Register(Register::B);
 #[cfg(test)]
 pub const C: Operand = Operand::Register(Register::C);
+#[cfg(test)]
+pub const D: Operand = Operand::Register(Register::D);
+#[cfg(test)]
+pub const E: Operand = Operand::Register(Register::E);
+#[cfg(test)]
+pub const H: Operand = Operand::Register(Register::H);
+#[cfg(test)]
+pub const L: Operand = Operand::Register(Register::L);
 
 #[cfg(test)]
 pub type AssemblyCommands = Vec<EmitBytes>;
