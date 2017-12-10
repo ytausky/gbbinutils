@@ -63,17 +63,15 @@ mod tests {
     }
 
     #[test]
-    fn encode_ld_a_a() {
-        test_instruction("ld", &[ast::A, ast::A], &[0x7f])
-    }
-
-    #[test]
-    fn encode_ld_a_b() {
-        test_instruction("ld", &[ast::A, ast::B], &[0x78])
-    }
-
-    #[test]
-    fn encode_ld_a_c() {
-        test_instruction("ld", &[ast::A, ast::C], &[0x79])
+    fn encode_8_bit_register_transfers() {
+        use ast::*;
+        let operands_and_encoding = vec![
+            (A, A, 0x7f),
+            (A, B, 0x78),
+            (A, C, 0x79),
+        ];
+        for (dest, src, opcode) in operands_and_encoding {
+            test_instruction("ld", &[dest, src], &[opcode])
+        }
     }
 }
