@@ -62,18 +62,15 @@ fn parse_operand(src: &str) -> Option<ast::Operand> {
 mod tests {
     use super::*;
 
-    type Command<'a> = (&'a str, &'a[ast::Operand]);
+    use ast::*;
 
-    fn make_ast(commands: &[Command]) -> Vec<ast::Instruction> {
-        commands.iter()
-                .map(|&(mnemonic, operands)| ast::Instruction::new(mnemonic, operands))
-                .collect()
+    fn inst(mnemonic: &str, operands: &[Operand]) -> Instruction {
+        Instruction::new(mnemonic, operands)
     }
 
-    fn assert_ast_eq(src: &str, commands: &[(&str, &[ast::Operand])]) {
-        let actual = parse_src(src).collect::<Vec<ast::Instruction>>();
-        let expected = make_ast(commands);
-        assert_eq!(actual, expected)
+    fn assert_ast_eq(src: &str, expected_ast: &[Instruction]) {
+        let actual = parse_src(src).collect::<Vec<Instruction>>();
+        assert_eq!(actual, expected_ast)
     }
 
     #[test]
@@ -93,7 +90,7 @@ mod tests {
 
     #[test]
     fn parse_nop_after_whitespace() {
-        assert_ast_eq("    nop", &[("nop", &[])])
+        assert_ast_eq("    nop", &[inst("nop", &[])])
     }
 
     #[test]
@@ -107,39 +104,39 @@ mod tests {
     }
 
     fn parse_nullary_instruction(src: &str) {
-        assert_ast_eq(src, &[(src, &[])])
+        assert_ast_eq(src, &[inst(src, &[])])
     }
 
-    const BC: ast::Operand = ast::Operand::RegisterPair(ast::RegisterPair::Bc);
+    const BC: Operand = Operand::RegisterPair(RegisterPair::Bc);
 
     #[test]
     fn parse_push_bc() {
-        assert_ast_eq("push bc", &[("push", &[BC])])
+        assert_ast_eq("push bc", &[inst("push", &[BC])])
     }
 
     #[test]
     fn parse_ld_a_a() {
-        assert_ast_eq("ld a, a", &[("ld", &[ast::A, ast::A])])
+        assert_ast_eq("ld a, a", &[inst("ld", &[A, A])])
     }
 
     #[test]
     fn parse_ld_a_b() {
-        assert_ast_eq("ld a, b", &[("ld", &[ast::A, ast::B])])
+        assert_ast_eq("ld a, b", &[inst("ld", &[A, B])])
     }
 
     #[test]
     fn parse_two_instructions() {
         assert_ast_eq("ld a, b\nld a, b", &[
-            ("ld", &[ast::A, ast::B]),
-            ("ld", &[ast::A, ast::B]),
+            inst("ld", &[A, B]),
+            inst("ld", &[A, B]),
         ])
     }
 
     #[test]
     fn parse_two_instructions_separated_by_blank_line() {
         assert_ast_eq("ld a, b\n\nld a, b", &[
-            ("ld", &[ast::A, ast::B]),
-            ("ld", &[ast::A, ast::B]),
+            inst("ld", &[A, B]),
+            inst("ld", &[A, B]),
         ])
     }
 }
