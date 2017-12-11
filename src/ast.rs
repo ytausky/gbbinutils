@@ -1,13 +1,13 @@
 #[derive(Debug, PartialEq)]
-pub struct EmitBytes {
+pub struct Instruction {
     pub mnemonic: String,
     pub operands: Vec<Operand>,
 }
 
-impl EmitBytes {
+impl Instruction {
     #[cfg(test)]
-    pub fn new(mnemonic: &str, operands: &[Operand]) -> EmitBytes {
-        EmitBytes {
+    pub fn new(mnemonic: &str, operands: &[Operand]) -> Instruction {
+        Instruction {
             mnemonic: mnemonic.to_owned(),
             operands: operands.iter().cloned().collect(),
         }
@@ -60,6 +60,3 @@ pub const E: Operand = Operand::Register(Register::E);
 pub const H: Operand = Operand::Register(Register::H);
 #[cfg(test)]
 pub const L: Operand = Operand::Register(Register::L);
-
-#[cfg(test)]
-pub type AssemblyCommands = Vec<EmitBytes>;

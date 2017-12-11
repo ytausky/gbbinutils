@@ -2,7 +2,7 @@
 use ast;
 
 #[cfg(test)]
-fn generate_code<F: FnMut(u8)>(ast_node: &ast::EmitBytes, mut sink: F) {
+fn generate_code<F: FnMut(u8)>(ast_node: &ast::Instruction, mut sink: F) {
     match ast_node.mnemonic.as_ref() {
         "halt" => sink(0x76),
         "ld" => sink(encode_ld(ast_node.operands[0], ast_node.operands[1])),
@@ -49,7 +49,7 @@ mod tests {
     use super::*;
 
     fn test_instruction(mnemonic: &str, operands: &[ast::Operand], bytes: &[u8]) {
-        let ast = ast::EmitBytes::new(mnemonic, operands);
+        let ast = ast::Instruction::new(mnemonic, operands);
         let mut code = vec![];
         generate_code(&ast, |byte| code.push(byte));
         assert_eq!(code, bytes)

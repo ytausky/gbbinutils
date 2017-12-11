@@ -18,9 +18,9 @@ struct Parser<'a> {
 
 #[cfg(test)]
 impl<'a> Iterator for Parser<'a> {
-    type Item = ast::EmitBytes;
+    type Item = ast::Instruction;
 
-    fn next(&mut self) -> Option<ast::EmitBytes> {
+    fn next(&mut self) -> Option<ast::Instruction> {
         let mut parsed_line = None;
         while parsed_line == None {
             parsed_line = parse_line(self.src.next()?)
@@ -30,14 +30,14 @@ impl<'a> Iterator for Parser<'a> {
 }
 
 #[cfg(test)]
-fn parse_line(line: &str) -> Option<ast::EmitBytes> {
+fn parse_line(line: &str) -> Option<ast::Instruction> {
     let trimmed_line = line.trim();
     if let Some(first_space) = trimmed_line.find(' ') {
         let (mnemonic, operands) = trimmed_line.split_at(first_space);
-        Some(ast::EmitBytes::new(mnemonic, &parse_operands(operands)))
+        Some(ast::Instruction::new(mnemonic, &parse_operands(operands)))
     } else {
         match trimmed_line {
-            "nop" | "halt" | "stop" => Some(ast::EmitBytes::new(trimmed_line, &[])),
+            "nop" | "halt" | "stop" => Some(ast::Instruction::new(trimmed_line, &[])),
             _ => None
         }
     }
@@ -64,14 +64,14 @@ mod tests {
 
     type Command<'a> = (&'a str, &'a[ast::Operand]);
 
-    fn make_ast(commands: &[Command]) -> ast::AssemblyCommands {
+    fn make_ast(commands: &[Command]) -> Vec<ast::Instruction> {
         commands.iter()
-                .map(|&(mnemonic, operands)| ast::EmitBytes::new(mnemonic, operands))
+                .map(|&(mnemonic, operands)| ast::Instruction::new(mnemonic, operands))
                 .collect()
     }
 
     fn assert_ast_eq(src: &str, commands: &[(&str, &[ast::Operand])]) {
-        let actual = parse_src(src).collect::<Vec<ast::EmitBytes>>();
+        let actual = parse_src(src).collect::<Vec<ast::Instruction>>();
         let expected = make_ast(commands);
         assert_eq!(actual, expected)
     }
