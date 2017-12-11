@@ -1,4 +1,10 @@
 #[derive(Debug, PartialEq)]
+pub enum AsmItem {
+    #[cfg(test)]
+    Instruction(Instruction),
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Instruction {
     pub mnemonic: String,
     pub operands: Vec<Operand>,

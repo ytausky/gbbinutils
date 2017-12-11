@@ -18,9 +18,9 @@ struct Parser<'a> {
 
 #[cfg(test)]
 impl<'a> Iterator for Parser<'a> {
-    type Item = ast::Instruction;
+    type Item = ast::AsmItem;
 
-    fn next(&mut self) -> Option<ast::Instruction> {
+    fn next(&mut self) -> Option<ast::AsmItem> {
         let mut parsed_line = None;
         while parsed_line == None {
             parsed_line = parse_line(self.src.next()?)
@@ -30,14 +30,14 @@ impl<'a> Iterator for Parser<'a> {
 }
 
 #[cfg(test)]
-fn parse_line(line: &str) -> Option<ast::Instruction> {
+fn parse_line(line: &str) -> Option<ast::AsmItem> {
     let trimmed_line = line.trim();
     if let Some(first_space) = trimmed_line.find(' ') {
         let (mnemonic, operands) = trimmed_line.split_at(first_space);
-        Some(ast::Instruction::new(mnemonic, &parse_operands(operands)))
+        Some(inst(mnemonic, &parse_operands(operands)))
     } else {
         match trimmed_line {
-            "nop" | "halt" | "stop" => Some(ast::Instruction::new(trimmed_line, &[])),
+            "nop" | "halt" | "stop" => Some(inst(trimmed_line, &[])),
             _ => None
         }
     }
@@ -59,17 +59,18 @@ fn parse_operand(src: &str) -> Option<ast::Operand> {
 }
 
 #[cfg(test)]
+fn inst(mnemonic: &str, operands: &[ast::Operand]) -> ast::AsmItem {
+    ast::AsmItem::Instruction(ast::Instruction::new(mnemonic, operands))
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
     use ast::*;
 
-    fn inst(mnemonic: &str, operands: &[Operand]) -> Instruction {
-        Instruction::new(mnemonic, operands)
-    }
-
-    fn assert_ast_eq(src: &str, expected_ast: &[Instruction]) {
-        let actual = parse_src(src).collect::<Vec<Instruction>>();
+    fn assert_ast_eq(src: &str, expected_ast: &[AsmItem]) {
+        let actual = parse_src(src).collect::<Vec<AsmItem>>();
         assert_eq!(actual, expected_ast)
     }
 
