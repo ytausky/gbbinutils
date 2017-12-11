@@ -2,15 +2,18 @@
 use ast;
 
 #[cfg(test)]
+use std::str;
+
+#[cfg(test)]
 fn parse_src(src: &str) -> Parser {
     Parser {
-        src,
+        src: src.lines(),
     }
 }
 
 #[cfg(test)]
 struct Parser<'a> {
-    src: &'a str,
+    src: str::Lines<'a>,
 }
 
 #[cfg(test)]
@@ -18,16 +21,20 @@ impl<'a> Iterator for Parser<'a> {
     type Item = ast::EmitBytes;
 
     fn next(&mut self) -> Option<ast::EmitBytes> {
-        let trimmed_src = self.src.trim();
-        self.src = &"";
-        if let Some(first_space) = trimmed_src.find(' ') {
-            let (mnemonic, operands) = trimmed_src.split_at(first_space);
-            Some(ast::EmitBytes::new(mnemonic, &parse_operands(operands)))
-        } else {
-            match trimmed_src {
-                "nop" | "halt" | "stop" => Some(ast::EmitBytes::new(trimmed_src, &[])),
-                _ => None
-            }
+        parse_line(self.src.next()?)
+    }
+}
+
+#[cfg(test)]
+fn parse_line(line: &str) -> Option<ast::EmitBytes> {
+    let trimmed_line = line.trim();
+    if let Some(first_space) = trimmed_line.find(' ') {
+        let (mnemonic, operands) = trimmed_line.split_at(first_space);
+        Some(ast::EmitBytes::new(mnemonic, &parse_operands(operands)))
+    } else {
+        match trimmed_line {
+            "nop" | "halt" | "stop" => Some(ast::EmitBytes::new(trimmed_line, &[])),
+            _ => None
         }
     }
 }
@@ -114,5 +121,10 @@ mod tests {
     #[test]
     fn parse_ld_a_b() {
         assert_ast_eq("ld a, b", &[("ld", &[ast::A, ast::B])])
+    }
+
+    #[test]
+    fn parse_two_instructions() {
+        assert_ast_eq("ld a, b\nld a, b", &[("ld", &[ast::A, ast::B]), ("ld", &[ast::A, ast::B])])
     }
 }
