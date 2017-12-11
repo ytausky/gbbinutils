@@ -21,7 +21,11 @@ impl<'a> Iterator for Parser<'a> {
     type Item = ast::EmitBytes;
 
     fn next(&mut self) -> Option<ast::EmitBytes> {
-        parse_line(self.src.next()?)
+        let mut parsed_line = None;
+        while parsed_line == None {
+            parsed_line = parse_line(self.src.next()?)
+        };
+        parsed_line
     }
 }
 
@@ -125,6 +129,17 @@ mod tests {
 
     #[test]
     fn parse_two_instructions() {
-        assert_ast_eq("ld a, b\nld a, b", &[("ld", &[ast::A, ast::B]), ("ld", &[ast::A, ast::B])])
+        assert_ast_eq("ld a, b\nld a, b", &[
+            ("ld", &[ast::A, ast::B]),
+            ("ld", &[ast::A, ast::B]),
+        ])
+    }
+
+    #[test]
+    fn parse_two_instructions_separated_by_blank_line() {
+        assert_ast_eq("ld a, b\n\nld a, b", &[
+            ("ld", &[ast::A, ast::B]),
+            ("ld", &[ast::A, ast::B]),
+        ])
     }
 }
