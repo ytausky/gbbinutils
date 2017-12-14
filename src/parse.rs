@@ -18,9 +18,9 @@ struct Parser<'a> {
 
 #[cfg(test)]
 impl<'a> Iterator for Parser<'a> {
-    type Item = ast::AsmItem;
+    type Item = ast::AsmItem<'a>;
 
-    fn next(&mut self) -> Option<ast::AsmItem> {
+    fn next(&mut self) -> Option<ast::AsmItem<'a>> {
         let mut parsed_line = None;
         while parsed_line == None {
             parsed_line = parse_line(self.src.next()?)
@@ -34,13 +34,22 @@ fn parse_line(line: &str) -> Option<ast::AsmItem> {
     let trimmed_line = line.trim();
     if let Some(first_space) = trimmed_line.find(' ') {
         let (mnemonic, operands) = trimmed_line.split_at(first_space);
-        Some(inst(mnemonic, &parse_operands(operands)))
+        match mnemonic {
+            "include" => Some(include(parse_include_path(operands))),
+            _ => Some(inst(mnemonic, &parse_operands(operands)))
+        }
     } else {
         match trimmed_line {
             "nop" | "halt" | "stop" => Some(inst(trimmed_line, &[])),
             _ => None
         }
     }
+}
+
+#[cfg(test)]
+fn parse_include_path(path: &str) -> &str {
+    let trimmed_path = path.trim();
+    &trimmed_path[1 .. trimmed_path.len() - 1]
 }
 
 #[cfg(test)]
@@ -59,8 +68,13 @@ fn parse_operand(src: &str) -> Option<ast::Operand> {
 }
 
 #[cfg(test)]
-fn inst(mnemonic: &str, operands: &[ast::Operand]) -> ast::AsmItem {
+fn inst<'a>(mnemonic: &str, operands: &[ast::Operand]) -> ast::AsmItem<'a> {
     ast::AsmItem::Instruction(ast::Instruction::new(mnemonic, operands))
+}
+
+#[cfg(test)]
+fn include(path: &str) -> ast::AsmItem {
+    ast::AsmItem::Include(path)
 }
 
 #[cfg(test)]
@@ -139,5 +153,10 @@ mod tests {
             inst("ld", &[A, B]),
             inst("ld", &[A, B]),
         ])
+    }
+
+    #[test]
+    fn parse_include() {
+        assert_ast_eq("include \"file.asm\"", &[include("file.asm")])
     }
 }

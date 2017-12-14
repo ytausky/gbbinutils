@@ -1,5 +1,8 @@
+#[cfg(test)]
 #[derive(Debug, PartialEq)]
-pub enum AsmItem {
+pub enum AsmItem<'a> {
+    #[cfg(test)]
+    Include(&'a str),
     #[cfg(test)]
     Instruction(Instruction),
 }
