@@ -31,35 +31,36 @@ impl<'a> Iterator for Parser<'a> {
 
 #[cfg(test)]
 fn parse_line(line: &str) -> Option<ast::AsmItem> {
-    let trimmed_line = line.trim();
-    if let Some(first_space) = trimmed_line.find(' ') {
-        let (mnemonic, operands) = trimmed_line.split_at(first_space);
-        match mnemonic {
-            "include" => Some(include(parse_include_path(operands))),
-            _ => Some(inst(mnemonic, &parse_operands(operands)))
+    let mut word_iterator = line.split_whitespace();
+    if let Some(first_word) = word_iterator.next() {
+        match first_word {
+            "nop" | "halt" | "stop" => Some(inst(first_word, &[])),
+            "include" => Some(include(parse_include_path(word_iterator.next().unwrap()))),
+            _ => Some(inst(first_word, &parse_operands(word_iterator))),
         }
     } else {
-        match trimmed_line {
-            "nop" | "halt" | "stop" => Some(inst(trimmed_line, &[])),
-            _ => None
-        }
+        None
     }
 }
 
 #[cfg(test)]
 fn parse_include_path(path: &str) -> &str {
-    let trimmed_path = path.trim();
-    &trimmed_path[1 .. trimmed_path.len() - 1]
+    &path[1 .. path.len() - 1]
 }
 
 #[cfg(test)]
-fn parse_operands(src: &str) -> Vec<ast::Operand> {
-    src.split(',').map(|op| parse_operand(op).unwrap()).collect()
+fn parse_operands<'a, I: Iterator<Item=&'a str>>(word_iterator: I) -> Vec<ast::Operand> {
+    word_iterator.map(|op| parse_operand(op).unwrap()).collect()
 }
 
 #[cfg(test)]
 fn parse_operand(src: &str) -> Option<ast::Operand> {
-    match src.trim() {
+    let without_comma = if src.ends_with(',') {
+        &src[0 .. src.len() - 1]
+    } else {
+        src
+    };
+    match without_comma {
         "a" => Some(ast::Operand::Register(ast::Register::A)),
         "b" => Some(ast::Operand::Register(ast::Register::B)),
         "bc" => Some(ast::Operand::RegisterPair(ast::RegisterPair::Bc)),
