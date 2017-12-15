@@ -6,11 +6,11 @@ use keyword;
 
 #[cfg(test)]
 fn generate_code<F: FnMut(u8)>(ast_node: &ast::Instruction, mut sink: F) {
-    match ast_node.mnemonic.as_ref() {
-        "halt" => sink(0x76),
-        "ld" => sink(encode_ld(ast_node.operands[0], ast_node.operands[1])),
+    match ast_node.mnemonic {
+        keyword::Mnemonic::Halt => sink(0x76),
+        keyword::Mnemonic::Ld => sink(encode_ld(ast_node.operands[0], ast_node.operands[1])),
         _ => {
-            if ast_node.mnemonic == "stop" {
+            if ast_node.mnemonic == keyword::Mnemonic::Stop {
                 sink(0x10)
             }
             sink(0x00)
@@ -51,30 +51,32 @@ fn encode_register(register: keyword::Register) -> u8 {
 mod tests {
     use super::*;
 
-    fn test_instruction(mnemonic: &str, operands: &[ast::Operand], bytes: &[u8]) {
+    use keyword::Mnemonic::*;
+
+    fn test_instruction(mnemonic: keyword::Mnemonic, operands: &[ast::Operand], bytes: &[u8]) {
         let ast = ast::Instruction::new(mnemonic, operands);
         let mut code = vec![];
         generate_code(&ast, |byte| code.push(byte));
         assert_eq!(code, bytes)
     }
 
-    fn test_nullary_instruction(mnemonic: &str, bytes: &[u8]) {
+    fn test_nullary_instruction(mnemonic: keyword::Mnemonic, bytes: &[u8]) {
         test_instruction(mnemonic, &[], bytes)
     }
 
     #[test]
     fn encode_nop() {
-        test_nullary_instruction("nop", &[0x00])
+        test_nullary_instruction(Nop, &[0x00])
     }
 
     #[test]
     fn encode_stop() {
-        test_nullary_instruction("stop", &[0x10, 0x00])
+        test_nullary_instruction(Stop, &[0x10, 0x00])
     }
 
     #[test]
     fn encode_halt() {
-        test_nullary_instruction("halt", &[0x76])
+        test_nullary_instruction(Halt, &[0x76])
     }
 
     #[test]
@@ -132,7 +134,7 @@ mod tests {
             (L, L, 0x6d),
         ];
         for (dest, src, opcode) in operands_and_encoding {
-            test_instruction("ld", &[dest, src], &[opcode])
+            test_instruction(Ld, &[dest, src], &[opcode])
         }
     }
 }

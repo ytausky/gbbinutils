@@ -36,13 +36,26 @@ impl<'a> Iterator for Parser<'a> {
 fn parse_line(line: &str) -> Option<ast::AsmItem> {
     let mut word_iterator = line.split_whitespace();
     if let Some(first_word) = word_iterator.next() {
-        match first_word {
-            "nop" | "halt" | "stop" => Some(inst(first_word, &[])),
-            "include" => Some(include(parse_include_path(word_iterator.next().unwrap()))),
-            _ => Some(inst(first_word, &parse_operands(word_iterator))),
+        let first_mnemonic = parse_mnemonic(first_word);
+        match first_mnemonic {
+            keyword::Mnemonic::Include => Some(include(parse_include_path(word_iterator.next().unwrap()))),
+            _ => Some(inst(first_mnemonic, &parse_operands(word_iterator))),
         }
     } else {
         None
+    }
+}
+
+#[cfg(test)]
+fn parse_mnemonic(spelling: &str) -> keyword::Mnemonic {
+    match spelling {
+        "halt" => keyword::Mnemonic::Halt,
+        "include" => keyword::Mnemonic::Include,
+        "ld" => keyword::Mnemonic::Ld,
+        "nop" => keyword::Mnemonic::Nop,
+        "push" => keyword::Mnemonic::Push,
+        "stop" => keyword::Mnemonic::Stop,
+        _ => unimplemented!(),
     }
 }
 
@@ -72,7 +85,7 @@ fn parse_operand(src: &str) -> Option<ast::Operand> {
 }
 
 #[cfg(test)]
-fn inst<'a>(mnemonic: &str, operands: &[ast::Operand]) -> ast::AsmItem<'a> {
+fn inst<'a>(mnemonic: keyword::Mnemonic, operands: &[ast::Operand]) -> ast::AsmItem<'a> {
     ast::AsmItem::Instruction(ast::Instruction::new(mnemonic, operands))
 }
 
@@ -86,6 +99,8 @@ mod tests {
     use super::*;
 
     use ast::*;
+
+    use keyword::Mnemonic::*;
 
     fn assert_ast_eq(src: &str, expected_ast: &[AsmItem]) {
         let actual = parse_src(src).collect::<Vec<AsmItem>>();
@@ -109,7 +124,7 @@ mod tests {
 
     #[test]
     fn parse_nop_after_whitespace() {
-        assert_ast_eq("    nop", &[inst("nop", &[])])
+        assert_ast_eq("    nop", &[inst(Nop, &[])])
     }
 
     #[test]
@@ -123,37 +138,37 @@ mod tests {
     }
 
     fn parse_nullary_instruction(src: &str) {
-        assert_ast_eq(src, &[inst(src, &[])])
+        assert_ast_eq(src, &[inst(parse_mnemonic(src), &[])])
     }
 
     #[test]
     fn parse_push_bc() {
-        assert_ast_eq("push bc", &[inst("push", &[BC])])
+        assert_ast_eq("push bc", &[inst(Push, &[BC])])
     }
 
     #[test]
     fn parse_ld_a_a() {
-        assert_ast_eq("ld a, a", &[inst("ld", &[A, A])])
+        assert_ast_eq("ld a, a", &[inst(Ld, &[A, A])])
     }
 
     #[test]
     fn parse_ld_a_b() {
-        assert_ast_eq("ld a, b", &[inst("ld", &[A, B])])
+        assert_ast_eq("ld a, b", &[inst(Ld, &[A, B])])
     }
 
     #[test]
     fn parse_two_instructions() {
         assert_ast_eq("ld a, b\nld a, b", &[
-            inst("ld", &[A, B]),
-            inst("ld", &[A, B]),
+            inst(Ld, &[A, B]),
+            inst(Ld, &[A, B]),
         ])
     }
 
     #[test]
     fn parse_two_instructions_separated_by_blank_line() {
         assert_ast_eq("ld a, b\n\nld a, b", &[
-            inst("ld", &[A, B]),
-            inst("ld", &[A, B]),
+            inst(Ld, &[A, B]),
+            inst(Ld, &[A, B]),
         ])
     }
 

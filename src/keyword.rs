@@ -1,3 +1,14 @@
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Mnemonic {
+    Halt,
+    Include,
+    Ld,
+    Nop,
+    Push,
+    Stop,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Register {
     #[cfg(test)]

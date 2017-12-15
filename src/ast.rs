@@ -10,17 +10,19 @@ pub enum AsmItem<'a> {
     Instruction(Instruction),
 }
 
+#[cfg(test)]
 #[derive(Debug, PartialEq)]
 pub struct Instruction {
-    pub mnemonic: String,
+    pub mnemonic: keyword::Mnemonic,
     pub operands: Vec<Operand>,
 }
 
+#[cfg(test)]
 impl Instruction {
     #[cfg(test)]
-    pub fn new(mnemonic: &str, operands: &[Operand]) -> Instruction {
+    pub fn new(mnemonic: keyword::Mnemonic, operands: &[Operand]) -> Instruction {
         Instruction {
-            mnemonic: mnemonic.to_owned(),
+            mnemonic: mnemonic,
             operands: operands.iter().cloned().collect(),
         }
     }
