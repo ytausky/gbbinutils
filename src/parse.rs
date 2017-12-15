@@ -2,6 +2,9 @@
 use ast;
 
 #[cfg(test)]
+use keyword;
+
+#[cfg(test)]
 use std::str;
 
 #[cfg(test)]
@@ -61,9 +64,9 @@ fn parse_operand(src: &str) -> Option<ast::Operand> {
         src
     };
     match without_comma {
-        "a" => Some(ast::Operand::Register(ast::Register::A)),
-        "b" => Some(ast::Operand::Register(ast::Register::B)),
-        "bc" => Some(ast::Operand::RegisterPair(ast::RegisterPair::Bc)),
+        "a" => Some(ast::Operand::Register(keyword::Register::A)),
+        "b" => Some(ast::Operand::Register(keyword::Register::B)),
+        "bc" => Some(ast::Operand::RegisterPair(keyword::RegisterPair::Bc)),
         _ => None,
     }
 }
@@ -122,8 +125,6 @@ mod tests {
     fn parse_nullary_instruction(src: &str) {
         assert_ast_eq(src, &[inst(src, &[])])
     }
-
-    const BC: Operand = Operand::RegisterPair(RegisterPair::Bc);
 
     #[test]
     fn parse_push_bc() {

@@ -2,6 +2,9 @@
 use ast;
 
 #[cfg(test)]
+use keyword;
+
+#[cfg(test)]
 fn generate_code<F: FnMut(u8)>(ast_node: &ast::Instruction, mut sink: F) {
     match ast_node.mnemonic.as_ref() {
         "halt" => sink(0x76),
@@ -27,20 +30,20 @@ fn encode_ld(dest: ast::Operand, src: ast::Operand) -> u8 {
 }
 
 #[cfg(test)]
-fn encode_ld_to_reg_from_reg(dest: ast::Register, src: ast::Register) -> u8 {
+fn encode_ld_to_reg_from_reg(dest: keyword::Register, src: keyword::Register) -> u8 {
     0b01_000_000 | (encode_register(dest) << 3)| encode_register(src)
 }
 
 #[cfg(test)]
-fn encode_register(register: ast::Register) -> u8 {
+fn encode_register(register: keyword::Register) -> u8 {
     match register {
-        ast::Register::A => 0b111,
-        ast::Register::B => 0b000,
-        ast::Register::C => 0b001,
-        ast::Register::D => 0b010,
-        ast::Register::E => 0b011,
-        ast::Register::H => 0b100,
-        ast::Register::L => 0b101,
+        keyword::Register::A => 0b111,
+        keyword::Register::B => 0b000,
+        keyword::Register::C => 0b001,
+        keyword::Register::D => 0b010,
+        keyword::Register::E => 0b011,
+        keyword::Register::H => 0b100,
+        keyword::Register::L => 0b101,
     }
 }
 

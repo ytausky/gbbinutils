@@ -1,4 +1,7 @@
 #[cfg(test)]
+use keyword;
+
+#[cfg(test)]
 #[derive(Debug, PartialEq)]
 pub enum AsmItem<'a> {
     #[cfg(test)]
@@ -26,46 +29,25 @@ impl Instruction {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Operand {
     #[cfg(test)]
-    Register(Register),
+    Register(keyword::Register),
     #[cfg(test)]
-    RegisterPair(RegisterPair),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Register {
-    #[cfg(test)]
-    A,
-    #[cfg(test)]
-    B,
-    #[cfg(test)]
-    C,
-    #[cfg(test)]
-    D,
-    #[cfg(test)]
-    E,
-    #[cfg(test)]
-    H,
-    #[cfg(test)]
-    L,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum RegisterPair {
-    #[cfg(test)]
-    Bc,
+    RegisterPair(keyword::RegisterPair),
 }
 
 #[cfg(test)]
-pub const A: Operand = Operand::Register(Register::A);
+pub const A: Operand = Operand::Register(keyword::Register::A);
 #[cfg(test)]
-pub const B: Operand = Operand::Register(Register::B);
+pub const B: Operand = Operand::Register(keyword::Register::B);
 #[cfg(test)]
-pub const C: Operand = Operand::Register(Register::C);
+pub const C: Operand = Operand::Register(keyword::Register::C);
 #[cfg(test)]
-pub const D: Operand = Operand::Register(Register::D);
+pub const D: Operand = Operand::Register(keyword::Register::D);
 #[cfg(test)]
-pub const E: Operand = Operand::Register(Register::E);
+pub const E: Operand = Operand::Register(keyword::Register::E);
 #[cfg(test)]
-pub const H: Operand = Operand::Register(Register::H);
+pub const H: Operand = Operand::Register(keyword::Register::H);
 #[cfg(test)]
-pub const L: Operand = Operand::Register(Register::L);
+pub const L: Operand = Operand::Register(keyword::Register::L);
+
+#[cfg(test)]
+pub const BC: Operand = Operand::RegisterPair(keyword::RegisterPair::Bc);

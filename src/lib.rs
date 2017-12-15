@@ -1,5 +1,6 @@
 mod ast;
 mod codegen;
+mod keyword;
 mod parse;
 
 #[cfg(test)]
