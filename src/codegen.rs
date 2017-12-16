@@ -6,11 +6,12 @@ use keyword;
 
 #[cfg(test)]
 fn generate_code<F: FnMut(u8)>(ast_node: &ast::Instruction, mut sink: F) {
+    use keyword::Mnemonic::*;
     match ast_node.mnemonic {
-        keyword::Mnemonic::Halt => sink(0x76),
-        keyword::Mnemonic::Ld => sink(encode_ld(ast_node.operands[0], ast_node.operands[1])),
+        Halt => sink(0x76),
+        Ld => sink(encode_ld(ast_node.operands[0], ast_node.operands[1])),
         _ => {
-            if ast_node.mnemonic == keyword::Mnemonic::Stop {
+            if ast_node.mnemonic == Stop {
                 sink(0x10)
             }
             sink(0x00)
@@ -36,14 +37,15 @@ fn encode_ld_to_reg_from_reg(dest: keyword::Register, src: keyword::Register) ->
 
 #[cfg(test)]
 fn encode_register(register: keyword::Register) -> u8 {
+    use keyword::Register::*;
     match register {
-        keyword::Register::A => 0b111,
-        keyword::Register::B => 0b000,
-        keyword::Register::C => 0b001,
-        keyword::Register::D => 0b010,
-        keyword::Register::E => 0b011,
-        keyword::Register::H => 0b100,
-        keyword::Register::L => 0b101,
+        A => 0b111,
+        B => 0b000,
+        C => 0b001,
+        D => 0b010,
+        E => 0b011,
+        H => 0b100,
+        L => 0b101,
     }
 }
 

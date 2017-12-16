@@ -48,13 +48,14 @@ fn parse_line(line: &str) -> Option<ast::AsmItem> {
 
 #[cfg(test)]
 fn parse_mnemonic(spelling: &str) -> keyword::Mnemonic {
+    use keyword::Mnemonic::*;
     match spelling {
-        "halt" => keyword::Mnemonic::Halt,
-        "include" => keyword::Mnemonic::Include,
-        "ld" => keyword::Mnemonic::Ld,
-        "nop" => keyword::Mnemonic::Nop,
-        "push" => keyword::Mnemonic::Push,
-        "stop" => keyword::Mnemonic::Stop,
+        "halt" => Halt,
+        "include" => Include,
+        "ld" => Ld,
+        "nop" => Nop,
+        "push" => Push,
+        "stop" => Stop,
         _ => unimplemented!(),
     }
 }
