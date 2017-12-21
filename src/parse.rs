@@ -36,13 +36,18 @@ impl<'a> Iterator for Parser<'a> {
 fn parse_line(line: &str) -> Option<ast::AsmItem> {
     let mut word_iterator = line.split_whitespace();
     if let Some(first_word) = word_iterator.next() {
-        let first_mnemonic = parse_mnemonic(first_word);
-        match first_mnemonic {
-            keyword::Mnemonic::Include => Some(include(parse_include_path(word_iterator.next().unwrap()))),
-            _ => Some(inst(first_mnemonic, &parse_operands(word_iterator))),
-        }
+        Some(parse_nonempty_line(first_word, word_iterator))
     } else {
         None
+    }
+}
+
+#[cfg(test)]
+fn parse_nonempty_line<'a, I>(first_word: &'a str, mut next_words: I) -> ast::AsmItem
+    where I: Iterator<Item=&'a str> {
+    match parse_mnemonic(first_word) {
+        keyword::Mnemonic::Include => include(parse_include_path(next_words.next().unwrap())),
+        mnemonic => inst(mnemonic, &parse_operands(next_words)),
     }
 }
 
