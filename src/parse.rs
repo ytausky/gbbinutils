@@ -35,11 +35,7 @@ impl<'a> Iterator for Parser<'a> {
 #[cfg(test)]
 fn parse_line(line: &str) -> Option<ast::AsmItem> {
     let mut word_iterator = line.split_whitespace();
-    if let Some(first_word) = word_iterator.next() {
-        Some(parse_nonempty_line(first_word, word_iterator))
-    } else {
-        None
-    }
+    word_iterator.next().map(|first_word| parse_nonempty_line(first_word, word_iterator))
 }
 
 #[cfg(test)]
