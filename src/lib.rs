@@ -3,6 +3,17 @@ mod codegen;
 mod keyword;
 mod parse;
 
+pub struct AnalyzedSrc;
+
+pub fn analyze_file(name: &str) -> AnalyzedSrc {
+    use std::io::prelude::*;
+    let mut file = std::fs::File::open(name).unwrap();
+    let mut src = String::new();
+    file.read_to_string(&mut src).unwrap();
+    parse::parse_src(&src).next().unwrap();
+    AnalyzedSrc {}
+}
+
 #[cfg(test)]
 struct FirstPass;
 

@@ -1,21 +1,17 @@
-#[cfg(test)]
 use keyword;
 
-#[cfg(test)]
 #[derive(Debug, PartialEq)]
 pub enum AsmItem<'a> {
     Include(&'a str),
     Instruction(Instruction),
 }
 
-#[cfg(test)]
 #[derive(Debug, PartialEq)]
 pub struct Instruction {
     pub mnemonic: keyword::Mnemonic,
     pub operands: Vec<Operand>,
 }
 
-#[cfg(test)]
 impl Instruction {
     pub fn new(mnemonic: keyword::Mnemonic, operands: &[Operand]) -> Instruction {
         Instruction {
@@ -25,7 +21,6 @@ impl Instruction {
     }
 }
 
-#[cfg(test)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Operand {
     Register(keyword::Register),

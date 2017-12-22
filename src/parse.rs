@@ -1,25 +1,18 @@
-#[cfg(test)]
 use ast;
-
-#[cfg(test)]
 use keyword;
 
-#[cfg(test)]
 use std::str;
 
-#[cfg(test)]
-fn parse_src(src: &str) -> Parser {
+pub fn parse_src(src: &str) -> Parser {
     Parser {
         src: src.lines(),
     }
 }
 
-#[cfg(test)]
-struct Parser<'a> {
+pub struct Parser<'a> {
     src: str::Lines<'a>,
 }
 
-#[cfg(test)]
 impl<'a> Iterator for Parser<'a> {
     type Item = ast::AsmItem<'a>;
 
@@ -32,13 +25,11 @@ impl<'a> Iterator for Parser<'a> {
     }
 }
 
-#[cfg(test)]
 fn parse_line(line: &str) -> Option<ast::AsmItem> {
     let mut word_iterator = line.split_whitespace();
     word_iterator.next().map(|first_word| parse_nonempty_line(first_word, word_iterator))
 }
 
-#[cfg(test)]
 fn parse_nonempty_line<'a, I>(first_word: &'a str, mut next_words: I) -> ast::AsmItem
     where I: Iterator<Item=&'a str> {
     match parse_mnemonic(first_word) {
@@ -47,7 +38,6 @@ fn parse_nonempty_line<'a, I>(first_word: &'a str, mut next_words: I) -> ast::As
     }
 }
 
-#[cfg(test)]
 fn parse_mnemonic(spelling: &str) -> keyword::Mnemonic {
     use keyword::Mnemonic::*;
     match spelling {
@@ -61,17 +51,14 @@ fn parse_mnemonic(spelling: &str) -> keyword::Mnemonic {
     }
 }
 
-#[cfg(test)]
 fn parse_include_path(path: &str) -> &str {
     &path[1 .. path.len() - 1]
 }
 
-#[cfg(test)]
 fn parse_operands<'a, I: Iterator<Item=&'a str>>(word_iterator: I) -> Vec<ast::Operand> {
     word_iterator.map(|op| parse_operand(op).unwrap()).collect()
 }
 
-#[cfg(test)]
 fn parse_operand(src: &str) -> Option<ast::Operand> {
     let without_comma = if src.ends_with(',') {
         &src[0 .. src.len() - 1]
@@ -86,12 +73,10 @@ fn parse_operand(src: &str) -> Option<ast::Operand> {
     }
 }
 
-#[cfg(test)]
 fn inst<'a>(mnemonic: keyword::Mnemonic, operands: &[ast::Operand]) -> ast::AsmItem<'a> {
     ast::AsmItem::Instruction(ast::Instruction::new(mnemonic, operands))
 }
 
-#[cfg(test)]
 fn include(path: &str) -> ast::AsmItem {
     ast::AsmItem::Include(path)
 }

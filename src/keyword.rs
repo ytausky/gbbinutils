@@ -1,4 +1,3 @@
-#[cfg(test)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Mnemonic {
     Halt,
@@ -9,7 +8,6 @@ pub enum Mnemonic {
     Stop,
 }
 
-#[cfg(test)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Register {
     A,
@@ -21,7 +19,6 @@ pub enum Register {
     L,
 }
 
-#[cfg(test)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum RegisterPair {
     Bc,
