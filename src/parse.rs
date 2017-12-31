@@ -3,6 +3,10 @@ use keyword;
 
 use std::str;
 
+enum Token<'a> {
+    Word(&'a str),
+}
+
 pub fn parse_src(src: &str) -> Parser {
     Parser {
         src: src.lines(),
@@ -29,25 +33,35 @@ impl<'a> Iterator for Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    fn next_word(&mut self) -> Option<&'a str> {
-        self.words.as_mut().unwrap().next()
+    fn next_word(&mut self) -> Option<Token<'a>> {
+        Some(Token::Word(self.words.as_mut().unwrap().next()?))
     }
 
     fn parse_line(&mut self) -> Option<ast::AsmItem<'a>> {
-        let first_word = self.next_word()?;
-        Some(self.parse_nonempty_line(first_word))
+        match self.next_word()? {
+            Token::Word(first_word) => Some(self.parse_nonempty_line(first_word)),
+        }
     }
 
     fn parse_nonempty_line(&mut self, first_word: &str) -> ast::AsmItem<'a> {
         match parse_mnemonic(first_word) {
-            keyword::Mnemonic::Include => include(parse_include_path(self.next_word().unwrap())),
+            keyword::Mnemonic::Include => self.parse_include(),
             mnemonic => inst(mnemonic, &self.parse_operands()),
         }
     }
 
+    fn parse_include(&mut self) -> ast::AsmItem<'a> {
+        match self.next_word().unwrap() {
+            Token::Word(include_path) => include(parse_include_path(include_path))
+        }
+    }
+
     fn parse_operands(&mut self) -> Vec<ast::Operand> {
-        let words = self.words.as_mut().unwrap();
-        words.map(|op| parse_operand(op).unwrap()).collect()
+        let mut operands = vec![];
+        while let Some(Token::Word(word)) = self.next_word() {
+            operands.push(parse_operand(word).unwrap())
+        };
+        operands
     }
 }
 
