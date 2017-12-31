@@ -6,11 +6,13 @@ use std::str;
 pub fn parse_src(src: &str) -> Parser {
     Parser {
         src: src.lines(),
+        words: None,
     }
 }
 
 pub struct Parser<'a> {
     src: str::Lines<'a>,
+    words: Option<str::SplitWhitespace<'a>>
 }
 
 impl<'a> Iterator for Parser<'a> {
@@ -19,22 +21,33 @@ impl<'a> Iterator for Parser<'a> {
     fn next(&mut self) -> Option<ast::AsmItem<'a>> {
         let mut parsed_line = None;
         while parsed_line == None {
-            parsed_line = parse_line(self.src.next()?)
+            self.words = Some(self.src.next()?.split_whitespace());
+            parsed_line = self.parse_line()
         };
         parsed_line
     }
 }
 
-fn parse_line(line: &str) -> Option<ast::AsmItem> {
-    let mut word_iterator = line.split_whitespace();
-    word_iterator.next().map(|first_word| parse_nonempty_line(first_word, word_iterator))
-}
+impl<'a> Parser<'a> {
+    fn next_word(&mut self) -> Option<&'a str> {
+        self.words.as_mut().unwrap().next()
+    }
 
-fn parse_nonempty_line<'a, I>(first_word: &'a str, mut next_words: I) -> ast::AsmItem
-    where I: Iterator<Item=&'a str> {
-    match parse_mnemonic(first_word) {
-        keyword::Mnemonic::Include => include(parse_include_path(next_words.next().unwrap())),
-        mnemonic => inst(mnemonic, &parse_operands(next_words)),
+    fn parse_line(&mut self) -> Option<ast::AsmItem<'a>> {
+        let first_word = self.next_word()?;
+        Some(self.parse_nonempty_line(first_word))
+    }
+
+    fn parse_nonempty_line(&mut self, first_word: &str) -> ast::AsmItem<'a> {
+        match parse_mnemonic(first_word) {
+            keyword::Mnemonic::Include => include(parse_include_path(self.next_word().unwrap())),
+            mnemonic => inst(mnemonic, &self.parse_operands()),
+        }
+    }
+
+    fn parse_operands(&mut self) -> Vec<ast::Operand> {
+        let words = self.words.as_mut().unwrap();
+        words.map(|op| parse_operand(op).unwrap()).collect()
     }
 }
 
@@ -53,10 +66,6 @@ fn parse_mnemonic(spelling: &str) -> keyword::Mnemonic {
 
 fn parse_include_path(path: &str) -> &str {
     &path[1 .. path.len() - 1]
-}
-
-fn parse_operands<'a, I: Iterator<Item=&'a str>>(word_iterator: I) -> Vec<ast::Operand> {
-    word_iterator.map(|op| parse_operand(op).unwrap()).collect()
 }
 
 fn parse_operand(src: &str) -> Option<ast::Operand> {
