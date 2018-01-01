@@ -1,22 +1,60 @@
 use ast;
 use keyword;
 
+use std::iter;
 use std::str;
 
+#[derive(PartialEq)]
 enum Token<'a> {
     Word(&'a str),
+    Eol,
+}
+
+struct Lexer<'a> {
+    lines: str::Lines<'a>,
+    words: Option<str::SplitWhitespace<'a>>,
+}
+
+impl<'a> Iterator for Lexer<'a> {
+    type Item = Token<'a>;
+
+    fn next(&mut self) -> Option<Token<'a>> {
+        match self.next_in_line() {
+            Some(token) => {
+                if token == Token::Eol {
+                    self.words = None
+                };
+                Some(token)
+            },
+            None => {
+                self.words = Some(self.lines.next()?.split_whitespace());
+                self.next_in_line()
+            }
+        }
+    }
+}
+
+impl<'a> Lexer<'a> {
+    fn new(src: &str) -> Lexer {
+        Lexer {
+            lines: src.lines(),
+            words: None,
+        }
+    }
+
+    fn next_in_line(&mut self) -> Option<Token<'a>> {
+        self.words.as_mut().map(|words| words.next().map_or(Token::Eol, |word| Token::Word(word)))
+    }
 }
 
 pub fn parse_src(src: &str) -> Parser {
     Parser {
-        src: src.lines(),
-        words: None,
+        lexer: Lexer::new(src).peekable(),
     }
 }
 
 pub struct Parser<'a> {
-    src: str::Lines<'a>,
-    words: Option<str::SplitWhitespace<'a>>
+    lexer: iter::Peekable<Lexer<'a>>,
 }
 
 impl<'a> Iterator for Parser<'a> {
@@ -24,8 +62,7 @@ impl<'a> Iterator for Parser<'a> {
 
     fn next(&mut self) -> Option<ast::AsmItem<'a>> {
         let mut parsed_line = None;
-        while parsed_line == None {
-            self.words = Some(self.src.next()?.split_whitespace());
+        while parsed_line.is_none() && self.lexer.peek().is_some() {
             parsed_line = self.parse_line()
         };
         parsed_line
@@ -34,12 +71,13 @@ impl<'a> Iterator for Parser<'a> {
 
 impl<'a> Parser<'a> {
     fn next_word(&mut self) -> Option<Token<'a>> {
-        Some(Token::Word(self.words.as_mut().unwrap().next()?))
+        self.lexer.next()
     }
 
     fn parse_line(&mut self) -> Option<ast::AsmItem<'a>> {
         match self.next_word()? {
             Token::Word(first_word) => Some(self.parse_nonempty_line(first_word)),
+            Token::Eol => None,
         }
     }
 
@@ -52,7 +90,8 @@ impl<'a> Parser<'a> {
 
     fn parse_include(&mut self) -> ast::AsmItem<'a> {
         match self.next_word().unwrap() {
-            Token::Word(include_path) => include(parse_include_path(include_path))
+            Token::Word(include_path) => include(parse_include_path(include_path)),
+            Token::Eol => unimplemented!(),
         }
     }
 
