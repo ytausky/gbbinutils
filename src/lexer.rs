@@ -1,10 +1,6 @@
-use std::str;
+use token::Token;
 
-#[derive(PartialEq)]
-pub enum Token<'a> {
-    Word(&'a str),
-    Eol,
-}
+use std::str;
 
 pub struct Lexer<'a> {
     lines: str::Lines<'a>,

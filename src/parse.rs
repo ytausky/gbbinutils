@@ -1,10 +1,11 @@
 use ast;
 use keyword;
-use lexer;
+
+use token::Token;
 
 use std::iter;
 
-pub fn parse_src<'a, I: Iterator<Item = lexer::Token<'a>>>(tokens: I) -> Parser<I> {
+pub fn parse_src<'a, I: Iterator<Item = Token<'a>>>(tokens: I) -> Parser<I> {
     Parser {
         lexer: tokens.peekable(),
     }
@@ -14,7 +15,7 @@ pub struct Parser<L: Iterator> {
     lexer: iter::Peekable<L>,
 }
 
-impl<'a, L: Iterator<Item = lexer::Token<'a>>> Iterator for Parser<L> {
+impl<'a, L: Iterator<Item = Token<'a>>> Iterator for Parser<L> {
     type Item = ast::AsmItem<'a>;
 
     fn next(&mut self) -> Option<ast::AsmItem<'a>> {
@@ -26,15 +27,15 @@ impl<'a, L: Iterator<Item = lexer::Token<'a>>> Iterator for Parser<L> {
     }
 }
 
-impl<'a, L: Iterator<Item = lexer::Token<'a>>> Parser<L> {
-    fn next_word(&mut self) -> Option<lexer::Token<'a>> {
+impl<'a, L: Iterator<Item = Token<'a>>> Parser<L> {
+    fn next_word(&mut self) -> Option<Token<'a>> {
         self.lexer.next()
     }
 
     fn parse_line(&mut self) -> Option<ast::AsmItem<'a>> {
         match self.next_word()? {
-            lexer::Token::Word(first_word) => Some(self.parse_nonempty_line(first_word)),
-            lexer::Token::Eol => None,
+            Token::Word(first_word) => Some(self.parse_nonempty_line(first_word)),
+            Token::Eol => None,
         }
     }
 
@@ -47,14 +48,14 @@ impl<'a, L: Iterator<Item = lexer::Token<'a>>> Parser<L> {
 
     fn parse_include(&mut self) -> ast::AsmItem<'a> {
         match self.next_word().unwrap() {
-            lexer::Token::Word(include_path) => include(parse_include_path(include_path)),
-            lexer::Token::Eol => unimplemented!(),
+            Token::Word(include_path) => include(parse_include_path(include_path)),
+            Token::Eol => unimplemented!(),
         }
     }
 
     fn parse_operands(&mut self) -> Vec<ast::Operand> {
         let mut operands = vec![];
-        while let Some(lexer::Token::Word(word)) = self.next_word() {
+        while let Some(Token::Word(word)) = self.next_word() {
             operands.push(parse_operand(word).unwrap())
         };
         operands
@@ -109,7 +110,8 @@ mod tests {
     use keyword::Mnemonic::*;
 
     fn assert_ast_eq(src: &str, expected_ast: &[AsmItem]) {
-        let lexer = lexer::Lexer::new(src);
+        use lexer::Lexer;
+        let lexer = Lexer::new(src);
         let actual = parse_src(lexer).collect::<Vec<AsmItem>>();
         assert_eq!(actual, expected_ast)
     }
