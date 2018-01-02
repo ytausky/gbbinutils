@@ -46,8 +46,8 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_token(&mut self, start: usize, first_char: char) -> Token<'a> {
-        if let Some(t) = lex_single_char_token(first_char) {
-            t
+        if let Some(token) = lex_single_char_token(first_char) {
+            token
         } else if first_char == '"' {
             self.lex_quoted_string()
         } else {
