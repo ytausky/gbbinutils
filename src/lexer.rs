@@ -69,13 +69,13 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_word(&mut self, start: usize) -> Token<'a> {
-        loop {
-            match self.char_indices.peek() {
-                None => return Token::Word(&self.src[start ..]),
-                Some(&(end, c)) if !c.is_alphanumeric() => return Token::Word(&self.src[start .. end]),
-                _ => self.advance(),
+        while let Some(&(end, c)) = self.char_indices.peek() {
+            if !c.is_alphanumeric() {
+                return Token::Word(&self.src[start .. end])
             }
+            self.advance()
         }
+        Token::Word(&self.src[start ..])
     }
 }
 
