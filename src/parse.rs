@@ -3,7 +3,6 @@ use keyword;
 use lexer;
 
 use std::iter;
-use std::str;
 
 pub fn parse_src(src: &str) -> Parser<lexer::Lexer> {
     Parser {
