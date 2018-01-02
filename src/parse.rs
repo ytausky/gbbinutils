@@ -4,9 +4,9 @@ use lexer;
 
 use std::iter;
 
-pub fn parse_src(src: &str) -> Parser<lexer::Lexer> {
+pub fn parse_src<'a, I: Iterator<Item = lexer::Token<'a>>>(tokens: I) -> Parser<I> {
     Parser {
-        lexer: lexer::Lexer::new(src).peekable(),
+        lexer: tokens.peekable(),
     }
 }
 
@@ -109,7 +109,8 @@ mod tests {
     use keyword::Mnemonic::*;
 
     fn assert_ast_eq(src: &str, expected_ast: &[AsmItem]) {
-        let actual = parse_src(src).collect::<Vec<AsmItem>>();
+        let lexer = lexer::Lexer::new(src);
+        let actual = parse_src(lexer).collect::<Vec<AsmItem>>();
         assert_eq!(actual, expected_ast)
     }
 
