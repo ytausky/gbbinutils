@@ -1,5 +1,7 @@
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token<'a> {
-    Word(&'a str),
+    Comma,
     Eol,
+    QuotedString(&'a str),
+    Word(&'a str),
 }

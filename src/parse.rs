@@ -36,6 +36,7 @@ impl<'a, L: Iterator<Item = Token<'a>>> Parser<L> {
         match self.next_word()? {
             Token::Word(first_word) => Some(self.parse_nonempty_line(first_word)),
             Token::Eol => None,
+            _ => panic!()
         }
     }
 
@@ -48,16 +49,25 @@ impl<'a, L: Iterator<Item = Token<'a>>> Parser<L> {
 
     fn parse_include(&mut self) -> ast::AsmItem<'a> {
         match self.next_word().unwrap() {
-            Token::Word(include_path) => include(parse_include_path(include_path)),
-            Token::Eol => unimplemented!(),
+            Token::QuotedString(include_path) => include(include_path),
+            _ => unimplemented!(),
         }
     }
 
     fn parse_operands(&mut self) -> Vec<ast::Operand> {
         let mut operands = vec![];
-        while let Some(Token::Word(word)) = self.next_word() {
-            operands.push(parse_operand(word).unwrap())
-        };
+        if let Some(&Token::Word(word)) = self.lexer.peek() {
+            operands.push(parse_operand(word).unwrap());
+            self.next_word();
+            while let Some(&Token::Comma) = self.lexer.peek() {
+                self.next_word();
+                let next_operand = match self.next_word().unwrap() {
+                    Token::Word(w) => w,
+                    _ => panic!(),
+                };
+                operands.push(parse_operand(next_operand).unwrap())
+            }
+        }
         operands
     }
 }
@@ -75,17 +85,8 @@ fn parse_mnemonic(spelling: &str) -> keyword::Mnemonic {
     }
 }
 
-fn parse_include_path(path: &str) -> &str {
-    &path[1 .. path.len() - 1]
-}
-
 fn parse_operand(src: &str) -> Option<ast::Operand> {
-    let without_comma = if src.ends_with(',') {
-        &src[0 .. src.len() - 1]
-    } else {
-        src
-    };
-    match without_comma {
+    match src {
         "a" => Some(ast::Operand::Register(keyword::Register::A)),
         "b" => Some(ast::Operand::Register(keyword::Register::B)),
         "bc" => Some(ast::Operand::RegisterPair(keyword::RegisterPair::Bc)),
@@ -185,6 +186,6 @@ mod tests {
 
     #[test]
     fn parse_include() {
-        assert_ast_eq("include \"file.asm\"", &[include("file.asm")])
+        assert_eq_ast(&[Word("include"), QuotedString("file.asm")], &[include("file.asm")])
     }
 }

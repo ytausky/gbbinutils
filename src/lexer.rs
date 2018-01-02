@@ -13,13 +13,9 @@ impl<'a> Iterator for Lexer<'a> {
 
     fn next(&mut self) -> Option<Token<'a>> {
         self.skip_horizontal_whitespace();
-        match self.char_indices.peek() {
+        match self.char_indices.next() {
             None => None,
-            Some(&(_, '\n')) => {
-                self.advance();
-                Some(Token::Eol)
-            },
-            _ => Some(self.lex_word())
+            Some((index, first_char)) => Some(self.lex_token(index, first_char)),
         }
     }
 }
@@ -49,15 +45,44 @@ impl<'a> Lexer<'a> {
         self.char_indices.next();
     }
 
-    fn lex_word(&mut self) -> Token<'a> {
-        let (start, _) = self.char_indices.next().unwrap();
+    fn lex_token(&mut self, start: usize, first_char: char) -> Token<'a> {
+        if let Some(t) = lex_single_char_token(first_char) {
+            t
+        } else if first_char == '"' {
+            self.lex_quoted_string()
+        } else {
+            self.lex_word(start)
+        }
+    }
+
+    fn lex_quoted_string(&mut self) -> Token<'a> {
+        let (start, first_char) = self.char_indices.next().unwrap();
+        let mut end = start;
+        let mut c = first_char;
+        while c != '"' {
+            let (next_index, next_char) = self.char_indices.next().unwrap();
+            end = next_index;
+            c = next_char;
+        }
+        Token::QuotedString(&self.src[start .. end])
+    }
+
+    fn lex_word(&mut self, start: usize) -> Token<'a> {
         loop {
             match self.char_indices.peek() {
                 None => return Token::Word(&self.src[start ..]),
-                Some(&(end, c)) if c.is_whitespace() => return Token::Word(&self.src[start .. end]),
+                Some(&(end, c)) if !c.is_alphanumeric() => return Token::Word(&self.src[start .. end]),
                 _ => self.advance(),
             }
         }
+    }
+}
+
+fn lex_single_char_token<'a>(c: char) -> Option<Token<'a>> {
+    match c {
+        ',' => Some(Token::Comma),
+        '\n' => Some(Token::Eol),
+        _ => None,
     }
 }
 
@@ -94,5 +119,15 @@ mod tests {
     #[test]
     fn lex_two_words() {
         assert_eq_tokens("push bc", &[Word("push"), Word("bc")])
+    }
+
+    #[test]
+    fn lex_comma() {
+        assert_eq_tokens(",", &[Comma])
+    }
+
+    #[test]
+    fn lex_quoted_string() {
+        assert_eq_tokens("\"file.asm\"", &[QuotedString("file.asm")])
     }
 }
