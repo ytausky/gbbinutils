@@ -5,17 +5,17 @@ use lexer;
 use std::iter;
 use std::str;
 
-pub fn parse_src(src: &str) -> Parser {
+pub fn parse_src(src: &str) -> Parser<lexer::Lexer> {
     Parser {
         lexer: lexer::Lexer::new(src).peekable(),
     }
 }
 
-pub struct Parser<'a> {
-    lexer: iter::Peekable<lexer::Lexer<'a>>,
+pub struct Parser<L: Iterator> {
+    lexer: iter::Peekable<L>,
 }
 
-impl<'a> Iterator for Parser<'a> {
+impl<'a, L: Iterator<Item = lexer::Token<'a>>> Iterator for Parser<L> {
     type Item = ast::AsmItem<'a>;
 
     fn next(&mut self) -> Option<ast::AsmItem<'a>> {
@@ -27,7 +27,7 @@ impl<'a> Iterator for Parser<'a> {
     }
 }
 
-impl<'a> Parser<'a> {
+impl<'a, L: Iterator<Item = lexer::Token<'a>>> Parser<L> {
     fn next_word(&mut self) -> Option<lexer::Token<'a>> {
         self.lexer.next()
     }
