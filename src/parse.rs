@@ -139,11 +139,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_nop_after_whitespace() {
-        assert_ast_eq("    nop", &[inst(Nop, &[])])
-    }
-
-    #[test]
     fn parse_halt() {
         parse_nullary_instruction("halt")
     }
@@ -154,7 +149,7 @@ mod tests {
     }
 
     fn parse_nullary_instruction(src: &str) {
-        assert_ast_eq(src, &[inst(parse_mnemonic(src), &[])])
+        assert_eq_ast(&[Word(src)], &[inst(parse_mnemonic(src), &[])])
     }
 
     #[test]

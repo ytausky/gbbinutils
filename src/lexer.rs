@@ -1,27 +1,25 @@
 use token::Token;
 
+use std::iter;
 use std::str;
 
 pub struct Lexer<'a> {
-    lines: str::Lines<'a>,
-    words: Option<str::SplitWhitespace<'a>>,
+    src: &'a str,
+    char_indices: iter::Peekable<str::CharIndices<'a>>,
 }
 
 impl<'a> Iterator for Lexer<'a> {
     type Item = Token<'a>;
 
     fn next(&mut self) -> Option<Token<'a>> {
-        match self.next_in_line() {
-            Some(token) => {
-                if token == Token::Eol {
-                    self.words = None
-                };
-                Some(token)
+        self.skip_horizontal_whitespace();
+        match self.char_indices.peek() {
+            None => None,
+            Some(&(_, '\n')) => {
+                self.advance();
+                Some(Token::Eol)
             },
-            None => {
-                self.words = Some(self.lines.next()?.split_whitespace());
-                self.next()
-            }
+            _ => Some(self.lex_word())
         }
     }
 }
@@ -29,13 +27,37 @@ impl<'a> Iterator for Lexer<'a> {
 impl<'a> Lexer<'a> {
     pub fn new(src: &str) -> Lexer {
         Lexer {
-            lines: src.lines(),
-            words: None,
+            src: src,
+            char_indices: src.char_indices().peekable(),
         }
     }
 
-    fn next_in_line(&mut self) -> Option<Token<'a>> {
-        self.words.as_mut().map(|words| words.next().map_or(Token::Eol, |word| Token::Word(word)))
+    fn skip_horizontal_whitespace(&mut self) {
+        loop {
+            match self.current_char() {
+                Some(c) if c.is_whitespace() && c != '\n' => self.advance(),
+                _ => break,
+            }
+        }
+    }
+
+    fn current_char(&mut self) -> Option<char> {
+        self.char_indices.peek().map(|&(_, c)| c)
+    }
+
+    fn advance(&mut self) {
+        self.char_indices.next();
+    }
+
+    fn lex_word(&mut self) -> Token<'a> {
+        let (start, _) = self.char_indices.next().unwrap();
+        loop {
+            match self.char_indices.peek() {
+                None => return Token::Word(&self.src[start ..]),
+                Some(&(end, c)) if c.is_whitespace() => return Token::Word(&self.src[start .. end]),
+                _ => self.advance(),
+            }
+        }
     }
 }
 
@@ -57,5 +79,15 @@ mod tests {
     #[test]
     fn lex_eol() {
         assert_eq_tokens("\n", &[Eol])
+    }
+
+    #[test]
+    fn lex_word() {
+        assert_eq_tokens("nop", &[Word("nop")])
+    }
+
+    #[test]
+    fn lex_word_after_whitespace() {
+        assert_eq_tokens("    nop", &[Word("nop")])
     }
 }
