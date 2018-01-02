@@ -108,6 +108,7 @@ mod tests {
     use ast::*;
 
     use keyword::Mnemonic::*;
+    use token::Token::*;
 
     fn assert_ast_eq(src: &str, expected_ast: &[AsmItem]) {
         use lexer::Lexer;
@@ -129,7 +130,7 @@ mod tests {
 
     #[test]
     fn parse_empty_line() {
-        assert_ast_eq("\n", &[])
+        assert_eq_ast(&[Eol], &[])
     }
 
     #[test]

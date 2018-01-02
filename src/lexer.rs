@@ -20,7 +20,7 @@ impl<'a> Iterator for Lexer<'a> {
             },
             None => {
                 self.words = Some(self.lines.next()?.split_whitespace());
-                self.next_in_line()
+                self.next()
             }
         }
     }
@@ -43,6 +43,8 @@ impl<'a> Lexer<'a> {
 mod tests {
     use super::*;
 
+    use token::Token::*;
+
     fn assert_eq_tokens(src: &str, expected_tokens: &[Token]) {
         assert_eq!(Lexer::new(src).collect::<Vec<Token>>(), expected_tokens)
     }
@@ -50,5 +52,10 @@ mod tests {
     #[test]
     fn lex_empty_str() {
         assert_eq_tokens("", &[])
+    }
+
+    #[test]
+    fn lex_eol() {
+        assert_eq_tokens("\n", &[Eol])
     }
 }
