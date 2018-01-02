@@ -1,60 +1,18 @@
 use ast;
 use keyword;
+use lexer;
 
 use std::iter;
 use std::str;
 
-#[derive(PartialEq)]
-enum Token<'a> {
-    Word(&'a str),
-    Eol,
-}
-
-struct Lexer<'a> {
-    lines: str::Lines<'a>,
-    words: Option<str::SplitWhitespace<'a>>,
-}
-
-impl<'a> Iterator for Lexer<'a> {
-    type Item = Token<'a>;
-
-    fn next(&mut self) -> Option<Token<'a>> {
-        match self.next_in_line() {
-            Some(token) => {
-                if token == Token::Eol {
-                    self.words = None
-                };
-                Some(token)
-            },
-            None => {
-                self.words = Some(self.lines.next()?.split_whitespace());
-                self.next_in_line()
-            }
-        }
-    }
-}
-
-impl<'a> Lexer<'a> {
-    fn new(src: &str) -> Lexer {
-        Lexer {
-            lines: src.lines(),
-            words: None,
-        }
-    }
-
-    fn next_in_line(&mut self) -> Option<Token<'a>> {
-        self.words.as_mut().map(|words| words.next().map_or(Token::Eol, |word| Token::Word(word)))
-    }
-}
-
 pub fn parse_src(src: &str) -> Parser {
     Parser {
-        lexer: Lexer::new(src).peekable(),
+        lexer: lexer::Lexer::new(src).peekable(),
     }
 }
 
 pub struct Parser<'a> {
-    lexer: iter::Peekable<Lexer<'a>>,
+    lexer: iter::Peekable<lexer::Lexer<'a>>,
 }
 
 impl<'a> Iterator for Parser<'a> {
@@ -70,14 +28,14 @@ impl<'a> Iterator for Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    fn next_word(&mut self) -> Option<Token<'a>> {
+    fn next_word(&mut self) -> Option<lexer::Token<'a>> {
         self.lexer.next()
     }
 
     fn parse_line(&mut self) -> Option<ast::AsmItem<'a>> {
         match self.next_word()? {
-            Token::Word(first_word) => Some(self.parse_nonempty_line(first_word)),
-            Token::Eol => None,
+            lexer::Token::Word(first_word) => Some(self.parse_nonempty_line(first_word)),
+            lexer::Token::Eol => None,
         }
     }
 
@@ -90,14 +48,14 @@ impl<'a> Parser<'a> {
 
     fn parse_include(&mut self) -> ast::AsmItem<'a> {
         match self.next_word().unwrap() {
-            Token::Word(include_path) => include(parse_include_path(include_path)),
-            Token::Eol => unimplemented!(),
+            lexer::Token::Word(include_path) => include(parse_include_path(include_path)),
+            lexer::Token::Eol => unimplemented!(),
         }
     }
 
     fn parse_operands(&mut self) -> Vec<ast::Operand> {
         let mut operands = vec![];
-        while let Some(Token::Word(word)) = self.next_word() {
+        while let Some(lexer::Token::Word(word)) = self.next_word() {
             operands.push(parse_operand(word).unwrap())
         };
         operands

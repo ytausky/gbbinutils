@@ -1,6 +1,7 @@
 mod ast;
 mod codegen;
 mod keyword;
+mod lexer;
 mod parse;
 
 pub struct AnalyzedSrc;
