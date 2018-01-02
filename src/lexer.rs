@@ -90,4 +90,9 @@ mod tests {
     fn lex_word_after_whitespace() {
         assert_eq_tokens("    nop", &[Word("nop")])
     }
+
+    #[test]
+    fn lex_two_words() {
+        assert_eq_tokens("push bc", &[Word("push"), Word("bc")])
+    }
 }

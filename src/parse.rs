@@ -154,7 +154,7 @@ mod tests {
 
     #[test]
     fn parse_push_bc() {
-        assert_ast_eq("push bc", &[inst(Push, &[BC])])
+        assert_eq_ast(&[Word("push"), Word("bc")], &[inst(Push, &[BC])])
     }
 
     #[test]
