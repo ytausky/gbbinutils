@@ -38,3 +38,17 @@ impl<'a> Lexer<'a> {
         self.words.as_mut().map(|words| words.next().map_or(Token::Eol, |word| Token::Word(word)))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn assert_eq_tokens(src: &str, expected_tokens: &[Token]) {
+        assert_eq!(Lexer::new(src).collect::<Vec<Token>>(), expected_tokens)
+    }
+
+    #[test]
+    fn lex_empty_str() {
+        assert_eq_tokens("", &[])
+    }
+}

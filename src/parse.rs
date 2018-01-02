@@ -116,9 +116,15 @@ mod tests {
         assert_eq!(actual, expected_ast)
     }
 
+    fn assert_eq_ast(tokens: &[Token], expected_ast: &[AsmItem]) {
+        let cloned_tokens = tokens.into_iter().cloned();
+        let parsed_ast = parse_src(cloned_tokens).collect::<Vec<AsmItem>>();
+        assert_eq!(parsed_ast, expected_ast)
+    }
+
     #[test]
     fn parse_empty_src() {
-        assert_ast_eq("", &[])
+        assert_eq_ast(&[], &[])
     }
 
     #[test]
