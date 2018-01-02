@@ -29,10 +29,11 @@ impl<'a> Lexer<'a> {
     }
 
     fn skip_horizontal_whitespace(&mut self) {
-        loop {
-            match self.current_char() {
-                Some(c) if c.is_whitespace() && c != '\n' => self.advance(),
-                _ => break,
+        while let Some(c) = self.current_char() {
+            if c.is_whitespace() && c != '\n' {
+                self.advance()
+            } else {
+                break
             }
         }
     }
