@@ -111,13 +111,6 @@ mod tests {
     use keyword::Mnemonic::*;
     use token::Token::*;
 
-    fn assert_ast_eq(src: &str, expected_ast: &[AsmItem]) {
-        use lexer::Lexer;
-        let lexer = Lexer::new(src);
-        let actual = parse_src(lexer).collect::<Vec<AsmItem>>();
-        assert_eq!(actual, expected_ast)
-    }
-
     fn assert_eq_ast(tokens: &[Token], expected_ast: &[AsmItem]) {
         let cloned_tokens = tokens.into_iter().cloned();
         let parsed_ast = parse_src(cloned_tokens).collect::<Vec<AsmItem>>();
@@ -160,28 +153,36 @@ mod tests {
 
     #[test]
     fn parse_ld_a_a() {
-        assert_ast_eq("ld a, a", &[inst(Ld, &[A, A])])
+        assert_eq_ast(
+            &[Word("ld"), Word("a"), Comma, Word("a")],
+            &[inst(Ld, &[A, A])]
+        )
     }
 
     #[test]
     fn parse_ld_a_b() {
-        assert_ast_eq("ld a, b", &[inst(Ld, &[A, B])])
+        assert_eq_ast(
+            &[Word("ld"), Word("a"), Comma, Word("b")],
+            &[inst(Ld, &[A, B])]
+        )
     }
 
     #[test]
     fn parse_two_instructions() {
-        assert_ast_eq("ld a, b\nld a, b", &[
-            inst(Ld, &[A, B]),
-            inst(Ld, &[A, B]),
-        ])
+        let tokens = &[
+            Word("ld"), Word("a"), Comma, Word("b"), Eol,
+            Word("ld"), Word("a"), Comma, Word("b"),
+        ];
+        assert_eq_ast(tokens, &[inst(Ld, &[A, B]), inst(Ld, &[A, B])])
     }
 
     #[test]
     fn parse_two_instructions_separated_by_blank_line() {
-        assert_ast_eq("ld a, b\n\nld a, b", &[
-            inst(Ld, &[A, B]),
-            inst(Ld, &[A, B]),
-        ])
+        let tokens = &[
+            Word("ld"), Word("a"), Comma, Word("b"), Eol, Eol,
+            Word("ld"), Word("a"), Comma, Word("b"),
+        ];
+        assert_eq_ast(tokens, &[inst(Ld, &[A, B]), inst(Ld, &[A, B])])
     }
 
     #[test]
