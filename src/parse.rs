@@ -7,12 +7,12 @@ use std::iter;
 
 pub fn parse_src<'a, I: Iterator<Item = Token<'a>>>(tokens: I) -> Parser<I> {
     Parser {
-        lexer: tokens.peekable(),
+        tokens: tokens.peekable(),
     }
 }
 
 pub struct Parser<L: Iterator> {
-    lexer: iter::Peekable<L>,
+    tokens: iter::Peekable<L>,
 }
 
 impl<'a, L: Iterator<Item = Token<'a>>> Iterator for Parser<L> {
@@ -20,7 +20,7 @@ impl<'a, L: Iterator<Item = Token<'a>>> Iterator for Parser<L> {
 
     fn next(&mut self) -> Option<ast::AsmItem<'a>> {
         let mut parsed_line = None;
-        while parsed_line.is_none() && self.lexer.peek().is_some() {
+        while parsed_line.is_none() && self.tokens.peek().is_some() {
             parsed_line = self.parse_line()
         };
         parsed_line
@@ -29,7 +29,7 @@ impl<'a, L: Iterator<Item = Token<'a>>> Iterator for Parser<L> {
 
 impl<'a, L: Iterator<Item = Token<'a>>> Parser<L> {
     fn next_word(&mut self) -> Option<Token<'a>> {
-        self.lexer.next()
+        self.tokens.next()
     }
 
     fn parse_line(&mut self) -> Option<ast::AsmItem<'a>> {
@@ -56,10 +56,10 @@ impl<'a, L: Iterator<Item = Token<'a>>> Parser<L> {
 
     fn parse_operands(&mut self) -> Vec<ast::Operand> {
         let mut operands = vec![];
-        if let Some(&Token::Word(word)) = self.lexer.peek() {
+        if let Some(&Token::Word(word)) = self.tokens.peek() {
             operands.push(parse_operand(word).unwrap());
             self.next_word();
-            while let Some(&Token::Comma) = self.lexer.peek() {
+            while let Some(&Token::Comma) = self.tokens.peek() {
                 self.next_word();
                 let next_operand = match self.next_word().unwrap() {
                     Token::Word(w) => w,
