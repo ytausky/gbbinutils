@@ -1,55 +1,82 @@
+use std::marker::PhantomData;
 use ast;
 use keyword;
 
 use token::Token;
 
 use std::iter;
+use std::vec;
 
-pub fn parse_src<'a, I: Iterator<Item = Token<'a>>>(tokens: I) -> Parser<I> {
-    Parser {
-        tokens: tokens.peekable(),
+trait Reduce<'a> {
+    fn reduce_include(&mut self, path: &'a str);
+    fn reduce_mnemonic(&mut self, mnemonic: keyword::Mnemonic, operands: &[ast::Operand]);
+}
+
+struct DefaultReduce<'a> {
+    items: Vec<ast::AsmItem<'a>>,
+}
+
+impl<'a> Reduce<'a> for DefaultReduce<'a> {
+    fn reduce_include(&mut self, path: &'a str) {
+        self.items.push(include(path))
+    }
+
+    fn reduce_mnemonic(&mut self, mnemonic: keyword::Mnemonic, operands: &[ast::Operand]) {
+        self.items.push(inst(mnemonic, operands))
     }
 }
 
-pub struct Parser<L: Iterator> {
-    tokens: iter::Peekable<L>,
-}
-
-impl<'a, L: Iterator<Item = Token<'a>>> Iterator for Parser<L> {
-    type Item = ast::AsmItem<'a>;
-
-    fn next(&mut self) -> Option<ast::AsmItem<'a>> {
-        let mut parsed_line = None;
-        while parsed_line.is_none() && self.tokens.peek().is_some() {
-            parsed_line = self.parse_line()
+pub fn parse_src<'a, I: Iterator<Item = Token<'a>>>(tokens: I) -> vec::IntoIter<ast::AsmItem<'a>> {
+    let mut reduce = DefaultReduce { items: vec![] };
+    {
+        let parser = Parser {
+            tokens: tokens.peekable(),
+            reduce: &mut reduce,
+            phantom: PhantomData,
         };
-        parsed_line
+        parser.parse();
     }
+    reduce.items.into_iter()
 }
 
-impl<'a, L: Iterator<Item = Token<'a>>> Parser<L> {
+struct Parser<'a, 'b, L: Iterator, R: 'b + Reduce<'a>> {
+    tokens: iter::Peekable<L>,
+    reduce: &'b mut R,
+    phantom: PhantomData<&'a ()>
+}
+
+impl<'a, 'b, L: Iterator<Item = Token<'a>>, R: Reduce<'a>> Parser<'a, 'b, L, R> {
     fn next_word(&mut self) -> Option<Token<'a>> {
         self.tokens.next()
     }
 
-    fn parse_line(&mut self) -> Option<ast::AsmItem<'a>> {
-        match self.next_word()? {
-            Token::Word(first_word) => Some(self.parse_nonempty_line(first_word)),
-            Token::Eol => None,
+    fn parse(mut self) {
+        while self.tokens.peek().is_some() {
+            self.parse_line()
+        }
+    }
+
+    fn parse_line(&mut self) {
+        match self.next_word() {
+            Some(Token::Word(first_word)) => self.parse_nonempty_line(first_word),
+            Some(Token::Eol) | None => (),
             _ => panic!()
         }
     }
 
-    fn parse_nonempty_line(&mut self, first_word: &str) -> ast::AsmItem<'a> {
+    fn parse_nonempty_line(&mut self, first_word: &str) {
         match parse_mnemonic(first_word) {
             keyword::Mnemonic::Include => self.parse_include(),
-            mnemonic => inst(mnemonic, &self.parse_operands()),
+            mnemonic => {
+                let operands = &self.parse_operands();
+                self.reduce.reduce_mnemonic(mnemonic, operands)
+            },
         }
     }
 
-    fn parse_include(&mut self) -> ast::AsmItem<'a> {
+    fn parse_include(&mut self) {
         match self.next_word().unwrap() {
-            Token::QuotedString(include_path) => include(include_path),
+            Token::QuotedString(include_path) => self.reduce.reduce_include(include_path),
             _ => unimplemented!(),
         }
     }
