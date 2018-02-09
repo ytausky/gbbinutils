@@ -47,14 +47,12 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_token(&mut self, start: usize, first_char: char) -> Token<'a> {
-        if let Some(token) = lex_single_char_token(first_char) {
-            token
-        } else if first_char == '"' {
-            self.lex_quoted_string()
-        } else if first_char == '$' {
-            self.lex_number()
-        } else {
-            self.lex_word(start)
+        match first_char {
+            ',' => Token::Comma,
+            '\n' => Token::Eol,
+            '$' => self.lex_number(),
+            '"' => self.lex_quoted_string(),
+            _ => self.lex_word(start),
         }
     }
 
@@ -98,14 +96,6 @@ impl<'a> Lexer<'a> {
             self.advance()
         }
         Token::Word(&self.src[start ..])
-    }
-}
-
-fn lex_single_char_token<'a>(c: char) -> Option<Token<'a>> {
-    match c {
-        ',' => Some(Token::Comma),
-        '\n' => Some(Token::Eol),
-        _ => None,
     }
 }
 
