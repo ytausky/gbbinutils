@@ -51,6 +51,8 @@ impl<'a> Lexer<'a> {
             token
         } else if first_char == '"' {
             self.lex_quoted_string()
+        } else if first_char == '$' {
+            self.lex_number()
         } else {
             self.lex_word(start)
         }
@@ -66,6 +68,26 @@ impl<'a> Lexer<'a> {
             c = next_char;
         }
         Token::QuotedString(&self.src[start .. end])
+    }
+
+    fn lex_number(&mut self) -> Token<'a> {
+        const RADIX: u32 = 16;
+        let mut value = 0isize;
+        let mut has_next_digit = true;
+        while has_next_digit {
+            if let Some(c) = self.current_char() {
+                if let Some(digit) = c.to_digit(RADIX) {
+                    value *= RADIX as isize;
+                    value += digit as isize;
+                    self.advance();
+                } else {
+                    has_next_digit = false;
+                }
+            } else {
+                has_next_digit = false;
+            }
+        }
+        Token::Number(value)
     }
 
     fn lex_word(&mut self, start: usize) -> Token<'a> {
@@ -130,5 +152,10 @@ mod tests {
     #[test]
     fn lex_quoted_string() {
         assert_eq_tokens("\"file.asm\"", &[QuotedString("file.asm")])
+    }
+
+    #[test]
+    fn lex_hex_number() {
+        assert_eq_tokens("$19af", &[Number(0x19af)])
     }
 }
