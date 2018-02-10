@@ -8,8 +8,8 @@ use std::iter;
 use std::vec;
 
 trait Reduce<'a> {
-    fn reduce_include(&mut self, path: &'a str);
-    fn reduce_mnemonic(&mut self, mnemonic: keyword::Mnemonic, operands: &[ast::Operand]);
+    fn reduce_include(&mut self, path: Token<'a>);
+    fn reduce_mnemonic(&mut self, mnemonic: Token<'a>, operands: &[ast::Operand]);
 }
 
 struct DefaultReduce<'a> {
@@ -17,12 +17,18 @@ struct DefaultReduce<'a> {
 }
 
 impl<'a> Reduce<'a> for DefaultReduce<'a> {
-    fn reduce_include(&mut self, path: &'a str) {
-        self.items.push(include(path))
+    fn reduce_include(&mut self, path: Token<'a>) {
+        match path {
+            Token::QuotedString(path_str) => self.items.push(include(path_str)),
+            _ => panic!()
+        }
     }
 
-    fn reduce_mnemonic(&mut self, mnemonic: keyword::Mnemonic, operands: &[ast::Operand]) {
-        self.items.push(inst(mnemonic, operands))
+    fn reduce_mnemonic(&mut self, mnemonic: Token<'a>, operands: &[ast::Operand]) {
+        match mnemonic {
+            Token::Word(spelling) => self.items.push(inst(parse_mnemonic(spelling), operands)),
+            _ => panic!()
+        }
     }
 }
 
@@ -56,7 +62,7 @@ impl<'a, 'b, L: Iterator<Item = Token<'a>>, R: Reduce<'a>> Parser<'a, 'b, L, R> 
         }
     }
 
-    fn parse_line(&mut self, first_token: Token) {
+    fn parse_line(&mut self, first_token: Token<'a>) {
         match first_token {
             Token::Word(first_word) => self.parse_nonempty_line(first_word),
             Token::Eol => (),
@@ -64,21 +70,19 @@ impl<'a, 'b, L: Iterator<Item = Token<'a>>, R: Reduce<'a>> Parser<'a, 'b, L, R> 
         }
     }
 
-    fn parse_nonempty_line(&mut self, first_word: &str) {
+    fn parse_nonempty_line(&mut self, first_word: &'a str) {
         match parse_mnemonic(first_word) {
             keyword::Mnemonic::Include => self.parse_include(),
-            mnemonic => {
+            _ => {
                 let operands = &self.parse_operands();
-                self.reduce.reduce_mnemonic(mnemonic, operands)
+                self.reduce.reduce_mnemonic(Token::Word(first_word), operands)
             },
         }
     }
 
     fn parse_include(&mut self) {
-        match self.next_word().unwrap() {
-            Token::QuotedString(include_path) => self.reduce.reduce_include(include_path),
-            _ => unimplemented!(),
-        }
+        let path = self.next_word().unwrap();
+        self.reduce.reduce_include(path)
     }
 
     fn parse_operands(&mut self) -> Vec<ast::Operand> {
