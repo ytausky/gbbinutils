@@ -8,8 +8,12 @@ use std::iter;
 use std::vec;
 
 trait Reduce<'a> {
+    type Expr;
+
+    fn build_name_expr(&mut self, token: Token<'a>) -> Self::Expr;
+
     fn reduce_include(&mut self, path: Token<'a>);
-    fn reduce_mnemonic(&mut self, mnemonic: Token<'a>, operands: &[ast::Operand]);
+    fn reduce_mnemonic(&mut self, mnemonic: Token<'a>, operands: &[Self::Expr]);
 }
 
 struct DefaultReduce<'a> {
@@ -17,6 +21,12 @@ struct DefaultReduce<'a> {
 }
 
 impl<'a> Reduce<'a> for DefaultReduce<'a> {
+    type Expr = Token<'a>;
+
+    fn build_name_expr(&mut self, token: Token<'a>) -> Token<'a> {
+        token
+    }
+
     fn reduce_include(&mut self, path: Token<'a>) {
         match path {
             Token::QuotedString(path_str) => self.items.push(include(path_str)),
@@ -24,9 +34,10 @@ impl<'a> Reduce<'a> for DefaultReduce<'a> {
         }
     }
 
-    fn reduce_mnemonic(&mut self, mnemonic: Token<'a>, operands: &[ast::Operand]) {
+    fn reduce_mnemonic(&mut self, mnemonic: Token<'a>, operands: &[Token<'a>]) {
+        let parsed_operands: Vec<ast::Operand> = operands.iter().map(|t| parse_operand(t).unwrap()).collect();
         match mnemonic {
-            Token::Word(spelling) => self.items.push(inst(parse_mnemonic(spelling), operands)),
+            Token::Word(spelling) => self.items.push(inst(parse_mnemonic(spelling), &parsed_operands)),
             _ => panic!()
         }
     }
@@ -74,8 +85,8 @@ impl<'a, 'b, L: Iterator<Item = Token<'a>>, R: Reduce<'a>> Parser<'a, 'b, L, R> 
         match parse_mnemonic(first_word) {
             keyword::Mnemonic::Include => self.parse_include(),
             _ => {
-                let operands = &self.parse_operands();
-                self.reduce.reduce_mnemonic(Token::Word(first_word), operands)
+                let operands = self.parse_operands();
+                self.reduce.reduce_mnemonic(Token::Word(first_word), &operands)
             },
         }
     }
@@ -85,18 +96,15 @@ impl<'a, 'b, L: Iterator<Item = Token<'a>>, R: Reduce<'a>> Parser<'a, 'b, L, R> 
         self.reduce.reduce_include(path)
     }
 
-    fn parse_operands(&mut self) -> Vec<ast::Operand> {
+    fn parse_operands(&mut self) -> Vec<R::Expr> {
         let mut operands = vec![];
-        if let Some(&Token::Word(word)) = self.tokens.peek() {
-            operands.push(parse_operand(word).unwrap());
-            self.next_word();
+        if let Some(&Token::Word(_)) = self.tokens.peek() {
+            let first_word = self.tokens.next().unwrap();
+            operands.push(self.reduce.build_name_expr(first_word));
             while let Some(&Token::Comma) = self.tokens.peek() {
                 self.next_word();
-                let next_operand = match self.next_word().unwrap() {
-                    Token::Word(w) => w,
-                    _ => panic!(),
-                };
-                operands.push(parse_operand(next_operand).unwrap())
+                let next_word = self.tokens.next().unwrap();
+                operands.push(self.reduce.build_name_expr(next_word))
             }
         }
         operands
@@ -116,11 +124,11 @@ fn parse_mnemonic(spelling: &str) -> keyword::Mnemonic {
     }
 }
 
-fn parse_operand(src: &str) -> Option<ast::Operand> {
-    match src {
-        "a" => Some(ast::Operand::Register(keyword::Register::A)),
-        "b" => Some(ast::Operand::Register(keyword::Register::B)),
-        "bc" => Some(ast::Operand::RegisterPair(keyword::RegisterPair::Bc)),
+fn parse_operand<'a>(token: &Token<'a>) -> Option<ast::Operand> {
+    match *token {
+        Token::Word("a") => Some(ast::Operand::Register(keyword::Register::A)),
+        Token::Word("b") => Some(ast::Operand::Register(keyword::Register::B)),
+        Token::Word("bc") => Some(ast::Operand::RegisterPair(keyword::RegisterPair::Bc)),
         _ => None,
     }
 }
