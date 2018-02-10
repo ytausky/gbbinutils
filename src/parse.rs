@@ -51,15 +51,15 @@ impl<'a, 'b, L: Iterator<Item = Token<'a>>, R: Reduce<'a>> Parser<'a, 'b, L, R> 
     }
 
     fn parse(mut self) {
-        while self.tokens.peek().is_some() {
-            self.parse_line()
+        while let Some(token) = self.tokens.next() {
+            self.parse_line(token)
         }
     }
 
-    fn parse_line(&mut self) {
-        match self.next_word() {
-            Some(Token::Word(first_word)) => self.parse_nonempty_line(first_word),
-            Some(Token::Eol) | None => (),
+    fn parse_line(&mut self, first_token: Token) {
+        match first_token {
+            Token::Word(first_word) => self.parse_nonempty_line(first_word),
+            Token::Eol => (),
             _ => panic!()
         }
     }
