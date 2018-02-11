@@ -12,8 +12,7 @@ trait Reduce<'a> {
 
     fn build_name_expr(&mut self, token: Token<'a>) -> Self::Expr;
 
-    fn reduce_include(&mut self, path: Token<'a>);
-    fn reduce_mnemonic(&mut self, mnemonic: Token<'a>, operands: &[Self::Expr]);
+    fn reduce_command(&mut self, name: Token<'a>, args: &[Self::Expr]);
 }
 
 struct DefaultReduce<'a> {
@@ -27,6 +26,20 @@ impl<'a> Reduce<'a> for DefaultReduce<'a> {
         token
     }
 
+    fn reduce_command(&mut self, name: Token<'a>, args: &[Self::Expr]) {
+        match name {
+            Token::Word(spelling) => {
+                match parse_mnemonic(spelling) {
+                    keyword::Mnemonic::Include => self.reduce_include(args[0].clone()),
+                    _ => self.reduce_mnemonic(name, args),
+                }
+            },
+            _ => panic!(),
+        }
+    }
+}
+
+impl<'a> DefaultReduce<'a> {
     fn reduce_include(&mut self, path: Token<'a>) {
         match path {
             Token::QuotedString(path_str) => self.items.push(include(path_str)),
@@ -75,30 +88,20 @@ impl<'a, 'b, L: Iterator<Item = Token<'a>>, R: Reduce<'a>> Parser<'a, 'b, L, R> 
 
     fn parse_line(&mut self, first_token: Token<'a>) {
         match first_token {
-            Token::Word(first_word) => self.parse_nonempty_line(first_word),
+            Token::Word(_) => self.parse_nonempty_line(first_token),
             Token::Eol => (),
             _ => panic!()
         }
     }
 
-    fn parse_nonempty_line(&mut self, first_word: &'a str) {
-        match parse_mnemonic(first_word) {
-            keyword::Mnemonic::Include => self.parse_include(),
-            _ => {
-                let operands = self.parse_operands();
-                self.reduce.reduce_mnemonic(Token::Word(first_word), &operands)
-            },
-        }
-    }
-
-    fn parse_include(&mut self) {
-        let path = self.next_word().unwrap();
-        self.reduce.reduce_include(path)
+    fn parse_nonempty_line(&mut self, first_token: Token<'a>) {
+        let operands = self.parse_operands();
+        self.reduce.reduce_command(first_token, &operands)
     }
 
     fn parse_operands(&mut self) -> Vec<R::Expr> {
         let mut operands = vec![];
-        if let Some(&Token::Word(_)) = self.tokens.peek() {
+        if let Some(_) = self.tokens.peek() {
             let first_word = self.tokens.next().unwrap();
             operands.push(self.reduce.build_name_expr(first_word));
             while let Some(&Token::Comma) = self.tokens.peek() {
