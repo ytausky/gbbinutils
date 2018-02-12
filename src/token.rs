@@ -9,15 +9,15 @@ pub enum Token<'a> {
     Word(&'a str),
 }
 
-impl<'a> syntax::SyntacticToken for Token<'a> {
-    fn kind(&self) -> syntax::TokenKind {
-        use syntax::TokenKind;
+impl<'a> syntax::Terminal for Token<'a> {
+    fn kind(&self) -> syntax::TerminalKind {
+        use syntax::TerminalKind;
         match *self {
-            Token::Comma => TokenKind::Comma,
-            Token::Eol => TokenKind::Eol,
-            Token::Number(_) => TokenKind::Number,
-            Token::QuotedString(_) => TokenKind::QuotedString,
-            Token::Word(_) => TokenKind::Word,
+            Token::Comma => TerminalKind::Comma,
+            Token::Eol => TerminalKind::Eol,
+            Token::Number(_) => TerminalKind::Number,
+            Token::QuotedString(_) => TerminalKind::QuotedString,
+            Token::Word(_) => TerminalKind::Word,
         }
     }
 }

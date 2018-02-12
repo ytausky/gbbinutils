@@ -2,19 +2,19 @@ use std::marker::PhantomData;
 use ast;
 use keyword;
 
-use syntax::*;
+use syntax::Terminal;
+use syntax::TerminalKind::*;
 use token::Token;
 
 use std::iter;
 use std::vec;
 
 trait Reduce {
-    type Token: SyntacticToken;
+    type Token: Terminal;
     type Item;
     type Expr;
 
     fn build_name_expr(&mut self, token: Self::Token) -> Self::Expr;
-
     fn reduce_command(&mut self, name: Self::Token, args: &[Self::Expr]) -> Self::Item;
 }
 
@@ -89,8 +89,8 @@ impl<L, R> Parser<L, R> where R: Reduce, L: Iterator<Item = R::Token> {
 
     fn parse_line(&mut self, first_token: R::Token) -> Option<R::Item> {
         match first_token.kind() {
-            TokenKind::Word => Some(self.parse_nonempty_line(first_token)),
-            TokenKind::Eol => None,
+            Word => Some(self.parse_nonempty_line(first_token)),
+            Eol => None,
             _ => panic!()
         }
     }
@@ -105,7 +105,7 @@ impl<L, R> Parser<L, R> where R: Reduce, L: Iterator<Item = R::Token> {
         if let Some(_) = self.tokens.peek() {
             let first_word = self.tokens.next().unwrap();
             operands.push(self.reduce.build_name_expr(first_word));
-            while let Some(TokenKind::Comma) = self.tokens.peek().map(|t| t.kind()) {
+            while let Some(Comma) = self.tokens.peek().map(|t| t.kind()) {
                 self.next_word();
                 let next_word = self.tokens.next().unwrap();
                 operands.push(self.reduce.build_name_expr(next_word))

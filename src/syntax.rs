@@ -1,8 +1,8 @@
-pub trait SyntacticToken {
-    fn kind(&self) -> TokenKind;
+pub trait Terminal {
+    fn kind(&self) -> TerminalKind;
 }
 
-pub enum TokenKind {
+pub enum TerminalKind {
     Comma,
     Eol,
     Number,
