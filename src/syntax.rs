@@ -9,3 +9,12 @@ pub enum TerminalKind {
     QuotedString,
     Word,
 }
+
+pub trait Reduce {
+    type Token: Terminal;
+    type Item;
+    type Expr;
+
+    fn build_name_expr(&mut self, token: Self::Token) -> Self::Expr;
+    fn reduce_command(&mut self, name: Self::Token, args: &[Self::Expr]) -> Self::Item;
+}

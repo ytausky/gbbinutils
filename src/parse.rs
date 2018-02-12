@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 use ast;
 use keyword;
 
+use syntax;
 use syntax::Terminal;
 use syntax::TerminalKind::*;
 use token::Token;
@@ -9,18 +10,9 @@ use token::Token;
 use std::iter;
 use std::vec;
 
-trait Reduce {
-    type Token: Terminal;
-    type Item;
-    type Expr;
-
-    fn build_name_expr(&mut self, token: Self::Token) -> Self::Expr;
-    fn reduce_command(&mut self, name: Self::Token, args: &[Self::Expr]) -> Self::Item;
-}
-
 struct DefaultReduce<'a>(PhantomData<&'a ()>);
 
-impl<'a> Reduce for DefaultReduce<'a> {
+impl<'a> syntax::Reduce for DefaultReduce<'a> {
     type Token = Token<'a>;
     type Item = ast::AsmItem<'a>;
     type Expr = Token<'a>;
@@ -67,12 +59,12 @@ pub fn parse_src<'a, I: Iterator<Item = Token<'a>>>(tokens: I) -> vec::IntoIter<
     parser.parse().into_iter()
 }
 
-struct Parser<L: Iterator, R: Reduce> {
+struct Parser<L: Iterator, R: syntax::Reduce> {
     tokens: iter::Peekable<L>,
     reduce: R,
 }
 
-impl<L, R> Parser<L, R> where R: Reduce, L: Iterator<Item = R::Token> {
+impl<L, R> Parser<L, R> where R: syntax::Reduce, L: Iterator<Item = R::Token> {
     fn next_word(&mut self) -> Option<R::Token> {
         self.tokens.next()
     }
