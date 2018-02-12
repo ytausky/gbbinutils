@@ -8,25 +8,25 @@ use std::iter;
 use std::vec;
 
 trait Reduce<'a> {
+    type Item;
     type Expr;
 
     fn build_name_expr(&mut self, token: Token<'a>) -> Self::Expr;
 
-    fn reduce_command(&mut self, name: Token<'a>, args: &[Self::Expr]);
+    fn reduce_command(&mut self, name: Token<'a>, args: &[Self::Expr]) -> Self::Item;
 }
 
-struct DefaultReduce<'a> {
-    items: Vec<ast::AsmItem<'a>>,
-}
+struct DefaultReduce;
 
-impl<'a> Reduce<'a> for DefaultReduce<'a> {
+impl<'a> Reduce<'a> for DefaultReduce {
+    type Item = ast::AsmItem<'a>;
     type Expr = Token<'a>;
 
     fn build_name_expr(&mut self, token: Token<'a>) -> Token<'a> {
         token
     }
 
-    fn reduce_command(&mut self, name: Token<'a>, args: &[Self::Expr]) {
+    fn reduce_command(&mut self, name: Token<'a>, args: &[Self::Expr]) -> Self::Item {
         match name {
             Token::Word(spelling) => {
                 match parse_mnemonic(spelling) {
@@ -39,62 +39,62 @@ impl<'a> Reduce<'a> for DefaultReduce<'a> {
     }
 }
 
-impl<'a> DefaultReduce<'a> {
-    fn reduce_include(&mut self, path: Token<'a>) {
+impl<'a> DefaultReduce {
+    fn reduce_include(&mut self, path: Token<'a>) -> ast::AsmItem<'a> {
         match path {
-            Token::QuotedString(path_str) => self.items.push(include(path_str)),
+            Token::QuotedString(path_str) => include(path_str),
             _ => panic!()
         }
     }
 
-    fn reduce_mnemonic(&mut self, mnemonic: Token<'a>, operands: &[Token<'a>]) {
+    fn reduce_mnemonic(&mut self, mnemonic: Token<'a>, operands: &[Token<'a>]) -> ast::AsmItem<'a> {
         let parsed_operands: Vec<ast::Operand> = operands.iter().map(|t| parse_operand(t).unwrap()).collect();
         match mnemonic {
-            Token::Word(spelling) => self.items.push(inst(parse_mnemonic(spelling), &parsed_operands)),
+            Token::Word(spelling) => inst(parse_mnemonic(spelling), &parsed_operands),
             _ => panic!()
         }
     }
 }
 
 pub fn parse_src<'a, I: Iterator<Item = Token<'a>>>(tokens: I) -> vec::IntoIter<ast::AsmItem<'a>> {
-    let mut reduce = DefaultReduce { items: vec![] };
-    {
-        let parser = Parser {
-            tokens: tokens.peekable(),
-            reduce: &mut reduce,
-            phantom: PhantomData,
-        };
-        parser.parse();
-    }
-    reduce.items.into_iter()
+    let parser = Parser {
+        tokens: tokens.peekable(),
+        reduce: DefaultReduce {},
+        phantom: PhantomData,
+    };
+    parser.parse().into_iter()
 }
 
-struct Parser<'a, 'b, L: Iterator, R: 'b + Reduce<'a>> {
+struct Parser<'a, L: Iterator, R: Reduce<'a>> {
     tokens: iter::Peekable<L>,
-    reduce: &'b mut R,
+    reduce: R,
     phantom: PhantomData<&'a ()>
 }
 
-impl<'a, 'b, L: Iterator<Item = Token<'a>>, R: Reduce<'a>> Parser<'a, 'b, L, R> {
+impl<'a, L: Iterator<Item = Token<'a>>, R: Reduce<'a>> Parser<'a, L, R> {
     fn next_word(&mut self) -> Option<Token<'a>> {
         self.tokens.next()
     }
 
-    fn parse(mut self) {
+    fn parse(mut self) -> Vec<R::Item> {
+        let mut src = vec![];
         while let Some(token) = self.tokens.next() {
-            self.parse_line(token)
-        }
+            if let Some(item) = self.parse_line(token) {
+                src.push(item)
+            }
+        };
+        src
     }
 
-    fn parse_line(&mut self, first_token: Token<'a>) {
+    fn parse_line(&mut self, first_token: Token<'a>) -> Option<R::Item> {
         match first_token {
-            Token::Word(_) => self.parse_nonempty_line(first_token),
-            Token::Eol => (),
+            Token::Word(_) => Some(self.parse_nonempty_line(first_token)),
+            Token::Eol => None,
             _ => panic!()
         }
     }
 
-    fn parse_nonempty_line(&mut self, first_token: Token<'a>) {
+    fn parse_nonempty_line(&mut self, first_token: Token<'a>) -> R::Item {
         let operands = self.parse_operands();
         self.reduce.reduce_command(first_token, &operands)
     }
