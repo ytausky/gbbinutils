@@ -7,18 +7,44 @@ use token::Token;
 use std::iter;
 use std::vec;
 
-trait Reduce<'a> {
+trait SyntacticToken {
+    fn kind(&self) -> TokenKind;
+}
+
+enum TokenKind {
+    Comma,
+    Eol,
+    Number,
+    QuotedString,
+    Word,
+}
+
+impl<'a> SyntacticToken for Token<'a> {
+    fn kind(&self) -> TokenKind {
+        match *self {
+            Token::Comma => TokenKind::Comma,
+            Token::Eol => TokenKind::Eol,
+            Token::Number(_) => TokenKind::Number,
+            Token::QuotedString(_) => TokenKind::QuotedString,
+            Token::Word(_) => TokenKind::Word,
+        }
+    }
+}
+
+trait Reduce {
+    type Token: SyntacticToken;
     type Item;
     type Expr;
 
-    fn build_name_expr(&mut self, token: Token<'a>) -> Self::Expr;
+    fn build_name_expr(&mut self, token: Self::Token) -> Self::Expr;
 
-    fn reduce_command(&mut self, name: Token<'a>, args: &[Self::Expr]) -> Self::Item;
+    fn reduce_command(&mut self, name: Self::Token, args: &[Self::Expr]) -> Self::Item;
 }
 
-struct DefaultReduce;
+struct DefaultReduce<'a>(PhantomData<&'a ()>);
 
-impl<'a> Reduce<'a> for DefaultReduce {
+impl<'a> Reduce for DefaultReduce<'a> {
+    type Token = Token<'a>;
     type Item = ast::AsmItem<'a>;
     type Expr = Token<'a>;
 
@@ -39,7 +65,7 @@ impl<'a> Reduce<'a> for DefaultReduce {
     }
 }
 
-impl<'a> DefaultReduce {
+impl<'a> DefaultReduce<'a> {
     fn reduce_include(&mut self, path: Token<'a>) -> ast::AsmItem<'a> {
         match path {
             Token::QuotedString(path_str) => include(path_str),
@@ -59,20 +85,18 @@ impl<'a> DefaultReduce {
 pub fn parse_src<'a, I: Iterator<Item = Token<'a>>>(tokens: I) -> vec::IntoIter<ast::AsmItem<'a>> {
     let parser = Parser {
         tokens: tokens.peekable(),
-        reduce: DefaultReduce {},
-        phantom: PhantomData,
+        reduce: DefaultReduce(PhantomData),
     };
     parser.parse().into_iter()
 }
 
-struct Parser<'a, L: Iterator, R: Reduce<'a>> {
+struct Parser<L: Iterator, R: Reduce> {
     tokens: iter::Peekable<L>,
     reduce: R,
-    phantom: PhantomData<&'a ()>
 }
 
-impl<'a, L: Iterator<Item = Token<'a>>, R: Reduce<'a>> Parser<'a, L, R> {
-    fn next_word(&mut self) -> Option<Token<'a>> {
+impl<L, R> Parser<L, R> where R: Reduce, L: Iterator<Item = R::Token> {
+    fn next_word(&mut self) -> Option<R::Token> {
         self.tokens.next()
     }
 
@@ -86,15 +110,15 @@ impl<'a, L: Iterator<Item = Token<'a>>, R: Reduce<'a>> Parser<'a, L, R> {
         src
     }
 
-    fn parse_line(&mut self, first_token: Token<'a>) -> Option<R::Item> {
-        match first_token {
-            Token::Word(_) => Some(self.parse_nonempty_line(first_token)),
-            Token::Eol => None,
+    fn parse_line(&mut self, first_token: R::Token) -> Option<R::Item> {
+        match first_token.kind() {
+            TokenKind::Word => Some(self.parse_nonempty_line(first_token)),
+            TokenKind::Eol => None,
             _ => panic!()
         }
     }
 
-    fn parse_nonempty_line(&mut self, first_token: Token<'a>) -> R::Item {
+    fn parse_nonempty_line(&mut self, first_token: R::Token) -> R::Item {
         let operands = self.parse_operands();
         self.reduce.reduce_command(first_token, &operands)
     }
@@ -104,7 +128,7 @@ impl<'a, L: Iterator<Item = Token<'a>>, R: Reduce<'a>> Parser<'a, L, R> {
         if let Some(_) = self.tokens.peek() {
             let first_word = self.tokens.next().unwrap();
             operands.push(self.reduce.build_name_expr(first_word));
-            while let Some(&Token::Comma) = self.tokens.peek() {
+            while let Some(TokenKind::Comma) = self.tokens.peek().map(|t| t.kind()) {
                 self.next_word();
                 let next_word = self.tokens.next().unwrap();
                 operands.push(self.reduce.build_name_expr(next_word))
