@@ -2,34 +2,11 @@ use std::marker::PhantomData;
 use ast;
 use keyword;
 
+use syntax::*;
 use token::Token;
 
 use std::iter;
 use std::vec;
-
-trait SyntacticToken {
-    fn kind(&self) -> TokenKind;
-}
-
-enum TokenKind {
-    Comma,
-    Eol,
-    Number,
-    QuotedString,
-    Word,
-}
-
-impl<'a> SyntacticToken for Token<'a> {
-    fn kind(&self) -> TokenKind {
-        match *self {
-            Token::Comma => TokenKind::Comma,
-            Token::Eol => TokenKind::Eol,
-            Token::Number(_) => TokenKind::Number,
-            Token::QuotedString(_) => TokenKind::QuotedString,
-            Token::Word(_) => TokenKind::Word,
-        }
-    }
-}
 
 trait Reduce {
     type Token: SyntacticToken;
