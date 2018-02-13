@@ -1,6 +1,5 @@
-use std::marker::PhantomData;
 use ast;
-use keyword;
+use semantics;
 
 use syntax;
 use syntax::Terminal;
@@ -8,53 +7,13 @@ use syntax::TerminalKind::*;
 use token::Token;
 
 use std::iter;
+use std::marker::PhantomData;
 use std::vec;
-
-struct DefaultReduce<'a>(PhantomData<&'a ()>);
-
-impl<'a> syntax::Reduce for DefaultReduce<'a> {
-    type Token = Token<'a>;
-    type Item = ast::AsmItem<'a>;
-    type Expr = Token<'a>;
-
-    fn build_name_expr(&mut self, token: Token<'a>) -> Token<'a> {
-        token
-    }
-
-    fn reduce_command(&mut self, name: Token<'a>, args: &[Self::Expr]) -> Self::Item {
-        match name {
-            Token::Word(spelling) => {
-                match parse_mnemonic(spelling) {
-                    keyword::Mnemonic::Include => self.reduce_include(args[0].clone()),
-                    _ => self.reduce_mnemonic(name, args),
-                }
-            },
-            _ => panic!(),
-        }
-    }
-}
-
-impl<'a> DefaultReduce<'a> {
-    fn reduce_include(&mut self, path: Token<'a>) -> ast::AsmItem<'a> {
-        match path {
-            Token::QuotedString(path_str) => include(path_str),
-            _ => panic!()
-        }
-    }
-
-    fn reduce_mnemonic(&mut self, mnemonic: Token<'a>, operands: &[Token<'a>]) -> ast::AsmItem<'a> {
-        let parsed_operands: Vec<ast::Operand> = operands.iter().map(|t| parse_operand(t).unwrap()).collect();
-        match mnemonic {
-            Token::Word(spelling) => inst(parse_mnemonic(spelling), &parsed_operands),
-            _ => panic!()
-        }
-    }
-}
 
 pub fn parse_src<'a, I: Iterator<Item = Token<'a>>>(tokens: I) -> vec::IntoIter<ast::AsmItem<'a>> {
     let parser = Parser {
         tokens: tokens.peekable(),
-        reduce: DefaultReduce(PhantomData),
+        reduce: semantics::DefaultReduce(PhantomData),
     };
     parser.parse().into_iter()
 }
@@ -107,44 +66,17 @@ impl<L, R> Parser<L, R> where R: syntax::Reduce, L: Iterator<Item = R::Token> {
     }
 }
 
-fn parse_mnemonic(spelling: &str) -> keyword::Mnemonic {
-    use keyword::Mnemonic::*;
-    match spelling {
-        "halt" => Halt,
-        "include" => Include,
-        "ld" => Ld,
-        "nop" => Nop,
-        "push" => Push,
-        "stop" => Stop,
-        _ => unimplemented!(),
-    }
-}
-
-fn parse_operand<'a>(token: &Token<'a>) -> Option<ast::Operand> {
-    match *token {
-        Token::Word("a") => Some(ast::Operand::Register(keyword::Register::A)),
-        Token::Word("b") => Some(ast::Operand::Register(keyword::Register::B)),
-        Token::Word("bc") => Some(ast::Operand::RegisterPair(keyword::RegisterPair::Bc)),
-        _ => None,
-    }
-}
-
-fn inst<'a>(mnemonic: keyword::Mnemonic, operands: &[ast::Operand]) -> ast::AsmItem<'a> {
-    ast::AsmItem::Instruction(ast::Instruction::new(mnemonic, operands))
-}
-
-fn include(path: &str) -> ast::AsmItem {
-    ast::AsmItem::Include(path)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::parse_src;
 
     use ast::*;
 
     use keyword::Mnemonic::*;
+    use token::Token;
     use token::Token::*;
+
+    use semantics::{include, inst, parse_mnemonic};
 
     fn assert_eq_ast(tokens: &[Token], expected_ast: &[AsmItem]) {
         let cloned_tokens = tokens.into_iter().cloned();

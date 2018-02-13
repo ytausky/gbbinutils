@@ -3,6 +3,7 @@ mod codegen;
 mod keyword;
 mod lexer;
 mod parse;
+mod semantics;
 mod syntax;
 mod token;
 
