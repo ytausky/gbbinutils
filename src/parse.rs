@@ -70,10 +70,12 @@ mod tests {
 
     use keyword::Mnemonic::*;
     use token::Token;
-    use token::Token::*;
 
     use semantics;
     use semantics::{include, inst};
+
+    use syntax;
+    use syntax::TerminalKind::*;
 
     fn assert_eq_ast(tokens: &[Token], expected_ast: &[AsmItem]) {
         let cloned_tokens = tokens.into_iter().cloned();
@@ -86,25 +88,57 @@ mod tests {
         assert_eq_ast(&[], &[])
     }
 
+    struct TestReduce;
+
+    type TestToken = (syntax::TerminalKind, usize);
+
+    impl syntax::Terminal for TestToken {
+        fn kind(&self) -> syntax::TerminalKind {
+            let (ref terminal_kind, _) = *self;
+            terminal_kind.clone()
+        }
+    }
+
+    type TestItem = (TestToken, Vec<TestToken>);
+
+    impl syntax::Reduce for TestReduce {
+        type Token = TestToken;
+        type Item = TestItem;
+        type Expr = Self::Token;
+
+        fn build_name_expr(&mut self, token: Self::Token) -> Self::Expr {
+            token
+        }
+
+        fn reduce_command(&mut self, name: Self::Token, args: &[Self::Expr]) -> Self::Item {
+            (name, args.iter().cloned().collect())
+        }
+    }
+
     #[test]
     fn parse_empty_line() {
-        assert_eq_ast(&[Eol], &[])
+        assert_eq_items(&[(Eol, 0)], &[])
+    }
+
+    fn assert_eq_items(tokens: &[TestToken], expected_items: &[TestItem]) {
+        let parsed_items = parse_src(tokens.iter().cloned(), TestReduce {});
+        assert_eq!(parsed_items, expected_items)
     }
 
     #[test]
     fn parse_nullary_instruction() {
-        assert_eq_ast(&[Word("nop")], &[inst(Nop, &[])])
+        assert_eq_items(&[(Word, 0)], &[((Word, 0), vec![])])
     }
 
     #[test]
     fn parse_push_bc() {
-        assert_eq_ast(&[Word("push"), Word("bc")], &[inst(Push, &[BC])])
+        assert_eq_ast(&[Token::Word("push"), Token::Word("bc")], &[inst(Push, &[BC])])
     }
 
     #[test]
     fn parse_ld_a_a() {
         assert_eq_ast(
-            &[Word("ld"), Word("a"), Comma, Word("a")],
+            &[Token::Word("ld"), Token::Word("a"), Token::Comma, Token::Word("a")],
             &[inst(Ld, &[A, A])]
         )
     }
@@ -112,7 +146,7 @@ mod tests {
     #[test]
     fn parse_ld_a_b() {
         assert_eq_ast(
-            &[Word("ld"), Word("a"), Comma, Word("b")],
+            &[Token::Word("ld"), Token::Word("a"), Token::Comma, Token::Word("b")],
             &[inst(Ld, &[A, B])]
         )
     }
@@ -120,8 +154,8 @@ mod tests {
     #[test]
     fn parse_two_instructions() {
         let tokens = &[
-            Word("ld"), Word("a"), Comma, Word("b"), Eol,
-            Word("ld"), Word("a"), Comma, Word("b"),
+            Token::Word("ld"), Token::Word("a"), Token::Comma, Token::Word("b"), Token::Eol,
+            Token::Word("ld"), Token::Word("a"), Token::Comma, Token::Word("b"),
         ];
         assert_eq_ast(tokens, &[inst(Ld, &[A, B]), inst(Ld, &[A, B])])
     }
@@ -129,14 +163,15 @@ mod tests {
     #[test]
     fn parse_two_instructions_separated_by_blank_line() {
         let tokens = &[
-            Word("ld"), Word("a"), Comma, Word("b"), Eol, Eol,
-            Word("ld"), Word("a"), Comma, Word("b"),
+            Token::Word("ld"), Token::Word("a"), Token::Comma, Token::Word("b"), Token::Eol,
+            Token::Eol,
+            Token::Word("ld"), Token::Word("a"), Token::Comma, Token::Word("b"),
         ];
         assert_eq_ast(tokens, &[inst(Ld, &[A, B]), inst(Ld, &[A, B])])
     }
 
     #[test]
     fn parse_include() {
-        assert_eq_ast(&[Word("include"), QuotedString("file.asm")], &[include("file.asm")])
+        assert_eq_ast(&[Token::Word("include"), Token::QuotedString("file.asm")], &[include("file.asm")])
     }
 }

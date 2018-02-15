@@ -2,6 +2,7 @@ pub trait Terminal {
     fn kind(&self) -> TerminalKind;
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub enum TerminalKind {
     Comma,
     Eol,
