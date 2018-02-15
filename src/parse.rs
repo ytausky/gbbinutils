@@ -76,7 +76,7 @@ mod tests {
     use token::Token;
     use token::Token::*;
 
-    use semantics::{include, inst, parse_mnemonic};
+    use semantics::{include, inst};
 
     fn assert_eq_ast(tokens: &[Token], expected_ast: &[AsmItem]) {
         let cloned_tokens = tokens.into_iter().cloned();
@@ -95,22 +95,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_nop() {
-        parse_nullary_instruction("nop")
-    }
-
-    #[test]
-    fn parse_halt() {
-        parse_nullary_instruction("halt")
-    }
-
-    #[test]
-    fn parse_stop() {
-        parse_nullary_instruction("stop")
-    }
-
-    fn parse_nullary_instruction(src: &str) {
-        assert_eq_ast(&[Word(src)], &[inst(parse_mnemonic(src), &[])])
+    fn parse_nullary_instruction() {
+        assert_eq_ast(&[Word("nop")], &[inst(Nop, &[])])
     }
 
     #[test]
