@@ -8,6 +8,12 @@ use std::marker::PhantomData;
 
 pub struct DefaultReduce<'a>(pub PhantomData<&'a ()>);
 
+impl<'a> DefaultReduce<'a> {
+    pub fn new() -> DefaultReduce<'a> {
+        DefaultReduce(PhantomData)
+    }
+}
+
 impl<'a> syntax::Reduce for DefaultReduce<'a> {
     type Token = Token<'a>;
     type Item = ast::AsmItem<'a>;

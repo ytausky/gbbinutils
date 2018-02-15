@@ -1,21 +1,17 @@
-use ast;
-use semantics;
-
 use syntax;
 use syntax::Terminal;
 use syntax::TerminalKind::*;
-use token::Token;
 
 use std::iter;
-use std::marker::PhantomData;
-use std::vec;
 
-pub fn parse_src<'a, I: Iterator<Item = Token<'a>>>(tokens: I) -> vec::IntoIter<ast::AsmItem<'a>> {
+pub fn parse_src<'a, I, R>(tokens: I, reduce: R) -> Vec<R::Item> 
+    where I: Iterator<Item = R::Token>, R: syntax::Reduce
+{
     let parser = Parser {
         tokens: tokens.peekable(),
-        reduce: semantics::DefaultReduce(PhantomData),
+        reduce: reduce,
     };
-    parser.parse().into_iter()
+    parser.parse()
 }
 
 struct Parser<L: Iterator, R: syntax::Reduce> {
@@ -76,11 +72,12 @@ mod tests {
     use token::Token;
     use token::Token::*;
 
+    use semantics;
     use semantics::{include, inst};
 
     fn assert_eq_ast(tokens: &[Token], expected_ast: &[AsmItem]) {
         let cloned_tokens = tokens.into_iter().cloned();
-        let parsed_ast = parse_src(cloned_tokens).collect::<Vec<AsmItem>>();
+        let parsed_ast = parse_src(cloned_tokens, semantics::DefaultReduce::new());
         assert_eq!(parsed_ast, expected_ast)
     }
 
