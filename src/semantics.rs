@@ -117,6 +117,13 @@ mod tests {
         analyze_nullary_instruction("stop", keyword::Mnemonic::Stop)
     }
 
+    #[test]
+    fn analyze_push_bc() {
+        let mut builder = DefaultReduce(PhantomData);
+        let item = builder.reduce_command(Token::Word("push"), &[Token::Word("bc")]);
+        assert_eq!(item, inst(keyword::Mnemonic::Push, &[ast::Operand::RegisterPair(keyword::RegisterPair::Bc)]))
+    }
+
     fn analyze_nullary_instruction(name: &str, mnemonic: keyword::Mnemonic) {
         let mut builder = DefaultReduce(PhantomData);
         let item = builder.reduce_command(Token::Word(name), &[]);

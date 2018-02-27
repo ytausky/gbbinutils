@@ -131,8 +131,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_push_bc() {
-        assert_eq_ast(&[Token::Word("push"), Token::Word("bc")], &[inst(Push, &[BC])])
+    fn parse_unary_instruction() {
+        assert_eq_items(&[(Word, 0), (Word, 1)], &[((Word, 0), vec![(Word, 1)])])
     }
 
     #[test]
