@@ -5,7 +5,7 @@ use syntax::TerminalKind::*;
 use std::iter;
 
 pub fn parse_src<'a, I, R>(tokens: I, reduce: R) -> Vec<R::Item> 
-    where I: Iterator<Item = R::Token>, R: syntax::Reduce
+    where I: Iterator<Item = R::Token>, R: syntax::ProductionRules
 {
     let parser = Parser {
         tokens: tokens.peekable(),
@@ -14,12 +14,12 @@ pub fn parse_src<'a, I, R>(tokens: I, reduce: R) -> Vec<R::Item>
     parser.parse()
 }
 
-struct Parser<L: Iterator, R: syntax::Reduce> {
+struct Parser<L: Iterator, R: syntax::ProductionRules> {
     tokens: iter::Peekable<L>,
     reduce: R,
 }
 
-impl<L, R> Parser<L, R> where R: syntax::Reduce, L: Iterator<Item = R::Token> {
+impl<L, R> Parser<L, R> where R: syntax::ProductionRules, L: Iterator<Item = R::Token> {
     fn next_word(&mut self) -> Option<R::Token> {
         self.tokens.next()
     }
@@ -87,7 +87,7 @@ mod tests {
 
     type TestItem = (TestToken, Vec<TestToken>);
 
-    impl syntax::Reduce for TestReduce {
+    impl syntax::ProductionRules for TestReduce {
         type Token = TestToken;
         type Item = TestItem;
         type Expr = Self::Token;

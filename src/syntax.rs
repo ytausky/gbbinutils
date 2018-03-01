@@ -11,7 +11,7 @@ pub enum TerminalKind {
     Word,
 }
 
-pub trait Reduce {
+pub trait ProductionRules {
     type Token: Terminal;
     type Item;
     type Expr;

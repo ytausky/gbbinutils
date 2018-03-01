@@ -14,7 +14,7 @@ impl<'a> DefaultReduce<'a> {
     }
 }
 
-impl<'a> syntax::Reduce for DefaultReduce<'a> {
+impl<'a> syntax::ProductionRules for DefaultReduce<'a> {
     type Token = Token<'a>;
     type Item = ast::AsmItem<'a>;
     type Expr = Token<'a>;
@@ -93,7 +93,7 @@ fn include(path: &str) -> ast::AsmItem {
 mod tests {
     use super::*;
 
-    use syntax::Reduce;
+    use syntax::ProductionRules;
 
     #[test]
     fn build_include_item() {
