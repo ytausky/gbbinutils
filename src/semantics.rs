@@ -81,11 +81,11 @@ fn parse_operand<'a>(token: &Token<'a>) -> Option<ast::Operand> {
     }
 }
 
-pub fn inst<'a>(mnemonic: keyword::Mnemonic, operands: &[ast::Operand]) -> ast::AsmItem<'a> {
+fn inst<'a>(mnemonic: keyword::Mnemonic, operands: &[ast::Operand]) -> ast::AsmItem<'a> {
     ast::AsmItem::Instruction(ast::Instruction::new(mnemonic, operands))
 }
 
-pub fn include(path: &str) -> ast::AsmItem {
+fn include(path: &str) -> ast::AsmItem {
     ast::AsmItem::Include(path)
 }
 
@@ -121,6 +121,19 @@ mod tests {
     fn analyze_push_bc() {
         let item = analyze_instruction("push", &[Token::Word("bc")]);
         assert_eq!(item, inst(keyword::Mnemonic::Push, &[ast::BC]))
+    }
+
+    #[test]
+    fn analyze_ld_a_a() {
+        let token_a = Token::Word("a");
+        let item = analyze_instruction("ld", &[token_a.clone(), token_a]);
+        assert_eq!(item, inst(keyword::Mnemonic::Ld, &[ast::A, ast::A]))
+    }
+
+    #[test]
+    fn analyze_ld_a_b() {
+        let item = analyze_instruction("ld", &[Token::Word("a"), Token::Word("b")]);
+        assert_eq!(item, inst(keyword::Mnemonic::Ld, &[ast::A, ast::B]))
     }
 
     fn analyze_nullary_instruction(name: &str, mnemonic: keyword::Mnemonic) {
