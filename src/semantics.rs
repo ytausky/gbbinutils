@@ -97,9 +97,9 @@ mod tests {
 
     #[test]
     fn build_include_item() {
-        let mut builder = DefaultReduce(PhantomData);
-        let item = builder.reduce_command(Token::Word("include"), &[Token::QuotedString("file.asm")]);
-        assert_eq!(item, include("file.asm"))
+        let filename = "file.asm";
+        let item = analyze_instruction("include", &[Token::QuotedString(filename)]);
+        assert_eq!(item, include(filename))
     }
 
     #[test]
@@ -119,14 +119,17 @@ mod tests {
 
     #[test]
     fn analyze_push_bc() {
-        let mut builder = DefaultReduce(PhantomData);
-        let item = builder.reduce_command(Token::Word("push"), &[Token::Word("bc")]);
-        assert_eq!(item, inst(keyword::Mnemonic::Push, &[ast::Operand::RegisterPair(keyword::RegisterPair::Bc)]))
+        let item = analyze_instruction("push", &[Token::Word("bc")]);
+        assert_eq!(item, inst(keyword::Mnemonic::Push, &[ast::BC]))
     }
 
     fn analyze_nullary_instruction(name: &str, mnemonic: keyword::Mnemonic) {
-        let mut builder = DefaultReduce(PhantomData);
-        let item = builder.reduce_command(Token::Word(name), &[]);
+        let item = analyze_instruction(name, &[]);
         assert_eq!(item, inst(mnemonic, &[]))
+    }
+
+    fn analyze_instruction<'a>(name: &'a str, operands: &[Token<'a>]) -> ast::AsmItem<'a> {
+        let mut builder = DefaultReduce(PhantomData);
+        builder.reduce_command(Token::Word(name), operands)
     }
 }
