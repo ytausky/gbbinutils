@@ -19,10 +19,6 @@ struct Parser<L: Iterator, R: ProductionRules> {
 }
 
 impl<L, R> Parser<L, R> where R: ProductionRules, L: Iterator<Item = R::Token> {
-    fn next_word(&mut self) -> Option<R::Token> {
-        self.tokens.next()
-    }
-
     fn parse_block(&mut self) -> R::Block {
         let mut block = R::Block::new();
         while let Some(token) = self.tokens.next() {
@@ -49,15 +45,17 @@ impl<L, R> Parser<L, R> where R: ProductionRules, L: Iterator<Item = R::Token> {
     fn parse_operands(&mut self) -> Vec<R::Expr> {
         let mut operands = vec![];
         if let Some(_) = self.tokens.peek() {
-            let first_word = self.tokens.next().unwrap();
-            operands.push(R::Expr::from_terminal(first_word));
+            operands.push(self.parse_expression());
             while let Some(Comma) = self.tokens.peek().map(|t| t.kind()) {
-                self.next_word();
-                let next_word = self.tokens.next().unwrap();
-                operands.push(R::Expr::from_terminal(next_word))
+                self.tokens.next();
+                operands.push(self.parse_expression())
             }
         }
         operands
+    }
+
+    fn parse_expression(&mut self) -> R::Expr {
+        R::Expr::from_terminal(self.tokens.next().unwrap())
     }
 }
 
