@@ -44,7 +44,7 @@ impl<L, R> Parser<L, R> where R: ProductionRules, L: Iterator<Item = R::Token> {
 
     fn parse_operands(&mut self) -> Vec<R::Expr> {
         let mut operands = vec![];
-        if let Some(_) = self.tokens.peek() {
+        if let Some(_) = self.peek_not_eol() {
             operands.push(self.parse_expression());
             while let Some(Comma) = self.tokens.peek().map(|t| t.kind()) {
                 self.tokens.next();
@@ -52,6 +52,13 @@ impl<L, R> Parser<L, R> where R: ProductionRules, L: Iterator<Item = R::Token> {
             }
         }
         operands
+    }
+
+    fn peek_not_eol(&mut self) -> Option<&L::Item> {
+        match self.tokens.peek() {
+            Some(token) if token.kind() == Eol => None,
+            option_token => option_token,
+        }
     }
 
     fn parse_expression(&mut self) -> R::Expr {
@@ -108,6 +115,11 @@ mod tests {
     #[test]
     fn parse_nullary_instruction() {
         assert_eq_items(&[(Word, 0)], &[((Word, 0), vec![])])
+    }
+
+    #[test]
+    fn parse_nullary_instruction_followed_by_eol() {
+        assert_eq_items(&[(Word, 0), (Eol, 1)], &[((Word, 0), vec![])])
     }
 
     #[test]
