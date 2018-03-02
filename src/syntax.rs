@@ -18,12 +18,17 @@ pub trait Block {
     fn push(&mut self, item: Self::Item);
 }
 
+pub trait Expr {
+    type Terminal: Terminal;
+
+    fn from_terminal(terminal: Self::Terminal) -> Self;
+}
+
 pub trait ProductionRules {
     type Token: Terminal;
     type Item;
-    type Expr;
+    type Expr: Expr<Terminal = Self::Token>;
     type Block: Block<Item = Self::Item>;
 
-    fn build_name_expr(&mut self, token: Self::Token) -> Self::Expr;
     fn reduce_command(&mut self, name: Self::Token, args: &[Self::Expr]) -> Self::Item;
 }

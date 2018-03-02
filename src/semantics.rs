@@ -26,15 +26,19 @@ impl<T> syntax::Block for Vec<T> {
     }
 }
 
+impl<T: syntax::Terminal> syntax::Expr for T {
+    type Terminal = T;
+
+    fn from_terminal(terminal: Self::Terminal) -> Self {
+        terminal
+    }
+}
+
 impl<'a> syntax::ProductionRules for DefaultReduce<'a> {
     type Token = Token<'a>;
     type Item = ast::AsmItem<'a>;
     type Expr = Token<'a>;
     type Block = Vec<Self::Item>;
-
-    fn build_name_expr(&mut self, token: Token<'a>) -> Token<'a> {
-        token
-    }
 
     fn reduce_command(&mut self, name: Token<'a>, args: &[Self::Expr]) -> Self::Item {
         match name {

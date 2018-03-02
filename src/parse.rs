@@ -1,12 +1,10 @@
-use syntax;
-use syntax::Block;
-use syntax::Terminal;
+use syntax::*;
 use syntax::TerminalKind::*;
 
 use std::iter;
 
 pub fn parse_src<'a, I, R>(tokens: I, reduce: R) -> R::Block
-    where I: Iterator<Item = R::Token>, R: syntax::ProductionRules
+    where I: Iterator<Item = R::Token>, R: ProductionRules
 {
     let mut parser = Parser {
         tokens: tokens.peekable(),
@@ -15,12 +13,12 @@ pub fn parse_src<'a, I, R>(tokens: I, reduce: R) -> R::Block
     parser.parse_block()
 }
 
-struct Parser<L: Iterator, R: syntax::ProductionRules> {
+struct Parser<L: Iterator, R: ProductionRules> {
     tokens: iter::Peekable<L>,
     reduce: R,
 }
 
-impl<L, R> Parser<L, R> where R: syntax::ProductionRules, L: Iterator<Item = R::Token> {
+impl<L, R> Parser<L, R> where R: ProductionRules, L: Iterator<Item = R::Token> {
     fn next_word(&mut self) -> Option<R::Token> {
         self.tokens.next()
     }
@@ -52,11 +50,11 @@ impl<L, R> Parser<L, R> where R: syntax::ProductionRules, L: Iterator<Item = R::
         let mut operands = vec![];
         if let Some(_) = self.tokens.peek() {
             let first_word = self.tokens.next().unwrap();
-            operands.push(self.reduce.build_name_expr(first_word));
+            operands.push(R::Expr::from_terminal(first_word));
             while let Some(Comma) = self.tokens.peek().map(|t| t.kind()) {
                 self.next_word();
                 let next_word = self.tokens.next().unwrap();
-                operands.push(self.reduce.build_name_expr(next_word))
+                operands.push(R::Expr::from_terminal(next_word))
             }
         }
         operands
@@ -93,10 +91,6 @@ mod tests {
         type Item = TestItem;
         type Expr = Self::Token;
         type Block = Vec<Self::Item>;
-
-        fn build_name_expr(&mut self, token: Self::Token) -> Self::Expr {
-            token
-        }
 
         fn reduce_command(&mut self, name: Self::Token, args: &[Self::Expr]) -> Self::Item {
             (name, args.iter().cloned().collect())
