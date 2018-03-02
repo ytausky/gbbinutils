@@ -8,11 +8,11 @@ use std::iter;
 pub fn parse_src<'a, I, R>(tokens: I, reduce: R) -> R::Block
     where I: Iterator<Item = R::Token>, R: syntax::ProductionRules
 {
-    let parser = Parser {
+    let mut parser = Parser {
         tokens: tokens.peekable(),
         reduce: reduce,
     };
-    parser.parse()
+    parser.parse_block()
 }
 
 struct Parser<L: Iterator, R: syntax::ProductionRules> {
@@ -25,7 +25,7 @@ impl<L, R> Parser<L, R> where R: syntax::ProductionRules, L: Iterator<Item = R::
         self.tokens.next()
     }
 
-    fn parse(mut self) -> R::Block {
+    fn parse_block(&mut self) -> R::Block {
         let mut block = R::Block::new();
         while let Some(token) = self.tokens.next() {
             if let Some(item) = self.parse_line(token) {
