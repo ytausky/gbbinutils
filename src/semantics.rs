@@ -14,10 +14,23 @@ impl<'a> DefaultReduce<'a> {
     }
 }
 
+impl<T> syntax::Block for Vec<T> {
+    type Item = T;
+
+    fn new() -> Self {
+        Vec::new()
+    }
+
+    fn push(&mut self, item: Self::Item) {
+        self.push(item)
+    }
+}
+
 impl<'a> syntax::ProductionRules for DefaultReduce<'a> {
     type Token = Token<'a>;
     type Item = ast::AsmItem<'a>;
     type Expr = Token<'a>;
+    type Block = Vec<Self::Item>;
 
     fn build_name_expr(&mut self, token: Token<'a>) -> Token<'a> {
         token

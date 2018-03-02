@@ -1,10 +1,11 @@
 use syntax;
+use syntax::Block;
 use syntax::Terminal;
 use syntax::TerminalKind::*;
 
 use std::iter;
 
-pub fn parse_src<'a, I, R>(tokens: I, reduce: R) -> Vec<R::Item> 
+pub fn parse_src<'a, I, R>(tokens: I, reduce: R) -> R::Block
     where I: Iterator<Item = R::Token>, R: syntax::ProductionRules
 {
     let parser = Parser {
@@ -24,14 +25,14 @@ impl<L, R> Parser<L, R> where R: syntax::ProductionRules, L: Iterator<Item = R::
         self.tokens.next()
     }
 
-    fn parse(mut self) -> Vec<R::Item> {
-        let mut src = vec![];
+    fn parse(mut self) -> R::Block {
+        let mut block = R::Block::new();
         while let Some(token) = self.tokens.next() {
             if let Some(item) = self.parse_line(token) {
-                src.push(item)
+                block.push(item)
             }
         };
-        src
+        block
     }
 
     fn parse_line(&mut self, first_token: R::Token) -> Option<R::Item> {
@@ -91,6 +92,7 @@ mod tests {
         type Token = TestToken;
         type Item = TestItem;
         type Expr = Self::Token;
+        type Block = Vec<Self::Item>;
 
         fn build_name_expr(&mut self, token: Self::Token) -> Self::Expr {
             token
