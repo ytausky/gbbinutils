@@ -28,3 +28,8 @@ pub enum Register {
 pub enum RegisterPair {
     Bc,
 }
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Keyword {
+    Nop,
+}

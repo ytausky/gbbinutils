@@ -1,3 +1,4 @@
+use keyword::Keyword;
 use token::Token;
 
 use std::iter;
@@ -89,13 +90,30 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_word(&mut self, start: usize) -> Token<'a> {
+        let end = self.find_word_end();
+        let word = &self.src[start .. end];
+        if let Some(keyword) = identify_keyword(word) {
+            Token::Keyword(keyword)
+        } else {
+            Token::Word(word)
+        }
+    }
+
+    fn find_word_end(&mut self) -> usize {
         while let Some(&(end, c)) = self.char_indices.peek() {
             if !c.is_alphanumeric() {
-                return Token::Word(&self.src[start .. end])
+                return end
             }
             self.advance()
         }
-        Token::Word(&self.src[start ..])
+        self.src.len()
+    }
+}
+
+fn identify_keyword(word: &str) -> Option<Keyword> {
+    match word {
+        "nop" => Some(Keyword::Nop),
+        _ => None,
     }
 }
 
@@ -103,6 +121,7 @@ impl<'a> Lexer<'a> {
 mod tests {
     use super::*;
 
+    use keyword::Keyword::*;
     use token::Token::*;
 
     fn assert_eq_tokens(src: &str, expected_tokens: &[Token]) {
@@ -121,12 +140,17 @@ mod tests {
 
     #[test]
     fn lex_word() {
-        assert_eq_tokens("nop", &[Word("nop")])
+        assert_eq_tokens("word", &[Word("word")])
+    }
+
+    #[test]
+    fn lex_nop() {
+        assert_eq_tokens("nop", &[Keyword(Nop)])
     }
 
     #[test]
     fn lex_word_after_whitespace() {
-        assert_eq_tokens("    nop", &[Word("nop")])
+        assert_eq_tokens("    word", &[Word("word")])
     }
 
     #[test]
