@@ -111,8 +111,11 @@ impl<'a> Lexer<'a> {
 }
 
 fn identify_keyword(word: &str) -> Option<Keyword> {
+    use keyword::Keyword::*;
     match word {
-        "nop" => Some(Keyword::Nop),
+        "bc" => Some(Bc),
+        "nop" => Some(Nop),
+        "push" => Some(Push),
         _ => None,
     }
 }
@@ -154,8 +157,8 @@ mod tests {
     }
 
     #[test]
-    fn lex_two_words() {
-        assert_eq_tokens("push bc", &[Word("push"), Word("bc")])
+    fn lex_two_keywords() {
+        assert_eq_tokens("push bc", &[Keyword(Push), Keyword(Bc)])
     }
 
     #[test]
