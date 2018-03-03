@@ -21,12 +21,24 @@ struct Parser<L: Iterator, R: ProductionRules> {
 impl<L, R> Parser<L, R> where R: ProductionRules, L: Iterator<Item = R::Token> {
     fn parse_block(&mut self) -> R::Block {
         let mut block = R::Block::new();
-        while let Some(token) = self.tokens.next() {
+        while let Some(token) = self.next_token_if_not_block_delimiter() {
             if let Some(item) = self.parse_line(token) {
                 block.push(item)
             }
         };
         block
+    }
+
+    fn next_token_if_not_block_delimiter(&mut self) -> Option<R::Token> {
+        let take_next = match self.tokens.peek() {
+            Some(token) if token.kind() != Endm => true,
+            _ => false,
+        };
+        if take_next {
+            self.tokens.next()
+        } else {
+            None
+        }
     }
 
     fn parse_line(&mut self, first_token: R::Token) -> Option<R::Item> {
@@ -49,8 +61,8 @@ impl<L, R> Parser<L, R> where R: ProductionRules, L: Iterator<Item = R::Token> {
         assert_eq!(self.tokens.next().unwrap().kind(), Colon);
         assert_eq!(self.tokens.next().unwrap().kind(), Macro);
         assert_eq!(self.tokens.next().unwrap().kind(), Eol);
+        let block = self.parse_block();
         assert_eq!(self.tokens.next().unwrap().kind(), Endm);
-        let block = R::Block::new();
         self.reduce.define_macro(label, block)
     }
 
@@ -192,10 +204,23 @@ mod tests {
     fn parse_empty_macro_definition() {
         let tokens = &[
             (Label, 0), (Colon, 1), (Macro, 2), (Eol, 3),
-            (Endm, 4)
+            (Endm, 4),
         ];
         let ast = &[
             TestItem::Macro((Label, 0), vec![]),
+        ];
+        assert_eq_items(tokens, ast)
+    }
+
+        #[test]
+    fn parse_macro_definition_with_instruction() {
+        let tokens = &[
+            (Label, 0), (Colon, 1), (Macro, 2), (Eol, 3),
+            (Word, 4), (Eol, 5),
+            (Endm, 6),
+        ];
+        let ast = &[
+            TestItem::Macro((Label, 0), vec![TestItem::Command((Word, 4), vec![])]),
         ];
         assert_eq_items(tokens, ast)
     }
