@@ -52,6 +52,7 @@ impl<'a> Lexer<'a> {
 
     fn lex_token(&mut self, start: usize, first_char: char) -> Token<'a> {
         let next_token = match first_char {
+            ':' => Token::Colon,
             ',' => Token::Comma,
             '\n' => Token::Eol,
             '$' => self.lex_number(),
@@ -123,6 +124,8 @@ fn identify_keyword(word: &str) -> Option<Keyword> {
     use keyword::Keyword::*;
     match word {
         "bc" => Some(Bc),
+        "endm" => Some(Endm),
+        "macro" => Some(Macro),
         "nop" => Some(Nop),
         "push" => Some(Push),
         _ => None,
@@ -188,5 +191,15 @@ mod tests {
     #[test]
     fn lex_hex_number() {
         assert_eq_tokens("$19af", &[Number(0x19af)])
+    }
+
+    #[test]
+    fn lex_macro_definition() {
+        assert_eq_tokens("f: macro\n", &[Label("f"), Colon, Keyword(Macro), Eol])
+    }
+
+    #[test]
+    fn lex_keyword_endm() {
+        assert_eq_tokens("endm", &[Keyword(Endm)])
     }
 }

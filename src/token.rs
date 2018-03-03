@@ -3,6 +3,7 @@ use syntax;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token<'a> {
+    Colon,
     Comma,
     Eol,
     Keyword(keyword::Keyword),
@@ -23,6 +24,7 @@ impl<'a> syntax::Terminal for Token<'a> {
             Token::Number(_) => TerminalKind::Number,
             Token::QuotedString(_) => TerminalKind::QuotedString,
             Token::Word(_) => TerminalKind::Word,
+            _ => panic!(),
         }
     }
 }

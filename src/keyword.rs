@@ -32,6 +32,8 @@ pub enum RegisterPair {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Keyword {
     Bc,
+    Endm,
+    Macro,
     Nop,
     Push,
 }
