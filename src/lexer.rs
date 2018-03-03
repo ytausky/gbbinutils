@@ -7,6 +7,7 @@ use std::str;
 pub struct Lexer<'a> {
     src: &'a str,
     char_indices: iter::Peekable<str::CharIndices<'a>>,
+    is_at_line_start: bool,
 }
 
 impl<'a> Iterator for Lexer<'a> {
@@ -26,12 +27,14 @@ impl<'a> Lexer<'a> {
         Lexer {
             src: src,
             char_indices: src.char_indices().peekable(),
+            is_at_line_start: true,
         }
     }
 
     fn skip_horizontal_whitespace(&mut self) {
         while let Some(c) = self.current_char() {
             if c.is_whitespace() && c != '\n' {
+                self.is_at_line_start = false;
                 self.advance()
             } else {
                 break
@@ -48,13 +51,17 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_token(&mut self, start: usize, first_char: char) -> Token<'a> {
-        match first_char {
+        let next_token = match first_char {
             ',' => Token::Comma,
             '\n' => Token::Eol,
             '$' => self.lex_number(),
             '"' => self.lex_quoted_string(),
             _ => self.lex_word(start),
+        };
+        if next_token == Token::Eol {
+            self.is_at_line_start = true
         }
+        next_token
     }
 
     fn lex_quoted_string(&mut self) -> Token<'a> {
@@ -94,6 +101,8 @@ impl<'a> Lexer<'a> {
         let word = &self.src[start .. end];
         if let Some(keyword) = identify_keyword(word) {
             Token::Keyword(keyword)
+        } else if self.is_at_line_start {
+            Token::Label(word)
         } else {
             Token::Word(word)
         }
@@ -142,8 +151,13 @@ mod tests {
     }
 
     #[test]
-    fn lex_word() {
-        assert_eq_tokens("word", &[Word("word")])
+    fn lex_label() {
+        assert_eq_tokens("label", &[Label("label")])
+    }
+
+    #[test]
+    fn lex_label_after_eol() {
+        assert_eq_tokens("    \nlabel", &[Eol, Label("label")])
     }
 
     #[test]
