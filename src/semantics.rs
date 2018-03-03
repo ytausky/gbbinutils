@@ -40,6 +40,10 @@ impl<'a> syntax::ProductionRules for DefaultReduce<'a> {
     type Expr = Token<'a>;
     type Block = Vec<Self::Item>;
 
+    fn define_macro(&mut self, _label: Token<'a>, _block: Self::Block) -> Self::Item {
+        inst(keyword::Mnemonic::Nop, &[])
+    }
+
     fn reduce_command(&mut self, name: Token<'a>, args: &[Self::Expr]) -> Self::Item {
         match name {
             Token::Word(spelling) => {

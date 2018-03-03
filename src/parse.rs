@@ -31,15 +31,27 @@ impl<L, R> Parser<L, R> where R: ProductionRules, L: Iterator<Item = R::Token> {
 
     fn parse_line(&mut self, first_token: R::Token) -> Option<R::Item> {
         match first_token.kind() {
-            Word => Some(self.parse_nonempty_line(first_token)),
             Eol => None,
-            _ => panic!()
+            _ => Some(self.parse_nonempty_line(first_token)),
         }
     }
 
     fn parse_nonempty_line(&mut self, first_token: R::Token) -> R::Item {
-        let operands = self.parse_operands();
-        self.reduce.reduce_command(first_token, &operands)
+        if first_token.kind() == Label {
+            self.parse_macro_definition(first_token)
+        } else {
+            let operands = self.parse_operands();
+            self.reduce.reduce_command(first_token, &operands)
+        }
+    }
+
+    fn parse_macro_definition(&mut self, label: R::Token) -> R::Item {
+        assert_eq!(self.tokens.next().unwrap().kind(), Colon);
+        assert_eq!(self.tokens.next().unwrap().kind(), Macro);
+        assert_eq!(self.tokens.next().unwrap().kind(), Eol);
+        assert_eq!(self.tokens.next().unwrap().kind(), Endm);
+        let block = R::Block::new();
+        self.reduce.define_macro(label, block)
     }
 
     fn parse_operands(&mut self) -> Vec<R::Expr> {
@@ -89,16 +101,26 @@ mod tests {
         }
     }
 
-    type TestItem = (TestToken, Vec<TestToken>);
+    type TestBlock = Vec<TestItem>;
+
+    #[derive(Debug, PartialEq)]
+    enum TestItem {
+        Command(TestToken, Vec<TestToken>),
+        Macro(TestToken, TestBlock),
+    }
 
     impl syntax::ProductionRules for TestReduce {
         type Token = TestToken;
         type Item = TestItem;
         type Expr = Self::Token;
-        type Block = Vec<Self::Item>;
+        type Block = TestBlock;
+
+        fn define_macro(&mut self, label: Self::Token, block: Self::Block) -> Self::Item {
+            TestItem::Macro(label, block)
+        }
 
         fn reduce_command(&mut self, name: Self::Token, args: &[Self::Expr]) -> Self::Item {
-            (name, args.iter().cloned().collect())
+            TestItem::Command(name, args.iter().cloned().collect())
         }
     }
 
@@ -114,23 +136,23 @@ mod tests {
 
     #[test]
     fn parse_nullary_instruction() {
-        assert_eq_items(&[(Word, 0)], &[((Word, 0), vec![])])
+        assert_eq_items(&[(Word, 0)], &[TestItem::Command((Word, 0), vec![])])
     }
 
     #[test]
     fn parse_nullary_instruction_followed_by_eol() {
-        assert_eq_items(&[(Word, 0), (Eol, 1)], &[((Word, 0), vec![])])
+        assert_eq_items(&[(Word, 0), (Eol, 1)], &[TestItem::Command((Word, 0), vec![])])
     }
 
     #[test]
     fn parse_unary_instruction() {
-        assert_eq_items(&[(Word, 0), (Word, 1)], &[((Word, 0), vec![(Word, 1)])])
+        assert_eq_items(&[(Word, 0), (Word, 1)], &[TestItem::Command((Word, 0), vec![(Word, 1)])])
     }
 
     #[test]
     fn parse_binary_instruction() {
         assert_eq_items(&[(Word, 0), (Word, 1), (Comma, 2), (Word, 3)],
-                        &[((Word, 0), vec![(Word, 1), (Word, 3)])])
+                        &[TestItem::Command((Word, 0), vec![(Word, 1), (Word, 3)])])
     }
 
     #[test]
@@ -140,8 +162,8 @@ mod tests {
             (Word, 5), (Word, 6), (Comma, 7), (Word, 8),
         ];
         let expected_items = &[
-            ((Word, 0), vec![(Word, 1), (Word, 3)]),
-            ((Word, 5), vec![(Word, 6), (Word, 8)]),
+            TestItem::Command((Word, 0), vec![(Word, 1), (Word, 3)]),
+            TestItem::Command((Word, 5), vec![(Word, 6), (Word, 8)]),
         ];
         assert_eq_items(tokens, expected_items)
     }
@@ -154,14 +176,27 @@ mod tests {
             (Word, 6), (Word, 7), (Comma, 8), (Word, 9),
         ];
         let expected_items = &[
-            ((Word, 0), vec![(Word, 1), (Word, 3)]),
-            ((Word, 6), vec![(Word, 7), (Word, 9)]),
+            TestItem::Command((Word, 0), vec![(Word, 1), (Word, 3)]),
+            TestItem::Command((Word, 6), vec![(Word, 7), (Word, 9)]),
         ];
         assert_eq_items(tokens, expected_items)
     }
 
     #[test]
     fn parse_include() {
-        assert_eq_items(&[(Word, 0), (QuotedString, 1)], &[((Word, 0), vec![(QuotedString, 1)])])
+        assert_eq_items(&[(Word, 0), (QuotedString, 1)],
+                        &[TestItem::Command((Word, 0), vec![(QuotedString, 1)])])
+    }
+
+    #[test]
+    fn parse_empty_macro_definition() {
+        let tokens = &[
+            (Label, 0), (Colon, 1), (Macro, 2), (Eol, 3),
+            (Endm, 4)
+        ];
+        let ast = &[
+            TestItem::Macro((Label, 0), vec![]),
+        ];
+        assert_eq_items(tokens, ast)
     }
 }

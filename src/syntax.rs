@@ -4,8 +4,12 @@ pub trait Terminal {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TerminalKind {
+    Colon,
     Comma,
+    Endm,
     Eol,
+    Label,
+    Macro,
     Number,
     QuotedString,
     Word,
@@ -30,5 +34,6 @@ pub trait ProductionRules {
     type Expr: Expr<Terminal = Self::Token>;
     type Block: Block<Item = Self::Item>;
 
+    fn define_macro(&mut self, label: Self::Token, block: Self::Block) -> Self::Item;
     fn reduce_command(&mut self, name: Self::Token, args: &[Self::Expr]) -> Self::Item;
 }
