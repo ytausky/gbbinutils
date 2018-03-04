@@ -14,8 +14,15 @@ pub fn analyze_file(name: &str) -> AnalyzedSrc {
     let mut file = std::fs::File::open(name).unwrap();
     let mut src = String::new();
     file.read_to_string(&mut src).unwrap();
-    parse::parse_src(lexer::Lexer::new(&src), semantics::DefaultReduce::new());
+    let ast = parse::parse_src(lexer::Lexer::new(&src), semantics::DefaultReduce::new());
+    dump_ast(&ast);
     AnalyzedSrc {}
+}
+
+fn dump_ast(ast: &Vec<ast::AsmItem>) {
+    for ref item in ast {
+        println!("{:?}", item)
+    }
 }
 
 #[cfg(test)]
