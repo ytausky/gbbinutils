@@ -42,7 +42,7 @@ impl<'a> syntax::ProductionRules for DefaultReduce<'a> {
     type Block = Vec<Self::Item>;
 
     fn define_macro(&mut self, _label: Token<'a>, _block: Self::Block) -> Self::Item {
-        inst(keyword::Mnemonic::Nop, &[])
+        inst(ast::Mnemonic::Nop, &[])
     }
 
     fn reduce_command(&mut self, name: Token<'a>, args: &[Self::Expr]) -> Self::Item {
@@ -68,9 +68,9 @@ fn reduce_mnemonic<'a>(command: keyword::Keyword, operands: &[Token<'a>]) -> ast
 
 fn identify_keyword(keyword: &Keyword) -> Option<ast::Operand> {
     match *keyword {
-        Keyword::A => Some(ast::Operand::Register(keyword::Register::A)),
-        Keyword::B => Some(ast::Operand::Register(keyword::Register::B)),
-        Keyword::Bc => Some(ast::Operand::RegisterPair(keyword::RegisterPair::Bc)),
+        Keyword::A => Some(ast::Operand::Register(ast::Register::A)),
+        Keyword::B => Some(ast::Operand::Register(ast::Register::B)),
+        Keyword::Bc => Some(ast::Operand::RegisterPair(ast::RegisterPair::Bc)),
         _ => None
     }
 }
@@ -85,8 +85,8 @@ fn parse_operand<'a>(token: &Token<'a>) -> Option<ast::Operand> {
     }
 }
 
-fn to_mnemonic(keyword: Keyword) -> keyword::Mnemonic {
-    use keyword::Mnemonic;
+fn to_mnemonic(keyword: Keyword) -> ast::Mnemonic {
+    use ast::Mnemonic;
     match keyword {
         Keyword::Halt => Mnemonic::Halt,
         Keyword::Ld => Mnemonic::Ld,
@@ -97,7 +97,7 @@ fn to_mnemonic(keyword: Keyword) -> keyword::Mnemonic {
     }
 }
 
-fn inst<'a>(mnemonic: keyword::Mnemonic, operands: &[ast::Operand]) -> ast::AsmItem<'a> {
+fn inst<'a>(mnemonic: ast::Mnemonic, operands: &[ast::Operand]) -> ast::AsmItem<'a> {
     ast::AsmItem::Instruction(ast::Instruction::new(mnemonic, operands))
 }
 
@@ -121,30 +121,30 @@ mod tests {
 
     #[test]
     fn parse_nop() {
-        analyze_nullary_instruction(Keyword::Nop, keyword::Mnemonic::Nop)
+        analyze_nullary_instruction(Keyword::Nop, ast::Mnemonic::Nop)
     }
 
     #[test]
     fn parse_halt() {
-        analyze_nullary_instruction(Keyword::Halt, keyword::Mnemonic::Halt)
+        analyze_nullary_instruction(Keyword::Halt, ast::Mnemonic::Halt)
     }
 
     #[test]
     fn parse_stop() {
-        analyze_nullary_instruction(Keyword::Stop, keyword::Mnemonic::Stop)
+        analyze_nullary_instruction(Keyword::Stop, ast::Mnemonic::Stop)
     }
 
     #[test]
     fn analyze_push_bc() {
         let item = analyze_instruction(Keyword::Push, &[Token::Keyword(Keyword::Bc)]);
-        assert_eq!(item, inst(keyword::Mnemonic::Push, &[ast::BC]))
+        assert_eq!(item, inst(ast::Mnemonic::Push, &[ast::BC]))
     }
 
     #[test]
     fn analyze_ld_a_a() {
         let token_a = Token::Keyword(Keyword::A);
         let item = analyze_instruction(Keyword::Ld, &[token_a.clone(), token_a]);
-        assert_eq!(item, inst(keyword::Mnemonic::Ld, &[ast::A, ast::A]))
+        assert_eq!(item, inst(ast::Mnemonic::Ld, &[ast::A, ast::A]))
     }
 
     #[test]
@@ -152,10 +152,10 @@ mod tests {
         let token_a = Token::Keyword(Keyword::A);
         let token_b = Token::Keyword(Keyword::B);
         let item = analyze_instruction(Keyword::Ld, &[token_a, token_b]);
-        assert_eq!(item, inst(keyword::Mnemonic::Ld, &[ast::A, ast::B]))
+        assert_eq!(item, inst(ast::Mnemonic::Ld, &[ast::A, ast::B]))
     }
 
-    fn analyze_nullary_instruction(keyword: Keyword, mnemonic: keyword::Mnemonic) {
+    fn analyze_nullary_instruction(keyword: Keyword, mnemonic: ast::Mnemonic) {
         let item = analyze_instruction(keyword, &[]);
         assert_eq!(item, inst(mnemonic, &[]))
     }

@@ -2,11 +2,8 @@
 use ast;
 
 #[cfg(test)]
-use keyword;
-
-#[cfg(test)]
 fn generate_code<F: FnMut(u8)>(ast_node: &ast::Instruction, mut sink: F) {
-    use keyword::Mnemonic::*;
+    use ast::Mnemonic::*;
     match ast_node.mnemonic {
         Halt => sink(0x76),
         Ld => sink(encode_ld(ast_node.operands[0], ast_node.operands[1])),
@@ -31,13 +28,13 @@ fn encode_ld(dest: ast::Operand, src: ast::Operand) -> u8 {
 }
 
 #[cfg(test)]
-fn encode_ld_to_reg_from_reg(dest: keyword::Register, src: keyword::Register) -> u8 {
+fn encode_ld_to_reg_from_reg(dest: ast::Register, src: ast::Register) -> u8 {
     0b01_000_000 | (encode_register(dest) << 3)| encode_register(src)
 }
 
 #[cfg(test)]
-fn encode_register(register: keyword::Register) -> u8 {
-    use keyword::Register::*;
+fn encode_register(register: ast::Register) -> u8 {
+    use ast::Register::*;
     match register {
         A => 0b111,
         B => 0b000,
@@ -53,16 +50,16 @@ fn encode_register(register: keyword::Register) -> u8 {
 mod tests {
     use super::*;
 
-    use keyword::Mnemonic::*;
+    use ast::Mnemonic::*;
 
-    fn test_instruction(mnemonic: keyword::Mnemonic, operands: &[ast::Operand], bytes: &[u8]) {
+    fn test_instruction(mnemonic: ast::Mnemonic, operands: &[ast::Operand], bytes: &[u8]) {
         let ast = ast::Instruction::new(mnemonic, operands);
         let mut code = vec![];
         generate_code(&ast, |byte| code.push(byte));
         assert_eq!(code, bytes)
     }
 
-    fn test_nullary_instruction(mnemonic: keyword::Mnemonic, bytes: &[u8]) {
+    fn test_nullary_instruction(mnemonic: ast::Mnemonic, bytes: &[u8]) {
         test_instruction(mnemonic, &[], bytes)
     }
 
