@@ -123,11 +123,17 @@ impl<'a> Lexer<'a> {
 fn identify_keyword(word: &str) -> Option<Keyword> {
     use keyword::Keyword::*;
     match word {
+        "a" => Some(A),
+        "b" => Some(B),
         "bc" => Some(Bc),
         "endm" => Some(Endm),
+        "halt" => Some(Halt),
+        "include" => Some(Include),
+        "ld" => Some(Ld),
         "macro" => Some(Macro),
         "nop" => Some(Nop),
         "push" => Some(Push),
+        "stop" => Some(Stop),
         _ => None,
     }
 }
@@ -201,5 +207,35 @@ mod tests {
     #[test]
     fn lex_keyword_endm() {
         assert_eq_tokens("endm", &[Keyword(Endm)])
+    }
+
+    #[test]
+    fn lex_keyword_a() {
+        assert_eq_tokens("a", &[Keyword(A)])
+    }
+
+    #[test]
+    fn lex_keyword_b() {
+        assert_eq_tokens("b", &[Keyword(B)])
+    }
+
+    #[test]
+    fn lex_keyword_include() {
+        assert_eq_tokens("include", &[Keyword(Include)])
+    }
+
+    #[test]
+    fn lex_keyword_halt() {
+        assert_eq_tokens("halt", &[Keyword(Halt)])
+    }
+
+    #[test]
+    fn lex_keyword_ld() {
+        assert_eq_tokens("ld", &[Keyword(Ld)])
+    }
+
+    #[test]
+    fn lex_keyword_stop() {
+        assert_eq_tokens("stop", &[Keyword(Stop)])
     }
 }

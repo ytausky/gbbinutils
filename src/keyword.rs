@@ -1,7 +1,6 @@
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Mnemonic {
     Halt,
-    Include,
     Ld,
     Nop,
     Push,
