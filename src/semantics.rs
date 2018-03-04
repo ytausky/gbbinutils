@@ -2,6 +2,7 @@ use ast;
 use keyword;
 use syntax;
 
+use keyword::Keyword;
 use token::Token;
 
 use std::marker::PhantomData;
@@ -46,13 +47,8 @@ impl<'a> syntax::ProductionRules for DefaultReduce<'a> {
 
     fn reduce_command(&mut self, name: Token<'a>, args: &[Self::Expr]) -> Self::Item {
         match name {
-            Token::Word(spelling) => {
-                match identify_keyword(spelling).unwrap() {
-                    IdentMeaning::Command(keyword::Mnemonic::Include) => reduce_include(args[0].clone()),
-                    IdentMeaning::Command(other_command) => reduce_mnemonic(other_command, args),
-                    _ => panic!(),
-                }
-            },
+            Token::Keyword(Keyword::Include) => reduce_include(args[0].clone()),
+            Token::Keyword(keyword) => reduce_mnemonic(keyword, args),
             _ => panic!(),
         }
     }
@@ -65,40 +61,39 @@ fn reduce_include<'a>(path: Token<'a>) -> ast::AsmItem<'a> {
     }
 }
 
-fn reduce_mnemonic<'a>(command: keyword::Mnemonic, operands: &[Token<'a>]) -> ast::AsmItem<'a> {
+fn reduce_mnemonic<'a>(command: keyword::Keyword, operands: &[Token<'a>]) -> ast::AsmItem<'a> {
     let parsed_operands: Vec<ast::Operand> = operands.iter().map(|t| parse_operand(t).unwrap()).collect();
-    inst(command, &parsed_operands)
+    inst(to_mnemonic(command), &parsed_operands)
 }
 
-enum IdentMeaning {
-    Command(keyword::Mnemonic),
-    Operand(ast::Operand),
-}
-
-fn identify_keyword(spelling: &str) -> Option<IdentMeaning> {
-    use self::IdentMeaning::*;
-    use keyword::Mnemonic;
-    match spelling {
-        "halt" => Some(Command(Mnemonic::Halt)),
-        "include" => Some(Command(Mnemonic::Include)),
-        "ld" => Some(Command(Mnemonic::Ld)),
-        "nop" => Some(Command(Mnemonic::Nop)),
-        "push" => Some(Command(Mnemonic::Push)),
-        "stop" => Some(Command(Mnemonic::Stop)),
-        "a" => Some(Operand(ast::Operand::Register(keyword::Register::A))),
-        "b" => Some(Operand(ast::Operand::Register(keyword::Register::B))),
-        "bc" => Some(Operand(ast::Operand::RegisterPair(keyword::RegisterPair::Bc))),
+fn identify_keyword(keyword: &Keyword) -> Option<ast::Operand> {
+    match *keyword {
+        Keyword::A => Some(ast::Operand::Register(keyword::Register::A)),
+        Keyword::B => Some(ast::Operand::Register(keyword::Register::B)),
+        Keyword::Bc => Some(ast::Operand::RegisterPair(keyword::RegisterPair::Bc)),
         _ => None
     }
 }
 
 fn parse_operand<'a>(token: &Token<'a>) -> Option<ast::Operand> {
     match *token {
-        Token::Word(spelling) => match identify_keyword(spelling) {
-            Some(IdentMeaning::Operand(operand)) => Some(operand),
+        Token::Keyword(ref keyword) => match identify_keyword(keyword) {
+            Some(operand) => Some(operand),
             _ => panic!(),
         },
         _ => None,
+    }
+}
+
+fn to_mnemonic(keyword: Keyword) -> keyword::Mnemonic {
+    use keyword::Mnemonic;
+    match keyword {
+        Keyword::Halt => Mnemonic::Halt,
+        Keyword::Ld => Mnemonic::Ld,
+        Keyword::Nop => Mnemonic::Nop,
+        Keyword::Push => Mnemonic::Push,
+        Keyword::Stop => Mnemonic::Stop,
+        _ => panic!(),
     }
 }
 
@@ -114,56 +109,59 @@ fn include(path: &str) -> ast::AsmItem {
 mod tests {
     use super::*;
 
+    use keyword::Keyword;
     use syntax::ProductionRules;
 
     #[test]
     fn build_include_item() {
         let filename = "file.asm";
-        let item = analyze_instruction("include", &[Token::QuotedString(filename)]);
+        let item = analyze_instruction(Keyword::Include, &[Token::QuotedString(filename)]);
         assert_eq!(item, include(filename))
     }
 
     #[test]
     fn parse_nop() {
-        analyze_nullary_instruction("nop", keyword::Mnemonic::Nop)
+        analyze_nullary_instruction(Keyword::Nop, keyword::Mnemonic::Nop)
     }
 
     #[test]
     fn parse_halt() {
-        analyze_nullary_instruction("halt", keyword::Mnemonic::Halt)
+        analyze_nullary_instruction(Keyword::Halt, keyword::Mnemonic::Halt)
     }
 
     #[test]
     fn parse_stop() {
-        analyze_nullary_instruction("stop", keyword::Mnemonic::Stop)
+        analyze_nullary_instruction(Keyword::Stop, keyword::Mnemonic::Stop)
     }
 
     #[test]
     fn analyze_push_bc() {
-        let item = analyze_instruction("push", &[Token::Word("bc")]);
+        let item = analyze_instruction(Keyword::Push, &[Token::Keyword(Keyword::Bc)]);
         assert_eq!(item, inst(keyword::Mnemonic::Push, &[ast::BC]))
     }
 
     #[test]
     fn analyze_ld_a_a() {
-        let token_a = Token::Word("a");
-        let item = analyze_instruction("ld", &[token_a.clone(), token_a]);
+        let token_a = Token::Keyword(Keyword::A);
+        let item = analyze_instruction(Keyword::Ld, &[token_a.clone(), token_a]);
         assert_eq!(item, inst(keyword::Mnemonic::Ld, &[ast::A, ast::A]))
     }
 
     #[test]
     fn analyze_ld_a_b() {
-        let item = analyze_instruction("ld", &[Token::Word("a"), Token::Word("b")]);
+        let token_a = Token::Keyword(Keyword::A);
+        let token_b = Token::Keyword(Keyword::B);
+        let item = analyze_instruction(Keyword::Ld, &[token_a, token_b]);
         assert_eq!(item, inst(keyword::Mnemonic::Ld, &[ast::A, ast::B]))
     }
 
-    fn analyze_nullary_instruction(name: &str, mnemonic: keyword::Mnemonic) {
-        let item = analyze_instruction(name, &[]);
+    fn analyze_nullary_instruction(keyword: Keyword, mnemonic: keyword::Mnemonic) {
+        let item = analyze_instruction(keyword, &[]);
         assert_eq!(item, inst(mnemonic, &[]))
     }
 
-    fn analyze_instruction<'a>(name: &'a str, operands: &[Token<'a>]) -> ast::AsmItem<'a> {
+    fn analyze_instruction<'a>(keyword: Keyword, operands: &[Token<'a>]) -> ast::AsmItem<'a> {
         let mut builder = DefaultReduce(PhantomData);
-        builder.reduce_command(Token::Word(name), operands)
+        builder.reduce_command(Token::Keyword(keyword), operands)
     }
 }
