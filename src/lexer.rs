@@ -105,7 +105,7 @@ impl<'a> Lexer<'a> {
         } else if self.is_at_line_start {
             Token::Label(word)
         } else {
-            Token::Word(word)
+            Token::Identifier(word)
         }
     }
 
@@ -176,7 +176,7 @@ mod tests {
 
     #[test]
     fn lex_word_after_whitespace() {
-        assert_eq_tokens("    word", &[Word("word")])
+        assert_eq_tokens("    word", &[Identifier("word")])
     }
 
     #[test]
