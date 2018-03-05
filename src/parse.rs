@@ -212,7 +212,7 @@ mod tests {
         assert_eq_items(tokens, ast)
     }
 
-        #[test]
+    #[test]
     fn parse_macro_definition_with_instruction() {
         let tokens = &[
             (Label, 0), (Colon, 1), (Macro, 2), (Eol, 3),
