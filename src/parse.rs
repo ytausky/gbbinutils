@@ -2,27 +2,28 @@ use syntax::*;
 use syntax::TerminalKind::*;
 
 use std::iter;
+use std::marker::PhantomData;
 
-pub fn parse_src<'a, I, R>(tokens: I, reduce: R) -> R::Block
+pub fn parse_src<'a, I, R>(tokens: I, mut reduce: R) -> R::Block
     where I: Iterator<Item = R::Token>, R: ProductionRules
 {
     let mut parser = Parser {
         tokens: tokens.peekable(),
-        reduce: reduce,
+        _phantom: PhantomData,
     };
-    parser.parse_block()
+    parser.parse_block(&mut reduce)
 }
 
 struct Parser<L: Iterator, R: ProductionRules> {
     tokens: iter::Peekable<L>,
-    reduce: R,
+    _phantom: PhantomData<R>,
 }
 
 impl<L, R> Parser<L, R> where R: ProductionRules, L: Iterator<Item = R::Token> {
-    fn parse_block(&mut self) -> R::Block {
+    fn parse_block(&mut self, reduce: &mut R) -> R::Block {
         let mut block = R::Block::new();
         while let Some(token) = self.next_token_if_not_block_delimiter() {
-            if let Some(item) = self.parse_line(token) {
+            if let Some(item) = self.parse_line(token, reduce) {
                 block.push(item)
             }
         };
@@ -41,29 +42,29 @@ impl<L, R> Parser<L, R> where R: ProductionRules, L: Iterator<Item = R::Token> {
         }
     }
 
-    fn parse_line(&mut self, first_token: R::Token) -> Option<R::Item> {
+    fn parse_line(&mut self, first_token: R::Token, reduce: &mut R) -> Option<R::Item> {
         match first_token.kind() {
             Eol => None,
-            _ => Some(self.parse_nonempty_line(first_token)),
+            _ => Some(self.parse_nonempty_line(first_token, reduce)),
         }
     }
 
-    fn parse_nonempty_line(&mut self, first_token: R::Token) -> R::Item {
+    fn parse_nonempty_line(&mut self, first_token: R::Token, reduce: &mut R) -> R::Item {
         if first_token.kind() == Label {
-            self.parse_macro_definition(first_token)
+            self.parse_macro_definition(first_token, reduce)
         } else {
             let operands = self.parse_operands();
-            self.reduce.reduce_command(first_token, &operands)
+            reduce.reduce_command(first_token, &operands)
         }
     }
 
-    fn parse_macro_definition(&mut self, label: R::Token) -> R::Item {
+    fn parse_macro_definition(&mut self, label: R::Token, reduce: &mut R) -> R::Item {
         assert_eq!(self.tokens.next().unwrap().kind(), Colon);
         assert_eq!(self.tokens.next().unwrap().kind(), Macro);
         assert_eq!(self.tokens.next().unwrap().kind(), Eol);
-        let block = self.parse_block();
+        let block = self.parse_block(reduce);
         assert_eq!(self.tokens.next().unwrap().kind(), Endm);
-        self.reduce.define_macro(label, block)
+        reduce.define_macro(label, block)
     }
 
     fn parse_operands(&mut self) -> Vec<R::Expr> {
