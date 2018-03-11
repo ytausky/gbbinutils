@@ -4,14 +4,14 @@ use syntax::TerminalKind::*;
 use std::iter;
 use std::marker::PhantomData;
 
-pub fn parse_src<'a, I, R>(tokens: I, mut reduce: R) -> R::Block
-    where I: Iterator<Item = R::Token>, R: ParsingContext
+pub fn parse_src<'a, I, R>(tokens: I, reduce: &mut R) -> R::Block
+    where I: Iterator<Item = R::Token>, R: ParsingContext, R::Token: Clone
 {
     let mut parser = Parser {
         tokens: tokens.peekable(),
         _phantom: PhantomData,
     };
-    parser.parse_block(&mut reduce)
+    parser.parse_block(reduce)
 }
 
 struct Parser<L: Iterator, R: ParsingContext> {
@@ -19,7 +19,7 @@ struct Parser<L: Iterator, R: ParsingContext> {
     _phantom: PhantomData<R>,
 }
 
-impl<L, R> Parser<L, R> where R: ParsingContext, L: Iterator<Item = R::Token> {
+impl<L, R> Parser<L, R> where R: ParsingContext, L: Iterator<Item = R::Token>, R::Token: Clone {
     fn parse_block(&mut self, reduce: &mut R) -> R::Block {
         let mut block = R::Block::new();
         while let Some(token) = self.next_token_if_not_block_delimiter() {
@@ -53,7 +53,9 @@ impl<L, R> Parser<L, R> where R: ParsingContext, L: Iterator<Item = R::Token> {
         if first_token.kind() == Label {
             self.parse_macro_definition(first_token, reduce)
         } else {
-            let operands = self.parse_operands();
+            reduce.enter_instruction(first_token.clone());
+            let operands = self.parse_operands(reduce);
+            reduce.exit_instruction();
             reduce.reduce_command(first_token, &operands)
         }
     }
@@ -67,13 +69,13 @@ impl<L, R> Parser<L, R> where R: ParsingContext, L: Iterator<Item = R::Token> {
         reduce.define_macro(label, block)
     }
 
-    fn parse_operands(&mut self) -> Vec<R::Expr> {
+    fn parse_operands(&mut self, reduce: &mut R) -> Vec<R::Expr> {
         let mut operands = vec![];
         if let Some(_) = self.peek_not_eol() {
-            operands.push(self.parse_expression());
+            operands.push(self.parse_expression(reduce));
             while let Some(Comma) = self.tokens.peek().map(|t| t.kind()) {
                 self.tokens.next();
-                operands.push(self.parse_expression())
+                operands.push(self.parse_expression(reduce))
             }
         }
         operands
@@ -86,8 +88,12 @@ impl<L, R> Parser<L, R> where R: ParsingContext, L: Iterator<Item = R::Token> {
         }
     }
 
-    fn parse_expression(&mut self) -> R::Expr {
-        R::Expr::from_terminal(self.tokens.next().unwrap())
+    fn parse_expression(&mut self, reduce: &mut R) -> R::Expr {
+        reduce.enter_expression();
+        let identifier = self.tokens.next().unwrap();
+        reduce.push_identifier(identifier.clone());
+        reduce.exit_expression();
+        R::Expr::from_terminal(identifier)
     }
 }
 
@@ -103,7 +109,26 @@ mod tests {
         assert_eq_items(&[], &[])
     }
 
-    struct TestReduce;
+    struct TestReduce {
+        actions: Vec<Action>,
+    }
+
+    impl TestReduce {
+        fn new() -> TestReduce {
+            TestReduce {
+                actions: Vec::new(),
+            }
+        }
+    }
+
+    #[derive(Debug, PartialEq)]
+    enum Action {
+        EnterExpression,
+        EnterInstruction(TestToken),
+        ExitExpression,
+        ExitInstruction,
+        PushIdentifier(TestToken),
+    }
 
     type TestToken = (syntax::TerminalKind, usize);
 
@@ -128,19 +153,24 @@ mod tests {
         type Expr = Self::Token;
         type Block = TestBlock;
 
-        fn enter_instruction(&mut self, _name: Self::Token) {
+        fn enter_instruction(&mut self, name: Self::Token) {
+            self.actions.push(Action::EnterInstruction(name))
         }
 
         fn exit_instruction(&mut self) {
+            self.actions.push(Action::ExitInstruction)
         }
 
         fn enter_expression(&mut self) {
+            self.actions.push(Action::EnterExpression)
         }
 
-        fn push_identifier(&mut self, _identifier: Self::Token) {
+        fn push_identifier(&mut self, identifier: Self::Token) {
+            self.actions.push(Action::PushIdentifier(identifier))
         }
 
         fn exit_expression(&mut self) {
+            self.actions.push(Action::ExitExpression)
         }
 
         fn define_macro(&mut self, label: Self::Token, block: Self::Block) -> Self::Item {
@@ -154,33 +184,59 @@ mod tests {
 
     #[test]
     fn parse_empty_line() {
-        assert_eq_items(&[(Eol, 0)], &[])
+        assert_eq_actions(&[(Eol, 0)], &[])
+    }
+
+    fn assert_eq_actions(tokens: &[TestToken], expected_actions: &[Action]) {
+        let mut parsing_constext = TestReduce::new();
+        parse_src(tokens.iter().cloned(), &mut parsing_constext);
+        assert_eq!(parsing_constext.actions, expected_actions)
     }
 
     fn assert_eq_items(tokens: &[TestToken], expected_items: &[TestItem]) {
-        let parsed_items = parse_src(tokens.iter().cloned(), TestReduce {});
+        let parsed_items = parse_src(tokens.iter().cloned(), &mut TestReduce::new());
         assert_eq!(parsed_items, expected_items)
     }
 
     #[test]
     fn parse_nullary_instruction() {
-        assert_eq_items(&[(Word, 0)], &[TestItem::Command((Word, 0), vec![])])
+        assert_eq_actions(&[(Word, 0)], &inst((Word, 0), vec![]))
+    }
+
+    fn inst(name: TestToken, args: Vec<Vec<Action>>) -> Vec<Action> {
+        let mut result = vec![Action::EnterInstruction(name)];
+        for mut arg in args {
+            result.append(&mut arg);
+        }
+        result.push(Action::ExitInstruction);
+        result
     }
 
     #[test]
     fn parse_nullary_instruction_followed_by_eol() {
-        assert_eq_items(&[(Word, 0), (Eol, 1)], &[TestItem::Command((Word, 0), vec![])])
+        assert_eq_actions(&[(Word, 0), (Eol, 1)], &inst((Word, 0), vec![]))
     }
 
     #[test]
     fn parse_unary_instruction() {
-        assert_eq_items(&[(Word, 0), (Word, 1)], &[TestItem::Command((Word, 0), vec![(Word, 1)])])
+        assert_eq_actions(&[(Word, 0), (Word, 1)], &inst((Word, 0), vec![expr(ident((Word, 1)))]))
+    }
+
+    fn expr(mut actions: Vec<Action>) -> Vec<Action> {
+        let mut result = vec![Action::EnterExpression];
+        result.append(&mut actions);
+        result.push(Action::ExitExpression);
+        result
+    }
+
+    fn ident(identifier: TestToken) -> Vec<Action> {
+        vec![Action::PushIdentifier(identifier)]
     }
 
     #[test]
     fn parse_binary_instruction() {
-        assert_eq_items(&[(Word, 0), (Word, 1), (Comma, 2), (Word, 3)],
-                        &[TestItem::Command((Word, 0), vec![(Word, 1), (Word, 3)])])
+        assert_eq_actions(&[(Word, 0), (Word, 1), (Comma, 2), (Word, 3)],
+                          &inst((Word, 0), vec![expr(ident((Word, 1))), expr(ident((Word, 3)))]));
     }
 
     #[test]
@@ -189,11 +245,25 @@ mod tests {
             (Word, 0), (Word, 1), (Comma, 2), (Word, 3), (Eol, 4),
             (Word, 5), (Word, 6), (Comma, 7), (Word, 8),
         ];
-        let expected_items = &[
-            TestItem::Command((Word, 0), vec![(Word, 1), (Word, 3)]),
-            TestItem::Command((Word, 5), vec![(Word, 6), (Word, 8)]),
-        ];
-        assert_eq_items(tokens, expected_items)
+        let expected_actions = &concat(vec![
+            inst((Word, 0), vec![
+                expr(ident((Word, 1))),
+                expr(ident((Word, 3))),
+            ]),
+            inst((Word, 5), vec![
+                expr(ident((Word, 6))),
+                expr(ident((Word, 8))),
+            ]),
+        ]);
+        assert_eq_actions(tokens, expected_actions)
+    }
+
+    fn concat(actions: Vec<Vec<Action>>) -> Vec<Action> {
+        let mut result = Vec::new();
+        for mut vector in actions {
+            result.append(&mut vector)
+        }
+        result
     }
 
     #[test]
