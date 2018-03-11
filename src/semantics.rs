@@ -7,11 +7,11 @@ use token::Token;
 
 use std::marker::PhantomData;
 
-pub struct DefaultReduce<'a>(pub PhantomData<&'a ()>);
+pub struct AstBuilder<'a>(pub PhantomData<&'a ()>);
 
-impl<'a> DefaultReduce<'a> {
-    pub fn new() -> DefaultReduce<'a> {
-        DefaultReduce(PhantomData)
+impl<'a> AstBuilder<'a> {
+    pub fn new() -> AstBuilder<'a> {
+        AstBuilder(PhantomData)
     }
 }
 
@@ -35,7 +35,7 @@ impl<T: syntax::Terminal> syntax::Expr for T {
     }
 }
 
-impl<'a> syntax::ParsingContext for DefaultReduce<'a> {
+impl<'a> syntax::ParsingContext for AstBuilder<'a> {
     type Token = Token<'a>;
     type Item = ast::AsmItem<'a>;
     type Expr = Token<'a>;
@@ -161,7 +161,7 @@ mod tests {
     }
 
     fn analyze_instruction<'a>(keyword: Keyword, operands: &[Token<'a>]) -> ast::AsmItem<'a> {
-        let mut builder = DefaultReduce(PhantomData);
+        let mut builder = AstBuilder(PhantomData);
         builder.reduce_command(Token::Keyword(keyword), operands)
     }
 }
