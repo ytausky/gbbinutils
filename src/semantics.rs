@@ -5,13 +5,23 @@ use syntax;
 use keyword::Keyword;
 use token::Token;
 
-use std::marker::PhantomData;
+pub struct AstBuilder<'a> {
+    ast: Vec<ast::AsmItem<'a>>,
+    contexts: Vec<Context<'a>>,
+}
 
-pub struct AstBuilder<'a>(pub PhantomData<&'a ()>);
+enum Context<'a> {
+    Block,
+    Expression(Vec<Token<'a>>),
+    Instruction(Token<'a>, Vec<Token<'a>>),
+}
 
 impl<'a> AstBuilder<'a> {
     pub fn new() -> AstBuilder<'a> {
-        AstBuilder(PhantomData)
+        AstBuilder {
+            ast: Vec::new(),
+            contexts: vec![Context::Block],
+        }
     }
 }
 
@@ -41,16 +51,54 @@ impl<'a> syntax::ParsingContext for AstBuilder<'a> {
     type Expr = Token<'a>;
     type Block = Vec<Self::Item>;
 
+    fn enter_instruction(&mut self, name: Self::Token) {
+        self.contexts.push(Context::Instruction(name, vec![]))
+    }
+
+    fn exit_instruction(&mut self) {
+        if let Some(Context::Instruction(name, args)) = self.contexts.pop() {
+            let item = match name {
+                Token::Keyword(Keyword::Include) => reduce_include(args[0].clone()),
+                Token::Keyword(keyword) => reduce_mnemonic(keyword, &args),
+                _ => panic!(),
+            };
+            self.ast.push(item)
+        } else {
+            panic!()
+        }
+    }
+
+    fn enter_expression(&mut self) {
+        self.contexts.push(Context::Expression(Vec::new()))
+    }
+
+    fn push_identifier(&mut self, identifier: Self::Token) {
+        if let Some(&mut Context::Expression(ref mut stack)) = self.contexts.last_mut() {
+            stack.push(identifier)
+        } else {
+            panic!()
+        }
+    }
+
+    fn exit_expression(&mut self) {
+        if let Some(Context::Expression(mut stack)) = self.contexts.pop() {
+            assert_eq!(stack.len(), 1);
+            let expression = stack.pop().unwrap();
+            match self.contexts.last_mut() {
+                Some(&mut Context::Instruction(_, ref mut args)) => args.push(expression),
+                _ => panic!(),
+            }
+        } else {
+            panic!()
+        }
+    }
+
     fn define_macro(&mut self, _label: Token<'a>, _block: Self::Block) -> Self::Item {
         inst(ast::Mnemonic::Nop, &[])
     }
 
-    fn reduce_command(&mut self, name: Token<'a>, args: &[Self::Expr]) -> Self::Item {
-        match name {
-            Token::Keyword(Keyword::Include) => reduce_include(args[0].clone()),
-            Token::Keyword(keyword) => reduce_mnemonic(keyword, args),
-            _ => panic!(),
-        }
+    fn reduce_command(&mut self, _name: Token<'a>, _args: &[Self::Expr]) -> Self::Item {
+        self.ast.pop().unwrap()
     }
 }
 
@@ -161,7 +209,14 @@ mod tests {
     }
 
     fn analyze_instruction<'a>(keyword: Keyword, operands: &[Token<'a>]) -> ast::AsmItem<'a> {
-        let mut builder = AstBuilder(PhantomData);
-        builder.reduce_command(Token::Keyword(keyword), operands)
+        let mut builder = AstBuilder::new();
+        builder.enter_instruction(Token::Keyword(keyword));
+        for arg in operands {
+            builder.enter_expression();
+            builder.push_identifier(arg.clone());
+            builder.exit_expression();
+        }
+        builder.exit_instruction();
+        builder.ast.pop().unwrap()
     }
 }

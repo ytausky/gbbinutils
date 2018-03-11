@@ -128,6 +128,21 @@ mod tests {
         type Expr = Self::Token;
         type Block = TestBlock;
 
+        fn enter_instruction(&mut self, _name: Self::Token) {
+        }
+
+        fn exit_instruction(&mut self) {
+        }
+
+        fn enter_expression(&mut self) {
+        }
+
+        fn push_identifier(&mut self, _identifier: Self::Token) {
+        }
+
+        fn exit_expression(&mut self) {
+        }
+
         fn define_macro(&mut self, label: Self::Token, block: Self::Block) -> Self::Item {
             TestItem::Macro(label, block)
         }
