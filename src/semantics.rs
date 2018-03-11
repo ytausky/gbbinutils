@@ -35,7 +35,7 @@ impl<T: syntax::Terminal> syntax::Expr for T {
     }
 }
 
-impl<'a> syntax::ProductionRules for DefaultReduce<'a> {
+impl<'a> syntax::ParsingContext for DefaultReduce<'a> {
     type Token = Token<'a>;
     type Item = ast::AsmItem<'a>;
     type Expr = Token<'a>;
@@ -110,7 +110,7 @@ mod tests {
     use super::*;
 
     use keyword::Keyword;
-    use syntax::ProductionRules;
+    use syntax::ParsingContext;
 
     #[test]
     fn build_include_item() {

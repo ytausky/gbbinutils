@@ -5,7 +5,7 @@ use std::iter;
 use std::marker::PhantomData;
 
 pub fn parse_src<'a, I, R>(tokens: I, mut reduce: R) -> R::Block
-    where I: Iterator<Item = R::Token>, R: ProductionRules
+    where I: Iterator<Item = R::Token>, R: ParsingContext
 {
     let mut parser = Parser {
         tokens: tokens.peekable(),
@@ -14,12 +14,12 @@ pub fn parse_src<'a, I, R>(tokens: I, mut reduce: R) -> R::Block
     parser.parse_block(&mut reduce)
 }
 
-struct Parser<L: Iterator, R: ProductionRules> {
+struct Parser<L: Iterator, R: ParsingContext> {
     tokens: iter::Peekable<L>,
     _phantom: PhantomData<R>,
 }
 
-impl<L, R> Parser<L, R> where R: ProductionRules, L: Iterator<Item = R::Token> {
+impl<L, R> Parser<L, R> where R: ParsingContext, L: Iterator<Item = R::Token> {
     fn parse_block(&mut self, reduce: &mut R) -> R::Block {
         let mut block = R::Block::new();
         while let Some(token) = self.next_token_if_not_block_delimiter() {
@@ -122,7 +122,7 @@ mod tests {
         Macro(TestToken, TestBlock),
     }
 
-    impl syntax::ProductionRules for TestReduce {
+    impl syntax::ParsingContext for TestReduce {
         type Token = TestToken;
         type Item = TestItem;
         type Expr = Self::Token;

@@ -28,7 +28,7 @@ pub trait Expr {
     fn from_terminal(terminal: Self::Terminal) -> Self;
 }
 
-pub trait ProductionRules {
+pub trait ParsingContext {
     type Token: Terminal;
     type Item;
     type Expr: Expr<Terminal = Self::Token>;
