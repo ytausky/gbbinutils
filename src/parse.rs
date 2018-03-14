@@ -61,11 +61,13 @@ impl<L, R> Parser<L, R> where R: ParsingContext, L: Iterator<Item = R::Token>, R
     }
 
     fn parse_macro_definition(&mut self, label: R::Token, reduce: &mut R) -> R::Item {
+        reduce.enter_macro_definition(label.clone());
         assert_eq!(self.tokens.next().unwrap().kind(), Colon);
         assert_eq!(self.tokens.next().unwrap().kind(), Macro);
         assert_eq!(self.tokens.next().unwrap().kind(), Eol);
         let block = self.parse_block(reduce);
         assert_eq!(self.tokens.next().unwrap().kind(), Endm);
+        reduce.exit_macro_definition();
         reduce.define_macro(label, block)
     }
 
@@ -90,10 +92,14 @@ impl<L, R> Parser<L, R> where R: ParsingContext, L: Iterator<Item = R::Token>, R
 
     fn parse_expression(&mut self, reduce: &mut R) -> R::Expr {
         reduce.enter_expression();
-        let identifier = self.tokens.next().unwrap();
-        reduce.push_identifier(identifier.clone());
+        let token = self.tokens.next().unwrap();
+        match token.kind() {
+            Word => reduce.push_identifier(token.clone()),
+            QuotedString => reduce.push_literal(token.clone()),
+            _ => panic!(),
+        }
         reduce.exit_expression();
-        R::Expr::from_terminal(identifier)
+        R::Expr::from_terminal(token)
     }
 }
 
@@ -125,9 +131,12 @@ mod tests {
     enum Action {
         EnterExpression,
         EnterInstruction(TestToken),
+        EnterMacroDef(TestToken),
         ExitExpression,
         ExitInstruction,
+        ExitMacroDef,
         PushIdentifier(TestToken),
+        PushLiteral(TestToken),
     }
 
     type TestToken = (syntax::TerminalKind, usize);
@@ -169,8 +178,20 @@ mod tests {
             self.actions.push(Action::PushIdentifier(identifier))
         }
 
+        fn push_literal(&mut self, literal: Self::Token) {
+            self.actions.push(Action::PushLiteral(literal))
+        }
+
         fn exit_expression(&mut self) {
             self.actions.push(Action::ExitExpression)
+        }
+
+        fn enter_macro_definition(&mut self, label: Self::Token) {
+            self.actions.push(Action::EnterMacroDef(label))
+        }
+
+        fn exit_macro_definition(&mut self) {
+            self.actions.push(Action::ExitMacroDef)
         }
 
         fn define_macro(&mut self, label: Self::Token, block: Self::Block) -> Self::Item {
@@ -273,17 +294,28 @@ mod tests {
             (Eol, 5),
             (Word, 6), (Word, 7), (Comma, 8), (Word, 9),
         ];
-        let expected_items = &[
-            TestItem::Command((Word, 0), vec![(Word, 1), (Word, 3)]),
-            TestItem::Command((Word, 6), vec![(Word, 7), (Word, 9)]),
-        ];
-        assert_eq_items(tokens, expected_items)
+        let expected_actions = &concat(vec![
+            inst((Word, 0), vec![
+                expr(ident((Word, 1))),
+                expr(ident((Word, 3))),
+            ]),
+            inst((Word, 6), vec![
+                expr(ident((Word, 7))),
+                expr(ident((Word, 9))),
+            ]),
+        ]);
+        assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_include() {
-        assert_eq_items(&[(Word, 0), (QuotedString, 1)],
-                        &[TestItem::Command((Word, 0), vec![(QuotedString, 1)])])
+        let tokens = &[(Word, 0), (QuotedString, 1)];
+        let expected_actions = &inst((Word, 0), vec![expr(literal((QuotedString, 1)))]);
+        assert_eq_actions(tokens, expected_actions);
+    }
+
+    fn literal(literal: TestToken) -> Vec<Action> {
+        vec![Action::PushLiteral(literal)]
     }
 
     #[test]
@@ -292,10 +324,15 @@ mod tests {
             (Label, 0), (Colon, 1), (Macro, 2), (Eol, 3),
             (Endm, 4),
         ];
-        let ast = &[
-            TestItem::Macro((Label, 0), vec![]),
-        ];
-        assert_eq_items(tokens, ast)
+        let expected_actions = &macro_def((Label, 0), vec![]);
+        assert_eq_actions(tokens, expected_actions);
+    }
+
+    fn macro_def(label: TestToken, mut instructions: Vec<Action>) -> Vec<Action> {
+        let mut result = vec![Action::EnterMacroDef(label)];
+        result.append(&mut instructions);
+        result.push(Action::ExitMacroDef);
+        result
     }
 
     #[test]
@@ -305,9 +342,7 @@ mod tests {
             (Word, 4), (Eol, 5),
             (Endm, 6),
         ];
-        let ast = &[
-            TestItem::Macro((Label, 0), vec![TestItem::Command((Word, 4), vec![])]),
-        ];
-        assert_eq_items(tokens, ast)
+        let expected_actions = &macro_def((Label, 0), inst((Word, 4), vec![]));
+        assert_eq_actions(tokens, expected_actions);
     }
 }

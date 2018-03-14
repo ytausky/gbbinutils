@@ -80,6 +80,10 @@ impl<'a> syntax::ParsingContext for AstBuilder<'a> {
         }
     }
 
+    fn push_literal(&mut self, _literal: Self::Token) {
+        unimplemented!()
+    }
+
     fn exit_expression(&mut self) {
         if let Some(Context::Expression(mut stack)) = self.contexts.pop() {
             assert_eq!(stack.len(), 1);
@@ -91,6 +95,14 @@ impl<'a> syntax::ParsingContext for AstBuilder<'a> {
         } else {
             panic!()
         }
+    }
+
+    fn enter_macro_definition(&mut self, _label: Self::Token) {
+        unimplemented!()
+    }
+
+    fn exit_macro_definition(&mut self) {
+        unimplemented!()
     }
 
     fn define_macro(&mut self, _label: Token<'a>, _block: Self::Block) -> Self::Item {
