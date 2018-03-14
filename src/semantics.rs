@@ -23,6 +23,10 @@ impl<'a> AstBuilder<'a> {
             contexts: vec![Context::Block],
         }
     }
+
+    pub fn ast(&self) -> &Vec<ast::AsmItem<'a>> {
+        &self.ast
+    }
 }
 
 impl<T> syntax::Block for Vec<T> {
@@ -47,9 +51,6 @@ impl<T: syntax::Terminal> syntax::Expr for T {
 
 impl<'a> syntax::ParsingContext for AstBuilder<'a> {
     type Token = Token<'a>;
-    type Item = ast::AsmItem<'a>;
-    type Expr = Token<'a>;
-    type Block = Vec<Self::Item>;
 
     fn enter_instruction(&mut self, name: Self::Token) {
         self.contexts.push(Context::Instruction(name, vec![]))
@@ -103,14 +104,6 @@ impl<'a> syntax::ParsingContext for AstBuilder<'a> {
 
     fn exit_macro_definition(&mut self) {
         unimplemented!()
-    }
-
-    fn define_macro(&mut self, _label: Token<'a>, _block: Self::Block) -> Self::Item {
-        inst(ast::Mnemonic::Nop, &[])
-    }
-
-    fn reduce_command(&mut self, _name: Token<'a>, _args: &[Self::Expr]) -> Self::Item {
-        self.ast.pop().unwrap()
     }
 }
 

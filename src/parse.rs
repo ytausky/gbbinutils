@@ -4,7 +4,7 @@ use syntax::TerminalKind::*;
 use std::iter;
 use std::marker::PhantomData;
 
-pub fn parse_src<'a, I, R>(tokens: I, reduce: &mut R) -> R::Block
+pub fn parse_src<'a, I, R>(tokens: I, reduce: &mut R)
     where I: Iterator<Item = R::Token>, R: ParsingContext, R::Token: Clone
 {
     let mut parser = Parser {
@@ -20,14 +20,10 @@ struct Parser<L: Iterator, R: ParsingContext> {
 }
 
 impl<L, R> Parser<L, R> where R: ParsingContext, L: Iterator<Item = R::Token>, R::Token: Clone {
-    fn parse_block(&mut self, reduce: &mut R) -> R::Block {
-        let mut block = R::Block::new();
+    fn parse_block(&mut self, reduce: &mut R) {
         while let Some(token) = self.next_token_if_not_block_delimiter() {
-            if let Some(item) = self.parse_line(token, reduce) {
-                block.push(item)
-            }
-        };
-        block
+            self.parse_line(token, reduce)
+        }
     }
 
     fn next_token_if_not_block_delimiter(&mut self) -> Option<R::Token> {
@@ -42,45 +38,40 @@ impl<L, R> Parser<L, R> where R: ParsingContext, L: Iterator<Item = R::Token>, R
         }
     }
 
-    fn parse_line(&mut self, first_token: R::Token, reduce: &mut R) -> Option<R::Item> {
-        match first_token.kind() {
-            Eol => None,
-            _ => Some(self.parse_nonempty_line(first_token, reduce)),
+    fn parse_line(&mut self, first_token: R::Token, reduce: &mut R) {
+        if first_token.kind() != Eol {
+            self.parse_nonempty_line(first_token, reduce)
         }
     }
 
-    fn parse_nonempty_line(&mut self, first_token: R::Token, reduce: &mut R) -> R::Item {
+    fn parse_nonempty_line(&mut self, first_token: R::Token, reduce: &mut R) {
         if first_token.kind() == Label {
             self.parse_macro_definition(first_token, reduce)
         } else {
             reduce.enter_instruction(first_token.clone());
-            let operands = self.parse_operands(reduce);
-            reduce.exit_instruction();
-            reduce.reduce_command(first_token, &operands)
+            self.parse_operands(reduce);
+            reduce.exit_instruction()
         }
     }
 
-    fn parse_macro_definition(&mut self, label: R::Token, reduce: &mut R) -> R::Item {
+    fn parse_macro_definition(&mut self, label: R::Token, reduce: &mut R) {
         reduce.enter_macro_definition(label.clone());
         assert_eq!(self.tokens.next().unwrap().kind(), Colon);
         assert_eq!(self.tokens.next().unwrap().kind(), Macro);
         assert_eq!(self.tokens.next().unwrap().kind(), Eol);
-        let block = self.parse_block(reduce);
+        self.parse_block(reduce);
         assert_eq!(self.tokens.next().unwrap().kind(), Endm);
-        reduce.exit_macro_definition();
-        reduce.define_macro(label, block)
+        reduce.exit_macro_definition()
     }
 
-    fn parse_operands(&mut self, reduce: &mut R) -> Vec<R::Expr> {
-        let mut operands = vec![];
+    fn parse_operands(&mut self, reduce: &mut R) {
         if let Some(_) = self.peek_not_eol() {
-            operands.push(self.parse_expression(reduce));
+            self.parse_expression(reduce);
             while let Some(Comma) = self.tokens.peek().map(|t| t.kind()) {
                 self.tokens.next();
-                operands.push(self.parse_expression(reduce))
+                self.parse_expression(reduce)
             }
         }
-        operands
     }
 
     fn peek_not_eol(&mut self) -> Option<&L::Item> {
@@ -90,7 +81,7 @@ impl<L, R> Parser<L, R> where R: ParsingContext, L: Iterator<Item = R::Token>, R
         }
     }
 
-    fn parse_expression(&mut self, reduce: &mut R) -> R::Expr {
+    fn parse_expression(&mut self, reduce: &mut R) {
         reduce.enter_expression();
         let token = self.tokens.next().unwrap();
         match token.kind() {
@@ -98,8 +89,7 @@ impl<L, R> Parser<L, R> where R: ParsingContext, L: Iterator<Item = R::Token>, R
             QuotedString => reduce.push_literal(token.clone()),
             _ => panic!(),
         }
-        reduce.exit_expression();
-        R::Expr::from_terminal(token)
+        reduce.exit_expression()
     }
 }
 
@@ -112,7 +102,7 @@ mod tests {
 
     #[test]
     fn parse_empty_src() {
-        assert_eq_items(&[], &[])
+        assert_eq_actions(&[], &[])
     }
 
     struct TestReduce {
@@ -148,19 +138,8 @@ mod tests {
         }
     }
 
-    type TestBlock = Vec<TestItem>;
-
-    #[derive(Debug, PartialEq)]
-    enum TestItem {
-        Command(TestToken, Vec<TestToken>),
-        Macro(TestToken, TestBlock),
-    }
-
     impl syntax::ParsingContext for TestReduce {
         type Token = TestToken;
-        type Item = TestItem;
-        type Expr = Self::Token;
-        type Block = TestBlock;
 
         fn enter_instruction(&mut self, name: Self::Token) {
             self.actions.push(Action::EnterInstruction(name))
@@ -193,14 +172,6 @@ mod tests {
         fn exit_macro_definition(&mut self) {
             self.actions.push(Action::ExitMacroDef)
         }
-
-        fn define_macro(&mut self, label: Self::Token, block: Self::Block) -> Self::Item {
-            TestItem::Macro(label, block)
-        }
-
-        fn reduce_command(&mut self, name: Self::Token, args: &[Self::Expr]) -> Self::Item {
-            TestItem::Command(name, args.iter().cloned().collect())
-        }
     }
 
     #[test]
@@ -212,11 +183,6 @@ mod tests {
         let mut parsing_constext = TestReduce::new();
         parse_src(tokens.iter().cloned(), &mut parsing_constext);
         assert_eq!(parsing_constext.actions, expected_actions)
-    }
-
-    fn assert_eq_items(tokens: &[TestToken], expected_items: &[TestItem]) {
-        let parsed_items = parse_src(tokens.iter().cloned(), &mut TestReduce::new());
-        assert_eq!(parsed_items, expected_items)
     }
 
     #[test]

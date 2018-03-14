@@ -14,8 +14,9 @@ pub fn analyze_file(name: &str) -> AnalyzedSrc {
     let mut file = std::fs::File::open(name).unwrap();
     let mut src = String::new();
     file.read_to_string(&mut src).unwrap();
-    let ast = parse::parse_src(lexer::Lexer::new(&src), &mut semantics::AstBuilder::new());
-    dump_ast(&ast);
+    let mut ast_builder = semantics::AstBuilder::new();
+    parse::parse_src(lexer::Lexer::new(&src), &mut ast_builder);
+    dump_ast(ast_builder.ast());
     AnalyzedSrc {}
 }
 
