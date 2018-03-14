@@ -22,8 +22,7 @@ pub trait ParsingContext {
     fn exit_instruction(&mut self);
 
     fn enter_expression(&mut self);
-    fn push_identifier(&mut self, identifier: Self::Token);
-    fn push_literal(&mut self, literal: Self::Token);
+    fn push_atom(&mut self, atom: Self::Token);
     fn exit_expression(&mut self);
 
     fn enter_macro_definition(&mut self, label: Self::Token);

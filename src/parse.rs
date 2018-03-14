@@ -84,11 +84,7 @@ impl<L, R> Parser<L, R> where R: ParsingContext, L: Iterator<Item = R::Token> {
     fn parse_expression(&mut self, reduce: &mut R) {
         reduce.enter_expression();
         let token = self.tokens.next().unwrap();
-        match token.kind() {
-            Word => reduce.push_identifier(token),
-            QuotedString => reduce.push_literal(token),
-            _ => panic!(),
-        }
+        reduce.push_atom(token);
         reduce.exit_expression()
     }
 }
@@ -125,8 +121,7 @@ mod tests {
         ExitExpression,
         ExitInstruction,
         ExitMacroDef,
-        PushIdentifier(TestToken),
-        PushLiteral(TestToken),
+        PushAtom(TestToken),
     }
 
     type TestToken = (syntax::TerminalKind, usize);
@@ -153,12 +148,8 @@ mod tests {
             self.actions.push(Action::EnterExpression)
         }
 
-        fn push_identifier(&mut self, identifier: Self::Token) {
-            self.actions.push(Action::PushIdentifier(identifier))
-        }
-
-        fn push_literal(&mut self, literal: Self::Token) {
-            self.actions.push(Action::PushLiteral(literal))
+        fn push_atom(&mut self, atom: Self::Token) {
+            self.actions.push(Action::PushAtom(atom))
         }
 
         fn exit_expression(&mut self) {
@@ -217,7 +208,7 @@ mod tests {
     }
 
     fn ident(identifier: TestToken) -> Vec<Action> {
-        vec![Action::PushIdentifier(identifier)]
+        vec![Action::PushAtom(identifier)]
     }
 
     #[test]
@@ -276,12 +267,8 @@ mod tests {
     #[test]
     fn parse_include() {
         let tokens = &[(Word, 0), (QuotedString, 1)];
-        let expected_actions = &inst((Word, 0), vec![expr(literal((QuotedString, 1)))]);
+        let expected_actions = &inst((Word, 0), vec![expr(ident((QuotedString, 1)))]);
         assert_eq_actions(tokens, expected_actions);
-    }
-
-    fn literal(literal: TestToken) -> Vec<Action> {
-        vec![Action::PushLiteral(literal)]
     }
 
     #[test]

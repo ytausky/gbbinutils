@@ -53,16 +53,12 @@ impl<'a> syntax::ParsingContext for AstBuilder<'a> {
         self.contexts.push(Context::Expression(Vec::new()))
     }
 
-    fn push_identifier(&mut self, identifier: Self::Token) {
+    fn push_atom(&mut self, atom: Self::Token) {
         if let Some(&mut Context::Expression(ref mut stack)) = self.contexts.last_mut() {
-            stack.push(identifier)
+            stack.push(atom)
         } else {
             panic!()
         }
-    }
-
-    fn push_literal(&mut self, _literal: Self::Token) {
-        unimplemented!()
     }
 
     fn exit_expression(&mut self) {
@@ -198,7 +194,7 @@ mod tests {
         builder.enter_instruction(Token::Keyword(keyword));
         for arg in operands {
             builder.enter_expression();
-            builder.push_identifier(arg.clone());
+            builder.push_atom(arg.clone());
             builder.exit_expression();
         }
         builder.exit_instruction();
