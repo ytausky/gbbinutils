@@ -5,7 +5,7 @@ use std::iter;
 use std::marker::PhantomData;
 
 pub fn parse_src<'a, I, R>(tokens: I, reduce: &mut R)
-    where I: Iterator<Item = R::Token>, R: ParsingContext, R::Token: Clone
+    where I: Iterator<Item = R::Token>, R: ParsingContext
 {
     let mut parser = Parser {
         tokens: tokens.peekable(),
@@ -19,7 +19,7 @@ struct Parser<L: Iterator, R: ParsingContext> {
     _phantom: PhantomData<R>,
 }
 
-impl<L, R> Parser<L, R> where R: ParsingContext, L: Iterator<Item = R::Token>, R::Token: Clone {
+impl<L, R> Parser<L, R> where R: ParsingContext, L: Iterator<Item = R::Token> {
     fn parse_block(&mut self, reduce: &mut R) {
         while let Some(token) = self.next_token_if_not_block_delimiter() {
             self.parse_line(token, reduce)
@@ -48,14 +48,14 @@ impl<L, R> Parser<L, R> where R: ParsingContext, L: Iterator<Item = R::Token>, R
         if first_token.kind() == Label {
             self.parse_macro_definition(first_token, reduce)
         } else {
-            reduce.enter_instruction(first_token.clone());
+            reduce.enter_instruction(first_token);
             self.parse_operands(reduce);
             reduce.exit_instruction()
         }
     }
 
     fn parse_macro_definition(&mut self, label: R::Token, reduce: &mut R) {
-        reduce.enter_macro_definition(label.clone());
+        reduce.enter_macro_definition(label);
         assert_eq!(self.tokens.next().unwrap().kind(), Colon);
         assert_eq!(self.tokens.next().unwrap().kind(), Macro);
         assert_eq!(self.tokens.next().unwrap().kind(), Eol);
@@ -85,8 +85,8 @@ impl<L, R> Parser<L, R> where R: ParsingContext, L: Iterator<Item = R::Token>, R
         reduce.enter_expression();
         let token = self.tokens.next().unwrap();
         match token.kind() {
-            Word => reduce.push_identifier(token.clone()),
-            QuotedString => reduce.push_literal(token.clone()),
+            Word => reduce.push_identifier(token),
+            QuotedString => reduce.push_literal(token),
             _ => panic!(),
         }
         reduce.exit_expression()
