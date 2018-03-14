@@ -29,26 +29,6 @@ impl<'a> AstBuilder<'a> {
     }
 }
 
-impl<T> syntax::Block for Vec<T> {
-    type Item = T;
-
-    fn new() -> Self {
-        Vec::new()
-    }
-
-    fn push(&mut self, item: Self::Item) {
-        self.push(item)
-    }
-}
-
-impl<T: syntax::Terminal> syntax::Expr for T {
-    type Terminal = T;
-
-    fn from_terminal(terminal: Self::Terminal) -> Self {
-        terminal
-    }
-}
-
 impl<'a> syntax::ParsingContext for AstBuilder<'a> {
     type Token = Token<'a>;
 

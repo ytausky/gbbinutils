@@ -15,19 +15,6 @@ pub enum TerminalKind {
     Word,
 }
 
-pub trait Block {
-    type Item;
-    
-    fn new() -> Self;
-    fn push(&mut self, item: Self::Item);
-}
-
-pub trait Expr {
-    type Terminal: Terminal;
-
-    fn from_terminal(terminal: Self::Terminal) -> Self;
-}
-
 pub trait ParsingContext {
     type Token: Terminal;
 
