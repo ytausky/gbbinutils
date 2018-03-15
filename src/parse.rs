@@ -66,10 +66,10 @@ impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
 
     fn parse_operands(&mut self, instruction_context: &mut B::InstructionContext) {
         if let Some(_) = self.peek_not_eol() {
-            self.parse_expression(instruction_context);
+            self.parse_argument(instruction_context);
             while let Some(Comma) = self.tokens.peek().map(|t| t.kind()) {
                 self.tokens.next();
-                self.parse_expression(instruction_context)
+                self.parse_argument(instruction_context)
             }
         }
     }
@@ -81,8 +81,14 @@ impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
         }
     }
 
-    fn parse_expression(&mut self, instruction_context: &mut B::InstructionContext) {
+    fn parse_argument(&mut self, instruction_context: &mut B::InstructionContext) {
         let expression_context = instruction_context.enter_argument();
+        self.parse_expression(expression_context)
+    }
+
+    fn parse_expression<E>(&mut self, expression_context: &mut E)
+        where E: ExpressionContext<Terminal = I::Item>
+    {
         let token = self.tokens.next().unwrap();
         expression_context.push_atom(token);
         expression_context.exit_expression()
