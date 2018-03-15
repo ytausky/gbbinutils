@@ -55,13 +55,13 @@ impl<L, R> Parser<L, R> where R: BlockContext, L: Iterator<Item = R::Terminal> {
     }
 
     fn parse_macro_definition(&mut self, label: R::Terminal, reduce: &mut R) {
-        reduce.enter_macro_definition(label);
+        let macro_block_context = reduce.enter_macro_definition(label);
         assert_eq!(self.tokens.next().unwrap().kind(), Colon);
         assert_eq!(self.tokens.next().unwrap().kind(), Macro);
         assert_eq!(self.tokens.next().unwrap().kind(), Eol);
-        self.parse_block(reduce);
+        self.parse_block(macro_block_context);
         assert_eq!(self.tokens.next().unwrap().kind(), Endm);
-        reduce.exit_block()
+        macro_block_context.exit_block()
     }
 
     fn parse_operands(&mut self, instruction_context: &mut R::InstructionContext) {
@@ -142,8 +142,9 @@ mod tests {
             self
         }
 
-        fn enter_macro_definition(&mut self, label: Self::Terminal) {
-            self.actions.push(Action::EnterMacroDef(label))
+        fn enter_macro_definition(&mut self, label: Self::Terminal) -> &mut Self {
+            self.actions.push(Action::EnterMacroDef(label));
+            self
         }
 
         fn exit_block(&mut self) {

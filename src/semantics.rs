@@ -38,7 +38,7 @@ impl<'a> syntax::BlockContext for AstBuilder<'a> {
         self
     }
 
-    fn enter_macro_definition(&mut self, _label: Self::Terminal) {
+    fn enter_macro_definition(&mut self, _label: Self::Terminal) -> &mut Self {
         unimplemented!()
     }
 

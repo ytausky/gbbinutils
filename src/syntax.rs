@@ -19,7 +19,7 @@ pub trait BlockContext {
     type Terminal: Terminal;
     type InstructionContext: InstructionContext<Terminal = Self::Terminal>;
     fn enter_instruction(&mut self, name: Self::Terminal) -> &mut Self::InstructionContext;
-    fn enter_macro_definition(&mut self, label: Self::Terminal);
+    fn enter_macro_definition(&mut self, label: Self::Terminal) -> &mut Self;
     fn exit_block(&mut self);
 }
 
