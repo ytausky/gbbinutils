@@ -42,7 +42,7 @@ impl<'a> syntax::BlockContext for AstBuilder<'a> {
         unimplemented!()
     }
 
-    fn exit_macro_definition(&mut self) {
+    fn exit_block(&mut self) {
         unimplemented!()
     }
 }

@@ -61,7 +61,7 @@ impl<L, R> Parser<L, R> where R: BlockContext, L: Iterator<Item = R::Terminal> {
         assert_eq!(self.tokens.next().unwrap().kind(), Eol);
         self.parse_block(reduce);
         assert_eq!(self.tokens.next().unwrap().kind(), Endm);
-        reduce.exit_macro_definition()
+        reduce.exit_block()
     }
 
     fn parse_operands(&mut self, instruction_context: &mut R::InstructionContext) {
@@ -146,7 +146,7 @@ mod tests {
             self.actions.push(Action::EnterMacroDef(label))
         }
 
-        fn exit_macro_definition(&mut self) {
+        fn exit_block(&mut self) {
             self.actions.push(Action::ExitMacroDef)
         }
     }
