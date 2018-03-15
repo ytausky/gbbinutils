@@ -26,7 +26,7 @@ impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
         }
     }
 
-    fn next_token_if_not_block_delimiter(&mut self) -> Option<B::Terminal> {
+    fn next_token_if_not_block_delimiter(&mut self) -> Option<I::Item> {
         let take_next = match self.tokens.peek() {
             Some(token) if token.kind() != Endm => true,
             _ => false,
@@ -38,13 +38,13 @@ impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
         }
     }
 
-    fn parse_line(&mut self, first_token: B::Terminal, block_context: &mut B) {
+    fn parse_line(&mut self, first_token: I::Item, block_context: &mut B) {
         if first_token.kind() != Eol {
             self.parse_nonempty_line(first_token, block_context)
         }
     }
 
-    fn parse_nonempty_line(&mut self, first_token: B::Terminal, block_context: &mut B) {
+    fn parse_nonempty_line(&mut self, first_token: I::Item, block_context: &mut B) {
         if first_token.kind() == Label {
             self.parse_macro_definition(first_token, block_context)
         } else {
@@ -54,7 +54,7 @@ impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
         }
     }
 
-    fn parse_macro_definition(&mut self, label: B::Terminal, block_context: &mut B) {
+    fn parse_macro_definition(&mut self, label: I::Item, block_context: &mut B) {
         let macro_block_context = block_context.enter_macro_definition(label);
         assert_eq!(self.tokens.next().unwrap().kind(), Colon);
         assert_eq!(self.tokens.next().unwrap().kind(), Macro);
