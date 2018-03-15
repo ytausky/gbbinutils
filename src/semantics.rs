@@ -29,7 +29,7 @@ impl<'a> AstBuilder<'a> {
     }
 }
 
-impl<'a> syntax::ParsingContext for AstBuilder<'a> {
+impl<'a> syntax::BlockContext for AstBuilder<'a> {
     type Terminal = Token<'a>;
     type InstructionContext = Self;
 

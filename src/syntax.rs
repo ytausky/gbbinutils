@@ -15,7 +15,7 @@ pub enum TerminalKind {
     Word,
 }
 
-pub trait ParsingContext {
+pub trait BlockContext {
     type Terminal: Terminal;
     type InstructionContext: InstructionContext<Terminal = Self::Terminal>;
 
