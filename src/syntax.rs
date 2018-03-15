@@ -17,17 +17,17 @@ pub enum TerminalKind {
 
 pub trait BlockContext {
     type Terminal: Terminal;
-    type InstructionContext: InstructionContext<Terminal = Self::Terminal>;
-    fn enter_instruction(&mut self, name: Self::Terminal) -> &mut Self::InstructionContext;
+    type CommandContext: CommandContext<Terminal = Self::Terminal>;
+    fn enter_command(&mut self, name: Self::Terminal) -> &mut Self::CommandContext;
     fn enter_macro_definition(&mut self, label: Self::Terminal) -> &mut Self;
     fn exit_block(&mut self);
 }
 
-pub trait InstructionContext {
+pub trait CommandContext {
     type Terminal: Terminal;
     type ExpressionContext: ExpressionContext<Terminal = Self::Terminal>;
     fn enter_argument(&mut self) -> &mut Self::ExpressionContext;
-    fn exit_instruction(&mut self);
+    fn exit_command(&mut self);
 }
 
 pub trait ExpressionContext {

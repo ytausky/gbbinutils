@@ -31,9 +31,9 @@ impl<'a> AstBuilder<'a> {
 
 impl<'a> syntax::BlockContext for AstBuilder<'a> {
     type Terminal = Token<'a>;
-    type InstructionContext = Self;
+    type CommandContext = Self;
 
-    fn enter_instruction(&mut self, name: Self::Terminal) -> &mut Self::InstructionContext {
+    fn enter_command(&mut self, name: Self::Terminal) -> &mut Self::CommandContext {
         self.contexts.push(Context::Instruction(name, vec![]));
         self
     }
@@ -47,7 +47,7 @@ impl<'a> syntax::BlockContext for AstBuilder<'a> {
     }
 }
 
-impl<'a> syntax::InstructionContext for AstBuilder<'a> {
+impl<'a> syntax::CommandContext for AstBuilder<'a> {
     type Terminal = Token<'a>;
     type ExpressionContext = Self;
 
@@ -56,7 +56,7 @@ impl<'a> syntax::InstructionContext for AstBuilder<'a> {
         self
     }
 
-    fn exit_instruction(&mut self) {
+    fn exit_command(&mut self) {
         if let Some(Context::Instruction(name, args)) = self.contexts.pop() {
             let item = match name {
                 Token::Keyword(Keyword::Include) => reduce_include(args[0].clone()),
@@ -203,13 +203,13 @@ mod tests {
 
     fn analyze_instruction<'a>(keyword: Keyword, operands: &[Token<'a>]) -> ast::AsmItem<'a> {
         let mut builder = AstBuilder::new();
-        builder.enter_instruction(Token::Keyword(keyword));
+        builder.enter_command(Token::Keyword(keyword));
         for arg in operands {
             let expr = builder.enter_argument();
             expr.push_atom(arg.clone());
             expr.exit_expression();
         }
-        builder.exit_instruction();
+        builder.exit_command();
         builder.ast.pop().unwrap()
     }
 }
