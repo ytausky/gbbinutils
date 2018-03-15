@@ -30,10 +30,10 @@ impl<'a> AstBuilder<'a> {
 }
 
 impl<'a> syntax::ParsingContext for AstBuilder<'a> {
-    type Token = Token<'a>;
+    type Terminal = Token<'a>;
     type ExpressionContext = Self;
 
-    fn enter_instruction(&mut self, name: Self::Token) {
+    fn enter_instruction(&mut self, name: Self::Terminal) {
         self.contexts.push(Context::Instruction(name, vec![]))
     }
 
@@ -55,7 +55,7 @@ impl<'a> syntax::ParsingContext for AstBuilder<'a> {
         self
     }
 
-    fn enter_macro_definition(&mut self, _label: Self::Token) {
+    fn enter_macro_definition(&mut self, _label: Self::Terminal) {
         unimplemented!()
     }
 

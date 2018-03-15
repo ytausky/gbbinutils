@@ -16,15 +16,15 @@ pub enum TerminalKind {
 }
 
 pub trait ParsingContext {
-    type Token: Terminal;
-    type ExpressionContext: ExpressionContext<Terminal = Self::Token>;
+    type Terminal: Terminal;
+    type ExpressionContext: ExpressionContext<Terminal = Self::Terminal>;
 
-    fn enter_instruction(&mut self, name: Self::Token);
+    fn enter_instruction(&mut self, name: Self::Terminal);
     fn exit_instruction(&mut self);
 
     fn enter_expression(&mut self) -> &mut Self::ExpressionContext;
 
-    fn enter_macro_definition(&mut self, label: Self::Token);
+    fn enter_macro_definition(&mut self, label: Self::Terminal);
     fn exit_macro_definition(&mut self);
 }
 

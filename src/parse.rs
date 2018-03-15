@@ -5,7 +5,7 @@ use std::iter;
 use std::marker::PhantomData;
 
 pub fn parse_src<'a, I, R>(tokens: I, reduce: &mut R)
-    where I: Iterator<Item = R::Token>, R: ParsingContext
+    where I: Iterator<Item = R::Terminal>, R: ParsingContext
 {
     let mut parser = Parser {
         tokens: tokens.peekable(),
@@ -19,14 +19,14 @@ struct Parser<L: Iterator, R: ParsingContext> {
     _phantom: PhantomData<R>,
 }
 
-impl<L, R> Parser<L, R> where R: ParsingContext, L: Iterator<Item = R::Token> {
+impl<L, R> Parser<L, R> where R: ParsingContext, L: Iterator<Item = R::Terminal> {
     fn parse_block(&mut self, reduce: &mut R) {
         while let Some(token) = self.next_token_if_not_block_delimiter() {
             self.parse_line(token, reduce)
         }
     }
 
-    fn next_token_if_not_block_delimiter(&mut self) -> Option<R::Token> {
+    fn next_token_if_not_block_delimiter(&mut self) -> Option<R::Terminal> {
         let take_next = match self.tokens.peek() {
             Some(token) if token.kind() != Endm => true,
             _ => false,
@@ -38,13 +38,13 @@ impl<L, R> Parser<L, R> where R: ParsingContext, L: Iterator<Item = R::Token> {
         }
     }
 
-    fn parse_line(&mut self, first_token: R::Token, reduce: &mut R) {
+    fn parse_line(&mut self, first_token: R::Terminal, reduce: &mut R) {
         if first_token.kind() != Eol {
             self.parse_nonempty_line(first_token, reduce)
         }
     }
 
-    fn parse_nonempty_line(&mut self, first_token: R::Token, reduce: &mut R) {
+    fn parse_nonempty_line(&mut self, first_token: R::Terminal, reduce: &mut R) {
         if first_token.kind() == Label {
             self.parse_macro_definition(first_token, reduce)
         } else {
@@ -54,7 +54,7 @@ impl<L, R> Parser<L, R> where R: ParsingContext, L: Iterator<Item = R::Token> {
         }
     }
 
-    fn parse_macro_definition(&mut self, label: R::Token, reduce: &mut R) {
+    fn parse_macro_definition(&mut self, label: R::Terminal, reduce: &mut R) {
         reduce.enter_macro_definition(label);
         assert_eq!(self.tokens.next().unwrap().kind(), Colon);
         assert_eq!(self.tokens.next().unwrap().kind(), Macro);
@@ -134,10 +134,10 @@ mod tests {
     }
 
     impl syntax::ParsingContext for TestReduce {
-        type Token = TestToken;
+        type Terminal = TestToken;
         type ExpressionContext = Self;
 
-        fn enter_instruction(&mut self, name: Self::Token) {
+        fn enter_instruction(&mut self, name: Self::Terminal) {
             self.actions.push(Action::EnterInstruction(name))
         }
 
@@ -150,7 +150,7 @@ mod tests {
             self
         }
 
-        fn enter_macro_definition(&mut self, label: Self::Token) {
+        fn enter_macro_definition(&mut self, label: Self::Terminal) {
             self.actions.push(Action::EnterMacroDef(label))
         }
 
