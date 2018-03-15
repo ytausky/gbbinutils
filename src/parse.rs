@@ -82,10 +82,10 @@ impl<L, R> Parser<L, R> where R: ParsingContext, L: Iterator<Item = R::Token> {
     }
 
     fn parse_expression(&mut self, reduce: &mut R) {
-        reduce.enter_expression();
+        let context = reduce.enter_expression();
         let token = self.tokens.next().unwrap();
-        reduce.push_atom(token);
-        reduce.exit_expression()
+        context.push_atom(token);
+        context.exit_expression()
     }
 }
 
@@ -135,6 +135,7 @@ mod tests {
 
     impl syntax::ParsingContext for TestReduce {
         type Token = TestToken;
+        type ExpressionContext = Self;
 
         fn enter_instruction(&mut self, name: Self::Token) {
             self.actions.push(Action::EnterInstruction(name))
@@ -144,16 +145,9 @@ mod tests {
             self.actions.push(Action::ExitInstruction)
         }
 
-        fn enter_expression(&mut self) {
-            self.actions.push(Action::EnterExpression)
-        }
-
-        fn push_atom(&mut self, atom: Self::Token) {
-            self.actions.push(Action::PushAtom(atom))
-        }
-
-        fn exit_expression(&mut self) {
-            self.actions.push(Action::ExitExpression)
+        fn enter_expression(&mut self) -> &mut Self::ExpressionContext {
+            self.actions.push(Action::EnterExpression);
+            self
         }
 
         fn enter_macro_definition(&mut self, label: Self::Token) {
@@ -162,6 +156,18 @@ mod tests {
 
         fn exit_macro_definition(&mut self) {
             self.actions.push(Action::ExitMacroDef)
+        }
+    }
+
+    impl syntax::ExpressionContext for TestReduce {
+        type Terminal = TestToken;
+
+        fn push_atom(&mut self, atom: Self::Terminal) {
+            self.actions.push(Action::PushAtom(atom))
+        }
+
+        fn exit_expression(&mut self) {
+            self.actions.push(Action::ExitExpression)
         }
     }
 

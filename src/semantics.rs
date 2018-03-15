@@ -31,6 +31,7 @@ impl<'a> AstBuilder<'a> {
 
 impl<'a> syntax::ParsingContext for AstBuilder<'a> {
     type Token = Token<'a>;
+    type ExpressionContext = Self;
 
     fn enter_instruction(&mut self, name: Self::Token) {
         self.contexts.push(Context::Instruction(name, vec![]))
@@ -49,11 +50,24 @@ impl<'a> syntax::ParsingContext for AstBuilder<'a> {
         }
     }
 
-    fn enter_expression(&mut self) {
-        self.contexts.push(Context::Expression(Vec::new()))
+    fn enter_expression(&mut self) -> &mut Self::ExpressionContext {
+        self.contexts.push(Context::Expression(Vec::new()));
+        self
     }
 
-    fn push_atom(&mut self, atom: Self::Token) {
+    fn enter_macro_definition(&mut self, _label: Self::Token) {
+        unimplemented!()
+    }
+
+    fn exit_macro_definition(&mut self) {
+        unimplemented!()
+    }
+}
+
+impl<'a> syntax::ExpressionContext for AstBuilder<'a> {
+    type Terminal = Token<'a>;
+
+    fn push_atom(&mut self, atom: Self::Terminal) {
         if let Some(&mut Context::Expression(ref mut stack)) = self.contexts.last_mut() {
             stack.push(atom)
         } else {
@@ -72,14 +86,6 @@ impl<'a> syntax::ParsingContext for AstBuilder<'a> {
         } else {
             panic!()
         }
-    }
-
-    fn enter_macro_definition(&mut self, _label: Self::Token) {
-        unimplemented!()
-    }
-
-    fn exit_macro_definition(&mut self) {
-        unimplemented!()
     }
 }
 
@@ -139,7 +145,7 @@ mod tests {
     use super::*;
 
     use keyword::Keyword;
-    use syntax::ParsingContext;
+    use syntax::*;
 
     #[test]
     fn build_include_item() {
@@ -193,9 +199,9 @@ mod tests {
         let mut builder = AstBuilder::new();
         builder.enter_instruction(Token::Keyword(keyword));
         for arg in operands {
-            builder.enter_expression();
-            builder.push_atom(arg.clone());
-            builder.exit_expression();
+            let expr = builder.enter_expression();
+            expr.push_atom(arg.clone());
+            expr.exit_expression();
         }
         builder.exit_instruction();
         builder.ast.pop().unwrap()
