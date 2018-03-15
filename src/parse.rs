@@ -4,29 +4,29 @@ use syntax::TerminalKind::*;
 use std::iter;
 use std::marker::PhantomData;
 
-pub fn parse_src<'a, I, R>(tokens: I, reduce: &mut R)
-    where I: Iterator<Item = R::Terminal>, R: BlockContext
+pub fn parse_src<'a, I, B>(tokens: I, block_context: &mut B)
+    where I: Iterator<Item = B::Terminal>, B: BlockContext
 {
     let mut parser = Parser {
         tokens: tokens.peekable(),
         _phantom: PhantomData,
     };
-    parser.parse_block(reduce)
+    parser.parse_block(block_context)
 }
 
-struct Parser<L: Iterator, R: BlockContext> {
-    tokens: iter::Peekable<L>,
-    _phantom: PhantomData<R>,
+struct Parser<I: Iterator, B: BlockContext> {
+    tokens: iter::Peekable<I>,
+    _phantom: PhantomData<B>,
 }
 
-impl<L, R> Parser<L, R> where R: BlockContext, L: Iterator<Item = R::Terminal> {
-    fn parse_block(&mut self, reduce: &mut R) {
+impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
+    fn parse_block(&mut self, block_context: &mut B) {
         while let Some(token) = self.next_token_if_not_block_delimiter() {
-            self.parse_line(token, reduce)
+            self.parse_line(token, block_context)
         }
     }
 
-    fn next_token_if_not_block_delimiter(&mut self) -> Option<R::Terminal> {
+    fn next_token_if_not_block_delimiter(&mut self) -> Option<B::Terminal> {
         let take_next = match self.tokens.peek() {
             Some(token) if token.kind() != Endm => true,
             _ => false,
@@ -38,24 +38,24 @@ impl<L, R> Parser<L, R> where R: BlockContext, L: Iterator<Item = R::Terminal> {
         }
     }
 
-    fn parse_line(&mut self, first_token: R::Terminal, reduce: &mut R) {
+    fn parse_line(&mut self, first_token: B::Terminal, block_context: &mut B) {
         if first_token.kind() != Eol {
-            self.parse_nonempty_line(first_token, reduce)
+            self.parse_nonempty_line(first_token, block_context)
         }
     }
 
-    fn parse_nonempty_line(&mut self, first_token: R::Terminal, reduce: &mut R) {
+    fn parse_nonempty_line(&mut self, first_token: B::Terminal, block_context: &mut B) {
         if first_token.kind() == Label {
-            self.parse_macro_definition(first_token, reduce)
+            self.parse_macro_definition(first_token, block_context)
         } else {
-            let instruction_context = reduce.enter_instruction(first_token);
+            let instruction_context = block_context.enter_instruction(first_token);
             self.parse_operands(instruction_context);
             instruction_context.exit_instruction()
         }
     }
 
-    fn parse_macro_definition(&mut self, label: R::Terminal, reduce: &mut R) {
-        let macro_block_context = reduce.enter_macro_definition(label);
+    fn parse_macro_definition(&mut self, label: B::Terminal, block_context: &mut B) {
+        let macro_block_context = block_context.enter_macro_definition(label);
         assert_eq!(self.tokens.next().unwrap().kind(), Colon);
         assert_eq!(self.tokens.next().unwrap().kind(), Macro);
         assert_eq!(self.tokens.next().unwrap().kind(), Eol);
@@ -64,7 +64,7 @@ impl<L, R> Parser<L, R> where R: BlockContext, L: Iterator<Item = R::Terminal> {
         macro_block_context.exit_block()
     }
 
-    fn parse_operands(&mut self, instruction_context: &mut R::InstructionContext) {
+    fn parse_operands(&mut self, instruction_context: &mut B::InstructionContext) {
         if let Some(_) = self.peek_not_eol() {
             self.parse_expression(instruction_context);
             while let Some(Comma) = self.tokens.peek().map(|t| t.kind()) {
@@ -74,14 +74,14 @@ impl<L, R> Parser<L, R> where R: BlockContext, L: Iterator<Item = R::Terminal> {
         }
     }
 
-    fn peek_not_eol(&mut self) -> Option<&L::Item> {
+    fn peek_not_eol(&mut self) -> Option<&I::Item> {
         match self.tokens.peek() {
             Some(token) if token.kind() == Eol => None,
             option_token => option_token,
         }
     }
 
-    fn parse_expression(&mut self, instruction_context: &mut R::InstructionContext) {
+    fn parse_expression(&mut self, instruction_context: &mut B::InstructionContext) {
         let expression_context = instruction_context.enter_argument();
         let token = self.tokens.next().unwrap();
         expression_context.push_atom(token);
@@ -101,13 +101,13 @@ mod tests {
         assert_eq_actions(&[], &[])
     }
 
-    struct TestReduce {
+    struct TestContext {
         actions: Vec<Action>,
     }
 
-    impl TestReduce {
-        fn new() -> TestReduce {
-            TestReduce {
+    impl TestContext {
+        fn new() -> TestContext {
+            TestContext {
                 actions: Vec::new(),
             }
         }
@@ -133,7 +133,7 @@ mod tests {
         }
     }
 
-    impl syntax::BlockContext for TestReduce {
+    impl syntax::BlockContext for TestContext {
         type Terminal = TestToken;
         type InstructionContext = Self;
 
@@ -152,7 +152,7 @@ mod tests {
         }
     }
 
-    impl syntax::InstructionContext for TestReduce {
+    impl syntax::InstructionContext for TestContext {
         type Terminal = TestToken;
         type ExpressionContext = Self;
 
@@ -166,7 +166,7 @@ mod tests {
         }
     }
 
-    impl syntax::ExpressionContext for TestReduce {
+    impl syntax::ExpressionContext for TestContext {
         type Terminal = TestToken;
 
         fn push_atom(&mut self, atom: Self::Terminal) {
@@ -184,7 +184,7 @@ mod tests {
     }
 
     fn assert_eq_actions(tokens: &[TestToken], expected_actions: &[Action]) {
-        let mut parsing_constext = TestReduce::new();
+        let mut parsing_constext = TestContext::new();
         parse_src(tokens.iter().cloned(), &mut parsing_constext);
         assert_eq!(parsing_constext.actions, expected_actions)
     }
