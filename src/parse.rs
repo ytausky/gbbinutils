@@ -39,18 +39,11 @@ impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
     }
 
     fn parse_line(&mut self, first_token: I::Item, block_context: &mut B) {
-        if first_token.kind() != Eol {
-            self.parse_nonempty_line(first_token, block_context)
-        }
-    }
-
-    fn parse_nonempty_line(&mut self, first_token: I::Item, block_context: &mut B) {
-        if first_token.kind() == Label {
-            self.parse_macro_definition(first_token, block_context)
-        } else {
-            let instruction_context = block_context.enter_instruction(first_token);
-            self.parse_operands(instruction_context);
-            instruction_context.exit_instruction()
+        match first_token.kind() {
+            Eol => (),
+            Label => self.parse_macro_definition(first_token, block_context),
+            Word => self.parse_instruction(first_token, block_context),
+            _ => panic!(),
         }
     }
 
@@ -64,7 +57,13 @@ impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
         macro_block_context.exit_block()
     }
 
-    fn parse_operands(&mut self, instruction_context: &mut B::InstructionContext) {
+    fn parse_instruction(&mut self, first_token: I::Item, block_context: &mut B) {
+        let instruction_context = block_context.enter_instruction(first_token);
+        self.parse_argument_list(instruction_context);
+        instruction_context.exit_instruction()
+    }
+
+    fn parse_argument_list(&mut self, instruction_context: &mut B::InstructionContext) {
         if let Some(_) = self.peek_not_eol() {
             self.parse_argument(instruction_context);
             while let Some(Comma) = self.tokens.peek().map(|t| t.kind()) {

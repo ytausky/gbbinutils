@@ -21,7 +21,7 @@ impl<'a> syntax::Terminal for Token<'a> {
             Token::Eol => TerminalKind::Eol,
             Token::Identifier(_) => TerminalKind::Word,
             Token::Keyword(_) => TerminalKind::Word,
-            Token::Label(_) => TerminalKind::Word,
+            Token::Label(_) => TerminalKind::Label,
             Token::Number(_) => TerminalKind::Number,
             Token::QuotedString(_) => TerminalKind::QuotedString,
             _ => panic!(),
