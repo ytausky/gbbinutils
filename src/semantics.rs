@@ -31,10 +31,29 @@ impl<'a> AstBuilder<'a> {
 
 impl<'a> syntax::ParsingContext for AstBuilder<'a> {
     type Terminal = Token<'a>;
+    type InstructionContext = Self;
+
+    fn enter_instruction(&mut self, name: Self::Terminal) -> &mut Self::InstructionContext {
+        self.contexts.push(Context::Instruction(name, vec![]));
+        self
+    }
+
+    fn enter_macro_definition(&mut self, _label: Self::Terminal) {
+        unimplemented!()
+    }
+
+    fn exit_macro_definition(&mut self) {
+        unimplemented!()
+    }
+}
+
+impl<'a> syntax::InstructionContext for AstBuilder<'a> {
+    type Terminal = Token<'a>;
     type ExpressionContext = Self;
 
-    fn enter_instruction(&mut self, name: Self::Terminal) {
-        self.contexts.push(Context::Instruction(name, vec![]))
+    fn enter_argument(&mut self) -> &mut Self::ExpressionContext {
+        self.contexts.push(Context::Expression(Vec::new()));
+        self
     }
 
     fn exit_instruction(&mut self) {
@@ -48,19 +67,6 @@ impl<'a> syntax::ParsingContext for AstBuilder<'a> {
         } else {
             panic!()
         }
-    }
-
-    fn enter_expression(&mut self) -> &mut Self::ExpressionContext {
-        self.contexts.push(Context::Expression(Vec::new()));
-        self
-    }
-
-    fn enter_macro_definition(&mut self, _label: Self::Terminal) {
-        unimplemented!()
-    }
-
-    fn exit_macro_definition(&mut self) {
-        unimplemented!()
     }
 }
 
@@ -199,7 +205,7 @@ mod tests {
         let mut builder = AstBuilder::new();
         builder.enter_instruction(Token::Keyword(keyword));
         for arg in operands {
-            let expr = builder.enter_expression();
+            let expr = builder.enter_argument();
             expr.push_atom(arg.clone());
             expr.exit_expression();
         }
