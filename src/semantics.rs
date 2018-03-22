@@ -42,10 +42,6 @@ impl<'a> syntax::BlockContext for AstBuilder<'a> {
     fn enter_macro_definition(&mut self, _label: Self::Terminal) -> &mut Self::TerminalSequenceContext {
         unimplemented!()
     }
-
-    fn exit_block(&mut self) {
-        unimplemented!()
-    }
 }
 
 impl<'a> syntax::CommandContext for AstBuilder<'a> {

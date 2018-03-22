@@ -155,10 +155,6 @@ mod tests {
             self.actions.push(Action::EnterMacroDef(label));
             self
         }
-
-        fn exit_block(&mut self) {
-            self.actions.push(Action::ExitMacroDef)
-        }
     }
 
     impl syntax::CommandContext for TestContext {
