@@ -18,8 +18,9 @@ pub enum TerminalKind {
 pub trait BlockContext {
     type Terminal: Terminal;
     type CommandContext: CommandContext<Terminal = Self::Terminal>;
+    type TerminalSequenceContext: TerminalSequenceContext<Terminal = Self::Terminal>;
     fn enter_command(&mut self, name: Self::Terminal) -> &mut Self::CommandContext;
-    fn enter_macro_definition(&mut self, label: Self::Terminal) -> &mut Self;
+    fn enter_macro_definition(&mut self, label: Self::Terminal) -> &mut Self::TerminalSequenceContext;
     fn exit_block(&mut self);
 }
 
@@ -34,4 +35,10 @@ pub trait ExpressionContext {
     type Terminal: Terminal;
     fn push_atom(&mut self, atom: Self::Terminal);
     fn exit_expression(&mut self);
+}
+
+pub trait TerminalSequenceContext {
+    type Terminal: Terminal;
+    fn push_terminal(&mut self, terminal: Self::Terminal);
+    fn exit_terminal_sequence(&mut self);
 }

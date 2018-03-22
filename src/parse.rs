@@ -52,9 +52,11 @@ impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
         assert_eq!(self.tokens.next().unwrap().kind(), Colon);
         assert_eq!(self.tokens.next().unwrap().kind(), Macro);
         assert_eq!(self.tokens.next().unwrap().kind(), Eol);
-        self.parse_block(macro_block_context);
+        while let Some(token) = self.next_token_if_not_block_delimiter() {
+            macro_block_context.push_terminal(token)
+        }
         assert_eq!(self.tokens.next().unwrap().kind(), Endm);
-        macro_block_context.exit_block()
+        macro_block_context.exit_terminal_sequence()
     }
 
     fn parse_command(&mut self, first_token: I::Item, block_context: &mut B) {
@@ -127,6 +129,7 @@ mod tests {
         ExitInstruction,
         ExitMacroDef,
         PushAtom(TestToken),
+        PushTerminal(TestToken),
     }
 
     type TestToken = (syntax::TerminalKind, usize);
@@ -141,13 +144,14 @@ mod tests {
     impl syntax::BlockContext for TestContext {
         type Terminal = TestToken;
         type CommandContext = Self;
+        type TerminalSequenceContext = Self;
 
         fn enter_command(&mut self, name: Self::Terminal) -> &mut Self::CommandContext {
             self.actions.push(Action::EnterInstruction(name));
             self
         }
 
-        fn enter_macro_definition(&mut self, label: Self::Terminal) -> &mut Self {
+        fn enter_macro_definition(&mut self, label: Self::Terminal) -> &mut Self::TerminalSequenceContext {
             self.actions.push(Action::EnterMacroDef(label));
             self
         }
@@ -180,6 +184,18 @@ mod tests {
 
         fn exit_expression(&mut self) {
             self.actions.push(Action::ExitExpression)
+        }
+    }
+
+    impl syntax::TerminalSequenceContext for TestContext {
+        type Terminal = TestToken;
+
+        fn push_terminal(&mut self, terminal: Self::Terminal) {
+            self.actions.push(Action::PushTerminal(terminal))
+        }
+
+        fn exit_terminal_sequence(&mut self) {
+            self.actions.push(Action::ExitMacroDef)
         }
     }
 
@@ -299,9 +315,9 @@ mod tests {
         assert_eq_actions(tokens, expected_actions);
     }
 
-    fn macro_def(label: TestToken, mut instructions: Vec<Action>) -> Vec<Action> {
+    fn macro_def(label: TestToken, tokens: Vec<TestToken>) -> Vec<Action> {
         let mut result = vec![Action::EnterMacroDef(label)];
-        result.append(&mut instructions);
+        result.extend(tokens.into_iter().map(|t| Action::PushTerminal(t)));
         result.push(Action::ExitMacroDef);
         result
     }
@@ -313,7 +329,7 @@ mod tests {
             (Word, 4), (Eol, 5),
             (Endm, 6),
         ];
-        let expected_actions = &macro_def((Label, 0), inst((Word, 4), vec![]));
+        let expected_actions = &macro_def((Label, 0), vec![(Word, 4), (Eol, 5)]);
         assert_eq_actions(tokens, expected_actions);
     }
 }

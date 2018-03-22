@@ -32,13 +32,14 @@ impl<'a> AstBuilder<'a> {
 impl<'a> syntax::BlockContext for AstBuilder<'a> {
     type Terminal = Token<'a>;
     type CommandContext = Self;
+    type TerminalSequenceContext = Self;
 
     fn enter_command(&mut self, name: Self::Terminal) -> &mut Self::CommandContext {
         self.contexts.push(Context::Instruction(name, vec![]));
         self
     }
 
-    fn enter_macro_definition(&mut self, _label: Self::Terminal) -> &mut Self {
+    fn enter_macro_definition(&mut self, _label: Self::Terminal) -> &mut Self::TerminalSequenceContext {
         unimplemented!()
     }
 
@@ -92,6 +93,18 @@ impl<'a> syntax::ExpressionContext for AstBuilder<'a> {
         } else {
             panic!()
         }
+    }
+}
+
+impl<'a> syntax::TerminalSequenceContext for AstBuilder<'a> {
+    type Terminal = Token<'a>;
+
+    fn push_terminal(&mut self, _terminal: Self::Terminal) {
+        unimplemented!()
+    }
+
+    fn exit_terminal_sequence(&mut self) {
+        unimplemented!()
     }
 }
 
