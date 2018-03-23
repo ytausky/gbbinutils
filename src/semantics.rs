@@ -36,6 +36,10 @@ impl<'a, S: ast::Section> syntax::BlockContext for AstBuilder<'a, S> {
     type CommandContext = Self;
     type TerminalSequenceContext = Self;
 
+    fn add_label(&mut self, _label: Self::Terminal) {
+        unimplemented!()
+    }
+
     fn enter_command(&mut self, name: Self::Terminal) -> &mut Self::CommandContext {
         self.contexts.push(Context::Instruction(name, vec![]));
         self
