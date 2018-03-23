@@ -38,65 +38,54 @@ impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
     }
 
     fn parse_block(&mut self, block_context: &mut B) {
-        while let Some(token) = self.next_token_if_not_block_delimiter() {
-            self.parse_line(token, block_context)
-        }
+        self.parse_list(Some(Eol), follows_line, |p| p.parse_line(block_context))
     }
 
-    fn next_token_if_not_block_delimiter(&mut self) -> Option<I::Item> {
-        let take_next = match self.tokens.peek() {
-            Some(token) if token.kind() != Endm => true,
-            _ => false,
-        };
-        if take_next {
-            self.tokens.next()
+    fn parse_line(&mut self, block_context: &mut B) {
+        if self.terminal_kind() == Some(Label) {
+            self.parse_labeled_line(block_context)
         } else {
-            None
+            self.parse_non_labeled_line(block_context)
         }
     }
 
-    fn parse_line(&mut self, first_token: I::Item, block_context: &mut B) {
-        if first_token.kind() == Label {
-            self.parse_labeled_line(first_token, block_context)
-        } else {
-            self.parse_non_labeled_line(first_token, block_context)
-        }
-    }
-
-    fn parse_labeled_line(&mut self, label: I::Item, block_context: &mut B) {
+    fn parse_labeled_line(&mut self, block_context: &mut B) {
+        assert_eq!(self.terminal_kind(), Some(Label));
+        let label = self.bump();
         if self.terminal_kind() == Some(Colon) {
             self.bump();
         }
-        if self.terminal_kind() != None {
-            let next_token = self.bump();
-            if next_token.kind() == Macro {
-                self.parse_macro_definition(label, block_context)
-            } else {
-                block_context.add_label(label);
-                self.parse_non_labeled_line(next_token, block_context)
-            }
+        if self.terminal_kind() == Some(Macro) {
+            self.parse_macro_definition(label, block_context)
+        } else {
+            block_context.add_label(label);
+            self.parse_non_labeled_line(block_context)
         }
     }
 
-    fn parse_non_labeled_line(&mut self, first_token: I::Item, block_context: &mut B) {
-        match first_token.kind() {
-            Eol => (),
-            Word => self.parse_command(first_token, block_context),
+    fn parse_non_labeled_line(&mut self, block_context: &mut B) {
+        match self.terminal_kind() {
+            ref t if follows_line(t.clone()) => (),
+            Some(Word) => self.parse_command(block_context),
             _ => panic!(),
         }
     }
 
     fn parse_macro_definition(&mut self, label: I::Item, block_context: &mut B) {
+        assert_eq!(self.terminal_kind(), Some(Macro));
+        self.bump();
         let macro_block_context = block_context.enter_macro_definition(label);
         assert_eq!(self.tokens.next().unwrap().kind(), Eol);
-        while let Some(token) = self.next_token_if_not_block_delimiter() {
-            macro_block_context.push_terminal(token)
+        while self.terminal_kind() != Some(Endm) {
+            macro_block_context.push_terminal(self.bump())
         }
         assert_eq!(self.tokens.next().unwrap().kind(), Endm);
         macro_block_context.exit_terminal_sequence()
     }
 
-    fn parse_command(&mut self, first_token: I::Item, block_context: &mut B) {
+    fn parse_command(&mut self, block_context: &mut B) {
+        assert_eq!(self.terminal_kind(), Some(Word));
+        let first_token = self.bump();
         let instruction_context = block_context.enter_command(first_token);
         self.parse_argument_list(instruction_context);
         instruction_context.exit_command()
