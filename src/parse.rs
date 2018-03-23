@@ -20,6 +20,14 @@ struct Parser<I: Iterator, B: BlockContext> {
 }
 
 impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
+    fn terminal_kind(&mut self) -> Option<TerminalKind> {
+        self.tokens.peek().map(|t| t.kind())
+    }
+
+    fn bump(&mut self) -> I::Item {
+        self.tokens.next().unwrap()
+    }
+
     fn parse_block(&mut self, block_context: &mut B) {
         while let Some(token) = self.next_token_if_not_block_delimiter() {
             self.parse_line(token, block_context)
@@ -47,11 +55,11 @@ impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
     }
 
     fn parse_labeled_line(&mut self, label: I::Item, block_context: &mut B) {
-        if self.tokens.peek().map(|t| t.kind()) == Some(Colon) {
-            self.tokens.next();
+        if self.terminal_kind() == Some(Colon) {
+            self.bump();
         }
-        if self.tokens.peek().is_some() {
-            let next_token = self.tokens.next().unwrap();
+        if self.terminal_kind() != None {
+            let next_token = self.bump();
             if next_token.kind() == Macro {
                 self.parse_macro_definition(label, block_context)
             } else {
@@ -86,19 +94,19 @@ impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
     }
 
     fn parse_argument_list(&mut self, instruction_context: &mut B::CommandContext) {
-        if let Some(_) = self.peek_not_eol() {
+        if !self.outside_line() {
             self.parse_argument(instruction_context);
-            while let Some(Comma) = self.tokens.peek().map(|t| t.kind()) {
-                self.tokens.next();
+            while self.terminal_kind() == Some(Comma) {
+                self.bump();
                 self.parse_argument(instruction_context)
             }
         }
     }
 
-    fn peek_not_eol(&mut self) -> Option<&I::Item> {
-        match self.tokens.peek() {
-            Some(token) if token.kind() == Eol => None,
-            option_token => option_token,
+    fn outside_line(&mut self) -> bool {
+        match self.terminal_kind() {
+            None | Some(Eol) => true,
+            _ => false,
         }
     }
 
@@ -110,7 +118,7 @@ impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
     fn parse_expression<E>(&mut self, expression_context: &mut E)
         where E: ExpressionContext<Terminal = I::Item>
     {
-        let token = self.tokens.next().unwrap();
+        let token = self.bump();
         expression_context.push_atom(token);
         expression_context.exit_expression()
     }
