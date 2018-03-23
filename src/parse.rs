@@ -47,7 +47,9 @@ impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
     }
 
     fn parse_labeled_line(&mut self, label: I::Item, block_context: &mut B) {
-        assert_eq!(self.tokens.next().unwrap().kind(), Colon);
+        if self.tokens.peek().map(|t| t.kind()) == Some(Colon) {
+            self.tokens.next();
+        }
         if self.tokens.peek().is_some() {
             let next_token = self.tokens.next().unwrap();
             if next_token.kind() == Macro {
@@ -354,6 +356,13 @@ mod tests {
 
     #[test]
     fn parse_label() {
+        let tokens = &[(Label, 0), (Eol, 1)];
+        let expected_actions = &add_label((Label, 0), vec![]);
+        assert_eq_actions(tokens, expected_actions)
+    }
+
+    #[test]
+    fn parse_label_colon() {
         let tokens = &[(Label, 0), (Colon, 1), (Eol, 2)];
         let expected_actions = &add_label((Label, 0), vec![]);
         assert_eq_actions(tokens, expected_actions)
