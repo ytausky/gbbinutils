@@ -1,3 +1,7 @@
+pub trait Section {
+    fn add_instruction(&mut self, instruction: Instruction);
+}
+
 #[derive(Debug, PartialEq)]
 pub enum AsmItem<'a> {
     Include(&'a str),

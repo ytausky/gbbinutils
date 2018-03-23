@@ -17,7 +17,7 @@ enum Context<'a> {
 }
 
 impl<'a> AstBuilder<'a> {
-    pub fn new() -> AstBuilder<'a> {
+    pub fn new<S: ast::Section>(_section: S) -> AstBuilder<'a> {
         AstBuilder {
             ast: Vec::new(),
             contexts: vec![Context::Block],
@@ -211,7 +211,7 @@ mod tests {
     }
 
     fn analyze_instruction<'a>(keyword: Keyword, operands: &[Token<'a>]) -> ast::AsmItem<'a> {
-        let mut builder = AstBuilder::new();
+        let mut builder = AstBuilder::new(TestSection::new());
         builder.enter_command(Token::Keyword(keyword));
         for arg in operands {
             let expr = builder.enter_argument();
@@ -220,5 +220,19 @@ mod tests {
         }
         builder.exit_command();
         builder.ast.pop().unwrap()
+    }
+
+    struct TestSection;
+
+    impl TestSection {
+        fn new() -> TestSection {
+            TestSection {}
+        }
+    }
+
+    impl ast::Section for TestSection {
+        fn add_instruction(&mut self, _instruction: ast::Instruction) {
+            unimplemented!()
+        }
     }
 }
