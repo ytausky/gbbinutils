@@ -29,12 +29,17 @@ struct Parser<I: Iterator, B: BlockContext> {
 }
 
 impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
-    fn lookahead(&mut self) -> Option<TerminalKind> {
+    fn lookahead(&mut self) -> Lookahead {
         self.tokens.peek().map(|t| t.kind())
     }
 
     fn bump(&mut self) -> I::Item {
         self.tokens.next().unwrap()
+    }
+
+    fn expect(&mut self, expected: Lookahead) -> I::Item {
+        assert_eq!(self.lookahead(), expected);
+        self.bump()
     }
 
     fn parse_block(&mut self, block_context: &mut B) {
@@ -50,8 +55,7 @@ impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
     }
 
     fn parse_labeled_line(&mut self, block_context: &mut B) {
-        assert_eq!(self.lookahead(), Some(Label));
-        let label = self.bump();
+        let label = self.expect(Some(Label));
         if self.lookahead() == Some(Colon) {
             self.bump();
         }
@@ -72,20 +76,18 @@ impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
     }
 
     fn parse_macro_definition(&mut self, label: I::Item, block_context: &mut B) {
-        assert_eq!(self.lookahead(), Some(Macro));
-        self.bump();
+        self.expect(Some(Macro));
         let macro_block_context = block_context.enter_macro_definition(label);
-        assert_eq!(self.tokens.next().unwrap().kind(), Eol);
+        self.expect(Some(Eol));
         while self.lookahead() != Some(Endm) {
             macro_block_context.push_terminal(self.bump())
         }
-        assert_eq!(self.tokens.next().unwrap().kind(), Endm);
+        self.expect(Some(Endm));
         macro_block_context.exit_terminal_sequence()
     }
 
     fn parse_command(&mut self, block_context: &mut B) {
-        assert_eq!(self.lookahead(), Some(Word));
-        let first_token = self.bump();
+        let first_token = self.expect(Some(Word));
         let instruction_context = block_context.enter_command(first_token);
         self.parse_argument_list(instruction_context);
         instruction_context.exit_command()
