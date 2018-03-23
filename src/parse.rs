@@ -29,7 +29,7 @@ struct Parser<I: Iterator, B: BlockContext> {
 }
 
 impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
-    fn terminal_kind(&mut self) -> Option<TerminalKind> {
+    fn lookahead(&mut self) -> Option<TerminalKind> {
         self.tokens.peek().map(|t| t.kind())
     }
 
@@ -42,29 +42,29 @@ impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
     }
 
     fn parse_line(&mut self, block_context: &mut B) {
-        if self.terminal_kind() == Some(Label) {
+        if self.lookahead() == Some(Label) {
             self.parse_labeled_line(block_context)
         } else {
-            self.parse_non_labeled_line(block_context)
+            self.parse_unlabeled_line(block_context)
         }
     }
 
     fn parse_labeled_line(&mut self, block_context: &mut B) {
-        assert_eq!(self.terminal_kind(), Some(Label));
+        assert_eq!(self.lookahead(), Some(Label));
         let label = self.bump();
-        if self.terminal_kind() == Some(Colon) {
+        if self.lookahead() == Some(Colon) {
             self.bump();
         }
-        if self.terminal_kind() == Some(Macro) {
+        if self.lookahead() == Some(Macro) {
             self.parse_macro_definition(label, block_context)
         } else {
             block_context.add_label(label);
-            self.parse_non_labeled_line(block_context)
+            self.parse_unlabeled_line(block_context)
         }
     }
 
-    fn parse_non_labeled_line(&mut self, block_context: &mut B) {
-        match self.terminal_kind() {
+    fn parse_unlabeled_line(&mut self, block_context: &mut B) {
+        match self.lookahead() {
             ref t if follows_line(t.clone()) => (),
             Some(Word) => self.parse_command(block_context),
             _ => panic!(),
@@ -72,11 +72,11 @@ impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
     }
 
     fn parse_macro_definition(&mut self, label: I::Item, block_context: &mut B) {
-        assert_eq!(self.terminal_kind(), Some(Macro));
+        assert_eq!(self.lookahead(), Some(Macro));
         self.bump();
         let macro_block_context = block_context.enter_macro_definition(label);
         assert_eq!(self.tokens.next().unwrap().kind(), Eol);
-        while self.terminal_kind() != Some(Endm) {
+        while self.lookahead() != Some(Endm) {
             macro_block_context.push_terminal(self.bump())
         }
         assert_eq!(self.tokens.next().unwrap().kind(), Endm);
@@ -84,7 +84,7 @@ impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
     }
 
     fn parse_command(&mut self, block_context: &mut B) {
-        assert_eq!(self.terminal_kind(), Some(Word));
+        assert_eq!(self.lookahead(), Some(Word));
         let first_token = self.bump();
         let instruction_context = block_context.enter_command(first_token);
         self.parse_argument_list(instruction_context);
@@ -98,13 +98,13 @@ impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
     fn parse_list<F, P>(&mut self, delimiter: Lookahead, mut follow: F, mut parser: P)
         where F: FnMut(Lookahead) -> bool, P: FnMut(&mut Self)
     {
-        if !follow(self.terminal_kind()) {
+        if !follow(self.lookahead()) {
             parser(self);
-            while self.terminal_kind() == delimiter {
+            while self.lookahead() == delimiter {
                 self.bump();
                 parser(self)
             }
-            assert!(follow(self.terminal_kind()))
+            assert!(follow(self.lookahead()))
         }
     }
 
