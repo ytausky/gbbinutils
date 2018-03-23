@@ -4,6 +4,15 @@ use syntax::TerminalKind::*;
 use std::iter;
 use std::marker::PhantomData;
 
+type Lookahead = Option<TerminalKind>;
+
+fn follows_line(lookahead: Lookahead) -> bool {
+    match lookahead {
+        None | Some(Eol) => true,
+        _ => false,
+    }
+}
+
 pub fn parse_src<'a, I, B>(tokens: I, block_context: &mut B)
     where I: Iterator<Item = B::Terminal>, B: BlockContext
 {
@@ -94,19 +103,19 @@ impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
     }
 
     fn parse_argument_list(&mut self, instruction_context: &mut B::CommandContext) {
-        if !self.outside_line() {
-            self.parse_argument(instruction_context);
-            while self.terminal_kind() == Some(Comma) {
-                self.bump();
-                self.parse_argument(instruction_context)
-            }
-        }
+        self.parse_list(Some(Comma), follows_line, |p| p.parse_argument(instruction_context))
     }
 
-    fn outside_line(&mut self) -> bool {
-        match self.terminal_kind() {
-            None | Some(Eol) => true,
-            _ => false,
+    fn parse_list<F, P>(&mut self, delimiter: Lookahead, mut follow: F, mut parser: P)
+        where F: FnMut(Lookahead) -> bool, P: FnMut(&mut Self)
+    {
+        if !follow(self.terminal_kind()) {
+            parser(self);
+            while self.terminal_kind() == delimiter {
+                self.bump();
+                parser(self)
+            }
+            assert!(follow(self.terminal_kind()))
         }
     }
 
