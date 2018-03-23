@@ -2,13 +2,12 @@ pub trait Section {
     fn add_instruction(&mut self, instruction: Instruction);
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum AsmItem<'a> {
     Include(&'a str),
-    Instruction(Instruction),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Instruction {
     pub mnemonic: Mnemonic,
     pub operands: Vec<Operand>,

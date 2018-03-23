@@ -5,9 +5,10 @@ use syntax;
 use keyword::Keyword;
 use token::Token;
 
-pub struct AstBuilder<'a> {
+pub struct AstBuilder<'a, S: ast::Section> {
     ast: Vec<ast::AsmItem<'a>>,
     contexts: Vec<Context<'a>>,
+    section: S
 }
 
 enum Context<'a> {
@@ -16,11 +17,12 @@ enum Context<'a> {
     Instruction(Token<'a>, Vec<Token<'a>>),
 }
 
-impl<'a> AstBuilder<'a> {
-    pub fn new<S: ast::Section>(_section: S) -> AstBuilder<'a> {
+impl<'a, S: ast::Section> AstBuilder<'a, S> {
+    pub fn new(section: S) -> AstBuilder<'a, S> {
         AstBuilder {
             ast: Vec::new(),
             contexts: vec![Context::Block],
+            section: section,
         }
     }
 
@@ -29,7 +31,7 @@ impl<'a> AstBuilder<'a> {
     }
 }
 
-impl<'a> syntax::BlockContext for AstBuilder<'a> {
+impl<'a, S: ast::Section> syntax::BlockContext for AstBuilder<'a, S> {
     type Terminal = Token<'a>;
     type CommandContext = Self;
     type TerminalSequenceContext = Self;
@@ -44,7 +46,7 @@ impl<'a> syntax::BlockContext for AstBuilder<'a> {
     }
 }
 
-impl<'a> syntax::CommandContext for AstBuilder<'a> {
+impl<'a, S: ast::Section> syntax::CommandContext for AstBuilder<'a, S> {
     type Terminal = Token<'a>;
     type ExpressionContext = Self;
 
@@ -55,19 +57,18 @@ impl<'a> syntax::CommandContext for AstBuilder<'a> {
 
     fn exit_command(&mut self) {
         if let Some(Context::Instruction(name, args)) = self.contexts.pop() {
-            let item = match name {
-                Token::Keyword(Keyword::Include) => reduce_include(args[0].clone()),
-                Token::Keyword(keyword) => reduce_mnemonic(keyword, &args),
+            match name {
+                Token::Keyword(Keyword::Include) => self.ast.push(reduce_include(args[0].clone())),
+                Token::Keyword(keyword) => self.section.add_instruction(reduce_mnemonic(keyword, &args)),
                 _ => panic!(),
-            };
-            self.ast.push(item)
+            }
         } else {
             panic!()
         }
     }
 }
 
-impl<'a> syntax::ExpressionContext for AstBuilder<'a> {
+impl<'a, S: ast::Section> syntax::ExpressionContext for AstBuilder<'a, S> {
     type Terminal = Token<'a>;
 
     fn push_atom(&mut self, atom: Self::Terminal) {
@@ -92,7 +93,7 @@ impl<'a> syntax::ExpressionContext for AstBuilder<'a> {
     }
 }
 
-impl<'a> syntax::TerminalSequenceContext for AstBuilder<'a> {
+impl<'a, S: ast::Section> syntax::TerminalSequenceContext for AstBuilder<'a, S> {
     type Terminal = Token<'a>;
 
     fn push_terminal(&mut self, _terminal: Self::Terminal) {
@@ -111,9 +112,9 @@ fn reduce_include<'a>(path: Token<'a>) -> ast::AsmItem<'a> {
     }
 }
 
-fn reduce_mnemonic<'a>(command: keyword::Keyword, operands: &[Token<'a>]) -> ast::AsmItem<'a> {
+fn reduce_mnemonic<'a>(command: keyword::Keyword, operands: &[Token<'a>]) -> ast::Instruction {
     let parsed_operands: Vec<ast::Operand> = operands.iter().map(|t| parse_operand(t).unwrap()).collect();
-    inst(to_mnemonic(command), &parsed_operands)
+    inst(to_mnemonic(command), &parsed_operands).pop().unwrap()
 }
 
 fn identify_keyword(keyword: &Keyword) -> Option<ast::Operand> {
@@ -147,8 +148,8 @@ fn to_mnemonic(keyword: Keyword) -> ast::Mnemonic {
     }
 }
 
-fn inst<'a>(mnemonic: ast::Mnemonic, operands: &[ast::Operand]) -> ast::AsmItem<'a> {
-    ast::AsmItem::Instruction(ast::Instruction::new(mnemonic, operands))
+fn inst<'a>(mnemonic: ast::Mnemonic, operands: &[ast::Operand]) -> Vec<ast::Instruction> {
+    vec![ast::Instruction::new(mnemonic, operands)]
 }
 
 fn include(path: &str) -> ast::AsmItem {
@@ -165,7 +166,8 @@ mod tests {
     #[test]
     fn build_include_item() {
         let filename = "file.asm";
-        let item = analyze_instruction(Keyword::Include, &[Token::QuotedString(filename)]);
+        let (_, mut items) = analyze_command(Keyword::Include, &[Token::QuotedString(filename)]);
+        let item = items.pop().unwrap();
         assert_eq!(item, include(filename))
     }
 
@@ -210,29 +212,46 @@ mod tests {
         assert_eq!(item, inst(mnemonic, &[]))
     }
 
-    fn analyze_instruction<'a>(keyword: Keyword, operands: &[Token<'a>]) -> ast::AsmItem<'a> {
-        let mut builder = AstBuilder::new(TestSection::new());
-        builder.enter_command(Token::Keyword(keyword));
-        for arg in operands {
-            let expr = builder.enter_argument();
-            expr.push_atom(arg.clone());
-            expr.exit_expression();
-        }
-        builder.exit_command();
-        builder.ast.pop().unwrap()
+    fn analyze_instruction<'a>(keyword: Keyword, operands: &[Token<'a>]) -> TestInstructions {
+        analyze_command(keyword, operands).0
     }
 
-    struct TestSection;
+    fn analyze_command<'a>(keyword: Keyword, operands: &[Token<'a>])
+        -> (TestInstructions, Vec<ast::AsmItem<'a>>)
+    {
+        let mut instructions = Vec::new();
+        let ast;
+        {
+            let mut builder = AstBuilder::new(TestSection::new(&mut instructions));
+            builder.enter_command(Token::Keyword(keyword));
+            for arg in operands {
+                let expr = builder.enter_argument();
+                expr.push_atom(arg.clone());
+                expr.exit_expression();
+            }
+            builder.exit_command();
+            ast = builder.ast().to_vec();
+        }
+        (instructions, ast)
+    }
 
-    impl TestSection {
-        fn new() -> TestSection {
-            TestSection {}
+    type TestInstructions = Vec<ast::Instruction>;
+
+    struct TestSection<'a> {
+        instructions: &'a mut TestInstructions,
+    }
+
+    impl<'a> TestSection<'a> {
+        fn new(instructions: &'a mut TestInstructions) -> TestSection<'a> {
+            TestSection {
+                instructions: instructions, 
+            }
         }
     }
 
-    impl ast::Section for TestSection {
-        fn add_instruction(&mut self, _instruction: ast::Instruction) {
-            unimplemented!()
+    impl<'a> ast::Section for TestSection<'a> {
+        fn add_instruction(&mut self, instruction: ast::Instruction) {
+            self.instructions.push(instruction)
         }
     }
 }
