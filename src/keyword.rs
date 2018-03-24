@@ -11,4 +11,5 @@ pub enum Keyword {
     Nop,
     Push,
     Stop,
+    Xor,
 }

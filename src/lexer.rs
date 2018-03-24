@@ -134,6 +134,7 @@ fn identify_keyword(word: &str) -> Option<Keyword> {
         "nop" => Some(Nop),
         "push" => Some(Push),
         "stop" => Some(Stop),
+        "xor" => Some(Xor),
         _ => None,
     }
 }
@@ -237,5 +238,10 @@ mod tests {
     #[test]
     fn lex_keyword_stop() {
         assert_eq_tokens("stop", &[Keyword(Stop)])
+    }
+
+    #[test]
+    fn lex_keyword_xor() {
+        assert_eq_tokens("xor", &[Keyword(Xor)])
     }
 }
