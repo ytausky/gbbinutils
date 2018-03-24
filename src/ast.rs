@@ -54,6 +54,7 @@ pub enum Mnemonic {
     Nop,
     Push,
     Stop,
+    Xor,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

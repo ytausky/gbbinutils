@@ -151,6 +151,7 @@ fn to_mnemonic(keyword: Keyword) -> ast::Mnemonic {
         Keyword::Nop => Mnemonic::Nop,
         Keyword::Push => Mnemonic::Push,
         Keyword::Stop => Mnemonic::Stop,
+        Keyword::Xor => Mnemonic::Xor,
         _ => panic!(),
     }
 }
@@ -212,6 +213,12 @@ mod tests {
         let token_b = Token::Keyword(Keyword::B);
         let item = analyze_instruction(Keyword::Ld, &[token_a, token_b]);
         assert_eq!(item, inst(ast::Mnemonic::Ld, &[ast::A, ast::B]))
+    }
+
+    #[test]
+    fn analyze_xor_a() {
+        let actions = analyze_instruction(Keyword::Xor, &[Token::Keyword(Keyword::A)]);
+        assert_eq!(actions, inst(ast::Mnemonic::Xor, &[ast::A]))
     }
 
     fn analyze_nullary_instruction(keyword: Keyword, mnemonic: ast::Mnemonic) {
