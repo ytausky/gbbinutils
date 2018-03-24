@@ -19,6 +19,7 @@ enum Context<'a> {
 
 enum Expression<'a> {
     Atom(Token<'a>),
+    Deref(Box<Expression<'a>>),
 }
 
 impl<'a, S: ast::Section> AstBuilder<'a, S> {
@@ -87,7 +88,12 @@ impl<'a, S: ast::Section> syntax::ExpressionContext for AstBuilder<'a, S> {
     type Terminal = Token<'a>;
 
     fn apply_deref(&mut self) {
-        unimplemented!()
+        if let Some(&mut Context::Expression(ref mut stack)) = self.contexts.last_mut() {
+            let address_specifier = stack.pop().unwrap();
+            stack.push(Expression::Deref(Box::new(address_specifier)))
+        } else {
+            panic!()
+        }
     }
 
     fn push_atom(&mut self, atom: Self::Terminal) {
@@ -143,6 +149,7 @@ where I: Iterator<Item = Expression<'a>>
 fn parse_operand<'a>(expression: Expression<'a>) -> ast::Operand {
     match expression {
         Expression::Atom(Token::Keyword(keyword)) => parse_keyword_operand(keyword),
+        Expression::Deref(address_specifier) => parse_deref_operand(*address_specifier),
         _ => panic!(),
     }
 }
@@ -152,6 +159,13 @@ fn parse_keyword_operand(keyword: Keyword) -> ast::Operand {
         Keyword::A => ast::Operand::Register(ast::Register::A),
         Keyword::B => ast::Operand::Register(ast::Register::B),
         Keyword::Bc => ast::Operand::RegisterPair(ast::RegisterPair::Bc),
+        _ => panic!(),
+    }
+}
+
+fn parse_deref_operand<'a>(address_specifier: Expression<'a>) -> ast::Operand {
+    match address_specifier {
+        Expression::Atom(Token::Keyword(Keyword::Hl)) => ast::Operand::DerefHl,
         _ => panic!(),
     }
 }
@@ -232,6 +246,23 @@ mod tests {
     fn analyze_xor_a() {
         let actions = analyze_instruction(Keyword::Xor, &[Token::Keyword(Keyword::A)]);
         assert_eq!(actions, inst(ast::Mnemonic::Xor, &[ast::A]))
+    }
+
+    #[test]
+    fn analyze_xor_deref_hl() {
+        let mut actions = Vec::new();
+        {
+            let mut builder = AstBuilder::new(TestSection::new(&mut actions));
+            let command = builder.enter_command(Token::Keyword(Keyword::Xor));
+            {
+                let argument = command.enter_argument();
+                argument.push_atom(Token::Keyword(Keyword::Hl));
+                argument.apply_deref();
+                argument.exit_expression();
+            }
+            command.exit_command();
+        }
+        assert_eq!(actions, inst(ast::Mnemonic::Xor, &[ast::Operand::DerefHl]))
     }
 
     fn analyze_nullary_instruction(keyword: Keyword, mnemonic: ast::Mnemonic) {

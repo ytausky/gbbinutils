@@ -5,6 +5,7 @@ pub enum Keyword {
     Bc,
     Endm,
     Halt,
+    Hl,
     Include,
     Ld,
     Macro,

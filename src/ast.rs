@@ -25,6 +25,7 @@ impl Instruction {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Operand {
+    DerefHl,
     Register(Register),
     RegisterPair(RegisterPair),
 }
