@@ -257,5 +257,9 @@ mod tests {
         fn add_instruction(&mut self, instruction: ast::Instruction) {
             self.instructions.push(instruction)
         }
+
+        fn add_label(&mut self, _label: &str) {
+            unimplemented!()
+        }
     }
 }

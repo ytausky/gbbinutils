@@ -35,4 +35,8 @@ impl ast::Section for DumpSection {
     fn add_instruction(&mut self, instruction: ast::Instruction) {
         println!("{:?}", instruction)
     }
+
+    fn add_label(&mut self, label: &str) {
+        println!("Define symbol: {}", label)
+    }
 }
