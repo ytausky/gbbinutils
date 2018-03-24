@@ -138,7 +138,8 @@ fn reduce_include<'a>(mut arguments: Vec<Expression<Token<'a>>>) -> ast::AsmItem
 }
 
 fn reduce_mnemonic<'a, I>(command: keyword::Keyword, operands: I) -> ast::Instruction
-where I: Iterator<Item = Expression<Token<'a>>>
+where
+    I: Iterator<Item = Expression<Token<'a>>>,
 {
     let parsed_operands: Vec<ast::Operand> = operands.map(parse_operand).collect();
     instruction(to_mnemonic(command), &parsed_operands)
@@ -163,7 +164,9 @@ fn parse_keyword_operand(keyword: Keyword) -> ast::Operand {
 
 fn parse_deref_operand<'a>(address_specifier: Expression<Token<'a>>) -> ast::Operand {
     match address_specifier {
-        Expression::Atom(Token::Keyword(Keyword::Hl)) => ast::Operand::Alu(ast::AluOperand::DerefHl),
+        Expression::Atom(Token::Keyword(Keyword::Hl)) => {
+            ast::Operand::Alu(ast::AluOperand::DerefHl)
+        }
         _ => panic!(),
     }
 }
@@ -260,7 +263,13 @@ mod tests {
             }
             command.exit_command();
         }
-        assert_eq!(actions, inst(ast::Mnemonic::Xor, &[ast::Operand::Alu(ast::AluOperand::DerefHl)]))
+        assert_eq!(
+            actions,
+            inst(
+                ast::Mnemonic::Xor,
+                &[ast::Operand::Alu(ast::AluOperand::DerefHl)]
+            )
+        )
     }
 
     fn analyze_nullary_instruction(keyword: Keyword, mnemonic: ast::Mnemonic) {

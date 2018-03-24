@@ -447,7 +447,12 @@ mod tests {
 
     #[test]
     fn parse_deref_operand() {
-        let tokens = &[(Word, 0), (OpeningBracket, 1), (Word, 2), (ClosingBracket, 3)];
+        let tokens = &[
+            (Word, 0),
+            (OpeningBracket, 1),
+            (Word, 2),
+            (ClosingBracket, 3),
+        ];
         let expected_actions = &inst((Word, 0), vec![expr(deref(ident((Word, 2))))]);
         assert_eq_actions(tokens, expected_actions)
     }
