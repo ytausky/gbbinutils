@@ -36,8 +36,11 @@ impl<'a, S: ast::Section> syntax::BlockContext for AstBuilder<'a, S> {
     type CommandContext = Self;
     type TerminalSequenceContext = Self;
 
-    fn add_label(&mut self, _label: Self::Terminal) {
-        unimplemented!()
+    fn add_label(&mut self, label: Self::Terminal) {
+        match label {
+            Token::Label(spelling) => self.section.add_label(spelling),
+            _ => panic!(),
+        }
     }
 
     fn enter_command(&mut self, name: Self::Terminal) -> &mut Self::CommandContext {
@@ -271,5 +274,15 @@ mod tests {
         fn add_label(&mut self, label: &str) {
             self.actions.push(Action::AddLabel(label.to_string()))
         }
+    }
+
+    #[test]
+    fn analyze_label() {
+        let mut actions = Vec::new();
+        {
+            let mut builder = AstBuilder::new(TestSection::new(&mut actions));
+            builder.add_label(Token::Label("label"));
+        }
+        assert_eq!(actions, vec![Action::AddLabel("label".to_string())])
     }
 }
