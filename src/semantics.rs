@@ -2,6 +2,7 @@ use ast;
 use keyword;
 use syntax;
 
+use ast::Expression;
 use keyword::Keyword;
 use token::Token;
 
@@ -13,13 +14,8 @@ pub struct AstBuilder<'a, S: ast::Section> {
 
 enum Context<'a> {
     Block,
-    Expression(Vec<Expression<'a>>),
-    Instruction(Token<'a>, Vec<Expression<'a>>),
-}
-
-enum Expression<'a> {
-    Atom(Token<'a>),
-    Deref(Box<Expression<'a>>),
+    Expression(Vec<ast::Expression<Token<'a>>>),
+    Instruction(Token<'a>, Vec<ast::Expression<Token<'a>>>),
 }
 
 impl<'a, S: ast::Section> AstBuilder<'a, S> {
@@ -85,6 +81,7 @@ impl<'a, S: ast::Section> syntax::CommandContext for AstBuilder<'a, S> {
 }
 
 impl<'a, S: ast::Section> syntax::ExpressionContext for AstBuilder<'a, S> {
+    type Expr = Expression<Token<'a>>;
     type Terminal = Token<'a>;
 
     fn apply_deref(&mut self) {
@@ -130,7 +127,7 @@ impl<'a, S: ast::Section> syntax::TerminalSequenceContext for AstBuilder<'a, S> 
     }
 }
 
-fn reduce_include<'a>(mut arguments: Vec<Expression<'a>>) -> ast::AsmItem<'a> {
+fn reduce_include<'a>(mut arguments: Vec<Expression<Token<'a>>>) -> ast::AsmItem<'a> {
     assert_eq!(arguments.len(), 1);
     let path = arguments.pop().unwrap();
     match path {
@@ -140,13 +137,13 @@ fn reduce_include<'a>(mut arguments: Vec<Expression<'a>>) -> ast::AsmItem<'a> {
 }
 
 fn reduce_mnemonic<'a, I>(command: keyword::Keyword, operands: I) -> ast::Instruction
-where I: Iterator<Item = Expression<'a>>
+where I: Iterator<Item = Expression<Token<'a>>>
 {
     let parsed_operands: Vec<ast::Operand> = operands.map(parse_operand).collect();
     instruction(to_mnemonic(command), &parsed_operands)
 }
 
-fn parse_operand<'a>(expression: Expression<'a>) -> ast::Operand {
+fn parse_operand<'a>(expression: Expression<Token<'a>>) -> ast::Operand {
     match expression {
         Expression::Atom(Token::Keyword(keyword)) => parse_keyword_operand(keyword),
         Expression::Deref(address_specifier) => parse_deref_operand(*address_specifier),
@@ -163,7 +160,7 @@ fn parse_keyword_operand(keyword: Keyword) -> ast::Operand {
     }
 }
 
-fn parse_deref_operand<'a>(address_specifier: Expression<'a>) -> ast::Operand {
+fn parse_deref_operand<'a>(address_specifier: Expression<Token<'a>>) -> ast::Operand {
     match address_specifier {
         Expression::Atom(Token::Keyword(Keyword::Hl)) => ast::Operand::Alu(ast::AluOperand::DerefHl),
         _ => panic!(),

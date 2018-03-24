@@ -37,6 +37,7 @@ pub trait CommandContext {
 }
 
 pub trait ExpressionContext {
+    type Expr;
     type Terminal: Terminal;
     fn apply_deref(&mut self);
     fn push_atom(&mut self, atom: Self::Terminal);

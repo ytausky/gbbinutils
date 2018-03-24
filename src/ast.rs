@@ -73,3 +73,8 @@ pub enum Mnemonic {
 pub enum RegisterPair {
     Bc,
 }
+
+pub enum Expression<T> {
+    Atom(T),
+    Deref(Box<Expression<T>>),
+}

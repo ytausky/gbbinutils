@@ -153,6 +153,7 @@ where
 mod tests {
     use super::parse_src;
 
+    use ast;
     use syntax;
     use syntax::TerminalKind::*;
 
@@ -234,6 +235,7 @@ mod tests {
     }
 
     impl syntax::ExpressionContext for TestContext {
+        type Expr = ast::Expression<TestToken>;
         type Terminal = TestToken;
 
         fn apply_deref(&mut self) {
