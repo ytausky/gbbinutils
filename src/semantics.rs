@@ -84,18 +84,20 @@ impl<'a, S: ast::Section> syntax::ExpressionContext for AstBuilder<'a, S> {
     type Expr = Expression<Token<'a>>;
     type Terminal = Token<'a>;
 
-    fn apply_deref(&mut self) {
+    fn apply_deref(&mut self, expr: Self::Expr) -> Self::Expr {
         if let Some(&mut Context::Expression(ref mut stack)) = self.contexts.last_mut() {
             let address_specifier = stack.pop().unwrap();
-            stack.push(Expression::Deref(Box::new(address_specifier)))
+            stack.push(Expression::Deref(Box::new(address_specifier)));
+            Expression::Deref(Box::new(expr))
         } else {
             panic!()
         }
     }
 
-    fn push_atom(&mut self, atom: Self::Terminal) {
+    fn push_atom(&mut self, atom: Self::Terminal) -> Self::Expr {
         if let Some(&mut Context::Expression(ref mut stack)) = self.contexts.last_mut() {
-            stack.push(Expression::Atom(atom))
+            stack.push(Expression::Atom(atom.clone()));
+            Expression::Atom(atom)
         } else {
             panic!()
         }
@@ -253,8 +255,8 @@ mod tests {
             let command = builder.enter_command(Token::Keyword(Keyword::Xor));
             {
                 let argument = command.enter_argument();
-                argument.push_atom(Token::Keyword(Keyword::Hl));
-                argument.apply_deref();
+                let atom = argument.push_atom(Token::Keyword(Keyword::Hl));
+                argument.apply_deref(atom);
                 argument.exit_expression();
             }
             command.exit_command();

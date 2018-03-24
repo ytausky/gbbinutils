@@ -126,7 +126,7 @@ where
         expression_context.exit_expression()
     }
 
-    fn parse_expression<E>(&mut self, expression_context: &mut E)
+    fn parse_expression<E>(&mut self, expression_context: &mut E) -> E::Expr
     where
         E: ExpressionContext<Terminal = I::Item>,
     {
@@ -138,14 +138,14 @@ where
         }
     }
 
-    fn parse_deref_expression<E>(&mut self, expression_context: &mut E)
+    fn parse_deref_expression<E>(&mut self, expression_context: &mut E) -> E::Expr
     where
         E: ExpressionContext<Terminal = I::Item>,
     {
         self.expect(Some(OpeningBracket));
-        self.parse_expression(expression_context);
+        let expr = self.parse_expression(expression_context);
         self.expect(Some(ClosingBracket));
-        expression_context.apply_deref()
+        expression_context.apply_deref(expr)
     }
 }
 
@@ -238,12 +238,14 @@ mod tests {
         type Expr = ast::Expression<TestToken>;
         type Terminal = TestToken;
 
-        fn apply_deref(&mut self) {
-            self.actions.push(Action::ApplyDeref)
+        fn apply_deref(&mut self, expr: Self::Expr) -> Self::Expr {
+            self.actions.push(Action::ApplyDeref);
+            ast::Expression::Deref(Box::new(expr))
         }
 
-        fn push_atom(&mut self, atom: Self::Terminal) {
-            self.actions.push(Action::PushAtom(atom))
+        fn push_atom(&mut self, atom: Self::Terminal) -> Self::Expr {
+            self.actions.push(Action::PushAtom(atom.clone()));
+            ast::Expression::Atom(atom)
         }
 
         fn exit_expression(&mut self) {
