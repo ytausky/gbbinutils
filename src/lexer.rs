@@ -130,6 +130,7 @@ fn identify_keyword(word: &str) -> Option<Keyword> {
         "bc" => Some(Bc),
         "endm" => Some(Endm),
         "halt" => Some(Halt),
+        "hl" => Some(Hl),
         "include" => Some(Include),
         "ld" => Some(Ld),
         "macro" => Some(Macro),
@@ -250,5 +251,10 @@ mod tests {
     #[test]
     fn lex_brackets() {
         assert_eq_tokens("[]", &[OpeningBracket, ClosingBracket])
+    }
+
+    #[test]
+    fn lex_hl() {
+        assert_eq_tokens("hl", &[Keyword(Hl)])
     }
 }
