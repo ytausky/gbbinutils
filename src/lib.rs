@@ -13,7 +13,11 @@ pub fn analyze_file(name: &str) {
     let mut src = String::new();
     file.read_to_string(&mut src).unwrap();
     let mut ast_builder = semantics::AstBuilder::new(DumpSection::new());
-    parse::parse_src(lexer::Lexer::new(&src), &mut ast_builder);
+    parse::parse_src(
+        lexer::Lexer::new(&src),
+        &mut ast_builder,
+        ast::ExprBuilder::new(),
+    );
     dump_ast(ast_builder.ast());
 }
 

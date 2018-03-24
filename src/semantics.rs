@@ -33,6 +33,7 @@ impl<'a, S: ast::Section> AstBuilder<'a, S> {
 
 impl<'a, S: ast::Section> syntax::BlockContext for AstBuilder<'a, S> {
     type Terminal = Token<'a>;
+    type Expr = Expression<Self::Terminal>;
     type CommandContext = Self;
     type TerminalSequenceContext = Self;
 
@@ -58,10 +59,13 @@ impl<'a, S: ast::Section> syntax::BlockContext for AstBuilder<'a, S> {
 
 impl<'a, S: ast::Section> syntax::CommandContext for AstBuilder<'a, S> {
     type Terminal = Token<'a>;
-    type ExpressionContext = Self;
+    type Expr = Expression<Self::Terminal>;
 
-    fn enter_argument(&mut self) -> &mut Self::ExpressionContext {
-        self
+    fn add_argument(&mut self, expr: Self::Expr) {
+        match self.contexts.last_mut() {
+            Some(&mut Context::Instruction(_, ref mut args)) => args.push(expr),
+            _ => panic!(),
+        }
     }
 
     fn exit_command(&mut self) {
@@ -74,26 +78,6 @@ impl<'a, S: ast::Section> syntax::CommandContext for AstBuilder<'a, S> {
             }
         } else {
             panic!()
-        }
-    }
-}
-
-impl<'a, S: ast::Section> syntax::ExpressionContext for AstBuilder<'a, S> {
-    type Expr = Expression<Token<'a>>;
-    type Terminal = Token<'a>;
-
-    fn apply_deref(&mut self, expr: Self::Expr) -> Self::Expr {
-        Expression::Deref(Box::new(expr))
-    }
-
-    fn push_atom(&mut self, atom: Self::Terminal) -> Self::Expr {
-        Expression::Atom(atom)
-    }
-
-    fn exit_expression(&mut self, expr: Self::Expr) {
-        match self.contexts.last_mut() {
-            Some(&mut Context::Instruction(_, ref mut args)) => args.push(expr),
-            _ => panic!(),
         }
     }
 }
@@ -178,6 +162,7 @@ fn include(path: &str) -> ast::AsmItem {
 mod tests {
     use super::*;
 
+    use ast::ExprFactory;
     use keyword::Keyword;
     use syntax::*;
 
@@ -237,13 +222,11 @@ mod tests {
         {
             let mut builder = AstBuilder::new(TestSection::new(&mut actions));
             let command = builder.enter_command(Token::Keyword(Keyword::Xor));
-            {
-                let argument = command.enter_argument();
-                let atom = argument.push_atom(Token::Keyword(Keyword::Hl));
-                let expr = argument.apply_deref(atom);
-                argument.exit_expression(expr);
-            }
-            command.exit_command();
+            let mut expr_builder = ast::ExprBuilder::new();
+            let atom = expr_builder.from_atom(Token::Keyword(Keyword::Hl));
+            let expr = expr_builder.apply_deref(atom);
+            command.add_argument(expr);
+            command.exit_command()
         }
         assert_eq!(
             actions,
@@ -277,9 +260,9 @@ mod tests {
             let mut builder = AstBuilder::new(TestSection::new(&mut instructions));
             builder.enter_command(Token::Keyword(keyword));
             for arg in operands {
-                let expr = builder.enter_argument();
-                let atom = expr.push_atom(arg.clone());
-                expr.exit_expression(atom);
+                let mut expr_builder = ast::ExprBuilder::new();
+                let expr = expr_builder.from_atom(arg.clone());
+                builder.add_argument(expr);
             }
             builder.exit_command();
             ast = builder.ast().to_vec();
