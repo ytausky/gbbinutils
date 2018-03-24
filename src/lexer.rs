@@ -278,7 +278,17 @@ mod tests {
     }
 
     #[test]
+    fn ignore_comment() {
+        assert_eq_tokens("; comment", &[])
+    }
+
+    #[test]
     fn ignore_comment_at_end_of_line() {
         assert_eq_tokens("nop ; comment\n", &[Keyword(Nop), Eol])
+    }
+
+    #[test]
+    fn ignore_comment_at_end_of_input() {
+        assert_eq_tokens("nop ; comment", &[Keyword(Nop)])
     }
 }
