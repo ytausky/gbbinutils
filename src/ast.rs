@@ -61,16 +61,11 @@ pub enum Mnemonic {
 pub enum Register {
     A,
     B,
-    #[cfg(test)]
-    C,
-    #[cfg(test)]
-    D,
-    #[cfg(test)]
-    E,
-    #[cfg(test)]
-    H,
-    #[cfg(test)]
-    L,
+    #[cfg(test)] C,
+    #[cfg(test)] D,
+    #[cfg(test)] E,
+    #[cfg(test)] H,
+    #[cfg(test)] L,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

@@ -14,7 +14,9 @@ fn follows_line(lookahead: Lookahead) -> bool {
 }
 
 pub fn parse_src<'a, I, B>(tokens: I, block_context: &mut B)
-    where I: Iterator<Item = B::Terminal>, B: BlockContext
+where
+    I: Iterator<Item = B::Terminal>,
+    B: BlockContext,
 {
     let mut parser = Parser {
         tokens: tokens.peekable(),
@@ -28,7 +30,11 @@ struct Parser<I: Iterator, B: BlockContext> {
     _phantom: PhantomData<B>,
 }
 
-impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
+impl<I, B> Parser<I, B>
+where
+    B: BlockContext,
+    I: Iterator<Item = B::Terminal>,
+{
     fn lookahead(&mut self) -> Lookahead {
         self.tokens.peek().map(|t| t.kind())
     }
@@ -94,11 +100,15 @@ impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
     }
 
     fn parse_argument_list(&mut self, instruction_context: &mut B::CommandContext) {
-        self.parse_list(Some(Comma), follows_line, |p| p.parse_argument(instruction_context))
+        self.parse_list(Some(Comma), follows_line, |p| {
+            p.parse_argument(instruction_context)
+        })
     }
 
     fn parse_list<F, P>(&mut self, delimiter: Lookahead, mut follow: F, mut parser: P)
-        where F: FnMut(Lookahead) -> bool, P: FnMut(&mut Self)
+    where
+        F: FnMut(Lookahead) -> bool,
+        P: FnMut(&mut Self),
     {
         if !follow(self.lookahead()) {
             parser(self);
@@ -116,7 +126,8 @@ impl<I, B> Parser<I, B> where B: BlockContext, I: Iterator<Item = B::Terminal> {
     }
 
     fn parse_expression<E>(&mut self, expression_context: &mut E)
-        where E: ExpressionContext<Terminal = I::Item>
+    where
+        E: ExpressionContext<Terminal = I::Item>,
     {
         let token = self.bump();
         expression_context.push_atom(token);
@@ -184,7 +195,10 @@ mod tests {
             self
         }
 
-        fn enter_macro_definition(&mut self, label: Self::Terminal) -> &mut Self::TerminalSequenceContext {
+        fn enter_macro_definition(
+            &mut self,
+            label: Self::Terminal,
+        ) -> &mut Self::TerminalSequenceContext {
             self.actions.push(Action::EnterMacroDef(label));
             self
         }
@@ -260,7 +274,10 @@ mod tests {
 
     #[test]
     fn parse_unary_instruction() {
-        assert_eq_actions(&[(Word, 0), (Word, 1)], &inst((Word, 0), vec![expr(ident((Word, 1)))]))
+        assert_eq_actions(
+            &[(Word, 0), (Word, 1)],
+            &inst((Word, 0), vec![expr(ident((Word, 1)))]),
+        )
     }
 
     fn expr(mut actions: Vec<Action>) -> Vec<Action> {
@@ -276,25 +293,37 @@ mod tests {
 
     #[test]
     fn parse_binary_instruction() {
-        assert_eq_actions(&[(Word, 0), (Word, 1), (Comma, 2), (Word, 3)],
-                          &inst((Word, 0), vec![expr(ident((Word, 1))), expr(ident((Word, 3)))]));
+        assert_eq_actions(
+            &[(Word, 0), (Word, 1), (Comma, 2), (Word, 3)],
+            &inst(
+                (Word, 0),
+                vec![expr(ident((Word, 1))), expr(ident((Word, 3)))],
+            ),
+        );
     }
 
     #[test]
     fn parse_two_instructions() {
         let tokens = &[
-            (Word, 0), (Word, 1), (Comma, 2), (Word, 3), (Eol, 4),
-            (Word, 5), (Word, 6), (Comma, 7), (Word, 8),
+            (Word, 0),
+            (Word, 1),
+            (Comma, 2),
+            (Word, 3),
+            (Eol, 4),
+            (Word, 5),
+            (Word, 6),
+            (Comma, 7),
+            (Word, 8),
         ];
         let expected_actions = &concat(vec![
-            inst((Word, 0), vec![
-                expr(ident((Word, 1))),
-                expr(ident((Word, 3))),
-            ]),
-            inst((Word, 5), vec![
-                expr(ident((Word, 6))),
-                expr(ident((Word, 8))),
-            ]),
+            inst(
+                (Word, 0),
+                vec![expr(ident((Word, 1))), expr(ident((Word, 3)))],
+            ),
+            inst(
+                (Word, 5),
+                vec![expr(ident((Word, 6))), expr(ident((Word, 8)))],
+            ),
         ]);
         assert_eq_actions(tokens, expected_actions)
     }
@@ -310,19 +339,26 @@ mod tests {
     #[test]
     fn parse_two_instructions_separated_by_blank_line() {
         let tokens = &[
-            (Word, 0), (Word, 1), (Comma, 2), (Word, 3), (Eol, 4),
+            (Word, 0),
+            (Word, 1),
+            (Comma, 2),
+            (Word, 3),
+            (Eol, 4),
             (Eol, 5),
-            (Word, 6), (Word, 7), (Comma, 8), (Word, 9),
+            (Word, 6),
+            (Word, 7),
+            (Comma, 8),
+            (Word, 9),
         ];
         let expected_actions = &concat(vec![
-            inst((Word, 0), vec![
-                expr(ident((Word, 1))),
-                expr(ident((Word, 3))),
-            ]),
-            inst((Word, 6), vec![
-                expr(ident((Word, 7))),
-                expr(ident((Word, 9))),
-            ]),
+            inst(
+                (Word, 0),
+                vec![expr(ident((Word, 1))), expr(ident((Word, 3)))],
+            ),
+            inst(
+                (Word, 6),
+                vec![expr(ident((Word, 7))), expr(ident((Word, 9)))],
+            ),
         ]);
         assert_eq_actions(tokens, expected_actions)
     }
@@ -336,10 +372,7 @@ mod tests {
 
     #[test]
     fn parse_empty_macro_definition() {
-        let tokens = &[
-            (Label, 0), (Colon, 1), (Macro, 2), (Eol, 3),
-            (Endm, 4),
-        ];
+        let tokens = &[(Label, 0), (Colon, 1), (Macro, 2), (Eol, 3), (Endm, 4)];
         let expected_actions = &macro_def((Label, 0), vec![]);
         assert_eq_actions(tokens, expected_actions);
     }
@@ -354,8 +387,12 @@ mod tests {
     #[test]
     fn parse_macro_definition_with_instruction() {
         let tokens = &[
-            (Label, 0), (Colon, 1), (Macro, 2), (Eol, 3),
-            (Word, 4), (Eol, 5),
+            (Label, 0),
+            (Colon, 1),
+            (Macro, 2),
+            (Eol, 3),
+            (Word, 4),
+            (Eol, 5),
             (Endm, 6),
         ];
         let expected_actions = &macro_def((Label, 0), vec![(Word, 4), (Eol, 5)]);

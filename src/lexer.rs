@@ -37,7 +37,7 @@ impl<'a> Lexer<'a> {
                 self.is_at_line_start = false;
                 self.advance()
             } else {
-                break
+                break;
             }
         }
     }
@@ -74,7 +74,7 @@ impl<'a> Lexer<'a> {
             end = next_index;
             c = next_char;
         }
-        Token::QuotedString(&self.src[start .. end])
+        Token::QuotedString(&self.src[start..end])
     }
 
     fn lex_number(&mut self) -> Token<'a> {
@@ -99,7 +99,7 @@ impl<'a> Lexer<'a> {
 
     fn lex_word(&mut self, start: usize) -> Token<'a> {
         let end = self.find_word_end();
-        let word = &self.src[start .. end];
+        let word = &self.src[start..end];
         if let Some(keyword) = identify_keyword(word) {
             Token::Keyword(keyword)
         } else if self.is_at_line_start {
@@ -112,7 +112,7 @@ impl<'a> Lexer<'a> {
     fn find_word_end(&mut self) -> usize {
         while let Some(&(end, c)) = self.char_indices.peek() {
             if !c.is_alphanumeric() {
-                return end
+                return end;
             }
             self.advance()
         }

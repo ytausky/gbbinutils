@@ -8,7 +8,7 @@ use token::Token;
 pub struct AstBuilder<'a, S: ast::Section> {
     ast: Vec<ast::AsmItem<'a>>,
     contexts: Vec<Context<'a>>,
-    section: S
+    section: S,
 }
 
 enum Context<'a> {
@@ -48,7 +48,10 @@ impl<'a, S: ast::Section> syntax::BlockContext for AstBuilder<'a, S> {
         self
     }
 
-    fn enter_macro_definition(&mut self, _label: Self::Terminal) -> &mut Self::TerminalSequenceContext {
+    fn enter_macro_definition(
+        &mut self,
+        _label: Self::Terminal,
+    ) -> &mut Self::TerminalSequenceContext {
         unimplemented!()
     }
 }
@@ -66,7 +69,8 @@ impl<'a, S: ast::Section> syntax::CommandContext for AstBuilder<'a, S> {
         if let Some(Context::Instruction(name, args)) = self.contexts.pop() {
             match name {
                 Token::Keyword(Keyword::Include) => self.ast.push(reduce_include(args[0].clone())),
-                Token::Keyword(keyword) => self.section.add_instruction(reduce_mnemonic(keyword, &args)),
+                Token::Keyword(keyword) => self.section
+                    .add_instruction(reduce_mnemonic(keyword, &args)),
                 _ => panic!(),
             }
         } else {
@@ -115,12 +119,13 @@ impl<'a, S: ast::Section> syntax::TerminalSequenceContext for AstBuilder<'a, S> 
 fn reduce_include<'a>(path: Token<'a>) -> ast::AsmItem<'a> {
     match path {
         Token::QuotedString(path_str) => include(path_str),
-        _ => panic!()
+        _ => panic!(),
     }
 }
 
 fn reduce_mnemonic<'a>(command: keyword::Keyword, operands: &[Token<'a>]) -> ast::Instruction {
-    let parsed_operands: Vec<ast::Operand> = operands.iter().map(|t| parse_operand(t).unwrap()).collect();
+    let parsed_operands: Vec<ast::Operand> =
+        operands.iter().map(|t| parse_operand(t).unwrap()).collect();
     instruction(to_mnemonic(command), &parsed_operands)
 }
 
@@ -129,7 +134,7 @@ fn identify_keyword(keyword: &Keyword) -> Option<ast::Operand> {
         Keyword::A => Some(ast::Operand::Register(ast::Register::A)),
         Keyword::B => Some(ast::Operand::Register(ast::Register::B)),
         Keyword::Bc => Some(ast::Operand::RegisterPair(ast::RegisterPair::Bc)),
-        _ => None
+        _ => None,
     }
 }
 
@@ -234,9 +239,10 @@ mod tests {
         analyze_command(keyword, operands).0
     }
 
-    fn analyze_command<'a>(keyword: Keyword, operands: &[Token<'a>])
-        -> (TestActions, Vec<ast::AsmItem<'a>>)
-    {
+    fn analyze_command<'a>(
+        keyword: Keyword,
+        operands: &[Token<'a>],
+    ) -> (TestActions, Vec<ast::AsmItem<'a>>) {
         let mut instructions = Vec::new();
         let ast;
         {
@@ -258,7 +264,7 @@ mod tests {
     #[derive(Debug, PartialEq)]
     enum Action {
         AddLabel(String),
-        AddInstruction(ast::Instruction)
+        AddInstruction(ast::Instruction),
     }
 
     struct TestSection<'a> {
@@ -267,9 +273,7 @@ mod tests {
 
     impl<'a> TestSection<'a> {
         fn new(actions: &'a mut TestActions) -> TestSection<'a> {
-            TestSection {
-                actions: actions, 
-            }
+            TestSection { actions: actions }
         }
     }
 

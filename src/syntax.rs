@@ -21,7 +21,10 @@ pub trait BlockContext {
     type TerminalSequenceContext: TerminalSequenceContext<Terminal = Self::Terminal>;
     fn add_label(&mut self, label: Self::Terminal);
     fn enter_command(&mut self, name: Self::Terminal) -> &mut Self::CommandContext;
-    fn enter_macro_definition(&mut self, label: Self::Terminal) -> &mut Self::TerminalSequenceContext;
+    fn enter_macro_definition(
+        &mut self,
+        label: Self::Terminal,
+    ) -> &mut Self::TerminalSequenceContext;
 }
 
 pub trait CommandContext {

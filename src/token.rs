@@ -76,7 +76,10 @@ mod tests {
 
     #[test]
     fn quoted_string_terminal_kind() {
-        assert_eq!(Token::QuotedString("string").kind(), TerminalKind::QuotedString)
+        assert_eq!(
+            Token::QuotedString("string").kind(),
+            TerminalKind::QuotedString
+        )
     }
 
     #[test]
