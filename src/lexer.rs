@@ -52,9 +52,11 @@ impl<'a> Lexer<'a> {
 
     fn lex_token(&mut self, start: usize, first_char: char) -> Token<'a> {
         let next_token = match first_char {
+            ']' => Token::ClosingBracket,
             ':' => Token::Colon,
             ',' => Token::Comma,
             '\n' => Token::Eol,
+            '[' => Token::OpeningBracket,
             '$' => self.lex_number(),
             '"' => self.lex_quoted_string(),
             _ => self.lex_word(start),
@@ -243,5 +245,10 @@ mod tests {
     #[test]
     fn lex_keyword_xor() {
         assert_eq_tokens("xor", &[Keyword(Xor)])
+    }
+
+    #[test]
+    fn lex_brackets() {
+        assert_eq_tokens("[]", &[OpeningBracket, ClosingBracket])
     }
 }

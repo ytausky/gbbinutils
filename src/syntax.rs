@@ -4,6 +4,7 @@ pub trait Terminal {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TerminalKind {
+    ClosingBracket,
     Colon,
     Comma,
     Endm,
@@ -11,6 +12,7 @@ pub enum TerminalKind {
     Label,
     Macro,
     Number,
+    OpeningBracket,
     QuotedString,
     Word,
 }

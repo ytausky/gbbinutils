@@ -3,6 +3,7 @@ use syntax;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token<'a> {
+    ClosingBracket,
     Colon,
     Comma,
     Eol,
@@ -10,6 +11,7 @@ pub enum Token<'a> {
     Keyword(keyword::Keyword),
     Label(&'a str),
     Number(isize),
+    OpeningBracket,
     QuotedString(&'a str),
 }
 
@@ -17,6 +19,7 @@ impl<'a> syntax::Terminal for Token<'a> {
     fn kind(&self) -> syntax::TerminalKind {
         use syntax::TerminalKind;
         match *self {
+            Token::ClosingBracket => TerminalKind::ClosingBracket,
             Token::Colon => TerminalKind::Colon,
             Token::Comma => TerminalKind::Comma,
             Token::Eol => TerminalKind::Eol,
@@ -26,6 +29,7 @@ impl<'a> syntax::Terminal for Token<'a> {
             Token::Keyword(_) => TerminalKind::Word,
             Token::Label(_) => TerminalKind::Label,
             Token::Number(_) => TerminalKind::Number,
+            Token::OpeningBracket => TerminalKind::OpeningBracket,
             Token::QuotedString(_) => TerminalKind::QuotedString,
         }
     }
@@ -85,5 +89,15 @@ mod tests {
     #[test]
     fn word_terminal_kind() {
         assert_eq!(Token::Identifier("identifier").kind(), TerminalKind::Word)
+    }
+
+    #[test]
+    fn opening_bracket_terminal_kind() {
+        assert_eq!(Token::OpeningBracket.kind(), TerminalKind::OpeningBracket)
+    }
+
+    #[test]
+    fn closing_bracket_terminal_kind() {
+        assert_eq!(Token::ClosingBracket.kind(), TerminalKind::ClosingBracket)
     }
 }
