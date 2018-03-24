@@ -13,8 +13,12 @@ pub struct AstBuilder<'a, S: ast::Section> {
 
 enum Context<'a> {
     Block,
-    Expression(Vec<Token<'a>>),
-    Instruction(Token<'a>, Vec<Token<'a>>),
+    Expression(Vec<Expression<'a>>),
+    Instruction(Token<'a>, Vec<Expression<'a>>),
+}
+
+enum Expression<'a> {
+    Atom(Token<'a>),
 }
 
 impl<'a, S: ast::Section> AstBuilder<'a, S> {
@@ -68,7 +72,7 @@ impl<'a, S: ast::Section> syntax::CommandContext for AstBuilder<'a, S> {
     fn exit_command(&mut self) {
         if let Some(Context::Instruction(name, args)) = self.contexts.pop() {
             match name {
-                Token::Keyword(Keyword::Include) => self.ast.push(reduce_include(args[0].clone())),
+                Token::Keyword(Keyword::Include) => self.ast.push(reduce_include(args)),
                 Token::Keyword(keyword) => self.section
                     .add_instruction(reduce_mnemonic(keyword, &args)),
                 _ => panic!(),
@@ -88,7 +92,7 @@ impl<'a, S: ast::Section> syntax::ExpressionContext for AstBuilder<'a, S> {
 
     fn push_atom(&mut self, atom: Self::Terminal) {
         if let Some(&mut Context::Expression(ref mut stack)) = self.contexts.last_mut() {
-            stack.push(atom)
+            stack.push(Expression::Atom(atom))
         } else {
             panic!()
         }
@@ -120,14 +124,16 @@ impl<'a, S: ast::Section> syntax::TerminalSequenceContext for AstBuilder<'a, S> 
     }
 }
 
-fn reduce_include<'a>(path: Token<'a>) -> ast::AsmItem<'a> {
+fn reduce_include<'a>(mut arguments: Vec<Expression<'a>>) -> ast::AsmItem<'a> {
+    assert_eq!(arguments.len(), 1);
+    let path = arguments.pop().unwrap();
     match path {
-        Token::QuotedString(path_str) => include(path_str),
+        Expression::Atom(Token::QuotedString(path_str)) => include(path_str),
         _ => panic!(),
     }
 }
 
-fn reduce_mnemonic<'a>(command: keyword::Keyword, operands: &[Token<'a>]) -> ast::Instruction {
+fn reduce_mnemonic<'a>(command: keyword::Keyword, operands: &[Expression<'a>]) -> ast::Instruction {
     let parsed_operands: Vec<ast::Operand> =
         operands.iter().map(|t| parse_operand(t).unwrap()).collect();
     instruction(to_mnemonic(command), &parsed_operands)
@@ -142,13 +148,10 @@ fn identify_keyword(keyword: &Keyword) -> Option<ast::Operand> {
     }
 }
 
-fn parse_operand<'a>(token: &Token<'a>) -> Option<ast::Operand> {
-    match *token {
-        Token::Keyword(ref keyword) => match identify_keyword(keyword) {
-            Some(operand) => Some(operand),
-            _ => panic!(),
-        },
-        _ => None,
+fn parse_operand<'a>(expression: &Expression<'a>) -> Option<ast::Operand> {
+    match *expression {
+        Expression::Atom(Token::Keyword(ref keyword)) => identify_keyword(keyword),
+        _ => panic!(),
     }
 }
 
