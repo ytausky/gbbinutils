@@ -14,10 +14,10 @@ impl<'a> Iterator for Lexer<'a> {
     type Item = Token<'a>;
 
     fn next(&mut self) -> Option<Token<'a>> {
-        self.skip_horizontal_whitespace();
-        match self.char_indices.next() {
+        self.skip_irrelevant_characters();
+        match self.char_indices.peek() {
             None => None,
-            Some((index, first_char)) => Some(self.lex_token(index, first_char)),
+            Some(&(index, _)) => Some(self.lex_token(index)),
         }
     }
 }
@@ -31,14 +31,16 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn skip_horizontal_whitespace(&mut self) {
-        while let Some(c) = self.current_char() {
-            if c.is_whitespace() && c != '\n' {
-                self.is_at_line_start = false;
-                self.advance()
-            } else {
-                break;
-            }
+    fn skip_irrelevant_characters(&mut self) {
+        self.skip_characters_if(is_horizontal_whitespace);
+        if self.current_char() == Some(';') {
+            self.skip_characters_if(|c| c != '\n')
+        }
+    }
+
+    fn skip_characters_if<P: FnMut(char) -> bool>(&mut self, mut predicate: P) {
+        while self.current_char().map_or(false, &mut predicate) {
+            self.advance()
         }
     }
 
@@ -47,16 +49,20 @@ impl<'a> Lexer<'a> {
     }
 
     fn advance(&mut self) {
+        if self.current_char() != Some('\n') {
+            self.is_at_line_start = false;
+        }
         self.char_indices.next();
     }
 
-    fn lex_token(&mut self, start: usize, first_char: char) -> Token<'a> {
+    fn lex_token(&mut self, start: usize) -> Token<'a> {
+        let first_char = self.current_char().unwrap();
         let next_token = match first_char {
-            ']' => Token::ClosingBracket,
-            ':' => Token::Colon,
-            ',' => Token::Comma,
-            '\n' => Token::Eol,
-            '[' => Token::OpeningBracket,
+            ']' => self.take(Token::ClosingBracket),
+            ':' => self.take(Token::Colon),
+            ',' => self.take(Token::Comma),
+            '\n' => self.take(Token::Eol),
+            '[' => self.take(Token::OpeningBracket),
             '$' => self.lex_number(),
             '"' => self.lex_quoted_string(),
             _ => self.lex_word(start),
@@ -67,7 +73,13 @@ impl<'a> Lexer<'a> {
         next_token
     }
 
+    fn take(&mut self, token: Token<'a>) -> Token<'a> {
+        self.advance();
+        token
+    }
+
     fn lex_quoted_string(&mut self) -> Token<'a> {
+        self.advance();
         let (start, first_char) = self.char_indices.next().unwrap();
         let mut end = start;
         let mut c = first_char;
@@ -80,6 +92,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_number(&mut self) -> Token<'a> {
+        self.advance();
         const RADIX: u32 = 16;
         let mut value = 0isize;
         let mut has_next_digit = true;
@@ -100,11 +113,13 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_word(&mut self, start: usize) -> Token<'a> {
+        let starts_on_first_column = self.is_at_line_start;
+        self.advance();
         let end = self.find_word_end();
         let word = &self.src[start..end];
         if let Some(keyword) = identify_keyword(word) {
             Token::Keyword(keyword)
-        } else if self.is_at_line_start {
+        } else if starts_on_first_column {
             Token::Label(word)
         } else {
             Token::Identifier(word)
@@ -120,6 +135,10 @@ impl<'a> Lexer<'a> {
         }
         self.src.len()
     }
+}
+
+fn is_horizontal_whitespace(character: char) -> bool {
+    character.is_whitespace() && character != '\n'
 }
 
 fn identify_keyword(word: &str) -> Option<Keyword> {
@@ -256,5 +275,10 @@ mod tests {
     #[test]
     fn lex_hl() {
         assert_eq_tokens("hl", &[Keyword(Hl)])
+    }
+
+    #[test]
+    fn ignore_comment_at_end_of_line() {
+        assert_eq_tokens("nop ; comment\n", &[Keyword(Nop), Eol])
     }
 }
