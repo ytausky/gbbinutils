@@ -23,13 +23,13 @@ impl Instruction {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Operand {
     Alu(AluOperand),
     RegisterPair(RegisterPair),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum AluOperand {
     A,
     B,
@@ -59,7 +59,7 @@ pub const L: Operand = Operand::Alu(AluOperand::L);
 #[cfg(test)]
 pub const BC: Operand = Operand::RegisterPair(RegisterPair::Bc);
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Mnemonic {
     Halt,
     Ld,
@@ -69,7 +69,7 @@ pub enum Mnemonic {
     Xor,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum RegisterPair {
     Bc,
 }

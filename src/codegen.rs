@@ -6,7 +6,7 @@ fn generate_code<F: FnMut(u8)>(ast_node: &ast::Instruction, mut sink: F) {
     use ast::Mnemonic::*;
     match ast_node.mnemonic {
         Halt => sink(0x76),
-        Ld => sink(encode_ld(ast_node.operands[0], ast_node.operands[1])),
+        Ld => sink(encode_ld(ast_node.operands[0].clone(), ast_node.operands[1].clone())),
         _ => {
             if ast_node.mnemonic == Stop {
                 sink(0x10)
