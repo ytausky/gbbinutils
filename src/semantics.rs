@@ -82,6 +82,10 @@ impl<'a, S: ast::Section> syntax::CommandContext for AstBuilder<'a, S> {
 impl<'a, S: ast::Section> syntax::ExpressionContext for AstBuilder<'a, S> {
     type Terminal = Token<'a>;
 
+    fn apply_deref(&mut self) {
+        unimplemented!()
+    }
+
     fn push_atom(&mut self, atom: Self::Terminal) {
         if let Some(&mut Context::Expression(ref mut stack)) = self.contexts.last_mut() {
             stack.push(atom)

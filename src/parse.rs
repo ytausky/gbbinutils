@@ -122,16 +122,30 @@ where
 
     fn parse_argument(&mut self, instruction_context: &mut B::CommandContext) {
         let expression_context = instruction_context.enter_argument();
-        self.parse_expression(expression_context)
+        self.parse_expression(expression_context);
+        expression_context.exit_expression()
     }
 
     fn parse_expression<E>(&mut self, expression_context: &mut E)
     where
         E: ExpressionContext<Terminal = I::Item>,
     {
-        let token = self.bump();
-        expression_context.push_atom(token);
-        expression_context.exit_expression()
+        if self.lookahead() == Some(OpeningBracket) {
+            self.parse_deref_expression(expression_context)
+        } else {
+            let token = self.bump();
+            expression_context.push_atom(token)
+        }
+    }
+
+    fn parse_deref_expression<E>(&mut self, expression_context: &mut E)
+    where
+        E: ExpressionContext<Terminal = I::Item>,
+    {
+        self.expect(Some(OpeningBracket));
+        self.parse_expression(expression_context);
+        self.expect(Some(ClosingBracket));
+        expression_context.apply_deref()
     }
 }
 
@@ -162,6 +176,7 @@ mod tests {
     #[derive(Debug, PartialEq)]
     enum Action {
         AddLabel(TestToken),
+        ApplyDeref,
         EnterExpression,
         EnterInstruction(TestToken),
         EnterMacroDef(TestToken),
@@ -220,6 +235,10 @@ mod tests {
 
     impl syntax::ExpressionContext for TestContext {
         type Terminal = TestToken;
+
+        fn apply_deref(&mut self) {
+            self.actions.push(Action::ApplyDeref)
+        }
 
         fn push_atom(&mut self, atom: Self::Terminal) {
             self.actions.push(Action::PushAtom(atom))
@@ -424,5 +443,17 @@ mod tests {
         let mut result = vec![Action::AddLabel(label)];
         result.append(&mut following_actions);
         result
+    }
+
+    #[test]
+    fn parse_deref_operand() {
+        let tokens = &[(Word, 0), (OpeningBracket, 1), (Word, 2), (ClosingBracket, 3)];
+        let expected_actions = &inst((Word, 0), vec![expr(deref(ident((Word, 2))))]);
+        assert_eq_actions(tokens, expected_actions)
+    }
+
+    fn deref(mut actions: Vec<Action>) -> Vec<Action> {
+        actions.push(Action::ApplyDeref);
+        actions
     }
 }
