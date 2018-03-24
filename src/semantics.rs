@@ -14,7 +14,6 @@ pub struct AstBuilder<'a, S: ast::Section> {
 
 enum Context<'a> {
     Block,
-    Expression(Vec<ast::Expression<Token<'a>>>),
     Instruction(Token<'a>, Vec<ast::Expression<Token<'a>>>),
 }
 
@@ -62,7 +61,6 @@ impl<'a, S: ast::Section> syntax::CommandContext for AstBuilder<'a, S> {
     type ExpressionContext = Self;
 
     fn enter_argument(&mut self) -> &mut Self::ExpressionContext {
-        self.contexts.push(Context::Expression(Vec::new()));
         self
     }
 
@@ -85,33 +83,17 @@ impl<'a, S: ast::Section> syntax::ExpressionContext for AstBuilder<'a, S> {
     type Terminal = Token<'a>;
 
     fn apply_deref(&mut self, expr: Self::Expr) -> Self::Expr {
-        if let Some(&mut Context::Expression(ref mut stack)) = self.contexts.last_mut() {
-            let address_specifier = stack.pop().unwrap();
-            stack.push(Expression::Deref(Box::new(address_specifier)));
-            Expression::Deref(Box::new(expr))
-        } else {
-            panic!()
-        }
+        Expression::Deref(Box::new(expr))
     }
 
     fn push_atom(&mut self, atom: Self::Terminal) -> Self::Expr {
-        if let Some(&mut Context::Expression(ref mut stack)) = self.contexts.last_mut() {
-            stack.push(Expression::Atom(atom.clone()));
-            Expression::Atom(atom)
-        } else {
-            panic!()
-        }
+        Expression::Atom(atom)
     }
 
     fn exit_expression(&mut self, expr: Self::Expr) {
-        if let Some(Context::Expression(stack)) = self.contexts.pop() {
-            assert_eq!(stack.len(), 1);
-            match self.contexts.last_mut() {
-                Some(&mut Context::Instruction(_, ref mut args)) => args.push(expr),
-                _ => panic!(),
-            }
-        } else {
-            panic!()
+        match self.contexts.last_mut() {
+            Some(&mut Context::Instruction(_, ref mut args)) => args.push(expr),
+            _ => panic!(),
         }
     }
 }
