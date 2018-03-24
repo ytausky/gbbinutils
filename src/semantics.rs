@@ -103,12 +103,11 @@ impl<'a, S: ast::Section> syntax::ExpressionContext for AstBuilder<'a, S> {
         }
     }
 
-    fn exit_expression(&mut self) {
-        if let Some(Context::Expression(mut stack)) = self.contexts.pop() {
+    fn exit_expression(&mut self, expr: Self::Expr) {
+        if let Some(Context::Expression(stack)) = self.contexts.pop() {
             assert_eq!(stack.len(), 1);
-            let expression = stack.pop().unwrap();
             match self.contexts.last_mut() {
-                Some(&mut Context::Instruction(_, ref mut args)) => args.push(expression),
+                Some(&mut Context::Instruction(_, ref mut args)) => args.push(expr),
                 _ => panic!(),
             }
         } else {
@@ -256,8 +255,8 @@ mod tests {
             {
                 let argument = command.enter_argument();
                 let atom = argument.push_atom(Token::Keyword(Keyword::Hl));
-                argument.apply_deref(atom);
-                argument.exit_expression();
+                let expr = argument.apply_deref(atom);
+                argument.exit_expression(expr);
             }
             command.exit_command();
         }
@@ -288,8 +287,8 @@ mod tests {
             builder.enter_command(Token::Keyword(keyword));
             for arg in operands {
                 let expr = builder.enter_argument();
-                expr.push_atom(arg.clone());
-                expr.exit_expression();
+                let atom = expr.push_atom(arg.clone());
+                expr.exit_expression(atom);
             }
             builder.exit_command();
             ast = builder.ast().to_vec();

@@ -74,6 +74,7 @@ pub enum RegisterPair {
     Bc,
 }
 
+#[derive(Debug, PartialEq)]
 pub enum Expression<T> {
     Atom(T),
     Deref(Box<Expression<T>>),

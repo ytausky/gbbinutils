@@ -41,7 +41,7 @@ pub trait ExpressionContext {
     type Terminal: Terminal;
     fn apply_deref(&mut self, expr: Self::Expr) -> Self::Expr;
     fn push_atom(&mut self, atom: Self::Terminal) -> Self::Expr;
-    fn exit_expression(&mut self);
+    fn exit_expression(&mut self, expr: Self::Expr);
 }
 
 pub trait TerminalSequenceContext {

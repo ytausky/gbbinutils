@@ -122,8 +122,8 @@ where
 
     fn parse_argument(&mut self, instruction_context: &mut B::CommandContext) {
         let expression_context = instruction_context.enter_argument();
-        self.parse_expression(expression_context);
-        expression_context.exit_expression()
+        let expr = self.parse_expression(expression_context);
+        expression_context.exit_expression(expr)
     }
 
     fn parse_expression<E>(&mut self, expression_context: &mut E) -> E::Expr
@@ -177,18 +177,17 @@ mod tests {
     #[derive(Debug, PartialEq)]
     enum Action {
         AddLabel(TestToken),
-        ApplyDeref,
         EnterExpression,
         EnterInstruction(TestToken),
         EnterMacroDef(TestToken),
-        ExitExpression,
+        ExitExpression(TestExpr),
         ExitInstruction,
         ExitMacroDef,
-        PushAtom(TestToken),
         PushTerminal(TestToken),
     }
 
     type TestToken = (syntax::TerminalKind, usize);
+    type TestExpr = ast::Expression<TestToken>;
 
     impl syntax::Terminal for TestToken {
         fn kind(&self) -> syntax::TerminalKind {
@@ -235,21 +234,19 @@ mod tests {
     }
 
     impl syntax::ExpressionContext for TestContext {
-        type Expr = ast::Expression<TestToken>;
+        type Expr = TestExpr;
         type Terminal = TestToken;
 
         fn apply_deref(&mut self, expr: Self::Expr) -> Self::Expr {
-            self.actions.push(Action::ApplyDeref);
             ast::Expression::Deref(Box::new(expr))
         }
 
         fn push_atom(&mut self, atom: Self::Terminal) -> Self::Expr {
-            self.actions.push(Action::PushAtom(atom.clone()));
             ast::Expression::Atom(atom)
         }
 
-        fn exit_expression(&mut self) {
-            self.actions.push(Action::ExitExpression)
+        fn exit_expression(&mut self, expr: Self::Expr) {
+            self.actions.push(Action::ExitExpression(expr))
         }
     }
 
@@ -303,15 +300,14 @@ mod tests {
         )
     }
 
-    fn expr(mut actions: Vec<Action>) -> Vec<Action> {
+    fn expr(expression: TestExpr) -> Vec<Action> {
         let mut result = vec![Action::EnterExpression];
-        result.append(&mut actions);
-        result.push(Action::ExitExpression);
+        result.push(Action::ExitExpression(expression));
         result
     }
 
-    fn ident(identifier: TestToken) -> Vec<Action> {
-        vec![Action::PushAtom(identifier)]
+    fn ident(identifier: TestToken) -> TestExpr {
+        ast::Expression::Atom(identifier)
     }
 
     #[test]
@@ -456,8 +452,7 @@ mod tests {
         assert_eq_actions(tokens, expected_actions)
     }
 
-    fn deref(mut actions: Vec<Action>) -> Vec<Action> {
-        actions.push(Action::ApplyDeref);
-        actions
+    fn deref(expr: TestExpr) -> TestExpr {
+        ast::Expression::Deref(Box::new(expr))
     }
 }
