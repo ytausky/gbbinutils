@@ -156,8 +156,8 @@ fn parse_operand<'a>(expression: Expression<'a>) -> ast::Operand {
 
 fn parse_keyword_operand(keyword: Keyword) -> ast::Operand {
     match keyword {
-        Keyword::A => ast::Operand::Register(ast::Register::A),
-        Keyword::B => ast::Operand::Register(ast::Register::B),
+        Keyword::A => ast::Operand::Alu(ast::AluOperand::A),
+        Keyword::B => ast::Operand::Alu(ast::AluOperand::B),
         Keyword::Bc => ast::Operand::RegisterPair(ast::RegisterPair::Bc),
         _ => panic!(),
     }
@@ -165,7 +165,7 @@ fn parse_keyword_operand(keyword: Keyword) -> ast::Operand {
 
 fn parse_deref_operand<'a>(address_specifier: Expression<'a>) -> ast::Operand {
     match address_specifier {
-        Expression::Atom(Token::Keyword(Keyword::Hl)) => ast::Operand::DerefHl,
+        Expression::Atom(Token::Keyword(Keyword::Hl)) => ast::Operand::Alu(ast::AluOperand::DerefHl),
         _ => panic!(),
     }
 }
@@ -262,7 +262,7 @@ mod tests {
             }
             command.exit_command();
         }
-        assert_eq!(actions, inst(ast::Mnemonic::Xor, &[ast::Operand::DerefHl]))
+        assert_eq!(actions, inst(ast::Mnemonic::Xor, &[ast::Operand::Alu(ast::AluOperand::DerefHl)]))
     }
 
     fn analyze_nullary_instruction(keyword: Keyword, mnemonic: ast::Mnemonic) {

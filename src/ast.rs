@@ -25,25 +25,36 @@ impl Instruction {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Operand {
-    DerefHl,
-    Register(Register),
+    Alu(AluOperand),
     RegisterPair(RegisterPair),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum AluOperand {
+    A,
+    B,
+    #[cfg(test)] C,
+    #[cfg(test)] D,
+    #[cfg(test)] E,
+    #[cfg(test)] H,
+    #[cfg(test)] L,
+    DerefHl,
+}
+
 #[cfg(test)]
-pub const A: Operand = Operand::Register(Register::A);
+pub const A: Operand = Operand::Alu(AluOperand::A);
 #[cfg(test)]
-pub const B: Operand = Operand::Register(Register::B);
+pub const B: Operand = Operand::Alu(AluOperand::B);
 #[cfg(test)]
-pub const C: Operand = Operand::Register(Register::C);
+pub const C: Operand = Operand::Alu(AluOperand::C);
 #[cfg(test)]
-pub const D: Operand = Operand::Register(Register::D);
+pub const D: Operand = Operand::Alu(AluOperand::D);
 #[cfg(test)]
-pub const E: Operand = Operand::Register(Register::E);
+pub const E: Operand = Operand::Alu(AluOperand::E);
 #[cfg(test)]
-pub const H: Operand = Operand::Register(Register::H);
+pub const H: Operand = Operand::Alu(AluOperand::H);
 #[cfg(test)]
-pub const L: Operand = Operand::Register(Register::L);
+pub const L: Operand = Operand::Alu(AluOperand::L);
 
 #[cfg(test)]
 pub const BC: Operand = Operand::RegisterPair(RegisterPair::Bc);
@@ -56,17 +67,6 @@ pub enum Mnemonic {
     Push,
     Stop,
     Xor,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Register {
-    A,
-    B,
-    #[cfg(test)] C,
-    #[cfg(test)] D,
-    #[cfg(test)] E,
-    #[cfg(test)] H,
-    #[cfg(test)] L,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

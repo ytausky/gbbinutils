@@ -20,19 +20,19 @@ fn generate_code<F: FnMut(u8)>(ast_node: &ast::Instruction, mut sink: F) {
 fn encode_ld(dest: ast::Operand, src: ast::Operand) -> u8 {
     use ast::Operand::*;
     match (dest, src) {
-        (Register(dest_reg), Register(src_reg)) => encode_ld_to_reg_from_reg(dest_reg, src_reg),
+        (Alu(dest_reg), Alu(src_reg)) => encode_ld_to_reg_from_reg(dest_reg, src_reg),
         _ => unimplemented!(),
     }
 }
 
 #[cfg(test)]
-fn encode_ld_to_reg_from_reg(dest: ast::Register, src: ast::Register) -> u8 {
+fn encode_ld_to_reg_from_reg(dest: ast::AluOperand, src: ast::AluOperand) -> u8 {
     0b01_000_000 | (encode_register(dest) << 3) | encode_register(src)
 }
 
 #[cfg(test)]
-fn encode_register(register: ast::Register) -> u8 {
-    use ast::Register::*;
+fn encode_register(register: ast::AluOperand) -> u8 {
+    use ast::AluOperand::*;
     match register {
         A => 0b111,
         B => 0b000,
@@ -41,6 +41,7 @@ fn encode_register(register: ast::Register) -> u8 {
         E => 0b011,
         H => 0b100,
         L => 0b101,
+        _ => panic!(),
     }
 }
 
