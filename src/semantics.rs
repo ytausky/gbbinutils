@@ -74,7 +74,7 @@ impl<'a, S: ast::Section> syntax::CommandContext for AstBuilder<'a, S> {
             match name {
                 Token::Keyword(Keyword::Include) => self.ast.push(reduce_include(args)),
                 Token::Keyword(keyword) => self.section
-                    .add_instruction(reduce_mnemonic(keyword, &args)),
+                    .add_instruction(reduce_mnemonic(keyword, args.into_iter())),
                 _ => panic!(),
             }
         } else {
@@ -133,24 +133,25 @@ fn reduce_include<'a>(mut arguments: Vec<Expression<'a>>) -> ast::AsmItem<'a> {
     }
 }
 
-fn reduce_mnemonic<'a>(command: keyword::Keyword, operands: &[Expression<'a>]) -> ast::Instruction {
-    let parsed_operands: Vec<ast::Operand> =
-        operands.iter().map(|t| parse_operand(t).unwrap()).collect();
+fn reduce_mnemonic<'a, I>(command: keyword::Keyword, operands: I) -> ast::Instruction
+where I: Iterator<Item = Expression<'a>>
+{
+    let parsed_operands: Vec<ast::Operand> = operands.map(parse_operand).collect();
     instruction(to_mnemonic(command), &parsed_operands)
 }
 
-fn identify_keyword(keyword: &Keyword) -> Option<ast::Operand> {
-    match *keyword {
-        Keyword::A => Some(ast::Operand::Register(ast::Register::A)),
-        Keyword::B => Some(ast::Operand::Register(ast::Register::B)),
-        Keyword::Bc => Some(ast::Operand::RegisterPair(ast::RegisterPair::Bc)),
-        _ => None,
+fn parse_operand<'a>(expression: Expression<'a>) -> ast::Operand {
+    match expression {
+        Expression::Atom(Token::Keyword(keyword)) => parse_keyword_operand(keyword),
+        _ => panic!(),
     }
 }
 
-fn parse_operand<'a>(expression: &Expression<'a>) -> Option<ast::Operand> {
-    match *expression {
-        Expression::Atom(Token::Keyword(ref keyword)) => identify_keyword(keyword),
+fn parse_keyword_operand(keyword: Keyword) -> ast::Operand {
+    match keyword {
+        Keyword::A => ast::Operand::Register(ast::Register::A),
+        Keyword::B => ast::Operand::Register(ast::Register::B),
+        Keyword::Bc => ast::Operand::RegisterPair(ast::RegisterPair::Bc),
         _ => panic!(),
     }
 }
