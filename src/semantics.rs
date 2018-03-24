@@ -118,7 +118,7 @@ fn reduce_include<'a>(path: Token<'a>) -> ast::AsmItem<'a> {
 
 fn reduce_mnemonic<'a>(command: keyword::Keyword, operands: &[Token<'a>]) -> ast::Instruction {
     let parsed_operands: Vec<ast::Operand> = operands.iter().map(|t| parse_operand(t).unwrap()).collect();
-    inst(to_mnemonic(command), &parsed_operands).pop().unwrap()
+    instruction(to_mnemonic(command), &parsed_operands)
 }
 
 fn identify_keyword(keyword: &Keyword) -> Option<ast::Operand> {
@@ -152,8 +152,8 @@ fn to_mnemonic(keyword: Keyword) -> ast::Mnemonic {
     }
 }
 
-fn inst<'a>(mnemonic: ast::Mnemonic, operands: &[ast::Operand]) -> Vec<ast::Instruction> {
-    vec![ast::Instruction::new(mnemonic, operands)]
+fn instruction<'a>(mnemonic: ast::Mnemonic, operands: &[ast::Operand]) -> ast::Instruction {
+    ast::Instruction::new(mnemonic, operands)
 }
 
 fn include(path: &str) -> ast::AsmItem {
@@ -216,12 +216,16 @@ mod tests {
         assert_eq!(item, inst(mnemonic, &[]))
     }
 
-    fn analyze_instruction<'a>(keyword: Keyword, operands: &[Token<'a>]) -> TestInstructions {
+    fn inst(mnemonic: ast::Mnemonic, operands: &[ast::Operand]) -> TestActions {
+        vec![Action::AddInstruction(instruction(mnemonic, operands))]
+    }
+
+    fn analyze_instruction<'a>(keyword: Keyword, operands: &[Token<'a>]) -> TestActions {
         analyze_command(keyword, operands).0
     }
 
     fn analyze_command<'a>(keyword: Keyword, operands: &[Token<'a>])
-        -> (TestInstructions, Vec<ast::AsmItem<'a>>)
+        -> (TestActions, Vec<ast::AsmItem<'a>>)
     {
         let mut instructions = Vec::new();
         let ast;
@@ -239,27 +243,33 @@ mod tests {
         (instructions, ast)
     }
 
-    type TestInstructions = Vec<ast::Instruction>;
+    type TestActions = Vec<Action>;
+
+    #[derive(Debug, PartialEq)]
+    enum Action {
+        AddLabel(String),
+        AddInstruction(ast::Instruction)
+    }
 
     struct TestSection<'a> {
-        instructions: &'a mut TestInstructions,
+        actions: &'a mut TestActions,
     }
 
     impl<'a> TestSection<'a> {
-        fn new(instructions: &'a mut TestInstructions) -> TestSection<'a> {
+        fn new(actions: &'a mut TestActions) -> TestSection<'a> {
             TestSection {
-                instructions: instructions, 
+                actions: actions, 
             }
         }
     }
 
     impl<'a> ast::Section for TestSection<'a> {
         fn add_instruction(&mut self, instruction: ast::Instruction) {
-            self.instructions.push(instruction)
+            self.actions.push(Action::AddInstruction(instruction))
         }
 
-        fn add_label(&mut self, _label: &str) {
-            unimplemented!()
+        fn add_label(&mut self, label: &str) {
+            self.actions.push(Action::AddLabel(label.to_string()))
         }
     }
 }
