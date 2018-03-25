@@ -157,7 +157,7 @@ fn to_mnemonic(keyword: Keyword) -> ast::Mnemonic {
     }
 }
 
-fn instruction<'a>(mnemonic: ast::Mnemonic, operands: &[Operand]) -> Instruction {
+fn instruction(mnemonic: ast::Mnemonic, operands: &[Operand]) -> Instruction {
     use ast::Mnemonic::*;
     match mnemonic {
         Halt => Instruction::Halt,
