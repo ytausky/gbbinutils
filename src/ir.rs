@@ -9,12 +9,6 @@ pub enum Instruction {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Operand {
-    Alu(AluOperand),
-    Reg16(Reg16),
-}
-
-#[derive(Clone, Debug, PartialEq)]
 pub enum AluOperand {
     A,
     B,

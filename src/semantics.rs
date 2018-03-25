@@ -104,6 +104,12 @@ fn reduce_include<'a>(mut arguments: Vec<Expression<Token<'a>>>) -> ast::AsmItem
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+enum Operand {
+    Alu(AluOperand),
+    Reg16(Reg16),
+}
+
 fn reduce_mnemonic<'a, I>(command: keyword::Keyword, operands: I) -> Instruction
 where
     I: Iterator<Item = Expression<Token<'a>>>,
@@ -210,28 +216,34 @@ mod tests {
     #[test]
     fn analyze_push_bc() {
         let item = analyze_instruction(Keyword::Push, &[Token::Keyword(Keyword::Bc)]);
-        assert_eq!(item, inst(ast::Mnemonic::Push, &[ast::BC]))
+        assert_eq!(item, inst(ast::Mnemonic::Push, &[BC]))
     }
+
+    const BC: Operand = Operand::Reg16(Reg16::Bc);
 
     #[test]
     fn analyze_ld_a_a() {
         let token_a = Token::Keyword(Keyword::A);
         let item = analyze_instruction(Keyword::Ld, &[token_a.clone(), token_a]);
-        assert_eq!(item, inst(ast::Mnemonic::Ld, &[ast::A, ast::A]))
+        assert_eq!(item, inst(ast::Mnemonic::Ld, &[A, A]))
     }
+
+    const A: Operand = Operand::Alu(AluOperand::A);
 
     #[test]
     fn analyze_ld_a_b() {
         let token_a = Token::Keyword(Keyword::A);
         let token_b = Token::Keyword(Keyword::B);
         let item = analyze_instruction(Keyword::Ld, &[token_a, token_b]);
-        assert_eq!(item, inst(ast::Mnemonic::Ld, &[ast::A, ast::B]))
+        assert_eq!(item, inst(ast::Mnemonic::Ld, &[A, B]))
     }
+
+    const B: Operand = Operand::Alu(AluOperand::B);
 
     #[test]
     fn analyze_xor_a() {
         let actions = analyze_instruction(Keyword::Xor, &[Token::Keyword(Keyword::A)]);
-        assert_eq!(actions, inst(ast::Mnemonic::Xor, &[ast::A]))
+        assert_eq!(actions, inst(ast::Mnemonic::Xor, &[A]))
     }
 
     #[test]

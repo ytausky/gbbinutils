@@ -12,14 +12,6 @@ pub enum AsmItem<'a> {
     Include(&'a str),
 }
 
-#[cfg(test)]
-pub const A: Operand = Operand::Alu(AluOperand::A);
-#[cfg(test)]
-pub const B: Operand = Operand::Alu(AluOperand::B);
-
-#[cfg(test)]
-pub const BC: Operand = Operand::Reg16(Reg16::Bc);
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum Mnemonic {
     Halt,
