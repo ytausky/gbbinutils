@@ -1,5 +1,5 @@
-use keyword::Keyword;
-use token::Token;
+use super::keyword::Keyword;
+use super::token::Token;
 
 use std::iter;
 use std::str;
@@ -142,7 +142,7 @@ fn is_horizontal_whitespace(character: char) -> bool {
 }
 
 fn identify_keyword(word: &str) -> Option<Keyword> {
-    use keyword::Keyword::*;
+    use super::keyword::Keyword::*;
     match word {
         "a" => Some(A),
         "b" => Some(B),
@@ -165,8 +165,8 @@ fn identify_keyword(word: &str) -> Option<Keyword> {
 mod tests {
     use super::*;
 
-    use keyword::Keyword::*;
-    use token::Token::*;
+    use super::Keyword::*;
+    use self::Token::*;
 
     fn assert_eq_tokens(src: &str, expected_tokens: &[Token]) {
         assert_eq!(Lexer::new(src).collect::<Vec<Token>>(), expected_tokens)

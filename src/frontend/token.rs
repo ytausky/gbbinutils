@@ -1,5 +1,5 @@
-use keyword;
-use syntax;
+use super::keyword;
+use super::syntax;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token<'a> {
@@ -17,7 +17,7 @@ pub enum Token<'a> {
 
 impl<'a> syntax::Terminal for Token<'a> {
     fn kind(&self) -> syntax::TerminalKind {
-        use syntax::TerminalKind;
+        use self::syntax::TerminalKind;
         match *self {
             Token::ClosingBracket => TerminalKind::ClosingBracket,
             Token::Colon => TerminalKind::Colon,
@@ -39,9 +39,9 @@ impl<'a> syntax::Terminal for Token<'a> {
 mod tests {
     use super::*;
 
-    use keyword::Keyword;
-    use syntax::Terminal;
-    use syntax::TerminalKind;
+    use self::keyword::Keyword;
+    use self::syntax::Terminal;
+    use self::syntax::TerminalKind;
 
     #[test]
     fn colon_terminal_kind() {

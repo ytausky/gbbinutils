@@ -1,7 +1,7 @@
-use ast;
+use super::ast;
 
-use syntax::*;
-use syntax::TerminalKind::*;
+use super::syntax::*;
+use super::syntax::TerminalKind::*;
 
 use std::iter;
 use std::marker::PhantomData;
@@ -152,9 +152,9 @@ where
 mod tests {
     use super::parse_src;
 
-    use ast;
-    use syntax;
-    use syntax::TerminalKind::*;
+    use super::ast;
+    use super::super::syntax;
+    use self::syntax::TerminalKind::*;
 
     #[test]
     fn parse_empty_src() {

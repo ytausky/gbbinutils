@@ -1,11 +1,11 @@
-use ast;
+use super::ast;
 use ir::*;
-use keyword;
-use syntax;
+use super::keyword;
+use super::syntax;
 
-use ast::Expression;
-use keyword::Keyword;
-use token::Token;
+use self::ast::Expression;
+use self::keyword::Keyword;
+use super::token::Token;
 
 pub struct AstBuilder<'a, S: Section> {
     ast: Vec<ast::AsmItem<'a>>,
@@ -27,7 +27,8 @@ impl<'a, S: Section> AstBuilder<'a, S> {
         }
     }
 
-    pub fn ast(&self) -> &Vec<ast::AsmItem<'a>> {
+    #[cfg(test)]
+    fn ast(&self) -> &Vec<ast::AsmItem<'a>> {
         &self.ast
     }
 }
@@ -202,9 +203,9 @@ fn include(path: &str) -> ast::AsmItem {
 mod tests {
     use super::*;
 
-    use ast::ExprFactory;
-    use keyword::Keyword;
-    use syntax::*;
+    use self::ast::ExprFactory;
+    use self::keyword::Keyword;
+    use self::syntax::*;
 
     #[test]
     fn build_include_item() {
