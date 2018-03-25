@@ -8,7 +8,10 @@ fn generate_code<F: FnMut(u8)>(ast_node: Instruction, mut sink: F) {
         Halt => sink(0x76),
         LdAluAlu(dest, src) => sink(encode_ld_to_reg_from_reg(dest, src)),
         Nop => sink(0x00),
-        Stop => { sink(0x10); sink(0x00) },
+        Stop => {
+            sink(0x10);
+            sink(0x00)
+        }
         _ => panic!(),
     }
 }

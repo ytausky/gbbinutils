@@ -137,9 +137,7 @@ fn parse_keyword_operand(keyword: Keyword) -> Operand {
 
 fn parse_deref_operand<'a>(address_specifier: Expression<Token<'a>>) -> Operand {
     match address_specifier {
-        Expression::Atom(Token::Keyword(Keyword::Hl)) => {
-            Operand::Alu(AluOperand::DerefHl)
-        }
+        Expression::Atom(Token::Keyword(Keyword::Hl)) => Operand::Alu(AluOperand::DerefHl),
         _ => panic!(),
     }
 }
@@ -162,14 +160,16 @@ fn instruction(mnemonic: ast::Mnemonic, operands: &[Operand]) -> Instruction {
     match mnemonic {
         Halt => Instruction::Halt,
         Ld => match (&operands[0], &operands[1]) {
-            (&Operand::Alu(ref dest), &Operand::Alu(ref src)) => Instruction::LdAluAlu(dest.clone(), src.clone()),
+            (&Operand::Alu(ref dest), &Operand::Alu(ref src)) => {
+                Instruction::LdAluAlu(dest.clone(), src.clone())
+            }
             _ => panic!(),
         },
         Nop => Instruction::Nop,
         Push => match &operands[0] {
             &Operand::Reg16(ref src) => Instruction::Push(src.clone()),
             _ => panic!(),
-        }
+        },
         Stop => Instruction::Stop,
         Xor => match &operands[0] {
             &Operand::Alu(ref src) => Instruction::Xor(src.clone()),
@@ -260,10 +260,7 @@ mod tests {
         }
         assert_eq!(
             actions,
-            inst(
-                ast::Mnemonic::Xor,
-                &[Operand::Alu(AluOperand::DerefHl)]
-            )
+            inst(ast::Mnemonic::Xor, &[Operand::Alu(AluOperand::DerefHl)])
         )
     }
 
