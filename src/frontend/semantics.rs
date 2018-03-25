@@ -1,10 +1,9 @@
 use super::ast;
 use ir::*;
-use super::keyword;
 use super::syntax;
 
 use self::ast::Expression;
-use self::keyword::Keyword;
+use frontend::Keyword;
 use super::token::Token;
 
 pub struct AstBuilder<'a, S: Section> {
@@ -111,7 +110,7 @@ enum Operand {
     Reg16(Reg16),
 }
 
-fn reduce_mnemonic<'a, I>(command: keyword::Keyword, operands: I) -> Instruction
+fn reduce_mnemonic<'a, I>(command: Keyword, operands: I) -> Instruction
 where
     I: Iterator<Item = Expression<Token<'a>>>,
 {
@@ -204,7 +203,7 @@ mod tests {
     use super::*;
 
     use self::ast::ExprFactory;
-    use self::keyword::Keyword;
+    use self::Keyword;
     use self::syntax::*;
 
     #[test]

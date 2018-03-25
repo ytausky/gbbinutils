@@ -3,12 +3,28 @@ use ir;
 use std;
 
 mod ast;
-mod keyword;
 mod lexer;
 mod parse;
 mod semantics;
 mod syntax;
 mod token;
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Keyword {
+    A,
+    B,
+    Bc,
+    Endm,
+    Halt,
+    Hl,
+    Include,
+    Ld,
+    Macro,
+    Nop,
+    Push,
+    Stop,
+    Xor,
+}
 
 pub fn analyze_file(name: &str) {
     use std::io::prelude::*;

@@ -1,5 +1,6 @@
-use super::keyword;
 use super::syntax;
+
+use frontend::Keyword;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token<'a> {
@@ -8,7 +9,7 @@ pub enum Token<'a> {
     Comma,
     Eol,
     Identifier(&'a str),
-    Keyword(keyword::Keyword),
+    Keyword(Keyword),
     Label(&'a str),
     Number(isize),
     OpeningBracket,
@@ -24,8 +25,8 @@ impl<'a> syntax::Terminal for Token<'a> {
             Token::Comma => TerminalKind::Comma,
             Token::Eol => TerminalKind::Eol,
             Token::Identifier(_) => TerminalKind::Word,
-            Token::Keyword(keyword::Keyword::Endm) => TerminalKind::Endm,
-            Token::Keyword(keyword::Keyword::Macro) => TerminalKind::Macro,
+            Token::Keyword(Keyword::Endm) => TerminalKind::Endm,
+            Token::Keyword(Keyword::Macro) => TerminalKind::Macro,
             Token::Keyword(_) => TerminalKind::Word,
             Token::Label(_) => TerminalKind::Label,
             Token::Number(_) => TerminalKind::Number,
@@ -39,7 +40,7 @@ impl<'a> syntax::Terminal for Token<'a> {
 mod tests {
     use super::*;
 
-    use self::keyword::Keyword;
+    use self::Keyword;
     use self::syntax::Terminal;
     use self::syntax::TerminalKind;
 

@@ -1,4 +1,4 @@
-use super::keyword::Keyword;
+use frontend::Keyword;
 use super::token::Token;
 
 use std::iter;
@@ -142,7 +142,7 @@ fn is_horizontal_whitespace(character: char) -> bool {
 }
 
 fn identify_keyword(word: &str) -> Option<Keyword> {
-    use super::keyword::Keyword::*;
+    use self::Keyword::*;
     match word {
         "a" => Some(A),
         "b" => Some(B),
