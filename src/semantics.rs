@@ -114,19 +114,19 @@ fn reduce_mnemonic<'a, I>(command: keyword::Keyword, operands: I) -> Instruction
 where
     I: Iterator<Item = Expression<Token<'a>>>,
 {
-    let parsed_operands: Vec<Operand> = operands.map(parse_operand).collect();
+    let parsed_operands: Vec<Operand> = operands.map(interpret_as_operand).collect();
     instruction(to_mnemonic(command), &parsed_operands)
 }
 
-fn parse_operand<'a>(expression: Expression<Token<'a>>) -> Operand {
-    match expression {
-        Expression::Atom(Token::Keyword(keyword)) => parse_keyword_operand(keyword),
-        Expression::Deref(address_specifier) => parse_deref_operand(*address_specifier),
+fn interpret_as_operand<'a>(expr: Expression<Token<'a>>) -> Operand {
+    match expr {
+        Expression::Atom(Token::Keyword(keyword)) => interpret_as_keyword_operand(keyword),
+        Expression::Deref(address_specifier) => interpret_as_deref_operand(*address_specifier),
         _ => panic!(),
     }
 }
 
-fn parse_keyword_operand(keyword: Keyword) -> Operand {
+fn interpret_as_keyword_operand(keyword: Keyword) -> Operand {
     match keyword {
         Keyword::A => Operand::Alu(AluOperand::A),
         Keyword::B => Operand::Alu(AluOperand::B),
@@ -135,8 +135,8 @@ fn parse_keyword_operand(keyword: Keyword) -> Operand {
     }
 }
 
-fn parse_deref_operand<'a>(address_specifier: Expression<Token<'a>>) -> Operand {
-    match address_specifier {
+fn interpret_as_deref_operand<'a>(addr: Expression<Token<'a>>) -> Operand {
+    match addr {
         Expression::Atom(Token::Keyword(Keyword::Hl)) => Operand::Alu(AluOperand::DerefHl),
         _ => panic!(),
     }
