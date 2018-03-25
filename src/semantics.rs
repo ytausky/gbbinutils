@@ -7,7 +7,7 @@ use ast::Expression;
 use keyword::Keyword;
 use token::Token;
 
-pub struct AstBuilder<'a, S: ast::Section> {
+pub struct AstBuilder<'a, S: Section> {
     ast: Vec<ast::AsmItem<'a>>,
     contexts: Vec<Context<'a>>,
     section: S,
@@ -18,7 +18,7 @@ enum Context<'a> {
     Instruction(Token<'a>, Vec<ast::Expression<Token<'a>>>),
 }
 
-impl<'a, S: ast::Section> AstBuilder<'a, S> {
+impl<'a, S: Section> AstBuilder<'a, S> {
     pub fn new(section: S) -> AstBuilder<'a, S> {
         AstBuilder {
             ast: Vec::new(),
@@ -32,7 +32,7 @@ impl<'a, S: ast::Section> AstBuilder<'a, S> {
     }
 }
 
-impl<'a, S: ast::Section> syntax::BlockContext for AstBuilder<'a, S> {
+impl<'a, S: Section> syntax::BlockContext for AstBuilder<'a, S> {
     type Terminal = Token<'a>;
     type Expr = Expression<Self::Terminal>;
     type CommandContext = Self;
@@ -58,7 +58,7 @@ impl<'a, S: ast::Section> syntax::BlockContext for AstBuilder<'a, S> {
     }
 }
 
-impl<'a, S: ast::Section> syntax::CommandContext for AstBuilder<'a, S> {
+impl<'a, S: Section> syntax::CommandContext for AstBuilder<'a, S> {
     type Terminal = Token<'a>;
     type Expr = Expression<Self::Terminal>;
 
@@ -83,7 +83,7 @@ impl<'a, S: ast::Section> syntax::CommandContext for AstBuilder<'a, S> {
     }
 }
 
-impl<'a, S: ast::Section> syntax::TerminalSequenceContext for AstBuilder<'a, S> {
+impl<'a, S: Section> syntax::TerminalSequenceContext for AstBuilder<'a, S> {
     type Terminal = Token<'a>;
 
     fn push_terminal(&mut self, _terminal: Self::Terminal) {
@@ -324,7 +324,7 @@ mod tests {
         }
     }
 
-    impl<'a> ast::Section for TestSection<'a> {
+    impl<'a> Section for TestSection<'a> {
         fn add_instruction(&mut self, instruction: Instruction) {
             self.actions.push(Action::AddInstruction(instruction))
         }

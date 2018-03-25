@@ -1,3 +1,8 @@
+pub trait Section {
+    fn add_instruction(&mut self, instruction: Instruction);
+    fn add_label(&mut self, label: &str);
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Instruction {
     Halt,
