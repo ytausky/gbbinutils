@@ -1,3 +1,5 @@
+use ir;
+
 use std::marker::PhantomData;
 
 pub trait Section {
@@ -27,36 +29,24 @@ impl Instruction {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Operand {
-    Alu(AluOperand),
+    Alu(ir::AluOperand),
     RegisterPair(RegisterPair),
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum AluOperand {
-    A,
-    B,
-    #[cfg(test)] C,
-    #[cfg(test)] D,
-    #[cfg(test)] E,
-    #[cfg(test)] H,
-    #[cfg(test)] L,
-    DerefHl,
-}
-
 #[cfg(test)]
-pub const A: Operand = Operand::Alu(AluOperand::A);
+pub const A: Operand = Operand::Alu(ir::AluOperand::A);
 #[cfg(test)]
-pub const B: Operand = Operand::Alu(AluOperand::B);
+pub const B: Operand = Operand::Alu(ir::AluOperand::B);
 #[cfg(test)]
-pub const C: Operand = Operand::Alu(AluOperand::C);
+pub const C: Operand = Operand::Alu(ir::AluOperand::C);
 #[cfg(test)]
-pub const D: Operand = Operand::Alu(AluOperand::D);
+pub const D: Operand = Operand::Alu(ir::AluOperand::D);
 #[cfg(test)]
-pub const E: Operand = Operand::Alu(AluOperand::E);
+pub const E: Operand = Operand::Alu(ir::AluOperand::E);
 #[cfg(test)]
-pub const H: Operand = Operand::Alu(AluOperand::H);
+pub const H: Operand = Operand::Alu(ir::AluOperand::H);
 #[cfg(test)]
-pub const L: Operand = Operand::Alu(AluOperand::L);
+pub const L: Operand = Operand::Alu(ir::AluOperand::L);
 
 #[cfg(test)]
 pub const BC: Operand = Operand::RegisterPair(RegisterPair::Bc);

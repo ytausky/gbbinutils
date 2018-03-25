@@ -1,4 +1,5 @@
 use ast;
+use ir;
 use keyword;
 use syntax;
 
@@ -121,8 +122,8 @@ fn parse_operand<'a>(expression: Expression<Token<'a>>) -> ast::Operand {
 
 fn parse_keyword_operand(keyword: Keyword) -> ast::Operand {
     match keyword {
-        Keyword::A => ast::Operand::Alu(ast::AluOperand::A),
-        Keyword::B => ast::Operand::Alu(ast::AluOperand::B),
+        Keyword::A => ast::Operand::Alu(ir::AluOperand::A),
+        Keyword::B => ast::Operand::Alu(ir::AluOperand::B),
         Keyword::Bc => ast::Operand::RegisterPair(ast::RegisterPair::Bc),
         _ => panic!(),
     }
@@ -131,7 +132,7 @@ fn parse_keyword_operand(keyword: Keyword) -> ast::Operand {
 fn parse_deref_operand<'a>(address_specifier: Expression<Token<'a>>) -> ast::Operand {
     match address_specifier {
         Expression::Atom(Token::Keyword(Keyword::Hl)) => {
-            ast::Operand::Alu(ast::AluOperand::DerefHl)
+            ast::Operand::Alu(ir::AluOperand::DerefHl)
         }
         _ => panic!(),
     }
@@ -232,7 +233,7 @@ mod tests {
             actions,
             inst(
                 ast::Mnemonic::Xor,
-                &[ast::Operand::Alu(ast::AluOperand::DerefHl)]
+                &[ast::Operand::Alu(ir::AluOperand::DerefHl)]
             )
         )
     }

@@ -2,6 +2,9 @@
 use ast;
 
 #[cfg(test)]
+use ir;
+
+#[cfg(test)]
 fn generate_code<F: FnMut(u8)>(ast_node: &ast::Instruction, mut sink: F) {
     use ast::Mnemonic::*;
     match ast_node.mnemonic {
@@ -29,13 +32,13 @@ fn encode_ld(dest: ast::Operand, src: ast::Operand) -> u8 {
 }
 
 #[cfg(test)]
-fn encode_ld_to_reg_from_reg(dest: ast::AluOperand, src: ast::AluOperand) -> u8 {
+fn encode_ld_to_reg_from_reg(dest: ir::AluOperand, src: ir::AluOperand) -> u8 {
     0b01_000_000 | (encode_register(dest) << 3) | encode_register(src)
 }
 
 #[cfg(test)]
-fn encode_register(register: ast::AluOperand) -> u8 {
-    use ast::AluOperand::*;
+fn encode_register(register: ir::AluOperand) -> u8 {
+    use ir::AluOperand::*;
     match register {
         A => 0b111,
         B => 0b000,

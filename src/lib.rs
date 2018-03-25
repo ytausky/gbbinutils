@@ -1,5 +1,6 @@
 mod ast;
 mod codegen;
+mod ir;
 mod keyword;
 mod lexer;
 mod parse;
