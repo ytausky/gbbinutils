@@ -159,12 +159,7 @@ fn instruction(mnemonic: ast::Mnemonic, operands: &[Operand]) -> Instruction {
     use ast::Mnemonic::*;
     match mnemonic {
         Halt => Instruction::Halt,
-        Ld => match (&operands[0], &operands[1]) {
-            (&Operand::Alu(ref dest), &Operand::Alu(ref src)) => {
-                Instruction::LdAluAlu(dest.clone(), src.clone())
-            }
-            _ => panic!(),
-        },
+        Ld => analyze_ld(operands),
         Nop => Instruction::Nop,
         Push => match &operands[0] {
             &Operand::Reg16(ref src) => Instruction::Push(src.clone()),
@@ -175,6 +170,18 @@ fn instruction(mnemonic: ast::Mnemonic, operands: &[Operand]) -> Instruction {
             &Operand::Alu(ref src) => Instruction::Xor(src.clone()),
             _ => panic!(),
         },
+    }
+}
+
+fn analyze_ld(operands: &[Operand]) -> Instruction {
+    assert_eq!(operands.len(), 2);
+    let dest = &operands[0];
+    let src = &operands[1];
+    match (dest, src) {
+        (&Operand::Alu(ref dest), &Operand::Alu(ref src)) => {
+            Instruction::LdAluAlu(dest.clone(), src.clone())
+        }
+        _ => panic!(),
     }
 }
 
