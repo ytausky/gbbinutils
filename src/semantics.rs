@@ -141,8 +141,17 @@ fn interpret_as_deref_operand<'a>(addr: Expression<Token<'a>>) -> Operand {
     }
 }
 
-fn to_mnemonic(keyword: Keyword) -> ast::Mnemonic {
-    use ast::Mnemonic;
+#[derive(Debug, PartialEq)]
+enum Mnemonic {
+    Halt,
+    Ld,
+    Nop,
+    Push,
+    Stop,
+    Xor,
+}
+
+fn to_mnemonic(keyword: Keyword) -> Mnemonic {
     match keyword {
         Keyword::Halt => Mnemonic::Halt,
         Keyword::Ld => Mnemonic::Ld,
@@ -154,11 +163,11 @@ fn to_mnemonic(keyword: Keyword) -> ast::Mnemonic {
     }
 }
 
-fn instruction<I>(mnemonic: ast::Mnemonic, mut operands: I) -> Instruction
+fn instruction<I>(mnemonic: Mnemonic, mut operands: I) -> Instruction
 where
     I: Iterator<Item = Operand>,
 {
-    use ast::Mnemonic::*;
+    use self::Mnemonic::*;
     match mnemonic {
         Halt => Instruction::Halt,
         Ld => analyze_ld(operands),
@@ -207,23 +216,23 @@ mod tests {
 
     #[test]
     fn parse_nop() {
-        analyze_nullary_instruction(Keyword::Nop, ast::Mnemonic::Nop)
+        analyze_nullary_instruction(Keyword::Nop, Mnemonic::Nop)
     }
 
     #[test]
     fn parse_halt() {
-        analyze_nullary_instruction(Keyword::Halt, ast::Mnemonic::Halt)
+        analyze_nullary_instruction(Keyword::Halt, Mnemonic::Halt)
     }
 
     #[test]
     fn parse_stop() {
-        analyze_nullary_instruction(Keyword::Stop, ast::Mnemonic::Stop)
+        analyze_nullary_instruction(Keyword::Stop, Mnemonic::Stop)
     }
 
     #[test]
     fn analyze_push_bc() {
         let item = analyze_instruction(Keyword::Push, &[Token::Keyword(Keyword::Bc)]);
-        assert_eq!(item, inst(ast::Mnemonic::Push, &[BC]))
+        assert_eq!(item, inst(Mnemonic::Push, &[BC]))
     }
 
     const BC: Operand = Operand::Reg16(Reg16::Bc);
@@ -232,7 +241,7 @@ mod tests {
     fn analyze_ld_a_a() {
         let token_a = Token::Keyword(Keyword::A);
         let item = analyze_instruction(Keyword::Ld, &[token_a.clone(), token_a]);
-        assert_eq!(item, inst(ast::Mnemonic::Ld, &[A, A]))
+        assert_eq!(item, inst(Mnemonic::Ld, &[A, A]))
     }
 
     const A: Operand = Operand::Alu(AluOperand::A);
@@ -242,7 +251,7 @@ mod tests {
         let token_a = Token::Keyword(Keyword::A);
         let token_b = Token::Keyword(Keyword::B);
         let item = analyze_instruction(Keyword::Ld, &[token_a, token_b]);
-        assert_eq!(item, inst(ast::Mnemonic::Ld, &[A, B]))
+        assert_eq!(item, inst(Mnemonic::Ld, &[A, B]))
     }
 
     const B: Operand = Operand::Alu(AluOperand::B);
@@ -250,7 +259,7 @@ mod tests {
     #[test]
     fn analyze_xor_a() {
         let actions = analyze_instruction(Keyword::Xor, &[Token::Keyword(Keyword::A)]);
-        assert_eq!(actions, inst(ast::Mnemonic::Xor, &[A]))
+        assert_eq!(actions, inst(Mnemonic::Xor, &[A]))
     }
 
     #[test]
@@ -267,16 +276,16 @@ mod tests {
         }
         assert_eq!(
             actions,
-            inst(ast::Mnemonic::Xor, &[Operand::Alu(AluOperand::DerefHl)])
+            inst(Mnemonic::Xor, &[Operand::Alu(AluOperand::DerefHl)])
         )
     }
 
-    fn analyze_nullary_instruction(keyword: Keyword, mnemonic: ast::Mnemonic) {
+    fn analyze_nullary_instruction(keyword: Keyword, mnemonic: Mnemonic) {
         let item = analyze_instruction(keyword, &[]);
         assert_eq!(item, inst(mnemonic, &[]))
     }
 
-    fn inst(mnemonic: ast::Mnemonic, operands: &[Operand]) -> TestActions {
+    fn inst(mnemonic: Mnemonic, operands: &[Operand]) -> TestActions {
         vec![
             Action::AddInstruction(instruction(mnemonic, operands.iter().cloned())),
         ]

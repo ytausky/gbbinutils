@@ -5,16 +5,6 @@ pub enum AsmItem<'a> {
     Include(&'a str),
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum Mnemonic {
-    Halt,
-    Ld,
-    Nop,
-    Push,
-    Stop,
-    Xor,
-}
-
 #[derive(Debug, PartialEq)]
 pub enum Expression<T> {
     Atom(T),
