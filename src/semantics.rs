@@ -114,8 +114,7 @@ fn reduce_mnemonic<'a, I>(command: keyword::Keyword, operands: I) -> Instruction
 where
     I: Iterator<Item = Expression<Token<'a>>>,
 {
-    let parsed_operands: Vec<Operand> = operands.map(interpret_as_operand).collect();
-    instruction(to_mnemonic(command), &parsed_operands)
+    instruction(to_mnemonic(command), operands.map(interpret_as_operand))
 }
 
 fn interpret_as_operand<'a>(expr: Expression<Token<'a>>) -> Operand {
@@ -155,32 +154,33 @@ fn to_mnemonic(keyword: Keyword) -> ast::Mnemonic {
     }
 }
 
-fn instruction(mnemonic: ast::Mnemonic, operands: &[Operand]) -> Instruction {
+fn instruction<I>(mnemonic: ast::Mnemonic, mut operands: I) -> Instruction
+where
+    I: Iterator<Item = Operand>,
+{
     use ast::Mnemonic::*;
     match mnemonic {
         Halt => Instruction::Halt,
         Ld => analyze_ld(operands),
         Nop => Instruction::Nop,
-        Push => match &operands[0] {
-            &Operand::Reg16(ref src) => Instruction::Push(src.clone()),
+        Push => match operands.next() {
+            Some(Operand::Reg16(src)) => Instruction::Push(src),
             _ => panic!(),
         },
         Stop => Instruction::Stop,
-        Xor => match &operands[0] {
-            &Operand::Alu(ref src) => Instruction::Xor(src.clone()),
+        Xor => match operands.next() {
+            Some(Operand::Alu(src)) => Instruction::Xor(src),
             _ => panic!(),
         },
     }
 }
 
-fn analyze_ld(operands: &[Operand]) -> Instruction {
-    assert_eq!(operands.len(), 2);
-    let dest = &operands[0];
-    let src = &operands[1];
+fn analyze_ld<I: Iterator<Item = Operand>>(mut operands: I) -> Instruction {
+    let dest = operands.next().unwrap();
+    let src = operands.next().unwrap();
+    assert_eq!(operands.next(), None);
     match (dest, src) {
-        (&Operand::Alu(ref dest), &Operand::Alu(ref src)) => {
-            Instruction::LdAluAlu(dest.clone(), src.clone())
-        }
+        (Operand::Alu(dest), Operand::Alu(src)) => Instruction::LdAluAlu(dest, src),
         _ => panic!(),
     }
 }
@@ -277,7 +277,9 @@ mod tests {
     }
 
     fn inst(mnemonic: ast::Mnemonic, operands: &[Operand]) -> TestActions {
-        vec![Action::AddInstruction(instruction(mnemonic, operands))]
+        vec![
+            Action::AddInstruction(instruction(mnemonic, operands.iter().cloned())),
+        ]
     }
 
     fn analyze_instruction<'a>(keyword: Keyword, operands: &[Token<'a>]) -> TestActions {
