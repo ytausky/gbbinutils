@@ -104,7 +104,7 @@ fn reduce_include<'a>(mut arguments: Vec<Expression<Token<'a>>>) -> ast::AsmItem
     }
 }
 
-fn reduce_mnemonic<'a, I>(command: keyword::Keyword, operands: I) -> ast::Instruction
+fn reduce_mnemonic<'a, I>(command: keyword::Keyword, operands: I) -> Instruction
 where
     I: Iterator<Item = Expression<Token<'a>>>,
 {
@@ -151,8 +151,25 @@ fn to_mnemonic(keyword: Keyword) -> ast::Mnemonic {
     }
 }
 
-fn instruction<'a>(mnemonic: ast::Mnemonic, operands: &[Operand]) -> ast::Instruction {
-    ast::Instruction::new(mnemonic, operands)
+fn instruction<'a>(mnemonic: ast::Mnemonic, operands: &[Operand]) -> Instruction {
+    use ast::Mnemonic::*;
+    match mnemonic {
+        Halt => Instruction::Halt,
+        Ld => match (&operands[0], &operands[1]) {
+            (&Operand::Alu(ref dest), &Operand::Alu(ref src)) => Instruction::LdAluAlu(dest.clone(), src.clone()),
+            _ => panic!(),
+        },
+        Nop => Instruction::Nop,
+        Push => match &operands[0] {
+            &Operand::Reg16(ref src) => Instruction::Push(src.clone()),
+            _ => panic!(),
+        }
+        Stop => Instruction::Stop,
+        Xor => match &operands[0] {
+            &Operand::Alu(ref src) => Instruction::Xor(src.clone()),
+            _ => panic!(),
+        },
+    }
 }
 
 fn include(path: &str) -> ast::AsmItem {
@@ -276,7 +293,7 @@ mod tests {
     #[derive(Debug, PartialEq)]
     enum Action {
         AddLabel(String),
-        AddInstruction(ast::Instruction),
+        AddInstruction(Instruction),
     }
 
     struct TestSection<'a> {
@@ -290,7 +307,7 @@ mod tests {
     }
 
     impl<'a> ast::Section for TestSection<'a> {
-        fn add_instruction(&mut self, instruction: ast::Instruction) {
+        fn add_instruction(&mut self, instruction: Instruction) {
             self.actions.push(Action::AddInstruction(instruction))
         }
 

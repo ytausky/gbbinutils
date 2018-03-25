@@ -37,7 +37,7 @@ impl DumpSection {
 }
 
 impl ast::Section for DumpSection {
-    fn add_instruction(&mut self, instruction: ast::Instruction) {
+    fn add_instruction(&mut self, instruction: ir::Instruction) {
         println!("{:?}", instruction)
     }
 

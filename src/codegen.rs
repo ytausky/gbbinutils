@@ -1,33 +1,15 @@
 #[cfg(test)]
-use ast;
-
-#[cfg(test)]
 use ir::*;
 
 #[cfg(test)]
-fn generate_code<F: FnMut(u8)>(ast_node: &ast::Instruction, mut sink: F) {
-    use ast::Mnemonic::*;
-    match ast_node.mnemonic {
+fn generate_code<F: FnMut(u8)>(ast_node: Instruction, mut sink: F) {
+    use ir::Instruction::*;
+    match ast_node {
         Halt => sink(0x76),
-        Ld => sink(encode_ld(
-            ast_node.operands[0].clone(),
-            ast_node.operands[1].clone(),
-        )),
-        _ => {
-            if ast_node.mnemonic == Stop {
-                sink(0x10)
-            }
-            sink(0x00)
-        }
-    }
-}
-
-#[cfg(test)]
-fn encode_ld(dest: Operand, src: Operand) -> u8 {
-    use self::Operand::*;
-    match (dest, src) {
-        (Alu(dest_reg), Alu(src_reg)) => encode_ld_to_reg_from_reg(dest_reg, src_reg),
-        _ => unimplemented!(),
+        LdAluAlu(dest, src) => sink(encode_ld_to_reg_from_reg(dest, src)),
+        Nop => sink(0x00),
+        Stop => { sink(0x10); sink(0x00) },
+        _ => panic!(),
     }
 }
 
@@ -55,37 +37,32 @@ fn encode_register(register: AluOperand) -> u8 {
 mod tests {
     use super::*;
 
-    use ast::Mnemonic::*;
+    use ir::Instruction::*;
 
-    fn test_instruction(mnemonic: ast::Mnemonic, operands: &[Operand], bytes: &[u8]) {
-        let ast = ast::Instruction::new(mnemonic, operands);
+    fn test_instruction(instruction: Instruction, bytes: &[u8]) {
         let mut code = vec![];
-        generate_code(&ast, |byte| code.push(byte));
+        generate_code(instruction, |byte| code.push(byte));
         assert_eq!(code, bytes)
-    }
-
-    fn test_nullary_instruction(mnemonic: ast::Mnemonic, bytes: &[u8]) {
-        test_instruction(mnemonic, &[], bytes)
     }
 
     #[test]
     fn encode_nop() {
-        test_nullary_instruction(Nop, &[0x00])
+        test_instruction(Nop, &[0x00])
     }
 
     #[test]
     fn encode_stop() {
-        test_nullary_instruction(Stop, &[0x10, 0x00])
+        test_instruction(Stop, &[0x10, 0x00])
     }
 
     #[test]
     fn encode_halt() {
-        test_nullary_instruction(Halt, &[0x76])
+        test_instruction(Halt, &[0x76])
     }
 
     #[test]
     fn encode_8_bit_register_transfers() {
-        use ast::*;
+        use self::AluOperand::*;
         let operands_and_encoding = vec![
             (A, A, 0x7f),
             (A, B, 0x78),
@@ -138,7 +115,7 @@ mod tests {
             (L, L, 0x6d),
         ];
         for (dest, src, opcode) in operands_and_encoding {
-            test_instruction(Ld, &[dest, src], &[opcode])
+            test_instruction(LdAluAlu(dest, src), &[opcode])
         }
     }
 }
