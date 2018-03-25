@@ -1,4 +1,4 @@
-use ir;
+use ir::*;
 
 use std::marker::PhantomData;
 
@@ -27,29 +27,23 @@ impl Instruction {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum Operand {
-    Alu(ir::AluOperand),
-    RegisterPair(RegisterPair),
-}
+#[cfg(test)]
+pub const A: Operand = Operand::Alu(AluOperand::A);
+#[cfg(test)]
+pub const B: Operand = Operand::Alu(AluOperand::B);
+#[cfg(test)]
+pub const C: Operand = Operand::Alu(AluOperand::C);
+#[cfg(test)]
+pub const D: Operand = Operand::Alu(AluOperand::D);
+#[cfg(test)]
+pub const E: Operand = Operand::Alu(AluOperand::E);
+#[cfg(test)]
+pub const H: Operand = Operand::Alu(AluOperand::H);
+#[cfg(test)]
+pub const L: Operand = Operand::Alu(AluOperand::L);
 
 #[cfg(test)]
-pub const A: Operand = Operand::Alu(ir::AluOperand::A);
-#[cfg(test)]
-pub const B: Operand = Operand::Alu(ir::AluOperand::B);
-#[cfg(test)]
-pub const C: Operand = Operand::Alu(ir::AluOperand::C);
-#[cfg(test)]
-pub const D: Operand = Operand::Alu(ir::AluOperand::D);
-#[cfg(test)]
-pub const E: Operand = Operand::Alu(ir::AluOperand::E);
-#[cfg(test)]
-pub const H: Operand = Operand::Alu(ir::AluOperand::H);
-#[cfg(test)]
-pub const L: Operand = Operand::Alu(ir::AluOperand::L);
-
-#[cfg(test)]
-pub const BC: Operand = Operand::RegisterPair(RegisterPair::Bc);
+pub const BC: Operand = Operand::Reg16(Reg16::Bc);
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Mnemonic {
@@ -59,11 +53,6 @@ pub enum Mnemonic {
     Push,
     Stop,
     Xor,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum RegisterPair {
-    Bc,
 }
 
 #[derive(Debug, PartialEq)]

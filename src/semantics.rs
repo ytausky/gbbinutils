@@ -1,5 +1,5 @@
 use ast;
-use ir;
+use ir::*;
 use keyword;
 use syntax;
 
@@ -108,11 +108,11 @@ fn reduce_mnemonic<'a, I>(command: keyword::Keyword, operands: I) -> ast::Instru
 where
     I: Iterator<Item = Expression<Token<'a>>>,
 {
-    let parsed_operands: Vec<ast::Operand> = operands.map(parse_operand).collect();
+    let parsed_operands: Vec<Operand> = operands.map(parse_operand).collect();
     instruction(to_mnemonic(command), &parsed_operands)
 }
 
-fn parse_operand<'a>(expression: Expression<Token<'a>>) -> ast::Operand {
+fn parse_operand<'a>(expression: Expression<Token<'a>>) -> Operand {
     match expression {
         Expression::Atom(Token::Keyword(keyword)) => parse_keyword_operand(keyword),
         Expression::Deref(address_specifier) => parse_deref_operand(*address_specifier),
@@ -120,19 +120,19 @@ fn parse_operand<'a>(expression: Expression<Token<'a>>) -> ast::Operand {
     }
 }
 
-fn parse_keyword_operand(keyword: Keyword) -> ast::Operand {
+fn parse_keyword_operand(keyword: Keyword) -> Operand {
     match keyword {
-        Keyword::A => ast::Operand::Alu(ir::AluOperand::A),
-        Keyword::B => ast::Operand::Alu(ir::AluOperand::B),
-        Keyword::Bc => ast::Operand::RegisterPair(ast::RegisterPair::Bc),
+        Keyword::A => Operand::Alu(AluOperand::A),
+        Keyword::B => Operand::Alu(AluOperand::B),
+        Keyword::Bc => Operand::Reg16(Reg16::Bc),
         _ => panic!(),
     }
 }
 
-fn parse_deref_operand<'a>(address_specifier: Expression<Token<'a>>) -> ast::Operand {
+fn parse_deref_operand<'a>(address_specifier: Expression<Token<'a>>) -> Operand {
     match address_specifier {
         Expression::Atom(Token::Keyword(Keyword::Hl)) => {
-            ast::Operand::Alu(ir::AluOperand::DerefHl)
+            Operand::Alu(AluOperand::DerefHl)
         }
         _ => panic!(),
     }
@@ -151,7 +151,7 @@ fn to_mnemonic(keyword: Keyword) -> ast::Mnemonic {
     }
 }
 
-fn instruction<'a>(mnemonic: ast::Mnemonic, operands: &[ast::Operand]) -> ast::Instruction {
+fn instruction<'a>(mnemonic: ast::Mnemonic, operands: &[Operand]) -> ast::Instruction {
     ast::Instruction::new(mnemonic, operands)
 }
 
@@ -233,7 +233,7 @@ mod tests {
             actions,
             inst(
                 ast::Mnemonic::Xor,
-                &[ast::Operand::Alu(ir::AluOperand::DerefHl)]
+                &[Operand::Alu(AluOperand::DerefHl)]
             )
         )
     }
@@ -243,7 +243,7 @@ mod tests {
         assert_eq!(item, inst(mnemonic, &[]))
     }
 
-    fn inst(mnemonic: ast::Mnemonic, operands: &[ast::Operand]) -> TestActions {
+    fn inst(mnemonic: ast::Mnemonic, operands: &[Operand]) -> TestActions {
         vec![Action::AddInstruction(instruction(mnemonic, operands))]
     }
 
