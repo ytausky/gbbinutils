@@ -16,7 +16,7 @@ pub fn reduce_include<'a>(mut arguments: Vec<Expression<Token<'a>>>) -> ast::Asm
 
 #[derive(Debug, PartialEq)]
 pub enum Operand {
-    Alu(AluOperand),
+    Simple(SimpleOperand),
     Condition(Condition),
     Const(Expr),
     Deref(Expr),
@@ -47,14 +47,14 @@ fn interpret_as_operand<'a>(expr: Expression<Token<'a>>) -> Operand {
 
 fn interpret_as_keyword_operand(keyword: Keyword) -> Operand {
     match keyword {
-        Keyword::A => Operand::Alu(AluOperand::A),
-        Keyword::B => Operand::Alu(AluOperand::B),
+        Keyword::A => Operand::Simple(SimpleOperand::A),
+        Keyword::B => Operand::Simple(SimpleOperand::B),
         Keyword::Bc => Operand::Reg16(Reg16::Bc),
-        Keyword::C => Operand::Alu(AluOperand::C),
-        Keyword::D => Operand::Alu(AluOperand::D),
-        Keyword::E => Operand::Alu(AluOperand::E),
-        Keyword::H => Operand::Alu(AluOperand::H),
-        Keyword::L => Operand::Alu(AluOperand::L),
+        Keyword::C => Operand::Simple(SimpleOperand::C),
+        Keyword::D => Operand::Simple(SimpleOperand::D),
+        Keyword::E => Operand::Simple(SimpleOperand::E),
+        Keyword::H => Operand::Simple(SimpleOperand::H),
+        Keyword::L => Operand::Simple(SimpleOperand::L),
         Keyword::Nz => Operand::Condition(Condition::Nz),
         Keyword::Z => Operand::Condition(Condition::Z),
         _ => panic!(),
@@ -63,7 +63,7 @@ fn interpret_as_keyword_operand(keyword: Keyword) -> Operand {
 
 fn interpret_as_deref_operand<'a>(addr: Expression<Token<'a>>) -> Operand {
     match addr {
-        Expression::Atom(Token::Keyword(Keyword::Hl)) => Operand::Alu(AluOperand::DerefHl),
+        Expression::Atom(Token::Keyword(Keyword::Hl)) => Operand::Simple(SimpleOperand::DerefHl),
         Expression::Atom(Token::Identifier(ident)) => {
             Operand::Deref(Expr::Symbol(ident.to_string()))
         }
@@ -73,7 +73,7 @@ fn interpret_as_deref_operand<'a>(addr: Expression<Token<'a>>) -> Operand {
 
 #[derive(Debug, PartialEq)]
 enum Mnemonic {
-    Alu(AluOperation),
+    Simple(AluOperation),
     Jr,
     Ld,
     Nullary(Instruction),
@@ -82,15 +82,15 @@ enum Mnemonic {
 
 fn to_mnemonic(keyword: Keyword) -> Mnemonic {
     match keyword {
-        Keyword::And => Mnemonic::Alu(AluOperation::And),
-        Keyword::Cp => Mnemonic::Alu(AluOperation::Cp),
+        Keyword::And => Mnemonic::Simple(AluOperation::And),
+        Keyword::Cp => Mnemonic::Simple(AluOperation::Cp),
         Keyword::Halt => Mnemonic::Nullary(Instruction::Halt),
         Keyword::Jr => Mnemonic::Jr,
         Keyword::Ld => Mnemonic::Ld,
         Keyword::Nop => Mnemonic::Nullary(Instruction::Nop),
         Keyword::Push => Mnemonic::Push,
         Keyword::Stop => Mnemonic::Nullary(Instruction::Stop),
-        Keyword::Xor => Mnemonic::Alu(AluOperation::Xor),
+        Keyword::Xor => Mnemonic::Simple(AluOperation::Xor),
         _ => panic!(),
     }
 }
@@ -101,7 +101,7 @@ where
 {
     use self::Mnemonic::*;
     match mnemonic {
-        Alu(operation) => interpret_alu_instruction(operation, operands),
+        Simple(operation) => interpret_alu_instruction(operation, operands),
         Jr => interpret_jr_instruction(operands),
         Ld => analyze_ld(operands),
         Nullary(instruction) => instruction,
@@ -117,7 +117,7 @@ where
     I: Iterator<Item = Operand>,
 {
     match operands.next() {
-        Some(Operand::Alu(src)) => Instruction::Alu(operation, src),
+        Some(Operand::Simple(src)) => Instruction::Alu(operation, src),
         Some(Operand::Const(expr)) => Instruction::AluImm8(operation, expr),
         _ => panic!(),
     }
@@ -139,9 +139,9 @@ fn analyze_ld<I: Iterator<Item = Operand>>(mut operands: I) -> Instruction {
     let src = operands.next().unwrap();
     assert_eq!(operands.next(), None);
     match (dest, src) {
-        (Operand::Alu(dest), Operand::Alu(src)) => Instruction::LdAluAlu(dest, src),
-        (Operand::Alu(AluOperand::A), src) => interpret_ld_a(src, Direction::IntoA),
-        (dest, Operand::Alu(AluOperand::A)) => interpret_ld_a(dest, Direction::FromA),
+        (Operand::Simple(dest), Operand::Simple(src)) => Instruction::LdAluAlu(dest, src),
+        (Operand::Simple(SimpleOperand::A), src) => interpret_ld_a(src, Direction::IntoA),
+        (dest, Operand::Simple(SimpleOperand::A)) => interpret_ld_a(dest, Direction::FromA),
         _ => panic!(),
     }
 }
@@ -183,17 +183,17 @@ mod tests {
         }
     }
 
-    impl From<AluOperand> for SynExpr {
-        fn from(alu_operand: AluOperand) -> Self {
+    impl From<SimpleOperand> for SynExpr {
+        fn from(alu_operand: SimpleOperand) -> Self {
             match alu_operand {
-                AluOperand::A => atom(A),
-                AluOperand::B => atom(B),
-                AluOperand::C => atom(C),
-                AluOperand::D => atom(D),
-                AluOperand::E => atom(E),
-                AluOperand::H => atom(H),
-                AluOperand::L => atom(L),
-                AluOperand::DerefHl => deref(atom(Hl)),
+                SimpleOperand::A => atom(A),
+                SimpleOperand::B => atom(B),
+                SimpleOperand::C => atom(C),
+                SimpleOperand::D => atom(D),
+                SimpleOperand::E => atom(E),
+                SimpleOperand::H => atom(H),
+                SimpleOperand::L => atom(L),
+                SimpleOperand::DerefHl => deref(atom(Hl)),
             }
         }
     }
@@ -295,9 +295,9 @@ mod tests {
         descriptors
     }
 
-    fn generate_ld_alu_alu(dest: AluOperand, src: AluOperand) -> Option<InstructionDescriptor> {
+    fn generate_ld_alu_alu(dest: SimpleOperand, src: SimpleOperand) -> Option<InstructionDescriptor> {
         match (dest, src) {
-            (AluOperand::DerefHl, AluOperand::DerefHl) => None,
+            (SimpleOperand::DerefHl, SimpleOperand::DerefHl) => None,
             _ => Some((
                 (Keyword::Ld, vec![SynExpr::from(dest), SynExpr::from(src)]),
                 Instruction::LdAluAlu(dest, src),
@@ -317,7 +317,7 @@ mod tests {
 
     fn generate_simple_alu_instruction(
         operation: AluOperation,
-        operand: AluOperand,
+        operand: SimpleOperand,
     ) -> InstructionDescriptor {
         (
             (Keyword::from(operation), vec![SynExpr::from(operand)]),
@@ -350,15 +350,15 @@ mod tests {
     const ALU_OPERATIONS: [AluOperation; 3] =
         [AluOperation::And, AluOperation::Cp, AluOperation::Xor];
 
-    const ALU_OPERANDS: [AluOperand; 8] = [
-        AluOperand::A,
-        AluOperand::B,
-        AluOperand::C,
-        AluOperand::D,
-        AluOperand::E,
-        AluOperand::H,
-        AluOperand::L,
-        AluOperand::DerefHl,
+    const ALU_OPERANDS: [SimpleOperand; 8] = [
+        SimpleOperand::A,
+        SimpleOperand::B,
+        SimpleOperand::C,
+        SimpleOperand::D,
+        SimpleOperand::E,
+        SimpleOperand::H,
+        SimpleOperand::L,
+        SimpleOperand::DerefHl,
     ];
 
     const CONDITIONS: [Condition; 2] = [Condition::Nz, Condition::Z];

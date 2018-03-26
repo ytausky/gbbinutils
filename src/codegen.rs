@@ -17,13 +17,13 @@ fn generate_code<F: FnMut(u8)>(ast_node: Instruction, mut sink: F) {
 }
 
 #[cfg(test)]
-fn encode_ld_to_reg_from_reg(dest: AluOperand, src: AluOperand) -> u8 {
+fn encode_ld_to_reg_from_reg(dest: SimpleOperand, src: SimpleOperand) -> u8 {
     0b01_000_000 | (encode_register(dest) << 3) | encode_register(src)
 }
 
 #[cfg(test)]
-fn encode_register(register: AluOperand) -> u8 {
-    use ir::AluOperand::*;
+fn encode_register(register: SimpleOperand) -> u8 {
+    use ir::SimpleOperand::*;
     match register {
         A => 0b111,
         B => 0b000,
@@ -65,7 +65,7 @@ mod tests {
 
     #[test]
     fn encode_8_bit_register_transfers() {
-        use self::AluOperand::*;
+        use self::SimpleOperand::*;
         let operands_and_encoding = vec![
             (A, A, 0x7f),
             (A, B, 0x78),
