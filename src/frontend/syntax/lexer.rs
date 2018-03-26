@@ -195,11 +195,6 @@ mod tests {
     }
 
     #[test]
-    fn lex_nop() {
-        assert_eq_tokens("nop", &[Keyword(Nop)])
-    }
-
-    #[test]
     fn lex_word_after_whitespace() {
         assert_eq_tokens("    word", &[Identifier("word")])
     }
@@ -230,68 +225,30 @@ mod tests {
     }
 
     #[test]
-    fn lex_keyword_endm() {
-        assert_eq_tokens("endm", &[Keyword(Endm)])
-    }
-
-    #[test]
-    fn lex_keyword_a() {
-        assert_eq_tokens("a", &[Keyword(A)])
-    }
-
-    #[test]
-    fn lex_keyword_b() {
-        assert_eq_tokens("b", &[Keyword(B)])
-    }
-
-    #[test]
-    fn lex_keyword_include() {
-        assert_eq_tokens("include", &[Keyword(Include)])
-    }
-
-    #[test]
-    fn lex_keyword_halt() {
-        assert_eq_tokens("halt", &[Keyword(Halt)])
-    }
-
-    #[test]
-    fn lex_keyword_ld() {
-        assert_eq_tokens("ld", &[Keyword(Ld)])
-    }
-
-    #[test]
-    fn lex_keyword_stop() {
-        assert_eq_tokens("stop", &[Keyword(Stop)])
-    }
-
-    #[test]
-    fn lex_keyword_xor() {
-        assert_eq_tokens("xor", &[Keyword(Xor)])
+    fn lex_keywords() {
+        let keywords = vec![
+            ("a", A),
+            ("and", And),
+            ("b", B),
+            ("endm", Endm),
+            ("halt", Halt),
+            ("hl", Hl),
+            ("include", Include),
+            ("jr", Jr),
+            ("ld", Ld),
+            ("nop", Nop),
+            ("stop", Stop),
+            ("xor", Xor),
+            ("z", Z),
+        ];
+        for (spelling, keyword) in keywords.into_iter() {
+            assert_eq_tokens(spelling, &[Keyword(keyword)])
+        }
     }
 
     #[test]
     fn lex_brackets() {
         assert_eq_tokens("[]", &[OpeningBracket, ClosingBracket])
-    }
-
-    #[test]
-    fn lex_hl() {
-        assert_eq_tokens("hl", &[Keyword(Hl)])
-    }
-
-    #[test]
-    fn lex_and() {
-        assert_eq_tokens("and", &[Keyword(And)])
-    }
-
-    #[test]
-    fn lex_jr() {
-        assert_eq_tokens("jr", &[Keyword(Jr)])
-    }
-
-    #[test]
-    fn lex_z() {
-        assert_eq_tokens("z", &[Keyword(Z)])
     }
 
     #[test]
