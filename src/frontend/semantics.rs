@@ -165,6 +165,16 @@ mod tests {
         Expression::Deref(Box::new(expr))
     }
 
+    impl From<AluOperation> for Keyword {
+        fn from(alu_operation: AluOperation) -> Self {
+            match alu_operation {
+                AluOperation::And => Keyword::And,
+                AluOperation::Cp => Keyword::Cp,
+                AluOperation::Xor => Keyword::Xor,
+            }
+        }
+    }
+
     impl From<AluOperand> for SynExpr {
         fn from(alu_operand: AluOperand) -> Self {
             match alu_operand {
@@ -219,22 +229,23 @@ mod tests {
     }
 
     fn generate_alu_instruction_descriptors() -> Vec<InstructionDescriptor> {
-        let alu_operations = [
-            (Keyword::And, AluOperation::And),
-            (Keyword::Cp, AluOperation::Cp),
-            (Keyword::Xor, AluOperation::Xor),
-        ];
         let mut descriptors = Vec::new();
-        for &(mnemonic, operation) in alu_operations.iter() {
+        for &operation in ALU_OPERATIONS.iter() {
             for &operand in ALU_OPERANDS.iter() {
                 descriptors.push((
-                    (mnemonic, vec![SynExpr::from(operand)]),
+                    (Keyword::from(operation), vec![SynExpr::from(operand)]),
                     Instruction::Alu(operation, operand),
                 ))
             }
         }
         descriptors
     }
+
+    const ALU_OPERATIONS: [AluOperation; 3] = [
+        AluOperation::And,
+        AluOperation::Cp,
+        AluOperation::Xor,
+    ];
 
     const ALU_OPERANDS: [AluOperand; 8] = [
         AluOperand::A,
