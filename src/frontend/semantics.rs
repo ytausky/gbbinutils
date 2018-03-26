@@ -191,6 +191,72 @@ mod tests {
         }
     }
 
+    impl From<Condition> for SynExpr {
+        fn from(condition: Condition) -> Self {
+            match condition {
+                Condition::Nz => atom(Nz),
+                Condition::Z => atom(Z),
+            }
+        }
+    }
+
+    #[test]
+    fn interpret_ld_deref_symbol_a() {
+        let ident = "ident";
+        assert_eq!(
+            interpret_instruction(
+                Keyword::Ld,
+                vec![deref(Expression::Atom(Token::Identifier(ident))), atom(A)]
+            ),
+            Instruction::LdDerefImm16(Expr::Symbol(ident.to_string()), Direction::FromA)
+        )
+    }
+
+    #[test]
+    fn interpret_ld_a_deref_symbol() {
+        let ident = "ident";
+        assert_eq!(
+            interpret_instruction(
+                Keyword::Ld,
+                vec![atom(A), deref(Expression::Atom(Token::Identifier(ident)))]
+            ),
+            Instruction::LdDerefImm16(Expr::Symbol(ident.to_string()), Direction::IntoA)
+        )
+    }
+
+    #[test]
+    fn interpret_jr_nz_symbol() {
+        test_conditional_jr_interpretation(Condition::Nz)
+    }
+
+    #[test]
+    fn interpret_jr_z_symbol() {
+        test_conditional_jr_interpretation(Condition::Z)
+    }
+
+    fn test_conditional_jr_interpretation(condition: Condition) {
+        let ident = "ident";
+        assert_eq!(
+            interpret_instruction(
+                Keyword::Jr,
+                vec![SynExpr::from(condition), Expression::Atom(Token::Identifier(ident))]
+            ),
+            Instruction::Jr(condition, Expr::Symbol(ident.to_string()))
+        )
+    }
+
+    #[test]
+    fn interpret_cp_const() {
+        let ident = "ident";
+        assert_eq!(
+            interpret_instruction(
+                Keyword::Cp,
+                Some(Expression::Atom(Token::Identifier(ident)))
+            ),
+            Instruction::AluImm8(AluOperation::Cp, Expr::Symbol(ident.to_string()))
+        )
+    }
+
     #[test]
     fn interpret_legal_instructions() {
         let nullary_instructions = vec![
@@ -267,65 +333,5 @@ mod tests {
         for ((mnemonic, operands), expected) in descriptors {
             assert_eq!(interpret_instruction(mnemonic, operands), expected)
         }
-    }
-
-    #[test]
-    fn interpret_ld_deref_symbol_a() {
-        let ident = "ident";
-        assert_eq!(
-            interpret_instruction(
-                Keyword::Ld,
-                vec![deref(Expression::Atom(Token::Identifier(ident))), atom(A)]
-            ),
-            Instruction::LdDerefImm16(Expr::Symbol(ident.to_string()), Direction::FromA)
-        )
-    }
-
-    #[test]
-    fn interpret_ld_a_deref_symbol() {
-        let ident = "ident";
-        assert_eq!(
-            interpret_instruction(
-                Keyword::Ld,
-                vec![atom(A), deref(Expression::Atom(Token::Identifier(ident)))]
-            ),
-            Instruction::LdDerefImm16(Expr::Symbol(ident.to_string()), Direction::IntoA)
-        )
-    }
-
-    #[test]
-    fn interpret_jr_nz_symbol() {
-        let ident = "ident";
-        assert_eq!(
-            interpret_instruction(
-                Keyword::Jr,
-                vec![atom(Nz), Expression::Atom(Token::Identifier(ident))]
-            ),
-            Instruction::Jr(Condition::Nz, Expr::Symbol(ident.to_string()))
-        )
-    }
-
-    #[test]
-    fn interpret_jr_z_symbol() {
-        let ident = "ident";
-        assert_eq!(
-            interpret_instruction(
-                Keyword::Jr,
-                vec![atom(Z), Expression::Atom(Token::Identifier(ident))]
-            ),
-            Instruction::Jr(Condition::Z, Expr::Symbol(ident.to_string()))
-        )
-    }
-
-    #[test]
-    fn interpret_cp_const() {
-        let ident = "ident";
-        assert_eq!(
-            interpret_instruction(
-                Keyword::Cp,
-                Some(Expression::Atom(Token::Identifier(ident)))
-            ),
-            Instruction::AluImm8(AluOperation::Cp, Expr::Symbol(ident.to_string()))
-        )
     }
 }

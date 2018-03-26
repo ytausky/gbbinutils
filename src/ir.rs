@@ -46,7 +46,7 @@ pub enum Reg16 {
     Bc,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Condition {
     Nz,
     Z,
