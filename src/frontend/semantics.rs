@@ -225,30 +225,6 @@ mod tests {
     }
 
     #[test]
-    fn interpret_jr_nz_symbol() {
-        test_conditional_jr_interpretation(Condition::Nz)
-    }
-
-    #[test]
-    fn interpret_jr_z_symbol() {
-        test_conditional_jr_interpretation(Condition::Z)
-    }
-
-    fn test_conditional_jr_interpretation(condition: Condition) {
-        let ident = "ident";
-        assert_eq!(
-            interpret_instruction(
-                Keyword::Jr,
-                vec![
-                    SynExpr::from(condition),
-                    Expression::Atom(Token::Identifier(ident)),
-                ]
-            ),
-            Instruction::Jr(condition, Expr::Symbol(ident.to_string()))
-        )
-    }
-
-    #[test]
     fn interpret_cp_const() {
         let ident = "ident";
         assert_eq!(
@@ -277,6 +253,7 @@ mod tests {
         test_instruction_interpretation(nullary_instructions);
         test_instruction_interpretation(generate_ld_instruction_descriptors());
         test_instruction_interpretation(generate_alu_instruction_descriptors());
+        test_instruction_interpretation(generate_condition_jr_instruction_descriptors());
         test_instruction_interpretation(instructions)
     }
 
@@ -322,6 +299,28 @@ mod tests {
         )
     }
 
+    fn generate_condition_jr_instruction_descriptors() -> Vec<InstructionDescriptor> {
+        let mut descriptors = Vec::new();
+        for &condition in CONDITIONS.iter() {
+            descriptors.push(generate_condition_jr(condition))
+        }
+        descriptors
+    }
+
+    fn generate_condition_jr(condition: Condition) -> InstructionDescriptor {
+        let ident = "ident";
+        (
+            (
+                Keyword::Jr,
+                vec![
+                    SynExpr::from(condition),
+                    Expression::Atom(Token::Identifier(ident)),
+                ],
+            ),
+            Instruction::Jr(condition, Expr::Symbol(ident.to_string())),
+        )
+    }
+
     const ALU_OPERATIONS: [AluOperation; 3] =
         [AluOperation::And, AluOperation::Cp, AluOperation::Xor];
 
@@ -335,6 +334,8 @@ mod tests {
         AluOperand::L,
         AluOperand::DerefHl,
     ];
+
+    const CONDITIONS: [Condition; 2] = [Condition::Nz, Condition::Z];
 
     fn test_instruction_interpretation<'a, DII, OII>(descriptors: DII)
     where
