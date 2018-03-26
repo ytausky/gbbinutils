@@ -1,5 +1,5 @@
-use frontend::Keyword;
-use frontend::token::Token;
+use frontend::syntax::Keyword;
+use frontend::syntax::Token;
 
 use std::iter;
 use std::str;

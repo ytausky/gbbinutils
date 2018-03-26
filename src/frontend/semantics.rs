@@ -3,8 +3,8 @@ use ir::*;
 use frontend::syntax;
 
 use self::ast::Expression;
-use frontend::Keyword;
-use super::token::Token;
+use frontend::syntax::Keyword;
+use frontend::syntax::Token;
 
 pub struct AstBuilder<'a, S: Section> {
     ast: Vec<ast::AsmItem<'a>>,
