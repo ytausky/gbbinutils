@@ -7,8 +7,7 @@ pub trait Section {
 pub enum Instruction {
     Halt,
     LdAluAlu(AluOperand, AluOperand),
-    LdADerefImm16(Expr),
-    LdDerefImm16A(Expr),
+    LdDerefImm16(Expr, Direction),
     Nop,
     Push(Reg16),
     Stop,
@@ -25,6 +24,12 @@ pub enum AluOperand {
     #[cfg(test)] H,
     #[cfg(test)] L,
     DerefHl,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Direction {
+    FromA,
+    IntoA,
 }
 
 #[derive(Debug, PartialEq)]

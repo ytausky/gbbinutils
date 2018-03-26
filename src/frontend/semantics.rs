@@ -107,12 +107,15 @@ fn analyze_ld<I: Iterator<Item = Operand>>(mut operands: I) -> Instruction {
     assert_eq!(operands.next(), None);
     match (dest, src) {
         (Operand::Alu(dest), Operand::Alu(src)) => Instruction::LdAluAlu(dest, src),
-        (Operand::DerefImm16(expr), Operand::Alu(AluOperand::A)) => {
-            Instruction::LdDerefImm16A(expr)
-        }
-        (Operand::Alu(AluOperand::A), Operand::DerefImm16(expr)) => {
-            Instruction::LdADerefImm16(expr)
-        }
+        (Operand::Alu(AluOperand::A), src) => interpret_ld_a(src, Direction::IntoA),
+        (dest, Operand::Alu(AluOperand::A)) => interpret_ld_a(dest, Direction::FromA),
+        _ => panic!(),
+    }
+}
+
+fn interpret_ld_a(other: Operand, direction: Direction) -> Instruction {
+    match other {
+        Operand::DerefImm16(expr) => Instruction::LdDerefImm16(expr, direction),
         _ => panic!(),
     }
 }
@@ -202,7 +205,7 @@ mod tests {
                 Keyword::Ld,
                 vec![deref(Expression::Atom(Token::Identifier(ident))), atom(A)]
             ),
-            Instruction::LdDerefImm16A(Expr::Symbol(ident.to_string()))
+            Instruction::LdDerefImm16(Expr::Symbol(ident.to_string()), Direction::FromA)
         )
     }
 
@@ -214,7 +217,7 @@ mod tests {
                 Keyword::Ld,
                 vec![atom(A), deref(Expression::Atom(Token::Identifier(ident)))]
             ),
-            Instruction::LdADerefImm16(Expr::Symbol(ident.to_string()))
+            Instruction::LdDerefImm16(Expr::Symbol(ident.to_string()), Direction::IntoA)
         )
     }
 }
