@@ -23,7 +23,7 @@ pub enum AluOperation {
     Xor,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum AluOperand {
     A,
     B,
