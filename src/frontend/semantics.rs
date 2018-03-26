@@ -1,10 +1,10 @@
-use super::ast;
-use ir::*;
+use frontend::ast;
 use frontend::syntax;
 
-use self::ast::Expression;
-use frontend::syntax::Keyword;
-use frontend::syntax::Token;
+use frontend::ast::Expression;
+use frontend::syntax::{Keyword, Token};
+
+use ir::*;
 
 pub struct AstBuilder<'a, S: Section> {
     ast: Vec<ast::AsmItem<'a>>,
@@ -203,7 +203,6 @@ mod tests {
     use super::*;
 
     use self::ast::ExprFactory;
-    use self::Keyword;
     use self::syntax::*;
 
     #[test]

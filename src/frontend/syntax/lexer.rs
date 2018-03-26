@@ -1,5 +1,4 @@
-use frontend::syntax::Keyword;
-use frontend::syntax::Token;
+use frontend::syntax::{Keyword, Token};
 
 use std::iter;
 use std::str;
@@ -166,7 +165,7 @@ mod tests {
     use super::*;
 
     use super::Keyword::*;
-    use self::Token::*;
+    use super::Token::*;
 
     fn assert_eq_tokens(src: &str, expected_tokens: &[Token]) {
         assert_eq!(Lexer::new(src).collect::<Vec<Token>>(), expected_tokens)
