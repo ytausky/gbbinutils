@@ -39,9 +39,7 @@ fn interpret_as_operand<'a>(expr: Expression<Token<'a>>) -> Operand {
         Expression::Atom(Token::Identifier(ident)) => {
             Operand::Const(Expr::Symbol(ident.to_string()))
         }
-        Expression::Atom(Token::Number(number)) => {
-            Operand::Const(Expr::Literal(number))
-        }
+        Expression::Atom(Token::Number(number)) => Operand::Const(Expr::Literal(number)),
         Expression::Deref(address_specifier) => interpret_as_deref_operand(*address_specifier),
         _ => panic!(),
     }
@@ -104,12 +102,7 @@ where
     use self::Mnemonic::*;
     match mnemonic {
         Alu(operation) => interpret_alu_instruction(operation, operands),
-        Jr => match (operands.next().unwrap(), operands.next().unwrap()) {
-            (Operand::Condition(condition), Operand::Const(expr)) => {
-                Instruction::Jr(condition, expr)
-            }
-            _ => panic!(),
-        },
+        Jr => interpret_jr_instruction(operands),
         Ld => analyze_ld(operands),
         Nullary(instruction) => instruction,
         Push => match operands.next() {
@@ -126,6 +119,17 @@ where
     match operands.next() {
         Some(Operand::Alu(src)) => Instruction::Alu(operation, src),
         Some(Operand::Const(expr)) => Instruction::AluImm8(operation, expr),
+        _ => panic!(),
+    }
+}
+
+fn interpret_jr_instruction<I: Iterator<Item = Operand>>(mut operands: I) -> Instruction {
+    match operands.next().unwrap() {
+        Operand::Condition(condition) => match operands.next().unwrap() {
+            Operand::Const(expr) => Instruction::Jr(Some(condition), expr),
+            _ => panic!(),
+        },
+        Operand::Const(expr) => Instruction::Jr(None, expr),
         _ => panic!(),
     }
 }
@@ -241,11 +245,20 @@ mod tests {
 
     fn test_cp_const(atom: Token<'static>, expr: Expr) {
         assert_eq!(
-            interpret_instruction(
-                Keyword::Cp,
-                Some(Expression::Atom(atom))
-            ),
+            interpret_instruction(Keyword::Cp, Some(Expression::Atom(atom))),
             Instruction::AluImm8(AluOperation::Cp, expr)
+        )
+    }
+
+    #[test]
+    fn interpret_unconditional_jr() {
+        let ident = "ident";
+        assert_eq!(
+            interpret_instruction(
+                Keyword::Jr,
+                Some(Expression::Atom(Token::Identifier(ident)))
+            ),
+            Instruction::Jr(None, Expr::Symbol(ident.to_string()))
         )
     }
 
@@ -330,7 +343,7 @@ mod tests {
                     Expression::Atom(Token::Identifier(ident)),
                 ],
             ),
-            Instruction::Jr(condition, Expr::Symbol(ident.to_string())),
+            Instruction::Jr(Some(condition), Expr::Symbol(ident.to_string())),
         )
     }
 

@@ -8,7 +8,7 @@ pub enum Instruction {
     Alu(AluOperation, AluOperand),
     AluImm8(AluOperation, Expr),
     Halt,
-    Jr(Condition, Expr),
+    Jr(Option<Condition>, Expr),
     LdAluAlu(AluOperand, AluOperand),
     LdDerefImm16(Expr, Direction),
     Nop,
