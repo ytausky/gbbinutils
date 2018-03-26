@@ -10,31 +10,13 @@ use ir::*;
 use self::ast::Expression;
 use self::syntax::*;
 
-pub fn analyze_file(name: &str) {
+pub fn analyze_file<S: ir::Section>(name: &str, section: S) {
     use std::io::prelude::*;
     let mut file = std::fs::File::open(name).unwrap();
     let mut src = String::new();
     file.read_to_string(&mut src).unwrap();
-    let ast_builder = AstBuilder::new(DumpSection::new());
+    let ast_builder = AstBuilder::new(section);
     syntax::parse(&src, ast_builder)
-}
-
-struct DumpSection;
-
-impl DumpSection {
-    fn new() -> DumpSection {
-        DumpSection {}
-    }
-}
-
-impl ir::Section for DumpSection {
-    fn add_instruction(&mut self, instruction: ir::Instruction) {
-        println!("{:?}", instruction)
-    }
-
-    fn add_label(&mut self, label: &str) {
-        println!("Define symbol: {}", label)
-    }
 }
 
 pub struct AstBuilder<'a, S: ir::Section> {

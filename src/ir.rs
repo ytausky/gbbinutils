@@ -29,3 +29,21 @@ pub enum AluOperand {
 pub enum Reg16 {
     Bc,
 }
+
+pub struct DumpSection;
+
+impl DumpSection {
+    pub fn new() -> DumpSection {
+        DumpSection {}
+    }
+}
+
+impl Section for DumpSection {
+    fn add_instruction(&mut self, instruction: Instruction) {
+        println!("{:?}", instruction)
+    }
+
+    fn add_label(&mut self, label: &str) {
+        println!("Define symbol: {}", label)
+    }
+}
