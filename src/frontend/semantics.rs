@@ -60,6 +60,7 @@ fn interpret_as_deref_operand<'a>(addr: Expression<Token<'a>>) -> Operand {
 
 #[derive(Debug, PartialEq)]
 pub enum Mnemonic {
+    And,
     Halt,
     Ld,
     Nop,
@@ -70,6 +71,7 @@ pub enum Mnemonic {
 
 fn to_mnemonic(keyword: Keyword) -> Mnemonic {
     match keyword {
+        Keyword::And => Mnemonic::And,
         Keyword::Halt => Mnemonic::Halt,
         Keyword::Ld => Mnemonic::Ld,
         Keyword::Nop => Mnemonic::Nop,
@@ -86,6 +88,10 @@ where
 {
     use self::Mnemonic::*;
     match mnemonic {
+        And => match operands.next() {
+            Some(Operand::Alu(src)) => Instruction::And(src),
+            _ => panic!(),
+        },
         Halt => Instruction::Halt,
         Ld => analyze_ld(operands),
         Nop => Instruction::Nop,
@@ -178,6 +184,14 @@ mod tests {
         assert_eq!(
             interpret_instruction(Keyword::Ld, vec![atom(A), atom(B)]),
             Instruction::LdAluAlu(AluOperand::A, AluOperand::B)
+        )
+    }
+
+    #[test]
+    fn interpret_and_a() {
+        assert_eq!(
+            interpret_instruction(Keyword::And, Some(atom(A))),
+            Instruction::And(AluOperand::A)
         )
     }
 

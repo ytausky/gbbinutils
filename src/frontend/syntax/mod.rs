@@ -17,6 +17,7 @@ where
 #[derive(Clone, Debug, PartialEq)]
 pub enum Keyword {
     A,
+    And,
     B,
     Bc,
     Endm,

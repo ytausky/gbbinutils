@@ -5,6 +5,7 @@ pub trait Section {
 
 #[derive(Debug, PartialEq)]
 pub enum Instruction {
+    And(AluOperand),
     Halt,
     LdAluAlu(AluOperand, AluOperand),
     LdDerefImm16(Expr, Direction),

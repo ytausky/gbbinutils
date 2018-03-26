@@ -144,6 +144,7 @@ fn identify_keyword(word: &str) -> Option<Keyword> {
     use self::Keyword::*;
     match word {
         "a" => Some(A),
+        "and" => Some(And),
         "b" => Some(B),
         "bc" => Some(Bc),
         "endm" => Some(Endm),
@@ -274,6 +275,11 @@ mod tests {
     #[test]
     fn lex_hl() {
         assert_eq_tokens("hl", &[Keyword(Hl)])
+    }
+
+    #[test]
+    fn lex_and() {
+        assert_eq_tokens("and", &[Keyword(And)])
     }
 
     #[test]
