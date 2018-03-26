@@ -9,8 +9,7 @@ pub enum Instruction {
     Dec(SimpleOperand),
     Halt,
     Jr(Option<Condition>, Expr),
-    LdAluAlu(SimpleOperand, SimpleOperand),
-    LdDerefImm16(Expr, Direction),
+    Ld(LdKind),
     Nop,
     Push(Reg16),
     Stop,
@@ -39,6 +38,12 @@ pub enum SimpleOperand {
     H,
     L,
     DerefHl,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum LdKind {
+    Simple(SimpleOperand, SimpleOperand),
+    ImmediateAddr(Expr, Direction),
 }
 
 #[derive(Debug, PartialEq)]

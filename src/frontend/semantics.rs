@@ -145,7 +145,7 @@ fn analyze_ld<I: Iterator<Item = Operand>>(mut operands: I) -> Instruction {
     let src = operands.next().unwrap();
     assert_eq!(operands.next(), None);
     match (dest, src) {
-        (Operand::Simple(dest), Operand::Simple(src)) => Instruction::LdAluAlu(dest, src),
+        (Operand::Simple(dest), Operand::Simple(src)) => Instruction::Ld(LdKind::Simple(dest, src)),
         (Operand::Simple(SimpleOperand::A), src) => interpret_ld_a(src, Direction::IntoA),
         (dest, Operand::Simple(SimpleOperand::A)) => interpret_ld_a(dest, Direction::FromA),
         _ => panic!(),
@@ -154,7 +154,7 @@ fn analyze_ld<I: Iterator<Item = Operand>>(mut operands: I) -> Instruction {
 
 fn interpret_ld_a(other: Operand, direction: Direction) -> Instruction {
     match other {
-        Operand::Deref(expr) => Instruction::LdDerefImm16(expr, direction),
+        Operand::Deref(expr) => Instruction::Ld(LdKind::ImmediateAddr(expr, direction)),
         _ => panic!(),
     }
 }
@@ -221,7 +221,7 @@ mod tests {
                 Keyword::Ld,
                 vec![deref(Expression::Atom(Token::Identifier(ident))), atom(A)]
             ),
-            Instruction::LdDerefImm16(Expr::Symbol(ident.to_string()), Direction::FromA)
+            Instruction::Ld(LdKind::ImmediateAddr(Expr::Symbol(ident.to_string()), Direction::FromA))
         )
     }
 
@@ -233,7 +233,7 @@ mod tests {
                 Keyword::Ld,
                 vec![atom(A), deref(Expression::Atom(Token::Identifier(ident)))]
             ),
-            Instruction::LdDerefImm16(Expr::Symbol(ident.to_string()), Direction::IntoA)
+            Instruction::Ld(LdKind::ImmediateAddr(Expr::Symbol(ident.to_string()), Direction::IntoA))
         )
     }
 
@@ -310,7 +310,7 @@ mod tests {
             (SimpleOperand::DerefHl, SimpleOperand::DerefHl) => None,
             _ => Some((
                 (Keyword::Ld, vec![SynExpr::from(dest), SynExpr::from(src)]),
-                Instruction::LdAluAlu(dest, src),
+                Instruction::Ld(LdKind::Simple(dest, src)),
             )),
         }
     }

@@ -6,7 +6,7 @@ fn generate_code<F: FnMut(u8)>(ast_node: Instruction, mut sink: F) {
     use ir::Instruction::*;
     match ast_node {
         Halt => sink(0x76),
-        LdAluAlu(dest, src) => sink(encode_ld_to_reg_from_reg(dest, src)),
+        Ld(LdKind::Simple(dest, src)) => sink(encode_ld_to_reg_from_reg(dest, src)),
         Nop => sink(0x00),
         Stop => {
             sink(0x10);
@@ -118,7 +118,7 @@ mod tests {
             (L, L, 0x6d),
         ];
         for (dest, src, opcode) in operands_and_encoding {
-            test_instruction(LdAluAlu(dest, src), &[opcode])
+            test_instruction(Ld(LdKind::Simple(dest, src)), &[opcode])
         }
     }
 }
