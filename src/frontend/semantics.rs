@@ -159,70 +159,50 @@ mod tests {
     }
 
     #[test]
-    fn interpret_push_bc() {
-        assert_eq!(
-            interpret_instruction(Keyword::Push, Some(atom(Bc))),
-            Instruction::Push(Reg16::Bc)
-        )
+    fn interpret_legal_instructions() {
+        let nullary_instructions = vec![
+            (Keyword::Halt, Instruction::Halt),
+            (Keyword::Nop, Instruction::Nop),
+            (Keyword::Stop, Instruction::Stop),
+        ].into_iter().map(|(mnemonic, instruction)| ((mnemonic, vec![]), instruction));
+        let instructions = vec![
+            (
+                (Keyword::And, vec![atom(A)]),
+                Instruction::Alu(AluOperation::And, AluOperand::A),
+            ),
+            (
+                (Keyword::Ld, vec![atom(A), atom(A)]),
+                Instruction::LdAluAlu(AluOperand::A, AluOperand::A),
+            ),
+            (
+                (Keyword::Ld, vec![atom(A), atom(B)]),
+                Instruction::LdAluAlu(AluOperand::A, AluOperand::B),
+            ),
+            (
+                (Keyword::Push, vec![atom(Bc)]),
+                Instruction::Push(Reg16::Bc),
+            ),
+            (
+                (Keyword::Xor, vec![atom(A)]),
+                Instruction::Alu(AluOperation::Xor, AluOperand::A),
+            ),
+            (
+                (Keyword::Xor, vec![deref(atom(Hl))]),
+                Instruction::Alu(AluOperation::Xor, AluOperand::DerefHl),
+            ),
+        ];
+        test_instruction_interpretation(nullary_instructions);
+        test_instruction_interpretation(instructions)
     }
 
-    #[test]
-    fn interpret_nop() {
-        interpret_nullary_instruction(Keyword::Nop, Instruction::Nop)
-    }
-
-    #[test]
-    fn interpret_halt() {
-        interpret_nullary_instruction(Keyword::Halt, Instruction::Halt)
-    }
-
-    #[test]
-    fn interpret_stop() {
-        interpret_nullary_instruction(Keyword::Stop, Instruction::Stop)
-    }
-
-    fn interpret_nullary_instruction(mnemonic: Keyword, expected: Instruction) {
-        assert_eq!(interpret_instruction(mnemonic, None), expected)
-    }
-
-    #[test]
-    fn interpret_ld_a_a() {
-        assert_eq!(
-            interpret_instruction(Keyword::Ld, vec![atom(A), atom(A)]),
-            Instruction::LdAluAlu(AluOperand::A, AluOperand::A)
-        )
-    }
-
-    #[test]
-    fn interpret_ld_a_b() {
-        assert_eq!(
-            interpret_instruction(Keyword::Ld, vec![atom(A), atom(B)]),
-            Instruction::LdAluAlu(AluOperand::A, AluOperand::B)
-        )
-    }
-
-    #[test]
-    fn interpret_and_a() {
-        assert_eq!(
-            interpret_instruction(Keyword::And, Some(atom(A))),
-            Instruction::Alu(AluOperation::And, AluOperand::A)
-        )
-    }
-
-    #[test]
-    fn interpret_xor_a() {
-        assert_eq!(
-            interpret_instruction(Keyword::Xor, Some(atom(A))),
-            Instruction::Alu(AluOperation::Xor, AluOperand::A)
-        )
-    }
-
-    #[test]
-    fn interpret_xor_deref_hl() {
-        assert_eq!(
-            interpret_instruction(Keyword::Xor, Some(deref(atom(Hl)))),
-            Instruction::Alu(AluOperation::Xor, AluOperand::DerefHl)
-        )
+    fn test_instruction_interpretation<'a, DII, OII>(descriptors: DII)
+    where
+        DII: IntoIterator<Item = ((Keyword, OII), Instruction)>,
+        OII: IntoIterator<Item = Expression<Token<'a>>>,
+    {
+        for ((mnemonic, operands), expected) in descriptors {
+            assert_eq!(interpret_instruction(mnemonic, operands), expected)
+        }
     }
 
     #[test]
