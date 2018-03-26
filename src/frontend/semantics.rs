@@ -117,8 +117,8 @@ where
     I: Iterator<Item = Operand>,
 {
     match operands.next() {
-        Some(Operand::Simple(src)) => Instruction::Alu(operation, src),
-        Some(Operand::Const(expr)) => Instruction::AluImm8(operation, expr),
+        Some(Operand::Simple(src)) => Instruction::Alu(operation, AluSource::Simple(src)),
+        Some(Operand::Const(expr)) => Instruction::Alu(operation, AluSource::Immediate(expr)),
         _ => panic!(),
     }
 }
@@ -246,7 +246,7 @@ mod tests {
     fn test_cp_const(atom: Token<'static>, expr: Expr) {
         assert_eq!(
             interpret_instruction(Keyword::Cp, Some(Expression::Atom(atom))),
-            Instruction::AluImm8(AluOperation::Cp, expr)
+            Instruction::Alu(AluOperation::Cp, AluSource::Immediate(expr))
         )
     }
 
@@ -295,7 +295,10 @@ mod tests {
         descriptors
     }
 
-    fn generate_ld_alu_alu(dest: SimpleOperand, src: SimpleOperand) -> Option<InstructionDescriptor> {
+    fn generate_ld_alu_alu(
+        dest: SimpleOperand,
+        src: SimpleOperand,
+    ) -> Option<InstructionDescriptor> {
         match (dest, src) {
             (SimpleOperand::DerefHl, SimpleOperand::DerefHl) => None,
             _ => Some((
@@ -321,7 +324,7 @@ mod tests {
     ) -> InstructionDescriptor {
         (
             (Keyword::from(operation), vec![SynExpr::from(operand)]),
-            Instruction::Alu(operation, operand),
+            Instruction::Alu(operation, AluSource::Simple(operand)),
         )
     }
 
