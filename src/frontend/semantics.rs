@@ -230,24 +230,22 @@ mod tests {
     #[test]
     fn interpret_cp_symbol() {
         let ident = "ident";
-        assert_eq!(
-            interpret_instruction(
-                Keyword::Cp,
-                Some(Expression::Atom(Token::Identifier(ident)))
-            ),
-            Instruction::AluImm8(AluOperation::Cp, Expr::Symbol(ident.to_string()))
-        )
+        test_cp_const(Token::Identifier(ident), Expr::Symbol(ident.to_string()))
     }
 
     #[test]
     fn interpret_cp_literal() {
         let literal = 0x50;
+        test_cp_const(Token::Number(literal), Expr::Literal(literal))
+    }
+
+    fn test_cp_const(atom: Token<'static>, expr: Expr) {
         assert_eq!(
             interpret_instruction(
                 Keyword::Cp,
-                Some(Expression::Atom(Token::Number(literal)))
+                Some(Expression::Atom(atom))
             ),
-            Instruction::AluImm8(AluOperation::Cp, Expr::Literal(literal))
+            Instruction::AluImm8(AluOperation::Cp, expr)
         )
     }
 
