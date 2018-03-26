@@ -6,6 +6,7 @@ pub trait Section {
 #[derive(Debug, PartialEq)]
 pub enum Instruction {
     Alu(AluOperation, AluOperand),
+    AluImm8(AluOperation, Expr),
     Halt,
     Jr(Condition, Expr),
     LdAluAlu(AluOperand, AluOperand),
@@ -18,6 +19,7 @@ pub enum Instruction {
 #[derive(Debug, PartialEq)]
 pub enum AluOperation {
     And,
+    Cp,
     Xor,
 }
 

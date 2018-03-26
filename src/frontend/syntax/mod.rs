@@ -20,6 +20,7 @@ pub enum Keyword {
     And,
     B,
     Bc,
+    Cp,
     Endm,
     Halt,
     Hl,

@@ -67,6 +67,7 @@ fn interpret_as_deref_operand<'a>(addr: Expression<Token<'a>>) -> Operand {
 #[derive(Debug, PartialEq)]
 enum Mnemonic {
     Alu(AluOperation),
+    AluImm8(AluOperation),
     Jr,
     Ld,
     Nullary(Instruction),
@@ -76,6 +77,7 @@ enum Mnemonic {
 fn to_mnemonic(keyword: Keyword) -> Mnemonic {
     match keyword {
         Keyword::And => Mnemonic::Alu(AluOperation::And),
+        Keyword::Cp => Mnemonic::AluImm8(AluOperation::Cp),
         Keyword::Halt => Mnemonic::Nullary(Instruction::Halt),
         Keyword::Jr => Mnemonic::Jr,
         Keyword::Ld => Mnemonic::Ld,
@@ -94,6 +96,7 @@ where
     use self::Mnemonic::*;
     match mnemonic {
         Alu(operation) => interpret_alu_instruction(operation, operands),
+        AluImm8(operation) => interpret_alu_imm8_instruction(operation, operands),
         Jr => match (operands.next().unwrap(), operands.next().unwrap()) {
             (Operand::Condition(condition), Operand::Imm16(expr)) => {
                 Instruction::Jr(condition, expr)
@@ -115,6 +118,16 @@ where
 {
     match operands.next() {
         Some(Operand::Alu(src)) => Instruction::Alu(operation, src),
+        _ => panic!(),
+    }
+}
+
+fn interpret_alu_imm8_instruction<I>(operation: AluOperation, mut operands: I) -> Instruction
+where
+    I: Iterator<Item = Operand>,
+{
+    match operands.next() {
+        Some(Operand::Imm16(expr)) => Instruction::AluImm8(operation, expr),
         _ => panic!(),
     }
 }
@@ -256,6 +269,18 @@ mod tests {
                 vec![atom(Z), Expression::Atom(Token::Identifier(ident))]
             ),
             Instruction::Jr(Condition::Z, Expr::Symbol(ident.to_string()))
+        )
+    }
+
+    #[test]
+    fn interpret_cp_const() {
+        let ident = "ident";
+        assert_eq!(
+            interpret_instruction(
+                Keyword::Cp,
+                Some(Expression::Atom(Token::Identifier(ident)))
+            ),
+            Instruction::AluImm8(AluOperation::Cp, Expr::Symbol(ident.to_string()))
         )
     }
 }
