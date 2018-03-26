@@ -14,7 +14,7 @@ pub enum Instruction {
     Xor(AluOperand),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum AluOperand {
     A,
     B,
@@ -26,12 +26,12 @@ pub enum AluOperand {
     DerefHl,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum Reg16 {
     Bc,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum Expr {
     Symbol(String),
 }

@@ -14,7 +14,7 @@ pub fn reduce_include<'a>(mut arguments: Vec<Expression<Token<'a>>>) -> ast::Asm
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum Operand {
     Alu(AluOperand),
     DerefImm16(Expr),
