@@ -141,34 +141,34 @@ fn is_horizontal_whitespace(character: char) -> bool {
 }
 
 fn identify_keyword(word: &str) -> Option<Keyword> {
-    use self::Keyword::*;
-    match word {
-        "a" => Some(A),
-        "and" => Some(And),
-        "b" => Some(B),
-        "bc" => Some(Bc),
-        "c" => Some(C),
-        "cp" => Some(Cp),
-        "d" => Some(D),
-        "e" => Some(E),
-        "endm" => Some(Endm),
-        "h" => Some(H),
-        "halt" => Some(Halt),
-        "hl" => Some(Hl),
-        "include" => Some(Include),
-        "jr" => Some(Jr),
-        "l" => Some(L),
-        "ld" => Some(Ld),
-        "macro" => Some(Macro),
-        "nop" => Some(Nop),
-        "nz" => Some(Nz),
-        "push" => Some(Push),
-        "stop" => Some(Stop),
-        "xor" => Some(Xor),
-        "z" => Some(Z),
-        _ => None,
-    }
+    KEYWORDS.iter().find(|&&(spelling, _)| spelling == word).map(|&(_, keyword)| keyword)
 }
+
+const KEYWORDS: [(&'static str, Keyword); 23] = [
+    ("a", Keyword::A),
+    ("and", Keyword::And),
+    ("b", Keyword::B),
+    ("bc", Keyword::Bc),
+    ("c", Keyword::C),
+    ("cp", Keyword::Cp),
+    ("d", Keyword::D),
+    ("e", Keyword::E),
+    ("endm", Keyword::Endm),
+    ("h", Keyword::H),
+    ("halt", Keyword::Halt),
+    ("hl", Keyword::Hl),
+    ("include", Keyword::Include),
+    ("jr", Keyword::Jr),
+    ("l", Keyword::L),
+    ("ld", Keyword::Ld),
+    ("macro", Keyword::Macro),
+    ("nop", Keyword::Nop),
+    ("nz", Keyword::Nz),
+    ("push", Keyword::Push),
+    ("stop", Keyword::Stop),
+    ("xor", Keyword::Xor),
+    ("z", Keyword::Z),
+];
 
 #[cfg(test)]
 mod tests {
@@ -233,29 +233,7 @@ mod tests {
 
     #[test]
     fn lex_keywords() {
-        let keywords = vec![
-            ("a", A),
-            ("and", And),
-            ("b", B),
-            ("c", C),
-            ("cp", Cp),
-            ("d", D),
-            ("e", E),
-            ("endm", Endm),
-            ("h", H),
-            ("halt", Halt),
-            ("hl", Hl),
-            ("include", Include),
-            ("jr", Jr),
-            ("l", L),
-            ("ld", Ld),
-            ("nop", Nop),
-            ("nz", Nz),
-            ("stop", Stop),
-            ("xor", Xor),
-            ("z", Z),
-        ];
-        for (spelling, keyword) in keywords.into_iter() {
+        for &(spelling, keyword) in KEYWORDS.iter() {
             assert_eq_tokens(spelling, &[Keyword(keyword)])
         }
     }
