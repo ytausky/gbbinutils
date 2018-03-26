@@ -3,7 +3,7 @@ use frontend::ast;
 use frontend::ast::Expression;
 use frontend::syntax::{Keyword, Token};
 
-use ir::*;
+use ir::{AluOperand, Reg16, Instruction};
 
 pub fn reduce_include<'a>(mut arguments: Vec<Expression<Token<'a>>>) -> ast::AsmItem<'a> {
     assert_eq!(arguments.len(), 1);
@@ -20,11 +20,11 @@ pub enum Operand {
     Reg16(Reg16),
 }
 
-pub fn reduce_mnemonic<'a, I>(command: Keyword, operands: I) -> Instruction
+pub fn interpret_instruction<'a, I>(mnemonic: Keyword, operands: I) -> Instruction
 where
     I: Iterator<Item = Expression<Token<'a>>>,
 {
-    instruction(to_mnemonic(command), operands.map(interpret_as_operand))
+    instruction(to_mnemonic(mnemonic), operands.map(interpret_as_operand))
 }
 
 fn interpret_as_operand<'a>(expr: Expression<Token<'a>>) -> Operand {
@@ -106,4 +106,15 @@ fn analyze_ld<I: Iterator<Item = Operand>>(mut operands: I) -> Instruction {
 
 pub fn include(path: &str) -> ast::AsmItem {
     ast::AsmItem::Include(path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn analyze_push_bc() {
+        let actual = interpret_instruction(Keyword::Push, vec![Expression::Atom(Token::Keyword(Keyword::Bc))].into_iter());
+        assert_eq!(actual, Instruction::Push(Reg16::Bc))
+    }
 }

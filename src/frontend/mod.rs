@@ -109,7 +109,7 @@ impl<'a, S: Section> syntax::CommandContext for AstBuilder<'a, S> {
             match name {
                 Token::Keyword(Keyword::Include) => self.ast.push(semantics::reduce_include(args)),
                 Token::Keyword(keyword) => self.section
-                    .add_instruction(semantics::reduce_mnemonic(keyword, args.into_iter())),
+                    .add_instruction(semantics::interpret_instruction(keyword, args.into_iter())),
                 _ => panic!(),
             }
         } else {
@@ -159,14 +159,6 @@ mod tests {
     fn parse_stop() {
         analyze_nullary_instruction(Keyword::Stop, Mnemonic::Stop)
     }
-
-    #[test]
-    fn analyze_push_bc() {
-        let item = analyze_instruction(Keyword::Push, &[Token::Keyword(Keyword::Bc)]);
-        assert_eq!(item, inst(Mnemonic::Push, &[BC]))
-    }
-
-    const BC: Operand = Operand::Reg16(Reg16::Bc);
 
     #[test]
     fn analyze_ld_a_a() {
