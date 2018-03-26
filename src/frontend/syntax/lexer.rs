@@ -141,7 +141,10 @@ fn is_horizontal_whitespace(character: char) -> bool {
 }
 
 fn identify_keyword(word: &str) -> Option<Keyword> {
-    KEYWORDS.iter().find(|&&(spelling, _)| spelling == word).map(|&(_, keyword)| keyword)
+    KEYWORDS
+        .iter()
+        .find(|&&(spelling, _)| spelling == word)
+        .map(|&(_, keyword)| keyword)
 }
 
 const KEYWORDS: [(&'static str, Keyword); 23] = [

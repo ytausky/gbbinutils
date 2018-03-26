@@ -239,7 +239,10 @@ mod tests {
         assert_eq!(
             interpret_instruction(
                 Keyword::Jr,
-                vec![SynExpr::from(condition), Expression::Atom(Token::Identifier(ident))]
+                vec![
+                    SynExpr::from(condition),
+                    Expression::Atom(Token::Identifier(ident)),
+                ]
             ),
             Instruction::Jr(condition, Expr::Symbol(ident.to_string()))
         )
@@ -283,36 +286,44 @@ mod tests {
         let mut descriptors = Vec::new();
         for &dest in ALU_OPERANDS.iter() {
             for &src in ALU_OPERANDS.iter() {
-                match (dest, src) {
-                    (AluOperand::DerefHl, AluOperand::DerefHl) => (),
-                    _ => descriptors.push((
-                        (Keyword::Ld, vec![SynExpr::from(dest), SynExpr::from(src)]),
-                        Instruction::LdAluAlu(dest, src),
-                    )),
-                }
+                descriptors.extend(generate_ld_alu_alu(dest, src))
             }
         }
         descriptors
+    }
+
+    fn generate_ld_alu_alu(dest: AluOperand, src: AluOperand) -> Option<InstructionDescriptor> {
+        match (dest, src) {
+            (AluOperand::DerefHl, AluOperand::DerefHl) => None,
+            _ => Some((
+                (Keyword::Ld, vec![SynExpr::from(dest), SynExpr::from(src)]),
+                Instruction::LdAluAlu(dest, src),
+            )),
+        }
     }
 
     fn generate_alu_instruction_descriptors() -> Vec<InstructionDescriptor> {
         let mut descriptors = Vec::new();
         for &operation in ALU_OPERATIONS.iter() {
             for &operand in ALU_OPERANDS.iter() {
-                descriptors.push((
-                    (Keyword::from(operation), vec![SynExpr::from(operand)]),
-                    Instruction::Alu(operation, operand),
-                ))
+                descriptors.push(generate_simple_alu_instruction(operation, operand))
             }
         }
         descriptors
     }
 
-    const ALU_OPERATIONS: [AluOperation; 3] = [
-        AluOperation::And,
-        AluOperation::Cp,
-        AluOperation::Xor,
-    ];
+    fn generate_simple_alu_instruction(
+        operation: AluOperation,
+        operand: AluOperand,
+    ) -> InstructionDescriptor {
+        (
+            (Keyword::from(operation), vec![SynExpr::from(operand)]),
+            Instruction::Alu(operation, operand),
+        )
+    }
+
+    const ALU_OPERATIONS: [AluOperation; 3] =
+        [AluOperation::And, AluOperation::Cp, AluOperation::Xor];
 
     const ALU_OPERANDS: [AluOperand; 8] = [
         AluOperand::A,
