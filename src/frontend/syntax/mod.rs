@@ -14,18 +14,23 @@ where
     )
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Keyword {
     A,
     And,
     B,
     Bc,
+    C,
     Cp,
+    D,
+    E,
     Endm,
+    H,
     Halt,
     Hl,
     Include,
     Jr,
+    L,
     Ld,
     Macro,
     Nop,

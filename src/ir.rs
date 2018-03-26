@@ -16,22 +16,22 @@ pub enum Instruction {
     Stop,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum AluOperation {
     And,
     Cp,
     Xor,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum AluOperand {
     A,
     B,
-    #[cfg(test)] C,
-    #[cfg(test)] D,
-    #[cfg(test)] E,
-    #[cfg(test)] H,
-    #[cfg(test)] L,
+    C,
+    D,
+    E,
+    H,
+    L,
     DerefHl,
 }
 

@@ -5,7 +5,7 @@ pub enum AsmItem<'a> {
     Include(&'a str),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Expression<T> {
     Atom(T),
     Deref(Box<Expression<T>>),

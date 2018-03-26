@@ -49,6 +49,11 @@ fn interpret_as_keyword_operand(keyword: Keyword) -> Operand {
         Keyword::A => Operand::Alu(AluOperand::A),
         Keyword::B => Operand::Alu(AluOperand::B),
         Keyword::Bc => Operand::Reg16(Reg16::Bc),
+        Keyword::C => Operand::Alu(AluOperand::C),
+        Keyword::D => Operand::Alu(AluOperand::D),
+        Keyword::E => Operand::Alu(AluOperand::E),
+        Keyword::H => Operand::Alu(AluOperand::H),
+        Keyword::L => Operand::Alu(AluOperand::L),
         Keyword::Z => Operand::Condition(Condition::Z),
         _ => panic!(),
     }
@@ -164,12 +169,9 @@ mod tests {
             (Keyword::Halt, Instruction::Halt),
             (Keyword::Nop, Instruction::Nop),
             (Keyword::Stop, Instruction::Stop),
-        ].into_iter().map(|(mnemonic, instruction)| ((mnemonic, vec![]), instruction));
+        ].into_iter()
+            .map(|(mnemonic, instruction)| ((mnemonic, vec![]), instruction));
         let instructions = vec![
-            (
-                (Keyword::And, vec![atom(A)]),
-                Instruction::Alu(AluOperation::And, AluOperand::A),
-            ),
             (
                 (Keyword::Ld, vec![atom(A), atom(A)]),
                 Instruction::LdAluAlu(AluOperand::A, AluOperand::A),
@@ -182,17 +184,37 @@ mod tests {
                 (Keyword::Push, vec![atom(Bc)]),
                 Instruction::Push(Reg16::Bc),
             ),
-            (
-                (Keyword::Xor, vec![atom(A)]),
-                Instruction::Alu(AluOperation::Xor, AluOperand::A),
-            ),
-            (
-                (Keyword::Xor, vec![deref(atom(Hl))]),
-                Instruction::Alu(AluOperation::Xor, AluOperand::DerefHl),
-            ),
         ];
         test_instruction_interpretation(nullary_instructions);
+        test_instruction_interpretation(generate_alu_instruction_descriptors());
         test_instruction_interpretation(instructions)
+    }
+
+    type InstructionDescriptor = ((Keyword, Vec<Expression<Token<'static>>>), Instruction);
+
+    fn generate_alu_instruction_descriptors() -> Vec<InstructionDescriptor> {
+        let alu_operations = [
+            (Keyword::And, AluOperation::And),
+            (Keyword::Cp, AluOperation::Cp),
+            (Keyword::Xor, AluOperation::Xor),
+        ];
+        let alu_operands = [
+            (atom(A), AluOperand::A),
+            (atom(B), AluOperand::B),
+            (atom(C), AluOperand::C),
+            (atom(D), AluOperand::D),
+            (atom(E), AluOperand::E),
+            (atom(H), AluOperand::H),
+            (atom(L), AluOperand::L),
+            (deref(atom(Hl)), AluOperand::DerefHl),
+        ];
+        let mut descriptors = Vec::new();
+        for (mnemonic, operation) in alu_operations.iter().cloned() {
+            for (expr, operand) in alu_operands.iter().cloned() {
+                descriptors.push(((mnemonic, vec![expr]), Instruction::Alu(operation, operand)))
+            }
+        }
+        descriptors
     }
 
     fn test_instruction_interpretation<'a, DII, OII>(descriptors: DII)
