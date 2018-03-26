@@ -18,8 +18,8 @@ pub fn reduce_include<'a>(mut arguments: Vec<Expression<Token<'a>>>) -> ast::Asm
 pub enum Operand {
     Alu(AluOperand),
     Condition(Condition),
-    DerefImm16(Expr),
-    Imm16(Expr),
+    Const(Expr),
+    Deref(Expr),
     Reg16(Reg16),
 }
 
@@ -37,7 +37,7 @@ fn interpret_as_operand<'a>(expr: Expression<Token<'a>>) -> Operand {
     match expr {
         Expression::Atom(Token::Keyword(keyword)) => interpret_as_keyword_operand(keyword),
         Expression::Atom(Token::Identifier(ident)) => {
-            Operand::Imm16(Expr::Symbol(ident.to_string()))
+            Operand::Const(Expr::Symbol(ident.to_string()))
         }
         Expression::Deref(address_specifier) => interpret_as_deref_operand(*address_specifier),
         _ => panic!(),
@@ -58,7 +58,7 @@ fn interpret_as_deref_operand<'a>(addr: Expression<Token<'a>>) -> Operand {
     match addr {
         Expression::Atom(Token::Keyword(Keyword::Hl)) => Operand::Alu(AluOperand::DerefHl),
         Expression::Atom(Token::Identifier(ident)) => {
-            Operand::DerefImm16(Expr::Symbol(ident.to_string()))
+            Operand::Deref(Expr::Symbol(ident.to_string()))
         }
         _ => panic!(),
     }
@@ -67,7 +67,6 @@ fn interpret_as_deref_operand<'a>(addr: Expression<Token<'a>>) -> Operand {
 #[derive(Debug, PartialEq)]
 enum Mnemonic {
     Alu(AluOperation),
-    AluImm8(AluOperation),
     Jr,
     Ld,
     Nullary(Instruction),
@@ -77,7 +76,7 @@ enum Mnemonic {
 fn to_mnemonic(keyword: Keyword) -> Mnemonic {
     match keyword {
         Keyword::And => Mnemonic::Alu(AluOperation::And),
-        Keyword::Cp => Mnemonic::AluImm8(AluOperation::Cp),
+        Keyword::Cp => Mnemonic::Alu(AluOperation::Cp),
         Keyword::Halt => Mnemonic::Nullary(Instruction::Halt),
         Keyword::Jr => Mnemonic::Jr,
         Keyword::Ld => Mnemonic::Ld,
@@ -96,9 +95,8 @@ where
     use self::Mnemonic::*;
     match mnemonic {
         Alu(operation) => interpret_alu_instruction(operation, operands),
-        AluImm8(operation) => interpret_alu_imm8_instruction(operation, operands),
         Jr => match (operands.next().unwrap(), operands.next().unwrap()) {
-            (Operand::Condition(condition), Operand::Imm16(expr)) => {
+            (Operand::Condition(condition), Operand::Const(expr)) => {
                 Instruction::Jr(condition, expr)
             }
             _ => panic!(),
@@ -118,16 +116,7 @@ where
 {
     match operands.next() {
         Some(Operand::Alu(src)) => Instruction::Alu(operation, src),
-        _ => panic!(),
-    }
-}
-
-fn interpret_alu_imm8_instruction<I>(operation: AluOperation, mut operands: I) -> Instruction
-where
-    I: Iterator<Item = Operand>,
-{
-    match operands.next() {
-        Some(Operand::Imm16(expr)) => Instruction::AluImm8(operation, expr),
+        Some(Operand::Const(expr)) => Instruction::AluImm8(operation, expr),
         _ => panic!(),
     }
 }
@@ -146,7 +135,7 @@ fn analyze_ld<I: Iterator<Item = Operand>>(mut operands: I) -> Instruction {
 
 fn interpret_ld_a(other: Operand, direction: Direction) -> Instruction {
     match other {
-        Operand::DerefImm16(expr) => Instruction::LdDerefImm16(expr, direction),
+        Operand::Deref(expr) => Instruction::LdDerefImm16(expr, direction),
         _ => panic!(),
     }
 }
