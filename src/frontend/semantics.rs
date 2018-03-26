@@ -155,12 +155,29 @@ mod tests {
 
     use self::Keyword::*;
 
-    fn atom<'a>(keyword: Keyword) -> Expression<Token<'a>> {
+    type SynExpr = Expression<Token<'static>>;
+
+    fn atom(keyword: Keyword) -> SynExpr {
         Expression::Atom(Token::Keyword(keyword))
     }
 
-    fn deref<'a>(expr: Expression<Token<'a>>) -> Expression<Token<'a>> {
+    fn deref(expr: SynExpr) -> SynExpr {
         Expression::Deref(Box::new(expr))
+    }
+
+    impl From<AluOperand> for SynExpr {
+        fn from(alu_operand: AluOperand) -> Self {
+            match alu_operand {
+                AluOperand::A => atom(A),
+                AluOperand::B => atom(B),
+                AluOperand::C => atom(C),
+                AluOperand::D => atom(D),
+                AluOperand::E => atom(E),
+                AluOperand::H => atom(H),
+                AluOperand::L => atom(L),
+                AluOperand::DerefHl => deref(atom(Hl)),
+            }
+        }
     }
 
     #[test]
@@ -187,13 +204,13 @@ mod tests {
 
     fn generate_ld_instruction_descriptors() -> Vec<InstructionDescriptor> {
         let mut descriptors = Vec::new();
-        for (dest_expr, dest_operand) in alu_operands() {
-            for (src_expr, src_operand) in alu_operands() {
-                match (dest_operand, src_operand) {
+        for &dest in ALU_OPERANDS.iter() {
+            for &src in ALU_OPERANDS.iter() {
+                match (dest, src) {
                     (AluOperand::DerefHl, AluOperand::DerefHl) => (),
                     _ => descriptors.push((
-                        (Keyword::Ld, vec![dest_expr.clone(), src_expr]),
-                        Instruction::LdAluAlu(dest_operand, src_operand),
+                        (Keyword::Ld, vec![SynExpr::from(dest), SynExpr::from(src)]),
+                        Instruction::LdAluAlu(dest, src),
                     )),
                 }
             }
@@ -209,25 +226,26 @@ mod tests {
         ];
         let mut descriptors = Vec::new();
         for &(mnemonic, operation) in alu_operations.iter() {
-            for (expr, operand) in alu_operands() {
-                descriptors.push(((mnemonic, vec![expr]), Instruction::Alu(operation, operand)))
+            for &operand in ALU_OPERANDS.iter() {
+                descriptors.push((
+                    (mnemonic, vec![SynExpr::from(operand)]),
+                    Instruction::Alu(operation, operand),
+                ))
             }
         }
         descriptors
     }
 
-    fn alu_operands() -> Vec<(Expression<Token<'static>>, AluOperand)> {
-        vec![
-            (atom(A), AluOperand::A),
-            (atom(B), AluOperand::B),
-            (atom(C), AluOperand::C),
-            (atom(D), AluOperand::D),
-            (atom(E), AluOperand::E),
-            (atom(H), AluOperand::H),
-            (atom(L), AluOperand::L),
-            (deref(atom(Hl)), AluOperand::DerefHl),
-        ]
-    }
+    const ALU_OPERANDS: [AluOperand; 8] = [
+        AluOperand::A,
+        AluOperand::B,
+        AluOperand::C,
+        AluOperand::D,
+        AluOperand::E,
+        AluOperand::H,
+        AluOperand::L,
+        AluOperand::DerefHl,
+    ];
 
     fn test_instruction_interpretation<'a, DII, OII>(descriptors: DII)
     where
