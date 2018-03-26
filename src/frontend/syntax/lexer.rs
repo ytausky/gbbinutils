@@ -1,5 +1,5 @@
 use frontend::Keyword;
-use super::token::Token;
+use frontend::token::Token;
 
 use std::iter;
 use std::str;

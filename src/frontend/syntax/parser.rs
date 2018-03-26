@@ -1,7 +1,7 @@
-use super::ast;
+use frontend::ast;
 
-use super::syntax::*;
-use super::syntax::TerminalKind::*;
+use super::*;
+use self::TerminalKind::*;
 
 use std::iter;
 use std::marker::PhantomData;
@@ -152,8 +152,8 @@ where
 mod tests {
     use super::parse_src;
 
-    use super::ast;
-    use super::super::syntax;
+    use frontend::ast;
+    use frontend::syntax;
     use self::syntax::TerminalKind::*;
 
     #[test]

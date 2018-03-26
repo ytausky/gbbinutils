@@ -1,4 +1,4 @@
-use super::syntax;
+use frontend::syntax;
 
 use frontend::Keyword;
 

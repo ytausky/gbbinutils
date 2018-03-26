@@ -1,3 +1,8 @@
+pub mod lexer;
+mod parser;
+
+pub use self::parser::parse_src;
+
 pub trait Terminal {
     fn kind(&self) -> TerminalKind;
 }

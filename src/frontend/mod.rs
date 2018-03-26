@@ -3,8 +3,6 @@ use ir;
 use std;
 
 mod ast;
-mod lexer;
-mod parse;
 mod semantics;
 mod syntax;
 mod token;
@@ -32,8 +30,8 @@ pub fn analyze_file(name: &str) {
     let mut src = String::new();
     file.read_to_string(&mut src).unwrap();
     let mut ast_builder = semantics::AstBuilder::new(DumpSection::new());
-    parse::parse_src(
-        lexer::Lexer::new(&src),
+    syntax::parse_src(
+        syntax::lexer::Lexer::new(&src),
         &mut ast_builder,
         ast::ExprBuilder::new(),
     )

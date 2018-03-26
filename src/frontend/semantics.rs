@@ -1,6 +1,6 @@
 use super::ast;
 use ir::*;
-use super::syntax;
+use frontend::syntax;
 
 use self::ast::Expression;
 use frontend::Keyword;
