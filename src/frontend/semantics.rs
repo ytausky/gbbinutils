@@ -39,6 +39,9 @@ fn interpret_as_operand<'a>(expr: Expression<Token<'a>>) -> Operand {
         Expression::Atom(Token::Identifier(ident)) => {
             Operand::Const(Expr::Symbol(ident.to_string()))
         }
+        Expression::Atom(Token::Number(number)) => {
+            Operand::Const(Expr::Literal(number))
+        }
         Expression::Deref(address_specifier) => interpret_as_deref_operand(*address_specifier),
         _ => panic!(),
     }
@@ -225,7 +228,7 @@ mod tests {
     }
 
     #[test]
-    fn interpret_cp_const() {
+    fn interpret_cp_symbol() {
         let ident = "ident";
         assert_eq!(
             interpret_instruction(
@@ -233,6 +236,18 @@ mod tests {
                 Some(Expression::Atom(Token::Identifier(ident)))
             ),
             Instruction::AluImm8(AluOperation::Cp, Expr::Symbol(ident.to_string()))
+        )
+    }
+
+    #[test]
+    fn interpret_cp_literal() {
+        let literal = 0x50;
+        assert_eq!(
+            interpret_instruction(
+                Keyword::Cp,
+                Some(Expression::Atom(Token::Number(literal)))
+            ),
+            Instruction::AluImm8(AluOperation::Cp, Expr::Literal(literal))
         )
     }
 

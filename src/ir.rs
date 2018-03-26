@@ -54,6 +54,7 @@ pub enum Condition {
 
 #[derive(Debug, PartialEq)]
 pub enum Expr {
+    Literal(isize),
     Symbol(String),
 }
 
