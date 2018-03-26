@@ -118,29 +118,15 @@ mod tests {
     #[test]
     fn build_include_item() {
         let filename = "file.asm";
-        let (_, mut items) = analyze_command(Keyword::Include, &[Token::QuotedString(filename)]);
-        let item = items.pop().unwrap();
-        assert_eq!(item, include(filename))
-    }
-
-    fn analyze_command<'a>(
-        keyword: Keyword,
-        operands: &[Token<'a>],
-    ) -> (TestActions, Vec<ast::AsmItem<'a>>) {
-        let mut instructions = Vec::new();
-        let ast;
-        {
-            let mut builder = AstBuilder::new(TestSection::new(&mut instructions));
-            builder.enter_command(Token::Keyword(keyword));
-            for arg in operands {
-                let mut expr_builder = ast::ExprBuilder::new();
-                let expr = expr_builder.from_atom(arg.clone());
-                builder.add_argument(expr);
-            }
-            builder.exit_command();
-            ast = builder.ast().to_vec();
-        }
-        (instructions, ast)
+        let mut actions = Vec::new();
+        let mut builder = AstBuilder::new(TestSection::new(&mut actions));
+        builder.enter_command(Token::Keyword(Keyword::Include));
+        let mut expr_builder = ast::ExprBuilder::new();
+        let expr = expr_builder.from_atom(Token::QuotedString(filename));
+        builder.add_argument(expr);
+        builder.exit_command();
+        let ast = builder.ast().to_vec();
+        assert_eq!(*ast.last().unwrap(), include(filename))
     }
 
     type TestActions = Vec<Action>;
