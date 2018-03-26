@@ -73,7 +73,8 @@ fn interpret_as_deref_operand<'a>(addr: Expression<Token<'a>>) -> Operand {
 
 #[derive(Debug, PartialEq)]
 enum Mnemonic {
-    Simple(AluOperation),
+    Alu(AluOperation),
+    Dec,
     Jr,
     Ld,
     Nullary(Instruction),
@@ -82,15 +83,16 @@ enum Mnemonic {
 
 fn to_mnemonic(keyword: Keyword) -> Mnemonic {
     match keyword {
-        Keyword::And => Mnemonic::Simple(AluOperation::And),
-        Keyword::Cp => Mnemonic::Simple(AluOperation::Cp),
+        Keyword::And => Mnemonic::Alu(AluOperation::And),
+        Keyword::Cp => Mnemonic::Alu(AluOperation::Cp),
+        Keyword::Dec => Mnemonic::Dec,
         Keyword::Halt => Mnemonic::Nullary(Instruction::Halt),
         Keyword::Jr => Mnemonic::Jr,
         Keyword::Ld => Mnemonic::Ld,
         Keyword::Nop => Mnemonic::Nullary(Instruction::Nop),
         Keyword::Push => Mnemonic::Push,
         Keyword::Stop => Mnemonic::Nullary(Instruction::Stop),
-        Keyword::Xor => Mnemonic::Simple(AluOperation::Xor),
+        Keyword::Xor => Mnemonic::Alu(AluOperation::Xor),
         _ => panic!(),
     }
 }
@@ -101,7 +103,11 @@ where
 {
     use self::Mnemonic::*;
     match mnemonic {
-        Simple(operation) => interpret_alu_instruction(operation, operands),
+        Alu(operation) => interpret_alu_instruction(operation, operands),
+        Dec => match operands.next() {
+            Some(Operand::Simple(operand)) => Instruction::Dec(operand),
+            _ => panic!(),
+        },
         Jr => interpret_jr_instruction(operands),
         Ld => analyze_ld(operands),
         Nullary(instruction) => instruction,
@@ -280,6 +286,7 @@ mod tests {
         test_instruction_interpretation(generate_ld_instruction_descriptors());
         test_instruction_interpretation(generate_alu_instruction_descriptors());
         test_instruction_interpretation(generate_condition_jr_instruction_descriptors());
+        test_instruction_interpretation(generate_dec_instruction_descriptors());
         test_instruction_interpretation(instructions)
     }
 
@@ -287,8 +294,8 @@ mod tests {
 
     fn generate_ld_instruction_descriptors() -> Vec<InstructionDescriptor> {
         let mut descriptors = Vec::new();
-        for &dest in ALU_OPERANDS.iter() {
-            for &src in ALU_OPERANDS.iter() {
+        for &dest in SIMPLE_OPERANDS.iter() {
+            for &src in SIMPLE_OPERANDS.iter() {
                 descriptors.extend(generate_ld_alu_alu(dest, src))
             }
         }
@@ -311,7 +318,7 @@ mod tests {
     fn generate_alu_instruction_descriptors() -> Vec<InstructionDescriptor> {
         let mut descriptors = Vec::new();
         for &operation in ALU_OPERATIONS.iter() {
-            for &operand in ALU_OPERANDS.iter() {
+            for &operand in SIMPLE_OPERANDS.iter() {
                 descriptors.push(generate_simple_alu_instruction(operation, operand))
             }
         }
@@ -350,10 +357,25 @@ mod tests {
         )
     }
 
+    fn generate_dec_instruction_descriptors() -> Vec<InstructionDescriptor> {
+        let mut descriptors = Vec::new();
+        for &operand in SIMPLE_OPERANDS.iter() {
+            descriptors.push(generate_dec(operand))
+        }
+        descriptors
+    }
+
+    fn generate_dec(operand: SimpleOperand) -> InstructionDescriptor {
+        (
+            (Keyword::Dec, vec![SynExpr::from(operand)]),
+            Instruction::Dec(operand),
+        )
+    }
+
     const ALU_OPERATIONS: [AluOperation; 3] =
         [AluOperation::And, AluOperation::Cp, AluOperation::Xor];
 
-    const ALU_OPERANDS: [SimpleOperand; 8] = [
+    const SIMPLE_OPERANDS: [SimpleOperand; 8] = [
         SimpleOperand::A,
         SimpleOperand::B,
         SimpleOperand::C,

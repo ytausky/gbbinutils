@@ -6,6 +6,7 @@ pub trait Section {
 #[derive(Debug, PartialEq)]
 pub enum Instruction {
     Alu(AluOperation, AluSource),
+    Dec(SimpleOperand),
     Halt,
     Jr(Option<Condition>, Expr),
     LdAluAlu(SimpleOperand, SimpleOperand),

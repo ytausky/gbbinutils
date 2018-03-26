@@ -23,6 +23,7 @@ pub enum Keyword {
     C,
     Cp,
     D,
+    Dec,
     E,
     Endm,
     H,
