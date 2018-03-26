@@ -7,6 +7,7 @@ pub trait Section {
 pub enum Instruction {
     Halt,
     LdAluAlu(AluOperand, AluOperand),
+    LdDerefImm16A(Expr),
     Nop,
     Push(Reg16),
     Stop,
@@ -28,6 +29,11 @@ pub enum AluOperand {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Reg16 {
     Bc,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Expr {
+    Symbol(String),
 }
 
 pub struct DumpSection;

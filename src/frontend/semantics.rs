@@ -3,7 +3,7 @@ use frontend::ast;
 use frontend::ast::Expression;
 use frontend::syntax::{Keyword, Token};
 
-use ir::{AluOperand, Instruction, Reg16};
+use ir::*;
 
 pub fn reduce_include<'a>(mut arguments: Vec<Expression<Token<'a>>>) -> ast::AsmItem<'a> {
     assert_eq!(arguments.len(), 1);
@@ -17,6 +17,7 @@ pub fn reduce_include<'a>(mut arguments: Vec<Expression<Token<'a>>>) -> ast::Asm
 #[derive(Clone, Debug, PartialEq)]
 pub enum Operand {
     Alu(AluOperand),
+    DerefImm16(Expr),
     Reg16(Reg16),
 }
 
@@ -50,6 +51,9 @@ fn interpret_as_keyword_operand(keyword: Keyword) -> Operand {
 fn interpret_as_deref_operand<'a>(addr: Expression<Token<'a>>) -> Operand {
     match addr {
         Expression::Atom(Token::Keyword(Keyword::Hl)) => Operand::Alu(AluOperand::DerefHl),
+        Expression::Atom(Token::Identifier(ident)) => {
+            Operand::DerefImm16(Expr::Symbol(ident.to_string()))
+        }
         _ => panic!(),
     }
 }
@@ -103,6 +107,9 @@ fn analyze_ld<I: Iterator<Item = Operand>>(mut operands: I) -> Instruction {
     assert_eq!(operands.next(), None);
     match (dest, src) {
         (Operand::Alu(dest), Operand::Alu(src)) => Instruction::LdAluAlu(dest, src),
+        (Operand::DerefImm16(expr), Operand::Alu(AluOperand::A)) => {
+            Instruction::LdDerefImm16A(expr)
+        }
         _ => panic!(),
     }
 }
@@ -181,6 +188,18 @@ mod tests {
         assert_eq!(
             interpret_instruction(Keyword::Xor, Some(deref(atom(Hl)))),
             Instruction::Xor(AluOperand::DerefHl)
+        )
+    }
+
+    #[test]
+    fn interpret_ld_deref_symbol_a() {
+        let ident = "ident";
+        assert_eq!(
+            interpret_instruction(
+                Keyword::Ld,
+                vec![deref(Expression::Atom(Token::Identifier(ident))), atom(A)]
+            ),
+            Instruction::LdDerefImm16A(Expr::Symbol(ident.to_string()))
         )
     }
 }
