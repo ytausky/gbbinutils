@@ -24,12 +24,14 @@ pub enum Keyword {
     Halt,
     Hl,
     Include,
+    Jr,
     Ld,
     Macro,
     Nop,
     Push,
     Stop,
     Xor,
+    Z,
 }
 
 #[derive(Clone, Debug, PartialEq)]

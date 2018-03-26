@@ -17,7 +17,9 @@ pub fn reduce_include<'a>(mut arguments: Vec<Expression<Token<'a>>>) -> ast::Asm
 #[derive(Debug, PartialEq)]
 pub enum Operand {
     Alu(AluOperand),
+    Condition(Condition),
     DerefImm16(Expr),
+    Imm16(Expr),
     Reg16(Reg16),
 }
 
@@ -34,6 +36,9 @@ where
 fn interpret_as_operand<'a>(expr: Expression<Token<'a>>) -> Operand {
     match expr {
         Expression::Atom(Token::Keyword(keyword)) => interpret_as_keyword_operand(keyword),
+        Expression::Atom(Token::Identifier(ident)) => {
+            Operand::Imm16(Expr::Symbol(ident.to_string()))
+        }
         Expression::Deref(address_specifier) => interpret_as_deref_operand(*address_specifier),
         _ => panic!(),
     }
@@ -44,6 +49,7 @@ fn interpret_as_keyword_operand(keyword: Keyword) -> Operand {
         Keyword::A => Operand::Alu(AluOperand::A),
         Keyword::B => Operand::Alu(AluOperand::B),
         Keyword::Bc => Operand::Reg16(Reg16::Bc),
+        Keyword::Z => Operand::Condition(Condition::Z),
         _ => panic!(),
     }
 }
@@ -59,8 +65,9 @@ fn interpret_as_deref_operand<'a>(addr: Expression<Token<'a>>) -> Operand {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Mnemonic {
+enum Mnemonic {
     Alu(AluOperation),
+    Jr,
     Ld,
     Nullary(Instruction),
     Push,
@@ -70,6 +77,7 @@ fn to_mnemonic(keyword: Keyword) -> Mnemonic {
     match keyword {
         Keyword::And => Mnemonic::Alu(AluOperation::And),
         Keyword::Halt => Mnemonic::Nullary(Instruction::Halt),
+        Keyword::Jr => Mnemonic::Jr,
         Keyword::Ld => Mnemonic::Ld,
         Keyword::Nop => Mnemonic::Nullary(Instruction::Nop),
         Keyword::Push => Mnemonic::Push,
@@ -79,13 +87,19 @@ fn to_mnemonic(keyword: Keyword) -> Mnemonic {
     }
 }
 
-pub fn instruction<I>(mnemonic: Mnemonic, mut operands: I) -> Instruction
+fn instruction<I>(mnemonic: Mnemonic, mut operands: I) -> Instruction
 where
     I: Iterator<Item = Operand>,
 {
     use self::Mnemonic::*;
     match mnemonic {
         Alu(operation) => interpret_alu_instruction(operation, operands),
+        Jr => match (operands.next().unwrap(), operands.next().unwrap()) {
+            (Operand::Condition(condition), Operand::Imm16(expr)) => {
+                Instruction::Jr(condition, expr)
+            }
+            _ => panic!(),
+        },
         Ld => analyze_ld(operands),
         Nullary(instruction) => instruction,
         Push => match operands.next() {
@@ -230,6 +244,18 @@ mod tests {
                 vec![atom(A), deref(Expression::Atom(Token::Identifier(ident)))]
             ),
             Instruction::LdDerefImm16(Expr::Symbol(ident.to_string()), Direction::IntoA)
+        )
+    }
+
+    #[test]
+    fn interpret_jr_z_symbol() {
+        let ident = "ident";
+        assert_eq!(
+            interpret_instruction(
+                Keyword::Jr,
+                vec![atom(Z), Expression::Atom(Token::Identifier(ident))]
+            ),
+            Instruction::Jr(Condition::Z, Expr::Symbol(ident.to_string()))
         )
     }
 }

@@ -151,12 +151,14 @@ fn identify_keyword(word: &str) -> Option<Keyword> {
         "halt" => Some(Halt),
         "hl" => Some(Hl),
         "include" => Some(Include),
+        "jr" => Some(Jr),
         "ld" => Some(Ld),
         "macro" => Some(Macro),
         "nop" => Some(Nop),
         "push" => Some(Push),
         "stop" => Some(Stop),
         "xor" => Some(Xor),
+        "z" => Some(Z),
         _ => None,
     }
 }
@@ -280,6 +282,16 @@ mod tests {
     #[test]
     fn lex_and() {
         assert_eq_tokens("and", &[Keyword(And)])
+    }
+
+    #[test]
+    fn lex_jr() {
+        assert_eq_tokens("jr", &[Keyword(Jr)])
+    }
+
+    #[test]
+    fn lex_z() {
+        assert_eq_tokens("z", &[Keyword(Z)])
     }
 
     #[test]
