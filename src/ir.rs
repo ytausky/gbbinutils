@@ -48,6 +48,7 @@ pub enum Reg16 {
 
 #[derive(Debug, PartialEq)]
 pub enum Condition {
+    Nz,
     Z,
 }
 

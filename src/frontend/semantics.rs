@@ -54,6 +54,7 @@ fn interpret_as_keyword_operand(keyword: Keyword) -> Operand {
         Keyword::E => Operand::Alu(AluOperand::E),
         Keyword::H => Operand::Alu(AluOperand::H),
         Keyword::L => Operand::Alu(AluOperand::L),
+        Keyword::Nz => Operand::Condition(Condition::Nz),
         Keyword::Z => Operand::Condition(Condition::Z),
         _ => panic!(),
     }
@@ -289,6 +290,18 @@ mod tests {
                 vec![atom(A), deref(Expression::Atom(Token::Identifier(ident)))]
             ),
             Instruction::LdDerefImm16(Expr::Symbol(ident.to_string()), Direction::IntoA)
+        )
+    }
+
+    #[test]
+    fn interpret_jr_nz_symbol() {
+        let ident = "ident";
+        assert_eq!(
+            interpret_instruction(
+                Keyword::Jr,
+                vec![atom(Nz), Expression::Atom(Token::Identifier(ident))]
+            ),
+            Instruction::Jr(Condition::Nz, Expr::Symbol(ident.to_string()))
         )
     }
 

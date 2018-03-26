@@ -34,6 +34,7 @@ pub enum Keyword {
     Ld,
     Macro,
     Nop,
+    Nz,
     Push,
     Stop,
     Xor,
