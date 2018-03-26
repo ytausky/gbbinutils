@@ -22,9 +22,12 @@ pub enum Operand {
 
 pub fn interpret_instruction<'a, I>(mnemonic: Keyword, operands: I) -> Instruction
 where
-    I: Iterator<Item = Expression<Token<'a>>>,
+    I: IntoIterator<Item = Expression<Token<'a>>>,
 {
-    instruction(to_mnemonic(mnemonic), operands.map(interpret_as_operand))
+    instruction(
+        to_mnemonic(mnemonic),
+        operands.into_iter().map(interpret_as_operand),
+    )
 }
 
 fn interpret_as_operand<'a>(expr: Expression<Token<'a>>) -> Operand {
@@ -112,13 +115,22 @@ pub fn include(path: &str) -> ast::AsmItem {
 mod tests {
     use super::*;
 
+    use self::Keyword::*;
+
+    fn atom<'a>(keyword: Keyword) -> Expression<Token<'a>> {
+        Expression::Atom(Token::Keyword(keyword))
+    }
+
+    fn deref<'a>(expr: Expression<Token<'a>>) -> Expression<Token<'a>> {
+        Expression::Deref(Box::new(expr))
+    }
+
     #[test]
     fn interpret_push_bc() {
-        let actual = interpret_instruction(
-            Keyword::Push,
-            vec![Expression::Atom(Token::Keyword(Keyword::Bc))].into_iter(),
-        );
-        assert_eq!(actual, Instruction::Push(Reg16::Bc))
+        assert_eq!(
+            interpret_instruction(Keyword::Push, Some(atom(Bc))),
+            Instruction::Push(Reg16::Bc)
+        )
     }
 
     #[test]
@@ -137,48 +149,38 @@ mod tests {
     }
 
     fn interpret_nullary_instruction(mnemonic: Keyword, expected: Instruction) {
-        assert_eq!(interpret_instruction(mnemonic, None.into_iter()), expected)
+        assert_eq!(interpret_instruction(mnemonic, None), expected)
     }
 
     #[test]
     fn interpret_ld_a_a() {
-        let actual = interpret_instruction(
-            Keyword::Ld,
-            vec![
-                Expression::Atom(Token::Keyword(Keyword::A)),
-                Expression::Atom(Token::Keyword(Keyword::A)),
-            ].into_iter(),
-        );
-        assert_eq!(actual, Instruction::LdAluAlu(AluOperand::A, AluOperand::A))
+        assert_eq!(
+            interpret_instruction(Keyword::Ld, vec![atom(A), atom(A)]),
+            Instruction::LdAluAlu(AluOperand::A, AluOperand::A)
+        )
     }
 
     #[test]
     fn interpret_ld_a_b() {
-        let actual = interpret_instruction(
-            Keyword::Ld,
-            vec![
-                Expression::Atom(Token::Keyword(Keyword::A)),
-                Expression::Atom(Token::Keyword(Keyword::B)),
-            ].into_iter(),
-        );
-        assert_eq!(actual, Instruction::LdAluAlu(AluOperand::A, AluOperand::B))
+        assert_eq!(
+            interpret_instruction(Keyword::Ld, vec![atom(A), atom(B)]),
+            Instruction::LdAluAlu(AluOperand::A, AluOperand::B)
+        )
     }
 
     #[test]
     fn interpret_xor_a() {
-        let actual = interpret_instruction(
-            Keyword::Xor,
-            vec![Expression::Atom(Token::Keyword(Keyword::A))].into_iter(),
-        );
-        assert_eq!(actual, Instruction::Xor(AluOperand::A))
+        assert_eq!(
+            interpret_instruction(Keyword::Xor, Some(atom(A))),
+            Instruction::Xor(AluOperand::A)
+        )
     }
 
     #[test]
     fn interpret_xor_deref_hl() {
-        let actual = interpret_instruction(
-            Keyword::Xor,
-            vec![Expression::Deref(Box::new(Expression::Atom(Token::Keyword(Keyword::Hl))))].into_iter(),
-        );
-        assert_eq!(actual, Instruction::Xor(AluOperand::DerefHl))
+        assert_eq!(
+            interpret_instruction(Keyword::Xor, Some(deref(atom(Hl)))),
+            Instruction::Xor(AluOperand::DerefHl)
+        )
     }
 }
