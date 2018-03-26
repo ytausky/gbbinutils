@@ -23,7 +23,9 @@ pub enum Operand {
     Reg16(Reg16),
 }
 
-pub fn interpret_instruction<'a, I>(mnemonic: Keyword, operands: I) -> Instruction
+pub type InterpretationResult = Result<Instruction, ()>;
+
+pub fn interpret_instruction<'a, I>(mnemonic: Keyword, operands: I) -> InterpretationResult
 where
     I: IntoIterator<Item = Expression<Token<'a>>>,
 {
@@ -97,7 +99,7 @@ fn to_mnemonic(keyword: Keyword) -> Mnemonic {
     }
 }
 
-fn instruction<I>(mnemonic: Mnemonic, mut operands: I) -> Instruction
+fn instruction<I>(mnemonic: Mnemonic, mut operands: I) -> InterpretationResult
 where
     I: Iterator<Item = Operand>,
 {
@@ -105,57 +107,59 @@ where
     match mnemonic {
         Alu(operation) => interpret_alu_instruction(operation, operands),
         Dec => match operands.next() {
-            Some(Operand::Simple(operand)) => Instruction::Dec(operand),
-            _ => panic!(),
+            Some(Operand::Simple(operand)) => Ok(Instruction::Dec(operand)),
+            _ => Err(()),
         },
         Jr => interpret_jr_instruction(operands),
         Ld => analyze_ld(operands),
-        Nullary(instruction) => instruction,
+        Nullary(instruction) => Ok(instruction),
         Push => match operands.next() {
-            Some(Operand::Reg16(src)) => Instruction::Push(src),
-            _ => panic!(),
+            Some(Operand::Reg16(src)) => Ok(Instruction::Push(src)),
+            _ => Err(()),
         },
     }
 }
 
-fn interpret_alu_instruction<I>(operation: AluOperation, mut operands: I) -> Instruction
+fn interpret_alu_instruction<I>(operation: AluOperation, mut operands: I) -> InterpretationResult
 where
     I: Iterator<Item = Operand>,
 {
     match operands.next() {
-        Some(Operand::Simple(src)) => Instruction::Alu(operation, AluSource::Simple(src)),
-        Some(Operand::Const(expr)) => Instruction::Alu(operation, AluSource::Immediate(expr)),
-        _ => panic!(),
+        Some(Operand::Simple(src)) => Ok(Instruction::Alu(operation, AluSource::Simple(src))),
+        Some(Operand::Const(expr)) => Ok(Instruction::Alu(operation, AluSource::Immediate(expr))),
+        _ => Err(()),
     }
 }
 
-fn interpret_jr_instruction<I: Iterator<Item = Operand>>(mut operands: I) -> Instruction {
-    match operands.next().unwrap() {
-        Operand::Condition(condition) => match operands.next().unwrap() {
-            Operand::Const(expr) => Instruction::Jr(Some(condition), expr),
-            _ => panic!(),
+fn interpret_jr_instruction<I: Iterator<Item = Operand>>(mut operands: I) -> InterpretationResult {
+    match operands.next() {
+        Some(Operand::Condition(condition)) => match operands.next() {
+            Some(Operand::Const(expr)) => Ok(Instruction::Jr(Some(condition), expr)),
+            _ => Err(()),
         },
-        Operand::Const(expr) => Instruction::Jr(None, expr),
-        _ => panic!(),
+        Some(Operand::Const(expr)) => Ok(Instruction::Jr(None, expr)),
+        _ => Err(()),
     }
 }
 
-fn analyze_ld<I: Iterator<Item = Operand>>(mut operands: I) -> Instruction {
-    let dest = operands.next().unwrap();
-    let src = operands.next().unwrap();
+fn analyze_ld<I: Iterator<Item = Operand>>(mut operands: I) -> InterpretationResult {
+    let dest = operands.next().ok_or(())?;
+    let src = operands.next().ok_or(())?;
     assert_eq!(operands.next(), None);
     match (dest, src) {
-        (Operand::Simple(dest), Operand::Simple(src)) => Instruction::Ld(LdKind::Simple(dest, src)),
+        (Operand::Simple(dest), Operand::Simple(src)) => {
+            Ok(Instruction::Ld(LdKind::Simple(dest, src)))
+        }
         (Operand::Simple(SimpleOperand::A), src) => interpret_ld_a(src, Direction::IntoA),
         (dest, Operand::Simple(SimpleOperand::A)) => interpret_ld_a(dest, Direction::FromA),
-        _ => panic!(),
+        _ => Err(()),
     }
 }
 
-fn interpret_ld_a(other: Operand, direction: Direction) -> Instruction {
+fn interpret_ld_a(other: Operand, direction: Direction) -> InterpretationResult {
     match other {
-        Operand::Deref(expr) => Instruction::Ld(LdKind::ImmediateAddr(expr, direction)),
-        _ => panic!(),
+        Operand::Deref(expr) => Ok(Instruction::Ld(LdKind::ImmediateAddr(expr, direction))),
+        _ => Err(()),
     }
 }
 
@@ -221,7 +225,10 @@ mod tests {
                 Keyword::Ld,
                 vec![deref(Expression::Atom(Token::Identifier(ident))), atom(A)]
             ),
-            Instruction::Ld(LdKind::ImmediateAddr(Expr::Symbol(ident.to_string()), Direction::FromA))
+            Ok(Instruction::Ld(LdKind::ImmediateAddr(
+                Expr::Symbol(ident.to_string()),
+                Direction::FromA
+            )))
         )
     }
 
@@ -233,7 +240,10 @@ mod tests {
                 Keyword::Ld,
                 vec![atom(A), deref(Expression::Atom(Token::Identifier(ident)))]
             ),
-            Instruction::Ld(LdKind::ImmediateAddr(Expr::Symbol(ident.to_string()), Direction::IntoA))
+            Ok(Instruction::Ld(LdKind::ImmediateAddr(
+                Expr::Symbol(ident.to_string()),
+                Direction::IntoA
+            )))
         )
     }
 
@@ -252,7 +262,10 @@ mod tests {
     fn test_cp_const(atom: Token<'static>, expr: Expr) {
         assert_eq!(
             interpret_instruction(Keyword::Cp, Some(Expression::Atom(atom))),
-            Instruction::Alu(AluOperation::Cp, AluSource::Immediate(expr))
+            Ok(Instruction::Alu(
+                AluOperation::Cp,
+                AluSource::Immediate(expr)
+            ))
         )
     }
 
@@ -264,7 +277,7 @@ mod tests {
                 Keyword::Jr,
                 Some(Expression::Atom(Token::Identifier(ident)))
             ),
-            Instruction::Jr(None, Expr::Symbol(ident.to_string()))
+            Ok(Instruction::Jr(None, Expr::Symbol(ident.to_string())))
         )
     }
 
@@ -394,7 +407,7 @@ mod tests {
         OII: IntoIterator<Item = Expression<Token<'a>>>,
     {
         for ((mnemonic, operands), expected) in descriptors {
-            assert_eq!(interpret_instruction(mnemonic, operands), expected)
+            assert_eq!(interpret_instruction(mnemonic, operands), Ok(expected))
         }
     }
 }

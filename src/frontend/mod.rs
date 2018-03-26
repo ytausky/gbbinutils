@@ -86,8 +86,9 @@ impl<'a, S: Section> syntax::CommandContext for AstBuilder<'a, S> {
         if let Some(Context::Instruction(name, args)) = self.contexts.pop() {
             match name {
                 Token::Keyword(Keyword::Include) => self.ast.push(semantics::reduce_include(args)),
-                Token::Keyword(keyword) => self.section
-                    .add_instruction(semantics::interpret_instruction(keyword, args.into_iter())),
+                Token::Keyword(keyword) => self.section.add_instruction(
+                    semantics::interpret_instruction(keyword, args.into_iter()).unwrap(),
+                ),
                 _ => panic!(),
             }
         } else {
