@@ -15,12 +15,8 @@ pub fn analyze_file(name: &str) {
     let mut file = std::fs::File::open(name).unwrap();
     let mut src = String::new();
     file.read_to_string(&mut src).unwrap();
-    let mut ast_builder = AstBuilder::new(DumpSection::new());
-    syntax::parse_src(
-        syntax::lexer::Lexer::new(&src),
-        &mut ast_builder,
-        ast::ExprBuilder::new(),
-    )
+    let ast_builder = AstBuilder::new(DumpSection::new());
+    syntax::parse(&src, ast_builder)
 }
 
 struct DumpSection;

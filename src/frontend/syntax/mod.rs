@@ -1,7 +1,18 @@
-pub mod lexer;
+use frontend::ast;
+
+mod lexer;
 mod parser;
 
-pub use self::parser::parse_src;
+pub fn parse<'a, BC>(src: &'a str, mut actions: BC)
+where
+    BC: BlockContext<Terminal = Token<'a>, Expr = ast::Expression<Token<'a>>>,
+{
+    self::parser::parse_src(
+        self::lexer::Lexer::new(src),
+        &mut actions,
+        ast::ExprBuilder::new(),
+    )
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Keyword {
