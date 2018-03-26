@@ -110,6 +110,9 @@ fn analyze_ld<I: Iterator<Item = Operand>>(mut operands: I) -> Instruction {
         (Operand::DerefImm16(expr), Operand::Alu(AluOperand::A)) => {
             Instruction::LdDerefImm16A(expr)
         }
+        (Operand::Alu(AluOperand::A), Operand::DerefImm16(expr)) => {
+            Instruction::LdADerefImm16(expr)
+        }
         _ => panic!(),
     }
 }
@@ -200,6 +203,18 @@ mod tests {
                 vec![deref(Expression::Atom(Token::Identifier(ident))), atom(A)]
             ),
             Instruction::LdDerefImm16A(Expr::Symbol(ident.to_string()))
+        )
+    }
+
+    #[test]
+    fn interpret_ld_a_deref_symbol() {
+        let ident = "ident";
+        assert_eq!(
+            interpret_instruction(
+                Keyword::Ld,
+                vec![atom(A), deref(Expression::Atom(Token::Identifier(ident)))]
+            ),
+            Instruction::LdADerefImm16(Expr::Symbol(ident.to_string()))
         )
     }
 }

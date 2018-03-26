@@ -7,6 +7,7 @@ pub trait Section {
 pub enum Instruction {
     Halt,
     LdAluAlu(AluOperand, AluOperand),
+    LdADerefImm16(Expr),
     LdDerefImm16A(Expr),
     Nop,
     Push(Reg16),
