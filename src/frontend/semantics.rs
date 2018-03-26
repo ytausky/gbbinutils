@@ -60,24 +60,21 @@ fn interpret_as_deref_operand<'a>(addr: Expression<Token<'a>>) -> Operand {
 
 #[derive(Debug, PartialEq)]
 pub enum Mnemonic {
-    And,
-    Halt,
+    Alu(AluOperation),
     Ld,
-    Nop,
+    Nullary(Instruction),
     Push,
-    Stop,
-    Xor,
 }
 
 fn to_mnemonic(keyword: Keyword) -> Mnemonic {
     match keyword {
-        Keyword::And => Mnemonic::And,
-        Keyword::Halt => Mnemonic::Halt,
+        Keyword::And => Mnemonic::Alu(AluOperation::And),
+        Keyword::Halt => Mnemonic::Nullary(Instruction::Halt),
         Keyword::Ld => Mnemonic::Ld,
-        Keyword::Nop => Mnemonic::Nop,
+        Keyword::Nop => Mnemonic::Nullary(Instruction::Nop),
         Keyword::Push => Mnemonic::Push,
-        Keyword::Stop => Mnemonic::Stop,
-        Keyword::Xor => Mnemonic::Xor,
+        Keyword::Stop => Mnemonic::Nullary(Instruction::Stop),
+        Keyword::Xor => Mnemonic::Alu(AluOperation::Xor),
         _ => panic!(),
     }
 }
@@ -88,22 +85,23 @@ where
 {
     use self::Mnemonic::*;
     match mnemonic {
-        And => match operands.next() {
-            Some(Operand::Alu(src)) => Instruction::And(src),
-            _ => panic!(),
-        },
-        Halt => Instruction::Halt,
+        Alu(operation) => interpret_alu_instruction(operation, operands),
         Ld => analyze_ld(operands),
-        Nop => Instruction::Nop,
+        Nullary(instruction) => instruction,
         Push => match operands.next() {
             Some(Operand::Reg16(src)) => Instruction::Push(src),
             _ => panic!(),
         },
-        Stop => Instruction::Stop,
-        Xor => match operands.next() {
-            Some(Operand::Alu(src)) => Instruction::Xor(src),
-            _ => panic!(),
-        },
+    }
+}
+
+fn interpret_alu_instruction<I>(operation: AluOperation, mut operands: I) -> Instruction
+where
+    I: Iterator<Item = Operand>,
+{
+    match operands.next() {
+        Some(Operand::Alu(src)) => Instruction::Alu(operation, src),
+        _ => panic!(),
     }
 }
 
@@ -191,7 +189,7 @@ mod tests {
     fn interpret_and_a() {
         assert_eq!(
             interpret_instruction(Keyword::And, Some(atom(A))),
-            Instruction::And(AluOperand::A)
+            Instruction::Alu(AluOperation::And, AluOperand::A)
         )
     }
 
@@ -199,7 +197,7 @@ mod tests {
     fn interpret_xor_a() {
         assert_eq!(
             interpret_instruction(Keyword::Xor, Some(atom(A))),
-            Instruction::Xor(AluOperand::A)
+            Instruction::Alu(AluOperation::Xor, AluOperand::A)
         )
     }
 
@@ -207,7 +205,7 @@ mod tests {
     fn interpret_xor_deref_hl() {
         assert_eq!(
             interpret_instruction(Keyword::Xor, Some(deref(atom(Hl)))),
-            Instruction::Xor(AluOperand::DerefHl)
+            Instruction::Alu(AluOperation::Xor, AluOperand::DerefHl)
         )
     }
 
