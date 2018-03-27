@@ -2,13 +2,17 @@ use diagnostics;
 
 use ir::*;
 use frontend::ExprFactory;
-use frontend::syntax::{Keyword, Token, TokenKind, StrToken, SynExpr};
+use frontend::syntax::{Keyword, StrToken, SynExpr, Token, TokenKind};
 
-pub struct CommandAnalyzer;
+pub struct CommandAnalyzer {
+    expr_factory: ExprFactory,
+}
 
 impl CommandAnalyzer {
     pub fn new() -> CommandAnalyzer {
-        CommandAnalyzer {}
+        CommandAnalyzer {
+            expr_factory: ExprFactory::new(),
+        }
     }
 
     pub fn analyze_instruction<'a, I>(&mut self, mnemonic: Keyword, operands: I) -> AnalysisResult
@@ -16,20 +20,66 @@ impl CommandAnalyzer {
         I: IntoIterator<Item = SynExpr<StrToken<'a>>>,
     {
         use self::Mnemonic::*;
-        let mut operands = operands.into_iter().map(analyze_operand);
+        let mut operands = operands.into_iter();
         match to_mnemonic(mnemonic) {
-            Alu(operation) => analyze_alu_instruction(operation, operands),
-            Dec => match operands.next() {
+            Alu(operation) => self.analyze_alu_instruction(operation, operands),
+            Dec => match operands.next().map(|x| self.analyze_operand(x)) {
                 Some(Operand::Simple(operand)) => Ok(Instruction::Dec(operand)),
                 _ => panic!(),
             },
-            Jr => analyze_jr_instruction(operands),
-            Ld => analyze_ld(operands),
+            Jr => analyze_jr_instruction(operands.map(|x| self.analyze_operand(x))),
+            Ld => analyze_ld(operands.map(|x| self.analyze_operand(x))),
             Nullary(instruction) => analyze_nullary_instruction(instruction, operands),
-            Push => match operands.next() {
+            Push => match operands.next().map(|x| self.analyze_operand(x)) {
                 Some(Operand::Reg16(src)) => Ok(Instruction::Push(src)),
                 _ => panic!(),
             },
+        }
+    }
+
+    fn analyze_operand(&mut self, expr: SynExpr<StrToken>) -> Operand {
+        match expr {
+            SynExpr::Atom(token) => self.analyze_atom_operand(token),
+            SynExpr::Deref(expr) => self.analyze_deref_operand(*expr),
+        }
+    }
+
+    fn analyze_atom_operand(&mut self, token: StrToken) -> Operand {
+        match token.kind() {
+            TokenKind::Keyword(keyword) => analyze_keyword_operand(keyword),
+            TokenKind::Identifier | TokenKind::Number => {
+                Operand::Const(self.expr_factory.from_token(token))
+            }
+            _ => panic!(),
+        }
+    }
+
+    fn analyze_deref_operand(&mut self, expr: SynExpr<StrToken>) -> Operand {
+        if let SynExpr::Atom(token) = expr {
+            match token.kind() {
+                TokenKind::Keyword(Keyword::Hl) => Operand::Simple(SimpleOperand::DerefHl),
+                TokenKind::Identifier => Operand::Deref(self.expr_factory.from_token(token)),
+                _ => panic!(),
+            }
+        } else {
+            panic!()
+        }
+    }
+
+    fn analyze_alu_instruction<'a, I>(
+        &mut self,
+        operation: AluOperation,
+        mut operands: I,
+    ) -> AnalysisResult
+    where
+        I: Iterator<Item = SynExpr<StrToken<'a>>>,
+    {
+        match operands.next().map(|x| self.analyze_operand(x)) {
+            Some(Operand::Simple(src)) => Ok(Instruction::Alu(operation, AluSource::Simple(src))),
+            Some(Operand::Const(expr)) => {
+                Ok(Instruction::Alu(operation, AluSource::Immediate(expr)))
+            }
+            _ => panic!(),
         }
     }
 }
@@ -45,22 +95,6 @@ pub enum Operand {
 
 pub type AnalysisResult = Result<Instruction, diagnostics::Error>;
 
-fn analyze_operand(expr: SynExpr<StrToken>) -> Operand {
-    match expr {
-        SynExpr::Atom(token) => analyze_atom_operand(token),
-        SynExpr::Deref(address_specifier) => analyze_deref_operand(address_specifier.as_ref()),
-    }
-}
-
-fn analyze_atom_operand(token: StrToken) -> Operand {
-    let mut expr_factory = ExprFactory::new();
-    match token.kind() {
-        TokenKind::Keyword(keyword) => analyze_keyword_operand(keyword),
-        TokenKind::Identifier | TokenKind::Number => Operand::Const(expr_factory.from_token(token)),
-        _ => panic!(),
-    }
-}
-
 fn analyze_keyword_operand(keyword: Keyword) -> Operand {
     match keyword {
         Keyword::A => Operand::Simple(SimpleOperand::A),
@@ -73,16 +107,6 @@ fn analyze_keyword_operand(keyword: Keyword) -> Operand {
         Keyword::L => Operand::Simple(SimpleOperand::L),
         Keyword::Nz => Operand::Condition(Condition::Nz),
         Keyword::Z => Operand::Condition(Condition::Z),
-        _ => panic!(),
-    }
-}
-
-fn analyze_deref_operand(addr: &SynExpr<StrToken>) -> Operand {
-    match *addr {
-        SynExpr::Atom(StrToken::Keyword(Keyword::Hl)) => Operand::Simple(SimpleOperand::DerefHl),
-        SynExpr::Atom(StrToken::Identifier(ident)) => {
-            Operand::Deref(Expr::Symbol(ident.to_string()))
-        }
         _ => panic!(),
     }
 }
@@ -109,17 +133,6 @@ fn to_mnemonic(keyword: Keyword) -> Mnemonic {
         Keyword::Push => Mnemonic::Push,
         Keyword::Stop => Mnemonic::Nullary(Instruction::Stop),
         Keyword::Xor => Mnemonic::Alu(AluOperation::Xor),
-        _ => panic!(),
-    }
-}
-
-fn analyze_alu_instruction<I>(operation: AluOperation, mut operands: I) -> AnalysisResult
-where
-    I: Iterator<Item = Operand>,
-{
-    match operands.next() {
-        Some(Operand::Simple(src)) => Ok(Instruction::Alu(operation, AluSource::Simple(src))),
-        Some(Operand::Const(expr)) => Ok(Instruction::Alu(operation, AluSource::Immediate(expr))),
         _ => panic!(),
     }
 }
