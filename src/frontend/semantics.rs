@@ -202,12 +202,26 @@ fn to_mnemonic(keyword: Keyword) -> Mnemonic {
 mod tests {
     use super::*;
 
-    use frontend::StrExprFactory;
-    use frontend::StrToken;
     use self::Keyword::*;
 
-    fn atom(keyword: Keyword) -> SynExpr<StrToken<'static>> {
-        SynExpr::from(StrToken::Keyword(keyword))
+    enum TestToken {
+        Identifier(&'static str),
+        Keyword(Keyword),
+        Number(isize),
+    }
+
+    impl Token for TestToken {
+        fn kind(&self) -> TokenKind {
+            match *self {
+                TestToken::Identifier(_) => TokenKind::Identifier,
+                TestToken::Keyword(keyword) => TokenKind::Keyword(keyword),
+                TestToken::Number(_) => TokenKind::Number,
+            }
+        }
+    }
+
+    fn atom(keyword: Keyword) -> SynExpr<TestToken> {
+        SynExpr::from(TestToken::Keyword(keyword))
     }
 
     impl From<AluOperation> for Keyword {
@@ -220,7 +234,7 @@ mod tests {
         }
     }
 
-    impl From<SimpleOperand> for SynExpr<StrToken<'static>> {
+    impl From<SimpleOperand> for SynExpr<TestToken> {
         fn from(alu_operand: SimpleOperand) -> Self {
             match alu_operand {
                 SimpleOperand::A => atom(A),
@@ -235,7 +249,7 @@ mod tests {
         }
     }
 
-    impl From<Condition> for SynExpr<StrToken<'static>> {
+    impl From<Condition> for SynExpr<TestToken> {
         fn from(condition: Condition) -> Self {
             match condition {
                 Condition::Nz => atom(Nz),
@@ -250,7 +264,7 @@ mod tests {
         assert_eq!(
             analyze(
                 Keyword::Ld,
-                vec![SynExpr::from(StrToken::Identifier(ident)).deref(), atom(A)]
+                vec![SynExpr::from(TestToken::Identifier(ident)).deref(), atom(A)]
             ),
             Ok(Instruction::Ld(LdKind::ImmediateAddr(
                 Expr::Symbol(ident.to_string()),
@@ -265,7 +279,7 @@ mod tests {
         assert_eq!(
             analyze(
                 Keyword::Ld,
-                vec![atom(A), SynExpr::from(StrToken::Identifier(ident)).deref()]
+                vec![atom(A), SynExpr::from(TestToken::Identifier(ident)).deref()]
             ),
             Ok(Instruction::Ld(LdKind::ImmediateAddr(
                 Expr::Symbol(ident.to_string()),
@@ -277,16 +291,16 @@ mod tests {
     #[test]
     fn analyze_cp_symbol() {
         let ident = "ident";
-        test_cp_const_analysis(StrToken::Identifier(ident), Expr::Symbol(ident.to_string()))
+        test_cp_const_analysis(TestToken::Identifier(ident), Expr::Symbol(ident.to_string()))
     }
 
     #[test]
     fn analyze_cp_literal() {
         let literal = 0x50;
-        test_cp_const_analysis(StrToken::Number(literal), Expr::Literal(literal))
+        test_cp_const_analysis(TestToken::Number(literal), Expr::Literal(literal))
     }
 
-    fn test_cp_const_analysis(atom: StrToken<'static>, expr: Expr) {
+    fn test_cp_const_analysis(atom: TestToken, expr: Expr) {
         assert_eq!(
             analyze(Keyword::Cp, Some(SynExpr::Atom(atom))),
             Ok(Instruction::Alu(
@@ -302,7 +316,7 @@ mod tests {
         assert_eq!(
             analyze(
                 Keyword::Jr,
-                Some(SynExpr::Atom(StrToken::Identifier(ident)))
+                Some(SynExpr::Atom(TestToken::Identifier(ident)))
             ),
             Ok(Instruction::Jr(None, Expr::Symbol(ident.to_string())))
         )
@@ -313,7 +327,7 @@ mod tests {
         test_instruction_analysis(describe_legal_instructions());
     }
 
-    type InstructionDescriptor = ((Keyword, Vec<SynExpr<StrToken<'static>>>), Instruction);
+    type InstructionDescriptor = ((Keyword, Vec<SynExpr<TestToken>>), Instruction);
 
     fn describe_legal_instructions() -> Vec<InstructionDescriptor> {
         let mut descriptors = Vec::new();
@@ -397,7 +411,7 @@ mod tests {
                 Keyword::Jr,
                 vec![
                     SynExpr::from(condition),
-                    SynExpr::Atom(StrToken::Identifier(ident)),
+                    SynExpr::Atom(TestToken::Identifier(ident)),
                 ],
             ),
             Instruction::Jr(Some(condition), Expr::Symbol(ident.to_string())),
@@ -443,10 +457,30 @@ mod tests {
 
     fn analyze<I>(mnemonic: Keyword, operands: I) -> AnalysisResult
     where
-        I: IntoIterator<Item = SynExpr<StrToken<'static>>>,
+        I: IntoIterator<Item = SynExpr<TestToken>>,
     {
-        let mut analyzer = CommandAnalyzer::new(StrExprFactory::new());
+        let mut analyzer = CommandAnalyzer::new(TestExprFactory::new());
         analyzer.analyze_instruction(mnemonic, operands)
+    }
+
+    struct TestExprFactory;
+
+    impl TestExprFactory {
+        fn new() -> TestExprFactory {
+            TestExprFactory {}
+        }
+    }
+
+    impl ExprFactory for TestExprFactory {
+        type Token = TestToken;
+
+        fn mk_atom(&mut self, token: Self::Token) -> Expr {
+            match token {
+                TestToken::Identifier(ident) => Expr::Symbol(ident.to_string()),
+                TestToken::Number(number) => Expr::Literal(number),
+                _ => panic!(),
+            }
+        }
     }
 
     use diagnostics;

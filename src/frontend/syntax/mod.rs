@@ -40,6 +40,7 @@ pub trait Token {
     fn kind(&self) -> TokenKind;
 }
 
+#[derive(Clone)]
 pub enum TokenKind {
     ClosingBracket,
     Colon,
