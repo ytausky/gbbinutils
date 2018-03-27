@@ -1,5 +1,3 @@
-use frontend::ast;
-
 use super::*;
 use self::TerminalKind::*;
 
@@ -15,31 +13,27 @@ fn follows_line(lookahead: Lookahead) -> bool {
     }
 }
 
-pub fn parse_src<'a, I, B, EF>(tokens: I, block_context: &mut B, expr_factory: EF)
+pub fn parse_src<'a, I, B>(tokens: I, block_context: &mut B)
 where
     I: Iterator<Item = B::Terminal>,
     B: BlockContext,
-    EF: ast::ExprFactory<Terminal = I::Item, Expr = B::Expr>,
 {
     let mut parser = Parser {
         tokens: tokens.peekable(),
-        expr_factory: expr_factory,
         _phantom: PhantomData,
     };
     parser.parse_block(block_context)
 }
 
-struct Parser<I: Iterator, B: BlockContext, EF: ast::ExprFactory> {
+struct Parser<I: Iterator, B: BlockContext> {
     tokens: iter::Peekable<I>,
-    expr_factory: EF,
     _phantom: PhantomData<B>,
 }
 
-impl<I, B, EF> Parser<I, B, EF>
+impl<I, B> Parser<I, B>
 where
     B: BlockContext,
     I: Iterator<Item = B::Terminal>,
-    EF: ast::ExprFactory<Terminal = I::Item, Expr = B::Expr>,
 {
     fn lookahead(&mut self) -> Lookahead {
         self.tokens.peek().map(|t| t.kind())
@@ -131,20 +125,20 @@ where
         instruction_context.add_argument(expr)
     }
 
-    fn parse_expression(&mut self) -> EF::Expr {
+    fn parse_expression(&mut self) -> SynExpr<I::Item> {
         if self.lookahead() == Some(OpeningBracket) {
             self.parse_deref_expression()
         } else {
             let token = self.bump();
-            self.expr_factory.from_atom(token)
+            SynExpr::from(token)
         }
     }
 
-    fn parse_deref_expression(&mut self) -> EF::Expr {
+    fn parse_deref_expression(&mut self) -> SynExpr<I::Item> {
         self.expect(Some(OpeningBracket));
         let expr = self.parse_expression();
         self.expect(Some(ClosingBracket));
-        self.expr_factory.apply_deref(expr)
+        expr.deref()
     }
 }
 
@@ -152,7 +146,6 @@ where
 mod tests {
     use super::parse_src;
 
-    use frontend::ast;
     use frontend::syntax;
     use self::syntax::TerminalKind::*;
 
@@ -196,7 +189,6 @@ mod tests {
 
     impl syntax::BlockContext for TestContext {
         type Terminal = TestToken;
-        type Expr = TestExpr;
         type CommandContext = Self;
         type TerminalSequenceContext = Self;
 
@@ -220,9 +212,8 @@ mod tests {
 
     impl syntax::CommandContext for TestContext {
         type Terminal = TestToken;
-        type Expr = TestExpr;
 
-        fn add_argument(&mut self, expr: Self::Expr) {
+        fn add_argument(&mut self, expr: syntax::SynExpr<Self::Terminal>) {
             self.actions.push(Action::AddArgument(expr))
         }
 
@@ -252,8 +243,7 @@ mod tests {
         let mut parsing_constext = TestContext::new();
         parse_src(
             tokens.iter().cloned(),
-            &mut parsing_constext,
-            ast::ExprBuilder::new(),
+            &mut parsing_constext
         );
         assert_eq!(parsing_constext.actions, expected_actions)
     }

@@ -46,7 +46,6 @@ impl<'a, S: ir::Section> AstBuilder<'a, S> {
 
 impl<'a, S: Section> syntax::BlockContext for AstBuilder<'a, S> {
     type Terminal = Token<'a>;
-    type Expr = SynExpr<Self::Terminal>;
     type CommandContext = Self;
     type TerminalSequenceContext = Self;
 
@@ -72,9 +71,8 @@ impl<'a, S: Section> syntax::BlockContext for AstBuilder<'a, S> {
 
 impl<'a, S: Section> syntax::CommandContext for AstBuilder<'a, S> {
     type Terminal = Token<'a>;
-    type Expr = SynExpr<Self::Terminal>;
 
-    fn add_argument(&mut self, expr: Self::Expr) {
+    fn add_argument(&mut self, expr: SynExpr<Self::Terminal>) {
         match self.contexts.last_mut() {
             Some(&mut Context::Instruction(_, ref mut args)) => args.push(expr),
             _ => panic!(),
@@ -112,7 +110,6 @@ impl<'a, S: Section> syntax::TerminalSequenceContext for AstBuilder<'a, S> {
 mod tests {
     use super::*;
 
-    use self::ast::ExprFactory;
     use frontend::semantics::*;
 
     #[test]
@@ -121,8 +118,7 @@ mod tests {
         let mut actions = Vec::new();
         let mut builder = AstBuilder::new(TestSection::new(&mut actions));
         builder.enter_command(Token::Keyword(Keyword::Include));
-        let mut expr_builder = ast::ExprBuilder::new();
-        let expr = expr_builder.from_atom(Token::QuotedString(filename));
+        let expr = SynExpr::from(Token::QuotedString(filename));
         builder.add_argument(expr);
         builder.exit_command();
         let ast = builder.ast().to_vec();

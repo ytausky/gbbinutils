@@ -1,16 +1,13 @@
-use frontend::ast;
-
 mod lexer;
 mod parser;
 
 pub fn parse<'a, BC>(src: &'a str, mut actions: BC)
 where
-    BC: BlockContext<Terminal = Token<'a>, Expr = SynExpr<Token<'a>>>,
+    BC: BlockContext<Terminal = Token<'a>>,
 {
     self::parser::parse_src(
         self::lexer::Lexer::new(src),
-        &mut actions,
-        ast::ExprBuilder::new(),
+        &mut actions
     )
 }
 
@@ -96,8 +93,7 @@ pub enum TerminalKind {
 
 pub trait BlockContext {
     type Terminal: Terminal;
-    type Expr;
-    type CommandContext: CommandContext<Expr = Self::Expr>;
+    type CommandContext: CommandContext<Terminal = Self::Terminal>;
     type TerminalSequenceContext: TerminalSequenceContext<Terminal = Self::Terminal>;
     fn add_label(&mut self, label: Self::Terminal);
     fn enter_command(&mut self, name: Self::Terminal) -> &mut Self::CommandContext;
@@ -109,8 +105,7 @@ pub trait BlockContext {
 
 pub trait CommandContext {
     type Terminal: Terminal;
-    type Expr;
-    fn add_argument(&mut self, expr: Self::Expr);
+    fn add_argument(&mut self, expr: SynExpr<Self::Terminal>);
     fn exit_command(&mut self);
 }
 
@@ -124,6 +119,18 @@ pub trait TerminalSequenceContext {
 pub enum SynExpr<T> {
     Atom(T),
     Deref(Box<SynExpr<T>>),
+}
+
+impl<T> From<T> for SynExpr<T> {
+    fn from(atom: T) -> Self {
+        SynExpr::Atom(atom)
+    }
+}
+
+impl<T> SynExpr<T> {
+    fn deref(self) -> Self {
+        SynExpr::Deref(Box::new(self))
+    }
 }
 
 #[cfg(test)]
