@@ -1,7 +1,7 @@
 use diagnostics;
 
 use ir::*;
-use frontend::syntax::{Keyword, SynExpr, StrToken};
+use frontend::syntax::{Keyword, StrToken, SynExpr};
 
 pub struct CommandAnalyzer;
 
@@ -47,7 +47,9 @@ pub type AnalysisResult = Result<Instruction, diagnostics::Error>;
 fn analyze_operand<'a>(expr: SynExpr<StrToken<'a>>) -> Operand {
     match expr {
         SynExpr::Atom(StrToken::Keyword(keyword)) => analyze_keyword_operand(keyword),
-        SynExpr::Atom(StrToken::Identifier(ident)) => Operand::Const(Expr::Symbol(ident.to_string())),
+        SynExpr::Atom(StrToken::Identifier(ident)) => {
+            Operand::Const(Expr::Symbol(ident.to_string()))
+        }
         SynExpr::Atom(StrToken::Number(number)) => Operand::Const(Expr::Literal(number)),
         SynExpr::Deref(address_specifier) => analyze_deref_operand(*address_specifier),
         _ => panic!(),
@@ -73,7 +75,9 @@ fn analyze_keyword_operand(keyword: Keyword) -> Operand {
 fn analyze_deref_operand<'a>(addr: SynExpr<StrToken<'a>>) -> Operand {
     match addr {
         SynExpr::Atom(StrToken::Keyword(Keyword::Hl)) => Operand::Simple(SimpleOperand::DerefHl),
-        SynExpr::Atom(StrToken::Identifier(ident)) => Operand::Deref(Expr::Symbol(ident.to_string())),
+        SynExpr::Atom(StrToken::Identifier(ident)) => {
+            Operand::Deref(Expr::Symbol(ident.to_string()))
+        }
         _ => panic!(),
     }
 }
@@ -257,7 +261,10 @@ mod tests {
     fn analyze_unconditional_jr() {
         let ident = "ident";
         assert_eq!(
-            analyze(Keyword::Jr, Some(SynExpr::Atom(StrToken::Identifier(ident)))),
+            analyze(
+                Keyword::Jr,
+                Some(SynExpr::Atom(StrToken::Identifier(ident)))
+            ),
             Ok(Instruction::Jr(None, Expr::Symbol(ident.to_string())))
         )
     }
@@ -397,7 +404,7 @@ mod tests {
 
     fn analyze<I>(mnemonic: Keyword, operands: I) -> AnalysisResult
     where
-        I: IntoIterator<Item = SynExpr<StrToken<'static>>>
+        I: IntoIterator<Item = SynExpr<StrToken<'static>>>,
     {
         let mut analyzer = CommandAnalyzer::new();
         analyzer.analyze_instruction(mnemonic, operands)

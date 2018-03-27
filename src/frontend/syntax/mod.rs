@@ -195,7 +195,10 @@ mod tests {
 
     #[test]
     fn macro_terminal_kind() {
-        assert_eq!(StrToken::Keyword(Keyword::Macro).kind(), TerminalKind::Macro)
+        assert_eq!(
+            StrToken::Keyword(Keyword::Macro).kind(),
+            TerminalKind::Macro
+        )
     }
 
     #[test]
@@ -213,16 +216,25 @@ mod tests {
 
     #[test]
     fn word_terminal_kind() {
-        assert_eq!(StrToken::Identifier("identifier").kind(), TerminalKind::Word)
+        assert_eq!(
+            StrToken::Identifier("identifier").kind(),
+            TerminalKind::Word
+        )
     }
 
     #[test]
     fn opening_bracket_terminal_kind() {
-        assert_eq!(StrToken::OpeningBracket.kind(), TerminalKind::OpeningBracket)
+        assert_eq!(
+            StrToken::OpeningBracket.kind(),
+            TerminalKind::OpeningBracket
+        )
     }
 
     #[test]
     fn closing_bracket_terminal_kind() {
-        assert_eq!(StrToken::ClosingBracket.kind(), TerminalKind::ClosingBracket)
+        assert_eq!(
+            StrToken::ClosingBracket.kind(),
+            TerminalKind::ClosingBracket
+        )
     }
 }

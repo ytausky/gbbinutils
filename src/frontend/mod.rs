@@ -90,7 +90,9 @@ impl<'a, S: Section> syntax::CommandContext for AstBuilder<'a, S> {
                 StrToken::Keyword(keyword) => {
                     let mut analyzer = semantics::CommandAnalyzer::new();
                     self.section.add_instruction(
-                        analyzer.analyze_instruction(keyword, args.into_iter()).unwrap(),
+                        analyzer
+                            .analyze_instruction(keyword, args.into_iter())
+                            .unwrap(),
                     )
                 }
                 _ => panic!(),
