@@ -18,10 +18,22 @@ pub fn analyze_instruction<'a, I>(mnemonic: Keyword, operands: I) -> AnalysisRes
 where
     I: IntoIterator<Item = SynExpr<Token<'a>>>,
 {
-    instruction(
-        to_mnemonic(mnemonic),
-        operands.into_iter().map(analyze_operand),
-    )
+    use self::Mnemonic::*;
+    let mut operands = operands.into_iter().map(analyze_operand);
+    match to_mnemonic(mnemonic) {
+        Alu(operation) => analyze_alu_instruction(operation, operands),
+        Dec => match operands.next() {
+            Some(Operand::Simple(operand)) => Ok(Instruction::Dec(operand)),
+            _ => panic!(),
+        },
+        Jr => analyze_jr_instruction(operands),
+        Ld => analyze_ld(operands),
+        Nullary(instruction) => analyze_nullary_instruction(instruction, operands),
+        Push => match operands.next() {
+            Some(Operand::Reg16(src)) => Ok(Instruction::Push(src)),
+            _ => panic!(),
+        },
+    }
 }
 
 fn analyze_operand<'a>(expr: SynExpr<Token<'a>>) -> Operand {
@@ -81,27 +93,6 @@ fn to_mnemonic(keyword: Keyword) -> Mnemonic {
         Keyword::Stop => Mnemonic::Nullary(Instruction::Stop),
         Keyword::Xor => Mnemonic::Alu(AluOperation::Xor),
         _ => panic!(),
-    }
-}
-
-fn instruction<I>(mnemonic: Mnemonic, mut operands: I) -> AnalysisResult
-where
-    I: Iterator<Item = Operand>,
-{
-    use self::Mnemonic::*;
-    match mnemonic {
-        Alu(operation) => analyze_alu_instruction(operation, operands),
-        Dec => match operands.next() {
-            Some(Operand::Simple(operand)) => Ok(Instruction::Dec(operand)),
-            _ => panic!(),
-        },
-        Jr => analyze_jr_instruction(operands),
-        Ld => analyze_ld(operands),
-        Nullary(instruction) => analyze_nullary_instruction(instruction, operands),
-        Push => match operands.next() {
-            Some(Operand::Reg16(src)) => Ok(Instruction::Push(src)),
-            _ => panic!(),
-        },
     }
 }
 
