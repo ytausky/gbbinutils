@@ -17,7 +17,7 @@ pub fn analyze_file<S: ir::Section>(name: &str, section: S) {
     syntax::parse(&src, ast_builder)
 }
 
-struct ExprFactory;
+pub struct ExprFactory;
 
 impl ExprFactory {
     fn new() -> ExprFactory {
@@ -104,7 +104,7 @@ impl<'a, S: Section> syntax::CommandContext for AstBuilder<'a, S> {
             match name {
                 StrToken::Keyword(Keyword::Include) => self.ast.push(reduce_include(args)),
                 StrToken::Keyword(keyword) => {
-                    let mut analyzer = semantics::CommandAnalyzer::new();
+                    let mut analyzer = semantics::CommandAnalyzer::new(ExprFactory::new());
                     self.section.add_instruction(
                         analyzer
                             .analyze_instruction(keyword, args.into_iter())

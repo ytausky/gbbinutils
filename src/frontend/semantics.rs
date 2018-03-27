@@ -9,10 +9,8 @@ struct OperandAnalyzer {
 }
 
 impl OperandAnalyzer {
-    fn new() -> OperandAnalyzer {
-        OperandAnalyzer {
-            expr_factory: ExprFactory::new(),
-        }
+    fn new(expr_factory: ExprFactory) -> OperandAnalyzer {
+        OperandAnalyzer { expr_factory }
     }
 
     fn analyze_operand(&mut self, expr: SynExpr<StrToken>) -> Operand {
@@ -50,9 +48,9 @@ pub struct CommandAnalyzer {
 }
 
 impl CommandAnalyzer {
-    pub fn new() -> CommandAnalyzer {
+    pub fn new(expr_factory: ExprFactory) -> CommandAnalyzer {
         CommandAnalyzer {
-            operand_analyzer: OperandAnalyzer::new(),
+            operand_analyzer: OperandAnalyzer::new(expr_factory),
         }
     }
 
@@ -445,7 +443,7 @@ mod tests {
     where
         I: IntoIterator<Item = SynExpr<StrToken<'static>>>,
     {
-        let mut analyzer = CommandAnalyzer::new();
+        let mut analyzer = CommandAnalyzer::new(ExprFactory::new());
         analyzer.analyze_instruction(mnemonic, operands)
     }
 
