@@ -1,18 +1,7 @@
 use diagnostics;
 
-use frontend::AsmItem;
-use frontend::syntax::{Keyword, SynExpr, Token};
-
 use ir::*;
-
-pub fn reduce_include<'a>(mut arguments: Vec<SynExpr<Token<'a>>>) -> AsmItem<'a> {
-    assert_eq!(arguments.len(), 1);
-    let path = arguments.pop().unwrap();
-    match path {
-        SynExpr::Atom(Token::QuotedString(path_str)) => include(path_str),
-        _ => panic!(),
-    }
-}
+use frontend::syntax::{Keyword, SynExpr, Token};
 
 #[derive(Debug, PartialEq)]
 pub enum Operand {
@@ -167,10 +156,6 @@ fn analyze_ld_a(other: Operand, direction: Direction) -> AnalysisResult {
         Operand::Deref(expr) => Ok(Instruction::Ld(LdKind::ImmediateAddr(expr, direction))),
         _ => panic!(),
     }
-}
-
-pub fn include(path: &str) -> AsmItem {
-    AsmItem::Include(path)
 }
 
 #[cfg(test)]

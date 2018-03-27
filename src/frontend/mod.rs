@@ -86,7 +86,7 @@ impl<'a, S: Section> syntax::CommandContext for AstBuilder<'a, S> {
     fn exit_command(&mut self) {
         if let Some(Context::Instruction(name, args)) = self.contexts.pop() {
             match name {
-                Token::Keyword(Keyword::Include) => self.ast.push(semantics::reduce_include(args)),
+                Token::Keyword(Keyword::Include) => self.ast.push(reduce_include(args)),
                 Token::Keyword(keyword) => self.section.add_instruction(
                     semantics::analyze_instruction(keyword, args.into_iter()).unwrap(),
                 ),
@@ -110,11 +110,22 @@ impl<'a, S: Section> syntax::TerminalSequenceContext for AstBuilder<'a, S> {
     }
 }
 
+fn reduce_include<'a>(mut arguments: Vec<SynExpr<Token<'a>>>) -> AsmItem<'a> {
+    assert_eq!(arguments.len(), 1);
+    let path = arguments.pop().unwrap();
+    match path {
+        SynExpr::Atom(Token::QuotedString(path_str)) => include(path_str),
+        _ => panic!(),
+    }
+}
+
+pub fn include(path: &str) -> AsmItem {
+    AsmItem::Include(path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use frontend::semantics::*;
 
     #[test]
     fn build_include_item() {
