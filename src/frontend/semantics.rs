@@ -1,3 +1,4 @@
+use diagnostics;
 use frontend::ast;
 
 use frontend::ast::Expression;
@@ -23,7 +24,7 @@ pub enum Operand {
     Reg16(Reg16),
 }
 
-pub type InterpretationResult = Result<Instruction, ()>;
+pub type InterpretationResult = Result<Instruction, diagnostics::Error>;
 
 pub fn interpret_instruction<'a, I>(mnemonic: Keyword, operands: I) -> InterpretationResult
 where
@@ -108,14 +109,14 @@ where
         Alu(operation) => interpret_alu_instruction(operation, operands),
         Dec => match operands.next() {
             Some(Operand::Simple(operand)) => Ok(Instruction::Dec(operand)),
-            _ => Err(()),
+            _ => panic!(),
         },
         Jr => interpret_jr_instruction(operands),
         Ld => analyze_ld(operands),
-        Nullary(instruction) => Ok(instruction),
+        Nullary(instruction) => interpret_nullary_instruction(instruction, operands),
         Push => match operands.next() {
             Some(Operand::Reg16(src)) => Ok(Instruction::Push(src)),
-            _ => Err(()),
+            _ => panic!(),
         },
     }
 }
@@ -127,7 +128,7 @@ where
     match operands.next() {
         Some(Operand::Simple(src)) => Ok(Instruction::Alu(operation, AluSource::Simple(src))),
         Some(Operand::Const(expr)) => Ok(Instruction::Alu(operation, AluSource::Immediate(expr))),
-        _ => Err(()),
+        _ => panic!(),
     }
 }
 
@@ -135,16 +136,26 @@ fn interpret_jr_instruction<I: Iterator<Item = Operand>>(mut operands: I) -> Int
     match operands.next() {
         Some(Operand::Condition(condition)) => match operands.next() {
             Some(Operand::Const(expr)) => Ok(Instruction::Jr(Some(condition), expr)),
-            _ => Err(()),
+            _ => panic!(),
         },
         Some(Operand::Const(expr)) => Ok(Instruction::Jr(None, expr)),
-        _ => Err(()),
+        _ => panic!(),
+    }
+}
+
+fn interpret_nullary_instruction<I: Iterator>(
+    instruction: Instruction,
+    operands: I,
+) -> InterpretationResult {
+    match operands.count() {
+        0 => Ok(instruction),
+        n => Err(diagnostics::Error::OperandCount(0, n)),
     }
 }
 
 fn analyze_ld<I: Iterator<Item = Operand>>(mut operands: I) -> InterpretationResult {
-    let dest = operands.next().ok_or(())?;
-    let src = operands.next().ok_or(())?;
+    let dest = operands.next().unwrap();
+    let src = operands.next().unwrap();
     assert_eq!(operands.next(), None);
     match (dest, src) {
         (Operand::Simple(dest), Operand::Simple(src)) => {
@@ -152,14 +163,14 @@ fn analyze_ld<I: Iterator<Item = Operand>>(mut operands: I) -> InterpretationRes
         }
         (Operand::Simple(SimpleOperand::A), src) => interpret_ld_a(src, Direction::IntoA),
         (dest, Operand::Simple(SimpleOperand::A)) => interpret_ld_a(dest, Direction::FromA),
-        _ => Err(()),
+        _ => panic!(),
     }
 }
 
 fn interpret_ld_a(other: Operand, direction: Direction) -> InterpretationResult {
     match other {
         Operand::Deref(expr) => Ok(Instruction::Ld(LdKind::ImmediateAddr(expr, direction))),
-        _ => Err(()),
+        _ => panic!(),
     }
 }
 
@@ -409,5 +420,15 @@ mod tests {
         for ((mnemonic, operands), expected) in descriptors {
             assert_eq!(interpret_instruction(mnemonic, operands), Ok(expected))
         }
+    }
+
+    use diagnostics;
+
+    #[test]
+    fn test_nop_a() {
+        assert_eq!(
+            interpret_instruction(Keyword::Nop, vec![atom(A)]),
+            Err(diagnostics::Error::OperandCount(0, 1))
+        )
     }
 }
