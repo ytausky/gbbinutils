@@ -88,7 +88,7 @@ impl<'a, S: Section> syntax::CommandContext for AstBuilder<'a, S> {
             match name {
                 Token::Keyword(Keyword::Include) => self.ast.push(semantics::reduce_include(args)),
                 Token::Keyword(keyword) => self.section.add_instruction(
-                    semantics::interpret_instruction(keyword, args.into_iter()).unwrap(),
+                    semantics::analyze_instruction(keyword, args.into_iter()).unwrap(),
                 ),
                 _ => panic!(),
             }

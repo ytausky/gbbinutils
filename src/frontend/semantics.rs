@@ -23,29 +23,29 @@ pub enum Operand {
     Reg16(Reg16),
 }
 
-pub type InterpretationResult = Result<Instruction, diagnostics::Error>;
+pub type AnalysisResult = Result<Instruction, diagnostics::Error>;
 
-pub fn interpret_instruction<'a, I>(mnemonic: Keyword, operands: I) -> InterpretationResult
+pub fn analyze_instruction<'a, I>(mnemonic: Keyword, operands: I) -> AnalysisResult
 where
     I: IntoIterator<Item = SynExpr<Token<'a>>>,
 {
     instruction(
         to_mnemonic(mnemonic),
-        operands.into_iter().map(interpret_as_operand),
+        operands.into_iter().map(analyze_operand),
     )
 }
 
-fn interpret_as_operand<'a>(expr: SynExpr<Token<'a>>) -> Operand {
+fn analyze_operand<'a>(expr: SynExpr<Token<'a>>) -> Operand {
     match expr {
-        SynExpr::Atom(Token::Keyword(keyword)) => interpret_as_keyword_operand(keyword),
+        SynExpr::Atom(Token::Keyword(keyword)) => analyze_keyword_operand(keyword),
         SynExpr::Atom(Token::Identifier(ident)) => Operand::Const(Expr::Symbol(ident.to_string())),
         SynExpr::Atom(Token::Number(number)) => Operand::Const(Expr::Literal(number)),
-        SynExpr::Deref(address_specifier) => interpret_as_deref_operand(*address_specifier),
+        SynExpr::Deref(address_specifier) => analyze_deref_operand(*address_specifier),
         _ => panic!(),
     }
 }
 
-fn interpret_as_keyword_operand(keyword: Keyword) -> Operand {
+fn analyze_keyword_operand(keyword: Keyword) -> Operand {
     match keyword {
         Keyword::A => Operand::Simple(SimpleOperand::A),
         Keyword::B => Operand::Simple(SimpleOperand::B),
@@ -61,7 +61,7 @@ fn interpret_as_keyword_operand(keyword: Keyword) -> Operand {
     }
 }
 
-fn interpret_as_deref_operand<'a>(addr: SynExpr<Token<'a>>) -> Operand {
+fn analyze_deref_operand<'a>(addr: SynExpr<Token<'a>>) -> Operand {
     match addr {
         SynExpr::Atom(Token::Keyword(Keyword::Hl)) => Operand::Simple(SimpleOperand::DerefHl),
         SynExpr::Atom(Token::Identifier(ident)) => Operand::Deref(Expr::Symbol(ident.to_string())),
@@ -95,20 +95,20 @@ fn to_mnemonic(keyword: Keyword) -> Mnemonic {
     }
 }
 
-fn instruction<I>(mnemonic: Mnemonic, mut operands: I) -> InterpretationResult
+fn instruction<I>(mnemonic: Mnemonic, mut operands: I) -> AnalysisResult
 where
     I: Iterator<Item = Operand>,
 {
     use self::Mnemonic::*;
     match mnemonic {
-        Alu(operation) => interpret_alu_instruction(operation, operands),
+        Alu(operation) => analyze_alu_instruction(operation, operands),
         Dec => match operands.next() {
             Some(Operand::Simple(operand)) => Ok(Instruction::Dec(operand)),
             _ => panic!(),
         },
-        Jr => interpret_jr_instruction(operands),
+        Jr => analyze_jr_instruction(operands),
         Ld => analyze_ld(operands),
-        Nullary(instruction) => interpret_nullary_instruction(instruction, operands),
+        Nullary(instruction) => analyze_nullary_instruction(instruction, operands),
         Push => match operands.next() {
             Some(Operand::Reg16(src)) => Ok(Instruction::Push(src)),
             _ => panic!(),
@@ -116,7 +116,7 @@ where
     }
 }
 
-fn interpret_alu_instruction<I>(operation: AluOperation, mut operands: I) -> InterpretationResult
+fn analyze_alu_instruction<I>(operation: AluOperation, mut operands: I) -> AnalysisResult
 where
     I: Iterator<Item = Operand>,
 {
@@ -127,7 +127,7 @@ where
     }
 }
 
-fn interpret_jr_instruction<I: Iterator<Item = Operand>>(mut operands: I) -> InterpretationResult {
+fn analyze_jr_instruction<I: Iterator<Item = Operand>>(mut operands: I) -> AnalysisResult {
     match operands.next() {
         Some(Operand::Condition(condition)) => match operands.next() {
             Some(Operand::Const(expr)) => Ok(Instruction::Jr(Some(condition), expr)),
@@ -138,17 +138,17 @@ fn interpret_jr_instruction<I: Iterator<Item = Operand>>(mut operands: I) -> Int
     }
 }
 
-fn interpret_nullary_instruction<I: Iterator>(
+fn analyze_nullary_instruction<I: Iterator>(
     instruction: Instruction,
     operands: I,
-) -> InterpretationResult {
+) -> AnalysisResult {
     match operands.count() {
         0 => Ok(instruction),
         n => Err(diagnostics::Error::OperandCount(0, n)),
     }
 }
 
-fn analyze_ld<I: Iterator<Item = Operand>>(mut operands: I) -> InterpretationResult {
+fn analyze_ld<I: Iterator<Item = Operand>>(mut operands: I) -> AnalysisResult {
     let dest = operands.next().unwrap();
     let src = operands.next().unwrap();
     assert_eq!(operands.next(), None);
@@ -156,13 +156,13 @@ fn analyze_ld<I: Iterator<Item = Operand>>(mut operands: I) -> InterpretationRes
         (Operand::Simple(dest), Operand::Simple(src)) => {
             Ok(Instruction::Ld(LdKind::Simple(dest, src)))
         }
-        (Operand::Simple(SimpleOperand::A), src) => interpret_ld_a(src, Direction::IntoA),
-        (dest, Operand::Simple(SimpleOperand::A)) => interpret_ld_a(dest, Direction::FromA),
+        (Operand::Simple(SimpleOperand::A), src) => analyze_ld_a(src, Direction::IntoA),
+        (dest, Operand::Simple(SimpleOperand::A)) => analyze_ld_a(dest, Direction::FromA),
         _ => panic!(),
     }
 }
 
-fn interpret_ld_a(other: Operand, direction: Direction) -> InterpretationResult {
+fn analyze_ld_a(other: Operand, direction: Direction) -> AnalysisResult {
     match other {
         Operand::Deref(expr) => Ok(Instruction::Ld(LdKind::ImmediateAddr(expr, direction))),
         _ => panic!(),
@@ -218,10 +218,10 @@ mod tests {
     }
 
     #[test]
-    fn interpret_ld_deref_symbol_a() {
+    fn analyze_ld_deref_symbol_a() {
         let ident = "ident";
         assert_eq!(
-            interpret_instruction(
+            analyze_instruction(
                 Keyword::Ld,
                 vec![SynExpr::from(Token::Identifier(ident)).deref(), atom(A)]
             ),
@@ -233,10 +233,10 @@ mod tests {
     }
 
     #[test]
-    fn interpret_ld_a_deref_symbol() {
+    fn analyze_ld_a_deref_symbol() {
         let ident = "ident";
         assert_eq!(
-            interpret_instruction(
+            analyze_instruction(
                 Keyword::Ld,
                 vec![atom(A), SynExpr::from(Token::Identifier(ident)).deref()]
             ),
@@ -248,20 +248,20 @@ mod tests {
     }
 
     #[test]
-    fn interpret_cp_symbol() {
+    fn analyze_cp_symbol() {
         let ident = "ident";
-        test_cp_const(Token::Identifier(ident), Expr::Symbol(ident.to_string()))
+        test_cp_const_analysis(Token::Identifier(ident), Expr::Symbol(ident.to_string()))
     }
 
     #[test]
-    fn interpret_cp_literal() {
+    fn analyze_cp_literal() {
         let literal = 0x50;
-        test_cp_const(Token::Number(literal), Expr::Literal(literal))
+        test_cp_const_analysis(Token::Number(literal), Expr::Literal(literal))
     }
 
-    fn test_cp_const(atom: Token<'static>, expr: Expr) {
+    fn test_cp_const_analysis(atom: Token<'static>, expr: Expr) {
         assert_eq!(
-            interpret_instruction(Keyword::Cp, Some(SynExpr::Atom(atom))),
+            analyze_instruction(Keyword::Cp, Some(SynExpr::Atom(atom))),
             Ok(Instruction::Alu(
                 AluOperation::Cp,
                 AluSource::Immediate(expr)
@@ -270,17 +270,17 @@ mod tests {
     }
 
     #[test]
-    fn interpret_unconditional_jr() {
+    fn analyze_unconditional_jr() {
         let ident = "ident";
         assert_eq!(
-            interpret_instruction(Keyword::Jr, Some(SynExpr::Atom(Token::Identifier(ident)))),
+            analyze_instruction(Keyword::Jr, Some(SynExpr::Atom(Token::Identifier(ident)))),
             Ok(Instruction::Jr(None, Expr::Symbol(ident.to_string())))
         )
     }
 
     #[test]
-    fn interpret_legal_instructions() {
-        test_instruction_interpretation(describe_legal_instructions());
+    fn analyze_legal_instructions() {
+        test_instruction_analysis(describe_legal_instructions());
     }
 
     type InstructionDescriptor = ((Keyword, Vec<SynExpr<Token<'static>>>), Instruction);
@@ -405,18 +405,18 @@ mod tests {
 
     const CONDITIONS: [Condition; 2] = [Condition::Nz, Condition::Z];
 
-    fn test_instruction_interpretation(descriptors: Vec<InstructionDescriptor>) {
+    fn test_instruction_analysis(descriptors: Vec<InstructionDescriptor>) {
         for ((mnemonic, operands), expected) in descriptors {
-            assert_eq!(interpret_instruction(mnemonic, operands), Ok(expected))
+            assert_eq!(analyze_instruction(mnemonic, operands), Ok(expected))
         }
     }
 
     use diagnostics;
 
     #[test]
-    fn test_nop_a() {
+    fn analyze_nop_a() {
         assert_eq!(
-            interpret_instruction(Keyword::Nop, vec![atom(A)]),
+            analyze_instruction(Keyword::Nop, vec![atom(A)]),
             Err(diagnostics::Error::OperandCount(0, 1))
         )
     }
