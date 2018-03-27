@@ -6,14 +6,14 @@ use std::marker::PhantomData;
 
 type Lookahead = Option<TerminalKind>;
 
-fn follows_line(lookahead: Lookahead) -> bool {
-    match lookahead {
+fn follows_line(lookahead: &Lookahead) -> bool {
+    match *lookahead {
         None | Some(Eol) => true,
         _ => false,
     }
 }
 
-pub fn parse_src<'a, I, B>(tokens: I, block_context: &mut B)
+pub fn parse_src<I, B>(tokens: I, block_context: &mut B)
 where
     I: Iterator<Item = B::Terminal>,
     B: BlockContext,
@@ -43,13 +43,13 @@ where
         self.tokens.next().unwrap()
     }
 
-    fn expect(&mut self, expected: Lookahead) -> I::Item {
-        assert_eq!(self.lookahead(), expected);
+    fn expect(&mut self, expected: &Lookahead) -> I::Item {
+        assert_eq!(self.lookahead(), *expected);
         self.bump()
     }
 
     fn parse_block(&mut self, block_context: &mut B) {
-        self.parse_list(Some(Eol), follows_line, |p| p.parse_line(block_context))
+        self.parse_list(&Some(Eol), follows_line, |p| p.parse_line(block_context))
     }
 
     fn parse_line(&mut self, block_context: &mut B) {
@@ -61,7 +61,7 @@ where
     }
 
     fn parse_labeled_line(&mut self, block_context: &mut B) {
-        let label = self.expect(Some(Label));
+        let label = self.expect(&Some(Label));
         if self.lookahead() == Some(Colon) {
             self.bump();
         }
@@ -75,48 +75,48 @@ where
 
     fn parse_unlabeled_line(&mut self, block_context: &mut B) {
         match self.lookahead() {
-            ref t if follows_line(t.clone()) => (),
+            ref t if follows_line(t) => (),
             Some(Word) => self.parse_command(block_context),
             _ => panic!(),
         }
     }
 
     fn parse_macro_definition(&mut self, label: I::Item, block_context: &mut B) {
-        self.expect(Some(Macro));
+        self.expect(&Some(Macro));
         let macro_block_context = block_context.enter_macro_definition(label);
-        self.expect(Some(Eol));
+        self.expect(&Some(Eol));
         while self.lookahead() != Some(Endm) {
             macro_block_context.push_terminal(self.bump())
         }
-        self.expect(Some(Endm));
+        self.expect(&Some(Endm));
         macro_block_context.exit_terminal_sequence()
     }
 
     fn parse_command(&mut self, block_context: &mut B) {
-        let first_token = self.expect(Some(Word));
+        let first_token = self.expect(&Some(Word));
         let instruction_context = block_context.enter_command(first_token);
         self.parse_argument_list(instruction_context);
         instruction_context.exit_command()
     }
 
     fn parse_argument_list(&mut self, instruction_context: &mut B::CommandContext) {
-        self.parse_list(Some(Comma), follows_line, |p| {
+        self.parse_list(&Some(Comma), follows_line, |p| {
             p.parse_argument(instruction_context)
         })
     }
 
-    fn parse_list<F, P>(&mut self, delimiter: Lookahead, mut follow: F, mut parser: P)
+    fn parse_list<F, P>(&mut self, delimiter: &Lookahead, mut follow: F, mut parser: P)
     where
-        F: FnMut(Lookahead) -> bool,
+        F: FnMut(&Lookahead) -> bool,
         P: FnMut(&mut Self),
     {
-        if !follow(self.lookahead()) {
+        if !follow(&self.lookahead()) {
             parser(self);
-            while self.lookahead() == delimiter {
+            while self.lookahead() == *delimiter {
                 self.bump();
                 parser(self)
             }
-            assert!(follow(self.lookahead()))
+            assert!(follow(&self.lookahead()))
         }
     }
 
@@ -135,9 +135,9 @@ where
     }
 
     fn parse_deref_expression(&mut self) -> SynExpr<I::Item> {
-        self.expect(Some(OpeningBracket));
+        self.expect(&Some(OpeningBracket));
         let expr = self.parse_expression();
-        self.expect(Some(ClosingBracket));
+        self.expect(&Some(ClosingBracket));
         expr.deref()
     }
 }

@@ -24,7 +24,7 @@ impl<'a> Iterator for Lexer<'a> {
 impl<'a> Lexer<'a> {
     pub fn new(src: &str) -> Lexer {
         Lexer {
-            src: src,
+            src,
             char_indices: src.char_indices().peekable(),
             is_at_line_start: true,
         }
@@ -147,7 +147,7 @@ fn identify_keyword(word: &str) -> Option<Keyword> {
         .map(|&(_, keyword)| keyword)
 }
 
-const KEYWORDS: [(&'static str, Keyword); 24] = [
+const KEYWORDS: [(&str, Keyword); 24] = [
     ("a", Keyword::A),
     ("and", Keyword::And),
     ("b", Keyword::B),

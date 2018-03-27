@@ -38,7 +38,7 @@ impl<'a, S: ir::Section> AstBuilder<'a, S> {
         AstBuilder {
             ast: Vec::new(),
             contexts: vec![Context::Block],
-            section: section,
+            section,
         }
     }
 
@@ -115,7 +115,7 @@ impl<'a, S: Section> syntax::TerminalSequenceContext for AstBuilder<'a, S> {
     }
 }
 
-fn reduce_include<'a>(mut arguments: Vec<SynExpr<StrToken<'a>>>) -> AsmItem<'a> {
+fn reduce_include(mut arguments: Vec<SynExpr<StrToken>>) -> AsmItem {
     assert_eq!(arguments.len(), 1);
     let path = arguments.pop().unwrap();
     match path {

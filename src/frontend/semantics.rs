@@ -44,14 +44,14 @@ pub enum Operand {
 
 pub type AnalysisResult = Result<Instruction, diagnostics::Error>;
 
-fn analyze_operand<'a>(expr: SynExpr<StrToken<'a>>) -> Operand {
+fn analyze_operand(expr: SynExpr<StrToken>) -> Operand {
     match expr {
         SynExpr::Atom(StrToken::Keyword(keyword)) => analyze_keyword_operand(keyword),
         SynExpr::Atom(StrToken::Identifier(ident)) => {
             Operand::Const(Expr::Symbol(ident.to_string()))
         }
         SynExpr::Atom(StrToken::Number(number)) => Operand::Const(Expr::Literal(number)),
-        SynExpr::Deref(address_specifier) => analyze_deref_operand(*address_specifier),
+        SynExpr::Deref(address_specifier) => analyze_deref_operand(address_specifier.as_ref()),
         _ => panic!(),
     }
 }
@@ -72,8 +72,8 @@ fn analyze_keyword_operand(keyword: Keyword) -> Operand {
     }
 }
 
-fn analyze_deref_operand<'a>(addr: SynExpr<StrToken<'a>>) -> Operand {
-    match addr {
+fn analyze_deref_operand(addr: &SynExpr<StrToken>) -> Operand {
+    match *addr {
         SynExpr::Atom(StrToken::Keyword(Keyword::Hl)) => Operand::Simple(SimpleOperand::DerefHl),
         SynExpr::Atom(StrToken::Identifier(ident)) => {
             Operand::Deref(Expr::Symbol(ident.to_string()))
