@@ -2,7 +2,6 @@ use ir;
 
 use std;
 
-mod ast;
 mod semantics;
 mod syntax;
 
@@ -19,9 +18,14 @@ pub fn analyze_file<S: ir::Section>(name: &str, section: S) {
 }
 
 pub struct AstBuilder<'a, S: ir::Section> {
-    ast: Vec<ast::AsmItem<'a>>,
+    ast: Vec<AsmItem<'a>>,
     contexts: Vec<Context<'a>>,
     section: S,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum AsmItem<'a> {
+    Include(&'a str),
 }
 
 enum Context<'a> {
@@ -39,7 +43,7 @@ impl<'a, S: ir::Section> AstBuilder<'a, S> {
     }
 
     #[cfg(test)]
-    fn ast(&self) -> &Vec<ast::AsmItem<'a>> {
+    fn ast(&self) -> &Vec<AsmItem<'a>> {
         &self.ast
     }
 }

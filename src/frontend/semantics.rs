@@ -1,11 +1,11 @@
 use diagnostics;
-use frontend::ast;
 
+use frontend::AsmItem;
 use frontend::syntax::{Keyword, SynExpr, Token};
 
 use ir::*;
 
-pub fn reduce_include<'a>(mut arguments: Vec<SynExpr<Token<'a>>>) -> ast::AsmItem<'a> {
+pub fn reduce_include<'a>(mut arguments: Vec<SynExpr<Token<'a>>>) -> AsmItem<'a> {
     assert_eq!(arguments.len(), 1);
     let path = arguments.pop().unwrap();
     match path {
@@ -169,8 +169,8 @@ fn interpret_ld_a(other: Operand, direction: Direction) -> InterpretationResult 
     }
 }
 
-pub fn include(path: &str) -> ast::AsmItem {
-    ast::AsmItem::Include(path)
+pub fn include(path: &str) -> AsmItem {
+    AsmItem::Include(path)
 }
 
 #[cfg(test)]
