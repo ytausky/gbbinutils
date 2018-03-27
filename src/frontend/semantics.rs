@@ -14,7 +14,22 @@ impl CommandAnalyzer {
     where
         I: IntoIterator<Item = SynExpr<StrToken<'a>>>,
     {
-        analyze_instruction(mnemonic, operands)
+        use self::Mnemonic::*;
+        let mut operands = operands.into_iter().map(analyze_operand);
+        match to_mnemonic(mnemonic) {
+            Alu(operation) => analyze_alu_instruction(operation, operands),
+            Dec => match operands.next() {
+                Some(Operand::Simple(operand)) => Ok(Instruction::Dec(operand)),
+                _ => panic!(),
+            },
+            Jr => analyze_jr_instruction(operands),
+            Ld => analyze_ld(operands),
+            Nullary(instruction) => analyze_nullary_instruction(instruction, operands),
+            Push => match operands.next() {
+                Some(Operand::Reg16(src)) => Ok(Instruction::Push(src)),
+                _ => panic!(),
+            },
+        }
     }
 }
 
@@ -28,28 +43,6 @@ pub enum Operand {
 }
 
 pub type AnalysisResult = Result<Instruction, diagnostics::Error>;
-
-fn analyze_instruction<'a, I>(mnemonic: Keyword, operands: I) -> AnalysisResult
-where
-    I: IntoIterator<Item = SynExpr<StrToken<'a>>>,
-{
-    use self::Mnemonic::*;
-    let mut operands = operands.into_iter().map(analyze_operand);
-    match to_mnemonic(mnemonic) {
-        Alu(operation) => analyze_alu_instruction(operation, operands),
-        Dec => match operands.next() {
-            Some(Operand::Simple(operand)) => Ok(Instruction::Dec(operand)),
-            _ => panic!(),
-        },
-        Jr => analyze_jr_instruction(operands),
-        Ld => analyze_ld(operands),
-        Nullary(instruction) => analyze_nullary_instruction(instruction, operands),
-        Push => match operands.next() {
-            Some(Operand::Reg16(src)) => Ok(Instruction::Push(src)),
-            _ => panic!(),
-        },
-    }
-}
 
 fn analyze_operand<'a>(expr: SynExpr<StrToken<'a>>) -> Operand {
     match expr {
@@ -212,7 +205,7 @@ mod tests {
     fn analyze_ld_deref_symbol_a() {
         let ident = "ident";
         assert_eq!(
-            analyze_instruction(
+            analyze(
                 Keyword::Ld,
                 vec![SynExpr::from(StrToken::Identifier(ident)).deref(), atom(A)]
             ),
@@ -227,7 +220,7 @@ mod tests {
     fn analyze_ld_a_deref_symbol() {
         let ident = "ident";
         assert_eq!(
-            analyze_instruction(
+            analyze(
                 Keyword::Ld,
                 vec![atom(A), SynExpr::from(StrToken::Identifier(ident)).deref()]
             ),
@@ -252,7 +245,7 @@ mod tests {
 
     fn test_cp_const_analysis(atom: StrToken<'static>, expr: Expr) {
         assert_eq!(
-            analyze_instruction(Keyword::Cp, Some(SynExpr::Atom(atom))),
+            analyze(Keyword::Cp, Some(SynExpr::Atom(atom))),
             Ok(Instruction::Alu(
                 AluOperation::Cp,
                 AluSource::Immediate(expr)
@@ -264,7 +257,7 @@ mod tests {
     fn analyze_unconditional_jr() {
         let ident = "ident";
         assert_eq!(
-            analyze_instruction(Keyword::Jr, Some(SynExpr::Atom(StrToken::Identifier(ident)))),
+            analyze(Keyword::Jr, Some(SynExpr::Atom(StrToken::Identifier(ident)))),
             Ok(Instruction::Jr(None, Expr::Symbol(ident.to_string())))
         )
     }
@@ -398,17 +391,24 @@ mod tests {
 
     fn test_instruction_analysis(descriptors: Vec<InstructionDescriptor>) {
         for ((mnemonic, operands), expected) in descriptors {
-            assert_eq!(analyze_instruction(mnemonic, operands), Ok(expected))
+            assert_eq!(analyze(mnemonic, operands), Ok(expected))
         }
+    }
+
+    fn analyze<I>(mnemonic: Keyword, operands: I) -> AnalysisResult
+    where
+        I: IntoIterator<Item = SynExpr<StrToken<'static>>>
+    {
+        let mut analyzer = CommandAnalyzer::new();
+        analyzer.analyze_instruction(mnemonic, operands)
     }
 
     use diagnostics;
 
     #[test]
     fn analyze_nop_a() {
-        let mut analyzer = CommandAnalyzer::new();
         assert_eq!(
-            analyzer.analyze_instruction(Keyword::Nop, vec![atom(A)]),
+            analyze(Keyword::Nop, vec![atom(A)]),
             Err(diagnostics::Error::OperandCount(0, 1))
         )
     }
