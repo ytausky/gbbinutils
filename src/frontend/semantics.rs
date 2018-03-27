@@ -2,39 +2,39 @@ use diagnostics;
 
 use ir::*;
 use frontend::ExprFactory;
-use frontend::syntax::{Keyword, StrToken, SynExpr, Token, TokenKind};
+use frontend::syntax::{Keyword, SynExpr, Token, TokenKind};
 
-struct OperandAnalyzer {
-    expr_factory: ExprFactory,
+struct OperandAnalyzer<EF> {
+    expr_factory: EF,
 }
 
-impl OperandAnalyzer {
-    fn new(expr_factory: ExprFactory) -> OperandAnalyzer {
+impl<EF: ExprFactory> OperandAnalyzer<EF> {
+    fn new(expr_factory: EF) -> OperandAnalyzer<EF> {
         OperandAnalyzer { expr_factory }
     }
 
-    fn analyze_operand(&mut self, expr: SynExpr<StrToken>) -> Operand {
+    fn analyze_operand(&mut self, expr: SynExpr<EF::Token>) -> Operand {
         match expr {
             SynExpr::Atom(token) => self.analyze_atom_operand(token),
             SynExpr::Deref(expr) => self.analyze_deref_operand(*expr),
         }
     }
 
-    fn analyze_atom_operand(&mut self, token: StrToken) -> Operand {
+    fn analyze_atom_operand(&mut self, token: EF::Token) -> Operand {
         match token.kind() {
             TokenKind::Keyword(keyword) => analyze_keyword_operand(keyword),
             TokenKind::Identifier | TokenKind::Number => {
-                Operand::Const(self.expr_factory.from_token(token))
+                Operand::Const(self.expr_factory.mk_atom(token))
             }
             _ => panic!(),
         }
     }
 
-    fn analyze_deref_operand(&mut self, expr: SynExpr<StrToken>) -> Operand {
+    fn analyze_deref_operand(&mut self, expr: SynExpr<EF::Token>) -> Operand {
         if let SynExpr::Atom(token) = expr {
             match token.kind() {
                 TokenKind::Keyword(Keyword::Hl) => Operand::Simple(SimpleOperand::DerefHl),
-                TokenKind::Identifier => Operand::Deref(self.expr_factory.from_token(token)),
+                TokenKind::Identifier => Operand::Deref(self.expr_factory.mk_atom(token)),
                 _ => panic!(),
             }
         } else {
@@ -43,20 +43,20 @@ impl OperandAnalyzer {
     }
 }
 
-pub struct CommandAnalyzer {
-    operand_analyzer: OperandAnalyzer,
+pub struct CommandAnalyzer<EF> {
+    operand_analyzer: OperandAnalyzer<EF>,
 }
 
-impl CommandAnalyzer {
-    pub fn new(expr_factory: ExprFactory) -> CommandAnalyzer {
+impl<EF: ExprFactory> CommandAnalyzer<EF> {
+    pub fn new(expr_factory: EF) -> CommandAnalyzer<EF> {
         CommandAnalyzer {
             operand_analyzer: OperandAnalyzer::new(expr_factory),
         }
     }
 
-    pub fn analyze_instruction<'a, I>(&mut self, mnemonic: Keyword, operands: I) -> AnalysisResult
+    pub fn analyze_instruction<I>(&mut self, mnemonic: Keyword, operands: I) -> AnalysisResult
     where
-        I: IntoIterator<Item = SynExpr<StrToken<'a>>>,
+        I: IntoIterator<Item = SynExpr<EF::Token>>,
     {
         Analysis::new(
             mnemonic,
@@ -202,6 +202,8 @@ fn to_mnemonic(keyword: Keyword) -> Mnemonic {
 mod tests {
     use super::*;
 
+    use frontend::StrExprFactory;
+    use frontend::StrToken;
     use self::Keyword::*;
 
     fn atom(keyword: Keyword) -> SynExpr<StrToken<'static>> {
@@ -443,7 +445,7 @@ mod tests {
     where
         I: IntoIterator<Item = SynExpr<StrToken<'static>>>,
     {
-        let mut analyzer = CommandAnalyzer::new(ExprFactory::new());
+        let mut analyzer = CommandAnalyzer::new(StrExprFactory::new());
         analyzer.analyze_instruction(mnemonic, operands)
     }
 

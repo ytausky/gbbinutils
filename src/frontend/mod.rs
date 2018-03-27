@@ -17,14 +17,22 @@ pub fn analyze_file<S: ir::Section>(name: &str, section: S) {
     syntax::parse(&src, ast_builder)
 }
 
-pub struct ExprFactory;
+pub trait ExprFactory {
+    type Token: Token;
+    fn mk_atom(&mut self, token: Self::Token) -> Expr;
+}
 
-impl ExprFactory {
-    fn new() -> ExprFactory {
-        ExprFactory {}
+pub struct StrExprFactory<'a>(std::marker::PhantomData<&'a ()>);
+
+impl<'a> StrExprFactory<'a> {
+    fn new() -> StrExprFactory<'a> {
+        StrExprFactory(std::marker::PhantomData)
     }
+}
 
-    fn from_token(&mut self, token: StrToken) -> Expr {
+impl<'a> ExprFactory for StrExprFactory<'a> {
+    type Token = StrToken<'a>;
+    fn mk_atom(&mut self, token: Self::Token) -> Expr {
         match token {
             StrToken::Identifier(ident) => Expr::Symbol(ident.to_string()),
             StrToken::Number(number) => Expr::Literal(number),
@@ -104,7 +112,7 @@ impl<'a, S: Section> syntax::CommandContext for AstBuilder<'a, S> {
             match name {
                 StrToken::Keyword(Keyword::Include) => self.ast.push(reduce_include(args)),
                 StrToken::Keyword(keyword) => {
-                    let mut analyzer = semantics::CommandAnalyzer::new(ExprFactory::new());
+                    let mut analyzer = semantics::CommandAnalyzer::new(StrExprFactory::new());
                     self.section.add_instruction(
                         analyzer
                             .analyze_instruction(keyword, args.into_iter())
