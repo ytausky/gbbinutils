@@ -37,15 +37,16 @@ pub enum Keyword {
 }
 
 pub trait Token {
-    fn kind(&self) -> TokenKind;
+    type Ident;
+    fn kind(&self) -> TokenKind<Self::Ident>;
 }
 
-pub enum TokenKind {
+pub enum TokenKind<T> {
     ClosingBracket,
     Colon,
     Comma,
     Eol,
-    Identifier,
+    Identifier(T),
     Keyword(Keyword),
     Label,
     Number,
@@ -68,13 +69,14 @@ pub enum StrToken<'a> {
 }
 
 impl<'a> Token for StrToken<'a> {
-    fn kind(&self) -> TokenKind {
+    type Ident = &'a str;
+    fn kind(&self) -> TokenKind<Self::Ident> {
         match *self {
             StrToken::ClosingBracket => TokenKind::ClosingBracket,
             StrToken::Colon => TokenKind::Colon,
             StrToken::Comma => TokenKind::Comma,
             StrToken::Eol => TokenKind::Eol,
-            StrToken::Identifier(_) => TokenKind::Identifier,
+            StrToken::Identifier(ident) => TokenKind::Identifier(ident),
             StrToken::Keyword(keyword) => TokenKind::Keyword(keyword),
             StrToken::Label(_) => TokenKind::Label,
             StrToken::Number(_) => TokenKind::Number,
@@ -91,7 +93,7 @@ impl<T: Token> Terminal for T {
             TokenKind::Colon => TerminalKind::Colon,
             TokenKind::Comma => TerminalKind::Comma,
             TokenKind::Eol => TerminalKind::Eol,
-            TokenKind::Identifier => TerminalKind::Word,
+            TokenKind::Identifier(_) => TerminalKind::Word,
             TokenKind::Keyword(Keyword::Endm) => TerminalKind::Endm,
             TokenKind::Keyword(Keyword::Macro) => TerminalKind::Macro,
             TokenKind::Keyword(_) => TerminalKind::Word,
