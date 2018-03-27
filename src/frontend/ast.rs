@@ -1,14 +1,10 @@
+use frontend::syntax;
+
 use std::marker::PhantomData;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum AsmItem<'a> {
     Include(&'a str),
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum SynExpr<T> {
-    Atom(T),
-    Deref(Box<SynExpr<T>>),
 }
 
 pub trait ExprFactory {
@@ -28,13 +24,13 @@ impl<T> ExprBuilder<T> {
 
 impl<T> ExprFactory for ExprBuilder<T> {
     type Terminal = T;
-    type Expr = SynExpr<Self::Terminal>;
+    type Expr = syntax::SynExpr<Self::Terminal>;
 
     fn from_atom(&mut self, atom: Self::Terminal) -> Self::Expr {
-        SynExpr::Atom(atom)
+        syntax::SynExpr::Atom(atom)
     }
 
     fn apply_deref(&mut self, expr: Self::Expr) -> Self::Expr {
-        SynExpr::Deref(Box::new(expr))
+        syntax::SynExpr::Deref(Box::new(expr))
     }
 }

@@ -5,7 +5,7 @@ mod parser;
 
 pub fn parse<'a, BC>(src: &'a str, mut actions: BC)
 where
-    BC: BlockContext<Terminal = Token<'a>, Expr = ast::SynExpr<Token<'a>>>,
+    BC: BlockContext<Terminal = Token<'a>, Expr = SynExpr<Token<'a>>>,
 {
     self::parser::parse_src(
         self::lexer::Lexer::new(src),
@@ -118,6 +118,12 @@ pub trait TerminalSequenceContext {
     type Terminal: Terminal;
     fn push_terminal(&mut self, terminal: Self::Terminal);
     fn exit_terminal_sequence(&mut self);
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum SynExpr<T> {
+    Atom(T),
+    Deref(Box<SynExpr<T>>),
 }
 
 #[cfg(test)]

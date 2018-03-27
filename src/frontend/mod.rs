@@ -7,7 +7,6 @@ mod semantics;
 mod syntax;
 
 use ir::*;
-use self::ast::SynExpr;
 use self::syntax::*;
 
 pub fn analyze_file<S: ir::Section>(name: &str, section: S) {
@@ -27,7 +26,7 @@ pub struct AstBuilder<'a, S: ir::Section> {
 
 enum Context<'a> {
     Block,
-    Instruction(syntax::Token<'a>, Vec<ast::SynExpr<syntax::Token<'a>>>),
+    Instruction(syntax::Token<'a>, Vec<SynExpr<syntax::Token<'a>>>),
 }
 
 impl<'a, S: ir::Section> AstBuilder<'a, S> {

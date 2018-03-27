@@ -1,8 +1,7 @@
 use diagnostics;
 use frontend::ast;
 
-use frontend::ast::SynExpr;
-use frontend::syntax::{Keyword, Token};
+use frontend::syntax::{Keyword, SynExpr, Token};
 
 use ir::*;
 
