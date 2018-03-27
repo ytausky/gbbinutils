@@ -1,4 +1,4 @@
-use frontend::syntax::{Keyword, Token};
+use frontend::syntax::{Keyword, StrToken};
 
 use std::iter;
 use std::str;
@@ -10,9 +10,9 @@ pub struct Lexer<'a> {
 }
 
 impl<'a> Iterator for Lexer<'a> {
-    type Item = Token<'a>;
+    type Item = StrToken<'a>;
 
-    fn next(&mut self) -> Option<Token<'a>> {
+    fn next(&mut self) -> Option<StrToken<'a>> {
         self.skip_irrelevant_characters();
         match self.char_indices.peek() {
             None => None,
@@ -54,30 +54,30 @@ impl<'a> Lexer<'a> {
         self.char_indices.next();
     }
 
-    fn lex_token(&mut self, start: usize) -> Token<'a> {
+    fn lex_token(&mut self, start: usize) -> StrToken<'a> {
         let first_char = self.current_char().unwrap();
         let next_token = match first_char {
-            ']' => self.take(Token::ClosingBracket),
-            ':' => self.take(Token::Colon),
-            ',' => self.take(Token::Comma),
-            '\n' => self.take(Token::Eol),
-            '[' => self.take(Token::OpeningBracket),
+            ']' => self.take(StrToken::ClosingBracket),
+            ':' => self.take(StrToken::Colon),
+            ',' => self.take(StrToken::Comma),
+            '\n' => self.take(StrToken::Eol),
+            '[' => self.take(StrToken::OpeningBracket),
             '$' => self.lex_number(),
             '"' => self.lex_quoted_string(),
             _ => self.lex_word(start),
         };
-        if next_token == Token::Eol {
+        if next_token == StrToken::Eol {
             self.is_at_line_start = true
         }
         next_token
     }
 
-    fn take(&mut self, token: Token<'a>) -> Token<'a> {
+    fn take(&mut self, token: StrToken<'a>) -> StrToken<'a> {
         self.advance();
         token
     }
 
-    fn lex_quoted_string(&mut self) -> Token<'a> {
+    fn lex_quoted_string(&mut self) -> StrToken<'a> {
         self.advance();
         let (start, first_char) = self.char_indices.next().unwrap();
         let mut end = start;
@@ -87,10 +87,10 @@ impl<'a> Lexer<'a> {
             end = next_index;
             c = next_char;
         }
-        Token::QuotedString(&self.src[start..end])
+        StrToken::QuotedString(&self.src[start..end])
     }
 
-    fn lex_number(&mut self) -> Token<'a> {
+    fn lex_number(&mut self) -> StrToken<'a> {
         self.advance();
         const RADIX: u32 = 16;
         let mut value = 0isize;
@@ -108,20 +108,20 @@ impl<'a> Lexer<'a> {
                 has_next_digit = false;
             }
         }
-        Token::Number(value)
+        StrToken::Number(value)
     }
 
-    fn lex_word(&mut self, start: usize) -> Token<'a> {
+    fn lex_word(&mut self, start: usize) -> StrToken<'a> {
         let starts_on_first_column = self.is_at_line_start;
         self.advance();
         let end = self.find_word_end();
         let word = &self.src[start..end];
         if let Some(keyword) = identify_keyword(word) {
-            Token::Keyword(keyword)
+            StrToken::Keyword(keyword)
         } else if starts_on_first_column {
-            Token::Label(word)
+            StrToken::Label(word)
         } else {
-            Token::Identifier(word)
+            StrToken::Identifier(word)
         }
     }
 
@@ -179,10 +179,10 @@ mod tests {
     use super::*;
 
     use super::Keyword::*;
-    use super::Token::*;
+    use super::StrToken::*;
 
-    fn assert_eq_tokens(src: &str, expected_tokens: &[Token]) {
-        assert_eq!(Lexer::new(src).collect::<Vec<Token>>(), expected_tokens)
+    fn assert_eq_tokens(src: &str, expected_tokens: &[StrToken]) {
+        assert_eq!(Lexer::new(src).collect::<Vec<StrToken>>(), expected_tokens)
     }
 
     #[test]

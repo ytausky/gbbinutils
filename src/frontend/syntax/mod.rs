@@ -3,7 +3,7 @@ mod parser;
 
 pub fn parse<'a, BC>(src: &'a str, mut actions: BC)
 where
-    BC: BlockContext<Terminal = Token<'a>>,
+    BC: BlockContext<Terminal = StrToken<'a>>,
 {
     self::parser::parse_src(self::lexer::Lexer::new(src), &mut actions)
 }
@@ -36,8 +36,25 @@ pub enum Keyword {
     Z,
 }
 
+pub trait Token {
+    fn kind(&self) -> TokenKind;
+}
+
+pub enum TokenKind {
+    ClosingBracket,
+    Colon,
+    Comma,
+    Eol,
+    Identifier,
+    Keyword(Keyword),
+    Label,
+    Number,
+    OpeningBracket,
+    QuotedString,
+}
+
 #[derive(Clone, Debug, PartialEq)]
-pub enum Token<'a> {
+pub enum StrToken<'a> {
     ClosingBracket,
     Colon,
     Comma,
@@ -50,21 +67,38 @@ pub enum Token<'a> {
     QuotedString(&'a str),
 }
 
-impl<'a> Terminal for Token<'a> {
-    fn kind(&self) -> TerminalKind {
+impl<'a> Token for StrToken<'a> {
+    fn kind(&self) -> TokenKind {
         match *self {
-            Token::ClosingBracket => TerminalKind::ClosingBracket,
-            Token::Colon => TerminalKind::Colon,
-            Token::Comma => TerminalKind::Comma,
-            Token::Eol => TerminalKind::Eol,
-            Token::Identifier(_) => TerminalKind::Word,
-            Token::Keyword(Keyword::Endm) => TerminalKind::Endm,
-            Token::Keyword(Keyword::Macro) => TerminalKind::Macro,
-            Token::Keyword(_) => TerminalKind::Word,
-            Token::Label(_) => TerminalKind::Label,
-            Token::Number(_) => TerminalKind::Number,
-            Token::OpeningBracket => TerminalKind::OpeningBracket,
-            Token::QuotedString(_) => TerminalKind::QuotedString,
+            StrToken::ClosingBracket => TokenKind::ClosingBracket,
+            StrToken::Colon => TokenKind::Colon,
+            StrToken::Comma => TokenKind::Comma,
+            StrToken::Eol => TokenKind::Eol,
+            StrToken::Identifier(_) => TokenKind::Identifier,
+            StrToken::Keyword(keyword) => TokenKind::Keyword(keyword),
+            StrToken::Label(_) => TokenKind::Label,
+            StrToken::Number(_) => TokenKind::Number,
+            StrToken::OpeningBracket => TokenKind::OpeningBracket,
+            StrToken::QuotedString(_) => TokenKind::QuotedString,
+        }
+    }
+}
+
+impl<T: Token> Terminal for T {
+    fn kind(&self) -> TerminalKind {
+        match self.kind() {
+            TokenKind::ClosingBracket => TerminalKind::ClosingBracket,
+            TokenKind::Colon => TerminalKind::Colon,
+            TokenKind::Comma => TerminalKind::Comma,
+            TokenKind::Eol => TerminalKind::Eol,
+            TokenKind::Identifier => TerminalKind::Word,
+            TokenKind::Keyword(Keyword::Endm) => TerminalKind::Endm,
+            TokenKind::Keyword(Keyword::Macro) => TerminalKind::Macro,
+            TokenKind::Keyword(_) => TerminalKind::Word,
+            TokenKind::Label => TerminalKind::Label,
+            TokenKind::Number => TerminalKind::Number,
+            TokenKind::OpeningBracket => TerminalKind::OpeningBracket,
+            TokenKind::QuotedString => TerminalKind::QuotedString,
         }
     }
 }
@@ -132,63 +166,63 @@ impl<T> SynExpr<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{Keyword, StrToken, Terminal, TerminalKind};
 
     #[test]
     fn colon_terminal_kind() {
-        assert_eq!(Token::Colon.kind(), TerminalKind::Colon)
+        assert_eq!(StrToken::Colon.kind(), TerminalKind::Colon)
     }
 
     #[test]
     fn comma_terminal_kind() {
-        assert_eq!(Token::Comma.kind(), TerminalKind::Comma)
+        assert_eq!(StrToken::Comma.kind(), TerminalKind::Comma)
     }
 
     #[test]
     fn endm_terminal_kind() {
-        assert_eq!(Token::Keyword(Keyword::Endm).kind(), TerminalKind::Endm)
+        assert_eq!(StrToken::Keyword(Keyword::Endm).kind(), TerminalKind::Endm)
     }
 
     #[test]
     fn eol_terminal_kind() {
-        assert_eq!(Token::Eol.kind(), TerminalKind::Eol)
+        assert_eq!(StrToken::Eol.kind(), TerminalKind::Eol)
     }
 
     #[test]
     fn label_terminal_kind() {
-        assert_eq!(Token::Label("label").kind(), TerminalKind::Label)
+        assert_eq!(StrToken::Label("label").kind(), TerminalKind::Label)
     }
 
     #[test]
     fn macro_terminal_kind() {
-        assert_eq!(Token::Keyword(Keyword::Macro).kind(), TerminalKind::Macro)
+        assert_eq!(StrToken::Keyword(Keyword::Macro).kind(), TerminalKind::Macro)
     }
 
     #[test]
     fn number_terminal_kind() {
-        assert_eq!(Token::Number(0x1234).kind(), TerminalKind::Number)
+        assert_eq!(StrToken::Number(0x1234).kind(), TerminalKind::Number)
     }
 
     #[test]
     fn quoted_string_terminal_kind() {
         assert_eq!(
-            Token::QuotedString("string").kind(),
+            StrToken::QuotedString("string").kind(),
             TerminalKind::QuotedString
         )
     }
 
     #[test]
     fn word_terminal_kind() {
-        assert_eq!(Token::Identifier("identifier").kind(), TerminalKind::Word)
+        assert_eq!(StrToken::Identifier("identifier").kind(), TerminalKind::Word)
     }
 
     #[test]
     fn opening_bracket_terminal_kind() {
-        assert_eq!(Token::OpeningBracket.kind(), TerminalKind::OpeningBracket)
+        assert_eq!(StrToken::OpeningBracket.kind(), TerminalKind::OpeningBracket)
     }
 
     #[test]
     fn closing_bracket_terminal_kind() {
-        assert_eq!(Token::ClosingBracket.kind(), TerminalKind::ClosingBracket)
+        assert_eq!(StrToken::ClosingBracket.kind(), TerminalKind::ClosingBracket)
     }
 }

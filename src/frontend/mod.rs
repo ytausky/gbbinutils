@@ -30,7 +30,7 @@ pub enum AsmItem<'a> {
 
 enum Context<'a> {
     Block,
-    Instruction(syntax::Token<'a>, Vec<SynExpr<syntax::Token<'a>>>),
+    Instruction(syntax::StrToken<'a>, Vec<SynExpr<syntax::StrToken<'a>>>),
 }
 
 impl<'a, S: ir::Section> AstBuilder<'a, S> {
@@ -49,13 +49,13 @@ impl<'a, S: ir::Section> AstBuilder<'a, S> {
 }
 
 impl<'a, S: Section> syntax::BlockContext for AstBuilder<'a, S> {
-    type Terminal = Token<'a>;
+    type Terminal = StrToken<'a>;
     type CommandContext = Self;
     type TerminalSequenceContext = Self;
 
     fn add_label(&mut self, label: Self::Terminal) {
         match label {
-            Token::Label(spelling) => self.section.add_label(spelling),
+            StrToken::Label(spelling) => self.section.add_label(spelling),
             _ => panic!(),
         }
     }
@@ -74,7 +74,7 @@ impl<'a, S: Section> syntax::BlockContext for AstBuilder<'a, S> {
 }
 
 impl<'a, S: Section> syntax::CommandContext for AstBuilder<'a, S> {
-    type Terminal = Token<'a>;
+    type Terminal = StrToken<'a>;
 
     fn add_argument(&mut self, expr: SynExpr<Self::Terminal>) {
         match self.contexts.last_mut() {
@@ -86,8 +86,8 @@ impl<'a, S: Section> syntax::CommandContext for AstBuilder<'a, S> {
     fn exit_command(&mut self) {
         if let Some(Context::Instruction(name, args)) = self.contexts.pop() {
             match name {
-                Token::Keyword(Keyword::Include) => self.ast.push(reduce_include(args)),
-                Token::Keyword(keyword) => self.section.add_instruction(
+                StrToken::Keyword(Keyword::Include) => self.ast.push(reduce_include(args)),
+                StrToken::Keyword(keyword) => self.section.add_instruction(
                     semantics::analyze_instruction(keyword, args.into_iter()).unwrap(),
                 ),
                 _ => panic!(),
@@ -99,7 +99,7 @@ impl<'a, S: Section> syntax::CommandContext for AstBuilder<'a, S> {
 }
 
 impl<'a, S: Section> syntax::TerminalSequenceContext for AstBuilder<'a, S> {
-    type Terminal = Token<'a>;
+    type Terminal = StrToken<'a>;
 
     fn push_terminal(&mut self, _terminal: Self::Terminal) {
         unimplemented!()
@@ -110,11 +110,11 @@ impl<'a, S: Section> syntax::TerminalSequenceContext for AstBuilder<'a, S> {
     }
 }
 
-fn reduce_include<'a>(mut arguments: Vec<SynExpr<Token<'a>>>) -> AsmItem<'a> {
+fn reduce_include<'a>(mut arguments: Vec<SynExpr<StrToken<'a>>>) -> AsmItem<'a> {
     assert_eq!(arguments.len(), 1);
     let path = arguments.pop().unwrap();
     match path {
-        SynExpr::Atom(Token::QuotedString(path_str)) => include(path_str),
+        SynExpr::Atom(StrToken::QuotedString(path_str)) => include(path_str),
         _ => panic!(),
     }
 }
@@ -132,8 +132,8 @@ mod tests {
         let filename = "file.asm";
         let mut actions = Vec::new();
         let mut builder = AstBuilder::new(TestSection::new(&mut actions));
-        builder.enter_command(Token::Keyword(Keyword::Include));
-        let expr = SynExpr::from(Token::QuotedString(filename));
+        builder.enter_command(StrToken::Keyword(Keyword::Include));
+        let expr = SynExpr::from(StrToken::QuotedString(filename));
         builder.add_argument(expr);
         builder.exit_command();
         let ast = builder.ast().to_vec();
@@ -173,7 +173,7 @@ mod tests {
         let mut actions = Vec::new();
         {
             let mut builder = AstBuilder::new(TestSection::new(&mut actions));
-            builder.add_label(Token::Label("label"));
+            builder.add_label(StrToken::Label("label"));
         }
         assert_eq!(actions, vec![Action::AddLabel("label".to_string())])
     }
