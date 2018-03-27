@@ -3,6 +3,21 @@ use diagnostics;
 use ir::*;
 use frontend::syntax::{Keyword, SynExpr, StrToken};
 
+pub struct CommandAnalyzer;
+
+impl CommandAnalyzer {
+    pub fn new() -> CommandAnalyzer {
+        CommandAnalyzer {}
+    }
+
+    pub fn analyze_instruction<'a, I>(&mut self, mnemonic: Keyword, operands: I) -> AnalysisResult
+    where
+        I: IntoIterator<Item = SynExpr<StrToken<'a>>>,
+    {
+        analyze_instruction(mnemonic, operands)
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Operand {
     Simple(SimpleOperand),
@@ -14,7 +29,7 @@ pub enum Operand {
 
 pub type AnalysisResult = Result<Instruction, diagnostics::Error>;
 
-pub fn analyze_instruction<'a, I>(mnemonic: Keyword, operands: I) -> AnalysisResult
+fn analyze_instruction<'a, I>(mnemonic: Keyword, operands: I) -> AnalysisResult
 where
     I: IntoIterator<Item = SynExpr<StrToken<'a>>>,
 {
@@ -391,8 +406,9 @@ mod tests {
 
     #[test]
     fn analyze_nop_a() {
+        let mut analyzer = CommandAnalyzer::new();
         assert_eq!(
-            analyze_instruction(Keyword::Nop, vec![atom(A)]),
+            analyzer.analyze_instruction(Keyword::Nop, vec![atom(A)]),
             Err(diagnostics::Error::OperandCount(0, 1))
         )
     }
