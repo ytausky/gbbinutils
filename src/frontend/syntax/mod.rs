@@ -5,10 +5,7 @@ pub fn parse<'a, BC>(src: &'a str, mut actions: BC)
 where
     BC: BlockContext<Terminal = Token<'a>>,
 {
-    self::parser::parse_src(
-        self::lexer::Lexer::new(src),
-        &mut actions
-    )
+    self::parser::parse_src(self::lexer::Lexer::new(src), &mut actions)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -128,7 +125,7 @@ impl<T> From<T> for SynExpr<T> {
 }
 
 impl<T> SynExpr<T> {
-    fn deref(self) -> Self {
+    pub fn deref(self) -> Self {
         SynExpr::Deref(Box::new(self))
     }
 }

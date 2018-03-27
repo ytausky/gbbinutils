@@ -180,11 +180,7 @@ mod tests {
     use self::Keyword::*;
 
     fn atom(keyword: Keyword) -> SynExpr<Token<'static>> {
-        SynExpr::Atom(Token::Keyword(keyword))
-    }
-
-    fn deref(expr: SynExpr<Token<'static>>) -> SynExpr<Token<'static>> {
-        SynExpr::Deref(Box::new(expr))
+        SynExpr::from(Token::Keyword(keyword))
     }
 
     impl From<AluOperation> for Keyword {
@@ -207,7 +203,7 @@ mod tests {
                 SimpleOperand::E => atom(E),
                 SimpleOperand::H => atom(H),
                 SimpleOperand::L => atom(L),
-                SimpleOperand::DerefHl => deref(atom(Hl)),
+                SimpleOperand::DerefHl => atom(Hl).deref(),
             }
         }
     }
@@ -227,7 +223,7 @@ mod tests {
         assert_eq!(
             interpret_instruction(
                 Keyword::Ld,
-                vec![deref(SynExpr::Atom(Token::Identifier(ident))), atom(A)]
+                vec![SynExpr::from(Token::Identifier(ident)).deref(), atom(A)]
             ),
             Ok(Instruction::Ld(LdKind::ImmediateAddr(
                 Expr::Symbol(ident.to_string()),
@@ -242,7 +238,7 @@ mod tests {
         assert_eq!(
             interpret_instruction(
                 Keyword::Ld,
-                vec![atom(A), deref(SynExpr::Atom(Token::Identifier(ident)))]
+                vec![atom(A), SynExpr::from(Token::Identifier(ident)).deref()]
             ),
             Ok(Instruction::Ld(LdKind::ImmediateAddr(
                 Expr::Symbol(ident.to_string()),
@@ -284,39 +280,46 @@ mod tests {
 
     #[test]
     fn interpret_legal_instructions() {
-        let nullary_instructions = vec![
-            (Keyword::Halt, Instruction::Halt),
-            (Keyword::Nop, Instruction::Nop),
-            (Keyword::Stop, Instruction::Stop),
-        ].into_iter()
-            .map(|(mnemonic, instruction)| ((mnemonic, vec![]), instruction));
-        let instructions = vec![
-            (
-                (Keyword::Push, vec![atom(Bc)]),
-                Instruction::Push(Reg16::Bc),
-            ),
-        ];
-        test_instruction_interpretation(nullary_instructions);
-        test_instruction_interpretation(generate_ld_instruction_descriptors());
-        test_instruction_interpretation(generate_alu_instruction_descriptors());
-        test_instruction_interpretation(generate_condition_jr_instruction_descriptors());
-        test_instruction_interpretation(generate_dec_instruction_descriptors());
-        test_instruction_interpretation(instructions)
+        test_instruction_interpretation(describe_legal_instructions());
     }
 
     type InstructionDescriptor = ((Keyword, Vec<SynExpr<Token<'static>>>), Instruction);
 
-    fn generate_ld_instruction_descriptors() -> Vec<InstructionDescriptor> {
+    fn describe_legal_instructions() -> Vec<InstructionDescriptor> {
+        let mut descriptors = Vec::new();
+        descriptors.extend(describe_nullary_instructions());
+        descriptors.extend(describe_ld_simple_instructions());
+        descriptors.extend(describe_alu_simple_instructions());
+        descriptors.extend(describe_jr_conditional_instuctions());
+        descriptors.extend(describe_dec_instructions());
+        descriptors.push((
+            (Keyword::Push, vec![atom(Bc)]),
+            Instruction::Push(Reg16::Bc),
+        ));
+        descriptors
+    }
+
+    fn describe_nullary_instructions() -> Vec<InstructionDescriptor> {
+        vec![
+            (Keyword::Halt, Instruction::Halt),
+            (Keyword::Nop, Instruction::Nop),
+            (Keyword::Stop, Instruction::Stop),
+        ].into_iter()
+            .map(|(mnemonic, instruction)| ((mnemonic, vec![]), instruction))
+            .collect()
+    }
+
+    fn describe_ld_simple_instructions() -> Vec<InstructionDescriptor> {
         let mut descriptors = Vec::new();
         for &dest in SIMPLE_OPERANDS.iter() {
             for &src in SIMPLE_OPERANDS.iter() {
-                descriptors.extend(generate_ld_alu_alu(dest, src))
+                descriptors.extend(describe_ld_simple(dest, src))
             }
         }
         descriptors
     }
 
-    fn generate_ld_alu_alu(
+    fn describe_ld_simple(
         dest: SimpleOperand,
         src: SimpleOperand,
     ) -> Option<InstructionDescriptor> {
@@ -329,17 +332,17 @@ mod tests {
         }
     }
 
-    fn generate_alu_instruction_descriptors() -> Vec<InstructionDescriptor> {
+    fn describe_alu_simple_instructions() -> Vec<InstructionDescriptor> {
         let mut descriptors = Vec::new();
         for &operation in ALU_OPERATIONS.iter() {
             for &operand in SIMPLE_OPERANDS.iter() {
-                descriptors.push(generate_simple_alu_instruction(operation, operand))
+                descriptors.push(describe_alu_simple(operation, operand))
             }
         }
         descriptors
     }
 
-    fn generate_simple_alu_instruction(
+    fn describe_alu_simple(
         operation: AluOperation,
         operand: SimpleOperand,
     ) -> InstructionDescriptor {
@@ -349,15 +352,15 @@ mod tests {
         )
     }
 
-    fn generate_condition_jr_instruction_descriptors() -> Vec<InstructionDescriptor> {
+    fn describe_jr_conditional_instuctions() -> Vec<InstructionDescriptor> {
         let mut descriptors = Vec::new();
         for &condition in CONDITIONS.iter() {
-            descriptors.push(generate_condition_jr(condition))
+            descriptors.push(describe_jr_conditional(condition))
         }
         descriptors
     }
 
-    fn generate_condition_jr(condition: Condition) -> InstructionDescriptor {
+    fn describe_jr_conditional(condition: Condition) -> InstructionDescriptor {
         let ident = "ident";
         (
             (
@@ -371,15 +374,15 @@ mod tests {
         )
     }
 
-    fn generate_dec_instruction_descriptors() -> Vec<InstructionDescriptor> {
+    fn describe_dec_instructions() -> Vec<InstructionDescriptor> {
         let mut descriptors = Vec::new();
         for &operand in SIMPLE_OPERANDS.iter() {
-            descriptors.push(generate_dec(operand))
+            descriptors.push(describe_dec(operand))
         }
         descriptors
     }
 
-    fn generate_dec(operand: SimpleOperand) -> InstructionDescriptor {
+    fn describe_dec(operand: SimpleOperand) -> InstructionDescriptor {
         (
             (Keyword::Dec, vec![SynExpr::from(operand)]),
             Instruction::Dec(operand),
@@ -402,11 +405,7 @@ mod tests {
 
     const CONDITIONS: [Condition; 2] = [Condition::Nz, Condition::Z];
 
-    fn test_instruction_interpretation<'a, DII, OII>(descriptors: DII)
-    where
-        DII: IntoIterator<Item = ((Keyword, OII), Instruction)>,
-        OII: IntoIterator<Item = SynExpr<Token<'a>>>,
-    {
+    fn test_instruction_interpretation(descriptors: Vec<InstructionDescriptor>) {
         for ((mnemonic, operands), expected) in descriptors {
             assert_eq!(interpret_instruction(mnemonic, operands), Ok(expected))
         }

@@ -241,10 +241,7 @@ mod tests {
 
     fn assert_eq_actions(tokens: &[TestToken], expected_actions: &[Action]) {
         let mut parsing_constext = TestContext::new();
-        parse_src(
-            tokens.iter().cloned(),
-            &mut parsing_constext
-        );
+        parse_src(tokens.iter().cloned(), &mut parsing_constext);
         assert_eq!(parsing_constext.actions, expected_actions)
     }
 
