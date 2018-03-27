@@ -1,7 +1,8 @@
 use diagnostics;
 
 use ir::*;
-use frontend::syntax::{Keyword, StrToken, SynExpr};
+use frontend::ExprFactory;
+use frontend::syntax::{Keyword, Token, TokenKind, StrToken, SynExpr};
 
 pub struct CommandAnalyzer;
 
@@ -52,10 +53,10 @@ fn analyze_operand(expr: SynExpr<StrToken>) -> Operand {
 }
 
 fn analyze_atom_operand(token: StrToken) -> Operand {
-    match token {
-        StrToken::Keyword(keyword) => analyze_keyword_operand(keyword),
-        StrToken::Identifier(ident) => Operand::Const(Expr::Symbol(ident.to_string())),
-        StrToken::Number(number) => Operand::Const(Expr::Literal(number)),
+    let mut expr_factory = ExprFactory::new();
+    match token.kind() {
+        TokenKind::Keyword(keyword) => analyze_keyword_operand(keyword),
+        TokenKind::Identifier | TokenKind::Number => Operand::Const(expr_factory.from_token(token)),
         _ => panic!(),
     }
 }

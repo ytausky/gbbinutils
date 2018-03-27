@@ -17,6 +17,22 @@ pub fn analyze_file<S: ir::Section>(name: &str, section: S) {
     syntax::parse(&src, ast_builder)
 }
 
+struct ExprFactory;
+
+impl ExprFactory {
+    fn new() -> ExprFactory {
+        ExprFactory {}
+    }
+
+    fn from_token(&mut self, token: StrToken) -> Expr {
+        match token {
+            StrToken::Identifier(ident) => Expr::Symbol(ident.to_string()),
+            StrToken::Number(number) => Expr::Literal(number),
+            _ => panic!(),
+        }
+    }
+}
+
 pub struct AstBuilder<'a, S: ir::Section> {
     ast: Vec<AsmItem<'a>>,
     contexts: Vec<Context<'a>>,
