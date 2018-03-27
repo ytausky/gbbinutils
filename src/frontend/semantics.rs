@@ -46,12 +46,16 @@ pub type AnalysisResult = Result<Instruction, diagnostics::Error>;
 
 fn analyze_operand(expr: SynExpr<StrToken>) -> Operand {
     match expr {
-        SynExpr::Atom(StrToken::Keyword(keyword)) => analyze_keyword_operand(keyword),
-        SynExpr::Atom(StrToken::Identifier(ident)) => {
-            Operand::Const(Expr::Symbol(ident.to_string()))
-        }
-        SynExpr::Atom(StrToken::Number(number)) => Operand::Const(Expr::Literal(number)),
+        SynExpr::Atom(token) => analyze_atom_operand(token),
         SynExpr::Deref(address_specifier) => analyze_deref_operand(address_specifier.as_ref()),
+    }
+}
+
+fn analyze_atom_operand(token: StrToken) -> Operand {
+    match token {
+        StrToken::Keyword(keyword) => analyze_keyword_operand(keyword),
+        StrToken::Identifier(ident) => Operand::Const(Expr::Symbol(ident.to_string())),
+        StrToken::Number(number) => Operand::Const(Expr::Literal(number)),
         _ => panic!(),
     }
 }
