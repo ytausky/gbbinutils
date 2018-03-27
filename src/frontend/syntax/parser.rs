@@ -185,7 +185,7 @@ mod tests {
     }
 
     type TestToken = (syntax::TerminalKind, usize);
-    type TestExpr = ast::Expression<TestToken>;
+    type TestExpr = ast::SynExpr<TestToken>;
 
     impl syntax::Terminal for TestToken {
         fn kind(&self) -> syntax::TerminalKind {
@@ -290,7 +290,7 @@ mod tests {
     }
 
     fn ident(identifier: TestToken) -> TestExpr {
-        ast::Expression::Atom(identifier)
+        ast::SynExpr::Atom(identifier)
     }
 
     #[test]
@@ -441,6 +441,6 @@ mod tests {
     }
 
     fn deref(expr: TestExpr) -> TestExpr {
-        ast::Expression::Deref(Box::new(expr))
+        ast::SynExpr::Deref(Box::new(expr))
     }
 }

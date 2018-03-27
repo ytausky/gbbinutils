@@ -7,7 +7,7 @@ mod semantics;
 mod syntax;
 
 use ir::*;
-use self::ast::Expression;
+use self::ast::SynExpr;
 use self::syntax::*;
 
 pub fn analyze_file<S: ir::Section>(name: &str, section: S) {
@@ -27,7 +27,7 @@ pub struct AstBuilder<'a, S: ir::Section> {
 
 enum Context<'a> {
     Block,
-    Instruction(syntax::Token<'a>, Vec<ast::Expression<syntax::Token<'a>>>),
+    Instruction(syntax::Token<'a>, Vec<ast::SynExpr<syntax::Token<'a>>>),
 }
 
 impl<'a, S: ir::Section> AstBuilder<'a, S> {
@@ -47,7 +47,7 @@ impl<'a, S: ir::Section> AstBuilder<'a, S> {
 
 impl<'a, S: Section> syntax::BlockContext for AstBuilder<'a, S> {
     type Terminal = Token<'a>;
-    type Expr = Expression<Self::Terminal>;
+    type Expr = SynExpr<Self::Terminal>;
     type CommandContext = Self;
     type TerminalSequenceContext = Self;
 
@@ -73,7 +73,7 @@ impl<'a, S: Section> syntax::BlockContext for AstBuilder<'a, S> {
 
 impl<'a, S: Section> syntax::CommandContext for AstBuilder<'a, S> {
     type Terminal = Token<'a>;
-    type Expr = Expression<Self::Terminal>;
+    type Expr = SynExpr<Self::Terminal>;
 
     fn add_argument(&mut self, expr: Self::Expr) {
         match self.contexts.last_mut() {

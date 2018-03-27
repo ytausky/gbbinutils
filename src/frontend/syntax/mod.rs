@@ -5,7 +5,7 @@ mod parser;
 
 pub fn parse<'a, BC>(src: &'a str, mut actions: BC)
 where
-    BC: BlockContext<Terminal = Token<'a>, Expr = ast::Expression<Token<'a>>>,
+    BC: BlockContext<Terminal = Token<'a>, Expr = ast::SynExpr<Token<'a>>>,
 {
     self::parser::parse_src(
         self::lexer::Lexer::new(src),

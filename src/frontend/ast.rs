@@ -6,9 +6,9 @@ pub enum AsmItem<'a> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Expression<T> {
+pub enum SynExpr<T> {
     Atom(T),
-    Deref(Box<Expression<T>>),
+    Deref(Box<SynExpr<T>>),
 }
 
 pub trait ExprFactory {
@@ -28,13 +28,13 @@ impl<T> ExprBuilder<T> {
 
 impl<T> ExprFactory for ExprBuilder<T> {
     type Terminal = T;
-    type Expr = Expression<Self::Terminal>;
+    type Expr = SynExpr<Self::Terminal>;
 
     fn from_atom(&mut self, atom: Self::Terminal) -> Self::Expr {
-        Expression::Atom(atom)
+        SynExpr::Atom(atom)
     }
 
     fn apply_deref(&mut self, expr: Self::Expr) -> Self::Expr {
-        Expression::Deref(Box::new(expr))
+        SynExpr::Deref(Box::new(expr))
     }
 }
