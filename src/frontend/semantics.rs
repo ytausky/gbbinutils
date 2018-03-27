@@ -4,36 +4,14 @@ use ir::*;
 use frontend::ExprFactory;
 use frontend::syntax::{Keyword, StrToken, SynExpr, Token, TokenKind};
 
-pub struct CommandAnalyzer {
+struct OperandAnalyzer {
     expr_factory: ExprFactory,
 }
 
-impl CommandAnalyzer {
-    pub fn new() -> CommandAnalyzer {
-        CommandAnalyzer {
+impl OperandAnalyzer {
+    fn new() -> OperandAnalyzer {
+        OperandAnalyzer {
             expr_factory: ExprFactory::new(),
-        }
-    }
-
-    pub fn analyze_instruction<'a, I>(&mut self, mnemonic: Keyword, operands: I) -> AnalysisResult
-    where
-        I: IntoIterator<Item = SynExpr<StrToken<'a>>>,
-    {
-        use self::Mnemonic::*;
-        let mut operands = operands.into_iter();
-        match to_mnemonic(mnemonic) {
-            Alu(operation) => self.analyze_alu_instruction(operation, operands),
-            Dec => match operands.next().map(|x| self.analyze_operand(x)) {
-                Some(Operand::Simple(operand)) => Ok(Instruction::Dec(operand)),
-                _ => panic!(),
-            },
-            Jr => analyze_jr_instruction(operands.map(|x| self.analyze_operand(x))),
-            Ld => analyze_ld(operands.map(|x| self.analyze_operand(x))),
-            Nullary(instruction) => analyze_nullary_instruction(instruction, operands),
-            Push => match operands.next().map(|x| self.analyze_operand(x)) {
-                Some(Operand::Reg16(src)) => Ok(Instruction::Push(src)),
-                _ => panic!(),
-            },
         }
     }
 
@@ -65,22 +43,107 @@ impl CommandAnalyzer {
             panic!()
         }
     }
+}
 
-    fn analyze_alu_instruction<'a, I>(
-        &mut self,
-        operation: AluOperation,
-        mut operands: I,
-    ) -> AnalysisResult
+pub struct CommandAnalyzer {
+    operand_analyzer: OperandAnalyzer,
+}
+
+impl CommandAnalyzer {
+    pub fn new() -> CommandAnalyzer {
+        CommandAnalyzer {
+            operand_analyzer: OperandAnalyzer::new(),
+        }
+    }
+
+    pub fn analyze_instruction<'a, I>(&mut self, mnemonic: Keyword, operands: I) -> AnalysisResult
     where
-        I: Iterator<Item = SynExpr<StrToken<'a>>>,
+        I: IntoIterator<Item = SynExpr<StrToken<'a>>>,
     {
-        match operands.next().map(|x| self.analyze_operand(x)) {
+        Analysis::new(
+            mnemonic,
+            operands
+                .into_iter()
+                .map(|x| self.operand_analyzer.analyze_operand(x)),
+        ).run()
+    }
+}
+
+struct Analysis<I> {
+    mnemonic: Keyword,
+    operands: I,
+}
+
+impl<'a, I: Iterator<Item = Operand>> Analysis<I> {
+    fn new(mnemonic: Keyword, operands: I) -> Analysis<I> {
+        Analysis { mnemonic, operands }
+    }
+
+    fn run(mut self) -> AnalysisResult {
+        use self::Mnemonic::*;
+        match to_mnemonic(self.mnemonic) {
+            Alu(operation) => self.analyze_alu_instruction(operation),
+            Dec => match self.operands.next() {
+                Some(Operand::Simple(operand)) => Ok(Instruction::Dec(operand)),
+                _ => panic!(),
+            },
+            Jr => self.analyze_jr_instruction(),
+            Ld => self.analyze_ld(),
+            Nullary(instruction) => self.analyze_nullary_instruction(instruction),
+            Push => match self.operands.next() {
+                Some(Operand::Reg16(src)) => Ok(Instruction::Push(src)),
+                _ => panic!(),
+            },
+        }
+    }
+
+    fn analyze_alu_instruction(&mut self, operation: AluOperation) -> AnalysisResult {
+        match self.operands.next() {
             Some(Operand::Simple(src)) => Ok(Instruction::Alu(operation, AluSource::Simple(src))),
             Some(Operand::Const(expr)) => {
                 Ok(Instruction::Alu(operation, AluSource::Immediate(expr)))
             }
             _ => panic!(),
         }
+    }
+
+    fn analyze_jr_instruction(&mut self) -> AnalysisResult {
+        match self.operands.next() {
+            Some(Operand::Condition(condition)) => match self.operands.next() {
+                Some(Operand::Const(expr)) => Ok(Instruction::Jr(Some(condition), expr)),
+                _ => panic!(),
+            },
+            Some(Operand::Const(expr)) => Ok(Instruction::Jr(None, expr)),
+            _ => panic!(),
+        }
+    }
+
+    fn analyze_nullary_instruction(&mut self, instruction: Instruction) -> AnalysisResult {
+        match self.operands.by_ref().count() {
+            0 => Ok(instruction),
+            n => Err(diagnostics::Error::OperandCount(0, n)),
+        }
+    }
+
+    fn analyze_ld(&mut self) -> AnalysisResult {
+        let dest = self.operands.next().unwrap();
+        let src = self.operands.next().unwrap();
+        assert_eq!(self.operands.next(), None);
+        match (dest, src) {
+            (Operand::Simple(dest), Operand::Simple(src)) => {
+                Ok(Instruction::Ld(LdKind::Simple(dest, src)))
+            }
+            (Operand::Simple(SimpleOperand::A), src) => analyze_ld_a(src, Direction::IntoA),
+            (dest, Operand::Simple(SimpleOperand::A)) => analyze_ld_a(dest, Direction::FromA),
+            _ => panic!(),
+        }
+    }
+}
+
+fn analyze_ld_a(other: Operand, direction: Direction) -> AnalysisResult {
+    match other {
+        Operand::Deref(expr) => Ok(Instruction::Ld(LdKind::ImmediateAddr(expr, direction))),
+        _ => panic!(),
     }
 }
 
@@ -133,48 +196,6 @@ fn to_mnemonic(keyword: Keyword) -> Mnemonic {
         Keyword::Push => Mnemonic::Push,
         Keyword::Stop => Mnemonic::Nullary(Instruction::Stop),
         Keyword::Xor => Mnemonic::Alu(AluOperation::Xor),
-        _ => panic!(),
-    }
-}
-
-fn analyze_jr_instruction<I: Iterator<Item = Operand>>(mut operands: I) -> AnalysisResult {
-    match operands.next() {
-        Some(Operand::Condition(condition)) => match operands.next() {
-            Some(Operand::Const(expr)) => Ok(Instruction::Jr(Some(condition), expr)),
-            _ => panic!(),
-        },
-        Some(Operand::Const(expr)) => Ok(Instruction::Jr(None, expr)),
-        _ => panic!(),
-    }
-}
-
-fn analyze_nullary_instruction<I: Iterator>(
-    instruction: Instruction,
-    operands: I,
-) -> AnalysisResult {
-    match operands.count() {
-        0 => Ok(instruction),
-        n => Err(diagnostics::Error::OperandCount(0, n)),
-    }
-}
-
-fn analyze_ld<I: Iterator<Item = Operand>>(mut operands: I) -> AnalysisResult {
-    let dest = operands.next().unwrap();
-    let src = operands.next().unwrap();
-    assert_eq!(operands.next(), None);
-    match (dest, src) {
-        (Operand::Simple(dest), Operand::Simple(src)) => {
-            Ok(Instruction::Ld(LdKind::Simple(dest, src)))
-        }
-        (Operand::Simple(SimpleOperand::A), src) => analyze_ld_a(src, Direction::IntoA),
-        (dest, Operand::Simple(SimpleOperand::A)) => analyze_ld_a(dest, Direction::FromA),
-        _ => panic!(),
-    }
-}
-
-fn analyze_ld_a(other: Operand, direction: Direction) -> AnalysisResult {
-    match other {
-        Operand::Deref(expr) => Ok(Instruction::Ld(LdKind::ImmediateAddr(expr, direction))),
         _ => panic!(),
     }
 }
