@@ -8,7 +8,7 @@ pub enum Instruction {
     Alu(AluOperation, AluSource),
     Dec(SimpleOperand),
     Halt,
-    Jr(Option<Condition>, Expr),
+    Branch(Branch, Option<Condition>),
     Ld(LdKind),
     Nop,
     Push(Reg16),
@@ -55,6 +55,11 @@ pub enum Direction {
 #[derive(Debug, PartialEq)]
 pub enum Reg16 {
     Bc,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Branch {
+    Jr(Expr),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

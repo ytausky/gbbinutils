@@ -73,7 +73,7 @@ impl<EF: ExprFactory> CommandAnalyzer<EF> {
     {
         let mnemonic = to_mnemonic(mnemonic);
         let context = match mnemonic {
-            Mnemonic::Jr => OperandAnalysisContext::Branch,
+            Mnemonic::Branch(_) => OperandAnalysisContext::Branch,
             _ => OperandAnalysisContext::Other,
         };
         Analysis::new(
@@ -101,7 +101,7 @@ impl<'a, I: Iterator<Item = Operand>> Analysis<I> {
                 Some(Operand::Simple(operand)) => Ok(Instruction::Dec(operand)),
                 _ => panic!(),
             },
-            Jr => self.analyze_jr_instruction(),
+            Branch(branch) => self.analyze_branch(branch),
             Ld => self.analyze_ld(),
             Nullary(instruction) => self.analyze_nullary_instruction(instruction),
             Push => match self.operands.next() {
@@ -121,13 +121,15 @@ impl<'a, I: Iterator<Item = Operand>> Analysis<I> {
         }
     }
 
-    fn analyze_jr_instruction(&mut self) -> AnalysisResult {
-        match self.operands.next() {
-            Some(Operand::Condition(condition)) => match self.operands.next() {
-                Some(Operand::Const(expr)) => Ok(Instruction::Jr(Some(condition), expr)),
-                _ => panic!(),
-            },
-            Some(Operand::Const(expr)) => Ok(Instruction::Jr(None, expr)),
+    fn analyze_branch(&mut self, branch: BranchKind) -> AnalysisResult {
+        let first_operand = self.operands.next();
+        let (condition, target) = if let Some(Operand::Condition(condition)) = first_operand {
+            (Some(condition), analyze_branch_target(self.operands.next()))
+        } else {
+            (None, analyze_branch_target(first_operand))
+        };
+        match (branch, target) {
+            (BranchKind::Jr, Some(expr)) => Ok(Instruction::Branch(Branch::Jr(expr), condition)),
             _ => panic!(),
         }
     }
@@ -151,6 +153,14 @@ impl<'a, I: Iterator<Item = Operand>> Analysis<I> {
             (dest, Operand::Simple(SimpleOperand::A)) => analyze_ld_a(dest, Direction::FromA),
             _ => panic!(),
         }
+    }
+}
+
+fn analyze_branch_target(target: Option<Operand>) -> Option<Expr> {
+    match target {
+        Some(Operand::Const(expr)) => Some(expr),
+        None => None,
+        _ => panic!(),
     }
 }
 
@@ -196,10 +206,15 @@ fn analyze_keyword_operand(keyword: Keyword, context: &OperandAnalysisContext) -
 enum Mnemonic {
     Alu(AluOperation),
     Dec,
-    Jr,
+    Branch(BranchKind),
     Ld,
     Nullary(Instruction),
     Push,
+}
+
+#[derive(Debug, PartialEq)]
+enum BranchKind {
+    Jr,
 }
 
 fn to_mnemonic(keyword: Keyword) -> Mnemonic {
@@ -208,7 +223,7 @@ fn to_mnemonic(keyword: Keyword) -> Mnemonic {
         Keyword::Cp => Mnemonic::Alu(AluOperation::Cp),
         Keyword::Dec => Mnemonic::Dec,
         Keyword::Halt => Mnemonic::Nullary(Instruction::Halt),
-        Keyword::Jr => Mnemonic::Jr,
+        Keyword::Jr => Mnemonic::Branch(BranchKind::Jr),
         Keyword::Ld => Mnemonic::Ld,
         Keyword::Nop => Mnemonic::Nullary(Instruction::Nop),
         Keyword::Push => Mnemonic::Push,
@@ -343,7 +358,10 @@ mod tests {
                 Keyword::Jr,
                 Some(SynExpr::Atom(TestToken::Identifier(ident)))
             ),
-            Ok(Instruction::Jr(None, Expr::Symbol(ident.to_string())))
+            Ok(Instruction::Branch(
+                Branch::Jr(Expr::Symbol(ident.to_string())),
+                None
+            ))
         )
     }
 
@@ -439,7 +457,7 @@ mod tests {
                     SynExpr::Atom(TestToken::Identifier(ident)),
                 ],
             ),
-            Instruction::Jr(Some(condition), Expr::Symbol(ident.to_string())),
+            Instruction::Branch(Branch::Jr(Expr::Symbol(ident.to_string())), Some(condition)),
         )
     }
 
