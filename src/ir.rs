@@ -43,6 +43,7 @@ pub enum SimpleOperand {
 #[derive(Debug, PartialEq)]
 pub enum LdKind {
     Simple(SimpleOperand, SimpleOperand),
+    Immediate16(Reg16, Expr),
     ImmediateAddr(Expr, Direction),
 }
 
@@ -52,9 +53,10 @@ pub enum Direction {
     IntoA,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Reg16 {
     Bc,
+    Hl,
 }
 
 #[derive(Debug, PartialEq)]

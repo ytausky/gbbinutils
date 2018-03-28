@@ -151,6 +151,9 @@ impl<'a, I: Iterator<Item = Operand>> Analysis<I> {
             }
             (Operand::Simple(SimpleOperand::A), src) => analyze_ld_a(src, Direction::IntoA),
             (dest, Operand::Simple(SimpleOperand::A)) => analyze_ld_a(dest, Direction::FromA),
+            (Operand::Reg16(reg16), Operand::Const(expr)) => {
+                Ok(Instruction::Ld(LdKind::Immediate16(reg16, expr)))
+            }
             _ => panic!(),
         }
     }
@@ -194,6 +197,7 @@ fn analyze_keyword_operand(keyword: Keyword, context: &OperandAnalysisContext) -
         Keyword::D => Operand::Simple(SimpleOperand::D),
         Keyword::E => Operand::Simple(SimpleOperand::E),
         Keyword::H => Operand::Simple(SimpleOperand::H),
+        Keyword::Hl => Operand::Reg16(Reg16::Hl),
         Keyword::L => Operand::Simple(SimpleOperand::L),
         Keyword::Nc => Operand::Condition(Condition::Nc),
         Keyword::Nz => Operand::Condition(Condition::Nz),
@@ -280,6 +284,15 @@ mod tests {
                 SimpleOperand::H => atom(H),
                 SimpleOperand::L => atom(L),
                 SimpleOperand::DerefHl => atom(Hl).deref(),
+            }
+        }
+    }
+
+    impl From<Reg16> for SynExpr<TestToken> {
+        fn from(reg16: Reg16) -> Self {
+            match reg16 {
+                Reg16::Bc => atom(Bc),
+                Reg16::Hl => atom(Hl),
             }
         }
     }
@@ -376,6 +389,7 @@ mod tests {
         let mut descriptors = Vec::new();
         descriptors.extend(describe_nullary_instructions());
         descriptors.extend(describe_ld_simple_instructions());
+        descriptors.extend(describe_ld_reg16_immediate_instructions());
         descriptors.extend(describe_alu_simple_instructions());
         descriptors.extend(describe_jr_conditional_instuctions());
         descriptors.extend(describe_dec_instructions());
@@ -417,6 +431,22 @@ mod tests {
                 Instruction::Ld(LdKind::Simple(dest, src)),
             )),
         }
+    }
+
+    fn describe_ld_reg16_immediate_instructions() -> Vec<InstructionDescriptor> {
+        let mut descriptors = Vec::new();
+        for &dest in REG16.iter() {
+            descriptors.push(describe_ld_reg16_immediate(dest))
+        }
+        descriptors
+    }
+
+    fn describe_ld_reg16_immediate(dest: Reg16) -> InstructionDescriptor {
+        let value = "value";
+        (
+            (Keyword::Ld, vec![SynExpr::from(dest), SynExpr::from(TestToken::Identifier(value))]),
+            Instruction::Ld(LdKind::Immediate16(dest, Expr::Symbol(value.to_string())))
+        )
     }
 
     fn describe_alu_simple_instructions() -> Vec<InstructionDescriptor> {
@@ -489,6 +519,8 @@ mod tests {
         SimpleOperand::L,
         SimpleOperand::DerefHl,
     ];
+
+    const REG16: [Reg16; 2] = [Reg16::Bc, Reg16::Hl];
 
     const CONDITIONS: [Condition; 4] = [Condition::C, Condition::Nc, Condition::Nz, Condition::Z];
 
