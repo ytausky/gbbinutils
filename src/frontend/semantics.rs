@@ -128,10 +128,7 @@ impl<'a, I: Iterator<Item = Operand>> Analysis<I> {
         } else {
             (None, analyze_branch_target(first_operand))
         };
-        match (branch, target) {
-            (BranchKind::Jr, Some(expr)) => Ok(Instruction::Branch(Branch::Jr(expr), condition)),
-            _ => panic!(),
-        }
+        Ok(Instruction::Branch(mk_branch(branch, target), condition))
     }
 
     fn analyze_nullary_instruction(&mut self, instruction: Instruction) -> AnalysisResult {
@@ -163,6 +160,14 @@ fn analyze_branch_target(target: Option<Operand>) -> Option<Expr> {
     match target {
         Some(Operand::Const(expr)) => Some(expr),
         None => None,
+        _ => panic!(),
+    }
+}
+
+fn mk_branch(kind: BranchKind, target: Option<Expr>) -> Branch {
+    match (kind, target) {
+        (BranchKind::Jp, Some(expr)) => Branch::Jp(expr),
+        (BranchKind::Jr, Some(expr)) => Branch::Jr(expr),
         _ => panic!(),
     }
 }
@@ -216,8 +221,9 @@ enum Mnemonic {
     Push,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum BranchKind {
+    Jp,
     Jr,
 }
 
@@ -227,6 +233,7 @@ fn to_mnemonic(keyword: Keyword) -> Mnemonic {
         Keyword::Cp => Mnemonic::Alu(AluOperation::Cp),
         Keyword::Dec => Mnemonic::Dec,
         Keyword::Halt => Mnemonic::Nullary(Instruction::Halt),
+        Keyword::Jp => Mnemonic::Branch(BranchKind::Jp),
         Keyword::Jr => Mnemonic::Branch(BranchKind::Jr),
         Keyword::Ld => Mnemonic::Ld,
         Keyword::Nop => Mnemonic::Nullary(Instruction::Nop),
@@ -269,6 +276,15 @@ mod tests {
                 AluOperation::And => Keyword::And,
                 AluOperation::Cp => Keyword::Cp,
                 AluOperation::Xor => Keyword::Xor,
+            }
+        }
+    }
+
+    impl From<BranchKind> for Keyword {
+        fn from(branch: BranchKind) -> Self {
+            match branch {
+                BranchKind::Jp => Keyword::Jp,
+                BranchKind::Jr => Keyword::Jr,
             }
         }
     }
@@ -376,7 +392,7 @@ mod tests {
         descriptors.extend(describe_ld_simple_instructions());
         descriptors.extend(describe_ld_reg16_immediate_instructions());
         descriptors.extend(describe_alu_simple_instructions());
-        descriptors.extend(describe_jr_instuctions());
+        descriptors.extend(describe_branch_instuctions());
         descriptors.extend(describe_dec_instructions());
         descriptors.push((
             (Keyword::Push, vec![atom(Bc)]),
@@ -460,15 +476,18 @@ mod tests {
         )
     }
 
-    fn describe_jr_instuctions() -> Vec<InstructionDescriptor> {
-        let mut descriptors = vec![describe_jr(None)];
-        for &condition in CONDITIONS.iter() {
-            descriptors.push(describe_jr(Some(condition)))
+    fn describe_branch_instuctions() -> Vec<InstructionDescriptor> {
+        let mut descriptors = Vec::new();
+        for &kind in BRANCHES.iter() {
+            descriptors.push(describe_branch(kind, None));
+            for &condition in CONDITIONS.iter() {
+                descriptors.push(describe_branch(kind, Some(condition)))
+            }
         }
         descriptors
     }
 
-    fn describe_jr(condition: Option<Condition>) -> InstructionDescriptor {
+    fn describe_branch(branch: BranchKind, condition: Option<Condition>) -> InstructionDescriptor {
         let ident = "ident";
         let mut operands = Vec::new();
         if let Some(condition) = condition {
@@ -476,8 +495,11 @@ mod tests {
         };
         operands.push(SynExpr::Atom(TestToken::Identifier(ident)));
         (
-            (Keyword::Jr, operands),
-            Instruction::Branch(Branch::Jr(Expr::Symbol(ident.to_string())), condition),
+            (Keyword::from(branch), operands),
+            Instruction::Branch(
+                mk_branch(branch, Some(Expr::Symbol(ident.to_string()))),
+                condition,
+            ),
         )
     }
 
@@ -511,6 +533,8 @@ mod tests {
     ];
 
     const REG16: [Reg16; 2] = [Reg16::Bc, Reg16::Hl];
+
+    const BRANCHES: [BranchKind; 2] = [BranchKind::Jp, BranchKind::Jr];
 
     const CONDITIONS: [Condition; 4] = [Condition::C, Condition::Nc, Condition::Nz, Condition::Z];
 

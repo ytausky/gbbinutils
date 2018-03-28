@@ -61,6 +61,7 @@ pub enum Reg16 {
 
 #[derive(Debug, PartialEq)]
 pub enum Branch {
+    Jp(Expr),
     Jr(Expr),
 }
 

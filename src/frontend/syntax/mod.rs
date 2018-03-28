@@ -24,6 +24,7 @@ pub enum Keyword {
     Halt,
     Hl,
     Include,
+    Jp,
     Jr,
     L,
     Ld,
