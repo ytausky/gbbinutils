@@ -119,6 +119,9 @@ impl<'a, S: Section> syntax::CommandContext for AstBuilder<'a, S> {
                             .unwrap(),
                     )
                 }
+                StrToken::Identifier(ident) => {
+                    println!("Probably macro invocation: {:?} {:?}", ident, args)
+                }
                 _ => panic!(),
             }
         } else {
