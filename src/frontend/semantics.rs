@@ -364,21 +364,6 @@ mod tests {
     }
 
     #[test]
-    fn analyze_unconditional_jr() {
-        let ident = "ident";
-        assert_eq!(
-            analyze(
-                Keyword::Jr,
-                Some(SynExpr::Atom(TestToken::Identifier(ident)))
-            ),
-            Ok(Instruction::Branch(
-                Branch::Jr(Expr::Symbol(ident.to_string())),
-                None
-            ))
-        )
-    }
-
-    #[test]
     fn analyze_legal_instructions() {
         test_instruction_analysis(describe_legal_instructions());
     }
@@ -391,7 +376,7 @@ mod tests {
         descriptors.extend(describe_ld_simple_instructions());
         descriptors.extend(describe_ld_reg16_immediate_instructions());
         descriptors.extend(describe_alu_simple_instructions());
-        descriptors.extend(describe_jr_conditional_instuctions());
+        descriptors.extend(describe_jr_instuctions());
         descriptors.extend(describe_dec_instructions());
         descriptors.push((
             (Keyword::Push, vec![atom(Bc)]),
@@ -444,8 +429,14 @@ mod tests {
     fn describe_ld_reg16_immediate(dest: Reg16) -> InstructionDescriptor {
         let value = "value";
         (
-            (Keyword::Ld, vec![SynExpr::from(dest), SynExpr::from(TestToken::Identifier(value))]),
-            Instruction::Ld(LdKind::Immediate16(dest, Expr::Symbol(value.to_string())))
+            (
+                Keyword::Ld,
+                vec![
+                    SynExpr::from(dest),
+                    SynExpr::from(TestToken::Identifier(value)),
+                ],
+            ),
+            Instruction::Ld(LdKind::Immediate16(dest, Expr::Symbol(value.to_string()))),
         )
     }
 
@@ -469,25 +460,24 @@ mod tests {
         )
     }
 
-    fn describe_jr_conditional_instuctions() -> Vec<InstructionDescriptor> {
-        let mut descriptors = Vec::new();
+    fn describe_jr_instuctions() -> Vec<InstructionDescriptor> {
+        let mut descriptors = vec![describe_jr(None)];
         for &condition in CONDITIONS.iter() {
-            descriptors.push(describe_jr_conditional(condition))
+            descriptors.push(describe_jr(Some(condition)))
         }
         descriptors
     }
 
-    fn describe_jr_conditional(condition: Condition) -> InstructionDescriptor {
+    fn describe_jr(condition: Option<Condition>) -> InstructionDescriptor {
         let ident = "ident";
+        let mut operands = Vec::new();
+        if let Some(condition) = condition {
+            operands.push(SynExpr::from(condition))
+        };
+        operands.push(SynExpr::Atom(TestToken::Identifier(ident)));
         (
-            (
-                Keyword::Jr,
-                vec![
-                    SynExpr::from(condition),
-                    SynExpr::Atom(TestToken::Identifier(ident)),
-                ],
-            ),
-            Instruction::Branch(Branch::Jr(Expr::Symbol(ident.to_string())), Some(condition)),
+            (Keyword::Jr, operands),
+            Instruction::Branch(Branch::Jr(Expr::Symbol(ident.to_string())), condition),
         )
     }
 
