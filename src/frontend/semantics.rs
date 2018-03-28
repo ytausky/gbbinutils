@@ -8,21 +8,34 @@ struct OperandAnalyzer<EF> {
     expr_factory: EF,
 }
 
+enum OperandAnalysisContext {
+    Branch,
+    Other,
+}
+
 impl<EF: ExprFactory> OperandAnalyzer<EF> {
     fn new(expr_factory: EF) -> OperandAnalyzer<EF> {
         OperandAnalyzer { expr_factory }
     }
 
-    fn analyze_operand(&mut self, expr: SynExpr<EF::Token>) -> Operand {
+    fn analyze_operand(
+        &mut self,
+        expr: SynExpr<EF::Token>,
+        context: &OperandAnalysisContext,
+    ) -> Operand {
         match expr {
-            SynExpr::Atom(token) => self.analyze_atom_operand(token),
+            SynExpr::Atom(token) => self.analyze_atom_operand(token, context),
             SynExpr::Deref(expr) => self.analyze_deref_operand(*expr),
         }
     }
 
-    fn analyze_atom_operand(&mut self, token: EF::Token) -> Operand {
+    fn analyze_atom_operand(
+        &mut self,
+        token: EF::Token,
+        context: &OperandAnalysisContext,
+    ) -> Operand {
         match token.kind() {
-            TokenKind::Keyword(keyword) => analyze_keyword_operand(keyword),
+            TokenKind::Keyword(keyword) => analyze_keyword_operand(keyword, context),
             TokenKind::Identifier | TokenKind::Number => {
                 Operand::Const(self.expr_factory.mk_atom(token))
             }
@@ -58,28 +71,31 @@ impl<EF: ExprFactory> CommandAnalyzer<EF> {
     where
         I: IntoIterator<Item = SynExpr<EF::Token>>,
     {
+        let mnemonic = to_mnemonic(mnemonic);
+        let context = match mnemonic {
+            Mnemonic::Jr => OperandAnalysisContext::Branch,
+            _ => OperandAnalysisContext::Other,
+        };
         Analysis::new(
-            mnemonic,
             operands
                 .into_iter()
-                .map(|x| self.operand_analyzer.analyze_operand(x)),
-        ).run()
+                .map(|x| self.operand_analyzer.analyze_operand(x, &context)),
+        ).run(mnemonic)
     }
 }
 
 struct Analysis<I> {
-    mnemonic: Keyword,
     operands: I,
 }
 
 impl<'a, I: Iterator<Item = Operand>> Analysis<I> {
-    fn new(mnemonic: Keyword, operands: I) -> Analysis<I> {
-        Analysis { mnemonic, operands }
+    fn new(operands: I) -> Analysis<I> {
+        Analysis { operands }
     }
 
-    fn run(mut self) -> AnalysisResult {
+    fn run(mut self, mnemonic: Mnemonic) -> AnalysisResult {
         use self::Mnemonic::*;
-        match to_mnemonic(self.mnemonic) {
+        match mnemonic {
             Alu(operation) => self.analyze_alu_instruction(operation),
             Dec => match self.operands.next() {
                 Some(Operand::Simple(operand)) => Ok(Instruction::Dec(operand)),
@@ -156,16 +172,20 @@ pub enum Operand {
 
 pub type AnalysisResult = Result<Instruction, diagnostics::Error>;
 
-fn analyze_keyword_operand(keyword: Keyword) -> Operand {
+fn analyze_keyword_operand(keyword: Keyword, context: &OperandAnalysisContext) -> Operand {
     match keyword {
         Keyword::A => Operand::Simple(SimpleOperand::A),
         Keyword::B => Operand::Simple(SimpleOperand::B),
         Keyword::Bc => Operand::Reg16(Reg16::Bc),
-        Keyword::C => Operand::Simple(SimpleOperand::C),
+        Keyword::C => match *context {
+            OperandAnalysisContext::Branch => Operand::Condition(Condition::C),
+            OperandAnalysisContext::Other => Operand::Simple(SimpleOperand::C),
+        },
         Keyword::D => Operand::Simple(SimpleOperand::D),
         Keyword::E => Operand::Simple(SimpleOperand::E),
         Keyword::H => Operand::Simple(SimpleOperand::H),
         Keyword::L => Operand::Simple(SimpleOperand::L),
+        Keyword::Nc => Operand::Condition(Condition::Nc),
         Keyword::Nz => Operand::Condition(Condition::Nz),
         Keyword::Z => Operand::Condition(Condition::Z),
         _ => panic!(),
@@ -252,6 +272,8 @@ mod tests {
     impl From<Condition> for SynExpr<TestToken> {
         fn from(condition: Condition) -> Self {
             match condition {
+                Condition::C => atom(C),
+                Condition::Nc => atom(Nc),
                 Condition::Nz => atom(Nz),
                 Condition::Z => atom(Z),
             }
@@ -291,7 +313,10 @@ mod tests {
     #[test]
     fn analyze_cp_symbol() {
         let ident = "ident";
-        test_cp_const_analysis(TestToken::Identifier(ident), Expr::Symbol(ident.to_string()))
+        test_cp_const_analysis(
+            TestToken::Identifier(ident),
+            Expr::Symbol(ident.to_string()),
+        )
     }
 
     #[test]
@@ -447,7 +472,7 @@ mod tests {
         SimpleOperand::DerefHl,
     ];
 
-    const CONDITIONS: [Condition; 2] = [Condition::Nz, Condition::Z];
+    const CONDITIONS: [Condition; 4] = [Condition::C, Condition::Nc, Condition::Nz, Condition::Z];
 
     fn test_instruction_analysis(descriptors: Vec<InstructionDescriptor>) {
         for ((mnemonic, operands), expected) in descriptors {

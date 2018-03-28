@@ -59,6 +59,8 @@ pub enum Reg16 {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Condition {
+    C,
+    Nc,
     Nz,
     Z,
 }

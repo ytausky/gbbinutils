@@ -28,6 +28,7 @@ pub enum Keyword {
     L,
     Ld,
     Macro,
+    Nc,
     Nop,
     Nz,
     Push,
