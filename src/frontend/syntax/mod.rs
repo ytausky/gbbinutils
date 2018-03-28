@@ -17,6 +17,7 @@ pub enum Keyword {
     C,
     Cp,
     D,
+    Db,
     Dec,
     E,
     Endm,

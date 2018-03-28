@@ -147,7 +147,7 @@ fn identify_keyword(word: &str) -> Option<Keyword> {
         .map(|&(_, keyword)| keyword)
 }
 
-const KEYWORDS: [(&str, Keyword); 26] = [
+const KEYWORDS: [(&str, Keyword); 27] = [
     ("a", Keyword::A),
     ("and", Keyword::And),
     ("b", Keyword::B),
@@ -155,6 +155,7 @@ const KEYWORDS: [(&str, Keyword); 26] = [
     ("c", Keyword::C),
     ("cp", Keyword::Cp),
     ("d", Keyword::D),
+    ("db", Keyword::Db),
     ("dec", Keyword::Dec),
     ("e", Keyword::E),
     ("endm", Keyword::Endm),
