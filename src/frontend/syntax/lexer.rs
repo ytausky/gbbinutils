@@ -127,7 +127,7 @@ impl<'a> Lexer<'a> {
 
     fn find_word_end(&mut self) -> usize {
         while let Some(&(end, c)) = self.char_indices.peek() {
-            if !c.is_alphanumeric() {
+            if !c.is_alphanumeric() && c != '_' {
                 return end;
             }
             self.advance()
@@ -210,6 +210,14 @@ mod tests {
     #[test]
     fn lex_word_after_whitespace() {
         assert_eq_tokens("    word", &[Identifier("word")])
+    }
+
+    #[test]
+    fn lex_label_and_word_with_underscore() {
+        assert_eq_tokens(
+            "first_label then_word",
+            &[Label("first_label"), Identifier("then_word")],
+        )
     }
 
     #[test]
