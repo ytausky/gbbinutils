@@ -141,9 +141,10 @@ fn is_horizontal_whitespace(character: char) -> bool {
 }
 
 fn identify_keyword(word: &str) -> Option<Keyword> {
+    let lowercase = word.to_lowercase();
     KEYWORDS
         .iter()
-        .find(|&&(spelling, _)| spelling == word)
+        .find(|&&(spelling, _)| spelling == lowercase)
         .map(|&(_, keyword)| keyword)
 }
 
@@ -247,9 +248,18 @@ mod tests {
     }
 
     #[test]
-    fn lex_keywords() {
+    fn lex_keywords_lowercase() {
+        lex_transformed_keywords(|k| k.to_lowercase())
+    }
+
+    #[test]
+    fn lex_keywords_uppercase() {
+        lex_transformed_keywords(|k| k.to_uppercase())
+    }
+
+    fn lex_transformed_keywords<F: Fn(&str) -> String>(f: F) {
         for &(spelling, keyword) in KEYWORDS.iter() {
-            assert_eq_tokens(spelling, &[Keyword(keyword)])
+            assert_eq_tokens(&f(spelling), &[Keyword(keyword)])
         }
     }
 
