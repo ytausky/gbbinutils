@@ -49,7 +49,7 @@ where
     }
 
     fn parse_block(&mut self, block_context: &mut B) {
-        self.parse_list(&Some(Eol), follows_line, |p| p.parse_line(block_context))
+        self.parse_list(&Some(Eol), |l| l.is_none(), |p| p.parse_line(block_context))
     }
 
     fn parse_line(&mut self, block_context: &mut B) {
@@ -110,7 +110,8 @@ where
         F: FnMut(&Lookahead) -> bool,
         P: FnMut(&mut Self),
     {
-        if !follow(&self.lookahead()) {
+        let first_terminal = self.lookahead();
+        if !follow(&first_terminal) {
             parser(self);
             while self.lookahead() == *delimiter {
                 self.bump();
@@ -248,6 +249,11 @@ mod tests {
     #[test]
     fn parse_nullary_instruction() {
         assert_eq_actions(&[(Word, 0)], &inst((Word, 0), vec![]))
+    }
+
+    #[test]
+    fn parse_nullary_instruction_after_eol() {
+        assert_eq_actions(&[(Eol, 0), (Word, 1)], &inst((Word, 1), vec![]))
     }
 
     fn inst(name: TestToken, args: Vec<Vec<Action>>) -> Vec<Action> {
