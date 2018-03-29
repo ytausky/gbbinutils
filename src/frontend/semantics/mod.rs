@@ -1,11 +1,19 @@
 use frontend::{Keyword, OperationReceiver, StrExprFactory};
 use frontend::syntax::{self, StrToken, SynExpr};
 
+use std::marker::PhantomData;
+
 mod instruction;
 
-pub struct SemanticActions<'s, 'a, OR: 's + OperationReceiver<'a>> {
-    session: &'s mut OR,
-    contexts: Vec<Context<'a>>,
+pub struct SemanticActions<'actions, 'session, 'src, OR>
+where
+    'session: 'actions,
+    'src: 'actions,
+    OR: 'session + OperationReceiver<'src>,
+{
+    session: &'session mut OR,
+    contexts: Vec<Context<'src>>,
+    _phantom: PhantomData<&'actions ()>,
 }
 
 enum Context<'a> {
@@ -13,17 +21,29 @@ enum Context<'a> {
     Instruction(syntax::StrToken<'a>, Vec<SynExpr<syntax::StrToken<'a>>>),
 }
 
-impl<'s, 'a, OR: 's + OperationReceiver<'a>> SemanticActions<'s, 'a, OR> {
-    pub fn new(session: &'s mut OR) -> SemanticActions<'s, 'a, OR> {
+impl<'actions, 'session, 'src, OR> SemanticActions<'actions, 'session, 'src, OR>
+where
+    'session: 'actions,
+    'src: 'actions,
+    OR: 'session + OperationReceiver<'src>,
+{
+    pub fn new(session: &'session mut OR) -> SemanticActions<'actions, 'session, 'src, OR> {
         SemanticActions {
             session,
             contexts: vec![Context::Block],
+            _phantom: PhantomData,
         }
     }
 }
 
-impl<'s, 'a, OR: 's + OperationReceiver<'a>> syntax::BlockContext for SemanticActions<'s, 'a, OR> {
-    type Terminal = StrToken<'a>;
+impl<'actions, 'session, 'src, OR> syntax::BlockContext
+    for SemanticActions<'actions, 'session, 'src, OR>
+where
+    'session: 'actions,
+    'src: 'actions,
+    OR: 'session + OperationReceiver<'src>,
+{
+    type Terminal = StrToken<'src>;
     type CommandContext = Self;
     type TerminalSequenceContext = Self;
 
@@ -47,8 +67,14 @@ impl<'s, 'a, OR: 's + OperationReceiver<'a>> syntax::BlockContext for SemanticAc
     }
 }
 
-impl<'s, 'a, OR: 's + OperationReceiver<'a>> syntax::CommandContext for SemanticActions<'s, 'a, OR> {
-    type Terminal = StrToken<'a>;
+impl<'actions, 'session, 'src, OR> syntax::CommandContext
+    for SemanticActions<'actions, 'session, 'src, OR>
+where
+    'session: 'actions,
+    'src: 'actions,
+    OR: 'session + OperationReceiver<'src>,
+{
+    type Terminal = StrToken<'src>;
 
     fn add_argument(&mut self, expr: SynExpr<Self::Terminal>) {
         match self.contexts.last_mut() {
@@ -83,9 +109,14 @@ impl<'s, 'a, OR: 's + OperationReceiver<'a>> syntax::CommandContext for Semantic
     }
 }
 
-impl<'s, 'a, OR: 's + OperationReceiver<'a>> syntax::TerminalSequenceContext
-    for SemanticActions<'s, 'a, OR> {
-    type Terminal = StrToken<'a>;
+impl<'actions, 'session, 'src, OR> syntax::TerminalSequenceContext
+    for SemanticActions<'actions, 'session, 'src, OR>
+where
+    'session: 'actions,
+    'src: 'actions,
+    OR: 'session + OperationReceiver<'src>,
+{
+    type Terminal = StrToken<'src>;
 
     fn push_terminal(&mut self, _terminal: Self::Terminal) {
         unimplemented!()

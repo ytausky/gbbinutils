@@ -9,13 +9,8 @@ use ir::*;
 use self::syntax::*;
 
 pub fn analyze_file<S: ir::Section>(name: &str, section: S) {
-    use std::io::prelude::*;
-    let mut file = std::fs::File::open(name).unwrap();
-    let mut src = String::new();
-    file.read_to_string(&mut src).unwrap();
     let mut session = Session::new(section);
-    let ast_builder = semantics::SemanticActions::new(&mut session);
-    syntax::parse(&src, ast_builder)
+    session.include_source_file(name);
 }
 
 pub trait ExprFactory {
@@ -42,41 +37,41 @@ impl<'a> ExprFactory for StrExprFactory<'a> {
     }
 }
 
-pub trait OperationReceiver<'a> {
-    fn include_source_file(&mut self, filename: &'a str);
+pub trait OperationReceiver<'src> {
+    fn include_source_file(&mut self, filename: &'src str);
     fn emit_instruction(&mut self, instruction: ir::Instruction);
-    fn emit_label(&mut self, label: &'a str);
+    fn emit_label(&mut self, label: &'src str);
 }
 
-struct Session<'a, S> {
-    ast: Vec<AsmItem<'a>>,
+struct Session<'session, S> {
     section: S,
+    _phantom: std::marker::PhantomData<&'session ()>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum AsmItem<'a> {
-    Include(&'a str),
-}
-
-impl<'a, S: ir::Section> Session<'a, S> {
-    fn new(section: S) -> Session<'a, S> {
+impl<'session, S: ir::Section> Session<'session, S> {
+    fn new(section: S) -> Session<'session, S> {
         Session {
-            ast: Vec::new(),
             section,
+            _phantom: std::marker::PhantomData,
         }
     }
 }
 
-impl<'a, S: ir::Section> OperationReceiver<'a> for Session<'a, S> {
-    fn include_source_file(&mut self, filename: &'a str) {
-        self.ast.push(AsmItem::Include(filename))
+impl<'src, 'session: 'src, S: ir::Section> OperationReceiver<'src> for Session<'session, S> {
+    fn include_source_file(&mut self, filename: &'src str) {
+        use std::io::prelude::*;
+        let mut file = std::fs::File::open(filename).unwrap();
+        let mut src = String::new();
+        file.read_to_string(&mut src).unwrap();
+        let actions = semantics::SemanticActions::new(self);
+        syntax::parse(&src, actions)
     }
 
     fn emit_instruction(&mut self, instruction: ir::Instruction) {
         self.section.add_instruction(instruction)
     }
 
-    fn emit_label(&mut self, label: &'a str) {
+    fn emit_label(&mut self, label: &'src str) {
         self.section.add_label(label)
     }
 }
