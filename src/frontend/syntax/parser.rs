@@ -49,7 +49,7 @@ where
     }
 
     fn parse_block(&mut self, block_context: &mut B) {
-        self.parse_list(&Some(Eol), |l| l.is_none(), |p| p.parse_line(block_context))
+        self.parse_list(&Some(Eol), Option::is_none, |p| p.parse_line(block_context))
     }
 
     fn parse_line(&mut self, block_context: &mut B) {
