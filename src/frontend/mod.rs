@@ -13,7 +13,8 @@ pub fn analyze_file<S: ir::Section>(name: &str, section: S) {
     let mut file = std::fs::File::open(name).unwrap();
     let mut src = String::new();
     file.read_to_string(&mut src).unwrap();
-    let ast_builder = AstBuilder::new(section);
+    let mut session = Session::new(section);
+    let ast_builder = AstBuilder::new(&mut session);
     syntax::parse(&src, ast_builder)
 }
 
@@ -41,10 +42,48 @@ impl<'a> ExprFactory for StrExprFactory<'a> {
     }
 }
 
-pub struct AstBuilder<'a, S: ir::Section> {
+trait OperationReceiver<'a> {
+    fn include_source_file(&mut self, filename: &'a str);
+    fn emit_instruction(&mut self, instruction: ir::Instruction);
+    fn emit_label(&mut self, label: &'a str);
+}
+
+struct Session<'a, S> {
     ast: Vec<AsmItem<'a>>,
-    contexts: Vec<Context<'a>>,
     section: S,
+}
+
+impl<'a, S: ir::Section> Session<'a, S> {
+    fn new(section: S) -> Session<'a, S> {
+        Session {
+            ast: Vec::new(),
+            section,
+        }
+    }
+
+    #[cfg(test)]
+    fn ast(&self) -> &Vec<AsmItem<'a>> {
+        &self.ast
+    }
+}
+
+impl<'a, S: ir::Section> OperationReceiver<'a> for Session<'a, S> {
+    fn include_source_file(&mut self, filename: &'a str) {
+        self.ast.push(AsmItem::Include(filename))
+    }
+
+    fn emit_instruction(&mut self, instruction: ir::Instruction) {
+        self.section.add_instruction(instruction)
+    }
+
+    fn emit_label(&mut self, label: &'a str) {
+        self.section.add_label(label)
+    }
+}
+
+struct AstBuilder<'s, 'a: 's, S: 's> {
+    session: &'s mut Session<'a, S>,
+    contexts: Vec<Context<'a>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -57,29 +96,23 @@ enum Context<'a> {
     Instruction(syntax::StrToken<'a>, Vec<SynExpr<syntax::StrToken<'a>>>),
 }
 
-impl<'a, S: ir::Section> AstBuilder<'a, S> {
-    pub fn new(section: S) -> AstBuilder<'a, S> {
+impl<'s, 'a: 's, S: ir::Section> AstBuilder<'s, 'a, S> {
+    fn new(session: &'s mut Session<'a, S>) -> AstBuilder<'s, 'a, S> {
         AstBuilder {
-            ast: Vec::new(),
+            session,
             contexts: vec![Context::Block],
-            section,
         }
-    }
-
-    #[cfg(test)]
-    fn ast(&self) -> &Vec<AsmItem<'a>> {
-        &self.ast
     }
 }
 
-impl<'a, S: Section> syntax::BlockContext for AstBuilder<'a, S> {
+impl<'s, 'a: 's, S: ir::Section> syntax::BlockContext for AstBuilder<'s, 'a, S> {
     type Terminal = StrToken<'a>;
     type CommandContext = Self;
     type TerminalSequenceContext = Self;
 
     fn add_label(&mut self, label: Self::Terminal) {
         match label {
-            StrToken::Label(spelling) => self.section.add_label(spelling),
+            StrToken::Label(spelling) => self.session.emit_label(spelling),
             _ => panic!(),
         }
     }
@@ -97,7 +130,7 @@ impl<'a, S: Section> syntax::BlockContext for AstBuilder<'a, S> {
     }
 }
 
-impl<'a, S: Section> syntax::CommandContext for AstBuilder<'a, S> {
+impl<'s, 'a: 's, S: ir::Section> syntax::CommandContext for AstBuilder<'s, 'a, S> {
     type Terminal = StrToken<'a>;
 
     fn add_argument(&mut self, expr: SynExpr<Self::Terminal>) {
@@ -110,10 +143,12 @@ impl<'a, S: Section> syntax::CommandContext for AstBuilder<'a, S> {
     fn exit_command(&mut self) {
         if let Some(Context::Instruction(name, args)) = self.contexts.pop() {
             match name {
-                StrToken::Keyword(Keyword::Include) => self.ast.push(reduce_include(args)),
+                StrToken::Keyword(Keyword::Include) => {
+                    self.session.include_source_file(reduce_include(args))
+                }
                 StrToken::Keyword(keyword) => {
                     let mut analyzer = semantics::CommandAnalyzer::new(StrExprFactory::new());
-                    self.section.add_instruction(
+                    self.session.emit_instruction(
                         analyzer
                             .analyze_instruction(keyword, args.into_iter())
                             .unwrap(),
@@ -130,7 +165,7 @@ impl<'a, S: Section> syntax::CommandContext for AstBuilder<'a, S> {
     }
 }
 
-impl<'a, S: Section> syntax::TerminalSequenceContext for AstBuilder<'a, S> {
+impl<'s, 'a: 's, S: ir::Section> syntax::TerminalSequenceContext for AstBuilder<'s, 'a, S> {
     type Terminal = StrToken<'a>;
 
     fn push_terminal(&mut self, _terminal: Self::Terminal) {
@@ -142,17 +177,13 @@ impl<'a, S: Section> syntax::TerminalSequenceContext for AstBuilder<'a, S> {
     }
 }
 
-fn reduce_include(mut arguments: Vec<SynExpr<StrToken>>) -> AsmItem {
+fn reduce_include(mut arguments: Vec<SynExpr<StrToken>>) -> &str {
     assert_eq!(arguments.len(), 1);
     let path = arguments.pop().unwrap();
     match path {
-        SynExpr::Atom(StrToken::QuotedString(path_str)) => include(path_str),
+        SynExpr::Atom(StrToken::QuotedString(path_str)) => path_str,
         _ => panic!(),
     }
-}
-
-pub fn include(path: &str) -> AsmItem {
-    AsmItem::Include(path)
 }
 
 #[cfg(test)]
@@ -163,13 +194,16 @@ mod tests {
     fn build_include_item() {
         let filename = "file.asm";
         let mut actions = Vec::new();
-        let mut builder = AstBuilder::new(TestSection::new(&mut actions));
-        builder.enter_command(StrToken::Keyword(Keyword::Include));
-        let expr = SynExpr::from(StrToken::QuotedString(filename));
-        builder.add_argument(expr);
-        builder.exit_command();
-        let ast = builder.ast().to_vec();
-        assert_eq!(*ast.last().unwrap(), include(filename))
+        let mut session = Session::new(TestSection::new(&mut actions));
+        {
+            let mut builder = AstBuilder::new(&mut session);
+            builder.enter_command(StrToken::Keyword(Keyword::Include));
+            let expr = SynExpr::from(StrToken::QuotedString(filename));
+            builder.add_argument(expr);
+            builder.exit_command();
+        }
+        let ast = session.ast().to_vec();
+        assert_eq!(*ast.last().unwrap(), AsmItem::Include(filename))
     }
 
     type TestActions = Vec<Action>;
@@ -204,7 +238,8 @@ mod tests {
     fn analyze_label() {
         let mut actions = Vec::new();
         {
-            let mut builder = AstBuilder::new(TestSection::new(&mut actions));
+            let mut session = Session::new(TestSection::new(&mut actions));
+            let mut builder = AstBuilder::new(&mut session);
             builder.add_label(StrToken::Label("label"));
         }
         assert_eq!(actions, vec![Action::AddLabel("label".to_string())])
