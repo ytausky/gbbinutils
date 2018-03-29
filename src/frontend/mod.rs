@@ -14,7 +14,7 @@ pub fn analyze_file<S: ir::Section>(name: &str, section: S) {
     let mut src = String::new();
     file.read_to_string(&mut src).unwrap();
     let mut session = Session::new(section);
-    let ast_builder = semantics::AstBuilder::new(&mut session);
+    let ast_builder = semantics::SemanticActions::new(&mut session);
     syntax::parse(&src, ast_builder)
 }
 

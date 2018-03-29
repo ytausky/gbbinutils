@@ -3,7 +3,7 @@ use frontend::syntax::{self, StrToken, SynExpr};
 
 mod instruction;
 
-pub struct AstBuilder<'s, 'a, OR: 's + OperationReceiver<'a>> {
+pub struct SemanticActions<'s, 'a, OR: 's + OperationReceiver<'a>> {
     session: &'s mut OR,
     contexts: Vec<Context<'a>>,
 }
@@ -13,16 +13,16 @@ enum Context<'a> {
     Instruction(syntax::StrToken<'a>, Vec<SynExpr<syntax::StrToken<'a>>>),
 }
 
-impl<'s, 'a, OR: 's + OperationReceiver<'a>> AstBuilder<'s, 'a, OR> {
-    pub fn new(session: &'s mut OR) -> AstBuilder<'s, 'a, OR> {
-        AstBuilder {
+impl<'s, 'a, OR: 's + OperationReceiver<'a>> SemanticActions<'s, 'a, OR> {
+    pub fn new(session: &'s mut OR) -> SemanticActions<'s, 'a, OR> {
+        SemanticActions {
             session,
             contexts: vec![Context::Block],
         }
     }
 }
 
-impl<'s, 'a, OR: 's + OperationReceiver<'a>> syntax::BlockContext for AstBuilder<'s, 'a, OR> {
+impl<'s, 'a, OR: 's + OperationReceiver<'a>> syntax::BlockContext for SemanticActions<'s, 'a, OR> {
     type Terminal = StrToken<'a>;
     type CommandContext = Self;
     type TerminalSequenceContext = Self;
@@ -47,7 +47,7 @@ impl<'s, 'a, OR: 's + OperationReceiver<'a>> syntax::BlockContext for AstBuilder
     }
 }
 
-impl<'s, 'a, OR: 's + OperationReceiver<'a>> syntax::CommandContext for AstBuilder<'s, 'a, OR> {
+impl<'s, 'a, OR: 's + OperationReceiver<'a>> syntax::CommandContext for SemanticActions<'s, 'a, OR> {
     type Terminal = StrToken<'a>;
 
     fn add_argument(&mut self, expr: SynExpr<Self::Terminal>) {
@@ -84,7 +84,7 @@ impl<'s, 'a, OR: 's + OperationReceiver<'a>> syntax::CommandContext for AstBuild
 }
 
 impl<'s, 'a, OR: 's + OperationReceiver<'a>> syntax::TerminalSequenceContext
-    for AstBuilder<'s, 'a, OR> {
+    for SemanticActions<'s, 'a, OR> {
     type Terminal = StrToken<'a>;
 
     fn push_terminal(&mut self, _terminal: Self::Terminal) {
@@ -146,11 +146,11 @@ mod tests {
         let filename = "file.asm";
         let mut ops = TestOperationReceiver::new();
         {
-            let mut builder = AstBuilder::new(&mut ops);
-            builder.enter_command(StrToken::Keyword(Keyword::Include));
+            let mut actions = SemanticActions::new(&mut ops);
+            actions.enter_command(StrToken::Keyword(Keyword::Include));
             let expr = SynExpr::from(StrToken::QuotedString(filename));
-            builder.add_argument(expr);
-            builder.exit_command();
+            actions.add_argument(expr);
+            actions.exit_command();
         }
         assert_eq!(ops.0, [TestOperation::Include(filename)])
     }
@@ -159,8 +159,8 @@ mod tests {
     fn analyze_label() {
         let mut ops = TestOperationReceiver::new();
         {
-            let mut builder = AstBuilder::new(&mut ops);
-            builder.add_label(StrToken::Label("label"));
+            let mut actions = SemanticActions::new(&mut ops);
+            actions.add_label(StrToken::Label("label"));
         }
         assert_eq!(ops.0, [TestOperation::Label("label")])
     }
