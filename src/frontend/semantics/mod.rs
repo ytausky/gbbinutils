@@ -175,24 +175,35 @@ mod tests {
     #[test]
     fn build_include_item() {
         let filename = "file.asm";
-        let mut ops = TestOperationReceiver::new();
-        {
-            let mut actions = SemanticActions::new(&mut ops);
+        let actions = collect_semantic_actions(|mut actions| {
             actions.enter_command(StrToken::Keyword(Keyword::Include));
             let expr = SynExpr::from(StrToken::QuotedString(filename));
             actions.add_argument(expr);
             actions.exit_command();
-        }
-        assert_eq!(ops.0, [TestOperation::Include(filename)])
+        });
+        assert_eq!(actions, [TestOperation::Include(filename)])
     }
 
     #[test]
     fn analyze_label() {
-        let mut ops = TestOperationReceiver::new();
-        {
-            let mut actions = SemanticActions::new(&mut ops);
-            actions.add_label(StrToken::Label("label"));
-        }
-        assert_eq!(ops.0, [TestOperation::Label("label")])
+        let actions =
+            collect_semantic_actions(|mut actions| actions.add_label(StrToken::Label("label")));
+        assert_eq!(actions, [TestOperation::Label("label")])
+    }
+
+    fn collect_semantic_actions<F>(f: F) -> Vec<TestOperation>
+    where
+        F: for<'actions, 'session: 'actions> FnOnce(
+            SemanticActions<
+                'actions,
+                'session,
+                'static,
+                TestOperationReceiver,
+            >,
+        ),
+    {
+        let mut operations = TestOperationReceiver::new();
+        f(SemanticActions::new(&mut operations));
+        operations.0
     }
 }
