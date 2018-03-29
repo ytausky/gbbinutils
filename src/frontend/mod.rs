@@ -81,8 +81,8 @@ impl<'a, S: ir::Section> OperationReceiver<'a> for Session<'a, S> {
     }
 }
 
-struct AstBuilder<'s, 'a: 's, S: 's> {
-    session: &'s mut Session<'a, S>,
+struct AstBuilder<'s, 'a, OR: 's + OperationReceiver<'a>> {
+    session: &'s mut OR,
     contexts: Vec<Context<'a>>,
 }
 
@@ -96,8 +96,8 @@ enum Context<'a> {
     Instruction(syntax::StrToken<'a>, Vec<SynExpr<syntax::StrToken<'a>>>),
 }
 
-impl<'s, 'a: 's, S: ir::Section> AstBuilder<'s, 'a, S> {
-    fn new(session: &'s mut Session<'a, S>) -> AstBuilder<'s, 'a, S> {
+impl<'s, 'a, OR: 's + OperationReceiver<'a>> AstBuilder<'s, 'a, OR> {
+    fn new(session: &'s mut OR) -> AstBuilder<'s, 'a, OR> {
         AstBuilder {
             session,
             contexts: vec![Context::Block],
@@ -105,7 +105,7 @@ impl<'s, 'a: 's, S: ir::Section> AstBuilder<'s, 'a, S> {
     }
 }
 
-impl<'s, 'a: 's, S: ir::Section> syntax::BlockContext for AstBuilder<'s, 'a, S> {
+impl<'s, 'a, OR: 's + OperationReceiver<'a>> syntax::BlockContext for AstBuilder<'s, 'a, OR> {
     type Terminal = StrToken<'a>;
     type CommandContext = Self;
     type TerminalSequenceContext = Self;
@@ -130,7 +130,7 @@ impl<'s, 'a: 's, S: ir::Section> syntax::BlockContext for AstBuilder<'s, 'a, S> 
     }
 }
 
-impl<'s, 'a: 's, S: ir::Section> syntax::CommandContext for AstBuilder<'s, 'a, S> {
+impl<'s, 'a, OR: 's + OperationReceiver<'a>> syntax::CommandContext for AstBuilder<'s, 'a, OR> {
     type Terminal = StrToken<'a>;
 
     fn add_argument(&mut self, expr: SynExpr<Self::Terminal>) {
@@ -165,7 +165,8 @@ impl<'s, 'a: 's, S: ir::Section> syntax::CommandContext for AstBuilder<'s, 'a, S
     }
 }
 
-impl<'s, 'a: 's, S: ir::Section> syntax::TerminalSequenceContext for AstBuilder<'s, 'a, S> {
+impl<'s, 'a, OR: 's + OperationReceiver<'a>> syntax::TerminalSequenceContext
+    for AstBuilder<'s, 'a, OR> {
     type Terminal = StrToken<'a>;
 
     fn push_terminal(&mut self, _terminal: Self::Terminal) {
