@@ -40,7 +40,7 @@ impl<'a> ExprFactory for StrExprFactory<'a> {
 pub trait OperationReceiver<'src> {
     fn include_source_file(&mut self, filename: &'src str);
     fn emit_instruction(&mut self, instruction: ir::Instruction);
-    fn emit_label(&mut self, label: &'src str);
+    fn define_label(&mut self, label: &'src str);
 }
 
 struct Session<'session, S> {
@@ -71,7 +71,7 @@ impl<'src, 'session: 'src, S: ir::Section> OperationReceiver<'src> for Session<'
         self.section.add_instruction(instruction)
     }
 
-    fn emit_label(&mut self, label: &'src str) {
+    fn define_label(&mut self, label: &'src str) {
         self.section.add_label(label)
     }
 }

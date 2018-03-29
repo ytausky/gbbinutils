@@ -49,7 +49,7 @@ where
 
     fn add_label(&mut self, label: Self::Terminal) {
         match label {
-            StrToken::Label(spelling) => self.session.emit_label(spelling),
+            StrToken::Label(spelling) => self.session.define_label(spelling),
             _ => panic!(),
         }
     }
@@ -167,7 +167,7 @@ mod tests {
             self.0.push(TestOperation::Instruction(instruction))
         }
 
-        fn emit_label(&mut self, label: &'static str) {
+        fn define_label(&mut self, label: &'static str) {
             self.0.push(TestOperation::Label(label))
         }
     }
