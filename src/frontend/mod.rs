@@ -8,10 +8,10 @@ mod syntax;
 use ir::*;
 use self::syntax::*;
 
-pub fn analyze_file<S: ir::Section>(name: &str, section: S) {
+pub fn analyze_file<S: ir::Section>(name: &str, mut section: S) {
     let mut fs = StdFileSystem::new();
     let mut factory = SemanticSrcAnalyzerFactory::new();
-    let mut session = Session::new(&mut fs, &mut factory, section);
+    let mut session = Session::new(&mut fs, &mut factory, &mut section);
     session.include_source_file(name);
 }
 
@@ -107,11 +107,10 @@ pub trait OperationReceiver<'src> {
     fn define_label(&mut self, label: &'src str);
 }
 
-struct Session<'session, FS: 'session, SAF: 'session, S> {
+struct Session<'session, FS: 'session, SAF: 'session, S: 'session> {
     fs: &'session mut FS,
     analyzer_factory: &'session mut SAF,
-    section: S,
-    _phantom: std::marker::PhantomData<&'session ()>,
+    section: &'session mut S,
 }
 
 impl<'session, FS: FileSystem, SAF: SrcAnalyzerFactory, S: ir::Section>
@@ -120,13 +119,12 @@ impl<'session, FS: FileSystem, SAF: SrcAnalyzerFactory, S: ir::Section>
     fn new(
         fs: &'session mut FS,
         analyzer_factory: &'session mut SAF,
-        section: S,
+        section: &'session mut S,
     ) -> Session<'session, FS, SAF, S> {
         Session {
             fs,
             analyzer_factory,
             section,
-            _phantom: std::marker::PhantomData,
         }
     }
 }
@@ -163,14 +161,47 @@ mod tests {
         let contents = "nop";
         let mut fs = MockFileSystem::new();
         fs.add_file(filename, contents);
-        let mut analyzer_factory = CollectingSrcAnalyzerFactory::new();
+        let mut analyzer_factory = MockSrcAnalyzerFactory::new();
+        let mut section = MockSection::new();
         {
-            let mut session = Session::new(&mut fs, &mut analyzer_factory, NullSection::new());
+            let mut session = Session::new(&mut fs, &mut analyzer_factory, &mut section);
             session.include_source_file(filename);
         }
         assert_eq!(
             Rc::try_unwrap(analyzer_factory.src).unwrap().into_inner(),
             [contents]
+        )
+    }
+
+    #[test]
+    fn emit_instruction() {
+        let mut fs = MockFileSystem::new();
+        let mut analyzer_factory = MockSrcAnalyzerFactory::new();
+        let mut section = MockSection::new();
+        let instruction = Instruction::Nop;
+        {
+            let mut session = Session::new(&mut fs, &mut analyzer_factory, &mut section);
+            session.emit_instruction(instruction.clone())
+        }
+        assert_eq!(
+            section.operations,
+            [MockSectionOperation::AddInstruction(instruction)]
+        )
+    }
+
+    #[test]
+    fn define_label() {
+        let mut fs = MockFileSystem::new();
+        let mut analyzer_factory = MockSrcAnalyzerFactory::new();
+        let mut section = MockSection::new();
+        let label = "label";
+        {
+            let mut session = Session::new(&mut fs, &mut analyzer_factory, &mut section);
+            session.define_label(label)
+        }
+        assert_eq!(
+            section.operations,
+            [MockSectionOperation::AddLabel(String::from(label))]
         )
     }
 
@@ -200,37 +231,37 @@ mod tests {
 
     use std::{cell::RefCell, rc::Rc};
 
-    struct CollectingSrcAnalyzerFactory {
+    struct MockSrcAnalyzerFactory {
         src: Rc<RefCell<Vec<String>>>,
     }
 
-    impl CollectingSrcAnalyzerFactory {
-        fn new() -> CollectingSrcAnalyzerFactory {
-            CollectingSrcAnalyzerFactory {
+    impl MockSrcAnalyzerFactory {
+        fn new() -> MockSrcAnalyzerFactory {
+            MockSrcAnalyzerFactory {
                 src: Rc::new(RefCell::new(Vec::new())),
             }
         }
     }
 
-    impl SrcAnalyzerFactory for CollectingSrcAnalyzerFactory {
-        type SrcAnalyzer = CollectingSrcAnalyzer;
+    impl SrcAnalyzerFactory for MockSrcAnalyzerFactory {
+        type SrcAnalyzer = MockSrcAnalyzer;
 
         fn mk_src_analyzer(&mut self) -> Self::SrcAnalyzer {
-            CollectingSrcAnalyzer::new(self.src.clone())
+            MockSrcAnalyzer::new(self.src.clone())
         }
     }
 
-    struct CollectingSrcAnalyzer {
+    struct MockSrcAnalyzer {
         src: Rc<RefCell<Vec<String>>>,
     }
 
-    impl CollectingSrcAnalyzer {
-        fn new(src: Rc<RefCell<Vec<String>>>) -> CollectingSrcAnalyzer {
-            CollectingSrcAnalyzer { src }
+    impl MockSrcAnalyzer {
+        fn new(src: Rc<RefCell<Vec<String>>>) -> MockSrcAnalyzer {
+            MockSrcAnalyzer { src }
         }
     }
 
-    impl SrcAnalyzer for CollectingSrcAnalyzer {
+    impl SrcAnalyzer for MockSrcAnalyzer {
         fn analyze<'src, OR: OperationReceiver<'src>>(
             &mut self,
             src: &'src str,
@@ -240,16 +271,33 @@ mod tests {
         }
     }
 
-    struct NullSection;
+    #[derive(Debug, PartialEq)]
+    enum MockSectionOperation {
+        AddInstruction(Instruction),
+        AddLabel(String),
+    }
 
-    impl NullSection {
-        fn new() -> NullSection {
-            NullSection {}
+    struct MockSection {
+        operations: Vec<MockSectionOperation>,
+    }
+
+    impl MockSection {
+        fn new() -> MockSection {
+            MockSection {
+                operations: Vec::new(),
+            }
         }
     }
 
-    impl ir::Section for NullSection {
-        fn add_instruction(&mut self, _instruction: Instruction) {}
-        fn add_label(&mut self, _label: &str) {}
+    impl ir::Section for MockSection {
+        fn add_instruction(&mut self, instruction: Instruction) {
+            self.operations
+                .push(MockSectionOperation::AddInstruction(instruction))
+        }
+
+        fn add_label(&mut self, label: &str) {
+            self.operations
+                .push(MockSectionOperation::AddLabel(String::from(label)))
+        }
     }
 }

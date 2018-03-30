@@ -3,7 +3,7 @@ pub trait Section {
     fn add_label(&mut self, label: &str);
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Instruction {
     Alu(AluOperation, AluSource),
     Dec(SimpleOperand),
@@ -22,7 +22,7 @@ pub enum AluOperation {
     Xor,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum AluSource {
     Simple(SimpleOperand),
     Immediate(Expr),
@@ -40,14 +40,14 @@ pub enum SimpleOperand {
     DerefHl,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum LdKind {
     Simple(SimpleOperand, SimpleOperand),
     Immediate16(Reg16, Expr),
     ImmediateAddr(Expr, Direction),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Direction {
     FromA,
     IntoA,
@@ -59,7 +59,7 @@ pub enum Reg16 {
     Hl,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Branch {
     Jp(Expr),
     Jr(Expr),
@@ -73,7 +73,7 @@ pub enum Condition {
     Z,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     Literal(isize),
     Symbol(String),
