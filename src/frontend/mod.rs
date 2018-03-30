@@ -161,7 +161,8 @@ mod tests {
     fn include_source_file() {
         let filename = "my_file.asm";
         let contents = "nop";
-        let mut fs = SingleFileFileSystem::new(filename, contents);
+        let mut fs = MockFileSystem::new();
+        fs.add_file(filename, contents);
         let mut analyzer_factory = CollectingSrcAnalyzerFactory::new();
         {
             let mut session = Session::new(&mut fs, &mut analyzer_factory, NullSection::new());
@@ -173,24 +174,27 @@ mod tests {
         )
     }
 
-    struct SingleFileFileSystem<'a> {
-        filename: &'a str,
-        contents: &'a str,
+    struct MockFileSystem<'a> {
+        files: Vec<(&'a str, &'a str)>,
     }
 
-    impl<'a> SingleFileFileSystem<'a> {
-        fn new(filename: &'a str, contents: &'a str) -> SingleFileFileSystem<'a> {
-            SingleFileFileSystem { filename, contents }
+    impl<'a> MockFileSystem<'a> {
+        fn new() -> MockFileSystem<'a> {
+            MockFileSystem { files: Vec::new() }
+        }
+
+        fn add_file(&mut self, filename: &'a str, contents: &'a str) {
+            self.files.push((filename, contents))
         }
     }
 
-    impl<'a> FileSystem for SingleFileFileSystem<'a> {
+    impl<'a> FileSystem for MockFileSystem<'a> {
         fn read_file(&mut self, filename: &str) -> String {
-            if filename == self.filename {
-                String::from(self.contents)
-            } else {
-                panic!()
-            }
+            self.files
+                .iter()
+                .find(|&&(f, _)| f == filename)
+                .map(|&(_, c)| String::from(c))
+                .unwrap()
         }
     }
 
