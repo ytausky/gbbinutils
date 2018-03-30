@@ -39,6 +39,16 @@ pub enum Keyword {
     Z,
 }
 
+impl Keyword {
+    fn is_command(self) -> bool {
+        use self::Keyword::*;
+        match self {
+            And | Cp | Db | Dec | Halt | Include | Jp | Jr | Ld | Nop | Push | Stop | Xor => true,
+            _ => false,
+        }
+    }
+}
+
 pub trait Token {
     fn kind(&self) -> TokenKind;
 }
@@ -97,6 +107,7 @@ impl<T: Token> Terminal for T {
             TokenKind::Eol => TerminalKind::Eol,
             TokenKind::Keyword(Keyword::Endm) => TerminalKind::Endm,
             TokenKind::Keyword(Keyword::Macro) => TerminalKind::Macro,
+            TokenKind::Keyword(keyword) if keyword.is_command() => TerminalKind::Command,
             TokenKind::Identifier | TokenKind::Keyword(_) => TerminalKind::Word,
             TokenKind::Label => TerminalKind::Label,
             TokenKind::Number => TerminalKind::Number,
@@ -115,6 +126,7 @@ pub enum TerminalKind {
     ClosingBracket,
     Colon,
     Comma,
+    Command,
     Endm,
     Eol,
     Label,
@@ -201,6 +213,14 @@ mod tests {
         assert_eq!(
             StrToken::Keyword(Keyword::Macro).kind(),
             TerminalKind::Macro
+        )
+    }
+
+    #[test]
+    fn nop_terminal_kind() {
+        assert_eq!(
+            StrToken::Keyword(Keyword::Nop).kind(),
+            TerminalKind::Command,
         )
     }
 

@@ -76,7 +76,7 @@ where
     fn parse_unlabeled_line(&mut self, block_context: &mut B) {
         match self.lookahead() {
             ref t if follows_line(t) => (),
-            Some(Word) => self.parse_command(block_context),
+            Some(Command) => self.parse_command(block_context),
             _ => panic!(),
         }
     }
@@ -93,7 +93,7 @@ where
     }
 
     fn parse_command(&mut self, block_context: &mut B) {
-        let first_token = self.expect(&Some(Word));
+        let first_token = self.expect(&Some(Command));
         let instruction_context = block_context.enter_command(first_token);
         self.parse_argument_list(instruction_context);
         instruction_context.exit_command()
@@ -248,12 +248,12 @@ mod tests {
 
     #[test]
     fn parse_nullary_instruction() {
-        assert_eq_actions(&[(Word, 0)], &inst((Word, 0), vec![]))
+        assert_eq_actions(&[(Command, 0)], &inst((Command, 0), vec![]))
     }
 
     #[test]
     fn parse_nullary_instruction_after_eol() {
-        assert_eq_actions(&[(Eol, 0), (Word, 1)], &inst((Word, 1), vec![]))
+        assert_eq_actions(&[(Eol, 0), (Command, 1)], &inst((Command, 1), vec![]))
     }
 
     fn inst(name: TestToken, args: Vec<Vec<Action>>) -> Vec<Action> {
@@ -267,14 +267,14 @@ mod tests {
 
     #[test]
     fn parse_nullary_instruction_followed_by_eol() {
-        assert_eq_actions(&[(Word, 0), (Eol, 1)], &inst((Word, 0), vec![]))
+        assert_eq_actions(&[(Command, 0), (Eol, 1)], &inst((Command, 0), vec![]))
     }
 
     #[test]
     fn parse_unary_instruction() {
         assert_eq_actions(
-            &[(Word, 0), (Word, 1)],
-            &inst((Word, 0), vec![expr(ident((Word, 1)))]),
+            &[(Command, 0), (Word, 1)],
+            &inst((Command, 0), vec![expr(ident((Word, 1)))]),
         )
     }
 
@@ -289,9 +289,9 @@ mod tests {
     #[test]
     fn parse_binary_instruction() {
         assert_eq_actions(
-            &[(Word, 0), (Word, 1), (Comma, 2), (Word, 3)],
+            &[(Command, 0), (Word, 1), (Comma, 2), (Word, 3)],
             &inst(
-                (Word, 0),
+                (Command, 0),
                 vec![expr(ident((Word, 1))), expr(ident((Word, 3)))],
             ),
         );
@@ -300,23 +300,23 @@ mod tests {
     #[test]
     fn parse_two_instructions() {
         let tokens = &[
-            (Word, 0),
+            (Command, 0),
             (Word, 1),
             (Comma, 2),
             (Word, 3),
             (Eol, 4),
-            (Word, 5),
+            (Command, 5),
             (Word, 6),
             (Comma, 7),
             (Word, 8),
         ];
         let expected_actions = &concat(vec![
             inst(
-                (Word, 0),
+                (Command, 0),
                 vec![expr(ident((Word, 1))), expr(ident((Word, 3)))],
             ),
             inst(
-                (Word, 5),
+                (Command, 5),
                 vec![expr(ident((Word, 6))), expr(ident((Word, 8)))],
             ),
         ]);
@@ -334,24 +334,24 @@ mod tests {
     #[test]
     fn parse_two_instructions_separated_by_blank_line() {
         let tokens = &[
-            (Word, 0),
+            (Command, 0),
             (Word, 1),
             (Comma, 2),
             (Word, 3),
             (Eol, 4),
             (Eol, 5),
-            (Word, 6),
+            (Command, 6),
             (Word, 7),
             (Comma, 8),
             (Word, 9),
         ];
         let expected_actions = &concat(vec![
             inst(
-                (Word, 0),
+                (Command, 0),
                 vec![expr(ident((Word, 1))), expr(ident((Word, 3)))],
             ),
             inst(
-                (Word, 6),
+                (Command, 6),
                 vec![expr(ident((Word, 7))), expr(ident((Word, 9)))],
             ),
         ]);
@@ -360,8 +360,8 @@ mod tests {
 
     #[test]
     fn parse_include() {
-        let tokens = &[(Word, 0), (QuotedString, 1)];
-        let expected_actions = &inst((Word, 0), vec![expr(ident((QuotedString, 1)))]);
+        let tokens = &[(Command, 0), (QuotedString, 1)];
+        let expected_actions = &inst((Command, 0), vec![expr(ident((QuotedString, 1)))]);
         assert_eq_actions(tokens, expected_actions);
     }
 
@@ -386,11 +386,11 @@ mod tests {
             (Colon, 1),
             (Macro, 2),
             (Eol, 3),
-            (Word, 4),
+            (Command, 4),
             (Eol, 5),
             (Endm, 6),
         ];
-        let expected_actions = &macro_def((Label, 0), vec![(Word, 4), (Eol, 5)]);
+        let expected_actions = &macro_def((Label, 0), vec![(Command, 4), (Eol, 5)]);
         assert_eq_actions(tokens, expected_actions)
     }
 
@@ -410,8 +410,8 @@ mod tests {
 
     #[test]
     fn parse_labeled_instruction() {
-        let tokens = &[(Label, 0), (Colon, 1), (Word, 2), (Eol, 3)];
-        let expected_actions = &add_label((Label, 0), inst((Word, 2), vec![]));
+        let tokens = &[(Label, 0), (Colon, 1), (Command, 2), (Eol, 3)];
+        let expected_actions = &add_label((Label, 0), inst((Command, 2), vec![]));
         assert_eq_actions(tokens, expected_actions)
     }
 
@@ -424,12 +424,12 @@ mod tests {
     #[test]
     fn parse_deref_operand() {
         let tokens = &[
-            (Word, 0),
+            (Command, 0),
             (OpeningBracket, 1),
             (Word, 2),
             (ClosingBracket, 3),
         ];
-        let expected_actions = &inst((Word, 0), vec![expr(deref(ident((Word, 2))))]);
+        let expected_actions = &inst((Command, 0), vec![expr(deref(ident((Word, 2))))]);
         assert_eq_actions(tokens, expected_actions)
     }
 
