@@ -65,4 +65,23 @@ mod tests {
         assert_eq!(iter.next(), Some((2, 'c')));
         assert_eq!(iter.next(), None);
     }
+
+    #[test]
+    fn second_buffer_disjoint_from_first() {
+        let mut codebase = StringCodebase::new();
+        let src_a = "some source string";
+        let buf_id_a = codebase.add_src_buf(String::from(src_a));
+        let end_a = {
+            let mut iter = codebase.buf(buf_id_a);
+            let mut end = None;
+            while let Some((new_end, ch)) = iter.next() {
+                end = Some(new_end + ch.len_utf8())
+            }
+            end
+        };
+        let src_b = "another string";
+        let buf_id_b = codebase.add_src_buf(String::from(src_b));
+        let start_b = codebase.buf(buf_id_b).next().map(|(idx, _)| idx);
+        assert_eq!(end_a, start_b)
+    }
 }
