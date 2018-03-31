@@ -2,6 +2,7 @@ use ir;
 
 use std::{self, marker::PhantomData};
 
+#[cfg(test)]
 mod codebase;
 mod semantics;
 mod syntax;
