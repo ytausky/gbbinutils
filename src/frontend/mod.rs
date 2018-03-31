@@ -2,6 +2,7 @@ use ir;
 
 use std::{self, marker::PhantomData};
 
+mod codebase;
 mod semantics;
 mod syntax;
 
