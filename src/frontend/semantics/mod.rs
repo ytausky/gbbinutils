@@ -45,6 +45,7 @@ where
 {
     type Terminal = StrToken<'src>;
     type CommandContext = Self;
+    type MacroInvocationContext = Self;
     type TerminalSequenceContext = Self;
 
     fn add_label(&mut self, label: Self::Terminal) {
@@ -63,6 +64,13 @@ where
         &mut self,
         _label: Self::Terminal,
     ) -> &mut Self::TerminalSequenceContext {
+        unimplemented!()
+    }
+
+    fn enter_macro_invocation(
+        &mut self,
+        _name: Self::Terminal,
+    ) -> &mut Self::MacroInvocationContext {
         unimplemented!()
     }
 }
@@ -107,6 +115,23 @@ where
             panic!()
         }
     }
+}
+
+impl<'actions, 'session, 'src, OR> syntax::MacroInvocationContext
+    for SemanticActions<'actions, 'session, 'src, OR>
+where
+    'session: 'actions,
+    'src: 'actions,
+    OR: 'session + OperationReceiver<'src>,
+{
+    type Terminal = StrToken<'src>;
+    type TerminalSequenceContext = Self;
+
+    fn enter_macro_argument(&mut self) -> &mut Self::TerminalSequenceContext {
+        self
+    }
+
+    fn exit_macro_invocation(&mut self) {}
 }
 
 impl<'actions, 'session, 'src, OR> syntax::TerminalSequenceContext

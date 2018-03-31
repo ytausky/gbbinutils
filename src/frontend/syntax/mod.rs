@@ -140,6 +140,7 @@ pub enum TerminalKind {
 pub trait BlockContext {
     type Terminal: Terminal;
     type CommandContext: CommandContext<Terminal = Self::Terminal>;
+    type MacroInvocationContext: MacroInvocationContext<Terminal = Self::Terminal>;
     type TerminalSequenceContext: TerminalSequenceContext<Terminal = Self::Terminal>;
     fn add_label(&mut self, label: Self::Terminal);
     fn enter_command(&mut self, name: Self::Terminal) -> &mut Self::CommandContext;
@@ -147,12 +148,21 @@ pub trait BlockContext {
         &mut self,
         label: Self::Terminal,
     ) -> &mut Self::TerminalSequenceContext;
+    fn enter_macro_invocation(&mut self, name: Self::Terminal)
+        -> &mut Self::MacroInvocationContext;
 }
 
 pub trait CommandContext {
     type Terminal: Terminal;
     fn add_argument(&mut self, expr: SynExpr<Self::Terminal>);
     fn exit_command(&mut self);
+}
+
+pub trait MacroInvocationContext {
+    type Terminal: Terminal;
+    type TerminalSequenceContext: TerminalSequenceContext<Terminal = Self::Terminal>;
+    fn enter_macro_argument(&mut self) -> &mut Self::TerminalSequenceContext;
+    fn exit_macro_invocation(&mut self);
 }
 
 pub trait TerminalSequenceContext {

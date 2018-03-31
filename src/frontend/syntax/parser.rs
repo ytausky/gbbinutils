@@ -77,6 +77,7 @@ where
         match self.lookahead() {
             ref t if follows_line(t) => (),
             Some(Command) => self.parse_command(block_context),
+            Some(Word) => self.parse_macro_invocation(block_context),
             _ => panic!(),
         }
     }
@@ -99,9 +100,28 @@ where
         instruction_context.exit_command()
     }
 
+    fn parse_macro_invocation(&mut self, block_context: &mut B) {
+        let macro_name = self.expect(&Some(Word));
+        let invocation_context = block_context.enter_macro_invocation(macro_name);
+        self.parse_macro_arg_list(invocation_context);
+        invocation_context.exit_macro_invocation()
+    }
+
     fn parse_argument_list(&mut self, instruction_context: &mut B::CommandContext) {
         self.parse_list(&Some(Comma), follows_line, |p| {
             p.parse_argument(instruction_context)
+        })
+    }
+
+    fn parse_macro_arg_list(&mut self, invocation_context: &mut B::MacroInvocationContext) {
+        self.parse_list(&Some(Comma), follows_line, |p| {
+            let arg_context = invocation_context.enter_macro_argument();
+            let mut next_token = p.lookahead();
+            while next_token != Some(Comma) && !follows_line(&next_token) {
+                arg_context.push_terminal(p.bump());
+                next_token = p.lookahead()
+            }
+            arg_context.exit_terminal_sequence()
         })
     }
 
@@ -157,12 +177,14 @@ mod tests {
 
     struct TestContext {
         actions: Vec<Action>,
+        token_seq_kind: Option<TokenSeqKind>,
     }
 
     impl TestContext {
         fn new() -> TestContext {
             TestContext {
                 actions: Vec::new(),
+                token_seq_kind: None,
             }
         }
     }
@@ -172,10 +194,19 @@ mod tests {
         AddArgument(TestExpr),
         AddLabel(TestToken),
         EnterInstruction(TestToken),
+        EnterMacroArg,
         EnterMacroDef(TestToken),
+        EnterMacroInvocation(TestToken),
         ExitInstruction,
+        ExitMacroArg,
         ExitMacroDef,
+        ExitMacroInvocation,
         PushTerminal(TestToken),
+    }
+
+    enum TokenSeqKind {
+        MacroArg,
+        MacroDef,
     }
 
     type TestToken = (syntax::TerminalKind, usize);
@@ -191,6 +222,7 @@ mod tests {
     impl syntax::BlockContext for TestContext {
         type Terminal = TestToken;
         type CommandContext = Self;
+        type MacroInvocationContext = Self;
         type TerminalSequenceContext = Self;
 
         fn add_label(&mut self, label: Self::Terminal) {
@@ -207,6 +239,15 @@ mod tests {
             label: Self::Terminal,
         ) -> &mut Self::TerminalSequenceContext {
             self.actions.push(Action::EnterMacroDef(label));
+            self.token_seq_kind = Some(TokenSeqKind::MacroDef);
+            self
+        }
+
+        fn enter_macro_invocation(
+            &mut self,
+            name: Self::Terminal,
+        ) -> &mut Self::MacroInvocationContext {
+            self.actions.push(Action::EnterMacroInvocation(name));
             self
         }
     }
@@ -223,6 +264,21 @@ mod tests {
         }
     }
 
+    impl syntax::MacroInvocationContext for TestContext {
+        type Terminal = TestToken;
+        type TerminalSequenceContext = Self;
+
+        fn enter_macro_argument(&mut self) -> &mut Self::TerminalSequenceContext {
+            self.actions.push(Action::EnterMacroArg);
+            self.token_seq_kind = Some(TokenSeqKind::MacroArg);
+            self
+        }
+
+        fn exit_macro_invocation(&mut self) {
+            self.actions.push(Action::ExitMacroInvocation)
+        }
+    }
+
     impl syntax::TerminalSequenceContext for TestContext {
         type Terminal = TestToken;
 
@@ -231,7 +287,12 @@ mod tests {
         }
 
         fn exit_terminal_sequence(&mut self) {
-            self.actions.push(Action::ExitMacroDef)
+            self.actions
+                .push(match *self.token_seq_kind.as_ref().unwrap() {
+                    TokenSeqKind::MacroArg => Action::ExitMacroArg,
+                    TokenSeqKind::MacroDef => Action::ExitMacroDef,
+                });
+            self.token_seq_kind = None
         }
     }
 
@@ -435,5 +496,30 @@ mod tests {
 
     fn deref(expr: TestExpr) -> TestExpr {
         syntax::SynExpr::Deref(Box::new(expr))
+    }
+
+    #[test]
+    fn parse_nullary_macro_invocation() {
+        let tokens = &[(Word, 0)];
+        let expected_actions = &invoke((Word, 0), vec![]);
+        assert_eq_actions(tokens, expected_actions)
+    }
+
+    #[test]
+    fn parse_unary_macro_invocation() {
+        let tokens = &[(Word, 0), (Word, 1)];
+        let expected_actions = &invoke((Word, 0), vec![vec![(Word, 1)]]);
+        assert_eq_actions(tokens, expected_actions)
+    }
+
+    fn invoke(name: TestToken, args: Vec<Vec<TestToken>>) -> Vec<Action> {
+        let mut actions = vec![Action::EnterMacroInvocation(name)];
+        for arg in args.into_iter() {
+            actions.push(Action::EnterMacroArg);
+            actions.extend(arg.into_iter().map(|t| Action::PushTerminal(t)));
+            actions.push(Action::ExitMacroArg);
+        }
+        actions.push(Action::ExitMacroInvocation);
+        actions
     }
 }
