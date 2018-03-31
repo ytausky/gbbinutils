@@ -512,6 +512,34 @@ mod tests {
         assert_eq_actions(tokens, expected_actions)
     }
 
+    #[test]
+    fn parse_unary_macro_invocation_with_multiple_terminals() {
+        let tokens = &[(Word, 0), (Word, 1), (Word, 2), (Word, 3)];
+        let expected_actions = &invoke((Word, 0), vec![vec![(Word, 1), (Word, 2), (Word, 3)]]);
+        assert_eq_actions(tokens, expected_actions)
+    }
+
+    #[test]
+    fn parse_binary_macro_invocation_with_multiple_terminals() {
+        let tokens = &[
+            (Word, 0),
+            (Word, 1),
+            (Word, 2),
+            (Comma, 3),
+            (Word, 4),
+            (Word, 5),
+            (Word, 6),
+        ];
+        let expected_actions = &invoke(
+            (Word, 0),
+            vec![
+                vec![(Word, 1), (Word, 2)],
+                vec![(Word, 4), (Word, 5), (Word, 6)],
+            ],
+        );
+        assert_eq_actions(tokens, expected_actions)
+    }
+
     fn invoke(name: TestToken, args: Vec<Vec<TestToken>>) -> Vec<Action> {
         let mut actions = vec![Action::EnterMacroInvocation(name)];
         for arg in args.into_iter() {
