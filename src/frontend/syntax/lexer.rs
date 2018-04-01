@@ -140,6 +140,26 @@ fn is_horizontal_whitespace(character: char) -> bool {
     character.is_whitespace() && character != '\n'
 }
 
+pub struct Lexer<'a> {
+    scanner: Scanner<'a>,
+}
+
+impl<'a> Lexer<'a> {
+    pub fn new(src: &'a str) -> Lexer<'a> {
+        Lexer {
+            scanner: Scanner::new(src),
+        }
+    }
+}
+
+impl<'a> Iterator for Lexer<'a> {
+    type Item = StrToken<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.scanner.next()
+    }
+}
+
 fn identify_keyword(word: &str) -> Option<Keyword> {
     let lowercase = word.to_lowercase();
     KEYWORDS
@@ -186,7 +206,7 @@ mod tests {
     use super::StrToken::*;
 
     fn assert_eq_tokens(src: &str, expected_tokens: &[StrToken]) {
-        assert_eq!(Scanner::new(src).collect::<Vec<StrToken>>(), expected_tokens)
+        assert_eq!(Lexer::new(src).collect::<Vec<StrToken>>(), expected_tokens)
     }
 
     #[test]

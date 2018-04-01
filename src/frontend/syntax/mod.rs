@@ -5,7 +5,7 @@ pub fn parse<'a, BC>(src: &'a str, mut actions: BC)
 where
     BC: BlockContext<Terminal = StrToken<'a>>,
 {
-    self::parser::parse_src(self::lexer::Scanner::new(src), &mut actions)
+    self::parser::parse_src(self::lexer::Lexer::new(src), &mut actions)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
