@@ -3,13 +3,13 @@ use frontend::syntax::{Keyword, StrToken};
 use std::iter;
 use std::str;
 
-pub struct Lexer<'a> {
+pub struct Scanner<'a> {
     src: &'a str,
     char_indices: iter::Peekable<str::CharIndices<'a>>,
     is_at_line_start: bool,
 }
 
-impl<'a> Iterator for Lexer<'a> {
+impl<'a> Iterator for Scanner<'a> {
     type Item = StrToken<'a>;
 
     fn next(&mut self) -> Option<StrToken<'a>> {
@@ -21,9 +21,9 @@ impl<'a> Iterator for Lexer<'a> {
     }
 }
 
-impl<'a> Lexer<'a> {
-    pub fn new(src: &str) -> Lexer {
-        Lexer {
+impl<'a> Scanner<'a> {
+    pub fn new(src: &str) -> Scanner {
+        Scanner {
             src,
             char_indices: src.char_indices().peekable(),
             is_at_line_start: true,
@@ -186,7 +186,7 @@ mod tests {
     use super::StrToken::*;
 
     fn assert_eq_tokens(src: &str, expected_tokens: &[StrToken]) {
-        assert_eq!(Lexer::new(src).collect::<Vec<StrToken>>(), expected_tokens)
+        assert_eq!(Scanner::new(src).collect::<Vec<StrToken>>(), expected_tokens)
     }
 
     #[test]
