@@ -11,9 +11,7 @@ struct BufId(usize);
 
 impl StringCodebase {
     fn new() -> StringCodebase {
-        StringCodebase {
-            bufs: Vec::new(),
-        }
+        StringCodebase { bufs: Vec::new() }
     }
 
     fn add_src_buf(&mut self, src: String) -> BufId {
@@ -46,7 +44,9 @@ impl<'a> Iterator for SrcBufIter<'a> {
     type Item = (usize, char);
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.char_indices.next().map(|(index, ch)| (self.start_index + index, ch))
+        self.char_indices
+            .next()
+            .map(|(index, ch)| (self.start_index + index, ch))
     }
 }
 

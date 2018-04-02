@@ -1,22 +1,30 @@
-use frontend::syntax::{Keyword, StrToken};
+use frontend::syntax::{Keyword, TokenKind, StrToken};
 
 use std::iter;
+use std::ops::{Index, Range};
 use std::str;
 
 pub struct Scanner<'a> {
     src: &'a str,
     char_indices: iter::Peekable<str::CharIndices<'a>>,
+    range: Range<usize>,
     is_at_line_start: bool,
 }
 
 impl<'a> Iterator for Scanner<'a> {
-    type Item = StrToken<'a>;
+    type Item = (TokenKind, Range<usize>);
 
-    fn next(&mut self) -> Option<StrToken<'a>> {
+    fn next(&mut self) -> Option<Self::Item> {
         self.skip_irrelevant_characters();
         match self.char_indices.peek() {
             None => None,
-            Some(&(index, _)) => Some(self.lex_token(index)),
+            Some(&(index, _)) => {
+                self.range = Range {
+                    start: index,
+                    end: index,
+                };
+                Some(self.lex_token())
+            }
         }
     }
 }
@@ -26,6 +34,7 @@ impl<'a> Scanner<'a> {
         Scanner {
             src,
             char_indices: src.char_indices().peekable(),
+            range: Range { start: 0, end: 0 },
             is_at_line_start: true,
         }
     }
@@ -39,7 +48,7 @@ impl<'a> Scanner<'a> {
 
     fn skip_characters_if<P: FnMut(char) -> bool>(&mut self, mut predicate: P) {
         while self.current_char().map_or(false, &mut predicate) {
-            self.advance()
+            self.advance();
         }
     }
 
@@ -47,59 +56,55 @@ impl<'a> Scanner<'a> {
         self.char_indices.peek().map(|&(_, c)| c)
     }
 
-    fn advance(&mut self) {
+    fn advance(&mut self) -> Option<(usize, char)> {
         if self.current_char() != Some('\n') {
             self.is_at_line_start = false;
         }
-        self.char_indices.next();
+        self.range.end += self.current_char().map_or(0, |ch| ch.len_utf8());
+        self.char_indices.next()
     }
 
-    fn lex_token(&mut self, start: usize) -> StrToken<'a> {
+    fn lex_token(&mut self) -> <Scanner<'a> as Iterator>::Item {
         let first_char = self.current_char().unwrap();
         let next_token = match first_char {
-            ']' => self.take(StrToken::ClosingBracket),
-            ':' => self.take(StrToken::Colon),
-            ',' => self.take(StrToken::Comma),
-            '\n' => self.take(StrToken::Eol),
-            '[' => self.take(StrToken::OpeningBracket),
+            ']' => self.take(TokenKind::ClosingBracket),
+            ':' => self.take(TokenKind::Colon),
+            ',' => self.take(TokenKind::Comma),
+            '\n' => self.take(TokenKind::Eol),
+            '[' => self.take(TokenKind::OpeningBracket),
             '$' => self.lex_number(),
             '"' => self.lex_quoted_string(),
-            _ => self.lex_word(start),
+            _ => self.lex_word(),
         };
-        if next_token == StrToken::Eol {
+        if next_token == TokenKind::Eol {
             self.is_at_line_start = true
         }
-        next_token
+        (next_token, self.range.clone())
     }
 
-    fn take(&mut self, token: StrToken<'a>) -> StrToken<'a> {
+    fn take(&mut self, token: TokenKind) -> TokenKind {
         self.advance();
         token
     }
 
-    fn lex_quoted_string(&mut self) -> StrToken<'a> {
+    fn lex_quoted_string(&mut self) -> TokenKind {
         self.advance();
-        let (start, first_char) = self.char_indices.next().unwrap();
-        let mut end = start;
+        let (_, first_char) = self.advance().unwrap();
         let mut c = first_char;
         while c != '"' {
-            let (next_index, next_char) = self.char_indices.next().unwrap();
-            end = next_index;
+            let (_, next_char) = self.advance().unwrap();
             c = next_char;
         }
-        StrToken::QuotedString(&self.src[start..end])
+        TokenKind::QuotedString
     }
 
-    fn lex_number(&mut self) -> StrToken<'a> {
+    fn lex_number(&mut self) -> TokenKind {
         self.advance();
         const RADIX: u32 = 16;
-        let mut value = 0isize;
         let mut has_next_digit = true;
         while has_next_digit {
             if let Some(c) = self.current_char() {
-                if let Some(digit) = c.to_digit(RADIX) {
-                    value *= RADIX as isize;
-                    value += digit as isize;
+                if c.to_digit(RADIX).is_some() {
                     self.advance();
                 } else {
                     has_next_digit = false;
@@ -108,20 +113,17 @@ impl<'a> Scanner<'a> {
                 has_next_digit = false;
             }
         }
-        StrToken::Number(value)
+        TokenKind::Number
     }
 
-    fn lex_word(&mut self, start: usize) -> StrToken<'a> {
+    fn lex_word(&mut self) -> TokenKind {
         let starts_on_first_column = self.is_at_line_start;
         self.advance();
-        let end = self.find_word_end();
-        let word = &self.src[start..end];
-        if let Some(keyword) = identify_keyword(word) {
-            StrToken::Keyword(keyword)
-        } else if starts_on_first_column {
-            StrToken::Label(word)
+        self.find_word_end();
+        if starts_on_first_column {
+            TokenKind::Label
         } else {
-            StrToken::Identifier(word)
+            TokenKind::Identifier
         }
     }
 
@@ -130,7 +132,7 @@ impl<'a> Scanner<'a> {
             if !c.is_alphanumeric() && c != '_' {
                 return end;
             }
-            self.advance()
+            self.advance();
         }
         self.src.len()
     }
@@ -141,12 +143,14 @@ fn is_horizontal_whitespace(character: char) -> bool {
 }
 
 pub struct Lexer<'a> {
+    src: &'a str,
     scanner: Scanner<'a>,
 }
 
 impl<'a> Lexer<'a> {
     pub fn new(src: &'a str) -> Lexer<'a> {
         Lexer {
+            src,
             scanner: Scanner::new(src),
         }
     }
@@ -156,7 +160,32 @@ impl<'a> Iterator for Lexer<'a> {
     type Item = StrToken<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.scanner.next()
+        self.scanner.next().map(|(token, range)| {
+            let lexeme = self.src.index(range);
+            match token {
+                TokenKind::ClosingBracket => StrToken::ClosingBracket,
+                TokenKind::Colon => StrToken::Colon,
+                TokenKind::Comma => StrToken::Comma,
+                TokenKind::Eol => StrToken::Eol,
+                TokenKind::Identifier => identify_keyword(lexeme)
+                    .map_or(StrToken::Identifier(lexeme), |keyword| {
+                        StrToken::Keyword(keyword)
+                    }),
+                TokenKind::Keyword(_) => panic!(),
+                TokenKind::Label => identify_keyword(lexeme)
+                    .map_or(StrToken::Label(lexeme), |keyword| {
+                        StrToken::Keyword(keyword)
+                    }),
+                TokenKind::Number => {
+                    StrToken::Number(isize::from_str_radix(&lexeme[1..], 16).unwrap())
+                }
+                TokenKind::OpeningBracket => StrToken::OpeningBracket,
+                TokenKind::QuotedString => {
+                    StrToken::QuotedString(&lexeme[1..(lexeme.len() - 1)])
+                }
+                
+            }
+        })
     }
 }
 

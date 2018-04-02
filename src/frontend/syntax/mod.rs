@@ -53,7 +53,7 @@ pub trait Token {
     fn kind(&self) -> TokenKind;
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum TokenKind {
     ClosingBracket,
     Colon,
