@@ -174,10 +174,9 @@ where
 }
 
 fn identify_keyword(word: &str) -> Option<Keyword> {
-    let lowercase = word.to_lowercase();
     KEYWORDS
         .iter()
-        .find(|&&(spelling, _)| spelling == lowercase)
+        .find(|&&(spelling, _)| spelling.eq_ignore_ascii_case(word))
         .map(|&(_, keyword)| keyword)
 }
 
