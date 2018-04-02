@@ -1,11 +1,10 @@
-use frontend::syntax::{Keyword, TokenKind, StrToken};
+use frontend::syntax::{Keyword, StrToken, TokenKind};
 
 use std::iter;
 use std::ops::{Index, Range};
 use std::str;
 
 pub struct Scanner<'a> {
-    src: &'a str,
     char_indices: iter::Peekable<str::CharIndices<'a>>,
     range: Range<usize>,
     is_at_line_start: bool,
@@ -32,7 +31,6 @@ impl<'a> Iterator for Scanner<'a> {
 impl<'a> Scanner<'a> {
     pub fn new(src: &str) -> Scanner {
         Scanner {
-            src,
             char_indices: src.char_indices().peekable(),
             range: Range { start: 0, end: 0 },
             is_at_line_start: true,
@@ -127,14 +125,12 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn find_word_end(&mut self) -> usize {
-        while let Some(&(end, c)) = self.char_indices.peek() {
-            if !c.is_alphanumeric() && c != '_' {
-                return end;
-            }
+    fn find_word_end(&mut self) {
+        while self.current_char()
+            .map_or(false, |c| c.is_alphanumeric() || c == '_')
+        {
             self.advance();
         }
-        self.src.len()
     }
 }
 
@@ -180,10 +176,7 @@ impl<'a> Iterator for Lexer<'a> {
                     StrToken::Number(isize::from_str_radix(&lexeme[1..], 16).unwrap())
                 }
                 TokenKind::OpeningBracket => StrToken::OpeningBracket,
-                TokenKind::QuotedString => {
-                    StrToken::QuotedString(&lexeme[1..(lexeme.len() - 1)])
-                }
-                
+                TokenKind::QuotedString => StrToken::QuotedString(&lexeme[1..(lexeme.len() - 1)]),
             }
         })
     }
