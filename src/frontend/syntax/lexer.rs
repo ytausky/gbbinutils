@@ -4,34 +4,30 @@ use std::iter;
 use std::ops::{Index, Range};
 use std::str;
 
-pub struct Scanner<'a> {
-    char_indices: iter::Peekable<str::CharIndices<'a>>,
+pub struct Scanner<I: Iterator> {
+    chars: iter::Peekable<I>,
     range: Range<usize>,
     is_at_line_start: bool,
 }
 
-impl<'a> Iterator for Scanner<'a> {
+impl<I: Iterator<Item = char>> Iterator for Scanner<I> {
     type Item = (TokenKind, Range<usize>);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.skip_irrelevant_characters();
-        match self.char_indices.peek() {
-            None => None,
-            Some(&(index, _)) => {
-                self.range = Range {
-                    start: index,
-                    end: index,
-                };
-                Some(self.lex_token())
-            }
+        if self.chars.peek().is_some() {
+            self.range.start = self.range.end;
+            Some(self.lex_token())
+        } else {
+            None
         }
     }
 }
 
-impl<'a> Scanner<'a> {
-    pub fn new(src: &str) -> Scanner {
+impl<I: Iterator<Item = char>> Scanner<I> {
+    pub fn new(chars: I) -> Scanner<I> {
         Scanner {
-            char_indices: src.char_indices().peekable(),
+            chars: chars.peekable(),
             range: Range { start: 0, end: 0 },
             is_at_line_start: true,
         }
@@ -51,18 +47,18 @@ impl<'a> Scanner<'a> {
     }
 
     fn current_char(&mut self) -> Option<char> {
-        self.char_indices.peek().map(|&(_, c)| c)
+        self.chars.peek().cloned()
     }
 
-    fn advance(&mut self) -> Option<(usize, char)> {
+    fn advance(&mut self) -> Option<char> {
         if self.current_char() != Some('\n') {
             self.is_at_line_start = false;
         }
         self.range.end += self.current_char().map_or(0, |ch| ch.len_utf8());
-        self.char_indices.next()
+        self.chars.next()
     }
 
-    fn lex_token(&mut self) -> <Scanner<'a> as Iterator>::Item {
+    fn lex_token(&mut self) -> <Self as Iterator>::Item {
         let first_char = self.current_char().unwrap();
         let next_token = match first_char {
             ']' => self.take(TokenKind::ClosingBracket),
@@ -87,11 +83,9 @@ impl<'a> Scanner<'a> {
 
     fn lex_quoted_string(&mut self) -> TokenKind {
         self.advance();
-        let (_, first_char) = self.advance().unwrap();
-        let mut c = first_char;
+        let mut c = self.advance().unwrap();
         while c != '"' {
-            let (_, next_char) = self.advance().unwrap();
-            c = next_char;
+            c = self.advance().unwrap()
         }
         TokenKind::QuotedString
     }
@@ -99,17 +93,8 @@ impl<'a> Scanner<'a> {
     fn lex_number(&mut self) -> TokenKind {
         self.advance();
         const RADIX: u32 = 16;
-        let mut has_next_digit = true;
-        while has_next_digit {
-            if let Some(c) = self.current_char() {
-                if c.to_digit(RADIX).is_some() {
-                    self.advance();
-                } else {
-                    has_next_digit = false;
-                }
-            } else {
-                has_next_digit = false;
-            }
+        while self.current_char().map_or(false, |c| c.is_digit(RADIX)) {
+            self.advance();
         }
         TokenKind::Number
     }
@@ -140,14 +125,14 @@ fn is_horizontal_whitespace(character: char) -> bool {
 
 pub struct Lexer<'a> {
     src: &'a str,
-    scanner: Scanner<'a>,
+    scanner: Scanner<str::Chars<'a>>,
 }
 
 impl<'a> Lexer<'a> {
     pub fn new(src: &'a str) -> Lexer<'a> {
         Lexer {
             src,
-            scanner: Scanner::new(src),
+            scanner: Scanner::new(src.chars()),
         }
     }
 }
