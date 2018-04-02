@@ -83,19 +83,14 @@ impl<I: Iterator<Item = char>> Scanner<I> {
 
     fn lex_quoted_string(&mut self) -> TokenKind {
         self.advance();
-        let mut c = self.advance().unwrap();
-        while c != '"' {
-            c = self.advance().unwrap()
-        }
+        self.skip_characters_if(|c| c != '"');
+        self.advance();
         TokenKind::QuotedString
     }
 
     fn lex_number(&mut self) -> TokenKind {
         self.advance();
-        const RADIX: u32 = 16;
-        while self.current_char().map_or(false, |c| c.is_digit(RADIX)) {
-            self.advance();
-        }
+        self.skip_characters_if(is_hex_digit);
         TokenKind::Number
     }
 
@@ -111,16 +106,20 @@ impl<I: Iterator<Item = char>> Scanner<I> {
     }
 
     fn find_word_end(&mut self) {
-        while self.current_char()
-            .map_or(false, |c| c.is_alphanumeric() || c == '_')
-        {
-            self.advance();
-        }
+        self.skip_characters_if(is_ident_continuation)
     }
 }
 
 fn is_horizontal_whitespace(character: char) -> bool {
     character.is_whitespace() && character != '\n'
+}
+
+fn is_ident_continuation(character: char) -> bool {
+    character.is_alphanumeric() || character == '_'
+}
+
+fn is_hex_digit(character: char) -> bool {
+    character.is_digit(16)
 }
 
 pub struct Lexer<'a> {
