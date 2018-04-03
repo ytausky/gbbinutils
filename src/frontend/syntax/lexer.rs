@@ -1,4 +1,4 @@
-use frontend::syntax::{Atom, SimpleTokenKind, Token, keyword::{Command, Operand}};
+use frontend::syntax::{Atom, Token, keyword::{Command, Operand}};
 
 use std::iter;
 use std::ops::{Index, Range};
@@ -6,11 +6,15 @@ use std::str;
 
 #[derive(PartialEq)]
 enum ScannerTokenKind {
+    ClosingBracket,
+    Colon,
+    Comma,
+    Eol,
     Identifier,
     Label,
     Number,
-    QuotedString,
-    Simple(SimpleTokenKind),
+    OpeningBracket,
+    String,
 }
 
 struct Scanner<I: Iterator> {
@@ -70,16 +74,16 @@ impl<I: Iterator<Item = char>> Scanner<I> {
     fn lex_token(&mut self) -> <Self as Iterator>::Item {
         let first_char = self.current_char().unwrap();
         let next_token = match first_char {
-            ']' => self.take(ScannerTokenKind::Simple(SimpleTokenKind::ClosingBracket)),
-            ':' => self.take(ScannerTokenKind::Simple(SimpleTokenKind::Colon)),
-            ',' => self.take(ScannerTokenKind::Simple(SimpleTokenKind::Comma)),
-            '\n' => self.take(ScannerTokenKind::Simple(SimpleTokenKind::Eol)),
-            '[' => self.take(ScannerTokenKind::Simple(SimpleTokenKind::OpeningBracket)),
+            ']' => self.take(ScannerTokenKind::ClosingBracket),
+            ':' => self.take(ScannerTokenKind::Colon),
+            ',' => self.take(ScannerTokenKind::Comma),
+            '\n' => self.take(ScannerTokenKind::Eol),
+            '[' => self.take(ScannerTokenKind::OpeningBracket),
             '$' => self.lex_number(),
             '"' => self.lex_quoted_string(),
             _ => self.lex_word(),
         };
-        if next_token == ScannerTokenKind::Simple(SimpleTokenKind::Eol) {
+        if next_token == ScannerTokenKind::Eol {
             self.is_at_line_start = true
         }
         (next_token, self.range.clone())
@@ -94,7 +98,7 @@ impl<I: Iterator<Item = char>> Scanner<I> {
         self.advance();
         self.skip_characters_if(|c| c != '"');
         self.advance();
-        ScannerTokenKind::QuotedString
+        ScannerTokenKind::String
     }
 
     fn lex_number(&mut self) -> ScannerTokenKind {
@@ -152,6 +156,10 @@ impl<'a> Iterator for Lexer<'a> {
         self.scanner.next().map(|(token, range)| {
             let lexeme = self.src.index(range);
             match token {
+                ScannerTokenKind::ClosingBracket => Token::ClosingBracket,
+                ScannerTokenKind::Colon => Token::Colon,
+                ScannerTokenKind::Comma => Token::Comma,
+                ScannerTokenKind::Eol => Token::Eol,
                 ScannerTokenKind::Identifier => {
                     mk_keyword_or(|x| Token::Atom(Atom::Ident(x)), lexeme)
                 }
@@ -159,10 +167,10 @@ impl<'a> Iterator for Lexer<'a> {
                 ScannerTokenKind::Number => Token::Atom(Atom::Number(
                     isize::from_str_radix(&lexeme[1..], 16).unwrap(),
                 )),
-                ScannerTokenKind::QuotedString => {
+                ScannerTokenKind::OpeningBracket => Token::OpeningBracket,
+                ScannerTokenKind::String => {
                     Token::Atom(Atom::String(&lexeme[1..(lexeme.len() - 1)]))
                 }
-                ScannerTokenKind::Simple(kind) => Token::Simple(kind),
             }
         })
     }
@@ -232,7 +240,6 @@ mod tests {
     use super::Atom::{Ident, Number, Operand};
     use super::Command::*;
     use super::Operand::*;
-    use super::SimpleTokenKind::*;
     use super::Token::*;
 
     fn assert_eq_tokens<'a>(src: &'a str, expected_tokens: &[Token<&'a str>]) {
@@ -249,7 +256,7 @@ mod tests {
 
     #[test]
     fn lex_eol() {
-        assert_eq_tokens("\n", &[Simple(Eol)])
+        assert_eq_tokens("\n", &[Eol])
     }
 
     #[test]
@@ -259,7 +266,7 @@ mod tests {
 
     #[test]
     fn lex_label_after_eol() {
-        assert_eq_tokens("    \nlabel", &[Simple(Eol), Label("label")])
+        assert_eq_tokens("    \nlabel", &[Eol, Label("label")])
     }
 
     #[test]
@@ -282,7 +289,7 @@ mod tests {
 
     #[test]
     fn lex_comma() {
-        assert_eq_tokens(",", &[Simple(Comma)])
+        assert_eq_tokens(",", &[Comma])
     }
 
     #[test]
@@ -297,10 +304,7 @@ mod tests {
 
     #[test]
     fn lex_macro_definition() {
-        assert_eq_tokens(
-            "f: macro\n",
-            &[Label("f"), Simple(Colon), Macro, Simple(Eol)],
-        )
+        assert_eq_tokens("f: macro\n", &[Label("f"), Colon, Macro, Eol])
     }
 
     #[test]
@@ -327,7 +331,7 @@ mod tests {
 
     #[test]
     fn lex_brackets() {
-        assert_eq_tokens("[]", &[Simple(OpeningBracket), Simple(ClosingBracket)])
+        assert_eq_tokens("[]", &[OpeningBracket, ClosingBracket])
     }
 
     #[test]
@@ -337,7 +341,7 @@ mod tests {
 
     #[test]
     fn ignore_comment_at_end_of_line() {
-        assert_eq_tokens("nop ; comment\n", &[Command(Nop), Simple(Eol)])
+        assert_eq_tokens("nop ; comment\n", &[Command(Nop), Eol])
     }
 
     #[test]

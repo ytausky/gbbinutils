@@ -9,23 +9,18 @@ where
     self::parser::parse_src(self::lexer::Lexer::new(src), &mut actions)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum SimpleTokenKind {
-    ClosingBracket,
-    Colon,
-    Comma,
-    Eol,
-    OpeningBracket,
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token<S> {
     Atom(Atom<S>),
+    ClosingBracket,
+    Colon,
+    Comma,
     Command(keyword::Command),
     Endm,
+    Eol,
     Label(S),
     Macro,
-    Simple(SimpleTokenKind),
+    OpeningBracket,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -39,16 +34,16 @@ pub enum Atom<S> {
 impl<S> Terminal for Token<S> {
     fn kind(&self) -> TerminalKind {
         match *self {
+            Token::Atom(_) => TerminalKind::Atom,
+            Token::ClosingBracket => TerminalKind::ClosingBracket,
+            Token::Colon => TerminalKind::Colon,
+            Token::Comma => TerminalKind::Comma,
             Token::Command(_) => TerminalKind::Command,
             Token::Endm => TerminalKind::Endm,
-            Token::Simple(SimpleTokenKind::ClosingBracket) => TerminalKind::ClosingBracket,
-            Token::Simple(SimpleTokenKind::Colon) => TerminalKind::Colon,
-            Token::Simple(SimpleTokenKind::Comma) => TerminalKind::Comma,
-            Token::Simple(SimpleTokenKind::Eol) => TerminalKind::Eol,
-            Token::Atom(_) => TerminalKind::Atom,
+            Token::Eol => TerminalKind::Eol,
             Token::Label(_) => TerminalKind::Label,
             Token::Macro => TerminalKind::Macro,
-            Token::Simple(SimpleTokenKind::OpeningBracket) => TerminalKind::OpeningBracket,
+            Token::OpeningBracket => TerminalKind::OpeningBracket,
         }
     }
 }
@@ -125,22 +120,16 @@ impl<T> SynExpr<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Atom, SimpleTokenKind, Terminal, TerminalKind, Token, keyword::Command};
+    use super::{Atom, Terminal, TerminalKind, Token, keyword::Command};
 
     #[test]
     fn colon_terminal_kind() {
-        assert_eq!(
-            Token::Simple::<()>(SimpleTokenKind::Colon).kind(),
-            TerminalKind::Colon
-        )
+        assert_eq!(Token::Colon::<()>.kind(), TerminalKind::Colon)
     }
 
     #[test]
     fn comma_terminal_kind() {
-        assert_eq!(
-            Token::Simple::<()>(SimpleTokenKind::Comma).kind(),
-            TerminalKind::Comma
-        )
+        assert_eq!(Token::Comma::<()>.kind(), TerminalKind::Comma)
     }
 
     #[test]
@@ -150,10 +139,7 @@ mod tests {
 
     #[test]
     fn eol_terminal_kind() {
-        assert_eq!(
-            Token::Simple::<()>(SimpleTokenKind::Eol).kind(),
-            TerminalKind::Eol
-        )
+        assert_eq!(Token::Eol::<()>.kind(), TerminalKind::Eol)
     }
 
     #[test]
@@ -201,7 +187,7 @@ mod tests {
     #[test]
     fn opening_bracket_terminal_kind() {
         assert_eq!(
-            Token::Simple::<()>(SimpleTokenKind::OpeningBracket).kind(),
+            Token::OpeningBracket::<()>.kind(),
             TerminalKind::OpeningBracket
         )
     }
@@ -209,7 +195,7 @@ mod tests {
     #[test]
     fn closing_bracket_terminal_kind() {
         assert_eq!(
-            Token::Simple::<()>(SimpleTokenKind::ClosingBracket).kind(),
+            Token::ClosingBracket::<()>.kind(),
             TerminalKind::ClosingBracket
         )
     }
