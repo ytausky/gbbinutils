@@ -1,4 +1,4 @@
-use frontend::syntax::{Atom, Command, Keyword, SimpleTokenKind, Token};
+use frontend::syntax::{Atom, SimpleTokenKind, Token, keyword::{Command, Operand}};
 
 use std::iter;
 use std::ops::{Index, Range};
@@ -175,8 +175,8 @@ where
     identify_keyword(lexeme).map_or(f(lexeme), |command_or_keyword| match command_or_keyword {
         CommandOrKeyword::Command(command) => Token::Command(command),
         CommandOrKeyword::Endm => Token::Endm,
-        CommandOrKeyword::Keyword(keyword) => Token::Atom(Atom::Keyword(keyword)),
         CommandOrKeyword::Macro => Token::Macro,
+        CommandOrKeyword::Operand(operand) => Token::Atom(Atom::Operand(operand)),
     })
 }
 
@@ -191,47 +191,47 @@ fn identify_keyword(word: &str) -> Option<CommandOrKeyword> {
 enum CommandOrKeyword {
     Command(Command),
     Endm,
-    Keyword(Keyword),
     Macro,
+    Operand(Operand),
 }
 
 const KEYWORDS: [(&str, CommandOrKeyword); 27] = [
-    ("a", CommandOrKeyword::Keyword(Keyword::A)),
+    ("a", CommandOrKeyword::Operand(Operand::A)),
     ("and", CommandOrKeyword::Command(Command::And)),
-    ("b", CommandOrKeyword::Keyword(Keyword::B)),
-    ("bc", CommandOrKeyword::Keyword(Keyword::Bc)),
-    ("c", CommandOrKeyword::Keyword(Keyword::C)),
+    ("b", CommandOrKeyword::Operand(Operand::B)),
+    ("bc", CommandOrKeyword::Operand(Operand::Bc)),
+    ("c", CommandOrKeyword::Operand(Operand::C)),
     ("cp", CommandOrKeyword::Command(Command::Cp)),
-    ("d", CommandOrKeyword::Keyword(Keyword::D)),
+    ("d", CommandOrKeyword::Operand(Operand::D)),
     ("db", CommandOrKeyword::Command(Command::Db)),
     ("dec", CommandOrKeyword::Command(Command::Dec)),
-    ("e", CommandOrKeyword::Keyword(Keyword::E)),
+    ("e", CommandOrKeyword::Operand(Operand::E)),
     ("endm", CommandOrKeyword::Endm),
-    ("h", CommandOrKeyword::Keyword(Keyword::H)),
+    ("h", CommandOrKeyword::Operand(Operand::H)),
     ("halt", CommandOrKeyword::Command(Command::Halt)),
-    ("hl", CommandOrKeyword::Keyword(Keyword::Hl)),
+    ("hl", CommandOrKeyword::Operand(Operand::Hl)),
     ("include", CommandOrKeyword::Command(Command::Include)),
     ("jp", CommandOrKeyword::Command(Command::Jp)),
     ("jr", CommandOrKeyword::Command(Command::Jr)),
-    ("l", CommandOrKeyword::Keyword(Keyword::L)),
+    ("l", CommandOrKeyword::Operand(Operand::L)),
     ("ld", CommandOrKeyword::Command(Command::Ld)),
     ("macro", CommandOrKeyword::Macro),
-    ("nc", CommandOrKeyword::Keyword(Keyword::Nc)),
+    ("nc", CommandOrKeyword::Operand(Operand::Nc)),
     ("nop", CommandOrKeyword::Command(Command::Nop)),
-    ("nz", CommandOrKeyword::Keyword(Keyword::Nz)),
+    ("nz", CommandOrKeyword::Operand(Operand::Nz)),
     ("push", CommandOrKeyword::Command(Command::Push)),
     ("stop", CommandOrKeyword::Command(Command::Stop)),
     ("xor", CommandOrKeyword::Command(Command::Xor)),
-    ("z", CommandOrKeyword::Keyword(Keyword::Z)),
+    ("z", CommandOrKeyword::Operand(Operand::Z)),
 ];
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use super::Atom::{Ident, Keyword, Number};
+    use super::Atom::{Ident, Number, Operand};
     use super::Command::*;
-    use super::Keyword::*;
+    use super::Operand::*;
     use super::SimpleTokenKind::*;
     use super::Token::*;
 
@@ -277,7 +277,7 @@ mod tests {
 
     #[test]
     fn lex_two_keywords() {
-        assert_eq_tokens("push bc", &[Command(Push), Atom(Keyword(Bc))])
+        assert_eq_tokens("push bc", &[Command(Push), Atom(Operand(Bc))])
     }
 
     #[test]
@@ -318,8 +318,8 @@ mod tests {
             let token = match keyword {
                 CommandOrKeyword::Command(command) => Command(command),
                 CommandOrKeyword::Endm => Endm,
-                CommandOrKeyword::Keyword(keyword) => Atom(Keyword(keyword)),
                 CommandOrKeyword::Macro => Macro,
+                CommandOrKeyword::Operand(operand) => Atom(Operand(operand)),
             };
             assert_eq_tokens(&f(spelling), &[token])
         }

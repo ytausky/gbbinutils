@@ -1,5 +1,5 @@
-use frontend::{Atom, Command, OperationReceiver, StrExprFactory};
-use frontend::syntax::{self, SynExpr, Token};
+use frontend::{Atom, OperationReceiver, StrExprFactory};
+use frontend::syntax::{self, SynExpr, Token, keyword::Command};
 
 use std::marker::PhantomData;
 

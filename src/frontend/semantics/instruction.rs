@@ -2,7 +2,7 @@ use diagnostics;
 
 use ir::*;
 use frontend::ExprFactory;
-use frontend::syntax::{Atom, Command, Keyword, SynExpr, Token};
+use frontend::syntax::{keyword, Atom, SynExpr, Token};
 
 struct OperandAnalyzer<EF> {
     expr_factory: EF,
@@ -35,7 +35,7 @@ impl<EF: ExprFactory> OperandAnalyzer<EF> {
         context: &OperandAnalysisContext,
     ) -> Operand {
         match token {
-            Token::Atom(Atom::Keyword(keyword)) => analyze_keyword_operand(keyword, context),
+            Token::Atom(Atom::Operand(operand)) => analyze_keyword_operand(operand, context),
             Token::Atom(Atom::Ident(_)) | Token::Atom(Atom::Number(_)) => {
                 Operand::Const(self.expr_factory.mk_atom(token))
             }
@@ -46,7 +46,9 @@ impl<EF: ExprFactory> OperandAnalyzer<EF> {
     fn analyze_deref_operand(&mut self, expr: SynExpr<Token<EF::String>>) -> Operand {
         if let SynExpr::Atom(token) = expr {
             match token {
-                Token::Atom(Atom::Keyword(Keyword::Hl)) => Operand::Simple(SimpleOperand::DerefHl),
+                Token::Atom(Atom::Operand(keyword::Operand::Hl)) => {
+                    Operand::Simple(SimpleOperand::DerefHl)
+                }
                 Token::Atom(Atom::Ident(_)) => Operand::Deref(self.expr_factory.mk_atom(token)),
                 _ => panic!(),
             }
@@ -67,7 +69,11 @@ impl<EF: ExprFactory> CommandAnalyzer<EF> {
         }
     }
 
-    pub fn analyze_instruction<I>(&mut self, mnemonic: Command, operands: I) -> AnalysisResult
+    pub fn analyze_instruction<I>(
+        &mut self,
+        mnemonic: keyword::Command,
+        operands: I,
+    ) -> AnalysisResult
     where
         I: IntoIterator<Item = SynExpr<Token<EF::String>>>,
     {
@@ -190,23 +196,24 @@ pub enum Operand {
 
 pub type AnalysisResult = Result<Instruction, diagnostics::Error>;
 
-fn analyze_keyword_operand(keyword: Keyword, context: &OperandAnalysisContext) -> Operand {
+fn analyze_keyword_operand(keyword: keyword::Operand, context: &OperandAnalysisContext) -> Operand {
+    use frontend::syntax::keyword::Operand::*;
     match keyword {
-        Keyword::A => Operand::Simple(SimpleOperand::A),
-        Keyword::B => Operand::Simple(SimpleOperand::B),
-        Keyword::Bc => Operand::Reg16(Reg16::Bc),
-        Keyword::C => match *context {
+        A => Operand::Simple(SimpleOperand::A),
+        B => Operand::Simple(SimpleOperand::B),
+        Bc => Operand::Reg16(Reg16::Bc),
+        C => match *context {
             OperandAnalysisContext::Branch => Operand::Condition(Condition::C),
             OperandAnalysisContext::Other => Operand::Simple(SimpleOperand::C),
         },
-        Keyword::D => Operand::Simple(SimpleOperand::D),
-        Keyword::E => Operand::Simple(SimpleOperand::E),
-        Keyword::H => Operand::Simple(SimpleOperand::H),
-        Keyword::Hl => Operand::Reg16(Reg16::Hl),
-        Keyword::L => Operand::Simple(SimpleOperand::L),
-        Keyword::Nc => Operand::Condition(Condition::Nc),
-        Keyword::Nz => Operand::Condition(Condition::Nz),
-        Keyword::Z => Operand::Condition(Condition::Z),
+        D => Operand::Simple(SimpleOperand::D),
+        E => Operand::Simple(SimpleOperand::E),
+        H => Operand::Simple(SimpleOperand::H),
+        Hl => Operand::Reg16(Reg16::Hl),
+        L => Operand::Simple(SimpleOperand::L),
+        Nc => Operand::Condition(Condition::Nc),
+        Nz => Operand::Condition(Condition::Nz),
+        Z => Operand::Condition(Condition::Z),
     }
 }
 
@@ -226,19 +233,20 @@ enum BranchKind {
     Jr,
 }
 
-fn to_mnemonic(command: Command) -> Mnemonic {
+fn to_mnemonic(command: keyword::Command) -> Mnemonic {
+    use frontend::syntax::keyword::Command::*;
     match command {
-        Command::And => Mnemonic::Alu(AluOperation::And),
-        Command::Cp => Mnemonic::Alu(AluOperation::Cp),
-        Command::Dec => Mnemonic::Dec,
-        Command::Halt => Mnemonic::Nullary(Instruction::Halt),
-        Command::Jp => Mnemonic::Branch(BranchKind::Jp),
-        Command::Jr => Mnemonic::Branch(BranchKind::Jr),
-        Command::Ld => Mnemonic::Ld,
-        Command::Nop => Mnemonic::Nullary(Instruction::Nop),
-        Command::Push => Mnemonic::Push,
-        Command::Stop => Mnemonic::Nullary(Instruction::Stop),
-        Command::Xor => Mnemonic::Alu(AluOperation::Xor),
+        And => Mnemonic::Alu(AluOperation::And),
+        Cp => Mnemonic::Alu(AluOperation::Cp),
+        Dec => Mnemonic::Dec,
+        Halt => Mnemonic::Nullary(Instruction::Halt),
+        Jp => Mnemonic::Branch(BranchKind::Jp),
+        Jr => Mnemonic::Branch(BranchKind::Jr),
+        Ld => Mnemonic::Ld,
+        Nop => Mnemonic::Nullary(Instruction::Nop),
+        Push => Mnemonic::Push,
+        Stop => Mnemonic::Nullary(Instruction::Stop),
+        Xor => Mnemonic::Alu(AluOperation::Xor),
         _ => panic!(),
     }
 }
@@ -247,12 +255,12 @@ fn to_mnemonic(command: Command) -> Mnemonic {
 mod tests {
     use super::*;
 
-    use self::Keyword::*;
+    use self::keyword::{Command, Operand::*};
 
     type TestToken = Token<&'static str>;
 
-    fn atom(keyword: Keyword) -> SynExpr<TestToken> {
-        SynExpr::from(Token::Atom(Atom::Keyword(keyword)))
+    fn atom(keyword: keyword::Operand) -> SynExpr<TestToken> {
+        SynExpr::from(Token::Atom(Atom::Operand(keyword)))
     }
 
     impl From<AluOperation> for Command {

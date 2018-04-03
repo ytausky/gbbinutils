@@ -1,3 +1,4 @@
+pub mod keyword;
 mod lexer;
 mod parser;
 
@@ -6,39 +7,6 @@ where
     BC: BlockContext<Terminal = Token<&'a str>>,
 {
     self::parser::parse_src(self::lexer::Lexer::new(src), &mut actions)
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Command {
-    And,
-    Cp,
-    Db,
-    Dec,
-    Halt,
-    Include,
-    Jp,
-    Jr,
-    Ld,
-    Nop,
-    Push,
-    Stop,
-    Xor,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Keyword {
-    A,
-    B,
-    Bc,
-    C,
-    D,
-    E,
-    H,
-    Hl,
-    L,
-    Nc,
-    Nz,
-    Z,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -53,7 +21,7 @@ pub enum SimpleTokenKind {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token<S> {
     Atom(Atom<S>),
-    Command(Command),
+    Command(keyword::Command),
     Endm,
     Label(S),
     Macro,
@@ -63,7 +31,7 @@ pub enum Token<S> {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Atom<S> {
     Ident(S),
-    Keyword(Keyword),
+    Operand(keyword::Operand),
     Number(isize),
     String(S),
 }
@@ -157,7 +125,7 @@ impl<T> SynExpr<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Atom, Command, SimpleTokenKind, Terminal, TerminalKind, Token};
+    use super::{Atom, SimpleTokenKind, Terminal, TerminalKind, Token, keyword::Command};
 
     #[test]
     fn colon_terminal_kind() {
