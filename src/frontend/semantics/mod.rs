@@ -16,11 +16,9 @@ where
     _phantom: PhantomData<&'actions ()>,
 }
 
-type Token<'a> = syntax::StrToken<Atom<'a>, Command, &'a str>;
-
 enum Context<'a> {
     Block,
-    Instruction(Token<'a>, Vec<SynExpr<Token<'a>>>),
+    Instruction(syntax::StrToken<'a>, Vec<SynExpr<syntax::StrToken<'a>>>),
 }
 
 impl<'actions, 'session, 'src, OR> SemanticActions<'actions, 'session, 'src, OR>
@@ -45,7 +43,7 @@ where
     'src: 'actions,
     OR: 'session + OperationReceiver<'src>,
 {
-    type Terminal = Token<'src>;
+    type Terminal = StrToken<'src>;
     type CommandContext = Self;
     type MacroInvocationContext = Self;
     type TerminalSequenceContext = Self;
@@ -84,7 +82,7 @@ where
     'src: 'actions,
     OR: 'session + OperationReceiver<'src>,
 {
-    type Terminal = Token<'src>;
+    type Terminal = StrToken<'src>;
 
     fn add_argument(&mut self, expr: SynExpr<Self::Terminal>) {
         match self.contexts.last_mut() {
@@ -126,7 +124,7 @@ where
     'src: 'actions,
     OR: 'session + OperationReceiver<'src>,
 {
-    type Terminal = Token<'src>;
+    type Terminal = StrToken<'src>;
     type TerminalSequenceContext = Self;
 
     fn enter_macro_argument(&mut self) -> &mut Self::TerminalSequenceContext {
@@ -143,7 +141,7 @@ where
     'src: 'actions,
     OR: 'session + OperationReceiver<'src>,
 {
-    type Terminal = Token<'src>;
+    type Terminal = StrToken<'src>;
 
     fn push_terminal(&mut self, _terminal: Self::Terminal) {
         unimplemented!()
@@ -154,7 +152,7 @@ where
     }
 }
 
-fn reduce_include(mut arguments: Vec<SynExpr<Token>>) -> &str {
+fn reduce_include(mut arguments: Vec<SynExpr<StrToken>>) -> &str {
     assert_eq!(arguments.len(), 1);
     let path = arguments.pop().unwrap();
     match path {
