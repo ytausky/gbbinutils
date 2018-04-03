@@ -1,18 +1,20 @@
-use frontend::{Atom, OperationReceiver, StrExprFactory};
+use frontend::{Atom, OperationReceiver, StrExprFactory, StringResolver};
 use frontend::syntax::{self, SynExpr, Token, keyword::Command};
 
 use std::marker::PhantomData;
 
 mod instruction;
 
-pub struct SemanticActions<'actions, 'session, 'src, OR>
+pub struct SemanticActions<'actions, 'session, 'src, OR, SR>
 where
     'session: 'actions,
     'src: 'actions,
     OR: 'session + OperationReceiver<'src>,
+    SR: StringResolver<StringRef = &'src str>,
 {
     session: &'session mut OR,
     contexts: Vec<Context<&'src str>>,
+    expr_factory: StrExprFactory<SR>,
     _phantom: PhantomData<&'actions ()>,
 }
 
@@ -21,27 +23,33 @@ enum Context<S> {
     Instruction(syntax::Token<S>, Vec<SynExpr<syntax::Token<S>>>),
 }
 
-impl<'actions, 'session, 'src, OR> SemanticActions<'actions, 'session, 'src, OR>
+impl<'actions, 'session, 'src, OR, SR> SemanticActions<'actions, 'session, 'src, OR, SR>
 where
     'session: 'actions,
     'src: 'actions,
     OR: 'session + OperationReceiver<'src>,
+    SR: StringResolver<StringRef = &'src str>,
 {
-    pub fn new(session: &'session mut OR) -> SemanticActions<'actions, 'session, 'src, OR> {
+    pub fn new(
+        session: &'session mut OR,
+        string_resolver: SR,
+    ) -> SemanticActions<'actions, 'session, 'src, OR, SR> {
         SemanticActions {
             session,
             contexts: vec![Context::Block],
+            expr_factory: StrExprFactory::new(string_resolver),
             _phantom: PhantomData,
         }
     }
 }
 
-impl<'actions, 'session, 'src, OR> syntax::BlockContext
-    for SemanticActions<'actions, 'session, 'src, OR>
+impl<'actions, 'session, 'src, OR, SR> syntax::BlockContext
+    for SemanticActions<'actions, 'session, 'src, OR, SR>
 where
     'session: 'actions,
     'src: 'actions,
     OR: 'session + OperationReceiver<'src>,
+    SR: StringResolver<StringRef = &'src str>,
 {
     type Terminal = Token<&'src str>;
     type CommandContext = Self;
@@ -75,12 +83,13 @@ where
     }
 }
 
-impl<'actions, 'session, 'src, OR> syntax::CommandContext
-    for SemanticActions<'actions, 'session, 'src, OR>
+impl<'actions, 'session, 'src, OR, SR> syntax::CommandContext
+    for SemanticActions<'actions, 'session, 'src, OR, SR>
 where
     'session: 'actions,
     'src: 'actions,
     OR: 'session + OperationReceiver<'src>,
+    SR: StringResolver<StringRef = &'src str>,
 {
     type Terminal = Token<&'src str>;
 
@@ -99,7 +108,7 @@ where
                 }
                 Token::Command(command) => {
                     let mut analyzer =
-                        self::instruction::CommandAnalyzer::new(StrExprFactory::new());
+                        self::instruction::CommandAnalyzer::new(&mut self.expr_factory);
                     self.session.emit_instruction(
                         analyzer
                             .analyze_instruction(command, args.into_iter())
@@ -117,12 +126,13 @@ where
     }
 }
 
-impl<'actions, 'session, 'src, OR> syntax::MacroInvocationContext
-    for SemanticActions<'actions, 'session, 'src, OR>
+impl<'actions, 'session, 'src, OR, SR> syntax::MacroInvocationContext
+    for SemanticActions<'actions, 'session, 'src, OR, SR>
 where
     'session: 'actions,
     'src: 'actions,
     OR: 'session + OperationReceiver<'src>,
+    SR: StringResolver<StringRef = &'src str>,
 {
     type Terminal = Token<&'src str>;
     type TerminalSequenceContext = Self;
@@ -134,12 +144,13 @@ where
     fn exit_macro_invocation(&mut self) {}
 }
 
-impl<'actions, 'session, 'src, OR> syntax::TerminalSequenceContext
-    for SemanticActions<'actions, 'session, 'src, OR>
+impl<'actions, 'session, 'src, OR, SR> syntax::TerminalSequenceContext
+    for SemanticActions<'actions, 'session, 'src, OR, SR>
 where
     'session: 'actions,
     'src: 'actions,
     OR: 'session + OperationReceiver<'src>,
+    SR: StringResolver<StringRef = &'src str>,
 {
     type Terminal = Token<&'src str>;
 
@@ -165,6 +176,7 @@ fn reduce_include<S>(mut arguments: Vec<SynExpr<Token<S>>>) -> S {
 mod tests {
     use super::*;
 
+    use frontend::TrivialStringResolver;
     use frontend::syntax::{BlockContext, CommandContext};
     use ir;
 
@@ -224,11 +236,15 @@ mod tests {
                 'session,
                 'static,
                 TestOperationReceiver,
+                TrivialStringResolver<'static>,
             >,
         ),
     {
         let mut operations = TestOperationReceiver::new();
-        f(SemanticActions::new(&mut operations));
+        f(SemanticActions::new(
+            &mut operations,
+            TrivialStringResolver::new(),
+        ));
         operations.0
     }
 }

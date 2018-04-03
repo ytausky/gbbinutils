@@ -17,6 +17,27 @@ pub fn analyze_file<S: ir::Section>(name: &str, mut section: S) {
     session.include_source_file(name);
 }
 
+pub trait StringResolver {
+    type StringRef;
+    fn resolve(&self, string_ref: &Self::StringRef) -> &str;
+}
+
+struct TrivialStringResolver<'a>(PhantomData<&'a str>);
+
+impl<'a> TrivialStringResolver<'a> {
+    fn new() -> TrivialStringResolver<'a> {
+        TrivialStringResolver(PhantomData)
+    }
+}
+
+impl<'a> StringResolver for TrivialStringResolver<'a> {
+    type StringRef = &'a str;
+
+    fn resolve(&self, string_ref: &Self::StringRef) -> &str {
+        *string_ref
+    }
+}
+
 trait FileSystem {
     fn read_file(&mut self, filename: &str) -> String;
 }
@@ -53,7 +74,7 @@ impl SemanticTokenSeqAnalyzer {
 
 impl TokenSeqAnalyzer for SemanticTokenSeqAnalyzer {
     fn analyze<'src, OR: OperationReceiver<'src>>(&mut self, src: &'src str, receiver: &mut OR) {
-        let actions = semantics::SemanticActions::new(receiver);
+        let actions = semantics::SemanticActions::new(receiver, TrivialStringResolver::new());
         let tokens = syntax::tokenize(src);
         syntax::parse_token_seq(tokens, actions)
     }
@@ -85,19 +106,23 @@ pub trait ExprFactory {
     fn mk_atom(&mut self, token: Token<Self::String>) -> Expr;
 }
 
-pub struct StrExprFactory<'a>(PhantomData<&'a ()>);
+pub struct StrExprFactory<SR> {
+    string_resolver: SR,
+}
 
-impl<'a> StrExprFactory<'a> {
-    fn new() -> StrExprFactory<'a> {
-        StrExprFactory(PhantomData)
+impl<SR> StrExprFactory<SR> {
+    fn new(string_resolver: SR) -> StrExprFactory<SR> {
+        StrExprFactory { string_resolver }
     }
 }
 
-impl<'a> ExprFactory for StrExprFactory<'a> {
-    type String = &'a str;
+impl<SR: StringResolver> ExprFactory for StrExprFactory<SR> {
+    type String = SR::StringRef;
     fn mk_atom(&mut self, token: Token<Self::String>) -> Expr {
         match token {
-            Token::Atom(Atom::Ident(ident)) => Expr::Symbol(ident.to_string()),
+            Token::Atom(Atom::Ident(ident)) => {
+                Expr::Symbol(self.string_resolver.resolve(&ident).to_string())
+            }
             Token::Atom(Atom::Number(number)) => Expr::Literal(number),
             _ => panic!(),
         }

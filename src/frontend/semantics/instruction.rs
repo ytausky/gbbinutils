@@ -4,8 +4,8 @@ use ir::*;
 use frontend::ExprFactory;
 use frontend::syntax::{keyword, Atom, SynExpr, Token};
 
-struct OperandAnalyzer<EF> {
-    expr_factory: EF,
+struct OperandAnalyzer<'a, EF: 'a> {
+    expr_factory: &'a mut EF,
 }
 
 enum OperandAnalysisContext {
@@ -13,8 +13,8 @@ enum OperandAnalysisContext {
     Other,
 }
 
-impl<EF: ExprFactory> OperandAnalyzer<EF> {
-    fn new(expr_factory: EF) -> OperandAnalyzer<EF> {
+impl<'a, EF: 'a + ExprFactory> OperandAnalyzer<'a, EF> {
+    fn new(expr_factory: &'a mut EF) -> OperandAnalyzer<'a, EF> {
         OperandAnalyzer { expr_factory }
     }
 
@@ -58,12 +58,12 @@ impl<EF: ExprFactory> OperandAnalyzer<EF> {
     }
 }
 
-pub struct CommandAnalyzer<EF> {
-    operand_analyzer: OperandAnalyzer<EF>,
+pub struct CommandAnalyzer<'a, EF: 'a> {
+    operand_analyzer: OperandAnalyzer<'a, EF>,
 }
 
-impl<EF: ExprFactory> CommandAnalyzer<EF> {
-    pub fn new(expr_factory: EF) -> CommandAnalyzer<EF> {
+impl<'a, EF: ExprFactory> CommandAnalyzer<'a, EF> {
+    pub fn new(expr_factory: &'a mut EF) -> CommandAnalyzer<'a, EF> {
         CommandAnalyzer {
             operand_analyzer: OperandAnalyzer::new(expr_factory),
         }
@@ -547,8 +547,9 @@ mod tests {
     where
         I: IntoIterator<Item = SynExpr<TestToken>>,
     {
-        use frontend::StrExprFactory;
-        let mut analyzer = CommandAnalyzer::new(StrExprFactory::new());
+        use frontend::{StrExprFactory, TrivialStringResolver};
+        let mut expr_factory = StrExprFactory::new(TrivialStringResolver::new());
+        let mut analyzer = CommandAnalyzer::new(&mut expr_factory);
         analyzer.analyze_instruction(mnemonic, operands)
     }
 
