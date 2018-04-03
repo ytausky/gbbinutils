@@ -3,7 +3,7 @@ mod parser;
 
 pub fn parse<'a, BC>(src: &'a str, mut actions: BC)
 where
-    BC: BlockContext<Terminal = StrToken<'a>>,
+    BC: BlockContext<Terminal = StrToken<Atom<'a>, Command, &'a str>>,
 {
     self::parser::parse_src(self::lexer::Lexer::new(src), &mut actions)
 }
@@ -73,11 +73,11 @@ pub enum SimpleTokenKind {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum StrToken<'a> {
-    Atom(Atom<'a>),
-    Command(Command),
+pub enum StrToken<A, C, L> {
+    Atom(A),
+    Command(C),
     Endm,
-    Label(&'a str),
+    Label(L),
     Macro,
     Simple(SimpleTokenKind),
 }
@@ -101,7 +101,7 @@ impl<'a> Atom<'a> {
     }
 }
 
-impl<'a> Token for StrToken<'a> {
+impl<'a> Token for StrToken<Atom<'a>, Command, &'a str> {
     fn kind(&self) -> TokenKind {
         match *self {
             StrToken::Atom(ref atom) => TokenKind::Atom(atom.kind()),

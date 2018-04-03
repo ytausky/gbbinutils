@@ -145,8 +145,10 @@ impl<'a> Lexer<'a> {
     }
 }
 
+type Token<'a> = StrToken<Atom<'a>, Command, &'a str>;
+
 impl<'a> Iterator for Lexer<'a> {
-    type Item = StrToken<'a>;
+    type Item = Token<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.scanner.next().map(|(token, range)| {
@@ -166,9 +168,9 @@ impl<'a> Iterator for Lexer<'a> {
     }
 }
 
-fn mk_keyword_or<'a, F>(f: F, lexeme: &'a str) -> StrToken<'a>
+fn mk_keyword_or<'a, F>(f: F, lexeme: &'a str) -> Token<'a>
 where
-    F: FnOnce(&'a str) -> StrToken<'a>,
+    F: FnOnce(&'a str) -> Token<'a>,
 {
     identify_keyword(lexeme).map_or(f(lexeme), |command_or_keyword| match command_or_keyword {
         CommandOrKeyword::Command(command) => StrToken::Command(command),
@@ -233,8 +235,8 @@ mod tests {
     use super::SimpleTokenKind::*;
     use super::StrToken::*;
 
-    fn assert_eq_tokens(src: &str, expected_tokens: &[StrToken]) {
-        assert_eq!(Lexer::new(src).collect::<Vec<StrToken>>(), expected_tokens)
+    fn assert_eq_tokens(src: &str, expected_tokens: &[Token]) {
+        assert_eq!(Lexer::new(src).collect::<Vec<Token>>(), expected_tokens)
     }
 
     #[test]
