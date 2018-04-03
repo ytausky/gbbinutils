@@ -54,7 +54,8 @@ impl SemanticTokenSeqAnalyzer {
 impl TokenSeqAnalyzer for SemanticTokenSeqAnalyzer {
     fn analyze<'src, OR: OperationReceiver<'src>>(&mut self, src: &'src str, receiver: &mut OR) {
         let actions = semantics::SemanticActions::new(receiver);
-        syntax::parse(src, actions)
+        let tokens = syntax::tokenize(src);
+        syntax::parse_token_seq(tokens, actions)
     }
 }
 

@@ -2,11 +2,16 @@ pub mod keyword;
 mod lexer;
 mod parser;
 
-pub fn parse<'a, BC>(src: &'a str, mut actions: BC)
+pub fn tokenize(src: &str) -> self::lexer::Lexer {
+    self::lexer::Lexer::new(src)
+}
+
+pub fn parse_token_seq<I, BC>(tokens: I, mut actions: BC)
 where
-    BC: BlockContext<Terminal = Token<&'a str>>,
+    I: Iterator<Item = BC::Terminal>,
+    BC: BlockContext,
 {
-    self::parser::parse_src(self::lexer::Lexer::new(src), &mut actions)
+    self::parser::parse_src(tokens, &mut actions)
 }
 
 #[derive(Clone, Debug, PartialEq)]
