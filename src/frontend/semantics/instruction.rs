@@ -35,9 +35,7 @@ impl<EF: ExprFactory> OperandAnalyzer<EF> {
         context: &OperandAnalysisContext,
     ) -> Operand {
         match token {
-            StrToken::Atom(Atom::Keyword(keyword)) => {
-                analyze_keyword_operand(keyword, context)
-            }
+            StrToken::Atom(Atom::Keyword(keyword)) => analyze_keyword_operand(keyword, context),
             StrToken::Atom(Atom::Ident(_)) | StrToken::Atom(Atom::Number(_)) => {
                 Operand::Const(self.expr_factory.mk_atom(token))
             }
@@ -51,9 +49,7 @@ impl<EF: ExprFactory> OperandAnalyzer<EF> {
                 StrToken::Atom(Atom::Keyword(Keyword::Hl)) => {
                     Operand::Simple(SimpleOperand::DerefHl)
                 }
-                StrToken::Atom(Atom::Ident(_)) => {
-                    Operand::Deref(self.expr_factory.mk_atom(token))
-                }
+                StrToken::Atom(Atom::Ident(_)) => Operand::Deref(self.expr_factory.mk_atom(token)),
                 _ => panic!(),
             }
         } else {
@@ -321,7 +317,10 @@ mod tests {
         assert_eq!(
             analyze(
                 Command::Ld,
-                vec![SynExpr::from(StrToken::Atom(Atom::Ident(ident))).deref(), atom(A)]
+                vec![
+                    SynExpr::from(StrToken::Atom(Atom::Ident(ident))).deref(),
+                    atom(A),
+                ]
             ),
             Ok(Instruction::Ld(LdKind::ImmediateAddr(
                 Expr::Symbol(ident.to_string()),
@@ -336,7 +335,10 @@ mod tests {
         assert_eq!(
             analyze(
                 Command::Ld,
-                vec![atom(A), SynExpr::from(StrToken::Atom(Atom::Ident(ident))).deref()]
+                vec![
+                    atom(A),
+                    SynExpr::from(StrToken::Atom(Atom::Ident(ident))).deref(),
+                ]
             ),
             Ok(Instruction::Ld(LdKind::ImmediateAddr(
                 Expr::Symbol(ident.to_string()),
@@ -357,7 +359,10 @@ mod tests {
     #[test]
     fn analyze_cp_literal() {
         let literal = 0x50;
-        test_cp_const_analysis(StrToken::Atom(Atom::Number(literal)), Expr::Literal(literal))
+        test_cp_const_analysis(
+            StrToken::Atom(Atom::Number(literal)),
+            Expr::Literal(literal),
+        )
     }
 
     fn test_cp_const_analysis(atom: TestToken, expr: Expr) {

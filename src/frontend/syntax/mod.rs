@@ -41,28 +41,6 @@ pub enum Keyword {
     Z,
 }
 
-pub trait Token {
-    fn kind(&self) -> TokenKind;
-}
-
-#[derive(Clone, PartialEq)]
-pub enum TokenKind {
-    Atom(AtomKind),
-    Command(Command),
-    Endm,
-    Label,
-    Macro,
-    Simple(SimpleTokenKind),
-}
-
-#[derive(Clone, PartialEq)]
-pub enum AtomKind {
-    Ident,
-    Keyword(Keyword),
-    Number,
-    String,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SimpleTokenKind {
     ClosingBracket,
@@ -88,30 +66,6 @@ pub enum Atom<S> {
     Keyword(Keyword),
     Number(isize),
     String(S),
-}
-
-impl<S> Atom<S> {
-    fn kind(&self) -> AtomKind {
-        match *self {
-            Atom::Ident(_) => AtomKind::Ident,
-            Atom::Keyword(keyword) => AtomKind::Keyword(keyword),
-            Atom::Number(_) => AtomKind::Number,
-            Atom::String(_) => AtomKind::String,
-        }
-    }
-}
-
-impl<S> Token for StrToken<S> {
-    fn kind(&self) -> TokenKind {
-        match *self {
-            StrToken::Atom(ref atom) => TokenKind::Atom(atom.kind()),
-            StrToken::Command(command) => TokenKind::Command(command),
-            StrToken::Endm => TokenKind::Endm,
-            StrToken::Label(_) => TokenKind::Label,
-            StrToken::Macro => TokenKind::Macro,
-            StrToken::Simple(kind) => TokenKind::Simple(kind),
-        }
-    }
 }
 
 impl<S> Terminal for StrToken<S> {
