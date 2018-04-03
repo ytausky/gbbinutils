@@ -172,7 +172,9 @@ where
 {
     identify_keyword(lexeme).map_or(f(lexeme), |command_or_keyword| match command_or_keyword {
         CommandOrKeyword::Command(command) => StrToken::Command(command),
+        CommandOrKeyword::Endm => StrToken::Endm,
         CommandOrKeyword::Keyword(keyword) => StrToken::Keyword(keyword),
+        CommandOrKeyword::Macro => StrToken::Macro,
     })
 }
 
@@ -186,7 +188,9 @@ fn identify_keyword(word: &str) -> Option<CommandOrKeyword> {
 #[derive(Clone, Copy)]
 enum CommandOrKeyword {
     Command(Command),
+    Endm,
     Keyword(Keyword),
+    Macro,
 }
 
 const KEYWORDS: [(&str, CommandOrKeyword); 27] = [
@@ -200,7 +204,7 @@ const KEYWORDS: [(&str, CommandOrKeyword); 27] = [
     ("db", CommandOrKeyword::Command(Command::Db)),
     ("dec", CommandOrKeyword::Command(Command::Dec)),
     ("e", CommandOrKeyword::Keyword(Keyword::E)),
-    ("endm", CommandOrKeyword::Keyword(Keyword::Endm)),
+    ("endm", CommandOrKeyword::Endm),
     ("h", CommandOrKeyword::Keyword(Keyword::H)),
     ("halt", CommandOrKeyword::Command(Command::Halt)),
     ("hl", CommandOrKeyword::Keyword(Keyword::Hl)),
@@ -209,7 +213,7 @@ const KEYWORDS: [(&str, CommandOrKeyword); 27] = [
     ("jr", CommandOrKeyword::Command(Command::Jr)),
     ("l", CommandOrKeyword::Keyword(Keyword::L)),
     ("ld", CommandOrKeyword::Command(Command::Ld)),
-    ("macro", CommandOrKeyword::Keyword(Keyword::Macro)),
+    ("macro", CommandOrKeyword::Macro),
     ("nc", CommandOrKeyword::Keyword(Keyword::Nc)),
     ("nop", CommandOrKeyword::Command(Command::Nop)),
     ("nz", CommandOrKeyword::Keyword(Keyword::Nz)),
@@ -289,7 +293,7 @@ mod tests {
     fn lex_macro_definition() {
         assert_eq_tokens(
             "f: macro\n",
-            &[Label("f"), Simple(Colon), Keyword(Macro), Simple(Eol)],
+            &[Label("f"), Simple(Colon), Macro, Simple(Eol)],
         )
     }
 
@@ -307,7 +311,9 @@ mod tests {
         for &(spelling, keyword) in KEYWORDS.iter() {
             let token = match keyword {
                 CommandOrKeyword::Command(command) => Command(command),
+                CommandOrKeyword::Endm => Endm,
                 CommandOrKeyword::Keyword(keyword) => Keyword(keyword),
+                CommandOrKeyword::Macro => Macro,
             };
             assert_eq_tokens(&f(spelling), &[token])
         }

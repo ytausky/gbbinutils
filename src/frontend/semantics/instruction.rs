@@ -207,7 +207,6 @@ fn analyze_keyword_operand(keyword: Keyword, context: &OperandAnalysisContext) -
         Keyword::Nc => Operand::Condition(Condition::Nc),
         Keyword::Nz => Operand::Condition(Condition::Nz),
         Keyword::Z => Operand::Condition(Condition::Z),
-        _ => panic!(),
     }
 }
 
