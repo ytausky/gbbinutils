@@ -1,4 +1,4 @@
-use frontend::syntax::{Atom, Command, Keyword, SimpleTokenKind, StrToken};
+use frontend::syntax::{Atom, Command, Keyword, SimpleTokenKind, Token};
 
 use std::iter;
 use std::ops::{Index, Range};
@@ -146,37 +146,37 @@ impl<'a> Lexer<'a> {
 }
 
 impl<'a> Iterator for Lexer<'a> {
-    type Item = StrToken<&'a str>;
+    type Item = Token<&'a str>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.scanner.next().map(|(token, range)| {
             let lexeme = self.src.index(range);
             match token {
                 ScannerTokenKind::Identifier => {
-                    mk_keyword_or(|x| StrToken::Atom(Atom::Ident(x)), lexeme)
+                    mk_keyword_or(|x| Token::Atom(Atom::Ident(x)), lexeme)
                 }
-                ScannerTokenKind::Label => mk_keyword_or(StrToken::Label, lexeme),
-                ScannerTokenKind::Number => StrToken::Atom(Atom::Number(
+                ScannerTokenKind::Label => mk_keyword_or(Token::Label, lexeme),
+                ScannerTokenKind::Number => Token::Atom(Atom::Number(
                     isize::from_str_radix(&lexeme[1..], 16).unwrap(),
                 )),
                 ScannerTokenKind::QuotedString => {
-                    StrToken::Atom(Atom::String(&lexeme[1..(lexeme.len() - 1)]))
+                    Token::Atom(Atom::String(&lexeme[1..(lexeme.len() - 1)]))
                 }
-                ScannerTokenKind::Simple(kind) => StrToken::Simple(kind),
+                ScannerTokenKind::Simple(kind) => Token::Simple(kind),
             }
         })
     }
 }
 
-fn mk_keyword_or<'a, F>(f: F, lexeme: &'a str) -> StrToken<&'a str>
+fn mk_keyword_or<'a, F>(f: F, lexeme: &'a str) -> Token<&'a str>
 where
-    F: FnOnce(&'a str) -> StrToken<&'a str>,
+    F: FnOnce(&'a str) -> Token<&'a str>,
 {
     identify_keyword(lexeme).map_or(f(lexeme), |command_or_keyword| match command_or_keyword {
-        CommandOrKeyword::Command(command) => StrToken::Command(command),
-        CommandOrKeyword::Endm => StrToken::Endm,
-        CommandOrKeyword::Keyword(keyword) => StrToken::Atom(Atom::Keyword(keyword)),
-        CommandOrKeyword::Macro => StrToken::Macro,
+        CommandOrKeyword::Command(command) => Token::Command(command),
+        CommandOrKeyword::Endm => Token::Endm,
+        CommandOrKeyword::Keyword(keyword) => Token::Atom(Atom::Keyword(keyword)),
+        CommandOrKeyword::Macro => Token::Macro,
     })
 }
 
@@ -233,11 +233,11 @@ mod tests {
     use super::Command::*;
     use super::Keyword::*;
     use super::SimpleTokenKind::*;
-    use super::StrToken::*;
+    use super::Token::*;
 
-    fn assert_eq_tokens<'a>(src: &'a str, expected_tokens: &[StrToken<&'a str>]) {
+    fn assert_eq_tokens<'a>(src: &'a str, expected_tokens: &[Token<&'a str>]) {
         assert_eq!(
-            Lexer::new(src).collect::<Vec<StrToken<&'a str>>>(),
+            Lexer::new(src).collect::<Vec<Token<&'a str>>>(),
             expected_tokens
         )
     }

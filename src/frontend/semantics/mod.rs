@@ -1,5 +1,5 @@
 use frontend::{Atom, Command, OperationReceiver, StrExprFactory};
-use frontend::syntax::{self, StrToken, SynExpr};
+use frontend::syntax::{self, SynExpr, Token};
 
 use std::marker::PhantomData;
 
@@ -18,7 +18,7 @@ where
 
 enum Context<S> {
     Block,
-    Instruction(syntax::StrToken<S>, Vec<SynExpr<syntax::StrToken<S>>>),
+    Instruction(syntax::Token<S>, Vec<SynExpr<syntax::Token<S>>>),
 }
 
 impl<'actions, 'session, 'src, OR> SemanticActions<'actions, 'session, 'src, OR>
@@ -43,14 +43,14 @@ where
     'src: 'actions,
     OR: 'session + OperationReceiver<'src>,
 {
-    type Terminal = StrToken<&'src str>;
+    type Terminal = Token<&'src str>;
     type CommandContext = Self;
     type MacroInvocationContext = Self;
     type TerminalSequenceContext = Self;
 
     fn add_label(&mut self, label: Self::Terminal) {
         match label {
-            StrToken::Label(spelling) => self.session.define_label(spelling),
+            Token::Label(spelling) => self.session.define_label(spelling),
             _ => panic!(),
         }
     }
@@ -82,7 +82,7 @@ where
     'src: 'actions,
     OR: 'session + OperationReceiver<'src>,
 {
-    type Terminal = StrToken<&'src str>;
+    type Terminal = Token<&'src str>;
 
     fn add_argument(&mut self, expr: SynExpr<Self::Terminal>) {
         match self.contexts.last_mut() {
@@ -94,10 +94,10 @@ where
     fn exit_command(&mut self) {
         if let Some(Context::Instruction(name, args)) = self.contexts.pop() {
             match name {
-                StrToken::Command(Command::Include) => {
+                Token::Command(Command::Include) => {
                     self.session.include_source_file(reduce_include(args))
                 }
-                StrToken::Command(command) => {
+                Token::Command(command) => {
                     let mut analyzer =
                         self::instruction::CommandAnalyzer::new(StrExprFactory::new());
                     self.session.emit_instruction(
@@ -106,7 +106,7 @@ where
                             .unwrap(),
                     )
                 }
-                StrToken::Atom(Atom::Ident(ident)) => {
+                Token::Atom(Atom::Ident(ident)) => {
                     println!("Probably macro invocation: {:?} {:?}", ident, args)
                 }
                 _ => panic!(),
@@ -124,7 +124,7 @@ where
     'src: 'actions,
     OR: 'session + OperationReceiver<'src>,
 {
-    type Terminal = StrToken<&'src str>;
+    type Terminal = Token<&'src str>;
     type TerminalSequenceContext = Self;
 
     fn enter_macro_argument(&mut self) -> &mut Self::TerminalSequenceContext {
@@ -141,7 +141,7 @@ where
     'src: 'actions,
     OR: 'session + OperationReceiver<'src>,
 {
-    type Terminal = StrToken<&'src str>;
+    type Terminal = Token<&'src str>;
 
     fn push_terminal(&mut self, _terminal: Self::Terminal) {
         unimplemented!()
@@ -152,11 +152,11 @@ where
     }
 }
 
-fn reduce_include<S>(mut arguments: Vec<SynExpr<StrToken<S>>>) -> S {
+fn reduce_include<S>(mut arguments: Vec<SynExpr<Token<S>>>) -> S {
     assert_eq!(arguments.len(), 1);
     let path = arguments.pop().unwrap();
     match path {
-        SynExpr::Atom(StrToken::Atom(Atom::String(path_str))) => path_str,
+        SynExpr::Atom(Token::Atom(Atom::String(path_str))) => path_str,
         _ => panic!(),
     }
 }
@@ -201,8 +201,8 @@ mod tests {
     fn build_include_item() {
         let filename = "file.asm";
         let actions = collect_semantic_actions(|mut actions| {
-            actions.enter_command(StrToken::Command(Command::Include));
-            let expr = SynExpr::from(StrToken::Atom(Atom::String(filename)));
+            actions.enter_command(Token::Command(Command::Include));
+            let expr = SynExpr::from(Token::Atom(Atom::String(filename)));
             actions.add_argument(expr);
             actions.exit_command();
         });
@@ -212,7 +212,7 @@ mod tests {
     #[test]
     fn analyze_label() {
         let actions =
-            collect_semantic_actions(|mut actions| actions.add_label(StrToken::Label("label")));
+            collect_semantic_actions(|mut actions| actions.add_label(Token::Label("label")));
         assert_eq!(actions, [TestOperation::Label("label")])
     }
 
