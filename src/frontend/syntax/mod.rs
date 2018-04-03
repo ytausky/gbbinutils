@@ -105,7 +105,7 @@ impl<T: Token> Terminal for T {
             TokenKind::Identifier
             | TokenKind::Keyword(_)
             | TokenKind::Number
-            | TokenKind::QuotedString => TerminalKind::Word,
+            | TokenKind::QuotedString => TerminalKind::Atom,
             TokenKind::Label => TerminalKind::Label,
             TokenKind::Simple(SimpleTokenKind::OpeningBracket) => TerminalKind::OpeningBracket,
         }
@@ -118,6 +118,7 @@ pub trait Terminal {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TerminalKind {
+    Atom,
     ClosingBracket,
     Colon,
     Comma,
@@ -127,7 +128,6 @@ pub enum TerminalKind {
     Label,
     Macro,
     OpeningBracket,
-    Word,
 }
 
 pub trait BlockContext {
@@ -238,19 +238,19 @@ mod tests {
 
     #[test]
     fn number_terminal_kind() {
-        assert_eq!(StrToken::Number(0x1234).kind(), TerminalKind::Word)
+        assert_eq!(StrToken::Number(0x1234).kind(), TerminalKind::Atom)
     }
 
     #[test]
     fn quoted_string_terminal_kind() {
-        assert_eq!(StrToken::QuotedString("string").kind(), TerminalKind::Word)
+        assert_eq!(StrToken::QuotedString("string").kind(), TerminalKind::Atom)
     }
 
     #[test]
     fn word_terminal_kind() {
         assert_eq!(
             StrToken::Identifier("identifier").kind(),
-            TerminalKind::Word
+            TerminalKind::Atom
         )
     }
 

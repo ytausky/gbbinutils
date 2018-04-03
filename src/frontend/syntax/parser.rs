@@ -77,7 +77,7 @@ where
         match self.lookahead() {
             ref t if follows_line(t) => (),
             Some(Command) => self.parse_command(block_context),
-            Some(Word) => self.parse_macro_invocation(block_context),
+            Some(Atom) => self.parse_macro_invocation(block_context),
             _ => panic!(),
         }
     }
@@ -101,7 +101,7 @@ where
     }
 
     fn parse_macro_invocation(&mut self, block_context: &mut B) {
-        let macro_name = self.expect(&Some(Word));
+        let macro_name = self.expect(&Some(Atom));
         let invocation_context = block_context.enter_macro_invocation(macro_name);
         self.parse_macro_arg_list(invocation_context);
         invocation_context.exit_macro_invocation()
@@ -334,8 +334,8 @@ mod tests {
     #[test]
     fn parse_unary_instruction() {
         assert_eq_actions(
-            &[(Command, 0), (Word, 1)],
-            &inst((Command, 0), vec![expr(ident((Word, 1)))]),
+            &[(Command, 0), (Atom, 1)],
+            &inst((Command, 0), vec![expr(ident((Atom, 1)))]),
         )
     }
 
@@ -350,10 +350,10 @@ mod tests {
     #[test]
     fn parse_binary_instruction() {
         assert_eq_actions(
-            &[(Command, 0), (Word, 1), (Comma, 2), (Word, 3)],
+            &[(Command, 0), (Atom, 1), (Comma, 2), (Atom, 3)],
             &inst(
                 (Command, 0),
-                vec![expr(ident((Word, 1))), expr(ident((Word, 3)))],
+                vec![expr(ident((Atom, 1))), expr(ident((Atom, 3)))],
             ),
         );
     }
@@ -362,23 +362,23 @@ mod tests {
     fn parse_two_instructions() {
         let tokens = &[
             (Command, 0),
-            (Word, 1),
+            (Atom, 1),
             (Comma, 2),
-            (Word, 3),
+            (Atom, 3),
             (Eol, 4),
             (Command, 5),
-            (Word, 6),
+            (Atom, 6),
             (Comma, 7),
-            (Word, 8),
+            (Atom, 8),
         ];
         let expected_actions = &concat(vec![
             inst(
                 (Command, 0),
-                vec![expr(ident((Word, 1))), expr(ident((Word, 3)))],
+                vec![expr(ident((Atom, 1))), expr(ident((Atom, 3)))],
             ),
             inst(
                 (Command, 5),
-                vec![expr(ident((Word, 6))), expr(ident((Word, 8)))],
+                vec![expr(ident((Atom, 6))), expr(ident((Atom, 8)))],
             ),
         ]);
         assert_eq_actions(tokens, expected_actions)
@@ -396,24 +396,24 @@ mod tests {
     fn parse_two_instructions_separated_by_blank_line() {
         let tokens = &[
             (Command, 0),
-            (Word, 1),
+            (Atom, 1),
             (Comma, 2),
-            (Word, 3),
+            (Atom, 3),
             (Eol, 4),
             (Eol, 5),
             (Command, 6),
-            (Word, 7),
+            (Atom, 7),
             (Comma, 8),
-            (Word, 9),
+            (Atom, 9),
         ];
         let expected_actions = &concat(vec![
             inst(
                 (Command, 0),
-                vec![expr(ident((Word, 1))), expr(ident((Word, 3)))],
+                vec![expr(ident((Atom, 1))), expr(ident((Atom, 3)))],
             ),
             inst(
                 (Command, 6),
-                vec![expr(ident((Word, 7))), expr(ident((Word, 9)))],
+                vec![expr(ident((Atom, 7))), expr(ident((Atom, 9)))],
             ),
         ]);
         assert_eq_actions(tokens, expected_actions)
@@ -480,10 +480,10 @@ mod tests {
         let tokens = &[
             (Command, 0),
             (OpeningBracket, 1),
-            (Word, 2),
+            (Atom, 2),
             (ClosingBracket, 3),
         ];
-        let expected_actions = &inst((Command, 0), vec![expr(deref(ident((Word, 2))))]);
+        let expected_actions = &inst((Command, 0), vec![expr(deref(ident((Atom, 2))))]);
         assert_eq_actions(tokens, expected_actions)
     }
 
@@ -493,41 +493,41 @@ mod tests {
 
     #[test]
     fn parse_nullary_macro_invocation() {
-        let tokens = &[(Word, 0)];
-        let expected_actions = &invoke((Word, 0), vec![]);
+        let tokens = &[(Atom, 0)];
+        let expected_actions = &invoke((Atom, 0), vec![]);
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_unary_macro_invocation() {
-        let tokens = &[(Word, 0), (Word, 1)];
-        let expected_actions = &invoke((Word, 0), vec![vec![(Word, 1)]]);
+        let tokens = &[(Atom, 0), (Atom, 1)];
+        let expected_actions = &invoke((Atom, 0), vec![vec![(Atom, 1)]]);
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_unary_macro_invocation_with_multiple_terminals() {
-        let tokens = &[(Word, 0), (Word, 1), (Word, 2), (Word, 3)];
-        let expected_actions = &invoke((Word, 0), vec![vec![(Word, 1), (Word, 2), (Word, 3)]]);
+        let tokens = &[(Atom, 0), (Atom, 1), (Atom, 2), (Atom, 3)];
+        let expected_actions = &invoke((Atom, 0), vec![vec![(Atom, 1), (Atom, 2), (Atom, 3)]]);
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_binary_macro_invocation_with_multiple_terminals() {
         let tokens = &[
-            (Word, 0),
-            (Word, 1),
-            (Word, 2),
+            (Atom, 0),
+            (Atom, 1),
+            (Atom, 2),
             (Comma, 3),
-            (Word, 4),
-            (Word, 5),
-            (Word, 6),
+            (Atom, 4),
+            (Atom, 5),
+            (Atom, 6),
         ];
         let expected_actions = &invoke(
-            (Word, 0),
+            (Atom, 0),
             vec![
-                vec![(Word, 1), (Word, 2)],
-                vec![(Word, 4), (Word, 5), (Word, 6)],
+                vec![(Atom, 1), (Atom, 2)],
+                vec![(Atom, 4), (Atom, 5), (Atom, 6)],
             ],
         );
         assert_eq_actions(tokens, expected_actions)
