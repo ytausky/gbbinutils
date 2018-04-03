@@ -102,11 +102,12 @@ impl<T: Token> Terminal for T {
             TokenKind::Simple(SimpleTokenKind::Eol) => TerminalKind::Eol,
             TokenKind::Keyword(Keyword::Endm) => TerminalKind::Endm,
             TokenKind::Keyword(Keyword::Macro) => TerminalKind::Macro,
-            TokenKind::Identifier | TokenKind::Keyword(_) => TerminalKind::Word,
+            TokenKind::Identifier
+            | TokenKind::Keyword(_)
+            | TokenKind::Number
+            | TokenKind::QuotedString => TerminalKind::Word,
             TokenKind::Label => TerminalKind::Label,
-            TokenKind::Number => TerminalKind::Number,
             TokenKind::Simple(SimpleTokenKind::OpeningBracket) => TerminalKind::OpeningBracket,
-            TokenKind::QuotedString => TerminalKind::QuotedString,
         }
     }
 }
@@ -125,9 +126,7 @@ pub enum TerminalKind {
     Eol,
     Label,
     Macro,
-    Number,
     OpeningBracket,
-    QuotedString,
     Word,
 }
 
@@ -239,15 +238,12 @@ mod tests {
 
     #[test]
     fn number_terminal_kind() {
-        assert_eq!(StrToken::Number(0x1234).kind(), TerminalKind::Number)
+        assert_eq!(StrToken::Number(0x1234).kind(), TerminalKind::Word)
     }
 
     #[test]
     fn quoted_string_terminal_kind() {
-        assert_eq!(
-            StrToken::QuotedString("string").kind(),
-            TerminalKind::QuotedString
-        )
+        assert_eq!(StrToken::QuotedString("string").kind(), TerminalKind::Word)
     }
 
     #[test]

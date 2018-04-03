@@ -420,13 +420,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_include() {
-        let tokens = &[(Command, 0), (QuotedString, 1)];
-        let expected_actions = &inst((Command, 0), vec![expr(ident((QuotedString, 1)))]);
-        assert_eq_actions(tokens, expected_actions);
-    }
-
-    #[test]
     fn parse_empty_macro_definition() {
         let tokens = &[(Label, 0), (Colon, 1), (Macro, 2), (Eol, 3), (Endm, 4)];
         let expected_actions = &macro_def((Label, 0), vec![]);
