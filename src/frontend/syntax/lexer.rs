@@ -146,17 +146,19 @@ impl<'a> Lexer<'a> {
 }
 
 impl<'a> Iterator for Lexer<'a> {
-    type Item = StrToken<'a>;
+    type Item = StrToken<&'a str>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.scanner.next().map(|(token, range)| {
             let lexeme = self.src.index(range);
             match token {
-                ScannerTokenKind::Identifier => mk_keyword_or(|x| StrToken::Atom(Atom::Ident(x)), lexeme),
-                ScannerTokenKind::Label => mk_keyword_or(StrToken::Label, lexeme),
-                ScannerTokenKind::Number => {
-                    StrToken::Atom(Atom::Number(isize::from_str_radix(&lexeme[1..], 16).unwrap()))
+                ScannerTokenKind::Identifier => {
+                    mk_keyword_or(|x| StrToken::Atom(Atom::Ident(x)), lexeme)
                 }
+                ScannerTokenKind::Label => mk_keyword_or(StrToken::Label, lexeme),
+                ScannerTokenKind::Number => StrToken::Atom(Atom::Number(
+                    isize::from_str_radix(&lexeme[1..], 16).unwrap(),
+                )),
                 ScannerTokenKind::QuotedString => {
                     StrToken::Atom(Atom::String(&lexeme[1..(lexeme.len() - 1)]))
                 }
@@ -166,9 +168,9 @@ impl<'a> Iterator for Lexer<'a> {
     }
 }
 
-fn mk_keyword_or<'a, F>(f: F, lexeme: &'a str) -> StrToken<'a>
+fn mk_keyword_or<'a, F>(f: F, lexeme: &'a str) -> StrToken<&'a str>
 where
-    F: FnOnce(&'a str) -> StrToken<'a>,
+    F: FnOnce(&'a str) -> StrToken<&'a str>,
 {
     identify_keyword(lexeme).map_or(f(lexeme), |command_or_keyword| match command_or_keyword {
         CommandOrKeyword::Command(command) => StrToken::Command(command),
@@ -233,8 +235,11 @@ mod tests {
     use super::SimpleTokenKind::*;
     use super::StrToken::*;
 
-    fn assert_eq_tokens(src: &str, expected_tokens: &[StrToken]) {
-        assert_eq!(Lexer::new(src).collect::<Vec<StrToken>>(), expected_tokens)
+    fn assert_eq_tokens<'a>(src: &'a str, expected_tokens: &[StrToken<&'a str>]) {
+        assert_eq!(
+            Lexer::new(src).collect::<Vec<StrToken<&'a str>>>(),
+            expected_tokens
+        )
     }
 
     #[test]

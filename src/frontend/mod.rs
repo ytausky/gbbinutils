@@ -93,7 +93,7 @@ impl<'a> StrExprFactory<'a> {
 }
 
 impl<'a> ExprFactory for StrExprFactory<'a> {
-    type Token = StrToken<'a>;
+    type Token = StrToken<&'a str>;
     fn mk_atom(&mut self, token: Self::Token) -> Expr {
         match token {
             StrToken::Atom(Atom::Ident(ident)) => Expr::Symbol(ident.to_string()),

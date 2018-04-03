@@ -35,7 +35,9 @@ impl<EF: ExprFactory> OperandAnalyzer<EF> {
         context: &OperandAnalysisContext,
     ) -> Operand {
         match token.kind() {
-            TokenKind::Atom(AtomKind::Keyword(keyword)) => analyze_keyword_operand(keyword, context),
+            TokenKind::Atom(AtomKind::Keyword(keyword)) => {
+                analyze_keyword_operand(keyword, context)
+            }
             TokenKind::Atom(AtomKind::Ident) | TokenKind::Atom(AtomKind::Number) => {
                 Operand::Const(self.expr_factory.mk_atom(token))
             }
@@ -49,7 +51,9 @@ impl<EF: ExprFactory> OperandAnalyzer<EF> {
                 TokenKind::Atom(AtomKind::Keyword(Keyword::Hl)) => {
                     Operand::Simple(SimpleOperand::DerefHl)
                 }
-                TokenKind::Atom(AtomKind::Ident) => Operand::Deref(self.expr_factory.mk_atom(token)),
+                TokenKind::Atom(AtomKind::Ident) => {
+                    Operand::Deref(self.expr_factory.mk_atom(token))
+                }
                 _ => panic!(),
             }
         } else {
