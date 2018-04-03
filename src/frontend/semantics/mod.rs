@@ -1,4 +1,4 @@
-use frontend::{Command, OperationReceiver, StrExprFactory};
+use frontend::{Atom, Command, OperationReceiver, StrExprFactory};
 use frontend::syntax::{self, StrToken, SynExpr};
 
 use std::marker::PhantomData;
@@ -106,7 +106,7 @@ where
                             .unwrap(),
                     )
                 }
-                StrToken::Identifier(ident) => {
+                StrToken::Atom(Atom::Ident(ident)) => {
                     println!("Probably macro invocation: {:?} {:?}", ident, args)
                 }
                 _ => panic!(),
@@ -156,7 +156,7 @@ fn reduce_include(mut arguments: Vec<SynExpr<StrToken>>) -> &str {
     assert_eq!(arguments.len(), 1);
     let path = arguments.pop().unwrap();
     match path {
-        SynExpr::Atom(StrToken::QuotedString(path_str)) => path_str,
+        SynExpr::Atom(StrToken::Atom(Atom::String(path_str))) => path_str,
         _ => panic!(),
     }
 }
@@ -202,7 +202,7 @@ mod tests {
         let filename = "file.asm";
         let actions = collect_semantic_actions(|mut actions| {
             actions.enter_command(StrToken::Command(Command::Include));
-            let expr = SynExpr::from(StrToken::QuotedString(filename));
+            let expr = SynExpr::from(StrToken::Atom(Atom::String(filename)));
             actions.add_argument(expr);
             actions.exit_command();
         });

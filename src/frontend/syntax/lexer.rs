@@ -1,4 +1,4 @@
-use frontend::syntax::{Command, Keyword, SimpleTokenKind, StrToken};
+use frontend::syntax::{Atom, Command, Keyword, SimpleTokenKind, StrToken};
 
 use std::iter;
 use std::ops::{Index, Range};
@@ -152,13 +152,13 @@ impl<'a> Iterator for Lexer<'a> {
         self.scanner.next().map(|(token, range)| {
             let lexeme = self.src.index(range);
             match token {
-                ScannerTokenKind::Identifier => mk_keyword_or(StrToken::Identifier, lexeme),
+                ScannerTokenKind::Identifier => mk_keyword_or(|x| StrToken::Atom(Atom::Ident(x)), lexeme),
                 ScannerTokenKind::Label => mk_keyword_or(StrToken::Label, lexeme),
                 ScannerTokenKind::Number => {
-                    StrToken::Number(isize::from_str_radix(&lexeme[1..], 16).unwrap())
+                    StrToken::Atom(Atom::Number(isize::from_str_radix(&lexeme[1..], 16).unwrap()))
                 }
                 ScannerTokenKind::QuotedString => {
-                    StrToken::QuotedString(&lexeme[1..(lexeme.len() - 1)])
+                    StrToken::Atom(Atom::String(&lexeme[1..(lexeme.len() - 1)]))
                 }
                 ScannerTokenKind::Simple(kind) => StrToken::Simple(kind),
             }
@@ -173,7 +173,7 @@ where
     identify_keyword(lexeme).map_or(f(lexeme), |command_or_keyword| match command_or_keyword {
         CommandOrKeyword::Command(command) => StrToken::Command(command),
         CommandOrKeyword::Endm => StrToken::Endm,
-        CommandOrKeyword::Keyword(keyword) => StrToken::Keyword(keyword),
+        CommandOrKeyword::Keyword(keyword) => StrToken::Atom(Atom::Keyword(keyword)),
         CommandOrKeyword::Macro => StrToken::Macro,
     })
 }
@@ -227,6 +227,7 @@ const KEYWORDS: [(&str, CommandOrKeyword); 27] = [
 mod tests {
     use super::*;
 
+    use super::Atom::{Ident, Keyword, Number};
     use super::Command::*;
     use super::Keyword::*;
     use super::SimpleTokenKind::*;
@@ -258,20 +259,20 @@ mod tests {
 
     #[test]
     fn lex_word_after_whitespace() {
-        assert_eq_tokens("    word", &[Identifier("word")])
+        assert_eq_tokens("    word", &[Atom(Ident("word"))])
     }
 
     #[test]
     fn lex_label_and_word_with_underscore() {
         assert_eq_tokens(
             "first_label then_word",
-            &[Label("first_label"), Identifier("then_word")],
+            &[Label("first_label"), Atom(Ident("then_word"))],
         )
     }
 
     #[test]
     fn lex_two_keywords() {
-        assert_eq_tokens("push bc", &[Command(Push), Keyword(Bc)])
+        assert_eq_tokens("push bc", &[Command(Push), Atom(Keyword(Bc))])
     }
 
     #[test]
@@ -281,12 +282,12 @@ mod tests {
 
     #[test]
     fn lex_quoted_string() {
-        assert_eq_tokens("\"file.asm\"", &[QuotedString("file.asm")])
+        assert_eq_tokens("\"file.asm\"", &[Atom(super::Atom::String("file.asm"))])
     }
 
     #[test]
     fn lex_hex_number() {
-        assert_eq_tokens("$19af", &[Number(0x19af)])
+        assert_eq_tokens("$19af", &[Atom(Number(0x19af))])
     }
 
     #[test]
@@ -312,7 +313,7 @@ mod tests {
             let token = match keyword {
                 CommandOrKeyword::Command(command) => Command(command),
                 CommandOrKeyword::Endm => Endm,
-                CommandOrKeyword::Keyword(keyword) => Keyword(keyword),
+                CommandOrKeyword::Keyword(keyword) => Atom(Keyword(keyword)),
                 CommandOrKeyword::Macro => Macro,
             };
             assert_eq_tokens(&f(spelling), &[token])

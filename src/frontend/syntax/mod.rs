@@ -74,28 +74,41 @@ pub enum SimpleTokenKind {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum StrToken<'a> {
+    Atom(Atom<'a>),
     Command(Command),
     Endm,
-    Identifier(&'a str),
-    Keyword(Keyword),
     Label(&'a str),
     Macro,
-    Number(isize),
-    QuotedString(&'a str),
     Simple(SimpleTokenKind),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Atom<'a> {
+    Ident(&'a str),
+    Keyword(Keyword),
+    Number(isize),
+    String(&'a str),
+}
+
+impl<'a> Atom<'a> {
+    fn kind(&self) -> AtomKind {
+        match *self {
+            Atom::Ident(_) => AtomKind::Ident,
+            Atom::Keyword(keyword) => AtomKind::Keyword(keyword),
+            Atom::Number(_) => AtomKind::Number,
+            Atom::String(_) => AtomKind::String,
+        }
+    }
 }
 
 impl<'a> Token for StrToken<'a> {
     fn kind(&self) -> TokenKind {
         match *self {
+            StrToken::Atom(ref atom) => TokenKind::Atom(atom.kind()),
             StrToken::Command(command) => TokenKind::Command(command),
             StrToken::Endm => TokenKind::Endm,
-            StrToken::Identifier(_) => TokenKind::Atom(AtomKind::Ident),
-            StrToken::Keyword(keyword) => TokenKind::Atom(AtomKind::Keyword(keyword)),
             StrToken::Label(_) => TokenKind::Label,
             StrToken::Macro => TokenKind::Macro,
-            StrToken::Number(_) => TokenKind::Atom(AtomKind::Number),
-            StrToken::QuotedString(_) => TokenKind::Atom(AtomKind::String),
             StrToken::Simple(kind) => TokenKind::Simple(kind),
         }
     }
@@ -190,7 +203,7 @@ impl<T> SynExpr<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Command, SimpleTokenKind, StrToken, Terminal, TerminalKind};
+    use super::{Atom, Command, SimpleTokenKind, StrToken, Terminal, TerminalKind};
 
     #[test]
     fn colon_terminal_kind() {
@@ -241,18 +254,18 @@ mod tests {
 
     #[test]
     fn number_terminal_kind() {
-        assert_eq!(StrToken::Number(0x1234).kind(), TerminalKind::Atom)
+        assert_eq!(StrToken::Atom(Atom::Number(0x1234)).kind(), TerminalKind::Atom)
     }
 
     #[test]
     fn quoted_string_terminal_kind() {
-        assert_eq!(StrToken::QuotedString("string").kind(), TerminalKind::Atom)
+        assert_eq!(StrToken::Atom(Atom::String("string")).kind(), TerminalKind::Atom)
     }
 
     #[test]
     fn word_terminal_kind() {
         assert_eq!(
-            StrToken::Identifier("identifier").kind(),
+            StrToken::Atom(Atom::Ident("identifier")).kind(),
             TerminalKind::Atom
         )
     }

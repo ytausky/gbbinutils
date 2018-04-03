@@ -96,8 +96,8 @@ impl<'a> ExprFactory for StrExprFactory<'a> {
     type Token = StrToken<'a>;
     fn mk_atom(&mut self, token: Self::Token) -> Expr {
         match token {
-            StrToken::Identifier(ident) => Expr::Symbol(ident.to_string()),
-            StrToken::Number(number) => Expr::Literal(number),
+            StrToken::Atom(Atom::Ident(ident)) => Expr::Symbol(ident.to_string()),
+            StrToken::Atom(Atom::Number(number)) => Expr::Literal(number),
             _ => panic!(),
         }
     }
