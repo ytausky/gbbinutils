@@ -2,7 +2,7 @@ use diagnostics;
 
 use ir::*;
 use frontend::ExprFactory;
-use frontend::syntax::{Command, Keyword, SynExpr, Token, TokenKind};
+use frontend::syntax::{Atom, Command, Keyword, SynExpr, Token, TokenKind};
 
 struct OperandAnalyzer<EF> {
     expr_factory: EF,
@@ -35,8 +35,8 @@ impl<EF: ExprFactory> OperandAnalyzer<EF> {
         context: &OperandAnalysisContext,
     ) -> Operand {
         match token.kind() {
-            TokenKind::Keyword(keyword) => analyze_keyword_operand(keyword, context),
-            TokenKind::Identifier | TokenKind::Number => {
+            TokenKind::Atom(Atom::Keyword(keyword)) => analyze_keyword_operand(keyword, context),
+            TokenKind::Atom(Atom::Ident) | TokenKind::Atom(Atom::Number) => {
                 Operand::Const(self.expr_factory.mk_atom(token))
             }
             _ => panic!(),
@@ -46,8 +46,10 @@ impl<EF: ExprFactory> OperandAnalyzer<EF> {
     fn analyze_deref_operand(&mut self, expr: SynExpr<EF::Token>) -> Operand {
         if let SynExpr::Atom(token) = expr {
             match token.kind() {
-                TokenKind::Keyword(Keyword::Hl) => Operand::Simple(SimpleOperand::DerefHl),
-                TokenKind::Identifier => Operand::Deref(self.expr_factory.mk_atom(token)),
+                TokenKind::Atom(Atom::Keyword(Keyword::Hl)) => {
+                    Operand::Simple(SimpleOperand::DerefHl)
+                }
+                TokenKind::Atom(Atom::Ident) => Operand::Deref(self.expr_factory.mk_atom(token)),
                 _ => panic!(),
             }
         } else {
@@ -258,9 +260,9 @@ mod tests {
     impl Token for TestToken {
         fn kind(&self) -> TokenKind {
             match *self {
-                TestToken::Identifier(_) => TokenKind::Identifier,
-                TestToken::Keyword(keyword) => TokenKind::Keyword(keyword),
-                TestToken::Number(_) => TokenKind::Number,
+                TestToken::Identifier(_) => TokenKind::Atom(Atom::Ident),
+                TestToken::Keyword(keyword) => TokenKind::Atom(Atom::Keyword(keyword)),
+                TestToken::Number(_) => TokenKind::Atom(Atom::Number),
             }
         }
     }

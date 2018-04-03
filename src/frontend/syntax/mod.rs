@@ -47,15 +47,20 @@ pub trait Token {
 
 #[derive(Clone, PartialEq)]
 pub enum TokenKind {
+    Atom(Atom),
     Command(Command),
     Endm,
-    Identifier,
-    Keyword(Keyword),
     Label,
     Macro,
-    Number,
-    QuotedString,
     Simple(SimpleTokenKind),
+}
+
+#[derive(Clone, PartialEq)]
+pub enum Atom {
+    Ident,
+    Keyword(Keyword),
+    Number,
+    String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -85,12 +90,12 @@ impl<'a> Token for StrToken<'a> {
         match *self {
             StrToken::Command(command) => TokenKind::Command(command),
             StrToken::Endm => TokenKind::Endm,
-            StrToken::Identifier(_) => TokenKind::Identifier,
-            StrToken::Keyword(keyword) => TokenKind::Keyword(keyword),
+            StrToken::Identifier(_) => TokenKind::Atom(Atom::Ident),
+            StrToken::Keyword(keyword) => TokenKind::Atom(Atom::Keyword(keyword)),
             StrToken::Label(_) => TokenKind::Label,
             StrToken::Macro => TokenKind::Macro,
-            StrToken::Number(_) => TokenKind::Number,
-            StrToken::QuotedString(_) => TokenKind::QuotedString,
+            StrToken::Number(_) => TokenKind::Atom(Atom::Number),
+            StrToken::QuotedString(_) => TokenKind::Atom(Atom::String),
             StrToken::Simple(kind) => TokenKind::Simple(kind),
         }
     }
@@ -105,10 +110,7 @@ impl<T: Token> Terminal for T {
             TokenKind::Simple(SimpleTokenKind::Colon) => TerminalKind::Colon,
             TokenKind::Simple(SimpleTokenKind::Comma) => TerminalKind::Comma,
             TokenKind::Simple(SimpleTokenKind::Eol) => TerminalKind::Eol,
-            TokenKind::Identifier
-            | TokenKind::Keyword(_)
-            | TokenKind::Number
-            | TokenKind::QuotedString => TerminalKind::Atom,
+            TokenKind::Atom(_) => TerminalKind::Atom,
             TokenKind::Label => TerminalKind::Label,
             TokenKind::Macro => TerminalKind::Macro,
             TokenKind::Simple(SimpleTokenKind::OpeningBracket) => TerminalKind::OpeningBracket,
@@ -226,10 +228,7 @@ mod tests {
 
     #[test]
     fn macro_terminal_kind() {
-        assert_eq!(
-            StrToken::Macro.kind(),
-            TerminalKind::Macro
-        )
+        assert_eq!(StrToken::Macro.kind(), TerminalKind::Macro)
     }
 
     #[test]
