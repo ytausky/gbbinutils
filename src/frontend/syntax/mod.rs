@@ -9,44 +9,38 @@ where
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Keyword {
-    A,
+pub enum Command {
     And,
-    B,
-    Bc,
-    C,
     Cp,
-    D,
     Db,
     Dec,
-    E,
-    Endm,
-    H,
     Halt,
-    Hl,
     Include,
     Jp,
     Jr,
-    L,
     Ld,
-    Macro,
-    Nc,
     Nop,
-    Nz,
     Push,
     Stop,
     Xor,
-    Z,
 }
 
-impl Keyword {
-    fn is_command(self) -> bool {
-        use self::Keyword::*;
-        match self {
-            And | Cp | Db | Dec | Halt | Include | Jp | Jr | Ld | Nop | Push | Stop | Xor => true,
-            _ => false,
-        }
-    }
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Keyword {
+    A,
+    B,
+    Bc,
+    C,
+    D,
+    E,
+    Endm,
+    H,
+    Hl,
+    L,
+    Macro,
+    Nc,
+    Nz,
+    Z,
 }
 
 pub trait Token {
@@ -55,6 +49,7 @@ pub trait Token {
 
 #[derive(Clone, PartialEq)]
 pub enum TokenKind {
+    Command(Command),
     Identifier,
     Keyword(Keyword),
     Label,
@@ -74,6 +69,7 @@ pub enum SimpleTokenKind {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum StrToken<'a> {
+    Command(Command),
     Identifier(&'a str),
     Keyword(Keyword),
     Label(&'a str),
@@ -85,6 +81,7 @@ pub enum StrToken<'a> {
 impl<'a> Token for StrToken<'a> {
     fn kind(&self) -> TokenKind {
         match *self {
+            StrToken::Command(command) => TokenKind::Command(command),
             StrToken::Identifier(_) => TokenKind::Identifier,
             StrToken::Keyword(keyword) => TokenKind::Keyword(keyword),
             StrToken::Label(_) => TokenKind::Label,
@@ -98,13 +95,13 @@ impl<'a> Token for StrToken<'a> {
 impl<T: Token> Terminal for T {
     fn kind(&self) -> TerminalKind {
         match self.kind() {
+            TokenKind::Command(_) => TerminalKind::Command,
             TokenKind::Simple(SimpleTokenKind::ClosingBracket) => TerminalKind::ClosingBracket,
             TokenKind::Simple(SimpleTokenKind::Colon) => TerminalKind::Colon,
             TokenKind::Simple(SimpleTokenKind::Comma) => TerminalKind::Comma,
             TokenKind::Simple(SimpleTokenKind::Eol) => TerminalKind::Eol,
             TokenKind::Keyword(Keyword::Endm) => TerminalKind::Endm,
             TokenKind::Keyword(Keyword::Macro) => TerminalKind::Macro,
-            TokenKind::Keyword(keyword) if keyword.is_command() => TerminalKind::Command,
             TokenKind::Identifier | TokenKind::Keyword(_) => TerminalKind::Word,
             TokenKind::Label => TerminalKind::Label,
             TokenKind::Number => TerminalKind::Number,
@@ -188,7 +185,7 @@ impl<T> SynExpr<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Keyword, SimpleTokenKind, StrToken, Terminal, TerminalKind};
+    use super::{Command, Keyword, SimpleTokenKind, StrToken, Terminal, TerminalKind};
 
     #[test]
     fn colon_terminal_kind() {
@@ -235,7 +232,7 @@ mod tests {
     #[test]
     fn nop_terminal_kind() {
         assert_eq!(
-            StrToken::Keyword(Keyword::Nop).kind(),
+            StrToken::Command(Command::Nop).kind(),
             TerminalKind::Command,
         )
     }

@@ -1,4 +1,4 @@
-use frontend::{Keyword, OperationReceiver, StrExprFactory};
+use frontend::{Command, OperationReceiver, StrExprFactory};
 use frontend::syntax::{self, StrToken, SynExpr};
 
 use std::marker::PhantomData;
@@ -94,15 +94,15 @@ where
     fn exit_command(&mut self) {
         if let Some(Context::Instruction(name, args)) = self.contexts.pop() {
             match name {
-                StrToken::Keyword(Keyword::Include) => {
+                StrToken::Command(Command::Include) => {
                     self.session.include_source_file(reduce_include(args))
                 }
-                StrToken::Keyword(keyword) => {
+                StrToken::Command(command) => {
                     let mut analyzer =
                         self::instruction::CommandAnalyzer::new(StrExprFactory::new());
                     self.session.emit_instruction(
                         analyzer
-                            .analyze_instruction(keyword, args.into_iter())
+                            .analyze_instruction(command, args.into_iter())
                             .unwrap(),
                     )
                 }
@@ -201,7 +201,7 @@ mod tests {
     fn build_include_item() {
         let filename = "file.asm";
         let actions = collect_semantic_actions(|mut actions| {
-            actions.enter_command(StrToken::Keyword(Keyword::Include));
+            actions.enter_command(StrToken::Command(Command::Include));
             let expr = SynExpr::from(StrToken::QuotedString(filename));
             actions.add_argument(expr);
             actions.exit_command();

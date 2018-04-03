@@ -1,4 +1,4 @@
-use frontend::syntax::{Keyword, SimpleTokenKind, StrToken};
+use frontend::syntax::{Command, Keyword, SimpleTokenKind, StrToken};
 
 use std::iter;
 use std::ops::{Index, Range};
@@ -170,50 +170,60 @@ fn mk_keyword_or<'a, F>(f: F, lexeme: &'a str) -> StrToken<'a>
 where
     F: FnOnce(&'a str) -> StrToken<'a>,
 {
-    identify_keyword(lexeme).map_or(f(lexeme), |keyword| StrToken::Keyword(keyword))
+    identify_keyword(lexeme).map_or(f(lexeme), |command_or_keyword| match command_or_keyword {
+        CommandOrKeyword::Command(command) => StrToken::Command(command),
+        CommandOrKeyword::Keyword(keyword) => StrToken::Keyword(keyword),
+    })
 }
 
-fn identify_keyword(word: &str) -> Option<Keyword> {
+fn identify_keyword(word: &str) -> Option<CommandOrKeyword> {
     KEYWORDS
         .iter()
         .find(|&&(spelling, _)| spelling.eq_ignore_ascii_case(word))
         .map(|&(_, keyword)| keyword)
 }
 
-const KEYWORDS: [(&str, Keyword); 27] = [
-    ("a", Keyword::A),
-    ("and", Keyword::And),
-    ("b", Keyword::B),
-    ("bc", Keyword::Bc),
-    ("c", Keyword::C),
-    ("cp", Keyword::Cp),
-    ("d", Keyword::D),
-    ("db", Keyword::Db),
-    ("dec", Keyword::Dec),
-    ("e", Keyword::E),
-    ("endm", Keyword::Endm),
-    ("h", Keyword::H),
-    ("halt", Keyword::Halt),
-    ("hl", Keyword::Hl),
-    ("include", Keyword::Include),
-    ("jp", Keyword::Jp),
-    ("jr", Keyword::Jr),
-    ("l", Keyword::L),
-    ("ld", Keyword::Ld),
-    ("macro", Keyword::Macro),
-    ("nc", Keyword::Nc),
-    ("nop", Keyword::Nop),
-    ("nz", Keyword::Nz),
-    ("push", Keyword::Push),
-    ("stop", Keyword::Stop),
-    ("xor", Keyword::Xor),
-    ("z", Keyword::Z),
+#[derive(Clone, Copy)]
+enum CommandOrKeyword {
+    Command(Command),
+    Keyword(Keyword),
+}
+
+const KEYWORDS: [(&str, CommandOrKeyword); 27] = [
+    ("a", CommandOrKeyword::Keyword(Keyword::A)),
+    ("and", CommandOrKeyword::Command(Command::And)),
+    ("b", CommandOrKeyword::Keyword(Keyword::B)),
+    ("bc", CommandOrKeyword::Keyword(Keyword::Bc)),
+    ("c", CommandOrKeyword::Keyword(Keyword::C)),
+    ("cp", CommandOrKeyword::Command(Command::Cp)),
+    ("d", CommandOrKeyword::Keyword(Keyword::D)),
+    ("db", CommandOrKeyword::Command(Command::Db)),
+    ("dec", CommandOrKeyword::Command(Command::Dec)),
+    ("e", CommandOrKeyword::Keyword(Keyword::E)),
+    ("endm", CommandOrKeyword::Keyword(Keyword::Endm)),
+    ("h", CommandOrKeyword::Keyword(Keyword::H)),
+    ("halt", CommandOrKeyword::Command(Command::Halt)),
+    ("hl", CommandOrKeyword::Keyword(Keyword::Hl)),
+    ("include", CommandOrKeyword::Command(Command::Include)),
+    ("jp", CommandOrKeyword::Command(Command::Jp)),
+    ("jr", CommandOrKeyword::Command(Command::Jr)),
+    ("l", CommandOrKeyword::Keyword(Keyword::L)),
+    ("ld", CommandOrKeyword::Command(Command::Ld)),
+    ("macro", CommandOrKeyword::Keyword(Keyword::Macro)),
+    ("nc", CommandOrKeyword::Keyword(Keyword::Nc)),
+    ("nop", CommandOrKeyword::Command(Command::Nop)),
+    ("nz", CommandOrKeyword::Keyword(Keyword::Nz)),
+    ("push", CommandOrKeyword::Command(Command::Push)),
+    ("stop", CommandOrKeyword::Command(Command::Stop)),
+    ("xor", CommandOrKeyword::Command(Command::Xor)),
+    ("z", CommandOrKeyword::Keyword(Keyword::Z)),
 ];
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    use super::Command::*;
     use super::Keyword::*;
     use super::SimpleTokenKind::*;
     use super::StrToken::*;
@@ -257,7 +267,7 @@ mod tests {
 
     #[test]
     fn lex_two_keywords() {
-        assert_eq_tokens("push bc", &[Keyword(Push), Keyword(Bc)])
+        assert_eq_tokens("push bc", &[Command(Push), Keyword(Bc)])
     }
 
     #[test]
@@ -295,7 +305,11 @@ mod tests {
 
     fn lex_transformed_keywords<F: Fn(&str) -> String>(f: F) {
         for &(spelling, keyword) in KEYWORDS.iter() {
-            assert_eq_tokens(&f(spelling), &[Keyword(keyword)])
+            let token = match keyword {
+                CommandOrKeyword::Command(command) => Command(command),
+                CommandOrKeyword::Keyword(keyword) => Keyword(keyword),
+            };
+            assert_eq_tokens(&f(spelling), &[token])
         }
     }
 
@@ -311,11 +325,11 @@ mod tests {
 
     #[test]
     fn ignore_comment_at_end_of_line() {
-        assert_eq_tokens("nop ; comment\n", &[Keyword(Nop), Simple(Eol)])
+        assert_eq_tokens("nop ; comment\n", &[Command(Nop), Simple(Eol)])
     }
 
     #[test]
     fn ignore_comment_at_end_of_input() {
-        assert_eq_tokens("nop ; comment", &[Keyword(Nop)])
+        assert_eq_tokens("nop ; comment", &[Command(Nop)])
     }
 }

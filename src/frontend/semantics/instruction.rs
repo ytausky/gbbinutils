@@ -2,7 +2,7 @@ use diagnostics;
 
 use ir::*;
 use frontend::ExprFactory;
-use frontend::syntax::{Keyword, SynExpr, Token, TokenKind};
+use frontend::syntax::{Command, Keyword, SynExpr, Token, TokenKind};
 
 struct OperandAnalyzer<EF> {
     expr_factory: EF,
@@ -67,7 +67,7 @@ impl<EF: ExprFactory> CommandAnalyzer<EF> {
         }
     }
 
-    pub fn analyze_instruction<I>(&mut self, mnemonic: Keyword, operands: I) -> AnalysisResult
+    pub fn analyze_instruction<I>(&mut self, mnemonic: Command, operands: I) -> AnalysisResult
     where
         I: IntoIterator<Item = SynExpr<EF::Token>>,
     {
@@ -227,19 +227,19 @@ enum BranchKind {
     Jr,
 }
 
-fn to_mnemonic(keyword: Keyword) -> Mnemonic {
-    match keyword {
-        Keyword::And => Mnemonic::Alu(AluOperation::And),
-        Keyword::Cp => Mnemonic::Alu(AluOperation::Cp),
-        Keyword::Dec => Mnemonic::Dec,
-        Keyword::Halt => Mnemonic::Nullary(Instruction::Halt),
-        Keyword::Jp => Mnemonic::Branch(BranchKind::Jp),
-        Keyword::Jr => Mnemonic::Branch(BranchKind::Jr),
-        Keyword::Ld => Mnemonic::Ld,
-        Keyword::Nop => Mnemonic::Nullary(Instruction::Nop),
-        Keyword::Push => Mnemonic::Push,
-        Keyword::Stop => Mnemonic::Nullary(Instruction::Stop),
-        Keyword::Xor => Mnemonic::Alu(AluOperation::Xor),
+fn to_mnemonic(command: Command) -> Mnemonic {
+    match command {
+        Command::And => Mnemonic::Alu(AluOperation::And),
+        Command::Cp => Mnemonic::Alu(AluOperation::Cp),
+        Command::Dec => Mnemonic::Dec,
+        Command::Halt => Mnemonic::Nullary(Instruction::Halt),
+        Command::Jp => Mnemonic::Branch(BranchKind::Jp),
+        Command::Jr => Mnemonic::Branch(BranchKind::Jr),
+        Command::Ld => Mnemonic::Ld,
+        Command::Nop => Mnemonic::Nullary(Instruction::Nop),
+        Command::Push => Mnemonic::Push,
+        Command::Stop => Mnemonic::Nullary(Instruction::Stop),
+        Command::Xor => Mnemonic::Alu(AluOperation::Xor),
         _ => panic!(),
     }
 }
@@ -270,21 +270,21 @@ mod tests {
         SynExpr::from(TestToken::Keyword(keyword))
     }
 
-    impl From<AluOperation> for Keyword {
+    impl From<AluOperation> for Command {
         fn from(alu_operation: AluOperation) -> Self {
             match alu_operation {
-                AluOperation::And => Keyword::And,
-                AluOperation::Cp => Keyword::Cp,
-                AluOperation::Xor => Keyword::Xor,
+                AluOperation::And => Command::And,
+                AluOperation::Cp => Command::Cp,
+                AluOperation::Xor => Command::Xor,
             }
         }
     }
 
-    impl From<BranchKind> for Keyword {
+    impl From<BranchKind> for Command {
         fn from(branch: BranchKind) -> Self {
             match branch {
-                BranchKind::Jp => Keyword::Jp,
-                BranchKind::Jr => Keyword::Jr,
+                BranchKind::Jp => Command::Jp,
+                BranchKind::Jr => Command::Jr,
             }
         }
     }
@@ -329,7 +329,7 @@ mod tests {
         let ident = "ident";
         assert_eq!(
             analyze(
-                Keyword::Ld,
+                Command::Ld,
                 vec![SynExpr::from(TestToken::Identifier(ident)).deref(), atom(A)]
             ),
             Ok(Instruction::Ld(LdKind::ImmediateAddr(
@@ -344,7 +344,7 @@ mod tests {
         let ident = "ident";
         assert_eq!(
             analyze(
-                Keyword::Ld,
+                Command::Ld,
                 vec![atom(A), SynExpr::from(TestToken::Identifier(ident)).deref()]
             ),
             Ok(Instruction::Ld(LdKind::ImmediateAddr(
@@ -371,7 +371,7 @@ mod tests {
 
     fn test_cp_const_analysis(atom: TestToken, expr: Expr) {
         assert_eq!(
-            analyze(Keyword::Cp, Some(SynExpr::Atom(atom))),
+            analyze(Command::Cp, Some(SynExpr::Atom(atom))),
             Ok(Instruction::Alu(
                 AluOperation::Cp,
                 AluSource::Immediate(expr)
@@ -384,7 +384,7 @@ mod tests {
         test_instruction_analysis(describe_legal_instructions());
     }
 
-    type InstructionDescriptor = ((Keyword, Vec<SynExpr<TestToken>>), Instruction);
+    type InstructionDescriptor = ((Command, Vec<SynExpr<TestToken>>), Instruction);
 
     fn describe_legal_instructions() -> Vec<InstructionDescriptor> {
         let mut descriptors = Vec::new();
@@ -395,7 +395,7 @@ mod tests {
         descriptors.extend(describe_branch_instuctions());
         descriptors.extend(describe_dec_instructions());
         descriptors.push((
-            (Keyword::Push, vec![atom(Bc)]),
+            (Command::Push, vec![atom(Bc)]),
             Instruction::Push(Reg16::Bc),
         ));
         descriptors
@@ -403,9 +403,9 @@ mod tests {
 
     fn describe_nullary_instructions() -> Vec<InstructionDescriptor> {
         vec![
-            (Keyword::Halt, Instruction::Halt),
-            (Keyword::Nop, Instruction::Nop),
-            (Keyword::Stop, Instruction::Stop),
+            (Command::Halt, Instruction::Halt),
+            (Command::Nop, Instruction::Nop),
+            (Command::Stop, Instruction::Stop),
         ].into_iter()
             .map(|(mnemonic, instruction)| ((mnemonic, vec![]), instruction))
             .collect()
@@ -428,7 +428,7 @@ mod tests {
         match (dest, src) {
             (SimpleOperand::DerefHl, SimpleOperand::DerefHl) => None,
             _ => Some((
-                (Keyword::Ld, vec![SynExpr::from(dest), SynExpr::from(src)]),
+                (Command::Ld, vec![SynExpr::from(dest), SynExpr::from(src)]),
                 Instruction::Ld(LdKind::Simple(dest, src)),
             )),
         }
@@ -446,7 +446,7 @@ mod tests {
         let value = "value";
         (
             (
-                Keyword::Ld,
+                Command::Ld,
                 vec![
                     SynExpr::from(dest),
                     SynExpr::from(TestToken::Identifier(value)),
@@ -471,7 +471,7 @@ mod tests {
         operand: SimpleOperand,
     ) -> InstructionDescriptor {
         (
-            (Keyword::from(operation), vec![SynExpr::from(operand)]),
+            (Command::from(operation), vec![SynExpr::from(operand)]),
             Instruction::Alu(operation, AluSource::Simple(operand)),
         )
     }
@@ -495,7 +495,7 @@ mod tests {
         };
         operands.push(SynExpr::Atom(TestToken::Identifier(ident)));
         (
-            (Keyword::from(branch), operands),
+            (Command::from(branch), operands),
             Instruction::Branch(
                 mk_branch(branch, Some(Expr::Symbol(ident.to_string()))),
                 condition,
@@ -513,7 +513,7 @@ mod tests {
 
     fn describe_dec(operand: SimpleOperand) -> InstructionDescriptor {
         (
-            (Keyword::Dec, vec![SynExpr::from(operand)]),
+            (Command::Dec, vec![SynExpr::from(operand)]),
             Instruction::Dec(operand),
         )
     }
@@ -544,7 +544,7 @@ mod tests {
         }
     }
 
-    fn analyze<I>(mnemonic: Keyword, operands: I) -> AnalysisResult
+    fn analyze<I>(mnemonic: Command, operands: I) -> AnalysisResult
     where
         I: IntoIterator<Item = SynExpr<TestToken>>,
     {
@@ -577,7 +577,7 @@ mod tests {
     #[test]
     fn analyze_nop_a() {
         assert_eq!(
-            analyze(Keyword::Nop, vec![atom(A)]),
+            analyze(Command::Nop, vec![atom(A)]),
             Err(diagnostics::Error::OperandCount(0, 1))
         )
     }
