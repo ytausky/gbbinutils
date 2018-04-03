@@ -114,19 +114,19 @@ impl<'a> Token for StrToken<'a> {
     }
 }
 
-impl<T: Token> Terminal for T {
+impl<'a> Terminal for StrToken<'a> {
     fn kind(&self) -> TerminalKind {
-        match self.kind() {
-            TokenKind::Command(_) => TerminalKind::Command,
-            TokenKind::Endm => TerminalKind::Endm,
-            TokenKind::Simple(SimpleTokenKind::ClosingBracket) => TerminalKind::ClosingBracket,
-            TokenKind::Simple(SimpleTokenKind::Colon) => TerminalKind::Colon,
-            TokenKind::Simple(SimpleTokenKind::Comma) => TerminalKind::Comma,
-            TokenKind::Simple(SimpleTokenKind::Eol) => TerminalKind::Eol,
-            TokenKind::Atom(_) => TerminalKind::Atom,
-            TokenKind::Label => TerminalKind::Label,
-            TokenKind::Macro => TerminalKind::Macro,
-            TokenKind::Simple(SimpleTokenKind::OpeningBracket) => TerminalKind::OpeningBracket,
+        match *self {
+            StrToken::Command(_) => TerminalKind::Command,
+            StrToken::Endm => TerminalKind::Endm,
+            StrToken::Simple(SimpleTokenKind::ClosingBracket) => TerminalKind::ClosingBracket,
+            StrToken::Simple(SimpleTokenKind::Colon) => TerminalKind::Colon,
+            StrToken::Simple(SimpleTokenKind::Comma) => TerminalKind::Comma,
+            StrToken::Simple(SimpleTokenKind::Eol) => TerminalKind::Eol,
+            StrToken::Atom(_) => TerminalKind::Atom,
+            StrToken::Label(_) => TerminalKind::Label,
+            StrToken::Macro => TerminalKind::Macro,
+            StrToken::Simple(SimpleTokenKind::OpeningBracket) => TerminalKind::OpeningBracket,
         }
     }
 }
