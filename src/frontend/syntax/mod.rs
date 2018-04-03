@@ -47,7 +47,7 @@ pub trait Token {
 
 #[derive(Clone, PartialEq)]
 pub enum TokenKind {
-    Atom(Atom),
+    Atom(AtomKind),
     Command(Command),
     Endm,
     Label,
@@ -56,7 +56,7 @@ pub enum TokenKind {
 }
 
 #[derive(Clone, PartialEq)]
-pub enum Atom {
+pub enum AtomKind {
     Ident,
     Keyword(Keyword),
     Number,
@@ -90,12 +90,12 @@ impl<'a> Token for StrToken<'a> {
         match *self {
             StrToken::Command(command) => TokenKind::Command(command),
             StrToken::Endm => TokenKind::Endm,
-            StrToken::Identifier(_) => TokenKind::Atom(Atom::Ident),
-            StrToken::Keyword(keyword) => TokenKind::Atom(Atom::Keyword(keyword)),
+            StrToken::Identifier(_) => TokenKind::Atom(AtomKind::Ident),
+            StrToken::Keyword(keyword) => TokenKind::Atom(AtomKind::Keyword(keyword)),
             StrToken::Label(_) => TokenKind::Label,
             StrToken::Macro => TokenKind::Macro,
-            StrToken::Number(_) => TokenKind::Atom(Atom::Number),
-            StrToken::QuotedString(_) => TokenKind::Atom(Atom::String),
+            StrToken::Number(_) => TokenKind::Atom(AtomKind::Number),
+            StrToken::QuotedString(_) => TokenKind::Atom(AtomKind::String),
             StrToken::Simple(kind) => TokenKind::Simple(kind),
         }
     }
