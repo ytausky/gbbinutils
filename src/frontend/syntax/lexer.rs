@@ -172,15 +172,15 @@ fn mk_keyword_or<'a, F>(f: F, lexeme: &'a str) -> Token<&'a str>
 where
     F: FnOnce(&'a str) -> Token<&'a str>,
 {
-    identify_keyword(lexeme).map_or(f(lexeme), |command_or_keyword| match command_or_keyword {
-        CommandOrKeyword::Command(command) => Token::Command(command),
-        CommandOrKeyword::Endm => Token::Endm,
-        CommandOrKeyword::Macro => Token::Macro,
-        CommandOrKeyword::Operand(operand) => Token::Atom(Atom::Operand(operand)),
+    identify_keyword(lexeme).map_or(f(lexeme), |keyword| match keyword {
+        Keyword::Command(command) => Token::Command(command),
+        Keyword::Endm => Token::Endm,
+        Keyword::Macro => Token::Macro,
+        Keyword::Operand(operand) => Token::Atom(Atom::Operand(operand)),
     })
 }
 
-fn identify_keyword(word: &str) -> Option<CommandOrKeyword> {
+fn identify_keyword(word: &str) -> Option<Keyword> {
     KEYWORDS
         .iter()
         .find(|&&(spelling, _)| spelling.eq_ignore_ascii_case(word))
@@ -188,41 +188,41 @@ fn identify_keyword(word: &str) -> Option<CommandOrKeyword> {
 }
 
 #[derive(Clone, Copy)]
-enum CommandOrKeyword {
+enum Keyword {
     Command(Command),
     Endm,
     Macro,
     Operand(Operand),
 }
 
-const KEYWORDS: [(&str, CommandOrKeyword); 27] = [
-    ("a", CommandOrKeyword::Operand(Operand::A)),
-    ("and", CommandOrKeyword::Command(Command::And)),
-    ("b", CommandOrKeyword::Operand(Operand::B)),
-    ("bc", CommandOrKeyword::Operand(Operand::Bc)),
-    ("c", CommandOrKeyword::Operand(Operand::C)),
-    ("cp", CommandOrKeyword::Command(Command::Cp)),
-    ("d", CommandOrKeyword::Operand(Operand::D)),
-    ("db", CommandOrKeyword::Command(Command::Db)),
-    ("dec", CommandOrKeyword::Command(Command::Dec)),
-    ("e", CommandOrKeyword::Operand(Operand::E)),
-    ("endm", CommandOrKeyword::Endm),
-    ("h", CommandOrKeyword::Operand(Operand::H)),
-    ("halt", CommandOrKeyword::Command(Command::Halt)),
-    ("hl", CommandOrKeyword::Operand(Operand::Hl)),
-    ("include", CommandOrKeyword::Command(Command::Include)),
-    ("jp", CommandOrKeyword::Command(Command::Jp)),
-    ("jr", CommandOrKeyword::Command(Command::Jr)),
-    ("l", CommandOrKeyword::Operand(Operand::L)),
-    ("ld", CommandOrKeyword::Command(Command::Ld)),
-    ("macro", CommandOrKeyword::Macro),
-    ("nc", CommandOrKeyword::Operand(Operand::Nc)),
-    ("nop", CommandOrKeyword::Command(Command::Nop)),
-    ("nz", CommandOrKeyword::Operand(Operand::Nz)),
-    ("push", CommandOrKeyword::Command(Command::Push)),
-    ("stop", CommandOrKeyword::Command(Command::Stop)),
-    ("xor", CommandOrKeyword::Command(Command::Xor)),
-    ("z", CommandOrKeyword::Operand(Operand::Z)),
+const KEYWORDS: [(&str, Keyword); 27] = [
+    ("a", Keyword::Operand(Operand::A)),
+    ("and", Keyword::Command(Command::And)),
+    ("b", Keyword::Operand(Operand::B)),
+    ("bc", Keyword::Operand(Operand::Bc)),
+    ("c", Keyword::Operand(Operand::C)),
+    ("cp", Keyword::Command(Command::Cp)),
+    ("d", Keyword::Operand(Operand::D)),
+    ("db", Keyword::Command(Command::Db)),
+    ("dec", Keyword::Command(Command::Dec)),
+    ("e", Keyword::Operand(Operand::E)),
+    ("endm", Keyword::Endm),
+    ("h", Keyword::Operand(Operand::H)),
+    ("halt", Keyword::Command(Command::Halt)),
+    ("hl", Keyword::Operand(Operand::Hl)),
+    ("include", Keyword::Command(Command::Include)),
+    ("jp", Keyword::Command(Command::Jp)),
+    ("jr", Keyword::Command(Command::Jr)),
+    ("l", Keyword::Operand(Operand::L)),
+    ("ld", Keyword::Command(Command::Ld)),
+    ("macro", Keyword::Macro),
+    ("nc", Keyword::Operand(Operand::Nc)),
+    ("nop", Keyword::Command(Command::Nop)),
+    ("nz", Keyword::Operand(Operand::Nz)),
+    ("push", Keyword::Command(Command::Push)),
+    ("stop", Keyword::Command(Command::Stop)),
+    ("xor", Keyword::Command(Command::Xor)),
+    ("z", Keyword::Operand(Operand::Z)),
 ];
 
 #[cfg(test)]
@@ -316,10 +316,10 @@ mod tests {
     fn lex_transformed_keywords<F: Fn(&str) -> String>(f: F) {
         for &(spelling, keyword) in KEYWORDS.iter() {
             let token = match keyword {
-                CommandOrKeyword::Command(command) => Command(command),
-                CommandOrKeyword::Endm => Endm,
-                CommandOrKeyword::Macro => Macro,
-                CommandOrKeyword::Operand(operand) => Atom(Operand(operand)),
+                Keyword::Command(command) => Command(command),
+                Keyword::Endm => Endm,
+                Keyword::Macro => Macro,
+                Keyword::Operand(operand) => Atom(Operand(operand)),
             };
             assert_eq_tokens(&f(spelling), &[token])
         }
