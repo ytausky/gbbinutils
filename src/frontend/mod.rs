@@ -12,7 +12,7 @@ use self::syntax::*;
 
 pub fn analyze_file<S: ir::Section>(name: &str, mut section: S) {
     let mut fs = StdFileSystem::new();
-    let mut factory = SemanticSrcAnalyzerFactory::new();
+    let mut factory = SemanticTokenSeqAnalyzerFactory::new();
     let mut session = Session::new(&mut fs, &mut factory, &mut section);
     session.include_source_file(name);
 }
@@ -39,43 +39,43 @@ impl FileSystem for StdFileSystem {
     }
 }
 
-trait SrcAnalyzer {
+trait TokenSeqAnalyzer {
     fn analyze<'src, OR: OperationReceiver<'src>>(&mut self, src: &'src str, receiver: &mut OR);
 }
 
-struct SemanticSrcAnalyzer;
+struct SemanticTokenSeqAnalyzer;
 
-impl SemanticSrcAnalyzer {
-    fn new() -> SemanticSrcAnalyzer {
-        SemanticSrcAnalyzer {}
+impl SemanticTokenSeqAnalyzer {
+    fn new() -> SemanticTokenSeqAnalyzer {
+        SemanticTokenSeqAnalyzer {}
     }
 }
 
-impl SrcAnalyzer for SemanticSrcAnalyzer {
+impl TokenSeqAnalyzer for SemanticTokenSeqAnalyzer {
     fn analyze<'src, OR: OperationReceiver<'src>>(&mut self, src: &'src str, receiver: &mut OR) {
         let actions = semantics::SemanticActions::new(receiver);
         syntax::parse(src, actions)
     }
 }
 
-trait SrcAnalyzerFactory {
-    type SrcAnalyzer: SrcAnalyzer;
-    fn mk_src_analyzer(&mut self) -> Self::SrcAnalyzer;
+trait TokenSeqAnalyzerFactory {
+    type TokenSeqAnalyzer: TokenSeqAnalyzer;
+    fn mk_token_seq_analyzer(&mut self) -> Self::TokenSeqAnalyzer;
 }
 
-struct SemanticSrcAnalyzerFactory;
+struct SemanticTokenSeqAnalyzerFactory;
 
-impl SemanticSrcAnalyzerFactory {
-    fn new() -> SemanticSrcAnalyzerFactory {
-        SemanticSrcAnalyzerFactory {}
+impl SemanticTokenSeqAnalyzerFactory {
+    fn new() -> SemanticTokenSeqAnalyzerFactory {
+        SemanticTokenSeqAnalyzerFactory {}
     }
 }
 
-impl SrcAnalyzerFactory for SemanticSrcAnalyzerFactory {
-    type SrcAnalyzer = SemanticSrcAnalyzer;
+impl TokenSeqAnalyzerFactory for SemanticTokenSeqAnalyzerFactory {
+    type TokenSeqAnalyzer = SemanticTokenSeqAnalyzer;
 
-    fn mk_src_analyzer(&mut self) -> Self::SrcAnalyzer {
-        SemanticSrcAnalyzer::new()
+    fn mk_token_seq_analyzer(&mut self) -> Self::TokenSeqAnalyzer {
+        SemanticTokenSeqAnalyzer::new()
     }
 }
 
@@ -115,7 +115,7 @@ struct Session<'session, FS: 'session, SAF: 'session, S: 'session> {
     section: &'session mut S,
 }
 
-impl<'session, FS: FileSystem, SAF: SrcAnalyzerFactory, S: ir::Section>
+impl<'session, FS: FileSystem, SAF: TokenSeqAnalyzerFactory, S: ir::Section>
     Session<'session, FS, SAF, S>
 {
     fn new(
@@ -135,12 +135,12 @@ impl<'src, 'session, FS, SAF, S> OperationReceiver<'src> for Session<'session, F
 where
     'session: 'src,
     FS: FileSystem,
-    SAF: SrcAnalyzerFactory,
+    SAF: TokenSeqAnalyzerFactory,
     S: ir::Section,
 {
     fn include_source_file(&mut self, filename: &'src str) {
         let src = self.fs.read_file(filename);
-        let mut analyzer = self.analyzer_factory.mk_src_analyzer();
+        let mut analyzer = self.analyzer_factory.mk_token_seq_analyzer();
         analyzer.analyze(&src, self)
     }
 
@@ -245,10 +245,10 @@ mod tests {
         }
     }
 
-    impl SrcAnalyzerFactory for MockSrcAnalyzerFactory {
-        type SrcAnalyzer = MockSrcAnalyzer;
+    impl TokenSeqAnalyzerFactory for MockSrcAnalyzerFactory {
+        type TokenSeqAnalyzer = MockSrcAnalyzer;
 
-        fn mk_src_analyzer(&mut self) -> Self::SrcAnalyzer {
+        fn mk_token_seq_analyzer(&mut self) -> Self::TokenSeqAnalyzer {
             MockSrcAnalyzer::new(self.src.clone())
         }
     }
@@ -263,7 +263,7 @@ mod tests {
         }
     }
 
-    impl SrcAnalyzer for MockSrcAnalyzer {
+    impl TokenSeqAnalyzer for MockSrcAnalyzer {
         fn analyze<'src, OR: OperationReceiver<'src>>(
             &mut self,
             src: &'src str,
