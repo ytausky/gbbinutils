@@ -80,8 +80,8 @@ impl SrcAnalyzerFactory for SemanticSrcAnalyzerFactory {
 }
 
 pub trait ExprFactory {
-    type Token: Token;
-    fn mk_atom(&mut self, token: Self::Token) -> Expr;
+    type String;
+    fn mk_atom(&mut self, token: StrToken<Self::String>) -> Expr;
 }
 
 pub struct StrExprFactory<'a>(PhantomData<&'a ()>);
@@ -93,8 +93,8 @@ impl<'a> StrExprFactory<'a> {
 }
 
 impl<'a> ExprFactory for StrExprFactory<'a> {
-    type Token = StrToken<&'a str>;
-    fn mk_atom(&mut self, token: Self::Token) -> Expr {
+    type String = &'a str;
+    fn mk_atom(&mut self, token: StrToken<Self::String>) -> Expr {
         match token {
             StrToken::Atom(Atom::Ident(ident)) => Expr::Symbol(ident.to_string()),
             StrToken::Atom(Atom::Number(number)) => Expr::Literal(number),
