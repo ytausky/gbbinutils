@@ -1,6 +1,6 @@
 use ir;
 
-use std::{self, marker::PhantomData};
+use std;
 
 #[cfg(test)]
 mod codebase;
@@ -10,32 +10,11 @@ mod syntax;
 use ir::*;
 use self::syntax::*;
 
-pub fn analyze_file<S: ir::Section>(name: &str, mut section: S) {
+pub fn analyze_file<S: ir::Section>(name: String, mut section: S) {
     let mut fs = StdFileSystem::new();
     let mut factory = SemanticTokenSeqAnalyzerFactory::new();
     let mut session = Session::new(&mut fs, &mut factory, &mut section);
     session.include_source_file(name);
-}
-
-pub trait StringResolver {
-    type StringRef;
-    fn resolve(&self, string_ref: &Self::StringRef) -> &str;
-}
-
-struct TrivialStringResolver<'a>(PhantomData<&'a str>);
-
-impl<'a> TrivialStringResolver<'a> {
-    fn new() -> TrivialStringResolver<'a> {
-        TrivialStringResolver(PhantomData)
-    }
-}
-
-impl<'a> StringResolver for TrivialStringResolver<'a> {
-    type StringRef = &'a str;
-
-    fn resolve(&self, string_ref: &Self::StringRef) -> &str {
-        *string_ref
-    }
 }
 
 trait FileSystem {
@@ -61,7 +40,7 @@ impl FileSystem for StdFileSystem {
 }
 
 trait TokenSeqAnalyzer {
-    fn analyze<'src, OR: OperationReceiver<'src>>(&mut self, src: &'src str, receiver: &mut OR);
+    fn analyze<OR: OperationReceiver>(&mut self, src: String, receiver: &mut OR);
 }
 
 struct SemanticTokenSeqAnalyzer;
@@ -73,9 +52,9 @@ impl SemanticTokenSeqAnalyzer {
 }
 
 impl TokenSeqAnalyzer for SemanticTokenSeqAnalyzer {
-    fn analyze<'src, OR: OperationReceiver<'src>>(&mut self, src: &'src str, receiver: &mut OR) {
-        let actions = semantics::SemanticActions::new(receiver, TrivialStringResolver::new());
-        let tokens = syntax::tokenize(src);
+    fn analyze<OR: OperationReceiver>(&mut self, src: String, receiver: &mut OR) {
+        let actions = semantics::SemanticActions::new(receiver);
+        let tokens = syntax::tokenize(&src);
         syntax::parse_token_seq(tokens, actions)
     }
 }
@@ -102,37 +81,31 @@ impl TokenSeqAnalyzerFactory for SemanticTokenSeqAnalyzerFactory {
 }
 
 pub trait ExprFactory {
-    type String;
-    fn mk_atom(&mut self, token: Token<Self::String>) -> Expr;
+    fn mk_atom(&mut self, token: Token<String>) -> Expr;
 }
 
-pub struct StrExprFactory<SR> {
-    string_resolver: SR,
-}
+pub struct StrExprFactory;
 
-impl<SR> StrExprFactory<SR> {
-    fn new(string_resolver: SR) -> StrExprFactory<SR> {
-        StrExprFactory { string_resolver }
+impl StrExprFactory {
+    fn new() -> StrExprFactory {
+        StrExprFactory {}
     }
 }
 
-impl<SR: StringResolver> ExprFactory for StrExprFactory<SR> {
-    type String = SR::StringRef;
-    fn mk_atom(&mut self, token: Token<Self::String>) -> Expr {
+impl ExprFactory for StrExprFactory {
+    fn mk_atom(&mut self, token: Token<String>) -> Expr {
         match token {
-            Token::Atom(Atom::Ident(ident)) => {
-                Expr::Symbol(self.string_resolver.resolve(&ident).to_string())
-            }
+            Token::Atom(Atom::Ident(ident)) => Expr::Symbol(ident),
             Token::Atom(Atom::Number(number)) => Expr::Literal(number),
             _ => panic!(),
         }
     }
 }
 
-pub trait OperationReceiver<'src> {
-    fn include_source_file(&mut self, filename: &'src str);
+pub trait OperationReceiver {
+    fn include_source_file(&mut self, filename: String);
     fn emit_instruction(&mut self, instruction: ir::Instruction);
-    fn define_label(&mut self, label: &'src str);
+    fn define_label(&mut self, label: String);
 }
 
 struct Session<'session, FS: 'session, SAF: 'session, S: 'session> {
@@ -157,25 +130,24 @@ impl<'session, FS: FileSystem, SAF: TokenSeqAnalyzerFactory, S: ir::Section>
     }
 }
 
-impl<'src, 'session, FS, SAF, S> OperationReceiver<'src> for Session<'session, FS, SAF, S>
+impl<'session, FS, SAF, S> OperationReceiver for Session<'session, FS, SAF, S>
 where
-    'session: 'src,
     FS: FileSystem,
     SAF: TokenSeqAnalyzerFactory,
     S: ir::Section,
 {
-    fn include_source_file(&mut self, filename: &'src str) {
-        let src = self.fs.read_file(filename);
+    fn include_source_file(&mut self, filename: String) {
+        let src = self.fs.read_file(&filename);
         let mut analyzer = self.analyzer_factory.mk_token_seq_analyzer();
-        analyzer.analyze(&src, self)
+        analyzer.analyze(src, self)
     }
 
     fn emit_instruction(&mut self, instruction: ir::Instruction) {
         self.section.add_instruction(instruction)
     }
 
-    fn define_label(&mut self, label: &'src str) {
-        self.section.add_label(label)
+    fn define_label(&mut self, label: String) {
+        self.section.add_label(&label)
     }
 }
 
@@ -193,7 +165,7 @@ mod tests {
         let mut section = MockSection::new();
         {
             let mut session = Session::new(&mut fs, &mut analyzer_factory, &mut section);
-            session.include_source_file(filename);
+            session.include_source_file(filename.to_string())
         }
         assert_eq!(
             Rc::try_unwrap(analyzer_factory.src).unwrap().into_inner(),
@@ -225,7 +197,7 @@ mod tests {
         let label = "label";
         {
             let mut session = Session::new(&mut fs, &mut analyzer_factory, &mut section);
-            session.define_label(label)
+            session.define_label(label.to_string())
         }
         assert_eq!(
             section.operations,
@@ -290,12 +262,8 @@ mod tests {
     }
 
     impl TokenSeqAnalyzer for MockSrcAnalyzer {
-        fn analyze<'src, OR: OperationReceiver<'src>>(
-            &mut self,
-            src: &'src str,
-            _receiver: &mut OR,
-        ) {
-            self.src.borrow_mut().push(String::from(src))
+        fn analyze<OR: OperationReceiver>(&mut self, src: String, _receiver: &mut OR) {
+            self.src.borrow_mut().push(src)
         }
     }
 

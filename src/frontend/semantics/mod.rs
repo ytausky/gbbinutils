@@ -1,20 +1,18 @@
-use frontend::{Atom, OperationReceiver, StrExprFactory, StringResolver};
+use frontend::{Atom, OperationReceiver, StrExprFactory};
 use frontend::syntax::{self, SynExpr, Token, keyword::Command};
 
 use std::marker::PhantomData;
 
 mod instruction;
 
-pub struct SemanticActions<'actions, 'session, 'src, OR, SR>
+pub struct SemanticActions<'actions, 'session, OR>
 where
     'session: 'actions,
-    'src: 'actions,
-    OR: 'session + OperationReceiver<'src>,
-    SR: StringResolver<StringRef = &'src str>,
+    OR: 'session + OperationReceiver,
 {
     session: &'session mut OR,
-    contexts: Vec<Context<&'src str>>,
-    expr_factory: StrExprFactory<SR>,
+    contexts: Vec<Context<String>>,
+    expr_factory: StrExprFactory,
     _phantom: PhantomData<&'actions ()>,
 }
 
@@ -23,35 +21,27 @@ enum Context<S> {
     Instruction(syntax::Token<S>, Vec<SynExpr<syntax::Token<S>>>),
 }
 
-impl<'actions, 'session, 'src, OR, SR> SemanticActions<'actions, 'session, 'src, OR, SR>
+impl<'actions, 'session, OR> SemanticActions<'actions, 'session, OR>
 where
     'session: 'actions,
-    'src: 'actions,
-    OR: 'session + OperationReceiver<'src>,
-    SR: StringResolver<StringRef = &'src str>,
+    OR: 'session + OperationReceiver,
 {
-    pub fn new(
-        session: &'session mut OR,
-        string_resolver: SR,
-    ) -> SemanticActions<'actions, 'session, 'src, OR, SR> {
+    pub fn new(session: &'session mut OR) -> SemanticActions<'actions, 'session, OR> {
         SemanticActions {
             session,
             contexts: vec![Context::Block],
-            expr_factory: StrExprFactory::new(string_resolver),
+            expr_factory: StrExprFactory::new(),
             _phantom: PhantomData,
         }
     }
 }
 
-impl<'actions, 'session, 'src, OR, SR> syntax::BlockContext
-    for SemanticActions<'actions, 'session, 'src, OR, SR>
+impl<'actions, 'session, OR> syntax::BlockContext for SemanticActions<'actions, 'session, OR>
 where
     'session: 'actions,
-    'src: 'actions,
-    OR: 'session + OperationReceiver<'src>,
-    SR: StringResolver<StringRef = &'src str>,
+    OR: 'session + OperationReceiver,
 {
-    type Terminal = Token<&'src str>;
+    type Terminal = Token<String>;
     type CommandContext = Self;
     type MacroInvocationContext = Self;
     type TerminalSequenceContext = Self;
@@ -83,15 +73,12 @@ where
     }
 }
 
-impl<'actions, 'session, 'src, OR, SR> syntax::CommandContext
-    for SemanticActions<'actions, 'session, 'src, OR, SR>
+impl<'actions, 'session, OR> syntax::CommandContext for SemanticActions<'actions, 'session, OR>
 where
     'session: 'actions,
-    'src: 'actions,
-    OR: 'session + OperationReceiver<'src>,
-    SR: StringResolver<StringRef = &'src str>,
+    OR: 'session + OperationReceiver,
 {
-    type Terminal = Token<&'src str>;
+    type Terminal = Token<String>;
 
     fn add_argument(&mut self, expr: SynExpr<Self::Terminal>) {
         match self.contexts.last_mut() {
@@ -126,15 +113,13 @@ where
     }
 }
 
-impl<'actions, 'session, 'src, OR, SR> syntax::MacroInvocationContext
-    for SemanticActions<'actions, 'session, 'src, OR, SR>
+impl<'actions, 'session, OR> syntax::MacroInvocationContext
+    for SemanticActions<'actions, 'session, OR>
 where
     'session: 'actions,
-    'src: 'actions,
-    OR: 'session + OperationReceiver<'src>,
-    SR: StringResolver<StringRef = &'src str>,
+    OR: 'session + OperationReceiver,
 {
-    type Terminal = Token<&'src str>;
+    type Terminal = Token<String>;
     type TerminalSequenceContext = Self;
 
     fn enter_macro_argument(&mut self) -> &mut Self::TerminalSequenceContext {
@@ -144,15 +129,13 @@ where
     fn exit_macro_invocation(&mut self) {}
 }
 
-impl<'actions, 'session, 'src, OR, SR> syntax::TerminalSequenceContext
-    for SemanticActions<'actions, 'session, 'src, OR, SR>
+impl<'actions, 'session, OR> syntax::TerminalSequenceContext
+    for SemanticActions<'actions, 'session, OR>
 where
     'session: 'actions,
-    'src: 'actions,
-    OR: 'session + OperationReceiver<'src>,
-    SR: StringResolver<StringRef = &'src str>,
+    OR: 'session + OperationReceiver,
 {
-    type Terminal = Token<&'src str>;
+    type Terminal = Token<String>;
 
     fn push_terminal(&mut self, _terminal: Self::Terminal) {
         unimplemented!()
@@ -176,7 +159,6 @@ fn reduce_include<S>(mut arguments: Vec<SynExpr<Token<S>>>) -> S {
 mod tests {
     use super::*;
 
-    use frontend::TrivialStringResolver;
     use frontend::syntax::{BlockContext, CommandContext};
     use ir;
 
@@ -190,13 +172,13 @@ mod tests {
 
     #[derive(Debug, PartialEq)]
     enum TestOperation {
-        Include(&'static str),
+        Include(String),
         Instruction(ir::Instruction),
-        Label(&'static str),
+        Label(String),
     }
 
-    impl OperationReceiver<'static> for TestOperationReceiver {
-        fn include_source_file(&mut self, filename: &'static str) {
+    impl OperationReceiver for TestOperationReceiver {
+        fn include_source_file(&mut self, filename: String) {
             self.0.push(TestOperation::Include(filename))
         }
 
@@ -204,7 +186,7 @@ mod tests {
             self.0.push(TestOperation::Instruction(instruction))
         }
 
-        fn define_label(&mut self, label: &'static str) {
+        fn define_label(&mut self, label: String) {
             self.0.push(TestOperation::Label(label))
         }
     }
@@ -214,18 +196,20 @@ mod tests {
         let filename = "file.asm";
         let actions = collect_semantic_actions(|mut actions| {
             actions.enter_command(Token::Command(Command::Include));
-            let expr = SynExpr::from(Token::Atom(Atom::String(filename)));
+            let expr = SynExpr::from(Token::Atom(Atom::String(filename.to_string())));
             actions.add_argument(expr);
             actions.exit_command();
         });
-        assert_eq!(actions, [TestOperation::Include(filename)])
+        assert_eq!(actions, [TestOperation::Include(filename.to_string())])
     }
 
     #[test]
     fn analyze_label() {
-        let actions =
-            collect_semantic_actions(|mut actions| actions.add_label(Token::Label("label")));
-        assert_eq!(actions, [TestOperation::Label("label")])
+        let label = "label";
+        let actions = collect_semantic_actions(|mut actions| {
+            actions.add_label(Token::Label(label.to_string()))
+        });
+        assert_eq!(actions, [TestOperation::Label(label.to_string())])
     }
 
     fn collect_semantic_actions<F>(f: F) -> Vec<TestOperation>
@@ -234,17 +218,12 @@ mod tests {
             SemanticActions<
                 'actions,
                 'session,
-                'static,
                 TestOperationReceiver,
-                TrivialStringResolver<'static>,
             >,
         ),
     {
         let mut operations = TestOperationReceiver::new();
-        f(SemanticActions::new(
-            &mut operations,
-            TrivialStringResolver::new(),
-        ));
+        f(SemanticActions::new(&mut operations));
         operations.0
     }
 }

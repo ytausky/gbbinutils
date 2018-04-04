@@ -150,7 +150,7 @@ impl<'a> Lexer<'a> {
 }
 
 impl<'a> Iterator for Lexer<'a> {
-    type Item = Token<&'a str>;
+    type Item = Token<String>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.scanner.next().map(|(token, range)| {
@@ -161,24 +161,24 @@ impl<'a> Iterator for Lexer<'a> {
                 ScannerTokenKind::Comma => Token::Comma,
                 ScannerTokenKind::Eol => Token::Eol,
                 ScannerTokenKind::Identifier => {
-                    mk_keyword_or(|x| Token::Atom(Atom::Ident(x)), lexeme)
+                    mk_keyword_or(|x| Token::Atom(Atom::Ident(x.to_string())), lexeme)
                 }
-                ScannerTokenKind::Label => mk_keyword_or(Token::Label, lexeme),
+                ScannerTokenKind::Label => mk_keyword_or(|x| Token::Label(x.to_string()), lexeme),
                 ScannerTokenKind::Number => Token::Atom(Atom::Number(
                     isize::from_str_radix(&lexeme[1..], 16).unwrap(),
                 )),
                 ScannerTokenKind::OpeningBracket => Token::OpeningBracket,
                 ScannerTokenKind::String => {
-                    Token::Atom(Atom::String(&lexeme[1..(lexeme.len() - 1)]))
+                    Token::Atom(Atom::String(lexeme[1..(lexeme.len() - 1)].to_string()))
                 }
             }
         })
     }
 }
 
-fn mk_keyword_or<'a, F>(f: F, lexeme: &'a str) -> Token<&'a str>
+fn mk_keyword_or<'a, F>(f: F, lexeme: &'a str) -> Token<String>
 where
-    F: FnOnce(&'a str) -> Token<&'a str>,
+    F: FnOnce(&'a str) -> Token<String>,
 {
     identify_keyword(lexeme).map_or(f(lexeme), |keyword| match keyword {
         Keyword::Command(command) => Token::Command(command),
@@ -242,9 +242,9 @@ mod tests {
     use super::Operand::*;
     use super::Token::*;
 
-    fn assert_eq_tokens<'a>(src: &'a str, expected_tokens: &[Token<&'a str>]) {
+    fn assert_eq_tokens<'a>(src: &'a str, expected_tokens: &[Token<String>]) {
         assert_eq!(
-            Lexer::new(src).collect::<Vec<Token<&'a str>>>(),
+            Lexer::new(src).collect::<Vec<Token<String>>>(),
             expected_tokens
         )
     }
@@ -261,24 +261,27 @@ mod tests {
 
     #[test]
     fn lex_label() {
-        assert_eq_tokens("label", &[Label("label")])
+        assert_eq_tokens("label", &[Label("label".to_string())])
     }
 
     #[test]
     fn lex_label_after_eol() {
-        assert_eq_tokens("    \nlabel", &[Eol, Label("label")])
+        assert_eq_tokens("    \nlabel", &[Eol, Label("label".to_string())])
     }
 
     #[test]
     fn lex_word_after_whitespace() {
-        assert_eq_tokens("    word", &[Atom(Ident("word"))])
+        assert_eq_tokens("    word", &[Atom(Ident("word".to_string()))])
     }
 
     #[test]
     fn lex_label_and_word_with_underscore() {
         assert_eq_tokens(
             "first_label then_word",
-            &[Label("first_label"), Atom(Ident("then_word"))],
+            &[
+                Label("first_label".to_string()),
+                Atom(Ident("then_word".to_string())),
+            ],
         )
     }
 
@@ -294,7 +297,10 @@ mod tests {
 
     #[test]
     fn lex_quoted_string() {
-        assert_eq_tokens("\"file.asm\"", &[Atom(super::Atom::String("file.asm"))])
+        assert_eq_tokens(
+            "\"file.asm\"",
+            &[Atom(super::Atom::String("file.asm".to_string()))],
+        )
     }
 
     #[test]
@@ -304,7 +310,7 @@ mod tests {
 
     #[test]
     fn lex_macro_definition() {
-        assert_eq_tokens("f: macro\n", &[Label("f"), Colon, Macro, Eol])
+        assert_eq_tokens("f: macro\n", &[Label("f".to_string()), Colon, Macro, Eol])
     }
 
     #[test]
