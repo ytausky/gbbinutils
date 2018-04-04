@@ -10,10 +10,10 @@ mod syntax;
 use ir::*;
 use self::syntax::*;
 
-pub fn analyze_file<S: ir::Section>(name: String, mut section: S) {
-    let mut fs = StdFileSystem::new();
-    let mut factory = SemanticTokenSeqAnalyzerFactory::new();
-    let mut session = Session::new(&mut fs, &mut factory, &mut section);
+pub fn analyze_file<S: ir::Section>(name: String, section: S) {
+    let fs = StdFileSystem::new();
+    let factory = SemanticTokenSeqAnalyzerFactory::new();
+    let mut session = Session::new(fs, factory, section);
     session.include_source_file(name);
 }
 
@@ -108,20 +108,14 @@ pub trait OperationReceiver {
     fn define_label(&mut self, label: String);
 }
 
-struct Session<'session, FS: 'session, SAF: 'session, S: 'session> {
-    fs: &'session mut FS,
-    analyzer_factory: &'session mut SAF,
-    section: &'session mut S,
+struct Session<FS, SAF, S> {
+    fs: FS,
+    analyzer_factory: SAF,
+    section: S,
 }
 
-impl<'session, FS: FileSystem, SAF: TokenSeqAnalyzerFactory, S: ir::Section>
-    Session<'session, FS, SAF, S>
-{
-    fn new(
-        fs: &'session mut FS,
-        analyzer_factory: &'session mut SAF,
-        section: &'session mut S,
-    ) -> Session<'session, FS, SAF, S> {
+impl<FS: FileSystem, SAF: TokenSeqAnalyzerFactory, S: ir::Section> Session<FS, SAF, S> {
+    fn new(fs: FS, analyzer_factory: SAF, section: S) -> Session<FS, SAF, S> {
         Session {
             fs,
             analyzer_factory,
@@ -130,7 +124,7 @@ impl<'session, FS: FileSystem, SAF: TokenSeqAnalyzerFactory, S: ir::Section>
     }
 }
 
-impl<'session, FS, SAF, S> OperationReceiver for Session<'session, FS, SAF, S>
+impl<FS, SAF, S> OperationReceiver for Session<FS, SAF, S>
 where
     FS: FileSystem,
     SAF: TokenSeqAnalyzerFactory,
@@ -164,50 +158,41 @@ mod tests {
         let contents = "nop";
         let mut fs = MockFileSystem::new();
         fs.add_file(filename, contents);
-        let mut analyzer_factory = Mock::new(&log);
-        let mut section = Mock::new(&log);
+        let analyzer_factory = Mock::new(&log);
+        let section = Mock::new(&log);
         {
-            let mut session = Session::new(&mut fs, &mut analyzer_factory, &mut section);
+            let mut session = Session::new(fs, analyzer_factory, section);
             session.include_source_file(filename.to_string())
         }
-        assert_eq!(
-            *log.borrow(),
-            [TestEvent::AnalyzeSrc(contents.into())]
-        );
+        assert_eq!(*log.borrow(), [TestEvent::AnalyzeSrc(contents.into())]);
     }
 
     #[test]
     fn emit_instruction() {
         let log = TestLog::default();
-        let mut fs = MockFileSystem::new();
-        let mut analyzer_factory = Mock::new(&log);
-        let mut section = Mock::new(&log);
+        let fs = MockFileSystem::new();
+        let analyzer_factory = Mock::new(&log);
+        let section = Mock::new(&log);
         let instruction = Instruction::Nop;
         {
-            let mut session = Session::new(&mut fs, &mut analyzer_factory, &mut section);
+            let mut session = Session::new(fs, analyzer_factory, section);
             session.emit_instruction(instruction.clone())
         }
-        assert_eq!(
-            *log.borrow(),
-            [TestEvent::AddInstruction(instruction)]
-        );
+        assert_eq!(*log.borrow(), [TestEvent::AddInstruction(instruction)]);
     }
 
     #[test]
     fn define_label() {
         let log = TestLog::default();
-        let mut fs = MockFileSystem::new();
-        let mut analyzer_factory = Mock::new(&log);
-        let mut section = Mock::new(&log);
+        let fs = MockFileSystem::new();
+        let analyzer_factory = Mock::new(&log);
+        let section = Mock::new(&log);
         let label = "label";
         {
-            let mut session = Session::new(&mut fs, &mut analyzer_factory, &mut section);
+            let mut session = Session::new(fs, analyzer_factory, section);
             session.define_label(label.to_string())
         }
-        assert_eq!(
-            *log.borrow(),
-            [TestEvent::AddLabel(String::from(label))]
-        );
+        assert_eq!(*log.borrow(), [TestEvent::AddLabel(String::from(label))]);
     }
 
     struct MockFileSystem<'a> {
@@ -260,12 +245,14 @@ mod tests {
 
     impl<'a> ir::Section for Mock<'a> {
         fn add_instruction(&mut self, instruction: Instruction) {
-            self.log.borrow_mut()
+            self.log
+                .borrow_mut()
                 .push(TestEvent::AddInstruction(instruction))
         }
 
         fn add_label(&mut self, label: &str) {
-            self.log.borrow_mut()
+            self.log
+                .borrow_mut()
                 .push(TestEvent::AddLabel(String::from(label)))
         }
     }
