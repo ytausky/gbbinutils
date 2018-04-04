@@ -153,39 +153,28 @@ mod tests {
 
     #[test]
     fn include_source_file() {
-        let log = TestLog::default();
-        let mut fixture = TestFixture::new(&log);
         let filename = "my_file.asm";
         let contents = "nop";
-        fixture.fs.add_file(filename, contents);
-        {
-            let mut session = Session::from(fixture);
-            session.include_source_file(filename.to_string())
-        }
+        let log = TestLog::default();
+        TestFixture::new(&log)
+            .given(|f| f.fs.add_file(filename, contents))
+            .when(|mut session| session.include_source_file(filename.to_string()));
         assert_eq!(*log.borrow(), [TestEvent::AnalyzeSrc(contents.into())]);
     }
 
     #[test]
     fn emit_instruction() {
-        let log = TestLog::default();
-        let fixture = TestFixture::new(&log);
         let instruction = Instruction::Nop;
-        {
-            let mut session = Session::from(fixture);
-            session.emit_instruction(instruction.clone())
-        }
+        let log = TestLog::default();
+        TestFixture::new(&log).when(|mut session| session.emit_instruction(instruction.clone()));
         assert_eq!(*log.borrow(), [TestEvent::AddInstruction(instruction)]);
     }
 
     #[test]
     fn define_label() {
-        let log = TestLog::default();
-        let fixture = TestFixture::new(&log);
         let label = "label";
-        {
-            let mut session = Session::from(fixture);
-            session.define_label(label.to_string())
-        }
+        let log = TestLog::default();
+        TestFixture::new(&log).when(|mut session| session.define_label(label.to_string()));
         assert_eq!(*log.borrow(), [TestEvent::AddLabel(String::from(label))]);
     }
 
@@ -273,6 +262,15 @@ mod tests {
                 analyzer_factory: Mock::new(log),
                 section: Mock::new(log),
             }
+        }
+
+        fn given<F: FnOnce(&mut Self)>(mut self, f: F) -> Self {
+            f(&mut self);
+            self
+        }
+
+        fn when<F: FnOnce(Session<MockFileSystem<'a>, Mock<'a>, Mock<'a>>)>(self, f: F) {
+            f(Session::from(self))
         }
     }
 
