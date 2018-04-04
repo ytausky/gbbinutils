@@ -155,6 +155,8 @@ where
 mod tests {
     use super::*;
 
+    use std::cell::RefCell;
+
     #[test]
     fn include_source_file() {
         let log = TestLog::default();
@@ -162,24 +164,24 @@ mod tests {
         let contents = "nop";
         let mut fs = MockFileSystem::new();
         fs.add_file(filename, contents);
-        let mut analyzer_factory = MockSrcAnalyzerFactory::new();
-        let mut section = MockSection::new(&log);
+        let mut analyzer_factory = Mock::new(&log);
+        let mut section = Mock::new(&log);
         {
             let mut session = Session::new(&mut fs, &mut analyzer_factory, &mut section);
             session.include_source_file(filename.to_string())
         }
         assert_eq!(
-            Rc::try_unwrap(analyzer_factory.src).unwrap().into_inner(),
-            [contents]
-        )
+            *log.borrow(),
+            [TestEvent::AnalyzeSrc(contents.into())]
+        );
     }
 
     #[test]
     fn emit_instruction() {
         let log = TestLog::default();
         let mut fs = MockFileSystem::new();
-        let mut analyzer_factory = MockSrcAnalyzerFactory::new();
-        let mut section = MockSection::new(&log);
+        let mut analyzer_factory = Mock::new(&log);
+        let mut section = Mock::new(&log);
         let instruction = Instruction::Nop;
         {
             let mut session = Session::new(&mut fs, &mut analyzer_factory, &mut section);
@@ -187,7 +189,7 @@ mod tests {
         }
         assert_eq!(
             *log.borrow(),
-            [MockSectionOperation::AddInstruction(instruction)]
+            [TestEvent::AddInstruction(instruction)]
         );
     }
 
@@ -195,8 +197,8 @@ mod tests {
     fn define_label() {
         let log = TestLog::default();
         let mut fs = MockFileSystem::new();
-        let mut analyzer_factory = MockSrcAnalyzerFactory::new();
-        let mut section = MockSection::new(&log);
+        let mut analyzer_factory = Mock::new(&log);
+        let mut section = Mock::new(&log);
         let label = "label";
         {
             let mut session = Session::new(&mut fs, &mut analyzer_factory, &mut section);
@@ -204,7 +206,7 @@ mod tests {
         }
         assert_eq!(
             *log.borrow(),
-            [MockSectionOperation::AddLabel(String::from(label))]
+            [TestEvent::AddLabel(String::from(label))]
         );
     }
 
@@ -232,73 +234,48 @@ mod tests {
         }
     }
 
-    use std::{cell::RefCell, rc::Rc};
-
-    struct MockSrcAnalyzerFactory {
-        src: Rc<RefCell<Vec<String>>>,
+    #[derive(Clone)]
+    struct Mock<'a> {
+        log: &'a TestLog,
     }
 
-    impl MockSrcAnalyzerFactory {
-        fn new() -> MockSrcAnalyzerFactory {
-            MockSrcAnalyzerFactory {
-                src: Rc::new(RefCell::new(Vec::new())),
-            }
+    impl<'a> Mock<'a> {
+        fn new(log: &'a TestLog) -> Mock<'a> {
+            Mock { log }
         }
     }
 
-    impl TokenSeqAnalyzerFactory for MockSrcAnalyzerFactory {
-        type TokenSeqAnalyzer = MockSrcAnalyzer;
-
+    impl<'a> TokenSeqAnalyzerFactory for Mock<'a> {
+        type TokenSeqAnalyzer = Self;
         fn mk_token_seq_analyzer(&mut self) -> Self::TokenSeqAnalyzer {
-            MockSrcAnalyzer::new(self.src.clone())
+            self.clone()
         }
     }
 
-    struct MockSrcAnalyzer {
-        src: Rc<RefCell<Vec<String>>>,
-    }
-
-    impl MockSrcAnalyzer {
-        fn new(src: Rc<RefCell<Vec<String>>>) -> MockSrcAnalyzer {
-            MockSrcAnalyzer { src }
-        }
-    }
-
-    impl TokenSeqAnalyzer for MockSrcAnalyzer {
+    impl<'a> TokenSeqAnalyzer for Mock<'a> {
         fn analyze<OR: OperationReceiver>(&mut self, src: String, _receiver: &mut OR) {
-            self.src.borrow_mut().push(src)
+            self.log.borrow_mut().push(TestEvent::AnalyzeSrc(src))
         }
     }
 
-    #[derive(Debug, PartialEq)]
-    enum MockSectionOperation {
-        AddInstruction(Instruction),
-        AddLabel(String),
-    }
-
-    struct MockSection<'a, E: 'a> {
-        log: &'a TestLog<E>,
-    }
-
-    impl<'a, E: 'a> MockSection<'a, E> {
-        fn new(log: &'a TestLog<E>) -> MockSection<'a, E> {
-            MockSection {
-                log,
-            }
-        }
-    }
-
-    impl<'a> ir::Section for MockSection<'a, MockSectionOperation> {
+    impl<'a> ir::Section for Mock<'a> {
         fn add_instruction(&mut self, instruction: Instruction) {
             self.log.borrow_mut()
-                .push(MockSectionOperation::AddInstruction(instruction).into())
+                .push(TestEvent::AddInstruction(instruction))
         }
 
         fn add_label(&mut self, label: &str) {
             self.log.borrow_mut()
-                .push(MockSectionOperation::AddLabel(String::from(label)).into())
+                .push(TestEvent::AddLabel(String::from(label)))
         }
     }
 
-    type TestLog<E> = RefCell<Vec<E>>;
+    type TestLog = RefCell<Vec<TestEvent>>;
+
+    #[derive(Debug, PartialEq)]
+    enum TestEvent {
+        AnalyzeSrc(String),
+        AddInstruction(Instruction),
+        AddLabel(String),
+    }
 }
