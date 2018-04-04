@@ -154,14 +154,12 @@ mod tests {
     #[test]
     fn include_source_file() {
         let log = TestLog::default();
+        let mut fixture = TestFixture::new(&log);
         let filename = "my_file.asm";
         let contents = "nop";
-        let mut fs = MockFileSystem::new();
-        fs.add_file(filename, contents);
-        let analyzer_factory = Mock::new(&log);
-        let section = Mock::new(&log);
+        fixture.fs.add_file(filename, contents);
         {
-            let mut session = Session::new(fs, analyzer_factory, section);
+            let mut session = Session::from(fixture);
             session.include_source_file(filename.to_string())
         }
         assert_eq!(*log.borrow(), [TestEvent::AnalyzeSrc(contents.into())]);
@@ -170,12 +168,10 @@ mod tests {
     #[test]
     fn emit_instruction() {
         let log = TestLog::default();
-        let fs = MockFileSystem::new();
-        let analyzer_factory = Mock::new(&log);
-        let section = Mock::new(&log);
+        let fixture = TestFixture::new(&log);
         let instruction = Instruction::Nop;
         {
-            let mut session = Session::new(fs, analyzer_factory, section);
+            let mut session = Session::from(fixture);
             session.emit_instruction(instruction.clone())
         }
         assert_eq!(*log.borrow(), [TestEvent::AddInstruction(instruction)]);
@@ -184,12 +180,10 @@ mod tests {
     #[test]
     fn define_label() {
         let log = TestLog::default();
-        let fs = MockFileSystem::new();
-        let analyzer_factory = Mock::new(&log);
-        let section = Mock::new(&log);
+        let fixture = TestFixture::new(&log);
         let label = "label";
         {
-            let mut session = Session::new(fs, analyzer_factory, section);
+            let mut session = Session::from(fixture);
             session.define_label(label.to_string())
         }
         assert_eq!(*log.borrow(), [TestEvent::AddLabel(String::from(label))]);
@@ -264,5 +258,27 @@ mod tests {
         AnalyzeSrc(String),
         AddInstruction(Instruction),
         AddLabel(String),
+    }
+
+    struct TestFixture<'a> {
+        fs: MockFileSystem<'a>,
+        analyzer_factory: Mock<'a>,
+        section: Mock<'a>,
+    }
+
+    impl<'a> TestFixture<'a> {
+        fn new(log: &'a TestLog) -> TestFixture<'a> {
+            TestFixture {
+                fs: MockFileSystem::new(),
+                analyzer_factory: Mock::new(log),
+                section: Mock::new(log),
+            }
+        }
+    }
+
+    impl<'a> From<TestFixture<'a>> for Session<MockFileSystem<'a>, Mock<'a>, Mock<'a>> {
+        fn from(fixture: TestFixture<'a>) -> Session<MockFileSystem<'a>, Mock<'a>, Mock<'a>> {
+            Session::new(fixture.fs, fixture.analyzer_factory, fixture.section)
+        }
     }
 }
