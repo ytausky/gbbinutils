@@ -157,12 +157,13 @@ mod tests {
 
     #[test]
     fn include_source_file() {
+        let log = TestLog::default();
         let filename = "my_file.asm";
         let contents = "nop";
         let mut fs = MockFileSystem::new();
         fs.add_file(filename, contents);
         let mut analyzer_factory = MockSrcAnalyzerFactory::new();
-        let mut section = MockSection::new();
+        let mut section = MockSection::new(&log);
         {
             let mut session = Session::new(&mut fs, &mut analyzer_factory, &mut section);
             session.include_source_file(filename.to_string())
@@ -175,34 +176,36 @@ mod tests {
 
     #[test]
     fn emit_instruction() {
+        let log = TestLog::default();
         let mut fs = MockFileSystem::new();
         let mut analyzer_factory = MockSrcAnalyzerFactory::new();
-        let mut section = MockSection::new();
+        let mut section = MockSection::new(&log);
         let instruction = Instruction::Nop;
         {
             let mut session = Session::new(&mut fs, &mut analyzer_factory, &mut section);
             session.emit_instruction(instruction.clone())
         }
         assert_eq!(
-            section.operations,
+            *log.borrow(),
             [MockSectionOperation::AddInstruction(instruction)]
-        )
+        );
     }
 
     #[test]
     fn define_label() {
+        let log = TestLog::default();
         let mut fs = MockFileSystem::new();
         let mut analyzer_factory = MockSrcAnalyzerFactory::new();
-        let mut section = MockSection::new();
+        let mut section = MockSection::new(&log);
         let label = "label";
         {
             let mut session = Session::new(&mut fs, &mut analyzer_factory, &mut section);
             session.define_label(label.to_string())
         }
         assert_eq!(
-            section.operations,
+            *log.borrow(),
             [MockSectionOperation::AddLabel(String::from(label))]
-        )
+        );
     }
 
     struct MockFileSystem<'a> {
@@ -273,27 +276,29 @@ mod tests {
         AddLabel(String),
     }
 
-    struct MockSection {
-        operations: Vec<MockSectionOperation>,
+    struct MockSection<'a, E: 'a> {
+        log: &'a TestLog<E>,
     }
 
-    impl MockSection {
-        fn new() -> MockSection {
+    impl<'a, E: 'a> MockSection<'a, E> {
+        fn new(log: &'a TestLog<E>) -> MockSection<'a, E> {
             MockSection {
-                operations: Vec::new(),
+                log,
             }
         }
     }
 
-    impl ir::Section for MockSection {
+    impl<'a> ir::Section for MockSection<'a, MockSectionOperation> {
         fn add_instruction(&mut self, instruction: Instruction) {
-            self.operations
-                .push(MockSectionOperation::AddInstruction(instruction))
+            self.log.borrow_mut()
+                .push(MockSectionOperation::AddInstruction(instruction).into())
         }
 
         fn add_label(&mut self, label: &str) {
-            self.operations
-                .push(MockSectionOperation::AddLabel(String::from(label)))
+            self.log.borrow_mut()
+                .push(MockSectionOperation::AddLabel(String::from(label)).into())
         }
     }
+
+    type TestLog<E> = RefCell<Vec<E>>;
 }
