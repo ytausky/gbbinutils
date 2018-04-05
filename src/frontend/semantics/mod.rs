@@ -19,6 +19,7 @@ where
 enum Context<S> {
     Block,
     Instruction(syntax::Token<S>, Vec<SynExpr<syntax::Token<S>>>),
+    MacroArg(Vec<Token<S>>),
     MacroDef(syntax::Token<S>, Vec<syntax::Token<S>>),
     MacroInvocation(syntax::Token<S>, Vec<Vec<syntax::Token<S>>>),
 }
@@ -127,17 +128,14 @@ where
     type TerminalSequenceContext = Self;
 
     fn enter_macro_argument(&mut self) -> &mut Self::TerminalSequenceContext {
-        match self.contexts.last_mut() {
-            Some(&mut Context::MacroInvocation(_, ref mut args)) => args.push(vec![]),
-            _ => panic!(),
-        }
+        self.contexts.push(Context::MacroArg(vec![]));
         self
     }
 
     fn exit_macro_invocation(&mut self) {
         match self.contexts.pop() {
-            Some(Context::MacroInvocation(Token::Atom(Atom::Ident(name)), _args)) => {
-                self.session.invoke_macro(name)
+            Some(Context::MacroInvocation(Token::Atom(Atom::Ident(name)), args)) => {
+                self.session.invoke_macro(name, args)
             }
             _ => panic!(),
         }
@@ -154,16 +152,18 @@ where
 
     fn push_terminal(&mut self, terminal: Self::Terminal) {
         match self.contexts.last_mut() {
-            Some(&mut Context::MacroDef(_, ref mut tokens)) => tokens.push(terminal),
-            Some(&mut Context::MacroInvocation(_, ref mut args)) => {
-                args.last_mut().unwrap().push(terminal)
-            }
+            Some(&mut Context::MacroDef(_, ref mut tokens))
+            | Some(&mut Context::MacroArg(ref mut tokens)) => tokens.push(terminal),
             _ => panic!(),
         }
     }
 
     fn exit_terminal_sequence(&mut self) {
         match self.contexts.pop() {
+            Some(Context::MacroArg(tokens)) => match self.contexts.last_mut() {
+                Some(&mut Context::MacroInvocation(_, ref mut args)) => args.push(tokens),
+                _ => panic!(),
+            }
             Some(Context::MacroDef(Token::Label(name), tokens)) => {
                 self.session.define_macro(name, tokens)
             }
@@ -223,8 +223,8 @@ mod tests {
             self.0.push(TestOperation::DefineMacro(name, tokens))
         }
 
-        fn invoke_macro(&mut self, name: String) {
-            self.0.push(TestOperation::InvokeMacro(name, Vec::new()))
+        fn invoke_macro(&mut self, name: String, args: Vec<Vec<Token<String>>>) {
+            self.0.push(TestOperation::InvokeMacro(name, args))
         }
     }
 
@@ -283,7 +283,6 @@ mod tests {
         )
     }
 
-    #[ignore]
     #[test]
     fn invoke_unary_macro() {
         let name = "my_macro";

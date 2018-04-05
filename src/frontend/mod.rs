@@ -113,7 +113,7 @@ pub trait OperationReceiver {
     fn emit_instruction(&mut self, instruction: ir::Instruction);
     fn define_label(&mut self, label: String);
     fn define_macro(&mut self, name: String, tokens: Vec<Token<String>>);
-    fn invoke_macro(&mut self, name: String);
+    fn invoke_macro(&mut self, name: String, args: Vec<Vec<Token<String>>>);
 }
 
 use std::{collections::HashMap, rc::Rc};
@@ -165,7 +165,7 @@ where
         self.macro_defs.insert(name, Rc::new(tokens));
     }
 
-    fn invoke_macro(&mut self, name: String) {
+    fn invoke_macro(&mut self, name: String, _args: Vec<Vec<Token<String>>>) {
         let rc = self.macro_defs.get(&name).unwrap().clone();
         let tokens = rc.iter().cloned();
         self.analyze_token_seq(tokens)
@@ -213,13 +213,13 @@ mod tests {
     use frontend::syntax::keyword::Command;
 
     #[test]
-    fn define_macro() {
+    fn define_and_invoke_macro() {
         let name = "my_macro";
         let tokens = vec![Token::Command(Command::Nop)];
         let log = TestLog::default();
         TestFixture::new(&log).when(|mut session| {
             session.define_macro(name.to_string(), tokens.clone());
-            session.invoke_macro(name.to_string())
+            session.invoke_macro(name.to_string(), vec![])
         });
         assert_eq!(*log.borrow(), [TestEvent::AnalyzeTokens(tokens)]);
     }
