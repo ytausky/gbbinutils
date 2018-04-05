@@ -40,7 +40,10 @@ impl FileSystem for StdFileSystem {
 }
 
 trait TokenSeqAnalyzer {
-    fn analyze<OR: OperationReceiver>(&mut self, src: String, receiver: &mut OR);
+    fn analyze<I, OR>(&mut self, tokens: I, receiver: &mut OR)
+    where
+        I: Iterator<Item = Token<String>>,
+        OR: OperationReceiver;
 }
 
 struct SemanticTokenSeqAnalyzer;
@@ -52,9 +55,12 @@ impl SemanticTokenSeqAnalyzer {
 }
 
 impl TokenSeqAnalyzer for SemanticTokenSeqAnalyzer {
-    fn analyze<OR: OperationReceiver>(&mut self, src: String, receiver: &mut OR) {
+    fn analyze<I, OR>(&mut self, tokens: I, receiver: &mut OR)
+    where
+        I: Iterator<Item = Token<String>>,
+        OR: OperationReceiver,
+    {
         let actions = semantics::SemanticActions::new(receiver);
-        let tokens = syntax::tokenize(&src);
         syntax::parse_token_seq(tokens, actions)
     }
 }
@@ -106,12 +112,17 @@ pub trait OperationReceiver {
     fn include_source_file(&mut self, filename: String);
     fn emit_instruction(&mut self, instruction: ir::Instruction);
     fn define_label(&mut self, label: String);
+    fn define_macro(&mut self, name: String, tokens: Vec<Token<String>>);
+    fn invoke_macro(&mut self, name: String);
 }
+
+use std::{collections::HashMap, rc::Rc};
 
 struct Session<FS, SAF, S> {
     fs: FS,
     analyzer_factory: SAF,
     section: S,
+    macro_defs: HashMap<String, Rc<Vec<Token<String>>>>,
 }
 
 impl<FS: FileSystem, SAF: TokenSeqAnalyzerFactory, S: ir::Section> Session<FS, SAF, S> {
@@ -120,7 +131,13 @@ impl<FS: FileSystem, SAF: TokenSeqAnalyzerFactory, S: ir::Section> Session<FS, S
             fs,
             analyzer_factory,
             section,
+            macro_defs: HashMap::new(),
         }
+    }
+
+    fn analyze_token_seq<I: Iterator<Item = Token<String>>>(&mut self, tokens: I) {
+        let mut analyzer = self.analyzer_factory.mk_token_seq_analyzer();
+        analyzer.analyze(tokens, self)
     }
 }
 
@@ -132,8 +149,8 @@ where
 {
     fn include_source_file(&mut self, filename: String) {
         let src = self.fs.read_file(&filename);
-        let mut analyzer = self.analyzer_factory.mk_token_seq_analyzer();
-        analyzer.analyze(src, self)
+        let tokens = syntax::tokenize(&src);
+        self.analyze_token_seq(tokens)
     }
 
     fn emit_instruction(&mut self, instruction: ir::Instruction) {
@@ -142,6 +159,16 @@ where
 
     fn define_label(&mut self, label: String) {
         self.section.add_label(&label)
+    }
+
+    fn define_macro(&mut self, name: String, tokens: Vec<Token<String>>) {
+        self.macro_defs.insert(name, Rc::new(tokens));
+    }
+
+    fn invoke_macro(&mut self, name: String) {
+        let rc = self.macro_defs.get(&name).unwrap().clone();
+        let tokens = rc.iter().cloned();
+        self.analyze_token_seq(tokens)
     }
 }
 
@@ -159,7 +186,7 @@ mod tests {
         TestFixture::new(&log)
             .given(|f| f.fs.add_file(filename, contents))
             .when(|mut session| session.include_source_file(filename.to_string()));
-        assert_eq!(*log.borrow(), [TestEvent::AnalyzeSrc(contents.into())]);
+        assert_eq!(*log.borrow(), [TestEvent::AnalyzeTokens([Token::Command(Command::Nop)].to_vec())]);
     }
 
     #[test]
@@ -176,6 +203,20 @@ mod tests {
         let log = TestLog::default();
         TestFixture::new(&log).when(|mut session| session.define_label(label.to_string()));
         assert_eq!(*log.borrow(), [TestEvent::AddLabel(String::from(label))]);
+    }
+
+    use frontend::syntax::keyword::Command;
+
+    #[test]
+    fn define_macro() {
+        let name = "my_macro";
+        let tokens = vec![Token::Command(Command::Nop)];
+        let log = TestLog::default();
+        TestFixture::new(&log).when(|mut session| {
+            session.define_macro(name.to_string(), tokens.clone());
+            session.invoke_macro(name.to_string())
+        });
+        assert_eq!(*log.borrow(), [TestEvent::AnalyzeTokens(tokens)]);
     }
 
     struct MockFileSystem<'a> {
@@ -221,8 +262,12 @@ mod tests {
     }
 
     impl<'a> TokenSeqAnalyzer for Mock<'a> {
-        fn analyze<OR: OperationReceiver>(&mut self, src: String, _receiver: &mut OR) {
-            self.log.borrow_mut().push(TestEvent::AnalyzeSrc(src))
+        fn analyze<I, OR>(&mut self, tokens: I, _receiver: &mut OR)
+        where
+            I: Iterator<Item = Token<String>>,
+            OR: OperationReceiver,
+        {
+            self.log.borrow_mut().push(TestEvent::AnalyzeTokens(tokens.collect()))
         }
     }
 
@@ -244,7 +289,7 @@ mod tests {
 
     #[derive(Debug, PartialEq)]
     enum TestEvent {
-        AnalyzeSrc(String),
+        AnalyzeTokens(Vec<Token<String>>),
         AddInstruction(Instruction),
         AddLabel(String),
     }

@@ -1,5 +1,5 @@
 pub mod keyword;
-mod lexer;
+pub mod lexer;
 mod parser;
 
 pub fn tokenize(src: &str) -> self::lexer::Lexer {

@@ -189,6 +189,9 @@ mod tests {
         fn define_label(&mut self, label: String) {
             self.0.push(TestOperation::Label(label))
         }
+
+        fn define_macro(&mut self, _name: String, _tokens: Vec<Token<String>>) {}
+        fn invoke_macro(&mut self, _name: String) {}
     }
 
     #[test]
