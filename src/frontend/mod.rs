@@ -186,7 +186,12 @@ mod tests {
         TestFixture::new(&log)
             .given(|f| f.fs.add_file(filename, contents))
             .when(|mut session| session.include_source_file(filename.to_string()));
-        assert_eq!(*log.borrow(), [TestEvent::AnalyzeTokens([Token::Command(Command::Nop)].to_vec())]);
+        assert_eq!(
+            *log.borrow(),
+            [
+                TestEvent::AnalyzeTokens([Token::Command(Command::Nop)].to_vec())
+            ]
+        );
     }
 
     #[test]
@@ -267,7 +272,9 @@ mod tests {
             I: Iterator<Item = Token<String>>,
             OR: OperationReceiver,
         {
-            self.log.borrow_mut().push(TestEvent::AnalyzeTokens(tokens.collect()))
+            self.log
+                .borrow_mut()
+                .push(TestEvent::AnalyzeTokens(tokens.collect()))
         }
     }
 

@@ -19,6 +19,7 @@ where
 enum Context<S> {
     Block,
     Instruction(syntax::Token<S>, Vec<SynExpr<syntax::Token<S>>>),
+    MacroDef(syntax::Token<S>, Vec<syntax::Token<S>>),
 }
 
 impl<'actions, 'session, OR> SemanticActions<'actions, 'session, OR>
@@ -60,9 +61,10 @@ where
 
     fn enter_macro_definition(
         &mut self,
-        _label: Self::Terminal,
+        name: Self::Terminal,
     ) -> &mut Self::TerminalSequenceContext {
-        unimplemented!()
+        self.contexts.push(Context::MacroDef(name, vec![]));
+        self
     }
 
     fn enter_macro_invocation(
@@ -137,12 +139,20 @@ where
 {
     type Terminal = Token<String>;
 
-    fn push_terminal(&mut self, _terminal: Self::Terminal) {
-        unimplemented!()
+    fn push_terminal(&mut self, terminal: Self::Terminal) {
+        match self.contexts.last_mut() {
+            Some(&mut Context::MacroDef(_, ref mut tokens)) => tokens.push(terminal),
+            _ => panic!(),
+        }
     }
 
     fn exit_terminal_sequence(&mut self) {
-        unimplemented!()
+        match self.contexts.pop() {
+            Some(Context::MacroDef(Token::Label(name), tokens)) => {
+                self.session.define_macro(name, tokens)
+            }
+            _ => panic!(),
+        }
     }
 }
 
@@ -159,7 +169,7 @@ fn reduce_include<S>(mut arguments: Vec<SynExpr<Token<S>>>) -> S {
 mod tests {
     use super::*;
 
-    use frontend::syntax::{BlockContext, CommandContext};
+    use frontend::syntax::{BlockContext, CommandContext, TerminalSequenceContext, keyword::Operand};
     use ir;
 
     struct TestOperationReceiver(Vec<TestOperation>);
@@ -172,6 +182,7 @@ mod tests {
 
     #[derive(Debug, PartialEq)]
     enum TestOperation {
+        DefineMacro(String, Vec<Token<String>>),
         Include(String),
         Instruction(ir::Instruction),
         Label(String),
@@ -190,7 +201,10 @@ mod tests {
             self.0.push(TestOperation::Label(label))
         }
 
-        fn define_macro(&mut self, _name: String, _tokens: Vec<Token<String>>) {}
+        fn define_macro(&mut self, name: String, tokens: Vec<Token<String>>) {
+            self.0.push(TestOperation::DefineMacro(name, tokens))
+        }
+
         fn invoke_macro(&mut self, _name: String) {}
     }
 
@@ -213,6 +227,26 @@ mod tests {
             actions.add_label(Token::Label(label.to_string()))
         });
         assert_eq!(actions, [TestOperation::Label(label.to_string())])
+    }
+
+    #[test]
+    fn define_macro() {
+        let name = "my_macro";
+        let tokens = vec![
+            Token::Command(Command::Xor),
+            Token::Atom(Atom::Operand(Operand::A)),
+        ];
+        let actions = collect_semantic_actions(|mut actions| {
+            let token_seq_context = actions.enter_macro_definition(Token::Label(name.to_string()));
+            for token in tokens.clone() {
+                token_seq_context.push_terminal(token)
+            }
+            token_seq_context.exit_terminal_sequence()
+        });
+        assert_eq!(
+            actions,
+            [TestOperation::DefineMacro(name.to_string(), tokens)]
+        )
     }
 
     fn collect_semantic_actions<F>(f: F) -> Vec<TestOperation>
