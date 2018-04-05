@@ -20,6 +20,7 @@ enum Context<S> {
     Block,
     Instruction(syntax::Token<S>, Vec<SynExpr<syntax::Token<S>>>),
     MacroDef(syntax::Token<S>, Vec<syntax::Token<S>>),
+    MacroInvocation(syntax::Token<S>, Vec<Vec<syntax::Token<S>>>),
 }
 
 impl<'actions, 'session, OR> SemanticActions<'actions, 'session, OR>
@@ -69,9 +70,10 @@ where
 
     fn enter_macro_invocation(
         &mut self,
-        _name: Self::Terminal,
+        name: Self::Terminal,
     ) -> &mut Self::MacroInvocationContext {
-        unimplemented!()
+        self.contexts.push(Context::MacroInvocation(name, vec![]));
+        self
     }
 }
 
@@ -125,10 +127,21 @@ where
     type TerminalSequenceContext = Self;
 
     fn enter_macro_argument(&mut self) -> &mut Self::TerminalSequenceContext {
+        match self.contexts.last_mut() {
+            Some(&mut Context::MacroInvocation(_, ref mut args)) => args.push(vec![]),
+            _ => panic!(),
+        }
         self
     }
 
-    fn exit_macro_invocation(&mut self) {}
+    fn exit_macro_invocation(&mut self) {
+        match self.contexts.pop() {
+            Some(Context::MacroInvocation(Token::Atom(Atom::Ident(name)), _args)) => {
+                self.session.invoke_macro(name)
+            }
+            _ => panic!(),
+        }
+    }
 }
 
 impl<'actions, 'session, OR> syntax::TerminalSequenceContext
@@ -142,6 +155,9 @@ where
     fn push_terminal(&mut self, terminal: Self::Terminal) {
         match self.contexts.last_mut() {
             Some(&mut Context::MacroDef(_, ref mut tokens)) => tokens.push(terminal),
+            Some(&mut Context::MacroInvocation(_, ref mut args)) => {
+                args.last_mut().unwrap().push(terminal)
+            }
             _ => panic!(),
         }
     }
@@ -169,7 +185,8 @@ fn reduce_include<S>(mut arguments: Vec<SynExpr<Token<S>>>) -> S {
 mod tests {
     use super::*;
 
-    use frontend::syntax::{BlockContext, CommandContext, TerminalSequenceContext, keyword::Operand};
+    use frontend::syntax::{BlockContext, CommandContext, MacroInvocationContext,
+                           TerminalSequenceContext, keyword::Operand};
     use ir;
 
     struct TestOperationReceiver(Vec<TestOperation>);
@@ -185,6 +202,7 @@ mod tests {
         DefineMacro(String, Vec<Token<String>>),
         Include(String),
         Instruction(ir::Instruction),
+        InvokeMacro(String, Vec<Vec<Token<String>>>),
         Label(String),
     }
 
@@ -205,7 +223,9 @@ mod tests {
             self.0.push(TestOperation::DefineMacro(name, tokens))
         }
 
-        fn invoke_macro(&mut self, _name: String) {}
+        fn invoke_macro(&mut self, name: String) {
+            self.0.push(TestOperation::InvokeMacro(name, Vec::new()))
+        }
     }
 
     #[test]
@@ -246,6 +266,41 @@ mod tests {
         assert_eq!(
             actions,
             [TestOperation::DefineMacro(name.to_string(), tokens)]
+        )
+    }
+
+    #[test]
+    fn invoke_nullary_macro() {
+        let name = "my_macro";
+        let actions = collect_semantic_actions(|mut actions| {
+            let invocation =
+                actions.enter_macro_invocation(Token::Atom(Atom::Ident(name.to_string())));
+            invocation.exit_macro_invocation()
+        });
+        assert_eq!(
+            actions,
+            [TestOperation::InvokeMacro(name.to_string(), Vec::new())]
+        )
+    }
+
+    #[ignore]
+    #[test]
+    fn invoke_unary_macro() {
+        let name = "my_macro";
+        let arg_token = Token::Atom(Atom::Operand(Operand::A));
+        let actions = collect_semantic_actions(|mut actions| {
+            let invocation =
+                actions.enter_macro_invocation(Token::Atom(Atom::Ident(name.to_string())));
+            {
+                let arg = invocation.enter_macro_argument();
+                arg.push_terminal(arg_token.clone());
+                arg.exit_terminal_sequence()
+            }
+            invocation.exit_macro_invocation()
+        });
+        assert_eq!(
+            actions,
+            [TestOperation::InvokeMacro(name.to_string(), vec![vec![arg_token]])]
         )
     }
 
