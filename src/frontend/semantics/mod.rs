@@ -1,19 +1,15 @@
 use frontend::{Atom, OperationReceiver, StrExprFactory};
 use frontend::syntax::{self, SynExpr, Token, keyword::Command};
 
-use std::marker::PhantomData;
-
 mod instruction;
 
-pub struct SemanticActions<'actions, 'session, OR>
+pub struct SemanticActions<'session, OR>
 where
-    'session: 'actions,
     OR: 'session + OperationReceiver,
 {
     session: &'session mut OR,
     contexts: Vec<Context<String>>,
     expr_factory: StrExprFactory,
-    _phantom: PhantomData<&'actions ()>,
 }
 
 enum Context<S> {
@@ -23,40 +19,36 @@ enum Context<S> {
     MacroInvocation(syntax::Token<S>, Vec<Vec<syntax::Token<S>>>),
 }
 
-impl<'actions, 'session, OR> SemanticActions<'actions, 'session, OR>
+impl<'session, OR> SemanticActions<'session, OR>
 where
-    'session: 'actions,
     OR: 'session + OperationReceiver,
 {
-    pub fn new(session: &'session mut OR) -> SemanticActions<'actions, 'session, OR> {
+    pub fn new(session: &'session mut OR) -> SemanticActions<'session, OR> {
         SemanticActions {
             session,
             contexts: vec![Context::Block],
             expr_factory: StrExprFactory::new(),
-            _phantom: PhantomData,
         }
     }
 }
 
-pub struct CommandActions<'actions, 'session, OR>
+pub struct CommandActions<'session, OR>
 where
-    'session: 'actions,
     OR: 'session + OperationReceiver,
 {
     name: Token<String>,
     args: Vec<SynExpr<syntax::Token<String>>>,
-    enclosing_context: SemanticActions<'actions, 'session, OR>,
+    enclosing_context: SemanticActions<'session, OR>,
 }
 
-impl<'actions, 'session, OR> CommandActions<'actions, 'session, OR>
+impl<'session, OR> CommandActions<'session, OR>
 where
-    'session: 'actions,
     OR: 'session + OperationReceiver,
 {
     fn new(
         name: Token<String>,
-        enclosing_context: SemanticActions<'actions, 'session, OR>,
-    ) -> CommandActions<'actions, 'session, OR> {
+        enclosing_context: SemanticActions<'session, OR>,
+    ) -> CommandActions<'session, OR> {
         CommandActions {
             name,
             args: Vec::new(),
@@ -65,13 +57,12 @@ where
     }
 }
 
-impl<'actions, 'session, OR> syntax::CommandContext for CommandActions<'actions, 'session, OR>
+impl<'actions, 'session, OR> syntax::CommandContext for CommandActions<'session, OR>
 where
-    'session: 'actions,
     OR: 'session + OperationReceiver,
 {
     type Terminal = Token<String>;
-    type EnclosingContext = SemanticActions<'actions, 'session, OR>;
+    type EnclosingContext = SemanticActions<'session, OR>;
 
     fn add_argument(&mut self, expr: SynExpr<Self::Terminal>) {
         self.args.push(expr)
@@ -98,13 +89,12 @@ where
     }
 }
 
-impl<'actions, 'session, OR> syntax::BlockContext for SemanticActions<'actions, 'session, OR>
+impl<'session, OR> syntax::BlockContext for SemanticActions<'session, OR>
 where
-    'session: 'actions,
     OR: 'session + OperationReceiver,
 {
     type Terminal = Token<String>;
-    type CommandContext = CommandActions<'actions, 'session, OR>;
+    type CommandContext = CommandActions<'session, OR>;
     type MacroInvocationContext = Self;
     type TerminalSequenceContext = Self;
 
@@ -130,10 +120,8 @@ where
     }
 }
 
-impl<'actions, 'session, OR> syntax::MacroInvocationContext
-    for SemanticActions<'actions, 'session, OR>
+impl<'session, OR> syntax::MacroInvocationContext for SemanticActions<'session, OR>
 where
-    'session: 'actions,
     OR: 'session + OperationReceiver,
 {
     type Terminal = Token<String>;
@@ -156,10 +144,8 @@ where
     }
 }
 
-impl<'actions, 'session, OR> syntax::TerminalSequenceContext
-    for SemanticActions<'actions, 'session, OR>
+impl<'session, OR> syntax::TerminalSequenceContext for SemanticActions<'session, OR>
 where
-    'session: 'actions,
     OR: 'session + OperationReceiver,
 {
     type Terminal = Token<String>;
@@ -324,13 +310,7 @@ mod tests {
 
     fn collect_semantic_actions<F>(f: F) -> Vec<TestOperation>
     where
-        F: for<'actions, 'session: 'actions> FnOnce(
-            SemanticActions<
-                'actions,
-                'session,
-                TestOperationReceiver,
-            >,
-        ),
+        F: for<'session> FnOnce(SemanticActions<'session, TestOperationReceiver>),
     {
         let mut operations = TestOperationReceiver::new();
         f(SemanticActions::new(&mut operations));
