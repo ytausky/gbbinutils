@@ -1,4 +1,4 @@
 #[derive(Debug, PartialEq)]
 pub enum Error {
-    OperandCount(usize, usize),
+    OperandCount { actual: usize, expected: usize },
 }
