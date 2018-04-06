@@ -128,7 +128,7 @@ fn is_horizontal_whitespace(character: char) -> bool {
 }
 
 fn is_ident_continuation(character: char) -> bool {
-    character.is_alphanumeric() || character == '_'
+    character.is_alphanumeric() || character == '_' || character == '#'
 }
 
 fn is_hex_digit(character: char) -> bool {
@@ -281,6 +281,17 @@ mod tests {
             &[
                 Label("first_label".to_string()),
                 Atom(Ident("then_word".to_string())),
+            ],
+        )
+    }
+
+    #[test]
+    fn lex_label_and_ident_with_hash() {
+        assert_eq_tokens(
+            "first#label then#word",
+            &[
+                Label("first#label".to_string()),
+                Atom(Ident("then#word".to_string())),
             ],
         )
     }
