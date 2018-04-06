@@ -3,10 +3,7 @@ use frontend::syntax::{self, SynExpr, Token, keyword::Command};
 
 mod instruction;
 
-pub struct SemanticActions<'session, OR>
-where
-    OR: 'session + OperationReceiver,
-{
+pub struct SemanticActions<'session, OR: 'session> {
     session: &'session mut OR,
     contexts: Vec<Context<String>>,
     expr_factory: StrExprFactory,
@@ -19,10 +16,7 @@ enum Context<S> {
     MacroInvocation(syntax::Token<S>, Vec<Vec<syntax::Token<S>>>),
 }
 
-impl<'session, OR> SemanticActions<'session, OR>
-where
-    OR: 'session + OperationReceiver,
-{
+impl<'session, OR: 'session> SemanticActions<'session, OR> {
     pub fn new(session: &'session mut OR) -> SemanticActions<'session, OR> {
         SemanticActions {
             session,
@@ -32,19 +26,13 @@ where
     }
 }
 
-pub struct CommandActions<'session, OR>
-where
-    OR: 'session + OperationReceiver,
-{
+pub struct CommandActions<'session, OR: 'session> {
     name: Token<String>,
     args: Vec<SynExpr<syntax::Token<String>>>,
     enclosing_context: SemanticActions<'session, OR>,
 }
 
-impl<'session, OR> CommandActions<'session, OR>
-where
-    OR: 'session + OperationReceiver,
-{
+impl<'session, OR: 'session> CommandActions<'session, OR> {
     fn new(
         name: Token<String>,
         enclosing_context: SemanticActions<'session, OR>,
@@ -57,7 +45,7 @@ where
     }
 }
 
-impl<'actions, 'session, OR> syntax::CommandContext for CommandActions<'session, OR>
+impl<'session, OR> syntax::CommandContext for CommandActions<'session, OR>
 where
     OR: 'session + OperationReceiver,
 {
