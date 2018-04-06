@@ -7,14 +7,23 @@ mod codebase;
 mod semantics;
 mod syntax;
 
+use diagnostics::*;
 use ir::*;
 use self::syntax::*;
 
 pub fn analyze_file<S: ir::Section>(name: String, section: S) {
     let fs = StdFileSystem::new();
     let factory = SemanticTokenSeqAnalyzerFactory::new();
-    let mut session = Session::new(fs, factory, section);
+    let mut session = Session::new(fs, factory, section, DebugDiagnosticsListener {});
     session.include_source_file(name);
+}
+
+struct DebugDiagnosticsListener;
+
+impl DiagnosticsListener for DebugDiagnosticsListener {
+    fn emit_diagnostic(&mut self, diagnostic: Error) {
+        println!("Diagnostic: {:?}", diagnostic)
+    }
 }
 
 trait FileSystem {
@@ -118,20 +127,28 @@ pub trait OperationReceiver {
 
 use std::{collections::HashMap, rc::Rc};
 
-struct Session<FS, SAF, S> {
+struct Session<FS, SAF, S, DL> {
     fs: FS,
     analyzer_factory: SAF,
     section: S,
     macro_defs: HashMap<String, Rc<Vec<Token<String>>>>,
+    diagnostics: DL,
 }
 
-impl<FS: FileSystem, SAF: TokenSeqAnalyzerFactory, S: ir::Section> Session<FS, SAF, S> {
-    fn new(fs: FS, analyzer_factory: SAF, section: S) -> Session<FS, SAF, S> {
+impl<FS, SAF, S, DL> Session<FS, SAF, S, DL>
+where
+    FS: FileSystem,
+    SAF: TokenSeqAnalyzerFactory,
+    S: ir::Section,
+    DL: DiagnosticsListener,
+{
+    fn new(fs: FS, analyzer_factory: SAF, section: S, diagnostics: DL) -> Session<FS, SAF, S, DL> {
         Session {
             fs,
             analyzer_factory,
             section,
             macro_defs: HashMap::new(),
+            diagnostics,
         }
     }
 
@@ -141,11 +158,12 @@ impl<FS: FileSystem, SAF: TokenSeqAnalyzerFactory, S: ir::Section> Session<FS, S
     }
 }
 
-impl<FS, SAF, S> OperationReceiver for Session<FS, SAF, S>
+impl<FS, SAF, S, DL> OperationReceiver for Session<FS, SAF, S, DL>
 where
     FS: FileSystem,
     SAF: TokenSeqAnalyzerFactory,
     S: ir::Section,
+    DL: DiagnosticsListener,
 {
     fn include_source_file(&mut self, filename: String) {
         let src = self.fs.read_file(&filename);
@@ -166,9 +184,12 @@ where
     }
 
     fn invoke_macro(&mut self, name: String, _args: Vec<Vec<Token<String>>>) {
-        let rc = self.macro_defs.get(&name).unwrap().clone();
-        let tokens = rc.iter().cloned();
-        self.analyze_token_seq(tokens)
+        let macro_def = self.macro_defs.get(&name).cloned();
+        match macro_def {
+            Some(rc) => self.analyze_token_seq(rc.iter().cloned()),
+            None => self.diagnostics
+                .emit_diagnostic(Error::UndefinedMacro { name }),
+        }
     }
 }
 
@@ -222,6 +243,23 @@ mod tests {
             session.invoke_macro(name.to_string(), vec![])
         });
         assert_eq!(*log.borrow(), [TestEvent::AnalyzeTokens(tokens)]);
+    }
+
+    use diagnostics::Error;
+
+    #[test]
+    fn diagnose_undefined_macro() {
+        let name = "my_macro";
+        let log = TestLog::default();
+        TestFixture::new(&log).when(|mut session| session.invoke_macro(name.to_string(), vec![]));
+        assert_eq!(
+            *log.borrow(),
+            [
+                TestEvent::Diagnostic(Error::UndefinedMacro {
+                    name: name.to_string(),
+                })
+            ]
+        );
     }
 
     struct MockFileSystem<'a> {
@@ -292,6 +330,14 @@ mod tests {
         }
     }
 
+    impl<'a> DiagnosticsListener for Mock<'a> {
+        fn emit_diagnostic(&mut self, diagnostic: Error) {
+            self.log
+                .borrow_mut()
+                .push(TestEvent::Diagnostic(diagnostic))
+        }
+    }
+
     type TestLog = RefCell<Vec<TestEvent>>;
 
     #[derive(Debug, PartialEq)]
@@ -299,12 +345,14 @@ mod tests {
         AnalyzeTokens(Vec<Token<String>>),
         AddInstruction(Instruction),
         AddLabel(String),
+        Diagnostic(Error),
     }
 
     struct TestFixture<'a> {
         fs: MockFileSystem<'a>,
         analyzer_factory: Mock<'a>,
         section: Mock<'a>,
+        diagnostics: Mock<'a>,
     }
 
     impl<'a> TestFixture<'a> {
@@ -313,6 +361,7 @@ mod tests {
                 fs: MockFileSystem::new(),
                 analyzer_factory: Mock::new(log),
                 section: Mock::new(log),
+                diagnostics: Mock::new(log),
             }
         }
 
@@ -321,14 +370,21 @@ mod tests {
             self
         }
 
-        fn when<F: FnOnce(Session<MockFileSystem<'a>, Mock<'a>, Mock<'a>>)>(self, f: F) {
+        fn when<F: FnOnce(Session<MockFileSystem<'a>, Mock<'a>, Mock<'a>, Mock<'a>>)>(self, f: F) {
             f(Session::from(self))
         }
     }
 
-    impl<'a> From<TestFixture<'a>> for Session<MockFileSystem<'a>, Mock<'a>, Mock<'a>> {
-        fn from(fixture: TestFixture<'a>) -> Session<MockFileSystem<'a>, Mock<'a>, Mock<'a>> {
-            Session::new(fixture.fs, fixture.analyzer_factory, fixture.section)
+    impl<'a> From<TestFixture<'a>> for Session<MockFileSystem<'a>, Mock<'a>, Mock<'a>, Mock<'a>> {
+        fn from(
+            fixture: TestFixture<'a>,
+        ) -> Session<MockFileSystem<'a>, Mock<'a>, Mock<'a>, Mock<'a>> {
+            Session::new(
+                fixture.fs,
+                fixture.analyzer_factory,
+                fixture.section,
+                fixture.diagnostics,
+            )
         }
     }
 }
