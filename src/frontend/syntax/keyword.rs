@@ -1,6 +1,7 @@
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Command {
     And,
+    Charmap,
     Cp,
     Db,
     Dec,
