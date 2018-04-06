@@ -18,7 +18,6 @@ where
 
 enum Context<S> {
     Block,
-    Instruction(syntax::Token<S>, Vec<SynExpr<syntax::Token<S>>>),
     MacroArg(Vec<Token<S>>),
     MacroDef(syntax::Token<S>, Vec<syntax::Token<S>>),
     MacroInvocation(syntax::Token<S>, Vec<Vec<syntax::Token<S>>>),
@@ -39,13 +38,73 @@ where
     }
 }
 
+pub struct CommandActions<'actions, 'session, OR>
+where
+    'session: 'actions,
+    OR: 'session + OperationReceiver,
+{
+    name: Token<String>,
+    args: Vec<SynExpr<syntax::Token<String>>>,
+    enclosing_context: SemanticActions<'actions, 'session, OR>,
+}
+
+impl<'actions, 'session, OR> CommandActions<'actions, 'session, OR>
+where
+    'session: 'actions,
+    OR: 'session + OperationReceiver,
+{
+    fn new(
+        name: Token<String>,
+        enclosing_context: SemanticActions<'actions, 'session, OR>,
+    ) -> CommandActions<'actions, 'session, OR> {
+        CommandActions {
+            name,
+            args: Vec::new(),
+            enclosing_context,
+        }
+    }
+}
+
+impl<'actions, 'session, OR> syntax::CommandContext for CommandActions<'actions, 'session, OR>
+where
+    'session: 'actions,
+    OR: 'session + OperationReceiver,
+{
+    type Terminal = Token<String>;
+    type EnclosingContext = SemanticActions<'actions, 'session, OR>;
+
+    fn add_argument(&mut self, expr: SynExpr<Self::Terminal>) {
+        self.args.push(expr)
+    }
+
+    fn exit_command(mut self) -> Self::EnclosingContext {
+        match self.name {
+            Token::Command(Command::Include) => self.enclosing_context
+                .session
+                .include_source_file(reduce_include(self.args)),
+            Token::Command(command) => {
+                let mut analyzer = self::instruction::CommandAnalyzer::new(
+                    &mut self.enclosing_context.expr_factory,
+                );
+                self.enclosing_context.session.emit_instruction(
+                    analyzer
+                        .analyze_instruction(command, self.args.into_iter())
+                        .unwrap(),
+                )
+            }
+            _ => panic!(),
+        }
+        self.enclosing_context
+    }
+}
+
 impl<'actions, 'session, OR> syntax::BlockContext for SemanticActions<'actions, 'session, OR>
 where
     'session: 'actions,
     OR: 'session + OperationReceiver,
 {
     type Terminal = Token<String>;
-    type CommandContext = Self;
+    type CommandContext = CommandActions<'actions, 'session, OR>;
     type MacroInvocationContext = Self;
     type TerminalSequenceContext = Self;
 
@@ -56,9 +115,8 @@ where
         }
     }
 
-    fn enter_command(mut self, name: Self::Terminal) -> Self::CommandContext {
-        self.contexts.push(Context::Instruction(name, vec![]));
-        self
+    fn enter_command(self, name: Self::Terminal) -> Self::CommandContext {
+        CommandActions::new(name, self)
     }
 
     fn enter_macro_definition(mut self, name: Self::Terminal) -> Self::TerminalSequenceContext {
@@ -68,48 +126,6 @@ where
 
     fn enter_macro_invocation(mut self, name: Self::Terminal) -> Self::MacroInvocationContext {
         self.contexts.push(Context::MacroInvocation(name, vec![]));
-        self
-    }
-}
-
-impl<'actions, 'session, OR> syntax::CommandContext for SemanticActions<'actions, 'session, OR>
-where
-    'session: 'actions,
-    OR: 'session + OperationReceiver,
-{
-    type Terminal = Token<String>;
-    type EnclosingContext = Self;
-
-    fn add_argument(&mut self, expr: SynExpr<Self::Terminal>) {
-        match self.contexts.last_mut() {
-            Some(&mut Context::Instruction(_, ref mut args)) => args.push(expr),
-            _ => panic!(),
-        }
-    }
-
-    fn exit_command(mut self) -> Self::EnclosingContext {
-        if let Some(Context::Instruction(name, args)) = self.contexts.pop() {
-            match name {
-                Token::Command(Command::Include) => {
-                    self.session.include_source_file(reduce_include(args))
-                }
-                Token::Command(command) => {
-                    let mut analyzer =
-                        self::instruction::CommandAnalyzer::new(&mut self.expr_factory);
-                    self.session.emit_instruction(
-                        analyzer
-                            .analyze_instruction(command, args.into_iter())
-                            .unwrap(),
-                    )
-                }
-                Token::Atom(Atom::Ident(ident)) => {
-                    println!("Probably macro invocation: {:?} {:?}", ident, args)
-                }
-                _ => panic!(),
-            }
-        } else {
-            panic!()
-        }
         self
     }
 }
