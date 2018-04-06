@@ -129,7 +129,7 @@ where
             &Some(Comma),
             follows_line,
             |p, c| {
-                let mut arg_context = c.enter_macro_argument();
+                let mut arg_context = c.enter_macro_arg();
                 let mut next_token = p.lookahead();
                 while next_token != Some(Comma) && !follows_line(&next_token) {
                     arg_context.push_terminal(p.bump());
@@ -248,7 +248,6 @@ mod tests {
         type CommandContext = Self;
         type MacroDefContext = Self;
         type MacroInvocationContext = Self;
-        type TerminalSequenceContext = Self;
 
         fn add_label(&mut self, label: Self::Terminal) {
             self.actions.push(Action::AddLabel(label))
@@ -288,9 +287,9 @@ mod tests {
     impl<'a> syntax::MacroInvocationContext for &'a mut TestContext {
         type Terminal = TestToken;
         type EnclosingContext = Self;
-        type TerminalSequenceContext = Self;
+        type MacroArgContext = Self;
 
-        fn enter_macro_argument(self) -> Self::TerminalSequenceContext {
+        fn enter_macro_arg(self) -> Self::MacroArgContext {
             self.actions.push(Action::EnterMacroArg);
             self.token_seq_kind = Some(TokenSeqKind::MacroArg);
             self

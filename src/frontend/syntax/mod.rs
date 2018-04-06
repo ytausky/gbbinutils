@@ -85,10 +85,6 @@ where
         Terminal = Self::Terminal,
         EnclosingContext = Self,
     >;
-    type TerminalSequenceContext: TerminalSequenceContext<
-        Terminal = Self::Terminal,
-        EnclosingContext = Self,
-    >;
     fn add_label(&mut self, label: Self::Terminal);
     fn enter_command(self, name: Self::Terminal) -> Self::CommandContext;
     fn enter_macro_def(self, name: Self::Terminal) -> Self::MacroDefContext;
@@ -108,11 +104,11 @@ where
 {
     type Terminal: Terminal;
     type EnclosingContext;
-    type TerminalSequenceContext: TerminalSequenceContext<
+    type MacroArgContext: TerminalSequenceContext<
         Terminal = Self::Terminal,
         EnclosingContext = Self,
     >;
-    fn enter_macro_argument(self) -> Self::TerminalSequenceContext;
+    fn enter_macro_arg(self) -> Self::MacroArgContext;
     fn exit_macro_invocation(self) -> Self::EnclosingContext;
 }
 

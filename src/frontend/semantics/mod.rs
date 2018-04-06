@@ -5,21 +5,13 @@ mod instruction;
 
 pub struct SemanticActions<'session, OR: 'session> {
     session: &'session mut OR,
-    contexts: Vec<Context<String>>,
     expr_factory: StrExprFactory,
-}
-
-enum Context<S> {
-    Block,
-    MacroArg(Vec<Token<S>>),
-    MacroInvocation(syntax::Token<S>, Vec<Vec<syntax::Token<S>>>),
 }
 
 impl<'session, OR: 'session> SemanticActions<'session, OR> {
     pub fn new(session: &'session mut OR) -> SemanticActions<'session, OR> {
         SemanticActions {
             session,
-            contexts: vec![Context::Block],
             expr_factory: StrExprFactory::new(),
         }
     }
@@ -32,8 +24,7 @@ where
     type Terminal = Token<String>;
     type CommandContext = CommandActions<'session, OR>;
     type MacroDefContext = MacroDefActions<'session, OR>;
-    type MacroInvocationContext = Self;
-    type TerminalSequenceContext = Self;
+    type MacroInvocationContext = MacroInvocationActions<'session, OR>;
 
     fn add_label(&mut self, label: Self::Terminal) {
         match label {
@@ -50,9 +41,8 @@ where
         MacroDefActions::new(name, self)
     }
 
-    fn enter_macro_invocation(mut self, name: Self::Terminal) -> Self::MacroInvocationContext {
-        self.contexts.push(Context::MacroInvocation(name, vec![]));
-        self
+    fn enter_macro_invocation(self, name: Self::Terminal) -> Self::MacroInvocationContext {
+        MacroInvocationActions::new(name, self)
     }
 }
 
@@ -151,53 +141,79 @@ where
     }
 }
 
-impl<'session, OR> syntax::MacroInvocationContext for SemanticActions<'session, OR>
-where
-    OR: 'session + OperationReceiver,
-{
-    type Terminal = Token<String>;
-    type EnclosingContext = Self;
-    type TerminalSequenceContext = Self;
+pub struct MacroInvocationActions<'session, OR: 'session> {
+    name: Token<String>,
+    args: Vec<Vec<Token<String>>>,
+    enclosing_context: SemanticActions<'session, OR>,
+}
 
-    fn enter_macro_argument(mut self) -> Self::TerminalSequenceContext {
-        self.contexts.push(Context::MacroArg(vec![]));
-        self
+impl<'session, OR: 'session> MacroInvocationActions<'session, OR> {
+    fn new(
+        name: Token<String>,
+        enclosing_context: SemanticActions<'session, OR>,
+    ) -> MacroInvocationActions<'session, OR> {
+        MacroInvocationActions {
+            name,
+            args: Vec::new(),
+            enclosing_context,
+        }
     }
 
-    fn exit_macro_invocation(mut self) -> Self::EnclosingContext {
-        match self.contexts.pop() {
-            Some(Context::MacroInvocation(Token::Atom(Atom::Ident(name)), args)) => {
-                self.session.invoke_macro(name, args)
-            }
-            _ => panic!(),
-        }
-        self
+    fn push_arg(&mut self, arg: Vec<Token<String>>) {
+        self.args.push(arg)
     }
 }
 
-impl<'session, OR> syntax::TerminalSequenceContext for SemanticActions<'session, OR>
+impl<'session, OR> syntax::MacroInvocationContext for MacroInvocationActions<'session, OR>
 where
     OR: 'session + OperationReceiver,
 {
     type Terminal = Token<String>;
-    type EnclosingContext = Self;
+    type EnclosingContext = SemanticActions<'session, OR>;
+    type MacroArgContext = MacroArgActions<'session, OR>;
 
-    fn push_terminal(&mut self, terminal: Self::Terminal) {
-        match self.contexts.last_mut() {
-            Some(&mut Context::MacroArg(ref mut tokens)) => tokens.push(terminal),
+    fn enter_macro_arg(self) -> Self::MacroArgContext {
+        MacroArgActions::new(self)
+    }
+
+    fn exit_macro_invocation(self) -> Self::EnclosingContext {
+        match self.name {
+            Token::Atom(Atom::Ident(name)) => {
+                self.enclosing_context.session.invoke_macro(name, self.args)
+            }
             _ => panic!(),
         }
+        self.enclosing_context
+    }
+}
+
+pub struct MacroArgActions<'session, OR: 'session> {
+    tokens: Vec<Token<String>>,
+    enclosing_context: MacroInvocationActions<'session, OR>,
+}
+
+impl<'session, OR: 'session> MacroArgActions<'session, OR> {
+    fn new(
+        enclosing_context: MacroInvocationActions<'session, OR>,
+    ) -> MacroArgActions<'session, OR> {
+        MacroArgActions {
+            tokens: Vec::new(),
+            enclosing_context,
+        }
+    }
+}
+
+impl<'session, OR> syntax::TerminalSequenceContext for MacroArgActions<'session, OR> {
+    type Terminal = Token<String>;
+    type EnclosingContext = MacroInvocationActions<'session, OR>;
+
+    fn push_terminal(&mut self, terminal: Self::Terminal) {
+        self.tokens.push(terminal)
     }
 
     fn exit_terminal_sequence(mut self) -> Self::EnclosingContext {
-        match self.contexts.pop() {
-            Some(Context::MacroArg(tokens)) => match self.contexts.last_mut() {
-                Some(&mut Context::MacroInvocation(_, ref mut args)) => args.push(tokens),
-                _ => panic!(),
-            },
-            _ => panic!(),
-        }
-        self
+        self.enclosing_context.push_arg(self.tokens);
+        self.enclosing_context
     }
 }
 
@@ -320,7 +336,7 @@ mod tests {
             let mut invocation =
                 actions.enter_macro_invocation(Token::Atom(Atom::Ident(name.to_string())));
             invocation = {
-                let mut arg = invocation.enter_macro_argument();
+                let mut arg = invocation.enter_macro_arg();
                 arg.push_terminal(arg_token.clone());
                 arg.exit_terminal_sequence()
             };
