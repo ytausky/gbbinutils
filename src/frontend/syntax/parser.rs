@@ -89,7 +89,7 @@ where
 
     fn parse_macro_definition(&mut self, label: I::Item, block_context: B) -> B {
         self.expect(&Some(Macro));
-        let mut macro_block_context = block_context.enter_macro_definition(label);
+        let mut macro_block_context = block_context.enter_macro_def(label);
         self.expect(&Some(Eol));
         while self.lookahead() != Some(Endm) {
             macro_block_context.push_terminal(self.bump())
@@ -246,6 +246,7 @@ mod tests {
     impl<'a> syntax::BlockContext for &'a mut TestContext {
         type Terminal = TestToken;
         type CommandContext = Self;
+        type MacroDefContext = Self;
         type MacroInvocationContext = Self;
         type TerminalSequenceContext = Self;
 
@@ -258,7 +259,7 @@ mod tests {
             self
         }
 
-        fn enter_macro_definition(self, label: Self::Terminal) -> Self::TerminalSequenceContext {
+        fn enter_macro_def(self, label: Self::Terminal) -> Self::MacroDefContext {
             self.actions.push(Action::EnterMacroDef(label));
             self.token_seq_kind = Some(TokenSeqKind::MacroDef);
             self
