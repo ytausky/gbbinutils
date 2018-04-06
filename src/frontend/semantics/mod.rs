@@ -56,23 +56,17 @@ where
         }
     }
 
-    fn enter_command(&mut self, name: Self::Terminal) -> &mut Self::CommandContext {
+    fn enter_command(mut self, name: Self::Terminal) -> Self::CommandContext {
         self.contexts.push(Context::Instruction(name, vec![]));
         self
     }
 
-    fn enter_macro_definition(
-        &mut self,
-        name: Self::Terminal,
-    ) -> &mut Self::TerminalSequenceContext {
+    fn enter_macro_definition(mut self, name: Self::Terminal) -> Self::TerminalSequenceContext {
         self.contexts.push(Context::MacroDef(name, vec![]));
         self
     }
 
-    fn enter_macro_invocation(
-        &mut self,
-        name: Self::Terminal,
-    ) -> &mut Self::MacroInvocationContext {
+    fn enter_macro_invocation(mut self, name: Self::Terminal) -> Self::MacroInvocationContext {
         self.contexts.push(Context::MacroInvocation(name, vec![]));
         self
     }
@@ -84,6 +78,7 @@ where
     OR: 'session + OperationReceiver,
 {
     type Terminal = Token<String>;
+    type EnclosingContext = Self;
 
     fn add_argument(&mut self, expr: SynExpr<Self::Terminal>) {
         match self.contexts.last_mut() {
@@ -92,7 +87,7 @@ where
         }
     }
 
-    fn exit_command(&mut self) {
+    fn exit_command(mut self) -> Self::EnclosingContext {
         if let Some(Context::Instruction(name, args)) = self.contexts.pop() {
             match name {
                 Token::Command(Command::Include) => {
@@ -115,6 +110,7 @@ where
         } else {
             panic!()
         }
+        self
     }
 }
 
@@ -125,20 +121,22 @@ where
     OR: 'session + OperationReceiver,
 {
     type Terminal = Token<String>;
+    type EnclosingContext = Self;
     type TerminalSequenceContext = Self;
 
-    fn enter_macro_argument(&mut self) -> &mut Self::TerminalSequenceContext {
+    fn enter_macro_argument(mut self) -> Self::TerminalSequenceContext {
         self.contexts.push(Context::MacroArg(vec![]));
         self
     }
 
-    fn exit_macro_invocation(&mut self) {
+    fn exit_macro_invocation(mut self) -> Self::EnclosingContext {
         match self.contexts.pop() {
             Some(Context::MacroInvocation(Token::Atom(Atom::Ident(name)), args)) => {
                 self.session.invoke_macro(name, args)
             }
             _ => panic!(),
         }
+        self
     }
 }
 
@@ -149,6 +147,7 @@ where
     OR: 'session + OperationReceiver,
 {
     type Terminal = Token<String>;
+    type EnclosingContext = Self;
 
     fn push_terminal(&mut self, terminal: Self::Terminal) {
         match self.contexts.last_mut() {
@@ -158,17 +157,18 @@ where
         }
     }
 
-    fn exit_terminal_sequence(&mut self) {
+    fn exit_terminal_sequence(mut self) -> Self::EnclosingContext {
         match self.contexts.pop() {
             Some(Context::MacroArg(tokens)) => match self.contexts.last_mut() {
                 Some(&mut Context::MacroInvocation(_, ref mut args)) => args.push(tokens),
                 _ => panic!(),
-            }
+            },
             Some(Context::MacroDef(Token::Label(name), tokens)) => {
                 self.session.define_macro(name, tokens)
             }
             _ => panic!(),
         }
+        self
     }
 }
 
@@ -231,11 +231,11 @@ mod tests {
     #[test]
     fn build_include_item() {
         let filename = "file.asm";
-        let actions = collect_semantic_actions(|mut actions| {
-            actions.enter_command(Token::Command(Command::Include));
+        let actions = collect_semantic_actions(|actions| {
+            let mut command = actions.enter_command(Token::Command(Command::Include));
             let expr = SynExpr::from(Token::Atom(Atom::String(filename.to_string())));
-            actions.add_argument(expr);
-            actions.exit_command();
+            command.add_argument(expr);
+            command.exit_command();
         });
         assert_eq!(actions, [TestOperation::Include(filename.to_string())])
     }
@@ -256,12 +256,13 @@ mod tests {
             Token::Command(Command::Xor),
             Token::Atom(Atom::Operand(Operand::A)),
         ];
-        let actions = collect_semantic_actions(|mut actions| {
-            let token_seq_context = actions.enter_macro_definition(Token::Label(name.to_string()));
+        let actions = collect_semantic_actions(|actions| {
+            let mut token_seq_context =
+                actions.enter_macro_definition(Token::Label(name.to_string()));
             for token in tokens.clone() {
                 token_seq_context.push_terminal(token)
             }
-            token_seq_context.exit_terminal_sequence()
+            token_seq_context.exit_terminal_sequence();
         });
         assert_eq!(
             actions,
@@ -272,10 +273,10 @@ mod tests {
     #[test]
     fn invoke_nullary_macro() {
         let name = "my_macro";
-        let actions = collect_semantic_actions(|mut actions| {
+        let actions = collect_semantic_actions(|actions| {
             let invocation =
                 actions.enter_macro_invocation(Token::Atom(Atom::Ident(name.to_string())));
-            invocation.exit_macro_invocation()
+            invocation.exit_macro_invocation();
         });
         assert_eq!(
             actions,
@@ -287,19 +288,21 @@ mod tests {
     fn invoke_unary_macro() {
         let name = "my_macro";
         let arg_token = Token::Atom(Atom::Operand(Operand::A));
-        let actions = collect_semantic_actions(|mut actions| {
-            let invocation =
+        let actions = collect_semantic_actions(|actions| {
+            let mut invocation =
                 actions.enter_macro_invocation(Token::Atom(Atom::Ident(name.to_string())));
-            {
-                let arg = invocation.enter_macro_argument();
+            invocation = {
+                let mut arg = invocation.enter_macro_argument();
                 arg.push_terminal(arg_token.clone());
                 arg.exit_terminal_sequence()
-            }
-            invocation.exit_macro_invocation()
+            };
+            invocation.exit_macro_invocation();
         });
         assert_eq!(
             actions,
-            [TestOperation::InvokeMacro(name.to_string(), vec![vec![arg_token]])]
+            [
+                TestOperation::InvokeMacro(name.to_string(), vec![vec![arg_token]])
+            ]
         )
     }
 

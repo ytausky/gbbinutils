@@ -6,12 +6,12 @@ pub fn tokenize(src: &str) -> self::lexer::Lexer {
     self::lexer::Lexer::new(src)
 }
 
-pub fn parse_token_seq<I, BC>(tokens: I, mut actions: BC)
+pub fn parse_token_seq<I, BC>(tokens: I, actions: BC)
 where
     I: Iterator<Item = BC::Terminal>,
     BC: BlockContext,
 {
-    self::parser::parse_src(tokens, &mut actions)
+    self::parser::parse_src(tokens, actions)
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -71,38 +71,52 @@ pub enum TerminalKind {
     OpeningBracket,
 }
 
-pub trait BlockContext {
+pub trait BlockContext
+where
+    Self: Sized,
+{
     type Terminal: Terminal;
-    type CommandContext: CommandContext<Terminal = Self::Terminal>;
-    type MacroInvocationContext: MacroInvocationContext<Terminal = Self::Terminal>;
-    type TerminalSequenceContext: TerminalSequenceContext<Terminal = Self::Terminal>;
+    type CommandContext: CommandContext<Terminal = Self::Terminal, EnclosingContext = Self>;
+    type MacroInvocationContext: MacroInvocationContext<
+        Terminal = Self::Terminal,
+        EnclosingContext = Self,
+    >;
+    type TerminalSequenceContext: TerminalSequenceContext<
+        Terminal = Self::Terminal,
+        EnclosingContext = Self,
+    >;
     fn add_label(&mut self, label: Self::Terminal);
-    fn enter_command(&mut self, name: Self::Terminal) -> &mut Self::CommandContext;
-    fn enter_macro_definition(
-        &mut self,
-        label: Self::Terminal,
-    ) -> &mut Self::TerminalSequenceContext;
-    fn enter_macro_invocation(&mut self, name: Self::Terminal)
-        -> &mut Self::MacroInvocationContext;
+    fn enter_command(self, name: Self::Terminal) -> Self::CommandContext;
+    fn enter_macro_definition(self, label: Self::Terminal) -> Self::TerminalSequenceContext;
+    fn enter_macro_invocation(self, name: Self::Terminal) -> Self::MacroInvocationContext;
 }
 
 pub trait CommandContext {
     type Terminal: Terminal;
+    type EnclosingContext;
     fn add_argument(&mut self, expr: SynExpr<Self::Terminal>);
-    fn exit_command(&mut self);
+    fn exit_command(self) -> Self::EnclosingContext;
 }
 
-pub trait MacroInvocationContext {
+pub trait MacroInvocationContext
+where
+    Self: Sized,
+{
     type Terminal: Terminal;
-    type TerminalSequenceContext: TerminalSequenceContext<Terminal = Self::Terminal>;
-    fn enter_macro_argument(&mut self) -> &mut Self::TerminalSequenceContext;
-    fn exit_macro_invocation(&mut self);
+    type EnclosingContext;
+    type TerminalSequenceContext: TerminalSequenceContext<
+        Terminal = Self::Terminal,
+        EnclosingContext = Self,
+    >;
+    fn enter_macro_argument(self) -> Self::TerminalSequenceContext;
+    fn exit_macro_invocation(self) -> Self::EnclosingContext;
 }
 
 pub trait TerminalSequenceContext {
     type Terminal: Terminal;
+    type EnclosingContext;
     fn push_terminal(&mut self, terminal: Self::Terminal);
-    fn exit_terminal_sequence(&mut self);
+    fn exit_terminal_sequence(self) -> Self::EnclosingContext;
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -13,7 +13,7 @@ fn follows_line(lookahead: &Lookahead) -> bool {
     }
 }
 
-pub fn parse_src<I, B>(tokens: I, block_context: &mut B)
+pub fn parse_src<I, B>(tokens: I, block_context: B)
 where
     I: Iterator<Item = B::Terminal>,
     B: BlockContext,
@@ -48,11 +48,16 @@ where
         self.bump()
     }
 
-    fn parse_block(&mut self, block_context: &mut B) {
-        self.parse_list(&Some(Eol), Option::is_none, |p| p.parse_line(block_context))
+    fn parse_block(&mut self, block_context: B) {
+        self.parse_list(
+            &Some(Eol),
+            Option::is_none,
+            |p, c| p.parse_line(c),
+            block_context,
+        );
     }
 
-    fn parse_line(&mut self, block_context: &mut B) {
+    fn parse_line(&mut self, block_context: B) -> B {
         if self.lookahead() == Some(Label) {
             self.parse_labeled_line(block_context)
         } else {
@@ -60,7 +65,7 @@ where
         }
     }
 
-    fn parse_labeled_line(&mut self, block_context: &mut B) {
+    fn parse_labeled_line(&mut self, mut block_context: B) -> B {
         let label = self.expect(&Some(Label));
         if self.lookahead() == Some(Colon) {
             self.bump();
@@ -73,18 +78,18 @@ where
         }
     }
 
-    fn parse_unlabeled_line(&mut self, block_context: &mut B) {
+    fn parse_unlabeled_line(&mut self, block_context: B) -> B {
         match self.lookahead() {
-            ref t if follows_line(t) => (),
+            ref t if follows_line(t) => block_context,
             Some(Command) => self.parse_command(block_context),
             Some(Atom) => self.parse_macro_invocation(block_context),
             _ => panic!(),
         }
     }
 
-    fn parse_macro_definition(&mut self, label: I::Item, block_context: &mut B) {
+    fn parse_macro_definition(&mut self, label: I::Item, block_context: B) -> B {
         self.expect(&Some(Macro));
-        let macro_block_context = block_context.enter_macro_definition(label);
+        let mut macro_block_context = block_context.enter_macro_definition(label);
         self.expect(&Some(Eol));
         while self.lookahead() != Some(Endm) {
             macro_block_context.push_terminal(self.bump())
@@ -93,57 +98,76 @@ where
         macro_block_context.exit_terminal_sequence()
     }
 
-    fn parse_command(&mut self, block_context: &mut B) {
+    fn parse_command(&mut self, block_context: B) -> B {
         let first_token = self.expect(&Some(Command));
-        let instruction_context = block_context.enter_command(first_token);
-        self.parse_argument_list(instruction_context);
+        let mut instruction_context = block_context.enter_command(first_token);
+        instruction_context = self.parse_argument_list(instruction_context);
         instruction_context.exit_command()
     }
 
-    fn parse_macro_invocation(&mut self, block_context: &mut B) {
+    fn parse_macro_invocation(&mut self, block_context: B) -> B {
         let macro_name = self.expect(&Some(Atom));
-        let invocation_context = block_context.enter_macro_invocation(macro_name);
-        self.parse_macro_arg_list(invocation_context);
+        let mut invocation_context = block_context.enter_macro_invocation(macro_name);
+        invocation_context = self.parse_macro_arg_list(invocation_context);
         invocation_context.exit_macro_invocation()
     }
 
-    fn parse_argument_list(&mut self, instruction_context: &mut B::CommandContext) {
-        self.parse_list(&Some(Comma), follows_line, |p| {
-            p.parse_argument(instruction_context)
-        })
+    fn parse_argument_list(&mut self, instruction_context: B::CommandContext) -> B::CommandContext {
+        self.parse_list(
+            &Some(Comma),
+            follows_line,
+            |p, c| p.parse_argument(c),
+            instruction_context,
+        )
     }
 
-    fn parse_macro_arg_list(&mut self, invocation_context: &mut B::MacroInvocationContext) {
-        self.parse_list(&Some(Comma), follows_line, |p| {
-            let arg_context = invocation_context.enter_macro_argument();
-            let mut next_token = p.lookahead();
-            while next_token != Some(Comma) && !follows_line(&next_token) {
-                arg_context.push_terminal(p.bump());
-                next_token = p.lookahead()
-            }
-            arg_context.exit_terminal_sequence()
-        })
+    fn parse_macro_arg_list(
+        &mut self,
+        invocation_context: B::MacroInvocationContext,
+    ) -> B::MacroInvocationContext {
+        self.parse_list(
+            &Some(Comma),
+            follows_line,
+            |p, c| {
+                let mut arg_context = c.enter_macro_argument();
+                let mut next_token = p.lookahead();
+                while next_token != Some(Comma) && !follows_line(&next_token) {
+                    arg_context.push_terminal(p.bump());
+                    next_token = p.lookahead()
+                }
+                arg_context.exit_terminal_sequence()
+            },
+            invocation_context,
+        )
     }
 
-    fn parse_list<F, P>(&mut self, delimiter: &Lookahead, mut follow: F, mut parser: P)
+    fn parse_list<F, P, C>(
+        &mut self,
+        delimiter: &Lookahead,
+        mut follow: F,
+        mut parser: P,
+        mut context: C,
+    ) -> C
     where
         F: FnMut(&Lookahead) -> bool,
-        P: FnMut(&mut Self),
+        P: FnMut(&mut Self, C) -> C,
     {
         let first_terminal = self.lookahead();
         if !follow(&first_terminal) {
-            parser(self);
+            context = parser(self, context);
             while self.lookahead() == *delimiter {
                 self.bump();
-                parser(self)
+                context = parser(self, context)
             }
-            assert!(follow(&self.lookahead()))
+            assert!(follow(&self.lookahead()));
         }
+        context
     }
 
-    fn parse_argument(&mut self, instruction_context: &mut B::CommandContext) {
+    fn parse_argument(&mut self, mut instruction_context: B::CommandContext) -> B::CommandContext {
         let expr = self.parse_expression();
-        instruction_context.add_argument(expr)
+        instruction_context.add_argument(expr);
+        instruction_context
     }
 
     fn parse_expression(&mut self) -> SynExpr<I::Item> {
@@ -219,7 +243,7 @@ mod tests {
         }
     }
 
-    impl syntax::BlockContext for TestContext {
+    impl<'a> syntax::BlockContext for &'a mut TestContext {
         type Terminal = TestToken;
         type CommandContext = Self;
         type MacroInvocationContext = Self;
@@ -229,70 +253,70 @@ mod tests {
             self.actions.push(Action::AddLabel(label))
         }
 
-        fn enter_command(&mut self, name: Self::Terminal) -> &mut Self::CommandContext {
+        fn enter_command(self, name: Self::Terminal) -> Self::CommandContext {
             self.actions.push(Action::EnterInstruction(name));
             self
         }
 
-        fn enter_macro_definition(
-            &mut self,
-            label: Self::Terminal,
-        ) -> &mut Self::TerminalSequenceContext {
+        fn enter_macro_definition(self, label: Self::Terminal) -> Self::TerminalSequenceContext {
             self.actions.push(Action::EnterMacroDef(label));
             self.token_seq_kind = Some(TokenSeqKind::MacroDef);
             self
         }
 
-        fn enter_macro_invocation(
-            &mut self,
-            name: Self::Terminal,
-        ) -> &mut Self::MacroInvocationContext {
+        fn enter_macro_invocation(self, name: Self::Terminal) -> Self::MacroInvocationContext {
             self.actions.push(Action::EnterMacroInvocation(name));
             self
         }
     }
 
-    impl syntax::CommandContext for TestContext {
+    impl<'a> syntax::CommandContext for &'a mut TestContext {
         type Terminal = TestToken;
+        type EnclosingContext = Self;
 
         fn add_argument(&mut self, expr: syntax::SynExpr<Self::Terminal>) {
             self.actions.push(Action::AddArgument(expr))
         }
 
-        fn exit_command(&mut self) {
-            self.actions.push(Action::ExitInstruction)
+        fn exit_command(self) -> Self::EnclosingContext {
+            self.actions.push(Action::ExitInstruction);
+            self
         }
     }
 
-    impl syntax::MacroInvocationContext for TestContext {
+    impl<'a> syntax::MacroInvocationContext for &'a mut TestContext {
         type Terminal = TestToken;
+        type EnclosingContext = Self;
         type TerminalSequenceContext = Self;
 
-        fn enter_macro_argument(&mut self) -> &mut Self::TerminalSequenceContext {
+        fn enter_macro_argument(self) -> Self::TerminalSequenceContext {
             self.actions.push(Action::EnterMacroArg);
             self.token_seq_kind = Some(TokenSeqKind::MacroArg);
             self
         }
 
-        fn exit_macro_invocation(&mut self) {
-            self.actions.push(Action::ExitMacroInvocation)
+        fn exit_macro_invocation(self) -> Self::EnclosingContext {
+            self.actions.push(Action::ExitMacroInvocation);
+            self
         }
     }
 
-    impl syntax::TerminalSequenceContext for TestContext {
+    impl<'a> syntax::TerminalSequenceContext for &'a mut TestContext {
         type Terminal = TestToken;
+        type EnclosingContext = Self;
 
         fn push_terminal(&mut self, terminal: Self::Terminal) {
             self.actions.push(Action::PushTerminal(terminal))
         }
 
-        fn exit_terminal_sequence(&mut self) {
+        fn exit_terminal_sequence(self) -> Self::EnclosingContext {
             self.actions
                 .push(match *self.token_seq_kind.as_ref().unwrap() {
                     TokenSeqKind::MacroArg => Action::ExitMacroArg,
                     TokenSeqKind::MacroDef => Action::ExitMacroDef,
                 });
-            self.token_seq_kind = None
+            self.token_seq_kind = None;
+            self
         }
     }
 
@@ -302,9 +326,9 @@ mod tests {
     }
 
     fn assert_eq_actions(tokens: &[TestToken], expected_actions: &[Action]) {
-        let mut parsing_constext = TestContext::new();
-        parse_src(tokens.iter().cloned(), &mut parsing_constext);
-        assert_eq!(parsing_constext.actions, expected_actions)
+        let mut parsing_context = TestContext::new();
+        parse_src(tokens.iter().cloned(), &mut parsing_context);
+        assert_eq!(parsing_context.actions, expected_actions)
     }
 
     #[test]
