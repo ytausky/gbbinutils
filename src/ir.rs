@@ -1,4 +1,4 @@
-pub trait Section {
+pub trait Object {
     fn add_instruction(&mut self, instruction: Instruction);
     fn add_label(&mut self, label: &str);
 }
@@ -79,15 +79,15 @@ pub enum Expr {
     Symbol(String),
 }
 
-pub struct DumpSection;
+pub struct OutputDumper;
 
-impl DumpSection {
-    pub fn new() -> DumpSection {
-        DumpSection {}
+impl OutputDumper {
+    pub fn new() -> OutputDumper {
+        OutputDumper {}
     }
 }
 
-impl Section for DumpSection {
+impl Object for OutputDumper {
     fn add_instruction(&mut self, instruction: Instruction) {
         println!("{:?}", instruction)
     }

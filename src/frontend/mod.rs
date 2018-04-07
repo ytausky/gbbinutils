@@ -11,7 +11,7 @@ use diagnostics::*;
 use ir::*;
 use self::syntax::*;
 
-pub fn analyze_file<S: ir::Section>(name: String, section: S) {
+pub fn analyze_file<S: ir::Object>(name: String, section: S) {
     let fs = StdFileSystem::new();
     let factory = SemanticTokenSeqAnalyzerFactory::new();
     let mut session = Session::new(fs, factory, section, DebugDiagnosticsListener {});
@@ -127,26 +127,26 @@ pub trait OperationReceiver {
 
 use std::{collections::HashMap, rc::Rc};
 
-struct Session<FS, SAF, S, DL> {
+struct Session<FS, SAF, O, DL> {
     fs: FS,
     analyzer_factory: SAF,
-    section: S,
+    object: O,
     macro_defs: HashMap<String, Rc<Vec<Token<String>>>>,
     diagnostics: DL,
 }
 
-impl<FS, SAF, S, DL> Session<FS, SAF, S, DL>
+impl<FS, SAF, O, DL> Session<FS, SAF, O, DL>
 where
     FS: FileSystem,
     SAF: TokenSeqAnalyzerFactory,
-    S: ir::Section,
+    O: ir::Object,
     DL: DiagnosticsListener,
 {
-    fn new(fs: FS, analyzer_factory: SAF, section: S, diagnostics: DL) -> Session<FS, SAF, S, DL> {
+    fn new(fs: FS, analyzer_factory: SAF, object: O, diagnostics: DL) -> Session<FS, SAF, O, DL> {
         Session {
             fs,
             analyzer_factory,
-            section,
+            object,
             macro_defs: HashMap::new(),
             diagnostics,
         }
@@ -158,11 +158,11 @@ where
     }
 }
 
-impl<FS, SAF, S, DL> OperationReceiver for Session<FS, SAF, S, DL>
+impl<FS, SAF, O, DL> OperationReceiver for Session<FS, SAF, O, DL>
 where
     FS: FileSystem,
     SAF: TokenSeqAnalyzerFactory,
-    S: ir::Section,
+    O: ir::Object,
     DL: DiagnosticsListener,
 {
     fn include_source_file(&mut self, filename: String) {
@@ -172,11 +172,11 @@ where
     }
 
     fn emit_instruction(&mut self, instruction: ir::Instruction) {
-        self.section.add_instruction(instruction)
+        self.object.add_instruction(instruction)
     }
 
     fn define_label(&mut self, label: String) {
-        self.section.add_label(&label)
+        self.object.add_label(&label)
     }
 
     fn define_macro(&mut self, name: String, tokens: Vec<Token<String>>) {
@@ -316,7 +316,7 @@ mod tests {
         }
     }
 
-    impl<'a> ir::Section for Mock<'a> {
+    impl<'a> ir::Object for Mock<'a> {
         fn add_instruction(&mut self, instruction: Instruction) {
             self.log
                 .borrow_mut()
@@ -351,7 +351,7 @@ mod tests {
     struct TestFixture<'a> {
         fs: MockFileSystem<'a>,
         analyzer_factory: Mock<'a>,
-        section: Mock<'a>,
+        object: Mock<'a>,
         diagnostics: Mock<'a>,
     }
 
@@ -360,7 +360,7 @@ mod tests {
             TestFixture {
                 fs: MockFileSystem::new(),
                 analyzer_factory: Mock::new(log),
-                section: Mock::new(log),
+                object: Mock::new(log),
                 diagnostics: Mock::new(log),
             }
         }
@@ -382,7 +382,7 @@ mod tests {
             Session::new(
                 fixture.fs,
                 fixture.analyzer_factory,
-                fixture.section,
+                fixture.object,
                 fixture.diagnostics,
             )
         }
