@@ -124,6 +124,6 @@ pub enum Condition {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
-    Literal(isize),
+    Literal(i32),
     Symbol(String),
 }

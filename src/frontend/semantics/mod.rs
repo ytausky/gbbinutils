@@ -302,11 +302,11 @@ mod tests {
         )
     }
 
-    fn mk_literal(n: isize) -> SynExpr<Token<String>> {
+    fn mk_literal(n: i32) -> SynExpr<Token<String>> {
         SynExpr::from(Token::Atom(Atom::Number(n)))
     }
 
-    fn mk_byte(byte: &isize) -> backend::Item {
+    fn mk_byte(byte: &i32) -> backend::Item {
         backend::Item::Byte(backend::Expr::Literal(*byte))
     }
 

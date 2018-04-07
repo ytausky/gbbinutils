@@ -32,7 +32,7 @@ pub enum Token<S> {
 pub enum Atom<S> {
     Ident(S),
     Operand(keyword::Operand),
-    Number(isize),
+    Number(i32),
     String(S),
 }
 

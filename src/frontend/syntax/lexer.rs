@@ -164,9 +164,9 @@ impl<'a> Iterator for Lexer<'a> {
                     mk_keyword_or(|x| Token::Atom(Atom::Ident(x.to_string())), lexeme)
                 }
                 ScannerTokenKind::Label => mk_keyword_or(|x| Token::Label(x.to_string()), lexeme),
-                ScannerTokenKind::Number => Token::Atom(Atom::Number(
-                    isize::from_str_radix(&lexeme[1..], 16).unwrap(),
-                )),
+                ScannerTokenKind::Number => {
+                    Token::Atom(Atom::Number(i32::from_str_radix(&lexeme[1..], 16).unwrap()))
+                }
                 ScannerTokenKind::OpeningBracket => Token::OpeningBracket,
                 ScannerTokenKind::String => {
                     Token::Atom(Atom::String(lexeme[1..(lexeme.len() - 1)].to_string()))
