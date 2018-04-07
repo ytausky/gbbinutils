@@ -1,6 +1,7 @@
 pub trait Object {
     fn add_instruction(&mut self, instruction: Instruction);
     fn add_label(&mut self, label: &str);
+    fn emit_byte(&mut self, byte: u8);
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -94,5 +95,9 @@ impl Object for OutputDumper {
 
     fn add_label(&mut self, label: &str) {
         println!("Define symbol: {}", label)
+    }
+
+    fn emit_byte(&mut self, byte: u8) {
+        println!("Emit byte: {:x}", byte)
     }
 }

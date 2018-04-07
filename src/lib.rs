@@ -7,8 +7,13 @@ pub fn analyze_file(name: &str) {
     frontend::analyze_file(name.to_string(), DumpingBackend::new());
 }
 
+use std::fs::File;
+use std::io::Write;
+
 pub fn assemble_rom(name: &str) {
-    let _rom = frontend::analyze_file(name.to_string(), backend::RomGenerator::new());
+    let rom = frontend::analyze_file(name.to_string(), backend::RomGenerator::new());
+    let mut file = File::create("my_rom.gb").unwrap();
+    file.write_all(rom.as_slice()).unwrap();
 }
 
 pub trait Backend {

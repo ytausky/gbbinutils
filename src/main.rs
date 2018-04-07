@@ -6,5 +6,5 @@ fn main() {
         println!("{}: error: no input files", args[0]);
         std::process::exit(1)
     }
-    gbas::analyze_file(&args[1]);
+    gbas::assemble_rom(&args[1]);
 }

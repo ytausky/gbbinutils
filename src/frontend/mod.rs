@@ -335,6 +335,10 @@ mod tests {
                 .borrow_mut()
                 .push(TestEvent::AddLabel(String::from(label)))
         }
+
+        fn emit_byte(&mut self, _byte: u8) {
+            unimplemented!()
+        }
     }
 
     impl<'a> DiagnosticsListener for Mock<'a> {
