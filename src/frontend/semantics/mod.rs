@@ -1,3 +1,4 @@
+use backend;
 use frontend::{Atom, Frontend, StrExprFactory};
 use frontend::syntax::{self, SynExpr, Token, keyword::Command};
 
@@ -79,9 +80,10 @@ impl<'a, F: Frontend + 'a> syntax::CommandContext for CommandActions<'a, F> {
                 let mut analyzer = self::instruction::CommandAnalyzer::new(
                     &mut self.enclosing_context.expr_factory,
                 );
-                self.enclosing_context.session.emit_instruction(
+                self.enclosing_context.session.emit_item(
                     analyzer
                         .analyze_instruction(command, self.args.into_iter())
+                        .map(backend::Item::Instruction)
                         .unwrap(),
                 )
             }
@@ -228,8 +230,8 @@ mod tests {
     #[derive(Debug, PartialEq)]
     enum TestOperation {
         DefineMacro(String, Vec<Token<String>>),
+        EmitItem(backend::Item),
         Include(String),
-        Instruction(backend::Instruction),
         InvokeMacro(String, Vec<Vec<Token<String>>>),
         Label(String),
     }
@@ -239,8 +241,8 @@ mod tests {
             self.0.push(TestOperation::Include(filename))
         }
 
-        fn emit_instruction(&mut self, instruction: backend::Instruction) {
-            self.0.push(TestOperation::Instruction(instruction))
+        fn emit_item(&mut self, item: backend::Item) {
+            self.0.push(TestOperation::EmitItem(item))
         }
 
         fn define_label(&mut self, label: String) {

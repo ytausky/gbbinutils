@@ -8,7 +8,7 @@ pub trait Object {
     fn emit_item(&mut self, item: Item);
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Item {
     Instruction(Instruction),
 }

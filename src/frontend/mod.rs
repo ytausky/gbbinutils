@@ -119,7 +119,7 @@ impl ExprFactory for StrExprFactory {
 
 pub trait Frontend {
     fn include_source_file(&mut self, filename: String);
-    fn emit_instruction(&mut self, instruction: Instruction);
+    fn emit_item(&mut self, item: Item);
     fn define_label(&mut self, label: String);
     fn define_macro(&mut self, name: String, tokens: Vec<Token<String>>);
     fn invoke_macro(&mut self, name: String, args: Vec<Vec<Token<String>>>);
@@ -175,8 +175,8 @@ where
         self.analyze_token_seq(tokens)
     }
 
-    fn emit_instruction(&mut self, instruction: Instruction) {
-        self.object.emit_item(Item::Instruction(instruction))
+    fn emit_item(&mut self, item: Item) {
+        self.object.emit_item(item)
     }
 
     fn define_label(&mut self, label: String) {
@@ -220,11 +220,11 @@ mod tests {
     }
 
     #[test]
-    fn emit_instruction() {
-        let instruction = Instruction::Nop;
+    fn emit_instruction_item() {
+        let item = Item::Instruction(Instruction::Nop);
         let log = TestLog::default();
-        TestFixture::new(&log).when(|mut session| session.emit_instruction(instruction.clone()));
-        assert_eq!(*log.borrow(), [TestEvent::EmitItem(Item::Instruction(instruction))]);
+        TestFixture::new(&log).when(|mut session| session.emit_item(item.clone()));
+        assert_eq!(*log.borrow(), [TestEvent::EmitItem(item)]);
     }
 
     #[test]
@@ -328,9 +328,7 @@ mod tests {
         }
 
         fn emit_item(&mut self, item: Item) {
-            self.log
-                .borrow_mut()
-                .push(TestEvent::EmitItem(item))
+            self.log.borrow_mut().push(TestEvent::EmitItem(item))
         }
     }
 
