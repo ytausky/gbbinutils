@@ -215,7 +215,7 @@ mod tests {
 
     use frontend::syntax::{BlockContext, CommandContext, MacroInvocationContext,
                            TerminalSeqContext, keyword::Operand};
-    use ir;
+    use backend;
 
     struct TestFrontend(Vec<TestOperation>);
 
@@ -229,7 +229,7 @@ mod tests {
     enum TestOperation {
         DefineMacro(String, Vec<Token<String>>),
         Include(String),
-        Instruction(ir::Instruction),
+        Instruction(backend::Instruction),
         InvokeMacro(String, Vec<Vec<Token<String>>>),
         Label(String),
     }
@@ -239,7 +239,7 @@ mod tests {
             self.0.push(TestOperation::Include(filename))
         }
 
-        fn emit_instruction(&mut self, instruction: ir::Instruction) {
+        fn emit_instruction(&mut self, instruction: backend::Instruction) {
             self.0.push(TestOperation::Instruction(instruction))
         }
 

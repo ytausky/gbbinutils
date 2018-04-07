@@ -1,6 +1,6 @@
 use diagnostics;
 
-use ir::*;
+use backend::*;
 use frontend::ExprFactory;
 use frontend::syntax::{keyword, Atom, SynExpr, Token};
 

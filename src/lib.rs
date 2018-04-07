@@ -1,7 +1,6 @@
 mod backend;
 mod diagnostics;
 mod frontend;
-mod ir;
 
 pub fn analyze_file(name: &str) {
     frontend::analyze_file(name.to_string(), DumpingBackend::new());
@@ -16,11 +15,6 @@ pub fn assemble_rom(name: &str) {
     file.write_all(rom.as_slice()).unwrap();
 }
 
-pub trait Backend {
-    type Object: ir::Object;
-    fn mk_object(&mut self) -> Self::Object;
-}
-
 struct DumpingBackend;
 
 impl DumpingBackend {
@@ -29,9 +23,31 @@ impl DumpingBackend {
     }
 }
 
-impl Backend for DumpingBackend {
-    type Object = ir::OutputDumper;
+impl backend::Backend for DumpingBackend {
+    type Object = OutputDumper;
     fn mk_object(&mut self) -> Self::Object {
-        ir::OutputDumper::new()
+        OutputDumper::new()
+    }
+}
+
+struct OutputDumper;
+
+impl OutputDumper {
+    pub fn new() -> OutputDumper {
+        OutputDumper {}
+    }
+}
+
+impl backend::Object for OutputDumper {
+    fn add_instruction(&mut self, instruction: backend::Instruction) {
+        println!("{:?}", instruction)
+    }
+
+    fn add_label(&mut self, label: &str) {
+        println!("Define symbol: {}", label)
+    }
+
+    fn emit_byte(&mut self, byte: u8) {
+        println!("Emit byte: {:x}", byte)
     }
 }

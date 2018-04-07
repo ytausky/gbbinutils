@@ -1,9 +1,9 @@
 #[cfg(test)]
-use ir::*;
+use backend::*;
 
 #[cfg(test)]
 fn generate_code<F: FnMut(u8)>(ast_node: Instruction, mut sink: F) {
-    use ir::Instruction::*;
+    use backend::Instruction::*;
     match ast_node {
         Halt => sink(0x76),
         Ld(LdKind::Simple(dest, src)) => sink(encode_ld_to_reg_from_reg(dest, src)),
@@ -23,7 +23,7 @@ fn encode_ld_to_reg_from_reg(dest: SimpleOperand, src: SimpleOperand) -> u8 {
 
 #[cfg(test)]
 fn encode_register(register: SimpleOperand) -> u8 {
-    use ir::SimpleOperand::*;
+    use backend::SimpleOperand::*;
     match register {
         A => 0b111,
         B => 0b000,
@@ -40,7 +40,7 @@ fn encode_register(register: SimpleOperand) -> u8 {
 mod tests {
     use super::*;
 
-    use ir::Instruction::*;
+    use backend::Instruction::*;
 
     fn test_instruction(instruction: Instruction, bytes: &[u8]) {
         let mut code = vec![];

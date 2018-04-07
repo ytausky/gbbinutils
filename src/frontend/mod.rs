@@ -1,5 +1,3 @@
-use ir;
-
 use std;
 
 #[cfg(test)]
@@ -7,9 +5,8 @@ mod codebase;
 mod semantics;
 mod syntax;
 
-use Backend;
 use diagnostics::*;
-use ir::*;
+use backend::*;
 use self::syntax::*;
 
 pub fn analyze_file<B: Backend>(name: String, mut backend: B) -> B::Object {
@@ -122,7 +119,7 @@ impl ExprFactory for StrExprFactory {
 
 pub trait Frontend {
     fn include_source_file(&mut self, filename: String);
-    fn emit_instruction(&mut self, instruction: ir::Instruction);
+    fn emit_instruction(&mut self, instruction: Instruction);
     fn define_label(&mut self, label: String);
     fn define_macro(&mut self, name: String, tokens: Vec<Token<String>>);
     fn invoke_macro(&mut self, name: String, args: Vec<Vec<Token<String>>>);
@@ -142,7 +139,7 @@ impl<FS, SAF, O, DL> Session<FS, SAF, O, DL>
 where
     FS: FileSystem,
     SAF: TokenSeqAnalyzerFactory,
-    O: ir::Object,
+    O: Object,
     DL: DiagnosticsListener,
 {
     fn new(fs: FS, analyzer_factory: SAF, object: O, diagnostics: DL) -> Session<FS, SAF, O, DL> {
@@ -169,7 +166,7 @@ impl<FS, SAF, O, DL> Frontend for Session<FS, SAF, O, DL>
 where
     FS: FileSystem,
     SAF: TokenSeqAnalyzerFactory,
-    O: ir::Object,
+    O: Object,
     DL: DiagnosticsListener,
 {
     fn include_source_file(&mut self, filename: String) {
@@ -178,7 +175,7 @@ where
         self.analyze_token_seq(tokens)
     }
 
-    fn emit_instruction(&mut self, instruction: ir::Instruction) {
+    fn emit_instruction(&mut self, instruction: Instruction) {
         self.object.add_instruction(instruction)
     }
 
@@ -323,7 +320,7 @@ mod tests {
         }
     }
 
-    impl<'a> ir::Object for Mock<'a> {
+    impl<'a> Object for Mock<'a> {
         fn add_instruction(&mut self, instruction: Instruction) {
             self.log
                 .borrow_mut()
