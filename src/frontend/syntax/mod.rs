@@ -77,10 +77,7 @@ where
 {
     type Terminal: Terminal;
     type CommandContext: CommandContext<Terminal = Self::Terminal, EnclosingContext = Self>;
-    type MacroDefContext: TerminalSequenceContext<
-        Terminal = Self::Terminal,
-        EnclosingContext = Self,
-    >;
+    type MacroDefContext: TerminalSeqContext<Terminal = Self::Terminal, EnclosingContext = Self>;
     type MacroInvocationContext: MacroInvocationContext<
         Terminal = Self::Terminal,
         EnclosingContext = Self,
@@ -104,19 +101,16 @@ where
 {
     type Terminal: Terminal;
     type EnclosingContext;
-    type MacroArgContext: TerminalSequenceContext<
-        Terminal = Self::Terminal,
-        EnclosingContext = Self,
-    >;
+    type MacroArgContext: TerminalSeqContext<Terminal = Self::Terminal, EnclosingContext = Self>;
     fn enter_macro_arg(self) -> Self::MacroArgContext;
     fn exit_macro_invocation(self) -> Self::EnclosingContext;
 }
 
-pub trait TerminalSequenceContext {
+pub trait TerminalSeqContext {
     type Terminal: Terminal;
     type EnclosingContext;
     fn push_terminal(&mut self, terminal: Self::Terminal);
-    fn exit_terminal_sequence(self) -> Self::EnclosingContext;
+    fn exit_terminal_seq(self) -> Self::EnclosingContext;
 }
 
 #[derive(Clone, Debug, PartialEq)]

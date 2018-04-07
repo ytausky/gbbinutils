@@ -110,7 +110,7 @@ impl<'a, F: Frontend + 'a> MacroDefActions<'a, F> {
     }
 }
 
-impl<'a, F: Frontend + 'a> syntax::TerminalSequenceContext for MacroDefActions<'a, F> {
+impl<'a, F: Frontend + 'a> syntax::TerminalSeqContext for MacroDefActions<'a, F> {
     type Terminal = Token<String>;
     type EnclosingContext = SemanticActions<'a, F>;
 
@@ -118,7 +118,7 @@ impl<'a, F: Frontend + 'a> syntax::TerminalSequenceContext for MacroDefActions<'
         self.tokens.push(terminal)
     }
 
-    fn exit_terminal_sequence(self) -> Self::EnclosingContext {
+    fn exit_terminal_seq(self) -> Self::EnclosingContext {
         match self.name {
             Token::Label(label) => self.enclosing_context
                 .session
@@ -186,7 +186,7 @@ impl<'a, F: 'a> MacroArgActions<'a, F> {
     }
 }
 
-impl<'a, F> syntax::TerminalSequenceContext for MacroArgActions<'a, F> {
+impl<'a, F> syntax::TerminalSeqContext for MacroArgActions<'a, F> {
     type Terminal = Token<String>;
     type EnclosingContext = MacroInvocationActions<'a, F>;
 
@@ -194,7 +194,7 @@ impl<'a, F> syntax::TerminalSequenceContext for MacroArgActions<'a, F> {
         self.tokens.push(terminal)
     }
 
-    fn exit_terminal_sequence(mut self) -> Self::EnclosingContext {
+    fn exit_terminal_seq(mut self) -> Self::EnclosingContext {
         self.enclosing_context.push_arg(self.tokens);
         self.enclosing_context
     }
@@ -214,7 +214,7 @@ mod tests {
     use super::*;
 
     use frontend::syntax::{BlockContext, CommandContext, MacroInvocationContext,
-                           TerminalSequenceContext, keyword::Operand};
+                           TerminalSeqContext, keyword::Operand};
     use ir;
 
     struct TestFrontend(Vec<TestOperation>);
@@ -289,7 +289,7 @@ mod tests {
             for token in tokens.clone() {
                 token_seq_context.push_terminal(token)
             }
-            token_seq_context.exit_terminal_sequence();
+            token_seq_context.exit_terminal_seq();
         });
         assert_eq!(
             actions,
@@ -321,7 +321,7 @@ mod tests {
             invocation = {
                 let mut arg = invocation.enter_macro_arg();
                 arg.push_terminal(arg_token.clone());
-                arg.exit_terminal_sequence()
+                arg.exit_terminal_seq()
             };
             invocation.exit_macro_invocation();
         });

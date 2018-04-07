@@ -95,7 +95,7 @@ where
             macro_block_context.push_terminal(self.bump())
         }
         self.expect(&Some(Endm));
-        macro_block_context.exit_terminal_sequence()
+        macro_block_context.exit_terminal_seq()
     }
 
     fn parse_command(&mut self, block_context: B) -> B {
@@ -135,7 +135,7 @@ where
                     arg_context.push_terminal(p.bump());
                     next_token = p.lookahead()
                 }
-                arg_context.exit_terminal_sequence()
+                arg_context.exit_terminal_seq()
             },
             invocation_context,
         )
@@ -301,7 +301,7 @@ mod tests {
         }
     }
 
-    impl<'a> syntax::TerminalSequenceContext for &'a mut TestContext {
+    impl<'a> syntax::TerminalSeqContext for &'a mut TestContext {
         type Terminal = TestToken;
         type EnclosingContext = Self;
 
@@ -309,7 +309,7 @@ mod tests {
             self.actions.push(Action::PushTerminal(terminal))
         }
 
-        fn exit_terminal_sequence(self) -> Self::EnclosingContext {
+        fn exit_terminal_seq(self) -> Self::EnclosingContext {
             self.actions
                 .push(match *self.token_seq_kind.as_ref().unwrap() {
                     TokenSeqKind::MacroArg => Action::ExitMacroArg,
