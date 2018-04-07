@@ -1,4 +1,4 @@
-mod codegen;
+mod backend;
 mod diagnostics;
 mod frontend;
 mod ir;
