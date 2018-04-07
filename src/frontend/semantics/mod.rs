@@ -73,6 +73,18 @@ impl<'a, F: Frontend + 'a> syntax::CommandContext for CommandActions<'a, F> {
 
     fn exit_command(mut self) -> Self::EnclosingContext {
         match self.name {
+            Token::Command(Command::Db) => for arg in self.args.into_iter() {
+                match arg {
+                    SynExpr::Atom(atom) => {
+                        use frontend::ExprFactory;
+                        let expr = self.enclosing_context.expr_factory.mk_atom(atom);
+                        self.enclosing_context
+                            .session
+                            .emit_item(backend::Item::Byte(expr))
+                    }
+                    _ => panic!(),
+                }
+            },
             Token::Command(Command::Include) => self.enclosing_context
                 .session
                 .include_source_file(reduce_include(self.args)),
@@ -268,6 +280,34 @@ mod tests {
             command.exit_command();
         });
         assert_eq!(actions, [TestOperation::Include(filename.to_string())])
+    }
+
+    #[test]
+    fn emit_byte_item() {
+        let bytes = [0x42, 0x78];
+        let actions = collect_semantic_actions(|actions| {
+            let mut command = actions.enter_command(Token::Command(Command::Db));
+            for &byte in bytes.iter() {
+                command.add_argument(mk_literal(byte))
+            }
+            command.exit_command();
+        });
+        assert_eq!(
+            actions,
+            bytes
+                .iter()
+                .map(mk_byte)
+                .map(TestOperation::EmitItem)
+                .collect::<Vec<_>>()
+        )
+    }
+
+    fn mk_literal(n: isize) -> SynExpr<Token<String>> {
+        SynExpr::from(Token::Atom(Atom::Number(n)))
+    }
+
+    fn mk_byte(byte: &isize) -> backend::Item {
+        backend::Item::Byte(backend::Expr::Literal(*byte))
     }
 
     #[test]

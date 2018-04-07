@@ -10,6 +10,7 @@ pub trait Object {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Item {
+    Byte(Expr),
     Instruction(Instruction),
 }
 
