@@ -11,10 +11,10 @@ use diagnostics::*;
 use ir::*;
 use self::syntax::*;
 
-pub fn analyze_file<S: ir::Object>(name: String, section: S) {
+pub fn analyze_file<O: ir::Object>(name: String, object: O) {
     let fs = StdFileSystem::new();
     let factory = SemanticTokenSeqAnalyzerFactory::new();
-    let mut session = Session::new(fs, factory, section, DebugDiagnosticsListener {});
+    let mut session = Session::new(fs, factory, object, DebugDiagnosticsListener {});
     session.include_source_file(name);
 }
 
