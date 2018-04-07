@@ -1,5 +1,22 @@
 mod codegen;
 
+pub struct RomGenerator;
+
+impl RomGenerator {
+    pub fn new() -> RomGenerator {
+        RomGenerator {}
+    }
+}
+
+use Backend;
+
+impl Backend for RomGenerator {
+    type Object = Rom;
+    fn mk_object(&mut self) -> Self::Object {
+        Rom::new()
+    }
+}
+
 pub struct Rom;
 
 impl Rom {

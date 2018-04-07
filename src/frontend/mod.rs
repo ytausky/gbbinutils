@@ -7,15 +7,18 @@ mod codebase;
 mod semantics;
 mod syntax;
 
+use Backend;
 use diagnostics::*;
 use ir::*;
 use self::syntax::*;
 
-pub fn analyze_file<O: ir::Object>(name: String, object: O) {
+pub fn analyze_file<B: Backend>(name: String, mut backend: B) -> B::Object {
     let fs = StdFileSystem::new();
     let factory = SemanticTokenSeqAnalyzerFactory::new();
+    let object = backend.mk_object();
     let mut session = Session::new(fs, factory, object, DebugDiagnosticsListener {});
     session.include_source_file(name);
+    session.into_object()
 }
 
 struct DebugDiagnosticsListener;
@@ -155,6 +158,10 @@ where
     fn analyze_token_seq<I: Iterator<Item = Token<String>>>(&mut self, tokens: I) {
         let mut analyzer = self.analyzer_factory.mk_token_seq_analyzer();
         analyzer.analyze(tokens, self)
+    }
+
+    fn into_object(self) -> O {
+        self.object
     }
 }
 
