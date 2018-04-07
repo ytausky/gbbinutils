@@ -176,7 +176,7 @@ where
     }
 
     fn emit_instruction(&mut self, instruction: Instruction) {
-        self.object.add_instruction(instruction)
+        self.object.emit_item(Item::Instruction(instruction))
     }
 
     fn define_label(&mut self, label: String) {
@@ -224,7 +224,7 @@ mod tests {
         let instruction = Instruction::Nop;
         let log = TestLog::default();
         TestFixture::new(&log).when(|mut session| session.emit_instruction(instruction.clone()));
-        assert_eq!(*log.borrow(), [TestEvent::AddInstruction(instruction)]);
+        assert_eq!(*log.borrow(), [TestEvent::EmitItem(Item::Instruction(instruction))]);
     }
 
     #[test]
@@ -321,20 +321,16 @@ mod tests {
     }
 
     impl<'a> Object for Mock<'a> {
-        fn add_instruction(&mut self, instruction: Instruction) {
-            self.log
-                .borrow_mut()
-                .push(TestEvent::AddInstruction(instruction))
-        }
-
         fn add_label(&mut self, label: &str) {
             self.log
                 .borrow_mut()
                 .push(TestEvent::AddLabel(String::from(label)))
         }
 
-        fn emit_byte(&mut self, _byte: u8) {
-            unimplemented!()
+        fn emit_item(&mut self, item: Item) {
+            self.log
+                .borrow_mut()
+                .push(TestEvent::EmitItem(item))
         }
     }
 
@@ -351,9 +347,9 @@ mod tests {
     #[derive(Debug, PartialEq)]
     enum TestEvent {
         AnalyzeTokens(Vec<Token<String>>),
-        AddInstruction(Instruction),
         AddLabel(String),
         Diagnostic(Error),
+        EmitItem(Item),
     }
 
     struct TestFixture<'a> {

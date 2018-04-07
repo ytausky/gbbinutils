@@ -39,15 +39,11 @@ impl OutputDumper {
 }
 
 impl backend::Object for OutputDumper {
-    fn add_instruction(&mut self, instruction: backend::Instruction) {
-        println!("{:?}", instruction)
-    }
-
     fn add_label(&mut self, label: &str) {
         println!("Define symbol: {}", label)
     }
 
-    fn emit_byte(&mut self, byte: u8) {
-        println!("Emit byte: {:x}", byte)
+    fn emit_item(&mut self, item: backend::Item) {
+        println!("Emit {:?}", item)
     }
 }

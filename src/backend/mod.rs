@@ -4,9 +4,13 @@ pub trait Backend {
 }
 
 pub trait Object {
-    fn add_instruction(&mut self, instruction: Instruction);
     fn add_label(&mut self, label: &str);
-    fn emit_byte(&mut self, byte: u8);
+    fn emit_item(&mut self, item: Item);
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Item {
+    Instruction(Instruction),
 }
 
 mod codegen;
@@ -28,14 +32,12 @@ impl Backend for RomGenerator {
 
 pub struct Rom {
     data: Vec<u8>,
-    counter: usize,
 }
 
 impl Rom {
     pub fn new() -> Rom {
         Rom {
             data: vec![0x00; 0x8000],
-            counter: 0x0000,
         }
     }
 
@@ -46,12 +48,7 @@ impl Rom {
 
 impl Object for Rom {
     fn add_label(&mut self, _label: &str) {}
-    fn add_instruction(&mut self, _instruction: Instruction) {}
-
-    fn emit_byte(&mut self, byte: u8) {
-        self.data[self.counter] = byte;
-        self.counter +=1;
-    }
+    fn emit_item(&mut self, _item: Item) {}
 }
 
 #[derive(Clone, Debug, PartialEq)]
