@@ -1,15 +1,15 @@
-use frontend::{Atom, OperationReceiver, StrExprFactory};
+use frontend::{Atom, Frontend, StrExprFactory};
 use frontend::syntax::{self, SynExpr, Token, keyword::Command};
 
 mod instruction;
 
-pub struct SemanticActions<'session, OR: 'session> {
-    session: &'session mut OR,
+pub struct SemanticActions<'session, F: 'session> {
+    session: &'session mut F,
     expr_factory: StrExprFactory,
 }
 
-impl<'session, OR: 'session> SemanticActions<'session, OR> {
-    pub fn new(session: &'session mut OR) -> SemanticActions<'session, OR> {
+impl<'session, F: 'session> SemanticActions<'session, F> {
+    pub fn new(session: &'session mut F) -> SemanticActions<'session, F> {
         SemanticActions {
             session,
             expr_factory: StrExprFactory::new(),
@@ -17,14 +17,14 @@ impl<'session, OR: 'session> SemanticActions<'session, OR> {
     }
 }
 
-impl<'session, OR> syntax::BlockContext for SemanticActions<'session, OR>
+impl<'session, F> syntax::BlockContext for SemanticActions<'session, F>
 where
-    OR: 'session + OperationReceiver,
+    F: 'session + Frontend,
 {
     type Terminal = Token<String>;
-    type CommandContext = CommandActions<'session, OR>;
-    type MacroDefContext = MacroDefActions<'session, OR>;
-    type MacroInvocationContext = MacroInvocationActions<'session, OR>;
+    type CommandContext = CommandActions<'session, F>;
+    type MacroDefContext = MacroDefActions<'session, F>;
+    type MacroInvocationContext = MacroInvocationActions<'session, F>;
 
     fn add_label(&mut self, label: Self::Terminal) {
         match label {
@@ -46,17 +46,17 @@ where
     }
 }
 
-pub struct CommandActions<'session, OR: 'session> {
+pub struct CommandActions<'session, F: 'session> {
     name: Token<String>,
     args: Vec<SynExpr<syntax::Token<String>>>,
-    enclosing_context: SemanticActions<'session, OR>,
+    enclosing_context: SemanticActions<'session, F>,
 }
 
-impl<'session, OR: 'session> CommandActions<'session, OR> {
+impl<'session, F: 'session> CommandActions<'session, F> {
     fn new(
         name: Token<String>,
-        enclosing_context: SemanticActions<'session, OR>,
-    ) -> CommandActions<'session, OR> {
+        enclosing_context: SemanticActions<'session, F>,
+    ) -> CommandActions<'session, F> {
         CommandActions {
             name,
             args: Vec::new(),
@@ -65,12 +65,12 @@ impl<'session, OR: 'session> CommandActions<'session, OR> {
     }
 }
 
-impl<'session, OR> syntax::CommandContext for CommandActions<'session, OR>
+impl<'session, F> syntax::CommandContext for CommandActions<'session, F>
 where
-    OR: 'session + OperationReceiver,
+    F: 'session + Frontend,
 {
     type Terminal = Token<String>;
-    type EnclosingContext = SemanticActions<'session, OR>;
+    type EnclosingContext = SemanticActions<'session, F>;
 
     fn add_argument(&mut self, expr: SynExpr<Self::Terminal>) {
         self.args.push(expr)
@@ -97,20 +97,20 @@ where
     }
 }
 
-pub struct MacroDefActions<'session, OR: 'session> {
+pub struct MacroDefActions<'session, F: 'session> {
     name: Token<String>,
     tokens: Vec<Token<String>>,
-    enclosing_context: SemanticActions<'session, OR>,
+    enclosing_context: SemanticActions<'session, F>,
 }
 
-impl<'session, OR> MacroDefActions<'session, OR>
+impl<'session, F> MacroDefActions<'session, F>
 where
-    OR: 'session + OperationReceiver,
+    F: 'session + Frontend,
 {
     fn new(
         name: Token<String>,
-        enclosing_context: SemanticActions<'session, OR>,
-    ) -> MacroDefActions<'session, OR> {
+        enclosing_context: SemanticActions<'session, F>,
+    ) -> MacroDefActions<'session, F> {
         MacroDefActions {
             name,
             tokens: Vec::new(),
@@ -119,12 +119,12 @@ where
     }
 }
 
-impl<'session, OR> syntax::TerminalSequenceContext for MacroDefActions<'session, OR>
+impl<'session, F> syntax::TerminalSequenceContext for MacroDefActions<'session, F>
 where
-    OR: 'session + OperationReceiver,
+    F: 'session + Frontend,
 {
     type Terminal = Token<String>;
-    type EnclosingContext = SemanticActions<'session, OR>;
+    type EnclosingContext = SemanticActions<'session, F>;
 
     fn push_terminal(&mut self, terminal: Self::Terminal) {
         self.tokens.push(terminal)
@@ -141,17 +141,17 @@ where
     }
 }
 
-pub struct MacroInvocationActions<'session, OR: 'session> {
+pub struct MacroInvocationActions<'session, F: 'session> {
     name: Token<String>,
     args: Vec<Vec<Token<String>>>,
-    enclosing_context: SemanticActions<'session, OR>,
+    enclosing_context: SemanticActions<'session, F>,
 }
 
-impl<'session, OR: 'session> MacroInvocationActions<'session, OR> {
+impl<'session, F: 'session> MacroInvocationActions<'session, F> {
     fn new(
         name: Token<String>,
-        enclosing_context: SemanticActions<'session, OR>,
-    ) -> MacroInvocationActions<'session, OR> {
+        enclosing_context: SemanticActions<'session, F>,
+    ) -> MacroInvocationActions<'session, F> {
         MacroInvocationActions {
             name,
             args: Vec::new(),
@@ -164,13 +164,13 @@ impl<'session, OR: 'session> MacroInvocationActions<'session, OR> {
     }
 }
 
-impl<'session, OR> syntax::MacroInvocationContext for MacroInvocationActions<'session, OR>
+impl<'session, F> syntax::MacroInvocationContext for MacroInvocationActions<'session, F>
 where
-    OR: 'session + OperationReceiver,
+    F: 'session + Frontend,
 {
     type Terminal = Token<String>;
-    type EnclosingContext = SemanticActions<'session, OR>;
-    type MacroArgContext = MacroArgActions<'session, OR>;
+    type EnclosingContext = SemanticActions<'session, F>;
+    type MacroArgContext = MacroArgActions<'session, F>;
 
     fn enter_macro_arg(self) -> Self::MacroArgContext {
         MacroArgActions::new(self)
@@ -187,15 +187,13 @@ where
     }
 }
 
-pub struct MacroArgActions<'session, OR: 'session> {
+pub struct MacroArgActions<'session, F: 'session> {
     tokens: Vec<Token<String>>,
-    enclosing_context: MacroInvocationActions<'session, OR>,
+    enclosing_context: MacroInvocationActions<'session, F>,
 }
 
-impl<'session, OR: 'session> MacroArgActions<'session, OR> {
-    fn new(
-        enclosing_context: MacroInvocationActions<'session, OR>,
-    ) -> MacroArgActions<'session, OR> {
+impl<'session, F: 'session> MacroArgActions<'session, F> {
+    fn new(enclosing_context: MacroInvocationActions<'session, F>) -> MacroArgActions<'session, F> {
         MacroArgActions {
             tokens: Vec::new(),
             enclosing_context,
@@ -203,9 +201,9 @@ impl<'session, OR: 'session> MacroArgActions<'session, OR> {
     }
 }
 
-impl<'session, OR> syntax::TerminalSequenceContext for MacroArgActions<'session, OR> {
+impl<'session, F> syntax::TerminalSequenceContext for MacroArgActions<'session, F> {
     type Terminal = Token<String>;
-    type EnclosingContext = MacroInvocationActions<'session, OR>;
+    type EnclosingContext = MacroInvocationActions<'session, F>;
 
     fn push_terminal(&mut self, terminal: Self::Terminal) {
         self.tokens.push(terminal)
@@ -234,11 +232,11 @@ mod tests {
                            TerminalSequenceContext, keyword::Operand};
     use ir;
 
-    struct TestOperationReceiver(Vec<TestOperation>);
+    struct TestFrontend(Vec<TestOperation>);
 
-    impl TestOperationReceiver {
-        fn new() -> TestOperationReceiver {
-            TestOperationReceiver(Vec::new())
+    impl TestFrontend {
+        fn new() -> TestFrontend {
+            TestFrontend(Vec::new())
         }
     }
 
@@ -251,7 +249,7 @@ mod tests {
         Label(String),
     }
 
-    impl OperationReceiver for TestOperationReceiver {
+    impl Frontend for TestFrontend {
         fn include_source_file(&mut self, filename: String) {
             self.0.push(TestOperation::Include(filename))
         }
@@ -352,9 +350,9 @@ mod tests {
 
     fn collect_semantic_actions<F>(f: F) -> Vec<TestOperation>
     where
-        F: for<'session> FnOnce(SemanticActions<'session, TestOperationReceiver>),
+        F: for<'session> FnOnce(SemanticActions<'session, TestFrontend>),
     {
-        let mut operations = TestOperationReceiver::new();
+        let mut operations = TestFrontend::new();
         f(SemanticActions::new(&mut operations));
         operations.0
     }

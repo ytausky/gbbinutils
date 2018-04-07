@@ -49,10 +49,10 @@ impl FileSystem for StdFileSystem {
 }
 
 trait TokenSeqAnalyzer {
-    fn analyze<I, OR>(&mut self, tokens: I, receiver: &mut OR)
+    fn analyze<I, F>(&mut self, tokens: I, frontend: &mut F)
     where
         I: Iterator<Item = Token<String>>,
-        OR: OperationReceiver;
+        F: Frontend;
 }
 
 struct SemanticTokenSeqAnalyzer;
@@ -64,12 +64,12 @@ impl SemanticTokenSeqAnalyzer {
 }
 
 impl TokenSeqAnalyzer for SemanticTokenSeqAnalyzer {
-    fn analyze<I, OR>(&mut self, tokens: I, receiver: &mut OR)
+    fn analyze<I, F>(&mut self, tokens: I, frontend: &mut F)
     where
         I: Iterator<Item = Token<String>>,
-        OR: OperationReceiver,
+        F: Frontend,
     {
-        let actions = semantics::SemanticActions::new(receiver);
+        let actions = semantics::SemanticActions::new(frontend);
         syntax::parse_token_seq(tokens, actions)
     }
 }
@@ -117,7 +117,7 @@ impl ExprFactory for StrExprFactory {
     }
 }
 
-pub trait OperationReceiver {
+pub trait Frontend {
     fn include_source_file(&mut self, filename: String);
     fn emit_instruction(&mut self, instruction: ir::Instruction);
     fn define_label(&mut self, label: String);
@@ -158,7 +158,7 @@ where
     }
 }
 
-impl<FS, SAF, O, DL> OperationReceiver for Session<FS, SAF, O, DL>
+impl<FS, SAF, O, DL> Frontend for Session<FS, SAF, O, DL>
 where
     FS: FileSystem,
     SAF: TokenSeqAnalyzerFactory,
@@ -305,10 +305,10 @@ mod tests {
     }
 
     impl<'a> TokenSeqAnalyzer for Mock<'a> {
-        fn analyze<I, OR>(&mut self, tokens: I, _receiver: &mut OR)
+        fn analyze<I, F>(&mut self, tokens: I, _frontend: &mut F)
         where
             I: Iterator<Item = Token<String>>,
-            OR: OperationReceiver,
+            F: Frontend,
         {
             self.log
                 .borrow_mut()
