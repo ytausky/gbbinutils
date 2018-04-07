@@ -3,13 +3,13 @@ use frontend::syntax::{self, SynExpr, Token, keyword::Command};
 
 mod instruction;
 
-pub struct SemanticActions<'session, F: 'session> {
-    session: &'session mut F,
+pub struct SemanticActions<'a, F: 'a> {
+    session: &'a mut F,
     expr_factory: StrExprFactory,
 }
 
-impl<'session, F: 'session> SemanticActions<'session, F> {
-    pub fn new(session: &'session mut F) -> SemanticActions<'session, F> {
+impl<'a, F: 'a> SemanticActions<'a, F> {
+    pub fn new(session: &'a mut F) -> SemanticActions<'a, F> {
         SemanticActions {
             session,
             expr_factory: StrExprFactory::new(),
@@ -17,14 +17,11 @@ impl<'session, F: 'session> SemanticActions<'session, F> {
     }
 }
 
-impl<'session, F> syntax::BlockContext for SemanticActions<'session, F>
-where
-    F: 'session + Frontend,
-{
+impl<'a, F: Frontend + 'a> syntax::BlockContext for SemanticActions<'a, F> {
     type Terminal = Token<String>;
-    type CommandContext = CommandActions<'session, F>;
-    type MacroDefContext = MacroDefActions<'session, F>;
-    type MacroInvocationContext = MacroInvocationActions<'session, F>;
+    type CommandContext = CommandActions<'a, F>;
+    type MacroDefContext = MacroDefActions<'a, F>;
+    type MacroInvocationContext = MacroInvocationActions<'a, F>;
 
     fn add_label(&mut self, label: Self::Terminal) {
         match label {
@@ -46,17 +43,17 @@ where
     }
 }
 
-pub struct CommandActions<'session, F: 'session> {
+pub struct CommandActions<'a, F: 'a> {
     name: Token<String>,
     args: Vec<SynExpr<syntax::Token<String>>>,
-    enclosing_context: SemanticActions<'session, F>,
+    enclosing_context: SemanticActions<'a, F>,
 }
 
-impl<'session, F: 'session> CommandActions<'session, F> {
+impl<'a, F: 'a> CommandActions<'a, F> {
     fn new(
         name: Token<String>,
-        enclosing_context: SemanticActions<'session, F>,
-    ) -> CommandActions<'session, F> {
+        enclosing_context: SemanticActions<'a, F>,
+    ) -> CommandActions<'a, F> {
         CommandActions {
             name,
             args: Vec::new(),
@@ -65,12 +62,9 @@ impl<'session, F: 'session> CommandActions<'session, F> {
     }
 }
 
-impl<'session, F> syntax::CommandContext for CommandActions<'session, F>
-where
-    F: 'session + Frontend,
-{
+impl<'a, F: Frontend + 'a> syntax::CommandContext for CommandActions<'a, F> {
     type Terminal = Token<String>;
-    type EnclosingContext = SemanticActions<'session, F>;
+    type EnclosingContext = SemanticActions<'a, F>;
 
     fn add_argument(&mut self, expr: SynExpr<Self::Terminal>) {
         self.args.push(expr)
@@ -97,20 +91,17 @@ where
     }
 }
 
-pub struct MacroDefActions<'session, F: 'session> {
+pub struct MacroDefActions<'a, F: 'a> {
     name: Token<String>,
     tokens: Vec<Token<String>>,
-    enclosing_context: SemanticActions<'session, F>,
+    enclosing_context: SemanticActions<'a, F>,
 }
 
-impl<'session, F> MacroDefActions<'session, F>
-where
-    F: 'session + Frontend,
-{
+impl<'a, F: Frontend + 'a> MacroDefActions<'a, F> {
     fn new(
         name: Token<String>,
-        enclosing_context: SemanticActions<'session, F>,
-    ) -> MacroDefActions<'session, F> {
+        enclosing_context: SemanticActions<'a, F>,
+    ) -> MacroDefActions<'a, F> {
         MacroDefActions {
             name,
             tokens: Vec::new(),
@@ -119,12 +110,9 @@ where
     }
 }
 
-impl<'session, F> syntax::TerminalSequenceContext for MacroDefActions<'session, F>
-where
-    F: 'session + Frontend,
-{
+impl<'a, F: Frontend + 'a> syntax::TerminalSequenceContext for MacroDefActions<'a, F> {
     type Terminal = Token<String>;
-    type EnclosingContext = SemanticActions<'session, F>;
+    type EnclosingContext = SemanticActions<'a, F>;
 
     fn push_terminal(&mut self, terminal: Self::Terminal) {
         self.tokens.push(terminal)
@@ -141,17 +129,17 @@ where
     }
 }
 
-pub struct MacroInvocationActions<'session, F: 'session> {
+pub struct MacroInvocationActions<'a, F: 'a> {
     name: Token<String>,
     args: Vec<Vec<Token<String>>>,
-    enclosing_context: SemanticActions<'session, F>,
+    enclosing_context: SemanticActions<'a, F>,
 }
 
-impl<'session, F: 'session> MacroInvocationActions<'session, F> {
+impl<'a, F: 'a> MacroInvocationActions<'a, F> {
     fn new(
         name: Token<String>,
-        enclosing_context: SemanticActions<'session, F>,
-    ) -> MacroInvocationActions<'session, F> {
+        enclosing_context: SemanticActions<'a, F>,
+    ) -> MacroInvocationActions<'a, F> {
         MacroInvocationActions {
             name,
             args: Vec::new(),
@@ -164,13 +152,10 @@ impl<'session, F: 'session> MacroInvocationActions<'session, F> {
     }
 }
 
-impl<'session, F> syntax::MacroInvocationContext for MacroInvocationActions<'session, F>
-where
-    F: 'session + Frontend,
-{
+impl<'a, F: Frontend + 'a> syntax::MacroInvocationContext for MacroInvocationActions<'a, F> {
     type Terminal = Token<String>;
-    type EnclosingContext = SemanticActions<'session, F>;
-    type MacroArgContext = MacroArgActions<'session, F>;
+    type EnclosingContext = SemanticActions<'a, F>;
+    type MacroArgContext = MacroArgActions<'a, F>;
 
     fn enter_macro_arg(self) -> Self::MacroArgContext {
         MacroArgActions::new(self)
@@ -187,13 +172,13 @@ where
     }
 }
 
-pub struct MacroArgActions<'session, F: 'session> {
+pub struct MacroArgActions<'a, F: 'a> {
     tokens: Vec<Token<String>>,
-    enclosing_context: MacroInvocationActions<'session, F>,
+    enclosing_context: MacroInvocationActions<'a, F>,
 }
 
-impl<'session, F: 'session> MacroArgActions<'session, F> {
-    fn new(enclosing_context: MacroInvocationActions<'session, F>) -> MacroArgActions<'session, F> {
+impl<'a, F: 'a> MacroArgActions<'a, F> {
+    fn new(enclosing_context: MacroInvocationActions<'a, F>) -> MacroArgActions<'a, F> {
         MacroArgActions {
             tokens: Vec::new(),
             enclosing_context,
@@ -201,9 +186,9 @@ impl<'session, F: 'session> MacroArgActions<'session, F> {
     }
 }
 
-impl<'session, F> syntax::TerminalSequenceContext for MacroArgActions<'session, F> {
+impl<'a, F> syntax::TerminalSequenceContext for MacroArgActions<'a, F> {
     type Terminal = Token<String>;
-    type EnclosingContext = MacroInvocationActions<'session, F>;
+    type EnclosingContext = MacroInvocationActions<'a, F>;
 
     fn push_terminal(&mut self, terminal: Self::Terminal) {
         self.tokens.push(terminal)
@@ -350,7 +335,7 @@ mod tests {
 
     fn collect_semantic_actions<F>(f: F) -> Vec<TestOperation>
     where
-        F: for<'session> FnOnce(SemanticActions<'session, TestFrontend>),
+        F: for<'a> FnOnce(SemanticActions<'a, TestFrontend>),
     {
         let mut operations = TestFrontend::new();
         f(SemanticActions::new(&mut operations));
