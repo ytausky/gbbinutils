@@ -33,12 +33,14 @@ impl Backend for RomGenerator {
 
 pub struct Rom {
     data: Vec<u8>,
+    counter: usize,
 }
 
 impl Rom {
     pub fn new() -> Rom {
         Rom {
             data: vec![0x00; 0x8000],
+            counter: 0,
         }
     }
 
@@ -49,7 +51,16 @@ impl Rom {
 
 impl Object for Rom {
     fn add_label(&mut self, _label: &str) {}
-    fn emit_item(&mut self, _item: Item) {}
+
+    fn emit_item(&mut self, item: Item) {
+        match item {
+            Item::Byte(Expr::Literal(n)) => {
+                self.data[self.counter] = n as u8;
+                self.counter += 1
+            }
+            _ => panic!(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -126,4 +137,48 @@ pub enum Condition {
 pub enum Expr {
     Literal(i32),
     Symbol(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::iter;
+
+    #[test]
+    fn new_rom_is_0x8000_zero_bytes_long() {
+        let rom = Rom::new();
+        assert!(
+            iter::repeat(0x00)
+                .take(0x8000)
+                .eq(rom.as_slice().iter().cloned())
+        )
+    }
+
+    #[test]
+    fn emit_literal_byte_item() {
+        let mut rom = Rom::new();
+        rom.emit_item(Item::Byte(Expr::Literal(0xff)));
+        assert!(
+            iter::once(0xff)
+                .chain(iter::repeat(0x00))
+                .take(0x8000)
+                .eq(rom.as_slice().iter().cloned())
+        )
+    }
+
+    #[test]
+    fn emit_two_literal_byte_item() {
+        let mut rom = Rom::new();
+        rom.emit_item(Item::Byte(Expr::Literal(0x12)));
+        rom.emit_item(Item::Byte(Expr::Literal(0x34)));
+        assert!(
+            [0x12, 0x34]
+                .iter()
+                .cloned()
+                .chain(iter::repeat(0x00))
+                .take(0x8000)
+                .eq(rom.as_slice().iter().cloned())
+        )
+    }
 }
