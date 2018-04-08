@@ -21,7 +21,7 @@ pub fn analyze_file<B: Backend>(name: String, mut backend: B) -> B::Object {
 struct DebugDiagnosticsListener;
 
 impl DiagnosticsListener for DebugDiagnosticsListener {
-    fn emit_diagnostic(&mut self, diagnostic: Error) {
+    fn emit_diagnostic(&mut self, diagnostic: Diagnostic) {
         println!("Diagnostic: {:?}", diagnostic)
     }
 }
@@ -192,7 +192,7 @@ where
         match macro_def {
             Some(rc) => self.analyze_token_seq(rc.iter().cloned()),
             None => self.diagnostics
-                .emit_diagnostic(Error::UndefinedMacro { name }),
+                .emit_diagnostic(Diagnostic::UndefinedMacro { name }),
         }
     }
 }
@@ -249,7 +249,7 @@ mod tests {
         assert_eq!(*log.borrow(), [TestEvent::AnalyzeTokens(tokens)]);
     }
 
-    use diagnostics::Error;
+    use diagnostics::Diagnostic;
 
     #[test]
     fn diagnose_undefined_macro() {
@@ -259,7 +259,7 @@ mod tests {
         assert_eq!(
             *log.borrow(),
             [
-                TestEvent::Diagnostic(Error::UndefinedMacro {
+                TestEvent::Diagnostic(Diagnostic::UndefinedMacro {
                     name: name.to_string(),
                 })
             ]
@@ -333,7 +333,7 @@ mod tests {
     }
 
     impl<'a> DiagnosticsListener for Mock<'a> {
-        fn emit_diagnostic(&mut self, diagnostic: Error) {
+        fn emit_diagnostic(&mut self, diagnostic: Diagnostic) {
             self.log
                 .borrow_mut()
                 .push(TestEvent::Diagnostic(diagnostic))
@@ -346,7 +346,7 @@ mod tests {
     enum TestEvent {
         AnalyzeTokens(Vec<Token<String>>),
         AddLabel(String),
-        Diagnostic(Error),
+        Diagnostic(Diagnostic),
         EmitItem(Item),
     }
 

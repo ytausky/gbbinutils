@@ -1,6 +1,5 @@
-use diagnostics;
-
 use backend::*;
+use diagnostics::Diagnostic;
 use frontend::ExprFactory;
 use frontend::syntax::{keyword, Atom, SynExpr, Token};
 
@@ -140,7 +139,7 @@ impl<'a, I: Iterator<Item = Operand>> Analysis<I> {
     fn analyze_nullary_instruction(&mut self, instruction: Instruction) -> AnalysisResult {
         match self.operands.by_ref().count() {
             0 => Ok(instruction),
-            n => Err(diagnostics::Error::OperandCount {
+            n => Err(Diagnostic::OperandCount {
                 actual: n,
                 expected: 0,
             }),
@@ -197,7 +196,7 @@ pub enum Operand {
     Reg16(Reg16),
 }
 
-pub type AnalysisResult = Result<Instruction, diagnostics::Error>;
+pub type AnalysisResult = Result<Instruction, Diagnostic>;
 
 fn analyze_keyword_operand(keyword: keyword::Operand, context: &OperandAnalysisContext) -> Operand {
     use frontend::syntax::keyword::Operand::*;
@@ -556,13 +555,11 @@ mod tests {
         analyzer.analyze_instruction(mnemonic, operands)
     }
 
-    use diagnostics;
-
     #[test]
     fn analyze_nop_a() {
         assert_eq!(
             analyze(Command::Nop, vec![atom(A)]),
-            Err(diagnostics::Error::OperandCount {
+            Err(Diagnostic::OperandCount {
                 actual: 1,
                 expected: 0,
             })
