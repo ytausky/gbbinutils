@@ -1,6 +1,6 @@
 use backend;
 use frontend::{Atom, Frontend, StrExprFactory};
-use frontend::syntax::{self, SynExpr, Token, keyword::Command};
+use frontend::syntax::{self, SynExpr, Token, TokenSpec, keyword::Command};
 
 mod instruction;
 
@@ -19,42 +19,39 @@ impl<'a, F: 'a> SemanticActions<'a, F> {
 }
 
 impl<'a, F: Frontend + 'a> syntax::BlockContext for SemanticActions<'a, F> {
-    type Terminal = Token<String>;
+    type TokenSpec = String;
     type CommandContext = CommandActions<'a, F>;
     type MacroDefContext = MacroDefActions<'a, F>;
     type MacroInvocationContext = MacroInvocationActions<'a, F>;
 
-    fn add_label(&mut self, label: Self::Terminal) {
-        match label {
-            Token::Label(spelling) => self.session.define_label(spelling),
-            _ => panic!(),
-        }
+    fn add_label(&mut self, label: <Self::TokenSpec as TokenSpec>::Label) {
+        self.session.define_label(label);
     }
 
-    fn enter_command(self, name: Self::Terminal) -> Self::CommandContext {
+    fn enter_command(self, name: <Self::TokenSpec as TokenSpec>::Command) -> Self::CommandContext {
         CommandActions::new(name, self)
     }
 
-    fn enter_macro_def(self, name: Self::Terminal) -> Self::MacroDefContext {
+    fn enter_macro_def(self, name: <Self::TokenSpec as TokenSpec>::Label) -> Self::MacroDefContext {
         MacroDefActions::new(name, self)
     }
 
-    fn enter_macro_invocation(self, name: Self::Terminal) -> Self::MacroInvocationContext {
+    fn enter_macro_invocation(
+        self,
+        name: <Self::TokenSpec as TokenSpec>::Atom,
+    ) -> Self::MacroInvocationContext {
         MacroInvocationActions::new(name, self)
     }
 }
 
 pub struct CommandActions<'a, F: 'a> {
-    name: Token<String>,
+    name: Command,
     args: Vec<SynExpr<syntax::Token<String>>>,
     enclosing_context: SemanticActions<'a, F>,
 }
 
 impl<'a, F: 'a> CommandActions<'a, F> {
-    fn new(
-        name: Token<String>,
-        enclosing_context: SemanticActions<'a, F>,
-    ) -> CommandActions<'a, F> {
+    fn new(name: Command, enclosing_context: SemanticActions<'a, F>) -> CommandActions<'a, F> {
         CommandActions {
             name,
             args: Vec::new(),
@@ -73,7 +70,7 @@ impl<'a, F: Frontend + 'a> syntax::CommandContext for CommandActions<'a, F> {
 
     fn exit_command(mut self) -> Self::EnclosingContext {
         match self.name {
-            Token::Command(Command::Db) => for arg in self.args.into_iter() {
+            Command::Db => for arg in self.args.into_iter() {
                 match arg {
                     SynExpr::Atom(atom) => {
                         use frontend::ExprFactory;
@@ -85,10 +82,10 @@ impl<'a, F: Frontend + 'a> syntax::CommandContext for CommandActions<'a, F> {
                     _ => panic!(),
                 }
             },
-            Token::Command(Command::Include) => self.enclosing_context
+            Command::Include => self.enclosing_context
                 .session
                 .include_source_file(reduce_include(self.args)),
-            Token::Command(command) => {
+            command => {
                 let mut analyzer = self::instruction::CommandAnalyzer::new(
                     &mut self.enclosing_context.expr_factory,
                 );
@@ -99,23 +96,19 @@ impl<'a, F: Frontend + 'a> syntax::CommandContext for CommandActions<'a, F> {
                         .unwrap(),
                 )
             }
-            _ => panic!(),
         }
         self.enclosing_context
     }
 }
 
 pub struct MacroDefActions<'a, F: 'a> {
-    name: Token<String>,
+    name: String,
     tokens: Vec<Token<String>>,
     enclosing_context: SemanticActions<'a, F>,
 }
 
 impl<'a, F: Frontend + 'a> MacroDefActions<'a, F> {
-    fn new(
-        name: Token<String>,
-        enclosing_context: SemanticActions<'a, F>,
-    ) -> MacroDefActions<'a, F> {
+    fn new(name: String, enclosing_context: SemanticActions<'a, F>) -> MacroDefActions<'a, F> {
         MacroDefActions {
             name,
             tokens: Vec::new(),
@@ -133,25 +126,22 @@ impl<'a, F: Frontend + 'a> syntax::TerminalSeqContext for MacroDefActions<'a, F>
     }
 
     fn exit_terminal_seq(self) -> Self::EnclosingContext {
-        match self.name {
-            Token::Label(label) => self.enclosing_context
-                .session
-                .define_macro(label, self.tokens),
-            _ => panic!(),
-        }
+        self.enclosing_context
+            .session
+            .define_macro(self.name, self.tokens);
         self.enclosing_context
     }
 }
 
 pub struct MacroInvocationActions<'a, F: 'a> {
-    name: Token<String>,
+    name: Atom<String>,
     args: Vec<Vec<Token<String>>>,
     enclosing_context: SemanticActions<'a, F>,
 }
 
 impl<'a, F: 'a> MacroInvocationActions<'a, F> {
     fn new(
-        name: Token<String>,
+        name: Atom<String>,
         enclosing_context: SemanticActions<'a, F>,
     ) -> MacroInvocationActions<'a, F> {
         MacroInvocationActions {
@@ -177,9 +167,7 @@ impl<'a, F: Frontend + 'a> syntax::MacroInvocationContext for MacroInvocationAct
 
     fn exit_macro_invocation(self) -> Self::EnclosingContext {
         match self.name {
-            Token::Atom(Atom::Ident(name)) => {
-                self.enclosing_context.session.invoke_macro(name, self.args)
-            }
+            Atom::Ident(name) => self.enclosing_context.session.invoke_macro(name, self.args),
             _ => panic!(),
         }
         self.enclosing_context
@@ -214,7 +202,10 @@ impl<'a, F> syntax::TerminalSeqContext for MacroArgActions<'a, F> {
     }
 }
 
-fn reduce_include<S>(mut arguments: Vec<SynExpr<Token<S>>>) -> S {
+fn reduce_include<TS, S>(mut arguments: Vec<SynExpr<Token<TS>>>) -> S
+where
+    TS: TokenSpec<Atom = Atom<S>>,
+{
     assert_eq!(arguments.len(), 1);
     let path = arguments.pop().unwrap();
     match path {
@@ -274,7 +265,7 @@ mod tests {
     fn build_include_item() {
         let filename = "file.asm";
         let actions = collect_semantic_actions(|actions| {
-            let mut command = actions.enter_command(Token::Command(Command::Include));
+            let mut command = actions.enter_command(Command::Include);
             let expr = SynExpr::from(Token::Atom(Atom::String(filename.to_string())));
             command.add_argument(expr);
             command.exit_command();
@@ -286,7 +277,7 @@ mod tests {
     fn emit_byte_item() {
         let bytes = [0x42, 0x78];
         let actions = collect_semantic_actions(|actions| {
-            let mut command = actions.enter_command(Token::Command(Command::Db));
+            let mut command = actions.enter_command(Command::Db);
             for &byte in bytes.iter() {
                 command.add_argument(mk_literal(byte))
             }
@@ -313,9 +304,7 @@ mod tests {
     #[test]
     fn analyze_label() {
         let label = "label";
-        let actions = collect_semantic_actions(|mut actions| {
-            actions.add_label(Token::Label(label.to_string()))
-        });
+        let actions = collect_semantic_actions(|mut actions| actions.add_label(label.to_string()));
         assert_eq!(actions, [TestOperation::Label(label.to_string())])
     }
 
@@ -327,7 +316,7 @@ mod tests {
             Token::Atom(Atom::Operand(Operand::A)),
         ];
         let actions = collect_semantic_actions(|actions| {
-            let mut token_seq_context = actions.enter_macro_def(Token::Label(name.to_string()));
+            let mut token_seq_context = actions.enter_macro_def(name.to_string());
             for token in tokens.clone() {
                 token_seq_context.push_terminal(token)
             }
@@ -343,8 +332,7 @@ mod tests {
     fn invoke_nullary_macro() {
         let name = "my_macro";
         let actions = collect_semantic_actions(|actions| {
-            let invocation =
-                actions.enter_macro_invocation(Token::Atom(Atom::Ident(name.to_string())));
+            let invocation = actions.enter_macro_invocation(Atom::Ident(name.to_string()));
             invocation.exit_macro_invocation();
         });
         assert_eq!(
@@ -358,8 +346,7 @@ mod tests {
         let name = "my_macro";
         let arg_token = Token::Atom(Atom::Operand(Operand::A));
         let actions = collect_semantic_actions(|actions| {
-            let mut invocation =
-                actions.enter_macro_invocation(Token::Atom(Atom::Ident(name.to_string())));
+            let mut invocation = actions.enter_macro_invocation(Atom::Ident(name.to_string()));
             invocation = {
                 let mut arg = invocation.enter_macro_arg();
                 arg.push_terminal(arg_token.clone());

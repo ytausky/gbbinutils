@@ -8,7 +8,7 @@ pub fn tokenize(src: &str) -> self::lexer::Lexer {
 
 pub fn parse_token_seq<I, BC>(tokens: I, actions: BC)
 where
-    I: Iterator<Item = BC::Terminal>,
+    I: Iterator<Item = Token<BC::TokenSpec>>,
     BC: BlockContext,
 {
     self::parser::parse_src(tokens, actions)
@@ -34,7 +34,7 @@ pub trait TokenSpec {
     type Label;
 }
 
-impl<T> TokenSpec for T {
+impl<T: AsRef<str>> TokenSpec for T {
     type Atom = Atom<T>;
     type Command = keyword::Command;
     type Label = T;
@@ -87,17 +87,23 @@ pub trait BlockContext
 where
     Self: Sized,
 {
-    type Terminal: Terminal;
-    type CommandContext: CommandContext<Terminal = Self::Terminal, EnclosingContext = Self>;
-    type MacroDefContext: TerminalSeqContext<Terminal = Self::Terminal, EnclosingContext = Self>;
-    type MacroInvocationContext: MacroInvocationContext<
-        Terminal = Self::Terminal,
+    type TokenSpec: TokenSpec;
+    type CommandContext: CommandContext<Terminal = Token<Self::TokenSpec>, EnclosingContext = Self>;
+    type MacroDefContext: TerminalSeqContext<
+        Terminal = Token<Self::TokenSpec>,
         EnclosingContext = Self,
     >;
-    fn add_label(&mut self, label: Self::Terminal);
-    fn enter_command(self, name: Self::Terminal) -> Self::CommandContext;
-    fn enter_macro_def(self, name: Self::Terminal) -> Self::MacroDefContext;
-    fn enter_macro_invocation(self, name: Self::Terminal) -> Self::MacroInvocationContext;
+    type MacroInvocationContext: MacroInvocationContext<
+        Terminal = Token<Self::TokenSpec>,
+        EnclosingContext = Self,
+    >;
+    fn add_label(&mut self, label: <Self::TokenSpec as TokenSpec>::Label);
+    fn enter_command(self, name: <Self::TokenSpec as TokenSpec>::Command) -> Self::CommandContext;
+    fn enter_macro_def(self, name: <Self::TokenSpec as TokenSpec>::Label) -> Self::MacroDefContext;
+    fn enter_macro_invocation(
+        self,
+        name: <Self::TokenSpec as TokenSpec>::Atom,
+    ) -> Self::MacroInvocationContext;
 }
 
 pub trait CommandContext {
