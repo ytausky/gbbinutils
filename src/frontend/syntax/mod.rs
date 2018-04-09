@@ -15,17 +15,29 @@ where
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Token<S> {
-    Atom(Atom<S>),
+pub enum Token<S: TokenSpec> {
+    Atom(S::Atom),
     ClosingBracket,
     Colon,
     Comma,
-    Command(keyword::Command),
+    Command(S::Command),
     Endm,
     Eol,
-    Label(S),
+    Label(S::Label),
     Macro,
     OpeningBracket,
+}
+
+pub trait TokenSpec {
+    type Atom;
+    type Command;
+    type Label;
+}
+
+impl<T> TokenSpec for T {
+    type Atom = Atom<T>;
+    type Command = keyword::Command;
+    type Label = T;
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -36,7 +48,7 @@ pub enum Atom<S> {
     String(S),
 }
 
-impl<S> Terminal for Token<S> {
+impl<S: TokenSpec> Terminal for Token<S> {
     fn kind(&self) -> TerminalKind {
         match *self {
             Token::Atom(_) => TerminalKind::Atom,
@@ -137,79 +149,65 @@ mod tests {
 
     #[test]
     fn colon_terminal_kind() {
-        assert_eq!(Token::Colon::<()>.kind(), TerminalKind::Colon)
+        test_terminal_kind(Token::Colon, TerminalKind::Colon)
     }
 
     #[test]
     fn comma_terminal_kind() {
-        assert_eq!(Token::Comma::<()>.kind(), TerminalKind::Comma)
+        test_terminal_kind(Token::Comma, TerminalKind::Comma)
     }
 
     #[test]
     fn endm_terminal_kind() {
-        assert_eq!(Token::Endm::<()>.kind(), TerminalKind::Endm)
+        test_terminal_kind(Token::Endm, TerminalKind::Endm)
     }
 
     #[test]
     fn eol_terminal_kind() {
-        assert_eq!(Token::Eol::<()>.kind(), TerminalKind::Eol)
+        test_terminal_kind(Token::Eol, TerminalKind::Eol)
     }
 
     #[test]
     fn label_terminal_kind() {
-        assert_eq!(Token::Label("label").kind(), TerminalKind::Label)
+        test_terminal_kind(Token::Label("label"), TerminalKind::Label)
     }
 
     #[test]
     fn macro_terminal_kind() {
-        assert_eq!(Token::Macro::<()>.kind(), TerminalKind::Macro)
+        test_terminal_kind(Token::Macro, TerminalKind::Macro)
     }
 
     #[test]
     fn nop_terminal_kind() {
-        assert_eq!(
-            Token::Command::<()>(Command::Nop).kind(),
-            TerminalKind::Command,
-        )
+        test_terminal_kind(Token::Command(Command::Nop), TerminalKind::Command)
     }
 
     #[test]
     fn number_terminal_kind() {
-        assert_eq!(
-            Token::Atom::<()>(Atom::Number(0x1234)).kind(),
-            TerminalKind::Atom
-        )
+        test_terminal_kind(Token::Atom(Atom::Number(0x1234)), TerminalKind::Atom)
     }
 
     #[test]
     fn quoted_string_terminal_kind() {
-        assert_eq!(
-            Token::Atom(Atom::String("string")).kind(),
-            TerminalKind::Atom
-        )
+        test_terminal_kind(Token::Atom(Atom::String("string")), TerminalKind::Atom)
     }
 
     #[test]
     fn word_terminal_kind() {
-        assert_eq!(
-            Token::Atom(Atom::Ident("identifier")).kind(),
-            TerminalKind::Atom
-        )
+        test_terminal_kind(Token::Atom(Atom::Ident("identifier")), TerminalKind::Atom)
     }
 
     #[test]
     fn opening_bracket_terminal_kind() {
-        assert_eq!(
-            Token::OpeningBracket::<()>.kind(),
-            TerminalKind::OpeningBracket
-        )
+        test_terminal_kind(Token::OpeningBracket, TerminalKind::OpeningBracket)
     }
 
     #[test]
     fn closing_bracket_terminal_kind() {
-        assert_eq!(
-            Token::ClosingBracket::<()>.kind(),
-            TerminalKind::ClosingBracket
-        )
+        test_terminal_kind(Token::ClosingBracket, TerminalKind::ClosingBracket)
+    }
+
+    fn test_terminal_kind(token: Token<&str>, kind: TerminalKind) {
+        assert_eq!(token.kind(), kind)
     }
 }
