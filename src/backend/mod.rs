@@ -1,9 +1,6 @@
-pub trait Backend {
-    type Object: Object;
-    fn mk_object(&mut self) -> Self::Object;
-}
+use diagnostics::*;
 
-pub trait Object {
+pub trait Backend {
     fn add_label(&mut self, label: &str);
     fn emit_item(&mut self, item: Item);
 }
@@ -16,31 +13,18 @@ pub enum Item {
 
 mod codegen;
 
-pub struct RomGenerator;
-
-impl RomGenerator {
-    pub fn new() -> RomGenerator {
-        RomGenerator {}
-    }
-}
-
-impl Backend for RomGenerator {
-    type Object = Rom;
-    fn mk_object(&mut self) -> Self::Object {
-        Rom::new()
-    }
-}
-
-pub struct Rom {
+pub struct Rom<'a, T: 'a> {
     data: Vec<u8>,
     counter: usize,
+    diagnostics: &'a T,
 }
 
-impl Rom {
-    pub fn new() -> Rom {
+impl<'a, T: 'a> Rom<'a, T> {
+    pub fn new(diagnostics: &'a T) -> Rom<'a, T> {
         Rom {
             data: vec![0x00; 0x8000],
             counter: 0,
+            diagnostics,
         }
     }
 
@@ -49,12 +33,19 @@ impl Rom {
     }
 }
 
-impl Object for Rom {
+impl<'a, T: 'a + DiagnosticsListener> Backend for Rom<'a, T> {
     fn add_label(&mut self, _label: &str) {}
 
     fn emit_item(&mut self, item: Item) {
         match item {
             Item::Byte(Expr::Literal(n)) => {
+                if n > u8::max_value() as i32 {
+                    self.diagnostics
+                        .emit_diagnostic(Diagnostic::ValueOutOfRange {
+                            value: n,
+                            range: Range::Byte,
+                        })
+                }
                 self.data[self.counter] = n as u8;
                 self.counter += 1
             }
@@ -147,7 +138,8 @@ mod tests {
 
     #[test]
     fn new_rom_is_0x8000_zero_bytes_long() {
-        let rom = Rom::new();
+        let diagnostics = TestDiagnosticsListener::new();
+        let rom = Rom::new(&diagnostics);
         assert!(
             iter::repeat(0x00)
                 .take(0x8000)
@@ -157,7 +149,8 @@ mod tests {
 
     #[test]
     fn emit_literal_byte_item() {
-        let mut rom = Rom::new();
+        let diagnostics = TestDiagnosticsListener::new();
+        let mut rom = Rom::new(&diagnostics);
         rom.emit_item(Item::Byte(Expr::Literal(0xff)));
         assert!(
             iter::once(0xff)
@@ -169,7 +162,8 @@ mod tests {
 
     #[test]
     fn emit_two_literal_byte_item() {
-        let mut rom = Rom::new();
+        let diagnostics = TestDiagnosticsListener::new();
+        let mut rom = Rom::new(&diagnostics);
         rom.emit_item(Item::Byte(Expr::Literal(0x12)));
         rom.emit_item(Item::Byte(Expr::Literal(0x34)));
         assert!(
@@ -180,5 +174,41 @@ mod tests {
                 .take(0x8000)
                 .eq(rom.as_slice().iter().cloned())
         )
+    }
+
+    #[test]
+    fn emit_diagnostic_when_byte_item_out_of_range() {
+        let listener = TestDiagnosticsListener::new();
+        let mut rom = Rom::new(&listener);
+        rom.emit_item(Item::Byte(Expr::Literal(0x100)));
+        assert_eq!(
+            *listener.diagnostics.borrow(),
+            [
+                Diagnostic::ValueOutOfRange {
+                    value: 0x100,
+                    range: Range::Byte,
+                }
+            ]
+        );
+    }
+
+    use std::cell::RefCell;
+
+    struct TestDiagnosticsListener {
+        diagnostics: RefCell<Vec<Diagnostic>>,
+    }
+
+    impl TestDiagnosticsListener {
+        fn new() -> TestDiagnosticsListener {
+            TestDiagnosticsListener {
+                diagnostics: RefCell::new(Vec::new()),
+            }
+        }
+    }
+
+    impl DiagnosticsListener for TestDiagnosticsListener {
+        fn emit_diagnostic(&self, diagnostic: Diagnostic) {
+            self.diagnostics.borrow_mut().push(diagnostic)
+        }
     }
 }

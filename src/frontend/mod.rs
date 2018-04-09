@@ -9,11 +9,10 @@ use diagnostics::*;
 use backend::*;
 use self::syntax::*;
 
-pub fn analyze_file<B: Backend>(name: String, mut backend: B) -> B::Object {
+pub fn analyze_file<B: Backend>(name: String, backend: B) -> B {
     let fs = StdFileSystem::new();
     let factory = SemanticTokenSeqAnalyzerFactory::new();
-    let object = backend.mk_object();
-    let mut session = Session::new(fs, factory, object, DebugDiagnosticsListener {});
+    let mut session = Session::new(fs, factory, backend, DebugDiagnosticsListener {});
     session.include_source_file(name);
     session.into_object()
 }
@@ -21,7 +20,7 @@ pub fn analyze_file<B: Backend>(name: String, mut backend: B) -> B::Object {
 struct DebugDiagnosticsListener;
 
 impl DiagnosticsListener for DebugDiagnosticsListener {
-    fn emit_diagnostic(&mut self, diagnostic: Diagnostic) {
+    fn emit_diagnostic(&self, diagnostic: Diagnostic) {
         println!("Diagnostic: {:?}", diagnostic)
     }
 }
@@ -127,26 +126,26 @@ pub trait Frontend {
 
 use std::{collections::HashMap, rc::Rc};
 
-struct Session<FS, SAF, O, DL> {
+struct Session<FS, SAF, B, DL> {
     fs: FS,
     analyzer_factory: SAF,
-    object: O,
+    backend: B,
     macro_defs: HashMap<String, Rc<Vec<Token<String>>>>,
     diagnostics: DL,
 }
 
-impl<FS, SAF, O, DL> Session<FS, SAF, O, DL>
+impl<FS, SAF, B, DL> Session<FS, SAF, B, DL>
 where
     FS: FileSystem,
     SAF: TokenSeqAnalyzerFactory,
-    O: Object,
+    B: Backend,
     DL: DiagnosticsListener,
 {
-    fn new(fs: FS, analyzer_factory: SAF, object: O, diagnostics: DL) -> Session<FS, SAF, O, DL> {
+    fn new(fs: FS, analyzer_factory: SAF, backend: B, diagnostics: DL) -> Session<FS, SAF, B, DL> {
         Session {
             fs,
             analyzer_factory,
-            object,
+            backend,
             macro_defs: HashMap::new(),
             diagnostics,
         }
@@ -157,16 +156,16 @@ where
         analyzer.analyze(tokens, self)
     }
 
-    fn into_object(self) -> O {
-        self.object
+    fn into_object(self) -> B {
+        self.backend
     }
 }
 
-impl<FS, SAF, O, DL> Frontend for Session<FS, SAF, O, DL>
+impl<FS, SAF, B, DL> Frontend for Session<FS, SAF, B, DL>
 where
     FS: FileSystem,
     SAF: TokenSeqAnalyzerFactory,
-    O: Object,
+    B: Backend,
     DL: DiagnosticsListener,
 {
     fn include_source_file(&mut self, filename: String) {
@@ -176,11 +175,11 @@ where
     }
 
     fn emit_item(&mut self, item: Item) {
-        self.object.emit_item(item)
+        self.backend.emit_item(item)
     }
 
     fn define_label(&mut self, label: String) {
-        self.object.add_label(&label)
+        self.backend.add_label(&label)
     }
 
     fn define_macro(&mut self, name: String, tokens: Vec<Token<String>>) {
@@ -320,7 +319,7 @@ mod tests {
         }
     }
 
-    impl<'a> Object for Mock<'a> {
+    impl<'a> Backend for Mock<'a> {
         fn add_label(&mut self, label: &str) {
             self.log
                 .borrow_mut()
@@ -333,7 +332,7 @@ mod tests {
     }
 
     impl<'a> DiagnosticsListener for Mock<'a> {
-        fn emit_diagnostic(&mut self, diagnostic: Diagnostic) {
+        fn emit_diagnostic(&self, diagnostic: Diagnostic) {
             self.log
                 .borrow_mut()
                 .push(TestEvent::Diagnostic(diagnostic))
