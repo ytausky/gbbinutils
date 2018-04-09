@@ -39,7 +39,7 @@ impl<'a, T: 'a + DiagnosticsListener> Backend for Rom<'a, T> {
     fn emit_item(&mut self, item: Item) {
         match item {
             Item::Byte(Expr::Literal(n)) => {
-                if n > u8::max_value() as i32 {
+                if !is_in_byte_range(n) {
                     self.diagnostics
                         .emit_diagnostic(Diagnostic::ValueOutOfRange {
                             value: n,
@@ -52,6 +52,18 @@ impl<'a, T: 'a + DiagnosticsListener> Backend for Rom<'a, T> {
             _ => panic!(),
         }
     }
+}
+
+fn is_in_byte_range(n: i32) -> bool {
+    is_in_i8_range(n) || is_in_u8_range(n)
+}
+
+fn is_in_i8_range(n: i32) -> bool {
+    n >= i8::min_value() as i32 && n <= i8::max_value() as i32
+}
+
+fn is_in_u8_range(n: i32) -> bool {
+    n >= u8::min_value() as i32 && n <= u8::max_value() as i32
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -178,14 +190,19 @@ mod tests {
 
     #[test]
     fn emit_diagnostic_when_byte_item_out_of_range() {
+        test_diagnostic_for_out_of_range_byte(i8::min_value() as i32 - 1);
+        test_diagnostic_for_out_of_range_byte(u8::max_value() as i32 + 1)
+    }
+
+    fn test_diagnostic_for_out_of_range_byte(value: i32) {
         let listener = TestDiagnosticsListener::new();
         let mut rom = Rom::new(&listener);
-        rom.emit_item(Item::Byte(Expr::Literal(0x100)));
+        rom.emit_item(Item::Byte(Expr::Literal(value)));
         assert_eq!(
             *listener.diagnostics.borrow(),
             [
                 Diagnostic::ValueOutOfRange {
-                    value: 0x100,
+                    value: value,
                     range: Range::Byte,
                 }
             ]
