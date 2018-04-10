@@ -2,6 +2,9 @@ mod backend;
 mod diagnostics;
 mod frontend;
 
+#[cfg(test)]
+mod codebase;
+
 pub fn analyze_file(name: &str) {
     frontend::analyze_file(name.to_string(), OutputDumper::new());
 }

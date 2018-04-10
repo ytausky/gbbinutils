@@ -1,7 +1,5 @@
 use std;
 
-#[cfg(test)]
-mod codebase;
 mod semantics;
 mod syntax;
 
