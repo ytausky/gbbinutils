@@ -4,6 +4,41 @@ use self::TerminalKind::*;
 use std::iter;
 use std::marker::PhantomData;
 
+impl<S: TokenSpec> Terminal for Token<S> {
+    fn kind(&self) -> TerminalKind {
+        match *self {
+            Token::Atom(_) => TerminalKind::Atom,
+            Token::ClosingBracket => TerminalKind::ClosingBracket,
+            Token::Colon => TerminalKind::Colon,
+            Token::Comma => TerminalKind::Comma,
+            Token::Command(_) => TerminalKind::Command,
+            Token::Endm => TerminalKind::Endm,
+            Token::Eol => TerminalKind::Eol,
+            Token::Label(_) => TerminalKind::Label,
+            Token::Macro => TerminalKind::Macro,
+            Token::OpeningBracket => TerminalKind::OpeningBracket,
+        }
+    }
+}
+
+pub trait Terminal {
+    fn kind(&self) -> TerminalKind;
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum TerminalKind {
+    Atom,
+    ClosingBracket,
+    Colon,
+    Comma,
+    Command,
+    Endm,
+    Eol,
+    Label,
+    Macro,
+    OpeningBracket,
+}
+
 type Lookahead = Option<TerminalKind>;
 
 fn follows_line(lookahead: &Lookahead) -> bool {
@@ -565,5 +600,71 @@ mod tests {
         }
         actions.push(Action::ExitMacroInvocation);
         actions
+    }
+
+    use super::{Terminal, TerminalKind};
+
+    #[test]
+    fn colon_terminal_kind() {
+        test_terminal_kind(Token::Colon, TerminalKind::Colon)
+    }
+
+    #[test]
+    fn comma_terminal_kind() {
+        test_terminal_kind(Token::Comma, TerminalKind::Comma)
+    }
+
+    #[test]
+    fn endm_terminal_kind() {
+        test_terminal_kind(Token::Endm, TerminalKind::Endm)
+    }
+
+    #[test]
+    fn eol_terminal_kind() {
+        test_terminal_kind(Token::Eol, TerminalKind::Eol)
+    }
+
+    #[test]
+    fn label_terminal_kind() {
+        test_terminal_kind(Token::Label(0), TerminalKind::Label)
+    }
+
+    #[test]
+    fn macro_terminal_kind() {
+        test_terminal_kind(Token::Macro, TerminalKind::Macro)
+    }
+
+    #[test]
+    fn nop_terminal_kind() {
+        test_terminal_kind(Token::Command(0), TerminalKind::Command)
+    }
+
+    #[test]
+    fn number_terminal_kind() {
+        test_terminal_kind(Token::Atom(0), TerminalKind::Atom)
+    }
+
+    #[test]
+    fn quoted_string_terminal_kind() {
+        test_terminal_kind(Token::Atom(0), TerminalKind::Atom)
+    }
+
+    #[test]
+    fn word_terminal_kind() {
+        test_terminal_kind(Token::Atom(0), TerminalKind::Atom)
+    }
+
+    #[test]
+    fn opening_bracket_terminal_kind() {
+        test_terminal_kind(Token::OpeningBracket, TerminalKind::OpeningBracket)
+    }
+
+    #[test]
+    fn closing_bracket_terminal_kind() {
+        test_terminal_kind(Token::ClosingBracket, TerminalKind::ClosingBracket)
+    }
+
+    fn test_terminal_kind(token: TestToken, kind: TerminalKind) {
+        assert_eq!(token.kind(), kind)
     }
 }
