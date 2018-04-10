@@ -156,10 +156,10 @@ impl<'a> Iterator for Lexer<'a> {
         self.scanner.next().map(|(token, range)| {
             let lexeme = self.src.index(range);
             match token {
-                ScannerTokenKind::ClosingBracket => Token::ClosingBracket,
-                ScannerTokenKind::Colon => Token::Colon,
-                ScannerTokenKind::Comma => Token::Comma,
-                ScannerTokenKind::Eol => Token::Eol,
+                ScannerTokenKind::ClosingBracket => Token::ClosingBracket(()),
+                ScannerTokenKind::Colon => Token::Colon(()),
+                ScannerTokenKind::Comma => Token::Comma(()),
+                ScannerTokenKind::Eol => Token::Eol(()),
                 ScannerTokenKind::Identifier => {
                     mk_keyword_or(|x| Token::Atom(Atom::Ident(x.to_string())), lexeme)
                 }
@@ -167,7 +167,7 @@ impl<'a> Iterator for Lexer<'a> {
                 ScannerTokenKind::Number => {
                     Token::Atom(Atom::Number(i32::from_str_radix(&lexeme[1..], 16).unwrap()))
                 }
-                ScannerTokenKind::OpeningBracket => Token::OpeningBracket,
+                ScannerTokenKind::OpeningBracket => Token::OpeningBracket(()),
                 ScannerTokenKind::String => {
                     Token::Atom(Atom::String(lexeme[1..(lexeme.len() - 1)].to_string()))
                 }
@@ -182,8 +182,8 @@ where
 {
     identify_keyword(lexeme).map_or(f(lexeme), |keyword| match keyword {
         Keyword::Command(command) => Token::Command(command),
-        Keyword::Endm => Token::Endm,
-        Keyword::Macro => Token::Macro,
+        Keyword::Endm => Token::Endm(()),
+        Keyword::Macro => Token::Macro(()),
         Keyword::Operand(operand) => Token::Atom(Atom::Operand(operand)),
     })
 }
@@ -257,7 +257,7 @@ mod tests {
 
     #[test]
     fn lex_eol() {
-        assert_eq_tokens("\n", &[Eol])
+        assert_eq_tokens("\n", &[Eol(())])
     }
 
     #[test]
@@ -267,7 +267,7 @@ mod tests {
 
     #[test]
     fn lex_label_after_eol() {
-        assert_eq_tokens("    \nlabel", &[Eol, Label("label".to_string())])
+        assert_eq_tokens("    \nlabel", &[Eol(()), Label("label".to_string())])
     }
 
     #[test]
@@ -304,7 +304,7 @@ mod tests {
 
     #[test]
     fn lex_comma() {
-        assert_eq_tokens(",", &[Comma])
+        assert_eq_tokens(",", &[Comma(())])
     }
 
     #[test]
@@ -322,7 +322,10 @@ mod tests {
 
     #[test]
     fn lex_macro_definition() {
-        assert_eq_tokens("f: macro\n", &[Label("f".to_string()), Colon, Macro, Eol])
+        assert_eq_tokens(
+            "f: macro\n",
+            &[Label("f".to_string()), Colon(()), Macro(()), Eol(())],
+        )
     }
 
     #[test]
@@ -339,8 +342,8 @@ mod tests {
         for &(spelling, keyword) in KEYWORDS.iter() {
             let token = match keyword {
                 Keyword::Command(command) => Command(command),
-                Keyword::Endm => Endm,
-                Keyword::Macro => Macro,
+                Keyword::Endm => Endm(()),
+                Keyword::Macro => Macro(()),
                 Keyword::Operand(operand) => Atom(Operand(operand)),
             };
             assert_eq_tokens(&f(spelling), &[token])
@@ -349,7 +352,7 @@ mod tests {
 
     #[test]
     fn lex_brackets() {
-        assert_eq_tokens("[]", &[OpeningBracket, ClosingBracket])
+        assert_eq_tokens("[]", &[OpeningBracket(()), ClosingBracket(())])
     }
 
     #[test]
@@ -359,7 +362,7 @@ mod tests {
 
     #[test]
     fn ignore_comment_at_end_of_line() {
-        assert_eq_tokens("nop ; comment\n", &[Command(Nop), Eol])
+        assert_eq_tokens("nop ; comment\n", &[Command(Nop), Eol(())])
     }
 
     #[test]

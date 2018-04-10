@@ -17,27 +17,52 @@ where
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token<S: TokenSpec> {
     Atom(S::Atom),
-    ClosingBracket,
-    Colon,
-    Comma,
+    ClosingBracket(S::Other),
+    Colon(S::Other),
+    Comma(S::Other),
     Command(S::Command),
-    Endm,
-    Eol,
+    Endm(S::Other),
+    Eol(S::Other),
     Label(S::Label),
-    Macro,
-    OpeningBracket,
+    Macro(S::Other),
+    OpeningBracket(S::Other),
 }
 
 pub trait TokenSpec {
     type Atom;
     type Command;
     type Label;
+    type Other;
 }
 
-impl<T: AsRef<str>> TokenSpec for T {
+impl<S: TokenSpec> Token<S> {
+    fn kind(&self) -> Token<()> {
+        use self::Token::*;
+        match *self {
+            Atom(_) => Atom(()),
+            ClosingBracket(_) => ClosingBracket(()),
+            Colon(_) => Colon(()),
+            Comma(_) => Comma(()),
+            Command(_) => Command(()),
+            Endm(_) => Endm(()),
+            Eol(_) => Eol(()),
+            Label(_) => Label(()),
+            Macro(_) => Macro(()),
+            OpeningBracket(_) => OpeningBracket(()),
+        }
+    }
+}
+
+pub trait StringRef {}
+
+impl StringRef for String {}
+impl<'a> StringRef for &'a str {}
+
+impl<T: StringRef> TokenSpec for T {
     type Atom = Atom<T>;
     type Command = keyword::Command;
     type Label = T;
+    type Other = ();
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -47,6 +72,15 @@ pub enum Atom<S> {
     Number(i32),
     String(S),
 }
+
+impl TokenSpec for () {
+    type Atom = ();
+    type Command = ();
+    type Label = ();
+    type Other = ();
+}
+
+impl Copy for Token<()> {}
 
 pub trait BlockContext
 where
