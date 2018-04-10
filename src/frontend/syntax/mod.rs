@@ -6,10 +6,10 @@ pub fn tokenize(src: &str) -> self::lexer::Lexer {
     self::lexer::Lexer::new(src)
 }
 
-pub fn parse_token_seq<I, BC>(tokens: I, actions: BC)
+pub fn parse_token_seq<I, F>(tokens: I, actions: F)
 where
-    I: Iterator<Item = Token<BC::TokenSpec>>,
-    BC: BlockContext,
+    I: Iterator<Item = Token<F::TokenSpec>>,
+    F: FileContext,
 {
     self::parser::parse_src(tokens, actions)
 }
@@ -82,7 +82,7 @@ impl TokenSpec for () {
 
 impl Copy for Token<()> {}
 
-pub trait BlockContext
+pub trait FileContext
 where
     Self: Sized,
 {

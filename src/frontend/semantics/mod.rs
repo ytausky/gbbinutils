@@ -18,7 +18,7 @@ impl<'a, F: 'a> SemanticActions<'a, F> {
     }
 }
 
-impl<'a, F: Frontend + 'a> syntax::BlockContext for SemanticActions<'a, F> {
+impl<'a, F: Frontend + 'a> syntax::FileContext for SemanticActions<'a, F> {
     type TokenSpec = String;
     type CommandContext = CommandActions<'a, F>;
     type MacroDefContext = MacroDefActions<'a, F>;
@@ -218,7 +218,7 @@ where
 mod tests {
     use super::*;
 
-    use frontend::syntax::{BlockContext, CommandContext, MacroInvocationContext,
+    use frontend::syntax::{CommandContext, FileContext, MacroInvocationContext,
                            TerminalSeqContext, keyword::Operand};
     use backend;
 
