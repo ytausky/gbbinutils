@@ -61,14 +61,14 @@ impl<'a, F: 'a> CommandActions<'a, F> {
 }
 
 impl<'a, F: Frontend + 'a> syntax::CommandContext for CommandActions<'a, F> {
-    type Terminal = Token<String>;
-    type EnclosingContext = SemanticActions<'a, F>;
+    type Token = Token<String>;
+    type Parent = SemanticActions<'a, F>;
 
-    fn add_argument(&mut self, expr: SynExpr<Self::Terminal>) {
+    fn add_argument(&mut self, expr: SynExpr<Self::Token>) {
         self.args.push(expr)
     }
 
-    fn exit_command(mut self) -> Self::EnclosingContext {
+    fn exit_command(mut self) -> Self::Parent {
         match self.name {
             Command::Db => for arg in self.args.into_iter() {
                 match arg {
@@ -117,15 +117,15 @@ impl<'a, F: Frontend + 'a> MacroDefActions<'a, F> {
     }
 }
 
-impl<'a, F: Frontend + 'a> syntax::TerminalSeqContext for MacroDefActions<'a, F> {
-    type Terminal = Token<String>;
-    type EnclosingContext = SemanticActions<'a, F>;
+impl<'a, F: Frontend + 'a> syntax::TokenSeqContext for MacroDefActions<'a, F> {
+    type Token = Token<String>;
+    type Parent = SemanticActions<'a, F>;
 
-    fn push_terminal(&mut self, terminal: Self::Terminal) {
-        self.tokens.push(terminal)
+    fn push_token(&mut self, token: Self::Token) {
+        self.tokens.push(token)
     }
 
-    fn exit_terminal_seq(self) -> Self::EnclosingContext {
+    fn exit_token_seq(self) -> Self::Parent {
         self.enclosing_context
             .session
             .define_macro(self.name, self.tokens);
@@ -157,15 +157,15 @@ impl<'a, F: 'a> MacroInvocationActions<'a, F> {
 }
 
 impl<'a, F: Frontend + 'a> syntax::MacroInvocationContext for MacroInvocationActions<'a, F> {
-    type Terminal = Token<String>;
-    type EnclosingContext = SemanticActions<'a, F>;
+    type Token = Token<String>;
+    type Parent = SemanticActions<'a, F>;
     type MacroArgContext = MacroArgActions<'a, F>;
 
     fn enter_macro_arg(self) -> Self::MacroArgContext {
         MacroArgActions::new(self)
     }
 
-    fn exit_macro_invocation(self) -> Self::EnclosingContext {
+    fn exit_macro_invocation(self) -> Self::Parent {
         match self.name {
             Atom::Ident(name) => self.enclosing_context.session.invoke_macro(name, self.args),
             _ => panic!(),
@@ -188,15 +188,15 @@ impl<'a, F: 'a> MacroArgActions<'a, F> {
     }
 }
 
-impl<'a, F> syntax::TerminalSeqContext for MacroArgActions<'a, F> {
-    type Terminal = Token<String>;
-    type EnclosingContext = MacroInvocationActions<'a, F>;
+impl<'a, F> syntax::TokenSeqContext for MacroArgActions<'a, F> {
+    type Token = Token<String>;
+    type Parent = MacroInvocationActions<'a, F>;
 
-    fn push_terminal(&mut self, terminal: Self::Terminal) {
-        self.tokens.push(terminal)
+    fn push_token(&mut self, token: Self::Token) {
+        self.tokens.push(token)
     }
 
-    fn exit_terminal_seq(mut self) -> Self::EnclosingContext {
+    fn exit_token_seq(mut self) -> Self::Parent {
         self.enclosing_context.push_arg(self.tokens);
         self.enclosing_context
     }
@@ -218,8 +218,8 @@ where
 mod tests {
     use super::*;
 
-    use frontend::syntax::{CommandContext, FileContext, MacroInvocationContext,
-                           TerminalSeqContext, keyword::Operand};
+    use frontend::syntax::{CommandContext, FileContext, MacroInvocationContext, TokenSeqContext,
+                           keyword::Operand};
     use backend;
 
     struct TestFrontend(Vec<TestOperation>);
@@ -318,9 +318,9 @@ mod tests {
         let actions = collect_semantic_actions(|actions| {
             let mut token_seq_context = actions.enter_macro_def(name.to_string());
             for token in tokens.clone() {
-                token_seq_context.push_terminal(token)
+                token_seq_context.push_token(token)
             }
-            token_seq_context.exit_terminal_seq();
+            token_seq_context.exit_token_seq();
         });
         assert_eq!(
             actions,
@@ -349,8 +349,8 @@ mod tests {
             let mut invocation = actions.enter_macro_invocation(Atom::Ident(name.to_string()));
             invocation = {
                 let mut arg = invocation.enter_macro_arg();
-                arg.push_terminal(arg_token.clone());
-                arg.exit_terminal_seq()
+                arg.push_token(arg_token.clone());
+                arg.exit_token_seq()
             };
             invocation.exit_macro_invocation();
         });

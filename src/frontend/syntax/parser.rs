@@ -116,10 +116,10 @@ where
         let mut actions = actions.enter_macro_def(label);
         self.expect(&Some(Token::Eol(())));
         while self.lookahead() != Some(Token::Endm(())) {
-            actions.push_terminal(self.bump())
+            actions.push_token(self.bump())
         }
         self.expect(&Some(Token::Endm(())));
-        actions.exit_terminal_seq()
+        actions.exit_token_seq()
     }
 
     fn parse_command(&mut self, actions: F) -> F {
@@ -156,10 +156,10 @@ where
                 let mut actions = actions.enter_macro_arg();
                 let mut next_token = p.lookahead();
                 while next_token != Some(Token::Comma(())) && !follows_line(&next_token) {
-                    actions.push_terminal(p.bump());
+                    actions.push_token(p.bump());
                     next_token = p.lookahead()
                 }
-                actions.exit_terminal_seq()
+                actions.exit_token_seq()
             },
             actions,
         )
@@ -306,22 +306,22 @@ mod tests {
     }
 
     impl<'a> syntax::CommandContext for &'a mut TestContext {
-        type Terminal = TestToken;
-        type EnclosingContext = Self;
+        type Token = TestToken;
+        type Parent = Self;
 
-        fn add_argument(&mut self, expr: syntax::SynExpr<Self::Terminal>) {
+        fn add_argument(&mut self, expr: syntax::SynExpr<Self::Token>) {
             self.actions.push(Action::AddArgument(expr))
         }
 
-        fn exit_command(self) -> Self::EnclosingContext {
+        fn exit_command(self) -> Self::Parent {
             self.actions.push(Action::ExitInstruction);
             self
         }
     }
 
     impl<'a> syntax::MacroInvocationContext for &'a mut TestContext {
-        type Terminal = TestToken;
-        type EnclosingContext = Self;
+        type Token = TestToken;
+        type Parent = Self;
         type MacroArgContext = Self;
 
         fn enter_macro_arg(self) -> Self::MacroArgContext {
@@ -330,21 +330,21 @@ mod tests {
             self
         }
 
-        fn exit_macro_invocation(self) -> Self::EnclosingContext {
+        fn exit_macro_invocation(self) -> Self::Parent {
             self.actions.push(Action::ExitMacroInvocation);
             self
         }
     }
 
-    impl<'a> syntax::TerminalSeqContext for &'a mut TestContext {
-        type Terminal = TestToken;
-        type EnclosingContext = Self;
+    impl<'a> syntax::TokenSeqContext for &'a mut TestContext {
+        type Token = TestToken;
+        type Parent = Self;
 
-        fn push_terminal(&mut self, terminal: Self::Terminal) {
-            self.actions.push(Action::PushTerminal(terminal))
+        fn push_token(&mut self, token: Self::Token) {
+            self.actions.push(Action::PushTerminal(token))
         }
 
-        fn exit_terminal_seq(self) -> Self::EnclosingContext {
+        fn exit_token_seq(self) -> Self::Parent {
             self.actions
                 .push(match *self.token_seq_kind.as_ref().unwrap() {
                     TokenSeqKind::MacroArg => Action::ExitMacroArg,

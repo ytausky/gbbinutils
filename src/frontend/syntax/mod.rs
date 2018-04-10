@@ -87,14 +87,11 @@ where
     Self: Sized,
 {
     type TokenSpec: TokenSpec;
-    type CommandContext: CommandContext<Terminal = Token<Self::TokenSpec>, EnclosingContext = Self>;
-    type MacroDefContext: TerminalSeqContext<
-        Terminal = Token<Self::TokenSpec>,
-        EnclosingContext = Self,
-    >;
+    type CommandContext: CommandContext<Token = Token<Self::TokenSpec>, Parent = Self>;
+    type MacroDefContext: TokenSeqContext<Token = Token<Self::TokenSpec>, Parent = Self>;
     type MacroInvocationContext: MacroInvocationContext<
-        Terminal = Token<Self::TokenSpec>,
-        EnclosingContext = Self,
+        Token = Token<Self::TokenSpec>,
+        Parent = Self,
     >;
     fn add_label(&mut self, label: <Self::TokenSpec as TokenSpec>::Label);
     fn enter_command(self, name: <Self::TokenSpec as TokenSpec>::Command) -> Self::CommandContext;
@@ -106,28 +103,28 @@ where
 }
 
 pub trait CommandContext {
-    type Terminal;
-    type EnclosingContext;
-    fn add_argument(&mut self, expr: SynExpr<Self::Terminal>);
-    fn exit_command(self) -> Self::EnclosingContext;
+    type Token;
+    type Parent;
+    fn add_argument(&mut self, expr: SynExpr<Self::Token>);
+    fn exit_command(self) -> Self::Parent;
 }
 
 pub trait MacroInvocationContext
 where
     Self: Sized,
 {
-    type Terminal;
-    type EnclosingContext;
-    type MacroArgContext: TerminalSeqContext<Terminal = Self::Terminal, EnclosingContext = Self>;
+    type Token;
+    type Parent;
+    type MacroArgContext: TokenSeqContext<Token = Self::Token, Parent = Self>;
     fn enter_macro_arg(self) -> Self::MacroArgContext;
-    fn exit_macro_invocation(self) -> Self::EnclosingContext;
+    fn exit_macro_invocation(self) -> Self::Parent;
 }
 
-pub trait TerminalSeqContext {
-    type Terminal;
-    type EnclosingContext;
-    fn push_terminal(&mut self, terminal: Self::Terminal);
-    fn exit_terminal_seq(self) -> Self::EnclosingContext;
+pub trait TokenSeqContext {
+    type Token;
+    type Parent;
+    fn push_token(&mut self, token: Self::Token);
+    fn exit_token_seq(self) -> Self::Parent;
 }
 
 #[derive(Clone, Debug, PartialEq)]
