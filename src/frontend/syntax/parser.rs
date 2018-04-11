@@ -43,10 +43,10 @@ fn follows_line(lookahead: &Lookahead) -> bool {
     }
 }
 
-pub fn parse_src<I, F>(tokens: I, actions: F)
+pub fn parse_src<S: TokenSpec, I, F>(tokens: I, actions: F)
 where
-    I: Iterator<Item = Token<F::TokenSpec>>,
-    F: FileContext,
+    I: Iterator<Item = Token<S>>,
+    F: FileContext<S>,
 {
     let mut parser = Parser {
         tokens: tokens.peekable(),
@@ -93,7 +93,7 @@ impl<S: TokenSpec, I: Iterator<Item = Token<S>>> Parser<I> {
         }
     }
 
-    fn parse_file<F: FileContext<TokenSpec = S>>(&mut self, actions: F) {
+    fn parse_file<F: FileContext<S>>(&mut self, actions: F) {
         self.parse_list(
             &Some(Token::Eol(())),
             Option::is_none,
@@ -102,7 +102,7 @@ impl<S: TokenSpec, I: Iterator<Item = Token<S>>> Parser<I> {
         );
     }
 
-    fn parse_line<F: FileContext<TokenSpec = S>>(&mut self, actions: F) -> F {
+    fn parse_line<F: FileContext<S>>(&mut self, actions: F) -> F {
         if self.lookahead() == Some(Token::Label(())) {
             self.parse_labeled_line(actions)
         } else {
@@ -110,7 +110,7 @@ impl<S: TokenSpec, I: Iterator<Item = Token<S>>> Parser<I> {
         }
     }
 
-    fn parse_labeled_line<F: FileContext<TokenSpec = S>>(&mut self, mut actions: F) -> F {
+    fn parse_labeled_line<F: FileContext<S>>(&mut self, mut actions: F) -> F {
         let label = self.expect_label();
         if self.lookahead() == Some(Token::Colon(())) {
             self.bump();
@@ -123,7 +123,7 @@ impl<S: TokenSpec, I: Iterator<Item = Token<S>>> Parser<I> {
         }
     }
 
-    fn parse_unlabeled_line<F: FileContext<TokenSpec = S>>(&mut self, actions: F) -> F {
+    fn parse_unlabeled_line<F: FileContext<S>>(&mut self, actions: F) -> F {
         match self.lookahead() {
             ref t if follows_line(t) => actions,
             Some(Token::Command(())) => self.parse_command(actions),
@@ -132,11 +132,7 @@ impl<S: TokenSpec, I: Iterator<Item = Token<S>>> Parser<I> {
         }
     }
 
-    fn parse_macro_definition<F: FileContext<TokenSpec = S>>(
-        &mut self,
-        label: S::Label,
-        actions: F,
-    ) -> F {
+    fn parse_macro_definition<F: FileContext<S>>(&mut self, label: S::Label, actions: F) -> F {
         self.expect(&Some(Token::Macro(())));
         let mut actions = actions.enter_macro_def(label);
         self.expect(&Some(Token::Eol(())));
@@ -147,14 +143,14 @@ impl<S: TokenSpec, I: Iterator<Item = Token<S>>> Parser<I> {
         actions.exit_token_seq()
     }
 
-    fn parse_command<F: FileContext<TokenSpec = S>>(&mut self, actions: F) -> F {
+    fn parse_command<F: FileContext<S>>(&mut self, actions: F) -> F {
         let first_token = self.expect_command();
         let mut actions = actions.enter_command(first_token);
         actions = self.parse_argument_list(actions);
         actions.exit_command()
     }
 
-    fn parse_macro_invocation<F: FileContext<TokenSpec = S>>(&mut self, actions: F) -> F {
+    fn parse_macro_invocation<F: FileContext<S>>(&mut self, actions: F) -> F {
         let macro_name = self.expect_atom();
         let mut actions = actions.enter_macro_invocation(macro_name);
         actions = self.parse_macro_arg_list(actions);
@@ -294,19 +290,18 @@ mod tests {
     type TestToken = Token<TestTokenSpec>;
     type TestExpr = syntax::SynExpr<TestToken>;
 
-    impl<'a> syntax::FileContext for &'a mut TestContext {
-        type TokenSpec = TestTokenSpec;
+    impl<'a> syntax::FileContext<TestTokenSpec> for &'a mut TestContext {
         type CommandContext = Self;
         type MacroDefContext = Self;
         type MacroInvocationContext = Self;
 
-        fn add_label(&mut self, label: <Self::TokenSpec as TokenSpec>::Label) {
+        fn add_label(&mut self, label: <TestTokenSpec as TokenSpec>::Label) {
             self.actions.push(Action::AddLabel(label))
         }
 
         fn enter_command(
             self,
-            name: <Self::TokenSpec as TokenSpec>::Command,
+            name: <TestTokenSpec as TokenSpec>::Command,
         ) -> Self::CommandContext {
             self.actions.push(Action::EnterInstruction(name));
             self
@@ -314,7 +309,7 @@ mod tests {
 
         fn enter_macro_def(
             self,
-            label: <Self::TokenSpec as TokenSpec>::Label,
+            label: <TestTokenSpec as TokenSpec>::Label,
         ) -> Self::MacroDefContext {
             self.actions.push(Action::EnterMacroDef(label));
             self.token_seq_kind = Some(TokenSeqKind::MacroDef);
@@ -323,7 +318,7 @@ mod tests {
 
         fn enter_macro_invocation(
             self,
-            name: <Self::TokenSpec as TokenSpec>::Atom,
+            name: <TestTokenSpec as TokenSpec>::Atom,
         ) -> Self::MacroInvocationContext {
             self.actions.push(Action::EnterMacroInvocation(name));
             self

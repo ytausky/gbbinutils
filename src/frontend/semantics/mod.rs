@@ -18,27 +18,26 @@ impl<'a, F: 'a> SemanticActions<'a, F> {
     }
 }
 
-impl<'a, F: Frontend + 'a> syntax::FileContext for SemanticActions<'a, F> {
-    type TokenSpec = String;
+impl<'a, F: Frontend + 'a> syntax::FileContext<String> for SemanticActions<'a, F> {
     type CommandContext = CommandActions<'a, F>;
     type MacroDefContext = MacroDefActions<'a, F>;
     type MacroInvocationContext = MacroInvocationActions<'a, F>;
 
-    fn add_label(&mut self, label: <Self::TokenSpec as TokenSpec>::Label) {
+    fn add_label(&mut self, label: <String as TokenSpec>::Label) {
         self.session.define_label(label);
     }
 
-    fn enter_command(self, name: <Self::TokenSpec as TokenSpec>::Command) -> Self::CommandContext {
+    fn enter_command(self, name: <String as TokenSpec>::Command) -> Self::CommandContext {
         CommandActions::new(name, self)
     }
 
-    fn enter_macro_def(self, name: <Self::TokenSpec as TokenSpec>::Label) -> Self::MacroDefContext {
+    fn enter_macro_def(self, name: <String as TokenSpec>::Label) -> Self::MacroDefContext {
         MacroDefActions::new(name, self)
     }
 
     fn enter_macro_invocation(
         self,
-        name: <Self::TokenSpec as TokenSpec>::Atom,
+        name: <String as TokenSpec>::Atom,
     ) -> Self::MacroInvocationContext {
         MacroInvocationActions::new(name, self)
     }

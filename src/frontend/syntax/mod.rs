@@ -6,10 +6,10 @@ pub fn tokenize(src: &str) -> self::lexer::Lexer {
     self::lexer::Lexer::new(src)
 }
 
-pub fn parse_token_seq<I, F>(tokens: I, actions: F)
+pub fn parse_token_seq<S: TokenSpec, I, F>(tokens: I, actions: F)
 where
-    I: Iterator<Item = Token<F::TokenSpec>>,
-    F: FileContext,
+    I: Iterator<Item = Token<S>>,
+    F: FileContext<S>,
 {
     self::parser::parse_src(tokens, actions)
 }
@@ -52,24 +52,17 @@ impl TokenSpec for () {
 
 impl Copy for Token<()> {}
 
-pub trait FileContext
+pub trait FileContext<S: TokenSpec>
 where
     Self: Sized,
 {
-    type TokenSpec: TokenSpec;
-    type CommandContext: CommandContext<Token = Token<Self::TokenSpec>, Parent = Self>;
-    type MacroDefContext: TokenSeqContext<Token = Token<Self::TokenSpec>, Parent = Self>;
-    type MacroInvocationContext: MacroInvocationContext<
-        Token = Token<Self::TokenSpec>,
-        Parent = Self,
-    >;
-    fn add_label(&mut self, label: <Self::TokenSpec as TokenSpec>::Label);
-    fn enter_command(self, name: <Self::TokenSpec as TokenSpec>::Command) -> Self::CommandContext;
-    fn enter_macro_def(self, name: <Self::TokenSpec as TokenSpec>::Label) -> Self::MacroDefContext;
-    fn enter_macro_invocation(
-        self,
-        name: <Self::TokenSpec as TokenSpec>::Atom,
-    ) -> Self::MacroInvocationContext;
+    type CommandContext: CommandContext<Token = Token<S>, Parent = Self>;
+    type MacroDefContext: TokenSeqContext<Token = Token<S>, Parent = Self>;
+    type MacroInvocationContext: MacroInvocationContext<Token = Token<S>, Parent = Self>;
+    fn add_label(&mut self, label: S::Label);
+    fn enter_command(self, name: S::Command) -> Self::CommandContext;
+    fn enter_macro_def(self, name: S::Label) -> Self::MacroDefContext;
+    fn enter_macro_invocation(self, name: S::Atom) -> Self::MacroInvocationContext;
 }
 
 pub trait CommandContext {
