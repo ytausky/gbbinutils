@@ -59,11 +59,11 @@ fn is_in_byte_range(n: i32) -> bool {
 }
 
 fn is_in_i8_range(n: i32) -> bool {
-    n >= i8::min_value() as i32 && n <= i8::max_value() as i32
+    n >= i32::from(i8::min_value()) && n <= i32::from(i8::max_value())
 }
 
 fn is_in_u8_range(n: i32) -> bool {
-    n >= u8::min_value() as i32 && n <= u8::max_value() as i32
+    n >= i32::from(u8::min_value()) && n <= i32::from(u8::max_value())
 }
 
 #[derive(Clone, Debug, PartialEq)]

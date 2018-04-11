@@ -70,7 +70,7 @@ impl<'a, F: Frontend + 'a> syntax::CommandContext for CommandActions<'a, F> {
 
     fn exit_command(mut self) -> Self::Parent {
         match self.name {
-            Command::Db => for arg in self.args.into_iter() {
+            Command::Db => for arg in self.args {
                 match arg {
                     SynExpr::Atom(atom) => {
                         use frontend::ExprFactory;
