@@ -1,7 +1,6 @@
 use super::*;
 
 use std::iter;
-use std::marker::PhantomData;
 
 type Lookahead = Option<Token<()>>;
 
@@ -19,21 +18,15 @@ where
 {
     let mut parser = Parser {
         tokens: tokens.peekable(),
-        _phantom: PhantomData,
     };
     parser.parse_file(actions)
 }
 
-struct Parser<I: Iterator, F: FileContext> {
+struct Parser<I: Iterator> {
     tokens: iter::Peekable<I>,
-    _phantom: PhantomData<F>,
 }
 
-impl<I, F> Parser<I, F>
-where
-    F: FileContext,
-    I: Iterator<Item = Token<F::TokenSpec>>,
-{
+impl<S: TokenSpec, I: Iterator<Item = Token<S>>> Parser<I> {
     fn lookahead(&mut self) -> Lookahead {
         self.tokens.peek().map(Token::kind)
     }
@@ -47,28 +40,28 @@ where
         self.bump()
     }
 
-    fn expect_label(&mut self) -> <F::TokenSpec as TokenSpec>::Label {
+    fn expect_label(&mut self) -> S::Label {
         match self.tokens.next() {
             Some(Token::Label(label)) => label,
             _ => panic!(),
         }
     }
 
-    fn expect_command(&mut self) -> <F::TokenSpec as TokenSpec>::Command {
+    fn expect_command(&mut self) -> S::Command {
         match self.tokens.next() {
             Some(Token::Command(command)) => command,
             _ => panic!(),
         }
     }
 
-    fn expect_atom(&mut self) -> <F::TokenSpec as TokenSpec>::Atom {
+    fn expect_atom(&mut self) -> S::Atom {
         match self.tokens.next() {
             Some(Token::Atom(atom)) => atom,
             _ => panic!(),
         }
     }
 
-    fn parse_file(&mut self, actions: F) {
+    fn parse_file<F: FileContext<TokenSpec = S>>(&mut self, actions: F) {
         self.parse_list(
             &Some(Token::Eol(())),
             Option::is_none,
@@ -77,7 +70,7 @@ where
         );
     }
 
-    fn parse_line(&mut self, actions: F) -> F {
+    fn parse_line<F: FileContext<TokenSpec = S>>(&mut self, actions: F) -> F {
         if self.lookahead() == Some(Token::Label(())) {
             self.parse_labeled_line(actions)
         } else {
@@ -85,7 +78,7 @@ where
         }
     }
 
-    fn parse_labeled_line(&mut self, mut actions: F) -> F {
+    fn parse_labeled_line<F: FileContext<TokenSpec = S>>(&mut self, mut actions: F) -> F {
         let label = self.expect_label();
         if self.lookahead() == Some(Token::Colon(())) {
             self.bump();
@@ -98,7 +91,7 @@ where
         }
     }
 
-    fn parse_unlabeled_line(&mut self, actions: F) -> F {
+    fn parse_unlabeled_line<F: FileContext<TokenSpec = S>>(&mut self, actions: F) -> F {
         match self.lookahead() {
             ref t if follows_line(t) => actions,
             Some(Token::Command(())) => self.parse_command(actions),
@@ -107,9 +100,9 @@ where
         }
     }
 
-    fn parse_macro_definition(
+    fn parse_macro_definition<F: FileContext<TokenSpec = S>>(
         &mut self,
-        label: <F::TokenSpec as TokenSpec>::Label,
+        label: S::Label,
         actions: F,
     ) -> F {
         self.expect(&Some(Token::Macro(())));
@@ -122,21 +115,21 @@ where
         actions.exit_token_seq()
     }
 
-    fn parse_command(&mut self, actions: F) -> F {
+    fn parse_command<F: FileContext<TokenSpec = S>>(&mut self, actions: F) -> F {
         let first_token = self.expect_command();
         let mut actions = actions.enter_command(first_token);
         actions = self.parse_argument_list(actions);
         actions.exit_command()
     }
 
-    fn parse_macro_invocation(&mut self, actions: F) -> F {
+    fn parse_macro_invocation<F: FileContext<TokenSpec = S>>(&mut self, actions: F) -> F {
         let macro_name = self.expect_atom();
         let mut actions = actions.enter_macro_invocation(macro_name);
         actions = self.parse_macro_arg_list(actions);
         actions.exit_macro_invocation()
     }
 
-    fn parse_argument_list(&mut self, actions: F::CommandContext) -> F::CommandContext {
+    fn parse_argument_list<C: CommandContext<Token = Token<S>>>(&mut self, actions: C) -> C {
         self.parse_list(
             &Some(Token::Comma(())),
             follows_line,
@@ -145,10 +138,10 @@ where
         )
     }
 
-    fn parse_macro_arg_list(
+    fn parse_macro_arg_list<M: MacroInvocationContext<Token = Token<S>>>(
         &mut self,
-        actions: F::MacroInvocationContext,
-    ) -> F::MacroInvocationContext {
+        actions: M,
+    ) -> M {
         self.parse_list(
             &Some(Token::Comma(())),
             follows_line,
@@ -188,7 +181,7 @@ where
         context
     }
 
-    fn parse_argument(&mut self, mut actions: F::CommandContext) -> F::CommandContext {
+    fn parse_argument<C: CommandContext<Token = Token<S>>>(&mut self, mut actions: C) -> C {
         let expr = self.parse_expression();
         actions.add_argument(expr);
         actions
