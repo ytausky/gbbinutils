@@ -14,43 +14,13 @@ where
     self::parser::parse_src(tokens, actions)
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum Token<S: TokenSpec> {
-    Atom(S::Atom),
-    ClosingBracket(S::Other),
-    Colon(S::Other),
-    Comma(S::Other),
-    Command(S::Command),
-    Endm(S::Other),
-    Eol(S::Other),
-    Label(S::Label),
-    Macro(S::Other),
-    OpeningBracket(S::Other),
-}
+pub use self::parser::Token;
 
 pub trait TokenSpec {
     type Atom;
     type Command;
     type Label;
     type Other;
-}
-
-impl<S: TokenSpec> Token<S> {
-    fn kind(&self) -> Token<()> {
-        use self::Token::*;
-        match *self {
-            Atom(_) => Atom(()),
-            ClosingBracket(_) => ClosingBracket(()),
-            Colon(_) => Colon(()),
-            Comma(_) => Comma(()),
-            Command(_) => Command(()),
-            Endm(_) => Endm(()),
-            Eol(_) => Eol(()),
-            Label(_) => Label(()),
-            Macro(_) => Macro(()),
-            OpeningBracket(_) => OpeningBracket(()),
-        }
-    }
 }
 
 pub trait StringRef {}
