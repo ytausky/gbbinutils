@@ -20,7 +20,6 @@ pub trait TokenSpec {
     type Atom;
     type Command;
     type Label;
-    type Other;
 }
 
 pub trait StringRef {}
@@ -32,7 +31,6 @@ impl<T: StringRef> TokenSpec for T {
     type Atom = Atom<T>;
     type Command = keyword::Command;
     type Label = T;
-    type Other = ();
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -47,10 +45,7 @@ impl TokenSpec for () {
     type Atom = ();
     type Command = ();
     type Label = ();
-    type Other = ();
 }
-
-impl Copy for Token<()> {}
 
 pub trait FileContext<S: TokenSpec>
 where

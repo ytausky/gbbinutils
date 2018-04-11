@@ -5,31 +5,33 @@ use std::iter;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token<S: TokenSpec> {
     Atom(S::Atom),
-    ClosingBracket(S::Other),
-    Colon(S::Other),
-    Comma(S::Other),
+    ClosingBracket,
+    Colon,
+    Comma,
     Command(S::Command),
-    Endm(S::Other),
-    Eol(S::Other),
+    Endm,
+    Eol,
     Label(S::Label),
-    Macro(S::Other),
-    OpeningBracket(S::Other),
+    Macro,
+    OpeningBracket,
 }
+
+impl Copy for Token<()> {}
 
 impl<S: TokenSpec> Token<S> {
     fn kind(&self) -> Token<()> {
         use self::Token::*;
         match *self {
             Atom(_) => Atom(()),
-            ClosingBracket(_) => ClosingBracket(()),
-            Colon(_) => Colon(()),
-            Comma(_) => Comma(()),
+            ClosingBracket => ClosingBracket,
+            Colon => Colon,
+            Comma => Comma,
             Command(_) => Command(()),
-            Endm(_) => Endm(()),
-            Eol(_) => Eol(()),
+            Endm => Endm,
+            Eol => Eol,
             Label(_) => Label(()),
-            Macro(_) => Macro(()),
-            OpeningBracket(_) => OpeningBracket(()),
+            Macro => Macro,
+            OpeningBracket => OpeningBracket,
         }
     }
 }
@@ -38,7 +40,7 @@ type Lookahead = Option<Token<()>>;
 
 fn follows_line(lookahead: &Lookahead) -> bool {
     match *lookahead {
-        None | Some(Token::Eol(())) => true,
+        None | Some(Token::Eol) => true,
         _ => false,
     }
 }
@@ -95,7 +97,7 @@ impl<S: TokenSpec, I: Iterator<Item = Token<S>>> Parser<I> {
 
     fn parse_file<F: FileContext<S>>(&mut self, actions: F) {
         self.parse_list(
-            &Some(Token::Eol(())),
+            &Some(Token::Eol),
             Option::is_none,
             |p, c| p.parse_line(c),
             actions,
@@ -112,10 +114,10 @@ impl<S: TokenSpec, I: Iterator<Item = Token<S>>> Parser<I> {
 
     fn parse_labeled_line<F: FileContext<S>>(&mut self, mut actions: F) -> F {
         let label = self.expect_label();
-        if self.lookahead() == Some(Token::Colon(())) {
+        if self.lookahead() == Some(Token::Colon) {
             self.bump();
         }
-        if self.lookahead() == Some(Token::Macro(())) {
+        if self.lookahead() == Some(Token::Macro) {
             self.parse_macro_definition(label, actions)
         } else {
             actions.add_label(label);
@@ -133,13 +135,13 @@ impl<S: TokenSpec, I: Iterator<Item = Token<S>>> Parser<I> {
     }
 
     fn parse_macro_definition<F: FileContext<S>>(&mut self, label: S::Label, actions: F) -> F {
-        self.expect(&Some(Token::Macro(())));
+        self.expect(&Some(Token::Macro));
         let mut actions = actions.enter_macro_def(label);
-        self.expect(&Some(Token::Eol(())));
-        while self.lookahead() != Some(Token::Endm(())) {
+        self.expect(&Some(Token::Eol));
+        while self.lookahead() != Some(Token::Endm) {
             actions.push_token(self.bump())
         }
-        self.expect(&Some(Token::Endm(())));
+        self.expect(&Some(Token::Endm));
         actions.exit_token_seq()
     }
 
@@ -159,7 +161,7 @@ impl<S: TokenSpec, I: Iterator<Item = Token<S>>> Parser<I> {
 
     fn parse_argument_list<C: CommandContext<Token = Token<S>>>(&mut self, actions: C) -> C {
         self.parse_list(
-            &Some(Token::Comma(())),
+            &Some(Token::Comma),
             follows_line,
             |p, c| p.parse_argument(c),
             actions,
@@ -171,12 +173,12 @@ impl<S: TokenSpec, I: Iterator<Item = Token<S>>> Parser<I> {
         actions: M,
     ) -> M {
         self.parse_list(
-            &Some(Token::Comma(())),
+            &Some(Token::Comma),
             follows_line,
             |p, actions| {
                 let mut actions = actions.enter_macro_arg();
                 let mut next_token = p.lookahead();
-                while next_token != Some(Token::Comma(())) && !follows_line(&next_token) {
+                while next_token != Some(Token::Comma) && !follows_line(&next_token) {
                     actions.push_token(p.bump());
                     next_token = p.lookahead()
                 }
@@ -216,7 +218,7 @@ impl<S: TokenSpec, I: Iterator<Item = Token<S>>> Parser<I> {
     }
 
     fn parse_expression(&mut self) -> SynExpr<I::Item> {
-        if self.lookahead() == Some(Token::OpeningBracket(())) {
+        if self.lookahead() == Some(Token::OpeningBracket) {
             self.parse_deref_expression()
         } else {
             let token = self.bump();
@@ -225,9 +227,9 @@ impl<S: TokenSpec, I: Iterator<Item = Token<S>>> Parser<I> {
     }
 
     fn parse_deref_expression(&mut self) -> SynExpr<I::Item> {
-        self.expect(&Some(Token::OpeningBracket(())));
+        self.expect(&Some(Token::OpeningBracket));
         let expr = self.parse_expression();
-        self.expect(&Some(Token::ClosingBracket(())));
+        self.expect(&Some(Token::ClosingBracket));
         expr.deref()
     }
 }
@@ -284,7 +286,6 @@ mod tests {
         type Atom = usize;
         type Command = usize;
         type Label = usize;
-        type Other = ();
     }
 
     type TestToken = Token<TestTokenSpec>;
@@ -377,7 +378,7 @@ mod tests {
 
     #[test]
     fn parse_empty_line() {
-        assert_eq_actions(&[Eol(())], &[])
+        assert_eq_actions(&[Eol], &[])
     }
 
     fn assert_eq_actions(tokens: &[TestToken], expected_actions: &[Action]) {
@@ -393,7 +394,7 @@ mod tests {
 
     #[test]
     fn parse_nullary_instruction_after_eol() {
-        assert_eq_actions(&[Eol(()), Command(1)], &inst(1, vec![]))
+        assert_eq_actions(&[Eol, Command(1)], &inst(1, vec![]))
     }
 
     fn inst(name: <TestTokenSpec as TokenSpec>::Command, args: Vec<Vec<Action>>) -> Vec<Action> {
@@ -407,7 +408,7 @@ mod tests {
 
     #[test]
     fn parse_nullary_instruction_followed_by_eol() {
-        assert_eq_actions(&[Command(0), Eol(())], &inst(0, vec![]))
+        assert_eq_actions(&[Command(0), Eol], &inst(0, vec![]))
     }
 
     #[test]
@@ -426,7 +427,7 @@ mod tests {
     #[test]
     fn parse_binary_instruction() {
         assert_eq_actions(
-            &[Command(0), Atom(1), Comma(()), Atom(3)],
+            &[Command(0), Atom(1), Comma, Atom(3)],
             &inst(0, vec![expr(ident(1)), expr(ident(3))]),
         );
     }
@@ -436,12 +437,12 @@ mod tests {
         let tokens = &[
             Command(0),
             Atom(1),
-            Comma(()),
+            Comma,
             Atom(3),
-            Eol(()),
+            Eol,
             Command(5),
             Atom(6),
-            Comma(()),
+            Comma,
             Atom(8),
         ];
         let expected_actions = &concat(vec![
@@ -464,13 +465,13 @@ mod tests {
         let tokens = &[
             Command(0),
             Atom(1),
-            Comma(()),
+            Comma,
             Atom(3),
-            Eol(()),
-            Eol(()),
+            Eol,
+            Eol,
             Command(6),
             Atom(7),
-            Comma(()),
+            Comma,
             Atom(9),
         ];
         let expected_actions = &concat(vec![
@@ -482,7 +483,7 @@ mod tests {
 
     #[test]
     fn parse_empty_macro_definition() {
-        let tokens = &[Label(0), Colon(()), Macro(()), Eol(()), Endm(())];
+        let tokens = &[Label(0), Colon, Macro, Eol, Endm];
         let expected_actions = &macro_def(0, vec![]);
         assert_eq_actions(tokens, expected_actions);
     }
@@ -499,36 +500,28 @@ mod tests {
 
     #[test]
     fn parse_macro_definition_with_instruction() {
-        let tokens = &[
-            Label(0),
-            Colon(()),
-            Macro(()),
-            Eol(()),
-            Command(4),
-            Eol(()),
-            Endm(()),
-        ];
-        let expected_actions = &macro_def(0, vec![Command(4), Eol(())]);
+        let tokens = &[Label(0), Colon, Macro, Eol, Command(4), Eol, Endm];
+        let expected_actions = &macro_def(0, vec![Command(4), Eol]);
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_label() {
-        let tokens = &[Label(0), Eol(())];
+        let tokens = &[Label(0), Eol];
         let expected_actions = &add_label(0, vec![]);
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_label_colon() {
-        let tokens = &[Label(0), Colon(()), Eol(())];
+        let tokens = &[Label(0), Colon, Eol];
         let expected_actions = &add_label(0, vec![]);
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_labeled_instruction() {
-        let tokens = &[Label(0), Colon(()), Command(2), Eol(())];
+        let tokens = &[Label(0), Colon, Command(2), Eol];
         let expected_actions = &add_label(0, inst(2, vec![]));
         assert_eq_actions(tokens, expected_actions)
     }
@@ -544,7 +537,7 @@ mod tests {
 
     #[test]
     fn parse_deref_operand() {
-        let tokens = &[Command(0), OpeningBracket(()), Atom(2), ClosingBracket(())];
+        let tokens = &[Command(0), OpeningBracket, Atom(2), ClosingBracket];
         let expected_actions = &inst(0, vec![expr(deref(ident(2)))]);
         assert_eq_actions(tokens, expected_actions)
     }
@@ -576,15 +569,7 @@ mod tests {
 
     #[test]
     fn parse_binary_macro_invocation_with_multiple_terminals() {
-        let tokens = &[
-            Atom(0),
-            Atom(1),
-            Atom(2),
-            Comma(()),
-            Atom(4),
-            Atom(5),
-            Atom(6),
-        ];
+        let tokens = &[Atom(0), Atom(1), Atom(2), Comma, Atom(4), Atom(5), Atom(6)];
         let expected_actions = &invoke(
             0,
             vec![vec![Atom(1), Atom(2)], vec![Atom(4), Atom(5), Atom(6)]],
