@@ -9,9 +9,10 @@ pub fn tokenize(src: &str) -> self::lexer::Lexer {
 pub fn parse_token_seq<I, F>(tokens: I, actions: F)
 where
     I: Iterator<Item = Token>,
-    F: FileContext<String>,
+    F: FileContext<String, ()>,
 {
-    self::parser::parse_src(tokens.zip(0..), actions)
+    use std::iter;
+    self::parser::parse_src(tokens.zip(iter::repeat(())), actions)
 }
 
 pub type Token = self::parser::Token<String>;
@@ -51,15 +52,15 @@ impl TokenSpec for () {
     type Label = ();
 }
 
-pub trait FileContext<S: TokenSpec>
+pub trait FileContext<S: TokenSpec, T>
 where
     Self: Sized,
 {
     type CommandContext: CommandContext<Token = parser::Token<S>, Parent = Self>;
     type MacroDefContext: TokenSeqContext<Token = parser::Token<S>, Parent = Self>;
     type MacroInvocationContext: MacroInvocationContext<Token = parser::Token<S>, Parent = Self>;
-    fn add_label(&mut self, label: S::Label);
-    fn enter_command(self, name: S::Command) -> Self::CommandContext;
+    fn add_label(&mut self, label: (S::Label, T));
+    fn enter_command(self, name: (S::Command, T)) -> Self::CommandContext;
     fn enter_macro_def(self, name: S::Label) -> Self::MacroDefContext;
     fn enter_macro_invocation(self, name: S::Atom) -> Self::MacroInvocationContext;
 }

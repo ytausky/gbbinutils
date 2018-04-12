@@ -49,7 +49,7 @@ trait TokenSeqAnalyzer {
     fn analyze<I, F>(&mut self, tokens: I, frontend: &mut F)
     where
         I: Iterator<Item = Token>,
-        F: Frontend;
+        F: Frontend<TrackingData = ()>;
 }
 
 struct SemanticTokenSeqAnalyzer;
@@ -64,7 +64,7 @@ impl TokenSeqAnalyzer for SemanticTokenSeqAnalyzer {
     fn analyze<I, F>(&mut self, tokens: I, frontend: &mut F)
     where
         I: Iterator<Item = Token>,
-        F: Frontend,
+        F: Frontend<TrackingData = ()>,
     {
         let actions = semantics::SemanticActions::new(frontend);
         syntax::parse_token_seq(tokens, actions)
@@ -115,6 +115,7 @@ impl ExprFactory for StrExprFactory {
 }
 
 pub trait Frontend {
+    type TrackingData;
     fn include_source_file(&mut self, filename: String);
     fn emit_item(&mut self, item: Item);
     fn define_label(&mut self, label: String);
@@ -166,6 +167,8 @@ where
     B: Backend,
     DL: DiagnosticsListener,
 {
+    type TrackingData = ();
+
     fn include_source_file(&mut self, filename: String) {
         let src = self.fs.read_file(&filename);
         let tokens = syntax::tokenize(&src);

@@ -4,12 +4,12 @@ use frontend::syntax::{self, token, SynExpr, Token, TokenSpec, keyword::Command}
 
 mod instruction;
 
-pub struct SemanticActions<'a, F: 'a> {
+pub struct SemanticActions<'a, F: Frontend + 'a> {
     session: &'a mut F,
     expr_factory: StrExprFactory,
 }
 
-impl<'a, F: 'a> SemanticActions<'a, F> {
+impl<'a, F: Frontend + 'a> SemanticActions<'a, F> {
     pub fn new(session: &'a mut F) -> SemanticActions<'a, F> {
         SemanticActions {
             session,
@@ -18,16 +18,19 @@ impl<'a, F: 'a> SemanticActions<'a, F> {
     }
 }
 
-impl<'a, F: Frontend + 'a> syntax::FileContext<String> for SemanticActions<'a, F> {
+impl<'a, F: Frontend + 'a> syntax::FileContext<String, F::TrackingData> for SemanticActions<'a, F> {
     type CommandContext = CommandActions<'a, F>;
     type MacroDefContext = MacroDefActions<'a, F>;
     type MacroInvocationContext = MacroInvocationActions<'a, F>;
 
-    fn add_label(&mut self, label: <String as TokenSpec>::Label) {
+    fn add_label(&mut self, (label, _): (<String as TokenSpec>::Label, F::TrackingData)) {
         self.session.define_label(label);
     }
 
-    fn enter_command(self, name: <String as TokenSpec>::Command) -> Self::CommandContext {
+    fn enter_command(
+        self,
+        name: (<String as TokenSpec>::Command, F::TrackingData),
+    ) -> Self::CommandContext {
         CommandActions::new(name, self)
     }
 
@@ -43,14 +46,17 @@ impl<'a, F: Frontend + 'a> syntax::FileContext<String> for SemanticActions<'a, F
     }
 }
 
-pub struct CommandActions<'a, F: 'a> {
-    name: Command,
+pub struct CommandActions<'a, F: Frontend + 'a> {
+    name: (Command, F::TrackingData),
     args: Vec<SynExpr<syntax::Token>>,
     parent: SemanticActions<'a, F>,
 }
 
-impl<'a, F: 'a> CommandActions<'a, F> {
-    fn new(name: Command, parent: SemanticActions<'a, F>) -> CommandActions<'a, F> {
+impl<'a, F: Frontend + 'a> CommandActions<'a, F> {
+    fn new(
+        name: (Command, F::TrackingData),
+        parent: SemanticActions<'a, F>,
+    ) -> CommandActions<'a, F> {
         CommandActions {
             name,
             args: Vec::new(),
@@ -69,7 +75,7 @@ impl<'a, F: Frontend + 'a> syntax::CommandContext for CommandActions<'a, F> {
 
     fn exit_command(mut self) -> Self::Parent {
         match self.name {
-            Command::Db => for arg in self.args {
+            (Command::Db, _) => for arg in self.args {
                 match arg {
                     SynExpr::Atom(atom) => {
                         use frontend::ExprFactory;
@@ -79,10 +85,10 @@ impl<'a, F: Frontend + 'a> syntax::CommandContext for CommandActions<'a, F> {
                     _ => panic!(),
                 }
             },
-            Command::Include => self.parent
+            (Command::Include, _) => self.parent
                 .session
                 .include_source_file(reduce_include(self.args)),
-            command => {
+            (command, _) => {
                 let mut analyzer =
                     self::instruction::CommandAnalyzer::new(&mut self.parent.expr_factory);
                 self.parent.session.emit_item(
@@ -97,7 +103,7 @@ impl<'a, F: Frontend + 'a> syntax::CommandContext for CommandActions<'a, F> {
     }
 }
 
-pub struct MacroDefActions<'a, F: 'a> {
+pub struct MacroDefActions<'a, F: Frontend + 'a> {
     name: String,
     tokens: Vec<Token>,
     parent: SemanticActions<'a, F>,
@@ -127,13 +133,13 @@ impl<'a, F: Frontend + 'a> syntax::TokenSeqContext for MacroDefActions<'a, F> {
     }
 }
 
-pub struct MacroInvocationActions<'a, F: 'a> {
+pub struct MacroInvocationActions<'a, F: Frontend + 'a> {
     name: Atom<String>,
     args: Vec<Vec<Token>>,
     parent: SemanticActions<'a, F>,
 }
 
-impl<'a, F: 'a> MacroInvocationActions<'a, F> {
+impl<'a, F: Frontend + 'a> MacroInvocationActions<'a, F> {
     fn new(name: Atom<String>, parent: SemanticActions<'a, F>) -> MacroInvocationActions<'a, F> {
         MacroInvocationActions {
             name,
@@ -165,12 +171,12 @@ impl<'a, F: Frontend + 'a> syntax::MacroInvocationContext for MacroInvocationAct
     }
 }
 
-pub struct MacroArgActions<'a, F: 'a> {
+pub struct MacroArgActions<'a, F: Frontend + 'a> {
     tokens: Vec<Token>,
     parent: MacroInvocationActions<'a, F>,
 }
 
-impl<'a, F: 'a> MacroArgActions<'a, F> {
+impl<'a, F: Frontend + 'a> MacroArgActions<'a, F> {
     fn new(parent: MacroInvocationActions<'a, F>) -> MacroArgActions<'a, F> {
         MacroArgActions {
             tokens: Vec::new(),
@@ -179,7 +185,7 @@ impl<'a, F: 'a> MacroArgActions<'a, F> {
     }
 }
 
-impl<'a, F> syntax::TokenSeqContext for MacroArgActions<'a, F> {
+impl<'a, F: Frontend + 'a> syntax::TokenSeqContext for MacroArgActions<'a, F> {
     type Token = Token;
     type Parent = MacroInvocationActions<'a, F>;
 
@@ -228,6 +234,8 @@ mod tests {
     }
 
     impl Frontend for TestFrontend {
+        type TrackingData = ();
+
         fn include_source_file(&mut self, filename: String) {
             self.0.push(TestOperation::Include(filename))
         }
@@ -253,7 +261,7 @@ mod tests {
     fn build_include_item() {
         let filename = "file.asm";
         let actions = collect_semantic_actions(|actions| {
-            let mut command = actions.enter_command(Command::Include);
+            let mut command = actions.enter_command((Command::Include, ()));
             let expr = SynExpr::from(token::Atom(Atom::String(filename.to_string())));
             command.add_argument(expr);
             command.exit_command();
@@ -265,7 +273,7 @@ mod tests {
     fn emit_byte_item() {
         let bytes = [0x42, 0x78];
         let actions = collect_semantic_actions(|actions| {
-            let mut command = actions.enter_command(Command::Db);
+            let mut command = actions.enter_command((Command::Db, ()));
             for &byte in bytes.iter() {
                 command.add_argument(mk_literal(byte))
             }
@@ -292,7 +300,8 @@ mod tests {
     #[test]
     fn analyze_label() {
         let label = "label";
-        let actions = collect_semantic_actions(|mut actions| actions.add_label(label.to_string()));
+        let actions =
+            collect_semantic_actions(|mut actions| actions.add_label((label.to_string(), ())));
         assert_eq!(actions, [TestOperation::Label(label.to_string())])
     }
 
