@@ -5,12 +5,12 @@ use std::ops::{Index, Range};
 use std::str;
 
 #[derive(PartialEq)]
-enum ScannerTokenKind {
+enum TokenKind {
     ClosingBracket,
     Colon,
     Comma,
     Eol,
-    Identifier,
+    Ident,
     Label,
     Number,
     OpeningBracket,
@@ -24,7 +24,7 @@ struct Scanner<I: Iterator> {
 }
 
 impl<I: Iterator<Item = char>> Iterator for Scanner<I> {
-    type Item = (ScannerTokenKind, Range<usize>);
+    type Item = (TokenKind, Range<usize>);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.skip_irrelevant_characters();
@@ -74,47 +74,47 @@ impl<I: Iterator<Item = char>> Scanner<I> {
     fn lex_token(&mut self) -> <Self as Iterator>::Item {
         let first_char = self.current_char().unwrap();
         let next_token = match first_char {
-            ']' => self.take(ScannerTokenKind::ClosingBracket),
-            ':' => self.take(ScannerTokenKind::Colon),
-            ',' => self.take(ScannerTokenKind::Comma),
-            '\n' => self.take(ScannerTokenKind::Eol),
-            '[' => self.take(ScannerTokenKind::OpeningBracket),
+            ']' => self.take(TokenKind::ClosingBracket),
+            ':' => self.take(TokenKind::Colon),
+            ',' => self.take(TokenKind::Comma),
+            '\n' => self.take(TokenKind::Eol),
+            '[' => self.take(TokenKind::OpeningBracket),
             '$' => self.lex_number(),
             '"' => self.lex_quoted_string(),
             _ => self.lex_word(),
         };
-        if next_token == ScannerTokenKind::Eol {
+        if next_token == TokenKind::Eol {
             self.is_at_line_start = true
         }
         (next_token, self.range.clone())
     }
 
-    fn take(&mut self, token: ScannerTokenKind) -> ScannerTokenKind {
+    fn take(&mut self, token: TokenKind) -> TokenKind {
         self.advance();
         token
     }
 
-    fn lex_quoted_string(&mut self) -> ScannerTokenKind {
+    fn lex_quoted_string(&mut self) -> TokenKind {
         self.advance();
         self.skip_characters_if(|c| c != '"');
         self.advance();
-        ScannerTokenKind::String
+        TokenKind::String
     }
 
-    fn lex_number(&mut self) -> ScannerTokenKind {
+    fn lex_number(&mut self) -> TokenKind {
         self.advance();
         self.skip_characters_if(is_hex_digit);
-        ScannerTokenKind::Number
+        TokenKind::Number
     }
 
-    fn lex_word(&mut self) -> ScannerTokenKind {
+    fn lex_word(&mut self) -> TokenKind {
         let starts_on_first_column = self.is_at_line_start;
         self.advance();
         self.find_word_end();
         if starts_on_first_column {
-            ScannerTokenKind::Label
+            TokenKind::Label
         } else {
-            ScannerTokenKind::Identifier
+            TokenKind::Ident
         }
     }
 
@@ -159,21 +159,19 @@ impl<'a> Iterator for Lexer<'a> {
     }
 }
 
-fn mk_token(kind: ScannerTokenKind, lexeme: &str) -> Token {
+fn mk_token(kind: TokenKind, lexeme: &str) -> Token {
     match kind {
-        ScannerTokenKind::ClosingBracket => token::ClosingBracket,
-        ScannerTokenKind::Colon => token::Colon,
-        ScannerTokenKind::Comma => token::Comma,
-        ScannerTokenKind::Eol => token::Eol,
-        ScannerTokenKind::Identifier => mk_keyword_or(|x| token::Atom(Atom::Ident(x)), lexeme),
-        ScannerTokenKind::Label => mk_keyword_or(token::Label, lexeme),
-        ScannerTokenKind::Number => {
+        TokenKind::ClosingBracket => token::ClosingBracket,
+        TokenKind::Colon => token::Colon,
+        TokenKind::Comma => token::Comma,
+        TokenKind::Eol => token::Eol,
+        TokenKind::Ident => mk_keyword_or(|x| token::Atom(Atom::Ident(x)), lexeme),
+        TokenKind::Label => mk_keyword_or(token::Label, lexeme),
+        TokenKind::Number => {
             token::Atom(Atom::Number(i32::from_str_radix(&lexeme[1..], 16).unwrap()))
         }
-        ScannerTokenKind::OpeningBracket => token::OpeningBracket,
-        ScannerTokenKind::String => {
-            token::Atom(Atom::String(lexeme[1..(lexeme.len() - 1)].to_string()))
-        }
+        TokenKind::OpeningBracket => token::OpeningBracket,
+        TokenKind::String => token::Atom(Atom::String(lexeme[1..(lexeme.len() - 1)].to_string())),
     }
 }
 
