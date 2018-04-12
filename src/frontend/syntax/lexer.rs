@@ -165,10 +165,8 @@ fn mk_token(kind: ScannerTokenKind, lexeme: &str) -> Token {
         ScannerTokenKind::Colon => token::Colon,
         ScannerTokenKind::Comma => token::Comma,
         ScannerTokenKind::Eol => token::Eol,
-        ScannerTokenKind::Identifier => {
-            mk_keyword_or(|x| token::Atom(Atom::Ident(x.to_string())), lexeme)
-        }
-        ScannerTokenKind::Label => mk_keyword_or(|x| token::Label(x.to_string()), lexeme),
+        ScannerTokenKind::Identifier => mk_keyword_or(|x| token::Atom(Atom::Ident(x)), lexeme),
+        ScannerTokenKind::Label => mk_keyword_or(token::Label, lexeme),
         ScannerTokenKind::Number => {
             token::Atom(Atom::Number(i32::from_str_radix(&lexeme[1..], 16).unwrap()))
         }
@@ -179,16 +177,16 @@ fn mk_token(kind: ScannerTokenKind, lexeme: &str) -> Token {
     }
 }
 
-fn mk_keyword_or<'a, F>(f: F, lexeme: &'a str) -> Token
-where
-    F: FnOnce(&'a str) -> Token,
-{
-    identify_keyword(lexeme).map_or(f(lexeme), |keyword| match keyword {
-        Keyword::Command(command) => token::Command(command),
-        Keyword::Endm => token::Endm,
-        Keyword::Macro => token::Macro,
-        Keyword::Operand(operand) => token::Atom(syntax::Atom::Operand(operand)),
-    })
+fn mk_keyword_or<'a, F: FnOnce(String) -> Token>(f: F, lexeme: &'a str) -> Token {
+    identify_keyword(lexeme).map_or_else(
+        || f(lexeme.to_string()),
+        |keyword| match keyword {
+            Keyword::Command(command) => token::Command(command),
+            Keyword::Endm => token::Endm,
+            Keyword::Macro => token::Macro,
+            Keyword::Operand(operand) => token::Atom(syntax::Atom::Operand(operand)),
+        },
+    )
 }
 
 fn identify_keyword(word: &str) -> Option<Keyword> {
