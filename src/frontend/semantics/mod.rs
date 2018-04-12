@@ -1,6 +1,6 @@
 use backend;
 use frontend::{Atom, Frontend, StrExprFactory};
-use frontend::syntax::{self, SynExpr, Token, TokenSpec, keyword::Command};
+use frontend::syntax::{self, token, SynExpr, Token, TokenSpec, keyword::Command};
 
 mod instruction;
 
@@ -45,7 +45,7 @@ impl<'a, F: Frontend + 'a> syntax::FileContext<String> for SemanticActions<'a, F
 
 pub struct CommandActions<'a, F: 'a> {
     name: Command,
-    args: Vec<SynExpr<syntax::Token<String>>>,
+    args: Vec<SynExpr<syntax::Token>>,
     enclosing_context: SemanticActions<'a, F>,
 }
 
@@ -60,7 +60,7 @@ impl<'a, F: 'a> CommandActions<'a, F> {
 }
 
 impl<'a, F: Frontend + 'a> syntax::CommandContext for CommandActions<'a, F> {
-    type Token = Token<String>;
+    type Token = Token;
     type Parent = SemanticActions<'a, F>;
 
     fn add_argument(&mut self, expr: SynExpr<Self::Token>) {
@@ -102,7 +102,7 @@ impl<'a, F: Frontend + 'a> syntax::CommandContext for CommandActions<'a, F> {
 
 pub struct MacroDefActions<'a, F: 'a> {
     name: String,
-    tokens: Vec<Token<String>>,
+    tokens: Vec<Token>,
     enclosing_context: SemanticActions<'a, F>,
 }
 
@@ -117,7 +117,7 @@ impl<'a, F: Frontend + 'a> MacroDefActions<'a, F> {
 }
 
 impl<'a, F: Frontend + 'a> syntax::TokenSeqContext for MacroDefActions<'a, F> {
-    type Token = Token<String>;
+    type Token = Token;
     type Parent = SemanticActions<'a, F>;
 
     fn push_token(&mut self, token: Self::Token) {
@@ -134,7 +134,7 @@ impl<'a, F: Frontend + 'a> syntax::TokenSeqContext for MacroDefActions<'a, F> {
 
 pub struct MacroInvocationActions<'a, F: 'a> {
     name: Atom<String>,
-    args: Vec<Vec<Token<String>>>,
+    args: Vec<Vec<Token>>,
     enclosing_context: SemanticActions<'a, F>,
 }
 
@@ -150,13 +150,13 @@ impl<'a, F: 'a> MacroInvocationActions<'a, F> {
         }
     }
 
-    fn push_arg(&mut self, arg: Vec<Token<String>>) {
+    fn push_arg(&mut self, arg: Vec<Token>) {
         self.args.push(arg)
     }
 }
 
 impl<'a, F: Frontend + 'a> syntax::MacroInvocationContext for MacroInvocationActions<'a, F> {
-    type Token = Token<String>;
+    type Token = Token;
     type Parent = SemanticActions<'a, F>;
     type MacroArgContext = MacroArgActions<'a, F>;
 
@@ -174,7 +174,7 @@ impl<'a, F: Frontend + 'a> syntax::MacroInvocationContext for MacroInvocationAct
 }
 
 pub struct MacroArgActions<'a, F: 'a> {
-    tokens: Vec<Token<String>>,
+    tokens: Vec<Token>,
     enclosing_context: MacroInvocationActions<'a, F>,
 }
 
@@ -188,7 +188,7 @@ impl<'a, F: 'a> MacroArgActions<'a, F> {
 }
 
 impl<'a, F> syntax::TokenSeqContext for MacroArgActions<'a, F> {
-    type Token = Token<String>;
+    type Token = Token;
     type Parent = MacroInvocationActions<'a, F>;
 
     fn push_token(&mut self, token: Self::Token) {
@@ -201,14 +201,11 @@ impl<'a, F> syntax::TokenSeqContext for MacroArgActions<'a, F> {
     }
 }
 
-fn reduce_include<TS, S>(mut arguments: Vec<SynExpr<Token<TS>>>) -> S
-where
-    TS: TokenSpec<Atom = Atom<S>>,
-{
+fn reduce_include(mut arguments: Vec<SynExpr<Token>>) -> String {
     assert_eq!(arguments.len(), 1);
     let path = arguments.pop().unwrap();
     match path {
-        SynExpr::Atom(Token::Atom(Atom::String(path_str))) => path_str,
+        SynExpr::Atom(token::Atom(Atom::String(path_str))) => path_str,
         _ => panic!(),
     }
 }
@@ -231,10 +228,10 @@ mod tests {
 
     #[derive(Debug, PartialEq)]
     enum TestOperation {
-        DefineMacro(String, Vec<Token<String>>),
+        DefineMacro(String, Vec<Token>),
         EmitItem(backend::Item),
         Include(String),
-        InvokeMacro(String, Vec<Vec<Token<String>>>),
+        InvokeMacro(String, Vec<Vec<Token>>),
         Label(String),
     }
 
@@ -251,11 +248,11 @@ mod tests {
             self.0.push(TestOperation::Label(label))
         }
 
-        fn define_macro(&mut self, name: String, tokens: Vec<Token<String>>) {
+        fn define_macro(&mut self, name: String, tokens: Vec<Token>) {
             self.0.push(TestOperation::DefineMacro(name, tokens))
         }
 
-        fn invoke_macro(&mut self, name: String, args: Vec<Vec<Token<String>>>) {
+        fn invoke_macro(&mut self, name: String, args: Vec<Vec<Token>>) {
             self.0.push(TestOperation::InvokeMacro(name, args))
         }
     }
@@ -265,7 +262,7 @@ mod tests {
         let filename = "file.asm";
         let actions = collect_semantic_actions(|actions| {
             let mut command = actions.enter_command(Command::Include);
-            let expr = SynExpr::from(Token::Atom(Atom::String(filename.to_string())));
+            let expr = SynExpr::from(token::Atom(Atom::String(filename.to_string())));
             command.add_argument(expr);
             command.exit_command();
         });
@@ -292,8 +289,8 @@ mod tests {
         )
     }
 
-    fn mk_literal(n: i32) -> SynExpr<Token<String>> {
-        SynExpr::from(Token::Atom(Atom::Number(n)))
+    fn mk_literal(n: i32) -> SynExpr<Token> {
+        SynExpr::from(token::Atom(Atom::Number(n)))
     }
 
     fn mk_byte(byte: &i32) -> backend::Item {
@@ -311,8 +308,8 @@ mod tests {
     fn define_macro() {
         let name = "my_macro";
         let tokens = vec![
-            Token::Command(Command::Xor),
-            Token::Atom(Atom::Operand(Operand::A)),
+            token::Command(Command::Xor),
+            token::Atom(Atom::Operand(Operand::A)),
         ];
         let actions = collect_semantic_actions(|actions| {
             let mut token_seq_context = actions.enter_macro_def(name.to_string());
@@ -343,7 +340,7 @@ mod tests {
     #[test]
     fn invoke_unary_macro() {
         let name = "my_macro";
-        let arg_token = Token::Atom(Atom::Operand(Operand::A));
+        let arg_token = token::Atom(Atom::Operand(Operand::A));
         let actions = collect_semantic_actions(|actions| {
             let mut invocation = actions.enter_macro_invocation(Atom::Ident(name.to_string()));
             invocation = {

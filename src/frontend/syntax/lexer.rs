@@ -1,4 +1,4 @@
-use frontend::syntax::{Atom, Token, keyword::{Command, Operand}};
+use frontend::syntax::{self, token, Token, keyword::{self, Command, Operand}};
 
 use std::iter;
 use std::ops::{Index, Range};
@@ -150,41 +150,41 @@ impl<'a> Lexer<'a> {
 }
 
 impl<'a> Iterator for Lexer<'a> {
-    type Item = Token<String>;
+    type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.scanner.next().map(|(token, range)| {
             let lexeme = self.src.index(range);
             match token {
-                ScannerTokenKind::ClosingBracket => Token::ClosingBracket,
-                ScannerTokenKind::Colon => Token::Colon,
-                ScannerTokenKind::Comma => Token::Comma,
-                ScannerTokenKind::Eol => Token::Eol,
+                ScannerTokenKind::ClosingBracket => token::ClosingBracket,
+                ScannerTokenKind::Colon => token::Colon,
+                ScannerTokenKind::Comma => token::Comma,
+                ScannerTokenKind::Eol => token::Eol,
                 ScannerTokenKind::Identifier => {
-                    mk_keyword_or(|x| Token::Atom(Atom::Ident(x.to_string())), lexeme)
+                    mk_keyword_or(|x| token::Atom(syntax::Atom::Ident(x.to_string())), lexeme)
                 }
-                ScannerTokenKind::Label => mk_keyword_or(|x| Token::Label(x.to_string()), lexeme),
-                ScannerTokenKind::Number => {
-                    Token::Atom(Atom::Number(i32::from_str_radix(&lexeme[1..], 16).unwrap()))
-                }
-                ScannerTokenKind::OpeningBracket => Token::OpeningBracket,
-                ScannerTokenKind::String => {
-                    Token::Atom(Atom::String(lexeme[1..(lexeme.len() - 1)].to_string()))
-                }
+                ScannerTokenKind::Label => mk_keyword_or(|x| token::Label(x.to_string()), lexeme),
+                ScannerTokenKind::Number => token::Atom(syntax::Atom::Number(
+                    i32::from_str_radix(&lexeme[1..], 16).unwrap(),
+                )),
+                ScannerTokenKind::OpeningBracket => token::OpeningBracket,
+                ScannerTokenKind::String => token::Atom(syntax::Atom::String(
+                    lexeme[1..(lexeme.len() - 1)].to_string(),
+                )),
             }
         })
     }
 }
 
-fn mk_keyword_or<'a, F>(f: F, lexeme: &'a str) -> Token<String>
+fn mk_keyword_or<'a, F>(f: F, lexeme: &'a str) -> Token
 where
-    F: FnOnce(&'a str) -> Token<String>,
+    F: FnOnce(&'a str) -> Token,
 {
     identify_keyword(lexeme).map_or(f(lexeme), |keyword| match keyword {
-        Keyword::Command(command) => Token::Command(command),
-        Keyword::Endm => Token::Endm,
-        Keyword::Macro => Token::Macro,
-        Keyword::Operand(operand) => Token::Atom(Atom::Operand(operand)),
+        Keyword::Command(command) => token::Command(command),
+        Keyword::Endm => token::Endm,
+        Keyword::Macro => token::Macro,
+        Keyword::Operand(operand) => token::Atom(syntax::Atom::Operand(operand)),
     })
 }
 
@@ -197,10 +197,10 @@ fn identify_keyword(word: &str) -> Option<Keyword> {
 
 #[derive(Clone, Copy)]
 enum Keyword {
-    Command(Command),
+    Command(keyword::Command),
     Endm,
     Macro,
-    Operand(Operand),
+    Operand(keyword::Operand),
 }
 
 const KEYWORDS: [(&str, Keyword); 28] = [
@@ -238,16 +238,13 @@ const KEYWORDS: [(&str, Keyword); 28] = [
 mod tests {
     use super::*;
 
-    use super::Atom::{Ident, Number, Operand};
-    use super::Command::*;
+    use super::syntax::Atom::{Ident, Number, Operand};
+    use super::keyword::Command::*;
     use super::Operand::*;
-    use super::Token::*;
+    use super::syntax::token::*;
 
-    fn assert_eq_tokens<'a>(src: &'a str, expected_tokens: &[Token<String>]) {
-        assert_eq!(
-            Lexer::new(src).collect::<Vec<Token<String>>>(),
-            expected_tokens
-        )
+    fn assert_eq_tokens<'a>(src: &'a str, expected_tokens: &[Token]) {
+        assert_eq!(Lexer::new(src).collect::<Vec<Token>>(), expected_tokens)
     }
 
     #[test]
@@ -311,7 +308,7 @@ mod tests {
     fn lex_quoted_string() {
         assert_eq_tokens(
             "\"file.asm\"",
-            &[Atom(super::Atom::String("file.asm".to_string()))],
+            &[Atom(syntax::Atom::String("file.asm".to_string()))],
         )
     }
 

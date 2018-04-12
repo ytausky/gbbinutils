@@ -48,7 +48,7 @@ impl FileSystem for StdFileSystem {
 trait TokenSeqAnalyzer {
     fn analyze<I, F>(&mut self, tokens: I, frontend: &mut F)
     where
-        I: Iterator<Item = Token<String>>,
+        I: Iterator<Item = Token>,
         F: Frontend;
 }
 
@@ -63,7 +63,7 @@ impl SemanticTokenSeqAnalyzer {
 impl TokenSeqAnalyzer for SemanticTokenSeqAnalyzer {
     fn analyze<I, F>(&mut self, tokens: I, frontend: &mut F)
     where
-        I: Iterator<Item = Token<String>>,
+        I: Iterator<Item = Token>,
         F: Frontend,
     {
         let actions = semantics::SemanticActions::new(frontend);
@@ -93,7 +93,7 @@ impl TokenSeqAnalyzerFactory for SemanticTokenSeqAnalyzerFactory {
 }
 
 pub trait ExprFactory {
-    fn mk_atom(&mut self, token: Token<String>) -> Expr;
+    fn mk_atom(&mut self, token: Token) -> Expr;
 }
 
 pub struct StrExprFactory;
@@ -105,10 +105,10 @@ impl StrExprFactory {
 }
 
 impl ExprFactory for StrExprFactory {
-    fn mk_atom(&mut self, token: Token<String>) -> Expr {
+    fn mk_atom(&mut self, token: Token) -> Expr {
         match token {
-            Token::Atom(Atom::Ident(ident)) => Expr::Symbol(ident),
-            Token::Atom(Atom::Number(number)) => Expr::Literal(number),
+            token::Atom(Atom::Ident(ident)) => Expr::Symbol(ident),
+            token::Atom(Atom::Number(number)) => Expr::Literal(number),
             _ => panic!(),
         }
     }
@@ -118,8 +118,8 @@ pub trait Frontend {
     fn include_source_file(&mut self, filename: String);
     fn emit_item(&mut self, item: Item);
     fn define_label(&mut self, label: String);
-    fn define_macro(&mut self, name: String, tokens: Vec<Token<String>>);
-    fn invoke_macro(&mut self, name: String, args: Vec<Vec<Token<String>>>);
+    fn define_macro(&mut self, name: String, tokens: Vec<Token>);
+    fn invoke_macro(&mut self, name: String, args: Vec<Vec<Token>>);
 }
 
 use std::{collections::HashMap, rc::Rc};
@@ -128,7 +128,7 @@ struct Session<FS, SAF, B, DL> {
     fs: FS,
     analyzer_factory: SAF,
     backend: B,
-    macro_defs: HashMap<String, Rc<Vec<Token<String>>>>,
+    macro_defs: HashMap<String, Rc<Vec<Token>>>,
     diagnostics: DL,
 }
 
@@ -149,7 +149,7 @@ where
         }
     }
 
-    fn analyze_token_seq<I: Iterator<Item = Token<String>>>(&mut self, tokens: I) {
+    fn analyze_token_seq<I: Iterator<Item = Token>>(&mut self, tokens: I) {
         let mut analyzer = self.analyzer_factory.mk_token_seq_analyzer();
         analyzer.analyze(tokens, self)
     }
@@ -180,11 +180,11 @@ where
         self.backend.add_label(&label)
     }
 
-    fn define_macro(&mut self, name: String, tokens: Vec<Token<String>>) {
+    fn define_macro(&mut self, name: String, tokens: Vec<Token>) {
         self.macro_defs.insert(name, Rc::new(tokens));
     }
 
-    fn invoke_macro(&mut self, name: String, _args: Vec<Vec<Token<String>>>) {
+    fn invoke_macro(&mut self, name: String, _args: Vec<Vec<Token>>) {
         let macro_def = self.macro_defs.get(&name).cloned();
         match macro_def {
             Some(rc) => self.analyze_token_seq(rc.iter().cloned()),
@@ -211,7 +211,7 @@ mod tests {
         assert_eq!(
             *log.borrow(),
             [
-                TestEvent::AnalyzeTokens([Token::Command(Command::Nop)].to_vec())
+                TestEvent::AnalyzeTokens([token::Command(Command::Nop)].to_vec())
             ]
         );
     }
@@ -237,7 +237,7 @@ mod tests {
     #[test]
     fn define_and_invoke_macro() {
         let name = "my_macro";
-        let tokens = vec![Token::Command(Command::Nop)];
+        let tokens = vec![token::Command(Command::Nop)];
         let log = TestLog::default();
         TestFixture::new(&log).when(|mut session| {
             session.define_macro(name.to_string(), tokens.clone());
@@ -308,7 +308,7 @@ mod tests {
     impl<'a> TokenSeqAnalyzer for Mock<'a> {
         fn analyze<I, F>(&mut self, tokens: I, _frontend: &mut F)
         where
-            I: Iterator<Item = Token<String>>,
+            I: Iterator<Item = Token>,
             F: Frontend,
         {
             self.log
@@ -341,7 +341,7 @@ mod tests {
 
     #[derive(Debug, PartialEq)]
     enum TestEvent {
-        AnalyzeTokens(Vec<Token<String>>),
+        AnalyzeTokens(Vec<Token>),
         AddLabel(String),
         Diagnostic(Diagnostic),
         EmitItem(Item),

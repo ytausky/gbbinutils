@@ -236,9 +236,9 @@ impl<S: TokenSpec, I: Iterator<Item = Token<S>>> Parser<I> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_src;
+    use super::{parse_src, Token::{self, *}};
 
-    use frontend::syntax::{self, Token::{self, *}, TokenSpec};
+    use frontend::syntax::{self, TokenSpec};
 
     #[test]
     fn parse_empty_src() {

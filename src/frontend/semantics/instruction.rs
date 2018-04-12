@@ -1,7 +1,7 @@
 use backend::*;
 use diagnostics::Diagnostic;
 use frontend::ExprFactory;
-use frontend::syntax::{keyword, Atom, SynExpr, Token};
+use frontend::syntax::{keyword, token, Atom, SynExpr, Token};
 
 struct OperandAnalyzer<'a, EF: 'a> {
     expr_factory: &'a mut EF,
@@ -19,7 +19,7 @@ impl<'a, EF: 'a + ExprFactory> OperandAnalyzer<'a, EF> {
 
     fn analyze_operand(
         &mut self,
-        expr: SynExpr<Token<String>>,
+        expr: SynExpr<Token>,
         context: &OperandAnalysisContext,
     ) -> Operand {
         match expr {
@@ -28,27 +28,23 @@ impl<'a, EF: 'a + ExprFactory> OperandAnalyzer<'a, EF> {
         }
     }
 
-    fn analyze_atom_operand(
-        &mut self,
-        token: Token<String>,
-        context: &OperandAnalysisContext,
-    ) -> Operand {
+    fn analyze_atom_operand(&mut self, token: Token, context: &OperandAnalysisContext) -> Operand {
         match token {
-            Token::Atom(Atom::Operand(operand)) => analyze_keyword_operand(operand, context),
-            Token::Atom(Atom::Ident(_)) | Token::Atom(Atom::Number(_)) => {
+            token::Atom(Atom::Operand(operand)) => analyze_keyword_operand(operand, context),
+            token::Atom(Atom::Ident(_)) | token::Atom(Atom::Number(_)) => {
                 Operand::Const(self.expr_factory.mk_atom(token))
             }
             _ => panic!(),
         }
     }
 
-    fn analyze_deref_operand(&mut self, expr: SynExpr<Token<String>>) -> Operand {
+    fn analyze_deref_operand(&mut self, expr: SynExpr<Token>) -> Operand {
         if let SynExpr::Atom(token) = expr {
             match token {
-                Token::Atom(Atom::Operand(keyword::Operand::Hl)) => {
+                token::Atom(Atom::Operand(keyword::Operand::Hl)) => {
                     Operand::Simple(SimpleOperand::DerefHl)
                 }
-                Token::Atom(Atom::Ident(_)) => Operand::Deref(self.expr_factory.mk_atom(token)),
+                token::Atom(Atom::Ident(_)) => Operand::Deref(self.expr_factory.mk_atom(token)),
                 _ => panic!(),
             }
         } else {
@@ -74,7 +70,7 @@ impl<'a, EF: ExprFactory> CommandAnalyzer<'a, EF> {
         operands: I,
     ) -> AnalysisResult
     where
-        I: IntoIterator<Item = SynExpr<Token<String>>>,
+        I: IntoIterator<Item = SynExpr<Token>>,
     {
         let mnemonic = to_mnemonic(mnemonic);
         let context = match mnemonic {
@@ -259,10 +255,10 @@ mod tests {
 
     use self::keyword::{Command, Operand::*};
 
-    type TestToken = Token<String>;
+    type TestToken = Token;
 
     fn atom(keyword: keyword::Operand) -> SynExpr<TestToken> {
-        SynExpr::from(Token::Atom(Atom::Operand(keyword)))
+        SynExpr::from(token::Atom(Atom::Operand(keyword)))
     }
 
     impl From<AluOperation> for Command {
@@ -326,7 +322,7 @@ mod tests {
             analyze(
                 Command::Ld,
                 vec![
-                    SynExpr::from(Token::Atom(Atom::Ident(ident.to_string()))).deref(),
+                    SynExpr::from(token::Atom(Atom::Ident(ident.to_string()))).deref(),
                     atom(A),
                 ]
             ),
@@ -345,7 +341,7 @@ mod tests {
                 Command::Ld,
                 vec![
                     atom(A),
-                    SynExpr::from(Token::Atom(Atom::Ident(ident.to_string()))).deref(),
+                    SynExpr::from(token::Atom(Atom::Ident(ident.to_string()))).deref(),
                 ]
             ),
             Ok(Instruction::Ld(LdKind::ImmediateAddr(
@@ -359,7 +355,7 @@ mod tests {
     fn analyze_cp_symbol() {
         let ident = "ident";
         test_cp_const_analysis(
-            Token::Atom(Atom::Ident(ident.to_string())),
+            token::Atom(Atom::Ident(ident.to_string())),
             Expr::Symbol(ident.to_string()),
         )
     }
@@ -367,7 +363,7 @@ mod tests {
     #[test]
     fn analyze_cp_literal() {
         let literal = 0x50;
-        test_cp_const_analysis(Token::Atom(Atom::Number(literal)), Expr::Literal(literal))
+        test_cp_const_analysis(token::Atom(Atom::Number(literal)), Expr::Literal(literal))
     }
 
     fn test_cp_const_analysis(atom: TestToken, expr: Expr) {
@@ -450,7 +446,7 @@ mod tests {
                 Command::Ld,
                 vec![
                     SynExpr::from(dest),
-                    SynExpr::from(Token::Atom(Atom::Ident(value.to_string()))),
+                    SynExpr::from(token::Atom(Atom::Ident(value.to_string()))),
                 ],
             ),
             Instruction::Ld(LdKind::Immediate16(dest, Expr::Symbol(value.to_string()))),
@@ -494,7 +490,7 @@ mod tests {
         if let Some(condition) = condition {
             operands.push(SynExpr::from(condition))
         };
-        operands.push(SynExpr::Atom(Token::Atom(Atom::Ident(ident.to_string()))));
+        operands.push(SynExpr::Atom(token::Atom(Atom::Ident(ident.to_string()))));
         (
             (Command::from(branch), operands),
             Instruction::Branch(
