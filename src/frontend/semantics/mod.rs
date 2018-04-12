@@ -46,15 +46,15 @@ impl<'a, F: Frontend + 'a> syntax::FileContext<String> for SemanticActions<'a, F
 pub struct CommandActions<'a, F: 'a> {
     name: Command,
     args: Vec<SynExpr<syntax::Token>>,
-    enclosing_context: SemanticActions<'a, F>,
+    parent: SemanticActions<'a, F>,
 }
 
 impl<'a, F: 'a> CommandActions<'a, F> {
-    fn new(name: Command, enclosing_context: SemanticActions<'a, F>) -> CommandActions<'a, F> {
+    fn new(name: Command, parent: SemanticActions<'a, F>) -> CommandActions<'a, F> {
         CommandActions {
             name,
             args: Vec::new(),
-            enclosing_context,
+            parent,
         }
     }
 }
@@ -73,22 +73,19 @@ impl<'a, F: Frontend + 'a> syntax::CommandContext for CommandActions<'a, F> {
                 match arg {
                     SynExpr::Atom(atom) => {
                         use frontend::ExprFactory;
-                        let expr = self.enclosing_context.expr_factory.mk_atom(atom);
-                        self.enclosing_context
-                            .session
-                            .emit_item(backend::Item::Byte(expr))
+                        let expr = self.parent.expr_factory.mk_atom(atom);
+                        self.parent.session.emit_item(backend::Item::Byte(expr))
                     }
                     _ => panic!(),
                 }
             },
-            Command::Include => self.enclosing_context
+            Command::Include => self.parent
                 .session
                 .include_source_file(reduce_include(self.args)),
             command => {
-                let mut analyzer = self::instruction::CommandAnalyzer::new(
-                    &mut self.enclosing_context.expr_factory,
-                );
-                self.enclosing_context.session.emit_item(
+                let mut analyzer =
+                    self::instruction::CommandAnalyzer::new(&mut self.parent.expr_factory);
+                self.parent.session.emit_item(
                     analyzer
                         .analyze_instruction(command, self.args.into_iter())
                         .map(backend::Item::Instruction)
@@ -96,22 +93,22 @@ impl<'a, F: Frontend + 'a> syntax::CommandContext for CommandActions<'a, F> {
                 )
             }
         }
-        self.enclosing_context
+        self.parent
     }
 }
 
 pub struct MacroDefActions<'a, F: 'a> {
     name: String,
     tokens: Vec<Token>,
-    enclosing_context: SemanticActions<'a, F>,
+    parent: SemanticActions<'a, F>,
 }
 
 impl<'a, F: Frontend + 'a> MacroDefActions<'a, F> {
-    fn new(name: String, enclosing_context: SemanticActions<'a, F>) -> MacroDefActions<'a, F> {
+    fn new(name: String, parent: SemanticActions<'a, F>) -> MacroDefActions<'a, F> {
         MacroDefActions {
             name,
             tokens: Vec::new(),
-            enclosing_context,
+            parent,
         }
     }
 }
@@ -125,28 +122,23 @@ impl<'a, F: Frontend + 'a> syntax::TokenSeqContext for MacroDefActions<'a, F> {
     }
 
     fn exit_token_seq(self) -> Self::Parent {
-        self.enclosing_context
-            .session
-            .define_macro(self.name, self.tokens);
-        self.enclosing_context
+        self.parent.session.define_macro(self.name, self.tokens);
+        self.parent
     }
 }
 
 pub struct MacroInvocationActions<'a, F: 'a> {
     name: Atom<String>,
     args: Vec<Vec<Token>>,
-    enclosing_context: SemanticActions<'a, F>,
+    parent: SemanticActions<'a, F>,
 }
 
 impl<'a, F: 'a> MacroInvocationActions<'a, F> {
-    fn new(
-        name: Atom<String>,
-        enclosing_context: SemanticActions<'a, F>,
-    ) -> MacroInvocationActions<'a, F> {
+    fn new(name: Atom<String>, parent: SemanticActions<'a, F>) -> MacroInvocationActions<'a, F> {
         MacroInvocationActions {
             name,
             args: Vec::new(),
-            enclosing_context,
+            parent,
         }
     }
 
@@ -166,23 +158,23 @@ impl<'a, F: Frontend + 'a> syntax::MacroInvocationContext for MacroInvocationAct
 
     fn exit_macro_invocation(self) -> Self::Parent {
         match self.name {
-            Atom::Ident(name) => self.enclosing_context.session.invoke_macro(name, self.args),
+            Atom::Ident(name) => self.parent.session.invoke_macro(name, self.args),
             _ => panic!(),
         }
-        self.enclosing_context
+        self.parent
     }
 }
 
 pub struct MacroArgActions<'a, F: 'a> {
     tokens: Vec<Token>,
-    enclosing_context: MacroInvocationActions<'a, F>,
+    parent: MacroInvocationActions<'a, F>,
 }
 
 impl<'a, F: 'a> MacroArgActions<'a, F> {
-    fn new(enclosing_context: MacroInvocationActions<'a, F>) -> MacroArgActions<'a, F> {
+    fn new(parent: MacroInvocationActions<'a, F>) -> MacroArgActions<'a, F> {
         MacroArgActions {
             tokens: Vec::new(),
-            enclosing_context,
+            parent,
         }
     }
 }
@@ -196,8 +188,8 @@ impl<'a, F> syntax::TokenSeqContext for MacroArgActions<'a, F> {
     }
 
     fn exit_token_seq(mut self) -> Self::Parent {
-        self.enclosing_context.push_arg(self.tokens);
-        self.enclosing_context
+        self.parent.push_arg(self.tokens);
+        self.parent
     }
 }
 
