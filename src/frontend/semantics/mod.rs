@@ -34,7 +34,10 @@ impl<'a, F: Frontend + 'a> syntax::FileContext<String, F::TrackingData> for Sema
         CommandActions::new(name, self)
     }
 
-    fn enter_macro_def(self, name: <String as TokenSpec>::Label) -> Self::MacroDefContext {
+    fn enter_macro_def(
+        self,
+        name: (<String as TokenSpec>::Label, F::TrackingData),
+    ) -> Self::MacroDefContext {
         MacroDefActions::new(name, self)
     }
 
@@ -104,13 +107,16 @@ impl<'a, F: Frontend + 'a> syntax::CommandContext for CommandActions<'a, F> {
 }
 
 pub struct MacroDefActions<'a, F: Frontend + 'a> {
-    name: String,
+    name: (String, F::TrackingData),
     tokens: Vec<Token>,
     parent: SemanticActions<'a, F>,
 }
 
 impl<'a, F: Frontend + 'a> MacroDefActions<'a, F> {
-    fn new(name: String, parent: SemanticActions<'a, F>) -> MacroDefActions<'a, F> {
+    fn new(
+        name: (String, F::TrackingData),
+        parent: SemanticActions<'a, F>,
+    ) -> MacroDefActions<'a, F> {
         MacroDefActions {
             name,
             tokens: Vec::new(),
@@ -248,7 +254,7 @@ mod tests {
             self.0.push(TestOperation::Label(label))
         }
 
-        fn define_macro(&mut self, name: String, tokens: Vec<Token>) {
+        fn define_macro(&mut self, (name, _): (String, Self::TrackingData), tokens: Vec<Token>) {
             self.0.push(TestOperation::DefineMacro(name, tokens))
         }
 
@@ -313,7 +319,7 @@ mod tests {
             token::Atom(Atom::Operand(Operand::A)),
         ];
         let actions = collect_semantic_actions(|actions| {
-            let mut token_seq_context = actions.enter_macro_def(name.to_string());
+            let mut token_seq_context = actions.enter_macro_def((name.to_string(), ()));
             for token in tokens.clone() {
                 token_seq_context.push_token(token)
             }

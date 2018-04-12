@@ -118,7 +118,7 @@ impl<S: TokenSpec, T, I: Iterator<Item = (Token<S>, T)>> Parser<I> {
             self.bump();
         }
         if self.lookahead() == Some(Token::Macro) {
-            self.parse_macro_definition(label.0, actions)
+            self.parse_macro_definition(label, actions)
         } else {
             actions.add_label(label);
             self.parse_unlabeled_line(actions)
@@ -134,7 +134,11 @@ impl<S: TokenSpec, T, I: Iterator<Item = (Token<S>, T)>> Parser<I> {
         }
     }
 
-    fn parse_macro_definition<F: FileContext<S, T>>(&mut self, label: S::Label, actions: F) -> F {
+    fn parse_macro_definition<F: FileContext<S, T>>(
+        &mut self,
+        label: (S::Label, T),
+        actions: F,
+    ) -> F {
         self.expect(&Some(Token::Macro));
         let mut actions = actions.enter_macro_def(label);
         self.expect(&Some(Token::Eol));
@@ -265,7 +269,7 @@ mod tests {
         AddLabel(TestTrackingData),
         EnterInstruction(TestTrackingData),
         EnterMacroArg,
-        EnterMacroDef(<TestTokenSpec as TokenSpec>::Label),
+        EnterMacroDef(TestTrackingData),
         EnterMacroInvocation(<TestTokenSpec as TokenSpec>::Atom),
         ExitInstruction,
         ExitMacroArg,
@@ -311,9 +315,9 @@ mod tests {
 
         fn enter_macro_def(
             self,
-            label: <TestTokenSpec as TokenSpec>::Label,
+            (_, n): (<TestTokenSpec as TokenSpec>::Label, TestTrackingData),
         ) -> Self::MacroDefContext {
-            self.actions.push(Action::EnterMacroDef(label));
+            self.actions.push(Action::EnterMacroDef(n));
             self.token_seq_kind = Some(TokenSeqKind::MacroDef);
             self
         }
@@ -485,14 +489,11 @@ mod tests {
     #[test]
     fn parse_empty_macro_definition() {
         let tokens = &[Label(()), Colon, Macro, Eol, Endm];
-        let expected_actions = &macro_def((), vec![]);
+        let expected_actions = &macro_def(0, vec![]);
         assert_eq_actions(tokens, expected_actions);
     }
 
-    fn macro_def(
-        label: <TestTokenSpec as TokenSpec>::Label,
-        tokens: Vec<TestToken>,
-    ) -> Vec<Action> {
+    fn macro_def(label: TestTrackingData, tokens: Vec<TestToken>) -> Vec<Action> {
         let mut result = vec![Action::EnterMacroDef(label)];
         result.extend(tokens.into_iter().map(|t| Action::PushTerminal(t)));
         result.push(Action::ExitMacroDef);
@@ -502,7 +503,7 @@ mod tests {
     #[test]
     fn parse_macro_definition_with_instruction() {
         let tokens = &[Label(()), Colon, Macro, Eol, Command(()), Eol, Endm];
-        let expected_actions = &macro_def((), vec![Command(()), Eol]);
+        let expected_actions = &macro_def(0, vec![Command(()), Eol]);
         assert_eq_actions(tokens, expected_actions)
     }
 

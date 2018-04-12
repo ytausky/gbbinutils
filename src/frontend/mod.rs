@@ -119,7 +119,7 @@ pub trait Frontend {
     fn include_source_file(&mut self, filename: String);
     fn emit_item(&mut self, item: Item);
     fn define_label(&mut self, label: String);
-    fn define_macro(&mut self, name: String, tokens: Vec<Token>);
+    fn define_macro(&mut self, name: (String, Self::TrackingData), tokens: Vec<Token>);
     fn invoke_macro(&mut self, name: String, args: Vec<Vec<Token>>);
 }
 
@@ -183,7 +183,7 @@ where
         self.backend.add_label(&label)
     }
 
-    fn define_macro(&mut self, name: String, tokens: Vec<Token>) {
+    fn define_macro(&mut self, (name, _): (String, Self::TrackingData), tokens: Vec<Token>) {
         self.macro_defs.insert(name, Rc::new(tokens));
     }
 
@@ -243,7 +243,7 @@ mod tests {
         let tokens = vec![token::Command(Command::Nop)];
         let log = TestLog::default();
         TestFixture::new(&log).when(|mut session| {
-            session.define_macro(name.to_string(), tokens.clone());
+            session.define_macro((name.to_string(), ()), tokens.clone());
             session.invoke_macro(name.to_string(), vec![])
         });
         assert_eq!(*log.borrow(), [TestEvent::AnalyzeTokens(tokens)]);
