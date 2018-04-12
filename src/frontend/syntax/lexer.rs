@@ -1,4 +1,4 @@
-use frontend::syntax::{self, token, Token, keyword::{self, Command, Operand}};
+use frontend::syntax::{self, token, Atom, Token, keyword::{self, Command, Operand}};
 
 use std::iter;
 use std::ops::{Index, Range};
@@ -153,26 +153,29 @@ impl<'a> Iterator for Lexer<'a> {
     type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.scanner.next().map(|(token, range)| {
-            let lexeme = self.src.index(range);
-            match token {
-                ScannerTokenKind::ClosingBracket => token::ClosingBracket,
-                ScannerTokenKind::Colon => token::Colon,
-                ScannerTokenKind::Comma => token::Comma,
-                ScannerTokenKind::Eol => token::Eol,
-                ScannerTokenKind::Identifier => {
-                    mk_keyword_or(|x| token::Atom(syntax::Atom::Ident(x.to_string())), lexeme)
-                }
-                ScannerTokenKind::Label => mk_keyword_or(|x| token::Label(x.to_string()), lexeme),
-                ScannerTokenKind::Number => token::Atom(syntax::Atom::Number(
-                    i32::from_str_radix(&lexeme[1..], 16).unwrap(),
-                )),
-                ScannerTokenKind::OpeningBracket => token::OpeningBracket,
-                ScannerTokenKind::String => token::Atom(syntax::Atom::String(
-                    lexeme[1..(lexeme.len() - 1)].to_string(),
-                )),
-            }
-        })
+        self.scanner
+            .next()
+            .map(|(kind, range)| mk_token(kind, self.src.index(range)))
+    }
+}
+
+fn mk_token(kind: ScannerTokenKind, lexeme: &str) -> Token {
+    match kind {
+        ScannerTokenKind::ClosingBracket => token::ClosingBracket,
+        ScannerTokenKind::Colon => token::Colon,
+        ScannerTokenKind::Comma => token::Comma,
+        ScannerTokenKind::Eol => token::Eol,
+        ScannerTokenKind::Identifier => {
+            mk_keyword_or(|x| token::Atom(Atom::Ident(x.to_string())), lexeme)
+        }
+        ScannerTokenKind::Label => mk_keyword_or(|x| token::Label(x.to_string()), lexeme),
+        ScannerTokenKind::Number => {
+            token::Atom(Atom::Number(i32::from_str_radix(&lexeme[1..], 16).unwrap()))
+        }
+        ScannerTokenKind::OpeningBracket => token::OpeningBracket,
+        ScannerTokenKind::String => {
+            token::Atom(Atom::String(lexeme[1..(lexeme.len() - 1)].to_string()))
+        }
     }
 }
 
