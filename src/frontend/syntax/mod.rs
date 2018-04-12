@@ -11,7 +11,7 @@ where
     I: Iterator<Item = Token>,
     F: FileContext<String>,
 {
-    self::parser::parse_src(tokens, actions)
+    self::parser::parse_src(tokens.zip(0..), actions)
 }
 
 pub type Token = self::parser::Token<String>;

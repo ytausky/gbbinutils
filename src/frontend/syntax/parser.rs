@@ -45,9 +45,9 @@ fn follows_line(lookahead: &Lookahead) -> bool {
     }
 }
 
-pub fn parse_src<S: TokenSpec, I, F>(tokens: I, actions: F)
+pub fn parse_src<S: TokenSpec, T, I, F>(tokens: I, actions: F)
 where
-    I: Iterator<Item = Token<S>>,
+    I: Iterator<Item = (Token<S>, T)>,
     F: FileContext<S>,
 {
     let mut parser = Parser {
@@ -60,9 +60,9 @@ struct Parser<I: Iterator> {
     tokens: iter::Peekable<I>,
 }
 
-impl<S: TokenSpec, I: Iterator<Item = Token<S>>> Parser<I> {
+impl<S: TokenSpec, T, I: Iterator<Item = (Token<S>, T)>> Parser<I> {
     fn lookahead(&mut self) -> Lookahead {
-        self.tokens.peek().map(Token::kind)
+        self.tokens.peek().map(|&(ref t, _)| t.kind())
     }
 
     fn bump(&mut self) -> I::Item {
@@ -74,23 +74,23 @@ impl<S: TokenSpec, I: Iterator<Item = Token<S>>> Parser<I> {
         self.bump()
     }
 
-    fn expect_label(&mut self) -> S::Label {
+    fn expect_label(&mut self) -> (S::Label, T) {
         match self.tokens.next() {
-            Some(Token::Label(label)) => label,
+            Some((Token::Label(label), t)) => (label, t),
             _ => panic!(),
         }
     }
 
-    fn expect_command(&mut self) -> S::Command {
+    fn expect_command(&mut self) -> (S::Command, T) {
         match self.tokens.next() {
-            Some(Token::Command(command)) => command,
+            Some((Token::Command(command), t)) => (command, t),
             _ => panic!(),
         }
     }
 
-    fn expect_atom(&mut self) -> S::Atom {
+    fn expect_atom(&mut self) -> (S::Atom, T) {
         match self.tokens.next() {
-            Some(Token::Atom(atom)) => atom,
+            Some((Token::Atom(atom), t)) => (atom, t),
             _ => panic!(),
         }
     }
@@ -113,7 +113,7 @@ impl<S: TokenSpec, I: Iterator<Item = Token<S>>> Parser<I> {
     }
 
     fn parse_labeled_line<F: FileContext<S>>(&mut self, mut actions: F) -> F {
-        let label = self.expect_label();
+        let (label, _) = self.expect_label();
         if self.lookahead() == Some(Token::Colon) {
             self.bump();
         }
@@ -139,21 +139,21 @@ impl<S: TokenSpec, I: Iterator<Item = Token<S>>> Parser<I> {
         let mut actions = actions.enter_macro_def(label);
         self.expect(&Some(Token::Eol));
         while self.lookahead() != Some(Token::Endm) {
-            actions.push_token(self.bump())
+            actions.push_token(self.bump().0)
         }
         self.expect(&Some(Token::Endm));
         actions.exit_token_seq()
     }
 
     fn parse_command<F: FileContext<S>>(&mut self, actions: F) -> F {
-        let first_token = self.expect_command();
+        let (first_token, _) = self.expect_command();
         let mut actions = actions.enter_command(first_token);
         actions = self.parse_argument_list(actions);
         actions.exit_command()
     }
 
     fn parse_macro_invocation<F: FileContext<S>>(&mut self, actions: F) -> F {
-        let macro_name = self.expect_atom();
+        let (macro_name, _) = self.expect_atom();
         let mut actions = actions.enter_macro_invocation(macro_name);
         actions = self.parse_macro_arg_list(actions);
         actions.exit_macro_invocation()
@@ -179,7 +179,7 @@ impl<S: TokenSpec, I: Iterator<Item = Token<S>>> Parser<I> {
                 let mut actions = actions.enter_macro_arg();
                 let mut next_token = p.lookahead();
                 while next_token != Some(Token::Comma) && !follows_line(&next_token) {
-                    actions.push_token(p.bump());
+                    actions.push_token(p.bump().0);
                     next_token = p.lookahead()
                 }
                 actions.exit_token_seq()
@@ -217,16 +217,16 @@ impl<S: TokenSpec, I: Iterator<Item = Token<S>>> Parser<I> {
         actions
     }
 
-    fn parse_expression(&mut self) -> SynExpr<I::Item> {
+    fn parse_expression(&mut self) -> SynExpr<Token<S>> {
         if self.lookahead() == Some(Token::OpeningBracket) {
             self.parse_deref_expression()
         } else {
-            let token = self.bump();
+            let (token, _) = self.bump();
             SynExpr::from(token)
         }
     }
 
-    fn parse_deref_expression(&mut self) -> SynExpr<I::Item> {
+    fn parse_deref_expression(&mut self) -> SynExpr<Token<S>> {
         self.expect(&Some(Token::OpeningBracket));
         let expr = self.parse_expression();
         self.expect(&Some(Token::ClosingBracket));
@@ -383,7 +383,7 @@ mod tests {
 
     fn assert_eq_actions(tokens: &[TestToken], expected_actions: &[Action]) {
         let mut parsing_context = TestContext::new();
-        parse_src(tokens.iter().cloned(), &mut parsing_context);
+        parse_src(tokens.iter().cloned().zip(0..), &mut parsing_context);
         assert_eq!(parsing_context.actions, expected_actions)
     }
 
