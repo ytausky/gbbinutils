@@ -43,7 +43,7 @@ impl<'a, T: 'a + DiagnosticsListener> Backend for Rom<'a, T> {
                     self.diagnostics
                         .emit_diagnostic(Diagnostic::ValueOutOfRange {
                             value: n,
-                            range: Range::Byte,
+                            width: Width::Byte,
                         })
                 }
                 self.data[self.counter] = n as u8;
@@ -203,7 +203,7 @@ mod tests {
             [
                 Diagnostic::ValueOutOfRange {
                     value: value,
-                    range: Range::Byte,
+                    width: Width::Byte,
                 }
             ]
         );

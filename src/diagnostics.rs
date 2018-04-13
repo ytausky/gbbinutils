@@ -6,10 +6,10 @@ pub trait DiagnosticsListener {
 pub enum Diagnostic {
     OperandCount { actual: usize, expected: usize },
     UndefinedMacro { name: String },
-    ValueOutOfRange { value: i32, range: Range },
+    ValueOutOfRange { value: i32, width: Width },
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Range {
+pub enum Width {
     Byte,
 }
