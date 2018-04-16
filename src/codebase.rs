@@ -1,9 +1,12 @@
+use std::ops;
+
 struct StringCodebase {
     bufs: Vec<SrcBuf>,
 }
 
 struct SrcBuf {
     src: String,
+    line_ranges: Vec<ops::Range<usize>>,
     start_index: usize,
 }
 
@@ -20,7 +23,12 @@ impl StringCodebase {
             Some(ref src_buf) => src_buf.start_index + src_buf.src.len(),
             None => 0,
         };
-        self.bufs.push(SrcBuf { src, start_index });
+        let line_ranges = build_line_ranges(&src);
+        self.bufs.push(SrcBuf {
+            src,
+            line_ranges,
+            start_index,
+        });
         buf_id
     }
 
@@ -31,6 +39,31 @@ impl StringCodebase {
             start_index: src_buf.start_index,
         }
     }
+
+    fn get_line(&self, buf_id: BufId, line_index: usize) -> &str {
+        let buf = &self.bufs[buf_id.0];
+        let &ops::Range { start, end } = &buf.line_ranges[line_index];
+        &buf.src[start..end]
+    }
+}
+
+fn build_line_ranges(src: &str) -> Vec<ops::Range<usize>> {
+    let mut line_ranges = Vec::new();
+    let mut current_line_start = 0;
+    for (index, ch) in src.char_indices() {
+        if ch == '\n' {
+            line_ranges.push(ops::Range {
+                start: current_line_start,
+                end: index,
+            });
+            current_line_start = index + ch.len_utf8()
+        }
+    }
+    line_ranges.push(ops::Range {
+        start: current_line_start,
+        end: src.len(),
+    });
+    line_ranges
 }
 
 use std::str::CharIndices;
@@ -83,5 +116,13 @@ mod tests {
         let buf_id_b = codebase.add_src_buf(String::from(src_b));
         let start_b = codebase.buf(buf_id_b).next().map(|(idx, _)| idx);
         assert_eq!(end_a, start_b)
+    }
+
+    #[test]
+    fn get_line() {
+        let mut codebase = StringCodebase::new();
+        let src = "first line\nsecond line\nthird line";
+        let buf_id = codebase.add_src_buf(src.into());
+        assert_eq!(codebase.get_line(buf_id, 1), "second line")
     }
 }
