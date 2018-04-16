@@ -50,14 +50,15 @@ impl StringCodebase {
 fn build_line_ranges(src: &str) -> Vec<ops::Range<usize>> {
     let mut line_ranges = Vec::new();
     let mut current_line_start = 0;
-    for (index, ch) in src.char_indices() {
-        if ch == '\n' {
-            line_ranges.push(ops::Range {
-                start: current_line_start,
-                end: index,
-            });
-            current_line_start = index + ch.len_utf8()
-        }
+    for index in src.char_indices()
+        .filter(|&(_, ch)| ch == '\n')
+        .map(|(index, _)| index)
+    {
+        line_ranges.push(ops::Range {
+            start: current_line_start,
+            end: index,
+        });
+        current_line_start = index + '\n'.len_utf8()
     }
     line_ranges.push(ops::Range {
         start: current_line_start,
