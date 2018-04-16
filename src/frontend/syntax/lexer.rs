@@ -4,7 +4,7 @@ use std::iter;
 use std::ops::{Index, Range};
 use std::str;
 
-#[derive(PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 enum TokenKind {
     ClosingBracket,
     Colon,
@@ -175,7 +175,7 @@ fn mk_token(kind: TokenKind, lexeme: &str) -> Token {
     }
 }
 
-fn mk_keyword_or<'a, F: FnOnce(String) -> Token>(f: F, lexeme: &'a str) -> Token {
+fn mk_keyword_or<F: FnOnce(String) -> Token>(f: F, lexeme: &str) -> Token {
     identify_keyword(lexeme).map_or_else(
         || f(lexeme.to_string()),
         |keyword| match keyword {
