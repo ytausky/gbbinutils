@@ -1,13 +1,81 @@
-use std::ops;
+use std::{cmp, ops};
 
-struct StringCodebase {
-    bufs: Vec<SrcBuf>,
+#[derive(Clone, Copy)]
+struct BufPosition(usize);
+
+struct BufRange {
+    start: BufPosition,
+    end: BufPosition,
 }
 
-struct SrcBuf {
+struct LineIndex(usize);
+
+#[derive(Debug, PartialEq)]
+struct TextPosition {
+    line_index: usize,
+    column_index: usize,
+}
+
+#[derive(Debug, PartialEq)]
+struct TextRange {
+    start: TextPosition,
+    end: TextPosition,
+}
+
+trait TextBuf {
+    fn text_range(&self, buf_range: &BufRange) -> TextRange;
+}
+
+struct StringSrcBuf {
     src: String,
     line_ranges: Vec<ops::Range<usize>>,
-    start_index: usize,
+}
+
+impl StringSrcBuf {
+    fn new(src: String) -> StringSrcBuf {
+        let line_ranges = build_line_ranges(&src);
+        StringSrcBuf { src, line_ranges }
+    }
+
+    fn line_index(&self, BufPosition(buf_position): BufPosition) -> LineIndex {
+        match self.line_ranges
+            .binary_search_by(|&ops::Range { start, end }| {
+                if start <= buf_position {
+                    if buf_position <= end {
+                        cmp::Ordering::Equal
+                    } else {
+                        cmp::Ordering::Greater
+                    }
+                } else {
+                    cmp::Ordering::Less
+                }
+            }) {
+            Ok(line_index) => LineIndex(line_index),
+            Err(_) => panic!(),
+        }
+    }
+
+    fn text_position(&self, buf_position: BufPosition) -> TextPosition {
+        let LineIndex(line_index) = self.line_index(buf_position);
+        let line_range = &self.line_ranges[line_index];
+        TextPosition {
+            line_index,
+            column_index: buf_position.0 - line_range.start,
+        }
+    }
+}
+
+impl TextBuf for StringSrcBuf {
+    fn text_range(&self, buf_range: &BufRange) -> TextRange {
+        TextRange {
+            start: self.text_position(buf_range.start),
+            end: self.text_position(buf_range.end),
+        }
+    }
+}
+
+struct StringCodebase {
+    bufs: Vec<StringSrcBuf>,
 }
 
 struct BufId(usize);
@@ -19,25 +87,13 @@ impl StringCodebase {
 
     fn add_src_buf(&mut self, src: String) -> BufId {
         let buf_id = BufId(self.bufs.len());
-        let start_index = match self.bufs.last() {
-            Some(ref src_buf) => src_buf.start_index + src_buf.src.len(),
-            None => 0,
-        };
-        let line_ranges = build_line_ranges(&src);
-        self.bufs.push(SrcBuf {
-            src,
-            line_ranges,
-            start_index,
-        });
+        self.bufs.push(StringSrcBuf::new(src));
         buf_id
     }
 
-    fn buf(&self, buf_id: BufId) -> SrcBufIter {
+    fn buf(&self, buf_id: BufId) -> CharIndices {
         let src_buf = &self.bufs[buf_id.0];
-        SrcBufIter {
-            char_indices: src_buf.src.char_indices(),
-            start_index: src_buf.start_index,
-        }
+        src_buf.src.char_indices()
     }
 
     fn get_line(&self, buf_id: BufId, line_index: usize) -> &str {
@@ -69,21 +125,6 @@ fn build_line_ranges(src: &str) -> Vec<ops::Range<usize>> {
 
 use std::str::CharIndices;
 
-struct SrcBufIter<'a> {
-    char_indices: CharIndices<'a>,
-    start_index: usize,
-}
-
-impl<'a> Iterator for SrcBufIter<'a> {
-    type Item = (usize, char);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.char_indices
-            .next()
-            .map(|(index, ch)| (self.start_index + index, ch))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -101,29 +142,34 @@ mod tests {
     }
 
     #[test]
-    fn second_buffer_disjoint_from_first() {
-        let mut codebase = StringCodebase::new();
-        let src_a = "some source string";
-        let buf_id_a = codebase.add_src_buf(String::from(src_a));
-        let end_a = {
-            let mut iter = codebase.buf(buf_id_a);
-            let mut end = None;
-            while let Some((new_end, ch)) = iter.next() {
-                end = Some(new_end + ch.len_utf8())
-            }
-            end
-        };
-        let src_b = "another string";
-        let buf_id_b = codebase.add_src_buf(String::from(src_b));
-        let start_b = codebase.buf(buf_id_b).next().map(|(idx, _)| idx);
-        assert_eq!(end_a, start_b)
-    }
-
-    #[test]
     fn get_line() {
         let mut codebase = StringCodebase::new();
         let src = "first line\nsecond line\nthird line";
         let buf_id = codebase.add_src_buf(src.into());
         assert_eq!(codebase.get_line(buf_id, 1), "second line")
+    }
+
+    #[test]
+    fn text_range_in_middle_of_line() {
+        let src = "abcdefg\nhijklmn";
+        let buf = StringSrcBuf::new(src.into());
+        let buf_range = BufRange {
+            start: BufPosition(9),
+            end: BufPosition(12),
+        };
+        let text_range = buf.text_range(&buf_range);
+        assert_eq!(
+            text_range,
+            TextRange {
+                start: TextPosition {
+                    line_index: 1,
+                    column_index: 1,
+                },
+                end: TextPosition {
+                    line_index: 1,
+                    column_index: 4,
+                },
+            }
+        )
     }
 }
