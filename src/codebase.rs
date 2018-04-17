@@ -8,11 +8,12 @@ struct BufRange {
     end: BufPosition,
 }
 
+#[derive(Debug, PartialEq)]
 struct LineIndex(usize);
 
 #[derive(Debug, PartialEq)]
 struct TextPosition {
-    line_index: usize,
+    line: LineIndex,
     column_index: usize,
 }
 
@@ -56,10 +57,10 @@ impl StringSrcBuf {
     }
 
     fn text_position(&self, buf_position: BufPosition) -> TextPosition {
-        let LineIndex(line_index) = self.line_index(buf_position);
-        let line_range = &self.line_ranges[line_index];
+        let line = self.line_index(buf_position);
+        let line_range = &self.line_ranges[line.0];
         TextPosition {
-            line_index,
+            line,
             column_index: buf_position.0 - line_range.start,
         }
     }
@@ -162,11 +163,11 @@ mod tests {
             text_range,
             TextRange {
                 start: TextPosition {
-                    line_index: 1,
+                    line: LineIndex(1),
                     column_index: 1,
                 },
                 end: TextPosition {
-                    line_index: 1,
+                    line: LineIndex(1),
                     column_index: 4,
                 },
             }
