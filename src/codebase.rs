@@ -1,4 +1,4 @@
-use std::{cmp, ops};
+use std::{cmp, ops, rc::Rc};
 
 #[derive(Clone, Copy)]
 struct BufPosition(usize);
@@ -28,14 +28,17 @@ trait TextBuf {
 }
 
 struct StringSrcBuf {
-    src: String,
+    src: Rc<str>,
     line_ranges: Vec<ops::Range<usize>>,
 }
 
 impl StringSrcBuf {
     fn new(src: String) -> StringSrcBuf {
         let line_ranges = build_line_ranges(&src);
-        StringSrcBuf { src, line_ranges }
+        StringSrcBuf {
+            src: src.into(),
+            line_ranges,
+        }
     }
 
     fn line_index(&self, BufPosition(buf_position): BufPosition) -> LineIndex {
@@ -75,28 +78,28 @@ impl TextBuf for StringSrcBuf {
     }
 }
 
-struct StringCodebase {
+pub struct StringCodebase {
     bufs: Vec<StringSrcBuf>,
 }
 
-struct BufId(usize);
+pub struct BufId(usize);
 
 impl StringCodebase {
-    fn new() -> StringCodebase {
+    pub fn new() -> StringCodebase {
         StringCodebase { bufs: Vec::new() }
     }
 
-    fn add_src_buf(&mut self, src: String) -> BufId {
+    pub fn add_src_buf(&mut self, src: String) -> BufId {
         let buf_id = BufId(self.bufs.len());
         self.bufs.push(StringSrcBuf::new(src));
         buf_id
     }
 
-    fn buf(&self, buf_id: BufId) -> CharIndices {
-        let src_buf = &self.bufs[buf_id.0];
-        src_buf.src.char_indices()
+    pub fn buf(&self, buf_id: BufId) -> Rc<str> {
+        self.bufs[buf_id.0].src.clone()
     }
 
+    #[cfg(test)]
     fn get_line(&self, buf_id: BufId, line_index: usize) -> &str {
         let buf = &self.bufs[buf_id.0];
         let &ops::Range { start, end } = &buf.line_ranges[line_index];
@@ -124,8 +127,6 @@ fn build_line_ranges(src: &str) -> Vec<ops::Range<usize>> {
     line_ranges
 }
 
-use std::str::CharIndices;
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -135,7 +136,8 @@ mod tests {
         let mut codebase = StringCodebase::new();
         let src = "src";
         let buf_id = codebase.add_src_buf(String::from(src));
-        let mut iter = codebase.buf(buf_id);
+        let rc_src = codebase.buf(buf_id);
+        let mut iter = rc_src.char_indices();
         assert_eq!(iter.next(), Some((0, 's')));
         assert_eq!(iter.next(), Some((1, 'r')));
         assert_eq!(iter.next(), Some((2, 'c')));

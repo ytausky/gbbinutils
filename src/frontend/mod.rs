@@ -3,6 +3,7 @@ use std;
 mod semantics;
 mod syntax;
 
+use codebase::StringCodebase;
 use diagnostics::*;
 use backend::*;
 use self::syntax::*;
@@ -131,6 +132,7 @@ struct Session<FS, SAF, B, DL> {
     backend: B,
     macro_defs: HashMap<String, Rc<Vec<Token>>>,
     diagnostics: DL,
+    codebase: StringCodebase,
 }
 
 impl<FS, SAF, B, DL> Session<FS, SAF, B, DL>
@@ -147,6 +149,7 @@ where
             backend,
             macro_defs: HashMap::new(),
             diagnostics,
+            codebase: StringCodebase::new(),
         }
     }
 
@@ -171,7 +174,9 @@ where
 
     fn include_source_file(&mut self, filename: String) {
         let src = self.fs.read_file(&filename);
-        let tokens = syntax::tokenize(&src);
+        let buf_id = self.codebase.add_src_buf(src);
+        let rc_src = self.codebase.buf(buf_id);
+        let tokens = syntax::tokenize(&rc_src);
         self.analyze_token_seq(tokens)
     }
 
