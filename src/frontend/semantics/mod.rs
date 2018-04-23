@@ -23,7 +23,7 @@ impl<'a, F: Frontend + 'a> syntax::FileContext<String, F::CodeRef> for SemanticA
     type MacroDefContext = MacroDefActions<'a, F>;
     type MacroInvocationContext = MacroInvocationActions<'a, F>;
 
-    fn add_label(&mut self, (label, _): (<String as TokenSpec>::Label, F::CodeRef)) {
+    fn add_label(&mut self, label: (<String as TokenSpec>::Label, F::CodeRef)) {
         self.session.define_label(label);
     }
 
@@ -244,7 +244,7 @@ mod tests {
             self.0.push(TestOperation::EmitItem(item))
         }
 
-        fn define_label(&mut self, label: String) {
+        fn define_label(&mut self, (label, _): (String, Self::CodeRef)) {
             self.0.push(TestOperation::Label(label))
         }
 

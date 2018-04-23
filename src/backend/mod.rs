@@ -1,7 +1,8 @@
 use diagnostics::*;
 
 pub trait Backend {
-    fn add_label(&mut self, label: &str);
+    type CodeRef;
+    fn add_label(&mut self, label: (&str, Self::CodeRef));
     fn emit_item(&mut self, item: Item);
 }
 
@@ -34,7 +35,9 @@ impl<'a, T: 'a> Rom<'a, T> {
 }
 
 impl<'a, T: 'a + DiagnosticsListener> Backend for Rom<'a, T> {
-    fn add_label(&mut self, _label: &str) {}
+    type CodeRef = ();
+
+    fn add_label(&mut self, _label: (&str, Self::CodeRef)) {}
 
     fn emit_item(&mut self, item: Item) {
         match item {

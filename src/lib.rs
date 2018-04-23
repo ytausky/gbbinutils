@@ -40,7 +40,9 @@ impl OutputDumper {
 }
 
 impl backend::Backend for OutputDumper {
-    fn add_label(&mut self, label: &str) {
+    type CodeRef = ();
+
+    fn add_label(&mut self, (label, _): (&str, Self::CodeRef)) {
         println!("Define symbol: {}", label)
     }
 

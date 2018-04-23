@@ -8,7 +8,7 @@ use diagnostics::*;
 use backend::*;
 use self::syntax::*;
 
-pub fn analyze_file<B: Backend>(name: String, backend: B) -> B {
+pub fn analyze_file<B: Backend<CodeRef = ()>>(name: String, backend: B) -> B {
     let fs = StdFileSystem::new();
     let factory = SemanticTokenSeqAnalyzerFactory::new();
     let mut session = Session::new(fs, factory, backend, DebugDiagnosticsListener {});
@@ -119,7 +119,7 @@ pub trait Frontend {
     type CodeRef;
     fn include_source_file(&mut self, filename: String);
     fn emit_item(&mut self, item: Item);
-    fn define_label(&mut self, label: String);
+    fn define_label(&mut self, label: (String, Self::CodeRef));
     fn define_macro(&mut self, name: (String, Self::CodeRef), tokens: Vec<Token>);
     fn invoke_macro(&mut self, name: String, args: Vec<Vec<Token>>);
 }
@@ -139,7 +139,7 @@ impl<FS, SAF, B, DL> Session<FS, SAF, B, DL>
 where
     FS: FileSystem,
     SAF: TokenSeqAnalyzerFactory,
-    B: Backend,
+    B: Backend<CodeRef = ()>,
     DL: DiagnosticsListener,
 {
     fn new(fs: FS, analyzer_factory: SAF, backend: B, diagnostics: DL) -> Session<FS, SAF, B, DL> {
@@ -167,10 +167,10 @@ impl<FS, SAF, B, DL> Frontend for Session<FS, SAF, B, DL>
 where
     FS: FileSystem,
     SAF: TokenSeqAnalyzerFactory,
-    B: Backend,
+    B: Backend<CodeRef = ()>,
     DL: DiagnosticsListener,
 {
-    type CodeRef = ();
+    type CodeRef = B::CodeRef;
 
     fn include_source_file(&mut self, filename: String) {
         let src = self.fs.read_file(&filename);
@@ -184,8 +184,8 @@ where
         self.backend.emit_item(item)
     }
 
-    fn define_label(&mut self, label: String) {
-        self.backend.add_label(&label)
+    fn define_label(&mut self, label: (String, Self::CodeRef)) {
+        self.backend.add_label((&label.0, label.1))
     }
 
     fn define_macro(&mut self, (name, _): (String, Self::CodeRef), tokens: Vec<Token>) {
@@ -236,7 +236,7 @@ mod tests {
     fn define_label() {
         let label = "label";
         let log = TestLog::default();
-        TestFixture::new(&log).when(|mut session| session.define_label(label.to_string()));
+        TestFixture::new(&log).when(|mut session| session.define_label((label.to_string(), ())));
         assert_eq!(*log.borrow(), [TestEvent::AddLabel(String::from(label))]);
     }
 
@@ -326,7 +326,9 @@ mod tests {
     }
 
     impl<'a> Backend for Mock<'a> {
-        fn add_label(&mut self, label: &str) {
+        type CodeRef = ();
+
+        fn add_label(&mut self, (label, _): (&str, Self::CodeRef)) {
             self.log
                 .borrow_mut()
                 .push(TestEvent::AddLabel(String::from(label)))
