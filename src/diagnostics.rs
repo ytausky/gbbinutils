@@ -1,6 +1,5 @@
-pub trait DiagnosticsListener {
-    type CodeRef;
-    fn emit_diagnostic(&self, diagnostic: Diagnostic<Self::CodeRef>);
+pub trait DiagnosticsListener<R> {
+    fn emit_diagnostic(&self, diagnostic: Diagnostic<R>);
 }
 
 #[derive(Debug, PartialEq)]

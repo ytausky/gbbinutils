@@ -8,7 +8,7 @@ use diagnostics::*;
 use backend::*;
 use self::syntax::*;
 
-pub fn analyze_file<B: Backend<CodeRef = ()>>(name: String, backend: B) -> B {
+pub fn analyze_file<B: Backend<()>>(name: String, backend: B) -> B {
     let fs = StdFileSystem::new();
     let factory = SemanticTokenSeqAnalyzerFactory::new();
     let mut session = Session::new(fs, factory, backend, DebugDiagnosticsListener {});
@@ -18,8 +18,7 @@ pub fn analyze_file<B: Backend<CodeRef = ()>>(name: String, backend: B) -> B {
 
 struct DebugDiagnosticsListener;
 
-impl DiagnosticsListener for DebugDiagnosticsListener {
-    type CodeRef = ();
+impl DiagnosticsListener<()> for DebugDiagnosticsListener {
     fn emit_diagnostic(&self, diagnostic: Diagnostic<()>) {
         println!("Diagnostic: {:?}", diagnostic)
     }
@@ -140,8 +139,8 @@ impl<FS, SAF, B, DL> Session<FS, SAF, B, DL>
 where
     FS: FileSystem,
     SAF: TokenSeqAnalyzerFactory,
-    B: Backend<CodeRef = ()>,
-    DL: DiagnosticsListener<CodeRef = ()>,
+    B: Backend<()>,
+    DL: DiagnosticsListener<()>,
 {
     fn new(fs: FS, analyzer_factory: SAF, backend: B, diagnostics: DL) -> Session<FS, SAF, B, DL> {
         Session {
@@ -154,7 +153,7 @@ where
         }
     }
 
-    fn analyze_token_seq<I: Iterator<Item = (Token, B::CodeRef)>>(&mut self, tokens: I) {
+    fn analyze_token_seq<I: Iterator<Item = (Token, ())>>(&mut self, tokens: I) {
         let mut analyzer = self.analyzer_factory.mk_token_seq_analyzer();
         analyzer.analyze(tokens.map(|(t, _)| t), self)
     }
@@ -168,10 +167,10 @@ impl<FS, SAF, B, DL> Frontend for Session<FS, SAF, B, DL>
 where
     FS: FileSystem,
     SAF: TokenSeqAnalyzerFactory,
-    B: Backend<CodeRef = ()>,
-    DL: DiagnosticsListener<CodeRef = ()>,
+    B: Backend<()>,
+    DL: DiagnosticsListener<()>,
 {
-    type CodeRef = B::CodeRef;
+    type CodeRef = ();
 
     fn include_source_file(&mut self, filename: String) {
         let src = self.fs.read_file(&filename);
@@ -327,10 +326,8 @@ mod tests {
         }
     }
 
-    impl<'a> Backend for Mock<'a> {
-        type CodeRef = ();
-
-        fn add_label(&mut self, (label, _): (&str, Self::CodeRef)) {
+    impl<'a> Backend<()> for Mock<'a> {
+        fn add_label(&mut self, (label, _): (&str, ())) {
             self.log
                 .borrow_mut()
                 .push(TestEvent::AddLabel(String::from(label)))
@@ -341,9 +338,8 @@ mod tests {
         }
     }
 
-    impl<'a> DiagnosticsListener for Mock<'a> {
-        type CodeRef = ();
-        fn emit_diagnostic(&self, diagnostic: Diagnostic<Self::CodeRef>) {
+    impl<'a> DiagnosticsListener<()> for Mock<'a> {
+        fn emit_diagnostic(&self, diagnostic: Diagnostic<()>) {
             self.log
                 .borrow_mut()
                 .push(TestEvent::Diagnostic(diagnostic))

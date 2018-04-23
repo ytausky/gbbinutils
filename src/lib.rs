@@ -25,9 +25,8 @@ impl DiagnosticsDumper {
     }
 }
 
-impl diagnostics::DiagnosticsListener for DiagnosticsDumper {
-    type CodeRef = ();
-    fn emit_diagnostic(&self, diagnostic: diagnostics::Diagnostic<Self::CodeRef>) {
+impl diagnostics::DiagnosticsListener<()> for DiagnosticsDumper {
+    fn emit_diagnostic(&self, diagnostic: diagnostics::Diagnostic<()>) {
         println!("{:?}", diagnostic)
     }
 }
@@ -40,10 +39,8 @@ impl OutputDumper {
     }
 }
 
-impl backend::Backend for OutputDumper {
-    type CodeRef = ();
-
-    fn add_label(&mut self, (label, _): (&str, Self::CodeRef)) {
+impl backend::Backend<()> for OutputDumper {
+    fn add_label(&mut self, (label, _): (&str, ())) {
         println!("Define symbol: {}", label)
     }
 

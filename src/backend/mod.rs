@@ -1,8 +1,7 @@
 use diagnostics::*;
 
-pub trait Backend {
-    type CodeRef;
-    fn add_label(&mut self, label: (&str, Self::CodeRef));
+pub trait Backend<R> {
+    fn add_label(&mut self, label: (&str, R));
     fn emit_item(&mut self, item: Item);
 }
 
@@ -34,10 +33,8 @@ impl<'a, T: 'a> Rom<'a, T> {
     }
 }
 
-impl<'a, T: 'a + DiagnosticsListener> Backend for Rom<'a, T> {
-    type CodeRef = ();
-
-    fn add_label(&mut self, _label: (&str, Self::CodeRef)) {}
+impl<'a, R, T: 'a + DiagnosticsListener<R>> Backend<R> for Rom<'a, T> {
+    fn add_label(&mut self, _label: (&str, R)) {}
 
     fn emit_item(&mut self, item: Item) {
         match item {
@@ -226,9 +223,8 @@ mod tests {
         }
     }
 
-    impl DiagnosticsListener for TestDiagnosticsListener {
-        type CodeRef = ();
-        fn emit_diagnostic(&self, diagnostic: Diagnostic<Self::CodeRef>) {
+    impl DiagnosticsListener<()> for TestDiagnosticsListener {
+        fn emit_diagnostic(&self, diagnostic: Diagnostic<()>) {
             self.diagnostics.borrow_mut().push(diagnostic)
         }
     }
