@@ -50,7 +50,7 @@ trait TokenSeqAnalyzer {
     fn analyze<I, F>(&mut self, tokens: I, frontend: &mut F)
     where
         I: Iterator<Item = Token>,
-        F: Frontend<TrackingData = ()>;
+        F: Frontend<CodeRef = ()>;
 }
 
 struct SemanticTokenSeqAnalyzer;
@@ -65,7 +65,7 @@ impl TokenSeqAnalyzer for SemanticTokenSeqAnalyzer {
     fn analyze<I, F>(&mut self, tokens: I, frontend: &mut F)
     where
         I: Iterator<Item = Token>,
-        F: Frontend<TrackingData = ()>,
+        F: Frontend<CodeRef = ()>,
     {
         let actions = semantics::SemanticActions::new(frontend);
         syntax::parse_token_seq(tokens, actions)
@@ -116,11 +116,11 @@ impl ExprFactory for StrExprFactory {
 }
 
 pub trait Frontend {
-    type TrackingData;
+    type CodeRef;
     fn include_source_file(&mut self, filename: String);
     fn emit_item(&mut self, item: Item);
     fn define_label(&mut self, label: String);
-    fn define_macro(&mut self, name: (String, Self::TrackingData), tokens: Vec<Token>);
+    fn define_macro(&mut self, name: (String, Self::CodeRef), tokens: Vec<Token>);
     fn invoke_macro(&mut self, name: String, args: Vec<Vec<Token>>);
 }
 
@@ -170,7 +170,7 @@ where
     B: Backend,
     DL: DiagnosticsListener,
 {
-    type TrackingData = ();
+    type CodeRef = ();
 
     fn include_source_file(&mut self, filename: String) {
         let src = self.fs.read_file(&filename);
@@ -188,7 +188,7 @@ where
         self.backend.add_label(&label)
     }
 
-    fn define_macro(&mut self, (name, _): (String, Self::TrackingData), tokens: Vec<Token>) {
+    fn define_macro(&mut self, (name, _): (String, Self::CodeRef), tokens: Vec<Token>) {
         self.macro_defs.insert(name, Rc::new(tokens));
     }
 

@@ -18,25 +18,25 @@ impl<'a, F: Frontend + 'a> SemanticActions<'a, F> {
     }
 }
 
-impl<'a, F: Frontend + 'a> syntax::FileContext<String, F::TrackingData> for SemanticActions<'a, F> {
+impl<'a, F: Frontend + 'a> syntax::FileContext<String, F::CodeRef> for SemanticActions<'a, F> {
     type CommandContext = CommandActions<'a, F>;
     type MacroDefContext = MacroDefActions<'a, F>;
     type MacroInvocationContext = MacroInvocationActions<'a, F>;
 
-    fn add_label(&mut self, (label, _): (<String as TokenSpec>::Label, F::TrackingData)) {
+    fn add_label(&mut self, (label, _): (<String as TokenSpec>::Label, F::CodeRef)) {
         self.session.define_label(label);
     }
 
     fn enter_command(
         self,
-        name: (<String as TokenSpec>::Command, F::TrackingData),
+        name: (<String as TokenSpec>::Command, F::CodeRef),
     ) -> Self::CommandContext {
         CommandActions::new(name, self)
     }
 
     fn enter_macro_def(
         self,
-        name: (<String as TokenSpec>::Label, F::TrackingData),
+        name: (<String as TokenSpec>::Label, F::CodeRef),
     ) -> Self::MacroDefContext {
         MacroDefActions::new(name, self)
     }
@@ -50,16 +50,13 @@ impl<'a, F: Frontend + 'a> syntax::FileContext<String, F::TrackingData> for Sema
 }
 
 pub struct CommandActions<'a, F: Frontend + 'a> {
-    name: (Command, F::TrackingData),
+    name: (Command, F::CodeRef),
     args: Vec<SynExpr<syntax::Token>>,
     parent: SemanticActions<'a, F>,
 }
 
 impl<'a, F: Frontend + 'a> CommandActions<'a, F> {
-    fn new(
-        name: (Command, F::TrackingData),
-        parent: SemanticActions<'a, F>,
-    ) -> CommandActions<'a, F> {
+    fn new(name: (Command, F::CodeRef), parent: SemanticActions<'a, F>) -> CommandActions<'a, F> {
         CommandActions {
             name,
             args: Vec::new(),
@@ -107,16 +104,13 @@ impl<'a, F: Frontend + 'a> syntax::CommandContext for CommandActions<'a, F> {
 }
 
 pub struct MacroDefActions<'a, F: Frontend + 'a> {
-    name: (String, F::TrackingData),
+    name: (String, F::CodeRef),
     tokens: Vec<Token>,
     parent: SemanticActions<'a, F>,
 }
 
 impl<'a, F: Frontend + 'a> MacroDefActions<'a, F> {
-    fn new(
-        name: (String, F::TrackingData),
-        parent: SemanticActions<'a, F>,
-    ) -> MacroDefActions<'a, F> {
+    fn new(name: (String, F::CodeRef), parent: SemanticActions<'a, F>) -> MacroDefActions<'a, F> {
         MacroDefActions {
             name,
             tokens: Vec::new(),
@@ -240,7 +234,7 @@ mod tests {
     }
 
     impl Frontend for TestFrontend {
-        type TrackingData = ();
+        type CodeRef = ();
 
         fn include_source_file(&mut self, filename: String) {
             self.0.push(TestOperation::Include(filename))
@@ -254,7 +248,7 @@ mod tests {
             self.0.push(TestOperation::Label(label))
         }
 
-        fn define_macro(&mut self, (name, _): (String, Self::TrackingData), tokens: Vec<Token>) {
+        fn define_macro(&mut self, (name, _): (String, Self::CodeRef), tokens: Vec<Token>) {
             self.0.push(TestOperation::DefineMacro(name, tokens))
         }
 
