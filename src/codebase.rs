@@ -55,7 +55,7 @@ impl StringSrcBuf {
                 }
             }) {
             Ok(line_index) => LineIndex(line_index),
-            Err(_) => panic!(),
+            Err(_n) => panic!(),
         }
     }
 
