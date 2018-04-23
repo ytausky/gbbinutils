@@ -82,6 +82,7 @@ pub struct StringCodebase {
     bufs: Vec<StringSrcBuf>,
 }
 
+#[derive(Clone, Copy)]
 pub struct BufId(usize);
 
 impl StringCodebase {
