@@ -1,11 +1,12 @@
 pub trait DiagnosticsListener {
-    fn emit_diagnostic(&self, diagnostic: Diagnostic);
+    type CodeRef;
+    fn emit_diagnostic(&self, diagnostic: Diagnostic<Self::CodeRef>);
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Diagnostic {
+pub enum Diagnostic<R> {
     OperandCount { actual: usize, expected: usize },
-    UndefinedMacro { name: String },
+    UndefinedMacro { name: (String, R) },
     ValueOutOfRange { value: i32, width: Width },
 }
 

@@ -157,7 +157,7 @@ impl<S: TokenSpec, T, I: Iterator<Item = (Token<S>, T)>> Parser<I> {
     }
 
     fn parse_macro_invocation<F: FileContext<S, T>>(&mut self, actions: F) -> F {
-        let (macro_name, _) = self.expect_atom();
+        let macro_name = self.expect_atom();
         let mut actions = actions.enter_macro_invocation(macro_name);
         actions = self.parse_macro_arg_list(actions);
         actions.exit_macro_invocation()
@@ -324,9 +324,9 @@ mod tests {
 
         fn enter_macro_invocation(
             self,
-            name: <TestTokenSpec as TokenSpec>::Atom,
+            name: (<TestTokenSpec as TokenSpec>::Atom, TestTrackingData),
         ) -> Self::MacroInvocationContext {
-            self.actions.push(Action::EnterMacroInvocation(name));
+            self.actions.push(Action::EnterMacroInvocation(name.0));
             self
         }
     }

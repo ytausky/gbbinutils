@@ -26,7 +26,8 @@ impl DiagnosticsDumper {
 }
 
 impl diagnostics::DiagnosticsListener for DiagnosticsDumper {
-    fn emit_diagnostic(&self, diagnostic: diagnostics::Diagnostic) {
+    type CodeRef = ();
+    fn emit_diagnostic(&self, diagnostic: diagnostics::Diagnostic<Self::CodeRef>) {
         println!("{:?}", diagnostic)
     }
 }

@@ -43,7 +43,7 @@ impl<'a, F: Frontend + 'a> syntax::FileContext<String, F::CodeRef> for SemanticA
 
     fn enter_macro_invocation(
         self,
-        name: <String as TokenSpec>::Atom,
+        name: (<String as TokenSpec>::Atom, F::CodeRef),
     ) -> Self::MacroInvocationContext {
         MacroInvocationActions::new(name, self)
     }
@@ -134,13 +134,16 @@ impl<'a, F: Frontend + 'a> syntax::TokenSeqContext for MacroDefActions<'a, F> {
 }
 
 pub struct MacroInvocationActions<'a, F: Frontend + 'a> {
-    name: Atom<String>,
+    name: (Atom<String>, F::CodeRef),
     args: Vec<Vec<Token>>,
     parent: SemanticActions<'a, F>,
 }
 
 impl<'a, F: Frontend + 'a> MacroInvocationActions<'a, F> {
-    fn new(name: Atom<String>, parent: SemanticActions<'a, F>) -> MacroInvocationActions<'a, F> {
+    fn new(
+        name: (Atom<String>, F::CodeRef),
+        parent: SemanticActions<'a, F>,
+    ) -> MacroInvocationActions<'a, F> {
         MacroInvocationActions {
             name,
             args: Vec::new(),
@@ -164,7 +167,9 @@ impl<'a, F: Frontend + 'a> syntax::MacroInvocationContext for MacroInvocationAct
 
     fn exit_macro_invocation(self) -> Self::Parent {
         match self.name {
-            Atom::Ident(name) => self.parent.session.invoke_macro(name, self.args),
+            (Atom::Ident(name), code_ref) => self.parent
+                .session
+                .invoke_macro((name, code_ref), self.args),
             _ => panic!(),
         }
         self.parent
@@ -252,8 +257,8 @@ mod tests {
             self.0.push(TestOperation::DefineMacro(name, tokens))
         }
 
-        fn invoke_macro(&mut self, name: String, args: Vec<Vec<Token>>) {
-            self.0.push(TestOperation::InvokeMacro(name, args))
+        fn invoke_macro(&mut self, name: (String, Self::CodeRef), args: Vec<Vec<Token>>) {
+            self.0.push(TestOperation::InvokeMacro(name.0, args))
         }
     }
 
@@ -329,7 +334,7 @@ mod tests {
     fn invoke_nullary_macro() {
         let name = "my_macro";
         let actions = collect_semantic_actions(|actions| {
-            let invocation = actions.enter_macro_invocation(Atom::Ident(name.to_string()));
+            let invocation = actions.enter_macro_invocation((Atom::Ident(name.to_string()), ()));
             invocation.exit_macro_invocation();
         });
         assert_eq!(
@@ -343,7 +348,8 @@ mod tests {
         let name = "my_macro";
         let arg_token = token::Atom(Atom::Operand(Operand::A));
         let actions = collect_semantic_actions(|actions| {
-            let mut invocation = actions.enter_macro_invocation(Atom::Ident(name.to_string()));
+            let mut invocation =
+                actions.enter_macro_invocation((Atom::Ident(name.to_string()), ()));
             invocation = {
                 let mut arg = invocation.enter_macro_arg();
                 arg.push_token(arg_token.clone());

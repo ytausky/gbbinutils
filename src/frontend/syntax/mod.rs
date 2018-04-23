@@ -62,7 +62,7 @@ where
     fn add_label(&mut self, label: (S::Label, T));
     fn enter_command(self, name: (S::Command, T)) -> Self::CommandContext;
     fn enter_macro_def(self, name: (S::Label, T)) -> Self::MacroDefContext;
-    fn enter_macro_invocation(self, name: S::Atom) -> Self::MacroInvocationContext;
+    fn enter_macro_invocation(self, name: (S::Atom, T)) -> Self::MacroInvocationContext;
 }
 
 pub trait CommandContext {

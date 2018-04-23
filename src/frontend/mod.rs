@@ -19,7 +19,8 @@ pub fn analyze_file<B: Backend<CodeRef = ()>>(name: String, backend: B) -> B {
 struct DebugDiagnosticsListener;
 
 impl DiagnosticsListener for DebugDiagnosticsListener {
-    fn emit_diagnostic(&self, diagnostic: Diagnostic) {
+    type CodeRef = ();
+    fn emit_diagnostic(&self, diagnostic: Diagnostic<()>) {
         println!("Diagnostic: {:?}", diagnostic)
     }
 }
@@ -121,7 +122,7 @@ pub trait Frontend {
     fn emit_item(&mut self, item: Item);
     fn define_label(&mut self, label: (String, Self::CodeRef));
     fn define_macro(&mut self, name: (String, Self::CodeRef), tokens: Vec<Token>);
-    fn invoke_macro(&mut self, name: String, args: Vec<Vec<Token>>);
+    fn invoke_macro(&mut self, name: (String, Self::CodeRef), args: Vec<Vec<Token>>);
 }
 
 use std::{collections::HashMap, rc::Rc};
@@ -140,7 +141,7 @@ where
     FS: FileSystem,
     SAF: TokenSeqAnalyzerFactory,
     B: Backend<CodeRef = ()>,
-    DL: DiagnosticsListener,
+    DL: DiagnosticsListener<CodeRef = ()>,
 {
     fn new(fs: FS, analyzer_factory: SAF, backend: B, diagnostics: DL) -> Session<FS, SAF, B, DL> {
         Session {
@@ -168,7 +169,7 @@ where
     FS: FileSystem,
     SAF: TokenSeqAnalyzerFactory,
     B: Backend<CodeRef = ()>,
-    DL: DiagnosticsListener,
+    DL: DiagnosticsListener<CodeRef = ()>,
 {
     type CodeRef = B::CodeRef;
 
@@ -192,8 +193,8 @@ where
         self.macro_defs.insert(name, Rc::new(tokens));
     }
 
-    fn invoke_macro(&mut self, name: String, _args: Vec<Vec<Token>>) {
-        let macro_def = self.macro_defs.get(&name).cloned();
+    fn invoke_macro(&mut self, name: (String, Self::CodeRef), _args: Vec<Vec<Token>>) {
+        let macro_def = self.macro_defs.get(&name.0).cloned();
         match macro_def {
             Some(rc) => self.analyze_token_seq(rc.iter().cloned()),
             None => self.diagnostics
@@ -249,7 +250,7 @@ mod tests {
         let log = TestLog::default();
         TestFixture::new(&log).when(|mut session| {
             session.define_macro((name.to_string(), ()), tokens.clone());
-            session.invoke_macro(name.to_string(), vec![])
+            session.invoke_macro((name.to_string(), ()), vec![])
         });
         assert_eq!(*log.borrow(), [TestEvent::AnalyzeTokens(tokens)]);
     }
@@ -260,12 +261,13 @@ mod tests {
     fn diagnose_undefined_macro() {
         let name = "my_macro";
         let log = TestLog::default();
-        TestFixture::new(&log).when(|mut session| session.invoke_macro(name.to_string(), vec![]));
+        TestFixture::new(&log)
+            .when(|mut session| session.invoke_macro((name.to_string(), ()), vec![]));
         assert_eq!(
             *log.borrow(),
             [
                 TestEvent::Diagnostic(Diagnostic::UndefinedMacro {
-                    name: name.to_string(),
+                    name: (name.to_string(), ()),
                 })
             ]
         );
@@ -340,7 +342,8 @@ mod tests {
     }
 
     impl<'a> DiagnosticsListener for Mock<'a> {
-        fn emit_diagnostic(&self, diagnostic: Diagnostic) {
+        type CodeRef = ();
+        fn emit_diagnostic(&self, diagnostic: Diagnostic<Self::CodeRef>) {
             self.log
                 .borrow_mut()
                 .push(TestEvent::Diagnostic(diagnostic))
@@ -353,7 +356,7 @@ mod tests {
     enum TestEvent {
         AnalyzeTokens(Vec<Token>),
         AddLabel(String),
-        Diagnostic(Diagnostic),
+        Diagnostic(Diagnostic<()>),
         EmitItem(Item),
     }
 

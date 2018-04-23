@@ -215,7 +215,7 @@ mod tests {
     use std::cell::RefCell;
 
     struct TestDiagnosticsListener {
-        diagnostics: RefCell<Vec<Diagnostic>>,
+        diagnostics: RefCell<Vec<Diagnostic<()>>>,
     }
 
     impl TestDiagnosticsListener {
@@ -227,7 +227,8 @@ mod tests {
     }
 
     impl DiagnosticsListener for TestDiagnosticsListener {
-        fn emit_diagnostic(&self, diagnostic: Diagnostic) {
+        type CodeRef = ();
+        fn emit_diagnostic(&self, diagnostic: Diagnostic<Self::CodeRef>) {
             self.diagnostics.borrow_mut().push(diagnostic)
         }
     }

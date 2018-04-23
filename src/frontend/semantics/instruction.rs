@@ -68,7 +68,7 @@ impl<'a, EF: ExprFactory> CommandAnalyzer<'a, EF> {
         &mut self,
         mnemonic: keyword::Command,
         operands: I,
-    ) -> AnalysisResult
+    ) -> AnalysisResult<()>
     where
         I: IntoIterator<Item = SynExpr<Token>>,
     {
@@ -94,7 +94,7 @@ impl<'a, I: Iterator<Item = Operand>> Analysis<I> {
         Analysis { operands }
     }
 
-    fn run(mut self, mnemonic: Mnemonic) -> AnalysisResult {
+    fn run(mut self, mnemonic: Mnemonic) -> AnalysisResult<()> {
         use self::Mnemonic::*;
         match mnemonic {
             Alu(operation) => self.analyze_alu_instruction(operation),
@@ -112,7 +112,7 @@ impl<'a, I: Iterator<Item = Operand>> Analysis<I> {
         }
     }
 
-    fn analyze_alu_instruction(&mut self, operation: AluOperation) -> AnalysisResult {
+    fn analyze_alu_instruction(&mut self, operation: AluOperation) -> AnalysisResult<()> {
         match self.operands.next() {
             Some(Operand::Simple(src)) => Ok(Instruction::Alu(operation, AluSource::Simple(src))),
             Some(Operand::Const(expr)) => {
@@ -122,7 +122,7 @@ impl<'a, I: Iterator<Item = Operand>> Analysis<I> {
         }
     }
 
-    fn analyze_branch(&mut self, branch: BranchKind) -> AnalysisResult {
+    fn analyze_branch(&mut self, branch: BranchKind) -> AnalysisResult<()> {
         let first_operand = self.operands.next();
         let (condition, target) = if let Some(Operand::Condition(condition)) = first_operand {
             (Some(condition), analyze_branch_target(self.operands.next()))
@@ -132,7 +132,7 @@ impl<'a, I: Iterator<Item = Operand>> Analysis<I> {
         Ok(Instruction::Branch(mk_branch(branch, target), condition))
     }
 
-    fn analyze_nullary_instruction(&mut self, instruction: Instruction) -> AnalysisResult {
+    fn analyze_nullary_instruction(&mut self, instruction: Instruction) -> AnalysisResult<()> {
         match self.operands.by_ref().count() {
             0 => Ok(instruction),
             n => Err(Diagnostic::OperandCount {
@@ -142,7 +142,7 @@ impl<'a, I: Iterator<Item = Operand>> Analysis<I> {
         }
     }
 
-    fn analyze_ld(&mut self) -> AnalysisResult {
+    fn analyze_ld(&mut self) -> AnalysisResult<()> {
         let dest = self.operands.next().unwrap();
         let src = self.operands.next().unwrap();
         assert_eq!(self.operands.next(), None);
@@ -176,7 +176,7 @@ fn mk_branch(kind: BranchKind, target: Option<Expr>) -> Branch {
     }
 }
 
-fn analyze_ld_a(other: Operand, direction: Direction) -> AnalysisResult {
+fn analyze_ld_a(other: Operand, direction: Direction) -> AnalysisResult<()> {
     match other {
         Operand::Deref(expr) => Ok(Instruction::Ld(LdKind::ImmediateAddr(expr, direction))),
         _ => panic!(),
@@ -192,7 +192,7 @@ pub enum Operand {
     Reg16(Reg16),
 }
 
-pub type AnalysisResult = Result<Instruction, Diagnostic>;
+pub type AnalysisResult<R> = Result<Instruction, Diagnostic<R>>;
 
 fn analyze_keyword_operand(keyword: keyword::Operand, context: &OperandAnalysisContext) -> Operand {
     use frontend::syntax::keyword::Operand::*;
@@ -541,7 +541,7 @@ mod tests {
         }
     }
 
-    fn analyze<I>(mnemonic: Command, operands: I) -> AnalysisResult
+    fn analyze<I>(mnemonic: Command, operands: I) -> AnalysisResult<()>
     where
         I: IntoIterator<Item = SynExpr<TestToken>>,
     {
