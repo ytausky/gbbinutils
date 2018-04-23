@@ -150,12 +150,12 @@ impl<'a> Lexer<'a> {
 }
 
 impl<'a> Iterator for Lexer<'a> {
-    type Item = Token;
+    type Item = (Token, Range<usize>);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.scanner
             .next()
-            .map(|(kind, range)| mk_token(kind, self.src.index(range)))
+            .map(|(kind, range)| (mk_token(kind, self.src.index(range.clone())), range))
     }
 }
 
@@ -243,7 +243,10 @@ mod tests {
     use super::syntax::token::*;
 
     fn assert_eq_tokens<'a>(src: &'a str, expected_tokens: &[Token]) {
-        assert_eq!(Lexer::new(src).collect::<Vec<Token>>(), expected_tokens)
+        assert_eq!(
+            Lexer::new(src).map(|(t, _)| t).collect::<Vec<_>>(),
+            expected_tokens
+        )
     }
 
     #[test]

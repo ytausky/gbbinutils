@@ -1,4 +1,4 @@
-use std;
+use std::{self, iter};
 
 mod semantics;
 mod syntax;
@@ -154,9 +154,9 @@ where
         }
     }
 
-    fn analyze_token_seq<I: Iterator<Item = Token>>(&mut self, tokens: I) {
+    fn analyze_token_seq<I: Iterator<Item = (Token, B::CodeRef)>>(&mut self, tokens: I) {
         let mut analyzer = self.analyzer_factory.mk_token_seq_analyzer();
-        analyzer.analyze(tokens, self)
+        analyzer.analyze(tokens.map(|(t, _)| t), self)
     }
 
     fn into_object(self) -> B {
@@ -178,7 +178,7 @@ where
         let buf_id = self.codebase.add_src_buf(src);
         let rc_src = self.codebase.buf(buf_id);
         let tokens = syntax::tokenize(&rc_src);
-        self.analyze_token_seq(tokens)
+        self.analyze_token_seq(tokens.map(|(t, _)| (t, ())))
     }
 
     fn emit_item(&mut self, item: Item) {
@@ -196,7 +196,7 @@ where
     fn invoke_macro(&mut self, name: (String, Self::CodeRef), _args: Vec<Vec<Token>>) {
         let macro_def = self.macro_defs.get(&name.0).cloned();
         match macro_def {
-            Some(rc) => self.analyze_token_seq(rc.iter().cloned()),
+            Some(rc) => self.analyze_token_seq(rc.iter().cloned().zip(iter::repeat(()))),
             None => self.diagnostics
                 .emit_diagnostic(Diagnostic::UndefinedMacro { name }),
         }
