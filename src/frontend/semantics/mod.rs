@@ -105,7 +105,7 @@ impl<'a, F: Frontend + 'a> syntax::CommandContext for CommandActions<'a, F> {
 
 pub struct MacroDefActions<'a, F: Frontend + 'a> {
     name: (String, F::CodeRef),
-    tokens: Vec<Token>,
+    tokens: Vec<(Token, F::CodeRef)>,
     parent: SemanticActions<'a, F>,
 }
 
@@ -119,11 +119,11 @@ impl<'a, F: Frontend + 'a> MacroDefActions<'a, F> {
     }
 }
 
-impl<'a, F: Frontend + 'a> syntax::TokenSeqContext for MacroDefActions<'a, F> {
+impl<'a, F: Frontend + 'a> syntax::TokenSeqContext<F::CodeRef> for MacroDefActions<'a, F> {
     type Token = Token;
     type Parent = SemanticActions<'a, F>;
 
-    fn push_token(&mut self, token: Self::Token) {
+    fn push_token(&mut self, token: (Self::Token, F::CodeRef)) {
         self.tokens.push(token)
     }
 
@@ -156,7 +156,9 @@ impl<'a, F: Frontend + 'a> MacroInvocationActions<'a, F> {
     }
 }
 
-impl<'a, F: Frontend + 'a> syntax::MacroInvocationContext for MacroInvocationActions<'a, F> {
+impl<'a, F: Frontend + 'a> syntax::MacroInvocationContext<F::CodeRef>
+    for MacroInvocationActions<'a, F>
+{
     type Token = Token;
     type Parent = SemanticActions<'a, F>;
     type MacroArgContext = MacroArgActions<'a, F>;
@@ -190,12 +192,12 @@ impl<'a, F: Frontend + 'a> MacroArgActions<'a, F> {
     }
 }
 
-impl<'a, F: Frontend + 'a> syntax::TokenSeqContext for MacroArgActions<'a, F> {
+impl<'a, F: Frontend + 'a> syntax::TokenSeqContext<F::CodeRef> for MacroArgActions<'a, F> {
     type Token = Token;
     type Parent = MacroInvocationActions<'a, F>;
 
-    fn push_token(&mut self, token: Self::Token) {
-        self.tokens.push(token)
+    fn push_token(&mut self, token: (Self::Token, F::CodeRef)) {
+        self.tokens.push(token.0)
     }
 
     fn exit_token_seq(mut self) -> Self::Parent {
@@ -253,8 +255,11 @@ mod tests {
             self.0.push(TestOperation::Label(label))
         }
 
-        fn define_macro(&mut self, (name, _): (String, Self::CodeRef), tokens: Vec<Token>) {
-            self.0.push(TestOperation::DefineMacro(name, tokens))
+        fn define_macro(&mut self, (name, _): (String, Self::CodeRef), tokens: Vec<(Token, ())>) {
+            self.0.push(TestOperation::DefineMacro(
+                name,
+                tokens.into_iter().map(|(t, _)| t).collect(),
+            ))
         }
 
         fn invoke_macro(&mut self, name: (String, Self::CodeRef), args: Vec<Vec<Token>>) {
@@ -319,7 +324,7 @@ mod tests {
         ];
         let actions = collect_semantic_actions(|actions| {
             let mut token_seq_context = actions.enter_macro_def((name.to_string(), ()));
-            for token in tokens.clone() {
+            for token in tokens.iter().cloned().map(|t| (t, ())) {
                 token_seq_context.push_token(token)
             }
             token_seq_context.exit_token_seq();
@@ -352,7 +357,7 @@ mod tests {
                 actions.enter_macro_invocation((Atom::Ident(name.to_string()), ()));
             invocation = {
                 let mut arg = invocation.enter_macro_arg();
-                arg.push_token(arg_token.clone());
+                arg.push_token((arg_token.clone(), ()));
                 arg.exit_token_seq()
             };
             invocation.exit_macro_invocation();

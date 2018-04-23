@@ -1,4 +1,4 @@
-use std::{self, fmt, iter};
+use std::{self, fmt};
 
 mod semantics;
 mod syntax;
@@ -11,9 +11,33 @@ use self::syntax::*;
 pub fn analyze_file<B: Backend<()>>(name: String, backend: B) -> B {
     let fs = StdFileSystem::new();
     let factory = SemanticTokenSeqAnalyzerFactory::new();
-    let mut session = Session::new(fs, factory, backend, DebugDiagnosticsListener {});
+    let mut session = Session::new(
+        NullCodeRefFactory {},
+        fs,
+        factory,
+        backend,
+        DebugDiagnosticsListener {},
+    );
     session.include_source_file(name);
     session.into_object()
+}
+
+trait CodeRefFactory
+where
+    Self: Clone,
+{
+    type CodeRef: Clone;
+    fn mk_code_ref(&self, byte_range: std::ops::Range<usize>) -> Self::CodeRef;
+}
+
+#[derive(Clone)]
+struct NullCodeRefFactory;
+
+impl CodeRefFactory for NullCodeRefFactory {
+    type CodeRef = ();
+    fn mk_code_ref(&self, _byte_range: std::ops::Range<usize>) -> Self::CodeRef {
+        ()
+    }
 }
 
 struct DebugDiagnosticsListener;
@@ -120,30 +144,39 @@ pub trait Frontend {
     fn include_source_file(&mut self, filename: String);
     fn emit_item(&mut self, item: Item);
     fn define_label(&mut self, label: (String, Self::CodeRef));
-    fn define_macro(&mut self, name: (String, Self::CodeRef), tokens: Vec<Token>);
+    fn define_macro(&mut self, name: (String, Self::CodeRef), tokens: Vec<(Token, Self::CodeRef)>);
     fn invoke_macro(&mut self, name: (String, Self::CodeRef), args: Vec<Vec<Token>>);
 }
 
 use std::{collections::HashMap, rc::Rc};
 
-struct Session<FS, SAF, B, DL> {
+struct Session<CRF: CodeRefFactory, FS, SAF, B, DL> {
+    code_ref_factory: CRF,
     fs: FS,
     analyzer_factory: SAF,
     backend: B,
-    macro_defs: HashMap<String, Rc<Vec<Token>>>,
+    macro_defs: HashMap<String, Rc<Vec<(Token, CRF::CodeRef)>>>,
     diagnostics: DL,
     codebase: StringCodebase,
 }
 
-impl<FS, SAF, B, DL> Session<FS, SAF, B, DL>
+impl<CRF, FS, SAF, B, DL> Session<CRF, FS, SAF, B, DL>
 where
+    CRF: CodeRefFactory,
     FS: FileSystem,
     SAF: TokenSeqAnalyzerFactory,
-    B: Backend<()>,
-    DL: DiagnosticsListener<()>,
+    B: Backend<CRF::CodeRef>,
+    DL: DiagnosticsListener<CRF::CodeRef>,
 {
-    fn new(fs: FS, analyzer_factory: SAF, backend: B, diagnostics: DL) -> Session<FS, SAF, B, DL> {
+    fn new(
+        code_ref_factory: CRF,
+        fs: FS,
+        analyzer_factory: SAF,
+        backend: B,
+        diagnostics: DL,
+    ) -> Session<CRF, FS, SAF, B, DL> {
         Session {
+            code_ref_factory,
             fs,
             analyzer_factory,
             backend,
@@ -153,7 +186,7 @@ where
         }
     }
 
-    fn analyze_token_seq<I: Iterator<Item = (Token, ())>>(&mut self, tokens: I) {
+    fn analyze_token_seq<I: Iterator<Item = (Token, CRF::CodeRef)>>(&mut self, tokens: I) {
         let mut analyzer = self.analyzer_factory.mk_token_seq_analyzer();
         analyzer.analyze(tokens, self)
     }
@@ -163,21 +196,23 @@ where
     }
 }
 
-impl<FS, SAF, B, DL> Frontend for Session<FS, SAF, B, DL>
+impl<CRF, FS, SAF, B, DL> Frontend for Session<CRF, FS, SAF, B, DL>
 where
+    CRF: CodeRefFactory,
     FS: FileSystem,
     SAF: TokenSeqAnalyzerFactory,
-    B: Backend<()>,
-    DL: DiagnosticsListener<()>,
+    B: Backend<CRF::CodeRef>,
+    DL: DiagnosticsListener<CRF::CodeRef>,
 {
-    type CodeRef = ();
+    type CodeRef = CRF::CodeRef;
 
     fn include_source_file(&mut self, filename: String) {
         let src = self.fs.read_file(&filename);
         let buf_id = self.codebase.add_src_buf(src);
         let rc_src = self.codebase.buf(buf_id);
         let tokens = syntax::tokenize(&rc_src);
-        self.analyze_token_seq(tokens.map(|(t, _)| (t, ())))
+        let crf = self.code_ref_factory.clone();
+        self.analyze_token_seq(tokens.map(|(t, r)| (t, crf.mk_code_ref(r))))
     }
 
     fn emit_item(&mut self, item: Item) {
@@ -188,14 +223,18 @@ where
         self.backend.add_label((&label.0, label.1))
     }
 
-    fn define_macro(&mut self, (name, _): (String, Self::CodeRef), tokens: Vec<Token>) {
+    fn define_macro(
+        &mut self,
+        (name, _): (String, Self::CodeRef),
+        tokens: Vec<(Token, Self::CodeRef)>,
+    ) {
         self.macro_defs.insert(name, Rc::new(tokens));
     }
 
     fn invoke_macro(&mut self, name: (String, Self::CodeRef), _args: Vec<Vec<Token>>) {
         let macro_def = self.macro_defs.get(&name.0).cloned();
         match macro_def {
-            Some(rc) => self.analyze_token_seq(rc.iter().cloned().zip(iter::repeat(()))),
+            Some(rc) => self.analyze_token_seq(rc.iter().cloned()),
             None => self.diagnostics
                 .emit_diagnostic(Diagnostic::UndefinedMacro { name }),
         }
@@ -248,7 +287,10 @@ mod tests {
         let tokens = vec![token::Command(Command::Nop)];
         let log = TestLog::default();
         TestFixture::new(&log).when(|mut session| {
-            session.define_macro((name.to_string(), ()), tokens.clone());
+            session.define_macro(
+                (name.to_string(), ()),
+                tokens.iter().cloned().map(|t| (t, ())).collect(),
+            );
             session.invoke_macro((name.to_string(), ()), vec![])
         });
         assert_eq!(*log.borrow(), [TestEvent::AnalyzeTokens(tokens)]);
@@ -378,16 +420,24 @@ mod tests {
             self
         }
 
-        fn when<F: FnOnce(Session<MockFileSystem<'a>, Mock<'a>, Mock<'a>, Mock<'a>>)>(self, f: F) {
+        fn when<
+            F: FnOnce(Session<NullCodeRefFactory, MockFileSystem<'a>, Mock<'a>, Mock<'a>, Mock<'a>>),
+        >(
+            self,
+            f: F,
+        ) {
             f(Session::from(self))
         }
     }
 
-    impl<'a> From<TestFixture<'a>> for Session<MockFileSystem<'a>, Mock<'a>, Mock<'a>, Mock<'a>> {
+    impl<'a> From<TestFixture<'a>>
+        for Session<NullCodeRefFactory, MockFileSystem<'a>, Mock<'a>, Mock<'a>, Mock<'a>>
+    {
         fn from(
             fixture: TestFixture<'a>,
-        ) -> Session<MockFileSystem<'a>, Mock<'a>, Mock<'a>, Mock<'a>> {
+        ) -> Session<NullCodeRefFactory, MockFileSystem<'a>, Mock<'a>, Mock<'a>, Mock<'a>> {
             Session::new(
+                NullCodeRefFactory {},
                 fixture.fs,
                 fixture.analyzer_factory,
                 fixture.object,

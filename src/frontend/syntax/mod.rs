@@ -51,17 +51,17 @@ impl TokenSpec for () {
     type Label = ();
 }
 
-pub trait FileContext<S: TokenSpec, T>
+pub trait FileContext<S: TokenSpec, R>
 where
     Self: Sized,
 {
     type CommandContext: CommandContext<Token = parser::Token<S>, Parent = Self>;
-    type MacroDefContext: TokenSeqContext<Token = parser::Token<S>, Parent = Self>;
-    type MacroInvocationContext: MacroInvocationContext<Token = parser::Token<S>, Parent = Self>;
-    fn add_label(&mut self, label: (S::Label, T));
-    fn enter_command(self, name: (S::Command, T)) -> Self::CommandContext;
-    fn enter_macro_def(self, name: (S::Label, T)) -> Self::MacroDefContext;
-    fn enter_macro_invocation(self, name: (S::Atom, T)) -> Self::MacroInvocationContext;
+    type MacroDefContext: TokenSeqContext<R, Token = parser::Token<S>, Parent = Self>;
+    type MacroInvocationContext: MacroInvocationContext<R, Token = parser::Token<S>, Parent = Self>;
+    fn add_label(&mut self, label: (S::Label, R));
+    fn enter_command(self, name: (S::Command, R)) -> Self::CommandContext;
+    fn enter_macro_def(self, name: (S::Label, R)) -> Self::MacroDefContext;
+    fn enter_macro_invocation(self, name: (S::Atom, R)) -> Self::MacroInvocationContext;
 }
 
 pub trait CommandContext {
@@ -71,21 +71,21 @@ pub trait CommandContext {
     fn exit_command(self) -> Self::Parent;
 }
 
-pub trait MacroInvocationContext
+pub trait MacroInvocationContext<R>
 where
     Self: Sized,
 {
     type Token;
     type Parent;
-    type MacroArgContext: TokenSeqContext<Token = Self::Token, Parent = Self>;
+    type MacroArgContext: TokenSeqContext<R, Token = Self::Token, Parent = Self>;
     fn enter_macro_arg(self) -> Self::MacroArgContext;
     fn exit_macro_invocation(self) -> Self::Parent;
 }
 
-pub trait TokenSeqContext {
+pub trait TokenSeqContext<R> {
     type Token;
     type Parent;
-    fn push_token(&mut self, token: Self::Token);
+    fn push_token(&mut self, token: (Self::Token, R));
     fn exit_token_seq(self) -> Self::Parent;
 }
 

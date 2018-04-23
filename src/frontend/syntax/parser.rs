@@ -143,7 +143,7 @@ impl<S: TokenSpec, T, I: Iterator<Item = (Token<S>, T)>> Parser<I> {
         let mut actions = actions.enter_macro_def(label);
         self.expect(&Some(Token::Eol));
         while self.lookahead() != Some(Token::Endm) {
-            actions.push_token(self.bump().0)
+            actions.push_token(self.bump())
         }
         self.expect(&Some(Token::Endm));
         actions.exit_token_seq()
@@ -172,7 +172,7 @@ impl<S: TokenSpec, T, I: Iterator<Item = (Token<S>, T)>> Parser<I> {
         )
     }
 
-    fn parse_macro_arg_list<M: MacroInvocationContext<Token = Token<S>>>(
+    fn parse_macro_arg_list<M: MacroInvocationContext<T, Token = Token<S>>>(
         &mut self,
         actions: M,
     ) -> M {
@@ -183,7 +183,7 @@ impl<S: TokenSpec, T, I: Iterator<Item = (Token<S>, T)>> Parser<I> {
                 let mut actions = actions.enter_macro_arg();
                 let mut next_token = p.lookahead();
                 while next_token != Some(Token::Comma) && !follows_line(&next_token) {
-                    actions.push_token(p.bump().0);
+                    actions.push_token(p.bump());
                     next_token = p.lookahead()
                 }
                 actions.exit_token_seq()
@@ -345,7 +345,7 @@ mod tests {
         }
     }
 
-    impl<'a> syntax::MacroInvocationContext for &'a mut TestContext {
+    impl<'a> syntax::MacroInvocationContext<TestTrackingData> for &'a mut TestContext {
         type Token = TestToken;
         type Parent = Self;
         type MacroArgContext = Self;
@@ -362,12 +362,12 @@ mod tests {
         }
     }
 
-    impl<'a> syntax::TokenSeqContext for &'a mut TestContext {
+    impl<'a> syntax::TokenSeqContext<TestTrackingData> for &'a mut TestContext {
         type Token = TestToken;
         type Parent = Self;
 
-        fn push_token(&mut self, token: Self::Token) {
-            self.actions.push(Action::PushTerminal(token))
+        fn push_token(&mut self, token: (Self::Token, TestTrackingData)) {
+            self.actions.push(Action::PushTerminal(token.0))
         }
 
         fn exit_token_seq(self) -> Self::Parent {
