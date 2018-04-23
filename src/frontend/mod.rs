@@ -1,4 +1,4 @@
-use std::{self, iter};
+use std::{self, fmt, iter};
 
 mod semantics;
 mod syntax;
@@ -18,8 +18,8 @@ pub fn analyze_file<B: Backend<()>>(name: String, backend: B) -> B {
 
 struct DebugDiagnosticsListener;
 
-impl DiagnosticsListener<()> for DebugDiagnosticsListener {
-    fn emit_diagnostic(&self, diagnostic: Diagnostic<()>) {
+impl<R: fmt::Debug> DiagnosticsListener<R> for DebugDiagnosticsListener {
+    fn emit_diagnostic(&self, diagnostic: Diagnostic<R>) {
         println!("Diagnostic: {:?}", diagnostic)
     }
 }
@@ -49,8 +49,8 @@ impl FileSystem for StdFileSystem {
 trait TokenSeqAnalyzer {
     fn analyze<I, F>(&mut self, tokens: I, frontend: &mut F)
     where
-        I: Iterator<Item = Token>,
-        F: Frontend<CodeRef = ()>;
+        I: Iterator<Item = (Token, F::CodeRef)>,
+        F: Frontend;
 }
 
 struct SemanticTokenSeqAnalyzer;
@@ -64,8 +64,8 @@ impl SemanticTokenSeqAnalyzer {
 impl TokenSeqAnalyzer for SemanticTokenSeqAnalyzer {
     fn analyze<I, F>(&mut self, tokens: I, frontend: &mut F)
     where
-        I: Iterator<Item = Token>,
-        F: Frontend<CodeRef = ()>,
+        I: Iterator<Item = (Token, F::CodeRef)>,
+        F: Frontend,
     {
         let actions = semantics::SemanticActions::new(frontend);
         syntax::parse_token_seq(tokens, actions)
@@ -155,7 +155,7 @@ where
 
     fn analyze_token_seq<I: Iterator<Item = (Token, ())>>(&mut self, tokens: I) {
         let mut analyzer = self.analyzer_factory.mk_token_seq_analyzer();
-        analyzer.analyze(tokens.map(|(t, _)| t), self)
+        analyzer.analyze(tokens, self)
     }
 
     fn into_object(self) -> B {
@@ -317,12 +317,12 @@ mod tests {
     impl<'a> TokenSeqAnalyzer for Mock<'a> {
         fn analyze<I, F>(&mut self, tokens: I, _frontend: &mut F)
         where
-            I: Iterator<Item = Token>,
+            I: Iterator<Item = (Token, F::CodeRef)>,
             F: Frontend,
         {
             self.log
                 .borrow_mut()
-                .push(TestEvent::AnalyzeTokens(tokens.collect()))
+                .push(TestEvent::AnalyzeTokens(tokens.map(|(t, _)| t).collect()))
         }
     }
 

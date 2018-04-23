@@ -6,13 +6,12 @@ pub fn tokenize(src: &str) -> self::lexer::Lexer {
     self::lexer::Lexer::new(src)
 }
 
-pub fn parse_token_seq<I, F>(tokens: I, actions: F)
+pub fn parse_token_seq<R, I, F>(tokens: I, actions: F)
 where
-    I: Iterator<Item = Token>,
-    F: FileContext<String, ()>,
+    I: Iterator<Item = (Token, R)>,
+    F: FileContext<String, R>,
 {
-    use std::iter;
-    self::parser::parse_src(tokens.zip(iter::repeat(())), actions)
+    self::parser::parse_src(tokens, actions)
 }
 
 pub type Token = self::parser::Token<String>;
