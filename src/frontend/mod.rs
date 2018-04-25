@@ -151,13 +151,10 @@ pub trait Frontend {
 use std::{collections::HashMap, rc::Rc};
 
 struct Session<CRF: CodeRefFactory, FS, SAF, B, DL> {
-    code_ref_factory: CRF,
-    fs: FS,
     analyzer_factory: SAF,
     backend: B,
-    token_stream_source: TokenStreamSource<CRF>,
+    token_stream_source: TokenStreamSource<CRF, FS>,
     diagnostics: DL,
-    codebase: StringCodebase,
 }
 
 impl<CRF, FS, SAF, B, DL> Session<CRF, FS, SAF, B, DL>
@@ -176,13 +173,10 @@ where
         diagnostics: DL,
     ) -> Session<CRF, FS, SAF, B, DL> {
         Session {
-            code_ref_factory,
-            fs,
             analyzer_factory,
             backend,
-            token_stream_source: TokenStreamSource::new(),
+            token_stream_source: TokenStreamSource::new(fs, code_ref_factory),
             diagnostics,
-            codebase: StringCodebase::new(),
         }
     }
 
@@ -207,12 +201,8 @@ where
     type CodeRef = CRF::CodeRef;
 
     fn include_source_file(&mut self, filename: String) {
-        let src = self.fs.read_file(&filename);
-        let buf_id = self.codebase.add_src_buf(src);
-        let rc_src = self.codebase.buf(buf_id);
-        let tokens = syntax::tokenize(&rc_src);
-        let crf = self.code_ref_factory.clone();
-        self.analyze_token_seq(tokens.map(|(t, r)| (t, crf.mk_code_ref(r))))
+        let tokenized_src = self.token_stream_source.tokenize_file(&filename);
+        self.analyze_token_seq(tokenized_src.iter())
     }
 
     fn emit_item(&mut self, item: Item) {
@@ -238,13 +228,19 @@ where
     }
 }
 
-struct TokenStreamSource<CRF: CodeRefFactory> {
+struct TokenStreamSource<CRF: CodeRefFactory, FS> {
+    fs: FS,
+    codebase: StringCodebase,
+    code_ref_factory: CRF,
     macro_defs: HashMap<String, Rc<Vec<(Token, CRF::CodeRef)>>>,
 }
 
-impl<CRF: CodeRefFactory> TokenStreamSource<CRF> {
-    fn new() -> TokenStreamSource<CRF> {
+impl<CRF: CodeRefFactory, FS: FileSystem> TokenStreamSource<CRF, FS> {
+    fn new(fs: FS, code_ref_factory: CRF) -> TokenStreamSource<CRF, FS> {
         TokenStreamSource {
+            fs,
+            codebase: StringCodebase::new(),
+            code_ref_factory,
             macro_defs: HashMap::new(),
         }
     }
@@ -259,6 +255,13 @@ impl<CRF: CodeRefFactory> TokenStreamSource<CRF> {
         _args: Vec<Vec<Token>>,
     ) -> Option<MacroDefIter<CRF::CodeRef>> {
         self.macro_defs.get(&name.0).cloned().map(MacroDefIter::new)
+    }
+
+    fn tokenize_file(&mut self, filename: &str) -> TokenizedSrc<CRF> {
+        let src = self.fs.read_file(&filename);
+        let buf_id = self.codebase.add_src_buf(src);
+        let rc_src = self.codebase.buf(buf_id);
+        TokenizedSrc::new(rc_src, self.code_ref_factory.clone())
     }
 }
 
@@ -283,6 +286,41 @@ impl<CR: Clone> Iterator for MacroDefIter<CR> {
         } else {
             None
         }
+    }
+}
+
+struct TokenizedSrc<CRF> {
+    src: Rc<str>,
+    code_ref_factory: CRF,
+}
+
+impl<CRF: CodeRefFactory> TokenizedSrc<CRF> {
+    fn new(src: Rc<str>, code_ref_factory: CRF) -> TokenizedSrc<CRF> {
+        TokenizedSrc {
+            src,
+            code_ref_factory,
+        }
+    }
+
+    fn iter(&self) -> TokenizedSrcIter<CRF> {
+        TokenizedSrcIter {
+            tokens: syntax::tokenize(&self.src),
+            code_ref_factory: &self.code_ref_factory,
+        }
+    }
+}
+
+struct TokenizedSrcIter<'a, CRF: 'a> {
+    tokens: syntax::lexer::Lexer<'a>,
+    code_ref_factory: &'a CRF,
+}
+
+impl<'a, CRF: CodeRefFactory + 'a> Iterator for TokenizedSrcIter<'a, CRF> {
+    type Item = (Token, CRF::CodeRef);
+    fn next(&mut self) -> Option<Self::Item> {
+        self.tokens
+            .next()
+            .map(|(t, r)| (t, self.code_ref_factory.mk_code_ref(r)))
     }
 }
 
