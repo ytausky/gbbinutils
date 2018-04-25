@@ -155,7 +155,7 @@ struct Session<CRF: CodeRefFactory, FS, SAF, B, DL> {
     fs: FS,
     analyzer_factory: SAF,
     backend: B,
-    macro_defs: HashMap<String, Rc<Vec<(Token, CRF::CodeRef)>>>,
+    token_stream_source: TokenStreamSource<CRF>,
     diagnostics: DL,
     codebase: StringCodebase,
 }
@@ -180,7 +180,7 @@ where
             fs,
             analyzer_factory,
             backend,
-            macro_defs: HashMap::new(),
+            token_stream_source: TokenStreamSource::new(),
             diagnostics,
             codebase: StringCodebase::new(),
         }
@@ -223,20 +223,65 @@ where
         self.backend.add_label((&label.0, label.1))
     }
 
-    fn define_macro(
-        &mut self,
-        (name, _): (String, Self::CodeRef),
-        tokens: Vec<(Token, Self::CodeRef)>,
-    ) {
-        self.macro_defs.insert(name, Rc::new(tokens));
+    fn define_macro(&mut self, name: (String, Self::CodeRef), tokens: Vec<(Token, Self::CodeRef)>) {
+        self.token_stream_source.define_macro(name, tokens)
     }
 
-    fn invoke_macro(&mut self, name: (String, Self::CodeRef), _args: Vec<Vec<Token>>) {
-        let macro_def = self.macro_defs.get(&name.0).cloned();
-        match macro_def {
-            Some(rc) => self.analyze_token_seq(rc.iter().cloned()),
+    fn invoke_macro(&mut self, name: (String, Self::CodeRef), args: Vec<Vec<Token>>) {
+        match self.token_stream_source
+            .macro_invocation(name.clone(), args)
+        {
+            Some(tokens) => self.analyze_token_seq(tokens),
             None => self.diagnostics
                 .emit_diagnostic(Diagnostic::UndefinedMacro { name }),
+        }
+    }
+}
+
+struct TokenStreamSource<CRF: CodeRefFactory> {
+    macro_defs: HashMap<String, Rc<Vec<(Token, CRF::CodeRef)>>>,
+}
+
+impl<CRF: CodeRefFactory> TokenStreamSource<CRF> {
+    fn new() -> TokenStreamSource<CRF> {
+        TokenStreamSource {
+            macro_defs: HashMap::new(),
+        }
+    }
+
+    fn define_macro(&mut self, name: (String, CRF::CodeRef), tokens: Vec<(Token, CRF::CodeRef)>) {
+        self.macro_defs.insert(name.0, Rc::new(tokens));
+    }
+
+    fn macro_invocation(
+        &mut self,
+        name: (String, CRF::CodeRef),
+        _args: Vec<Vec<Token>>,
+    ) -> Option<MacroDefIter<CRF::CodeRef>> {
+        self.macro_defs.get(&name.0).cloned().map(MacroDefIter::new)
+    }
+}
+
+struct MacroDefIter<CR> {
+    tokens: Rc<Vec<(Token, CR)>>,
+    index: usize,
+}
+
+impl<CR> MacroDefIter<CR> {
+    fn new(tokens: Rc<Vec<(Token, CR)>>) -> MacroDefIter<CR> {
+        MacroDefIter { tokens, index: 0 }
+    }
+}
+
+impl<CR: Clone> Iterator for MacroDefIter<CR> {
+    type Item = (Token, CR);
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.tokens.len() {
+            let item = self.tokens[self.index].clone();
+            self.index += 1;
+            Some(item)
+        } else {
+            None
         }
     }
 }
