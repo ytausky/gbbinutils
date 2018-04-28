@@ -11,9 +11,9 @@ use self::syntax::*;
 pub fn analyze_file<B: Backend<()>>(name: String, backend: B) -> B {
     let fs = StdFileSystem::new();
     let factory = SemanticTokenSeqAnalyzerFactory::new();
+    let token_provider = TokenStreamSource::new(fs, NullCodeRefFactory {});
     let mut session = Session::new(
-        NullCodeRefFactory {},
-        fs,
+        token_provider,
         factory,
         backend,
         DebugDiagnosticsListener {},
@@ -150,39 +150,38 @@ pub trait Frontend {
 
 use std::{collections::HashMap, rc::Rc};
 
-struct Session<CRF: CodeRefFactory, FS, SAF, B, DL> {
+struct Session<TCS, SAF, B, DL> {
     analyzer_factory: SAF,
     backend: B,
-    token_stream_source: TokenStreamSource<CRF, FS>,
+    tokenized_code_source: TCS,
     diagnostics: DL,
 }
 
-impl<CRF, FS, SAF, B, DL> Session<CRF, FS, SAF, B, DL>
+impl<TCS, SAF, B, DL> Session<TCS, SAF, B, DL>
 where
-    CRF: CodeRefFactory,
-    FS: FileSystem,
+    TCS: TokenizedCodeSource,
+    for<'a> &'a TCS::Tokenized: IntoIterator<Item = (Token, TCS::CodeRef)>,
     SAF: TokenSeqAnalyzerFactory,
-    B: Backend<CRF::CodeRef>,
-    DL: DiagnosticsListener<CRF::CodeRef>,
+    B: Backend<TCS::CodeRef>,
+    DL: DiagnosticsListener<TCS::CodeRef>,
 {
     fn new(
-        code_ref_factory: CRF,
-        fs: FS,
+        tokenized_code_source: TCS,
         analyzer_factory: SAF,
         backend: B,
         diagnostics: DL,
-    ) -> Session<CRF, FS, SAF, B, DL> {
+    ) -> Session<TCS, SAF, B, DL> {
         Session {
             analyzer_factory,
             backend,
-            token_stream_source: TokenStreamSource::new(fs, code_ref_factory),
+            tokenized_code_source,
             diagnostics,
         }
     }
 
-    fn analyze_token_seq<I: Iterator<Item = (Token, CRF::CodeRef)>>(&mut self, tokens: I) {
+    fn analyze_token_seq<I: IntoIterator<Item = (Token, TCS::CodeRef)>>(&mut self, tokens: I) {
         let mut analyzer = self.analyzer_factory.mk_token_seq_analyzer();
-        analyzer.analyze(tokens, self)
+        analyzer.analyze(tokens.into_iter(), self)
     }
 
     fn into_object(self) -> B {
@@ -190,19 +189,19 @@ where
     }
 }
 
-impl<CRF, FS, SAF, B, DL> Frontend for Session<CRF, FS, SAF, B, DL>
+impl<TCS, SAF, B, DL> Frontend for Session<TCS, SAF, B, DL>
 where
-    CRF: CodeRefFactory,
-    FS: FileSystem,
+    TCS: TokenizedCodeSource,
+    for<'a> &'a TCS::Tokenized: IntoIterator<Item = (Token, TCS::CodeRef)>,
     SAF: TokenSeqAnalyzerFactory,
-    B: Backend<CRF::CodeRef>,
-    DL: DiagnosticsListener<CRF::CodeRef>,
+    B: Backend<TCS::CodeRef>,
+    DL: DiagnosticsListener<TCS::CodeRef>,
 {
-    type CodeRef = CRF::CodeRef;
+    type CodeRef = TCS::CodeRef;
 
     fn include_source_file(&mut self, filename: String) {
-        let tokenized_src = self.token_stream_source.tokenize_file(&filename);
-        self.analyze_token_seq(tokenized_src.iter())
+        let tokenized_src = self.tokenized_code_source.tokenize_file(&filename);
+        self.analyze_token_seq::<&TCS::Tokenized>(&tokenized_src)
     }
 
     fn emit_item(&mut self, item: Item) {
@@ -214,11 +213,11 @@ where
     }
 
     fn define_macro(&mut self, name: (String, Self::CodeRef), tokens: Vec<(Token, Self::CodeRef)>) {
-        self.token_stream_source.define_macro(name, tokens)
+        self.tokenized_code_source.define_macro(name, tokens)
     }
 
     fn invoke_macro(&mut self, name: (String, Self::CodeRef), args: Vec<Vec<Token>>) {
-        match self.token_stream_source
+        match self.tokenized_code_source
             .macro_invocation(name.clone(), args)
         {
             Some(tokens) => self.analyze_token_seq(tokens),
@@ -226,6 +225,22 @@ where
                 .emit_diagnostic(Diagnostic::UndefinedMacro { name }),
         }
     }
+}
+
+trait TokenizedCodeSource
+where
+    for<'c> &'c Self::Tokenized: IntoIterator<Item = (Token, Self::CodeRef)>,
+{
+    type CodeRef: Clone;
+    fn define_macro(&mut self, name: (String, Self::CodeRef), tokens: Vec<(Token, Self::CodeRef)>);
+    type MacroInvocationIter: Iterator<Item = (Token, Self::CodeRef)>;
+    fn macro_invocation(
+        &mut self,
+        name: (String, Self::CodeRef),
+        args: Vec<Vec<Token>>,
+    ) -> Option<Self::MacroInvocationIter>;
+    type Tokenized;
+    fn tokenize_file(&mut self, filename: &str) -> Self::Tokenized;
 }
 
 struct TokenStreamSource<CRF: CodeRefFactory, FS> {
@@ -244,20 +259,28 @@ impl<CRF: CodeRefFactory, FS: FileSystem> TokenStreamSource<CRF, FS> {
             macro_defs: HashMap::new(),
         }
     }
+}
+
+impl<CRF: CodeRefFactory, FS: FileSystem> TokenizedCodeSource for TokenStreamSource<CRF, FS> {
+    type CodeRef = CRF::CodeRef;
 
     fn define_macro(&mut self, name: (String, CRF::CodeRef), tokens: Vec<(Token, CRF::CodeRef)>) {
         self.macro_defs.insert(name.0, Rc::new(tokens));
     }
 
+    type MacroInvocationIter = MacroDefIter<CRF::CodeRef>;
+
     fn macro_invocation(
         &mut self,
         name: (String, CRF::CodeRef),
         _args: Vec<Vec<Token>>,
-    ) -> Option<MacroDefIter<CRF::CodeRef>> {
+    ) -> Option<Self::MacroInvocationIter> {
         self.macro_defs.get(&name.0).cloned().map(MacroDefIter::new)
     }
 
-    fn tokenize_file(&mut self, filename: &str) -> TokenizedSrc<CRF> {
+    type Tokenized = TokenizedSrc<CRF>;
+
+    fn tokenize_file(&mut self, filename: &str) -> Self::Tokenized {
         let src = self.fs.read_file(&filename);
         let buf_id = self.codebase.add_src_buf(src);
         let rc_src = self.codebase.buf(buf_id);
@@ -301,8 +324,12 @@ impl<CRF: CodeRefFactory> TokenizedSrc<CRF> {
             code_ref_factory,
         }
     }
+}
 
-    fn iter(&self) -> TokenizedSrcIter<CRF> {
+impl<'a, CRF: CodeRefFactory> IntoIterator for &'a TokenizedSrc<CRF> {
+    type Item = <Self::IntoIter as Iterator>::Item;
+    type IntoIter = TokenizedSrcIter<'a, CRF>;
+    fn into_iter(self) -> Self::IntoIter {
         TokenizedSrcIter {
             tokens: syntax::tokenize(&self.src),
             code_ref_factory: &self.code_ref_factory,
@@ -310,12 +337,12 @@ impl<CRF: CodeRefFactory> TokenizedSrc<CRF> {
     }
 }
 
-struct TokenizedSrcIter<'a, CRF: 'a> {
+struct TokenizedSrcIter<'a, CRF: CodeRefFactory + 'a> {
     tokens: syntax::lexer::Lexer<'a>,
     code_ref_factory: &'a CRF,
 }
 
-impl<'a, CRF: CodeRefFactory + 'a> Iterator for TokenizedSrcIter<'a, CRF> {
+impl<'a, CRF: CodeRefFactory> Iterator for TokenizedSrcIter<'a, CRF> {
     type Item = (Token, CRF::CodeRef);
     fn next(&mut self) -> Option<Self::Item> {
         self.tokens
@@ -333,17 +360,19 @@ mod tests {
     #[test]
     fn include_source_file() {
         let filename = "my_file.asm";
-        let contents = "nop";
+        let contents = vec![token::Command(Command::Nop)];
         let log = TestLog::default();
         TestFixture::new(&log)
-            .given(|f| f.fs.add_file(filename, contents))
+            .given(|f| {
+                f.mock_token_source
+                    .add_file(filename, add_code_refs(&contents))
+            })
             .when(|mut session| session.include_source_file(filename.to_string()));
-        assert_eq!(
-            *log.borrow(),
-            [
-                TestEvent::AnalyzeTokens([token::Command(Command::Nop)].to_vec())
-            ]
-        );
+        assert_eq!(*log.borrow(), [TestEvent::AnalyzeTokens(contents)]);
+    }
+
+    fn add_code_refs<'a, I: IntoIterator<Item = &'a Token>>(tokens: I) -> Vec<(Token, ())> {
+        tokens.into_iter().map(|t| (t.clone(), ())).collect()
     }
 
     #[test]
@@ -370,10 +399,7 @@ mod tests {
         let tokens = vec![token::Command(Command::Nop)];
         let log = TestLog::default();
         TestFixture::new(&log).when(|mut session| {
-            session.define_macro(
-                (name.to_string(), ()),
-                tokens.iter().cloned().map(|t| (t, ())).collect(),
-            );
+            session.define_macro((name.to_string(), ()), add_code_refs(&tokens));
             session.invoke_macro((name.to_string(), ()), vec![])
         });
         assert_eq!(*log.borrow(), [TestEvent::AnalyzeTokens(tokens)]);
@@ -397,27 +423,59 @@ mod tests {
         );
     }
 
-    struct MockFileSystem<'a> {
-        files: Vec<(&'a str, &'a str)>,
+    struct MockTokenSource {
+        files: HashMap<String, Vec<(Token, ())>>,
+        macros: HashMap<String, Vec<(Token, ())>>,
     }
 
-    impl<'a> MockFileSystem<'a> {
-        fn new() -> MockFileSystem<'a> {
-            MockFileSystem { files: Vec::new() }
+    impl MockTokenSource {
+        fn new() -> MockTokenSource {
+            MockTokenSource {
+                files: HashMap::new(),
+                macros: HashMap::new(),
+            }
         }
 
-        fn add_file(&mut self, filename: &'a str, contents: &'a str) {
-            self.files.push((filename, contents))
+        fn add_file(&mut self, name: &str, tokens: Vec<(Token, ())>) {
+            self.files.insert(name.to_string(), tokens);
         }
     }
 
-    impl<'a> FileSystem for MockFileSystem<'a> {
-        fn read_file(&mut self, filename: &str) -> String {
-            self.files
-                .iter()
-                .find(|&&(f, _)| f == filename)
-                .map(|&(_, c)| String::from(c))
-                .unwrap()
+    impl TokenizedCodeSource for MockTokenSource {
+        type CodeRef = ();
+
+        fn define_macro(
+            &mut self,
+            name: (String, Self::CodeRef),
+            tokens: Vec<(Token, Self::CodeRef)>,
+        ) {
+            self.macros.insert(name.0, tokens);
+        }
+
+        type MacroInvocationIter = std::vec::IntoIter<(Token, Self::CodeRef)>;
+
+        fn macro_invocation(
+            &mut self,
+            name: (String, Self::CodeRef),
+            _args: Vec<Vec<Token>>,
+        ) -> Option<Self::MacroInvocationIter> {
+            self.macros.get(&name.0).cloned().map(|v| v.into_iter())
+        }
+
+        type Tokenized = MockTokenized;
+
+        fn tokenize_file(&mut self, filename: &str) -> Self::Tokenized {
+            MockTokenized(self.files.get(filename).unwrap().clone())
+        }
+    }
+
+    struct MockTokenized(Vec<(Token, ())>);
+
+    impl<'b> IntoIterator for &'b MockTokenized {
+        type Item = (Token, ());
+        type IntoIter = std::iter::Cloned<std::slice::Iter<'b, (Token, ())>>;
+        fn into_iter(self) -> Self::IntoIter {
+            (&self.0).into_iter().cloned()
         }
     }
 
@@ -482,7 +540,7 @@ mod tests {
     }
 
     struct TestFixture<'a> {
-        fs: MockFileSystem<'a>,
+        mock_token_source: MockTokenSource,
         analyzer_factory: Mock<'a>,
         object: Mock<'a>,
         diagnostics: Mock<'a>,
@@ -491,7 +549,7 @@ mod tests {
     impl<'a> TestFixture<'a> {
         fn new(log: &'a TestLog) -> TestFixture<'a> {
             TestFixture {
-                fs: MockFileSystem::new(),
+                mock_token_source: MockTokenSource::new(),
                 analyzer_factory: Mock::new(log),
                 object: Mock::new(log),
                 diagnostics: Mock::new(log),
@@ -503,25 +561,17 @@ mod tests {
             self
         }
 
-        fn when<
-            F: FnOnce(Session<NullCodeRefFactory, MockFileSystem<'a>, Mock<'a>, Mock<'a>, Mock<'a>>),
-        >(
-            self,
-            f: F,
-        ) {
+        fn when<F: FnOnce(Session<MockTokenSource, Mock<'a>, Mock<'a>, Mock<'a>>)>(self, f: F) {
             f(Session::from(self))
         }
     }
 
-    impl<'a> From<TestFixture<'a>>
-        for Session<NullCodeRefFactory, MockFileSystem<'a>, Mock<'a>, Mock<'a>, Mock<'a>>
-    {
+    impl<'a> From<TestFixture<'a>> for Session<MockTokenSource, Mock<'a>, Mock<'a>, Mock<'a>> {
         fn from(
             fixture: TestFixture<'a>,
-        ) -> Session<NullCodeRefFactory, MockFileSystem<'a>, Mock<'a>, Mock<'a>, Mock<'a>> {
+        ) -> Session<MockTokenSource, Mock<'a>, Mock<'a>, Mock<'a>> {
             Session::new(
-                NullCodeRefFactory {},
-                fixture.fs,
+                fixture.mock_token_source,
                 fixture.analyzer_factory,
                 fixture.object,
                 fixture.diagnostics,
