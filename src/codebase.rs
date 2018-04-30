@@ -8,8 +8,23 @@ struct BufRange {
     end: BufPosition,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 struct LineIndex(usize);
+
+impl ops::AddAssign<usize> for LineIndex {
+    fn add_assign(&mut self, rhs: usize) {
+        self.0 += rhs
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct LineNumber(usize);
+
+impl From<LineIndex> for LineNumber {
+    fn from(line_index: LineIndex) -> LineNumber {
+        LineNumber(line_index.0 + 1)
+    }
+}
 
 #[derive(Debug, PartialEq)]
 struct TextPosition {
@@ -65,6 +80,36 @@ impl StringSrcBuf {
         TextPosition {
             line,
             column_index: buf_position.0 - line_range.start,
+        }
+    }
+
+    #[cfg(test)]
+    fn lines<'a>(&'a self, line_range: ops::Range<LineIndex>) -> TextLines<'a> {
+        TextLines {
+            buf: self,
+            remaining_range: line_range,
+        }
+    }
+}
+
+#[cfg(test)]
+struct TextLines<'a> {
+    buf: &'a StringSrcBuf,
+    remaining_range: ops::Range<LineIndex>,
+}
+
+#[cfg(test)]
+impl<'a> Iterator for TextLines<'a> {
+    type Item = (LineNumber, &'a str);
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.remaining_range.start < self.remaining_range.end {
+            let line_index = self.remaining_range.start;
+            let line_number = line_index.into();
+            let line_text = &self.buf.src[self.buf.line_ranges[line_index.0].clone()];
+            self.remaining_range.start += 1;
+            Some((line_number, line_text))
+        } else {
+            None
         }
     }
 }
@@ -174,6 +219,20 @@ mod tests {
                     column_index: 4,
                 },
             }
+        )
+    }
+
+    #[test]
+    fn borrow_some_lines() {
+        let text = "my first line\nsome second line\nand a third";
+        let buf = StringSrcBuf::new(text.to_string());
+        let lines = buf.lines(LineIndex(1)..LineIndex(3));
+        assert_eq!(
+            lines.collect::<Vec<_>>(),
+            [
+                (LineNumber(2), "some second line"),
+                (LineNumber(3), "and a third")
+            ]
         )
     }
 }
