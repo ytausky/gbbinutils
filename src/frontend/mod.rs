@@ -198,7 +198,7 @@ where
 
     fn include_source_file(&mut self, filename: String) {
         let tokenized_src = self.tokenized_code_source.tokenize_file(&filename);
-        self.analyze_token_seq::<&TCS::Tokenized>(&tokenized_src)
+        self.analyze_token_seq(&tokenized_src)
     }
 
     fn invoke_macro(&mut self, name: (String, <Self as Frontend>::CodeRef), args: Vec<Vec<Token>>) {
