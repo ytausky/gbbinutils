@@ -1,5 +1,5 @@
 use backend;
-use frontend::{Atom, Frontend, StrExprFactory};
+use frontend::{Atom, ChunkId, Frontend, StrExprFactory};
 use frontend::syntax::{self, token, SynExpr, Token, TokenSpec, keyword::Command};
 
 mod instruction;
@@ -85,9 +85,7 @@ impl<'a, F: Frontend + 'a> syntax::CommandContext for CommandActions<'a, F> {
                     _ => panic!(),
                 }
             },
-            (Command::Include, _) => self.parent
-                .session
-                .include_source_file(reduce_include(self.args)),
+            (Command::Include, _) => self.parent.session.analyze_chunk(reduce_include(self.args)),
             (command, _) => {
                 let mut analyzer =
                     self::instruction::CommandAnalyzer::new(&mut self.parent.expr_factory);
@@ -169,9 +167,10 @@ impl<'a, F: Frontend + 'a> syntax::MacroInvocationContext<F::CodeRef>
 
     fn exit_macro_invocation(self) -> Self::Parent {
         match self.name {
-            (Atom::Ident(name), code_ref) => self.parent
-                .session
-                .invoke_macro((name, code_ref), self.args),
+            (Atom::Ident(name), code_ref) => self.parent.session.analyze_chunk(ChunkId::Macro {
+                name: (name, code_ref),
+                args: self.args,
+            }),
             _ => panic!(),
         }
         self.parent
@@ -206,11 +205,11 @@ impl<'a, F: Frontend + 'a> syntax::TokenSeqContext<F::CodeRef> for MacroArgActio
     }
 }
 
-fn reduce_include(mut arguments: Vec<SynExpr<Token>>) -> String {
+fn reduce_include<T>(mut arguments: Vec<SynExpr<Token>>) -> ChunkId<T> {
     assert_eq!(arguments.len(), 1);
     let path = arguments.pop().unwrap();
     match path {
-        SynExpr::Atom(token::Atom(Atom::String(path_str))) => path_str,
+        SynExpr::Atom(token::Atom(Atom::String(path_str))) => ChunkId::File((path_str, None)),
         _ => panic!(),
     }
 }
@@ -219,6 +218,7 @@ fn reduce_include(mut arguments: Vec<SynExpr<Token>>) -> String {
 mod tests {
     use super::*;
 
+    use frontend::ChunkId;
     use frontend::syntax::{CommandContext, FileContext, MacroInvocationContext, TokenSeqContext,
                            keyword::Operand};
     use backend;
@@ -233,18 +233,17 @@ mod tests {
 
     #[derive(Debug, PartialEq)]
     enum TestOperation {
+        AnalyzeChunk(ChunkId<()>),
         DefineMacro(String, Vec<Token>),
         EmitItem(backend::Item),
-        Include(String),
-        InvokeMacro(String, Vec<Vec<Token>>),
         Label(String),
     }
 
     impl Frontend for TestFrontend {
         type CodeRef = ();
 
-        fn include_source_file(&mut self, filename: String) {
-            self.0.push(TestOperation::Include(filename))
+        fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::CodeRef>) {
+            self.0.push(TestOperation::AnalyzeChunk(chunk_id))
         }
 
         fn emit_item(&mut self, item: backend::Item) {
@@ -261,10 +260,6 @@ mod tests {
                 tokens.into_iter().map(|(t, _)| t).collect(),
             ))
         }
-
-        fn invoke_macro(&mut self, name: (String, Self::CodeRef), args: Vec<Vec<Token>>) {
-            self.0.push(TestOperation::InvokeMacro(name.0, args))
-        }
     }
 
     #[test]
@@ -276,7 +271,12 @@ mod tests {
             command.add_argument(expr);
             command.exit_command();
         });
-        assert_eq!(actions, [TestOperation::Include(filename.to_string())])
+        assert_eq!(
+            actions,
+            [
+                TestOperation::AnalyzeChunk(ChunkId::File((filename.to_string(), None)))
+            ]
+        )
     }
 
     #[test]
@@ -344,7 +344,12 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [TestOperation::InvokeMacro(name.to_string(), Vec::new())]
+            [
+                TestOperation::AnalyzeChunk(ChunkId::Macro {
+                    name: (name.to_string(), ()),
+                    args: Vec::new(),
+                })
+            ]
         )
     }
 
@@ -365,7 +370,10 @@ mod tests {
         assert_eq!(
             actions,
             [
-                TestOperation::InvokeMacro(name.to_string(), vec![vec![arg_token]])
+                TestOperation::AnalyzeChunk(ChunkId::Macro {
+                    name: (name.to_string(), ()),
+                    args: vec![vec![arg_token]],
+                })
             ]
         )
     }

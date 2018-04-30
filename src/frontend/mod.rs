@@ -18,7 +18,7 @@ pub fn analyze_file<B: Backend<()>>(name: String, backend: B) -> B {
         backend,
         DebugDiagnosticsListener {},
     );
-    session.include_source_file(name);
+    session.analyze_chunk(ChunkId::File((name, None)));
     session.into_object()
 }
 
@@ -141,11 +141,19 @@ impl ExprFactory for StrExprFactory {
 
 pub trait Frontend {
     type CodeRef;
-    fn include_source_file(&mut self, filename: String);
+    fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::CodeRef>);
     fn emit_item(&mut self, item: Item);
     fn define_label(&mut self, label: (String, Self::CodeRef));
     fn define_macro(&mut self, name: (String, Self::CodeRef), tokens: Vec<(Token, Self::CodeRef)>);
-    fn invoke_macro(&mut self, name: (String, Self::CodeRef), args: Vec<Vec<Token>>);
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ChunkId<T> {
+    File((String, Option<T>)),
+    Macro {
+        name: (String, T),
+        args: Vec<Vec<Token>>,
+    },
 }
 
 use std::{collections::HashMap, rc::Rc};
@@ -187,6 +195,21 @@ where
     fn into_object(self) -> B {
         self.backend
     }
+
+    fn include_source_file(&mut self, filename: String) {
+        let tokenized_src = self.tokenized_code_source.tokenize_file(&filename);
+        self.analyze_token_seq::<&TCS::Tokenized>(&tokenized_src)
+    }
+
+    fn invoke_macro(&mut self, name: (String, <Self as Frontend>::CodeRef), args: Vec<Vec<Token>>) {
+        match self.tokenized_code_source
+            .macro_invocation(name.clone(), args)
+        {
+            Some(tokens) => self.analyze_token_seq(tokens),
+            None => self.diagnostics
+                .emit_diagnostic(Diagnostic::UndefinedMacro { name }),
+        }
+    }
 }
 
 impl<TCS, SAF, B, DL> Frontend for Session<TCS, SAF, B, DL>
@@ -199,9 +222,11 @@ where
 {
     type CodeRef = TCS::CodeRef;
 
-    fn include_source_file(&mut self, filename: String) {
-        let tokenized_src = self.tokenized_code_source.tokenize_file(&filename);
-        self.analyze_token_seq::<&TCS::Tokenized>(&tokenized_src)
+    fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::CodeRef>) {
+        match chunk_id {
+            ChunkId::File((name, _)) => self.include_source_file(name),
+            ChunkId::Macro { name, args } => self.invoke_macro(name, args),
+        }
     }
 
     fn emit_item(&mut self, item: Item) {
@@ -214,16 +239,6 @@ where
 
     fn define_macro(&mut self, name: (String, Self::CodeRef), tokens: Vec<(Token, Self::CodeRef)>) {
         self.tokenized_code_source.define_macro(name, tokens)
-    }
-
-    fn invoke_macro(&mut self, name: (String, Self::CodeRef), args: Vec<Vec<Token>>) {
-        match self.tokenized_code_source
-            .macro_invocation(name.clone(), args)
-        {
-            Some(tokens) => self.analyze_token_seq(tokens),
-            None => self.diagnostics
-                .emit_diagnostic(Diagnostic::UndefinedMacro { name }),
-        }
     }
 }
 
