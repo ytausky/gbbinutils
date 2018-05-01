@@ -3,13 +3,30 @@ use std::{cmp, ops, rc::Rc};
 #[derive(Clone, Copy)]
 struct BufPosition(usize);
 
-struct BufRange {
+pub struct BufRange {
     start: BufPosition,
     end: BufPosition,
 }
 
+impl From<ops::Range<usize>> for BufRange {
+    fn from(range: ops::Range<usize>) -> BufRange {
+        BufRange {
+            start: BufPosition(range.start),
+            end: BufPosition(range.end),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
-struct LineIndex(usize);
+pub struct LineIndex(usize);
+
+impl ops::Add<usize> for LineIndex {
+    type Output = LineIndex;
+    fn add(mut self, rhs: usize) -> Self::Output {
+        self += rhs;
+        self
+    }
+}
 
 impl ops::AddAssign<usize> for LineIndex {
     fn add_assign(&mut self, rhs: usize) {
@@ -18,7 +35,7 @@ impl ops::AddAssign<usize> for LineIndex {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct LineNumber(usize);
+pub struct LineNumber(pub usize);
 
 impl From<LineIndex> for LineNumber {
     fn from(line_index: LineIndex) -> LineNumber {
@@ -27,22 +44,22 @@ impl From<LineIndex> for LineNumber {
 }
 
 #[derive(Debug, PartialEq)]
-struct TextPosition {
-    line: LineIndex,
+pub struct TextPosition {
+    pub line: LineIndex,
     column_index: usize,
 }
 
 #[derive(Debug, PartialEq)]
-struct TextRange {
-    start: TextPosition,
-    end: TextPosition,
+pub struct TextRange {
+    pub start: TextPosition,
+    pub end: TextPosition,
 }
 
-trait TextBuf {
+pub trait TextBuf {
     fn text_range(&self, buf_range: &BufRange) -> TextRange;
 }
 
-struct StringSrcBuf {
+pub struct StringSrcBuf {
     src: Rc<str>,
     line_ranges: Vec<ops::Range<usize>>,
 }
@@ -63,14 +80,14 @@ impl StringSrcBuf {
                     if buf_position <= end {
                         cmp::Ordering::Equal
                     } else {
-                        cmp::Ordering::Greater
+                        cmp::Ordering::Less
                     }
                 } else {
-                    cmp::Ordering::Less
+                    cmp::Ordering::Greater
                 }
             }) {
             Ok(line_index) => LineIndex(line_index),
-            Err(_n) => panic!(),
+            Err(_n) => panic!("couldn't find buffer position {}", buf_position),
         }
     }
 
@@ -84,16 +101,20 @@ impl StringSrcBuf {
     }
 
     #[cfg(test)]
-    fn lines<'a>(&'a self, line_range: ops::Range<LineIndex>) -> TextLines<'a> {
+    pub fn lines<'a>(&'a self, line_range: ops::Range<LineIndex>) -> TextLines<'a> {
         TextLines {
             buf: self,
             remaining_range: line_range,
         }
     }
+
+    pub fn text(&self) -> Rc<str> {
+        self.src.clone()
+    }
 }
 
 #[cfg(test)]
-struct TextLines<'a> {
+pub struct TextLines<'a> {
     buf: &'a StringSrcBuf,
     remaining_range: ops::Range<LineIndex>,
 }
@@ -141,8 +162,8 @@ impl StringCodebase {
         buf_id
     }
 
-    pub fn buf(&self, buf_id: BufId) -> Rc<str> {
-        self.bufs[buf_id.0].src.clone()
+    pub fn buf(&self, buf_id: BufId) -> &StringSrcBuf {
+        &self.bufs[buf_id.0]
     }
 
     #[cfg(test)]
@@ -182,7 +203,7 @@ mod tests {
         let mut codebase = StringCodebase::new();
         let src = "src";
         let buf_id = codebase.add_src_buf(String::from(src));
-        let rc_src = codebase.buf(buf_id);
+        let rc_src = codebase.buf(buf_id).text();
         let mut iter = rc_src.char_indices();
         assert_eq!(iter.next(), Some((0, 's')));
         assert_eq!(iter.next(), Some((1, 'r')));
@@ -234,5 +255,11 @@ mod tests {
                 (LineNumber(3), "and a third")
             ]
         )
+    }
+
+    #[test]
+    fn line_ranges() {
+        let text = "    nop\n    my_macro a, $12\n\n";
+        assert_eq!(build_line_ranges(text), [0..7, 8..27, 28..28, 29..29])
     }
 }

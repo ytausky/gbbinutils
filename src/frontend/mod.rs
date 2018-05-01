@@ -298,7 +298,7 @@ impl<CRF: CodeRefFactory, FS: FileSystem> TokenizedCodeSource for TokenStreamSou
     fn tokenize_file(&mut self, filename: &str) -> Self::Tokenized {
         let src = self.fs.read_file(&filename);
         let buf_id = self.codebase.add_src_buf(src);
-        let rc_src = self.codebase.buf(buf_id);
+        let rc_src = self.codebase.buf(buf_id).text();
         TokenizedSrc::new(rc_src, self.code_ref_factory.clone())
     }
 }
