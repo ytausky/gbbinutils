@@ -5,16 +5,23 @@ use diagnostics::*;
 use backend::*;
 use self::syntax::*;
 
-use codebase::{BufId, BufRange, Codebase};
+use codebase::{BufId, Codebase};
 
-pub fn analyze_file<C: Codebase, B: Backend<(BufId, BufRange)>>(
+pub fn analyze_file<
+    C: Codebase,
+    CRF: CodeRefFactory,
+    B: Backend<CRF::CodeRef>,
+    D: DiagnosticsListener<CRF::CodeRef>,
+>(
     name: String,
     codebase: C,
+    code_ref_factory: CRF,
     backend: B,
+    diagnostics: &D,
 ) -> B {
     let factory = SemanticTokenSeqAnalyzerFactory::new();
-    let token_provider = TokenStreamSource::new(codebase, TrivialCodeRefFactory {});
-    let mut session = Session::new(token_provider, factory, backend, DiagnosticsDumper::new());
+    let token_provider = TokenStreamSource::new(codebase, code_ref_factory);
+    let mut session = Session::new(token_provider, factory, backend, diagnostics);
     session.analyze_chunk(ChunkId::File((name, None)));
     session.into_object()
 }
@@ -107,26 +114,26 @@ pub enum ChunkId<T> {
 
 use std::{collections::HashMap, rc::Rc};
 
-struct Session<TCS, SAF, B, DL> {
+struct Session<'a, TCS, SAF, B, DL: 'a> {
     analyzer_factory: SAF,
     backend: B,
     tokenized_code_source: TCS,
-    diagnostics: DL,
+    diagnostics: &'a DL,
 }
 
-impl<TCS, SAF, B, DL> Session<TCS, SAF, B, DL>
+impl<'a, TCS, SAF, B, DL> Session<'a, TCS, SAF, B, DL>
 where
     TCS: TokenizedCodeSource,
-    for<'a> &'a TCS::Tokenized: IntoIterator<Item = (Token, TCS::CodeRef)>,
+    for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token, TCS::CodeRef)>,
     SAF: TokenSeqAnalyzerFactory,
     B: Backend<TCS::CodeRef>,
-    DL: DiagnosticsListener<TCS::CodeRef>,
+    DL: DiagnosticsListener<TCS::CodeRef> + 'a,
 {
     fn new(
         tokenized_code_source: TCS,
         analyzer_factory: SAF,
         backend: B,
-        diagnostics: DL,
+        diagnostics: &DL,
     ) -> Session<TCS, SAF, B, DL> {
         Session {
             analyzer_factory,
@@ -161,13 +168,13 @@ where
     }
 }
 
-impl<TCS, SAF, B, DL> Frontend for Session<TCS, SAF, B, DL>
+impl<'a, TCS, SAF, B, DL> Frontend for Session<'a, TCS, SAF, B, DL>
 where
     TCS: TokenizedCodeSource,
-    for<'a> &'a TCS::Tokenized: IntoIterator<Item = (Token, TCS::CodeRef)>,
+    for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token, TCS::CodeRef)>,
     SAF: TokenSeqAnalyzerFactory,
     B: Backend<TCS::CodeRef>,
-    DL: DiagnosticsListener<TCS::CodeRef>,
+    DL: DiagnosticsListener<TCS::CodeRef> + 'a,
 {
     type CodeRef = TCS::CodeRef;
 
@@ -527,20 +534,12 @@ mod tests {
         }
 
         fn when<F: FnOnce(Session<MockTokenSource, Mock<'a>, Mock<'a>, Mock<'a>>)>(self, f: F) {
-            f(Session::from(self))
-        }
-    }
-
-    impl<'a> From<TestFixture<'a>> for Session<MockTokenSource, Mock<'a>, Mock<'a>, Mock<'a>> {
-        fn from(
-            fixture: TestFixture<'a>,
-        ) -> Session<MockTokenSource, Mock<'a>, Mock<'a>, Mock<'a>> {
-            Session::new(
-                fixture.mock_token_source,
-                fixture.analyzer_factory,
-                fixture.object,
-                fixture.diagnostics,
-            )
+            f(Session::new(
+                self.mock_token_source,
+                self.analyzer_factory,
+                self.object,
+                &self.diagnostics,
+            ))
         }
     }
 }
