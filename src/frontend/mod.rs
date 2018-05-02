@@ -1,16 +1,18 @@
 mod semantics;
 mod syntax;
 
-use codebase;
-use codebase::TextCache;
+use codebase::Codebase;
 use diagnostics::*;
 use backend::*;
 use self::syntax::*;
 
-pub fn analyze_file<B: Backend<(BufId, BufRange)>>(name: String, backend: B) -> B {
-    let fs = codebase::StdFileSystem::new();
+pub fn analyze_file<C: Codebase, B: Backend<(BufId, BufRange)>>(
+    name: String,
+    codebase: C,
+    backend: B,
+) -> B {
     let factory = SemanticTokenSeqAnalyzerFactory::new();
-    let token_provider = TokenStreamSource::new(fs, TrivialCodeRefFactory {});
+    let token_provider = TokenStreamSource::new(codebase, TrivialCodeRefFactory {});
     let mut session = Session::new(token_provider, factory, backend, DiagnosticsDumper::new());
     session.analyze_chunk(ChunkId::File((name, None)));
     session.into_object()
@@ -224,27 +226,23 @@ where
     fn tokenize_file(&mut self, filename: &str) -> Self::Tokenized;
 }
 
-struct TokenStreamSource<CRF: CodeRefFactory, FS> {
-    fs: FS,
-    codebase: TextCache,
+struct TokenStreamSource<C: Codebase, CRF: CodeRefFactory> {
+    codebase: C,
     code_ref_factory: CRF,
     macro_defs: HashMap<String, Rc<Vec<(Token, CRF::CodeRef)>>>,
 }
 
-impl<CRF: CodeRefFactory, FS: codebase::FileSystem> TokenStreamSource<CRF, FS> {
-    fn new(fs: FS, code_ref_factory: CRF) -> TokenStreamSource<CRF, FS> {
+impl<C: Codebase, CRF: CodeRefFactory> TokenStreamSource<C, CRF> {
+    fn new(codebase: C, code_ref_factory: CRF) -> TokenStreamSource<C, CRF> {
         TokenStreamSource {
-            fs,
-            codebase: TextCache::new(),
+            codebase,
             code_ref_factory,
             macro_defs: HashMap::new(),
         }
     }
 }
 
-impl<CRF: CodeRefFactory, FS: codebase::FileSystem> TokenizedCodeSource
-    for TokenStreamSource<CRF, FS>
-{
+impl<C: Codebase, CRF: CodeRefFactory> TokenizedCodeSource for TokenStreamSource<C, CRF> {
     type CodeRef = CRF::CodeRef;
 
     fn define_macro(&mut self, name: (String, CRF::CodeRef), tokens: Vec<(Token, CRF::CodeRef)>) {
@@ -264,9 +262,8 @@ impl<CRF: CodeRefFactory, FS: codebase::FileSystem> TokenizedCodeSource
     type Tokenized = TokenizedSrc<CRF>;
 
     fn tokenize_file(&mut self, filename: &str) -> Self::Tokenized {
-        let src = self.fs.read_file(&filename);
-        let buf_id = self.codebase.add_src_buf(src);
-        let rc_src = self.codebase.buf(buf_id).text();
+        let buf_id = self.codebase.open(filename);
+        let rc_src = self.codebase.buf(buf_id);
         TokenizedSrc::new(buf_id, rc_src, self.code_ref_factory.clone())
     }
 }

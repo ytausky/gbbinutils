@@ -201,6 +201,36 @@ impl FileSystem for StdFileSystem {
     }
 }
 
+pub trait Codebase {
+    fn open(&mut self, path: &str) -> BufId;
+    fn buf(&self, buf_id: BufId) -> Rc<str>;
+}
+
+pub struct FileCodebase<FS: FileSystem> {
+    fs: FS,
+    cache: TextCache,
+}
+
+impl<FS: FileSystem> FileCodebase<FS> {
+    pub fn new(fs: FS) -> FileCodebase<FS> {
+        FileCodebase {
+            fs,
+            cache: TextCache::new(),
+        }
+    }
+}
+
+impl<FS: FileSystem> Codebase for FileCodebase<FS> {
+    fn open(&mut self, path: &str) -> BufId {
+        let text = self.fs.read_file(path);
+        self.cache.add_src_buf(text)
+    }
+
+    fn buf(&self, buf_id: BufId) -> Rc<str> {
+        self.cache.buf(buf_id).text()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
