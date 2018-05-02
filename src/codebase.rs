@@ -1,23 +1,5 @@
 use std::{cmp, ops, rc::Rc};
 
-#[derive(Clone, Copy, Debug)]
-struct BufOffset(usize);
-
-#[derive(Clone, Debug)]
-pub struct BufRange {
-    start: BufOffset,
-    end: BufOffset,
-}
-
-impl From<ops::Range<usize>> for BufRange {
-    fn from(range: ops::Range<usize>) -> BufRange {
-        BufRange {
-            start: BufOffset(range.start),
-            end: BufOffset(range.end),
-        }
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub struct LineIndex(usize);
 
@@ -56,13 +38,15 @@ pub struct TextRange {
     pub end: TextPosition,
 }
 
+pub type BufRange = ops::Range<usize>;
+
 pub trait TextBuf {
     fn text_range(&self, buf_range: &BufRange) -> TextRange;
 }
 
 pub struct StringSrcBuf {
     src: Rc<str>,
-    line_ranges: Vec<ops::Range<usize>>,
+    line_ranges: Vec<BufRange>,
 }
 
 impl StringSrcBuf {
@@ -74,7 +58,7 @@ impl StringSrcBuf {
         }
     }
 
-    fn line_index(&self, BufOffset(buf_offset): BufOffset) -> LineIndex {
+    fn line_index(&self, buf_offset: usize) -> LineIndex {
         match self.line_ranges
             .binary_search_by(|&ops::Range { start, end }| {
                 if start <= buf_offset {
@@ -92,12 +76,12 @@ impl StringSrcBuf {
         }
     }
 
-    fn text_position(&self, buf_offset: BufOffset) -> TextPosition {
+    fn text_position(&self, buf_offset: usize) -> TextPosition {
         let line = self.line_index(buf_offset);
         let line_range = &self.line_ranges[line.0];
         TextPosition {
             line,
-            column_index: buf_offset.0 - line_range.start,
+            column_index: buf_offset - line_range.start,
         }
     }
 
@@ -224,10 +208,7 @@ mod tests {
     fn text_range_in_middle_of_line() {
         let src = "abcdefg\nhijklmn";
         let buf = StringSrcBuf::new(src.into());
-        let buf_range = BufRange {
-            start: BufOffset(9),
-            end: BufOffset(12),
-        };
+        let buf_range = 9..12;
         let text_range = buf.text_range(&buf_range);
         assert_eq!(
             text_range,

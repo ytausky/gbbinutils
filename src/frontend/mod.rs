@@ -24,7 +24,7 @@ where
     Self: Clone,
 {
     type CodeRef: Clone;
-    fn mk_code_ref(&self, buf_id: BufId, byte_range: std::ops::Range<usize>) -> Self::CodeRef;
+    fn mk_code_ref(&self, buf_id: BufId, buf_range: BufRange) -> Self::CodeRef;
 }
 
 #[derive(Clone)]
@@ -32,8 +32,8 @@ struct TrivialCodeRefFactory;
 
 impl CodeRefFactory for TrivialCodeRefFactory {
     type CodeRef = (BufId, BufRange);
-    fn mk_code_ref(&self, buf_id: BufId, byte_range: std::ops::Range<usize>) -> Self::CodeRef {
-        (buf_id, byte_range.into())
+    fn mk_code_ref(&self, buf_id: BufId, buf_range: BufRange) -> Self::CodeRef {
+        (buf_id, buf_range)
     }
 }
 
