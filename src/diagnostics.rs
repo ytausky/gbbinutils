@@ -1,3 +1,21 @@
+pub trait CodeRefFactory
+where
+    Self: Clone,
+{
+    type CodeRef: Clone;
+    fn mk_code_ref(&self, buf_id: BufId, buf_range: BufRange) -> Self::CodeRef;
+}
+
+#[derive(Clone)]
+pub struct TrivialCodeRefFactory;
+
+impl CodeRefFactory for TrivialCodeRefFactory {
+    type CodeRef = (BufId, BufRange);
+    fn mk_code_ref(&self, buf_id: BufId, buf_range: BufRange) -> Self::CodeRef {
+        (buf_id, buf_range)
+    }
+}
+
 pub trait DiagnosticsListener<R> {
     fn emit_diagnostic(&self, diagnostic: Diagnostic<R>);
 }

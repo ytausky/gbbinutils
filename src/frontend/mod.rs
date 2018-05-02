@@ -1,10 +1,11 @@
 mod semantics;
 mod syntax;
 
-use codebase::Codebase;
 use diagnostics::*;
 use backend::*;
 use self::syntax::*;
+
+use codebase::{BufId, BufRange, Codebase};
 
 pub fn analyze_file<C: Codebase, B: Backend<(BufId, BufRange)>>(
     name: String,
@@ -16,26 +17,6 @@ pub fn analyze_file<C: Codebase, B: Backend<(BufId, BufRange)>>(
     let mut session = Session::new(token_provider, factory, backend, DiagnosticsDumper::new());
     session.analyze_chunk(ChunkId::File((name, None)));
     session.into_object()
-}
-
-use codebase::{BufId, BufRange};
-
-trait CodeRefFactory
-where
-    Self: Clone,
-{
-    type CodeRef: Clone;
-    fn mk_code_ref(&self, buf_id: BufId, buf_range: BufRange) -> Self::CodeRef;
-}
-
-#[derive(Clone)]
-struct TrivialCodeRefFactory;
-
-impl CodeRefFactory for TrivialCodeRefFactory {
-    type CodeRef = (BufId, BufRange);
-    fn mk_code_ref(&self, buf_id: BufId, buf_range: BufRange) -> Self::CodeRef {
-        (buf_id, buf_range)
-    }
 }
 
 trait TokenSeqAnalyzer {
