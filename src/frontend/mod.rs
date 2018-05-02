@@ -1,15 +1,14 @@
-use std;
-
 mod semantics;
 mod syntax;
 
+use codebase;
 use codebase::TextCache;
 use diagnostics::*;
 use backend::*;
 use self::syntax::*;
 
 pub fn analyze_file<B: Backend<(BufId, BufRange)>>(name: String, backend: B) -> B {
-    let fs = StdFileSystem::new();
+    let fs = codebase::StdFileSystem::new();
     let factory = SemanticTokenSeqAnalyzerFactory::new();
     let token_provider = TokenStreamSource::new(fs, TrivialCodeRefFactory {});
     let mut session = Session::new(token_provider, factory, backend, DiagnosticsDumper::new());
@@ -34,28 +33,6 @@ impl CodeRefFactory for TrivialCodeRefFactory {
     type CodeRef = (BufId, BufRange);
     fn mk_code_ref(&self, buf_id: BufId, buf_range: BufRange) -> Self::CodeRef {
         (buf_id, buf_range)
-    }
-}
-
-trait FileSystem {
-    fn read_file(&mut self, filename: &str) -> String;
-}
-
-struct StdFileSystem;
-
-impl StdFileSystem {
-    fn new() -> StdFileSystem {
-        StdFileSystem {}
-    }
-}
-
-impl FileSystem for StdFileSystem {
-    fn read_file(&mut self, filename: &str) -> String {
-        use std::io::prelude::*;
-        let mut file = std::fs::File::open(filename).unwrap();
-        let mut src = String::new();
-        file.read_to_string(&mut src).unwrap();
-        src
     }
 }
 
@@ -254,7 +231,7 @@ struct TokenStreamSource<CRF: CodeRefFactory, FS> {
     macro_defs: HashMap<String, Rc<Vec<(Token, CRF::CodeRef)>>>,
 }
 
-impl<CRF: CodeRefFactory, FS: FileSystem> TokenStreamSource<CRF, FS> {
+impl<CRF: CodeRefFactory, FS: codebase::FileSystem> TokenStreamSource<CRF, FS> {
     fn new(fs: FS, code_ref_factory: CRF) -> TokenStreamSource<CRF, FS> {
         TokenStreamSource {
             fs,
@@ -265,7 +242,9 @@ impl<CRF: CodeRefFactory, FS: FileSystem> TokenStreamSource<CRF, FS> {
     }
 }
 
-impl<CRF: CodeRefFactory, FS: FileSystem> TokenizedCodeSource for TokenStreamSource<CRF, FS> {
+impl<CRF: CodeRefFactory, FS: codebase::FileSystem> TokenizedCodeSource
+    for TokenStreamSource<CRF, FS>
+{
     type CodeRef = CRF::CodeRef;
 
     fn define_macro(&mut self, name: (String, CRF::CodeRef), tokens: Vec<(Token, CRF::CodeRef)>) {
@@ -363,7 +342,7 @@ impl<'a, CRF: CodeRefFactory> Iterator for TokenizedSrcIter<'a, CRF> {
 mod tests {
     use super::*;
 
-    use std::cell::RefCell;
+    use std::{self, cell::RefCell};
 
     #[test]
     fn include_source_file() {

@@ -1,4 +1,4 @@
-use std::{cmp, ops, rc::Rc};
+use std::{cmp, fs, ops, rc::Rc};
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub struct LineIndex(usize);
@@ -179,16 +179,38 @@ fn build_line_ranges(src: &str) -> Vec<ops::Range<usize>> {
     line_ranges
 }
 
+pub trait FileSystem {
+    fn read_file(&mut self, filename: &str) -> String;
+}
+
+pub struct StdFileSystem;
+
+impl StdFileSystem {
+    pub fn new() -> StdFileSystem {
+        StdFileSystem {}
+    }
+}
+
+impl FileSystem for StdFileSystem {
+    fn read_file(&mut self, filename: &str) -> String {
+        use std::io::prelude::*;
+        let mut file = fs::File::open(filename).unwrap();
+        let mut src = String::new();
+        file.read_to_string(&mut src).unwrap();
+        src
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn iterate_src() {
-        let mut codebase = TextCache::new();
+        let mut cache = TextCache::new();
         let src = "src";
-        let buf_id = codebase.add_src_buf(String::from(src));
-        let rc_src = codebase.buf(buf_id).text();
+        let buf_id = cache.add_src_buf(String::from(src));
+        let rc_src = cache.buf(buf_id).text();
         let mut iter = rc_src.char_indices();
         assert_eq!(iter.next(), Some((0, 's')));
         assert_eq!(iter.next(), Some((1, 'r')));
@@ -198,10 +220,10 @@ mod tests {
 
     #[test]
     fn get_line() {
-        let mut codebase = TextCache::new();
+        let mut cache = TextCache::new();
         let src = "first line\nsecond line\nthird line";
-        let buf_id = codebase.add_src_buf(src.into());
-        assert_eq!(codebase.get_line(buf_id, 1), "second line")
+        let buf_id = cache.add_src_buf(src.into());
+        assert_eq!(cache.get_line(buf_id, 1), "second line")
     }
 
     #[test]
