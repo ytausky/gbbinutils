@@ -1,11 +1,12 @@
 use std::{cmp, ops, rc::Rc};
 
-#[derive(Clone, Copy)]
-struct BufPosition(usize);
+#[derive(Clone, Copy, Debug)]
+pub struct BufPosition(pub usize);
 
+#[derive(Clone, Debug)]
 pub struct BufRange {
-    start: BufPosition,
-    end: BufPosition,
+    pub start: BufPosition,
+    pub end: BufPosition,
 }
 
 impl From<ops::Range<usize>> for BufRange {
@@ -148,7 +149,7 @@ pub struct StringCodebase {
     bufs: Vec<StringSrcBuf>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct BufId(usize);
 
 impl StringCodebase {

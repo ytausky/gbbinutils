@@ -25,8 +25,8 @@ impl OutputDumper {
     }
 }
 
-impl backend::Backend<()> for OutputDumper {
-    fn add_label(&mut self, (label, _): (&str, ())) {
+impl<R> backend::Backend<R> for OutputDumper {
+    fn add_label(&mut self, (label, _): (&str, R)) {
         println!("Define symbol: {}", label)
     }
 

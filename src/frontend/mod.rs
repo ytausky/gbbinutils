@@ -8,16 +8,16 @@ use diagnostics::*;
 use backend::*;
 use self::syntax::*;
 
-pub fn analyze_file<B: Backend<()>>(name: String, backend: B) -> B {
+pub fn analyze_file<B: Backend<(BufId, BufRange)>>(name: String, backend: B) -> B {
     let fs = StdFileSystem::new();
     let factory = SemanticTokenSeqAnalyzerFactory::new();
-    let token_provider = TokenStreamSource::new(fs, NullCodeRefFactory {});
+    let token_provider = TokenStreamSource::new(fs, TrivialCodeRefFactory {});
     let mut session = Session::new(token_provider, factory, backend, DiagnosticsDumper::new());
     session.analyze_chunk(ChunkId::File((name, None)));
     session.into_object()
 }
 
-use codebase::BufId;
+use codebase::{BufId, BufRange};
 
 trait CodeRefFactory
 where
@@ -28,12 +28,19 @@ where
 }
 
 #[derive(Clone)]
-struct NullCodeRefFactory;
+struct TrivialCodeRefFactory;
 
-impl CodeRefFactory for NullCodeRefFactory {
-    type CodeRef = ();
-    fn mk_code_ref(&self, _buf_id: BufId, _byte_range: std::ops::Range<usize>) -> Self::CodeRef {
-        ()
+impl CodeRefFactory for TrivialCodeRefFactory {
+    type CodeRef = (BufId, BufRange);
+    fn mk_code_ref(&self, buf_id: BufId, byte_range: std::ops::Range<usize>) -> Self::CodeRef {
+        use codebase::BufPosition;
+        (
+            buf_id,
+            BufRange {
+                start: BufPosition(byte_range.start),
+                end: BufPosition(byte_range.end),
+            },
+        )
     }
 }
 
