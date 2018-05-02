@@ -33,14 +33,7 @@ struct TrivialCodeRefFactory;
 impl CodeRefFactory for TrivialCodeRefFactory {
     type CodeRef = (BufId, BufRange);
     fn mk_code_ref(&self, buf_id: BufId, byte_range: std::ops::Range<usize>) -> Self::CodeRef {
-        use codebase::BufPosition;
-        (
-            buf_id,
-            BufRange {
-                start: BufPosition(byte_range.start),
-                end: BufPosition(byte_range.end),
-            },
-        )
+        (buf_id, byte_range.into())
     }
 }
 

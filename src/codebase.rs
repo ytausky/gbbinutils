@@ -1,19 +1,19 @@
 use std::{cmp, ops, rc::Rc};
 
 #[derive(Clone, Copy, Debug)]
-pub struct BufPosition(pub usize);
+struct BufOffset(usize);
 
 #[derive(Clone, Debug)]
 pub struct BufRange {
-    pub start: BufPosition,
-    pub end: BufPosition,
+    start: BufOffset,
+    end: BufOffset,
 }
 
 impl From<ops::Range<usize>> for BufRange {
     fn from(range: ops::Range<usize>) -> BufRange {
         BufRange {
-            start: BufPosition(range.start),
-            end: BufPosition(range.end),
+            start: BufOffset(range.start),
+            end: BufOffset(range.end),
         }
     }
 }
@@ -74,11 +74,11 @@ impl StringSrcBuf {
         }
     }
 
-    fn line_index(&self, BufPosition(buf_position): BufPosition) -> LineIndex {
+    fn line_index(&self, BufOffset(buf_offset): BufOffset) -> LineIndex {
         match self.line_ranges
             .binary_search_by(|&ops::Range { start, end }| {
-                if start <= buf_position {
-                    if buf_position <= end {
+                if start <= buf_offset {
+                    if buf_offset <= end {
                         cmp::Ordering::Equal
                     } else {
                         cmp::Ordering::Less
@@ -88,16 +88,16 @@ impl StringSrcBuf {
                 }
             }) {
             Ok(line_index) => LineIndex(line_index),
-            Err(_n) => panic!("couldn't find buffer position {}", buf_position),
+            Err(_n) => panic!("couldn't find buffer position {}", buf_offset),
         }
     }
 
-    fn text_position(&self, buf_position: BufPosition) -> TextPosition {
-        let line = self.line_index(buf_position);
+    fn text_position(&self, buf_offset: BufOffset) -> TextPosition {
+        let line = self.line_index(buf_offset);
         let line_range = &self.line_ranges[line.0];
         TextPosition {
             line,
-            column_index: buf_position.0 - line_range.start,
+            column_index: buf_offset.0 - line_range.start,
         }
     }
 
@@ -225,8 +225,8 @@ mod tests {
         let src = "abcdefg\nhijklmn";
         let buf = StringSrcBuf::new(src.into());
         let buf_range = BufRange {
-            start: BufPosition(9),
-            end: BufPosition(12),
+            start: BufOffset(9),
+            end: BufOffset(12),
         };
         let text_range = buf.text_range(&buf_range);
         assert_eq!(
