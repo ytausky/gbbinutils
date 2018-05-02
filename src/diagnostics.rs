@@ -14,6 +14,20 @@ pub enum Width {
     Byte,
 }
 
+pub struct DiagnosticsDumper;
+
+impl DiagnosticsDumper {
+    pub fn new() -> DiagnosticsDumper {
+        DiagnosticsDumper {}
+    }
+}
+
+impl DiagnosticsListener<()> for DiagnosticsDumper {
+    fn emit_diagnostic(&self, diagnostic: Diagnostic<()>) {
+        println!("{:?}", diagnostic)
+    }
+}
+
 #[cfg(test)]
 use codebase::{BufId, BufRange, LineNumber, StringCodebase, TextBuf};
 

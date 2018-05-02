@@ -1,4 +1,4 @@
-use std::{self, fmt};
+use std;
 
 mod semantics;
 mod syntax;
@@ -12,12 +12,7 @@ pub fn analyze_file<B: Backend<()>>(name: String, backend: B) -> B {
     let fs = StdFileSystem::new();
     let factory = SemanticTokenSeqAnalyzerFactory::new();
     let token_provider = TokenStreamSource::new(fs, NullCodeRefFactory {});
-    let mut session = Session::new(
-        token_provider,
-        factory,
-        backend,
-        DebugDiagnosticsListener {},
-    );
+    let mut session = Session::new(token_provider, factory, backend, DiagnosticsDumper::new());
     session.analyze_chunk(ChunkId::File((name, None)));
     session.into_object()
 }
@@ -37,14 +32,6 @@ impl CodeRefFactory for NullCodeRefFactory {
     type CodeRef = ();
     fn mk_code_ref(&self, _byte_range: std::ops::Range<usize>) -> Self::CodeRef {
         ()
-    }
-}
-
-struct DebugDiagnosticsListener;
-
-impl<R: fmt::Debug> DiagnosticsListener<R> for DebugDiagnosticsListener {
-    fn emit_diagnostic(&self, diagnostic: Diagnostic<R>) {
-        println!("Diagnostic: {:?}", diagnostic)
     }
 }
 

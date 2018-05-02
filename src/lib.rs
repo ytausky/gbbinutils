@@ -11,24 +11,10 @@ use std::fs::File;
 use std::io::Write;
 
 pub fn assemble_rom(name: &str) {
-    let diagnostics = DiagnosticsDumper::new();
+    let diagnostics = diagnostics::DiagnosticsDumper::new();
     let rom = frontend::analyze_file(name.to_string(), backend::Rom::new(&diagnostics));
     let mut file = File::create("my_rom.gb").unwrap();
     file.write_all(rom.as_slice()).unwrap();
-}
-
-struct DiagnosticsDumper;
-
-impl DiagnosticsDumper {
-    pub fn new() -> DiagnosticsDumper {
-        DiagnosticsDumper {}
-    }
-}
-
-impl diagnostics::DiagnosticsListener<()> for DiagnosticsDumper {
-    fn emit_diagnostic(&self, diagnostic: diagnostics::Diagnostic<()>) {
-        println!("{:?}", diagnostic)
-    }
 }
 
 struct OutputDumper;
