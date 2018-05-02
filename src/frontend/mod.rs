@@ -3,7 +3,7 @@ use std;
 mod semantics;
 mod syntax;
 
-use codebase::StringCodebase;
+use codebase::TextCache;
 use diagnostics::*;
 use backend::*;
 use self::syntax::*;
@@ -249,7 +249,7 @@ where
 
 struct TokenStreamSource<CRF: CodeRefFactory, FS> {
     fs: FS,
-    codebase: StringCodebase,
+    codebase: TextCache,
     code_ref_factory: CRF,
     macro_defs: HashMap<String, Rc<Vec<(Token, CRF::CodeRef)>>>,
 }
@@ -258,7 +258,7 @@ impl<CRF: CodeRefFactory, FS: FileSystem> TokenStreamSource<CRF, FS> {
     fn new(fs: FS, code_ref_factory: CRF) -> TokenStreamSource<CRF, FS> {
         TokenStreamSource {
             fs,
-            codebase: StringCodebase::new(),
+            codebase: TextCache::new(),
             code_ref_factory,
             macro_defs: HashMap::new(),
         }

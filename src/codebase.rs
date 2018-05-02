@@ -129,16 +129,16 @@ impl TextBuf for StringSrcBuf {
     }
 }
 
-pub struct StringCodebase {
+pub struct TextCache {
     bufs: Vec<StringSrcBuf>,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct BufId(usize);
 
-impl StringCodebase {
-    pub fn new() -> StringCodebase {
-        StringCodebase { bufs: Vec::new() }
+impl TextCache {
+    pub fn new() -> TextCache {
+        TextCache { bufs: Vec::new() }
     }
 
     pub fn add_src_buf(&mut self, src: String) -> BufId {
@@ -185,7 +185,7 @@ mod tests {
 
     #[test]
     fn iterate_src() {
-        let mut codebase = StringCodebase::new();
+        let mut codebase = TextCache::new();
         let src = "src";
         let buf_id = codebase.add_src_buf(String::from(src));
         let rc_src = codebase.buf(buf_id).text();
@@ -198,7 +198,7 @@ mod tests {
 
     #[test]
     fn get_line() {
-        let mut codebase = StringCodebase::new();
+        let mut codebase = TextCache::new();
         let src = "first line\nsecond line\nthird line";
         let buf_id = codebase.add_src_buf(src.into());
         assert_eq!(codebase.get_line(buf_id, 1), "second line")

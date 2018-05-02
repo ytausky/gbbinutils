@@ -31,7 +31,7 @@ impl DiagnosticsListener<(BufId, BufRange)> for DiagnosticsDumper {
 }
 
 #[cfg(test)]
-use codebase::{LineNumber, StringCodebase, TextBuf};
+use codebase::{LineNumber, TextBuf, TextCache};
 
 #[cfg(test)]
 #[derive(Debug, PartialEq)]
@@ -43,7 +43,7 @@ struct Message<'a> {
 #[cfg(test)]
 fn mk_diagnostic_message<'a>(
     diagnostic: Diagnostic<(BufId, BufRange)>,
-    codebase: &'a StringCodebase,
+    codebase: &'a TextCache,
 ) -> Message<'a> {
     let mut collectible_ranges = Vec::new();
     let text = match diagnostic {
@@ -68,7 +68,7 @@ mod tests {
 
     #[test]
     fn mk_message_for_undefined_macro() {
-        let mut codebase = StringCodebase::new();
+        let mut codebase = TextCache::new();
         let src = "    nop\n    my_macro a, $12\n\n";
         let buf_id = codebase.add_src_buf(src.to_string());
         let buf_range = BufRange::from(12..20);
