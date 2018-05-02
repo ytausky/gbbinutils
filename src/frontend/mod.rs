@@ -17,12 +17,14 @@ pub fn analyze_file<B: Backend<()>>(name: String, backend: B) -> B {
     session.into_object()
 }
 
+use codebase::BufId;
+
 trait CodeRefFactory
 where
     Self: Clone,
 {
     type CodeRef: Clone;
-    fn mk_code_ref(&self, byte_range: std::ops::Range<usize>) -> Self::CodeRef;
+    fn mk_code_ref(&self, buf_id: BufId, byte_range: std::ops::Range<usize>) -> Self::CodeRef;
 }
 
 #[derive(Clone)]
@@ -30,7 +32,7 @@ struct NullCodeRefFactory;
 
 impl CodeRefFactory for NullCodeRefFactory {
     type CodeRef = ();
-    fn mk_code_ref(&self, _byte_range: std::ops::Range<usize>) -> Self::CodeRef {
+    fn mk_code_ref(&self, _buf_id: BufId, _byte_range: std::ops::Range<usize>) -> Self::CodeRef {
         ()
     }
 }
@@ -286,7 +288,7 @@ impl<CRF: CodeRefFactory, FS: FileSystem> TokenizedCodeSource for TokenStreamSou
         let src = self.fs.read_file(&filename);
         let buf_id = self.codebase.add_src_buf(src);
         let rc_src = self.codebase.buf(buf_id).text();
-        TokenizedSrc::new(rc_src, self.code_ref_factory.clone())
+        TokenizedSrc::new(buf_id, rc_src, self.code_ref_factory.clone())
     }
 }
 
@@ -315,13 +317,15 @@ impl<CR: Clone> Iterator for MacroDefIter<CR> {
 }
 
 struct TokenizedSrc<CRF> {
+    buf_id: BufId,
     src: Rc<str>,
     code_ref_factory: CRF,
 }
 
 impl<CRF: CodeRefFactory> TokenizedSrc<CRF> {
-    fn new(src: Rc<str>, code_ref_factory: CRF) -> TokenizedSrc<CRF> {
+    fn new(buf_id: BufId, src: Rc<str>, code_ref_factory: CRF) -> TokenizedSrc<CRF> {
         TokenizedSrc {
+            buf_id,
             src,
             code_ref_factory,
         }
@@ -333,6 +337,7 @@ impl<'a, CRF: CodeRefFactory> IntoIterator for &'a TokenizedSrc<CRF> {
     type IntoIter = TokenizedSrcIter<'a, CRF>;
     fn into_iter(self) -> Self::IntoIter {
         TokenizedSrcIter {
+            buf_id: self.buf_id,
             tokens: syntax::tokenize(&self.src),
             code_ref_factory: &self.code_ref_factory,
         }
@@ -340,6 +345,7 @@ impl<'a, CRF: CodeRefFactory> IntoIterator for &'a TokenizedSrc<CRF> {
 }
 
 struct TokenizedSrcIter<'a, CRF: CodeRefFactory + 'a> {
+    buf_id: BufId,
     tokens: syntax::lexer::Lexer<'a>,
     code_ref_factory: &'a CRF,
 }
@@ -349,7 +355,7 @@ impl<'a, CRF: CodeRefFactory> Iterator for TokenizedSrcIter<'a, CRF> {
     fn next(&mut self) -> Option<Self::Item> {
         self.tokens
             .next()
-            .map(|(t, r)| (t, self.code_ref_factory.mk_code_ref(r)))
+            .map(|(t, r)| (t, self.code_ref_factory.mk_code_ref(self.buf_id, r)))
     }
 }
 
