@@ -156,8 +156,8 @@ where
         self.backend
     }
 
-    fn include_source_file(&mut self, filename: String) {
-        let tokenized_src = self.tokenized_code_source.tokenize_file(&filename);
+    fn include_source_file(&mut self, filename: &str) {
+        let tokenized_src = self.tokenized_code_source.tokenize_file(filename);
         self.analyze_token_seq(&tokenized_src)
     }
 
@@ -188,7 +188,7 @@ where
 
     fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::TokenRef>) {
         match chunk_id {
-            ChunkId::File((name, _)) => self.include_source_file(name),
+            ChunkId::File((name, _)) => self.include_source_file(&name),
             ChunkId::Macro { name, args } => self.invoke_macro(name, args),
         }
     }
@@ -233,8 +233,10 @@ where
 struct TokenStreamSource<C: Codebase, TT: TokenTracker> {
     codebase: C,
     token_tracker: TT,
-    macro_defs: HashMap<String, Rc<Vec<(Token, TT::TokenRef)>>>,
+    macro_defs: HashMap<String, Rc<MacroDef<TT::TokenRef>>>,
 }
+
+type MacroDef<TR> = Vec<(Token, TR)>;
 
 impl<C: Codebase, TT: TokenTracker> TokenStreamSource<C, TT> {
     fn new(codebase: C, token_tracker: TT) -> TokenStreamSource<C, TT> {
@@ -351,7 +353,7 @@ mod tests {
                 f.mock_token_source
                     .add_file(filename, add_code_refs(&contents))
             })
-            .when(|mut session| session.include_source_file(filename.to_string()));
+            .when(|mut session| session.include_source_file(filename));
         assert_eq!(*log.borrow(), [TestEvent::AnalyzeTokens(contents)]);
     }
 
