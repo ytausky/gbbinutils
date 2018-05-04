@@ -1,18 +1,65 @@
-pub trait CodeRefFactory
-where
-    Self: Clone,
-{
-    type CodeRef: Clone;
-    fn mk_code_ref(&self, buf_id: BufId, buf_range: BufRange) -> Self::CodeRef;
+use codebase::{BufId, BufRange};
+use std::{fmt::Debug, rc::Rc};
+
+pub trait TokenTracker {
+    type TokenRef: Clone;
+    type BufContext: Clone + LexemeRefFactory<TokenRef = Self::TokenRef>;
+    fn mk_buf_context(
+        &mut self,
+        buf_id: BufId,
+        included_from: Option<Self::TokenRef>,
+    ) -> Self::BufContext;
+}
+
+pub trait LexemeRefFactory {
+    type TokenRef;
+    fn mk_lexeme_ref(&self, range: BufRange) -> Self::TokenRef;
+}
+
+#[derive(Debug)]
+pub enum TokenRefData {
+    Lexeme {
+        range: BufRange,
+        context: Rc<BufContextData>,
+    },
+}
+
+#[derive(Debug)]
+pub struct BufContextData {
+    buf_id: BufId,
+    included_from: Option<Rc<TokenRefData>>,
+}
+
+pub struct SimpleTokenTracker;
+
+impl TokenTracker for SimpleTokenTracker {
+    type TokenRef = Rc<TokenRefData>;
+    type BufContext = SimpleBufTokenRefFactory;
+    fn mk_buf_context(
+        &mut self,
+        buf_id: BufId,
+        included_from: Option<Self::TokenRef>,
+    ) -> Self::BufContext {
+        let context = Rc::new(BufContextData {
+            buf_id,
+            included_from,
+        });
+        SimpleBufTokenRefFactory { context }
+    }
 }
 
 #[derive(Clone)]
-pub struct TrivialCodeRefFactory;
+pub struct SimpleBufTokenRefFactory {
+    context: Rc<BufContextData>,
+}
 
-impl CodeRefFactory for TrivialCodeRefFactory {
-    type CodeRef = (BufId, BufRange);
-    fn mk_code_ref(&self, buf_id: BufId, buf_range: BufRange) -> Self::CodeRef {
-        (buf_id, buf_range)
+impl LexemeRefFactory for SimpleBufTokenRefFactory {
+    type TokenRef = Rc<TokenRefData>;
+    fn mk_lexeme_ref(&self, range: BufRange) -> Self::TokenRef {
+        Rc::new(TokenRefData::Lexeme {
+            range,
+            context: self.context.clone(),
+        })
     }
 }
 
@@ -32,8 +79,6 @@ pub enum Width {
     Byte,
 }
 
-use codebase::{BufId, BufRange};
-
 pub struct DiagnosticsDumper;
 
 impl DiagnosticsDumper {
@@ -42,8 +87,8 @@ impl DiagnosticsDumper {
     }
 }
 
-impl DiagnosticsListener<(BufId, BufRange)> for DiagnosticsDumper {
-    fn emit_diagnostic(&self, diagnostic: Diagnostic<(BufId, BufRange)>) {
+impl<TR: Debug> DiagnosticsListener<TR> for DiagnosticsDumper {
+    fn emit_diagnostic(&self, diagnostic: Diagnostic<TR>) {
         println!("{:?}", diagnostic)
     }
 }

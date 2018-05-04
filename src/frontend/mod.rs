@@ -5,22 +5,22 @@ use diagnostics::*;
 use backend::*;
 use self::syntax::*;
 
-use codebase::{BufId, Codebase};
+use codebase::Codebase;
 
 pub fn analyze_file<
     C: Codebase,
-    CRF: CodeRefFactory,
-    B: Backend<CRF::CodeRef>,
-    D: DiagnosticsListener<CRF::CodeRef>,
+    TT: TokenTracker,
+    B: Backend<TT::TokenRef>,
+    D: DiagnosticsListener<TT::TokenRef>,
 >(
     name: String,
     codebase: C,
-    code_ref_factory: CRF,
+    token_tracker: TT,
     backend: B,
     diagnostics: &D,
 ) -> B {
     let factory = SemanticTokenSeqAnalyzerFactory::new();
-    let token_provider = TokenStreamSource::new(codebase, code_ref_factory);
+    let token_provider = TokenStreamSource::new(codebase, token_tracker);
     let mut session = Session::new(token_provider, factory, backend, diagnostics);
     session.analyze_chunk(ChunkId::File((name, None)));
     session.into_object()
@@ -29,7 +29,7 @@ pub fn analyze_file<
 trait TokenSeqAnalyzer {
     fn analyze<I, F>(&mut self, tokens: I, frontend: &mut F)
     where
-        I: Iterator<Item = (Token, F::CodeRef)>,
+        I: Iterator<Item = (Token, F::TokenRef)>,
         F: Frontend;
 }
 
@@ -44,7 +44,7 @@ impl SemanticTokenSeqAnalyzer {
 impl TokenSeqAnalyzer for SemanticTokenSeqAnalyzer {
     fn analyze<I, F>(&mut self, tokens: I, frontend: &mut F)
     where
-        I: Iterator<Item = (Token, F::CodeRef)>,
+        I: Iterator<Item = (Token, F::TokenRef)>,
         F: Frontend,
     {
         let actions = semantics::SemanticActions::new(frontend);
@@ -96,11 +96,15 @@ impl ExprFactory for StrExprFactory {
 }
 
 pub trait Frontend {
-    type CodeRef;
-    fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::CodeRef>);
+    type TokenRef;
+    fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::TokenRef>);
     fn emit_item(&mut self, item: Item);
-    fn define_label(&mut self, label: (String, Self::CodeRef));
-    fn define_macro(&mut self, name: (String, Self::CodeRef), tokens: Vec<(Token, Self::CodeRef)>);
+    fn define_label(&mut self, label: (String, Self::TokenRef));
+    fn define_macro(
+        &mut self,
+        name: (String, Self::TokenRef),
+        tokens: Vec<(Token, Self::TokenRef)>,
+    );
 }
 
 #[derive(Debug, PartialEq)]
@@ -124,10 +128,10 @@ struct Session<'a, TCS, SAF, B, DL: 'a> {
 impl<'a, TCS, SAF, B, DL> Session<'a, TCS, SAF, B, DL>
 where
     TCS: TokenizedCodeSource,
-    for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token, TCS::CodeRef)>,
+    for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token, TCS::TokenRef)>,
     SAF: TokenSeqAnalyzerFactory,
-    B: Backend<TCS::CodeRef>,
-    DL: DiagnosticsListener<TCS::CodeRef> + 'a,
+    B: Backend<TCS::TokenRef>,
+    DL: DiagnosticsListener<TCS::TokenRef> + 'a,
 {
     fn new(
         tokenized_code_source: TCS,
@@ -143,7 +147,7 @@ where
         }
     }
 
-    fn analyze_token_seq<I: IntoIterator<Item = (Token, TCS::CodeRef)>>(&mut self, tokens: I) {
+    fn analyze_token_seq<I: IntoIterator<Item = (Token, TCS::TokenRef)>>(&mut self, tokens: I) {
         let mut analyzer = self.analyzer_factory.mk_token_seq_analyzer();
         analyzer.analyze(tokens.into_iter(), self)
     }
@@ -157,7 +161,11 @@ where
         self.analyze_token_seq(&tokenized_src)
     }
 
-    fn invoke_macro(&mut self, name: (String, <Self as Frontend>::CodeRef), args: Vec<Vec<Token>>) {
+    fn invoke_macro(
+        &mut self,
+        name: (String, <Self as Frontend>::TokenRef),
+        args: Vec<Vec<Token>>,
+    ) {
         match self.tokenized_code_source
             .macro_invocation(name.clone(), args)
         {
@@ -171,14 +179,14 @@ where
 impl<'a, TCS, SAF, B, DL> Frontend for Session<'a, TCS, SAF, B, DL>
 where
     TCS: TokenizedCodeSource,
-    for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token, TCS::CodeRef)>,
+    for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token, TCS::TokenRef)>,
     SAF: TokenSeqAnalyzerFactory,
-    B: Backend<TCS::CodeRef>,
-    DL: DiagnosticsListener<TCS::CodeRef> + 'a,
+    B: Backend<TCS::TokenRef>,
+    DL: DiagnosticsListener<TCS::TokenRef> + 'a,
 {
-    type CodeRef = TCS::CodeRef;
+    type TokenRef = TCS::TokenRef;
 
-    fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::CodeRef>) {
+    fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::TokenRef>) {
         match chunk_id {
             ChunkId::File((name, _)) => self.include_source_file(name),
             ChunkId::Macro { name, args } => self.invoke_macro(name, args),
@@ -189,70 +197,78 @@ where
         self.backend.emit_item(item)
     }
 
-    fn define_label(&mut self, label: (String, Self::CodeRef)) {
+    fn define_label(&mut self, label: (String, Self::TokenRef)) {
         self.backend.add_label((&label.0, label.1))
     }
 
-    fn define_macro(&mut self, name: (String, Self::CodeRef), tokens: Vec<(Token, Self::CodeRef)>) {
+    fn define_macro(
+        &mut self,
+        name: (String, Self::TokenRef),
+        tokens: Vec<(Token, Self::TokenRef)>,
+    ) {
         self.tokenized_code_source.define_macro(name, tokens)
     }
 }
 
 trait TokenizedCodeSource
 where
-    for<'c> &'c Self::Tokenized: IntoIterator<Item = (Token, Self::CodeRef)>,
+    for<'c> &'c Self::Tokenized: IntoIterator<Item = (Token, Self::TokenRef)>,
 {
-    type CodeRef: Clone;
-    fn define_macro(&mut self, name: (String, Self::CodeRef), tokens: Vec<(Token, Self::CodeRef)>);
-    type MacroInvocationIter: Iterator<Item = (Token, Self::CodeRef)>;
+    type TokenRef: Clone;
+    fn define_macro(
+        &mut self,
+        name: (String, Self::TokenRef),
+        tokens: Vec<(Token, Self::TokenRef)>,
+    );
+    type MacroInvocationIter: Iterator<Item = (Token, Self::TokenRef)>;
     fn macro_invocation(
         &mut self,
-        name: (String, Self::CodeRef),
+        name: (String, Self::TokenRef),
         args: Vec<Vec<Token>>,
     ) -> Option<Self::MacroInvocationIter>;
     type Tokenized;
     fn tokenize_file(&mut self, filename: &str) -> Self::Tokenized;
 }
 
-struct TokenStreamSource<C: Codebase, CRF: CodeRefFactory> {
+struct TokenStreamSource<C: Codebase, TT: TokenTracker> {
     codebase: C,
-    code_ref_factory: CRF,
-    macro_defs: HashMap<String, Rc<Vec<(Token, CRF::CodeRef)>>>,
+    token_tracker: TT,
+    macro_defs: HashMap<String, Rc<Vec<(Token, TT::TokenRef)>>>,
 }
 
-impl<C: Codebase, CRF: CodeRefFactory> TokenStreamSource<C, CRF> {
-    fn new(codebase: C, code_ref_factory: CRF) -> TokenStreamSource<C, CRF> {
+impl<C: Codebase, TT: TokenTracker> TokenStreamSource<C, TT> {
+    fn new(codebase: C, token_tracker: TT) -> TokenStreamSource<C, TT> {
         TokenStreamSource {
             codebase,
-            code_ref_factory,
+            token_tracker,
             macro_defs: HashMap::new(),
         }
     }
 }
 
-impl<C: Codebase, CRF: CodeRefFactory> TokenizedCodeSource for TokenStreamSource<C, CRF> {
-    type CodeRef = CRF::CodeRef;
+impl<C: Codebase, TT: TokenTracker> TokenizedCodeSource for TokenStreamSource<C, TT> {
+    type TokenRef = TT::TokenRef;
 
-    fn define_macro(&mut self, name: (String, CRF::CodeRef), tokens: Vec<(Token, CRF::CodeRef)>) {
+    fn define_macro(&mut self, name: (String, TT::TokenRef), tokens: Vec<(Token, TT::TokenRef)>) {
         self.macro_defs.insert(name.0, Rc::new(tokens));
     }
 
-    type MacroInvocationIter = MacroDefIter<CRF::CodeRef>;
+    type MacroInvocationIter = MacroDefIter<TT::TokenRef>;
 
     fn macro_invocation(
         &mut self,
-        name: (String, CRF::CodeRef),
+        name: (String, TT::TokenRef),
         _args: Vec<Vec<Token>>,
     ) -> Option<Self::MacroInvocationIter> {
         self.macro_defs.get(&name.0).cloned().map(MacroDefIter::new)
     }
 
-    type Tokenized = TokenizedSrc<CRF>;
+    type Tokenized = TokenizedSrc<TT::BufContext>;
 
     fn tokenize_file(&mut self, filename: &str) -> Self::Tokenized {
         let buf_id = self.codebase.open(filename);
         let rc_src = self.codebase.buf(buf_id);
-        TokenizedSrc::new(buf_id, rc_src, self.code_ref_factory.clone())
+        TokenizedSrc::new(rc_src, self.token_tracker.mk_buf_context(buf_id, None))
     }
 }
 
@@ -280,46 +296,42 @@ impl<CR: Clone> Iterator for MacroDefIter<CR> {
     }
 }
 
-struct TokenizedSrc<CRF> {
-    buf_id: BufId,
+struct TokenizedSrc<LRF> {
     src: Rc<str>,
-    code_ref_factory: CRF,
+    lexeme_ref_factory: LRF,
 }
 
-impl<CRF: CodeRefFactory> TokenizedSrc<CRF> {
-    fn new(buf_id: BufId, src: Rc<str>, code_ref_factory: CRF) -> TokenizedSrc<CRF> {
+impl<LRF: LexemeRefFactory> TokenizedSrc<LRF> {
+    fn new(src: Rc<str>, lexeme_ref_factory: LRF) -> TokenizedSrc<LRF> {
         TokenizedSrc {
-            buf_id,
             src,
-            code_ref_factory,
+            lexeme_ref_factory,
         }
     }
 }
 
-impl<'a, CRF: CodeRefFactory> IntoIterator for &'a TokenizedSrc<CRF> {
+impl<'a, LRF: LexemeRefFactory> IntoIterator for &'a TokenizedSrc<LRF> {
     type Item = <Self::IntoIter as Iterator>::Item;
-    type IntoIter = TokenizedSrcIter<'a, CRF>;
+    type IntoIter = TokenizedSrcIter<'a, LRF>;
     fn into_iter(self) -> Self::IntoIter {
         TokenizedSrcIter {
-            buf_id: self.buf_id,
             tokens: syntax::tokenize(&self.src),
-            code_ref_factory: &self.code_ref_factory,
+            lexeme_ref_factory: &self.lexeme_ref_factory,
         }
     }
 }
 
-struct TokenizedSrcIter<'a, CRF: CodeRefFactory + 'a> {
-    buf_id: BufId,
+struct TokenizedSrcIter<'a, LRF: LexemeRefFactory + 'a> {
     tokens: syntax::lexer::Lexer<'a>,
-    code_ref_factory: &'a CRF,
+    lexeme_ref_factory: &'a LRF,
 }
 
-impl<'a, CRF: CodeRefFactory> Iterator for TokenizedSrcIter<'a, CRF> {
-    type Item = (Token, CRF::CodeRef);
+impl<'a, LRF: LexemeRefFactory> Iterator for TokenizedSrcIter<'a, LRF> {
+    type Item = (Token, LRF::TokenRef);
     fn next(&mut self) -> Option<Self::Item> {
         self.tokens
             .next()
-            .map(|(t, r)| (t, self.code_ref_factory.mk_code_ref(self.buf_id, r)))
+            .map(|(t, r)| (t, self.lexeme_ref_factory.mk_lexeme_ref(r)))
     }
 }
 
@@ -414,21 +426,21 @@ mod tests {
     }
 
     impl TokenizedCodeSource for MockTokenSource {
-        type CodeRef = ();
+        type TokenRef = ();
 
         fn define_macro(
             &mut self,
-            name: (String, Self::CodeRef),
-            tokens: Vec<(Token, Self::CodeRef)>,
+            name: (String, Self::TokenRef),
+            tokens: Vec<(Token, Self::TokenRef)>,
         ) {
             self.macros.insert(name.0, tokens);
         }
 
-        type MacroInvocationIter = std::vec::IntoIter<(Token, Self::CodeRef)>;
+        type MacroInvocationIter = std::vec::IntoIter<(Token, Self::TokenRef)>;
 
         fn macro_invocation(
             &mut self,
-            name: (String, Self::CodeRef),
+            name: (String, Self::TokenRef),
             _args: Vec<Vec<Token>>,
         ) -> Option<Self::MacroInvocationIter> {
             self.macros.get(&name.0).cloned().map(|v| v.into_iter())
@@ -472,7 +484,7 @@ mod tests {
     impl<'a> TokenSeqAnalyzer for Mock<'a> {
         fn analyze<I, F>(&mut self, tokens: I, _frontend: &mut F)
         where
-            I: Iterator<Item = (Token, F::CodeRef)>,
+            I: Iterator<Item = (Token, F::TokenRef)>,
             F: Frontend,
         {
             self.log

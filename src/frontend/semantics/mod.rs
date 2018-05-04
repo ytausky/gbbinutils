@@ -18,45 +18,45 @@ impl<'a, F: Frontend + 'a> SemanticActions<'a, F> {
     }
 }
 
-impl<'a, F: Frontend + 'a> syntax::FileContext<String, F::CodeRef> for SemanticActions<'a, F> {
+impl<'a, F: Frontend + 'a> syntax::FileContext<String, F::TokenRef> for SemanticActions<'a, F> {
     type CommandContext = CommandActions<'a, F>;
     type MacroDefContext = MacroDefActions<'a, F>;
     type MacroInvocationContext = MacroInvocationActions<'a, F>;
 
-    fn add_label(&mut self, label: (<String as TokenSpec>::Label, F::CodeRef)) {
+    fn add_label(&mut self, label: (<String as TokenSpec>::Label, F::TokenRef)) {
         self.session.define_label(label);
     }
 
     fn enter_command(
         self,
-        name: (<String as TokenSpec>::Command, F::CodeRef),
+        name: (<String as TokenSpec>::Command, F::TokenRef),
     ) -> Self::CommandContext {
         CommandActions::new(name, self)
     }
 
     fn enter_macro_def(
         self,
-        name: (<String as TokenSpec>::Label, F::CodeRef),
+        name: (<String as TokenSpec>::Label, F::TokenRef),
     ) -> Self::MacroDefContext {
         MacroDefActions::new(name, self)
     }
 
     fn enter_macro_invocation(
         self,
-        name: (<String as TokenSpec>::Atom, F::CodeRef),
+        name: (<String as TokenSpec>::Atom, F::TokenRef),
     ) -> Self::MacroInvocationContext {
         MacroInvocationActions::new(name, self)
     }
 }
 
 pub struct CommandActions<'a, F: Frontend + 'a> {
-    name: (Command, F::CodeRef),
+    name: (Command, F::TokenRef),
     args: Vec<SynExpr<syntax::Token>>,
     parent: SemanticActions<'a, F>,
 }
 
 impl<'a, F: Frontend + 'a> CommandActions<'a, F> {
-    fn new(name: (Command, F::CodeRef), parent: SemanticActions<'a, F>) -> CommandActions<'a, F> {
+    fn new(name: (Command, F::TokenRef), parent: SemanticActions<'a, F>) -> CommandActions<'a, F> {
         CommandActions {
             name,
             args: Vec::new(),
@@ -102,13 +102,13 @@ impl<'a, F: Frontend + 'a> syntax::CommandContext for CommandActions<'a, F> {
 }
 
 pub struct MacroDefActions<'a, F: Frontend + 'a> {
-    name: (String, F::CodeRef),
-    tokens: Vec<(Token, F::CodeRef)>,
+    name: (String, F::TokenRef),
+    tokens: Vec<(Token, F::TokenRef)>,
     parent: SemanticActions<'a, F>,
 }
 
 impl<'a, F: Frontend + 'a> MacroDefActions<'a, F> {
-    fn new(name: (String, F::CodeRef), parent: SemanticActions<'a, F>) -> MacroDefActions<'a, F> {
+    fn new(name: (String, F::TokenRef), parent: SemanticActions<'a, F>) -> MacroDefActions<'a, F> {
         MacroDefActions {
             name,
             tokens: Vec::new(),
@@ -117,11 +117,11 @@ impl<'a, F: Frontend + 'a> MacroDefActions<'a, F> {
     }
 }
 
-impl<'a, F: Frontend + 'a> syntax::TokenSeqContext<F::CodeRef> for MacroDefActions<'a, F> {
+impl<'a, F: Frontend + 'a> syntax::TokenSeqContext<F::TokenRef> for MacroDefActions<'a, F> {
     type Token = Token;
     type Parent = SemanticActions<'a, F>;
 
-    fn push_token(&mut self, token: (Self::Token, F::CodeRef)) {
+    fn push_token(&mut self, token: (Self::Token, F::TokenRef)) {
         self.tokens.push(token)
     }
 
@@ -132,14 +132,14 @@ impl<'a, F: Frontend + 'a> syntax::TokenSeqContext<F::CodeRef> for MacroDefActio
 }
 
 pub struct MacroInvocationActions<'a, F: Frontend + 'a> {
-    name: (Atom<String>, F::CodeRef),
+    name: (Atom<String>, F::TokenRef),
     args: Vec<Vec<Token>>,
     parent: SemanticActions<'a, F>,
 }
 
 impl<'a, F: Frontend + 'a> MacroInvocationActions<'a, F> {
     fn new(
-        name: (Atom<String>, F::CodeRef),
+        name: (Atom<String>, F::TokenRef),
         parent: SemanticActions<'a, F>,
     ) -> MacroInvocationActions<'a, F> {
         MacroInvocationActions {
@@ -154,7 +154,7 @@ impl<'a, F: Frontend + 'a> MacroInvocationActions<'a, F> {
     }
 }
 
-impl<'a, F: Frontend + 'a> syntax::MacroInvocationContext<F::CodeRef>
+impl<'a, F: Frontend + 'a> syntax::MacroInvocationContext<F::TokenRef>
     for MacroInvocationActions<'a, F>
 {
     type Token = Token;
@@ -191,11 +191,11 @@ impl<'a, F: Frontend + 'a> MacroArgActions<'a, F> {
     }
 }
 
-impl<'a, F: Frontend + 'a> syntax::TokenSeqContext<F::CodeRef> for MacroArgActions<'a, F> {
+impl<'a, F: Frontend + 'a> syntax::TokenSeqContext<F::TokenRef> for MacroArgActions<'a, F> {
     type Token = Token;
     type Parent = MacroInvocationActions<'a, F>;
 
-    fn push_token(&mut self, token: (Self::Token, F::CodeRef)) {
+    fn push_token(&mut self, token: (Self::Token, F::TokenRef)) {
         self.tokens.push(token.0)
     }
 
@@ -240,9 +240,9 @@ mod tests {
     }
 
     impl Frontend for TestFrontend {
-        type CodeRef = ();
+        type TokenRef = ();
 
-        fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::CodeRef>) {
+        fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::TokenRef>) {
             self.0.push(TestOperation::AnalyzeChunk(chunk_id))
         }
 
@@ -250,11 +250,11 @@ mod tests {
             self.0.push(TestOperation::EmitItem(item))
         }
 
-        fn define_label(&mut self, (label, _): (String, Self::CodeRef)) {
+        fn define_label(&mut self, (label, _): (String, Self::TokenRef)) {
             self.0.push(TestOperation::Label(label))
         }
 
-        fn define_macro(&mut self, (name, _): (String, Self::CodeRef), tokens: Vec<(Token, ())>) {
+        fn define_macro(&mut self, (name, _): (String, Self::TokenRef), tokens: Vec<(Token, ())>) {
             self.0.push(TestOperation::DefineMacro(
                 name,
                 tokens.into_iter().map(|(t, _)| t).collect(),

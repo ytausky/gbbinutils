@@ -9,7 +9,7 @@ pub fn analyze_file(name: &str) {
     frontend::analyze_file(
         name.to_string(),
         codebase,
-        diagnostics::TrivialCodeRefFactory {},
+        diagnostics::SimpleTokenTracker {},
         OutputDumper::new(),
         &diagnostics,
     );
@@ -24,7 +24,7 @@ pub fn assemble_rom(name: &str) {
     let rom = frontend::analyze_file(
         name.to_string(),
         codebase,
-        diagnostics::TrivialCodeRefFactory {},
+        diagnostics::SimpleTokenTracker {},
         backend::Rom::new(&diagnostics),
         &diagnostics,
     );
