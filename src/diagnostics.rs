@@ -1,6 +1,9 @@
 use codebase::{BufId, BufRange};
 use std::{fmt::Debug, rc::Rc};
 
+#[cfg(test)]
+use std::io::{self, Write};
+
 pub trait TokenTracker {
     type TokenRef: Clone;
     type BufContext: Clone + LexemeRefFactory<TokenRef = Self::TokenRef>;
@@ -126,6 +129,17 @@ fn mk_diagnostic_message<'a>(
 }
 
 #[cfg(test)]
+fn render_message<'a, W: Write>(message: &Message<'a>, output: &mut W) -> io::Result<()> {
+    output.write_all(message.text.as_bytes())?;
+    output.write_all("\n".as_bytes())?;
+    for &(_, line) in message.src_lines.iter() {
+        output.write_all(line.as_bytes())?;
+        output.write_all("\n".as_bytes())?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -146,5 +160,17 @@ mod tests {
                 src_lines: vec![(LineNumber(2), "    my_macro a, $12")],
             }
         )
+    }
+
+    #[test]
+    fn write_message() {
+        let message = Message {
+            text: "invocation of undefined macro `my_macro`".to_string(),
+            src_lines: vec![(LineNumber(2), "    my_macro a, $12")],
+        };
+        let expected = "invocation of undefined macro `my_macro`\n    my_macro a, $12\n";
+        let mut actual = Vec::new();
+        render_message(&message, &mut actual).unwrap();
+        assert_eq!(String::from_utf8(actual).unwrap(), expected)
     }
 }
