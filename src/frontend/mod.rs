@@ -14,7 +14,7 @@ pub fn analyze_file<
     D: DiagnosticsListener<TT::TokenRef>,
 >(
     name: String,
-    codebase: C,
+    codebase: &C,
     token_tracker: TT,
     backend: B,
     diagnostics: &D,
@@ -230,16 +230,16 @@ where
     fn tokenize_file(&mut self, filename: &str) -> Self::Tokenized;
 }
 
-struct TokenStreamSource<C: Codebase, TT: TokenTracker> {
-    codebase: C,
+struct TokenStreamSource<'a, C: Codebase + 'a, TT: TokenTracker> {
+    codebase: &'a C,
     token_tracker: TT,
     macro_defs: HashMap<String, Rc<MacroDef<TT::TokenRef>>>,
 }
 
 type MacroDef<TR> = Vec<(Token, TR)>;
 
-impl<C: Codebase, TT: TokenTracker> TokenStreamSource<C, TT> {
-    fn new(codebase: C, token_tracker: TT) -> TokenStreamSource<C, TT> {
+impl<'a, C: Codebase + 'a, TT: TokenTracker> TokenStreamSource<'a, C, TT> {
+    fn new(codebase: &'a C, token_tracker: TT) -> TokenStreamSource<C, TT> {
         TokenStreamSource {
             codebase,
             token_tracker,
@@ -248,7 +248,7 @@ impl<C: Codebase, TT: TokenTracker> TokenStreamSource<C, TT> {
     }
 }
 
-impl<C: Codebase, TT: TokenTracker> TokenizedCodeSource for TokenStreamSource<C, TT> {
+impl<'a, C: Codebase + 'a, TT: TokenTracker> TokenizedCodeSource for TokenStreamSource<'a, C, TT> {
     type TokenRef = TT::TokenRef;
 
     fn define_macro(&mut self, name: (String, TT::TokenRef), tokens: Vec<(Token, TT::TokenRef)>) {

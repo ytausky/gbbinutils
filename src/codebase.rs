@@ -1,4 +1,4 @@
-use std::{cmp, fs, ops, rc::Rc};
+use std::{cmp, fs, ops, cell::RefCell, rc::Rc};
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub struct LineIndex(usize);
@@ -85,7 +85,6 @@ impl StringSrcBuf {
         }
     }
 
-    #[cfg(test)]
     pub fn lines<'a>(&'a self, line_range: ops::Range<LineIndex>) -> TextLines<'a> {
         TextLines {
             buf: self,
@@ -98,13 +97,11 @@ impl StringSrcBuf {
     }
 }
 
-#[cfg(test)]
 pub struct TextLines<'a> {
     buf: &'a StringSrcBuf,
     remaining_range: ops::Range<LineIndex>,
 }
 
-#[cfg(test)]
 impl<'a> Iterator for TextLines<'a> {
     type Item = (LineNumber, &'a str);
     fn next(&mut self) -> Option<Self::Item> {
@@ -180,7 +177,7 @@ fn build_line_ranges(src: &str) -> Vec<ops::Range<usize>> {
 }
 
 pub trait FileSystem {
-    fn read_file(&mut self, filename: &str) -> String;
+    fn read_file(&self, filename: &str) -> String;
 }
 
 pub struct StdFileSystem;
@@ -192,7 +189,7 @@ impl StdFileSystem {
 }
 
 impl FileSystem for StdFileSystem {
-    fn read_file(&mut self, filename: &str) -> String {
+    fn read_file(&self, filename: &str) -> String {
         use std::io::prelude::*;
         let mut file = fs::File::open(filename).unwrap();
         let mut src = String::new();
@@ -202,32 +199,32 @@ impl FileSystem for StdFileSystem {
 }
 
 pub trait Codebase {
-    fn open(&mut self, path: &str) -> BufId;
+    fn open(&self, path: &str) -> BufId;
     fn buf(&self, buf_id: BufId) -> Rc<str>;
 }
 
 pub struct FileCodebase<FS: FileSystem> {
     fs: FS,
-    cache: TextCache,
+    pub cache: RefCell<TextCache>,
 }
 
 impl<FS: FileSystem> FileCodebase<FS> {
     pub fn new(fs: FS) -> FileCodebase<FS> {
         FileCodebase {
             fs,
-            cache: TextCache::new(),
+            cache: RefCell::new(TextCache::new()),
         }
     }
 }
 
 impl<FS: FileSystem> Codebase for FileCodebase<FS> {
-    fn open(&mut self, path: &str) -> BufId {
+    fn open(&self, path: &str) -> BufId {
         let text = self.fs.read_file(path);
-        self.cache.add_src_buf(text)
+        self.cache.borrow_mut().add_src_buf(text)
     }
 
     fn buf(&self, buf_id: BufId) -> Rc<str> {
-        self.cache.buf(buf_id).text()
+        self.cache.borrow().buf(buf_id).text()
     }
 }
 

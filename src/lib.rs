@@ -5,10 +5,10 @@ mod frontend;
 
 pub fn analyze_file(name: &str) {
     let codebase = codebase::FileCodebase::new(codebase::StdFileSystem::new());
-    let diagnostics = diagnostics::DiagnosticsDumper::new();
+    let diagnostics = diagnostics::TerminalDiagnostics::new(&codebase.cache);
     frontend::analyze_file(
         name.to_string(),
-        codebase,
+        &codebase,
         diagnostics::SimpleTokenTracker {},
         OutputDumper::new(),
         &diagnostics,
@@ -20,10 +20,10 @@ use std::io::Write;
 
 pub fn assemble_rom(name: &str) {
     let codebase = codebase::FileCodebase::new(codebase::StdFileSystem::new());
-    let diagnostics = diagnostics::DiagnosticsDumper::new();
+    let diagnostics = diagnostics::TerminalDiagnostics::new(&codebase.cache);
     let rom = frontend::analyze_file(
         name.to_string(),
-        codebase,
+        &codebase,
         diagnostics::SimpleTokenTracker {},
         backend::Rom::new(&diagnostics),
         &diagnostics,

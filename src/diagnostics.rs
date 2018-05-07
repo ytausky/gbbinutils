@@ -1,8 +1,5 @@
-use codebase::{BufId, BufRange};
-use std::{fmt::Debug, rc::Rc};
-
-#[cfg(test)]
-use std::io::{self, Write};
+use codebase::{BufId, BufRange, LineNumber, TextBuf, TextCache};
+use std::{io, cell::RefCell, rc::Rc};
 
 pub trait TokenTracker {
     type TokenRef: Clone;
@@ -82,33 +79,32 @@ pub enum Width {
     Byte,
 }
 
-pub struct DiagnosticsDumper;
+pub struct TerminalDiagnostics<'a> {
+    codebase: &'a RefCell<TextCache>,
+}
 
-impl DiagnosticsDumper {
-    pub fn new() -> DiagnosticsDumper {
-        DiagnosticsDumper {}
+impl<'a> TerminalDiagnostics<'a> {
+    pub fn new(codebase: &'a RefCell<TextCache>) -> TerminalDiagnostics<'a> {
+        TerminalDiagnostics { codebase }
     }
 }
 
-impl<TR: Debug> DiagnosticsListener<TR> for DiagnosticsDumper {
-    fn emit_diagnostic(&self, diagnostic: Diagnostic<TR>) {
-        println!("{:?}", diagnostic)
+impl<'a> DiagnosticsListener<Rc<TokenRefData>> for TerminalDiagnostics<'a> {
+    fn emit_diagnostic(&self, diagnostic: Diagnostic<Rc<TokenRefData>>) {
+        let codebase = self.codebase.borrow();
+        let message = mk_diagnostic_message(diagnostic, &codebase);
+        render_message(&message, &mut io::stdout()).unwrap()
     }
 }
 
-#[cfg(test)]
-use codebase::{LineNumber, TextBuf, TextCache};
-
-#[cfg(test)]
 #[derive(Debug, PartialEq)]
 struct Message<'a> {
     text: String,
     src_lines: Vec<(LineNumber, &'a str)>,
 }
 
-#[cfg(test)]
 fn mk_diagnostic_message<'a>(
-    diagnostic: Diagnostic<(BufId, BufRange)>,
+    diagnostic: Diagnostic<Rc<TokenRefData>>,
     codebase: &'a TextCache,
 ) -> Message<'a> {
     let mut collectible_ranges = Vec::new();
@@ -121,15 +117,21 @@ fn mk_diagnostic_message<'a>(
     };
     let mut src_lines = Vec::new();
     for range_ref in collectible_ranges {
-        let buf = codebase.buf(range_ref.0);
-        let text_range = buf.text_range(&range_ref.1);
-        src_lines.extend(buf.lines(text_range.start.line..text_range.end.line + 1))
+        match *range_ref {
+            TokenRefData::Lexeme {
+                ref range,
+                ref context,
+            } => {
+                let buf = codebase.buf(context.buf_id);
+                let text_range = buf.text_range(&range);
+                src_lines.extend(buf.lines(text_range.start.line..text_range.end.line + 1))
+            }
+        }
     }
     Message { text, src_lines }
 }
 
-#[cfg(test)]
-fn render_message<'a, W: Write>(message: &Message<'a>, output: &mut W) -> io::Result<()> {
+fn render_message<'a, W: io::Write>(message: &Message<'a>, output: &mut W) -> io::Result<()> {
     output.write_all(message.text.as_bytes())?;
     output.write_all("\n".as_bytes())?;
     for &(_, line) in message.src_lines.iter() {
@@ -148,9 +150,16 @@ mod tests {
         let mut codebase = TextCache::new();
         let src = "    nop\n    my_macro a, $12\n\n";
         let buf_id = codebase.add_src_buf(src.to_string());
-        let buf_range = BufRange::from(12..20);
+        let range = BufRange::from(12..20);
+        let token_ref = Rc::new(TokenRefData::Lexeme {
+            range,
+            context: Rc::new(BufContextData {
+                buf_id,
+                included_from: None,
+            }),
+        });
         let diagnostic = Diagnostic::UndefinedMacro {
-            name: ("my_macro".to_string(), (buf_id, buf_range)),
+            name: ("my_macro".to_string(), token_ref),
         };
         let message = mk_diagnostic_message(diagnostic, &codebase);
         assert_eq!(
