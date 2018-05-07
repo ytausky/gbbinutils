@@ -1,5 +1,5 @@
 use backend::*;
-use diagnostics::Diagnostic;
+use diagnostics::{Diagnostic, Message};
 use frontend::ExprFactory;
 use frontend::syntax::{keyword, token, Atom, SynExpr, Token};
 
@@ -135,9 +135,12 @@ impl<'a, I: Iterator<Item = Operand>> Analysis<I> {
     fn analyze_nullary_instruction(&mut self, instruction: Instruction) -> AnalysisResult<()> {
         match self.operands.by_ref().count() {
             0 => Ok(instruction),
-            n => Err(Diagnostic::OperandCount {
-                actual: n,
-                expected: 0,
+            n => Err(Diagnostic {
+                message: Message::OperandCount {
+                    actual: n,
+                    expected: 0,
+                },
+                highlight: None,
             }),
         }
     }
@@ -555,9 +558,12 @@ mod tests {
     fn analyze_nop_a() {
         assert_eq!(
             analyze(Command::Nop, vec![atom(A)]),
-            Err(Diagnostic::OperandCount {
-                actual: 1,
-                expected: 0,
+            Err(Diagnostic {
+                message: Message::OperandCount {
+                    actual: 1,
+                    expected: 0,
+                },
+                highlight: None,
             })
         )
     }

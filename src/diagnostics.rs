@@ -63,14 +63,20 @@ impl LexemeRefFactory for SimpleBufTokenRefFactory {
     }
 }
 
-pub trait DiagnosticsListener<R> {
-    fn emit_diagnostic(&self, diagnostic: Diagnostic<R>);
+pub trait DiagnosticsListener<TR> {
+    fn emit_diagnostic(&self, diagnostic: Diagnostic<TR>);
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Diagnostic<R> {
+pub struct Diagnostic<TR> {
+    pub message: Message,
+    pub highlight: Option<TR>,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Message {
     OperandCount { actual: usize, expected: usize },
-    UndefinedMacro { name: (String, R) },
+    UndefinedMacro { name: String },
     ValueOutOfRange { value: i32, width: Width },
 }
 
@@ -92,32 +98,28 @@ impl<'a> TerminalDiagnostics<'a> {
 impl<'a> DiagnosticsListener<Rc<TokenRefData>> for TerminalDiagnostics<'a> {
     fn emit_diagnostic(&self, diagnostic: Diagnostic<Rc<TokenRefData>>) {
         let codebase = self.codebase.borrow();
-        let message = mk_diagnostic_message(diagnostic, &codebase);
-        render_message(&message, &mut io::stdout()).unwrap()
+        let elaborated_diagnostic = elaborate(diagnostic, &codebase);
+        render(&elaborated_diagnostic, &mut io::stdout()).unwrap()
     }
 }
 
 #[derive(Debug, PartialEq)]
-struct Message<'a> {
+struct ElaboratedDiagnostic<'a> {
     text: String,
     src_lines: Vec<(LineNumber, &'a str)>,
 }
 
-fn mk_diagnostic_message<'a>(
+fn elaborate<'a>(
     diagnostic: Diagnostic<Rc<TokenRefData>>,
     codebase: &'a TextCache,
-) -> Message<'a> {
-    let mut collectible_ranges = Vec::new();
-    let text = match diagnostic {
-        Diagnostic::UndefinedMacro { name } => {
-            collectible_ranges.push(name.1);
-            format!("invocation of undefined macro `{}`", name.0)
-        }
+) -> ElaboratedDiagnostic<'a> {
+    let text = match diagnostic.message {
+        Message::UndefinedMacro { name } => format!("invocation of undefined macro `{}`", name),
         _ => panic!(),
     };
     let mut src_lines = Vec::new();
-    for range_ref in collectible_ranges {
-        match *range_ref {
+    if let Some(rc_token_ref) = diagnostic.highlight {
+        match *rc_token_ref {
             TokenRefData::Lexeme {
                 ref range,
                 ref context,
@@ -128,13 +130,16 @@ fn mk_diagnostic_message<'a>(
             }
         }
     }
-    Message { text, src_lines }
+    ElaboratedDiagnostic { text, src_lines }
 }
 
-fn render_message<'a, W: io::Write>(message: &Message<'a>, output: &mut W) -> io::Result<()> {
-    output.write_all(message.text.as_bytes())?;
+fn render<'a, W: io::Write>(
+    elaborated_diagnostic: &ElaboratedDiagnostic<'a>,
+    output: &mut W,
+) -> io::Result<()> {
+    output.write_all(elaborated_diagnostic.text.as_bytes())?;
     output.write_all("\n".as_bytes())?;
-    for &(_, line) in message.src_lines.iter() {
+    for &(_, line) in elaborated_diagnostic.src_lines.iter() {
         output.write_all(line.as_bytes())?;
         output.write_all("\n".as_bytes())?;
     }
@@ -158,13 +163,16 @@ mod tests {
                 included_from: None,
             }),
         });
-        let diagnostic = Diagnostic::UndefinedMacro {
-            name: ("my_macro".to_string(), token_ref),
+        let diagnostic = Diagnostic {
+            message: Message::UndefinedMacro {
+                name: "my_macro".to_string(),
+            },
+            highlight: Some(token_ref),
         };
-        let message = mk_diagnostic_message(diagnostic, &codebase);
+        let elaborated_diagnostic = elaborate(diagnostic, &codebase);
         assert_eq!(
-            message,
-            Message {
+            elaborated_diagnostic,
+            ElaboratedDiagnostic {
                 text: "invocation of undefined macro `my_macro`".to_string(),
                 src_lines: vec![(LineNumber(2), "    my_macro a, $12")],
             }
@@ -172,14 +180,14 @@ mod tests {
     }
 
     #[test]
-    fn write_message() {
-        let message = Message {
+    fn render_elaborated_diagnostic() {
+        let elaborated_diagnostic = ElaboratedDiagnostic {
             text: "invocation of undefined macro `my_macro`".to_string(),
             src_lines: vec![(LineNumber(2), "    my_macro a, $12")],
         };
         let expected = "invocation of undefined macro `my_macro`\n    my_macro a, $12\n";
         let mut actual = Vec::new();
-        render_message(&message, &mut actual).unwrap();
+        render(&elaborated_diagnostic, &mut actual).unwrap();
         assert_eq!(String::from_utf8(actual).unwrap(), expected)
     }
 }

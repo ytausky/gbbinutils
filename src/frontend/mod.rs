@@ -170,8 +170,13 @@ where
             .macro_invocation(name.clone(), args)
         {
             Some(tokens) => self.analyze_token_seq(tokens),
-            None => self.diagnostics
-                .emit_diagnostic(Diagnostic::UndefinedMacro { name }),
+            None => {
+                let (name, name_ref) = name;
+                self.diagnostics.emit_diagnostic(Diagnostic {
+                    message: Message::UndefinedMacro { name },
+                    highlight: Some(name_ref),
+                })
+            }
         }
     }
 }
@@ -402,8 +407,11 @@ mod tests {
         assert_eq!(
             *log.borrow(),
             [
-                TestEvent::Diagnostic(Diagnostic::UndefinedMacro {
-                    name: (name.to_string(), ()),
+                TestEvent::Diagnostic(Diagnostic {
+                    message: Message::UndefinedMacro {
+                        name: name.to_string(),
+                    },
+                    highlight: Some(()),
                 })
             ]
         );
