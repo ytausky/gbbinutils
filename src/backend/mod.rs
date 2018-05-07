@@ -40,13 +40,11 @@ impl<'a, R, T: 'a + DiagnosticsListener<R>> Backend<R> for Rom<'a, T> {
         match item {
             Item::Byte(Expr::Literal(n)) => {
                 if !is_in_byte_range(n) {
-                    self.diagnostics.emit_diagnostic(Diagnostic {
-                        message: Message::ValueOutOfRange {
+                    self.diagnostics
+                        .emit_diagnostic(Diagnostic::new(Message::ValueOutOfRange {
                             value: n,
                             width: Width::Byte,
-                        },
-                        highlight: None,
-                    })
+                        }))
                 }
                 self.data[self.counter] = n as u8;
                 self.counter += 1
@@ -203,13 +201,10 @@ mod tests {
         assert_eq!(
             *listener.diagnostics.borrow(),
             [
-                Diagnostic {
-                    message: Message::ValueOutOfRange {
-                        value: value,
-                        width: Width::Byte,
-                    },
-                    highlight: None,
-                }
+                Diagnostic::new(Message::ValueOutOfRange {
+                    value: value,
+                    width: Width::Byte,
+                })
             ]
         );
     }

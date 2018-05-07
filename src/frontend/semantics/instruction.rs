@@ -135,13 +135,10 @@ impl<'a, I: Iterator<Item = Operand>> Analysis<I> {
     fn analyze_nullary_instruction(&mut self, instruction: Instruction) -> AnalysisResult<()> {
         match self.operands.by_ref().count() {
             0 => Ok(instruction),
-            n => Err(Diagnostic {
-                message: Message::OperandCount {
-                    actual: n,
-                    expected: 0,
-                },
-                highlight: None,
-            }),
+            n => Err(Diagnostic::new(Message::OperandCount {
+                actual: n,
+                expected: 0,
+            })),
         }
     }
 
@@ -558,13 +555,10 @@ mod tests {
     fn analyze_nop_a() {
         assert_eq!(
             analyze(Command::Nop, vec![atom(A)]),
-            Err(Diagnostic {
-                message: Message::OperandCount {
-                    actual: 1,
-                    expected: 0,
-                },
-                highlight: None,
-            })
+            Err(Diagnostic::new(Message::OperandCount {
+                actual: 1,
+                expected: 0,
+            },))
         )
     }
 }

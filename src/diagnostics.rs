@@ -69,8 +69,22 @@ pub trait DiagnosticsListener<TR> {
 
 #[derive(Debug, PartialEq)]
 pub struct Diagnostic<TR> {
-    pub message: Message,
-    pub highlight: Option<TR>,
+    message: Message,
+    highlight: Option<TR>,
+}
+
+impl<TR> Diagnostic<TR> {
+    pub fn new(message: Message) -> Diagnostic<TR> {
+        Diagnostic {
+            message,
+            highlight: None,
+        }
+    }
+
+    pub fn with_highlight(mut self, token_ref: TR) -> Diagnostic<TR> {
+        self.highlight = Some(token_ref);
+        self
+    }
 }
 
 #[derive(Debug, PartialEq)]

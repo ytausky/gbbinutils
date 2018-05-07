@@ -172,10 +172,9 @@ where
             Some(tokens) => self.analyze_token_seq(tokens),
             None => {
                 let (name, name_ref) = name;
-                self.diagnostics.emit_diagnostic(Diagnostic {
-                    message: Message::UndefinedMacro { name },
-                    highlight: Some(name_ref),
-                })
+                self.diagnostics.emit_diagnostic(
+                    Diagnostic::new(Message::UndefinedMacro { name }).with_highlight(name_ref),
+                )
             }
         }
     }
@@ -400,19 +399,15 @@ mod tests {
 
     #[test]
     fn diagnose_undefined_macro() {
-        let name = "my_macro";
+        let name = "my_macro".to_string();
         let log = TestLog::default();
-        TestFixture::new(&log)
-            .when(|mut session| session.invoke_macro((name.to_string(), ()), vec![]));
+        TestFixture::new(&log).when(|mut session| session.invoke_macro((name.clone(), ()), vec![]));
         assert_eq!(
             *log.borrow(),
             [
-                TestEvent::Diagnostic(Diagnostic {
-                    message: Message::UndefinedMacro {
-                        name: name.to_string(),
-                    },
-                    highlight: Some(()),
-                })
+                TestEvent::Diagnostic(
+                    Diagnostic::new(Message::UndefinedMacro { name }).with_highlight(())
+                )
             ]
         );
     }
