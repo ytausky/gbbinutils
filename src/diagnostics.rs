@@ -164,11 +164,13 @@ fn render<'a, W: io::Write>(
 mod tests {
     use super::*;
 
+    static DUMMY_FILE: &str = "/my/file";
+
     #[test]
     fn mk_message_for_undefined_macro() {
         let mut codebase = TextCache::new();
         let src = "    nop\n    my_macro a, $12\n\n";
-        let buf_id = codebase.add_src_buf(src.to_string());
+        let buf_id = codebase.add_src_buf(DUMMY_FILE.into(), src.to_string());
         let range = BufRange::from(12..20);
         let token_ref = Rc::new(TokenRefData::Lexeme {
             range,

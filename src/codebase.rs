@@ -45,17 +45,23 @@ pub trait TextBuf {
 }
 
 pub struct StringSrcBuf {
+    name: String,
     src: Rc<str>,
     line_ranges: Vec<BufRange>,
 }
 
 impl StringSrcBuf {
-    fn new(src: String) -> StringSrcBuf {
+    fn new(name: String, src: String) -> StringSrcBuf {
         let line_ranges = build_line_ranges(&src);
         StringSrcBuf {
+            name,
             src: src.into(),
             line_ranges,
         }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     fn line_index(&self, buf_offset: usize) -> LineIndex {
@@ -138,9 +144,9 @@ impl TextCache {
         TextCache { bufs: Vec::new() }
     }
 
-    pub fn add_src_buf(&mut self, src: String) -> BufId {
+    pub fn add_src_buf(&mut self, name: String, src: String) -> BufId {
         let buf_id = BufId(self.bufs.len());
-        self.bufs.push(StringSrcBuf::new(src));
+        self.bufs.push(StringSrcBuf::new(name, src));
         buf_id
     }
 
@@ -220,7 +226,7 @@ impl<FS: FileSystem> FileCodebase<FS> {
 impl<FS: FileSystem> Codebase for FileCodebase<FS> {
     fn open(&self, path: &str) -> BufId {
         let text = self.fs.read_file(path);
-        self.cache.borrow_mut().add_src_buf(text)
+        self.cache.borrow_mut().add_src_buf(path.to_string(), text)
     }
 
     fn buf(&self, buf_id: BufId) -> Rc<str> {
@@ -232,11 +238,13 @@ impl<FS: FileSystem> Codebase for FileCodebase<FS> {
 mod tests {
     use super::*;
 
+    static NONE: &str = "<none>";
+
     #[test]
     fn iterate_src() {
         let mut cache = TextCache::new();
         let src = "src";
-        let buf_id = cache.add_src_buf(String::from(src));
+        let buf_id = cache.add_src_buf(NONE.into(), src.to_string());
         let rc_src = cache.buf(buf_id).text();
         let mut iter = rc_src.char_indices();
         assert_eq!(iter.next(), Some((0, 's')));
@@ -249,14 +257,14 @@ mod tests {
     fn get_line() {
         let mut cache = TextCache::new();
         let src = "first line\nsecond line\nthird line";
-        let buf_id = cache.add_src_buf(src.into());
+        let buf_id = cache.add_src_buf(NONE.into(), src.into());
         assert_eq!(cache.get_line(buf_id, 1), "second line")
     }
 
     #[test]
     fn text_range_in_middle_of_line() {
         let src = "abcdefg\nhijklmn";
-        let buf = StringSrcBuf::new(src.into());
+        let buf = StringSrcBuf::new(NONE.into(), src.into());
         let buf_range = 9..12;
         let text_range = buf.text_range(&buf_range);
         assert_eq!(
@@ -277,7 +285,7 @@ mod tests {
     #[test]
     fn borrow_some_lines() {
         let text = "my first line\nsome second line\nand a third";
-        let buf = StringSrcBuf::new(text.to_string());
+        let buf = StringSrcBuf::new(NONE.into(), text.to_string());
         let lines = buf.lines(LineIndex(1)..LineIndex(3));
         assert_eq!(
             lines.collect::<Vec<_>>(),
