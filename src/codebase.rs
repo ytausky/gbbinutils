@@ -1,4 +1,4 @@
-use std::{cmp, fs, ops, cell::RefCell, rc::Rc};
+use std::{cmp, fmt, fs, ops, cell::RefCell, rc::Rc};
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub struct LineIndex(usize);
@@ -19,6 +19,12 @@ impl ops::AddAssign<usize> for LineIndex {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LineNumber(pub usize);
+
+impl fmt::Display for LineNumber {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        self.0.fmt(formatter)
+    }
+}
 
 impl From<LineIndex> for LineNumber {
     fn from(line_index: LineIndex) -> LineNumber {
