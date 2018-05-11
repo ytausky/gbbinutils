@@ -2,7 +2,7 @@
 use backend::*;
 
 #[cfg(test)]
-fn generate_code<F: FnMut(u8)>(ast_node: Instruction, mut sink: F) {
+fn generate_code<R, F: FnMut(u8)>(ast_node: Instruction<R>, mut sink: F) {
     use backend::Instruction::*;
     match ast_node {
         Halt => sink(0x76),
@@ -42,7 +42,7 @@ mod tests {
 
     use backend::Instruction::*;
 
-    fn test_instruction(instruction: Instruction, bytes: &[u8]) {
+    fn test_instruction(instruction: Instruction<()>, bytes: &[u8]) {
         let mut code = vec![];
         generate_code(instruction, |byte| code.push(byte));
         assert_eq!(code, bytes)

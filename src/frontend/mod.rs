@@ -1,9 +1,11 @@
+use std::fmt::Debug;
+
 mod semantics;
 mod syntax;
 
-use diagnostics::*;
-use backend::*;
 use self::syntax::*;
+use backend::*;
+use diagnostics::*;
 
 use codebase::Codebase;
 
@@ -74,7 +76,7 @@ impl TokenSeqAnalyzerFactory for SemanticTokenSeqAnalyzerFactory {
 }
 
 pub trait ExprFactory {
-    fn mk_atom(&mut self, token: Token) -> Expr;
+    fn mk_atom<R>(&mut self, token: (Token, R)) -> Expr<R>;
 }
 
 pub struct StrExprFactory;
@@ -86,19 +88,19 @@ impl StrExprFactory {
 }
 
 impl ExprFactory for StrExprFactory {
-    fn mk_atom(&mut self, token: Token) -> Expr {
+    fn mk_atom<R>(&mut self, (token, token_ref): (Token, R)) -> Expr<R> {
         match token {
-            token::Atom(Atom::Ident(ident)) => Expr::Symbol(ident),
-            token::Atom(Atom::Number(number)) => Expr::Literal(number),
+            token::Atom(Atom::Ident(ident)) => Expr::Symbol(ident, token_ref),
+            token::Atom(Atom::Number(number)) => Expr::Literal(number, token_ref),
             _ => panic!(),
         }
     }
 }
 
 pub trait Frontend {
-    type TokenRef;
+    type TokenRef: Debug + PartialEq;
     fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::TokenRef>);
-    fn emit_item(&mut self, item: Item);
+    fn emit_item(&mut self, item: Item<Self::TokenRef>);
     fn define_label(&mut self, label: (String, Self::TokenRef));
     fn define_macro(
         &mut self,
@@ -197,7 +199,7 @@ where
         }
     }
 
-    fn emit_item(&mut self, item: Item) {
+    fn emit_item(&mut self, item: Item<Self::TokenRef>) {
         self.backend.emit_item(item)
     }
 
@@ -218,7 +220,7 @@ trait TokenizedCodeSource
 where
     for<'c> &'c Self::Tokenized: IntoIterator<Item = (Token, Self::TokenRef)>,
 {
-    type TokenRef: Clone;
+    type TokenRef: Clone + Debug + PartialEq;
     fn define_macro(
         &mut self,
         name: (String, Self::TokenRef),
@@ -505,7 +507,7 @@ mod tests {
                 .push(TestEvent::AddLabel(String::from(label)))
         }
 
-        fn emit_item(&mut self, item: Item) {
+        fn emit_item(&mut self, item: Item<()>) {
             self.log.borrow_mut().push(TestEvent::EmitItem(item))
         }
     }
@@ -525,7 +527,7 @@ mod tests {
         AnalyzeTokens(Vec<Token>),
         AddLabel(String),
         Diagnostic(Diagnostic<()>),
-        EmitItem(Item),
+        EmitItem(Item<()>),
     }
 
     struct TestFixture<'a> {

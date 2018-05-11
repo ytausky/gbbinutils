@@ -237,9 +237,9 @@ const KEYWORDS: [(&str, Keyword); 28] = [
 mod tests {
     use super::*;
 
-    use super::syntax::Atom::{Ident, Number, Operand};
-    use super::keyword::Command::*;
     use super::Operand::*;
+    use super::keyword::Command::*;
+    use super::syntax::Atom::{Ident, Number, Operand};
     use super::syntax::token::*;
 
     fn assert_eq_tokens<'a>(src: &'a str, expected_tokens: &[Token]) {

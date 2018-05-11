@@ -163,7 +163,7 @@ impl<S: TokenSpec, T, I: Iterator<Item = (Token<S>, T)>> Parser<I> {
         actions.exit_macro_invocation()
     }
 
-    fn parse_argument_list<C: CommandContext<Token = Token<S>>>(&mut self, actions: C) -> C {
+    fn parse_argument_list<C: CommandContext<T, Token = Token<S>>>(&mut self, actions: C) -> C {
         self.parse_list(
             &Some(Token::Comma),
             follows_line,
@@ -215,22 +215,21 @@ impl<S: TokenSpec, T, I: Iterator<Item = (Token<S>, T)>> Parser<I> {
         context
     }
 
-    fn parse_argument<C: CommandContext<Token = Token<S>>>(&mut self, mut actions: C) -> C {
+    fn parse_argument<C: CommandContext<T, Token = Token<S>>>(&mut self, mut actions: C) -> C {
         let expr = self.parse_expression();
         actions.add_argument(expr);
         actions
     }
 
-    fn parse_expression(&mut self) -> SynExpr<Token<S>> {
+    fn parse_expression(&mut self) -> SynExpr<(Token<S>, T)> {
         if self.lookahead() == Some(Token::OpeningBracket) {
             self.parse_deref_expression()
         } else {
-            let (token, _) = self.bump();
-            SynExpr::from(token)
+            SynExpr::from(self.bump())
         }
     }
 
-    fn parse_deref_expression(&mut self) -> SynExpr<Token<S>> {
+    fn parse_deref_expression(&mut self) -> SynExpr<(Token<S>, T)> {
         self.expect(&Some(Token::OpeningBracket));
         let expr = self.parse_expression();
         self.expect(&Some(Token::ClosingBracket));
@@ -294,7 +293,7 @@ mod tests {
 
     type TestToken = Token<TestTokenSpec>;
     type TestTrackingData = usize;
-    type TestExpr = syntax::SynExpr<TestToken>;
+    type TestExpr = syntax::SynExpr<(TestToken, TestTrackingData)>;
 
     impl<'a> syntax::FileContext<TestTokenSpec, TestTrackingData> for &'a mut TestContext {
         type CommandContext = Self;
@@ -331,11 +330,11 @@ mod tests {
         }
     }
 
-    impl<'a> syntax::CommandContext for &'a mut TestContext {
+    impl<'a> syntax::CommandContext<TestTrackingData> for &'a mut TestContext {
         type Token = TestToken;
         type Parent = Self;
 
-        fn add_argument(&mut self, expr: syntax::SynExpr<Self::Token>) {
+        fn add_argument(&mut self, expr: TestExpr) {
             self.actions.push(Action::AddArgument(expr))
         }
 
@@ -426,7 +425,7 @@ mod tests {
     }
 
     fn ident(identifier: <TestTokenSpec as TokenSpec>::Atom) -> TestExpr {
-        syntax::SynExpr::Atom(Token::Atom(identifier))
+        syntax::SynExpr::Atom((Token::Atom(identifier), identifier))
     }
 
     #[test]

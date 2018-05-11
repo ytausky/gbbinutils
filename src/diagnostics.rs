@@ -1,8 +1,8 @@
 use codebase::{BufId, BufRange, LineNumber, TextBuf, TextCache};
-use std::{io, cell::RefCell, rc::Rc};
+use std::{io, cell::RefCell, fmt::Debug, rc::Rc};
 
 pub trait TokenTracker {
-    type TokenRef: Clone;
+    type TokenRef: Clone + Debug + PartialEq;
     type BufContext: Clone + LexemeRefFactory<TokenRef = Self::TokenRef>;
     fn mk_buf_context(
         &mut self,
@@ -16,7 +16,7 @@ pub trait LexemeRefFactory {
     fn mk_lexeme_ref(&self, range: BufRange) -> Self::TokenRef;
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum TokenRefData {
     Lexeme {
         range: BufRange,
@@ -24,7 +24,7 @@ pub enum TokenRefData {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct BufContextData {
     buf_id: BufId,
     included_from: Option<Rc<TokenRefData>>,
@@ -123,10 +123,10 @@ struct ElaboratedDiagnostic<'a> {
     src_lines: Vec<(LineNumber, &'a str)>,
 }
 
-fn elaborate<'a>(
+fn elaborate(
     diagnostic: Diagnostic<Rc<TokenRefData>>,
-    codebase: &'a TextCache,
-) -> ElaboratedDiagnostic<'a> {
+    codebase: &TextCache,
+) -> ElaboratedDiagnostic {
     let text = match diagnostic.message {
         Message::UndefinedMacro { name } => format!("invocation of undefined macro `{}`", name),
         _ => panic!(),
@@ -152,10 +152,10 @@ fn render<'a, W: io::Write>(
     output: &mut W,
 ) -> io::Result<()> {
     output.write_all(elaborated_diagnostic.text.as_bytes())?;
-    output.write_all("\n".as_bytes())?;
-    for &(_, line) in elaborated_diagnostic.src_lines.iter() {
+    output.write_all(b"\n")?;
+    for &(_, line) in &elaborated_diagnostic.src_lines {
         output.write_all(line.as_bytes())?;
-        output.write_all("\n".as_bytes())?;
+        output.write_all(b"\n")?;
     }
     Ok(())
 }

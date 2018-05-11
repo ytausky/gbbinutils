@@ -91,7 +91,7 @@ impl StringSrcBuf {
         }
     }
 
-    pub fn lines<'a>(&'a self, line_range: ops::Range<LineIndex>) -> TextLines<'a> {
+    pub fn lines(&self, line_range: ops::Range<LineIndex>) -> TextLines {
         TextLines {
             buf: self,
             remaining_range: line_range,
@@ -136,7 +136,7 @@ pub struct TextCache {
     bufs: Vec<StringSrcBuf>,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BufId(usize);
 
 impl TextCache {

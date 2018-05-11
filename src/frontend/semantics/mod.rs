@@ -1,6 +1,6 @@
 use backend;
-use frontend::{Atom, ChunkId, Frontend, StrExprFactory};
 use frontend::syntax::{self, token, SynExpr, Token, TokenSpec, keyword::Command};
+use frontend::{Atom, ChunkId, Frontend, StrExprFactory};
 
 mod instruction;
 
@@ -51,7 +51,7 @@ impl<'a, F: Frontend + 'a> syntax::FileContext<String, F::TokenRef> for Semantic
 
 pub struct CommandActions<'a, F: Frontend + 'a> {
     name: (Command, F::TokenRef),
-    args: Vec<SynExpr<syntax::Token>>,
+    args: Vec<SynExpr<(syntax::Token, F::TokenRef)>>,
     parent: SemanticActions<'a, F>,
 }
 
@@ -65,11 +65,11 @@ impl<'a, F: Frontend + 'a> CommandActions<'a, F> {
     }
 }
 
-impl<'a, F: Frontend + 'a> syntax::CommandContext for CommandActions<'a, F> {
+impl<'a, F: Frontend + 'a> syntax::CommandContext<F::TokenRef> for CommandActions<'a, F> {
     type Token = Token;
     type Parent = SemanticActions<'a, F>;
 
-    fn add_argument(&mut self, expr: SynExpr<Self::Token>) {
+    fn add_argument(&mut self, expr: SynExpr<(Self::Token, F::TokenRef)>) {
         self.args.push(expr)
     }
 
@@ -86,7 +86,7 @@ impl<'a, F: Frontend + 'a> syntax::CommandContext for CommandActions<'a, F> {
                 }
             },
             (Command::Include, _) => self.parent.session.analyze_chunk(reduce_include(self.args)),
-            (command, _) => {
+            command => {
                 let mut analyzer =
                     self::instruction::CommandAnalyzer::new(&mut self.parent.expr_factory);
                 self.parent.session.emit_item(
@@ -205,11 +205,13 @@ impl<'a, F: Frontend + 'a> syntax::TokenSeqContext<F::TokenRef> for MacroArgActi
     }
 }
 
-fn reduce_include<T>(mut arguments: Vec<SynExpr<Token>>) -> ChunkId<T> {
+fn reduce_include<R>(mut arguments: Vec<SynExpr<(Token, R)>>) -> ChunkId<R> {
     assert_eq!(arguments.len(), 1);
     let path = arguments.pop().unwrap();
     match path {
-        SynExpr::Atom(token::Atom(Atom::String(path_str))) => ChunkId::File((path_str, None)),
+        SynExpr::Atom((token::Atom(Atom::String(path_str)), token_ref)) => {
+            ChunkId::File((path_str, Some(token_ref)))
+        }
         _ => panic!(),
     }
 }
@@ -218,10 +220,10 @@ fn reduce_include<T>(mut arguments: Vec<SynExpr<Token>>) -> ChunkId<T> {
 mod tests {
     use super::*;
 
+    use backend;
     use frontend::ChunkId;
     use frontend::syntax::{CommandContext, FileContext, MacroInvocationContext, TokenSeqContext,
                            keyword::Operand};
-    use backend;
 
     struct TestFrontend(Vec<TestOperation>);
 
@@ -235,7 +237,7 @@ mod tests {
     enum TestOperation {
         AnalyzeChunk(ChunkId<()>),
         DefineMacro(String, Vec<Token>),
-        EmitItem(backend::Item),
+        EmitItem(backend::Item<()>),
         Label(String),
     }
 
@@ -246,7 +248,7 @@ mod tests {
             self.0.push(TestOperation::AnalyzeChunk(chunk_id))
         }
 
-        fn emit_item(&mut self, item: backend::Item) {
+        fn emit_item(&mut self, item: backend::Item<()>) {
             self.0.push(TestOperation::EmitItem(item))
         }
 
@@ -267,14 +269,14 @@ mod tests {
         let filename = "file.asm";
         let actions = collect_semantic_actions(|actions| {
             let mut command = actions.enter_command((Command::Include, ()));
-            let expr = SynExpr::from(token::Atom(Atom::String(filename.to_string())));
+            let expr = SynExpr::from((token::Atom(Atom::String(filename.to_string())), ()));
             command.add_argument(expr);
             command.exit_command();
         });
         assert_eq!(
             actions,
             [
-                TestOperation::AnalyzeChunk(ChunkId::File((filename.to_string(), None)))
+                TestOperation::AnalyzeChunk(ChunkId::File((filename.to_string(), Some(()))))
             ]
         )
     }
@@ -299,12 +301,12 @@ mod tests {
         )
     }
 
-    fn mk_literal(n: i32) -> SynExpr<Token> {
-        SynExpr::from(token::Atom(Atom::Number(n)))
+    fn mk_literal(n: i32) -> SynExpr<(Token, ())> {
+        SynExpr::from((token::Atom(Atom::Number(n)), ()))
     }
 
-    fn mk_byte(byte: &i32) -> backend::Item {
-        backend::Item::Byte(backend::Expr::Literal(*byte))
+    fn mk_byte(byte: &i32) -> backend::Item<()> {
+        backend::Item::Byte(backend::Expr::Literal(*byte, ()))
     }
 
     #[test]
@@ -373,7 +375,7 @@ mod tests {
                 TestOperation::AnalyzeChunk(ChunkId::Macro {
                     name: (name.to_string(), ()),
                     args: vec![vec![arg_token]],
-                })
+                }),
             ]
         )
     }

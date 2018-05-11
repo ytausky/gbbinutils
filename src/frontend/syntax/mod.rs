@@ -55,7 +55,7 @@ pub trait FileContext<S: TokenSpec, R>
 where
     Self: Sized,
 {
-    type CommandContext: CommandContext<Token = parser::Token<S>, Parent = Self>;
+    type CommandContext: CommandContext<R, Token = parser::Token<S>, Parent = Self>;
     type MacroDefContext: TokenSeqContext<R, Token = parser::Token<S>, Parent = Self>;
     type MacroInvocationContext: MacroInvocationContext<R, Token = parser::Token<S>, Parent = Self>;
     fn add_label(&mut self, label: (S::Label, R));
@@ -64,10 +64,10 @@ where
     fn enter_macro_invocation(self, name: (S::Atom, R)) -> Self::MacroInvocationContext;
 }
 
-pub trait CommandContext {
+pub trait CommandContext<R> {
     type Token;
     type Parent;
-    fn add_argument(&mut self, expr: SynExpr<Self::Token>);
+    fn add_argument(&mut self, expr: SynExpr<(Self::Token, R)>);
     fn exit_command(self) -> Self::Parent;
 }
 

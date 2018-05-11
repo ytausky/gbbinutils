@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use backend::*;
 use diagnostics::{Diagnostic, Message};
 use frontend::ExprFactory;
@@ -17,20 +19,26 @@ impl<'a, EF: 'a + ExprFactory> OperandAnalyzer<'a, EF> {
         OperandAnalyzer { expr_factory }
     }
 
-    fn analyze_operand(
+    fn analyze_operand<R>(
         &mut self,
-        expr: SynExpr<Token>,
+        expr: SynExpr<(Token, R)>,
         context: &OperandAnalysisContext,
-    ) -> Operand {
+    ) -> Operand<R> {
         match expr {
             SynExpr::Atom(token) => self.analyze_atom_operand(token, context),
             SynExpr::Deref(expr) => self.analyze_deref_operand(*expr),
         }
     }
 
-    fn analyze_atom_operand(&mut self, token: Token, context: &OperandAnalysisContext) -> Operand {
-        match token {
-            token::Atom(Atom::Operand(operand)) => analyze_keyword_operand(operand, context),
+    fn analyze_atom_operand<R>(
+        &mut self,
+        token: (Token, R),
+        context: &OperandAnalysisContext,
+    ) -> Operand<R> {
+        match token.0 {
+            token::Atom(Atom::Operand(operand)) => {
+                analyze_keyword_operand((operand, token.1), context)
+            }
             token::Atom(Atom::Ident(_)) | token::Atom(Atom::Number(_)) => {
                 Operand::Const(self.expr_factory.mk_atom(token))
             }
@@ -38,13 +46,15 @@ impl<'a, EF: 'a + ExprFactory> OperandAnalyzer<'a, EF> {
         }
     }
 
-    fn analyze_deref_operand(&mut self, expr: SynExpr<Token>) -> Operand {
-        if let SynExpr::Atom(token) = expr {
+    fn analyze_deref_operand<R>(&mut self, expr: SynExpr<(Token, R)>) -> Operand<R> {
+        if let SynExpr::Atom((token, token_ref)) = expr {
             match token {
                 token::Atom(Atom::Operand(keyword::Operand::Hl)) => {
-                    Operand::Simple(SimpleOperand::DerefHl)
+                    Operand::Simple(SimpleOperand::DerefHl, token_ref)
                 }
-                token::Atom(Atom::Ident(_)) => Operand::Deref(self.expr_factory.mk_atom(token)),
+                token::Atom(Atom::Ident(_)) => {
+                    Operand::Deref(self.expr_factory.mk_atom((token, token_ref)))
+                }
                 _ => panic!(),
             }
         } else {
@@ -64,15 +74,16 @@ impl<'a, EF: ExprFactory> CommandAnalyzer<'a, EF> {
         }
     }
 
-    pub fn analyze_instruction<I>(
+    pub fn analyze_instruction<I, R>(
         &mut self,
-        mnemonic: keyword::Command,
+        mnemonic: (keyword::Command, R),
         operands: I,
-    ) -> AnalysisResult<()>
+    ) -> AnalysisResult<R>
     where
-        I: IntoIterator<Item = SynExpr<Token>>,
+        I: IntoIterator<Item = SynExpr<(Token, R)>>,
+        R: Debug + PartialEq,
     {
-        let mnemonic = to_mnemonic(mnemonic);
+        let (mnemonic, mnemonic_ref) = (to_mnemonic(mnemonic.0), mnemonic.1);
         let context = match mnemonic {
             Mnemonic::Branch(_) => OperandAnalysisContext::Branch,
             _ => OperandAnalysisContext::Other,
@@ -81,7 +92,7 @@ impl<'a, EF: ExprFactory> CommandAnalyzer<'a, EF> {
             operands
                 .into_iter()
                 .map(|x| self.operand_analyzer.analyze_operand(x, &context)),
-        ).run(mnemonic)
+        ).run((mnemonic, mnemonic_ref))
     }
 }
 
@@ -89,32 +100,34 @@ struct Analysis<I> {
     operands: I,
 }
 
-impl<'a, I: Iterator<Item = Operand>> Analysis<I> {
+impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
     fn new(operands: I) -> Analysis<I> {
         Analysis { operands }
     }
 
-    fn run(mut self, mnemonic: Mnemonic) -> AnalysisResult<()> {
+    fn run(mut self, mnemonic: (Mnemonic, R)) -> AnalysisResult<R> {
         use self::Mnemonic::*;
-        match mnemonic {
-            Alu(operation) => self.analyze_alu_instruction(operation),
+        match mnemonic.0 {
+            Alu(operation) => self.analyze_alu_instruction((operation, mnemonic.1)),
             Dec => match self.operands.next() {
-                Some(Operand::Simple(operand)) => Ok(Instruction::Dec(operand)),
+                Some(Operand::Simple(operand, _)) => Ok(Instruction::Dec(operand)),
                 _ => panic!(),
             },
             Branch(branch) => self.analyze_branch(branch),
             Ld => self.analyze_ld(),
             Nullary(instruction) => self.analyze_nullary_instruction(instruction),
             Push => match self.operands.next() {
-                Some(Operand::Reg16(src)) => Ok(Instruction::Push(src)),
+                Some(Operand::Reg16(src, _)) => Ok(Instruction::Push(src)),
                 _ => panic!(),
             },
         }
     }
 
-    fn analyze_alu_instruction(&mut self, operation: AluOperation) -> AnalysisResult<()> {
+    fn analyze_alu_instruction(&mut self, (operation, _): (AluOperation, R)) -> AnalysisResult<R> {
         match self.operands.next() {
-            Some(Operand::Simple(src)) => Ok(Instruction::Alu(operation, AluSource::Simple(src))),
+            Some(Operand::Simple(src, _)) => {
+                Ok(Instruction::Alu(operation, AluSource::Simple(src)))
+            }
             Some(Operand::Const(expr)) => {
                 Ok(Instruction::Alu(operation, AluSource::Immediate(expr)))
             }
@@ -122,9 +135,9 @@ impl<'a, I: Iterator<Item = Operand>> Analysis<I> {
         }
     }
 
-    fn analyze_branch(&mut self, branch: BranchKind) -> AnalysisResult<()> {
+    fn analyze_branch(&mut self, branch: BranchKind) -> AnalysisResult<R> {
         let first_operand = self.operands.next();
-        let (condition, target) = if let Some(Operand::Condition(condition)) = first_operand {
+        let (condition, target) = if let Some(Operand::Condition(condition, _)) = first_operand {
             (Some(condition), analyze_branch_target(self.operands.next()))
         } else {
             (None, analyze_branch_target(first_operand))
@@ -132,9 +145,9 @@ impl<'a, I: Iterator<Item = Operand>> Analysis<I> {
         Ok(Instruction::Branch(mk_branch(branch, target), condition))
     }
 
-    fn analyze_nullary_instruction(&mut self, instruction: Instruction) -> AnalysisResult<()> {
+    fn analyze_nullary_instruction(&mut self, mnemonic: NullaryMnemonic) -> AnalysisResult<R> {
         match self.operands.by_ref().count() {
-            0 => Ok(instruction),
+            0 => Ok(mnemonic.into()),
             n => Err(Diagnostic::new(Message::OperandCount {
                 actual: n,
                 expected: 0,
@@ -142,17 +155,17 @@ impl<'a, I: Iterator<Item = Operand>> Analysis<I> {
         }
     }
 
-    fn analyze_ld(&mut self) -> AnalysisResult<()> {
+    fn analyze_ld(&mut self) -> AnalysisResult<R> {
         let dest = self.operands.next().unwrap();
         let src = self.operands.next().unwrap();
         assert_eq!(self.operands.next(), None);
         match (dest, src) {
-            (Operand::Simple(dest), Operand::Simple(src)) => {
+            (Operand::Simple(dest, _), Operand::Simple(src, _)) => {
                 Ok(Instruction::Ld(LdKind::Simple(dest, src)))
             }
-            (Operand::Simple(SimpleOperand::A), src) => analyze_ld_a(src, Direction::IntoA),
-            (dest, Operand::Simple(SimpleOperand::A)) => analyze_ld_a(dest, Direction::FromA),
-            (Operand::Reg16(reg16), Operand::Const(expr)) => {
+            (Operand::Simple(SimpleOperand::A, _), src) => analyze_ld_a(src, Direction::IntoA),
+            (dest, Operand::Simple(SimpleOperand::A, _)) => analyze_ld_a(dest, Direction::FromA),
+            (Operand::Reg16(reg16, _), Operand::Const(expr)) => {
                 Ok(Instruction::Ld(LdKind::Immediate16(reg16, expr)))
             }
             _ => panic!(),
@@ -160,7 +173,7 @@ impl<'a, I: Iterator<Item = Operand>> Analysis<I> {
     }
 }
 
-fn analyze_branch_target(target: Option<Operand>) -> Option<Expr> {
+fn analyze_branch_target<R>(target: Option<Operand<R>>) -> Option<Expr<R>> {
     match target {
         Some(Operand::Const(expr)) => Some(expr),
         None => None,
@@ -168,7 +181,7 @@ fn analyze_branch_target(target: Option<Operand>) -> Option<Expr> {
     }
 }
 
-fn mk_branch(kind: BranchKind, target: Option<Expr>) -> Branch {
+fn mk_branch<R>(kind: BranchKind, target: Option<Expr<R>>) -> Branch<R> {
     match (kind, target) {
         (BranchKind::Jp, Some(expr)) => Branch::Jp(expr),
         (BranchKind::Jr, Some(expr)) => Branch::Jr(expr),
@@ -176,7 +189,7 @@ fn mk_branch(kind: BranchKind, target: Option<Expr>) -> Branch {
     }
 }
 
-fn analyze_ld_a(other: Operand, direction: Direction) -> AnalysisResult<()> {
+fn analyze_ld_a<R>(other: Operand<R>, direction: Direction) -> AnalysisResult<R> {
     match other {
         Operand::Deref(expr) => Ok(Instruction::Ld(LdKind::ImmediateAddr(expr, direction))),
         _ => panic!(),
@@ -184,34 +197,37 @@ fn analyze_ld_a(other: Operand, direction: Direction) -> AnalysisResult<()> {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Operand {
-    Simple(SimpleOperand),
-    Condition(Condition),
-    Const(Expr),
-    Deref(Expr),
-    Reg16(Reg16),
+pub enum Operand<R> {
+    Simple(SimpleOperand, R),
+    Condition(Condition, R),
+    Const(Expr<R>),
+    Deref(Expr<R>),
+    Reg16(Reg16, R),
 }
 
-pub type AnalysisResult<R> = Result<Instruction, Diagnostic<R>>;
+pub type AnalysisResult<R> = Result<Instruction<R>, Diagnostic<R>>;
 
-fn analyze_keyword_operand(keyword: keyword::Operand, context: &OperandAnalysisContext) -> Operand {
+fn analyze_keyword_operand<R>(
+    keyword: (keyword::Operand, R),
+    context: &OperandAnalysisContext,
+) -> Operand<R> {
     use frontend::syntax::keyword::Operand::*;
-    match keyword {
-        A => Operand::Simple(SimpleOperand::A),
-        B => Operand::Simple(SimpleOperand::B),
-        Bc => Operand::Reg16(Reg16::Bc),
+    match keyword.0 {
+        A => Operand::Simple(SimpleOperand::A, keyword.1),
+        B => Operand::Simple(SimpleOperand::B, keyword.1),
+        Bc => Operand::Reg16(Reg16::Bc, keyword.1),
         C => match *context {
-            OperandAnalysisContext::Branch => Operand::Condition(Condition::C),
-            OperandAnalysisContext::Other => Operand::Simple(SimpleOperand::C),
+            OperandAnalysisContext::Branch => Operand::Condition(Condition::C, keyword.1),
+            OperandAnalysisContext::Other => Operand::Simple(SimpleOperand::C, keyword.1),
         },
-        D => Operand::Simple(SimpleOperand::D),
-        E => Operand::Simple(SimpleOperand::E),
-        H => Operand::Simple(SimpleOperand::H),
-        Hl => Operand::Reg16(Reg16::Hl),
-        L => Operand::Simple(SimpleOperand::L),
-        Nc => Operand::Condition(Condition::Nc),
-        Nz => Operand::Condition(Condition::Nz),
-        Z => Operand::Condition(Condition::Z),
+        D => Operand::Simple(SimpleOperand::D, keyword.1),
+        E => Operand::Simple(SimpleOperand::E, keyword.1),
+        H => Operand::Simple(SimpleOperand::H, keyword.1),
+        Hl => Operand::Reg16(Reg16::Hl, keyword.1),
+        L => Operand::Simple(SimpleOperand::L, keyword.1),
+        Nc => Operand::Condition(Condition::Nc, keyword.1),
+        Nz => Operand::Condition(Condition::Nz, keyword.1),
+        Z => Operand::Condition(Condition::Z, keyword.1),
     }
 }
 
@@ -221,8 +237,25 @@ enum Mnemonic {
     Dec,
     Branch(BranchKind),
     Ld,
-    Nullary(Instruction),
+    Nullary(NullaryMnemonic),
     Push,
+}
+
+#[derive(Debug, PartialEq)]
+enum NullaryMnemonic {
+    Halt,
+    Nop,
+    Stop,
+}
+
+impl<R> From<NullaryMnemonic> for Instruction<R> {
+    fn from(nullary_mnemonic: NullaryMnemonic) -> Instruction<R> {
+        match nullary_mnemonic {
+            NullaryMnemonic::Halt => Instruction::Halt,
+            NullaryMnemonic::Nop => Instruction::Nop,
+            NullaryMnemonic::Stop => Instruction::Stop,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -237,13 +270,13 @@ fn to_mnemonic(command: keyword::Command) -> Mnemonic {
         And => Mnemonic::Alu(AluOperation::And),
         Cp => Mnemonic::Alu(AluOperation::Cp),
         Dec => Mnemonic::Dec,
-        Halt => Mnemonic::Nullary(Instruction::Halt),
+        Halt => Mnemonic::Nullary(NullaryMnemonic::Halt),
         Jp => Mnemonic::Branch(BranchKind::Jp),
         Jr => Mnemonic::Branch(BranchKind::Jr),
         Ld => Mnemonic::Ld,
-        Nop => Mnemonic::Nullary(Instruction::Nop),
+        Nop => Mnemonic::Nullary(NullaryMnemonic::Nop),
         Push => Mnemonic::Push,
-        Stop => Mnemonic::Nullary(Instruction::Stop),
+        Stop => Mnemonic::Nullary(NullaryMnemonic::Stop),
         Xor => Mnemonic::Alu(AluOperation::Xor),
         _ => panic!(),
     }
@@ -257,8 +290,8 @@ mod tests {
 
     type TestToken = Token;
 
-    fn atom(keyword: keyword::Operand) -> SynExpr<TestToken> {
-        SynExpr::from(token::Atom(Atom::Operand(keyword)))
+    fn atom(keyword: keyword::Operand) -> SynExpr<(TestToken, ())> {
+        SynExpr::from((token::Atom(Atom::Operand(keyword)), ()))
     }
 
     impl From<AluOperation> for Command {
@@ -280,7 +313,7 @@ mod tests {
         }
     }
 
-    impl From<SimpleOperand> for SynExpr<TestToken> {
+    impl From<SimpleOperand> for SynExpr<(TestToken, ())> {
         fn from(alu_operand: SimpleOperand) -> Self {
             match alu_operand {
                 SimpleOperand::A => atom(A),
@@ -295,7 +328,7 @@ mod tests {
         }
     }
 
-    impl From<Reg16> for SynExpr<TestToken> {
+    impl From<Reg16> for SynExpr<(TestToken, ())> {
         fn from(reg16: Reg16) -> Self {
             match reg16 {
                 Reg16::Bc => atom(Bc),
@@ -304,7 +337,7 @@ mod tests {
         }
     }
 
-    impl From<Condition> for SynExpr<TestToken> {
+    impl From<Condition> for SynExpr<(TestToken, ())> {
         fn from(condition: Condition) -> Self {
             match condition {
                 Condition::C => atom(C),
@@ -322,13 +355,13 @@ mod tests {
             analyze(
                 Command::Ld,
                 vec![
-                    SynExpr::from(token::Atom(Atom::Ident(ident.to_string()))).deref(),
+                    SynExpr::from((token::Atom(Atom::Ident(ident.to_string())), ())).deref(),
                     atom(A),
                 ]
             ),
             Ok(Instruction::Ld(LdKind::ImmediateAddr(
-                Expr::Symbol(ident.to_string()),
-                Direction::FromA
+                Expr::Symbol(ident.to_string(), ()),
+                Direction::FromA,
             )))
         )
     }
@@ -341,12 +374,12 @@ mod tests {
                 Command::Ld,
                 vec![
                     atom(A),
-                    SynExpr::from(token::Atom(Atom::Ident(ident.to_string()))).deref(),
+                    SynExpr::from((token::Atom(Atom::Ident(ident.to_string())), ())).deref(),
                 ]
             ),
             Ok(Instruction::Ld(LdKind::ImmediateAddr(
-                Expr::Symbol(ident.to_string()),
-                Direction::IntoA
+                Expr::Symbol(ident.to_string(), ()),
+                Direction::IntoA,
             )))
         )
     }
@@ -356,19 +389,22 @@ mod tests {
         let ident = "ident";
         test_cp_const_analysis(
             token::Atom(Atom::Ident(ident.to_string())),
-            Expr::Symbol(ident.to_string()),
+            Expr::Symbol(ident.to_string(), ()),
         )
     }
 
     #[test]
     fn analyze_cp_literal() {
         let literal = 0x50;
-        test_cp_const_analysis(token::Atom(Atom::Number(literal)), Expr::Literal(literal))
+        test_cp_const_analysis(
+            token::Atom(Atom::Number(literal)),
+            Expr::Literal(literal, ()),
+        )
     }
 
-    fn test_cp_const_analysis(atom: TestToken, expr: Expr) {
+    fn test_cp_const_analysis(atom: TestToken, expr: Expr<()>) {
         assert_eq!(
-            analyze(Command::Cp, Some(SynExpr::Atom(atom))),
+            analyze(Command::Cp, Some(SynExpr::Atom((atom, ())))),
             Ok(Instruction::Alu(
                 AluOperation::Cp,
                 AluSource::Immediate(expr)
@@ -381,7 +417,7 @@ mod tests {
         test_instruction_analysis(describe_legal_instructions());
     }
 
-    type InstructionDescriptor = ((Command, Vec<SynExpr<TestToken>>), Instruction);
+    type InstructionDescriptor = ((Command, Vec<SynExpr<(TestToken, ())>>), Instruction<()>);
 
     fn describe_legal_instructions() -> Vec<InstructionDescriptor> {
         let mut descriptors = Vec::new();
@@ -446,10 +482,13 @@ mod tests {
                 Command::Ld,
                 vec![
                     SynExpr::from(dest),
-                    SynExpr::from(token::Atom(Atom::Ident(value.to_string()))),
+                    SynExpr::from((token::Atom(Atom::Ident(value.to_string())), ())),
                 ],
             ),
-            Instruction::Ld(LdKind::Immediate16(dest, Expr::Symbol(value.to_string()))),
+            Instruction::Ld(LdKind::Immediate16(
+                dest,
+                Expr::Symbol(value.to_string(), ()),
+            )),
         )
     }
 
@@ -490,11 +529,14 @@ mod tests {
         if let Some(condition) = condition {
             operands.push(SynExpr::from(condition))
         };
-        operands.push(SynExpr::Atom(token::Atom(Atom::Ident(ident.to_string()))));
+        operands.push(SynExpr::Atom((
+            token::Atom(Atom::Ident(ident.to_string())),
+            (),
+        )));
         (
             (Command::from(branch), operands),
             Instruction::Branch(
-                mk_branch(branch, Some(Expr::Symbol(ident.to_string()))),
+                mk_branch(branch, Some(Expr::Symbol(ident.to_string(), ()))),
                 condition,
             ),
         )
@@ -543,12 +585,12 @@ mod tests {
 
     fn analyze<I>(mnemonic: Command, operands: I) -> AnalysisResult<()>
     where
-        I: IntoIterator<Item = SynExpr<TestToken>>,
+        I: IntoIterator<Item = SynExpr<(TestToken, ())>>,
     {
         use frontend::StrExprFactory;
         let mut expr_factory = StrExprFactory::new();
         let mut analyzer = CommandAnalyzer::new(&mut expr_factory);
-        analyzer.analyze_instruction(mnemonic, operands)
+        analyzer.analyze_instruction((mnemonic, ()), operands)
     }
 
     #[test]
@@ -558,7 +600,7 @@ mod tests {
             Err(Diagnostic::new(Message::OperandCount {
                 actual: 1,
                 expected: 0,
-            },))
+            }))
         )
     }
 }

@@ -1,3 +1,5 @@
+use std::{fmt::Debug, fs::File, io::Write};
+
 mod backend;
 mod codebase;
 mod diagnostics;
@@ -14,9 +16,6 @@ pub fn analyze_file(name: &str) {
         &diagnostics,
     );
 }
-
-use std::fs::File;
-use std::io::Write;
 
 pub fn assemble_rom(name: &str) {
     let codebase = codebase::FileCodebase::new(codebase::StdFileSystem::new());
@@ -40,12 +39,12 @@ impl OutputDumper {
     }
 }
 
-impl<R> backend::Backend<R> for OutputDumper {
+impl<R: Debug> backend::Backend<R> for OutputDumper {
     fn add_label(&mut self, (label, _): (&str, R)) {
         println!("Define symbol: {}", label)
     }
 
-    fn emit_item(&mut self, item: backend::Item) {
+    fn emit_item(&mut self, item: backend::Item<R>) {
         println!("Emit {:?}", item)
     }
 }

@@ -2,13 +2,13 @@ use diagnostics::*;
 
 pub trait Backend<R> {
     fn add_label(&mut self, label: (&str, R));
-    fn emit_item(&mut self, item: Item);
+    fn emit_item(&mut self, item: Item<R>);
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Item {
-    Byte(Expr),
-    Instruction(Instruction),
+pub enum Item<R> {
+    Byte(Expr<R>),
+    Instruction(Instruction<R>),
 }
 
 mod codegen;
@@ -36,9 +36,9 @@ impl<'a, T: 'a> Rom<'a, T> {
 impl<'a, R, T: 'a + DiagnosticsListener<R>> Backend<R> for Rom<'a, T> {
     fn add_label(&mut self, _label: (&str, R)) {}
 
-    fn emit_item(&mut self, item: Item) {
+    fn emit_item(&mut self, item: Item<R>) {
         match item {
-            Item::Byte(Expr::Literal(n)) => {
+            Item::Byte(Expr::Literal(n, _)) => {
                 if !is_in_byte_range(n) {
                     self.diagnostics
                         .emit_diagnostic(Diagnostic::new(Message::ValueOutOfRange {
@@ -67,12 +67,12 @@ fn is_in_u8_range(n: i32) -> bool {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Instruction {
-    Alu(AluOperation, AluSource),
+pub enum Instruction<R> {
+    Alu(AluOperation, AluSource<R>),
     Dec(SimpleOperand),
     Halt,
-    Branch(Branch, Option<Condition>),
-    Ld(LdKind),
+    Branch(Branch<R>, Option<Condition>),
+    Ld(LdKind<R>),
     Nop,
     Push(Reg16),
     Stop,
@@ -86,9 +86,9 @@ pub enum AluOperation {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum AluSource {
+pub enum AluSource<R> {
     Simple(SimpleOperand),
-    Immediate(Expr),
+    Immediate(Expr<R>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -104,10 +104,10 @@ pub enum SimpleOperand {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum LdKind {
+pub enum LdKind<R> {
     Simple(SimpleOperand, SimpleOperand),
-    Immediate16(Reg16, Expr),
-    ImmediateAddr(Expr, Direction),
+    Immediate16(Reg16, Expr<R>),
+    ImmediateAddr(Expr<R>, Direction),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -123,9 +123,9 @@ pub enum Reg16 {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Branch {
-    Jp(Expr),
-    Jr(Expr),
+pub enum Branch<R> {
+    Jp(Expr<R>),
+    Jr(Expr<R>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -137,9 +137,9 @@ pub enum Condition {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Expr {
-    Literal(i32),
-    Symbol(String),
+pub enum Expr<R> {
+    Literal(i32, R),
+    Symbol(String, R),
 }
 
 #[cfg(test)]
@@ -163,7 +163,7 @@ mod tests {
     fn emit_literal_byte_item() {
         let diagnostics = TestDiagnosticsListener::new();
         let mut rom = Rom::new(&diagnostics);
-        rom.emit_item(Item::Byte(Expr::Literal(0xff)));
+        rom.emit_item(Item::Byte(Expr::Literal(0xff, ())));
         assert!(
             iter::once(0xff)
                 .chain(iter::repeat(0x00))
@@ -176,8 +176,8 @@ mod tests {
     fn emit_two_literal_byte_item() {
         let diagnostics = TestDiagnosticsListener::new();
         let mut rom = Rom::new(&diagnostics);
-        rom.emit_item(Item::Byte(Expr::Literal(0x12)));
-        rom.emit_item(Item::Byte(Expr::Literal(0x34)));
+        rom.emit_item(Item::Byte(Expr::Literal(0x12, ())));
+        rom.emit_item(Item::Byte(Expr::Literal(0x34, ())));
         assert!(
             [0x12, 0x34]
                 .iter()
@@ -197,7 +197,7 @@ mod tests {
     fn test_diagnostic_for_out_of_range_byte(value: i32) {
         let listener = TestDiagnosticsListener::new();
         let mut rom = Rom::new(&listener);
-        rom.emit_item(Item::Byte(Expr::Literal(value)));
+        rom.emit_item(Item::Byte(Expr::Literal(value, ())));
         assert_eq!(
             *listener.diagnostics.borrow(),
             [
