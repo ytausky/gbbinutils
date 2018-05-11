@@ -174,9 +174,8 @@ where
             Some(tokens) => self.analyze_token_seq(tokens),
             None => {
                 let (name, name_ref) = name;
-                self.diagnostics.emit_diagnostic(
-                    Diagnostic::new(Message::UndefinedMacro { name }).with_highlight(name_ref),
-                )
+                self.diagnostics
+                    .emit_diagnostic(Diagnostic::new(Message::UndefinedMacro { name }, name_ref))
             }
         }
     }
@@ -407,9 +406,7 @@ mod tests {
         assert_eq!(
             *log.borrow(),
             [
-                TestEvent::Diagnostic(
-                    Diagnostic::new(Message::UndefinedMacro { name }).with_highlight(())
-                )
+                TestEvent::Diagnostic(Diagnostic::new(Message::UndefinedMacro { name }, ()))
             ]
         );
     }

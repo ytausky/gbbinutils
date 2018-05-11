@@ -38,13 +38,15 @@ impl<'a, R, T: 'a + DiagnosticsListener<R>> Backend<R> for Rom<'a, T> {
 
     fn emit_item(&mut self, item: Item<R>) {
         match item {
-            Item::Byte(Expr::Literal(n, _)) => {
+            Item::Byte(Expr::Literal(n, byte_ref)) => {
                 if !is_in_byte_range(n) {
-                    self.diagnostics
-                        .emit_diagnostic(Diagnostic::new(Message::ValueOutOfRange {
+                    self.diagnostics.emit_diagnostic(Diagnostic::new(
+                        Message::ValueOutOfRange {
                             value: n,
                             width: Width::Byte,
-                        }))
+                        },
+                        byte_ref,
+                    ))
                 }
                 self.data[self.counter] = n as u8;
                 self.counter += 1
@@ -201,10 +203,13 @@ mod tests {
         assert_eq!(
             *listener.diagnostics.borrow(),
             [
-                Diagnostic::new(Message::ValueOutOfRange {
-                    value: value,
-                    width: Width::Byte,
-                })
+                Diagnostic::new(
+                    Message::ValueOutOfRange {
+                        value: value,
+                        width: Width::Byte,
+                    },
+                    ()
+                )
             ]
         );
     }

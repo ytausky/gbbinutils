@@ -115,7 +115,7 @@ impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
             },
             Branch(branch) => self.analyze_branch(branch),
             Ld => self.analyze_ld(),
-            Nullary(instruction) => self.analyze_nullary_instruction(instruction),
+            Nullary(instruction) => self.analyze_nullary_instruction((instruction, mnemonic.1)),
             Push => match self.operands.next() {
                 Some(Operand::Reg16(src, _)) => Ok(Instruction::Push(src)),
                 _ => panic!(),
@@ -145,13 +145,16 @@ impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
         Ok(Instruction::Branch(mk_branch(branch, target), condition))
     }
 
-    fn analyze_nullary_instruction(&mut self, mnemonic: NullaryMnemonic) -> AnalysisResult<R> {
+    fn analyze_nullary_instruction(&mut self, mnemonic: (NullaryMnemonic, R)) -> AnalysisResult<R> {
         match self.operands.by_ref().count() {
-            0 => Ok(mnemonic.into()),
-            n => Err(Diagnostic::new(Message::OperandCount {
-                actual: n,
-                expected: 0,
-            })),
+            0 => Ok(mnemonic.0.into()),
+            n => Err(Diagnostic::new(
+                Message::OperandCount {
+                    actual: n,
+                    expected: 0,
+                },
+                mnemonic.1,
+            )),
         }
     }
 
@@ -597,10 +600,13 @@ mod tests {
     fn analyze_nop_a() {
         assert_eq!(
             analyze(Command::Nop, vec![atom(A)]),
-            Err(Diagnostic::new(Message::OperandCount {
-                actual: 1,
-                expected: 0,
-            }))
+            Err(Diagnostic::new(
+                Message::OperandCount {
+                    actual: 1,
+                    expected: 0,
+                },
+                (),
+            ))
         )
     }
 }

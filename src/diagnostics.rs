@@ -70,20 +70,12 @@ pub trait DiagnosticsListener<TR> {
 #[derive(Debug, PartialEq)]
 pub struct Diagnostic<TR> {
     message: Message,
-    highlight: Option<TR>,
+    highlight: TR,
 }
 
 impl<TR> Diagnostic<TR> {
-    pub fn new(message: Message) -> Diagnostic<TR> {
-        Diagnostic {
-            message,
-            highlight: None,
-        }
-    }
-
-    pub fn with_highlight(mut self, token_ref: TR) -> Diagnostic<TR> {
-        self.highlight = Some(token_ref);
-        self
+    pub fn new(message: Message, highlight: TR) -> Diagnostic<TR> {
+        Diagnostic { message, highlight }
     }
 }
 
@@ -132,16 +124,14 @@ fn elaborate(
         _ => panic!(),
     };
     let mut src_lines = Vec::new();
-    if let Some(rc_token_ref) = diagnostic.highlight {
-        match *rc_token_ref {
-            TokenRefData::Lexeme {
-                ref range,
-                ref context,
-            } => {
-                let buf = codebase.buf(context.buf_id);
-                let text_range = buf.text_range(&range);
-                src_lines.extend(buf.lines(text_range.start.line..text_range.end.line + 1))
-            }
+    match *diagnostic.highlight {
+        TokenRefData::Lexeme {
+            ref range,
+            ref context,
+        } => {
+            let buf = codebase.buf(context.buf_id);
+            let text_range = buf.text_range(&range);
+            src_lines.extend(buf.lines(text_range.start.line..text_range.end.line + 1))
         }
     }
     ElaboratedDiagnostic { text, src_lines }
@@ -183,7 +173,7 @@ mod tests {
             message: Message::UndefinedMacro {
                 name: "my_macro".to_string(),
             },
-            highlight: Some(token_ref),
+            highlight: token_ref,
         };
         let elaborated_diagnostic = elaborate(diagnostic, &codebase);
         assert_eq!(
