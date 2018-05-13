@@ -111,9 +111,10 @@ impl<'a> DiagnosticsListener<Rc<TokenRefData>> for TerminalDiagnostics<'a> {
 
 #[derive(Debug, PartialEq)]
 struct ElaboratedDiagnostic<'a> {
-    buf_name: &'a str,
     text: String,
-    src_lines: Vec<(LineNumber, &'a str)>,
+    buf_name: &'a str,
+    line_number: LineNumber,
+    src_line: &'a str,
 }
 
 fn elaborate(
@@ -124,7 +125,6 @@ fn elaborate(
         Message::UndefinedMacro { name } => format!("invocation of undefined macro `{}`", name),
         _ => panic!(),
     };
-    let mut src_lines = Vec::new();
     match *diagnostic.highlight {
         TokenRefData::Lexeme {
             ref range,
@@ -132,11 +132,14 @@ fn elaborate(
         } => {
             let buf = codebase.buf(context.buf_id);
             let text_range = buf.text_range(&range);
-            src_lines.extend(buf.lines(text_range.start.line..text_range.end.line + 1));
+            let (line_number, src_line) = buf.lines(text_range.start.line..text_range.end.line + 1)
+                .next()
+                .unwrap();
             ElaboratedDiagnostic {
-                buf_name: buf.name(),
                 text,
-                src_lines,
+                buf_name: buf.name(),
+                line_number,
+                src_line,
             }
         }
     }
@@ -148,15 +151,9 @@ fn render<'a, W: io::Write>(
 ) -> io::Result<()> {
     writeln!(
         output,
-        "{}:{}: {}",
-        disgnostic.buf_name,
-        disgnostic.src_lines.first().unwrap().0,
-        disgnostic.text
-    )?;
-    for &(_, line) in &disgnostic.src_lines {
-        writeln!(output, "{}", line)?;
-    }
-    Ok(())
+        "{}:{}: {}\n{}",
+        disgnostic.buf_name, disgnostic.line_number, disgnostic.text, disgnostic.src_line
+    )
 }
 
 #[cfg(test)]
@@ -188,9 +185,10 @@ mod tests {
         assert_eq!(
             elaborated_diagnostic,
             ElaboratedDiagnostic {
-                buf_name: DUMMY_FILE,
                 text: "invocation of undefined macro `my_macro`".to_string(),
-                src_lines: vec![(LineNumber(2), "    my_macro a, $12")],
+                buf_name: DUMMY_FILE,
+                line_number: LineNumber(2),
+                src_line: "    my_macro a, $12",
             }
         )
     }
@@ -198,9 +196,10 @@ mod tests {
     #[test]
     fn render_elaborated_diagnostic() {
         let elaborated_diagnostic = ElaboratedDiagnostic {
-            buf_name: DUMMY_FILE,
             text: "invocation of undefined macro `my_macro`".to_string(),
-            src_lines: vec![(LineNumber(2), "    my_macro a, $12")],
+            buf_name: DUMMY_FILE,
+            line_number: LineNumber(2),
+            src_line: "    my_macro a, $12",
         };
         let expected =
             "/my/file:2: invocation of undefined macro `my_macro`\n    my_macro a, $12\n";
