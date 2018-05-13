@@ -127,7 +127,7 @@ impl<'a> TerminalDiagnostics<'a> {
 impl<'a> DiagnosticsListener<Rc<TokenRefData>> for TerminalDiagnostics<'a> {
     fn emit_diagnostic(&self, diagnostic: Diagnostic<Rc<TokenRefData>>) {
         let codebase = self.codebase.borrow();
-        let elaborated_diagnostic = elaborate(diagnostic, &codebase);
+        let elaborated_diagnostic = elaborate(&diagnostic, &codebase);
         render(&elaborated_diagnostic, &mut io::stdout()).unwrap()
     }
 }
@@ -140,10 +140,10 @@ struct ElaboratedDiagnostic<'a> {
     src_line: &'a str,
 }
 
-fn elaborate(
-    diagnostic: Diagnostic<Rc<TokenRefData>>,
-    codebase: &TextCache,
-) -> ElaboratedDiagnostic {
+fn elaborate<'a>(
+    diagnostic: &Diagnostic<Rc<TokenRefData>>,
+    codebase: &'a TextCache,
+) -> ElaboratedDiagnostic<'a> {
     match *diagnostic.highlight {
         TokenRefData::Lexeme {
             ref range,
@@ -215,7 +215,7 @@ mod tests {
             },
             highlight: token_ref,
         };
-        let elaborated_diagnostic = elaborate(diagnostic, &codebase);
+        let elaborated_diagnostic = elaborate(&diagnostic, &codebase);
         assert_eq!(
             elaborated_diagnostic,
             ElaboratedDiagnostic {
