@@ -1,14 +1,18 @@
 use backend::*;
 
-pub fn generate_code<R, F: FnMut(u8)>(ast_node: Instruction<R>, mut sink: F) {
+pub trait ByteEmitter {
+    fn emit_byte(&mut self, byte: u8);
+}
+
+pub fn generate_code<R, E: ByteEmitter>(ast_node: Instruction<R>, emitter: &mut E) {
     use backend::Instruction::*;
     match ast_node {
-        Halt => sink(0x76),
-        Ld(LdKind::Simple(dest, src)) => sink(encode_ld_to_reg_from_reg(dest, src)),
-        Nop => sink(0x00),
+        Halt => emitter.emit_byte(0x76),
+        Ld(LdKind::Simple(dest, src)) => emitter.emit_byte(encode_ld_to_reg_from_reg(dest, src)),
+        Nop => emitter.emit_byte(0x00),
         Stop => {
-            sink(0x10);
-            sink(0x00)
+            emitter.emit_byte(0x10);
+            emitter.emit_byte(0x00)
         }
         _ => panic!(),
     }
@@ -38,9 +42,15 @@ mod tests {
 
     use backend::Instruction::*;
 
+    impl<F: FnMut(u8)> ByteEmitter for F {
+        fn emit_byte(&mut self, byte: u8) {
+            self(byte)
+        }
+    }
+
     fn test_instruction(instruction: Instruction<()>, bytes: &[u8]) {
         let mut code = vec![];
-        generate_code(instruction, |byte| code.push(byte));
+        generate_code(instruction, &mut |byte| code.push(byte));
         assert_eq!(code, bytes)
     }
 

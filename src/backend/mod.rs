@@ -32,7 +32,7 @@ impl<'a, T: 'a> Rom<'a, T> {
         self.data.as_slice()
     }
 
-    fn emit_byte<R>(&mut self, expr: Expr<R>)
+    fn emit_byte_expr<R>(&mut self, expr: Expr<R>)
     where
         T: DiagnosticsListener<R>,
     {
@@ -47,18 +47,23 @@ impl<'a, T: 'a> Rom<'a, T> {
                         byte_ref,
                     ))
                 }
-                self.data[self.counter] = n as u8;
-                self.counter += 1
+                self.emit_byte(n as u8)
             }
             _ => unimplemented!(),
         }
     }
 
     fn emit_instruction<R>(&mut self, instruction: Instruction<R>) {
-        codegen::generate_code(instruction, |byte| {
-            self.data[self.counter] = byte;
-            self.counter += 1
-        })
+        codegen::generate_code(instruction, self)
+    }
+}
+
+use backend::codegen::ByteEmitter;
+
+impl<'a, T: 'a> ByteEmitter for Rom<'a, T> {
+    fn emit_byte(&mut self, byte: u8) {
+        self.data[self.counter] = byte;
+        self.counter += 1
     }
 }
 
@@ -67,7 +72,7 @@ impl<'a, R, T: 'a + DiagnosticsListener<R>> Backend<R> for Rom<'a, T> {
 
     fn emit_item(&mut self, item: Item<R>) {
         match item {
-            Item::Byte(expr) => self.emit_byte(expr),
+            Item::Byte(expr) => self.emit_byte_expr(expr),
             Item::Instruction(instruction) => self.emit_instruction(instruction),
         }
     }
