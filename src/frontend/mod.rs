@@ -100,6 +100,7 @@ impl ExprFactory for StrExprFactory {
 pub trait Frontend {
     type TokenRef: Debug + PartialEq;
     fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::TokenRef>);
+    fn emit_diagnostic(&mut self, diagnostic: Diagnostic<Self::TokenRef>);
     fn emit_item(&mut self, item: Item<Self::TokenRef>);
     fn define_label(&mut self, label: (String, Self::TokenRef));
     fn define_macro(
@@ -196,6 +197,10 @@ where
             ChunkId::File((name, _)) => self.include_source_file(&name),
             ChunkId::Macro { name, args } => self.invoke_macro(name, args),
         }
+    }
+
+    fn emit_diagnostic(&mut self, diagnostic: Diagnostic<Self::TokenRef>) {
+        self.diagnostics.emit_diagnostic(diagnostic)
     }
 
     fn emit_item(&mut self, item: Item<Self::TokenRef>) {

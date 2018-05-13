@@ -1,8 +1,8 @@
 use codebase::{BufId, BufRange, LineNumber, TextBuf, TextCache, TextRange};
-use std::{io, cell::RefCell, fmt::Debug, rc::Rc};
+use std::{fmt, io, cell::RefCell, rc::Rc};
 
 pub trait TokenTracker {
-    type TokenRef: Clone + Debug + PartialEq;
+    type TokenRef: Clone + fmt::Debug + PartialEq;
     type BufContext: Clone + LexemeRefFactory<TokenRef = Self::TokenRef>;
     fn mk_buf_context(
         &mut self,
@@ -86,9 +86,32 @@ pub enum Message {
     ValueOutOfRange { value: i32, width: Width },
 }
 
+impl fmt::Display for Message {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use diagnostics::Message::*;
+        match self {
+            OperandCount { actual, expected } => {
+                write!(f, "expected {} operands, found {}", expected, actual)
+            }
+            UndefinedMacro { name } => write!(f, "invocation of undefined macro `{}`", name),
+            ValueOutOfRange { value, width } => {
+                write!(f, "value {} cannot be represented in a {}", value, width)
+            }
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Width {
     Byte,
+}
+
+impl fmt::Display for Width {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Width::Byte => f.write_str("byte"),
+        }
+    }
 }
 
 pub struct TerminalDiagnostics<'a> {
@@ -121,10 +144,6 @@ fn elaborate(
     diagnostic: Diagnostic<Rc<TokenRefData>>,
     codebase: &TextCache,
 ) -> ElaboratedDiagnostic {
-    let text = match diagnostic.message {
-        Message::UndefinedMacro { name } => format!("invocation of undefined macro `{}`", name),
-        _ => panic!(),
-    };
     match *diagnostic.highlight {
         TokenRefData::Lexeme {
             ref range,
@@ -136,7 +155,7 @@ fn elaborate(
                 .next()
                 .unwrap();
             ElaboratedDiagnostic {
-                text,
+                text: diagnostic.message.to_string(),
                 buf_name: buf.name(),
                 highlight: text_range,
                 src_line,

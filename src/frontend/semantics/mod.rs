@@ -116,7 +116,7 @@ fn analyze_command<'a, F: Frontend + 'a>(
         Ok(instruction) => actions
             .session
             .emit_item(backend::Item::Instruction(instruction)),
-        Err(_diagnostic) => panic!(),
+        Err(diagnostic) => actions.session.emit_diagnostic(diagnostic),
     }
 }
 
@@ -240,6 +240,7 @@ mod tests {
     use super::*;
 
     use backend;
+    use diagnostics::Diagnostic;
     use frontend::ChunkId;
     use frontend::syntax::{CommandContext, FileContext, MacroInvocationContext, TokenSeqContext,
                            keyword::Operand};
@@ -256,6 +257,7 @@ mod tests {
     enum TestOperation {
         AnalyzeChunk(ChunkId<()>),
         DefineMacro(String, Vec<Token>),
+        EmitDiagnostic(Diagnostic<()>),
         EmitItem(backend::Item<()>),
         Label(String),
     }
@@ -265,6 +267,10 @@ mod tests {
 
         fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::TokenRef>) {
             self.0.push(TestOperation::AnalyzeChunk(chunk_id))
+        }
+
+        fn emit_diagnostic(&mut self, diagnostic: Diagnostic<Self::TokenRef>) {
+            self.0.push(TestOperation::EmitDiagnostic(diagnostic))
         }
 
         fn emit_item(&mut self, item: backend::Item<()>) {
@@ -395,6 +401,29 @@ mod tests {
                     name: (name.to_string(), ()),
                     args: vec![vec![arg_token]],
                 }),
+            ]
+        )
+    }
+
+    #[test]
+    fn diagnoze_wrong_operand_count() {
+        use diagnostics::{Diagnostic, Message};
+        let actions = collect_semantic_actions(|actions| {
+            let mut command_context = actions.enter_command((Command::Nop, ()));
+            let token_a = token::Atom(Atom::Operand(Operand::A));
+            command_context.add_argument((token_a, ()).into());
+            command_context.exit_command();
+        });
+        assert_eq!(
+            actions,
+            [
+                TestOperation::EmitDiagnostic(Diagnostic::new(
+                    Message::OperandCount {
+                        actual: 1,
+                        expected: 0
+                    },
+                    ()
+                )),
             ]
         )
     }
