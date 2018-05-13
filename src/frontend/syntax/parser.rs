@@ -140,27 +140,27 @@ impl<S: TokenSpec, T, I: Iterator<Item = (Token<S>, T)>> Parser<I> {
         actions: F,
     ) -> F {
         self.expect(&Some(Token::Macro));
-        let mut actions = actions.enter_macro_def(label);
+        let mut macro_def_context = actions.enter_macro_def(label);
         self.expect(&Some(Token::Eol));
         while self.lookahead() != Some(Token::Endm) {
-            actions.push_token(self.bump())
+            macro_def_context.push_token(self.bump())
         }
         self.expect(&Some(Token::Endm));
-        actions.exit_token_seq()
+        macro_def_context.exit()
     }
 
     fn parse_command<F: FileContext<S, T>>(&mut self, actions: F) -> F {
         let first_token = self.expect_command();
-        let mut actions = actions.enter_command(first_token);
-        actions = self.parse_argument_list(actions);
-        actions.exit_command()
+        let mut command_context = actions.enter_command(first_token);
+        command_context = self.parse_argument_list(command_context);
+        command_context.exit()
     }
 
     fn parse_macro_invocation<F: FileContext<S, T>>(&mut self, actions: F) -> F {
         let macro_name = self.expect_atom();
-        let mut actions = actions.enter_macro_invocation(macro_name);
-        actions = self.parse_macro_arg_list(actions);
-        actions.exit_macro_invocation()
+        let mut invocation_context = actions.enter_macro_invocation(macro_name);
+        invocation_context = self.parse_macro_arg_list(invocation_context);
+        invocation_context.exit()
     }
 
     fn parse_argument_list<C: CommandContext<T, Token = Token<S>>>(&mut self, actions: C) -> C {
@@ -180,13 +180,13 @@ impl<S: TokenSpec, T, I: Iterator<Item = (Token<S>, T)>> Parser<I> {
             &Some(Token::Comma),
             follows_line,
             |p, actions| {
-                let mut actions = actions.enter_macro_arg();
+                let mut arg_context = actions.enter_macro_arg();
                 let mut next_token = p.lookahead();
                 while next_token != Some(Token::Comma) && !follows_line(&next_token) {
-                    actions.push_token(p.bump());
+                    arg_context.push_token(p.bump());
                     next_token = p.lookahead()
                 }
-                actions.exit_token_seq()
+                arg_context.exit()
             },
             actions,
         )
@@ -338,7 +338,7 @@ mod tests {
             self.actions.push(Action::AddArgument(expr))
         }
 
-        fn exit_command(self) -> Self::Parent {
+        fn exit(self) -> Self::Parent {
             self.actions.push(Action::ExitInstruction);
             self
         }
@@ -355,7 +355,7 @@ mod tests {
             self
         }
 
-        fn exit_macro_invocation(self) -> Self::Parent {
+        fn exit(self) -> Self::Parent {
             self.actions.push(Action::ExitMacroInvocation);
             self
         }
@@ -369,7 +369,7 @@ mod tests {
             self.actions.push(Action::PushTerminal(token.0))
         }
 
-        fn exit_token_seq(self) -> Self::Parent {
+        fn exit(self) -> Self::Parent {
             self.actions
                 .push(match *self.token_seq_kind.as_ref().unwrap() {
                     TokenSeqKind::MacroArg => Action::ExitMacroArg,

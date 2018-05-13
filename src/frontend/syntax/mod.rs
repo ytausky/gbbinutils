@@ -68,7 +68,7 @@ pub trait CommandContext<R> {
     type Token;
     type Parent;
     fn add_argument(&mut self, expr: SynExpr<(Self::Token, R)>);
-    fn exit_command(self) -> Self::Parent;
+    fn exit(self) -> Self::Parent;
 }
 
 pub trait MacroInvocationContext<R>
@@ -79,14 +79,14 @@ where
     type Parent;
     type MacroArgContext: TokenSeqContext<R, Token = Self::Token, Parent = Self>;
     fn enter_macro_arg(self) -> Self::MacroArgContext;
-    fn exit_macro_invocation(self) -> Self::Parent;
+    fn exit(self) -> Self::Parent;
 }
 
 pub trait TokenSeqContext<R> {
     type Token;
     type Parent;
     fn push_token(&mut self, token: (Self::Token, R));
-    fn exit_token_seq(self) -> Self::Parent;
+    fn exit(self) -> Self::Parent;
 }
 
 #[derive(Clone, Debug, PartialEq)]

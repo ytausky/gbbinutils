@@ -75,7 +75,7 @@ impl<'a, F: Frontend + 'a> syntax::CommandContext<F::TokenRef> for CommandAction
         self.args.push(expr)
     }
 
-    fn exit_command(mut self) -> Self::Parent {
+    fn exit(mut self) -> Self::Parent {
         match self.name {
             (Command::Db, _) => analyze_db(self.args, &mut self.parent),
             (Command::Include, _) => analyze_include(self.args, &mut self.parent),
@@ -144,7 +144,7 @@ impl<'a, F: Frontend + 'a> syntax::TokenSeqContext<F::TokenRef> for MacroDefActi
         self.tokens.push(token)
     }
 
-    fn exit_token_seq(self) -> Self::Parent {
+    fn exit(self) -> Self::Parent {
         self.parent.session.define_macro(self.name, self.tokens);
         self.parent
     }
@@ -184,7 +184,7 @@ impl<'a, F: Frontend + 'a> syntax::MacroInvocationContext<F::TokenRef>
         MacroArgActions::new(self)
     }
 
-    fn exit_macro_invocation(self) -> Self::Parent {
+    fn exit(self) -> Self::Parent {
         match self.name {
             (Atom::Ident(name), code_ref) => self.parent.session.analyze_chunk(ChunkId::Macro {
                 name: (name, code_ref),
@@ -218,7 +218,7 @@ impl<'a, F: Frontend + 'a> syntax::TokenSeqContext<F::TokenRef> for MacroArgActi
         self.tokens.push(token.0)
     }
 
-    fn exit_token_seq(mut self) -> Self::Parent {
+    fn exit(mut self) -> Self::Parent {
         self.parent.push_arg(self.tokens);
         self.parent
     }
@@ -296,7 +296,7 @@ mod tests {
             let mut command = actions.enter_command((Command::Include, ()));
             let expr = SynExpr::from((token::Atom(Atom::String(filename.to_string())), ()));
             command.add_argument(expr);
-            command.exit_command();
+            command.exit();
         });
         assert_eq!(
             actions,
@@ -314,7 +314,7 @@ mod tests {
             for &byte in bytes.iter() {
                 command.add_argument(mk_literal(byte))
             }
-            command.exit_command();
+            command.exit();
         });
         assert_eq!(
             actions,
@@ -354,7 +354,7 @@ mod tests {
             for token in tokens.iter().cloned().map(|t| (t, ())) {
                 token_seq_context.push_token(token)
             }
-            token_seq_context.exit_token_seq();
+            token_seq_context.exit();
         });
         assert_eq!(
             actions,
@@ -367,7 +367,7 @@ mod tests {
         let name = "my_macro";
         let actions = collect_semantic_actions(|actions| {
             let invocation = actions.enter_macro_invocation((Atom::Ident(name.to_string()), ()));
-            invocation.exit_macro_invocation();
+            invocation.exit();
         });
         assert_eq!(
             actions,
@@ -390,9 +390,9 @@ mod tests {
             invocation = {
                 let mut arg = invocation.enter_macro_arg();
                 arg.push_token((arg_token.clone(), ()));
-                arg.exit_token_seq()
+                arg.exit()
             };
-            invocation.exit_macro_invocation();
+            invocation.exit();
         });
         assert_eq!(
             actions,
@@ -412,7 +412,7 @@ mod tests {
             let mut command_context = actions.enter_command((Command::Nop, ()));
             let token_a = token::Atom(Atom::Operand(Operand::A));
             command_context.add_argument((token_a, ()).into());
-            command_context.exit_command();
+            command_context.exit();
         });
         assert_eq!(
             actions,
