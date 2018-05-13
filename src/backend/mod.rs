@@ -31,14 +31,13 @@ impl<'a, T: 'a> Rom<'a, T> {
     pub fn as_slice(&self) -> &[u8] {
         self.data.as_slice()
     }
-}
 
-impl<'a, R, T: 'a + DiagnosticsListener<R>> Backend<R> for Rom<'a, T> {
-    fn add_label(&mut self, _label: (&str, R)) {}
-
-    fn emit_item(&mut self, item: Item<R>) {
-        match item {
-            Item::Byte(Expr::Literal(n, byte_ref)) => {
+    fn emit_byte<R>(&mut self, expr: Expr<R>)
+    where
+        T: DiagnosticsListener<R>,
+    {
+        match expr {
+            Expr::Literal(n, byte_ref) => {
                 if !is_in_byte_range(n) {
                     self.diagnostics.emit_diagnostic(Diagnostic::new(
                         Message::ValueOutOfRange {
@@ -51,7 +50,25 @@ impl<'a, R, T: 'a + DiagnosticsListener<R>> Backend<R> for Rom<'a, T> {
                 self.data[self.counter] = n as u8;
                 self.counter += 1
             }
-            _ => panic!(),
+            _ => unimplemented!(),
+        }
+    }
+
+    fn emit_instruction<R>(&mut self, instruction: Instruction<R>) {
+        codegen::generate_code(instruction, |byte| {
+            self.data[self.counter] = byte;
+            self.counter += 1
+        })
+    }
+}
+
+impl<'a, R, T: 'a + DiagnosticsListener<R>> Backend<R> for Rom<'a, T> {
+    fn add_label(&mut self, _label: (&str, R)) {}
+
+    fn emit_item(&mut self, item: Item<R>) {
+        match item {
+            Item::Byte(expr) => self.emit_byte(expr),
+            Item::Instruction(instruction) => self.emit_instruction(instruction),
         }
     }
 }
@@ -182,6 +199,21 @@ mod tests {
         rom.emit_item(Item::Byte(Expr::Literal(0x34, ())));
         assert!(
             [0x12, 0x34]
+                .iter()
+                .cloned()
+                .chain(iter::repeat(0x00))
+                .take(0x8000)
+                .eq(rom.as_slice().iter().cloned())
+        )
+    }
+
+    #[test]
+    fn emit_stop() {
+        let diagnostics = TestDiagnosticsListener::new();
+        let mut rom = Rom::new(&diagnostics);
+        rom.emit_item(Item::Instruction(Instruction::Stop));
+        assert!(
+            [0x10, 0x00]
                 .iter()
                 .cloned()
                 .chain(iter::repeat(0x00))

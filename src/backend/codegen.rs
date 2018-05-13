@@ -1,8 +1,6 @@
-#[cfg(test)]
 use backend::*;
 
-#[cfg(test)]
-fn generate_code<R, F: FnMut(u8)>(ast_node: Instruction<R>, mut sink: F) {
+pub fn generate_code<R, F: FnMut(u8)>(ast_node: Instruction<R>, mut sink: F) {
     use backend::Instruction::*;
     match ast_node {
         Halt => sink(0x76),
@@ -16,12 +14,10 @@ fn generate_code<R, F: FnMut(u8)>(ast_node: Instruction<R>, mut sink: F) {
     }
 }
 
-#[cfg(test)]
 fn encode_ld_to_reg_from_reg(dest: SimpleOperand, src: SimpleOperand) -> u8 {
     0b01_000_000 | (encode_register(dest) << 3) | encode_register(src)
 }
 
-#[cfg(test)]
 fn encode_register(register: SimpleOperand) -> u8 {
     use backend::SimpleOperand::*;
     match register {
