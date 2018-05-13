@@ -27,15 +27,23 @@ impl fmt::Display for LineNumber {
 }
 
 impl From<LineIndex> for LineNumber {
-    fn from(line_index: LineIndex) -> LineNumber {
-        LineNumber(line_index.0 + 1)
+    fn from(LineIndex(index): LineIndex) -> LineNumber {
+        LineNumber(index + 1)
+    }
+}
+
+#[cfg(test)]
+impl From<LineNumber> for LineIndex {
+    fn from(LineNumber(n): LineNumber) -> LineIndex {
+        assert_ne!(n, 0);
+        LineIndex(n - 1)
     }
 }
 
 #[derive(Debug, PartialEq)]
 pub struct TextPosition {
     pub line: LineIndex,
-    column_index: usize,
+    pub column_index: usize,
 }
 
 #[derive(Debug, PartialEq)]

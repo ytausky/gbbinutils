@@ -1,4 +1,4 @@
-use codebase::{BufId, BufRange, LineNumber, TextBuf, TextCache};
+use codebase::{BufId, BufRange, LineNumber, TextBuf, TextCache, TextRange};
 use std::{io, cell::RefCell, fmt::Debug, rc::Rc};
 
 pub trait TokenTracker {
@@ -113,7 +113,7 @@ impl<'a> DiagnosticsListener<Rc<TokenRefData>> for TerminalDiagnostics<'a> {
 struct ElaboratedDiagnostic<'a> {
     text: String,
     buf_name: &'a str,
-    line_number: LineNumber,
+    highlight: TextRange,
     src_line: &'a str,
 }
 
@@ -132,13 +132,13 @@ fn elaborate(
         } => {
             let buf = codebase.buf(context.buf_id);
             let text_range = buf.text_range(&range);
-            let (line_number, src_line) = buf.lines(text_range.start.line..text_range.end.line + 1)
+            let (_, src_line) = buf.lines(text_range.start.line..text_range.end.line + 1)
                 .next()
                 .unwrap();
             ElaboratedDiagnostic {
                 text,
                 buf_name: buf.name(),
-                line_number,
+                highlight: text_range,
                 src_line,
             }
         }
@@ -146,19 +146,34 @@ fn elaborate(
 }
 
 fn render<'a, W: io::Write>(
-    disgnostic: &ElaboratedDiagnostic<'a>,
+    diagnostic: &ElaboratedDiagnostic<'a>,
     output: &mut W,
 ) -> io::Result<()> {
+    assert_eq!(
+        diagnostic.highlight.start.line,
+        diagnostic.highlight.end.line
+    );
+    let line_number: LineNumber = diagnostic.highlight.start.line.into();
+    let mut highlight = String::new();
+    let space_count = diagnostic.highlight.start.column_index;
+    let tilde_count = diagnostic.highlight.end.column_index - space_count;
+    for _ in 0..space_count {
+        highlight.push(' ');
+    }
+    for _ in 0..tilde_count {
+        highlight.push('~');
+    }
     writeln!(
         output,
-        "{}:{}: {}\n{}",
-        disgnostic.buf_name, disgnostic.line_number, disgnostic.text, disgnostic.src_line
+        "{}:{}: {}\n{}\n{}",
+        diagnostic.buf_name, line_number, diagnostic.text, diagnostic.src_line, highlight
     )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use codebase::TextPosition;
 
     static DUMMY_FILE: &str = "/my/file";
 
@@ -187,7 +202,7 @@ mod tests {
             ElaboratedDiagnostic {
                 text: "invocation of undefined macro `my_macro`".to_string(),
                 buf_name: DUMMY_FILE,
-                line_number: LineNumber(2),
+                highlight: mk_highlight(LineNumber(2), 4, 12),
                 src_line: "    my_macro a, $12",
             }
         )
@@ -198,13 +213,28 @@ mod tests {
         let elaborated_diagnostic = ElaboratedDiagnostic {
             text: "invocation of undefined macro `my_macro`".to_string(),
             buf_name: DUMMY_FILE,
-            line_number: LineNumber(2),
+            highlight: mk_highlight(LineNumber(2), 4, 12),
             src_line: "    my_macro a, $12",
         };
-        let expected =
-            "/my/file:2: invocation of undefined macro `my_macro`\n    my_macro a, $12\n";
+        let expected = r"/my/file:2: invocation of undefined macro `my_macro`
+    my_macro a, $12
+    ~~~~~~~~
+";
         let mut actual = Vec::new();
         render(&elaborated_diagnostic, &mut actual).unwrap();
         assert_eq!(String::from_utf8(actual).unwrap(), expected)
+    }
+
+    fn mk_highlight(line_number: LineNumber, start: usize, end: usize) -> TextRange {
+        TextRange {
+            start: TextPosition {
+                line: line_number.into(),
+                column_index: start,
+            },
+            end: TextPosition {
+                line: line_number.into(),
+                column_index: end,
+            },
+        }
     }
 }
