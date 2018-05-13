@@ -51,9 +51,11 @@ impl<'a, F: Frontend + 'a> syntax::FileContext<String, F::TokenRef> for Semantic
 
 pub struct CommandActions<'a, F: Frontend + 'a> {
     name: (Command, F::TokenRef),
-    args: Vec<SynExpr<(syntax::Token, F::TokenRef)>>,
+    args: CommandArgs<F>,
     parent: SemanticActions<'a, F>,
 }
+
+type CommandArgs<F> = Vec<SynExpr<(syntax::Token, <F as Frontend>::TokenRef)>>;
 
 impl<'a, F: Frontend + 'a> CommandActions<'a, F> {
     fn new(name: (Command, F::TokenRef), parent: SemanticActions<'a, F>) -> CommandActions<'a, F> {
@@ -75,29 +77,46 @@ impl<'a, F: Frontend + 'a> syntax::CommandContext<F::TokenRef> for CommandAction
 
     fn exit_command(mut self) -> Self::Parent {
         match self.name {
-            (Command::Db, _) => for arg in self.args {
-                match arg {
-                    SynExpr::Atom(atom) => {
-                        use frontend::ExprFactory;
-                        let expr = self.parent.expr_factory.mk_atom(atom);
-                        self.parent.session.emit_item(backend::Item::Byte(expr))
-                    }
-                    _ => panic!(),
-                }
-            },
-            (Command::Include, _) => self.parent.session.analyze_chunk(reduce_include(self.args)),
-            command => {
-                let mut analyzer =
-                    self::instruction::CommandAnalyzer::new(&mut self.parent.expr_factory);
-                self.parent.session.emit_item(
-                    analyzer
-                        .analyze_instruction(command, self.args.into_iter())
-                        .map(backend::Item::Instruction)
-                        .unwrap(),
-                )
-            }
+            (Command::Db, _) => analyze_db(self.args, &mut self.parent),
+            (Command::Include, _) => analyze_include(self.args, &mut self.parent),
+            name => analyze_command(name, self.args, &mut self.parent),
         }
         self.parent
+    }
+}
+
+fn analyze_db<'a, F: Frontend + 'a>(args: CommandArgs<F>, actions: &mut SemanticActions<'a, F>) {
+    for arg in args {
+        match arg {
+            SynExpr::Atom(atom) => {
+                use frontend::ExprFactory;
+                let expr = actions.expr_factory.mk_atom(atom);
+                actions.session.emit_item(backend::Item::Byte(expr))
+            }
+            _ => panic!(),
+        }
+    }
+}
+
+fn analyze_include<'a, F: Frontend + 'a>(
+    args: CommandArgs<F>,
+    actions: &mut SemanticActions<'a, F>,
+) {
+    actions.session.analyze_chunk(reduce_include(args));
+}
+
+fn analyze_command<'a, F: Frontend + 'a>(
+    name: (Command, F::TokenRef),
+    args: CommandArgs<F>,
+    actions: &mut SemanticActions<'a, F>,
+) {
+    let mut analyzer = instruction::CommandAnalyzer::new(&mut actions.expr_factory);
+    let analysis_result = analyzer.analyze_instruction(name, args.into_iter());
+    match analysis_result {
+        Ok(instruction) => actions
+            .session
+            .emit_item(backend::Item::Instruction(instruction)),
+        Err(_diagnostic) => panic!(),
     }
 }
 
