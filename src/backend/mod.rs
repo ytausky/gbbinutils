@@ -53,8 +53,8 @@ impl<'a, T: 'a> Rom<'a, T> {
         }
     }
 
-    fn emit_instruction<R>(&mut self, instruction: Instruction<R>) {
-        codegen::generate_code(instruction, self)
+    fn emit_instruction<R>(&mut self, instruction: &Instruction<R>) {
+        codegen::generate_code(&instruction, self)
     }
 }
 
@@ -73,7 +73,7 @@ impl<'a, R, T: 'a + DiagnosticsListener<R>> Backend<R> for Rom<'a, T> {
     fn emit_item(&mut self, item: Item<R>) {
         match item {
             Item::Byte(expr) => self.emit_byte_expr(expr),
-            Item::Instruction(instruction) => self.emit_instruction(instruction),
+            Item::Instruction(instruction) => self.emit_instruction(&instruction),
         }
     }
 }

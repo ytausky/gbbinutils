@@ -4,11 +4,11 @@ pub trait ByteEmitter {
     fn emit_byte(&mut self, byte: u8);
 }
 
-pub fn generate_code<R, E: ByteEmitter>(ast_node: Instruction<R>, emitter: &mut E) {
+pub fn generate_code<R>(instruction: &Instruction<R>, emitter: &mut impl ByteEmitter) {
     use backend::Instruction::*;
-    match ast_node {
+    match instruction {
         Halt => emitter.emit_byte(0x76),
-        Ld(LdKind::Simple(dest, src)) => emitter.emit_byte(encode_ld_to_reg_from_reg(dest, src)),
+        Ld(LdKind::Simple(dest, src)) => emitter.emit_byte(encode_ld_to_reg_from_reg(*dest, *src)),
         Nop => emitter.emit_byte(0x00),
         Stop => {
             emitter.emit_byte(0x10);
@@ -50,7 +50,7 @@ mod tests {
 
     fn test_instruction(instruction: Instruction<()>, bytes: &[u8]) {
         let mut code = vec![];
-        generate_code(instruction, &mut |byte| code.push(byte));
+        generate_code(&instruction, &mut |byte| code.push(byte));
         assert_eq!(code, bytes)
     }
 
