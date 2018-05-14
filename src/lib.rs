@@ -1,4 +1,4 @@
-use std::{fmt::Debug, fs::File, io::Write};
+use std::fmt::Debug;
 
 mod backend;
 mod codebase;
@@ -20,21 +20,26 @@ pub fn analyze_file(name: &str) {
 pub fn assemble_rom(name: &str) {
     let codebase = codebase::FileCodebase::new(codebase::StdFileSystem::new());
     let diagnostics = diagnostics::TerminalDiagnostics::new(&codebase.cache);
-    let rom = frontend::analyze_file(
+    frontend::analyze_file(
         name.to_string(),
         &codebase,
         diagnostics::SimpleTokenTracker {},
-        backend::Rom::new(&diagnostics),
+        backend::ObjectBuilder::new(&diagnostics),
         &diagnostics,
     );
-    let mut file = File::create("my_rom.gb").unwrap();
-    file.write_all(rom.as_slice()).unwrap();
 }
 
 struct OutputDumper;
 
 impl OutputDumper {
     pub fn new() -> OutputDumper {
+        OutputDumper {}
+    }
+}
+
+impl<R: Debug> backend::Backend<R> for OutputDumper {
+    type Section = Self;
+    fn mk_section(&mut self) -> Self::Section {
         OutputDumper {}
     }
 }

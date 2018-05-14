@@ -12,7 +12,7 @@ use codebase::Codebase;
 pub fn analyze_file<
     C: Codebase,
     TT: TokenTracker,
-    B: Section<TT::TokenRef>,
+    B: Backend<TT::TokenRef>,
     D: DiagnosticsListener<TT::TokenRef>,
 >(
     name: String,
@@ -121,9 +121,13 @@ pub enum ChunkId<T> {
 
 use std::{collections::HashMap, rc::Rc};
 
-struct Session<'a, TCS, SAF, B, DL: 'a> {
+struct Session<'a, TCS: TokenizedCodeSource, SAF, B: Backend<TCS::TokenRef>, DL: 'a>
+where
+    for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token, TCS::TokenRef)>,
+{
     analyzer_factory: SAF,
     backend: B,
+    section: Option<B::Section>,
     tokenized_code_source: TCS,
     diagnostics: &'a DL,
 }
@@ -133,7 +137,7 @@ where
     TCS: TokenizedCodeSource,
     for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token, TCS::TokenRef)>,
     SAF: TokenSeqAnalyzerFactory,
-    B: Section<TCS::TokenRef>,
+    B: Backend<TCS::TokenRef>,
     DL: DiagnosticsListener<TCS::TokenRef> + 'a,
 {
     fn new(
@@ -142,12 +146,15 @@ where
         backend: B,
         diagnostics: &DL,
     ) -> Session<TCS, SAF, B, DL> {
-        Session {
+        let mut session = Session {
             analyzer_factory,
             backend,
+            section: None,
             tokenized_code_source,
             diagnostics,
-        }
+        };
+        session.section = Some(session.backend.mk_section());
+        session
     }
 
     fn analyze_token_seq<I: IntoIterator<Item = (Token, TCS::TokenRef)>>(&mut self, tokens: I) {
@@ -187,7 +194,7 @@ where
     TCS: TokenizedCodeSource,
     for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token, TCS::TokenRef)>,
     SAF: TokenSeqAnalyzerFactory,
-    B: Section<TCS::TokenRef>,
+    B: Backend<TCS::TokenRef>,
     DL: DiagnosticsListener<TCS::TokenRef> + 'a,
 {
     type TokenRef = TCS::TokenRef;
@@ -204,11 +211,14 @@ where
     }
 
     fn emit_item(&mut self, item: Item<Self::TokenRef>) {
-        self.backend.emit_item(item)
+        self.section.as_mut().unwrap().emit_item(item)
     }
 
     fn define_label(&mut self, label: (String, Self::TokenRef)) {
-        self.backend.add_label((&label.0, label.1))
+        self.section
+            .as_mut()
+            .unwrap()
+            .add_label((&label.0, label.1))
     }
 
     fn define_macro(
@@ -503,6 +513,13 @@ mod tests {
             self.log
                 .borrow_mut()
                 .push(TestEvent::AnalyzeTokens(tokens.map(|(t, _)| t).collect()))
+        }
+    }
+
+    impl<'a> Backend<()> for Mock<'a> {
+        type Section = Self;
+        fn mk_section(&mut self) -> Self::Section {
+            self.clone()
         }
     }
 

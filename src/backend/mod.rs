@@ -1,5 +1,10 @@
 use diagnostics::*;
 
+pub trait Backend<R> {
+    type Section: Section<R>;
+    fn mk_section(&mut self) -> Self::Section;
+}
+
 pub trait Section<R> {
     fn add_label(&mut self, label: (&str, R));
     fn emit_item(&mut self, item: Item<R>);
@@ -12,6 +17,23 @@ pub enum Item<R> {
 }
 
 mod codegen;
+
+pub struct ObjectBuilder<'a, T: 'a> {
+    diagnostics: &'a T,
+}
+
+impl<'a, T: 'a> ObjectBuilder<'a, T> {
+    pub fn new(diagnostics: &T) -> ObjectBuilder<T> {
+        ObjectBuilder { diagnostics }
+    }
+}
+
+impl<'a, R, T: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<'a, T> {
+    type Section = Rom<'a, T>;
+    fn mk_section(&mut self) -> Self::Section {
+        Rom::new(self.diagnostics)
+    }
+}
 
 pub struct Rom<'a, T: 'a> {
     data: Vec<u8>,
@@ -28,6 +50,7 @@ impl<'a, T: 'a> Rom<'a, T> {
         }
     }
 
+    #[cfg(test)]
     pub fn as_slice(&self) -> &[u8] {
         self.data.as_slice()
     }
