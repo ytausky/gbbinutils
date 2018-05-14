@@ -281,9 +281,13 @@ mod tests {
             self.0.push(TestOperation::Label(label))
         }
 
-        fn define_macro(&mut self, (name, _): (String, Self::TokenRef), tokens: Vec<(Token, ())>) {
+        fn define_macro(
+            &mut self,
+            (name, _): (impl Into<String>, Self::TokenRef),
+            tokens: Vec<(Token, ())>,
+        ) {
             self.0.push(TestOperation::DefineMacro(
-                name,
+                name.into(),
                 tokens.into_iter().map(|(t, _)| t).collect(),
             ))
         }

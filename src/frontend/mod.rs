@@ -105,7 +105,7 @@ pub trait Frontend {
     fn define_label(&mut self, label: (String, Self::TokenRef));
     fn define_macro(
         &mut self,
-        name: (String, Self::TokenRef),
+        name: (impl Into<String>, Self::TokenRef),
         tokens: Vec<(Token, Self::TokenRef)>,
     );
 }
@@ -213,7 +213,7 @@ where
 
     fn define_macro(
         &mut self,
-        name: (String, Self::TokenRef),
+        name: (impl Into<String>, Self::TokenRef),
         tokens: Vec<(Token, Self::TokenRef)>,
     ) {
         self.tokenized_code_source.define_macro(name, tokens)
@@ -227,7 +227,7 @@ where
     type TokenRef: Clone + Debug + PartialEq;
     fn define_macro(
         &mut self,
-        name: (String, Self::TokenRef),
+        name: (impl Into<String>, Self::TokenRef),
         tokens: Vec<(Token, Self::TokenRef)>,
     );
     type MacroInvocationIter: Iterator<Item = (Token, Self::TokenRef)>;
@@ -261,8 +261,12 @@ impl<'a, C: Codebase + 'a, TT: TokenTracker> TokenStreamSource<'a, C, TT> {
 impl<'a, C: Codebase + 'a, TT: TokenTracker> TokenizedCodeSource for TokenStreamSource<'a, C, TT> {
     type TokenRef = TT::TokenRef;
 
-    fn define_macro(&mut self, name: (String, TT::TokenRef), tokens: Vec<(Token, TT::TokenRef)>) {
-        self.macro_defs.insert(name.0, Rc::new(tokens));
+    fn define_macro(
+        &mut self,
+        name: (impl Into<String>, TT::TokenRef),
+        tokens: Vec<(Token, TT::TokenRef)>,
+    ) {
+        self.macro_defs.insert(name.0.into(), Rc::new(tokens));
     }
 
     type MacroInvocationIter = MacroDefIter<TT::TokenRef>;
@@ -439,10 +443,10 @@ mod tests {
 
         fn define_macro(
             &mut self,
-            name: (String, Self::TokenRef),
+            name: (impl Into<String>, Self::TokenRef),
             tokens: Vec<(Token, Self::TokenRef)>,
         ) {
-            self.macros.insert(name.0, tokens);
+            self.macros.insert(name.0.into(), tokens);
         }
 
         type MacroInvocationIter = std::vec::IntoIter<(Token, Self::TokenRef)>;
