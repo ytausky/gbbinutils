@@ -12,7 +12,7 @@ use codebase::Codebase;
 pub fn analyze_file<
     C: Codebase,
     TT: TokenTracker,
-    B: Backend<TT::TokenRef>,
+    B: Section<TT::TokenRef>,
     D: DiagnosticsListener<TT::TokenRef>,
 >(
     name: String,
@@ -133,7 +133,7 @@ where
     TCS: TokenizedCodeSource,
     for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token, TCS::TokenRef)>,
     SAF: TokenSeqAnalyzerFactory,
-    B: Backend<TCS::TokenRef>,
+    B: Section<TCS::TokenRef>,
     DL: DiagnosticsListener<TCS::TokenRef> + 'a,
 {
     fn new(
@@ -187,7 +187,7 @@ where
     TCS: TokenizedCodeSource,
     for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token, TCS::TokenRef)>,
     SAF: TokenSeqAnalyzerFactory,
-    B: Backend<TCS::TokenRef>,
+    B: Section<TCS::TokenRef>,
     DL: DiagnosticsListener<TCS::TokenRef> + 'a,
 {
     type TokenRef = TCS::TokenRef;
@@ -506,7 +506,7 @@ mod tests {
         }
     }
 
-    impl<'a> Backend<()> for Mock<'a> {
+    impl<'a> Section<()> for Mock<'a> {
         fn add_label(&mut self, (label, _): (&str, ())) {
             self.log
                 .borrow_mut()

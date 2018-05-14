@@ -1,6 +1,6 @@
 use diagnostics::*;
 
-pub trait Backend<R> {
+pub trait Section<R> {
     fn add_label(&mut self, label: (&str, R));
     fn emit_item(&mut self, item: Item<R>);
 }
@@ -67,7 +67,7 @@ impl<'a, T: 'a> ByteEmitter for Rom<'a, T> {
     }
 }
 
-impl<'a, R, T: 'a + DiagnosticsListener<R>> Backend<R> for Rom<'a, T> {
+impl<'a, R, T: 'a + DiagnosticsListener<R>> Section<R> for Rom<'a, T> {
     fn add_label(&mut self, _label: (&str, R)) {}
 
     fn emit_item(&mut self, item: Item<R>) {
