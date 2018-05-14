@@ -32,7 +32,7 @@ trait TokenSeqAnalyzer {
     fn analyze<I, F>(&mut self, tokens: I, frontend: &mut F)
     where
         I: Iterator<Item = (Token, F::TokenRef)>,
-        F: Frontend;
+        F: AssemblySession;
 }
 
 struct SemanticTokenSeqAnalyzer;
@@ -47,7 +47,7 @@ impl TokenSeqAnalyzer for SemanticTokenSeqAnalyzer {
     fn analyze<I, F>(&mut self, tokens: I, frontend: &mut F)
     where
         I: Iterator<Item = (Token, F::TokenRef)>,
-        F: Frontend,
+        F: AssemblySession,
     {
         let actions = semantics::SemanticActions::new(frontend);
         syntax::parse_token_seq(tokens, actions)
@@ -97,7 +97,7 @@ impl ExprFactory for StrExprFactory {
     }
 }
 
-pub trait Frontend {
+pub trait AssemblySession {
     type TokenRef: Debug + PartialEq;
     fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::TokenRef>);
     fn emit_diagnostic(&mut self, diagnostic: Diagnostic<Self::TokenRef>);
@@ -173,7 +173,7 @@ where
 
     fn invoke_macro(
         &mut self,
-        name: (String, <Self as Frontend>::TokenRef),
+        name: (String, <Self as AssemblySession>::TokenRef),
         args: Vec<Vec<Token>>,
     ) {
         match self.tokenized_code_source
@@ -189,7 +189,7 @@ where
     }
 }
 
-impl<'a, TCS, SAF, B, DL> Frontend for Session<'a, TCS, SAF, B, DL>
+impl<'a, TCS, SAF, B, DL> AssemblySession for Session<'a, TCS, SAF, B, DL>
 where
     TCS: TokenizedCodeSource,
     for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token, TCS::TokenRef)>,
@@ -508,7 +508,7 @@ mod tests {
         fn analyze<I, F>(&mut self, tokens: I, _frontend: &mut F)
         where
             I: Iterator<Item = (Token, F::TokenRef)>,
-            F: Frontend,
+            F: AssemblySession,
         {
             self.log
                 .borrow_mut()

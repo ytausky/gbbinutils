@@ -1,15 +1,15 @@
 use backend;
 use frontend::syntax::{self, token, SynExpr, Token, TokenSpec, keyword::Command};
-use frontend::{Atom, ChunkId, Frontend, StrExprFactory};
+use frontend::{AssemblySession, Atom, ChunkId, StrExprFactory};
 
 mod instruction;
 
-pub struct SemanticActions<'a, F: Frontend + 'a> {
+pub struct SemanticActions<'a, F: AssemblySession + 'a> {
     session: &'a mut F,
     expr_factory: StrExprFactory,
 }
 
-impl<'a, F: Frontend + 'a> SemanticActions<'a, F> {
+impl<'a, F: AssemblySession + 'a> SemanticActions<'a, F> {
     pub fn new(session: &'a mut F) -> SemanticActions<'a, F> {
         SemanticActions {
             session,
@@ -18,7 +18,9 @@ impl<'a, F: Frontend + 'a> SemanticActions<'a, F> {
     }
 }
 
-impl<'a, F: Frontend + 'a> syntax::FileContext<String, F::TokenRef> for SemanticActions<'a, F> {
+impl<'a, F: AssemblySession + 'a> syntax::FileContext<String, F::TokenRef>
+    for SemanticActions<'a, F>
+{
     type CommandContext = CommandActions<'a, F>;
     type MacroDefContext = MacroDefActions<'a, F>;
     type MacroInvocationContext = MacroInvocationActions<'a, F>;
@@ -49,15 +51,15 @@ impl<'a, F: Frontend + 'a> syntax::FileContext<String, F::TokenRef> for Semantic
     }
 }
 
-pub struct CommandActions<'a, F: Frontend + 'a> {
+pub struct CommandActions<'a, F: AssemblySession + 'a> {
     name: (Command, F::TokenRef),
     args: CommandArgs<F>,
     parent: SemanticActions<'a, F>,
 }
 
-type CommandArgs<F> = Vec<SynExpr<(syntax::Token, <F as Frontend>::TokenRef)>>;
+type CommandArgs<F> = Vec<SynExpr<(syntax::Token, <F as AssemblySession>::TokenRef)>>;
 
-impl<'a, F: Frontend + 'a> CommandActions<'a, F> {
+impl<'a, F: AssemblySession + 'a> CommandActions<'a, F> {
     fn new(name: (Command, F::TokenRef), parent: SemanticActions<'a, F>) -> CommandActions<'a, F> {
         CommandActions {
             name,
@@ -67,7 +69,7 @@ impl<'a, F: Frontend + 'a> CommandActions<'a, F> {
     }
 }
 
-impl<'a, F: Frontend + 'a> syntax::CommandContext<F::TokenRef> for CommandActions<'a, F> {
+impl<'a, F: AssemblySession + 'a> syntax::CommandContext<F::TokenRef> for CommandActions<'a, F> {
     type Token = Token;
     type Parent = SemanticActions<'a, F>;
 
@@ -85,7 +87,10 @@ impl<'a, F: Frontend + 'a> syntax::CommandContext<F::TokenRef> for CommandAction
     }
 }
 
-fn analyze_db<'a, F: Frontend + 'a>(args: CommandArgs<F>, actions: &mut SemanticActions<'a, F>) {
+fn analyze_db<'a, F: AssemblySession + 'a>(
+    args: CommandArgs<F>,
+    actions: &mut SemanticActions<'a, F>,
+) {
     for arg in args {
         match arg {
             SynExpr::Atom(atom) => {
@@ -98,14 +103,14 @@ fn analyze_db<'a, F: Frontend + 'a>(args: CommandArgs<F>, actions: &mut Semantic
     }
 }
 
-fn analyze_include<'a, F: Frontend + 'a>(
+fn analyze_include<'a, F: AssemblySession + 'a>(
     args: CommandArgs<F>,
     actions: &mut SemanticActions<'a, F>,
 ) {
     actions.session.analyze_chunk(reduce_include(args));
 }
 
-fn analyze_command<'a, F: Frontend + 'a>(
+fn analyze_command<'a, F: AssemblySession + 'a>(
     name: (Command, F::TokenRef),
     args: CommandArgs<F>,
     actions: &mut SemanticActions<'a, F>,
@@ -120,13 +125,13 @@ fn analyze_command<'a, F: Frontend + 'a>(
     }
 }
 
-pub struct MacroDefActions<'a, F: Frontend + 'a> {
+pub struct MacroDefActions<'a, F: AssemblySession + 'a> {
     name: (String, F::TokenRef),
     tokens: Vec<(Token, F::TokenRef)>,
     parent: SemanticActions<'a, F>,
 }
 
-impl<'a, F: Frontend + 'a> MacroDefActions<'a, F> {
+impl<'a, F: AssemblySession + 'a> MacroDefActions<'a, F> {
     fn new(name: (String, F::TokenRef), parent: SemanticActions<'a, F>) -> MacroDefActions<'a, F> {
         MacroDefActions {
             name,
@@ -136,7 +141,7 @@ impl<'a, F: Frontend + 'a> MacroDefActions<'a, F> {
     }
 }
 
-impl<'a, F: Frontend + 'a> syntax::TokenSeqContext<F::TokenRef> for MacroDefActions<'a, F> {
+impl<'a, F: AssemblySession + 'a> syntax::TokenSeqContext<F::TokenRef> for MacroDefActions<'a, F> {
     type Token = Token;
     type Parent = SemanticActions<'a, F>;
 
@@ -150,13 +155,13 @@ impl<'a, F: Frontend + 'a> syntax::TokenSeqContext<F::TokenRef> for MacroDefActi
     }
 }
 
-pub struct MacroInvocationActions<'a, F: Frontend + 'a> {
+pub struct MacroInvocationActions<'a, F: AssemblySession + 'a> {
     name: (Atom<String>, F::TokenRef),
     args: Vec<Vec<Token>>,
     parent: SemanticActions<'a, F>,
 }
 
-impl<'a, F: Frontend + 'a> MacroInvocationActions<'a, F> {
+impl<'a, F: AssemblySession + 'a> MacroInvocationActions<'a, F> {
     fn new(
         name: (Atom<String>, F::TokenRef),
         parent: SemanticActions<'a, F>,
@@ -173,7 +178,7 @@ impl<'a, F: Frontend + 'a> MacroInvocationActions<'a, F> {
     }
 }
 
-impl<'a, F: Frontend + 'a> syntax::MacroInvocationContext<F::TokenRef>
+impl<'a, F: AssemblySession + 'a> syntax::MacroInvocationContext<F::TokenRef>
     for MacroInvocationActions<'a, F>
 {
     type Token = Token;
@@ -196,12 +201,12 @@ impl<'a, F: Frontend + 'a> syntax::MacroInvocationContext<F::TokenRef>
     }
 }
 
-pub struct MacroArgActions<'a, F: Frontend + 'a> {
+pub struct MacroArgActions<'a, F: AssemblySession + 'a> {
     tokens: Vec<Token>,
     parent: MacroInvocationActions<'a, F>,
 }
 
-impl<'a, F: Frontend + 'a> MacroArgActions<'a, F> {
+impl<'a, F: AssemblySession + 'a> MacroArgActions<'a, F> {
     fn new(parent: MacroInvocationActions<'a, F>) -> MacroArgActions<'a, F> {
         MacroArgActions {
             tokens: Vec::new(),
@@ -210,7 +215,7 @@ impl<'a, F: Frontend + 'a> MacroArgActions<'a, F> {
     }
 }
 
-impl<'a, F: Frontend + 'a> syntax::TokenSeqContext<F::TokenRef> for MacroArgActions<'a, F> {
+impl<'a, F: AssemblySession + 'a> syntax::TokenSeqContext<F::TokenRef> for MacroArgActions<'a, F> {
     type Token = Token;
     type Parent = MacroInvocationActions<'a, F>;
 
@@ -262,7 +267,7 @@ mod tests {
         Label(String),
     }
 
-    impl Frontend for TestFrontend {
+    impl AssemblySession for TestFrontend {
         type TokenRef = ();
 
         fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::TokenRef>) {
