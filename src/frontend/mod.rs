@@ -80,7 +80,7 @@ impl AnalysisFactory for SemanticAnalysisFactory {
 }
 
 pub trait ExprFactory {
-    fn mk_atom<R>(&mut self, token: (Token, R)) -> Expr<R>;
+    fn mk_atom<R>(&mut self, atom: (Atom<String>, R)) -> Expr<R>;
 }
 
 pub struct StrExprFactory;
@@ -92,10 +92,10 @@ impl StrExprFactory {
 }
 
 impl ExprFactory for StrExprFactory {
-    fn mk_atom<R>(&mut self, (token, token_ref): (Token, R)) -> Expr<R> {
-        match token {
-            token::Atom(Atom::Ident(ident)) => Expr::Symbol(ident, token_ref),
-            token::Atom(Atom::Number(number)) => Expr::Literal(number, token_ref),
+    fn mk_atom<R>(&mut self, (atom, token_ref): (Atom<String>, R)) -> Expr<R> {
+        match atom {
+            Atom::Ident(ident) => Expr::Symbol(ident, token_ref),
+            Atom::Number(number) => Expr::Literal(number, token_ref),
             _ => panic!(),
         }
     }

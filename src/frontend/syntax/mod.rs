@@ -55,7 +55,7 @@ pub trait FileContext<S: TokenSpec, R>
 where
     Self: Sized,
 {
-    type CommandContext: CommandContext<R, Token = parser::Token<S>, Parent = Self>;
+    type CommandContext: CommandContext<R, TokenSpec = S, Parent = Self>;
     type MacroDefContext: TokenSeqContext<R, Token = parser::Token<S>, Parent = Self>;
     type MacroInvocationContext: MacroInvocationContext<R, Token = parser::Token<S>, Parent = Self>;
     fn add_label(&mut self, label: (S::Label, R));
@@ -65,9 +65,9 @@ where
 }
 
 pub trait CommandContext<R> {
-    type Token;
+    type TokenSpec: TokenSpec;
     type Parent;
-    fn add_argument(&mut self, expr: SynExpr<(Self::Token, R)>);
+    fn add_argument(&mut self, expr: SynExpr<Self::TokenSpec, R>);
     fn exit(self) -> Self::Parent;
 }
 
@@ -89,19 +89,21 @@ pub trait TokenSeqContext<R> {
     fn exit(self) -> Self::Parent;
 }
 
+pub trait ExprSpec {
+    type Atom;
+}
+
+impl<T: TokenSpec> ExprSpec for T {
+    type Atom = T::Atom;
+}
+
 #[derive(Clone, Debug, PartialEq)]
-pub enum SynExpr<T> {
-    Atom(T),
-    Deref(Box<SynExpr<T>>),
+pub enum SynExpr<S: ExprSpec, R> {
+    Atom((S::Atom, R)),
+    Deref(Box<SynExpr<S, R>>),
 }
 
-impl<T> From<T> for SynExpr<T> {
-    fn from(atom: T) -> Self {
-        SynExpr::Atom(atom)
-    }
-}
-
-impl<T> SynExpr<T> {
+impl<S: ExprSpec, R> SynExpr<S, R> {
     pub fn deref(self) -> Self {
         SynExpr::Deref(Box::new(self))
     }

@@ -1,5 +1,5 @@
 use backend;
-use frontend::syntax::{self, token, SynExpr, Token, TokenSpec, keyword::Command};
+use frontend::syntax::{self, SynExpr, Token, TokenSpec, keyword::Command};
 use frontend::{Atom, StrExprFactory};
 use session::{ChunkId, Session};
 
@@ -56,7 +56,7 @@ pub struct CommandActions<'a, F: Session + 'a> {
     parent: SemanticActions<'a, F>,
 }
 
-type CommandArgs<F> = Vec<SynExpr<(syntax::Token, <F as Session>::TokenRef)>>;
+type CommandArgs<F> = Vec<SynExpr<String, <F as Session>::TokenRef>>;
 
 impl<'a, F: Session + 'a> CommandActions<'a, F> {
     fn new(name: (Command, F::TokenRef), parent: SemanticActions<'a, F>) -> CommandActions<'a, F> {
@@ -69,10 +69,10 @@ impl<'a, F: Session + 'a> CommandActions<'a, F> {
 }
 
 impl<'a, F: Session + 'a> syntax::CommandContext<F::TokenRef> for CommandActions<'a, F> {
-    type Token = Token;
+    type TokenSpec = String;
     type Parent = SemanticActions<'a, F>;
 
-    fn add_argument(&mut self, expr: SynExpr<(Self::Token, F::TokenRef)>) {
+    fn add_argument(&mut self, expr: SynExpr<String, F::TokenRef>) {
         self.args.push(expr)
     }
 
@@ -225,11 +225,11 @@ impl<'a, F: Session + 'a> syntax::TokenSeqContext<F::TokenRef> for MacroArgActio
     }
 }
 
-fn reduce_include<R>(mut arguments: Vec<SynExpr<(Token, R)>>) -> ChunkId<R> {
+fn reduce_include<R>(mut arguments: Vec<SynExpr<String, R>>) -> ChunkId<R> {
     assert_eq!(arguments.len(), 1);
     let path = arguments.pop().unwrap();
     match path {
-        SynExpr::Atom((token::Atom(Atom::String(path_str)), token_ref)) => {
+        SynExpr::Atom((Atom::String(path_str), token_ref)) => {
             ChunkId::File((path_str, Some(token_ref)))
         }
         _ => panic!(),
@@ -242,8 +242,8 @@ mod tests {
 
     use backend;
     use diagnostics::Diagnostic;
-    use frontend::syntax::{CommandContext, FileContext, MacroInvocationContext, TokenSeqContext,
-                           keyword::Operand};
+    use frontend::syntax::{token, CommandContext, FileContext, MacroInvocationContext,
+                           TokenSeqContext, keyword::Operand};
 
     struct TestFrontend(Vec<TestOperation>);
 
@@ -298,7 +298,7 @@ mod tests {
         let filename = "file.asm";
         let actions = collect_semantic_actions(|actions| {
             let mut command = actions.enter_command((Command::Include, ()));
-            let expr = SynExpr::from((token::Atom(Atom::String(filename.to_string())), ()));
+            let expr = SynExpr::Atom((Atom::String(filename.to_string()), ()));
             command.add_argument(expr);
             command.exit();
         });
@@ -330,8 +330,8 @@ mod tests {
         )
     }
 
-    fn mk_literal(n: i32) -> SynExpr<(Token, ())> {
-        SynExpr::from((token::Atom(Atom::Number(n)), ()))
+    fn mk_literal(n: i32) -> SynExpr<String, ()> {
+        SynExpr::Atom((Atom::Number(n), ()))
     }
 
     fn mk_byte(byte: &i32) -> backend::Item<()> {
@@ -414,8 +414,8 @@ mod tests {
         use diagnostics::{Diagnostic, Message};
         let actions = collect_semantic_actions(|actions| {
             let mut command_context = actions.enter_command((Command::Nop, ()));
-            let token_a = token::Atom(Atom::Operand(Operand::A));
-            command_context.add_argument((token_a, ()).into());
+            let atom_a = Atom::Operand(Operand::A);
+            command_context.add_argument(SynExpr::Atom((atom_a, ())));
             command_context.exit();
         });
         assert_eq!(
