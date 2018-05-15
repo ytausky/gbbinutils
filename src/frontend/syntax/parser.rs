@@ -60,7 +60,22 @@ struct Parser<I: Iterator> {
     tokens: iter::Peekable<I>,
 }
 
+macro_rules! mk_expect {
+    ($name:ident, $ret_ty:ident) => {
+        fn $name(&mut self) -> (S::$ret_ty, T) {
+            match self.tokens.next() {
+                Some((Token::$ret_ty(inner), t)) => (inner, t),
+                _ => panic!(),
+            }
+        }
+    }
+}
+
 impl<S: TokenSpec, T, I: Iterator<Item = (Token<S>, T)>> Parser<I> {
+    mk_expect!(expect_atom, Atom);
+    mk_expect!(expect_command, Command);
+    mk_expect!(expect_label, Label);
+
     fn lookahead(&mut self) -> Lookahead {
         self.tokens.peek().map(|&(ref t, _)| t.kind())
     }
@@ -72,27 +87,6 @@ impl<S: TokenSpec, T, I: Iterator<Item = (Token<S>, T)>> Parser<I> {
     fn expect(&mut self, expected: &Lookahead) -> I::Item {
         assert_eq!(self.lookahead(), *expected);
         self.bump()
-    }
-
-    fn expect_label(&mut self) -> (S::Label, T) {
-        match self.tokens.next() {
-            Some((Token::Label(label), t)) => (label, t),
-            _ => panic!(),
-        }
-    }
-
-    fn expect_command(&mut self) -> (S::Command, T) {
-        match self.tokens.next() {
-            Some((Token::Command(command), t)) => (command, t),
-            _ => panic!(),
-        }
-    }
-
-    fn expect_atom(&mut self) -> (S::Atom, T) {
-        match self.tokens.next() {
-            Some((Token::Atom(atom), t)) => (atom, t),
-            _ => panic!(),
-        }
     }
 
     fn parse_file<F: FileContext<S, T>>(&mut self, actions: F) {
