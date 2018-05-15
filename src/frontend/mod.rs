@@ -27,7 +27,7 @@ pub fn analyze_file<
     let factory = SemanticTokenSeqAnalyzerFactory::new();
     let token_provider = TokenStreamSource::new(codebase, token_tracker);
     let file_parser = FileParser::new(factory, token_provider, diagnostics);
-    let mut session: Components<_, _, _, D, _, _, _> =
+    let mut session: Components<_, _, D, _, _, _> =
         Components::new(file_parser, backend, diagnostics);
     session.analyze_chunk(ChunkId::File((name, None)))
 }
@@ -150,7 +150,7 @@ where
     ) {
         let mut analyzer = self.analyzer_factory.mk_token_seq_analyzer();
         let diagnostics = self.diagnostics;
-        let mut session: Components<TCS::TokenRef, Self, B, DL, _, _, _> =
+        let mut session: Components<Self, B, DL, _, _, _> =
             Components::new(self, backend, diagnostics);
         analyzer.analyze(tokens.into_iter(), &mut session)
     }
@@ -586,7 +586,6 @@ mod tests {
 
     type TestFileParser<'a> = FileParser<'a, Mock<'a>, MockTokenSource, Mock<'a>>;
     type TestSession<'a> = Components<
-        (),
         TestFileParser<'a>,
         Mock<'a>,
         Mock<'a>,

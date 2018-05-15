@@ -23,11 +23,11 @@ pub enum ChunkId<T> {
     },
 }
 
-pub struct Components<R, F, B, D, BMF, BMB, BD>
+pub struct Components<F, B, D, BMF, BMB, BD>
 where
     F: frontend::Frontend,
-    B: backend::Backend<R>,
-    D: diagnostics::DiagnosticsListener<R>,
+    B: backend::Backend<F::TokenRef>,
+    D: diagnostics::DiagnosticsListener<F::TokenRef>,
     BMF: BorrowMut<F>,
     BMB: BorrowMut<B>,
     BD: Borrow<D>,
@@ -35,24 +35,19 @@ where
     frontend: BMF,
     backend: BMB,
     diagnostics: BD,
-    phantom: marker::PhantomData<(R, F, B, D)>,
+    phantom: marker::PhantomData<(F, B, D)>,
 }
 
-impl<R, F, B, D, BMF, BMB, BD> Components<R, F, B, D, BMF, BMB, BD>
+impl<F, B, D, BMF, BMB, BD> Components<F, B, D, BMF, BMB, BD>
 where
-    R: fmt::Debug + PartialEq,
-    F: frontend::Frontend<TokenRef = R>,
-    B: backend::Backend<R>,
-    D: diagnostics::DiagnosticsListener<R>,
+    F: frontend::Frontend,
+    B: backend::Backend<F::TokenRef>,
+    D: diagnostics::DiagnosticsListener<F::TokenRef>,
     BMF: BorrowMut<F>,
     BMB: BorrowMut<B>,
     BD: Borrow<D>,
 {
-    pub fn new(
-        frontend: BMF,
-        backend: BMB,
-        diagnostics: BD,
-    ) -> Components<R, F, B, D, BMF, BMB, BD> {
+    pub fn new(frontend: BMF, backend: BMB, diagnostics: BD) -> Components<F, B, D, BMF, BMB, BD> {
         Components {
             frontend,
             backend,
@@ -62,17 +57,16 @@ where
     }
 }
 
-impl<R, F, B, D, BMF, BMB, BD> Session for Components<R, F, B, D, BMF, BMB, BD>
+impl<F, B, D, BMF, BMB, BD> Session for Components<F, B, D, BMF, BMB, BD>
 where
-    R: fmt::Debug + PartialEq,
-    F: frontend::Frontend<TokenRef = R>,
-    B: backend::Backend<R>,
-    D: diagnostics::DiagnosticsListener<R>,
+    F: frontend::Frontend,
+    B: backend::Backend<F::TokenRef>,
+    D: diagnostics::DiagnosticsListener<F::TokenRef>,
     BMF: BorrowMut<F>,
     BMB: BorrowMut<B>,
     BD: Borrow<D>,
 {
-    type TokenRef = R;
+    type TokenRef = F::TokenRef;
 
     fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::TokenRef>) {
         self.frontend
