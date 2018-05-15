@@ -24,7 +24,7 @@ pub fn analyze_file<
     backend: B,
     diagnostics: &D,
 ) {
-    let factory = SemanticTokenSeqAnalyzerFactory::new();
+    let factory = SemanticAnalysisFactory::new();
     let token_provider = TokenStreamSource::new(codebase, token_tracker);
     let file_parser = FileParser::new(factory, token_provider, diagnostics);
     let mut session: Components<_, _, D, _, _, _> =
@@ -32,50 +32,50 @@ pub fn analyze_file<
     session.analyze_chunk(ChunkId::File((name, None)))
 }
 
-trait TokenSeqAnalyzer {
-    fn analyze<I, F>(&mut self, tokens: I, frontend: &mut F)
+trait Analysis {
+    fn run<I, S>(&mut self, tokens: I, session: &mut S)
     where
-        I: Iterator<Item = (Token, F::TokenRef)>,
-        F: Session;
+        I: Iterator<Item = (Token, S::TokenRef)>,
+        S: Session;
 }
 
-struct SemanticTokenSeqAnalyzer;
+struct SemanticAnalysis;
 
-impl SemanticTokenSeqAnalyzer {
-    fn new() -> SemanticTokenSeqAnalyzer {
-        SemanticTokenSeqAnalyzer {}
+impl SemanticAnalysis {
+    fn new() -> SemanticAnalysis {
+        SemanticAnalysis {}
     }
 }
 
-impl TokenSeqAnalyzer for SemanticTokenSeqAnalyzer {
-    fn analyze<I, F>(&mut self, tokens: I, frontend: &mut F)
+impl Analysis for SemanticAnalysis {
+    fn run<I, S>(&mut self, tokens: I, session: &mut S)
     where
-        I: Iterator<Item = (Token, F::TokenRef)>,
-        F: Session,
+        I: Iterator<Item = (Token, S::TokenRef)>,
+        S: Session,
     {
-        let actions = semantics::SemanticActions::new(frontend);
+        let actions = semantics::SemanticActions::new(session);
         syntax::parse_token_seq(tokens, actions)
     }
 }
 
-trait TokenSeqAnalyzerFactory {
-    type TokenSeqAnalyzer: TokenSeqAnalyzer;
-    fn mk_token_seq_analyzer(&mut self) -> Self::TokenSeqAnalyzer;
+trait AnalysisFactory {
+    type Analysis: Analysis;
+    fn mk_analysis(&mut self) -> Self::Analysis;
 }
 
-struct SemanticTokenSeqAnalyzerFactory;
+struct SemanticAnalysisFactory;
 
-impl SemanticTokenSeqAnalyzerFactory {
-    fn new() -> SemanticTokenSeqAnalyzerFactory {
-        SemanticTokenSeqAnalyzerFactory {}
+impl SemanticAnalysisFactory {
+    fn new() -> SemanticAnalysisFactory {
+        SemanticAnalysisFactory {}
     }
 }
 
-impl TokenSeqAnalyzerFactory for SemanticTokenSeqAnalyzerFactory {
-    type TokenSeqAnalyzer = SemanticTokenSeqAnalyzer;
+impl AnalysisFactory for SemanticAnalysisFactory {
+    type Analysis = SemanticAnalysis;
 
-    fn mk_token_seq_analyzer(&mut self) -> Self::TokenSeqAnalyzer {
-        SemanticTokenSeqAnalyzer::new()
+    fn mk_analysis(&mut self) -> Self::Analysis {
+        SemanticAnalysis::new()
     }
 }
 
@@ -115,26 +115,26 @@ pub trait Frontend {
     );
 }
 
-struct FileParser<'a, SAF, TCS, DL: 'a> {
-    analyzer_factory: SAF,
+struct FileParser<'a, AF, TCS, DL: 'a> {
+    analysis_factory: AF,
     tokenized_code_source: TCS,
     diagnostics: &'a DL,
 }
 
-impl<'a, SAF, TCS, DL> FileParser<'a, SAF, TCS, DL>
+impl<'a, AF, TCS, DL> FileParser<'a, AF, TCS, DL>
 where
-    SAF: TokenSeqAnalyzerFactory,
+    AF: AnalysisFactory,
     TCS: TokenizedCodeSource,
     for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token, TCS::TokenRef)>,
     DL: DiagnosticsListener<TCS::TokenRef>,
 {
     fn new(
-        analyzer_factory: SAF,
+        analysis_factory: AF,
         tokenized_code_source: TCS,
         diagnostics: &DL,
-    ) -> FileParser<SAF, TCS, DL> {
+    ) -> FileParser<AF, TCS, DL> {
         FileParser {
-            analyzer_factory,
+            analysis_factory,
             tokenized_code_source,
             diagnostics,
         }
@@ -148,10 +148,10 @@ where
         tokens: I,
         backend: &mut B,
     ) {
-        let mut analyzer = self.analyzer_factory.mk_token_seq_analyzer();
+        let mut analysis = self.analysis_factory.mk_analysis();
         let diagnostics = self.diagnostics;
         let mut session = BorrowedComponents::new(self, backend, diagnostics);
-        analyzer.analyze(tokens.into_iter(), &mut session)
+        analysis.run(tokens.into_iter(), &mut session)
     }
 
     fn include_source_file(&mut self, filename: &str, backend: &mut impl Backend<TCS::TokenRef>) {
@@ -178,9 +178,9 @@ where
     }
 }
 
-impl<'a, SAF, TCS, DL> Frontend for FileParser<'a, SAF, TCS, DL>
+impl<'a, AF, TCS, DL> Frontend for FileParser<'a, AF, TCS, DL>
 where
-    SAF: TokenSeqAnalyzerFactory,
+    AF: AnalysisFactory,
     TCS: TokenizedCodeSource,
     for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token, TCS::TokenRef)>,
     DL: DiagnosticsListener<TCS::TokenRef>,
@@ -484,15 +484,15 @@ mod tests {
         }
     }
 
-    impl<'a> TokenSeqAnalyzerFactory for Mock<'a> {
-        type TokenSeqAnalyzer = Self;
-        fn mk_token_seq_analyzer(&mut self) -> Self::TokenSeqAnalyzer {
+    impl<'a> AnalysisFactory for Mock<'a> {
+        type Analysis = Self;
+        fn mk_analysis(&mut self) -> Self::Analysis {
             self.clone()
         }
     }
 
-    impl<'a> TokenSeqAnalyzer for Mock<'a> {
-        fn analyze<I, F>(&mut self, tokens: I, _frontend: &mut F)
+    impl<'a> Analysis for Mock<'a> {
+        fn run<I, F>(&mut self, tokens: I, _frontend: &mut F)
         where
             I: Iterator<Item = (Token, F::TokenRef)>,
             F: Session,
@@ -535,7 +535,7 @@ mod tests {
 
     struct TestFixture<'a> {
         mock_token_source: MockTokenSource,
-        analyzer_factory: Mock<'a>,
+        analysis_factory: Mock<'a>,
         object: Mock<'a>,
         diagnostics: Mock<'a>,
     }
@@ -544,7 +544,7 @@ mod tests {
         fn new(log: &'a TestLog) -> TestFixture<'a> {
             TestFixture {
                 mock_token_source: MockTokenSource::new(),
-                analyzer_factory: Mock::new(log),
+                analysis_factory: Mock::new(log),
                 object: Mock::new(log),
                 diagnostics: Mock::new(log),
             }
@@ -557,7 +557,7 @@ mod tests {
 
         fn when<F: for<'b> FnOnce(TestSession<'b>)>(self, f: F) {
             let file_parser = FileParser::new(
-                self.analyzer_factory,
+                self.analysis_factory,
                 self.mock_token_source,
                 &self.diagnostics,
             );
