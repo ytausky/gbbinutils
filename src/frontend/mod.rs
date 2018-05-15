@@ -3,11 +3,14 @@ use std::fmt::Debug;
 mod semantics;
 mod syntax;
 
-use self::syntax::*;
+use AssemblySession;
 use backend::*;
 use diagnostics::*;
+use frontend::syntax::*;
 
 use codebase::Codebase;
+
+pub use frontend::syntax::Token;
 
 pub fn analyze_file<
     C: Codebase,
@@ -24,7 +27,7 @@ pub fn analyze_file<
     let factory = SemanticTokenSeqAnalyzerFactory::new();
     let token_provider = TokenStreamSource::new(codebase, token_tracker);
     let mut session = Session::new(token_provider, factory, backend, diagnostics);
-    session.analyze_chunk(ChunkId::File((name, None)));
+    session.analyze_chunk(::ChunkId::File((name, None)));
     session.into_object()
 }
 
@@ -97,12 +100,13 @@ impl ExprFactory for StrExprFactory {
     }
 }
 
-pub trait AssemblySession {
+pub trait Frontend {
     type TokenRef: Debug + PartialEq;
-    fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::TokenRef>);
-    fn emit_diagnostic(&mut self, diagnostic: Diagnostic<Self::TokenRef>);
-    fn emit_item(&mut self, item: Item<Self::TokenRef>);
-    fn define_label(&mut self, label: (String, Self::TokenRef));
+    fn analyze_chunk(
+        &mut self,
+        chunk_id: ::ChunkId<Self::TokenRef>,
+        backend: &mut impl Backend<Self::TokenRef>,
+    );
     fn define_macro(
         &mut self,
         name: (impl Into<String>, Self::TokenRef),
@@ -110,13 +114,85 @@ pub trait AssemblySession {
     );
 }
 
-#[derive(Debug, PartialEq)]
-pub enum ChunkId<T> {
-    File((String, Option<T>)),
-    Macro {
-        name: (String, T),
+struct FileParser<'a, SAF, TCS, DL: 'a> {
+    analyzer_factory: SAF,
+    tokenized_code_source: TCS,
+    diagnostics: &'a DL,
+}
+
+impl<'a, SAF, TCS, DL> FileParser<'a, SAF, TCS, DL>
+where
+    SAF: TokenSeqAnalyzerFactory,
+    TCS: TokenizedCodeSource,
+    for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token, TCS::TokenRef)>,
+    DL: DiagnosticsListener<TCS::TokenRef>,
+{
+    fn analyze_token_seq<
+        I: IntoIterator<Item = (Token, TCS::TokenRef)>,
+        B: Backend<TCS::TokenRef>,
+    >(
+        &mut self,
+        tokens: I,
+        backend: &mut B,
+    ) {
+        let mut analyzer = self.analyzer_factory.mk_token_seq_analyzer();
+        let diagnostics = self.diagnostics;
+        let mut session: ::Session<TCS::TokenRef, Self, B, DL, _, _, _> =
+            ::Session::new(self, backend, diagnostics);
+        analyzer.analyze(tokens.into_iter(), &mut session)
+    }
+
+    fn include_source_file(&mut self, filename: &str, backend: &mut impl Backend<TCS::TokenRef>) {
+        let tokenized_src = self.tokenized_code_source.tokenize_file(filename);
+        self.analyze_token_seq(&tokenized_src, backend)
+    }
+
+    fn invoke_macro(
+        &mut self,
+        name: (String, <Self as Frontend>::TokenRef),
         args: Vec<Vec<Token>>,
-    },
+        backend: &mut impl Backend<TCS::TokenRef>,
+    ) {
+        match self.tokenized_code_source
+            .macro_invocation(name.clone(), args)
+        {
+            Some(tokens) => self.analyze_token_seq(tokens, backend),
+            None => {
+                let (name, name_ref) = name;
+                self.diagnostics
+                    .emit_diagnostic(Diagnostic::new(Message::UndefinedMacro { name }, name_ref))
+            }
+        }
+    }
+}
+
+impl<'a, SAF, TCS, DL> Frontend for FileParser<'a, SAF, TCS, DL>
+where
+    SAF: TokenSeqAnalyzerFactory,
+    TCS: TokenizedCodeSource,
+    for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token, TCS::TokenRef)>,
+    DL: DiagnosticsListener<TCS::TokenRef>,
+{
+    type TokenRef = TCS::TokenRef;
+
+    fn analyze_chunk(
+        &mut self,
+        chunk_id: ::ChunkId<Self::TokenRef>,
+        backend: &mut impl Backend<Self::TokenRef>,
+    ) {
+        match chunk_id {
+            ::ChunkId::File((name, _)) => self.include_source_file(&name, backend),
+            ::ChunkId::Macro { name, args } => self.invoke_macro(name, args, backend),
+        }
+    }
+
+    fn define_macro(
+        &mut self,
+        name: (impl Into<String>, Self::TokenRef),
+        tokens: Vec<(Token, Self::TokenRef)>,
+    ) {
+        self.tokenized_code_source.define_macro(name, tokens)
+    }
 }
 
 use std::{collections::HashMap, rc::Rc};
@@ -173,7 +249,7 @@ where
 
     fn invoke_macro(
         &mut self,
-        name: (String, <Self as AssemblySession>::TokenRef),
+        name: (String, <Self as ::AssemblySession>::TokenRef),
         args: Vec<Vec<Token>>,
     ) {
         match self.tokenized_code_source
@@ -189,7 +265,7 @@ where
     }
 }
 
-impl<'a, TCS, SAF, B, DL> AssemblySession for Session<'a, TCS, SAF, B, DL>
+impl<'a, TCS, SAF, B, DL> ::AssemblySession for Session<'a, TCS, SAF, B, DL>
 where
     TCS: TokenizedCodeSource,
     for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token, TCS::TokenRef)>,
@@ -199,10 +275,10 @@ where
 {
     type TokenRef = TCS::TokenRef;
 
-    fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::TokenRef>) {
+    fn analyze_chunk(&mut self, chunk_id: ::ChunkId<Self::TokenRef>) {
         match chunk_id {
-            ChunkId::File((name, _)) => self.include_source_file(&name),
-            ChunkId::Macro { name, args } => self.invoke_macro(name, args),
+            ::ChunkId::File((name, _)) => self.include_source_file(&name),
+            ::ChunkId::Macro { name, args } => self.invoke_macro(name, args),
         }
     }
 
@@ -215,10 +291,7 @@ where
     }
 
     fn define_label(&mut self, label: (String, Self::TokenRef)) {
-        self.section
-            .as_mut()
-            .unwrap()
-            .add_label((&label.0, label.1))
+        self.section.as_mut().unwrap().add_label((label.0, label.1))
     }
 
     fn define_macro(
@@ -508,7 +581,7 @@ mod tests {
         fn analyze<I, F>(&mut self, tokens: I, _frontend: &mut F)
         where
             I: Iterator<Item = (Token, F::TokenRef)>,
-            F: AssemblySession,
+            F: ::AssemblySession,
         {
             self.log
                 .borrow_mut()
@@ -521,13 +594,23 @@ mod tests {
         fn mk_section(&mut self) -> Self::Section {
             self.clone()
         }
+
+        fn add_label(&mut self, (label, _): (impl Into<String>, ())) {
+            self.log
+                .borrow_mut()
+                .push(TestEvent::AddLabel(label.into()))
+        }
+
+        fn emit_item(&mut self, item: Item<()>) {
+            self.log.borrow_mut().push(TestEvent::EmitItem(item))
+        }
     }
 
     impl<'a> Section<()> for Mock<'a> {
-        fn add_label(&mut self, (label, _): (&str, ())) {
+        fn add_label(&mut self, (label, _): (impl Into<String>, ())) {
             self.log
                 .borrow_mut()
-                .push(TestEvent::AddLabel(String::from(label)))
+                .push(TestEvent::AddLabel(label.into()))
         }
 
         fn emit_item(&mut self, item: Item<()>) {

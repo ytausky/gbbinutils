@@ -3,10 +3,12 @@ use diagnostics::*;
 pub trait Backend<R> {
     type Section: Section<R>;
     fn mk_section(&mut self) -> Self::Section;
+    fn add_label(&mut self, label: (impl Into<String>, R));
+    fn emit_item(&mut self, item: Item<R>);
 }
 
 pub trait Section<R> {
-    fn add_label(&mut self, label: (&str, R));
+    fn add_label(&mut self, label: (impl Into<String>, R));
     fn emit_item(&mut self, item: Item<R>);
 }
 
@@ -19,12 +21,16 @@ pub enum Item<R> {
 mod codegen;
 
 pub struct ObjectBuilder<'a, T: 'a> {
+    section: Option<Rom<'a, T>>,
     diagnostics: &'a T,
 }
 
 impl<'a, T: 'a> ObjectBuilder<'a, T> {
     pub fn new(diagnostics: &T) -> ObjectBuilder<T> {
-        ObjectBuilder { diagnostics }
+        ObjectBuilder {
+            section: Some(Rom::new(diagnostics)),
+            diagnostics,
+        }
     }
 }
 
@@ -32,6 +38,14 @@ impl<'a, R, T: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<'a, T> 
     type Section = Rom<'a, T>;
     fn mk_section(&mut self) -> Self::Section {
         Rom::new(self.diagnostics)
+    }
+
+    fn add_label(&mut self, label: (impl Into<String>, R)) {
+        self.section.as_mut().unwrap().add_label(label)
+    }
+
+    fn emit_item(&mut self, item: Item<R>) {
+        self.section.as_mut().unwrap().emit_item(item)
     }
 }
 
@@ -91,7 +105,7 @@ impl<'a, T: 'a> ByteEmitter for Rom<'a, T> {
 }
 
 impl<'a, R, T: 'a + DiagnosticsListener<R>> Section<R> for Rom<'a, T> {
-    fn add_label(&mut self, _label: (&str, R)) {}
+    fn add_label(&mut self, _label: (impl Into<String>, R)) {}
 
     fn emit_item(&mut self, item: Item<R>) {
         match item {

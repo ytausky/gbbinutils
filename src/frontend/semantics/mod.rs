@@ -1,6 +1,7 @@
 use backend;
 use frontend::syntax::{self, token, SynExpr, Token, TokenSpec, keyword::Command};
-use frontend::{AssemblySession, Atom, ChunkId, StrExprFactory};
+use frontend::{Atom, StrExprFactory};
+use {AssemblySession, ChunkId};
 
 mod instruction;
 
@@ -246,7 +247,6 @@ mod tests {
 
     use backend;
     use diagnostics::Diagnostic;
-    use frontend::ChunkId;
     use frontend::syntax::{CommandContext, FileContext, MacroInvocationContext, TokenSeqContext,
                            keyword::Operand};
 
