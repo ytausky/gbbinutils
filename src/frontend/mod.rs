@@ -3,10 +3,10 @@ use std::fmt::Debug;
 mod semantics;
 mod syntax;
 
-use AssemblySession;
 use backend::*;
 use diagnostics::*;
 use frontend::syntax::*;
+use {AssemblySession, ChunkId};
 
 use codebase::Codebase;
 
@@ -26,9 +26,11 @@ pub fn analyze_file<
 ) -> B {
     let factory = SemanticTokenSeqAnalyzerFactory::new();
     let token_provider = TokenStreamSource::new(codebase, token_tracker);
-    let mut session = Session::new(token_provider, factory, backend, diagnostics);
-    session.analyze_chunk(::ChunkId::File((name, None)));
-    session.into_object()
+    let file_parser = FileParser::new(factory, token_provider, diagnostics);
+    let mut session: ::Session<_, _, _, D, _, _, _> =
+        ::Session::new(file_parser, backend, diagnostics);
+    session.analyze_chunk(ChunkId::File((name, None)));
+    session.backend
 }
 
 trait TokenSeqAnalyzer {
@@ -104,7 +106,7 @@ pub trait Frontend {
     type TokenRef: Debug + PartialEq;
     fn analyze_chunk(
         &mut self,
-        chunk_id: ::ChunkId<Self::TokenRef>,
+        chunk_id: ChunkId<Self::TokenRef>,
         backend: &mut impl Backend<Self::TokenRef>,
     );
     fn define_macro(
@@ -127,6 +129,18 @@ where
     for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token, TCS::TokenRef)>,
     DL: DiagnosticsListener<TCS::TokenRef>,
 {
+    fn new(
+        analyzer_factory: SAF,
+        tokenized_code_source: TCS,
+        diagnostics: &DL,
+    ) -> FileParser<SAF, TCS, DL> {
+        FileParser {
+            analyzer_factory,
+            tokenized_code_source,
+            diagnostics,
+        }
+    }
+
     fn analyze_token_seq<
         I: IntoIterator<Item = (Token, TCS::TokenRef)>,
         B: Backend<TCS::TokenRef>,
@@ -177,12 +191,12 @@ where
 
     fn analyze_chunk(
         &mut self,
-        chunk_id: ::ChunkId<Self::TokenRef>,
+        chunk_id: ChunkId<Self::TokenRef>,
         backend: &mut impl Backend<Self::TokenRef>,
     ) {
         match chunk_id {
-            ::ChunkId::File((name, _)) => self.include_source_file(&name, backend),
-            ::ChunkId::Macro { name, args } => self.invoke_macro(name, args, backend),
+            ChunkId::File((name, _)) => self.include_source_file(&name, backend),
+            ChunkId::Macro { name, args } => self.invoke_macro(name, args, backend),
         }
     }
 
@@ -196,112 +210,6 @@ where
 }
 
 use std::{collections::HashMap, rc::Rc};
-
-struct Session<'a, TCS: TokenizedCodeSource, SAF, B: Backend<TCS::TokenRef>, DL: 'a>
-where
-    for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token, TCS::TokenRef)>,
-{
-    analyzer_factory: SAF,
-    backend: B,
-    section: Option<B::Section>,
-    tokenized_code_source: TCS,
-    diagnostics: &'a DL,
-}
-
-impl<'a, TCS, SAF, B, DL> Session<'a, TCS, SAF, B, DL>
-where
-    TCS: TokenizedCodeSource,
-    for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token, TCS::TokenRef)>,
-    SAF: TokenSeqAnalyzerFactory,
-    B: Backend<TCS::TokenRef>,
-    DL: DiagnosticsListener<TCS::TokenRef> + 'a,
-{
-    fn new(
-        tokenized_code_source: TCS,
-        analyzer_factory: SAF,
-        backend: B,
-        diagnostics: &DL,
-    ) -> Session<TCS, SAF, B, DL> {
-        let mut session = Session {
-            analyzer_factory,
-            backend,
-            section: None,
-            tokenized_code_source,
-            diagnostics,
-        };
-        session.section = Some(session.backend.mk_section());
-        session
-    }
-
-    fn analyze_token_seq<I: IntoIterator<Item = (Token, TCS::TokenRef)>>(&mut self, tokens: I) {
-        let mut analyzer = self.analyzer_factory.mk_token_seq_analyzer();
-        analyzer.analyze(tokens.into_iter(), self)
-    }
-
-    fn into_object(self) -> B {
-        self.backend
-    }
-
-    fn include_source_file(&mut self, filename: &str) {
-        let tokenized_src = self.tokenized_code_source.tokenize_file(filename);
-        self.analyze_token_seq(&tokenized_src)
-    }
-
-    fn invoke_macro(
-        &mut self,
-        name: (String, <Self as ::AssemblySession>::TokenRef),
-        args: Vec<Vec<Token>>,
-    ) {
-        match self.tokenized_code_source
-            .macro_invocation(name.clone(), args)
-        {
-            Some(tokens) => self.analyze_token_seq(tokens),
-            None => {
-                let (name, name_ref) = name;
-                self.diagnostics
-                    .emit_diagnostic(Diagnostic::new(Message::UndefinedMacro { name }, name_ref))
-            }
-        }
-    }
-}
-
-impl<'a, TCS, SAF, B, DL> ::AssemblySession for Session<'a, TCS, SAF, B, DL>
-where
-    TCS: TokenizedCodeSource,
-    for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token, TCS::TokenRef)>,
-    SAF: TokenSeqAnalyzerFactory,
-    B: Backend<TCS::TokenRef>,
-    DL: DiagnosticsListener<TCS::TokenRef> + 'a,
-{
-    type TokenRef = TCS::TokenRef;
-
-    fn analyze_chunk(&mut self, chunk_id: ::ChunkId<Self::TokenRef>) {
-        match chunk_id {
-            ::ChunkId::File((name, _)) => self.include_source_file(&name),
-            ::ChunkId::Macro { name, args } => self.invoke_macro(name, args),
-        }
-    }
-
-    fn emit_diagnostic(&mut self, diagnostic: Diagnostic<Self::TokenRef>) {
-        self.diagnostics.emit_diagnostic(diagnostic)
-    }
-
-    fn emit_item(&mut self, item: Item<Self::TokenRef>) {
-        self.section.as_mut().unwrap().emit_item(item)
-    }
-
-    fn define_label(&mut self, label: (String, Self::TokenRef)) {
-        self.section.as_mut().unwrap().add_label((label.0, label.1))
-    }
-
-    fn define_macro(
-        &mut self,
-        name: (impl Into<String>, Self::TokenRef),
-        tokens: Vec<(Token, Self::TokenRef)>,
-    ) {
-        self.tokenized_code_source.define_macro(name, tokens)
-    }
-}
 
 trait TokenizedCodeSource
 where
@@ -450,7 +358,7 @@ mod tests {
                 f.mock_token_source
                     .add_file(filename, add_code_refs(&contents))
             })
-            .when(|mut session| session.include_source_file(filename));
+            .when(|mut session| session.analyze_chunk(ChunkId::File((filename.to_string(), None))));
         assert_eq!(*log.borrow(), [TestEvent::AnalyzeTokens(contents)]);
     }
 
@@ -483,7 +391,10 @@ mod tests {
         let log = TestLog::default();
         TestFixture::new(&log).when(|mut session| {
             session.define_macro((name.to_string(), ()), add_code_refs(&tokens));
-            session.invoke_macro((name.to_string(), ()), vec![])
+            session.analyze_chunk(ChunkId::Macro {
+                name: (name.to_string(), ()),
+                args: vec![],
+            })
         });
         assert_eq!(*log.borrow(), [TestEvent::AnalyzeTokens(tokens)]);
     }
@@ -494,7 +405,12 @@ mod tests {
     fn diagnose_undefined_macro() {
         let name = "my_macro".to_string();
         let log = TestLog::default();
-        TestFixture::new(&log).when(|mut session| session.invoke_macro((name.clone(), ()), vec![]));
+        TestFixture::new(&log).when(|mut session| {
+            session.analyze_chunk(ChunkId::Macro {
+                name: (name.clone(), ()),
+                args: vec![],
+            })
+        });
         assert_eq!(
             *log.borrow(),
             [
@@ -658,13 +574,25 @@ mod tests {
             self
         }
 
-        fn when<F: FnOnce(Session<MockTokenSource, Mock<'a>, Mock<'a>, Mock<'a>>)>(self, f: F) {
-            f(Session::new(
-                self.mock_token_source,
+        fn when<F: for<'b> FnOnce(TestSession<'b>)>(self, f: F) {
+            let file_parser = FileParser::new(
                 self.analyzer_factory,
-                self.object,
+                self.mock_token_source,
                 &self.diagnostics,
-            ))
+            );
+            let session = ::Session::new(file_parser, self.object, &self.diagnostics);
+            f(session);
         }
     }
+
+    type TestFileParser<'a> = FileParser<'a, Mock<'a>, MockTokenSource, Mock<'a>>;
+    type TestSession<'a> = ::Session<
+        (),
+        TestFileParser<'a>,
+        Mock<'a>,
+        Mock<'a>,
+        TestFileParser<'a>,
+        Mock<'a>,
+        &'a Mock<'a>,
+    >;
 }
