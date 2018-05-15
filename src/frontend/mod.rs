@@ -6,7 +6,7 @@ mod syntax;
 use backend::*;
 use diagnostics::*;
 use frontend::syntax::*;
-use session::{ChunkId, Components, Session};
+use session::{BorrowedComponents, ChunkId, Components, Session};
 
 use codebase::Codebase;
 
@@ -150,8 +150,7 @@ where
     ) {
         let mut analyzer = self.analyzer_factory.mk_token_seq_analyzer();
         let diagnostics = self.diagnostics;
-        let mut session: Components<Self, B, DL, _, _, _> =
-            Components::new(self, backend, diagnostics);
+        let mut session = BorrowedComponents::new(self, backend, diagnostics);
         analyzer.analyze(tokens.into_iter(), &mut session)
     }
 

@@ -38,6 +38,8 @@ where
     phantom: marker::PhantomData<(F, B, D)>,
 }
 
+pub type BorrowedComponents<'a, F, B, D> = Components<F, B, D, &'a mut F, &'a mut B, &'a D>;
+
 impl<F, B, D, BMF, BMB, BD> Components<F, B, D, BMF, BMB, BD>
 where
     F: frontend::Frontend,
