@@ -6,7 +6,7 @@ mod syntax;
 use backend::*;
 use diagnostics::*;
 use frontend::syntax::*;
-use session::{AssemblySession, ChunkId, Session};
+use session::{AssemblySession, ChunkId, Components};
 
 use codebase::Codebase;
 
@@ -27,7 +27,8 @@ pub fn analyze_file<
     let factory = SemanticTokenSeqAnalyzerFactory::new();
     let token_provider = TokenStreamSource::new(codebase, token_tracker);
     let file_parser = FileParser::new(factory, token_provider, diagnostics);
-    let mut session: Session<_, _, _, D, _, _, _> = Session::new(file_parser, backend, diagnostics);
+    let mut session: Components<_, _, _, D, _, _, _> =
+        Components::new(file_parser, backend, diagnostics);
     session.analyze_chunk(ChunkId::File((name, None)))
 }
 
@@ -149,8 +150,8 @@ where
     ) {
         let mut analyzer = self.analyzer_factory.mk_token_seq_analyzer();
         let diagnostics = self.diagnostics;
-        let mut session: Session<TCS::TokenRef, Self, B, DL, _, _, _> =
-            Session::new(self, backend, diagnostics);
+        let mut session: Components<TCS::TokenRef, Self, B, DL, _, _, _> =
+            Components::new(self, backend, diagnostics);
         analyzer.analyze(tokens.into_iter(), &mut session)
     }
 
@@ -578,13 +579,13 @@ mod tests {
                 self.mock_token_source,
                 &self.diagnostics,
             );
-            let session = Session::new(file_parser, self.object, &self.diagnostics);
+            let session = Components::new(file_parser, self.object, &self.diagnostics);
             f(session);
         }
     }
 
     type TestFileParser<'a> = FileParser<'a, Mock<'a>, MockTokenSource, Mock<'a>>;
-    type TestSession<'a> = Session<
+    type TestSession<'a> = Components<
         (),
         TestFileParser<'a>,
         Mock<'a>,

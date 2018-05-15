@@ -23,7 +23,7 @@ pub enum ChunkId<T> {
     },
 }
 
-pub struct Session<R, F, B, D, BMF, BMB, BD>
+pub struct Components<R, F, B, D, BMF, BMB, BD>
 where
     F: frontend::Frontend,
     B: backend::Backend<R>,
@@ -38,7 +38,7 @@ where
     phantom: marker::PhantomData<(R, F, B, D)>,
 }
 
-impl<R, F, B, D, BMF, BMB, BD> Session<R, F, B, D, BMF, BMB, BD>
+impl<R, F, B, D, BMF, BMB, BD> Components<R, F, B, D, BMF, BMB, BD>
 where
     R: fmt::Debug + PartialEq,
     F: frontend::Frontend<TokenRef = R>,
@@ -48,8 +48,12 @@ where
     BMB: BorrowMut<B>,
     BD: Borrow<D>,
 {
-    pub fn new(frontend: BMF, backend: BMB, diagnostics: BD) -> Session<R, F, B, D, BMF, BMB, BD> {
-        Session {
+    pub fn new(
+        frontend: BMF,
+        backend: BMB,
+        diagnostics: BD,
+    ) -> Components<R, F, B, D, BMF, BMB, BD> {
+        Components {
             frontend,
             backend,
             diagnostics,
@@ -58,7 +62,7 @@ where
     }
 }
 
-impl<R, F, B, D, BMF, BMB, BD> AssemblySession for Session<R, F, B, D, BMF, BMB, BD>
+impl<R, F, B, D, BMF, BMB, BD> AssemblySession for Components<R, F, B, D, BMF, BMB, BD>
 where
     R: fmt::Debug + PartialEq,
     F: frontend::Frontend<TokenRef = R>,
