@@ -505,23 +505,6 @@ mod tests {
     }
 
     impl<'a> Backend<()> for Mock<'a> {
-        type Section = Self;
-        fn mk_section(&mut self) -> Self::Section {
-            self.clone()
-        }
-
-        fn add_label(&mut self, (label, _): (impl Into<String>, ())) {
-            self.log
-                .borrow_mut()
-                .push(TestEvent::AddLabel(label.into()))
-        }
-
-        fn emit_item(&mut self, item: Item<()>) {
-            self.log.borrow_mut().push(TestEvent::EmitItem(item))
-        }
-    }
-
-    impl<'a> Section<()> for Mock<'a> {
         fn add_label(&mut self, (label, _): (impl Into<String>, ())) {
             self.log
                 .borrow_mut()

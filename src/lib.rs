@@ -39,21 +39,6 @@ impl OutputDumper {
 }
 
 impl<R: Debug> backend::Backend<R> for OutputDumper {
-    type Section = Self;
-    fn mk_section(&mut self) -> Self::Section {
-        OutputDumper {}
-    }
-
-    fn add_label(&mut self, (label, _): (impl Into<String>, R)) {
-        println!("Define symbol: {}", label.into())
-    }
-
-    fn emit_item(&mut self, item: backend::Item<R>) {
-        println!("Emit {:?}", item)
-    }
-}
-
-impl<R: Debug> backend::Section<R> for OutputDumper {
     fn add_label(&mut self, (label, _): (impl Into<String>, R)) {
         println!("Define symbol: {}", label.into())
     }
