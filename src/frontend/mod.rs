@@ -6,7 +6,7 @@ mod syntax;
 use backend::*;
 use diagnostics::*;
 use frontend::syntax::*;
-use session::{AssemblySession, ChunkId, Components};
+use session::{ChunkId, Components, Session};
 
 use codebase::Codebase;
 
@@ -36,7 +36,7 @@ trait TokenSeqAnalyzer {
     fn analyze<I, F>(&mut self, tokens: I, frontend: &mut F)
     where
         I: Iterator<Item = (Token, F::TokenRef)>,
-        F: AssemblySession;
+        F: Session;
 }
 
 struct SemanticTokenSeqAnalyzer;
@@ -51,7 +51,7 @@ impl TokenSeqAnalyzer for SemanticTokenSeqAnalyzer {
     fn analyze<I, F>(&mut self, tokens: I, frontend: &mut F)
     where
         I: Iterator<Item = (Token, F::TokenRef)>,
-        F: AssemblySession,
+        F: Session,
     {
         let actions = semantics::SemanticActions::new(frontend);
         syntax::parse_token_seq(tokens, actions)
@@ -496,7 +496,7 @@ mod tests {
         fn analyze<I, F>(&mut self, tokens: I, _frontend: &mut F)
         where
             I: Iterator<Item = (Token, F::TokenRef)>,
-            F: AssemblySession,
+            F: Session,
         {
             self.log
                 .borrow_mut()

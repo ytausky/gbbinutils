@@ -1,7 +1,7 @@
 use std::{fmt, marker, borrow::{Borrow, BorrowMut}};
 use {backend, diagnostics, frontend};
 
-pub trait AssemblySession {
+pub trait Session {
     type TokenRef: fmt::Debug + PartialEq;
     fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::TokenRef>);
     fn emit_diagnostic(&mut self, diagnostic: diagnostics::Diagnostic<Self::TokenRef>);
@@ -62,7 +62,7 @@ where
     }
 }
 
-impl<R, F, B, D, BMF, BMB, BD> AssemblySession for Components<R, F, B, D, BMF, BMB, BD>
+impl<R, F, B, D, BMF, BMB, BD> Session for Components<R, F, B, D, BMF, BMB, BD>
 where
     R: fmt::Debug + PartialEq,
     F: frontend::Frontend<TokenRef = R>,
