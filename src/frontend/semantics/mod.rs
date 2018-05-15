@@ -1,7 +1,7 @@
 use backend;
 use frontend::syntax::{self, token, SynExpr, Token, TokenSpec, keyword::Command};
 use frontend::{Atom, StrExprFactory};
-use {AssemblySession, ChunkId};
+use session::{AssemblySession, ChunkId};
 
 mod instruction;
 

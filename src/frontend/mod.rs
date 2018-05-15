@@ -6,7 +6,7 @@ mod syntax;
 use backend::*;
 use diagnostics::*;
 use frontend::syntax::*;
-use {AssemblySession, ChunkId};
+use session::{AssemblySession, ChunkId, Session};
 
 use codebase::Codebase;
 
@@ -23,14 +23,12 @@ pub fn analyze_file<
     token_tracker: TT,
     backend: B,
     diagnostics: &D,
-) -> B {
+) {
     let factory = SemanticTokenSeqAnalyzerFactory::new();
     let token_provider = TokenStreamSource::new(codebase, token_tracker);
     let file_parser = FileParser::new(factory, token_provider, diagnostics);
-    let mut session: ::Session<_, _, _, D, _, _, _> =
-        ::Session::new(file_parser, backend, diagnostics);
-    session.analyze_chunk(ChunkId::File((name, None)));
-    session.backend
+    let mut session: Session<_, _, _, D, _, _, _> = Session::new(file_parser, backend, diagnostics);
+    session.analyze_chunk(ChunkId::File((name, None)))
 }
 
 trait TokenSeqAnalyzer {
@@ -151,8 +149,8 @@ where
     ) {
         let mut analyzer = self.analyzer_factory.mk_token_seq_analyzer();
         let diagnostics = self.diagnostics;
-        let mut session: ::Session<TCS::TokenRef, Self, B, DL, _, _, _> =
-            ::Session::new(self, backend, diagnostics);
+        let mut session: Session<TCS::TokenRef, Self, B, DL, _, _, _> =
+            Session::new(self, backend, diagnostics);
         analyzer.analyze(tokens.into_iter(), &mut session)
     }
 
@@ -497,7 +495,7 @@ mod tests {
         fn analyze<I, F>(&mut self, tokens: I, _frontend: &mut F)
         where
             I: Iterator<Item = (Token, F::TokenRef)>,
-            F: ::AssemblySession,
+            F: AssemblySession,
         {
             self.log
                 .borrow_mut()
@@ -580,13 +578,13 @@ mod tests {
                 self.mock_token_source,
                 &self.diagnostics,
             );
-            let session = ::Session::new(file_parser, self.object, &self.diagnostics);
+            let session = Session::new(file_parser, self.object, &self.diagnostics);
             f(session);
         }
     }
 
     type TestFileParser<'a> = FileParser<'a, Mock<'a>, MockTokenSource, Mock<'a>>;
-    type TestSession<'a> = ::Session<
+    type TestSession<'a> = Session<
         (),
         TestFileParser<'a>,
         Mock<'a>,
