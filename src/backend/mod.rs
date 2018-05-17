@@ -1,3 +1,4 @@
+use backend::codegen::ByteEmitter;
 use diagnostics::*;
 
 pub trait Backend<R> {
@@ -14,45 +15,16 @@ pub enum Item<R> {
 mod codegen;
 
 pub struct ObjectBuilder<'a, T: 'a> {
-    section: Option<Rom<'a, T>>,
+    section: Option<Section>,
+    diagnostics: &'a T,
 }
 
 impl<'a, T: 'a> ObjectBuilder<'a, T> {
     pub fn new(diagnostics: &T) -> ObjectBuilder<T> {
         ObjectBuilder {
-            section: Some(Rom::new(diagnostics)),
-        }
-    }
-}
-
-impl<'a, R, T: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<'a, T> {
-    fn add_label(&mut self, label: (impl Into<String>, R)) {
-        self.section.as_mut().unwrap().add_label(&label)
-    }
-
-    fn emit_item(&mut self, item: Item<R>) {
-        self.section.as_mut().unwrap().emit_item(item)
-    }
-}
-
-pub struct Rom<'a, T: 'a> {
-    data: Vec<u8>,
-    counter: usize,
-    diagnostics: &'a T,
-}
-
-impl<'a, T: 'a> Rom<'a, T> {
-    pub fn new(diagnostics: &'a T) -> Rom<'a, T> {
-        Rom {
-            data: vec![0x00; 0x8000],
-            counter: 0,
+            section: Some(Section::new()),
             diagnostics,
         }
-    }
-
-    #[cfg(test)]
-    pub fn as_slice(&self) -> &[u8] {
-        self.data.as_slice()
     }
 
     fn emit_byte_expr<R>(&mut self, expr: Expr<R>)
@@ -60,32 +32,39 @@ impl<'a, T: 'a> Rom<'a, T> {
         T: DiagnosticsListener<R>,
     {
         match expr {
-            Expr::Literal(n, byte_ref) => {
-                if !is_in_byte_range(n) {
-                    self.diagnostics.emit_diagnostic(Diagnostic::new(
-                        Message::ValueOutOfRange {
-                            value: n,
-                            width: Width::Byte,
-                        },
-                        byte_ref,
-                    ))
-                }
-                self.emit_byte(n as u8)
+            Expr::Literal(value, expr_ref) => {
+                self.emit_resolved_byte_expr(value, expr_ref)
             }
             _ => unimplemented!(),
         }
     }
 
+    fn emit_resolved_byte_expr<R>(&mut self, value: i32, expr_ref: R)
+    where
+        T: DiagnosticsListener<R>
+    {
+        if !is_in_byte_range(value) {
+            self.diagnostics.emit_diagnostic(Diagnostic::new(
+                Message::ValueOutOfRange {
+                    value,
+                    width: Width::Byte,
+                },
+                expr_ref,
+            ))
+        }
+        self.emit_byte(value as u8)
+    }
+
     fn emit_instruction<R>(&mut self, instruction: &Instruction<R>) {
         codegen::generate_code(&instruction, self)
     }
+}
 
-    fn add_label<R>(&mut self, _label: &(impl Into<String>, R)) {}
+impl<'a, R, T: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<'a, T> {
+    fn add_label(&mut self, _label: (impl Into<String>, R)) {
+    }
 
-    fn emit_item<R>(&mut self, item: Item<R>)
-    where
-        T: DiagnosticsListener<R>,
-    {
+    fn emit_item(&mut self, item: Item<R>) {
         match item {
             Item::Byte(expr) => self.emit_byte_expr(expr),
             Item::Instruction(instruction) => self.emit_instruction(&instruction),
@@ -93,12 +72,19 @@ impl<'a, T: 'a> Rom<'a, T> {
     }
 }
 
-use backend::codegen::ByteEmitter;
+impl<'a, T: 'a> ByteEmitter for ObjectBuilder<'a, T> {
+    fn emit_byte(&mut self, value: u8) {
+        self.section.as_mut().unwrap().data.push(value)
+    }
+}
 
-impl<'a, T: 'a> ByteEmitter for Rom<'a, T> {
-    fn emit_byte(&mut self, byte: u8) {
-        self.data[self.counter] = byte;
-        self.counter += 1
+struct Section {
+    data: Vec<u8>,
+}
+
+impl Section {
+    fn new() -> Section {
+        Section { data: Vec::new() }
     }
 }
 
@@ -194,61 +180,29 @@ pub enum Expr<R> {
 mod tests {
     use super::*;
 
-    use std::iter;
-
-    #[test]
-    fn new_rom_is_0x8000_zero_bytes_long() {
-        let diagnostics = TestDiagnosticsListener::new();
-        let rom = Rom::new(&diagnostics);
-        assert!(
-            iter::repeat(0x00)
-                .take(0x8000)
-                .eq(rom.as_slice().iter().cloned())
-        )
-    }
-
     #[test]
     fn emit_literal_byte_item() {
         let diagnostics = TestDiagnosticsListener::new();
-        let mut rom = Rom::new(&diagnostics);
-        rom.emit_item(Item::Byte(Expr::Literal(0xff, ())));
-        assert!(
-            iter::once(0xff)
-                .chain(iter::repeat(0x00))
-                .take(0x8000)
-                .eq(rom.as_slice().iter().cloned())
-        )
+        let mut builder = ObjectBuilder::new(&diagnostics);
+        builder.emit_item(Item::Byte(Expr::Literal(0xff, ())));
+        assert_eq!(builder.section.unwrap().data, [0xff])
     }
 
     #[test]
     fn emit_two_literal_byte_item() {
         let diagnostics = TestDiagnosticsListener::new();
-        let mut rom = Rom::new(&diagnostics);
-        rom.emit_item(Item::Byte(Expr::Literal(0x12, ())));
-        rom.emit_item(Item::Byte(Expr::Literal(0x34, ())));
-        assert!(
-            [0x12, 0x34]
-                .iter()
-                .cloned()
-                .chain(iter::repeat(0x00))
-                .take(0x8000)
-                .eq(rom.as_slice().iter().cloned())
-        )
+        let mut builder = ObjectBuilder::new(&diagnostics);
+        builder.emit_item(Item::Byte(Expr::Literal(0x12, ())));
+        builder.emit_item(Item::Byte(Expr::Literal(0x34, ())));
+        assert_eq!(builder.section.unwrap().data, [0x12, 0x34])
     }
 
     #[test]
     fn emit_stop() {
         let diagnostics = TestDiagnosticsListener::new();
-        let mut rom = Rom::new(&diagnostics);
-        rom.emit_item(Item::Instruction(Instruction::Stop));
-        assert!(
-            [0x10, 0x00]
-                .iter()
-                .cloned()
-                .chain(iter::repeat(0x00))
-                .take(0x8000)
-                .eq(rom.as_slice().iter().cloned())
-        )
+        let mut builder = ObjectBuilder::new(&diagnostics);
+        builder.emit_item(Item::Instruction(Instruction::Stop));
+        assert_eq!(builder.section.unwrap().data, [0x10, 0x00])
     }
 
     #[test]
@@ -259,14 +213,14 @@ mod tests {
 
     fn test_diagnostic_for_out_of_range_byte(value: i32) {
         let listener = TestDiagnosticsListener::new();
-        let mut rom = Rom::new(&listener);
-        rom.emit_item(Item::Byte(Expr::Literal(value, ())));
+        let mut builder = ObjectBuilder::new(&listener);
+        builder.emit_item(Item::Byte(Expr::Literal(value, ())));
         assert_eq!(
             *listener.diagnostics.borrow(),
             [
                 Diagnostic::new(
                     Message::ValueOutOfRange {
-                        value: value,
+                        value,
                         width: Width::Byte,
                     },
                     ()
