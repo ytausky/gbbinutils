@@ -194,7 +194,7 @@ enum Keyword {
     Operand(keyword::Operand),
 }
 
-const KEYWORDS: [(&str, Keyword); 28] = [
+const KEYWORDS: [(&str, Keyword); 29] = [
     ("a", Keyword::Operand(Operand::A)),
     ("and", Keyword::Command(Command::And)),
     ("b", Keyword::Operand(Operand::B)),
@@ -205,6 +205,7 @@ const KEYWORDS: [(&str, Keyword); 28] = [
     ("d", Keyword::Operand(Operand::D)),
     ("db", Keyword::Command(Command::Db)),
     ("dec", Keyword::Command(Command::Dec)),
+    ("dw", Keyword::Command(Command::Dw)),
     ("e", Keyword::Operand(Operand::E)),
     ("endm", Keyword::Endm),
     ("h", Keyword::Operand(Operand::H)),

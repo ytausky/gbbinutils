@@ -1,3 +1,4 @@
+use Width;
 use backend::codegen::ByteEmitter;
 use diagnostics::*;
 

@@ -5,6 +5,7 @@ pub enum Command {
     Cp,
     Db,
     Dec,
+    Dw,
     Halt,
     Include,
     Jp,

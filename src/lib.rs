@@ -6,6 +6,12 @@ mod diagnostics;
 mod frontend;
 mod session;
 
+#[derive(Debug, PartialEq)]
+pub enum Width {
+    Byte,
+    Word,
+}
+
 pub fn analyze_file(name: &str) {
     let codebase = codebase::FileCodebase::new(codebase::StdFileSystem::new());
     let diagnostics = diagnostics::TerminalDiagnostics::new(&codebase.cache);

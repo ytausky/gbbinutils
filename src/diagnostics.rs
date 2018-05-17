@@ -1,3 +1,4 @@
+use Width;
 use codebase::{BufId, BufRange, LineNumber, TextBuf, TextCache, TextRange};
 use std::{fmt, io, cell::RefCell, rc::Rc};
 
@@ -103,15 +104,11 @@ impl fmt::Display for Message {
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub enum Width {
-    Byte,
-}
-
 impl fmt::Display for Width {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Width::Byte => f.write_str("byte"),
+            Width::Word => f.write_str("word"),
         }
     }
 }

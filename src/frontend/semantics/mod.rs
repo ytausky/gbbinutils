@@ -1,3 +1,4 @@
+use Width;
 use backend;
 use frontend::syntax::{self, SynExpr, Token, TokenSpec, keyword::Command};
 use frontend::{Literal, StrExprFactory};
@@ -78,7 +79,8 @@ impl<'a, F: Session + 'a> syntax::CommandContext<F::TokenRef> for CommandActions
 
     fn exit(mut self) -> Self::Parent {
         match self.name {
-            (Command::Db, _) => analyze_db(self.args, &mut self.parent),
+            (Command::Db, _) => analyze_data(Width::Byte, self.args, &mut self.parent),
+            (Command::Dw, _) => analyze_data(Width::Word, self.args, &mut self.parent),
             (Command::Include, _) => analyze_include(self.args, &mut self.parent),
             name => analyze_command(name, self.args, &mut self.parent),
         }
@@ -86,13 +88,21 @@ impl<'a, F: Session + 'a> syntax::CommandContext<F::TokenRef> for CommandActions
     }
 }
 
-fn analyze_db<'a, F: Session + 'a>(args: CommandArgs<F>, actions: &mut SemanticActions<'a, F>) {
+fn analyze_data<'a, S: Session + 'a>(
+    width: Width,
+    args: CommandArgs<S>,
+    actions: &mut SemanticActions<'a, S>,
+) {
+    let item_constructor = match width {
+        Width::Byte => backend::Item::Byte,
+        Width::Word => backend::Item::Word,
+    };
     for arg in args {
         match arg {
             SynExpr::Literal(literal) => {
                 use frontend::ExprFactory;
                 let expr = actions.expr_factory.mk_literal(literal);
-                actions.session.emit_item(backend::Item::Byte(expr))
+                actions.session.emit_item(item_constructor(expr))
             }
             _ => panic!(),
         }
@@ -308,7 +318,7 @@ mod tests {
     }
 
     #[test]
-    fn emit_byte_item() {
+    fn emit_byte_items() {
         let bytes = [0x42, 0x78];
         let actions = collect_semantic_actions(|actions| {
             let mut command = actions.enter_command((Command::Db, ()));
@@ -327,12 +337,36 @@ mod tests {
         )
     }
 
+    #[test]
+    fn emit_word_items() {
+        let words = [0x4332, 0x780f];
+        let actions = collect_semantic_actions(|actions| {
+            let mut command = actions.enter_command((Command::Dw, ()));
+            for &word in words.iter() {
+                command.add_argument(mk_literal(word))
+            }
+            command.exit();
+        });
+        assert_eq!(
+            actions,
+            words
+                .iter()
+                .map(mk_word)
+                .map(TestOperation::EmitItem)
+                .collect::<Vec<_>>()
+        )
+    }
+
     fn mk_literal(n: i32) -> SynExpr<String, ()> {
         SynExpr::Literal((Literal::Number(n), ()))
     }
 
     fn mk_byte(byte: &i32) -> backend::Item<()> {
         backend::Item::Byte(backend::Expr::Literal(*byte, ()))
+    }
+
+    fn mk_word(word: &i32) -> backend::Item<()> {
+        backend::Item::Word(backend::Expr::Literal(*word, ()))
     }
 
     #[test]
