@@ -1,4 +1,4 @@
-use frontend::syntax::{self, token, Atom, Token, keyword::{self, Command, Operand}};
+use frontend::syntax::{self, token, Literal, Token, keyword::{self, Command, Operand}};
 
 use std::iter;
 use std::ops::{Index, Range};
@@ -11,7 +11,6 @@ enum TokenKind {
     Comma,
     Eol,
     Ident,
-    Label,
     Number,
     OpeningBracket,
     String,
@@ -81,11 +80,8 @@ impl<I: Iterator<Item = char>> Scanner<I> {
             '[' => self.take(TokenKind::OpeningBracket),
             '$' => self.lex_number(),
             '"' => self.lex_quoted_string(),
-            _ => self.lex_word(),
+            _ => self.lex_ident(),
         };
-        if next_token == TokenKind::Eol {
-            self.is_at_line_start = true
-        }
         (next_token, self.range.clone())
     }
 
@@ -107,15 +103,10 @@ impl<I: Iterator<Item = char>> Scanner<I> {
         TokenKind::Number
     }
 
-    fn lex_word(&mut self) -> TokenKind {
-        let starts_on_first_column = self.is_at_line_start;
+    fn lex_ident(&mut self) -> TokenKind {
         self.advance();
         self.find_word_end();
-        if starts_on_first_column {
-            TokenKind::Label
-        } else {
-            TokenKind::Ident
-        }
+        TokenKind::Ident
     }
 
     fn find_word_end(&mut self) {
@@ -165,13 +156,14 @@ fn mk_token(kind: TokenKind, lexeme: &str) -> Token {
         TokenKind::Colon => token::Colon,
         TokenKind::Comma => token::Comma,
         TokenKind::Eol => token::Eol,
-        TokenKind::Ident => mk_keyword_or(|x| token::Atom(Atom::Ident(x)), lexeme),
-        TokenKind::Label => mk_keyword_or(token::Label, lexeme),
-        TokenKind::Number => {
-            token::Atom(Atom::Number(i32::from_str_radix(&lexeme[1..], 16).unwrap()))
-        }
+        TokenKind::Ident => mk_keyword_or(token::Ident, lexeme),
+        TokenKind::Number => token::Literal(Literal::Number(
+            i32::from_str_radix(&lexeme[1..], 16).unwrap(),
+        )),
         TokenKind::OpeningBracket => token::OpeningBracket,
-        TokenKind::String => token::Atom(Atom::String(lexeme[1..(lexeme.len() - 1)].to_string())),
+        TokenKind::String => {
+            token::Literal(Literal::String(lexeme[1..(lexeme.len() - 1)].to_string()))
+        }
     }
 }
 
@@ -182,7 +174,7 @@ fn mk_keyword_or<F: FnOnce(String) -> Token>(f: F, lexeme: &str) -> Token {
             Keyword::Command(command) => token::Command(command),
             Keyword::Endm => token::Endm,
             Keyword::Macro => token::Macro,
-            Keyword::Operand(operand) => token::Atom(syntax::Atom::Operand(operand)),
+            Keyword::Operand(operand) => token::Literal(syntax::Literal::Operand(operand)),
         },
     )
 }
@@ -239,7 +231,7 @@ mod tests {
 
     use super::Operand::*;
     use super::keyword::Command::*;
-    use super::syntax::Atom::{Ident, Number, Operand};
+    use super::syntax::Literal::{Number, Operand};
     use super::syntax::token::*;
 
     fn assert_eq_tokens<'a>(src: &'a str, expected_tokens: &[Token]) {
@@ -260,45 +252,31 @@ mod tests {
     }
 
     #[test]
-    fn lex_label() {
-        assert_eq_tokens("label", &[Label("label".to_string())])
+    fn lex_ident() {
+        assert_eq_tokens("ident", &[Ident("ident".to_string())])
     }
 
     #[test]
-    fn lex_label_after_eol() {
-        assert_eq_tokens("    \nlabel", &[Eol, Label("label".to_string())])
+    fn lex_ident_after_eol() {
+        assert_eq_tokens("    \nident", &[Eol, Ident("ident".to_string())])
     }
 
     #[test]
-    fn lex_word_after_whitespace() {
-        assert_eq_tokens("    word", &[Atom(Ident("word".to_string()))])
+    fn lex_ident_after_whitespace() {
+        assert_eq_tokens("    ident", &[Ident("ident".to_string())])
     }
 
     #[test]
-    fn lex_label_and_word_with_underscore() {
+    fn lex_ident_with_underscore() {
         assert_eq_tokens(
-            "first_label then_word",
-            &[
-                Label("first_label".to_string()),
-                Atom(Ident("then_word".to_string())),
-            ],
-        )
-    }
-
-    #[test]
-    fn lex_label_and_ident_with_hash() {
-        assert_eq_tokens(
-            "first#label then#word",
-            &[
-                Label("first#label".to_string()),
-                Atom(Ident("then#word".to_string())),
-            ],
+            "ident_with_underscore",
+            &[Ident("ident_with_underscore".to_string())],
         )
     }
 
     #[test]
     fn lex_two_keywords() {
-        assert_eq_tokens("push bc", &[Command(Push), Atom(Operand(Bc))])
+        assert_eq_tokens("push bc", &[Command(Push), Literal(Operand(Bc))])
     }
 
     #[test]
@@ -310,18 +288,26 @@ mod tests {
     fn lex_quoted_string() {
         assert_eq_tokens(
             "\"file.asm\"",
-            &[Atom(syntax::Atom::String("file.asm".to_string()))],
+            &[Literal(syntax::Literal::String("file.asm".to_string()))],
         )
     }
 
     #[test]
     fn lex_hex_number() {
-        assert_eq_tokens("$19af", &[Atom(Number(0x19af))])
+        assert_eq_tokens("$19af", &[Literal(Number(0x19af))])
     }
 
     #[test]
-    fn lex_macro_definition() {
-        assert_eq_tokens("f: macro\n", &[Label("f".to_string()), Colon, Macro, Eol])
+    fn lex_label() {
+        assert_eq_tokens(
+            "label: nop\n",
+            &[
+                Ident("label".to_string()),
+                Colon,
+                Command(keyword::Command::Nop),
+                Eol,
+            ],
+        )
     }
 
     #[test]
@@ -340,7 +326,7 @@ mod tests {
                 Keyword::Command(command) => Command(command),
                 Keyword::Endm => Endm,
                 Keyword::Macro => Macro,
-                Keyword::Operand(operand) => Atom(Operand(operand)),
+                Keyword::Operand(operand) => Literal(Operand(operand)),
             };
             assert_eq_tokens(&f(spelling), &[token])
         }

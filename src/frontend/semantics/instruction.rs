@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use backend::*;
 use diagnostics::{Diagnostic, Message};
 use frontend::ExprFactory;
-use frontend::syntax::{keyword, Atom, SynExpr};
+use frontend::syntax::{keyword, Literal, SynExpr};
 
 struct OperandAnalyzer<'a, EF: 'a> {
     expr_factory: &'a mut EF,
@@ -25,34 +25,35 @@ impl<'a, EF: 'a + ExprFactory> OperandAnalyzer<'a, EF> {
         context: &OperandAnalysisContext,
     ) -> Operand<R> {
         match expr {
-            SynExpr::Atom(token) => self.analyze_atom_operand(token, context),
             SynExpr::Deref(expr) => self.analyze_deref_operand(*expr),
+            SynExpr::Ident(ident) => self.analyze_ident_operand(ident),
+            SynExpr::Literal(literal) => self.analyze_literal_operand(literal, context),
         }
     }
 
-    fn analyze_atom_operand<R>(
+    fn analyze_ident_operand<R>(&mut self, ident: (String, R)) -> Operand<R> {
+        Operand::Const(self.expr_factory.mk_symbol(ident))
+    }
+
+    fn analyze_literal_operand<R>(
         &mut self,
-        atom: (Atom<String>, R),
+        literal: (Literal<String>, R),
         context: &OperandAnalysisContext,
     ) -> Operand<R> {
-        match atom.0 {
-            Atom::Operand(operand) => analyze_keyword_operand((operand, atom.1), context),
-            Atom::Ident(_) | Atom::Number(_) => Operand::Const(self.expr_factory.mk_atom(atom)),
+        match literal.0 {
+            Literal::Operand(operand) => analyze_keyword_operand((operand, literal.1), context),
+            Literal::Number(_) => Operand::Const(self.expr_factory.mk_literal(literal)),
             _ => panic!(),
         }
     }
 
     fn analyze_deref_operand<R>(&mut self, expr: SynExpr<String, R>) -> Operand<R> {
-        if let SynExpr::Atom((atom, token_ref)) = expr {
-            match atom {
-                Atom::Operand(keyword::Operand::Hl) => {
-                    Operand::Simple(SimpleOperand::DerefHl, token_ref)
-                }
-                Atom::Ident(_) => Operand::Deref(self.expr_factory.mk_atom((atom, token_ref))),
-                _ => panic!(),
+        match expr {
+            SynExpr::Ident(ident) => Operand::Deref(self.expr_factory.mk_symbol(ident)),
+            SynExpr::Literal((Literal::Operand(keyword::Operand::Hl), token_ref)) => {
+                Operand::Simple(SimpleOperand::DerefHl, token_ref)
             }
-        } else {
-            panic!()
+            _ => panic!(),
         }
     }
 }
@@ -285,8 +286,8 @@ mod tests {
 
     use self::keyword::{Command, Operand::*};
 
-    fn atom(keyword: keyword::Operand) -> SynExpr<String, ()> {
-        SynExpr::Atom((Atom::Operand(keyword), ()))
+    fn literal(keyword: keyword::Operand) -> SynExpr<String, ()> {
+        SynExpr::Literal((Literal::Operand(keyword), ()))
     }
 
     impl From<AluOperation> for Command {
@@ -311,14 +312,14 @@ mod tests {
     impl From<SimpleOperand> for SynExpr<String, ()> {
         fn from(alu_operand: SimpleOperand) -> Self {
             match alu_operand {
-                SimpleOperand::A => atom(A),
-                SimpleOperand::B => atom(B),
-                SimpleOperand::C => atom(C),
-                SimpleOperand::D => atom(D),
-                SimpleOperand::E => atom(E),
-                SimpleOperand::H => atom(H),
-                SimpleOperand::L => atom(L),
-                SimpleOperand::DerefHl => atom(Hl).deref(),
+                SimpleOperand::A => literal(A),
+                SimpleOperand::B => literal(B),
+                SimpleOperand::C => literal(C),
+                SimpleOperand::D => literal(D),
+                SimpleOperand::E => literal(E),
+                SimpleOperand::H => literal(H),
+                SimpleOperand::L => literal(L),
+                SimpleOperand::DerefHl => literal(Hl).deref(),
             }
         }
     }
@@ -326,8 +327,8 @@ mod tests {
     impl From<Reg16> for SynExpr<String, ()> {
         fn from(reg16: Reg16) -> Self {
             match reg16 {
-                Reg16::Bc => atom(Bc),
-                Reg16::Hl => atom(Hl),
+                Reg16::Bc => literal(Bc),
+                Reg16::Hl => literal(Hl),
             }
         }
     }
@@ -335,10 +336,10 @@ mod tests {
     impl From<Condition> for SynExpr<String, ()> {
         fn from(condition: Condition) -> Self {
             match condition {
-                Condition::C => atom(C),
-                Condition::Nc => atom(Nc),
-                Condition::Nz => atom(Nz),
-                Condition::Z => atom(Z),
+                Condition::C => literal(C),
+                Condition::Nc => literal(Nc),
+                Condition::Nz => literal(Nz),
+                Condition::Z => literal(Z),
             }
         }
     }
@@ -349,10 +350,7 @@ mod tests {
         assert_eq!(
             analyze(
                 Command::Ld,
-                vec![
-                    SynExpr::Atom((Atom::Ident(ident.to_string()), ())).deref(),
-                    atom(A),
-                ]
+                vec![SynExpr::Ident((ident.to_string(), ())).deref(), literal(A)]
             ),
             Ok(Instruction::Ld(LdKind::ImmediateAddr(
                 Expr::Symbol(ident.to_string(), ()),
@@ -367,10 +365,7 @@ mod tests {
         assert_eq!(
             analyze(
                 Command::Ld,
-                vec![
-                    atom(A),
-                    SynExpr::Atom((Atom::Ident(ident.to_string()), ())).deref(),
-                ]
+                vec![literal(A), SynExpr::Ident((ident.to_string(), ())).deref()]
             ),
             Ok(Instruction::Ld(LdKind::ImmediateAddr(
                 Expr::Symbol(ident.to_string(), ()),
@@ -383,20 +378,21 @@ mod tests {
     fn analyze_cp_symbol() {
         let ident = "ident";
         test_cp_const_analysis(
-            Atom::Ident(ident.to_string()),
+            SynExpr::Ident((ident.to_string(), ())),
             Expr::Symbol(ident.to_string(), ()),
         )
     }
 
     #[test]
     fn analyze_cp_literal() {
-        let literal = 0x50;
-        test_cp_const_analysis(Atom::Number(literal), Expr::Literal(literal, ()))
+        let n = 0x50;
+        let literal = SynExpr::Literal((Literal::Number(n), ()));
+        test_cp_const_analysis(literal, Expr::Literal(n, ()))
     }
 
-    fn test_cp_const_analysis(atom: Atom<String>, expr: Expr<()>) {
+    fn test_cp_const_analysis(parsed: SynExpr<String, ()>, expr: Expr<()>) {
         assert_eq!(
-            analyze(Command::Cp, Some(SynExpr::Atom((atom, ())))),
+            analyze(Command::Cp, Some(parsed)),
             Ok(Instruction::Alu(
                 AluOperation::Cp,
                 AluSource::Immediate(expr)
@@ -420,7 +416,7 @@ mod tests {
         descriptors.extend(describe_branch_instuctions());
         descriptors.extend(describe_dec_instructions());
         descriptors.push((
-            (Command::Push, vec![atom(Bc)]),
+            (Command::Push, vec![literal(Bc)]),
             Instruction::Push(Reg16::Bc),
         ));
         descriptors
@@ -472,10 +468,7 @@ mod tests {
         (
             (
                 Command::Ld,
-                vec![
-                    SynExpr::from(dest),
-                    SynExpr::Atom((Atom::Ident(value.to_string()), ())),
-                ],
+                vec![SynExpr::from(dest), SynExpr::Ident((value.to_string(), ()))],
             ),
             Instruction::Ld(LdKind::Immediate16(
                 dest,
@@ -521,7 +514,7 @@ mod tests {
         if let Some(condition) = condition {
             operands.push(SynExpr::from(condition))
         };
-        operands.push(SynExpr::Atom((Atom::Ident(ident.to_string()), ())));
+        operands.push(SynExpr::Ident((ident.to_string(), ())));
         (
             (Command::from(branch), operands),
             Instruction::Branch(
@@ -585,7 +578,7 @@ mod tests {
     #[test]
     fn analyze_nop_a() {
         assert_eq!(
-            analyze(Command::Nop, vec![atom(A)]),
+            analyze(Command::Nop, vec![literal(A)]),
             Err(Diagnostic::new(
                 Message::OperandCount {
                     actual: 1,

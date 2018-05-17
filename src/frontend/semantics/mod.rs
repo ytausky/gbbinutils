@@ -1,6 +1,6 @@
 use backend;
 use frontend::syntax::{self, SynExpr, Token, TokenSpec, keyword::Command};
-use frontend::{Atom, StrExprFactory};
+use frontend::{Literal, StrExprFactory};
 use session::{ChunkId, Session};
 
 mod instruction;
@@ -24,7 +24,7 @@ impl<'a, F: Session + 'a> syntax::FileContext<String, F::TokenRef> for SemanticA
     type MacroDefContext = MacroDefActions<'a, F>;
     type MacroInvocationContext = MacroInvocationActions<'a, F>;
 
-    fn add_label(&mut self, label: (<String as TokenSpec>::Label, F::TokenRef)) {
+    fn add_label(&mut self, label: (<String as TokenSpec>::Ident, F::TokenRef)) {
         self.session.define_label(label);
     }
 
@@ -37,14 +37,14 @@ impl<'a, F: Session + 'a> syntax::FileContext<String, F::TokenRef> for SemanticA
 
     fn enter_macro_def(
         self,
-        name: (<String as TokenSpec>::Label, F::TokenRef),
+        name: (<String as TokenSpec>::Ident, F::TokenRef),
     ) -> Self::MacroDefContext {
         MacroDefActions::new(name, self)
     }
 
     fn enter_macro_invocation(
         self,
-        name: (<String as TokenSpec>::Atom, F::TokenRef),
+        name: (<String as TokenSpec>::Ident, F::TokenRef),
     ) -> Self::MacroInvocationContext {
         MacroInvocationActions::new(name, self)
     }
@@ -89,9 +89,9 @@ impl<'a, F: Session + 'a> syntax::CommandContext<F::TokenRef> for CommandActions
 fn analyze_db<'a, F: Session + 'a>(args: CommandArgs<F>, actions: &mut SemanticActions<'a, F>) {
     for arg in args {
         match arg {
-            SynExpr::Atom(atom) => {
+            SynExpr::Literal(literal) => {
                 use frontend::ExprFactory;
-                let expr = actions.expr_factory.mk_atom(atom);
+                let expr = actions.expr_factory.mk_literal(literal);
                 actions.session.emit_item(backend::Item::Byte(expr))
             }
             _ => panic!(),
@@ -152,14 +152,14 @@ impl<'a, F: Session + 'a> syntax::TokenSeqContext<F::TokenRef> for MacroDefActio
 }
 
 pub struct MacroInvocationActions<'a, F: Session + 'a> {
-    name: (Atom<String>, F::TokenRef),
+    name: (String, F::TokenRef),
     args: Vec<Vec<Token>>,
     parent: SemanticActions<'a, F>,
 }
 
 impl<'a, F: Session + 'a> MacroInvocationActions<'a, F> {
     fn new(
-        name: (Atom<String>, F::TokenRef),
+        name: (String, F::TokenRef),
         parent: SemanticActions<'a, F>,
     ) -> MacroInvocationActions<'a, F> {
         MacroInvocationActions {
@@ -186,13 +186,10 @@ impl<'a, F: Session + 'a> syntax::MacroInvocationContext<F::TokenRef>
     }
 
     fn exit(self) -> Self::Parent {
-        match self.name {
-            (Atom::Ident(name), code_ref) => self.parent.session.analyze_chunk(ChunkId::Macro {
-                name: (name, code_ref),
-                args: self.args,
-            }),
-            _ => panic!(),
-        }
+        self.parent.session.analyze_chunk(ChunkId::Macro {
+            name: self.name,
+            args: self.args,
+        });
         self.parent
     }
 }
@@ -229,7 +226,7 @@ fn reduce_include<R>(mut arguments: Vec<SynExpr<String, R>>) -> ChunkId<R> {
     assert_eq!(arguments.len(), 1);
     let path = arguments.pop().unwrap();
     match path {
-        SynExpr::Atom((Atom::String(path_str), token_ref)) => {
+        SynExpr::Literal((Literal::String(path_str), token_ref)) => {
             ChunkId::File((path_str, Some(token_ref)))
         }
         _ => panic!(),
@@ -298,7 +295,7 @@ mod tests {
         let filename = "file.asm";
         let actions = collect_semantic_actions(|actions| {
             let mut command = actions.enter_command((Command::Include, ()));
-            let expr = SynExpr::Atom((Atom::String(filename.to_string()), ()));
+            let expr = SynExpr::Literal((Literal::String(filename.to_string()), ()));
             command.add_argument(expr);
             command.exit();
         });
@@ -331,7 +328,7 @@ mod tests {
     }
 
     fn mk_literal(n: i32) -> SynExpr<String, ()> {
-        SynExpr::Atom((Atom::Number(n), ()))
+        SynExpr::Literal((Literal::Number(n), ()))
     }
 
     fn mk_byte(byte: &i32) -> backend::Item<()> {
@@ -351,7 +348,7 @@ mod tests {
         let name = "my_macro";
         let tokens = vec![
             token::Command(Command::Xor),
-            token::Atom(Atom::Operand(Operand::A)),
+            token::Literal(Literal::Operand(Operand::A)),
         ];
         let actions = collect_semantic_actions(|actions| {
             let mut token_seq_context = actions.enter_macro_def((name.to_string(), ()));
@@ -370,7 +367,7 @@ mod tests {
     fn invoke_nullary_macro() {
         let name = "my_macro";
         let actions = collect_semantic_actions(|actions| {
-            let invocation = actions.enter_macro_invocation((Atom::Ident(name.to_string()), ()));
+            let invocation = actions.enter_macro_invocation((name.to_string(), ()));
             invocation.exit();
         });
         assert_eq!(
@@ -387,10 +384,9 @@ mod tests {
     #[test]
     fn invoke_unary_macro() {
         let name = "my_macro";
-        let arg_token = token::Atom(Atom::Operand(Operand::A));
+        let arg_token = token::Literal(Literal::Operand(Operand::A));
         let actions = collect_semantic_actions(|actions| {
-            let mut invocation =
-                actions.enter_macro_invocation((Atom::Ident(name.to_string()), ()));
+            let mut invocation = actions.enter_macro_invocation((name.to_string(), ()));
             invocation = {
                 let mut arg = invocation.enter_macro_arg();
                 arg.push_token((arg_token.clone(), ()));
@@ -414,8 +410,8 @@ mod tests {
         use diagnostics::{Diagnostic, Message};
         let actions = collect_semantic_actions(|actions| {
             let mut command_context = actions.enter_command((Command::Nop, ()));
-            let atom_a = Atom::Operand(Operand::A);
-            command_context.add_argument(SynExpr::Atom((atom_a, ())));
+            let literal_a = Literal::Operand(Operand::A);
+            command_context.add_argument(SynExpr::Literal((literal_a, ())));
             command_context.exit();
         });
         assert_eq!(

@@ -21,9 +21,9 @@ pub mod token {
 }
 
 pub trait TokenSpec {
-    type Atom;
     type Command;
-    type Label;
+    type Ident;
+    type Literal;
 }
 
 pub trait StringRef {}
@@ -32,13 +32,13 @@ impl StringRef for String {}
 impl<'a> StringRef for &'a str {}
 
 impl<T: StringRef> TokenSpec for T {
-    type Atom = Atom<T>;
     type Command = keyword::Command;
-    type Label = T;
+    type Ident = T;
+    type Literal = Literal<T>;
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Atom<S> {
+pub enum Literal<S> {
     Ident(S),
     Operand(keyword::Operand),
     Number(i32),
@@ -46,9 +46,9 @@ pub enum Atom<S> {
 }
 
 impl TokenSpec for () {
-    type Atom = ();
     type Command = ();
-    type Label = ();
+    type Ident = ();
+    type Literal = ();
 }
 
 pub trait FileContext<S: TokenSpec, R>
@@ -58,10 +58,10 @@ where
     type CommandContext: CommandContext<R, TokenSpec = S, Parent = Self>;
     type MacroDefContext: TokenSeqContext<R, Token = parser::Token<S>, Parent = Self>;
     type MacroInvocationContext: MacroInvocationContext<R, Token = parser::Token<S>, Parent = Self>;
-    fn add_label(&mut self, label: (S::Label, R));
+    fn add_label(&mut self, label: (S::Ident, R));
     fn enter_command(self, name: (S::Command, R)) -> Self::CommandContext;
-    fn enter_macro_def(self, name: (S::Label, R)) -> Self::MacroDefContext;
-    fn enter_macro_invocation(self, name: (S::Atom, R)) -> Self::MacroInvocationContext;
+    fn enter_macro_def(self, name: (S::Ident, R)) -> Self::MacroDefContext;
+    fn enter_macro_invocation(self, name: (S::Ident, R)) -> Self::MacroInvocationContext;
 }
 
 pub trait CommandContext<R> {
@@ -90,17 +90,20 @@ pub trait TokenSeqContext<R> {
 }
 
 pub trait ExprSpec {
-    type Atom;
+    type Ident;
+    type Literal;
 }
 
 impl<T: TokenSpec> ExprSpec for T {
-    type Atom = T::Atom;
+    type Ident = T::Ident;
+    type Literal = T::Literal;
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SynExpr<S: ExprSpec, R> {
-    Atom((S::Atom, R)),
+    Ident((S::Ident, R)),
     Deref(Box<SynExpr<S, R>>),
+    Literal((S::Literal, R)),
 }
 
 impl<S: ExprSpec, R> SynExpr<S, R> {
