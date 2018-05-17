@@ -15,14 +15,14 @@ pub enum Item<R> {
 mod codegen;
 
 pub struct ObjectBuilder<'a, T: 'a> {
-    section: Option<Section>,
+    sections: Vec<Section>,
     diagnostics: &'a T,
 }
 
 impl<'a, T: 'a> ObjectBuilder<'a, T> {
     pub fn new(diagnostics: &T) -> ObjectBuilder<T> {
         ObjectBuilder {
-            section: Some(Section::new()),
+            sections: vec![Section::new()],
             diagnostics,
         }
     }
@@ -32,16 +32,14 @@ impl<'a, T: 'a> ObjectBuilder<'a, T> {
         T: DiagnosticsListener<R>,
     {
         match expr {
-            Expr::Literal(value, expr_ref) => {
-                self.emit_resolved_byte_expr(value, expr_ref)
-            }
+            Expr::Literal(value, expr_ref) => self.emit_resolved_byte_expr(value, expr_ref),
             _ => unimplemented!(),
         }
     }
 
     fn emit_resolved_byte_expr<R>(&mut self, value: i32, expr_ref: R)
     where
-        T: DiagnosticsListener<R>
+        T: DiagnosticsListener<R>,
     {
         if !is_in_byte_range(value) {
             self.diagnostics.emit_diagnostic(Diagnostic::new(
@@ -61,8 +59,7 @@ impl<'a, T: 'a> ObjectBuilder<'a, T> {
 }
 
 impl<'a, R, T: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<'a, T> {
-    fn add_label(&mut self, _label: (impl Into<String>, R)) {
-    }
+    fn add_label(&mut self, _label: (impl Into<String>, R)) {}
 
     fn emit_item(&mut self, item: Item<R>) {
         match item {
@@ -74,7 +71,7 @@ impl<'a, R, T: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<'a, T> 
 
 impl<'a, T: 'a> ByteEmitter for ObjectBuilder<'a, T> {
     fn emit_byte(&mut self, value: u8) {
-        self.section.as_mut().unwrap().data.push(value)
+        self.sections.last_mut().unwrap().data.push(value)
     }
 }
 
@@ -180,29 +177,40 @@ pub enum Expr<R> {
 mod tests {
     use super::*;
 
+    use std::borrow::Borrow;
+
     #[test]
     fn emit_literal_byte_item() {
-        let diagnostics = TestDiagnosticsListener::new();
-        let mut builder = ObjectBuilder::new(&diagnostics);
-        builder.emit_item(Item::Byte(Expr::Literal(0xff, ())));
-        assert_eq!(builder.section.unwrap().data, [0xff])
+        emit_items_and_compare([Item::Byte(Expr::Literal(0xff, ()))], [0xff])
     }
 
     #[test]
     fn emit_two_literal_byte_item() {
-        let diagnostics = TestDiagnosticsListener::new();
-        let mut builder = ObjectBuilder::new(&diagnostics);
-        builder.emit_item(Item::Byte(Expr::Literal(0x12, ())));
-        builder.emit_item(Item::Byte(Expr::Literal(0x34, ())));
-        assert_eq!(builder.section.unwrap().data, [0x12, 0x34])
+        emit_items_and_compare(
+            [
+                Item::Byte(Expr::Literal(0x12, ())),
+                Item::Byte(Expr::Literal(0x34, ())),
+            ],
+            [0x12, 0x34],
+        )
     }
 
     #[test]
     fn emit_stop() {
+        emit_items_and_compare([Item::Instruction(Instruction::Stop)], [0x10, 0x00])
+    }
+
+    fn emit_items_and_compare<I, B>(items: I, bytes: B)
+    where
+        I: Borrow<[Item<()>]>,
+        B: Borrow<[u8]>,
+    {
         let diagnostics = TestDiagnosticsListener::new();
         let mut builder = ObjectBuilder::new(&diagnostics);
-        builder.emit_item(Item::Instruction(Instruction::Stop));
-        assert_eq!(builder.section.unwrap().data, [0x10, 0x00])
+        for item in items.borrow() {
+            builder.emit_item(item.clone())
+        }
+        assert_eq!(builder.sections.last_mut().unwrap().data, bytes.borrow())
     }
 
     #[test]
