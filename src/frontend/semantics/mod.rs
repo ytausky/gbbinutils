@@ -93,16 +93,12 @@ fn analyze_data<'a, S: Session + 'a>(
     args: CommandArgs<S>,
     actions: &mut SemanticActions<'a, S>,
 ) {
-    let item_constructor = match width {
-        Width::Byte => backend::Item::Byte,
-        Width::Word => backend::Item::Word,
-    };
     for arg in args {
         match arg {
             SynExpr::Literal(literal) => {
                 use frontend::ExprFactory;
                 let expr = actions.expr_factory.mk_literal(literal);
-                actions.session.emit_item(item_constructor(expr))
+                actions.session.emit_item(backend::Item::Data(expr, width))
             }
             _ => panic!(),
         }
@@ -362,11 +358,11 @@ mod tests {
     }
 
     fn mk_byte(byte: &i32) -> backend::Item<()> {
-        backend::Item::Byte(backend::Expr::Literal(*byte, ()))
+        backend::Item::Data(backend::Expr::Literal(*byte, ()), Width::Byte)
     }
 
     fn mk_word(word: &i32) -> backend::Item<()> {
-        backend::Item::Word(backend::Expr::Literal(*word, ()))
+        backend::Item::Data(backend::Expr::Literal(*word, ()), Width::Word)
     }
 
     #[test]

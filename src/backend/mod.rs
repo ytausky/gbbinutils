@@ -9,9 +9,8 @@ pub trait Backend<R> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Item<R> {
-    Byte(Expr<R>),
+    Data(Expr<R>, Width),
     Instruction(Instruction<R>),
-    Word(Expr<R>),
 }
 
 mod codegen;
@@ -32,39 +31,26 @@ impl<'a, T: 'a> ObjectBuilder<'a, T> {
     #[cfg(test)]
     pub fn resolve_symbols(&mut self) {}
 
-    fn emit_byte_expr<R>(&mut self, expr: Expr<R>)
+    fn emit_data_expr<R>(&mut self, expr: Expr<R>, width: Width)
     where
         T: DiagnosticsListener<R>,
     {
         match expr {
-            Expr::Literal(value, expr_ref) => self.emit_resolved_byte_expr(value, expr_ref),
-            _ => unimplemented!(),
-        }
-    }
-
-    fn emit_word_expr<R>(&mut self, expr: Expr<R>)
-    where
-        T: DiagnosticsListener<R>,
-    {
-        match expr {
+            Expr::Literal(value, expr_ref) => self.emit_resolved_data_expr(value, width, expr_ref),
             Expr::Symbol(symbol, expr_ref) => self.diagnostics.emit_diagnostic(Diagnostic::new(
                 Message::UnresolvedSymbol { symbol },
                 expr_ref,
             )),
-            _ => unimplemented!(),
         }
     }
 
-    fn emit_resolved_byte_expr<R>(&mut self, value: i32, expr_ref: R)
+    fn emit_resolved_data_expr<R>(&mut self, value: i32, width: Width, expr_ref: R)
     where
         T: DiagnosticsListener<R>,
     {
         if !is_in_byte_range(value) {
             self.diagnostics.emit_diagnostic(Diagnostic::new(
-                Message::ValueOutOfRange {
-                    value,
-                    width: Width::Byte,
-                },
+                Message::ValueOutOfRange { value, width },
                 expr_ref,
             ))
         }
@@ -81,9 +67,8 @@ impl<'a, R, T: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<'a, T> 
 
     fn emit_item(&mut self, item: Item<R>) {
         match item {
-            Item::Byte(expr) => self.emit_byte_expr(expr),
+            Item::Data(expr, width) => self.emit_data_expr(expr, width),
             Item::Instruction(instruction) => self.emit_instruction(&instruction),
-            Item::Word(expr) => self.emit_word_expr(expr),
         }
     }
 }
@@ -200,15 +185,15 @@ mod tests {
 
     #[test]
     fn emit_literal_byte_item() {
-        emit_items_and_compare([Item::Byte(Expr::Literal(0xff, ()))], [0xff])
+        emit_items_and_compare([Item::Data(Expr::Literal(0xff, ()), Width::Byte)], [0xff])
     }
 
     #[test]
     fn emit_two_literal_byte_item() {
         emit_items_and_compare(
             [
-                Item::Byte(Expr::Literal(0x12, ())),
-                Item::Byte(Expr::Literal(0x34, ())),
+                Item::Data(Expr::Literal(0x12, ()), Width::Byte),
+                Item::Data(Expr::Literal(0x34, ()), Width::Byte),
             ],
             [0x12, 0x34],
         )
@@ -241,7 +226,7 @@ mod tests {
     fn test_diagnostic_for_out_of_range_byte(value: i32) {
         let listener = TestDiagnosticsListener::new();
         let mut builder = ObjectBuilder::new(&listener);
-        builder.emit_item(Item::Byte(Expr::Literal(value, ())));
+        builder.emit_item(Item::Data(Expr::Literal(value, ()), Width::Byte));
         assert_eq!(
             *listener.diagnostics.borrow(),
             [
@@ -261,7 +246,7 @@ mod tests {
         let ident = "ident";
         let diagnostics = TestDiagnosticsListener::new();
         let mut builder = ObjectBuilder::new(&diagnostics);
-        builder.emit_item(Item::Word(Expr::Symbol(ident.to_string(), ())));
+        builder.emit_item(Item::Data(Expr::Symbol(ident.to_string(), ()), Width::Word));
         builder.resolve_symbols();
         assert_eq!(
             *diagnostics.diagnostics.borrow(),

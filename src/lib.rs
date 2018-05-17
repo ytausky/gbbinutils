@@ -6,7 +6,7 @@ mod diagnostics;
 mod frontend;
 mod session;
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Width {
     Byte,
     Word,
