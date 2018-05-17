@@ -83,6 +83,7 @@ impl<TR> Diagnostic<TR> {
 pub enum Message {
     OperandCount { actual: usize, expected: usize },
     UndefinedMacro { name: String },
+    UnresolvedSymbol { symbol: String },
     ValueOutOfRange { value: i32, width: Width },
 }
 
@@ -94,6 +95,7 @@ impl fmt::Display for Message {
                 write!(f, "expected {} operands, found {}", expected, actual)
             }
             UndefinedMacro { name } => write!(f, "invocation of undefined macro `{}`", name),
+            UnresolvedSymbol { symbol } => write!(f, "symbol `{}` could not be resolved", symbol),
             ValueOutOfRange { value, width } => {
                 write!(f, "value {} cannot be represented in a {}", value, width)
             }

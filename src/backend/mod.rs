@@ -10,6 +10,7 @@ pub trait Backend<R> {
 pub enum Item<R> {
     Byte(Expr<R>),
     Instruction(Instruction<R>),
+    Word(Expr<R>),
 }
 
 mod codegen;
@@ -27,12 +28,28 @@ impl<'a, T: 'a> ObjectBuilder<'a, T> {
         }
     }
 
+    #[cfg(test)]
+    pub fn resolve_symbols(&mut self) {}
+
     fn emit_byte_expr<R>(&mut self, expr: Expr<R>)
     where
         T: DiagnosticsListener<R>,
     {
         match expr {
             Expr::Literal(value, expr_ref) => self.emit_resolved_byte_expr(value, expr_ref),
+            _ => unimplemented!(),
+        }
+    }
+
+    fn emit_word_expr<R>(&mut self, expr: Expr<R>)
+    where
+        T: DiagnosticsListener<R>,
+    {
+        match expr {
+            Expr::Symbol(symbol, expr_ref) => self.diagnostics.emit_diagnostic(Diagnostic::new(
+                Message::UnresolvedSymbol { symbol },
+                expr_ref,
+            )),
             _ => unimplemented!(),
         }
     }
@@ -65,6 +82,7 @@ impl<'a, R, T: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<'a, T> 
         match item {
             Item::Byte(expr) => self.emit_byte_expr(expr),
             Item::Instruction(instruction) => self.emit_instruction(&instruction),
+            Item::Word(expr) => self.emit_word_expr(expr),
         }
     }
 }
@@ -230,6 +248,26 @@ mod tests {
                     Message::ValueOutOfRange {
                         value,
                         width: Width::Byte,
+                    },
+                    ()
+                )
+            ]
+        );
+    }
+
+    #[test]
+    fn diagnose_unresolved_symbol() {
+        let ident = "ident";
+        let diagnostics = TestDiagnosticsListener::new();
+        let mut builder = ObjectBuilder::new(&diagnostics);
+        builder.emit_item(Item::Word(Expr::Symbol(ident.to_string(), ())));
+        builder.resolve_symbols();
+        assert_eq!(
+            *diagnostics.diagnostics.borrow(),
+            [
+                Diagnostic::new(
+                    Message::UnresolvedSymbol {
+                        symbol: ident.to_string()
                     },
                     ()
                 )
