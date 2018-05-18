@@ -1,6 +1,7 @@
 use Width;
 use backend::codegen::ByteEmitter;
 use diagnostics::*;
+use std::collections::HashMap;
 
 pub trait Backend<R> {
     fn add_label(&mut self, label: (impl Into<String>, R));
@@ -17,6 +18,7 @@ mod codegen;
 
 pub struct ObjectBuilder<'a, T: 'a> {
     sections: Vec<Section>,
+    symbols: HashMap<String, i32>,
     diagnostics: &'a T,
 }
 
@@ -24,6 +26,7 @@ impl<'a, T: 'a> ObjectBuilder<'a, T> {
     pub fn new(diagnostics: &T) -> ObjectBuilder<T> {
         ObjectBuilder {
             sections: vec![Section::new()],
+            symbols: HashMap::new(),
             diagnostics,
         }
     }
@@ -37,10 +40,17 @@ impl<'a, T: 'a> ObjectBuilder<'a, T> {
     {
         match expr {
             Expr::Literal(value, expr_ref) => self.emit_resolved_data_expr(value, width, expr_ref),
-            Expr::Symbol(symbol, expr_ref) => self.diagnostics.emit_diagnostic(Diagnostic::new(
-                Message::UnresolvedSymbol { symbol },
-                expr_ref,
-            )),
+            Expr::Symbol(symbol, expr_ref) => {
+                let symbol_def = self.symbols.get(&symbol).cloned();
+                if let Some(value) = symbol_def {
+                    self.emit_resolved_data_expr(value, width, expr_ref)
+                } else {
+                    self.diagnostics.emit_diagnostic(Diagnostic::new(
+                        Message::UnresolvedSymbol { symbol },
+                        expr_ref,
+                    ))
+                }
+            }
         }
     }
 
@@ -48,13 +58,22 @@ impl<'a, T: 'a> ObjectBuilder<'a, T> {
     where
         T: DiagnosticsListener<R>,
     {
-        if !is_in_byte_range(value) {
+        if !is_in_range(value, width) {
             self.diagnostics.emit_diagnostic(Diagnostic::new(
                 Message::ValueOutOfRange { value, width },
                 expr_ref,
             ))
         }
-        self.emit_byte(value as u8)
+        self.emit_data(value, width)
+    }
+
+    fn emit_data(&mut self, value: i32, width: Width) {
+        let low = value & 0xff;
+        self.emit_byte(low as u8);
+        if width == Width::Word {
+            let high = (value >> 8) & 0xff;
+            self.emit_byte(high as u8)
+        }
     }
 
     fn emit_instruction<R>(&mut self, instruction: &Instruction<R>) {
@@ -63,7 +82,12 @@ impl<'a, T: 'a> ObjectBuilder<'a, T> {
 }
 
 impl<'a, R, T: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<'a, T> {
-    fn add_label(&mut self, _label: (impl Into<String>, R)) {}
+    fn add_label(&mut self, label: (impl Into<String>, R)) {
+        self.symbols.insert(
+            label.0.into(),
+            self.sections.last().unwrap().data.len() as i32,
+        );
+    }
 
     fn emit_item(&mut self, item: Item<R>) {
         match item {
@@ -86,6 +110,13 @@ struct Section {
 impl Section {
     fn new() -> Section {
         Section { data: Vec::new() }
+    }
+}
+
+fn is_in_range(n: i32, width: Width) -> bool {
+    match width {
+        Width::Byte => is_in_byte_range(n),
+        Width::Word => true,
     }
 }
 
@@ -259,6 +290,18 @@ mod tests {
                 )
             ]
         );
+    }
+
+    #[test]
+    fn emit_defined_symbol() {
+        let label = "label";
+        let diagnostics = TestDiagnosticsListener::new();
+        let mut builder = ObjectBuilder::new(&diagnostics);
+        builder.add_label((label, ()));
+        builder.emit_item(Item::Data(Expr::Symbol(label.to_string(), ()), Width::Word));
+        builder.resolve_symbols();
+        assert_eq!(*diagnostics.diagnostics.borrow(), []);
+        assert_eq!(builder.sections.last_mut().unwrap().data, [0x00, 0x00])
     }
 
     use std::cell::RefCell;
