@@ -1,5 +1,5 @@
 use Width;
-use backend::codegen::ByteEmitter;
+use backend::codegen::{DataItem, Emit};
 use diagnostics::*;
 use std::collections::HashMap;
 
@@ -14,78 +14,103 @@ pub enum Item<R> {
     Instruction(Instruction<R>),
 }
 
-mod codegen;
-
-pub struct ObjectBuilder<'a, T: 'a> {
-    sections: Vec<Section>,
-    symbols: HashMap<String, i32>,
-    diagnostics: &'a T,
+enum Data {
+    Byte(u8),
+    Word(u16),
 }
 
-impl<'a, T: 'a> ObjectBuilder<'a, T> {
-    pub fn new(diagnostics: &T) -> ObjectBuilder<T> {
+mod codegen;
+
+pub struct ObjectBuilder<'a, R, D: DiagnosticsListener<R> + 'a> {
+    pending_sections: Vec<PendingSection<R>>,
+    resolved_sections: Vec<ResolvedSection>,
+    symbols: HashMap<String, i32>,
+    diagnostics: &'a D,
+}
+
+impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R, D> {
+    pub fn new(diagnostics: &D) -> ObjectBuilder<R, D> {
         ObjectBuilder {
-            sections: vec![Section::new()],
+            pending_sections: vec![PendingSection::new()],
+            resolved_sections: Vec::new(),
             symbols: HashMap::new(),
             diagnostics,
         }
     }
 
     #[cfg(test)]
-    pub fn resolve_symbols(&mut self) {}
+    pub fn resolve_symbols(&mut self) {
+        for pending_section in self.pending_sections.iter() {
+            let mut resolved_section = ResolvedSection::new();
+            for item in pending_section.items.iter() {
+                match item {
+                    DataItem::Byte(value) => resolved_section.push(Data::Byte(*value)),
+                    DataItem::Expr(expr, width) => {
+                        resolved_section.push(self.resolve_expr_item(expr, *width))
+                    }
+                }
+            }
+            self.resolved_sections.push(resolved_section)
+        }
+    }
 
-    fn emit_data_expr<R>(&mut self, expr: Expr<R>, width: Width)
-    where
-        T: DiagnosticsListener<R>,
-    {
+    #[cfg(test)]
+    fn resolve_expr_item(&self, expr: &Expr<R>, width: Width) -> Data {
+        let value = self.evaluate_expr(expr);
+        self.fit_to_width(value, width)
+    }
+
+    fn evaluate_expr<'b>(&self, expr: &'b Expr<R>) -> (i32, &'b R) {
         match expr {
-            Expr::Literal(value, expr_ref) => self.emit_resolved_data_expr(value, width, expr_ref),
+            Expr::Literal(value, expr_ref) => (*value, expr_ref),
             Expr::Symbol(symbol, expr_ref) => {
-                let symbol_def = self.symbols.get(&symbol).cloned();
+                let symbol_def = self.symbols.get(symbol).cloned();
                 if let Some(value) = symbol_def {
-                    self.emit_resolved_data_expr(value, width, expr_ref)
+                    (value, expr_ref)
                 } else {
                     self.diagnostics.emit_diagnostic(Diagnostic::new(
-                        Message::UnresolvedSymbol { symbol },
-                        expr_ref,
-                    ))
+                        Message::UnresolvedSymbol {
+                            symbol: symbol.clone(),
+                        },
+                        expr_ref.clone(),
+                    ));
+                    (0, expr_ref)
                 }
             }
         }
     }
 
-    fn emit_resolved_data_expr<R>(&mut self, value: i32, width: Width, expr_ref: R)
-    where
-        T: DiagnosticsListener<R>,
-    {
+    #[cfg(test)]
+    fn fit_to_width(&self, (value, value_ref): (i32, &R), width: Width) -> Data {
         if !is_in_range(value, width) {
             self.diagnostics.emit_diagnostic(Diagnostic::new(
                 Message::ValueOutOfRange { value, width },
-                expr_ref,
+                value_ref.clone(),
             ))
         }
-        self.emit_data(value, width)
-    }
-
-    fn emit_data(&mut self, value: i32, width: Width) {
-        let low = value & 0xff;
-        self.emit_byte(low as u8);
-        if width == Width::Word {
-            let high = (value >> 8) & 0xff;
-            self.emit_byte(high as u8)
+        match width {
+            Width::Byte => Data::Byte(value as u8),
+            Width::Word => Data::Word(value as u16),
         }
     }
 
-    fn emit_instruction<R>(&mut self, instruction: &Instruction<R>) {
+    fn emit_data_expr(&mut self, expr: Expr<R>, width: Width) {
+        self.pending_sections
+            .last_mut()
+            .unwrap()
+            .push(DataItem::Expr(expr, width))
+    }
+
+    fn emit_instruction(&mut self, instruction: &Instruction<R>) {
         codegen::generate_code(&instruction, self)
     }
 }
 
-impl<'a, R, T: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<'a, T> {
+impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<'a, R, D> {
     fn add_label(&mut self, label: (impl Into<String>, R)) {
         self.symbols.insert(
             label.0.into(),
-            self.sections.last().unwrap().data.len() as i32,
+            self.pending_sections.last().unwrap().len as i32,
         );
     }
 
@@ -97,19 +122,59 @@ impl<'a, R, T: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<'a, T> 
     }
 }
 
-impl<'a, T: 'a> ByteEmitter for ObjectBuilder<'a, T> {
-    fn emit_byte(&mut self, value: u8) {
-        self.sections.last_mut().unwrap().data.push(value)
+impl<'a, R, D: DiagnosticsListener<R> + 'a> Emit<R> for ObjectBuilder<'a, R, D> {
+    fn emit(&mut self, item: DataItem<R>) {
+        self.pending_sections.last_mut().unwrap().push(item)
     }
 }
 
-struct Section {
+struct PendingSection<R> {
+    items: Vec<DataItem<R>>,
+    len: usize,
+}
+
+impl<R> DataItem<R> {
+    fn len(&self) -> usize {
+        match self {
+            DataItem::Byte(_) => 1,
+            DataItem::Expr(_, width) => width.len(),
+        }
+    }
+}
+
+impl<R> PendingSection<R> {
+    fn new() -> PendingSection<R> {
+        PendingSection {
+            items: Vec::new(),
+            len: 0,
+        }
+    }
+
+    fn push(&mut self, item: DataItem<R>) {
+        self.len += item.len();
+        self.items.push(item)
+    }
+}
+
+struct ResolvedSection {
     data: Vec<u8>,
 }
 
-impl Section {
-    fn new() -> Section {
-        Section { data: Vec::new() }
+impl ResolvedSection {
+    fn new() -> ResolvedSection {
+        ResolvedSection { data: Vec::new() }
+    }
+
+    fn push(&mut self, data: Data) {
+        match data {
+            Data::Byte(value) => self.data.push(value),
+            Data::Word(value) => {
+                let low = value & 0xff;
+                let high = (value >> 8) & 0xff;
+                self.data.push(low as u8);
+                self.data.push(high as u8);
+            }
+        }
     }
 }
 
@@ -245,7 +310,11 @@ mod tests {
         for item in items.borrow() {
             builder.emit_item(item.clone())
         }
-        assert_eq!(builder.sections.last_mut().unwrap().data, bytes.borrow())
+        builder.resolve_symbols();
+        assert_eq!(
+            builder.resolved_sections.last_mut().unwrap().data,
+            bytes.borrow()
+        )
     }
 
     #[test]
@@ -258,6 +327,7 @@ mod tests {
         let listener = TestDiagnosticsListener::new();
         let mut builder = ObjectBuilder::new(&listener);
         builder.emit_item(Item::Data(Expr::Literal(value, ()), Width::Byte));
+        builder.resolve_symbols();
         assert_eq!(
             *listener.diagnostics.borrow(),
             [
@@ -301,7 +371,10 @@ mod tests {
         builder.emit_item(Item::Data(Expr::Symbol(label.to_string(), ()), Width::Word));
         builder.resolve_symbols();
         assert_eq!(*diagnostics.diagnostics.borrow(), []);
-        assert_eq!(builder.sections.last_mut().unwrap().data, [0x00, 0x00])
+        assert_eq!(
+            builder.resolved_sections.last_mut().unwrap().data,
+            [0x00, 0x00]
+        )
     }
 
     use std::cell::RefCell;

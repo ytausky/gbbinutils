@@ -1,10 +1,20 @@
 use backend::*;
 
-pub trait ByteEmitter {
-    fn emit_byte(&mut self, byte: u8);
+pub trait Emit<R> {
+    fn emit(&mut self, item: DataItem<R>);
+
+    fn emit_byte(&mut self, value: u8) {
+        self.emit(DataItem::Byte(value))
+    }
 }
 
-pub fn generate_code<R>(instruction: &Instruction<R>, emitter: &mut impl ByteEmitter) {
+#[derive(Debug, PartialEq)]
+pub enum DataItem<R> {
+    Byte(u8),
+    Expr(Expr<R>, Width),
+}
+
+pub fn generate_code<R>(instruction: &Instruction<R>, emitter: &mut impl Emit<R>) {
     use backend::Instruction::*;
     match instruction {
         Halt => emitter.emit_byte(0x76),
@@ -42,16 +52,19 @@ mod tests {
 
     use backend::Instruction::*;
 
-    impl<F: FnMut(u8)> ByteEmitter for F {
-        fn emit_byte(&mut self, byte: u8) {
-            self(byte)
+    impl<F: FnMut(DataItem<()>)> Emit<()> for F {
+        fn emit(&mut self, item: DataItem<()>) {
+            self(item)
         }
     }
 
     fn test_instruction(instruction: Instruction<()>, bytes: &[u8]) {
         let mut code = vec![];
-        generate_code(&instruction, &mut |byte| code.push(byte));
-        assert_eq!(code, bytes)
+        generate_code(&instruction, &mut |item| code.push(item));
+        assert_eq!(
+            code,
+            bytes.iter().map(|&b| DataItem::Byte(b)).collect::<Vec<_>>()
+        )
     }
 
     #[test]

@@ -12,6 +12,15 @@ pub enum Width {
     Word,
 }
 
+impl Width {
+    fn len(&self) -> usize {
+        match self {
+            Width::Byte => 1,
+            Width::Word => 2,
+        }
+    }
+}
+
 pub fn analyze_file(name: &str) {
     let codebase = codebase::FileCodebase::new(codebase::StdFileSystem::new());
     let diagnostics = diagnostics::TerminalDiagnostics::new(&codebase.cache);
