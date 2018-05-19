@@ -54,6 +54,8 @@ impl OutputDumper {
 }
 
 impl<R: Debug> backend::Backend<R> for OutputDumper {
+    type Object = ();
+
     fn add_label(&mut self, (label, _): (impl Into<String>, R)) {
         println!("Define symbol: {}", label.into())
     }
@@ -61,4 +63,6 @@ impl<R: Debug> backend::Backend<R> for OutputDumper {
     fn emit_item(&mut self, item: backend::Item<R>) {
         println!("Emit {:?}", item)
     }
+
+    fn into_object(self) {}
 }

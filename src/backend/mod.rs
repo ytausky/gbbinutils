@@ -4,8 +4,10 @@ use diagnostics::*;
 use std::collections::HashMap;
 
 pub trait Backend<R> {
+    type Object;
     fn add_label(&mut self, label: (impl Into<String>, R));
     fn emit_item(&mut self, item: Item<R>);
+    fn into_object(self) -> Self::Object;
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -46,7 +48,6 @@ impl<'a, D: 'a> SymbolTable<'a, D> {
         }
     }
 
-    #[cfg(test)]
     fn resolve_expr_item<R: Clone>(&self, expr: Expr<R>, width: Width) -> Data
     where
         D: DiagnosticsListener<R>,
@@ -78,7 +79,6 @@ impl<'a, D: 'a> SymbolTable<'a, D> {
         }
     }
 
-    #[cfg(test)]
     fn fit_to_width<R: Clone>(&self, (value, value_ref): (i32, R), width: Width) -> Data
     where
         D: DiagnosticsListener<R>,
@@ -109,7 +109,6 @@ impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R, D> {
         }
     }
 
-    #[cfg(test)]
     pub fn resolve_symbols(self) -> Object {
         let mut object = Object::new();
         for pending_section in self.pending_sections {
@@ -140,6 +139,8 @@ impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R, D> {
 }
 
 impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<'a, R, D> {
+    type Object = Object;
+
     fn add_label(&mut self, label: (impl Into<String>, R)) {
         self.symbol_table.symbols.insert(
             label.0.into(),
@@ -152,6 +153,10 @@ impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<
             Item::Data(expr, width) => self.emit_data_expr(expr, width),
             Item::Instruction(instruction) => self.emit_instruction(&instruction),
         }
+    }
+
+    fn into_object(self) -> Self::Object {
+        self.resolve_symbols()
     }
 }
 

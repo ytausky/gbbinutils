@@ -23,13 +23,14 @@ pub fn analyze_file<
     token_tracker: TT,
     backend: B,
     diagnostics: &D,
-) {
+) -> B::Object {
     let factory = SemanticAnalysisFactory::new();
     let token_provider = TokenStreamSource::new(codebase, token_tracker);
     let file_parser = FileParser::new(factory, token_provider, diagnostics);
     let mut session: Components<_, _, D, _, _, _> =
         Components::new(file_parser, backend, diagnostics);
-    session.analyze_chunk(ChunkId::File((name, None)))
+    session.analyze_chunk(ChunkId::File((name, None)));
+    session.build_object()
 }
 
 trait Analysis {
@@ -508,6 +509,8 @@ mod tests {
     }
 
     impl<'a> Backend<()> for Mock<'a> {
+        type Object = ();
+
         fn add_label(&mut self, (label, _): (impl Into<String>, ())) {
             self.log
                 .borrow_mut()
@@ -517,6 +520,8 @@ mod tests {
         fn emit_item(&mut self, item: Item<()>) {
             self.log.borrow_mut().push(TestEvent::EmitItem(item))
         }
+
+        fn into_object(self) {}
     }
 
     impl<'a> DiagnosticsListener<()> for Mock<'a> {

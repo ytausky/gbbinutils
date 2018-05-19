@@ -57,6 +57,13 @@ where
             phantom: marker::PhantomData,
         }
     }
+
+    pub fn build_object(self) -> B::Object
+    where
+        BMB: Into<B>,
+    {
+        self.backend.into().into_object()
+    }
 }
 
 impl<F, B, D, BMF, BMB, BD> Session for Components<F, B, D, BMF, BMB, BD>
