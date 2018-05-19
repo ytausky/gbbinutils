@@ -21,50 +21,48 @@ enum Data {
 
 mod codegen;
 
-pub struct ObjectBuilder<'a, R, D: DiagnosticsListener<R> + 'a> {
-    pending_sections: Vec<PendingSection<R>>,
+pub struct Object {
     resolved_sections: Vec<ResolvedSection>,
+}
+
+impl Object {
+    fn new() -> Object {
+        Object {
+            resolved_sections: Vec::new(),
+        }
+    }
+}
+
+struct SymbolTable<'a, D: 'a> {
     symbols: HashMap<String, i32>,
     diagnostics: &'a D,
 }
 
-impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R, D> {
-    pub fn new(diagnostics: &D) -> ObjectBuilder<R, D> {
-        ObjectBuilder {
-            pending_sections: vec![PendingSection::new()],
-            resolved_sections: Vec::new(),
+impl<'a, D: 'a> SymbolTable<'a, D> {
+    fn new(diagnostics: &'a D) -> SymbolTable<'a, D> {
+        SymbolTable {
             symbols: HashMap::new(),
             diagnostics,
         }
     }
 
     #[cfg(test)]
-    pub fn resolve_symbols(&mut self) {
-        for pending_section in self.pending_sections.iter() {
-            let mut resolved_section = ResolvedSection::new();
-            for item in pending_section.items.iter() {
-                match item {
-                    DataItem::Byte(value) => resolved_section.push(Data::Byte(*value)),
-                    DataItem::Expr(expr, width) => {
-                        resolved_section.push(self.resolve_expr_item(expr, *width))
-                    }
-                }
-            }
-            self.resolved_sections.push(resolved_section)
-        }
-    }
-
-    #[cfg(test)]
-    fn resolve_expr_item(&self, expr: &Expr<R>, width: Width) -> Data {
+    fn resolve_expr_item<R: Clone>(&self, expr: Expr<R>, width: Width) -> Data
+    where
+        D: DiagnosticsListener<R>,
+    {
         let value = self.evaluate_expr(expr);
         self.fit_to_width(value, width)
     }
 
-    fn evaluate_expr<'b>(&self, expr: &'b Expr<R>) -> (i32, &'b R) {
+    fn evaluate_expr<R: Clone>(&self, expr: Expr<R>) -> (i32, R)
+    where
+        D: DiagnosticsListener<R>,
+    {
         match expr {
-            Expr::Literal(value, expr_ref) => (*value, expr_ref),
+            Expr::Literal(value, expr_ref) => (value, expr_ref),
             Expr::Symbol(symbol, expr_ref) => {
-                let symbol_def = self.symbols.get(symbol).cloned();
+                let symbol_def = self.symbols.get(&symbol).cloned();
                 if let Some(value) = symbol_def {
                     (value, expr_ref)
                 } else {
@@ -81,7 +79,10 @@ impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R, D> {
     }
 
     #[cfg(test)]
-    fn fit_to_width(&self, (value, value_ref): (i32, &R), width: Width) -> Data {
+    fn fit_to_width<R: Clone>(&self, (value, value_ref): (i32, R), width: Width) -> Data
+    where
+        D: DiagnosticsListener<R>,
+    {
         if !is_in_range(value, width) {
             self.diagnostics.emit_diagnostic(Diagnostic::new(
                 Message::ValueOutOfRange { value, width },
@@ -92,6 +93,38 @@ impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R, D> {
             Width::Byte => Data::Byte(value as u8),
             Width::Word => Data::Word(value as u16),
         }
+    }
+}
+
+pub struct ObjectBuilder<'a, R, D: DiagnosticsListener<R> + 'a> {
+    pending_sections: Vec<PendingSection<R>>,
+    symbol_table: SymbolTable<'a, D>,
+}
+
+impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R, D> {
+    pub fn new(diagnostics: &D) -> ObjectBuilder<R, D> {
+        ObjectBuilder {
+            pending_sections: vec![PendingSection::new()],
+            symbol_table: SymbolTable::new(diagnostics),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn resolve_symbols(self) -> Object {
+        let mut object = Object::new();
+        for pending_section in self.pending_sections {
+            let mut resolved_section = ResolvedSection::new();
+            for item in pending_section.items {
+                match item {
+                    DataItem::Byte(value) => resolved_section.push(Data::Byte(value)),
+                    DataItem::Expr(expr, width) => {
+                        resolved_section.push(self.symbol_table.resolve_expr_item(expr, width))
+                    }
+                }
+            }
+            object.resolved_sections.push(resolved_section)
+        }
+        object
     }
 
     fn emit_data_expr(&mut self, expr: Expr<R>, width: Width) {
@@ -108,7 +141,7 @@ impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R, D> {
 
 impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<'a, R, D> {
     fn add_label(&mut self, label: (impl Into<String>, R)) {
-        self.symbols.insert(
+        self.symbol_table.symbols.insert(
             label.0.into(),
             self.pending_sections.last().unwrap().len as i32,
         );
@@ -310,9 +343,9 @@ mod tests {
         for item in items.borrow() {
             builder.emit_item(item.clone())
         }
-        builder.resolve_symbols();
+        let object = builder.resolve_symbols();
         assert_eq!(
-            builder.resolved_sections.last_mut().unwrap().data,
+            object.resolved_sections.last().unwrap().data,
             bytes.borrow()
         )
     }
@@ -369,12 +402,9 @@ mod tests {
         let mut builder = ObjectBuilder::new(&diagnostics);
         builder.add_label((label, ()));
         builder.emit_item(Item::Data(Expr::Symbol(label.to_string(), ()), Width::Word));
-        builder.resolve_symbols();
+        let object = builder.resolve_symbols();
         assert_eq!(*diagnostics.diagnostics.borrow(), []);
-        assert_eq!(
-            builder.resolved_sections.last_mut().unwrap().data,
-            [0x00, 0x00]
-        )
+        assert_eq!(object.resolved_sections.last().unwrap().data, [0x00, 0x00])
     }
 
     use std::cell::RefCell;
