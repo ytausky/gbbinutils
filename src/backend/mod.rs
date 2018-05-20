@@ -412,6 +412,18 @@ mod tests {
         assert_eq!(object.resolved_sections.last().unwrap().data, [0x00, 0x00])
     }
 
+    #[test]
+    fn emit_symbol_defined_after_use() {
+        let label = "label";
+        let diagnostics = TestDiagnosticsListener::new();
+        let mut builder = ObjectBuilder::new(&diagnostics);
+        builder.emit_item(Item::Data(Expr::Symbol(label.to_string(), ()), Width::Word));
+        builder.add_label((label, ()));
+        let object = builder.resolve_symbols();
+        assert_eq!(*diagnostics.diagnostics.borrow(), []);
+        assert_eq!(object.resolved_sections.last().unwrap().data, [0x02, 0x00])
+    }
+
     use std::cell::RefCell;
 
     struct TestDiagnosticsListener {
