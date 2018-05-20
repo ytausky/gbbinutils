@@ -319,18 +319,16 @@ mod tests {
 
     #[test]
     fn emit_literal_byte_item() {
-        emit_items_and_compare([Item::Data(Expr::Literal(0xff, ()), Width::Byte)], [0xff])
+        emit_items_and_compare([byte_literal(0xff)], [0xff])
     }
 
     #[test]
     fn emit_two_literal_byte_item() {
-        emit_items_and_compare(
-            [
-                Item::Data(Expr::Literal(0x12, ()), Width::Byte),
-                Item::Data(Expr::Literal(0x34, ()), Width::Byte),
-            ],
-            [0x12, 0x34],
-        )
+        emit_items_and_compare([byte_literal(0x12), byte_literal(0x34)], [0x12, 0x34])
+    }
+
+    fn byte_literal(value: i32) -> Item<()> {
+        Item::Data(Expr::Literal(value, ()), Width::Byte)
     }
 
     #[test]
@@ -343,12 +341,11 @@ mod tests {
         I: Borrow<[Item<()>]>,
         B: Borrow<[u8]>,
     {
-        let diagnostics = TestDiagnosticsListener::new();
-        let mut builder = ObjectBuilder::new(&diagnostics);
-        for item in items.borrow() {
-            builder.emit_item(item.clone())
-        }
-        let object = builder.resolve_symbols();
+        let (object, _) = with_object_builder(|builder| {
+            for item in items.borrow() {
+                builder.emit_item(item.clone())
+            }
+        });
         assert_eq!(
             object.resolved_sections.last().unwrap().data,
             bytes.borrow()
@@ -362,12 +359,10 @@ mod tests {
     }
 
     fn test_diagnostic_for_out_of_range_byte(value: i32) {
-        let listener = TestDiagnosticsListener::new();
-        let mut builder = ObjectBuilder::new(&listener);
-        builder.emit_item(Item::Data(Expr::Literal(value, ()), Width::Byte));
-        builder.resolve_symbols();
+        let (_, diagnostics) =
+            with_object_builder(|builder| builder.emit_item(byte_literal(value)));
         assert_eq!(
-            *listener.diagnostics.borrow(),
+            *diagnostics,
             [
                 Diagnostic::new(
                     Message::ValueOutOfRange {
@@ -383,45 +378,58 @@ mod tests {
     #[test]
     fn diagnose_unresolved_symbol() {
         let ident = "ident";
-        let diagnostics = TestDiagnosticsListener::new();
-        let mut builder = ObjectBuilder::new(&diagnostics);
-        builder.emit_item(Item::Data(Expr::Symbol(ident.to_string(), ()), Width::Word));
-        builder.resolve_symbols();
-        assert_eq!(
-            *diagnostics.diagnostics.borrow(),
-            [
-                Diagnostic::new(
-                    Message::UnresolvedSymbol {
-                        symbol: ident.to_string()
-                    },
-                    ()
-                )
-            ]
-        );
+        let (_, diagnostics) = with_object_builder(|builder| builder.emit_item(symbol_expr(ident)));
+        assert_eq!(*diagnostics, [unresolved(ident)]);
     }
 
     #[test]
     fn emit_defined_symbol() {
         let label = "label";
-        let diagnostics = TestDiagnosticsListener::new();
-        let mut builder = ObjectBuilder::new(&diagnostics);
-        builder.add_label((label, ()));
-        builder.emit_item(Item::Data(Expr::Symbol(label.to_string(), ()), Width::Word));
-        let object = builder.resolve_symbols();
-        assert_eq!(*diagnostics.diagnostics.borrow(), []);
+        let (object, diagnostics) = with_object_builder(|builder| {
+            builder.add_label((label, ()));
+            builder.emit_item(symbol_expr(label));
+        });
+        assert_eq!(*diagnostics, []);
         assert_eq!(object.resolved_sections.last().unwrap().data, [0x00, 0x00])
     }
 
     #[test]
     fn emit_symbol_defined_after_use() {
         let label = "label";
-        let diagnostics = TestDiagnosticsListener::new();
-        let mut builder = ObjectBuilder::new(&diagnostics);
-        builder.emit_item(Item::Data(Expr::Symbol(label.to_string(), ()), Width::Word));
-        builder.add_label((label, ()));
-        let object = builder.resolve_symbols();
-        assert_eq!(*diagnostics.diagnostics.borrow(), []);
+        let (object, diagnostics) = with_object_builder(|builder| {
+            builder.emit_item(symbol_expr(label));
+            builder.add_label((label, ()));
+        });
+        assert_eq!(*diagnostics, []);
         assert_eq!(object.resolved_sections.last().unwrap().data, [0x02, 0x00])
+    }
+
+    type TestObjectBuilder<'a> = ObjectBuilder<'a, (), TestDiagnosticsListener>;
+
+    fn with_object_builder<F: FnOnce(&mut TestObjectBuilder)>(
+        f: F,
+    ) -> (Object, Box<[Diagnostic<()>]>) {
+        let diagnostics = TestDiagnosticsListener::new();
+        let object = {
+            let mut builder = ObjectBuilder::new(&diagnostics);
+            f(&mut builder);
+            builder.resolve_symbols()
+        };
+        let diagnostics = diagnostics.diagnostics.into_inner().into_boxed_slice();
+        (object, diagnostics)
+    }
+
+    fn symbol_expr(symbol: impl Into<String>) -> Item<()> {
+        Item::Data(Expr::Symbol(symbol.into(), ()), Width::Word)
+    }
+
+    fn unresolved(symbol: impl Into<String>) -> Diagnostic<()> {
+        Diagnostic::new(
+            Message::UnresolvedSymbol {
+                symbol: symbol.into(),
+            },
+            (),
+        )
     }
 
     use std::cell::RefCell;
