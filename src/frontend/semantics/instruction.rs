@@ -430,7 +430,7 @@ mod tests {
     fn describe_legal_instructions() -> Vec<InstructionDescriptor> {
         let mut descriptors = Vec::new();
         descriptors.extend(describe_nullary_instructions());
-        descriptors.extend(describe_ld_simple_instructions());
+        descriptors.extend(describe_ld_simple_simple_instructions());
         descriptors.extend(describe_ld_reg16_immediate_instructions());
         descriptors.extend(describe_alu_simple_instructions());
         descriptors.extend(describe_branch_instuctions());
@@ -452,17 +452,17 @@ mod tests {
             .collect()
     }
 
-    fn describe_ld_simple_instructions() -> Vec<InstructionDescriptor> {
+    fn describe_ld_simple_simple_instructions() -> Vec<InstructionDescriptor> {
         let mut descriptors = Vec::new();
         for &dest in SIMPLE_OPERANDS.iter() {
             for &src in SIMPLE_OPERANDS.iter() {
-                descriptors.extend(describe_ld_simple(dest, src))
+                descriptors.extend(describe_ld_simple_simple(dest, src))
             }
         }
         descriptors
     }
 
-    fn describe_ld_simple(
+    fn describe_ld_simple_simple(
         dest: SimpleOperand,
         src: SimpleOperand,
     ) -> Option<InstructionDescriptor> {
