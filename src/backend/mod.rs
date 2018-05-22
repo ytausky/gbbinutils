@@ -259,7 +259,7 @@ fn is_in_u8_range(n: i32) -> bool {
 pub enum Instruction<R> {
     AddHl(Reg16),
     Alu(AluOperation, AluSource<R>),
-    Dec(SimpleOperand),
+    Dec8(SimpleOperand),
     Dec16(Reg16),
     Halt,
     Branch(Branch<R>, Option<Condition>),

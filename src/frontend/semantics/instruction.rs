@@ -111,7 +111,7 @@ impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
                 self.analyze_alu_instruction((operation, mnemonic.1), explicit_a, first_operand)
             }
             Dec => match self.operands.next() {
-                Some(Operand::Simple(operand, _)) => Ok(Instruction::Dec(operand)),
+                Some(Operand::Simple(operand, _)) => Ok(Instruction::Dec8(operand)),
                 _ => panic!(),
             },
             Branch(branch) => self.analyze_branch(branch),
@@ -476,7 +476,7 @@ mod tests {
         descriptors.extend(describe_alu_simple_instructions());
         descriptors.extend(describe_add_hl_reg16_instructions());
         descriptors.extend(describe_branch_instuctions());
-        descriptors.extend(describe_dec_instructions());
+        descriptors.extend(describe_dec8_instructions());
         descriptors.push((
             (Command::Push, vec![literal(Bc)]),
             Instruction::Push(Reg16::Bc),
@@ -627,18 +627,18 @@ mod tests {
         )
     }
 
-    fn describe_dec_instructions() -> Vec<InstructionDescriptor> {
+    fn describe_dec8_instructions() -> Vec<InstructionDescriptor> {
         let mut descriptors = Vec::new();
         for &operand in SIMPLE_OPERANDS.iter() {
-            descriptors.push(describe_dec(operand))
+            descriptors.push(describe_dec8(operand))
         }
         descriptors
     }
 
-    fn describe_dec(operand: SimpleOperand) -> InstructionDescriptor {
+    fn describe_dec8(operand: SimpleOperand) -> InstructionDescriptor {
         (
             (Command::Dec, vec![SynExpr::from(operand)]),
-            Instruction::Dec(operand),
+            Instruction::Dec8(operand),
         )
     }
 
