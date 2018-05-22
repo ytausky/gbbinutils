@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, fs::File, io::Write};
 
 mod backend;
 mod codebase;
@@ -36,13 +36,15 @@ pub fn analyze_file(name: &str) {
 pub fn assemble_rom(name: &str) {
     let codebase = codebase::FileCodebase::new(codebase::StdFileSystem::new());
     let diagnostics = diagnostics::TerminalDiagnostics::new(&codebase.cache);
-    frontend::analyze_file(
+    let rom = frontend::analyze_file(
         name.to_string(),
         &codebase,
         diagnostics::SimpleTokenTracker {},
         backend::ObjectBuilder::new(&diagnostics),
         &diagnostics,
-    );
+    ).into_rom();
+    let mut rom_file = File::open(name.to_owned() + ".o").unwrap();
+    rom_file.write_all(&rom.data).unwrap()
 }
 
 struct OutputDumper;

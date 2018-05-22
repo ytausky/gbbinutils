@@ -27,6 +27,18 @@ pub struct Object {
     resolved_sections: Vec<ResolvedSection>,
 }
 
+impl Object {
+    pub fn into_rom(self) -> Rom {
+        let mut data = Vec::new();
+        self.resolved_sections.into_iter().for_each(|section| data.extend(section.data.into_iter()));
+        Rom { data: data.into_boxed_slice() }
+    }
+}
+
+pub struct Rom {
+    pub data: Box<[u8]>,
+}
+
 struct SymbolTable<'a, D: 'a> {
     symbols: HashMap<String, i32>,
     diagnostics: &'a D,
