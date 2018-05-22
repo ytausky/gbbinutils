@@ -41,6 +41,7 @@ pub fn generate_code<R>(instruction: Instruction<R>, emitter: &mut impl Emit<R>)
             emitter.emit_byte(0x10);
             emitter.emit_byte(0x00)
         }
+        Push(reg_pair) => emitter.emit_byte(0xc5 | (encode_reg_pair(reg_pair) << 4)),
         _ => panic!(),
     }
 }
@@ -103,6 +104,16 @@ fn encode_reg16(reg16: Reg16) -> u8 {
         De => 0b01,
         Hl => 0b10,
         Sp => 0b11,
+    }
+}
+
+fn encode_reg_pair(reg_pair: RegPair) -> u8 {
+    use backend::RegPair::*;
+    match reg_pair {
+        Bc => 0b00,
+        De => 0b01,
+        Hl => 0b10,
+        Af => 0b11,
     }
 }
 
@@ -293,6 +304,16 @@ mod tests {
             .iter()
             .for_each(|(reg16, opcode)| {
                 test_instruction(Instruction::Dec16(*reg16), bytes([*opcode]))
+            })
+    }
+
+    #[test]
+    fn encode_push() {
+        use backend::RegPair::*;
+        [(Bc, 0xc5), (De, 0xd5), (Hl, 0xe5), (Af, 0xf5)]
+            .iter()
+            .for_each(|(reg_pair, opcode)| {
+                test_instruction(Instruction::Push(*reg_pair), bytes([*opcode]))
             })
     }
 
