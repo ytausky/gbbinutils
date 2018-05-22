@@ -4,7 +4,7 @@ use std::iter;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token<S: TokenSpec> {
-    ClosingBracket,
+    ClosingParenthesis,
     Colon,
     Comma,
     Command(S::Command),
@@ -13,7 +13,7 @@ pub enum Token<S: TokenSpec> {
     Ident(S::Ident),
     Literal(S::Literal),
     Macro,
-    OpeningBracket,
+    OpeningParenthesis,
 }
 
 impl Copy for Token<()> {}
@@ -22,7 +22,7 @@ impl<S: TokenSpec> Token<S> {
     fn kind(&self) -> Token<()> {
         use self::Token::*;
         match *self {
-            ClosingBracket => ClosingBracket,
+            ClosingParenthesis => ClosingParenthesis,
             Colon => Colon,
             Comma => Comma,
             Command(_) => Command(()),
@@ -31,7 +31,7 @@ impl<S: TokenSpec> Token<S> {
             Ident(_) => Ident(()),
             Literal(_) => Literal(()),
             Macro => Macro,
-            OpeningBracket => OpeningBracket,
+            OpeningParenthesis => OpeningParenthesis,
         }
     }
 }
@@ -217,7 +217,7 @@ impl<S: TokenSpec, T, I: Iterator<Item = (Token<S>, T)>> Parser<I> {
     }
 
     fn parse_expression(&mut self) -> SynExpr<S, T> {
-        if self.lookahead() == Some(Token::OpeningBracket) {
+        if self.lookahead() == Some(Token::OpeningParenthesis) {
             self.parse_deref_expression()
         } else {
             self.parse_atomic_expr()
@@ -225,9 +225,9 @@ impl<S: TokenSpec, T, I: Iterator<Item = (Token<S>, T)>> Parser<I> {
     }
 
     fn parse_deref_expression(&mut self) -> SynExpr<S, T> {
-        self.expect(&Some(Token::OpeningBracket));
+        self.expect(&Some(Token::OpeningParenthesis));
         let expr = self.parse_expression();
-        self.expect(&Some(Token::ClosingBracket));
+        self.expect(&Some(Token::ClosingParenthesis));
         expr.deref()
     }
 
@@ -539,7 +539,12 @@ mod tests {
 
     #[test]
     fn parse_deref_operand() {
-        let tokens = &[Command(()), OpeningBracket, Literal(2), ClosingBracket];
+        let tokens = &[
+            Command(()),
+            OpeningParenthesis,
+            Literal(2),
+            ClosingParenthesis,
+        ];
         let expected_actions = &inst(0, vec![expr(deref(atom(2)))]);
         assert_eq_actions(tokens, expected_actions)
     }

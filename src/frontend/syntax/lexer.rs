@@ -6,13 +6,13 @@ use std::str;
 
 #[derive(Clone, Copy, PartialEq)]
 enum TokenKind {
-    ClosingBracket,
+    ClosingParenthesis,
     Colon,
     Comma,
     Eol,
     Ident,
     Number(Radix),
-    OpeningBracket,
+    OpeningParenthesis,
     String,
 }
 
@@ -79,11 +79,11 @@ impl<I: Iterator<Item = char>> Scanner<I> {
     fn lex_token(&mut self) -> <Self as Iterator>::Item {
         let first_char = self.current_char().unwrap();
         let next_token = match first_char {
-            ']' => self.take(TokenKind::ClosingBracket),
+            ')' => self.take(TokenKind::ClosingParenthesis),
             ':' => self.take(TokenKind::Colon),
             ',' => self.take(TokenKind::Comma),
             '\n' => self.take(TokenKind::Eol),
-            '[' => self.take(TokenKind::OpeningBracket),
+            '(' => self.take(TokenKind::OpeningParenthesis),
             '0'...'9' => self.lex_decimal_number(),
             '$' => self.lex_hex_number(),
             '"' => self.lex_quoted_string(),
@@ -169,7 +169,7 @@ impl<'a> Iterator for Lexer<'a> {
 
 fn mk_token(kind: TokenKind, lexeme: &str) -> Token {
     match kind {
-        TokenKind::ClosingBracket => token::ClosingBracket,
+        TokenKind::ClosingParenthesis => token::ClosingParenthesis,
         TokenKind::Colon => token::Colon,
         TokenKind::Comma => token::Comma,
         TokenKind::Eol => token::Eol,
@@ -180,7 +180,7 @@ fn mk_token(kind: TokenKind, lexeme: &str) -> Token {
         TokenKind::Number(Radix::Hexadecimal) => token::Literal(Literal::Number(
             i32::from_str_radix(&lexeme[1..], 16).unwrap(),
         )),
-        TokenKind::OpeningBracket => token::OpeningBracket,
+        TokenKind::OpeningParenthesis => token::OpeningParenthesis,
         TokenKind::String => {
             token::Literal(Literal::String(lexeme[1..(lexeme.len() - 1)].to_string()))
         }
@@ -363,7 +363,7 @@ mod tests {
 
     #[test]
     fn lex_brackets() {
-        assert_eq_tokens("[]", &[OpeningBracket, ClosingBracket])
+        assert_eq_tokens("()", &[OpeningParenthesis, ClosingParenthesis])
     }
 
     #[test]
