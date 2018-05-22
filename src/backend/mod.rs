@@ -30,8 +30,12 @@ pub struct Object {
 impl Object {
     pub fn into_rom(self) -> Rom {
         let mut data = Vec::new();
-        self.resolved_sections.into_iter().for_each(|section| data.extend(section.data.into_iter()));
-        Rom { data: data.into_boxed_slice() }
+        self.resolved_sections
+            .into_iter()
+            .for_each(|section| data.extend(section.data.into_iter()));
+        Rom {
+            data: data.into_boxed_slice(),
+        }
     }
 }
 
@@ -141,8 +145,8 @@ impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R, D> {
             .push(DataItem::Expr(expr, width))
     }
 
-    fn emit_instruction(&mut self, instruction: &Instruction<R>) {
-        codegen::generate_code(&instruction, self)
+    fn emit_instruction(&mut self, instruction: Instruction<R>) {
+        codegen::generate_code(instruction, self)
     }
 }
 
@@ -159,7 +163,7 @@ impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<
     fn emit_item(&mut self, item: Item<R>) {
         match item {
             Item::Data(expr, width) => self.emit_data_expr(expr, width),
-            Item::Instruction(instruction) => self.emit_instruction(&instruction),
+            Item::Instruction(instruction) => self.emit_instruction(instruction),
         }
     }
 

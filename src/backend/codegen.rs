@@ -6,6 +6,10 @@ pub trait Emit<R> {
     fn emit_byte(&mut self, value: u8) {
         self.emit(DataItem::Byte(value))
     }
+
+    fn emit_word(&mut self, value: Expr<R>) {
+        self.emit(DataItem::Expr(value, Width::Word))
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -14,15 +18,27 @@ pub enum DataItem<R> {
     Expr(Expr<R>, Width),
 }
 
-pub fn generate_code<R>(instruction: &Instruction<R>, emitter: &mut impl Emit<R>) {
+pub fn generate_code<R>(instruction: Instruction<R>, emitter: &mut impl Emit<R>) {
     use backend::Instruction::*;
     match instruction {
+        Branch(branch, condition) => encode_branch(branch, condition, emitter),
         Halt => emitter.emit_byte(0x76),
-        Ld(LdKind::Simple(dest, src)) => emitter.emit_byte(encode_ld_to_reg_from_reg(*dest, *src)),
+        Ld(LdKind::Simple(dest, src)) => emitter.emit_byte(encode_ld_to_reg_from_reg(dest, src)),
         Nop => emitter.emit_byte(0x00),
         Stop => {
             emitter.emit_byte(0x10);
             emitter.emit_byte(0x00)
+        }
+        _ => panic!(),
+    }
+}
+
+fn encode_branch<R>(branch: Branch<R>, condition: Option<Condition>, emitter: &mut impl Emit<R>) {
+    use backend::Branch::*;
+    match (branch, condition) {
+        (Jp(target), None) => {
+            emitter.emit_byte(0xc3);
+            emitter.emit_word(target)
         }
         _ => panic!(),
     }
@@ -49,7 +65,9 @@ fn encode_register(register: SimpleOperand) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::borrow::Borrow;
 
+    use backend::Branch::*;
     use backend::Instruction::*;
 
     impl<F: FnMut(DataItem<()>)> Emit<()> for F {
@@ -58,28 +76,25 @@ mod tests {
         }
     }
 
-    fn test_instruction(instruction: Instruction<()>, bytes: &[u8]) {
+    fn test_instruction(instruction: Instruction<()>, data_items: impl Borrow<[DataItem<()>]>) {
         let mut code = vec![];
-        generate_code(&instruction, &mut |item| code.push(item));
-        assert_eq!(
-            code,
-            bytes.iter().map(|&b| DataItem::Byte(b)).collect::<Vec<_>>()
-        )
+        generate_code(instruction, &mut |item| code.push(item));
+        assert_eq!(code, data_items.borrow())
     }
 
     #[test]
     fn encode_nop() {
-        test_instruction(Nop, &[0x00])
+        test_instruction(Nop, bytes([0x00]))
     }
 
     #[test]
     fn encode_stop() {
-        test_instruction(Stop, &[0x10, 0x00])
+        test_instruction(Stop, bytes([0x10, 0x00]))
     }
 
     #[test]
     fn encode_halt() {
-        test_instruction(Halt, &[0x76])
+        test_instruction(Halt, bytes([0x76]))
     }
 
     #[test]
@@ -137,7 +152,23 @@ mod tests {
             (L, L, 0x6d),
         ];
         for (dest, src, opcode) in operands_and_encoding {
-            test_instruction(Ld(LdKind::Simple(dest, src)), &[opcode])
+            test_instruction(Ld(LdKind::Simple(dest, src)), bytes([opcode]))
         }
+    }
+
+    #[test]
+    fn encode_jp() {
+        let target_expr = Expr::Literal(0x1234, ());
+        test_instruction(
+            Branch(Jp(target_expr.clone()), None),
+            [
+                DataItem::Byte(0xc3),
+                DataItem::Expr(target_expr, Width::Word),
+            ],
+        )
+    }
+
+    fn bytes(data: impl Borrow<[u8]>) -> Vec<DataItem<()>> {
+        data.borrow().iter().map(|&b| DataItem::Byte(b)).collect()
     }
 }
