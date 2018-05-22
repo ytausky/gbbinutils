@@ -21,6 +21,9 @@ pub enum DataItem<R> {
 pub fn generate_code<R>(instruction: Instruction<R>, emitter: &mut impl Emit<R>) {
     use backend::Instruction::*;
     match instruction {
+        Alu(operation, AluSource::Simple(src)) => {
+            encode_simple_alu_operation(operation, src, emitter)
+        }
         Branch(branch, condition) => encode_branch(branch, condition, emitter),
         Halt => emitter.emit_byte(0x76),
         Ld(LdKind::Simple(dest, src)) => emitter.emit_byte(encode_ld_to_reg_from_reg(dest, src)),
@@ -29,6 +32,17 @@ pub fn generate_code<R>(instruction: Instruction<R>, emitter: &mut impl Emit<R>)
             emitter.emit_byte(0x10);
             emitter.emit_byte(0x00)
         }
+        _ => panic!(),
+    }
+}
+
+fn encode_simple_alu_operation<R>(
+    operation: AluOperation,
+    src: SimpleOperand,
+    emitter: &mut impl Emit<R>,
+) {
+    match operation {
+        AluOperation::Add => emitter.emit_byte(0x80 | encode_simple_operand(src)),
         _ => panic!(),
     }
 }
@@ -45,10 +59,10 @@ fn encode_branch<R>(branch: Branch<R>, condition: Option<Condition>, emitter: &m
 }
 
 fn encode_ld_to_reg_from_reg(dest: SimpleOperand, src: SimpleOperand) -> u8 {
-    0b01_000_000 | (encode_register(dest) << 3) | encode_register(src)
+    0b01_000_000 | (encode_simple_operand(dest) << 3) | encode_simple_operand(src)
 }
 
-fn encode_register(register: SimpleOperand) -> u8 {
+fn encode_simple_operand(register: SimpleOperand) -> u8 {
     use backend::SimpleOperand::*;
     match register {
         A => 0b111,
@@ -58,7 +72,7 @@ fn encode_register(register: SimpleOperand) -> u8 {
         E => 0b011,
         H => 0b100,
         L => 0b101,
-        _ => panic!(),
+        DerefHl => 0b110,
     }
 }
 
@@ -153,6 +167,27 @@ mod tests {
         ];
         for (dest, src, opcode) in operands_and_encoding {
             test_instruction(Ld(LdKind::Simple(dest, src)), bytes([opcode]))
+        }
+    }
+
+    #[test]
+    fn encode_simple_add() {
+        use backend::SimpleOperand::*;
+        let src_and_opcode = vec![
+            (B, 0x80),
+            (C, 0x81),
+            (D, 0x82),
+            (E, 0x83),
+            (H, 0x84),
+            (L, 0x85),
+            (DerefHl, 0x86),
+            (A, 0x87),
+        ];
+        for (src, opcode) in src_and_opcode {
+            test_instruction(
+                Alu(AluOperation::Add, AluSource::Simple(src)),
+                bytes([opcode]),
+            )
         }
     }
 
