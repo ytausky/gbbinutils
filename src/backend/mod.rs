@@ -1,7 +1,7 @@
 use Width;
 use backend::codegen::{DataItem, Emit};
 use diagnostics::*;
-use std::collections::HashMap;
+use std::{collections::HashMap, iter::FromIterator};
 
 pub trait Backend<R> {
     type Object;
@@ -111,17 +111,18 @@ impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R, D> {
 
     pub fn resolve_symbols(self) -> Object {
         let mut object = Object::new();
+        let symbol_table = self.symbol_table;
         for pending_section in self.pending_sections {
-            let mut resolved_section = ResolvedSection::new();
-            for item in pending_section.items {
-                match item {
-                    DataItem::Byte(value) => resolved_section.push(Data::Byte(value)),
-                    DataItem::Expr(expr, width) => {
-                        resolved_section.push(self.symbol_table.resolve_expr_item(expr, width))
-                    }
-                }
-            }
-            object.resolved_sections.push(resolved_section)
+            object.resolved_sections.push(
+                pending_section
+                    .items
+                    .into_iter()
+                    .map(|item| match item {
+                        DataItem::Byte(value) => Data::Byte(value),
+                        DataItem::Expr(expr, width) => symbol_table.resolve_expr_item(expr, width),
+                    })
+                    .collect(),
+            )
         }
         object
     }
@@ -213,6 +214,14 @@ impl ResolvedSection {
                 self.data.push(high as u8);
             }
         }
+    }
+}
+
+impl FromIterator<Data> for ResolvedSection {
+    fn from_iter<T: IntoIterator<Item = Data>>(iter: T) -> Self {
+        let mut section = ResolvedSection::new();
+        iter.into_iter().for_each(|x| section.push(x));
+        section
     }
 }
 
