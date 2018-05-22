@@ -269,6 +269,7 @@ pub enum Instruction<R> {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum AluOperation {
+    Add,
     And,
     Cp,
     Xor,

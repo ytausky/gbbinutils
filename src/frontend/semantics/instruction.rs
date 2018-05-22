@@ -103,7 +103,9 @@ impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
     fn run(mut self, mnemonic: (Mnemonic, R)) -> AnalysisResult<R> {
         use self::Mnemonic::*;
         match mnemonic.0 {
-            Alu(operation) => self.analyze_alu_instruction((operation, mnemonic.1)),
+            Alu(operation, explicit_a) => {
+                self.analyze_alu_instruction((operation, mnemonic.1), explicit_a)
+            }
             Dec => match self.operands.next() {
                 Some(Operand::Simple(operand, _)) => Ok(Instruction::Dec(operand)),
                 _ => panic!(),
@@ -118,7 +120,17 @@ impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
         }
     }
 
-    fn analyze_alu_instruction(&mut self, (operation, _): (AluOperation, R)) -> AnalysisResult<R> {
+    fn analyze_alu_instruction(
+        &mut self,
+        (operation, _): (AluOperation, R),
+        explicit_a: ExplicitA,
+    ) -> AnalysisResult<R> {
+        if explicit_a == ExplicitA::Required {
+            match self.operands.next() {
+                Some(Operand::Simple(SimpleOperand::A, _)) => (),
+                _ => panic!(),
+            }
+        }
         match self.operands.next() {
             Some(Operand::Simple(src, _)) => {
                 Ok(Instruction::Alu(operation, AluSource::Simple(src)))
@@ -231,12 +243,18 @@ fn analyze_keyword_operand<R>(
 
 #[derive(Debug, PartialEq)]
 enum Mnemonic {
-    Alu(AluOperation),
+    Alu(AluOperation, ExplicitA),
     Dec,
     Branch(BranchKind),
     Ld,
     Nullary(NullaryMnemonic),
     Push,
+}
+
+#[derive(Debug, PartialEq)]
+enum ExplicitA {
+    Required,
+    NotAllowed,
 }
 
 #[derive(Debug, PartialEq)]
@@ -265,8 +283,9 @@ enum BranchKind {
 fn to_mnemonic(command: keyword::Command) -> Mnemonic {
     use frontend::syntax::keyword::Command::*;
     match command {
-        And => Mnemonic::Alu(AluOperation::And),
-        Cp => Mnemonic::Alu(AluOperation::Cp),
+        Add => Mnemonic::Alu(AluOperation::Add, ExplicitA::Required),
+        And => Mnemonic::Alu(AluOperation::And, ExplicitA::NotAllowed),
+        Cp => Mnemonic::Alu(AluOperation::Cp, ExplicitA::NotAllowed),
         Dec => Mnemonic::Dec,
         Halt => Mnemonic::Nullary(NullaryMnemonic::Halt),
         Jp => Mnemonic::Branch(BranchKind::Jp),
@@ -275,7 +294,7 @@ fn to_mnemonic(command: keyword::Command) -> Mnemonic {
         Nop => Mnemonic::Nullary(NullaryMnemonic::Nop),
         Push => Mnemonic::Push,
         Stop => Mnemonic::Nullary(NullaryMnemonic::Stop),
-        Xor => Mnemonic::Alu(AluOperation::Xor),
+        Xor => Mnemonic::Alu(AluOperation::Xor, ExplicitA::NotAllowed),
         _ => panic!(),
     }
 }
@@ -293,6 +312,7 @@ mod tests {
     impl From<AluOperation> for Command {
         fn from(alu_operation: AluOperation) -> Self {
             match alu_operation {
+                AluOperation::Add => Command::Add,
                 AluOperation::And => Command::And,
                 AluOperation::Cp => Command::Cp,
                 AluOperation::Xor => Command::Xor,
@@ -479,15 +499,31 @@ mod tests {
 
     fn describe_alu_simple_instructions() -> Vec<InstructionDescriptor> {
         let mut descriptors = Vec::new();
-        for &operation in ALU_OPERATIONS.iter() {
-            for &operand in SIMPLE_OPERANDS.iter() {
-                descriptors.push(describe_alu_simple(operation, operand))
+        for &operand in SIMPLE_OPERANDS {
+            for &operation in ALU_OPERATIONS_WITH_A {
+                descriptors.push(describe_alu_simple_with_a(operation, operand))
+            }
+            for &operation in ALU_OPERATIONS_WITHOUT_A {
+                descriptors.push(describe_alu_simple_without_a(operation, operand))
             }
         }
         descriptors
     }
 
-    fn describe_alu_simple(
+    fn describe_alu_simple_with_a(
+        operation: AluOperation,
+        operand: SimpleOperand,
+    ) -> InstructionDescriptor {
+        (
+            (
+                Command::from(operation),
+                vec![SynExpr::from(SimpleOperand::A), SynExpr::from(operand)],
+            ),
+            Instruction::Alu(operation, AluSource::Simple(operand)),
+        )
+    }
+
+    fn describe_alu_simple_without_a(
         operation: AluOperation,
         operand: SimpleOperand,
     ) -> InstructionDescriptor {
@@ -539,10 +575,12 @@ mod tests {
         )
     }
 
-    const ALU_OPERATIONS: [AluOperation; 3] =
-        [AluOperation::And, AluOperation::Cp, AluOperation::Xor];
+    const ALU_OPERATIONS_WITH_A: &[AluOperation] = &[AluOperation::Add];
 
-    const SIMPLE_OPERANDS: [SimpleOperand; 8] = [
+    const ALU_OPERATIONS_WITHOUT_A: &[AluOperation] =
+        &[AluOperation::And, AluOperation::Cp, AluOperation::Xor];
+
+    const SIMPLE_OPERANDS: &[SimpleOperand] = &[
         SimpleOperand::A,
         SimpleOperand::B,
         SimpleOperand::C,
