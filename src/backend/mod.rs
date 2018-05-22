@@ -146,7 +146,7 @@ impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R, D> {
     }
 
     fn emit_instruction(&mut self, instruction: Instruction<R>) {
-        codegen::generate_code(instruction, self)
+        self.emit_encoded(codegen::generate_code(instruction))
     }
 }
 

@@ -3,16 +3,11 @@ use backend::*;
 pub trait Emit<R> {
     fn emit(&mut self, item: DataItem<R>);
 
-    fn emit_byte(&mut self, value: u8) {
-        self.emit(DataItem::Byte(value))
-    }
-
-    fn emit_byte_expr(&mut self, value: Expr<R>) {
-        self.emit(DataItem::Expr(value, Width::Byte))
-    }
-
-    fn emit_word(&mut self, value: Expr<R>) {
-        self.emit(DataItem::Expr(value, Width::Word))
+    fn emit_encoded(&mut self, encoded: Encoded<R>) {
+        self.emit(DataItem::Byte(encoded.opcode));
+        if let Some(immediate) = encoded.immediate {
+            self.emit(immediate)
+        }
     }
 }
 
@@ -22,83 +17,89 @@ pub enum DataItem<R> {
     Expr(Expr<R>, Width),
 }
 
-pub fn generate_code<R>(instruction: Instruction<R>, emitter: &mut impl Emit<R>) {
+pub struct Encoded<R> {
+    opcode: u8,
+    immediate: Option<DataItem<R>>,
+}
+
+impl<R> Encoded<R> {
+    fn with(opcode: u8) -> Encoded<R> {
+        Encoded {
+            opcode,
+            immediate: None,
+        }
+    }
+
+    fn and_byte(mut self, expr: Expr<R>) -> Encoded<R> {
+        self.immediate = Some(DataItem::Expr(expr, Width::Byte));
+        self
+    }
+
+    fn and_word(mut self, expr: Expr<R>) -> Encoded<R> {
+        self.immediate = Some(DataItem::Expr(expr, Width::Word));
+        self
+    }
+}
+
+pub fn generate_code<R>(instruction: Instruction<R>) -> Encoded<R> {
     use backend::Instruction::*;
     match instruction {
-        AddHl(reg16) => emitter.emit_byte(0x09 | (encode_reg16(reg16) << 4)),
-        Alu(operation, AluSource::Simple(src)) => {
-            encode_simple_alu_operation(operation, src, emitter)
-        }
+        AddHl(reg16) => Encoded::with(0x09 | (encode_reg16(reg16) << 4)),
+        Alu(operation, AluSource::Simple(src)) => encode_simple_alu_operation(operation, src),
         Alu(operation, AluSource::Immediate(expr)) => {
-            encode_immediate_alu_operation(operation, expr, emitter)
+            encode_immediate_alu_operation(operation, expr)
         }
-        Branch(branch, condition) => encode_branch(branch, condition, emitter),
-        Dec8(simple_operand) => {
-            emitter.emit_byte(0x05 | (encode_simple_operand(simple_operand) << 3))
-        }
-        Dec16(reg16) => emitter.emit_byte(0x0b | (encode_reg16(reg16) << 4)),
-        Halt => emitter.emit_byte(0x76),
-        Ld(kind) => encode_ld(kind, emitter),
-        Nop => emitter.emit_byte(0x00),
-        Stop => {
-            emitter.emit_byte(0x10);
-            emitter.emit_byte(0x00)
-        }
-        Push(reg_pair) => emitter.emit_byte(0xc5 | (encode_reg_pair(reg_pair) << 4)),
+        Branch(branch, condition) => encode_branch(branch, condition),
+        Dec8(simple_operand) => Encoded::with(0x05 | (encode_simple_operand(simple_operand) << 3)),
+        Dec16(reg16) => Encoded::with(0x0b | (encode_reg16(reg16) << 4)),
+        Halt => Encoded::with(0x76),
+        Ld(kind) => encode_ld(kind),
+        Nop => Encoded::with(0x00),
+        Stop => Encoded {
+            opcode: 0x10,
+            immediate: Some(DataItem::Byte(0x00)),
+        },
+        Push(reg_pair) => Encoded::with(0xc5 | (encode_reg_pair(reg_pair) << 4)),
     }
 }
 
-fn encode_ld<R>(kind: LdKind<R>, emitter: &mut impl Emit<R>) {
+fn encode_ld<R>(kind: LdKind<R>) -> Encoded<R> {
     match kind {
-        LdKind::Simple(dest, src) => emitter.emit_byte(encode_ld_to_reg_from_reg(dest, src)),
+        LdKind::Simple(dest, src) => encode_ld_to_reg_from_reg(dest, src),
         LdKind::Immediate8(dest, immediate) => {
-            emitter.emit_byte(0x06 | (encode_simple_operand(dest) << 3));
-            emitter.emit_byte_expr(immediate)
+            Encoded::with(0x06 | (encode_simple_operand(dest) << 3)).and_byte(immediate)
         }
         _ => panic!(),
     }
 }
 
-fn encode_simple_alu_operation<R>(
-    operation: AluOperation,
-    src: SimpleOperand,
-    emitter: &mut impl Emit<R>,
-) {
+fn encode_simple_alu_operation<R>(operation: AluOperation, src: SimpleOperand) -> Encoded<R> {
     match operation {
-        AluOperation::Add => emitter.emit_byte(0x80 | encode_simple_operand(src)),
+        AluOperation::Add => Encoded::with(0x80 | encode_simple_operand(src)),
         _ => panic!(),
     }
 }
 
-fn encode_immediate_alu_operation<R>(
-    operation: AluOperation,
-    expr: Expr<R>,
-    emitter: &mut impl Emit<R>,
-) {
+fn encode_immediate_alu_operation<R>(operation: AluOperation, expr: Expr<R>) -> Encoded<R> {
     use backend::AluOperation::*;
-    let opcode = match operation {
+    Encoded::with(match operation {
         Add => 0xc6,
         And => 0xe6,
         Cp => 0xfe,
         Xor => 0xee,
-    };
-    emitter.emit_byte(opcode);
-    emitter.emit_byte_expr(expr)
+    }).and_byte(expr)
 }
 
-fn encode_branch<R>(branch: Branch<R>, condition: Option<Condition>, emitter: &mut impl Emit<R>) {
+fn encode_branch<R>(branch: Branch<R>, condition: Option<Condition>) -> Encoded<R> {
     use backend::Branch::*;
     match (branch, condition) {
-        (Jp(target), None) => {
-            emitter.emit_byte(0xc3);
-            emitter.emit_word(target)
-        }
+        (Jp(target), None) => Encoded::with(0xc3).and_word(target),
         _ => panic!(),
     }
 }
 
-fn encode_ld_to_reg_from_reg(dest: SimpleOperand, src: SimpleOperand) -> u8 {
-    0b01_000_000 | (encode_simple_operand(dest) << 3) | encode_simple_operand(src)
+fn encode_ld_to_reg_from_reg<R>(dest: SimpleOperand, src: SimpleOperand) -> Encoded<R> {
+    Encoded::with(0b01_000_000 | (encode_simple_operand(dest) << 3) | encode_simple_operand(src))
 }
 
 fn encode_simple_operand(register: SimpleOperand) -> u8 {
@@ -151,7 +152,7 @@ mod tests {
 
     fn test_instruction(instruction: Instruction<()>, data_items: impl Borrow<[DataItem<()>]>) {
         let mut code = vec![];
-        generate_code(instruction, &mut |item| code.push(item));
+        (&mut |item| code.push(item)).emit_encoded(generate_code(instruction));
         assert_eq!(code, data_items.borrow())
     }
 
