@@ -27,14 +27,6 @@ pub struct Object {
     resolved_sections: Vec<ResolvedSection>,
 }
 
-impl Object {
-    fn new() -> Object {
-        Object {
-            resolved_sections: Vec::new(),
-        }
-    }
-}
-
 struct SymbolTable<'a, D: 'a> {
     symbols: HashMap<String, i32>,
     diagnostics: &'a D,
@@ -110,21 +102,24 @@ impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R, D> {
     }
 
     pub fn resolve_symbols(self) -> Object {
-        let mut object = Object::new();
         let symbol_table = self.symbol_table;
-        for pending_section in self.pending_sections {
-            object.resolved_sections.push(
-                pending_section
-                    .items
-                    .into_iter()
-                    .map(|item| match item {
-                        DataItem::Byte(value) => Data::Byte(value),
-                        DataItem::Expr(expr, width) => symbol_table.resolve_expr_item(expr, width),
-                    })
-                    .collect(),
-            )
+        Object {
+            resolved_sections: self.pending_sections
+                .into_iter()
+                .map(|pending_section| {
+                    pending_section
+                        .items
+                        .into_iter()
+                        .map(|item| match item {
+                            DataItem::Byte(value) => Data::Byte(value),
+                            DataItem::Expr(expr, width) => {
+                                symbol_table.resolve_expr_item(expr, width)
+                            }
+                        })
+                        .collect()
+                })
+                .collect(),
         }
-        object
     }
 
     fn emit_data_expr(&mut self, expr: Expr<R>, width: Width) {
