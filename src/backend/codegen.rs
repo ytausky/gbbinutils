@@ -7,6 +7,10 @@ pub trait Emit<R> {
         self.emit(DataItem::Byte(value))
     }
 
+    fn emit_byte_expr(&mut self, value: Expr<R>) {
+        self.emit(DataItem::Expr(value, Width::Byte))
+    }
+
     fn emit_word(&mut self, value: Expr<R>) {
         self.emit(DataItem::Expr(value, Width::Word))
     }
@@ -26,11 +30,22 @@ pub fn generate_code<R>(instruction: Instruction<R>, emitter: &mut impl Emit<R>)
         }
         Branch(branch, condition) => encode_branch(branch, condition, emitter),
         Halt => emitter.emit_byte(0x76),
-        Ld(LdKind::Simple(dest, src)) => emitter.emit_byte(encode_ld_to_reg_from_reg(dest, src)),
+        Ld(kind) => encode_ld(kind, emitter),
         Nop => emitter.emit_byte(0x00),
         Stop => {
             emitter.emit_byte(0x10);
             emitter.emit_byte(0x00)
+        }
+        _ => panic!(),
+    }
+}
+
+fn encode_ld<R>(kind: LdKind<R>, emitter: &mut impl Emit<R>) {
+    match kind {
+        LdKind::Simple(dest, src) => emitter.emit_byte(encode_ld_to_reg_from_reg(dest, src)),
+        LdKind::Immediate8(dest, immediate) => {
+            emitter.emit_byte(0x06 | (encode_simple_operand(dest) << 3));
+            emitter.emit_byte_expr(immediate)
         }
         _ => panic!(),
     }
@@ -168,6 +183,31 @@ mod tests {
         for (dest, src, opcode) in operands_and_encoding {
             test_instruction(Ld(LdKind::Simple(dest, src)), bytes([opcode]))
         }
+    }
+
+    #[test]
+    fn encode_ld_simple_immediate() {
+        use backend::SimpleOperand::*;
+        let immediate = Expr::Literal(0x42, ());
+        vec![
+            (B, 0x06),
+            (C, 0x0e),
+            (D, 0x16),
+            (E, 0x1e),
+            (H, 0x26),
+            (L, 0x2e),
+            (DerefHl, 0x36),
+            (A, 0x3e),
+        ].into_iter()
+            .for_each(|(dest, opcode)| {
+                test_instruction(
+                    Ld(LdKind::Immediate8(dest, immediate.clone())),
+                    [
+                        DataItem::Byte(opcode),
+                        DataItem::Expr(immediate.clone(), Width::Byte),
+                    ],
+                )
+            })
     }
 
     #[test]
