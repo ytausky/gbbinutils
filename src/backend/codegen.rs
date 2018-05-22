@@ -30,6 +30,7 @@ pub fn generate_code<R>(instruction: Instruction<R>, emitter: &mut impl Emit<R>)
             encode_simple_alu_operation(operation, src, emitter)
         }
         Branch(branch, condition) => encode_branch(branch, condition, emitter),
+        Dec16(reg16) => emitter.emit_byte(0x0b | (encode_reg16(reg16) << 4)),
         Halt => emitter.emit_byte(0x76),
         Ld(kind) => encode_ld(kind, emitter),
         Nop => emitter.emit_byte(0x00),
@@ -261,6 +262,16 @@ mod tests {
             .iter()
             .for_each(|(reg16, opcode)| {
                 test_instruction(Instruction::AddHl(*reg16), bytes([*opcode]))
+            })
+    }
+
+    #[test]
+    fn encode_dec16() {
+        use backend::Reg16::*;
+        [(Bc, 0x0b), (De, 0x1b), (Hl, 0x2b), (Sp, 0x3b)]
+            .iter()
+            .for_each(|(reg16, opcode)| {
+                test_instruction(Instruction::Dec16(*reg16), bytes([*opcode]))
             })
     }
 

@@ -260,6 +260,7 @@ pub enum Instruction<R> {
     AddHl(Reg16),
     Alu(AluOperation, AluSource<R>),
     Dec(SimpleOperand),
+    Dec16(Reg16),
     Halt,
     Branch(Branch<R>, Option<Condition>),
     Ld(LdKind<R>),
