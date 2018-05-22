@@ -29,6 +29,9 @@ pub fn generate_code<R>(instruction: Instruction<R>, emitter: &mut impl Emit<R>)
         Alu(operation, AluSource::Simple(src)) => {
             encode_simple_alu_operation(operation, src, emitter)
         }
+        Alu(operation, AluSource::Immediate(expr)) => {
+            encode_immediate_alu_operation(operation, expr, emitter)
+        }
         Branch(branch, condition) => encode_branch(branch, condition, emitter),
         Dec8(simple_operand) => {
             emitter.emit_byte(0x05 | (encode_simple_operand(simple_operand) << 3))
@@ -42,7 +45,6 @@ pub fn generate_code<R>(instruction: Instruction<R>, emitter: &mut impl Emit<R>)
             emitter.emit_byte(0x00)
         }
         Push(reg_pair) => emitter.emit_byte(0xc5 | (encode_reg_pair(reg_pair) << 4)),
-        _ => panic!(),
     }
 }
 
@@ -66,6 +68,22 @@ fn encode_simple_alu_operation<R>(
         AluOperation::Add => emitter.emit_byte(0x80 | encode_simple_operand(src)),
         _ => panic!(),
     }
+}
+
+fn encode_immediate_alu_operation<R>(
+    operation: AluOperation,
+    expr: Expr<R>,
+    emitter: &mut impl Emit<R>,
+) {
+    use backend::AluOperation::*;
+    let opcode = match operation {
+        Add => 0xc6,
+        And => 0xe6,
+        Cp => 0xfe,
+        Xor => 0xee,
+    };
+    emitter.emit_byte(opcode);
+    emitter.emit_byte_expr(expr)
 }
 
 fn encode_branch<R>(branch: Branch<R>, condition: Option<Condition>, emitter: &mut impl Emit<R>) {
@@ -231,6 +249,23 @@ mod tests {
                     [
                         DataItem::Byte(opcode),
                         DataItem::Expr(immediate.clone(), Width::Byte),
+                    ],
+                )
+            })
+    }
+
+    #[test]
+    fn encode_alu_immediate() {
+        use backend::AluOperation::*;
+        let expr = Expr::Literal(0x42, ());
+        [(Add, 0xc6), (And, 0xe6), (Cp, 0xfe), (Xor, 0xee)]
+            .iter()
+            .for_each(|(alu_operation, opcode)| {
+                test_instruction(
+                    Instruction::Alu(*alu_operation, AluSource::Immediate(expr.clone())),
+                    [
+                        DataItem::Byte(*opcode),
+                        DataItem::Expr(expr.clone(), Width::Byte),
                     ],
                 )
             })
