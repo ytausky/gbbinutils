@@ -173,6 +173,9 @@ impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
             (Operand::Simple(dest, _), Operand::Simple(src, _)) => {
                 Ok(Instruction::Ld(LdKind::Simple(dest, src)))
             }
+            (Operand::Simple(dest, _), Operand::Const(expr)) => {
+                Ok(Instruction::Ld(LdKind::Immediate8(dest, expr)))
+            }
             (Operand::Simple(SimpleOperand::A, _), src) => analyze_ld_a(src, Direction::IntoA),
             (dest, Operand::Simple(SimpleOperand::A, _)) => analyze_ld_a(dest, Direction::FromA),
             (Operand::Reg16(reg16, _), Operand::Const(expr)) => {
@@ -431,6 +434,7 @@ mod tests {
         let mut descriptors = Vec::new();
         descriptors.extend(describe_nullary_instructions());
         descriptors.extend(describe_ld_simple_simple_instructions());
+        descriptors.extend(describe_ld_simple_immediate_instructions());
         descriptors.extend(describe_ld_reg16_immediate_instructions());
         descriptors.extend(describe_alu_simple_instructions());
         descriptors.extend(describe_branch_instuctions());
@@ -473,6 +477,27 @@ mod tests {
                 Instruction::Ld(LdKind::Simple(dest, src)),
             )),
         }
+    }
+
+    fn describe_ld_simple_immediate_instructions() -> Vec<InstructionDescriptor> {
+        let mut descriptors = Vec::new();
+        for &dest in SIMPLE_OPERANDS {
+            descriptors.push(describe_ld_simple_immediate(dest))
+        }
+        descriptors
+    }
+
+    fn describe_ld_simple_immediate(dest: SimpleOperand) -> InstructionDescriptor {
+        (
+            (
+                Command::Ld,
+                vec![
+                    SynExpr::from(dest),
+                    SynExpr::Literal((Literal::Number(0x12), ())),
+                ],
+            ),
+            Instruction::Ld(LdKind::Immediate8(dest, Expr::Literal(0x12, ()))),
+        )
     }
 
     fn describe_ld_reg16_immediate_instructions() -> Vec<InstructionDescriptor> {

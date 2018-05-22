@@ -296,6 +296,7 @@ pub enum SimpleOperand {
 #[derive(Clone, Debug, PartialEq)]
 pub enum LdKind<R> {
     Simple(SimpleOperand, SimpleOperand),
+    Immediate8(SimpleOperand, Expr<R>),
     Immediate16(Reg16, Expr<R>),
     ImmediateAddr(Expr<R>, Direction),
 }
