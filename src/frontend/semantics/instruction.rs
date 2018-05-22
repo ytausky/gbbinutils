@@ -446,24 +446,21 @@ mod tests {
         descriptors
     }
 
-    fn describe_nullary_instructions() -> Vec<InstructionDescriptor> {
-        vec![
+    fn describe_nullary_instructions() -> impl Iterator<Item = InstructionDescriptor> {
+        [
             (Command::Halt, Instruction::Halt),
             (Command::Nop, Instruction::Nop),
             (Command::Stop, Instruction::Stop),
-        ].into_iter()
-            .map(|(mnemonic, instruction)| ((mnemonic, vec![]), instruction))
-            .collect()
+        ].iter()
+            .map(|(mnemonic, instruction)| ((*mnemonic, vec![]), instruction.clone()))
     }
 
-    fn describe_ld_simple_simple_instructions() -> Vec<InstructionDescriptor> {
-        let mut descriptors = Vec::new();
-        for &dest in SIMPLE_OPERANDS.iter() {
-            for &src in SIMPLE_OPERANDS.iter() {
-                descriptors.extend(describe_ld_simple_simple(dest, src))
-            }
-        }
-        descriptors
+    fn describe_ld_simple_simple_instructions() -> impl Iterator<Item = InstructionDescriptor> {
+        SIMPLE_OPERANDS.iter().flat_map(|&dest| {
+            SIMPLE_OPERANDS
+                .iter()
+                .flat_map(move |&src| describe_ld_simple_simple(dest, src))
+        })
     }
 
     fn describe_ld_simple_simple(
@@ -479,12 +476,10 @@ mod tests {
         }
     }
 
-    fn describe_ld_simple_immediate_instructions() -> Vec<InstructionDescriptor> {
-        let mut descriptors = Vec::new();
-        for &dest in SIMPLE_OPERANDS {
-            descriptors.push(describe_ld_simple_immediate(dest))
-        }
-        descriptors
+    fn describe_ld_simple_immediate_instructions() -> impl Iterator<Item = InstructionDescriptor> {
+        SIMPLE_OPERANDS
+            .iter()
+            .map(|&dest| describe_ld_simple_immediate(dest))
     }
 
     fn describe_ld_simple_immediate(dest: SimpleOperand) -> InstructionDescriptor {
@@ -500,12 +495,8 @@ mod tests {
         )
     }
 
-    fn describe_ld_reg16_immediate_instructions() -> Vec<InstructionDescriptor> {
-        let mut descriptors = Vec::new();
-        for &dest in REG16.iter() {
-            descriptors.push(describe_ld_reg16_immediate(dest))
-        }
-        descriptors
+    fn describe_ld_reg16_immediate_instructions() -> impl Iterator<Item = InstructionDescriptor> {
+        REG16.iter().map(|&dest| describe_ld_reg16_immediate(dest))
     }
 
     fn describe_ld_reg16_immediate(dest: Reg16) -> InstructionDescriptor {
@@ -522,17 +513,16 @@ mod tests {
         )
     }
 
-    fn describe_alu_simple_instructions() -> Vec<InstructionDescriptor> {
-        let mut descriptors = Vec::new();
-        for &operand in SIMPLE_OPERANDS {
-            for &operation in ALU_OPERATIONS_WITH_A {
-                descriptors.push(describe_alu_simple_with_a(operation, operand))
-            }
-            for &operation in ALU_OPERATIONS_WITHOUT_A {
-                descriptors.push(describe_alu_simple_without_a(operation, operand))
-            }
-        }
-        descriptors
+    fn describe_alu_simple_instructions() -> impl Iterator<Item = InstructionDescriptor> {
+        SIMPLE_OPERANDS.iter().flat_map(|&operand| {
+            let with_a = ALU_OPERATIONS_WITH_A
+                .iter()
+                .map(move |&operation| describe_alu_simple_with_a(operation, operand));
+            let without_a = ALU_OPERATIONS_WITHOUT_A
+                .iter()
+                .map(move |&operation| describe_alu_simple_without_a(operation, operand));
+            with_a.chain(without_a)
+        })
     }
 
     fn describe_alu_simple_with_a(
