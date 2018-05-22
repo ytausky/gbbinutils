@@ -11,6 +11,7 @@ struct OperandAnalyzer<'a, EF: 'a> {
 
 enum OperandAnalysisContext {
     Branch,
+    Stack,
     Other,
 }
 
@@ -81,6 +82,7 @@ impl<'a, EF: ExprFactory> CommandAnalyzer<'a, EF> {
         let (mnemonic, mnemonic_ref) = (to_mnemonic(mnemonic.0), mnemonic.1);
         let context = match mnemonic {
             Mnemonic::Branch(_) => OperandAnalysisContext::Branch,
+            Mnemonic::Push => OperandAnalysisContext::Stack,
             _ => OperandAnalysisContext::Other,
         };
         Analysis::new(
@@ -118,7 +120,7 @@ impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
             Ld => self.analyze_ld(),
             Nullary(instruction) => self.analyze_nullary_instruction((instruction, mnemonic.1)),
             Push => match self.operands.next() {
-                Some(Operand::Reg16(src, _)) => Ok(Instruction::Push(src)),
+                Some(Operand::RegPair(src, _)) => Ok(Instruction::Push(src)),
                 _ => panic!(),
             },
         }
@@ -249,6 +251,7 @@ pub enum Operand<R> {
     Const(Expr<R>),
     Deref(Expr<R>),
     Reg16(Reg16, R),
+    RegPair(RegPair, R),
 }
 
 pub type AnalysisResult<R> = Result<Instruction<R>, Diagnostic<R>>;
@@ -257,20 +260,30 @@ fn analyze_keyword_operand<R>(
     keyword: (keyword::Operand, R),
     context: &OperandAnalysisContext,
 ) -> Operand<R> {
+    use self::OperandAnalysisContext::*;
     use frontend::syntax::keyword::Operand::*;
     match keyword.0 {
         A => Operand::Simple(SimpleOperand::A, keyword.1),
         B => Operand::Simple(SimpleOperand::B, keyword.1),
-        Bc => Operand::Reg16(Reg16::Bc, keyword.1),
+        Bc => match *context {
+            Stack => Operand::RegPair(RegPair::Bc, keyword.1),
+            _ => Operand::Reg16(Reg16::Bc, keyword.1),
+        },
         C => match *context {
-            OperandAnalysisContext::Branch => Operand::Condition(Condition::C, keyword.1),
-            OperandAnalysisContext::Other => Operand::Simple(SimpleOperand::C, keyword.1),
+            Branch => Operand::Condition(Condition::C, keyword.1),
+            _ => Operand::Simple(SimpleOperand::C, keyword.1),
         },
         D => Operand::Simple(SimpleOperand::D, keyword.1),
-        De => Operand::Reg16(Reg16::De, keyword.1),
+        De => match *context {
+            Stack => Operand::RegPair(RegPair::De, keyword.1),
+            _ => Operand::Reg16(Reg16::De, keyword.1),
+        },
         E => Operand::Simple(SimpleOperand::E, keyword.1),
         H => Operand::Simple(SimpleOperand::H, keyword.1),
-        Hl => Operand::Reg16(Reg16::Hl, keyword.1),
+        Hl => match *context {
+            Stack => Operand::RegPair(RegPair::Hl, keyword.1),
+            _ => Operand::Reg16(Reg16::Hl, keyword.1),
+        },
         L => Operand::Simple(SimpleOperand::L, keyword.1),
         Nc => Operand::Condition(Condition::Nc, keyword.1),
         Nz => Operand::Condition(Condition::Nz, keyword.1),
@@ -479,7 +492,7 @@ mod tests {
         descriptors.extend(describe_dec8_instructions());
         descriptors.push((
             (Command::Push, vec![literal(Bc)]),
-            Instruction::Push(Reg16::Bc),
+            Instruction::Push(RegPair::Bc),
         ));
         descriptors
     }

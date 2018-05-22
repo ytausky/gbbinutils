@@ -265,7 +265,7 @@ pub enum Instruction<R> {
     Branch(Branch<R>, Option<Condition>),
     Ld(LdKind<R>),
     Nop,
-    Push(Reg16),
+    Push(RegPair),
     Stop,
 }
 
@@ -315,6 +315,14 @@ pub enum Reg16 {
     De,
     Hl,
     Sp,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum RegPair {
+    Bc,
+    De,
+    Hl,
+    Af,
 }
 
 #[derive(Clone, Debug, PartialEq)]
