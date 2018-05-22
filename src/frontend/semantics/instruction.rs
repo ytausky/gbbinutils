@@ -264,6 +264,7 @@ fn analyze_keyword_operand<R>(
     use frontend::syntax::keyword::Operand::*;
     match keyword.0 {
         A => Operand::Simple(SimpleOperand::A, keyword.1),
+        Af => Operand::RegPair(RegPair::Af, keyword.1),
         B => Operand::Simple(SimpleOperand::B, keyword.1),
         Bc => match *context {
             Stack => Operand::RegPair(RegPair::Bc, keyword.1),

@@ -216,6 +216,7 @@ enum Keyword {
 
 const KEYWORDS: &[(&str, Keyword)] = &[
     ("a", Keyword::Operand(Operand::A)),
+    ("af", Keyword::Operand(Operand::Af)),
     ("add", Keyword::Command(Command::Add)),
     ("and", Keyword::Command(Command::And)),
     ("b", Keyword::Operand(Operand::B)),

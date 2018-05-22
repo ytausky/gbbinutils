@@ -21,6 +21,7 @@ pub enum Command {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Operand {
     A,
+    Af,
     B,
     Bc,
     C,
