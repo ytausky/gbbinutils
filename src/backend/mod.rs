@@ -257,6 +257,7 @@ fn is_in_u8_range(n: i32) -> bool {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Instruction<R> {
+    AddHl(Reg16),
     Alu(AluOperation, AluSource<R>),
     Dec(SimpleOperand),
     Halt,
@@ -310,7 +311,9 @@ pub enum Direction {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Reg16 {
     Bc,
+    De,
     Hl,
+    Sp,
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -103,8 +103,12 @@ impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
     fn run(mut self, mnemonic: (Mnemonic, R)) -> AnalysisResult<R> {
         use self::Mnemonic::*;
         match mnemonic.0 {
+            Alu(AluOperation::Add, explicit_a) => {
+                self.analyze_add_instruction(mnemonic.1, explicit_a)
+            }
             Alu(operation, explicit_a) => {
-                self.analyze_alu_instruction((operation, mnemonic.1), explicit_a)
+                let first_operand = self.operands.next();
+                self.analyze_alu_instruction((operation, mnemonic.1), explicit_a, first_operand)
             }
             Dec => match self.operands.next() {
                 Some(Operand::Simple(operand, _)) => Ok(Instruction::Dec(operand)),
@@ -120,18 +124,47 @@ impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
         }
     }
 
+    fn analyze_add_instruction(
+        &mut self,
+        operation_ref: R,
+        explicit_a: ExplicitA,
+    ) -> AnalysisResult<R> {
+        match self.operands.next() {
+            Some(Operand::Reg16(reg16, reg16_ref)) => {
+                self.analyze_add_hl_instruction((reg16, reg16_ref))
+            }
+            operand => self.analyze_alu_instruction(
+                (AluOperation::Add, operation_ref),
+                explicit_a,
+                operand,
+            ),
+        }
+    }
+
+    fn analyze_add_hl_instruction(&mut self, target: (Reg16, R)) -> AnalysisResult<R> {
+        assert_eq!(target.0, Reg16::Hl);
+        match self.operands.next() {
+            Some(Operand::Reg16(src, _src_ref)) => Ok(Instruction::AddHl(src)),
+            _ => panic!(),
+        }
+    }
+
     fn analyze_alu_instruction(
         &mut self,
         (operation, _): (AluOperation, R),
         explicit_a: ExplicitA,
+        first_operand: Option<Operand<R>>,
     ) -> AnalysisResult<R> {
-        if explicit_a == ExplicitA::Required {
-            match self.operands.next() {
+        let next_operand = if explicit_a == ExplicitA::Required {
+            match first_operand {
                 Some(Operand::Simple(SimpleOperand::A, _)) => (),
                 _ => panic!(),
-            }
-        }
-        match self.operands.next() {
+            };
+            self.operands.next()
+        } else {
+            first_operand
+        };
+        match next_operand {
             Some(Operand::Simple(src, _)) => {
                 Ok(Instruction::Alu(operation, AluSource::Simple(src)))
             }
@@ -234,12 +267,14 @@ fn analyze_keyword_operand<R>(
             OperandAnalysisContext::Other => Operand::Simple(SimpleOperand::C, keyword.1),
         },
         D => Operand::Simple(SimpleOperand::D, keyword.1),
+        De => Operand::Reg16(Reg16::De, keyword.1),
         E => Operand::Simple(SimpleOperand::E, keyword.1),
         H => Operand::Simple(SimpleOperand::H, keyword.1),
         Hl => Operand::Reg16(Reg16::Hl, keyword.1),
         L => Operand::Simple(SimpleOperand::L, keyword.1),
         Nc => Operand::Condition(Condition::Nc, keyword.1),
         Nz => Operand::Condition(Condition::Nz, keyword.1),
+        Sp => Operand::Reg16(Reg16::Sp, keyword.1),
         Z => Operand::Condition(Condition::Z, keyword.1),
     }
 }
@@ -351,7 +386,9 @@ mod tests {
         fn from(reg16: Reg16) -> Self {
             match reg16 {
                 Reg16::Bc => literal(Bc),
+                Reg16::De => literal(De),
                 Reg16::Hl => literal(Hl),
+                Reg16::Sp => literal(Sp),
             }
         }
     }
@@ -437,6 +474,7 @@ mod tests {
         descriptors.extend(describe_ld_simple_immediate_instructions());
         descriptors.extend(describe_ld_reg16_immediate_instructions());
         descriptors.extend(describe_alu_simple_instructions());
+        descriptors.extend(describe_add_hl_reg16_instructions());
         descriptors.extend(describe_branch_instuctions());
         descriptors.extend(describe_dec_instructions());
         descriptors.push((
@@ -545,6 +583,20 @@ mod tests {
         (
             (Command::from(operation), vec![SynExpr::from(operand)]),
             Instruction::Alu(operation, AluSource::Simple(operand)),
+        )
+    }
+
+    fn describe_add_hl_reg16_instructions() -> impl Iterator<Item = InstructionDescriptor> {
+        REG16.iter().map(|&reg16| describe_add_hl_reg16(reg16))
+    }
+
+    fn describe_add_hl_reg16(reg16: Reg16) -> InstructionDescriptor {
+        (
+            (
+                Command::Add,
+                vec![SynExpr::from(Reg16::Hl), SynExpr::from(reg16)],
+            ),
+            Instruction::AddHl(reg16),
         )
     }
 

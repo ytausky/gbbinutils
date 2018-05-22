@@ -25,11 +25,13 @@ pub enum Operand {
     Bc,
     C,
     D,
+    De,
     E,
     H,
     Hl,
     L,
     Nc,
     Nz,
+    Sp,
     Z,
 }
