@@ -11,9 +11,15 @@ enum TokenKind {
     Comma,
     Eol,
     Ident,
-    Number,
+    Number(Radix),
     OpeningBracket,
     String,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Radix {
+    Decimal,
+    Hexadecimal,
 }
 
 struct Scanner<I: Iterator> {
@@ -78,7 +84,8 @@ impl<I: Iterator<Item = char>> Scanner<I> {
             ',' => self.take(TokenKind::Comma),
             '\n' => self.take(TokenKind::Eol),
             '[' => self.take(TokenKind::OpeningBracket),
-            '$' => self.lex_number(),
+            '0'...'9' => self.lex_decimal_number(),
+            '$' => self.lex_hex_number(),
             '"' => self.lex_quoted_string(),
             _ => self.lex_ident(),
         };
@@ -90,17 +97,23 @@ impl<I: Iterator<Item = char>> Scanner<I> {
         token
     }
 
+    fn lex_decimal_number(&mut self) -> TokenKind {
+        self.advance();
+        self.skip_characters_if(is_dec_digit);
+        TokenKind::Number(Radix::Decimal)
+    }
+
+    fn lex_hex_number(&mut self) -> TokenKind {
+        self.advance();
+        self.skip_characters_if(is_hex_digit);
+        TokenKind::Number(Radix::Hexadecimal)
+    }
+
     fn lex_quoted_string(&mut self) -> TokenKind {
         self.advance();
         self.skip_characters_if(|c| c != '"');
         self.advance();
         TokenKind::String
-    }
-
-    fn lex_number(&mut self) -> TokenKind {
-        self.advance();
-        self.skip_characters_if(is_hex_digit);
-        TokenKind::Number
     }
 
     fn lex_ident(&mut self) -> TokenKind {
@@ -120,6 +133,10 @@ fn is_horizontal_whitespace(character: char) -> bool {
 
 fn is_ident_continuation(character: char) -> bool {
     character.is_alphanumeric() || character == '_' || character == '#'
+}
+
+fn is_dec_digit(character: char) -> bool {
+    character.is_digit(10)
 }
 
 fn is_hex_digit(character: char) -> bool {
@@ -157,7 +174,10 @@ fn mk_token(kind: TokenKind, lexeme: &str) -> Token {
         TokenKind::Comma => token::Comma,
         TokenKind::Eol => token::Eol,
         TokenKind::Ident => mk_keyword_or(token::Ident, lexeme),
-        TokenKind::Number => token::Literal(Literal::Number(
+        TokenKind::Number(Radix::Decimal) => {
+            token::Literal(Literal::Number(i32::from_str_radix(lexeme, 10).unwrap()))
+        }
+        TokenKind::Number(Radix::Hexadecimal) => token::Literal(Literal::Number(
             i32::from_str_radix(&lexeme[1..], 16).unwrap(),
         )),
         TokenKind::OpeningBracket => token::OpeningBracket,
@@ -292,6 +312,11 @@ mod tests {
             "\"file.asm\"",
             &[Literal(syntax::Literal::String("file.asm".to_string()))],
         )
+    }
+
+    #[test]
+    fn lex_decimal_number() {
+        assert_eq_tokens("1234", &[Literal(Number(1234))])
     }
 
     #[test]
