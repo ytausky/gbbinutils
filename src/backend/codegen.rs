@@ -30,6 +30,9 @@ pub fn generate_code<R>(instruction: Instruction<R>, emitter: &mut impl Emit<R>)
             encode_simple_alu_operation(operation, src, emitter)
         }
         Branch(branch, condition) => encode_branch(branch, condition, emitter),
+        Dec8(simple_operand) => {
+            emitter.emit_byte(0x05 | (encode_simple_operand(simple_operand) << 3))
+        }
         Dec16(reg16) => emitter.emit_byte(0x0b | (encode_reg16(reg16) << 4)),
         Halt => emitter.emit_byte(0x76),
         Ld(kind) => encode_ld(kind, emitter),
@@ -262,6 +265,24 @@ mod tests {
             .iter()
             .for_each(|(reg16, opcode)| {
                 test_instruction(Instruction::AddHl(*reg16), bytes([*opcode]))
+            })
+    }
+
+    #[test]
+    fn encode_dec8() {
+        use backend::SimpleOperand::*;
+        [
+            (B, 0x05),
+            (C, 0x0d),
+            (D, 0x15),
+            (E, 0x1d),
+            (H, 0x25),
+            (L, 0x2d),
+            (DerefHl, 0x35),
+            (A, 0x3d),
+        ].iter()
+            .for_each(|(simple_operand, opcode)| {
+                test_instruction(Instruction::Dec8(*simple_operand), bytes([*opcode]))
             })
     }
 
