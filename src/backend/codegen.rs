@@ -25,6 +25,7 @@ pub enum DataItem<R> {
 pub fn generate_code<R>(instruction: Instruction<R>, emitter: &mut impl Emit<R>) {
     use backend::Instruction::*;
     match instruction {
+        AddHl(reg16) => emitter.emit_byte(0x09 | (encode_reg16(reg16) << 4)),
         Alu(operation, AluSource::Simple(src)) => {
             encode_simple_alu_operation(operation, src, emitter)
         }
@@ -88,6 +89,16 @@ fn encode_simple_operand(register: SimpleOperand) -> u8 {
         H => 0b100,
         L => 0b101,
         DerefHl => 0b110,
+    }
+}
+
+fn encode_reg16(reg16: Reg16) -> u8 {
+    use backend::Reg16::*;
+    match reg16 {
+        Bc => 0b00,
+        De => 0b01,
+        Hl => 0b10,
+        Sp => 0b11,
     }
 }
 
@@ -241,6 +252,16 @@ mod tests {
                 DataItem::Expr(target_expr, Width::Word),
             ],
         )
+    }
+
+    #[test]
+    fn encode_add_hl() {
+        use backend::Reg16::*;
+        [(Bc, 0x09), (De, 0x19), (Hl, 0x29), (Sp, 0x39)]
+            .iter()
+            .for_each(|(reg16, opcode)| {
+                test_instruction(Instruction::AddHl(*reg16), bytes([*opcode]))
+            })
     }
 
     fn bytes(data: impl Borrow<[u8]>) -> Vec<DataItem<()>> {
