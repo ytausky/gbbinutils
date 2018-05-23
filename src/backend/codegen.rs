@@ -44,14 +44,14 @@ impl<R> Encoded<R> {
 pub fn generate_code<R>(instruction: Instruction<R>) -> Encoded<R> {
     use backend::Instruction::*;
     match instruction {
-        AddHl(reg16) => Encoded::with(0x09 | (encode_reg16(reg16) << 4)),
+        AddHl(reg16) => Encoded::with(0x09 | encode_reg16(reg16)),
         Alu(operation, AluSource::Simple(src)) => encode_simple_alu_operation(operation, src),
         Alu(operation, AluSource::Immediate(expr)) => {
             encode_immediate_alu_operation(operation, expr)
         }
         Branch(branch, condition) => encode_branch(branch, condition),
         Dec8(simple_operand) => Encoded::with(0x05 | (encode_simple_operand(simple_operand) << 3)),
-        Dec16(reg16) => Encoded::with(0x0b | (encode_reg16(reg16) << 4)),
+        Dec16(reg16) => Encoded::with(0x0b | encode_reg16(reg16)),
         Halt => Encoded::with(0x76),
         Ld(kind) => encode_ld(kind),
         Nop => Encoded::with(0x00),
@@ -70,7 +70,7 @@ fn encode_ld<R>(kind: LdKind<R>) -> Encoded<R> {
             Encoded::with(0x06 | (encode_simple_operand(dest) << 3)).and_byte(immediate)
         }
         LdKind::Immediate16(dest, immediate) => {
-            Encoded::with(0x01 | (encode_reg16(dest) << 4)).and_word(immediate)
+            Encoded::with(0x01 | encode_reg16(dest)).and_word(immediate)
         }
         LdKind::ImmediateAddr(addr, direction) => {
             Encoded::with(0xea | encode_direction(direction)).and_word(addr)
@@ -104,11 +104,11 @@ fn encode_branch<R>(branch: Branch<R>, condition: Option<Condition>) -> Encoded<
     match branch {
         Jp(target) => Encoded::with(match condition {
             None => 0xc3,
-            Some(condition) => 0xc2 | (encode_condition(condition) << 3),
+            Some(condition) => 0xc2 | encode_condition(condition),
         }).and_word(target),
         Jr(target) => Encoded::with(match condition {
             None => 0x18,
-            Some(condition) => 0x20 | (encode_condition(condition) << 3),
+            Some(condition) => 0x20 | encode_condition(condition),
         }).and_byte(Expr::Subtract(
             Box::new(target),
             Box::new(Expr::LocationCounter),
@@ -118,12 +118,12 @@ fn encode_branch<R>(branch: Branch<R>, condition: Option<Condition>) -> Encoded<
 
 fn encode_condition(condition: Condition) -> u8 {
     use backend::Condition::*;
-    match condition {
+    (match condition {
         Nz => 0b00,
         Z => 0b01,
         Nc => 0b10,
         C => 0b11,
-    }
+    }) << 3
 }
 
 fn encode_direction(direction: Direction) -> u8 {
@@ -153,12 +153,12 @@ fn encode_simple_operand(register: SimpleOperand) -> u8 {
 
 fn encode_reg16(reg16: Reg16) -> u8 {
     use backend::Reg16::*;
-    match reg16 {
+    (match reg16 {
         Bc => 0b00,
         De => 0b01,
         Hl => 0b10,
         Sp => 0b11,
-    }
+    }) << 4
 }
 
 fn encode_reg_pair(reg_pair: RegPair) -> u8 {
