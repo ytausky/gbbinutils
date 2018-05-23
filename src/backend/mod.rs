@@ -264,6 +264,7 @@ pub enum Instruction<R> {
     Dec8(SimpleOperand),
     Dec16(Reg16),
     Halt,
+    JpDerefHl,
     Branch(Branch<R>, Option<Condition>),
     Ld(LdKind<R>),
     Nop,

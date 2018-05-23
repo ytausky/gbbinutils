@@ -53,6 +53,7 @@ pub fn generate_code<R>(instruction: Instruction<R>) -> Encoded<R> {
         Dec8(simple_operand) => Encoded::with(0x05 | (encode_simple_operand(simple_operand) << 3)),
         Dec16(reg16) => Encoded::with(0x0b | encode_reg16(reg16)),
         Halt => Encoded::with(0x76),
+        JpDerefHl => Encoded::with(0xe9),
         Ld(kind) => encode_ld(kind),
         Nop => Encoded::with(0x00),
         Stop => Encoded {
@@ -428,6 +429,11 @@ mod tests {
                 ],
             )
         }
+    }
+
+    #[test]
+    fn encode_jp_hl() {
+        test_instruction(JpDerefHl, bytes([0xe9]))
     }
 
     #[test]

@@ -184,7 +184,10 @@ impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
         } else {
             (None, analyze_branch_target(first_operand))
         };
-        Ok(Instruction::Branch(mk_branch(branch, target), condition))
+        match (branch, condition, target) {
+            (BranchKind::Jp, None, Some(TargetSelector::DerefHl)) => Ok(Instruction::JpDerefHl),
+            (_, _, target) => Ok(Instruction::Branch(mk_branch(branch, target), condition)),
+        }
     }
 
     fn analyze_nullary_instruction(&mut self, mnemonic: (NullaryMnemonic, R)) -> AnalysisResult<R> {
@@ -221,18 +224,19 @@ impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
     }
 }
 
-fn analyze_branch_target<R>(target: Option<Operand<R>>) -> Option<Expr<R>> {
+fn analyze_branch_target<R>(target: Option<Operand<R>>) -> Option<TargetSelector<R>> {
     match target {
-        Some(Operand::Const(expr)) => Some(expr),
+        Some(Operand::Const(expr)) => Some(TargetSelector::Expr(expr)),
+        Some(Operand::Simple(SimpleOperand::DerefHl, _)) => Some(TargetSelector::DerefHl),
         None => None,
         _ => panic!(),
     }
 }
 
-fn mk_branch<R>(kind: BranchKind, target: Option<Expr<R>>) -> Branch<R> {
+fn mk_branch<R>(kind: BranchKind, target: Option<TargetSelector<R>>) -> Branch<R> {
     match (kind, target) {
-        (BranchKind::Jp, Some(expr)) => Branch::Jp(expr),
-        (BranchKind::Jr, Some(expr)) => Branch::Jr(expr),
+        (BranchKind::Jp, Some(TargetSelector::Expr(expr))) => Branch::Jp(expr),
+        (BranchKind::Jr, Some(TargetSelector::Expr(expr))) => Branch::Jr(expr),
         _ => panic!(),
     }
 }
@@ -332,6 +336,11 @@ enum BranchKind {
     Jr,
 }
 
+enum TargetSelector<R> {
+    DerefHl,
+    Expr(Expr<R>),
+}
+
 fn to_mnemonic(command: keyword::Command) -> Mnemonic {
     use frontend::syntax::keyword::Command::*;
     match command {
@@ -416,6 +425,14 @@ mod tests {
                 Condition::Z => literal(Z),
             }
         }
+    }
+
+    #[test]
+    fn analyze_jp_deref_hl() {
+        assert_eq!(
+            analyze(Command::Jp, vec![literal(Hl).deref()]),
+            Ok(Instruction::JpDerefHl)
+        )
     }
 
     #[test]
@@ -635,7 +652,10 @@ mod tests {
         (
             (Command::from(branch), operands),
             Instruction::Branch(
-                mk_branch(branch, Some(Expr::Symbol(ident.to_string(), ()))),
+                mk_branch(
+                    branch,
+                    Some(TargetSelector::Expr(Expr::Symbol(ident.to_string(), ()))),
+                ),
                 condition,
             ),
         )
