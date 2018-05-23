@@ -70,6 +70,8 @@ impl<'a, D: 'a> SymbolTable<'a, D> {
     {
         match expr {
             Expr::Literal(value, expr_ref) => (value, expr_ref),
+            Expr::LocationCounter => panic!(),
+            Expr::Subtract(_, _) => panic!(),
             Expr::Symbol(symbol, expr_ref) => {
                 let symbol_def = self.symbols.get(&symbol).cloned();
                 if let Some(value) = symbol_def {
@@ -342,6 +344,8 @@ pub enum Condition {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr<R> {
     Literal(i32, R),
+    LocationCounter,
+    Subtract(Box<Expr<R>>, Box<Expr<R>>),
     Symbol(String, R),
 }
 

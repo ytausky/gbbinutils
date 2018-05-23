@@ -96,9 +96,28 @@ fn encode_immediate_alu_operation<R>(operation: AluOperation, expr: Expr<R>) -> 
 
 fn encode_branch<R>(branch: Branch<R>, condition: Option<Condition>) -> Encoded<R> {
     use backend::Branch::*;
-    match (branch, condition) {
-        (Jp(target), None) => Encoded::with(0xc3).and_word(target),
-        _ => panic!(),
+    match branch {
+        Jp(target) => Encoded::with(match condition {
+            None => 0xc3,
+            Some(condition) => 0xc2 | (encode_condition(condition) << 3),
+        }).and_word(target),
+        Jr(target) => Encoded::with(match condition {
+            None => 0x18,
+            Some(condition) => 0x20 | (encode_condition(condition) << 3),
+        }).and_byte(Expr::Subtract(
+            Box::new(target),
+            Box::new(Expr::LocationCounter),
+        )),
+    }
+}
+
+fn encode_condition(condition: Condition) -> u8 {
+    use backend::Condition::*;
+    match condition {
+        Nz => 0b00,
+        Z => 0b01,
+        Nc => 0b10,
+        C => 0b11,
     }
 }
 
@@ -348,14 +367,52 @@ mod tests {
 
     #[test]
     fn encode_jp() {
+        use backend::Condition::*;
         let target_expr = Expr::Literal(0x1234, ());
-        test_instruction(
-            Branch(Jp(target_expr.clone()), None),
-            [
-                DataItem::Byte(0xc3),
-                DataItem::Expr(target_expr, Width::Word),
-            ],
-        )
+        let test_cases = &[
+            (None, 0xc3),
+            (Some(C), 0xda),
+            (Some(Nc), 0xd2),
+            (Some(Nz), 0xc2),
+            (Some(Z), 0xca),
+        ];
+        for &(condition, opcode) in test_cases {
+            test_instruction(
+                Branch(Jp(target_expr.clone()), condition),
+                [
+                    DataItem::Byte(opcode),
+                    DataItem::Expr(target_expr.clone(), Width::Word),
+                ],
+            )
+        }
+    }
+
+    #[test]
+    fn encode_jr() {
+        use backend::Condition::*;
+        let target_expr = Expr::Literal(0x1234, ());
+        let test_cases = &[
+            (None, 0x18),
+            (Some(C), 0x38),
+            (Some(Nc), 0x30),
+            (Some(Nz), 0x20),
+            (Some(Z), 0x28),
+        ];
+        for &(condition, opcode) in test_cases {
+            test_instruction(
+                Branch(Jr(target_expr.clone()), condition),
+                [
+                    DataItem::Byte(opcode),
+                    DataItem::Expr(
+                        Expr::Subtract(
+                            Box::new(target_expr.clone()),
+                            Box::new(Expr::LocationCounter),
+                        ),
+                        Width::Byte,
+                    ),
+                ],
+            )
+        }
     }
 
     #[test]
