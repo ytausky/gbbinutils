@@ -289,12 +289,7 @@ mod tests {
             (DerefHl, 0x86),
             (A, 0x87),
         ];
-        for (src, opcode) in src_and_opcode {
-            test_instruction(
-                Alu(AluOperation::Add, AluSource::Simple(src)),
-                bytes([opcode]),
-            )
-        }
+        test_simple_alu_encoding(AluOperation::Add, &src_and_opcode)
     }
 
     #[test]
@@ -310,12 +305,7 @@ mod tests {
             (DerefHl, 0xa6),
             (A, 0xa7),
         ];
-        for (src, opcode) in src_and_opcode {
-            test_instruction(
-                Alu(AluOperation::And, AluSource::Simple(src)),
-                bytes([opcode]),
-            )
-        }
+        test_simple_alu_encoding(AluOperation::And, &src_and_opcode)
     }
 
     #[test]
@@ -331,12 +321,7 @@ mod tests {
             (DerefHl, 0xbe),
             (A, 0xbf),
         ];
-        for (src, opcode) in src_and_opcode {
-            test_instruction(
-                Alu(AluOperation::Cp, AluSource::Simple(src)),
-                bytes([opcode]),
-            )
-        }
+        test_simple_alu_encoding(AluOperation::Cp, &src_and_opcode)
     }
 
     #[test]
@@ -352,11 +337,12 @@ mod tests {
             (DerefHl, 0xae),
             (A, 0xaf),
         ];
-        for (src, opcode) in src_and_opcode {
-            test_instruction(
-                Alu(AluOperation::Xor, AluSource::Simple(src)),
-                bytes([opcode]),
-            )
+        test_simple_alu_encoding(AluOperation::Xor, &src_and_opcode)
+    }
+
+    fn test_simple_alu_encoding(operation: AluOperation, test_cases: &[(SimpleOperand, u8)]) {
+        for &(src, opcode) in test_cases {
+            test_instruction(Alu(operation, AluSource::Simple(src)), bytes([opcode]))
         }
     }
 
