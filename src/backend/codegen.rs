@@ -79,7 +79,7 @@ fn encode_simple_alu_operation<R>(operation: AluOperation, src: SimpleOperand) -
         Add => 0x80,
         And => 0xa0,
         Cp => 0xb8,
-        _ => panic!(),
+        Xor => 0xa8,
     };
     Encoded::with(opcode_base | encode_simple_operand(src))
 }
@@ -334,6 +334,27 @@ mod tests {
         for (src, opcode) in src_and_opcode {
             test_instruction(
                 Alu(AluOperation::Cp, AluSource::Simple(src)),
+                bytes([opcode]),
+            )
+        }
+    }
+
+    #[test]
+    fn encode_simple_xor() {
+        use backend::SimpleOperand::*;
+        let src_and_opcode = vec![
+            (B, 0xa8),
+            (C, 0xa9),
+            (D, 0xaa),
+            (E, 0xab),
+            (H, 0xac),
+            (L, 0xad),
+            (DerefHl, 0xae),
+            (A, 0xaf),
+        ];
+        for (src, opcode) in src_and_opcode {
+            test_instruction(
+                Alu(AluOperation::Xor, AluSource::Simple(src)),
                 bytes([opcode]),
             )
         }
