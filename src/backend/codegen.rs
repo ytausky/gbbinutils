@@ -72,7 +72,9 @@ fn encode_ld<R>(kind: LdKind<R>) -> Encoded<R> {
         LdKind::Immediate16(dest, immediate) => {
             Encoded::with(0x01 | (encode_reg16(dest) << 4)).and_word(immediate)
         }
-        LdKind::ImmediateAddr(_immediate, _direction) => panic!(),
+        LdKind::ImmediateAddr(addr, direction) => {
+            Encoded::with(0xea | encode_direction(direction)).and_word(addr)
+        }
     }
 }
 
@@ -121,6 +123,13 @@ fn encode_condition(condition: Condition) -> u8 {
         Z => 0b01,
         Nc => 0b10,
         C => 0b11,
+    }
+}
+
+fn encode_direction(direction: Direction) -> u8 {
+    match direction {
+        Direction::FromA => 0x00,
+        Direction::IntoA => 0x10,
     }
 }
 
@@ -292,6 +301,21 @@ mod tests {
                 [
                     DataItem::Byte(opcode),
                     DataItem::Expr(immediate.clone(), Width::Word),
+                ],
+            )
+        }
+    }
+
+    #[test]
+    fn encode_ld_immediate_addr() {
+        let addr = Expr::Literal(0x1234, ());
+        let test_cases = &[(Direction::FromA, 0xea), (Direction::IntoA, 0xfa)];
+        for &(direction, opcode) in test_cases {
+            test_instruction(
+                Ld(LdKind::ImmediateAddr(addr.clone(), direction)),
+                [
+                    DataItem::Byte(opcode),
+                    DataItem::Expr(addr.clone(), Width::Word),
                 ],
             )
         }

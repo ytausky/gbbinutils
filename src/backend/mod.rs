@@ -305,7 +305,7 @@ pub enum LdKind<R> {
     ImmediateAddr(Expr<R>, Direction),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Direction {
     FromA,
     IntoA,
