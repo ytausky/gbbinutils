@@ -69,7 +69,10 @@ fn encode_ld<R>(kind: LdKind<R>) -> Encoded<R> {
         LdKind::Immediate8(dest, immediate) => {
             Encoded::with(0x06 | (encode_simple_operand(dest) << 3)).and_byte(immediate)
         }
-        _ => panic!(),
+        LdKind::Immediate16(dest, immediate) => {
+            Encoded::with(0x01 | (encode_reg16(dest) << 4)).and_word(immediate)
+        }
+        LdKind::ImmediateAddr(_immediate, _direction) => panic!(),
     }
 }
 
@@ -276,6 +279,22 @@ mod tests {
                     ],
                 )
             })
+    }
+
+    #[test]
+    fn encode_ld_immediate16() {
+        use backend::Reg16::*;
+        let immediate = Expr::Literal(0x1234, ());
+        let test_cases = &[(Bc, 0x01), (De, 0x11), (Hl, 0x21), (Sp, 0x31)];
+        for &(reg16, opcode) in test_cases {
+            test_instruction(
+                Ld(LdKind::Immediate16(reg16, immediate.clone())),
+                [
+                    DataItem::Byte(opcode),
+                    DataItem::Expr(immediate.clone(), Width::Word),
+                ],
+            )
+        }
     }
 
     #[test]
