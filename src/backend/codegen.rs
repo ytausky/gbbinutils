@@ -74,11 +74,14 @@ fn encode_ld<R>(kind: LdKind<R>) -> Encoded<R> {
 }
 
 fn encode_simple_alu_operation<R>(operation: AluOperation, src: SimpleOperand) -> Encoded<R> {
-    match operation {
-        AluOperation::Add => Encoded::with(0x80 | encode_simple_operand(src)),
-        AluOperation::And => Encoded::with(0xa0 | encode_simple_operand(src)),
+    use backend::AluOperation::*;
+    let opcode_base = match operation {
+        Add => 0x80,
+        And => 0xa0,
+        Cp => 0xb8,
         _ => panic!(),
-    }
+    };
+    Encoded::with(opcode_base | encode_simple_operand(src))
 }
 
 fn encode_immediate_alu_operation<R>(operation: AluOperation, expr: Expr<R>) -> Encoded<R> {
@@ -310,6 +313,27 @@ mod tests {
         for (src, opcode) in src_and_opcode {
             test_instruction(
                 Alu(AluOperation::And, AluSource::Simple(src)),
+                bytes([opcode]),
+            )
+        }
+    }
+
+    #[test]
+    fn encode_simple_cp() {
+        use backend::SimpleOperand::*;
+        let src_and_opcode = vec![
+            (B, 0xb8),
+            (C, 0xb9),
+            (D, 0xba),
+            (E, 0xbb),
+            (H, 0xbc),
+            (L, 0xbd),
+            (DerefHl, 0xbe),
+            (A, 0xbf),
+        ];
+        for (src, opcode) in src_and_opcode {
+            test_instruction(
+                Alu(AluOperation::Cp, AluSource::Simple(src)),
                 bytes([opcode]),
             )
         }
