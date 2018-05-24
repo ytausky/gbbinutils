@@ -417,6 +417,22 @@ mod tests {
         Expr::Symbol(ident.to_string(), Marking::default())
     }
 
+    trait ToMarked<T> {
+        fn to_marked(self) -> (T, Marking);
+    }
+
+    impl ToMarked<Command> for Command {
+        fn to_marked(self) -> (Command, Marking) {
+            (self, Marking::default())
+        }
+    }
+
+    impl ToMarked<Command> for (Command, Marking) {
+        fn to_marked(self) -> (Command, Marking) {
+            self
+        }
+    }
+
     impl From<AluOperation> for Command {
         fn from(alu_operation: AluOperation) -> Self {
             match alu_operation {
@@ -494,33 +510,22 @@ mod tests {
 
     #[test]
     fn analyze_jp_deref_hl() {
-        assert_eq!(
-            analyze(Command::Jp, vec![literal(Hl).deref()]),
-            Ok(Instruction::JpDerefHl)
-        )
+        analyze(Command::Jp, vec![literal(Hl).deref()]).expect_instruction(Instruction::JpDerefHl)
     }
 
     #[test]
     fn analyze_ld_deref_symbol_a() {
         let ident = "ident";
-        assert_eq!(
-            analyze(Command::Ld, vec![SynExpr::from(ident).deref(), literal(A)]),
-            Ok(Instruction::Ld(LdKind::ImmediateAddr(
-                symbol(ident),
-                Direction::FromA,
-            )))
+        analyze(Command::Ld, vec![SynExpr::from(ident).deref(), literal(A)]).expect_instruction(
+            Instruction::Ld(LdKind::ImmediateAddr(symbol(ident), Direction::FromA)),
         )
     }
 
     #[test]
     fn analyze_ld_a_deref_symbol() {
         let ident = "ident";
-        assert_eq!(
-            analyze(Command::Ld, vec![literal(A), SynExpr::from(ident).deref()]),
-            Ok(Instruction::Ld(LdKind::ImmediateAddr(
-                symbol(ident),
-                Direction::IntoA,
-            )))
+        analyze(Command::Ld, vec![literal(A), SynExpr::from(ident).deref()]).expect_instruction(
+            Instruction::Ld(LdKind::ImmediateAddr(symbol(ident), Direction::IntoA)),
         )
     }
 
@@ -540,13 +545,10 @@ mod tests {
     }
 
     fn test_cp_const_analysis(parsed: SynExpr<String, Marking>, expr: Expr<Marking>) {
-        assert_eq!(
-            analyze(Command::Cp, Some(parsed)),
-            Ok(Instruction::Alu(
-                AluOperation::Cp,
-                AluSource::Immediate(expr)
-            ))
-        )
+        analyze(Command::Cp, Some(parsed)).expect_instruction(Instruction::Alu(
+            AluOperation::Cp,
+            AluSource::Immediate(expr),
+        ))
     }
 
     #[test]
@@ -750,56 +752,48 @@ mod tests {
 
     fn test_instruction_analysis(descriptors: Vec<InstructionDescriptor>) {
         for ((mnemonic, operands), expected) in descriptors {
-            assert_eq!(analyze(mnemonic, operands), Ok(expected))
+            analyze(mnemonic, operands).expect_instruction(expected)
         }
     }
 
-    fn analyze<I>(mnemonic: Command, operands: I) -> AnalysisResult<Marking>
+    struct Result(AnalysisResult<Marking>);
+
+    impl Result {
+        fn expect_instruction(self, expected: Instruction<Marking>) {
+            assert_eq!(self.0, Ok(expected))
+        }
+
+        fn expect_diagnostic(self, message: Message) {
+            assert_eq!(self.0, Err(Diagnostic::new(message, Marking::Special)))
+        }
+    }
+
+    fn analyze<C, I>(mnemonic: C, operands: I) -> Result
     where
+        C: ToMarked<Command>,
         I: IntoIterator<Item = SynExpr<String, Marking>>,
     {
         use frontend::StrExprFactory;
         let mut expr_factory = StrExprFactory::new();
         let mut analyzer = CommandAnalyzer::new(&mut expr_factory);
-        analyzer.analyze_instruction((mnemonic, Marking::Normal), operands)
-    }
-
-    fn diagnoze<R, I>(mnemonic: (Command, R), operands: I) -> Diagnostic<R>
-    where
-        R: Debug + PartialEq,
-        I: IntoIterator<Item = SynExpr<String, R>>,
-    {
-        use frontend::StrExprFactory;
-        let mut expr_factory = StrExprFactory::new();
-        let mut analyzer = CommandAnalyzer::new(&mut expr_factory);
-        analyzer
-            .analyze_instruction(mnemonic, operands)
-            .err()
-            .unwrap()
+        Result(analyzer.analyze_instruction(mnemonic.to_marked(), operands))
     }
 
     #[test]
     fn analyze_nop_a() {
-        assert_eq!(
-            diagnoze((Command::Nop, Marking::Special), vec![literal(A)]),
-            Diagnostic::new(
-                Message::OperandCount {
-                    actual: 1,
-                    expected: 0,
-                },
-                Marking::Special,
-            )
+        analyze((Command::Nop, Marking::Special), vec![literal(A)]).expect_diagnostic(
+            Message::OperandCount {
+                actual: 1,
+                expected: 0,
+            },
         )
     }
 
     #[test]
     fn analyze_jp_c_deref_hl() {
-        assert_eq!(
-            diagnoze(
-                (Command::Jp, Marking::Normal),
-                vec![literal(C).mark(), SimpleOperand::DerefHl.into()]
-            ),
-            Diagnostic::new(Message::AlwaysUnconditional, Marking::Special)
-        )
+        analyze(
+            Command::Jp,
+            vec![literal(C).mark(), SimpleOperand::DerefHl.into()],
+        ).expect_diagnostic(Message::AlwaysUnconditional)
     }
 }
