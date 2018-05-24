@@ -178,15 +178,19 @@ impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
     }
 
     fn analyze_branch(&mut self, branch: BranchKind) -> AnalysisResult<R> {
-        let first_operand = self.operands.next();
-        let (condition, target) = if let Some(Operand::Condition(condition, _)) = first_operand {
-            (Some(condition), analyze_branch_target(self.operands.next()))
-        } else {
-            (None, analyze_branch_target(first_operand))
-        };
+        let (condition, target) = self.collect_condition_and_target();
         match (branch, condition, target) {
             (BranchKind::Jp, None, Some(TargetSelector::DerefHl)) => Ok(Instruction::JpDerefHl),
             (_, _, target) => Ok(Instruction::Branch(mk_branch(branch, target), condition)),
+        }
+    }
+
+    fn collect_condition_and_target(&mut self) -> (Option<Condition>, Option<TargetSelector<R>>) {
+        let first_operand = self.operands.next();
+        if let Some(Operand::Condition(condition, _)) = first_operand {
+            (Some(condition), analyze_branch_target(self.operands.next()))
+        } else {
+            (None, analyze_branch_target(first_operand))
         }
     }
 
