@@ -381,8 +381,40 @@ mod tests {
 
     use self::keyword::{Command, Operand::*};
 
-    fn literal(keyword: keyword::Operand) -> SynExpr<String, ()> {
-        SynExpr::Literal((Literal::Operand(keyword), ()))
+    #[derive(Clone, Debug, PartialEq)]
+    enum Marking {
+        Normal,
+        Special,
+    }
+
+    impl Default for Marking {
+        fn default() -> Self {
+            Marking::Normal
+        }
+    }
+
+    trait Mark {
+        fn mark(self) -> Self;
+    }
+
+    type Input = SynExpr<String, Marking>;
+
+    impl<S: ::frontend::syntax::StringRef> Mark for SynExpr<S, Marking> {
+        fn mark(self) -> Self {
+            match self {
+                SynExpr::Ident((ident, _)) => SynExpr::Ident((ident, Marking::Special)),
+                SynExpr::Deref(expr) => SynExpr::Deref(Box::new(expr.mark())),
+                SynExpr::Literal((literal, _)) => SynExpr::Literal((literal, Marking::Special)),
+            }
+        }
+    }
+
+    fn literal(keyword: keyword::Operand) -> Input {
+        SynExpr::Literal((Literal::Operand(keyword), Marking::Normal))
+    }
+
+    fn symbol(ident: &str) -> Expr<Marking> {
+        Expr::Symbol(ident.to_string(), Marking::default())
     }
 
     impl From<AluOperation> for Command {
@@ -405,7 +437,7 @@ mod tests {
         }
     }
 
-    impl From<SimpleOperand> for SynExpr<String, ()> {
+    impl From<SimpleOperand> for Input {
         fn from(alu_operand: SimpleOperand) -> Self {
             match alu_operand {
                 SimpleOperand::A => literal(A),
@@ -420,7 +452,7 @@ mod tests {
         }
     }
 
-    impl From<Reg16> for SynExpr<String, ()> {
+    impl From<Reg16> for SynExpr<String, Marking> {
         fn from(reg16: Reg16) -> Self {
             match reg16 {
                 Reg16::Bc => literal(Bc),
@@ -431,7 +463,7 @@ mod tests {
         }
     }
 
-    impl From<Condition> for SynExpr<String, ()> {
+    impl From<Condition> for SynExpr<String, Marking> {
         fn from(condition: Condition) -> Self {
             match condition {
                 Condition::C => literal(C),
@@ -439,6 +471,24 @@ mod tests {
                 Condition::Nz => literal(Nz),
                 Condition::Z => literal(Z),
             }
+        }
+    }
+
+    impl<'a> From<&'a str> for SynExpr<String, Marking> {
+        fn from(ident: &'a str) -> Self {
+            SynExpr::Ident((ident.to_string(), Marking::Normal))
+        }
+    }
+
+    impl From<i32> for SynExpr<String, Marking> {
+        fn from(n: i32) -> Self {
+            SynExpr::Literal((Literal::Number(n), Marking::Normal))
+        }
+    }
+
+    impl From<i32> for Expr<Marking> {
+        fn from(n: i32) -> Self {
+            Expr::Literal(n, Marking::default())
         }
     }
 
@@ -454,12 +504,9 @@ mod tests {
     fn analyze_ld_deref_symbol_a() {
         let ident = "ident";
         assert_eq!(
-            analyze(
-                Command::Ld,
-                vec![SynExpr::Ident((ident.to_string(), ())).deref(), literal(A)]
-            ),
+            analyze(Command::Ld, vec![SynExpr::from(ident).deref(), literal(A)]),
             Ok(Instruction::Ld(LdKind::ImmediateAddr(
-                Expr::Symbol(ident.to_string(), ()),
+                symbol(ident),
                 Direction::FromA,
             )))
         )
@@ -469,12 +516,9 @@ mod tests {
     fn analyze_ld_a_deref_symbol() {
         let ident = "ident";
         assert_eq!(
-            analyze(
-                Command::Ld,
-                vec![literal(A), SynExpr::Ident((ident.to_string(), ())).deref()]
-            ),
+            analyze(Command::Ld, vec![literal(A), SynExpr::from(ident).deref()]),
             Ok(Instruction::Ld(LdKind::ImmediateAddr(
-                Expr::Symbol(ident.to_string(), ()),
+                symbol(ident),
                 Direction::IntoA,
             )))
         )
@@ -484,19 +528,18 @@ mod tests {
     fn analyze_cp_symbol() {
         let ident = "ident";
         test_cp_const_analysis(
-            SynExpr::Ident((ident.to_string(), ())),
-            Expr::Symbol(ident.to_string(), ()),
+            SynExpr::from(ident),
+            Expr::Symbol(ident.to_string(), Marking::Normal),
         )
     }
 
     #[test]
     fn analyze_cp_literal() {
         let n = 0x50;
-        let literal = SynExpr::Literal((Literal::Number(n), ()));
-        test_cp_const_analysis(literal, Expr::Literal(n, ()))
+        test_cp_const_analysis(n.into(), Expr::Literal(n, Marking::Normal))
     }
 
-    fn test_cp_const_analysis(parsed: SynExpr<String, ()>, expr: Expr<()>) {
+    fn test_cp_const_analysis(parsed: SynExpr<String, Marking>, expr: Expr<Marking>) {
         assert_eq!(
             analyze(Command::Cp, Some(parsed)),
             Ok(Instruction::Alu(
@@ -511,7 +554,7 @@ mod tests {
         test_instruction_analysis(describe_legal_instructions());
     }
 
-    type InstructionDescriptor = ((Command, Vec<SynExpr<String, ()>>), Instruction<()>);
+    type InstructionDescriptor = ((Command, Vec<Input>), Instruction<Marking>);
 
     fn describe_legal_instructions() -> Vec<InstructionDescriptor> {
         let mut descriptors = Vec::new();
@@ -567,15 +610,10 @@ mod tests {
     }
 
     fn describe_ld_simple_immediate(dest: SimpleOperand) -> InstructionDescriptor {
+        let n = 0x12;
         (
-            (
-                Command::Ld,
-                vec![
-                    SynExpr::from(dest),
-                    SynExpr::Literal((Literal::Number(0x12), ())),
-                ],
-            ),
-            Instruction::Ld(LdKind::Immediate8(dest, Expr::Literal(0x12, ()))),
+            (Command::Ld, vec![SynExpr::from(dest), n.into()]),
+            Instruction::Ld(LdKind::Immediate8(dest, n.into())),
         )
     }
 
@@ -586,14 +624,8 @@ mod tests {
     fn describe_ld_reg16_immediate(dest: Reg16) -> InstructionDescriptor {
         let value = "value";
         (
-            (
-                Command::Ld,
-                vec![SynExpr::from(dest), SynExpr::Ident((value.to_string(), ()))],
-            ),
-            Instruction::Ld(LdKind::Immediate16(
-                dest,
-                Expr::Symbol(value.to_string(), ()),
-            )),
+            (Command::Ld, vec![SynExpr::from(dest), value.into()]),
+            Instruction::Ld(LdKind::Immediate16(dest, symbol(value))),
         )
     }
 
@@ -663,13 +695,16 @@ mod tests {
         if let Some(condition) = condition {
             operands.push(SynExpr::from(condition))
         };
-        operands.push(SynExpr::Ident((ident.to_string(), ())));
+        operands.push(SynExpr::Ident((ident.to_string(), Marking::Normal)));
         (
             (Command::from(branch), operands),
             Instruction::Branch(
                 mk_branch(
                     branch,
-                    Some(TargetSelector::Expr(Expr::Symbol(ident.to_string(), ()))),
+                    Some(TargetSelector::Expr(Expr::Symbol(
+                        ident.to_string(),
+                        Marking::Normal,
+                    ))),
                 ),
                 condition,
             ),
@@ -719,14 +754,14 @@ mod tests {
         }
     }
 
-    fn analyze<I>(mnemonic: Command, operands: I) -> AnalysisResult<()>
+    fn analyze<I>(mnemonic: Command, operands: I) -> AnalysisResult<Marking>
     where
-        I: IntoIterator<Item = SynExpr<String, ()>>,
+        I: IntoIterator<Item = SynExpr<String, Marking>>,
     {
         use frontend::StrExprFactory;
         let mut expr_factory = StrExprFactory::new();
         let mut analyzer = CommandAnalyzer::new(&mut expr_factory);
-        analyzer.analyze_instruction((mnemonic, ()), operands)
+        analyzer.analyze_instruction((mnemonic, Marking::Normal), operands)
     }
 
     fn diagnoze<R, I>(mnemonic: (Command, R), operands: I) -> Diagnostic<R>
@@ -746,14 +781,14 @@ mod tests {
     #[test]
     fn analyze_nop_a() {
         assert_eq!(
-            analyze(Command::Nop, vec![literal(A)]),
-            Err(Diagnostic::new(
+            diagnoze((Command::Nop, Marking::Special), vec![literal(A)]),
+            Diagnostic::new(
                 Message::OperandCount {
                     actual: 1,
                     expected: 0,
                 },
-                (),
-            ))
+                Marking::Special,
+            )
         )
     }
 
@@ -761,10 +796,10 @@ mod tests {
     fn analyze_jp_c_deref_hl() {
         assert_eq!(
             diagnoze(
-                (Command::Jp, ()),
-                vec![literal(C), SimpleOperand::DerefHl.into()]
+                (Command::Jp, Marking::Normal),
+                vec![literal(C).mark(), SimpleOperand::DerefHl.into()]
             ),
-            Diagnostic::new(Message::AlwaysUnconditional, ())
+            Diagnostic::new(Message::AlwaysUnconditional, Marking::Special)
         )
     }
 }
