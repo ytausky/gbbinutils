@@ -181,14 +181,25 @@ impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
         let (condition, target) = self.collect_condition_and_target();
         match (branch, condition, target) {
             (BranchKind::Jp, None, Some(TargetSelector::DerefHl)) => Ok(Instruction::JpDerefHl),
-            (_, _, target) => Ok(Instruction::Branch(mk_branch(branch, target), condition)),
+            (BranchKind::Jp, Some((_, condition_ref)), Some(TargetSelector::DerefHl)) => {
+                Err(Diagnostic::new(Message::AlwaysUnconditional, condition_ref))
+            }
+            (_, condition, target) => Ok(Instruction::Branch(
+                mk_branch(branch, target),
+                condition.map(|(condition, _)| condition),
+            )),
         }
     }
 
-    fn collect_condition_and_target(&mut self) -> (Option<Condition>, Option<TargetSelector<R>>) {
+    fn collect_condition_and_target(
+        &mut self,
+    ) -> (Option<(Condition, R)>, Option<TargetSelector<R>>) {
         let first_operand = self.operands.next();
-        if let Some(Operand::Condition(condition, _)) = first_operand {
-            (Some(condition), analyze_branch_target(self.operands.next()))
+        if let Some(Operand::Condition(condition, condition_ref)) = first_operand {
+            (
+                Some((condition, condition_ref)),
+                analyze_branch_target(self.operands.next()),
+            )
         } else {
             (None, analyze_branch_target(first_operand))
         }
@@ -718,6 +729,20 @@ mod tests {
         analyzer.analyze_instruction((mnemonic, ()), operands)
     }
 
+    fn diagnoze<R, I>(mnemonic: (Command, R), operands: I) -> Diagnostic<R>
+    where
+        R: Debug + PartialEq,
+        I: IntoIterator<Item = SynExpr<String, R>>,
+    {
+        use frontend::StrExprFactory;
+        let mut expr_factory = StrExprFactory::new();
+        let mut analyzer = CommandAnalyzer::new(&mut expr_factory);
+        analyzer
+            .analyze_instruction(mnemonic, operands)
+            .err()
+            .unwrap()
+    }
+
     #[test]
     fn analyze_nop_a() {
         assert_eq!(
@@ -729,6 +754,17 @@ mod tests {
                 },
                 (),
             ))
+        )
+    }
+
+    #[test]
+    fn analyze_jp_c_deref_hl() {
+        assert_eq!(
+            diagnoze(
+                (Command::Jp, ()),
+                vec![literal(C), SimpleOperand::DerefHl.into()]
+            ),
+            Diagnostic::new(Message::AlwaysUnconditional, ())
         )
     }
 }

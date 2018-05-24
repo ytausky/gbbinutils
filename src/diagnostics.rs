@@ -82,6 +82,7 @@ impl<TR> Diagnostic<TR> {
 
 #[derive(Debug, PartialEq)]
 pub enum Message {
+    AlwaysUnconditional,
     OperandCount { actual: usize, expected: usize },
     UndefinedMacro { name: String },
     UnresolvedSymbol { symbol: String },
@@ -92,6 +93,7 @@ impl fmt::Display for Message {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use diagnostics::Message::*;
         match self {
+            AlwaysUnconditional => write!(f, "instruction cannot be made conditional"),
             OperandCount { actual, expected } => {
                 write!(f, "expected {} operands, found {}", expected, actual)
             }
