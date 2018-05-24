@@ -532,16 +532,13 @@ mod tests {
     #[test]
     fn analyze_cp_symbol() {
         let ident = "ident";
-        test_cp_const_analysis(
-            SynExpr::from(ident),
-            Expr::Symbol(ident.to_string(), Marking::Normal),
-        )
+        test_cp_const_analysis(ident.into(), symbol(ident))
     }
 
     #[test]
     fn analyze_cp_literal() {
         let n = 0x50;
-        test_cp_const_analysis(n.into(), Expr::Literal(n, Marking::Normal))
+        test_cp_const_analysis(n.into(), n.into())
     }
 
     fn test_cp_const_analysis(parsed: SynExpr<String, Marking>, expr: Expr<Marking>) {
@@ -599,7 +596,7 @@ mod tests {
         match (dest, src) {
             (SimpleOperand::DerefHl, SimpleOperand::DerefHl) => None,
             _ => Some((
-                (Command::Ld, vec![SynExpr::from(dest), SynExpr::from(src)]),
+                (Command::Ld, vec![dest.into(), src.into()]),
                 Instruction::Ld(LdKind::Simple(dest, src)),
             )),
         }
@@ -649,8 +646,8 @@ mod tests {
     ) -> InstructionDescriptor {
         (
             (
-                Command::from(operation),
-                vec![SynExpr::from(SimpleOperand::A), SynExpr::from(operand)],
+                operation.into(),
+                vec![SimpleOperand::A.into(), operand.into()],
             ),
             Instruction::Alu(operation, AluSource::Simple(operand)),
         )
@@ -672,10 +669,7 @@ mod tests {
 
     fn describe_add_hl_reg16(reg16: Reg16) -> InstructionDescriptor {
         (
-            (
-                Command::Add,
-                vec![SynExpr::from(Reg16::Hl), SynExpr::from(reg16)],
-            ),
+            (Command::Add, vec![Reg16::Hl.into(), reg16.into()]),
             Instruction::AddHl(reg16),
         )
     }
@@ -697,17 +691,11 @@ mod tests {
         if let Some(condition) = condition {
             operands.push(SynExpr::from(condition))
         };
-        operands.push(SynExpr::Ident((ident.to_string(), Marking::Normal)));
+        operands.push(ident.into());
         (
             (Command::from(branch), operands),
             Instruction::Branch(
-                mk_branch(
-                    branch,
-                    Some(TargetSelector::Expr(Expr::Symbol(
-                        ident.to_string(),
-                        Marking::Normal,
-                    ))),
-                ),
+                mk_branch(branch, Some(TargetSelector::Expr(symbol(ident)))),
                 condition,
             ),
         )
@@ -723,7 +711,7 @@ mod tests {
 
     fn describe_dec8(operand: SimpleOperand) -> InstructionDescriptor {
         (
-            (Command::Dec, vec![SynExpr::from(operand)]),
+            (Command::Dec, vec![operand.into()]),
             Instruction::Dec8(operand),
         )
     }
