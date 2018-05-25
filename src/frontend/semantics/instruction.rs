@@ -51,8 +51,8 @@ impl<'a, EF: 'a + ExprFactory> OperandAnalyzer<'a, EF> {
     fn analyze_deref_operand<R>(&mut self, expr: SynExpr<String, R>) -> Operand<R> {
         match expr {
             SynExpr::Ident(ident) => Operand::Deref(self.expr_factory.mk_symbol(ident)),
-            SynExpr::Literal((Literal::Operand(keyword::Operand::Hl), token_ref)) => {
-                Operand::Simple(SimpleOperand::DerefHl, token_ref)
+            SynExpr::Literal((Literal::Operand(keyword::Operand::Hl), range)) => {
+                Operand::Atom(AtomKind::Simple(SimpleOperand::DerefHl), range)
             }
             _ => panic!(),
         }
@@ -113,15 +113,15 @@ impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
                 self.analyze_alu_instruction((operation, mnemonic.1), explicit_a, first_operand)
             }
             Dec => match self.operands.next() {
-                Some(Operand::Simple(operand, _)) => Ok(Instruction::Dec8(operand)),
-                Some(Operand::Reg16(operand, _)) => Ok(Instruction::Dec16(operand)),
+                Some(Operand::Atom(AtomKind::Simple(operand), _)) => Ok(Instruction::Dec8(operand)),
+                Some(Operand::Atom(AtomKind::Reg16(operand), _)) => Ok(Instruction::Dec16(operand)),
                 _ => panic!(),
             },
             Branch(branch) => self.analyze_branch(branch),
             Ld => self.analyze_ld(),
             Nullary(instruction) => self.analyze_nullary_instruction((instruction, mnemonic.1)),
             Push => match self.operands.next() {
-                Some(Operand::RegPair(src, _)) => Ok(Instruction::Push(src)),
+                Some(Operand::Atom(AtomKind::RegPair(src), _)) => Ok(Instruction::Push(src)),
                 _ => panic!(),
             },
         }
@@ -133,8 +133,8 @@ impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
         explicit_a: ExplicitA,
     ) -> AnalysisResult<R> {
         match self.operands.next() {
-            Some(Operand::Reg16(reg16, reg16_ref)) => {
-                self.analyze_add_hl_instruction((reg16, reg16_ref))
+            Some(Operand::Atom(AtomKind::Reg16(reg16), range)) => {
+                self.analyze_add_hl_instruction((reg16, range))
             }
             operand => self.analyze_alu_instruction(
                 (AluOperation::Add, operation_ref),
@@ -147,7 +147,7 @@ impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
     fn analyze_add_hl_instruction(&mut self, target: (Reg16, R)) -> AnalysisResult<R> {
         assert_eq!(target.0, Reg16::Hl);
         match self.operands.next() {
-            Some(Operand::Reg16(src, _src_ref)) => Ok(Instruction::AddHl(src)),
+            Some(Operand::Atom(AtomKind::Reg16(src), _)) => Ok(Instruction::AddHl(src)),
             _ => panic!(),
         }
     }
@@ -160,7 +160,7 @@ impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
     ) -> AnalysisResult<R> {
         let next_operand = if explicit_a == ExplicitA::Required {
             match first_operand {
-                Some(Operand::Simple(SimpleOperand::A, _)) => (),
+                Some(Operand::Atom(AtomKind::Simple(SimpleOperand::A), _)) => (),
                 _ => panic!(),
             };
             self.operands.next()
@@ -168,7 +168,7 @@ impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
             first_operand
         };
         match next_operand {
-            Some(Operand::Simple(src, _)) => {
+            Some(Operand::Atom(AtomKind::Simple(src), _)) => {
                 Ok(Instruction::Alu(operation, AluSource::Simple(src)))
             }
             Some(Operand::Const(expr)) => {
@@ -196,9 +196,9 @@ impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
         &mut self,
     ) -> (Option<(Condition, R)>, Option<TargetSelector<R>>) {
         let first_operand = self.operands.next();
-        if let Some(Operand::Condition(condition, condition_ref)) = first_operand {
+        if let Some(Operand::Atom(AtomKind::Condition(condition), range)) = first_operand {
             (
-                Some((condition, condition_ref)),
+                Some((condition, range)),
                 analyze_branch_target(self.operands.next()),
             )
         } else {
@@ -224,16 +224,20 @@ impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
         let src = self.operands.next().unwrap();
         assert_eq!(self.operands.next(), None);
         match (dest, src) {
-            (Operand::Simple(dest, _), Operand::Simple(src, _)) => {
+            (Operand::Atom(AtomKind::Simple(dest), _), Operand::Atom(AtomKind::Simple(src), _)) => {
                 Ok(Instruction::Ld(LdKind::Simple(dest, src)))
             }
-            (Operand::Simple(dest, _), Operand::Const(expr)) => {
+            (Operand::Atom(AtomKind::Simple(dest), _), Operand::Const(expr)) => {
                 Ok(Instruction::Ld(LdKind::Immediate8(dest, expr)))
             }
-            (Operand::Simple(SimpleOperand::A, _), src) => analyze_ld_a(src, Direction::IntoA),
-            (dest, Operand::Simple(SimpleOperand::A, _)) => analyze_ld_a(dest, Direction::FromA),
-            (Operand::Reg16(reg16, _), Operand::Const(expr)) => {
-                Ok(Instruction::Ld(LdKind::Immediate16(reg16, expr)))
+            (Operand::Atom(AtomKind::Simple(SimpleOperand::A), _), src) => {
+                analyze_ld_a(src, Direction::IntoA)
+            }
+            (dest, Operand::Atom(AtomKind::Simple(SimpleOperand::A), _)) => {
+                analyze_ld_a(dest, Direction::FromA)
+            }
+            (Operand::Atom(AtomKind::Reg16(dest), _), Operand::Const(expr)) => {
+                Ok(Instruction::Ld(LdKind::Immediate16(dest, expr)))
             }
             _ => panic!(),
         }
@@ -243,7 +247,9 @@ impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
 fn analyze_branch_target<R>(target: Option<Operand<R>>) -> Option<TargetSelector<R>> {
     match target {
         Some(Operand::Const(expr)) => Some(TargetSelector::Expr(expr)),
-        Some(Operand::Simple(SimpleOperand::DerefHl, _)) => Some(TargetSelector::DerefHl),
+        Some(Operand::Atom(AtomKind::Simple(SimpleOperand::DerefHl), _)) => {
+            Some(TargetSelector::DerefHl)
+        }
         None => None,
         _ => panic!(),
     }
@@ -265,52 +271,58 @@ fn analyze_ld_a<R>(other: Operand<R>, direction: Direction) -> AnalysisResult<R>
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Operand<R> {
-    Simple(SimpleOperand, R),
-    Condition(Condition, R),
+enum Operand<R> {
+    Atom(AtomKind, R),
     Const(Expr<R>),
     Deref(Expr<R>),
-    Reg16(Reg16, R),
-    RegPair(RegPair, R),
+}
+
+#[derive(Debug, PartialEq)]
+enum AtomKind {
+    Simple(SimpleOperand),
+    Condition(Condition),
+    Reg16(Reg16),
+    RegPair(RegPair),
 }
 
 pub type AnalysisResult<R> = Result<Instruction<R>, Diagnostic<R>>;
 
 fn analyze_keyword_operand<R>(
-    keyword: (keyword::Operand, R),
+    (keyword, range): (keyword::Operand, R),
     context: &OperandAnalysisContext,
 ) -> Operand<R> {
     use self::OperandAnalysisContext::*;
     use frontend::syntax::keyword::Operand::*;
-    match keyword.0 {
-        A => Operand::Simple(SimpleOperand::A, keyword.1),
-        Af => Operand::RegPair(RegPair::Af, keyword.1),
-        B => Operand::Simple(SimpleOperand::B, keyword.1),
+    let kind = match keyword {
+        A => AtomKind::Simple(SimpleOperand::A),
+        Af => AtomKind::RegPair(RegPair::Af),
+        B => AtomKind::Simple(SimpleOperand::B),
         Bc => match *context {
-            Stack => Operand::RegPair(RegPair::Bc, keyword.1),
-            _ => Operand::Reg16(Reg16::Bc, keyword.1),
+            Stack => AtomKind::RegPair(RegPair::Bc),
+            _ => AtomKind::Reg16(Reg16::Bc),
         },
         C => match *context {
-            Branch => Operand::Condition(Condition::C, keyword.1),
-            _ => Operand::Simple(SimpleOperand::C, keyword.1),
+            Branch => AtomKind::Condition(Condition::C),
+            _ => AtomKind::Simple(SimpleOperand::C),
         },
-        D => Operand::Simple(SimpleOperand::D, keyword.1),
+        D => AtomKind::Simple(SimpleOperand::D),
         De => match *context {
-            Stack => Operand::RegPair(RegPair::De, keyword.1),
-            _ => Operand::Reg16(Reg16::De, keyword.1),
+            Stack => AtomKind::RegPair(RegPair::De),
+            _ => AtomKind::Reg16(Reg16::De),
         },
-        E => Operand::Simple(SimpleOperand::E, keyword.1),
-        H => Operand::Simple(SimpleOperand::H, keyword.1),
+        E => AtomKind::Simple(SimpleOperand::E),
+        H => AtomKind::Simple(SimpleOperand::H),
         Hl => match *context {
-            Stack => Operand::RegPair(RegPair::Hl, keyword.1),
-            _ => Operand::Reg16(Reg16::Hl, keyword.1),
+            Stack => AtomKind::RegPair(RegPair::Hl),
+            _ => AtomKind::Reg16(Reg16::Hl),
         },
-        L => Operand::Simple(SimpleOperand::L, keyword.1),
-        Nc => Operand::Condition(Condition::Nc, keyword.1),
-        Nz => Operand::Condition(Condition::Nz, keyword.1),
-        Sp => Operand::Reg16(Reg16::Sp, keyword.1),
-        Z => Operand::Condition(Condition::Z, keyword.1),
-    }
+        L => AtomKind::Simple(SimpleOperand::L),
+        Nc => AtomKind::Condition(Condition::Nc),
+        Nz => AtomKind::Condition(Condition::Nz),
+        Sp => AtomKind::Reg16(Reg16::Sp),
+        Z => AtomKind::Condition(Condition::Z),
+    };
+    Operand::Atom(kind, range)
 }
 
 #[derive(Debug, PartialEq)]
