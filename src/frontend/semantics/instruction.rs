@@ -114,6 +114,7 @@ impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
             }
             Dec => match self.operands.next() {
                 Some(Operand::Simple(operand, _)) => Ok(Instruction::Dec8(operand)),
+                Some(Operand::Reg16(operand, _)) => Ok(Instruction::Dec16(operand)),
                 _ => panic!(),
             },
             Branch(branch) => self.analyze_branch(branch),
@@ -565,6 +566,7 @@ mod tests {
         descriptors.extend(describe_add_hl_reg16_instructions());
         descriptors.extend(describe_branch_instuctions());
         descriptors.extend(describe_dec8_instructions());
+        descriptors.extend(describe_dec16_instructions());
         descriptors.push((
             (Command::Push, vec![literal(Bc)]),
             Instruction::Push(RegPair::Bc),
@@ -716,6 +718,18 @@ mod tests {
         )
     }
 
+    fn describe_dec16_instructions() -> Vec<InstructionDescriptor> {
+        REG16
+            .iter()
+            .map(|&reg16| {
+                (
+                    (Command::Dec, vec![reg16.into()]),
+                    Instruction::Dec16(reg16),
+                )
+            })
+            .collect()
+    }
+
     const ALU_OPERATIONS_WITH_A: &[AluOperation] = &[AluOperation::Add];
 
     const ALU_OPERATIONS_WITHOUT_A: &[AluOperation] =
@@ -732,7 +746,7 @@ mod tests {
         SimpleOperand::DerefHl,
     ];
 
-    const REG16: [Reg16; 2] = [Reg16::Bc, Reg16::Hl];
+    const REG16: &[Reg16] = &[Reg16::Bc, Reg16::Hl];
 
     const BRANCHES: [BranchKind; 2] = [BranchKind::Jp, BranchKind::Jr];
 
