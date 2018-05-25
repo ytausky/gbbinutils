@@ -322,7 +322,7 @@ enum Mnemonic {
     Push,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum ExplicitA {
     Required,
     NotAllowed,

@@ -16,6 +16,7 @@ pub enum Item<R> {
     Instruction(Instruction<R>),
 }
 
+#[derive(Clone, Copy)]
 enum Data {
     Byte(u8),
     Word(u16),
