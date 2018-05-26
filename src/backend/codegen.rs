@@ -1,4 +1,5 @@
-use backend::*;
+use Width;
+use instruction::*;
 
 pub trait Emit<R> {
     fn emit(&mut self, item: DataItem<R>);
@@ -80,7 +81,7 @@ fn encode_ld<R>(kind: LdKind<R>) -> Encoded<R> {
 }
 
 fn encode_simple_alu_operation<R>(operation: AluOperation, src: SimpleOperand) -> Encoded<R> {
-    use backend::AluOperation::*;
+    use instruction::AluOperation::*;
     let opcode_base = match operation {
         Add => 0x80,
         And => 0xa0,
@@ -91,7 +92,7 @@ fn encode_simple_alu_operation<R>(operation: AluOperation, src: SimpleOperand) -
 }
 
 fn encode_immediate_alu_operation<R>(operation: AluOperation, expr: Expr<R>) -> Encoded<R> {
-    use backend::AluOperation::*;
+    use instruction::AluOperation::*;
     Encoded::with(match operation {
         Add => 0xc6,
         And => 0xe6,
@@ -101,7 +102,7 @@ fn encode_immediate_alu_operation<R>(operation: AluOperation, expr: Expr<R>) -> 
 }
 
 fn encode_branch<R>(branch: Branch<R>, condition: Option<Condition>) -> Encoded<R> {
-    use backend::Branch::*;
+    use instruction::Branch::*;
     match branch {
         Jp(target) => Encoded::with(match condition {
             None => 0xc3,
@@ -118,7 +119,7 @@ fn encode_branch<R>(branch: Branch<R>, condition: Option<Condition>) -> Encoded<
 }
 
 fn encode_condition(condition: Condition) -> u8 {
-    use backend::Condition::*;
+    use instruction::Condition::*;
     (match condition {
         Nz => 0b00,
         Z => 0b01,
@@ -139,7 +140,7 @@ fn encode_ld_to_reg_from_reg<R>(dest: SimpleOperand, src: SimpleOperand) -> Enco
 }
 
 fn encode_simple_operand(register: SimpleOperand) -> u8 {
-    use backend::SimpleOperand::*;
+    use instruction::SimpleOperand::*;
     match register {
         A => 0b111,
         B => 0b000,
@@ -153,7 +154,7 @@ fn encode_simple_operand(register: SimpleOperand) -> u8 {
 }
 
 fn encode_reg16(reg16: Reg16) -> u8 {
-    use backend::Reg16::*;
+    use instruction::Reg16::*;
     (match reg16 {
         Bc => 0b00,
         De => 0b01,
@@ -163,7 +164,7 @@ fn encode_reg16(reg16: Reg16) -> u8 {
 }
 
 fn encode_reg_pair(reg_pair: RegPair) -> u8 {
-    use backend::RegPair::*;
+    use instruction::RegPair::*;
     match reg_pair {
         Bc => 0b00,
         De => 0b01,
@@ -177,8 +178,8 @@ mod tests {
     use super::*;
     use std::borrow::Borrow;
 
-    use backend::Branch::*;
-    use backend::Instruction::*;
+    use instruction::Branch::*;
+    use instruction::Instruction::*;
 
     impl<F: FnMut(DataItem<()>)> Emit<()> for F {
         fn emit(&mut self, item: DataItem<()>) {
@@ -268,7 +269,7 @@ mod tests {
 
     #[test]
     fn encode_ld_simple_immediate() {
-        use backend::SimpleOperand::*;
+        use instruction::SimpleOperand::*;
         let immediate = Expr::Literal(0x42, ());
         vec![
             (B, 0x06),
@@ -293,7 +294,7 @@ mod tests {
 
     #[test]
     fn encode_ld_immediate16() {
-        use backend::Reg16::*;
+        use instruction::Reg16::*;
         let immediate = Expr::Literal(0x1234, ());
         let test_cases = &[(Bc, 0x01), (De, 0x11), (Hl, 0x21), (Sp, 0x31)];
         for &(reg16, opcode) in test_cases {
@@ -324,7 +325,7 @@ mod tests {
 
     #[test]
     fn encode_alu_immediate() {
-        use backend::AluOperation::*;
+        use instruction::AluOperation::*;
         let expr = Expr::Literal(0x42, ());
         [(Add, 0xc6), (And, 0xe6), (Cp, 0xfe), (Xor, 0xee)]
             .iter()
@@ -341,7 +342,7 @@ mod tests {
 
     #[test]
     fn encode_simple_add() {
-        use backend::SimpleOperand::*;
+        use instruction::SimpleOperand::*;
         let src_and_opcode = vec![
             (B, 0x80),
             (C, 0x81),
@@ -357,7 +358,7 @@ mod tests {
 
     #[test]
     fn encode_simple_and() {
-        use backend::SimpleOperand::*;
+        use instruction::SimpleOperand::*;
         let src_and_opcode = vec![
             (B, 0xa0),
             (C, 0xa1),
@@ -373,7 +374,7 @@ mod tests {
 
     #[test]
     fn encode_simple_cp() {
-        use backend::SimpleOperand::*;
+        use instruction::SimpleOperand::*;
         let src_and_opcode = vec![
             (B, 0xb8),
             (C, 0xb9),
@@ -389,7 +390,7 @@ mod tests {
 
     #[test]
     fn encode_simple_xor() {
-        use backend::SimpleOperand::*;
+        use instruction::SimpleOperand::*;
         let src_and_opcode = vec![
             (B, 0xa8),
             (C, 0xa9),
@@ -411,7 +412,7 @@ mod tests {
 
     #[test]
     fn encode_jp() {
-        use backend::Condition::*;
+        use instruction::Condition::*;
         let target_expr = Expr::Literal(0x1234, ());
         let test_cases = &[
             (None, 0xc3),
@@ -438,7 +439,7 @@ mod tests {
 
     #[test]
     fn encode_jr() {
-        use backend::Condition::*;
+        use instruction::Condition::*;
         let target_expr = Expr::Literal(0x1234, ());
         let test_cases = &[
             (None, 0x18),
@@ -466,7 +467,7 @@ mod tests {
 
     #[test]
     fn encode_add_hl() {
-        use backend::Reg16::*;
+        use instruction::Reg16::*;
         [(Bc, 0x09), (De, 0x19), (Hl, 0x29), (Sp, 0x39)]
             .iter()
             .for_each(|(reg16, opcode)| {
@@ -476,7 +477,7 @@ mod tests {
 
     #[test]
     fn encode_dec8() {
-        use backend::SimpleOperand::*;
+        use instruction::SimpleOperand::*;
         [
             (B, 0x05),
             (C, 0x0d),
@@ -494,7 +495,7 @@ mod tests {
 
     #[test]
     fn encode_dec16() {
-        use backend::Reg16::*;
+        use instruction::Reg16::*;
         [(Bc, 0x0b), (De, 0x1b), (Hl, 0x2b), (Sp, 0x3b)]
             .iter()
             .for_each(|(reg16, opcode)| {
@@ -504,7 +505,7 @@ mod tests {
 
     #[test]
     fn encode_push() {
-        use backend::RegPair::*;
+        use instruction::RegPair::*;
         [(Bc, 0xc5), (De, 0xd5), (Hl, 0xe5), (Af, 0xf5)]
             .iter()
             .for_each(|(reg_pair, opcode)| {

@@ -247,6 +247,7 @@ mod tests {
     use diagnostics::Diagnostic;
     use frontend::syntax::{token, CommandContext, FileContext, MacroInvocationContext,
                            TokenSeqContext, keyword::Operand};
+    use instruction::Expr;
 
     struct TestFrontend(Vec<TestOperation>);
 
@@ -358,11 +359,11 @@ mod tests {
     }
 
     fn mk_byte(byte: &i32) -> backend::Item<()> {
-        backend::Item::Data(backend::Expr::Literal(*byte, ()), Width::Byte)
+        backend::Item::Data(Expr::Literal(*byte, ()), Width::Byte)
     }
 
     fn mk_word(word: &i32) -> backend::Item<()> {
-        backend::Item::Data(backend::Expr::Literal(*word, ()), Width::Word)
+        backend::Item::Data(Expr::Literal(*word, ()), Width::Word)
     }
 
     #[test]

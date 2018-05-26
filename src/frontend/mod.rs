@@ -6,6 +6,7 @@ mod syntax;
 use backend::*;
 use diagnostics::*;
 use frontend::syntax::*;
+use instruction::Expr;
 use session::{BorrowedComponents, ChunkId, Components, Session};
 
 use codebase::Codebase;
@@ -348,6 +349,7 @@ impl<'a, LRF: LexemeRefFactory> Iterator for TokenizedSrcIter<'a, LRF> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use instruction::Instruction;
 
     use std::{self, cell::RefCell};
 

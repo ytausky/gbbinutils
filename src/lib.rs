@@ -4,6 +4,7 @@ mod backend;
 mod codebase;
 mod diagnostics;
 mod frontend;
+mod instruction;
 mod session;
 
 #[derive(Clone, Copy, Debug, PartialEq)]

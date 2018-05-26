@@ -1,9 +1,9 @@
 use std::fmt::Debug;
 
-use backend::*;
 use diagnostics::{Diagnostic, Message};
 use frontend::ExprFactory;
 use frontend::syntax::{keyword, Literal, SynExpr};
+use instruction::*;
 
 struct OperandAnalyzer<'a, EF: 'a> {
     expr_factory: &'a mut EF,
