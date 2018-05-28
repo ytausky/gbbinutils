@@ -82,7 +82,7 @@ impl<'a, EF: ExprFactory> CommandAnalyzer<'a, EF> {
         let (mnemonic, mnemonic_ref) = (to_mnemonic(mnemonic.0), mnemonic.1);
         let context = match mnemonic {
             Mnemonic::Branch(_) => OperandAnalysisContext::Branch,
-            Mnemonic::Push | Mnemonic::Pop => OperandAnalysisContext::Stack,
+            Mnemonic::Stack(_) => OperandAnalysisContext::Stack,
             _ => OperandAnalysisContext::Other,
         };
         Analysis::new(
@@ -143,14 +143,7 @@ impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<
             Branch(branch) => self.analyze_branch(branch),
             Ld => self.analyze_ld(),
             Nullary(instruction) => Ok(instruction.into()),
-            Pop => match self.operands.next() {
-                Some(Operand::Atom(AtomKind::RegPair(dest), _)) => Ok(Instruction::Pop(dest)),
-                _ => panic!(),
-            },
-            Push => match self.operands.next() {
-                Some(Operand::Atom(AtomKind::RegPair(src), _)) => Ok(Instruction::Push(src)),
-                _ => panic!(),
-            },
+            Stack(operation) => self.analyze_stack_operation(operation),
         }?;
         let expected = self.operands.count;
         let extra = self.operands.count();
@@ -267,6 +260,18 @@ impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<
             _ => panic!(),
         }
     }
+
+    fn analyze_stack_operation(&mut self, operation: StackOperation) -> AnalysisResult<R> {
+        let reg_pair = match self.operands.next() {
+            Some(Operand::Atom(AtomKind::RegPair(reg_pair), _)) => reg_pair,
+            _ => panic!(),
+        };
+        let instruction_ctor = match operation {
+            StackOperation::Push => Instruction::Push,
+            StackOperation::Pop => Instruction::Pop,
+        };
+        Ok(instruction_ctor(reg_pair))
+    }
 }
 
 fn analyze_branch_target<R>(target: Option<Operand<R>>) -> Option<TargetSelector<R>> {
@@ -357,8 +362,7 @@ enum Mnemonic {
     Branch(BranchKind),
     Ld,
     Nullary(NullaryMnemonic),
-    Pop,
-    Push,
+    Stack(StackOperation),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -372,6 +376,12 @@ enum NullaryMnemonic {
     Halt,
     Nop,
     Stop,
+}
+
+#[derive(Debug, PartialEq)]
+enum StackOperation {
+    Push,
+    Pop
 }
 
 impl<R> From<NullaryMnemonic> for Instruction<R> {
@@ -407,8 +417,8 @@ fn to_mnemonic(command: keyword::Command) -> Mnemonic {
         Jr => Mnemonic::Branch(BranchKind::Jr),
         Ld => Mnemonic::Ld,
         Nop => Mnemonic::Nullary(NullaryMnemonic::Nop),
-        Pop => Mnemonic::Pop,
-        Push => Mnemonic::Push,
+        Pop => Mnemonic::Stack(StackOperation::Pop),
+        Push => Mnemonic::Stack(StackOperation::Push),
         Stop => Mnemonic::Nullary(NullaryMnemonic::Stop),
         Xor => Mnemonic::Alu(AluOperation::Xor, ExplicitA::NotAllowed),
         _ => panic!(),
