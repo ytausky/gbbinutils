@@ -9,6 +9,7 @@ pub enum Instruction<R> {
     Branch(Branch<R>, Option<Condition>),
     Ld(LdKind<R>),
     Nop,
+    Pop(RegPair),
     Push(RegPair),
     Stop,
 }

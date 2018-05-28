@@ -61,6 +61,7 @@ pub fn generate_code<R>(instruction: Instruction<R>) -> Encoded<R> {
             opcode: 0x10,
             immediate: Some(DataItem::Byte(0x00)),
         },
+        Pop(reg_pair) => Encoded::with(0xc1 | (encode_reg_pair(reg_pair) << 4)),
         Push(reg_pair) => Encoded::with(0xc5 | (encode_reg_pair(reg_pair) << 4)),
     }
 }
@@ -500,6 +501,16 @@ mod tests {
             .iter()
             .for_each(|(reg16, opcode)| {
                 test_instruction(Instruction::Dec16(*reg16), bytes([*opcode]))
+            })
+    }
+
+    #[test]
+    fn encode_pop() {
+        use instruction::RegPair::*;
+        [(Bc, 0xc1), (De, 0xd1), (Hl, 0xe1), (Af, 0xf1)]
+            .iter()
+            .for_each(|(reg_pair, opcode)| {
+                test_instruction(Instruction::Pop(*reg_pair), bytes([*opcode]))
             })
     }
 

@@ -243,6 +243,7 @@ const KEYWORDS: &[(&str, Keyword)] = &[
     ("nc", Keyword::Operand(Operand::Nc)),
     ("nop", Keyword::Command(Command::Nop)),
     ("nz", Keyword::Operand(Operand::Nz)),
+    ("pop", Keyword::Command(Command::Pop)),
     ("push", Keyword::Command(Command::Push)),
     ("sp", Keyword::Operand(Operand::Sp)),
     ("stop", Keyword::Command(Command::Stop)),

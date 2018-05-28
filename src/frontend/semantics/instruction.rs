@@ -82,7 +82,7 @@ impl<'a, EF: ExprFactory> CommandAnalyzer<'a, EF> {
         let (mnemonic, mnemonic_ref) = (to_mnemonic(mnemonic.0), mnemonic.1);
         let context = match mnemonic {
             Mnemonic::Branch(_) => OperandAnalysisContext::Branch,
-            Mnemonic::Push => OperandAnalysisContext::Stack,
+            Mnemonic::Push | Mnemonic::Pop => OperandAnalysisContext::Stack,
             _ => OperandAnalysisContext::Other,
         };
         Analysis::new(
@@ -120,6 +120,10 @@ impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
             Branch(branch) => self.analyze_branch(branch),
             Ld => self.analyze_ld(),
             Nullary(instruction) => self.analyze_nullary_instruction((instruction, mnemonic.1)),
+            Pop => match self.operands.next() {
+                Some(Operand::Atom(AtomKind::RegPair(dest), _)) => Ok(Instruction::Pop(dest)),
+                _ => panic!(),
+            },
             Push => match self.operands.next() {
                 Some(Operand::Atom(AtomKind::RegPair(src), _)) => Ok(Instruction::Push(src)),
                 _ => panic!(),
@@ -332,6 +336,7 @@ enum Mnemonic {
     Branch(BranchKind),
     Ld,
     Nullary(NullaryMnemonic),
+    Pop,
     Push,
 }
 
@@ -381,6 +386,7 @@ fn to_mnemonic(command: keyword::Command) -> Mnemonic {
         Jr => Mnemonic::Branch(BranchKind::Jr),
         Ld => Mnemonic::Ld,
         Nop => Mnemonic::Nullary(NullaryMnemonic::Nop),
+        Pop => Mnemonic::Pop,
         Push => Mnemonic::Push,
         Stop => Mnemonic::Nullary(NullaryMnemonic::Stop),
         Xor => Mnemonic::Alu(AluOperation::Xor, ExplicitA::NotAllowed),
@@ -492,6 +498,17 @@ mod tests {
         }
     }
 
+    impl From<RegPair> for SynExpr<String, Marking> {
+        fn from(reg_pair: RegPair) -> Self {
+            literal(match reg_pair {
+                RegPair::Bc => Bc,
+                RegPair::De => De,
+                RegPair::Hl => Hl,
+                RegPair::Af => Af,
+            })
+        }
+    }
+
     impl From<Condition> for SynExpr<String, Marking> {
         fn from(condition: Condition) -> Self {
             match condition {
@@ -579,11 +596,23 @@ mod tests {
         descriptors.extend(describe_branch_instuctions());
         descriptors.extend(describe_dec8_instructions());
         descriptors.extend(describe_dec16_instructions());
-        descriptors.push((
-            (Command::Push, vec![literal(Bc)]),
-            Instruction::Push(RegPair::Bc),
-        ));
+        descriptors.extend(describe_push_pop_instructions());
         descriptors
+    }
+
+    fn describe_push_pop_instructions() -> impl Iterator<Item = InstructionDescriptor> {
+        REG_PAIRS.iter().flat_map(|&reg_pair| {
+            vec![
+                (
+                    (Command::Push, vec![reg_pair.into()]),
+                    Instruction::Push(reg_pair),
+                ),
+                (
+                    (Command::Pop, vec![reg_pair.into()]),
+                    Instruction::Pop(reg_pair),
+                ),
+            ]
+        })
     }
 
     fn describe_nullary_instructions() -> impl Iterator<Item = InstructionDescriptor> {
@@ -759,6 +788,8 @@ mod tests {
     ];
 
     const REG16: &[Reg16] = &[Reg16::Bc, Reg16::Hl];
+
+    const REG_PAIRS: &[RegPair] = &[RegPair::Bc, RegPair::De, RegPair::Hl, RegPair::Af];
 
     const BRANCHES: [BranchKind; 2] = [BranchKind::Jp, BranchKind::Jr];
 

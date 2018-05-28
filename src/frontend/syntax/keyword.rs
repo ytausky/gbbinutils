@@ -13,6 +13,7 @@ pub enum Command {
     Jr,
     Ld,
     Nop,
+    Pop,
     Push,
     Stop,
     Xor,
