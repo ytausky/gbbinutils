@@ -67,7 +67,7 @@ where
 pub trait CommandContext<R> {
     type TokenSpec: TokenSpec;
     type Parent;
-    fn add_argument(&mut self, expr: SynExpr<Self::TokenSpec, R>);
+    fn add_argument(&mut self, expr: ParsedExpr<Self::TokenSpec, R>);
     fn exit(self) -> Self::Parent;
 }
 
@@ -100,14 +100,14 @@ impl<T: TokenSpec> ExprSpec for T {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum SynExpr<S: ExprSpec, R> {
+pub enum ParsedExpr<S: ExprSpec, R> {
     Ident((S::Ident, R)),
-    Deref(Box<SynExpr<S, R>>),
+    Deref(Box<ParsedExpr<S, R>>),
     Literal((S::Literal, R)),
 }
 
-impl<S: ExprSpec, R> SynExpr<S, R> {
+impl<S: ExprSpec, R> ParsedExpr<S, R> {
     pub fn deref(self) -> Self {
-        SynExpr::Deref(Box::new(self))
+        ParsedExpr::Deref(Box::new(self))
     }
 }

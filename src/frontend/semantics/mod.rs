@@ -1,6 +1,6 @@
 use Width;
 use backend;
-use frontend::syntax::{self, SynExpr, Token, TokenSpec, keyword::Command};
+use frontend::syntax::{self, ParsedExpr, Token, TokenSpec, keyword::Command};
 use frontend::{Literal, StrExprFactory};
 use session::{ChunkId, Session};
 
@@ -58,7 +58,7 @@ pub struct CommandActions<'a, F: Session + 'a> {
     parent: SemanticActions<'a, F>,
 }
 
-type CommandArgs<F> = Vec<SynExpr<String, <F as Session>::TokenRef>>;
+type CommandArgs<F> = Vec<ParsedExpr<String, <F as Session>::TokenRef>>;
 
 impl<'a, F: Session + 'a> CommandActions<'a, F> {
     fn new(name: (Command, F::TokenRef), parent: SemanticActions<'a, F>) -> CommandActions<'a, F> {
@@ -74,7 +74,7 @@ impl<'a, F: Session + 'a> syntax::CommandContext<F::TokenRef> for CommandActions
     type TokenSpec = String;
     type Parent = SemanticActions<'a, F>;
 
-    fn add_argument(&mut self, expr: SynExpr<String, F::TokenRef>) {
+    fn add_argument(&mut self, expr: ParsedExpr<String, F::TokenRef>) {
         self.args.push(expr)
     }
 
@@ -96,7 +96,7 @@ fn analyze_data<'a, S: Session + 'a>(
 ) {
     for arg in args {
         match arg {
-            SynExpr::Literal(literal) => {
+            ParsedExpr::Literal(literal) => {
                 use frontend::ExprFactory;
                 let expr = actions.expr_factory.mk_literal(literal);
                 actions.session.emit_item(backend::Item::Data(expr, width))
@@ -229,11 +229,11 @@ impl<'a, F: Session + 'a> syntax::TokenSeqContext<F::TokenRef> for MacroArgActio
     }
 }
 
-fn reduce_include<R>(mut arguments: Vec<SynExpr<String, R>>) -> ChunkId<R> {
+fn reduce_include<R>(mut arguments: Vec<ParsedExpr<String, R>>) -> ChunkId<R> {
     assert_eq!(arguments.len(), 1);
     let path = arguments.pop().unwrap();
     match path {
-        SynExpr::Literal((Literal::String(path_str), token_ref)) => {
+        ParsedExpr::Literal((Literal::String(path_str), token_ref)) => {
             ChunkId::File((path_str, Some(token_ref)))
         }
         _ => panic!(),
@@ -303,7 +303,7 @@ mod tests {
         let filename = "file.asm";
         let actions = collect_semantic_actions(|actions| {
             let mut command = actions.enter_command((Command::Include, ()));
-            let expr = SynExpr::Literal((Literal::String(filename.to_string()), ()));
+            let expr = ParsedExpr::Literal((Literal::String(filename.to_string()), ()));
             command.add_argument(expr);
             command.exit();
         });
@@ -355,8 +355,8 @@ mod tests {
         )
     }
 
-    fn mk_literal(n: i32) -> SynExpr<String, ()> {
-        SynExpr::Literal((Literal::Number(n), ()))
+    fn mk_literal(n: i32) -> ParsedExpr<String, ()> {
+        ParsedExpr::Literal((Literal::Number(n), ()))
     }
 
     fn mk_byte(byte: &i32) -> backend::Item<()> {
@@ -443,7 +443,7 @@ mod tests {
         let actions = collect_semantic_actions(|actions| {
             let mut command_context = actions.enter_command((Command::Nop, ()));
             let literal_a = Literal::Operand(Operand::A);
-            command_context.add_argument(SynExpr::Literal((literal_a, ())));
+            command_context.add_argument(ParsedExpr::Literal((literal_a, ())));
             command_context.exit();
         });
         assert_eq!(

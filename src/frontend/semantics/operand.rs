@@ -1,5 +1,5 @@
 use frontend::ExprFactory;
-use frontend::syntax::{keyword, Literal, SynExpr};
+use frontend::syntax::{keyword, Literal, ParsedExpr};
 use instruction::{Condition, Expr, Reg16, RegPair, SimpleOperand};
 
 #[derive(Debug, PartialEq)]
@@ -34,13 +34,13 @@ impl<'a, EF: 'a + ExprFactory> OperandAnalyzer<'a, EF> {
 
     pub fn analyze_operand<R>(
         &mut self,
-        expr: SynExpr<String, R>,
+        expr: ParsedExpr<String, R>,
         context: &Context,
     ) -> Operand<R> {
         match expr {
-            SynExpr::Deref(expr) => self.analyze_deref_operand(*expr),
-            SynExpr::Ident(ident) => self.analyze_ident_operand(ident),
-            SynExpr::Literal(literal) => self.analyze_literal_operand(literal, context),
+            ParsedExpr::Deref(expr) => self.analyze_deref_operand(*expr),
+            ParsedExpr::Ident(ident) => self.analyze_ident_operand(ident),
+            ParsedExpr::Literal(literal) => self.analyze_literal_operand(literal, context),
         }
     }
 
@@ -60,10 +60,10 @@ impl<'a, EF: 'a + ExprFactory> OperandAnalyzer<'a, EF> {
         }
     }
 
-    fn analyze_deref_operand<R>(&mut self, expr: SynExpr<String, R>) -> Operand<R> {
+    fn analyze_deref_operand<R>(&mut self, expr: ParsedExpr<String, R>) -> Operand<R> {
         match expr {
-            SynExpr::Ident(ident) => Operand::Deref(self.expr_factory.mk_symbol(ident)),
-            SynExpr::Literal((Literal::Operand(keyword::Operand::Hl), range)) => {
+            ParsedExpr::Ident(ident) => Operand::Deref(self.expr_factory.mk_symbol(ident)),
+            ParsedExpr::Literal((Literal::Operand(keyword::Operand::Hl), range)) => {
                 Operand::Atom(AtomKind::Simple(SimpleOperand::DerefHl), range)
             }
             _ => panic!(),

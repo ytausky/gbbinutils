@@ -216,7 +216,7 @@ impl<S: TokenSpec, T, I: Iterator<Item = (Token<S>, T)>> Parser<I> {
         actions
     }
 
-    fn parse_expression(&mut self) -> SynExpr<S, T> {
+    fn parse_expression(&mut self) -> ParsedExpr<S, T> {
         if self.lookahead() == Some(Token::OpeningParenthesis) {
             self.parse_deref_expression()
         } else {
@@ -224,18 +224,18 @@ impl<S: TokenSpec, T, I: Iterator<Item = (Token<S>, T)>> Parser<I> {
         }
     }
 
-    fn parse_deref_expression(&mut self) -> SynExpr<S, T> {
+    fn parse_deref_expression(&mut self) -> ParsedExpr<S, T> {
         self.expect(&Some(Token::OpeningParenthesis));
         let expr = self.parse_expression();
         self.expect(&Some(Token::ClosingParenthesis));
         expr.deref()
     }
 
-    fn parse_atomic_expr(&mut self) -> SynExpr<S, T> {
+    fn parse_atomic_expr(&mut self) -> ParsedExpr<S, T> {
         let (token, token_ref) = self.bump();
         match token {
-            Token::Ident(ident) => SynExpr::Ident((ident, token_ref)),
-            Token::Literal(literal) => SynExpr::Literal((literal, token_ref)),
+            Token::Ident(ident) => ParsedExpr::Ident((ident, token_ref)),
+            Token::Literal(literal) => ParsedExpr::Literal((literal, token_ref)),
             _ => panic!(),
         }
     }
@@ -297,7 +297,7 @@ mod tests {
 
     type TestToken = Token<TestTokenSpec>;
     type TestTrackingData = usize;
-    type TestExpr = syntax::SynExpr<TestTokenSpec, TestTrackingData>;
+    type TestExpr = syntax::ParsedExpr<TestTokenSpec, TestTrackingData>;
 
     impl<'a> syntax::FileContext<TestTokenSpec, TestTrackingData> for &'a mut TestContext {
         type CommandContext = Self;
@@ -429,7 +429,7 @@ mod tests {
     }
 
     fn ident(identifier: <TestTokenSpec as TokenSpec>::Ident) -> TestExpr {
-        syntax::SynExpr::Ident((identifier, identifier))
+        syntax::ParsedExpr::Ident((identifier, identifier))
     }
 
     #[test]
@@ -441,7 +441,7 @@ mod tests {
     }
 
     fn atom(n: <TestTokenSpec as TokenSpec>::Literal) -> TestExpr {
-        syntax::SynExpr::Literal((n, n))
+        syntax::ParsedExpr::Literal((n, n))
     }
 
     #[test]
@@ -550,7 +550,7 @@ mod tests {
     }
 
     fn deref(expr: TestExpr) -> TestExpr {
-        syntax::SynExpr::Deref(Box::new(expr))
+        syntax::ParsedExpr::Deref(Box::new(expr))
     }
 
     #[test]

@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use diagnostics::{Diagnostic, Message};
 use frontend::ExprFactory;
 use frontend::semantics::operand::{AtomKind, Context, Operand, OperandAnalyzer, OperandCounter};
-use frontend::syntax::{keyword, SynExpr};
+use frontend::syntax::{keyword, ParsedExpr};
 use instruction::*;
 
 pub struct CommandAnalyzer<'a, EF: 'a> {
@@ -23,7 +23,7 @@ impl<'a, EF: ExprFactory> CommandAnalyzer<'a, EF> {
         operands: I,
     ) -> AnalysisResult<R>
     where
-        I: IntoIterator<Item = SynExpr<String, R>>,
+        I: IntoIterator<Item = ParsedExpr<String, R>>,
         R: Clone + Debug + PartialEq,
     {
         let (mnemonic, mnemonic_ref) = (to_mnemonic(mnemonic.0), mnemonic.1);
@@ -327,20 +327,22 @@ mod tests {
         fn mark(self) -> Self;
     }
 
-    type Input = SynExpr<String, Marking>;
+    type Input = ParsedExpr<String, Marking>;
 
-    impl<S: ::frontend::syntax::StringRef> Mark for SynExpr<S, Marking> {
+    impl<S: ::frontend::syntax::StringRef> Mark for ParsedExpr<S, Marking> {
         fn mark(self) -> Self {
             match self {
-                SynExpr::Ident((ident, _)) => SynExpr::Ident((ident, Marking::Special)),
-                SynExpr::Deref(expr) => SynExpr::Deref(Box::new(expr.mark())),
-                SynExpr::Literal((literal, _)) => SynExpr::Literal((literal, Marking::Special)),
+                ParsedExpr::Ident((ident, _)) => ParsedExpr::Ident((ident, Marking::Special)),
+                ParsedExpr::Deref(expr) => ParsedExpr::Deref(Box::new(expr.mark())),
+                ParsedExpr::Literal((literal, _)) => {
+                    ParsedExpr::Literal((literal, Marking::Special))
+                }
             }
         }
     }
 
     fn literal(keyword: keyword::Operand) -> Input {
-        SynExpr::Literal((Literal::Operand(keyword), Marking::Normal))
+        ParsedExpr::Literal((Literal::Operand(keyword), Marking::Normal))
     }
 
     fn symbol(ident: &str) -> Expr<Marking> {
@@ -398,7 +400,7 @@ mod tests {
         }
     }
 
-    impl From<Reg16> for SynExpr<String, Marking> {
+    impl From<Reg16> for ParsedExpr<String, Marking> {
         fn from(reg16: Reg16) -> Self {
             match reg16 {
                 Reg16::Bc => literal(Bc),
@@ -409,7 +411,7 @@ mod tests {
         }
     }
 
-    impl From<RegPair> for SynExpr<String, Marking> {
+    impl From<RegPair> for ParsedExpr<String, Marking> {
         fn from(reg_pair: RegPair) -> Self {
             literal(match reg_pair {
                 RegPair::Bc => Bc,
@@ -420,7 +422,7 @@ mod tests {
         }
     }
 
-    impl From<Condition> for SynExpr<String, Marking> {
+    impl From<Condition> for ParsedExpr<String, Marking> {
         fn from(condition: Condition) -> Self {
             match condition {
                 Condition::C => literal(C),
@@ -431,15 +433,15 @@ mod tests {
         }
     }
 
-    impl<'a> From<&'a str> for SynExpr<String, Marking> {
+    impl<'a> From<&'a str> for ParsedExpr<String, Marking> {
         fn from(ident: &'a str) -> Self {
-            SynExpr::Ident((ident.to_string(), Marking::Normal))
+            ParsedExpr::Ident((ident.to_string(), Marking::Normal))
         }
     }
 
-    impl From<i32> for SynExpr<String, Marking> {
+    impl From<i32> for ParsedExpr<String, Marking> {
         fn from(n: i32) -> Self {
-            SynExpr::Literal((Literal::Number(n), Marking::Normal))
+            ParsedExpr::Literal((Literal::Number(n), Marking::Normal))
         }
     }
 
@@ -457,17 +459,25 @@ mod tests {
     #[test]
     fn analyze_ld_deref_symbol_a() {
         let ident = "ident";
-        analyze(Command::Ld, vec![SynExpr::from(ident).deref(), literal(A)]).expect_instruction(
-            Instruction::Ld(LdKind::ImmediateAddr(symbol(ident), Direction::FromA)),
-        )
+        analyze(
+            Command::Ld,
+            vec![ParsedExpr::from(ident).deref(), literal(A)],
+        ).expect_instruction(Instruction::Ld(LdKind::ImmediateAddr(
+            symbol(ident),
+            Direction::FromA,
+        )))
     }
 
     #[test]
     fn analyze_ld_a_deref_symbol() {
         let ident = "ident";
-        analyze(Command::Ld, vec![literal(A), SynExpr::from(ident).deref()]).expect_instruction(
-            Instruction::Ld(LdKind::ImmediateAddr(symbol(ident), Direction::IntoA)),
-        )
+        analyze(
+            Command::Ld,
+            vec![literal(A), ParsedExpr::from(ident).deref()],
+        ).expect_instruction(Instruction::Ld(LdKind::ImmediateAddr(
+            symbol(ident),
+            Direction::IntoA,
+        )))
     }
 
     #[test]
@@ -482,7 +492,7 @@ mod tests {
         test_cp_const_analysis(n.into(), n.into())
     }
 
-    fn test_cp_const_analysis(parsed: SynExpr<String, Marking>, expr: Expr<Marking>) {
+    fn test_cp_const_analysis(parsed: ParsedExpr<String, Marking>, expr: Expr<Marking>) {
         analyze(Command::Cp, Some(parsed)).expect_instruction(Instruction::Alu(
             AluOperation::Cp,
             AluSource::Immediate(expr),
@@ -566,7 +576,7 @@ mod tests {
     fn describe_ld_simple_immediate(dest: SimpleOperand) -> InstructionDescriptor {
         let n = 0x12;
         (
-            (Command::Ld, vec![SynExpr::from(dest), n.into()]),
+            (Command::Ld, vec![ParsedExpr::from(dest), n.into()]),
             Instruction::Ld(LdKind::Immediate8(dest, n.into())),
         )
     }
@@ -578,7 +588,7 @@ mod tests {
     fn describe_ld_reg16_immediate(dest: Reg16) -> InstructionDescriptor {
         let value = "value";
         (
-            (Command::Ld, vec![SynExpr::from(dest), value.into()]),
+            (Command::Ld, vec![ParsedExpr::from(dest), value.into()]),
             Instruction::Ld(LdKind::Immediate16(dest, symbol(value))),
         )
     }
@@ -613,7 +623,7 @@ mod tests {
         operand: SimpleOperand,
     ) -> InstructionDescriptor {
         (
-            (Command::from(operation), vec![SynExpr::from(operand)]),
+            (Command::from(operation), vec![ParsedExpr::from(operand)]),
             Instruction::Alu(operation, AluSource::Simple(operand)),
         )
     }
@@ -644,7 +654,7 @@ mod tests {
         let ident = "ident";
         let mut operands = Vec::new();
         if let Some(condition) = condition {
-            operands.push(SynExpr::from(condition))
+            operands.push(ParsedExpr::from(condition))
         };
         operands.push(ident.into());
         (
@@ -740,7 +750,7 @@ mod tests {
     fn analyze<C, I>(mnemonic: C, operands: I) -> Result
     where
         C: ToMarked<Command>,
-        I: IntoIterator<Item = SynExpr<String, Marking>>,
+        I: IntoIterator<Item = ParsedExpr<String, Marking>>,
     {
         use frontend::StrExprFactory;
         let mut expr_factory = StrExprFactory::new();
