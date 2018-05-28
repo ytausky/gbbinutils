@@ -5,6 +5,7 @@ use frontend::{Literal, StrExprFactory};
 use session::{ChunkId, Session};
 
 mod instruction;
+mod operand;
 
 pub struct SemanticActions<'a, F: Session + 'a> {
     session: &'a mut F,

@@ -2,62 +2,9 @@ use std::fmt::Debug;
 
 use diagnostics::{Diagnostic, Message};
 use frontend::ExprFactory;
-use frontend::syntax::{keyword, Literal, SynExpr};
+use frontend::semantics::operand::{AtomKind, Context, Operand, OperandAnalyzer, OperandCounter};
+use frontend::syntax::{keyword, SynExpr};
 use instruction::*;
-
-struct OperandAnalyzer<'a, EF: 'a> {
-    expr_factory: &'a mut EF,
-}
-
-enum OperandAnalysisContext {
-    Branch,
-    Stack,
-    Other,
-}
-
-impl<'a, EF: 'a + ExprFactory> OperandAnalyzer<'a, EF> {
-    fn new(expr_factory: &'a mut EF) -> OperandAnalyzer<'a, EF> {
-        OperandAnalyzer { expr_factory }
-    }
-
-    fn analyze_operand<R>(
-        &mut self,
-        expr: SynExpr<String, R>,
-        context: &OperandAnalysisContext,
-    ) -> Operand<R> {
-        match expr {
-            SynExpr::Deref(expr) => self.analyze_deref_operand(*expr),
-            SynExpr::Ident(ident) => self.analyze_ident_operand(ident),
-            SynExpr::Literal(literal) => self.analyze_literal_operand(literal, context),
-        }
-    }
-
-    fn analyze_ident_operand<R>(&mut self, ident: (String, R)) -> Operand<R> {
-        Operand::Const(self.expr_factory.mk_symbol(ident))
-    }
-
-    fn analyze_literal_operand<R>(
-        &mut self,
-        literal: (Literal<String>, R),
-        context: &OperandAnalysisContext,
-    ) -> Operand<R> {
-        match literal.0 {
-            Literal::Operand(operand) => analyze_keyword_operand((operand, literal.1), context),
-            Literal::Number(_) => Operand::Const(self.expr_factory.mk_literal(literal)),
-            _ => panic!(),
-        }
-    }
-
-    fn analyze_deref_operand<R>(&mut self, expr: SynExpr<String, R>) -> Operand<R> {
-        match expr {
-            SynExpr::Ident(ident) => Operand::Deref(self.expr_factory.mk_symbol(ident)),
-            SynExpr::Literal((Literal::Operand(keyword::Operand::Hl), range)) => {
-                Operand::Atom(AtomKind::Simple(SimpleOperand::DerefHl), range)
-            }
-            _ => panic!(),
-        }
-    }
-}
 
 pub struct CommandAnalyzer<'a, EF: 'a> {
     operand_analyzer: OperandAnalyzer<'a, EF>,
@@ -81,9 +28,9 @@ impl<'a, EF: ExprFactory> CommandAnalyzer<'a, EF> {
     {
         let (mnemonic, mnemonic_ref) = (to_mnemonic(mnemonic.0), mnemonic.1);
         let context = match mnemonic {
-            Mnemonic::Branch(_) => OperandAnalysisContext::Branch,
-            Mnemonic::Stack(_) => OperandAnalysisContext::Stack,
-            _ => OperandAnalysisContext::Other,
+            Mnemonic::Branch(_) => Context::Branch,
+            Mnemonic::Stack(_) => Context::Stack,
+            _ => Context::Other,
         };
         Analysis::new(
             operands
@@ -95,27 +42,6 @@ impl<'a, EF: ExprFactory> CommandAnalyzer<'a, EF> {
 
 struct Analysis<I> {
     operands: OperandCounter<I>,
-}
-
-struct OperandCounter<I> {
-    operands: I,
-    count: usize,
-}
-
-impl<I> OperandCounter<I> {
-    fn new(operands: I) -> OperandCounter<I> {
-        OperandCounter { operands, count: 0 }
-    }
-}
-
-impl<I: Iterator> Iterator for OperandCounter<I> {
-    type Item = I::Item;
-    fn next(&mut self) -> Option<Self::Item> {
-        self.operands.next().map(|x| {
-            self.count += 1;
-            x
-        })
-    }
 }
 
 impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
@@ -149,7 +75,7 @@ impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<
             Nullary(instruction) => Ok(instruction.into()),
             Stack(operation) => self.analyze_stack_operation(operation),
         }?;
-        let expected = self.operands.count;
+        let expected = self.operands.seen();
         let extra = self.operands.count();
         let actual = expected + extra;
         if actual == expected {
@@ -304,60 +230,7 @@ fn analyze_ld_a<R>(other: Operand<R>, direction: Direction) -> AnalysisResult<R>
     }
 }
 
-#[derive(Debug, PartialEq)]
-enum Operand<R> {
-    Atom(AtomKind, R),
-    Const(Expr<R>),
-    Deref(Expr<R>),
-}
-
-#[derive(Debug, PartialEq)]
-enum AtomKind {
-    Simple(SimpleOperand),
-    Condition(Condition),
-    Reg16(Reg16),
-    RegPair(RegPair),
-}
-
 pub type AnalysisResult<R> = Result<Instruction<R>, Diagnostic<R>>;
-
-fn analyze_keyword_operand<R>(
-    (keyword, range): (keyword::Operand, R),
-    context: &OperandAnalysisContext,
-) -> Operand<R> {
-    use self::OperandAnalysisContext::*;
-    use frontend::syntax::keyword::Operand::*;
-    let kind = match keyword {
-        A => AtomKind::Simple(SimpleOperand::A),
-        Af => AtomKind::RegPair(RegPair::Af),
-        B => AtomKind::Simple(SimpleOperand::B),
-        Bc => match *context {
-            Stack => AtomKind::RegPair(RegPair::Bc),
-            _ => AtomKind::Reg16(Reg16::Bc),
-        },
-        C => match *context {
-            Branch => AtomKind::Condition(Condition::C),
-            _ => AtomKind::Simple(SimpleOperand::C),
-        },
-        D => AtomKind::Simple(SimpleOperand::D),
-        De => match *context {
-            Stack => AtomKind::RegPair(RegPair::De),
-            _ => AtomKind::Reg16(Reg16::De),
-        },
-        E => AtomKind::Simple(SimpleOperand::E),
-        H => AtomKind::Simple(SimpleOperand::H),
-        Hl => match *context {
-            Stack => AtomKind::RegPair(RegPair::Hl),
-            _ => AtomKind::Reg16(Reg16::Hl),
-        },
-        L => AtomKind::Simple(SimpleOperand::L),
-        Nc => AtomKind::Condition(Condition::Nc),
-        Nz => AtomKind::Condition(Condition::Nz),
-        Sp => AtomKind::Reg16(Reg16::Sp),
-        Z => AtomKind::Condition(Condition::Z),
-    };
-    Operand::Atom(kind, range)
-}
 
 #[derive(Debug, PartialEq)]
 enum Mnemonic {
@@ -434,6 +307,7 @@ fn to_mnemonic(command: keyword::Command) -> Mnemonic {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use frontend::syntax::Literal;
 
     use self::keyword::{Command, Operand::*};
 
