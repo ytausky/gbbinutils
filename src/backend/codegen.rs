@@ -54,6 +54,7 @@ pub fn generate_code<R>(instruction: Instruction<R>) -> Encoded<R> {
         Dec8(simple_operand) => Encoded::with(0x05 | (encode_simple_operand(simple_operand) << 3)),
         Dec16(reg16) => Encoded::with(0x0b | encode_reg16(reg16)),
         Halt => Encoded::with(0x76),
+        Inc16(reg16) => Encoded::with(0x03 | encode_reg16(reg16)),
         JpDerefHl => Encoded::with(0xe9),
         Ld(kind) => encode_ld(kind),
         Nop => Encoded::with(0x00),
@@ -491,6 +492,16 @@ mod tests {
         ].iter()
             .for_each(|(simple_operand, opcode)| {
                 test_instruction(Instruction::Dec8(*simple_operand), bytes([*opcode]))
+            })
+    }
+
+    #[test]
+    fn encode_inc16() {
+        use instruction::Reg16::*;
+        [(Bc, 0x03), (De, 0x13), (Hl, 0x23), (Sp, 0x33)]
+            .iter()
+            .for_each(|(reg16, opcode)| {
+                test_instruction(Instruction::Inc16(*reg16), bytes([*opcode]))
             })
     }
 

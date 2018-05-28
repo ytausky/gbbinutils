@@ -8,6 +8,7 @@ pub enum Command {
     Dec,
     Dw,
     Halt,
+    Inc,
     Include,
     Jp,
     Jr,

@@ -141,6 +141,10 @@ impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<
                 _ => panic!(),
             },
             Branch(branch) => self.analyze_branch(branch),
+            Inc => match self.operands.next() {
+                Some(Operand::Atom(AtomKind::Reg16(reg16), _)) => Ok(Instruction::Inc16(reg16)),
+                _ => panic!(),
+            },
             Ld => self.analyze_ld(),
             Nullary(instruction) => Ok(instruction.into()),
             Stack(operation) => self.analyze_stack_operation(operation),
@@ -360,6 +364,7 @@ enum Mnemonic {
     Alu(AluOperation, ExplicitA),
     Dec,
     Branch(BranchKind),
+    Inc,
     Ld,
     Nullary(NullaryMnemonic),
     Stack(StackOperation),
@@ -381,7 +386,7 @@ enum NullaryMnemonic {
 #[derive(Debug, PartialEq)]
 enum StackOperation {
     Push,
-    Pop
+    Pop,
 }
 
 impl<R> From<NullaryMnemonic> for Instruction<R> {
@@ -413,6 +418,7 @@ fn to_mnemonic(command: keyword::Command) -> Mnemonic {
         Cp => Mnemonic::Alu(AluOperation::Cp, ExplicitA::NotAllowed),
         Dec => Mnemonic::Dec,
         Halt => Mnemonic::Nullary(NullaryMnemonic::Halt),
+        Inc => Mnemonic::Inc,
         Jp => Mnemonic::Branch(BranchKind::Jp),
         Jr => Mnemonic::Branch(BranchKind::Jr),
         Ld => Mnemonic::Ld,
@@ -626,6 +632,7 @@ mod tests {
         descriptors.extend(describe_add_hl_reg16_instructions());
         descriptors.extend(describe_branch_instuctions());
         descriptors.extend(describe_dec8_instructions());
+        descriptors.extend(describe_inc16_instructions());
         descriptors.extend(describe_dec16_instructions());
         descriptors.extend(describe_push_pop_instructions());
         descriptors
@@ -788,6 +795,18 @@ mod tests {
             (Command::Dec, vec![operand.into()]),
             Instruction::Dec8(operand),
         )
+    }
+
+    fn describe_inc16_instructions() -> Vec<InstructionDescriptor> {
+        REG16
+            .iter()
+            .map(|&reg16| {
+                (
+                    (Command::Inc, vec![reg16.into()]),
+                    Instruction::Inc16(reg16),
+                )
+            })
+            .collect()
     }
 
     fn describe_dec16_instructions() -> Vec<InstructionDescriptor> {
