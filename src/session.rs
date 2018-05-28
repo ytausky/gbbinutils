@@ -2,7 +2,7 @@ use std::{fmt, marker, borrow::{Borrow, BorrowMut}};
 use {backend, diagnostics, frontend};
 
 pub trait Session {
-    type TokenRef: fmt::Debug + PartialEq;
+    type TokenRef: Clone + fmt::Debug + PartialEq;
     fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::TokenRef>);
     fn emit_diagnostic(&mut self, diagnostic: diagnostics::Diagnostic<Self::TokenRef>);
     fn emit_item(&mut self, item: backend::Item<Self::TokenRef>);

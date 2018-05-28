@@ -108,7 +108,7 @@ impl ExprFactory for StrExprFactory {
 }
 
 pub trait Frontend {
-    type TokenRef: Debug + PartialEq;
+    type TokenRef: Clone + Debug + PartialEq;
     fn analyze_chunk(
         &mut self,
         chunk_id: ChunkId<Self::TokenRef>,

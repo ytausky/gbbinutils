@@ -77,7 +77,7 @@ impl<'a, EF: ExprFactory> CommandAnalyzer<'a, EF> {
     ) -> AnalysisResult<R>
     where
         I: IntoIterator<Item = SynExpr<String, R>>,
-        R: Debug + PartialEq,
+        R: Clone + Debug + PartialEq,
     {
         let (mnemonic, mnemonic_ref) = (to_mnemonic(mnemonic.0), mnemonic.1);
         let context = match mnemonic {
@@ -94,23 +94,46 @@ impl<'a, EF: ExprFactory> CommandAnalyzer<'a, EF> {
 }
 
 struct Analysis<I> {
-    operands: I,
+    operands: OperandCounter<I>,
 }
 
-impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
+struct OperandCounter<I> {
+    operands: I,
+    count: usize,
+}
+
+impl<I> OperandCounter<I> {
+    fn new(operands: I) -> OperandCounter<I> {
+        OperandCounter { operands, count: 0 }
+    }
+}
+
+impl<I: Iterator> Iterator for OperandCounter<I> {
+    type Item = I::Item;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.operands.next().map(|x| {
+            self.count += 1;
+            x
+        })
+    }
+}
+
+impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
     fn new(operands: I) -> Analysis<I> {
-        Analysis { operands }
+        Analysis {
+            operands: OperandCounter::new(operands),
+        }
     }
 
-    fn run(mut self, mnemonic: (Mnemonic, R)) -> AnalysisResult<R> {
+    fn run(mut self, (mnemonic, range): (Mnemonic, R)) -> AnalysisResult<R> {
         use self::Mnemonic::*;
-        match mnemonic.0 {
+        let instruction = match mnemonic {
             Alu(AluOperation::Add, explicit_a) => {
-                self.analyze_add_instruction(mnemonic.1, explicit_a)
+                self.analyze_add_instruction(range.clone(), explicit_a)
             }
             Alu(operation, explicit_a) => {
                 let first_operand = self.operands.next();
-                self.analyze_alu_instruction((operation, mnemonic.1), explicit_a, first_operand)
+                self.analyze_alu_instruction((operation, range.clone()), explicit_a, first_operand)
             }
             Dec => match self.operands.next() {
                 Some(Operand::Atom(AtomKind::Simple(operand), _)) => Ok(Instruction::Dec8(operand)),
@@ -119,7 +142,7 @@ impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
             },
             Branch(branch) => self.analyze_branch(branch),
             Ld => self.analyze_ld(),
-            Nullary(instruction) => self.analyze_nullary_instruction((instruction, mnemonic.1)),
+            Nullary(instruction) => Ok(instruction.into()),
             Pop => match self.operands.next() {
                 Some(Operand::Atom(AtomKind::RegPair(dest), _)) => Ok(Instruction::Pop(dest)),
                 _ => panic!(),
@@ -128,6 +151,17 @@ impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
                 Some(Operand::Atom(AtomKind::RegPair(src), _)) => Ok(Instruction::Push(src)),
                 _ => panic!(),
             },
+        }?;
+        let expected = self.operands.count;
+        let extra = self.operands.count();
+        let actual = expected + extra;
+        if actual == expected {
+            Ok(instruction)
+        } else {
+            Err(Diagnostic::new(
+                Message::OperandCount { actual, expected },
+                range,
+            ))
         }
     }
 
@@ -207,19 +241,6 @@ impl<'a, R: Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
             )
         } else {
             (None, analyze_branch_target(first_operand))
-        }
-    }
-
-    fn analyze_nullary_instruction(&mut self, mnemonic: (NullaryMnemonic, R)) -> AnalysisResult<R> {
-        match self.operands.by_ref().count() {
-            0 => Ok(mnemonic.0.into()),
-            n => Err(Diagnostic::new(
-                Message::OperandCount {
-                    actual: n,
-                    expected: 0,
-                },
-                mnemonic.1,
-            )),
         }
     }
 
@@ -832,6 +853,17 @@ mod tests {
                 expected: 0,
             },
         )
+    }
+
+    #[test]
+    fn analyze_add_a_a_a() {
+        analyze(
+            (Command::Add, Marking::Special),
+            vec![A, A, A].into_iter().map(|a| literal(a)),
+        ).expect_diagnostic(Message::OperandCount {
+            actual: 3,
+            expected: 2,
+        })
     }
 
     #[test]
