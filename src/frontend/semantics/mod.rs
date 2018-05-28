@@ -95,14 +95,13 @@ fn analyze_data<'a, S: Session + 'a>(
     actions: &mut SemanticActions<'a, S>,
 ) {
     for arg in args {
-        match arg {
-            ParsedExpr::Literal(literal) => {
-                use frontend::ExprFactory;
-                let expr = actions.expr_factory.mk_literal(literal);
-                actions.session.emit_item(backend::Item::Data(expr, width))
-            }
+        use frontend::ExprFactory;
+        let expr = match arg {
+            ParsedExpr::Literal(literal) => actions.expr_factory.mk_literal(literal),
+            ParsedExpr::Ident(ident) => actions.expr_factory.mk_symbol(ident),
             _ => panic!(),
-        }
+        };
+        actions.session.emit_item(backend::Item::Data(expr, width))
     }
 }
 
@@ -353,6 +352,25 @@ mod tests {
                 .map(TestOperation::EmitItem)
                 .collect::<Vec<_>>()
         )
+    }
+
+    #[test]
+    fn emit_label_word() {
+        let label = "my_label";
+        let actions = collect_semantic_actions(|actions| {
+            let mut command = actions.enter_command((Command::Dw, ()));
+            command.add_argument(ParsedExpr::Ident((label.to_string(), ())));
+            command.exit();
+        });
+        assert_eq!(
+            actions,
+            [
+                TestOperation::EmitItem(backend::Item::Data(
+                    Expr::Symbol(label.to_string(), ()),
+                    Width::Word
+                ))
+            ]
+        );
     }
 
     fn mk_literal(n: i32) -> ParsedExpr<String, ()> {
