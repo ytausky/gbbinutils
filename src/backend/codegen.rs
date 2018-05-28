@@ -106,6 +106,10 @@ fn encode_immediate_alu_operation<R>(operation: AluOperation, expr: Expr<R>) -> 
 fn encode_branch<R>(branch: Branch<R>, condition: Option<Condition>) -> Encoded<R> {
     use instruction::Branch::*;
     match branch {
+        Call(target) => Encoded::with(match condition {
+            None => 0xcd,
+            Some(condition) => 0xc4 | encode_condition(condition),
+        }).and_word(target),
         Jp(target) => Encoded::with(match condition {
             None => 0xc3,
             Some(condition) => 0xc2 | encode_condition(condition),
@@ -409,6 +413,28 @@ mod tests {
     fn test_simple_alu_encoding(operation: AluOperation, test_cases: &[(SimpleOperand, u8)]) {
         for &(src, opcode) in test_cases {
             test_instruction(Alu(operation, AluSource::Simple(src)), bytes([opcode]))
+        }
+    }
+
+    #[test]
+    fn encode_call() {
+        use instruction::Condition::*;
+        let target_expr = Expr::Literal(0x1234, ());
+        let test_cases = &[
+            (None, 0xcd),
+            (Some(C), 0xdc),
+            (Some(Nc), 0xd4),
+            (Some(Nz), 0xc4),
+            (Some(Z), 0xcc),
+        ];
+        for &(condition, opcode) in test_cases {
+            test_instruction(
+                Branch(Call(target_expr.clone()), condition),
+                [
+                    DataItem::Byte(opcode),
+                    DataItem::Expr(target_expr.clone(), Width::Word),
+                ],
+            )
         }
     }
 

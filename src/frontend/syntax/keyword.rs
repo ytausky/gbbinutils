@@ -2,6 +2,7 @@
 pub enum Command {
     Add,
     And,
+    Call,
     Charmap,
     Cp,
     Db,

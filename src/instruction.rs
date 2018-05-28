@@ -73,6 +73,7 @@ pub enum RegPair {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Branch<R> {
+    Call(Expr<R>),
     Jp(Expr<R>),
     Jr(Expr<R>),
 }

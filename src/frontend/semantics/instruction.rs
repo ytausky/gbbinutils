@@ -217,6 +217,7 @@ fn analyze_branch_target<R>(target: Option<Operand<R>>) -> Option<TargetSelector
 
 fn mk_branch<R>(kind: BranchKind, target: Option<TargetSelector<R>>) -> Branch<R> {
     match (kind, target) {
+        (BranchKind::Call, Some(TargetSelector::Expr(expr))) => Branch::Call(expr),
         (BranchKind::Jp, Some(TargetSelector::Expr(expr))) => Branch::Jp(expr),
         (BranchKind::Jr, Some(TargetSelector::Expr(expr))) => Branch::Jr(expr),
         _ => panic!(),
@@ -274,6 +275,7 @@ impl<R> From<NullaryMnemonic> for Instruction<R> {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum BranchKind {
+    Call,
     Jp,
     Jr,
 }
@@ -288,6 +290,7 @@ fn to_mnemonic(command: keyword::Command) -> Mnemonic {
     match command {
         Add => Mnemonic::Alu(AluOperation::Add, ExplicitA::Required),
         And => Mnemonic::Alu(AluOperation::And, ExplicitA::NotAllowed),
+        Call => Mnemonic::Branch(BranchKind::Call),
         Cp => Mnemonic::Alu(AluOperation::Cp, ExplicitA::NotAllowed),
         Dec => Mnemonic::Dec,
         Halt => Mnemonic::Nullary(NullaryMnemonic::Halt),
@@ -379,6 +382,7 @@ mod tests {
     impl From<BranchKind> for Command {
         fn from(branch: BranchKind) -> Self {
             match branch {
+                BranchKind::Call => Command::Call,
                 BranchKind::Jp => Command::Jp,
                 BranchKind::Jr => Command::Jr,
             }
@@ -725,7 +729,7 @@ mod tests {
 
     const REG_PAIRS: &[RegPair] = &[RegPair::Bc, RegPair::De, RegPair::Hl, RegPair::Af];
 
-    const BRANCHES: [BranchKind; 2] = [BranchKind::Jp, BranchKind::Jr];
+    const BRANCHES: &[BranchKind] = &[BranchKind::Call, BranchKind::Jp, BranchKind::Jr];
 
     const CONDITIONS: [Condition; 4] = [Condition::C, Condition::Nc, Condition::Nz, Condition::Z];
 
