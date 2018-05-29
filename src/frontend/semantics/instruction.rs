@@ -68,6 +68,7 @@ impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<
             },
             Branch(branch) => self.analyze_branch(branch),
             Inc => match self.operands.next() {
+                Some(Operand::Atom(AtomKind::Simple(operand), _)) => Ok(Instruction::Inc8(operand)),
                 Some(Operand::Atom(AtomKind::Reg16(reg16), _)) => Ok(Instruction::Inc16(reg16)),
                 _ => panic!(),
             },
@@ -556,6 +557,7 @@ mod tests {
         descriptors.extend(describe_alu_simple_instructions());
         descriptors.extend(describe_add_hl_reg16_instructions());
         descriptors.extend(describe_branch_instuctions());
+        descriptors.extend(describe_inc8_instructions());
         descriptors.extend(describe_dec8_instructions());
         descriptors.extend(describe_inc16_instructions());
         descriptors.extend(describe_dec16_instructions());
@@ -706,6 +708,15 @@ mod tests {
                 condition,
             ),
         )
+    }
+
+    fn describe_inc8_instructions() -> impl Iterator<Item = InstructionDescriptor> {
+        SIMPLE_OPERANDS.iter().map(|&operand| {
+            (
+                (Command::Inc, vec![operand.into()]),
+                Instruction::Inc8(operand),
+            )
+        })
     }
 
     fn describe_dec8_instructions() -> Vec<InstructionDescriptor> {
