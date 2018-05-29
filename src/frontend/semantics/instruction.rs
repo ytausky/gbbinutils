@@ -61,17 +61,8 @@ impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<
                 let first_operand = self.operands.next();
                 self.analyze_alu_instruction((operation, range.clone()), explicit_a, first_operand)
             }
-            Dec => match self.operands.next() {
-                Some(Operand::Atom(AtomKind::Simple(operand), _)) => Ok(Instruction::Dec8(operand)),
-                Some(Operand::Atom(AtomKind::Reg16(operand), _)) => Ok(Instruction::Dec16(operand)),
-                _ => panic!(),
-            },
+            IncDec(mode) => self.analyze_inc_dec(mode),
             Branch(branch) => self.analyze_branch(branch),
-            Inc => match self.operands.next() {
-                Some(Operand::Atom(AtomKind::Simple(operand), _)) => Ok(Instruction::Inc8(operand)),
-                Some(Operand::Atom(AtomKind::Reg16(reg16), _)) => Ok(Instruction::Inc16(reg16)),
-                _ => panic!(),
-            },
             Ld => self.analyze_ld(),
             Ldh => self.analyze_ldh(),
             Nullary(instruction) => Ok(instruction.into()),
@@ -217,6 +208,18 @@ impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<
         };
         Ok(instruction_ctor(reg_pair))
     }
+
+    fn analyze_inc_dec(&mut self, mode: IncDec) -> AnalysisResult<R> {
+        match self.operands.next() {
+            Some(Operand::Atom(AtomKind::Simple(operand), _)) => {
+                Ok(Instruction::IncDec8(mode, operand))
+            }
+            Some(Operand::Atom(AtomKind::Reg16(operand), _)) => {
+                Ok(Instruction::IncDec16(mode, operand))
+            }
+            _ => panic!(),
+        }
+    }
 }
 
 fn analyze_branch_target<R>(target: Option<Operand<R>>) -> Option<TargetSelector<R>> {
@@ -251,9 +254,8 @@ pub type AnalysisResult<R> = Result<Instruction<R>, Diagnostic<R>>;
 #[derive(Debug, PartialEq)]
 enum Mnemonic {
     Alu(AluOperation, ExplicitA),
-    Dec,
     Branch(BranchKind),
-    Inc,
+    IncDec(IncDec),
     Ld,
     Ldh,
     Nullary(NullaryMnemonic),
@@ -310,9 +312,9 @@ fn to_mnemonic(command: keyword::Command) -> Mnemonic {
         And => Mnemonic::Alu(AluOperation::And, ExplicitA::NotAllowed),
         Call => Mnemonic::Branch(BranchKind::Call),
         Cp => Mnemonic::Alu(AluOperation::Cp, ExplicitA::NotAllowed),
-        Dec => Mnemonic::Dec,
+        Dec => Mnemonic::IncDec(IncDec::Dec),
         Halt => Mnemonic::Nullary(NullaryMnemonic::Halt),
-        Inc => Mnemonic::Inc,
+        Inc => Mnemonic::IncDec(IncDec::Inc),
         Jp => Mnemonic::Branch(BranchKind::Jp),
         Jr => Mnemonic::Branch(BranchKind::Jr),
         Ld => Mnemonic::Ld,
@@ -405,6 +407,15 @@ mod tests {
                 BranchKind::Call => Command::Call,
                 BranchKind::Jp => Command::Jp,
                 BranchKind::Jr => Command::Jr,
+            }
+        }
+    }
+
+    impl From<IncDec> for Command {
+        fn from(mode: IncDec) -> Self {
+            match mode {
+                IncDec::Inc => Command::Inc,
+                IncDec::Dec => Command::Dec,
             }
         }
     }
@@ -557,10 +568,8 @@ mod tests {
         descriptors.extend(describe_alu_simple_instructions());
         descriptors.extend(describe_add_hl_reg16_instructions());
         descriptors.extend(describe_branch_instuctions());
-        descriptors.extend(describe_inc8_instructions());
-        descriptors.extend(describe_dec8_instructions());
-        descriptors.extend(describe_inc16_instructions());
-        descriptors.extend(describe_dec16_instructions());
+        descriptors.extend(describe_inc_dec8_instructions());
+        descriptors.extend(describe_inc_dec16_instructions());
         descriptors.extend(describe_push_pop_instructions());
         descriptors
     }
@@ -710,52 +719,26 @@ mod tests {
         )
     }
 
-    fn describe_inc8_instructions() -> impl Iterator<Item = InstructionDescriptor> {
-        SIMPLE_OPERANDS.iter().map(|&operand| {
-            (
-                (Command::Inc, vec![operand.into()]),
-                Instruction::Inc8(operand),
-            )
+    fn describe_inc_dec8_instructions() -> impl Iterator<Item = InstructionDescriptor> {
+        INC_DEC.iter().flat_map(|&mode| {
+            SIMPLE_OPERANDS.iter().map(move |&operand| {
+                (
+                    (mode.into(), vec![operand.into()]),
+                    Instruction::IncDec8(mode, operand),
+                )
+            })
         })
     }
 
-    fn describe_dec8_instructions() -> Vec<InstructionDescriptor> {
-        let mut descriptors = Vec::new();
-        for &operand in SIMPLE_OPERANDS.iter() {
-            descriptors.push(describe_dec8(operand))
-        }
-        descriptors
-    }
-
-    fn describe_dec8(operand: SimpleOperand) -> InstructionDescriptor {
-        (
-            (Command::Dec, vec![operand.into()]),
-            Instruction::Dec8(operand),
-        )
-    }
-
-    fn describe_inc16_instructions() -> Vec<InstructionDescriptor> {
-        REG16
-            .iter()
-            .map(|&reg16| {
+    fn describe_inc_dec16_instructions() -> impl Iterator<Item = InstructionDescriptor> {
+        INC_DEC.iter().flat_map(|&mode| {
+            REG16.iter().map(move |&reg16| {
                 (
-                    (Command::Inc, vec![reg16.into()]),
-                    Instruction::Inc16(reg16),
+                    (mode.into(), vec![reg16.into()]),
+                    Instruction::IncDec16(mode, reg16),
                 )
             })
-            .collect()
-    }
-
-    fn describe_dec16_instructions() -> Vec<InstructionDescriptor> {
-        REG16
-            .iter()
-            .map(|&reg16| {
-                (
-                    (Command::Dec, vec![reg16.into()]),
-                    Instruction::Dec16(reg16),
-                )
-            })
-            .collect()
+        })
     }
 
     const ALU_OPERATIONS_WITH_A: &[AluOperation] = &[AluOperation::Add];
@@ -781,6 +764,8 @@ mod tests {
     const BRANCHES: &[BranchKind] = &[BranchKind::Call, BranchKind::Jp, BranchKind::Jr];
 
     const CONDITIONS: [Condition; 4] = [Condition::C, Condition::Nc, Condition::Nz, Condition::Z];
+
+    const INC_DEC: &[IncDec] = &[IncDec::Inc, IncDec::Dec];
 
     fn test_instruction_analysis(descriptors: Vec<InstructionDescriptor>) {
         for ((mnemonic, operands), expected) in descriptors {

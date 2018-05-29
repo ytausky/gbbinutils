@@ -51,11 +51,13 @@ pub fn generate_code<R>(instruction: Instruction<R>) -> Encoded<R> {
             encode_immediate_alu_operation(operation, expr)
         }
         Branch(branch, condition) => encode_branch(branch, condition),
-        Dec8(simple_operand) => Encoded::with(0x05 | (encode_simple_operand(simple_operand) << 3)),
-        Dec16(reg16) => Encoded::with(0x0b | encode_reg16(reg16)),
         Halt => Encoded::with(0x76),
-        Inc8(operand) => Encoded::with(0b00_000_100 | (encode_simple_operand(operand) << 3)),
-        Inc16(reg16) => Encoded::with(0x03 | encode_reg16(reg16)),
+        IncDec8(mode, operand) => Encoded::with(
+            0b00_000_100 | encode_inc_dec(mode) | (encode_simple_operand(operand) << 3),
+        ),
+        IncDec16(mode, operand) => {
+            Encoded::with(0x03 | (encode_inc_dec(mode) << 3) | encode_reg16(operand))
+        }
         JpDerefHl => Encoded::with(0xe9),
         Ld(kind) => encode_ld(kind),
         Ldh(expr, direction) => Encoded::with(0xe0 | encode_direction(direction)).and_byte(expr),
@@ -179,6 +181,14 @@ fn encode_reg_pair(reg_pair: RegPair) -> u8 {
         De => 0b01,
         Hl => 0b10,
         Af => 0b11,
+    }
+}
+
+fn encode_inc_dec(mode: IncDec) -> u8 {
+    use instruction::IncDec::*;
+    match mode {
+        Inc => 0,
+        Dec => 1,
     }
 }
 
@@ -522,59 +532,47 @@ mod tests {
     }
 
     #[test]
-    fn encode_inc8() {
-        use instruction::SimpleOperand::*;
+    fn encode_inc_dec8() {
+        use instruction::{IncDec::*, SimpleOperand::*};
         let test_cases = &[
-            (B, 0x04),
-            (C, 0x0c),
-            (D, 0x14),
-            (E, 0x1c),
-            (H, 0x24),
-            (L, 0x2c),
-            (DerefHl, 0x34),
-            (A, 0x3c),
+            (Inc, B, 0x04),
+            (Inc, C, 0x0c),
+            (Inc, D, 0x14),
+            (Inc, E, 0x1c),
+            (Inc, H, 0x24),
+            (Inc, L, 0x2c),
+            (Inc, DerefHl, 0x34),
+            (Inc, A, 0x3c),
+            (Dec, B, 0x05),
+            (Dec, C, 0x0d),
+            (Dec, D, 0x15),
+            (Dec, E, 0x1d),
+            (Dec, H, 0x25),
+            (Dec, L, 0x2d),
+            (Dec, DerefHl, 0x35),
+            (Dec, A, 0x3d),
         ];
-        for (operand, opcode) in test_cases {
-            test_instruction(Instruction::Inc8(*operand), bytes([*opcode]))
+        for (mode, operand, opcode) in test_cases {
+            test_instruction(Instruction::IncDec8(*mode, *operand), bytes([*opcode]))
         }
     }
 
     #[test]
-    fn encode_dec8() {
-        use instruction::SimpleOperand::*;
-        [
-            (B, 0x05),
-            (C, 0x0d),
-            (D, 0x15),
-            (E, 0x1d),
-            (H, 0x25),
-            (L, 0x2d),
-            (DerefHl, 0x35),
-            (A, 0x3d),
-        ].iter()
-            .for_each(|(simple_operand, opcode)| {
-                test_instruction(Instruction::Dec8(*simple_operand), bytes([*opcode]))
-            })
-    }
-
-    #[test]
-    fn encode_inc16() {
-        use instruction::Reg16::*;
-        [(Bc, 0x03), (De, 0x13), (Hl, 0x23), (Sp, 0x33)]
-            .iter()
-            .for_each(|(reg16, opcode)| {
-                test_instruction(Instruction::Inc16(*reg16), bytes([*opcode]))
-            })
-    }
-
-    #[test]
-    fn encode_dec16() {
-        use instruction::Reg16::*;
-        [(Bc, 0x0b), (De, 0x1b), (Hl, 0x2b), (Sp, 0x3b)]
-            .iter()
-            .for_each(|(reg16, opcode)| {
-                test_instruction(Instruction::Dec16(*reg16), bytes([*opcode]))
-            })
+    fn encode_inc_dec16() {
+        use instruction::{IncDec::*, Reg16::*};
+        let test_cases = &[
+            (Inc, Bc, 0x03),
+            (Inc, De, 0x13),
+            (Inc, Hl, 0x23),
+            (Inc, Sp, 0x33),
+            (Dec, Bc, 0x0b),
+            (Dec, De, 0x1b),
+            (Dec, Hl, 0x2b),
+            (Dec, Sp, 0x3b),
+        ];
+        for (mode, operand, opcode) in test_cases {
+            test_instruction(Instruction::IncDec16(*mode, *operand), bytes([*opcode]))
+        }
     }
 
     #[test]

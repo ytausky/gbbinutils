@@ -2,11 +2,9 @@
 pub enum Instruction<R> {
     AddHl(Reg16),
     Alu(AluOperation, AluSource<R>),
-    Dec8(SimpleOperand),
-    Dec16(Reg16),
     Halt,
-    Inc8(SimpleOperand),
-    Inc16(Reg16),
+    IncDec8(IncDec, SimpleOperand),
+    IncDec16(IncDec, Reg16),
     JpDerefHl,
     Branch(Branch<R>, Option<Condition>),
     Ld(LdKind<R>),
@@ -95,4 +93,10 @@ pub enum Expr<R> {
     LocationCounter,
     Subtract(Box<Expr<R>>, Box<Expr<R>>),
     Symbol(String, R),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum IncDec {
+    Inc,
+    Dec,
 }
