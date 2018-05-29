@@ -269,6 +269,7 @@ enum ExplicitA {
 enum NullaryMnemonic {
     Halt,
     Nop,
+    Reti,
     Stop,
 }
 
@@ -283,6 +284,7 @@ impl<R> From<NullaryMnemonic> for Instruction<R> {
         match nullary_mnemonic {
             NullaryMnemonic::Halt => Instruction::Halt,
             NullaryMnemonic::Nop => Instruction::Nop,
+            NullaryMnemonic::Reti => Instruction::Reti,
             NullaryMnemonic::Stop => Instruction::Stop,
         }
     }
@@ -317,6 +319,7 @@ fn to_mnemonic(command: keyword::Command) -> Mnemonic {
         Nop => Mnemonic::Nullary(NullaryMnemonic::Nop),
         Pop => Mnemonic::Stack(StackOperation::Pop),
         Push => Mnemonic::Stack(StackOperation::Push),
+        Reti => Mnemonic::Nullary(NullaryMnemonic::Reti),
         Stop => Mnemonic::Nullary(NullaryMnemonic::Stop),
         Xor => Mnemonic::Alu(AluOperation::Xor, ExplicitA::NotAllowed),
         _ => panic!(),
@@ -579,6 +582,7 @@ mod tests {
         [
             (Command::Halt, Instruction::Halt),
             (Command::Nop, Instruction::Nop),
+            (Command::Reti, Instruction::Reti),
             (Command::Stop, Instruction::Stop),
         ].iter()
             .map(|(mnemonic, instruction)| ((*mnemonic, vec![]), instruction.clone()))

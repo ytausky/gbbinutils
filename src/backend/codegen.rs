@@ -65,6 +65,7 @@ pub fn generate_code<R>(instruction: Instruction<R>) -> Encoded<R> {
         },
         Pop(reg_pair) => Encoded::with(0xc1 | (encode_reg_pair(reg_pair) << 4)),
         Push(reg_pair) => Encoded::with(0xc5 | (encode_reg_pair(reg_pair) << 4)),
+        Reti => Encoded::with(0xd9),
     }
 }
 
@@ -575,6 +576,11 @@ mod tests {
             .for_each(|(reg_pair, opcode)| {
                 test_instruction(Instruction::Push(*reg_pair), bytes([*opcode]))
             })
+    }
+
+    #[test]
+    fn encode_reti() {
+        test_instruction(Instruction::Reti, bytes([0xd9]))
     }
 
     fn bytes(data: impl Borrow<[u8]>) -> Vec<DataItem<()>> {

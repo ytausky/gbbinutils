@@ -13,6 +13,7 @@ pub enum Instruction<R> {
     Nop,
     Pop(RegPair),
     Push(RegPair),
+    Reti,
     Stop,
 }
 
