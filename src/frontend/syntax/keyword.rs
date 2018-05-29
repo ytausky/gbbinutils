@@ -17,6 +17,7 @@ pub enum Command {
     Nop,
     Pop,
     Push,
+    Ret,
     Reti,
     Stop,
     Xor,

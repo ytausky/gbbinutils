@@ -77,6 +77,7 @@ pub enum Branch<R> {
     Call(Expr<R>),
     Jp(Expr<R>),
     Jr(Expr<R>),
+    Ret,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

@@ -238,6 +238,7 @@ fn mk_branch<R>(kind: BranchKind, target: Option<TargetSelector<R>>) -> Branch<R
         (BranchKind::Call, Some(TargetSelector::Expr(expr))) => Branch::Call(expr),
         (BranchKind::Jp, Some(TargetSelector::Expr(expr))) => Branch::Jp(expr),
         (BranchKind::Jr, Some(TargetSelector::Expr(expr))) => Branch::Jr(expr),
+        (BranchKind::Ret, None) => Branch::Ret,
         _ => panic!(),
     }
 }
@@ -298,6 +299,14 @@ enum BranchKind {
     Call,
     Jp,
     Jr,
+    Ret,
+}
+
+#[cfg(test)]
+impl BranchKind {
+    fn has_target(&self) -> bool {
+        *self != BranchKind::Ret
+    }
 }
 
 enum TargetSelector<R> {
@@ -322,6 +331,7 @@ fn to_mnemonic(command: keyword::Command) -> Mnemonic {
         Nop => Mnemonic::Nullary(NullaryMnemonic::Nop),
         Pop => Mnemonic::Stack(StackOperation::Pop),
         Push => Mnemonic::Stack(StackOperation::Push),
+        Ret => Mnemonic::Branch(BranchKind::Ret),
         Reti => Mnemonic::Nullary(NullaryMnemonic::Reti),
         Stop => Mnemonic::Nullary(NullaryMnemonic::Stop),
         Xor => Mnemonic::Alu(AluOperation::Xor, ExplicitA::NotAllowed),
@@ -407,6 +417,7 @@ mod tests {
                 BranchKind::Call => Command::Call,
                 BranchKind::Jp => Command::Jp,
                 BranchKind::Jr => Command::Jr,
+                BranchKind::Ret => Command::Ret,
             }
         }
     }
@@ -709,11 +720,20 @@ mod tests {
         if let Some(condition) = condition {
             operands.push(ParsedExpr::from(condition))
         };
-        operands.push(ident.into());
+        if branch.has_target() {
+            operands.push(ident.into());
+        };
         (
             (Command::from(branch), operands),
             Instruction::Branch(
-                mk_branch(branch, Some(TargetSelector::Expr(symbol(ident)))),
+                mk_branch(
+                    branch,
+                    if branch.has_target() {
+                        Some(TargetSelector::Expr(symbol(ident)))
+                    } else {
+                        None
+                    },
+                ),
                 condition,
             ),
         )
@@ -761,7 +781,12 @@ mod tests {
 
     const REG_PAIRS: &[RegPair] = &[RegPair::Bc, RegPair::De, RegPair::Hl, RegPair::Af];
 
-    const BRANCHES: &[BranchKind] = &[BranchKind::Call, BranchKind::Jp, BranchKind::Jr];
+    const BRANCHES: &[BranchKind] = &[
+        BranchKind::Call,
+        BranchKind::Jp,
+        BranchKind::Jr,
+        BranchKind::Ret,
+    ];
 
     const CONDITIONS: [Condition; 4] = [Condition::C, Condition::Nc, Condition::Nz, Condition::Z];
 

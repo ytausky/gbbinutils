@@ -126,6 +126,10 @@ fn encode_branch<R>(branch: Branch<R>, condition: Option<Condition>) -> Encoded<
             Box::new(target),
             Box::new(Expr::LocationCounter),
         )),
+        Ret => Encoded::with(match condition {
+            None => 0xc9,
+            Some(condition) => 0b11_000_000 | encode_condition(condition),
+        }),
     }
 }
 
@@ -518,6 +522,21 @@ mod tests {
                     ),
                 ],
             )
+        }
+    }
+
+    #[test]
+    fn encode_ret() {
+        use instruction::Condition::*;
+        let test_cases = &[
+            (None, 0xc9),
+            (Some(C), 0xd8),
+            (Some(Nc), 0xd0),
+            (Some(Nz), 0xc0),
+            (Some(Z), 0xc8),
+        ];
+        for &(condition, opcode) in test_cases {
+            test_instruction(Branch(Ret, condition), bytes([opcode]))
         }
     }
 
