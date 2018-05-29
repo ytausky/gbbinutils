@@ -4,6 +4,7 @@ pub enum Command {
     And,
     Call,
     Cp,
+    Daa,
     Db,
     Dec,
     Di,

@@ -225,6 +225,7 @@ const KEYWORDS: &[(&str, Keyword)] = &[
     ("call", Keyword::Command(Command::Call)),
     ("cp", Keyword::Command(Command::Cp)),
     ("d", Keyword::Operand(Operand::D)),
+    ("daa", Keyword::Command(Command::Daa)),
     ("db", Keyword::Command(Command::Db)),
     ("de", Keyword::Operand(Operand::De)),
     ("dec", Keyword::Command(Command::Dec)),

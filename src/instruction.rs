@@ -15,6 +15,7 @@ pub enum Instruction<R> {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Nullary {
+    Daa,
     Di,
     Ei,
     Halt,

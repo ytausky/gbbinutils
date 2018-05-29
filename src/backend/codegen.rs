@@ -69,6 +69,7 @@ pub fn generate_code<R>(instruction: Instruction<R>) -> Encoded<R> {
 fn encode_nullary_instruction<R>(instr: Nullary) -> Encoded<R> {
     use instruction::Nullary::*;
     let opcode = match instr {
+        Daa => 0x27,
         Di => 0xf3,
         Ei => 0xfb,
         Halt => 0x76,
@@ -252,6 +253,11 @@ mod tests {
     #[test]
     fn encode_ei() {
         test_nullary(Ei, bytes([0xfb]))
+    }
+
+    #[test]
+    fn encode_daa() {
+        test_nullary(Daa, bytes([0x27]))
     }
 
     fn test_nullary(nullary: instruction::Nullary, items: impl Borrow<[DataItem<()>]>) {
