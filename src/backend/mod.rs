@@ -262,6 +262,7 @@ fn is_in_u8_range(n: i32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use instruction::Nullary;
 
     use std::borrow::Borrow;
 
@@ -281,7 +282,10 @@ mod tests {
 
     #[test]
     fn emit_stop() {
-        emit_items_and_compare([Item::Instruction(Instruction::Stop)], [0x10, 0x00])
+        emit_items_and_compare(
+            [Item::Instruction(Instruction::Nullary(Nullary::Stop))],
+            [0x10, 0x00],
+        )
     }
 
     fn emit_items_and_compare<I, B>(items: I, bytes: B)

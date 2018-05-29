@@ -349,7 +349,7 @@ impl<'a, LRF: LexemeRefFactory> Iterator for TokenizedSrcIter<'a, LRF> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use instruction::Instruction;
+    use instruction::{Instruction, Nullary};
 
     use std::{self, cell::RefCell};
 
@@ -373,7 +373,7 @@ mod tests {
 
     #[test]
     fn emit_instruction_item() {
-        let item = Item::Instruction(Instruction::Nop);
+        let item = Item::Instruction(Instruction::Nullary(Nullary::Nop));
         let log = TestLog::default();
         TestFixture::new(&log).when(|mut session| session.emit_item(item.clone()));
         assert_eq!(*log.borrow(), [TestEvent::EmitItem(item)]);

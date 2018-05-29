@@ -2,18 +2,23 @@
 pub enum Instruction<R> {
     AddHl(Reg16),
     Alu(AluOperation, AluSource<R>),
-    Di,
-    Ei,
-    Halt,
     IncDec8(IncDec, SimpleOperand),
     IncDec16(IncDec, Reg16),
     JpDerefHl,
     Branch(Branch<R>, Option<Condition>),
     Ld(LdKind<R>),
     Ldh(Expr<R>, Direction),
-    Nop,
+    Nullary(Nullary),
     Pop(RegPair),
     Push(RegPair),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Nullary {
+    Di,
+    Ei,
+    Halt,
+    Nop,
     Reti,
     Stop,
 }

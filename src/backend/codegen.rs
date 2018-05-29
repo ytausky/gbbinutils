@@ -43,7 +43,7 @@ impl<R> Encoded<R> {
 }
 
 pub fn generate_code<R>(instruction: Instruction<R>) -> Encoded<R> {
-    use backend::Instruction::*;
+    use instruction::Instruction::*;
     match instruction {
         AddHl(reg16) => Encoded::with(0x09 | encode_reg16(reg16)),
         Alu(operation, AluSource::Simple(src)) => encode_simple_alu_operation(operation, src),
@@ -51,9 +51,6 @@ pub fn generate_code<R>(instruction: Instruction<R>) -> Encoded<R> {
             encode_immediate_alu_operation(operation, expr)
         }
         Branch(branch, condition) => encode_branch(branch, condition),
-        Di => Encoded::with(0xf3),
-        Ei => Encoded::with(0xfb),
-        Halt => Encoded::with(0x76),
         IncDec8(mode, operand) => Encoded::with(
             0b00_000_100 | encode_inc_dec(mode) | (encode_simple_operand(operand) << 3),
         ),
@@ -63,14 +60,29 @@ pub fn generate_code<R>(instruction: Instruction<R>) -> Encoded<R> {
         JpDerefHl => Encoded::with(0xe9),
         Ld(kind) => encode_ld(kind),
         Ldh(expr, direction) => Encoded::with(0xe0 | encode_direction(direction)).and_byte(expr),
-        Nop => Encoded::with(0x00),
-        Stop => Encoded {
-            opcode: 0x10,
-            immediate: Some(DataItem::Byte(0x00)),
-        },
+        Nullary(instr) => encode_nullary_instruction(instr),
         Pop(reg_pair) => Encoded::with(0xc1 | (encode_reg_pair(reg_pair) << 4)),
         Push(reg_pair) => Encoded::with(0xc5 | (encode_reg_pair(reg_pair) << 4)),
-        Reti => Encoded::with(0xd9),
+    }
+}
+
+fn encode_nullary_instruction<R>(instr: Nullary) -> Encoded<R> {
+    use instruction::Nullary::*;
+    let opcode = match instr {
+        Di => 0xf3,
+        Ei => 0xfb,
+        Halt => 0x76,
+        Nop => 0x00,
+        Stop => 0x10,
+        Reti => 0xd9,
+    };
+    if instr == Stop {
+        Encoded {
+            opcode,
+            immediate: Some(DataItem::Byte(0x00)),
+        }
+    } else {
+        Encoded::with(opcode)
     }
 }
 
@@ -203,8 +215,7 @@ mod tests {
     use super::*;
     use std::borrow::Borrow;
 
-    use instruction::Branch::*;
-    use instruction::Instruction::*;
+    use instruction::{self, Branch::*, Instruction::*, Nullary::*};
 
     impl<F: FnMut(DataItem<()>)> Emit<()> for F {
         fn emit(&mut self, item: DataItem<()>) {
@@ -220,27 +231,31 @@ mod tests {
 
     #[test]
     fn encode_nop() {
-        test_instruction(Nop, bytes([0x00]))
+        test_nullary(Nop, bytes([0x00]))
     }
 
     #[test]
     fn encode_stop() {
-        test_instruction(Stop, bytes([0x10, 0x00]))
+        test_nullary(Stop, bytes([0x10, 0x00]))
     }
 
     #[test]
     fn encode_halt() {
-        test_instruction(Halt, bytes([0x76]))
+        test_nullary(Halt, bytes([0x76]))
     }
 
     #[test]
     fn encode_di() {
-        test_instruction(Di, bytes([0xf3]))
+        test_nullary(Di, bytes([0xf3]))
     }
 
     #[test]
     fn encode_ei() {
-        test_instruction(Ei, bytes([0xfb]))
+        test_nullary(Ei, bytes([0xfb]))
+    }
+
+    fn test_nullary(nullary: instruction::Nullary, items: impl Borrow<[DataItem<()>]>) {
+        test_instruction(Nullary(nullary), items)
     }
 
     #[test]
@@ -628,7 +643,7 @@ mod tests {
 
     #[test]
     fn encode_reti() {
-        test_instruction(Instruction::Reti, bytes([0xd9]))
+        test_nullary(Reti, bytes([0xd9]))
     }
 
     fn bytes(data: impl Borrow<[u8]>) -> Vec<DataItem<()>> {

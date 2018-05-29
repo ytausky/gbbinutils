@@ -259,7 +259,7 @@ enum Mnemonic {
     IncDec(IncDec),
     Ld,
     Ldh,
-    Nullary(NullaryMnemonic),
+    Nullary(Nullary),
     Stack(StackOperation),
 }
 
@@ -270,31 +270,14 @@ enum ExplicitA {
 }
 
 #[derive(Debug, PartialEq)]
-enum NullaryMnemonic {
-    Di,
-    Ei,
-    Halt,
-    Nop,
-    Reti,
-    Stop,
-}
-
-#[derive(Debug, PartialEq)]
 enum StackOperation {
     Push,
     Pop,
 }
 
-impl<R> From<NullaryMnemonic> for Instruction<R> {
-    fn from(nullary_mnemonic: NullaryMnemonic) -> Instruction<R> {
-        match nullary_mnemonic {
-            NullaryMnemonic::Di => Instruction::Di,
-            NullaryMnemonic::Ei => Instruction::Ei,
-            NullaryMnemonic::Halt => Instruction::Halt,
-            NullaryMnemonic::Nop => Instruction::Nop,
-            NullaryMnemonic::Reti => Instruction::Reti,
-            NullaryMnemonic::Stop => Instruction::Stop,
-        }
+impl<R> From<Nullary> for Instruction<R> {
+    fn from(nullary: Nullary) -> Instruction<R> {
+        Instruction::Nullary(nullary)
     }
 }
 
@@ -326,20 +309,20 @@ fn to_mnemonic(command: keyword::Command) -> Mnemonic {
         Call => Mnemonic::Branch(BranchKind::Call),
         Cp => Mnemonic::Alu(AluOperation::Cp, ExplicitA::NotAllowed),
         Dec => Mnemonic::IncDec(IncDec::Dec),
-        Di => Mnemonic::Nullary(NullaryMnemonic::Di),
-        Ei => Mnemonic::Nullary(NullaryMnemonic::Ei),
-        Halt => Mnemonic::Nullary(NullaryMnemonic::Halt),
+        Di => Mnemonic::Nullary(Nullary::Di),
+        Ei => Mnemonic::Nullary(Nullary::Ei),
+        Halt => Mnemonic::Nullary(Nullary::Halt),
         Inc => Mnemonic::IncDec(IncDec::Inc),
         Jp => Mnemonic::Branch(BranchKind::Jp),
         Jr => Mnemonic::Branch(BranchKind::Jr),
         Ld => Mnemonic::Ld,
         Ldh => Mnemonic::Ldh,
-        Nop => Mnemonic::Nullary(NullaryMnemonic::Nop),
+        Nop => Mnemonic::Nullary(Nullary::Nop),
         Pop => Mnemonic::Stack(StackOperation::Pop),
         Push => Mnemonic::Stack(StackOperation::Push),
         Ret => Mnemonic::Branch(BranchKind::Ret),
-        Reti => Mnemonic::Nullary(NullaryMnemonic::Reti),
-        Stop => Mnemonic::Nullary(NullaryMnemonic::Stop),
+        Reti => Mnemonic::Nullary(Nullary::Reti),
+        Stop => Mnemonic::Nullary(Nullary::Stop),
         Xor => Mnemonic::Alu(AluOperation::Xor, ExplicitA::NotAllowed),
         _ => panic!(),
     }
@@ -608,14 +591,14 @@ mod tests {
 
     fn describe_nullary_instructions() -> impl Iterator<Item = InstructionDescriptor> {
         [
-            (Command::Di, Instruction::Di),
-            (Command::Ei, Instruction::Ei),
-            (Command::Halt, Instruction::Halt),
-            (Command::Nop, Instruction::Nop),
-            (Command::Reti, Instruction::Reti),
-            (Command::Stop, Instruction::Stop),
+            (Command::Di, Nullary::Di),
+            (Command::Ei, Nullary::Ei),
+            (Command::Halt, Nullary::Halt),
+            (Command::Nop, Nullary::Nop),
+            (Command::Reti, Nullary::Reti),
+            (Command::Stop, Nullary::Stop),
         ].iter()
-            .map(|(mnemonic, instruction)| ((*mnemonic, vec![]), instruction.clone()))
+            .map(|(mnemonic, nullary)| ((*mnemonic, vec![]), Instruction::Nullary(nullary.clone())))
     }
 
     fn describe_ld_simple_simple_instructions() -> impl Iterator<Item = InstructionDescriptor> {
