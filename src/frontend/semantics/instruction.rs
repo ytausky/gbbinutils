@@ -763,7 +763,7 @@ mod tests {
         SimpleOperand::DerefHl,
     ];
 
-    const REG16: &[Reg16] = &[Reg16::Bc, Reg16::Hl];
+    const REG16: &[Reg16] = &[Reg16::Bc, Reg16::De, Reg16::Hl, Reg16::Sp];
 
     const REG_PAIRS: &[RegPair] = &[RegPair::Bc, RegPair::De, RegPair::Hl, RegPair::Af];
 
