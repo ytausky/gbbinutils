@@ -246,6 +246,7 @@ fn mk_branch<R>(kind: BranchKind, target: Option<TargetSelector<R>>) -> Branch<R
 fn analyze_ld_a<R>(other: Operand<R>, direction: Direction) -> AnalysisResult<R> {
     match other {
         Operand::Deref(expr) => Ok(Instruction::Ld(Ld::ImmediateAddr(expr, direction))),
+        Operand::Atom(AtomKind::DerefC, _) => Ok(Instruction::Ld(Ld::IndexedC(direction))),
         _ => panic!(),
     }
 }
@@ -514,6 +515,18 @@ mod tests {
             symbol(ident),
             Direction::IntoA,
         )))
+    }
+
+    #[test]
+    fn analyze_ld_deref_c_a() {
+        analyze(Command::Ld, vec![literal(C).deref(), literal(A)])
+            .expect_instruction(Instruction::Ld(Ld::IndexedC(Direction::FromA)))
+    }
+
+    #[test]
+    fn analyze_ld_a_deref_c() {
+        analyze(Command::Ld, vec![literal(A), literal(C).deref()])
+            .expect_instruction(Instruction::Ld(Ld::IndexedC(Direction::IntoA)))
     }
 
     #[test]

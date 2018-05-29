@@ -15,6 +15,7 @@ pub enum AtomKind {
     Condition(Condition),
     Reg16(Reg16),
     RegPair(RegPair),
+    DerefC,
 }
 
 pub struct OperandAnalyzer<'a, EF: 'a> {
@@ -65,6 +66,9 @@ impl<'a, EF: 'a + ExprFactory> OperandAnalyzer<'a, EF> {
             ParsedExpr::Ident(ident) => Operand::Deref(self.expr_factory.mk_symbol(ident)),
             ParsedExpr::Literal((Literal::Operand(keyword::Operand::Hl), range)) => {
                 Operand::Atom(AtomKind::Simple(SimpleOperand::DerefHl), range)
+            }
+            ParsedExpr::Literal((Literal::Operand(keyword::Operand::C), range)) => {
+                Operand::Atom(AtomKind::DerefC, range)
             }
             ParsedExpr::Literal(number @ (Literal::Number(_), _)) => {
                 Operand::Deref(self.expr_factory.mk_literal(number))

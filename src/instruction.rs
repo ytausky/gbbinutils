@@ -56,6 +56,7 @@ pub enum Ld<R> {
     Immediate8(SimpleOperand, Expr<R>),
     Immediate16(Reg16, Expr<R>),
     ImmediateAddr(Expr<R>, Direction),
+    IndexedC(Direction),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

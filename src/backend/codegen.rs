@@ -99,6 +99,7 @@ fn encode_ld<R>(kind: Ld<R>) -> Encoded<R> {
         Ld::ImmediateAddr(addr, direction) => {
             Encoded::with(0xea | encode_direction(direction)).and_word(addr)
         }
+        Ld::IndexedC(direction) => Encoded::with(0xe2 | encode_direction(direction)),
     }
 }
 
@@ -377,6 +378,16 @@ mod tests {
                 ],
             )
         }
+    }
+
+    #[test]
+    fn encode_ld_deref_c_a() {
+        test_instruction(Ld(IndexedC(Direction::FromA)), bytes([0xe2]))
+    }
+
+    #[test]
+    fn encode_ld_a_deref_c() {
+        test_instruction(Ld(IndexedC(Direction::IntoA)), bytes([0xf2]))
     }
 
     #[test]
