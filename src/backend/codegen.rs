@@ -87,16 +87,16 @@ fn encode_nullary_instruction<R>(instr: Nullary) -> Encoded<R> {
     }
 }
 
-fn encode_ld<R>(kind: LdKind<R>) -> Encoded<R> {
+fn encode_ld<R>(kind: Ld<R>) -> Encoded<R> {
     match kind {
-        LdKind::Simple(dest, src) => encode_ld_to_reg_from_reg(dest, src),
-        LdKind::Immediate8(dest, immediate) => {
+        Ld::Simple(dest, src) => encode_ld_to_reg_from_reg(dest, src),
+        Ld::Immediate8(dest, immediate) => {
             Encoded::with(0x06 | (encode_simple_operand(dest) << 3)).and_byte(immediate)
         }
-        LdKind::Immediate16(dest, immediate) => {
+        Ld::Immediate16(dest, immediate) => {
             Encoded::with(0x01 | encode_reg16(dest)).and_word(immediate)
         }
-        LdKind::ImmediateAddr(addr, direction) => {
+        Ld::ImmediateAddr(addr, direction) => {
             Encoded::with(0xea | encode_direction(direction)).and_word(addr)
         }
     }
@@ -216,7 +216,7 @@ mod tests {
     use super::*;
     use std::borrow::Borrow;
 
-    use instruction::{self, Branch::*, Instruction::*, Nullary::*};
+    use instruction::{self, Branch::*, Instruction::*, Ld::*, Nullary::*};
 
     impl<F: FnMut(DataItem<()>)> Emit<()> for F {
         fn emit(&mut self, item: DataItem<()>) {
@@ -319,7 +319,7 @@ mod tests {
             (L, L, 0x6d),
         ];
         for (dest, src, opcode) in operands_and_encoding {
-            test_instruction(Ld(LdKind::Simple(dest, src)), bytes([opcode]))
+            test_instruction(Ld(Simple(dest, src)), bytes([opcode]))
         }
     }
 
@@ -339,7 +339,7 @@ mod tests {
         ].into_iter()
             .for_each(|(dest, opcode)| {
                 test_instruction(
-                    Ld(LdKind::Immediate8(dest, immediate.clone())),
+                    Ld(Immediate8(dest, immediate.clone())),
                     [
                         DataItem::Byte(opcode),
                         DataItem::Expr(immediate.clone(), Width::Byte),
@@ -355,7 +355,7 @@ mod tests {
         let test_cases = &[(Bc, 0x01), (De, 0x11), (Hl, 0x21), (Sp, 0x31)];
         for &(reg16, opcode) in test_cases {
             test_instruction(
-                Ld(LdKind::Immediate16(reg16, immediate.clone())),
+                Ld(Immediate16(reg16, immediate.clone())),
                 [
                     DataItem::Byte(opcode),
                     DataItem::Expr(immediate.clone(), Width::Word),
@@ -370,7 +370,7 @@ mod tests {
         let test_cases = &[(Direction::FromA, 0xea), (Direction::IntoA, 0xfa)];
         for &(direction, opcode) in test_cases {
             test_instruction(
-                Ld(LdKind::ImmediateAddr(addr.clone(), direction)),
+                Ld(ImmediateAddr(addr.clone(), direction)),
                 [
                     DataItem::Byte(opcode),
                     DataItem::Expr(addr.clone(), Width::Word),

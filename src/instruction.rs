@@ -6,7 +6,7 @@ pub enum Instruction<R> {
     IncDec16(IncDec, Reg16),
     JpDerefHl,
     Branch(Branch<R>, Option<Condition>),
-    Ld(LdKind<R>),
+    Ld(Ld<R>),
     Ldh(Expr<R>, Direction),
     Nullary(Nullary),
     Pop(RegPair),
@@ -51,7 +51,7 @@ pub enum SimpleOperand {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum LdKind<R> {
+pub enum Ld<R> {
     Simple(SimpleOperand, SimpleOperand),
     Immediate8(SimpleOperand, Expr<R>),
     Immediate16(Reg16, Expr<R>),

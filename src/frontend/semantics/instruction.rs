@@ -165,10 +165,10 @@ impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<
         let src = self.operands.next().unwrap();
         match (dest, src) {
             (Operand::Atom(AtomKind::Simple(dest), _), Operand::Atom(AtomKind::Simple(src), _)) => {
-                Ok(Instruction::Ld(LdKind::Simple(dest, src)))
+                Ok(Instruction::Ld(Ld::Simple(dest, src)))
             }
             (Operand::Atom(AtomKind::Simple(dest), _), Operand::Const(expr)) => {
-                Ok(Instruction::Ld(LdKind::Immediate8(dest, expr)))
+                Ok(Instruction::Ld(Ld::Immediate8(dest, expr)))
             }
             (Operand::Atom(AtomKind::Simple(SimpleOperand::A), _), src) => {
                 analyze_ld_a(src, Direction::IntoA)
@@ -177,7 +177,7 @@ impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<
                 analyze_ld_a(dest, Direction::FromA)
             }
             (Operand::Atom(AtomKind::Reg16(dest), _), Operand::Const(expr)) => {
-                Ok(Instruction::Ld(LdKind::Immediate16(dest, expr)))
+                Ok(Instruction::Ld(Ld::Immediate16(dest, expr)))
             }
             _ => panic!(),
         }
@@ -245,7 +245,7 @@ fn mk_branch<R>(kind: BranchKind, target: Option<TargetSelector<R>>) -> Branch<R
 
 fn analyze_ld_a<R>(other: Operand<R>, direction: Direction) -> AnalysisResult<R> {
     match other {
-        Operand::Deref(expr) => Ok(Instruction::Ld(LdKind::ImmediateAddr(expr, direction))),
+        Operand::Deref(expr) => Ok(Instruction::Ld(Ld::ImmediateAddr(expr, direction))),
         _ => panic!(),
     }
 }
@@ -498,7 +498,7 @@ mod tests {
         analyze(
             Command::Ld,
             vec![ParsedExpr::from(ident).deref(), literal(A)],
-        ).expect_instruction(Instruction::Ld(LdKind::ImmediateAddr(
+        ).expect_instruction(Instruction::Ld(Ld::ImmediateAddr(
             symbol(ident),
             Direction::FromA,
         )))
@@ -510,7 +510,7 @@ mod tests {
         analyze(
             Command::Ld,
             vec![literal(A), ParsedExpr::from(ident).deref()],
-        ).expect_instruction(Instruction::Ld(LdKind::ImmediateAddr(
+        ).expect_instruction(Instruction::Ld(Ld::ImmediateAddr(
             symbol(ident),
             Direction::IntoA,
         )))
@@ -619,7 +619,7 @@ mod tests {
             (SimpleOperand::DerefHl, SimpleOperand::DerefHl) => None,
             _ => Some((
                 (Command::Ld, vec![dest.into(), src.into()]),
-                Instruction::Ld(LdKind::Simple(dest, src)),
+                Instruction::Ld(Ld::Simple(dest, src)),
             )),
         }
     }
@@ -634,7 +634,7 @@ mod tests {
         let n = 0x12;
         (
             (Command::Ld, vec![ParsedExpr::from(dest), n.into()]),
-            Instruction::Ld(LdKind::Immediate8(dest, n.into())),
+            Instruction::Ld(Ld::Immediate8(dest, n.into())),
         )
     }
 
@@ -646,7 +646,7 @@ mod tests {
         let value = "value";
         (
             (Command::Ld, vec![ParsedExpr::from(dest), value.into()]),
-            Instruction::Ld(LdKind::Immediate16(dest, symbol(value))),
+            Instruction::Ld(Ld::Immediate16(dest, symbol(value))),
         )
     }
 
