@@ -63,8 +63,8 @@ impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<
             }
             IncDec(mode) => self.analyze_inc_dec(mode),
             Branch(branch) => self.analyze_branch(branch),
-            Ld => self.analyze_ld(),
-            Ldh => self.analyze_ldh(),
+            Ld => self.analyze_ld(LdHint::Normal),
+            Ldh => self.analyze_ld(LdHint::Ldh),
             Nullary(instruction) => Ok(instruction.into()),
             Stack(operation) => self.analyze_stack_operation(operation),
         }?;
@@ -160,7 +160,7 @@ impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<
         }
     }
 
-    fn analyze_ld(&mut self) -> AnalysisResult<R> {
+    fn analyze_ld(&mut self, hint: LdHint) -> AnalysisResult<R> {
         let dest = self.operands.next().unwrap();
         let src = self.operands.next().unwrap();
         match (dest, src) {
@@ -171,27 +171,13 @@ impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<
                 Ok(Instruction::Ld(Ld::Immediate8(dest, expr)))
             }
             (Operand::Atom(AtomKind::Simple(SimpleOperand::A), _), src) => {
-                analyze_ld_a(src, Direction::IntoA)
+                analyze_special_ld(src, Direction::IntoA, hint)
             }
             (dest, Operand::Atom(AtomKind::Simple(SimpleOperand::A), _)) => {
-                analyze_ld_a(dest, Direction::FromA)
+                analyze_special_ld(dest, Direction::FromA, hint)
             }
             (Operand::Atom(AtomKind::Reg16(dest), _), Operand::Const(expr)) => {
                 Ok(Instruction::Ld(Ld::Immediate16(dest, expr)))
-            }
-            _ => panic!(),
-        }
-    }
-
-    fn analyze_ldh(&mut self) -> AnalysisResult<R> {
-        let dest = self.operands.next().unwrap();
-        let src = self.operands.next().unwrap();
-        match (dest, src) {
-            (Operand::Deref(expr), Operand::Atom(AtomKind::Simple(SimpleOperand::A), _)) => {
-                Ok(Instruction::Ldh(expr, Direction::FromA))
-            }
-            (Operand::Atom(AtomKind::Simple(SimpleOperand::A), _), Operand::Deref(expr)) => {
-                Ok(Instruction::Ldh(expr, Direction::IntoA))
             }
             _ => panic!(),
         }
@@ -222,6 +208,11 @@ impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<
     }
 }
 
+enum LdHint {
+    Normal,
+    Ldh,
+}
+
 fn analyze_branch_target<R>(target: Option<Operand<R>>) -> Option<TargetSelector<R>> {
     match target {
         Some(Operand::Const(expr)) => Some(TargetSelector::Expr(expr)),
@@ -243,12 +234,22 @@ fn mk_branch<R>(kind: BranchKind, target: Option<TargetSelector<R>>) -> Branch<R
     }
 }
 
-fn analyze_ld_a<R>(other: Operand<R>, direction: Direction) -> AnalysisResult<R> {
-    match other {
-        Operand::Deref(expr) => Ok(Instruction::Ld(Ld::ImmediateAddr(expr, direction))),
-        Operand::Atom(AtomKind::DerefC, _) => Ok(Instruction::Ld(Ld::IndexedC(direction))),
-        _ => panic!(),
-    }
+fn analyze_special_ld<R>(
+    other: Operand<R>,
+    direction: Direction,
+    hint: LdHint,
+) -> AnalysisResult<R> {
+    Ok(Instruction::Ld(Ld::Special(
+        match other {
+            Operand::Deref(expr) => match hint {
+                LdHint::Normal => SpecialLd::InlineAddr(expr),
+                LdHint::Ldh => SpecialLd::InlineIndex(expr),
+            },
+            Operand::Atom(AtomKind::DerefC, _) => SpecialLd::RegIndex,
+            _ => panic!(),
+        },
+        direction,
+    )))
 }
 
 pub type AnalysisResult<R> = Result<Instruction<R>, Diagnostic<R>>;
@@ -499,8 +500,8 @@ mod tests {
         analyze(
             Command::Ld,
             vec![ParsedExpr::from(ident).deref(), literal(A)],
-        ).expect_instruction(Instruction::Ld(Ld::ImmediateAddr(
-            symbol(ident),
+        ).expect_instruction(Instruction::Ld(Ld::Special(
+            SpecialLd::InlineAddr(symbol(ident)),
             Direction::FromA,
         )))
     }
@@ -511,22 +512,24 @@ mod tests {
         analyze(
             Command::Ld,
             vec![literal(A), ParsedExpr::from(ident).deref()],
-        ).expect_instruction(Instruction::Ld(Ld::ImmediateAddr(
-            symbol(ident),
+        ).expect_instruction(Instruction::Ld(Ld::Special(
+            SpecialLd::InlineAddr(symbol(ident)),
             Direction::IntoA,
         )))
     }
 
     #[test]
     fn analyze_ld_deref_c_a() {
-        analyze(Command::Ld, vec![literal(C).deref(), literal(A)])
-            .expect_instruction(Instruction::Ld(Ld::IndexedC(Direction::FromA)))
+        analyze(Command::Ld, vec![literal(C).deref(), literal(A)]).expect_instruction(
+            Instruction::Ld(Ld::Special(SpecialLd::RegIndex, Direction::FromA)),
+        )
     }
 
     #[test]
     fn analyze_ld_a_deref_c() {
-        analyze(Command::Ld, vec![literal(A), literal(C).deref()])
-            .expect_instruction(Instruction::Ld(Ld::IndexedC(Direction::IntoA)))
+        analyze(Command::Ld, vec![literal(A), literal(C).deref()]).expect_instruction(
+            Instruction::Ld(Ld::Special(SpecialLd::RegIndex, Direction::IntoA)),
+        )
     }
 
     #[test]
@@ -535,7 +538,10 @@ mod tests {
         analyze(
             Command::Ldh,
             vec![ParsedExpr::from(index).deref(), literal(A)],
-        ).expect_instruction(Instruction::Ldh(index.into(), Direction::FromA))
+        ).expect_instruction(Instruction::Ld(Ld::Special(
+            SpecialLd::InlineIndex(index.into()),
+            Direction::FromA,
+        )))
     }
 
     #[test]
@@ -544,7 +550,10 @@ mod tests {
         analyze(
             Command::Ldh,
             vec![literal(A), ParsedExpr::from(index).deref()],
-        ).expect_instruction(Instruction::Ldh(index.into(), Direction::IntoA))
+        ).expect_instruction(Instruction::Ld(Ld::Special(
+            SpecialLd::InlineIndex(index.into()),
+            Direction::IntoA,
+        )))
     }
 
     #[test]

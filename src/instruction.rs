@@ -7,7 +7,6 @@ pub enum Instruction<R> {
     JpDerefHl,
     Branch(Branch<R>, Option<Condition>),
     Ld(Ld<R>),
-    Ldh(Expr<R>, Direction),
     Nullary(Nullary),
     Pop(RegPair),
     Push(RegPair),
@@ -53,10 +52,16 @@ pub enum SimpleOperand {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Ld<R> {
     Simple(SimpleOperand, SimpleOperand),
+    Special(SpecialLd<R>, Direction),
     Immediate8(SimpleOperand, Expr<R>),
     Immediate16(Reg16, Expr<R>),
-    ImmediateAddr(Expr<R>, Direction),
-    IndexedC(Direction),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum SpecialLd<R> {
+    InlineAddr(Expr<R>),
+    InlineIndex(Expr<R>),
+    RegIndex,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

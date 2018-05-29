@@ -59,7 +59,6 @@ pub fn generate_code<R>(instruction: Instruction<R>) -> Encoded<R> {
         }
         JpDerefHl => Encoded::with(0xe9),
         Ld(kind) => encode_ld(kind),
-        Ldh(expr, direction) => Encoded::with(0xe0 | encode_direction(direction)).and_byte(expr),
         Nullary(instr) => encode_nullary_instruction(instr),
         Pop(reg_pair) => Encoded::with(0xc1 | (encode_reg_pair(reg_pair) << 4)),
         Push(reg_pair) => Encoded::with(0xc5 | (encode_reg_pair(reg_pair) << 4)),
@@ -90,16 +89,25 @@ fn encode_nullary_instruction<R>(instr: Nullary) -> Encoded<R> {
 fn encode_ld<R>(kind: Ld<R>) -> Encoded<R> {
     match kind {
         Ld::Simple(dest, src) => encode_ld_to_reg_from_reg(dest, src),
+        Ld::Special(special, direction) => encode_special_ld(special, direction),
         Ld::Immediate8(dest, immediate) => {
             Encoded::with(0x06 | (encode_simple_operand(dest) << 3)).and_byte(immediate)
         }
         Ld::Immediate16(dest, immediate) => {
             Encoded::with(0x01 | encode_reg16(dest)).and_word(immediate)
         }
-        Ld::ImmediateAddr(addr, direction) => {
+    }
+}
+
+fn encode_special_ld<R>(ld: SpecialLd<R>, direction: Direction) -> Encoded<R> {
+    match ld {
+        SpecialLd::InlineAddr(addr) => {
             Encoded::with(0xea | encode_direction(direction)).and_word(addr)
         }
-        Ld::IndexedC(direction) => Encoded::with(0xe2 | encode_direction(direction)),
+        SpecialLd::InlineIndex(index) => {
+            Encoded::with(0xe0 | encode_direction(direction)).and_byte(index)
+        }
+        SpecialLd::RegIndex => Encoded::with(0xe2 | encode_direction(direction)),
     }
 }
 
@@ -366,12 +374,12 @@ mod tests {
     }
 
     #[test]
-    fn encode_ld_immediate_addr() {
+    fn encode_ld_inline_addr() {
         let addr = Expr::Literal(0x1234, ());
         let test_cases = &[(Direction::FromA, 0xea), (Direction::IntoA, 0xfa)];
         for &(direction, opcode) in test_cases {
             test_instruction(
-                Ld(ImmediateAddr(addr.clone(), direction)),
+                Ld(Special(SpecialLd::InlineAddr(addr.clone()), direction)),
                 [
                     DataItem::Byte(opcode),
                     DataItem::Expr(addr.clone(), Width::Word),
@@ -382,12 +390,18 @@ mod tests {
 
     #[test]
     fn encode_ld_deref_c_a() {
-        test_instruction(Ld(IndexedC(Direction::FromA)), bytes([0xe2]))
+        test_instruction(
+            Ld(Special(SpecialLd::RegIndex, Direction::FromA)),
+            bytes([0xe2]),
+        )
     }
 
     #[test]
     fn encode_ld_a_deref_c() {
-        test_instruction(Ld(IndexedC(Direction::IntoA)), bytes([0xf2]))
+        test_instruction(
+            Ld(Special(SpecialLd::RegIndex, Direction::IntoA)),
+            bytes([0xf2]),
+        )
     }
 
     #[test]
@@ -396,7 +410,7 @@ mod tests {
         let test_cases = &[(Direction::FromA, 0xe0), (Direction::IntoA, 0xf0)];
         for &(direction, opcode) in test_cases {
             test_instruction(
-                Ldh(index.clone(), direction),
+                Ld(Special(SpecialLd::InlineIndex(index.clone()), direction)),
                 [
                     DataItem::Byte(opcode),
                     DataItem::Expr(index.clone(), Width::Byte),
