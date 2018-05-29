@@ -66,6 +66,9 @@ impl<'a, EF: 'a + ExprFactory> OperandAnalyzer<'a, EF> {
             ParsedExpr::Literal((Literal::Operand(keyword::Operand::Hl), range)) => {
                 Operand::Atom(AtomKind::Simple(SimpleOperand::DerefHl), range)
             }
+            ParsedExpr::Literal(number @ (Literal::Number(_), _)) => {
+                Operand::Deref(self.expr_factory.mk_literal(number))
+            }
             _ => panic!(),
         }
     }

@@ -9,6 +9,7 @@ pub enum Instruction<R> {
     JpDerefHl,
     Branch(Branch<R>, Option<Condition>),
     Ld(LdKind<R>),
+    Ldh(Expr<R>, Direction),
     Nop,
     Pop(RegPair),
     Push(RegPair),

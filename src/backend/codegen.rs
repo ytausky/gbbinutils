@@ -57,6 +57,7 @@ pub fn generate_code<R>(instruction: Instruction<R>) -> Encoded<R> {
         Inc16(reg16) => Encoded::with(0x03 | encode_reg16(reg16)),
         JpDerefHl => Encoded::with(0xe9),
         Ld(kind) => encode_ld(kind),
+        Ldh(expr, direction) => Encoded::with(0xe0 | encode_direction(direction)).and_byte(expr),
         Nop => Encoded::with(0x00),
         Stop => Encoded {
             opcode: 0x10,
@@ -324,6 +325,21 @@ mod tests {
                 [
                     DataItem::Byte(opcode),
                     DataItem::Expr(addr.clone(), Width::Word),
+                ],
+            )
+        }
+    }
+
+    #[test]
+    fn encode_ldh() {
+        let index = Expr::Literal(0xcc, ());
+        let test_cases = &[(Direction::FromA, 0xe0), (Direction::IntoA, 0xf0)];
+        for &(direction, opcode) in test_cases {
+            test_instruction(
+                Ldh(index.clone(), direction),
+                [
+                    DataItem::Byte(opcode),
+                    DataItem::Expr(index.clone(), Width::Byte),
                 ],
             )
         }

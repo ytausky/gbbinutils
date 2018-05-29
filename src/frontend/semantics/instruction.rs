@@ -72,6 +72,7 @@ impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<
                 _ => panic!(),
             },
             Ld => self.analyze_ld(),
+            Ldh => self.analyze_ldh(),
             Nullary(instruction) => Ok(instruction.into()),
             Stack(operation) => self.analyze_stack_operation(operation),
         }?;
@@ -170,7 +171,6 @@ impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<
     fn analyze_ld(&mut self) -> AnalysisResult<R> {
         let dest = self.operands.next().unwrap();
         let src = self.operands.next().unwrap();
-        assert_eq!(self.operands.next(), None);
         match (dest, src) {
             (Operand::Atom(AtomKind::Simple(dest), _), Operand::Atom(AtomKind::Simple(src), _)) => {
                 Ok(Instruction::Ld(LdKind::Simple(dest, src)))
@@ -186,6 +186,20 @@ impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<
             }
             (Operand::Atom(AtomKind::Reg16(dest), _), Operand::Const(expr)) => {
                 Ok(Instruction::Ld(LdKind::Immediate16(dest, expr)))
+            }
+            _ => panic!(),
+        }
+    }
+
+    fn analyze_ldh(&mut self) -> AnalysisResult<R> {
+        let dest = self.operands.next().unwrap();
+        let src = self.operands.next().unwrap();
+        match (dest, src) {
+            (Operand::Deref(expr), Operand::Atom(AtomKind::Simple(SimpleOperand::A), _)) => {
+                Ok(Instruction::Ldh(expr, Direction::FromA))
+            }
+            (Operand::Atom(AtomKind::Simple(SimpleOperand::A), _), Operand::Deref(expr)) => {
+                Ok(Instruction::Ldh(expr, Direction::IntoA))
             }
             _ => panic!(),
         }
@@ -240,6 +254,7 @@ enum Mnemonic {
     Branch(BranchKind),
     Inc,
     Ld,
+    Ldh,
     Nullary(NullaryMnemonic),
     Stack(StackOperation),
 }
@@ -298,6 +313,7 @@ fn to_mnemonic(command: keyword::Command) -> Mnemonic {
         Jp => Mnemonic::Branch(BranchKind::Jp),
         Jr => Mnemonic::Branch(BranchKind::Jr),
         Ld => Mnemonic::Ld,
+        Ldh => Mnemonic::Ldh,
         Nop => Mnemonic::Nullary(NullaryMnemonic::Nop),
         Pop => Mnemonic::Stack(StackOperation::Pop),
         Push => Mnemonic::Stack(StackOperation::Push),
@@ -482,6 +498,24 @@ mod tests {
             symbol(ident),
             Direction::IntoA,
         )))
+    }
+
+    #[test]
+    fn analyze_ldh_from_a() {
+        let index = 0xcc;
+        analyze(
+            Command::Ldh,
+            vec![ParsedExpr::from(index).deref(), literal(A)],
+        ).expect_instruction(Instruction::Ldh(index.into(), Direction::FromA))
+    }
+
+    #[test]
+    fn analyze_ldh_into_a() {
+        let index = 0xcc;
+        analyze(
+            Command::Ldh,
+            vec![literal(A), ParsedExpr::from(index).deref()],
+        ).expect_instruction(Instruction::Ldh(index.into(), Direction::IntoA))
     }
 
     #[test]
