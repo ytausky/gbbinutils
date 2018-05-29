@@ -2,6 +2,8 @@
 pub enum Instruction<R> {
     AddHl(Reg16),
     Alu(AluOperation, AluSource<R>),
+    Di,
+    Ei,
     Halt,
     IncDec8(IncDec, SimpleOperand),
     IncDec16(IncDec, Reg16),

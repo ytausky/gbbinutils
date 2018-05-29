@@ -271,6 +271,8 @@ enum ExplicitA {
 
 #[derive(Debug, PartialEq)]
 enum NullaryMnemonic {
+    Di,
+    Ei,
     Halt,
     Nop,
     Reti,
@@ -286,6 +288,8 @@ enum StackOperation {
 impl<R> From<NullaryMnemonic> for Instruction<R> {
     fn from(nullary_mnemonic: NullaryMnemonic) -> Instruction<R> {
         match nullary_mnemonic {
+            NullaryMnemonic::Di => Instruction::Di,
+            NullaryMnemonic::Ei => Instruction::Ei,
             NullaryMnemonic::Halt => Instruction::Halt,
             NullaryMnemonic::Nop => Instruction::Nop,
             NullaryMnemonic::Reti => Instruction::Reti,
@@ -322,6 +326,8 @@ fn to_mnemonic(command: keyword::Command) -> Mnemonic {
         Call => Mnemonic::Branch(BranchKind::Call),
         Cp => Mnemonic::Alu(AluOperation::Cp, ExplicitA::NotAllowed),
         Dec => Mnemonic::IncDec(IncDec::Dec),
+        Di => Mnemonic::Nullary(NullaryMnemonic::Di),
+        Ei => Mnemonic::Nullary(NullaryMnemonic::Ei),
         Halt => Mnemonic::Nullary(NullaryMnemonic::Halt),
         Inc => Mnemonic::IncDec(IncDec::Inc),
         Jp => Mnemonic::Branch(BranchKind::Jp),
@@ -602,6 +608,8 @@ mod tests {
 
     fn describe_nullary_instructions() -> impl Iterator<Item = InstructionDescriptor> {
         [
+            (Command::Di, Instruction::Di),
+            (Command::Ei, Instruction::Ei),
             (Command::Halt, Instruction::Halt),
             (Command::Nop, Instruction::Nop),
             (Command::Reti, Instruction::Reti),

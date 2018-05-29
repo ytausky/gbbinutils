@@ -51,6 +51,8 @@ pub fn generate_code<R>(instruction: Instruction<R>) -> Encoded<R> {
             encode_immediate_alu_operation(operation, expr)
         }
         Branch(branch, condition) => encode_branch(branch, condition),
+        Di => Encoded::with(0xf3),
+        Ei => Encoded::with(0xfb),
         Halt => Encoded::with(0x76),
         IncDec8(mode, operand) => Encoded::with(
             0b00_000_100 | encode_inc_dec(mode) | (encode_simple_operand(operand) << 3),
@@ -229,6 +231,16 @@ mod tests {
     #[test]
     fn encode_halt() {
         test_instruction(Halt, bytes([0x76]))
+    }
+
+    #[test]
+    fn encode_di() {
+        test_instruction(Di, bytes([0xf3]))
+    }
+
+    #[test]
+    fn encode_ei() {
+        test_instruction(Ei, bytes([0xfb]))
     }
 
     #[test]
