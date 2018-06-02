@@ -85,6 +85,7 @@ pub enum Message {
     AlwaysUnconditional,
     DestMustBeA,
     DestMustBeHl,
+    IncompatibleOperand,
     OperandCount { actual: usize, expected: usize },
     UndefinedMacro { name: String },
     UnresolvedSymbol { symbol: String },
@@ -98,6 +99,7 @@ impl fmt::Display for Message {
             AlwaysUnconditional => write!(f, "instruction cannot be made conditional"),
             DestMustBeA => write!(f, "destination of ALU operation must be `a`"),
             DestMustBeHl => write!(f, "destination operand must be `hl`"),
+            IncompatibleOperand => write!(f, "operand cannot be used with this instruction"),
             OperandCount { actual, expected } => {
                 write!(f, "expected {} operands, found {}", expected, actual)
             }

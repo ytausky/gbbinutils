@@ -88,7 +88,7 @@ impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<
     ) -> AnalysisResult<R> {
         match self.operands.next() {
             Some(Operand::Atom(AtomKind::Reg16(reg16), range)) => {
-                self.analyze_add_hl_instruction((reg16, range))
+                self.analyze_add_hl_instruction(operation_ref, (reg16, range))
             }
             operand => self.analyze_alu_instruction(
                 (AluOperation::Add, operation_ref),
@@ -98,12 +98,19 @@ impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<
         }
     }
 
-    fn analyze_add_hl_instruction(&mut self, target: (Reg16, R)) -> AnalysisResult<R> {
+    fn analyze_add_hl_instruction(
+        &mut self,
+        mnemonic_interval: R,
+        target: (Reg16, R),
+    ) -> AnalysisResult<R> {
         if target.0 != Reg16::Hl {
             return Err(Diagnostic::new(Message::DestMustBeHl, target.1));
         }
-        match self.operands.next() {
-            Some(Operand::Atom(AtomKind::Reg16(src), _)) => Ok(Instruction::AddHl(src)),
+        match self.expect_operand(2, mnemonic_interval)? {
+            Operand::Atom(AtomKind::Reg16(src), _) => Ok(Instruction::AddHl(src)),
+            Operand::Atom(_, interval) => {
+                Err(Diagnostic::new(Message::IncompatibleOperand, interval))
+            }
             _ => panic!(),
         }
     }
@@ -911,5 +918,21 @@ mod tests {
     fn analyze_add_bc_de() {
         analyze(Command::Add, vec![literal(Bc).mark(), literal(De)])
             .expect_diagnostic(Message::DestMustBeHl)
+    }
+
+    #[test]
+    fn analyze_add_hl_af() {
+        analyze(Command::Add, vec![literal(Hl), literal(Af).mark()])
+            .expect_diagnostic(Message::IncompatibleOperand)
+    }
+
+    #[test]
+    fn analyze_add_hl() {
+        analyze((Command::Add, Marking::Special), vec![literal(Hl)]).expect_diagnostic(
+            Message::OperandCount {
+                actual: 1,
+                expected: 2,
+            },
+        )
     }
 }
