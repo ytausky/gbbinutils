@@ -26,7 +26,7 @@ pub trait LexemeRefFactory {
     fn mk_lexeme_ref(&self, range: BufRange) -> Self::TokenRef;
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum TokenRefData {
     Lexeme {
         range: BufRange,
@@ -37,13 +37,13 @@ pub enum TokenRefData {
 #[derive(Debug, PartialEq)]
 pub struct BufContextData {
     buf_id: BufId,
-    included_from: Option<Rc<TokenRefData>>,
+    included_from: Option<TokenRefData>,
 }
 
 pub struct SimpleTokenTracker;
 
 impl TokenTracker for SimpleTokenTracker {
-    type TokenRef = Rc<TokenRefData>;
+    type TokenRef = TokenRefData;
     type BufContext = SimpleBufTokenRefFactory;
     fn mk_buf_context(
         &mut self,
@@ -64,18 +64,18 @@ pub struct SimpleBufTokenRefFactory {
 }
 
 impl LexemeRefFactory for SimpleBufTokenRefFactory {
-    type TokenRef = Rc<TokenRefData>;
+    type TokenRef = TokenRefData;
     fn mk_lexeme_ref(&self, range: BufRange) -> Self::TokenRef {
-        Rc::new(TokenRefData::Lexeme {
+        TokenRefData::Lexeme {
             range,
             context: self.context.clone(),
-        })
+        }
     }
 }
 
-impl SourceInterval for Rc<TokenRefData> {
+impl SourceInterval for TokenRefData {
     fn extend(&self, _: Self) -> Self {
-        self.clone()
+        (*self).clone()
     }
 }
 
@@ -146,8 +146,8 @@ impl<'a> TerminalDiagnostics<'a> {
     }
 }
 
-impl<'a> DiagnosticsListener<Rc<TokenRefData>> for TerminalDiagnostics<'a> {
-    fn emit_diagnostic(&self, diagnostic: Diagnostic<Rc<TokenRefData>>) {
+impl<'a> DiagnosticsListener<TokenRefData> for TerminalDiagnostics<'a> {
+    fn emit_diagnostic(&self, diagnostic: Diagnostic<TokenRefData>) {
         let codebase = self.codebase.borrow();
         let elaborated_diagnostic = elaborate(&diagnostic, &codebase);
         render(&elaborated_diagnostic, &mut io::stdout()).unwrap()
@@ -163,10 +163,10 @@ struct ElaboratedDiagnostic<'a> {
 }
 
 fn elaborate<'a>(
-    diagnostic: &Diagnostic<Rc<TokenRefData>>,
+    diagnostic: &Diagnostic<TokenRefData>,
     codebase: &'a TextCache,
 ) -> ElaboratedDiagnostic<'a> {
-    match *diagnostic.highlight {
+    match diagnostic.highlight {
         TokenRefData::Lexeme {
             ref range,
             ref context,
@@ -224,13 +224,13 @@ mod tests {
         let src = "    nop\n    my_macro a, $12\n\n";
         let buf_id = codebase.add_src_buf(DUMMY_FILE.into(), src.to_string());
         let range = BufRange::from(12..20);
-        let token_ref = Rc::new(TokenRefData::Lexeme {
+        let token_ref = TokenRefData::Lexeme {
             range,
             context: Rc::new(BufContextData {
                 buf_id,
                 included_from: None,
             }),
-        });
+        };
         let diagnostic = Diagnostic {
             message: Message::UndefinedMacro {
                 name: "my_macro".to_string(),
