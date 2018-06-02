@@ -33,33 +33,34 @@ impl<'a, EF: ExprFactory> CommandAnalyzer<'a, EF> {
             _ => Context::Other,
         };
         Analysis::new(
+            (mnemonic, mnemonic_ref),
             operands
                 .into_iter()
                 .map(|x| self.operand_analyzer.analyze_operand(x, &context)),
-        ).run((mnemonic, mnemonic_ref))
+        ).run()
     }
 }
 
-struct Analysis<I> {
+struct Analysis<R, I> {
+    mnemonic: (Mnemonic, R),
     operands: OperandCounter<I>,
 }
 
-impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<I> {
-    fn new(operands: I) -> Analysis<I> {
+impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<R, I> {
+    fn new(mnemonic: (Mnemonic, R), operands: I) -> Analysis<R, I> {
         Analysis {
+            mnemonic,
             operands: OperandCounter::new(operands),
         }
     }
 
-    fn run(mut self, (mnemonic, range): (Mnemonic, R)) -> AnalysisResult<R> {
+    fn run(mut self) -> AnalysisResult<R> {
         use self::Mnemonic::*;
-        let instruction = match mnemonic {
-            Alu(AluOperation::Add, explicit_a) => {
-                self.analyze_add_instruction(range.clone(), explicit_a)
-            }
+        let instruction = match self.mnemonic.0 {
+            Alu(AluOperation::Add, explicit_a) => self.analyze_add_instruction(explicit_a),
             Alu(operation, explicit_a) => {
                 let first_operand = self.operands.next();
-                self.analyze_alu_instruction((operation, range.clone()), explicit_a, first_operand)
+                self.analyze_alu_instruction(operation, explicit_a, first_operand)
             }
             IncDec(mode) => self.analyze_inc_dec(mode),
             Branch(branch) => self.analyze_branch(branch),
@@ -76,37 +77,25 @@ impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<
         } else {
             Err(Diagnostic::new(
                 Message::OperandCount { actual, expected },
-                range,
+                self.mnemonic.1,
             ))
         }
     }
 
-    fn analyze_add_instruction(
-        &mut self,
-        operation_ref: R,
-        explicit_a: ExplicitA,
-    ) -> AnalysisResult<R> {
+    fn analyze_add_instruction(&mut self, explicit_a: ExplicitA) -> AnalysisResult<R> {
         match self.operands.next() {
             Some(Operand::Atom(AtomKind::Reg16(reg16), range)) => {
-                self.analyze_add_hl_instruction(operation_ref, (reg16, range))
+                self.analyze_add_hl_instruction((reg16, range))
             }
-            operand => self.analyze_alu_instruction(
-                (AluOperation::Add, operation_ref),
-                explicit_a,
-                operand,
-            ),
+            operand => self.analyze_alu_instruction(AluOperation::Add, explicit_a, operand),
         }
     }
 
-    fn analyze_add_hl_instruction(
-        &mut self,
-        mnemonic_interval: R,
-        target: (Reg16, R),
-    ) -> AnalysisResult<R> {
+    fn analyze_add_hl_instruction(&mut self, target: (Reg16, R)) -> AnalysisResult<R> {
         if target.0 != Reg16::Hl {
             return Err(Diagnostic::new(Message::DestMustBeHl, target.1));
         }
-        match self.expect_operand(2, mnemonic_interval)? {
+        match self.expect_operand(2)? {
             Operand::Atom(AtomKind::Reg16(src), _) => Ok(Instruction::AddHl(src)),
             Operand::Atom(_, interval) => {
                 Err(Diagnostic::new(Message::IncompatibleOperand, interval))
@@ -117,13 +106,13 @@ impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<
 
     fn analyze_alu_instruction(
         &mut self,
-        (operation, range): (AluOperation, R),
+        operation: AluOperation,
         explicit_a: ExplicitA,
         first_operand: Option<Operand<R>>,
     ) -> AnalysisResult<R> {
-        let first_operand = expect_operand(first_operand, 0, 2, range.clone())?;
+        let first_operand = expect_operand(first_operand, 0, 2, self.mnemonic.1.clone())?;
         let src = if explicit_a == ExplicitA::Required {
-            let second_operand = self.expect_operand(2, range)?;
+            let second_operand = self.expect_operand(2)?;
             match first_operand {
                 Operand::Atom(AtomKind::Simple(SimpleOperand::A), _) => Ok(()),
                 Operand::Atom(_, range) => Err(range),
@@ -217,8 +206,13 @@ impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<
         }
     }
 
-    fn expect_operand(&mut self, out_of: usize, range: R) -> Result<Operand<R>, Diagnostic<R>> {
-        expect_operand(self.operands.next(), self.operands.seen(), out_of, range)
+    fn expect_operand(&mut self, out_of: usize) -> Result<Operand<R>, Diagnostic<R>> {
+        expect_operand(
+            self.operands.next(),
+            self.operands.seen(),
+            out_of,
+            self.mnemonic.1.clone(),
+        )
     }
 }
 
@@ -294,7 +288,7 @@ enum ExplicitA {
     NotAllowed,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum StackOperation {
     Push,
     Pop,
