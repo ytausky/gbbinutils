@@ -1,6 +1,6 @@
-use Width;
 use codebase::{BufId, BufRange, LineNumber, TextBuf, TextCache, TextRange};
-use std::{fmt, io, cell::RefCell, rc::Rc};
+use std::{cell::RefCell, fmt, io, rc::Rc};
+use Width;
 
 pub trait TokenTracker {
     type TokenRef: Clone + fmt::Debug + PartialEq;
@@ -83,6 +83,7 @@ impl<TR> Diagnostic<TR> {
 #[derive(Debug, PartialEq)]
 pub enum Message {
     AlwaysUnconditional,
+    DestMustBeA,
     OperandCount { actual: usize, expected: usize },
     UndefinedMacro { name: String },
     UnresolvedSymbol { symbol: String },
@@ -94,6 +95,7 @@ impl fmt::Display for Message {
         use diagnostics::Message::*;
         match self {
             AlwaysUnconditional => write!(f, "instruction cannot be made conditional"),
+            DestMustBeA => write!(f, "destination of ALU operation must be `a`"),
             OperandCount { actual, expected } => {
                 write!(f, "expected {} operands, found {}", expected, actual)
             }

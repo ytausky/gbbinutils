@@ -1,9 +1,9 @@
 use std::fmt::Debug;
 
 use diagnostics::{Diagnostic, Message};
-use frontend::ExprFactory;
 use frontend::semantics::operand::{AtomKind, Context, Operand, OperandAnalyzer, OperandCounter};
 use frontend::syntax::{keyword, ParsedExpr};
+use frontend::ExprFactory;
 use instruction::*;
 
 pub struct CommandAnalyzer<'a, EF: 'a> {
@@ -108,26 +108,27 @@ impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<
 
     fn analyze_alu_instruction(
         &mut self,
-        (operation, _): (AluOperation, R),
+        (operation, range): (AluOperation, R),
         explicit_a: ExplicitA,
         first_operand: Option<Operand<R>>,
     ) -> AnalysisResult<R> {
-        let next_operand = if explicit_a == ExplicitA::Required {
+        let first_operand = expect_operand(first_operand, 0, 2, range.clone())?;
+        let src = if explicit_a == ExplicitA::Required {
+            let second_operand = self.expect_operand(2, range)?;
             match first_operand {
-                Some(Operand::Atom(AtomKind::Simple(SimpleOperand::A), _)) => (),
-                _ => panic!(),
-            };
-            self.operands.next()
+                Operand::Atom(AtomKind::Simple(SimpleOperand::A), _) => Ok(()),
+                Operand::Atom(_, range) => Err(range),
+                Operand::Const(expr) | Operand::Deref(expr) => Err(expr.analysis_range()),
+            }.map_err(|range| Diagnostic::new(Message::DestMustBeA, range))?;
+            second_operand
         } else {
             first_operand
         };
-        match next_operand {
-            Some(Operand::Atom(AtomKind::Simple(src), _)) => {
+        match src {
+            Operand::Atom(AtomKind::Simple(src), _) => {
                 Ok(Instruction::Alu(operation, AluSource::Simple(src)))
             }
-            Some(Operand::Const(expr)) => {
-                Ok(Instruction::Alu(operation, AluSource::Immediate(expr)))
-            }
+            Operand::Const(expr) => Ok(Instruction::Alu(operation, AluSource::Immediate(expr))),
             _ => panic!(),
         }
     }
@@ -206,6 +207,19 @@ impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<
             _ => panic!(),
         }
     }
+
+    fn expect_operand(&mut self, out_of: usize, range: R) -> Result<Operand<R>, Diagnostic<R>> {
+        expect_operand(self.operands.next(), self.operands.seen(), out_of, range)
+    }
+}
+
+fn expect_operand<R>(
+    operand: Option<Operand<R>>,
+    actual: usize,
+    expected: usize,
+    range: R,
+) -> Result<Operand<R>, Diagnostic<R>> {
+    operand.ok_or_else(|| Diagnostic::new(Message::OperandCount { actual, expected }, range))
 }
 
 enum LdHint {
@@ -863,5 +877,31 @@ mod tests {
             Command::Jp,
             vec![literal(C).mark(), SimpleOperand::DerefHl.into()],
         ).expect_diagnostic(Message::AlwaysUnconditional)
+    }
+
+    #[test]
+    fn analyze_add() {
+        analyze((Command::Add, Marking::Special), Vec::new()).expect_diagnostic(
+            Message::OperandCount {
+                actual: 0,
+                expected: 2,
+            },
+        )
+    }
+
+    #[test]
+    fn analyze_add_a() {
+        analyze((Command::Add, Marking::Special), vec![literal(A)]).expect_diagnostic(
+            Message::OperandCount {
+                actual: 1,
+                expected: 2,
+            },
+        )
+    }
+
+    #[test]
+    fn analyze_add_b_a() {
+        analyze(Command::Add, vec![literal(B).mark(), literal(A)])
+            .expect_diagnostic(Message::DestMustBeA)
     }
 }

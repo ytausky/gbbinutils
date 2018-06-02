@@ -1,5 +1,5 @@
-use Width;
 use instruction::*;
+use Width;
 
 pub trait Emit<R> {
     fn emit(&mut self, item: DataItem<R>);

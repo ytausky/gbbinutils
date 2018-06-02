@@ -110,6 +110,15 @@ pub enum Expr<R> {
     Symbol(String, R),
 }
 
+impl<R: Clone> Expr<R> {
+    pub fn analysis_range(&self) -> R {
+        match self {
+            Expr::Literal(_, range) | Expr::Symbol(_, range) => (*range).clone(),
+            Expr::LocationCounter | Expr::Subtract(..) => panic!(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum IncDec {
     Inc,

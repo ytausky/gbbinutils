@@ -1,5 +1,5 @@
-use frontend::ExprFactory;
 use frontend::syntax::{keyword, Literal, ParsedExpr};
+use frontend::ExprFactory;
 use instruction::{Condition, Expr, Reg16, RegPair, SimpleOperand};
 
 #[derive(Debug, PartialEq)]

@@ -1,4 +1,8 @@
-use frontend::syntax::{self, token, Literal, Token, keyword::{self, Command, Operand}};
+use frontend::syntax::{self,
+                       keyword::{self, Command, Operand},
+                       token,
+                       Literal,
+                       Token};
 
 use std::iter;
 use std::ops::{Index, Range};
@@ -262,10 +266,10 @@ const KEYWORDS: &[(&str, Keyword)] = &[
 mod tests {
     use super::*;
 
-    use super::Operand::*;
     use super::keyword::Command::*;
-    use super::syntax::Literal::{Number, Operand};
     use super::syntax::token::*;
+    use super::syntax::Literal::{Number, Operand};
+    use super::Operand::*;
 
     fn assert_eq_tokens<'a>(src: &'a str, expected_tokens: &[Token]) {
         assert_eq!(

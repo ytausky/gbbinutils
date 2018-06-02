@@ -1,4 +1,4 @@
-use std::{cmp, fmt, fs, ops, cell::RefCell, rc::Rc};
+use std::{cell::RefCell, cmp, fmt, fs, ops, rc::Rc};
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub struct LineIndex(usize);
@@ -305,7 +305,7 @@ mod tests {
             lines.collect::<Vec<_>>(),
             [
                 (LineNumber(2), "some second line"),
-                (LineNumber(3), "and a third")
+                (LineNumber(3), "and a third"),
             ]
         )
     }

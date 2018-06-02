@@ -1,8 +1,8 @@
-use Width;
 use backend;
-use frontend::syntax::{self, ParsedExpr, Token, TokenSpec, keyword::Command};
+use frontend::syntax::{self, keyword::Command, ParsedExpr, Token, TokenSpec};
 use frontend::{Literal, StrExprFactory};
 use session::{ChunkId, Session};
+use Width;
 
 mod instruction;
 mod operand;
@@ -245,8 +245,8 @@ mod tests {
 
     use backend;
     use diagnostics::Diagnostic;
-    use frontend::syntax::{token, CommandContext, FileContext, MacroInvocationContext,
-                           TokenSeqContext, keyword::Operand};
+    use frontend::syntax::{keyword::Operand, token, CommandContext, FileContext,
+                           MacroInvocationContext, TokenSeqContext};
     use instruction::Expr;
 
     struct TestFrontend(Vec<TestOperation>);
@@ -308,9 +308,10 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [
-                TestOperation::AnalyzeChunk(ChunkId::File((filename.to_string(), Some(()))))
-            ]
+            [TestOperation::AnalyzeChunk(ChunkId::File((
+                filename.to_string(),
+                Some(())
+            )))]
         )
     }
 
@@ -364,12 +365,10 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [
-                TestOperation::EmitItem(backend::Item::Data(
-                    Expr::Symbol(label.to_string(), ()),
-                    Width::Word
-                ))
-            ]
+            [TestOperation::EmitItem(backend::Item::Data(
+                Expr::Symbol(label.to_string(), ()),
+                Width::Word
+            ))]
         );
     }
 
@@ -422,12 +421,10 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [
-                TestOperation::AnalyzeChunk(ChunkId::Macro {
-                    name: (name.to_string(), ()),
-                    args: Vec::new(),
-                })
-            ]
+            [TestOperation::AnalyzeChunk(ChunkId::Macro {
+                name: (name.to_string(), ()),
+                args: Vec::new(),
+            })]
         )
     }
 
@@ -446,12 +443,10 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [
-                TestOperation::AnalyzeChunk(ChunkId::Macro {
-                    name: (name.to_string(), ()),
-                    args: vec![vec![arg_token]],
-                }),
-            ]
+            [TestOperation::AnalyzeChunk(ChunkId::Macro {
+                name: (name.to_string(), ()),
+                args: vec![vec![arg_token]],
+            })]
         )
     }
 
@@ -466,15 +461,13 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [
-                TestOperation::EmitDiagnostic(Diagnostic::new(
-                    Message::OperandCount {
-                        actual: 1,
-                        expected: 0
-                    },
-                    ()
-                )),
-            ]
+            [TestOperation::EmitDiagnostic(Diagnostic::new(
+                Message::OperandCount {
+                    actual: 1,
+                    expected: 0
+                },
+                ()
+            ))]
         )
     }
 

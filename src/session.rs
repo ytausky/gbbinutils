@@ -1,4 +1,6 @@
-use std::{fmt, marker, borrow::{Borrow, BorrowMut}};
+use std::{borrow::{Borrow, BorrowMut},
+          fmt,
+          marker};
 use {backend, diagnostics, frontend};
 
 pub trait Session {

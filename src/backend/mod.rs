@@ -1,8 +1,8 @@
-use Width;
 use backend::codegen::{DataItem, Emit};
 use diagnostics::*;
 use instruction::{Expr, Instruction};
 use std::{collections::HashMap, iter::FromIterator};
+use Width;
 
 pub trait Backend<R> {
     type Object;
@@ -315,15 +315,13 @@ mod tests {
             with_object_builder(|builder| builder.emit_item(byte_literal(value)));
         assert_eq!(
             *diagnostics,
-            [
-                Diagnostic::new(
-                    Message::ValueOutOfRange {
-                        value,
-                        width: Width::Byte,
-                    },
-                    ()
-                )
-            ]
+            [Diagnostic::new(
+                Message::ValueOutOfRange {
+                    value,
+                    width: Width::Byte,
+                },
+                ()
+            )]
         );
     }
 

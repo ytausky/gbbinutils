@@ -418,9 +418,10 @@ mod tests {
         });
         assert_eq!(
             *log.borrow(),
-            [
-                TestEvent::Diagnostic(Diagnostic::new(Message::UndefinedMacro { name }, ()))
-            ]
+            [TestEvent::Diagnostic(Diagnostic::new(
+                Message::UndefinedMacro { name },
+                ()
+            ))]
         );
     }
 
