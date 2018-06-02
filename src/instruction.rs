@@ -1,4 +1,4 @@
-use diagnostics::Source;
+use diagnostics::{Source, SourceInterval};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Instruction<R> {
@@ -112,8 +112,8 @@ pub enum Expr<R> {
     Symbol(String, R),
 }
 
-impl<R: Clone> Source for Expr<R> {
-    type Interval = R;
+impl<SI: SourceInterval> Source for Expr<SI> {
+    type Interval = SI;
     fn source_interval(&self) -> Self::Interval {
         match self {
             Expr::Literal(_, interval) | Expr::Symbol(_, interval) => (*interval).clone(),

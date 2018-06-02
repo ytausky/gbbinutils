@@ -1,5 +1,3 @@
-use std::fmt::Debug;
-
 mod semantics;
 mod syntax;
 
@@ -108,7 +106,7 @@ impl ExprFactory for StrExprFactory {
 }
 
 pub trait Frontend {
-    type TokenRef: Clone + Debug + PartialEq;
+    type TokenRef: SourceInterval;
     fn analyze_chunk(
         &mut self,
         chunk_id: ChunkId<Self::TokenRef>,
@@ -219,7 +217,7 @@ trait TokenizedCodeSource
 where
     for<'c> &'c Self::Tokenized: IntoIterator<Item = (Token, Self::TokenRef)>,
 {
-    type TokenRef: Clone + Debug + PartialEq;
+    type TokenRef: SourceInterval;
     fn define_macro(
         &mut self,
         name: (impl Into<String>, Self::TokenRef),

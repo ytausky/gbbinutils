@@ -1,4 +1,4 @@
-use diagnostics::Source;
+use diagnostics::{Source, SourceInterval};
 use frontend::syntax::{keyword, Literal, ParsedExpr};
 use frontend::ExprFactory;
 use instruction::{Condition, Expr, Reg16, RegPair, SimpleOperand};
@@ -10,8 +10,8 @@ pub enum Operand<R> {
     Deref(Expr<R>),
 }
 
-impl<R: Clone> Source for Operand<R> {
-    type Interval = R;
+impl<SI: SourceInterval> Source for Operand<SI> {
+    type Interval = SI;
     fn source_interval(&self) -> Self::Interval {
         match self {
             Operand::Atom(_, interval) => (*interval).clone(),

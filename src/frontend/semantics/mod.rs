@@ -244,7 +244,7 @@ mod tests {
     use super::*;
 
     use backend;
-    use diagnostics::Diagnostic;
+    use diagnostics::{Diagnostic, SourceInterval};
     use frontend::syntax::{keyword::Operand, token, CommandContext, FileContext,
                            MacroInvocationContext, TokenSeqContext};
     use instruction::Expr;
@@ -295,6 +295,10 @@ mod tests {
                 tokens.into_iter().map(|(t, _)| t).collect(),
             ))
         }
+    }
+
+    impl SourceInterval for () {
+        fn extend(&self, _: Self) {}
     }
 
     #[test]

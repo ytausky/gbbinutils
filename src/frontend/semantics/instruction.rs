@@ -1,6 +1,4 @@
-use std::fmt::Debug;
-
-use diagnostics::{Diagnostic, Message, Source};
+use diagnostics::{Diagnostic, Message, Source, SourceInterval};
 use frontend::semantics::operand::{AtomKind, Context, Operand, OperandAnalyzer, OperandCounter};
 use frontend::syntax::{keyword, ParsedExpr};
 use frontend::ExprFactory;
@@ -24,7 +22,7 @@ impl<'a, EF: ExprFactory> CommandAnalyzer<'a, EF> {
     ) -> AnalysisResult<R>
     where
         I: IntoIterator<Item = ParsedExpr<String, R>>,
-        R: Clone + Debug + PartialEq,
+        R: SourceInterval,
     {
         let (mnemonic, mnemonic_ref) = (to_mnemonic(mnemonic.0), mnemonic.1);
         let context = match mnemonic {
@@ -46,7 +44,7 @@ struct Analysis<R, I> {
     operands: OperandCounter<I>,
 }
 
-impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<R, I> {
+impl<'a, R: SourceInterval, I: Iterator<Item = Operand<R>>> Analysis<R, I> {
     fn new(mnemonic: (Mnemonic, R), operands: I) -> Analysis<R, I> {
         Analysis {
             mnemonic,
@@ -357,10 +355,16 @@ mod tests {
 
     use self::keyword::{Command, Operand::*};
 
-    #[derive(Clone, Debug, PartialEq)]
+    #[derive(Clone, Copy, Debug, PartialEq)]
     enum Marking {
         Normal,
         Special,
+    }
+
+    impl SourceInterval for Marking {
+        fn extend(&self, _: Self) -> Self {
+            *self
+        }
     }
 
     impl Default for Marking {

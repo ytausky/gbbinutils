@@ -1,10 +1,9 @@
 use std::{borrow::{Borrow, BorrowMut},
-          fmt,
           marker};
 use {backend, diagnostics, frontend};
 
 pub trait Session {
-    type TokenRef: Clone + fmt::Debug + PartialEq;
+    type TokenRef: diagnostics::SourceInterval;
     fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::TokenRef>);
     fn emit_diagnostic(&mut self, diagnostic: diagnostics::Diagnostic<Self::TokenRef>);
     fn emit_item(&mut self, item: backend::Item<Self::TokenRef>);
