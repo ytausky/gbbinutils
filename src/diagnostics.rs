@@ -1,5 +1,5 @@
 use codebase::{BufId, BufRange, LineNumber, TextBuf, TextCache, TextRange};
-use std::{cell::RefCell, fmt, io, rc::Rc};
+use std::{cell::RefCell, cmp, fmt, io, rc::Rc};
 use Width;
 
 pub trait SourceInterval: Clone {
@@ -74,8 +74,25 @@ impl LexemeRefFactory for SimpleBufTokenRefFactory {
 }
 
 impl SourceInterval for TokenRefData {
-    fn extend(&self, _: Self) -> Self {
-        (*self).clone()
+    fn extend(&self, other: Self) -> Self {
+        use diagnostics::TokenRefData::*;
+        match (self, &other) {
+            (
+                Lexeme { range, context },
+                Lexeme {
+                    range: other_range,
+                    context: other_context,
+                },
+            ) if Rc::ptr_eq(context, other_context) =>
+            {
+                Lexeme {
+                    range: cmp::min(range.start, other_range.start)
+                        ..cmp::max(range.end, other_range.end),
+                    context: (*context).clone(),
+                }
+            }
+            _ => panic!(),
+        }
     }
 }
 
@@ -217,6 +234,33 @@ mod tests {
     use codebase::TextPosition;
 
     static DUMMY_FILE: &str = "/my/file";
+
+    #[test]
+    fn extend_interval() {
+        let mut codebase = TextCache::new();
+        let src = "left right";
+        let buf_id = codebase.add_src_buf(DUMMY_FILE.into(), src.to_string());
+        let context = Rc::new(BufContextData {
+            buf_id,
+            included_from: None,
+        });
+        let left = TokenRefData::Lexeme {
+            range: BufRange::from(0..4),
+            context: context.clone(),
+        };
+        let right = TokenRefData::Lexeme {
+            range: BufRange::from(5..10),
+            context: context.clone(),
+        };
+        let combined = left.extend(right);
+        assert_eq!(
+            combined,
+            TokenRefData::Lexeme {
+                range: BufRange::from(0..10),
+                context
+            }
+        )
+    }
 
     #[test]
     fn mk_message_for_undefined_macro() {
