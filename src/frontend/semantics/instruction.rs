@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use diagnostics::{Diagnostic, Message};
+use diagnostics::{Diagnostic, Message, Source};
 use frontend::semantics::operand::{AtomKind, Context, Operand, OperandAnalyzer, OperandCounter};
 use frontend::syntax::{keyword, ParsedExpr};
 use frontend::ExprFactory;
@@ -115,9 +115,11 @@ impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<
             let second_operand = self.expect_operand(2)?;
             match first_operand {
                 Operand::Atom(AtomKind::Simple(SimpleOperand::A), _) => Ok(()),
-                Operand::Atom(_, range) => Err(range),
-                Operand::Const(expr) | Operand::Deref(expr) => Err(expr.analysis_range()),
-            }.map_err(|range| Diagnostic::new(Message::DestMustBeA, range))?;
+                operand => Err(Diagnostic::new(
+                    Message::DestMustBeA,
+                    operand.source_interval(),
+                )),
+            }?;
             second_operand
         } else {
             first_operand

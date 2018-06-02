@@ -1,3 +1,5 @@
+use diagnostics::Source;
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Instruction<R> {
     AddHl(Reg16),
@@ -110,10 +112,11 @@ pub enum Expr<R> {
     Symbol(String, R),
 }
 
-impl<R: Clone> Expr<R> {
-    pub fn analysis_range(&self) -> R {
+impl<R: Clone> Source for Expr<R> {
+    type Interval = R;
+    fn source_interval(&self) -> Self::Interval {
         match self {
-            Expr::Literal(_, range) | Expr::Symbol(_, range) => (*range).clone(),
+            Expr::Literal(_, interval) | Expr::Symbol(_, interval) => (*interval).clone(),
             Expr::LocationCounter | Expr::Subtract(..) => panic!(),
         }
     }
