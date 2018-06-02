@@ -99,7 +99,9 @@ impl<'a, R: Clone + Debug + PartialEq, I: Iterator<Item = Operand<R>>> Analysis<
     }
 
     fn analyze_add_hl_instruction(&mut self, target: (Reg16, R)) -> AnalysisResult<R> {
-        assert_eq!(target.0, Reg16::Hl);
+        if target.0 != Reg16::Hl {
+            return Err(Diagnostic::new(Message::DestMustBeHl, target.1));
+        }
         match self.operands.next() {
             Some(Operand::Atom(AtomKind::Reg16(src), _)) => Ok(Instruction::AddHl(src)),
             _ => panic!(),
@@ -903,5 +905,11 @@ mod tests {
     fn analyze_add_b_a() {
         analyze(Command::Add, vec![literal(B).mark(), literal(A)])
             .expect_diagnostic(Message::DestMustBeA)
+    }
+
+    #[test]
+    fn analyze_add_bc_de() {
+        analyze(Command::Add, vec![literal(Bc).mark(), literal(De)])
+            .expect_diagnostic(Message::DestMustBeHl)
     }
 }
