@@ -362,7 +362,7 @@ mod tests {
     }
 
     impl SourceInterval for Marking {
-        fn extend(&self, _: Self) -> Self {
+        fn extend(&self, _: &Self) -> Self {
             *self
         }
     }

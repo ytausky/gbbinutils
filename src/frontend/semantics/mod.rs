@@ -298,7 +298,7 @@ mod tests {
     }
 
     impl SourceInterval for () {
-        fn extend(&self, _: Self) {}
+        fn extend(&self, _: &Self) {}
     }
 
     #[test]

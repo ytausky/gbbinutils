@@ -3,7 +3,7 @@ use std::{cell::RefCell, cmp, fmt, io, rc::Rc};
 use Width;
 
 pub trait SourceInterval: Clone {
-    fn extend(&self, other: Self) -> Self;
+    fn extend(&self, other: &Self) -> Self;
 }
 
 pub trait Source {
@@ -74,9 +74,9 @@ impl LexemeRefFactory for SimpleBufTokenRefFactory {
 }
 
 impl SourceInterval for TokenRefData {
-    fn extend(&self, other: Self) -> Self {
+    fn extend(&self, other: &Self) -> Self {
         use diagnostics::TokenRefData::*;
-        match (self, &other) {
+        match (self, other) {
             (
                 Lexeme { range, context },
                 Lexeme {
@@ -252,7 +252,7 @@ mod tests {
             range: BufRange::from(5..10),
             context: context.clone(),
         };
-        let combined = left.extend(right);
+        let combined = left.extend(&right);
         assert_eq!(
             combined,
             TokenRefData::Lexeme {
