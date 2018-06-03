@@ -44,7 +44,7 @@ struct Analysis<R, I> {
     operands: OperandCounter<I>,
 }
 
-impl<'a, R: SourceInterval, I: Iterator<Item = Operand<R>>> Analysis<R, I> {
+impl<'a, R: SourceInterval, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>>> Analysis<R, I> {
     fn new(mnemonic: (Mnemonic, R), operands: I) -> Analysis<R, I> {
         Analysis {
             mnemonic,
@@ -54,7 +54,8 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Operand<R>>> Analysis<R, I> {
 
     fn run(mut self) -> AnalysisResult<R> {
         let instruction = self.analyze_mnemonic()?;
-        self.check_for_unexpected_operands()?;
+        self.operands
+            .check_for_unexpected_operands(self.mnemonic.1)?;
         Ok(instruction)
     }
 
@@ -72,20 +73,6 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Operand<R>>> Analysis<R, I> {
             Ldh => self.analyze_ld(LdHint::Ldh),
             Nullary(instruction) => Ok(instruction.into()),
             Stack(operation) => self.analyze_stack_operation(operation),
-        }
-    }
-
-    fn check_for_unexpected_operands(self) -> Result<(), Diagnostic<R>> {
-        let expected = self.operands.seen();
-        let extra = self.operands.count();
-        let actual = expected + extra;
-        if actual == expected {
-            Ok(())
-        } else {
-            Err(Diagnostic::new(
-                Message::OperandCount { actual, expected },
-                self.mnemonic.1,
-            ))
         }
     }
 
@@ -143,7 +130,7 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Operand<R>>> Analysis<R, I> {
     }
 
     fn analyze_branch(&mut self, branch: BranchKind) -> AnalysisResult<R> {
-        let (condition, target) = self.collect_condition_and_target();
+        let (condition, target) = self.collect_condition_and_target()?;
         match (branch, condition, target) {
             (BranchKind::Jp, None, Some(TargetSelector::DerefHl)) => Ok(Instruction::JpDerefHl),
             (BranchKind::Jp, Some((_, condition_ref)), Some(TargetSelector::DerefHl)) => {
@@ -158,16 +145,18 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Operand<R>>> Analysis<R, I> {
 
     fn collect_condition_and_target(
         &mut self,
-    ) -> (Option<(Condition, R)>, Option<TargetSelector<R>>) {
-        let first_operand = self.operands.next();
-        if let Some(Operand::Atom(AtomKind::Condition(condition), range)) = first_operand {
-            (
-                Some((condition, range)),
-                analyze_branch_target(self.operands.next()),
-            )
-        } else {
-            (None, analyze_branch_target(first_operand))
-        }
+    ) -> Result<(Option<(Condition, R)>, Option<TargetSelector<R>>), Diagnostic<R>> {
+        let first_operand = self.operands.next()?;
+        Ok(
+            if let Some(Operand::Atom(AtomKind::Condition(condition), range)) = first_operand {
+                (
+                    Some((condition, range)),
+                    analyze_branch_target(self.operands.next()?),
+                )
+            } else {
+                (None, analyze_branch_target(first_operand))
+            },
+        )
     }
 
     fn analyze_ld(&mut self, hint: LdHint) -> AnalysisResult<R> {
@@ -215,7 +204,7 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Operand<R>>> Analysis<R, I> {
 
     fn expect_operand(&mut self, out_of: usize) -> Result<Operand<R>, Diagnostic<R>> {
         let actual = self.operands.seen();
-        self.operands.next().ok_or_else(|| {
+        self.operands.next()?.ok_or_else(|| {
             Diagnostic::new(
                 Message::OperandCount {
                     actual,

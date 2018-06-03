@@ -1,4 +1,4 @@
-use diagnostics::{Source, SourceInterval};
+use diagnostics::{Diagnostic, Message, Source, SourceInterval};
 use frontend::syntax::{keyword, ExprNode, Literal, ParsedExpr};
 use frontend::ExprFactory;
 use instruction::{Condition, Reg16, RegPair, RelocExpr, SimpleOperand};
@@ -48,14 +48,14 @@ impl<'a, EF: 'a + ExprFactory> OperandAnalyzer<'a, EF> {
         &mut self,
         expr: ParsedExpr<String, R>,
         context: &Context,
-    ) -> Operand<R> {
-        match expr.node {
+    ) -> Result<Operand<R>, Diagnostic<R>> {
+        Ok(match expr.node {
             ExprNode::Deref(expr) => self.analyze_deref_operand(*expr),
             ExprNode::Ident(ident) => self.analyze_ident_operand((ident, expr.interval)),
             ExprNode::Literal(literal) => {
                 self.analyze_literal_operand((literal, expr.interval), context)
             }
-        }
+        })
     }
 
     fn analyze_ident_operand<R>(&mut self, ident: (String, R)) -> Operand<R> {
@@ -136,7 +136,7 @@ pub struct OperandCounter<I> {
     count: usize,
 }
 
-impl<I> OperandCounter<I> {
+impl<I: Iterator<Item = Result<T, E>>, T, E> OperandCounter<I> {
     pub fn new(operands: I) -> OperandCounter<I> {
         OperandCounter { operands, count: 0 }
     }
@@ -144,14 +144,28 @@ impl<I> OperandCounter<I> {
     pub fn seen(&self) -> usize {
         self.count
     }
-}
 
-impl<I: Iterator> Iterator for OperandCounter<I> {
-    type Item = I::Item;
-    fn next(&mut self) -> Option<Self::Item> {
-        self.operands.next().map(|x| {
+    pub fn next(&mut self) -> Result<Option<T>, E> {
+        self.operands.next().map_or(Ok(None), |operand| {
             self.count += 1;
-            x
+            operand.map(|x| Some(x))
         })
+    }
+
+    pub fn check_for_unexpected_operands<SI>(
+        self,
+        source_interval: SI,
+    ) -> Result<(), Diagnostic<SI>> {
+        let expected = self.count;
+        let extra = self.operands.count();
+        let actual = expected + extra;
+        if actual == expected {
+            Ok(())
+        } else {
+            Err(Diagnostic::new(
+                Message::OperandCount { actual, expected },
+                source_interval,
+            ))
+        }
     }
 }
