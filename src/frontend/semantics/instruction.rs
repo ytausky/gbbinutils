@@ -53,8 +53,14 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Operand<R>>> Analysis<R, I> {
     }
 
     fn run(mut self) -> AnalysisResult<R> {
+        let instruction = self.analyze_mnemonic()?;
+        self.check_for_unexpected_operands()?;
+        Ok(instruction)
+    }
+
+    fn analyze_mnemonic(&mut self) -> AnalysisResult<R> {
         use self::Mnemonic::*;
-        let instruction = match self.mnemonic.0 {
+        match self.mnemonic.0 {
             Alu(AluOperation::Add, explicit_a) => self.analyze_add_instruction(explicit_a),
             Alu(operation, explicit_a) => {
                 let first_operand = self.operands.next();
@@ -66,12 +72,15 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Operand<R>>> Analysis<R, I> {
             Ldh => self.analyze_ld(LdHint::Ldh),
             Nullary(instruction) => Ok(instruction.into()),
             Stack(operation) => self.analyze_stack_operation(operation),
-        }?;
+        }
+    }
+
+    fn check_for_unexpected_operands(self) -> Result<(), Diagnostic<R>> {
         let expected = self.operands.seen();
         let extra = self.operands.count();
         let actual = expected + extra;
         if actual == expected {
-            Ok(instruction)
+            Ok(())
         } else {
             Err(Diagnostic::new(
                 Message::OperandCount { actual, expected },
@@ -83,16 +92,20 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Operand<R>>> Analysis<R, I> {
     fn analyze_add_instruction(&mut self, explicit_a: ExplicitA) -> AnalysisResult<R> {
         match self.operands.next() {
             Some(Operand::Atom(AtomKind::Reg16(reg16), range)) => {
-                self.analyze_add_hl_instruction((reg16, range))
+                self.analyze_add_reg16_instruction((reg16, range))
             }
             operand => self.analyze_alu_instruction(AluOperation::Add, explicit_a, operand),
         }
     }
 
-    fn analyze_add_hl_instruction(&mut self, target: (Reg16, R)) -> AnalysisResult<R> {
-        if target.0 != Reg16::Hl {
-            return Err(Diagnostic::new(Message::DestMustBeHl, target.1));
+    fn analyze_add_reg16_instruction(&mut self, target: (Reg16, R)) -> AnalysisResult<R> {
+        match target.0 {
+            Reg16::Hl => self.analyze_add_hl_instruction(),
+            _ => Err(Diagnostic::new(Message::DestMustBeHl, target.1)),
         }
+    }
+
+    fn analyze_add_hl_instruction(&mut self) -> AnalysisResult<R> {
         match self.expect_operand(2)? {
             Operand::Atom(AtomKind::Reg16(src), _) => Ok(Instruction::AddHl(src)),
             Operand::Atom(_, interval) => {
