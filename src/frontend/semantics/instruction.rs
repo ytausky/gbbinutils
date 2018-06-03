@@ -90,8 +90,7 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Operand<R>>> Analysis<R, I> {
     }
 
     fn analyze_add_instruction(&mut self) -> AnalysisResult<R> {
-        let exptected_operands = self.mnemonic.0.expected_operands();
-        match self.expect_operand(exptected_operands)? {
+        match self.expect_operand(2)? {
             Operand::Atom(AtomKind::Reg16(reg16), range) => {
                 self.analyze_add_reg16_instruction((reg16, range))
             }
@@ -195,8 +194,8 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Operand<R>>> Analysis<R, I> {
     }
 
     fn analyze_stack_operation(&mut self, operation: StackOperation) -> AnalysisResult<R> {
-        let reg_pair = match self.operands.next() {
-            Some(Operand::Atom(AtomKind::RegPair(reg_pair), _)) => reg_pair,
+        let reg_pair = match self.expect_operand(1)? {
+            Operand::Atom(AtomKind::RegPair(reg_pair), _) => reg_pair,
             _ => panic!(),
         };
         let instruction_ctor = match operation {
@@ -207,34 +206,25 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Operand<R>>> Analysis<R, I> {
     }
 
     fn analyze_inc_dec(&mut self, mode: IncDec) -> AnalysisResult<R> {
-        match self.operands.next() {
-            Some(Operand::Atom(AtomKind::Simple(operand), _)) => {
-                Ok(Instruction::IncDec8(mode, operand))
-            }
-            Some(Operand::Atom(AtomKind::Reg16(operand), _)) => {
-                Ok(Instruction::IncDec16(mode, operand))
-            }
+        match self.expect_operand(1)? {
+            Operand::Atom(AtomKind::Simple(operand), _) => Ok(Instruction::IncDec8(mode, operand)),
+            Operand::Atom(AtomKind::Reg16(operand), _) => Ok(Instruction::IncDec16(mode, operand)),
             _ => panic!(),
         }
     }
 
     fn expect_operand(&mut self, out_of: usize) -> Result<Operand<R>, Diagnostic<R>> {
-        expect_operand(
-            self.operands.next(),
-            self.operands.seen(),
-            out_of,
-            self.mnemonic.1.clone(),
-        )
+        let actual = self.operands.seen();
+        self.operands.next().ok_or_else(|| {
+            Diagnostic::new(
+                Message::OperandCount {
+                    actual,
+                    expected: out_of,
+                },
+                self.mnemonic.1.clone(),
+            )
+        })
     }
-}
-
-fn expect_operand<R>(
-    operand: Option<Operand<R>>,
-    actual: usize,
-    expected: usize,
-    range: R,
-) -> Result<Operand<R>, Diagnostic<R>> {
-    operand.ok_or_else(|| Diagnostic::new(Message::OperandCount { actual, expected }, range))
 }
 
 enum LdHint {
@@ -289,15 +279,6 @@ enum Mnemonic {
     Ldh,
     Nullary(Nullary),
     Stack(StackOperation),
-}
-
-impl Mnemonic {
-    fn expected_operands(&self) -> usize {
-        match self {
-            Mnemonic::Alu(operation) => operation.expected_operands(),
-            _ => panic!(),
-        }
-    }
 }
 
 impl AluOperation {
@@ -1001,5 +982,21 @@ mod tests {
                 expected: 2,
             },
         )
+    }
+
+    #[test]
+    fn analyze_push() {
+        analyze(Command::Push.to_marked().mark(), vec![]).expect_diagnostic(Message::OperandCount {
+            actual: 0,
+            expected: 1,
+        })
+    }
+
+    #[test]
+    fn analyze_inc() {
+        analyze(Command::Inc.to_marked().mark(), vec![]).expect_diagnostic(Message::OperandCount {
+            actual: 0,
+            expected: 1,
+        })
     }
 }
