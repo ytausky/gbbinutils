@@ -65,8 +65,10 @@ pub struct StringSrcBuf {
 }
 
 impl StringSrcBuf {
-    fn new(name: String, src: String) -> StringSrcBuf {
+    fn new(name: impl Into<String>, src: impl Into<String>) -> StringSrcBuf {
+        let src = src.into();
         let line_ranges = build_line_ranges(&src);
+        let name = name.into();
         StringSrcBuf {
             name,
             src: src.into(),
@@ -158,7 +160,7 @@ impl TextCache {
         TextCache { bufs: Vec::new() }
     }
 
-    pub fn add_src_buf(&mut self, name: String, src: String) -> BufId {
+    pub fn add_src_buf(&mut self, name: impl Into<String>, src: impl Into<String>) -> BufId {
         let buf_id = BufId(self.bufs.len());
         self.bufs.push(StringSrcBuf::new(name, src));
         buf_id
@@ -258,7 +260,7 @@ mod tests {
     fn iterate_src() {
         let mut cache = TextCache::new();
         let src = "src";
-        let buf_id = cache.add_src_buf(NONE.into(), src.to_string());
+        let buf_id = cache.add_src_buf(NONE, src);
         let rc_src = cache.buf(buf_id).text();
         let mut iter = rc_src.char_indices();
         assert_eq!(iter.next(), Some((0, 's')));
@@ -271,14 +273,14 @@ mod tests {
     fn get_line() {
         let mut cache = TextCache::new();
         let src = "first line\nsecond line\nthird line";
-        let buf_id = cache.add_src_buf(NONE.into(), src.into());
+        let buf_id = cache.add_src_buf(NONE, src);
         assert_eq!(cache.get_line(buf_id, 1), "second line")
     }
 
     #[test]
     fn text_range_in_middle_of_line() {
         let src = "abcdefg\nhijklmn";
-        let buf = StringSrcBuf::new(NONE.into(), src.into());
+        let buf = StringSrcBuf::new(NONE, src);
         let buf_range = 9..12;
         let text_range = buf.text_range(&buf_range);
         assert_eq!(
@@ -299,7 +301,7 @@ mod tests {
     #[test]
     fn borrow_some_lines() {
         let text = "my first line\nsome second line\nand a third";
-        let buf = StringSrcBuf::new(NONE.into(), text.to_string());
+        let buf = StringSrcBuf::new(NONE, text);
         let lines = buf.lines(LineIndex(1)..LineIndex(3));
         assert_eq!(
             lines.collect::<Vec<_>>(),

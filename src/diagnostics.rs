@@ -239,7 +239,7 @@ mod tests {
     fn extend_interval() {
         let mut codebase = TextCache::new();
         let src = "left right";
-        let buf_id = codebase.add_src_buf(DUMMY_FILE.into(), src.to_string());
+        let buf_id = codebase.add_src_buf(DUMMY_FILE, src);
         let context = Rc::new(BufContextData {
             buf_id,
             included_from: None,
@@ -266,7 +266,7 @@ mod tests {
     fn mk_message_for_undefined_macro() {
         let mut codebase = TextCache::new();
         let src = "    nop\n    my_macro a, $12\n\n";
-        let buf_id = codebase.add_src_buf(DUMMY_FILE.into(), src.to_string());
+        let buf_id = codebase.add_src_buf(DUMMY_FILE, src);
         let range = BufRange::from(12..20);
         let token_ref = TokenRefData::Lexeme {
             range,
