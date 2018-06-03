@@ -1,6 +1,6 @@
 use backend::codegen::{DataItem, Emit};
 use diagnostics::*;
-use instruction::{Expr, Instruction};
+use instruction::{Instruction, RelocExpr};
 use std::{collections::HashMap, iter::FromIterator};
 use Width;
 
@@ -13,7 +13,7 @@ pub trait Backend<R> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Item<R> {
-    Data(Expr<R>, Width),
+    Data(RelocExpr<R>, Width),
     Instruction(Instruction<R>),
 }
 
@@ -58,7 +58,7 @@ impl<'a, D: 'a> SymbolTable<'a, D> {
         }
     }
 
-    fn resolve_expr_item<R: Clone>(&self, expr: Expr<R>, width: Width) -> Data
+    fn resolve_expr_item<R: Clone>(&self, expr: RelocExpr<R>, width: Width) -> Data
     where
         D: DiagnosticsListener<R>,
     {
@@ -66,15 +66,15 @@ impl<'a, D: 'a> SymbolTable<'a, D> {
         self.fit_to_width(value, width)
     }
 
-    fn evaluate_expr<R: Clone>(&self, expr: Expr<R>) -> (i32, R)
+    fn evaluate_expr<R: Clone>(&self, expr: RelocExpr<R>) -> (i32, R)
     where
         D: DiagnosticsListener<R>,
     {
         match expr {
-            Expr::Literal(value, expr_ref) => (value, expr_ref),
-            Expr::LocationCounter => panic!(),
-            Expr::Subtract(_, _) => panic!(),
-            Expr::Symbol(symbol, expr_ref) => {
+            RelocExpr::Literal(value, expr_ref) => (value, expr_ref),
+            RelocExpr::LocationCounter => panic!(),
+            RelocExpr::Subtract(_, _) => panic!(),
+            RelocExpr::Symbol(symbol, expr_ref) => {
                 let symbol_def = self.symbols.get(&symbol).cloned();
                 if let Some(value) = symbol_def {
                     (value, expr_ref)
@@ -142,7 +142,7 @@ impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R, D> {
         }
     }
 
-    fn emit_data_expr(&mut self, expr: Expr<R>, width: Width) {
+    fn emit_data_expr(&mut self, expr: RelocExpr<R>, width: Width) {
         self.pending_sections
             .last_mut()
             .unwrap()
@@ -277,7 +277,7 @@ mod tests {
     }
 
     fn byte_literal(value: i32) -> Item<()> {
-        Item::Data(Expr::Literal(value, ()), Width::Byte)
+        Item::Data(RelocExpr::Literal(value, ()), Width::Byte)
     }
 
     #[test]
@@ -370,7 +370,7 @@ mod tests {
     }
 
     fn symbol_expr(symbol: impl Into<String>) -> Item<()> {
-        Item::Data(Expr::Symbol(symbol.into(), ()), Width::Word)
+        Item::Data(RelocExpr::Symbol(symbol.into(), ()), Width::Word)
     }
 
     fn unresolved(symbol: impl Into<String>) -> Diagnostic<()> {

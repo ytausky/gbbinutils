@@ -4,7 +4,7 @@ mod syntax;
 use backend::*;
 use diagnostics::*;
 use frontend::syntax::*;
-use instruction::Expr;
+use instruction::RelocExpr;
 use session::{BorrowedComponents, ChunkId, Components, Session};
 
 use codebase::Codebase;
@@ -80,8 +80,8 @@ impl AnalysisFactory for SemanticAnalysisFactory {
 }
 
 pub trait ExprFactory {
-    fn mk_literal<R>(&mut self, literal: (Literal<String>, R)) -> Expr<R>;
-    fn mk_symbol<R>(&mut self, symbol: (String, R)) -> Expr<R>;
+    fn mk_literal<R>(&mut self, literal: (Literal<String>, R)) -> RelocExpr<R>;
+    fn mk_symbol<R>(&mut self, symbol: (String, R)) -> RelocExpr<R>;
 }
 
 pub struct StrExprFactory;
@@ -93,15 +93,15 @@ impl StrExprFactory {
 }
 
 impl ExprFactory for StrExprFactory {
-    fn mk_literal<R>(&mut self, (literal, token_ref): (Literal<String>, R)) -> Expr<R> {
+    fn mk_literal<R>(&mut self, (literal, token_ref): (Literal<String>, R)) -> RelocExpr<R> {
         match literal {
-            Literal::Number(number) => Expr::Literal(number, token_ref),
+            Literal::Number(number) => RelocExpr::Literal(number, token_ref),
             _ => panic!(),
         }
     }
 
-    fn mk_symbol<R>(&mut self, symbol: (String, R)) -> Expr<R> {
-        Expr::Symbol(symbol.0, symbol.1)
+    fn mk_symbol<R>(&mut self, symbol: (String, R)) -> RelocExpr<R> {
+        RelocExpr::Symbol(symbol.0, symbol.1)
     }
 }
 

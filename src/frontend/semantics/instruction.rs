@@ -327,7 +327,7 @@ impl BranchKind {
 
 enum TargetSelector<R> {
     DerefHl,
-    Expr(Expr<R>),
+    Expr(RelocExpr<R>),
 }
 
 fn to_mnemonic(command: keyword::Command) -> Mnemonic {
@@ -421,8 +421,8 @@ mod tests {
         Literal::Operand(keyword).into()
     }
 
-    fn symbol(ident: &str) -> Expr<Marking> {
-        Expr::Symbol(ident.to_string(), Marking::default())
+    fn symbol(ident: &str) -> RelocExpr<Marking> {
+        RelocExpr::Symbol(ident.to_string(), Marking::default())
     }
 
     fn deref(expr: Input) -> Input {
@@ -539,9 +539,9 @@ mod tests {
         }
     }
 
-    impl From<i32> for Expr<Marking> {
+    impl From<i32> for RelocExpr<Marking> {
         fn from(n: i32) -> Self {
-            Expr::Literal(n, Marking::default())
+            RelocExpr::Literal(n, Marking::default())
         }
     }
 
@@ -620,7 +620,7 @@ mod tests {
         test_cp_const_analysis(n.into(), n.into())
     }
 
-    fn test_cp_const_analysis(parsed: ParsedExpr<String, Marking>, expr: Expr<Marking>) {
+    fn test_cp_const_analysis(parsed: ParsedExpr<String, Marking>, expr: RelocExpr<Marking>) {
         analyze(Command::Cp, Some(parsed)).expect_instruction(Instruction::Alu(
             AluOperation::Cp,
             AluSource::Immediate(expr),

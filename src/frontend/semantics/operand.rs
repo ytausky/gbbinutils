@@ -1,13 +1,13 @@
 use diagnostics::{Source, SourceInterval};
 use frontend::syntax::{keyword, ExprNode, Literal, ParsedExpr};
 use frontend::ExprFactory;
-use instruction::{Condition, Expr, Reg16, RegPair, SimpleOperand};
+use instruction::{Condition, Reg16, RegPair, RelocExpr, SimpleOperand};
 
 #[derive(Debug, PartialEq)]
 pub enum Operand<R> {
     Atom(AtomKind, R),
-    Const(Expr<R>),
-    Deref(Expr<R>),
+    Const(RelocExpr<R>),
+    Deref(RelocExpr<R>),
 }
 
 impl<SI: SourceInterval> Source for Operand<SI> {

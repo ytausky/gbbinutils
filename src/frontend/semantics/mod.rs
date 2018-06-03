@@ -247,7 +247,7 @@ mod tests {
     use diagnostics::{Diagnostic, SourceInterval};
     use frontend::syntax::{keyword::Operand, token, CommandContext, FileContext,
                            MacroInvocationContext, TokenSeqContext};
-    use instruction::Expr;
+    use instruction::RelocExpr;
 
     struct TestFrontend(Vec<TestOperation>);
 
@@ -376,7 +376,7 @@ mod tests {
         assert_eq!(
             actions,
             [TestOperation::EmitItem(backend::Item::Data(
-                Expr::Symbol(label.to_string(), ()),
+                RelocExpr::Symbol(label.to_string(), ()),
                 Width::Word
             ))]
         );
@@ -390,11 +390,11 @@ mod tests {
     }
 
     fn mk_byte(byte: &i32) -> backend::Item<()> {
-        backend::Item::Data(Expr::Literal(*byte, ()), Width::Byte)
+        backend::Item::Data(RelocExpr::Literal(*byte, ()), Width::Byte)
     }
 
     fn mk_word(word: &i32) -> backend::Item<()> {
-        backend::Item::Data(Expr::Literal(*word, ()), Width::Word)
+        backend::Item::Data(RelocExpr::Literal(*word, ()), Width::Word)
     }
 
     #[test]

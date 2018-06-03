@@ -36,7 +36,7 @@ pub enum AluOperation {
 #[derive(Clone, Debug, PartialEq)]
 pub enum AluSource<R> {
     Simple(SimpleOperand),
-    Immediate(Expr<R>),
+    Immediate(RelocExpr<R>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -55,14 +55,14 @@ pub enum SimpleOperand {
 pub enum Ld<R> {
     Simple(SimpleOperand, SimpleOperand),
     Special(SpecialLd<R>, Direction),
-    Immediate8(SimpleOperand, Expr<R>),
-    Immediate16(Reg16, Expr<R>),
+    Immediate8(SimpleOperand, RelocExpr<R>),
+    Immediate16(Reg16, RelocExpr<R>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SpecialLd<R> {
-    InlineAddr(Expr<R>),
-    InlineIndex(Expr<R>),
+    InlineAddr(RelocExpr<R>),
+    InlineIndex(RelocExpr<R>),
     RegIndex,
 }
 
@@ -90,9 +90,9 @@ pub enum RegPair {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Branch<R> {
-    Call(Expr<R>),
-    Jp(Expr<R>),
-    Jr(Expr<R>),
+    Call(RelocExpr<R>),
+    Jp(RelocExpr<R>),
+    Jr(RelocExpr<R>),
     Ret,
 }
 
@@ -105,19 +105,19 @@ pub enum Condition {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Expr<R> {
+pub enum RelocExpr<R> {
     Literal(i32, R),
     LocationCounter,
-    Subtract(Box<Expr<R>>, Box<Expr<R>>),
+    Subtract(Box<RelocExpr<R>>, Box<RelocExpr<R>>),
     Symbol(String, R),
 }
 
-impl<SI: SourceInterval> Source for Expr<SI> {
+impl<SI: SourceInterval> Source for RelocExpr<SI> {
     type Interval = SI;
     fn source_interval(&self) -> Self::Interval {
         match self {
-            Expr::Literal(_, interval) | Expr::Symbol(_, interval) => (*interval).clone(),
-            Expr::LocationCounter | Expr::Subtract(..) => panic!(),
+            RelocExpr::Literal(_, interval) | RelocExpr::Symbol(_, interval) => (*interval).clone(),
+            RelocExpr::LocationCounter | RelocExpr::Subtract(..) => panic!(),
         }
     }
 }

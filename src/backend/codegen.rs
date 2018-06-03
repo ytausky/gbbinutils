@@ -15,7 +15,7 @@ pub trait Emit<R> {
 #[derive(Debug, PartialEq)]
 pub enum DataItem<R> {
     Byte(u8),
-    Expr(Expr<R>, Width),
+    Expr(RelocExpr<R>, Width),
 }
 
 pub struct Encoded<R> {
@@ -31,12 +31,12 @@ impl<R> Encoded<R> {
         }
     }
 
-    fn and_byte(mut self, expr: Expr<R>) -> Encoded<R> {
+    fn and_byte(mut self, expr: RelocExpr<R>) -> Encoded<R> {
         self.immediate = Some(DataItem::Expr(expr, Width::Byte));
         self
     }
 
-    fn and_word(mut self, expr: Expr<R>) -> Encoded<R> {
+    fn and_word(mut self, expr: RelocExpr<R>) -> Encoded<R> {
         self.immediate = Some(DataItem::Expr(expr, Width::Word));
         self
     }
@@ -122,7 +122,7 @@ fn encode_simple_alu_operation<R>(operation: AluOperation, src: SimpleOperand) -
     Encoded::with(opcode_base | encode_simple_operand(src))
 }
 
-fn encode_immediate_alu_operation<R>(operation: AluOperation, expr: Expr<R>) -> Encoded<R> {
+fn encode_immediate_alu_operation<R>(operation: AluOperation, expr: RelocExpr<R>) -> Encoded<R> {
     use instruction::AluOperation::*;
     Encoded::with(match operation {
         Add => 0xc6,
@@ -146,9 +146,9 @@ fn encode_branch<R>(branch: Branch<R>, condition: Option<Condition>) -> Encoded<
         Jr(target) => Encoded::with(match condition {
             None => 0x18,
             Some(condition) => 0x20 | encode_condition(condition),
-        }).and_byte(Expr::Subtract(
+        }).and_byte(RelocExpr::Subtract(
             Box::new(target),
-            Box::new(Expr::LocationCounter),
+            Box::new(RelocExpr::LocationCounter),
         )),
         Ret => Encoded::with(match condition {
             None => 0xc9,
@@ -335,7 +335,7 @@ mod tests {
     #[test]
     fn encode_ld_simple_immediate() {
         use instruction::SimpleOperand::*;
-        let immediate = Expr::Literal(0x42, ());
+        let immediate = RelocExpr::Literal(0x42, ());
         vec![
             (B, 0x06),
             (C, 0x0e),
@@ -360,7 +360,7 @@ mod tests {
     #[test]
     fn encode_ld_immediate16() {
         use instruction::Reg16::*;
-        let immediate = Expr::Literal(0x1234, ());
+        let immediate = RelocExpr::Literal(0x1234, ());
         let test_cases = &[(Bc, 0x01), (De, 0x11), (Hl, 0x21), (Sp, 0x31)];
         for &(reg16, opcode) in test_cases {
             test_instruction(
@@ -375,7 +375,7 @@ mod tests {
 
     #[test]
     fn encode_ld_inline_addr() {
-        let addr = Expr::Literal(0x1234, ());
+        let addr = RelocExpr::Literal(0x1234, ());
         let test_cases = &[(Direction::FromA, 0xea), (Direction::IntoA, 0xfa)];
         for &(direction, opcode) in test_cases {
             test_instruction(
@@ -406,7 +406,7 @@ mod tests {
 
     #[test]
     fn encode_ldh() {
-        let index = Expr::Literal(0xcc, ());
+        let index = RelocExpr::Literal(0xcc, ());
         let test_cases = &[(Direction::FromA, 0xe0), (Direction::IntoA, 0xf0)];
         for &(direction, opcode) in test_cases {
             test_instruction(
@@ -422,7 +422,7 @@ mod tests {
     #[test]
     fn encode_alu_immediate() {
         use instruction::AluOperation::*;
-        let expr = Expr::Literal(0x42, ());
+        let expr = RelocExpr::Literal(0x42, ());
         [(Add, 0xc6), (And, 0xe6), (Cp, 0xfe), (Xor, 0xee)]
             .iter()
             .for_each(|(alu_operation, opcode)| {
@@ -509,7 +509,7 @@ mod tests {
     #[test]
     fn encode_call() {
         use instruction::Condition::*;
-        let target_expr = Expr::Literal(0x1234, ());
+        let target_expr = RelocExpr::Literal(0x1234, ());
         let test_cases = &[
             (None, 0xcd),
             (Some(C), 0xdc),
@@ -531,7 +531,7 @@ mod tests {
     #[test]
     fn encode_jp() {
         use instruction::Condition::*;
-        let target_expr = Expr::Literal(0x1234, ());
+        let target_expr = RelocExpr::Literal(0x1234, ());
         let test_cases = &[
             (None, 0xc3),
             (Some(C), 0xda),
@@ -558,7 +558,7 @@ mod tests {
     #[test]
     fn encode_jr() {
         use instruction::Condition::*;
-        let target_expr = Expr::Literal(0x1234, ());
+        let target_expr = RelocExpr::Literal(0x1234, ());
         let test_cases = &[
             (None, 0x18),
             (Some(C), 0x38),
@@ -572,9 +572,9 @@ mod tests {
                 [
                     DataItem::Byte(opcode),
                     DataItem::Expr(
-                        Expr::Subtract(
+                        RelocExpr::Subtract(
                             Box::new(target_expr.clone()),
-                            Box::new(Expr::LocationCounter),
+                            Box::new(RelocExpr::LocationCounter),
                         ),
                         Width::Byte,
                     ),
