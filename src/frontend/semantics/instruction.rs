@@ -63,7 +63,7 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Operand<R>>> Analysis<R, I> {
         match self.mnemonic.0 {
             Alu(AluOperation::Add, explicit_a) => self.analyze_add_instruction(explicit_a),
             Alu(operation, explicit_a) => {
-                let first_operand = self.operands.next();
+                let first_operand = self.expect_operand(operation.expected_operands())?;
                 self.analyze_alu_instruction(operation, explicit_a, first_operand)
             }
             IncDec(mode) => self.analyze_inc_dec(mode),
@@ -90,8 +90,9 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Operand<R>>> Analysis<R, I> {
     }
 
     fn analyze_add_instruction(&mut self, explicit_a: ExplicitA) -> AnalysisResult<R> {
-        match self.operands.next() {
-            Some(Operand::Atom(AtomKind::Reg16(reg16), range)) => {
+        let exptected_operands = self.mnemonic.0.expected_operands();
+        match self.expect_operand(exptected_operands)? {
+            Operand::Atom(AtomKind::Reg16(reg16), range) => {
                 self.analyze_add_reg16_instruction((reg16, range))
             }
             operand => self.analyze_alu_instruction(AluOperation::Add, explicit_a, operand),
@@ -119,9 +120,8 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Operand<R>>> Analysis<R, I> {
         &mut self,
         operation: AluOperation,
         explicit_a: ExplicitA,
-        first_operand: Option<Operand<R>>,
+        first_operand: Operand<R>,
     ) -> AnalysisResult<R> {
-        let first_operand = expect_operand(first_operand, 0, 2, self.mnemonic.1.clone())?;
         let src = if explicit_a == ExplicitA::Required {
             let second_operand = self.expect_operand(2)?;
             match first_operand {
@@ -290,6 +290,25 @@ enum Mnemonic {
     Ldh,
     Nullary(Nullary),
     Stack(StackOperation),
+}
+
+impl Mnemonic {
+    fn expected_operands(&self) -> usize {
+        match self {
+            Mnemonic::Alu(operation, _) => operation.expected_operands(),
+            _ => panic!(),
+        }
+    }
+}
+
+impl AluOperation {
+    fn expected_operands(&self) -> usize {
+        use instruction::AluOperation::*;
+        match self {
+            Add => 2,
+            And | Cp | Xor => 1,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
