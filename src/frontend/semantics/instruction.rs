@@ -173,8 +173,8 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Operand<R>>> Analysis<R, I> {
     }
 
     fn analyze_ld(&mut self, hint: LdHint) -> AnalysisResult<R> {
-        let dest = self.operands.next().unwrap();
-        let src = self.operands.next().unwrap();
+        let dest = self.expect_operand(2)?;
+        let src = self.expect_operand(2)?;
         match (dest, src) {
             (Operand::Atom(AtomKind::Simple(dest), _), Operand::Atom(AtomKind::Simple(src), _)) => {
                 Ok(Instruction::Ld(Ld::Simple(dest, src)))
@@ -388,6 +388,12 @@ mod tests {
     }
 
     type Input = ParsedExpr<String, Marking>;
+
+    impl Mark for (Command, Marking) {
+        fn mark(self) -> Self {
+            (self.0, Marking::Special)
+        }
+    }
 
     impl<S: ::frontend::syntax::StringRef> Mark for ParsedExpr<S, Marking> {
         fn mark(mut self) -> Self {
@@ -952,6 +958,24 @@ mod tests {
     #[test]
     fn analyze_add_hl() {
         analyze((Command::Add, Marking::Special), vec![literal(Hl)]).expect_diagnostic(
+            Message::OperandCount {
+                actual: 1,
+                expected: 2,
+            },
+        )
+    }
+
+    #[test]
+    fn analyze_ld() {
+        analyze(Command::Ld.to_marked().mark(), vec![]).expect_diagnostic(Message::OperandCount {
+            actual: 0,
+            expected: 2,
+        })
+    }
+
+    #[test]
+    fn analyze_ld_a() {
+        analyze(Command::Ld.to_marked().mark(), vec![literal(A)]).expect_diagnostic(
             Message::OperandCount {
                 actual: 1,
                 expected: 2,
