@@ -61,10 +61,10 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Operand<R>>> Analysis<R, I> {
     fn analyze_mnemonic(&mut self) -> AnalysisResult<R> {
         use self::Mnemonic::*;
         match self.mnemonic.0 {
-            Alu(AluOperation::Add, explicit_a) => self.analyze_add_instruction(explicit_a),
-            Alu(operation, explicit_a) => {
+            Alu(AluOperation::Add) => self.analyze_add_instruction(),
+            Alu(operation) => {
                 let first_operand = self.expect_operand(operation.expected_operands())?;
-                self.analyze_alu_instruction(operation, explicit_a, first_operand)
+                self.analyze_alu_instruction(operation, first_operand)
             }
             IncDec(mode) => self.analyze_inc_dec(mode),
             Branch(branch) => self.analyze_branch(branch),
@@ -89,13 +89,13 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Operand<R>>> Analysis<R, I> {
         }
     }
 
-    fn analyze_add_instruction(&mut self, explicit_a: ExplicitA) -> AnalysisResult<R> {
+    fn analyze_add_instruction(&mut self) -> AnalysisResult<R> {
         let exptected_operands = self.mnemonic.0.expected_operands();
         match self.expect_operand(exptected_operands)? {
             Operand::Atom(AtomKind::Reg16(reg16), range) => {
                 self.analyze_add_reg16_instruction((reg16, range))
             }
-            operand => self.analyze_alu_instruction(AluOperation::Add, explicit_a, operand),
+            operand => self.analyze_alu_instruction(AluOperation::Add, operand),
         }
     }
 
@@ -119,10 +119,11 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Operand<R>>> Analysis<R, I> {
     fn analyze_alu_instruction(
         &mut self,
         operation: AluOperation,
-        explicit_a: ExplicitA,
         first_operand: Operand<R>,
     ) -> AnalysisResult<R> {
-        let src = if explicit_a == ExplicitA::Required {
+        let src = if operation.implicit_dest() {
+            first_operand
+        } else {
             let second_operand = self.expect_operand(2)?;
             match first_operand {
                 Operand::Atom(AtomKind::Simple(SimpleOperand::A), _) => Ok(()),
@@ -132,8 +133,6 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Operand<R>>> Analysis<R, I> {
                 )),
             }?;
             second_operand
-        } else {
-            first_operand
         };
         match src {
             Operand::Atom(AtomKind::Simple(src), _) => {
@@ -283,7 +282,7 @@ pub type AnalysisResult<R> = Result<Instruction<R>, Diagnostic<R>>;
 
 #[derive(Debug, PartialEq)]
 enum Mnemonic {
-    Alu(AluOperation, ExplicitA),
+    Alu(AluOperation),
     Branch(BranchKind),
     IncDec(IncDec),
     Ld,
@@ -295,7 +294,7 @@ enum Mnemonic {
 impl Mnemonic {
     fn expected_operands(&self) -> usize {
         match self {
-            Mnemonic::Alu(operation, _) => operation.expected_operands(),
+            Mnemonic::Alu(operation) => operation.expected_operands(),
             _ => panic!(),
         }
     }
@@ -303,18 +302,20 @@ impl Mnemonic {
 
 impl AluOperation {
     fn expected_operands(&self) -> usize {
-        use instruction::AluOperation::*;
-        match self {
-            Add => 2,
-            And | Cp | Xor => 1,
+        if self.implicit_dest() {
+            1
+        } else {
+            2
         }
     }
-}
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum ExplicitA {
-    Required,
-    NotAllowed,
+    fn implicit_dest(&self) -> bool {
+        use instruction::AluOperation::*;
+        match self {
+            Add => false,
+            And | Cp | Xor => true,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -352,10 +353,10 @@ enum TargetSelector<R> {
 fn to_mnemonic(command: keyword::Command) -> Mnemonic {
     use frontend::syntax::keyword::Command::*;
     match command {
-        Add => Mnemonic::Alu(AluOperation::Add, ExplicitA::Required),
-        And => Mnemonic::Alu(AluOperation::And, ExplicitA::NotAllowed),
+        Add => Mnemonic::Alu(AluOperation::Add),
+        And => Mnemonic::Alu(AluOperation::And),
         Call => Mnemonic::Branch(BranchKind::Call),
-        Cp => Mnemonic::Alu(AluOperation::Cp, ExplicitA::NotAllowed),
+        Cp => Mnemonic::Alu(AluOperation::Cp),
         Daa => Mnemonic::Nullary(Nullary::Daa),
         Dec => Mnemonic::IncDec(IncDec::Dec),
         Di => Mnemonic::Nullary(Nullary::Di),
@@ -372,7 +373,7 @@ fn to_mnemonic(command: keyword::Command) -> Mnemonic {
         Ret => Mnemonic::Branch(BranchKind::Ret),
         Reti => Mnemonic::Nullary(Nullary::Reti),
         Stop => Mnemonic::Nullary(Nullary::Stop),
-        Xor => Mnemonic::Alu(AluOperation::Xor, ExplicitA::NotAllowed),
+        Xor => Mnemonic::Alu(AluOperation::Xor),
         _ => panic!(),
     }
 }
