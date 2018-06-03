@@ -28,6 +28,7 @@ pub enum AtomKind {
     DerefC,
 }
 
+#[derive(Clone, Copy)]
 pub enum Context {
     Branch,
     Stack,
@@ -36,20 +37,22 @@ pub enum Context {
 
 pub fn analyze_operand<R>(
     expr: ParsedExpr<String, R>,
-    context: &Context,
+    context: Context,
 ) -> Result<Operand<R>, Diagnostic<R>> {
-    Ok(match expr.node {
-        ExprNode::Deref(expr) => analyze_deref_operand(*expr),
-        ExprNode::Ident(ident) => analyze_ident_operand((ident, expr.interval)),
-        ExprNode::Literal(literal) => analyze_literal_operand((literal, expr.interval), context),
-    })
+    match expr.node {
+        ExprNode::Deref(inner) => analyze_deref_operand(*inner, expr.interval),
+        ExprNode::Ident(ident) => Ok(analyze_ident_operand((ident, expr.interval))),
+        ExprNode::Literal(literal) => {
+            Ok(analyze_literal_operand((literal, expr.interval), context))
+        }
+    }
 }
 
 fn analyze_ident_operand<R>(ident: (String, R)) -> Operand<R> {
     Operand::Const(RelocExpr::Symbol(ident.0, ident.1))
 }
 
-fn analyze_literal_operand<R>(literal: (Literal<String>, R), context: &Context) -> Operand<R> {
+fn analyze_literal_operand<R>(literal: (Literal<String>, R), context: Context) -> Operand<R> {
     match literal.0 {
         Literal::Operand(operand) => analyze_keyword_operand((operand, literal.1), context),
         Literal::Number(n) => Operand::Const(RelocExpr::Literal(n, literal.1)),
@@ -57,17 +60,24 @@ fn analyze_literal_operand<R>(literal: (Literal<String>, R), context: &Context) 
     }
 }
 
-fn analyze_deref_operand<R>(expr: ParsedExpr<String, R>) -> Operand<R> {
+fn analyze_deref_operand<R>(
+    expr: ParsedExpr<String, R>,
+    deref_interval: R,
+) -> Result<Operand<R>, Diagnostic<R>> {
     match expr.node {
-        ExprNode::Ident(ident) => Operand::Deref(RelocExpr::Symbol(ident, expr.interval)),
-        ExprNode::Literal(Literal::Operand(keyword::Operand::Hl)) => {
-            Operand::Atom(AtomKind::Simple(SimpleOperand::DerefHl), expr.interval)
-        }
+        ExprNode::Ident(ident) => Ok(Operand::Deref(RelocExpr::Symbol(ident, expr.interval))),
+        ExprNode::Literal(Literal::Operand(keyword::Operand::Hl)) => Ok(Operand::Atom(
+            AtomKind::Simple(SimpleOperand::DerefHl),
+            expr.interval,
+        )),
         ExprNode::Literal(Literal::Operand(keyword::Operand::C)) => {
-            Operand::Atom(AtomKind::DerefC, expr.interval)
+            Ok(Operand::Atom(AtomKind::DerefC, expr.interval))
+        }
+        ExprNode::Literal(Literal::Operand(keyword::Operand::Af)) => {
+            Err(Diagnostic::new(Message::CannotDereference, deref_interval))
         }
         ExprNode::Literal(Literal::Number(n)) => {
-            Operand::Deref(RelocExpr::Literal(n, expr.interval))
+            Ok(Operand::Deref(RelocExpr::Literal(n, expr.interval)))
         }
         _ => panic!(),
     }
@@ -75,7 +85,7 @@ fn analyze_deref_operand<R>(expr: ParsedExpr<String, R>) -> Operand<R> {
 
 fn analyze_keyword_operand<R>(
     (keyword, range): (keyword::Operand, R),
-    context: &Context,
+    context: Context,
 ) -> Operand<R> {
     use self::Context::*;
     use frontend::syntax::keyword::Operand::*;
@@ -83,22 +93,22 @@ fn analyze_keyword_operand<R>(
         A => AtomKind::Simple(SimpleOperand::A),
         Af => AtomKind::RegPair(RegPair::Af),
         B => AtomKind::Simple(SimpleOperand::B),
-        Bc => match *context {
+        Bc => match context {
             Stack => AtomKind::RegPair(RegPair::Bc),
             _ => AtomKind::Reg16(Reg16::Bc),
         },
-        C => match *context {
+        C => match context {
             Branch => AtomKind::Condition(Condition::C),
             _ => AtomKind::Simple(SimpleOperand::C),
         },
         D => AtomKind::Simple(SimpleOperand::D),
-        De => match *context {
+        De => match context {
             Stack => AtomKind::RegPair(RegPair::De),
             _ => AtomKind::Reg16(Reg16::De),
         },
         E => AtomKind::Simple(SimpleOperand::E),
         H => AtomKind::Simple(SimpleOperand::H),
-        Hl => match *context {
+        Hl => match context {
             Stack => AtomKind::RegPair(RegPair::Hl),
             _ => AtomKind::Reg16(Reg16::Hl),
         },
@@ -147,5 +157,25 @@ impl<I: Iterator<Item = Result<T, E>>, T, E> OperandCounter<I> {
                 source_interval,
             ))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn analyze_deref_af() {
+        let parsed_expr = ParsedExpr {
+            node: ExprNode::Deref(Box::new(ParsedExpr {
+                node: ExprNode::Literal(Literal::Operand(keyword::Operand::Af)),
+                interval: 0,
+            })),
+            interval: 1,
+        };
+        assert_eq!(
+            analyze_operand(parsed_expr, Context::Other),
+            Err(Diagnostic::new(Message::CannotDereference, 1))
+        )
     }
 }

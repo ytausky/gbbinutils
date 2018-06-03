@@ -115,6 +115,7 @@ impl<TR> Diagnostic<TR> {
 #[derive(Debug, PartialEq)]
 pub enum Message {
     AlwaysUnconditional,
+    CannotDereference,
     DestMustBeA,
     DestMustBeHl,
     IncompatibleOperand,
@@ -130,6 +131,7 @@ impl fmt::Display for Message {
         use diagnostics::Message::*;
         match self {
             AlwaysUnconditional => write!(f, "instruction cannot be made conditional"),
+            CannotDereference => write!(f, "register pair `af` cannot be dereferenced"),
             DestMustBeA => write!(f, "destination of ALU operation must be `a`"),
             DestMustBeHl => write!(f, "destination operand must be `hl`"),
             IncompatibleOperand => write!(f, "operand cannot be used with this instruction"),

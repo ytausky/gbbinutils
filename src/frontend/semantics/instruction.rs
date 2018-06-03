@@ -18,7 +18,7 @@ where
         (mnemonic, mnemonic_ref),
         operands
             .into_iter()
-            .map(|x| operand::analyze_operand(x, &context)),
+            .map(|x| operand::analyze_operand(x, context)),
     ).run()
 }
 
