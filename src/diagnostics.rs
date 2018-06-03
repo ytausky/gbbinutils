@@ -118,6 +118,7 @@ pub enum Message {
     DestMustBeA,
     DestMustBeHl,
     IncompatibleOperand,
+    MissingTarget,
     OperandCount { actual: usize, expected: usize },
     UndefinedMacro { name: String },
     UnresolvedSymbol { symbol: String },
@@ -132,6 +133,7 @@ impl fmt::Display for Message {
             DestMustBeA => write!(f, "destination of ALU operation must be `a`"),
             DestMustBeHl => write!(f, "destination operand must be `hl`"),
             IncompatibleOperand => write!(f, "operand cannot be used with this instruction"),
+            MissingTarget => write!(f, "branch instruction requires target"),
             OperandCount { actual, expected } => {
                 write!(f, "expected {} operands, found {}", expected, actual)
             }

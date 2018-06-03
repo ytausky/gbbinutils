@@ -150,7 +150,7 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Operand<R>>> Analysis<R, I> {
                 Err(Diagnostic::new(Message::AlwaysUnconditional, condition_ref))
             }
             (_, condition, target) => Ok(Instruction::Branch(
-                mk_branch(branch, target),
+                mk_branch((branch, self.mnemonic.1.clone()), target)?,
                 condition.map(|(condition, _)| condition),
             )),
         }
@@ -240,12 +240,16 @@ fn analyze_branch_target<R>(target: Option<Operand<R>>) -> Option<TargetSelector
     })
 }
 
-fn mk_branch<R>(kind: BranchKind, target: Option<TargetSelector<R>>) -> Branch<R> {
-    match (kind, target) {
-        (BranchKind::Call, Some(TargetSelector::Expr(expr))) => Branch::Call(expr),
-        (BranchKind::Jp, Some(TargetSelector::Expr(expr))) => Branch::Jp(expr),
-        (BranchKind::Jr, Some(TargetSelector::Expr(expr))) => Branch::Jr(expr),
-        (BranchKind::Ret, None) => Branch::Ret,
+fn mk_branch<R>(
+    kind: (BranchKind, R),
+    target: Option<TargetSelector<R>>,
+) -> Result<Branch<R>, Diagnostic<R>> {
+    match (kind.0, target) {
+        (BranchKind::Call, Some(TargetSelector::Expr(expr))) => Ok(Branch::Call(expr)),
+        (BranchKind::Jp, Some(TargetSelector::Expr(expr))) => Ok(Branch::Jp(expr)),
+        (BranchKind::Jp, None) => Err(Diagnostic::new(Message::MissingTarget, kind.1)),
+        (BranchKind::Jr, Some(TargetSelector::Expr(expr))) => Ok(Branch::Jr(expr)),
+        (BranchKind::Ret, None) => Ok(Branch::Ret),
         _ => panic!(),
     }
 }
@@ -795,13 +799,13 @@ mod tests {
             (Command::from(branch), operands),
             Instruction::Branch(
                 mk_branch(
-                    branch,
+                    (branch, Marking::default()),
                     if branch.has_target() {
                         Some(TargetSelector::Expr(symbol(ident)))
                     } else {
                         None
                     },
-                ),
+                ).unwrap(),
                 condition,
             ),
         )
@@ -998,5 +1002,11 @@ mod tests {
             actual: 0,
             expected: 1,
         })
+    }
+
+    #[test]
+    fn analyze_jp_z() {
+        analyze(Command::Jp.to_marked().mark(), vec![literal(Z)])
+            .expect_diagnostic(Message::MissingTarget)
     }
 }
