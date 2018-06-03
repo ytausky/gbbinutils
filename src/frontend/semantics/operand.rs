@@ -1,5 +1,5 @@
 use diagnostics::{Diagnostic, Message, Source, SourceInterval};
-use frontend::syntax::{keyword, ExprNode, Literal, ParsedExpr};
+use frontend::syntax::{keyword::OperandKeyword, ExprNode, Literal, ParsedExpr};
 use instruction::{Condition, Reg16, RegPair, RelocExpr, SimpleOperand};
 
 #[derive(Debug, PartialEq)]
@@ -66,14 +66,14 @@ fn analyze_deref_operand<R>(
 ) -> Result<Operand<R>, Diagnostic<R>> {
     match expr.node {
         ExprNode::Ident(ident) => Ok(Operand::Deref(RelocExpr::Symbol(ident, expr.interval))),
-        ExprNode::Literal(Literal::Operand(keyword::Operand::Hl)) => Ok(Operand::Atom(
+        ExprNode::Literal(Literal::Operand(OperandKeyword::Hl)) => Ok(Operand::Atom(
             AtomKind::Simple(SimpleOperand::DerefHl),
             expr.interval,
         )),
-        ExprNode::Literal(Literal::Operand(keyword::Operand::C)) => {
+        ExprNode::Literal(Literal::Operand(OperandKeyword::C)) => {
             Ok(Operand::Atom(AtomKind::DerefC, expr.interval))
         }
-        ExprNode::Literal(Literal::Operand(keyword::Operand::Af)) => {
+        ExprNode::Literal(Literal::Operand(OperandKeyword::Af)) => {
             Err(Diagnostic::new(Message::CannotDereference, deref_interval))
         }
         ExprNode::Literal(Literal::Number(n)) => {
@@ -84,11 +84,11 @@ fn analyze_deref_operand<R>(
 }
 
 fn analyze_keyword_operand<R>(
-    (keyword, range): (keyword::Operand, R),
+    (keyword, range): (OperandKeyword, R),
     context: Context,
 ) -> Operand<R> {
     use self::Context::*;
-    use frontend::syntax::keyword::Operand::*;
+    use frontend::syntax::keyword::OperandKeyword::*;
     let kind = match keyword {
         A => AtomKind::Simple(SimpleOperand::A),
         Af => AtomKind::RegPair(RegPair::Af),
@@ -168,7 +168,7 @@ mod tests {
     fn analyze_deref_af() {
         let parsed_expr = ParsedExpr {
             node: ExprNode::Deref(Box::new(ParsedExpr {
-                node: ExprNode::Literal(Literal::Operand(keyword::Operand::Af)),
+                node: ExprNode::Literal(Literal::Operand(OperandKeyword::Af)),
                 interval: 0,
             })),
             interval: 1,

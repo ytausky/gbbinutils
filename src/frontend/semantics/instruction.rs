@@ -340,7 +340,7 @@ mod tests {
     use super::*;
     use frontend::syntax::{ExprNode, Literal};
 
-    use self::keyword::{Command, Operand::*};
+    use self::keyword::{Command, OperandKeyword::*};
 
     #[derive(Clone, Copy, Debug, PartialEq)]
     enum Marking {
@@ -394,7 +394,7 @@ mod tests {
         }
     }
 
-    fn literal(keyword: keyword::Operand) -> Input {
+    fn literal(keyword: keyword::OperandKeyword) -> Input {
         Literal::Operand(keyword).into()
     }
 

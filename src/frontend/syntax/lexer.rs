@@ -1,5 +1,5 @@
 use frontend::syntax::{self,
-                       keyword::{self, Command, Operand},
+                       keyword::{self, Command, OperandKeyword},
                        token,
                        Literal,
                        Token};
@@ -215,51 +215,51 @@ enum Keyword {
     Command(keyword::Command),
     Endm,
     Macro,
-    Operand(keyword::Operand),
+    Operand(OperandKeyword),
 }
 
 const KEYWORDS: &[(&str, Keyword)] = &[
-    ("a", Keyword::Operand(Operand::A)),
-    ("af", Keyword::Operand(Operand::Af)),
+    ("a", Keyword::Operand(OperandKeyword::A)),
+    ("af", Keyword::Operand(OperandKeyword::Af)),
     ("add", Keyword::Command(Command::Add)),
     ("and", Keyword::Command(Command::And)),
-    ("b", Keyword::Operand(Operand::B)),
-    ("bc", Keyword::Operand(Operand::Bc)),
-    ("c", Keyword::Operand(Operand::C)),
+    ("b", Keyword::Operand(OperandKeyword::B)),
+    ("bc", Keyword::Operand(OperandKeyword::Bc)),
+    ("c", Keyword::Operand(OperandKeyword::C)),
     ("call", Keyword::Command(Command::Call)),
     ("cp", Keyword::Command(Command::Cp)),
-    ("d", Keyword::Operand(Operand::D)),
+    ("d", Keyword::Operand(OperandKeyword::D)),
     ("daa", Keyword::Command(Command::Daa)),
     ("db", Keyword::Command(Command::Db)),
-    ("de", Keyword::Operand(Operand::De)),
+    ("de", Keyword::Operand(OperandKeyword::De)),
     ("dec", Keyword::Command(Command::Dec)),
     ("di", Keyword::Command(Command::Di)),
     ("dw", Keyword::Command(Command::Dw)),
-    ("e", Keyword::Operand(Operand::E)),
+    ("e", Keyword::Operand(OperandKeyword::E)),
     ("ei", Keyword::Command(Command::Ei)),
     ("endm", Keyword::Endm),
-    ("h", Keyword::Operand(Operand::H)),
+    ("h", Keyword::Operand(OperandKeyword::H)),
     ("halt", Keyword::Command(Command::Halt)),
-    ("hl", Keyword::Operand(Operand::Hl)),
+    ("hl", Keyword::Operand(OperandKeyword::Hl)),
     ("inc", Keyword::Command(Command::Inc)),
     ("include", Keyword::Command(Command::Include)),
     ("jp", Keyword::Command(Command::Jp)),
     ("jr", Keyword::Command(Command::Jr)),
-    ("l", Keyword::Operand(Operand::L)),
+    ("l", Keyword::Operand(OperandKeyword::L)),
     ("ld", Keyword::Command(Command::Ld)),
     ("ldh", Keyword::Command(Command::Ldh)),
     ("macro", Keyword::Macro),
-    ("nc", Keyword::Operand(Operand::Nc)),
+    ("nc", Keyword::Operand(OperandKeyword::Nc)),
     ("nop", Keyword::Command(Command::Nop)),
-    ("nz", Keyword::Operand(Operand::Nz)),
+    ("nz", Keyword::Operand(OperandKeyword::Nz)),
     ("pop", Keyword::Command(Command::Pop)),
     ("push", Keyword::Command(Command::Push)),
     ("ret", Keyword::Command(Command::Ret)),
     ("reti", Keyword::Command(Command::Reti)),
-    ("sp", Keyword::Operand(Operand::Sp)),
+    ("sp", Keyword::Operand(OperandKeyword::Sp)),
     ("stop", Keyword::Command(Command::Stop)),
     ("xor", Keyword::Command(Command::Xor)),
-    ("z", Keyword::Operand(Operand::Z)),
+    ("z", Keyword::Operand(OperandKeyword::Z)),
 ];
 
 #[cfg(test)]
@@ -269,7 +269,7 @@ mod tests {
     use super::keyword::Command::*;
     use super::syntax::token::*;
     use super::syntax::Literal::{Number, Operand};
-    use super::Operand::*;
+    use super::OperandKeyword::*;
 
     fn assert_eq_tokens<'a>(src: &'a str, expected_tokens: &[Token]) {
         assert_eq!(

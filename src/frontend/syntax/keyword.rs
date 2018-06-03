@@ -27,7 +27,7 @@ pub enum Command {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Operand {
+pub enum OperandKeyword {
     A,
     Af,
     B,

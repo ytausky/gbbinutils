@@ -42,7 +42,7 @@ impl<T: StringRef> TokenSpec for T {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Literal<S> {
-    Operand(keyword::Operand),
+    Operand(keyword::OperandKeyword),
     Number(i32),
     String(S),
 }
