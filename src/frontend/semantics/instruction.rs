@@ -1,42 +1,25 @@
 use diagnostics::{Diagnostic, Message, Source, SourceInterval};
-use frontend::semantics::operand::{AtomKind, Context, Operand, OperandAnalyzer, OperandCounter};
+use frontend::semantics::operand::{self, AtomKind, Context, Operand, OperandCounter};
 use frontend::syntax::{keyword, ParsedExpr};
-use frontend::ExprFactory;
 use instruction::*;
 
-pub struct CommandAnalyzer<'a, EF: 'a> {
-    operand_analyzer: OperandAnalyzer<'a, EF>,
-}
-
-impl<'a, EF: ExprFactory> CommandAnalyzer<'a, EF> {
-    pub fn new(expr_factory: &'a mut EF) -> CommandAnalyzer<'a, EF> {
-        CommandAnalyzer {
-            operand_analyzer: OperandAnalyzer::new(expr_factory),
-        }
-    }
-
-    pub fn analyze_instruction<I, R>(
-        &mut self,
-        mnemonic: (keyword::Command, R),
-        operands: I,
-    ) -> AnalysisResult<R>
-    where
-        I: IntoIterator<Item = ParsedExpr<String, R>>,
-        R: SourceInterval,
-    {
-        let (mnemonic, mnemonic_ref) = (to_mnemonic(mnemonic.0), mnemonic.1);
-        let context = match mnemonic {
-            Mnemonic::Branch(_) => Context::Branch,
-            Mnemonic::Stack(_) => Context::Stack,
-            _ => Context::Other,
-        };
-        Analysis::new(
-            (mnemonic, mnemonic_ref),
-            operands
-                .into_iter()
-                .map(|x| self.operand_analyzer.analyze_operand(x, &context)),
-        ).run()
-    }
+pub fn analyze_instruction<I, R>(mnemonic: (keyword::Command, R), operands: I) -> AnalysisResult<R>
+where
+    I: IntoIterator<Item = ParsedExpr<String, R>>,
+    R: SourceInterval,
+{
+    let (mnemonic, mnemonic_ref) = (to_mnemonic(mnemonic.0), mnemonic.1);
+    let context = match mnemonic {
+        Mnemonic::Branch(_) => Context::Branch,
+        Mnemonic::Stack(_) => Context::Stack,
+        _ => Context::Other,
+    };
+    Analysis::new(
+        (mnemonic, mnemonic_ref),
+        operands
+            .into_iter()
+            .map(|x| operand::analyze_operand(x, &context)),
+    ).run()
 }
 
 struct Analysis<R, I> {
@@ -876,10 +859,7 @@ mod tests {
         C: ToMarked<Command>,
         I: IntoIterator<Item = ParsedExpr<String, Marking>>,
     {
-        use frontend::StrExprFactory;
-        let mut expr_factory = StrExprFactory::new();
-        let mut analyzer = CommandAnalyzer::new(&mut expr_factory);
-        Result(analyzer.analyze_instruction(mnemonic.to_marked(), operands))
+        Result(analyze_instruction(mnemonic.to_marked(), operands))
     }
 
     #[test]

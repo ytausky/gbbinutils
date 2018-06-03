@@ -1,6 +1,5 @@
 use diagnostics::{Diagnostic, Message, Source, SourceInterval};
 use frontend::syntax::{keyword, ExprNode, Literal, ParsedExpr};
-use frontend::ExprFactory;
 use instruction::{Condition, Reg16, RegPair, RelocExpr, SimpleOperand};
 
 #[derive(Debug, PartialEq)]
@@ -29,67 +28,48 @@ pub enum AtomKind {
     DerefC,
 }
 
-pub struct OperandAnalyzer<'a, EF: 'a> {
-    expr_factory: &'a mut EF,
-}
-
 pub enum Context {
     Branch,
     Stack,
     Other,
 }
 
-impl<'a, EF: 'a + ExprFactory> OperandAnalyzer<'a, EF> {
-    pub fn new(expr_factory: &'a mut EF) -> OperandAnalyzer<'a, EF> {
-        OperandAnalyzer { expr_factory }
-    }
+pub fn analyze_operand<R>(
+    expr: ParsedExpr<String, R>,
+    context: &Context,
+) -> Result<Operand<R>, Diagnostic<R>> {
+    Ok(match expr.node {
+        ExprNode::Deref(expr) => analyze_deref_operand(*expr),
+        ExprNode::Ident(ident) => analyze_ident_operand((ident, expr.interval)),
+        ExprNode::Literal(literal) => analyze_literal_operand((literal, expr.interval), context),
+    })
+}
 
-    pub fn analyze_operand<R>(
-        &mut self,
-        expr: ParsedExpr<String, R>,
-        context: &Context,
-    ) -> Result<Operand<R>, Diagnostic<R>> {
-        Ok(match expr.node {
-            ExprNode::Deref(expr) => self.analyze_deref_operand(*expr),
-            ExprNode::Ident(ident) => self.analyze_ident_operand((ident, expr.interval)),
-            ExprNode::Literal(literal) => {
-                self.analyze_literal_operand((literal, expr.interval), context)
-            }
-        })
-    }
+fn analyze_ident_operand<R>(ident: (String, R)) -> Operand<R> {
+    Operand::Const(RelocExpr::Symbol(ident.0, ident.1))
+}
 
-    fn analyze_ident_operand<R>(&mut self, ident: (String, R)) -> Operand<R> {
-        Operand::Const(self.expr_factory.mk_symbol(ident))
+fn analyze_literal_operand<R>(literal: (Literal<String>, R), context: &Context) -> Operand<R> {
+    match literal.0 {
+        Literal::Operand(operand) => analyze_keyword_operand((operand, literal.1), context),
+        Literal::Number(n) => Operand::Const(RelocExpr::Literal(n, literal.1)),
+        _ => panic!(),
     }
+}
 
-    fn analyze_literal_operand<R>(
-        &mut self,
-        literal: (Literal<String>, R),
-        context: &Context,
-    ) -> Operand<R> {
-        match literal.0 {
-            Literal::Operand(operand) => analyze_keyword_operand((operand, literal.1), context),
-            Literal::Number(_) => Operand::Const(self.expr_factory.mk_literal(literal)),
-            _ => panic!(),
+fn analyze_deref_operand<R>(expr: ParsedExpr<String, R>) -> Operand<R> {
+    match expr.node {
+        ExprNode::Ident(ident) => Operand::Deref(RelocExpr::Symbol(ident, expr.interval)),
+        ExprNode::Literal(Literal::Operand(keyword::Operand::Hl)) => {
+            Operand::Atom(AtomKind::Simple(SimpleOperand::DerefHl), expr.interval)
         }
-    }
-
-    fn analyze_deref_operand<R>(&mut self, expr: ParsedExpr<String, R>) -> Operand<R> {
-        match expr.node {
-            ExprNode::Ident(ident) => {
-                Operand::Deref(self.expr_factory.mk_symbol((ident, expr.interval)))
-            }
-            ExprNode::Literal(Literal::Operand(keyword::Operand::Hl)) => {
-                Operand::Atom(AtomKind::Simple(SimpleOperand::DerefHl), expr.interval)
-            }
-            ExprNode::Literal(Literal::Operand(keyword::Operand::C)) => {
-                Operand::Atom(AtomKind::DerefC, expr.interval)
-            }
-            ExprNode::Literal(number @ Literal::Number(_)) => {
-                Operand::Deref(self.expr_factory.mk_literal((number, expr.interval)))
-            }
-            _ => panic!(),
+        ExprNode::Literal(Literal::Operand(keyword::Operand::C)) => {
+            Operand::Atom(AtomKind::DerefC, expr.interval)
         }
+        ExprNode::Literal(Literal::Number(n)) => {
+            Operand::Deref(RelocExpr::Literal(n, expr.interval))
+        }
+        _ => panic!(),
     }
 }
 

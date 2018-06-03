@@ -117,8 +117,7 @@ fn analyze_command<'a, F: Session + 'a>(
     args: CommandArgs<F>,
     actions: &mut SemanticActions<'a, F>,
 ) {
-    let mut analyzer = instruction::CommandAnalyzer::new(&mut actions.expr_factory);
-    let analysis_result = analyzer.analyze_instruction(name, args.into_iter());
+    let analysis_result = instruction::analyze_instruction(name, args.into_iter());
     match analysis_result {
         Ok(instruction) => actions
             .session
