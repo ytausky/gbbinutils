@@ -31,7 +31,7 @@ pub struct Object {
 
 impl Object {
     pub fn into_rom(self) -> Rom {
-        let mut data = Vec::new();
+        let mut data: Vec<u8> = Vec::new();
         self.resolved_sections
             .into_iter()
             .for_each(|section| data.extend(section.data.into_iter()));

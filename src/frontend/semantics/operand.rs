@@ -1,5 +1,5 @@
 use diagnostics::{Source, SourceInterval};
-use frontend::syntax::{keyword, Literal, ParsedExpr};
+use frontend::syntax::{keyword, ExprNode, Literal, ParsedExpr};
 use frontend::ExprFactory;
 use instruction::{Condition, Expr, Reg16, RegPair, SimpleOperand};
 
@@ -49,10 +49,12 @@ impl<'a, EF: 'a + ExprFactory> OperandAnalyzer<'a, EF> {
         expr: ParsedExpr<String, R>,
         context: &Context,
     ) -> Operand<R> {
-        match expr {
-            ParsedExpr::Deref(expr) => self.analyze_deref_operand(*expr),
-            ParsedExpr::Ident(ident) => self.analyze_ident_operand(ident),
-            ParsedExpr::Literal(literal) => self.analyze_literal_operand(literal, context),
+        match expr.node {
+            ExprNode::Deref(expr) => self.analyze_deref_operand(*expr),
+            ExprNode::Ident(ident) => self.analyze_ident_operand((ident, expr.interval)),
+            ExprNode::Literal(literal) => {
+                self.analyze_literal_operand((literal, expr.interval), context)
+            }
         }
     }
 
@@ -73,16 +75,18 @@ impl<'a, EF: 'a + ExprFactory> OperandAnalyzer<'a, EF> {
     }
 
     fn analyze_deref_operand<R>(&mut self, expr: ParsedExpr<String, R>) -> Operand<R> {
-        match expr {
-            ParsedExpr::Ident(ident) => Operand::Deref(self.expr_factory.mk_symbol(ident)),
-            ParsedExpr::Literal((Literal::Operand(keyword::Operand::Hl), range)) => {
-                Operand::Atom(AtomKind::Simple(SimpleOperand::DerefHl), range)
+        match expr.node {
+            ExprNode::Ident(ident) => {
+                Operand::Deref(self.expr_factory.mk_symbol((ident, expr.interval)))
             }
-            ParsedExpr::Literal((Literal::Operand(keyword::Operand::C), range)) => {
-                Operand::Atom(AtomKind::DerefC, range)
+            ExprNode::Literal(Literal::Operand(keyword::Operand::Hl)) => {
+                Operand::Atom(AtomKind::Simple(SimpleOperand::DerefHl), expr.interval)
             }
-            ParsedExpr::Literal(number @ (Literal::Number(_), _)) => {
-                Operand::Deref(self.expr_factory.mk_literal(number))
+            ExprNode::Literal(Literal::Operand(keyword::Operand::C)) => {
+                Operand::Atom(AtomKind::DerefC, expr.interval)
+            }
+            ExprNode::Literal(number @ Literal::Number(_)) => {
+                Operand::Deref(self.expr_factory.mk_literal((number, expr.interval)))
             }
             _ => panic!(),
         }

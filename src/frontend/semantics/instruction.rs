@@ -351,7 +351,7 @@ fn to_mnemonic(command: keyword::Command) -> Mnemonic {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use frontend::syntax::Literal;
+    use frontend::syntax::{ExprNode, Literal};
 
     use self::keyword::{Command, Operand::*};
 
@@ -380,23 +380,40 @@ mod tests {
     type Input = ParsedExpr<String, Marking>;
 
     impl<S: ::frontend::syntax::StringRef> Mark for ParsedExpr<S, Marking> {
-        fn mark(self) -> Self {
-            match self {
-                ParsedExpr::Ident((ident, _)) => ParsedExpr::Ident((ident, Marking::Special)),
-                ParsedExpr::Deref(expr) => ParsedExpr::Deref(Box::new(expr.mark())),
-                ParsedExpr::Literal((literal, _)) => {
-                    ParsedExpr::Literal((literal, Marking::Special))
-                }
+        fn mark(mut self) -> Self {
+            self.interval = Marking::Special;
+            self
+        }
+    }
+
+    impl From<ExprNode<String, Marking>> for Input {
+        fn from(node: ExprNode<String, Marking>) -> Self {
+            ParsedExpr {
+                node,
+                interval: Marking::default(),
             }
         }
     }
 
+    impl From<Literal<String>> for Input {
+        fn from(literal: Literal<String>) -> Input {
+            ExprNode::Literal(literal).into()
+        }
+    }
+
     fn literal(keyword: keyword::Operand) -> Input {
-        ParsedExpr::Literal((Literal::Operand(keyword), Marking::Normal))
+        Literal::Operand(keyword).into()
     }
 
     fn symbol(ident: &str) -> Expr<Marking> {
         Expr::Symbol(ident.to_string(), Marking::default())
+    }
+
+    fn deref(expr: Input) -> Input {
+        ParsedExpr {
+            node: ExprNode::Deref(Box::new(expr)),
+            interval: Marking::default(),
+        }
     }
 
     trait ToMarked<T> {
@@ -456,7 +473,7 @@ mod tests {
                 SimpleOperand::E => literal(E),
                 SimpleOperand::H => literal(H),
                 SimpleOperand::L => literal(L),
-                SimpleOperand::DerefHl => literal(Hl).deref(),
+                SimpleOperand::DerefHl => deref(literal(Hl)),
             }
         }
     }
@@ -494,15 +511,15 @@ mod tests {
         }
     }
 
-    impl<'a> From<&'a str> for ParsedExpr<String, Marking> {
+    impl<'a> From<&'a str> for Input {
         fn from(ident: &'a str) -> Self {
-            ParsedExpr::Ident((ident.to_string(), Marking::Normal))
+            ExprNode::Ident(ident.to_string()).into()
         }
     }
 
     impl From<i32> for ParsedExpr<String, Marking> {
         fn from(n: i32) -> Self {
-            ParsedExpr::Literal((Literal::Number(n), Marking::Normal))
+            ExprNode::Literal(Literal::Number(n)).into()
         }
     }
 
@@ -514,43 +531,41 @@ mod tests {
 
     #[test]
     fn analyze_jp_deref_hl() {
-        analyze(Command::Jp, vec![literal(Hl).deref()]).expect_instruction(Instruction::JpDerefHl)
+        analyze(Command::Jp, vec![deref(literal(Hl))]).expect_instruction(Instruction::JpDerefHl)
     }
 
     #[test]
     fn analyze_ld_deref_symbol_a() {
         let ident = "ident";
-        analyze(
-            Command::Ld,
-            vec![ParsedExpr::from(ident).deref(), literal(A)],
-        ).expect_instruction(Instruction::Ld(Ld::Special(
-            SpecialLd::InlineAddr(symbol(ident)),
-            Direction::FromA,
-        )))
+        analyze(Command::Ld, vec![deref(ident.into()), literal(A)]).expect_instruction(
+            Instruction::Ld(Ld::Special(
+                SpecialLd::InlineAddr(symbol(ident)),
+                Direction::FromA,
+            )),
+        )
     }
 
     #[test]
     fn analyze_ld_a_deref_symbol() {
         let ident = "ident";
-        analyze(
-            Command::Ld,
-            vec![literal(A), ParsedExpr::from(ident).deref()],
-        ).expect_instruction(Instruction::Ld(Ld::Special(
-            SpecialLd::InlineAddr(symbol(ident)),
-            Direction::IntoA,
-        )))
+        analyze(Command::Ld, vec![literal(A), deref(ident.into())]).expect_instruction(
+            Instruction::Ld(Ld::Special(
+                SpecialLd::InlineAddr(symbol(ident)),
+                Direction::IntoA,
+            )),
+        )
     }
 
     #[test]
     fn analyze_ld_deref_c_a() {
-        analyze(Command::Ld, vec![literal(C).deref(), literal(A)]).expect_instruction(
+        analyze(Command::Ld, vec![deref(literal(C)), literal(A)]).expect_instruction(
             Instruction::Ld(Ld::Special(SpecialLd::RegIndex, Direction::FromA)),
         )
     }
 
     #[test]
     fn analyze_ld_a_deref_c() {
-        analyze(Command::Ld, vec![literal(A), literal(C).deref()]).expect_instruction(
+        analyze(Command::Ld, vec![literal(A), deref(literal(C))]).expect_instruction(
             Instruction::Ld(Ld::Special(SpecialLd::RegIndex, Direction::IntoA)),
         )
     }
@@ -558,25 +573,23 @@ mod tests {
     #[test]
     fn analyze_ldh_from_a() {
         let index = 0xcc;
-        analyze(
-            Command::Ldh,
-            vec![ParsedExpr::from(index).deref(), literal(A)],
-        ).expect_instruction(Instruction::Ld(Ld::Special(
-            SpecialLd::InlineIndex(index.into()),
-            Direction::FromA,
-        )))
+        analyze(Command::Ldh, vec![deref(index.into()), literal(A)]).expect_instruction(
+            Instruction::Ld(Ld::Special(
+                SpecialLd::InlineIndex(index.into()),
+                Direction::FromA,
+            )),
+        )
     }
 
     #[test]
     fn analyze_ldh_into_a() {
         let index = 0xcc;
-        analyze(
-            Command::Ldh,
-            vec![literal(A), ParsedExpr::from(index).deref()],
-        ).expect_instruction(Instruction::Ld(Ld::Special(
-            SpecialLd::InlineIndex(index.into()),
-            Direction::IntoA,
-        )))
+        analyze(Command::Ldh, vec![literal(A), deref(index.into())]).expect_instruction(
+            Instruction::Ld(Ld::Special(
+                SpecialLd::InlineIndex(index.into()),
+                Direction::IntoA,
+            )),
+        )
     }
 
     #[test]
@@ -606,7 +619,7 @@ mod tests {
     type InstructionDescriptor = ((Command, Vec<Input>), Instruction<Marking>);
 
     fn describe_legal_instructions() -> Vec<InstructionDescriptor> {
-        let mut descriptors = Vec::new();
+        let mut descriptors: Vec<InstructionDescriptor> = Vec::new();
         descriptors.extend(describe_nullary_instructions());
         descriptors.extend(describe_ld_simple_simple_instructions());
         descriptors.extend(describe_ld_simple_immediate_instructions());

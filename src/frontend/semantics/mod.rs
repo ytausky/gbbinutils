@@ -1,5 +1,5 @@
 use backend;
-use frontend::syntax::{self, keyword::Command, ParsedExpr, Token, TokenSpec};
+use frontend::syntax::{self, keyword::Command, ExprNode, ParsedExpr, Token, TokenSpec};
 use frontend::{Literal, StrExprFactory};
 use session::{ChunkId, Session};
 use Width;
@@ -96,9 +96,9 @@ fn analyze_data<'a, S: Session + 'a>(
 ) {
     for arg in args {
         use frontend::ExprFactory;
-        let expr = match arg {
-            ParsedExpr::Literal(literal) => actions.expr_factory.mk_literal(literal),
-            ParsedExpr::Ident(ident) => actions.expr_factory.mk_symbol(ident),
+        let expr = match arg.node {
+            ExprNode::Literal(literal) => actions.expr_factory.mk_literal((literal, arg.interval)),
+            ExprNode::Ident(ident) => actions.expr_factory.mk_symbol((ident, arg.interval)),
             _ => panic!(),
         };
         actions.session.emit_item(backend::Item::Data(expr, width))
@@ -231,9 +231,9 @@ impl<'a, F: Session + 'a> syntax::TokenSeqContext<F::TokenRef> for MacroArgActio
 fn reduce_include<R>(mut arguments: Vec<ParsedExpr<String, R>>) -> ChunkId<R> {
     assert_eq!(arguments.len(), 1);
     let path = arguments.pop().unwrap();
-    match path {
-        ParsedExpr::Literal((Literal::String(path_str), token_ref)) => {
-            ChunkId::File((path_str, Some(token_ref)))
+    match path.node {
+        ExprNode::Literal(Literal::String(path_str)) => {
+            ChunkId::File((path_str, Some(path.interval)))
         }
         _ => panic!(),
     }
@@ -306,7 +306,10 @@ mod tests {
         let filename = "file.asm";
         let actions = collect_semantic_actions(|actions| {
             let mut command = actions.enter_command((Command::Include, ()));
-            let expr = ParsedExpr::Literal((Literal::String(filename.to_string()), ()));
+            let expr = ParsedExpr {
+                node: ExprNode::Literal(Literal::String(filename.to_string())),
+                interval: (),
+            };
             command.add_argument(expr);
             command.exit();
         });
@@ -364,7 +367,10 @@ mod tests {
         let label = "my_label";
         let actions = collect_semantic_actions(|actions| {
             let mut command = actions.enter_command((Command::Dw, ()));
-            command.add_argument(ParsedExpr::Ident((label.to_string(), ())));
+            command.add_argument(ParsedExpr {
+                node: ExprNode::Ident(label.to_string()),
+                interval: (),
+            });
             command.exit();
         });
         assert_eq!(
@@ -377,7 +383,10 @@ mod tests {
     }
 
     fn mk_literal(n: i32) -> ParsedExpr<String, ()> {
-        ParsedExpr::Literal((Literal::Number(n), ()))
+        ParsedExpr {
+            node: ExprNode::Literal(Literal::Number(n)),
+            interval: (),
+        }
     }
 
     fn mk_byte(byte: &i32) -> backend::Item<()> {
@@ -460,7 +469,10 @@ mod tests {
         let actions = collect_semantic_actions(|actions| {
             let mut command_context = actions.enter_command((Command::Nop, ()));
             let literal_a = Literal::Operand(Operand::A);
-            command_context.add_argument(ParsedExpr::Literal((literal_a, ())));
+            command_context.add_argument(ParsedExpr {
+                node: ExprNode::Literal(literal_a),
+                interval: (),
+            });
             command_context.exit();
         });
         assert_eq!(

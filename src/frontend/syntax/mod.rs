@@ -1,3 +1,6 @@
+use diagnostics::SourceInterval;
+use std::{cmp::PartialEq, fmt::Debug};
+
 pub mod keyword;
 pub mod lexer;
 mod parser;
@@ -6,7 +9,7 @@ pub fn tokenize(src: &str) -> self::lexer::Lexer {
     self::lexer::Lexer::new(src)
 }
 
-pub fn parse_token_seq<R, I, F>(tokens: I, actions: F)
+pub fn parse_token_seq<R: SourceInterval, I, F>(tokens: I, actions: F)
 where
     I: Iterator<Item = (Token, R)>,
     F: FileContext<String, R>,
@@ -21,12 +24,12 @@ pub mod token {
 }
 
 pub trait TokenSpec {
-    type Command;
-    type Ident;
-    type Literal;
+    type Command: Debug + PartialEq;
+    type Ident: Debug + PartialEq;
+    type Literal: Debug + PartialEq;
 }
 
-pub trait StringRef {}
+pub trait StringRef: Debug + PartialEq {}
 
 impl StringRef for String {}
 impl<'a> StringRef for &'a str {}
@@ -89,8 +92,8 @@ pub trait TokenSeqContext<R> {
 }
 
 pub trait ExprSpec {
-    type Ident;
-    type Literal;
+    type Ident: Debug + PartialEq;
+    type Literal: Debug + PartialEq;
 }
 
 impl<T: TokenSpec> ExprSpec for T {
@@ -98,15 +101,15 @@ impl<T: TokenSpec> ExprSpec for T {
     type Literal = T::Literal;
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum ParsedExpr<S: ExprSpec, R> {
-    Ident((S::Ident, R)),
-    Deref(Box<ParsedExpr<S, R>>),
-    Literal((S::Literal, R)),
+#[derive(Debug, PartialEq)]
+pub enum ExprNode<S: ExprSpec, I> {
+    Ident(S::Ident),
+    Deref(Box<ParsedExpr<S, I>>),
+    Literal(S::Literal),
 }
 
-impl<S: ExprSpec, R> ParsedExpr<S, R> {
-    pub fn deref(self) -> Self {
-        ParsedExpr::Deref(Box::new(self))
-    }
+#[derive(Debug, PartialEq)]
+pub struct ParsedExpr<S: ExprSpec, I> {
+    pub node: ExprNode<S, I>,
+    pub interval: I,
 }

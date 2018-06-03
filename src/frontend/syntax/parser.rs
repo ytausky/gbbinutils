@@ -1,4 +1,5 @@
 use super::*;
+use diagnostics::SourceInterval;
 
 use std::iter;
 
@@ -45,7 +46,7 @@ fn follows_line(lookahead: &Lookahead) -> bool {
     }
 }
 
-pub fn parse_src<S: TokenSpec, T, I, F>(tokens: I, actions: F)
+pub fn parse_src<S: TokenSpec, T: SourceInterval, I, F>(tokens: I, actions: F)
 where
     I: Iterator<Item = (Token<S>, T)>,
     F: FileContext<S, T>,
@@ -71,7 +72,7 @@ macro_rules! mk_expect {
     }
 }
 
-impl<S: TokenSpec, T, I: Iterator<Item = (Token<S>, T)>> Parser<I> {
+impl<S: TokenSpec, T: SourceInterval, I: Iterator<Item = (Token<S>, T)>> Parser<I> {
     mk_expect!(expect_command, Command);
     mk_expect!(expect_ident, Ident);
 
@@ -225,18 +226,24 @@ impl<S: TokenSpec, T, I: Iterator<Item = (Token<S>, T)>> Parser<I> {
     }
 
     fn parse_deref_expression(&mut self) -> ParsedExpr<S, T> {
-        self.expect(&Some(Token::OpeningParenthesis));
+        let (_, left) = self.expect(&Some(Token::OpeningParenthesis));
         let expr = self.parse_expression();
-        self.expect(&Some(Token::ClosingParenthesis));
-        expr.deref()
+        let (_, right) = self.expect(&Some(Token::ClosingParenthesis));
+        ParsedExpr {
+            node: ExprNode::Deref(Box::new(expr)),
+            interval: left.extend(&right),
+        }
     }
 
     fn parse_atomic_expr(&mut self) -> ParsedExpr<S, T> {
-        let (token, token_ref) = self.bump();
-        match token {
-            Token::Ident(ident) => ParsedExpr::Ident((ident, token_ref)),
-            Token::Literal(literal) => ParsedExpr::Literal((literal, token_ref)),
-            _ => panic!(),
+        let (token, interval) = self.bump();
+        ParsedExpr {
+            node: match token {
+                Token::Ident(ident) => ExprNode::Ident(ident),
+                Token::Literal(literal) => ExprNode::Literal(literal),
+                _ => panic!(),
+            },
+            interval,
         }
     }
 }
@@ -246,7 +253,8 @@ mod tests {
     use super::{parse_src,
                 Token::{self, *}};
 
-    use frontend::syntax::{self, TokenSpec};
+    use diagnostics::SourceInterval;
+    use frontend::syntax::{self, ExprNode, ParsedExpr, TokenSpec};
 
     #[test]
     fn parse_empty_src() {
@@ -297,8 +305,14 @@ mod tests {
     }
 
     type TestToken = Token<TestTokenSpec>;
-    type TestTrackingData = usize;
+    type TestTrackingData = Vec<usize>;
     type TestExpr = syntax::ParsedExpr<TestTokenSpec, TestTrackingData>;
+
+    impl SourceInterval for TestTrackingData {
+        fn extend(&self, other: &Self) -> Self {
+            self.iter().chain(other.iter()).cloned().collect()
+        }
+    }
 
     impl<'a> syntax::FileContext<TestTokenSpec, TestTrackingData> for &'a mut TestContext {
         type CommandContext = Self;
@@ -392,7 +406,10 @@ mod tests {
 
     fn assert_eq_actions(tokens: &[TestToken], expected_actions: &[Action]) {
         let mut parsing_context = TestContext::new();
-        parse_src(tokens.iter().cloned().zip(0..), &mut parsing_context);
+        parse_src(
+            tokens.iter().cloned().zip((0..).map(|n| vec![n])),
+            &mut parsing_context,
+        );
         assert_eq!(parsing_context.actions, expected_actions)
     }
 
@@ -406,8 +423,8 @@ mod tests {
         assert_eq_actions(&[Eol, Command(())], &inst(1, vec![]))
     }
 
-    fn inst(n: TestTrackingData, args: Vec<Vec<Action>>) -> Vec<Action> {
-        let mut result = vec![Action::EnterInstruction(n)];
+    fn inst(n: usize, args: Vec<Vec<Action>>) -> Vec<Action> {
+        let mut result = vec![Action::EnterInstruction(vec![n])];
         for mut arg in args {
             result.append(&mut arg);
         }
@@ -430,7 +447,10 @@ mod tests {
     }
 
     fn ident(identifier: <TestTokenSpec as TokenSpec>::Ident) -> TestExpr {
-        syntax::ParsedExpr::Ident((identifier, identifier))
+        ParsedExpr {
+            node: ExprNode::Ident(identifier),
+            interval: vec![identifier],
+        }
     }
 
     #[test]
@@ -442,7 +462,10 @@ mod tests {
     }
 
     fn atom(n: <TestTokenSpec as TokenSpec>::Literal) -> TestExpr {
-        syntax::ParsedExpr::Literal((n, n))
+        ParsedExpr {
+            node: ExprNode::Literal(n),
+            interval: vec![n],
+        }
     }
 
     #[test]
@@ -501,8 +524,8 @@ mod tests {
         assert_eq_actions(tokens, expected_actions);
     }
 
-    fn macro_def(label: TestTrackingData, tokens: Vec<TestToken>) -> Vec<Action> {
-        let mut result = vec![Action::EnterMacroDef(label)];
+    fn macro_def(label: usize, tokens: Vec<TestToken>) -> Vec<Action> {
+        let mut result = vec![Action::EnterMacroDef(vec![label])];
         result.extend(tokens.into_iter().map(|t| Action::PushTerminal(t)));
         result.push(Action::ExitMacroDef);
         result
@@ -530,10 +553,10 @@ mod tests {
     }
 
     fn add_label(
-        (_, n): (<TestTokenSpec as TokenSpec>::Ident, TestTrackingData),
+        (_, n): (<TestTokenSpec as TokenSpec>::Ident, usize),
         mut following_actions: Vec<Action>,
     ) -> Vec<Action> {
-        let mut result = vec![Action::AddLabel(n)];
+        let mut result = vec![Action::AddLabel(vec![n])];
         result.append(&mut following_actions);
         result
     }
@@ -546,12 +569,15 @@ mod tests {
             Literal(2),
             ClosingParenthesis,
         ];
-        let expected_actions = &inst(0, vec![expr(deref(atom(2)))]);
+        let expected_actions = &inst(0, vec![expr(deref(1, atom(2), 3))]);
         assert_eq_actions(tokens, expected_actions)
     }
 
-    fn deref(expr: TestExpr) -> TestExpr {
-        syntax::ParsedExpr::Deref(Box::new(expr))
+    fn deref(left: usize, expr: TestExpr, right: usize) -> TestExpr {
+        ParsedExpr {
+            node: ExprNode::Deref(Box::new(expr)),
+            interval: vec![left, right],
+        }
     }
 
     #[test]
