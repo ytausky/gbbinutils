@@ -231,14 +231,11 @@ enum LdHint {
 }
 
 fn analyze_branch_target<R>(target: Option<Operand<R>>) -> Option<TargetSelector<R>> {
-    match target {
-        Some(Operand::Const(expr)) => Some(TargetSelector::Expr(expr)),
-        Some(Operand::Atom(AtomKind::Simple(SimpleOperand::DerefHl), _)) => {
-            Some(TargetSelector::DerefHl)
-        }
-        None => None,
+    target.map(|target| match target {
+        Operand::Const(expr) => TargetSelector::Expr(expr),
+        Operand::Atom(AtomKind::Simple(SimpleOperand::DerefHl), _) => TargetSelector::DerefHl,
         _ => panic!(),
-    }
+    })
 }
 
 fn mk_branch<R>(kind: BranchKind, target: Option<TargetSelector<R>>) -> Branch<R> {
