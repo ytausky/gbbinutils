@@ -66,19 +66,28 @@ fn analyze_deref_operand<R>(
 ) -> Result<Operand<R>, Diagnostic<R>> {
     match expr.node {
         ExprNode::Ident(ident) => Ok(Operand::Deref(RelocExpr::Symbol(ident, expr.interval))),
-        ExprNode::Literal(Literal::Operand(OperandKeyword::Hl)) => Ok(Operand::Atom(
-            AtomKind::Simple(SimpleOperand::DerefHl),
-            expr.interval,
-        )),
-        ExprNode::Literal(Literal::Operand(OperandKeyword::C)) => {
-            Ok(Operand::Atom(AtomKind::DerefC, expr.interval))
-        }
-        ExprNode::Literal(Literal::Operand(OperandKeyword::Af)) => {
-            Err(Diagnostic::new(Message::CannotDereference, deref_interval))
+        ExprNode::Literal(Literal::Operand(keyword)) => {
+            analyze_deref_operand_keyword((keyword, expr.interval), deref_interval)
         }
         ExprNode::Literal(Literal::Number(n)) => {
             Ok(Operand::Deref(RelocExpr::Literal(n, expr.interval)))
         }
+        _ => panic!(),
+    }
+}
+
+fn analyze_deref_operand_keyword<SI>(
+    keyword: (OperandKeyword, SI),
+    deref: SI,
+) -> Result<Operand<SI>, Diagnostic<SI>> {
+    use frontend::syntax::OperandKeyword::*;
+    match keyword.0 {
+        Af => Err(Diagnostic::new(Message::CannotDereference, deref)),
+        C => Ok(Operand::Atom(AtomKind::DerefC, keyword.1)),
+        Hl => Ok(Operand::Atom(
+            AtomKind::Simple(SimpleOperand::DerefHl),
+            keyword.1,
+        )),
         _ => panic!(),
     }
 }

@@ -5,6 +5,8 @@ pub mod keyword;
 pub mod lexer;
 mod parser;
 
+pub use frontend::syntax::keyword::OperandKeyword;
+
 pub fn tokenize(src: &str) -> self::lexer::Lexer {
     self::lexer::Lexer::new(src)
 }
