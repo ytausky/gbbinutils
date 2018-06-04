@@ -40,23 +40,11 @@ pub fn analyze_operand<R>(
     context: Context,
 ) -> Result<Operand<R>, Diagnostic<R>> {
     match expr.node {
-        ExprNode::Deref(inner) => analyze_deref_operand(*inner, expr.interval),
-        ExprNode::Ident(ident) => Ok(analyze_ident_operand((ident, expr.interval))),
-        ExprNode::Literal(literal) => {
-            Ok(analyze_literal_operand((literal, expr.interval), context))
+        ExprNode::Literal(Literal::Operand(keyword)) => {
+            Ok(analyze_keyword_operand((keyword, expr.interval), context))
         }
-    }
-}
-
-fn analyze_ident_operand<R>(ident: (String, R)) -> Operand<R> {
-    Operand::Const(RelocExpr::Symbol(ident.0, ident.1))
-}
-
-fn analyze_literal_operand<R>(literal: (Literal<String>, R), context: Context) -> Operand<R> {
-    match literal.0 {
-        Literal::Operand(operand) => analyze_keyword_operand((operand, literal.1), context),
-        Literal::Number(n) => Operand::Const(RelocExpr::Literal(n, literal.1)),
-        _ => panic!(),
+        ExprNode::Deref(inner) => analyze_deref_operand(*inner, expr.interval),
+        _ => Ok(Operand::Const(analyze_reloc_expr(expr)?)),
     }
 }
 
@@ -65,14 +53,10 @@ fn analyze_deref_operand<R>(
     deref_interval: R,
 ) -> Result<Operand<R>, Diagnostic<R>> {
     match expr.node {
-        ExprNode::Ident(ident) => Ok(Operand::Deref(RelocExpr::Symbol(ident, expr.interval))),
         ExprNode::Literal(Literal::Operand(keyword)) => {
             analyze_deref_operand_keyword((keyword, expr.interval), deref_interval)
         }
-        ExprNode::Literal(Literal::Number(n)) => {
-            Ok(Operand::Deref(RelocExpr::Literal(n, expr.interval)))
-        }
-        _ => panic!(),
+        _ => Ok(Operand::Deref(analyze_reloc_expr(expr)?)),
     }
 }
 
@@ -88,6 +72,14 @@ fn analyze_deref_operand_keyword<SI>(
             AtomKind::Simple(SimpleOperand::DerefHl),
             keyword.1,
         )),
+        _ => panic!(),
+    }
+}
+
+fn analyze_reloc_expr<SI>(expr: ParsedExpr<String, SI>) -> Result<RelocExpr<SI>, Diagnostic<SI>> {
+    match expr.node {
+        ExprNode::Ident(ident) => Ok(RelocExpr::Symbol(ident, expr.interval)),
+        ExprNode::Literal(Literal::Number(n)) => Ok(RelocExpr::Literal(n, expr.interval)),
         _ => panic!(),
     }
 }
