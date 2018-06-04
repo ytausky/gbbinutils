@@ -35,10 +35,9 @@ pub enum Context {
     Other,
 }
 
-pub fn analyze_operand<R>(
-    expr: ParsedExpr<String, R>,
-    context: Context,
-) -> Result<Operand<R>, Diagnostic<R>> {
+type OperandResult<SI> = Result<Operand<SI>, Diagnostic<SI>>;
+
+pub fn analyze_operand<SI>(expr: ParsedExpr<String, SI>, context: Context) -> OperandResult<SI> {
     match expr.node {
         ExprNode::Literal(Literal::Operand(keyword)) => {
             Ok(analyze_keyword_operand((keyword, expr.interval), context))
@@ -48,10 +47,10 @@ pub fn analyze_operand<R>(
     }
 }
 
-fn analyze_deref_operand<R>(
-    expr: ParsedExpr<String, R>,
-    deref_interval: R,
-) -> Result<Operand<R>, Diagnostic<R>> {
+fn analyze_deref_operand<SI>(
+    expr: ParsedExpr<String, SI>,
+    deref_interval: SI,
+) -> OperandResult<SI> {
     match expr.node {
         ExprNode::Literal(Literal::Operand(keyword)) => {
             analyze_deref_operand_keyword((keyword, expr.interval), deref_interval)
@@ -63,7 +62,7 @@ fn analyze_deref_operand<R>(
 fn analyze_deref_operand_keyword<SI>(
     keyword: (OperandKeyword, SI),
     deref: SI,
-) -> Result<Operand<SI>, Diagnostic<SI>> {
+) -> OperandResult<SI> {
     use frontend::syntax::OperandKeyword::*;
     match keyword.0 {
         Af => Err(Diagnostic::new(Message::CannotDereference, deref)),
