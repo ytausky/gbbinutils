@@ -138,7 +138,7 @@ impl<I: Iterator<Item = Result<T, E>>, T, E> OperandCounter<I> {
     pub fn next(&mut self) -> Result<Option<T>, E> {
         self.operands.next().map_or(Ok(None), |operand| {
             self.count += 1;
-            operand.map(|x| Some(x))
+            operand.map(Some)
         })
     }
 

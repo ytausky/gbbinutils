@@ -126,9 +126,7 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>
         }
     }
 
-    fn collect_condition_and_target(
-        &mut self,
-    ) -> Result<(Option<(Condition, R)>, Option<TargetSelector<R>>), Diagnostic<R>> {
+    fn collect_condition_and_target(&mut self) -> Result<CondtitionTargetPair<R>, Diagnostic<R>> {
         let first_operand = self.operands.next()?;
         Ok(
             if let Some(Operand::Atom(AtomKind::Condition(condition), range)) = first_operand {
@@ -199,6 +197,9 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>
     }
 }
 
+type CondtitionTargetPair<SI> = (Option<(Condition, SI)>, Option<TargetSelector<SI>>);
+
+#[derive(Clone, Copy)]
 enum LdHint {
     Normal,
     Ldh,
