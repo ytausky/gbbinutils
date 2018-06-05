@@ -65,7 +65,10 @@ fn analyze_deref_operand_keyword<SI>(
 ) -> OperandResult<SI> {
     use frontend::syntax::OperandKeyword::*;
     match keyword.0 {
-        Af => Err(Diagnostic::new(Message::CannotDereference, deref)),
+        Af => Err(Diagnostic::new(
+            Message::CannotDereference { keyword: keyword.1 },
+            deref,
+        )),
         C => Ok(Operand::Atom(AtomKind::DerefC, keyword.1)),
         Hl => Ok(Operand::Atom(
             AtomKind::Simple(SimpleOperand::DerefHl),
@@ -175,7 +178,10 @@ mod tests {
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Err(Diagnostic::new(Message::CannotDereference, 1))
+            Err(Diagnostic::new(
+                Message::CannotDereference { keyword: 0 },
+                1
+            ))
         )
     }
 }

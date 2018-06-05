@@ -101,21 +101,21 @@ pub trait DiagnosticsListener<TR> {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Diagnostic<TR> {
-    message: Message,
-    highlight: TR,
+pub struct Diagnostic<SR> {
+    message: Message<SR>,
+    highlight: SR,
 }
 
-impl<TR> Diagnostic<TR> {
-    pub fn new(message: Message, highlight: TR) -> Diagnostic<TR> {
+impl<SR> Diagnostic<SR> {
+    pub fn new(message: Message<SR>, highlight: SR) -> Diagnostic<SR> {
         Diagnostic { message, highlight }
     }
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Message {
+pub enum Message<SR> {
     AlwaysUnconditional,
-    CannotDereference,
+    CannotDereference { keyword: SR },
     DestMustBeA,
     DestMustBeHl,
     IncompatibleOperand,
@@ -126,23 +126,26 @@ pub enum Message {
     ValueOutOfRange { value: i32, width: Width },
 }
 
-impl fmt::Display for Message {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl Message<TokenRefData> {
+    fn render(&self, codebase: &TextCache) -> String {
         use diagnostics::Message::*;
         match self {
-            AlwaysUnconditional => write!(f, "instruction cannot be made conditional"),
-            CannotDereference => write!(f, "register pair `af` cannot be dereferenced"),
-            DestMustBeA => write!(f, "destination of ALU operation must be `a`"),
-            DestMustBeHl => write!(f, "destination operand must be `hl`"),
-            IncompatibleOperand => write!(f, "operand cannot be used with this instruction"),
-            MissingTarget => write!(f, "branch instruction requires target"),
+            AlwaysUnconditional => "instruction cannot be made conditional".into(),
+            CannotDereference { keyword } => format!(
+                "register pair `{}` cannot be dereferenced",
+                mk_snippet(codebase, keyword)
+            ),
+            DestMustBeA => "destination of ALU operation must be `a`".into(),
+            DestMustBeHl => "destination operand must be `hl`".into(),
+            IncompatibleOperand => "operand cannot be used with this instruction".into(),
+            MissingTarget => "branch instruction requires target".into(),
             OperandCount { actual, expected } => {
-                write!(f, "expected {} operands, found {}", expected, actual)
+                format!("expected {} operands, found {}", expected, actual)
             }
-            UndefinedMacro { name } => write!(f, "invocation of undefined macro `{}`", name),
-            UnresolvedSymbol { symbol } => write!(f, "symbol `{}` could not be resolved", symbol),
+            UndefinedMacro { name } => format!("invocation of undefined macro `{}`", name),
+            UnresolvedSymbol { symbol } => format!("symbol `{}` could not be resolved", symbol),
             ValueOutOfRange { value, width } => {
-                write!(f, "value {} cannot be represented in a {}", value, width)
+                format!("value {} cannot be represented in a {}", value, width)
             }
         }
     }
@@ -198,7 +201,7 @@ fn elaborate<'a>(
                 .next()
                 .unwrap();
             ElaboratedDiagnostic {
-                text: diagnostic.message.to_string(),
+                text: diagnostic.message.render(codebase),
                 buf_name: buf.name(),
                 highlight: text_range,
                 src_line,
@@ -230,6 +233,14 @@ fn render<'a, W: io::Write>(
         "{}:{}: {}\n{}\n{}",
         diagnostic.buf_name, line_number, diagnostic.text, diagnostic.src_line, highlight
     )
+}
+
+fn mk_snippet<'a>(codebase: &'a TextCache, interval: &TokenRefData) -> &'a str {
+    match interval {
+        TokenRefData::Lexeme { range, context } => {
+            &codebase.buf(context.buf_id).as_str()[range.start..range.end]
+        }
+    }
 }
 
 #[cfg(test)]
@@ -264,6 +275,22 @@ mod tests {
                 context
             }
         )
+    }
+
+    #[test]
+    fn get_snippet() {
+        let mut codebase = TextCache::new();
+        let src = "add snippet, my";
+        let buf_id = codebase.add_src_buf(DUMMY_FILE, src);
+        let context = Rc::new(BufContextData {
+            buf_id,
+            included_from: None,
+        });
+        let interval = TokenRefData::Lexeme {
+            range: BufRange::from(4..11),
+            context: context.clone(),
+        };
+        assert_eq!(mk_snippet(&codebase, &interval), "snippet")
     }
 
     #[test]

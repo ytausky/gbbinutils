@@ -117,6 +117,10 @@ impl StringSrcBuf {
     pub fn text(&self) -> Rc<str> {
         self.src.clone()
     }
+
+    pub fn as_str(&self) -> &str {
+        &self.src
+    }
 }
 
 pub struct TextLines<'a> {

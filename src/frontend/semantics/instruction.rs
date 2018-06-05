@@ -850,7 +850,7 @@ mod tests {
             assert_eq!(self.0, Ok(expected))
         }
 
-        fn expect_diagnostic(self, message: Message) {
+        fn expect_diagnostic(self, message: Message<Marking>) {
             assert_eq!(self.0, Err(Diagnostic::new(message, Marking::Special)))
         }
     }
