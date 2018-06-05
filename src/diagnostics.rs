@@ -1,5 +1,5 @@
 use codebase::{BufId, BufRange, LineNumber, TextBuf, TextCache, TextRange};
-use std::{cell::RefCell, cmp, fmt, io, rc::Rc};
+use std::{cell::RefCell, cmp, fmt, rc::Rc};
 use Width;
 
 pub trait SourceInterval: Clone {
@@ -174,7 +174,7 @@ impl<'a> DiagnosticsListener<TokenRefData> for TerminalDiagnostics<'a> {
     fn emit_diagnostic(&self, diagnostic: Diagnostic<TokenRefData>) {
         let codebase = self.codebase.borrow();
         let elaborated_diagnostic = elaborate(&diagnostic, &codebase);
-        render(&elaborated_diagnostic, &mut io::stdout()).unwrap()
+        print!("{}", elaborated_diagnostic)
     }
 }
 
@@ -210,29 +210,25 @@ fn elaborate<'a>(
     }
 }
 
-fn render<'a, W: io::Write>(
-    diagnostic: &ElaboratedDiagnostic<'a>,
-    output: &mut W,
-) -> io::Result<()> {
-    assert_eq!(
-        diagnostic.highlight.start.line,
-        diagnostic.highlight.end.line
-    );
-    let line_number: LineNumber = diagnostic.highlight.start.line.into();
-    let mut highlight = String::new();
-    let space_count = diagnostic.highlight.start.column_index;
-    let tilde_count = diagnostic.highlight.end.column_index - space_count;
-    for _ in 0..space_count {
-        highlight.push(' ');
+impl<'a> fmt::Display for ElaboratedDiagnostic<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        assert_eq!(self.highlight.start.line, self.highlight.end.line);
+        let line_number: LineNumber = self.highlight.start.line.into();
+        let mut highlight = String::new();
+        let space_count = self.highlight.start.column_index;
+        let tilde_count = self.highlight.end.column_index - space_count;
+        for _ in 0..space_count {
+            highlight.push(' ');
+        }
+        for _ in 0..tilde_count {
+            highlight.push('~');
+        }
+        writeln!(
+            f,
+            "{}:{}: {}\n{}\n{}",
+            self.buf_name, line_number, self.text, self.src_line, highlight
+        )
     }
-    for _ in 0..tilde_count {
-        highlight.push('~');
-    }
-    writeln!(
-        output,
-        "{}:{}: {}\n{}\n{}",
-        diagnostic.buf_name, line_number, diagnostic.text, diagnostic.src_line, highlight
-    )
 }
 
 fn mk_snippet<'a>(codebase: &'a TextCache, interval: &TokenRefData) -> &'a str {
@@ -336,9 +332,7 @@ mod tests {
     my_macro a, $12
     ~~~~~~~~
 ";
-        let mut actual = Vec::new();
-        render(&elaborated_diagnostic, &mut actual).unwrap();
-        assert_eq!(String::from_utf8(actual).unwrap(), expected)
+        assert_eq!(elaborated_diagnostic.to_string(), expected)
     }
 
     fn mk_highlight(line_number: LineNumber, start: usize, end: usize) -> TextRange {
