@@ -225,7 +225,7 @@ impl<'a> fmt::Display for ElaboratedDiagnostic<'a> {
         }
         writeln!(
             f,
-            "{}:{}: {}\n{}\n{}",
+            "{}:{}: error: {}\n{}\n{}",
             self.buf_name, line_number, self.text, self.src_line, highlight
         )
     }
@@ -328,7 +328,7 @@ mod tests {
             highlight: mk_highlight(LineNumber(2), 4, 12),
             src_line: "    my_macro a, $12",
         };
-        let expected = r"/my/file:2: invocation of undefined macro `my_macro`
+        let expected = r"/my/file:2: error: invocation of undefined macro `my_macro`
     my_macro a, $12
     ~~~~~~~~
 ";
