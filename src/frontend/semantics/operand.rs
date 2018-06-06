@@ -82,6 +82,7 @@ fn analyze_reloc_expr<SI>(expr: ParsedExpr<String, SI>) -> Result<RelocExpr<SI>,
     match expr.node {
         ExprNode::Ident(ident) => Ok(RelocExpr::Symbol(ident, expr.interval)),
         ExprNode::Literal(Literal::Number(n)) => Ok(RelocExpr::Literal(n, expr.interval)),
+        ExprNode::Parenthesized(expr) => analyze_reloc_expr(*expr),
         _ => panic!(),
     }
 }
@@ -182,6 +183,26 @@ mod tests {
                 Message::CannotDereference { keyword: 0 },
                 1
             ))
+        )
+    }
+
+    #[test]
+    fn analyze_repeated_parentheses() {
+        let n = 0x42;
+        let interval = 0;
+        let parsed_expr = ParsedExpr {
+            node: ExprNode::Parenthesized(Box::new(ParsedExpr {
+                node: ExprNode::Parenthesized(Box::new(ParsedExpr {
+                    node: ExprNode::Literal(Literal::Number(n)),
+                    interval,
+                })),
+                interval: 1,
+            })),
+            interval: 2,
+        };
+        assert_eq!(
+            analyze_operand(parsed_expr, Context::Other),
+            Ok(Operand::Deref(RelocExpr::Literal(n, interval)))
         )
     }
 }
