@@ -106,7 +106,7 @@ impl<T: TokenSpec> ExprSpec for T {
 #[derive(Debug, PartialEq)]
 pub enum ExprNode<S: ExprSpec, I> {
     Ident(S::Ident),
-    Deref(Box<ParsedExpr<S, I>>),
+    Parenthesized(Box<ParsedExpr<S, I>>),
     Literal(S::Literal),
 }
 

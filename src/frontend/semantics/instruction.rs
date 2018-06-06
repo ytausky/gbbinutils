@@ -405,7 +405,7 @@ mod tests {
 
     fn deref(expr: Input) -> Input {
         ParsedExpr {
-            node: ExprNode::Deref(Box::new(expr)),
+            node: ExprNode::Parenthesized(Box::new(expr)),
             interval: Marking::default(),
         }
     }

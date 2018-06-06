@@ -219,18 +219,18 @@ impl<S: TokenSpec, T: SourceInterval, I: Iterator<Item = (Token<S>, T)>> Parser<
 
     fn parse_expression(&mut self) -> ParsedExpr<S, T> {
         if self.lookahead() == Some(Token::OpeningParenthesis) {
-            self.parse_deref_expression()
+            self.parse_parenthesized_expression()
         } else {
             self.parse_atomic_expr()
         }
     }
 
-    fn parse_deref_expression(&mut self) -> ParsedExpr<S, T> {
+    fn parse_parenthesized_expression(&mut self) -> ParsedExpr<S, T> {
         let (_, left) = self.expect(&Some(Token::OpeningParenthesis));
         let expr = self.parse_expression();
         let (_, right) = self.expect(&Some(Token::ClosingParenthesis));
         ParsedExpr {
-            node: ExprNode::Deref(Box::new(expr)),
+            node: ExprNode::Parenthesized(Box::new(expr)),
             interval: left.extend(&right),
         }
     }
@@ -575,7 +575,7 @@ mod tests {
 
     fn deref(left: usize, expr: TestExpr, right: usize) -> TestExpr {
         ParsedExpr {
-            node: ExprNode::Deref(Box::new(expr)),
+            node: ExprNode::Parenthesized(Box::new(expr)),
             interval: vec![left, right],
         }
     }

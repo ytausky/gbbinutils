@@ -42,7 +42,7 @@ pub fn analyze_operand<SI>(expr: ParsedExpr<String, SI>, context: Context) -> Op
         ExprNode::Literal(Literal::Operand(keyword)) => {
             Ok(analyze_keyword_operand((keyword, expr.interval), context))
         }
-        ExprNode::Deref(inner) => analyze_deref_operand(*inner, expr.interval),
+        ExprNode::Parenthesized(inner) => analyze_deref_operand(*inner, expr.interval),
         _ => Ok(Operand::Const(analyze_reloc_expr(expr)?)),
     }
 }
@@ -170,7 +170,7 @@ mod tests {
     #[test]
     fn analyze_deref_af() {
         let parsed_expr = ParsedExpr {
-            node: ExprNode::Deref(Box::new(ParsedExpr {
+            node: ExprNode::Parenthesized(Box::new(ParsedExpr {
                 node: ExprNode::Literal(Literal::Operand(OperandKeyword::Af)),
                 interval: 0,
             })),
