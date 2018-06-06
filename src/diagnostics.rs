@@ -139,15 +139,26 @@ impl Message<TokenRefData> {
             DestMustBeHl => "destination operand must be `hl`".into(),
             IncompatibleOperand => "operand cannot be used with this instruction".into(),
             MissingTarget => "branch instruction requires target".into(),
-            OperandCount { actual, expected } => {
-                format!("expected {} operands, found {}", expected, actual)
-            }
+            OperandCount { actual, expected } => format!(
+                "expected {} operand{}, found {}",
+                expected,
+                pluralize(*expected),
+                actual
+            ),
             UndefinedMacro { name } => format!("invocation of undefined macro `{}`", name),
             UnresolvedSymbol { symbol } => format!("symbol `{}` could not be resolved", symbol),
             ValueOutOfRange { value, width } => {
                 format!("value {} cannot be represented in a {}", value, width)
             }
         }
+    }
+}
+
+fn pluralize(n: usize) -> &'static str {
+    if n == 1 {
+        ""
+    } else {
+        "s"
     }
 }
 
@@ -333,6 +344,16 @@ mod tests {
     ~~~~~~~~
 ";
         assert_eq!(elaborated_diagnostic.to_string(), expected)
+    }
+
+    #[test]
+    fn expect_1_operand() {
+        let codebase = TextCache::new();
+        let message = Message::OperandCount {
+            actual: 0,
+            expected: 1,
+        };
+        assert_eq!(message.render(&codebase), "expected 1 operand, found 0")
     }
 
     fn mk_highlight(line_number: LineNumber, start: usize, end: usize) -> TextRange {
