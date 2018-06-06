@@ -145,7 +145,9 @@ pub enum Message<SR> {
 
 #[derive(Debug, PartialEq)]
 pub enum KeywordOperandCategory {
+    Reg,
     RegPair,
+    ConditionCode,
 }
 
 impl Message<TokenRefData> {
@@ -185,7 +187,9 @@ impl Message<TokenRefData> {
 impl fmt::Display for KeywordOperandCategory {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            KeywordOperandCategory::Reg => f.write_str("register"),
             KeywordOperandCategory::RegPair => f.write_str("register pair"),
+            KeywordOperandCategory::ConditionCode => f.write_str("condition code"),
         }
     }
 }

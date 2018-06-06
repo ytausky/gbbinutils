@@ -81,10 +81,11 @@ fn analyze_deref_operand_keyword<SI>(
 fn try_deref_operand_keyword(keyword: OperandKeyword) -> Result<AtomKind, KeywordOperandCategory> {
     use frontend::syntax::OperandKeyword::*;
     match keyword {
-        Af => Err(KeywordOperandCategory::RegPair),
         C => Ok(AtomKind::DerefC),
         Hl => Ok(AtomKind::Simple(SimpleOperand::DerefHl)),
-        _ => panic!(),
+        A | B | D | E | H | L | Sp => Err(KeywordOperandCategory::Reg),
+        Af | Bc | De  => Err(KeywordOperandCategory::RegPair),
+        Nc | Nz | Z => Err(KeywordOperandCategory::ConditionCode),
     }
 }
 
