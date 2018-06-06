@@ -119,6 +119,7 @@ pub enum Message<SR> {
     DestMustBeA,
     DestMustBeHl,
     IncompatibleOperand,
+    KeywordInExpr { keyword: SR },
     MissingTarget,
     OperandCount { actual: usize, expected: usize },
     UndefinedMacro { name: String },
@@ -138,6 +139,10 @@ impl Message<TokenRefData> {
             DestMustBeA => "destination of ALU operation must be `a`".into(),
             DestMustBeHl => "destination operand must be `hl`".into(),
             IncompatibleOperand => "operand cannot be used with this instruction".into(),
+            KeywordInExpr { keyword } => format!(
+                "keyword `{}` cannot appear in expression",
+                mk_snippet(codebase, keyword)
+            ),
             MissingTarget => "branch instruction requires target".into(),
             OperandCount { actual, expected } => format!(
                 "expected {} operand{}, found {}",

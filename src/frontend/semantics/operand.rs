@@ -37,7 +37,10 @@ pub enum Context {
 
 type OperandResult<SI> = Result<Operand<SI>, Diagnostic<SI>>;
 
-pub fn analyze_operand<SI>(expr: ParsedExpr<String, SI>, context: Context) -> OperandResult<SI> {
+pub fn analyze_operand<SI: Clone>(
+    expr: ParsedExpr<String, SI>,
+    context: Context,
+) -> OperandResult<SI> {
     match expr.node {
         ExprNode::Literal(Literal::Operand(keyword)) => {
             Ok(analyze_keyword_operand((keyword, expr.interval), context))
@@ -47,7 +50,7 @@ pub fn analyze_operand<SI>(expr: ParsedExpr<String, SI>, context: Context) -> Op
     }
 }
 
-fn analyze_deref_operand<SI>(
+fn analyze_deref_operand<SI: Clone>(
     expr: ParsedExpr<String, SI>,
     deref_interval: SI,
 ) -> OperandResult<SI> {
@@ -78,10 +81,18 @@ fn analyze_deref_operand_keyword<SI>(
     }
 }
 
-fn analyze_reloc_expr<SI>(expr: ParsedExpr<String, SI>) -> Result<RelocExpr<SI>, Diagnostic<SI>> {
+fn analyze_reloc_expr<SI: Clone>(
+    expr: ParsedExpr<String, SI>,
+) -> Result<RelocExpr<SI>, Diagnostic<SI>> {
     match expr.node {
         ExprNode::Ident(ident) => Ok(RelocExpr::Symbol(ident, expr.interval)),
         ExprNode::Literal(Literal::Number(n)) => Ok(RelocExpr::Literal(n, expr.interval)),
+        ExprNode::Literal(Literal::Operand(_)) => Err(Diagnostic::new(
+            Message::KeywordInExpr {
+                keyword: expr.interval.clone(),
+            },
+            expr.interval,
+        )),
         ExprNode::Parenthesized(expr) => analyze_reloc_expr(*expr),
         _ => panic!(),
     }
@@ -203,6 +214,28 @@ mod tests {
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
             Ok(Operand::Deref(RelocExpr::Literal(n, interval)))
+        )
+    }
+
+    #[test]
+    fn analyze_reg_in_expr() {
+        let interval = 0;
+        let parsed_expr = ParsedExpr {
+            node: ExprNode::Parenthesized(Box::new(ParsedExpr {
+                node: ExprNode::Parenthesized(Box::new(ParsedExpr {
+                    node: ExprNode::Literal(Literal::Operand(OperandKeyword::Z)),
+                    interval,
+                })),
+                interval: 1,
+            })),
+            interval: 2,
+        };
+        assert_eq!(
+            analyze_operand(parsed_expr, Context::Other),
+            Err(Diagnostic::new(
+                Message::KeywordInExpr { keyword: interval },
+                interval
+            ))
         )
     }
 }
