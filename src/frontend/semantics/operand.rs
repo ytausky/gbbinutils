@@ -1,4 +1,4 @@
-use diagnostics::{Diagnostic, Message, Source, SourceInterval};
+use diagnostics::{Diagnostic, KeywordOperandCategory, Message, Source, SourceInterval};
 use frontend::syntax::{keyword::OperandKeyword, ExprNode, Literal, ParsedExpr};
 use instruction::{Condition, Reg16, RegPair, RelocExpr, SimpleOperand};
 
@@ -66,17 +66,24 @@ fn analyze_deref_operand_keyword<SI>(
     keyword: (OperandKeyword, SI),
     deref: SI,
 ) -> OperandResult<SI> {
-    use frontend::syntax::OperandKeyword::*;
-    match keyword.0 {
-        Af => Err(Diagnostic::new(
-            Message::CannotDereference { keyword: keyword.1 },
+    match try_deref_operand_keyword(keyword.0) {
+        Ok(atom) => Ok(Operand::Atom(atom, keyword.1)),
+        Err(category) => Err(Diagnostic::new(
+            Message::CannotDereference {
+                category,
+                keyword: keyword.1,
+            },
             deref,
         )),
-        C => Ok(Operand::Atom(AtomKind::DerefC, keyword.1)),
-        Hl => Ok(Operand::Atom(
-            AtomKind::Simple(SimpleOperand::DerefHl),
-            keyword.1,
-        )),
+    }
+}
+
+fn try_deref_operand_keyword(keyword: OperandKeyword) -> Result<AtomKind, KeywordOperandCategory> {
+    use frontend::syntax::OperandKeyword::*;
+    match keyword {
+        Af => Err(KeywordOperandCategory::RegPair),
+        C => Ok(AtomKind::DerefC),
+        Hl => Ok(AtomKind::Simple(SimpleOperand::DerefHl)),
         _ => panic!(),
     }
 }
@@ -193,7 +200,10 @@ mod tests {
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
             Err(Diagnostic::new(
-                Message::CannotDereference { keyword: 0 },
+                Message::CannotDereference {
+                    category: KeywordOperandCategory::RegPair,
+                    keyword: 0
+                },
                 1
             ))
         )

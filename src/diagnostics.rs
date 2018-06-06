@@ -115,17 +115,37 @@ impl<SR> Diagnostic<SR> {
 #[derive(Debug, PartialEq)]
 pub enum Message<SR> {
     AlwaysUnconditional,
-    CannotDereference { keyword: SR },
+    CannotDereference {
+        category: KeywordOperandCategory,
+        keyword: SR,
+    },
     DestMustBeA,
     DestMustBeHl,
     IncompatibleOperand,
-    KeywordInExpr { keyword: SR },
+    KeywordInExpr {
+        keyword: SR,
+    },
     MissingTarget,
-    OperandCount { actual: usize, expected: usize },
+    OperandCount {
+        actual: usize,
+        expected: usize,
+    },
     StringInInstruction,
-    UndefinedMacro { name: String },
-    UnresolvedSymbol { symbol: String },
-    ValueOutOfRange { value: i32, width: Width },
+    UndefinedMacro {
+        name: String,
+    },
+    UnresolvedSymbol {
+        symbol: String,
+    },
+    ValueOutOfRange {
+        value: i32,
+        width: Width,
+    },
+}
+
+#[derive(Debug, PartialEq)]
+pub enum KeywordOperandCategory {
+    RegPair,
 }
 
 impl Message<TokenRefData> {
@@ -133,8 +153,9 @@ impl Message<TokenRefData> {
         use diagnostics::Message::*;
         match self {
             AlwaysUnconditional => "instruction cannot be made conditional".into(),
-            CannotDereference { keyword } => format!(
-                "register pair `{}` cannot be dereferenced",
+            CannotDereference { category, keyword } => format!(
+                "{} `{}` cannot be dereferenced",
+                category,
                 mk_snippet(codebase, keyword)
             ),
             DestMustBeA => "destination of ALU operation must be `a`".into(),
@@ -157,6 +178,14 @@ impl Message<TokenRefData> {
             ValueOutOfRange { value, width } => {
                 format!("value {} cannot be represented in a {}", value, width)
             }
+        }
+    }
+}
+
+impl fmt::Display for KeywordOperandCategory {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            KeywordOperandCategory::RegPair => f.write_str("register pair"),
         }
     }
 }
