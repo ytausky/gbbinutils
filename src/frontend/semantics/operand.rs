@@ -93,8 +93,10 @@ fn analyze_reloc_expr<SI: Clone>(
             },
             expr.interval,
         )),
+        ExprNode::Literal(Literal::String(_)) => {
+            Err(Diagnostic::new(Message::StringInInstruction, expr.interval))
+        }
         ExprNode::Parenthesized(expr) => analyze_reloc_expr(*expr),
-        _ => panic!(),
     }
 }
 
@@ -236,6 +238,19 @@ mod tests {
                 Message::KeywordInExpr { keyword: interval },
                 interval
             ))
+        )
+    }
+
+    #[test]
+    fn analyze_string_in_instruction() {
+        let interval = 0;
+        let parsed_expr = ParsedExpr {
+            node: ExprNode::Literal(Literal::String("some_string".into())),
+            interval,
+        };
+        assert_eq!(
+            analyze_operand(parsed_expr, Context::Other),
+            Err(Diagnostic::new(Message::StringInInstruction, interval))
         )
     }
 }

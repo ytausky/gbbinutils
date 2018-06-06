@@ -122,6 +122,7 @@ pub enum Message<SR> {
     KeywordInExpr { keyword: SR },
     MissingTarget,
     OperandCount { actual: usize, expected: usize },
+    StringInInstruction,
     UndefinedMacro { name: String },
     UnresolvedSymbol { symbol: String },
     ValueOutOfRange { value: i32, width: Width },
@@ -150,6 +151,7 @@ impl Message<TokenRefData> {
                 pluralize(*expected),
                 actual
             ),
+            StringInInstruction => "strings cannot appear in instruction operands".into(),
             UndefinedMacro { name } => format!("invocation of undefined macro `{}`", name),
             UnresolvedSymbol { symbol } => format!("symbol `{}` could not be resolved", symbol),
             ValueOutOfRange { value, width } => {
