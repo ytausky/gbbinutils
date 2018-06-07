@@ -84,7 +84,7 @@ fn try_deref_operand_keyword(keyword: OperandKeyword) -> Result<AtomKind, Keywor
         C => Ok(AtomKind::DerefC),
         Hl => Ok(AtomKind::Simple(SimpleOperand::DerefHl)),
         A | B | D | E | H | L | Sp => Err(KeywordOperandCategory::Reg),
-        Af | Bc | De  => Err(KeywordOperandCategory::RegPair),
+        Af | Bc | De => Err(KeywordOperandCategory::RegPair),
         Nc | Nz | Z => Err(KeywordOperandCategory::ConditionCode),
     }
 }

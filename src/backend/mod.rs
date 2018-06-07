@@ -1,4 +1,4 @@
-use backend::codegen::{DataItem, Emit};
+use backend::lowering::{DataItem, Emit};
 use diagnostics::*;
 use instruction::{Instruction, RelocExpr};
 use std::{collections::HashMap, iter::FromIterator};
@@ -23,7 +23,7 @@ enum Data {
     Word(u16),
 }
 
-mod codegen;
+mod lowering;
 
 pub struct Object {
     resolved_sections: Vec<ResolvedSection>,
@@ -150,7 +150,7 @@ impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R, D> {
     }
 
     fn emit_instruction(&mut self, instruction: Instruction<R>) {
-        self.emit_encoded(codegen::generate_code(instruction))
+        self.emit_encoded(lowering::generate_code(instruction))
     }
 }
 
