@@ -18,6 +18,10 @@ pub enum DataItem<R> {
     Expr(RelocExpr<R>, Width),
 }
 
+pub trait Lower<SR> {
+    fn lower(self) -> LoweredItem<SR>;
+}
+
 pub struct LoweredItem<SR>(DataItem<SR>, Option<DataItem<SR>>);
 
 impl<SR> LoweredItem<SR> {
@@ -39,56 +43,62 @@ impl<SR> LoweredItem<SR> {
     }
 }
 
-pub fn generate_code<SR>(instruction: Instruction<SR>) -> LoweredItem<SR> {
-    use instruction::Instruction::*;
-    match instruction {
-        AddHl(reg16) => LoweredItem::with_opcode(0x09 | encode_reg16(reg16)),
-        Alu(operation, AluSource::Simple(src)) => encode_simple_alu_operation(operation, src),
-        Alu(operation, AluSource::Immediate(expr)) => {
-            encode_immediate_alu_operation(operation, expr)
+impl<SR> Lower<SR> for Instruction<SR> {
+    fn lower(self) -> LoweredItem<SR> {
+        use instruction::Instruction::*;
+        match self {
+            AddHl(reg16) => LoweredItem::with_opcode(0x09 | encode_reg16(reg16)),
+            Alu(operation, AluSource::Simple(src)) => encode_simple_alu_operation(operation, src),
+            Alu(operation, AluSource::Immediate(expr)) => {
+                encode_immediate_alu_operation(operation, expr)
+            }
+            Branch(branch, condition) => encode_branch(branch, condition),
+            IncDec8(mode, operand) => LoweredItem::with_opcode(
+                0b00_000_100 | encode_inc_dec(mode) | (encode_simple_operand(operand) << 3),
+            ),
+            IncDec16(mode, operand) => {
+                LoweredItem::with_opcode(0x03 | (encode_inc_dec(mode) << 3) | encode_reg16(operand))
+            }
+            JpDerefHl => LoweredItem::with_opcode(0xe9),
+            Ld(ld) => ld.lower(),
+            Nullary(nullary) => nullary.lower(),
+            Pop(reg_pair) => LoweredItem::with_opcode(0xc1 | (encode_reg_pair(reg_pair) << 4)),
+            Push(reg_pair) => LoweredItem::with_opcode(0xc5 | (encode_reg_pair(reg_pair) << 4)),
         }
-        Branch(branch, condition) => encode_branch(branch, condition),
-        IncDec8(mode, operand) => LoweredItem::with_opcode(
-            0b00_000_100 | encode_inc_dec(mode) | (encode_simple_operand(operand) << 3),
-        ),
-        IncDec16(mode, operand) => {
-            LoweredItem::with_opcode(0x03 | (encode_inc_dec(mode) << 3) | encode_reg16(operand))
-        }
-        JpDerefHl => LoweredItem::with_opcode(0xe9),
-        Ld(kind) => encode_ld(kind),
-        Nullary(instr) => encode_nullary_instruction(instr),
-        Pop(reg_pair) => LoweredItem::with_opcode(0xc1 | (encode_reg_pair(reg_pair) << 4)),
-        Push(reg_pair) => LoweredItem::with_opcode(0xc5 | (encode_reg_pair(reg_pair) << 4)),
     }
 }
 
-fn encode_nullary_instruction<SR>(instr: Nullary) -> LoweredItem<SR> {
-    use instruction::Nullary::*;
-    let opcode = match instr {
-        Daa => 0x27,
-        Di => 0xf3,
-        Ei => 0xfb,
-        Halt => 0x76,
-        Nop => 0x00,
-        Stop => 0x10,
-        Reti => 0xd9,
-    };
-    if instr == Stop {
-        LoweredItem(DataItem::Byte(opcode), Some(DataItem::Byte(0x00)))
-    } else {
-        LoweredItem::with_opcode(opcode)
+impl<SR> Lower<SR> for Nullary {
+    fn lower(self) -> LoweredItem<SR> {
+        use instruction::Nullary::*;
+        let opcode = match self {
+            Daa => 0x27,
+            Di => 0xf3,
+            Ei => 0xfb,
+            Halt => 0x76,
+            Nop => 0x00,
+            Stop => 0x10,
+            Reti => 0xd9,
+        };
+        if self == Stop {
+            LoweredItem(DataItem::Byte(opcode), Some(DataItem::Byte(0x00)))
+        } else {
+            LoweredItem::with_opcode(opcode)
+        }
     }
 }
 
-fn encode_ld<SR>(kind: Ld<SR>) -> LoweredItem<SR> {
-    match kind {
-        Ld::Simple(dest, src) => encode_ld_to_reg_from_reg(dest, src),
-        Ld::Special(special, direction) => encode_special_ld(special, direction),
-        Ld::Immediate8(dest, immediate) => {
-            LoweredItem::with_opcode(0x06 | (encode_simple_operand(dest) << 3)).and_byte(immediate)
-        }
-        Ld::Immediate16(dest, immediate) => {
-            LoweredItem::with_opcode(0x01 | encode_reg16(dest)).and_word(immediate)
+impl<SR> Lower<SR> for Ld<SR> {
+    fn lower(self) -> LoweredItem<SR> {
+        match self {
+            Ld::Simple(dest, src) => encode_ld_to_reg_from_reg(dest, src),
+            Ld::Special(special, direction) => encode_special_ld(special, direction),
+            Ld::Immediate8(dest, immediate) => LoweredItem::with_opcode(
+                0x06 | (encode_simple_operand(dest) << 3),
+            ).and_byte(immediate),
+            Ld::Immediate16(dest, immediate) => {
+                LoweredItem::with_opcode(0x01 | encode_reg16(dest)).and_word(immediate)
+            }
         }
     }
 }
@@ -234,7 +244,7 @@ mod tests {
 
     fn test_instruction(instruction: Instruction<()>, data_items: impl Borrow<[DataItem<()>]>) {
         let mut code = vec![];
-        (&mut |item| code.push(item)).emit_lowered_item(generate_code(instruction));
+        (&mut |item| code.push(item)).emit_lowered_item(instruction.lower());
         assert_eq!(code, data_items.borrow())
     }
 

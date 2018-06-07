@@ -1,4 +1,4 @@
-use backend::lowering::{DataItem, Emit};
+use backend::lowering::{DataItem, Emit, Lower};
 use diagnostics::*;
 use instruction::{Instruction, RelocExpr};
 use std::{collections::HashMap, iter::FromIterator};
@@ -150,7 +150,7 @@ impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R, D> {
     }
 
     fn emit_instruction(&mut self, instruction: Instruction<R>) {
-        self.emit_lowered_item(lowering::generate_code(instruction))
+        self.emit_lowered_item(instruction.lower())
     }
 }
 
