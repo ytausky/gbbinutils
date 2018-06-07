@@ -1,13 +1,13 @@
 use instruction::*;
 use Width;
 
-pub trait Emit<R> {
-    fn emit(&mut self, item: DataItem<R>);
+pub trait Emit<SR> {
+    fn emit(&mut self, item: DataItem<SR>);
 
-    fn emit_encoded(&mut self, encoded: Encoded<R>) {
-        self.emit(DataItem::Byte(encoded.opcode));
-        if let Some(immediate) = encoded.immediate {
-            self.emit(immediate)
+    fn emit_lowered_item(&mut self, item: LoweredItem<SR>) {
+        self.emit(item.0);
+        if let Some(data_item) = item.1 {
+            self.emit(data_item)
         }
     }
 }
@@ -18,54 +18,51 @@ pub enum DataItem<R> {
     Expr(RelocExpr<R>, Width),
 }
 
-pub struct Encoded<R> {
-    opcode: u8,
-    immediate: Option<DataItem<R>>,
-}
+pub struct LoweredItem<SR>(DataItem<SR>, Option<DataItem<SR>>);
 
-impl<R> Encoded<R> {
-    fn with(opcode: u8) -> Encoded<R> {
-        Encoded {
-            opcode,
-            immediate: None,
-        }
+impl<SR> LoweredItem<SR> {
+    fn with_opcode(opcode: u8) -> LoweredItem<SR> {
+        LoweredItem(DataItem::Byte(opcode), None)
     }
 
-    fn and_byte(mut self, expr: RelocExpr<R>) -> Encoded<R> {
-        self.immediate = Some(DataItem::Expr(expr, Width::Byte));
-        self
+    fn and_byte(self, expr: RelocExpr<SR>) -> Self {
+        self.and_expr(expr, Width::Byte)
     }
 
-    fn and_word(mut self, expr: RelocExpr<R>) -> Encoded<R> {
-        self.immediate = Some(DataItem::Expr(expr, Width::Word));
+    fn and_word(self, expr: RelocExpr<SR>) -> Self {
+        self.and_expr(expr, Width::Word)
+    }
+
+    fn and_expr(mut self, expr: RelocExpr<SR>, width: Width) -> Self {
+        self.1 = Some(DataItem::Expr(expr, width));
         self
     }
 }
 
-pub fn generate_code<R>(instruction: Instruction<R>) -> Encoded<R> {
+pub fn generate_code<SR>(instruction: Instruction<SR>) -> LoweredItem<SR> {
     use instruction::Instruction::*;
     match instruction {
-        AddHl(reg16) => Encoded::with(0x09 | encode_reg16(reg16)),
+        AddHl(reg16) => LoweredItem::with_opcode(0x09 | encode_reg16(reg16)),
         Alu(operation, AluSource::Simple(src)) => encode_simple_alu_operation(operation, src),
         Alu(operation, AluSource::Immediate(expr)) => {
             encode_immediate_alu_operation(operation, expr)
         }
         Branch(branch, condition) => encode_branch(branch, condition),
-        IncDec8(mode, operand) => Encoded::with(
+        IncDec8(mode, operand) => LoweredItem::with_opcode(
             0b00_000_100 | encode_inc_dec(mode) | (encode_simple_operand(operand) << 3),
         ),
         IncDec16(mode, operand) => {
-            Encoded::with(0x03 | (encode_inc_dec(mode) << 3) | encode_reg16(operand))
+            LoweredItem::with_opcode(0x03 | (encode_inc_dec(mode) << 3) | encode_reg16(operand))
         }
-        JpDerefHl => Encoded::with(0xe9),
+        JpDerefHl => LoweredItem::with_opcode(0xe9),
         Ld(kind) => encode_ld(kind),
         Nullary(instr) => encode_nullary_instruction(instr),
-        Pop(reg_pair) => Encoded::with(0xc1 | (encode_reg_pair(reg_pair) << 4)),
-        Push(reg_pair) => Encoded::with(0xc5 | (encode_reg_pair(reg_pair) << 4)),
+        Pop(reg_pair) => LoweredItem::with_opcode(0xc1 | (encode_reg_pair(reg_pair) << 4)),
+        Push(reg_pair) => LoweredItem::with_opcode(0xc5 | (encode_reg_pair(reg_pair) << 4)),
     }
 }
 
-fn encode_nullary_instruction<R>(instr: Nullary) -> Encoded<R> {
+fn encode_nullary_instruction<SR>(instr: Nullary) -> LoweredItem<SR> {
     use instruction::Nullary::*;
     let opcode = match instr {
         Daa => 0x27,
@@ -77,41 +74,38 @@ fn encode_nullary_instruction<R>(instr: Nullary) -> Encoded<R> {
         Reti => 0xd9,
     };
     if instr == Stop {
-        Encoded {
-            opcode,
-            immediate: Some(DataItem::Byte(0x00)),
-        }
+        LoweredItem(DataItem::Byte(opcode), Some(DataItem::Byte(0x00)))
     } else {
-        Encoded::with(opcode)
+        LoweredItem::with_opcode(opcode)
     }
 }
 
-fn encode_ld<R>(kind: Ld<R>) -> Encoded<R> {
+fn encode_ld<SR>(kind: Ld<SR>) -> LoweredItem<SR> {
     match kind {
         Ld::Simple(dest, src) => encode_ld_to_reg_from_reg(dest, src),
         Ld::Special(special, direction) => encode_special_ld(special, direction),
         Ld::Immediate8(dest, immediate) => {
-            Encoded::with(0x06 | (encode_simple_operand(dest) << 3)).and_byte(immediate)
+            LoweredItem::with_opcode(0x06 | (encode_simple_operand(dest) << 3)).and_byte(immediate)
         }
         Ld::Immediate16(dest, immediate) => {
-            Encoded::with(0x01 | encode_reg16(dest)).and_word(immediate)
+            LoweredItem::with_opcode(0x01 | encode_reg16(dest)).and_word(immediate)
         }
     }
 }
 
-fn encode_special_ld<R>(ld: SpecialLd<R>, direction: Direction) -> Encoded<R> {
+fn encode_special_ld<SR>(ld: SpecialLd<SR>, direction: Direction) -> LoweredItem<SR> {
     match ld {
         SpecialLd::InlineAddr(addr) => {
-            Encoded::with(0xea | encode_direction(direction)).and_word(addr)
+            LoweredItem::with_opcode(0xea | encode_direction(direction)).and_word(addr)
         }
         SpecialLd::InlineIndex(index) => {
-            Encoded::with(0xe0 | encode_direction(direction)).and_byte(index)
+            LoweredItem::with_opcode(0xe0 | encode_direction(direction)).and_byte(index)
         }
-        SpecialLd::RegIndex => Encoded::with(0xe2 | encode_direction(direction)),
+        SpecialLd::RegIndex => LoweredItem::with_opcode(0xe2 | encode_direction(direction)),
     }
 }
 
-fn encode_simple_alu_operation<R>(operation: AluOperation, src: SimpleOperand) -> Encoded<R> {
+fn encode_simple_alu_operation<SR>(operation: AluOperation, src: SimpleOperand) -> LoweredItem<SR> {
     use instruction::AluOperation::*;
     let opcode_base = match operation {
         Add => 0x80,
@@ -119,12 +113,15 @@ fn encode_simple_alu_operation<R>(operation: AluOperation, src: SimpleOperand) -
         Cp => 0xb8,
         Xor => 0xa8,
     };
-    Encoded::with(opcode_base | encode_simple_operand(src))
+    LoweredItem::with_opcode(opcode_base | encode_simple_operand(src))
 }
 
-fn encode_immediate_alu_operation<R>(operation: AluOperation, expr: RelocExpr<R>) -> Encoded<R> {
+fn encode_immediate_alu_operation<SR>(
+    operation: AluOperation,
+    expr: RelocExpr<SR>,
+) -> LoweredItem<SR> {
     use instruction::AluOperation::*;
-    Encoded::with(match operation {
+    LoweredItem::with_opcode(match operation {
         Add => 0xc6,
         And => 0xe6,
         Cp => 0xfe,
@@ -132,25 +129,25 @@ fn encode_immediate_alu_operation<R>(operation: AluOperation, expr: RelocExpr<R>
     }).and_byte(expr)
 }
 
-fn encode_branch<R>(branch: Branch<R>, condition: Option<Condition>) -> Encoded<R> {
+fn encode_branch<SR>(branch: Branch<SR>, condition: Option<Condition>) -> LoweredItem<SR> {
     use instruction::Branch::*;
     match branch {
-        Call(target) => Encoded::with(match condition {
+        Call(target) => LoweredItem::with_opcode(match condition {
             None => 0xcd,
             Some(condition) => 0xc4 | encode_condition(condition),
         }).and_word(target),
-        Jp(target) => Encoded::with(match condition {
+        Jp(target) => LoweredItem::with_opcode(match condition {
             None => 0xc3,
             Some(condition) => 0xc2 | encode_condition(condition),
         }).and_word(target),
-        Jr(target) => Encoded::with(match condition {
+        Jr(target) => LoweredItem::with_opcode(match condition {
             None => 0x18,
             Some(condition) => 0x20 | encode_condition(condition),
         }).and_byte(RelocExpr::Subtract(
             Box::new(target),
             Box::new(RelocExpr::LocationCounter),
         )),
-        Ret => Encoded::with(match condition {
+        Ret => LoweredItem::with_opcode(match condition {
             None => 0xc9,
             Some(condition) => 0b11_000_000 | encode_condition(condition),
         }),
@@ -174,8 +171,10 @@ fn encode_direction(direction: Direction) -> u8 {
     }
 }
 
-fn encode_ld_to_reg_from_reg<R>(dest: SimpleOperand, src: SimpleOperand) -> Encoded<R> {
-    Encoded::with(0b01_000_000 | (encode_simple_operand(dest) << 3) | encode_simple_operand(src))
+fn encode_ld_to_reg_from_reg<SR>(dest: SimpleOperand, src: SimpleOperand) -> LoweredItem<SR> {
+    LoweredItem::with_opcode(
+        0b01_000_000 | (encode_simple_operand(dest) << 3) | encode_simple_operand(src),
+    )
 }
 
 fn encode_simple_operand(register: SimpleOperand) -> u8 {
@@ -235,7 +234,7 @@ mod tests {
 
     fn test_instruction(instruction: Instruction<()>, data_items: impl Borrow<[DataItem<()>]>) {
         let mut code = vec![];
-        (&mut |item| code.push(item)).emit_encoded(generate_code(instruction));
+        (&mut |item| code.push(item)).emit_lowered_item(generate_code(instruction));
         assert_eq!(code, data_items.borrow())
     }
 
