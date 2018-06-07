@@ -1,3 +1,4 @@
+use backend::Item;
 use instruction::*;
 use Width;
 
@@ -40,6 +41,15 @@ impl<SR> LoweredItem<SR> {
     fn and_expr(mut self, expr: RelocExpr<SR>, width: Width) -> Self {
         self.1 = Some(DataItem::Expr(expr, width));
         self
+    }
+}
+
+impl<SR> Lower<SR> for Item<SR> {
+    fn lower(self) -> LoweredItem<SR> {
+        match self {
+            Item::Data(expr, width) => LoweredItem(DataItem::Expr(expr, width), None),
+            Item::Instruction(instruction) => instruction.lower(),
+        }
     }
 }
 

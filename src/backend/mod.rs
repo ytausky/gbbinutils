@@ -141,17 +141,6 @@ impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R, D> {
                 .collect(),
         }
     }
-
-    fn emit_data_expr(&mut self, expr: RelocExpr<R>, width: Width) {
-        self.pending_sections
-            .last_mut()
-            .unwrap()
-            .push(DataItem::Expr(expr, width))
-    }
-
-    fn emit_instruction(&mut self, instruction: Instruction<R>) {
-        self.emit_lowered_item(instruction.lower())
-    }
 }
 
 impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<'a, R, D> {
@@ -165,10 +154,7 @@ impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<
     }
 
     fn emit_item(&mut self, item: Item<R>) {
-        match item {
-            Item::Data(expr, width) => self.emit_data_expr(expr, width),
-            Item::Instruction(instruction) => self.emit_instruction(instruction),
-        }
+        self.emit_lowered_item(item.lower())
     }
 
     fn into_object(self) -> Self::Object {
