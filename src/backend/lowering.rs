@@ -1,17 +1,7 @@
 use backend::Item;
 use instruction::*;
+use std::mem;
 use Width;
-
-pub trait Emit<SR> {
-    fn emit(&mut self, item: DataItem<SR>);
-
-    fn emit_lowered_item(&mut self, item: LoweredItem<SR>) {
-        self.emit(item.0);
-        if let Some(data_item) = item.1 {
-            self.emit(data_item)
-        }
-    }
-}
 
 #[derive(Debug, PartialEq)]
 pub enum DataItem<R> {
@@ -23,11 +13,29 @@ pub trait Lower<SR> {
     fn lower(self) -> LoweredItem<SR>;
 }
 
-pub struct LoweredItem<SR>(DataItem<SR>, Option<DataItem<SR>>);
+pub enum LoweredItem<SR> {
+    None,
+    One(DataItem<SR>),
+    Two(DataItem<SR>, DataItem<SR>),
+}
+
+impl<SR> Iterator for LoweredItem<SR> {
+    type Item = DataItem<SR>;
+    fn next(&mut self) -> Option<Self::Item> {
+        match mem::replace(self, LoweredItem::None) {
+            LoweredItem::None => None,
+            LoweredItem::One(item) => Some(item),
+            LoweredItem::Two(first, second) => {
+                *self = LoweredItem::One(second);
+                Some(first)
+            }
+        }
+    }
+}
 
 impl<SR> LoweredItem<SR> {
     fn with_opcode(opcode: u8) -> LoweredItem<SR> {
-        LoweredItem(DataItem::Byte(opcode), None)
+        LoweredItem::One(DataItem::Byte(opcode))
     }
 
     fn and_byte(self, expr: RelocExpr<SR>) -> Self {
@@ -38,16 +46,18 @@ impl<SR> LoweredItem<SR> {
         self.and_expr(expr, Width::Word)
     }
 
-    fn and_expr(mut self, expr: RelocExpr<SR>, width: Width) -> Self {
-        self.1 = Some(DataItem::Expr(expr, width));
-        self
+    fn and_expr(self, expr: RelocExpr<SR>, width: Width) -> Self {
+        match self {
+            LoweredItem::One(item) => LoweredItem::Two(item, DataItem::Expr(expr, width)),
+            LoweredItem::None | LoweredItem::Two(..) => panic!(),
+        }
     }
 }
 
 impl<SR> Lower<SR> for Item<SR> {
     fn lower(self) -> LoweredItem<SR> {
         match self {
-            Item::Data(expr, width) => LoweredItem(DataItem::Expr(expr, width), None),
+            Item::Data(expr, width) => LoweredItem::One(DataItem::Expr(expr, width)),
             Item::Instruction(instruction) => instruction.lower(),
         }
     }
@@ -91,7 +101,7 @@ impl<SR> Lower<SR> for Nullary {
             Reti => 0xd9,
         };
         if self == Stop {
-            LoweredItem(DataItem::Byte(opcode), Some(DataItem::Byte(0x00)))
+            LoweredItem::Two(DataItem::Byte(opcode), DataItem::Byte(0x00))
         } else {
             LoweredItem::with_opcode(opcode)
         }
@@ -246,15 +256,9 @@ mod tests {
 
     use instruction::{self, Branch::*, Instruction::*, Ld::*, Nullary::*};
 
-    impl<F: FnMut(DataItem<()>)> Emit<()> for F {
-        fn emit(&mut self, item: DataItem<()>) {
-            self(item)
-        }
-    }
-
     fn test_instruction(instruction: Instruction<()>, data_items: impl Borrow<[DataItem<()>]>) {
         let mut code = vec![];
-        (&mut |item| code.push(item)).emit_lowered_item(instruction.lower());
+        code.extend(instruction.lower());
         assert_eq!(code, data_items.borrow())
     }
 

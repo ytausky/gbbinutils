@@ -1,4 +1,4 @@
-use backend::lowering::{DataItem, Emit, Lower};
+use backend::lowering::{DataItem, Lower};
 use diagnostics::*;
 use instruction::{Instruction, RelocExpr};
 use std::{collections::HashMap, iter::FromIterator};
@@ -154,17 +154,13 @@ impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<
     }
 
     fn emit_item(&mut self, item: Item<R>) {
-        self.emit_lowered_item(item.lower())
+        let data_items = self.pending_sections.last_mut().unwrap();
+        item.lower()
+            .for_each(|data_item| data_items.push(data_item))
     }
 
     fn into_object(self) -> Self::Object {
         self.resolve_symbols()
-    }
-}
-
-impl<'a, R, D: DiagnosticsListener<R> + 'a> Emit<R> for ObjectBuilder<'a, R, D> {
-    fn emit(&mut self, item: DataItem<R>) {
-        self.pending_sections.last_mut().unwrap().push(item)
     }
 }
 
