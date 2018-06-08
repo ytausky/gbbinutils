@@ -1,7 +1,7 @@
 use backend::lowering::{DataItem, Lower};
 use diagnostics::*;
 use instruction::{Instruction, RelocExpr};
-use std::{collections::HashMap, iter::FromIterator};
+use std::{collections::HashMap, iter::FromIterator, ops::AddAssign};
 use Width;
 
 pub trait Backend<R> {
@@ -46,8 +46,27 @@ pub struct Rom {
 }
 
 struct SymbolTable<'a, D: 'a> {
-    symbols: HashMap<String, i32>,
+    symbols: HashMap<String, Value>,
     diagnostics: &'a D,
+}
+
+#[derive(Clone)]
+struct Value {
+    min: i32,
+    max: i32,
+}
+
+impl From<i32> for Value {
+    fn from(n: i32) -> Self {
+        Value { min: n, max: n }
+    }
+}
+
+impl AddAssign<Value> for Value {
+    fn add_assign(&mut self, rhs: Value) {
+        self.min += rhs.min;
+        self.max += rhs.max
+    }
 }
 
 impl<'a, D: 'a> SymbolTable<'a, D> {
@@ -77,7 +96,7 @@ impl<'a, D: 'a> SymbolTable<'a, D> {
             RelocExpr::Symbol(symbol, expr_ref) => {
                 let symbol_def = self.symbols.get(&symbol).cloned();
                 if let Some(value) = symbol_def {
-                    (value, expr_ref)
+                    (value.min, expr_ref)
                 } else {
                     self.diagnostics.emit_diagnostic(Diagnostic::new(
                         Message::UnresolvedSymbol {
@@ -149,7 +168,7 @@ impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<
     fn add_label(&mut self, label: (impl Into<String>, R)) {
         self.symbol_table.symbols.insert(
             label.0.into(),
-            self.pending_sections.last().unwrap().len as i32,
+            self.pending_sections.last().unwrap().location.clone(),
         );
     }
 
@@ -166,14 +185,14 @@ impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<
 
 struct PendingSection<R> {
     items: Vec<DataItem<R>>,
-    len: usize,
+    location: Value,
 }
 
 impl<R> DataItem<R> {
-    fn len(&self) -> usize {
+    fn len(&self) -> Value {
         match self {
-            DataItem::Byte(_) => 1,
-            DataItem::Expr(_, width) => width.len(),
+            DataItem::Byte(_) => 1.into(),
+            DataItem::Expr(_, width) => width.len().into(),
         }
     }
 }
@@ -182,12 +201,12 @@ impl<R> PendingSection<R> {
     fn new() -> PendingSection<R> {
         PendingSection {
             items: Vec::new(),
-            len: 0,
+            location: 0.into(),
         }
     }
 
     fn push(&mut self, item: DataItem<R>) {
-        self.len += item.len();
+        self.location += item.len();
         self.items.push(item)
     }
 }

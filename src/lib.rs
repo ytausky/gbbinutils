@@ -14,7 +14,7 @@ pub enum Width {
 }
 
 impl Width {
-    fn len(&self) -> usize {
+    fn len(&self) -> i32 {
         match self {
             Width::Byte => 1,
             Width::Word => 2,
