@@ -52,8 +52,7 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>
             }
             IncDec(mode) => self.analyze_inc_dec(mode),
             Branch(branch) => self.analyze_branch(branch),
-            Ld => self.analyze_ld(LdHint::Normal),
-            Ldh => self.analyze_ld(LdHint::Ldh),
+            Ld => self.analyze_ld(),
             Nullary(instruction) => Ok(instruction.into()),
             Stack(operation) => self.analyze_stack_operation(operation),
         }
@@ -140,7 +139,7 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>
         )
     }
 
-    fn analyze_ld(&mut self, hint: LdHint) -> AnalysisResult<R> {
+    fn analyze_ld(&mut self) -> AnalysisResult<R> {
         let dest = self.expect_operand(2)?;
         let src = self.expect_operand(2)?;
         match (dest, src) {
@@ -151,10 +150,10 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>
                 Ok(Instruction::Ld(Ld::Immediate8(dest, expr)))
             }
             (Operand::Atom(AtomKind::Simple(SimpleOperand::A), _), src) => {
-                analyze_special_ld(src, Direction::IntoA, hint)
+                analyze_special_ld(src, Direction::IntoA)
             }
             (dest, Operand::Atom(AtomKind::Simple(SimpleOperand::A), _)) => {
-                analyze_special_ld(dest, Direction::FromA, hint)
+                analyze_special_ld(dest, Direction::FromA)
             }
             (Operand::Atom(AtomKind::Reg16(dest), _), Operand::Const(expr)) => {
                 Ok(Instruction::Ld(Ld::Immediate16(dest, expr)))
@@ -199,12 +198,6 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>
 
 type CondtitionTargetPair<SI> = (Option<(Condition, SI)>, Option<TargetSelector<SI>>);
 
-#[derive(Clone, Copy)]
-enum LdHint {
-    Normal,
-    Ldh,
-}
-
 fn analyze_branch_target<R>(target: Option<Operand<R>>) -> Option<TargetSelector<R>> {
     target.map(|target| match target {
         Operand::Const(expr) => TargetSelector::Expr(expr),
@@ -227,17 +220,10 @@ fn mk_branch<R>(
     }
 }
 
-fn analyze_special_ld<R>(
-    other: Operand<R>,
-    direction: Direction,
-    hint: LdHint,
-) -> AnalysisResult<R> {
+fn analyze_special_ld<R>(other: Operand<R>, direction: Direction) -> AnalysisResult<R> {
     Ok(Instruction::Ld(Ld::Special(
         match other {
-            Operand::Deref(expr) => match hint {
-                LdHint::Normal => SpecialLd::InlineAddr(expr),
-                LdHint::Ldh => SpecialLd::InlineIndex(expr),
-            },
+            Operand::Deref(expr) => SpecialLd::InlineAddr(expr),
             Operand::Atom(AtomKind::DerefC, _) => SpecialLd::RegIndex,
             _ => panic!(),
         },
@@ -253,7 +239,6 @@ enum Mnemonic {
     Branch(BranchKind),
     IncDec(IncDec),
     Ld,
-    Ldh,
     Nullary(Nullary),
     Stack(StackOperation),
 }
@@ -324,7 +309,6 @@ fn to_mnemonic(command: keyword::Command) -> Mnemonic {
         Jp => Mnemonic::Branch(BranchKind::Jp),
         Jr => Mnemonic::Branch(BranchKind::Jr),
         Ld => Mnemonic::Ld,
-        Ldh => Mnemonic::Ldh,
         Nop => Mnemonic::Nullary(Nullary::Nop),
         Pop => Mnemonic::Stack(StackOperation::Pop),
         Push => Mnemonic::Stack(StackOperation::Push),
@@ -561,28 +545,6 @@ mod tests {
     fn analyze_ld_a_deref_c() {
         analyze(Command::Ld, vec![literal(A), deref(literal(C))]).expect_instruction(
             Instruction::Ld(Ld::Special(SpecialLd::RegIndex, Direction::IntoA)),
-        )
-    }
-
-    #[test]
-    fn analyze_ldh_from_a() {
-        let index = 0xcc;
-        analyze(Command::Ldh, vec![deref(index.into()), literal(A)]).expect_instruction(
-            Instruction::Ld(Ld::Special(
-                SpecialLd::InlineIndex(index.into()),
-                Direction::FromA,
-            )),
-        )
-    }
-
-    #[test]
-    fn analyze_ldh_into_a() {
-        let index = 0xcc;
-        analyze(Command::Ldh, vec![literal(A), deref(index.into())]).expect_instruction(
-            Instruction::Ld(Ld::Special(
-                SpecialLd::InlineIndex(index.into()),
-                Direction::IntoA,
-            )),
         )
     }
 

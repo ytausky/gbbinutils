@@ -7,6 +7,7 @@ use Width;
 pub enum DataItem<R> {
     Byte(u8),
     Expr(RelocExpr<R>, Width),
+    LdInlineAddr(RelocExpr<R>, Direction),
 }
 
 pub trait Lower<SR> {
@@ -125,12 +126,7 @@ impl<SR> Lower<SR> for Ld<SR> {
 
 fn encode_special_ld<SR>(ld: SpecialLd<SR>, direction: Direction) -> LoweredItem<SR> {
     match ld {
-        SpecialLd::InlineAddr(addr) => {
-            LoweredItem::with_opcode(0xea | encode_direction(direction)).and_word(addr)
-        }
-        SpecialLd::InlineIndex(index) => {
-            LoweredItem::with_opcode(0xe0 | encode_direction(direction)).and_byte(index)
-        }
+        SpecialLd::InlineAddr(addr) => LoweredItem::One(DataItem::LdInlineAddr(addr, direction)),
         SpecialLd::RegIndex => LoweredItem::with_opcode(0xe2 | encode_direction(direction)),
     }
 }
@@ -400,13 +396,10 @@ mod tests {
     fn encode_ld_inline_addr() {
         let addr = RelocExpr::Literal(0x1234, ());
         let test_cases = &[(Direction::FromA, 0xea), (Direction::IntoA, 0xfa)];
-        for &(direction, opcode) in test_cases {
+        for &(direction, _opcode) in test_cases {
             test_instruction(
                 Ld(Special(SpecialLd::InlineAddr(addr.clone()), direction)),
-                [
-                    DataItem::Byte(opcode),
-                    DataItem::Expr(addr.clone(), Width::Word),
-                ],
+                [DataItem::LdInlineAddr(addr.clone(), direction)],
             )
         }
     }
@@ -425,21 +418,6 @@ mod tests {
             Ld(Special(SpecialLd::RegIndex, Direction::IntoA)),
             bytes([0xf2]),
         )
-    }
-
-    #[test]
-    fn encode_ldh() {
-        let index = RelocExpr::Literal(0xcc, ());
-        let test_cases = &[(Direction::FromA, 0xe0), (Direction::IntoA, 0xf0)];
-        for &(direction, opcode) in test_cases {
-            test_instruction(
-                Ld(Special(SpecialLd::InlineIndex(index.clone()), direction)),
-                [
-                    DataItem::Byte(opcode),
-                    DataItem::Expr(index.clone(), Width::Byte),
-                ],
-            )
-        }
     }
 
     #[test]

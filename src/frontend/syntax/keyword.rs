@@ -16,7 +16,6 @@ pub enum Command {
     Jp,
     Jr,
     Ld,
-    Ldh,
     Nop,
     Pop,
     Push,

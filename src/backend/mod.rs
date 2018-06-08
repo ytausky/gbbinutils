@@ -154,6 +154,7 @@ impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R, D> {
                             DataItem::Expr(expr, width) => {
                                 symbol_table.resolve_expr_item(expr, width)
                             }
+                            DataItem::LdInlineAddr(..) => panic!(),
                         })
                         .collect()
                 })
@@ -193,6 +194,7 @@ impl<R> DataItem<R> {
         match self {
             DataItem::Byte(_) => 1.into(),
             DataItem::Expr(_, width) => width.len().into(),
+            DataItem::LdInlineAddr(..) => Value { min: 2, max: 3 },
         }
     }
 }

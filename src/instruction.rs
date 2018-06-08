@@ -62,7 +62,6 @@ pub enum Ld<R> {
 #[derive(Clone, Debug, PartialEq)]
 pub enum SpecialLd<R> {
     InlineAddr(RelocExpr<R>),
-    InlineIndex(RelocExpr<R>),
     RegIndex,
 }
 
