@@ -1,14 +1,8 @@
+use backend::section::Node;
 use backend::Item;
 use instruction::*;
 use std::mem;
 use Width;
-
-#[derive(Debug, PartialEq)]
-pub enum DataItem<R> {
-    Byte(u8),
-    Expr(RelocExpr<R>, Width),
-    LdInlineAddr(RelocExpr<R>, Direction),
-}
 
 pub trait Lower<SR> {
     fn lower(self) -> LoweredItem<SR>;
@@ -16,12 +10,12 @@ pub trait Lower<SR> {
 
 pub enum LoweredItem<SR> {
     None,
-    One(DataItem<SR>),
-    Two(DataItem<SR>, DataItem<SR>),
+    One(Node<SR>),
+    Two(Node<SR>, Node<SR>),
 }
 
 impl<SR> Iterator for LoweredItem<SR> {
-    type Item = DataItem<SR>;
+    type Item = Node<SR>;
     fn next(&mut self) -> Option<Self::Item> {
         match mem::replace(self, LoweredItem::None) {
             LoweredItem::None => None,
@@ -36,7 +30,7 @@ impl<SR> Iterator for LoweredItem<SR> {
 
 impl<SR> LoweredItem<SR> {
     fn with_opcode(opcode: u8) -> LoweredItem<SR> {
-        LoweredItem::One(DataItem::Byte(opcode))
+        LoweredItem::One(Node::Byte(opcode))
     }
 
     fn and_byte(self, expr: RelocExpr<SR>) -> Self {
@@ -49,7 +43,7 @@ impl<SR> LoweredItem<SR> {
 
     fn and_expr(self, expr: RelocExpr<SR>, width: Width) -> Self {
         match self {
-            LoweredItem::One(item) => LoweredItem::Two(item, DataItem::Expr(expr, width)),
+            LoweredItem::One(item) => LoweredItem::Two(item, Node::Expr(expr, width)),
             LoweredItem::None | LoweredItem::Two(..) => panic!(),
         }
     }
@@ -58,7 +52,7 @@ impl<SR> LoweredItem<SR> {
 impl<SR> Lower<SR> for Item<SR> {
     fn lower(self) -> LoweredItem<SR> {
         match self {
-            Item::Data(expr, width) => LoweredItem::One(DataItem::Expr(expr, width)),
+            Item::Data(expr, width) => LoweredItem::One(Node::Expr(expr, width)),
             Item::Instruction(instruction) => instruction.lower(),
         }
     }
@@ -102,7 +96,7 @@ impl<SR> Lower<SR> for Nullary {
             Reti => 0xd9,
         };
         if self == Stop {
-            LoweredItem::Two(DataItem::Byte(opcode), DataItem::Byte(0x00))
+            LoweredItem::Two(Node::Byte(opcode), Node::Byte(0x00))
         } else {
             LoweredItem::with_opcode(opcode)
         }
@@ -126,7 +120,7 @@ impl<SR> Lower<SR> for Ld<SR> {
 
 fn encode_special_ld<SR>(ld: SpecialLd<SR>, direction: Direction) -> LoweredItem<SR> {
     match ld {
-        SpecialLd::InlineAddr(addr) => LoweredItem::One(DataItem::LdInlineAddr(addr, direction)),
+        SpecialLd::InlineAddr(addr) => LoweredItem::One(Node::LdInlineAddr(addr, direction)),
         SpecialLd::RegIndex => LoweredItem::with_opcode(0xe2 | encode_direction(direction)),
     }
 }
@@ -252,7 +246,7 @@ mod tests {
 
     use instruction::{self, Branch::*, Instruction::*, Ld::*, Nullary::*};
 
-    fn test_instruction(instruction: Instruction<()>, data_items: impl Borrow<[DataItem<()>]>) {
+    fn test_instruction(instruction: Instruction<()>, data_items: impl Borrow<[Node<()>]>) {
         let mut code = vec![];
         code.extend(instruction.lower());
         assert_eq!(code, data_items.borrow())
@@ -288,7 +282,7 @@ mod tests {
         test_nullary(Daa, bytes([0x27]))
     }
 
-    fn test_nullary(nullary: instruction::Nullary, items: impl Borrow<[DataItem<()>]>) {
+    fn test_nullary(nullary: instruction::Nullary, items: impl Borrow<[Node<()>]>) {
         test_instruction(Nullary(nullary), items)
     }
 
@@ -369,8 +363,8 @@ mod tests {
                 test_instruction(
                     Ld(Immediate8(dest, immediate.clone())),
                     [
-                        DataItem::Byte(opcode),
-                        DataItem::Expr(immediate.clone(), Width::Byte),
+                        Node::Byte(opcode),
+                        Node::Expr(immediate.clone(), Width::Byte),
                     ],
                 )
             })
@@ -385,8 +379,8 @@ mod tests {
             test_instruction(
                 Ld(Immediate16(reg16, immediate.clone())),
                 [
-                    DataItem::Byte(opcode),
-                    DataItem::Expr(immediate.clone(), Width::Word),
+                    Node::Byte(opcode),
+                    Node::Expr(immediate.clone(), Width::Word),
                 ],
             )
         }
@@ -399,7 +393,7 @@ mod tests {
         for &(direction, _opcode) in test_cases {
             test_instruction(
                 Ld(Special(SpecialLd::InlineAddr(addr.clone()), direction)),
-                [DataItem::LdInlineAddr(addr.clone(), direction)],
+                [Node::LdInlineAddr(addr.clone(), direction)],
             )
         }
     }
@@ -429,10 +423,7 @@ mod tests {
             .for_each(|(alu_operation, opcode)| {
                 test_instruction(
                     Instruction::Alu(*alu_operation, AluSource::Immediate(expr.clone())),
-                    [
-                        DataItem::Byte(*opcode),
-                        DataItem::Expr(expr.clone(), Width::Byte),
-                    ],
+                    [Node::Byte(*opcode), Node::Expr(expr.clone(), Width::Byte)],
                 )
             })
     }
@@ -522,8 +513,8 @@ mod tests {
             test_instruction(
                 Branch(Call(target_expr.clone()), condition),
                 [
-                    DataItem::Byte(opcode),
-                    DataItem::Expr(target_expr.clone(), Width::Word),
+                    Node::Byte(opcode),
+                    Node::Expr(target_expr.clone(), Width::Word),
                 ],
             )
         }
@@ -544,8 +535,8 @@ mod tests {
             test_instruction(
                 Branch(Jp(target_expr.clone()), condition),
                 [
-                    DataItem::Byte(opcode),
-                    DataItem::Expr(target_expr.clone(), Width::Word),
+                    Node::Byte(opcode),
+                    Node::Expr(target_expr.clone(), Width::Word),
                 ],
             )
         }
@@ -571,8 +562,8 @@ mod tests {
             test_instruction(
                 Branch(Jr(target_expr.clone()), condition),
                 [
-                    DataItem::Byte(opcode),
-                    DataItem::Expr(
+                    Node::Byte(opcode),
+                    Node::Expr(
                         RelocExpr::Subtract(
                             Box::new(target_expr.clone()),
                             Box::new(RelocExpr::LocationCounter),
@@ -678,7 +669,7 @@ mod tests {
         test_nullary(Reti, bytes([0xd9]))
     }
 
-    fn bytes(data: impl Borrow<[u8]>) -> Vec<DataItem<()>> {
-        data.borrow().iter().map(|&b| DataItem::Byte(b)).collect()
+    fn bytes(data: impl Borrow<[u8]>) -> Vec<Node<()>> {
+        data.borrow().iter().map(|&b| Node::Byte(b)).collect()
     }
 }

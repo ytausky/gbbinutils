@@ -1,8 +1,10 @@
-use backend::lowering::{DataItem, Lower};
+use backend::{lowering::Lower, section::Node};
 use diagnostics::*;
 use instruction::{Instruction, RelocExpr};
 use std::{collections::HashMap, iter::FromIterator, ops::AddAssign};
 use Width;
+
+mod section;
 
 pub trait Backend<R> {
     type Object;
@@ -150,11 +152,9 @@ impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R, D> {
                         .items
                         .into_iter()
                         .map(|item| match item {
-                            DataItem::Byte(value) => Data::Byte(value),
-                            DataItem::Expr(expr, width) => {
-                                symbol_table.resolve_expr_item(expr, width)
-                            }
-                            DataItem::LdInlineAddr(..) => panic!(),
+                            Node::Byte(value) => Data::Byte(value),
+                            Node::Expr(expr, width) => symbol_table.resolve_expr_item(expr, width),
+                            Node::LdInlineAddr(..) => panic!(),
                         })
                         .collect()
                 })
@@ -185,16 +185,16 @@ impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<
 }
 
 struct PendingSection<R> {
-    items: Vec<DataItem<R>>,
+    items: Vec<Node<R>>,
     location: Value,
 }
 
-impl<R> DataItem<R> {
+impl<R> Node<R> {
     fn len(&self) -> Value {
         match self {
-            DataItem::Byte(_) => 1.into(),
-            DataItem::Expr(_, width) => width.len().into(),
-            DataItem::LdInlineAddr(..) => Value { min: 2, max: 3 },
+            Node::Byte(_) => 1.into(),
+            Node::Expr(_, width) => width.len().into(),
+            Node::LdInlineAddr(..) => Value { min: 2, max: 3 },
         }
     }
 }
@@ -207,7 +207,7 @@ impl<R> PendingSection<R> {
         }
     }
 
-    fn push(&mut self, item: DataItem<R>) {
+    fn push(&mut self, item: Node<R>) {
         self.location += item.len();
         self.items.push(item)
     }
