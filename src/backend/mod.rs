@@ -112,6 +112,15 @@ impl<'a, D: 'a> SymbolTable<'a, D> {
         }
     }
 
+    fn evaluate_expr_value<SR>(&self, expr: &RelocExpr<SR>) -> Option<Value> {
+        match expr {
+            RelocExpr::Literal(value, _) => Some((*value).into()),
+            RelocExpr::LocationCounter => panic!(),
+            RelocExpr::Subtract(..) => panic!(),
+            RelocExpr::Symbol(symbol, _) => self.symbols.get(symbol).cloned()
+        }
+    }
+
     fn fit_to_width<R: Clone>(&self, (value, value_ref): (i32, R), width: Width) -> Data
     where
         D: DiagnosticsListener<R>,
