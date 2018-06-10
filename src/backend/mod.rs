@@ -1,4 +1,5 @@
-use backend::{lowering::Lower, section::Node};
+use backend::{lowering::Lower,
+              section::{Node, PendingSection}};
 use diagnostics::*;
 use instruction::{Instruction, RelocExpr};
 use std::{collections::HashMap, iter::FromIterator, ops::AddAssign};
@@ -48,12 +49,16 @@ pub struct Rom {
 }
 
 struct SymbolTable<'a, D: 'a> {
-    symbols: HashMap<String, Value>,
+    names: HashMap<String, SymbolId>,
+    values: Vec<Value>,
     diagnostics: &'a D,
 }
 
+#[derive(Clone, Copy)]
+struct SymbolId(usize);
+
 #[derive(Clone)]
-struct Value {
+pub struct Value {
     min: i32,
     max: i32,
 }
@@ -74,7 +79,8 @@ impl AddAssign<Value> for Value {
 impl<'a, D: 'a> SymbolTable<'a, D> {
     fn new(diagnostics: &'a D) -> SymbolTable<'a, D> {
         SymbolTable {
-            symbols: HashMap::new(),
+            names: HashMap::new(),
+            values: Vec::new(),
             diagnostics,
         }
     }
@@ -96,7 +102,7 @@ impl<'a, D: 'a> SymbolTable<'a, D> {
             RelocExpr::LocationCounter => panic!(),
             RelocExpr::Subtract(_, _) => panic!(),
             RelocExpr::Symbol(symbol, expr_ref) => {
-                let symbol_def = self.symbols.get(&symbol).cloned();
+                let symbol_def = self.symbol_value(&symbol).cloned();
                 if let Some(value) = symbol_def {
                     (value.min, expr_ref)
                 } else {
@@ -117,7 +123,7 @@ impl<'a, D: 'a> SymbolTable<'a, D> {
             RelocExpr::Literal(value, _) => Some((*value).into()),
             RelocExpr::LocationCounter => panic!(),
             RelocExpr::Subtract(..) => panic!(),
-            RelocExpr::Symbol(symbol, _) => self.symbols.get(symbol).cloned()
+            RelocExpr::Symbol(symbol, _) => self.symbol_value(symbol).cloned(),
         }
     }
 
@@ -135,6 +141,12 @@ impl<'a, D: 'a> SymbolTable<'a, D> {
             Width::Byte => Data::Byte(value as u8),
             Width::Word => Data::Word(value as u16),
         }
+    }
+
+    fn symbol_value(&self, name: &str) -> Option<&Value> {
+        self.names
+            .get(name)
+            .and_then(|SymbolId(id)| self.values.get(*id))
     }
 }
 
@@ -176,10 +188,10 @@ impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<
     type Object = Object;
 
     fn add_label(&mut self, label: (impl Into<String>, R)) {
-        self.symbol_table.symbols.insert(
-            label.0.into(),
-            self.pending_sections.last().unwrap().location.clone(),
-        );
+        let id = SymbolId(self.symbol_table.values.len());
+        let location = self.pending_sections.last().unwrap().location.clone();
+        self.symbol_table.values.push(location);
+        self.symbol_table.names.insert(label.0.into(), id);
     }
 
     fn emit_item(&mut self, item: Item<R>) {
@@ -190,35 +202,6 @@ impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<
 
     fn into_object(self) -> Self::Object {
         self.resolve_symbols()
-    }
-}
-
-struct PendingSection<R> {
-    items: Vec<Node<R>>,
-    location: Value,
-}
-
-impl<R> Node<R> {
-    fn len(&self) -> Value {
-        match self {
-            Node::Byte(_) => 1.into(),
-            Node::Expr(_, width) => width.len().into(),
-            Node::LdInlineAddr(..) => Value { min: 2, max: 3 },
-        }
-    }
-}
-
-impl<R> PendingSection<R> {
-    fn new() -> PendingSection<R> {
-        PendingSection {
-            items: Vec::new(),
-            location: 0.into(),
-        }
-    }
-
-    fn push(&mut self, item: Node<R>) {
-        self.location += item.len();
-        self.items.push(item)
     }
 }
 
