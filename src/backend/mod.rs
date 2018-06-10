@@ -89,7 +89,10 @@ impl SymbolTable {
         width: Width,
     ) -> Result<Data, Diagnostic<SR>> {
         let range = expr.source_interval();
-        let value = expr.evaluate(self)?;
+        let value = expr.evaluate(self).map_err(|undefined| {
+            let UndefinedSymbol(symbol, range) = undefined;
+            Diagnostic::new(Message::UnresolvedSymbol { symbol }, range)
+        })?;
         self.fit_to_width((value, range), width)
     }
 
@@ -127,8 +130,10 @@ impl SymbolTable {
     }
 }
 
+struct UndefinedSymbol<SR>(String, SR);
+
 impl<SR: Clone> RelocExpr<SR> {
-    fn evaluate(&self, symbol_table: &SymbolTable) -> Result<i32, Diagnostic<SR>> {
+    fn evaluate(&self, symbol_table: &SymbolTable) -> Result<i32, UndefinedSymbol<SR>> {
         match self {
             RelocExpr::Literal(value, _) => Ok(*value),
             RelocExpr::LocationCounter => panic!(),
@@ -136,14 +141,7 @@ impl<SR: Clone> RelocExpr<SR> {
             RelocExpr::Symbol(symbol, expr_ref) => symbol_table
                 .symbol_value(&symbol)
                 .map(|value| value.min)
-                .ok_or_else(|| {
-                    Diagnostic::new(
-                        Message::UnresolvedSymbol {
-                            symbol: (*symbol).clone(),
-                        },
-                        (*expr_ref).clone(),
-                    )
-                }),
+                .ok_or_else(|| UndefinedSymbol((*symbol).clone(), (*expr_ref).clone())),
         }
     }
 }
