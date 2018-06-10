@@ -89,29 +89,8 @@ impl SymbolTable {
         width: Width,
     ) -> Result<Data, Diagnostic<SR>> {
         let range = expr.source_interval();
-        let value = self.evaluate_expr(expr)?;
+        let value = expr.evaluate(self)?;
         self.fit_to_width((value, range), width)
-    }
-
-    fn evaluate_expr<SR: SourceInterval>(
-        &self,
-        expr: RelocExpr<SR>,
-    ) -> Result<i32, Diagnostic<SR>> {
-        match expr {
-            RelocExpr::Literal(value, _) => Ok(value),
-            RelocExpr::LocationCounter => panic!(),
-            RelocExpr::Subtract(_, _) => panic!(),
-            RelocExpr::Symbol(symbol, expr_ref) => self.symbol_value(&symbol)
-                .map(|value| value.min)
-                .ok_or_else(|| {
-                    Diagnostic::new(
-                        Message::UnresolvedSymbol {
-                            symbol: symbol.clone(),
-                        },
-                        expr_ref.clone(),
-                    )
-                }),
-        }
     }
 
     fn evaluate_expr_value<SR>(&self, expr: &RelocExpr<SR>) -> Option<Value> {
@@ -145,6 +124,27 @@ impl SymbolTable {
         self.names
             .get(name)
             .and_then(|SymbolId(id)| self.values.get(*id))
+    }
+}
+
+impl<SR: Clone> RelocExpr<SR> {
+    fn evaluate(&self, symbol_table: &SymbolTable) -> Result<i32, Diagnostic<SR>> {
+        match self {
+            RelocExpr::Literal(value, _) => Ok(*value),
+            RelocExpr::LocationCounter => panic!(),
+            RelocExpr::Subtract(_, _) => panic!(),
+            RelocExpr::Symbol(symbol, expr_ref) => symbol_table
+                .symbol_value(&symbol)
+                .map(|value| value.min)
+                .ok_or_else(|| {
+                    Diagnostic::new(
+                        Message::UnresolvedSymbol {
+                            symbol: (*symbol).clone(),
+                        },
+                        (*expr_ref).clone(),
+                    )
+                }),
+        }
     }
 }
 
