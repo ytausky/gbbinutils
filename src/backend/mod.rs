@@ -85,26 +85,27 @@ impl<'a, D: 'a> SymbolTable<'a, D> {
         }
     }
 
-    fn resolve_expr_item<R: Clone>(&self, expr: RelocExpr<R>, width: Width) -> Data
+    fn resolve_expr_item<SR: SourceInterval>(&self, expr: RelocExpr<SR>, width: Width) -> Data
     where
-        D: DiagnosticsListener<R>,
+        D: DiagnosticsListener<SR>,
     {
+        let range = expr.source_interval();
         let value = self.evaluate_expr(expr);
-        self.fit_to_width(value, width)
+        self.fit_to_width((value, range), width)
     }
 
-    fn evaluate_expr<R: Clone>(&self, expr: RelocExpr<R>) -> (i32, R)
+    fn evaluate_expr<SR: SourceInterval>(&self, expr: RelocExpr<SR>) -> i32
     where
-        D: DiagnosticsListener<R>,
+        D: DiagnosticsListener<SR>,
     {
         match expr {
-            RelocExpr::Literal(value, expr_ref) => (value, expr_ref),
+            RelocExpr::Literal(value, _) => value,
             RelocExpr::LocationCounter => panic!(),
             RelocExpr::Subtract(_, _) => panic!(),
             RelocExpr::Symbol(symbol, expr_ref) => {
                 let symbol_def = self.symbol_value(&symbol).cloned();
                 if let Some(value) = symbol_def {
-                    (value.min, expr_ref)
+                    value.min
                 } else {
                     self.diagnostics.emit_diagnostic(Diagnostic::new(
                         Message::UnresolvedSymbol {
@@ -112,7 +113,7 @@ impl<'a, D: 'a> SymbolTable<'a, D> {
                         },
                         expr_ref.clone(),
                     ));
-                    (0, expr_ref)
+                    0
                 }
             }
         }
@@ -155,7 +156,7 @@ pub struct ObjectBuilder<'a, R, D: DiagnosticsListener<R> + 'a> {
     symbol_table: SymbolTable<'a, D>,
 }
 
-impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R, D> {
+impl<'a, R: SourceInterval, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R, D> {
     pub fn new(diagnostics: &D) -> ObjectBuilder<R, D> {
         ObjectBuilder {
             pending_sections: vec![PendingSection::new()],
@@ -184,7 +185,7 @@ impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R, D> {
     }
 }
 
-impl<'a, R: Clone, D: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<'a, R, D> {
+impl<'a, R: SourceInterval, D: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<'a, R, D> {
     type Object = Object;
 
     fn add_label(&mut self, label: (impl Into<String>, R)) {
