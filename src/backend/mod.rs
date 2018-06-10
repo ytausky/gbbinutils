@@ -48,7 +48,7 @@ pub struct Rom {
     pub data: Box<[u8]>,
 }
 
-struct SymbolTable {
+pub struct SymbolTable {
     names: HashMap<String, SymbolId>,
     values: Vec<Value>,
 }
@@ -60,6 +60,16 @@ struct SymbolId(usize);
 pub struct Value {
     min: i32,
     max: i32,
+}
+
+impl Value {
+    fn exact(&self) -> Option<i32> {
+        if self.min == self.max {
+            Some(self.min)
+        } else {
+            None
+        }
+    }
 }
 
 impl From<i32> for Value {
@@ -89,20 +99,14 @@ impl SymbolTable {
         width: Width,
     ) -> Result<Data, Diagnostic<SR>> {
         let range = expr.source_interval();
-        let value = expr.evaluate(self).map_err(|undefined| {
-            let UndefinedSymbol(symbol, range) = undefined;
-            Diagnostic::new(Message::UnresolvedSymbol { symbol }, range)
-        })?;
+        let value = expr.evaluate(self)
+            .map_err(|undefined| {
+                let UndefinedSymbol(symbol, range) = undefined;
+                Diagnostic::new(Message::UnresolvedSymbol { symbol }, range)
+            })?
+            .exact()
+            .unwrap();
         self.fit_to_width((value, range), width)
-    }
-
-    fn evaluate_expr_value<SR>(&self, expr: &RelocExpr<SR>) -> Option<Value> {
-        match expr {
-            RelocExpr::Literal(value, _) => Some((*value).into()),
-            RelocExpr::LocationCounter => panic!(),
-            RelocExpr::Subtract(..) => panic!(),
-            RelocExpr::Symbol(symbol, _) => self.symbol_value(symbol).cloned(),
-        }
     }
 
     fn fit_to_width<SR: Clone>(
@@ -133,14 +137,14 @@ impl SymbolTable {
 struct UndefinedSymbol<SR>(String, SR);
 
 impl<SR: Clone> RelocExpr<SR> {
-    fn evaluate(&self, symbol_table: &SymbolTable) -> Result<i32, UndefinedSymbol<SR>> {
+    fn evaluate(&self, symbol_table: &SymbolTable) -> Result<Value, UndefinedSymbol<SR>> {
         match self {
-            RelocExpr::Literal(value, _) => Ok(*value),
+            RelocExpr::Literal(value, _) => Ok((*value).into()),
             RelocExpr::LocationCounter => panic!(),
             RelocExpr::Subtract(_, _) => panic!(),
             RelocExpr::Symbol(symbol, expr_ref) => symbol_table
                 .symbol_value(&symbol)
-                .map(|value| value.min)
+                .cloned()
                 .ok_or_else(|| UndefinedSymbol((*symbol).clone(), (*expr_ref).clone())),
         }
     }
@@ -202,9 +206,12 @@ impl<'a, R: SourceInterval, D: DiagnosticsListener<R> + 'a> Backend<R> for Objec
     }
 
     fn emit_item(&mut self, item: Item<R>) {
-        let data_items = self.pending_sections.last_mut().unwrap();
-        item.lower()
-            .for_each(|data_item| data_items.push(data_item))
+        let section = self.pending_sections.last_mut().unwrap();
+        let symbols = &self.symbol_table;
+        item.lower().for_each(|data_item| {
+            section.location += data_item.size(symbols);
+            section.items.push(data_item)
+        })
     }
 
     fn into_object(self) -> Self::Object {
