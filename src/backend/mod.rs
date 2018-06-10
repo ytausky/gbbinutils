@@ -90,32 +90,31 @@ impl<'a, D: 'a> SymbolTable<'a, D> {
         D: DiagnosticsListener<SR>,
     {
         let range = expr.source_interval();
-        let value = self.evaluate_expr(expr);
+        let value = self.evaluate_expr(expr).unwrap_or_else(|diagnostic| {
+            self.diagnostics.emit_diagnostic(diagnostic);
+            0
+        });
         self.fit_to_width((value, range), width)
     }
 
-    fn evaluate_expr<SR: SourceInterval>(&self, expr: RelocExpr<SR>) -> i32
-    where
-        D: DiagnosticsListener<SR>,
-    {
+    fn evaluate_expr<SR: SourceInterval>(
+        &self,
+        expr: RelocExpr<SR>,
+    ) -> Result<i32, Diagnostic<SR>> {
         match expr {
-            RelocExpr::Literal(value, _) => value,
+            RelocExpr::Literal(value, _) => Ok(value),
             RelocExpr::LocationCounter => panic!(),
             RelocExpr::Subtract(_, _) => panic!(),
-            RelocExpr::Symbol(symbol, expr_ref) => {
-                let symbol_def = self.symbol_value(&symbol).cloned();
-                if let Some(value) = symbol_def {
-                    value.min
-                } else {
-                    self.diagnostics.emit_diagnostic(Diagnostic::new(
+            RelocExpr::Symbol(symbol, expr_ref) => self.symbol_value(&symbol)
+                .map(|value| value.min)
+                .ok_or_else(|| {
+                    Diagnostic::new(
                         Message::UnresolvedSymbol {
                             symbol: symbol.clone(),
                         },
                         expr_ref.clone(),
-                    ));
-                    0
-                }
-            }
+                    )
+                }),
         }
     }
 
