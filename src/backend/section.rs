@@ -24,7 +24,7 @@ impl<SR> Node<SR> {
     }
 }
 
-fn evaluate_node_size<'a, SR, D: 'a>(node: &Node<SR>, symbols: &'a SymbolTable<'a, D>) -> Value {
+fn evaluate_node_size<SR>(node: &Node<SR>, symbols: &SymbolTable) -> Value {
     match node {
         Node::Byte(_) => 1.into(),
         Node::Expr(_, width) => width.len().into(),

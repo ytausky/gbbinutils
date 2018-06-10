@@ -48,10 +48,9 @@ pub struct Rom {
     pub data: Box<[u8]>,
 }
 
-struct SymbolTable<'a, D: 'a> {
+struct SymbolTable {
     names: HashMap<String, SymbolId>,
     values: Vec<Value>,
-    diagnostics: &'a D,
 }
 
 #[derive(Clone, Copy)]
@@ -76,24 +75,21 @@ impl AddAssign<Value> for Value {
     }
 }
 
-impl<'a, D: 'a> SymbolTable<'a, D> {
-    fn new(diagnostics: &'a D) -> SymbolTable<'a, D> {
+impl SymbolTable {
+    fn new() -> SymbolTable {
         SymbolTable {
             names: HashMap::new(),
             values: Vec::new(),
-            diagnostics,
         }
     }
 
-    fn resolve_expr_item<SR: SourceInterval>(&self, expr: RelocExpr<SR>, width: Width) -> Data
-    where
-        D: DiagnosticsListener<SR>,
-    {
+    fn resolve_expr_item<SR: SourceInterval>(
+        &self,
+        expr: RelocExpr<SR>,
+        width: Width,
+    ) -> Result<Data, Diagnostic<SR>> {
         let range = expr.source_interval();
-        let value = self.evaluate_expr(expr).unwrap_or_else(|diagnostic| {
-            self.diagnostics.emit_diagnostic(diagnostic);
-            0
-        });
+        let value = self.evaluate_expr(expr)?;
         self.fit_to_width((value, range), width)
     }
 
@@ -127,19 +123,21 @@ impl<'a, D: 'a> SymbolTable<'a, D> {
         }
     }
 
-    fn fit_to_width<R: Clone>(&self, (value, value_ref): (i32, R), width: Width) -> Data
-    where
-        D: DiagnosticsListener<R>,
-    {
+    fn fit_to_width<SR: Clone>(
+        &self,
+        (value, value_ref): (i32, SR),
+        width: Width,
+    ) -> Result<Data, Diagnostic<SR>> {
         if !is_in_range(value, width) {
-            self.diagnostics.emit_diagnostic(Diagnostic::new(
+            Err(Diagnostic::new(
                 Message::ValueOutOfRange { value, width },
                 value_ref.clone(),
             ))
-        }
-        match width {
-            Width::Byte => Data::Byte(value as u8),
-            Width::Word => Data::Word(value as u16),
+        } else {
+            Ok(match width {
+                Width::Byte => Data::Byte(value as u8),
+                Width::Word => Data::Word(value as u16),
+            })
         }
     }
 
@@ -152,19 +150,22 @@ impl<'a, D: 'a> SymbolTable<'a, D> {
 
 pub struct ObjectBuilder<'a, R, D: DiagnosticsListener<R> + 'a> {
     pending_sections: Vec<PendingSection<R>>,
-    symbol_table: SymbolTable<'a, D>,
+    symbol_table: SymbolTable,
+    diagnostics: &'a D,
 }
 
 impl<'a, R: SourceInterval, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R, D> {
     pub fn new(diagnostics: &D) -> ObjectBuilder<R, D> {
         ObjectBuilder {
             pending_sections: vec![PendingSection::new()],
-            symbol_table: SymbolTable::new(diagnostics),
+            symbol_table: SymbolTable::new(),
+            diagnostics,
         }
     }
 
     pub fn resolve_symbols(self) -> Object {
         let symbol_table = self.symbol_table;
+        let diagnostics = self.diagnostics;
         Object {
             resolved_sections: self.pending_sections
                 .into_iter()
@@ -174,7 +175,15 @@ impl<'a, R: SourceInterval, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R,
                         .into_iter()
                         .map(|item| match item {
                             Node::Byte(value) => Data::Byte(value),
-                            Node::Expr(expr, width) => symbol_table.resolve_expr_item(expr, width),
+                            Node::Expr(expr, width) => symbol_table
+                                .resolve_expr_item(expr, width)
+                                .unwrap_or_else(|diagnostic| {
+                                    diagnostics.emit_diagnostic(diagnostic);
+                                    match width {
+                                        Width::Byte => Data::Byte(0),
+                                        Width::Word => Data::Word(0),
+                                    }
+                                }),
                             Node::LdInlineAddr(..) => panic!(),
                         })
                         .collect()
