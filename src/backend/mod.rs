@@ -1,5 +1,5 @@
 use backend::{lowering::Lower,
-              section::{Node, PendingSection}};
+              section::{Node, Object, PendingSection}};
 use diagnostics::*;
 use instruction::{Instruction, RelocExpr};
 use std::{collections::HashMap, iter::FromIterator, ops::AddAssign};
@@ -152,11 +152,6 @@ impl<SR: Clone> RelocExpr<SR> {
 
 pub struct ObjectBuilder<R> {
     object: Object<R>,
-}
-
-pub struct Object<SR> {
-    sections: Vec<PendingSection<SR>>,
-    symbols: SymbolTable,
 }
 
 impl<SR: SourceInterval> ObjectBuilder<SR> {

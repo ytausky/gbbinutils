@@ -2,6 +2,11 @@ use backend::{SymbolTable, Value};
 use instruction::{Direction, RelocExpr};
 use Width;
 
+pub struct Object<SR> {
+    pub sections: Vec<PendingSection<SR>>,
+    pub symbols: SymbolTable,
+}
+
 pub struct PendingSection<R> {
     pub items: Vec<Node<R>>,
     pub location: Value,
