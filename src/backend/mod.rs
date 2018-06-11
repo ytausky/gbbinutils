@@ -151,25 +151,32 @@ impl<SR: Clone> RelocExpr<SR> {
 }
 
 pub struct ObjectBuilder<'a, R, D: DiagnosticsListener<R> + 'a> {
-    pending_sections: Vec<PendingSection<R>>,
-    symbol_table: SymbolTable,
+    object: Object<R>,
     diagnostics: &'a D,
+}
+
+struct Object<SR> {
+    sections: Vec<PendingSection<SR>>,
+    symbols: SymbolTable,
 }
 
 impl<'a, R: SourceInterval, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R, D> {
     pub fn new(diagnostics: &D) -> ObjectBuilder<R, D> {
         ObjectBuilder {
-            pending_sections: vec![PendingSection::new()],
-            symbol_table: SymbolTable::new(),
+            object: Object {
+                sections: vec![PendingSection::new()],
+                symbols: SymbolTable::new(),
+            },
             diagnostics,
         }
     }
 
     pub fn resolve_symbols(self) -> ResolvedObject {
-        let symbol_table = self.symbol_table;
+        let symbol_table = self.object.symbols;
         let diagnostics = self.diagnostics;
         ResolvedObject {
-            resolved_sections: self.pending_sections
+            resolved_sections: self.object
+                .sections
                 .into_iter()
                 .map(|pending_section| {
                     pending_section
@@ -199,15 +206,15 @@ impl<'a, R: SourceInterval, D: DiagnosticsListener<R> + 'a> Backend<R> for Objec
     type Object = ResolvedObject;
 
     fn add_label(&mut self, label: (impl Into<String>, R)) {
-        let id = SymbolId(self.symbol_table.values.len());
-        let location = self.pending_sections.last().unwrap().location.clone();
-        self.symbol_table.values.push(location);
-        self.symbol_table.names.insert(label.0.into(), id);
+        let id = SymbolId(self.object.symbols.values.len());
+        let location = self.object.sections.last().unwrap().location.clone();
+        self.object.symbols.values.push(location);
+        self.object.symbols.names.insert(label.0.into(), id);
     }
 
     fn emit_item(&mut self, item: Item<R>) {
-        let section = self.pending_sections.last_mut().unwrap();
-        let symbols = &self.symbol_table;
+        let section = self.object.sections.last_mut().unwrap();
+        let symbols = &self.object.symbols;
         item.lower().for_each(|data_item| {
             section.location += data_item.size(symbols);
             section.items.push(data_item)
