@@ -1,7 +1,7 @@
 pub use backend::object::ObjectBuilder;
 
 use backend::{lowering::Lower,
-              object::{Node, Object}};
+              object::{Node, Object, Section}};
 use diagnostics::*;
 use instruction::{Instruction, RelocExpr};
 use std::{collections::HashMap, iter::FromIterator, ops::AddAssign};
@@ -162,28 +162,7 @@ where
         resolved_sections: object
             .sections
             .into_iter()
-            .map(|pending_section| {
-                pending_section
-                    .items
-                    .into_iter()
-                    .flat_map(|item| match item {
-                        Node::Byte(value) => Some(Data::Byte(value)),
-                        Node::Expr(expr, width) => {
-                            Some(symbols.resolve_expr_item(expr, width).unwrap_or_else(
-                                |diagnostic| {
-                                    diagnostics.emit_diagnostic(diagnostic);
-                                    match width {
-                                        Width::Byte => Data::Byte(0),
-                                        Width::Word => Data::Word(0),
-                                    }
-                                },
-                            ))
-                        }
-                        Node::Label(..) => None,
-                        Node::LdInlineAddr(..) => panic!(),
-                    })
-                    .collect()
-            })
+            .map(|section| resolve_section(section, &symbols, diagnostics))
             .collect(),
     }
 }
@@ -204,6 +183,31 @@ fn collect_symbols<SR: Clone>(object: &Object<SR>) -> SymbolTable {
         }
     }
     symbols
+}
+
+fn resolve_section<SR: SourceInterval>(
+    section: Section<SR>,
+    symbols: &SymbolTable,
+    diagnostics: &impl DiagnosticsListener<SR>,
+) -> ResolvedSection {
+    section
+        .items
+        .into_iter()
+        .flat_map(|item| match item {
+            Node::Byte(value) => Some(Data::Byte(value)),
+            Node::Expr(expr, width) => Some(symbols.resolve_expr_item(expr, width).unwrap_or_else(
+                |diagnostic| {
+                    diagnostics.emit_diagnostic(diagnostic);
+                    match width {
+                        Width::Byte => Data::Byte(0),
+                        Width::Word => Data::Word(0),
+                    }
+                },
+            )),
+            Node::Label(..) => None,
+            Node::LdInlineAddr(..) => panic!(),
+        })
+        .collect()
 }
 
 impl<SR: SourceInterval> Backend<SR> for ObjectBuilder<SR> {
