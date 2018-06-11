@@ -150,69 +150,70 @@ impl<SR: Clone> RelocExpr<SR> {
     }
 }
 
-pub struct ObjectBuilder<'a, R, D: DiagnosticsListener<R> + 'a> {
+pub struct ObjectBuilder<R> {
     object: Object<R>,
-    diagnostics: &'a D,
 }
 
-struct Object<SR> {
+pub struct Object<SR> {
     sections: Vec<PendingSection<SR>>,
     symbols: SymbolTable,
 }
 
-impl<'a, R: SourceInterval, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R, D> {
-    pub fn new(diagnostics: &D) -> ObjectBuilder<R, D> {
+impl<SR: SourceInterval> ObjectBuilder<SR> {
+    pub fn new() -> ObjectBuilder<SR> {
         ObjectBuilder {
             object: Object {
                 sections: vec![PendingSection::new()],
                 symbols: SymbolTable::new(),
             },
-            diagnostics,
-        }
-    }
-
-    pub fn resolve_symbols(self) -> ResolvedObject {
-        let symbol_table = self.object.symbols;
-        let diagnostics = self.diagnostics;
-        ResolvedObject {
-            resolved_sections: self.object
-                .sections
-                .into_iter()
-                .map(|pending_section| {
-                    pending_section
-                        .items
-                        .into_iter()
-                        .map(|item| match item {
-                            Node::Byte(value) => Data::Byte(value),
-                            Node::Expr(expr, width) => symbol_table
-                                .resolve_expr_item(expr, width)
-                                .unwrap_or_else(|diagnostic| {
-                                    diagnostics.emit_diagnostic(diagnostic);
-                                    match width {
-                                        Width::Byte => Data::Byte(0),
-                                        Width::Word => Data::Word(0),
-                                    }
-                                }),
-                            Node::LdInlineAddr(..) => panic!(),
-                        })
-                        .collect()
-                })
-                .collect(),
         }
     }
 }
 
-impl<'a, R: SourceInterval, D: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<'a, R, D> {
-    type Object = ResolvedObject;
+pub fn resolve_symbols<'a, SR, D>(object: Object<SR>, diagnostics: &D) -> ResolvedObject
+where
+    SR: SourceInterval,
+    D: DiagnosticsListener<SR> + 'a,
+{
+    let symbol_table = object.symbols;
+    ResolvedObject {
+        resolved_sections: object
+            .sections
+            .into_iter()
+            .map(|pending_section| {
+                pending_section
+                    .items
+                    .into_iter()
+                    .map(|item| match item {
+                        Node::Byte(value) => Data::Byte(value),
+                        Node::Expr(expr, width) => symbol_table
+                            .resolve_expr_item(expr, width)
+                            .unwrap_or_else(|diagnostic| {
+                                diagnostics.emit_diagnostic(diagnostic);
+                                match width {
+                                    Width::Byte => Data::Byte(0),
+                                    Width::Word => Data::Word(0),
+                                }
+                            }),
+                        Node::LdInlineAddr(..) => panic!(),
+                    })
+                    .collect()
+            })
+            .collect(),
+    }
+}
 
-    fn add_label(&mut self, label: (impl Into<String>, R)) {
+impl<SR: SourceInterval> Backend<SR> for ObjectBuilder<SR> {
+    type Object = Object<SR>;
+
+    fn add_label(&mut self, label: (impl Into<String>, SR)) {
         let id = SymbolId(self.object.symbols.values.len());
         let location = self.object.sections.last().unwrap().location.clone();
         self.object.symbols.values.push(location);
         self.object.symbols.names.insert(label.0.into(), id);
     }
 
-    fn emit_item(&mut self, item: Item<R>) {
+    fn emit_item(&mut self, item: Item<SR>) {
         let section = self.object.sections.last_mut().unwrap();
         let symbols = &self.object.symbols;
         item.lower().for_each(|data_item| {
@@ -222,7 +223,7 @@ impl<'a, R: SourceInterval, D: DiagnosticsListener<R> + 'a> Backend<R> for Objec
     }
 
     fn into_object(self) -> Self::Object {
-        self.resolve_symbols()
+        self.object
     }
 }
 
@@ -370,16 +371,16 @@ mod tests {
         assert_eq!(object.resolved_sections.last().unwrap().data, [0x02, 0x00])
     }
 
-    type TestObjectBuilder<'a> = ObjectBuilder<'a, (), TestDiagnosticsListener>;
+    type TestObjectBuilder = ObjectBuilder<()>;
 
     fn with_object_builder<F: FnOnce(&mut TestObjectBuilder)>(
         f: F,
     ) -> (ResolvedObject, Box<[Diagnostic<()>]>) {
         let diagnostics = TestDiagnosticsListener::new();
         let object = {
-            let mut builder = ObjectBuilder::new(&diagnostics);
+            let mut builder = ObjectBuilder::new();
             f(&mut builder);
-            builder.resolve_symbols()
+            resolve_symbols(builder.object, &diagnostics)
         };
         let diagnostics = diagnostics.diagnostics.into_inner().into_boxed_slice();
         (object, diagnostics)

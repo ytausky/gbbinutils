@@ -37,13 +37,14 @@ pub fn analyze_file(name: &str) {
 pub fn assemble_rom(name: &str) {
     let codebase = codebase::FileCodebase::new(codebase::StdFileSystem::new());
     let diagnostics = diagnostics::TerminalDiagnostics::new(&codebase.cache);
-    let rom = frontend::analyze_file(
+    let object = frontend::analyze_file(
         name.to_string(),
         &codebase,
         diagnostics::SimpleTokenTracker {},
-        backend::ObjectBuilder::new(&diagnostics),
+        backend::ObjectBuilder::new(),
         &diagnostics,
-    ).into_rom();
+    );
+    let rom = backend::resolve_symbols(object, &diagnostics).into_rom();
     let mut rom_file = File::create(name.to_owned() + ".o").unwrap();
     rom_file.write_all(&rom.data).unwrap()
 }
