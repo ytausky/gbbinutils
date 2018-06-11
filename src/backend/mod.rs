@@ -1,13 +1,13 @@
-pub use backend::section::ObjectBuilder;
+pub use backend::object::ObjectBuilder;
 
 use backend::{lowering::Lower,
-              section::{Node, Object}};
+              object::{Node, Object}};
 use diagnostics::*;
 use instruction::{Instruction, RelocExpr};
 use std::{collections::HashMap, iter::FromIterator, ops::AddAssign};
 use Width;
 
-mod section;
+mod object;
 
 pub trait Backend<R> {
     type Object;
