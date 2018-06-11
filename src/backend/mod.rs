@@ -1,5 +1,7 @@
+pub use backend::section::ObjectBuilder;
+
 use backend::{lowering::Lower,
-              section::{Node, Object, Section}};
+              section::{Node, Object}};
 use diagnostics::*;
 use instruction::{Instruction, RelocExpr};
 use std::{collections::HashMap, iter::FromIterator, ops::AddAssign};
@@ -146,21 +148,6 @@ impl<SR: Clone> RelocExpr<SR> {
                 .symbol_value(&symbol)
                 .cloned()
                 .ok_or_else(|| UndefinedSymbol((*symbol).clone(), (*expr_ref).clone())),
-        }
-    }
-}
-
-pub struct ObjectBuilder<R> {
-    object: Object<R>,
-}
-
-impl<SR: SourceInterval> ObjectBuilder<SR> {
-    pub fn new() -> ObjectBuilder<SR> {
-        ObjectBuilder {
-            object: Object {
-                sections: vec![Section::new()],
-                symbols: SymbolTable::new(),
-            },
         }
     }
 }

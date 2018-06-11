@@ -41,3 +41,18 @@ impl<SR> Section<SR> {
         }
     }
 }
+
+pub struct ObjectBuilder<SR> {
+    pub object: Object<SR>,
+}
+
+impl<SR> ObjectBuilder<SR> {
+    pub fn new() -> ObjectBuilder<SR> {
+        ObjectBuilder {
+            object: Object {
+                sections: vec![Section::new()],
+                symbols: SymbolTable::new(),
+            },
+        }
+    }
+}
