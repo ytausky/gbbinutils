@@ -3,11 +3,11 @@ use instruction::{Direction, RelocExpr};
 use Width;
 
 pub struct Object<SR> {
-    pub sections: Vec<PendingSection<SR>>,
+    pub sections: Vec<Section<SR>>,
     pub symbols: SymbolTable,
 }
 
-pub struct PendingSection<R> {
+pub struct Section<R> {
     pub items: Vec<Node<R>>,
     pub location: Value,
 }
@@ -33,9 +33,9 @@ impl<SR: Clone> Node<SR> {
     }
 }
 
-impl<R> PendingSection<R> {
-    pub fn new() -> PendingSection<R> {
-        PendingSection {
+impl<SR> Section<SR> {
+    pub fn new() -> Section<SR> {
+        Section {
             items: Vec::new(),
             location: 0.into(),
         }

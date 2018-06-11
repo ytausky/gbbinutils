@@ -1,5 +1,5 @@
 use backend::{lowering::Lower,
-              section::{Node, Object, PendingSection}};
+              section::{Node, Object, Section}};
 use diagnostics::*;
 use instruction::{Instruction, RelocExpr};
 use std::{collections::HashMap, iter::FromIterator, ops::AddAssign};
@@ -158,7 +158,7 @@ impl<SR: SourceInterval> ObjectBuilder<SR> {
     pub fn new() -> ObjectBuilder<SR> {
         ObjectBuilder {
             object: Object {
-                sections: vec![PendingSection::new()],
+                sections: vec![Section::new()],
                 symbols: SymbolTable::new(),
             },
         }
