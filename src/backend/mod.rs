@@ -157,7 +157,7 @@ where
     SR: SourceInterval,
     D: DiagnosticsListener<SR> + 'a,
 {
-    let symbol_table = object.symbols;
+    let symbols = collect_symbols(&object);
     ResolvedObject {
         resolved_sections: object
             .sections
@@ -166,17 +166,20 @@ where
                 pending_section
                     .items
                     .into_iter()
-                    .map(|item| match item {
-                        Node::Byte(value) => Data::Byte(value),
-                        Node::Expr(expr, width) => symbol_table
-                            .resolve_expr_item(expr, width)
-                            .unwrap_or_else(|diagnostic| {
-                                diagnostics.emit_diagnostic(diagnostic);
-                                match width {
-                                    Width::Byte => Data::Byte(0),
-                                    Width::Word => Data::Word(0),
-                                }
-                            }),
+                    .flat_map(|item| match item {
+                        Node::Byte(value) => Some(Data::Byte(value)),
+                        Node::Expr(expr, width) => {
+                            Some(symbols.resolve_expr_item(expr, width).unwrap_or_else(
+                                |diagnostic| {
+                                    diagnostics.emit_diagnostic(diagnostic);
+                                    match width {
+                                        Width::Byte => Data::Byte(0),
+                                        Width::Word => Data::Word(0),
+                                    }
+                                },
+                            ))
+                        }
+                        Node::Label(..) => None,
                         Node::LdInlineAddr(..) => panic!(),
                     })
                     .collect()
@@ -185,23 +188,36 @@ where
     }
 }
 
+fn collect_symbols<SR: Clone>(object: &Object<SR>) -> SymbolTable {
+    let mut symbols = SymbolTable::new();
+    for section in &object.sections {
+        let mut location = Value::from(0);
+        for node in &section.items {
+            match node {
+                Node::Label(symbol, _) => {
+                    let id = SymbolId(symbols.values.len());
+                    symbols.values.push(location.clone());
+                    symbols.names.insert(symbol.to_string(), id);
+                }
+                node => location += node.size(&symbols),
+            }
+        }
+    }
+    symbols
+}
+
 impl<SR: SourceInterval> Backend<SR> for ObjectBuilder<SR> {
     type Object = Object<SR>;
 
     fn add_label(&mut self, label: (impl Into<String>, SR)) {
-        let id = SymbolId(self.object.symbols.values.len());
-        let location = self.object.sections.last().unwrap().location.clone();
-        self.object.symbols.values.push(location);
-        self.object.symbols.names.insert(label.0.into(), id);
+        let section = self.object.sections.last_mut().unwrap();
+        section.items.push(Node::Label(label.0.into(), label.1))
     }
 
     fn emit_item(&mut self, item: Item<SR>) {
         let section = self.object.sections.last_mut().unwrap();
-        let symbols = &self.object.symbols;
-        item.lower().for_each(|data_item| {
-            section.location += data_item.size(symbols);
-            section.items.push(data_item)
-        })
+        item.lower()
+            .for_each(|data_item| section.items.push(data_item))
     }
 
     fn into_object(self) -> Self::Object {

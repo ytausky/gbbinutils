@@ -4,18 +4,17 @@ use Width;
 
 pub struct Object<SR> {
     pub sections: Vec<Section<SR>>,
-    pub symbols: SymbolTable,
 }
 
 pub struct Section<R> {
     pub items: Vec<Node<R>>,
-    pub location: Value,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum Node<SR> {
     Byte(u8),
     Expr(RelocExpr<SR>, Width),
+    Label(String, SR),
     LdInlineAddr(RelocExpr<SR>, Direction),
 }
 
@@ -24,6 +23,7 @@ impl<SR: Clone> Node<SR> {
         match self {
             Node::Byte(_) => 1.into(),
             Node::Expr(_, width) => width.len().into(),
+            Node::Label(..) => 0.into(),
             Node::LdInlineAddr(expr, _) => match expr.evaluate(symbols) {
                 Ok(Value { min, .. }) if min >= 0xff00 => 2.into(),
                 Ok(Value { max, .. }) if max < 0xff00 => 3.into(),
@@ -35,10 +35,7 @@ impl<SR: Clone> Node<SR> {
 
 impl<SR> Section<SR> {
     pub fn new() -> Section<SR> {
-        Section {
-            items: Vec::new(),
-            location: 0.into(),
-        }
+        Section { items: Vec::new() }
     }
 }
 
@@ -51,7 +48,6 @@ impl<SR> ObjectBuilder<SR> {
         ObjectBuilder {
             object: Object {
                 sections: vec![Section::new()],
-                symbols: SymbolTable::new(),
             },
         }
     }
