@@ -28,11 +28,11 @@ enum Data {
 
 mod lowering;
 
-pub struct Object {
+pub struct ResolvedObject {
     resolved_sections: Vec<ResolvedSection>,
 }
 
-impl Object {
+impl ResolvedObject {
     pub fn into_rom(self) -> Rom {
         let mut data: Vec<u8> = Vec::new();
         self.resolved_sections
@@ -165,10 +165,10 @@ impl<'a, R: SourceInterval, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R,
         }
     }
 
-    pub fn resolve_symbols(self) -> Object {
+    pub fn resolve_symbols(self) -> ResolvedObject {
         let symbol_table = self.symbol_table;
         let diagnostics = self.diagnostics;
-        Object {
+        ResolvedObject {
             resolved_sections: self.pending_sections
                 .into_iter()
                 .map(|pending_section| {
@@ -196,7 +196,7 @@ impl<'a, R: SourceInterval, D: DiagnosticsListener<R> + 'a> ObjectBuilder<'a, R,
 }
 
 impl<'a, R: SourceInterval, D: DiagnosticsListener<R> + 'a> Backend<R> for ObjectBuilder<'a, R, D> {
-    type Object = Object;
+    type Object = ResolvedObject;
 
     fn add_label(&mut self, label: (impl Into<String>, R)) {
         let id = SymbolId(self.symbol_table.values.len());
@@ -367,7 +367,7 @@ mod tests {
 
     fn with_object_builder<F: FnOnce(&mut TestObjectBuilder)>(
         f: F,
-    ) -> (Object, Box<[Diagnostic<()>]>) {
+    ) -> (ResolvedObject, Box<[Diagnostic<()>]>) {
         let diagnostics = TestDiagnosticsListener::new();
         let object = {
             let mut builder = ObjectBuilder::new(&diagnostics);
