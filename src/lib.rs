@@ -44,7 +44,7 @@ pub fn assemble_rom(name: &str) {
         backend::ObjectBuilder::new(),
         &diagnostics,
     );
-    let rom = backend::resolve_symbols(object, &diagnostics).into_rom();
+    let rom = backend::link(object, &diagnostics).into_rom();
     let mut rom_file = File::create(name.to_owned() + ".o").unwrap();
     rom_file.write_all(&rom.data).unwrap()
 }

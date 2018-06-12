@@ -145,7 +145,7 @@ impl<SR: Clone> RelocExpr<SR> {
     }
 }
 
-pub fn resolve_symbols<'a, SR, D>(object: Object<SR>, diagnostics: &D) -> ResolvedObject
+pub fn link<'a, SR, D>(object: Object<SR>, diagnostics: &D) -> ResolvedObject
 where
     SR: SourceInterval,
     D: DiagnosticsListener<SR> + 'a,
@@ -373,7 +373,7 @@ mod tests {
         let object = {
             let mut builder = ObjectBuilder::new();
             f(&mut builder);
-            resolve_symbols(builder.object, &diagnostics)
+            link(builder.object, &diagnostics)
         };
         let diagnostics = diagnostics.diagnostics.into_inner().into_boxed_slice();
         (object, diagnostics)
