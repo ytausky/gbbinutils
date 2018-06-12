@@ -31,13 +31,13 @@ enum Data {
 mod lowering;
 
 pub struct ResolvedObject {
-    resolved_sections: Vec<ResolvedSection>,
+    sections: Vec<BinarySection>,
 }
 
 impl ResolvedObject {
     pub fn into_rom(self) -> Rom {
         let mut data: Vec<u8> = Vec::new();
-        self.resolved_sections
+        self.sections
             .into_iter()
             .for_each(|section| data.extend(section.data.into_iter()));
         Rom {
@@ -152,7 +152,7 @@ where
 {
     let symbols = collect_symbols(&object);
     ResolvedObject {
-        resolved_sections: object
+        sections: object
             .sections
             .into_iter()
             .map(|section| resolve_section(section, &symbols, diagnostics))
@@ -180,7 +180,7 @@ fn resolve_section<SR: SourceInterval>(
     section: Section<SR>,
     symbols: &SymbolTable,
     diagnostics: &impl DiagnosticsListener<SR>,
-) -> ResolvedSection {
+) -> BinarySection {
     section
         .items
         .into_iter()
@@ -220,13 +220,13 @@ impl<SR: SourceInterval> Backend<SR> for ObjectBuilder<SR> {
     }
 }
 
-struct ResolvedSection {
+struct BinarySection {
     data: Vec<u8>,
 }
 
-impl ResolvedSection {
-    fn new() -> ResolvedSection {
-        ResolvedSection { data: Vec::new() }
+impl BinarySection {
+    fn new() -> BinarySection {
+        BinarySection { data: Vec::new() }
     }
 
     fn push(&mut self, data: Data) {
@@ -242,9 +242,9 @@ impl ResolvedSection {
     }
 }
 
-impl FromIterator<Data> for ResolvedSection {
+impl FromIterator<Data> for BinarySection {
     fn from_iter<T: IntoIterator<Item = Data>>(iter: T) -> Self {
-        let mut section = ResolvedSection::new();
+        let mut section = BinarySection::new();
         iter.into_iter().for_each(|x| section.push(x));
         section
     }
@@ -308,10 +308,7 @@ mod tests {
                 builder.emit_item(item.clone())
             }
         });
-        assert_eq!(
-            object.resolved_sections.last().unwrap().data,
-            bytes.borrow()
-        )
+        assert_eq!(object.sections.last().unwrap().data, bytes.borrow())
     }
 
     #[test]
@@ -350,7 +347,7 @@ mod tests {
             builder.emit_item(symbol_expr(label));
         });
         assert_eq!(*diagnostics, []);
-        assert_eq!(object.resolved_sections.last().unwrap().data, [0x00, 0x00])
+        assert_eq!(object.sections.last().unwrap().data, [0x00, 0x00])
     }
 
     #[test]
@@ -361,7 +358,7 @@ mod tests {
             builder.add_label((label, ()));
         });
         assert_eq!(*diagnostics, []);
-        assert_eq!(object.resolved_sections.last().unwrap().data, [0x02, 0x00])
+        assert_eq!(object.sections.last().unwrap().data, [0x02, 0x00])
     }
 
     type TestObjectBuilder = ObjectBuilder<()>;
