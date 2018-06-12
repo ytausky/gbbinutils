@@ -375,12 +375,28 @@ mod tests {
     }
 
     #[test]
-    fn empty_section_has_length_zero() {
-        let name = "MySection";
+    fn empty_section_has_size_zero() {
+        assert_section_size(0, |_| ())
+    }
+
+    #[test]
+    fn section_with_nop_has_size_one() {
+        assert_section_size(1, |section| {
+            section
+                .items
+                .extend(Item::Instruction(Instruction::Nullary(Nullary::Nop)).lower())
+        });
+    }
+
+    fn assert_section_size(expected: impl Into<Value>, f: impl FnOnce(&mut Section<()>)) {
         let mut object = Object::<()>::new();
-        object.add_section(name);
+        object.add_section("TestSection");
+        f(&mut object.sections[0]);
         let symbols = resolve_symbols(&object);
-        assert_eq!(symbols.get("MySection.size").cloned(), Some(0.into()))
+        assert_eq!(
+            symbols.get("TestSection.size").cloned(),
+            Some(expected.into())
+        )
     }
 
     type TestObjectBuilder = ObjectBuilder<()>;
