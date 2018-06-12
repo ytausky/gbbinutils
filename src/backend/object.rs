@@ -11,7 +11,7 @@ pub struct Section<R> {
     pub items: Vec<Node<R>>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Node<SR> {
     Byte(u8),
     Expr(RelocExpr<SR>, Width),

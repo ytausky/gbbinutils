@@ -68,6 +68,10 @@ impl Value {
             None
         }
     }
+
+    fn len(&self) -> i32 {
+        self.max - self.min
+    }
 }
 
 impl From<i32> for Value {
@@ -94,8 +98,16 @@ impl SymbolTable {
         self.symbols.insert(name.into(), value);
     }
 
+    #[cfg(test)]
     fn get(&self, name: impl Borrow<str>) -> Option<&Value> {
         self.symbols.get(name.borrow())
+    }
+
+    fn refine(&mut self, name: impl Borrow<str>, value: Value) -> bool {
+        let stored_value = self.symbols.get_mut(name.borrow()).unwrap();
+        let was_refined = value.len() < stored_value.len();
+        *stored_value = value;
+        was_refined
     }
 
     fn resolve_expr_item<SR: SourceInterval>(
@@ -169,7 +181,9 @@ where
 }
 
 fn resolve_symbols<SR: Clone>(object: &Object<SR>) -> SymbolTable {
-    collect_symbols(object)
+    let mut symbols = collect_symbols(object);
+    refine_symbols(object, &mut symbols);
+    symbols
 }
 
 fn collect_symbols<SR: Clone>(object: &Object<SR>) -> SymbolTable {
@@ -187,6 +201,23 @@ fn collect_symbols<SR: Clone>(object: &Object<SR>) -> SymbolTable {
         symbols.define(format!("{}.size", section.name()), location)
     }
     symbols
+}
+
+fn refine_symbols<SR: Clone>(object: &Object<SR>, symbols: &mut SymbolTable) -> i32 {
+    let mut refinements = 0;
+    for section in &object.sections {
+        let mut location = Value::from(0);
+        for node in &section.items {
+            match node {
+                Node::Label(symbol, _) => {
+                    refinements += symbols.refine(symbol.as_str(), location.clone()) as i32
+                }
+                node => location += node.size(symbols),
+            }
+        }
+        refinements += symbols.refine(format!("{}.size", section.name()), location) as i32
+    }
+    refinements
 }
 
 fn resolve_section<SR: SourceInterval>(
@@ -405,6 +436,22 @@ mod tests {
                 Direction::FromA,
             ))
         });
+    }
+
+    #[test]
+    fn ld_inline_addr_with_symbol_after_instruction_has_size_three() {
+        assert_section_size(3, |section| {
+            section.items.extend(
+                [
+                    Node::LdInlineAddr(
+                        RelocExpr::Symbol("label".to_string(), ()),
+                        Direction::FromA,
+                    ),
+                    Node::Label("label".to_string(), ()),
+                ].iter()
+                    .cloned(),
+            )
+        })
     }
 
     fn assert_section_size(expected: impl Into<Value>, f: impl FnOnce(&mut Section<()>)) {
