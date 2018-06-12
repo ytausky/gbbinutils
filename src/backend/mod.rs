@@ -30,11 +30,11 @@ enum Data {
 
 mod lowering;
 
-pub struct ResolvedObject {
+pub struct BinaryObject {
     sections: Vec<BinarySection>,
 }
 
-impl ResolvedObject {
+impl BinaryObject {
     pub fn into_rom(self) -> Rom {
         let mut data: Vec<u8> = Vec::new();
         self.sections
@@ -145,13 +145,13 @@ impl<SR: Clone> RelocExpr<SR> {
     }
 }
 
-pub fn link<'a, SR, D>(object: Object<SR>, diagnostics: &D) -> ResolvedObject
+pub fn link<'a, SR, D>(object: Object<SR>, diagnostics: &D) -> BinaryObject
 where
     SR: SourceInterval,
     D: DiagnosticsListener<SR> + 'a,
 {
     let symbols = collect_symbols(&object);
-    ResolvedObject {
+    BinaryObject {
         sections: object
             .sections
             .into_iter()
@@ -365,7 +365,7 @@ mod tests {
 
     fn with_object_builder<F: FnOnce(&mut TestObjectBuilder)>(
         f: F,
-    ) -> (ResolvedObject, Box<[Diagnostic<()>]>) {
+    ) -> (BinaryObject, Box<[Diagnostic<()>]>) {
         let diagnostics = TestDiagnosticsListener::new();
         let object = {
             let mut builder = ObjectBuilder::new();
