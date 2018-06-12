@@ -285,7 +285,7 @@ fn is_in_u8_range(n: i32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use instruction::Nullary;
+    use instruction::{Direction, Nullary};
 
     use std::borrow::Borrow;
 
@@ -385,6 +385,25 @@ mod tests {
             section
                 .items
                 .extend(Item::Instruction(Instruction::Nullary(Nullary::Nop)).lower())
+        });
+    }
+
+    #[test]
+    fn section_with_const_inline_addr_ld_has_size_two() {
+        test_section_size_with_literal_ld_inline_addr(0xff00, 2)
+    }
+
+    #[test]
+    fn section_with_const_inline_addr_ld_has_size_three() {
+        test_section_size_with_literal_ld_inline_addr(0x1234, 3)
+    }
+
+    fn test_section_size_with_literal_ld_inline_addr(addr: i32, expected: i32) {
+        assert_section_size(expected, |section| {
+            section.items.push(Node::LdInlineAddr(
+                RelocExpr::Literal(addr, ()),
+                Direction::FromA,
+            ))
         });
     }
 
