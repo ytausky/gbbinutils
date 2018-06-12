@@ -51,12 +51,8 @@ pub struct Rom {
 }
 
 pub struct SymbolTable {
-    names: HashMap<String, SymbolId>,
-    values: Vec<Value>,
+    symbols: HashMap<String, Value>,
 }
-
-#[derive(Clone, Copy)]
-struct SymbolId(usize);
 
 #[derive(Clone)]
 pub struct Value {
@@ -90,8 +86,7 @@ impl AddAssign<Value> for Value {
 impl SymbolTable {
     fn new() -> SymbolTable {
         SymbolTable {
-            names: HashMap::new(),
-            values: Vec::new(),
+            symbols: HashMap::new(),
         }
     }
 
@@ -130,9 +125,7 @@ impl SymbolTable {
     }
 
     fn symbol_value(&self, name: &str) -> Option<&Value> {
-        self.names
-            .get(name)
-            .and_then(|SymbolId(id)| self.values.get(*id))
+        self.symbols.get(name)
     }
 }
 
@@ -174,9 +167,7 @@ fn collect_symbols<SR: Clone>(object: &Object<SR>) -> SymbolTable {
         for node in &section.items {
             match node {
                 Node::Label(symbol, _) => {
-                    let id = SymbolId(symbols.values.len());
-                    symbols.values.push(location.clone());
-                    symbols.names.insert(symbol.to_string(), id);
+                    symbols.symbols.insert(symbol.to_string(), location.clone());
                 }
                 node => location += node.size(&symbols),
             }
