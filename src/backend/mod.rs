@@ -4,7 +4,7 @@ use backend::{lowering::Lower,
               object::{Node, Object, Section}};
 use diagnostics::*;
 use instruction::{Instruction, RelocExpr};
-use std::{collections::HashMap, iter::FromIterator, ops::AddAssign};
+use std::{borrow::Borrow, collections::HashMap, iter::FromIterator, ops::AddAssign};
 use Width;
 
 mod object;
@@ -54,7 +54,7 @@ pub struct SymbolTable {
     symbols: HashMap<String, Value>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Value {
     min: i32,
     max: i32,
@@ -88,6 +88,14 @@ impl SymbolTable {
         SymbolTable {
             symbols: HashMap::new(),
         }
+    }
+
+    fn define(&mut self, name: impl Into<String>, value: Value) {
+        self.symbols.insert(name.into(), value);
+    }
+
+    fn get(&self, name: impl Borrow<str>) -> Option<&Value> {
+        self.symbols.get(name.borrow())
     }
 
     fn resolve_expr_item<SR: SourceInterval>(
@@ -150,7 +158,7 @@ where
     SR: SourceInterval,
     D: DiagnosticsListener<SR> + 'a,
 {
-    let symbols = collect_symbols(&object);
+    let symbols = resolve_symbols(&object);
     BinaryObject {
         sections: object
             .sections
@@ -158,6 +166,10 @@ where
             .map(|section| resolve_section(section, &symbols, diagnostics))
             .collect(),
     }
+}
+
+fn resolve_symbols<SR: Clone>(object: &Object<SR>) -> SymbolTable {
+    collect_symbols(object)
 }
 
 fn collect_symbols<SR: Clone>(object: &Object<SR>) -> SymbolTable {
@@ -172,6 +184,7 @@ fn collect_symbols<SR: Clone>(object: &Object<SR>) -> SymbolTable {
                 node => location += node.size(&symbols),
             }
         }
+        symbols.define(format!("{}.size", section.name()), location)
     }
     symbols
 }
@@ -359,6 +372,15 @@ mod tests {
         });
         assert_eq!(*diagnostics, []);
         assert_eq!(object.sections.last().unwrap().data, [0x02, 0x00])
+    }
+
+    #[test]
+    fn empty_section_has_length_zero() {
+        let name = "MySection";
+        let mut object = Object::<()>::new();
+        object.add_section(name);
+        let symbols = resolve_symbols(&object);
+        assert_eq!(symbols.get("MySection.size").cloned(), Some(0.into()))
     }
 
     type TestObjectBuilder = ObjectBuilder<()>;

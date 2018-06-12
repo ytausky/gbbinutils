@@ -7,6 +7,7 @@ pub struct Object<SR> {
 }
 
 pub struct Section<R> {
+    name: String,
     pub items: Vec<Node<R>>,
 }
 
@@ -16,6 +17,18 @@ pub enum Node<SR> {
     Expr(RelocExpr<SR>, Width),
     Label(String, SR),
     LdInlineAddr(RelocExpr<SR>, Direction),
+}
+
+impl<SR> Object<SR> {
+    pub fn new() -> Object<SR> {
+        Object {
+            sections: Vec::new(),
+        }
+    }
+
+    pub fn add_section(&mut self, name: impl Into<String>) {
+        self.sections.push(Section::new(name.into()))
+    }
 }
 
 impl<SR: Clone> Node<SR> {
@@ -34,8 +47,15 @@ impl<SR: Clone> Node<SR> {
 }
 
 impl<SR> Section<SR> {
-    pub fn new() -> Section<SR> {
-        Section { items: Vec::new() }
+    pub fn new(name: impl Into<String>) -> Section<SR> {
+        Section {
+            name: name.into(),
+            items: Vec::new(),
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
     }
 }
 
@@ -45,10 +65,8 @@ pub struct ObjectBuilder<SR> {
 
 impl<SR> ObjectBuilder<SR> {
     pub fn new() -> ObjectBuilder<SR> {
-        ObjectBuilder {
-            object: Object {
-                sections: vec![Section::new()],
-            },
-        }
+        let mut object = Object::new();
+        object.add_section("__default");
+        ObjectBuilder { object }
     }
 }
