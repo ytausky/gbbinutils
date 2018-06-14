@@ -1,7 +1,7 @@
 pub use backend::object::ObjectBuilder;
 
 use backend::{lowering::Lower,
-              object::{Node, Object, Section}};
+              object::{Chunk, Node, Object}};
 use diagnostics::*;
 use instruction::{Instruction, RelocExpr};
 use std::{borrow::Borrow, collections::HashMap, iter::FromIterator, ops::AddAssign};
@@ -173,7 +173,7 @@ where
     let symbols = resolve_symbols(&object);
     BinaryObject {
         sections: object
-            .sections
+            .chunks
             .into_iter()
             .map(|section| resolve_section(section, &symbols, diagnostics))
             .collect(),
@@ -188,9 +188,9 @@ fn resolve_symbols<SR: Clone>(object: &Object<SR>) -> SymbolTable {
 
 fn collect_symbols<SR: Clone>(object: &Object<SR>) -> SymbolTable {
     let mut symbols = SymbolTable::new();
-    for section in &object.sections {
+    for chunk in &object.chunks {
         let mut location = Value::from(0);
-        for node in &section.items {
+        for node in &chunk.items {
             match node {
                 Node::Label(symbol, _) => {
                     symbols.symbols.insert(symbol.to_string(), location.clone());
@@ -198,16 +198,16 @@ fn collect_symbols<SR: Clone>(object: &Object<SR>) -> SymbolTable {
                 node => location += node.size(&symbols),
             }
         }
-        symbols.define(format!("{}.size", section.name()), location)
+        symbols.define(format!("{}.size", chunk.name()), location)
     }
     symbols
 }
 
 fn refine_symbols<SR: Clone>(object: &Object<SR>, symbols: &mut SymbolTable) -> i32 {
     let mut refinements = 0;
-    for section in &object.sections {
+    for chunk in &object.chunks {
         let mut location = Value::from(0);
-        for node in &section.items {
+        for node in &chunk.items {
             match node {
                 Node::Label(symbol, _) => {
                     refinements += symbols.refine(symbol.as_str(), location.clone()) as i32
@@ -215,13 +215,13 @@ fn refine_symbols<SR: Clone>(object: &Object<SR>, symbols: &mut SymbolTable) -> 
                 node => location += node.size(symbols),
             }
         }
-        refinements += symbols.refine(format!("{}.size", section.name()), location) as i32
+        refinements += symbols.refine(format!("{}.size", chunk.name()), location) as i32
     }
     refinements
 }
 
 fn resolve_section<SR: SourceInterval>(
-    section: Section<SR>,
+    section: Chunk<SR>,
     symbols: &SymbolTable,
     diagnostics: &impl DiagnosticsListener<SR>,
 ) -> BinarySection {
@@ -249,14 +249,14 @@ impl<SR: SourceInterval> Backend<SR> for ObjectBuilder<SR> {
     type Object = Object<SR>;
 
     fn add_label(&mut self, label: (impl Into<String>, SR)) {
-        let section = self.object.sections.last_mut().unwrap();
-        section.items.push(Node::Label(label.0.into(), label.1))
+        let chunk = self.object.chunks.last_mut().unwrap();
+        chunk.items.push(Node::Label(label.0.into(), label.1))
     }
 
     fn emit_item(&mut self, item: Item<SR>) {
-        let section = self.object.sections.last_mut().unwrap();
+        let chunk = self.object.chunks.last_mut().unwrap();
         item.lower()
-            .for_each(|data_item| section.items.push(data_item))
+            .for_each(|data_item| chunk.items.push(data_item))
     }
 
     fn into_object(self) -> Self::Object {
@@ -406,13 +406,13 @@ mod tests {
     }
 
     #[test]
-    fn empty_section_has_size_zero() {
-        assert_section_size(0, |_| ())
+    fn empty_chunk_has_size_zero() {
+        assert_chunk_size(0, |_| ())
     }
 
     #[test]
-    fn section_with_nop_has_size_one() {
-        assert_section_size(1, |section| {
+    fn chunk_with_nop_has_size_one() {
+        assert_chunk_size(1, |section| {
             section
                 .items
                 .extend(Item::Instruction(Instruction::Nullary(Nullary::Nop)).lower())
@@ -420,17 +420,17 @@ mod tests {
     }
 
     #[test]
-    fn section_with_const_inline_addr_ld_has_size_two() {
-        test_section_size_with_literal_ld_inline_addr(0xff00, 2)
+    fn chunk_with_const_inline_addr_ld_has_size_two() {
+        test_chunk_size_with_literal_ld_inline_addr(0xff00, 2)
     }
 
     #[test]
-    fn section_with_const_inline_addr_ld_has_size_three() {
-        test_section_size_with_literal_ld_inline_addr(0x1234, 3)
+    fn chunk_with_const_inline_addr_ld_has_size_three() {
+        test_chunk_size_with_literal_ld_inline_addr(0x1234, 3)
     }
 
-    fn test_section_size_with_literal_ld_inline_addr(addr: i32, expected: i32) {
-        assert_section_size(expected, |section| {
+    fn test_chunk_size_with_literal_ld_inline_addr(addr: i32, expected: i32) {
+        assert_chunk_size(expected, |section| {
             section.items.push(Node::LdInlineAddr(
                 RelocExpr::Literal(addr, ()),
                 Direction::FromA,
@@ -440,7 +440,7 @@ mod tests {
 
     #[test]
     fn ld_inline_addr_with_symbol_after_instruction_has_size_three() {
-        assert_section_size(3, |section| {
+        assert_chunk_size(3, |section| {
             section.items.extend(
                 [
                     Node::LdInlineAddr(
@@ -454,10 +454,10 @@ mod tests {
         })
     }
 
-    fn assert_section_size(expected: impl Into<Value>, f: impl FnOnce(&mut Section<()>)) {
+    fn assert_chunk_size(expected: impl Into<Value>, f: impl FnOnce(&mut Chunk<()>)) {
         let mut object = Object::<()>::new();
-        object.add_section("TestSection");
-        f(&mut object.sections[0]);
+        object.add_chunk("TestSection");
+        f(&mut object.chunks[0]);
         let symbols = resolve_symbols(&object);
         assert_eq!(
             symbols.get("TestSection.size").cloned(),

@@ -3,10 +3,10 @@ use instruction::{Direction, RelocExpr};
 use Width;
 
 pub struct Object<SR> {
-    pub sections: Vec<Section<SR>>,
+    pub chunks: Vec<Chunk<SR>>,
 }
 
-pub struct Section<R> {
+pub struct Chunk<R> {
     name: String,
     pub items: Vec<Node<R>>,
 }
@@ -21,13 +21,11 @@ pub enum Node<SR> {
 
 impl<SR> Object<SR> {
     pub fn new() -> Object<SR> {
-        Object {
-            sections: Vec::new(),
-        }
+        Object { chunks: Vec::new() }
     }
 
-    pub fn add_section(&mut self, name: impl Into<String>) {
-        self.sections.push(Section::new(name.into()))
+    pub fn add_chunk(&mut self, name: impl Into<String>) {
+        self.chunks.push(Chunk::new(name.into()))
     }
 }
 
@@ -46,9 +44,9 @@ impl<SR: Clone> Node<SR> {
     }
 }
 
-impl<SR> Section<SR> {
-    pub fn new(name: impl Into<String>) -> Section<SR> {
-        Section {
+impl<SR> Chunk<SR> {
+    pub fn new(name: impl Into<String>) -> Chunk<SR> {
+        Chunk {
             name: name.into(),
             items: Vec::new(),
         }
@@ -66,7 +64,7 @@ pub struct ObjectBuilder<SR> {
 impl<SR> ObjectBuilder<SR> {
     pub fn new() -> ObjectBuilder<SR> {
         let mut object = Object::new();
-        object.add_section("__default");
+        object.add_chunk("__default");
         ObjectBuilder { object }
     }
 }
