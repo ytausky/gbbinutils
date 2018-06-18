@@ -61,27 +61,57 @@ impl<SR> Chunk<SR> {
 
 pub struct ObjectBuilder<SR> {
     object: Object<SR>,
+    state: Option<BuilderState<SR>>,
+}
+
+enum BuilderState<SR> {
+    Pending { origin: Option<RelocExpr<SR>> },
+    InChunk(usize),
 }
 
 impl<SR> ObjectBuilder<SR> {
     pub fn new() -> ObjectBuilder<SR> {
-        let mut object = Object::new();
-        object.add_chunk("__default");
-        ObjectBuilder { object }
+        ObjectBuilder {
+            object: Object::new(),
+            state: Some(BuilderState::Pending { origin: None }),
+        }
     }
 
     pub fn push(&mut self, node: Node<SR>) {
-        self.object.chunks.last_mut().unwrap().items.push(node)
+        self.current_chunk().items.push(node)
     }
 
     pub fn build(self) -> Object<SR> {
         self.object
+    }
+
+    fn current_chunk(&mut self) -> &mut Chunk<SR> {
+        match self.state.take().unwrap() {
+            BuilderState::Pending { origin } => {
+                self.object.add_chunk("name");
+                let index = self.object.chunks.len() - 1;
+                self.state = Some(BuilderState::InChunk(index));
+                let chunk = &mut self.object.chunks[index];
+                chunk.origin = origin;
+                chunk
+            }
+            BuilderState::InChunk(index) => {
+                self.state = Some(BuilderState::InChunk(index));
+                &mut self.object.chunks[index]
+            }
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn new_object_has_no_chunks() {
+        let object = ObjectBuilder::<()>::new().build();
+        assert_eq!(object.chunks.len(), 0)
+    }
 
     #[test]
     fn no_origin_by_default() {
