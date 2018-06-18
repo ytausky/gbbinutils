@@ -14,6 +14,7 @@ pub trait Backend<R> {
     fn add_label(&mut self, label: (impl Into<String>, R));
     fn emit_item(&mut self, item: Item<R>);
     fn into_object(self) -> Self::Object;
+    fn set_origin(&mut self, origin: RelocExpr<R>);
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -286,6 +287,10 @@ impl<SR: SourceInterval> Backend<SR> for ObjectBuilder<SR> {
 
     fn into_object(self) -> Self::Object {
         self.object
+    }
+
+    fn set_origin(&mut self, _origin: RelocExpr<SR>) {
+        unimplemented!()
     }
 }
 

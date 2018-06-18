@@ -523,6 +523,10 @@ mod tests {
         }
 
         fn into_object(self) {}
+
+        fn set_origin(&mut self, _origin: RelocExpr<()>) {
+            unimplemented!()
+        }
     }
 
     impl<'a> DiagnosticsListener<()> for Mock<'a> {
