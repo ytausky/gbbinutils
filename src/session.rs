@@ -1,6 +1,6 @@
 use std::{borrow::{Borrow, BorrowMut},
           marker};
-use {backend, diagnostics, frontend};
+use {backend, diagnostics, frontend, instruction};
 
 pub trait Session {
     type TokenRef: diagnostics::SourceInterval;
@@ -13,6 +13,7 @@ pub trait Session {
         name: (impl Into<String>, Self::TokenRef),
         tokens: Vec<(frontend::Token, Self::TokenRef)>,
     );
+    fn set_origin(&mut self, origin: instruction::RelocExpr<Self::TokenRef>);
 }
 
 #[derive(Debug, PartialEq)]
@@ -102,5 +103,9 @@ where
         tokens: Vec<(frontend::Token, Self::TokenRef)>,
     ) {
         self.frontend.borrow_mut().define_macro(name, tokens)
+    }
+
+    fn set_origin(&mut self, origin: instruction::RelocExpr<Self::TokenRef>) {
+        self.backend.borrow_mut().set_origin(origin)
     }
 }

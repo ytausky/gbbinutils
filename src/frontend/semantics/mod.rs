@@ -83,6 +83,7 @@ impl<'a, F: Session + 'a> syntax::CommandContext<F::TokenRef> for CommandActions
             (Command::Db, _) => analyze_data(Width::Byte, self.args, &mut self.parent),
             (Command::Dw, _) => analyze_data(Width::Word, self.args, &mut self.parent),
             (Command::Include, _) => analyze_include(self.args, &mut self.parent),
+            (Command::Org, _) => analyze_org(self.args, &mut self.parent),
             name => analyze_command(name, self.args, &mut self.parent),
         }
         self.parent
@@ -110,6 +111,16 @@ fn analyze_include<'a, F: Session + 'a>(
     actions: &mut SemanticActions<'a, F>,
 ) {
     actions.session.analyze_chunk(reduce_include(args));
+}
+
+fn analyze_org<'a, S: Session + 'a>(
+    args: CommandArgs<S>,
+    actions: &mut SemanticActions<'a, S>,
+) {
+    let mut args = args.into_iter();
+    let expr = operand::analyze_reloc_expr(args.next().unwrap()).unwrap();
+    assert!(args.next().is_none());
+    actions.session.set_origin(expr)
 }
 
 fn analyze_command<'a, F: Session + 'a>(
@@ -263,6 +274,7 @@ mod tests {
         EmitDiagnostic(Diagnostic<()>),
         EmitItem(backend::Item<()>),
         Label(String),
+        SetOrigin(RelocExpr<()>),
     }
 
     impl Session for TestFrontend {
@@ -294,6 +306,10 @@ mod tests {
                 tokens.into_iter().map(|(t, _)| t).collect(),
             ))
         }
+
+        fn set_origin(&mut self, origin: RelocExpr<()>) {
+            self.0.push(TestOperation::SetOrigin(origin))
+        }
     }
 
     impl SourceInterval for () {
@@ -319,6 +335,21 @@ mod tests {
                 Some(())
             )))]
         )
+    }
+
+    #[test]
+    fn set_origin() {
+        let origin = 0x3000;
+        let actions = collect_semantic_actions(|actions| {
+            let mut command = actions.enter_command((Command::Org, ()));
+            let expr = ParsedExpr {
+                node: ExprNode::Literal(Literal::Number(origin)),
+                interval: (),
+            };
+            command.add_argument(expr);
+            command.exit();
+        });
+        assert_eq!(actions, [TestOperation::SetOrigin(RelocExpr::Literal(origin, ()))])
     }
 
     #[test]

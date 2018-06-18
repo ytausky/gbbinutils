@@ -89,7 +89,7 @@ fn try_deref_operand_keyword(keyword: OperandKeyword) -> Result<AtomKind, Keywor
     }
 }
 
-fn analyze_reloc_expr<SI: Clone>(
+pub fn analyze_reloc_expr<SI: Clone>(
     expr: ParsedExpr<String, SI>,
 ) -> Result<RelocExpr<SI>, Diagnostic<SI>> {
     match expr.node {

@@ -2,7 +2,7 @@ use codebase::{BufId, BufRange, LineNumber, TextBuf, TextCache, TextRange};
 use std::{cell::RefCell, cmp, fmt, rc::Rc};
 use Width;
 
-pub trait SourceInterval: Clone {
+pub trait SourceInterval: Clone + fmt::Debug {
     fn extend(&self, other: &Self) -> Self;
 }
 
