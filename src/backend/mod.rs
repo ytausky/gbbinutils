@@ -51,7 +51,27 @@ pub struct Rom {
 }
 
 pub struct SymbolTable {
-    symbols: HashMap<String, Value>,
+    symbols: Vec<Value>,
+    names: HashMap<String, SymbolId>,
+}
+
+#[derive(Clone)]
+struct SymbolId(usize);
+
+trait SymbolRef {
+    fn to_symbol_id(&self, table: &SymbolTable) -> Option<SymbolId>;
+}
+
+impl SymbolRef for SymbolId {
+    fn to_symbol_id(&self, _: &SymbolTable) -> Option<SymbolId> {
+        Some((*self).clone())
+    }
+}
+
+impl<Q: Borrow<str>> SymbolRef for Q {
+    fn to_symbol_id(&self, table: &SymbolTable) -> Option<SymbolId> {
+        table.names.get(self.borrow()).cloned()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -90,21 +110,28 @@ impl AddAssign<Value> for Value {
 impl SymbolTable {
     fn new() -> SymbolTable {
         SymbolTable {
-            symbols: HashMap::new(),
+            symbols: Vec::new(),
+            names: HashMap::new(),
         }
     }
 
     fn define(&mut self, name: impl Into<String>, value: Value) {
-        self.symbols.insert(name.into(), value);
+        let id = SymbolId(self.symbols.len());
+        self.symbols.push(value);
+        self.names.insert(name.into(), id);
     }
 
-    #[cfg(test)]
-    fn get(&self, name: impl Borrow<str>) -> Option<&Value> {
-        self.symbols.get(name.borrow())
+    fn get(&self, key: impl SymbolRef) -> Option<&Value> {
+        key.to_symbol_id(self).map(|SymbolId(id)| &self.symbols[id])
     }
 
-    fn refine(&mut self, name: impl Borrow<str>, value: Value) -> bool {
-        let stored_value = self.symbols.get_mut(name.borrow()).unwrap();
+    fn get_mut(&mut self, key: impl SymbolRef) -> Option<&mut Value> {
+        key.to_symbol_id(self)
+            .map(move |SymbolId(id)| &mut self.symbols[id])
+    }
+
+    fn refine(&mut self, key: impl SymbolRef, value: Value) -> bool {
+        let stored_value = self.get_mut(key).unwrap();
         let was_refined = value.len() < stored_value.len();
         *stored_value = value;
         was_refined
@@ -143,10 +170,6 @@ impl SymbolTable {
             })
         }
     }
-
-    fn symbol_value(&self, name: &str) -> Option<&Value> {
-        self.symbols.get(name)
-    }
 }
 
 struct UndefinedSymbol<SR>(String, SR);
@@ -158,7 +181,7 @@ impl<SR: Clone> RelocExpr<SR> {
             RelocExpr::LocationCounter => panic!(),
             RelocExpr::Subtract(_, _) => panic!(),
             RelocExpr::Symbol(symbol, expr_ref) => symbol_table
-                .symbol_value(&symbol)
+                .get(symbol.as_str())
                 .cloned()
                 .ok_or_else(|| UndefinedSymbol((*symbol).clone(), (*expr_ref).clone())),
         }
@@ -193,7 +216,7 @@ fn collect_symbols<SR: Clone>(object: &Object<SR>) -> SymbolTable {
         for node in &chunk.items {
             match node {
                 Node::Label(symbol, _) => {
-                    symbols.symbols.insert(symbol.to_string(), location.clone());
+                    symbols.define(symbol.as_str(), location.clone());
                 }
                 node => location += node.size(&symbols),
             }
