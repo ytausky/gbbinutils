@@ -244,7 +244,7 @@ enum Mnemonic {
 }
 
 impl AluOperation {
-    fn expected_operands(&self) -> usize {
+    fn expected_operands(self) -> usize {
         if self.implicit_dest() {
             1
         } else {
@@ -252,7 +252,7 @@ impl AluOperation {
         }
     }
 
-    fn implicit_dest(&self) -> bool {
+    fn implicit_dest(self) -> bool {
         use instruction::AluOperation::*;
         match self {
             Add => false,

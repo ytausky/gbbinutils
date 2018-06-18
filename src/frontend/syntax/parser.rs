@@ -39,8 +39,8 @@ impl<S: TokenSpec> Token<S> {
 
 type Lookahead = Option<Token<()>>;
 
-fn follows_line(lookahead: &Lookahead) -> bool {
-    match *lookahead {
+fn follows_line(lookahead: Lookahead) -> bool {
+    match lookahead {
         None | Some(Token::Eol) => true,
         _ => false,
     }
@@ -84,15 +84,15 @@ impl<S: TokenSpec, T: SourceInterval, I: Iterator<Item = (Token<S>, T)>> Parser<
         self.tokens.next().unwrap()
     }
 
-    fn expect(&mut self, expected: &Lookahead) -> I::Item {
-        assert_eq!(self.lookahead(), *expected);
+    fn expect(&mut self, expected: Lookahead) -> I::Item {
+        assert_eq!(self.lookahead(), expected);
         self.bump()
     }
 
     fn parse_file<F: FileContext<S, T>>(&mut self, actions: F) {
         self.parse_list(
-            &Some(Token::Eol),
-            Option::is_none,
+            Some(Token::Eol),
+            |l| l.is_none(),
             |p, c| p.parse_line(c),
             actions,
         );
@@ -119,7 +119,7 @@ impl<S: TokenSpec, T: SourceInterval, I: Iterator<Item = (Token<S>, T)>> Parser<
 
     fn parse_unlabeled_line<F: FileContext<S, T>>(&mut self, actions: F) -> F {
         match self.lookahead() {
-            t if follows_line(&t) => actions,
+            t if follows_line(t) => actions,
             Some(Token::Command(())) => self.parse_command(actions),
             Some(Token::Ident(())) => {
                 let ident = self.expect_ident();
@@ -131,14 +131,14 @@ impl<S: TokenSpec, T: SourceInterval, I: Iterator<Item = (Token<S>, T)>> Parser<
     }
 
     fn parse_macro_def<F: FileContext<S, T>>(&mut self, actions: F) -> F {
-        self.expect(&Some(Token::Macro));
+        self.expect(Some(Token::Macro));
         let name = self.expect_ident();
         let mut macro_def_context = actions.enter_macro_def(name);
-        self.expect(&Some(Token::Eol));
+        self.expect(Some(Token::Eol));
         while self.lookahead() != Some(Token::Endm) {
             macro_def_context.push_token(self.bump())
         }
-        self.expect(&Some(Token::Endm));
+        self.expect(Some(Token::Endm));
         macro_def_context.exit()
     }
 
@@ -161,7 +161,7 @@ impl<S: TokenSpec, T: SourceInterval, I: Iterator<Item = (Token<S>, T)>> Parser<
 
     fn parse_argument_list<C: CommandContext<T, TokenSpec = S>>(&mut self, actions: C) -> C {
         self.parse_list(
-            &Some(Token::Comma),
+            Some(Token::Comma),
             follows_line,
             |p, c| p.parse_argument(c),
             actions,
@@ -173,12 +173,12 @@ impl<S: TokenSpec, T: SourceInterval, I: Iterator<Item = (Token<S>, T)>> Parser<
         actions: M,
     ) -> M {
         self.parse_list(
-            &Some(Token::Comma),
+            Some(Token::Comma),
             follows_line,
             |p, actions| {
                 let mut arg_context = actions.enter_macro_arg();
                 let mut next_token = p.lookahead();
-                while next_token != Some(Token::Comma) && !follows_line(&next_token) {
+                while next_token != Some(Token::Comma) && !follows_line(next_token) {
                     arg_context.push_token(p.bump());
                     next_token = p.lookahead()
                 }
@@ -190,23 +190,23 @@ impl<S: TokenSpec, T: SourceInterval, I: Iterator<Item = (Token<S>, T)>> Parser<
 
     fn parse_list<FP, P, C>(
         &mut self,
-        delimiter: &Lookahead,
+        delimiter: Lookahead,
         mut follow: FP,
         mut parser: P,
         mut context: C,
     ) -> C
     where
-        FP: FnMut(&Lookahead) -> bool,
+        FP: FnMut(Lookahead) -> bool,
         P: FnMut(&mut Self, C) -> C,
     {
         let first_terminal = self.lookahead();
-        if !follow(&first_terminal) {
+        if !follow(first_terminal) {
             context = parser(self, context);
-            while self.lookahead() == *delimiter {
+            while self.lookahead() == delimiter {
                 self.bump();
                 context = parser(self, context)
             }
-            assert!(follow(&self.lookahead()));
+            assert!(follow(self.lookahead()));
         }
         context
     }
@@ -226,9 +226,9 @@ impl<S: TokenSpec, T: SourceInterval, I: Iterator<Item = (Token<S>, T)>> Parser<
     }
 
     fn parse_parenthesized_expression(&mut self) -> ParsedExpr<S, T> {
-        let (_, left) = self.expect(&Some(Token::OpeningParenthesis));
+        let (_, left) = self.expect(Some(Token::OpeningParenthesis));
         let expr = self.parse_expression();
-        let (_, right) = self.expect(&Some(Token::ClosingParenthesis));
+        let (_, right) = self.expect(Some(Token::ClosingParenthesis));
         ParsedExpr {
             node: ExprNode::Parenthesized(Box::new(expr)),
             interval: left.extend(&right),

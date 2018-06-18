@@ -139,7 +139,7 @@ impl SymbolTable {
 
     fn resolve_expr_item<SR: SourceInterval>(
         &self,
-        expr: RelocExpr<SR>,
+        expr: &RelocExpr<SR>,
         width: Width,
     ) -> Result<Data, Diagnostic<SR>> {
         let range = expr.source_interval();
@@ -253,15 +253,17 @@ fn resolve_section<SR: SourceInterval>(
         .into_iter()
         .flat_map(|item| match item {
             Node::Byte(value) => Some(Data::Byte(value)),
-            Node::Expr(expr, width) => Some(symbols.resolve_expr_item(expr, width).unwrap_or_else(
-                |diagnostic| {
-                    diagnostics.emit_diagnostic(diagnostic);
-                    match width {
-                        Width::Byte => Data::Byte(0),
-                        Width::Word => Data::Word(0),
-                    }
-                },
-            )),
+            Node::Expr(expr, width) => Some(
+                symbols
+                    .resolve_expr_item(&expr, width)
+                    .unwrap_or_else(|diagnostic| {
+                        diagnostics.emit_diagnostic(diagnostic);
+                        match width {
+                            Width::Byte => Data::Byte(0),
+                            Width::Word => Data::Word(0),
+                        }
+                    }),
+            ),
             Node::Label(..) => None,
             Node::LdInlineAddr(..) => panic!(),
         })
