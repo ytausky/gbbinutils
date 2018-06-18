@@ -8,6 +8,7 @@ pub struct Object<SR> {
 
 pub struct Chunk<R> {
     name: String,
+    origin: Option<RelocExpr<R>>,
     pub items: Vec<Node<R>>,
 }
 
@@ -48,6 +49,7 @@ impl<SR> Chunk<SR> {
     pub fn new(name: impl Into<String>) -> Chunk<SR> {
         Chunk {
             name: name.into(),
+            origin: None,
             items: Vec::new(),
         }
     }
@@ -66,5 +68,28 @@ impl<SR> ObjectBuilder<SR> {
         let mut object = Object::new();
         object.add_chunk("__default");
         ObjectBuilder { object }
+    }
+
+    #[cfg(test)]
+    fn push(&mut self, node: Node<SR>) {
+        self.object.chunks.last_mut().unwrap().items.push(node)
+    }
+
+    #[cfg(test)]
+    fn build(self) -> Object<SR> {
+        self.object
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_origin_by_default() {
+        let mut builder = ObjectBuilder::<()>::new();
+        builder.push(Node::Byte(0xcd));
+        let object = builder.build();
+        assert_eq!(object.chunks[0].origin, None)
     }
 }
