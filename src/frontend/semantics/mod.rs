@@ -113,10 +113,7 @@ fn analyze_include<'a, F: Session + 'a>(
     actions.session.analyze_chunk(reduce_include(args));
 }
 
-fn analyze_org<'a, S: Session + 'a>(
-    args: CommandArgs<S>,
-    actions: &mut SemanticActions<'a, S>,
-) {
+fn analyze_org<'a, S: Session + 'a>(args: CommandArgs<S>, actions: &mut SemanticActions<'a, S>) {
     let mut args = args.into_iter();
     let expr = operand::analyze_reloc_expr(args.next().unwrap()).unwrap();
     assert!(args.next().is_none());
@@ -349,7 +346,10 @@ mod tests {
             command.add_argument(expr);
             command.exit();
         });
-        assert_eq!(actions, [TestOperation::SetOrigin(RelocExpr::Literal(origin, ()))])
+        assert_eq!(
+            actions,
+            [TestOperation::SetOrigin(RelocExpr::Literal(origin, ()))]
+        )
     }
 
     #[test]

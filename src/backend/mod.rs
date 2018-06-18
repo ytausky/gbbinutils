@@ -275,18 +275,15 @@ impl<SR: SourceInterval> Backend<SR> for ObjectBuilder<SR> {
     type Object = Object<SR>;
 
     fn add_label(&mut self, label: (impl Into<String>, SR)) {
-        let chunk = self.object.chunks.last_mut().unwrap();
-        chunk.items.push(Node::Label(label.0.into(), label.1))
+        self.push(Node::Label(label.0.into(), label.1))
     }
 
     fn emit_item(&mut self, item: Item<SR>) {
-        let chunk = self.object.chunks.last_mut().unwrap();
-        item.lower()
-            .for_each(|data_item| chunk.items.push(data_item))
+        item.lower().for_each(|data_item| self.push(data_item))
     }
 
     fn into_object(self) -> Self::Object {
-        self.object
+        self.build()
     }
 
     fn set_origin(&mut self, _origin: RelocExpr<SR>) {
@@ -504,7 +501,7 @@ mod tests {
         let object = {
             let mut builder = ObjectBuilder::new();
             f(&mut builder);
-            link(builder.object, &diagnostics)
+            link(builder.build(), &diagnostics)
         };
         let diagnostics = diagnostics.diagnostics.into_inner().into_boxed_slice();
         (object, diagnostics)

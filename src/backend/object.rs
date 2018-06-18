@@ -60,7 +60,7 @@ impl<SR> Chunk<SR> {
 }
 
 pub struct ObjectBuilder<SR> {
-    pub object: Object<SR>,
+    object: Object<SR>,
 }
 
 impl<SR> ObjectBuilder<SR> {
@@ -70,13 +70,11 @@ impl<SR> ObjectBuilder<SR> {
         ObjectBuilder { object }
     }
 
-    #[cfg(test)]
-    fn push(&mut self, node: Node<SR>) {
+    pub fn push(&mut self, node: Node<SR>) {
         self.object.chunks.last_mut().unwrap().items.push(node)
     }
 
-    #[cfg(test)]
-    fn build(self) -> Object<SR> {
+    pub fn build(self) -> Object<SR> {
         self.object
     }
 }
