@@ -12,6 +12,7 @@ pub enum Instruction<R> {
     Nullary(Nullary),
     Pop(RegPair),
     Push(RegPair),
+    Rst(RelocExpr<R>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

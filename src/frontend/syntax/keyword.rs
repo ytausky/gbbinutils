@@ -22,6 +22,7 @@ pub enum Command {
     Push,
     Ret,
     Reti,
+    Rst,
     Stop,
     Xor,
 }

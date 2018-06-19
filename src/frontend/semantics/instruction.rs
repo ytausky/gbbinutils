@@ -54,6 +54,7 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>
             Branch(branch) => self.analyze_branch(branch),
             Ld => self.analyze_ld(),
             Nullary(instruction) => Ok(instruction.into()),
+            Rst => self.analyze_rst(),
             Stack(operation) => self.analyze_stack_operation(operation),
         }
     }
@@ -182,6 +183,13 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>
         }
     }
 
+    fn analyze_rst(&mut self) -> AnalysisResult<R> {
+        match self.expect_operand(1)? {
+            Operand::Const(expr) => Ok(Instruction::Rst(expr)),
+            _ => panic!(),
+        }
+    }
+
     fn expect_operand(&mut self, out_of: usize) -> Result<Operand<R>, Diagnostic<R>> {
         let actual = self.operands.seen();
         self.operands.next()?.ok_or_else(|| {
@@ -240,6 +248,7 @@ enum Mnemonic {
     IncDec(IncDec),
     Ld,
     Nullary(Nullary),
+    Rst,
     Stack(StackOperation),
 }
 
@@ -314,6 +323,7 @@ fn to_mnemonic(command: keyword::Command) -> Mnemonic {
         Push => Mnemonic::Stack(StackOperation::Push),
         Ret => Mnemonic::Branch(BranchKind::Ret),
         Reti => Mnemonic::Nullary(Nullary::Reti),
+        Rst => Mnemonic::Rst,
         Stop => Mnemonic::Nullary(Nullary::Stop),
         Xor => Mnemonic::Alu(AluOperation::Xor),
         _ => panic!(),
@@ -565,6 +575,12 @@ mod tests {
             AluOperation::Cp,
             AluSource::Immediate(expr),
         ))
+    }
+
+    #[test]
+    fn analyze_rst() {
+        let n = 3;
+        analyze(Command::Rst, vec![n.into()]).expect_instruction(Instruction::Rst(n.into()))
     }
 
     #[test]

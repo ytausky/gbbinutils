@@ -256,6 +256,7 @@ const KEYWORDS: &[(&str, Keyword)] = &[
     ("push", Keyword::Command(Command::Push)),
     ("ret", Keyword::Command(Command::Ret)),
     ("reti", Keyword::Command(Command::Reti)),
+    ("rst", Keyword::Command(Command::Rst)),
     ("sp", Keyword::Operand(OperandKeyword::Sp)),
     ("stop", Keyword::Command(Command::Stop)),
     ("xor", Keyword::Command(Command::Xor)),

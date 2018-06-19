@@ -79,6 +79,7 @@ impl<SR> Lower<SR> for Instruction<SR> {
             Nullary(nullary) => nullary.lower(),
             Pop(reg_pair) => LoweredItem::with_opcode(0xc1 | (encode_reg_pair(reg_pair) << 4)),
             Push(reg_pair) => LoweredItem::with_opcode(0xc5 | (encode_reg_pair(reg_pair) << 4)),
+            Rst(_) => panic!(),
         }
     }
 }
