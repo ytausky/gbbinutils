@@ -116,25 +116,29 @@ mod tests {
 
     #[test]
     fn new_object_has_no_chunks() {
-        let object = ObjectBuilder::<()>::new().build();
+        let object = build_object(|_| ());
         assert_eq!(object.chunks.len(), 0)
     }
 
     #[test]
     fn no_origin_by_default() {
-        let mut builder = ObjectBuilder::<()>::new();
-        builder.push(Node::Byte(0xcd));
-        let object = builder.build();
+        let object = build_object(|builder| builder.push(Node::Byte(0xcd)));
         assert_eq!(object.chunks[0].origin, None)
     }
 
     #[test]
     fn set_origin_determines_origin_of_new_chunk() {
         let origin = RelocExpr::Literal(0x3000, ());
-        let mut builder = ObjectBuilder::new();
-        builder.set_origin(origin.clone());
-        builder.push(Node::Byte(0xcd));
-        let object = builder.build();
+        let object = build_object(|builder| {
+            builder.set_origin(origin.clone());
+            builder.push(Node::Byte(0xcd))
+        });
         assert_eq!(object.chunks[0].origin, Some(origin))
+    }
+
+    fn build_object(f: impl FnOnce(&mut ObjectBuilder<()>)) -> Object<()> {
+        let mut builder = ObjectBuilder::new();
+        f(&mut builder);
+        builder.build()
     }
 }
