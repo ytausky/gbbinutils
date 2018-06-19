@@ -101,6 +101,13 @@ impl<SR> ObjectBuilder<SR> {
             }
         }
     }
+
+    #[cfg(test)]
+    fn set_origin(&mut self, origin: RelocExpr<SR>) {
+        self.state = Some(BuilderState::Pending {
+            origin: Some(origin),
+        })
+    }
 }
 
 #[cfg(test)]
@@ -119,5 +126,15 @@ mod tests {
         builder.push(Node::Byte(0xcd));
         let object = builder.build();
         assert_eq!(object.chunks[0].origin, None)
+    }
+
+    #[test]
+    fn set_origin_determines_origin_of_new_chunk() {
+        let origin = RelocExpr::Literal(0x3000, ());
+        let mut builder = ObjectBuilder::new();
+        builder.set_origin(origin.clone());
+        builder.push(Node::Byte(0xcd));
+        let object = builder.build();
+        assert_eq!(object.chunks[0].origin, Some(origin))
     }
 }
