@@ -1,5 +1,6 @@
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Command {
+    Adc,
     Add,
     And,
     Call,

@@ -29,6 +29,7 @@ pub enum Nullary {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum AluOperation {
     Add,
+    Adc,
     And,
     Cp,
     Xor,

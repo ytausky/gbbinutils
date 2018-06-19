@@ -130,6 +130,7 @@ fn encode_simple_alu_operation<SR>(operation: AluOperation, src: SimpleOperand) 
     use instruction::AluOperation::*;
     let opcode_base = match operation {
         Add => 0x80,
+        Adc => 0x88,
         And => 0xa0,
         Cp => 0xb8,
         Xor => 0xa8,
@@ -144,6 +145,7 @@ fn encode_immediate_alu_operation<SR>(
     use instruction::AluOperation::*;
     LoweredItem::with_opcode(match operation {
         Add => 0xc6,
+        Adc => 0xce,
         And => 0xe6,
         Cp => 0xfe,
         Xor => 0xee,
@@ -419,8 +421,13 @@ mod tests {
     fn encode_alu_immediate() {
         use instruction::AluOperation::*;
         let expr = RelocExpr::Literal(0x42, ());
-        [(Add, 0xc6), (And, 0xe6), (Cp, 0xfe), (Xor, 0xee)]
-            .iter()
+        [
+            (Add, 0xc6),
+            (Adc, 0xce),
+            (And, 0xe6),
+            (Cp, 0xfe),
+            (Xor, 0xee),
+        ].iter()
             .for_each(|(alu_operation, opcode)| {
                 test_instruction(
                     Instruction::Alu(*alu_operation, AluSource::Immediate(expr.clone())),
@@ -443,6 +450,22 @@ mod tests {
             (A, 0x87),
         ];
         test_simple_alu_encoding(AluOperation::Add, &src_and_opcode)
+    }
+
+    #[test]
+    fn encode_simple_adc() {
+        use instruction::SimpleOperand::*;
+        let src_and_opcode = vec![
+            (B, 0x88),
+            (C, 0x89),
+            (D, 0x8a),
+            (E, 0x8b),
+            (H, 0x8c),
+            (L, 0x8d),
+            (DerefHl, 0x8e),
+            (A, 0x8f),
+        ];
+        test_simple_alu_encoding(AluOperation::Adc, &src_and_opcode)
     }
 
     #[test]

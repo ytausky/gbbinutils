@@ -264,7 +264,7 @@ impl AluOperation {
     fn implicit_dest(self) -> bool {
         use instruction::AluOperation::*;
         match self {
-            Add => false,
+            Add | Adc => false,
             And | Cp | Xor => true,
         }
     }
@@ -305,6 +305,7 @@ enum TargetSelector<R> {
 fn to_mnemonic(command: keyword::Command) -> Mnemonic {
     use frontend::syntax::keyword::Command::*;
     match command {
+        Adc => Mnemonic::Alu(AluOperation::Adc),
         Add => Mnemonic::Alu(AluOperation::Add),
         And => Mnemonic::Alu(AluOperation::And),
         Call => Mnemonic::Branch(BranchKind::Call),
@@ -424,6 +425,7 @@ mod tests {
         fn from(alu_operation: AluOperation) -> Self {
             match alu_operation {
                 AluOperation::Add => Command::Add,
+                AluOperation::Adc => Command::Adc,
                 AluOperation::And => Command::And,
                 AluOperation::Cp => Command::Cp,
                 AluOperation::Xor => Command::Xor,
@@ -784,7 +786,7 @@ mod tests {
         })
     }
 
-    const ALU_OPERATIONS_WITH_A: &[AluOperation] = &[AluOperation::Add];
+    const ALU_OPERATIONS_WITH_A: &[AluOperation] = &[AluOperation::Add, AluOperation::Adc];
 
     const ALU_OPERATIONS_WITHOUT_A: &[AluOperation] =
         &[AluOperation::And, AluOperation::Cp, AluOperation::Xor];
