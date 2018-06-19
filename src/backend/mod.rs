@@ -254,6 +254,7 @@ fn resolve_section<SR: SourceInterval>(
         .into_iter()
         .flat_map(|item| match item {
             Node::Byte(value) => Some(Data::Byte(value)),
+            Node::Embedded(..) | Node::LdInlineAddr(..) => panic!(),
             Node::Expr(expr, width) => Some(
                 symbols
                     .resolve_expr_item(&expr, width)
@@ -266,7 +267,6 @@ fn resolve_section<SR: SourceInterval>(
                     }),
             ),
             Node::Label(..) => None,
-            Node::LdInlineAddr(..) | Node::Rst(..) => panic!(),
         })
         .collect()
 }
