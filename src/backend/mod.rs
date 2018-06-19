@@ -266,7 +266,7 @@ fn resolve_section<SR: SourceInterval>(
                     }),
             ),
             Node::Label(..) => None,
-            Node::LdInlineAddr(..) => panic!(),
+            Node::LdInlineAddr(..) | Node::Rst(..) => panic!(),
         })
         .collect()
 }

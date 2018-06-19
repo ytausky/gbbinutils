@@ -18,6 +18,7 @@ pub enum Node<SR> {
     Expr(RelocExpr<SR>, Width),
     Label(String, SR),
     LdInlineAddr(RelocExpr<SR>, Direction),
+    Rst(RelocExpr<SR>),
 }
 
 impl<SR> Object<SR> {
@@ -33,7 +34,7 @@ impl<SR> Object<SR> {
 impl<SR: Clone> Node<SR> {
     pub fn size(&self, symbols: &SymbolTable) -> Value {
         match self {
-            Node::Byte(_) => 1.into(),
+            Node::Byte(_) | Node::Rst(_) => 1.into(),
             Node::Expr(_, width) => width.len().into(),
             Node::Label(..) => 0.into(),
             Node::LdInlineAddr(expr, _) => match expr.evaluate(symbols) {

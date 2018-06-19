@@ -79,7 +79,7 @@ impl<SR> Lower<SR> for Instruction<SR> {
             Nullary(nullary) => nullary.lower(),
             Pop(reg_pair) => LoweredItem::with_opcode(0xc1 | (encode_reg_pair(reg_pair) << 4)),
             Push(reg_pair) => LoweredItem::with_opcode(0xc5 | (encode_reg_pair(reg_pair) << 4)),
-            Rst(_) => panic!(),
+            Rst(expr) => LoweredItem::One(Node::Rst(expr)),
         }
     }
 }
@@ -668,6 +668,12 @@ mod tests {
     #[test]
     fn encode_reti() {
         test_nullary(Reti, bytes([0xd9]))
+    }
+
+    #[test]
+    fn lower_rst() {
+        let n = RelocExpr::Literal(3, ());
+        test_instruction(Instruction::Rst(n.clone()), [Node::Rst(n)])
     }
 
     fn bytes(data: impl Borrow<[u8]>) -> Vec<Node<()>> {
