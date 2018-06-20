@@ -63,7 +63,7 @@ pub enum Ld<R> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SpecialLd<R> {
-    DerefReg16(Reg16),
+    DerefPtrReg(PtrReg),
     InlineAddr(RelocExpr<R>),
     RegIndex,
 }
@@ -88,6 +88,12 @@ pub enum RegPair {
     De,
     Hl,
     Af,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum PtrReg {
+    Bc,
+    De,
 }
 
 #[derive(Clone, Debug, PartialEq)]

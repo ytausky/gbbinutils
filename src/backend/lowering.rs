@@ -121,8 +121,8 @@ impl<SR> Lower<SR> for Ld<SR> {
 
 fn encode_special_ld<SR>(ld: SpecialLd<SR>, direction: Direction) -> LoweredItem<SR> {
     match ld {
-        SpecialLd::DerefReg16(reg16) => LoweredItem::with_opcode(
-            0x02 | encode_reg16(reg16) | (encode_direction(direction) >> 1),
+        SpecialLd::DerefPtrReg(ptr_reg) => LoweredItem::with_opcode(
+            0x02 | encode_ptr_reg(ptr_reg) | (encode_direction(direction) >> 1),
         ),
         SpecialLd::InlineAddr(addr) => LoweredItem::One(Node::LdInlineAddr(addr, direction)),
         SpecialLd::RegIndex => LoweredItem::with_opcode(0xe2 | encode_direction(direction)),
@@ -235,6 +235,14 @@ fn encode_reg_pair(reg_pair: RegPair) -> u8 {
         Hl => 0b10,
         Af => 0b11,
     }
+}
+
+fn encode_ptr_reg(ptr_reg: PtrReg) -> u8 {
+    use instruction::PtrReg::*;
+    (match ptr_reg {
+        Bc => 0b00,
+        De => 0b01,
+    }) << 4
 }
 
 fn encode_inc_dec(mode: IncDec) -> u8 {
@@ -422,16 +430,16 @@ mod tests {
 
     #[test]
     fn lower_ld_deref_reg16() {
-        use instruction::{Direction::*, Reg16::*};
+        use instruction::{Direction::*, PtrReg::*};
         let test_cases = &[
             (Bc, FromA, 0x02),
             (De, FromA, 0x12),
             (Bc, IntoA, 0x0a),
             (De, IntoA, 0x1a),
         ];
-        for &(reg16, direction, opcode) in test_cases {
+        for &(ptr_reg, direction, opcode) in test_cases {
             test_instruction(
-                Ld(Special(SpecialLd::DerefReg16(reg16), direction)),
+                Ld(Special(SpecialLd::DerefPtrReg(ptr_reg), direction)),
                 bytes([opcode]),
             )
         }

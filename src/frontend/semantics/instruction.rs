@@ -233,7 +233,7 @@ fn analyze_special_ld<R>(other: Operand<R>, direction: Direction) -> AnalysisRes
         match other {
             Operand::Deref(expr) => SpecialLd::InlineAddr(expr),
             Operand::Atom(AtomKind::DerefC, _) => SpecialLd::RegIndex,
-            Operand::Atom(AtomKind::DerefReg16(reg16), _) => SpecialLd::DerefReg16(reg16),
+            Operand::Atom(AtomKind::DerefPtrReg(ptr_reg), _) => SpecialLd::DerefPtrReg(ptr_reg),
             _ => panic!(),
         },
         direction,
@@ -469,6 +469,15 @@ mod tests {
         }
     }
 
+    impl From<PtrReg> for keyword::OperandKeyword {
+        fn from(ptr_reg: PtrReg) -> Self {
+            match ptr_reg {
+                PtrReg::Bc => Bc,
+                PtrReg::De => De,
+            }
+        }
+    }
+
     impl From<Reg16> for keyword::OperandKeyword {
         fn from(reg16: Reg16) -> Self {
             match reg16 {
@@ -480,9 +489,12 @@ mod tests {
         }
     }
 
-    impl From<Reg16> for ParsedExpr<String, Marking> {
-        fn from(reg16: Reg16) -> Self {
-            literal(reg16.into())
+    impl<T> From<T> for ParsedExpr<String, Marking>
+    where
+        keyword::OperandKeyword: From<T>,
+    {
+        fn from(src: T) -> Self {
+            literal(src.into())
         }
     }
 
@@ -691,26 +703,32 @@ mod tests {
     }
 
     fn describe_ld_deref_reg16_instructions() -> impl Iterator<Item = InstructionDescriptor> {
-        [Reg16::Bc, Reg16::De]
+        PTR_REGS
             .iter()
-            .flat_map(|&addr| describe_ld_deref_reg16(addr))
+            .flat_map(|&addr| describe_ld_deref_ptr_reg(addr))
     }
 
-    fn describe_ld_deref_reg16(reg16: Reg16) -> impl Iterator<Item = InstructionDescriptor> {
+    fn describe_ld_deref_ptr_reg(ptr_reg: PtrReg) -> impl Iterator<Item = InstructionDescriptor> {
         vec![
             (
                 (
                     Command::Ld,
-                    vec![deref(ParsedExpr::from(reg16)), literal(A)],
+                    vec![deref(ParsedExpr::from(ptr_reg)), literal(A)],
                 ),
-                Instruction::Ld(Ld::Special(SpecialLd::DerefReg16(reg16), Direction::FromA)),
+                Instruction::Ld(Ld::Special(
+                    SpecialLd::DerefPtrReg(ptr_reg),
+                    Direction::FromA,
+                )),
             ),
             (
                 (
                     Command::Ld,
-                    vec![literal(A), deref(ParsedExpr::from(reg16))],
+                    vec![literal(A), deref(ParsedExpr::from(ptr_reg))],
                 ),
-                Instruction::Ld(Ld::Special(SpecialLd::DerefReg16(reg16), Direction::IntoA)),
+                Instruction::Ld(Ld::Special(
+                    SpecialLd::DerefPtrReg(ptr_reg),
+                    Direction::IntoA,
+                )),
             ),
         ].into_iter()
     }
@@ -838,6 +856,8 @@ mod tests {
     const REG16: &[Reg16] = &[Reg16::Bc, Reg16::De, Reg16::Hl, Reg16::Sp];
 
     const REG_PAIRS: &[RegPair] = &[RegPair::Bc, RegPair::De, RegPair::Hl, RegPair::Af];
+
+    const PTR_REGS: &[PtrReg] = &[PtrReg::Bc, PtrReg::De];
 
     const BRANCHES: &[BranchKind] = &[
         BranchKind::Call,

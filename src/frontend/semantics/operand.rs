@@ -1,6 +1,6 @@
 use diagnostics::{Diagnostic, KeywordOperandCategory, Message, Source, SourceInterval};
 use frontend::syntax::{keyword::OperandKeyword, ExprNode, Literal, ParsedExpr};
-use instruction::{Condition, Reg16, RegPair, RelocExpr, SimpleOperand};
+use instruction::{Condition, PtrReg, Reg16, RegPair, RelocExpr, SimpleOperand};
 
 #[derive(Debug, PartialEq)]
 pub enum Operand<R> {
@@ -25,7 +25,7 @@ pub enum AtomKind {
     Condition(Condition),
     Reg16(Reg16),
     RegPair(RegPair),
-    DerefReg16(Reg16),
+    DerefPtrReg(PtrReg),
     DerefC,
 }
 
@@ -82,9 +82,9 @@ fn analyze_deref_operand_keyword<SI>(
 fn try_deref_operand_keyword(keyword: OperandKeyword) -> Result<AtomKind, KeywordOperandCategory> {
     use frontend::syntax::OperandKeyword::*;
     match keyword {
-        Bc => Ok(AtomKind::DerefReg16(Reg16::Bc)),
+        Bc => Ok(AtomKind::DerefPtrReg(PtrReg::Bc)),
         C => Ok(AtomKind::DerefC),
-        De => Ok(AtomKind::DerefReg16(Reg16::De)),
+        De => Ok(AtomKind::DerefPtrReg(PtrReg::De)),
         Hl => Ok(AtomKind::Simple(SimpleOperand::DerefHl)),
         A | B | D | E | H | L | Sp => Err(KeywordOperandCategory::Reg),
         Af => Err(KeywordOperandCategory::RegPair),
@@ -194,25 +194,25 @@ mod tests {
 
     #[test]
     fn analyze_deref_bc() {
-        analyze_deref_reg16(Reg16::Bc)
+        analyze_deref_ptr_reg(PtrReg::Bc)
     }
 
     #[test]
     fn analyze_deref_de() {
-        analyze_deref_reg16(Reg16::De)
+        analyze_deref_ptr_reg(PtrReg::De)
     }
 
-    fn analyze_deref_reg16(reg16: Reg16) {
+    fn analyze_deref_ptr_reg(ptr_reg: PtrReg) {
         let parsed_expr = ParsedExpr {
             node: ExprNode::Parenthesized(Box::new(ParsedExpr {
-                node: ExprNode::Literal(Literal::Operand(reg16.into())),
+                node: ExprNode::Literal(Literal::Operand(ptr_reg.into())),
                 interval: 0,
             })),
             interval: 1,
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Ok(Operand::Atom(AtomKind::DerefReg16(reg16), 1))
+            Ok(Operand::Atom(AtomKind::DerefPtrReg(ptr_reg), 1))
         )
     }
 
