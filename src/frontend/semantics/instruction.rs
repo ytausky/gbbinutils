@@ -233,6 +233,7 @@ fn analyze_special_ld<R>(other: Operand<R>, direction: Direction) -> AnalysisRes
         match other {
             Operand::Deref(expr) => SpecialLd::InlineAddr(expr),
             Operand::Atom(AtomKind::DerefC, _) => SpecialLd::RegIndex,
+            Operand::Atom(AtomKind::DerefReg16(reg16), _) => SpecialLd::DerefReg16(reg16),
             _ => panic!(),
         },
         direction,
@@ -604,6 +605,7 @@ mod tests {
         descriptors.extend(describe_ld_simple_simple_instructions());
         descriptors.extend(describe_ld_simple_immediate_instructions());
         descriptors.extend(describe_ld_reg16_immediate_instructions());
+        descriptors.extend(describe_ld_deref_reg16_instructions());
         descriptors.extend(describe_alu_simple_instructions());
         descriptors.extend(describe_add_hl_reg16_instructions());
         descriptors.extend(describe_branch_instuctions());
@@ -686,6 +688,31 @@ mod tests {
             (Command::Ld, vec![ParsedExpr::from(dest), value.into()]),
             Instruction::Ld(Ld::Immediate16(dest, symbol(value))),
         )
+    }
+
+    fn describe_ld_deref_reg16_instructions() -> impl Iterator<Item = InstructionDescriptor> {
+        [Reg16::Bc, Reg16::De]
+            .iter()
+            .flat_map(|&addr| describe_ld_deref_reg16(addr))
+    }
+
+    fn describe_ld_deref_reg16(reg16: Reg16) -> impl Iterator<Item = InstructionDescriptor> {
+        vec![
+            (
+                (
+                    Command::Ld,
+                    vec![deref(ParsedExpr::from(reg16)), literal(A)],
+                ),
+                Instruction::Ld(Ld::Special(SpecialLd::DerefReg16(reg16), Direction::FromA)),
+            ),
+            (
+                (
+                    Command::Ld,
+                    vec![literal(A), deref(ParsedExpr::from(reg16))],
+                ),
+                Instruction::Ld(Ld::Special(SpecialLd::DerefReg16(reg16), Direction::IntoA)),
+            ),
+        ].into_iter()
     }
 
     fn describe_alu_simple_instructions() -> impl Iterator<Item = InstructionDescriptor> {

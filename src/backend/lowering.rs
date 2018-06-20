@@ -121,6 +121,7 @@ impl<SR> Lower<SR> for Ld<SR> {
 
 fn encode_special_ld<SR>(ld: SpecialLd<SR>, direction: Direction) -> LoweredItem<SR> {
     match ld {
+        SpecialLd::DerefReg16(..) => panic!(),
         SpecialLd::InlineAddr(addr) => LoweredItem::One(Node::LdInlineAddr(addr, direction)),
         SpecialLd::RegIndex => LoweredItem::with_opcode(0xe2 | encode_direction(direction)),
     }
