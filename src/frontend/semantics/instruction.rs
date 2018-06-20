@@ -474,6 +474,8 @@ mod tests {
             match ptr_reg {
                 PtrReg::Bc => Bc,
                 PtrReg::De => De,
+                PtrReg::Hli => Hli,
+                PtrReg::Hld => Hld,
             }
         }
     }
@@ -857,7 +859,7 @@ mod tests {
 
     const REG_PAIRS: &[RegPair] = &[RegPair::Bc, RegPair::De, RegPair::Hl, RegPair::Af];
 
-    const PTR_REGS: &[PtrReg] = &[PtrReg::Bc, PtrReg::De];
+    const PTR_REGS: &[PtrReg] = &[PtrReg::Bc, PtrReg::De, PtrReg::Hli, PtrReg::Hld];
 
     const BRANCHES: &[BranchKind] = &[
         BranchKind::Call,

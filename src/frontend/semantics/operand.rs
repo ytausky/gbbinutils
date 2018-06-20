@@ -86,6 +86,8 @@ fn try_deref_operand_keyword(keyword: OperandKeyword) -> Result<AtomKind, Keywor
         C => Ok(AtomKind::DerefC),
         De => Ok(AtomKind::DerefPtrReg(PtrReg::De)),
         Hl => Ok(AtomKind::Simple(SimpleOperand::DerefHl)),
+        Hld => Ok(AtomKind::DerefPtrReg(PtrReg::Hld)),
+        Hli => Ok(AtomKind::DerefPtrReg(PtrReg::Hli)),
         A | B | D | E | H | L | Sp => Err(KeywordOperandCategory::Reg),
         Af => Err(KeywordOperandCategory::RegPair),
         Nc | Nz | Z => Err(KeywordOperandCategory::ConditionCode),
@@ -140,6 +142,7 @@ fn analyze_keyword_operand<R>(
             Stack => AtomKind::RegPair(RegPair::Hl),
             _ => AtomKind::Reg16(Reg16::Hl),
         },
+        Hld | Hli => panic!(),
         L => AtomKind::Simple(SimpleOperand::L),
         Nc => AtomKind::Condition(Condition::Nc),
         Nz => AtomKind::Condition(Condition::Nz),
@@ -200,6 +203,16 @@ mod tests {
     #[test]
     fn analyze_deref_de() {
         analyze_deref_ptr_reg(PtrReg::De)
+    }
+
+    #[test]
+    fn analyze_deref_hli() {
+        analyze_deref_ptr_reg(PtrReg::Hli)
+    }
+
+    #[test]
+    fn analyze_deref_hld() {
+        analyze_deref_ptr_reg(PtrReg::Hld)
     }
 
     fn analyze_deref_ptr_reg(ptr_reg: PtrReg) {

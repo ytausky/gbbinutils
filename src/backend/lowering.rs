@@ -242,6 +242,8 @@ fn encode_ptr_reg(ptr_reg: PtrReg) -> u8 {
     (match ptr_reg {
         Bc => 0b00,
         De => 0b01,
+        Hli => 0b10,
+        Hld => 0b11,
     }) << 4
 }
 
@@ -429,13 +431,17 @@ mod tests {
     }
 
     #[test]
-    fn lower_ld_deref_reg16() {
+    fn lower_ld_deref_ptr_reg() {
         use instruction::{Direction::*, PtrReg::*};
         let test_cases = &[
             (Bc, FromA, 0x02),
             (De, FromA, 0x12),
+            (Hli, FromA, 0x22),
+            (Hld, FromA, 0x32),
             (Bc, IntoA, 0x0a),
             (De, IntoA, 0x1a),
+            (Hli, IntoA, 0x2a),
+            (Hld, IntoA, 0x3a),
         ];
         for &(ptr_reg, direction, opcode) in test_cases {
             test_instruction(

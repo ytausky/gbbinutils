@@ -94,6 +94,8 @@ pub enum RegPair {
 pub enum PtrReg {
     Bc,
     De,
+    Hli,
+    Hld,
 }
 
 #[derive(Clone, Debug, PartialEq)]

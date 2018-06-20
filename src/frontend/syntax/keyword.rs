@@ -40,6 +40,8 @@ pub enum OperandKeyword {
     E,
     H,
     Hl,
+    Hld,
+    Hli,
     L,
     Nc,
     Nz,
