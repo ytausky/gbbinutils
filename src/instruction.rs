@@ -32,9 +32,11 @@ pub enum AluOperation {
     Add,
     Adc,
     Sub,
+    Sbc,
     And,
-    Cp,
     Xor,
+    Or,
+    Cp,
 }
 
 #[derive(Clone, Debug, PartialEq)]

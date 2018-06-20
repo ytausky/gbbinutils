@@ -278,8 +278,8 @@ impl AluOperation {
     fn implicit_dest(self) -> bool {
         use instruction::AluOperation::*;
         match self {
-            Add | Adc => false,
-            Sub | And | Cp | Xor => true,
+            Add | Adc | Sbc => false,
+            _ => true,
         }
     }
 }
@@ -335,12 +335,14 @@ fn to_mnemonic(command: keyword::Command) -> Mnemonic {
         Jr => Mnemonic::Branch(BranchKind::Jr),
         Ld => Mnemonic::Ld,
         Nop => Mnemonic::Nullary(Nullary::Nop),
+        Or => Mnemonic::Alu(AluOperation::Or),
         Pop => Mnemonic::Stack(StackOperation::Pop),
         Push => Mnemonic::Stack(StackOperation::Push),
         Res => Mnemonic::Bit(BitOperation::Res),
         Ret => Mnemonic::Branch(BranchKind::Ret),
         Reti => Mnemonic::Nullary(Nullary::Reti),
         Rst => Mnemonic::Rst,
+        Sbc => Mnemonic::Alu(AluOperation::Sbc),
         Set => Mnemonic::Bit(BitOperation::Set),
         Stop => Mnemonic::Nullary(Nullary::Stop),
         Sub => Mnemonic::Alu(AluOperation::Sub),
@@ -445,9 +447,11 @@ mod tests {
                 AluOperation::Add => Command::Add,
                 AluOperation::Adc => Command::Adc,
                 AluOperation::Sub => Command::Sub,
+                AluOperation::Sbc => Command::Sbc,
                 AluOperation::And => Command::And,
-                AluOperation::Cp => Command::Cp,
                 AluOperation::Xor => Command::Xor,
+                AluOperation::Or => Command::Or,
+                AluOperation::Cp => Command::Cp,
             }
         }
     }
@@ -887,13 +891,15 @@ mod tests {
         })
     }
 
-    const ALU_OPERATIONS_WITH_A: &[AluOperation] = &[AluOperation::Add, AluOperation::Adc];
+    const ALU_OPERATIONS_WITH_A: &[AluOperation] =
+        &[AluOperation::Add, AluOperation::Adc, AluOperation::Sbc];
 
     const ALU_OPERATIONS_WITHOUT_A: &[AluOperation] = &[
         AluOperation::Sub,
         AluOperation::And,
-        AluOperation::Cp,
         AluOperation::Xor,
+        AluOperation::Or,
+        AluOperation::Cp,
     ];
 
     const BIT_OPERATIONS: &[BitOperation] =

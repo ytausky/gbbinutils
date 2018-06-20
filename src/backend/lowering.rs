@@ -155,8 +155,10 @@ fn encode_alu_operation(operation: AluOperation) -> u8 {
         Add => 0b000,
         Adc => 0b001,
         Sub => 0b010,
+        Sbc => 0b011,
         And => 0b100,
         Xor => 0b101,
+        Or => 0b110,
         Cp => 0b111,
     }) << 3
 }
@@ -474,9 +476,11 @@ mod tests {
             (Add, 0xc6),
             (Adc, 0xce),
             (Sub, 0xd6),
+            (Sbc, 0xde),
             (And, 0xe6),
-            (Cp, 0xfe),
             (Xor, 0xee),
+            (Or, 0xf6),
+            (Cp, 0xfe),
         ].iter()
             .for_each(|(alu_operation, opcode)| {
                 test_instruction(
@@ -535,6 +539,22 @@ mod tests {
     }
 
     #[test]
+    fn encode_simple_sbc() {
+        use instruction::SimpleOperand::*;
+        let src_and_opcode = vec![
+            (B, 0x98),
+            (C, 0x99),
+            (D, 0x9a),
+            (E, 0x9b),
+            (H, 0x9c),
+            (L, 0x9d),
+            (DerefHl, 0x9e),
+            (A, 0x9f),
+        ];
+        test_simple_alu_encoding(AluOperation::Sbc, &src_and_opcode)
+    }
+
+    #[test]
     fn encode_simple_and() {
         use instruction::SimpleOperand::*;
         let src_and_opcode = vec![
@@ -551,22 +571,6 @@ mod tests {
     }
 
     #[test]
-    fn encode_simple_cp() {
-        use instruction::SimpleOperand::*;
-        let src_and_opcode = vec![
-            (B, 0xb8),
-            (C, 0xb9),
-            (D, 0xba),
-            (E, 0xbb),
-            (H, 0xbc),
-            (L, 0xbd),
-            (DerefHl, 0xbe),
-            (A, 0xbf),
-        ];
-        test_simple_alu_encoding(AluOperation::Cp, &src_and_opcode)
-    }
-
-    #[test]
     fn encode_simple_xor() {
         use instruction::SimpleOperand::*;
         let src_and_opcode = vec![
@@ -580,6 +584,38 @@ mod tests {
             (A, 0xaf),
         ];
         test_simple_alu_encoding(AluOperation::Xor, &src_and_opcode)
+    }
+
+    #[test]
+    fn encode_simple_or() {
+        use instruction::SimpleOperand::*;
+        let src_and_opcode = vec![
+            (B, 0xb0),
+            (C, 0xb1),
+            (D, 0xb2),
+            (E, 0xb3),
+            (H, 0xb4),
+            (L, 0xb5),
+            (DerefHl, 0xb6),
+            (A, 0xb7),
+        ];
+        test_simple_alu_encoding(AluOperation::Or, &src_and_opcode)
+    }
+
+    #[test]
+    fn encode_simple_cp() {
+        use instruction::SimpleOperand::*;
+        let src_and_opcode = vec![
+            (B, 0xb8),
+            (C, 0xb9),
+            (D, 0xba),
+            (E, 0xbb),
+            (H, 0xbc),
+            (L, 0xbd),
+            (DerefHl, 0xbe),
+            (A, 0xbf),
+        ];
+        test_simple_alu_encoding(AluOperation::Cp, &src_and_opcode)
     }
 
     fn test_simple_alu_encoding(operation: AluOperation, test_cases: &[(SimpleOperand, u8)]) {
