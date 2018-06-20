@@ -10,6 +10,7 @@ pub enum Instruction<R> {
     JpDerefHl,
     Branch(Branch<R>, Option<Condition>),
     Ld(Ld<R>),
+    Misc(MiscOperation, SimpleOperand),
     Nullary(Nullary),
     Pop(RegPair),
     Push(RegPair),
@@ -50,6 +51,18 @@ pub enum BitOperation {
     Bit,
     Set,
     Res,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum MiscOperation {
+    Rlc,
+    Rrc,
+    Rl,
+    Rr,
+    Sla,
+    Sra,
+    Swap,
+    Srl,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

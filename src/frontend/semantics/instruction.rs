@@ -54,6 +54,7 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>
             IncDec(mode) => self.analyze_inc_dec(mode),
             Branch(branch) => self.analyze_branch(branch),
             Ld => self.analyze_ld(),
+            Misc(operation) => self.analyze_misc(operation),
             Nullary(instruction) => Ok(instruction.into()),
             Rst => self.analyze_rst(),
             Stack(operation) => self.analyze_stack_operation(operation),
@@ -175,6 +176,14 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>
         }
     }
 
+    fn analyze_misc(&mut self, operation: MiscOperation) -> AnalysisResult<R> {
+        let operand = self.expect_operand(1)?;
+        match operand {
+            Operand::Atom(AtomKind::Simple(simple), _) => Ok(Instruction::Misc(operation, simple)),
+            _ => panic!(),
+        }
+    }
+
     fn analyze_stack_operation(&mut self, operation: StackOperation) -> AnalysisResult<R> {
         let reg_pair = match self.expect_operand(1)? {
             Operand::Atom(AtomKind::RegPair(reg_pair), _) => reg_pair,
@@ -261,6 +270,7 @@ enum Mnemonic {
     Branch(BranchKind),
     IncDec(IncDec),
     Ld,
+    Misc(MiscOperation),
     Nullary(Nullary),
     Rst,
     Stack(StackOperation),
@@ -341,11 +351,19 @@ fn to_mnemonic(command: keyword::Command) -> Mnemonic {
         Res => Mnemonic::Bit(BitOperation::Res),
         Ret => Mnemonic::Branch(BranchKind::Ret),
         Reti => Mnemonic::Nullary(Nullary::Reti),
+        Rl => Mnemonic::Misc(MiscOperation::Rl),
+        Rlc => Mnemonic::Misc(MiscOperation::Rlc),
+        Rr => Mnemonic::Misc(MiscOperation::Rr),
+        Rrc => Mnemonic::Misc(MiscOperation::Rrc),
         Rst => Mnemonic::Rst,
         Sbc => Mnemonic::Alu(AluOperation::Sbc),
         Set => Mnemonic::Bit(BitOperation::Set),
+        Sla => Mnemonic::Misc(MiscOperation::Sla),
+        Sra => Mnemonic::Misc(MiscOperation::Sra),
+        Srl => Mnemonic::Misc(MiscOperation::Srl),
         Stop => Mnemonic::Nullary(Nullary::Stop),
         Sub => Mnemonic::Alu(AluOperation::Sub),
+        Swap => Mnemonic::Misc(MiscOperation::Swap),
         Xor => Mnemonic::Alu(AluOperation::Xor),
         _ => panic!(),
     }
@@ -462,6 +480,21 @@ mod tests {
                 BitOperation::Bit => Command::Bit,
                 BitOperation::Set => Command::Set,
                 BitOperation::Res => Command::Res,
+            }
+        }
+    }
+
+    impl From<MiscOperation> for Command {
+        fn from(operation: MiscOperation) -> Self {
+            match operation {
+                MiscOperation::Rlc => Command::Rlc,
+                MiscOperation::Rrc => Command::Rrc,
+                MiscOperation::Rl => Command::Rl,
+                MiscOperation::Rr => Command::Rr,
+                MiscOperation::Sla => Command::Sla,
+                MiscOperation::Sra => Command::Sra,
+                MiscOperation::Swap => Command::Swap,
+                MiscOperation::Srl => Command::Srl,
             }
         }
     }
@@ -659,6 +692,7 @@ mod tests {
         descriptors.extend(describe_inc_dec8_instructions());
         descriptors.extend(describe_inc_dec16_instructions());
         descriptors.extend(describe_push_pop_instructions());
+        descriptors.extend(describe_misc_operation_instructions());
         descriptors
     }
 
@@ -891,6 +925,17 @@ mod tests {
         })
     }
 
+    fn describe_misc_operation_instructions() -> impl Iterator<Item = InstructionDescriptor> {
+        MISC_OPERATIONS.iter().flat_map(|&operation| {
+            SIMPLE_OPERANDS.iter().map(move |&operand| {
+                (
+                    (operation.into(), vec![operand.into()]),
+                    Instruction::Misc(operation, operand),
+                )
+            })
+        })
+    }
+
     const ALU_OPERATIONS_WITH_A: &[AluOperation] =
         &[AluOperation::Add, AluOperation::Adc, AluOperation::Sbc];
 
@@ -904,6 +949,17 @@ mod tests {
 
     const BIT_OPERATIONS: &[BitOperation] =
         &[BitOperation::Bit, BitOperation::Set, BitOperation::Res];
+
+    const MISC_OPERATIONS: &[MiscOperation] = &[
+        MiscOperation::Rlc,
+        MiscOperation::Rrc,
+        MiscOperation::Rl,
+        MiscOperation::Rr,
+        MiscOperation::Sla,
+        MiscOperation::Sra,
+        MiscOperation::Swap,
+        MiscOperation::Srl,
+    ];
 
     const SIMPLE_OPERANDS: &[SimpleOperand] = &[
         SimpleOperand::A,

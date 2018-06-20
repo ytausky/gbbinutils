@@ -83,6 +83,7 @@ impl<SR> Lower<SR> for Instruction<SR> {
             }
             JpDerefHl => LoweredItem::with_opcode(0xe9),
             Ld(ld) => ld.lower(),
+            Misc(..) => panic!(),
             Nullary(nullary) => nullary.lower(),
             Pop(reg_pair) => LoweredItem::with_opcode(0xc1 | (encode_reg_pair(reg_pair) << 4)),
             Push(reg_pair) => LoweredItem::with_opcode(0xc5 | (encode_reg_pair(reg_pair) << 4)),
