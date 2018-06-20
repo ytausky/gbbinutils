@@ -50,6 +50,7 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>
                 let first_operand = self.expect_operand(operation.expected_operands())?;
                 self.analyze_alu_instruction(operation, first_operand)
             }
+            Bit(operation) => self.analyze_bit_operation(operation),
             IncDec(mode) => self.analyze_inc_dec(mode),
             Branch(branch) => self.analyze_branch(branch),
             Ld => self.analyze_ld(),
@@ -108,6 +109,17 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>
                 Ok(Instruction::Alu(operation, AluSource::Simple(src)))
             }
             Operand::Const(expr) => Ok(Instruction::Alu(operation, AluSource::Immediate(expr))),
+            _ => panic!(),
+        }
+    }
+
+    fn analyze_bit_operation(&mut self, operation: BitOperation) -> AnalysisResult<R> {
+        let bit_number = self.expect_operand(2)?;
+        let operand = self.expect_operand(2)?;
+        match (bit_number, operand) {
+            (Operand::Const(expr), Operand::Atom(AtomKind::Simple(simple), _)) => {
+                Ok(Instruction::Bit(operation, expr, simple))
+            }
             _ => panic!(),
         }
     }
@@ -245,6 +257,7 @@ pub type AnalysisResult<R> = Result<Instruction<R>, Diagnostic<R>>;
 #[derive(Debug, PartialEq)]
 enum Mnemonic {
     Alu(AluOperation),
+    Bit(BitOperation),
     Branch(BranchKind),
     IncDec(IncDec),
     Ld,
@@ -309,6 +322,7 @@ fn to_mnemonic(command: keyword::Command) -> Mnemonic {
         Adc => Mnemonic::Alu(AluOperation::Adc),
         Add => Mnemonic::Alu(AluOperation::Add),
         And => Mnemonic::Alu(AluOperation::And),
+        Bit => Mnemonic::Bit(BitOperation::Bit),
         Call => Mnemonic::Branch(BranchKind::Call),
         Cp => Mnemonic::Alu(AluOperation::Cp),
         Daa => Mnemonic::Nullary(Nullary::Daa),
@@ -323,9 +337,11 @@ fn to_mnemonic(command: keyword::Command) -> Mnemonic {
         Nop => Mnemonic::Nullary(Nullary::Nop),
         Pop => Mnemonic::Stack(StackOperation::Pop),
         Push => Mnemonic::Stack(StackOperation::Push),
+        Res => Mnemonic::Bit(BitOperation::Res),
         Ret => Mnemonic::Branch(BranchKind::Ret),
         Reti => Mnemonic::Nullary(Nullary::Reti),
         Rst => Mnemonic::Rst,
+        Set => Mnemonic::Bit(BitOperation::Set),
         Stop => Mnemonic::Nullary(Nullary::Stop),
         Xor => Mnemonic::Alu(AluOperation::Xor),
         _ => panic!(),
@@ -430,6 +446,16 @@ mod tests {
                 AluOperation::And => Command::And,
                 AluOperation::Cp => Command::Cp,
                 AluOperation::Xor => Command::Xor,
+            }
+        }
+    }
+
+    impl From<BitOperation> for Command {
+        fn from(operation: BitOperation) -> Self {
+            match operation {
+                BitOperation::Bit => Command::Bit,
+                BitOperation::Set => Command::Set,
+                BitOperation::Res => Command::Res,
             }
         }
     }
@@ -622,6 +648,7 @@ mod tests {
         descriptors.extend(describe_ld_deref_reg16_instructions());
         descriptors.extend(describe_alu_simple_instructions());
         descriptors.extend(describe_add_hl_reg16_instructions());
+        descriptors.extend(describe_bit_operation_instructions());
         descriptors.extend(describe_branch_instuctions());
         descriptors.extend(describe_inc_dec8_instructions());
         descriptors.extend(describe_inc_dec16_instructions());
@@ -781,6 +808,25 @@ mod tests {
         )
     }
 
+    fn describe_bit_operation_instructions() -> impl Iterator<Item = InstructionDescriptor> {
+        BIT_OPERATIONS.iter().flat_map(|&operation| {
+            SIMPLE_OPERANDS
+                .iter()
+                .map(move |&operand| describe_bit_operation(operation, operand))
+        })
+    }
+
+    fn describe_bit_operation(
+        operation: BitOperation,
+        operand: SimpleOperand,
+    ) -> InstructionDescriptor {
+        let bit_number = 4;
+        (
+            (operation.into(), vec![bit_number.into(), operand.into()]),
+            Instruction::Bit(operation, bit_number.into(), operand),
+        )
+    }
+
     fn describe_branch_instuctions() -> Vec<InstructionDescriptor> {
         let mut descriptors = Vec::new();
         for &kind in BRANCHES.iter() {
@@ -843,6 +889,9 @@ mod tests {
 
     const ALU_OPERATIONS_WITHOUT_A: &[AluOperation] =
         &[AluOperation::And, AluOperation::Cp, AluOperation::Xor];
+
+    const BIT_OPERATIONS: &[BitOperation] =
+        &[BitOperation::Bit, BitOperation::Set, BitOperation::Res];
 
     const SIMPLE_OPERANDS: &[SimpleOperand] = &[
         SimpleOperand::A,
