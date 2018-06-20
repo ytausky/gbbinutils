@@ -468,14 +468,20 @@ mod tests {
         }
     }
 
-    impl From<Reg16> for ParsedExpr<String, Marking> {
+    impl From<Reg16> for keyword::OperandKeyword {
         fn from(reg16: Reg16) -> Self {
             match reg16 {
-                Reg16::Bc => literal(Bc),
-                Reg16::De => literal(De),
-                Reg16::Hl => literal(Hl),
-                Reg16::Sp => literal(Sp),
+                Reg16::Bc => Bc,
+                Reg16::De => De,
+                Reg16::Hl => Hl,
+                Reg16::Sp => Sp,
             }
+        }
+    }
+
+    impl From<Reg16> for ParsedExpr<String, Marking> {
+        fn from(reg16: Reg16) -> Self {
+            literal(reg16.into())
         }
     }
 

@@ -25,6 +25,7 @@ pub enum AtomKind {
     Condition(Condition),
     Reg16(Reg16),
     RegPair(RegPair),
+    DerefReg16(Reg16),
     DerefC,
 }
 
@@ -67,7 +68,7 @@ fn analyze_deref_operand_keyword<SI>(
     deref: SI,
 ) -> OperandResult<SI> {
     match try_deref_operand_keyword(keyword.0) {
-        Ok(atom) => Ok(Operand::Atom(atom, keyword.1)),
+        Ok(atom) => Ok(Operand::Atom(atom, deref)),
         Err(category) => Err(Diagnostic::new(
             Message::CannotDereference {
                 category,
@@ -81,10 +82,12 @@ fn analyze_deref_operand_keyword<SI>(
 fn try_deref_operand_keyword(keyword: OperandKeyword) -> Result<AtomKind, KeywordOperandCategory> {
     use frontend::syntax::OperandKeyword::*;
     match keyword {
+        Bc => Ok(AtomKind::DerefReg16(Reg16::Bc)),
         C => Ok(AtomKind::DerefC),
+        De => Ok(AtomKind::DerefReg16(Reg16::De)),
         Hl => Ok(AtomKind::Simple(SimpleOperand::DerefHl)),
         A | B | D | E | H | L | Sp => Err(KeywordOperandCategory::Reg),
-        Af | Bc | De => Err(KeywordOperandCategory::RegPair),
+        Af => Err(KeywordOperandCategory::RegPair),
         Nc | Nz | Z => Err(KeywordOperandCategory::ConditionCode),
     }
 }
@@ -188,6 +191,30 @@ impl<I: Iterator<Item = Result<T, E>>, T, E> OperandCounter<I> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn analyze_deref_bc() {
+        analyze_deref_reg16(Reg16::Bc)
+    }
+
+    #[test]
+    fn analyze_deref_de() {
+        analyze_deref_reg16(Reg16::De)
+    }
+
+    fn analyze_deref_reg16(reg16: Reg16) {
+        let parsed_expr = ParsedExpr {
+            node: ExprNode::Parenthesized(Box::new(ParsedExpr {
+                node: ExprNode::Literal(Literal::Operand(reg16.into())),
+                interval: 0,
+            })),
+            interval: 1,
+        };
+        assert_eq!(
+            analyze_operand(parsed_expr, Context::Other),
+            Ok(Operand::Atom(AtomKind::DerefReg16(reg16), 1))
+        )
+    }
 
     #[test]
     fn analyze_deref_af() {
