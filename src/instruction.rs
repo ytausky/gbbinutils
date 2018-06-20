@@ -31,6 +31,7 @@ pub enum Nullary {
 pub enum AluOperation {
     Add,
     Adc,
+    Sub,
     And,
     Cp,
     Xor,

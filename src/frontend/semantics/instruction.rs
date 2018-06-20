@@ -279,7 +279,7 @@ impl AluOperation {
         use instruction::AluOperation::*;
         match self {
             Add | Adc => false,
-            And | Cp | Xor => true,
+            Sub | And | Cp | Xor => true,
         }
     }
 }
@@ -343,6 +343,7 @@ fn to_mnemonic(command: keyword::Command) -> Mnemonic {
         Rst => Mnemonic::Rst,
         Set => Mnemonic::Bit(BitOperation::Set),
         Stop => Mnemonic::Nullary(Nullary::Stop),
+        Sub => Mnemonic::Alu(AluOperation::Sub),
         Xor => Mnemonic::Alu(AluOperation::Xor),
         _ => panic!(),
     }
@@ -443,6 +444,7 @@ mod tests {
             match alu_operation {
                 AluOperation::Add => Command::Add,
                 AluOperation::Adc => Command::Adc,
+                AluOperation::Sub => Command::Sub,
                 AluOperation::And => Command::And,
                 AluOperation::Cp => Command::Cp,
                 AluOperation::Xor => Command::Xor,
@@ -887,8 +889,12 @@ mod tests {
 
     const ALU_OPERATIONS_WITH_A: &[AluOperation] = &[AluOperation::Add, AluOperation::Adc];
 
-    const ALU_OPERATIONS_WITHOUT_A: &[AluOperation] =
-        &[AluOperation::And, AluOperation::Cp, AluOperation::Xor];
+    const ALU_OPERATIONS_WITHOUT_A: &[AluOperation] = &[
+        AluOperation::Sub,
+        AluOperation::And,
+        AluOperation::Cp,
+        AluOperation::Xor,
+    ];
 
     const BIT_OPERATIONS: &[BitOperation] =
         &[BitOperation::Bit, BitOperation::Set, BitOperation::Res];

@@ -137,29 +137,28 @@ fn encode_special_ld<SR>(ld: SpecialLd<SR>, direction: Direction) -> LoweredItem
 }
 
 fn encode_simple_alu_operation<SR>(operation: AluOperation, src: SimpleOperand) -> LoweredItem<SR> {
-    use instruction::AluOperation::*;
-    let opcode_base = match operation {
-        Add => 0x80,
-        Adc => 0x88,
-        And => 0xa0,
-        Cp => 0xb8,
-        Xor => 0xa8,
-    };
-    LoweredItem::with_opcode(opcode_base | encode_simple_operand(src))
+    LoweredItem::with_opcode(
+        0b10_000_000 | encode_alu_operation(operation) | encode_simple_operand(src),
+    )
 }
 
 fn encode_immediate_alu_operation<SR>(
     operation: AluOperation,
     expr: RelocExpr<SR>,
 ) -> LoweredItem<SR> {
+    LoweredItem::with_opcode(0b11_000_110 | encode_alu_operation(operation)).and_byte(expr)
+}
+
+fn encode_alu_operation(operation: AluOperation) -> u8 {
     use instruction::AluOperation::*;
-    LoweredItem::with_opcode(match operation {
-        Add => 0xc6,
-        Adc => 0xce,
-        And => 0xe6,
-        Cp => 0xfe,
-        Xor => 0xee,
-    }).and_byte(expr)
+    (match operation {
+        Add => 0b000,
+        Adc => 0b001,
+        Sub => 0b010,
+        And => 0b100,
+        Xor => 0b101,
+        Cp => 0b111,
+    }) << 3
 }
 
 fn encode_branch<SR>(branch: Branch<SR>, condition: Option<Condition>) -> LoweredItem<SR> {
@@ -474,6 +473,7 @@ mod tests {
         [
             (Add, 0xc6),
             (Adc, 0xce),
+            (Sub, 0xd6),
             (And, 0xe6),
             (Cp, 0xfe),
             (Xor, 0xee),
@@ -516,6 +516,22 @@ mod tests {
             (A, 0x8f),
         ];
         test_simple_alu_encoding(AluOperation::Adc, &src_and_opcode)
+    }
+
+    #[test]
+    fn lower_simple_sub() {
+        use instruction::SimpleOperand::*;
+        let src_and_opcode = vec![
+            (B, 0x90),
+            (C, 0x91),
+            (D, 0x92),
+            (E, 0x93),
+            (H, 0x94),
+            (L, 0x95),
+            (DerefHl, 0x96),
+            (A, 0x97),
+        ];
+        test_simple_alu_encoding(AluOperation::Sub, &src_and_opcode)
     }
 
     #[test]

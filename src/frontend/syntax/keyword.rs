@@ -28,6 +28,7 @@ pub enum Command {
     Rst,
     Set,
     Stop,
+    Sub,
     Xor,
 }
 
