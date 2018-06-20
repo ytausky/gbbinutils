@@ -67,6 +67,13 @@ impl<SR> Lower<SR> for Instruction<SR> {
             Alu(operation, AluSource::Immediate(expr)) => {
                 encode_immediate_alu_operation(operation, expr)
             }
+            Bit(operation, expr, operand) => LoweredItem::Two(
+                Node::Byte(0xcb),
+                Node::Embedded(
+                    encode_bit_operation(operation) | encode_simple_operand(operand),
+                    expr,
+                ),
+            ),
             Branch(branch, condition) => encode_branch(branch, condition),
             IncDec8(mode, operand) => LoweredItem::with_opcode(
                 0b00_000_100 | encode_inc_dec(mode) | (encode_simple_operand(operand) << 3),
@@ -178,6 +185,15 @@ fn encode_branch<SR>(branch: Branch<SR>, condition: Option<Condition>) -> Lowere
             Some(condition) => 0b11_000_000 | encode_condition(condition),
         }),
     }
+}
+
+fn encode_bit_operation(operation: BitOperation) -> u8 {
+    use instruction::BitOperation::*;
+    (match operation {
+        Bit => 0b01,
+        Set => 0b11,
+        Res => 0b10,
+    }) << 6
 }
 
 fn encode_condition(condition: Condition) -> u8 {
@@ -734,6 +750,44 @@ mod tests {
             Instruction::Rst(n.clone()),
             [Node::Embedded(0b11_000_111, n)],
         )
+    }
+
+    #[test]
+    fn lower_bit_operations() {
+        use instruction::{BitOperation::*, SimpleOperand::*};
+        let n = RelocExpr::Literal(3, ());
+        let test_cases = &[
+            (Bit, B, 0b01_000_000),
+            (Bit, C, 0b01_000_001),
+            (Bit, D, 0b01_000_010),
+            (Bit, E, 0b01_000_011),
+            (Bit, H, 0b01_000_100),
+            (Bit, L, 0b01_000_101),
+            (Bit, DerefHl, 0b01_000_110),
+            (Bit, A, 0b01_000_111),
+            (Set, B, 0b11_000_000),
+            (Set, C, 0b11_000_001),
+            (Set, D, 0b11_000_010),
+            (Set, E, 0b11_000_011),
+            (Set, H, 0b11_000_100),
+            (Set, L, 0b11_000_101),
+            (Set, DerefHl, 0b11_000_110),
+            (Set, A, 0b11_000_111),
+            (Res, B, 0b10_000_000),
+            (Res, C, 0b10_000_001),
+            (Res, D, 0b10_000_010),
+            (Res, E, 0b10_000_011),
+            (Res, H, 0b10_000_100),
+            (Res, L, 0b10_000_101),
+            (Res, DerefHl, 0b10_000_110),
+            (Res, A, 0b10_000_111),
+        ];
+        for &(operation, operand, opcode) in test_cases {
+            test_instruction(
+                Instruction::Bit(operation, n.clone(), operand),
+                [Node::Byte(0xcb), Node::Embedded(opcode, n.clone())],
+            )
+        }
     }
 
     fn bytes(data: impl Borrow<[u8]>) -> Vec<Node<()>> {

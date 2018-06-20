@@ -4,6 +4,7 @@ use diagnostics::{Source, SourceInterval};
 pub enum Instruction<R> {
     AddHl(Reg16),
     Alu(AluOperation, AluSource<R>),
+    Bit(BitOperation, RelocExpr<R>, SimpleOperand),
     IncDec8(IncDec, SimpleOperand),
     IncDec16(IncDec, Reg16),
     JpDerefHl,
@@ -39,6 +40,13 @@ pub enum AluOperation {
 pub enum AluSource<R> {
     Simple(SimpleOperand),
     Immediate(RelocExpr<R>),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum BitOperation {
+    Bit,
+    Set,
+    Res,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
