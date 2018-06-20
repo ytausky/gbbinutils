@@ -121,7 +121,9 @@ impl<SR> Lower<SR> for Ld<SR> {
 
 fn encode_special_ld<SR>(ld: SpecialLd<SR>, direction: Direction) -> LoweredItem<SR> {
     match ld {
-        SpecialLd::DerefReg16(..) => panic!(),
+        SpecialLd::DerefReg16(reg16) => LoweredItem::with_opcode(
+            0x02 | encode_reg16(reg16) | (encode_direction(direction) >> 1),
+        ),
         SpecialLd::InlineAddr(addr) => LoweredItem::One(Node::LdInlineAddr(addr, direction)),
         SpecialLd::RegIndex => LoweredItem::with_opcode(0xe2 | encode_direction(direction)),
     }
@@ -416,6 +418,23 @@ mod tests {
             Ld(Special(SpecialLd::RegIndex, Direction::IntoA)),
             bytes([0xf2]),
         )
+    }
+
+    #[test]
+    fn lower_ld_deref_reg16() {
+        use instruction::{Direction::*, Reg16::*};
+        let test_cases = &[
+            (Bc, FromA, 0x02),
+            (De, FromA, 0x12),
+            (Bc, IntoA, 0x0a),
+            (De, IntoA, 0x1a),
+        ];
+        for &(reg16, direction, opcode) in test_cases {
+            test_instruction(
+                Ld(Special(SpecialLd::DerefReg16(reg16), direction)),
+                bytes([opcode]),
+            )
+        }
     }
 
     #[test]
