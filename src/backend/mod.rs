@@ -25,7 +25,7 @@ pub enum Item<R> {
 }
 
 #[derive(Clone, Copy)]
-enum Data {
+pub enum Data {
     Byte(u8),
     Word(u16),
 }
@@ -253,22 +253,7 @@ fn resolve_section<SR: SourceInterval>(
     section
         .items
         .into_iter()
-        .flat_map(|item| match item {
-            Node::Byte(value) => Some(Data::Byte(value)),
-            Node::Embedded(..) | Node::LdInlineAddr(..) => panic!(),
-            Node::Expr(expr, width) => Some(
-                symbols
-                    .resolve_expr_item(&expr, width)
-                    .unwrap_or_else(|diagnostic| {
-                        diagnostics.emit_diagnostic(diagnostic);
-                        match width {
-                            Width::Byte => Data::Byte(0),
-                            Width::Word => Data::Word(0),
-                        }
-                    }),
-            ),
-            Node::Label(..) => None,
-        })
+        .flat_map(|node| node.translate(symbols, diagnostics))
         .collect()
 }
 

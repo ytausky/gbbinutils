@@ -1,4 +1,5 @@
-use backend::{SymbolTable, Value};
+use backend::{Data, SymbolTable, Value};
+use diagnostics::{DiagnosticsListener, SourceInterval};
 use instruction::{Direction, RelocExpr};
 use Width;
 
@@ -43,6 +44,31 @@ impl<SR: Clone> Node<SR> {
                 _ => Value { min: 2, max: 3 },
             },
         }
+    }
+}
+
+impl<SR: SourceInterval> Node<SR> {
+    pub fn translate(
+        &self,
+        symbols: &SymbolTable,
+        diagnostics: &impl DiagnosticsListener<SR>,
+    ) -> impl Iterator<Item = Data> {
+        match self {
+            Node::Byte(value) => Some(Data::Byte(*value)),
+            Node::Embedded(..) | Node::LdInlineAddr(..) => panic!(),
+            Node::Expr(expr, width) => Some(
+                symbols
+                    .resolve_expr_item(&expr, *width)
+                    .unwrap_or_else(|diagnostic| {
+                        diagnostics.emit_diagnostic(diagnostic);
+                        match width {
+                            Width::Byte => Data::Byte(0),
+                            Width::Word => Data::Word(0),
+                        }
+                    }),
+            ),
+            Node::Label(..) => None,
+        }.into_iter()
     }
 }
 
