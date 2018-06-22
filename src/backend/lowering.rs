@@ -105,6 +105,7 @@ impl<SR> Lower<SR> for Nullary {
     fn lower(self) -> LoweredItem<SR> {
         use instruction::Nullary::*;
         let opcode = match self {
+            Cpl => 0x2f,
             Daa => 0x27,
             Di => 0xf3,
             Ei => 0xfb,
@@ -369,6 +370,11 @@ mod tests {
     #[test]
     fn lower_rra() {
         test_nullary(Rra, bytes([0x1f]))
+    }
+
+    #[test]
+    fn lower_cpl() {
+        test_nullary(Cpl, bytes([0x2f]))
     }
 
     fn test_nullary(nullary: instruction::Nullary, items: impl Borrow<[Node<()>]>) {

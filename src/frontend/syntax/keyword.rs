@@ -6,6 +6,7 @@ pub enum Command {
     Bit,
     Call,
     Cp,
+    Cpl,
     Daa,
     Db,
     Dec,

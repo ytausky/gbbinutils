@@ -335,6 +335,7 @@ fn to_mnemonic(command: keyword::Command) -> Mnemonic {
         Bit => Mnemonic::Bit(BitOperation::Bit),
         Call => Mnemonic::Branch(BranchKind::Call),
         Cp => Mnemonic::Alu(AluOperation::Cp),
+        Cpl => Mnemonic::Nullary(Nullary::Cpl),
         Daa => Mnemonic::Nullary(Nullary::Daa),
         Dec => Mnemonic::IncDec(IncDec::Dec),
         Di => Mnemonic::Nullary(Nullary::Di),
@@ -717,6 +718,7 @@ mod tests {
 
     fn describe_nullary_instructions() -> impl Iterator<Item = InstructionDescriptor> {
         [
+            (Command::Cpl, Nullary::Cpl),
             (Command::Daa, Nullary::Daa),
             (Command::Di, Nullary::Di),
             (Command::Ei, Nullary::Ei),
