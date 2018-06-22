@@ -25,6 +25,10 @@ pub enum Nullary {
     Halt,
     Nop,
     Reti,
+    Rla,
+    Rlca,
+    Rra,
+    Rrca,
     Stop,
 }
 

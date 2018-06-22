@@ -110,6 +110,10 @@ impl<SR> Lower<SR> for Nullary {
             Ei => 0xfb,
             Halt => 0x76,
             Nop => 0x00,
+            Rla => 0x17,
+            Rlca => 0x07,
+            Rra => 0x1f,
+            Rrca => 0x0f,
             Stop => 0x10,
             Reti => 0xd9,
         };
@@ -345,6 +349,26 @@ mod tests {
     #[test]
     fn encode_daa() {
         test_nullary(Daa, bytes([0x27]))
+    }
+
+    #[test]
+    fn lower_rlca() {
+        test_nullary(Rlca, bytes([0x07]))
+    }
+
+    #[test]
+    fn lower_rrca() {
+        test_nullary(Rrca, bytes([0x0f]))
+    }
+
+    #[test]
+    fn lower_rla() {
+        test_nullary(Rla, bytes([0x17]))
+    }
+
+    #[test]
+    fn lower_rra() {
+        test_nullary(Rra, bytes([0x1f]))
     }
 
     fn test_nullary(nullary: instruction::Nullary, items: impl Borrow<[Node<()>]>) {
