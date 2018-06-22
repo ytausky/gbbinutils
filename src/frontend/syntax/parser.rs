@@ -250,8 +250,9 @@ impl<S: TokenSpec, T: SourceInterval, I: Iterator<Item = (Token<S>, T)>> Parser<
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_src,
-                Token::{self, *}};
+    use super::{
+        parse_src, Token::{self, *},
+    };
 
     use diagnostics::SourceInterval;
     use frontend::syntax::{self, ExprNode, ParsedExpr, TokenSpec};

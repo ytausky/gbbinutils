@@ -1,8 +1,6 @@
-use frontend::syntax::{self,
-                       keyword::{self, Command, OperandKeyword},
-                       token,
-                       Literal,
-                       Token};
+use frontend::syntax::{
+    self, keyword::{self, Command, OperandKeyword}, token, Literal, Token,
+};
 
 use std::iter;
 use std::ops::{Index, Range};

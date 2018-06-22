@@ -1,7 +1,8 @@
 pub use backend::object::ObjectBuilder;
 
-use backend::{lowering::Lower,
-              object::{Chunk, Node, Object}};
+use backend::{
+    lowering::Lower, object::{Chunk, Node, Object},
+};
 use diagnostics::*;
 use instruction::{Instruction, RelocExpr};
 use std::{borrow::Borrow, collections::HashMap, iter::FromIterator, ops::AddAssign};

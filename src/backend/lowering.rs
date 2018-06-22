@@ -33,6 +33,10 @@ impl<SR> LoweredItem<SR> {
         LoweredItem::One(Node::Byte(opcode))
     }
 
+    fn extended(opcode: impl Into<Node<SR>>) -> LoweredItem<SR> {
+        LoweredItem::Two(Node::Byte(0xcb), opcode.into())
+    }
+
     fn and_byte(self, expr: RelocExpr<SR>) -> Self {
         self.and_expr(expr, Width::Byte)
     }
@@ -46,6 +50,12 @@ impl<SR> LoweredItem<SR> {
             LoweredItem::One(item) => LoweredItem::Two(item, Node::Expr(expr, width)),
             LoweredItem::None | LoweredItem::Two(..) => panic!(),
         }
+    }
+}
+
+impl<SR> From<u8> for Node<SR> {
+    fn from(byte: u8) -> Self {
+        Node::Byte(byte)
     }
 }
 
@@ -67,13 +77,10 @@ impl<SR> Lower<SR> for Instruction<SR> {
             Alu(operation, AluSource::Immediate(expr)) => {
                 encode_immediate_alu_operation(operation, expr)
             }
-            Bit(operation, expr, operand) => LoweredItem::Two(
-                Node::Byte(0xcb),
-                Node::Embedded(
-                    encode_bit_operation(operation) | encode_simple_operand(operand),
-                    expr,
-                ),
-            ),
+            Bit(operation, expr, operand) => LoweredItem::extended(Node::Embedded(
+                encode_bit_operation(operation) | encode_simple_operand(operand),
+                expr,
+            )),
             Branch(branch, condition) => encode_branch(branch, condition),
             IncDec8(mode, operand) => LoweredItem::with_opcode(
                 0b00_000_100 | encode_inc_dec(mode) | (encode_simple_operand(operand) << 3),
@@ -83,7 +90,9 @@ impl<SR> Lower<SR> for Instruction<SR> {
             }
             JpDerefHl => LoweredItem::with_opcode(0xe9),
             Ld(ld) => ld.lower(),
-            Misc(..) => panic!(),
+            Misc(operation, operand) => {
+                LoweredItem::extended(operation.encode() | operand.encode())
+            }
             Nullary(nullary) => nullary.lower(),
             Pop(reg_pair) => LoweredItem::with_opcode(0xc1 | (encode_reg_pair(reg_pair) << 4)),
             Push(reg_pair) => LoweredItem::with_opcode(0xc5 | (encode_reg_pair(reg_pair) << 4)),
@@ -198,6 +207,22 @@ fn encode_bit_operation(operation: BitOperation) -> u8 {
     }) << 6
 }
 
+impl MiscOperation {
+    fn encode(self) -> u8 {
+        use instruction::MiscOperation::*;
+        (match self {
+            Rlc => 0b000,
+            Rrc => 0b001,
+            Rl => 0b010,
+            Rr => 0b011,
+            Sla => 0b100,
+            Sra => 0b101,
+            Swap => 0b110,
+            Srl => 0b111,
+        }) << 3
+    }
+}
+
 fn encode_condition(condition: Condition) -> u8 {
     use instruction::Condition::*;
     (match condition {
@@ -221,17 +246,23 @@ fn encode_ld_to_reg_from_reg<SR>(dest: SimpleOperand, src: SimpleOperand) -> Low
     )
 }
 
-fn encode_simple_operand(register: SimpleOperand) -> u8 {
-    use instruction::SimpleOperand::*;
-    match register {
-        A => 0b111,
-        B => 0b000,
-        C => 0b001,
-        D => 0b010,
-        E => 0b011,
-        H => 0b100,
-        L => 0b101,
-        DerefHl => 0b110,
+fn encode_simple_operand(operand: SimpleOperand) -> u8 {
+    operand.encode()
+}
+
+impl SimpleOperand {
+    fn encode(self) -> u8 {
+        use instruction::SimpleOperand::*;
+        match self {
+            B => 0b000,
+            C => 0b001,
+            D => 0b010,
+            E => 0b011,
+            H => 0b100,
+            L => 0b101,
+            DerefHl => 0b110,
+            A => 0b111,
+        }
     }
 }
 
@@ -838,9 +869,31 @@ mod tests {
         for &(operation, operand, opcode) in test_cases {
             test_instruction(
                 Instruction::Bit(operation, n.clone(), operand),
-                [Node::Byte(0xcb), Node::Embedded(opcode, n.clone())],
+                extended(Node::Embedded(opcode, n.clone())),
             )
         }
+    }
+
+    #[test]
+    fn lower_misc_operations() {
+        use instruction::{MiscOperation::*, SimpleOperand::*};
+        let test_cases = &[
+            (Rlc, H, 0x04),
+            (Rrc, B, 0x08),
+            (Rl, A, 0x17),
+            (Rr, D, 0x1a),
+            (Sla, C, 0x21),
+            (Sra, E, 0x2b),
+            (Swap, DerefHl, 0x36),
+            (Srl, L, 0x3d),
+        ];
+        for &(operation, operand, opcode) in test_cases {
+            test_instruction(Instruction::Misc(operation, operand), extended(opcode))
+        }
+    }
+
+    fn extended(suffix: impl Into<Node<()>>) -> Vec<Node<()>> {
+        vec![Node::Byte(0xcb), suffix.into()]
     }
 
     fn bytes(data: impl Borrow<[u8]>) -> Vec<Node<()>> {

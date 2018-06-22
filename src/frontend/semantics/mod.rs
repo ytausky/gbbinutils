@@ -252,8 +252,10 @@ mod tests {
 
     use backend;
     use diagnostics::{Diagnostic, SourceInterval};
-    use frontend::syntax::{keyword::OperandKeyword, token, CommandContext, FileContext,
-                           MacroInvocationContext, TokenSeqContext};
+    use frontend::syntax::{
+        keyword::OperandKeyword, token, CommandContext, FileContext, MacroInvocationContext,
+        TokenSeqContext,
+    };
     use instruction::RelocExpr;
 
     struct TestFrontend(Vec<TestOperation>);
