@@ -152,25 +152,24 @@ impl SymbolTable {
             })?
             .exact()
             .unwrap();
-        self.fit_to_width((value, range), width)
+        fit_to_width((value, range), width)
     }
+}
 
-    fn fit_to_width<SR: Clone>(
-        &self,
-        (value, value_ref): (i32, SR),
-        width: Width,
-    ) -> Result<Data, Diagnostic<SR>> {
-        if !is_in_range(value, width) {
-            Err(Diagnostic::new(
-                Message::ValueOutOfRange { value, width },
-                value_ref.clone(),
-            ))
-        } else {
-            Ok(match width {
-                Width::Byte => Data::Byte(value as u8),
-                Width::Word => Data::Word(value as u16),
-            })
-        }
+fn fit_to_width<SR: Clone>(
+    (value, value_ref): (i32, SR),
+    width: Width,
+) -> Result<Data, Diagnostic<SR>> {
+    if !is_in_range(value, width) {
+        Err(Diagnostic::new(
+            Message::ValueOutOfRange { value, width },
+            value_ref.clone(),
+        ))
+    } else {
+        Ok(match width {
+            Width::Byte => Data::Byte(value as u8),
+            Width::Word => Data::Word(value as u16),
+        })
     }
 }
 
