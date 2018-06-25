@@ -4,7 +4,6 @@ mod syntax;
 use backend::*;
 use diagnostics::*;
 use frontend::syntax::*;
-use instruction::RelocExpr;
 use session::{BorrowedComponents, ChunkId, Components, Session};
 
 use codebase::Codebase;

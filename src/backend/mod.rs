@@ -5,7 +5,7 @@ use backend::{
     lowering::Lower, object::{Chunk, Node, Object},
 };
 use diagnostics::*;
-use instruction::{Instruction, RelocExpr};
+use instruction::Instruction;
 use std::{iter::FromIterator, ops::AddAssign};
 use Width;
 
@@ -25,6 +25,24 @@ pub trait Backend<R> {
 pub enum Item<R> {
     Data(RelocExpr<R>, Width),
     Instruction(Instruction<R>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum RelocExpr<R> {
+    Literal(i32, R),
+    LocationCounter,
+    Subtract(Box<RelocExpr<R>>, Box<RelocExpr<R>>),
+    Symbol(String, R),
+}
+
+impl<SI: SourceInterval> Source for RelocExpr<SI> {
+    type Interval = SI;
+    fn source_interval(&self) -> Self::Interval {
+        match self {
+            RelocExpr::Literal(_, interval) | RelocExpr::Symbol(_, interval) => (*interval).clone(),
+            RelocExpr::LocationCounter | RelocExpr::Subtract(..) => panic!(),
+        }
+    }
 }
 
 #[derive(Clone, Copy)]

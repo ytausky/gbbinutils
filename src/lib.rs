@@ -70,7 +70,7 @@ impl<R: Debug> backend::Backend<R> for OutputDumper {
 
     fn into_object(self) {}
 
-    fn set_origin(&mut self, origin: instruction::RelocExpr<R>) {
+    fn set_origin(&mut self, origin: backend::RelocExpr<R>) {
         println!("Set origin to {:?}", origin)
     }
 }

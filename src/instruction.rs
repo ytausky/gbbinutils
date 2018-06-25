@@ -1,4 +1,4 @@
-use diagnostics::{Source, SourceInterval};
+pub use backend::RelocExpr;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Instruction<R> {
@@ -141,24 +141,6 @@ pub enum Condition {
     Nc,
     Nz,
     Z,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum RelocExpr<R> {
-    Literal(i32, R),
-    LocationCounter,
-    Subtract(Box<RelocExpr<R>>, Box<RelocExpr<R>>),
-    Symbol(String, R),
-}
-
-impl<SI: SourceInterval> Source for RelocExpr<SI> {
-    type Interval = SI;
-    fn source_interval(&self) -> Self::Interval {
-        match self {
-            RelocExpr::Literal(_, interval) | RelocExpr::Symbol(_, interval) => (*interval).clone(),
-            RelocExpr::LocationCounter | RelocExpr::Subtract(..) => panic!(),
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
