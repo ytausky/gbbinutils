@@ -5,6 +5,7 @@ use backend::{BinaryObject, BinarySection, Chunk, Node, Object};
 use diagnostics::{Diagnostic, DiagnosticsListener, Message, Source, SourceInterval};
 use instruction::RelocExpr;
 use std::ops::AddAssign;
+use std::vec::IntoIter;
 use Width;
 
 mod context;
@@ -66,7 +67,13 @@ fn resolve_section<SR: SourceInterval>(
         data: section
             .items
             .into_iter()
-            .flat_map(|node| node.translate(context, diagnostics))
+            .flat_map(|node| match node.translate(context) {
+                Ok(iter) => iter,
+                Err(diagnostic) => {
+                    diagnostics.emit_diagnostic(diagnostic);
+                    Vec::new().into_iter()
+                }
+            })
             .collect(),
     }
 }
@@ -195,25 +202,15 @@ impl<SR: Clone> Node<SR> {
 }
 
 impl<SR: SourceInterval> Node<SR> {
-    pub fn translate(
-        &self,
-        symbols: &LinkingContext,
-        diagnostics: &impl DiagnosticsListener<SR>,
-    ) -> impl Iterator<Item = u8> {
-        match self {
+    fn translate(&self, symbols: &LinkingContext) -> Result<IntoIter<u8>, Diagnostic<SR>> {
+        Ok(match self {
             Node::Byte(value) => vec![*value],
             Node::Embedded(..) | Node::LdInlineAddr(..) => panic!(),
-            Node::Expr(expr, width) => resolve_expr_item(&expr, *width, symbols)
-                .map(|data| data.into_bytes())
-                .unwrap_or_else(|diagnostic| {
-                    diagnostics.emit_diagnostic(diagnostic);
-                    match width {
-                        Width::Byte => vec![0],
-                        Width::Word => vec![0, 0],
-                    }
-                }),
+            Node::Expr(expr, width) => {
+                resolve_expr_item(&expr, *width, symbols).map(|data| data.into_bytes())?
+            }
             Node::Label(..) => vec![],
-        }.into_iter()
+        }.into_iter())
     }
 }
 
