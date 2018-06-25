@@ -77,6 +77,15 @@ impl<Q: Borrow<str>> SymbolRef for Q {
     }
 }
 
+struct ChunkSize(usize);
+
+impl SymbolRef for ChunkSize {
+    fn to_symbol_id(&self, context: &LinkingContext) -> Option<SymbolId> {
+        let ChunkSize(index) = *self;
+        context.sizes.get(index).cloned()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Value {
     min: i32,
@@ -232,8 +241,7 @@ fn collect_symbols<SR: Clone>(object: &Object<SR>) -> LinkingContext {
                 node => location += node.size(&symbols),
             }
         }
-        let chunk_size_symbol_id = symbols.sizes[i];
-        symbols.refine(chunk_size_symbol_id, location);
+        symbols.refine(ChunkSize(i), location);
     }
     symbols
 }
@@ -250,8 +258,7 @@ fn refine_symbols<SR: Clone>(object: &Object<SR>, context: &mut LinkingContext) 
                 node => location += node.size(context),
             }
         }
-        let chunk_size_symbol_id = context.sizes[i];
-        refinements += context.refine(chunk_size_symbol_id, location) as i32
+        refinements += context.refine(ChunkSize(i), location) as i32
     }
     refinements
 }
