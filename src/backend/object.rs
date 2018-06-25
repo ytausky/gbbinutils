@@ -1,4 +1,4 @@
-use backend::{Data, SymbolTable, Value};
+use backend::{Data, LinkingContext, Value};
 use diagnostics::{DiagnosticsListener, SourceInterval};
 use instruction::{Direction, RelocExpr};
 use Width;
@@ -33,7 +33,7 @@ impl<SR> Object<SR> {
 }
 
 impl<SR: Clone> Node<SR> {
-    pub fn size(&self, symbols: &SymbolTable) -> Value {
+    pub fn size(&self, symbols: &LinkingContext) -> Value {
         match self {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),
             Node::Expr(_, width) => width.len().into(),
@@ -50,7 +50,7 @@ impl<SR: Clone> Node<SR> {
 impl<SR: SourceInterval> Node<SR> {
     pub fn translate(
         &self,
-        symbols: &SymbolTable,
+        symbols: &LinkingContext,
         diagnostics: &impl DiagnosticsListener<SR>,
     ) -> impl Iterator<Item = Data> {
         match self {

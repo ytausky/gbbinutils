@@ -52,7 +52,7 @@ pub struct Rom {
     pub data: Box<[u8]>,
 }
 
-pub struct SymbolTable {
+pub struct LinkingContext {
     symbols: Vec<Value>,
     names: HashMap<String, SymbolId>,
 }
@@ -61,17 +61,17 @@ pub struct SymbolTable {
 struct SymbolId(usize);
 
 trait SymbolRef {
-    fn to_symbol_id(&self, table: &SymbolTable) -> Option<SymbolId>;
+    fn to_symbol_id(&self, table: &LinkingContext) -> Option<SymbolId>;
 }
 
 impl SymbolRef for SymbolId {
-    fn to_symbol_id(&self, _: &SymbolTable) -> Option<SymbolId> {
+    fn to_symbol_id(&self, _: &LinkingContext) -> Option<SymbolId> {
         Some((*self).clone())
     }
 }
 
 impl<Q: Borrow<str>> SymbolRef for Q {
-    fn to_symbol_id(&self, table: &SymbolTable) -> Option<SymbolId> {
+    fn to_symbol_id(&self, table: &LinkingContext) -> Option<SymbolId> {
         table.names.get(self.borrow()).cloned()
     }
 }
@@ -109,9 +109,9 @@ impl AddAssign<Value> for Value {
     }
 }
 
-impl SymbolTable {
-    fn new() -> SymbolTable {
-        SymbolTable {
+impl LinkingContext {
+    fn new() -> LinkingContext {
+        LinkingContext {
             symbols: Vec::new(),
             names: HashMap::new(),
         }
@@ -176,12 +176,12 @@ fn fit_to_width<SR: Clone>(
 struct UndefinedSymbol<SR>(String, SR);
 
 impl<SR: Clone> RelocExpr<SR> {
-    fn evaluate(&self, symbol_table: &SymbolTable) -> Result<Value, UndefinedSymbol<SR>> {
+    fn evaluate(&self, context: &LinkingContext) -> Result<Value, UndefinedSymbol<SR>> {
         match self {
             RelocExpr::Literal(value, _) => Ok((*value).into()),
             RelocExpr::LocationCounter => panic!(),
             RelocExpr::Subtract(_, _) => panic!(),
-            RelocExpr::Symbol(symbol, expr_ref) => symbol_table
+            RelocExpr::Symbol(symbol, expr_ref) => context
                 .get(symbol.as_str())
                 .cloned()
                 .ok_or_else(|| UndefinedSymbol((*symbol).clone(), (*expr_ref).clone())),
@@ -204,14 +204,14 @@ where
     }
 }
 
-fn resolve_symbols<SR: Clone>(object: &Object<SR>) -> SymbolTable {
+fn resolve_symbols<SR: Clone>(object: &Object<SR>) -> LinkingContext {
     let mut symbols = collect_symbols(object);
     refine_symbols(object, &mut symbols);
     symbols
 }
 
-fn collect_symbols<SR: Clone>(object: &Object<SR>) -> SymbolTable {
-    let mut symbols = SymbolTable::new();
+fn collect_symbols<SR: Clone>(object: &Object<SR>) -> LinkingContext {
+    let mut symbols = LinkingContext::new();
     for chunk in &object.chunks {
         let mut location = Value::from(0);
         for node in &chunk.items {
@@ -227,32 +227,32 @@ fn collect_symbols<SR: Clone>(object: &Object<SR>) -> SymbolTable {
     symbols
 }
 
-fn refine_symbols<SR: Clone>(object: &Object<SR>, symbols: &mut SymbolTable) -> i32 {
+fn refine_symbols<SR: Clone>(object: &Object<SR>, context: &mut LinkingContext) -> i32 {
     let mut refinements = 0;
     for chunk in &object.chunks {
         let mut location = Value::from(0);
         for node in &chunk.items {
             match node {
                 Node::Label(symbol, _) => {
-                    refinements += symbols.refine(symbol.as_str(), location.clone()) as i32
+                    refinements += context.refine(symbol.as_str(), location.clone()) as i32
                 }
-                node => location += node.size(symbols),
+                node => location += node.size(context),
             }
         }
-        refinements += symbols.refine(format!("{}.size", chunk.name()), location) as i32
+        refinements += context.refine(format!("{}.size", chunk.name()), location) as i32
     }
     refinements
 }
 
 fn resolve_section<SR: SourceInterval>(
     section: Chunk<SR>,
-    symbols: &SymbolTable,
+    context: &LinkingContext,
     diagnostics: &impl DiagnosticsListener<SR>,
 ) -> BinarySection {
     section
         .items
         .into_iter()
-        .flat_map(|node| node.translate(symbols, diagnostics))
+        .flat_map(|node| node.translate(context, diagnostics))
         .collect()
 }
 
