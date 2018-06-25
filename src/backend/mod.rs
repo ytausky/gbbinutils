@@ -6,7 +6,7 @@ use backend::{
 };
 use diagnostics::*;
 use instruction::Instruction;
-use std::{iter::FromIterator, ops::AddAssign};
+use std::iter::FromIterator;
 use Width;
 
 mod link;
@@ -69,39 +69,6 @@ impl BinaryObject {
 
 pub struct Rom {
     pub data: Box<[u8]>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Value {
-    min: i32,
-    max: i32,
-}
-
-impl Value {
-    fn exact(&self) -> Option<i32> {
-        if self.min == self.max {
-            Some(self.min)
-        } else {
-            None
-        }
-    }
-
-    fn len(&self) -> i32 {
-        self.max - self.min
-    }
-}
-
-impl From<i32> for Value {
-    fn from(n: i32) -> Self {
-        Value { min: n, max: n }
-    }
-}
-
-impl AddAssign<Value> for Value {
-    fn add_assign(&mut self, rhs: Value) {
-        self.min += rhs.min;
-        self.max += rhs.max
-    }
 }
 
 impl<SR: SourceInterval> Backend<SR> for ObjectBuilder<SR> {

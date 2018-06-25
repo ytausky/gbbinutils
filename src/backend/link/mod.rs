@@ -1,11 +1,45 @@
 pub use self::context::LinkingContext;
 
 use self::context::ChunkSize;
-use backend::{BinaryObject, BinarySection, Chunk, Node, Object, Value};
+use backend::{BinaryObject, BinarySection, Chunk, Node, Object};
 use diagnostics::{DiagnosticsListener, SourceInterval};
 use instruction::RelocExpr;
+use std::ops::AddAssign;
 
 mod context;
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Value {
+    min: i32,
+    max: i32,
+}
+
+impl Value {
+    fn exact(&self) -> Option<i32> {
+        if self.min == self.max {
+            Some(self.min)
+        } else {
+            None
+        }
+    }
+
+    fn len(&self) -> i32 {
+        self.max - self.min
+    }
+}
+
+impl From<i32> for Value {
+    fn from(n: i32) -> Self {
+        Value { min: n, max: n }
+    }
+}
+
+impl AddAssign<Value> for Value {
+    fn add_assign(&mut self, rhs: Value) {
+        self.min += rhs.min;
+        self.max += rhs.max
+    }
+}
 
 pub fn link<'a, SR, D>(object: Object<SR>, diagnostics: &D) -> BinaryObject
 where
@@ -90,7 +124,7 @@ impl<SR: Clone> RelocExpr<SR> {
 }
 
 impl<SR: Clone> Node<SR> {
-    pub fn size(&self, symbols: &LinkingContext) -> Value {
+    fn size(&self, symbols: &LinkingContext) -> Value {
         match self {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),
             Node::Expr(_, width) => width.len().into(),
