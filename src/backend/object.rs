@@ -1,4 +1,4 @@
-use backend::{Data, LinkingContext, Value};
+use backend::{link::LinkingContext, Data};
 use diagnostics::{DiagnosticsListener, SourceInterval};
 use instruction::{Direction, RelocExpr};
 use Width;
@@ -28,21 +28,6 @@ impl<SR> Object<SR> {
 
     pub fn add_chunk(&mut self) {
         self.chunks.push(Chunk::new())
-    }
-}
-
-impl<SR: Clone> Node<SR> {
-    pub fn size(&self, symbols: &LinkingContext) -> Value {
-        match self {
-            Node::Byte(_) | Node::Embedded(..) => 1.into(),
-            Node::Expr(_, width) => width.len().into(),
-            Node::Label(..) => 0.into(),
-            Node::LdInlineAddr(expr, _) => match expr.evaluate(symbols) {
-                Ok(Some(Value { min, .. })) if min >= 0xff00 => 2.into(),
-                Ok(Some(Value { max, .. })) if max < 0xff00 => 3.into(),
-                _ => Value { min: 2, max: 3 },
-            },
-        }
     }
 }
 

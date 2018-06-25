@@ -1,3 +1,4 @@
+pub use backend::link::link;
 pub use backend::object::ObjectBuilder;
 
 use backend::{
@@ -5,9 +6,11 @@ use backend::{
 };
 use diagnostics::*;
 use instruction::{Instruction, RelocExpr};
-use std::{borrow::Borrow, collections::HashMap, iter::FromIterator, ops::AddAssign};
+use std::{iter::FromIterator, ops::AddAssign};
 use Width;
 
+mod link;
+mod lowering;
 mod object;
 
 pub trait Backend<R> {
@@ -30,8 +33,6 @@ pub enum Data {
     Word(u16),
 }
 
-mod lowering;
-
 pub struct BinaryObject {
     sections: Vec<BinarySection>,
 }
@@ -50,40 +51,6 @@ impl BinaryObject {
 
 pub struct Rom {
     pub data: Box<[u8]>,
-}
-
-pub struct LinkingContext {
-    symbols: Vec<Option<Value>>,
-    names: HashMap<String, SymbolId>,
-    sizes: Vec<SymbolId>,
-}
-
-#[derive(Clone, Copy)]
-struct SymbolId(usize);
-
-trait SymbolRef {
-    fn to_symbol_id(&self, table: &LinkingContext) -> Option<SymbolId>;
-}
-
-impl SymbolRef for SymbolId {
-    fn to_symbol_id(&self, _: &LinkingContext) -> Option<SymbolId> {
-        Some((*self).clone())
-    }
-}
-
-impl<Q: Borrow<str>> SymbolRef for Q {
-    fn to_symbol_id(&self, table: &LinkingContext) -> Option<SymbolId> {
-        table.names.get(self.borrow()).cloned()
-    }
-}
-
-struct ChunkSize(usize);
-
-impl SymbolRef for ChunkSize {
-    fn to_symbol_id(&self, context: &LinkingContext) -> Option<SymbolId> {
-        let ChunkSize(index) = *self;
-        context.sizes.get(index).cloned()
-    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -117,162 +84,6 @@ impl AddAssign<Value> for Value {
         self.min += rhs.min;
         self.max += rhs.max
     }
-}
-
-impl LinkingContext {
-    fn new() -> LinkingContext {
-        LinkingContext {
-            symbols: Vec::new(),
-            names: HashMap::new(),
-            sizes: Vec::new(),
-        }
-    }
-
-    fn define(&mut self, name: impl Into<String>, value: Value) {
-        let id = SymbolId(self.symbols.len());
-        self.symbols.push(Some(value));
-        self.names.insert(name.into(), id);
-    }
-
-    fn get(&self, key: impl SymbolRef) -> Option<&Option<Value>> {
-        key.to_symbol_id(self).map(|SymbolId(id)| &self.symbols[id])
-    }
-
-    fn get_mut(&mut self, key: impl SymbolRef) -> Option<&mut Option<Value>> {
-        key.to_symbol_id(self)
-            .map(move |SymbolId(id)| &mut self.symbols[id])
-    }
-
-    fn refine(&mut self, key: impl SymbolRef, value: Value) -> bool {
-        let stored_value = self.get_mut(key).unwrap();
-        let old_value = stored_value.clone();
-        let was_refined = old_value.map_or(true, |v| value.len() < v.len());
-        *stored_value = Some(value);
-        was_refined
-    }
-
-    fn resolve_expr_item<SR: SourceInterval>(
-        &self,
-        expr: &RelocExpr<SR>,
-        width: Width,
-    ) -> Result<Data, Diagnostic<SR>> {
-        let range = expr.source_interval();
-        let value = expr.evaluate(self)
-            .map_err(|undefined| {
-                let UndefinedSymbol(symbol, range) = undefined;
-                Diagnostic::new(Message::UnresolvedSymbol { symbol }, range)
-            })?
-            .unwrap()
-            .exact()
-            .unwrap();
-        fit_to_width((value, range), width)
-    }
-}
-
-fn fit_to_width<SR: Clone>(
-    (value, value_ref): (i32, SR),
-    width: Width,
-) -> Result<Data, Diagnostic<SR>> {
-    if !is_in_range(value, width) {
-        Err(Diagnostic::new(
-            Message::ValueOutOfRange { value, width },
-            value_ref.clone(),
-        ))
-    } else {
-        Ok(match width {
-            Width::Byte => Data::Byte(value as u8),
-            Width::Word => Data::Word(value as u16),
-        })
-    }
-}
-
-struct UndefinedSymbol<SR>(String, SR);
-
-impl<SR: Clone> RelocExpr<SR> {
-    fn evaluate(&self, context: &LinkingContext) -> Result<Option<Value>, UndefinedSymbol<SR>> {
-        match self {
-            RelocExpr::Literal(value, _) => Ok(Some((*value).into())),
-            RelocExpr::LocationCounter => panic!(),
-            RelocExpr::Subtract(_, _) => panic!(),
-            RelocExpr::Symbol(symbol, expr_ref) => context
-                .get(symbol.as_str())
-                .cloned()
-                .ok_or_else(|| UndefinedSymbol((*symbol).clone(), (*expr_ref).clone())),
-        }
-    }
-}
-
-pub fn link<'a, SR, D>(object: Object<SR>, diagnostics: &D) -> BinaryObject
-where
-    SR: SourceInterval,
-    D: DiagnosticsListener<SR> + 'a,
-{
-    let symbols = resolve_symbols(&object);
-    BinaryObject {
-        sections: object
-            .chunks
-            .into_iter()
-            .map(|section| resolve_section(section, &symbols, diagnostics))
-            .collect(),
-    }
-}
-
-fn resolve_symbols<SR: Clone>(object: &Object<SR>) -> LinkingContext {
-    let mut symbols = collect_symbols(object);
-    refine_symbols(object, &mut symbols);
-    symbols
-}
-
-fn collect_symbols<SR: Clone>(object: &Object<SR>) -> LinkingContext {
-    let mut symbols = LinkingContext::new();
-    for i in 0..object.chunks.len() {
-        assert_eq!(i, symbols.sizes.len());
-        let symbol_id = SymbolId(symbols.symbols.len());
-        symbols.symbols.push(None);
-        symbols.sizes.push(symbol_id);
-    }
-    for (i, chunk) in (&object.chunks).into_iter().enumerate() {
-        let mut location = Value::from(0);
-        for node in &chunk.items {
-            match node {
-                Node::Label(symbol, _) => {
-                    symbols.define(symbol.as_str(), location.clone());
-                }
-                node => location += node.size(&symbols),
-            }
-        }
-        symbols.refine(ChunkSize(i), location);
-    }
-    symbols
-}
-
-fn refine_symbols<SR: Clone>(object: &Object<SR>, context: &mut LinkingContext) -> i32 {
-    let mut refinements = 0;
-    for (i, chunk) in (&object.chunks).into_iter().enumerate() {
-        let mut location = Value::from(0);
-        for node in &chunk.items {
-            match node {
-                Node::Label(symbol, _) => {
-                    refinements += context.refine(symbol.as_str(), location.clone()) as i32
-                }
-                node => location += node.size(context),
-            }
-        }
-        refinements += context.refine(ChunkSize(i), location) as i32
-    }
-    refinements
-}
-
-fn resolve_section<SR: SourceInterval>(
-    section: Chunk<SR>,
-    context: &LinkingContext,
-    diagnostics: &impl DiagnosticsListener<SR>,
-) -> BinarySection {
-    section
-        .items
-        .into_iter()
-        .flat_map(|node| node.translate(context, diagnostics))
-        .collect()
 }
 
 impl<SR: SourceInterval> Backend<SR> for ObjectBuilder<SR> {
@@ -325,29 +136,10 @@ impl FromIterator<Data> for BinarySection {
     }
 }
 
-fn is_in_range(n: i32, width: Width) -> bool {
-    match width {
-        Width::Byte => is_in_byte_range(n),
-        Width::Word => true,
-    }
-}
-
-fn is_in_byte_range(n: i32) -> bool {
-    is_in_i8_range(n) || is_in_u8_range(n)
-}
-
-fn is_in_i8_range(n: i32) -> bool {
-    n >= i32::from(i8::min_value()) && n <= i32::from(i8::max_value())
-}
-
-fn is_in_u8_range(n: i32) -> bool {
-    n >= i32::from(u8::min_value()) && n <= i32::from(u8::max_value())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use instruction::{Direction, Nullary};
+    use instruction::Nullary;
 
     use std::borrow::Borrow;
 
@@ -434,66 +226,6 @@ mod tests {
         });
         assert_eq!(*diagnostics, []);
         assert_eq!(object.sections.last().unwrap().data, [0x02, 0x00])
-    }
-
-    #[test]
-    fn empty_chunk_has_size_zero() {
-        assert_chunk_size(0, |_| ())
-    }
-
-    #[test]
-    fn chunk_with_nop_has_size_one() {
-        assert_chunk_size(1, |section| {
-            section
-                .items
-                .extend(Item::Instruction(Instruction::Nullary(Nullary::Nop)).lower())
-        });
-    }
-
-    #[test]
-    fn chunk_with_const_inline_addr_ld_has_size_two() {
-        test_chunk_size_with_literal_ld_inline_addr(0xff00, 2)
-    }
-
-    #[test]
-    fn chunk_with_const_inline_addr_ld_has_size_three() {
-        test_chunk_size_with_literal_ld_inline_addr(0x1234, 3)
-    }
-
-    fn test_chunk_size_with_literal_ld_inline_addr(addr: i32, expected: i32) {
-        assert_chunk_size(expected, |section| {
-            section.items.push(Node::LdInlineAddr(
-                RelocExpr::Literal(addr, ()),
-                Direction::FromA,
-            ))
-        });
-    }
-
-    #[test]
-    fn ld_inline_addr_with_symbol_after_instruction_has_size_three() {
-        assert_chunk_size(3, |section| {
-            section.items.extend(
-                [
-                    Node::LdInlineAddr(
-                        RelocExpr::Symbol("label".to_string(), ()),
-                        Direction::FromA,
-                    ),
-                    Node::Label("label".to_string(), ()),
-                ].iter()
-                    .cloned(),
-            )
-        })
-    }
-
-    fn assert_chunk_size(expected: impl Into<Value>, f: impl FnOnce(&mut Chunk<()>)) {
-        let mut object = Object::<()>::new();
-        object.add_chunk();
-        f(&mut object.chunks[0]);
-        let symbols = resolve_symbols(&object);
-        assert_eq!(
-            symbols.get(symbols.sizes[0]).cloned(),
-            Some(Some(expected.into()))
-        )
     }
 
     type TestObjectBuilder = ObjectBuilder<()>;
