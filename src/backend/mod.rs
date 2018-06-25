@@ -55,9 +55,10 @@ pub struct Rom {
 pub struct LinkingContext {
     symbols: Vec<Option<Value>>,
     names: HashMap<String, SymbolId>,
+    sizes: Vec<SymbolId>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 struct SymbolId(usize);
 
 trait SymbolRef {
@@ -114,6 +115,7 @@ impl LinkingContext {
         LinkingContext {
             symbols: Vec::new(),
             names: HashMap::new(),
+            sizes: Vec::new(),
         }
     }
 
@@ -214,7 +216,13 @@ fn resolve_symbols<SR: Clone>(object: &Object<SR>) -> LinkingContext {
 
 fn collect_symbols<SR: Clone>(object: &Object<SR>) -> LinkingContext {
     let mut symbols = LinkingContext::new();
-    for chunk in &object.chunks {
+    for i in 0..object.chunks.len() {
+        assert_eq!(i, symbols.sizes.len());
+        let symbol_id = SymbolId(symbols.symbols.len());
+        symbols.symbols.push(None);
+        symbols.sizes.push(symbol_id);
+    }
+    for (i, chunk) in (&object.chunks).into_iter().enumerate() {
         let mut location = Value::from(0);
         for node in &chunk.items {
             match node {
@@ -224,14 +232,15 @@ fn collect_symbols<SR: Clone>(object: &Object<SR>) -> LinkingContext {
                 node => location += node.size(&symbols),
             }
         }
-        symbols.define(format!("{}.size", chunk.name()), location)
+        let chunk_size_symbol_id = symbols.sizes[i];
+        symbols.refine(chunk_size_symbol_id, location);
     }
     symbols
 }
 
 fn refine_symbols<SR: Clone>(object: &Object<SR>, context: &mut LinkingContext) -> i32 {
     let mut refinements = 0;
-    for chunk in &object.chunks {
+    for (i, chunk) in (&object.chunks).into_iter().enumerate() {
         let mut location = Value::from(0);
         for node in &chunk.items {
             match node {
@@ -241,7 +250,8 @@ fn refine_symbols<SR: Clone>(object: &Object<SR>, context: &mut LinkingContext) 
                 node => location += node.size(context),
             }
         }
-        refinements += context.refine(format!("{}.size", chunk.name()), location) as i32
+        let chunk_size_symbol_id = context.sizes[i];
+        refinements += context.refine(chunk_size_symbol_id, location) as i32
     }
     refinements
 }
@@ -474,7 +484,7 @@ mod tests {
         f(&mut object.chunks[0]);
         let symbols = resolve_symbols(&object);
         assert_eq!(
-            symbols.get("TestSection.size").cloned(),
+            symbols.get(symbols.sizes[0]).cloned(),
             Some(Some(expected.into()))
         )
     }
