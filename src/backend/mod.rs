@@ -480,7 +480,7 @@ mod tests {
 
     fn assert_chunk_size(expected: impl Into<Value>, f: impl FnOnce(&mut Chunk<()>)) {
         let mut object = Object::<()>::new();
-        object.add_chunk("TestSection");
+        object.add_chunk();
         f(&mut object.chunks[0]);
         let symbols = resolve_symbols(&object);
         assert_eq!(

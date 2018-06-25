@@ -8,7 +8,6 @@ pub struct Object<SR> {
 }
 
 pub struct Chunk<R> {
-    name: String,
     origin: Option<RelocExpr<R>>,
     pub items: Vec<Node<R>>,
 }
@@ -27,8 +26,8 @@ impl<SR> Object<SR> {
         Object { chunks: Vec::new() }
     }
 
-    pub fn add_chunk(&mut self, name: impl Into<String>) {
-        self.chunks.push(Chunk::new(name.into()))
+    pub fn add_chunk(&mut self) {
+        self.chunks.push(Chunk::new())
     }
 }
 
@@ -73,16 +72,11 @@ impl<SR: SourceInterval> Node<SR> {
 }
 
 impl<SR> Chunk<SR> {
-    pub fn new(name: impl Into<String>) -> Chunk<SR> {
+    pub fn new() -> Chunk<SR> {
         Chunk {
-            name: name.into(),
             origin: None,
             items: Vec::new(),
         }
-    }
-
-    pub fn name(&self) -> &str {
-        &self.name
     }
 }
 
@@ -115,7 +109,7 @@ impl<SR> ObjectBuilder<SR> {
     fn current_chunk(&mut self) -> &mut Chunk<SR> {
         match self.state.take().unwrap() {
             BuilderState::Pending { origin } => {
-                self.object.add_chunk("name");
+                self.object.add_chunk();
                 let index = self.object.chunks.len() - 1;
                 self.state = Some(BuilderState::InChunk(index));
                 let chunk = &mut self.object.chunks[index];
