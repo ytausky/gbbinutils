@@ -1,9 +1,6 @@
-use backend::link::{Data, UndefinedSymbol, Value};
-use diagnostics::{Diagnostic, Message, Source, SourceInterval};
-use instruction::RelocExpr;
+use backend::link::Value;
 use std::borrow::Borrow;
 use std::collections::HashMap;
-use Width;
 
 pub struct LinkingContext {
     symbols: Vec<Option<Value>>,
@@ -83,57 +80,4 @@ impl LinkingContext {
         *stored_value = Some(value);
         was_refined
     }
-
-    pub fn resolve_expr_item<SR: SourceInterval>(
-        &self,
-        expr: &RelocExpr<SR>,
-        width: Width,
-    ) -> Result<Data, Diagnostic<SR>> {
-        let range = expr.source_interval();
-        let value = expr.evaluate(self)
-            .map_err(|undefined| {
-                let UndefinedSymbol(symbol, range) = undefined;
-                Diagnostic::new(Message::UnresolvedSymbol { symbol }, range)
-            })?
-            .unwrap()
-            .exact()
-            .unwrap();
-        fit_to_width((value, range), width)
-    }
-}
-
-fn fit_to_width<SR: Clone>(
-    (value, value_ref): (i32, SR),
-    width: Width,
-) -> Result<Data, Diagnostic<SR>> {
-    if !is_in_range(value, width) {
-        Err(Diagnostic::new(
-            Message::ValueOutOfRange { value, width },
-            value_ref.clone(),
-        ))
-    } else {
-        Ok(match width {
-            Width::Byte => Data::Byte(value as u8),
-            Width::Word => Data::Word(value as u16),
-        })
-    }
-}
-
-fn is_in_range(n: i32, width: Width) -> bool {
-    match width {
-        Width::Byte => is_in_byte_range(n),
-        Width::Word => true,
-    }
-}
-
-fn is_in_byte_range(n: i32) -> bool {
-    is_in_i8_range(n) || is_in_u8_range(n)
-}
-
-fn is_in_i8_range(n: i32) -> bool {
-    n >= i32::from(i8::min_value()) && n <= i32::from(i8::max_value())
-}
-
-fn is_in_u8_range(n: i32) -> bool {
-    n >= i32::from(u8::min_value()) && n <= i32::from(u8::max_value())
 }

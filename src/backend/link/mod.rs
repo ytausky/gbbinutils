@@ -2,7 +2,7 @@ pub use self::context::LinkingContext;
 
 use self::context::ChunkSize;
 use backend::{BinaryObject, BinarySection, Chunk, Node, Object};
-use diagnostics::{DiagnosticsListener, SourceInterval};
+use diagnostics::{Diagnostic, DiagnosticsListener, Message, Source, SourceInterval};
 use instruction::RelocExpr;
 use std::ops::AddAssign;
 use Width;
@@ -126,6 +126,59 @@ impl<SR: Clone> RelocExpr<SR> {
     }
 }
 
+fn resolve_expr_item<SR: SourceInterval>(
+    expr: &RelocExpr<SR>,
+    width: Width,
+    context: &LinkingContext,
+) -> Result<Data, Diagnostic<SR>> {
+    let range = expr.source_interval();
+    let value = expr.evaluate(context)
+        .map_err(|undefined| {
+            let UndefinedSymbol(symbol, range) = undefined;
+            Diagnostic::new(Message::UnresolvedSymbol { symbol }, range)
+        })?
+        .unwrap()
+        .exact()
+        .unwrap();
+    fit_to_width((value, range), width)
+}
+
+fn fit_to_width<SR: Clone>(
+    (value, value_ref): (i32, SR),
+    width: Width,
+) -> Result<Data, Diagnostic<SR>> {
+    if !is_in_range(value, width) {
+        Err(Diagnostic::new(
+            Message::ValueOutOfRange { value, width },
+            value_ref.clone(),
+        ))
+    } else {
+        Ok(match width {
+            Width::Byte => Data::Byte(value as u8),
+            Width::Word => Data::Word(value as u16),
+        })
+    }
+}
+
+fn is_in_range(n: i32, width: Width) -> bool {
+    match width {
+        Width::Byte => is_in_byte_range(n),
+        Width::Word => true,
+    }
+}
+
+fn is_in_byte_range(n: i32) -> bool {
+    is_in_i8_range(n) || is_in_u8_range(n)
+}
+
+fn is_in_i8_range(n: i32) -> bool {
+    n >= i32::from(i8::min_value()) && n <= i32::from(i8::max_value())
+}
+
+fn is_in_u8_range(n: i32) -> bool {
+    n >= i32::from(u8::min_value()) && n <= i32::from(u8::max_value())
+}
+
 impl<SR: Clone> Node<SR> {
     fn size(&self, symbols: &LinkingContext) -> Value {
         match self {
@@ -150,8 +203,7 @@ impl<SR: SourceInterval> Node<SR> {
         match self {
             Node::Byte(value) => vec![*value],
             Node::Embedded(..) | Node::LdInlineAddr(..) => panic!(),
-            Node::Expr(expr, width) => symbols
-                .resolve_expr_item(&expr, *width)
+            Node::Expr(expr, width) => resolve_expr_item(&expr, *width, symbols)
                 .map(|data| data.into_bytes())
                 .unwrap_or_else(|diagnostic| {
                     diagnostics.emit_diagnostic(diagnostic);
@@ -166,7 +218,7 @@ impl<SR: SourceInterval> Node<SR> {
 }
 
 #[derive(Clone, Copy)]
-pub enum Data {
+enum Data {
     Byte(u8),
     Word(u16),
 }
