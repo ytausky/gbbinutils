@@ -53,7 +53,7 @@ pub struct Rom {
 }
 
 pub struct LinkingContext {
-    symbols: Vec<Value>,
+    symbols: Vec<Option<Value>>,
     names: HashMap<String, SymbolId>,
 }
 
@@ -119,23 +119,24 @@ impl LinkingContext {
 
     fn define(&mut self, name: impl Into<String>, value: Value) {
         let id = SymbolId(self.symbols.len());
-        self.symbols.push(value);
+        self.symbols.push(Some(value));
         self.names.insert(name.into(), id);
     }
 
-    fn get(&self, key: impl SymbolRef) -> Option<&Value> {
+    fn get(&self, key: impl SymbolRef) -> Option<&Option<Value>> {
         key.to_symbol_id(self).map(|SymbolId(id)| &self.symbols[id])
     }
 
-    fn get_mut(&mut self, key: impl SymbolRef) -> Option<&mut Value> {
+    fn get_mut(&mut self, key: impl SymbolRef) -> Option<&mut Option<Value>> {
         key.to_symbol_id(self)
             .map(move |SymbolId(id)| &mut self.symbols[id])
     }
 
     fn refine(&mut self, key: impl SymbolRef, value: Value) -> bool {
         let stored_value = self.get_mut(key).unwrap();
-        let was_refined = value.len() < stored_value.len();
-        *stored_value = value;
+        let old_value = stored_value.clone();
+        let was_refined = old_value.map_or(true, |v| value.len() < v.len());
+        *stored_value = Some(value);
         was_refined
     }
 
@@ -150,6 +151,7 @@ impl LinkingContext {
                 let UndefinedSymbol(symbol, range) = undefined;
                 Diagnostic::new(Message::UnresolvedSymbol { symbol }, range)
             })?
+            .unwrap()
             .exact()
             .unwrap();
         fit_to_width((value, range), width)
@@ -176,9 +178,9 @@ fn fit_to_width<SR: Clone>(
 struct UndefinedSymbol<SR>(String, SR);
 
 impl<SR: Clone> RelocExpr<SR> {
-    fn evaluate(&self, context: &LinkingContext) -> Result<Value, UndefinedSymbol<SR>> {
+    fn evaluate(&self, context: &LinkingContext) -> Result<Option<Value>, UndefinedSymbol<SR>> {
         match self {
-            RelocExpr::Literal(value, _) => Ok((*value).into()),
+            RelocExpr::Literal(value, _) => Ok(Some((*value).into())),
             RelocExpr::LocationCounter => panic!(),
             RelocExpr::Subtract(_, _) => panic!(),
             RelocExpr::Symbol(symbol, expr_ref) => context
@@ -473,7 +475,7 @@ mod tests {
         let symbols = resolve_symbols(&object);
         assert_eq!(
             symbols.get("TestSection.size").cloned(),
-            Some(expected.into())
+            Some(Some(expected.into()))
         )
     }
 

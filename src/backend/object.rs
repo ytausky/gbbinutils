@@ -39,8 +39,8 @@ impl<SR: Clone> Node<SR> {
             Node::Expr(_, width) => width.len().into(),
             Node::Label(..) => 0.into(),
             Node::LdInlineAddr(expr, _) => match expr.evaluate(symbols) {
-                Ok(Value { min, .. }) if min >= 0xff00 => 2.into(),
-                Ok(Value { max, .. }) if max < 0xff00 => 3.into(),
+                Ok(Some(Value { min, .. })) if min >= 0xff00 => 2.into(),
+                Ok(Some(Value { max, .. })) if max < 0xff00 => 3.into(),
                 _ => Value { min: 2, max: 3 },
             },
         }
