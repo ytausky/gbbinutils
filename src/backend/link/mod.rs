@@ -1,7 +1,7 @@
 pub use self::context::LinkingContext;
 
 use self::context::ChunkSize;
-use backend::{BinaryObject, BinarySection, Chunk, Data, Node, Object};
+use backend::{BinaryObject, BinarySection, Chunk, Node, Object};
 use diagnostics::{DiagnosticsListener, SourceInterval};
 use instruction::RelocExpr;
 use std::ops::AddAssign;
@@ -62,11 +62,13 @@ fn resolve_section<SR: SourceInterval>(
     context: &LinkingContext,
     diagnostics: &impl DiagnosticsListener<SR>,
 ) -> BinarySection {
-    section
-        .items
-        .into_iter()
-        .flat_map(|node| node.translate(context, diagnostics))
-        .collect()
+    BinarySection {
+        data: section
+            .items
+            .into_iter()
+            .flat_map(|node| node.translate(context, diagnostics))
+            .collect(),
+    }
 }
 
 fn resolve_symbols<SR: Clone>(object: &Object<SR>) -> LinkingContext {
@@ -144,23 +146,41 @@ impl<SR: SourceInterval> Node<SR> {
         &self,
         symbols: &LinkingContext,
         diagnostics: &impl DiagnosticsListener<SR>,
-    ) -> impl Iterator<Item = Data> {
+    ) -> impl Iterator<Item = u8> {
         match self {
-            Node::Byte(value) => Some(Data::Byte(*value)),
+            Node::Byte(value) => vec![*value],
             Node::Embedded(..) | Node::LdInlineAddr(..) => panic!(),
-            Node::Expr(expr, width) => Some(
-                symbols
-                    .resolve_expr_item(&expr, *width)
-                    .unwrap_or_else(|diagnostic| {
-                        diagnostics.emit_diagnostic(diagnostic);
-                        match width {
-                            Width::Byte => Data::Byte(0),
-                            Width::Word => Data::Word(0),
-                        }
-                    }),
-            ),
-            Node::Label(..) => None,
+            Node::Expr(expr, width) => symbols
+                .resolve_expr_item(&expr, *width)
+                .map(|data| data.into_bytes())
+                .unwrap_or_else(|diagnostic| {
+                    diagnostics.emit_diagnostic(diagnostic);
+                    match width {
+                        Width::Byte => vec![0],
+                        Width::Word => vec![0, 0],
+                    }
+                }),
+            Node::Label(..) => vec![],
         }.into_iter()
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum Data {
+    Byte(u8),
+    Word(u16),
+}
+
+impl Data {
+    fn into_bytes(self) -> Vec<u8> {
+        match self {
+            Data::Byte(value) => vec![value],
+            Data::Word(value) => {
+                let low = (value & 0xff) as u8;
+                let high = ((value >> 8) & 0xff) as u8;
+                vec![low, high]
+            }
+        }
     }
 }
 

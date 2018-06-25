@@ -1,5 +1,4 @@
-use backend::link::{UndefinedSymbol, Value};
-use backend::Data;
+use backend::link::{Data, UndefinedSymbol, Value};
 use diagnostics::{Diagnostic, Message, Source, SourceInterval};
 use instruction::RelocExpr;
 use std::borrow::Borrow;

@@ -6,7 +6,6 @@ use backend::{
 };
 use diagnostics::*;
 use instruction::Instruction;
-use std::iter::FromIterator;
 use Width;
 
 mod link;
@@ -43,12 +42,6 @@ impl<SI: SourceInterval> Source for RelocExpr<SI> {
             RelocExpr::LocationCounter | RelocExpr::Subtract(..) => panic!(),
         }
     }
-}
-
-#[derive(Clone, Copy)]
-pub enum Data {
-    Byte(u8),
-    Word(u16),
 }
 
 pub struct BinaryObject {
@@ -93,32 +86,6 @@ impl<SR: SourceInterval> Backend<SR> for ObjectBuilder<SR> {
 
 struct BinarySection {
     data: Vec<u8>,
-}
-
-impl BinarySection {
-    fn new() -> BinarySection {
-        BinarySection { data: Vec::new() }
-    }
-
-    fn push(&mut self, data: Data) {
-        match data {
-            Data::Byte(value) => self.data.push(value),
-            Data::Word(value) => {
-                let low = value & 0xff;
-                let high = (value >> 8) & 0xff;
-                self.data.push(low as u8);
-                self.data.push(high as u8);
-            }
-        }
-    }
-}
-
-impl FromIterator<Data> for BinarySection {
-    fn from_iter<T: IntoIterator<Item = Data>>(iter: T) -> Self {
-        let mut section = BinarySection::new();
-        iter.into_iter().for_each(|x| section.push(x));
-        section
-    }
 }
 
 #[cfg(test)]
