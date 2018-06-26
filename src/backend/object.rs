@@ -1,4 +1,4 @@
-use instruction::{Direction, RelocExpr};
+use backend::RelocExpr;
 use Width;
 
 pub struct Object<SR> {
@@ -15,7 +15,7 @@ pub enum Node<SR> {
     Byte(u8),
     Expr(RelocExpr<SR>, Width),
     Label(String, SR),
-    LdInlineAddr(RelocExpr<SR>, Direction),
+    LdInlineAddr(u8, RelocExpr<SR>),
     Embedded(u8, RelocExpr<SR>),
 }
 

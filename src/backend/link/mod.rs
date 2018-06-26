@@ -1,9 +1,8 @@
 pub use self::context::LinkingContext;
 
 use self::context::ChunkSize;
-use backend::{BinaryObject, BinarySection, Chunk, Node, Object};
+use backend::{BinaryObject, BinarySection, Chunk, Node, Object, RelocExpr};
 use diagnostics::{Diagnostic, DiagnosticsListener, Message, Source, SourceInterval};
-use instruction::{Direction, RelocExpr};
 use std::ops::AddAssign;
 use std::vec::IntoIter;
 use Width;
@@ -193,7 +192,7 @@ impl<SR: Clone> Node<SR> {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),
             Node::Expr(_, width) => width.len().into(),
             Node::Label(..) => 0.into(),
-            Node::LdInlineAddr(expr, _) => match expr.evaluate(symbols) {
+            Node::LdInlineAddr(_, expr) => match expr.evaluate(symbols) {
                 Ok(Some(Value { min, .. })) if min >= 0xff00 => 2.into(),
                 Ok(Some(Value { max, .. })) if max < 0xff00 => 3.into(),
                 _ => Value { min: 2, max: 3 },
@@ -214,18 +213,16 @@ impl<SR: SourceInterval> Node<SR> {
                 resolve_expr_item(&expr, *width, context).map(|data| data.into_bytes())?
             }
             Node::Label(..) => vec![],
-            Node::LdInlineAddr(expr, direction) => {
+            Node::LdInlineAddr(opcode, expr) => {
                 let addr = expr.evaluate(context).unwrap().unwrap().exact().unwrap();
                 let kind = if addr < 0xff00 {
                     AddrKind::Low
                 } else {
                     AddrKind::High
                 };
-                let opcode: u8 = match (kind, direction) {
-                    (AddrKind::Low, Direction::FromA) => 0xea,
-                    (AddrKind::Low, Direction::IntoA) => 0xfa,
-                    (AddrKind::High, Direction::FromA) => 0xe0,
-                    (AddrKind::High, Direction::IntoA) => 0xf0,
+                let opcode = opcode | match kind {
+                    AddrKind::Low => 0x0a,
+                    AddrKind::High => 0x00,
                 };
                 let mut bytes = vec![opcode];
                 let addr_repr = match kind {
@@ -267,35 +264,30 @@ impl Data {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use instruction::Direction;
     use std::borrow::Borrow;
 
     #[test]
     fn translate_ld_deref_addr_a_with_low_addr() {
-        test_translation_of_ld_inline_addr(0x2000, Direction::FromA, [0xea, 0x00, 0x20])
+        test_translation_of_ld_inline_addr(0xe0, 0x2000, [0xea, 0x00, 0x20])
     }
 
     #[test]
     fn translate_ld_a_deref_addr_with_low_addr() {
-        test_translation_of_ld_inline_addr(0x2000, Direction::IntoA, [0xfa, 0x00, 0x20])
+        test_translation_of_ld_inline_addr(0xf0, 0x2000, [0xfa, 0x00, 0x20])
     }
 
     #[test]
     fn translate_ld_deref_addr_a_with_high_addr() {
-        test_translation_of_ld_inline_addr(0xff77, Direction::FromA, [0xe0, 0x77])
+        test_translation_of_ld_inline_addr(0xe0, 0xff77, [0xe0, 0x77])
     }
 
     #[test]
     fn translate_ld_a_deref_addr_with_high_addr() {
-        test_translation_of_ld_inline_addr(0xff77, Direction::IntoA, [0xf0, 0x77])
+        test_translation_of_ld_inline_addr(0xf0, 0xff77, [0xf0, 0x77])
     }
 
-    fn test_translation_of_ld_inline_addr(
-        addr: u16,
-        direction: Direction,
-        expected: impl Borrow<[u8]>,
-    ) {
-        let actual: Vec<_> = Node::LdInlineAddr(RelocExpr::Literal(addr.into(), ()), direction)
+    fn test_translation_of_ld_inline_addr(opcode: u8, addr: u16, expected: impl Borrow<[u8]>) {
+        let actual: Vec<_> = Node::LdInlineAddr(opcode, RelocExpr::Literal(addr.into(), ()))
             .translate(&LinkingContext::new())
             .unwrap()
             .collect();
@@ -333,10 +325,9 @@ mod tests {
 
     fn test_chunk_size_with_literal_ld_inline_addr(addr: i32, expected: i32) {
         assert_chunk_size(expected, |section| {
-            section.items.push(Node::LdInlineAddr(
-                RelocExpr::Literal(addr, ()),
-                Direction::FromA,
-            ))
+            section
+                .items
+                .push(Node::LdInlineAddr(0, RelocExpr::Literal(addr, ())))
         });
     }
 
@@ -345,10 +336,7 @@ mod tests {
         assert_chunk_size(3, |section| {
             section.items.extend(
                 [
-                    Node::LdInlineAddr(
-                        RelocExpr::Symbol("label".to_string(), ()),
-                        Direction::FromA,
-                    ),
+                    Node::LdInlineAddr(0, RelocExpr::Symbol("label".to_string(), ())),
                     Node::Label("label".to_string(), ()),
                 ].iter()
                     .cloned(),

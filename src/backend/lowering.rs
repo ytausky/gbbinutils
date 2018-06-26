@@ -142,12 +142,15 @@ impl<SR> Lower<SR> for Ld<SR> {
 }
 
 fn encode_special_ld<SR>(ld: SpecialLd<SR>, direction: Direction) -> LoweredItem<SR> {
+    let direction_bit = encode_direction(direction);
     match ld {
-        SpecialLd::DerefPtrReg(ptr_reg) => LoweredItem::with_opcode(
-            0x02 | encode_ptr_reg(ptr_reg) | (encode_direction(direction) >> 1),
-        ),
-        SpecialLd::InlineAddr(addr) => LoweredItem::One(Node::LdInlineAddr(addr, direction)),
-        SpecialLd::RegIndex => LoweredItem::with_opcode(0xe2 | encode_direction(direction)),
+        SpecialLd::DerefPtrReg(ptr_reg) => {
+            LoweredItem::with_opcode(0x02 | encode_ptr_reg(ptr_reg) | (direction_bit >> 1))
+        }
+        SpecialLd::InlineAddr(addr) => {
+            LoweredItem::One(Node::LdInlineAddr(0xe0 | direction_bit, addr))
+        }
+        SpecialLd::RegIndex => LoweredItem::with_opcode(0xe2 | direction_bit),
     }
 }
 
@@ -485,10 +488,10 @@ mod tests {
     fn encode_ld_inline_addr() {
         let addr = RelocExpr::Literal(0x1234, ());
         let test_cases = &[(Direction::FromA, 0xea), (Direction::IntoA, 0xfa)];
-        for &(direction, _opcode) in test_cases {
+        for &(direction, opcode) in test_cases {
             test_instruction(
                 Ld(Special(SpecialLd::InlineAddr(addr.clone()), direction)),
-                [Node::LdInlineAddr(addr.clone(), direction)],
+                [Node::LdInlineAddr(opcode & 0xf0, addr.clone())],
             )
         }
     }
