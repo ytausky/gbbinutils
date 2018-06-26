@@ -206,7 +206,10 @@ impl<SR: SourceInterval> Node<SR> {
     fn translate(&self, context: &LinkingContext) -> Result<IntoIter<u8>, Diagnostic<SR>> {
         Ok(match self {
             Node::Byte(value) => vec![*value],
-            Node::Embedded(..) => panic!(),
+            Node::Embedded(opcode, expr) => {
+                let n = expr.evaluate(context).unwrap().unwrap().exact().unwrap();
+                vec![opcode | ((n as u8) << 3)]
+            }
             Node::Expr(expr, width) => {
                 resolve_expr_item(&expr, *width, context).map(|data| data.into_bytes())?
             }
@@ -297,6 +300,15 @@ mod tests {
             .unwrap()
             .collect();
         assert_eq!(actual, expected.borrow())
+    }
+
+    #[test]
+    fn translate_embedded() {
+        let actual: Vec<_> = Node::Embedded(0b01_000_110, RelocExpr::Literal(4, ()))
+            .translate(&LinkingContext::new())
+            .unwrap()
+            .collect();
+        assert_eq!(actual, [0x66])
     }
 
     #[test]
