@@ -3,7 +3,7 @@ pub use self::context::LinkingContext;
 use self::context::ChunkSize;
 use backend::{BinaryObject, BinarySection, Chunk, Node, Object};
 use diagnostics::{Diagnostic, DiagnosticsListener, Message, Source, SourceInterval};
-use instruction::RelocExpr;
+use instruction::{Direction, RelocExpr};
 use std::ops::AddAssign;
 use std::vec::IntoIter;
 use Width;
@@ -117,6 +117,7 @@ fn refine_symbols<SR: Clone>(object: &Object<SR>, context: &mut LinkingContext) 
     refinements
 }
 
+#[derive(Debug)]
 struct UndefinedSymbol<SR>(String, SR);
 
 impl<SR: Clone> RelocExpr<SR> {
@@ -202,16 +203,43 @@ impl<SR: Clone> Node<SR> {
 }
 
 impl<SR: SourceInterval> Node<SR> {
-    fn translate(&self, symbols: &LinkingContext) -> Result<IntoIter<u8>, Diagnostic<SR>> {
+    fn translate(&self, context: &LinkingContext) -> Result<IntoIter<u8>, Diagnostic<SR>> {
         Ok(match self {
             Node::Byte(value) => vec![*value],
-            Node::Embedded(..) | Node::LdInlineAddr(..) => panic!(),
+            Node::Embedded(..) => panic!(),
             Node::Expr(expr, width) => {
-                resolve_expr_item(&expr, *width, symbols).map(|data| data.into_bytes())?
+                resolve_expr_item(&expr, *width, context).map(|data| data.into_bytes())?
             }
             Node::Label(..) => vec![],
+            Node::LdInlineAddr(expr, direction) => {
+                let addr = expr.evaluate(context).unwrap().unwrap().exact().unwrap();
+                let kind = if addr < 0xff00 {
+                    AddrKind::Low
+                } else {
+                    AddrKind::High
+                };
+                let opcode: u8 = match (kind, direction) {
+                    (AddrKind::Low, Direction::FromA) => 0xea,
+                    (AddrKind::Low, Direction::IntoA) => 0xfa,
+                    (AddrKind::High, Direction::FromA) => 0xe0,
+                    (AddrKind::High, Direction::IntoA) => 0xf0,
+                };
+                let mut bytes = vec![opcode];
+                let addr_repr = match kind {
+                    AddrKind::Low => Data::Word(addr as u16),
+                    AddrKind::High => Data::Byte((addr & 0xff) as u8),
+                };
+                bytes.extend(addr_repr.into_bytes());
+                bytes
+            }
         }.into_iter())
     }
+}
+
+#[derive(Clone, Copy)]
+enum AddrKind {
+    Low,
+    High,
 }
 
 #[derive(Clone, Copy)]
@@ -237,6 +265,39 @@ impl Data {
 mod tests {
     use super::*;
     use instruction::Direction;
+    use std::borrow::Borrow;
+
+    #[test]
+    fn translate_ld_deref_addr_a_with_low_addr() {
+        test_translation_of_ld_inline_addr(0x2000, Direction::FromA, [0xea, 0x00, 0x20])
+    }
+
+    #[test]
+    fn translate_ld_a_deref_addr_with_low_addr() {
+        test_translation_of_ld_inline_addr(0x2000, Direction::IntoA, [0xfa, 0x00, 0x20])
+    }
+
+    #[test]
+    fn translate_ld_deref_addr_a_with_high_addr() {
+        test_translation_of_ld_inline_addr(0xff77, Direction::FromA, [0xe0, 0x77])
+    }
+
+    #[test]
+    fn translate_ld_a_deref_addr_with_high_addr() {
+        test_translation_of_ld_inline_addr(0xff77, Direction::IntoA, [0xf0, 0x77])
+    }
+
+    fn test_translation_of_ld_inline_addr(
+        addr: u16,
+        direction: Direction,
+        expected: impl Borrow<[u8]>,
+    ) {
+        let actual: Vec<_> = Node::LdInlineAddr(RelocExpr::Literal(addr.into(), ()), direction)
+            .translate(&LinkingContext::new())
+            .unwrap()
+            .collect();
+        assert_eq!(actual, expected.borrow())
+    }
 
     #[test]
     fn empty_chunk_has_size_zero() {
