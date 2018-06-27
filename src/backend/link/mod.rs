@@ -1,4 +1,4 @@
-pub use self::context::LinkingContext;
+pub use self::context::SymbolTable;
 
 use self::context::ChunkSize;
 use backend::{BinaryObject, BinarySection, Chunk, Node, Object, RelocExpr};
@@ -59,7 +59,7 @@ where
 
 fn resolve_section<SR: SourceInterval>(
     section: Chunk<SR>,
-    context: &LinkingContext,
+    context: &SymbolTable,
     diagnostics: &impl DiagnosticsListener<SR>,
 ) -> BinarySection {
     BinarySection {
@@ -77,14 +77,14 @@ fn resolve_section<SR: SourceInterval>(
     }
 }
 
-fn resolve_symbols<SR: Clone>(object: &Object<SR>) -> LinkingContext {
+fn resolve_symbols<SR: Clone>(object: &Object<SR>) -> SymbolTable {
     let mut symbols = collect_symbols(object);
     refine_symbols(object, &mut symbols);
     symbols
 }
 
-fn collect_symbols<SR: Clone>(object: &Object<SR>) -> LinkingContext {
-    let mut symbols = LinkingContext::new();
+fn collect_symbols<SR: Clone>(object: &Object<SR>) -> SymbolTable {
+    let mut symbols = SymbolTable::new();
     (0..object.chunks.len()).for_each(|i| symbols.define(ChunkSize(i), None));
     for (i, chunk) in (&object.chunks).into_iter().enumerate() {
         let size = chunk.traverse(&mut symbols, |location, item, context| {
@@ -97,7 +97,7 @@ fn collect_symbols<SR: Clone>(object: &Object<SR>) -> LinkingContext {
     symbols
 }
 
-fn refine_symbols<SR: Clone>(object: &Object<SR>, context: &mut LinkingContext) -> i32 {
+fn refine_symbols<SR: Clone>(object: &Object<SR>, context: &mut SymbolTable) -> i32 {
     let mut refinements = 0;
     for (i, chunk) in (&object.chunks).into_iter().enumerate() {
         let size = chunk.traverse(context, |location, item, context| {
@@ -111,9 +111,9 @@ fn refine_symbols<SR: Clone>(object: &Object<SR>, context: &mut LinkingContext) 
 }
 
 impl<SR: Clone> Chunk<SR> {
-    fn traverse<F>(&self, context: &mut LinkingContext, mut f: F) -> Value
+    fn traverse<F>(&self, context: &mut SymbolTable, mut f: F) -> Value
     where
-        F: FnMut(&Value, &Node<SR>, &mut LinkingContext),
+        F: FnMut(&Value, &Node<SR>, &mut SymbolTable),
     {
         let mut location = Value::from(0);
         for item in &self.items {
@@ -128,7 +128,7 @@ impl<SR: Clone> Chunk<SR> {
 struct UndefinedSymbol<SR>(String, SR);
 
 impl<SR: Clone> RelocExpr<SR> {
-    fn evaluate(&self, context: &LinkingContext) -> Result<Option<Value>, UndefinedSymbol<SR>> {
+    fn evaluate(&self, context: &SymbolTable) -> Result<Option<Value>, UndefinedSymbol<SR>> {
         match self {
             RelocExpr::Literal(value, _) => Ok(Some((*value).into())),
             RelocExpr::LocationCounter => panic!(),
@@ -144,7 +144,7 @@ impl<SR: Clone> RelocExpr<SR> {
 fn resolve_expr_item<SR: SourceInterval>(
     expr: &RelocExpr<SR>,
     width: Width,
-    context: &LinkingContext,
+    context: &SymbolTable,
 ) -> Result<Data, Diagnostic<SR>> {
     let range = expr.source_interval();
     let value = expr.evaluate(context)
@@ -195,7 +195,7 @@ fn is_in_u8_range(n: i32) -> bool {
 }
 
 impl<SR: Clone> Node<SR> {
-    fn size(&self, symbols: &LinkingContext) -> Value {
+    fn size(&self, symbols: &SymbolTable) -> Value {
         match self {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),
             Node::Expr(_, width) => width.len().into(),
@@ -210,7 +210,7 @@ impl<SR: Clone> Node<SR> {
 }
 
 impl<SR: SourceInterval> Node<SR> {
-    fn translate(&self, context: &LinkingContext) -> Result<IntoIter<u8>, Diagnostic<SR>> {
+    fn translate(&self, context: &SymbolTable) -> Result<IntoIter<u8>, Diagnostic<SR>> {
         Ok(match self {
             Node::Byte(value) => vec![*value],
             Node::Embedded(opcode, expr) => {
@@ -296,7 +296,7 @@ mod tests {
 
     fn test_translation_of_ld_inline_addr(opcode: u8, addr: u16, expected: impl Borrow<[u8]>) {
         let actual: Vec<_> = Node::LdInlineAddr(opcode, RelocExpr::Literal(addr.into(), ()))
-            .translate(&LinkingContext::new())
+            .translate(&SymbolTable::new())
             .unwrap()
             .collect();
         assert_eq!(actual, expected.borrow())
@@ -305,7 +305,7 @@ mod tests {
     #[test]
     fn translate_embedded() {
         let actual: Vec<_> = Node::Embedded(0b01_000_110, RelocExpr::Literal(4, ()))
-            .translate(&LinkingContext::new())
+            .translate(&SymbolTable::new())
             .unwrap()
             .collect();
         assert_eq!(actual, [0x66])

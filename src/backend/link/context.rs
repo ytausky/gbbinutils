@@ -2,7 +2,7 @@ use backend::link::Value;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 
-pub struct LinkingContext {
+pub struct SymbolTable {
     symbols: Vec<Option<Value>>,
     names: HashMap<String, SymbolId>,
     sizes: Vec<SymbolId>,
@@ -12,24 +12,24 @@ pub struct LinkingContext {
 pub struct SymbolId(usize);
 
 pub trait SymbolRef {
-    fn associate(&self, context: &mut LinkingContext, id: SymbolId);
-    fn to_symbol_id(&self, table: &LinkingContext) -> Option<SymbolId>;
+    fn associate(&self, context: &mut SymbolTable, id: SymbolId);
+    fn to_symbol_id(&self, table: &SymbolTable) -> Option<SymbolId>;
 }
 
 impl SymbolRef for SymbolId {
-    fn associate(&self, _: &mut LinkingContext, _: SymbolId) {}
+    fn associate(&self, _: &mut SymbolTable, _: SymbolId) {}
 
-    fn to_symbol_id(&self, _: &LinkingContext) -> Option<SymbolId> {
+    fn to_symbol_id(&self, _: &SymbolTable) -> Option<SymbolId> {
         Some((*self).clone())
     }
 }
 
 impl<Q: Borrow<str>> SymbolRef for Q {
-    fn associate(&self, context: &mut LinkingContext, id: SymbolId) {
+    fn associate(&self, context: &mut SymbolTable, id: SymbolId) {
         context.names.insert(self.borrow().to_string(), id);
     }
 
-    fn to_symbol_id(&self, table: &LinkingContext) -> Option<SymbolId> {
+    fn to_symbol_id(&self, table: &SymbolTable) -> Option<SymbolId> {
         table.names.get(self.borrow()).cloned()
     }
 }
@@ -37,21 +37,21 @@ impl<Q: Borrow<str>> SymbolRef for Q {
 pub struct ChunkSize(pub usize);
 
 impl SymbolRef for ChunkSize {
-    fn associate(&self, context: &mut LinkingContext, id: SymbolId) {
+    fn associate(&self, context: &mut SymbolTable, id: SymbolId) {
         let ChunkSize(index) = *self;
         assert_eq!(index, context.sizes.len());
         context.sizes.push(id)
     }
 
-    fn to_symbol_id(&self, context: &LinkingContext) -> Option<SymbolId> {
+    fn to_symbol_id(&self, context: &SymbolTable) -> Option<SymbolId> {
         let ChunkSize(index) = *self;
         context.sizes.get(index).cloned()
     }
 }
 
-impl LinkingContext {
-    pub fn new() -> LinkingContext {
-        LinkingContext {
+impl SymbolTable {
+    pub fn new() -> SymbolTable {
+        SymbolTable {
             symbols: Vec::new(),
             names: HashMap::new(),
             sizes: Vec::new(),
