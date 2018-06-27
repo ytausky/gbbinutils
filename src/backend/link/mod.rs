@@ -87,14 +87,12 @@ fn collect_symbols<SR: Clone>(object: &Object<SR>) -> LinkingContext {
     let mut symbols = LinkingContext::new();
     (0..object.chunks.len()).for_each(|i| symbols.define(ChunkSize(i), None));
     for (i, chunk) in (&object.chunks).into_iter().enumerate() {
-        let mut location = Value::from(0);
-        for node in &chunk.items {
-            match node {
-                Node::Label(symbol, _) => symbols.define(symbol.as_str(), Some(location.clone())),
-                node => location += node.size(&symbols),
+        let size = chunk.traverse(&mut symbols, |location, item, context| {
+            if let Node::Label(symbol, _) = item {
+                context.define(symbol.as_str(), Some(location.clone()))
             }
-        }
-        symbols.refine(ChunkSize(i), location);
+        });
+        symbols.refine(ChunkSize(i), size);
     }
     symbols
 }
@@ -102,18 +100,28 @@ fn collect_symbols<SR: Clone>(object: &Object<SR>) -> LinkingContext {
 fn refine_symbols<SR: Clone>(object: &Object<SR>, context: &mut LinkingContext) -> i32 {
     let mut refinements = 0;
     for (i, chunk) in (&object.chunks).into_iter().enumerate() {
-        let mut location = Value::from(0);
-        for node in &chunk.items {
-            match node {
-                Node::Label(symbol, _) => {
-                    refinements += context.refine(symbol.as_str(), location.clone()) as i32
-                }
-                node => location += node.size(context),
+        let size = chunk.traverse(context, |location, item, context| {
+            if let Node::Label(symbol, _) = item {
+                refinements += context.refine(symbol.as_str(), location.clone()) as i32
             }
-        }
-        refinements += context.refine(ChunkSize(i), location) as i32
+        });
+        refinements += context.refine(ChunkSize(i), size) as i32
     }
     refinements
+}
+
+impl<SR: Clone> Chunk<SR> {
+    fn traverse<F>(&self, context: &mut LinkingContext, mut f: F) -> Value
+    where
+        F: FnMut(&Value, &Node<SR>, &mut LinkingContext),
+    {
+        let mut location = Value::from(0);
+        for item in &self.items {
+            f(&location, item, context);
+            location += item.size(context)
+        }
+        location
+    }
 }
 
 #[derive(Debug)]
