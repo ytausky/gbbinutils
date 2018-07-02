@@ -280,7 +280,7 @@ impl Data {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use backend;
+    use diagnostics::TestDiagnosticsListener;
     use std::borrow::Borrow;
 
     #[test]
@@ -334,11 +334,7 @@ mod tests {
             Node::Byte(byte),
             Node::Expr(RelocExpr::LocationCounter(()), Width::Byte),
         ]);
-        let binary = resolve_section(
-            chunk,
-            &SymbolTable::new(),
-            &backend::tests::TestDiagnosticsListener::new(),
-        );
+        let binary = resolve_section(chunk, &SymbolTable::new(), &TestDiagnosticsListener::new());
         assert_eq!(binary.data, [byte, 0x01])
     }
 

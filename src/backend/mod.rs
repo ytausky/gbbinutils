@@ -94,8 +94,8 @@ struct BinarySection {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use diagnostics::TestDiagnosticsListener;
     use instruction::Nullary;
-
     use std::borrow::Borrow;
 
     #[test]
@@ -209,25 +209,5 @@ mod tests {
             },
             (),
         )
-    }
-
-    use std::cell::RefCell;
-
-    pub struct TestDiagnosticsListener {
-        diagnostics: RefCell<Vec<Diagnostic<()>>>,
-    }
-
-    impl TestDiagnosticsListener {
-        pub fn new() -> TestDiagnosticsListener {
-            TestDiagnosticsListener {
-                diagnostics: RefCell::new(Vec::new()),
-            }
-        }
-    }
-
-    impl DiagnosticsListener<()> for TestDiagnosticsListener {
-        fn emit_diagnostic(&self, diagnostic: Diagnostic<()>) {
-            self.diagnostics.borrow_mut().push(diagnostic)
-        }
     }
 }

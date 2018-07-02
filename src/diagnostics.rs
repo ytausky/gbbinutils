@@ -105,6 +105,27 @@ pub trait DiagnosticsListener<TR> {
     fn emit_diagnostic(&self, diagnostic: Diagnostic<TR>);
 }
 
+#[cfg(test)]
+pub struct TestDiagnosticsListener {
+    pub diagnostics: RefCell<Vec<Diagnostic<()>>>,
+}
+
+#[cfg(test)]
+impl TestDiagnosticsListener {
+    pub fn new() -> TestDiagnosticsListener {
+        TestDiagnosticsListener {
+            diagnostics: RefCell::new(Vec::new()),
+        }
+    }
+}
+
+#[cfg(test)]
+impl DiagnosticsListener<()> for TestDiagnosticsListener {
+    fn emit_diagnostic(&self, diagnostic: Diagnostic<()>) {
+        self.diagnostics.borrow_mut().push(diagnostic)
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct Diagnostic<SR> {
     message: Message<SR>,
