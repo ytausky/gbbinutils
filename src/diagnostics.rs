@@ -6,6 +6,11 @@ pub trait SourceInterval: Clone + fmt::Debug {
     fn extend(&self, other: &Self) -> Self;
 }
 
+#[cfg(test)]
+impl SourceInterval for () {
+    fn extend(&self, _: &Self) -> Self {}
+}
+
 pub trait Source {
     type Interval: SourceInterval;
     fn source_interval(&self) -> Self::Interval;

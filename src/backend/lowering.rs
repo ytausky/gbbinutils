@@ -1,5 +1,6 @@
 use backend::object::Node;
 use backend::Item;
+use diagnostics::{Source, SourceInterval};
 use instruction::*;
 use std::mem;
 use Width;
@@ -59,7 +60,7 @@ impl<SR> From<u8> for Node<SR> {
     }
 }
 
-impl<SR> Lower<SR> for Item<SR> {
+impl<SR: SourceInterval> Lower<SR> for Item<SR> {
     fn lower(self) -> LoweredItem<SR> {
         match self {
             Item::Data(expr, width) => LoweredItem::One(Node::Expr(expr, width)),
@@ -68,7 +69,7 @@ impl<SR> Lower<SR> for Item<SR> {
     }
 }
 
-impl<SR> Lower<SR> for Instruction<SR> {
+impl<SR: SourceInterval> Lower<SR> for Instruction<SR> {
     fn lower(self) -> LoweredItem<SR> {
         use instruction::Instruction::*;
         match self {
@@ -181,7 +182,10 @@ fn encode_alu_operation(operation: AluOperation) -> u8 {
     }) << 3
 }
 
-fn encode_branch<SR>(branch: Branch<SR>, condition: Option<Condition>) -> LoweredItem<SR> {
+fn encode_branch<SR: SourceInterval>(
+    branch: Branch<SR>,
+    condition: Option<Condition>,
+) -> LoweredItem<SR> {
     use instruction::Branch::*;
     match branch {
         Call(target) => LoweredItem::with_opcode(match condition {
@@ -192,13 +196,16 @@ fn encode_branch<SR>(branch: Branch<SR>, condition: Option<Condition>) -> Lowere
             None => 0xc3,
             Some(condition) => 0xc2 | encode_condition(condition),
         }).and_word(target),
-        Jr(target) => LoweredItem::with_opcode(match condition {
-            None => 0x18,
-            Some(condition) => 0x20 | encode_condition(condition),
-        }).and_byte(RelocExpr::Subtract(
-            Box::new(target),
-            Box::new(RelocExpr::LocationCounter),
-        )),
+        Jr(target) => {
+            let source_range = target.source_interval();
+            LoweredItem::with_opcode(match condition {
+                None => 0x18,
+                Some(condition) => 0x20 | encode_condition(condition),
+            }).and_byte(RelocExpr::Subtract(
+                Box::new(target),
+                Box::new(RelocExpr::LocationCounter(source_range)),
+            ))
+        }
         Ret => LoweredItem::with_opcode(match condition {
             None => 0xc9,
             Some(condition) => 0b11_000_000 | encode_condition(condition),
@@ -320,8 +327,7 @@ mod tests {
     use instruction::{self, Branch::*, Instruction::*, Ld::*, Nullary::*};
 
     fn test_instruction(instruction: Instruction<()>, data_items: impl Borrow<[Node<()>]>) {
-        let mut code = vec![];
-        code.extend(instruction.lower());
+        let code: Vec<_> = instruction.lower().collect();
         assert_eq!(code, data_items.borrow())
     }
 
@@ -757,7 +763,7 @@ mod tests {
                     Node::Expr(
                         RelocExpr::Subtract(
                             Box::new(target_expr.clone()),
-                            Box::new(RelocExpr::LocationCounter),
+                            Box::new(RelocExpr::LocationCounter(())),
                         ),
                         Width::Byte,
                     ),

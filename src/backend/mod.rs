@@ -27,19 +27,22 @@ pub enum Item<R> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum RelocExpr<R> {
-    Literal(i32, R),
-    LocationCounter,
-    Subtract(Box<RelocExpr<R>>, Box<RelocExpr<R>>),
-    Symbol(String, R),
+pub enum RelocExpr<SR> {
+    Literal(i32, SR),
+    LocationCounter(SR),
+    Subtract(Box<RelocExpr<SR>>, Box<RelocExpr<SR>>),
+    Symbol(String, SR),
 }
 
 impl<SI: SourceInterval> Source for RelocExpr<SI> {
     type Interval = SI;
     fn source_interval(&self) -> Self::Interval {
+        use backend::RelocExpr::*;
         match self {
-            RelocExpr::Literal(_, interval) | RelocExpr::Symbol(_, interval) => (*interval).clone(),
-            RelocExpr::LocationCounter | RelocExpr::Subtract(..) => panic!(),
+            Literal(_, interval) | Symbol(_, interval) | LocationCounter(interval) => {
+                (*interval).clone()
+            }
+            Subtract(..) => panic!(),
         }
     }
 }
@@ -210,12 +213,12 @@ mod tests {
 
     use std::cell::RefCell;
 
-    struct TestDiagnosticsListener {
+    pub struct TestDiagnosticsListener {
         diagnostics: RefCell<Vec<Diagnostic<()>>>,
     }
 
     impl TestDiagnosticsListener {
-        fn new() -> TestDiagnosticsListener {
+        pub fn new() -> TestDiagnosticsListener {
             TestDiagnosticsListener {
                 diagnostics: RefCell::new(Vec::new()),
             }

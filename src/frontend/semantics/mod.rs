@@ -251,7 +251,7 @@ mod tests {
     use super::*;
 
     use backend;
-    use diagnostics::{Diagnostic, SourceInterval};
+    use diagnostics::Diagnostic;
     use frontend::syntax::{
         keyword::OperandKeyword, token, CommandContext, FileContext, MacroInvocationContext,
         TokenSeqContext,
@@ -309,10 +309,6 @@ mod tests {
         fn set_origin(&mut self, origin: RelocExpr<()>) {
             self.0.push(TestOperation::SetOrigin(origin))
         }
-    }
-
-    impl SourceInterval for () {
-        fn extend(&self, _: &Self) {}
     }
 
     #[test]

@@ -63,15 +63,17 @@ fn resolve_section<SR: SourceInterval>(
     diagnostics: &impl DiagnosticsListener<SR>,
 ) -> BinarySection {
     let mut data = Vec::<u8>::new();
-    let context = EvalContext {
+    let mut context = EvalContext {
         symbols,
         location: Some(0.into()),
     };
     for item in section.items {
+        let size = item.size(&context);
         match item.translate(&context) {
             Ok(iter) => data.extend(iter),
             Err(diagnostic) => diagnostics.emit_diagnostic(diagnostic),
         }
+        *context.location.as_mut().unwrap() += size;
     }
     BinarySection { data }
 }
@@ -136,7 +138,7 @@ impl<SR: Clone> RelocExpr<SR> {
     fn evaluate(&self, context: &EvalContext) -> Result<Option<Value>, UndefinedSymbol<SR>> {
         match self {
             RelocExpr::Literal(value, _) => Ok(Some((*value).into())),
-            RelocExpr::LocationCounter => panic!(),
+            RelocExpr::LocationCounter(_) => Ok(context.location.clone()),
             RelocExpr::Subtract(_, _) => panic!(),
             RelocExpr::Symbol(symbol, expr_ref) => context
                 .symbols
@@ -278,6 +280,7 @@ impl Data {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use backend;
     use std::borrow::Borrow;
 
     #[test]
@@ -321,6 +324,22 @@ mod tests {
             .unwrap()
             .collect();
         assert_eq!(actual, [0x66])
+    }
+
+    #[test]
+    fn translate_expr_with_location_counter() {
+        let byte = 0x42;
+        let mut chunk = Chunk::new();
+        chunk.items.extend(vec![
+            Node::Byte(byte),
+            Node::Expr(RelocExpr::LocationCounter(()), Width::Byte),
+        ]);
+        let binary = resolve_section(
+            chunk,
+            &SymbolTable::new(),
+            &backend::tests::TestDiagnosticsListener::new(),
+        );
+        assert_eq!(binary.data, [byte, 0x01])
     }
 
     #[test]
