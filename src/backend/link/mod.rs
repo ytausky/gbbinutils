@@ -3,7 +3,7 @@ pub use self::context::{EvalContext, SymbolTable};
 use self::context::ChunkSize;
 use backend::{BinaryObject, BinarySection, Chunk, Node, Object, RelocExpr};
 use diagnostics::{Diagnostic, DiagnosticsListener, Message, Source, SourceRange};
-use std::ops::AddAssign;
+use std::ops::{AddAssign, Sub};
 use std::vec::IntoIter;
 use Width;
 
@@ -39,6 +39,16 @@ impl AddAssign<Value> for Value {
     fn add_assign(&mut self, rhs: Value) {
         self.min += rhs.min;
         self.max += rhs.max
+    }
+}
+
+impl Sub<Value> for Value {
+    type Output = Value;
+    fn sub(self, rhs: Value) -> Self::Output {
+        Value {
+            min: self.min - rhs.max,
+            max: self.max - rhs.min,
+        }
     }
 }
 
@@ -139,7 +149,14 @@ impl<SR: Clone> RelocExpr<SR> {
         match self {
             RelocExpr::Literal(value, _) => Ok(Some((*value).into())),
             RelocExpr::LocationCounter(_) => Ok(context.location.clone()),
-            RelocExpr::Subtract(_, _) => panic!(),
+            RelocExpr::Subtract(lhs, rhs, _) => Ok({
+                let lhs = lhs.evaluate(context)?;
+                let rhs = rhs.evaluate(context)?;
+                match (lhs, rhs) {
+                    (Some(left), Some(right)) => Some(left - right),
+                    _ => None,
+                }
+            }),
             RelocExpr::Symbol(symbol, expr_ref) => context
                 .symbols
                 .get(symbol.as_str())
@@ -324,6 +341,24 @@ mod tests {
             .unwrap()
             .collect();
         assert_eq!(actual, [0x66])
+    }
+
+    #[test]
+    fn translate_expr_with_subtraction() {
+        let actual = Node::Expr(
+            RelocExpr::Subtract(
+                Box::new(RelocExpr::Literal(4, ())),
+                Box::new(RelocExpr::Literal(3, ())),
+                (),
+            ),
+            Width::Byte,
+        ).translate(&EvalContext {
+            symbols: &SymbolTable::new(),
+            location: None,
+        })
+            .unwrap()
+            .collect::<Vec<_>>();
+        assert_eq!(actual, [0x01])
     }
 
     #[test]

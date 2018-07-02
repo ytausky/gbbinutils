@@ -203,7 +203,8 @@ fn encode_branch<SR: SourceRange>(
                 Some(condition) => 0x20 | encode_condition(condition),
             }).and_byte(RelocExpr::Subtract(
                 Box::new(target),
-                Box::new(RelocExpr::LocationCounter(source_range)),
+                Box::new(RelocExpr::LocationCounter(source_range.clone())),
+                source_range,
             ))
         }
         Ret => LoweredItem::with_opcode(match condition {
@@ -764,6 +765,7 @@ mod tests {
                         RelocExpr::Subtract(
                             Box::new(target_expr.clone()),
                             Box::new(RelocExpr::LocationCounter(())),
+                            (),
                         ),
                         Width::Byte,
                     ),

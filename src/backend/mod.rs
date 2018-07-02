@@ -30,7 +30,7 @@ pub enum Item<R> {
 pub enum RelocExpr<SR> {
     Literal(i32, SR),
     LocationCounter(SR),
-    Subtract(Box<RelocExpr<SR>>, Box<RelocExpr<SR>>),
+    Subtract(Box<RelocExpr<SR>>, Box<RelocExpr<SR>>, SR),
     Symbol(String, SR),
 }
 
@@ -39,8 +39,10 @@ impl<SR: SourceRange> Source for RelocExpr<SR> {
     fn source_range(&self) -> Self::Range {
         use backend::RelocExpr::*;
         match self {
-            Literal(_, range) | Symbol(_, range) | LocationCounter(range) => (*range).clone(),
-            Subtract(..) => panic!(),
+            Literal(_, range)
+            | Symbol(_, range)
+            | LocationCounter(range)
+            | Subtract(_, _, range) => (*range).clone(),
         }
     }
 }
