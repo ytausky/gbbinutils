@@ -2,22 +2,22 @@ use codebase::{BufId, BufRange, LineNumber, TextBuf, TextCache, TextRange};
 use std::{cell::RefCell, cmp, fmt, rc::Rc};
 use Width;
 
-pub trait SourceInterval: Clone + fmt::Debug {
+pub trait SourceRange: Clone + fmt::Debug {
     fn extend(&self, other: &Self) -> Self;
 }
 
 #[cfg(test)]
-impl SourceInterval for () {
+impl SourceRange for () {
     fn extend(&self, _: &Self) -> Self {}
 }
 
 pub trait Source {
-    type Interval: SourceInterval;
-    fn source_interval(&self) -> Self::Interval;
+    type Range: SourceRange;
+    fn source_range(&self) -> Self::Range;
 }
 
 pub trait TokenTracker {
-    type TokenRef: SourceInterval;
+    type TokenRef: SourceRange;
     type BufContext: Clone + LexemeRefFactory<TokenRef = Self::TokenRef>;
     fn mk_buf_context(
         &mut self,
@@ -78,7 +78,7 @@ impl LexemeRefFactory for SimpleBufTokenRefFactory {
     }
 }
 
-impl SourceInterval for TokenRefData {
+impl SourceRange for TokenRefData {
     fn extend(&self, other: &Self) -> Self {
         use diagnostics::TokenRefData::*;
         match (self, other) {

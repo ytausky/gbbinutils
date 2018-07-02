@@ -1,4 +1,4 @@
-use diagnostics::SourceInterval;
+use diagnostics::SourceRange;
 use std::{cmp::PartialEq, fmt::Debug};
 
 pub mod keyword;
@@ -11,7 +11,7 @@ pub fn tokenize(src: &str) -> self::lexer::Lexer {
     self::lexer::Lexer::new(src)
 }
 
-pub fn parse_token_seq<R: SourceInterval, I, F>(tokens: I, actions: F)
+pub fn parse_token_seq<R: SourceRange, I, F>(tokens: I, actions: F)
 where
     I: Iterator<Item = (Token, R)>,
     F: FileContext<String, R>,

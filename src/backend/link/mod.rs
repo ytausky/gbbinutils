@@ -2,7 +2,7 @@ pub use self::context::{EvalContext, SymbolTable};
 
 use self::context::ChunkSize;
 use backend::{BinaryObject, BinarySection, Chunk, Node, Object, RelocExpr};
-use diagnostics::{Diagnostic, DiagnosticsListener, Message, Source, SourceInterval};
+use diagnostics::{Diagnostic, DiagnosticsListener, Message, Source, SourceRange};
 use std::ops::AddAssign;
 use std::vec::IntoIter;
 use Width;
@@ -44,7 +44,7 @@ impl AddAssign<Value> for Value {
 
 pub fn link<'a, SR, D>(object: Object<SR>, diagnostics: &D) -> BinaryObject
 where
-    SR: SourceInterval,
+    SR: SourceRange,
     D: DiagnosticsListener<SR> + 'a,
 {
     let symbols = resolve_symbols(&object);
@@ -57,7 +57,7 @@ where
     }
 }
 
-fn resolve_section<SR: SourceInterval>(
+fn resolve_section<SR: SourceRange>(
     section: Chunk<SR>,
     symbols: &SymbolTable,
     diagnostics: &impl DiagnosticsListener<SR>,
@@ -149,12 +149,12 @@ impl<SR: Clone> RelocExpr<SR> {
     }
 }
 
-fn resolve_expr_item<SR: SourceInterval>(
+fn resolve_expr_item<SR: SourceRange>(
     expr: &RelocExpr<SR>,
     width: Width,
     context: &EvalContext,
 ) -> Result<Data, Diagnostic<SR>> {
-    let range = expr.source_interval();
+    let range = expr.source_range();
     let value = expr.evaluate(context)
         .map_err(|undefined| {
             let UndefinedSymbol(symbol, range) = undefined;
@@ -217,7 +217,7 @@ impl<SR: Clone> Node<SR> {
     }
 }
 
-impl<SR: SourceInterval> Node<SR> {
+impl<SR: SourceRange> Node<SR> {
     fn translate(&self, context: &EvalContext) -> Result<IntoIter<u8>, Diagnostic<SR>> {
         Ok(match self {
             Node::Byte(value) => vec![*value],

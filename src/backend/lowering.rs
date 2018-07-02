@@ -1,6 +1,6 @@
 use backend::object::Node;
 use backend::Item;
-use diagnostics::{Source, SourceInterval};
+use diagnostics::{Source, SourceRange};
 use instruction::*;
 use std::mem;
 use Width;
@@ -60,7 +60,7 @@ impl<SR> From<u8> for Node<SR> {
     }
 }
 
-impl<SR: SourceInterval> Lower<SR> for Item<SR> {
+impl<SR: SourceRange> Lower<SR> for Item<SR> {
     fn lower(self) -> LoweredItem<SR> {
         match self {
             Item::Data(expr, width) => LoweredItem::One(Node::Expr(expr, width)),
@@ -69,7 +69,7 @@ impl<SR: SourceInterval> Lower<SR> for Item<SR> {
     }
 }
 
-impl<SR: SourceInterval> Lower<SR> for Instruction<SR> {
+impl<SR: SourceRange> Lower<SR> for Instruction<SR> {
     fn lower(self) -> LoweredItem<SR> {
         use instruction::Instruction::*;
         match self {
@@ -182,7 +182,7 @@ fn encode_alu_operation(operation: AluOperation) -> u8 {
     }) << 3
 }
 
-fn encode_branch<SR: SourceInterval>(
+fn encode_branch<SR: SourceRange>(
     branch: Branch<SR>,
     condition: Option<Condition>,
 ) -> LoweredItem<SR> {
@@ -197,7 +197,7 @@ fn encode_branch<SR: SourceInterval>(
             Some(condition) => 0xc2 | encode_condition(condition),
         }).and_word(target),
         Jr(target) => {
-            let source_range = target.source_interval();
+            let source_range = target.source_range();
             LoweredItem::with_opcode(match condition {
                 None => 0x18,
                 Some(condition) => 0x20 | encode_condition(condition),

@@ -1,4 +1,4 @@
-use diagnostics::{Diagnostic, KeywordOperandCategory, Message, Source, SourceInterval};
+use diagnostics::{Diagnostic, KeywordOperandCategory, Message, Source, SourceRange};
 use frontend::syntax::{keyword::OperandKeyword, ExprNode, Literal, ParsedExpr};
 use instruction::{Condition, PtrReg, Reg16, RegPair, RelocExpr, SimpleOperand};
 
@@ -9,12 +9,12 @@ pub enum Operand<R> {
     Deref(RelocExpr<R>),
 }
 
-impl<SI: SourceInterval> Source for Operand<SI> {
-    type Interval = SI;
-    fn source_interval(&self) -> Self::Interval {
+impl<SR: SourceRange> Source for Operand<SR> {
+    type Range = SR;
+    fn source_range(&self) -> Self::Range {
         match self {
-            Operand::Atom(_, interval) => (*interval).clone(),
-            Operand::Const(expr) | Operand::Deref(expr) => expr.source_interval(),
+            Operand::Atom(_, range) => (*range).clone(),
+            Operand::Const(expr) | Operand::Deref(expr) => expr.source_range(),
         }
     }
 }

@@ -1,4 +1,4 @@
-use diagnostics::{Diagnostic, Message, Source, SourceInterval};
+use diagnostics::{Diagnostic, Message, Source, SourceRange};
 use frontend::semantics::operand::{self, AtomKind, Context, Operand, OperandCounter};
 use frontend::syntax::{keyword, ParsedExpr};
 use instruction::*;
@@ -6,7 +6,7 @@ use instruction::*;
 pub fn analyze_instruction<I, R>(mnemonic: (keyword::Command, R), operands: I) -> AnalysisResult<R>
 where
     I: IntoIterator<Item = ParsedExpr<String, R>>,
-    R: SourceInterval,
+    R: SourceRange,
 {
     let (mnemonic, mnemonic_ref) = (to_mnemonic(mnemonic.0), mnemonic.1);
     let context = match mnemonic {
@@ -27,7 +27,7 @@ struct Analysis<R, I> {
     operands: OperandCounter<I>,
 }
 
-impl<'a, R: SourceInterval, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>>> Analysis<R, I> {
+impl<'a, R: SourceRange, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>>> Analysis<R, I> {
     fn new(mnemonic: (Mnemonic, R), operands: I) -> Analysis<R, I> {
         Analysis {
             mnemonic,
@@ -100,7 +100,7 @@ impl<'a, R: SourceInterval, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>
                 Operand::Atom(AtomKind::Simple(SimpleOperand::A), _) => Ok(()),
                 operand => Err(Diagnostic::new(
                     Message::DestMustBeA,
-                    operand.source_interval(),
+                    operand.source_range(),
                 )),
             }?;
             second_operand
@@ -387,7 +387,7 @@ mod tests {
         Special,
     }
 
-    impl SourceInterval for Marking {
+    impl SourceRange for Marking {
         fn extend(&self, _: &Self) -> Self {
             *self
         }

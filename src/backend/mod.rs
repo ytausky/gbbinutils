@@ -34,14 +34,12 @@ pub enum RelocExpr<SR> {
     Symbol(String, SR),
 }
 
-impl<SI: SourceInterval> Source for RelocExpr<SI> {
-    type Interval = SI;
-    fn source_interval(&self) -> Self::Interval {
+impl<SR: SourceRange> Source for RelocExpr<SR> {
+    type Range = SR;
+    fn source_range(&self) -> Self::Range {
         use backend::RelocExpr::*;
         match self {
-            Literal(_, interval) | Symbol(_, interval) | LocationCounter(interval) => {
-                (*interval).clone()
-            }
+            Literal(_, range) | Symbol(_, range) | LocationCounter(range) => (*range).clone(),
             Subtract(..) => panic!(),
         }
     }
@@ -67,7 +65,7 @@ pub struct Rom {
     pub data: Box<[u8]>,
 }
 
-impl<SR: SourceInterval> Backend<SR> for ObjectBuilder<SR> {
+impl<SR: SourceRange> Backend<SR> for ObjectBuilder<SR> {
     type Object = Object<SR>;
 
     fn add_label(&mut self, label: (impl Into<String>, SR)) {

@@ -1,5 +1,5 @@
 use super::*;
-use diagnostics::SourceInterval;
+use diagnostics::SourceRange;
 
 use std::iter;
 
@@ -46,7 +46,7 @@ fn follows_line(lookahead: Lookahead) -> bool {
     }
 }
 
-pub fn parse_src<S: TokenSpec, T: SourceInterval, I, F>(tokens: I, actions: F)
+pub fn parse_src<S: TokenSpec, T: SourceRange, I, F>(tokens: I, actions: F)
 where
     I: Iterator<Item = (Token<S>, T)>,
     F: FileContext<S, T>,
@@ -72,7 +72,7 @@ macro_rules! mk_expect {
     }
 }
 
-impl<S: TokenSpec, T: SourceInterval, I: Iterator<Item = (Token<S>, T)>> Parser<I> {
+impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> {
     mk_expect!(expect_command, Command);
     mk_expect!(expect_ident, Ident);
 
@@ -254,7 +254,7 @@ mod tests {
         parse_src, Token::{self, *},
     };
 
-    use diagnostics::SourceInterval;
+    use diagnostics::SourceRange;
     use frontend::syntax::{self, ExprNode, ParsedExpr, TokenSpec};
 
     #[test]
@@ -309,7 +309,7 @@ mod tests {
     type TestTrackingData = Vec<usize>;
     type TestExpr = syntax::ParsedExpr<TestTokenSpec, TestTrackingData>;
 
-    impl SourceInterval for TestTrackingData {
+    impl SourceRange for TestTrackingData {
         fn extend(&self, other: &Self) -> Self {
             self.iter().chain(other.iter()).cloned().collect()
         }

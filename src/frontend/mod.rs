@@ -105,7 +105,7 @@ impl ExprFactory for StrExprFactory {
 }
 
 pub trait Frontend {
-    type TokenRef: SourceInterval;
+    type TokenRef: SourceRange;
     fn analyze_chunk(
         &mut self,
         chunk_id: ChunkId<Self::TokenRef>,
@@ -216,7 +216,7 @@ trait TokenizedCodeSource
 where
     for<'c> &'c Self::Tokenized: IntoIterator<Item = (Token, Self::TokenRef)>,
 {
-    type TokenRef: SourceInterval;
+    type TokenRef: SourceRange;
     fn define_macro(
         &mut self,
         name: (impl Into<String>, Self::TokenRef),
