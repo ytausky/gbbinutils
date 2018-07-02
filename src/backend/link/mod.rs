@@ -1,4 +1,4 @@
-pub use self::context::SymbolTable;
+pub use self::context::{EvalContext, SymbolTable};
 
 use self::context::ChunkSize;
 use backend::{BinaryObject, BinarySection, Chunk, Node, Object, RelocExpr};
@@ -59,22 +59,21 @@ where
 
 fn resolve_section<SR: SourceInterval>(
     section: Chunk<SR>,
-    context: &SymbolTable,
+    symbols: &SymbolTable,
     diagnostics: &impl DiagnosticsListener<SR>,
 ) -> BinarySection {
-    BinarySection {
-        data: section
-            .items
-            .into_iter()
-            .flat_map(|node| match node.translate(context) {
-                Ok(iter) => iter,
-                Err(diagnostic) => {
-                    diagnostics.emit_diagnostic(diagnostic);
-                    Vec::new().into_iter()
-                }
-            })
-            .collect(),
+    let mut data = Vec::<u8>::new();
+    let context = EvalContext {
+        symbols,
+        location: Some(0.into()),
+    };
+    for item in section.items {
+        match item.translate(&context) {
+            Ok(iter) => data.extend(iter),
+            Err(diagnostic) => diagnostics.emit_diagnostic(diagnostic),
+        }
     }
+    BinarySection { data }
 }
 
 fn resolve_symbols<SR: Clone>(object: &Object<SR>) -> SymbolTable {
@@ -111,14 +110,20 @@ fn refine_symbols<SR: Clone>(object: &Object<SR>, context: &mut SymbolTable) -> 
 }
 
 impl<SR: Clone> Chunk<SR> {
-    fn traverse<F>(&self, context: &mut SymbolTable, mut f: F) -> Value
+    fn traverse<F>(&self, symbols: &mut SymbolTable, mut f: F) -> Value
     where
         F: FnMut(&Value, &Node<SR>, &mut SymbolTable),
     {
         let mut location = Value::from(0);
         for item in &self.items {
-            f(&location, item, context);
-            location += item.size(context)
+            f(&location, item, symbols);
+            location += {
+                let context = EvalContext {
+                    symbols,
+                    location: Some(location.clone()),
+                };
+                item.size(&context)
+            }
         }
         location
     }
@@ -128,12 +133,13 @@ impl<SR: Clone> Chunk<SR> {
 struct UndefinedSymbol<SR>(String, SR);
 
 impl<SR: Clone> RelocExpr<SR> {
-    fn evaluate(&self, context: &SymbolTable) -> Result<Option<Value>, UndefinedSymbol<SR>> {
+    fn evaluate(&self, context: &EvalContext) -> Result<Option<Value>, UndefinedSymbol<SR>> {
         match self {
             RelocExpr::Literal(value, _) => Ok(Some((*value).into())),
             RelocExpr::LocationCounter => panic!(),
             RelocExpr::Subtract(_, _) => panic!(),
             RelocExpr::Symbol(symbol, expr_ref) => context
+                .symbols
                 .get(symbol.as_str())
                 .cloned()
                 .ok_or_else(|| UndefinedSymbol((*symbol).clone(), (*expr_ref).clone())),
@@ -144,7 +150,7 @@ impl<SR: Clone> RelocExpr<SR> {
 fn resolve_expr_item<SR: SourceInterval>(
     expr: &RelocExpr<SR>,
     width: Width,
-    context: &SymbolTable,
+    context: &EvalContext,
 ) -> Result<Data, Diagnostic<SR>> {
     let range = expr.source_interval();
     let value = expr.evaluate(context)
@@ -195,12 +201,12 @@ fn is_in_u8_range(n: i32) -> bool {
 }
 
 impl<SR: Clone> Node<SR> {
-    fn size(&self, symbols: &SymbolTable) -> Value {
+    fn size(&self, context: &EvalContext) -> Value {
         match self {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),
             Node::Expr(_, width) => width.len().into(),
             Node::Label(..) => 0.into(),
-            Node::LdInlineAddr(_, expr) => match expr.evaluate(symbols) {
+            Node::LdInlineAddr(_, expr) => match expr.evaluate(context) {
                 Ok(Some(Value { min, .. })) if min >= 0xff00 => 2.into(),
                 Ok(Some(Value { max, .. })) if max < 0xff00 => 3.into(),
                 _ => Value { min: 2, max: 3 },
@@ -210,7 +216,7 @@ impl<SR: Clone> Node<SR> {
 }
 
 impl<SR: SourceInterval> Node<SR> {
-    fn translate(&self, context: &SymbolTable) -> Result<IntoIter<u8>, Diagnostic<SR>> {
+    fn translate(&self, context: &EvalContext) -> Result<IntoIter<u8>, Diagnostic<SR>> {
         Ok(match self {
             Node::Byte(value) => vec![*value],
             Node::Embedded(opcode, expr) => {
@@ -296,7 +302,10 @@ mod tests {
 
     fn test_translation_of_ld_inline_addr(opcode: u8, addr: u16, expected: impl Borrow<[u8]>) {
         let actual: Vec<_> = Node::LdInlineAddr(opcode, RelocExpr::Literal(addr.into(), ()))
-            .translate(&SymbolTable::new())
+            .translate(&EvalContext {
+                symbols: &SymbolTable::new(),
+                location: None,
+            })
             .unwrap()
             .collect();
         assert_eq!(actual, expected.borrow())
@@ -305,7 +314,10 @@ mod tests {
     #[test]
     fn translate_embedded() {
         let actual: Vec<_> = Node::Embedded(0b01_000_110, RelocExpr::Literal(4, ()))
-            .translate(&SymbolTable::new())
+            .translate(&EvalContext {
+                symbols: &SymbolTable::new(),
+                location: None,
+            })
             .unwrap()
             .collect();
         assert_eq!(actual, [0x66])

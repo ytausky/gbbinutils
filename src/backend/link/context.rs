@@ -81,3 +81,8 @@ impl SymbolTable {
         was_refined
     }
 }
+
+pub struct EvalContext<'a> {
+    pub symbols: &'a SymbolTable,
+    pub location: Option<Value>,
+}
