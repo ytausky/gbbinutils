@@ -78,12 +78,11 @@ fn resolve_section<SR: SourceRange>(
         location: Some(0.into()),
     };
     for item in section.items {
-        let size = item.size(&context);
+        *context.location.as_mut().unwrap() += item.size(&context);
         match item.translate(&context) {
             Ok(iter) => data.extend(iter),
             Err(diagnostic) => diagnostics.emit_diagnostic(diagnostic),
         }
-        *context.location.as_mut().unwrap() += size;
     }
     BinarySection { data }
 }
@@ -128,14 +127,14 @@ impl<SR: Clone> Chunk<SR> {
     {
         let mut location = Value::from(0);
         for item in &self.items {
-            f(&location, item, symbols);
             location += {
                 let context = EvalContext {
                     symbols,
                     location: Some(location.clone()),
                 };
                 item.size(&context)
-            }
+            };
+            f(&location, item, symbols)
         }
         location
     }
@@ -370,7 +369,7 @@ mod tests {
             Node::Expr(RelocExpr::LocationCounter(()), Width::Byte),
         ]);
         let binary = resolve_section(chunk, &SymbolTable::new(), &TestDiagnosticsListener::new());
-        assert_eq!(binary.data, [byte, 0x01])
+        assert_eq!(binary.data, [byte, 0x02])
     }
 
     #[test]
