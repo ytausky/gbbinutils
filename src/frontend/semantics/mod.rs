@@ -1,5 +1,7 @@
 use backend;
-use frontend::syntax::{self, keyword::Command, ExprNode, ParsedExpr, Token, TokenSpec};
+use frontend::syntax::{
+    self, keyword::{Command, DirectiveKeyword}, ExprNode, ParsedExpr, Token, TokenSpec,
+};
 use frontend::{Literal, StrExprFactory};
 use session::{ChunkId, Session};
 use Width;
@@ -80,13 +82,25 @@ impl<'a, F: Session + 'a> syntax::CommandContext<F::TokenRef> for CommandActions
 
     fn exit(mut self) -> Self::Parent {
         match self.name {
-            (Command::Db, _) => analyze_data(Width::Byte, self.args, &mut self.parent),
-            (Command::Dw, _) => analyze_data(Width::Word, self.args, &mut self.parent),
-            (Command::Include, _) => analyze_include(self.args, &mut self.parent),
-            (Command::Org, _) => analyze_org(self.args, &mut self.parent),
+            (Command::Directive(directive), _) => {
+                analyze_directive(directive, self.args, &mut self.parent)
+            }
             name => analyze_command(name, self.args, &mut self.parent),
         }
         self.parent
+    }
+}
+
+fn analyze_directive<'a, S: Session + 'a>(
+    directive: DirectiveKeyword,
+    args: CommandArgs<S>,
+    actions: &mut SemanticActions<'a, S>,
+) {
+    match directive {
+        DirectiveKeyword::Db => analyze_data(Width::Byte, args, actions),
+        DirectiveKeyword::Dw => analyze_data(Width::Word, args, actions),
+        DirectiveKeyword::Include => analyze_include(args, actions),
+        DirectiveKeyword::Org => analyze_org(args, actions),
     }
 }
 
@@ -315,7 +329,8 @@ mod tests {
     fn build_include_item() {
         let filename = "file.asm";
         let actions = collect_semantic_actions(|actions| {
-            let mut command = actions.enter_command((Command::Include, ()));
+            let mut command =
+                actions.enter_command((Command::Directive(DirectiveKeyword::Include), ()));
             let expr = ParsedExpr {
                 node: ExprNode::Literal(Literal::String(filename.to_string())),
                 interval: (),
@@ -336,7 +351,8 @@ mod tests {
     fn set_origin() {
         let origin = 0x3000;
         let actions = collect_semantic_actions(|actions| {
-            let mut command = actions.enter_command((Command::Org, ()));
+            let mut command =
+                actions.enter_command((Command::Directive(DirectiveKeyword::Org), ()));
             let expr = ParsedExpr {
                 node: ExprNode::Literal(Literal::Number(origin)),
                 interval: (),
@@ -354,7 +370,7 @@ mod tests {
     fn emit_byte_items() {
         let bytes = [0x42, 0x78];
         let actions = collect_semantic_actions(|actions| {
-            let mut command = actions.enter_command((Command::Db, ()));
+            let mut command = actions.enter_command((Command::Directive(DirectiveKeyword::Db), ()));
             for &byte in bytes.iter() {
                 command.add_argument(mk_literal(byte))
             }
@@ -374,7 +390,7 @@ mod tests {
     fn emit_word_items() {
         let words = [0x4332, 0x780f];
         let actions = collect_semantic_actions(|actions| {
-            let mut command = actions.enter_command((Command::Dw, ()));
+            let mut command = actions.enter_command((Command::Directive(DirectiveKeyword::Dw), ()));
             for &word in words.iter() {
                 command.add_argument(mk_literal(word))
             }
@@ -394,7 +410,7 @@ mod tests {
     fn emit_label_word() {
         let label = "my_label";
         let actions = collect_semantic_actions(|actions| {
-            let mut command = actions.enter_command((Command::Dw, ()));
+            let mut command = actions.enter_command((Command::Directive(DirectiveKeyword::Dw), ()));
             command.add_argument(ParsedExpr {
                 node: ExprNode::Ident(label.to_string()),
                 interval: (),

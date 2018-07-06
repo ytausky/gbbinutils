@@ -1,5 +1,6 @@
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Command {
+    Directive(DirectiveKeyword),
     Adc,
     Add,
     And,
@@ -8,20 +9,16 @@ pub enum Command {
     Cp,
     Cpl,
     Daa,
-    Db,
     Dec,
     Di,
-    Dw,
     Ei,
     Halt,
     Inc,
-    Include,
     Jp,
     Jr,
     Ld,
     Nop,
     Or,
-    Org,
     Pop,
     Push,
     Res,
@@ -45,6 +42,14 @@ pub enum Command {
     Sub,
     Swap,
     Xor,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum DirectiveKeyword {
+    Db,
+    Dw,
+    Include,
+    Org,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

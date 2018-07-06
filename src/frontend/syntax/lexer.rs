@@ -1,5 +1,5 @@
 use frontend::syntax::{
-    self, keyword::{self, Command, OperandKeyword}, token, Literal, Token,
+    self, keyword::{self, Command, DirectiveKeyword, OperandKeyword}, token, Literal, Token,
 };
 
 use std::iter;
@@ -231,11 +231,17 @@ const KEYWORDS: &[(&str, Keyword)] = &[
     ("cpl", Keyword::Command(Command::Cpl)),
     ("d", Keyword::Operand(OperandKeyword::D)),
     ("daa", Keyword::Command(Command::Daa)),
-    ("db", Keyword::Command(Command::Db)),
+    (
+        "db",
+        Keyword::Command(Command::Directive(DirectiveKeyword::Db)),
+    ),
     ("de", Keyword::Operand(OperandKeyword::De)),
     ("dec", Keyword::Command(Command::Dec)),
     ("di", Keyword::Command(Command::Di)),
-    ("dw", Keyword::Command(Command::Dw)),
+    (
+        "dw",
+        Keyword::Command(Command::Directive(DirectiveKeyword::Dw)),
+    ),
     ("e", Keyword::Operand(OperandKeyword::E)),
     ("ei", Keyword::Command(Command::Ei)),
     ("endm", Keyword::Endm),
@@ -245,7 +251,10 @@ const KEYWORDS: &[(&str, Keyword)] = &[
     ("hld", Keyword::Operand(OperandKeyword::Hld)),
     ("hli", Keyword::Operand(OperandKeyword::Hli)),
     ("inc", Keyword::Command(Command::Inc)),
-    ("include", Keyword::Command(Command::Include)),
+    (
+        "include",
+        Keyword::Command(Command::Directive(DirectiveKeyword::Include)),
+    ),
     ("jp", Keyword::Command(Command::Jp)),
     ("jr", Keyword::Command(Command::Jr)),
     ("l", Keyword::Operand(OperandKeyword::L)),
@@ -255,7 +264,10 @@ const KEYWORDS: &[(&str, Keyword)] = &[
     ("nop", Keyword::Command(Command::Nop)),
     ("nz", Keyword::Operand(OperandKeyword::Nz)),
     ("or", Keyword::Command(Command::Or)),
-    ("org", Keyword::Command(Command::Org)),
+    (
+        "org",
+        Keyword::Command(Command::Directive(DirectiveKeyword::Org)),
+    ),
     ("pop", Keyword::Command(Command::Pop)),
     ("push", Keyword::Command(Command::Push)),
     ("res", Keyword::Command(Command::Res)),
