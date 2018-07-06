@@ -1,7 +1,5 @@
 use backend;
-use frontend::syntax::{
-    self, keyword::{Command, DirectiveKeyword}, ExprNode, ParsedExpr, Token, TokenSpec,
-};
+use frontend::syntax::{self, keyword::*, ExprNode, ParsedExpr, Token, TokenSpec};
 use frontend::{Literal, StrExprFactory};
 use session::{ChunkId, Session};
 use Width;
@@ -85,7 +83,9 @@ impl<'a, F: Session + 'a> syntax::CommandContext<F::TokenRef> for CommandActions
             (Command::Directive(directive), _) => {
                 analyze_directive(directive, self.args, &mut self.parent)
             }
-            name => analyze_command(name, self.args, &mut self.parent),
+            (Command::Mnemonic(mnemonic), range) => {
+                analyze_mnemonic((mnemonic, range), self.args, &mut self.parent)
+            }
         }
         self.parent
     }
@@ -134,8 +134,8 @@ fn analyze_org<'a, S: Session + 'a>(args: CommandArgs<S>, actions: &mut Semantic
     actions.session.set_origin(expr)
 }
 
-fn analyze_command<'a, F: Session + 'a>(
-    name: (Command, F::TokenRef),
+fn analyze_mnemonic<'a, F: Session + 'a>(
+    name: (MnemonicKeyword, F::TokenRef),
     args: CommandArgs<F>,
     actions: &mut SemanticActions<'a, F>,
 ) {
@@ -453,7 +453,7 @@ mod tests {
     fn define_macro() {
         let name = "my_macro";
         let tokens = vec![
-            token::Command(Command::Xor),
+            token::Command(Command::Mnemonic(MnemonicKeyword::Xor)),
             token::Literal(Literal::Operand(OperandKeyword::A)),
         ];
         let actions = collect_semantic_actions(|actions| {
@@ -511,7 +511,8 @@ mod tests {
     fn diagnoze_wrong_operand_count() {
         use diagnostics::{Diagnostic, Message};
         let actions = collect_semantic_actions(|actions| {
-            let mut command_context = actions.enter_command((Command::Nop, ()));
+            let mut command_context =
+                actions.enter_command((Command::Mnemonic(MnemonicKeyword::Nop), ()));
             let literal_a = Literal::Operand(OperandKeyword::A);
             command_context.add_argument(ParsedExpr {
                 node: ExprNode::Literal(literal_a),

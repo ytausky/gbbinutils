@@ -1,9 +1,10 @@
 use diagnostics::{Diagnostic, Message, Source, SourceRange};
 use frontend::semantics::operand::{self, AtomKind, Context, Operand, OperandCounter};
+use frontend::syntax::keyword::MnemonicKeyword;
 use frontend::syntax::{keyword, ParsedExpr};
 use instruction::*;
 
-pub fn analyze_instruction<I, R>(mnemonic: (keyword::Command, R), operands: I) -> AnalysisResult<R>
+pub fn analyze_instruction<I, R>(mnemonic: (MnemonicKeyword, R), operands: I) -> AnalysisResult<R>
 where
     I: IntoIterator<Item = ParsedExpr<String, R>>,
     R: SourceRange,
@@ -326,9 +327,9 @@ enum TargetSelector<R> {
     Expr(RelocExpr<R>),
 }
 
-fn to_mnemonic(command: keyword::Command) -> Mnemonic {
-    use frontend::syntax::keyword::Command::*;
-    match command {
+fn to_mnemonic(keyword: keyword::MnemonicKeyword) -> Mnemonic {
+    use frontend::syntax::keyword::MnemonicKeyword::*;
+    match keyword {
         Adc => Mnemonic::Alu(AluOperation::Adc),
         Add => Mnemonic::Alu(AluOperation::Add),
         And => Mnemonic::Alu(AluOperation::And),
@@ -370,7 +371,6 @@ fn to_mnemonic(command: keyword::Command) -> Mnemonic {
         Sub => Mnemonic::Alu(AluOperation::Sub),
         Swap => Mnemonic::Misc(MiscOperation::Swap),
         Xor => Mnemonic::Alu(AluOperation::Xor),
-        _ => panic!(),
     }
 }
 
@@ -379,7 +379,7 @@ mod tests {
     use super::*;
     use frontend::syntax::{ExprNode, Literal};
 
-    use self::keyword::{Command, OperandKeyword::*};
+    use self::keyword::{MnemonicKeyword, OperandKeyword::*};
 
     #[derive(Clone, Copy, Debug, PartialEq)]
     enum Marking {
@@ -405,7 +405,7 @@ mod tests {
 
     type Input = ParsedExpr<String, Marking>;
 
-    impl Mark for (Command, Marking) {
+    impl Mark for (MnemonicKeyword, Marking) {
         fn mark(self) -> Self {
             (self.0, Marking::Special)
         }
@@ -452,74 +452,74 @@ mod tests {
         fn to_marked(self) -> (T, Marking);
     }
 
-    impl ToMarked<Command> for Command {
-        fn to_marked(self) -> (Command, Marking) {
+    impl ToMarked<MnemonicKeyword> for MnemonicKeyword {
+        fn to_marked(self) -> (MnemonicKeyword, Marking) {
             (self, Marking::default())
         }
     }
 
-    impl ToMarked<Command> for (Command, Marking) {
-        fn to_marked(self) -> (Command, Marking) {
+    impl ToMarked<MnemonicKeyword> for (MnemonicKeyword, Marking) {
+        fn to_marked(self) -> (MnemonicKeyword, Marking) {
             self
         }
     }
 
-    impl From<AluOperation> for Command {
+    impl From<AluOperation> for MnemonicKeyword {
         fn from(alu_operation: AluOperation) -> Self {
             match alu_operation {
-                AluOperation::Add => Command::Add,
-                AluOperation::Adc => Command::Adc,
-                AluOperation::Sub => Command::Sub,
-                AluOperation::Sbc => Command::Sbc,
-                AluOperation::And => Command::And,
-                AluOperation::Xor => Command::Xor,
-                AluOperation::Or => Command::Or,
-                AluOperation::Cp => Command::Cp,
+                AluOperation::Add => MnemonicKeyword::Add,
+                AluOperation::Adc => MnemonicKeyword::Adc,
+                AluOperation::Sub => MnemonicKeyword::Sub,
+                AluOperation::Sbc => MnemonicKeyword::Sbc,
+                AluOperation::And => MnemonicKeyword::And,
+                AluOperation::Xor => MnemonicKeyword::Xor,
+                AluOperation::Or => MnemonicKeyword::Or,
+                AluOperation::Cp => MnemonicKeyword::Cp,
             }
         }
     }
 
-    impl From<BitOperation> for Command {
+    impl From<BitOperation> for MnemonicKeyword {
         fn from(operation: BitOperation) -> Self {
             match operation {
-                BitOperation::Bit => Command::Bit,
-                BitOperation::Set => Command::Set,
-                BitOperation::Res => Command::Res,
+                BitOperation::Bit => MnemonicKeyword::Bit,
+                BitOperation::Set => MnemonicKeyword::Set,
+                BitOperation::Res => MnemonicKeyword::Res,
             }
         }
     }
 
-    impl From<MiscOperation> for Command {
+    impl From<MiscOperation> for MnemonicKeyword {
         fn from(operation: MiscOperation) -> Self {
             match operation {
-                MiscOperation::Rlc => Command::Rlc,
-                MiscOperation::Rrc => Command::Rrc,
-                MiscOperation::Rl => Command::Rl,
-                MiscOperation::Rr => Command::Rr,
-                MiscOperation::Sla => Command::Sla,
-                MiscOperation::Sra => Command::Sra,
-                MiscOperation::Swap => Command::Swap,
-                MiscOperation::Srl => Command::Srl,
+                MiscOperation::Rlc => MnemonicKeyword::Rlc,
+                MiscOperation::Rrc => MnemonicKeyword::Rrc,
+                MiscOperation::Rl => MnemonicKeyword::Rl,
+                MiscOperation::Rr => MnemonicKeyword::Rr,
+                MiscOperation::Sla => MnemonicKeyword::Sla,
+                MiscOperation::Sra => MnemonicKeyword::Sra,
+                MiscOperation::Swap => MnemonicKeyword::Swap,
+                MiscOperation::Srl => MnemonicKeyword::Srl,
             }
         }
     }
 
-    impl From<BranchKind> for Command {
+    impl From<BranchKind> for MnemonicKeyword {
         fn from(branch: BranchKind) -> Self {
             match branch {
-                BranchKind::Call => Command::Call,
-                BranchKind::Jp => Command::Jp,
-                BranchKind::Jr => Command::Jr,
-                BranchKind::Ret => Command::Ret,
+                BranchKind::Call => MnemonicKeyword::Call,
+                BranchKind::Jp => MnemonicKeyword::Jp,
+                BranchKind::Jr => MnemonicKeyword::Jr,
+                BranchKind::Ret => MnemonicKeyword::Ret,
             }
         }
     }
 
-    impl From<IncDec> for Command {
+    impl From<IncDec> for MnemonicKeyword {
         fn from(mode: IncDec) -> Self {
             match mode {
-                IncDec::Inc => Command::Inc,
-                IncDec::Dec => Command::Dec,
+                IncDec::Inc => MnemonicKeyword::Inc,
+                IncDec::Dec => MnemonicKeyword::Dec,
             }
         }
     }
@@ -612,13 +612,14 @@ mod tests {
 
     #[test]
     fn analyze_jp_deref_hl() {
-        analyze(Command::Jp, vec![deref(literal(Hl))]).expect_instruction(Instruction::JpDerefHl)
+        analyze(MnemonicKeyword::Jp, vec![deref(literal(Hl))])
+            .expect_instruction(Instruction::JpDerefHl)
     }
 
     #[test]
     fn analyze_ld_deref_symbol_a() {
         let ident = "ident";
-        analyze(Command::Ld, vec![deref(ident.into()), literal(A)]).expect_instruction(
+        analyze(MnemonicKeyword::Ld, vec![deref(ident.into()), literal(A)]).expect_instruction(
             Instruction::Ld(Ld::Special(
                 SpecialLd::InlineAddr(symbol(ident)),
                 Direction::FromA,
@@ -629,7 +630,7 @@ mod tests {
     #[test]
     fn analyze_ld_a_deref_symbol() {
         let ident = "ident";
-        analyze(Command::Ld, vec![literal(A), deref(ident.into())]).expect_instruction(
+        analyze(MnemonicKeyword::Ld, vec![literal(A), deref(ident.into())]).expect_instruction(
             Instruction::Ld(Ld::Special(
                 SpecialLd::InlineAddr(symbol(ident)),
                 Direction::IntoA,
@@ -639,14 +640,14 @@ mod tests {
 
     #[test]
     fn analyze_ld_deref_c_a() {
-        analyze(Command::Ld, vec![deref(literal(C)), literal(A)]).expect_instruction(
+        analyze(MnemonicKeyword::Ld, vec![deref(literal(C)), literal(A)]).expect_instruction(
             Instruction::Ld(Ld::Special(SpecialLd::RegIndex, Direction::FromA)),
         )
     }
 
     #[test]
     fn analyze_ld_a_deref_c() {
-        analyze(Command::Ld, vec![literal(A), deref(literal(C))]).expect_instruction(
+        analyze(MnemonicKeyword::Ld, vec![literal(A), deref(literal(C))]).expect_instruction(
             Instruction::Ld(Ld::Special(SpecialLd::RegIndex, Direction::IntoA)),
         )
     }
@@ -664,7 +665,7 @@ mod tests {
     }
 
     fn test_cp_const_analysis(parsed: ParsedExpr<String, Marking>, expr: RelocExpr<Marking>) {
-        analyze(Command::Cp, Some(parsed)).expect_instruction(Instruction::Alu(
+        analyze(MnemonicKeyword::Cp, Some(parsed)).expect_instruction(Instruction::Alu(
             AluOperation::Cp,
             AluSource::Immediate(expr),
         ))
@@ -673,7 +674,7 @@ mod tests {
     #[test]
     fn analyze_rst() {
         let n = 3;
-        analyze(Command::Rst, vec![n.into()]).expect_instruction(Instruction::Rst(n.into()))
+        analyze(MnemonicKeyword::Rst, vec![n.into()]).expect_instruction(Instruction::Rst(n.into()))
     }
 
     #[test]
@@ -681,7 +682,7 @@ mod tests {
         test_instruction_analysis(describe_legal_instructions());
     }
 
-    type InstructionDescriptor = ((Command, Vec<Input>), Instruction<Marking>);
+    type InstructionDescriptor = ((MnemonicKeyword, Vec<Input>), Instruction<Marking>);
 
     fn describe_legal_instructions() -> Vec<InstructionDescriptor> {
         let mut descriptors: Vec<InstructionDescriptor> = Vec::new();
@@ -705,11 +706,11 @@ mod tests {
         REG_PAIRS.iter().flat_map(|&reg_pair| {
             vec![
                 (
-                    (Command::Push, vec![reg_pair.into()]),
+                    (MnemonicKeyword::Push, vec![reg_pair.into()]),
                     Instruction::Push(reg_pair),
                 ),
                 (
-                    (Command::Pop, vec![reg_pair.into()]),
+                    (MnemonicKeyword::Pop, vec![reg_pair.into()]),
                     Instruction::Pop(reg_pair),
                 ),
             ]
@@ -718,18 +719,18 @@ mod tests {
 
     fn describe_nullary_instructions() -> impl Iterator<Item = InstructionDescriptor> {
         [
-            (Command::Cpl, Nullary::Cpl),
-            (Command::Daa, Nullary::Daa),
-            (Command::Di, Nullary::Di),
-            (Command::Ei, Nullary::Ei),
-            (Command::Halt, Nullary::Halt),
-            (Command::Nop, Nullary::Nop),
-            (Command::Reti, Nullary::Reti),
-            (Command::Rla, Nullary::Rla),
-            (Command::Rlca, Nullary::Rlca),
-            (Command::Rra, Nullary::Rra),
-            (Command::Rrca, Nullary::Rrca),
-            (Command::Stop, Nullary::Stop),
+            (MnemonicKeyword::Cpl, Nullary::Cpl),
+            (MnemonicKeyword::Daa, Nullary::Daa),
+            (MnemonicKeyword::Di, Nullary::Di),
+            (MnemonicKeyword::Ei, Nullary::Ei),
+            (MnemonicKeyword::Halt, Nullary::Halt),
+            (MnemonicKeyword::Nop, Nullary::Nop),
+            (MnemonicKeyword::Reti, Nullary::Reti),
+            (MnemonicKeyword::Rla, Nullary::Rla),
+            (MnemonicKeyword::Rlca, Nullary::Rlca),
+            (MnemonicKeyword::Rra, Nullary::Rra),
+            (MnemonicKeyword::Rrca, Nullary::Rrca),
+            (MnemonicKeyword::Stop, Nullary::Stop),
         ].iter()
             .map(|(mnemonic, nullary)| ((*mnemonic, vec![]), Instruction::Nullary(nullary.clone())))
     }
@@ -749,7 +750,7 @@ mod tests {
         match (dest, src) {
             (SimpleOperand::DerefHl, SimpleOperand::DerefHl) => None,
             _ => Some((
-                (Command::Ld, vec![dest.into(), src.into()]),
+                (MnemonicKeyword::Ld, vec![dest.into(), src.into()]),
                 Instruction::Ld(Ld::Simple(dest, src)),
             )),
         }
@@ -764,7 +765,7 @@ mod tests {
     fn describe_ld_simple_immediate(dest: SimpleOperand) -> InstructionDescriptor {
         let n = 0x12;
         (
-            (Command::Ld, vec![ParsedExpr::from(dest), n.into()]),
+            (MnemonicKeyword::Ld, vec![ParsedExpr::from(dest), n.into()]),
             Instruction::Ld(Ld::Immediate8(dest, n.into())),
         )
     }
@@ -776,7 +777,10 @@ mod tests {
     fn describe_ld_reg16_immediate(dest: Reg16) -> InstructionDescriptor {
         let value = "value";
         (
-            (Command::Ld, vec![ParsedExpr::from(dest), value.into()]),
+            (
+                MnemonicKeyword::Ld,
+                vec![ParsedExpr::from(dest), value.into()],
+            ),
             Instruction::Ld(Ld::Immediate16(dest, symbol(value))),
         )
     }
@@ -791,7 +795,7 @@ mod tests {
         vec![
             (
                 (
-                    Command::Ld,
+                    MnemonicKeyword::Ld,
                     vec![deref(ParsedExpr::from(ptr_reg)), literal(A)],
                 ),
                 Instruction::Ld(Ld::Special(
@@ -801,7 +805,7 @@ mod tests {
             ),
             (
                 (
-                    Command::Ld,
+                    MnemonicKeyword::Ld,
                     vec![literal(A), deref(ParsedExpr::from(ptr_reg))],
                 ),
                 Instruction::Ld(Ld::Special(
@@ -842,7 +846,10 @@ mod tests {
         operand: SimpleOperand,
     ) -> InstructionDescriptor {
         (
-            (Command::from(operation), vec![ParsedExpr::from(operand)]),
+            (
+                MnemonicKeyword::from(operation),
+                vec![ParsedExpr::from(operand)],
+            ),
             Instruction::Alu(operation, AluSource::Simple(operand)),
         )
     }
@@ -853,7 +860,7 @@ mod tests {
 
     fn describe_add_hl_reg16(reg16: Reg16) -> InstructionDescriptor {
         (
-            (Command::Add, vec![Reg16::Hl.into(), reg16.into()]),
+            (MnemonicKeyword::Add, vec![Reg16::Hl.into(), reg16.into()]),
             Instruction::AddHl(reg16),
         )
     }
@@ -898,7 +905,7 @@ mod tests {
             operands.push(ident.into());
         };
         (
-            (Command::from(branch), operands),
+            (MnemonicKeyword::from(branch), operands),
             Instruction::Branch(
                 mk_branch(
                     (branch, Marking::default()),
@@ -1019,7 +1026,7 @@ mod tests {
 
     fn analyze<C, I>(mnemonic: C, operands: I) -> Result
     where
-        C: ToMarked<Command>,
+        C: ToMarked<MnemonicKeyword>,
         I: IntoIterator<Item = ParsedExpr<String, Marking>>,
     {
         Result(analyze_instruction(mnemonic.to_marked(), operands))
@@ -1027,7 +1034,7 @@ mod tests {
 
     #[test]
     fn analyze_nop_a() {
-        analyze((Command::Nop, Marking::Special), vec![literal(A)]).expect_diagnostic(
+        analyze((MnemonicKeyword::Nop, Marking::Special), vec![literal(A)]).expect_diagnostic(
             Message::OperandCount {
                 actual: 1,
                 expected: 0,
@@ -1038,7 +1045,7 @@ mod tests {
     #[test]
     fn analyze_add_a_a_a() {
         analyze(
-            (Command::Add, Marking::Special),
+            (MnemonicKeyword::Add, Marking::Special),
             vec![A, A, A].into_iter().map(|a| literal(a)),
         ).expect_diagnostic(Message::OperandCount {
             actual: 3,
@@ -1049,14 +1056,14 @@ mod tests {
     #[test]
     fn analyze_jp_c_deref_hl() {
         analyze(
-            Command::Jp,
+            MnemonicKeyword::Jp,
             vec![literal(C).mark(), SimpleOperand::DerefHl.into()],
         ).expect_diagnostic(Message::AlwaysUnconditional)
     }
 
     #[test]
     fn analyze_add() {
-        analyze((Command::Add, Marking::Special), Vec::new()).expect_diagnostic(
+        analyze((MnemonicKeyword::Add, Marking::Special), Vec::new()).expect_diagnostic(
             Message::OperandCount {
                 actual: 0,
                 expected: 2,
@@ -1066,7 +1073,7 @@ mod tests {
 
     #[test]
     fn analyze_add_a() {
-        analyze((Command::Add, Marking::Special), vec![literal(A)]).expect_diagnostic(
+        analyze((MnemonicKeyword::Add, Marking::Special), vec![literal(A)]).expect_diagnostic(
             Message::OperandCount {
                 actual: 1,
                 expected: 2,
@@ -1076,25 +1083,25 @@ mod tests {
 
     #[test]
     fn analyze_add_b_a() {
-        analyze(Command::Add, vec![literal(B).mark(), literal(A)])
+        analyze(MnemonicKeyword::Add, vec![literal(B).mark(), literal(A)])
             .expect_diagnostic(Message::DestMustBeA)
     }
 
     #[test]
     fn analyze_add_bc_de() {
-        analyze(Command::Add, vec![literal(Bc).mark(), literal(De)])
+        analyze(MnemonicKeyword::Add, vec![literal(Bc).mark(), literal(De)])
             .expect_diagnostic(Message::DestMustBeHl)
     }
 
     #[test]
     fn analyze_add_hl_af() {
-        analyze(Command::Add, vec![literal(Hl), literal(Af).mark()])
+        analyze(MnemonicKeyword::Add, vec![literal(Hl), literal(Af).mark()])
             .expect_diagnostic(Message::IncompatibleOperand)
     }
 
     #[test]
     fn analyze_add_hl() {
-        analyze((Command::Add, Marking::Special), vec![literal(Hl)]).expect_diagnostic(
+        analyze((MnemonicKeyword::Add, Marking::Special), vec![literal(Hl)]).expect_diagnostic(
             Message::OperandCount {
                 actual: 1,
                 expected: 2,
@@ -1104,15 +1111,17 @@ mod tests {
 
     #[test]
     fn analyze_ld() {
-        analyze(Command::Ld.to_marked().mark(), vec![]).expect_diagnostic(Message::OperandCount {
-            actual: 0,
-            expected: 2,
-        })
+        analyze(MnemonicKeyword::Ld.to_marked().mark(), vec![]).expect_diagnostic(
+            Message::OperandCount {
+                actual: 0,
+                expected: 2,
+            },
+        )
     }
 
     #[test]
     fn analyze_ld_a() {
-        analyze(Command::Ld.to_marked().mark(), vec![literal(A)]).expect_diagnostic(
+        analyze(MnemonicKeyword::Ld.to_marked().mark(), vec![literal(A)]).expect_diagnostic(
             Message::OperandCount {
                 actual: 1,
                 expected: 2,
@@ -1122,23 +1131,27 @@ mod tests {
 
     #[test]
     fn analyze_push() {
-        analyze(Command::Push.to_marked().mark(), vec![]).expect_diagnostic(Message::OperandCount {
-            actual: 0,
-            expected: 1,
-        })
+        analyze(MnemonicKeyword::Push.to_marked().mark(), vec![]).expect_diagnostic(
+            Message::OperandCount {
+                actual: 0,
+                expected: 1,
+            },
+        )
     }
 
     #[test]
     fn analyze_inc() {
-        analyze(Command::Inc.to_marked().mark(), vec![]).expect_diagnostic(Message::OperandCount {
-            actual: 0,
-            expected: 1,
-        })
+        analyze(MnemonicKeyword::Inc.to_marked().mark(), vec![]).expect_diagnostic(
+            Message::OperandCount {
+                actual: 0,
+                expected: 1,
+            },
+        )
     }
 
     #[test]
     fn analyze_jp_z() {
-        analyze(Command::Jp.to_marked().mark(), vec![literal(Z)])
+        analyze(MnemonicKeyword::Jp.to_marked().mark(), vec![literal(Z)])
             .expect_diagnostic(Message::MissingTarget)
     }
 }

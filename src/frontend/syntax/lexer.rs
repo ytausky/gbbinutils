@@ -1,5 +1,5 @@
 use frontend::syntax::{
-    self, keyword::{self, Command, DirectiveKeyword, OperandKeyword}, token, Literal, Token,
+    self, keyword::{self, *}, token, Literal, Token,
 };
 
 use std::iter;
@@ -218,80 +218,203 @@ enum Keyword {
 
 const KEYWORDS: &[(&str, Keyword)] = &[
     ("a", Keyword::Operand(OperandKeyword::A)),
-    ("adc", Keyword::Command(Command::Adc)),
-    ("add", Keyword::Command(Command::Add)),
+    (
+        "adc",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Adc)),
+    ),
+    (
+        "add",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Add)),
+    ),
     ("af", Keyword::Operand(OperandKeyword::Af)),
-    ("and", Keyword::Command(Command::And)),
+    (
+        "and",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::And)),
+    ),
     ("b", Keyword::Operand(OperandKeyword::B)),
     ("bc", Keyword::Operand(OperandKeyword::Bc)),
-    ("bit", Keyword::Command(Command::Bit)),
+    (
+        "bit",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Bit)),
+    ),
     ("c", Keyword::Operand(OperandKeyword::C)),
-    ("call", Keyword::Command(Command::Call)),
-    ("cp", Keyword::Command(Command::Cp)),
-    ("cpl", Keyword::Command(Command::Cpl)),
+    (
+        "call",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Call)),
+    ),
+    (
+        "cp",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Cp)),
+    ),
+    (
+        "cpl",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Cpl)),
+    ),
     ("d", Keyword::Operand(OperandKeyword::D)),
-    ("daa", Keyword::Command(Command::Daa)),
+    (
+        "daa",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Daa)),
+    ),
     (
         "db",
         Keyword::Command(Command::Directive(DirectiveKeyword::Db)),
     ),
     ("de", Keyword::Operand(OperandKeyword::De)),
-    ("dec", Keyword::Command(Command::Dec)),
-    ("di", Keyword::Command(Command::Di)),
+    (
+        "dec",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Dec)),
+    ),
+    (
+        "di",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Di)),
+    ),
     (
         "dw",
         Keyword::Command(Command::Directive(DirectiveKeyword::Dw)),
     ),
     ("e", Keyword::Operand(OperandKeyword::E)),
-    ("ei", Keyword::Command(Command::Ei)),
+    (
+        "ei",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Ei)),
+    ),
     ("endm", Keyword::Endm),
     ("h", Keyword::Operand(OperandKeyword::H)),
-    ("halt", Keyword::Command(Command::Halt)),
+    (
+        "halt",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Halt)),
+    ),
     ("hl", Keyword::Operand(OperandKeyword::Hl)),
     ("hld", Keyword::Operand(OperandKeyword::Hld)),
     ("hli", Keyword::Operand(OperandKeyword::Hli)),
-    ("inc", Keyword::Command(Command::Inc)),
+    (
+        "inc",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Inc)),
+    ),
     (
         "include",
         Keyword::Command(Command::Directive(DirectiveKeyword::Include)),
     ),
-    ("jp", Keyword::Command(Command::Jp)),
-    ("jr", Keyword::Command(Command::Jr)),
+    (
+        "jp",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Jp)),
+    ),
+    (
+        "jr",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Jr)),
+    ),
     ("l", Keyword::Operand(OperandKeyword::L)),
-    ("ld", Keyword::Command(Command::Ld)),
+    (
+        "ld",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Ld)),
+    ),
     ("macro", Keyword::Macro),
     ("nc", Keyword::Operand(OperandKeyword::Nc)),
-    ("nop", Keyword::Command(Command::Nop)),
+    (
+        "nop",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Nop)),
+    ),
     ("nz", Keyword::Operand(OperandKeyword::Nz)),
-    ("or", Keyword::Command(Command::Or)),
+    (
+        "or",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Or)),
+    ),
     (
         "org",
         Keyword::Command(Command::Directive(DirectiveKeyword::Org)),
     ),
-    ("pop", Keyword::Command(Command::Pop)),
-    ("push", Keyword::Command(Command::Push)),
-    ("res", Keyword::Command(Command::Res)),
-    ("ret", Keyword::Command(Command::Ret)),
-    ("reti", Keyword::Command(Command::Reti)),
-    ("rl", Keyword::Command(Command::Rl)),
-    ("rla", Keyword::Command(Command::Rla)),
-    ("rlc", Keyword::Command(Command::Rlc)),
-    ("rlca", Keyword::Command(Command::Rlca)),
-    ("rr", Keyword::Command(Command::Rr)),
-    ("rra", Keyword::Command(Command::Rra)),
-    ("rrc", Keyword::Command(Command::Rrc)),
-    ("rrca", Keyword::Command(Command::Rrca)),
-    ("rst", Keyword::Command(Command::Rst)),
-    ("sbc", Keyword::Command(Command::Sbc)),
-    ("set", Keyword::Command(Command::Set)),
-    ("sla", Keyword::Command(Command::Sla)),
+    (
+        "pop",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Pop)),
+    ),
+    (
+        "push",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Push)),
+    ),
+    (
+        "res",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Res)),
+    ),
+    (
+        "ret",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Ret)),
+    ),
+    (
+        "reti",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Reti)),
+    ),
+    (
+        "rl",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Rl)),
+    ),
+    (
+        "rla",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Rla)),
+    ),
+    (
+        "rlc",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Rlc)),
+    ),
+    (
+        "rlca",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Rlca)),
+    ),
+    (
+        "rr",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Rr)),
+    ),
+    (
+        "rra",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Rra)),
+    ),
+    (
+        "rrc",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Rrc)),
+    ),
+    (
+        "rrca",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Rrca)),
+    ),
+    (
+        "rst",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Rst)),
+    ),
+    (
+        "sbc",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Sbc)),
+    ),
+    (
+        "set",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Set)),
+    ),
+    (
+        "sla",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Sla)),
+    ),
     ("sp", Keyword::Operand(OperandKeyword::Sp)),
-    ("sra", Keyword::Command(Command::Sra)),
-    ("srl", Keyword::Command(Command::Srl)),
-    ("stop", Keyword::Command(Command::Stop)),
-    ("sub", Keyword::Command(Command::Sub)),
-    ("swap", Keyword::Command(Command::Swap)),
-    ("xor", Keyword::Command(Command::Xor)),
+    (
+        "sra",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Sra)),
+    ),
+    (
+        "srl",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Srl)),
+    ),
+    (
+        "stop",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Stop)),
+    ),
+    (
+        "sub",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Sub)),
+    ),
+    (
+        "swap",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Swap)),
+    ),
+    (
+        "xor",
+        Keyword::Command(Command::Mnemonic(MnemonicKeyword::Xor)),
+    ),
     ("z", Keyword::Operand(OperandKeyword::Z)),
 ];
 
@@ -299,7 +422,7 @@ const KEYWORDS: &[(&str, Keyword)] = &[
 mod tests {
     use super::*;
 
-    use super::keyword::Command::*;
+    use super::keyword::{Command::*, MnemonicKeyword::*};
     use super::syntax::token::*;
     use super::syntax::Literal::{Number, Operand};
     use super::OperandKeyword::*;
@@ -346,7 +469,7 @@ mod tests {
 
     #[test]
     fn lex_two_keywords() {
-        assert_eq_tokens("push bc", &[Command(Push), Literal(Operand(Bc))])
+        assert_eq_tokens("push bc", &[Command(Mnemonic(Push)), Literal(Operand(Bc))])
     }
 
     #[test]
@@ -379,7 +502,7 @@ mod tests {
             &[
                 Ident("label".to_string()),
                 Colon,
-                Command(keyword::Command::Nop),
+                Command(Mnemonic(Nop)),
                 Eol,
             ],
         )
@@ -419,11 +542,11 @@ mod tests {
 
     #[test]
     fn ignore_comment_at_end_of_line() {
-        assert_eq_tokens("nop ; comment\n", &[Command(Nop), Eol])
+        assert_eq_tokens("nop ; comment\n", &[Command(Mnemonic(Nop)), Eol])
     }
 
     #[test]
     fn ignore_comment_at_end_of_input() {
-        assert_eq_tokens("nop ; comment", &[Command(Nop)])
+        assert_eq_tokens("nop ; comment", &[Command(Mnemonic(Nop))])
     }
 }
