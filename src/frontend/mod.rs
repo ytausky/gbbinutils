@@ -346,14 +346,14 @@ impl<'a, LRF: LexemeRefFactory> Iterator for TokenizedSrcIter<'a, LRF> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use frontend::syntax::keyword::MnemonicKeyword;
+    use frontend::syntax::keyword::Mnemonic;
     use instruction::{Instruction, Nullary};
     use std::{self, cell::RefCell};
 
     #[test]
     fn include_source_file() {
         let filename = "my_file.asm";
-        let contents = vec![token::Command(Command::Mnemonic(MnemonicKeyword::Nop))];
+        let contents = vec![token::Command(Command::Mnemonic(Mnemonic::Nop))];
         let log = TestLog::default();
         TestFixture::new(&log)
             .given(|f| {
@@ -389,7 +389,7 @@ mod tests {
     #[test]
     fn define_and_invoke_macro() {
         let name = "my_macro";
-        let tokens = vec![token::Command(Command::Mnemonic(MnemonicKeyword::Nop))];
+        let tokens = vec![token::Command(Command::Mnemonic(Mnemonic::Nop))];
         let log = TestLog::default();
         TestFixture::new(&log).when(|mut session| {
             session.define_macro((name.to_string(), ()), add_code_refs(&tokens));

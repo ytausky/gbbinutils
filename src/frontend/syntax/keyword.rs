@@ -1,7 +1,7 @@
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Command {
     Directive(DirectiveKeyword),
-    Mnemonic(MnemonicKeyword),
+    Mnemonic(Mnemonic),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -13,7 +13,7 @@ pub enum DirectiveKeyword {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum MnemonicKeyword {
+pub enum Mnemonic {
     Adc,
     Add,
     And,
