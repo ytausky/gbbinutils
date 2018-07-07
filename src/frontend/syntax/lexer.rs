@@ -1,5 +1,5 @@
 use frontend::syntax::{
-    self, keyword::{self, *}, token, Literal, Token,
+    self, keyword::{self as kw, *}, token, Literal, Token,
 };
 
 use std::iter;
@@ -210,10 +210,22 @@ fn identify_keyword(word: &str) -> Option<Keyword> {
 
 #[derive(Clone, Copy)]
 enum Keyword {
-    Command(keyword::Command),
+    Command(kw::Command),
     Endm,
     Macro,
     Operand(Operand),
+}
+
+impl From<kw::Command> for Keyword {
+    fn from(command: kw::Command) -> Self {
+        Keyword::Command(command)
+    }
+}
+
+impl From<Operand> for Keyword {
+    fn from(operand: Operand) -> Self {
+        Keyword::Operand(operand)
+    }
 }
 
 const KEYWORDS: &[(&str, Keyword)] = &[
@@ -290,7 +302,7 @@ const KEYWORDS: &[(&str, Keyword)] = &[
 mod tests {
     use super::*;
 
-    use super::keyword::{Command::*, Mnemonic::*};
+    use super::kw::Mnemonic::*;
     use super::syntax::token::*;
     use super::syntax::Literal::{Number, Operand};
     use super::Operand::*;
@@ -337,7 +349,7 @@ mod tests {
 
     #[test]
     fn lex_two_keywords() {
-        assert_eq_tokens("push bc", &[Command(Mnemonic(Push)), Literal(Operand(Bc))])
+        assert_eq_tokens("push bc", &[Push.into(), Literal(Operand(Bc))])
     }
 
     #[test]
@@ -367,12 +379,7 @@ mod tests {
     fn lex_label() {
         assert_eq_tokens(
             "label: nop\n",
-            &[
-                Ident("label".to_string()),
-                Colon,
-                Command(Mnemonic(Nop)),
-                Eol,
-            ],
+            &[Ident("label".to_string()), Colon, Nop.into(), Eol],
         )
     }
 
@@ -410,11 +417,17 @@ mod tests {
 
     #[test]
     fn ignore_comment_at_end_of_line() {
-        assert_eq_tokens("nop ; comment\n", &[Command(Mnemonic(Nop)), Eol])
+        assert_eq_tokens("nop ; comment\n", &[Nop.into(), Eol])
     }
 
     #[test]
     fn ignore_comment_at_end_of_input() {
-        assert_eq_tokens("nop ; comment", &[Command(Mnemonic(Nop))])
+        assert_eq_tokens("nop ; comment", &[Nop.into()])
+    }
+
+    impl<T: Into<kw::Command>> From<T> for Token {
+        fn from(t: T) -> Self {
+            Command(t.into())
+        }
     }
 }

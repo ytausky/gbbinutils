@@ -4,6 +4,18 @@ pub enum Command {
     Mnemonic(Mnemonic),
 }
 
+impl From<Directive> for Command {
+    fn from(directive: Directive) -> Self {
+        Command::Directive(directive)
+    }
+}
+
+impl From<Mnemonic> for Command {
+    fn from(mnemonic: Mnemonic) -> Self {
+        Command::Mnemonic(mnemonic)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Directive {
     Db,
