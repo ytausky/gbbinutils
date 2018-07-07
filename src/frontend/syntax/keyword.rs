@@ -1,11 +1,11 @@
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Command {
-    Directive(DirectiveKeyword),
+    Directive(Directive),
     Mnemonic(Mnemonic),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum DirectiveKeyword {
+pub enum Directive {
     Db,
     Dw,
     Include,

@@ -92,15 +92,15 @@ impl<'a, F: Session + 'a> syntax::CommandContext<F::TokenRef> for CommandActions
 }
 
 fn analyze_directive<'a, S: Session + 'a>(
-    directive: DirectiveKeyword,
+    directive: Directive,
     args: CommandArgs<S>,
     actions: &mut SemanticActions<'a, S>,
 ) {
     match directive {
-        DirectiveKeyword::Db => analyze_data(Width::Byte, args, actions),
-        DirectiveKeyword::Dw => analyze_data(Width::Word, args, actions),
-        DirectiveKeyword::Include => analyze_include(args, actions),
-        DirectiveKeyword::Org => analyze_org(args, actions),
+        Directive::Db => analyze_data(Width::Byte, args, actions),
+        Directive::Dw => analyze_data(Width::Word, args, actions),
+        Directive::Include => analyze_include(args, actions),
+        Directive::Org => analyze_org(args, actions),
     }
 }
 
@@ -329,8 +329,7 @@ mod tests {
     fn build_include_item() {
         let filename = "file.asm";
         let actions = collect_semantic_actions(|actions| {
-            let mut command =
-                actions.enter_command((Command::Directive(DirectiveKeyword::Include), ()));
+            let mut command = actions.enter_command((Command::Directive(Directive::Include), ()));
             let expr = ParsedExpr {
                 node: ExprNode::Literal(Literal::String(filename.to_string())),
                 interval: (),
@@ -351,8 +350,7 @@ mod tests {
     fn set_origin() {
         let origin = 0x3000;
         let actions = collect_semantic_actions(|actions| {
-            let mut command =
-                actions.enter_command((Command::Directive(DirectiveKeyword::Org), ()));
+            let mut command = actions.enter_command((Command::Directive(Directive::Org), ()));
             let expr = ParsedExpr {
                 node: ExprNode::Literal(Literal::Number(origin)),
                 interval: (),
@@ -370,7 +368,7 @@ mod tests {
     fn emit_byte_items() {
         let bytes = [0x42, 0x78];
         let actions = collect_semantic_actions(|actions| {
-            let mut command = actions.enter_command((Command::Directive(DirectiveKeyword::Db), ()));
+            let mut command = actions.enter_command((Command::Directive(Directive::Db), ()));
             for &byte in bytes.iter() {
                 command.add_argument(mk_literal(byte))
             }
@@ -390,7 +388,7 @@ mod tests {
     fn emit_word_items() {
         let words = [0x4332, 0x780f];
         let actions = collect_semantic_actions(|actions| {
-            let mut command = actions.enter_command((Command::Directive(DirectiveKeyword::Dw), ()));
+            let mut command = actions.enter_command((Command::Directive(Directive::Dw), ()));
             for &word in words.iter() {
                 command.add_argument(mk_literal(word))
             }
@@ -410,7 +408,7 @@ mod tests {
     fn emit_label_word() {
         let label = "my_label";
         let actions = collect_semantic_actions(|actions| {
-            let mut command = actions.enter_command((Command::Directive(DirectiveKeyword::Dw), ()));
+            let mut command = actions.enter_command((Command::Directive(Directive::Dw), ()));
             command.add_argument(ParsedExpr {
                 node: ExprNode::Ident(label.to_string()),
                 interval: (),
