@@ -376,7 +376,7 @@ fn to_mnemonic(keyword: kw::Mnemonic) -> Mnemonic {
 
 #[cfg(test)]
 mod tests {
-    use self::kw::{OperandKeyword, OperandKeyword::*};
+    use self::kw::Operand::*;
     use super::*;
     use frontend::syntax::{ExprNode, Literal};
 
@@ -432,7 +432,7 @@ mod tests {
         }
     }
 
-    fn literal(keyword: OperandKeyword) -> Input {
+    fn literal(keyword: kw::Operand) -> Input {
         Literal::Operand(keyword).into()
     }
 
@@ -538,7 +538,7 @@ mod tests {
         }
     }
 
-    impl From<PtrReg> for OperandKeyword {
+    impl From<PtrReg> for kw::Operand {
         fn from(ptr_reg: PtrReg) -> Self {
             match ptr_reg {
                 PtrReg::Bc => Bc,
@@ -549,7 +549,7 @@ mod tests {
         }
     }
 
-    impl From<Reg16> for OperandKeyword {
+    impl From<Reg16> for kw::Operand {
         fn from(reg16: Reg16) -> Self {
             match reg16 {
                 Reg16::Bc => Bc,
@@ -562,7 +562,7 @@ mod tests {
 
     impl<T> From<T> for ParsedExpr<String, Marking>
     where
-        OperandKeyword: From<T>,
+        kw::Operand: From<T>,
     {
         fn from(src: T) -> Self {
             literal(src.into())

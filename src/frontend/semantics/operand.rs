@@ -1,5 +1,6 @@
 use diagnostics::{Diagnostic, KeywordOperandCategory, Message, Source, SourceRange};
-use frontend::syntax::{keyword::OperandKeyword, ExprNode, Literal, ParsedExpr};
+use frontend::syntax::keyword as kw;
+use frontend::syntax::{ExprNode, Literal, ParsedExpr};
 use instruction::{Condition, PtrReg, Reg16, RegPair, RelocExpr, SimpleOperand};
 
 #[derive(Debug, PartialEq)]
@@ -63,10 +64,7 @@ fn analyze_deref_operand<SI: Clone>(
     }
 }
 
-fn analyze_deref_operand_keyword<SI>(
-    keyword: (OperandKeyword, SI),
-    deref: SI,
-) -> OperandResult<SI> {
+fn analyze_deref_operand_keyword<SI>(keyword: (kw::Operand, SI), deref: SI) -> OperandResult<SI> {
     match try_deref_operand_keyword(keyword.0) {
         Ok(atom) => Ok(Operand::Atom(atom, deref)),
         Err(category) => Err(Diagnostic::new(
@@ -79,8 +77,8 @@ fn analyze_deref_operand_keyword<SI>(
     }
 }
 
-fn try_deref_operand_keyword(keyword: OperandKeyword) -> Result<AtomKind, KeywordOperandCategory> {
-    use frontend::syntax::OperandKeyword::*;
+fn try_deref_operand_keyword(keyword: kw::Operand) -> Result<AtomKind, KeywordOperandCategory> {
+    use self::kw::Operand::*;
     match keyword {
         Bc => Ok(AtomKind::DerefPtrReg(PtrReg::Bc)),
         C => Ok(AtomKind::DerefC),
@@ -113,12 +111,9 @@ pub fn analyze_reloc_expr<SI: Clone>(
     }
 }
 
-fn analyze_keyword_operand<R>(
-    (keyword, range): (OperandKeyword, R),
-    context: Context,
-) -> Operand<R> {
+fn analyze_keyword_operand<R>((keyword, range): (kw::Operand, R), context: Context) -> Operand<R> {
+    use self::kw::Operand::*;
     use self::Context::*;
-    use frontend::syntax::keyword::OperandKeyword::*;
     let kind = match keyword {
         A => AtomKind::Simple(SimpleOperand::A),
         Af => AtomKind::RegPair(RegPair::Af),
@@ -233,7 +228,7 @@ mod tests {
     fn analyze_deref_af() {
         let parsed_expr = ParsedExpr {
             node: ExprNode::Parenthesized(Box::new(ParsedExpr {
-                node: ExprNode::Literal(Literal::Operand(OperandKeyword::Af)),
+                node: ExprNode::Literal(Literal::Operand(kw::Operand::Af)),
                 interval: 0,
             })),
             interval: 1,
@@ -276,7 +271,7 @@ mod tests {
         let parsed_expr = ParsedExpr {
             node: ExprNode::Parenthesized(Box::new(ParsedExpr {
                 node: ExprNode::Parenthesized(Box::new(ParsedExpr {
-                    node: ExprNode::Literal(Literal::Operand(OperandKeyword::Z)),
+                    node: ExprNode::Literal(Literal::Operand(kw::Operand::Z)),
                     interval,
                 })),
                 interval: 1,

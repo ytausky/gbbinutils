@@ -213,43 +213,43 @@ enum Keyword {
     Command(keyword::Command),
     Endm,
     Macro,
-    Operand(OperandKeyword),
+    Operand(Operand),
 }
 
 const KEYWORDS: &[(&str, Keyword)] = &[
-    ("a", Keyword::Operand(OperandKeyword::A)),
+    ("a", Keyword::Operand(Operand::A)),
     ("adc", Keyword::Command(Command::Mnemonic(Mnemonic::Adc))),
     ("add", Keyword::Command(Command::Mnemonic(Mnemonic::Add))),
-    ("af", Keyword::Operand(OperandKeyword::Af)),
+    ("af", Keyword::Operand(Operand::Af)),
     ("and", Keyword::Command(Command::Mnemonic(Mnemonic::And))),
-    ("b", Keyword::Operand(OperandKeyword::B)),
-    ("bc", Keyword::Operand(OperandKeyword::Bc)),
+    ("b", Keyword::Operand(Operand::B)),
+    ("bc", Keyword::Operand(Operand::Bc)),
     ("bit", Keyword::Command(Command::Mnemonic(Mnemonic::Bit))),
-    ("c", Keyword::Operand(OperandKeyword::C)),
+    ("c", Keyword::Operand(Operand::C)),
     ("call", Keyword::Command(Command::Mnemonic(Mnemonic::Call))),
     ("cp", Keyword::Command(Command::Mnemonic(Mnemonic::Cp))),
     ("cpl", Keyword::Command(Command::Mnemonic(Mnemonic::Cpl))),
-    ("d", Keyword::Operand(OperandKeyword::D)),
+    ("d", Keyword::Operand(Operand::D)),
     ("daa", Keyword::Command(Command::Mnemonic(Mnemonic::Daa))),
     (
         "db",
         Keyword::Command(Command::Directive(DirectiveKeyword::Db)),
     ),
-    ("de", Keyword::Operand(OperandKeyword::De)),
+    ("de", Keyword::Operand(Operand::De)),
     ("dec", Keyword::Command(Command::Mnemonic(Mnemonic::Dec))),
     ("di", Keyword::Command(Command::Mnemonic(Mnemonic::Di))),
     (
         "dw",
         Keyword::Command(Command::Directive(DirectiveKeyword::Dw)),
     ),
-    ("e", Keyword::Operand(OperandKeyword::E)),
+    ("e", Keyword::Operand(Operand::E)),
     ("ei", Keyword::Command(Command::Mnemonic(Mnemonic::Ei))),
     ("endm", Keyword::Endm),
-    ("h", Keyword::Operand(OperandKeyword::H)),
+    ("h", Keyword::Operand(Operand::H)),
     ("halt", Keyword::Command(Command::Mnemonic(Mnemonic::Halt))),
-    ("hl", Keyword::Operand(OperandKeyword::Hl)),
-    ("hld", Keyword::Operand(OperandKeyword::Hld)),
-    ("hli", Keyword::Operand(OperandKeyword::Hli)),
+    ("hl", Keyword::Operand(Operand::Hl)),
+    ("hld", Keyword::Operand(Operand::Hld)),
+    ("hli", Keyword::Operand(Operand::Hli)),
     ("inc", Keyword::Command(Command::Mnemonic(Mnemonic::Inc))),
     (
         "include",
@@ -257,12 +257,12 @@ const KEYWORDS: &[(&str, Keyword)] = &[
     ),
     ("jp", Keyword::Command(Command::Mnemonic(Mnemonic::Jp))),
     ("jr", Keyword::Command(Command::Mnemonic(Mnemonic::Jr))),
-    ("l", Keyword::Operand(OperandKeyword::L)),
+    ("l", Keyword::Operand(Operand::L)),
     ("ld", Keyword::Command(Command::Mnemonic(Mnemonic::Ld))),
     ("macro", Keyword::Macro),
-    ("nc", Keyword::Operand(OperandKeyword::Nc)),
+    ("nc", Keyword::Operand(Operand::Nc)),
     ("nop", Keyword::Command(Command::Mnemonic(Mnemonic::Nop))),
-    ("nz", Keyword::Operand(OperandKeyword::Nz)),
+    ("nz", Keyword::Operand(Operand::Nz)),
     ("or", Keyword::Command(Command::Mnemonic(Mnemonic::Or))),
     (
         "org",
@@ -285,14 +285,14 @@ const KEYWORDS: &[(&str, Keyword)] = &[
     ("sbc", Keyword::Command(Command::Mnemonic(Mnemonic::Sbc))),
     ("set", Keyword::Command(Command::Mnemonic(Mnemonic::Set))),
     ("sla", Keyword::Command(Command::Mnemonic(Mnemonic::Sla))),
-    ("sp", Keyword::Operand(OperandKeyword::Sp)),
+    ("sp", Keyword::Operand(Operand::Sp)),
     ("sra", Keyword::Command(Command::Mnemonic(Mnemonic::Sra))),
     ("srl", Keyword::Command(Command::Mnemonic(Mnemonic::Srl))),
     ("stop", Keyword::Command(Command::Mnemonic(Mnemonic::Stop))),
     ("sub", Keyword::Command(Command::Mnemonic(Mnemonic::Sub))),
     ("swap", Keyword::Command(Command::Mnemonic(Mnemonic::Swap))),
     ("xor", Keyword::Command(Command::Mnemonic(Mnemonic::Xor))),
-    ("z", Keyword::Operand(OperandKeyword::Z)),
+    ("z", Keyword::Operand(Operand::Z)),
 ];
 
 #[cfg(test)]
@@ -302,7 +302,7 @@ mod tests {
     use super::keyword::{Command::*, Mnemonic::*};
     use super::syntax::token::*;
     use super::syntax::Literal::{Number, Operand};
-    use super::OperandKeyword::*;
+    use super::Operand::*;
 
     fn assert_eq_tokens<'a>(src: &'a str, expected_tokens: &[Token]) {
         assert_eq!(

@@ -267,7 +267,7 @@ mod tests {
     use backend;
     use diagnostics::Diagnostic;
     use frontend::syntax::{
-        keyword::OperandKeyword, token, CommandContext, FileContext, MacroInvocationContext,
+        keyword::Operand, token, CommandContext, FileContext, MacroInvocationContext,
         TokenSeqContext,
     };
     use instruction::RelocExpr;
@@ -454,7 +454,7 @@ mod tests {
         let name = "my_macro";
         let tokens = vec![
             token::Command(Command::Mnemonic(Mnemonic::Xor)),
-            token::Literal(Literal::Operand(OperandKeyword::A)),
+            token::Literal(Literal::Operand(Operand::A)),
         ];
         let actions = collect_semantic_actions(|actions| {
             let mut token_seq_context = actions.enter_macro_def((name.to_string(), ()));
@@ -488,7 +488,7 @@ mod tests {
     #[test]
     fn invoke_unary_macro() {
         let name = "my_macro";
-        let arg_token = token::Literal(Literal::Operand(OperandKeyword::A));
+        let arg_token = token::Literal(Literal::Operand(Operand::A));
         let actions = collect_semantic_actions(|actions| {
             let mut invocation = actions.enter_macro_invocation((name.to_string(), ()));
             invocation = {
@@ -512,7 +512,7 @@ mod tests {
         use diagnostics::{Diagnostic, Message};
         let actions = collect_semantic_actions(|actions| {
             let mut command_context = actions.enter_command((Command::Mnemonic(Mnemonic::Nop), ()));
-            let literal_a = Literal::Operand(OperandKeyword::A);
+            let literal_a = Literal::Operand(Operand::A);
             command_context.add_argument(ParsedExpr {
                 node: ExprNode::Literal(literal_a),
                 interval: (),

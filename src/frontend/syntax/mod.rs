@@ -5,7 +5,7 @@ pub mod keyword;
 pub mod lexer;
 mod parser;
 
-pub use frontend::syntax::keyword::OperandKeyword;
+pub use frontend::syntax::keyword::Operand;
 
 pub fn tokenize(src: &str) -> self::lexer::Lexer {
     self::lexer::Lexer::new(src)
@@ -44,7 +44,7 @@ impl<T: StringRef> TokenSpec for T {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Literal<S> {
-    Operand(keyword::OperandKeyword),
+    Operand(Operand),
     Number(i32),
     String(S),
 }

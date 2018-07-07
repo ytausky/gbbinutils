@@ -58,7 +58,7 @@ pub enum Mnemonic {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum OperandKeyword {
+pub enum Operand {
     A,
     Af,
     B,
