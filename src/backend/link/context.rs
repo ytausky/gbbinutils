@@ -11,7 +11,10 @@ pub struct SymbolTable {
 #[derive(Clone, Copy)]
 pub struct SymbolId(usize);
 
-pub trait SymbolKey {
+pub trait SymbolKey
+where
+    Self: Copy,
+{
     fn associate(&self, context: &mut SymbolTable, id: SymbolId);
     fn to_symbol_id(&self, table: &SymbolTable) -> Option<SymbolId>;
 }
@@ -20,11 +23,11 @@ impl SymbolKey for SymbolId {
     fn associate(&self, _: &mut SymbolTable, _: SymbolId) {}
 
     fn to_symbol_id(&self, _: &SymbolTable) -> Option<SymbolId> {
-        Some((*self).clone())
+        Some(*self)
     }
 }
 
-impl<Q: Borrow<str>> SymbolKey for Q {
+impl<Q: Borrow<str> + Copy> SymbolKey for Q {
     fn associate(&self, context: &mut SymbolTable, id: SymbolId) {
         context.names.insert(self.borrow().to_string(), id);
     }
@@ -34,6 +37,7 @@ impl<Q: Borrow<str>> SymbolKey for Q {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct ChunkSize(pub usize);
 
 impl SymbolKey for ChunkSize {
