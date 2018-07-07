@@ -9,14 +9,10 @@ where
     I: IntoIterator<Item = ParsedExpr<String, R>>,
     R: SourceRange,
 {
-    let (mnemonic, mnemonic_ref) = (to_mnemonic(mnemonic.0), mnemonic.1);
-    let context = match mnemonic {
-        Mnemonic::Branch(_) => Context::Branch,
-        Mnemonic::Stack(_) => Context::Stack,
-        _ => Context::Other,
-    };
+    let mnemonic: (Mnemonic, R) = (mnemonic.0.into(), mnemonic.1);
+    let context = mnemonic.0.context();
     Analysis::new(
-        (mnemonic, mnemonic_ref),
+        mnemonic,
         operands
             .into_iter()
             .map(|x| operand::analyze_operand(x, context)),
@@ -277,6 +273,16 @@ enum Mnemonic {
     Stack(StackOperation),
 }
 
+impl Mnemonic {
+    fn context(&self) -> Context {
+        match *self {
+            Mnemonic::Branch(_) => Context::Branch,
+            Mnemonic::Stack(_) => Context::Stack,
+            _ => Context::Other,
+        }
+    }
+}
+
 impl AluOperation {
     fn expected_operands(self) -> usize {
         if self.implicit_dest() {
@@ -327,50 +333,52 @@ enum TargetSelector<R> {
     Expr(RelocExpr<R>),
 }
 
-fn to_mnemonic(keyword: kw::Mnemonic) -> Mnemonic {
-    use self::kw::Mnemonic::*;
-    match keyword {
-        Adc => Mnemonic::Alu(AluOperation::Adc),
-        Add => Mnemonic::Alu(AluOperation::Add),
-        And => Mnemonic::Alu(AluOperation::And),
-        Bit => Mnemonic::Bit(BitOperation::Bit),
-        Call => Mnemonic::Branch(BranchKind::Call),
-        Cp => Mnemonic::Alu(AluOperation::Cp),
-        Cpl => Mnemonic::Nullary(Nullary::Cpl),
-        Daa => Mnemonic::Nullary(Nullary::Daa),
-        Dec => Mnemonic::IncDec(IncDec::Dec),
-        Di => Mnemonic::Nullary(Nullary::Di),
-        Ei => Mnemonic::Nullary(Nullary::Ei),
-        Halt => Mnemonic::Nullary(Nullary::Halt),
-        Inc => Mnemonic::IncDec(IncDec::Inc),
-        Jp => Mnemonic::Branch(BranchKind::Jp),
-        Jr => Mnemonic::Branch(BranchKind::Jr),
-        Ld => Mnemonic::Ld,
-        Nop => Mnemonic::Nullary(Nullary::Nop),
-        Or => Mnemonic::Alu(AluOperation::Or),
-        Pop => Mnemonic::Stack(StackOperation::Pop),
-        Push => Mnemonic::Stack(StackOperation::Push),
-        Res => Mnemonic::Bit(BitOperation::Res),
-        Ret => Mnemonic::Branch(BranchKind::Ret),
-        Reti => Mnemonic::Nullary(Nullary::Reti),
-        Rl => Mnemonic::Misc(MiscOperation::Rl),
-        Rla => Mnemonic::Nullary(Nullary::Rla),
-        Rlc => Mnemonic::Misc(MiscOperation::Rlc),
-        Rlca => Mnemonic::Nullary(Nullary::Rlca),
-        Rr => Mnemonic::Misc(MiscOperation::Rr),
-        Rra => Mnemonic::Nullary(Nullary::Rra),
-        Rrc => Mnemonic::Misc(MiscOperation::Rrc),
-        Rrca => Mnemonic::Nullary(Nullary::Rrca),
-        Rst => Mnemonic::Rst,
-        Sbc => Mnemonic::Alu(AluOperation::Sbc),
-        Set => Mnemonic::Bit(BitOperation::Set),
-        Sla => Mnemonic::Misc(MiscOperation::Sla),
-        Sra => Mnemonic::Misc(MiscOperation::Sra),
-        Srl => Mnemonic::Misc(MiscOperation::Srl),
-        Stop => Mnemonic::Nullary(Nullary::Stop),
-        Sub => Mnemonic::Alu(AluOperation::Sub),
-        Swap => Mnemonic::Misc(MiscOperation::Swap),
-        Xor => Mnemonic::Alu(AluOperation::Xor),
+impl From<kw::Mnemonic> for Mnemonic {
+    fn from(keyword: kw::Mnemonic) -> Self {
+        use self::kw::Mnemonic::*;
+        match keyword {
+            Adc => Mnemonic::Alu(AluOperation::Adc),
+            Add => Mnemonic::Alu(AluOperation::Add),
+            And => Mnemonic::Alu(AluOperation::And),
+            Bit => Mnemonic::Bit(BitOperation::Bit),
+            Call => Mnemonic::Branch(BranchKind::Call),
+            Cp => Mnemonic::Alu(AluOperation::Cp),
+            Cpl => Mnemonic::Nullary(Nullary::Cpl),
+            Daa => Mnemonic::Nullary(Nullary::Daa),
+            Dec => Mnemonic::IncDec(IncDec::Dec),
+            Di => Mnemonic::Nullary(Nullary::Di),
+            Ei => Mnemonic::Nullary(Nullary::Ei),
+            Halt => Mnemonic::Nullary(Nullary::Halt),
+            Inc => Mnemonic::IncDec(IncDec::Inc),
+            Jp => Mnemonic::Branch(BranchKind::Jp),
+            Jr => Mnemonic::Branch(BranchKind::Jr),
+            Ld => Mnemonic::Ld,
+            Nop => Mnemonic::Nullary(Nullary::Nop),
+            Or => Mnemonic::Alu(AluOperation::Or),
+            Pop => Mnemonic::Stack(StackOperation::Pop),
+            Push => Mnemonic::Stack(StackOperation::Push),
+            Res => Mnemonic::Bit(BitOperation::Res),
+            Ret => Mnemonic::Branch(BranchKind::Ret),
+            Reti => Mnemonic::Nullary(Nullary::Reti),
+            Rl => Mnemonic::Misc(MiscOperation::Rl),
+            Rla => Mnemonic::Nullary(Nullary::Rla),
+            Rlc => Mnemonic::Misc(MiscOperation::Rlc),
+            Rlca => Mnemonic::Nullary(Nullary::Rlca),
+            Rr => Mnemonic::Misc(MiscOperation::Rr),
+            Rra => Mnemonic::Nullary(Nullary::Rra),
+            Rrc => Mnemonic::Misc(MiscOperation::Rrc),
+            Rrca => Mnemonic::Nullary(Nullary::Rrca),
+            Rst => Mnemonic::Rst,
+            Sbc => Mnemonic::Alu(AluOperation::Sbc),
+            Set => Mnemonic::Bit(BitOperation::Set),
+            Sla => Mnemonic::Misc(MiscOperation::Sla),
+            Sra => Mnemonic::Misc(MiscOperation::Sra),
+            Srl => Mnemonic::Misc(MiscOperation::Srl),
+            Stop => Mnemonic::Nullary(Nullary::Stop),
+            Sub => Mnemonic::Alu(AluOperation::Sub),
+            Swap => Mnemonic::Misc(MiscOperation::Swap),
+            Xor => Mnemonic::Alu(AluOperation::Xor),
+        }
     }
 }
 
