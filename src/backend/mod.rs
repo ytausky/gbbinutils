@@ -82,8 +82,8 @@ impl<SR: SourceRange> Backend<SR> for ObjectBuilder<SR> {
         self.build()
     }
 
-    fn set_origin(&mut self, _origin: RelocExpr<SR>) {
-        unimplemented!()
+    fn set_origin(&mut self, origin: RelocExpr<SR>) {
+        self.constrain_origin(origin)
     }
 }
 

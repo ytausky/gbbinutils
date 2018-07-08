@@ -6,7 +6,7 @@ pub struct Object<SR> {
 }
 
 pub struct Chunk<R> {
-    origin: Option<RelocExpr<R>>,
+    pub origin: Option<RelocExpr<R>>,
     pub items: Vec<Node<R>>,
 }
 
@@ -81,8 +81,7 @@ impl<SR> ObjectBuilder<SR> {
         }
     }
 
-    #[cfg(test)]
-    fn set_origin(&mut self, origin: RelocExpr<SR>) {
+    pub fn constrain_origin(&mut self, origin: RelocExpr<SR>) {
         self.state = Some(BuilderState::Pending {
             origin: Some(origin),
         })
@@ -106,10 +105,10 @@ mod tests {
     }
 
     #[test]
-    fn set_origin_determines_origin_of_new_chunk() {
+    fn constrain_origin_determines_origin_of_new_chunk() {
         let origin = RelocExpr::Literal(0x3000, ());
         let object = build_object(|builder| {
-            builder.set_origin(origin.clone());
+            builder.constrain_origin(origin.clone());
             builder.push(Node::Byte(0xcd))
         });
         assert_eq!(object.chunks[0].origin, Some(origin))

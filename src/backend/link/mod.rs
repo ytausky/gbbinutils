@@ -77,6 +77,12 @@ fn resolve_section<SR: SourceRange>(
         symbols,
         location: Some(0.into()),
     };
+    context.location = Some(
+        section
+            .origin
+            .map(|expr| expr.evaluate(&context).unwrap().unwrap())
+            .unwrap_or_else(|| 0.into()),
+    );
     for item in section.items {
         *context.location.as_mut().unwrap() += item.size(&context);
         match item.translate(&context) {
@@ -87,13 +93,13 @@ fn resolve_section<SR: SourceRange>(
     BinarySection { data }
 }
 
-fn resolve_symbols<SR: Clone>(object: &Object<SR>) -> SymbolTable {
+fn resolve_symbols<SR: SourceRange>(object: &Object<SR>) -> SymbolTable {
     let mut symbols = collect_symbols(object);
     refine_symbols(object, &mut symbols);
     symbols
 }
 
-fn collect_symbols<SR: Clone>(object: &Object<SR>) -> SymbolTable {
+fn collect_symbols<SR: SourceRange>(object: &Object<SR>) -> SymbolTable {
     let mut symbols = SymbolTable::new();
     (0..object.chunks.len()).for_each(|i| symbols.define(ChunkSize(i), None));
     for (i, chunk) in (&object.chunks).into_iter().enumerate() {
@@ -107,7 +113,7 @@ fn collect_symbols<SR: Clone>(object: &Object<SR>) -> SymbolTable {
     symbols
 }
 
-fn refine_symbols<SR: Clone>(object: &Object<SR>, context: &mut SymbolTable) -> i32 {
+fn refine_symbols<SR: SourceRange>(object: &Object<SR>, context: &mut SymbolTable) -> i32 {
     let mut refinements = 0;
     for (i, chunk) in (&object.chunks).into_iter().enumerate() {
         let size = chunk.traverse(context, |location, item, context| {
@@ -120,30 +126,42 @@ fn refine_symbols<SR: Clone>(object: &Object<SR>, context: &mut SymbolTable) -> 
     refinements
 }
 
-impl<SR: Clone> Chunk<SR> {
+impl<SR: SourceRange> Chunk<SR> {
     fn traverse<F>(&self, symbols: &mut SymbolTable, mut f: F) -> Value
     where
         F: FnMut(&Value, &Node<SR>, &mut SymbolTable),
     {
-        let mut location = Value::from(0);
+        let mut location = {
+            let context = EvalContext {
+                symbols,
+                location: None,
+            };
+            Some(
+                self.origin
+                    .as_ref()
+                    .map(|expr| expr.evaluate(&context).unwrap().unwrap())
+                    .unwrap_or(0.into()),
+            )
+        };
         for item in &self.items {
-            location += {
+            let size = {
                 let context = EvalContext {
                     symbols,
-                    location: Some(location.clone()),
+                    location: location.clone(),
                 };
                 item.size(&context)
             };
-            f(&location, item, symbols)
+            *location.as_mut().unwrap() += size;
+            f(location.as_ref().unwrap(), item, symbols)
         }
-        location
+        location.unwrap()
     }
 }
 
 #[derive(Debug)]
-struct UndefinedSymbol<SR>(String, SR);
+struct UndefinedSymbol<SR: SourceRange>(String, SR);
 
-impl<SR: Clone> RelocExpr<SR> {
+impl<SR: SourceRange> RelocExpr<SR> {
     fn evaluate(&self, context: &EvalContext) -> Result<Option<Value>, UndefinedSymbol<SR>> {
         match self {
             RelocExpr::Literal(value, _) => Ok(Some((*value).into())),
@@ -218,7 +236,7 @@ fn is_in_u8_range(n: i32) -> bool {
     n >= i32::from(u8::min_value()) && n <= i32::from(u8::max_value())
 }
 
-impl<SR: Clone> Node<SR> {
+impl<SR: SourceRange> Node<SR> {
     fn size(&self, context: &EvalContext) -> Value {
         match self {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),
@@ -296,6 +314,7 @@ impl Data {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use backend::{object::ObjectBuilder, Backend};
     use diagnostics::TestDiagnosticsListener;
     use std::borrow::Borrow;
 
@@ -370,6 +389,29 @@ mod tests {
         ]);
         let binary = resolve_section(chunk, &SymbolTable::new(), &TestDiagnosticsListener::new());
         assert_eq!(binary.data, [byte, 0x02])
+    }
+
+    #[test]
+    fn location_counter_starts_from_chunk_origin() {
+        let mut chunk = Chunk::new();
+        chunk.origin = Some(RelocExpr::Literal(0xffe1, ()));
+        chunk
+            .items
+            .push(Node::Expr(RelocExpr::LocationCounter(()), Width::Word));
+        let binary = resolve_section(chunk, &SymbolTable::new(), &TestDiagnosticsListener::new());
+        assert_eq!(binary.data, [0xe3, 0xff])
+    }
+
+    #[test]
+    fn label_defined_as_chunk_origin_plus_offset() {
+        let label = "label";
+        let addr = 0xffe1;
+        let mut builder = ObjectBuilder::new();
+        builder.set_origin(RelocExpr::Literal(addr, ()));
+        builder.add_label((label, ()));
+        let object = builder.into_object();
+        let symbols = resolve_symbols(&object);
+        assert_eq!(symbols.get(label), Some(&Some(addr.into())))
     }
 
     #[test]
