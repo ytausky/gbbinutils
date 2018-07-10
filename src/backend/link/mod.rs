@@ -77,28 +77,22 @@ where
 }
 
 fn resolve_section<SR: SourceRange>(
-    section: Chunk<SR>,
+    chunk: Chunk<SR>,
     symbols: &SymbolTable,
     diagnostics: &impl DiagnosticsListener<SR>,
 ) -> BinarySection {
     let mut data = Vec::<u8>::new();
     let mut context = EvalContext {
         symbols,
-        location: Some(0.into()),
+        location: None,
     };
-    context.location = Some(
-        section
-            .origin
-            .map(|expr| expr.evaluate(&context).unwrap().unwrap())
-            .unwrap_or_else(|| 0.into()),
-    );
-    for item in section.items {
-        *context.location.as_mut().unwrap() += item.size(&context);
-        match item.translate(&context) {
+    chunk.traverse(
+        &mut context,
+        |item, context| match item.translate(context) {
             Ok(iter) => data.extend(iter),
             Err(diagnostic) => diagnostics.emit_diagnostic(diagnostic),
-        }
-    }
+        },
+    );
     BinarySection { data }
 }
 
