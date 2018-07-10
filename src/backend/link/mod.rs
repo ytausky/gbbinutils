@@ -88,10 +88,7 @@ impl<SR: SourceRange> Chunk<SR> {
             location: None,
         };
         self.traverse(&mut context, |item, context| {
-            match item.translate(context, diagnostics) {
-                Ok(iter) => data.extend(iter),
-                Err(diagnostic) => diagnostics.emit_diagnostic(diagnostic),
-            }
+            data.extend(item.translate(context, diagnostics))
         });
         BinarySection { data }
     }
@@ -209,7 +206,7 @@ fn resolve_expr_item<SR: SourceRange>(
     width: Width,
     context: &EvalContext<&SymbolTable>,
     diagnostics: &DiagnosticsListener<SR>,
-) -> Result<Data, Diagnostic<SR>> {
+) -> Data {
     let range = expr.source_range();
     let value = expr.evaluate_strictly(context, &mut |symbol, range| {
         diagnostics.emit_diagnostic(Diagnostic::new(
@@ -221,23 +218,23 @@ fn resolve_expr_item<SR: SourceRange>(
     }).unwrap_or_else(|| 0.into())
         .exact()
         .unwrap();
-    fit_to_width((value, range), width)
+    fit_to_width((value, range), width, diagnostics)
 }
 
 fn fit_to_width<SR: Clone>(
     (value, value_ref): (i32, SR),
     width: Width,
-) -> Result<Data, Diagnostic<SR>> {
+    diagnostics: &DiagnosticsListener<SR>,
+) -> Data {
     if !is_in_range(value, width) {
-        Err(Diagnostic::new(
+        diagnostics.emit_diagnostic(Diagnostic::new(
             Message::ValueOutOfRange { value, width },
-            value_ref.clone(),
+            value_ref,
         ))
-    } else {
-        Ok(match width {
-            Width::Byte => Data::Byte(value as u8),
-            Width::Word => Data::Word(value as u16),
-        })
+    }
+    match width {
+        Width::Byte => Data::Byte(value as u8),
+        Width::Word => Data::Word(value as u16),
     }
 }
 
@@ -280,15 +277,16 @@ impl<SR: SourceRange> Node<SR> {
         &self,
         context: &EvalContext<&SymbolTable>,
         diagnostics: &DiagnosticsListener<SR>,
-    ) -> Result<IntoIter<u8>, Diagnostic<SR>> {
-        Ok(match self {
+    ) -> IntoIter<u8> {
+        match self {
             Node::Byte(value) => vec![*value],
             Node::Embedded(opcode, expr) => {
                 let n = expr.evaluate(context).unwrap().exact().unwrap();
                 vec![opcode | ((n as u8) << 3)]
             }
-            Node::Expr(expr, width) => resolve_expr_item(&expr, *width, context, diagnostics)
-                .map(|data| data.into_bytes())?,
+            Node::Expr(expr, width) => {
+                resolve_expr_item(&expr, *width, context, diagnostics).into_bytes()
+            }
             Node::Label(..) => vec![],
             Node::LdInlineAddr(opcode, expr) => {
                 let addr = expr.evaluate(context).unwrap().exact().unwrap();
@@ -309,7 +307,7 @@ impl<SR: SourceRange> Node<SR> {
                 bytes.extend(addr_repr.into_bytes());
                 bytes
             }
-        }.into_iter())
+        }.into_iter()
     }
 }
 
@@ -400,8 +398,7 @@ mod tests {
                 location: None,
             },
             &diagnostics::IgnoreDiagnostics {},
-        ).unwrap()
-            .collect()
+        ).collect()
     }
 
     #[test]
