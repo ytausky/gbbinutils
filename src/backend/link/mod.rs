@@ -4,7 +4,7 @@ use self::context::ChunkSize;
 use backend::{BinaryObject, BinarySection, Chunk, Node, Object, RelocExpr};
 use diagnostics::{Diagnostic, DiagnosticsListener, Message, Source, SourceRange};
 use std::borrow::Borrow;
-use std::ops::{AddAssign, Sub};
+use std::ops::{Add, AddAssign, Sub};
 use std::vec::IntoIter;
 use Width;
 
@@ -40,6 +40,14 @@ impl AddAssign<Value> for Value {
     fn add_assign(&mut self, rhs: Value) {
         self.min += rhs.min;
         self.max += rhs.max
+    }
+}
+
+impl<T: Into<Value>> Add<T> for Value {
+    type Output = Value;
+    fn add(mut self, rhs: T) -> Self::Output {
+        self += rhs.into();
+        self
     }
 }
 
@@ -103,51 +111,62 @@ fn resolve_symbols<SR: SourceRange>(object: &Object<SR>) -> SymbolTable {
 fn collect_symbols<SR: SourceRange>(object: &Object<SR>) -> SymbolTable {
     let mut symbols = SymbolTable::new();
     (0..object.chunks.len()).for_each(|i| symbols.define(ChunkSize(i), None));
-    for (i, chunk) in (&object.chunks).into_iter().enumerate() {
-        let size = chunk.traverse(&mut symbols, |location, item, context| {
-            if let Node::Label(symbol, _) = item {
-                context.define(symbol.as_str(), Some(location.clone()))
-            }
-        });
-        symbols.refine(ChunkSize(i), size);
+    {
+        let mut context = EvalContext {
+            symbols: &mut symbols,
+            location: None,
+        };
+        for (i, chunk) in (&object.chunks).into_iter().enumerate() {
+            let size = chunk.traverse(&mut context, |item, context| {
+                if let Node::Label(symbol, _) = item {
+                    context
+                        .symbols
+                        .define(symbol.as_str(), Some(context.location.clone().unwrap()))
+                }
+            });
+            context.symbols.refine(ChunkSize(i), size);
+        }
     }
     symbols
 }
 
-fn refine_symbols<SR: SourceRange>(object: &Object<SR>, context: &mut SymbolTable) -> i32 {
+fn refine_symbols<SR: SourceRange>(object: &Object<SR>, symbols: &mut SymbolTable) -> i32 {
     let mut refinements = 0;
+    let context = &mut EvalContext {
+        symbols,
+        location: None,
+    };
     for (i, chunk) in (&object.chunks).into_iter().enumerate() {
-        let size = chunk.traverse(context, |location, item, context| {
+        let size = chunk.traverse(context, |item, context| {
             if let Node::Label(symbol, _) = item {
-                refinements += context.refine(symbol.as_str(), location.clone()) as i32
+                refinements += context
+                    .symbols
+                    .refine(symbol.as_str(), context.location.clone().unwrap())
+                    as i32
             }
         });
-        refinements += context.refine(ChunkSize(i), size) as i32
+        refinements += context.symbols.refine(ChunkSize(i), size) as i32
     }
     refinements
 }
 
 impl<SR: SourceRange> Chunk<SR> {
-    fn traverse<F>(&self, symbols: &mut SymbolTable, mut f: F) -> Value
+    fn traverse<B: Borrow<SymbolTable>, F>(&self, context: &mut EvalContext<B>, mut f: F) -> Value
     where
-        F: FnMut(&Value, &Node<SR>, &mut SymbolTable),
+        F: FnMut(&Node<SR>, &mut EvalContext<B>),
     {
-        let mut context: EvalContext<&mut SymbolTable> = EvalContext {
-            symbols,
-            location: None,
-        };
-        context.location = Some(
-            self.origin
-                .as_ref()
-                .map(|expr| expr.evaluate(&context).unwrap().unwrap())
-                .unwrap_or(0.into()),
-        );
+        let origin = self.origin
+            .as_ref()
+            .map(|expr| expr.evaluate(&context).unwrap().unwrap())
+            .unwrap_or(0.into());
+        let mut offset = Value::from(0);
+        context.location = Some(origin.clone());
         for item in &self.items {
-            let size = item.size(&context);
-            *context.location.as_mut().unwrap() += size;
-            f(context.location.as_ref().unwrap(), item, context.symbols)
+            offset += item.size(&context);
+            *context.location.as_mut().unwrap() = origin.clone() + offset.clone();
+            f(item, context)
         }
-        context.location.unwrap()
+        offset
     }
 }
 
