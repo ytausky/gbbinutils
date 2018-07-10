@@ -88,7 +88,7 @@ impl<SR: SourceRange> Chunk<SR> {
             location: None,
         };
         self.traverse(&mut context, |item, context| {
-            match item.translate(context) {
+            match item.translate(context, diagnostics) {
                 Ok(iter) => data.extend(iter),
                 Err(diagnostic) => diagnostics.emit_diagnostic(diagnostic),
             }
@@ -153,7 +153,7 @@ impl<SR: SourceRange> Chunk<SR> {
     {
         let origin = self.origin
             .as_ref()
-            .map(|expr| expr.evaluate(&context).unwrap().unwrap())
+            .map(|expr| expr.evaluate(&context).unwrap())
             .unwrap_or(0.into());
         let mut offset = Value::from(0);
         context.location = Some(origin.clone());
@@ -166,31 +166,40 @@ impl<SR: SourceRange> Chunk<SR> {
     }
 }
 
-#[derive(Debug)]
-struct UndefinedSymbol<SR: SourceRange>(String, SR);
-
 impl<SR: SourceRange> RelocExpr<SR> {
-    fn evaluate<ST: Borrow<SymbolTable>>(
+    fn evaluate<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Option<Value> {
+        self.evaluate_strictly(context, &mut |_: &str, _: &SR| ())
+    }
+
+    fn evaluate_strictly<ST, F>(
         &self,
         context: &EvalContext<ST>,
-    ) -> Result<Option<Value>, UndefinedSymbol<SR>> {
+        on_undefined_symbol: &mut F,
+    ) -> Option<Value>
+    where
+        ST: Borrow<SymbolTable>,
+        F: FnMut(&str, &SR),
+    {
         match self {
-            RelocExpr::Literal(value, _) => Ok(Some((*value).into())),
-            RelocExpr::LocationCounter(_) => Ok(context.location.clone()),
-            RelocExpr::Subtract(lhs, rhs, _) => Ok({
-                let lhs = lhs.evaluate(context)?;
-                let rhs = rhs.evaluate(context)?;
+            RelocExpr::Literal(value, _) => Some((*value).into()),
+            RelocExpr::LocationCounter(_) => context.location.clone(),
+            RelocExpr::Subtract(lhs, rhs, _) => {
+                let lhs = lhs.evaluate_strictly(context, on_undefined_symbol);
+                let rhs = rhs.evaluate_strictly(context, on_undefined_symbol);
                 match (lhs, rhs) {
                     (Some(left), Some(right)) => Some(left - right),
                     _ => None,
                 }
-            }),
+            }
             RelocExpr::Symbol(symbol, expr_ref) => context
                 .symbols
                 .borrow()
                 .get(symbol.as_str())
                 .cloned()
-                .ok_or_else(|| UndefinedSymbol((*symbol).clone(), (*expr_ref).clone())),
+                .unwrap_or_else(|| {
+                    on_undefined_symbol(symbol, expr_ref);
+                    None
+                }),
         }
     }
 }
@@ -199,14 +208,17 @@ fn resolve_expr_item<SR: SourceRange>(
     expr: &RelocExpr<SR>,
     width: Width,
     context: &EvalContext<&SymbolTable>,
+    diagnostics: &DiagnosticsListener<SR>,
 ) -> Result<Data, Diagnostic<SR>> {
     let range = expr.source_range();
-    let value = expr.evaluate(context)
-        .map_err(|undefined| {
-            let UndefinedSymbol(symbol, range) = undefined;
-            Diagnostic::new(Message::UnresolvedSymbol { symbol }, range)
-        })?
-        .unwrap()
+    let value = expr.evaluate_strictly(context, &mut |symbol, range| {
+        diagnostics.emit_diagnostic(Diagnostic::new(
+            Message::UnresolvedSymbol {
+                symbol: symbol.to_string(),
+            },
+            range.clone(),
+        ))
+    }).unwrap_or_else(|| 0.into())
         .exact()
         .unwrap();
     fit_to_width((value, range), width)
@@ -255,8 +267,8 @@ impl<SR: SourceRange> Node<SR> {
             Node::Expr(_, width) => width.len().into(),
             Node::Label(..) => 0.into(),
             Node::LdInlineAddr(_, expr) => match expr.evaluate(context) {
-                Ok(Some(Value { min, .. })) if min >= 0xff00 => 2.into(),
-                Ok(Some(Value { max, .. })) if max < 0xff00 => 3.into(),
+                Some(Value { min, .. }) if min >= 0xff00 => 2.into(),
+                Some(Value { max, .. }) if max < 0xff00 => 3.into(),
                 _ => Value { min: 2, max: 3 },
             },
         }
@@ -267,19 +279,19 @@ impl<SR: SourceRange> Node<SR> {
     fn translate(
         &self,
         context: &EvalContext<&SymbolTable>,
+        diagnostics: &DiagnosticsListener<SR>,
     ) -> Result<IntoIter<u8>, Diagnostic<SR>> {
         Ok(match self {
             Node::Byte(value) => vec![*value],
             Node::Embedded(opcode, expr) => {
-                let n = expr.evaluate(context).unwrap().unwrap().exact().unwrap();
+                let n = expr.evaluate(context).unwrap().exact().unwrap();
                 vec![opcode | ((n as u8) << 3)]
             }
-            Node::Expr(expr, width) => {
-                resolve_expr_item(&expr, *width, context).map(|data| data.into_bytes())?
-            }
+            Node::Expr(expr, width) => resolve_expr_item(&expr, *width, context, diagnostics)
+                .map(|data| data.into_bytes())?,
             Node::Label(..) => vec![],
             Node::LdInlineAddr(opcode, expr) => {
-                let addr = expr.evaluate(context).unwrap().unwrap().exact().unwrap();
+                let addr = expr.evaluate(context).unwrap().exact().unwrap();
                 let kind = if addr < 0xff00 {
                     AddrKind::Low
                 } else {
@@ -354,44 +366,42 @@ mod tests {
     }
 
     fn test_translation_of_ld_inline_addr(opcode: u8, addr: u16, expected: impl Borrow<[u8]>) {
-        let actual: Vec<_> = Node::LdInlineAddr(opcode, RelocExpr::Literal(addr.into(), ()))
-            .translate(&EvalContext {
-                symbols: &SymbolTable::new(),
-                location: None,
-            })
-            .unwrap()
-            .collect();
+        let actual = translate_chunk_item(Node::LdInlineAddr(
+            opcode,
+            RelocExpr::Literal(addr.into(), ()),
+        ));
         assert_eq!(actual, expected.borrow())
     }
 
     #[test]
     fn translate_embedded() {
-        let actual: Vec<_> = Node::Embedded(0b01_000_110, RelocExpr::Literal(4, ()))
-            .translate(&EvalContext {
-                symbols: &SymbolTable::new(),
-                location: None,
-            })
-            .unwrap()
-            .collect();
+        let actual = translate_chunk_item(Node::Embedded(0b01_000_110, RelocExpr::Literal(4, ())));
         assert_eq!(actual, [0x66])
     }
 
     #[test]
     fn translate_expr_with_subtraction() {
-        let actual = Node::Expr(
+        let actual = translate_chunk_item(Node::Expr(
             RelocExpr::Subtract(
                 Box::new(RelocExpr::Literal(4, ())),
                 Box::new(RelocExpr::Literal(3, ())),
                 (),
             ),
             Width::Byte,
-        ).translate(&EvalContext {
-            symbols: &SymbolTable::new(),
-            location: None,
-        })
-            .unwrap()
-            .collect::<Vec<_>>();
+        ));
         assert_eq!(actual, [0x01])
+    }
+
+    fn translate_chunk_item<SR: SourceRange>(item: Node<SR>) -> Vec<u8> {
+        use diagnostics;
+        item.translate(
+            &EvalContext {
+                symbols: &SymbolTable::new(),
+                location: None,
+            },
+            &diagnostics::IgnoreDiagnostics {},
+        ).unwrap()
+            .collect()
     }
 
     #[test]

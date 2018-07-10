@@ -157,8 +157,26 @@ mod tests {
     #[test]
     fn diagnose_unresolved_symbol() {
         let ident = "ident";
-        let (_, diagnostics) = with_object_builder(|builder| builder.emit_item(symbol_expr(ident)));
+        let (_, diagnostics) =
+            with_object_builder(|builder| builder.emit_item(symbol_expr_item(ident)));
         assert_eq!(*diagnostics, [unresolved(ident)]);
+    }
+
+    #[test]
+    fn diagnose_two_unresolved_symbols_in_one_expr() {
+        let ident1 = "ident1";
+        let ident2 = "ident2";
+        let (_, diagnostics) = with_object_builder(|builder| {
+            builder.emit_item(Item::Data(
+                RelocExpr::Subtract(
+                    Box::new(symbol_expr(ident1)),
+                    Box::new(symbol_expr(ident2)),
+                    (),
+                ),
+                Width::Word,
+            ))
+        });
+        assert_eq!(*diagnostics, [unresolved(ident1), unresolved(ident2)]);
     }
 
     #[test]
@@ -166,7 +184,7 @@ mod tests {
         let label = "label";
         let (object, diagnostics) = with_object_builder(|builder| {
             builder.add_label((label, ()));
-            builder.emit_item(symbol_expr(label));
+            builder.emit_item(symbol_expr_item(label));
         });
         assert_eq!(*diagnostics, []);
         assert_eq!(object.sections.last().unwrap().data, [0x00, 0x00])
@@ -176,7 +194,7 @@ mod tests {
     fn emit_symbol_defined_after_use() {
         let label = "label";
         let (object, diagnostics) = with_object_builder(|builder| {
-            builder.emit_item(symbol_expr(label));
+            builder.emit_item(symbol_expr_item(label));
             builder.add_label((label, ()));
         });
         assert_eq!(*diagnostics, []);
@@ -198,8 +216,12 @@ mod tests {
         (object, diagnostics)
     }
 
-    fn symbol_expr(symbol: impl Into<String>) -> Item<()> {
-        Item::Data(RelocExpr::Symbol(symbol.into(), ()), Width::Word)
+    fn symbol_expr_item(symbol: impl Into<String>) -> Item<()> {
+        Item::Data(symbol_expr(symbol), Width::Word)
+    }
+
+    fn symbol_expr(symbol: impl Into<String>) -> RelocExpr<()> {
+        RelocExpr::Symbol(symbol.into(), ())
     }
 
     fn unresolved(symbol: impl Into<String>) -> Diagnostic<()> {

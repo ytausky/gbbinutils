@@ -106,6 +106,14 @@ pub trait DiagnosticsListener<TR> {
 }
 
 #[cfg(test)]
+pub struct IgnoreDiagnostics;
+
+#[cfg(test)]
+impl<SR> DiagnosticsListener<SR> for IgnoreDiagnostics {
+    fn emit_diagnostic(&self, _: Diagnostic<SR>) {}
+}
+
+#[cfg(test)]
 pub struct TestDiagnosticsListener {
     pub diagnostics: RefCell<Vec<Diagnostic<()>>>,
 }
