@@ -145,9 +145,10 @@ fn refine_symbols<SR: SourceRange>(object: &Object<SR>, symbols: &mut SymbolTabl
 }
 
 impl<SR: SourceRange> Chunk<SR> {
-    fn traverse<B: Borrow<SymbolTable>, F>(&self, context: &mut EvalContext<B>, mut f: F) -> Value
+    fn traverse<ST, F>(&self, context: &mut EvalContext<ST>, mut f: F) -> Value
     where
-        F: FnMut(&Node<SR>, &mut EvalContext<B>),
+        ST: Borrow<SymbolTable>,
+        F: FnMut(&Node<SR>, &mut EvalContext<ST>),
     {
         let origin = self.origin
             .as_ref()
@@ -168,9 +169,9 @@ impl<SR: SourceRange> Chunk<SR> {
 struct UndefinedSymbol<SR: SourceRange>(String, SR);
 
 impl<SR: SourceRange> RelocExpr<SR> {
-    fn evaluate<B: Borrow<SymbolTable>>(
+    fn evaluate<ST: Borrow<SymbolTable>>(
         &self,
-        context: &EvalContext<B>,
+        context: &EvalContext<ST>,
     ) -> Result<Option<Value>, UndefinedSymbol<SR>> {
         match self {
             RelocExpr::Literal(value, _) => Ok(Some((*value).into())),
@@ -247,7 +248,7 @@ fn is_in_u8_range(n: i32) -> bool {
 }
 
 impl<SR: SourceRange> Node<SR> {
-    fn size<B: Borrow<SymbolTable>>(&self, context: &EvalContext<B>) -> Value {
+    fn size<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
         match self {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),
             Node::Expr(_, width) => width.len().into(),

@@ -86,7 +86,7 @@ impl SymbolTable {
     }
 }
 
-pub struct EvalContext<B: Borrow<SymbolTable>> {
-    pub symbols: B,
+pub struct EvalContext<ST> {
+    pub symbols: ST,
     pub location: Option<Value>,
 }
