@@ -71,29 +71,30 @@ where
         sections: object
             .chunks
             .into_iter()
-            .map(|section| resolve_section(section, &symbols, diagnostics))
+            .map(|chunk| chunk.translate(&symbols, diagnostics))
             .collect(),
     }
 }
 
-fn resolve_section<SR: SourceRange>(
-    chunk: Chunk<SR>,
-    symbols: &SymbolTable,
-    diagnostics: &impl DiagnosticsListener<SR>,
-) -> BinarySection {
-    let mut data = Vec::<u8>::new();
-    let mut context = EvalContext {
-        symbols,
-        location: None,
-    };
-    chunk.traverse(
-        &mut context,
-        |item, context| match item.translate(context) {
-            Ok(iter) => data.extend(iter),
-            Err(diagnostic) => diagnostics.emit_diagnostic(diagnostic),
-        },
-    );
-    BinarySection { data }
+impl<SR: SourceRange> Chunk<SR> {
+    fn translate(
+        &self,
+        symbols: &SymbolTable,
+        diagnostics: &impl DiagnosticsListener<SR>,
+    ) -> BinarySection {
+        let mut data = Vec::<u8>::new();
+        let mut context = EvalContext {
+            symbols,
+            location: None,
+        };
+        self.traverse(&mut context, |item, context| {
+            match item.translate(context) {
+                Ok(iter) => data.extend(iter),
+                Err(diagnostic) => diagnostics.emit_diagnostic(diagnostic),
+            }
+        });
+        BinarySection { data }
+    }
 }
 
 fn resolve_symbols<SR: SourceRange>(object: &Object<SR>) -> SymbolTable {
@@ -401,7 +402,7 @@ mod tests {
             Node::Byte(byte),
             Node::Expr(RelocExpr::LocationCounter(()), Width::Byte),
         ]);
-        let binary = resolve_section(chunk, &SymbolTable::new(), &TestDiagnosticsListener::new());
+        let binary = chunk.translate(&SymbolTable::new(), &TestDiagnosticsListener::new());
         assert_eq!(binary.data, [byte, 0x02])
     }
 
@@ -412,7 +413,7 @@ mod tests {
         chunk
             .items
             .push(Node::Expr(RelocExpr::LocationCounter(()), Width::Word));
-        let binary = resolve_section(chunk, &SymbolTable::new(), &TestDiagnosticsListener::new());
+        let binary = chunk.translate(&SymbolTable::new(), &TestDiagnosticsListener::new());
         assert_eq!(binary.data, [0xe3, 0xff])
     }
 
