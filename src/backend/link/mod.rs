@@ -3,6 +3,7 @@ pub use self::context::{EvalContext, SymbolTable};
 use self::context::ChunkSize;
 use backend::{BinaryObject, BinarySection, Chunk, Node, Object, RelocExpr};
 use diagnostics::{Diagnostic, DiagnosticsListener, Message, Source, SourceRange};
+use std::borrow::Borrow;
 use std::ops::{AddAssign, Sub};
 use std::vec::IntoIter;
 use Width;
@@ -131,30 +132,22 @@ impl<SR: SourceRange> Chunk<SR> {
     where
         F: FnMut(&Value, &Node<SR>, &mut SymbolTable),
     {
-        let mut location = {
-            let context = EvalContext {
-                symbols,
-                location: None,
-            };
-            Some(
-                self.origin
-                    .as_ref()
-                    .map(|expr| expr.evaluate(&context).unwrap().unwrap())
-                    .unwrap_or(0.into()),
-            )
+        let mut context: EvalContext<&mut SymbolTable> = EvalContext {
+            symbols,
+            location: None,
         };
+        context.location = Some(
+            self.origin
+                .as_ref()
+                .map(|expr| expr.evaluate(&context).unwrap().unwrap())
+                .unwrap_or(0.into()),
+        );
         for item in &self.items {
-            let size = {
-                let context = EvalContext {
-                    symbols,
-                    location: location.clone(),
-                };
-                item.size(&context)
-            };
-            *location.as_mut().unwrap() += size;
-            f(location.as_ref().unwrap(), item, symbols)
+            let size = item.size(&context);
+            *context.location.as_mut().unwrap() += size;
+            f(context.location.as_ref().unwrap(), item, context.symbols)
         }
-        location.unwrap()
+        context.location.unwrap()
     }
 }
 
@@ -162,7 +155,10 @@ impl<SR: SourceRange> Chunk<SR> {
 struct UndefinedSymbol<SR: SourceRange>(String, SR);
 
 impl<SR: SourceRange> RelocExpr<SR> {
-    fn evaluate(&self, context: &EvalContext) -> Result<Option<Value>, UndefinedSymbol<SR>> {
+    fn evaluate<B: Borrow<SymbolTable>>(
+        &self,
+        context: &EvalContext<B>,
+    ) -> Result<Option<Value>, UndefinedSymbol<SR>> {
         match self {
             RelocExpr::Literal(value, _) => Ok(Some((*value).into())),
             RelocExpr::LocationCounter(_) => Ok(context.location.clone()),
@@ -176,6 +172,7 @@ impl<SR: SourceRange> RelocExpr<SR> {
             }),
             RelocExpr::Symbol(symbol, expr_ref) => context
                 .symbols
+                .borrow()
                 .get(symbol.as_str())
                 .cloned()
                 .ok_or_else(|| UndefinedSymbol((*symbol).clone(), (*expr_ref).clone())),
@@ -186,7 +183,7 @@ impl<SR: SourceRange> RelocExpr<SR> {
 fn resolve_expr_item<SR: SourceRange>(
     expr: &RelocExpr<SR>,
     width: Width,
-    context: &EvalContext,
+    context: &EvalContext<&SymbolTable>,
 ) -> Result<Data, Diagnostic<SR>> {
     let range = expr.source_range();
     let value = expr.evaluate(context)
@@ -237,7 +234,7 @@ fn is_in_u8_range(n: i32) -> bool {
 }
 
 impl<SR: SourceRange> Node<SR> {
-    fn size(&self, context: &EvalContext) -> Value {
+    fn size<B: Borrow<SymbolTable>>(&self, context: &EvalContext<B>) -> Value {
         match self {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),
             Node::Expr(_, width) => width.len().into(),
@@ -252,7 +249,10 @@ impl<SR: SourceRange> Node<SR> {
 }
 
 impl<SR: SourceRange> Node<SR> {
-    fn translate(&self, context: &EvalContext) -> Result<IntoIter<u8>, Diagnostic<SR>> {
+    fn translate(
+        &self,
+        context: &EvalContext<&SymbolTable>,
+    ) -> Result<IntoIter<u8>, Diagnostic<SR>> {
         Ok(match self {
             Node::Byte(value) => vec![*value],
             Node::Embedded(opcode, expr) => {
