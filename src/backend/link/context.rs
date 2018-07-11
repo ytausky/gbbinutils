@@ -3,7 +3,7 @@ use std::borrow::Borrow;
 use std::collections::HashMap;
 
 pub struct SymbolTable {
-    symbols: Vec<Option<Value>>,
+    symbols: Vec<Value>,
     names: HashMap<String, SymbolId>,
     sizes: Vec<SymbolId>,
 }
@@ -62,17 +62,17 @@ impl SymbolTable {
         }
     }
 
-    pub fn define(&mut self, key: impl SymbolKey, value: Option<Value>) {
+    pub fn define(&mut self, key: impl SymbolKey, value: Value) {
         let id = SymbolId(self.symbols.len());
         self.symbols.push(value);
         key.associate(self, id)
     }
 
-    pub fn get(&self, key: impl SymbolKey) -> Option<&Option<Value>> {
+    pub fn get(&self, key: impl SymbolKey) -> Option<&Value> {
         key.to_symbol_id(self).map(|SymbolId(id)| &self.symbols[id])
     }
 
-    fn get_mut(&mut self, key: impl SymbolKey) -> Option<&mut Option<Value>> {
+    fn get_mut(&mut self, key: impl SymbolKey) -> Option<&mut Value> {
         key.to_symbol_id(self)
             .map(move |SymbolId(id)| &mut self.symbols[id])
     }
@@ -80,13 +80,32 @@ impl SymbolTable {
     pub fn refine(&mut self, key: impl SymbolKey, value: Value) -> bool {
         let stored_value = self.get_mut(key).unwrap();
         let old_value = stored_value.clone();
-        let was_refined = old_value.map_or(true, |v| value.len() < v.len());
-        *stored_value = Some(value);
+        let was_refined = match (old_value, &value) {
+            (Value::Unknown, new_value) => *new_value != Value::Unknown,
+            (
+                Value::Range {
+                    min: old_min,
+                    max: old_max,
+                },
+                Value::Range {
+                    min: new_min,
+                    max: new_max,
+                },
+            ) => {
+                assert!(*new_min >= old_min);
+                assert!(*new_max <= old_max);
+                *new_min > old_min || *new_max < old_max
+            }
+            (Value::Range { .. }, Value::Unknown) => {
+                panic!("a symbol previously approximated is now unknown")
+            }
+        };
+        *stored_value = value;
         was_refined
     }
 }
 
 pub struct EvalContext<ST> {
     pub symbols: ST,
-    pub location: Option<Value>,
+    pub location: Value,
 }

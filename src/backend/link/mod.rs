@@ -11,35 +11,41 @@ use Width;
 mod context;
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Value {
-    min: i32,
-    max: i32,
+pub enum Value {
+    Range { min: i32, max: i32 },
+    Unknown,
 }
 
 impl Value {
     fn exact(&self) -> Option<i32> {
-        if self.min == self.max {
-            Some(self.min)
-        } else {
-            None
+        match *self {
+            Value::Range { min, max } if min == max => Some(min),
+            _ => None,
         }
-    }
-
-    fn len(&self) -> i32 {
-        self.max - self.min
     }
 }
 
 impl From<i32> for Value {
     fn from(n: i32) -> Self {
-        Value { min: n, max: n }
+        Value::Range { min: n, max: n }
     }
 }
 
 impl AddAssign<Value> for Value {
     fn add_assign(&mut self, rhs: Value) {
-        self.min += rhs.min;
-        self.max += rhs.max
+        match (self, rhs) {
+            (
+                Value::Range { min, max },
+                Value::Range {
+                    min: rhs_min,
+                    max: rhs_max,
+                },
+            ) => {
+                *min += rhs_min;
+                *max += rhs_max;
+            }
+            (this, _) => *this = Value::Unknown,
+        }
     }
 }
 
@@ -54,9 +60,18 @@ impl<T: Into<Value>> Add<T> for Value {
 impl Sub<Value> for Value {
     type Output = Value;
     fn sub(self, rhs: Value) -> Self::Output {
-        Value {
-            min: self.min - rhs.max,
-            max: self.max - rhs.min,
+        match (self, rhs) {
+            (
+                Value::Range { min, max },
+                Value::Range {
+                    min: rhs_min,
+                    max: rhs_max,
+                },
+            ) => Value::Range {
+                min: min - rhs_max,
+                max: max - rhs_min,
+            },
+            _ => Value::Unknown,
         }
     }
 }
@@ -85,7 +100,7 @@ impl<SR: SourceRange> Chunk<SR> {
         let mut data = Vec::<u8>::new();
         let mut context = EvalContext {
             symbols,
-            location: None,
+            location: Value::Unknown,
         };
         self.traverse(&mut context, |item, context| {
             data.extend(item.translate(context, diagnostics))
@@ -102,18 +117,18 @@ fn resolve_symbols<SR: SourceRange>(object: &Object<SR>) -> SymbolTable {
 
 fn collect_symbols<SR: SourceRange>(object: &Object<SR>) -> SymbolTable {
     let mut symbols = SymbolTable::new();
-    (0..object.chunks.len()).for_each(|i| symbols.define(ChunkSize(i), None));
+    (0..object.chunks.len()).for_each(|i| symbols.define(ChunkSize(i), Value::Unknown));
     {
         let mut context = EvalContext {
             symbols: &mut symbols,
-            location: None,
+            location: Value::Unknown,
         };
         for (i, chunk) in (&object.chunks).into_iter().enumerate() {
             let size = chunk.traverse(&mut context, |item, context| {
                 if let Node::Label(symbol, _) = item {
                     context
                         .symbols
-                        .define(symbol.as_str(), Some(context.location.clone().unwrap()))
+                        .define(symbol.as_str(), context.location.clone())
                 }
             });
             context.symbols.refine(ChunkSize(i), size);
@@ -126,14 +141,14 @@ fn refine_symbols<SR: SourceRange>(object: &Object<SR>, symbols: &mut SymbolTabl
     let mut refinements = 0;
     let context = &mut EvalContext {
         symbols,
-        location: None,
+        location: Value::Unknown,
     };
     for (i, chunk) in (&object.chunks).into_iter().enumerate() {
         let size = chunk.traverse(context, |item, context| {
             if let Node::Label(symbol, _) = item {
                 refinements += context
                     .symbols
-                    .refine(symbol.as_str(), context.location.clone().unwrap())
+                    .refine(symbol.as_str(), context.location.clone())
                     as i32
             }
         });
@@ -150,13 +165,13 @@ impl<SR: SourceRange> Chunk<SR> {
     {
         let origin = self.origin
             .as_ref()
-            .map(|expr| expr.evaluate(&context).unwrap())
+            .map(|expr| expr.evaluate(&context))
             .unwrap_or(0.into());
         let mut offset = Value::from(0);
-        context.location = Some(origin.clone());
+        context.location = origin.clone();
         for item in &self.items {
             offset += item.size(&context);
-            *context.location.as_mut().unwrap() = origin.clone() + offset.clone();
+            context.location = origin.clone() + offset.clone();
             f(item, context)
         }
         offset
@@ -164,7 +179,7 @@ impl<SR: SourceRange> Chunk<SR> {
 }
 
 impl<SR: SourceRange> RelocExpr<SR> {
-    fn evaluate<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Option<Value> {
+    fn evaluate<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
         self.evaluate_strictly(context, &mut |_: &str, _: &SR| ())
     }
 
@@ -172,21 +187,18 @@ impl<SR: SourceRange> RelocExpr<SR> {
         &self,
         context: &EvalContext<ST>,
         on_undefined_symbol: &mut F,
-    ) -> Option<Value>
+    ) -> Value
     where
         ST: Borrow<SymbolTable>,
         F: FnMut(&str, &SR),
     {
         match self {
-            RelocExpr::Literal(value, _) => Some((*value).into()),
+            RelocExpr::Literal(value, _) => (*value).into(),
             RelocExpr::LocationCounter(_) => context.location.clone(),
             RelocExpr::Subtract(lhs, rhs, _) => {
                 let lhs = lhs.evaluate_strictly(context, on_undefined_symbol);
                 let rhs = rhs.evaluate_strictly(context, on_undefined_symbol);
-                match (lhs, rhs) {
-                    (Some(left), Some(right)) => Some(left - right),
-                    _ => None,
-                }
+                lhs - rhs
             }
             RelocExpr::Symbol(symbol, expr_ref) => context
                 .symbols
@@ -195,7 +207,7 @@ impl<SR: SourceRange> RelocExpr<SR> {
                 .cloned()
                 .unwrap_or_else(|| {
                     on_undefined_symbol(symbol, expr_ref);
-                    None
+                    Value::Unknown
                 }),
         }
     }
@@ -215,9 +227,8 @@ fn resolve_expr_item<SR: SourceRange>(
             },
             range.clone(),
         ))
-    }).unwrap_or_else(|| 0.into())
-        .exact()
-        .unwrap();
+    }).exact()
+        .unwrap_or(0);
     fit_to_width((value, range), width, diagnostics)
 }
 
@@ -264,9 +275,9 @@ impl<SR: SourceRange> Node<SR> {
             Node::Expr(_, width) => width.len().into(),
             Node::Label(..) => 0.into(),
             Node::LdInlineAddr(_, expr) => match expr.evaluate(context) {
-                Some(Value { min, .. }) if min >= 0xff00 => 2.into(),
-                Some(Value { max, .. }) if max < 0xff00 => 3.into(),
-                _ => Value { min: 2, max: 3 },
+                Value::Range { min, .. } if min >= 0xff00 => 2.into(),
+                Value::Range { max, .. } if max < 0xff00 => 3.into(),
+                _ => Value::Range { min: 2, max: 3 },
             },
         }
     }
@@ -281,7 +292,7 @@ impl<SR: SourceRange> Node<SR> {
         match self {
             Node::Byte(value) => vec![*value],
             Node::Embedded(opcode, expr) => {
-                let n = expr.evaluate(context).unwrap().exact().unwrap();
+                let n = expr.evaluate(context).exact().unwrap();
                 vec![opcode | ((n as u8) << 3)]
             }
             Node::Expr(expr, width) => {
@@ -289,7 +300,7 @@ impl<SR: SourceRange> Node<SR> {
             }
             Node::Label(..) => vec![],
             Node::LdInlineAddr(opcode, expr) => {
-                let addr = expr.evaluate(context).unwrap().exact().unwrap();
+                let addr = expr.evaluate(context).exact().unwrap();
                 let kind = if addr < 0xff00 {
                     AddrKind::Low
                 } else {
@@ -395,7 +406,7 @@ mod tests {
         item.translate(
             &EvalContext {
                 symbols: &SymbolTable::new(),
-                location: None,
+                location: Value::Unknown,
             },
             &diagnostics::IgnoreDiagnostics {},
         ).collect()
@@ -433,7 +444,7 @@ mod tests {
         builder.add_label((label, ()));
         let object = builder.into_object();
         let symbols = resolve_symbols(&object);
-        assert_eq!(symbols.get(label), Some(&Some(addr.into())))
+        assert_eq!(symbols.get(label), Some(&addr.into()))
     }
 
     #[test]
@@ -482,9 +493,6 @@ mod tests {
         object.add_chunk();
         f(&mut object.chunks[0]);
         let symbols = resolve_symbols(&object);
-        assert_eq!(
-            symbols.get(ChunkSize(0)).cloned(),
-            Some(Some(expected.into()))
-        )
+        assert_eq!(symbols.get(ChunkSize(0)).cloned(), Some(expected.into()))
     }
 }
