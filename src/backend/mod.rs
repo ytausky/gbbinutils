@@ -56,11 +56,16 @@ impl BinaryObject {
         self.sections
             .into_iter()
             .for_each(|section| data.extend(section.data.into_iter()));
+        if data.len() < MIN_ROM_LEN {
+            data.resize(MIN_ROM_LEN, 0x00)
+        }
         Rom {
             data: data.into_boxed_slice(),
         }
     }
 }
+
+const MIN_ROM_LEN: usize = 0x8000;
 
 pub struct Rom {
     pub data: Box<[u8]>,
@@ -97,6 +102,13 @@ mod tests {
     use diagnostics::TestDiagnosticsListener;
     use instruction::Nullary;
     use std::borrow::Borrow;
+
+    #[test]
+    fn empty_object_converted_to_all_zero_rom() {
+        let object = BinaryObject { sections: Vec::new() };
+        let rom = object.into_rom();
+        assert_eq!(*rom.data, [0x00u8; MIN_ROM_LEN][..])
+    }
 
     #[test]
     fn emit_literal_byte_item() {
