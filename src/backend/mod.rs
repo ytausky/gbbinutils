@@ -53,9 +53,15 @@ pub struct BinaryObject {
 impl BinaryObject {
     pub fn into_rom(self) -> Rom {
         let mut data: Vec<u8> = Vec::new();
-        self.sections
-            .into_iter()
-            .for_each(|section| data.extend(section.data.into_iter()));
+        for chunk in self.sections {
+            if chunk.data.len() > 0 {
+                let end = chunk.origin + chunk.data.len();
+                if data.len() < end {
+                    data.resize(end, 0x00)
+                }
+                data[chunk.origin..end].copy_from_slice(&chunk.data)
+            }
+        }
         if data.len() < MIN_ROM_LEN {
             data.resize(MIN_ROM_LEN, 0x00)
         }
@@ -92,7 +98,7 @@ impl<SR: SourceRange> Backend<SR> for ObjectBuilder<SR> {
 }
 
 pub struct BinarySection {
-    origin: i32,
+    origin: usize,
     data: Vec<u8>,
 }
 
@@ -105,9 +111,40 @@ mod tests {
 
     #[test]
     fn empty_object_converted_to_all_zero_rom() {
-        let object = BinaryObject { sections: Vec::new() };
+        let object = BinaryObject {
+            sections: Vec::new(),
+        };
         let rom = object.into_rom();
         assert_eq!(*rom.data, [0x00u8; MIN_ROM_LEN][..])
+    }
+
+    #[test]
+    fn chunk_placed_in_rom_starting_at_origin() {
+        let byte = 0x42;
+        let origin = 0x150;
+        let object = BinaryObject {
+            sections: vec![BinarySection {
+                origin,
+                data: vec![byte],
+            }],
+        };
+        let rom = object.into_rom();
+        let mut expected = [0x00u8; MIN_ROM_LEN];
+        expected[origin] = byte;
+        assert_eq!(*rom.data, expected[..])
+    }
+
+    #[test]
+    fn empty_chunk_does_not_extend_rom() {
+        let origin = MIN_ROM_LEN + 1;
+        let object = BinaryObject {
+            sections: vec![BinarySection {
+                origin,
+                data: Vec::new(),
+            }],
+        };
+        let rom = object.into_rom();
+        assert_eq!(rom.data.len(), MIN_ROM_LEN)
     }
 
     #[test]

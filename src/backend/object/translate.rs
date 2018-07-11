@@ -23,7 +23,7 @@ impl<SR: SourceRange> Chunk<SR> {
             data.extend(item.translate(context, diagnostics))
         });
         BinarySection {
-            origin: origin.exact().unwrap(),
+            origin: origin.exact().unwrap() as usize,
             data,
         }
     }
@@ -220,7 +220,7 @@ mod tests {
             items: Vec::new(),
         };
         let translated = chunk.translate(&SymbolTable::new(), &IgnoreDiagnostics {});
-        assert_eq!(translated.origin, addr)
+        assert_eq!(translated.origin, addr as usize)
     }
 
     #[test]
