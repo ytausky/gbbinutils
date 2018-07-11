@@ -102,10 +102,15 @@ impl<SR: SourceRange> Chunk<SR> {
             symbols,
             location: Value::Unknown,
         };
-        self.traverse(&mut context, |item, context| {
+        let origin = self.evaluate_origin(&context);
+        context.location = origin.clone();
+        traverse_chunk_items(&self.items, &mut context, |item, context| {
             data.extend(item.translate(context, diagnostics))
         });
-        BinarySection { data }
+        BinarySection {
+            origin: origin.exact().unwrap(),
+            data,
+        }
     }
 }
 
@@ -158,24 +163,41 @@ fn refine_symbols<SR: SourceRange>(object: &Object<SR>, symbols: &mut SymbolTabl
 }
 
 impl<SR: SourceRange> Chunk<SR> {
-    fn traverse<ST, F>(&self, context: &mut EvalContext<ST>, mut f: F) -> Value
+    fn traverse<ST, F>(&self, context: &mut EvalContext<ST>, f: F) -> Value
     where
         ST: Borrow<SymbolTable>,
         F: FnMut(&Node<SR>, &mut EvalContext<ST>),
     {
-        let origin = self.origin
-            .as_ref()
-            .map(|expr| expr.evaluate(&context))
-            .unwrap_or(0.into());
-        let mut offset = Value::from(0);
-        context.location = origin.clone();
-        for item in &self.items {
-            offset += item.size(&context);
-            context.location = origin.clone() + offset.clone();
-            f(item, context)
-        }
-        offset
+        context.location = self.evaluate_origin(context);
+        traverse_chunk_items(&self.items, context, f)
     }
+
+    fn evaluate_origin<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
+        self.origin
+            .as_ref()
+            .map(|expr| expr.evaluate(context))
+            .unwrap_or_else(|| 0.into())
+    }
+}
+
+fn traverse_chunk_items<SR, ST, F>(
+    items: &[Node<SR>],
+    context: &mut EvalContext<ST>,
+    mut f: F,
+) -> Value
+where
+    SR: SourceRange,
+    ST: Borrow<SymbolTable>,
+    F: FnMut(&Node<SR>, &mut EvalContext<ST>),
+{
+    let origin = context.location.clone();
+    let mut offset = Value::from(0);
+    for item in items {
+        offset += item.size(&context);
+        context.location = origin.clone() + offset.clone();
+        f(item, context)
+    }
+    offset
 }
 
 impl<SR: SourceRange> RelocExpr<SR> {
@@ -351,7 +373,7 @@ impl Data {
 mod tests {
     use super::*;
     use backend::{object::ObjectBuilder, Backend};
-    use diagnostics::TestDiagnosticsListener;
+    use diagnostics::{IgnoreDiagnostics, TestDiagnosticsListener};
     use std::borrow::Borrow;
 
     #[test]
@@ -410,6 +432,17 @@ mod tests {
             },
             &diagnostics::IgnoreDiagnostics {},
         ).collect()
+    }
+
+    #[test]
+    fn set_origin_of_translated_chunk() {
+        let addr = 0x7ff0;
+        let chunk = Chunk {
+            origin: Some(RelocExpr::Literal(addr, ())),
+            items: Vec::new(),
+        };
+        let translated = chunk.translate(&SymbolTable::new(), &IgnoreDiagnostics {});
+        assert_eq!(translated.origin, addr)
     }
 
     #[test]

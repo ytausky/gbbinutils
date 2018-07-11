@@ -88,6 +88,7 @@ impl<SR: SourceRange> Backend<SR> for ObjectBuilder<SR> {
 }
 
 struct BinarySection {
+    origin: i32,
     data: Vec<u8>,
 }
 
