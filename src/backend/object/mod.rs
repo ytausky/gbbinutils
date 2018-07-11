@@ -7,12 +7,12 @@ mod context;
 mod resolve;
 
 pub struct Object<SR> {
-    pub chunks: Vec<Chunk<SR>>,
+    chunks: Vec<Chunk<SR>>,
 }
 
 pub struct Chunk<R> {
-    pub origin: Option<RelocExpr<R>>,
-    pub items: Vec<Node<R>>,
+    origin: Option<RelocExpr<R>>,
+    items: Vec<Node<R>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -29,7 +29,7 @@ impl<SR> Object<SR> {
         Object { chunks: Vec::new() }
     }
 
-    pub fn add_chunk(&mut self) {
+    fn add_chunk(&mut self) {
         self.chunks.push(Chunk::new())
     }
 }
