@@ -1,4 +1,4 @@
-pub use backend::link::link;
+pub use backend::object::link;
 pub use backend::object::ObjectBuilder;
 
 use backend::{
@@ -8,7 +8,6 @@ use diagnostics::*;
 use instruction::Instruction;
 use Width;
 
-mod link;
 mod lowering;
 mod object;
 

@@ -1,5 +1,10 @@
+pub use self::resolve::link;
+
 use backend::RelocExpr;
 use Width;
+
+mod context;
+mod resolve;
 
 pub struct Object<SR> {
     pub chunks: Vec<Chunk<SR>>,

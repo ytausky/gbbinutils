@@ -1,14 +1,12 @@
-pub use self::context::{EvalContext, SymbolTable};
+pub use super::context::{EvalContext, SymbolTable};
 
-use self::context::ChunkSize;
+use super::context::ChunkSize;
 use backend::{BinaryObject, BinarySection, Chunk, Node, Object, RelocExpr};
 use diagnostics::{Diagnostic, DiagnosticsListener, Message, Source, SourceRange};
 use std::borrow::Borrow;
 use std::ops::{Add, AddAssign, Sub};
 use std::vec::IntoIter;
 use Width;
-
-mod context;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {

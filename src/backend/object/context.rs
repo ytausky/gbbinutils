@@ -1,4 +1,4 @@
-use backend::link::Value;
+use super::resolve::Value;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 
