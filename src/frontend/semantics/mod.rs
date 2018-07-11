@@ -98,6 +98,7 @@ fn analyze_directive<'a, S: Session + 'a>(
 ) {
     match directive {
         Directive::Db => analyze_data(Width::Byte, args, actions),
+        Directive::Ds => analyze_ds(args, actions),
         Directive::Dw => analyze_data(Width::Word, args, actions),
         Directive::Include => analyze_include(args, actions),
         Directive::Org => analyze_org(args, actions),
@@ -118,6 +119,24 @@ fn analyze_data<'a, S: Session + 'a>(
         };
         actions.session.emit_item(backend::Item::Data(expr, width))
     }
+}
+
+fn analyze_ds<'a, S: Session + 'a>(args: CommandArgs<S>, actions: &mut SemanticActions<'a, S>) {
+    use backend::RelocExpr;
+    use frontend::ExprFactory;
+    let arg = args.into_iter().next().unwrap();
+    let count = match arg.node {
+        ExprNode::Literal(literal) => actions
+            .expr_factory
+            .mk_literal((literal, arg.interval.clone())),
+        _ => panic!(),
+    };
+    let expr = RelocExpr::Add(
+        Box::new(RelocExpr::LocationCounter(arg.interval.clone())),
+        Box::new(count),
+        arg.interval,
+    );
+    actions.session.set_origin(expr)
 }
 
 fn analyze_include<'a, F: Session + 'a>(
@@ -524,6 +543,26 @@ mod tests {
                     actual: 1,
                     expected: 0
                 },
+                ()
+            ))]
+        )
+    }
+
+    #[test]
+    fn reserve_3_bytes() {
+        let actions = collect_semantic_actions(|actions| {
+            let mut context = actions.enter_command((Command::Directive(Directive::Ds), ()));
+            context.add_argument(ParsedExpr {
+                node: ExprNode::Literal(Literal::Number(3)),
+                interval: (),
+            });
+            context.exit();
+        });
+        assert_eq!(
+            actions,
+            [TestOperation::SetOrigin(RelocExpr::Add(
+                Box::new(RelocExpr::LocationCounter(())),
+                Box::new(RelocExpr::Literal(3, ())),
                 ()
             ))]
         )

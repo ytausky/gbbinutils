@@ -43,11 +43,15 @@ where
     D: DiagnosticsListener<SR> + 'a,
 {
     let symbols = resolve::resolve_symbols(&object);
+    let mut context = EvalContext {
+        symbols: &symbols,
+        location: 0.into(),
+    };
     BinaryObject {
         sections: object
             .chunks
             .into_iter()
-            .map(|chunk| chunk.translate(&symbols, diagnostics))
+            .map(|chunk| chunk.translate(&mut context, diagnostics))
             .collect(),
     }
 }
@@ -152,6 +156,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use diagnostics::IgnoreDiagnostics;
 
     #[test]
     fn new_object_has_no_chunks() {
@@ -173,6 +178,33 @@ mod tests {
             builder.push(Node::Byte(0xcd))
         });
         assert_eq!(object.chunks[0].origin, Some(origin))
+    }
+
+    #[test]
+    fn resolve_origin_relative_to_previous_chunk() {
+        let origin1 = 0x150;
+        let skipped_bytes = 0x10;
+        let object = Object {
+            chunks: vec![
+                Chunk {
+                    origin: Some(RelocExpr::Literal(origin1, ())),
+                    items: vec![Node::Byte(0x42)],
+                },
+                Chunk {
+                    origin: Some(RelocExpr::Add(
+                        Box::new(RelocExpr::LocationCounter(())),
+                        Box::new(RelocExpr::Literal(skipped_bytes, ())),
+                        (),
+                    )),
+                    items: vec![Node::Byte(0x43)],
+                },
+            ],
+        };
+        let binary = link(object, &IgnoreDiagnostics {});
+        assert_eq!(
+            binary.sections[1].origin,
+            (origin1 + 1 + skipped_bytes) as usize
+        )
     }
 
     fn build_object(f: impl FnOnce(&mut ObjectBuilder<()>)) -> Object<()> {

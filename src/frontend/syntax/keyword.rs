@@ -19,6 +19,7 @@ impl From<Mnemonic> for Command {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Directive {
     Db,
+    Ds,
     Dw,
     Include,
     Org,

@@ -1,5 +1,4 @@
 use super::context::{EvalContext, SymbolTable};
-use super::resolve::Value;
 use super::{traverse_chunk_items, Chunk, Node};
 use backend::{BinarySection, RelocExpr};
 use diagnostics::{Diagnostic, DiagnosticsListener, Message, Source, SourceRange};
@@ -9,17 +8,13 @@ use Width;
 impl<SR: SourceRange> Chunk<SR> {
     pub fn translate(
         &self,
-        symbols: &SymbolTable,
+        context: &mut EvalContext<&SymbolTable>,
         diagnostics: &impl DiagnosticsListener<SR>,
     ) -> BinarySection {
         let mut data = Vec::<u8>::new();
-        let mut context = EvalContext {
-            symbols,
-            location: Value::Unknown,
-        };
         let origin = self.evaluate_origin(&context);
         context.location = origin.clone();
-        traverse_chunk_items(&self.items, &mut context, |item, context| {
+        traverse_chunk_items(&self.items, context, |item, context| {
             data.extend(item.translate(context, diagnostics))
         });
         BinarySection {
@@ -151,7 +146,7 @@ fn is_in_u8_range(n: i32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use diagnostics::{IgnoreDiagnostics, TestDiagnosticsListener};
+    use diagnostics::IgnoreDiagnostics;
     use std::borrow::Borrow;
 
     #[test]
@@ -202,6 +197,7 @@ mod tests {
     }
 
     fn translate_chunk_item<SR: SourceRange>(item: Node<SR>) -> Vec<u8> {
+        use backend::object::resolve::Value;
         use diagnostics;
         item.translate(
             &EvalContext {
@@ -219,7 +215,7 @@ mod tests {
             origin: Some(RelocExpr::Literal(addr, ())),
             items: Vec::new(),
         };
-        let translated = chunk.translate(&SymbolTable::new(), &IgnoreDiagnostics {});
+        let translated = translate_without_context(chunk);
         assert_eq!(translated.origin, addr as usize)
     }
 
@@ -231,7 +227,7 @@ mod tests {
             Node::Byte(byte),
             Node::Expr(RelocExpr::LocationCounter(()), Width::Byte),
         ]);
-        let binary = chunk.translate(&SymbolTable::new(), &TestDiagnosticsListener::new());
+        let binary = translate_without_context(chunk);
         assert_eq!(binary.data, [byte, 0x02])
     }
 
@@ -242,7 +238,15 @@ mod tests {
         chunk
             .items
             .push(Node::Expr(RelocExpr::LocationCounter(()), Width::Word));
-        let binary = chunk.translate(&SymbolTable::new(), &TestDiagnosticsListener::new());
+        let binary = translate_without_context(chunk);
         assert_eq!(binary.data, [0xe3, 0xff])
+    }
+
+    fn translate_without_context<SR: SourceRange>(chunk: Chunk<SR>) -> BinarySection {
+        let mut context = EvalContext {
+            symbols: &SymbolTable::new(),
+            location: 0.into(),
+        };
+        chunk.translate(&mut context, &IgnoreDiagnostics)
     }
 }
