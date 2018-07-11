@@ -2,7 +2,7 @@ pub use backend::object::link;
 pub use backend::object::ObjectBuilder;
 
 use backend::{
-    lowering::Lower, object::{Chunk, Node, Object},
+    lowering::Lower, object::{Node, Object},
 };
 use diagnostics::*;
 use instruction::Instruction;
@@ -86,7 +86,7 @@ impl<SR: SourceRange> Backend<SR> for ObjectBuilder<SR> {
     }
 }
 
-struct BinarySection {
+pub struct BinarySection {
     origin: i32,
     data: Vec<u8>,
 }

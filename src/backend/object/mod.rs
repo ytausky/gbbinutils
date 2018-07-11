@@ -1,10 +1,13 @@
-pub use self::resolve::link;
-
-use backend::RelocExpr;
+use self::context::{EvalContext, SymbolTable};
+use self::resolve::Value;
+use backend::{BinaryObject, RelocExpr};
+use diagnostics::{DiagnosticsListener, SourceRange};
+use std::borrow::Borrow;
 use Width;
 
 mod context;
 mod resolve;
+mod translate;
 
 pub struct Object<SR> {
     chunks: Vec<Chunk<SR>>,
@@ -31,6 +34,21 @@ impl<SR> Object<SR> {
 
     fn add_chunk(&mut self) {
         self.chunks.push(Chunk::new())
+    }
+}
+
+pub fn link<'a, SR, D>(object: Object<SR>, diagnostics: &D) -> BinaryObject
+where
+    SR: SourceRange,
+    D: DiagnosticsListener<SR> + 'a,
+{
+    let symbols = resolve::resolve_symbols(&object);
+    BinaryObject {
+        sections: object
+            .chunks
+            .into_iter()
+            .map(|chunk| chunk.translate(&symbols, diagnostics))
+            .collect(),
     }
 }
 
@@ -91,6 +109,44 @@ impl<SR> ObjectBuilder<SR> {
             origin: Some(origin),
         })
     }
+}
+
+impl<SR: SourceRange> Chunk<SR> {
+    fn traverse<ST, F>(&self, context: &mut EvalContext<ST>, f: F) -> Value
+    where
+        ST: Borrow<SymbolTable>,
+        F: FnMut(&Node<SR>, &mut EvalContext<ST>),
+    {
+        context.location = self.evaluate_origin(context);
+        traverse_chunk_items(&self.items, context, f)
+    }
+
+    fn evaluate_origin<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
+        self.origin
+            .as_ref()
+            .map(|expr| expr.evaluate(context))
+            .unwrap_or_else(|| 0.into())
+    }
+}
+
+fn traverse_chunk_items<SR, ST, F>(
+    items: &[Node<SR>],
+    context: &mut EvalContext<ST>,
+    mut f: F,
+) -> Value
+where
+    SR: SourceRange,
+    ST: Borrow<SymbolTable>,
+    F: FnMut(&Node<SR>, &mut EvalContext<ST>),
+{
+    let origin = context.location.clone();
+    let mut offset = Value::from(0);
+    for item in items {
+        offset += item.size(&context);
+        context.location = origin.clone() + offset.clone();
+        f(item, context)
+    }
+    offset
 }
 
 #[cfg(test)]
