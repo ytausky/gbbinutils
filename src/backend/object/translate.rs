@@ -146,6 +146,7 @@ fn is_in_u8_range(n: i32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use backend::BinaryOperator;
     use diagnostics::IgnoreDiagnostics;
     use std::borrow::Borrow;
 
@@ -186,9 +187,10 @@ mod tests {
     #[test]
     fn translate_expr_with_subtraction() {
         let actual = translate_chunk_item(Node::Expr(
-            RelocExpr::Subtract(
+            RelocExpr::BinaryOperation(
                 Box::new(RelocExpr::Literal(4, ())),
                 Box::new(RelocExpr::Literal(3, ())),
+                BinaryOperator::Minus,
                 (),
             ),
             Width::Byte,

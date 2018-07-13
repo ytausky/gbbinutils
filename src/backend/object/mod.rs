@@ -156,6 +156,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use backend::BinaryOperator;
     use diagnostics::IgnoreDiagnostics;
 
     #[test]
@@ -191,9 +192,10 @@ mod tests {
                     items: vec![Node::Byte(0x42)],
                 },
                 Chunk {
-                    origin: Some(RelocExpr::Add(
+                    origin: Some(RelocExpr::BinaryOperation(
                         Box::new(RelocExpr::LocationCounter(())),
                         Box::new(RelocExpr::Literal(skipped_bytes, ())),
+                        BinaryOperator::Plus,
                         (),
                     )),
                     items: vec![Node::Byte(0x43)],

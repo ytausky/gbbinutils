@@ -27,11 +27,16 @@ pub enum Item<R> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum RelocExpr<SR> {
-    Add(Box<RelocExpr<SR>>, Box<RelocExpr<SR>>, SR),
+    BinaryOperation(Box<RelocExpr<SR>>, Box<RelocExpr<SR>>, BinaryOperator, SR),
     Literal(i32, SR),
     LocationCounter(SR),
-    Subtract(Box<RelocExpr<SR>>, Box<RelocExpr<SR>>, SR),
     Symbol(String, SR),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum BinaryOperator {
+    Minus,
+    Plus,
 }
 
 impl<SR: SourceRange> Source for RelocExpr<SR> {
@@ -39,11 +44,10 @@ impl<SR: SourceRange> Source for RelocExpr<SR> {
     fn source_range(&self) -> Self::Range {
         use backend::RelocExpr::*;
         match self {
-            Add(_, _, range)
+            BinaryOperation(_, _, _, range)
             | Literal(_, range)
             | Symbol(_, range)
-            | LocationCounter(range)
-            | Subtract(_, _, range) => (*range).clone(),
+            | LocationCounter(range) => (*range).clone(),
         }
     }
 }
@@ -219,9 +223,10 @@ mod tests {
         let ident2 = "ident2";
         let (_, diagnostics) = with_object_builder(|builder| {
             builder.emit_item(Item::Data(
-                RelocExpr::Subtract(
+                RelocExpr::BinaryOperation(
                     Box::new(symbol_expr(ident1)),
                     Box::new(symbol_expr(ident2)),
+                    BinaryOperator::Minus,
                     (),
                 ),
                 Width::Word,

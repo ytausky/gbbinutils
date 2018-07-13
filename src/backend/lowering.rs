@@ -1,5 +1,5 @@
 use backend::object::Node;
-use backend::Item;
+use backend::{BinaryOperator, Item};
 use diagnostics::{Source, SourceRange};
 use instruction::*;
 use std::mem;
@@ -201,9 +201,10 @@ fn encode_branch<SR: SourceRange>(
             LoweredItem::with_opcode(match condition {
                 None => 0x18,
                 Some(condition) => 0x20 | encode_condition(condition),
-            }).and_byte(RelocExpr::Subtract(
+            }).and_byte(RelocExpr::BinaryOperation(
                 Box::new(target),
                 Box::new(RelocExpr::LocationCounter(source_range.clone())),
+                BinaryOperator::Minus,
                 source_range,
             ))
         }
@@ -762,9 +763,10 @@ mod tests {
                 [
                     Node::Byte(opcode),
                     Node::Expr(
-                        RelocExpr::Subtract(
+                        RelocExpr::BinaryOperation(
                             Box::new(target_expr.clone()),
                             Box::new(RelocExpr::LocationCounter(())),
+                            BinaryOperator::Minus,
                             (),
                         ),
                         Width::Byte,

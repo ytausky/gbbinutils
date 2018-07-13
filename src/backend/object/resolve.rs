@@ -135,18 +135,17 @@ impl<SR: SourceRange> RelocExpr<SR> {
         F: FnMut(&str, &SR),
     {
         match self {
-            RelocExpr::Add(lhs, rhs, _) => {
+            RelocExpr::BinaryOperation(lhs, rhs, operator, _) => {
+                use backend::BinaryOperator;
                 let lhs = lhs.evaluate_strictly(context, on_undefined_symbol);
                 let rhs = rhs.evaluate_strictly(context, on_undefined_symbol);
-                lhs + rhs
+                match operator {
+                    BinaryOperator::Minus => lhs - rhs,
+                    BinaryOperator::Plus => lhs + rhs,
+                }
             }
             RelocExpr::Literal(value, _) => (*value).into(),
             RelocExpr::LocationCounter(_) => context.location.clone(),
-            RelocExpr::Subtract(lhs, rhs, _) => {
-                let lhs = lhs.evaluate_strictly(context, on_undefined_symbol);
-                let rhs = rhs.evaluate_strictly(context, on_undefined_symbol);
-                lhs - rhs
-            }
             RelocExpr::Symbol(symbol, expr_ref) => context
                 .symbols
                 .borrow()

@@ -1,4 +1,4 @@
-use backend;
+use backend::{self, BinaryOperator};
 use frontend::syntax::{self, keyword::*, ExprNode, ParsedExpr, Token, TokenSpec};
 use frontend::{Literal, StrExprFactory};
 use session::{ChunkId, Session};
@@ -131,9 +131,10 @@ fn analyze_ds<'a, S: Session + 'a>(args: CommandArgs<S>, actions: &mut SemanticA
             .mk_literal((literal, arg.interval.clone())),
         _ => panic!(),
     };
-    let expr = RelocExpr::Add(
+    let expr = RelocExpr::BinaryOperation(
         Box::new(RelocExpr::LocationCounter(arg.interval.clone())),
         Box::new(count),
+        BinaryOperator::Plus,
         arg.interval,
     );
     actions.session.set_origin(expr)
@@ -560,9 +561,10 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [TestOperation::SetOrigin(RelocExpr::Add(
+            [TestOperation::SetOrigin(RelocExpr::BinaryOperation(
                 Box::new(RelocExpr::LocationCounter(())),
                 Box::new(RelocExpr::Literal(3, ())),
+                BinaryOperator::Plus,
                 ()
             ))]
         )
