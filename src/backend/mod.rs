@@ -60,7 +60,7 @@ impl BinaryObject {
     pub fn into_rom(self) -> Rom {
         let mut data: Vec<u8> = Vec::new();
         for chunk in self.sections {
-            if chunk.data.len() > 0 {
+            if !chunk.data.is_empty() {
                 let end = chunk.origin + chunk.data.len();
                 if data.len() < end {
                     data.resize(end, 0x00)
