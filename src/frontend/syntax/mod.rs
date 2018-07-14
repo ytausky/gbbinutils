@@ -68,7 +68,7 @@ where
     Self: Sized,
 {
     type CommandContext: CommandContext<SR, TokenSpec = TS, Parent = Self>;
-    type MacroDefContext: TokenSeqContext<SR, Token = parser::Token<TS>, Parent = Self>;
+    type MacroParamsActions: MacroParamsActions<SR, TokenSpec = TS, Parent = Self>;
     type MacroInvocationContext: MacroInvocationContext<
         SR,
         Token = parser::Token<TS>,
@@ -76,7 +76,7 @@ where
     >;
     type Parent;
     fn enter_command(self, name: (TS::Command, SR)) -> Self::CommandContext;
-    fn enter_macro_def(self) -> Self::MacroDefContext;
+    fn enter_macro_def(self) -> Self::MacroParamsActions;
     fn enter_macro_invocation(self, name: (TS::Ident, SR)) -> Self::MacroInvocationContext;
     fn exit(self) -> Self::Parent;
 }
@@ -86,6 +86,18 @@ pub trait CommandContext<R> {
     type Parent;
     fn add_argument(&mut self, expr: ParsedExpr<Self::TokenSpec, R>);
     fn exit(self) -> Self::Parent;
+}
+
+pub trait MacroParamsActions<SR> {
+    type TokenSpec: TokenSpec;
+    type MacroBodyActions: TokenSeqContext<
+        SR,
+        Token = parser::Token<Self::TokenSpec>,
+        Parent = Self::Parent,
+    >;
+    type Parent;
+    fn add_parameter(&mut self, param: (<Self::TokenSpec as TokenSpec>::Ident, SR));
+    fn exit(self) -> Self::MacroBodyActions;
 }
 
 pub trait MacroInvocationContext<R>

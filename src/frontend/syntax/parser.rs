@@ -131,7 +131,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
 
     fn parse_macro_def<LA: LineActions<S, T>>(&mut self, actions: LA) -> LA {
         self.expect(Some(Token::Macro));
-        let mut macro_def_context = actions.enter_macro_def();
+        let mut macro_def_context = actions.enter_macro_def().exit();
         self.expect(Some(Token::Eol));
         while self.lookahead() != Some(Token::Endm) {
             macro_def_context.push_token(self.bump())
@@ -329,7 +329,7 @@ mod tests {
 
     impl<'a> syntax::LineActions<TestTokenSpec, TestTrackingData> for &'a mut TestContext {
         type CommandContext = Self;
-        type MacroDefContext = Self;
+        type MacroParamsActions = Self;
         type MacroInvocationContext = Self;
         type Parent = Self;
 
@@ -341,7 +341,7 @@ mod tests {
             self
         }
 
-        fn enter_macro_def(self) -> Self::MacroDefContext {
+        fn enter_macro_def(self) -> Self::MacroParamsActions {
             self.actions.push(Action::EnterMacroDef);
             self.token_seq_kind = Some(TokenSeqKind::MacroDef);
             self
@@ -371,6 +371,20 @@ mod tests {
 
         fn exit(self) -> Self::Parent {
             self.actions.push(Action::ExitInstruction);
+            self
+        }
+    }
+
+    impl<'a> syntax::MacroParamsActions<TestTrackingData> for &'a mut TestContext {
+        type TokenSpec = TestTokenSpec;
+        type MacroBodyActions = Self;
+        type Parent = Self;
+
+        fn add_parameter(&mut self, _: (<Self::TokenSpec as TokenSpec>::Ident, TestTrackingData)) {
+            unimplemented!()
+        }
+
+        fn exit(self) -> Self::MacroBodyActions {
             self
         }
     }

@@ -43,7 +43,7 @@ impl<'a, F: Session + 'a> syntax::FileContext<String, F::TokenRef> for SemanticA
 
 impl<'a, F: Session + 'a> syntax::LineActions<String, F::TokenRef> for SemanticActions<'a, F> {
     type CommandContext = CommandActions<'a, F>;
-    type MacroDefContext = MacroDefActions<'a, F>;
+    type MacroParamsActions = MacroDefActions<'a, F>;
     type MacroInvocationContext = MacroInvocationActions<'a, F>;
     type Parent = Self;
 
@@ -55,7 +55,7 @@ impl<'a, F: Session + 'a> syntax::LineActions<String, F::TokenRef> for SemanticA
         CommandActions::new(name, self)
     }
 
-    fn enter_macro_def(mut self) -> Self::MacroDefContext {
+    fn enter_macro_def(mut self) -> Self::MacroParamsActions {
         MacroDefActions::new(self.label.take().unwrap(), self)
     }
 
@@ -202,6 +202,20 @@ impl<'a, F: Session + 'a> MacroDefActions<'a, F> {
             tokens: Vec::new(),
             parent,
         }
+    }
+}
+
+impl<'a, F: Session + 'a> syntax::MacroParamsActions<F::TokenRef> for MacroDefActions<'a, F> {
+    type TokenSpec = String;
+    type MacroBodyActions = Self;
+    type Parent = SemanticActions<'a, F>;
+
+    fn add_parameter(&mut self, _: (<Self::TokenSpec as TokenSpec>::Ident, F::TokenRef)) {
+        unimplemented!()
+    }
+
+    fn exit(self) -> Self::MacroBodyActions {
+        self
     }
 }
 
