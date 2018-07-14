@@ -102,22 +102,21 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
         if self.lookahead() == Some(Token::Ident(())) {
             self.parse_potentially_labeled_line(actions)
         } else {
-            self.parse_unlabeled_line(actions)
+            self.parse_unlabeled_line(actions.enter_line(None)).exit()
         }
     }
 
-    fn parse_potentially_labeled_line<F: FileContext<S, T>>(&mut self, mut actions: F) -> F {
+    fn parse_potentially_labeled_line<F: FileContext<S, T>>(&mut self, actions: F) -> F {
         let ident = self.expect_ident();
         if self.lookahead() == Some(Token::Colon) {
             self.bump();
-            actions.add_label(ident);
-            self.parse_unlabeled_line(actions)
+            self.parse_unlabeled_line(actions.enter_line(Some(ident)))
         } else {
-            self.parse_macro_invocation(ident, actions)
-        }
+            self.parse_macro_invocation(ident, actions.enter_line(None))
+        }.exit()
     }
 
-    fn parse_unlabeled_line<F: FileContext<S, T>>(&mut self, actions: F) -> F {
+    fn parse_unlabeled_line<LA: LineActions<S, T>>(&mut self, actions: LA) -> LA {
         match self.lookahead() {
             t if follows_line(t) => actions,
             Some(Token::Command(())) => self.parse_command(actions),
@@ -130,7 +129,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
         }
     }
 
-    fn parse_macro_def<F: FileContext<S, T>>(&mut self, actions: F) -> F {
+    fn parse_macro_def<LA: LineActions<S, T>>(&mut self, actions: LA) -> LA {
         self.expect(Some(Token::Macro));
         let name = self.expect_ident();
         let mut macro_def_context = actions.enter_macro_def(name);
@@ -142,18 +141,18 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
         macro_def_context.exit()
     }
 
-    fn parse_command<F: FileContext<S, T>>(&mut self, actions: F) -> F {
+    fn parse_command<LA: LineActions<S, T>>(&mut self, actions: LA) -> LA {
         let first_token = self.expect_command();
         let mut command_context = actions.enter_command(first_token);
         command_context = self.parse_argument_list(command_context);
         command_context.exit()
     }
 
-    fn parse_macro_invocation<F: FileContext<S, T>>(
+    fn parse_macro_invocation<LA: LineActions<S, T>>(
         &mut self,
         name: (S::Ident, T),
-        actions: F,
-    ) -> F {
+        actions: LA,
+    ) -> LA {
         let mut invocation_context = actions.enter_macro_invocation(name);
         invocation_context = self.parse_macro_arg_list(invocation_context);
         invocation_context.exit()
@@ -256,10 +255,11 @@ mod tests {
 
     use diagnostics::SourceRange;
     use frontend::syntax::{self, ExprNode, ParsedExpr, TokenSpec};
+    use std::borrow::Borrow;
 
     #[test]
     fn parse_empty_src() {
-        assert_eq_actions(&[], &[])
+        assert_eq_actions([], vec![])
     }
 
     struct TestContext {
@@ -279,12 +279,13 @@ mod tests {
     #[derive(Debug, PartialEq)]
     enum Action {
         AddArgument(TestExpr),
-        AddLabel(TestTrackingData),
         EnterInstruction(TestTrackingData),
+        EnterLine(Option<TestTrackingData>),
         EnterMacroArg,
         EnterMacroDef(TestTrackingData),
         EnterMacroInvocation(<TestTokenSpec as TokenSpec>::Ident),
         ExitInstruction,
+        ExitLine,
         ExitMacroArg,
         ExitMacroDef,
         ExitMacroInvocation,
@@ -316,13 +317,22 @@ mod tests {
     }
 
     impl<'a> syntax::FileContext<TestTokenSpec, TestTrackingData> for &'a mut TestContext {
+        type LineActions = Self;
+
+        fn enter_line(
+            self,
+            label: Option<(<TestTokenSpec as TokenSpec>::Ident, TestTrackingData)>,
+        ) -> Self::LineActions {
+            self.actions.push(Action::EnterLine(label.map(|(_, n)| n)));
+            self
+        }
+    }
+
+    impl<'a> syntax::LineActions<TestTokenSpec, TestTrackingData> for &'a mut TestContext {
         type CommandContext = Self;
         type MacroDefContext = Self;
         type MacroInvocationContext = Self;
-
-        fn add_label(&mut self, (_, n): (<TestTokenSpec as TokenSpec>::Ident, TestTrackingData)) {
-            self.actions.push(Action::AddLabel(n))
-        }
+        type Parent = Self;
 
         fn enter_command(
             self,
@@ -346,6 +356,11 @@ mod tests {
             name: (<TestTokenSpec as TokenSpec>::Ident, TestTrackingData),
         ) -> Self::MacroInvocationContext {
             self.actions.push(Action::EnterMacroInvocation(name.0));
+            self
+        }
+
+        fn exit(self) -> Self::Parent {
+            self.actions.push(Action::ExitLine);
             self
         }
     }
@@ -402,26 +417,42 @@ mod tests {
 
     #[test]
     fn parse_empty_line() {
-        assert_eq_actions(&[Eol], &[])
+        assert_eq_actions([Eol], concat(vec![line(vec![]), line(vec![])]))
     }
 
-    fn assert_eq_actions(tokens: &[TestToken], expected_actions: &[Action]) {
+    fn assert_eq_actions(
+        tokens: impl Borrow<[TestToken]>,
+        expected_actions: impl IntoIterator<Item = Action>,
+    ) {
         let mut parsing_context = TestContext::new();
         parse_src(
-            tokens.iter().cloned().zip((0..).map(|n| vec![n])),
+            tokens.borrow().iter().cloned().zip((0..).map(|n| vec![n])),
             &mut parsing_context,
         );
-        assert_eq!(parsing_context.actions, expected_actions)
+        assert_eq!(
+            parsing_context.actions,
+            expected_actions.into_iter().collect::<Vec<_>>()
+        )
+    }
+
+    fn line(mut actions: Vec<Action>) -> Vec<Action> {
+        let mut result = vec![Action::EnterLine(None)];
+        result.append(&mut actions);
+        result.push(Action::ExitLine);
+        result
     }
 
     #[test]
     fn parse_nullary_instruction() {
-        assert_eq_actions(&[Command(())], &inst(0, vec![]))
+        assert_eq_actions([Command(())], line(inst(0, vec![])))
     }
 
     #[test]
     fn parse_nullary_instruction_after_eol() {
-        assert_eq_actions(&[Eol, Command(())], &inst(1, vec![]))
+        assert_eq_actions(
+            [Eol, Command(())],
+            concat(vec![line(vec![]), line(inst(1, vec![]))]),
+        )
     }
 
     fn inst(n: usize, args: Vec<Vec<Action>>) -> Vec<Action> {
@@ -435,12 +466,15 @@ mod tests {
 
     #[test]
     fn parse_nullary_instruction_followed_by_eol() {
-        assert_eq_actions(&[Command(()), Eol], &inst(0, vec![]))
+        assert_eq_actions(
+            [Command(()), Eol],
+            concat(vec![line(inst(0, vec![])), line(vec![])]),
+        )
     }
 
     #[test]
     fn parse_unary_instruction() {
-        assert_eq_actions(&[Command(()), Ident(1)], &inst(0, vec![expr(ident(1))]))
+        assert_eq_actions([Command(()), Ident(1)], line(inst(0, vec![expr(ident(1))])))
     }
 
     fn expr(expression: TestExpr) -> Vec<Action> {
@@ -457,8 +491,8 @@ mod tests {
     #[test]
     fn parse_binary_instruction() {
         assert_eq_actions(
-            &[Command(()), Ident(1), Comma, Literal(3)],
-            &inst(0, vec![expr(ident(1)), expr(atom(3))]),
+            [Command(()), Ident(1), Comma, Literal(3)],
+            line(inst(0, vec![expr(ident(1)), expr(atom(3))])),
         );
     }
 
@@ -471,7 +505,7 @@ mod tests {
 
     #[test]
     fn parse_two_instructions() {
-        let tokens = &[
+        let tokens = [
             Command(()),
             Ident(1),
             Comma,
@@ -482,9 +516,9 @@ mod tests {
             Comma,
             Ident(8),
         ];
-        let expected_actions = &concat(vec![
-            inst(0, vec![expr(ident(1)), expr(atom(3))]),
-            inst(5, vec![expr(atom(6)), expr(ident(8))]),
+        let expected_actions = concat(vec![
+            line(inst(0, vec![expr(ident(1)), expr(atom(3))])),
+            line(inst(5, vec![expr(atom(6)), expr(ident(8))])),
         ]);
         assert_eq_actions(tokens, expected_actions)
     }
@@ -499,7 +533,7 @@ mod tests {
 
     #[test]
     fn parse_two_instructions_separated_by_blank_line() {
-        let tokens = &[
+        let tokens = [
             Command(()),
             Literal(1),
             Comma,
@@ -511,17 +545,18 @@ mod tests {
             Comma,
             Literal(9),
         ];
-        let expected_actions = &concat(vec![
-            inst(0, vec![expr(atom(1)), expr(ident(3))]),
-            inst(6, vec![expr(ident(7)), expr(atom(9))]),
+        let expected_actions = concat(vec![
+            line(inst(0, vec![expr(atom(1)), expr(ident(3))])),
+            line(vec![]),
+            line(inst(6, vec![expr(ident(7)), expr(atom(9))])),
         ]);
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_empty_macro_definition() {
-        let tokens = &[Macro, Ident(1), Eol, Endm];
-        let expected_actions = &macro_def(1, vec![]);
+        let tokens = [Macro, Ident(1), Eol, Endm];
+        let expected_actions = line(macro_def(1, vec![]));
         assert_eq_actions(tokens, expected_actions);
     }
 
@@ -534,22 +569,22 @@ mod tests {
 
     #[test]
     fn parse_macro_definition_with_instruction() {
-        let tokens = &[Macro, Ident(1), Eol, Command(()), Eol, Endm];
-        let expected_actions = &macro_def(1, vec![Command(()), Eol]);
+        let tokens = [Macro, Ident(1), Eol, Command(()), Eol, Endm];
+        let expected_actions = line(macro_def(1, vec![Command(()), Eol]));
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_label() {
-        let tokens = &[Ident(0), Colon, Eol];
-        let expected_actions = &add_label((0, 0), vec![]);
+        let tokens = [Ident(0), Colon, Eol];
+        let expected_actions = concat(vec![add_label((0, 0), vec![]), line(vec![])]);
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_labeled_instruction() {
-        let tokens = &[Ident(0), Colon, Command(()), Eol];
-        let expected_actions = &add_label((0, 0), inst(2, vec![]));
+        let tokens = [Ident(0), Colon, Command(()), Eol];
+        let expected_actions = concat(vec![add_label((0, 0), inst(2, vec![])), line(vec![])]);
         assert_eq_actions(tokens, expected_actions)
     }
 
@@ -557,20 +592,21 @@ mod tests {
         (_, n): (<TestTokenSpec as TokenSpec>::Ident, usize),
         mut following_actions: Vec<Action>,
     ) -> Vec<Action> {
-        let mut result = vec![Action::AddLabel(vec![n])];
+        let mut result = vec![Action::EnterLine(Some(vec![n]))];
         result.append(&mut following_actions);
+        result.push(Action::ExitLine);
         result
     }
 
     #[test]
     fn parse_deref_operand() {
-        let tokens = &[
+        let tokens = [
             Command(()),
             OpeningParenthesis,
             Literal(2),
             ClosingParenthesis,
         ];
-        let expected_actions = &inst(0, vec![expr(deref(1, atom(2), 3))]);
+        let expected_actions = line(inst(0, vec![expr(deref(1, atom(2), 3))]));
         assert_eq_actions(tokens, expected_actions)
     }
 
@@ -583,28 +619,28 @@ mod tests {
 
     #[test]
     fn parse_nullary_macro_invocation() {
-        let tokens = &[Ident(0)];
-        let expected_actions = &invoke(0, vec![]);
+        let tokens = [Ident(0)];
+        let expected_actions = line(invoke(0, vec![]));
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_unary_macro_invocation() {
-        let tokens = &[Ident(0), Literal(1)];
-        let expected_actions = &invoke(0, vec![vec![Literal(1)]]);
+        let tokens = [Ident(0), Literal(1)];
+        let expected_actions = line(invoke(0, vec![vec![Literal(1)]]));
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_unary_macro_invocation_with_multiple_terminals() {
-        let tokens = &[Ident(0), Literal(1), Literal(2), Literal(3)];
-        let expected_actions = &invoke(0, vec![vec![Literal(1), Literal(2), Literal(3)]]);
+        let tokens = [Ident(0), Literal(1), Literal(2), Literal(3)];
+        let expected_actions = line(invoke(0, vec![vec![Literal(1), Literal(2), Literal(3)]]));
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_binary_macro_invocation_with_multiple_terminals() {
-        let tokens = &[
+        let tokens = [
             Ident(0),
             Literal(1),
             Literal(2),
@@ -613,13 +649,13 @@ mod tests {
             Literal(5),
             Literal(6),
         ];
-        let expected_actions = &invoke(
+        let expected_actions = line(invoke(
             0,
             vec![
                 vec![Literal(1), Literal(2)],
                 vec![Literal(4), Literal(5), Literal(6)],
             ],
-        );
+        ));
         assert_eq_actions(tokens, expected_actions)
     }
 

@@ -10,6 +10,7 @@ mod operand;
 pub struct SemanticActions<'a, F: Session + 'a> {
     session: &'a mut F,
     expr_factory: StrExprFactory,
+    label: Option<(<String as TokenSpec>::Ident, F::TokenRef)>,
 }
 
 impl<'a, F: Session + 'a> SemanticActions<'a, F> {
@@ -17,38 +18,62 @@ impl<'a, F: Session + 'a> SemanticActions<'a, F> {
         SemanticActions {
             session,
             expr_factory: StrExprFactory::new(),
+            label: None,
+        }
+    }
+
+    fn define_label_if_present(&mut self) {
+        if let Some(label) = self.label.take() {
+            self.session.define_label(label)
         }
     }
 }
 
 impl<'a, F: Session + 'a> syntax::FileContext<String, F::TokenRef> for SemanticActions<'a, F> {
+    type LineActions = Self;
+
+    fn enter_line(
+        mut self,
+        label: Option<(<String as TokenSpec>::Ident, F::TokenRef)>,
+    ) -> Self::LineActions {
+        self.label = label;
+        self
+    }
+}
+
+impl<'a, F: Session + 'a> syntax::LineActions<String, F::TokenRef> for SemanticActions<'a, F> {
     type CommandContext = CommandActions<'a, F>;
     type MacroDefContext = MacroDefActions<'a, F>;
     type MacroInvocationContext = MacroInvocationActions<'a, F>;
-
-    fn add_label(&mut self, label: (<String as TokenSpec>::Ident, F::TokenRef)) {
-        self.session.define_label(label);
-    }
+    type Parent = Self;
 
     fn enter_command(
-        self,
+        mut self,
         name: (<String as TokenSpec>::Command, F::TokenRef),
     ) -> Self::CommandContext {
+        self.define_label_if_present();
         CommandActions::new(name, self)
     }
 
     fn enter_macro_def(
-        self,
+        mut self,
         name: (<String as TokenSpec>::Ident, F::TokenRef),
     ) -> Self::MacroDefContext {
+        self.define_label_if_present();
         MacroDefActions::new(name, self)
     }
 
     fn enter_macro_invocation(
-        self,
+        mut self,
         name: (<String as TokenSpec>::Ident, F::TokenRef),
     ) -> Self::MacroInvocationContext {
+        self.define_label_if_present();
         MacroInvocationActions::new(name, self)
+    }
+
+    fn exit(mut self) -> Self::Parent {
+        self.define_label_if_present();
+        self
     }
 }
 
@@ -287,7 +312,7 @@ mod tests {
     use backend;
     use diagnostics::Diagnostic;
     use frontend::syntax::{
-        keyword::Operand, token, CommandContext, FileContext, MacroInvocationContext,
+        keyword::Operand, token, CommandContext, FileContext, LineActions, MacroInvocationContext,
         TokenSeqContext,
     };
     use instruction::RelocExpr;
@@ -349,13 +374,15 @@ mod tests {
     fn build_include_item() {
         let filename = "file.asm";
         let actions = collect_semantic_actions(|actions| {
-            let mut command = actions.enter_command((Command::Directive(Directive::Include), ()));
+            let mut command = actions
+                .enter_line(None)
+                .enter_command((Command::Directive(Directive::Include), ()));
             let expr = ParsedExpr {
                 node: ExprNode::Literal(Literal::String(filename.to_string())),
                 interval: (),
             };
             command.add_argument(expr);
-            command.exit();
+            command.exit().exit()
         });
         assert_eq!(
             actions,
@@ -370,13 +397,15 @@ mod tests {
     fn set_origin() {
         let origin = 0x3000;
         let actions = collect_semantic_actions(|actions| {
-            let mut command = actions.enter_command((Command::Directive(Directive::Org), ()));
+            let mut command = actions
+                .enter_line(None)
+                .enter_command((Command::Directive(Directive::Org), ()));
             let expr = ParsedExpr {
                 node: ExprNode::Literal(Literal::Number(origin)),
                 interval: (),
             };
             command.add_argument(expr);
-            command.exit();
+            command.exit().exit()
         });
         assert_eq!(
             actions,
@@ -388,11 +417,13 @@ mod tests {
     fn emit_byte_items() {
         let bytes = [0x42, 0x78];
         let actions = collect_semantic_actions(|actions| {
-            let mut command = actions.enter_command((Command::Directive(Directive::Db), ()));
+            let mut command = actions
+                .enter_line(None)
+                .enter_command((Command::Directive(Directive::Db), ()));
             for &byte in bytes.iter() {
                 command.add_argument(mk_literal(byte))
             }
-            command.exit();
+            command.exit().exit()
         });
         assert_eq!(
             actions,
@@ -408,11 +439,13 @@ mod tests {
     fn emit_word_items() {
         let words = [0x4332, 0x780f];
         let actions = collect_semantic_actions(|actions| {
-            let mut command = actions.enter_command((Command::Directive(Directive::Dw), ()));
+            let mut command = actions
+                .enter_line(None)
+                .enter_command((Command::Directive(Directive::Dw), ()));
             for &word in words.iter() {
                 command.add_argument(mk_literal(word))
             }
-            command.exit();
+            command.exit().exit()
         });
         assert_eq!(
             actions,
@@ -428,12 +461,14 @@ mod tests {
     fn emit_label_word() {
         let label = "my_label";
         let actions = collect_semantic_actions(|actions| {
-            let mut command = actions.enter_command((Command::Directive(Directive::Dw), ()));
+            let mut command = actions
+                .enter_line(None)
+                .enter_command((Command::Directive(Directive::Dw), ()));
             command.add_argument(ParsedExpr {
                 node: ExprNode::Ident(label.to_string()),
                 interval: (),
             });
-            command.exit();
+            command.exit().exit()
         });
         assert_eq!(
             actions,
@@ -462,8 +497,9 @@ mod tests {
     #[test]
     fn analyze_label() {
         let label = "label";
-        let actions =
-            collect_semantic_actions(|mut actions| actions.add_label((label.to_string(), ())));
+        let actions = collect_semantic_actions(|actions| {
+            actions.enter_line(Some((label.to_string(), ()))).exit()
+        });
         assert_eq!(actions, [TestOperation::Label(label.to_string())])
     }
 
@@ -475,11 +511,13 @@ mod tests {
             token::Literal(Literal::Operand(Operand::A)),
         ];
         let actions = collect_semantic_actions(|actions| {
-            let mut token_seq_context = actions.enter_macro_def((name.to_string(), ()));
+            let mut token_seq_context = actions
+                .enter_line(None)
+                .enter_macro_def((name.to_string(), ()));
             for token in tokens.iter().cloned().map(|t| (t, ())) {
                 token_seq_context.push_token(token)
             }
-            token_seq_context.exit();
+            token_seq_context.exit().exit()
         });
         assert_eq!(
             actions,
@@ -491,8 +529,10 @@ mod tests {
     fn invoke_nullary_macro() {
         let name = "my_macro";
         let actions = collect_semantic_actions(|actions| {
-            let invocation = actions.enter_macro_invocation((name.to_string(), ()));
-            invocation.exit();
+            let invocation = actions
+                .enter_line(None)
+                .enter_macro_invocation((name.to_string(), ()));
+            invocation.exit().exit()
         });
         assert_eq!(
             actions,
@@ -508,13 +548,15 @@ mod tests {
         let name = "my_macro";
         let arg_token = token::Literal(Literal::Operand(Operand::A));
         let actions = collect_semantic_actions(|actions| {
-            let mut invocation = actions.enter_macro_invocation((name.to_string(), ()));
+            let mut invocation = actions
+                .enter_line(None)
+                .enter_macro_invocation((name.to_string(), ()));
             invocation = {
                 let mut arg = invocation.enter_macro_arg();
                 arg.push_token((arg_token.clone(), ()));
                 arg.exit()
             };
-            invocation.exit();
+            invocation.exit().exit()
         });
         assert_eq!(
             actions,
@@ -529,13 +571,15 @@ mod tests {
     fn diagnoze_wrong_operand_count() {
         use diagnostics::{Diagnostic, Message};
         let actions = collect_semantic_actions(|actions| {
-            let mut command_context = actions.enter_command((Command::Mnemonic(Mnemonic::Nop), ()));
+            let mut command_context = actions
+                .enter_line(None)
+                .enter_command((Command::Mnemonic(Mnemonic::Nop), ()));
             let literal_a = Literal::Operand(Operand::A);
             command_context.add_argument(ParsedExpr {
                 node: ExprNode::Literal(literal_a),
                 interval: (),
             });
-            command_context.exit();
+            command_context.exit().exit()
         });
         assert_eq!(
             actions,
@@ -552,12 +596,14 @@ mod tests {
     #[test]
     fn reserve_3_bytes() {
         let actions = collect_semantic_actions(|actions| {
-            let mut context = actions.enter_command((Command::Directive(Directive::Ds), ()));
+            let mut context = actions
+                .enter_line(None)
+                .enter_command((Command::Directive(Directive::Ds), ()));
             context.add_argument(ParsedExpr {
                 node: ExprNode::Literal(Literal::Number(3)),
                 interval: (),
             });
-            context.exit();
+            context.exit().exit()
         });
         assert_eq!(
             actions,
@@ -572,7 +618,7 @@ mod tests {
 
     fn collect_semantic_actions<F>(f: F) -> Vec<TestOperation>
     where
-        F: for<'a> FnOnce(SemanticActions<'a, TestFrontend>),
+        F: for<'a> FnOnce(SemanticActions<'a, TestFrontend>) -> SemanticActions<'a, TestFrontend>,
     {
         let mut operations = TestFrontend::new();
         f(SemanticActions::new(&mut operations));
