@@ -55,12 +55,8 @@ impl<'a, F: Session + 'a> syntax::LineActions<String, F::TokenRef> for SemanticA
         CommandActions::new(name, self)
     }
 
-    fn enter_macro_def(
-        mut self,
-        name: (<String as TokenSpec>::Ident, F::TokenRef),
-    ) -> Self::MacroDefContext {
-        self.define_label_if_present();
-        MacroDefActions::new(name, self)
+    fn enter_macro_def(mut self) -> Self::MacroDefContext {
+        MacroDefActions::new(self.label.take().unwrap(), self)
     }
 
     fn enter_macro_invocation(
@@ -512,8 +508,8 @@ mod tests {
         ];
         let actions = collect_semantic_actions(|actions| {
             let mut token_seq_context = actions
-                .enter_line(None)
-                .enter_macro_def((name.to_string(), ()));
+                .enter_line(Some((name.to_string(), ())))
+                .enter_macro_def();
             for token in tokens.iter().cloned().map(|t| (t, ())) {
                 token_seq_context.push_token(token)
             }

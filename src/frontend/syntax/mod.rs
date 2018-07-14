@@ -76,7 +76,7 @@ where
     >;
     type Parent;
     fn enter_command(self, name: (TS::Command, SR)) -> Self::CommandContext;
-    fn enter_macro_def(self, name: (TS::Ident, SR)) -> Self::MacroDefContext;
+    fn enter_macro_def(self) -> Self::MacroDefContext;
     fn enter_macro_invocation(self, name: (TS::Ident, SR)) -> Self::MacroInvocationContext;
     fn exit(self) -> Self::Parent;
 }

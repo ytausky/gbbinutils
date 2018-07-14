@@ -131,8 +131,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
 
     fn parse_macro_def<LA: LineActions<S, T>>(&mut self, actions: LA) -> LA {
         self.expect(Some(Token::Macro));
-        let name = self.expect_ident();
-        let mut macro_def_context = actions.enter_macro_def(name);
+        let mut macro_def_context = actions.enter_macro_def();
         self.expect(Some(Token::Eol));
         while self.lookahead() != Some(Token::Endm) {
             macro_def_context.push_token(self.bump())
@@ -282,7 +281,7 @@ mod tests {
         EnterInstruction(TestTrackingData),
         EnterLine(Option<TestTrackingData>),
         EnterMacroArg,
-        EnterMacroDef(TestTrackingData),
+        EnterMacroDef,
         EnterMacroInvocation(<TestTokenSpec as TokenSpec>::Ident),
         ExitInstruction,
         ExitLine,
@@ -342,11 +341,8 @@ mod tests {
             self
         }
 
-        fn enter_macro_def(
-            self,
-            (_, n): (<TestTokenSpec as TokenSpec>::Ident, TestTrackingData),
-        ) -> Self::MacroDefContext {
-            self.actions.push(Action::EnterMacroDef(n));
+        fn enter_macro_def(self) -> Self::MacroDefContext {
+            self.actions.push(Action::EnterMacroDef);
             self.token_seq_kind = Some(TokenSeqKind::MacroDef);
             self
         }
@@ -555,22 +551,23 @@ mod tests {
 
     #[test]
     fn parse_empty_macro_definition() {
-        let tokens = [Macro, Ident(1), Eol, Endm];
-        let expected_actions = line(macro_def(1, vec![]));
+        let tokens = [Ident(0), Colon, Macro, Eol, Endm];
+        let expected_actions = macro_def(0, vec![]);
         assert_eq_actions(tokens, expected_actions);
     }
 
     fn macro_def(label: usize, tokens: Vec<TestToken>) -> Vec<Action> {
-        let mut result = vec![Action::EnterMacroDef(vec![label])];
+        let mut result = vec![Action::EnterLine(Some(vec![label])), Action::EnterMacroDef];
         result.extend(tokens.into_iter().map(|t| Action::PushTerminal(t)));
         result.push(Action::ExitMacroDef);
+        result.push(Action::ExitLine);
         result
     }
 
     #[test]
     fn parse_macro_definition_with_instruction() {
-        let tokens = [Macro, Ident(1), Eol, Command(()), Eol, Endm];
-        let expected_actions = line(macro_def(1, vec![Command(()), Eol]));
+        let tokens = [Ident(0), Colon, Macro, Eol, Command(()), Eol, Endm];
+        let expected_actions = macro_def(0, vec![Command(()), Eol]);
         assert_eq_actions(tokens, expected_actions)
     }
 
