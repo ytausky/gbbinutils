@@ -114,6 +114,7 @@ pub trait Frontend {
     fn define_macro(
         &mut self,
         name: (impl Into<String>, Self::TokenRef),
+        params: Vec<(String, Self::TokenRef)>,
         tokens: Vec<(Token, Self::TokenRef)>,
     );
 }
@@ -204,9 +205,11 @@ where
     fn define_macro(
         &mut self,
         name: (impl Into<String>, Self::TokenRef),
+        params: Vec<(String, Self::TokenRef)>,
         tokens: Vec<(Token, Self::TokenRef)>,
     ) {
-        self.tokenized_code_source.define_macro(name, tokens)
+        self.tokenized_code_source
+            .define_macro(name, params, tokens)
     }
 }
 
@@ -220,6 +223,7 @@ where
     fn define_macro(
         &mut self,
         name: (impl Into<String>, Self::TokenRef),
+        params: Vec<(String, Self::TokenRef)>,
         tokens: Vec<(Token, Self::TokenRef)>,
     );
     type MacroInvocationIter: Iterator<Item = (Token, Self::TokenRef)>;
@@ -256,6 +260,7 @@ impl<'a, C: Codebase + 'a, TT: TokenTracker> TokenizedCodeSource for TokenStream
     fn define_macro(
         &mut self,
         name: (impl Into<String>, TT::TokenRef),
+        _params: Vec<(String, TT::TokenRef)>,
         tokens: Vec<(Token, TT::TokenRef)>,
     ) {
         self.macro_defs.insert(name.0.into(), Rc::new(tokens));
@@ -392,7 +397,7 @@ mod tests {
         let tokens = vec![token::Command(Command::Mnemonic(Mnemonic::Nop))];
         let log = TestLog::default();
         TestFixture::new(&log).when(|mut session| {
-            session.define_macro((name.to_string(), ()), add_code_refs(&tokens));
+            session.define_macro((name.to_string(), ()), Vec::new(), add_code_refs(&tokens));
             session.analyze_chunk(ChunkId::Macro {
                 name: (name.to_string(), ()),
                 args: vec![],
@@ -446,6 +451,7 @@ mod tests {
         fn define_macro(
             &mut self,
             name: (impl Into<String>, Self::TokenRef),
+            _params: Vec<(String, Self::TokenRef)>,
             tokens: Vec<(Token, Self::TokenRef)>,
         ) {
             self.macros.insert(name.0.into(), tokens);

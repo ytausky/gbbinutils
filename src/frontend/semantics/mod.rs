@@ -191,6 +191,7 @@ fn analyze_mnemonic<'a, F: Session + 'a>(
 
 pub struct MacroDefActions<'a, F: Session + 'a> {
     name: (String, F::TokenRef),
+    params: Vec<(String, F::TokenRef)>,
     tokens: Vec<(Token, F::TokenRef)>,
     parent: SemanticActions<'a, F>,
 }
@@ -199,6 +200,7 @@ impl<'a, F: Session + 'a> MacroDefActions<'a, F> {
     fn new(name: (String, F::TokenRef), parent: SemanticActions<'a, F>) -> MacroDefActions<'a, F> {
         MacroDefActions {
             name,
+            params: Vec::new(),
             tokens: Vec::new(),
             parent,
         }
@@ -228,7 +230,9 @@ impl<'a, F: Session + 'a> syntax::TokenSeqContext<F::TokenRef> for MacroDefActio
     }
 
     fn exit(self) -> Self::Parent {
-        self.parent.session.define_macro(self.name, self.tokens);
+        self.parent
+            .session
+            .define_macro(self.name, self.params, self.tokens);
         self.parent
     }
 }
@@ -367,6 +371,7 @@ mod tests {
         fn define_macro(
             &mut self,
             (name, _): (impl Into<String>, Self::TokenRef),
+            _params: Vec<(String, Self::TokenRef)>,
             tokens: Vec<(Token, ())>,
         ) {
             self.0.push(TestOperation::DefineMacro(

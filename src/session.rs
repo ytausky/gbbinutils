@@ -12,6 +12,7 @@ pub trait Session {
     fn define_macro(
         &mut self,
         name: (impl Into<String>, Self::TokenRef),
+        params: Vec<(String, Self::TokenRef)>,
         tokens: Vec<(frontend::Token, Self::TokenRef)>,
     );
     fn set_origin(&mut self, origin: backend::RelocExpr<Self::TokenRef>);
@@ -101,9 +102,12 @@ where
     fn define_macro(
         &mut self,
         name: (impl Into<String>, Self::TokenRef),
+        params: Vec<(String, Self::TokenRef)>,
         tokens: Vec<(frontend::Token, Self::TokenRef)>,
     ) {
-        self.frontend.borrow_mut().define_macro(name, tokens)
+        self.frontend
+            .borrow_mut()
+            .define_macro(name, params, tokens)
     }
 
     fn set_origin(&mut self, origin: backend::RelocExpr<Self::TokenRef>) {
