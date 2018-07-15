@@ -131,13 +131,26 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
 
     fn parse_macro_def<LA: LineActions<S, T>>(&mut self, actions: LA) -> LA {
         self.expect(Some(Token::Macro));
-        let mut macro_def_context = actions.enter_macro_def().exit();
+        let mut macro_body_actions = self.parse_list(
+            Some(Token::Comma),
+            follows_line,
+            |p, a| p.parse_macro_param(a),
+            actions.enter_macro_def(),
+        ).exit();
         self.expect(Some(Token::Eol));
         while self.lookahead() != Some(Token::Endm) {
-            macro_def_context.push_token(self.bump())
+            macro_body_actions.push_token(self.bump())
         }
         self.expect(Some(Token::Endm));
-        macro_def_context.exit()
+        macro_body_actions.exit()
+    }
+
+    fn parse_macro_param<MPA>(&mut self, mut actions: MPA) -> MPA
+    where
+        MPA: MacroParamsActions<T, TokenSpec = S>,
+    {
+        actions.add_parameter(self.expect_ident());
+        actions
     }
 
     fn parse_command<LA: LineActions<S, T>>(&mut self, actions: LA) -> LA {
@@ -278,9 +291,11 @@ mod tests {
     #[derive(Debug, PartialEq)]
     enum Action {
         AddArgument(TestExpr),
+        AddParameter(<TestTokenSpec as TokenSpec>::Ident),
         EnterInstruction(TestTrackingData),
         EnterLine(Option<TestTrackingData>),
         EnterMacroArg,
+        EnterMacroBody,
         EnterMacroDef,
         EnterMacroInvocation(<TestTokenSpec as TokenSpec>::Ident),
         ExitInstruction,
@@ -380,11 +395,15 @@ mod tests {
         type MacroBodyActions = Self;
         type Parent = Self;
 
-        fn add_parameter(&mut self, _: (<Self::TokenSpec as TokenSpec>::Ident, TestTrackingData)) {
-            unimplemented!()
+        fn add_parameter(
+            &mut self,
+            (n, _): (<Self::TokenSpec as TokenSpec>::Ident, TestTrackingData),
+        ) {
+            self.actions.push(Action::AddParameter(n))
         }
 
         fn exit(self) -> Self::MacroBodyActions {
+            self.actions.push(Action::EnterMacroBody);
             self
         }
     }
@@ -566,12 +585,18 @@ mod tests {
     #[test]
     fn parse_empty_macro_definition() {
         let tokens = [Ident(0), Colon, Macro, Eol, Endm];
-        let expected_actions = macro_def(0, vec![]);
+        let expected_actions = macro_def(0, [], vec![]);
         assert_eq_actions(tokens, expected_actions);
     }
 
-    fn macro_def(label: usize, tokens: Vec<TestToken>) -> Vec<Action> {
+    fn macro_def(
+        label: usize,
+        params: impl Borrow<[<TestTokenSpec as TokenSpec>::Ident]>,
+        tokens: Vec<TestToken>,
+    ) -> Vec<Action> {
         let mut result = vec![Action::EnterLine(Some(vec![label])), Action::EnterMacroDef];
+        result.extend(params.borrow().iter().map(|&n| Action::AddParameter(n)));
+        result.push(Action::EnterMacroBody);
         result.extend(tokens.into_iter().map(|t| Action::PushTerminal(t)));
         result.push(Action::ExitMacroDef);
         result.push(Action::ExitLine);
@@ -581,8 +606,26 @@ mod tests {
     #[test]
     fn parse_macro_definition_with_instruction() {
         let tokens = [Ident(0), Colon, Macro, Eol, Command(()), Eol, Endm];
-        let expected_actions = macro_def(0, vec![Command(()), Eol]);
+        let expected_actions = macro_def(0, [], vec![Command(()), Eol]);
         assert_eq_actions(tokens, expected_actions)
+    }
+
+    #[test]
+    fn parse_nonempty_macro_def_with_two_params() {
+        let tokens = [
+            Ident(0),
+            Colon,
+            Macro,
+            Ident(3),
+            Comma,
+            Ident(5),
+            Eol,
+            Command(()),
+            Eol,
+            Endm,
+        ];
+        let expected = macro_def(0, vec![3, 5], vec![Command(()), Eol]);
+        assert_eq_actions(tokens, expected)
     }
 
     #[test]
