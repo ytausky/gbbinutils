@@ -242,7 +242,10 @@ struct TokenStreamSource<'a, C: Codebase + 'a, TT: TokenTracker> {
     macro_defs: HashMap<String, Rc<MacroDef<TT::TokenRef>>>,
 }
 
-type MacroDef<TR> = Vec<(Token, TR)>;
+struct MacroDef<SR> {
+    params: Vec<(String, SR)>,
+    body: Vec<(Token, SR)>,
+}
 
 impl<'a, C: Codebase + 'a, TT: TokenTracker> TokenStreamSource<'a, C, TT> {
     fn new(codebase: &'a C, token_tracker: TT) -> TokenStreamSource<C, TT> {
@@ -260,10 +263,11 @@ impl<'a, C: Codebase + 'a, TT: TokenTracker> TokenizedCodeSource for TokenStream
     fn define_macro(
         &mut self,
         name: (impl Into<String>, TT::TokenRef),
-        _params: Vec<(String, TT::TokenRef)>,
-        tokens: Vec<(Token, TT::TokenRef)>,
+        params: Vec<(String, TT::TokenRef)>,
+        body: Vec<(Token, TT::TokenRef)>,
     ) {
-        self.macro_defs.insert(name.0.into(), Rc::new(tokens));
+        self.macro_defs
+            .insert(name.0.into(), Rc::new(MacroDef { params, body }));
     }
 
     type MacroInvocationIter = MacroDefIter<TT::TokenRef>;
@@ -285,22 +289,22 @@ impl<'a, C: Codebase + 'a, TT: TokenTracker> TokenizedCodeSource for TokenStream
     }
 }
 
-struct MacroDefIter<CR> {
-    tokens: Rc<Vec<(Token, CR)>>,
+struct MacroDefIter<SR> {
+    def: Rc<MacroDef<SR>>,
     index: usize,
 }
 
-impl<CR> MacroDefIter<CR> {
-    fn new(tokens: Rc<Vec<(Token, CR)>>) -> MacroDefIter<CR> {
-        MacroDefIter { tokens, index: 0 }
+impl<SR> MacroDefIter<SR> {
+    fn new(def: Rc<MacroDef<SR>>) -> MacroDefIter<SR> {
+        MacroDefIter { def, index: 0 }
     }
 }
 
-impl<CR: Clone> Iterator for MacroDefIter<CR> {
-    type Item = (Token, CR);
+impl<SR: Clone> Iterator for MacroDefIter<SR> {
+    type Item = (Token, SR);
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index < self.tokens.len() {
-            let item = self.tokens[self.index].clone();
+        if self.index < self.def.body.len() {
+            let item = self.def.body[self.index].clone();
             self.index += 1;
             Some(item)
         } else {
