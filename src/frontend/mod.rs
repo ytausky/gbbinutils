@@ -270,14 +270,17 @@ impl<'a, C: Codebase + 'a, TT: TokenTracker> TokenizedCodeSource for TokenStream
             .insert(name.0.into(), Rc::new(MacroDef { params, body }));
     }
 
-    type MacroInvocationIter = MacroDefIter<TT::TokenRef>;
+    type MacroInvocationIter = ExpandedMacro<TT::TokenRef>;
 
     fn macro_invocation(
         &mut self,
         name: (String, TT::TokenRef),
         _args: Vec<Vec<Token>>,
     ) -> Option<Self::MacroInvocationIter> {
-        self.macro_defs.get(&name.0).cloned().map(MacroDefIter::new)
+        self.macro_defs
+            .get(&name.0)
+            .cloned()
+            .map(ExpandedMacro::new)
     }
 
     type Tokenized = TokenizedSrc<TT::BufContext>;
@@ -289,18 +292,18 @@ impl<'a, C: Codebase + 'a, TT: TokenTracker> TokenizedCodeSource for TokenStream
     }
 }
 
-struct MacroDefIter<SR> {
+struct ExpandedMacro<SR> {
     def: Rc<MacroDef<SR>>,
     index: usize,
 }
 
-impl<SR> MacroDefIter<SR> {
-    fn new(def: Rc<MacroDef<SR>>) -> MacroDefIter<SR> {
-        MacroDefIter { def, index: 0 }
+impl<SR> ExpandedMacro<SR> {
+    fn new(def: Rc<MacroDef<SR>>) -> ExpandedMacro<SR> {
+        ExpandedMacro { def, index: 0 }
     }
 }
 
-impl<SR: Clone> Iterator for MacroDefIter<SR> {
+impl<SR: Clone> Iterator for ExpandedMacro<SR> {
     type Item = (Token, SR);
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.def.body.len() {
