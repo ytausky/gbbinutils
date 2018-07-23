@@ -171,7 +171,7 @@ where
     fn invoke_macro(
         &mut self,
         name: (String, <Self as Frontend>::TokenRef),
-        args: Vec<Vec<Token>>,
+        args: Vec<Vec<(Token, <Self as Frontend>::TokenRef)>>,
         backend: &mut impl Backend<TCS::TokenRef>,
     ) {
         match self.macros.expand(name.clone(), args) {
@@ -230,7 +230,7 @@ trait Macros {
     fn expand(
         &mut self,
         name: (String, Self::SourceRange),
-        args: Vec<Vec<Token>>,
+        args: Vec<Vec<(Token, Self::SourceRange)>>,
     ) -> Option<Self::ExpandedMacro>;
 }
 
@@ -268,32 +268,78 @@ impl<SR: SourceRange> Macros for MacroExpander<SR> {
     fn expand(
         &mut self,
         name: (String, Self::SourceRange),
-        _args: Vec<Vec<Token>>,
+        args: Vec<Vec<(Token, Self::SourceRange)>>,
     ) -> Option<Self::ExpandedMacro> {
         self.macro_defs
             .get(&name.0)
             .cloned()
-            .map(ExpandedMacro::new)
+            .map(|def| ExpandedMacro::new(def, args))
     }
 }
 
 struct ExpandedMacro<SR> {
     def: Rc<MacroDef<SR>>,
-    index: usize,
+    args: Vec<Vec<(Token, SR)>>,
+    body_index: usize,
+    arg_index: Option<(usize, usize)>,
 }
 
 impl<SR> ExpandedMacro<SR> {
-    fn new(def: Rc<MacroDef<SR>>) -> ExpandedMacro<SR> {
-        ExpandedMacro { def, index: 0 }
+    fn new(def: Rc<MacroDef<SR>>, args: Vec<Vec<(Token, SR)>>) -> ExpandedMacro<SR> {
+        let mut expanded_macro = ExpandedMacro {
+            def,
+            args,
+            body_index: 0,
+            arg_index: None,
+        };
+        expanded_macro.try_expand();
+        expanded_macro
+    }
+
+    fn param_position(&self, name: &str) -> Option<usize> {
+        for i in 0..self.def.params.len() {
+            if self.def.params[i].0 == name {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    fn advance(&mut self) {
+        if let Some((position, index)) = self.arg_index {
+            if index + 1 < self.args[position].len() {
+                self.arg_index = Some((position, index + 1))
+            } else {
+                self.arg_index = None
+            }
+        }
+        if let None = self.arg_index {
+            self.body_index += 1;
+            self.try_expand()
+        }
+    }
+
+    fn try_expand(&mut self) {
+        assert_eq!(self.arg_index, None);
+        if self.body_index < self.def.body.len() {
+            if let token::Ident(ref name) = self.def.body[self.body_index].0 {
+                if let Some(position) = self.param_position(&name) {
+                    self.arg_index = Some((position, 0))
+                }
+            }
+        }
     }
 }
 
 impl<SR: Clone> Iterator for ExpandedMacro<SR> {
     type Item = (Token, SR);
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index < self.def.body.len() {
-            let item = self.def.body[self.index].clone();
-            self.index += 1;
+        if self.body_index < self.def.body.len() {
+            let item = match self.arg_index {
+                Some((position, index)) => self.args[position][index].clone(),
+                None => self.def.body[self.body_index].clone(),
+            };
+            self.advance();
             Some(item)
         } else {
             None
@@ -415,7 +461,7 @@ mod tests {
         assert_eq!(*log.borrow(), [TestEvent::AddLabel(String::from(label))]);
     }
 
-    use frontend::syntax::keyword::Command;
+    use frontend::syntax::keyword::*;
 
     #[test]
     fn define_and_invoke_macro() {
@@ -430,6 +476,35 @@ mod tests {
             })
         });
         assert_eq!(*log.borrow(), [TestEvent::AnalyzeTokens(tokens)]);
+    }
+
+    #[test]
+    fn define_and_invoke_macro_with_param() {
+        let db = token::Command(Command::Directive(Directive::Db));
+        let arg = token::Literal(Literal::Number(0x42));
+        let literal0 = token::Literal(Literal::Number(0));
+        let log = TestLog::default();
+        TestFixture::new(&log).when(|mut session| {
+            let name = "my_db";
+            let param = "x";
+            session.define_macro(
+                (name.to_string(), ()),
+                vec![(param.to_string(), ())],
+                vec![
+                    (db.clone(), ()),
+                    (token::Ident(param.to_string()), ()),
+                    (literal0.clone(), ()),
+                ],
+            );
+            session.analyze_chunk(ChunkId::Macro {
+                name: (name.to_string(), ()),
+                args: vec![vec![(arg.clone(), ())]],
+            })
+        });
+        assert_eq!(
+            *log.borrow(),
+            [TestEvent::AnalyzeTokens(vec![db, arg, literal0])]
+        );
     }
 
     use diagnostics::Diagnostic;

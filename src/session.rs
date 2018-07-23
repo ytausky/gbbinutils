@@ -23,7 +23,7 @@ pub enum ChunkId<T> {
     File((String, Option<T>)),
     Macro {
         name: (String, T),
-        args: Vec<Vec<frontend::Token>>,
+        args: Vec<Vec<(frontend::Token, T)>>,
     },
 }
 

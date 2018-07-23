@@ -239,7 +239,7 @@ impl<'a, F: Session + 'a> syntax::TokenSeqContext<F::TokenRef> for MacroDefActio
 
 pub struct MacroInvocationActions<'a, F: Session + 'a> {
     name: (String, F::TokenRef),
-    args: Vec<Vec<Token>>,
+    args: Vec<Vec<(Token, F::TokenRef)>>,
     parent: SemanticActions<'a, F>,
 }
 
@@ -255,7 +255,7 @@ impl<'a, F: Session + 'a> MacroInvocationActions<'a, F> {
         }
     }
 
-    fn push_arg(&mut self, arg: Vec<Token>) {
+    fn push_arg(&mut self, arg: Vec<(Token, F::TokenRef)>) {
         self.args.push(arg)
     }
 }
@@ -281,7 +281,7 @@ impl<'a, F: Session + 'a> syntax::MacroInvocationContext<F::TokenRef>
 }
 
 pub struct MacroArgActions<'a, F: Session + 'a> {
-    tokens: Vec<Token>,
+    tokens: Vec<(Token, F::TokenRef)>,
     parent: MacroInvocationActions<'a, F>,
 }
 
@@ -299,7 +299,7 @@ impl<'a, F: Session + 'a> syntax::TokenSeqContext<F::TokenRef> for MacroArgActio
     type Parent = MacroInvocationActions<'a, F>;
 
     fn push_token(&mut self, token: (Self::Token, F::TokenRef)) {
-        self.tokens.push(token.0)
+        self.tokens.push(token)
     }
 
     fn exit(mut self) -> Self::Parent {
@@ -577,7 +577,7 @@ mod tests {
             actions,
             [TestOperation::AnalyzeChunk(ChunkId::Macro {
                 name: (name.to_string(), ()),
-                args: vec![vec![arg_token]],
+                args: vec![vec![(arg_token, ())]],
             })]
         )
     }
