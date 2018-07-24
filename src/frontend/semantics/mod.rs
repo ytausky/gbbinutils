@@ -212,8 +212,8 @@ impl<'a, F: Session + 'a> syntax::MacroParamsActions<F::TokenRef> for MacroDefAc
     type MacroBodyActions = Self;
     type Parent = SemanticActions<'a, F>;
 
-    fn add_parameter(&mut self, _: (<Self::TokenSpec as TokenSpec>::Ident, F::TokenRef)) {
-        unimplemented!()
+    fn add_parameter(&mut self, param: (<Self::TokenSpec as TokenSpec>::Ident, F::TokenRef)) {
+        self.params.push(param)
     }
 
     fn exit(self) -> Self::MacroBodyActions {
@@ -327,9 +327,10 @@ mod tests {
     use diagnostics::Diagnostic;
     use frontend::syntax::{
         keyword::Operand, token, CommandContext, FileContext, LineActions, MacroInvocationContext,
-        TokenSeqContext,
+        MacroParamsActions, TokenSeqContext,
     };
     use instruction::RelocExpr;
+    use std::borrow::Borrow;
 
     struct TestFrontend(Vec<TestOperation>);
 
@@ -342,7 +343,7 @@ mod tests {
     #[derive(Debug, PartialEq)]
     enum TestOperation {
         AnalyzeChunk(ChunkId<()>),
-        DefineMacro(String, Vec<Token>),
+        DefineMacro(String, Vec<String>, Vec<Token>),
         EmitDiagnostic(Diagnostic<()>),
         EmitItem(backend::Item<()>),
         Label(String),
@@ -371,11 +372,12 @@ mod tests {
         fn define_macro(
             &mut self,
             (name, _): (impl Into<String>, Self::TokenRef),
-            _params: Vec<(String, Self::TokenRef)>,
+            params: Vec<(String, Self::TokenRef)>,
             tokens: Vec<(Token, ())>,
         ) {
             self.0.push(TestOperation::DefineMacro(
                 name.into(),
+                params.into_iter().map(|(s, _)| s).collect(),
                 tokens.into_iter().map(|(t, _)| t).collect(),
             ))
         }
@@ -519,24 +521,55 @@ mod tests {
     }
 
     #[test]
-    fn define_macro() {
-        let name = "my_macro";
-        let tokens = vec![
-            token::Command(Command::Mnemonic(Mnemonic::Xor)),
-            token::Literal(Literal::Operand(Operand::A)),
-        ];
+    fn define_nullary_macro() {
+        test_macro_definition(
+            "my_macro",
+            [],
+            [
+                token::Command(Command::Mnemonic(Mnemonic::Xor)),
+                token::Literal(Literal::Operand(Operand::A)),
+            ],
+        )
+    }
+
+    #[test]
+    fn define_unary_macro() {
+        let param = "reg";
+        test_macro_definition(
+            "my_xor",
+            [param],
+            [
+                token::Command(Command::Mnemonic(Mnemonic::Xor)),
+                token::Ident(param.to_string()),
+            ],
+        )
+    }
+
+    fn test_macro_definition(
+        name: &str,
+        params: impl Borrow<[&'static str]>,
+        body: impl Borrow<[Token]>,
+    ) {
         let actions = collect_semantic_actions(|actions| {
-            let mut token_seq_context = actions
+            let mut params_actions = actions
                 .enter_line(Some((name.to_string(), ())))
                 .enter_macro_def();
-            for token in tokens.iter().cloned().map(|t| (t, ())) {
-                token_seq_context.push_token(token)
+            for param in params.borrow().iter().map(|t| (t.to_string(), ())) {
+                params_actions.add_parameter(param)
             }
-            token_seq_context.exit().exit()
+            let mut token_seq_actions = MacroParamsActions::exit(params_actions);
+            for token in body.borrow().iter().cloned().map(|t| (t, ())) {
+                token_seq_actions.push_token(token)
+            }
+            TokenSeqContext::exit(token_seq_actions)
         });
         assert_eq!(
             actions,
-            [TestOperation::DefineMacro(name.to_string(), tokens)]
+            [TestOperation::DefineMacro(
+                name.to_string(),
+                params.borrow().iter().cloned().map(String::from).collect(),
+                body.borrow().iter().cloned().collect()
+            )]
         )
     }
 
