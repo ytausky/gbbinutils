@@ -81,11 +81,34 @@ where
     fn exit(self) -> Self::Parent;
 }
 
-pub trait CommandContext<R> {
+pub trait CommandContext<R>
+where
+    Self: Sized,
+{
+    type TokenSpec: TokenSpec;
+    type ArgActions: ExprActions<R, TokenSpec = Self::TokenSpec, Parent = Self>;
+    type Parent;
+    fn add_argument(self) -> Self::ArgActions;
+    fn exit(self) -> Self::Parent;
+}
+
+pub trait ExprActions<SR> {
     type TokenSpec: TokenSpec;
     type Parent;
-    fn add_argument(&mut self, expr: ParsedExpr<Self::TokenSpec, R>);
+    fn push_atom(&mut self, atom: (ExprAtom<Self::TokenSpec>, SR));
+    fn apply_operator(&mut self, operator: (ExprOperator, SR));
     fn exit(self) -> Self::Parent;
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ExprAtom<S: TokenSpec> {
+    Ident(S::Ident),
+    Literal(S::Literal),
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ExprOperator {
+    Parentheses,
 }
 
 pub trait MacroParamsActions<SR> {

@@ -1,5 +1,7 @@
 use backend::{self, BinaryOperator};
-use frontend::syntax::{self, keyword::*, ExprNode, ParsedExpr, Token, TokenSpec};
+use frontend::syntax::{
+    self, keyword::*, ExprAtom, ExprNode, ExprOperator, ParsedExpr, Token, TokenSpec,
+};
 use frontend::{Literal, StrExprFactory};
 use session::{ChunkId, Session};
 use Width;
@@ -93,10 +95,14 @@ impl<'a, F: Session + 'a> CommandActions<'a, F> {
 
 impl<'a, F: Session + 'a> syntax::CommandContext<F::TokenRef> for CommandActions<'a, F> {
     type TokenSpec = String;
+    type ArgActions = ExprActions<'a, F>;
     type Parent = SemanticActions<'a, F>;
 
-    fn add_argument(&mut self, expr: ParsedExpr<String, F::TokenRef>) {
-        self.args.push(expr)
+    fn add_argument(self) -> Self::ArgActions {
+        ExprActions {
+            stack: Vec::new(),
+            parent: self,
+        }
     }
 
     fn exit(mut self) -> Self::Parent {
@@ -108,6 +114,44 @@ impl<'a, F: Session + 'a> syntax::CommandContext<F::TokenRef> for CommandActions
                 analyze_mnemonic((mnemonic, range), self.args, &mut self.parent)
             }
         }
+        self.parent
+    }
+}
+
+pub struct ExprActions<'a, F: Session + 'a> {
+    stack: Vec<ParsedExpr<String, F::TokenRef>>,
+    parent: CommandActions<'a, F>,
+}
+
+impl<'a, F: Session + 'a> syntax::ExprActions<F::TokenRef> for ExprActions<'a, F> {
+    type TokenSpec = String;
+    type Parent = CommandActions<'a, F>;
+
+    fn push_atom(&mut self, atom: (ExprAtom<Self::TokenSpec>, F::TokenRef)) {
+        self.stack.push(ParsedExpr {
+            node: match atom.0 {
+                ExprAtom::Ident(ident) => ExprNode::Ident(ident),
+                ExprAtom::Literal(literal) => ExprNode::Literal(literal),
+            },
+            interval: atom.1,
+        })
+    }
+
+    fn apply_operator(&mut self, operator: (ExprOperator, F::TokenRef)) {
+        match operator.0 {
+            ExprOperator::Parentheses => {
+                let inner = self.stack.pop().unwrap();
+                self.stack.push(ParsedExpr {
+                    node: ExprNode::Parenthesized(Box::new(inner)),
+                    interval: operator.1,
+                })
+            }
+        }
+    }
+
+    fn exit(mut self) -> Self::Parent {
+        assert_eq!(self.stack.len(), 1);
+        self.parent.args.push(self.stack.pop().unwrap());
         self.parent
     }
 }
@@ -326,8 +370,8 @@ mod tests {
     use backend;
     use diagnostics::Diagnostic;
     use frontend::syntax::{
-        keyword::Operand, token, CommandContext, FileContext, LineActions, MacroInvocationContext,
-        MacroParamsActions, TokenSeqContext,
+        keyword::Operand, token, CommandContext, ExprActions, FileContext, LineActions,
+        MacroInvocationContext, MacroParamsActions, TokenSeqContext,
     };
     use instruction::RelocExpr;
     use std::borrow::Borrow;
@@ -391,15 +435,12 @@ mod tests {
     fn build_include_item() {
         let filename = "file.asm";
         let actions = collect_semantic_actions(|actions| {
-            let mut command = actions
+            let mut arg = actions
                 .enter_line(None)
-                .enter_command((Command::Directive(Directive::Include), ()));
-            let expr = ParsedExpr {
-                node: ExprNode::Literal(Literal::String(filename.to_string())),
-                interval: (),
-            };
-            command.add_argument(expr);
-            command.exit().exit()
+                .enter_command((Command::Directive(Directive::Include), ()))
+                .add_argument();
+            arg.push_atom((ExprAtom::Literal(Literal::String(filename.to_string())), ()));
+            arg.exit().exit().exit()
         });
         assert_eq!(
             actions,
@@ -414,15 +455,12 @@ mod tests {
     fn set_origin() {
         let origin = 0x3000;
         let actions = collect_semantic_actions(|actions| {
-            let mut command = actions
+            let mut arg = actions
                 .enter_line(None)
-                .enter_command((Command::Directive(Directive::Org), ()));
-            let expr = ParsedExpr {
-                node: ExprNode::Literal(Literal::Number(origin)),
-                interval: (),
-            };
-            command.add_argument(expr);
-            command.exit().exit()
+                .enter_command((Command::Directive(Directive::Org), ()))
+                .add_argument();
+            arg.push_atom((ExprAtom::Literal(Literal::Number(origin)), ()));
+            arg.exit().exit().exit()
         });
         assert_eq!(
             actions,
@@ -432,45 +470,60 @@ mod tests {
 
     #[test]
     fn emit_byte_items() {
-        let bytes = [0x42, 0x78];
+        test_data_items_emission(Directive::Db, mk_byte, [0x42, 0x78])
+    }
+
+    #[test]
+    fn emit_word_items() {
+        test_data_items_emission(Directive::Dw, mk_word, [0x4332, 0x780f])
+    }
+
+    fn test_data_items_emission(
+        directive: Directive,
+        mk_item: impl Fn(&i32) -> backend::Item<()>,
+        data: impl Borrow<[i32]>,
+    ) {
         let actions = collect_semantic_actions(|actions| {
             let mut command = actions
                 .enter_line(None)
-                .enter_command((Command::Directive(Directive::Db), ()));
-            for &byte in bytes.iter() {
-                command.add_argument(mk_literal(byte))
+                .enter_command((Command::Directive(directive), ()));
+            for datum in data.borrow().iter() {
+                let mut arg = command.add_argument();
+                arg.push_atom(mk_literal(*datum));
+                command = arg.exit();
             }
             command.exit().exit()
         });
         assert_eq!(
             actions,
-            bytes
+            data.borrow()
                 .iter()
-                .map(mk_byte)
+                .map(mk_item)
                 .map(TestOperation::EmitItem)
                 .collect::<Vec<_>>()
         )
     }
 
     #[test]
-    fn emit_word_items() {
-        let words = [0x4332, 0x780f];
+    fn emit_ld_b_deref_hl() {
+        use instruction::*;
         let actions = collect_semantic_actions(|actions| {
             let mut command = actions
                 .enter_line(None)
-                .enter_command((Command::Directive(Directive::Dw), ()));
-            for &word in words.iter() {
-                command.add_argument(mk_literal(word))
-            }
-            command.exit().exit()
+                .enter_command((Command::Mnemonic(Mnemonic::Ld), ()));
+            let mut arg1 = command.add_argument();
+            arg1.push_atom((ExprAtom::Literal(Literal::Operand(Operand::B)), ()));
+            command = arg1.exit();
+            let mut arg2 = command.add_argument();
+            arg2.push_atom((ExprAtom::Literal(Literal::Operand(Operand::Hl)), ()));
+            arg2.apply_operator((ExprOperator::Parentheses, ()));
+            arg2.exit().exit().exit()
         });
         assert_eq!(
             actions,
-            words
-                .iter()
-                .map(mk_word)
-                .map(TestOperation::EmitItem)
-                .collect::<Vec<_>>()
+            [TestOperation::EmitItem(backend::Item::Instruction(
+                Instruction::Ld(Ld::Simple(SimpleOperand::B, SimpleOperand::DerefHl))
+            ))]
         )
     }
 
@@ -478,14 +531,12 @@ mod tests {
     fn emit_label_word() {
         let label = "my_label";
         let actions = collect_semantic_actions(|actions| {
-            let mut command = actions
+            let mut arg = actions
                 .enter_line(None)
-                .enter_command((Command::Directive(Directive::Dw), ()));
-            command.add_argument(ParsedExpr {
-                node: ExprNode::Ident(label.to_string()),
-                interval: (),
-            });
-            command.exit().exit()
+                .enter_command((Command::Directive(Directive::Dw), ()))
+                .add_argument();
+            arg.push_atom((ExprAtom::Ident(label.to_string()), ()));
+            arg.exit().exit().exit()
         });
         assert_eq!(
             actions,
@@ -496,11 +547,8 @@ mod tests {
         );
     }
 
-    fn mk_literal(n: i32) -> ParsedExpr<String, ()> {
-        ParsedExpr {
-            node: ExprNode::Literal(Literal::Number(n)),
-            interval: (),
-        }
+    fn mk_literal(n: i32) -> (ExprAtom<String>, ()) {
+        (ExprAtom::Literal(Literal::Number(n)), ())
     }
 
     fn mk_byte(byte: &i32) -> backend::Item<()> {
@@ -619,15 +667,13 @@ mod tests {
     fn diagnoze_wrong_operand_count() {
         use diagnostics::{Diagnostic, Message};
         let actions = collect_semantic_actions(|actions| {
-            let mut command_context = actions
+            let mut arg = actions
                 .enter_line(None)
-                .enter_command((Command::Mnemonic(Mnemonic::Nop), ()));
+                .enter_command((Command::Mnemonic(Mnemonic::Nop), ()))
+                .add_argument();
             let literal_a = Literal::Operand(Operand::A);
-            command_context.add_argument(ParsedExpr {
-                node: ExprNode::Literal(literal_a),
-                interval: (),
-            });
-            command_context.exit().exit()
+            arg.push_atom((ExprAtom::Literal(literal_a), ()));
+            arg.exit().exit().exit()
         });
         assert_eq!(
             actions,
@@ -644,14 +690,12 @@ mod tests {
     #[test]
     fn reserve_3_bytes() {
         let actions = collect_semantic_actions(|actions| {
-            let mut context = actions
+            let mut arg = actions
                 .enter_line(None)
-                .enter_command((Command::Directive(Directive::Ds), ()));
-            context.add_argument(ParsedExpr {
-                node: ExprNode::Literal(Literal::Number(3)),
-                interval: (),
-            });
-            context.exit().exit()
+                .enter_command((Command::Directive(Directive::Ds), ()))
+                .add_argument();
+            arg.push_atom(mk_literal(3));
+            arg.exit().exit().exit()
         });
         assert_eq!(
             actions,

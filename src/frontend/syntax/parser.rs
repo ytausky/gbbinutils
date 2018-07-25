@@ -222,40 +222,40 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
         context
     }
 
-    fn parse_argument<C: CommandContext<T, TokenSpec = S>>(&mut self, mut actions: C) -> C {
-        let expr = self.parse_expression();
-        actions.add_argument(expr);
+    fn parse_argument<C: CommandContext<T, TokenSpec = S>>(&mut self, actions: C) -> C {
+        self.parse_expression(actions.add_argument()).exit()
+    }
+
+    fn parse_expression<EA: ExprActions<T, TokenSpec = S>>(&mut self, actions: EA) -> EA {
+        if self.lookahead() == Some(Token::OpeningParenthesis) {
+            self.parse_parenthesized_expression(actions)
+        } else {
+            self.parse_atomic_expr(actions)
+        }
+    }
+
+    fn parse_parenthesized_expression<EA: ExprActions<T, TokenSpec = S>>(
+        &mut self,
+        actions: EA,
+    ) -> EA {
+        let (_, left) = self.expect(Some(Token::OpeningParenthesis));
+        let mut actions = self.parse_expression(actions);
+        let (_, right) = self.expect(Some(Token::ClosingParenthesis));
+        actions.apply_operator((ExprOperator::Parentheses, left.extend(&right)));
         actions
     }
 
-    fn parse_expression(&mut self) -> ParsedExpr<S, T> {
-        if self.lookahead() == Some(Token::OpeningParenthesis) {
-            self.parse_parenthesized_expression()
-        } else {
-            self.parse_atomic_expr()
-        }
-    }
-
-    fn parse_parenthesized_expression(&mut self) -> ParsedExpr<S, T> {
-        let (_, left) = self.expect(Some(Token::OpeningParenthesis));
-        let expr = self.parse_expression();
-        let (_, right) = self.expect(Some(Token::ClosingParenthesis));
-        ParsedExpr {
-            node: ExprNode::Parenthesized(Box::new(expr)),
-            interval: left.extend(&right),
-        }
-    }
-
-    fn parse_atomic_expr(&mut self) -> ParsedExpr<S, T> {
+    fn parse_atomic_expr<EA: ExprActions<T, TokenSpec = S>>(&mut self, mut actions: EA) -> EA {
         let (token, interval) = self.bump();
-        ParsedExpr {
-            node: match token {
-                Token::Ident(ident) => ExprNode::Ident(ident),
-                Token::Literal(literal) => ExprNode::Literal(literal),
+        actions.push_atom((
+            match token {
+                Token::Ident(ident) => ExprAtom::Ident(ident),
+                Token::Literal(literal) => ExprAtom::Literal(literal),
                 _ => panic!(),
             },
             interval,
-        }
+        ));
+        actions
     }
 }
 
@@ -266,7 +266,7 @@ mod tests {
     };
 
     use diagnostics::SourceRange;
-    use frontend::syntax::{self, ExprNode, ParsedExpr, TokenSpec};
+    use frontend::syntax::{self, ExprAtom, ExprNode, ExprOperator, ParsedExpr, TokenSpec};
     use std::borrow::Borrow;
 
     #[test]
@@ -290,19 +290,22 @@ mod tests {
 
     #[derive(Debug, PartialEq)]
     enum Action {
-        AddArgument(TestExpr),
         AddParameter(<TestTokenSpec as TokenSpec>::Ident),
+        ApplyExprOperator(ExprOperator),
+        EnterArgument,
         EnterInstruction(TestTrackingData),
         EnterLine(Option<TestTrackingData>),
         EnterMacroArg,
         EnterMacroBody,
         EnterMacroDef,
         EnterMacroInvocation(<TestTokenSpec as TokenSpec>::Ident),
+        ExitArgument,
         ExitInstruction,
         ExitLine,
         ExitMacroArg,
         ExitMacroDef,
         ExitMacroInvocation,
+        PushExprAtom(ExprAtom<TestTokenSpec>),
         PushTerminal(TestToken),
     }
 
@@ -378,14 +381,34 @@ mod tests {
 
     impl<'a> syntax::CommandContext<TestTrackingData> for &'a mut TestContext {
         type TokenSpec = TestTokenSpec;
+        type ArgActions = Self;
         type Parent = Self;
 
-        fn add_argument(&mut self, expr: TestExpr) {
-            self.actions.push(Action::AddArgument(expr))
+        fn add_argument(self) -> Self::ArgActions {
+            self.actions.push(Action::EnterArgument);
+            self
         }
 
         fn exit(self) -> Self::Parent {
             self.actions.push(Action::ExitInstruction);
+            self
+        }
+    }
+
+    impl<'a> syntax::ExprActions<TestTrackingData> for &'a mut TestContext {
+        type TokenSpec = TestTokenSpec;
+        type Parent = Self;
+
+        fn push_atom(&mut self, atom: (ExprAtom<TestTokenSpec>, TestTrackingData)) {
+            self.actions.push(Action::PushExprAtom(atom.0))
+        }
+
+        fn apply_operator(&mut self, operator: (ExprOperator, TestTrackingData)) {
+            self.actions.push(Action::ApplyExprOperator(operator.0))
+        }
+
+        fn exit(self) -> Self::Parent {
+            self.actions.push(Action::ExitArgument);
             self
         }
     }
@@ -487,7 +510,9 @@ mod tests {
     fn inst(n: usize, args: Vec<Vec<Action>>) -> Vec<Action> {
         let mut result = vec![Action::EnterInstruction(vec![n])];
         for mut arg in args {
+            result.push(Action::EnterArgument);
             result.append(&mut arg);
+            result.push(Action::ExitArgument);
         }
         result.push(Action::ExitInstruction);
         result
@@ -507,7 +532,15 @@ mod tests {
     }
 
     fn expr(expression: TestExpr) -> Vec<Action> {
-        vec![Action::AddArgument(expression)]
+        match expression.node {
+            ExprNode::Ident(ident) => vec![Action::PushExprAtom(ExprAtom::Ident(ident))],
+            ExprNode::Literal(literal) => vec![Action::PushExprAtom(ExprAtom::Literal(literal))],
+            ExprNode::Parenthesized(e) => {
+                let mut actions = expr(*e);
+                actions.push(Action::ApplyExprOperator(ExprOperator::Parentheses));
+                actions
+            }
+        }
     }
 
     fn ident(identifier: <TestTokenSpec as TokenSpec>::Ident) -> TestExpr {
