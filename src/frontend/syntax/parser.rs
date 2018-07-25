@@ -268,10 +268,136 @@ mod tests {
     use diagnostics::SourceRange;
     use frontend::syntax::{self, ExprAtom, ExprNode, ExprOperator, ParsedExpr, TokenSpec};
     use std::borrow::Borrow;
+    use std::collections::HashMap;
+    use std::fmt::Debug;
+
+    #[derive(Debug, PartialEq)]
+    struct Symbolic;
+
+    impl TokenSpec for Symbolic {
+        type Command = SymCommand;
+        type Ident = SymIdent;
+        type Literal = SymLiteral;
+    }
+
+    #[derive(Debug, PartialEq)]
+    struct SymCommand(usize);
+
+    #[derive(Debug, PartialEq)]
+    struct SymIdent(usize);
+
+    #[derive(Debug, PartialEq)]
+    struct SymLiteral(usize);
+
+    type SymToken = Token<Symbolic>;
+
+    fn mk_sym_token(id: usize, token: Token<()>) -> SymToken {
+        match token {
+            Command(()) => Command(SymCommand(id)),
+            Ident(()) => Ident(SymIdent(id)),
+            Literal(()) => Literal(SymLiteral(id)),
+            ClosingParenthesis => ClosingParenthesis,
+            Colon => Colon,
+            Comma => Comma,
+            Endm => Endm,
+            Eol => Eol,
+            Macro => Macro,
+            OpeningParenthesis => OpeningParenthesis,
+        }
+    }
+
+    struct InputTokens {
+        tokens: Vec<SymToken>,
+        names: HashMap<String, usize>,
+    }
+
+    macro_rules! add_token {
+        ($input:expr, $token:expr) => {
+            let id = $input.tokens.len();
+            $input.tokens.push(mk_sym_token(id, $token))
+        };
+        ($input:expr, $name:ident @ $token:expr) => {
+            $input
+                .names
+                .insert(stringify!($name).into(), $input.tokens.len());
+            add_token!($input, $token)
+        };
+    }
+
+    macro_rules! input_tokens_impl {
+        ($input:expr, ) => {};
+        ($input:expr, $token:expr) => {
+            add_token!($input, $token)
+        };
+        ($input:expr, $token:expr, $($tail:tt)*) => {
+            add_token!($input, $token);
+            input_tokens_impl![$input, $($tail)*]
+        };
+        ($input:expr, $name:ident @ $token:expr) => {
+            add_token!($input, $name @ $token)
+        };
+        ($input:expr, $name:ident @ $token:expr, $($tail:tt)*) => {
+            add_token!($input, $name @ $token);
+            input_tokens_impl![$input, $($tail)*]
+        }
+    }
+
+    macro_rules! input_tokens {
+        () => {
+            InputTokens {
+                tokens: Vec::new(),
+                names: HashMap::new(),
+            }
+        };
+        ($($tokens:tt)*) => {{
+            let mut input = input_tokens![];
+            input_tokens_impl!(input, $($tokens)*);
+            input
+        }};
+    }
+
+    #[test]
+    fn test_token_macro() {
+        let tokens = input_tokens![
+            my_tok @ Command(()),
+            Literal(()),
+            next_one @ Macro,
+        ];
+        assert_eq!(
+            tokens.tokens,
+            [Command(SymCommand(0)), Literal(SymLiteral(1)), Macro]
+        );
+        assert_eq!(tokens.names.get("my_tok"), Some(&0));
+        assert_eq!(tokens.names.get("next_one"), Some(&2))
+    }
+
+    #[derive(Clone, Debug, PartialEq)]
+    struct SymRange<T> {
+        start: T,
+        end: T,
+    }
+
+    impl<T: Clone> From<T> for SymRange<T> {
+        fn from(x: T) -> SymRange<T> {
+            SymRange {
+                start: x.clone(),
+                end: x,
+            }
+        }
+    }
+
+    impl<T: Clone + Debug> SourceRange for SymRange<T> {
+        fn extend(&self, other: &Self) -> Self {
+            SymRange {
+                start: self.start.clone(),
+                end: other.end.clone(),
+            }
+        }
+    }
 
     #[test]
     fn parse_empty_src() {
-        assert_eq_actions([], vec![])
+        assert_eq_actions(input_tokens![], vec![])
     }
 
     struct TestContext {
@@ -290,23 +416,23 @@ mod tests {
 
     #[derive(Debug, PartialEq)]
     enum Action {
-        AddParameter(<TestTokenSpec as TokenSpec>::Ident),
+        AddParameter(SymIdent),
         ApplyExprOperator(ExprOperator),
         EnterArgument,
-        EnterInstruction(TestTrackingData),
-        EnterLine(Option<TestTrackingData>),
+        EnterInstruction(SymCommand),
+        EnterLine(Option<SymIdent>),
         EnterMacroArg,
         EnterMacroBody,
         EnterMacroDef,
-        EnterMacroInvocation(<TestTokenSpec as TokenSpec>::Ident),
+        EnterMacroInvocation(SymIdent),
         ExitArgument,
         ExitInstruction,
         ExitLine,
         ExitMacroArg,
         ExitMacroDef,
         ExitMacroInvocation,
-        PushExprAtom(ExprAtom<TestTokenSpec>),
-        PushTerminal(TestToken),
+        PushExprAtom(ExprAtom<Symbolic>),
+        PushTerminal(SymToken),
     }
 
     enum TokenSeqKind {
@@ -314,38 +440,19 @@ mod tests {
         MacroDef,
     }
 
-    #[derive(Clone, Debug, PartialEq)]
-    struct TestTokenSpec;
+    type TestExpr = syntax::ParsedExpr<Symbolic, SymRange<usize>>;
 
-    impl TokenSpec for TestTokenSpec {
-        type Command = ();
-        type Ident = usize;
-        type Literal = usize;
-    }
-
-    type TestToken = Token<TestTokenSpec>;
-    type TestTrackingData = Vec<usize>;
-    type TestExpr = syntax::ParsedExpr<TestTokenSpec, TestTrackingData>;
-
-    impl SourceRange for TestTrackingData {
-        fn extend(&self, other: &Self) -> Self {
-            self.iter().chain(other.iter()).cloned().collect()
-        }
-    }
-
-    impl<'a> syntax::FileContext<TestTokenSpec, TestTrackingData> for &'a mut TestContext {
+    impl<'a> syntax::FileContext<Symbolic, SymRange<usize>> for &'a mut TestContext {
         type LineActions = Self;
 
-        fn enter_line(
-            self,
-            label: Option<(<TestTokenSpec as TokenSpec>::Ident, TestTrackingData)>,
-        ) -> Self::LineActions {
-            self.actions.push(Action::EnterLine(label.map(|(_, n)| n)));
+        fn enter_line(self, label: Option<(SymIdent, SymRange<usize>)>) -> Self::LineActions {
+            self.actions
+                .push(Action::EnterLine(label.map(|(ident, _)| ident)));
             self
         }
     }
 
-    impl<'a> syntax::LineActions<TestTokenSpec, TestTrackingData> for &'a mut TestContext {
+    impl<'a> syntax::LineActions<Symbolic, SymRange<usize>> for &'a mut TestContext {
         type CommandContext = Self;
         type MacroParamsActions = Self;
         type MacroInvocationContext = Self;
@@ -353,9 +460,9 @@ mod tests {
 
         fn enter_command(
             self,
-            (_, n): (<TestTokenSpec as TokenSpec>::Command, TestTrackingData),
+            (command, _): (SymCommand, SymRange<usize>),
         ) -> Self::CommandContext {
-            self.actions.push(Action::EnterInstruction(n));
+            self.actions.push(Action::EnterInstruction(command));
             self
         }
 
@@ -367,7 +474,7 @@ mod tests {
 
         fn enter_macro_invocation(
             self,
-            name: (<TestTokenSpec as TokenSpec>::Ident, TestTrackingData),
+            name: (SymIdent, SymRange<usize>),
         ) -> Self::MacroInvocationContext {
             self.actions.push(Action::EnterMacroInvocation(name.0));
             self
@@ -379,8 +486,8 @@ mod tests {
         }
     }
 
-    impl<'a> syntax::CommandContext<TestTrackingData> for &'a mut TestContext {
-        type TokenSpec = TestTokenSpec;
+    impl<'a> syntax::CommandContext<SymRange<usize>> for &'a mut TestContext {
+        type TokenSpec = Symbolic;
         type ArgActions = Self;
         type Parent = Self;
 
@@ -395,15 +502,15 @@ mod tests {
         }
     }
 
-    impl<'a> syntax::ExprActions<TestTrackingData> for &'a mut TestContext {
-        type TokenSpec = TestTokenSpec;
+    impl<'a> syntax::ExprActions<SymRange<usize>> for &'a mut TestContext {
+        type TokenSpec = Symbolic;
         type Parent = Self;
 
-        fn push_atom(&mut self, atom: (ExprAtom<TestTokenSpec>, TestTrackingData)) {
+        fn push_atom(&mut self, atom: (ExprAtom<Symbolic>, SymRange<usize>)) {
             self.actions.push(Action::PushExprAtom(atom.0))
         }
 
-        fn apply_operator(&mut self, operator: (ExprOperator, TestTrackingData)) {
+        fn apply_operator(&mut self, operator: (ExprOperator, SymRange<usize>)) {
             self.actions.push(Action::ApplyExprOperator(operator.0))
         }
 
@@ -413,16 +520,13 @@ mod tests {
         }
     }
 
-    impl<'a> syntax::MacroParamsActions<TestTrackingData> for &'a mut TestContext {
-        type TokenSpec = TestTokenSpec;
+    impl<'a> syntax::MacroParamsActions<SymRange<usize>> for &'a mut TestContext {
+        type TokenSpec = Symbolic;
         type MacroBodyActions = Self;
         type Parent = Self;
 
-        fn add_parameter(
-            &mut self,
-            (n, _): (<Self::TokenSpec as TokenSpec>::Ident, TestTrackingData),
-        ) {
-            self.actions.push(Action::AddParameter(n))
+        fn add_parameter(&mut self, (ident, _): (SymIdent, SymRange<usize>)) {
+            self.actions.push(Action::AddParameter(ident))
         }
 
         fn exit(self) -> Self::MacroBodyActions {
@@ -431,8 +535,8 @@ mod tests {
         }
     }
 
-    impl<'a> syntax::MacroInvocationContext<TestTrackingData> for &'a mut TestContext {
-        type Token = TestToken;
+    impl<'a> syntax::MacroInvocationContext<SymRange<usize>> for &'a mut TestContext {
+        type Token = SymToken;
         type Parent = Self;
         type MacroArgContext = Self;
 
@@ -448,11 +552,11 @@ mod tests {
         }
     }
 
-    impl<'a> syntax::TokenSeqContext<TestTrackingData> for &'a mut TestContext {
-        type Token = TestToken;
+    impl<'a> syntax::TokenSeqContext<SymRange<usize>> for &'a mut TestContext {
+        type Token = SymToken;
         type Parent = Self;
 
-        fn push_token(&mut self, token: (Self::Token, TestTrackingData)) {
+        fn push_token(&mut self, token: (Self::Token, SymRange<usize>)) {
             self.actions.push(Action::PushTerminal(token.0))
         }
 
@@ -469,16 +573,16 @@ mod tests {
 
     #[test]
     fn parse_empty_line() {
-        assert_eq_actions([Eol], concat(vec![line(vec![]), line(vec![])]))
+        assert_eq_actions(input_tokens![Eol], concat(vec![line(vec![]), line(vec![])]))
     }
 
-    fn assert_eq_actions(
-        tokens: impl Borrow<[TestToken]>,
-        expected_actions: impl IntoIterator<Item = Action>,
-    ) {
+    fn assert_eq_actions(tokens: InputTokens, expected_actions: impl IntoIterator<Item = Action>) {
         let mut parsing_context = TestContext::new();
         parse_src(
-            tokens.borrow().iter().cloned().zip((0..).map(|n| vec![n])),
+            tokens
+                .tokens
+                .into_iter()
+                .zip((0..).map(|n| SymRange::from(n))),
             &mut parsing_context,
         );
         assert_eq!(
@@ -496,19 +600,19 @@ mod tests {
 
     #[test]
     fn parse_nullary_instruction() {
-        assert_eq_actions([Command(())], line(inst(0, vec![])))
+        assert_eq_actions(input_tokens![Command(())], line(inst(0, vec![])))
     }
 
     #[test]
     fn parse_nullary_instruction_after_eol() {
         assert_eq_actions(
-            [Eol, Command(())],
+            input_tokens![Eol, Command(())],
             concat(vec![line(vec![]), line(inst(1, vec![]))]),
         )
     }
 
-    fn inst(n: usize, args: Vec<Vec<Action>>) -> Vec<Action> {
-        let mut result = vec![Action::EnterInstruction(vec![n])];
+    fn inst(id: usize, args: Vec<Vec<Action>>) -> Vec<Action> {
+        let mut result = vec![Action::EnterInstruction(SymCommand(id))];
         for mut arg in args {
             result.push(Action::EnterArgument);
             result.append(&mut arg);
@@ -521,14 +625,17 @@ mod tests {
     #[test]
     fn parse_nullary_instruction_followed_by_eol() {
         assert_eq_actions(
-            [Command(()), Eol],
+            input_tokens![Command(()), Eol],
             concat(vec![line(inst(0, vec![])), line(vec![])]),
         )
     }
 
     #[test]
     fn parse_unary_instruction() {
-        assert_eq_actions([Command(()), Ident(1)], line(inst(0, vec![expr(ident(1))])))
+        assert_eq_actions(
+            input_tokens![Command(()), Ident(())],
+            line(inst(0, vec![expr(ident(1))])),
+        )
     }
 
     fn expr(expression: TestExpr) -> Vec<Action> {
@@ -543,40 +650,40 @@ mod tests {
         }
     }
 
-    fn ident(identifier: <TestTokenSpec as TokenSpec>::Ident) -> TestExpr {
+    fn ident(id: usize) -> TestExpr {
         ParsedExpr {
-            node: ExprNode::Ident(identifier),
-            interval: vec![identifier],
+            node: ExprNode::Ident(SymIdent(id)),
+            interval: id.into(),
         }
     }
 
     #[test]
     fn parse_binary_instruction() {
         assert_eq_actions(
-            [Command(()), Ident(1), Comma, Literal(3)],
+            input_tokens![Command(()), Ident(()), Comma, Literal(())],
             line(inst(0, vec![expr(ident(1)), expr(atom(3))])),
         );
     }
 
-    fn atom(n: <TestTokenSpec as TokenSpec>::Literal) -> TestExpr {
+    fn atom(id: usize) -> TestExpr {
         ParsedExpr {
-            node: ExprNode::Literal(n),
-            interval: vec![n],
+            node: ExprNode::Literal(SymLiteral(id)),
+            interval: id.into(),
         }
     }
 
     #[test]
     fn parse_two_instructions() {
-        let tokens = [
+        let tokens = input_tokens![
             Command(()),
-            Ident(1),
+            Ident(()),
             Comma,
-            Literal(3),
+            Literal(()),
             Eol,
             Command(()),
-            Literal(6),
+            Literal(()),
             Comma,
-            Ident(8),
+            Ident(()),
         ];
         let expected_actions = concat(vec![
             line(inst(0, vec![expr(ident(1)), expr(atom(3))])),
@@ -595,17 +702,17 @@ mod tests {
 
     #[test]
     fn parse_two_instructions_separated_by_blank_line() {
-        let tokens = [
+        let tokens = input_tokens![
             Command(()),
-            Literal(1),
+            Literal(()),
             Comma,
-            Ident(3),
+            Ident(()),
             Eol,
             Eol,
             Command(()),
-            Ident(7),
+            Ident(()),
             Comma,
-            Literal(9),
+            Literal(()),
         ];
         let expected_actions = concat(vec![
             line(inst(0, vec![expr(atom(1)), expr(ident(3))])),
@@ -617,18 +724,22 @@ mod tests {
 
     #[test]
     fn parse_empty_macro_definition() {
-        let tokens = [Ident(0), Colon, Macro, Eol, Endm];
+        let tokens = input_tokens![Ident(()), Colon, Macro, Eol, Endm];
         let expected_actions = macro_def(0, [], vec![]);
         assert_eq_actions(tokens, expected_actions);
     }
 
-    fn macro_def(
-        label: usize,
-        params: impl Borrow<[<TestTokenSpec as TokenSpec>::Ident]>,
-        tokens: Vec<TestToken>,
-    ) -> Vec<Action> {
-        let mut result = vec![Action::EnterLine(Some(vec![label])), Action::EnterMacroDef];
-        result.extend(params.borrow().iter().map(|&n| Action::AddParameter(n)));
+    fn macro_def(label: usize, params: impl Borrow<[usize]>, tokens: Vec<SymToken>) -> Vec<Action> {
+        let mut result = vec![
+            Action::EnterLine(Some(SymIdent(label))),
+            Action::EnterMacroDef,
+        ];
+        result.extend(
+            params
+                .borrow()
+                .iter()
+                .map(|&id| Action::AddParameter(SymIdent(id))),
+        );
         result.push(Action::EnterMacroBody);
         result.extend(tokens.into_iter().map(|t| Action::PushTerminal(t)));
         result.push(Action::ExitMacroDef);
@@ -638,48 +749,45 @@ mod tests {
 
     #[test]
     fn parse_macro_definition_with_instruction() {
-        let tokens = [Ident(0), Colon, Macro, Eol, Command(()), Eol, Endm];
-        let expected_actions = macro_def(0, [], vec![Command(()), Eol]);
+        let tokens = input_tokens![Ident(()), Colon, Macro, Eol, Command(()), Eol, Endm];
+        let expected_actions = macro_def(0, [], vec![Command(SymCommand(4)), Eol]);
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_nonempty_macro_def_with_two_params() {
-        let tokens = [
-            Ident(0),
+        let tokens = input_tokens![
+            Ident(()),
             Colon,
             Macro,
-            Ident(3),
+            Ident(()),
             Comma,
-            Ident(5),
+            Ident(()),
             Eol,
             Command(()),
             Eol,
             Endm,
         ];
-        let expected = macro_def(0, vec![3, 5], vec![Command(()), Eol]);
+        let expected = macro_def(0, vec![3, 5], vec![Command(SymCommand(7)), Eol]);
         assert_eq_actions(tokens, expected)
     }
 
     #[test]
     fn parse_label() {
-        let tokens = [Ident(0), Colon, Eol];
-        let expected_actions = concat(vec![add_label((0, 0), vec![]), line(vec![])]);
+        let tokens = input_tokens![Ident(()), Colon, Eol];
+        let expected_actions = concat(vec![add_label(0, vec![]), line(vec![])]);
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_labeled_instruction() {
-        let tokens = [Ident(0), Colon, Command(()), Eol];
-        let expected_actions = concat(vec![add_label((0, 0), inst(2, vec![])), line(vec![])]);
+        let tokens = input_tokens![Ident(()), Colon, Command(()), Eol];
+        let expected_actions = concat(vec![add_label(0, inst(2, vec![])), line(vec![])]);
         assert_eq_actions(tokens, expected_actions)
     }
 
-    fn add_label(
-        (_, n): (<TestTokenSpec as TokenSpec>::Ident, usize),
-        mut following_actions: Vec<Action>,
-    ) -> Vec<Action> {
-        let mut result = vec![Action::EnterLine(Some(vec![n]))];
+    fn add_label(id: usize, mut following_actions: Vec<Action>) -> Vec<Action> {
+        let mut result = vec![Action::EnterLine(Some(SymIdent(id)))];
         result.append(&mut following_actions);
         result.push(Action::ExitLine);
         result
@@ -687,10 +795,10 @@ mod tests {
 
     #[test]
     fn parse_deref_operand() {
-        let tokens = [
+        let tokens = input_tokens![
             Command(()),
             OpeningParenthesis,
-            Literal(2),
+            Literal(()),
             ClosingParenthesis,
         ];
         let expected_actions = line(inst(0, vec![expr(deref(1, atom(2), 3))]));
@@ -700,57 +808,65 @@ mod tests {
     fn deref(left: usize, expr: TestExpr, right: usize) -> TestExpr {
         ParsedExpr {
             node: ExprNode::Parenthesized(Box::new(expr)),
-            interval: vec![left, right],
+            interval: SymRange::from(left).extend(&right.into()),
         }
     }
 
     #[test]
     fn parse_nullary_macro_invocation() {
-        let tokens = [Ident(0)];
+        let tokens = input_tokens![Ident(())];
         let expected_actions = line(invoke(0, vec![]));
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_unary_macro_invocation() {
-        let tokens = [Ident(0), Literal(1)];
-        let expected_actions = line(invoke(0, vec![vec![Literal(1)]]));
+        let tokens = input_tokens![Ident(()), Literal(())];
+        let expected_actions = line(invoke(0, vec![vec![Literal(SymLiteral(1))]]));
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_unary_macro_invocation_with_multiple_terminals() {
-        let tokens = [Ident(0), Literal(1), Literal(2), Literal(3)];
-        let expected_actions = line(invoke(0, vec![vec![Literal(1), Literal(2), Literal(3)]]));
+        let tokens = input_tokens![Ident(()), Literal(()), Literal(()), Literal(())];
+        let expected_actions = line(invoke(
+            0,
+            vec![vec![
+                Literal(SymLiteral(1)),
+                Literal(SymLiteral(2)),
+                Literal(SymLiteral(3)),
+            ]],
+        ));
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_binary_macro_invocation_with_multiple_terminals() {
-        let tokens = [
-            Ident(0),
-            Literal(1),
-            Literal(2),
+        let tokens = input_tokens![
+            Ident(()),
+            Literal(()),
+            Literal(()),
             Comma,
-            Literal(4),
-            Literal(5),
-            Literal(6),
+            Literal(()),
+            Literal(()),
+            Literal(()),
         ];
         let expected_actions = line(invoke(
             0,
             vec![
-                vec![Literal(1), Literal(2)],
-                vec![Literal(4), Literal(5), Literal(6)],
+                vec![Literal(SymLiteral(1)), Literal(SymLiteral(2))],
+                vec![
+                    Literal(SymLiteral(4)),
+                    Literal(SymLiteral(5)),
+                    Literal(SymLiteral(6)),
+                ],
             ],
         ));
         assert_eq_actions(tokens, expected_actions)
     }
 
-    fn invoke(
-        name: <TestTokenSpec as TokenSpec>::Literal,
-        args: Vec<Vec<TestToken>>,
-    ) -> Vec<Action> {
-        let mut actions = vec![Action::EnterMacroInvocation(name)];
+    fn invoke(name: usize, args: Vec<Vec<SymToken>>) -> Vec<Action> {
+        let mut actions = vec![Action::EnterMacroInvocation(SymIdent(name))];
         for arg in args.into_iter() {
             actions.push(Action::EnterMacroArg);
             actions.extend(arg.into_iter().map(|t| Action::PushTerminal(t)));
