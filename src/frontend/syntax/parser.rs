@@ -266,7 +266,7 @@ mod tests {
     };
 
     use diagnostics::SourceRange;
-    use frontend::syntax::{self, ExprAtom, ExprNode, ExprOperator, ParsedExpr, TokenSpec};
+    use frontend::syntax::{self, ExprAtom, ExprOperator, TokenSpec};
     use std::borrow::Borrow;
     use std::collections::HashMap;
     use std::fmt::Debug;
@@ -440,8 +440,6 @@ mod tests {
         MacroDef,
     }
 
-    type TestExpr = syntax::ParsedExpr<Symbolic, SymRange<usize>>;
-
     impl<'a> syntax::FileContext<Symbolic, SymRange<usize>> for &'a mut TestContext {
         type LineActions = Self;
 
@@ -600,22 +598,22 @@ mod tests {
 
     #[test]
     fn parse_nullary_instruction() {
-        assert_eq_actions(input_tokens![Command(())], line(inst(0, vec![])))
+        assert_eq_actions(input_tokens![Command(())], line(inst(0, [])))
     }
 
     #[test]
     fn parse_nullary_instruction_after_eol() {
         assert_eq_actions(
             input_tokens![Eol, Command(())],
-            concat(vec![line(vec![]), line(inst(1, vec![]))]),
+            concat(vec![line(vec![]), line(inst(1, []))]),
         )
     }
 
-    fn inst(id: usize, args: Vec<Vec<Action>>) -> Vec<Action> {
+    fn inst(id: usize, args: impl Borrow<[SymExpr]>) -> Vec<Action> {
         let mut result = vec![Action::EnterInstruction(SymCommand(id))];
-        for mut arg in args {
+        for mut arg in args.borrow().iter().cloned() {
             result.push(Action::EnterArgument);
-            result.append(&mut arg);
+            result.append(&mut arg.into_actions());
             result.push(Action::ExitArgument);
         }
         result.push(Action::ExitInstruction);
@@ -626,7 +624,7 @@ mod tests {
     fn parse_nullary_instruction_followed_by_eol() {
         assert_eq_actions(
             input_tokens![Command(()), Eol],
-            concat(vec![line(inst(0, vec![])), line(vec![])]),
+            concat(vec![line(inst(0, [])), line(vec![])]),
         )
     }
 
@@ -634,26 +632,44 @@ mod tests {
     fn parse_unary_instruction() {
         assert_eq_actions(
             input_tokens![Command(()), Ident(())],
-            line(inst(0, vec![expr(ident(1))])),
+            line(inst(0, [ident(1)])),
         )
     }
 
-    fn expr(expression: TestExpr) -> Vec<Action> {
-        match expression.node {
-            ExprNode::Ident(ident) => vec![Action::PushExprAtom(ExprAtom::Ident(ident))],
-            ExprNode::Literal(literal) => vec![Action::PushExprAtom(ExprAtom::Literal(literal))],
-            ExprNode::Parenthesized(e) => {
-                let mut actions = expr(*e);
-                actions.push(Action::ApplyExprOperator(ExprOperator::Parentheses));
-                actions
-            }
-        }
+    fn ident(id: usize) -> SymExpr {
+        SymExpr::Ident(id)
     }
 
-    fn ident(id: usize) -> TestExpr {
-        ParsedExpr {
-            node: ExprNode::Ident(SymIdent(id)),
-            interval: id.into(),
+    fn literal(id: usize) -> SymExpr {
+        SymExpr::Literal(id)
+    }
+
+    fn parentheses(open_id: usize, expr: SymExpr, close_id: usize) -> SymExpr {
+        SymExpr::Parentheses(open_id, Box::new(expr), close_id)
+    }
+
+    #[derive(Clone)]
+    enum SymExpr {
+        Ident(usize),
+        Literal(usize),
+        Parentheses(usize, Box<SymExpr>, usize),
+    }
+
+    impl SymExpr {
+        fn into_actions(self) -> Vec<Action> {
+            match self {
+                SymExpr::Ident(ident) => {
+                    vec![Action::PushExprAtom(ExprAtom::Ident(SymIdent(ident)))]
+                }
+                SymExpr::Literal(literal) => {
+                    vec![Action::PushExprAtom(ExprAtom::Literal(SymLiteral(literal)))]
+                }
+                SymExpr::Parentheses(_, expr, _) => {
+                    let mut actions = expr.into_actions();
+                    actions.push(Action::ApplyExprOperator(ExprOperator::Parentheses));
+                    actions
+                }
+            }
         }
     }
 
@@ -661,15 +677,8 @@ mod tests {
     fn parse_binary_instruction() {
         assert_eq_actions(
             input_tokens![Command(()), Ident(()), Comma, Literal(())],
-            line(inst(0, vec![expr(ident(1)), expr(atom(3))])),
+            line(inst(0, [ident(1), literal(3)])),
         );
-    }
-
-    fn atom(id: usize) -> TestExpr {
-        ParsedExpr {
-            node: ExprNode::Literal(SymLiteral(id)),
-            interval: id.into(),
-        }
     }
 
     #[test]
@@ -686,8 +695,8 @@ mod tests {
             Ident(()),
         ];
         let expected_actions = concat(vec![
-            line(inst(0, vec![expr(ident(1)), expr(atom(3))])),
-            line(inst(5, vec![expr(atom(6)), expr(ident(8))])),
+            line(inst(0, [ident(1), literal(3)])),
+            line(inst(5, [literal(6), ident(8)])),
         ]);
         assert_eq_actions(tokens, expected_actions)
     }
@@ -715,9 +724,9 @@ mod tests {
             Literal(()),
         ];
         let expected_actions = concat(vec![
-            line(inst(0, vec![expr(atom(1)), expr(ident(3))])),
+            line(inst(0, [literal(1), ident(3)])),
             line(vec![]),
-            line(inst(6, vec![expr(ident(7)), expr(atom(9))])),
+            line(inst(6, [ident(7), literal(9)])),
         ]);
         assert_eq_actions(tokens, expected_actions)
     }
@@ -782,7 +791,7 @@ mod tests {
     #[test]
     fn parse_labeled_instruction() {
         let tokens = input_tokens![Ident(()), Colon, Command(()), Eol];
-        let expected_actions = concat(vec![add_label(0, inst(2, vec![])), line(vec![])]);
+        let expected_actions = concat(vec![add_label(0, inst(2, [])), line(vec![])]);
         assert_eq_actions(tokens, expected_actions)
     }
 
@@ -801,15 +810,8 @@ mod tests {
             Literal(()),
             ClosingParenthesis,
         ];
-        let expected_actions = line(inst(0, vec![expr(deref(1, atom(2), 3))]));
+        let expected_actions = line(inst(0, [parentheses(1, literal(2), 3)]));
         assert_eq_actions(tokens, expected_actions)
-    }
-
-    fn deref(left: usize, expr: TestExpr, right: usize) -> TestExpr {
-        ParsedExpr {
-            node: ExprNode::Parenthesized(Box::new(expr)),
-            interval: SymRange::from(left).extend(&right.into()),
-        }
     }
 
     #[test]
