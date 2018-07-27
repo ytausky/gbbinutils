@@ -397,7 +397,7 @@ mod tests {
 
     #[test]
     fn parse_empty_src() {
-        assert_eq_actions(input_tokens![], vec![])
+        assert_eq_actions(input_tokens![], file([]))
     }
 
     struct TestContext {
@@ -432,7 +432,7 @@ mod tests {
         ExitMacroDef,
         ExitMacroInvocation,
         PushExprAtom(ExprAtom<Symbolic>),
-        PushTerminal(SymToken),
+        PushTerminal(usize),
     }
 
     enum TokenSeqKind {
@@ -555,7 +555,9 @@ mod tests {
         type Parent = Self;
 
         fn push_token(&mut self, token: (Self::Token, SymRange<usize>)) {
-            self.actions.push(Action::PushTerminal(token.0))
+            let id = token.1.start;
+            assert_eq!(id, token.1.end);
+            self.actions.push(Action::PushTerminal(id))
         }
 
         fn exit(self) -> Self::Parent {
@@ -571,10 +573,13 @@ mod tests {
 
     #[test]
     fn parse_empty_line() {
-        assert_eq_actions(input_tokens![Eol], concat(vec![line(vec![]), line(vec![])]))
+        assert_eq_actions(
+            input_tokens![Eol],
+            file([unlabeled(empty()), unlabeled(empty())]),
+        )
     }
 
-    fn assert_eq_actions(tokens: InputTokens, expected_actions: impl IntoIterator<Item = Action>) {
+    fn assert_eq_actions(tokens: InputTokens, expected: File) {
         let mut parsing_context = TestContext::new();
         parse_src(
             tokens
@@ -583,48 +588,150 @@ mod tests {
                 .zip((0..).map(|n| SymRange::from(n))),
             &mut parsing_context,
         );
-        assert_eq!(
-            parsing_context.actions,
-            expected_actions.into_iter().collect::<Vec<_>>()
-        )
+        assert_eq!(parsing_context.actions, expected.into_actions())
     }
 
-    fn line(mut actions: Vec<Action>) -> Vec<Action> {
-        let mut result = vec![Action::EnterLine(None)];
-        result.append(&mut actions);
-        result.push(Action::ExitLine);
-        result
+    struct File(Vec<Line>);
+
+    fn file(lines: impl Borrow<[Line]>) -> File {
+        File(lines.borrow().iter().cloned().collect())
+    }
+
+    impl File {
+        fn into_actions(self) -> Vec<Action> {
+            self.0.into_iter().flat_map(Line::into_actions).collect()
+        }
     }
 
     #[test]
     fn parse_nullary_instruction() {
-        assert_eq_actions(input_tokens![Command(())], line(inst(0, [])))
+        assert_eq_actions(
+            input_tokens![Command(())],
+            file([unlabeled(command(0, []))]),
+        )
     }
 
     #[test]
     fn parse_nullary_instruction_after_eol() {
         assert_eq_actions(
             input_tokens![Eol, Command(())],
-            concat(vec![line(vec![]), line(inst(1, []))]),
+            file([unlabeled(empty()), unlabeled(command(1, []))]),
         )
     }
 
-    fn inst(id: usize, args: impl Borrow<[SymExpr]>) -> Vec<Action> {
-        let mut result = vec![Action::EnterInstruction(SymCommand(id))];
-        for mut arg in args.borrow().iter().cloned() {
-            result.push(Action::EnterArgument);
-            result.append(&mut arg.into_actions());
-            result.push(Action::ExitArgument);
+    #[derive(Clone)]
+    struct Line(Option<usize>, Option<LineBody>);
+
+    fn labeled(label: usize, body: Option<LineBody>) -> Line {
+        Line(Some(label), body)
+    }
+
+    fn unlabeled(body: Option<LineBody>) -> Line {
+        Line(None, body)
+    }
+
+    impl Line {
+        fn into_actions(self) -> Vec<Action> {
+            let mut actions = vec![Action::EnterLine(self.0.map(|id| SymIdent(id)))];
+            if let Some(body) = self.1 {
+                actions.append(&mut body.into_actions())
+            }
+            actions.push(Action::ExitLine);
+            actions
         }
-        result.push(Action::ExitInstruction);
-        result
+    }
+
+    fn empty() -> Option<LineBody> {
+        None
+    }
+
+    #[derive(Clone)]
+    enum LineBody {
+        Command(usize, Vec<SymExpr>),
+        Invoke(usize, Vec<TokenSeq>),
+        MacroDef(Vec<usize>, Vec<usize>),
+    }
+
+    fn command(id: usize, args: impl Borrow<[SymExpr]>) -> Option<LineBody> {
+        Some(LineBody::Command(
+            id,
+            args.borrow().iter().cloned().collect(),
+        ))
+    }
+
+    fn invoke(id: usize, args: impl Borrow<[TokenSeq]>) -> Option<LineBody> {
+        Some(LineBody::Invoke(
+            id,
+            args.borrow().iter().cloned().collect(),
+        ))
+    }
+
+    fn macro_def(params: impl Borrow<[usize]>, body: impl Borrow<[usize]>) -> Option<LineBody> {
+        Some(LineBody::MacroDef(
+            params.borrow().iter().cloned().collect(),
+            body.borrow().iter().cloned().collect(),
+        ))
+    }
+
+    impl LineBody {
+        fn into_actions(self) -> Vec<Action> {
+            let mut actions = Vec::new();
+            match self {
+                LineBody::Command(id, args) => {
+                    actions.push(Action::EnterInstruction(SymCommand(id)));
+                    for mut arg in args {
+                        actions.push(Action::EnterArgument);
+                        actions.append(&mut arg.into_actions());
+                        actions.push(Action::ExitArgument)
+                    }
+                    actions.push(Action::ExitInstruction)
+                }
+                LineBody::Invoke(id, args) => {
+                    actions.push(Action::EnterMacroInvocation(SymIdent(id)));
+                    for arg in args {
+                        actions.push(Action::EnterMacroArg);
+                        actions.append(&mut arg.into_actions());
+                        actions.push(Action::ExitMacroArg)
+                    }
+                    actions.push(Action::ExitMacroInvocation)
+                }
+                LineBody::MacroDef(params, body) => {
+                    actions.push(Action::EnterMacroDef);
+                    actions.extend(
+                        params
+                            .into_iter()
+                            .map(|id| Action::AddParameter(SymIdent(id))),
+                    );
+                    actions.push(Action::EnterMacroBody);
+                    actions.extend(body.into_iter().map(|t| Action::PushTerminal(t)));
+                    actions.push(Action::ExitMacroDef)
+                }
+            }
+            actions
+        }
+    }
+
+    #[derive(Clone)]
+    struct TokenSeq(Vec<usize>);
+
+    fn token_seq(ids: impl Borrow<[usize]>) -> TokenSeq {
+        TokenSeq(ids.borrow().iter().cloned().collect())
+    }
+
+    impl TokenSeq {
+        fn into_actions(self) -> Vec<Action> {
+            self.0
+                .into_iter()
+                .map(|id| Action::PushTerminal(id))
+                .collect()
+        }
     }
 
     #[test]
     fn parse_nullary_instruction_followed_by_eol() {
         assert_eq_actions(
             input_tokens![Command(()), Eol],
-            concat(vec![line(inst(0, [])), line(vec![])]),
+            file([unlabeled(command(0, [])), unlabeled(empty())]),
         )
     }
 
@@ -632,7 +739,7 @@ mod tests {
     fn parse_unary_instruction() {
         assert_eq_actions(
             input_tokens![Command(()), Ident(())],
-            line(inst(0, [ident(1)])),
+            file([unlabeled(command(0, [ident(1)]))]),
         )
     }
 
@@ -677,7 +784,7 @@ mod tests {
     fn parse_binary_instruction() {
         assert_eq_actions(
             input_tokens![Command(()), Ident(()), Comma, Literal(())],
-            line(inst(0, [ident(1), literal(3)])),
+            file([unlabeled(command(0, [ident(1), literal(3)]))]),
         );
     }
 
@@ -694,19 +801,11 @@ mod tests {
             Comma,
             Ident(()),
         ];
-        let expected_actions = concat(vec![
-            line(inst(0, [ident(1), literal(3)])),
-            line(inst(5, [literal(6), ident(8)])),
+        let expected = file([
+            unlabeled(command(0, [ident(1), literal(3)])),
+            unlabeled(command(5, [literal(6), ident(8)])),
         ]);
-        assert_eq_actions(tokens, expected_actions)
-    }
-
-    fn concat(actions: Vec<Vec<Action>>) -> Vec<Action> {
-        let mut result = Vec::new();
-        for mut vector in actions {
-            result.append(&mut vector)
-        }
-        result
+        assert_eq_actions(tokens, expected)
     }
 
     #[test]
@@ -723,43 +822,25 @@ mod tests {
             Comma,
             Literal(()),
         ];
-        let expected_actions = concat(vec![
-            line(inst(0, [literal(1), ident(3)])),
-            line(vec![]),
-            line(inst(6, [ident(7), literal(9)])),
+        let expected = file([
+            unlabeled(command(0, [literal(1), ident(3)])),
+            unlabeled(empty()),
+            unlabeled(command(6, [ident(7), literal(9)])),
         ]);
-        assert_eq_actions(tokens, expected_actions)
+        assert_eq_actions(tokens, expected)
     }
 
     #[test]
     fn parse_empty_macro_definition() {
         let tokens = input_tokens![Ident(()), Colon, Macro, Eol, Endm];
-        let expected_actions = macro_def(0, [], vec![]);
+        let expected_actions = file([labeled(0, macro_def([], []))]);
         assert_eq_actions(tokens, expected_actions);
-    }
-
-    fn macro_def(label: usize, params: impl Borrow<[usize]>, tokens: Vec<SymToken>) -> Vec<Action> {
-        let mut result = vec![
-            Action::EnterLine(Some(SymIdent(label))),
-            Action::EnterMacroDef,
-        ];
-        result.extend(
-            params
-                .borrow()
-                .iter()
-                .map(|&id| Action::AddParameter(SymIdent(id))),
-        );
-        result.push(Action::EnterMacroBody);
-        result.extend(tokens.into_iter().map(|t| Action::PushTerminal(t)));
-        result.push(Action::ExitMacroDef);
-        result.push(Action::ExitLine);
-        result
     }
 
     #[test]
     fn parse_macro_definition_with_instruction() {
         let tokens = input_tokens![Ident(()), Colon, Macro, Eol, Command(()), Eol, Endm];
-        let expected_actions = macro_def(0, [], vec![Command(SymCommand(4)), Eol]);
+        let expected_actions = file([labeled(0, macro_def([], [4, 5]))]);
         assert_eq_actions(tokens, expected_actions)
     }
 
@@ -777,29 +858,22 @@ mod tests {
             Eol,
             Endm,
         ];
-        let expected = macro_def(0, vec![3, 5], vec![Command(SymCommand(7)), Eol]);
+        let expected = file([labeled(0, macro_def([3, 5], [7, 8]))]);
         assert_eq_actions(tokens, expected)
     }
 
     #[test]
     fn parse_label() {
         let tokens = input_tokens![Ident(()), Colon, Eol];
-        let expected_actions = concat(vec![add_label(0, vec![]), line(vec![])]);
+        let expected_actions = file([labeled(0, empty()), unlabeled(empty())]);
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_labeled_instruction() {
         let tokens = input_tokens![Ident(()), Colon, Command(()), Eol];
-        let expected_actions = concat(vec![add_label(0, inst(2, [])), line(vec![])]);
-        assert_eq_actions(tokens, expected_actions)
-    }
-
-    fn add_label(id: usize, mut following_actions: Vec<Action>) -> Vec<Action> {
-        let mut result = vec![Action::EnterLine(Some(SymIdent(id)))];
-        result.append(&mut following_actions);
-        result.push(Action::ExitLine);
-        result
+        let expected = file([labeled(0, command(2, [])), unlabeled(empty())]);
+        assert_eq_actions(tokens, expected)
     }
 
     #[test]
@@ -810,35 +884,28 @@ mod tests {
             Literal(()),
             ClosingParenthesis,
         ];
-        let expected_actions = line(inst(0, [parentheses(1, literal(2), 3)]));
-        assert_eq_actions(tokens, expected_actions)
+        let expected = file([unlabeled(command(0, [parentheses(1, literal(2), 3)]))]);
+        assert_eq_actions(tokens, expected)
     }
 
     #[test]
     fn parse_nullary_macro_invocation() {
         let tokens = input_tokens![Ident(())];
-        let expected_actions = line(invoke(0, vec![]));
+        let expected_actions = file([unlabeled(invoke(0, []))]);
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_unary_macro_invocation() {
         let tokens = input_tokens![Ident(()), Literal(())];
-        let expected_actions = line(invoke(0, vec![vec![Literal(SymLiteral(1))]]));
+        let expected_actions = file([unlabeled(invoke(0, [token_seq([1])]))]);
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_unary_macro_invocation_with_multiple_terminals() {
         let tokens = input_tokens![Ident(()), Literal(()), Literal(()), Literal(())];
-        let expected_actions = line(invoke(
-            0,
-            vec![vec![
-                Literal(SymLiteral(1)),
-                Literal(SymLiteral(2)),
-                Literal(SymLiteral(3)),
-            ]],
-        ));
+        let expected_actions = file([unlabeled(invoke(0, [token_seq([1, 2, 3])]))]);
         assert_eq_actions(tokens, expected_actions)
     }
 
@@ -853,28 +920,10 @@ mod tests {
             Literal(()),
             Literal(()),
         ];
-        let expected_actions = line(invoke(
+        let expected_actions = file([unlabeled(invoke(
             0,
-            vec![
-                vec![Literal(SymLiteral(1)), Literal(SymLiteral(2))],
-                vec![
-                    Literal(SymLiteral(4)),
-                    Literal(SymLiteral(5)),
-                    Literal(SymLiteral(6)),
-                ],
-            ],
-        ));
+            [token_seq([1, 2]), token_seq([4, 5, 6])],
+        ))]);
         assert_eq_actions(tokens, expected_actions)
-    }
-
-    fn invoke(name: usize, args: Vec<Vec<SymToken>>) -> Vec<Action> {
-        let mut actions = vec![Action::EnterMacroInvocation(SymIdent(name))];
-        for arg in args.into_iter() {
-            actions.push(Action::EnterMacroArg);
-            actions.extend(arg.into_iter().map(|t| Action::PushTerminal(t)));
-            actions.push(Action::ExitMacroArg);
-        }
-        actions.push(Action::ExitMacroInvocation);
-        actions
     }
 }
