@@ -271,7 +271,7 @@ mod tests {
     use std::collections::HashMap;
     use std::fmt::Debug;
 
-    #[derive(Debug, PartialEq)]
+    #[derive(Clone, Debug, PartialEq)]
     struct Symbolic;
 
     impl TokenSpec for Symbolic {
@@ -280,13 +280,13 @@ mod tests {
         type Literal = SymLiteral;
     }
 
-    #[derive(Debug, PartialEq)]
+    #[derive(Clone, Debug, PartialEq)]
     struct SymCommand(usize);
 
-    #[derive(Debug, PartialEq)]
+    #[derive(Clone, Debug, PartialEq)]
     struct SymIdent(usize);
 
-    #[derive(Debug, PartialEq)]
+    #[derive(Clone, Debug, PartialEq)]
     struct SymLiteral(usize);
 
     type SymToken = Token<Symbolic>;
@@ -584,11 +584,39 @@ mod tests {
         parse_src(
             tokens
                 .tokens
-                .into_iter()
+                .iter()
+                .cloned()
                 .zip((0..).map(|n| SymRange::from(n))),
             &mut parsing_context,
         );
-        assert_eq!(parsing_context.actions, expected.into_actions())
+        assert_eq!(parsing_context.actions, expected.into_actions(&tokens))
+    }
+
+    #[derive(Clone)]
+    enum TokenRef {
+        Id(usize),
+        Name(String),
+    }
+
+    impl From<usize> for TokenRef {
+        fn from(id: usize) -> Self {
+            TokenRef::Id(id)
+        }
+    }
+
+    impl From<&'static str> for TokenRef {
+        fn from(name: &'static str) -> Self {
+            TokenRef::Name(name.to_string())
+        }
+    }
+
+    impl TokenRef {
+        fn resolve(&self, input: &InputTokens) -> usize {
+            match self {
+                TokenRef::Id(id) => *id,
+                TokenRef::Name(name) => *input.names.get(name).unwrap(),
+            }
+        }
     }
 
     struct File(Vec<Line>);
@@ -598,24 +626,27 @@ mod tests {
     }
 
     impl File {
-        fn into_actions(self) -> Vec<Action> {
-            self.0.into_iter().flat_map(Line::into_actions).collect()
+        fn into_actions(self, input: &InputTokens) -> Vec<Action> {
+            self.0
+                .into_iter()
+                .flat_map(|line| line.into_actions(input))
+                .collect()
         }
     }
 
     #[test]
     fn parse_nullary_instruction() {
         assert_eq_actions(
-            input_tokens![Command(())],
-            file([unlabeled(command(0, []))]),
+            input_tokens![nop @ Command(())],
+            file([unlabeled(command("nop", []))]),
         )
     }
 
     #[test]
     fn parse_nullary_instruction_after_eol() {
         assert_eq_actions(
-            input_tokens![Eol, Command(())],
-            file([unlabeled(empty()), unlabeled(command(1, []))]),
+            input_tokens![Eol, nop @ Command(())],
+            file([unlabeled(empty()), unlabeled(command("nop", []))]),
         )
     }
 
@@ -631,10 +662,10 @@ mod tests {
     }
 
     impl Line {
-        fn into_actions(self) -> Vec<Action> {
+        fn into_actions(self, input: &InputTokens) -> Vec<Action> {
             let mut actions = vec![Action::EnterLine(self.0.map(|id| SymIdent(id)))];
             if let Some(body) = self.1 {
-                actions.append(&mut body.into_actions())
+                actions.append(&mut body.into_actions(input))
             }
             actions.push(Action::ExitLine);
             actions
@@ -647,14 +678,14 @@ mod tests {
 
     #[derive(Clone)]
     enum LineBody {
-        Command(usize, Vec<SymExpr>),
+        Command(TokenRef, Vec<SymExpr>),
         Invoke(usize, Vec<TokenSeq>),
         MacroDef(Vec<usize>, Vec<usize>),
     }
 
-    fn command(id: usize, args: impl Borrow<[SymExpr]>) -> Option<LineBody> {
+    fn command(id: impl Into<TokenRef>, args: impl Borrow<[SymExpr]>) -> Option<LineBody> {
         Some(LineBody::Command(
-            id,
+            id.into(),
             args.borrow().iter().cloned().collect(),
         ))
     }
@@ -674,14 +705,14 @@ mod tests {
     }
 
     impl LineBody {
-        fn into_actions(self) -> Vec<Action> {
+        fn into_actions(self, input: &InputTokens) -> Vec<Action> {
             let mut actions = Vec::new();
             match self {
                 LineBody::Command(id, args) => {
-                    actions.push(Action::EnterInstruction(SymCommand(id)));
+                    actions.push(Action::EnterInstruction(SymCommand(id.resolve(input))));
                     for mut arg in args {
                         actions.push(Action::EnterArgument);
-                        actions.append(&mut arg.into_actions());
+                        actions.append(&mut arg.into_actions(input));
                         actions.push(Action::ExitArgument)
                     }
                     actions.push(Action::ExitInstruction)
@@ -730,49 +761,53 @@ mod tests {
     #[test]
     fn parse_nullary_instruction_followed_by_eol() {
         assert_eq_actions(
-            input_tokens![Command(()), Eol],
-            file([unlabeled(command(0, [])), unlabeled(empty())]),
+            input_tokens![daa @ Command(()), Eol],
+            file([unlabeled(command("daa", [])), unlabeled(empty())]),
         )
     }
 
     #[test]
     fn parse_unary_instruction() {
         assert_eq_actions(
-            input_tokens![Command(()), Ident(())],
-            file([unlabeled(command(0, [ident(1)]))]),
+            input_tokens![db @ Command(()), my_ptr @ Ident(())],
+            file([unlabeled(command("db", [ident("my_ptr")]))]),
         )
     }
 
-    fn ident(id: usize) -> SymExpr {
-        SymExpr::Ident(id)
+    fn ident(id: impl Into<TokenRef>) -> SymExpr {
+        SymExpr::Ident(id.into())
     }
 
-    fn literal(id: usize) -> SymExpr {
-        SymExpr::Literal(id)
+    fn literal(id: impl Into<TokenRef>) -> SymExpr {
+        SymExpr::Literal(id.into())
     }
 
-    fn parentheses(open_id: usize, expr: SymExpr, close_id: usize) -> SymExpr {
-        SymExpr::Parentheses(open_id, Box::new(expr), close_id)
+    fn parentheses(
+        open_id: impl Into<TokenRef>,
+        expr: SymExpr,
+        close_id: impl Into<TokenRef>,
+    ) -> SymExpr {
+        SymExpr::Parentheses(open_id.into(), Box::new(expr), close_id.into())
     }
 
     #[derive(Clone)]
     enum SymExpr {
-        Ident(usize),
-        Literal(usize),
-        Parentheses(usize, Box<SymExpr>, usize),
+        Ident(TokenRef),
+        Literal(TokenRef),
+        Parentheses(TokenRef, Box<SymExpr>, TokenRef),
     }
 
     impl SymExpr {
-        fn into_actions(self) -> Vec<Action> {
+        fn into_actions(self, input: &InputTokens) -> Vec<Action> {
             match self {
-                SymExpr::Ident(ident) => {
-                    vec![Action::PushExprAtom(ExprAtom::Ident(SymIdent(ident)))]
-                }
-                SymExpr::Literal(literal) => {
-                    vec![Action::PushExprAtom(ExprAtom::Literal(SymLiteral(literal)))]
-                }
+                SymExpr::Ident(ident) => vec![Action::PushExprAtom(ExprAtom::Ident(SymIdent(
+                    ident.resolve(input),
+                )))],
+                SymExpr::Literal(literal) => vec![Action::PushExprAtom(ExprAtom::Literal(
+                    SymLiteral(literal.resolve(input)),
+                ))],
                 SymExpr::Parentheses(_, expr, _) => {
-                    let mut actions = expr.into_actions();
+                    let mut actions = expr.into_actions(input);
                     actions.push(Action::ApplyExprOperator(ExprOperator::Parentheses));
                     actions
                 }
@@ -796,14 +831,14 @@ mod tests {
             Comma,
             Literal(()),
             Eol,
-            Command(()),
-            Literal(()),
+            ld @ Command(()),
+            a @ Literal(()),
             Comma,
-            Ident(()),
+            some_const @ Ident(()),
         ];
         let expected = file([
             unlabeled(command(0, [ident(1), literal(3)])),
-            unlabeled(command(5, [literal(6), ident(8)])),
+            unlabeled(command("ld", [literal("a"), ident("some_const")])),
         ]);
         assert_eq_actions(tokens, expected)
     }
@@ -879,12 +914,15 @@ mod tests {
     #[test]
     fn parse_deref_operand() {
         let tokens = input_tokens![
-            Command(()),
-            OpeningParenthesis,
-            Literal(()),
-            ClosingParenthesis,
+            jp @ Command(()),
+            open @ OpeningParenthesis,
+            hl @ Literal(()),
+            close @ ClosingParenthesis,
         ];
-        let expected = file([unlabeled(command(0, [parentheses(1, literal(2), 3)]))]);
+        let expected = file([unlabeled(command(
+            "jp",
+            [parentheses("open", literal("hl"), "close")],
+        ))]);
         assert_eq_actions(tokens, expected)
     }
 
