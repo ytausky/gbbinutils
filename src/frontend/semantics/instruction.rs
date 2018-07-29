@@ -1,7 +1,7 @@
+use super::ParsedExpr;
 use diagnostics::{Diagnostic, Message, Source, SourceRange};
 use frontend::semantics::operand::{self, AtomKind, Context, Operand, OperandCounter};
 use frontend::syntax::keyword as kw;
-use frontend::syntax::ParsedExpr;
 use instruction::*;
 
 pub fn analyze_instruction<I, R>(mnemonic: (kw::Mnemonic, R), operands: I) -> AnalysisResult<R>
@@ -386,7 +386,8 @@ impl From<kw::Mnemonic> for Mnemonic {
 mod tests {
     use self::kw::Operand::*;
     use super::*;
-    use frontend::syntax::{ExprNode, Literal};
+    use frontend::semantics::ExprNode;
+    use frontend::syntax::Literal;
 
     #[derive(Clone, Copy, Debug, PartialEq)]
     enum Marking {

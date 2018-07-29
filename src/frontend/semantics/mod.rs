@@ -1,13 +1,35 @@
 use backend::{self, BinaryOperator};
-use frontend::syntax::{
-    self, keyword::*, ExprAtom, ExprNode, ExprOperator, ParsedExpr, Token, TokenSpec,
-};
+use frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token, TokenSpec};
 use frontend::{Literal, StrExprFactory};
 use session::{ChunkId, Session};
+use std::fmt::Debug;
 use Width;
 
 mod instruction;
 mod operand;
+
+pub trait ExprSpec {
+    type Ident: Debug + PartialEq;
+    type Literal: Debug + PartialEq;
+}
+
+impl<T: TokenSpec> ExprSpec for T {
+    type Ident = T::Ident;
+    type Literal = T::Literal;
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ExprNode<S: ExprSpec, I> {
+    Ident(S::Ident),
+    Parenthesized(Box<ParsedExpr<S, I>>),
+    Literal(S::Literal),
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ParsedExpr<S: ExprSpec, I> {
+    pub node: ExprNode<S, I>,
+    pub interval: I,
+}
 
 pub struct SemanticActions<'a, F: Session + 'a> {
     session: &'a mut F,

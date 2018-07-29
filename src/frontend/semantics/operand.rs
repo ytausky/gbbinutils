@@ -1,6 +1,7 @@
+use super::{ExprNode, ParsedExpr};
 use diagnostics::{Diagnostic, KeywordOperandCategory, Message, Source, SourceRange};
 use frontend::syntax::keyword as kw;
-use frontend::syntax::{ExprNode, Literal, ParsedExpr};
+use frontend::syntax::Literal;
 use instruction::{Condition, PtrReg, Reg16, RegPair, RelocExpr, SimpleOperand};
 
 #[derive(Debug, PartialEq)]
