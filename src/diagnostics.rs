@@ -134,7 +134,7 @@ impl DiagnosticsListener<()> for TestDiagnosticsListener {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Diagnostic<SR> {
     message: Message<SR>,
     highlight: SR,
@@ -146,7 +146,7 @@ impl<SR> Diagnostic<SR> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Message<SR> {
     AlwaysUnconditional,
     CannotDereference {
@@ -168,6 +168,9 @@ pub enum Message<SR> {
     UndefinedMacro {
         name: String,
     },
+    UnexpectedToken {
+        token: SR,
+    },
     UnresolvedSymbol {
         symbol: String,
     },
@@ -177,7 +180,7 @@ pub enum Message<SR> {
     },
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum KeywordOperandCategory {
     Reg,
     RegPair,
@@ -210,6 +213,10 @@ impl Message<TokenRefData> {
             ),
             StringInInstruction => "strings cannot appear in instruction operands".into(),
             UndefinedMacro { name } => format!("invocation of undefined macro `{}`", name),
+            UnexpectedToken { token } => format!(
+                "encountered unexpected token `{}`",
+                mk_snippet(codebase, token)
+            ),
             UnresolvedSymbol { symbol } => format!("symbol `{}` could not be resolved", symbol),
             ValueOutOfRange { value, width } => {
                 format!("value {} cannot be represented in a {}", value, width)

@@ -1,4 +1,5 @@
 use backend::{self, BinaryOperator};
+use diagnostics::Diagnostic;
 use frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token, TokenSpec};
 use frontend::{Literal, StrExprFactory};
 use session::{ChunkId, Session};
@@ -89,6 +90,10 @@ impl<'a, F: Session + 'a> syntax::LineActions<String, F::TokenRef> for SemanticA
     ) -> Self::MacroInvocationContext {
         self.define_label_if_present();
         MacroInvocationActions::new(name, self)
+    }
+
+    fn error(&mut self, diagnostic: Diagnostic<F::TokenRef>) {
+        self.session.emit_diagnostic(diagnostic)
     }
 
     fn exit(mut self) -> Self::Parent {
@@ -390,7 +395,7 @@ mod tests {
     use super::*;
 
     use backend;
-    use diagnostics::Diagnostic;
+    use diagnostics::{Diagnostic, Message};
     use frontend::syntax::{
         keyword::Operand, token, CommandContext, ExprActions, FileContext, LineActions,
         MacroInvocationContext, MacroParamsActions, TokenSeqContext,
@@ -687,7 +692,6 @@ mod tests {
 
     #[test]
     fn diagnoze_wrong_operand_count() {
-        use diagnostics::{Diagnostic, Message};
         let actions = collect_semantic_actions(|actions| {
             let mut arg = actions
                 .enter_line(None)
@@ -707,6 +711,17 @@ mod tests {
                 ()
             ))]
         )
+    }
+
+    #[test]
+    fn diagnoze_parsing_error() {
+        let diagnostic = Diagnostic::new(Message::UnexpectedToken { token: () }, ());
+        let actions = collect_semantic_actions(|actions| {
+            let mut stmt = actions.enter_line(None);
+            stmt.error(diagnostic.clone());
+            stmt.exit()
+        });
+        assert_eq!(actions, [TestOperation::EmitDiagnostic(diagnostic)])
     }
 
     #[test]

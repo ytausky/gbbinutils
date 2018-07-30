@@ -1,4 +1,4 @@
-use diagnostics::SourceRange;
+use diagnostics::{Diagnostic, SourceRange};
 use std::{cmp::PartialEq, fmt::Debug};
 
 pub mod keyword;
@@ -78,6 +78,7 @@ where
     fn enter_command(self, name: (TS::Command, SR)) -> Self::CommandContext;
     fn enter_macro_def(self) -> Self::MacroParamsActions;
     fn enter_macro_invocation(self, name: (TS::Ident, SR)) -> Self::MacroInvocationContext;
+    fn error(&mut self, diagnostic: Diagnostic<SR>);
     fn exit(self) -> Self::Parent;
 }
 

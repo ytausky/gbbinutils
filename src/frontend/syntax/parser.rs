@@ -1,5 +1,5 @@
 use super::*;
-use diagnostics::SourceRange;
+use diagnostics::{Diagnostic, Message, SourceRange};
 
 use std::iter;
 
@@ -116,16 +116,25 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
         }.exit()
     }
 
-    fn parse_unlabeled_line<LA: LineActions<S, T>>(&mut self, actions: LA) -> LA {
+    fn parse_unlabeled_line<LA: LineActions<S, T>>(&mut self, mut actions: LA) -> LA {
         match self.lookahead() {
-            t if follows_line(t) => actions,
+            None | Some(Token::Eol) => actions,
             Some(Token::Command(())) => self.parse_command(actions),
             Some(Token::Ident(())) => {
                 let ident = self.expect_ident();
                 self.parse_macro_invocation(ident, actions)
             }
             Some(Token::Macro) => self.parse_macro_def(actions),
-            _ => panic!(),
+            _ => {
+                let (_, range) = self.bump();
+                actions.error(Diagnostic::new(
+                    Message::UnexpectedToken {
+                        token: range.clone(),
+                    },
+                    range,
+                ));
+                actions
+            }
         }
     }
 
@@ -265,7 +274,7 @@ mod tests {
         parse_src, Token::{self, *},
     };
 
-    use diagnostics::SourceRange;
+    use diagnostics::{Diagnostic, Message, SourceRange};
     use frontend::syntax::{self, ExprAtom, ExprOperator, TokenSpec};
     use std::borrow::Borrow;
     use std::collections::HashMap;
@@ -425,6 +434,7 @@ mod tests {
         EnterMacroBody,
         EnterMacroDef,
         EnterMacroInvocation(SymIdent),
+        Error(Diagnostic<SymRange<usize>>),
         ExitArgument,
         ExitInstruction,
         ExitLine,
@@ -476,6 +486,10 @@ mod tests {
         ) -> Self::MacroInvocationContext {
             self.actions.push(Action::EnterMacroInvocation(name.0));
             self
+        }
+
+        fn error(&mut self, diagnostic: Diagnostic<SymRange<usize>>) {
+            self.actions.push(Action::Error(diagnostic))
         }
 
         fn exit(self) -> Self::Parent {
@@ -619,6 +633,15 @@ mod tests {
         }
     }
 
+    impl SymRange<TokenRef> {
+        fn resolve(&self, input: &InputTokens) -> SymRange<usize> {
+            SymRange {
+                start: self.start.resolve(input),
+                end: self.end.resolve(input),
+            }
+        }
+    }
+
     struct File(Vec<Line>);
 
     fn file(lines: impl Borrow<[Line]>) -> File {
@@ -679,9 +702,19 @@ mod tests {
     #[derive(Clone)]
     enum LineBody {
         Command(TokenRef, Vec<SymExpr>),
+        Error(SymDiagnostic),
         Invoke(usize, Vec<TokenSeq>),
         MacroDef(Vec<usize>, Vec<usize>),
     }
+
+    #[derive(Clone)]
+    struct SymDiagnostic {
+        message_ctor: MessageCtor,
+        ranges: Vec<SymRange<TokenRef>>,
+        highlight: SymRange<TokenRef>,
+    }
+
+    type MessageCtor = fn(Vec<SymRange<usize>>) -> Message<SymRange<usize>>;
 
     fn command(id: impl Into<TokenRef>, args: impl Borrow<[SymExpr]>) -> Option<LineBody> {
         Some(LineBody::Command(
@@ -716,6 +749,22 @@ mod tests {
                         actions.push(Action::ExitArgument)
                     }
                     actions.push(Action::ExitInstruction)
+                }
+                LineBody::Error(SymDiagnostic {
+                    message_ctor,
+                    ranges,
+                    highlight,
+                }) => {
+                    let message = message_ctor(
+                        ranges
+                            .into_iter()
+                            .map(|range| range.resolve(input))
+                            .collect(),
+                    );
+                    actions.push(Action::Error(Diagnostic::new(
+                        message,
+                        highlight.resolve(input),
+                    )))
                 }
                 LineBody::Invoke(id, args) => {
                     actions.push(Action::EnterMacroInvocation(SymIdent(id)));
@@ -963,5 +1012,35 @@ mod tests {
             [token_seq([1, 2]), token_seq([4, 5, 6])],
         ))]);
         assert_eq_actions(tokens, expected_actions)
+    }
+
+    fn error(
+        message_ctor: MessageCtor,
+        ranges: impl Borrow<[&'static str]>,
+        highlight: impl Into<TokenRef>,
+    ) -> Option<LineBody> {
+        Some(LineBody::Error(SymDiagnostic {
+            message_ctor,
+            ranges: ranges
+                .borrow()
+                .iter()
+                .map(|s| TokenRef::from(*s).into())
+                .collect(),
+            highlight: highlight.into().into(),
+        }))
+    }
+
+    #[test]
+    fn diagnoze_stmt_starting_with_literal() {
+        assert_eq_actions(
+            input_tokens![a @ Literal(())],
+            file([unlabeled(error(unexpected_token, ["a"], "a"))]),
+        )
+    }
+
+    fn unexpected_token(ranges: Vec<SymRange<usize>>) -> Message<SymRange<usize>> {
+        Message::UnexpectedToken {
+            token: ranges.into_iter().next().unwrap(),
+        }
     }
 }
