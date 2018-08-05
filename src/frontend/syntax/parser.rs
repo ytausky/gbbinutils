@@ -1094,7 +1094,7 @@ mod tests {
     }
 
     #[test]
-    fn diagnoze_stmt_starting_with_literal() {
+    fn diagnose_stmt_starting_with_literal() {
         assert_eq_actions(
             input_tokens![a @ Literal(())],
             file([unlabeled(line_error(unexpected_token, ["a"], "a"))]),

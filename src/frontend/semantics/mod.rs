@@ -716,7 +716,7 @@ mod tests {
     }
 
     #[test]
-    fn diagnoze_wrong_operand_count() {
+    fn diagnose_wrong_operand_count() {
         let actions = collect_semantic_actions(|actions| {
             let mut arg = actions
                 .enter_line(None)
