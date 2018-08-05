@@ -1,4 +1,4 @@
-use diagnostics::{Diagnostic, SourceRange};
+use diagnostics::{DiagnosticsListener, SourceRange};
 use std::{cmp::PartialEq, fmt::Debug};
 
 pub mod keyword;
@@ -55,17 +55,17 @@ impl TokenSpec for () {
     type Literal = ();
 }
 
-pub trait FileContext<S: TokenSpec, R>
+pub trait FileContext<S: TokenSpec, SR>
 where
-    Self: Sized,
+    Self: DiagnosticsListener<SR> + Sized,
 {
-    type LineActions: LineActions<S, R, Parent = Self>;
-    fn enter_line(self, label: Option<(S::Ident, R)>) -> Self::LineActions;
+    type LineActions: LineActions<S, SR, Parent = Self>;
+    fn enter_line(self, label: Option<(S::Ident, SR)>) -> Self::LineActions;
 }
 
 pub trait LineActions<TS: TokenSpec, SR>
 where
-    Self: Sized,
+    Self: DiagnosticsListener<SR> + Sized,
 {
     type CommandContext: CommandContext<SR, TokenSpec = TS, Parent = Self>;
     type MacroParamsActions: MacroParamsActions<SR, TokenSpec = TS, Parent = Self>;
@@ -78,16 +78,15 @@ where
     fn enter_command(self, name: (TS::Command, SR)) -> Self::CommandContext;
     fn enter_macro_def(self) -> Self::MacroParamsActions;
     fn enter_macro_invocation(self, name: (TS::Ident, SR)) -> Self::MacroInvocationContext;
-    fn error(&mut self, diagnostic: Diagnostic<SR>);
     fn exit(self) -> Self::Parent;
 }
 
-pub trait CommandContext<R>
+pub trait CommandContext<SR>
 where
-    Self: Sized,
+    Self: DiagnosticsListener<SR> + Sized,
 {
     type TokenSpec: TokenSpec;
-    type ArgActions: ExprActions<R, TokenSpec = Self::TokenSpec, Parent = Self>;
+    type ArgActions: ExprActions<SR, TokenSpec = Self::TokenSpec, Parent = Self>;
     type Parent;
     fn add_argument(self) -> Self::ArgActions;
     fn exit(self) -> Self::Parent;
@@ -112,7 +111,7 @@ pub enum ExprOperator {
     Parentheses,
 }
 
-pub trait MacroParamsActions<SR> {
+pub trait MacroParamsActions<SR>: DiagnosticsListener<SR> {
     type TokenSpec: TokenSpec;
     type MacroBodyActions: TokenSeqContext<
         SR,
@@ -124,13 +123,13 @@ pub trait MacroParamsActions<SR> {
     fn exit(self) -> Self::MacroBodyActions;
 }
 
-pub trait MacroInvocationContext<R>
+pub trait MacroInvocationContext<SR>
 where
-    Self: Sized,
+    Self: DiagnosticsListener<SR> + Sized,
 {
     type Token;
     type Parent;
-    type MacroArgContext: TokenSeqContext<R, Token = Self::Token, Parent = Self>;
+    type MacroArgContext: TokenSeqContext<SR, Token = Self::Token, Parent = Self>;
     fn enter_macro_arg(self) -> Self::MacroArgContext;
     fn exit(self) -> Self::Parent;
 }

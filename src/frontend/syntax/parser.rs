@@ -116,7 +116,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
         }.exit()
     }
 
-    fn parse_unlabeled_line<LA: LineActions<S, T>>(&mut self, mut actions: LA) -> LA {
+    fn parse_unlabeled_line<LA: LineActions<S, T>>(&mut self, actions: LA) -> LA {
         match self.lookahead() {
             None | Some(Token::Eol) => actions,
             Some(Token::Command(())) => self.parse_command(actions),
@@ -127,7 +127,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
             Some(Token::Macro) => self.parse_macro_def(actions),
             _ => {
                 let (_, range) = self.bump();
-                actions.error(Diagnostic::new(
+                actions.emit_diagnostic(Diagnostic::new(
                     Message::UnexpectedToken {
                         token: range.clone(),
                     },
@@ -218,6 +218,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
     where
         FP: FnMut(Lookahead) -> bool,
         P: FnMut(&mut Self, C) -> C,
+        C: DiagnosticsListener<T>,
     {
         let first_terminal = self.lookahead();
         if !follow(first_terminal) {
@@ -226,7 +227,18 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
                 self.bump();
                 context = parser(self, context)
             }
-            assert!(follow(self.lookahead()));
+            if !follow(self.lookahead()) {
+                let unexpected_range = self.tokens.peek().unwrap().1.clone();
+                context.emit_diagnostic(Diagnostic::new(
+                    Message::UnexpectedToken {
+                        token: unexpected_range.clone(),
+                    },
+                    unexpected_range,
+                ));
+                while !follow(self.lookahead()) {
+                    self.bump();
+                }
+            }
         }
         context
     }
@@ -274,9 +286,10 @@ mod tests {
         parse_src, Token::{self, *},
     };
 
-    use diagnostics::{Diagnostic, Message, SourceRange};
+    use diagnostics::{Diagnostic, DiagnosticsListener, Message, SourceRange};
     use frontend::syntax::{self, ExprAtom, ExprOperator, TokenSpec};
     use std::borrow::Borrow;
+    use std::cell::RefCell;
     use std::collections::HashMap;
     use std::fmt::Debug;
 
@@ -410,14 +423,14 @@ mod tests {
     }
 
     struct TestContext {
-        actions: Vec<Action>,
+        actions: RefCell<Vec<Action>>,
         token_seq_kind: Option<TokenSeqKind>,
     }
 
     impl TestContext {
         fn new() -> TestContext {
             TestContext {
-                actions: Vec::new(),
+                actions: RefCell::new(Vec::new()),
                 token_seq_kind: None,
             }
         }
@@ -450,11 +463,18 @@ mod tests {
         MacroDef,
     }
 
+    impl<'a> DiagnosticsListener<SymRange<usize>> for &'a mut TestContext {
+        fn emit_diagnostic(&self, diagnostic: Diagnostic<SymRange<usize>>) {
+            self.actions.borrow_mut().push(Action::Error(diagnostic))
+        }
+    }
+
     impl<'a> syntax::FileContext<Symbolic, SymRange<usize>> for &'a mut TestContext {
         type LineActions = Self;
 
         fn enter_line(self, label: Option<(SymIdent, SymRange<usize>)>) -> Self::LineActions {
             self.actions
+                .borrow_mut()
                 .push(Action::EnterLine(label.map(|(ident, _)| ident)));
             self
         }
@@ -470,12 +490,14 @@ mod tests {
             self,
             (command, _): (SymCommand, SymRange<usize>),
         ) -> Self::CommandContext {
-            self.actions.push(Action::EnterInstruction(command));
+            self.actions
+                .borrow_mut()
+                .push(Action::EnterInstruction(command));
             self
         }
 
         fn enter_macro_def(self) -> Self::MacroParamsActions {
-            self.actions.push(Action::EnterMacroDef);
+            self.actions.borrow_mut().push(Action::EnterMacroDef);
             self.token_seq_kind = Some(TokenSeqKind::MacroDef);
             self
         }
@@ -484,16 +506,14 @@ mod tests {
             self,
             name: (SymIdent, SymRange<usize>),
         ) -> Self::MacroInvocationContext {
-            self.actions.push(Action::EnterMacroInvocation(name.0));
+            self.actions
+                .borrow_mut()
+                .push(Action::EnterMacroInvocation(name.0));
             self
         }
 
-        fn error(&mut self, diagnostic: Diagnostic<SymRange<usize>>) {
-            self.actions.push(Action::Error(diagnostic))
-        }
-
         fn exit(self) -> Self::Parent {
-            self.actions.push(Action::ExitLine);
+            self.actions.borrow_mut().push(Action::ExitLine);
             self
         }
     }
@@ -504,12 +524,12 @@ mod tests {
         type Parent = Self;
 
         fn add_argument(self) -> Self::ArgActions {
-            self.actions.push(Action::EnterArgument);
+            self.actions.borrow_mut().push(Action::EnterArgument);
             self
         }
 
         fn exit(self) -> Self::Parent {
-            self.actions.push(Action::ExitInstruction);
+            self.actions.borrow_mut().push(Action::ExitInstruction);
             self
         }
     }
@@ -519,15 +539,17 @@ mod tests {
         type Parent = Self;
 
         fn push_atom(&mut self, atom: (ExprAtom<Symbolic>, SymRange<usize>)) {
-            self.actions.push(Action::PushExprAtom(atom.0))
+            self.actions.borrow_mut().push(Action::PushExprAtom(atom.0))
         }
 
         fn apply_operator(&mut self, operator: (ExprOperator, SymRange<usize>)) {
-            self.actions.push(Action::ApplyExprOperator(operator.0))
+            self.actions
+                .borrow_mut()
+                .push(Action::ApplyExprOperator(operator.0))
         }
 
         fn exit(self) -> Self::Parent {
-            self.actions.push(Action::ExitArgument);
+            self.actions.borrow_mut().push(Action::ExitArgument);
             self
         }
     }
@@ -538,11 +560,11 @@ mod tests {
         type Parent = Self;
 
         fn add_parameter(&mut self, (ident, _): (SymIdent, SymRange<usize>)) {
-            self.actions.push(Action::AddParameter(ident))
+            self.actions.borrow_mut().push(Action::AddParameter(ident))
         }
 
         fn exit(self) -> Self::MacroBodyActions {
-            self.actions.push(Action::EnterMacroBody);
+            self.actions.borrow_mut().push(Action::EnterMacroBody);
             self
         }
     }
@@ -553,13 +575,13 @@ mod tests {
         type MacroArgContext = Self;
 
         fn enter_macro_arg(self) -> Self::MacroArgContext {
-            self.actions.push(Action::EnterMacroArg);
+            self.actions.borrow_mut().push(Action::EnterMacroArg);
             self.token_seq_kind = Some(TokenSeqKind::MacroArg);
             self
         }
 
         fn exit(self) -> Self::Parent {
-            self.actions.push(Action::ExitMacroInvocation);
+            self.actions.borrow_mut().push(Action::ExitMacroInvocation);
             self
         }
     }
@@ -571,11 +593,12 @@ mod tests {
         fn push_token(&mut self, token: (Self::Token, SymRange<usize>)) {
             let id = token.1.start;
             assert_eq!(id, token.1.end);
-            self.actions.push(Action::PushTerminal(id))
+            self.actions.borrow_mut().push(Action::PushTerminal(id))
         }
 
         fn exit(self) -> Self::Parent {
             self.actions
+                .borrow_mut()
                 .push(match *self.token_seq_kind.as_ref().unwrap() {
                     TokenSeqKind::MacroArg => Action::ExitMacroArg,
                     TokenSeqKind::MacroDef => Action::ExitMacroDef,
@@ -603,7 +626,10 @@ mod tests {
                 .zip((0..).map(|n| SymRange::from(n))),
             &mut parsing_context,
         );
-        assert_eq!(parsing_context.actions, expected.into_actions(&tokens))
+        assert_eq!(
+            parsing_context.actions.into_inner(),
+            expected.into_actions(&tokens)
+        )
     }
 
     #[derive(Clone)]
@@ -701,7 +727,7 @@ mod tests {
 
     #[derive(Clone)]
     enum LineBody {
-        Command(TokenRef, Vec<SymExpr>),
+        Command(TokenRef, Vec<SymExpr>, Option<SymDiagnostic>),
         Error(SymDiagnostic),
         Invoke(usize, Vec<TokenSeq>),
         MacroDef(Vec<usize>, Vec<usize>),
@@ -716,10 +742,41 @@ mod tests {
 
     type MessageCtor = fn(Vec<SymRange<usize>>) -> Message<SymRange<usize>>;
 
+    impl From<SymDiagnostic> for LineBody {
+        fn from(diagnostic: SymDiagnostic) -> Self {
+            LineBody::Error(diagnostic)
+        }
+    }
+
+    impl SymDiagnostic {
+        fn into_action(self, input: &InputTokens) -> Action {
+            let message = (self.message_ctor)(
+                self.ranges
+                    .into_iter()
+                    .map(|range| range.resolve(input))
+                    .collect(),
+            );
+            Action::Error(Diagnostic::new(message, self.highlight.resolve(input)))
+        }
+    }
+
     fn command(id: impl Into<TokenRef>, args: impl Borrow<[SymExpr]>) -> Option<LineBody> {
         Some(LineBody::Command(
             id.into(),
             args.borrow().iter().cloned().collect(),
+            None,
+        ))
+    }
+
+    fn malformed_command(
+        id: impl Into<TokenRef>,
+        args: impl Borrow<[SymExpr]>,
+        diagnostic: SymDiagnostic,
+    ) -> Option<LineBody> {
+        Some(LineBody::Command(
+            id.into(),
+            args.borrow().iter().cloned().collect(),
+            Some(diagnostic),
         ))
     }
 
@@ -741,31 +798,19 @@ mod tests {
         fn into_actions(self, input: &InputTokens) -> Vec<Action> {
             let mut actions = Vec::new();
             match self {
-                LineBody::Command(id, args) => {
+                LineBody::Command(id, args, error) => {
                     actions.push(Action::EnterInstruction(SymCommand(id.resolve(input))));
                     for mut arg in args {
                         actions.push(Action::EnterArgument);
                         actions.append(&mut arg.into_actions(input));
                         actions.push(Action::ExitArgument)
                     }
+                    if let Some(diagnostic) = error {
+                        actions.push(diagnostic.into_action(input))
+                    }
                     actions.push(Action::ExitInstruction)
                 }
-                LineBody::Error(SymDiagnostic {
-                    message_ctor,
-                    ranges,
-                    highlight,
-                }) => {
-                    let message = message_ctor(
-                        ranges
-                            .into_iter()
-                            .map(|range| range.resolve(input))
-                            .collect(),
-                    );
-                    actions.push(Action::Error(Diagnostic::new(
-                        message,
-                        highlight.resolve(input),
-                    )))
-                }
+                LineBody::Error(diagnostic) => actions.push(diagnostic.into_action(input)),
                 LineBody::Invoke(id, args) => {
                     actions.push(Action::EnterMacroInvocation(SymIdent(id)));
                     for arg in args {
@@ -1014,12 +1059,30 @@ mod tests {
         assert_eq_actions(tokens, expected_actions)
     }
 
-    fn error(
+    fn line_error(
         message_ctor: MessageCtor,
         ranges: impl Borrow<[&'static str]>,
         highlight: impl Into<TokenRef>,
     ) -> Option<LineBody> {
-        Some(LineBody::Error(SymDiagnostic {
+        Some(
+            SymDiagnostic {
+                message_ctor,
+                ranges: ranges
+                    .borrow()
+                    .iter()
+                    .map(|s| TokenRef::from(*s).into())
+                    .collect(),
+                highlight: highlight.into().into(),
+            }.into(),
+        )
+    }
+
+    fn arg_error(
+        message_ctor: MessageCtor,
+        ranges: impl Borrow<[&'static str]>,
+        highlight: impl Into<TokenRef>,
+    ) -> SymDiagnostic {
+        SymDiagnostic {
             message_ctor,
             ranges: ranges
                 .borrow()
@@ -1027,14 +1090,26 @@ mod tests {
                 .map(|s| TokenRef::from(*s).into())
                 .collect(),
             highlight: highlight.into().into(),
-        }))
+        }
     }
 
     #[test]
     fn diagnoze_stmt_starting_with_literal() {
         assert_eq_actions(
             input_tokens![a @ Literal(())],
-            file([unlabeled(error(unexpected_token, ["a"], "a"))]),
+            file([unlabeled(line_error(unexpected_token, ["a"], "a"))]),
+        )
+    }
+
+    #[test]
+    fn diagnose_missing_comma_in_arg_list() {
+        assert_eq_actions(
+            input_tokens![Command(()), Literal(()), unexpected @ Literal(())],
+            file([unlabeled(malformed_command(
+                0,
+                [literal(1)],
+                arg_error(unexpected_token, ["unexpected"], "unexpected"),
+            ))]),
         )
     }
 

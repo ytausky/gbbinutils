@@ -1,5 +1,5 @@
 use backend::{self, BinaryOperator};
-use diagnostics::Diagnostic;
+use diagnostics::{Diagnostic, DiagnosticsListener};
 use frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token, TokenSpec};
 use frontend::{Literal, StrExprFactory};
 use session::{ChunkId, Session};
@@ -54,6 +54,12 @@ impl<'a, F: Session + 'a> SemanticActions<'a, F> {
     }
 }
 
+impl<'a, F: Session + 'a> DiagnosticsListener<F::TokenRef> for SemanticActions<'a, F> {
+    fn emit_diagnostic(&self, diagnostic: Diagnostic<F::TokenRef>) {
+        self.session.emit_diagnostic(diagnostic)
+    }
+}
+
 impl<'a, F: Session + 'a> syntax::FileContext<String, F::TokenRef> for SemanticActions<'a, F> {
     type LineActions = Self;
 
@@ -92,10 +98,6 @@ impl<'a, F: Session + 'a> syntax::LineActions<String, F::TokenRef> for SemanticA
         MacroInvocationActions::new(name, self)
     }
 
-    fn error(&mut self, diagnostic: Diagnostic<F::TokenRef>) {
-        self.session.emit_diagnostic(diagnostic)
-    }
-
     fn exit(mut self) -> Self::Parent {
         self.define_label_if_present();
         self
@@ -117,6 +119,12 @@ impl<'a, F: Session + 'a> CommandActions<'a, F> {
             args: Vec::new(),
             parent,
         }
+    }
+}
+
+impl<'a, F: Session + 'a> DiagnosticsListener<F::TokenRef> for CommandActions<'a, F> {
+    fn emit_diagnostic(&self, diagnostic: Diagnostic<F::TokenRef>) {
+        self.parent.emit_diagnostic(diagnostic)
     }
 }
 
@@ -278,6 +286,12 @@ impl<'a, F: Session + 'a> MacroDefActions<'a, F> {
     }
 }
 
+impl<'a, F: Session + 'a> DiagnosticsListener<F::TokenRef> for MacroDefActions<'a, F> {
+    fn emit_diagnostic(&self, diagnostic: Diagnostic<F::TokenRef>) {
+        self.parent.emit_diagnostic(diagnostic)
+    }
+}
+
 impl<'a, F: Session + 'a> syntax::MacroParamsActions<F::TokenRef> for MacroDefActions<'a, F> {
     type TokenSpec = String;
     type MacroBodyActions = Self;
@@ -328,6 +342,12 @@ impl<'a, F: Session + 'a> MacroInvocationActions<'a, F> {
 
     fn push_arg(&mut self, arg: Vec<(Token, F::TokenRef)>) {
         self.args.push(arg)
+    }
+}
+
+impl<'a, F: Session + 'a> DiagnosticsListener<F::TokenRef> for MacroInvocationActions<'a, F> {
+    fn emit_diagnostic(&self, diagnostic: Diagnostic<F::TokenRef>) {
+        self.parent.emit_diagnostic(diagnostic)
     }
 }
 
@@ -402,12 +422,13 @@ mod tests {
     };
     use instruction::RelocExpr;
     use std::borrow::Borrow;
+    use std::cell::RefCell;
 
-    struct TestFrontend(Vec<TestOperation>);
+    struct TestFrontend(RefCell<Vec<TestOperation>>);
 
     impl TestFrontend {
         fn new() -> TestFrontend {
-            TestFrontend(Vec::new())
+            TestFrontend(RefCell::new(Vec::new()))
         }
     }
 
@@ -425,19 +446,23 @@ mod tests {
         type TokenRef = ();
 
         fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::TokenRef>) {
-            self.0.push(TestOperation::AnalyzeChunk(chunk_id))
+            self.0
+                .borrow_mut()
+                .push(TestOperation::AnalyzeChunk(chunk_id))
         }
 
-        fn emit_diagnostic(&mut self, diagnostic: Diagnostic<Self::TokenRef>) {
-            self.0.push(TestOperation::EmitDiagnostic(diagnostic))
+        fn emit_diagnostic(&self, diagnostic: Diagnostic<Self::TokenRef>) {
+            self.0
+                .borrow_mut()
+                .push(TestOperation::EmitDiagnostic(diagnostic))
         }
 
         fn emit_item(&mut self, item: backend::Item<()>) {
-            self.0.push(TestOperation::EmitItem(item))
+            self.0.borrow_mut().push(TestOperation::EmitItem(item))
         }
 
         fn define_label(&mut self, (label, _): (String, Self::TokenRef)) {
-            self.0.push(TestOperation::Label(label))
+            self.0.borrow_mut().push(TestOperation::Label(label))
         }
 
         fn define_macro(
@@ -446,7 +471,7 @@ mod tests {
             params: Vec<(String, Self::TokenRef)>,
             tokens: Vec<(Token, ())>,
         ) {
-            self.0.push(TestOperation::DefineMacro(
+            self.0.borrow_mut().push(TestOperation::DefineMacro(
                 name.into(),
                 params.into_iter().map(|(s, _)| s).collect(),
                 tokens.into_iter().map(|(t, _)| t).collect(),
@@ -454,7 +479,7 @@ mod tests {
         }
 
         fn set_origin(&mut self, origin: RelocExpr<()>) {
-            self.0.push(TestOperation::SetOrigin(origin))
+            self.0.borrow_mut().push(TestOperation::SetOrigin(origin))
         }
     }
 
@@ -714,11 +739,11 @@ mod tests {
     }
 
     #[test]
-    fn diagnoze_parsing_error() {
+    fn diagnose_parsing_error() {
         let diagnostic = Diagnostic::new(Message::UnexpectedToken { token: () }, ());
         let actions = collect_semantic_actions(|actions| {
-            let mut stmt = actions.enter_line(None);
-            stmt.error(diagnostic.clone());
+            let stmt = actions.enter_line(None);
+            stmt.emit_diagnostic(diagnostic.clone());
             stmt.exit()
         });
         assert_eq!(actions, [TestOperation::EmitDiagnostic(diagnostic)])
@@ -751,6 +776,6 @@ mod tests {
     {
         let mut operations = TestFrontend::new();
         f(SemanticActions::new(&mut operations));
-        operations.0
+        operations.0.into_inner()
     }
 }

@@ -6,7 +6,7 @@ use {backend, diagnostics, frontend};
 pub trait Session {
     type TokenRef: diagnostics::SourceRange;
     fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::TokenRef>);
-    fn emit_diagnostic(&mut self, diagnostic: diagnostics::Diagnostic<Self::TokenRef>);
+    fn emit_diagnostic(&self, diagnostic: diagnostics::Diagnostic<Self::TokenRef>);
     fn emit_item(&mut self, item: backend::Item<Self::TokenRef>);
     fn define_label(&mut self, label: (String, Self::TokenRef));
     fn define_macro(
@@ -87,7 +87,7 @@ where
             .analyze_chunk(chunk_id, self.backend.borrow_mut())
     }
 
-    fn emit_diagnostic(&mut self, diagnostic: diagnostics::Diagnostic<Self::TokenRef>) {
+    fn emit_diagnostic(&self, diagnostic: diagnostics::Diagnostic<Self::TokenRef>) {
         self.diagnostics.borrow().emit_diagnostic(diagnostic)
     }
 
