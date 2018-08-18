@@ -168,6 +168,9 @@ pub enum Message<SR> {
     UndefinedMacro {
         name: String,
     },
+    UnexpectedEof {
+        prev_token: SR,
+    },
     UnexpectedToken {
         token: SR,
     },
@@ -213,6 +216,10 @@ impl Message<TokenRefData> {
             ),
             StringInInstruction => "strings cannot appear in instruction operands".into(),
             UndefinedMacro { name } => format!("invocation of undefined macro `{}`", name),
+            UnexpectedEof { prev_token } => format!(
+                "encountered end of file after token `{}`",
+                mk_snippet(codebase, prev_token)
+            ),
             UnexpectedToken { token } => format!(
                 "encountered unexpected token `{}`",
                 mk_snippet(codebase, token)

@@ -48,12 +48,14 @@ where
 {
     let mut parser = Parser {
         tokens: tokens.peekable(),
+        prev_token: None,
     };
     parser.parse_file(actions)
 }
 
-struct Parser<I: Iterator> {
+struct Parser<I: Iterator, SR> {
     tokens: iter::Peekable<I>,
+    prev_token: Option<SR>,
 }
 
 macro_rules! mk_expect {
@@ -67,7 +69,7 @@ macro_rules! mk_expect {
     }
 }
 
-impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> {
+impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I, T> {
     mk_expect!(expect_command, Command);
     mk_expect!(expect_ident, Ident);
 
@@ -106,7 +108,9 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
     }
 
     fn bump(&mut self) -> I::Item {
-        self.tokens.next().unwrap()
+        let next_token = self.tokens.next().unwrap();
+        self.prev_token = Some(next_token.1.clone());
+        next_token
     }
 
     fn expect(&mut self, expected: Lookahead) -> I::Item {
@@ -159,20 +163,28 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
 
     fn parse_macro_def<LA: LineActions<S, T>>(&mut self, actions: LA) -> LA {
         self.expect(Some(Token::Macro));
-        let mut macro_body_actions =
-            self.parse_terminated_list(
-                Token::Comma,
-                LINE_FOLLOW_SET,
-                |p, a| p.parse_macro_param(a),
-                actions.enter_macro_def(),
-            ).exit();
-        self.expect(Some(Token::Eol));
-        self.take_token_while(
-            |x| x != Token::Endm,
-            |token| macro_body_actions.push_token(token),
+        let actions = self.parse_terminated_list(
+            Token::Comma,
+            LINE_FOLLOW_SET,
+            |p, a| p.parse_macro_param(a),
+            actions.enter_macro_def(),
         );
-        self.expect(Some(Token::Endm));
-        macro_body_actions.exit()
+        if self.consume(Token::Eol) {
+            let mut body_actions = actions.exit();
+            self.take_token_while(|x| x != Token::Endm, |token| body_actions.push_token(token));
+            self.expect(Some(Token::Endm));
+            body_actions
+        } else {
+            assert_eq!(self.lookahead(), None);
+            let last_token = self.prev_token.clone().unwrap();
+            actions.emit_diagnostic(Diagnostic::new(
+                Message::UnexpectedEof {
+                    prev_token: last_token.clone(),
+                },
+                last_token,
+            ));
+            actions.exit()
+        }.exit()
     }
 
     fn parse_macro_param<MPA>(&mut self, mut actions: MPA) -> MPA
@@ -778,7 +790,13 @@ mod tests {
         Command(TokenRef, Vec<SymExpr>, Option<SymDiagnostic>),
         Error(SymDiagnostic),
         Invoke(usize, Vec<TokenSeq>),
-        MacroDef(Vec<usize>, Vec<usize>),
+        MacroDef(Vec<usize>, MacroDefTail),
+    }
+
+    #[derive(Clone)]
+    enum MacroDefTail {
+        Body(Vec<usize>, Option<SymDiagnostic>),
+        Error(SymDiagnostic),
     }
 
     #[derive(Clone)]
@@ -838,7 +856,17 @@ mod tests {
     fn macro_def(params: impl Borrow<[usize]>, body: impl Borrow<[usize]>) -> Option<LineBody> {
         Some(LineBody::MacroDef(
             params.borrow().iter().cloned().collect(),
-            body.borrow().iter().cloned().collect(),
+            MacroDefTail::Body(body.borrow().iter().cloned().collect(), None),
+        ))
+    }
+
+    fn malformed_macro_def_head(
+        params: impl Borrow<[usize]>,
+        diagnostic: SymDiagnostic,
+    ) -> Option<LineBody> {
+        Some(LineBody::MacroDef(
+            params.borrow().iter().cloned().collect(),
+            MacroDefTail::Error(diagnostic),
         ))
     }
 
@@ -868,15 +896,23 @@ mod tests {
                     }
                     actions.push(Action::ExitMacroInvocation)
                 }
-                LineBody::MacroDef(params, body) => {
+                LineBody::MacroDef(params, tail) => {
                     actions.push(Action::EnterMacroDef);
                     actions.extend(
                         params
                             .into_iter()
                             .map(|id| Action::AddParameter(SymIdent(id))),
                     );
-                    actions.push(Action::EnterMacroBody);
-                    actions.extend(body.into_iter().map(|t| Action::PushTerminal(t)));
+                    match tail {
+                        MacroDefTail::Body(body, _) => {
+                            actions.push(Action::EnterMacroBody);
+                            actions.extend(body.into_iter().map(|t| Action::PushTerminal(t)));
+                        }
+                        MacroDefTail::Error(diagnostic) => {
+                            actions.push(diagnostic.into_action(input));
+                            actions.push(Action::EnterMacroBody)
+                        }
+                    }
                     actions.push(Action::ExitMacroDef)
                 }
             }
@@ -1161,9 +1197,26 @@ mod tests {
         )
     }
 
+    #[test]
+    fn diagnose_eof_after_macro_param_list() {
+        assert_eq_actions(
+            input_tokens![kw_macro @ Macro],
+            file([unlabeled(malformed_macro_def_head(
+                [],
+                arg_error(unexpected_eof, ["kw_macro"], "kw_macro"),
+            ))]),
+        )
+    }
+
     fn unexpected_token(ranges: Vec<SymRange<usize>>) -> Message<SymRange<usize>> {
         Message::UnexpectedToken {
             token: ranges.into_iter().next().unwrap(),
+        }
+    }
+
+    fn unexpected_eof(ranges: Vec<SymRange<usize>>) -> Message<SymRange<usize>> {
+        Message::UnexpectedEof {
+            prev_token: ranges.into_iter().next().unwrap(),
         }
     }
 }
