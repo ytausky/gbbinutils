@@ -39,13 +39,6 @@ impl<S: TokenSpec> Token<S> {
 
 type Lookahead = Option<Token<()>>;
 
-fn follows_line(lookahead: Lookahead) -> bool {
-    match lookahead {
-        None | Some(Token::Eol) => true,
-        _ => false,
-    }
-}
-
 const LINE_FOLLOW_SET: &[Lookahead] = &[Some(Token::Eol), None];
 
 pub fn parse_src<S: TokenSpec, T: SourceRange, I, F>(tokens: I, actions: F)
@@ -87,6 +80,31 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
         kinds.iter().find(|&x| *x == lookahead).is_some()
     }
 
+    fn consume(&mut self, kind: Token<()>) -> bool {
+        self.take_token_if(|x| x == kind, |_| ())
+    }
+
+    fn take_token_if<P, F>(&mut self, predicate: P, f: F) -> bool
+    where
+        P: FnOnce(Token<()>) -> bool,
+        F: FnOnce((Token<S>, T)),
+    {
+        if self.lookahead().map(predicate).unwrap_or(false) {
+            f(self.bump());
+            true
+        } else {
+            false
+        }
+    }
+
+    fn take_token_while<P, F>(&mut self, predicate: P, mut f: F)
+    where
+        P: Fn(Token<()>) -> bool,
+        F: FnMut((Token<S>, T)),
+    {
+        while self.take_token_if(|x| predicate(x), |token| f(token)) {}
+    }
+
     fn bump(&mut self) -> I::Item {
         self.tokens.next().unwrap()
     }
@@ -97,7 +115,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
     }
 
     fn parse_file<F: FileContext<S, T>>(&mut self, actions: F) {
-        self.parse_terminated_list(Some(Token::Eol), &[None], |p, c| p.parse_line(c), actions);
+        self.parse_terminated_list(Token::Eol, &[None], |p, c| p.parse_line(c), actions);
     }
 
     fn parse_line<F: FileContext<S, T>>(&mut self, actions: F) -> F {
@@ -110,8 +128,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
 
     fn parse_potentially_labeled_line<F: FileContext<S, T>>(&mut self, actions: F) -> F {
         let ident = self.expect_ident();
-        if self.lookahead() == Some(Token::Colon) {
-            self.bump();
+        if self.consume(Token::Colon) {
             self.parse_unlabeled_line(actions.enter_line(Some(ident)))
         } else {
             self.parse_macro_invocation(ident, actions.enter_line(None))
@@ -127,7 +144,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
                 self.parse_macro_invocation(ident, actions)
             }
             Some(Token::Macro) => self.parse_macro_def(actions),
-            _ => {
+            Some(_) => {
                 let (_, range) = self.bump();
                 actions.emit_diagnostic(Diagnostic::new(
                     Message::UnexpectedToken {
@@ -144,15 +161,16 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
         self.expect(Some(Token::Macro));
         let mut macro_body_actions =
             self.parse_terminated_list(
-                Some(Token::Comma),
+                Token::Comma,
                 LINE_FOLLOW_SET,
                 |p, a| p.parse_macro_param(a),
                 actions.enter_macro_def(),
             ).exit();
         self.expect(Some(Token::Eol));
-        while self.lookahead() != Some(Token::Endm) {
-            macro_body_actions.push_token(self.bump())
-        }
+        self.take_token_while(
+            |x| x != Token::Endm,
+            |token| macro_body_actions.push_token(token),
+        );
         self.expect(Some(Token::Endm));
         macro_body_actions.exit()
     }
@@ -184,7 +202,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
 
     fn parse_argument_list<C: CommandContext<T, TokenSpec = S>>(&mut self, actions: C) -> C {
         self.parse_terminated_list(
-            Some(Token::Comma),
+            Token::Comma,
             LINE_FOLLOW_SET,
             |p, c| p.parse_argument(c),
             actions,
@@ -196,15 +214,14 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
         actions: M,
     ) -> M {
         self.parse_terminated_list(
-            Some(Token::Comma),
+            Token::Comma,
             LINE_FOLLOW_SET,
             |p, actions| {
                 let mut arg_context = actions.enter_macro_arg();
-                let mut next_token = p.lookahead();
-                while next_token != Some(Token::Comma) && !follows_line(next_token) {
-                    arg_context.push_token(p.bump());
-                    next_token = p.lookahead()
-                }
+                p.take_token_while(
+                    |x| x != Token::Comma && x != Token::Eol,
+                    |token| arg_context.push_token(token),
+                );
                 arg_context.exit()
             },
             actions,
@@ -213,7 +230,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
 
     fn parse_terminated_list<P, C>(
         &mut self,
-        delimiter: Lookahead,
+        delimiter: Token<()>,
         terminators: &[Lookahead],
         parser: P,
         mut context: C,
@@ -224,7 +241,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
     {
         context = self.parse_list(delimiter, terminators, parser, context);
         if !self.is_lookahead_in(terminators) {
-            let unexpected_range = self.tokens.peek().unwrap().1.clone();
+            let (_, unexpected_range) = self.bump();
             context.emit_diagnostic(Diagnostic::new(
                 Message::UnexpectedToken {
                     token: unexpected_range.clone(),
@@ -240,7 +257,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
 
     fn parse_list<P, C>(
         &mut self,
-        delimiter: Lookahead,
+        delimiter: Token<()>,
         terminators: &[Lookahead],
         mut parser: P,
         context: C,
@@ -258,7 +275,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
 
     fn parse_nonempty_list<P, C>(
         &mut self,
-        delimiter: Lookahead,
+        delimiter: Token<()>,
         parser: &mut P,
         mut actions: C,
     ) -> C
@@ -267,8 +284,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
         C: DiagnosticsListener<T>,
     {
         actions = parser(self, actions);
-        while self.lookahead() == delimiter {
-            self.bump();
+        while self.consume(delimiter) {
             actions = parser(self, actions)
         }
         actions
