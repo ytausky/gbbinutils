@@ -90,7 +90,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
     }
 
     fn parse_file<F: FileContext<S, T>>(&mut self, actions: F) {
-        self.parse_list(
+        self.parse_terminated_list(
             Some(Token::Eol),
             |l| l.is_none(),
             |p, c| p.parse_line(c),
@@ -140,7 +140,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
 
     fn parse_macro_def<LA: LineActions<S, T>>(&mut self, actions: LA) -> LA {
         self.expect(Some(Token::Macro));
-        let mut macro_body_actions = self.parse_list(
+        let mut macro_body_actions = self.parse_terminated_list(
             Some(Token::Comma),
             follows_line,
             |p, a| p.parse_macro_param(a),
@@ -180,7 +180,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
     }
 
     fn parse_argument_list<C: CommandContext<T, TokenSpec = S>>(&mut self, actions: C) -> C {
-        self.parse_list(
+        self.parse_terminated_list(
             Some(Token::Comma),
             follows_line,
             |p, c| p.parse_argument(c),
@@ -192,7 +192,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
         &mut self,
         actions: M,
     ) -> M {
-        self.parse_list(
+        self.parse_terminated_list(
             Some(Token::Comma),
             follows_line,
             |p, actions| {
@@ -208,11 +208,11 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
         )
     }
 
-    fn parse_list<FP, P, C>(
+    fn parse_terminated_list<FP, P, C>(
         &mut self,
         delimiter: Lookahead,
         mut follow: FP,
-        mut parser: P,
+        parser: P,
         mut context: C,
     ) -> C
     where
@@ -220,27 +220,57 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
         P: FnMut(&mut Self, C) -> C,
         C: DiagnosticsListener<T>,
     {
-        let first_terminal = self.lookahead();
-        if !follow(first_terminal) {
-            context = parser(self, context);
-            while self.lookahead() == delimiter {
+        context = self.parse_list(delimiter, &mut follow, parser, context);
+        if !follow(self.lookahead()) {
+            let unexpected_range = self.tokens.peek().unwrap().1.clone();
+            context.emit_diagnostic(Diagnostic::new(
+                Message::UnexpectedToken {
+                    token: unexpected_range.clone(),
+                },
+                unexpected_range,
+            ));
+            while !follow(self.lookahead()) {
                 self.bump();
-                context = parser(self, context)
-            }
-            if !follow(self.lookahead()) {
-                let unexpected_range = self.tokens.peek().unwrap().1.clone();
-                context.emit_diagnostic(Diagnostic::new(
-                    Message::UnexpectedToken {
-                        token: unexpected_range.clone(),
-                    },
-                    unexpected_range,
-                ));
-                while !follow(self.lookahead()) {
-                    self.bump();
-                }
             }
         }
         context
+    }
+
+    fn parse_list<FP, P, C>(
+        &mut self,
+        delimiter: Lookahead,
+        follow: &mut FP,
+        mut parser: P,
+        context: C,
+    ) -> C
+    where
+        FP: FnMut(Lookahead) -> bool,
+        P: FnMut(&mut Self, C) -> C,
+        C: DiagnosticsListener<T>,
+    {
+        if follow(self.lookahead()) {
+            context
+        } else {
+            self.parse_nonempty_list(delimiter, &mut parser, context)
+        }
+    }
+
+    fn parse_nonempty_list<P, C>(
+        &mut self,
+        delimiter: Lookahead,
+        parser: &mut P,
+        mut actions: C,
+    ) -> C
+    where
+        P: FnMut(&mut Self, C) -> C,
+        C: DiagnosticsListener<T>,
+    {
+        actions = parser(self, actions);
+        while self.lookahead() == delimiter {
+            self.bump();
+            actions = parser(self, actions)
+        }
+        actions
     }
 
     fn parse_argument<C: CommandContext<T, TokenSpec = S>>(&mut self, actions: C) -> C {
