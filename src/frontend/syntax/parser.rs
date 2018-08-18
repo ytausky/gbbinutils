@@ -1148,17 +1148,7 @@ mod tests {
         ranges: impl Borrow<[&'static str]>,
         highlight: impl Into<TokenRef>,
     ) -> Option<LineBody> {
-        Some(
-            SymDiagnostic {
-                message_ctor,
-                ranges: ranges
-                    .borrow()
-                    .iter()
-                    .map(|s| TokenRef::from(*s).into())
-                    .collect(),
-                highlight: highlight.into().into(),
-            }.into(),
-        )
+        Some(arg_error(message_ctor, ranges, highlight).into())
     }
 
     fn arg_error(
