@@ -2,7 +2,8 @@ pub use backend::object::link;
 pub use backend::object::ObjectBuilder;
 
 use backend::{
-    lowering::Lower, object::{Node, Object},
+    lowering::Lower,
+    object::{Node, Object},
 };
 use diagnostics::*;
 use instruction::Instruction;

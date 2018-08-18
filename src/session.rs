@@ -1,5 +1,6 @@
 use std::{
-    borrow::{Borrow, BorrowMut}, marker,
+    borrow::{Borrow, BorrowMut},
+    marker,
 };
 use {backend, diagnostics, frontend};
 

@@ -46,6 +46,8 @@ fn follows_line(lookahead: Lookahead) -> bool {
     }
 }
 
+const LINE_FOLLOW_SET: &[Lookahead] = &[Some(Token::Eol), None];
+
 pub fn parse_src<S: TokenSpec, T: SourceRange, I, F>(tokens: I, actions: F)
 where
     I: Iterator<Item = (Token<S>, T)>,
@@ -80,6 +82,11 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
         self.tokens.peek().map(|&(ref t, _)| t.kind())
     }
 
+    fn is_lookahead_in(&mut self, kinds: &[Lookahead]) -> bool {
+        let lookahead = self.lookahead();
+        kinds.iter().find(|&x| *x == lookahead).is_some()
+    }
+
     fn bump(&mut self) -> I::Item {
         self.tokens.next().unwrap()
     }
@@ -90,12 +97,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
     }
 
     fn parse_file<F: FileContext<S, T>>(&mut self, actions: F) {
-        self.parse_terminated_list(
-            Some(Token::Eol),
-            |l| l.is_none(),
-            |p, c| p.parse_line(c),
-            actions,
-        );
+        self.parse_terminated_list(Some(Token::Eol), &[None], |p, c| p.parse_line(c), actions);
     }
 
     fn parse_line<F: FileContext<S, T>>(&mut self, actions: F) -> F {
@@ -140,12 +142,13 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
 
     fn parse_macro_def<LA: LineActions<S, T>>(&mut self, actions: LA) -> LA {
         self.expect(Some(Token::Macro));
-        let mut macro_body_actions = self.parse_terminated_list(
-            Some(Token::Comma),
-            follows_line,
-            |p, a| p.parse_macro_param(a),
-            actions.enter_macro_def(),
-        ).exit();
+        let mut macro_body_actions =
+            self.parse_terminated_list(
+                Some(Token::Comma),
+                LINE_FOLLOW_SET,
+                |p, a| p.parse_macro_param(a),
+                actions.enter_macro_def(),
+            ).exit();
         self.expect(Some(Token::Eol));
         while self.lookahead() != Some(Token::Endm) {
             macro_body_actions.push_token(self.bump())
@@ -182,7 +185,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
     fn parse_argument_list<C: CommandContext<T, TokenSpec = S>>(&mut self, actions: C) -> C {
         self.parse_terminated_list(
             Some(Token::Comma),
-            follows_line,
+            LINE_FOLLOW_SET,
             |p, c| p.parse_argument(c),
             actions,
         )
@@ -194,7 +197,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
     ) -> M {
         self.parse_terminated_list(
             Some(Token::Comma),
-            follows_line,
+            LINE_FOLLOW_SET,
             |p, actions| {
                 let mut arg_context = actions.enter_macro_arg();
                 let mut next_token = p.lookahead();
@@ -208,20 +211,19 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
         )
     }
 
-    fn parse_terminated_list<FP, P, C>(
+    fn parse_terminated_list<P, C>(
         &mut self,
         delimiter: Lookahead,
-        mut follow: FP,
+        terminators: &[Lookahead],
         parser: P,
         mut context: C,
     ) -> C
     where
-        FP: FnMut(Lookahead) -> bool,
         P: FnMut(&mut Self, C) -> C,
         C: DiagnosticsListener<T>,
     {
-        context = self.parse_list(delimiter, &mut follow, parser, context);
-        if !follow(self.lookahead()) {
+        context = self.parse_list(delimiter, terminators, parser, context);
+        if !self.is_lookahead_in(terminators) {
             let unexpected_range = self.tokens.peek().unwrap().1.clone();
             context.emit_diagnostic(Diagnostic::new(
                 Message::UnexpectedToken {
@@ -229,26 +231,25 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
                 },
                 unexpected_range,
             ));
-            while !follow(self.lookahead()) {
+            while !self.is_lookahead_in(terminators) {
                 self.bump();
             }
         }
         context
     }
 
-    fn parse_list<FP, P, C>(
+    fn parse_list<P, C>(
         &mut self,
         delimiter: Lookahead,
-        follow: &mut FP,
+        terminators: &[Lookahead],
         mut parser: P,
         context: C,
     ) -> C
     where
-        FP: FnMut(Lookahead) -> bool,
         P: FnMut(&mut Self, C) -> C,
         C: DiagnosticsListener<T>,
     {
-        if follow(self.lookahead()) {
+        if self.is_lookahead_in(terminators) {
             context
         } else {
             self.parse_nonempty_list(delimiter, &mut parser, context)
@@ -313,7 +314,8 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I> 
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_src, Token::{self, *},
+        parse_src,
+        Token::{self, *},
     };
 
     use diagnostics::{Diagnostic, DiagnosticsListener, Message, SourceRange};

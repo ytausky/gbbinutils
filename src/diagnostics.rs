@@ -289,7 +289,8 @@ fn elaborate<'a>(
         } => {
             let buf = codebase.buf(context.buf_id);
             let text_range = buf.text_range(&range);
-            let (_, src_line) = buf.lines(text_range.start.line..text_range.end.line + 1)
+            let (_, src_line) = buf
+                .lines(text_range.start.line..text_range.end.line + 1)
                 .next()
                 .unwrap();
             ElaboratedDiagnostic {

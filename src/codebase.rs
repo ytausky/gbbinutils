@@ -81,7 +81,8 @@ impl StringSrcBuf {
     }
 
     fn line_index(&self, buf_offset: usize) -> LineIndex {
-        match self.line_ranges
+        match self
+            .line_ranges
             .binary_search_by(|&ops::Range { start, end }| {
                 if start <= buf_offset {
                     if buf_offset <= end {
@@ -185,7 +186,8 @@ impl TextCache {
 fn build_line_ranges(src: &str) -> Vec<ops::Range<usize>> {
     let mut line_ranges = Vec::new();
     let mut current_line_start = 0;
-    for index in src.char_indices()
+    for index in src
+        .char_indices()
         .filter(|&(_, ch)| ch == '\n')
         .map(|(index, _)| index)
     {

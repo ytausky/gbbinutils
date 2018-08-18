@@ -95,15 +95,16 @@ fn resolve_expr_item<SR: SourceRange>(
     diagnostics: &DiagnosticsListener<SR>,
 ) -> Data {
     let range = expr.source_range();
-    let value = expr.evaluate_strictly(context, &mut |symbol, range| {
-        diagnostics.emit_diagnostic(Diagnostic::new(
-            Message::UnresolvedSymbol {
-                symbol: symbol.to_string(),
-            },
-            range.clone(),
-        ))
-    }).exact()
-        .unwrap_or(0);
+    let value =
+        expr.evaluate_strictly(context, &mut |symbol, range| {
+            diagnostics.emit_diagnostic(Diagnostic::new(
+                Message::UnresolvedSymbol {
+                    symbol: symbol.to_string(),
+                },
+                range.clone(),
+            ))
+        }).exact()
+            .unwrap_or(0);
     fit_to_width((value, range), width, diagnostics)
 }
 

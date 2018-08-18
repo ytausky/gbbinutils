@@ -1,5 +1,7 @@
 use frontend::syntax::{
-    self, keyword::{self as kw, *}, token, Literal, Token,
+    self,
+    keyword::{self as kw, *},
+    token, Literal, Token,
 };
 
 use std::iter;
