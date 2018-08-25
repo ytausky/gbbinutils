@@ -311,7 +311,10 @@ impl<'a> fmt::Display for ElaboratedDiagnostic<'a> {
         let line_number: LineNumber = self.highlight.start.line.into();
         let mut highlight = String::new();
         let space_count = self.highlight.start.column_index;
-        let tilde_count = self.highlight.end.column_index - space_count;
+        let tilde_count = match self.highlight.end.column_index - space_count {
+            0 => 1,
+            n => n,
+        };
         for _ in 0..space_count {
             highlight.push(' ');
         }
@@ -428,6 +431,21 @@ mod tests {
     ~~~~~~~~
 ";
         assert_eq!(elaborated_diagnostic.to_string(), expected)
+    }
+
+    #[test]
+    fn highlight_eof_with_one_tilde() {
+        let elaborated = ElaboratedDiagnostic {
+            text: "unexpected end of file".into(),
+            buf_name: DUMMY_FILE,
+            highlight: mk_highlight(LineNumber(2), 5, 5),
+            src_line: "dummy",
+        };
+        let expected = r"/my/file:2: error: unexpected end of file
+dummy
+     ~
+";
+        assert_eq!(elaborated.to_string(), expected)
     }
 
     #[test]
