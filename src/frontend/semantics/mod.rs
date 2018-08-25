@@ -385,6 +385,12 @@ impl<'a, F: Session + 'a> MacroArgActions<'a, F> {
     }
 }
 
+impl<'a, F: Session + 'a> DiagnosticsListener<F::TokenRef> for MacroArgActions<'a, F> {
+    fn emit_diagnostic(&self, diagnostic: Diagnostic<F::TokenRef>) {
+        self.parent.parent.session.emit_diagnostic(diagnostic)
+    }
+}
+
 impl<'a, F: Session + 'a> syntax::TokenSeqContext<F::TokenRef> for MacroArgActions<'a, F> {
     type Token = Token;
     type Parent = MacroInvocationActions<'a, F>;

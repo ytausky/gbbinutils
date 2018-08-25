@@ -173,18 +173,25 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I, 
         );
         if self.consume(Token::Eol) {
             let mut body_actions = actions.exit();
-            self.take_token_while(|x| x != Token::Endm, |token| body_actions.push_token(token));
-            let endm = self.bump();
-            assert_eq!(endm.0.kind(), Token::Endm);
-            body_actions.push_token((Token::Eof, endm.1));
+            self.take_token_while(
+                |x| x != Token::Endm && x != Token::Eof,
+                |token| body_actions.push_token(token),
+            );
+            if self.lookahead() == Token::Endm {
+                let endm = self.bump();
+                body_actions.push_token((Token::Eof, endm.1));
+            } else {
+                assert_eq!(self.lookahead(), Token::Eof);
+                body_actions.emit_diagnostic(Diagnostic::new(
+                    Message::UnexpectedEof,
+                    self.tokens.peek().unwrap().1.clone(),
+                ))
+            }
             body_actions
         } else {
             assert_eq!(self.lookahead(), Token::Eof);
-            let last_token = self.prev_token.clone().unwrap();
             actions.emit_diagnostic(Diagnostic::new(
-                Message::UnexpectedEof {
-                    prev_token: last_token.clone(),
-                },
+                Message::UnexpectedEof,
                 self.tokens.peek().unwrap().1.clone(),
             ));
             actions.exit()
@@ -762,10 +769,22 @@ mod tests {
     #[test]
     fn diagnose_eof_after_macro_param_list() {
         assert_eq_actions(
-            input_tokens![kw_macro @ Macro, endm @ Eof],
+            input_tokens![Macro, eof @ Eof],
             file([unlabeled(malformed_macro_def_head(
                 [],
-                arg_error(unexpected_eof, ["kw_macro"], "endm"),
+                arg_error(unexpected_eof, [], "eof"),
+            ))]),
+        )
+    }
+
+    #[test]
+    fn diagnose_eof_in_macro_body() {
+        assert_eq_actions(
+            input_tokens![Macro, Eol, eof @ Eof],
+            file([unlabeled(malformed_macro_def(
+                [],
+                [],
+                arg_error(unexpected_eof, [], "eof"),
             ))]),
         )
     }

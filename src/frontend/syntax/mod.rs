@@ -137,9 +137,12 @@ where
     fn exit(self) -> Self::Parent;
 }
 
-pub trait TokenSeqContext<R> {
+pub trait TokenSeqContext<SR>
+where
+    Self: DiagnosticsListener<SR>,
+{
     type Token;
     type Parent;
-    fn push_token(&mut self, token: (Self::Token, R));
+    fn push_token(&mut self, token: (Self::Token, SR));
     fn exit(self) -> Self::Parent;
 }

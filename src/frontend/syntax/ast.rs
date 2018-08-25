@@ -308,6 +308,17 @@ pub fn malformed_macro_def_head(
     ))
 }
 
+pub fn malformed_macro_def(
+    params: impl Borrow<[usize]>,
+    body: impl Borrow<[usize]>,
+    diagnostic: SymDiagnostic,
+) -> Option<LineBody> {
+    Some(LineBody::MacroDef(
+        params.borrow().iter().cloned().collect(),
+        MacroDefTail::Body(body.borrow().iter().cloned().collect(), Some(diagnostic)),
+    ))
+}
+
 impl LineBody {
     fn into_actions(self, input: &InputTokens) -> Vec<Action> {
         let mut actions = Vec::new();
@@ -342,9 +353,12 @@ impl LineBody {
                         .map(|id| Action::AddParameter(SymIdent(id))),
                 );
                 match tail {
-                    MacroDefTail::Body(body, _) => {
+                    MacroDefTail::Body(body, error) => {
                         actions.push(Action::EnterMacroBody);
                         actions.extend(body.into_iter().map(|t| Action::PushTerminal(t)));
+                        if let Some(diagnostic) = error {
+                            actions.push(diagnostic.into_action(input))
+                        }
                     }
                     MacroDefTail::Error(diagnostic) => {
                         actions.push(diagnostic.into_action(input));
@@ -445,10 +459,8 @@ pub fn unexpected_token(ranges: Vec<SymRange<usize>>) -> Message<SymRange<usize>
     }
 }
 
-pub fn unexpected_eof(ranges: Vec<SymRange<usize>>) -> Message<SymRange<usize>> {
-    Message::UnexpectedEof {
-        prev_token: ranges.into_iter().next().unwrap(),
-    }
+pub fn unexpected_eof(_ranges: Vec<SymRange<usize>>) -> Message<SymRange<usize>> {
+    Message::UnexpectedEof
 }
 
 #[cfg(test)]
