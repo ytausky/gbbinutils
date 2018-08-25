@@ -313,7 +313,7 @@ impl<SR> ExpandedMacro<SR> {
                 self.arg_index = None
             }
         }
-        if let None = self.arg_index {
+        if self.arg_index.is_none() {
             self.body_index += 1;
             self.try_expand()
         }

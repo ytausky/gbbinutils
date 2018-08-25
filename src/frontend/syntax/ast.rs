@@ -454,7 +454,7 @@ pub fn unexpected_eof(ranges: Vec<SymRange<usize>>) -> Message<SymRange<usize>> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_token_macro() {
         let tokens = input_tokens![

@@ -79,9 +79,9 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I, 
         self.tokens.peek().unwrap().0.kind()
     }
 
-    fn is_lookahead_in(&mut self, kinds: &[Lookahead]) -> bool {
+    fn lookahead_is_in(&mut self, kinds: &[Lookahead]) -> bool {
         let lookahead = self.lookahead();
-        kinds.iter().find(|&x| *x == lookahead).is_some()
+        kinds.iter().any(|x| *x == lookahead)
     }
 
     fn consume(&mut self, kind: Token<()>) -> bool {
@@ -106,7 +106,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I, 
         P: Fn(Token<()>) -> bool,
         F: FnMut((Token<S>, T)),
     {
-        while self.take_token_if(|x| predicate(x), |token| f(token)) {}
+        while self.take_token_if(&predicate, &mut f) {}
     }
 
     fn bump(&mut self) -> I::Item {
@@ -256,7 +256,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I, 
         C: DiagnosticsListener<T>,
     {
         context = self.parse_list(delimiter, terminators, parser, context);
-        if !self.is_lookahead_in(terminators) {
+        if !self.lookahead_is_in(terminators) {
             let (_, unexpected_range) = self.bump();
             context.emit_diagnostic(Diagnostic::new(
                 Message::UnexpectedToken {
@@ -264,7 +264,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I, 
                 },
                 unexpected_range,
             ));
-            while !self.is_lookahead_in(terminators) {
+            while !self.lookahead_is_in(terminators) {
                 self.bump();
             }
         }
@@ -282,7 +282,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I, 
         P: FnMut(&mut Self, C) -> C,
         C: DiagnosticsListener<T>,
     {
-        if self.is_lookahead_in(terminators) {
+        if self.lookahead_is_in(terminators) {
             context
         } else {
             self.parse_nonempty_list(delimiter, &mut parser, context)
