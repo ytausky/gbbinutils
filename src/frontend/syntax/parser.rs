@@ -185,7 +185,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I, 
                 Message::UnexpectedEof {
                     prev_token: last_token.clone(),
                 },
-                last_token,
+                self.tokens.peek().unwrap().1.clone(),
             ));
             actions.exit()
         }.exit()
@@ -762,10 +762,10 @@ mod tests {
     #[test]
     fn diagnose_eof_after_macro_param_list() {
         assert_eq_actions(
-            input_tokens![kw_macro @ Macro],
+            input_tokens![kw_macro @ Macro, endm @ Eof],
             file([unlabeled(malformed_macro_def_head(
                 [],
-                arg_error(unexpected_eof, ["kw_macro"], "kw_macro"),
+                arg_error(unexpected_eof, ["kw_macro"], "endm"),
             ))]),
         )
     }
