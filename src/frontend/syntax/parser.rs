@@ -10,6 +10,7 @@ pub enum Token<S: TokenSpec> {
     Comma,
     Command(S::Command),
     Endm,
+    Eof,
     Eol,
     Ident(S::Ident),
     Literal(S::Literal),
@@ -28,6 +29,7 @@ impl<S: TokenSpec> Token<S> {
             Comma => Comma,
             Command(_) => Command(()),
             Endm => Endm,
+            Eof => Eof,
             Eol => Eol,
             Ident(_) => Ident(()),
             Literal(_) => Literal(()),
@@ -37,9 +39,9 @@ impl<S: TokenSpec> Token<S> {
     }
 }
 
-type Lookahead = Option<Token<()>>;
+type Lookahead = Token<()>;
 
-const LINE_FOLLOW_SET: &[Lookahead] = &[Some(Token::Eol), None];
+const LINE_FOLLOW_SET: &[Lookahead] = &[Token::Eol, Token::Eof];
 
 pub fn parse_src<S: TokenSpec, T: SourceRange, I, F>(tokens: I, actions: F)
 where
@@ -74,7 +76,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I, 
     mk_expect!(expect_ident, Ident);
 
     fn lookahead(&mut self) -> Lookahead {
-        self.tokens.peek().map(|&(ref t, _)| t.kind())
+        self.tokens.peek().unwrap().0.kind()
     }
 
     fn is_lookahead_in(&mut self, kinds: &[Lookahead]) -> bool {
@@ -91,7 +93,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I, 
         P: FnOnce(Token<()>) -> bool,
         F: FnOnce((Token<S>, T)),
     {
-        if self.lookahead().map(predicate).unwrap_or(false) {
+        if predicate(self.lookahead()) {
             f(self.bump());
             true
         } else {
@@ -119,11 +121,11 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I, 
     }
 
     fn parse_file<F: FileContext<S, T>>(&mut self, actions: F) {
-        self.parse_terminated_list(Token::Eol, &[None], |p, c| p.parse_line(c), actions);
+        self.parse_terminated_list(Token::Eol, &[Token::Eof], |p, c| p.parse_line(c), actions);
     }
 
     fn parse_line<F: FileContext<S, T>>(&mut self, actions: F) -> F {
-        if self.lookahead() == Some(Token::Ident(())) {
+        if self.lookahead() == Token::Ident(()) {
             self.parse_potentially_labeled_line(actions)
         } else {
             self.parse_unlabeled_line(actions.enter_line(None)).exit()
@@ -141,14 +143,14 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I, 
 
     fn parse_unlabeled_line<LA: LineActions<S, T>>(&mut self, actions: LA) -> LA {
         match self.lookahead() {
-            None | Some(Token::Eol) => actions,
-            Some(Token::Command(())) => self.parse_command(actions),
-            Some(Token::Ident(())) => {
+            Token::Eol | Token::Eof => actions,
+            Token::Command(()) => self.parse_command(actions),
+            Token::Ident(()) => {
                 let ident = self.expect_ident();
                 self.parse_macro_invocation(ident, actions)
             }
-            Some(Token::Macro) => self.parse_macro_def(actions),
-            Some(_) => {
+            Token::Macro => self.parse_macro_def(actions),
+            _ => {
                 let (_, range) = self.bump();
                 actions.emit_diagnostic(Diagnostic::new(
                     Message::UnexpectedToken {
@@ -162,7 +164,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I, 
     }
 
     fn parse_macro_def<LA: LineActions<S, T>>(&mut self, actions: LA) -> LA {
-        self.expect(Some(Token::Macro));
+        self.expect(Token::Macro);
         let actions = self.parse_terminated_list(
             Token::Comma,
             LINE_FOLLOW_SET,
@@ -172,10 +174,12 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I, 
         if self.consume(Token::Eol) {
             let mut body_actions = actions.exit();
             self.take_token_while(|x| x != Token::Endm, |token| body_actions.push_token(token));
-            self.expect(Some(Token::Endm));
+            let endm = self.bump();
+            assert_eq!(endm.0.kind(), Token::Endm);
+            body_actions.push_token((Token::Eof, endm.1));
             body_actions
         } else {
-            assert_eq!(self.lookahead(), None);
+            assert_eq!(self.lookahead(), Token::Eof);
             let last_token = self.prev_token.clone().unwrap();
             actions.emit_diagnostic(Diagnostic::new(
                 Message::UnexpectedEof {
@@ -231,7 +235,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I, 
             |p, actions| {
                 let mut arg_context = actions.enter_macro_arg();
                 p.take_token_while(
-                    |x| x != Token::Comma && x != Token::Eol,
+                    |x| x != Token::Comma && x != Token::Eol && x != Token::Eof,
                     |token| arg_context.push_token(token),
                 );
                 arg_context.exit()
@@ -307,7 +311,7 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I, 
     }
 
     fn parse_expression<EA: ExprActions<T, TokenSpec = S>>(&mut self, actions: EA) -> EA {
-        if self.lookahead() == Some(Token::OpeningParenthesis) {
+        if self.lookahead() == Token::OpeningParenthesis {
             self.parse_parenthesized_expression(actions)
         } else {
             self.parse_atomic_expr(actions)
@@ -318,9 +322,9 @@ impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I, 
         &mut self,
         actions: EA,
     ) -> EA {
-        let (_, left) = self.expect(Some(Token::OpeningParenthesis));
+        let (_, left) = self.expect(Token::OpeningParenthesis);
         let mut actions = self.parse_expression(actions);
-        let (_, right) = self.expect(Some(Token::ClosingParenthesis));
+        let (_, right) = self.expect(Token::ClosingParenthesis);
         actions.apply_operator((ExprOperator::Parentheses, left.extend(&right)));
         actions
     }
@@ -382,6 +386,7 @@ mod tests {
             Colon => Colon,
             Comma => Comma,
             Endm => Endm,
+            Eof => Eof,
             Eol => Eol,
             Macro => Macro,
             OpeningParenthesis => OpeningParenthesis,
@@ -676,10 +681,18 @@ mod tests {
         )
     }
 
-    fn assert_eq_actions(tokens: InputTokens, expected: File) {
+    fn assert_eq_actions(mut input: InputTokens, expected: File) {
+        if input
+            .tokens
+            .last()
+            .map(|token| token.kind() != Token::Eof)
+            .unwrap_or(true)
+        {
+            input.tokens.push(Token::Eof)
+        }
         let mut parsing_context = TestContext::new();
         parse_src(
-            tokens
+            input
                 .tokens
                 .iter()
                 .cloned()
@@ -688,7 +701,7 @@ mod tests {
         );
         assert_eq!(
             parsing_context.actions.into_inner(),
-            expected.into_actions(&tokens)
+            expected.into_actions(&input)
         )
     }
 
@@ -853,10 +866,18 @@ mod tests {
         ))
     }
 
-    fn macro_def(params: impl Borrow<[usize]>, body: impl Borrow<[usize]>) -> Option<LineBody> {
+    fn macro_def(
+        params: impl Borrow<[usize]>,
+        body: impl Borrow<[usize]>,
+        endm: usize,
+    ) -> Option<LineBody> {
+        use std::iter::once;
         Some(LineBody::MacroDef(
             params.borrow().iter().cloned().collect(),
-            MacroDefTail::Body(body.borrow().iter().cloned().collect(), None),
+            MacroDefTail::Body(
+                body.borrow().iter().cloned().chain(once(endm)).collect(),
+                None,
+            ),
         ))
     }
 
@@ -1046,14 +1067,14 @@ mod tests {
     #[test]
     fn parse_empty_macro_definition() {
         let tokens = input_tokens![Ident(()), Colon, Macro, Eol, Endm];
-        let expected_actions = file([labeled(0, macro_def([], []))]);
+        let expected_actions = file([labeled(0, macro_def([], [], 4))]);
         assert_eq_actions(tokens, expected_actions);
     }
 
     #[test]
     fn parse_macro_definition_with_instruction() {
         let tokens = input_tokens![Ident(()), Colon, Macro, Eol, Command(()), Eol, Endm];
-        let expected_actions = file([labeled(0, macro_def([], [4, 5]))]);
+        let expected_actions = file([labeled(0, macro_def([], [4, 5], 6))]);
         assert_eq_actions(tokens, expected_actions)
     }
 
@@ -1071,7 +1092,7 @@ mod tests {
             Eol,
             Endm,
         ];
-        let expected = file([labeled(0, macro_def([3, 5], [7, 8]))]);
+        let expected = file([labeled(0, macro_def([3, 5], [7, 8], 9))]);
         assert_eq_actions(tokens, expected)
     }
 

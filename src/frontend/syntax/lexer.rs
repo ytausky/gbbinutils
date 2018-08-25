@@ -13,6 +13,7 @@ enum TokenKind {
     ClosingParenthesis,
     Colon,
     Comma,
+    Eof,
     Eol,
     Ident,
     Number(Radix),
@@ -30,6 +31,7 @@ struct Scanner<I: Iterator> {
     chars: iter::Peekable<I>,
     range: Range<usize>,
     is_at_line_start: bool,
+    is_at_file_end: bool,
 }
 
 impl<I: Iterator<Item = char>> Iterator for Scanner<I> {
@@ -40,6 +42,9 @@ impl<I: Iterator<Item = char>> Iterator for Scanner<I> {
         if self.chars.peek().is_some() {
             self.range.start = self.range.end;
             Some(self.lex_token())
+        } else if !self.is_at_file_end {
+            self.is_at_file_end = true;
+            Some((TokenKind::Eof, self.range.end..self.range.end))
         } else {
             None
         }
@@ -52,6 +57,7 @@ impl<I: Iterator<Item = char>> Scanner<I> {
             chars: chars.peekable(),
             range: Range { start: 0, end: 0 },
             is_at_line_start: true,
+            is_at_file_end: false,
         }
     }
 
@@ -176,6 +182,7 @@ fn mk_token(kind: TokenKind, lexeme: &str) -> Token {
         TokenKind::ClosingParenthesis => token::ClosingParenthesis,
         TokenKind::Colon => token::Colon,
         TokenKind::Comma => token::Comma,
+        TokenKind::Eof => token::Eof,
         TokenKind::Eol => token::Eol,
         TokenKind::Ident => mk_keyword_or(token::Ident, lexeme),
         TokenKind::Number(Radix::Decimal) => {
@@ -309,11 +316,33 @@ mod tests {
     use super::syntax::token::*;
     use super::syntax::Literal::{Number, Operand};
     use super::Operand::*;
+    use std::borrow::Borrow;
 
-    fn assert_eq_tokens<'a>(src: &'a str, expected_tokens: &[Token]) {
+    #[test]
+    fn range_of_eof_in_empty_str() {
+        test_byte_range_at_eof("", [(Eof, 0..0)])
+    }
+
+    #[test]
+    fn range_of_eof_after_ident() {
+        test_byte_range_at_eof("ident", [(Ident("ident".into()), 0..5), (Eof, 5..5)])
+    }
+
+    #[test]
+    fn range_of_eof_after_trailing_whitespace() {
+        test_byte_range_at_eof("ident ", [(Ident("ident".into()), 0..5), (Eof, 6..6)])
+    }
+
+    fn test_byte_range_at_eof(src: &str, tokens: impl Borrow<[(Token, Range<usize>)]>) {
+        assert_eq!(Lexer::new(src).collect::<Vec<_>>(), tokens.borrow())
+    }
+
+    fn assert_eq_tokens<'a>(src: &'a str, expected_without_eof: &[Token]) {
+        let mut expected: Vec<_> = expected_without_eof.iter().cloned().collect();
+        expected.push(Eof);
         assert_eq!(
             Lexer::new(src).map(|(t, _)| t).collect::<Vec<_>>(),
-            expected_tokens
+            expected
         )
     }
 
