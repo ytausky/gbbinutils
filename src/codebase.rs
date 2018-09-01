@@ -108,10 +108,21 @@ impl StringSrcBuf {
         }
     }
 
-    pub fn lines(&self, line_range: ops::Range<LineIndex>) -> TextLines {
+    pub fn lines(&self, line_range: impl ops::RangeBounds<LineIndex>) -> TextLines {
+        use std::ops::Bound::*;
+        let start = match line_range.start_bound() {
+            Included(&n) => n,
+            Excluded(&n) => n + 1,
+            Unbounded => LineIndex(0),
+        };
+        let end = match line_range.end_bound() {
+            Included(&n) => n + 1,
+            Excluded(&n) => n,
+            Unbounded => LineIndex(self.line_ranges.len()),
+        };
         TextLines {
             buf: self,
-            remaining_range: line_range,
+            remaining_range: start..end,
         }
     }
 

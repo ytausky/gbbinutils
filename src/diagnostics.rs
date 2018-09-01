@@ -214,7 +214,7 @@ impl Message<TokenRefData> {
             ),
             StringInInstruction => "strings cannot appear in instruction operands".into(),
             UndefinedMacro { name } => format!("invocation of undefined macro `{}`", name),
-            UnexpectedEof => format!("unexpected end of file"),
+            UnexpectedEof => "unexpected end of file".into(),
             UnexpectedToken { token } => format!(
                 "encountered unexpected token `{}`",
                 mk_snippet(codebase, token)
@@ -292,7 +292,7 @@ fn elaborate<'a>(
             let buf = codebase.buf(context.buf_id);
             let text_range = buf.text_range(&range);
             let (_, src_line) = buf
-                .lines(text_range.start.line..text_range.end.line + 1)
+                .lines(text_range.start.line..=text_range.end.line)
                 .next()
                 .unwrap();
             ElaboratedDiagnostic {
