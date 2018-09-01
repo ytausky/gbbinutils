@@ -217,7 +217,7 @@ pub fn empty() -> Option<LineBody> {
 
 #[derive(Clone)]
 pub enum LineBody {
-    Command(TokenRef, Vec<SymExpr>, Option<SymDiagnostic>),
+    Command(TokenRef, Vec<SymExpr<TokenRef>>, Option<SymDiagnostic>),
     Error(SymDiagnostic),
     Invoke(usize, Vec<TokenSeq>),
     MacroDef(Vec<usize>, MacroDefTail),
@@ -256,7 +256,10 @@ impl SymDiagnostic {
     }
 }
 
-pub fn command(id: impl Into<TokenRef>, args: impl Borrow<[SymExpr]>) -> Option<LineBody> {
+pub fn command(
+    id: impl Into<TokenRef>,
+    args: impl Borrow<[SymExpr<TokenRef>]>,
+) -> Option<LineBody> {
     Some(LineBody::Command(
         id.into(),
         args.borrow().iter().cloned().collect(),
@@ -266,7 +269,7 @@ pub fn command(id: impl Into<TokenRef>, args: impl Borrow<[SymExpr]>) -> Option<
 
 pub fn malformed_command(
     id: impl Into<TokenRef>,
-    args: impl Borrow<[SymExpr]>,
+    args: impl Borrow<[SymExpr<TokenRef>]>,
     diagnostic: SymDiagnostic,
 ) -> Option<LineBody> {
     Some(LineBody::Command(
@@ -388,30 +391,30 @@ impl TokenSeq {
     }
 }
 
-pub fn ident(id: impl Into<TokenRef>) -> SymExpr {
+pub fn ident(id: impl Into<TokenRef>) -> SymExpr<TokenRef> {
     SymExpr::Ident(id.into())
 }
 
-pub fn literal(id: impl Into<TokenRef>) -> SymExpr {
+pub fn literal(id: impl Into<TokenRef>) -> SymExpr<TokenRef> {
     SymExpr::Literal(id.into())
 }
 
 pub fn parentheses(
     open_id: impl Into<TokenRef>,
-    expr: SymExpr,
+    expr: SymExpr<TokenRef>,
     close_id: impl Into<TokenRef>,
-) -> SymExpr {
+) -> SymExpr<TokenRef> {
     SymExpr::Parentheses(open_id.into(), Box::new(expr), close_id.into())
 }
 
 #[derive(Clone)]
-pub enum SymExpr {
-    Ident(TokenRef),
-    Literal(TokenRef),
-    Parentheses(TokenRef, Box<SymExpr>, TokenRef),
+pub enum SymExpr<S> {
+    Ident(S),
+    Literal(S),
+    Parentheses(S, Box<SymExpr<S>>, S),
 }
 
-impl SymExpr {
+impl SymExpr<TokenRef> {
     fn into_actions(self, input: &InputTokens) -> Vec<Action> {
         match self {
             SymExpr::Ident(ident) => vec![Action::PushExprAtom(ExprAtom::Ident(SymIdent(
