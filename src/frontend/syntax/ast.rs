@@ -404,14 +404,22 @@ pub fn parentheses(
     expr: SymExpr<TokenRef>,
     close_id: impl Into<TokenRef>,
 ) -> SymExpr<TokenRef> {
-    SymExpr::Parentheses(open_id.into(), Box::new(expr), close_id.into())
+    SymExpr::Parentheses {
+        left: open_id.into(),
+        right: close_id.into(),
+        inner: Box::new(expr),
+    }
 }
 
 #[derive(Clone)]
 pub enum SymExpr<S> {
     Ident(S),
     Literal(S),
-    Parentheses(S, Box<SymExpr<S>>, S),
+    Parentheses {
+        left: S,
+        right: S,
+        inner: Box<SymExpr<S>>,
+    },
 }
 
 impl SymExpr<TokenRef> {
@@ -423,8 +431,8 @@ impl SymExpr<TokenRef> {
             SymExpr::Literal(literal) => vec![Action::PushExprAtom(ExprAtom::Literal(SymLiteral(
                 literal.resolve(input),
             )))],
-            SymExpr::Parentheses(_, expr, _) => {
-                let mut actions = expr.into_actions(input);
+            SymExpr::Parentheses { inner, .. } => {
+                let mut actions = inner.into_actions(input);
                 actions.push(Action::ApplyExprOperator(ExprOperator::Parentheses));
                 actions
             }
