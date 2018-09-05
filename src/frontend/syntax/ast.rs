@@ -138,7 +138,7 @@ pub enum Action {
     PushTerminal(usize),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum TokenRef {
     Id(usize),
     Name(String),
@@ -217,11 +217,13 @@ pub fn empty() -> Option<LineBody> {
 
 #[derive(Clone)]
 pub enum LineBody {
-    Command(TokenRef, Vec<Expr<TokenRef>>, Option<SymDiagnostic>),
+    Command(TokenRef, Vec<SymExpr>, Option<SymDiagnostic>),
     Error(SymDiagnostic),
     Invoke(usize, Vec<TokenSeq>),
     MacroDef(Vec<usize>, MacroDefTail),
 }
+
+pub type SymExpr = Expr<TokenRef, TokenRef, SymRange<TokenRef>>;
 
 #[derive(Clone)]
 pub enum MacroDefTail {
@@ -256,7 +258,7 @@ impl SymDiagnostic {
     }
 }
 
-pub fn command(id: impl Into<TokenRef>, args: impl Borrow<[Expr<TokenRef>]>) -> Option<LineBody> {
+pub fn command(id: impl Into<TokenRef>, args: impl Borrow<[SymExpr]>) -> Option<LineBody> {
     Some(LineBody::Command(
         id.into(),
         args.borrow().iter().cloned().collect(),
@@ -266,7 +268,7 @@ pub fn command(id: impl Into<TokenRef>, args: impl Borrow<[Expr<TokenRef>]>) -> 
 
 pub fn malformed_command(
     id: impl Into<TokenRef>,
-    args: impl Borrow<[Expr<TokenRef>]>,
+    args: impl Borrow<[SymExpr]>,
     diagnostic: SymDiagnostic,
 ) -> Option<LineBody> {
     Some(LineBody::Command(
@@ -388,47 +390,56 @@ impl TokenSeq {
     }
 }
 
-pub fn ident(id: impl Into<TokenRef>) -> Expr<TokenRef> {
-    Expr::Ident(id.into())
+pub fn ident(id: impl Into<TokenRef>) -> SymExpr {
+    let token_ref = id.into();
+    Expr {
+        variant: ExprVariant::Ident(token_ref.clone()),
+        span: token_ref.into(),
+    }
 }
 
-pub fn literal(id: impl Into<TokenRef>) -> Expr<TokenRef> {
-    Expr::Literal(id.into())
+pub fn literal(id: impl Into<TokenRef>) -> SymExpr {
+    let token_ref = id.into();
+    Expr {
+        variant: ExprVariant::Literal(token_ref.clone()),
+        span: token_ref.into(),
+    }
 }
 
 pub fn parentheses(
     open_id: impl Into<TokenRef>,
-    expr: Expr<TokenRef>,
+    expr: SymExpr,
     close_id: impl Into<TokenRef>,
-) -> Expr<TokenRef> {
-    Expr::Parentheses {
-        left: open_id.into(),
-        right: close_id.into(),
-        inner: Box::new(expr),
+) -> SymExpr {
+    Expr {
+        variant: ExprVariant::Parentheses(Box::new(expr)),
+        span: SymRange::from(open_id.into()).extend(&close_id.into().into()),
     }
 }
 
 #[derive(Clone)]
-pub enum Expr<S> {
-    Ident(S),
-    Literal(S),
-    Parentheses {
-        left: S,
-        right: S,
-        inner: Box<Expr<S>>,
-    },
+pub struct Expr<I, L, S> {
+    variant: ExprVariant<I, L, S>,
+    span: S,
 }
 
-impl Expr<TokenRef> {
+#[derive(Clone)]
+pub enum ExprVariant<I, L, S> {
+    Ident(I),
+    Literal(L),
+    Parentheses(Box<Expr<I, L, S>>),
+}
+
+impl Expr<TokenRef, TokenRef, SymRange<TokenRef>> {
     fn into_actions(self, input: &InputTokens) -> Vec<Action> {
-        match self {
-            Expr::Ident(ident) => vec![Action::PushExprAtom(ExprAtom::Ident(SymIdent(
+        match self.variant {
+            ExprVariant::Ident(ident) => vec![Action::PushExprAtom(ExprAtom::Ident(SymIdent(
                 ident.resolve(input),
             )))],
-            Expr::Literal(literal) => vec![Action::PushExprAtom(ExprAtom::Literal(SymLiteral(
-                literal.resolve(input),
-            )))],
-            Expr::Parentheses { inner, .. } => {
+            ExprVariant::Literal(literal) => vec![Action::PushExprAtom(ExprAtom::Literal(
+                SymLiteral(literal.resolve(input)),
+            ))],
+            ExprVariant::Parentheses(inner) => {
                 let mut actions = inner.into_actions(input);
                 actions.push(Action::ApplyExprOperator(ExprOperator::Parentheses));
                 actions
