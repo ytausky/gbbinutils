@@ -1,4 +1,3 @@
-use super::TokenSpec;
 use diagnostics::{Message, Span};
 use std::fmt::Debug;
 
@@ -33,12 +32,6 @@ pub enum ExprVariant<I, L, S: Clone> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Symbolic;
 
-impl TokenSpec for Symbolic {
-    type Command = SymCommand;
-    type Ident = SymIdent;
-    type Literal = SymLiteral;
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct SymCommand(pub usize);
 
@@ -49,10 +42,10 @@ pub struct SymIdent(pub usize);
 pub struct SymLiteral(pub usize);
 
 #[cfg(test)]
-pub type SymToken = TokenVariant<Symbolic>;
+pub type SymToken = TokenVariant<SymCommand, SymIdent, SymLiteral>;
 
 #[cfg(test)]
-pub fn mk_sym_token(id: usize, token: TokenVariant<()>) -> SymToken {
+pub fn mk_sym_token(id: usize, token: TokenVariant<(), (), ()>) -> SymToken {
     match token {
         Command(()) => Command(SymCommand(id)),
         Ident(()) => Ident(SymIdent(id)),
@@ -165,7 +158,7 @@ pub enum Action {
     ExitMacroArg,
     ExitMacroDef,
     ExitMacroInvocation,
-    PushExprAtom(ExprAtom<Symbolic>),
+    PushExprAtom(ExprAtom<SymIdent, SymLiteral>),
     PushTerminal(usize),
 }
 

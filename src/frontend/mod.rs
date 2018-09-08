@@ -5,8 +5,8 @@ mod syntax;
 use backend::*;
 use codebase::Codebase;
 use diagnostics::*;
-use frontend::syntax::*;
 use frontend::session::{BorrowedComponents, ChunkId, Components, Session};
+use frontend::syntax::*;
 use std::collections::HashMap;
 use std::rc::Rc;
 

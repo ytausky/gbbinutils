@@ -2,7 +2,7 @@ use diagnostics::{Diagnostic, KeywordOperandCategory, Message, Source, Span};
 use frontend::syntax::ast;
 use frontend::syntax::ast::ExprVariant;
 use frontend::syntax::keyword as kw;
-use frontend::syntax::{Literal, TokenSpec};
+use frontend::syntax::Literal;
 use instruction::{Condition, PtrReg, Reg16, RegPair, RelocExpr, SimpleOperand};
 
 #[derive(Debug, PartialEq)]
@@ -41,7 +41,7 @@ pub enum Context {
 
 type OperandResult<SI> = Result<Operand<SI>, Diagnostic<SI>>;
 
-type Expr<S> = ast::Expr<<String as TokenSpec>::Ident, <String as TokenSpec>::Literal, S>;
+type Expr<S> = ast::Expr<String, Literal<String>, S>;
 
 pub fn analyze_operand<SI: Clone>(expr: Expr<SI>, context: Context) -> OperandResult<SI> {
     match expr.variant {

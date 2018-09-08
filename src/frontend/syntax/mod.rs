@@ -1,5 +1,4 @@
 use diagnostics::{DiagnosticsListener, Span};
-use std::{cmp::PartialEq, fmt::Debug};
 
 #[macro_use]
 pub mod ast;
@@ -16,32 +15,15 @@ pub fn tokenize(src: &str) -> self::lexer::Lexer {
 pub fn parse_token_seq<S: Span, I, F>(tokens: I, actions: F)
 where
     I: Iterator<Item = (Token, S)>,
-    F: FileContext<String, S>,
+    F: FileContext<keyword::Command, String, Literal<String>, S>,
 {
     self::parser::parse_src(tokens, actions)
 }
 
-pub type Token = self::parser::TokenVariant<String>;
+pub type Token = self::parser::TokenVariant<keyword::Command, String, Literal<String>>;
 
 pub mod token {
     pub use super::parser::TokenVariant::*;
-}
-
-pub trait TokenSpec {
-    type Command: Debug + PartialEq;
-    type Ident: Debug + PartialEq;
-    type Literal: Debug + PartialEq;
-}
-
-pub trait StringRef: Debug + PartialEq {}
-
-impl StringRef for String {}
-impl<'a> StringRef for &'a str {}
-
-impl<T: StringRef> TokenSpec for T {
-    type Command = keyword::Command;
-    type Ident = T;
-    type Literal = Literal<T>;
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -51,61 +33,64 @@ pub enum Literal<S> {
     String(S),
 }
 
-impl TokenSpec for () {
-    type Command = ();
-    type Ident = ();
-    type Literal = ();
+pub trait FileContext<C, I, L, S>
+where
+    Self: DiagnosticsListener<S> + Sized,
+{
+    type LineActions: LineActions<C, I, L, S, Parent = Self>;
+    fn enter_line(self, label: Option<(I, S)>) -> Self::LineActions;
 }
 
-pub trait FileContext<S: TokenSpec, SR>
+pub trait LineActions<C, I, L, S>
 where
-    Self: DiagnosticsListener<SR> + Sized,
+    Self: DiagnosticsListener<S> + Sized,
 {
-    type LineActions: LineActions<S, SR, Parent = Self>;
-    fn enter_line(self, label: Option<(S::Ident, SR)>) -> Self::LineActions;
-}
-
-pub trait LineActions<TS: TokenSpec, SR>
-where
-    Self: DiagnosticsListener<SR> + Sized,
-{
-    type CommandContext: CommandContext<SR, TokenSpec = TS, Parent = Self>;
-    type MacroParamsActions: MacroParamsActions<SR, TokenSpec = TS, Parent = Self>;
+    type CommandContext: CommandContext<S, Command = C, Ident = I, Literal = L, Parent = Self>;
+    type MacroParamsActions: MacroParamsActions<
+        S,
+        Command = C,
+        Ident = I,
+        Literal = L,
+        Parent = Self,
+    >;
     type MacroInvocationContext: MacroInvocationContext<
-        SR,
-        Token = parser::TokenVariant<TS>,
+        S,
+        Token = parser::TokenVariant<C, I, L>,
         Parent = Self,
     >;
     type Parent;
-    fn enter_command(self, name: (TS::Command, SR)) -> Self::CommandContext;
+    fn enter_command(self, name: (C, S)) -> Self::CommandContext;
     fn enter_macro_def(self) -> Self::MacroParamsActions;
-    fn enter_macro_invocation(self, name: (TS::Ident, SR)) -> Self::MacroInvocationContext;
+    fn enter_macro_invocation(self, name: (I, S)) -> Self::MacroInvocationContext;
     fn exit(self) -> Self::Parent;
 }
 
-pub trait CommandContext<SR>
+pub trait CommandContext<S>
 where
-    Self: DiagnosticsListener<SR> + Sized,
+    Self: DiagnosticsListener<S> + Sized,
 {
-    type TokenSpec: TokenSpec;
-    type ArgActions: ExprActions<SR, TokenSpec = Self::TokenSpec, Parent = Self>;
+    type Command;
+    type Ident;
+    type Literal;
+    type ArgActions: ExprActions<S, Ident = Self::Ident, Literal = Self::Literal, Parent = Self>;
     type Parent;
     fn add_argument(self) -> Self::ArgActions;
     fn exit(self) -> Self::Parent;
 }
 
-pub trait ExprActions<SR> {
-    type TokenSpec: TokenSpec;
+pub trait ExprActions<S> {
+    type Ident;
+    type Literal;
     type Parent;
-    fn push_atom(&mut self, atom: (ExprAtom<Self::TokenSpec>, SR));
-    fn apply_operator(&mut self, operator: (ExprOperator, SR));
+    fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, S));
+    fn apply_operator(&mut self, operator: (ExprOperator, S));
     fn exit(self) -> Self::Parent;
 }
 
 #[derive(Debug, PartialEq)]
-pub enum ExprAtom<S: TokenSpec> {
-    Ident(S::Ident),
-    Literal(S::Literal),
+pub enum ExprAtom<I, L> {
+    Ident(I),
+    Literal(L),
 }
 
 #[derive(Debug, PartialEq)]
@@ -113,35 +98,37 @@ pub enum ExprOperator {
     Parentheses,
 }
 
-pub trait MacroParamsActions<SR>: DiagnosticsListener<SR> {
-    type TokenSpec: TokenSpec;
+pub trait MacroParamsActions<S>: DiagnosticsListener<S> {
+    type Command;
+    type Ident;
+    type Literal;
     type MacroBodyActions: TokenSeqContext<
-        SR,
-        Token = parser::TokenVariant<Self::TokenSpec>,
+        S,
+        Token = parser::TokenVariant<Self::Command, Self::Ident, Self::Literal>,
         Parent = Self::Parent,
     >;
     type Parent;
-    fn add_parameter(&mut self, param: (<Self::TokenSpec as TokenSpec>::Ident, SR));
+    fn add_parameter(&mut self, param: (Self::Ident, S));
     fn exit(self) -> Self::MacroBodyActions;
 }
 
-pub trait MacroInvocationContext<SR>
+pub trait MacroInvocationContext<S>
 where
-    Self: DiagnosticsListener<SR> + Sized,
+    Self: DiagnosticsListener<S> + Sized,
 {
     type Token;
     type Parent;
-    type MacroArgContext: TokenSeqContext<SR, Token = Self::Token, Parent = Self>;
+    type MacroArgContext: TokenSeqContext<S, Token = Self::Token, Parent = Self>;
     fn enter_macro_arg(self) -> Self::MacroArgContext;
     fn exit(self) -> Self::Parent;
 }
 
-pub trait TokenSeqContext<SR>
+pub trait TokenSeqContext<S>
 where
-    Self: DiagnosticsListener<SR>,
+    Self: DiagnosticsListener<S>,
 {
     type Token;
     type Parent;
-    fn push_token(&mut self, token: (Self::Token, SR));
+    fn push_token(&mut self, token: (Self::Token, S));
     fn exit(self) -> Self::Parent;
 }

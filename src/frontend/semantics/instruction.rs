@@ -2,10 +2,10 @@ use diagnostics::{Diagnostic, Message, Source, Span};
 use frontend::semantics::operand::{self, AtomKind, Context, Operand, OperandCounter};
 use frontend::syntax::ast;
 use frontend::syntax::keyword as kw;
-use frontend::syntax::TokenSpec;
+use frontend::syntax::Literal;
 use instruction::*;
 
-type Expr<S> = ast::Expr<<String as TokenSpec>::Ident, <String as TokenSpec>::Literal, S>;
+type Expr<S> = ast::Expr<String, Literal<String>, S>;
 
 pub fn analyze_instruction<I, S>(mnemonic: (kw::Mnemonic, S), operands: I) -> AnalysisResult<S>
 where
@@ -426,16 +426,8 @@ mod tests {
         }
     }
 
-    impl From<ExprVariant<<String as TokenSpec>::Ident, <String as TokenSpec>::Literal, Marking>>
-        for Input
-    {
-        fn from(
-            variant: ExprVariant<
-                <String as TokenSpec>::Ident,
-                <String as TokenSpec>::Literal,
-                Marking,
-            >,
-        ) -> Self {
+    impl From<ExprVariant<String, Literal<String>, Marking>> for Input {
+        fn from(variant: ExprVariant<String, Literal<String>, Marking>) -> Self {
             Expr {
                 variant,
                 span: Marking::default(),

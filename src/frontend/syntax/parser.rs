@@ -4,25 +4,25 @@ use diagnostics::{Diagnostic, Message, Span};
 use std::iter;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum TokenVariant<S: TokenSpec> {
+pub enum TokenVariant<C, I, L> {
     ClosingParenthesis,
     Colon,
     Comma,
-    Command(S::Command),
+    Command(C),
     Endm,
     Eof,
     Eol,
-    Ident(S::Ident),
-    Literal(S::Literal),
+    Ident(I),
+    Literal(L),
     Macro,
     OpeningParenthesis,
 }
 
-type TokenKind = TokenVariant<()>;
+type TokenKind = TokenVariant<(), (), ()>;
 
 impl Copy for TokenKind {}
 
-impl<S: TokenSpec> TokenVariant<S> {
+impl<C, I, L> TokenVariant<C, I, L> {
     fn kind(&self) -> TokenKind {
         use self::TokenVariant::*;
         match *self {
@@ -43,10 +43,11 @@ impl<S: TokenSpec> TokenVariant<S> {
 
 const LINE_FOLLOW_SET: &[TokenKind] = &[TokenVariant::Eol, TokenVariant::Eof];
 
-pub fn parse_src<S: TokenSpec, T: Span, I, F>(tokens: I, actions: F)
+pub fn parse_src<C, Id, L, S, I, F>(tokens: I, actions: F)
 where
-    I: Iterator<Item = (TokenVariant<S>, T)>,
-    F: FileContext<S, T>,
+    S: Span,
+    I: Iterator<Item = (TokenVariant<C, Id, L>, S)>,
+    F: FileContext<C, Id, L, S>,
 {
     let mut parser = Parser {
         tokens: tokens.peekable(),
@@ -55,25 +56,25 @@ where
     parser.parse_file(actions)
 }
 
-struct Parser<I: Iterator, SR> {
+struct Parser<I: Iterator, S> {
     tokens: iter::Peekable<I>,
-    prev_token: Option<SR>,
+    prev_token: Option<S>,
 }
 
 macro_rules! mk_expect {
-    ($name:ident, $ret_ty:ident) => {
-        fn $name(&mut self) -> (S::$ret_ty, T) {
+    ($name:ident, $variant:ident, $ret_ty:ident) => {
+        fn $name(&mut self) -> ($ret_ty, S) {
             match self.tokens.next() {
-                Some((TokenVariant::$ret_ty(inner), t)) => (inner, t),
+                Some((TokenVariant::$variant(inner), s)) => (inner, s),
                 _ => panic!(),
             }
         }
     }
 }
 
-impl<S: TokenSpec, T: Span, I: Iterator<Item = (TokenVariant<S>, T)>> Parser<I, T> {
-    mk_expect!(expect_command, Command);
-    mk_expect!(expect_ident, Ident);
+impl<C, Id, L, S: Span, I: Iterator<Item = (TokenVariant<C, Id, L>, S)>> Parser<I, S> {
+    mk_expect!(expect_command, Command, C);
+    mk_expect!(expect_ident, Ident, Id);
 
     fn lookahead(&mut self) -> TokenKind {
         self.tokens.peek().unwrap().0.kind()
@@ -91,7 +92,7 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (TokenVariant<S>, T)>> Parser<I, 
     fn take_token_if<P, F>(&mut self, predicate: P, f: F) -> bool
     where
         P: FnOnce(TokenKind) -> bool,
-        F: FnOnce((TokenVariant<S>, T)),
+        F: FnOnce((TokenVariant<C, Id, L>, S)),
     {
         if predicate(self.lookahead()) {
             f(self.bump());
@@ -104,7 +105,7 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (TokenVariant<S>, T)>> Parser<I, 
     fn take_token_while<P, F>(&mut self, predicate: P, mut f: F)
     where
         P: Fn(TokenKind) -> bool,
-        F: FnMut((TokenVariant<S>, T)),
+        F: FnMut((TokenVariant<C, Id, L>, S)),
     {
         while self.take_token_if(&predicate, &mut f) {}
     }
@@ -120,7 +121,7 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (TokenVariant<S>, T)>> Parser<I, 
         self.bump()
     }
 
-    fn parse_file<F: FileContext<S, T>>(&mut self, actions: F) {
+    fn parse_file<F: FileContext<C, Id, L, S>>(&mut self, actions: F) {
         self.parse_terminated_list(
             TokenVariant::Eol,
             &[TokenVariant::Eof],
@@ -129,7 +130,7 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (TokenVariant<S>, T)>> Parser<I, 
         );
     }
 
-    fn parse_line<F: FileContext<S, T>>(&mut self, actions: F) -> F {
+    fn parse_line<F: FileContext<C, Id, L, S>>(&mut self, actions: F) -> F {
         if self.lookahead() == TokenVariant::Ident(()) {
             self.parse_potentially_labeled_line(actions)
         } else {
@@ -137,7 +138,7 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (TokenVariant<S>, T)>> Parser<I, 
         }
     }
 
-    fn parse_potentially_labeled_line<F: FileContext<S, T>>(&mut self, actions: F) -> F {
+    fn parse_potentially_labeled_line<F: FileContext<C, Id, L, S>>(&mut self, actions: F) -> F {
         let ident = self.expect_ident();
         if self.consume(TokenVariant::Colon) {
             self.parse_unlabeled_line(actions.enter_line(Some(ident)))
@@ -146,7 +147,7 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (TokenVariant<S>, T)>> Parser<I, 
         }.exit()
     }
 
-    fn parse_unlabeled_line<LA: LineActions<S, T>>(&mut self, actions: LA) -> LA {
+    fn parse_unlabeled_line<LA: LineActions<C, Id, L, S>>(&mut self, actions: LA) -> LA {
         match self.lookahead() {
             TokenVariant::Eol | TokenVariant::Eof => actions,
             TokenVariant::Command(()) => self.parse_command(actions),
@@ -168,7 +169,7 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (TokenVariant<S>, T)>> Parser<I, 
         }
     }
 
-    fn parse_macro_def<LA: LineActions<S, T>>(&mut self, actions: LA) -> LA {
+    fn parse_macro_def<LA: LineActions<C, Id, L, S>>(&mut self, actions: LA) -> LA {
         self.expect(TokenVariant::Macro);
         let actions = self.parse_terminated_list(
             TokenVariant::Comma,
@@ -205,22 +206,22 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (TokenVariant<S>, T)>> Parser<I, 
 
     fn parse_macro_param<MPA>(&mut self, mut actions: MPA) -> MPA
     where
-        MPA: MacroParamsActions<T, TokenSpec = S>,
+        MPA: MacroParamsActions<S, Command = C, Ident = Id, Literal = L>,
     {
         actions.add_parameter(self.expect_ident());
         actions
     }
 
-    fn parse_command<LA: LineActions<S, T>>(&mut self, actions: LA) -> LA {
+    fn parse_command<LA: LineActions<C, Id, L, S>>(&mut self, actions: LA) -> LA {
         let first_token = self.expect_command();
         let mut command_context = actions.enter_command(first_token);
         command_context = self.parse_argument_list(command_context);
         command_context.exit()
     }
 
-    fn parse_macro_invocation<LA: LineActions<S, T>>(
+    fn parse_macro_invocation<LA: LineActions<C, Id, L, S>>(
         &mut self,
-        name: (S::Ident, T),
+        name: (Id, S),
         actions: LA,
     ) -> LA {
         let mut invocation_context = actions.enter_macro_invocation(name);
@@ -228,7 +229,10 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (TokenVariant<S>, T)>> Parser<I, 
         invocation_context.exit()
     }
 
-    fn parse_argument_list<C: CommandContext<T, TokenSpec = S>>(&mut self, actions: C) -> C {
+    fn parse_argument_list<CC: CommandContext<S, Command = C, Ident = Id, Literal = L>>(
+        &mut self,
+        actions: CC,
+    ) -> CC {
         self.parse_terminated_list(
             TokenVariant::Comma,
             LINE_FOLLOW_SET,
@@ -237,7 +241,7 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (TokenVariant<S>, T)>> Parser<I, 
         )
     }
 
-    fn parse_macro_arg_list<M: MacroInvocationContext<T, Token = TokenVariant<S>>>(
+    fn parse_macro_arg_list<M: MacroInvocationContext<S, Token = TokenVariant<C, Id, L>>>(
         &mut self,
         actions: M,
     ) -> M {
@@ -258,16 +262,16 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (TokenVariant<S>, T)>> Parser<I, 
         )
     }
 
-    fn parse_terminated_list<P, C>(
+    fn parse_terminated_list<P, A>(
         &mut self,
         delimiter: TokenKind,
         terminators: &[TokenKind],
         parser: P,
-        mut context: C,
-    ) -> C
+        mut context: A,
+    ) -> A
     where
-        P: FnMut(&mut Self, C) -> C,
-        C: DiagnosticsListener<T>,
+        P: FnMut(&mut Self, A) -> A,
+        A: DiagnosticsListener<S>,
     {
         context = self.parse_list(delimiter, terminators, parser, context);
         if !self.lookahead_is_in(terminators) {
@@ -285,16 +289,16 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (TokenVariant<S>, T)>> Parser<I, 
         context
     }
 
-    fn parse_list<P, C>(
+    fn parse_list<P, A>(
         &mut self,
         delimiter: TokenKind,
         terminators: &[TokenKind],
         mut parser: P,
-        context: C,
-    ) -> C
+        context: A,
+    ) -> A
     where
-        P: FnMut(&mut Self, C) -> C,
-        C: DiagnosticsListener<T>,
+        P: FnMut(&mut Self, A) -> A,
+        A: DiagnosticsListener<S>,
     {
         if self.lookahead_is_in(terminators) {
             context
@@ -303,15 +307,15 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (TokenVariant<S>, T)>> Parser<I, 
         }
     }
 
-    fn parse_nonempty_list<P, C>(
+    fn parse_nonempty_list<P, A>(
         &mut self,
         delimiter: TokenKind,
         parser: &mut P,
-        mut actions: C,
-    ) -> C
+        mut actions: A,
+    ) -> A
     where
-        P: FnMut(&mut Self, C) -> C,
-        C: DiagnosticsListener<T>,
+        P: FnMut(&mut Self, A) -> A,
+        A: DiagnosticsListener<S>,
     {
         actions = parser(self, actions);
         while self.consume(delimiter) {
@@ -320,11 +324,14 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (TokenVariant<S>, T)>> Parser<I, 
         actions
     }
 
-    fn parse_argument<C: CommandContext<T, TokenSpec = S>>(&mut self, actions: C) -> C {
+    fn parse_argument<CC: CommandContext<S, Command = C, Ident = Id, Literal = L>>(
+        &mut self,
+        actions: CC,
+    ) -> CC {
         self.parse_expression(actions.add_argument()).exit()
     }
 
-    fn parse_expression<EA: ExprActions<T, TokenSpec = S>>(&mut self, actions: EA) -> EA {
+    fn parse_expression<EA: ExprActions<S, Ident = Id, Literal = L>>(&mut self, actions: EA) -> EA {
         if self.lookahead() == TokenVariant::OpeningParenthesis {
             self.parse_parenthesized_expression(actions)
         } else {
@@ -332,7 +339,7 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (TokenVariant<S>, T)>> Parser<I, 
         }
     }
 
-    fn parse_parenthesized_expression<EA: ExprActions<T, TokenSpec = S>>(
+    fn parse_parenthesized_expression<EA: ExprActions<S, Ident = Id, Literal = L>>(
         &mut self,
         actions: EA,
     ) -> EA {
@@ -343,7 +350,10 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (TokenVariant<S>, T)>> Parser<I, 
         actions
     }
 
-    fn parse_atomic_expr<EA: ExprActions<T, TokenSpec = S>>(&mut self, mut actions: EA) -> EA {
+    fn parse_atomic_expr<EA: ExprActions<S, Ident = Id, Literal = L>>(
+        &mut self,
+        mut actions: EA,
+    ) -> EA {
         let (token, interval) = self.bump();
         actions.push_atom((
             match token {
@@ -400,7 +410,9 @@ mod tests {
         }
     }
 
-    impl<'a> syntax::FileContext<Symbolic, SymRange<usize>> for &'a mut TestContext {
+    impl<'a> syntax::FileContext<SymCommand, SymIdent, SymLiteral, SymRange<usize>>
+        for &'a mut TestContext
+    {
         type LineActions = Self;
 
         fn enter_line(self, label: Option<(SymIdent, SymRange<usize>)>) -> Self::LineActions {
@@ -411,7 +423,9 @@ mod tests {
         }
     }
 
-    impl<'a> syntax::LineActions<Symbolic, SymRange<usize>> for &'a mut TestContext {
+    impl<'a> syntax::LineActions<SymCommand, SymIdent, SymLiteral, SymRange<usize>>
+        for &'a mut TestContext
+    {
         type CommandContext = Self;
         type MacroParamsActions = Self;
         type MacroInvocationContext = Self;
@@ -450,7 +464,9 @@ mod tests {
     }
 
     impl<'a> syntax::CommandContext<SymRange<usize>> for &'a mut TestContext {
-        type TokenSpec = Symbolic;
+        type Command = SymCommand;
+        type Ident = SymIdent;
+        type Literal = SymLiteral;
         type ArgActions = Self;
         type Parent = Self;
 
@@ -466,10 +482,11 @@ mod tests {
     }
 
     impl<'a> syntax::ExprActions<SymRange<usize>> for &'a mut TestContext {
-        type TokenSpec = Symbolic;
+        type Ident = SymIdent;
+        type Literal = SymLiteral;
         type Parent = Self;
 
-        fn push_atom(&mut self, atom: (ExprAtom<Symbolic>, SymRange<usize>)) {
+        fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, SymRange<usize>)) {
             self.actions.borrow_mut().push(Action::PushExprAtom(atom.0))
         }
 
@@ -486,7 +503,9 @@ mod tests {
     }
 
     impl<'a> syntax::MacroParamsActions<SymRange<usize>> for &'a mut TestContext {
-        type TokenSpec = Symbolic;
+        type Command = SymCommand;
+        type Ident = SymIdent;
+        type Literal = SymLiteral;
         type MacroBodyActions = Self;
         type Parent = Self;
 

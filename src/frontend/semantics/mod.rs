@@ -1,30 +1,19 @@
 use backend::{self, BinaryOperator};
 use diagnostics::{Diagnostic, DiagnosticsListener, Span};
+use frontend::session::{ChunkId, Session};
 use frontend::syntax::ast;
 use frontend::syntax::ast::ExprVariant;
-use frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token, TokenSpec};
+use frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token};
 use frontend::{Literal, StrExprFactory};
-use frontend::session::{ChunkId, Session};
-use std::fmt::Debug;
 use Width;
 
 mod instruction;
 mod operand;
 
-pub trait ExprSpec {
-    type Ident: Debug + PartialEq;
-    type Literal: Debug + PartialEq;
-}
-
-impl<T: TokenSpec> ExprSpec for T {
-    type Ident = T::Ident;
-    type Literal = T::Literal;
-}
-
 pub struct SemanticActions<'a, F: Session + 'a> {
     session: &'a mut F,
     expr_factory: StrExprFactory,
-    label: Option<(<String as TokenSpec>::Ident, F::Span)>,
+    label: Option<(String, F::Span)>,
 }
 
 impl<'a, F: Session + 'a> SemanticActions<'a, F> {
@@ -49,28 +38,26 @@ impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for SemanticActions<'a, F
     }
 }
 
-impl<'a, F: Session + 'a> syntax::FileContext<String, F::Span> for SemanticActions<'a, F> {
+impl<'a, F: Session + 'a> syntax::FileContext<Command, String, Literal<String>, F::Span>
+    for SemanticActions<'a, F>
+{
     type LineActions = Self;
 
-    fn enter_line(
-        mut self,
-        label: Option<(<String as TokenSpec>::Ident, F::Span)>,
-    ) -> Self::LineActions {
+    fn enter_line(mut self, label: Option<(String, F::Span)>) -> Self::LineActions {
         self.label = label;
         self
     }
 }
 
-impl<'a, F: Session + 'a> syntax::LineActions<String, F::Span> for SemanticActions<'a, F> {
+impl<'a, F: Session + 'a> syntax::LineActions<Command, String, Literal<String>, F::Span>
+    for SemanticActions<'a, F>
+{
     type CommandContext = CommandActions<'a, F>;
     type MacroParamsActions = MacroDefActions<'a, F>;
     type MacroInvocationContext = MacroInvocationActions<'a, F>;
     type Parent = Self;
 
-    fn enter_command(
-        mut self,
-        name: (<String as TokenSpec>::Command, F::Span),
-    ) -> Self::CommandContext {
+    fn enter_command(mut self, name: (Command, F::Span)) -> Self::CommandContext {
         self.define_label_if_present();
         CommandActions::new(name, self)
     }
@@ -79,10 +66,7 @@ impl<'a, F: Session + 'a> syntax::LineActions<String, F::Span> for SemanticActio
         MacroDefActions::new(self.label.take().unwrap(), self)
     }
 
-    fn enter_macro_invocation(
-        mut self,
-        name: (<String as TokenSpec>::Ident, F::Span),
-    ) -> Self::MacroInvocationContext {
+    fn enter_macro_invocation(mut self, name: (String, F::Span)) -> Self::MacroInvocationContext {
         self.define_label_if_present();
         MacroInvocationActions::new(name, self)
     }
@@ -99,7 +83,7 @@ pub struct CommandActions<'a, F: Session + 'a> {
     parent: SemanticActions<'a, F>,
 }
 
-type Expr<S> = ast::Expr<<String as TokenSpec>::Ident, <String as TokenSpec>::Literal, S>;
+type Expr<S> = ast::Expr<String, Literal<String>, S>;
 type CommandArgs<F> = Vec<Expr<<F as Session>::Span>>;
 
 impl<'a, F: Session + 'a> CommandActions<'a, F> {
@@ -119,7 +103,9 @@ impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for CommandActions<'a, F>
 }
 
 impl<'a, F: Session + 'a> syntax::CommandContext<F::Span> for CommandActions<'a, F> {
-    type TokenSpec = String;
+    type Command = Command;
+    type Ident = String;
+    type Literal = Literal<String>;
     type ArgActions = ExprActions<'a, F>;
     type Parent = SemanticActions<'a, F>;
 
@@ -149,10 +135,11 @@ pub struct ExprActions<'a, F: Session + 'a> {
 }
 
 impl<'a, F: Session + 'a> syntax::ExprActions<F::Span> for ExprActions<'a, F> {
-    type TokenSpec = String;
+    type Ident = String;
+    type Literal = Literal<String>;
     type Parent = CommandActions<'a, F>;
 
-    fn push_atom(&mut self, atom: (ExprAtom<Self::TokenSpec>, F::Span)) {
+    fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, F::Span)) {
         self.stack.push(Expr {
             variant: match atom.0 {
                 ExprAtom::Ident(ident) => ExprVariant::Ident(ident),
@@ -283,11 +270,13 @@ impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for MacroDefActions<'a, F
 }
 
 impl<'a, F: Session + 'a> syntax::MacroParamsActions<F::Span> for MacroDefActions<'a, F> {
-    type TokenSpec = String;
+    type Command = Command;
+    type Ident = String;
+    type Literal = Literal<String>;
     type MacroBodyActions = Self;
     type Parent = SemanticActions<'a, F>;
 
-    fn add_parameter(&mut self, param: (<Self::TokenSpec as TokenSpec>::Ident, F::Span)) {
+    fn add_parameter(&mut self, param: (Self::Ident, F::Span)) {
         self.params.push(param)
     }
 
@@ -595,7 +584,7 @@ mod tests {
         );
     }
 
-    fn mk_literal(n: i32) -> (ExprAtom<String>, ()) {
+    fn mk_literal(n: i32) -> (ExprAtom<String, Literal<String>>, ()) {
         (ExprAtom::Literal(Literal::Number(n)), ())
     }
 
