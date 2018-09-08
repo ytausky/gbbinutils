@@ -1,5 +1,5 @@
 use super::*;
-use diagnostics::{Diagnostic, Message, SourceRange};
+use diagnostics::{Diagnostic, Message, Span};
 
 use std::iter;
 
@@ -43,7 +43,7 @@ type Lookahead = Token<()>;
 
 const LINE_FOLLOW_SET: &[Lookahead] = &[Token::Eol, Token::Eof];
 
-pub fn parse_src<S: TokenSpec, T: SourceRange, I, F>(tokens: I, actions: F)
+pub fn parse_src<S: TokenSpec, T: Span, I, F>(tokens: I, actions: F)
 where
     I: Iterator<Item = (Token<S>, T)>,
     F: FileContext<S, T>,
@@ -71,7 +71,7 @@ macro_rules! mk_expect {
     }
 }
 
-impl<S: TokenSpec, T: SourceRange, I: Iterator<Item = (Token<S>, T)>> Parser<I, T> {
+impl<S: TokenSpec, T: Span, I: Iterator<Item = (Token<S>, T)>> Parser<I, T> {
     mk_expect!(expect_command, Command);
     mk_expect!(expect_ident, Ident);
 

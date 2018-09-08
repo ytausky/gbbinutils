@@ -1,15 +1,15 @@
 use super::context::{EvalContext, SymbolTable};
 use super::{traverse_chunk_items, Chunk, Node};
 use backend::{BinarySection, RelocExpr};
-use diagnostics::{Diagnostic, DiagnosticsListener, Message, Source, SourceRange};
+use diagnostics::{Diagnostic, DiagnosticsListener, Message, Source, Span};
 use std::vec::IntoIter;
 use Width;
 
-impl<SR: SourceRange> Chunk<SR> {
+impl<S: Span> Chunk<S> {
     pub fn translate(
         &self,
         context: &mut EvalContext<&SymbolTable>,
-        diagnostics: &impl DiagnosticsListener<SR>,
+        diagnostics: &impl DiagnosticsListener<S>,
     ) -> BinarySection {
         let mut data = Vec::<u8>::new();
         let origin = self.evaluate_origin(&context);
@@ -24,11 +24,11 @@ impl<SR: SourceRange> Chunk<SR> {
     }
 }
 
-impl<SR: SourceRange> Node<SR> {
+impl<S: Span> Node<S> {
     fn translate(
         &self,
         context: &EvalContext<&SymbolTable>,
-        diagnostics: &DiagnosticsListener<SR>,
+        diagnostics: &DiagnosticsListener<S>,
     ) -> IntoIter<u8> {
         match self {
             Node::Byte(value) => vec![*value],
@@ -88,24 +88,24 @@ impl Data {
     }
 }
 
-fn resolve_expr_item<SR: SourceRange>(
-    expr: &RelocExpr<SR>,
+fn resolve_expr_item<S: Span>(
+    expr: &RelocExpr<S>,
     width: Width,
     context: &EvalContext<&SymbolTable>,
-    diagnostics: &DiagnosticsListener<SR>,
+    diagnostics: &DiagnosticsListener<S>,
 ) -> Data {
-    let range = expr.source_range();
+    let span = expr.span();
     let value =
-        expr.evaluate_strictly(context, &mut |symbol, range| {
+        expr.evaluate_strictly(context, &mut |symbol, span| {
             diagnostics.emit_diagnostic(Diagnostic::new(
                 Message::UnresolvedSymbol {
                     symbol: symbol.to_string(),
                 },
-                range.clone(),
+                span.clone(),
             ))
         }).exact()
             .unwrap_or(0);
-    fit_to_width((value, range), width, diagnostics)
+    fit_to_width((value, span), width, diagnostics)
 }
 
 fn fit_to_width<SR: Clone>(
@@ -199,7 +199,7 @@ mod tests {
         assert_eq!(actual, [0x01])
     }
 
-    fn translate_chunk_item<SR: SourceRange>(item: Node<SR>) -> Vec<u8> {
+    fn translate_chunk_item<S: Span>(item: Node<S>) -> Vec<u8> {
         use backend::object::resolve::Value;
         use diagnostics;
         item.translate(
@@ -245,7 +245,7 @@ mod tests {
         assert_eq!(binary.data, [0xe3, 0xff])
     }
 
-    fn translate_without_context<SR: SourceRange>(chunk: Chunk<SR>) -> BinarySection {
+    fn translate_without_context<S: Span>(chunk: Chunk<S>) -> BinarySection {
         let mut context = EvalContext {
             symbols: &SymbolTable::new(),
             location: 0.into(),

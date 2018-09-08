@@ -14,8 +14,8 @@ pub use frontend::syntax::Token;
 pub fn analyze_file<
     C: Codebase,
     TT: TokenTracker,
-    B: Backend<TT::TokenRef>,
-    D: DiagnosticsListener<TT::TokenRef>,
+    B: Backend<TT::Span>,
+    D: DiagnosticsListener<TT::Span>,
 >(
     name: String,
     codebase: &C,
@@ -35,7 +35,7 @@ pub fn analyze_file<
 trait Analysis {
     fn run<I, S>(&mut self, tokens: I, session: &mut S)
     where
-        I: Iterator<Item = (Token, S::TokenRef)>,
+        I: Iterator<Item = (Token, S::Span)>,
         S: Session;
 }
 
@@ -50,7 +50,7 @@ impl SemanticAnalysis {
 impl Analysis for SemanticAnalysis {
     fn run<I, S>(&mut self, tokens: I, session: &mut S)
     where
-        I: Iterator<Item = (Token, S::TokenRef)>,
+        I: Iterator<Item = (Token, S::Span)>,
         S: Session,
     {
         let actions = semantics::SemanticActions::new(session);
@@ -106,17 +106,17 @@ impl ExprFactory for StrExprFactory {
 }
 
 pub trait Frontend {
-    type TokenRef: SourceRange;
+    type Span: Span;
     fn analyze_chunk(
         &mut self,
-        chunk_id: ChunkId<Self::TokenRef>,
-        backend: &mut impl Backend<Self::TokenRef>,
+        chunk_id: ChunkId<Self::Span>,
+        backend: &mut impl Backend<Self::Span>,
     );
     fn define_macro(
         &mut self,
-        name: (impl Into<String>, Self::TokenRef),
-        params: Vec<(String, Self::TokenRef)>,
-        tokens: Vec<(Token, Self::TokenRef)>,
+        name: (impl Into<String>, Self::Span),
+        params: Vec<(String, Self::Span)>,
+        tokens: Vec<(Token, Self::Span)>,
     );
 }
 
@@ -130,10 +130,10 @@ struct FileParser<'a, AF, M, TCS, DL: 'a> {
 impl<'a, AF, M, TCS, DL> FileParser<'a, AF, M, TCS, DL>
 where
     AF: AnalysisFactory,
-    M: Macros<SourceRange = TCS::TokenRef>,
+    M: Macros<Span = TCS::Span>,
     TCS: TokenizedCodeSource,
-    for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token, TCS::TokenRef)>,
-    DL: DiagnosticsListener<TCS::TokenRef>,
+    for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token, TCS::Span)>,
+    DL: DiagnosticsListener<TCS::Span>,
 {
     fn new(
         analysis_factory: AF,
@@ -149,10 +149,7 @@ where
         }
     }
 
-    fn analyze_token_seq<
-        I: IntoIterator<Item = (Token, TCS::TokenRef)>,
-        B: Backend<TCS::TokenRef>,
-    >(
+    fn analyze_token_seq<I: IntoIterator<Item = (Token, TCS::Span)>, B: Backend<TCS::Span>>(
         &mut self,
         tokens: I,
         backend: &mut B,
@@ -163,16 +160,16 @@ where
         analysis.run(tokens.into_iter(), &mut session)
     }
 
-    fn include_source_file(&mut self, filename: &str, backend: &mut impl Backend<TCS::TokenRef>) {
+    fn include_source_file(&mut self, filename: &str, backend: &mut impl Backend<TCS::Span>) {
         let tokenized_src = self.tokenized_code_source.tokenize_file(filename);
         self.analyze_token_seq(&tokenized_src, backend)
     }
 
     fn invoke_macro(
         &mut self,
-        name: (String, <Self as Frontend>::TokenRef),
-        args: Vec<Vec<(Token, <Self as Frontend>::TokenRef)>>,
-        backend: &mut impl Backend<TCS::TokenRef>,
+        name: (String, <Self as Frontend>::Span),
+        args: Vec<Vec<(Token, <Self as Frontend>::Span)>>,
+        backend: &mut impl Backend<TCS::Span>,
     ) {
         match self.macros.expand(name.clone(), args) {
             Some(tokens) => self.analyze_token_seq(tokens, backend),
@@ -188,17 +185,17 @@ where
 impl<'a, AF, M, TCS, DL> Frontend for FileParser<'a, AF, M, TCS, DL>
 where
     AF: AnalysisFactory,
-    M: Macros<SourceRange = TCS::TokenRef>,
+    M: Macros<Span = TCS::Span>,
     TCS: TokenizedCodeSource,
-    for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token, TCS::TokenRef)>,
-    DL: DiagnosticsListener<TCS::TokenRef>,
+    for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token, TCS::Span)>,
+    DL: DiagnosticsListener<TCS::Span>,
 {
-    type TokenRef = TCS::TokenRef;
+    type Span = TCS::Span;
 
     fn analyze_chunk(
         &mut self,
-        chunk_id: ChunkId<Self::TokenRef>,
-        backend: &mut impl Backend<Self::TokenRef>,
+        chunk_id: ChunkId<Self::Span>,
+        backend: &mut impl Backend<Self::Span>,
     ) {
         match chunk_id {
             ChunkId::File((name, _)) => self.include_source_file(&name, backend),
@@ -208,58 +205,58 @@ where
 
     fn define_macro(
         &mut self,
-        name: (impl Into<String>, Self::TokenRef),
-        params: Vec<(String, Self::TokenRef)>,
-        tokens: Vec<(Token, Self::TokenRef)>,
+        name: (impl Into<String>, Self::Span),
+        params: Vec<(String, Self::Span)>,
+        tokens: Vec<(Token, Self::Span)>,
     ) {
         self.macros.define(name, params, tokens)
     }
 }
 
 trait Macros {
-    type SourceRange: SourceRange;
-    type ExpandedMacro: Iterator<Item = (Token, Self::SourceRange)>;
+    type Span: Span;
+    type ExpandedMacro: Iterator<Item = (Token, Self::Span)>;
 
     fn define(
         &mut self,
-        name: (impl Into<String>, Self::SourceRange),
-        params: Vec<(String, Self::SourceRange)>,
-        body: Vec<(Token, Self::SourceRange)>,
+        name: (impl Into<String>, Self::Span),
+        params: Vec<(String, Self::Span)>,
+        body: Vec<(Token, Self::Span)>,
     );
 
     fn expand(
         &mut self,
-        name: (String, Self::SourceRange),
-        args: Vec<Vec<(Token, Self::SourceRange)>>,
+        name: (String, Self::Span),
+        args: Vec<Vec<(Token, Self::Span)>>,
     ) -> Option<Self::ExpandedMacro>;
 }
 
-struct MacroExpander<SR: SourceRange> {
-    macro_defs: HashMap<String, Rc<MacroDef<SR>>>,
+struct MacroExpander<S: Span> {
+    macro_defs: HashMap<String, Rc<MacroDef<S>>>,
 }
 
-struct MacroDef<SR> {
-    params: Vec<(String, SR)>,
-    body: Vec<(Token, SR)>,
+struct MacroDef<S> {
+    params: Vec<(String, S)>,
+    body: Vec<(Token, S)>,
 }
 
-impl<SR: SourceRange> MacroExpander<SR> {
-    fn new() -> MacroExpander<SR> {
+impl<S: Span> MacroExpander<S> {
+    fn new() -> MacroExpander<S> {
         MacroExpander {
             macro_defs: HashMap::new(),
         }
     }
 }
 
-impl<SR: SourceRange> Macros for MacroExpander<SR> {
-    type SourceRange = SR;
-    type ExpandedMacro = ExpandedMacro<Self::SourceRange>;
+impl<S: Span> Macros for MacroExpander<S> {
+    type Span = S;
+    type ExpandedMacro = ExpandedMacro<Self::Span>;
 
     fn define(
         &mut self,
-        name: (impl Into<String>, Self::SourceRange),
-        params: Vec<(String, Self::SourceRange)>,
-        body: Vec<(Token, Self::SourceRange)>,
+        name: (impl Into<String>, Self::Span),
+        params: Vec<(String, Self::Span)>,
+        body: Vec<(Token, Self::Span)>,
     ) {
         self.macro_defs
             .insert(name.0.into(), Rc::new(MacroDef { params, body }));
@@ -267,8 +264,8 @@ impl<SR: SourceRange> Macros for MacroExpander<SR> {
 
     fn expand(
         &mut self,
-        name: (String, Self::SourceRange),
-        args: Vec<Vec<(Token, Self::SourceRange)>>,
+        name: (String, Self::Span),
+        args: Vec<Vec<(Token, Self::Span)>>,
     ) -> Option<Self::ExpandedMacro> {
         self.macro_defs
             .get(&name.0)
@@ -277,15 +274,15 @@ impl<SR: SourceRange> Macros for MacroExpander<SR> {
     }
 }
 
-struct ExpandedMacro<SR> {
-    def: Rc<MacroDef<SR>>,
-    args: Vec<Vec<(Token, SR)>>,
+struct ExpandedMacro<S> {
+    def: Rc<MacroDef<S>>,
+    args: Vec<Vec<(Token, S)>>,
     body_index: usize,
     arg_index: Option<(usize, usize)>,
 }
 
-impl<SR> ExpandedMacro<SR> {
-    fn new(def: Rc<MacroDef<SR>>, args: Vec<Vec<(Token, SR)>>) -> ExpandedMacro<SR> {
+impl<S> ExpandedMacro<S> {
+    fn new(def: Rc<MacroDef<S>>, args: Vec<Vec<(Token, S)>>) -> ExpandedMacro<S> {
         let mut expanded_macro = ExpandedMacro {
             def,
             args,
@@ -331,8 +328,8 @@ impl<SR> ExpandedMacro<SR> {
     }
 }
 
-impl<SR: Clone> Iterator for ExpandedMacro<SR> {
-    type Item = (Token, SR);
+impl<S: Clone> Iterator for ExpandedMacro<S> {
+    type Item = (Token, S);
     fn next(&mut self) -> Option<Self::Item> {
         if self.body_index < self.def.body.len() {
             let item = match self.arg_index {
@@ -349,9 +346,9 @@ impl<SR: Clone> Iterator for ExpandedMacro<SR> {
 
 trait TokenizedCodeSource
 where
-    for<'c> &'c Self::Tokenized: IntoIterator<Item = (Token, Self::TokenRef)>,
+    for<'c> &'c Self::Tokenized: IntoIterator<Item = (Token, Self::Span)>,
 {
-    type TokenRef: SourceRange;
+    type Span: Span;
     type Tokenized;
     fn tokenize_file(&mut self, filename: &str) -> Self::Tokenized;
 }
@@ -371,7 +368,7 @@ impl<'a, C: Codebase + 'a, TT: TokenTracker> TokenStreamSource<'a, C, TT> {
 }
 
 impl<'a, C: Codebase + 'a, TT: TokenTracker> TokenizedCodeSource for TokenStreamSource<'a, C, TT> {
-    type TokenRef = TT::TokenRef;
+    type Span = TT::Span;
     type Tokenized = TokenizedSrc<TT::BufContext>;
 
     fn tokenize_file(&mut self, filename: &str) -> Self::Tokenized {
@@ -412,7 +409,7 @@ struct TokenizedSrcIter<'a, LRF: LexemeRefFactory + 'a> {
 }
 
 impl<'a, LRF: LexemeRefFactory> Iterator for TokenizedSrcIter<'a, LRF> {
-    type Item = (Token, LRF::TokenRef);
+    type Item = (Token, LRF::Span);
     fn next(&mut self) -> Option<Self::Item> {
         self.tokens
             .next()
@@ -545,7 +542,7 @@ mod tests {
     }
 
     impl TokenizedCodeSource for MockTokenSource {
-        type TokenRef = ();
+        type Span = ();
         type Tokenized = MockTokenized;
 
         fn tokenize_file(&mut self, filename: &str) -> Self::Tokenized {
@@ -584,7 +581,7 @@ mod tests {
     impl<'a> Analysis for Mock<'a> {
         fn run<I, F>(&mut self, tokens: I, _frontend: &mut F)
         where
-            I: Iterator<Item = (Token, F::TokenRef)>,
+            I: Iterator<Item = (Token, F::Span)>,
             F: Session,
         {
             self.log

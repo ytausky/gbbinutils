@@ -1,4 +1,4 @@
-use diagnostics::{DiagnosticsListener, SourceRange};
+use diagnostics::{DiagnosticsListener, Span};
 use std::{cmp::PartialEq, fmt::Debug};
 
 #[macro_use]
@@ -13,10 +13,10 @@ pub fn tokenize(src: &str) -> self::lexer::Lexer {
     self::lexer::Lexer::new(src)
 }
 
-pub fn parse_token_seq<R: SourceRange, I, F>(tokens: I, actions: F)
+pub fn parse_token_seq<S: Span, I, F>(tokens: I, actions: F)
 where
-    I: Iterator<Item = (Token, R)>,
-    F: FileContext<String, R>,
+    I: Iterator<Item = (Token, S)>,
+    F: FileContext<String, S>,
 {
     self::parser::parse_src(tokens, actions)
 }

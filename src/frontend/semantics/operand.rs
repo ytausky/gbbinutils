@@ -1,4 +1,4 @@
-use diagnostics::{Diagnostic, KeywordOperandCategory, Message, Source, SourceRange};
+use diagnostics::{Diagnostic, KeywordOperandCategory, Message, Source, Span};
 use frontend::syntax::ast;
 use frontend::syntax::ast::ExprVariant;
 use frontend::syntax::keyword as kw;
@@ -12,12 +12,12 @@ pub enum Operand<R> {
     Deref(RelocExpr<R>),
 }
 
-impl<SR: SourceRange> Source for Operand<SR> {
-    type Range = SR;
-    fn source_range(&self) -> Self::Range {
+impl<S: Span> Source for Operand<S> {
+    type Span = S;
+    fn span(&self) -> Self::Span {
         match self {
-            Operand::Atom(_, range) => (*range).clone(),
-            Operand::Const(expr) | Operand::Deref(expr) => expr.source_range(),
+            Operand::Atom(_, span) => (*span).clone(),
+            Operand::Const(expr) | Operand::Deref(expr) => expr.span(),
         }
     }
 }

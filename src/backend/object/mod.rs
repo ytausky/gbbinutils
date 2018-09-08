@@ -1,7 +1,7 @@
 use self::context::{EvalContext, SymbolTable};
 use self::resolve::Value;
 use backend::{BinaryObject, RelocExpr};
-use diagnostics::{DiagnosticsListener, SourceRange};
+use diagnostics::{DiagnosticsListener, Span};
 use std::borrow::Borrow;
 use Width;
 
@@ -37,10 +37,10 @@ impl<SR> Object<SR> {
     }
 }
 
-pub fn link<'a, SR, D>(object: Object<SR>, diagnostics: &D) -> BinaryObject
+pub fn link<'a, S, D>(object: Object<S>, diagnostics: &D) -> BinaryObject
 where
-    SR: SourceRange,
-    D: DiagnosticsListener<SR> + 'a,
+    S: Span,
+    D: DiagnosticsListener<S> + 'a,
 {
     let symbols = resolve::resolve_symbols(&object);
     let mut context = EvalContext {
@@ -115,11 +115,11 @@ impl<SR> ObjectBuilder<SR> {
     }
 }
 
-impl<SR: SourceRange> Chunk<SR> {
+impl<S: Span> Chunk<S> {
     fn traverse<ST, F>(&self, context: &mut EvalContext<ST>, f: F) -> Value
     where
         ST: Borrow<SymbolTable>,
-        F: FnMut(&Node<SR>, &mut EvalContext<ST>),
+        F: FnMut(&Node<S>, &mut EvalContext<ST>),
     {
         context.location = self.evaluate_origin(context);
         traverse_chunk_items(&self.items, context, f)
@@ -133,15 +133,15 @@ impl<SR: SourceRange> Chunk<SR> {
     }
 }
 
-fn traverse_chunk_items<SR, ST, F>(
-    items: &[Node<SR>],
+fn traverse_chunk_items<S, ST, F>(
+    items: &[Node<S>],
     context: &mut EvalContext<ST>,
     mut f: F,
 ) -> Value
 where
-    SR: SourceRange,
+    S: Span,
     ST: Borrow<SymbolTable>,
-    F: FnMut(&Node<SR>, &mut EvalContext<ST>),
+    F: FnMut(&Node<S>, &mut EvalContext<ST>),
 {
     let origin = context.location.clone();
     let mut offset = Value::from(0);

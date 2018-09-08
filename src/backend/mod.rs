@@ -40,15 +40,15 @@ pub enum BinaryOperator {
     Plus,
 }
 
-impl<SR: SourceRange> Source for RelocExpr<SR> {
-    type Range = SR;
-    fn source_range(&self) -> Self::Range {
+impl<S: Span> Source for RelocExpr<S> {
+    type Span = S;
+    fn span(&self) -> Self::Span {
         use backend::RelocExpr::*;
         match self {
-            BinaryOperation(_, _, _, range)
-            | Literal(_, range)
-            | Symbol(_, range)
-            | LocationCounter(range) => (*range).clone(),
+            BinaryOperation(_, _, _, span)
+            | Literal(_, span)
+            | Symbol(_, span)
+            | LocationCounter(span) => (*span).clone(),
         }
     }
 }
@@ -84,14 +84,14 @@ pub struct Rom {
     pub data: Box<[u8]>,
 }
 
-impl<SR: SourceRange> Backend<SR> for ObjectBuilder<SR> {
-    type Object = Object<SR>;
+impl<S: Span> Backend<S> for ObjectBuilder<S> {
+    type Object = Object<S>;
 
-    fn add_label(&mut self, label: (impl Into<String>, SR)) {
+    fn add_label(&mut self, label: (impl Into<String>, S)) {
         self.push(Node::Label(label.0.into(), label.1))
     }
 
-    fn emit_item(&mut self, item: Item<SR>) {
+    fn emit_item(&mut self, item: Item<S>) {
         item.lower().for_each(|data_item| self.push(data_item))
     }
 
@@ -99,7 +99,7 @@ impl<SR: SourceRange> Backend<SR> for ObjectBuilder<SR> {
         self.build()
     }
 
-    fn set_origin(&mut self, origin: RelocExpr<SR>) {
+    fn set_origin(&mut self, origin: RelocExpr<S>) {
         self.constrain_origin(origin)
     }
 }

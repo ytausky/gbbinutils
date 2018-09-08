@@ -2,33 +2,33 @@ use codebase::{BufId, BufRange, LineNumber, TextBuf, TextCache, TextRange};
 use std::{cell::RefCell, cmp, fmt, rc::Rc};
 use Width;
 
-pub trait SourceRange: Clone + fmt::Debug {
+pub trait Span: Clone + fmt::Debug {
     fn extend(&self, other: &Self) -> Self;
 }
 
 #[cfg(test)]
-impl SourceRange for () {
+impl Span for () {
     fn extend(&self, _: &Self) -> Self {}
 }
 
 pub trait Source {
-    type Range: SourceRange;
-    fn source_range(&self) -> Self::Range;
+    type Span: Span;
+    fn span(&self) -> Self::Span;
 }
 
 pub trait TokenTracker {
-    type TokenRef: SourceRange;
-    type BufContext: Clone + LexemeRefFactory<TokenRef = Self::TokenRef>;
+    type Span: Span;
+    type BufContext: Clone + LexemeRefFactory<Span = Self::Span>;
     fn mk_buf_context(
         &mut self,
         buf_id: BufId,
-        included_from: Option<Self::TokenRef>,
+        included_from: Option<Self::Span>,
     ) -> Self::BufContext;
 }
 
 pub trait LexemeRefFactory {
-    type TokenRef;
-    fn mk_lexeme_ref(&self, range: BufRange) -> Self::TokenRef;
+    type Span;
+    fn mk_lexeme_ref(&self, range: BufRange) -> Self::Span;
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -48,12 +48,12 @@ pub struct BufContextData {
 pub struct SimpleTokenTracker;
 
 impl TokenTracker for SimpleTokenTracker {
-    type TokenRef = TokenRefData;
+    type Span = TokenRefData;
     type BufContext = SimpleBufTokenRefFactory;
     fn mk_buf_context(
         &mut self,
         buf_id: BufId,
-        included_from: Option<Self::TokenRef>,
+        included_from: Option<Self::Span>,
     ) -> Self::BufContext {
         let context = Rc::new(BufContextData {
             buf_id,
@@ -69,8 +69,8 @@ pub struct SimpleBufTokenRefFactory {
 }
 
 impl LexemeRefFactory for SimpleBufTokenRefFactory {
-    type TokenRef = TokenRefData;
-    fn mk_lexeme_ref(&self, range: BufRange) -> Self::TokenRef {
+    type Span = TokenRefData;
+    fn mk_lexeme_ref(&self, range: BufRange) -> Self::Span {
         TokenRefData::Lexeme {
             range,
             context: self.context.clone(),
@@ -78,7 +78,7 @@ impl LexemeRefFactory for SimpleBufTokenRefFactory {
     }
 }
 
-impl SourceRange for TokenRefData {
+impl Span for TokenRefData {
     fn extend(&self, other: &Self) -> Self {
         use diagnostics::TokenRefData::*;
         match (self, other) {

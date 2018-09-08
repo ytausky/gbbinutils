@@ -1,4 +1,4 @@
-use diagnostics::{Diagnostic, Message, Source, SourceRange};
+use diagnostics::{Diagnostic, Message, Source, Span};
 use frontend::semantics::operand::{self, AtomKind, Context, Operand, OperandCounter};
 use frontend::syntax::ast;
 use frontend::syntax::keyword as kw;
@@ -7,12 +7,12 @@ use instruction::*;
 
 type Expr<S> = ast::Expr<<String as TokenSpec>::Ident, <String as TokenSpec>::Literal, S>;
 
-pub fn analyze_instruction<I, R>(mnemonic: (kw::Mnemonic, R), operands: I) -> AnalysisResult<R>
+pub fn analyze_instruction<I, S>(mnemonic: (kw::Mnemonic, S), operands: I) -> AnalysisResult<S>
 where
-    I: IntoIterator<Item = Expr<R>>,
-    R: SourceRange,
+    I: IntoIterator<Item = Expr<S>>,
+    S: Span,
 {
-    let mnemonic: (Mnemonic, R) = (mnemonic.0.into(), mnemonic.1);
+    let mnemonic: (Mnemonic, S) = (mnemonic.0.into(), mnemonic.1);
     let context = mnemonic.0.context();
     Analysis::new(
         mnemonic,
@@ -27,22 +27,22 @@ struct Analysis<R, I> {
     operands: OperandCounter<I>,
 }
 
-impl<'a, R: SourceRange, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>>> Analysis<R, I> {
-    fn new(mnemonic: (Mnemonic, R), operands: I) -> Analysis<R, I> {
+impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, Diagnostic<S>>>> Analysis<S, I> {
+    fn new(mnemonic: (Mnemonic, S), operands: I) -> Analysis<S, I> {
         Analysis {
             mnemonic,
             operands: OperandCounter::new(operands),
         }
     }
 
-    fn run(mut self) -> AnalysisResult<R> {
+    fn run(mut self) -> AnalysisResult<S> {
         let instruction = self.analyze_mnemonic()?;
         self.operands
             .check_for_unexpected_operands(self.mnemonic.1)?;
         Ok(instruction)
     }
 
-    fn analyze_mnemonic(&mut self) -> AnalysisResult<R> {
+    fn analyze_mnemonic(&mut self) -> AnalysisResult<S> {
         use self::Mnemonic::*;
         match self.mnemonic.0 {
             Alu(AluOperation::Add) => self.analyze_add_instruction(),
@@ -61,7 +61,7 @@ impl<'a, R: SourceRange, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>>> 
         }
     }
 
-    fn analyze_add_instruction(&mut self) -> AnalysisResult<R> {
+    fn analyze_add_instruction(&mut self) -> AnalysisResult<S> {
         match self.expect_operand(2)? {
             Operand::Atom(AtomKind::Reg16(reg16), range) => {
                 self.analyze_add_reg16_instruction((reg16, range))
@@ -70,14 +70,14 @@ impl<'a, R: SourceRange, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>>> 
         }
     }
 
-    fn analyze_add_reg16_instruction(&mut self, target: (Reg16, R)) -> AnalysisResult<R> {
+    fn analyze_add_reg16_instruction(&mut self, target: (Reg16, S)) -> AnalysisResult<S> {
         match target.0 {
             Reg16::Hl => self.analyze_add_hl_instruction(),
             _ => Err(Diagnostic::new(Message::DestMustBeHl, target.1)),
         }
     }
 
-    fn analyze_add_hl_instruction(&mut self) -> AnalysisResult<R> {
+    fn analyze_add_hl_instruction(&mut self) -> AnalysisResult<S> {
         match self.expect_operand(2)? {
             Operand::Atom(AtomKind::Reg16(src), _) => Ok(Instruction::AddHl(src)),
             Operand::Atom(_, interval) => {
@@ -90,18 +90,15 @@ impl<'a, R: SourceRange, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>>> 
     fn analyze_alu_instruction(
         &mut self,
         operation: AluOperation,
-        first_operand: Operand<R>,
-    ) -> AnalysisResult<R> {
+        first_operand: Operand<S>,
+    ) -> AnalysisResult<S> {
         let src = if operation.implicit_dest() {
             first_operand
         } else {
             let second_operand = self.expect_operand(2)?;
             match first_operand {
                 Operand::Atom(AtomKind::Simple(SimpleOperand::A), _) => Ok(()),
-                operand => Err(Diagnostic::new(
-                    Message::DestMustBeA,
-                    operand.source_range(),
-                )),
+                operand => Err(Diagnostic::new(Message::DestMustBeA, operand.span())),
             }?;
             second_operand
         };
@@ -114,7 +111,7 @@ impl<'a, R: SourceRange, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>>> 
         }
     }
 
-    fn analyze_bit_operation(&mut self, operation: BitOperation) -> AnalysisResult<R> {
+    fn analyze_bit_operation(&mut self, operation: BitOperation) -> AnalysisResult<S> {
         let bit_number = self.expect_operand(2)?;
         let operand = self.expect_operand(2)?;
         match (bit_number, operand) {
@@ -125,7 +122,7 @@ impl<'a, R: SourceRange, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>>> 
         }
     }
 
-    fn analyze_branch(&mut self, branch: BranchKind) -> AnalysisResult<R> {
+    fn analyze_branch(&mut self, branch: BranchKind) -> AnalysisResult<S> {
         let (condition, target) = self.collect_condition_and_target()?;
         match (branch, condition, target) {
             (BranchKind::Jp, None, Some(TargetSelector::DerefHl)) => Ok(Instruction::JpDerefHl),
@@ -139,7 +136,7 @@ impl<'a, R: SourceRange, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>>> 
         }
     }
 
-    fn collect_condition_and_target(&mut self) -> Result<CondtitionTargetPair<R>, Diagnostic<R>> {
+    fn collect_condition_and_target(&mut self) -> Result<CondtitionTargetPair<S>, Diagnostic<S>> {
         let first_operand = self.operands.next()?;
         Ok(
             if let Some(Operand::Atom(AtomKind::Condition(condition), range)) = first_operand {
@@ -153,7 +150,7 @@ impl<'a, R: SourceRange, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>>> 
         )
     }
 
-    fn analyze_ld(&mut self) -> AnalysisResult<R> {
+    fn analyze_ld(&mut self) -> AnalysisResult<S> {
         let dest = self.expect_operand(2)?;
         let src = self.expect_operand(2)?;
         match (dest, src) {
@@ -176,7 +173,7 @@ impl<'a, R: SourceRange, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>>> 
         }
     }
 
-    fn analyze_misc(&mut self, operation: MiscOperation) -> AnalysisResult<R> {
+    fn analyze_misc(&mut self, operation: MiscOperation) -> AnalysisResult<S> {
         let operand = self.expect_operand(1)?;
         match operand {
             Operand::Atom(AtomKind::Simple(simple), _) => Ok(Instruction::Misc(operation, simple)),
@@ -184,7 +181,7 @@ impl<'a, R: SourceRange, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>>> 
         }
     }
 
-    fn analyze_stack_operation(&mut self, operation: StackOperation) -> AnalysisResult<R> {
+    fn analyze_stack_operation(&mut self, operation: StackOperation) -> AnalysisResult<S> {
         let reg_pair = match self.expect_operand(1)? {
             Operand::Atom(AtomKind::RegPair(reg_pair), _) => reg_pair,
             _ => panic!(),
@@ -196,7 +193,7 @@ impl<'a, R: SourceRange, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>>> 
         Ok(instruction_ctor(reg_pair))
     }
 
-    fn analyze_inc_dec(&mut self, mode: IncDec) -> AnalysisResult<R> {
+    fn analyze_inc_dec(&mut self, mode: IncDec) -> AnalysisResult<S> {
         match self.expect_operand(1)? {
             Operand::Atom(AtomKind::Simple(operand), _) => Ok(Instruction::IncDec8(mode, operand)),
             Operand::Atom(AtomKind::Reg16(operand), _) => Ok(Instruction::IncDec16(mode, operand)),
@@ -204,14 +201,14 @@ impl<'a, R: SourceRange, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>>> 
         }
     }
 
-    fn analyze_rst(&mut self) -> AnalysisResult<R> {
+    fn analyze_rst(&mut self) -> AnalysisResult<S> {
         match self.expect_operand(1)? {
             Operand::Const(expr) => Ok(Instruction::Rst(expr)),
             _ => panic!(),
         }
     }
 
-    fn expect_operand(&mut self, out_of: usize) -> Result<Operand<R>, Diagnostic<R>> {
+    fn expect_operand(&mut self, out_of: usize) -> Result<Operand<S>, Diagnostic<S>> {
         let actual = self.operands.seen();
         self.operands.next()?.ok_or_else(|| {
             Diagnostic::new(
@@ -225,9 +222,9 @@ impl<'a, R: SourceRange, I: Iterator<Item = Result<Operand<R>, Diagnostic<R>>>> 
     }
 }
 
-type CondtitionTargetPair<SI> = (Option<(Condition, SI)>, Option<TargetSelector<SI>>);
+type CondtitionTargetPair<S> = (Option<(Condition, S)>, Option<TargetSelector<S>>);
 
-fn analyze_branch_target<R>(target: Option<Operand<R>>) -> Option<TargetSelector<R>> {
+fn analyze_branch_target<S>(target: Option<Operand<S>>) -> Option<TargetSelector<S>> {
     target.map(|target| match target {
         Operand::Const(expr) => TargetSelector::Expr(expr),
         Operand::Atom(AtomKind::Simple(SimpleOperand::DerefHl), _) => TargetSelector::DerefHl,
@@ -235,10 +232,10 @@ fn analyze_branch_target<R>(target: Option<Operand<R>>) -> Option<TargetSelector
     })
 }
 
-fn mk_branch<R>(
-    kind: (BranchKind, R),
-    target: Option<TargetSelector<R>>,
-) -> Result<Branch<R>, Diagnostic<R>> {
+fn mk_branch<S>(
+    kind: (BranchKind, S),
+    target: Option<TargetSelector<S>>,
+) -> Result<Branch<S>, Diagnostic<S>> {
     match (kind.0, target) {
         (BranchKind::Call, Some(TargetSelector::Expr(expr))) => Ok(Branch::Call(expr)),
         (BranchKind::Jp, Some(TargetSelector::Expr(expr))) => Ok(Branch::Jp(expr)),
@@ -249,7 +246,7 @@ fn mk_branch<R>(
     }
 }
 
-fn analyze_special_ld<R>(other: Operand<R>, direction: Direction) -> AnalysisResult<R> {
+fn analyze_special_ld<S>(other: Operand<S>, direction: Direction) -> AnalysisResult<S> {
     Ok(Instruction::Ld(Ld::Special(
         match other {
             Operand::Deref(expr) => SpecialLd::InlineAddr(expr),
@@ -261,7 +258,7 @@ fn analyze_special_ld<R>(other: Operand<R>, direction: Direction) -> AnalysisRes
     )))
 }
 
-pub type AnalysisResult<R> = Result<Instruction<R>, Diagnostic<R>>;
+pub type AnalysisResult<S> = Result<Instruction<S>, Diagnostic<S>>;
 
 #[derive(Debug, PartialEq)]
 enum Mnemonic {
@@ -398,7 +395,7 @@ mod tests {
         Special,
     }
 
-    impl SourceRange for Marking {
+    impl Span for Marking {
         fn extend(&self, _: &Self) -> Self {
             *self
         }

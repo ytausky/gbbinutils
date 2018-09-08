@@ -1,5 +1,5 @@
 use backend::{self, BinaryOperator};
-use diagnostics::{Diagnostic, DiagnosticsListener, SourceRange};
+use diagnostics::{Diagnostic, DiagnosticsListener, Span};
 use frontend::syntax::ast;
 use frontend::syntax::ast::ExprVariant;
 use frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token, TokenSpec};
@@ -24,7 +24,7 @@ impl<T: TokenSpec> ExprSpec for T {
 pub struct SemanticActions<'a, F: Session + 'a> {
     session: &'a mut F,
     expr_factory: StrExprFactory,
-    label: Option<(<String as TokenSpec>::Ident, F::TokenRef)>,
+    label: Option<(<String as TokenSpec>::Ident, F::Span)>,
 }
 
 impl<'a, F: Session + 'a> SemanticActions<'a, F> {
@@ -43,25 +43,25 @@ impl<'a, F: Session + 'a> SemanticActions<'a, F> {
     }
 }
 
-impl<'a, F: Session + 'a> DiagnosticsListener<F::TokenRef> for SemanticActions<'a, F> {
-    fn emit_diagnostic(&self, diagnostic: Diagnostic<F::TokenRef>) {
+impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for SemanticActions<'a, F> {
+    fn emit_diagnostic(&self, diagnostic: Diagnostic<F::Span>) {
         self.session.emit_diagnostic(diagnostic)
     }
 }
 
-impl<'a, F: Session + 'a> syntax::FileContext<String, F::TokenRef> for SemanticActions<'a, F> {
+impl<'a, F: Session + 'a> syntax::FileContext<String, F::Span> for SemanticActions<'a, F> {
     type LineActions = Self;
 
     fn enter_line(
         mut self,
-        label: Option<(<String as TokenSpec>::Ident, F::TokenRef)>,
+        label: Option<(<String as TokenSpec>::Ident, F::Span)>,
     ) -> Self::LineActions {
         self.label = label;
         self
     }
 }
 
-impl<'a, F: Session + 'a> syntax::LineActions<String, F::TokenRef> for SemanticActions<'a, F> {
+impl<'a, F: Session + 'a> syntax::LineActions<String, F::Span> for SemanticActions<'a, F> {
     type CommandContext = CommandActions<'a, F>;
     type MacroParamsActions = MacroDefActions<'a, F>;
     type MacroInvocationContext = MacroInvocationActions<'a, F>;
@@ -69,7 +69,7 @@ impl<'a, F: Session + 'a> syntax::LineActions<String, F::TokenRef> for SemanticA
 
     fn enter_command(
         mut self,
-        name: (<String as TokenSpec>::Command, F::TokenRef),
+        name: (<String as TokenSpec>::Command, F::Span),
     ) -> Self::CommandContext {
         self.define_label_if_present();
         CommandActions::new(name, self)
@@ -81,7 +81,7 @@ impl<'a, F: Session + 'a> syntax::LineActions<String, F::TokenRef> for SemanticA
 
     fn enter_macro_invocation(
         mut self,
-        name: (<String as TokenSpec>::Ident, F::TokenRef),
+        name: (<String as TokenSpec>::Ident, F::Span),
     ) -> Self::MacroInvocationContext {
         self.define_label_if_present();
         MacroInvocationActions::new(name, self)
@@ -94,16 +94,16 @@ impl<'a, F: Session + 'a> syntax::LineActions<String, F::TokenRef> for SemanticA
 }
 
 pub struct CommandActions<'a, F: Session + 'a> {
-    name: (Command, F::TokenRef),
+    name: (Command, F::Span),
     args: CommandArgs<F>,
     parent: SemanticActions<'a, F>,
 }
 
 type Expr<S> = ast::Expr<<String as TokenSpec>::Ident, <String as TokenSpec>::Literal, S>;
-type CommandArgs<F> = Vec<Expr<<F as Session>::TokenRef>>;
+type CommandArgs<F> = Vec<Expr<<F as Session>::Span>>;
 
 impl<'a, F: Session + 'a> CommandActions<'a, F> {
-    fn new(name: (Command, F::TokenRef), parent: SemanticActions<'a, F>) -> CommandActions<'a, F> {
+    fn new(name: (Command, F::Span), parent: SemanticActions<'a, F>) -> CommandActions<'a, F> {
         CommandActions {
             name,
             args: Vec::new(),
@@ -112,13 +112,13 @@ impl<'a, F: Session + 'a> CommandActions<'a, F> {
     }
 }
 
-impl<'a, F: Session + 'a> DiagnosticsListener<F::TokenRef> for CommandActions<'a, F> {
-    fn emit_diagnostic(&self, diagnostic: Diagnostic<F::TokenRef>) {
+impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for CommandActions<'a, F> {
+    fn emit_diagnostic(&self, diagnostic: Diagnostic<F::Span>) {
         self.parent.emit_diagnostic(diagnostic)
     }
 }
 
-impl<'a, F: Session + 'a> syntax::CommandContext<F::TokenRef> for CommandActions<'a, F> {
+impl<'a, F: Session + 'a> syntax::CommandContext<F::Span> for CommandActions<'a, F> {
     type TokenSpec = String;
     type ArgActions = ExprActions<'a, F>;
     type Parent = SemanticActions<'a, F>;
@@ -144,15 +144,15 @@ impl<'a, F: Session + 'a> syntax::CommandContext<F::TokenRef> for CommandActions
 }
 
 pub struct ExprActions<'a, F: Session + 'a> {
-    stack: Vec<Expr<F::TokenRef>>,
+    stack: Vec<Expr<F::Span>>,
     parent: CommandActions<'a, F>,
 }
 
-impl<'a, F: Session + 'a> syntax::ExprActions<F::TokenRef> for ExprActions<'a, F> {
+impl<'a, F: Session + 'a> syntax::ExprActions<F::Span> for ExprActions<'a, F> {
     type TokenSpec = String;
     type Parent = CommandActions<'a, F>;
 
-    fn push_atom(&mut self, atom: (ExprAtom<Self::TokenSpec>, F::TokenRef)) {
+    fn push_atom(&mut self, atom: (ExprAtom<Self::TokenSpec>, F::Span)) {
         self.stack.push(Expr {
             variant: match atom.0 {
                 ExprAtom::Ident(ident) => ExprVariant::Ident(ident),
@@ -162,7 +162,7 @@ impl<'a, F: Session + 'a> syntax::ExprActions<F::TokenRef> for ExprActions<'a, F
         })
     }
 
-    fn apply_operator(&mut self, operator: (ExprOperator, F::TokenRef)) {
+    fn apply_operator(&mut self, operator: (ExprOperator, F::Span)) {
         match operator.0 {
             ExprOperator::Parentheses => {
                 let inner = self.stack.pop().unwrap();
@@ -245,7 +245,7 @@ fn analyze_org<'a, S: Session + 'a>(args: CommandArgs<S>, actions: &mut Semantic
 }
 
 fn analyze_mnemonic<'a, F: Session + 'a>(
-    name: (Mnemonic, F::TokenRef),
+    name: (Mnemonic, F::Span),
     args: CommandArgs<F>,
     actions: &mut SemanticActions<'a, F>,
 ) {
@@ -259,14 +259,14 @@ fn analyze_mnemonic<'a, F: Session + 'a>(
 }
 
 pub struct MacroDefActions<'a, F: Session + 'a> {
-    name: (String, F::TokenRef),
-    params: Vec<(String, F::TokenRef)>,
-    tokens: Vec<(Token, F::TokenRef)>,
+    name: (String, F::Span),
+    params: Vec<(String, F::Span)>,
+    tokens: Vec<(Token, F::Span)>,
     parent: SemanticActions<'a, F>,
 }
 
 impl<'a, F: Session + 'a> MacroDefActions<'a, F> {
-    fn new(name: (String, F::TokenRef), parent: SemanticActions<'a, F>) -> MacroDefActions<'a, F> {
+    fn new(name: (String, F::Span), parent: SemanticActions<'a, F>) -> MacroDefActions<'a, F> {
         MacroDefActions {
             name,
             params: Vec::new(),
@@ -276,18 +276,18 @@ impl<'a, F: Session + 'a> MacroDefActions<'a, F> {
     }
 }
 
-impl<'a, F: Session + 'a> DiagnosticsListener<F::TokenRef> for MacroDefActions<'a, F> {
-    fn emit_diagnostic(&self, diagnostic: Diagnostic<F::TokenRef>) {
+impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for MacroDefActions<'a, F> {
+    fn emit_diagnostic(&self, diagnostic: Diagnostic<F::Span>) {
         self.parent.emit_diagnostic(diagnostic)
     }
 }
 
-impl<'a, F: Session + 'a> syntax::MacroParamsActions<F::TokenRef> for MacroDefActions<'a, F> {
+impl<'a, F: Session + 'a> syntax::MacroParamsActions<F::Span> for MacroDefActions<'a, F> {
     type TokenSpec = String;
     type MacroBodyActions = Self;
     type Parent = SemanticActions<'a, F>;
 
-    fn add_parameter(&mut self, param: (<Self::TokenSpec as TokenSpec>::Ident, F::TokenRef)) {
+    fn add_parameter(&mut self, param: (<Self::TokenSpec as TokenSpec>::Ident, F::Span)) {
         self.params.push(param)
     }
 
@@ -296,11 +296,11 @@ impl<'a, F: Session + 'a> syntax::MacroParamsActions<F::TokenRef> for MacroDefAc
     }
 }
 
-impl<'a, F: Session + 'a> syntax::TokenSeqContext<F::TokenRef> for MacroDefActions<'a, F> {
+impl<'a, F: Session + 'a> syntax::TokenSeqContext<F::Span> for MacroDefActions<'a, F> {
     type Token = Token;
     type Parent = SemanticActions<'a, F>;
 
-    fn push_token(&mut self, token: (Self::Token, F::TokenRef)) {
+    fn push_token(&mut self, token: (Self::Token, F::Span)) {
         self.tokens.push(token)
     }
 
@@ -313,14 +313,14 @@ impl<'a, F: Session + 'a> syntax::TokenSeqContext<F::TokenRef> for MacroDefActio
 }
 
 pub struct MacroInvocationActions<'a, F: Session + 'a> {
-    name: (String, F::TokenRef),
-    args: Vec<Vec<(Token, F::TokenRef)>>,
+    name: (String, F::Span),
+    args: Vec<Vec<(Token, F::Span)>>,
     parent: SemanticActions<'a, F>,
 }
 
 impl<'a, F: Session + 'a> MacroInvocationActions<'a, F> {
     fn new(
-        name: (String, F::TokenRef),
+        name: (String, F::Span),
         parent: SemanticActions<'a, F>,
     ) -> MacroInvocationActions<'a, F> {
         MacroInvocationActions {
@@ -330,18 +330,18 @@ impl<'a, F: Session + 'a> MacroInvocationActions<'a, F> {
         }
     }
 
-    fn push_arg(&mut self, arg: Vec<(Token, F::TokenRef)>) {
+    fn push_arg(&mut self, arg: Vec<(Token, F::Span)>) {
         self.args.push(arg)
     }
 }
 
-impl<'a, F: Session + 'a> DiagnosticsListener<F::TokenRef> for MacroInvocationActions<'a, F> {
-    fn emit_diagnostic(&self, diagnostic: Diagnostic<F::TokenRef>) {
+impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for MacroInvocationActions<'a, F> {
+    fn emit_diagnostic(&self, diagnostic: Diagnostic<F::Span>) {
         self.parent.emit_diagnostic(diagnostic)
     }
 }
 
-impl<'a, F: Session + 'a> syntax::MacroInvocationContext<F::TokenRef>
+impl<'a, F: Session + 'a> syntax::MacroInvocationContext<F::Span>
     for MacroInvocationActions<'a, F>
 {
     type Token = Token;
@@ -362,7 +362,7 @@ impl<'a, F: Session + 'a> syntax::MacroInvocationContext<F::TokenRef>
 }
 
 pub struct MacroArgActions<'a, F: Session + 'a> {
-    tokens: Vec<(Token, F::TokenRef)>,
+    tokens: Vec<(Token, F::Span)>,
     parent: MacroInvocationActions<'a, F>,
 }
 
@@ -375,17 +375,17 @@ impl<'a, F: Session + 'a> MacroArgActions<'a, F> {
     }
 }
 
-impl<'a, F: Session + 'a> DiagnosticsListener<F::TokenRef> for MacroArgActions<'a, F> {
-    fn emit_diagnostic(&self, diagnostic: Diagnostic<F::TokenRef>) {
+impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for MacroArgActions<'a, F> {
+    fn emit_diagnostic(&self, diagnostic: Diagnostic<F::Span>) {
         self.parent.parent.session.emit_diagnostic(diagnostic)
     }
 }
 
-impl<'a, F: Session + 'a> syntax::TokenSeqContext<F::TokenRef> for MacroArgActions<'a, F> {
+impl<'a, F: Session + 'a> syntax::TokenSeqContext<F::Span> for MacroArgActions<'a, F> {
     type Token = Token;
     type Parent = MacroInvocationActions<'a, F>;
 
-    fn push_token(&mut self, token: (Self::Token, F::TokenRef)) {
+    fn push_token(&mut self, token: (Self::Token, F::Span)) {
         self.tokens.push(token)
     }
 
@@ -395,7 +395,7 @@ impl<'a, F: Session + 'a> syntax::TokenSeqContext<F::TokenRef> for MacroArgActio
     }
 }
 
-fn reduce_include<R: SourceRange>(mut arguments: Vec<Expr<R>>) -> ChunkId<R> {
+fn reduce_include<S: Span>(mut arguments: Vec<Expr<S>>) -> ChunkId<S> {
     assert_eq!(arguments.len(), 1);
     let path = arguments.pop().unwrap();
     match path.variant {
@@ -439,15 +439,15 @@ mod tests {
     }
 
     impl Session for TestFrontend {
-        type TokenRef = ();
+        type Span = ();
 
-        fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::TokenRef>) {
+        fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::Span>) {
             self.0
                 .borrow_mut()
                 .push(TestOperation::AnalyzeChunk(chunk_id))
         }
 
-        fn emit_diagnostic(&self, diagnostic: Diagnostic<Self::TokenRef>) {
+        fn emit_diagnostic(&self, diagnostic: Diagnostic<Self::Span>) {
             self.0
                 .borrow_mut()
                 .push(TestOperation::EmitDiagnostic(diagnostic))
@@ -457,14 +457,14 @@ mod tests {
             self.0.borrow_mut().push(TestOperation::EmitItem(item))
         }
 
-        fn define_label(&mut self, (label, _): (String, Self::TokenRef)) {
+        fn define_label(&mut self, (label, _): (String, Self::Span)) {
             self.0.borrow_mut().push(TestOperation::Label(label))
         }
 
         fn define_macro(
             &mut self,
-            (name, _): (impl Into<String>, Self::TokenRef),
-            params: Vec<(String, Self::TokenRef)>,
+            (name, _): (impl Into<String>, Self::Span),
+            params: Vec<(String, Self::Span)>,
             tokens: Vec<(Token, ())>,
         ) {
             self.0.borrow_mut().push(TestOperation::DefineMacro(

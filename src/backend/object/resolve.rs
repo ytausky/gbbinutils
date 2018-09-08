@@ -2,7 +2,7 @@ pub use super::context::{EvalContext, SymbolTable};
 
 use super::context::ChunkSize;
 use backend::{Node, Object, RelocExpr};
-use diagnostics::SourceRange;
+use diagnostics::Span;
 use std::borrow::Borrow;
 use std::ops::{Add, AddAssign, Sub};
 
@@ -72,13 +72,13 @@ impl Sub<Value> for Value {
     }
 }
 
-pub fn resolve_symbols<SR: SourceRange>(object: &Object<SR>) -> SymbolTable {
+pub fn resolve_symbols<S: Span>(object: &Object<S>) -> SymbolTable {
     let mut symbols = collect_symbols(object);
     refine_symbols(object, &mut symbols);
     symbols
 }
 
-fn collect_symbols<SR: SourceRange>(object: &Object<SR>) -> SymbolTable {
+fn collect_symbols<S: Span>(object: &Object<S>) -> SymbolTable {
     let mut symbols = SymbolTable::new();
     (0..object.chunks.len()).for_each(|i| symbols.define(ChunkSize(i), Value::Unknown));
     {
@@ -100,7 +100,7 @@ fn collect_symbols<SR: SourceRange>(object: &Object<SR>) -> SymbolTable {
     symbols
 }
 
-fn refine_symbols<SR: SourceRange>(object: &Object<SR>, symbols: &mut SymbolTable) -> i32 {
+fn refine_symbols<S: Span>(object: &Object<S>, symbols: &mut SymbolTable) -> i32 {
     let mut refinements = 0;
     let context = &mut EvalContext {
         symbols,
@@ -120,9 +120,9 @@ fn refine_symbols<SR: SourceRange>(object: &Object<SR>, symbols: &mut SymbolTabl
     refinements
 }
 
-impl<SR: SourceRange> RelocExpr<SR> {
+impl<S: Span> RelocExpr<S> {
     pub fn evaluate<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
-        self.evaluate_strictly(context, &mut |_: &str, _: &SR| ())
+        self.evaluate_strictly(context, &mut |_: &str, _: &S| ())
     }
 
     pub fn evaluate_strictly<ST, F>(
@@ -132,7 +132,7 @@ impl<SR: SourceRange> RelocExpr<SR> {
     ) -> Value
     where
         ST: Borrow<SymbolTable>,
-        F: FnMut(&str, &SR),
+        F: FnMut(&str, &S),
     {
         match self {
             RelocExpr::BinaryOperation(lhs, rhs, operator, _) => {
@@ -159,7 +159,7 @@ impl<SR: SourceRange> RelocExpr<SR> {
     }
 }
 
-impl<SR: SourceRange> Node<SR> {
+impl<S: Span> Node<S> {
     pub fn size<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
         match self {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),

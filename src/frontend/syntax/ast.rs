@@ -1,5 +1,5 @@
 use super::TokenSpec;
-use diagnostics::{Message, SourceRange};
+use diagnostics::{Message, Span};
 use std::fmt::Debug;
 
 #[cfg(test)]
@@ -137,7 +137,7 @@ impl<T: Clone> From<T> for SymRange<T> {
     }
 }
 
-impl<T: Clone + Debug> SourceRange for SymRange<T> {
+impl<T: Clone + Debug> Span for SymRange<T> {
     fn extend(&self, other: &Self) -> Self {
         SymRange {
             start: self.start.clone(),

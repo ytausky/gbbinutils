@@ -1,18 +1,18 @@
 use backend::object::Node;
 use backend::{BinaryOperator, Item};
-use diagnostics::{Source, SourceRange};
+use diagnostics::{Source, Span};
 use instruction::*;
 use std::mem;
 use Width;
 
-pub trait Lower<SR> {
-    fn lower(self) -> LoweredItem<SR>;
+pub trait Lower<S> {
+    fn lower(self) -> LoweredItem<S>;
 }
 
-pub enum LoweredItem<SR> {
+pub enum LoweredItem<S> {
     None,
-    One(Node<SR>),
-    Two(Node<SR>, Node<SR>),
+    One(Node<S>),
+    Two(Node<S>, Node<S>),
 }
 
 impl<SR> Iterator for LoweredItem<SR> {
@@ -29,24 +29,24 @@ impl<SR> Iterator for LoweredItem<SR> {
     }
 }
 
-impl<SR> LoweredItem<SR> {
-    fn with_opcode(opcode: u8) -> LoweredItem<SR> {
+impl<S> LoweredItem<S> {
+    fn with_opcode(opcode: u8) -> LoweredItem<S> {
         LoweredItem::One(Node::Byte(opcode))
     }
 
-    fn extended(opcode: impl Into<Node<SR>>) -> LoweredItem<SR> {
+    fn extended(opcode: impl Into<Node<S>>) -> LoweredItem<S> {
         LoweredItem::Two(Node::Byte(0xcb), opcode.into())
     }
 
-    fn and_byte(self, expr: RelocExpr<SR>) -> Self {
+    fn and_byte(self, expr: RelocExpr<S>) -> Self {
         self.and_expr(expr, Width::Byte)
     }
 
-    fn and_word(self, expr: RelocExpr<SR>) -> Self {
+    fn and_word(self, expr: RelocExpr<S>) -> Self {
         self.and_expr(expr, Width::Word)
     }
 
-    fn and_expr(self, expr: RelocExpr<SR>, width: Width) -> Self {
+    fn and_expr(self, expr: RelocExpr<S>, width: Width) -> Self {
         match self {
             LoweredItem::One(item) => LoweredItem::Two(item, Node::Expr(expr, width)),
             LoweredItem::None | LoweredItem::Two(..) => panic!(),
@@ -54,14 +54,14 @@ impl<SR> LoweredItem<SR> {
     }
 }
 
-impl<SR> From<u8> for Node<SR> {
+impl<S> From<u8> for Node<S> {
     fn from(byte: u8) -> Self {
         Node::Byte(byte)
     }
 }
 
-impl<SR: SourceRange> Lower<SR> for Item<SR> {
-    fn lower(self) -> LoweredItem<SR> {
+impl<S: Span> Lower<S> for Item<S> {
+    fn lower(self) -> LoweredItem<S> {
         match self {
             Item::Data(expr, width) => LoweredItem::One(Node::Expr(expr, width)),
             Item::Instruction(instruction) => instruction.lower(),
@@ -69,8 +69,8 @@ impl<SR: SourceRange> Lower<SR> for Item<SR> {
     }
 }
 
-impl<SR: SourceRange> Lower<SR> for Instruction<SR> {
-    fn lower(self) -> LoweredItem<SR> {
+impl<S: Span> Lower<S> for Instruction<S> {
+    fn lower(self) -> LoweredItem<S> {
         use instruction::Instruction::*;
         match self {
             AddHl(reg16) => LoweredItem::with_opcode(0x09 | encode_reg16(reg16)),
@@ -127,8 +127,8 @@ impl<SR> Lower<SR> for Nullary {
     }
 }
 
-impl<SR> Lower<SR> for Ld<SR> {
-    fn lower(self) -> LoweredItem<SR> {
+impl<S> Lower<S> for Ld<S> {
+    fn lower(self) -> LoweredItem<S> {
         match self {
             Ld::Simple(dest, src) => encode_ld_to_reg_from_reg(dest, src),
             Ld::Special(special, direction) => encode_special_ld(special, direction),
@@ -142,7 +142,7 @@ impl<SR> Lower<SR> for Ld<SR> {
     }
 }
 
-fn encode_special_ld<SR>(ld: SpecialLd<SR>, direction: Direction) -> LoweredItem<SR> {
+fn encode_special_ld<S>(ld: SpecialLd<S>, direction: Direction) -> LoweredItem<S> {
     let direction_bit = encode_direction(direction);
     match ld {
         SpecialLd::DerefPtrReg(ptr_reg) => {
@@ -155,16 +155,16 @@ fn encode_special_ld<SR>(ld: SpecialLd<SR>, direction: Direction) -> LoweredItem
     }
 }
 
-fn encode_simple_alu_operation<SR>(operation: AluOperation, src: SimpleOperand) -> LoweredItem<SR> {
+fn encode_simple_alu_operation<S>(operation: AluOperation, src: SimpleOperand) -> LoweredItem<S> {
     LoweredItem::with_opcode(
         0b10_000_000 | encode_alu_operation(operation) | encode_simple_operand(src),
     )
 }
 
-fn encode_immediate_alu_operation<SR>(
+fn encode_immediate_alu_operation<S>(
     operation: AluOperation,
-    expr: RelocExpr<SR>,
-) -> LoweredItem<SR> {
+    expr: RelocExpr<S>,
+) -> LoweredItem<S> {
     LoweredItem::with_opcode(0b11_000_110 | encode_alu_operation(operation)).and_byte(expr)
 }
 
@@ -182,10 +182,7 @@ fn encode_alu_operation(operation: AluOperation) -> u8 {
     }) << 3
 }
 
-fn encode_branch<SR: SourceRange>(
-    branch: Branch<SR>,
-    condition: Option<Condition>,
-) -> LoweredItem<SR> {
+fn encode_branch<S: Span>(branch: Branch<S>, condition: Option<Condition>) -> LoweredItem<S> {
     use instruction::Branch::*;
     match branch {
         Call(target) => LoweredItem::with_opcode(match condition {
@@ -197,15 +194,15 @@ fn encode_branch<SR: SourceRange>(
             Some(condition) => 0xc2 | encode_condition(condition),
         }).and_word(target),
         Jr(target) => {
-            let source_range = target.source_range();
+            let span = target.span();
             LoweredItem::with_opcode(match condition {
                 None => 0x18,
                 Some(condition) => 0x20 | encode_condition(condition),
             }).and_byte(RelocExpr::BinaryOperation(
                 Box::new(target),
-                Box::new(RelocExpr::LocationCounter(source_range.clone())),
+                Box::new(RelocExpr::LocationCounter(span.clone())),
                 BinaryOperator::Minus,
-                source_range,
+                span,
             ))
         }
         Ret => LoweredItem::with_opcode(match condition {
@@ -257,7 +254,7 @@ fn encode_direction(direction: Direction) -> u8 {
     }
 }
 
-fn encode_ld_to_reg_from_reg<SR>(dest: SimpleOperand, src: SimpleOperand) -> LoweredItem<SR> {
+fn encode_ld_to_reg_from_reg<S>(dest: SimpleOperand, src: SimpleOperand) -> LoweredItem<S> {
     LoweredItem::with_opcode(
         0b01_000_000 | (encode_simple_operand(dest) << 3) | encode_simple_operand(src),
     )
