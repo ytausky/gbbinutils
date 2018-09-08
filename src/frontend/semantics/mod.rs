@@ -4,7 +4,7 @@ use frontend::syntax::ast;
 use frontend::syntax::ast::ExprVariant;
 use frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token, TokenSpec};
 use frontend::{Literal, StrExprFactory};
-use session::{ChunkId, Session};
+use frontend::session::{ChunkId, Session};
 use std::fmt::Debug;
 use Width;
 
