@@ -18,10 +18,12 @@ pub enum TokenVariant<S: TokenSpec> {
     OpeningParenthesis,
 }
 
-impl Copy for TokenVariant<()> {}
+type TokenKind = TokenVariant<()>;
+
+impl Copy for TokenKind {}
 
 impl<S: TokenSpec> TokenVariant<S> {
-    fn kind(&self) -> TokenVariant<()> {
+    fn kind(&self) -> TokenKind {
         use self::TokenVariant::*;
         match *self {
             ClosingParenthesis => ClosingParenthesis,
@@ -39,9 +41,7 @@ impl<S: TokenSpec> TokenVariant<S> {
     }
 }
 
-type Lookahead = TokenVariant<()>;
-
-const LINE_FOLLOW_SET: &[Lookahead] = &[TokenVariant::Eol, TokenVariant::Eof];
+const LINE_FOLLOW_SET: &[TokenKind] = &[TokenVariant::Eol, TokenVariant::Eof];
 
 pub fn parse_src<S: TokenSpec, T: Span, I, F>(tokens: I, actions: F)
 where
@@ -75,22 +75,22 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (TokenVariant<S>, T)>> Parser<I, 
     mk_expect!(expect_command, Command);
     mk_expect!(expect_ident, Ident);
 
-    fn lookahead(&mut self) -> Lookahead {
+    fn lookahead(&mut self) -> TokenKind {
         self.tokens.peek().unwrap().0.kind()
     }
 
-    fn lookahead_is_in(&mut self, kinds: &[Lookahead]) -> bool {
+    fn lookahead_is_in(&mut self, kinds: &[TokenKind]) -> bool {
         let lookahead = self.lookahead();
         kinds.iter().any(|x| *x == lookahead)
     }
 
-    fn consume(&mut self, kind: TokenVariant<()>) -> bool {
+    fn consume(&mut self, kind: TokenKind) -> bool {
         self.take_token_if(|x| x == kind, |_| ())
     }
 
     fn take_token_if<P, F>(&mut self, predicate: P, f: F) -> bool
     where
-        P: FnOnce(TokenVariant<()>) -> bool,
+        P: FnOnce(TokenKind) -> bool,
         F: FnOnce((TokenVariant<S>, T)),
     {
         if predicate(self.lookahead()) {
@@ -103,7 +103,7 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (TokenVariant<S>, T)>> Parser<I, 
 
     fn take_token_while<P, F>(&mut self, predicate: P, mut f: F)
     where
-        P: Fn(TokenVariant<()>) -> bool,
+        P: Fn(TokenKind) -> bool,
         F: FnMut((TokenVariant<S>, T)),
     {
         while self.take_token_if(&predicate, &mut f) {}
@@ -115,7 +115,7 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (TokenVariant<S>, T)>> Parser<I, 
         next_token
     }
 
-    fn expect(&mut self, expected: Lookahead) -> I::Item {
+    fn expect(&mut self, expected: TokenKind) -> I::Item {
         assert_eq!(self.lookahead(), expected);
         self.bump()
     }
@@ -260,8 +260,8 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (TokenVariant<S>, T)>> Parser<I, 
 
     fn parse_terminated_list<P, C>(
         &mut self,
-        delimiter: TokenVariant<()>,
-        terminators: &[Lookahead],
+        delimiter: TokenKind,
+        terminators: &[TokenKind],
         parser: P,
         mut context: C,
     ) -> C
@@ -287,8 +287,8 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (TokenVariant<S>, T)>> Parser<I, 
 
     fn parse_list<P, C>(
         &mut self,
-        delimiter: TokenVariant<()>,
-        terminators: &[Lookahead],
+        delimiter: TokenKind,
+        terminators: &[TokenKind],
         mut parser: P,
         context: C,
     ) -> C
@@ -305,7 +305,7 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (TokenVariant<S>, T)>> Parser<I, 
 
     fn parse_nonempty_list<P, C>(
         &mut self,
-        delimiter: TokenVariant<()>,
+        delimiter: TokenKind,
         parser: &mut P,
         mut actions: C,
     ) -> C
