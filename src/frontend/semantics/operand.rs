@@ -1,7 +1,8 @@
-use super::{ExprNode, ParsedExpr};
 use diagnostics::{Diagnostic, KeywordOperandCategory, Message, Source, SourceRange};
+use frontend::syntax::ast;
+use frontend::syntax::ast::ExprVariant;
 use frontend::syntax::keyword as kw;
-use frontend::syntax::Literal;
+use frontend::syntax::{Literal, TokenSpec};
 use instruction::{Condition, PtrReg, Reg16, RegPair, RelocExpr, SimpleOperand};
 
 #[derive(Debug, PartialEq)]
@@ -40,26 +41,22 @@ pub enum Context {
 
 type OperandResult<SI> = Result<Operand<SI>, Diagnostic<SI>>;
 
-pub fn analyze_operand<SI: Clone>(
-    expr: ParsedExpr<String, SI>,
-    context: Context,
-) -> OperandResult<SI> {
-    match expr.node {
-        ExprNode::Literal(Literal::Operand(keyword)) => {
-            Ok(analyze_keyword_operand((keyword, expr.interval), context))
+type Expr<S> = ast::Expr<<String as TokenSpec>::Ident, <String as TokenSpec>::Literal, S>;
+
+pub fn analyze_operand<SI: Clone>(expr: Expr<SI>, context: Context) -> OperandResult<SI> {
+    match expr.variant {
+        ExprVariant::Literal(Literal::Operand(keyword)) => {
+            Ok(analyze_keyword_operand((keyword, expr.span), context))
         }
-        ExprNode::Parenthesized(inner) => analyze_deref_operand(*inner, expr.interval),
+        ExprVariant::Parentheses(inner) => analyze_deref_operand(*inner, expr.span),
         _ => Ok(Operand::Const(analyze_reloc_expr(expr)?)),
     }
 }
 
-fn analyze_deref_operand<SI: Clone>(
-    expr: ParsedExpr<String, SI>,
-    deref_interval: SI,
-) -> OperandResult<SI> {
-    match expr.node {
-        ExprNode::Literal(Literal::Operand(keyword)) => {
-            analyze_deref_operand_keyword((keyword, expr.interval), deref_interval)
+fn analyze_deref_operand<SI: Clone>(expr: Expr<SI>, deref_interval: SI) -> OperandResult<SI> {
+    match expr.variant {
+        ExprVariant::Literal(Literal::Operand(keyword)) => {
+            analyze_deref_operand_keyword((keyword, expr.span), deref_interval)
         }
         _ => Ok(Operand::Deref(analyze_reloc_expr(expr)?)),
     }
@@ -93,22 +90,20 @@ fn try_deref_operand_keyword(keyword: kw::Operand) -> Result<AtomKind, KeywordOp
     }
 }
 
-pub fn analyze_reloc_expr<SI: Clone>(
-    expr: ParsedExpr<String, SI>,
-) -> Result<RelocExpr<SI>, Diagnostic<SI>> {
-    match expr.node {
-        ExprNode::Ident(ident) => Ok(RelocExpr::Symbol(ident, expr.interval)),
-        ExprNode::Literal(Literal::Number(n)) => Ok(RelocExpr::Literal(n, expr.interval)),
-        ExprNode::Literal(Literal::Operand(_)) => Err(Diagnostic::new(
+pub fn analyze_reloc_expr<SI: Clone>(expr: Expr<SI>) -> Result<RelocExpr<SI>, Diagnostic<SI>> {
+    match expr.variant {
+        ExprVariant::Ident(ident) => Ok(RelocExpr::Symbol(ident, expr.span)),
+        ExprVariant::Literal(Literal::Number(n)) => Ok(RelocExpr::Literal(n, expr.span)),
+        ExprVariant::Literal(Literal::Operand(_)) => Err(Diagnostic::new(
             Message::KeywordInExpr {
-                keyword: expr.interval.clone(),
+                keyword: expr.span.clone(),
             },
-            expr.interval,
+            expr.span,
         )),
-        ExprNode::Literal(Literal::String(_)) => {
-            Err(Diagnostic::new(Message::StringInInstruction, expr.interval))
+        ExprVariant::Literal(Literal::String(_)) => {
+            Err(Diagnostic::new(Message::StringInInstruction, expr.span))
         }
-        ExprNode::Parenthesized(expr) => analyze_reloc_expr(*expr),
+        ExprVariant::Parentheses(expr) => analyze_reloc_expr(*expr),
     }
 }
 
@@ -212,27 +207,27 @@ mod tests {
     }
 
     fn analyze_deref_ptr_reg(ptr_reg: PtrReg) {
-        let parsed_expr = ParsedExpr {
-            node: ExprNode::Parenthesized(Box::new(ParsedExpr {
-                node: ExprNode::Literal(Literal::Operand(ptr_reg.into())),
-                interval: 0,
+        let expr = Expr {
+            variant: ExprVariant::Parentheses(Box::new(Expr {
+                variant: ExprVariant::Literal(Literal::Operand(ptr_reg.into())),
+                span: 0,
             })),
-            interval: 1,
+            span: 1,
         };
         assert_eq!(
-            analyze_operand(parsed_expr, Context::Other),
+            analyze_operand(expr, Context::Other),
             Ok(Operand::Atom(AtomKind::DerefPtrReg(ptr_reg), 1))
         )
     }
 
     #[test]
     fn analyze_deref_af() {
-        let parsed_expr = ParsedExpr {
-            node: ExprNode::Parenthesized(Box::new(ParsedExpr {
-                node: ExprNode::Literal(Literal::Operand(kw::Operand::Af)),
-                interval: 0,
+        let parsed_expr = Expr {
+            variant: ExprVariant::Parentheses(Box::new(Expr {
+                variant: ExprVariant::Literal(Literal::Operand(kw::Operand::Af)),
+                span: 0,
             })),
-            interval: 1,
+            span: 1,
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
@@ -249,55 +244,55 @@ mod tests {
     #[test]
     fn analyze_repeated_parentheses() {
         let n = 0x42;
-        let interval = 0;
-        let parsed_expr = ParsedExpr {
-            node: ExprNode::Parenthesized(Box::new(ParsedExpr {
-                node: ExprNode::Parenthesized(Box::new(ParsedExpr {
-                    node: ExprNode::Literal(Literal::Number(n)),
-                    interval,
+        let span = 0;
+        let parsed_expr = Expr {
+            variant: ExprVariant::Parentheses(Box::new(Expr {
+                variant: ExprVariant::Parentheses(Box::new(Expr {
+                    variant: ExprVariant::Literal(Literal::Number(n)),
+                    span,
                 })),
-                interval: 1,
+                span: 1,
             })),
-            interval: 2,
+            span: 2,
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Ok(Operand::Deref(RelocExpr::Literal(n, interval)))
+            Ok(Operand::Deref(RelocExpr::Literal(n, span)))
         )
     }
 
     #[test]
     fn analyze_reg_in_expr() {
-        let interval = 0;
-        let parsed_expr = ParsedExpr {
-            node: ExprNode::Parenthesized(Box::new(ParsedExpr {
-                node: ExprNode::Parenthesized(Box::new(ParsedExpr {
-                    node: ExprNode::Literal(Literal::Operand(kw::Operand::Z)),
-                    interval,
+        let span = 0;
+        let parsed_expr = Expr {
+            variant: ExprVariant::Parentheses(Box::new(Expr {
+                variant: ExprVariant::Parentheses(Box::new(Expr {
+                    variant: ExprVariant::Literal(Literal::Operand(kw::Operand::Z)),
+                    span,
                 })),
-                interval: 1,
+                span: 1,
             })),
-            interval: 2,
+            span: 2,
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
             Err(Diagnostic::new(
-                Message::KeywordInExpr { keyword: interval },
-                interval
+                Message::KeywordInExpr { keyword: span },
+                span
             ))
         )
     }
 
     #[test]
     fn analyze_string_in_instruction() {
-        let interval = 0;
-        let parsed_expr = ParsedExpr {
-            node: ExprNode::Literal(Literal::String("some_string".into())),
-            interval,
+        let span = 0;
+        let parsed_expr = Expr {
+            variant: ExprVariant::Literal(Literal::String("some_string".into())),
+            span,
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Err(Diagnostic::new(Message::StringInInstruction, interval))
+            Err(Diagnostic::new(Message::StringInInstruction, span))
         )
     }
 }

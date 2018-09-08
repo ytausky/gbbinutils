@@ -1,9 +1,8 @@
 use diagnostics::{DiagnosticsListener, SourceRange};
 use std::{cmp::PartialEq, fmt::Debug};
 
-#[cfg(test)]
 #[macro_use]
-mod ast;
+pub mod ast;
 pub mod keyword;
 pub mod lexer;
 mod parser;

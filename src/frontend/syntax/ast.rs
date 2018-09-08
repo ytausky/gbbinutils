@@ -1,10 +1,34 @@
-use super::parser::Token;
-use super::parser::Token::*;
-use super::{ExprAtom, ExprOperator, TokenSpec};
-use diagnostics::{Diagnostic, Message, SourceRange};
-use std::borrow::Borrow;
-use std::collections::HashMap;
+use super::TokenSpec;
+use diagnostics::{Message, SourceRange};
 use std::fmt::Debug;
+
+#[cfg(test)]
+use super::parser::Token;
+#[cfg(test)]
+use super::parser::Token::*;
+#[cfg(test)]
+use super::ExprAtom;
+#[cfg(test)]
+use super::ExprOperator;
+#[cfg(test)]
+use diagnostics::Diagnostic;
+#[cfg(test)]
+use std::borrow::Borrow;
+#[cfg(test)]
+use std::collections::HashMap;
+
+#[derive(Clone)]
+pub struct Expr<I, L, S: Clone> {
+    pub variant: ExprVariant<I, L, S>,
+    pub span: S,
+}
+
+#[derive(Clone)]
+pub enum ExprVariant<I, L, S: Clone> {
+    Ident(I),
+    Literal(L),
+    Parentheses(Box<Expr<I, L, S>>),
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Symbolic;
@@ -24,8 +48,10 @@ pub struct SymIdent(pub usize);
 #[derive(Clone, Debug, PartialEq)]
 pub struct SymLiteral(pub usize);
 
+#[cfg(test)]
 pub type SymToken = Token<Symbolic>;
 
+#[cfg(test)]
 pub fn mk_sym_token(id: usize, token: Token<()>) -> SymToken {
     match token {
         Command(()) => Command(SymCommand(id)),
@@ -42,11 +68,13 @@ pub fn mk_sym_token(id: usize, token: Token<()>) -> SymToken {
     }
 }
 
+#[cfg(test)]
 pub struct InputTokens {
     pub tokens: Vec<SymToken>,
     pub names: HashMap<String, usize>,
 }
 
+#[cfg(test)]
 macro_rules! add_token {
     ($input:expr, $token:expr) => {
         let id = $input.tokens.len();
@@ -60,6 +88,7 @@ macro_rules! add_token {
     };
 }
 
+#[cfg(test)]
 macro_rules! input_tokens_impl {
     ($input:expr, ) => {};
     ($input:expr, $token:expr) => {
@@ -78,6 +107,7 @@ macro_rules! input_tokens_impl {
     }
 }
 
+#[cfg(test)]
 macro_rules! input_tokens {
     () => {
         InputTokens {
@@ -116,6 +146,7 @@ impl<T: Clone + Debug> SourceRange for SymRange<T> {
     }
 }
 
+#[cfg(test)]
 #[derive(Debug, PartialEq)]
 pub enum Action {
     AddParameter(SymIdent),
@@ -156,6 +187,7 @@ impl From<&'static str> for TokenRef {
     }
 }
 
+#[cfg(test)]
 impl TokenRef {
     fn resolve(&self, input: &InputTokens) -> usize {
         match self {
@@ -165,6 +197,7 @@ impl TokenRef {
     }
 }
 
+#[cfg(test)]
 impl SymRange<TokenRef> {
     fn resolve(&self, input: &InputTokens) -> SymRange<usize> {
         SymRange {
@@ -174,12 +207,15 @@ impl SymRange<TokenRef> {
     }
 }
 
+#[cfg(test)]
 pub struct File(Vec<Line>);
 
+#[cfg(test)]
 pub fn file(lines: impl Borrow<[Line]>) -> File {
     File(lines.borrow().iter().cloned().collect())
 }
 
+#[cfg(test)]
 impl File {
     pub fn into_actions(self, input: &InputTokens) -> Vec<Action> {
         self.0
@@ -189,17 +225,21 @@ impl File {
     }
 }
 
+#[cfg(test)]
 #[derive(Clone)]
 pub struct Line(Option<usize>, Option<LineBody>);
 
+#[cfg(test)]
 pub fn labeled(label: usize, body: Option<LineBody>) -> Line {
     Line(Some(label), body)
 }
 
+#[cfg(test)]
 pub fn unlabeled(body: Option<LineBody>) -> Line {
     Line(None, body)
 }
 
+#[cfg(test)]
 impl Line {
     fn into_actions(self, input: &InputTokens) -> Vec<Action> {
         let mut actions = vec![Action::EnterLine(self.0.map(|id| SymIdent(id)))];
@@ -211,10 +251,12 @@ impl Line {
     }
 }
 
+#[cfg(test)]
 pub fn empty() -> Option<LineBody> {
     None
 }
 
+#[cfg(test)]
 #[derive(Clone)]
 pub enum LineBody {
     Command(TokenRef, Vec<SymExpr>, Option<SymDiagnostic>),
@@ -223,8 +265,10 @@ pub enum LineBody {
     MacroDef(Vec<usize>, MacroDefTail),
 }
 
+#[cfg(test)]
 pub type SymExpr = Expr<TokenRef, TokenRef, SymRange<TokenRef>>;
 
+#[cfg(test)]
 #[derive(Clone)]
 pub enum MacroDefTail {
     Body(Vec<usize>, Option<SymDiagnostic>),
@@ -240,12 +284,14 @@ pub struct SymDiagnostic {
 
 pub type MessageCtor = fn(Vec<SymRange<usize>>) -> Message<SymRange<usize>>;
 
+#[cfg(test)]
 impl From<SymDiagnostic> for LineBody {
     fn from(diagnostic: SymDiagnostic) -> Self {
         LineBody::Error(diagnostic)
     }
 }
 
+#[cfg(test)]
 impl SymDiagnostic {
     fn into_action(self, input: &InputTokens) -> Action {
         let message = (self.message_ctor)(
@@ -258,6 +304,7 @@ impl SymDiagnostic {
     }
 }
 
+#[cfg(test)]
 pub fn command(id: impl Into<TokenRef>, args: impl Borrow<[SymExpr]>) -> Option<LineBody> {
     Some(LineBody::Command(
         id.into(),
@@ -266,6 +313,7 @@ pub fn command(id: impl Into<TokenRef>, args: impl Borrow<[SymExpr]>) -> Option<
     ))
 }
 
+#[cfg(test)]
 pub fn malformed_command(
     id: impl Into<TokenRef>,
     args: impl Borrow<[SymExpr]>,
@@ -278,6 +326,7 @@ pub fn malformed_command(
     ))
 }
 
+#[cfg(test)]
 pub fn invoke(id: usize, args: impl Borrow<[TokenSeq]>) -> Option<LineBody> {
     Some(LineBody::Invoke(
         id,
@@ -285,6 +334,7 @@ pub fn invoke(id: usize, args: impl Borrow<[TokenSeq]>) -> Option<LineBody> {
     ))
 }
 
+#[cfg(test)]
 pub fn macro_def(
     params: impl Borrow<[usize]>,
     body: impl Borrow<[usize]>,
@@ -300,6 +350,7 @@ pub fn macro_def(
     ))
 }
 
+#[cfg(test)]
 pub fn malformed_macro_def_head(
     params: impl Borrow<[usize]>,
     diagnostic: SymDiagnostic,
@@ -310,6 +361,7 @@ pub fn malformed_macro_def_head(
     ))
 }
 
+#[cfg(test)]
 pub fn malformed_macro_def(
     params: impl Borrow<[usize]>,
     body: impl Borrow<[usize]>,
@@ -321,6 +373,7 @@ pub fn malformed_macro_def(
     ))
 }
 
+#[cfg(test)]
 impl LineBody {
     fn into_actions(self, input: &InputTokens) -> Vec<Action> {
         let mut actions = Vec::new();
@@ -377,10 +430,12 @@ impl LineBody {
 #[derive(Clone)]
 pub struct TokenSeq(Vec<usize>);
 
+#[cfg(test)]
 pub fn token_seq(ids: impl Borrow<[usize]>) -> TokenSeq {
     TokenSeq(ids.borrow().iter().cloned().collect())
 }
 
+#[cfg(test)]
 impl TokenSeq {
     fn into_actions(self) -> Vec<Action> {
         self.0
@@ -390,6 +445,7 @@ impl TokenSeq {
     }
 }
 
+#[cfg(test)]
 pub fn ident(id: impl Into<TokenRef>) -> SymExpr {
     let token_ref = id.into();
     Expr {
@@ -398,6 +454,7 @@ pub fn ident(id: impl Into<TokenRef>) -> SymExpr {
     }
 }
 
+#[cfg(test)]
 pub fn literal(id: impl Into<TokenRef>) -> SymExpr {
     let token_ref = id.into();
     Expr {
@@ -406,6 +463,7 @@ pub fn literal(id: impl Into<TokenRef>) -> SymExpr {
     }
 }
 
+#[cfg(test)]
 pub fn parentheses(
     open_id: impl Into<TokenRef>,
     expr: SymExpr,
@@ -417,19 +475,7 @@ pub fn parentheses(
     }
 }
 
-#[derive(Clone)]
-pub struct Expr<I, L, S> {
-    variant: ExprVariant<I, L, S>,
-    span: S,
-}
-
-#[derive(Clone)]
-pub enum ExprVariant<I, L, S> {
-    Ident(I),
-    Literal(L),
-    Parentheses(Box<Expr<I, L, S>>),
-}
-
+#[cfg(test)]
 impl Expr<TokenRef, TokenRef, SymRange<TokenRef>> {
     fn into_actions(self, input: &InputTokens) -> Vec<Action> {
         match self.variant {
@@ -448,6 +494,7 @@ impl Expr<TokenRef, TokenRef, SymRange<TokenRef>> {
     }
 }
 
+#[cfg(test)]
 pub fn line_error(
     message_ctor: MessageCtor,
     ranges: impl Borrow<[&'static str]>,
@@ -456,6 +503,7 @@ pub fn line_error(
     Some(arg_error(message_ctor, ranges, highlight).into())
 }
 
+#[cfg(test)]
 pub fn arg_error(
     message_ctor: MessageCtor,
     ranges: impl Borrow<[&'static str]>,
@@ -472,12 +520,14 @@ pub fn arg_error(
     }
 }
 
+#[cfg(test)]
 pub fn unexpected_token(ranges: Vec<SymRange<usize>>) -> Message<SymRange<usize>> {
     Message::UnexpectedToken {
         token: ranges.into_iter().next().unwrap(),
     }
 }
 
+#[cfg(test)]
 pub fn unexpected_eof(_ranges: Vec<SymRange<usize>>) -> Message<SymRange<usize>> {
     Message::UnexpectedEof
 }

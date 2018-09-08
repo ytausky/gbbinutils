@@ -1,5 +1,7 @@
 use backend::{self, BinaryOperator};
-use diagnostics::{Diagnostic, DiagnosticsListener};
+use diagnostics::{Diagnostic, DiagnosticsListener, SourceRange};
+use frontend::syntax::ast;
+use frontend::syntax::ast::ExprVariant;
 use frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token, TokenSpec};
 use frontend::{Literal, StrExprFactory};
 use session::{ChunkId, Session};
@@ -17,19 +19,6 @@ pub trait ExprSpec {
 impl<T: TokenSpec> ExprSpec for T {
     type Ident = T::Ident;
     type Literal = T::Literal;
-}
-
-#[derive(Debug, PartialEq)]
-pub enum ExprNode<S: ExprSpec, I> {
-    Ident(S::Ident),
-    Parenthesized(Box<ParsedExpr<S, I>>),
-    Literal(S::Literal),
-}
-
-#[derive(Debug, PartialEq)]
-pub struct ParsedExpr<S: ExprSpec, I> {
-    pub node: ExprNode<S, I>,
-    pub interval: I,
 }
 
 pub struct SemanticActions<'a, F: Session + 'a> {
@@ -110,7 +99,8 @@ pub struct CommandActions<'a, F: Session + 'a> {
     parent: SemanticActions<'a, F>,
 }
 
-type CommandArgs<F> = Vec<ParsedExpr<String, <F as Session>::TokenRef>>;
+type Expr<S> = ast::Expr<<String as TokenSpec>::Ident, <String as TokenSpec>::Literal, S>;
+type CommandArgs<F> = Vec<Expr<<F as Session>::TokenRef>>;
 
 impl<'a, F: Session + 'a> CommandActions<'a, F> {
     fn new(name: (Command, F::TokenRef), parent: SemanticActions<'a, F>) -> CommandActions<'a, F> {
@@ -154,7 +144,7 @@ impl<'a, F: Session + 'a> syntax::CommandContext<F::TokenRef> for CommandActions
 }
 
 pub struct ExprActions<'a, F: Session + 'a> {
-    stack: Vec<ParsedExpr<String, F::TokenRef>>,
+    stack: Vec<Expr<F::TokenRef>>,
     parent: CommandActions<'a, F>,
 }
 
@@ -163,12 +153,12 @@ impl<'a, F: Session + 'a> syntax::ExprActions<F::TokenRef> for ExprActions<'a, F
     type Parent = CommandActions<'a, F>;
 
     fn push_atom(&mut self, atom: (ExprAtom<Self::TokenSpec>, F::TokenRef)) {
-        self.stack.push(ParsedExpr {
-            node: match atom.0 {
-                ExprAtom::Ident(ident) => ExprNode::Ident(ident),
-                ExprAtom::Literal(literal) => ExprNode::Literal(literal),
+        self.stack.push(Expr {
+            variant: match atom.0 {
+                ExprAtom::Ident(ident) => ExprVariant::Ident(ident),
+                ExprAtom::Literal(literal) => ExprVariant::Literal(literal),
             },
-            interval: atom.1,
+            span: atom.1,
         })
     }
 
@@ -176,9 +166,9 @@ impl<'a, F: Session + 'a> syntax::ExprActions<F::TokenRef> for ExprActions<'a, F
         match operator.0 {
             ExprOperator::Parentheses => {
                 let inner = self.stack.pop().unwrap();
-                self.stack.push(ParsedExpr {
-                    node: ExprNode::Parenthesized(Box::new(inner)),
-                    interval: operator.1,
+                self.stack.push(Expr {
+                    variant: ExprVariant::Parentheses(Box::new(inner)),
+                    span: operator.1,
                 })
             }
         }
@@ -212,9 +202,9 @@ fn analyze_data<'a, S: Session + 'a>(
 ) {
     for arg in args {
         use frontend::ExprFactory;
-        let expr = match arg.node {
-            ExprNode::Literal(literal) => actions.expr_factory.mk_literal((literal, arg.interval)),
-            ExprNode::Ident(ident) => actions.expr_factory.mk_symbol((ident, arg.interval)),
+        let expr = match arg.variant {
+            ExprVariant::Literal(literal) => actions.expr_factory.mk_literal((literal, arg.span)),
+            ExprVariant::Ident(ident) => actions.expr_factory.mk_symbol((ident, arg.span)),
             _ => panic!(),
         };
         actions.session.emit_item(backend::Item::Data(expr, width))
@@ -225,17 +215,17 @@ fn analyze_ds<'a, S: Session + 'a>(args: CommandArgs<S>, actions: &mut SemanticA
     use backend::RelocExpr;
     use frontend::ExprFactory;
     let arg = args.into_iter().next().unwrap();
-    let count = match arg.node {
-        ExprNode::Literal(literal) => actions
-            .expr_factory
-            .mk_literal((literal, arg.interval.clone())),
+    let count = match arg.variant {
+        ExprVariant::Literal(literal) => {
+            actions.expr_factory.mk_literal((literal, arg.span.clone()))
+        }
         _ => panic!(),
     };
     let expr = RelocExpr::BinaryOperation(
-        Box::new(RelocExpr::LocationCounter(arg.interval.clone())),
+        Box::new(RelocExpr::LocationCounter(arg.span.clone())),
         Box::new(count),
         BinaryOperator::Plus,
-        arg.interval,
+        arg.span,
     );
     actions.session.set_origin(expr)
 }
@@ -405,12 +395,12 @@ impl<'a, F: Session + 'a> syntax::TokenSeqContext<F::TokenRef> for MacroArgActio
     }
 }
 
-fn reduce_include<R>(mut arguments: Vec<ParsedExpr<String, R>>) -> ChunkId<R> {
+fn reduce_include<R: SourceRange>(mut arguments: Vec<Expr<R>>) -> ChunkId<R> {
     assert_eq!(arguments.len(), 1);
     let path = arguments.pop().unwrap();
-    match path.node {
-        ExprNode::Literal(Literal::String(path_str)) => {
-            ChunkId::File((path_str, Some(path.interval)))
+    match path.variant {
+        ExprVariant::Literal(Literal::String(path_str)) => {
+            ChunkId::File((path_str, Some(path.span)))
         }
         _ => panic!(),
     }

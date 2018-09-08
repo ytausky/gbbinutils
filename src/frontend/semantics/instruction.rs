@@ -1,12 +1,15 @@
-use super::ParsedExpr;
 use diagnostics::{Diagnostic, Message, Source, SourceRange};
 use frontend::semantics::operand::{self, AtomKind, Context, Operand, OperandCounter};
+use frontend::syntax::ast;
 use frontend::syntax::keyword as kw;
+use frontend::syntax::TokenSpec;
 use instruction::*;
+
+type Expr<S> = ast::Expr<<String as TokenSpec>::Ident, <String as TokenSpec>::Literal, S>;
 
 pub fn analyze_instruction<I, R>(mnemonic: (kw::Mnemonic, R), operands: I) -> AnalysisResult<R>
 where
-    I: IntoIterator<Item = ParsedExpr<String, R>>,
+    I: IntoIterator<Item = Expr<R>>,
     R: SourceRange,
 {
     let mnemonic: (Mnemonic, R) = (mnemonic.0.into(), mnemonic.1);
@@ -386,7 +389,7 @@ impl From<kw::Mnemonic> for Mnemonic {
 mod tests {
     use self::kw::Operand::*;
     use super::*;
-    use frontend::semantics::ExprNode;
+    use frontend::syntax::ast::ExprVariant;
     use frontend::syntax::Literal;
 
     #[derive(Clone, Copy, Debug, PartialEq)]
@@ -411,7 +414,7 @@ mod tests {
         fn mark(self) -> Self;
     }
 
-    type Input = ParsedExpr<String, Marking>;
+    type Input = ast::Expr<String, Literal<String>, Marking>;
 
     impl Mark for (kw::Mnemonic, Marking) {
         fn mark(self) -> Self {
@@ -419,25 +422,33 @@ mod tests {
         }
     }
 
-    impl<S: ::frontend::syntax::StringRef> Mark for ParsedExpr<S, Marking> {
+    impl Mark for Input {
         fn mark(mut self) -> Self {
-            self.interval = Marking::Special;
+            self.span = Marking::Special;
             self
         }
     }
 
-    impl From<ExprNode<String, Marking>> for Input {
-        fn from(node: ExprNode<String, Marking>) -> Self {
-            ParsedExpr {
-                node,
-                interval: Marking::default(),
+    impl From<ExprVariant<<String as TokenSpec>::Ident, <String as TokenSpec>::Literal, Marking>>
+        for Input
+    {
+        fn from(
+            variant: ExprVariant<
+                <String as TokenSpec>::Ident,
+                <String as TokenSpec>::Literal,
+                Marking,
+            >,
+        ) -> Self {
+            Expr {
+                variant,
+                span: Marking::default(),
             }
         }
     }
 
     impl From<Literal<String>> for Input {
         fn from(literal: Literal<String>) -> Input {
-            ExprNode::Literal(literal).into()
+            ExprVariant::Literal(literal).into()
         }
     }
 
@@ -450,9 +461,9 @@ mod tests {
     }
 
     fn deref(expr: Input) -> Input {
-        ParsedExpr {
-            node: ExprNode::Parenthesized(Box::new(expr)),
-            interval: Marking::default(),
+        Expr {
+            variant: ExprVariant::Parentheses(Box::new(expr)),
+            span: Marking::default(),
         }
     }
 
@@ -569,7 +580,7 @@ mod tests {
         }
     }
 
-    impl<T> From<T> for ParsedExpr<String, Marking>
+    impl<T> From<T> for Input
     where
         kw::Operand: From<T>,
     {
@@ -578,7 +589,7 @@ mod tests {
         }
     }
 
-    impl From<RegPair> for ParsedExpr<String, Marking> {
+    impl From<RegPair> for Input {
         fn from(reg_pair: RegPair) -> Self {
             literal(match reg_pair {
                 RegPair::Bc => Bc,
@@ -589,7 +600,7 @@ mod tests {
         }
     }
 
-    impl From<Condition> for ParsedExpr<String, Marking> {
+    impl From<Condition> for Input {
         fn from(condition: Condition) -> Self {
             match condition {
                 Condition::C => literal(C),
@@ -602,13 +613,13 @@ mod tests {
 
     impl<'a> From<&'a str> for Input {
         fn from(ident: &'a str) -> Self {
-            ExprNode::Ident(ident.to_string()).into()
+            ExprVariant::Ident(ident.to_string()).into()
         }
     }
 
-    impl From<i32> for ParsedExpr<String, Marking> {
+    impl From<i32> for Input {
         fn from(n: i32) -> Self {
-            ExprNode::Literal(Literal::Number(n)).into()
+            ExprVariant::Literal(Literal::Number(n)).into()
         }
     }
 
@@ -672,7 +683,7 @@ mod tests {
         test_cp_const_analysis(n.into(), n.into())
     }
 
-    fn test_cp_const_analysis(parsed: ParsedExpr<String, Marking>, expr: RelocExpr<Marking>) {
+    fn test_cp_const_analysis(parsed: Input, expr: RelocExpr<Marking>) {
         analyze(kw::Mnemonic::Cp, Some(parsed)).expect_instruction(Instruction::Alu(
             AluOperation::Cp,
             AluSource::Immediate(expr),
@@ -773,7 +784,7 @@ mod tests {
     fn describe_ld_simple_immediate(dest: SimpleOperand) -> InstructionDescriptor {
         let n = 0x12;
         (
-            (kw::Mnemonic::Ld, vec![ParsedExpr::from(dest), n.into()]),
+            (kw::Mnemonic::Ld, vec![Expr::from(dest), n.into()]),
             Instruction::Ld(Ld::Immediate8(dest, n.into())),
         )
     }
@@ -785,7 +796,7 @@ mod tests {
     fn describe_ld_reg16_immediate(dest: Reg16) -> InstructionDescriptor {
         let value = "value";
         (
-            (kw::Mnemonic::Ld, vec![ParsedExpr::from(dest), value.into()]),
+            (kw::Mnemonic::Ld, vec![Expr::from(dest), value.into()]),
             Instruction::Ld(Ld::Immediate16(dest, symbol(value))),
         )
     }
@@ -801,7 +812,7 @@ mod tests {
             (
                 (
                     kw::Mnemonic::Ld,
-                    vec![deref(ParsedExpr::from(ptr_reg)), literal(A)],
+                    vec![deref(Expr::from(ptr_reg)), literal(A)],
                 ),
                 Instruction::Ld(Ld::Special(
                     SpecialLd::DerefPtrReg(ptr_reg),
@@ -811,7 +822,7 @@ mod tests {
             (
                 (
                     kw::Mnemonic::Ld,
-                    vec![literal(A), deref(ParsedExpr::from(ptr_reg))],
+                    vec![literal(A), deref(Expr::from(ptr_reg))],
                 ),
                 Instruction::Ld(Ld::Special(
                     SpecialLd::DerefPtrReg(ptr_reg),
@@ -851,10 +862,7 @@ mod tests {
         operand: SimpleOperand,
     ) -> InstructionDescriptor {
         (
-            (
-                kw::Mnemonic::from(operation),
-                vec![ParsedExpr::from(operand)],
-            ),
+            (kw::Mnemonic::from(operation), vec![Expr::from(operand)]),
             Instruction::Alu(operation, AluSource::Simple(operand)),
         )
     }
@@ -904,7 +912,7 @@ mod tests {
         let ident = "ident";
         let mut operands = Vec::new();
         if let Some(condition) = condition {
-            operands.push(ParsedExpr::from(condition))
+            operands.push(Expr::from(condition))
         };
         if branch.has_target() {
             operands.push(ident.into());
@@ -1032,7 +1040,7 @@ mod tests {
     fn analyze<C, I>(mnemonic: C, operands: I) -> Result
     where
         C: ToMarked<kw::Mnemonic>,
-        I: IntoIterator<Item = ParsedExpr<String, Marking>>,
+        I: IntoIterator<Item = Input>,
     {
         Result(analyze_instruction(mnemonic.to_marked(), operands))
     }
