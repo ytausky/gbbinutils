@@ -4,7 +4,7 @@ use diagnostics::{Diagnostic, Message, Span};
 use std::iter;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Token<S: TokenSpec> {
+pub enum TokenVariant<S: TokenSpec> {
     ClosingParenthesis,
     Colon,
     Comma,
@@ -18,11 +18,11 @@ pub enum Token<S: TokenSpec> {
     OpeningParenthesis,
 }
 
-impl Copy for Token<()> {}
+impl Copy for TokenVariant<()> {}
 
-impl<S: TokenSpec> Token<S> {
-    fn kind(&self) -> Token<()> {
-        use self::Token::*;
+impl<S: TokenSpec> TokenVariant<S> {
+    fn kind(&self) -> TokenVariant<()> {
+        use self::TokenVariant::*;
         match *self {
             ClosingParenthesis => ClosingParenthesis,
             Colon => Colon,
@@ -39,13 +39,13 @@ impl<S: TokenSpec> Token<S> {
     }
 }
 
-type Lookahead = Token<()>;
+type Lookahead = TokenVariant<()>;
 
-const LINE_FOLLOW_SET: &[Lookahead] = &[Token::Eol, Token::Eof];
+const LINE_FOLLOW_SET: &[Lookahead] = &[TokenVariant::Eol, TokenVariant::Eof];
 
 pub fn parse_src<S: TokenSpec, T: Span, I, F>(tokens: I, actions: F)
 where
-    I: Iterator<Item = (Token<S>, T)>,
+    I: Iterator<Item = (TokenVariant<S>, T)>,
     F: FileContext<S, T>,
 {
     let mut parser = Parser {
@@ -64,14 +64,14 @@ macro_rules! mk_expect {
     ($name:ident, $ret_ty:ident) => {
         fn $name(&mut self) -> (S::$ret_ty, T) {
             match self.tokens.next() {
-                Some((Token::$ret_ty(inner), t)) => (inner, t),
+                Some((TokenVariant::$ret_ty(inner), t)) => (inner, t),
                 _ => panic!(),
             }
         }
     }
 }
 
-impl<S: TokenSpec, T: Span, I: Iterator<Item = (Token<S>, T)>> Parser<I, T> {
+impl<S: TokenSpec, T: Span, I: Iterator<Item = (TokenVariant<S>, T)>> Parser<I, T> {
     mk_expect!(expect_command, Command);
     mk_expect!(expect_ident, Ident);
 
@@ -84,14 +84,14 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (Token<S>, T)>> Parser<I, T> {
         kinds.iter().any(|x| *x == lookahead)
     }
 
-    fn consume(&mut self, kind: Token<()>) -> bool {
+    fn consume(&mut self, kind: TokenVariant<()>) -> bool {
         self.take_token_if(|x| x == kind, |_| ())
     }
 
     fn take_token_if<P, F>(&mut self, predicate: P, f: F) -> bool
     where
-        P: FnOnce(Token<()>) -> bool,
-        F: FnOnce((Token<S>, T)),
+        P: FnOnce(TokenVariant<()>) -> bool,
+        F: FnOnce((TokenVariant<S>, T)),
     {
         if predicate(self.lookahead()) {
             f(self.bump());
@@ -103,8 +103,8 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (Token<S>, T)>> Parser<I, T> {
 
     fn take_token_while<P, F>(&mut self, predicate: P, mut f: F)
     where
-        P: Fn(Token<()>) -> bool,
-        F: FnMut((Token<S>, T)),
+        P: Fn(TokenVariant<()>) -> bool,
+        F: FnMut((TokenVariant<S>, T)),
     {
         while self.take_token_if(&predicate, &mut f) {}
     }
@@ -121,11 +121,16 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (Token<S>, T)>> Parser<I, T> {
     }
 
     fn parse_file<F: FileContext<S, T>>(&mut self, actions: F) {
-        self.parse_terminated_list(Token::Eol, &[Token::Eof], |p, c| p.parse_line(c), actions);
+        self.parse_terminated_list(
+            TokenVariant::Eol,
+            &[TokenVariant::Eof],
+            |p, c| p.parse_line(c),
+            actions,
+        );
     }
 
     fn parse_line<F: FileContext<S, T>>(&mut self, actions: F) -> F {
-        if self.lookahead() == Token::Ident(()) {
+        if self.lookahead() == TokenVariant::Ident(()) {
             self.parse_potentially_labeled_line(actions)
         } else {
             self.parse_unlabeled_line(actions.enter_line(None)).exit()
@@ -134,7 +139,7 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (Token<S>, T)>> Parser<I, T> {
 
     fn parse_potentially_labeled_line<F: FileContext<S, T>>(&mut self, actions: F) -> F {
         let ident = self.expect_ident();
-        if self.consume(Token::Colon) {
+        if self.consume(TokenVariant::Colon) {
             self.parse_unlabeled_line(actions.enter_line(Some(ident)))
         } else {
             self.parse_macro_invocation(ident, actions.enter_line(None))
@@ -143,13 +148,13 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (Token<S>, T)>> Parser<I, T> {
 
     fn parse_unlabeled_line<LA: LineActions<S, T>>(&mut self, actions: LA) -> LA {
         match self.lookahead() {
-            Token::Eol | Token::Eof => actions,
-            Token::Command(()) => self.parse_command(actions),
-            Token::Ident(()) => {
+            TokenVariant::Eol | TokenVariant::Eof => actions,
+            TokenVariant::Command(()) => self.parse_command(actions),
+            TokenVariant::Ident(()) => {
                 let ident = self.expect_ident();
                 self.parse_macro_invocation(ident, actions)
             }
-            Token::Macro => self.parse_macro_def(actions),
+            TokenVariant::Macro => self.parse_macro_def(actions),
             _ => {
                 let (_, range) = self.bump();
                 actions.emit_diagnostic(Diagnostic::new(
@@ -164,24 +169,24 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (Token<S>, T)>> Parser<I, T> {
     }
 
     fn parse_macro_def<LA: LineActions<S, T>>(&mut self, actions: LA) -> LA {
-        self.expect(Token::Macro);
+        self.expect(TokenVariant::Macro);
         let actions = self.parse_terminated_list(
-            Token::Comma,
+            TokenVariant::Comma,
             LINE_FOLLOW_SET,
             |p, a| p.parse_macro_param(a),
             actions.enter_macro_def(),
         );
-        if self.consume(Token::Eol) {
+        if self.consume(TokenVariant::Eol) {
             let mut body_actions = actions.exit();
             self.take_token_while(
-                |x| x != Token::Endm && x != Token::Eof,
+                |x| x != TokenVariant::Endm && x != TokenVariant::Eof,
                 |token| body_actions.push_token(token),
             );
-            if self.lookahead() == Token::Endm {
+            if self.lookahead() == TokenVariant::Endm {
                 let endm = self.bump();
-                body_actions.push_token((Token::Eof, endm.1));
+                body_actions.push_token((TokenVariant::Eof, endm.1));
             } else {
-                assert_eq!(self.lookahead(), Token::Eof);
+                assert_eq!(self.lookahead(), TokenVariant::Eof);
                 body_actions.emit_diagnostic(Diagnostic::new(
                     Message::UnexpectedEof,
                     self.tokens.peek().unwrap().1.clone(),
@@ -189,7 +194,7 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (Token<S>, T)>> Parser<I, T> {
             }
             body_actions
         } else {
-            assert_eq!(self.lookahead(), Token::Eof);
+            assert_eq!(self.lookahead(), TokenVariant::Eof);
             actions.emit_diagnostic(Diagnostic::new(
                 Message::UnexpectedEof,
                 self.tokens.peek().unwrap().1.clone(),
@@ -225,24 +230,26 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (Token<S>, T)>> Parser<I, T> {
 
     fn parse_argument_list<C: CommandContext<T, TokenSpec = S>>(&mut self, actions: C) -> C {
         self.parse_terminated_list(
-            Token::Comma,
+            TokenVariant::Comma,
             LINE_FOLLOW_SET,
             |p, c| p.parse_argument(c),
             actions,
         )
     }
 
-    fn parse_macro_arg_list<M: MacroInvocationContext<T, Token = Token<S>>>(
+    fn parse_macro_arg_list<M: MacroInvocationContext<T, Token = TokenVariant<S>>>(
         &mut self,
         actions: M,
     ) -> M {
         self.parse_terminated_list(
-            Token::Comma,
+            TokenVariant::Comma,
             LINE_FOLLOW_SET,
             |p, actions| {
                 let mut arg_context = actions.enter_macro_arg();
                 p.take_token_while(
-                    |x| x != Token::Comma && x != Token::Eol && x != Token::Eof,
+                    |x| {
+                        x != TokenVariant::Comma && x != TokenVariant::Eol && x != TokenVariant::Eof
+                    },
                     |token| arg_context.push_token(token),
                 );
                 arg_context.exit()
@@ -253,7 +260,7 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (Token<S>, T)>> Parser<I, T> {
 
     fn parse_terminated_list<P, C>(
         &mut self,
-        delimiter: Token<()>,
+        delimiter: TokenVariant<()>,
         terminators: &[Lookahead],
         parser: P,
         mut context: C,
@@ -280,7 +287,7 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (Token<S>, T)>> Parser<I, T> {
 
     fn parse_list<P, C>(
         &mut self,
-        delimiter: Token<()>,
+        delimiter: TokenVariant<()>,
         terminators: &[Lookahead],
         mut parser: P,
         context: C,
@@ -298,7 +305,7 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (Token<S>, T)>> Parser<I, T> {
 
     fn parse_nonempty_list<P, C>(
         &mut self,
-        delimiter: Token<()>,
+        delimiter: TokenVariant<()>,
         parser: &mut P,
         mut actions: C,
     ) -> C
@@ -318,7 +325,7 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (Token<S>, T)>> Parser<I, T> {
     }
 
     fn parse_expression<EA: ExprActions<T, TokenSpec = S>>(&mut self, actions: EA) -> EA {
-        if self.lookahead() == Token::OpeningParenthesis {
+        if self.lookahead() == TokenVariant::OpeningParenthesis {
             self.parse_parenthesized_expression(actions)
         } else {
             self.parse_atomic_expr(actions)
@@ -329,9 +336,9 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (Token<S>, T)>> Parser<I, T> {
         &mut self,
         actions: EA,
     ) -> EA {
-        let (_, left) = self.expect(Token::OpeningParenthesis);
+        let (_, left) = self.expect(TokenVariant::OpeningParenthesis);
         let mut actions = self.parse_expression(actions);
-        let (_, right) = self.expect(Token::ClosingParenthesis);
+        let (_, right) = self.expect(TokenVariant::ClosingParenthesis);
         actions.apply_operator((ExprOperator::Parentheses, left.extend(&right)));
         actions
     }
@@ -340,8 +347,8 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (Token<S>, T)>> Parser<I, T> {
         let (token, interval) = self.bump();
         actions.push_atom((
             match token {
-                Token::Ident(ident) => ExprAtom::Ident(ident),
-                Token::Literal(literal) => ExprAtom::Literal(literal),
+                TokenVariant::Ident(ident) => ExprAtom::Ident(ident),
+                TokenVariant::Literal(literal) => ExprAtom::Literal(literal),
                 _ => panic!(),
             },
             interval,
@@ -354,7 +361,7 @@ impl<S: TokenSpec, T: Span, I: Iterator<Item = (Token<S>, T)>> Parser<I, T> {
 mod tests {
     use super::{
         parse_src,
-        Token::{self, *},
+        TokenVariant::{self, *},
     };
 
     use super::ast::*;
@@ -544,10 +551,10 @@ mod tests {
         if input
             .tokens
             .last()
-            .map(|token| token.kind() != Token::Eof)
+            .map(|token| token.kind() != TokenVariant::Eof)
             .unwrap_or(true)
         {
-            input.tokens.push(Token::Eof)
+            input.tokens.push(TokenVariant::Eof)
         }
         let mut parsing_context = TestContext::new();
         parse_src(

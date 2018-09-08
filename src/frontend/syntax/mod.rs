@@ -21,10 +21,10 @@ where
     self::parser::parse_src(tokens, actions)
 }
 
-pub type Token = self::parser::Token<String>;
+pub type Token = self::parser::TokenVariant<String>;
 
 pub mod token {
-    pub use super::parser::Token::*;
+    pub use super::parser::TokenVariant::*;
 }
 
 pub trait TokenSpec {
@@ -73,7 +73,7 @@ where
     type MacroParamsActions: MacroParamsActions<SR, TokenSpec = TS, Parent = Self>;
     type MacroInvocationContext: MacroInvocationContext<
         SR,
-        Token = parser::Token<TS>,
+        Token = parser::TokenVariant<TS>,
         Parent = Self,
     >;
     type Parent;
@@ -117,7 +117,7 @@ pub trait MacroParamsActions<SR>: DiagnosticsListener<SR> {
     type TokenSpec: TokenSpec;
     type MacroBodyActions: TokenSeqContext<
         SR,
-        Token = parser::Token<Self::TokenSpec>,
+        Token = parser::TokenVariant<Self::TokenSpec>,
         Parent = Self::Parent,
     >;
     type Parent;

@@ -3,9 +3,9 @@ use diagnostics::{Message, Span};
 use std::fmt::Debug;
 
 #[cfg(test)]
-use super::parser::Token;
+use super::parser::TokenVariant;
 #[cfg(test)]
-use super::parser::Token::*;
+use super::parser::TokenVariant::*;
 #[cfg(test)]
 use super::ExprAtom;
 #[cfg(test)]
@@ -49,10 +49,10 @@ pub struct SymIdent(pub usize);
 pub struct SymLiteral(pub usize);
 
 #[cfg(test)]
-pub type SymToken = Token<Symbolic>;
+pub type SymToken = TokenVariant<Symbolic>;
 
 #[cfg(test)]
-pub fn mk_sym_token(id: usize, token: Token<()>) -> SymToken {
+pub fn mk_sym_token(id: usize, token: TokenVariant<()>) -> SymToken {
     match token {
         Command(()) => Command(SymCommand(id)),
         Ident(()) => Ident(SymIdent(id)),
