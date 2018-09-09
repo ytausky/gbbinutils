@@ -30,9 +30,6 @@ pub enum ExprVariant<I, L, S: Clone> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Symbolic;
-
-#[derive(Clone, Debug, PartialEq)]
 pub struct SymCommand(pub usize);
 
 #[derive(Clone, Debug, PartialEq)]
