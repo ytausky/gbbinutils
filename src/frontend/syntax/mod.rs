@@ -8,6 +8,21 @@ mod parser;
 
 pub use frontend::syntax::keyword::Operand;
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum TokenVariant<C, I, L> {
+    ClosingParenthesis,
+    Colon,
+    Comma,
+    Command(C),
+    Endm,
+    Eof,
+    Eol,
+    Ident(I),
+    Literal(L),
+    Macro,
+    OpeningParenthesis,
+}
+
 pub fn tokenize(src: &str) -> self::lexer::Lexer {
     self::lexer::Lexer::new(src)
 }
@@ -20,10 +35,10 @@ where
     self::parser::parse_src(tokens, actions)
 }
 
-pub type Token<I> = self::parser::TokenVariant<keyword::Command, I, Literal<I>>;
+pub type Token<I> = TokenVariant<keyword::Command, I, Literal<I>>;
 
 pub mod token {
-    pub use super::parser::TokenVariant::*;
+    pub use super::TokenVariant::*;
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -55,7 +70,7 @@ where
     >;
     type MacroInvocationContext: MacroInvocationContext<
         S,
-        Token = parser::TokenVariant<C, I, L>,
+        Token = TokenVariant<C, I, L>,
         Parent = Self,
     >;
     type Parent;
@@ -104,7 +119,7 @@ pub trait MacroParamsActions<S>: DiagnosticsListener<S> {
     type Literal;
     type MacroBodyActions: TokenSeqContext<
         S,
-        Token = parser::TokenVariant<Self::Command, Self::Ident, Self::Literal>,
+        Token = TokenVariant<Self::Command, Self::Ident, Self::Literal>,
         Parent = Self::Parent,
     >;
     type Parent;

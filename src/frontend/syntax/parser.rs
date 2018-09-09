@@ -3,21 +3,6 @@ use diagnostics::{Diagnostic, Message, Span};
 
 use std::iter;
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum TokenVariant<C, I, L> {
-    ClosingParenthesis,
-    Colon,
-    Comma,
-    Command(C),
-    Endm,
-    Eof,
-    Eol,
-    Ident(I),
-    Literal(L),
-    Macro,
-    OpeningParenthesis,
-}
-
 type TokenKind = TokenVariant<(), (), ()>;
 
 impl Copy for TokenKind {}

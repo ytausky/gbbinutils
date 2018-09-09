@@ -2,13 +2,13 @@ use diagnostics::{Message, Span};
 use std::fmt::Debug;
 
 #[cfg(test)]
-use super::parser::TokenVariant;
-#[cfg(test)]
-use super::parser::TokenVariant::*;
-#[cfg(test)]
 use super::ExprAtom;
 #[cfg(test)]
 use super::ExprOperator;
+#[cfg(test)]
+use super::TokenVariant;
+#[cfg(test)]
+use super::TokenVariant::*;
 #[cfg(test)]
 use diagnostics::Diagnostic;
 #[cfg(test)]
