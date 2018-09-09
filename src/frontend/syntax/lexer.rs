@@ -1,7 +1,7 @@
 use frontend::syntax::{
     self,
     keyword::{self as kw, *},
-    token, Literal, Token,
+    Literal, Token,
 };
 
 use std::iter;
@@ -179,21 +179,21 @@ impl<'a> Iterator for Lexer<'a> {
 
 fn mk_token(kind: TokenKind, lexeme: &str) -> Token<String> {
     match kind {
-        TokenKind::ClosingParenthesis => token::ClosingParenthesis,
-        TokenKind::Colon => token::Colon,
-        TokenKind::Comma => token::Comma,
-        TokenKind::Eof => token::Eof,
-        TokenKind::Eol => token::Eol,
-        TokenKind::Ident => mk_keyword_or(token::Ident, lexeme),
+        TokenKind::ClosingParenthesis => Token::ClosingParenthesis,
+        TokenKind::Colon => Token::Colon,
+        TokenKind::Comma => Token::Comma,
+        TokenKind::Eof => Token::Eof,
+        TokenKind::Eol => Token::Eol,
+        TokenKind::Ident => mk_keyword_or(Token::Ident, lexeme),
         TokenKind::Number(Radix::Decimal) => {
-            token::Literal(Literal::Number(i32::from_str_radix(lexeme, 10).unwrap()))
+            Token::Literal(Literal::Number(i32::from_str_radix(lexeme, 10).unwrap()))
         }
-        TokenKind::Number(Radix::Hexadecimal) => token::Literal(Literal::Number(
+        TokenKind::Number(Radix::Hexadecimal) => Token::Literal(Literal::Number(
             i32::from_str_radix(&lexeme[1..], 16).unwrap(),
         )),
-        TokenKind::OpeningParenthesis => token::OpeningParenthesis,
+        TokenKind::OpeningParenthesis => Token::OpeningParenthesis,
         TokenKind::String => {
-            token::Literal(Literal::String(lexeme[1..(lexeme.len() - 1)].to_string()))
+            Token::Literal(Literal::String(lexeme[1..(lexeme.len() - 1)].to_string()))
         }
     }
 }
@@ -202,10 +202,10 @@ fn mk_keyword_or<F: FnOnce(String) -> Token<String>>(f: F, lexeme: &str) -> Toke
     identify_keyword(lexeme).map_or_else(
         || f(lexeme.to_string()),
         |keyword| match keyword {
-            Keyword::Command(command) => token::Command(command),
-            Keyword::Endm => token::Endm,
-            Keyword::Macro => token::Macro,
-            Keyword::Operand(operand) => token::Literal(syntax::Literal::Operand(operand)),
+            Keyword::Command(command) => Token::Command(command),
+            Keyword::Endm => Token::Endm,
+            Keyword::Macro => Token::Macro,
+            Keyword::Operand(operand) => Token::Literal(syntax::Literal::Operand(operand)),
         },
     )
 }
@@ -313,8 +313,8 @@ mod tests {
     use super::*;
 
     use super::kw::Mnemonic::*;
-    use super::syntax::token::*;
     use super::syntax::Literal::{Number, Operand};
+    use super::syntax::Token::*;
     use super::Operand::*;
     use std::borrow::Borrow;
 

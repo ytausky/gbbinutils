@@ -335,7 +335,7 @@ impl<I: AsRef<str> + PartialEq, S> ExpandedMacro<I, S> {
     fn try_expand(&mut self) {
         assert_eq!(self.arg_index, None);
         if self.body_index < self.def.body.len() {
-            if let token::Ident(ref name) = self.def.body[self.body_index].0 {
+            if let Token::Ident(ref name) = self.def.body[self.body_index].0 {
                 if let Some(position) = self.param_position(name.as_ref()) {
                     self.arg_index = Some((position, 0))
                 }
@@ -445,7 +445,7 @@ mod tests {
     #[test]
     fn include_source_file() {
         let filename = "my_file.asm";
-        let contents = vec![token::Command(Command::Mnemonic(Mnemonic::Nop))];
+        let contents = vec![Token::Command(Command::Mnemonic(Mnemonic::Nop))];
         let log = TestLog::default();
         TestFixture::new(&log)
             .given(|f| {
@@ -483,7 +483,7 @@ mod tests {
     #[test]
     fn define_and_invoke_macro() {
         let name = "my_macro";
-        let tokens = vec![token::Command(Command::Mnemonic(Mnemonic::Nop))];
+        let tokens = vec![Token::Command(Command::Mnemonic(Mnemonic::Nop))];
         let log = TestLog::default();
         TestFixture::new(&log).when(|mut session| {
             session.define_macro((name.to_string(), ()), Vec::new(), add_code_refs(&tokens));
@@ -497,9 +497,9 @@ mod tests {
 
     #[test]
     fn define_and_invoke_macro_with_param() {
-        let db = token::Command(Command::Directive(Directive::Db));
-        let arg = token::Literal(Literal::Number(0x42));
-        let literal0 = token::Literal(Literal::Number(0));
+        let db = Token::Command(Command::Directive(Directive::Db));
+        let arg = Token::Literal(Literal::Number(0x42));
+        let literal0 = Token::Literal(Literal::Number(0));
         let log = TestLog::default();
         TestFixture::new(&log).when(|mut session| {
             let name = "my_db";
@@ -509,7 +509,7 @@ mod tests {
                 vec![(param.to_string(), ())],
                 vec![
                     (db.clone(), ()),
-                    (token::Ident(param.to_string()), ()),
+                    (Token::Ident(param.to_string()), ()),
                     (literal0.clone(), ()),
                 ],
             );

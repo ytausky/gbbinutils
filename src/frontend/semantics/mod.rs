@@ -402,7 +402,7 @@ mod tests {
     use backend;
     use diagnostics::{Diagnostic, Message};
     use frontend::syntax::{
-        keyword::Operand, token, CommandContext, ExprActions, FileContext, LineActions,
+        keyword::Operand, CommandContext, ExprActions, FileContext, LineActions,
         MacroInvocationContext, MacroParamsActions, TokenSeqContext,
     };
     use instruction::RelocExpr;
@@ -612,8 +612,8 @@ mod tests {
             "my_macro",
             [],
             [
-                token::Command(Command::Mnemonic(Mnemonic::Xor)),
-                token::Literal(Literal::Operand(Operand::A)),
+                Token::Command(Command::Mnemonic(Mnemonic::Xor)),
+                Token::Literal(Literal::Operand(Operand::A)),
             ],
         )
     }
@@ -625,8 +625,8 @@ mod tests {
             "my_xor",
             [param],
             [
-                token::Command(Command::Mnemonic(Mnemonic::Xor)),
-                token::Ident(param.to_string()),
+                Token::Command(Command::Mnemonic(Mnemonic::Xor)),
+                Token::Ident(param.to_string()),
             ],
         )
     }
@@ -680,7 +680,7 @@ mod tests {
     #[test]
     fn invoke_unary_macro() {
         let name = "my_macro";
-        let arg_token = token::Literal(Literal::Operand(Operand::A));
+        let arg_token = Token::Literal(Literal::Operand(Operand::A));
         let actions = collect_semantic_actions(|actions| {
             let mut invocation = actions
                 .enter_line(None)

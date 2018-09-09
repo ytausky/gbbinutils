@@ -6,9 +6,9 @@ use super::ExprAtom;
 #[cfg(test)]
 use super::ExprOperator;
 #[cfg(test)]
-use super::TokenVariant;
+use super::Token;
 #[cfg(test)]
-use super::TokenVariant::*;
+use super::Token::*;
 #[cfg(test)]
 use diagnostics::Diagnostic;
 #[cfg(test)]
@@ -42,10 +42,10 @@ pub struct SymIdent(pub usize);
 pub struct SymLiteral(pub usize);
 
 #[cfg(test)]
-pub type SymToken = TokenVariant<SymIdent, SymCommand, SymLiteral>;
+pub type SymToken = Token<SymIdent, SymCommand, SymLiteral>;
 
 #[cfg(test)]
-pub fn mk_sym_token(id: usize, token: TokenVariant<(), (), ()>) -> SymToken {
+pub fn mk_sym_token(id: usize, token: Token<(), (), ()>) -> SymToken {
     match token {
         Command(()) => Command(SymCommand(id)),
         Ident(()) => Ident(SymIdent(id)),

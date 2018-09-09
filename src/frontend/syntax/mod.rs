@@ -9,7 +9,7 @@ mod parser;
 pub use frontend::syntax::keyword::Operand;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum TokenVariant<I, C = keyword::Command, L = Literal<I>> {
+pub enum Token<I, C = keyword::Command, L = Literal<I>> {
     ClosingParenthesis,
     Colon,
     Comma,
@@ -33,12 +33,6 @@ where
     F: FileContext<Id, keyword::Command, Literal<Id>, S>,
 {
     self::parser::parse_src(tokens, actions)
-}
-
-pub type Token<I> = TokenVariant<I>;
-
-pub mod token {
-    pub use super::TokenVariant::*;
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -68,11 +62,7 @@ where
         Literal = L,
         Parent = Self,
     >;
-    type MacroInvocationContext: MacroInvocationContext<
-        S,
-        Token = TokenVariant<I, C, L>,
-        Parent = Self,
-    >;
+    type MacroInvocationContext: MacroInvocationContext<S, Token = Token<I, C, L>, Parent = Self>;
     type Parent;
     fn enter_command(self, name: (C, S)) -> Self::CommandContext;
     fn enter_macro_def(self) -> Self::MacroParamsActions;
@@ -119,7 +109,7 @@ pub trait MacroParamsActions<S>: DiagnosticsListener<S> {
     type Literal;
     type MacroBodyActions: TokenSeqContext<
         S,
-        Token = TokenVariant<Self::Ident, Self::Command, Self::Literal>,
+        Token = Token<Self::Ident, Self::Command, Self::Literal>,
         Parent = Self::Parent,
     >;
     type Parent;
