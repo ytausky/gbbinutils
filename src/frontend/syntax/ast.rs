@@ -16,19 +16,6 @@ use std::borrow::Borrow;
 #[cfg(test)]
 use std::collections::HashMap;
 
-#[derive(Clone)]
-pub struct Expr<I, L, S: Clone> {
-    pub variant: ExprVariant<I, L, S>,
-    pub span: S,
-}
-
-#[derive(Clone)]
-pub enum ExprVariant<I, L, S: Clone> {
-    Ident(I),
-    Literal(L),
-    Parentheses(Box<Expr<I, L, S>>),
-}
-
 #[cfg(test)]
 #[derive(Clone, Debug, PartialEq)]
 pub enum RpnAction<I, L> {

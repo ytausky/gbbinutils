@@ -1,14 +1,31 @@
 use backend::{self, BinaryOperator};
 use diagnostics::{Diagnostic, DiagnosticsListener, Span};
 use frontend::session::{ChunkId, Session};
-use frontend::syntax::ast;
-use frontend::syntax::ast::ExprVariant;
 use frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token};
 use frontend::{Literal, StrExprFactory};
 use Width;
 
+use self::expr::*;
+
 mod instruction;
 mod operand;
+
+mod expr {
+    use frontend::Literal;
+
+    #[derive(Clone)]
+    pub struct Expr<I, S: Clone> {
+        pub variant: ExprVariant<I, S>,
+        pub span: S,
+    }
+
+    #[derive(Clone)]
+    pub enum ExprVariant<I, S: Clone> {
+        Ident(I),
+        Literal(Literal<I>),
+        Parentheses(Box<Expr<I, S>>),
+    }
+}
 
 pub struct SemanticActions<'a, F: Session + 'a> {
     session: &'a mut F,
@@ -83,7 +100,6 @@ pub struct CommandActions<'a, F: Session + 'a> {
     parent: SemanticActions<'a, F>,
 }
 
-type Expr<I, S> = ast::Expr<I, Literal<I>, S>;
 type CommandArgs<F> = Vec<Expr<<F as Session>::Ident, <F as Session>::Span>>;
 
 impl<'a, F: Session + 'a> CommandActions<'a, F> {

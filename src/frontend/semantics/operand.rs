@@ -1,6 +1,5 @@
+use super::{Expr, ExprVariant};
 use diagnostics::{Diagnostic, KeywordOperandCategory, Message, Source, Span};
-use frontend::syntax::ast;
-use frontend::syntax::ast::ExprVariant;
 use frontend::syntax::keyword as kw;
 use frontend::syntax::Literal;
 use instruction::{Condition, PtrReg, Reg16, RegPair, RelocExpr, SimpleOperand};
@@ -40,8 +39,6 @@ pub enum Context {
 }
 
 type OperandResult<SI> = Result<Operand<SI>, Diagnostic<SI>>;
-
-type Expr<I, S> = ast::Expr<I, Literal<I>, S>;
 
 pub fn analyze_operand<I: Into<String>, S: Clone>(
     expr: Expr<I, S>,

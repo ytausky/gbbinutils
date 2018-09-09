@@ -1,11 +1,8 @@
+use super::Expr;
 use diagnostics::{Diagnostic, Message, Source, Span};
 use frontend::semantics::operand::{self, AtomKind, Context, Operand, OperandCounter};
-use frontend::syntax::ast;
 use frontend::syntax::keyword as kw;
-use frontend::syntax::Literal;
 use instruction::*;
-
-type Expr<I, S> = ast::Expr<I, Literal<I>, S>;
 
 pub fn analyze_instruction<Id: Into<String>, I, S>(
     mnemonic: (kw::Mnemonic, S),
@@ -387,7 +384,7 @@ impl From<kw::Mnemonic> for Mnemonic {
 mod tests {
     use self::kw::Operand::*;
     use super::*;
-    use frontend::syntax::ast::ExprVariant;
+    use frontend::semantics::ExprVariant;
     use frontend::syntax::Literal;
 
     #[derive(Clone, Copy, Debug, PartialEq)]
@@ -412,7 +409,7 @@ mod tests {
         fn mark(self) -> Self;
     }
 
-    type Input = ast::Expr<String, Literal<String>, Marking>;
+    type Input = Expr<String, Marking>;
 
     impl Mark for (kw::Mnemonic, Marking) {
         fn mark(self) -> Self {
@@ -427,8 +424,8 @@ mod tests {
         }
     }
 
-    impl From<ExprVariant<String, Literal<String>, Marking>> for Input {
-        fn from(variant: ExprVariant<String, Literal<String>, Marking>) -> Self {
+    impl From<ExprVariant<String, Marking>> for Input {
+        fn from(variant: ExprVariant<String, Marking>) -> Self {
             Expr {
                 variant,
                 span: Marking::default(),
