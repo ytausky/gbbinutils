@@ -332,14 +332,14 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I, S> {
         &mut self,
         mut actions: EA,
     ) -> EA {
-        let (token, interval) = self.bump();
+        let (token, span) = self.bump();
         actions.push_atom((
             match token {
                 Token::Ident(ident) => ExprAtom::Ident(ident),
                 Token::Literal(literal) => ExprAtom::Literal(literal),
                 _ => panic!(),
             },
-            interval,
+            span,
         ));
         actions
     }

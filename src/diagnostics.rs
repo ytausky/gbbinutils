@@ -329,8 +329,8 @@ impl<'a> fmt::Display for ElaboratedDiagnostic<'a> {
     }
 }
 
-fn mk_snippet<'a>(codebase: &'a TextCache, interval: &TokenRefData) -> &'a str {
-    match interval {
+fn mk_snippet<'a>(codebase: &'a TextCache, span: &TokenRefData) -> &'a str {
+    match span {
         TokenRefData::Lexeme { range, context } => {
             &codebase.buf(context.buf_id).as_str()[range.start..range.end]
         }
@@ -345,7 +345,7 @@ mod tests {
     static DUMMY_FILE: &str = "/my/file";
 
     #[test]
-    fn extend_interval() {
+    fn extend_span() {
         let mut codebase = TextCache::new();
         let src = "left right";
         let buf_id = codebase.add_src_buf(DUMMY_FILE, src);
@@ -380,11 +380,11 @@ mod tests {
             buf_id,
             included_from: None,
         });
-        let interval = TokenRefData::Lexeme {
+        let span = TokenRefData::Lexeme {
             range: BufRange::from(4..11),
             context: context.clone(),
         };
-        assert_eq!(mk_snippet(&codebase, &interval), "snippet")
+        assert_eq!(mk_snippet(&codebase, &span), "snippet")
     }
 
     #[test]

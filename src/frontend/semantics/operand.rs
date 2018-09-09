@@ -172,10 +172,7 @@ impl<I: Iterator<Item = Result<T, E>>, T, E> OperandCounter<I> {
         })
     }
 
-    pub fn check_for_unexpected_operands<SI>(
-        self,
-        source_interval: SI,
-    ) -> Result<(), Diagnostic<SI>> {
+    pub fn check_for_unexpected_operands<S>(self, span: S) -> Result<(), Diagnostic<S>> {
         let expected = self.count;
         let extra = self.operands.count();
         let actual = expected + extra;
@@ -184,7 +181,7 @@ impl<I: Iterator<Item = Result<T, E>>, T, E> OperandCounter<I> {
         } else {
             Err(Diagnostic::new(
                 Message::OperandCount { actual, expected },
-                source_interval,
+                span,
             ))
         }
     }

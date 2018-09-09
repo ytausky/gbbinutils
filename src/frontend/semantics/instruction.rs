@@ -83,9 +83,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, Diagnostic<S>>>> Analysi
     fn analyze_add_hl_instruction(&mut self) -> AnalysisResult<S> {
         match self.expect_operand(2)? {
             Operand::Atom(AtomKind::Reg16(src), _) => Ok(Instruction::AddHl(src)),
-            Operand::Atom(_, interval) => {
-                Err(Diagnostic::new(Message::IncompatibleOperand, interval))
-            }
+            Operand::Atom(_, span) => Err(Diagnostic::new(Message::IncompatibleOperand, span)),
             _ => panic!(),
         }
     }
