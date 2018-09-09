@@ -38,7 +38,7 @@ impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for SemanticActions<'a, F
     }
 }
 
-impl<'a, F: Session + 'a> syntax::FileContext<Command, F::Ident, Literal<F::Ident>, F::Span>
+impl<'a, F: Session + 'a> syntax::FileContext<F::Ident, Command, Literal<F::Ident>, F::Span>
     for SemanticActions<'a, F>
 {
     type LineActions = Self;
@@ -49,7 +49,7 @@ impl<'a, F: Session + 'a> syntax::FileContext<Command, F::Ident, Literal<F::Iden
     }
 }
 
-impl<'a, F: Session + 'a> syntax::LineActions<Command, F::Ident, Literal<F::Ident>, F::Span>
+impl<'a, F: Session + 'a> syntax::LineActions<F::Ident, Command, Literal<F::Ident>, F::Span>
     for SemanticActions<'a, F>
 {
     type CommandContext = CommandActions<'a, F>;
@@ -103,8 +103,8 @@ impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for CommandActions<'a, F>
 }
 
 impl<'a, F: Session + 'a> syntax::CommandContext<F::Span> for CommandActions<'a, F> {
-    type Command = Command;
     type Ident = F::Ident;
+    type Command = Command;
     type Literal = Literal<F::Ident>;
     type ArgActions = ExprActions<'a, F>;
     type Parent = SemanticActions<'a, F>;
@@ -270,8 +270,8 @@ impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for MacroDefActions<'a, F
 }
 
 impl<'a, F: Session + 'a> syntax::MacroParamsActions<F::Span> for MacroDefActions<'a, F> {
-    type Command = Command;
     type Ident = F::Ident;
+    type Command = Command;
     type Literal = Literal<F::Ident>;
     type MacroBodyActions = Self;
     type Parent = SemanticActions<'a, F>;

@@ -28,11 +28,11 @@ impl<C, I, L> TokenVariant<C, I, L> {
 
 const LINE_FOLLOW_SET: &[TokenKind] = &[TokenVariant::Eol, TokenVariant::Eof];
 
-pub fn parse_src<C, Id, L, S, I, F>(tokens: I, actions: F)
+pub fn parse_src<Id, C, L, S, I, F>(tokens: I, actions: F)
 where
     S: Span,
-    I: Iterator<Item = (TokenVariant<C, Id, L>, S)>,
-    F: FileContext<C, Id, L, S>,
+    I: Iterator<Item = (TokenVariant<Id, C, L>, S)>,
+    F: FileContext<Id, C, L, S>,
 {
     let mut parser = Parser {
         tokens: tokens.peekable(),
@@ -57,7 +57,7 @@ macro_rules! mk_expect {
     }
 }
 
-impl<C, Id, L, S: Span, I: Iterator<Item = (TokenVariant<C, Id, L>, S)>> Parser<I, S> {
+impl<Id, C, L, S: Span, I: Iterator<Item = (TokenVariant<Id, C, L>, S)>> Parser<I, S> {
     mk_expect!(expect_command, Command, C);
     mk_expect!(expect_ident, Ident, Id);
 
@@ -77,7 +77,7 @@ impl<C, Id, L, S: Span, I: Iterator<Item = (TokenVariant<C, Id, L>, S)>> Parser<
     fn take_token_if<P, F>(&mut self, predicate: P, f: F) -> bool
     where
         P: FnOnce(TokenKind) -> bool,
-        F: FnOnce((TokenVariant<C, Id, L>, S)),
+        F: FnOnce((TokenVariant<Id, C, L>, S)),
     {
         if predicate(self.lookahead()) {
             f(self.bump());
@@ -90,7 +90,7 @@ impl<C, Id, L, S: Span, I: Iterator<Item = (TokenVariant<C, Id, L>, S)>> Parser<
     fn take_token_while<P, F>(&mut self, predicate: P, mut f: F)
     where
         P: Fn(TokenKind) -> bool,
-        F: FnMut((TokenVariant<C, Id, L>, S)),
+        F: FnMut((TokenVariant<Id, C, L>, S)),
     {
         while self.take_token_if(&predicate, &mut f) {}
     }
@@ -106,7 +106,7 @@ impl<C, Id, L, S: Span, I: Iterator<Item = (TokenVariant<C, Id, L>, S)>> Parser<
         self.bump()
     }
 
-    fn parse_file<F: FileContext<C, Id, L, S>>(&mut self, actions: F) {
+    fn parse_file<F: FileContext<Id, C, L, S>>(&mut self, actions: F) {
         self.parse_terminated_list(
             TokenVariant::Eol,
             &[TokenVariant::Eof],
@@ -115,7 +115,7 @@ impl<C, Id, L, S: Span, I: Iterator<Item = (TokenVariant<C, Id, L>, S)>> Parser<
         );
     }
 
-    fn parse_line<F: FileContext<C, Id, L, S>>(&mut self, actions: F) -> F {
+    fn parse_line<F: FileContext<Id, C, L, S>>(&mut self, actions: F) -> F {
         if self.lookahead() == TokenVariant::Ident(()) {
             self.parse_potentially_labeled_line(actions)
         } else {
@@ -123,7 +123,7 @@ impl<C, Id, L, S: Span, I: Iterator<Item = (TokenVariant<C, Id, L>, S)>> Parser<
         }
     }
 
-    fn parse_potentially_labeled_line<F: FileContext<C, Id, L, S>>(&mut self, actions: F) -> F {
+    fn parse_potentially_labeled_line<F: FileContext<Id, C, L, S>>(&mut self, actions: F) -> F {
         let ident = self.expect_ident();
         if self.consume(TokenVariant::Colon) {
             self.parse_unlabeled_line(actions.enter_line(Some(ident)))
@@ -132,7 +132,7 @@ impl<C, Id, L, S: Span, I: Iterator<Item = (TokenVariant<C, Id, L>, S)>> Parser<
         }.exit()
     }
 
-    fn parse_unlabeled_line<LA: LineActions<C, Id, L, S>>(&mut self, actions: LA) -> LA {
+    fn parse_unlabeled_line<LA: LineActions<Id, C, L, S>>(&mut self, actions: LA) -> LA {
         match self.lookahead() {
             TokenVariant::Eol | TokenVariant::Eof => actions,
             TokenVariant::Command(()) => self.parse_command(actions),
@@ -154,7 +154,7 @@ impl<C, Id, L, S: Span, I: Iterator<Item = (TokenVariant<C, Id, L>, S)>> Parser<
         }
     }
 
-    fn parse_macro_def<LA: LineActions<C, Id, L, S>>(&mut self, actions: LA) -> LA {
+    fn parse_macro_def<LA: LineActions<Id, C, L, S>>(&mut self, actions: LA) -> LA {
         self.expect(TokenVariant::Macro);
         let actions = self.parse_terminated_list(
             TokenVariant::Comma,
@@ -197,14 +197,14 @@ impl<C, Id, L, S: Span, I: Iterator<Item = (TokenVariant<C, Id, L>, S)>> Parser<
         actions
     }
 
-    fn parse_command<LA: LineActions<C, Id, L, S>>(&mut self, actions: LA) -> LA {
+    fn parse_command<LA: LineActions<Id, C, L, S>>(&mut self, actions: LA) -> LA {
         let first_token = self.expect_command();
         let mut command_context = actions.enter_command(first_token);
         command_context = self.parse_argument_list(command_context);
         command_context.exit()
     }
 
-    fn parse_macro_invocation<LA: LineActions<C, Id, L, S>>(
+    fn parse_macro_invocation<LA: LineActions<Id, C, L, S>>(
         &mut self,
         name: (Id, S),
         actions: LA,
@@ -226,7 +226,7 @@ impl<C, Id, L, S: Span, I: Iterator<Item = (TokenVariant<C, Id, L>, S)>> Parser<
         )
     }
 
-    fn parse_macro_arg_list<M: MacroInvocationContext<S, Token = TokenVariant<C, Id, L>>>(
+    fn parse_macro_arg_list<M: MacroInvocationContext<S, Token = TokenVariant<Id, C, L>>>(
         &mut self,
         actions: M,
     ) -> M {
@@ -395,7 +395,7 @@ mod tests {
         }
     }
 
-    impl<'a> syntax::FileContext<SymCommand, SymIdent, SymLiteral, SymRange<usize>>
+    impl<'a> syntax::FileContext<SymIdent, SymCommand, SymLiteral, SymRange<usize>>
         for &'a mut TestContext
     {
         type LineActions = Self;
@@ -408,7 +408,7 @@ mod tests {
         }
     }
 
-    impl<'a> syntax::LineActions<SymCommand, SymIdent, SymLiteral, SymRange<usize>>
+    impl<'a> syntax::LineActions<SymIdent, SymCommand, SymLiteral, SymRange<usize>>
         for &'a mut TestContext
     {
         type CommandContext = Self;
@@ -488,8 +488,8 @@ mod tests {
     }
 
     impl<'a> syntax::MacroParamsActions<SymRange<usize>> for &'a mut TestContext {
-        type Command = SymCommand;
         type Ident = SymIdent;
+        type Command = SymCommand;
         type Literal = SymLiteral;
         type MacroBodyActions = Self;
         type Parent = Self;

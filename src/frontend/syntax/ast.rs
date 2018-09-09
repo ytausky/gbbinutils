@@ -42,7 +42,7 @@ pub struct SymIdent(pub usize);
 pub struct SymLiteral(pub usize);
 
 #[cfg(test)]
-pub type SymToken = TokenVariant<SymCommand, SymIdent, SymLiteral>;
+pub type SymToken = TokenVariant<SymIdent, SymCommand, SymLiteral>;
 
 #[cfg(test)]
 pub fn mk_sym_token(id: usize, token: TokenVariant<(), (), ()>) -> SymToken {

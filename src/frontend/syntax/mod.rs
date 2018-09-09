@@ -9,7 +9,7 @@ mod parser;
 pub use frontend::syntax::keyword::Operand;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum TokenVariant<C, I, L> {
+pub enum TokenVariant<I, C = keyword::Command, L = Literal<I>> {
     ClosingParenthesis,
     Colon,
     Comma,
@@ -30,12 +30,12 @@ pub fn tokenize(src: &str) -> self::lexer::Lexer {
 pub fn parse_token_seq<Id, S: Span, I, F>(tokens: I, actions: F)
 where
     I: Iterator<Item = (Token<Id>, S)>,
-    F: FileContext<keyword::Command, Id, Literal<Id>, S>,
+    F: FileContext<Id, keyword::Command, Literal<Id>, S>,
 {
     self::parser::parse_src(tokens, actions)
 }
 
-pub type Token<I> = TokenVariant<keyword::Command, I, Literal<I>>;
+pub type Token<I> = TokenVariant<I>;
 
 pub mod token {
     pub use super::TokenVariant::*;
@@ -48,29 +48,29 @@ pub enum Literal<S> {
     String(S),
 }
 
-pub trait FileContext<C, I, L, S>
+pub trait FileContext<I, C, L, S>
 where
     Self: DiagnosticsListener<S> + Sized,
 {
-    type LineActions: LineActions<C, I, L, S, Parent = Self>;
+    type LineActions: LineActions<I, C, L, S, Parent = Self>;
     fn enter_line(self, label: Option<(I, S)>) -> Self::LineActions;
 }
 
-pub trait LineActions<C, I, L, S>
+pub trait LineActions<I, C, L, S>
 where
     Self: DiagnosticsListener<S> + Sized,
 {
-    type CommandContext: CommandContext<S, Command = C, Ident = I, Literal = L, Parent = Self>;
+    type CommandContext: CommandContext<S, Ident = I, Command = C, Literal = L, Parent = Self>;
     type MacroParamsActions: MacroParamsActions<
         S,
-        Command = C,
         Ident = I,
+        Command = C,
         Literal = L,
         Parent = Self,
     >;
     type MacroInvocationContext: MacroInvocationContext<
         S,
-        Token = TokenVariant<C, I, L>,
+        Token = TokenVariant<I, C, L>,
         Parent = Self,
     >;
     type Parent;
@@ -84,8 +84,8 @@ pub trait CommandContext<S>
 where
     Self: DiagnosticsListener<S> + Sized,
 {
-    type Command;
     type Ident;
+    type Command;
     type Literal;
     type ArgActions: ExprActions<S, Ident = Self::Ident, Literal = Self::Literal, Parent = Self>;
     type Parent;
@@ -114,12 +114,12 @@ pub enum ExprOperator {
 }
 
 pub trait MacroParamsActions<S>: DiagnosticsListener<S> {
-    type Command;
     type Ident;
+    type Command;
     type Literal;
     type MacroBodyActions: TokenSeqContext<
         S,
-        Token = TokenVariant<Self::Command, Self::Ident, Self::Literal>,
+        Token = TokenVariant<Self::Ident, Self::Command, Self::Literal>,
         Parent = Self::Parent,
     >;
     type Parent;
