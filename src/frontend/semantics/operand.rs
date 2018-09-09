@@ -41,9 +41,12 @@ pub enum Context {
 
 type OperandResult<SI> = Result<Operand<SI>, Diagnostic<SI>>;
 
-type Expr<S> = ast::Expr<String, Literal<String>, S>;
+type Expr<I, S> = ast::Expr<I, Literal<I>, S>;
 
-pub fn analyze_operand<SI: Clone>(expr: Expr<SI>, context: Context) -> OperandResult<SI> {
+pub fn analyze_operand<I: Into<String>, S: Clone>(
+    expr: Expr<I, S>,
+    context: Context,
+) -> OperandResult<S> {
     match expr.variant {
         ExprVariant::Literal(Literal::Operand(keyword)) => {
             Ok(analyze_keyword_operand((keyword, expr.span), context))
@@ -53,10 +56,13 @@ pub fn analyze_operand<SI: Clone>(expr: Expr<SI>, context: Context) -> OperandRe
     }
 }
 
-fn analyze_deref_operand<SI: Clone>(expr: Expr<SI>, deref_interval: SI) -> OperandResult<SI> {
+fn analyze_deref_operand<I: Into<String>, S: Clone>(
+    expr: Expr<I, S>,
+    deref_span: S,
+) -> OperandResult<S> {
     match expr.variant {
         ExprVariant::Literal(Literal::Operand(keyword)) => {
-            analyze_deref_operand_keyword((keyword, expr.span), deref_interval)
+            analyze_deref_operand_keyword((keyword, expr.span), deref_span)
         }
         _ => Ok(Operand::Deref(analyze_reloc_expr(expr)?)),
     }
@@ -90,9 +96,11 @@ fn try_deref_operand_keyword(keyword: kw::Operand) -> Result<AtomKind, KeywordOp
     }
 }
 
-pub fn analyze_reloc_expr<SI: Clone>(expr: Expr<SI>) -> Result<RelocExpr<SI>, Diagnostic<SI>> {
+pub fn analyze_reloc_expr<I: Into<String>, S: Clone>(
+    expr: Expr<I, S>,
+) -> Result<RelocExpr<S>, Diagnostic<S>> {
     match expr.variant {
-        ExprVariant::Ident(ident) => Ok(RelocExpr::Symbol(ident, expr.span)),
+        ExprVariant::Ident(ident) => Ok(RelocExpr::Symbol(ident.into(), expr.span)),
         ExprVariant::Literal(Literal::Number(n)) => Ok(RelocExpr::Literal(n, expr.span)),
         ExprVariant::Literal(Literal::Operand(_)) => Err(Diagnostic::new(
             Message::KeywordInExpr {
@@ -207,7 +215,7 @@ mod tests {
     }
 
     fn analyze_deref_ptr_reg(ptr_reg: PtrReg) {
-        let expr = Expr {
+        let expr = Expr::<String, _> {
             variant: ExprVariant::Parentheses(Box::new(Expr {
                 variant: ExprVariant::Literal(Literal::Operand(ptr_reg.into())),
                 span: 0,
@@ -222,7 +230,7 @@ mod tests {
 
     #[test]
     fn analyze_deref_af() {
-        let parsed_expr = Expr {
+        let parsed_expr = Expr::<String, _> {
             variant: ExprVariant::Parentheses(Box::new(Expr {
                 variant: ExprVariant::Literal(Literal::Operand(kw::Operand::Af)),
                 span: 0,
@@ -245,7 +253,7 @@ mod tests {
     fn analyze_repeated_parentheses() {
         let n = 0x42;
         let span = 0;
-        let parsed_expr = Expr {
+        let parsed_expr = Expr::<String, _> {
             variant: ExprVariant::Parentheses(Box::new(Expr {
                 variant: ExprVariant::Parentheses(Box::new(Expr {
                     variant: ExprVariant::Literal(Literal::Number(n)),
@@ -264,7 +272,7 @@ mod tests {
     #[test]
     fn analyze_reg_in_expr() {
         let span = 0;
-        let parsed_expr = Expr {
+        let parsed_expr = Expr::<String, _> {
             variant: ExprVariant::Parentheses(Box::new(Expr {
                 variant: ExprVariant::Parentheses(Box::new(Expr {
                     variant: ExprVariant::Literal(Literal::Operand(kw::Operand::Z)),
@@ -286,7 +294,7 @@ mod tests {
     #[test]
     fn analyze_string_in_instruction() {
         let span = 0;
-        let parsed_expr = Expr {
+        let parsed_expr = Expr::<String, _> {
             variant: ExprVariant::Literal(Literal::String("some_string".into())),
             span,
         };

@@ -12,15 +12,15 @@ pub fn tokenize(src: &str) -> self::lexer::Lexer {
     self::lexer::Lexer::new(src)
 }
 
-pub fn parse_token_seq<S: Span, I, F>(tokens: I, actions: F)
+pub fn parse_token_seq<Id, S: Span, I, F>(tokens: I, actions: F)
 where
-    I: Iterator<Item = (Token, S)>,
-    F: FileContext<keyword::Command, String, Literal<String>, S>,
+    I: Iterator<Item = (Token<Id>, S)>,
+    F: FileContext<keyword::Command, Id, Literal<Id>, S>,
 {
     self::parser::parse_src(tokens, actions)
 }
 
-pub type Token = self::parser::TokenVariant<keyword::Command, String, Literal<String>>;
+pub type Token<I> = self::parser::TokenVariant<keyword::Command, I, Literal<I>>;
 
 pub mod token {
     pub use super::parser::TokenVariant::*;

@@ -168,7 +168,7 @@ impl<'a> Lexer<'a> {
 }
 
 impl<'a> Iterator for Lexer<'a> {
-    type Item = (Token, Range<usize>);
+    type Item = (Token<String>, Range<usize>);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.scanner
@@ -177,7 +177,7 @@ impl<'a> Iterator for Lexer<'a> {
     }
 }
 
-fn mk_token(kind: TokenKind, lexeme: &str) -> Token {
+fn mk_token(kind: TokenKind, lexeme: &str) -> Token<String> {
     match kind {
         TokenKind::ClosingParenthesis => token::ClosingParenthesis,
         TokenKind::Colon => token::Colon,
@@ -198,7 +198,7 @@ fn mk_token(kind: TokenKind, lexeme: &str) -> Token {
     }
 }
 
-fn mk_keyword_or<F: FnOnce(String) -> Token>(f: F, lexeme: &str) -> Token {
+fn mk_keyword_or<F: FnOnce(String) -> Token<String>>(f: F, lexeme: &str) -> Token<String> {
     identify_keyword(lexeme).map_or_else(
         || f(lexeme.to_string()),
         |keyword| match keyword {
@@ -333,11 +333,11 @@ mod tests {
         test_byte_range_at_eof("ident ", [(Ident("ident".into()), 0..5), (Eof, 6..6)])
     }
 
-    fn test_byte_range_at_eof(src: &str, tokens: impl Borrow<[(Token, Range<usize>)]>) {
+    fn test_byte_range_at_eof(src: &str, tokens: impl Borrow<[(Token<String>, Range<usize>)]>) {
         assert_eq!(Lexer::new(src).collect::<Vec<_>>(), tokens.borrow())
     }
 
-    fn assert_eq_tokens<'a>(src: &'a str, expected_without_eof: &[Token]) {
+    fn assert_eq_tokens<'a>(src: &'a str, expected_without_eof: &[Token<String>]) {
         let mut expected: Vec<_> = expected_without_eof.iter().cloned().collect();
         expected.push(Eof);
         assert_eq!(
@@ -457,7 +457,7 @@ mod tests {
         assert_eq_tokens("nop ; comment", &[Nop.into()])
     }
 
-    impl<T: Into<kw::Command>> From<T> for Token {
+    impl<T: Into<kw::Command>> From<T> for Token<String> {
         fn from(t: T) -> Self {
             Command(t.into())
         }

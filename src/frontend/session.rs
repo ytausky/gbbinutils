@@ -5,26 +5,27 @@ use std::{
 use {backend, diagnostics, frontend};
 
 pub trait Session {
+    type Ident: Into<String>;
     type Span: diagnostics::Span;
-    fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::Span>);
+    fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::Ident, Self::Span>);
     fn emit_diagnostic(&self, diagnostic: diagnostics::Diagnostic<Self::Span>);
     fn emit_item(&mut self, item: backend::Item<Self::Span>);
     fn define_label(&mut self, label: (String, Self::Span));
     fn define_macro(
         &mut self,
-        name: (impl Into<String>, Self::Span),
-        params: Vec<(String, Self::Span)>,
-        tokens: Vec<(frontend::Token, Self::Span)>,
+        name: (impl Into<Self::Ident>, Self::Span),
+        params: Vec<(Self::Ident, Self::Span)>,
+        tokens: Vec<(frontend::Token<Self::Ident>, Self::Span)>,
     );
     fn set_origin(&mut self, origin: backend::RelocExpr<Self::Span>);
 }
 
 #[derive(Debug, PartialEq)]
-pub enum ChunkId<T> {
-    File((String, Option<T>)),
+pub enum ChunkId<I, S> {
+    File((I, Option<S>)),
     Macro {
-        name: (String, T),
-        args: Vec<Vec<(frontend::Token, T)>>,
+        name: (I, S),
+        args: Vec<Vec<(frontend::Token<I>, S)>>,
     },
 }
 
@@ -80,9 +81,10 @@ where
     BMB: BorrowMut<B>,
     BD: Borrow<D>,
 {
+    type Ident = F::Ident;
     type Span = F::Span;
 
-    fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::Span>) {
+    fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::Ident, Self::Span>) {
         self.frontend
             .borrow_mut()
             .analyze_chunk(chunk_id, self.backend.borrow_mut())
@@ -102,9 +104,9 @@ where
 
     fn define_macro(
         &mut self,
-        name: (impl Into<String>, Self::Span),
-        params: Vec<(String, Self::Span)>,
-        tokens: Vec<(frontend::Token, Self::Span)>,
+        name: (impl Into<Self::Ident>, Self::Span),
+        params: Vec<(Self::Ident, Self::Span)>,
+        tokens: Vec<(frontend::Token<Self::Ident>, Self::Span)>,
     ) {
         self.frontend
             .borrow_mut()

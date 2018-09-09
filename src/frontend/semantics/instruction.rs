@@ -5,11 +5,14 @@ use frontend::syntax::keyword as kw;
 use frontend::syntax::Literal;
 use instruction::*;
 
-type Expr<S> = ast::Expr<String, Literal<String>, S>;
+type Expr<I, S> = ast::Expr<I, Literal<I>, S>;
 
-pub fn analyze_instruction<I, S>(mnemonic: (kw::Mnemonic, S), operands: I) -> AnalysisResult<S>
+pub fn analyze_instruction<Id: Into<String>, I, S>(
+    mnemonic: (kw::Mnemonic, S),
+    operands: I,
+) -> AnalysisResult<S>
 where
-    I: IntoIterator<Item = Expr<S>>,
+    I: IntoIterator<Item = Expr<Id, S>>,
     S: Span,
 {
     let mnemonic: (Mnemonic, S) = (mnemonic.0.into(), mnemonic.1);
