@@ -92,13 +92,13 @@ pub trait ExprActions<S> {
     fn exit(self) -> Self::Parent;
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ExprAtom<I, L> {
     Ident(I),
     Literal(L),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ExprOperator {
     Parentheses,
 }

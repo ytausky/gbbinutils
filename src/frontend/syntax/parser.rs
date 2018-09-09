@@ -445,12 +445,12 @@ mod tests {
         type Command = SymCommand;
         type Ident = SymIdent;
         type Literal = SymLiteral;
-        type ArgActions = Self;
+        type ArgActions = ExprContext<'a>;
         type Parent = Self;
 
         fn add_argument(self) -> Self::ArgActions {
             self.actions.borrow_mut().push(Action::EnterArgument);
-            self
+            ExprContext::new(self)
         }
 
         fn exit(self) -> Self::Parent {
@@ -459,24 +459,41 @@ mod tests {
         }
     }
 
-    impl<'a> syntax::ExprActions<SymRange<usize>> for &'a mut TestContext {
+    struct ExprContext<'a> {
+        rpn_expr: RpnExpr<SymIdent, SymLiteral, SymRange<usize>>,
+        parent: &'a mut TestContext,
+    }
+
+    impl<'a> ExprContext<'a> {
+        fn new(parent: &'a mut TestContext) -> Self {
+            ExprContext {
+                rpn_expr: Vec::new(),
+                parent,
+            }
+        }
+    }
+
+    impl<'a> syntax::ExprActions<SymRange<usize>> for ExprContext<'a> {
         type Ident = SymIdent;
         type Literal = SymLiteral;
-        type Parent = Self;
+        type Parent = &'a mut TestContext;
 
         fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, SymRange<usize>)) {
-            self.actions.borrow_mut().push(Action::PushExprAtom(atom.0))
+            self.rpn_expr.push((RpnAction::Push(atom.0), atom.1))
         }
 
         fn apply_operator(&mut self, operator: (ExprOperator, SymRange<usize>)) {
-            self.actions
-                .borrow_mut()
-                .push(Action::ApplyExprOperator(operator.0))
+            self.rpn_expr
+                .push((RpnAction::Apply(operator.0), operator.1))
         }
 
         fn exit(self) -> Self::Parent {
-            self.actions.borrow_mut().push(Action::ExitArgument);
-            self
+            {
+                let mut actions = self.parent.actions.borrow_mut();
+                actions.push(Action::AcceptExpr(self.rpn_expr));
+                actions.push(Action::ExitArgument)
+            }
+            self.parent
         }
     }
 
@@ -596,7 +613,7 @@ mod tests {
     fn parse_unary_instruction() {
         assert_eq_actions(
             input_tokens![db @ Command(()), my_ptr @ Ident(())],
-            file([unlabeled(command("db", [ident("my_ptr")]))]),
+            file([unlabeled(command("db", [expr().ident("my_ptr")]))]),
         )
     }
 
@@ -604,7 +621,7 @@ mod tests {
     fn parse_binary_instruction() {
         assert_eq_actions(
             input_tokens![Command(()), Ident(()), Comma, Literal(())],
-            file([unlabeled(command(0, [ident(1), literal(3)]))]),
+            file([unlabeled(command(0, [expr().ident(1), expr().literal(3)]))]),
         );
     }
 
@@ -622,8 +639,11 @@ mod tests {
             some_const @ Ident(()),
         ];
         let expected = file([
-            unlabeled(command(0, [ident(1), literal(3)])),
-            unlabeled(command("ld", [literal("a"), ident("some_const")])),
+            unlabeled(command(0, [expr().ident(1), expr().literal(3)])),
+            unlabeled(command(
+                "ld",
+                [expr().literal("a"), expr().ident("some_const")],
+            )),
         ]);
         assert_eq_actions(tokens, expected)
     }
@@ -643,9 +663,9 @@ mod tests {
             Literal(()),
         ];
         let expected = file([
-            unlabeled(command(0, [literal(1), ident(3)])),
+            unlabeled(command(0, [expr().literal(1), expr().ident(3)])),
             unlabeled(empty()),
-            unlabeled(command(6, [ident(7), literal(9)])),
+            unlabeled(command(6, [expr().ident(7), expr().literal(9)])),
         ]);
         assert_eq_actions(tokens, expected)
     }
@@ -706,7 +726,7 @@ mod tests {
         ];
         let expected = file([unlabeled(command(
             "jp",
-            [parentheses("open", literal("hl"), "close")],
+            [expr().literal("hl").parentheses("open", "close")],
         ))]);
         assert_eq_actions(tokens, expected)
     }
@@ -764,7 +784,7 @@ mod tests {
             input_tokens![Command(()), Literal(()), unexpected @ Literal(())],
             file([unlabeled(malformed_command(
                 0,
-                [literal(1)],
+                [expr().literal(1)],
                 arg_error(unexpected_token, ["unexpected"], "unexpected"),
             ))]),
         )
