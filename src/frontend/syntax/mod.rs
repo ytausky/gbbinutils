@@ -1,7 +1,8 @@
 use diagnostics::{DiagnosticsListener, Span};
 
+#[cfg(test)]
 #[macro_use]
-pub mod ast;
+mod ast;
 pub mod keyword;
 pub mod lexer;
 mod parser;
