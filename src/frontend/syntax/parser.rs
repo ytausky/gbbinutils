@@ -37,33 +37,25 @@ where
 {
     let mut parser = Parser {
         tokens: tokens.peekable(),
-        prev_token: None,
     };
     parser.parse_file(actions)
 }
 
-struct Parser<I: Iterator, S> {
+struct Parser<I: Iterator> {
     tokens: iter::Peekable<I>,
-    prev_token: Option<S>,
 }
 
-macro_rules! mk_expect {
-    ($name:ident, $variant:ident, $ret_ty:ident) => {
-        fn $name(&mut self) -> ($ret_ty, S) {
-            match self.tokens.next() {
-                Some((Token::$variant(inner), s)) => (inner, s),
-                _ => panic!(),
-            }
-        }
-    }
-}
+trait TokenStream {
+    type Ident;
+    type Command;
+    type Literal;
+    type Span: Span;
+    type Iter: Iterator<Item = (Token<Self::Ident, Self::Command, Self::Literal>, Self::Span)>;
 
-impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I, S> {
-    mk_expect!(expect_command, Command, C);
-    mk_expect!(expect_ident, Ident, Id);
+    fn tokens(&mut self) -> &mut iter::Peekable<Self::Iter>;
 
     fn lookahead(&mut self) -> TokenKind {
-        self.tokens.peek().unwrap().0.kind()
+        self.tokens().peek().unwrap().0.kind()
     }
 
     fn lookahead_is_in(&mut self, kinds: &[TokenKind]) -> bool {
@@ -78,7 +70,7 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I, S> {
     fn take_token_if<P, F>(&mut self, predicate: P, f: F) -> bool
     where
         P: FnOnce(TokenKind) -> bool,
-        F: FnOnce((Token<Id, C, L>, S)),
+        F: FnOnce(<Self::Iter as Iterator>::Item),
     {
         if predicate(self.lookahead()) {
             f(self.bump());
@@ -91,21 +83,47 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I, S> {
     fn take_token_while<P, F>(&mut self, predicate: P, mut f: F)
     where
         P: Fn(TokenKind) -> bool,
-        F: FnMut((Token<Id, C, L>, S)),
+        F: FnMut(<Self::Iter as Iterator>::Item),
     {
         while self.take_token_if(&predicate, &mut f) {}
     }
 
-    fn bump(&mut self) -> I::Item {
-        let next_token = self.tokens.next().unwrap();
-        self.prev_token = Some(next_token.1.clone());
-        next_token
+    fn bump(&mut self) -> <Self::Iter as Iterator>::Item {
+        self.tokens().next().unwrap()
     }
 
-    fn expect(&mut self, expected: TokenKind) -> I::Item {
+    fn expect(&mut self, expected: TokenKind) -> <Self::Iter as Iterator>::Item {
         assert_eq!(self.lookahead(), expected);
         self.bump()
     }
+}
+
+impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> TokenStream for Parser<I> {
+    type Ident = Id;
+    type Command = C;
+    type Literal = L;
+    type Span = S;
+    type Iter = I;
+
+    fn tokens(&mut self) -> &mut iter::Peekable<Self::Iter> {
+        &mut self.tokens
+    }
+}
+
+macro_rules! mk_expect {
+    ($name:ident, $variant:ident, $ret_ty:ident) => {
+        fn $name(&mut self) -> ($ret_ty, S) {
+            match self.tokens.next() {
+                Some((Token::$variant(inner), s)) => (inner, s),
+                _ => panic!(),
+            }
+        }
+    }
+}
+
+impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I> {
+    mk_expect!(expect_command, Command, C);
+    mk_expect!(expect_ident, Ident, Id);
 
     fn parse_file<F: FileContext<Id, C, L, S>>(&mut self, actions: F) {
         self.parse_terminated_list(Token::Eol, &[Token::Eof], |p, c| p.parse_line(c), actions);
@@ -307,44 +325,68 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I, S> {
         &mut self,
         actions: CC,
     ) -> CC {
-        self.parse_expression(actions.add_argument()).exit()
+        ExprParser {
+            tokens: self,
+            actions: actions.add_argument(),
+        }.parse()
+    }
+}
+
+struct ExprParser<'a, T: 'a, A> {
+    tokens: &'a mut T,
+    actions: A,
+}
+
+impl<'a, T: TokenStream + 'a, A> TokenStream for ExprParser<'a, T, A> {
+    type Ident = T::Ident;
+    type Command = T::Command;
+    type Literal = T::Literal;
+    type Span = T::Span;
+    type Iter = T::Iter;
+
+    fn tokens(&mut self) -> &mut iter::Peekable<Self::Iter> {
+        self.tokens.tokens()
+    }
+}
+
+impl<'a, T, A> ExprParser<'a, T, A>
+where
+    T: TokenStream + 'a,
+    A: ExprActions<T::Span, Ident = T::Ident, Literal = T::Literal>,
+{
+    fn parse(mut self) -> A::Parent {
+        self.parse_expression();
+        self.actions.exit()
     }
 
-    fn parse_expression<EA: ExprActions<S, Ident = Id, Literal = L>>(&mut self, actions: EA) -> EA {
+    fn parse_expression(&mut self) {
         if self.lookahead() == Token::OpeningParenthesis {
-            self.parse_parenthesized_expression(actions)
+            self.parse_parenthesized_expression()
         } else {
-            self.parse_infix_expr(actions)
+            self.parse_infix_expr()
         }
     }
 
-    fn parse_parenthesized_expression<EA: ExprActions<S, Ident = Id, Literal = L>>(
-        &mut self,
-        actions: EA,
-    ) -> EA {
+    fn parse_parenthesized_expression(&mut self) {
         let (_, left) = self.expect(Token::OpeningParenthesis);
-        let mut actions = self.parse_expression(actions);
+        self.parse_expression();
         let (_, right) = self.expect(Token::ClosingParenthesis);
-        actions.apply_operator((ExprOperator::Parentheses, left.extend(&right)));
-        actions
+        self.actions
+            .apply_operator((ExprOperator::Parentheses, left.extend(&right)))
     }
 
-    fn parse_infix_expr<EA: ExprActions<S, Ident = Id, Literal = L>>(&mut self, actions: EA) -> EA {
-        let mut actions = self.parse_atomic_expr(actions);
+    fn parse_infix_expr(&mut self) {
+        self.parse_atomic_expr();
         while self.lookahead() == Token::Plus {
             let (_, plus_span) = self.bump();
-            actions = self.parse_atomic_expr(actions);
-            actions.apply_operator((ExprOperator::Plus, plus_span));
+            self.parse_atomic_expr();
+            self.actions.apply_operator((ExprOperator::Plus, plus_span));
         }
-        actions
     }
 
-    fn parse_atomic_expr<EA: ExprActions<S, Ident = Id, Literal = L>>(
-        &mut self,
-        mut actions: EA,
-    ) -> EA {
+    fn parse_atomic_expr(&mut self) {
         let (token, span) = self.bump();
-        actions.push_atom((
+        self.actions.push_atom((
             match token {
                 Token::Ident(ident) => ExprAtom::Ident(ident),
                 Token::Literal(literal) => ExprAtom::Literal(literal),
@@ -352,7 +394,6 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I, S> {
             },
             span,
         ));
-        actions
     }
 }
 
