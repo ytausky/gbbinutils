@@ -135,50 +135,42 @@ impl DiagnosticsListener<()> for TestDiagnosticsListener {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Diagnostic<SR> {
-    message: Message<SR>,
-    highlight: SR,
+pub struct Diagnostic<S> {
+    pub message: Message,
+    pub spans: Vec<S>,
+    pub highlight: S,
 }
 
-impl<SR> Diagnostic<SR> {
-    pub fn new(message: Message<SR>, highlight: SR) -> Diagnostic<SR> {
-        Diagnostic { message, highlight }
+impl<S> Diagnostic<S> {
+    pub fn new(
+        message: Message,
+        spans: impl IntoIterator<Item = S>,
+        highlight: S,
+    ) -> Diagnostic<S> {
+        Diagnostic {
+            message,
+            spans: spans.into_iter().collect(),
+            highlight,
+        }
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Message<SR> {
+pub enum Message {
     AlwaysUnconditional,
-    CannotDereference {
-        category: KeywordOperandCategory,
-        keyword: SR,
-    },
+    CannotDereference { category: KeywordOperandCategory },
     DestMustBeA,
     DestMustBeHl,
     IncompatibleOperand,
-    KeywordInExpr {
-        keyword: SR,
-    },
+    KeywordInExpr,
     MissingTarget,
-    OperandCount {
-        actual: usize,
-        expected: usize,
-    },
+    OperandCount { actual: usize, expected: usize },
     StringInInstruction,
-    UndefinedMacro {
-        name: String,
-    },
+    UndefinedMacro { name: String },
     UnexpectedEof,
-    UnexpectedToken {
-        token: SR,
-    },
-    UnresolvedSymbol {
-        symbol: String,
-    },
-    ValueOutOfRange {
-        value: i32,
-        width: Width,
-    },
+    UnexpectedToken,
+    UnresolvedSymbol { symbol: String },
+    ValueOutOfRange { value: i32, width: Width },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -188,22 +180,23 @@ pub enum KeywordOperandCategory {
     ConditionCode,
 }
 
-impl Message<TokenRefData> {
-    fn render(&self, codebase: &TextCache) -> String {
+impl Message {
+    fn render<'a>(&self, snippets: impl IntoIterator<Item = &'a str>) -> String {
         use diagnostics::Message::*;
-        match self {
+        let mut snippets = snippets.into_iter();
+        let string = match self {
             AlwaysUnconditional => "instruction cannot be made conditional".into(),
-            CannotDereference { category, keyword } => format!(
+            CannotDereference { category } => format!(
                 "{} `{}` cannot be dereferenced",
                 category,
-                mk_snippet(codebase, keyword)
+                snippets.next().unwrap(),
             ),
             DestMustBeA => "destination of ALU operation must be `a`".into(),
             DestMustBeHl => "destination operand must be `hl`".into(),
             IncompatibleOperand => "operand cannot be used with this instruction".into(),
-            KeywordInExpr { keyword } => format!(
+            KeywordInExpr => format!(
                 "keyword `{}` cannot appear in expression",
-                mk_snippet(codebase, keyword)
+                snippets.next().unwrap(),
             ),
             MissingTarget => "branch instruction requires target".into(),
             OperandCount { actual, expected } => format!(
@@ -215,15 +208,17 @@ impl Message<TokenRefData> {
             StringInInstruction => "strings cannot appear in instruction operands".into(),
             UndefinedMacro { name } => format!("invocation of undefined macro `{}`", name),
             UnexpectedEof => "unexpected end of file".into(),
-            UnexpectedToken { token } => format!(
+            UnexpectedToken => format!(
                 "encountered unexpected token `{}`",
-                mk_snippet(codebase, token)
+                snippets.next().unwrap(),
             ),
             UnresolvedSymbol { symbol } => format!("symbol `{}` could not be resolved", symbol),
             ValueOutOfRange { value, width } => {
                 format!("value {} cannot be represented in a {}", value, width)
             }
-        }
+        };
+        assert_eq!(snippets.next(), None);
+        string
     }
 }
 
@@ -295,8 +290,12 @@ fn elaborate<'a>(
                 .lines(text_range.start.line..=text_range.end.line)
                 .next()
                 .unwrap();
+            let snippets = diagnostic
+                .spans
+                .iter()
+                .map(|span| mk_snippet(codebase, span));
             ElaboratedDiagnostic {
-                text: diagnostic.message.render(codebase),
+                text: diagnostic.message.render(snippets),
                 buf_name: buf.name(),
                 highlight: text_range,
                 src_line,
@@ -404,6 +403,7 @@ mod tests {
             message: Message::UndefinedMacro {
                 name: "my_macro".to_string(),
             },
+            spans: Vec::new(),
             highlight: token_ref,
         };
         let elaborated_diagnostic = elaborate(&diagnostic, &codebase);
@@ -450,12 +450,11 @@ dummy
 
     #[test]
     fn expect_1_operand() {
-        let codebase = TextCache::new();
         let message = Message::OperandCount {
             actual: 0,
             expected: 1,
         };
-        assert_eq!(message.render(&codebase), "expected 1 operand, found 0")
+        assert_eq!(message.render(Vec::new()), "expected 1 operand, found 0")
     }
 
     fn mk_highlight(line_number: LineNumber, start: usize, end: usize) -> TextRange {

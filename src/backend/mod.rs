@@ -205,6 +205,7 @@ mod tests {
                     value,
                     width: Width::Byte,
                 },
+                vec![],
                 ()
             )]
         );
@@ -286,6 +287,7 @@ mod tests {
             Message::UnresolvedSymbol {
                 symbol: symbol.into(),
             },
+            vec![],
             (),
         )
     }

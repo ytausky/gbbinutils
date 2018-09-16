@@ -3,6 +3,7 @@ use diagnostics::{Diagnostic, KeywordOperandCategory, Message, Source, Span};
 use frontend::syntax::keyword as kw;
 use frontend::syntax::Literal;
 use instruction::{Condition, PtrReg, Reg16, RegPair, RelocExpr, SimpleOperand};
+use std::iter::empty;
 
 #[derive(Debug, PartialEq)]
 pub enum Operand<R> {
@@ -69,10 +70,8 @@ fn analyze_deref_operand_keyword<SI>(keyword: (kw::Operand, SI), deref: SI) -> O
     match try_deref_operand_keyword(keyword.0) {
         Ok(atom) => Ok(Operand::Atom(atom, deref)),
         Err(category) => Err(Diagnostic::new(
-            Message::CannotDereference {
-                category,
-                keyword: keyword.1,
-            },
+            Message::CannotDereference { category },
+            vec![keyword.1],
             deref,
         )),
     }
@@ -100,14 +99,15 @@ pub fn analyze_reloc_expr<I: Into<String>, S: Clone>(
         ExprVariant::Ident(ident) => Ok(RelocExpr::Symbol(ident.into(), expr.span)),
         ExprVariant::Literal(Literal::Number(n)) => Ok(RelocExpr::Literal(n, expr.span)),
         ExprVariant::Literal(Literal::Operand(_)) => Err(Diagnostic::new(
-            Message::KeywordInExpr {
-                keyword: expr.span.clone(),
-            },
+            Message::KeywordInExpr,
+            vec![expr.span.clone()],
             expr.span,
         )),
-        ExprVariant::Literal(Literal::String(_)) => {
-            Err(Diagnostic::new(Message::StringInInstruction, expr.span))
-        }
+        ExprVariant::Literal(Literal::String(_)) => Err(Diagnostic::new(
+            Message::StringInInstruction,
+            empty(),
+            expr.span,
+        )),
         ExprVariant::Parentheses(expr) => analyze_reloc_expr(*expr),
     }
 }
@@ -178,6 +178,7 @@ impl<I: Iterator<Item = Result<T, E>>, T, E> OperandCounter<I> {
         } else {
             Err(Diagnostic::new(
                 Message::OperandCount { actual, expected },
+                empty(),
                 span,
             ))
         }
@@ -235,9 +236,9 @@ mod tests {
             analyze_operand(parsed_expr, Context::Other),
             Err(Diagnostic::new(
                 Message::CannotDereference {
-                    category: KeywordOperandCategory::RegPair,
-                    keyword: 0
+                    category: KeywordOperandCategory::RegPair
                 },
+                vec![0],
                 1
             ))
         )
@@ -278,10 +279,7 @@ mod tests {
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Err(Diagnostic::new(
-                Message::KeywordInExpr { keyword: span },
-                span
-            ))
+            Err(Diagnostic::new(Message::KeywordInExpr, vec![span], span))
         )
     }
 
@@ -294,7 +292,7 @@ mod tests {
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Err(Diagnostic::new(Message::StringInInstruction, span))
+            Err(Diagnostic::new(Message::StringInInstruction, empty(), span))
         )
     }
 }

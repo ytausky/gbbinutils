@@ -139,9 +139,8 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I, S> {
             _ => {
                 let (_, range) = self.bump();
                 actions.emit_diagnostic(Diagnostic::new(
-                    Message::UnexpectedToken {
-                        token: range.clone(),
-                    },
+                    Message::UnexpectedToken,
+                    vec![range.clone()],
                     range,
                 ));
                 actions
@@ -170,6 +169,7 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I, S> {
                 assert_eq!(self.lookahead(), Token::Eof);
                 body_actions.emit_diagnostic(Diagnostic::new(
                     Message::UnexpectedEof,
+                    iter::empty(),
                     self.tokens.peek().unwrap().1.clone(),
                 ))
             }
@@ -178,6 +178,7 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I, S> {
             assert_eq!(self.lookahead(), Token::Eof);
             actions.emit_diagnostic(Diagnostic::new(
                 Message::UnexpectedEof,
+                iter::empty(),
                 self.tokens.peek().unwrap().1.clone(),
             ));
             actions.exit()
@@ -255,9 +256,8 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I, S> {
         if !self.lookahead_is_in(terminators) {
             let (_, unexpected_range) = self.bump();
             context.emit_diagnostic(Diagnostic::new(
-                Message::UnexpectedToken {
-                    token: unexpected_range.clone(),
-                },
+                Message::UnexpectedToken,
+                vec![unexpected_range.clone()],
                 unexpected_range,
             ));
             while !self.lookahead_is_in(terminators) {
@@ -353,7 +353,7 @@ mod tests {
     };
 
     use super::ast::*;
-    use diagnostics::{Diagnostic, DiagnosticsListener};
+    use diagnostics::{Diagnostic, DiagnosticsListener, Message};
     use frontend::syntax::{self, ExprAtom, ExprOperator};
     use std::cell::RefCell;
     use std::collections::HashMap;
@@ -774,7 +774,7 @@ mod tests {
     fn diagnose_stmt_starting_with_literal() {
         assert_eq_actions(
             input_tokens![a @ Literal(())],
-            file([unlabeled(line_error(unexpected_token, ["a"], "a"))]),
+            file([unlabeled(line_error(Message::UnexpectedToken, ["a"], "a"))]),
         )
     }
 
@@ -785,7 +785,7 @@ mod tests {
             file([unlabeled(malformed_command(
                 0,
                 [expr().literal(1)],
-                arg_error(unexpected_token, ["unexpected"], "unexpected"),
+                arg_error(Message::UnexpectedToken, ["unexpected"], "unexpected"),
             ))]),
         )
     }
@@ -796,7 +796,7 @@ mod tests {
             input_tokens![Macro, eof @ Eof],
             file([unlabeled(malformed_macro_def_head(
                 [],
-                arg_error(unexpected_eof, [], "eof"),
+                arg_error(Message::UnexpectedEof, [], "eof"),
             ))]),
         )
     }
@@ -808,7 +808,7 @@ mod tests {
             file([unlabeled(malformed_macro_def(
                 [],
                 [],
-                arg_error(unexpected_eof, [], "eof"),
+                arg_error(Message::UnexpectedEof, [], "eof"),
             ))]),
         )
     }

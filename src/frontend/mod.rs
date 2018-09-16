@@ -186,6 +186,7 @@ where
                 let (name, name_ref) = name;
                 self.diagnostics.emit_diagnostic(Diagnostic::new(
                     Message::UndefinedMacro { name: name.into() },
+                    vec![],
                     name_ref,
                 ))
             }
@@ -540,6 +541,7 @@ mod tests {
             *log.borrow(),
             [TestEvent::Diagnostic(Diagnostic::new(
                 Message::UndefinedMacro { name },
+                vec![],
                 ()
             ))]
         );

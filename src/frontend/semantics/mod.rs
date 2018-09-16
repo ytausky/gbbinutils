@@ -424,6 +424,7 @@ mod tests {
     use instruction::RelocExpr;
     use std::borrow::Borrow;
     use std::cell::RefCell;
+    use std::iter::{empty, once};
 
     struct TestFrontend(RefCell<Vec<TestOperation>>);
 
@@ -735,6 +736,7 @@ mod tests {
                     actual: 1,
                     expected: 0
                 },
+                empty(),
                 ()
             ))]
         )
@@ -742,7 +744,7 @@ mod tests {
 
     #[test]
     fn diagnose_parsing_error() {
-        let diagnostic = Diagnostic::new(Message::UnexpectedToken { token: () }, ());
+        let diagnostic = Diagnostic::new(Message::UnexpectedToken, once(()), ());
         let actions = collect_semantic_actions(|actions| {
             let stmt = actions.enter_line(None);
             stmt.emit_diagnostic(diagnostic.clone());

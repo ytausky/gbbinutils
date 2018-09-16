@@ -288,13 +288,7 @@ pub enum MacroDefTail {
 }
 
 #[derive(Clone)]
-pub struct SymDiagnostic {
-    message_ctor: MessageCtor,
-    ranges: Vec<SymRange<TokenRef>>,
-    highlight: SymRange<TokenRef>,
-}
-
-pub type MessageCtor = fn(Vec<SymRange<usize>>) -> Message<SymRange<usize>>;
+pub struct SymDiagnostic(Diagnostic<SymRange<TokenRef>>);
 
 impl From<SymDiagnostic> for LineBody {
     fn from(diagnostic: SymDiagnostic) -> Self {
@@ -304,13 +298,11 @@ impl From<SymDiagnostic> for LineBody {
 
 impl SymDiagnostic {
     fn into_action(self, input: &InputTokens) -> Action {
-        let message = (self.message_ctor)(
-            self.ranges
-                .into_iter()
-                .map(|range| range.resolve(input))
-                .collect(),
-        );
-        Action::Error(Diagnostic::new(message, self.highlight.resolve(input)))
+        Action::Error(Diagnostic::new(
+            self.0.message,
+            self.0.spans.into_iter().map(|span| span.resolve(input)),
+            self.0.highlight.resolve(input),
+        ))
     }
 }
 
@@ -447,37 +439,23 @@ impl TokenSeq {
 }
 
 pub fn line_error(
-    message_ctor: MessageCtor,
+    message: Message,
     ranges: impl Borrow<[&'static str]>,
     highlight: impl Into<TokenRef>,
 ) -> Option<LineBody> {
-    Some(arg_error(message_ctor, ranges, highlight).into())
+    Some(arg_error(message, ranges, highlight).into())
 }
 
 pub fn arg_error(
-    message_ctor: MessageCtor,
+    message: Message,
     ranges: impl Borrow<[&'static str]>,
     highlight: impl Into<TokenRef>,
 ) -> SymDiagnostic {
-    SymDiagnostic {
-        message_ctor,
-        ranges: ranges
-            .borrow()
-            .iter()
-            .map(|s| TokenRef::from(*s).into())
-            .collect(),
-        highlight: highlight.into().into(),
-    }
-}
-
-pub fn unexpected_token(ranges: Vec<SymRange<usize>>) -> Message<SymRange<usize>> {
-    Message::UnexpectedToken {
-        token: ranges.into_iter().next().unwrap(),
-    }
-}
-
-pub fn unexpected_eof(_ranges: Vec<SymRange<usize>>) -> Message<SymRange<usize>> {
-    Message::UnexpectedEof
+    SymDiagnostic(Diagnostic::new(
+        message,
+        ranges.borrow().iter().map(|s| TokenRef::from(*s).into()),
+        highlight.into().into(),
+    ))
 }
 
 mod tests {
