@@ -330,13 +330,12 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I, S> {
     }
 
     fn parse_infix_expr<EA: ExprActions<S, Ident = Id, Literal = L>>(&mut self, actions: EA) -> EA {
-        let actions = self.parse_atomic_expr(actions);
-        if self.lookahead() != Token::Plus {
-            return actions;
-        }
-        let (_, plus_span) = self.bump();
         let mut actions = self.parse_atomic_expr(actions);
-        actions.apply_operator((ExprOperator::Plus, plus_span));
+        while self.lookahead() == Token::Plus {
+            let (_, plus_span) = self.bump();
+            actions = self.parse_atomic_expr(actions);
+            actions.apply_operator((ExprOperator::Plus, plus_span));
+        }
         actions
     }
 
@@ -793,6 +792,28 @@ mod tests {
         let expected_actions = file([unlabeled(command(
             0,
             [expr().ident("x").literal("y").plus("plus")],
+        ))]);
+        assert_eq_actions(tokens, expected_actions)
+    }
+
+    #[test]
+    fn parse_long_sum_arg() {
+        let tokens = input_tokens![
+            Command(()),
+            x @ Ident(()),
+            plus1 @ Plus,
+            y @ Literal(()),
+            plus2 @ Plus,
+            z @ Ident(()),
+        ];
+        let expected_actions = file([unlabeled(command(
+            0,
+            [expr()
+                .ident("x")
+                .literal("y")
+                .plus("plus1")
+                .ident("z")
+                .plus("plus2")],
         ))]);
         assert_eq_actions(tokens, expected_actions)
     }
