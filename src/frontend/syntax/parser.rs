@@ -22,6 +22,7 @@ impl<C, I, L> Token<C, I, L> {
             Literal(_) => Literal(()),
             Macro => Macro,
             OpeningParenthesis => OpeningParenthesis,
+            Plus => Plus,
         }
     }
 }
@@ -313,7 +314,7 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I, S> {
         if self.lookahead() == Token::OpeningParenthesis {
             self.parse_parenthesized_expression(actions)
         } else {
-            self.parse_atomic_expr(actions)
+            self.parse_infix_expr(actions)
         }
     }
 
@@ -325,6 +326,17 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I, S> {
         let mut actions = self.parse_expression(actions);
         let (_, right) = self.expect(Token::ClosingParenthesis);
         actions.apply_operator((ExprOperator::Parentheses, left.extend(&right)));
+        actions
+    }
+
+    fn parse_infix_expr<EA: ExprActions<S, Ident = Id, Literal = L>>(&mut self, actions: EA) -> EA {
+        let actions = self.parse_atomic_expr(actions);
+        if self.lookahead() != Token::Plus {
+            return actions;
+        }
+        let (_, plus_span) = self.bump();
+        let mut actions = self.parse_atomic_expr(actions);
+        actions.apply_operator((ExprOperator::Plus, plus_span));
         actions
     }
 
@@ -766,6 +778,21 @@ mod tests {
         let expected_actions = file([unlabeled(invoke(
             0,
             [token_seq([1, 2]), token_seq([4, 5, 6])],
+        ))]);
+        assert_eq_actions(tokens, expected_actions)
+    }
+
+    #[test]
+    fn parse_sum_arg() {
+        let tokens = input_tokens![
+            Command(()),
+            x @ Ident(()),
+            plus @ Plus,
+            y @ Literal(()),
+        ];
+        let expected_actions = file([unlabeled(command(
+            0,
+            [expr().ident("x").literal("y").plus("plus")],
         ))]);
         assert_eq_actions(tokens, expected_actions)
     }

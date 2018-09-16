@@ -22,6 +22,7 @@ pub enum Token<I, C = keyword::Command, L = Literal<I>> {
     Literal(L),
     Macro,
     OpeningParenthesis,
+    Plus,
 }
 
 pub fn tokenize(src: &str) -> self::lexer::Lexer {
@@ -102,6 +103,7 @@ pub enum ExprAtom<I, L> {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExprOperator {
     Parentheses,
+    Plus,
 }
 
 pub trait MacroParamsActions<S>: DiagnosticsListener<S> {

@@ -174,6 +174,7 @@ impl<'a, F: Session + 'a> syntax::ExprActions<F::Span> for ExprActions<'a, F> {
                     span: operator.1,
                 })
             }
+            ExprOperator::Plus => panic!(),
         }
     }
 

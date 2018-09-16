@@ -45,6 +45,12 @@ impl SymExpr {
             .push((RpnAction::Apply(ExprOperator::Parentheses), span));
         self
     }
+
+    pub fn plus(mut self, token: impl Into<TokenRef>) -> Self {
+        self.0
+            .push((RpnAction::Apply(ExprOperator::Plus), token.into().into()));
+        self
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -71,6 +77,7 @@ pub fn mk_sym_token(id: usize, token: Token<(), (), ()>) -> SymToken {
         Eol => Eol,
         Macro => Macro,
         OpeningParenthesis => OpeningParenthesis,
+        Plus => Plus,
     }
 }
 
