@@ -18,6 +18,7 @@ enum TokenKind {
     Ident,
     Number(Radix),
     OpeningParenthesis,
+    Plus,
     String,
 }
 
@@ -94,6 +95,7 @@ impl<I: Iterator<Item = char>> Scanner<I> {
             ',' => self.take(TokenKind::Comma),
             '\n' => self.take(TokenKind::Eol),
             '(' => self.take(TokenKind::OpeningParenthesis),
+            '+' => self.take(TokenKind::Plus),
             '0'...'9' => self.lex_decimal_number(),
             '$' => self.lex_hex_number(),
             '"' => self.lex_quoted_string(),
@@ -192,6 +194,7 @@ fn mk_token(kind: TokenKind, lexeme: &str) -> Token<String> {
             i32::from_str_radix(&lexeme[1..], 16).unwrap(),
         )),
         TokenKind::OpeningParenthesis => Token::OpeningParenthesis,
+        TokenKind::Plus => Token::Plus,
         TokenKind::String => {
             Token::Literal(Literal::String(lexeme[1..(lexeme.len() - 1)].to_string()))
         }
@@ -337,8 +340,8 @@ mod tests {
         assert_eq!(Lexer::new(src).collect::<Vec<_>>(), tokens.borrow())
     }
 
-    fn assert_eq_tokens<'a>(src: &'a str, expected_without_eof: &[Token<String>]) {
-        let mut expected: Vec<_> = expected_without_eof.iter().cloned().collect();
+    fn assert_eq_tokens<'a>(src: &'a str, expected_without_eof: impl Borrow<[Token<String>]>) {
+        let mut expected: Vec<_> = expected_without_eof.borrow().iter().cloned().collect();
         expected.push(Eof);
         assert_eq!(
             Lexer::new(src).map(|(t, _)| t).collect::<Vec<_>>(),
@@ -348,70 +351,70 @@ mod tests {
 
     #[test]
     fn lex_empty_str() {
-        assert_eq_tokens("", &[])
+        assert_eq_tokens("", [])
     }
 
     #[test]
     fn lex_eol() {
-        assert_eq_tokens("\n", &[Eol])
+        assert_eq_tokens("\n", [Eol])
     }
 
     #[test]
     fn lex_ident() {
-        assert_eq_tokens("ident", &[Ident("ident".to_string())])
+        assert_eq_tokens("ident", [Ident("ident".to_string())])
     }
 
     #[test]
     fn lex_ident_after_eol() {
-        assert_eq_tokens("    \nident", &[Eol, Ident("ident".to_string())])
+        assert_eq_tokens("    \nident", [Eol, Ident("ident".to_string())])
     }
 
     #[test]
     fn lex_ident_after_whitespace() {
-        assert_eq_tokens("    ident", &[Ident("ident".to_string())])
+        assert_eq_tokens("    ident", [Ident("ident".to_string())])
     }
 
     #[test]
     fn lex_ident_with_underscore() {
         assert_eq_tokens(
             "ident_with_underscore",
-            &[Ident("ident_with_underscore".to_string())],
+            [Ident("ident_with_underscore".to_string())],
         )
     }
 
     #[test]
     fn lex_two_keywords() {
-        assert_eq_tokens("push bc", &[Push.into(), Literal(Operand(Bc))])
+        assert_eq_tokens("push bc", [Push.into(), Literal(Operand(Bc))])
     }
 
     #[test]
     fn lex_comma() {
-        assert_eq_tokens(",", &[Comma])
+        assert_eq_tokens(",", [Comma])
     }
 
     #[test]
     fn lex_quoted_string() {
         assert_eq_tokens(
             "\"file.asm\"",
-            &[Literal(syntax::Literal::String("file.asm".to_string()))],
+            [Literal(syntax::Literal::String("file.asm".to_string()))],
         )
     }
 
     #[test]
     fn lex_decimal_number() {
-        assert_eq_tokens("1234", &[Literal(Number(1234))])
+        assert_eq_tokens("1234", [Literal(Number(1234))])
     }
 
     #[test]
     fn lex_hex_number() {
-        assert_eq_tokens("$19af", &[Literal(Number(0x19af))])
+        assert_eq_tokens("$19af", [Literal(Number(0x19af))])
     }
 
     #[test]
     fn lex_label() {
         assert_eq_tokens(
             "label: nop\n",
-            &[Ident("label".to_string()), Colon, Nop.into(), Eol],
+            [Ident("label".to_string()), Colon, Nop.into(), Eol],
         )
     }
 
@@ -433,28 +436,33 @@ mod tests {
                 Keyword::Macro => Macro,
                 Keyword::Operand(operand) => Literal(Operand(operand)),
             };
-            assert_eq_tokens(&f(spelling), &[token])
+            assert_eq_tokens(&f(spelling), [token])
         }
     }
 
     #[test]
     fn lex_brackets() {
-        assert_eq_tokens("()", &[OpeningParenthesis, ClosingParenthesis])
+        assert_eq_tokens("()", [OpeningParenthesis, ClosingParenthesis])
+    }
+
+    #[test]
+    fn lex_plus() {
+        assert_eq_tokens("+", [Plus])
     }
 
     #[test]
     fn ignore_comment() {
-        assert_eq_tokens("; comment", &[])
+        assert_eq_tokens("; comment", [])
     }
 
     #[test]
     fn ignore_comment_at_end_of_line() {
-        assert_eq_tokens("nop ; comment\n", &[Nop.into(), Eol])
+        assert_eq_tokens("nop ; comment\n", [Nop.into(), Eol])
     }
 
     #[test]
     fn ignore_comment_at_end_of_input() {
-        assert_eq_tokens("nop ; comment", &[Nop.into()])
+        assert_eq_tokens("nop ; comment", [Nop.into()])
     }
 
     impl<T: Into<kw::Command>> From<T> for Token<String> {
