@@ -43,6 +43,7 @@ pub enum Mnemonic {
     Jp,
     Jr,
     Ld,
+    Ldhl,
     Nop,
     Or,
     Pop,

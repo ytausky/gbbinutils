@@ -91,6 +91,7 @@ impl<S: Span> Lower<S> for Instruction<S> {
             }
             JpDerefHl => LoweredItem::with_opcode(0xe9),
             Ld(ld) => ld.lower(),
+            Ldhl(_) => panic!(),
             Misc(operation, operand) => {
                 LoweredItem::extended(operation.encode() | operand.encode())
             }

@@ -55,6 +55,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, Diagnostic<S>>>> Analysi
             IncDec(mode) => self.analyze_inc_dec(mode),
             Branch(branch) => self.analyze_branch(branch),
             Ld => self.analyze_ld(),
+            Ldhl => self.analyze_ldhl(),
             Misc(operation) => self.analyze_misc(operation),
             Nullary(instruction) => Ok(instruction.into()),
             Rst => self.analyze_rst(),
@@ -182,6 +183,19 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, Diagnostic<S>>>> Analysi
         }
     }
 
+    fn analyze_ldhl(&mut self) -> AnalysisResult<S> {
+        let dest = self.expect_operand(2)?;
+        let src = self.expect_operand(2)?;
+        match dest {
+            Operand::Atom(AtomKind::Reg16(Reg16::Sp), _) => (),
+            _ => panic!(),
+        }
+        match src {
+            Operand::Const(expr) => Ok(Instruction::Ldhl(expr)),
+            _ => panic!(),
+        }
+    }
+
     fn analyze_misc(&mut self, operation: MiscOperation) -> AnalysisResult<S> {
         let operand = self.expect_operand(1)?;
         match operand {
@@ -277,6 +291,7 @@ enum Mnemonic {
     Branch(BranchKind),
     IncDec(IncDec),
     Ld,
+    Ldhl,
     Misc(MiscOperation),
     Nullary(Nullary),
     Rst,
@@ -363,6 +378,7 @@ impl From<kw::Mnemonic> for Mnemonic {
             Jp => Mnemonic::Branch(BranchKind::Jp),
             Jr => Mnemonic::Branch(BranchKind::Jr),
             Ld => Mnemonic::Ld,
+            Ldhl => Mnemonic::Ldhl,
             Nop => Mnemonic::Nullary(Nullary::Nop),
             Or => Mnemonic::Alu(AluOperation::Or),
             Pop => Mnemonic::Stack(StackOperation::Pop),
@@ -720,6 +736,10 @@ mod tests {
         descriptors.push((
             (kw::Mnemonic::Ld, vec![Reg16::Sp.into(), Reg16::Hl.into()]),
             Instruction::Ld(Ld::SpHl),
+        ));
+        descriptors.push((
+            (kw::Mnemonic::Ldhl, vec![Reg16::Sp.into(), 0x42.into()]),
+            Instruction::Ldhl(0x42.into()),
         ));
         descriptors
     }

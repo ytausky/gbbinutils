@@ -10,6 +10,7 @@ pub enum Instruction<R> {
     JpDerefHl,
     Branch(Branch<R>, Option<Condition>),
     Ld(Ld<R>),
+    Ldhl(RelocExpr<R>),
     Misc(MiscOperation, SimpleOperand),
     Nullary(Nullary),
     Pop(RegPair),

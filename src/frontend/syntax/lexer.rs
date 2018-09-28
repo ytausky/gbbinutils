@@ -278,6 +278,7 @@ const KEYWORDS: &[(&str, Keyword)] = &[
     ("jr", Keyword::Command(Command::Mnemonic(Mnemonic::Jr))),
     ("l", Keyword::Operand(Operand::L)),
     ("ld", Keyword::Command(Command::Mnemonic(Mnemonic::Ld))),
+    ("ldhl", Keyword::Command(Command::Mnemonic(Mnemonic::Ldhl))),
     ("macro", Keyword::Macro),
     ("nc", Keyword::Operand(Operand::Nc)),
     ("nop", Keyword::Command(Command::Mnemonic(Mnemonic::Nop))),
