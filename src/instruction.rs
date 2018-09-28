@@ -86,6 +86,7 @@ pub enum SimpleOperand {
 pub enum Ld<R> {
     Simple(SimpleOperand, SimpleOperand),
     Special(SpecialLd<R>, Direction),
+    SpHl,
     Immediate8(SimpleOperand, RelocExpr<R>),
     Immediate16(Reg16, RelocExpr<R>),
 }

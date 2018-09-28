@@ -227,7 +227,8 @@ mod tests {
                 [
                     Node::LdInlineAddr(0, RelocExpr::Symbol("label".to_string(), ())),
                     Node::Label("label".to_string(), ()),
-                ].iter()
+                ]
+                    .iter()
                     .cloned(),
             )
         })

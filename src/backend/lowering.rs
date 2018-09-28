@@ -132,9 +132,11 @@ impl<S> Lower<S> for Ld<S> {
         match self {
             Ld::Simple(dest, src) => encode_ld_to_reg_from_reg(dest, src),
             Ld::Special(special, direction) => encode_special_ld(special, direction),
-            Ld::Immediate8(dest, immediate) => LoweredItem::with_opcode(
-                0x06 | (encode_simple_operand(dest) << 3),
-            ).and_byte(immediate),
+            Ld::SpHl => panic!(),
+            Ld::Immediate8(dest, immediate) => {
+                LoweredItem::with_opcode(0x06 | (encode_simple_operand(dest) << 3))
+                    .and_byte(immediate)
+            }
             Ld::Immediate16(dest, immediate) => {
                 LoweredItem::with_opcode(0x01 | encode_reg16(dest)).and_word(immediate)
             }
@@ -462,15 +464,15 @@ mod tests {
             (DerefHl, 0x36),
             (A, 0x3e),
         ].into_iter()
-            .for_each(|(dest, opcode)| {
-                test_instruction(
-                    Ld(Immediate8(dest, immediate.clone())),
-                    [
-                        Node::Byte(opcode),
-                        Node::Expr(immediate.clone(), Width::Byte),
-                    ],
-                )
-            })
+        .for_each(|(dest, opcode)| {
+            test_instruction(
+                Ld(Immediate8(dest, immediate.clone())),
+                [
+                    Node::Byte(opcode),
+                    Node::Expr(immediate.clone(), Width::Byte),
+                ],
+            )
+        })
     }
 
     #[test]
@@ -551,7 +553,8 @@ mod tests {
             (Xor, 0xee),
             (Or, 0xf6),
             (Cp, 0xfe),
-        ].iter()
+        ]
+            .iter()
             .for_each(|(alu_operation, opcode)| {
                 test_instruction(
                     Instruction::Alu(*alu_operation, AluSource::Immediate(expr.clone())),

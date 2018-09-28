@@ -95,8 +95,8 @@ fn resolve_expr_item<S: Span>(
     diagnostics: &DiagnosticsListener<S>,
 ) -> Data {
     let span = expr.span();
-    let value =
-        expr.evaluate_strictly(context, &mut |symbol, span| {
+    let value = expr
+        .evaluate_strictly(context, &mut |symbol, span| {
             diagnostics.emit_diagnostic(Diagnostic::new(
                 Message::UnresolvedSymbol {
                     symbol: symbol.to_string(),
@@ -105,7 +105,7 @@ fn resolve_expr_item<S: Span>(
                 span.clone(),
             ))
         }).exact()
-            .unwrap_or(0);
+        .unwrap_or(0);
     fit_to_width((value, span), width, diagnostics)
 }
 

@@ -171,6 +171,10 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, Diagnostic<S>>>> Analysi
             (dest, Operand::Atom(AtomKind::Simple(SimpleOperand::A), _)) => {
                 analyze_special_ld(dest, Direction::FromA)
             }
+            (
+                Operand::Atom(AtomKind::Reg16(Reg16::Sp), _),
+                Operand::Atom(AtomKind::Reg16(Reg16::Hl), _),
+            ) => Ok(Instruction::Ld(Ld::SpHl)),
             (Operand::Atom(AtomKind::Reg16(dest), _), Operand::Const(expr)) => {
                 Ok(Instruction::Ld(Ld::Immediate16(dest, expr)))
             }
@@ -713,6 +717,10 @@ mod tests {
         descriptors.extend(describe_inc_dec16_instructions());
         descriptors.extend(describe_push_pop_instructions());
         descriptors.extend(describe_misc_operation_instructions());
+        descriptors.push((
+            (kw::Mnemonic::Ld, vec![Reg16::Sp.into(), Reg16::Hl.into()]),
+            Instruction::Ld(Ld::SpHl),
+        ));
         descriptors
     }
 
@@ -745,7 +753,8 @@ mod tests {
             (kw::Mnemonic::Rra, Nullary::Rra),
             (kw::Mnemonic::Rrca, Nullary::Rrca),
             (kw::Mnemonic::Stop, Nullary::Stop),
-        ].iter()
+        ]
+            .iter()
             .map(|(mnemonic, nullary)| ((*mnemonic, vec![]), Instruction::Nullary(nullary.clone())))
     }
 

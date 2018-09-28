@@ -88,7 +88,8 @@ impl Span for TokenRefData {
                     range: other_range,
                     context: other_context,
                 },
-            ) if Rc::ptr_eq(context, other_context) =>
+            )
+                if Rc::ptr_eq(context, other_context) =>
             {
                 Lexeme {
                     range: cmp::min(range.start, other_range.start)

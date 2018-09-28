@@ -282,8 +282,7 @@ impl SymExpr {
                         },
                         span.resolve(input),
                     )
-                })
-                .collect(),
+                }).collect(),
         )
     }
 }
