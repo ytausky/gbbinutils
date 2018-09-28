@@ -1,6 +1,7 @@
 use super::Token::*;
 use super::{ExprAtom, ExprOperator, Token};
-use diagnostics::{Diagnostic, Message, Span};
+use diagnostics::{Diagnostic, Message};
+use span::Span;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt::Debug;

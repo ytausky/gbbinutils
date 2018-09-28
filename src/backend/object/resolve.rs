@@ -2,7 +2,7 @@ pub use super::context::{EvalContext, SymbolTable};
 
 use super::context::ChunkSize;
 use backend::{Node, Object, RelocExpr};
-use diagnostics::Span;
+use span::Span;
 use std::borrow::Borrow;
 use std::ops::{Add, AddAssign, Sub};
 

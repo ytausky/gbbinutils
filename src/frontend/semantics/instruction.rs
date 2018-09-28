@@ -1,8 +1,9 @@
 use super::Expr;
-use diagnostics::{Diagnostic, Message, Source, Span};
+use diagnostics::{Diagnostic, Message};
 use frontend::semantics::operand::{self, AtomKind, Context, Operand, OperandCounter};
 use frontend::syntax::keyword as kw;
 use instruction::*;
+use span::{Source, Span};
 use std::iter::empty;
 
 pub fn analyze_instruction<Id: Into<String>, I, S>(

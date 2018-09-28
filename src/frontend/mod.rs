@@ -7,6 +7,7 @@ use codebase::Codebase;
 use diagnostics::*;
 use frontend::session::{BorrowedComponents, ChunkId, Components, Session};
 use frontend::syntax::*;
+use span::{LexemeRefFactory, Span, TokenTracker};
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::rc::Rc;

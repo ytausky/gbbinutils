@@ -1,7 +1,8 @@
 use super::context::{EvalContext, SymbolTable};
 use super::{traverse_chunk_items, Chunk, Node};
 use backend::{BinarySection, RelocExpr};
-use diagnostics::{Diagnostic, DiagnosticsListener, Message, Source, Span};
+use diagnostics::{Diagnostic, DiagnosticsListener, Message};
+use span::{Source, Span};
 use std::vec::IntoIter;
 use Width;
 

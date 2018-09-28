@@ -5,8 +5,8 @@ use backend::{
     lowering::Lower,
     object::{Node, Object},
 };
-use diagnostics::*;
 use instruction::Instruction;
+use span::{Source, Span};
 use Width;
 
 mod lowering;
@@ -112,7 +112,7 @@ pub struct BinarySection {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use diagnostics::TestDiagnosticsListener;
+    use diagnostics::{Diagnostic, Message, TestDiagnosticsListener};
     use instruction::Nullary;
     use std::borrow::Borrow;
 

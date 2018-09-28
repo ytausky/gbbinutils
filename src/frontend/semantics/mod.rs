@@ -1,8 +1,9 @@
 use backend::{self, BinaryOperator};
-use diagnostics::{Diagnostic, DiagnosticsListener, Span};
+use diagnostics::{Diagnostic, DiagnosticsListener};
 use frontend::session::{ChunkId, Session};
 use frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token};
 use frontend::{Literal, StrExprFactory};
+use span::Span;
 use Width;
 
 use self::expr::*;

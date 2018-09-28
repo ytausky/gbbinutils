@@ -1,8 +1,9 @@
 use super::{Expr, ExprVariant};
-use diagnostics::{Diagnostic, KeywordOperandCategory, Message, Source, Span};
+use diagnostics::{Diagnostic, KeywordOperandCategory, Message};
 use frontend::syntax::keyword as kw;
 use frontend::syntax::Literal;
 use instruction::{Condition, PtrReg, Reg16, RegPair, RelocExpr, SimpleOperand};
+use span::{Source, Span};
 use std::iter::empty;
 
 #[derive(Debug, PartialEq)]

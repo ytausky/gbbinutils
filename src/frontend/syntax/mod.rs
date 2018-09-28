@@ -1,4 +1,5 @@
-use diagnostics::{DiagnosticsListener, Span};
+use diagnostics::DiagnosticsListener;
+use span::Span;
 
 #[cfg(test)]
 #[macro_use]

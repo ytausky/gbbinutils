@@ -1,7 +1,7 @@
 use backend::object::Node;
 use backend::{BinaryOperator, Item};
-use diagnostics::{Source, Span};
 use instruction::*;
+use span::{Source, Span};
 use std::mem;
 use Width;
 

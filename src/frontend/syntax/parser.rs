@@ -1,5 +1,6 @@
 use super::*;
-use diagnostics::{Diagnostic, Message, Span};
+use diagnostics::{Diagnostic, Message};
+use span::Span;
 
 use std::iter;
 

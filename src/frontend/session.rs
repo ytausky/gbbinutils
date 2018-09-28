@@ -2,11 +2,11 @@ use std::{
     borrow::{Borrow, BorrowMut},
     marker,
 };
-use {backend, diagnostics, frontend};
+use {backend, diagnostics, frontend, span};
 
 pub trait Session {
     type Ident: Into<String>;
-    type Span: diagnostics::Span;
+    type Span: span::Span;
     fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::Ident, Self::Span>);
     fn emit_diagnostic(&self, diagnostic: diagnostics::Diagnostic<Self::Span>);
     fn emit_item(&mut self, item: backend::Item<Self::Span>);

@@ -1,7 +1,8 @@
 use self::context::{EvalContext, SymbolTable};
 use self::resolve::Value;
 use backend::{BinaryObject, RelocExpr};
-use diagnostics::{DiagnosticsListener, Span};
+use diagnostics::DiagnosticsListener;
+use span::Span;
 use std::borrow::Borrow;
 use Width;
 

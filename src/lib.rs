@@ -5,6 +5,7 @@ mod codebase;
 mod diagnostics;
 mod frontend;
 mod instruction;
+mod span;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Width {
@@ -27,7 +28,7 @@ pub fn analyze_file(name: &str) {
     frontend::analyze_file(
         name.to_string(),
         &codebase,
-        diagnostics::SimpleTokenTracker {},
+        span::SimpleTokenTracker {},
         OutputDumper::new(),
         &diagnostics,
     );
@@ -39,7 +40,7 @@ pub fn assemble_rom(name: &str) {
     let object = frontend::analyze_file(
         name.to_string(),
         &codebase,
-        diagnostics::SimpleTokenTracker {},
+        span::SimpleTokenTracker {},
         backend::ObjectBuilder::new(),
         &diagnostics,
     );
