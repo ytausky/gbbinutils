@@ -91,7 +91,7 @@ impl<S: Span> Lower<S> for Instruction<S> {
             }
             JpDerefHl => LoweredItem::with_opcode(0xe9),
             Ld(ld) => ld.lower(),
-            Ldhl(_) => panic!(),
+            Ldhl(offset) => LoweredItem::with_opcode(0xf8).and_byte(offset),
             Misc(operation, operand) => {
                 LoweredItem::extended(operation.encode() | operand.encode())
             }
@@ -196,23 +196,25 @@ fn encode_branch<S: Span>(branch: Branch<S>, condition: Option<Condition>) -> Lo
             None => 0xc3,
             Some(condition) => 0xc2 | encode_condition(condition),
         }).and_word(target),
-        Jr(target) => {
-            let span = target.span();
-            LoweredItem::with_opcode(match condition {
-                None => 0x18,
-                Some(condition) => 0x20 | encode_condition(condition),
-            }).and_byte(RelocExpr::BinaryOperation(
-                Box::new(target),
-                Box::new(RelocExpr::LocationCounter(span.clone())),
-                BinaryOperator::Minus,
-                span,
-            ))
-        }
+        Jr(target) => LoweredItem::with_opcode(match condition {
+            None => 0x18,
+            Some(condition) => 0x20 | encode_condition(condition),
+        }).and_byte(mk_relative_expr(target)),
         Ret => LoweredItem::with_opcode(match condition {
             None => 0xc9,
             Some(condition) => 0b11_000_000 | encode_condition(condition),
         }),
     }
+}
+
+fn mk_relative_expr<S: Span>(expr: RelocExpr<S>) -> RelocExpr<S> {
+    let span = expr.span();
+    RelocExpr::BinaryOperation(
+        Box::new(expr),
+        Box::new(RelocExpr::LocationCounter(span.clone())),
+        BinaryOperator::Minus,
+        span,
+    )
 }
 
 fn encode_bit_operation(operation: BitOperation) -> u8 {
@@ -547,6 +549,15 @@ mod tests {
     }
 
     #[test]
+    fn lower_ldhl_sp_expr() {
+        let expr = RelocExpr::Literal(0x42, ());
+        test_instruction(
+            Ldhl(expr.clone()),
+            [Node::Byte(0xf8), Node::Expr(expr, Width::Byte)],
+        )
+    }
+
+    #[test]
     fn encode_alu_immediate() {
         use instruction::AluOperation::*;
         let expr = RelocExpr::Literal(0x42, ());
@@ -768,15 +779,7 @@ mod tests {
                 Branch(Jr(target_expr.clone()), condition),
                 [
                     Node::Byte(opcode),
-                    Node::Expr(
-                        RelocExpr::BinaryOperation(
-                            Box::new(target_expr.clone()),
-                            Box::new(RelocExpr::LocationCounter(())),
-                            BinaryOperator::Minus,
-                            (),
-                        ),
-                        Width::Byte,
-                    ),
+                    Node::Expr(mk_relative_expr(target_expr.clone()), Width::Byte),
                 ],
             )
         }
