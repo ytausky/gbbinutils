@@ -132,7 +132,7 @@ impl<S> Lower<S> for Ld<S> {
         match self {
             Ld::Simple(dest, src) => encode_ld_to_reg_from_reg(dest, src),
             Ld::Special(special, direction) => encode_special_ld(special, direction),
-            Ld::SpHl => panic!(),
+            Ld::SpHl => LoweredItem::with_opcode(0xf9),
             Ld::Immediate8(dest, immediate) => {
                 LoweredItem::with_opcode(0x06 | (encode_simple_operand(dest) << 3))
                     .and_byte(immediate)
@@ -538,6 +538,11 @@ mod tests {
                 bytes([opcode]),
             )
         }
+    }
+
+    #[test]
+    fn lower_ld_sp_hl() {
+        test_instruction(Ld(SpHl), bytes([0xf9]))
     }
 
     #[test]
