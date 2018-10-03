@@ -1,5 +1,5 @@
 use super::Expr;
-use diagnostics::{Diagnostic, Message};
+use diagnostics::{InternalDiagnostic, Message};
 use frontend::semantics::operand::{self, AtomKind, Context, Operand, OperandCounter};
 use frontend::syntax::keyword as kw;
 use instruction::*;
@@ -29,7 +29,7 @@ struct Analysis<R, I> {
     operands: OperandCounter<I>,
 }
 
-impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, Diagnostic<S>>>> Analysis<S, I> {
+impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>> Analysis<S, I> {
     fn new(mnemonic: (Mnemonic, S), operands: I) -> Analysis<S, I> {
         Analysis {
             mnemonic,
@@ -76,16 +76,22 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, Diagnostic<S>>>> Analysi
     fn analyze_add_reg16_instruction(&mut self, target: (Reg16, S)) -> AnalysisResult<S> {
         match target.0 {
             Reg16::Hl => self.analyze_add_hl_instruction(),
-            _ => Err(Diagnostic::new(Message::DestMustBeHl, empty(), target.1)),
+            _ => Err(InternalDiagnostic::new(
+                Message::DestMustBeHl,
+                empty(),
+                target.1,
+            )),
         }
     }
 
     fn analyze_add_hl_instruction(&mut self) -> AnalysisResult<S> {
         match self.expect_operand(2)? {
             Operand::Atom(AtomKind::Reg16(src), _) => Ok(Instruction::AddHl(src)),
-            Operand::Atom(_, span) => {
-                Err(Diagnostic::new(Message::IncompatibleOperand, empty(), span))
-            }
+            Operand::Atom(_, span) => Err(InternalDiagnostic::new(
+                Message::IncompatibleOperand,
+                empty(),
+                span,
+            )),
             _ => panic!(),
         }
     }
@@ -101,7 +107,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, Diagnostic<S>>>> Analysi
             let second_operand = self.expect_operand(2)?;
             match first_operand {
                 Operand::Atom(AtomKind::Simple(SimpleOperand::A), _) => Ok(()),
-                operand => Err(Diagnostic::new(
+                operand => Err(InternalDiagnostic::new(
                     Message::DestMustBeA,
                     empty(),
                     operand.span(),
@@ -134,7 +140,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, Diagnostic<S>>>> Analysi
         match (branch, condition, target) {
             (BranchKind::Jp, None, Some(TargetSelector::DerefHl)) => Ok(Instruction::JpDerefHl),
             (BranchKind::Jp, Some((_, condition_ref)), Some(TargetSelector::DerefHl)) => Err(
-                Diagnostic::new(Message::AlwaysUnconditional, empty(), condition_ref),
+                InternalDiagnostic::new(Message::AlwaysUnconditional, empty(), condition_ref),
             ),
             (_, condition, target) => Ok(Instruction::Branch(
                 mk_branch((branch, self.mnemonic.1.clone()), target)?,
@@ -143,7 +149,9 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, Diagnostic<S>>>> Analysi
         }
     }
 
-    fn collect_condition_and_target(&mut self) -> Result<CondtitionTargetPair<S>, Diagnostic<S>> {
+    fn collect_condition_and_target(
+        &mut self,
+    ) -> Result<CondtitionTargetPair<S>, InternalDiagnostic<S>> {
         let first_operand = self.operands.next()?;
         Ok(
             if let Some(Operand::Atom(AtomKind::Condition(condition), range)) = first_operand {
@@ -232,10 +240,10 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, Diagnostic<S>>>> Analysi
         }
     }
 
-    fn expect_operand(&mut self, out_of: usize) -> Result<Operand<S>, Diagnostic<S>> {
+    fn expect_operand(&mut self, out_of: usize) -> Result<Operand<S>, InternalDiagnostic<S>> {
         let actual = self.operands.seen();
         self.operands.next()?.ok_or_else(|| {
-            Diagnostic::new(
+            InternalDiagnostic::new(
                 Message::OperandCount {
                     actual,
                     expected: out_of,
@@ -260,11 +268,15 @@ fn analyze_branch_target<S>(target: Option<Operand<S>>) -> Option<TargetSelector
 fn mk_branch<S>(
     kind: (BranchKind, S),
     target: Option<TargetSelector<S>>,
-) -> Result<Branch<S>, Diagnostic<S>> {
+) -> Result<Branch<S>, InternalDiagnostic<S>> {
     match (kind.0, target) {
         (BranchKind::Call, Some(TargetSelector::Expr(expr))) => Ok(Branch::Call(expr)),
         (BranchKind::Jp, Some(TargetSelector::Expr(expr))) => Ok(Branch::Jp(expr)),
-        (BranchKind::Jp, None) => Err(Diagnostic::new(Message::MissingTarget, empty(), kind.1)),
+        (BranchKind::Jp, None) => Err(InternalDiagnostic::new(
+            Message::MissingTarget,
+            empty(),
+            kind.1,
+        )),
         (BranchKind::Jr, Some(TargetSelector::Expr(expr))) => Ok(Branch::Jr(expr)),
         (BranchKind::Ret, None) => Ok(Branch::Ret),
         _ => panic!(),
@@ -283,7 +295,7 @@ fn analyze_special_ld<S>(other: Operand<S>, direction: Direction) -> AnalysisRes
     )))
 }
 
-pub type AnalysisResult<S> = Result<Instruction<S>, Diagnostic<S>>;
+pub type AnalysisResult<S> = Result<Instruction<S>, InternalDiagnostic<S>>;
 
 #[derive(Debug, PartialEq)]
 enum Mnemonic {
@@ -1060,7 +1072,7 @@ mod tests {
         fn expect_diagnostic(self, message: Message) {
             assert_eq!(
                 self.0,
-                Err(Diagnostic::new(message, empty(), Marking::Special))
+                Err(InternalDiagnostic::new(message, empty(), Marking::Special))
             )
         }
     }

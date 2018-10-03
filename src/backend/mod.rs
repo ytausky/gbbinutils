@@ -112,7 +112,7 @@ pub struct BinarySection {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use diagnostics::{Diagnostic, Message, TestDiagnosticsListener};
+    use diagnostics::{InternalDiagnostic, Message, TestDiagnosticsListener};
     use instruction::Nullary;
     use std::borrow::Borrow;
 
@@ -200,7 +200,7 @@ mod tests {
             with_object_builder(|builder| builder.emit_item(byte_literal(value)));
         assert_eq!(
             *diagnostics,
-            [Diagnostic::new(
+            [InternalDiagnostic::new(
                 Message::ValueOutOfRange {
                     value,
                     width: Width::Byte,
@@ -263,7 +263,7 @@ mod tests {
 
     fn with_object_builder<F: FnOnce(&mut TestObjectBuilder)>(
         f: F,
-    ) -> (BinaryObject, Box<[Diagnostic<()>]>) {
+    ) -> (BinaryObject, Box<[InternalDiagnostic<()>]>) {
         let diagnostics = TestDiagnosticsListener::new();
         let object = {
             let mut builder = ObjectBuilder::new();
@@ -282,8 +282,8 @@ mod tests {
         RelocExpr::Symbol(symbol.into(), ())
     }
 
-    fn unresolved(symbol: impl Into<String>) -> Diagnostic<()> {
-        Diagnostic::new(
+    fn unresolved(symbol: impl Into<String>) -> InternalDiagnostic<()> {
+        InternalDiagnostic::new(
             Message::UnresolvedSymbol {
                 symbol: symbol.into(),
             },

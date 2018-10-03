@@ -185,7 +185,7 @@ where
             Some(tokens) => self.analyze_token_seq(tokens, backend),
             None => {
                 let (name, name_ref) = name;
-                self.diagnostics.emit_diagnostic(Diagnostic::new(
+                self.diagnostics.emit_diagnostic(InternalDiagnostic::new(
                     Message::UndefinedMacro { name: name.into() },
                     vec![],
                     name_ref,
@@ -526,7 +526,7 @@ mod tests {
         );
     }
 
-    use diagnostics::Diagnostic;
+    use diagnostics::InternalDiagnostic;
 
     #[test]
     fn diagnose_undefined_macro() {
@@ -540,7 +540,7 @@ mod tests {
         });
         assert_eq!(
             *log.borrow(),
-            [TestEvent::Diagnostic(Diagnostic::new(
+            [TestEvent::Diagnostic(InternalDiagnostic::new(
                 Message::UndefinedMacro { name },
                 vec![],
                 ()
@@ -635,7 +635,7 @@ mod tests {
     }
 
     impl<'a> DiagnosticsListener<()> for Mock<'a> {
-        fn emit_diagnostic(&self, diagnostic: Diagnostic<()>) {
+        fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<()>) {
             self.log
                 .borrow_mut()
                 .push(TestEvent::Diagnostic(diagnostic))
@@ -648,7 +648,7 @@ mod tests {
     enum TestEvent {
         AnalyzeTokens(Vec<Token<String>>),
         AddLabel(String),
-        Diagnostic(Diagnostic<()>),
+        Diagnostic(InternalDiagnostic<()>),
         EmitItem(Item<()>),
     }
 

@@ -1,6 +1,6 @@
 use super::Token::*;
 use super::{ExprAtom, ExprOperator, Token};
-use diagnostics::{Diagnostic, Message};
+use diagnostics::{InternalDiagnostic, Message};
 use span::Span;
 use std::borrow::Borrow;
 use std::collections::HashMap;
@@ -167,7 +167,7 @@ pub enum Action {
     EnterMacroBody,
     EnterMacroDef,
     EnterMacroInvocation(SymIdent),
-    Error(Diagnostic<SymRange<usize>>),
+    Error(InternalDiagnostic<SymRange<usize>>),
     ExitArgument,
     ExitInstruction,
     ExitLine,
@@ -297,7 +297,7 @@ pub enum MacroDefTail {
 }
 
 #[derive(Clone)]
-pub struct SymDiagnostic(Diagnostic<SymRange<TokenRef>>);
+pub struct SymDiagnostic(InternalDiagnostic<SymRange<TokenRef>>);
 
 impl From<SymDiagnostic> for LineBody {
     fn from(diagnostic: SymDiagnostic) -> Self {
@@ -307,7 +307,7 @@ impl From<SymDiagnostic> for LineBody {
 
 impl SymDiagnostic {
     fn into_action(self, input: &InputTokens) -> Action {
-        Action::Error(Diagnostic::new(
+        Action::Error(InternalDiagnostic::new(
             self.0.message,
             self.0.spans.into_iter().map(|span| span.resolve(input)),
             self.0.highlight.resolve(input),
@@ -460,7 +460,7 @@ pub fn arg_error(
     ranges: impl Borrow<[&'static str]>,
     highlight: impl Into<TokenRef>,
 ) -> SymDiagnostic {
-    SymDiagnostic(Diagnostic::new(
+    SymDiagnostic(InternalDiagnostic::new(
         message,
         ranges.borrow().iter().map(|s| TokenRef::from(*s).into()),
         highlight.into().into(),

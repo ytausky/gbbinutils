@@ -1,5 +1,5 @@
 use backend::{self, BinaryOperator};
-use diagnostics::{Diagnostic, DiagnosticsListener};
+use diagnostics::{DiagnosticsListener, InternalDiagnostic};
 use frontend::session::{ChunkId, Session};
 use frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token};
 use frontend::{Literal, StrExprFactory};
@@ -51,7 +51,7 @@ impl<'a, F: Session + 'a> SemanticActions<'a, F> {
 }
 
 impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for SemanticActions<'a, F> {
-    fn emit_diagnostic(&self, diagnostic: Diagnostic<F::Span>) {
+    fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<F::Span>) {
         self.session.emit_diagnostic(diagnostic)
     }
 }
@@ -114,7 +114,7 @@ impl<'a, F: Session + 'a> CommandActions<'a, F> {
 }
 
 impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for CommandActions<'a, F> {
-    fn emit_diagnostic(&self, diagnostic: Diagnostic<F::Span>) {
+    fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<F::Span>) {
         self.parent.emit_diagnostic(diagnostic)
     }
 }
@@ -282,7 +282,7 @@ impl<'a, F: Session + 'a> MacroDefActions<'a, F> {
 }
 
 impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for MacroDefActions<'a, F> {
-    fn emit_diagnostic(&self, diagnostic: Diagnostic<F::Span>) {
+    fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<F::Span>) {
         self.parent.emit_diagnostic(diagnostic)
     }
 }
@@ -343,7 +343,7 @@ impl<'a, F: Session + 'a> MacroInvocationActions<'a, F> {
 }
 
 impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for MacroInvocationActions<'a, F> {
-    fn emit_diagnostic(&self, diagnostic: Diagnostic<F::Span>) {
+    fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<F::Span>) {
         self.parent.emit_diagnostic(diagnostic)
     }
 }
@@ -383,7 +383,7 @@ impl<'a, F: Session + 'a> MacroArgActions<'a, F> {
 }
 
 impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for MacroArgActions<'a, F> {
-    fn emit_diagnostic(&self, diagnostic: Diagnostic<F::Span>) {
+    fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<F::Span>) {
         self.parent.parent.session.emit_diagnostic(diagnostic)
     }
 }
@@ -418,7 +418,7 @@ mod tests {
     use super::*;
 
     use backend;
-    use diagnostics::{Diagnostic, Message};
+    use diagnostics::{InternalDiagnostic, Message};
     use frontend::syntax::{
         keyword::Operand, CommandContext, ExprActions, FileContext, LineActions,
         MacroInvocationContext, MacroParamsActions, TokenSeqContext,
@@ -440,7 +440,7 @@ mod tests {
     enum TestOperation {
         AnalyzeChunk(ChunkId<String, ()>),
         DefineMacro(String, Vec<String>, Vec<Token<String>>),
-        EmitDiagnostic(Diagnostic<()>),
+        EmitDiagnostic(InternalDiagnostic<()>),
         EmitItem(backend::Item<()>),
         Label(String),
         SetOrigin(RelocExpr<()>),
@@ -456,7 +456,7 @@ mod tests {
                 .push(TestOperation::AnalyzeChunk(chunk_id))
         }
 
-        fn emit_diagnostic(&self, diagnostic: Diagnostic<Self::Span>) {
+        fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<Self::Span>) {
             self.0
                 .borrow_mut()
                 .push(TestOperation::EmitDiagnostic(diagnostic))
@@ -733,7 +733,7 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [TestOperation::EmitDiagnostic(Diagnostic::new(
+            [TestOperation::EmitDiagnostic(InternalDiagnostic::new(
                 Message::OperandCount {
                     actual: 1,
                     expected: 0
@@ -746,7 +746,7 @@ mod tests {
 
     #[test]
     fn diagnose_parsing_error() {
-        let diagnostic = Diagnostic::new(Message::UnexpectedToken, once(()), ());
+        let diagnostic = InternalDiagnostic::new(Message::UnexpectedToken, once(()), ());
         let actions = collect_semantic_actions(|actions| {
             let stmt = actions.enter_line(None);
             stmt.emit_diagnostic(diagnostic.clone());

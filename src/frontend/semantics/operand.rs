@@ -1,5 +1,5 @@
 use super::{Expr, ExprVariant};
-use diagnostics::{Diagnostic, KeywordOperandCategory, Message};
+use diagnostics::{InternalDiagnostic, KeywordOperandCategory, Message};
 use frontend::syntax::keyword as kw;
 use frontend::syntax::Literal;
 use instruction::{Condition, PtrReg, Reg16, RegPair, RelocExpr, SimpleOperand};
@@ -40,7 +40,7 @@ pub enum Context {
     Other,
 }
 
-type OperandResult<SI> = Result<Operand<SI>, Diagnostic<SI>>;
+type OperandResult<S> = Result<Operand<S>, InternalDiagnostic<S>>;
 
 pub fn analyze_operand<I: Into<String>, S: Clone>(
     expr: Expr<I, S>,
@@ -70,7 +70,7 @@ fn analyze_deref_operand<I: Into<String>, S: Clone>(
 fn analyze_deref_operand_keyword<SI>(keyword: (kw::Operand, SI), deref: SI) -> OperandResult<SI> {
     match try_deref_operand_keyword(keyword.0) {
         Ok(atom) => Ok(Operand::Atom(atom, deref)),
-        Err(category) => Err(Diagnostic::new(
+        Err(category) => Err(InternalDiagnostic::new(
             Message::CannotDereference { category },
             vec![keyword.1],
             deref,
@@ -95,16 +95,16 @@ fn try_deref_operand_keyword(keyword: kw::Operand) -> Result<AtomKind, KeywordOp
 
 pub fn analyze_reloc_expr<I: Into<String>, S: Clone>(
     expr: Expr<I, S>,
-) -> Result<RelocExpr<S>, Diagnostic<S>> {
+) -> Result<RelocExpr<S>, InternalDiagnostic<S>> {
     match expr.variant {
         ExprVariant::Ident(ident) => Ok(RelocExpr::Symbol(ident.into(), expr.span)),
         ExprVariant::Literal(Literal::Number(n)) => Ok(RelocExpr::Literal(n, expr.span)),
-        ExprVariant::Literal(Literal::Operand(_)) => Err(Diagnostic::new(
+        ExprVariant::Literal(Literal::Operand(_)) => Err(InternalDiagnostic::new(
             Message::KeywordInExpr,
             vec![expr.span.clone()],
             expr.span,
         )),
-        ExprVariant::Literal(Literal::String(_)) => Err(Diagnostic::new(
+        ExprVariant::Literal(Literal::String(_)) => Err(InternalDiagnostic::new(
             Message::StringInInstruction,
             empty(),
             expr.span,
@@ -170,14 +170,14 @@ impl<I: Iterator<Item = Result<T, E>>, T, E> OperandCounter<I> {
         })
     }
 
-    pub fn check_for_unexpected_operands<S>(self, span: S) -> Result<(), Diagnostic<S>> {
+    pub fn check_for_unexpected_operands<S>(self, span: S) -> Result<(), InternalDiagnostic<S>> {
         let expected = self.count;
         let extra = self.operands.count();
         let actual = expected + extra;
         if actual == expected {
             Ok(())
         } else {
-            Err(Diagnostic::new(
+            Err(InternalDiagnostic::new(
                 Message::OperandCount { actual, expected },
                 empty(),
                 span,
@@ -235,7 +235,7 @@ mod tests {
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Err(Diagnostic::new(
+            Err(InternalDiagnostic::new(
                 Message::CannotDereference {
                     category: KeywordOperandCategory::RegPair
                 },
@@ -280,7 +280,11 @@ mod tests {
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Err(Diagnostic::new(Message::KeywordInExpr, vec![span], span))
+            Err(InternalDiagnostic::new(
+                Message::KeywordInExpr,
+                vec![span],
+                span
+            ))
         )
     }
 
@@ -293,7 +297,11 @@ mod tests {
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Err(Diagnostic::new(Message::StringInInstruction, empty(), span))
+            Err(InternalDiagnostic::new(
+                Message::StringInInstruction,
+                empty(),
+                span
+            ))
         )
     }
 }

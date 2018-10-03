@@ -1,7 +1,7 @@
 use super::context::{EvalContext, SymbolTable};
 use super::{traverse_chunk_items, Chunk, Node};
 use backend::{BinarySection, RelocExpr};
-use diagnostics::{Diagnostic, DiagnosticsListener, Message};
+use diagnostics::{DiagnosticsListener, InternalDiagnostic, Message};
 use span::{Source, Span};
 use std::vec::IntoIter;
 use Width;
@@ -98,7 +98,7 @@ fn resolve_expr_item<S: Span>(
     let span = expr.span();
     let value = expr
         .evaluate_strictly(context, &mut |symbol, span| {
-            diagnostics.emit_diagnostic(Diagnostic::new(
+            diagnostics.emit_diagnostic(InternalDiagnostic::new(
                 Message::UnresolvedSymbol {
                     symbol: symbol.to_string(),
                 },
@@ -116,7 +116,7 @@ fn fit_to_width<SR: Clone>(
     diagnostics: &DiagnosticsListener<SR>,
 ) -> Data {
     if !is_in_range(value, width) {
-        diagnostics.emit_diagnostic(Diagnostic::new(
+        diagnostics.emit_diagnostic(InternalDiagnostic::new(
             Message::ValueOutOfRange { value, width },
             vec![],
             value_ref,

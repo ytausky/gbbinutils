@@ -1,5 +1,5 @@
 use super::*;
-use diagnostics::{Diagnostic, Message};
+use diagnostics::{InternalDiagnostic, Message};
 use span::Span;
 
 use std::iter;
@@ -172,7 +172,7 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I> {
             Token::Macro => self.parse_macro_def(actions),
             _ => {
                 let (_, range) = self.bump();
-                actions.emit_diagnostic(Diagnostic::new(
+                actions.emit_diagnostic(InternalDiagnostic::new(
                     Message::UnexpectedToken,
                     vec![range.clone()],
                     range,
@@ -201,7 +201,7 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I> {
                 body_actions.push_token((Token::Eof, endm.1));
             } else {
                 assert_eq!(self.lookahead(), Token::Eof);
-                body_actions.emit_diagnostic(Diagnostic::new(
+                body_actions.emit_diagnostic(InternalDiagnostic::new(
                     Message::UnexpectedEof,
                     iter::empty(),
                     self.tokens.peek().unwrap().1.clone(),
@@ -210,7 +210,7 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I> {
             body_actions
         } else {
             assert_eq!(self.lookahead(), Token::Eof);
-            actions.emit_diagnostic(Diagnostic::new(
+            actions.emit_diagnostic(InternalDiagnostic::new(
                 Message::UnexpectedEof,
                 iter::empty(),
                 self.tokens.peek().unwrap().1.clone(),
@@ -289,7 +289,7 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I> {
         context = self.parse_list(delimiter, terminators, parser, context);
         if !self.lookahead_is_in(terminators) {
             let (_, unexpected_range) = self.bump();
-            context.emit_diagnostic(Diagnostic::new(
+            context.emit_diagnostic(InternalDiagnostic::new(
                 Message::UnexpectedToken,
                 vec![unexpected_range.clone()],
                 unexpected_range,
@@ -417,7 +417,7 @@ mod tests {
     use super::ast::*;
     use super::Token::*;
     use super::*;
-    use diagnostics::{Diagnostic, DiagnosticsListener, Message};
+    use diagnostics::{DiagnosticsListener, InternalDiagnostic, Message};
     use frontend::syntax::{self, ExprAtom, ExprOperator};
     use std::cell::RefCell;
     use std::collections::HashMap;
@@ -447,7 +447,7 @@ mod tests {
     }
 
     impl<'a> DiagnosticsListener<SymRange<usize>> for &'a mut TestContext {
-        fn emit_diagnostic(&self, diagnostic: Diagnostic<SymRange<usize>>) {
+        fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<SymRange<usize>>) {
             self.actions.borrow_mut().push(Action::Error(diagnostic))
         }
     }

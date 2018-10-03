@@ -1,14 +1,16 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    marker,
-};
-use {backend, diagnostics, frontend, span};
+use backend;
+use diagnostics;
+use diagnostics::InternalDiagnostic;
+use frontend;
+use span;
+use std::borrow::{Borrow, BorrowMut};
+use std::marker;
 
 pub trait Session {
     type Ident: Into<String>;
     type Span: span::Span;
     fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::Ident, Self::Span>);
-    fn emit_diagnostic(&self, diagnostic: diagnostics::Diagnostic<Self::Span>);
+    fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<Self::Span>);
     fn emit_item(&mut self, item: backend::Item<Self::Span>);
     fn define_label(&mut self, label: (String, Self::Span));
     fn define_macro(
@@ -90,7 +92,7 @@ where
             .analyze_chunk(chunk_id, self.backend.borrow_mut())
     }
 
-    fn emit_diagnostic(&self, diagnostic: diagnostics::Diagnostic<Self::Span>) {
+    fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<Self::Span>) {
         self.diagnostics.borrow().emit_diagnostic(diagnostic)
     }
 

@@ -5,21 +5,21 @@ use std::cell::RefCell;
 use std::fmt;
 use Width;
 
-pub trait DiagnosticsListener<TR> {
-    fn emit_diagnostic(&self, diagnostic: Diagnostic<TR>);
+pub trait DiagnosticsListener<S> {
+    fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<S>);
 }
 
 #[cfg(test)]
 pub struct IgnoreDiagnostics;
 
 #[cfg(test)]
-impl<SR> DiagnosticsListener<SR> for IgnoreDiagnostics {
-    fn emit_diagnostic(&self, _: Diagnostic<SR>) {}
+impl<S> DiagnosticsListener<S> for IgnoreDiagnostics {
+    fn emit_diagnostic(&self, _: InternalDiagnostic<S>) {}
 }
 
 #[cfg(test)]
 pub struct TestDiagnosticsListener {
-    pub diagnostics: RefCell<Vec<Diagnostic<()>>>,
+    pub diagnostics: RefCell<Vec<InternalDiagnostic<()>>>,
 }
 
 #[cfg(test)]
@@ -33,25 +33,25 @@ impl TestDiagnosticsListener {
 
 #[cfg(test)]
 impl DiagnosticsListener<()> for TestDiagnosticsListener {
-    fn emit_diagnostic(&self, diagnostic: Diagnostic<()>) {
+    fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<()>) {
         self.diagnostics.borrow_mut().push(diagnostic)
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Diagnostic<S> {
+pub struct InternalDiagnostic<S> {
     pub message: Message,
     pub spans: Vec<S>,
     pub highlight: S,
 }
 
-impl<S> Diagnostic<S> {
+impl<S> InternalDiagnostic<S> {
     pub fn new(
         message: Message,
         spans: impl IntoIterator<Item = S>,
         highlight: S,
-    ) -> Diagnostic<S> {
-        Diagnostic {
+    ) -> InternalDiagnostic<S> {
+        InternalDiagnostic {
             message,
             spans: spans.into_iter().collect(),
             highlight,
@@ -164,7 +164,7 @@ impl<'a> TerminalDiagnostics<'a> {
 }
 
 impl<'a> DiagnosticsListener<TokenRefData> for TerminalDiagnostics<'a> {
-    fn emit_diagnostic(&self, diagnostic: Diagnostic<TokenRefData>) {
+    fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<TokenRefData>) {
         let codebase = self.codebase.borrow();
         let elaborated_diagnostic = elaborate(&diagnostic, &codebase);
         print!("{}", elaborated_diagnostic)
@@ -181,7 +181,7 @@ struct ElaboratedDiagnostic<T> {
 }
 
 fn elaborate<'a>(
-    diagnostic: &Diagnostic<TokenRefData>,
+    diagnostic: &InternalDiagnostic<TokenRefData>,
     codebase: &'a TextCache,
 ) -> ElaboratedDiagnostic<&'a str> {
     match diagnostic.highlight {
@@ -283,7 +283,7 @@ mod tests {
                 included_from: None,
             }),
         };
-        let diagnostic = Diagnostic {
+        let diagnostic = InternalDiagnostic {
             message: Message::UndefinedMacro {
                 name: "my_macro".to_string(),
             },
