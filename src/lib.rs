@@ -1,4 +1,4 @@
-use std::{fmt::Debug, fs::File, io::Write};
+use std::{fs::File, io::Write};
 
 mod backend;
 mod codebase;
@@ -22,18 +22,6 @@ impl Width {
     }
 }
 
-pub fn analyze_file(name: &str) {
-    let codebase = codebase::FileCodebase::new(codebase::StdFileSystem::new());
-    let diagnostics = diagnostics::TerminalDiagnostics::new(&codebase.cache);
-    frontend::analyze_file(
-        name.to_string(),
-        &codebase,
-        span::SimpleTokenTracker {},
-        OutputDumper::new(),
-        &diagnostics,
-    );
-}
-
 pub fn assemble_rom(name: &str) {
     let codebase = codebase::FileCodebase::new(codebase::StdFileSystem::new());
     let diagnostics = diagnostics::TerminalDiagnostics::new(&codebase.cache);
@@ -47,30 +35,4 @@ pub fn assemble_rom(name: &str) {
     let rom = backend::link(object, &diagnostics).into_rom();
     let mut rom_file = File::create(name.to_owned() + ".o").unwrap();
     rom_file.write_all(&rom.data).unwrap()
-}
-
-struct OutputDumper;
-
-impl OutputDumper {
-    pub fn new() -> OutputDumper {
-        OutputDumper {}
-    }
-}
-
-impl<R: Debug> backend::Backend<R> for OutputDumper {
-    type Object = ();
-
-    fn add_label(&mut self, (label, _): (impl Into<String>, R)) {
-        println!("Define symbol: {}", label.into())
-    }
-
-    fn emit_item(&mut self, item: backend::Item<R>) {
-        println!("Emit {:?}", item)
-    }
-
-    fn into_object(self) {}
-
-    fn set_origin(&mut self, origin: backend::RelocExpr<R>) {
-        println!("Set origin to {:?}", origin)
-    }
 }
