@@ -99,6 +99,20 @@ trait TokenStream {
     }
 }
 
+impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> TokenStream
+    for iter::Peekable<I>
+{
+    type Ident = Id;
+    type Command = C;
+    type Literal = L;
+    type Span = S;
+    type Iter = I;
+
+    fn tokens(&mut self) -> &mut iter::Peekable<Self::Iter> {
+        self
+    }
+}
+
 impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> TokenStream for Parser<I> {
     type Ident = Id;
     type Command = C;
@@ -400,12 +414,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        parse_src,
-        Token::{self, *},
-    };
-
     use super::ast::*;
+    use super::Token::*;
+    use super::*;
     use diagnostics::{Diagnostic, DiagnosticsListener, Message};
     use frontend::syntax::{self, ExprAtom, ExprOperator};
     use std::cell::RefCell;
@@ -498,12 +509,12 @@ mod tests {
         type Command = SymCommand;
         type Ident = SymIdent;
         type Literal = SymLiteral;
-        type ArgActions = ExprContext<'a>;
+        type ArgActions = ArgContext<'a>;
         type Parent = Self;
 
         fn add_argument(self) -> Self::ArgActions {
             self.actions.borrow_mut().push(Action::EnterArgument);
-            ExprContext::new(self)
+            ArgContext::new(self)
         }
 
         fn exit(self) -> Self::Parent {
@@ -512,24 +523,61 @@ mod tests {
         }
     }
 
-    struct ExprContext<'a> {
-        rpn_expr: RpnExpr<SymIdent, SymLiteral, SymRange<usize>>,
+    struct ArgContext<'a> {
+        expr_context: ExprContext,
         parent: &'a mut TestContext,
     }
 
-    impl<'a> ExprContext<'a> {
+    impl<'a> ArgContext<'a> {
         fn new(parent: &'a mut TestContext) -> Self {
-            ExprContext {
-                rpn_expr: Vec::new(),
+            ArgContext {
+                expr_context: ExprContext::new(),
                 parent,
             }
         }
     }
 
-    impl<'a> syntax::ExprActions<SymRange<usize>> for ExprContext<'a> {
+    impl<'a> syntax::ExprActions<SymRange<usize>> for ArgContext<'a> {
         type Ident = SymIdent;
         type Literal = SymLiteral;
         type Parent = &'a mut TestContext;
+
+        fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, SymRange<usize>)) {
+            self.expr_context.push_atom(atom)
+        }
+
+        fn apply_operator(&mut self, operator: (ExprOperator, SymRange<usize>)) {
+            self.expr_context.apply_operator(operator)
+        }
+
+        fn exit(self) -> Self::Parent {
+            {
+                let mut actions = self.parent.actions.borrow_mut();
+                actions.push(Action::AcceptExpr(self.expr_context.rpn_expr));
+                actions.push(Action::ExitArgument)
+            }
+            self.parent
+        }
+    }
+
+    struct ExprContext {
+        rpn_expr: TestRpnExpr,
+    }
+
+    type TestRpnExpr = RpnExpr<SymIdent, SymLiteral, SymRange<usize>>;
+
+    impl ExprContext {
+        fn new() -> Self {
+            ExprContext {
+                rpn_expr: Vec::new(),
+            }
+        }
+    }
+
+    impl syntax::ExprActions<SymRange<usize>> for ExprContext {
+        type Ident = SymIdent;
+        type Literal = SymLiteral;
+        type Parent = TestRpnExpr;
 
         fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, SymRange<usize>)) {
             self.rpn_expr.push((RpnAction::Push(atom.0), atom.1))
@@ -541,12 +589,7 @@ mod tests {
         }
 
         fn exit(self) -> Self::Parent {
-            {
-                let mut actions = self.parent.actions.borrow_mut();
-                actions.push(Action::AcceptExpr(self.rpn_expr));
-                actions.push(Action::ExitArgument)
-            }
-            self.parent
+            self.rpn_expr
         }
     }
 
@@ -624,18 +667,20 @@ mod tests {
             input.tokens.push(Token::Eof)
         }
         let mut parsing_context = TestContext::new();
-        parse_src(
-            input
-                .tokens
-                .iter()
-                .cloned()
-                .zip((0..).map(|n| SymRange::from(n))),
-            &mut parsing_context,
-        );
+        parse_src(with_spans(&input.tokens), &mut parsing_context);
         assert_eq!(
             parsing_context.actions.into_inner(),
             expected.into_actions(&input)
         )
+    }
+
+    fn with_spans<'a>(
+        tokens: impl IntoIterator<Item = &'a SymToken>,
+    ) -> impl Iterator<Item = (SymToken, SymRange<usize>)> {
+        tokens
+            .into_iter()
+            .cloned()
+            .zip((0..).map(|n| SymRange::from(n)))
     }
 
     #[test]
@@ -841,23 +886,32 @@ mod tests {
     #[test]
     fn parse_long_sum_arg() {
         let tokens = input_tokens![
-            Command(()),
             x @ Ident(()),
             plus1 @ Plus,
             y @ Literal(()),
             plus2 @ Plus,
             z @ Ident(()),
         ];
-        let expected_actions = file([unlabeled(command(
-            0,
-            [expr()
-                .ident("x")
-                .literal("y")
-                .plus("plus1")
-                .ident("z")
-                .plus("plus2")],
-        ))]);
-        assert_eq_actions(tokens, expected_actions)
+        let expected = expr()
+            .ident("x")
+            .literal("y")
+            .plus("plus1")
+            .ident("z")
+            .plus("plus2");
+        assert_eq_rpn_expr(tokens, expected)
+    }
+
+    fn assert_eq_rpn_expr(mut input: InputTokens, expected: SymExpr) {
+        input.tokens.push(Token::Eof);
+        let tokens = &mut with_spans(&input.tokens).peekable();
+        let parsed_rpn_expr = {
+            let parser = ExprParser {
+                tokens,
+                actions: ExprContext::new(),
+            };
+            parser.parse()
+        };
+        assert_eq!(parsed_rpn_expr, expected.resolve(&input));
     }
 
     #[test]

@@ -266,25 +266,27 @@ pub enum LineBody {
 pub struct SymExpr(RpnExpr<TokenRef, TokenRef, SymRange<TokenRef>>);
 
 impl SymExpr {
+    pub fn resolve(self, input: &InputTokens) -> RpnExpr<SymIdent, SymLiteral, SymRange<usize>> {
+        self.0
+            .into_iter()
+            .map(|(rpn, span)| {
+                (
+                    match rpn {
+                        RpnAction::Push(ExprAtom::Ident(ident)) => {
+                            RpnAction::Push(ExprAtom::Ident(SymIdent(ident.resolve(input))))
+                        }
+                        RpnAction::Push(ExprAtom::Literal(literal)) => {
+                            RpnAction::Push(ExprAtom::Literal(SymLiteral(literal.resolve(input))))
+                        }
+                        RpnAction::Apply(operator) => RpnAction::Apply(operator),
+                    },
+                    span.resolve(input),
+                )
+            }).collect()
+    }
+
     fn into_action(self, input: &InputTokens) -> Action {
-        Action::AcceptExpr(
-            self.0
-                .into_iter()
-                .map(|(rpn, span)| {
-                    (
-                        match rpn {
-                            RpnAction::Push(ExprAtom::Ident(ident)) => {
-                                RpnAction::Push(ExprAtom::Ident(SymIdent(ident.resolve(input))))
-                            }
-                            RpnAction::Push(ExprAtom::Literal(literal)) => RpnAction::Push(
-                                ExprAtom::Literal(SymLiteral(literal.resolve(input))),
-                            ),
-                            RpnAction::Apply(operator) => RpnAction::Apply(operator),
-                        },
-                        span.resolve(input),
-                    )
-                }).collect(),
-        )
+        Action::AcceptExpr(self.resolve(input))
     }
 }
 
