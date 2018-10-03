@@ -166,8 +166,7 @@ impl<'a> TerminalDiagnostics<'a> {
 impl<'a> DiagnosticsListener<TokenRefData> for TerminalDiagnostics<'a> {
     fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<TokenRefData>) {
         let codebase = self.codebase.borrow();
-        let elaborated_diagnostic = elaborate(&diagnostic, &codebase);
-        print!("{}", elaborated_diagnostic)
+        print!("{}", diagnostic.elaborate(&codebase))
     }
 }
 
@@ -180,31 +179,27 @@ struct Diagnostic<T> {
     highlight: TextRange,
 }
 
-fn elaborate<'a>(
-    diagnostic: &InternalDiagnostic<TokenRefData>,
-    codebase: &'a TextCache,
-) -> Diagnostic<&'a str> {
-    match diagnostic.highlight {
-        TokenRefData::Lexeme {
-            ref range,
-            ref context,
-        } => {
-            let buf = codebase.buf(context.buf_id);
-            let highlight = buf.text_range(&range);
-            let (_, source) = buf
-                .lines(highlight.start.line..=highlight.end.line)
-                .next()
-                .unwrap();
-            let snippets = diagnostic
-                .spans
-                .iter()
-                .map(|span| mk_snippet(codebase, span));
-            Diagnostic {
-                file: buf.name(),
-                line: highlight.start.line.into(),
-                message: diagnostic.message.render(snippets),
-                source,
-                highlight,
+impl InternalDiagnostic<TokenRefData> {
+    fn elaborate<'a>(&self, codebase: &'a TextCache) -> Diagnostic<&'a str> {
+        match self.highlight {
+            TokenRefData::Lexeme {
+                ref range,
+                ref context,
+            } => {
+                let buf = codebase.buf(context.buf_id);
+                let highlight = buf.text_range(&range);
+                let (_, source) = buf
+                    .lines(highlight.start.line..=highlight.end.line)
+                    .next()
+                    .unwrap();
+                let snippets = self.spans.iter().map(|span| mk_snippet(codebase, span));
+                Diagnostic {
+                    file: buf.name(),
+                    line: highlight.start.line.into(),
+                    message: self.message.render(snippets),
+                    source,
+                    highlight,
+                }
             }
         }
     }
@@ -290,9 +285,8 @@ mod tests {
             spans: Vec::new(),
             highlight: token_ref,
         };
-        let elaborated_diagnostic = elaborate(&diagnostic, &codebase);
         assert_eq!(
-            elaborated_diagnostic,
+            diagnostic.elaborate(&codebase),
             Diagnostic {
                 file: DUMMY_FILE,
                 line: LineNumber(2),
