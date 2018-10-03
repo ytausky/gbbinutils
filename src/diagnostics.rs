@@ -172,7 +172,7 @@ impl<'a> DiagnosticsListener<TokenRefData> for TerminalDiagnostics<'a> {
 }
 
 #[derive(Debug, PartialEq)]
-struct ElaboratedDiagnostic<T> {
+struct Diagnostic<T> {
     file: T,
     line: LineNumber,
     message: String,
@@ -183,7 +183,7 @@ struct ElaboratedDiagnostic<T> {
 fn elaborate<'a>(
     diagnostic: &InternalDiagnostic<TokenRefData>,
     codebase: &'a TextCache,
-) -> ElaboratedDiagnostic<&'a str> {
+) -> Diagnostic<&'a str> {
     match diagnostic.highlight {
         TokenRefData::Lexeme {
             ref range,
@@ -199,7 +199,7 @@ fn elaborate<'a>(
                 .spans
                 .iter()
                 .map(|span| mk_snippet(codebase, span));
-            ElaboratedDiagnostic {
+            Diagnostic {
                 file: buf.name(),
                 line: highlight.start.line.into(),
                 message: diagnostic.message.render(snippets),
@@ -210,7 +210,7 @@ fn elaborate<'a>(
     }
 }
 
-impl<T: Borrow<str>> fmt::Display for ElaboratedDiagnostic<T> {
+impl<T: Borrow<str>> fmt::Display for Diagnostic<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         assert_eq!(self.highlight.start.line, self.highlight.end.line);
         let mut highlight = String::new();
@@ -293,7 +293,7 @@ mod tests {
         let elaborated_diagnostic = elaborate(&diagnostic, &codebase);
         assert_eq!(
             elaborated_diagnostic,
-            ElaboratedDiagnostic {
+            Diagnostic {
                 file: DUMMY_FILE,
                 line: LineNumber(2),
                 message: "invocation of undefined macro `my_macro`".to_string(),
@@ -305,7 +305,7 @@ mod tests {
 
     #[test]
     fn render_elaborated_diagnostic() {
-        let elaborated_diagnostic = ElaboratedDiagnostic {
+        let elaborated_diagnostic = Diagnostic {
             file: DUMMY_FILE,
             line: LineNumber(2),
             message: "invocation of undefined macro `my_macro`".to_string(),
@@ -321,7 +321,7 @@ mod tests {
 
     #[test]
     fn highlight_eof_with_one_tilde() {
-        let elaborated = ElaboratedDiagnostic {
+        let elaborated = Diagnostic {
             file: DUMMY_FILE,
             line: LineNumber(2),
             message: "unexpected end of file".into(),
