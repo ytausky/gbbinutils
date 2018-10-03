@@ -1,5 +1,6 @@
 use codebase::{LineNumber, TextBuf, TextCache, TextRange};
 use span::TokenRefData;
+use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::fmt;
 use Width;
@@ -171,26 +172,27 @@ impl<'a> DiagnosticsListener<TokenRefData> for TerminalDiagnostics<'a> {
 }
 
 #[derive(Debug, PartialEq)]
-struct ElaboratedDiagnostic<'a> {
-    text: String,
-    buf_name: &'a str,
+struct ElaboratedDiagnostic<T> {
+    file: T,
+    line: LineNumber,
+    message: String,
+    source: T,
     highlight: TextRange,
-    src_line: &'a str,
 }
 
 fn elaborate<'a>(
     diagnostic: &Diagnostic<TokenRefData>,
     codebase: &'a TextCache,
-) -> ElaboratedDiagnostic<'a> {
+) -> ElaboratedDiagnostic<&'a str> {
     match diagnostic.highlight {
         TokenRefData::Lexeme {
             ref range,
             ref context,
         } => {
             let buf = codebase.buf(context.buf_id);
-            let text_range = buf.text_range(&range);
-            let (_, src_line) = buf
-                .lines(text_range.start.line..=text_range.end.line)
+            let highlight = buf.text_range(&range);
+            let (_, source) = buf
+                .lines(highlight.start.line..=highlight.end.line)
                 .next()
                 .unwrap();
             let snippets = diagnostic
@@ -198,19 +200,19 @@ fn elaborate<'a>(
                 .iter()
                 .map(|span| mk_snippet(codebase, span));
             ElaboratedDiagnostic {
-                text: diagnostic.message.render(snippets),
-                buf_name: buf.name(),
-                highlight: text_range,
-                src_line,
+                file: buf.name(),
+                line: highlight.start.line.into(),
+                message: diagnostic.message.render(snippets),
+                source,
+                highlight,
             }
         }
     }
 }
 
-impl<'a> fmt::Display for ElaboratedDiagnostic<'a> {
+impl<T: Borrow<str>> fmt::Display for ElaboratedDiagnostic<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         assert_eq!(self.highlight.start.line, self.highlight.end.line);
-        let line_number: LineNumber = self.highlight.start.line.into();
         let mut highlight = String::new();
         let space_count = self.highlight.start.column_index;
         let tilde_count = match self.highlight.end.column_index - space_count {
@@ -226,7 +228,11 @@ impl<'a> fmt::Display for ElaboratedDiagnostic<'a> {
         writeln!(
             f,
             "{}:{}: error: {}\n{}\n{}",
-            self.buf_name, line_number, self.text, self.src_line, highlight
+            self.file.borrow(),
+            self.line,
+            self.message,
+            self.source.borrow(),
+            highlight,
         )
     }
 }
@@ -288,10 +294,11 @@ mod tests {
         assert_eq!(
             elaborated_diagnostic,
             ElaboratedDiagnostic {
-                text: "invocation of undefined macro `my_macro`".to_string(),
-                buf_name: DUMMY_FILE,
+                file: DUMMY_FILE,
+                line: LineNumber(2),
+                message: "invocation of undefined macro `my_macro`".to_string(),
+                source: "    my_macro a, $12",
                 highlight: mk_highlight(LineNumber(2), 4, 12),
-                src_line: "    my_macro a, $12",
             }
         )
     }
@@ -299,10 +306,11 @@ mod tests {
     #[test]
     fn render_elaborated_diagnostic() {
         let elaborated_diagnostic = ElaboratedDiagnostic {
-            text: "invocation of undefined macro `my_macro`".to_string(),
-            buf_name: DUMMY_FILE,
+            file: DUMMY_FILE,
+            line: LineNumber(2),
+            message: "invocation of undefined macro `my_macro`".to_string(),
+            source: "    my_macro a, $12",
             highlight: mk_highlight(LineNumber(2), 4, 12),
-            src_line: "    my_macro a, $12",
         };
         let expected = r"/my/file:2: error: invocation of undefined macro `my_macro`
     my_macro a, $12
@@ -314,10 +322,11 @@ mod tests {
     #[test]
     fn highlight_eof_with_one_tilde() {
         let elaborated = ElaboratedDiagnostic {
-            text: "unexpected end of file".into(),
-            buf_name: DUMMY_FILE,
+            file: DUMMY_FILE,
+            line: LineNumber(2),
+            message: "unexpected end of file".into(),
+            source: "dummy",
             highlight: mk_highlight(LineNumber(2), 5, 5),
-            src_line: "dummy",
         };
         let expected = r"/my/file:2: error: unexpected end of file
 dummy
