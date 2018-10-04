@@ -6,5 +6,8 @@ fn main() {
         println!("{}: error: no input files", args[0]);
         std::process::exit(1)
     }
-    gbas::assemble_rom(&args[1]);
+    let config = gbas::DiagnosticsConfig {
+        output: &mut gbas::TerminalOutput {},
+    };
+    gbas::assemble_rom(&args[1], config);
 }

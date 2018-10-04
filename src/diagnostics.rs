@@ -5,8 +5,32 @@ use std::cell::RefCell;
 use std::fmt;
 use Width;
 
+pub trait DiagnosticsOutput {
+    fn emit(&self, diagnostic: Diagnostic<String>);
+}
+
+pub struct TerminalOutput;
+
+impl DiagnosticsOutput for TerminalOutput {
+    fn emit(&self, diagnostic: Diagnostic<String>) {
+        print!("{}", diagnostic)
+    }
+}
+
 pub trait DiagnosticsListener<S> {
     fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<S>);
+}
+
+pub struct OutputForwarder<'a> {
+    pub output: &'a mut dyn DiagnosticsOutput,
+    pub codebase: &'a RefCell<TextCache>,
+}
+
+impl<'a> DiagnosticsListener<TokenRefData> for OutputForwarder<'a> {
+    fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<TokenRefData>) {
+        self.output
+            .emit(diagnostic.elaborate(&self.codebase.borrow()))
+    }
 }
 
 #[cfg(test)]
@@ -153,25 +177,8 @@ impl fmt::Display for Width {
     }
 }
 
-pub struct TerminalDiagnostics<'a> {
-    codebase: &'a RefCell<TextCache>,
-}
-
-impl<'a> TerminalDiagnostics<'a> {
-    pub fn new(codebase: &'a RefCell<TextCache>) -> TerminalDiagnostics<'a> {
-        TerminalDiagnostics { codebase }
-    }
-}
-
-impl<'a> DiagnosticsListener<TokenRefData> for TerminalDiagnostics<'a> {
-    fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<TokenRefData>) {
-        let codebase = self.codebase.borrow();
-        print!("{}", diagnostic.elaborate(&codebase))
-    }
-}
-
 #[derive(Debug, PartialEq)]
-struct Diagnostic<T> {
+pub struct Diagnostic<T> {
     file: T,
     line: LineNumber,
     message: String,
@@ -180,7 +187,7 @@ struct Diagnostic<T> {
 }
 
 impl InternalDiagnostic<TokenRefData> {
-    fn elaborate<'a>(&self, codebase: &'a TextCache) -> Diagnostic<&'a str> {
+    fn elaborate<'a, T: From<&'a str>>(&self, codebase: &'a TextCache) -> Diagnostic<T> {
         match self.highlight {
             TokenRefData::Lexeme {
                 ref range,
@@ -194,10 +201,10 @@ impl InternalDiagnostic<TokenRefData> {
                     .unwrap();
                 let snippets = self.spans.iter().map(|span| mk_snippet(codebase, span));
                 Diagnostic {
-                    file: buf.name(),
+                    file: buf.name().into(),
                     line: highlight.start.line.into(),
                     message: self.message.render(snippets),
-                    source,
+                    source: source.into(),
                     highlight,
                 }
             }

@@ -22,9 +22,18 @@ impl Width {
     }
 }
 
-pub fn assemble_rom(name: &str) {
+pub use diagnostics::TerminalOutput;
+
+pub struct DiagnosticsConfig<'a> {
+    pub output: &'a mut dyn diagnostics::DiagnosticsOutput,
+}
+
+pub fn assemble_rom<'a>(name: &str, config: DiagnosticsConfig<'a>) {
     let codebase = codebase::FileCodebase::new(codebase::StdFileSystem::new());
-    let diagnostics = diagnostics::TerminalDiagnostics::new(&codebase.cache);
+    let diagnostics = diagnostics::OutputForwarder {
+        output: config.output,
+        codebase: &codebase.cache,
+    };
     let object = frontend::analyze_file(
         name.to_string(),
         &codebase,
