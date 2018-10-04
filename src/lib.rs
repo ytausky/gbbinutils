@@ -1,4 +1,5 @@
-use std::{fs::File, io::Write};
+pub use backend::Rom;
+pub use diagnostics::TerminalOutput;
 
 mod backend;
 mod codebase;
@@ -22,13 +23,11 @@ impl Width {
     }
 }
 
-pub use diagnostics::TerminalOutput;
-
 pub struct DiagnosticsConfig<'a> {
     pub output: &'a mut dyn diagnostics::DiagnosticsOutput,
 }
 
-pub fn assemble_rom<'a>(name: &str, config: DiagnosticsConfig<'a>) {
+pub fn assemble<'a>(name: &str, config: DiagnosticsConfig<'a>) -> Rom {
     let codebase = codebase::FileCodebase::new(codebase::StdFileSystem::new());
     let diagnostics = diagnostics::OutputForwarder {
         output: config.output,
@@ -41,7 +40,5 @@ pub fn assemble_rom<'a>(name: &str, config: DiagnosticsConfig<'a>) {
         backend::ObjectBuilder::new(),
         &diagnostics,
     );
-    let rom = backend::link(object, &diagnostics).into_rom();
-    let mut rom_file = File::create(name.to_owned() + ".o").unwrap();
-    rom_file.write_all(&rom.data).unwrap()
+    backend::link(object, &diagnostics).into_rom()
 }

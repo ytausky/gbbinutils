@@ -1,5 +1,8 @@
 extern crate gbas;
 
+use std::fs::File;
+use std::io::Write;
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() <= 1 {
@@ -9,5 +12,8 @@ fn main() {
     let config = gbas::DiagnosticsConfig {
         output: &mut gbas::TerminalOutput {},
     };
-    gbas::assemble_rom(&args[1], config);
+    let filename = &args[1];
+    let rom = gbas::assemble(filename, config);
+    let mut rom_file = File::create(filename.to_owned() + ".o").unwrap();
+    rom_file.write_all(&rom.data).unwrap()
 }
