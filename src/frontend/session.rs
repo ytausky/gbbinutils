@@ -93,8 +93,10 @@ where
     fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::Ident, Self::Span>) {
         self.frontend.borrow_mut().analyze_chunk(
             chunk_id,
-            self.backend.borrow_mut(),
-            self.diagnostics.borrow_mut(),
+            frontend::Downstream {
+                backend: self.backend.borrow_mut(),
+                diagnostics: self.diagnostics.borrow_mut(),
+            },
         )
     }
 

@@ -35,6 +35,11 @@ pub fn analyze_file<
     session.build_object()
 }
 
+pub struct Downstream<'a, B: 'a, D: 'a> {
+    backend: &'a mut B,
+    diagnostics: &'a mut D,
+}
+
 trait Analysis<Id: Into<String>> {
     fn run<I, S>(&mut self, tokens: I, session: &mut S)
     where
@@ -117,8 +122,7 @@ pub trait Frontend {
     fn analyze_chunk(
         &mut self,
         chunk_id: ChunkId<Self::Ident, Self::Span>,
-        backend: &mut impl Backend<Self::Span>,
-        diagnostics: &mut impl DiagnosticsListener<Self::Span>,
+        downstream: Downstream<impl Backend<Self::Span>, impl DiagnosticsListener<Self::Span>>,
     );
     fn define_macro(
         &mut self,
@@ -149,47 +153,42 @@ where
         }
     }
 
-    fn analyze_token_seq<
-        I: IntoIterator<Item = (Token<TCS::Ident>, TCS::Span)>,
-        B: Backend<TCS::Span>,
-        D: DiagnosticsListener<TCS::Span>,
-    >(
+    fn analyze_token_seq<I: IntoIterator<Item = (Token<TCS::Ident>, TCS::Span)>>(
         &mut self,
         tokens: I,
-        backend: &mut B,
-        diagnostics: &mut D,
+        downstream: Downstream<impl Backend<TCS::Span>, impl DiagnosticsListener<TCS::Span>>,
     ) {
         let mut analysis = self.analysis_factory.mk_analysis();
-        let mut session = BorrowedComponents::new(self, backend, diagnostics);
+        let mut session = BorrowedComponents::new(self, downstream.backend, downstream.diagnostics);
         analysis.run(tokens.into_iter(), &mut session)
     }
 
     fn include_source_file(
         &mut self,
         filename: &str,
-        backend: &mut impl Backend<TCS::Span>,
-        diagnostics: &mut impl DiagnosticsListener<TCS::Span>,
+        downstream: Downstream<impl Backend<TCS::Span>, impl DiagnosticsListener<TCS::Span>>,
     ) {
         let tokenized_src = self.tokenized_code_source.tokenize_file(filename);
-        self.analyze_token_seq(&tokenized_src, backend, diagnostics)
+        self.analyze_token_seq(&tokenized_src, downstream)
     }
 
     fn invoke_macro(
         &mut self,
         name: (<Self as Frontend>::Ident, <Self as Frontend>::Span),
         args: Vec<TokenSeq<<Self as Frontend>::Ident, <Self as Frontend>::Span>>,
-        backend: &mut impl Backend<TCS::Span>,
-        diagnostics: &mut impl DiagnosticsListener<TCS::Span>,
+        downstream: Downstream<impl Backend<TCS::Span>, impl DiagnosticsListener<TCS::Span>>,
     ) {
         match self.macros.expand(name.clone(), args) {
-            Some(tokens) => self.analyze_token_seq(tokens, backend, diagnostics),
+            Some(tokens) => self.analyze_token_seq(tokens, downstream),
             None => {
                 let (name, name_ref) = name;
-                diagnostics.emit_diagnostic(InternalDiagnostic::new(
-                    Message::UndefinedMacro { name: name.into() },
-                    vec![],
-                    name_ref,
-                ))
+                downstream
+                    .diagnostics
+                    .emit_diagnostic(InternalDiagnostic::new(
+                        Message::UndefinedMacro { name: name.into() },
+                        vec![],
+                        name_ref,
+                    ))
             }
         }
     }
@@ -210,14 +209,11 @@ where
     fn analyze_chunk(
         &mut self,
         chunk_id: ChunkId<Self::Ident, Self::Span>,
-        backend: &mut impl Backend<Self::Span>,
-        diagnostics: &mut impl DiagnosticsListener<Self::Span>,
+        downstream: Downstream<impl Backend<Self::Span>, impl DiagnosticsListener<Self::Span>>,
     ) {
         match chunk_id {
-            ChunkId::File((name, _)) => {
-                self.include_source_file(name.as_ref(), backend, diagnostics)
-            }
-            ChunkId::Macro { name, args } => self.invoke_macro(name, args, backend, diagnostics),
+            ChunkId::File((name, _)) => self.include_source_file(name.as_ref(), downstream),
+            ChunkId::Macro { name, args } => self.invoke_macro(name, args, downstream),
         }
     }
 
