@@ -29,7 +29,7 @@ pub struct DiagnosticsConfig<'a> {
 
 pub fn assemble<'a>(name: &str, config: DiagnosticsConfig<'a>) -> Rom {
     let codebase = codebase::FileCodebase::new(codebase::StdFileSystem::new());
-    let diagnostics = diagnostics::OutputForwarder {
+    let mut diagnostics = diagnostics::OutputForwarder {
         output: config.output,
         codebase: &codebase.cache,
     };
@@ -38,7 +38,7 @@ pub fn assemble<'a>(name: &str, config: DiagnosticsConfig<'a>) -> Rom {
         &codebase,
         span::SimpleTokenTracker {},
         backend::ObjectBuilder::new(),
-        &diagnostics,
+        &mut diagnostics,
     );
     backend::link(object, &diagnostics).into_rom()
 }

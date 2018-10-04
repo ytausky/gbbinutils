@@ -24,11 +24,11 @@ pub fn analyze_file<
     codebase: &C,
     token_tracker: TT,
     backend: B,
-    diagnostics: &D,
+    diagnostics: &mut D,
 ) -> B::Object {
     let factory = SemanticAnalysisFactory::new();
     let token_provider = TokenStreamSource::new(codebase, token_tracker);
-    let file_parser = FileParser::new(factory, MacroExpander::new(), token_provider, diagnostics);
+    let file_parser = FileParser::new(factory, MacroExpander::new(), token_provider);
     let mut session: Components<_, _, D, _, _, _> =
         Components::new(file_parser, backend, diagnostics);
     session.analyze_chunk(ChunkId::File((name, None)));
@@ -118,6 +118,7 @@ pub trait Frontend {
         &mut self,
         chunk_id: ChunkId<Self::Ident, Self::Span>,
         backend: &mut impl Backend<Self::Span>,
+        diagnostics: &mut impl DiagnosticsListener<Self::Span>,
     );
     fn define_macro(
         &mut self,
@@ -127,52 +128,50 @@ pub trait Frontend {
     );
 }
 
-struct FileParser<'a, AF, M, TCS, DL: 'a> {
+struct FileParser<AF, M, TCS> {
     analysis_factory: AF,
     macros: M,
     tokenized_code_source: TCS,
-    diagnostics: &'a DL,
 }
 
-impl<'a, AF, M, TCS, DL> FileParser<'a, AF, M, TCS, DL>
+impl<AF, M, TCS> FileParser<AF, M, TCS>
 where
     AF: AnalysisFactory<TCS::Ident>,
     M: Macros<Ident = TCS::Ident, Span = TCS::Span>,
     TCS: TokenizedCodeSource,
-    for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token<TCS::Ident>, TCS::Span)>,
-    DL: DiagnosticsListener<TCS::Span>,
+    for<'a> &'a TCS::Tokenized: IntoIterator<Item = (Token<TCS::Ident>, TCS::Span)>,
 {
-    fn new(
-        analysis_factory: AF,
-        macros: M,
-        tokenized_code_source: TCS,
-        diagnostics: &DL,
-    ) -> FileParser<AF, M, TCS, DL> {
+    fn new(analysis_factory: AF, macros: M, tokenized_code_source: TCS) -> FileParser<AF, M, TCS> {
         FileParser {
             analysis_factory,
             macros,
             tokenized_code_source,
-            diagnostics,
         }
     }
 
     fn analyze_token_seq<
         I: IntoIterator<Item = (Token<TCS::Ident>, TCS::Span)>,
         B: Backend<TCS::Span>,
+        D: DiagnosticsListener<TCS::Span>,
     >(
         &mut self,
         tokens: I,
         backend: &mut B,
+        diagnostics: &mut D,
     ) {
         let mut analysis = self.analysis_factory.mk_analysis();
-        let diagnostics = self.diagnostics;
         let mut session = BorrowedComponents::new(self, backend, diagnostics);
         analysis.run(tokens.into_iter(), &mut session)
     }
 
-    fn include_source_file(&mut self, filename: &str, backend: &mut impl Backend<TCS::Span>) {
+    fn include_source_file(
+        &mut self,
+        filename: &str,
+        backend: &mut impl Backend<TCS::Span>,
+        diagnostics: &mut impl DiagnosticsListener<TCS::Span>,
+    ) {
         let tokenized_src = self.tokenized_code_source.tokenize_file(filename);
-        self.analyze_token_seq(&tokenized_src, backend)
+        self.analyze_token_seq(&tokenized_src, backend, diagnostics)
     }
 
     fn invoke_macro(
@@ -180,12 +179,13 @@ where
         name: (<Self as Frontend>::Ident, <Self as Frontend>::Span),
         args: Vec<TokenSeq<<Self as Frontend>::Ident, <Self as Frontend>::Span>>,
         backend: &mut impl Backend<TCS::Span>,
+        diagnostics: &mut impl DiagnosticsListener<TCS::Span>,
     ) {
         match self.macros.expand(name.clone(), args) {
-            Some(tokens) => self.analyze_token_seq(tokens, backend),
+            Some(tokens) => self.analyze_token_seq(tokens, backend, diagnostics),
             None => {
                 let (name, name_ref) = name;
-                self.diagnostics.emit_diagnostic(InternalDiagnostic::new(
+                diagnostics.emit_diagnostic(InternalDiagnostic::new(
                     Message::UndefinedMacro { name: name.into() },
                     vec![],
                     name_ref,
@@ -197,13 +197,12 @@ where
 
 type TokenSeq<I, S> = Vec<(Token<I>, S)>;
 
-impl<'a, AF, M, TCS, DL> Frontend for FileParser<'a, AF, M, TCS, DL>
+impl<AF, M, TCS> Frontend for FileParser<AF, M, TCS>
 where
     AF: AnalysisFactory<TCS::Ident>,
     M: Macros<Ident = TCS::Ident, Span = TCS::Span>,
     TCS: TokenizedCodeSource,
-    for<'b> &'b TCS::Tokenized: IntoIterator<Item = (Token<TCS::Ident>, TCS::Span)>,
-    DL: DiagnosticsListener<TCS::Span>,
+    for<'a> &'a TCS::Tokenized: IntoIterator<Item = (Token<TCS::Ident>, TCS::Span)>,
 {
     type Ident = TCS::Ident;
     type Span = TCS::Span;
@@ -212,10 +211,13 @@ where
         &mut self,
         chunk_id: ChunkId<Self::Ident, Self::Span>,
         backend: &mut impl Backend<Self::Span>,
+        diagnostics: &mut impl DiagnosticsListener<Self::Span>,
     ) {
         match chunk_id {
-            ChunkId::File((name, _)) => self.include_source_file(name.as_ref(), backend),
-            ChunkId::Macro { name, args } => self.invoke_macro(name, args, backend),
+            ChunkId::File((name, _)) => {
+                self.include_source_file(name.as_ref(), backend, diagnostics)
+            }
+            ChunkId::Macro { name, args } => self.invoke_macro(name, args, backend, diagnostics),
         }
     }
 
@@ -677,25 +679,14 @@ mod tests {
         }
 
         fn when<F: for<'b> FnOnce(TestSession<'b>)>(self, f: F) {
-            let file_parser = FileParser::new(
-                self.analysis_factory,
-                self.macros,
-                self.mock_token_source,
-                &self.diagnostics,
-            );
-            let session = Components::new(file_parser, self.object, &self.diagnostics);
+            let file_parser =
+                FileParser::new(self.analysis_factory, self.macros, self.mock_token_source);
+            let session = Components::new(file_parser, self.object, self.diagnostics);
             f(session);
         }
     }
 
-    type TestFileParser<'a> =
-        FileParser<'a, Mock<'a>, MacroExpander<String, ()>, MockTokenSource, Mock<'a>>;
-    type TestSession<'a> = Components<
-        TestFileParser<'a>,
-        Mock<'a>,
-        Mock<'a>,
-        TestFileParser<'a>,
-        Mock<'a>,
-        &'a Mock<'a>,
-    >;
+    type TestFileParser<'a> = FileParser<Mock<'a>, MacroExpander<String, ()>, MockTokenSource>;
+    type TestSession<'a> =
+        Components<TestFileParser<'a>, Mock<'a>, Mock<'a>, TestFileParser<'a>, Mock<'a>, Mock<'a>>;
 }

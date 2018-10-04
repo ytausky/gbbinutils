@@ -3,7 +3,7 @@ use diagnostics;
 use diagnostics::InternalDiagnostic;
 use frontend;
 use span;
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::BorrowMut;
 use std::marker;
 
 pub trait Session {
@@ -31,33 +31,37 @@ pub enum ChunkId<I, S> {
     },
 }
 
-pub struct Components<F, B, D, BMF, BMB, BD>
+pub struct Components<F, B, D, BMF, BMB, BMD>
 where
     F: frontend::Frontend,
     B: backend::Backend<F::Span>,
     D: diagnostics::DiagnosticsListener<F::Span>,
     BMF: BorrowMut<F>,
     BMB: BorrowMut<B>,
-    BD: Borrow<D>,
+    BMD: BorrowMut<D>,
 {
     frontend: BMF,
     backend: BMB,
-    diagnostics: BD,
+    diagnostics: BMD,
     phantom: marker::PhantomData<(F, B, D)>,
 }
 
-pub type BorrowedComponents<'a, F, B, D> = Components<F, B, D, &'a mut F, &'a mut B, &'a D>;
+pub type BorrowedComponents<'a, F, B, D> = Components<F, B, D, &'a mut F, &'a mut B, &'a mut D>;
 
-impl<F, B, D, BMF, BMB, BD> Components<F, B, D, BMF, BMB, BD>
+impl<F, B, D, BMF, BMB, BMD> Components<F, B, D, BMF, BMB, BMD>
 where
     F: frontend::Frontend,
     B: backend::Backend<F::Span>,
     D: diagnostics::DiagnosticsListener<F::Span>,
     BMF: BorrowMut<F>,
     BMB: BorrowMut<B>,
-    BD: Borrow<D>,
+    BMD: BorrowMut<D>,
 {
-    pub fn new(frontend: BMF, backend: BMB, diagnostics: BD) -> Components<F, B, D, BMF, BMB, BD> {
+    pub fn new(
+        frontend: BMF,
+        backend: BMB,
+        diagnostics: BMD,
+    ) -> Components<F, B, D, BMF, BMB, BMD> {
         Components {
             frontend,
             backend,
@@ -74,22 +78,24 @@ where
     }
 }
 
-impl<F, B, D, BMF, BMB, BD> Session for Components<F, B, D, BMF, BMB, BD>
+impl<F, B, D, BMF, BMB, BMD> Session for Components<F, B, D, BMF, BMB, BMD>
 where
     F: frontend::Frontend,
     B: backend::Backend<F::Span>,
     D: diagnostics::DiagnosticsListener<F::Span>,
     BMF: BorrowMut<F>,
     BMB: BorrowMut<B>,
-    BD: Borrow<D>,
+    BMD: BorrowMut<D>,
 {
     type Ident = F::Ident;
     type Span = F::Span;
 
     fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::Ident, Self::Span>) {
-        self.frontend
-            .borrow_mut()
-            .analyze_chunk(chunk_id, self.backend.borrow_mut())
+        self.frontend.borrow_mut().analyze_chunk(
+            chunk_id,
+            self.backend.borrow_mut(),
+            self.diagnostics.borrow_mut(),
+        )
     }
 
     fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<Self::Span>) {
