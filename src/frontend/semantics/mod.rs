@@ -51,7 +51,7 @@ impl<'a, F: Session + 'a> SemanticActions<'a, F> {
 }
 
 impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for SemanticActions<'a, F> {
-    fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<F::Span>) {
+    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<F::Span>) {
         self.session.emit_diagnostic(diagnostic)
     }
 }
@@ -114,7 +114,7 @@ impl<'a, F: Session + 'a> CommandActions<'a, F> {
 }
 
 impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for CommandActions<'a, F> {
-    fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<F::Span>) {
+    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<F::Span>) {
         self.parent.emit_diagnostic(diagnostic)
     }
 }
@@ -282,7 +282,7 @@ impl<'a, F: Session + 'a> MacroDefActions<'a, F> {
 }
 
 impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for MacroDefActions<'a, F> {
-    fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<F::Span>) {
+    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<F::Span>) {
         self.parent.emit_diagnostic(diagnostic)
     }
 }
@@ -343,7 +343,7 @@ impl<'a, F: Session + 'a> MacroInvocationActions<'a, F> {
 }
 
 impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for MacroInvocationActions<'a, F> {
-    fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<F::Span>) {
+    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<F::Span>) {
         self.parent.emit_diagnostic(diagnostic)
     }
 }
@@ -383,7 +383,7 @@ impl<'a, F: Session + 'a> MacroArgActions<'a, F> {
 }
 
 impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for MacroArgActions<'a, F> {
-    fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<F::Span>) {
+    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<F::Span>) {
         self.parent.parent.session.emit_diagnostic(diagnostic)
     }
 }
@@ -456,7 +456,7 @@ mod tests {
                 .push(TestOperation::AnalyzeChunk(chunk_id))
         }
 
-        fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<Self::Span>) {
+        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<Self::Span>) {
             self.0
                 .borrow_mut()
                 .push(TestOperation::EmitDiagnostic(diagnostic))
@@ -748,7 +748,7 @@ mod tests {
     fn diagnose_parsing_error() {
         let diagnostic = InternalDiagnostic::new(Message::UnexpectedToken, once(()), ());
         let actions = collect_semantic_actions(|actions| {
-            let stmt = actions.enter_line(None);
+            let mut stmt = actions.enter_line(None);
             stmt.emit_diagnostic(diagnostic.clone());
             stmt.exit()
         });

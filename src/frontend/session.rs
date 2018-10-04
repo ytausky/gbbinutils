@@ -10,7 +10,7 @@ pub trait Session {
     type Ident: Into<String>;
     type Span: span::Span;
     fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::Ident, Self::Span>);
-    fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<Self::Span>);
+    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<Self::Span>);
     fn emit_item(&mut self, item: backend::Item<Self::Span>);
     fn define_label(&mut self, label: (String, Self::Span));
     fn define_macro(
@@ -98,8 +98,8 @@ where
         )
     }
 
-    fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<Self::Span>) {
-        self.diagnostics.borrow().emit_diagnostic(diagnostic)
+    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<Self::Span>) {
+        self.diagnostics.borrow_mut().emit_diagnostic(diagnostic)
     }
 
     fn emit_item(&mut self, item: backend::Item<Self::Span>) {

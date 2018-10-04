@@ -38,7 +38,7 @@ impl<SR> Object<SR> {
     }
 }
 
-pub fn link<'a, S, D>(object: Object<S>, diagnostics: &D) -> BinaryObject
+pub fn link<'a, S, D>(object: Object<S>, diagnostics: &mut D) -> BinaryObject
 where
     S: Span,
     D: DiagnosticsListener<S> + 'a,
@@ -203,7 +203,7 @@ mod tests {
                 },
             ],
         };
-        let binary = link(object, &IgnoreDiagnostics {});
+        let binary = link(object, &mut IgnoreDiagnostics {});
         assert_eq!(
             binary.sections[1].origin,
             (origin1 + 1 + skipped_bytes) as usize

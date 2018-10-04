@@ -40,5 +40,5 @@ pub fn assemble<'a>(name: &str, config: DiagnosticsConfig<'a>) -> Rom {
         backend::ObjectBuilder::new(),
         &mut diagnostics,
     );
-    backend::link(object, &diagnostics).into_rom()
+    backend::link(object, &mut diagnostics).into_rom()
 }

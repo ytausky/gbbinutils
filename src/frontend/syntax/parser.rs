@@ -161,7 +161,7 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I> {
         }.exit()
     }
 
-    fn parse_unlabeled_line<LA: LineActions<Id, C, L, S>>(&mut self, actions: LA) -> LA {
+    fn parse_unlabeled_line<LA: LineActions<Id, C, L, S>>(&mut self, mut actions: LA) -> LA {
         match self.lookahead() {
             Token::Eol | Token::Eof => actions,
             Token::Command(()) => self.parse_command(actions),
@@ -184,7 +184,7 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I> {
 
     fn parse_macro_def<LA: LineActions<Id, C, L, S>>(&mut self, actions: LA) -> LA {
         self.expect(Token::Macro);
-        let actions = self.parse_terminated_list(
+        let mut actions = self.parse_terminated_list(
             Token::Comma,
             LINE_FOLLOW_SET,
             |p, a| p.parse_macro_param(a),
@@ -447,7 +447,7 @@ mod tests {
     }
 
     impl<'a> DiagnosticsListener<SymRange<usize>> for &'a mut TestContext {
-        fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<SymRange<usize>>) {
+        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymRange<usize>>) {
             self.actions.borrow_mut().push(Action::Error(diagnostic))
         }
     }

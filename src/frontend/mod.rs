@@ -637,7 +637,7 @@ mod tests {
     }
 
     impl<'a> DiagnosticsListener<()> for Mock<'a> {
-        fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<()>) {
+        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<()>) {
             self.log
                 .borrow_mut()
                 .push(TestEvent::Diagnostic(diagnostic))

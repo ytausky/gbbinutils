@@ -264,11 +264,11 @@ mod tests {
     fn with_object_builder<F: FnOnce(&mut TestObjectBuilder)>(
         f: F,
     ) -> (BinaryObject, Box<[InternalDiagnostic<()>]>) {
-        let diagnostics = TestDiagnosticsListener::new();
+        let mut diagnostics = TestDiagnosticsListener::new();
         let object = {
             let mut builder = ObjectBuilder::new();
             f(&mut builder);
-            link(builder.build(), &diagnostics)
+            link(builder.build(), &mut diagnostics)
         };
         let diagnostics = diagnostics.diagnostics.into_inner().into_boxed_slice();
         (object, diagnostics)

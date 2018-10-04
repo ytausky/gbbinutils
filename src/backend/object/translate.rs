@@ -10,7 +10,7 @@ impl<S: Span> Chunk<S> {
     pub fn translate(
         &self,
         context: &mut EvalContext<&SymbolTable>,
-        diagnostics: &impl DiagnosticsListener<S>,
+        diagnostics: &mut impl DiagnosticsListener<S>,
     ) -> BinarySection {
         let mut data = Vec::<u8>::new();
         let origin = self.evaluate_origin(&context);
@@ -29,7 +29,7 @@ impl<S: Span> Node<S> {
     fn translate(
         &self,
         context: &EvalContext<&SymbolTable>,
-        diagnostics: &DiagnosticsListener<S>,
+        diagnostics: &mut impl DiagnosticsListener<S>,
     ) -> IntoIter<u8> {
         match self {
             Node::Byte(value) => vec![*value],
@@ -93,7 +93,7 @@ fn resolve_expr_item<S: Span>(
     expr: &RelocExpr<S>,
     width: Width,
     context: &EvalContext<&SymbolTable>,
-    diagnostics: &DiagnosticsListener<S>,
+    diagnostics: &mut impl DiagnosticsListener<S>,
 ) -> Data {
     let span = expr.span();
     let value = expr
@@ -113,7 +113,7 @@ fn resolve_expr_item<S: Span>(
 fn fit_to_width<SR: Clone>(
     (value, value_ref): (i32, SR),
     width: Width,
-    diagnostics: &DiagnosticsListener<SR>,
+    diagnostics: &mut impl DiagnosticsListener<SR>,
 ) -> Data {
     if !is_in_range(value, width) {
         diagnostics.emit_diagnostic(InternalDiagnostic::new(
@@ -210,7 +210,7 @@ mod tests {
                 symbols: &SymbolTable::new(),
                 location: Value::Unknown,
             },
-            &diagnostics::IgnoreDiagnostics {},
+            &mut diagnostics::IgnoreDiagnostics {},
         ).collect()
     }
 
@@ -253,6 +253,6 @@ mod tests {
             symbols: &SymbolTable::new(),
             location: 0.into(),
         };
-        chunk.translate(&mut context, &IgnoreDiagnostics)
+        chunk.translate(&mut context, &mut IgnoreDiagnostics)
     }
 }

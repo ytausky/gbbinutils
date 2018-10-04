@@ -18,7 +18,7 @@ impl DiagnosticsOutput for TerminalOutput {
 }
 
 pub trait DiagnosticsListener<S> {
-    fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<S>);
+    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<S>);
 }
 
 pub struct OutputForwarder<'a> {
@@ -27,7 +27,7 @@ pub struct OutputForwarder<'a> {
 }
 
 impl<'a> DiagnosticsListener<TokenRefData> for OutputForwarder<'a> {
-    fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<TokenRefData>) {
+    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<TokenRefData>) {
         self.output
             .emit(diagnostic.elaborate(&self.codebase.borrow()))
     }
@@ -38,7 +38,7 @@ pub struct IgnoreDiagnostics;
 
 #[cfg(test)]
 impl<S> DiagnosticsListener<S> for IgnoreDiagnostics {
-    fn emit_diagnostic(&self, _: InternalDiagnostic<S>) {}
+    fn emit_diagnostic(&mut self, _: InternalDiagnostic<S>) {}
 }
 
 #[cfg(test)]
@@ -57,7 +57,7 @@ impl TestDiagnosticsListener {
 
 #[cfg(test)]
 impl DiagnosticsListener<()> for TestDiagnosticsListener {
-    fn emit_diagnostic(&self, diagnostic: InternalDiagnostic<()>) {
+    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<()>) {
         self.diagnostics.borrow_mut().push(diagnostic)
     }
 }
