@@ -188,10 +188,10 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
             (Operand::Atom(AtomKind::Reg16(dest), _), Operand::Const(expr)) => {
                 Ok(Instruction::Ld(Ld::Immediate16(dest, expr)))
             }
-            _ => Err(InternalDiagnostic::new(
+            (dest, src) => Err(InternalDiagnostic::new(
                 Message::IllegalOperands,
                 iter::once(self.mnemonic.1.clone()),
-                self.mnemonic.1.clone(),
+                dest.span().extend(&src.span()),
             )),
         }
     }
@@ -1246,13 +1246,12 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn analyze_ld_const_const() {
         analyze(kw::Mnemonic::Ld, vec![2.into(), 4.into()]).expect_diagnostic(
             ExpectedDiagnostic::new(Message::IllegalOperands)
                 .with_spans(iter::once(TokenId::Mnemonic.into()))
                 .with_highlight(
-                    TokenSpan::from(TokenId::Mnemonic).extend(&TokenId::Operand(1, 0).into()),
+                    TokenSpan::from(TokenId::Operand(0, 0)).extend(&TokenId::Operand(1, 0).into()),
                 ),
         )
     }
