@@ -92,6 +92,7 @@ pub enum Message {
     IncompatibleOperand,
     KeywordInExpr,
     MissingTarget,
+    MustBeDeref,
     OperandCount { actual: usize, expected: usize },
     StringInInstruction,
     UndefinedMacro { name: String },
@@ -127,6 +128,10 @@ impl Message {
                 snippets.next().unwrap(),
             ),
             MissingTarget => "branch instruction requires target".into(),
+            MustBeDeref => format!(
+                "operand `{}` must be dereferenced",
+                snippets.next().unwrap()
+            ),
             OperandCount { actual, expected } => format!(
                 "expected {} operand{}, found {}",
                 expected,

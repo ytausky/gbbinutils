@@ -4,7 +4,7 @@ use frontend::syntax::keyword as kw;
 use frontend::syntax::Literal;
 use instruction::{Condition, PtrReg, Reg16, RegPair, RelocExpr, SimpleOperand};
 use span::{Source, Span};
-use std::iter::empty;
+use std::iter;
 
 #[derive(Debug, PartialEq)]
 pub enum Operand<R> {
@@ -48,7 +48,7 @@ pub fn analyze_operand<I: Into<String>, S: Clone>(
 ) -> OperandResult<S> {
     match expr.variant {
         ExprVariant::Literal(Literal::Operand(keyword)) => {
-            Ok(analyze_keyword_operand((keyword, expr.span), context))
+            analyze_keyword_operand((keyword, expr.span), context)
         }
         ExprVariant::Parentheses(inner) => analyze_deref_operand(*inner, expr.span),
         _ => Ok(Operand::Const(analyze_reloc_expr(expr)?)),
@@ -106,14 +106,17 @@ pub fn analyze_reloc_expr<I: Into<String>, S: Clone>(
         )),
         ExprVariant::Literal(Literal::String(_)) => Err(InternalDiagnostic::new(
             Message::StringInInstruction,
-            empty(),
+            iter::empty(),
             expr.span,
         )),
         ExprVariant::Parentheses(expr) => analyze_reloc_expr(*expr),
     }
 }
 
-fn analyze_keyword_operand<R>((keyword, range): (kw::Operand, R), context: Context) -> Operand<R> {
+fn analyze_keyword_operand<S: Clone>(
+    (keyword, span): (kw::Operand, S),
+    context: Context,
+) -> OperandResult<S> {
     use self::kw::Operand::*;
     use self::Context::*;
     let kind = match keyword {
@@ -139,14 +142,18 @@ fn analyze_keyword_operand<R>((keyword, range): (kw::Operand, R), context: Conte
             Stack => AtomKind::RegPair(RegPair::Hl),
             _ => AtomKind::Reg16(Reg16::Hl),
         },
-        Hld | Hli => panic!(),
+        Hld | Hli => Err(InternalDiagnostic::new(
+            Message::MustBeDeref,
+            iter::once(span.clone()),
+            span.clone(),
+        ))?,
         L => AtomKind::Simple(SimpleOperand::L),
         Nc => AtomKind::Condition(Condition::Nc),
         Nz => AtomKind::Condition(Condition::Nz),
         Sp => AtomKind::Reg16(Reg16::Sp),
         Z => AtomKind::Condition(Condition::Z),
     };
-    Operand::Atom(kind, range)
+    Ok(Operand::Atom(kind, span))
 }
 
 pub struct OperandCounter<I> {
@@ -179,7 +186,7 @@ impl<I: Iterator<Item = Result<T, E>>, T, E> OperandCounter<I> {
         } else {
             Err(InternalDiagnostic::new(
                 Message::OperandCount { actual, expected },
-                empty(),
+                iter::empty(),
                 span,
             ))
         }
@@ -299,7 +306,33 @@ mod tests {
             analyze_operand(parsed_expr, Context::Other),
             Err(InternalDiagnostic::new(
                 Message::StringInInstruction,
-                empty(),
+                iter::empty(),
+                span
+            ))
+        )
+    }
+
+    #[test]
+    fn analyze_bare_hld() {
+        test_bare_ptr_reg(kw::Operand::Hld)
+    }
+
+    #[test]
+    fn analyze_bare_hli() {
+        test_bare_ptr_reg(kw::Operand::Hli)
+    }
+
+    fn test_bare_ptr_reg(keyword: kw::Operand) {
+        let span = 0;
+        let expr = Expr::<String, _> {
+            variant: ExprVariant::Literal(Literal::Operand(keyword)),
+            span,
+        };
+        assert_eq!(
+            analyze_operand(expr, Context::Other),
+            Err(InternalDiagnostic::new(
+                Message::MustBeDeref,
+                iter::once(span),
                 span
             ))
         )
