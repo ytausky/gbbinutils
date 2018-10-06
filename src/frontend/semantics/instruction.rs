@@ -4,7 +4,7 @@ use frontend::semantics::operand::{self, AtomKind, Context, Operand, OperandCoun
 use frontend::syntax::keyword as kw;
 use instruction::*;
 use span::{Source, Span};
-use std::iter::empty;
+use std::iter;
 
 pub fn analyze_instruction<Id: Into<String>, I, S>(
     mnemonic: (kw::Mnemonic, S),
@@ -78,7 +78,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
             Reg16::Hl => self.analyze_add_hl_instruction(),
             _ => Err(InternalDiagnostic::new(
                 Message::DestMustBeHl,
-                empty(),
+                iter::empty(),
                 target.1,
             )),
         }
@@ -89,7 +89,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
             Operand::Atom(AtomKind::Reg16(src), _) => Ok(Instruction::AddHl(src)),
             Operand::Atom(_, span) => Err(InternalDiagnostic::new(
                 Message::IncompatibleOperand,
-                empty(),
+                iter::empty(),
                 span,
             )),
             _ => panic!(),
@@ -109,7 +109,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
                 Operand::Atom(AtomKind::Simple(SimpleOperand::A), _) => Ok(()),
                 operand => Err(InternalDiagnostic::new(
                     Message::DestMustBeA,
-                    empty(),
+                    iter::empty(),
                     operand.span(),
                 )),
             }?;
@@ -140,7 +140,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
         match (branch, condition, target) {
             (BranchKind::Jp, None, Some(TargetSelector::DerefHl)) => Ok(Instruction::JpDerefHl),
             (BranchKind::Jp, Some((_, condition_ref)), Some(TargetSelector::DerefHl)) => Err(
-                InternalDiagnostic::new(Message::AlwaysUnconditional, empty(), condition_ref),
+                InternalDiagnostic::new(Message::AlwaysUnconditional, iter::empty(), condition_ref),
             ),
             (_, condition, target) => Ok(Instruction::Branch(
                 mk_branch((branch, self.mnemonic.1.clone()), target)?,
@@ -188,7 +188,11 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
             (Operand::Atom(AtomKind::Reg16(dest), _), Operand::Const(expr)) => {
                 Ok(Instruction::Ld(Ld::Immediate16(dest, expr)))
             }
-            _ => panic!(),
+            _ => Err(InternalDiagnostic::new(
+                Message::IllegalOperands,
+                iter::once(self.mnemonic.1.clone()),
+                self.mnemonic.1.clone(),
+            )),
         }
     }
 
@@ -248,7 +252,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
                     actual,
                     expected: out_of,
                 },
-                empty(),
+                iter::empty(),
                 self.mnemonic.1.clone(),
             )
         })
@@ -274,7 +278,7 @@ fn mk_branch<S>(
         (BranchKind::Jp, Some(TargetSelector::Expr(expr))) => Ok(Branch::Jp(expr)),
         (BranchKind::Jp, None) => Err(InternalDiagnostic::new(
             Message::MissingTarget,
-            empty(),
+            iter::empty(),
             kind.1,
         )),
         (BranchKind::Jr, Some(TargetSelector::Expr(expr))) => Ok(Branch::Jr(expr)),
@@ -1072,7 +1076,11 @@ mod tests {
         fn expect_diagnostic(self, message: Message) {
             assert_eq!(
                 self.0,
-                Err(InternalDiagnostic::new(message, empty(), Marking::Special))
+                Err(InternalDiagnostic::new(
+                    message,
+                    iter::empty(),
+                    Marking::Special
+                ))
             )
         }
     }
@@ -1206,5 +1214,14 @@ mod tests {
     fn analyze_jp_z() {
         analyze(kw::Mnemonic::Jp.to_marked().mark(), vec![literal(Z)])
             .expect_diagnostic(Message::MissingTarget)
+    }
+
+    #[test]
+    #[ignore]
+    fn analyze_ld_const_const() {
+        analyze(
+            kw::Mnemonic::Ld.to_marked().mark(),
+            vec![2.into(), 4.into()],
+        ).expect_diagnostic(Message::IllegalOperands)
     }
 }
