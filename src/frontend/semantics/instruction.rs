@@ -130,11 +130,23 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
     fn analyze_bit_operation(&mut self, operation: BitOperation) -> AnalysisResult<S> {
         let bit_number = self.expect_operand(2)?;
         let operand = self.expect_operand(2)?;
-        match (bit_number, operand) {
-            (Operand::Const(expr), Operand::Atom(AtomKind::Simple(simple), _)) => {
-                Ok(Instruction::Bit(operation, expr, simple))
-            }
-            _ => panic!(),
+        let expr = if let Operand::Const(expr) = bit_number {
+            expr
+        } else {
+            return Err(InternalDiagnostic::new(
+                Message::MustBeBit,
+                iter::once(self.mnemonic.1.clone()),
+                bit_number.span(),
+            ));
+        };
+        if let Operand::Atom(AtomKind::Simple(simple), _) = operand {
+            Ok(Instruction::Bit(operation, expr, simple))
+        } else {
+            Err(InternalDiagnostic::new(
+                Message::RequiresSimpleOperand,
+                iter::empty(),
+                operand.span(),
+            ))
         }
     }
 
@@ -1098,8 +1110,12 @@ mod tests {
             }
         }
 
-        fn with_spans<I: IntoIterator<Item = TokenSpan>>(mut self, spans: I) -> Self {
-            self.spans.extend(spans);
+        fn with_spans<I>(mut self, spans: I) -> Self
+        where
+            I: IntoIterator,
+            I::Item: Into<TokenSpan>,
+        {
+            self.spans.extend(spans.into_iter().map(Into::into));
             self
         }
 
@@ -1252,7 +1268,7 @@ mod tests {
     fn analyze_ld_const_const() {
         analyze(kw::Mnemonic::Ld, vec![2.into(), 4.into()]).expect_diagnostic(
             ExpectedDiagnostic::new(Message::IllegalOperands)
-                .with_spans(iter::once(TokenId::Mnemonic.into()))
+                .with_spans(iter::once(TokenId::Mnemonic))
                 .with_highlight(
                     TokenSpan::from(TokenId::Operand(0, 0)).extend(&TokenId::Operand(1, 0).into()),
                 ),
@@ -1274,6 +1290,23 @@ mod tests {
                 first: TokenId::Operand(1, 0),
                 last: TokenId::Operand(1, 2),
             }),
+        )
+    }
+
+    #[test]
+    fn analyze_bit_a_b() {
+        analyze(kw::Mnemonic::Bit, vec![literal(A), literal(B)]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::MustBeBit)
+                .with_spans(iter::once(TokenId::Mnemonic))
+                .with_highlight(TokenId::Operand(0, 0)),
+        )
+    }
+
+    #[test]
+    fn analyze_bit_7_bc() {
+        analyze(kw::Mnemonic::Bit, vec![7.into(), literal(Bc)]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::RequiresSimpleOperand)
+                .with_highlight(TokenId::Operand(1, 0)),
         )
     }
 

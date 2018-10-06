@@ -93,8 +93,10 @@ pub enum Message {
     IncompatibleOperand,
     KeywordInExpr,
     MissingTarget,
+    MustBeBit,
     MustBeDeref,
     OperandCount { actual: usize, expected: usize },
+    RequiresSimpleOperand,
     StringInInstruction,
     UndefinedMacro { name: String },
     UnexpectedEof,
@@ -133,6 +135,10 @@ impl Message {
                 snippets.next().unwrap(),
             ),
             MissingTarget => "branch instruction requires target".into(),
+            MustBeBit => format!(
+                "first operand of `{}` must be bit number",
+                snippets.next().unwrap()
+            ),
             MustBeDeref => format!(
                 "operand `{}` must be dereferenced",
                 snippets.next().unwrap()
@@ -143,6 +149,7 @@ impl Message {
                 pluralize(*expected),
                 actual
             ),
+            RequiresSimpleOperand => "instruction requires 8-bit register or `(hl)`".into(),
             StringInInstruction => "strings cannot appear in instruction operands".into(),
             UndefinedMacro { name } => format!("invocation of undefined macro `{}`", name),
             UnexpectedEof => "unexpected end of file".into(),
