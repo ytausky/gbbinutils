@@ -119,7 +119,11 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
                 Ok(Instruction::Alu(operation, AluSource::Simple(src)))
             }
             Operand::Const(expr) => Ok(Instruction::Alu(operation, AluSource::Immediate(expr))),
-            _ => panic!(),
+            src => Err(InternalDiagnostic::new(
+                Message::IncompatibleOperand,
+                iter::empty(),
+                src.span(),
+            )),
         }
     }
 
@@ -1260,6 +1264,16 @@ mod tests {
         analyze(kw::Mnemonic::Add, vec![literal(Hl), 2.into()]).expect_diagnostic(
             ExpectedDiagnostic::new(Message::IncompatibleOperand)
                 .with_highlight(TokenId::Operand(1, 0)),
+        )
+    }
+
+    #[test]
+    fn analyze_add_a_bc_deref() {
+        analyze(kw::Mnemonic::Add, vec![literal(A), deref(literal(Bc))]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::IncompatibleOperand).with_highlight(TokenSpan {
+                first: TokenId::Operand(1, 0),
+                last: TokenId::Operand(1, 2),
+            }),
         )
     }
 
