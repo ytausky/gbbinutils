@@ -87,12 +87,11 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
     fn analyze_add_hl_instruction(&mut self) -> AnalysisResult<S> {
         match self.expect_operand(2)? {
             Operand::Atom(AtomKind::Reg16(src), _) => Ok(Instruction::AddHl(src)),
-            Operand::Atom(_, span) => Err(InternalDiagnostic::new(
+            operand => Err(InternalDiagnostic::new(
                 Message::IncompatibleOperand,
                 iter::empty(),
-                span,
+                operand.span(),
             )),
-            _ => panic!(),
         }
     }
 
@@ -1253,6 +1252,14 @@ mod tests {
                 .with_highlight(
                     TokenSpan::from(TokenId::Operand(0, 0)).extend(&TokenId::Operand(1, 0).into()),
                 ),
+        )
+    }
+
+    #[test]
+    fn analyze_add_hl_const() {
+        analyze(kw::Mnemonic::Add, vec![literal(Hl), 2.into()]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::IncompatibleOperand)
+                .with_highlight(TokenId::Operand(1, 0)),
         )
     }
 
