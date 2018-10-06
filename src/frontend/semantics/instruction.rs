@@ -431,50 +431,13 @@ mod tests {
     use super::*;
     use frontend::semantics::ExprVariant;
     use frontend::syntax::Literal;
+    use std::cmp;
 
-    #[derive(Clone, Copy, Debug, PartialEq)]
-    enum Marking {
-        Normal,
-        Special,
-    }
+    type Input = Expr<String, ()>;
 
-    impl Span for Marking {
-        fn extend(&self, _: &Self) -> Self {
-            *self
-        }
-    }
-
-    impl Default for Marking {
-        fn default() -> Self {
-            Marking::Normal
-        }
-    }
-
-    trait Mark {
-        fn mark(self) -> Self;
-    }
-
-    type Input = Expr<String, Marking>;
-
-    impl Mark for (kw::Mnemonic, Marking) {
-        fn mark(self) -> Self {
-            (self.0, Marking::Special)
-        }
-    }
-
-    impl Mark for Input {
-        fn mark(mut self) -> Self {
-            self.span = Marking::Special;
-            self
-        }
-    }
-
-    impl From<ExprVariant<String, Marking>> for Input {
-        fn from(variant: ExprVariant<String, Marking>) -> Self {
-            Expr {
-                variant,
-                span: Marking::default(),
-            }
+    impl From<ExprVariant<String, ()>> for Input {
+        fn from(variant: ExprVariant<String, ()>) -> Self {
+            Expr { variant, span: () }
         }
     }
 
@@ -488,30 +451,18 @@ mod tests {
         Literal::Operand(keyword).into()
     }
 
-    fn symbol(ident: &str) -> RelocExpr<Marking> {
-        RelocExpr::Symbol(ident.to_string(), Marking::default())
+    fn number(n: i32, span: impl Into<TokenSpan>) -> RelocExpr<TokenSpan> {
+        RelocExpr::Literal(n, span.into())
+    }
+
+    fn symbol(ident: &str, span: impl Into<TokenSpan>) -> RelocExpr<TokenSpan> {
+        RelocExpr::Symbol(ident.to_string(), span.into())
     }
 
     fn deref(expr: Input) -> Input {
         Expr {
             variant: ExprVariant::Parentheses(Box::new(expr)),
-            span: Marking::default(),
-        }
-    }
-
-    trait ToMarked<T> {
-        fn to_marked(self) -> (T, Marking);
-    }
-
-    impl ToMarked<kw::Mnemonic> for kw::Mnemonic {
-        fn to_marked(self) -> (kw::Mnemonic, Marking) {
-            (self, Marking::default())
-        }
-    }
-
-    impl ToMarked<kw::Mnemonic> for (kw::Mnemonic, Marking) {
-        fn to_marked(self) -> (kw::Mnemonic, Marking) {
-            self
+            span: (),
         }
     }
 
@@ -655,9 +606,9 @@ mod tests {
         }
     }
 
-    impl From<i32> for RelocExpr<Marking> {
+    impl From<i32> for RelocExpr<()> {
         fn from(n: i32) -> Self {
-            RelocExpr::Literal(n, Marking::default())
+            RelocExpr::Literal(n, ())
         }
     }
 
@@ -672,7 +623,7 @@ mod tests {
         let ident = "ident";
         analyze(kw::Mnemonic::Ld, vec![deref(ident.into()), literal(A)]).expect_instruction(
             Instruction::Ld(Ld::Special(
-                SpecialLd::InlineAddr(symbol(ident)),
+                SpecialLd::InlineAddr(symbol(ident, TokenId::Operand(0, 1))),
                 Direction::FromA,
             )),
         )
@@ -683,7 +634,7 @@ mod tests {
         let ident = "ident";
         analyze(kw::Mnemonic::Ld, vec![literal(A), deref(ident.into())]).expect_instruction(
             Instruction::Ld(Ld::Special(
-                SpecialLd::InlineAddr(symbol(ident)),
+                SpecialLd::InlineAddr(symbol(ident, TokenId::Operand(1, 1))),
                 Direction::IntoA,
             )),
         )
@@ -706,16 +657,16 @@ mod tests {
     #[test]
     fn analyze_cp_symbol() {
         let ident = "ident";
-        test_cp_const_analysis(ident.into(), symbol(ident))
+        test_cp_const_analysis(ident.into(), symbol(ident, TokenId::Operand(0, 0)))
     }
 
     #[test]
     fn analyze_cp_literal() {
         let n = 0x50;
-        test_cp_const_analysis(n.into(), n.into())
+        test_cp_const_analysis(n.into(), number(n, TokenId::Operand(0, 0)))
     }
 
-    fn test_cp_const_analysis(parsed: Input, expr: RelocExpr<Marking>) {
+    fn test_cp_const_analysis(parsed: Input, expr: RelocExpr<TokenSpan>) {
         analyze(kw::Mnemonic::Cp, Some(parsed)).expect_instruction(Instruction::Alu(
             AluOperation::Cp,
             AluSource::Immediate(expr),
@@ -725,7 +676,8 @@ mod tests {
     #[test]
     fn analyze_rst() {
         let n = 3;
-        analyze(kw::Mnemonic::Rst, vec![n.into()]).expect_instruction(Instruction::Rst(n.into()))
+        analyze(kw::Mnemonic::Rst, vec![n.into()])
+            .expect_instruction(Instruction::Rst(number(n, TokenId::Operand(0, 0))))
     }
 
     #[test]
@@ -733,7 +685,7 @@ mod tests {
         test_instruction_analysis(describe_legal_instructions());
     }
 
-    type InstructionDescriptor = ((kw::Mnemonic, Vec<Input>), Instruction<Marking>);
+    type InstructionDescriptor = ((kw::Mnemonic, Vec<Input>), Instruction<TokenSpan>);
 
     fn describe_legal_instructions() -> Vec<InstructionDescriptor> {
         let mut descriptors: Vec<InstructionDescriptor> = Vec::new();
@@ -756,7 +708,7 @@ mod tests {
         ));
         descriptors.push((
             (kw::Mnemonic::Ldhl, vec![Reg16::Sp.into(), 0x42.into()]),
-            Instruction::Ldhl(0x42.into()),
+            Instruction::Ldhl(number(0x42, TokenId::Operand(1, 0))),
         ));
         descriptors
     }
@@ -826,7 +778,7 @@ mod tests {
         let n = 0x12;
         (
             (kw::Mnemonic::Ld, vec![Expr::from(dest), n.into()]),
-            Instruction::Ld(Ld::Immediate8(dest, n.into())),
+            Instruction::Ld(Ld::Immediate8(dest, number(n, TokenId::Operand(1, 0)))),
         )
     }
 
@@ -838,7 +790,7 @@ mod tests {
         let value = "value";
         (
             (kw::Mnemonic::Ld, vec![Expr::from(dest), value.into()]),
-            Instruction::Ld(Ld::Immediate16(dest, symbol(value))),
+            Instruction::Ld(Ld::Immediate16(dest, symbol(value, TokenId::Operand(1, 0)))),
         )
     }
 
@@ -934,7 +886,11 @@ mod tests {
         let bit_number = 4;
         (
             (operation.into(), vec![bit_number.into(), operand.into()]),
-            Instruction::Bit(operation, bit_number.into(), operand),
+            Instruction::Bit(
+                operation,
+                number(bit_number, TokenId::Operand(0, 0)),
+                operand,
+            ),
         )
     }
 
@@ -952,8 +908,10 @@ mod tests {
     fn describe_branch(branch: BranchKind, condition: Option<Condition>) -> InstructionDescriptor {
         let ident = "ident";
         let mut operands = Vec::new();
+        let mut has_condition = false;
         if let Some(condition) = condition {
-            operands.push(Expr::from(condition))
+            operands.push(Expr::from(condition));
+            has_condition = true;
         };
         if branch.has_target() {
             operands.push(ident.into());
@@ -962,9 +920,12 @@ mod tests {
             (kw::Mnemonic::from(branch), operands),
             Instruction::Branch(
                 mk_branch(
-                    (branch, Marking::default()),
+                    (branch, TokenId::Mnemonic.into()),
                     if branch.has_target() {
-                        Some(TargetSelector::Expr(symbol(ident)))
+                        Some(TargetSelector::Expr(symbol(
+                            ident,
+                            TokenId::Operand(if has_condition { 1 } else { 0 }, 0),
+                        )))
                     } else {
                         None
                     },
@@ -1066,162 +1027,263 @@ mod tests {
         }
     }
 
-    struct Result(AnalysisResult<Marking>);
+    struct Result(AnalysisResult<TokenSpan>);
 
     impl Result {
-        fn expect_instruction(self, expected: Instruction<Marking>) {
+        fn expect_instruction(self, expected: Instruction<TokenSpan>) {
             assert_eq!(self.0, Ok(expected))
         }
 
-        fn expect_diagnostic(self, message: Message) {
+        fn expect_diagnostic(self, diagnostic: impl Into<ExpectedDiagnostic>) {
+            let expected = diagnostic.into();
             assert_eq!(
                 self.0,
                 Err(InternalDiagnostic::new(
-                    message,
-                    iter::empty(),
-                    Marking::Special
+                    expected.message,
+                    expected.spans,
+                    expected.highlight.unwrap(),
                 ))
             )
         }
     }
 
-    fn analyze<C, I>(mnemonic: C, operands: I) -> Result
+    fn analyze<I>(mnemonic: kw::Mnemonic, operands: I) -> Result
     where
-        C: ToMarked<kw::Mnemonic>,
         I: IntoIterator<Item = Input>,
     {
-        Result(analyze_instruction(mnemonic.to_marked(), operands))
+        Result(analyze_instruction(
+            (mnemonic, TokenId::Mnemonic.into()),
+            operands.into_iter().enumerate().map(add_token_spans),
+        ))
+    }
+
+    fn add_token_spans((i, operand): (usize, Input)) -> Expr<String, TokenSpan> {
+        add_token_spans_recursive(i, 0, operand).1
+    }
+
+    fn add_token_spans_recursive(
+        i: usize,
+        mut j: usize,
+        expr: Expr<String, ()>,
+    ) -> (usize, Expr<String, TokenSpan>) {
+        let mut span: TokenSpan = TokenId::Operand(i, j).into();
+        let variant = match expr.variant {
+            ExprVariant::Parentheses(expr) => {
+                let (new_j, inner) = add_token_spans_recursive(i, j + 1, *expr);
+                j = new_j;
+                span = span.extend(&TokenId::Operand(i, j).into());
+                ExprVariant::Parentheses(Box::new(inner))
+            }
+            ExprVariant::Ident(ident) => ExprVariant::Ident(ident),
+            ExprVariant::Literal(literal) => ExprVariant::Literal(literal),
+        };
+        (j + 1, Expr { variant, span })
+    }
+
+    struct ExpectedDiagnostic {
+        message: Message,
+        spans: Vec<TokenSpan>,
+        highlight: Option<TokenSpan>,
+    }
+
+    impl ExpectedDiagnostic {
+        fn new(message: Message) -> Self {
+            ExpectedDiagnostic {
+                message,
+                spans: Vec::new(),
+                highlight: None,
+            }
+        }
+
+        fn with_spans<I: IntoIterator<Item = TokenSpan>>(mut self, spans: I) -> Self {
+            self.spans.extend(spans);
+            self
+        }
+
+        fn with_highlight(mut self, highlight: impl Into<TokenSpan>) -> Self {
+            self.highlight = Some(highlight.into());
+            self
+        }
+    }
+
+    impl From<Message> for ExpectedDiagnostic {
+        fn from(message: Message) -> Self {
+            ExpectedDiagnostic::new(message).with_highlight(TokenId::Mnemonic)
+        }
     }
 
     #[test]
     fn analyze_nop_a() {
-        analyze((kw::Mnemonic::Nop, Marking::Special), vec![literal(A)]).expect_diagnostic(
-            Message::OperandCount {
+        analyze(kw::Mnemonic::Nop, vec![literal(A)]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::OperandCount {
                 actual: 1,
                 expected: 0,
-            },
+            }).with_highlight(TokenId::Mnemonic),
         )
     }
 
     #[test]
     fn analyze_add_a_a_a() {
         analyze(
-            (kw::Mnemonic::Add, Marking::Special),
+            kw::Mnemonic::Add,
             vec![A, A, A].into_iter().map(|a| literal(a)),
-        ).expect_diagnostic(Message::OperandCount {
-            actual: 3,
-            expected: 2,
-        })
+        ).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::OperandCount {
+                actual: 3,
+                expected: 2,
+            }).with_highlight(TokenId::Mnemonic),
+        )
     }
 
     #[test]
     fn analyze_jp_c_deref_hl() {
         analyze(
             kw::Mnemonic::Jp,
-            vec![literal(C).mark(), SimpleOperand::DerefHl.into()],
-        ).expect_diagnostic(Message::AlwaysUnconditional)
+            vec![literal(C), SimpleOperand::DerefHl.into()],
+        ).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::AlwaysUnconditional)
+                .with_highlight(TokenId::Operand(0, 0)),
+        )
     }
 
     #[test]
     fn analyze_add() {
-        analyze((kw::Mnemonic::Add, Marking::Special), Vec::new()).expect_diagnostic(
-            Message::OperandCount {
+        analyze(kw::Mnemonic::Add, Vec::new()).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::OperandCount {
                 actual: 0,
                 expected: 2,
-            },
+            }).with_highlight(TokenId::Mnemonic),
         )
     }
 
     #[test]
     fn analyze_add_a() {
-        analyze((kw::Mnemonic::Add, Marking::Special), vec![literal(A)]).expect_diagnostic(
-            Message::OperandCount {
+        analyze(kw::Mnemonic::Add, vec![literal(A)]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::OperandCount {
                 actual: 1,
                 expected: 2,
-            },
+            }).with_highlight(TokenId::Mnemonic),
         )
     }
 
     #[test]
     fn analyze_add_b_a() {
-        analyze(kw::Mnemonic::Add, vec![literal(B).mark(), literal(A)])
-            .expect_diagnostic(Message::DestMustBeA)
+        analyze(kw::Mnemonic::Add, vec![literal(B), literal(A)]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::DestMustBeA).with_highlight(TokenId::Operand(0, 0)),
+        )
     }
 
     #[test]
     fn analyze_add_bc_de() {
-        analyze(kw::Mnemonic::Add, vec![literal(Bc).mark(), literal(De)])
-            .expect_diagnostic(Message::DestMustBeHl)
+        analyze(kw::Mnemonic::Add, vec![literal(Bc), literal(De)]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::DestMustBeHl).with_highlight(TokenId::Operand(0, 0)),
+        )
     }
 
     #[test]
     fn analyze_add_hl_af() {
-        analyze(kw::Mnemonic::Add, vec![literal(Hl), literal(Af).mark()])
-            .expect_diagnostic(Message::IncompatibleOperand)
+        analyze(kw::Mnemonic::Add, vec![literal(Hl), literal(Af)]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::IncompatibleOperand)
+                .with_highlight(TokenId::Operand(1, 0)),
+        )
     }
 
     #[test]
     fn analyze_add_hl() {
-        analyze((kw::Mnemonic::Add, Marking::Special), vec![literal(Hl)]).expect_diagnostic(
-            Message::OperandCount {
+        analyze(kw::Mnemonic::Add, vec![literal(Hl)]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::OperandCount {
                 actual: 1,
                 expected: 2,
-            },
+            }).with_highlight(TokenId::Mnemonic),
         )
     }
 
     #[test]
     fn analyze_ld() {
-        analyze(kw::Mnemonic::Ld.to_marked().mark(), vec![]).expect_diagnostic(
-            Message::OperandCount {
+        analyze(kw::Mnemonic::Ld, vec![]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::OperandCount {
                 actual: 0,
                 expected: 2,
-            },
+            }).with_highlight(TokenId::Mnemonic),
         )
     }
 
     #[test]
     fn analyze_ld_a() {
-        analyze(kw::Mnemonic::Ld.to_marked().mark(), vec![literal(A)]).expect_diagnostic(
-            Message::OperandCount {
+        analyze(kw::Mnemonic::Ld, vec![literal(A)]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::OperandCount {
                 actual: 1,
                 expected: 2,
-            },
+            }).with_highlight(TokenId::Mnemonic),
         )
     }
 
     #[test]
     fn analyze_push() {
-        analyze(kw::Mnemonic::Push.to_marked().mark(), vec![]).expect_diagnostic(
-            Message::OperandCount {
+        analyze(kw::Mnemonic::Push, vec![]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::OperandCount {
                 actual: 0,
                 expected: 1,
-            },
+            }).with_highlight(TokenId::Mnemonic),
         )
     }
 
     #[test]
     fn analyze_inc() {
-        analyze(kw::Mnemonic::Inc.to_marked().mark(), vec![]).expect_diagnostic(
-            Message::OperandCount {
+        analyze(kw::Mnemonic::Inc, vec![]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::OperandCount {
                 actual: 0,
                 expected: 1,
-            },
+            }).with_highlight(TokenId::Mnemonic),
         )
     }
 
     #[test]
     fn analyze_jp_z() {
-        analyze(kw::Mnemonic::Jp.to_marked().mark(), vec![literal(Z)])
-            .expect_diagnostic(Message::MissingTarget)
+        analyze(kw::Mnemonic::Jp, vec![literal(Z)]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::MissingTarget).with_highlight(TokenId::Mnemonic),
+        )
     }
 
     #[test]
     #[ignore]
     fn analyze_ld_const_const() {
-        analyze(
-            kw::Mnemonic::Ld.to_marked().mark(),
-            vec![2.into(), 4.into()],
-        ).expect_diagnostic(Message::IllegalOperands)
+        analyze(kw::Mnemonic::Ld, vec![2.into(), 4.into()]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::IllegalOperands)
+                .with_spans(iter::once(TokenId::Mnemonic.into()))
+                .with_highlight(
+                    TokenSpan::from(TokenId::Mnemonic).extend(&TokenId::Operand(1, 0).into()),
+                ),
+        )
+    }
+
+    #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+    enum TokenId {
+        Mnemonic,
+        Operand(usize, usize),
+    }
+
+    #[derive(Clone, Debug, PartialEq)]
+    struct TokenSpan {
+        first: TokenId,
+        last: TokenId,
+    }
+
+    impl From<TokenId> for TokenSpan {
+        fn from(id: TokenId) -> Self {
+            TokenSpan {
+                first: id,
+                last: id,
+            }
+        }
+    }
+
+    impl Span for TokenSpan {
+        fn extend(&self, other: &Self) -> Self {
+            TokenSpan {
+                first: cmp::min(self.first, other.first),
+                last: cmp::max(self.last, other.last),
+            }
+        }
     }
 }
