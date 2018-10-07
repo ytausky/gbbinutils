@@ -208,11 +208,11 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
             (LdDest8::Simple(dest, _), LdOperand::Const(expr)) => {
                 Ok(Instruction::Ld(Ld::Immediate8(dest, expr)))
             }
-            (LdDest8::Simple(SimpleOperand::A, _), LdOperand::Other(src)) => {
-                analyze_special_ld(src, Direction::IntoA)
+            (LdDest8::Simple(dest, span), LdOperand::Other(LdDest8::Special(src))) => {
+                analyze_special_ld(src, (dest, span), Direction::IntoA)
             }
-            (dest, LdOperand::Other(LdDest8::Simple(SimpleOperand::A, _))) => {
-                analyze_special_ld(dest, Direction::FromA)
+            (LdDest8::Special(dest), LdOperand::Other(LdDest8::Simple(src, span))) => {
+                analyze_special_ld(dest, (src, span), Direction::FromA)
             }
             _ => panic!(),
         }
@@ -287,14 +287,14 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
 impl<S: Span> Operand<S> {
     fn into_ld_dest(self) -> Result<LdDest<S>, InternalDiagnostic<S>> {
         match self {
-            Operand::Deref(expr) => Ok(LdDest::Byte(LdDest8::Deref(expr))),
+            Operand::Deref(expr) => Ok(LdDest::Byte(LdDest8::Special(LdSpecial::Deref(expr)))),
             Operand::Atom(kind, span) => match kind {
                 AtomKind::Condition(_) => panic!(),
                 AtomKind::Simple(simple) => Ok(LdDest::Byte(LdDest8::Simple(simple, span))),
-                AtomKind::DerefC => Ok(LdDest::Byte(LdDest8::DerefC(span))),
-                AtomKind::DerefPtrReg(ptr_reg) => {
-                    Ok(LdDest::Byte(LdDest8::DerefPtrReg(ptr_reg, span)))
-                }
+                AtomKind::DerefC => Ok(LdDest::Byte(LdDest8::Special(LdSpecial::DerefC(span)))),
+                AtomKind::DerefPtrReg(ptr_reg) => Ok(LdDest::Byte(LdDest8::Special(
+                    LdSpecial::DerefPtrReg(ptr_reg, span),
+                ))),
                 AtomKind::Reg16(reg16) => Ok(LdDest::Word(LdDest16::Reg16(reg16, span))),
                 AtomKind::RegPair(_) => panic!(),
             },
@@ -379,10 +379,14 @@ enum LdDest<S> {
 }
 
 enum LdDest8<S> {
+    Simple(SimpleOperand, S),
+    Special(LdSpecial<S>),
+}
+
+enum LdSpecial<S> {
     Deref(RelocExpr<S>),
     DerefC(S),
     DerefPtrReg(PtrReg, S),
-    Simple(SimpleOperand, S),
 }
 
 enum LdDest16<S> {
@@ -404,8 +408,19 @@ impl<S: Span> Source for LdDest8<S> {
     fn span(&self) -> Self::Span {
         use self::LdDest8::*;
         match self {
+            Simple(_, span) => span.clone(),
+            Special(special) => special.span(),
+        }
+    }
+}
+
+impl<S: Span> Source for LdSpecial<S> {
+    type Span = S;
+    fn span(&self) -> Self::Span {
+        use self::LdSpecial::*;
+        match self {
             Deref(expr) => expr.span(),
-            DerefC(span) | DerefPtrReg(_, span) | Simple(_, span) => span.clone(),
+            DerefC(span) | DerefPtrReg(_, span) => span.clone(),
         }
     }
 }
@@ -447,16 +462,26 @@ fn mk_branch<S>(
     }
 }
 
-fn analyze_special_ld<S>(other: LdDest8<S>, direction: Direction) -> AnalysisResult<S> {
-    Ok(Instruction::Ld(Ld::Special(
-        match other {
-            LdDest8::Deref(expr) => SpecialLd::InlineAddr(expr),
-            LdDest8::DerefC(_) => SpecialLd::RegIndex,
-            LdDest8::DerefPtrReg(ptr_reg, _) => SpecialLd::DerefPtrReg(ptr_reg),
-            _ => panic!(),
-        },
-        direction,
-    )))
+fn analyze_special_ld<S>(
+    other: LdSpecial<S>,
+    simple: (SimpleOperand, S),
+    direction: Direction,
+) -> AnalysisResult<S> {
+    match simple.0 {
+        SimpleOperand::A => Ok(Instruction::Ld(Ld::Special(
+            match other {
+                LdSpecial::Deref(expr) => SpecialLd::InlineAddr(expr),
+                LdSpecial::DerefC(_) => SpecialLd::RegIndex,
+                LdSpecial::DerefPtrReg(ptr_reg, _) => SpecialLd::DerefPtrReg(ptr_reg),
+            },
+            direction,
+        ))),
+        _ => Err(InternalDiagnostic::new(
+            Message::OnlySupportedByA,
+            iter::empty(),
+            simple.1,
+        )),
+    }
 }
 
 pub type AnalysisResult<S> = Result<Instruction<S>, InternalDiagnostic<S>>;
@@ -1436,6 +1461,14 @@ mod tests {
                 .with_highlight(
                     TokenSpan::from(TokenId::Operand(0, 0)).extend(&TokenId::Operand(1, 0).into()),
                 ),
+        )
+    }
+
+    #[test]
+    fn analyze_ld_deref_c_b() {
+        analyze(kw::Mnemonic::Ld, vec![deref(literal(C)), literal(B)]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::OnlySupportedByA)
+                .with_highlight(TokenId::Operand(1, 0)),
         )
     }
 

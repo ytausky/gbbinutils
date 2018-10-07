@@ -97,6 +97,7 @@ pub enum Message {
     MustBeBit,
     MustBeConst,
     MustBeDeref,
+    OnlySupportedByA,
     OperandCount { actual: usize, expected: usize },
     RequiresRegPair,
     RequiresSimpleOperand,
@@ -158,6 +159,7 @@ impl Message {
                 "operand `{}` must be dereferenced",
                 snippets.next().unwrap()
             ),
+            OnlySupportedByA => "only `a` can be used for this operand".into(),
             OperandCount { actual, expected } => format!(
                 "expected {} operand{}, found {}",
                 expected,
