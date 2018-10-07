@@ -104,11 +104,8 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
             first_operand
         } else {
             let second_operand = self.next_operand_out_of(2)?;
-            expect_specific_atom_operand(
-                first_operand,
-                AtomKind::Simple(SimpleOperand::A),
-                Message::DestMustBeA,
-            )?;
+            first_operand
+                .expect_specific_atom(AtomKind::Simple(SimpleOperand::A), Message::DestMustBeA)?;
             second_operand
         };
         match src {
@@ -136,11 +133,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
                 bit_number.span(),
             ));
         };
-        Ok(Instruction::Bit(
-            operation,
-            expr,
-            expect_simple_operand(operand)?,
-        ))
+        Ok(Instruction::Bit(operation, expr, operand.expect_simple()?))
     }
 
     fn analyze_branch(&mut self, branch: BranchKind) -> AnalysisResult<S> {
@@ -207,7 +200,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
     fn analyze_ldhl(&mut self) -> AnalysisResult<S> {
         let src = self.next_operand_out_of(2)?;
         let offset = self.next_operand_out_of(2)?;
-        expect_specific_atom_operand(src, AtomKind::Reg16(Reg16::Sp), Message::SrcMustBeSp)?;
+        src.expect_specific_atom(AtomKind::Reg16(Reg16::Sp), Message::SrcMustBeSp)?;
         match offset {
             Operand::Const(expr) => Ok(Instruction::Ldhl(expr)),
             _ => panic!(),
@@ -264,31 +257,31 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
     }
 }
 
-fn expect_specific_atom_operand<S: Span>(
-    operand: Operand<S>,
-    expected: AtomKind,
-    message: Message,
-) -> Result<(), InternalDiagnostic<S>> {
-    match operand {
-        Operand::Atom(ref actual, _) if *actual == expected => Ok(()),
-        operand => Err(InternalDiagnostic::new(
-            message,
-            iter::empty(),
-            operand.span(),
-        )),
+impl<S: Span> Operand<S> {
+    fn expect_specific_atom(
+        self,
+        expected: AtomKind,
+        message: Message,
+    ) -> Result<(), InternalDiagnostic<S>> {
+        match self {
+            Operand::Atom(ref actual, _) if *actual == expected => Ok(()),
+            operand => Err(InternalDiagnostic::new(
+                message,
+                iter::empty(),
+                operand.span(),
+            )),
+        }
     }
-}
 
-fn expect_simple_operand<S: Span>(
-    operand: Operand<S>,
-) -> Result<SimpleOperand, InternalDiagnostic<S>> {
-    match operand {
-        Operand::Atom(AtomKind::Simple(simple), _) => Ok(simple),
-        operand => Err(InternalDiagnostic::new(
-            Message::RequiresSimpleOperand,
-            iter::empty(),
-            operand.span(),
-        )),
+    fn expect_simple(self) -> Result<SimpleOperand, InternalDiagnostic<S>> {
+        match self {
+            Operand::Atom(AtomKind::Simple(simple), _) => Ok(simple),
+            operand => Err(InternalDiagnostic::new(
+                Message::RequiresSimpleOperand,
+                iter::empty(),
+                operand.span(),
+            )),
+        }
     }
 }
 
