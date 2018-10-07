@@ -92,6 +92,7 @@ pub enum Message {
     IllegalOperands,
     IncompatibleOperand,
     KeywordInExpr,
+    LdWidthMismatch { src: Width },
     MissingTarget,
     MustBeBit,
     MustBeConst,
@@ -137,6 +138,19 @@ impl Message {
                 "keyword `{}` cannot appear in expression",
                 snippets.next().unwrap(),
             ),
+            LdWidthMismatch { src } => {
+                let (src_bits, dest_bits) = match src {
+                    Width::Byte => (8, 16),
+                    Width::Word => (16, 8),
+                };
+                format!(
+                    "cannot load {}-bit value of `{}` into {}-bit register `{}`",
+                    src_bits,
+                    snippets.next().unwrap(),
+                    dest_bits,
+                    snippets.next().unwrap(),
+                )
+            }
             MissingTarget => "branch instruction requires target".into(),
             MustBeBit => format!(
                 "first operand of `{}` must be bit number",

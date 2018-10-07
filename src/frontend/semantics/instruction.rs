@@ -5,6 +5,7 @@ use frontend::syntax::keyword as kw;
 use instruction::*;
 use span::{Source, Span};
 use std::iter;
+use Width;
 
 pub fn analyze_instruction<Id: Into<String>, I, S>(
     mnemonic: (kw::Mnemonic, S),
@@ -173,6 +174,15 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
             (Operand::Atom(AtomKind::Simple(dest), _), Operand::Atom(AtomKind::Simple(src), _)) => {
                 Ok(Instruction::Ld(Ld::Simple(dest, src)))
             }
+            (Operand::Atom(AtomKind::Simple(_), ref dest_span), ref operand)
+                if operand.is_16_bit() =>
+            {
+                Err(InternalDiagnostic::new(
+                    Message::LdWidthMismatch { src: Width::Word },
+                    vec![operand.span(), dest_span.clone()],
+                    dest_span.extend(&operand.span()),
+                ))
+            }
             (Operand::Atom(AtomKind::Simple(dest), _), Operand::Const(expr)) => {
                 Ok(Instruction::Ld(Ld::Immediate8(dest, expr)))
             }
@@ -248,6 +258,13 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
 }
 
 impl<S: Span> Operand<S> {
+    fn is_16_bit(&self) -> bool {
+        match self {
+            Operand::Atom(AtomKind::Reg16(_), _) | Operand::Atom(AtomKind::RegPair(_), _) => true,
+            _ => false,
+        }
+    }
+
     fn expect_specific_atom(
         self,
         expected: AtomKind,
@@ -1280,6 +1297,17 @@ mod tests {
         analyze(kw::Mnemonic::Ld, vec![2.into(), 4.into()]).expect_diagnostic(
             ExpectedDiagnostic::new(Message::IllegalOperands)
                 .with_spans(iter::once(TokenId::Mnemonic))
+                .with_highlight(
+                    TokenSpan::from(TokenId::Operand(0, 0)).extend(&TokenId::Operand(1, 0).into()),
+                ),
+        )
+    }
+
+    #[test]
+    fn analyze_ld_a_bc() {
+        analyze(kw::Mnemonic::Ld, vec![literal(A), literal(Bc)]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::LdWidthMismatch { src: Width::Word })
+                .with_spans(vec![TokenId::Operand(1, 0), TokenId::Operand(0, 0)])
                 .with_highlight(
                     TokenSpan::from(TokenId::Operand(0, 0)).extend(&TokenId::Operand(1, 0).into()),
                 ),
