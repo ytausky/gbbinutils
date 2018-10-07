@@ -208,13 +208,14 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
             (LdDest8::Simple(dest, _), LdOperand::Const(expr)) => {
                 Ok(Instruction::Ld(Ld::Immediate8(dest, expr)))
             }
-            (LdDest8::Simple(dest, span), LdOperand::Other(LdDest8::Special(src))) => {
-                analyze_special_ld(src, (dest, span), Direction::IntoA)
+            (LdDest8::Special(dest), src) => {
+                src.expect_a()?;
+                analyze_special_ld(dest, Direction::FromA)
             }
-            (LdDest8::Special(dest), LdOperand::Other(LdDest8::Simple(src, span))) => {
-                analyze_special_ld(dest, (src, span), Direction::FromA)
+            (dest, LdOperand::Other(LdDest8::Special(src))) => {
+                dest.expect_a()?;
+                analyze_special_ld(src, Direction::IntoA)
             }
-            _ => panic!(),
         }
     }
 
@@ -393,6 +394,28 @@ enum LdDest16<S> {
     Reg16(Reg16, S),
 }
 
+impl<S: Span> LdOperand<S, LdDest8<S>> {
+    fn expect_a(self) -> Result<(), InternalDiagnostic<S>> {
+        match self {
+            LdOperand::Const(expr) => Err(diagnose_not_a(expr.span())),
+            LdOperand::Other(other) => other.expect_a(),
+        }
+    }
+}
+
+impl<S: Span> LdDest8<S> {
+    fn expect_a(self) -> Result<(), InternalDiagnostic<S>> {
+        match self {
+            LdDest8::Simple(SimpleOperand::A, _) => Ok(()),
+            operand => Err(diagnose_not_a(operand.span())),
+        }
+    }
+}
+
+fn diagnose_not_a<S>(span: S) -> InternalDiagnostic<S> {
+    InternalDiagnostic::new(Message::OnlySupportedByA, iter::empty(), span)
+}
+
 impl<S: Span, T: Source<Span = S>> Source for LdOperand<S, T> {
     type Span = S;
     fn span(&self) -> Self::Span {
@@ -462,26 +485,15 @@ fn mk_branch<S>(
     }
 }
 
-fn analyze_special_ld<S>(
-    other: LdSpecial<S>,
-    simple: (SimpleOperand, S),
-    direction: Direction,
-) -> AnalysisResult<S> {
-    match simple.0 {
-        SimpleOperand::A => Ok(Instruction::Ld(Ld::Special(
-            match other {
-                LdSpecial::Deref(expr) => SpecialLd::InlineAddr(expr),
-                LdSpecial::DerefC(_) => SpecialLd::RegIndex,
-                LdSpecial::DerefPtrReg(ptr_reg, _) => SpecialLd::DerefPtrReg(ptr_reg),
-            },
-            direction,
-        ))),
-        _ => Err(InternalDiagnostic::new(
-            Message::OnlySupportedByA,
-            iter::empty(),
-            simple.1,
-        )),
-    }
+fn analyze_special_ld<S>(other: LdSpecial<S>, direction: Direction) -> AnalysisResult<S> {
+    Ok(Instruction::Ld(Ld::Special(
+        match other {
+            LdSpecial::Deref(expr) => SpecialLd::InlineAddr(expr),
+            LdSpecial::DerefC(_) => SpecialLd::RegIndex,
+            LdSpecial::DerefPtrReg(ptr_reg, _) => SpecialLd::DerefPtrReg(ptr_reg),
+        },
+        direction,
+    )))
 }
 
 pub type AnalysisResult<S> = Result<Instruction<S>, InternalDiagnostic<S>>;
@@ -1467,6 +1479,14 @@ mod tests {
     #[test]
     fn analyze_ld_deref_c_b() {
         analyze(kw::Mnemonic::Ld, vec![deref(literal(C)), literal(B)]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::OnlySupportedByA)
+                .with_highlight(TokenId::Operand(1, 0)),
+        )
+    }
+
+    #[test]
+    fn analyze_ld_deref_c_4() {
+        analyze(kw::Mnemonic::Ld, vec![deref(literal(C)), 4.into()]).expect_diagnostic(
             ExpectedDiagnostic::new(Message::OnlySupportedByA)
                 .with_highlight(TokenId::Operand(1, 0)),
         )
