@@ -201,10 +201,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
         let src = self.next_operand_out_of(2)?;
         let offset = self.next_operand_out_of(2)?;
         src.expect_specific_atom(AtomKind::Reg16(Reg16::Sp), Message::SrcMustBeSp)?;
-        match offset {
-            Operand::Const(expr) => Ok(Instruction::Ldhl(expr)),
-            _ => panic!(),
-        }
+        Ok(Instruction::Ldhl(offset.expect_const()?))
     }
 
     fn analyze_misc(&mut self, operation: MiscOperation) -> AnalysisResult<S> {
@@ -278,6 +275,17 @@ impl<S: Span> Operand<S> {
             Operand::Atom(AtomKind::Simple(simple), _) => Ok(simple),
             operand => Err(InternalDiagnostic::new(
                 Message::RequiresSimpleOperand,
+                iter::empty(),
+                operand.span(),
+            )),
+        }
+    }
+
+    fn expect_const(self) -> Result<RelocExpr<S>, InternalDiagnostic<S>> {
+        match self {
+            Operand::Const(expr) => Ok(expr),
+            operand => Err(InternalDiagnostic::new(
+                Message::MustBeConst,
                 iter::empty(),
                 operand.span(),
             )),
@@ -1325,6 +1333,13 @@ mod tests {
     fn analyze_ldhl_bc_7() {
         analyze(kw::Mnemonic::Ldhl, vec![literal(Bc), 7.into()]).expect_diagnostic(
             ExpectedDiagnostic::new(Message::SrcMustBeSp).with_highlight(TokenId::Operand(0, 0)),
+        )
+    }
+
+    #[test]
+    fn analyze_ldhl_sp_a() {
+        analyze(kw::Mnemonic::Ldhl, vec![literal(Sp), literal(A)]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::MustBeConst).with_highlight(TokenId::Operand(1, 0)),
         )
     }
 

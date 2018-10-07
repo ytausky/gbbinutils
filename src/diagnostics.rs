@@ -94,6 +94,7 @@ pub enum Message {
     KeywordInExpr,
     MissingTarget,
     MustBeBit,
+    MustBeConst,
     MustBeDeref,
     OperandCount { actual: usize, expected: usize },
     RequiresSimpleOperand,
@@ -140,6 +141,7 @@ impl Message {
                 "first operand of `{}` must be bit number",
                 snippets.next().unwrap()
             ),
+            MustBeConst => "operand must be a constant".into(),
             MustBeDeref => format!(
                 "operand `{}` must be dereferenced",
                 snippets.next().unwrap()
