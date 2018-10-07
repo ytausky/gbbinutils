@@ -97,6 +97,7 @@ pub enum Message {
     MustBeConst,
     MustBeDeref,
     OperandCount { actual: usize, expected: usize },
+    RequiresRegPair,
     RequiresSimpleOperand,
     SrcMustBeSp,
     StringInInstruction,
@@ -152,6 +153,7 @@ impl Message {
                 pluralize(*expected),
                 actual
             ),
+            RequiresRegPair => "instruction requires a register pair".into(),
             RequiresSimpleOperand => "instruction requires 8-bit register or `(hl)`".into(),
             SrcMustBeSp => "source operand must be `sp`".into(),
             StringInInstruction => "strings cannot appear in instruction operands".into(),

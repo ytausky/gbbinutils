@@ -210,10 +210,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
     }
 
     fn analyze_stack_operation(&mut self, operation: StackOperation) -> AnalysisResult<S> {
-        let reg_pair = match self.next_operand_out_of(1)? {
-            Operand::Atom(AtomKind::RegPair(reg_pair), _) => reg_pair,
-            _ => panic!(),
-        };
+        let reg_pair = self.next_operand_out_of(1)?.expect_reg_pair()?;
         let instruction_ctor = match operation {
             StackOperation::Push => Instruction::Push,
             StackOperation::Pop => Instruction::Pop,
@@ -283,6 +280,17 @@ impl<S: Span> Operand<S> {
             Operand::Const(expr) => Ok(expr),
             operand => Err(InternalDiagnostic::new(
                 Message::MustBeConst,
+                iter::empty(),
+                operand.span(),
+            )),
+        }
+    }
+
+    fn expect_reg_pair(self) -> Result<RegPair, InternalDiagnostic<S>> {
+        match self {
+            Operand::Atom(AtomKind::RegPair(reg_pair), _) => Ok(reg_pair),
+            operand => Err(InternalDiagnostic::new(
+                Message::RequiresRegPair,
                 iter::empty(),
                 operand.span(),
             )),
@@ -1344,6 +1352,14 @@ mod tests {
     fn analyze_swap_bc() {
         analyze(kw::Mnemonic::Swap, vec![literal(Bc)]).expect_diagnostic(
             ExpectedDiagnostic::new(Message::RequiresSimpleOperand)
+                .with_highlight(TokenId::Operand(0, 0)),
+        )
+    }
+
+    #[test]
+    fn analyze_push_a() {
+        analyze(kw::Mnemonic::Push, vec![literal(A)]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::RequiresRegPair)
                 .with_highlight(TokenId::Operand(0, 0)),
         )
     }
