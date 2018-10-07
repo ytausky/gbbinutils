@@ -227,10 +227,9 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
     }
 
     fn analyze_rst(&mut self) -> AnalysisResult<S> {
-        match self.next_operand_out_of(1)? {
-            Operand::Const(expr) => Ok(Instruction::Rst(expr)),
-            _ => panic!(),
-        }
+        Ok(Instruction::Rst(
+            self.next_operand_out_of(1)?.expect_const()?,
+        ))
     }
 
     fn next_operand_out_of(&mut self, out_of: usize) -> Result<Operand<S>, InternalDiagnostic<S>> {
@@ -1349,6 +1348,13 @@ mod tests {
         analyze(kw::Mnemonic::Push, vec![literal(A)]).expect_diagnostic(
             ExpectedDiagnostic::new(Message::RequiresRegPair)
                 .with_highlight(TokenId::Operand(0, 0)),
+        )
+    }
+
+    #[test]
+    fn analyze_rst_a() {
+        analyze(kw::Mnemonic::Rst, vec![literal(A)]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::MustBeConst).with_highlight(TokenId::Operand(0, 0)),
         )
     }
 
