@@ -49,7 +49,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
         match self.mnemonic.0 {
             Alu(AluOperation::Add) => self.analyze_add_instruction(),
             Alu(operation) => {
-                let first_operand = self.expect_operand(operation.expected_operands())?;
+                let first_operand = self.next_operand_out_of(operation.expected_operands())?;
                 self.analyze_alu_instruction(operation, first_operand)
             }
             Bit(operation) => self.analyze_bit_operation(operation),
@@ -65,7 +65,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
     }
 
     fn analyze_add_instruction(&mut self) -> AnalysisResult<S> {
-        match self.expect_operand(2)? {
+        match self.next_operand_out_of(2)? {
             Operand::Atom(AtomKind::Reg16(reg16), range) => {
                 self.analyze_add_reg16_instruction((reg16, range))
             }
@@ -85,7 +85,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
     }
 
     fn analyze_add_hl_instruction(&mut self) -> AnalysisResult<S> {
-        match self.expect_operand(2)? {
+        match self.next_operand_out_of(2)? {
             Operand::Atom(AtomKind::Reg16(src), _) => Ok(Instruction::AddHl(src)),
             operand => Err(InternalDiagnostic::new(
                 Message::IncompatibleOperand,
@@ -103,7 +103,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
         let src = if operation.implicit_dest() {
             first_operand
         } else {
-            let second_operand = self.expect_operand(2)?;
+            let second_operand = self.next_operand_out_of(2)?;
             match first_operand {
                 Operand::Atom(AtomKind::Simple(SimpleOperand::A), _) => Ok(()),
                 operand => Err(InternalDiagnostic::new(
@@ -128,8 +128,8 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
     }
 
     fn analyze_bit_operation(&mut self, operation: BitOperation) -> AnalysisResult<S> {
-        let bit_number = self.expect_operand(2)?;
-        let operand = self.expect_operand(2)?;
+        let bit_number = self.next_operand_out_of(2)?;
+        let operand = self.next_operand_out_of(2)?;
         let expr = if let Operand::Const(expr) = bit_number {
             expr
         } else {
@@ -177,8 +177,8 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
     }
 
     fn analyze_ld(&mut self) -> AnalysisResult<S> {
-        let dest = self.expect_operand(2)?;
-        let src = self.expect_operand(2)?;
+        let dest = self.next_operand_out_of(2)?;
+        let src = self.next_operand_out_of(2)?;
         match (dest, src) {
             (Operand::Atom(AtomKind::Simple(dest), _), Operand::Atom(AtomKind::Simple(src), _)) => {
                 Ok(Instruction::Ld(Ld::Simple(dest, src)))
@@ -208,8 +208,8 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
     }
 
     fn analyze_ldhl(&mut self) -> AnalysisResult<S> {
-        let dest = self.expect_operand(2)?;
-        let src = self.expect_operand(2)?;
+        let dest = self.next_operand_out_of(2)?;
+        let src = self.next_operand_out_of(2)?;
         match dest {
             Operand::Atom(AtomKind::Reg16(Reg16::Sp), _) => (),
             _ => panic!(),
@@ -221,7 +221,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
     }
 
     fn analyze_misc(&mut self, operation: MiscOperation) -> AnalysisResult<S> {
-        let operand = self.expect_operand(1)?;
+        let operand = self.next_operand_out_of(1)?;
         match operand {
             Operand::Atom(AtomKind::Simple(simple), _) => Ok(Instruction::Misc(operation, simple)),
             _ => panic!(),
@@ -229,7 +229,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
     }
 
     fn analyze_stack_operation(&mut self, operation: StackOperation) -> AnalysisResult<S> {
-        let reg_pair = match self.expect_operand(1)? {
+        let reg_pair = match self.next_operand_out_of(1)? {
             Operand::Atom(AtomKind::RegPair(reg_pair), _) => reg_pair,
             _ => panic!(),
         };
@@ -241,7 +241,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
     }
 
     fn analyze_inc_dec(&mut self, mode: IncDec) -> AnalysisResult<S> {
-        match self.expect_operand(1)? {
+        match self.next_operand_out_of(1)? {
             Operand::Atom(AtomKind::Simple(operand), _) => Ok(Instruction::IncDec8(mode, operand)),
             Operand::Atom(AtomKind::Reg16(operand), _) => Ok(Instruction::IncDec16(mode, operand)),
             _ => panic!(),
@@ -249,13 +249,13 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
     }
 
     fn analyze_rst(&mut self) -> AnalysisResult<S> {
-        match self.expect_operand(1)? {
+        match self.next_operand_out_of(1)? {
             Operand::Const(expr) => Ok(Instruction::Rst(expr)),
             _ => panic!(),
         }
     }
 
-    fn expect_operand(&mut self, out_of: usize) -> Result<Operand<S>, InternalDiagnostic<S>> {
+    fn next_operand_out_of(&mut self, out_of: usize) -> Result<Operand<S>, InternalDiagnostic<S>> {
         let actual = self.operands.seen();
         self.operands.next()?.ok_or_else(|| {
             InternalDiagnostic::new(
