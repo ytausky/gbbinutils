@@ -256,45 +256,33 @@ impl<S: Span> Operand<S> {
     ) -> Result<(), InternalDiagnostic<S>> {
         match self {
             Operand::Atom(ref actual, _) if *actual == expected => Ok(()),
-            operand => Err(InternalDiagnostic::new(
-                message,
-                iter::empty(),
-                operand.span(),
-            )),
+            operand => operand.error(message),
         }
     }
 
     fn expect_simple(self) -> Result<SimpleOperand, InternalDiagnostic<S>> {
         match self {
             Operand::Atom(AtomKind::Simple(simple), _) => Ok(simple),
-            operand => Err(InternalDiagnostic::new(
-                Message::RequiresSimpleOperand,
-                iter::empty(),
-                operand.span(),
-            )),
+            operand => operand.error(Message::RequiresSimpleOperand),
         }
     }
 
     fn expect_const(self) -> Result<RelocExpr<S>, InternalDiagnostic<S>> {
         match self {
             Operand::Const(expr) => Ok(expr),
-            operand => Err(InternalDiagnostic::new(
-                Message::MustBeConst,
-                iter::empty(),
-                operand.span(),
-            )),
+            operand => operand.error(Message::MustBeConst),
         }
     }
 
     fn expect_reg_pair(self) -> Result<RegPair, InternalDiagnostic<S>> {
         match self {
             Operand::Atom(AtomKind::RegPair(reg_pair), _) => Ok(reg_pair),
-            operand => Err(InternalDiagnostic::new(
-                Message::RequiresRegPair,
-                iter::empty(),
-                operand.span(),
-            )),
+            operand => operand.error(Message::RequiresRegPair),
         }
+    }
+
+    fn error<T>(self, message: Message) -> Result<T, InternalDiagnostic<S>> {
+        Err(InternalDiagnostic::new(message, iter::empty(), self.span()))
     }
 }
 
