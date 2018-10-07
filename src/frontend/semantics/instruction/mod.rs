@@ -140,13 +140,24 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
 
     fn analyze_branch(&mut self, branch: BranchKind) -> AnalysisResult<S> {
         let (condition, target) = self.collect_condition_and_target()?;
-        match (branch, condition, target) {
-            (BranchKind::Jp, None, Some(TargetSelector::DerefHl)) => Ok(Instruction::JpDerefHl),
-            (BranchKind::Jp, Some((_, condition_ref)), Some(TargetSelector::DerefHl)) => Err(
-                InternalDiagnostic::new(Message::AlwaysUnconditional, iter::empty(), condition_ref),
-            ),
-            (_, condition, target) => Ok(Instruction::Branch(
-                mk_branch((branch, self.mnemonic.1.clone()), target)?,
+        let variant = match (branch, target) {
+            (BranchKind::Jp, Some(TargetSelector::DerefHl)) => Ok(BranchVariant::JpDerefHl),
+            (_, target) => Ok(BranchVariant::Conditional(mk_branch(
+                (branch, self.mnemonic.1.clone()),
+                target,
+            )?)),
+        }?;
+        match variant {
+            BranchVariant::JpDerefHl => match condition {
+                None => Ok(Instruction::JpDerefHl),
+                Some((_, condition_span)) => Err(InternalDiagnostic::new(
+                    Message::AlwaysUnconditional,
+                    iter::empty(),
+                    condition_span,
+                )),
+            },
+            BranchVariant::Conditional(branch) => Ok(Instruction::Branch(
+                branch,
                 condition.map(|(condition, _)| condition),
             )),
         }
@@ -362,6 +373,11 @@ enum BranchKind {
     Jp,
     Jr,
     Ret,
+}
+
+enum BranchVariant<S> {
+    JpDerefHl,
+    Conditional(Branch<S>),
 }
 
 #[cfg(test)]
