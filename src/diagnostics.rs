@@ -1,4 +1,5 @@
 use codebase::{LineNumber, TextBuf, TextCache, TextRange};
+use instruction::IncDec;
 use span::TokenRefData;
 use std::borrow::Borrow;
 use std::cell::RefCell;
@@ -101,6 +102,7 @@ pub enum Message {
     MustBeConst,
     MustBeDeref,
     OnlySupportedByA,
+    OperandCannotBeIncDec(IncDec),
     OperandCount { actual: usize, expected: usize },
     RequiresRegPair,
     RequiresSimpleOperand,
@@ -172,6 +174,13 @@ impl Message {
                 snippets.next().unwrap()
             ),
             OnlySupportedByA => "only `a` can be used for this operand".into(),
+            OperandCannotBeIncDec(operation) => format!(
+                "operand cannot be {}",
+                match operation {
+                    IncDec::Inc => "incremented",
+                    IncDec::Dec => "decremented",
+                }
+            ),
             OperandCount { actual, expected } => format!(
                 "expected {} operand{}, found {}",
                 expected,

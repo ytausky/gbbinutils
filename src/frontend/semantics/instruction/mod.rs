@@ -193,7 +193,11 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
         match self.next_operand_out_of(1)? {
             Operand::Atom(AtomKind::Simple(operand), _) => Ok(Instruction::IncDec8(mode, operand)),
             Operand::Atom(AtomKind::Reg16(operand), _) => Ok(Instruction::IncDec16(mode, operand)),
-            _ => panic!(),
+            operand => Err(InternalDiagnostic::new(
+                Message::OperandCannotBeIncDec(mode),
+                iter::empty(),
+                operand.span(),
+            )),
         }
     }
 
@@ -1161,6 +1165,14 @@ mod tests {
     fn analyze_rst_a() {
         analyze(kw::Mnemonic::Rst, vec![literal(A)]).expect_diagnostic(
             ExpectedDiagnostic::new(Message::MustBeConst).with_highlight(TokenId::Operand(0, 0)),
+        )
+    }
+
+    #[test]
+    fn analyze_inc_7() {
+        analyze(kw::Mnemonic::Inc, vec![7.into()]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::OperandCannotBeIncDec(IncDec::Inc))
+                .with_highlight(TokenId::Operand(0, 0)),
         )
     }
 
