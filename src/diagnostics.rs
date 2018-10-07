@@ -97,6 +97,7 @@ pub enum Message {
     MustBeDeref,
     OperandCount { actual: usize, expected: usize },
     RequiresSimpleOperand,
+    SrcMustBeSp,
     StringInInstruction,
     UndefinedMacro { name: String },
     UnexpectedEof,
@@ -150,6 +151,7 @@ impl Message {
                 actual
             ),
             RequiresSimpleOperand => "instruction requires 8-bit register or `(hl)`".into(),
+            SrcMustBeSp => "source operand must be `sp`".into(),
             StringInInstruction => "strings cannot appear in instruction operands".into(),
             UndefinedMacro { name } => format!("invocation of undefined macro `{}`", name),
             UnexpectedEof => "unexpected end of file".into(),

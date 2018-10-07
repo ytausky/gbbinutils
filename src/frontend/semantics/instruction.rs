@@ -205,13 +205,10 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
     }
 
     fn analyze_ldhl(&mut self) -> AnalysisResult<S> {
-        let dest = self.next_operand_out_of(2)?;
         let src = self.next_operand_out_of(2)?;
-        match dest {
-            Operand::Atom(AtomKind::Reg16(Reg16::Sp), _) => (),
-            _ => panic!(),
-        }
-        match src {
+        let offset = self.next_operand_out_of(2)?;
+        expect_specific_atom_operand(src, AtomKind::Reg16(Reg16::Sp), Message::SrcMustBeSp)?;
+        match offset {
             Operand::Const(expr) => Ok(Instruction::Ldhl(expr)),
             _ => panic!(),
         }
@@ -1328,6 +1325,13 @@ mod tests {
         analyze(kw::Mnemonic::Bit, vec![7.into(), literal(Bc)]).expect_diagnostic(
             ExpectedDiagnostic::new(Message::RequiresSimpleOperand)
                 .with_highlight(TokenId::Operand(1, 0)),
+        )
+    }
+
+    #[test]
+    fn analyze_ldhl_bc_7() {
+        analyze(kw::Mnemonic::Ldhl, vec![literal(Bc), 7.into()]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::SrcMustBeSp).with_highlight(TokenId::Operand(0, 0)),
         )
     }
 
