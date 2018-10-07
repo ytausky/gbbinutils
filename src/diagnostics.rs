@@ -87,6 +87,7 @@ impl<S> InternalDiagnostic<S> {
 pub enum Message {
     AlwaysUnconditional,
     CannotDereference { category: KeywordOperandCategory },
+    ConditionOutsideBranch,
     DestCannotBeConst,
     DestMustBeA,
     DestMustBeHl,
@@ -129,6 +130,9 @@ impl Message {
                 category,
                 snippets.next().unwrap(),
             ),
+            ConditionOutsideBranch => {
+                "condition codes can only be used as operands for branching instructions".into()
+            }
             DestCannotBeConst => "destination operand cannot be a constant".into(),
             DestMustBeA => "destination of ALU operation must be `a`".into(),
             DestMustBeHl => "destination operand must be `hl`".into(),

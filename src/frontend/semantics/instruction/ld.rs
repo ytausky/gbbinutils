@@ -99,7 +99,11 @@ impl<S: Span> Operand<S> {
         match self {
             Operand::Deref(expr) => Ok(LdDest::Byte(LdDest8::Special(LdSpecial::Deref(expr)))),
             Operand::Atom(kind, span) => match kind {
-                AtomKind::Condition(_) => panic!(),
+                AtomKind::Condition(_) => Err(InternalDiagnostic::new(
+                    Message::ConditionOutsideBranch,
+                    iter::empty(),
+                    span,
+                )),
                 AtomKind::Simple(simple) => Ok(LdDest::Byte(LdDest8::Simple(simple, span))),
                 AtomKind::DerefC => Ok(LdDest::Byte(LdDest8::Special(LdSpecial::DerefC(span)))),
                 AtomKind::DerefPtrReg(ptr_reg) => Ok(LdDest::Byte(LdDest8::Special(
@@ -440,6 +444,14 @@ mod tests {
             ExpectedDiagnostic::new(Message::LdSpHlOperands).with_highlight(
                 TokenSpan::from(TokenId::Operand(0, 0)).extend(&TokenId::Operand(1, 0).into()),
             ),
+        )
+    }
+
+    #[test]
+    fn analyze_ld_a_z() {
+        analyze(Mnemonic::Ld, vec![literal(A), literal(Z)]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::ConditionOutsideBranch)
+                .with_highlight(TokenId::Operand(1, 0)),
         )
     }
 }
