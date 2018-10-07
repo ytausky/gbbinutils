@@ -160,10 +160,10 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
             if let Some(Operand::Atom(AtomKind::Condition(condition), range)) = first_operand {
                 (
                     Some((condition, range)),
-                    analyze_branch_target(self.operands.next()?),
+                    analyze_branch_target(self.operands.next()?)?,
                 )
             } else {
-                (None, analyze_branch_target(first_operand))
+                (None, analyze_branch_target(first_operand)?)
             },
         )
     }
@@ -262,12 +262,24 @@ impl<S: Span> Operand<S> {
 
 type CondtitionTargetPair<S> = (Option<(Condition, S)>, Option<TargetSelector<S>>);
 
-fn analyze_branch_target<S>(target: Option<Operand<S>>) -> Option<TargetSelector<S>> {
-    target.map(|target| match target {
-        Operand::Const(expr) => TargetSelector::Expr(expr),
-        Operand::Atom(AtomKind::Simple(SimpleOperand::DerefHl), _) => TargetSelector::DerefHl,
-        _ => panic!(),
-    })
+fn analyze_branch_target<S: Span>(
+    target: Option<Operand<S>>,
+) -> Result<Option<TargetSelector<S>>, InternalDiagnostic<S>> {
+    let target = match target {
+        Some(target) => target,
+        None => return Ok(None),
+    };
+    match target {
+        Operand::Const(expr) => Ok(Some(TargetSelector::Expr(expr))),
+        Operand::Atom(AtomKind::Simple(SimpleOperand::DerefHl), _) => {
+            Ok(Some(TargetSelector::DerefHl))
+        }
+        operand => Err(InternalDiagnostic::new(
+            Message::CannotBeUsedAsTarget,
+            iter::empty(),
+            operand.span(),
+        )),
+    }
 }
 
 fn mk_branch<S>(
@@ -1172,6 +1184,14 @@ mod tests {
     fn analyze_inc_7() {
         analyze(kw::Mnemonic::Inc, vec![7.into()]).expect_diagnostic(
             ExpectedDiagnostic::new(Message::OperandCannotBeIncDec(IncDec::Inc))
+                .with_highlight(TokenId::Operand(0, 0)),
+        )
+    }
+
+    #[test]
+    fn analyze_ret_a() {
+        analyze(kw::Mnemonic::Ret, vec![literal(A)]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::CannotBeUsedAsTarget)
                 .with_highlight(TokenId::Operand(0, 0)),
         )
     }

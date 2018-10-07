@@ -88,6 +88,7 @@ impl<S> InternalDiagnostic<S> {
 pub enum Message {
     AfOutsideStackOperation,
     AlwaysUnconditional,
+    CannotBeUsedAsTarget,
     CannotDereference { category: KeywordOperandCategory },
     ConditionOutsideBranch,
     DestCannotBeConst,
@@ -131,6 +132,9 @@ impl Message {
                 "register pair `af` can only be used with `push` and `pop`".into()
             }
             AlwaysUnconditional => "instruction cannot be made conditional".into(),
+            CannotBeUsedAsTarget => {
+                "operand cannot be used as target for branching instructions".into()
+            }
             CannotDereference { category } => format!(
                 "{} `{}` cannot be dereferenced",
                 category,
