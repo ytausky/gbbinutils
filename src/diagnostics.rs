@@ -87,9 +87,9 @@ impl<S> InternalDiagnostic<S> {
 pub enum Message {
     AlwaysUnconditional,
     CannotDereference { category: KeywordOperandCategory },
+    DestCannotBeConst,
     DestMustBeA,
     DestMustBeHl,
-    IllegalOperands,
     IncompatibleOperand,
     KeywordInExpr,
     LdWidthMismatch { src: Width },
@@ -127,12 +127,9 @@ impl Message {
                 category,
                 snippets.next().unwrap(),
             ),
+            DestCannotBeConst => "destination operand cannot be a constant".into(),
             DestMustBeA => "destination of ALU operation must be `a`".into(),
             DestMustBeHl => "destination operand must be `hl`".into(),
-            IllegalOperands => format!(
-                "illegal operands for mnemonic `{}`",
-                snippets.next().unwrap()
-            ),
             IncompatibleOperand => "operand cannot be used with this instruction".into(),
             KeywordInExpr => format!(
                 "keyword `{}` cannot appear in expression",

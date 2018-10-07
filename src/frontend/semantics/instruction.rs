@@ -170,50 +170,48 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
     fn analyze_ld(&mut self) -> AnalysisResult<S> {
         let dest = self.next_operand_out_of(2)?;
         let src = self.next_operand_out_of(2)?;
-        match (dest.into_ld_operand()?, src.into_ld_operand()?) {
-            (LdOperand::Byte(dest), LdOperand::Byte(src)) => self.analyze_8_bit_ld(dest, src),
-            (LdOperand::Byte(dest), LdOperand::Const(src)) => {
-                self.analyze_8_bit_ld(dest, ByteOperand::Const(src))
+        match (dest.into_ld_dest()?, src.into_ld_src()?) {
+            (LdDest::Byte(dest), LdOperand::Other(LdDest::Byte(src))) => {
+                self.analyze_8_bit_ld(dest, src)
             }
-            (LdOperand::Word(dest), LdOperand::Word(src)) => self.analyze_16_bit_ld(dest, src),
-            (LdOperand::Word(dest), LdOperand::Const(src)) => {
-                self.analyze_16_bit_ld(dest, WordOperand::Const(src))
+            (LdDest::Byte(dest), LdOperand::Const(src)) => self.analyze_8_bit_ld(dest, src),
+            (LdDest::Word(dest), LdOperand::Other(LdDest::Word(src))) => {
+                self.analyze_16_bit_ld(dest, src)
             }
-            (LdOperand::Const(dest), src) => Err(InternalDiagnostic::new(
-                Message::IllegalOperands,
-                iter::once(self.mnemonic.1.clone()),
-                dest.span().extend(&src.span()),
-            )),
-            (LdOperand::Byte(dest), LdOperand::Word(src)) => Err(InternalDiagnostic::new(
-                Message::LdWidthMismatch { src: Width::Word },
-                vec![src.span(), dest.span()],
-                dest.span().extend(&src.span()),
-            )),
-            (LdOperand::Word(dest), LdOperand::Byte(src)) => Err(InternalDiagnostic::new(
-                Message::LdWidthMismatch { src: Width::Byte },
-                vec![src.span(), dest.span()],
-                dest.span().extend(&src.span()),
-            )),
+            (LdDest::Word(dest), LdOperand::Const(src)) => self.analyze_16_bit_ld(dest, src),
+            (LdDest::Byte(dest), LdOperand::Other(LdDest::Word(src))) => {
+                Err(InternalDiagnostic::new(
+                    Message::LdWidthMismatch { src: Width::Word },
+                    vec![src.span(), dest.span()],
+                    dest.span().extend(&src.span()),
+                ))
+            }
+            (LdDest::Word(dest), LdOperand::Other(LdDest::Byte(src))) => {
+                Err(InternalDiagnostic::new(
+                    Message::LdWidthMismatch { src: Width::Byte },
+                    vec![src.span(), dest.span()],
+                    dest.span().extend(&src.span()),
+                ))
+            }
         }
-        /*(dest, src) => Err(InternalDiagnostic::new(
-                Message::IllegalOperands,
-                iter::once(self.mnemonic.1.clone()),
-                dest.span().extend(&src.span()),
-            )),*/
     }
 
-    fn analyze_8_bit_ld(&mut self, dest: ByteOperand<S>, src: ByteOperand<S>) -> AnalysisResult<S> {
-        match (dest, src) {
-            (ByteOperand::Simple(dest, _), ByteOperand::Simple(src, _)) => {
+    fn analyze_8_bit_ld(
+        &mut self,
+        dest: LdDest8<S>,
+        src: impl Into<LdOperand<S, LdDest8<S>>>,
+    ) -> AnalysisResult<S> {
+        match (dest, src.into()) {
+            (LdDest8::Simple(dest, _), LdOperand::Other(LdDest8::Simple(src, _))) => {
                 Ok(Instruction::Ld(Ld::Simple(dest, src)))
             }
-            (ByteOperand::Simple(dest, _), ByteOperand::Const(expr)) => {
+            (LdDest8::Simple(dest, _), LdOperand::Const(expr)) => {
                 Ok(Instruction::Ld(Ld::Immediate8(dest, expr)))
             }
-            (ByteOperand::Simple(SimpleOperand::A, _), src) => {
+            (LdDest8::Simple(SimpleOperand::A, _), LdOperand::Other(src)) => {
                 analyze_special_ld(src, Direction::IntoA)
             }
-            (dest, ByteOperand::Simple(SimpleOperand::A, _)) => {
+            (dest, LdOperand::Other(LdDest8::Simple(SimpleOperand::A, _))) => {
                 analyze_special_ld(dest, Direction::FromA)
             }
             _ => panic!(),
@@ -222,14 +220,14 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
 
     fn analyze_16_bit_ld(
         &mut self,
-        dest: WordOperand<S>,
-        src: WordOperand<S>,
+        dest: LdDest16<S>,
+        src: impl Into<LdOperand<S, LdDest16<S>>>,
     ) -> AnalysisResult<S> {
-        match (dest, src) {
-            (WordOperand::Reg16(Reg16::Sp, _), WordOperand::Reg16(Reg16::Hl, _)) => {
+        match (dest, src.into()) {
+            (LdDest16::Reg16(Reg16::Sp, _), LdOperand::Other(LdDest16::Reg16(Reg16::Hl, _))) => {
                 Ok(Instruction::Ld(Ld::SpHl))
             }
-            (WordOperand::Reg16(dest, _), WordOperand::Const(expr)) => {
+            (LdDest16::Reg16(dest, _), LdOperand::Const(expr)) => {
                 Ok(Instruction::Ld(Ld::Immediate16(dest, expr)))
             }
             _ => panic!(),
@@ -287,20 +285,31 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
 }
 
 impl<S: Span> Operand<S> {
-    fn into_ld_operand(self) -> Result<LdOperand<S>, InternalDiagnostic<S>> {
+    fn into_ld_dest(self) -> Result<LdDest<S>, InternalDiagnostic<S>> {
         match self {
-            Operand::Const(expr) => Ok(LdOperand::Const(expr)),
-            Operand::Deref(expr) => Ok(LdOperand::Byte(ByteOperand::Deref(expr))),
+            Operand::Deref(expr) => Ok(LdDest::Byte(LdDest8::Deref(expr))),
             Operand::Atom(kind, span) => match kind {
                 AtomKind::Condition(_) => panic!(),
-                AtomKind::Simple(simple) => Ok(LdOperand::Byte(ByteOperand::Simple(simple, span))),
-                AtomKind::DerefC => Ok(LdOperand::Byte(ByteOperand::DerefC(span))),
+                AtomKind::Simple(simple) => Ok(LdDest::Byte(LdDest8::Simple(simple, span))),
+                AtomKind::DerefC => Ok(LdDest::Byte(LdDest8::DerefC(span))),
                 AtomKind::DerefPtrReg(ptr_reg) => {
-                    Ok(LdOperand::Byte(ByteOperand::DerefPtrReg(ptr_reg, span)))
+                    Ok(LdDest::Byte(LdDest8::DerefPtrReg(ptr_reg, span)))
                 }
-                AtomKind::Reg16(reg16) => Ok(LdOperand::Word(WordOperand::Reg16(reg16, span))),
+                AtomKind::Reg16(reg16) => Ok(LdDest::Word(LdDest16::Reg16(reg16, span))),
                 AtomKind::RegPair(_) => panic!(),
             },
+            Operand::Const(expr) => Err(InternalDiagnostic::new(
+                Message::DestCannotBeConst,
+                iter::empty(),
+                expr.span(),
+            )),
+        }
+    }
+
+    fn into_ld_src(self) -> Result<LdOperand<S, LdDest<S>>, InternalDiagnostic<S>> {
+        match self {
+            Operand::Const(expr) => Ok(LdOperand::Const(expr)),
+            operand => Ok(LdOperand::Other(operand.into_ld_dest()?)),
         }
     }
 
@@ -341,54 +350,71 @@ impl<S: Span> Operand<S> {
     }
 }
 
-enum LdOperand<S> {
-    Byte(ByteOperand<S>),
+enum LdOperand<S, T> {
     Const(RelocExpr<S>),
-    Word(WordOperand<S>),
+    Other(T),
 }
 
-enum ByteOperand<S> {
-    Const(RelocExpr<S>),
+impl<S, T> From<RelocExpr<S>> for LdOperand<S, T> {
+    fn from(expr: RelocExpr<S>) -> Self {
+        LdOperand::Const(expr)
+    }
+}
+
+impl<S> From<LdDest8<S>> for LdOperand<S, LdDest8<S>> {
+    fn from(dest: LdDest8<S>) -> Self {
+        LdOperand::Other(dest)
+    }
+}
+
+impl<S> From<LdDest16<S>> for LdOperand<S, LdDest16<S>> {
+    fn from(dest: LdDest16<S>) -> Self {
+        LdOperand::Other(dest)
+    }
+}
+
+enum LdDest<S> {
+    Byte(LdDest8<S>),
+    Word(LdDest16<S>),
+}
+
+enum LdDest8<S> {
     Deref(RelocExpr<S>),
     DerefC(S),
     DerefPtrReg(PtrReg, S),
     Simple(SimpleOperand, S),
 }
 
-enum WordOperand<S> {
-    Const(RelocExpr<S>),
+enum LdDest16<S> {
     Reg16(Reg16, S),
 }
 
-impl<S: Span> Source for LdOperand<S> {
+impl<S: Span, T: Source<Span = S>> Source for LdOperand<S, T> {
     type Span = S;
     fn span(&self) -> Self::Span {
         match self {
-            LdOperand::Byte(byte) => byte.span(),
             LdOperand::Const(expr) => expr.span(),
-            LdOperand::Word(word) => word.span(),
+            LdOperand::Other(operand) => operand.span(),
         }
     }
 }
 
-impl<S: Span> Source for ByteOperand<S> {
+impl<S: Span> Source for LdDest8<S> {
     type Span = S;
     fn span(&self) -> Self::Span {
-        use self::ByteOperand::*;
+        use self::LdDest8::*;
         match self {
-            Const(expr) | Deref(expr) => expr.span(),
+            Deref(expr) => expr.span(),
             DerefC(span) | DerefPtrReg(_, span) | Simple(_, span) => span.clone(),
         }
     }
 }
 
-impl<S: Span> Source for WordOperand<S> {
+impl<S: Span> Source for LdDest16<S> {
     type Span = S;
     fn span(&self) -> Self::Span {
-        use self::WordOperand::*;
         match self {
-            Const(expr) => expr.span(),
-            Reg16(_, span) => span.clone(),
+            LdDest16::Reg16(_, span) => span.clone(),
         }
     }
 }
@@ -421,12 +447,12 @@ fn mk_branch<S>(
     }
 }
 
-fn analyze_special_ld<S>(other: ByteOperand<S>, direction: Direction) -> AnalysisResult<S> {
+fn analyze_special_ld<S>(other: LdDest8<S>, direction: Direction) -> AnalysisResult<S> {
     Ok(Instruction::Ld(Ld::Special(
         match other {
-            ByteOperand::Deref(expr) => SpecialLd::InlineAddr(expr),
-            ByteOperand::DerefC(_) => SpecialLd::RegIndex,
-            ByteOperand::DerefPtrReg(ptr_reg, _) => SpecialLd::DerefPtrReg(ptr_reg),
+            LdDest8::Deref(expr) => SpecialLd::InlineAddr(expr),
+            LdDest8::DerefC(_) => SpecialLd::RegIndex,
+            LdDest8::DerefPtrReg(ptr_reg, _) => SpecialLd::DerefPtrReg(ptr_reg),
             _ => panic!(),
         },
         direction,
@@ -1386,11 +1412,8 @@ mod tests {
     #[test]
     fn analyze_ld_const_const() {
         analyze(kw::Mnemonic::Ld, vec![2.into(), 4.into()]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::IllegalOperands)
-                .with_spans(iter::once(TokenId::Mnemonic))
-                .with_highlight(
-                    TokenSpan::from(TokenId::Operand(0, 0)).extend(&TokenId::Operand(1, 0).into()),
-                ),
+            ExpectedDiagnostic::new(Message::DestCannotBeConst)
+                .with_highlight(TokenId::Operand(0, 0)),
         )
     }
 
