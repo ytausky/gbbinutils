@@ -85,6 +85,7 @@ impl<S> InternalDiagnostic<S> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Message {
+    AfOutsideStackOperation,
     AlwaysUnconditional,
     CannotDereference { category: KeywordOperandCategory },
     ConditionOutsideBranch,
@@ -124,6 +125,9 @@ impl Message {
         use diagnostics::Message::*;
         let mut snippets = snippets.into_iter();
         let string = match self {
+            AfOutsideStackOperation => {
+                "register pair `af` can only be used with `push` and `pop`".into()
+            }
             AlwaysUnconditional => "instruction cannot be made conditional".into(),
             CannotDereference { category } => format!(
                 "{} `{}` cannot be dereferenced",

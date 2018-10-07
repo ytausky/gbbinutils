@@ -110,7 +110,15 @@ impl<S: Span> Operand<S> {
                     LdSpecial::DerefPtrReg(ptr_reg, span),
                 ))),
                 AtomKind::Reg16(reg16) => Ok(LdDest::Word(LdDest16::Reg16(reg16, span))),
-                AtomKind::RegPair(_) => panic!(),
+                AtomKind::RegPair(reg_pair) => {
+                    use instruction::RegPair;
+                    assert_eq!(reg_pair, RegPair::Af);
+                    Err(InternalDiagnostic::new(
+                        Message::AfOutsideStackOperation,
+                        iter::empty(),
+                        span,
+                    ))
+                }
             },
             Operand::Const(expr) => Err(InternalDiagnostic::new(
                 Message::DestCannotBeConst,
@@ -451,6 +459,14 @@ mod tests {
     fn analyze_ld_a_z() {
         analyze(Mnemonic::Ld, vec![literal(A), literal(Z)]).expect_diagnostic(
             ExpectedDiagnostic::new(Message::ConditionOutsideBranch)
+                .with_highlight(TokenId::Operand(1, 0)),
+        )
+    }
+
+    #[test]
+    fn analyze_ld_sp_af() {
+        analyze(Mnemonic::Ld, vec![literal(Sp), literal(Af)]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::AfOutsideStackOperation)
                 .with_highlight(TokenId::Operand(1, 0)),
         )
     }
