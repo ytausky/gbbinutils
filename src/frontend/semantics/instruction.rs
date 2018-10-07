@@ -139,15 +139,11 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
                 bit_number.span(),
             ));
         };
-        if let Operand::Atom(AtomKind::Simple(simple), _) = operand {
-            Ok(Instruction::Bit(operation, expr, simple))
-        } else {
-            Err(InternalDiagnostic::new(
-                Message::RequiresSimpleOperand,
-                iter::empty(),
-                operand.span(),
-            ))
-        }
+        Ok(Instruction::Bit(
+            operation,
+            expr,
+            expect_simple_operand(operand)?,
+        ))
     }
 
     fn analyze_branch(&mut self, branch: BranchKind) -> AnalysisResult<S> {
@@ -271,6 +267,19 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
                 self.mnemonic.1.clone(),
             )
         })
+    }
+}
+
+fn expect_simple_operand<S: Span>(
+    operand: Operand<S>,
+) -> Result<SimpleOperand, InternalDiagnostic<S>> {
+    match operand {
+        Operand::Atom(AtomKind::Simple(simple), _) => Ok(simple),
+        operand => Err(InternalDiagnostic::new(
+            Message::RequiresSimpleOperand,
+            iter::empty(),
+            operand.span(),
+        )),
     }
 }
 
