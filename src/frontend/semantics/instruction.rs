@@ -104,14 +104,11 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
             first_operand
         } else {
             let second_operand = self.next_operand_out_of(2)?;
-            match first_operand {
-                Operand::Atom(AtomKind::Simple(SimpleOperand::A), _) => Ok(()),
-                operand => Err(InternalDiagnostic::new(
-                    Message::DestMustBeA,
-                    iter::empty(),
-                    operand.span(),
-                )),
-            }?;
+            expect_specific_atom_operand(
+                first_operand,
+                AtomKind::Simple(SimpleOperand::A),
+                Message::DestMustBeA,
+            )?;
             second_operand
         };
         match src {
@@ -267,6 +264,21 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
                 self.mnemonic.1.clone(),
             )
         })
+    }
+}
+
+fn expect_specific_atom_operand<S: Span>(
+    operand: Operand<S>,
+    expected: AtomKind,
+    message: Message,
+) -> Result<(), InternalDiagnostic<S>> {
+    match operand {
+        Operand::Atom(ref actual, _) if *actual == expected => Ok(()),
+        operand => Err(InternalDiagnostic::new(
+            message,
+            iter::empty(),
+            operand.span(),
+        )),
     }
 }
 
