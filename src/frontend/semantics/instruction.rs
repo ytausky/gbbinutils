@@ -206,10 +206,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
 
     fn analyze_misc(&mut self, operation: MiscOperation) -> AnalysisResult<S> {
         let operand = self.next_operand_out_of(1)?;
-        match operand {
-            Operand::Atom(AtomKind::Simple(simple), _) => Ok(Instruction::Misc(operation, simple)),
-            _ => panic!(),
-        }
+        Ok(Instruction::Misc(operation, operand.expect_simple()?))
     }
 
     fn analyze_stack_operation(&mut self, operation: StackOperation) -> AnalysisResult<S> {
@@ -1340,6 +1337,14 @@ mod tests {
     fn analyze_ldhl_sp_a() {
         analyze(kw::Mnemonic::Ldhl, vec![literal(Sp), literal(A)]).expect_diagnostic(
             ExpectedDiagnostic::new(Message::MustBeConst).with_highlight(TokenId::Operand(1, 0)),
+        )
+    }
+
+    #[test]
+    fn analyze_swap_bc() {
+        analyze(kw::Mnemonic::Swap, vec![literal(Bc)]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::RequiresSimpleOperand)
+                .with_highlight(TokenId::Operand(0, 0)),
         )
     }
 
