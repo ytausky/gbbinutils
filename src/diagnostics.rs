@@ -144,7 +144,7 @@ impl Message {
                     Width::Word => (16, 8),
                 };
                 format!(
-                    "cannot load {}-bit value of `{}` into {}-bit register `{}`",
+                    "cannot load {}-bit source `{}` into {}-bit destination `{}`",
                     src_bits,
                     snippets.next().unwrap(),
                     dest_bits,

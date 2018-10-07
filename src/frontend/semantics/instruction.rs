@@ -170,40 +170,69 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
     fn analyze_ld(&mut self) -> AnalysisResult<S> {
         let dest = self.next_operand_out_of(2)?;
         let src = self.next_operand_out_of(2)?;
-        match (dest, src) {
-            (Operand::Atom(AtomKind::Simple(dest), _), Operand::Atom(AtomKind::Simple(src), _)) => {
-                Ok(Instruction::Ld(Ld::Simple(dest, src)))
+        match (dest.into_ld_operand()?, src.into_ld_operand()?) {
+            (LdOperand::Byte(dest), LdOperand::Byte(src)) => self.analyze_8_bit_ld(dest, src),
+            (LdOperand::Byte(dest), LdOperand::Const(src)) => {
+                self.analyze_8_bit_ld(dest, ByteOperand::Const(src))
             }
-            (Operand::Atom(AtomKind::Simple(_), ref dest_span), ref operand)
-                if operand.is_16_bit() =>
-            {
-                Err(InternalDiagnostic::new(
-                    Message::LdWidthMismatch { src: Width::Word },
-                    vec![operand.span(), dest_span.clone()],
-                    dest_span.extend(&operand.span()),
-                ))
+            (LdOperand::Word(dest), LdOperand::Word(src)) => self.analyze_16_bit_ld(dest, src),
+            (LdOperand::Word(dest), LdOperand::Const(src)) => {
+                self.analyze_16_bit_ld(dest, WordOperand::Const(src))
             }
-            (Operand::Atom(AtomKind::Simple(dest), _), Operand::Const(expr)) => {
-                Ok(Instruction::Ld(Ld::Immediate8(dest, expr)))
-            }
-            (Operand::Atom(AtomKind::Simple(SimpleOperand::A), _), src) => {
-                analyze_special_ld(src, Direction::IntoA)
-            }
-            (dest, Operand::Atom(AtomKind::Simple(SimpleOperand::A), _)) => {
-                analyze_special_ld(dest, Direction::FromA)
-            }
-            (
-                Operand::Atom(AtomKind::Reg16(Reg16::Sp), _),
-                Operand::Atom(AtomKind::Reg16(Reg16::Hl), _),
-            ) => Ok(Instruction::Ld(Ld::SpHl)),
-            (Operand::Atom(AtomKind::Reg16(dest), _), Operand::Const(expr)) => {
-                Ok(Instruction::Ld(Ld::Immediate16(dest, expr)))
-            }
-            (dest, src) => Err(InternalDiagnostic::new(
+            (LdOperand::Const(dest), src) => Err(InternalDiagnostic::new(
                 Message::IllegalOperands,
                 iter::once(self.mnemonic.1.clone()),
                 dest.span().extend(&src.span()),
             )),
+            (LdOperand::Byte(dest), LdOperand::Word(src)) => Err(InternalDiagnostic::new(
+                Message::LdWidthMismatch { src: Width::Word },
+                vec![src.span(), dest.span()],
+                dest.span().extend(&src.span()),
+            )),
+            (LdOperand::Word(dest), LdOperand::Byte(src)) => Err(InternalDiagnostic::new(
+                Message::LdWidthMismatch { src: Width::Byte },
+                vec![src.span(), dest.span()],
+                dest.span().extend(&src.span()),
+            )),
+        }
+        /*(dest, src) => Err(InternalDiagnostic::new(
+                Message::IllegalOperands,
+                iter::once(self.mnemonic.1.clone()),
+                dest.span().extend(&src.span()),
+            )),*/
+    }
+
+    fn analyze_8_bit_ld(&mut self, dest: ByteOperand<S>, src: ByteOperand<S>) -> AnalysisResult<S> {
+        match (dest, src) {
+            (ByteOperand::Simple(dest, _), ByteOperand::Simple(src, _)) => {
+                Ok(Instruction::Ld(Ld::Simple(dest, src)))
+            }
+            (ByteOperand::Simple(dest, _), ByteOperand::Const(expr)) => {
+                Ok(Instruction::Ld(Ld::Immediate8(dest, expr)))
+            }
+            (ByteOperand::Simple(SimpleOperand::A, _), src) => {
+                analyze_special_ld(src, Direction::IntoA)
+            }
+            (dest, ByteOperand::Simple(SimpleOperand::A, _)) => {
+                analyze_special_ld(dest, Direction::FromA)
+            }
+            _ => panic!(),
+        }
+    }
+
+    fn analyze_16_bit_ld(
+        &mut self,
+        dest: WordOperand<S>,
+        src: WordOperand<S>,
+    ) -> AnalysisResult<S> {
+        match (dest, src) {
+            (WordOperand::Reg16(Reg16::Sp, _), WordOperand::Reg16(Reg16::Hl, _)) => {
+                Ok(Instruction::Ld(Ld::SpHl))
+            }
+            (WordOperand::Reg16(dest, _), WordOperand::Const(expr)) => {
+                Ok(Instruction::Ld(Ld::Immediate16(dest, expr)))
+            }
+            _ => panic!(),
         }
     }
 
@@ -258,10 +287,20 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
 }
 
 impl<S: Span> Operand<S> {
-    fn is_16_bit(&self) -> bool {
+    fn into_ld_operand(self) -> Result<LdOperand<S>, InternalDiagnostic<S>> {
         match self {
-            Operand::Atom(AtomKind::Reg16(_), _) | Operand::Atom(AtomKind::RegPair(_), _) => true,
-            _ => false,
+            Operand::Const(expr) => Ok(LdOperand::Const(expr)),
+            Operand::Deref(expr) => Ok(LdOperand::Byte(ByteOperand::Deref(expr))),
+            Operand::Atom(kind, span) => match kind {
+                AtomKind::Condition(_) => panic!(),
+                AtomKind::Simple(simple) => Ok(LdOperand::Byte(ByteOperand::Simple(simple, span))),
+                AtomKind::DerefC => Ok(LdOperand::Byte(ByteOperand::DerefC(span))),
+                AtomKind::DerefPtrReg(ptr_reg) => {
+                    Ok(LdOperand::Byte(ByteOperand::DerefPtrReg(ptr_reg, span)))
+                }
+                AtomKind::Reg16(reg16) => Ok(LdOperand::Word(WordOperand::Reg16(reg16, span))),
+                AtomKind::RegPair(_) => panic!(),
+            },
         }
     }
 
@@ -302,6 +341,58 @@ impl<S: Span> Operand<S> {
     }
 }
 
+enum LdOperand<S> {
+    Byte(ByteOperand<S>),
+    Const(RelocExpr<S>),
+    Word(WordOperand<S>),
+}
+
+enum ByteOperand<S> {
+    Const(RelocExpr<S>),
+    Deref(RelocExpr<S>),
+    DerefC(S),
+    DerefPtrReg(PtrReg, S),
+    Simple(SimpleOperand, S),
+}
+
+enum WordOperand<S> {
+    Const(RelocExpr<S>),
+    Reg16(Reg16, S),
+}
+
+impl<S: Span> Source for LdOperand<S> {
+    type Span = S;
+    fn span(&self) -> Self::Span {
+        match self {
+            LdOperand::Byte(byte) => byte.span(),
+            LdOperand::Const(expr) => expr.span(),
+            LdOperand::Word(word) => word.span(),
+        }
+    }
+}
+
+impl<S: Span> Source for ByteOperand<S> {
+    type Span = S;
+    fn span(&self) -> Self::Span {
+        use self::ByteOperand::*;
+        match self {
+            Const(expr) | Deref(expr) => expr.span(),
+            DerefC(span) | DerefPtrReg(_, span) | Simple(_, span) => span.clone(),
+        }
+    }
+}
+
+impl<S: Span> Source for WordOperand<S> {
+    type Span = S;
+    fn span(&self) -> Self::Span {
+        use self::WordOperand::*;
+        match self {
+            Const(expr) => expr.span(),
+            Reg16(_, span) => span.clone(),
+        }
+    }
+}
+
 type CondtitionTargetPair<S> = (Option<(Condition, S)>, Option<TargetSelector<S>>);
 
 fn analyze_branch_target<S>(target: Option<Operand<S>>) -> Option<TargetSelector<S>> {
@@ -330,12 +421,12 @@ fn mk_branch<S>(
     }
 }
 
-fn analyze_special_ld<S>(other: Operand<S>, direction: Direction) -> AnalysisResult<S> {
+fn analyze_special_ld<S>(other: ByteOperand<S>, direction: Direction) -> AnalysisResult<S> {
     Ok(Instruction::Ld(Ld::Special(
         match other {
-            Operand::Deref(expr) => SpecialLd::InlineAddr(expr),
-            Operand::Atom(AtomKind::DerefC, _) => SpecialLd::RegIndex,
-            Operand::Atom(AtomKind::DerefPtrReg(ptr_reg), _) => SpecialLd::DerefPtrReg(ptr_reg),
+            ByteOperand::Deref(expr) => SpecialLd::InlineAddr(expr),
+            ByteOperand::DerefC(_) => SpecialLd::RegIndex,
+            ByteOperand::DerefPtrReg(ptr_reg, _) => SpecialLd::DerefPtrReg(ptr_reg),
             _ => panic!(),
         },
         direction,
@@ -1307,6 +1398,17 @@ mod tests {
     fn analyze_ld_a_bc() {
         analyze(kw::Mnemonic::Ld, vec![literal(A), literal(Bc)]).expect_diagnostic(
             ExpectedDiagnostic::new(Message::LdWidthMismatch { src: Width::Word })
+                .with_spans(vec![TokenId::Operand(1, 0), TokenId::Operand(0, 0)])
+                .with_highlight(
+                    TokenSpan::from(TokenId::Operand(0, 0)).extend(&TokenId::Operand(1, 0).into()),
+                ),
+        )
+    }
+
+    #[test]
+    fn analyze_ld_bc_a() {
+        analyze(kw::Mnemonic::Ld, vec![literal(Bc), literal(A)]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::LdWidthMismatch { src: Width::Byte })
                 .with_spans(vec![TokenId::Operand(1, 0), TokenId::Operand(0, 0)])
                 .with_highlight(
                     TokenSpan::from(TokenId::Operand(0, 0)).extend(&TokenId::Operand(1, 0).into()),
