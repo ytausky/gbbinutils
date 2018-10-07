@@ -69,10 +69,16 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
             (LdDest16::Reg16(Reg16::Sp, _), LdOperand::Other(LdDest16::Reg16(Reg16::Hl, _))) => {
                 Ok(Instruction::Ld(Ld::SpHl))
             }
+            (LdDest16::Reg16(_, dest_span), LdOperand::Other(LdDest16::Reg16(_, src_span))) => {
+                Err(InternalDiagnostic::new(
+                    Message::LdSpHlOperands,
+                    iter::empty(),
+                    dest_span.extend(&src_span),
+                ))
+            }
             (LdDest16::Reg16(dest, _), LdOperand::Const(expr)) => {
                 Ok(Instruction::Ld(Ld::Immediate16(dest, expr)))
             }
-            _ => panic!(),
         }
     }
 }
@@ -425,6 +431,15 @@ mod tests {
         analyze(Mnemonic::Ld, vec![deref(literal(C)), 4.into()]).expect_diagnostic(
             ExpectedDiagnostic::new(Message::OnlySupportedByA)
                 .with_highlight(TokenId::Operand(1, 0)),
+        )
+    }
+
+    #[test]
+    fn analyze_ld_hl_sp() {
+        analyze(Mnemonic::Ld, vec![literal(Hl), literal(Sp)]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::LdSpHlOperands).with_highlight(
+                TokenSpan::from(TokenId::Operand(0, 0)).extend(&TokenId::Operand(1, 0).into()),
+            ),
         )
     }
 }

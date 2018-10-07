@@ -92,6 +92,7 @@ pub enum Message {
     DestMustBeHl,
     IncompatibleOperand,
     KeywordInExpr,
+    LdSpHlOperands,
     LdWidthMismatch { src: Width },
     MissingTarget,
     MustBeBit,
@@ -136,6 +137,9 @@ impl Message {
                 "keyword `{}` cannot appear in expression",
                 snippets.next().unwrap(),
             ),
+            LdSpHlOperands => {
+                "the only legal 16-bit register to register transfer is from `hl` to `sp`".into()
+            }
             LdWidthMismatch { src } => {
                 let (src_bits, dest_bits) = match src {
                     Width::Byte => (8, 16),
