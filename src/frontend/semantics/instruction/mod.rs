@@ -140,13 +140,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
 
     fn analyze_branch(&mut self, branch: BranchKind) -> AnalysisResult<S> {
         let (condition, target) = self.collect_condition_and_target()?;
-        let variant = match (branch, target) {
-            (BranchKind::Jp, Some(TargetSelector::DerefHl)) => Ok(BranchVariant::JpDerefHl),
-            (_, target) => Ok(BranchVariant::Conditional(mk_branch(
-                (branch, self.mnemonic.1.clone()),
-                target,
-            )?)),
-        }?;
+        let variant = analyze_branch_variant((branch, &self.mnemonic.1), target)?;
         match variant {
             BranchVariant::JpDerefHl => match condition {
                 None => Ok(Instruction::JpDerefHl),
@@ -293,21 +287,35 @@ fn analyze_branch_target<S: Span>(
     }
 }
 
-fn mk_branch<S>(
-    kind: (BranchKind, S),
+fn analyze_branch_variant<S: Clone>(
+    kind: (BranchKind, &S),
     target: Option<TargetSelector<S>>,
-) -> Result<Branch<S>, InternalDiagnostic<S>> {
+) -> Result<BranchVariant<S>, InternalDiagnostic<S>> {
     match (kind.0, target) {
-        (BranchKind::Call, Some(TargetSelector::Expr(expr))) => Ok(Branch::Call(expr)),
-        (BranchKind::Jp, Some(TargetSelector::Expr(expr))) => Ok(Branch::Jp(expr)),
-        (BranchKind::Jp, None) => Err(InternalDiagnostic::new(
+        (BranchKind::Explicit(ExplicitBranch::Jp), Some(TargetSelector::DerefHl)) => {
+            Ok(BranchVariant::JpDerefHl)
+        }
+        (BranchKind::Explicit(branch), Some(TargetSelector::Expr(expr))) => {
+            Ok(BranchVariant::Conditional(mk_explicit_branch(branch, expr)))
+        }
+        (BranchKind::Implicit(ImplicitBranch::Ret), None) => {
+            Ok(BranchVariant::Conditional(Branch::Ret))
+        }
+        (BranchKind::Explicit(_), None) => Err(InternalDiagnostic::new(
             Message::MissingTarget,
             iter::empty(),
-            kind.1,
+            kind.1.clone(),
         )),
-        (BranchKind::Jr, Some(TargetSelector::Expr(expr))) => Ok(Branch::Jr(expr)),
-        (BranchKind::Ret, None) => Ok(Branch::Ret),
+        (BranchKind::Implicit(_), Some(_)) => panic!(),
         _ => panic!(),
+    }
+}
+
+fn mk_explicit_branch<S>(branch: ExplicitBranch, target: RelocExpr<S>) -> Branch<S> {
+    match branch {
+        ExplicitBranch::Call => Branch::Call(target),
+        ExplicitBranch::Jp => Branch::Jp(target),
+        ExplicitBranch::Jr => Branch::Jr(target),
     }
 }
 
@@ -369,22 +377,25 @@ impl<R> From<Nullary> for Instruction<R> {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum BranchKind {
+    Explicit(ExplicitBranch),
+    Implicit(ImplicitBranch),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum ExplicitBranch {
     Call,
     Jp,
     Jr,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum ImplicitBranch {
     Ret,
 }
 
 enum BranchVariant<S> {
     JpDerefHl,
     Conditional(Branch<S>),
-}
-
-#[cfg(test)]
-impl BranchKind {
-    fn has_target(&self) -> bool {
-        *self != BranchKind::Ret
-    }
 }
 
 enum TargetSelector<R> {
@@ -400,7 +411,7 @@ impl From<kw::Mnemonic> for Mnemonic {
             Add => Mnemonic::Alu(AluOperation::Add),
             And => Mnemonic::Alu(AluOperation::And),
             Bit => Mnemonic::Bit(BitOperation::Bit),
-            Call => Mnemonic::Branch(BranchKind::Call),
+            Call => Mnemonic::Branch(BranchKind::Explicit(ExplicitBranch::Call)),
             Cp => Mnemonic::Alu(AluOperation::Cp),
             Cpl => Mnemonic::Nullary(Nullary::Cpl),
             Daa => Mnemonic::Nullary(Nullary::Daa),
@@ -409,8 +420,8 @@ impl From<kw::Mnemonic> for Mnemonic {
             Ei => Mnemonic::Nullary(Nullary::Ei),
             Halt => Mnemonic::Nullary(Nullary::Halt),
             Inc => Mnemonic::IncDec(IncDec::Inc),
-            Jp => Mnemonic::Branch(BranchKind::Jp),
-            Jr => Mnemonic::Branch(BranchKind::Jr),
+            Jp => Mnemonic::Branch(BranchKind::Explicit(ExplicitBranch::Jp)),
+            Jr => Mnemonic::Branch(BranchKind::Explicit(ExplicitBranch::Jr)),
             Ld => Mnemonic::Ld,
             Ldhl => Mnemonic::Ldhl,
             Nop => Mnemonic::Nullary(Nullary::Nop),
@@ -418,7 +429,7 @@ impl From<kw::Mnemonic> for Mnemonic {
             Pop => Mnemonic::Stack(StackOperation::Pop),
             Push => Mnemonic::Stack(StackOperation::Push),
             Res => Mnemonic::Bit(BitOperation::Res),
-            Ret => Mnemonic::Branch(BranchKind::Ret),
+            Ret => Mnemonic::Branch(BranchKind::Implicit(ImplicitBranch::Ret)),
             Reti => Mnemonic::Nullary(Nullary::Reti),
             Rl => Mnemonic::Misc(MiscOperation::Rl),
             Rla => Mnemonic::Nullary(Nullary::Rla),
@@ -528,10 +539,10 @@ mod tests {
     impl From<BranchKind> for kw::Mnemonic {
         fn from(branch: BranchKind) -> Self {
             match branch {
-                BranchKind::Call => kw::Mnemonic::Call,
-                BranchKind::Jp => kw::Mnemonic::Jp,
-                BranchKind::Jr => kw::Mnemonic::Jr,
-                BranchKind::Ret => kw::Mnemonic::Ret,
+                BranchKind::Explicit(ExplicitBranch::Call) => kw::Mnemonic::Call,
+                BranchKind::Explicit(ExplicitBranch::Jp) => kw::Mnemonic::Jp,
+                BranchKind::Explicit(ExplicitBranch::Jr) => kw::Mnemonic::Jr,
+                BranchKind::Implicit(ImplicitBranch::Ret) => kw::Mnemonic::Ret,
             }
         }
     }
@@ -810,23 +821,22 @@ mod tests {
             operands.push(Expr::from(condition));
             has_condition = true;
         };
-        if branch.has_target() {
+        if let BranchKind::Explicit(_) = branch {
             operands.push(ident.into());
         };
         (
             (kw::Mnemonic::from(branch), operands),
             Instruction::Branch(
-                mk_branch(
-                    (branch, TokenId::Mnemonic.into()),
-                    if branch.has_target() {
-                        Some(TargetSelector::Expr(symbol(
+                match branch {
+                    BranchKind::Implicit(ImplicitBranch::Ret) => Branch::Ret,
+                    BranchKind::Explicit(explicit) => mk_explicit_branch(
+                        explicit,
+                        symbol(
                             ident,
                             TokenId::Operand(if has_condition { 1 } else { 0 }, 0),
-                        )))
-                    } else {
-                        None
-                    },
-                ).unwrap(),
+                        ),
+                    ),
+                },
                 condition,
             ),
         )
@@ -906,10 +916,10 @@ mod tests {
     const REG_PAIRS: &[RegPair] = &[RegPair::Bc, RegPair::De, RegPair::Hl, RegPair::Af];
 
     const BRANCHES: &[BranchKind] = &[
-        BranchKind::Call,
-        BranchKind::Jp,
-        BranchKind::Jr,
-        BranchKind::Ret,
+        BranchKind::Explicit(ExplicitBranch::Call),
+        BranchKind::Explicit(ExplicitBranch::Jp),
+        BranchKind::Explicit(ExplicitBranch::Jr),
+        BranchKind::Implicit(ImplicitBranch::Ret),
     ];
 
     const CONDITIONS: [Condition; 4] = [Condition::C, Condition::Nc, Condition::Nz, Condition::Z];
