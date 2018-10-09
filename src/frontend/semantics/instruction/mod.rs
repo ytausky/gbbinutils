@@ -265,19 +265,19 @@ impl<S: Span> Operand<S> {
     }
 }
 
-type CondtitionTargetPair<S> = (Option<(Condition, S)>, Option<TargetSelector<S>>);
+type CondtitionTargetPair<S> = (Option<(Condition, S)>, Option<BranchTarget<S>>);
 
 fn analyze_branch_target<S: Span>(
     target: Option<Operand<S>>,
-) -> Result<Option<TargetSelector<S>>, InternalDiagnostic<S>> {
+) -> Result<Option<BranchTarget<S>>, InternalDiagnostic<S>> {
     let target = match target {
         Some(target) => target,
         None => return Ok(None),
     };
     match target {
-        Operand::Const(expr) => Ok(Some(TargetSelector::Expr(expr))),
+        Operand::Const(expr) => Ok(Some(BranchTarget::Expr(expr))),
         Operand::Atom(AtomKind::Simple(SimpleOperand::DerefHl), span) => {
-            Ok(Some(TargetSelector::DerefHl(span)))
+            Ok(Some(BranchTarget::DerefHl(span)))
         }
         operand => Err(InternalDiagnostic::new(
             Message::CannotBeUsedAsTarget,
@@ -289,13 +289,13 @@ fn analyze_branch_target<S: Span>(
 
 fn analyze_branch_variant<S: Span>(
     kind: (BranchKind, &S),
-    target: Option<TargetSelector<S>>,
+    target: Option<BranchTarget<S>>,
 ) -> Result<BranchVariant<S>, InternalDiagnostic<S>> {
     match (kind.0, target) {
-        (BranchKind::Explicit(ExplicitBranch::Jp), Some(TargetSelector::DerefHl(_))) => {
+        (BranchKind::Explicit(ExplicitBranch::Jp), Some(BranchTarget::DerefHl(_))) => {
             Ok(BranchVariant::Unconditional(UnconditionalBranch::JpDerefHl))
         }
-        (BranchKind::Explicit(branch), Some(TargetSelector::Expr(expr))) => Ok(
+        (BranchKind::Explicit(branch), Some(BranchTarget::Expr(expr))) => Ok(
             BranchVariant::PotentiallyConditional(mk_explicit_branch(branch, expr)),
         ),
         (BranchKind::Implicit(ImplicitBranch::Ret), None) => {
@@ -420,17 +420,17 @@ impl<S> From<UnconditionalBranch> for Instruction<S> {
     }
 }
 
-enum TargetSelector<S> {
+enum BranchTarget<S> {
     DerefHl(S),
     Expr(RelocExpr<S>),
 }
 
-impl<S: Span> Source for TargetSelector<S> {
+impl<S: Span> Source for BranchTarget<S> {
     type Span = S;
     fn span(&self) -> Self::Span {
         match self {
-            TargetSelector::DerefHl(span) => span.clone(),
-            TargetSelector::Expr(expr) => expr.span(),
+            BranchTarget::DerefHl(span) => span.clone(),
+            BranchTarget::Expr(expr) => expr.span(),
         }
     }
 }
