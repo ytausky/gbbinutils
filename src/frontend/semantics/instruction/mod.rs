@@ -293,6 +293,13 @@ fn analyze_branch_variant<S: Span>(
         (BranchKind::Explicit(ExplicitBranch::Jp), Some(BranchTarget::DerefHl(_))) => {
             Ok(BranchVariant::Unconditional(UnconditionalBranch::JpDerefHl))
         }
+        (BranchKind::Explicit(_), Some(BranchTarget::DerefHl(span))) => {
+            Err(InternalDiagnostic::new(
+                Message::RequiresConstantTarget,
+                iter::once(kind.1.clone()),
+                span,
+            ))
+        }
         (BranchKind::Explicit(branch), Some(BranchTarget::Expr(expr))) => Ok(
             BranchVariant::PotentiallyConditional(mk_explicit_branch(branch, expr)),
         ),
@@ -312,7 +319,6 @@ fn analyze_branch_variant<S: Span>(
             iter::empty(),
             target.span(),
         )),
-        _ => panic!(),
     }
 }
 
@@ -1272,6 +1278,17 @@ mod tests {
         analyze(kw::Mnemonic::Ret, vec![literal(Z), "target".into()]).expect_diagnostic(
             ExpectedDiagnostic::new(Message::CannotSpecifyTarget)
                 .with_highlight(TokenId::Operand(1, 0)),
+        )
+    }
+
+    #[test]
+    fn analyze_call_deref_hl() {
+        analyze(kw::Mnemonic::Call, vec![deref(literal(Hl))]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::RequiresConstantTarget)
+                .with_spans(iter::once(TokenId::Mnemonic))
+                .with_highlight(
+                    TokenSpan::from(TokenId::Operand(0, 0)).extend(&TokenId::Operand(0, 2).into()),
+                ),
         )
     }
 

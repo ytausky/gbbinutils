@@ -106,6 +106,7 @@ pub enum Message {
     OnlySupportedByA,
     OperandCannotBeIncDec(IncDec),
     OperandCount { actual: usize, expected: usize },
+    RequiresConstantTarget,
     RequiresRegPair,
     RequiresSimpleOperand,
     SrcMustBeSp,
@@ -192,6 +193,10 @@ impl Message {
                 expected,
                 pluralize(*expected),
                 actual
+            ),
+            RequiresConstantTarget => format!(
+                "instruction `{}` requires a constant target",
+                snippets.next().unwrap(),
             ),
             RequiresRegPair => "instruction requires a register pair".into(),
             RequiresSimpleOperand => "instruction requires 8-bit register or `(hl)`".into(),
