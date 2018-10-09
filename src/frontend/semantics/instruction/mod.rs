@@ -157,9 +157,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
         }
     }
 
-    fn collect_condition_and_target(
-        &mut self,
-    ) -> Result<CondtitionTargetPair<S>, InternalDiagnostic<S>> {
+    fn collect_condition_and_target(&mut self) -> Result<BranchOperands<S>, InternalDiagnostic<S>> {
         let first_operand = self.operands.next()?;
         Ok(
             if let Some(Operand::Atom(AtomKind::Condition(condition), range)) = first_operand {
@@ -265,7 +263,7 @@ impl<S: Span> Operand<S> {
     }
 }
 
-type CondtitionTargetPair<S> = (Option<(Condition, S)>, Option<BranchTarget<S>>);
+type BranchOperands<S> = (Option<(Condition, S)>, Option<BranchTarget<S>>);
 
 fn analyze_branch_target<S: Span>(
     target: Option<Operand<S>>,
