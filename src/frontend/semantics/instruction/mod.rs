@@ -139,7 +139,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
     }
 
     fn analyze_branch(&mut self, branch: BranchKind) -> AnalysisResult<S> {
-        let (condition, target) = self.collect_condition_and_target()?;
+        let (condition, target) = self.collect_branch_operands()?;
         let variant = analyze_branch_variant((branch, &self.mnemonic.1), target)?;
         match variant {
             BranchVariant::Unconditional(branch) => match condition {
@@ -157,7 +157,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
         }
     }
 
-    fn collect_condition_and_target(&mut self) -> Result<BranchOperands<S>, InternalDiagnostic<S>> {
+    fn collect_branch_operands(&mut self) -> Result<BranchOperands<S>, InternalDiagnostic<S>> {
         let first_operand = self.operands.next()?;
         Ok(
             if let Some(Operand::Atom(AtomKind::Condition(condition), range)) = first_operand {
