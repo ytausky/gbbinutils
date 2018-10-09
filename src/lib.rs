@@ -27,7 +27,7 @@ pub struct DiagnosticsConfig<'a> {
     pub output: &'a mut dyn diagnostics::DiagnosticsOutput,
 }
 
-pub fn assemble<'a>(name: &str, config: DiagnosticsConfig<'a>) -> Rom {
+pub fn assemble<'a>(name: &str, config: &mut DiagnosticsConfig<'a>) -> Rom {
     let codebase = codebase::FileCodebase::new(codebase::StdFileSystem::new());
     let mut diagnostics = diagnostics::OutputForwarder {
         output: config.output,

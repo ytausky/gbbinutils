@@ -9,11 +9,11 @@ fn main() {
         println!("{}: error: no input files", args[0]);
         std::process::exit(1)
     }
-    let config = gbas::DiagnosticsConfig {
+    let mut config = gbas::DiagnosticsConfig {
         output: &mut gbas::TerminalOutput {},
     };
     let filename = &args[1];
-    let rom = gbas::assemble(filename, config);
+    let rom = gbas::assemble(filename, &mut config);
     let mut rom_file = File::create(filename.to_owned() + ".o").unwrap();
     rom_file.write_all(&rom.data).unwrap()
 }

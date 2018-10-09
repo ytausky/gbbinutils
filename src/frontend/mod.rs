@@ -156,7 +156,7 @@ where
     fn analyze_token_seq<I: IntoIterator<Item = (Token<TCS::Ident>, TCS::Span)>>(
         &mut self,
         tokens: I,
-        downstream: Downstream<impl Backend<TCS::Span>, impl DiagnosticsListener<TCS::Span>>,
+        downstream: &mut Downstream<impl Backend<TCS::Span>, impl DiagnosticsListener<TCS::Span>>,
     ) {
         let mut analysis = self.analysis_factory.mk_analysis();
         let mut session = BorrowedComponents::new(self, downstream.backend, downstream.diagnostics);
@@ -166,20 +166,20 @@ where
     fn include_source_file(
         &mut self,
         filename: &str,
-        downstream: Downstream<impl Backend<TCS::Span>, impl DiagnosticsListener<TCS::Span>>,
+        mut downstream: Downstream<impl Backend<TCS::Span>, impl DiagnosticsListener<TCS::Span>>,
     ) {
         let tokenized_src = self.tokenized_code_source.tokenize_file(filename);
-        self.analyze_token_seq(&tokenized_src, downstream)
+        self.analyze_token_seq(&tokenized_src, &mut downstream)
     }
 
     fn invoke_macro(
         &mut self,
         name: (<Self as Frontend>::Ident, <Self as Frontend>::Span),
         args: Vec<TokenSeq<<Self as Frontend>::Ident, <Self as Frontend>::Span>>,
-        downstream: Downstream<impl Backend<TCS::Span>, impl DiagnosticsListener<TCS::Span>>,
+        mut downstream: Downstream<impl Backend<TCS::Span>, impl DiagnosticsListener<TCS::Span>>,
     ) {
         match self.macros.expand(name.clone(), args) {
-            Some(tokens) => self.analyze_token_seq(tokens, downstream),
+            Some(tokens) => self.analyze_token_seq(tokens, &mut downstream),
             None => {
                 let (name, name_ref) = name;
                 downstream

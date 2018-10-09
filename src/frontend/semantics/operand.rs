@@ -23,7 +23,7 @@ impl<S: Span> Source for Operand<S> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum AtomKind {
     Simple(SimpleOperand),
     Condition(Condition),
