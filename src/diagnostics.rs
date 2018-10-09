@@ -90,6 +90,7 @@ pub enum Message {
     AlwaysUnconditional,
     CannotBeUsedAsTarget,
     CannotDereference { category: KeywordOperandCategory },
+    CannotSpecifyTarget,
     ConditionOutsideBranch,
     DestCannotBeConst,
     DestMustBeA,
@@ -140,6 +141,7 @@ impl Message {
                 category,
                 snippets.next().unwrap(),
             ),
+            CannotSpecifyTarget => "branch target cannot be specified explicitly".into(),
             ConditionOutsideBranch => {
                 "condition codes can only be used as operands for branching instructions".into()
             }

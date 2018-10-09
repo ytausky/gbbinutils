@@ -276,8 +276,8 @@ fn analyze_branch_target<S: Span>(
     };
     match target {
         Operand::Const(expr) => Ok(Some(TargetSelector::Expr(expr))),
-        Operand::Atom(AtomKind::Simple(SimpleOperand::DerefHl), _) => {
-            Ok(Some(TargetSelector::DerefHl))
+        Operand::Atom(AtomKind::Simple(SimpleOperand::DerefHl), span) => {
+            Ok(Some(TargetSelector::DerefHl(span)))
         }
         operand => Err(InternalDiagnostic::new(
             Message::CannotBeUsedAsTarget,
@@ -287,12 +287,12 @@ fn analyze_branch_target<S: Span>(
     }
 }
 
-fn analyze_branch_variant<S: Clone>(
+fn analyze_branch_variant<S: Span>(
     kind: (BranchKind, &S),
     target: Option<TargetSelector<S>>,
 ) -> Result<BranchVariant<S>, InternalDiagnostic<S>> {
     match (kind.0, target) {
-        (BranchKind::Explicit(ExplicitBranch::Jp), Some(TargetSelector::DerefHl)) => {
+        (BranchKind::Explicit(ExplicitBranch::Jp), Some(TargetSelector::DerefHl(_))) => {
             Ok(BranchVariant::Unconditional(UnconditionalBranch::JpDerefHl))
         }
         (BranchKind::Explicit(branch), Some(TargetSelector::Expr(expr))) => Ok(
@@ -309,7 +309,11 @@ fn analyze_branch_variant<S: Clone>(
             iter::empty(),
             kind.1.clone(),
         )),
-        (BranchKind::Implicit(_), Some(_)) => panic!(),
+        (BranchKind::Implicit(_), Some(target)) => Err(InternalDiagnostic::new(
+            Message::CannotSpecifyTarget,
+            iter::empty(),
+            target.span(),
+        )),
         _ => panic!(),
     }
 }
@@ -416,9 +420,19 @@ impl<S> From<UnconditionalBranch> for Instruction<S> {
     }
 }
 
-enum TargetSelector<R> {
-    DerefHl,
-    Expr(RelocExpr<R>),
+enum TargetSelector<S> {
+    DerefHl(S),
+    Expr(RelocExpr<S>),
+}
+
+impl<S: Span> Source for TargetSelector<S> {
+    type Span = S;
+    fn span(&self) -> Self::Span {
+        match self {
+            TargetSelector::DerefHl(span) => span.clone(),
+            TargetSelector::Expr(expr) => expr.span(),
+        }
+    }
 }
 
 impl From<kw::Mnemonic> for Mnemonic {
@@ -1252,6 +1266,14 @@ mod tests {
         analyze(kw::Mnemonic::Reti, vec![literal(Z)]).expect_diagnostic(
             ExpectedDiagnostic::new(Message::AlwaysUnconditional)
                 .with_highlight(TokenId::Operand(0, 0)),
+        )
+    }
+
+    #[test]
+    fn analyze_ret_z_ident() {
+        analyze(kw::Mnemonic::Ret, vec![literal(Z), "target".into()]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::CannotSpecifyTarget)
+                .with_highlight(TokenId::Operand(1, 0)),
         )
     }
 
