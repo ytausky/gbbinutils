@@ -1,3 +1,4 @@
+use self::branch::*;
 use super::Expr;
 use diagnostics::{InternalDiagnostic, Message};
 use frontend::semantics::operand::{self, AtomKind, Context, Operand, OperandCounter};
@@ -6,6 +7,7 @@ use instruction::*;
 use span::{Source, Span};
 use std::iter;
 
+mod branch;
 mod ld;
 
 pub fn analyze_instruction<Id: Into<String>, I, S>(
@@ -138,39 +140,6 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
         Ok(Instruction::Bit(operation, expr, operand.expect_simple()?))
     }
 
-    fn analyze_branch(&mut self, branch: BranchKind) -> AnalysisResult<S> {
-        let (condition, target) = self.collect_branch_operands()?;
-        let variant = analyze_branch_variant((branch, &self.mnemonic.1), target)?;
-        match variant {
-            BranchVariant::Unconditional(branch) => match condition {
-                None => Ok(branch.into()),
-                Some((_, condition_span)) => Err(InternalDiagnostic::new(
-                    Message::AlwaysUnconditional,
-                    iter::empty(),
-                    condition_span,
-                )),
-            },
-            BranchVariant::PotentiallyConditional(branch) => Ok(Instruction::Branch(
-                branch,
-                condition.map(|(condition, _)| condition),
-            )),
-        }
-    }
-
-    fn collect_branch_operands(&mut self) -> Result<BranchOperands<S>, InternalDiagnostic<S>> {
-        let first_operand = self.operands.next()?;
-        Ok(
-            if let Some(Operand::Atom(AtomKind::Condition(condition), range)) = first_operand {
-                (
-                    Some((condition, range)),
-                    analyze_branch_target(self.operands.next()?)?,
-                )
-            } else {
-                (None, analyze_branch_target(first_operand)?)
-            },
-        )
-    }
-
     fn analyze_ldhl(&mut self) -> AnalysisResult<S> {
         let src = self.next_operand_out_of(2)?;
         let offset = self.next_operand_out_of(2)?;
@@ -263,73 +232,6 @@ impl<S: Span> Operand<S> {
     }
 }
 
-type BranchOperands<S> = (Option<(Condition, S)>, Option<BranchTarget<S>>);
-
-fn analyze_branch_target<S: Span>(
-    target: Option<Operand<S>>,
-) -> Result<Option<BranchTarget<S>>, InternalDiagnostic<S>> {
-    let target = match target {
-        Some(target) => target,
-        None => return Ok(None),
-    };
-    match target {
-        Operand::Const(expr) => Ok(Some(BranchTarget::Expr(expr))),
-        Operand::Atom(AtomKind::Simple(SimpleOperand::DerefHl), span) => {
-            Ok(Some(BranchTarget::DerefHl(span)))
-        }
-        operand => Err(InternalDiagnostic::new(
-            Message::CannotBeUsedAsTarget,
-            iter::empty(),
-            operand.span(),
-        )),
-    }
-}
-
-fn analyze_branch_variant<S: Span>(
-    kind: (BranchKind, &S),
-    target: Option<BranchTarget<S>>,
-) -> Result<BranchVariant<S>, InternalDiagnostic<S>> {
-    match (kind.0, target) {
-        (BranchKind::Explicit(ExplicitBranch::Jp), Some(BranchTarget::DerefHl(_))) => {
-            Ok(BranchVariant::Unconditional(UnconditionalBranch::JpDerefHl))
-        }
-        (BranchKind::Explicit(_), Some(BranchTarget::DerefHl(span))) => {
-            Err(InternalDiagnostic::new(
-                Message::RequiresConstantTarget,
-                iter::once(kind.1.clone()),
-                span,
-            ))
-        }
-        (BranchKind::Explicit(branch), Some(BranchTarget::Expr(expr))) => Ok(
-            BranchVariant::PotentiallyConditional(mk_explicit_branch(branch, expr)),
-        ),
-        (BranchKind::Implicit(ImplicitBranch::Ret), None) => {
-            Ok(BranchVariant::PotentiallyConditional(Branch::Ret))
-        }
-        (BranchKind::Implicit(ImplicitBranch::Reti), None) => {
-            Ok(BranchVariant::Unconditional(UnconditionalBranch::Reti))
-        }
-        (BranchKind::Explicit(_), None) => Err(InternalDiagnostic::new(
-            Message::MissingTarget,
-            iter::empty(),
-            kind.1.clone(),
-        )),
-        (BranchKind::Implicit(_), Some(target)) => Err(InternalDiagnostic::new(
-            Message::CannotSpecifyTarget,
-            iter::empty(),
-            target.span(),
-        )),
-    }
-}
-
-fn mk_explicit_branch<S>(branch: ExplicitBranch, target: RelocExpr<S>) -> Branch<S> {
-    match branch {
-        ExplicitBranch::Call => Branch::Call(target),
-        ExplicitBranch::Jp => Branch::Jp(target),
-        ExplicitBranch::Jr => Branch::Jr(target),
-    }
-}
-
 pub type AnalysisResult<S> = Result<Instruction<S>, InternalDiagnostic<S>>;
 
 #[derive(Debug, PartialEq)]
@@ -383,59 +285,6 @@ enum StackOperation {
 impl<R> From<Nullary> for Instruction<R> {
     fn from(nullary: Nullary) -> Instruction<R> {
         Instruction::Nullary(nullary)
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum BranchKind {
-    Explicit(ExplicitBranch),
-    Implicit(ImplicitBranch),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum ExplicitBranch {
-    Call,
-    Jp,
-    Jr,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum ImplicitBranch {
-    Ret,
-    Reti,
-}
-
-enum BranchVariant<S> {
-    PotentiallyConditional(Branch<S>),
-    Unconditional(UnconditionalBranch),
-}
-
-enum UnconditionalBranch {
-    JpDerefHl,
-    Reti,
-}
-
-impl<S> From<UnconditionalBranch> for Instruction<S> {
-    fn from(branch: UnconditionalBranch) -> Self {
-        match branch {
-            UnconditionalBranch::JpDerefHl => Instruction::JpDerefHl,
-            UnconditionalBranch::Reti => Instruction::Nullary(Nullary::Reti),
-        }
-    }
-}
-
-enum BranchTarget<S> {
-    DerefHl(S),
-    Expr(RelocExpr<S>),
-}
-
-impl<S: Span> Source for BranchTarget<S> {
-    type Span = S;
-    fn span(&self) -> Self::Span {
-        match self {
-            BranchTarget::DerefHl(span) => span.clone(),
-            BranchTarget::Expr(expr) => expr.span(),
-        }
     }
 }
 
@@ -706,7 +555,6 @@ mod tests {
         descriptors.extend(describe_alu_simple_instructions());
         descriptors.extend(describe_add_hl_reg16_instructions());
         descriptors.extend(describe_bit_operation_instructions());
-        descriptors.extend(describe_branch_instuctions());
         descriptors.extend(describe_inc_dec8_instructions());
         descriptors.extend(describe_inc_dec16_instructions());
         descriptors.extend(describe_push_pop_instructions());
@@ -820,78 +668,6 @@ mod tests {
         )
     }
 
-    fn describe_branch_instuctions() -> Vec<InstructionDescriptor> {
-        use self::{ExplicitBranch::*, PotentiallyConditionalBranch::*};
-        let mut descriptors = vec![
-            (
-                (kw::Mnemonic::Jp, vec![deref(literal(Hl))]),
-                Instruction::JpDerefHl,
-            ),
-            (
-                (kw::Mnemonic::Reti, vec![]),
-                Instruction::Nullary(Nullary::Reti),
-            ),
-        ];
-        for &kind in [Explicit(Call), Explicit(Jp), Explicit(Jr), Ret].iter() {
-            descriptors.push(describe_branch(kind, None));
-            for &condition in CONDITIONS.iter() {
-                descriptors.push(describe_branch(kind, Some(condition)))
-            }
-        }
-        descriptors
-    }
-
-    #[derive(Clone, Copy, PartialEq)]
-    enum PotentiallyConditionalBranch {
-        Explicit(ExplicitBranch),
-        Ret,
-    }
-
-    impl From<PotentiallyConditionalBranch> for kw::Mnemonic {
-        fn from(branch: PotentiallyConditionalBranch) -> Self {
-            use self::{ExplicitBranch::*, PotentiallyConditionalBranch::*};
-            match branch {
-                Explicit(Call) => kw::Mnemonic::Call,
-                Explicit(Jp) => kw::Mnemonic::Jp,
-                Explicit(Jr) => kw::Mnemonic::Jr,
-                Ret => kw::Mnemonic::Ret,
-            }
-        }
-    }
-
-    fn describe_branch(
-        branch: PotentiallyConditionalBranch,
-        condition: Option<Condition>,
-    ) -> InstructionDescriptor {
-        use self::PotentiallyConditionalBranch::*;
-        let ident = "ident";
-        let mut operands = Vec::new();
-        let mut has_condition = false;
-        if let Some(condition) = condition {
-            operands.push(Expr::from(condition));
-            has_condition = true;
-        };
-        if branch != Ret {
-            operands.push(ident.into());
-        };
-        (
-            (kw::Mnemonic::from(branch), operands),
-            Instruction::Branch(
-                match branch {
-                    Ret => Branch::Ret,
-                    Explicit(explicit) => mk_explicit_branch(
-                        explicit,
-                        symbol(
-                            ident,
-                            TokenId::Operand(if has_condition { 1 } else { 0 }, 0),
-                        ),
-                    ),
-                },
-                condition,
-            ),
-        )
-    }
-
     fn describe_inc_dec8_instructions() -> impl Iterator<Item = InstructionDescriptor> {
         INC_DEC.iter().flat_map(|&mode| {
             SIMPLE_OPERANDS.iter().map(move |&operand| {
@@ -964,8 +740,6 @@ mod tests {
     pub const REG16: &[Reg16] = &[Reg16::Bc, Reg16::De, Reg16::Hl, Reg16::Sp];
 
     const REG_PAIRS: &[RegPair] = &[RegPair::Bc, RegPair::De, RegPair::Hl, RegPair::Af];
-
-    const CONDITIONS: [Condition; 4] = [Condition::C, Condition::Nc, Condition::Nz, Condition::Z];
 
     const INC_DEC: &[IncDec] = &[IncDec::Inc, IncDec::Dec];
 
@@ -1088,17 +862,6 @@ mod tests {
     }
 
     #[test]
-    fn analyze_jp_c_deref_hl() {
-        analyze(
-            kw::Mnemonic::Jp,
-            vec![literal(C), SimpleOperand::DerefHl.into()],
-        ).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::AlwaysUnconditional)
-                .with_highlight(TokenId::Operand(0, 0)),
-        )
-    }
-
-    #[test]
     fn analyze_add() {
         analyze(kw::Mnemonic::Add, Vec::new()).expect_diagnostic(
             ExpectedDiagnostic::new(Message::OperandCount {
@@ -1167,13 +930,6 @@ mod tests {
                 actual: 0,
                 expected: 1,
             }).with_highlight(TokenId::Mnemonic),
-        )
-    }
-
-    #[test]
-    fn analyze_jp_z() {
-        analyze(kw::Mnemonic::Jp, vec![literal(Z)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::MissingTarget).with_highlight(TokenId::Mnemonic),
         )
     }
 
@@ -1254,41 +1010,6 @@ mod tests {
         analyze(kw::Mnemonic::Inc, vec![7.into()]).expect_diagnostic(
             ExpectedDiagnostic::new(Message::OperandCannotBeIncDec(IncDec::Inc))
                 .with_highlight(TokenId::Operand(0, 0)),
-        )
-    }
-
-    #[test]
-    fn analyze_ret_a() {
-        analyze(kw::Mnemonic::Ret, vec![literal(A)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::CannotBeUsedAsTarget)
-                .with_highlight(TokenId::Operand(0, 0)),
-        )
-    }
-
-    #[test]
-    fn analyze_reti_z() {
-        analyze(kw::Mnemonic::Reti, vec![literal(Z)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::AlwaysUnconditional)
-                .with_highlight(TokenId::Operand(0, 0)),
-        )
-    }
-
-    #[test]
-    fn analyze_ret_z_ident() {
-        analyze(kw::Mnemonic::Ret, vec![literal(Z), "target".into()]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::CannotSpecifyTarget)
-                .with_highlight(TokenId::Operand(1, 0)),
-        )
-    }
-
-    #[test]
-    fn analyze_call_deref_hl() {
-        analyze(kw::Mnemonic::Call, vec![deref(literal(Hl))]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::RequiresConstantTarget)
-                .with_spans(iter::once(TokenId::Mnemonic))
-                .with_highlight(
-                    TokenSpan::from(TokenId::Operand(0, 0)).extend(&TokenId::Operand(0, 2).into()),
-                ),
         )
     }
 
