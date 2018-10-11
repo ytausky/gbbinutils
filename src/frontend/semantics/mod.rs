@@ -151,6 +151,12 @@ pub struct ExprActions<'a, F: Session + 'a> {
     parent: CommandActions<'a, F>,
 }
 
+impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for ExprActions<'a, F> {
+    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<F::Span>) {
+        self.parent.emit_diagnostic(diagnostic)
+    }
+}
+
 impl<'a, F: Session + 'a> syntax::ExprActions<F::Span> for ExprActions<'a, F> {
     type Ident = F::Ident;
     type Literal = Literal<F::Ident>;

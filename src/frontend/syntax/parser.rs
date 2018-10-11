@@ -401,14 +401,15 @@ where
 
     fn parse_atomic_expr(&mut self) {
         let (token, span) = self.bump();
-        self.actions.push_atom((
-            match token {
-                Token::Ident(ident) => ExprAtom::Ident(ident),
-                Token::Literal(literal) => ExprAtom::Literal(literal),
-                _ => panic!(),
-            },
-            span,
-        ));
+        match token {
+            Token::Ident(ident) => self.actions.push_atom((ExprAtom::Ident(ident), span)),
+            Token::Literal(literal) => self.actions.push_atom((ExprAtom::Literal(literal), span)),
+            _ => self.actions.emit_diagnostic(InternalDiagnostic::new(
+                Message::UnexpectedToken,
+                iter::empty(),
+                span,
+            )),
+        }
     }
 }
 
@@ -537,6 +538,12 @@ mod tests {
         }
     }
 
+    impl<'a> DiagnosticsListener<SymRange<usize>> for ArgContext<'a> {
+        fn emit_diagnostic(&mut self, _: InternalDiagnostic<SymRange<usize>>) {
+            unimplemented!()
+        }
+    }
+
     impl<'a> syntax::ExprActions<SymRange<usize>> for ArgContext<'a> {
         type Ident = SymIdent;
         type Literal = SymLiteral;
@@ -562,6 +569,7 @@ mod tests {
 
     struct ExprContext {
         rpn_expr: TestRpnExpr,
+        diagnostics: Vec<InternalDiagnostic<SymRange<usize>>>,
     }
 
     type TestRpnExpr = RpnExpr<SymIdent, SymLiteral, SymRange<usize>>;
@@ -570,14 +578,21 @@ mod tests {
         fn new() -> Self {
             ExprContext {
                 rpn_expr: Vec::new(),
+                diagnostics: Vec::new(),
             }
+        }
+    }
+
+    impl DiagnosticsListener<SymRange<usize>> for ExprContext {
+        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymRange<usize>>) {
+            self.diagnostics.push(diagnostic)
         }
     }
 
     impl syntax::ExprActions<SymRange<usize>> for ExprContext {
         type Ident = SymIdent;
         type Literal = SymLiteral;
-        type Parent = TestRpnExpr;
+        type Parent = (TestRpnExpr, Vec<InternalDiagnostic<SymRange<usize>>>);
 
         fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, SymRange<usize>)) {
             self.rpn_expr.push((RpnAction::Push(atom.0), atom.1))
@@ -589,7 +604,7 @@ mod tests {
         }
 
         fn exit(self) -> Self::Parent {
-            self.rpn_expr
+            (self.rpn_expr, self.diagnostics)
         }
     }
 
@@ -902,16 +917,28 @@ mod tests {
     }
 
     fn assert_eq_rpn_expr(mut input: InputTokens, expected: SymExpr) {
+        let (parsed_rpn_expr, _) = parse_sym_expr(&mut input);
+        assert_eq!(parsed_rpn_expr, expected.resolve(&input));
+    }
+
+    fn assert_eq_expr_diagnostics(
+        mut input: InputTokens,
+        expected: InternalDiagnostic<SymRange<TokenRef>>,
+    ) {
+        let (_, diagnostics) = parse_sym_expr(&mut input);
+        assert_eq!(diagnostics, [SymDiagnostic(expected).resolve(&input)])
+    }
+
+    fn parse_sym_expr(
+        input: &mut InputTokens,
+    ) -> (TestRpnExpr, Vec<InternalDiagnostic<SymRange<usize>>>) {
         input.tokens.push(Token::Eof);
         let tokens = &mut with_spans(&input.tokens).peekable();
-        let parsed_rpn_expr = {
-            let parser = ExprParser {
-                tokens,
-                actions: ExprContext::new(),
-            };
-            parser.parse()
+        let parser = ExprParser {
+            tokens,
+            actions: ExprContext::new(),
         };
-        assert_eq!(parsed_rpn_expr, expected.resolve(&input));
+        parser.parse()
     }
 
     #[test]
@@ -954,6 +981,19 @@ mod tests {
                 [],
                 arg_error(Message::UnexpectedEof, [], "eof"),
             ))]),
+        )
+    }
+
+    #[test]
+    fn diagnose_unexpected_token_in_expr() {
+        let input = input_tokens![plus @ Plus];
+        assert_eq_expr_diagnostics(
+            input,
+            InternalDiagnostic::new(
+                Message::UnexpectedToken,
+                iter::empty(),
+                TokenRef::from("plus").into(),
+            ),
         )
     }
 }

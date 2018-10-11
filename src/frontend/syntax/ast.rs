@@ -297,7 +297,7 @@ pub enum MacroDefTail {
 }
 
 #[derive(Clone)]
-pub struct SymDiagnostic(InternalDiagnostic<SymRange<TokenRef>>);
+pub struct SymDiagnostic(pub InternalDiagnostic<SymRange<TokenRef>>);
 
 impl From<SymDiagnostic> for LineBody {
     fn from(diagnostic: SymDiagnostic) -> Self {
@@ -306,12 +306,16 @@ impl From<SymDiagnostic> for LineBody {
 }
 
 impl SymDiagnostic {
-    fn into_action(self, input: &InputTokens) -> Action {
-        Action::Error(InternalDiagnostic::new(
+    pub fn resolve(self, input: &InputTokens) -> InternalDiagnostic<SymRange<usize>> {
+        InternalDiagnostic::new(
             self.0.message,
             self.0.spans.into_iter().map(|span| span.resolve(input)),
             self.0.highlight.resolve(input),
-        ))
+        )
+    }
+
+    fn into_action(self, input: &InputTokens) -> Action {
+        Action::Error(self.resolve(input))
     }
 }
 

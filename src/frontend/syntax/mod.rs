@@ -86,7 +86,10 @@ where
     fn exit(self) -> Self::Parent;
 }
 
-pub trait ExprActions<S> {
+pub trait ExprActions<S>
+where
+    Self: DiagnosticsListener<S>,
+{
     type Ident;
     type Literal;
     type Parent;
