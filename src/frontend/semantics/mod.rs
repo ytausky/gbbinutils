@@ -25,6 +25,7 @@ mod expr {
         Ident(I),
         Literal(Literal<I>),
         Parentheses(Box<Expr<I, S>>),
+        Plus(Box<Expr<I, S>>, Box<Expr<I, S>>),
     }
 }
 
@@ -181,7 +182,14 @@ impl<'a, F: Session + 'a> syntax::ExprActions<F::Span> for ExprActions<'a, F> {
                     span: operator.1,
                 })
             }
-            ExprOperator::Plus => panic!(),
+            ExprOperator::Plus => {
+                let rhs = self.stack.pop().unwrap();
+                let lhs = self.stack.pop().unwrap();
+                self.stack.push(Expr {
+                    variant: ExprVariant::Plus(Box::new(lhs), Box::new(rhs)),
+                    span: operator.1,
+                })
+            }
         }
     }
 
@@ -586,6 +594,32 @@ mod tests {
             actions,
             [TestOperation::EmitItem(backend::Item::Instruction(
                 Instruction::Ld(Ld::Simple(SimpleOperand::B, SimpleOperand::DerefHl))
+            ))]
+        )
+    }
+
+    #[test]
+    fn emit_rst_1_plus_1() {
+        use instruction::*;
+        let actions = collect_semantic_actions(|actions| {
+            let command = actions
+                .enter_line(None)
+                .enter_command((Command::Mnemonic(Mnemonic::Rst), ()));
+            let mut expr = command.add_argument();
+            expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
+            expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
+            expr.apply_operator((ExprOperator::Plus, ()));
+            expr.exit().exit().exit()
+        });
+        assert_eq!(
+            actions,
+            [TestOperation::EmitItem(backend::Item::Instruction(
+                Instruction::Rst(RelocExpr::BinaryOperation(
+                    Box::new(RelocExpr::Literal(1, ())),
+                    Box::new(RelocExpr::Literal(1, ())),
+                    BinaryOperator::Plus,
+                    ()
+                ))
             ))]
         )
     }

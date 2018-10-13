@@ -2,7 +2,7 @@ use super::{Expr, ExprVariant};
 use diagnostics::{InternalDiagnostic, KeywordOperandCategory, Message};
 use frontend::syntax::keyword as kw;
 use frontend::syntax::Literal;
-use instruction::{Condition, PtrReg, Reg16, RegPair, RelocExpr, SimpleOperand};
+use instruction::{BinaryOperator, Condition, PtrReg, Reg16, RegPair, RelocExpr, SimpleOperand};
 use span::{Source, Span};
 use std::iter;
 
@@ -110,6 +110,16 @@ pub fn analyze_reloc_expr<I: Into<String>, S: Clone>(
             expr.span,
         )),
         ExprVariant::Parentheses(expr) => analyze_reloc_expr(*expr),
+        ExprVariant::Plus(left, right) => {
+            let left = analyze_reloc_expr(*left)?;
+            let right = analyze_reloc_expr(*right)?;
+            Ok(RelocExpr::BinaryOperation(
+                Box::new(left),
+                Box::new(right),
+                BinaryOperator::Plus,
+                expr.span,
+            ))
+        }
     }
 }
 

@@ -796,6 +796,7 @@ mod tests {
                 span = span.extend(&TokenId::Operand(i, j).into());
                 ExprVariant::Parentheses(Box::new(inner))
             }
+            ExprVariant::Plus(_, _) => panic!(),
             ExprVariant::Ident(ident) => ExprVariant::Ident(ident),
             ExprVariant::Literal(literal) => ExprVariant::Literal(literal),
         };

@@ -1,4 +1,4 @@
-pub use backend::RelocExpr;
+pub use backend::{BinaryOperator, RelocExpr};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Instruction<R> {
