@@ -1,5 +1,5 @@
 use self::branch::*;
-use super::Expr;
+use super::SemanticExpr;
 use diagnostics::{InternalDiagnostic, Message};
 use frontend::semantics::operand::{self, AtomKind, Context, Operand, OperandCounter};
 use frontend::syntax::keyword as kw;
@@ -15,7 +15,7 @@ pub fn analyze_instruction<Id: Into<String>, I, S>(
     operands: I,
 ) -> AnalysisResult<S>
 where
-    I: IntoIterator<Item = Expr<Id, S>>,
+    I: IntoIterator<Item = SemanticExpr<Id, S>>,
     S: Span,
 {
     let mnemonic: (Mnemonic, S) = (mnemonic.0.into(), mnemonic.1);
@@ -342,23 +342,25 @@ impl From<kw::Mnemonic> for Mnemonic {
 mod tests {
     pub use self::kw::Operand::*;
     use super::*;
+    use backend::RelocAtom;
     pub use diagnostics::Message;
-    use frontend::semantics::ExprVariant;
+    use expr::{Expr, ExprVariant};
+    use frontend::semantics::{SemanticAtom, SemanticExpr, SemanticExprVariant, SemanticUnary};
     use frontend::syntax::Literal;
     pub use span::Span;
     use std::cmp;
 
-    type Input = Expr<String, ()>;
+    type Input = SemanticExpr<String, ()>;
 
-    impl From<ExprVariant<String, ()>> for Input {
-        fn from(variant: ExprVariant<String, ()>) -> Self {
-            Expr { variant, span: () }
+    impl From<SemanticExprVariant<String, ()>> for Input {
+        fn from(variant: SemanticExprVariant<String, ()>) -> Self {
+            SemanticExpr { variant, span: () }
         }
     }
 
     impl From<Literal<String>> for Input {
         fn from(literal: Literal<String>) -> Input {
-            ExprVariant::Literal(literal).into()
+            ExprVariant::Atom(SemanticAtom::Literal(literal)).into()
         }
     }
 
@@ -367,16 +369,16 @@ mod tests {
     }
 
     pub fn number(n: i32, span: impl Into<TokenSpan>) -> RelocExpr<TokenSpan> {
-        RelocExpr::Literal(n, span.into())
+        RelocExpr::from_atom(n, span.into())
     }
 
     pub fn symbol(ident: &str, span: impl Into<TokenSpan>) -> RelocExpr<TokenSpan> {
-        RelocExpr::Symbol(ident.to_string(), span.into())
+        RelocExpr::from_atom(RelocAtom::Symbol(ident.to_string()), span.into())
     }
 
     pub fn deref(expr: Input) -> Input {
         Expr {
-            variant: ExprVariant::Parentheses(Box::new(expr)),
+            variant: ExprVariant::Unary(SemanticUnary::Parentheses, Box::new(expr)),
             span: (),
         }
     }
@@ -500,19 +502,13 @@ mod tests {
 
     impl<'a> From<&'a str> for Input {
         fn from(ident: &'a str) -> Self {
-            ExprVariant::Ident(ident.to_string()).into()
+            Expr::from_atom(SemanticAtom::Ident(ident.to_string()), ())
         }
     }
 
     impl From<i32> for Input {
         fn from(n: i32) -> Self {
-            ExprVariant::Literal(Literal::Number(n)).into()
-        }
-    }
-
-    impl From<i32> for RelocExpr<()> {
-        fn from(n: i32) -> Self {
-            RelocExpr::Literal(n, ())
+            Literal::Number(n).into()
         }
     }
 
@@ -779,26 +775,30 @@ mod tests {
         ))
     }
 
-    fn add_token_spans((i, operand): (usize, Input)) -> Expr<String, TokenSpan> {
+    fn add_token_spans((i, operand): (usize, Input)) -> SemanticExpr<String, TokenSpan> {
         add_token_spans_recursive(i, 0, operand).1
     }
 
     fn add_token_spans_recursive(
         i: usize,
         mut j: usize,
-        expr: Expr<String, ()>,
-    ) -> (usize, Expr<String, TokenSpan>) {
+        expr: SemanticExpr<String, ()>,
+    ) -> (usize, SemanticExpr<String, TokenSpan>) {
         let mut span: TokenSpan = TokenId::Operand(i, j).into();
         let variant = match expr.variant {
-            ExprVariant::Parentheses(expr) => {
+            ExprVariant::Unary(SemanticUnary::Parentheses, expr) => {
                 let (new_j, inner) = add_token_spans_recursive(i, j + 1, *expr);
                 j = new_j;
                 span = span.extend(&TokenId::Operand(i, j).into());
-                ExprVariant::Parentheses(Box::new(inner))
+                ExprVariant::Unary(SemanticUnary::Parentheses, Box::new(inner))
             }
-            ExprVariant::Plus(_, _) => panic!(),
-            ExprVariant::Ident(ident) => ExprVariant::Ident(ident),
-            ExprVariant::Literal(literal) => ExprVariant::Literal(literal),
+            ExprVariant::Binary(_, _, _) => panic!(),
+            ExprVariant::Atom(SemanticAtom::Ident(ident)) => {
+                ExprVariant::Atom(SemanticAtom::Ident(ident))
+            }
+            ExprVariant::Atom(SemanticAtom::Literal(literal)) => {
+                ExprVariant::Atom(SemanticAtom::Literal(literal))
+            }
         };
         (j + 1, Expr { variant, span })
     }

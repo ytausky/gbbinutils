@@ -1,8 +1,9 @@
 pub use super::context::{EvalContext, SymbolTable};
 
 use super::context::ChunkSize;
-use backend::{Node, Object, RelocExpr};
-use span::Span;
+use backend::{Node, Object, RelocAtom, RelocExpr};
+use expr::ExprVariant;
+use span::{Source, Span};
 use std::borrow::Borrow;
 use std::ops::{Add, AddAssign, Sub};
 
@@ -134,8 +135,9 @@ impl<S: Span> RelocExpr<S> {
         ST: Borrow<SymbolTable>,
         F: FnMut(&str, &S),
     {
-        match self {
-            RelocExpr::BinaryOperation(lhs, rhs, operator, _) => {
+        match &self.variant {
+            ExprVariant::Unary(_, _) => unreachable!(),
+            ExprVariant::Binary(operator, lhs, rhs) => {
                 use backend::BinaryOperator;
                 let lhs = lhs.evaluate_strictly(context, on_undefined_symbol);
                 let rhs = rhs.evaluate_strictly(context, on_undefined_symbol);
@@ -144,15 +146,15 @@ impl<S: Span> RelocExpr<S> {
                     BinaryOperator::Plus => lhs + rhs,
                 }
             }
-            RelocExpr::Literal(value, _) => (*value).into(),
-            RelocExpr::LocationCounter(_) => context.location.clone(),
-            RelocExpr::Symbol(symbol, expr_ref) => context
+            ExprVariant::Atom(RelocAtom::Literal(value)) => (*value).into(),
+            ExprVariant::Atom(RelocAtom::LocationCounter) => context.location.clone(),
+            ExprVariant::Atom(RelocAtom::Symbol(symbol)) => context
                 .symbols
                 .borrow()
                 .get(symbol.as_str())
                 .cloned()
                 .unwrap_or_else(|| {
-                    on_undefined_symbol(symbol, expr_ref);
+                    on_undefined_symbol(&symbol, &self.span());
                     Value::Unknown
                 }),
         }
@@ -185,7 +187,7 @@ mod tests {
         let label = "label";
         let addr = 0xffe1;
         let mut builder = ObjectBuilder::new();
-        builder.set_origin(RelocExpr::Literal(addr, ()));
+        builder.set_origin(addr.into());
         builder.add_label((label, ()));
         let object = builder.into_object();
         let symbols = resolve_symbols(&object);
@@ -214,9 +216,7 @@ mod tests {
 
     fn test_chunk_size_with_literal_ld_inline_addr(addr: i32, expected: i32) {
         assert_chunk_size(expected, |section| {
-            section
-                .items
-                .push(Node::LdInlineAddr(0, RelocExpr::Literal(addr, ())))
+            section.items.push(Node::LdInlineAddr(0, addr.into()))
         });
     }
 
@@ -225,7 +225,7 @@ mod tests {
         assert_chunk_size(3, |section| {
             section.items.extend(
                 [
-                    Node::LdInlineAddr(0, RelocExpr::Symbol("label".to_string(), ())),
+                    Node::LdInlineAddr(0, RelocAtom::Symbol("label".to_string()).into()),
                     Node::Label("label".to_string(), ()),
                 ]
                     .iter()

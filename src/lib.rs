@@ -4,6 +4,7 @@ pub use diagnostics::TerminalOutput;
 mod backend;
 mod codebase;
 mod diagnostics;
+mod expr;
 mod frontend;
 mod instruction;
 mod span;

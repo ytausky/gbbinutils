@@ -1,33 +1,48 @@
-use backend::{self, BinaryOperator};
+use backend::{self, BinaryOperator, RelocAtom};
 use diagnostics::{DiagnosticsListener, InternalDiagnostic};
+use expr::ExprVariant;
 use frontend::session::{ChunkId, Session};
 use frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token};
 use frontend::{Literal, StrExprFactory};
 use span::Span;
 use Width;
 
-use self::expr::*;
-
 mod instruction;
 mod operand;
 
 mod expr {
+    use expr::Expr;
+    #[cfg(test)]
+    use expr::ExprVariant;
     use frontend::Literal;
 
-    #[derive(Clone)]
-    pub struct Expr<I, S: Clone> {
-        pub variant: ExprVariant<I, S>,
-        pub span: S,
-    }
-
-    #[derive(Clone)]
-    pub enum ExprVariant<I, S: Clone> {
+    pub enum SemanticAtom<I> {
         Ident(I),
         Literal(Literal<I>),
-        Parentheses(Box<Expr<I, S>>),
-        Plus(Box<Expr<I, S>>, Box<Expr<I, S>>),
     }
+
+    impl<I> From<Literal<I>> for SemanticAtom<I> {
+        fn from(literal: Literal<I>) -> Self {
+            SemanticAtom::Literal(literal)
+        }
+    }
+
+    pub enum SemanticUnary {
+        Parentheses,
+    }
+
+    pub enum SemanticBinary {
+        Plus,
+    }
+
+    pub type SemanticExpr<I, S> = Expr<SemanticAtom<I>, SemanticUnary, SemanticBinary, S>;
+
+    #[cfg(test)]
+    pub type SemanticExprVariant<I, S> =
+        ExprVariant<SemanticAtom<I>, SemanticUnary, SemanticBinary, S>;
 }
+
+use self::expr::*;
 
 pub struct SemanticActions<'a, F: Session + 'a> {
     session: &'a mut F,
@@ -102,7 +117,7 @@ pub struct CommandActions<'a, F: Session + 'a> {
     parent: SemanticActions<'a, F>,
 }
 
-type CommandArgs<F> = Vec<Expr<<F as Session>::Ident, <F as Session>::Span>>;
+type CommandArgs<F> = Vec<SemanticExpr<<F as Session>::Ident, <F as Session>::Span>>;
 
 impl<'a, F: Session + 'a> CommandActions<'a, F> {
     fn new(name: (Command, F::Span), parent: SemanticActions<'a, F>) -> CommandActions<'a, F> {
@@ -148,7 +163,7 @@ impl<'a, F: Session + 'a> syntax::CommandContext<F::Span> for CommandActions<'a,
 }
 
 pub struct ExprActions<'a, F: Session + 'a> {
-    stack: Vec<Expr<F::Ident, F::Span>>,
+    stack: Vec<SemanticExpr<F::Ident, F::Span>>,
     parent: CommandActions<'a, F>,
 }
 
@@ -164,11 +179,11 @@ impl<'a, F: Session + 'a> syntax::ExprActions<F::Span> for ExprActions<'a, F> {
     type Parent = CommandActions<'a, F>;
 
     fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, F::Span)) {
-        self.stack.push(Expr {
-            variant: match atom.0 {
-                ExprAtom::Ident(ident) => ExprVariant::Ident(ident),
-                ExprAtom::Literal(literal) => ExprVariant::Literal(literal),
-            },
+        self.stack.push(SemanticExpr {
+            variant: ExprVariant::Atom(match atom.0 {
+                ExprAtom::Ident(ident) => SemanticAtom::Ident(ident),
+                ExprAtom::Literal(literal) => SemanticAtom::Literal(literal),
+            }),
             span: atom.1,
         })
     }
@@ -177,16 +192,20 @@ impl<'a, F: Session + 'a> syntax::ExprActions<F::Span> for ExprActions<'a, F> {
         match operator.0 {
             ExprOperator::Parentheses => {
                 let inner = self.stack.pop().unwrap();
-                self.stack.push(Expr {
-                    variant: ExprVariant::Parentheses(Box::new(inner)),
+                self.stack.push(SemanticExpr {
+                    variant: ExprVariant::Unary(SemanticUnary::Parentheses, Box::new(inner)),
                     span: operator.1,
                 })
             }
             ExprOperator::Plus => {
                 let rhs = self.stack.pop().unwrap();
                 let lhs = self.stack.pop().unwrap();
-                self.stack.push(Expr {
-                    variant: ExprVariant::Plus(Box::new(lhs), Box::new(rhs)),
+                self.stack.push(SemanticExpr {
+                    variant: ExprVariant::Binary(
+                        SemanticBinary::Plus,
+                        Box::new(lhs),
+                        Box::new(rhs),
+                    ),
                     span: operator.1,
                 })
             }
@@ -222,8 +241,12 @@ fn analyze_data<'a, S: Session + 'a>(
     for arg in args {
         use frontend::ExprFactory;
         let expr = match arg.variant {
-            ExprVariant::Literal(literal) => actions.expr_factory.mk_literal((literal, arg.span)),
-            ExprVariant::Ident(ident) => actions.expr_factory.mk_symbol((ident, arg.span)),
+            ExprVariant::Atom(SemanticAtom::Literal(literal)) => {
+                actions.expr_factory.mk_literal((literal, arg.span))
+            }
+            ExprVariant::Atom(SemanticAtom::Ident(ident)) => {
+                actions.expr_factory.mk_symbol((ident, arg.span))
+            }
             _ => panic!(),
         };
         actions.session.emit_item(backend::Item::Data(expr, width))
@@ -234,18 +257,24 @@ fn analyze_ds<'a, S: Session + 'a>(args: CommandArgs<S>, actions: &mut SemanticA
     use backend::RelocExpr;
     use frontend::ExprFactory;
     let arg = args.into_iter().next().unwrap();
+    let span = arg.span.clone();
     let count = match arg.variant {
-        ExprVariant::Literal(literal) => {
-            actions.expr_factory.mk_literal((literal, arg.span.clone()))
+        ExprVariant::Atom(SemanticAtom::Literal(literal)) => {
+            actions.expr_factory.mk_literal((literal, arg.span))
         }
         _ => panic!(),
     };
-    let expr = RelocExpr::BinaryOperation(
-        Box::new(RelocExpr::LocationCounter(arg.span.clone())),
-        Box::new(count),
-        BinaryOperator::Plus,
-        arg.span,
-    );
+    let expr = RelocExpr {
+        variant: ExprVariant::Binary(
+            BinaryOperator::Plus,
+            Box::new(RelocExpr {
+                variant: ExprVariant::Atom(RelocAtom::LocationCounter),
+                span: span.clone(),
+            }),
+            Box::new(count),
+        ),
+        span,
+    };
     actions.session.set_origin(expr)
 }
 
@@ -416,11 +445,11 @@ impl<'a, F: Session + 'a> syntax::TokenSeqContext<F::Span> for MacroArgActions<'
     }
 }
 
-fn reduce_include<I, S: Span>(mut arguments: Vec<Expr<I, S>>) -> ChunkId<I, S> {
+fn reduce_include<I, S: Span>(mut arguments: Vec<SemanticExpr<I, S>>) -> ChunkId<I, S> {
     assert_eq!(arguments.len(), 1);
     let path = arguments.pop().unwrap();
     match path.variant {
-        ExprVariant::Literal(Literal::String(path_str)) => {
+        ExprVariant::Atom(SemanticAtom::Literal(Literal::String(path_str))) => {
             ChunkId::File((path_str, Some(path.span)))
         }
         _ => panic!(),
@@ -431,7 +460,6 @@ fn reduce_include<I, S: Span>(mut arguments: Vec<Expr<I, S>>) -> ChunkId<I, S> {
 mod tests {
     use super::*;
 
-    use backend;
     use diagnostics::{InternalDiagnostic, Message};
     use frontend::syntax::{
         keyword::Operand, CommandContext, ExprActions, FileContext, LineActions,
@@ -533,10 +561,7 @@ mod tests {
             arg.push_atom((ExprAtom::Literal(Literal::Number(origin)), ()));
             arg.exit().exit().exit()
         });
-        assert_eq!(
-            actions,
-            [TestOperation::SetOrigin(RelocExpr::Literal(origin, ()))]
-        )
+        assert_eq!(actions, [TestOperation::SetOrigin(origin.into())])
     }
 
     #[test]
@@ -614,12 +639,13 @@ mod tests {
         assert_eq!(
             actions,
             [TestOperation::EmitItem(backend::Item::Instruction(
-                Instruction::Rst(RelocExpr::BinaryOperation(
-                    Box::new(RelocExpr::Literal(1, ())),
-                    Box::new(RelocExpr::Literal(1, ())),
-                    BinaryOperator::Plus,
-                    ()
-                ))
+                Instruction::Rst(
+                    ExprVariant::Binary(
+                        BinaryOperator::Plus,
+                        Box::new(1.into()),
+                        Box::new(1.into()),
+                    ).into()
+                )
             ))]
         )
     }
@@ -638,7 +664,7 @@ mod tests {
         assert_eq!(
             actions,
             [TestOperation::EmitItem(backend::Item::Data(
-                RelocExpr::Symbol(label.to_string(), ()),
+                RelocAtom::Symbol(label.to_string()).into(),
                 Width::Word
             ))]
         );
@@ -649,11 +675,11 @@ mod tests {
     }
 
     fn mk_byte(byte: &i32) -> backend::Item<()> {
-        backend::Item::Data(RelocExpr::Literal(*byte, ()), Width::Byte)
+        backend::Item::Data((*byte).into(), Width::Byte)
     }
 
     fn mk_word(word: &i32) -> backend::Item<()> {
-        backend::Item::Data(RelocExpr::Literal(*word, ()), Width::Word)
+        backend::Item::Data((*word).into(), Width::Word)
     }
 
     #[test]
@@ -807,12 +833,13 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [TestOperation::SetOrigin(RelocExpr::BinaryOperation(
-                Box::new(RelocExpr::LocationCounter(())),
-                Box::new(RelocExpr::Literal(3, ())),
-                BinaryOperator::Plus,
-                ()
-            ))]
+            [TestOperation::SetOrigin(
+                ExprVariant::Binary(
+                    BinaryOperator::Plus,
+                    Box::new(RelocAtom::LocationCounter.into()),
+                    Box::new(3.into()),
+                ).into()
+            )]
         )
     }
 

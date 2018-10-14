@@ -1,4 +1,4 @@
-use super::{Expr, ExprVariant};
+use super::{ExprVariant, SemanticAtom, SemanticBinary, SemanticExpr, SemanticUnary};
 use diagnostics::{InternalDiagnostic, KeywordOperandCategory, Message};
 use frontend::syntax::keyword as kw;
 use frontend::syntax::Literal;
@@ -43,24 +43,26 @@ pub enum Context {
 type OperandResult<S> = Result<Operand<S>, InternalDiagnostic<S>>;
 
 pub fn analyze_operand<I: Into<String>, S: Clone>(
-    expr: Expr<I, S>,
+    expr: SemanticExpr<I, S>,
     context: Context,
 ) -> OperandResult<S> {
     match expr.variant {
-        ExprVariant::Literal(Literal::Operand(keyword)) => {
+        ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(keyword))) => {
             analyze_keyword_operand((keyword, expr.span), context)
         }
-        ExprVariant::Parentheses(inner) => analyze_deref_operand(*inner, expr.span),
+        ExprVariant::Unary(SemanticUnary::Parentheses, inner) => {
+            analyze_deref_operand(*inner, expr.span)
+        }
         _ => Ok(Operand::Const(analyze_reloc_expr(expr)?)),
     }
 }
 
 fn analyze_deref_operand<I: Into<String>, S: Clone>(
-    expr: Expr<I, S>,
+    expr: SemanticExpr<I, S>,
     deref_span: S,
 ) -> OperandResult<S> {
     match expr.variant {
-        ExprVariant::Literal(Literal::Operand(keyword)) => {
+        ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(keyword))) => {
             analyze_deref_operand_keyword((keyword, expr.span), deref_span)
         }
         _ => Ok(Operand::Deref(analyze_reloc_expr(expr)?)),
@@ -94,31 +96,31 @@ fn try_deref_operand_keyword(keyword: kw::Operand) -> Result<AtomKind, KeywordOp
 }
 
 pub fn analyze_reloc_expr<I: Into<String>, S: Clone>(
-    expr: Expr<I, S>,
+    expr: SemanticExpr<I, S>,
 ) -> Result<RelocExpr<S>, InternalDiagnostic<S>> {
+    use backend::RelocAtom;
     match expr.variant {
-        ExprVariant::Ident(ident) => Ok(RelocExpr::Symbol(ident.into(), expr.span)),
-        ExprVariant::Literal(Literal::Number(n)) => Ok(RelocExpr::Literal(n, expr.span)),
-        ExprVariant::Literal(Literal::Operand(_)) => Err(InternalDiagnostic::new(
-            Message::KeywordInExpr,
-            vec![expr.span.clone()],
-            expr.span,
-        )),
-        ExprVariant::Literal(Literal::String(_)) => Err(InternalDiagnostic::new(
-            Message::StringInInstruction,
-            iter::empty(),
-            expr.span,
-        )),
-        ExprVariant::Parentheses(expr) => analyze_reloc_expr(*expr),
-        ExprVariant::Plus(left, right) => {
+        ExprVariant::Atom(SemanticAtom::Ident(ident)) => Ok(RelocExpr {
+            variant: ExprVariant::Atom(RelocAtom::Symbol(ident.into())),
+            span: expr.span,
+        }),
+        ExprVariant::Atom(SemanticAtom::Literal(Literal::Number(n))) => {
+            Ok(RelocExpr::from_atom(n, expr.span))
+        }
+        ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(_))) => Err(
+            InternalDiagnostic::new(Message::KeywordInExpr, vec![expr.span.clone()], expr.span),
+        ),
+        ExprVariant::Atom(SemanticAtom::Literal(Literal::String(_))) => Err(
+            InternalDiagnostic::new(Message::StringInInstruction, iter::empty(), expr.span),
+        ),
+        ExprVariant::Unary(SemanticUnary::Parentheses, expr) => analyze_reloc_expr(*expr),
+        ExprVariant::Binary(SemanticBinary::Plus, left, right) => {
             let left = analyze_reloc_expr(*left)?;
             let right = analyze_reloc_expr(*right)?;
-            Ok(RelocExpr::BinaryOperation(
-                Box::new(left),
-                Box::new(right),
-                BinaryOperator::Plus,
-                expr.span,
-            ))
+            Ok(RelocExpr {
+                variant: ExprVariant::Binary(BinaryOperator::Plus, Box::new(left), Box::new(right)),
+                span: expr.span,
+            })
         }
     }
 }
@@ -206,6 +208,7 @@ impl<I: Iterator<Item = Result<T, E>>, T, E> OperandCounter<I> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use backend::RelocAtom;
 
     #[test]
     fn analyze_deref_bc() {
@@ -228,11 +231,14 @@ mod tests {
     }
 
     fn analyze_deref_ptr_reg(ptr_reg: PtrReg) {
-        let expr = Expr::<String, _> {
-            variant: ExprVariant::Parentheses(Box::new(Expr {
-                variant: ExprVariant::Literal(Literal::Operand(ptr_reg.into())),
-                span: 0,
-            })),
+        let expr = SemanticExpr::<String, _> {
+            variant: ExprVariant::Unary(
+                SemanticUnary::Parentheses,
+                Box::new(SemanticExpr::from_atom(
+                    SemanticAtom::Literal(Literal::Operand(ptr_reg.into())),
+                    0,
+                )),
+            ),
             span: 1,
         };
         assert_eq!(
@@ -243,11 +249,14 @@ mod tests {
 
     #[test]
     fn analyze_deref_af() {
-        let parsed_expr = Expr::<String, _> {
-            variant: ExprVariant::Parentheses(Box::new(Expr {
-                variant: ExprVariant::Literal(Literal::Operand(kw::Operand::Af)),
-                span: 0,
-            })),
+        let parsed_expr = SemanticExpr::<String, _> {
+            variant: ExprVariant::Unary(
+                SemanticUnary::Parentheses,
+                Box::new(SemanticExpr::from_atom(
+                    SemanticAtom::Literal(Literal::Operand(kw::Operand::Af)),
+                    0,
+                )),
+            ),
             span: 1,
         };
         assert_eq!(
@@ -266,33 +275,48 @@ mod tests {
     fn analyze_repeated_parentheses() {
         let n = 0x42;
         let span = 0;
-        let parsed_expr = Expr::<String, _> {
-            variant: ExprVariant::Parentheses(Box::new(Expr {
-                variant: ExprVariant::Parentheses(Box::new(Expr {
-                    variant: ExprVariant::Literal(Literal::Number(n)),
-                    span,
-                })),
-                span: 1,
-            })),
+        let parsed_expr = SemanticExpr::<String, _> {
+            variant: ExprVariant::Unary(
+                SemanticUnary::Parentheses,
+                Box::new(SemanticExpr {
+                    variant: ExprVariant::Unary(
+                        SemanticUnary::Parentheses,
+                        Box::new(SemanticExpr::from_atom(
+                            SemanticAtom::Literal(Literal::Number(n)),
+                            span,
+                        )),
+                    ),
+                    span: 1,
+                }),
+            ),
             span: 2,
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Ok(Operand::Deref(RelocExpr::Literal(n, span)))
+            Ok(Operand::Deref(RelocExpr::from_atom(
+                RelocAtom::Literal(n),
+                span
+            )))
         )
     }
 
     #[test]
     fn analyze_reg_in_expr() {
         let span = 0;
-        let parsed_expr = Expr::<String, _> {
-            variant: ExprVariant::Parentheses(Box::new(Expr {
-                variant: ExprVariant::Parentheses(Box::new(Expr {
-                    variant: ExprVariant::Literal(Literal::Operand(kw::Operand::Z)),
-                    span,
-                })),
-                span: 1,
-            })),
+        let parsed_expr = SemanticExpr::<String, _> {
+            variant: ExprVariant::Unary(
+                SemanticUnary::Parentheses,
+                Box::new(SemanticExpr {
+                    variant: ExprVariant::Unary(
+                        SemanticUnary::Parentheses,
+                        Box::new(SemanticExpr::from_atom(
+                            SemanticAtom::Literal(Literal::Operand(kw::Operand::Z)),
+                            span,
+                        )),
+                    ),
+                    span: 1,
+                }),
+            ),
             span: 2,
         };
         assert_eq!(
@@ -308,10 +332,10 @@ mod tests {
     #[test]
     fn analyze_string_in_instruction() {
         let span = 0;
-        let parsed_expr = Expr::<String, _> {
-            variant: ExprVariant::Literal(Literal::String("some_string".into())),
+        let parsed_expr = SemanticExpr::<String, _>::from_atom(
+            SemanticAtom::Literal(Literal::String("some_string".into())),
             span,
-        };
+        );
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
             Err(InternalDiagnostic::new(
@@ -334,10 +358,10 @@ mod tests {
 
     fn test_bare_ptr_reg(keyword: kw::Operand) {
         let span = 0;
-        let expr = Expr::<String, _> {
-            variant: ExprVariant::Literal(Literal::Operand(keyword)),
+        let expr = SemanticExpr::<String, _>::from_atom(
+            SemanticAtom::Literal(Literal::Operand(keyword)),
             span,
-        };
+        );
         assert_eq!(
             analyze_operand(expr, Context::Other),
             Err(InternalDiagnostic::new(

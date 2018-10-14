@@ -162,8 +162,8 @@ fn mk_explicit_branch<S>(branch: ExplicitBranch, target: RelocExpr<S>) -> Branch
 #[cfg(test)]
 mod tests {
     use super::*;
+    use expr::Expr;
     use frontend::semantics::instruction::tests::*;
-    use frontend::semantics::Expr;
     use frontend::syntax::keyword::Mnemonic;
 
     #[test]

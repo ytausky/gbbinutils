@@ -157,8 +157,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use backend::BinaryOperator;
+    use backend::{BinaryOperator, RelocAtom};
     use diagnostics::IgnoreDiagnostics;
+    use expr::ExprVariant;
 
     #[test]
     fn new_object_has_no_chunks() {
@@ -174,7 +175,7 @@ mod tests {
 
     #[test]
     fn constrain_origin_determines_origin_of_new_chunk() {
-        let origin = RelocExpr::Literal(0x3000, ());
+        let origin: RelocExpr<_> = 0x3000.into();
         let object = build_object(|builder| {
             builder.constrain_origin(origin.clone());
             builder.push(Node::Byte(0xcd))
@@ -189,16 +190,17 @@ mod tests {
         let object = Object {
             chunks: vec![
                 Chunk {
-                    origin: Some(RelocExpr::Literal(origin1, ())),
+                    origin: Some(origin1.into()),
                     items: vec![Node::Byte(0x42)],
                 },
                 Chunk {
-                    origin: Some(RelocExpr::BinaryOperation(
-                        Box::new(RelocExpr::LocationCounter(())),
-                        Box::new(RelocExpr::Literal(skipped_bytes, ())),
-                        BinaryOperator::Plus,
-                        (),
-                    )),
+                    origin: Some(
+                        ExprVariant::Binary(
+                            BinaryOperator::Plus,
+                            Box::new(RelocAtom::LocationCounter.into()),
+                            Box::new(skipped_bytes.into()),
+                        ).into(),
+                    ),
                     items: vec![Node::Byte(0x43)],
                 },
             ],

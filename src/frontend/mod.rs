@@ -101,18 +101,21 @@ impl StrExprFactory {
 }
 
 impl ExprFactory for StrExprFactory {
-    fn mk_literal<I: Into<String>, S>(
-        &mut self,
-        (literal, token_ref): (Literal<I>, S),
-    ) -> RelocExpr<S> {
+    fn mk_literal<I: Into<String>, S>(&mut self, (literal, span): (Literal<I>, S)) -> RelocExpr<S> {
         match literal {
-            Literal::Number(number) => RelocExpr::Literal(number, token_ref),
+            Literal::Number(number) => RelocExpr {
+                variant: number.into(),
+                span,
+            },
             _ => panic!(),
         }
     }
 
-    fn mk_symbol<I: Into<String>, S>(&mut self, symbol: (I, S)) -> RelocExpr<S> {
-        RelocExpr::Symbol(symbol.0.into(), symbol.1)
+    fn mk_symbol<I: Into<String>, S>(&mut self, (symbol, span): (I, S)) -> RelocExpr<S> {
+        RelocExpr {
+            variant: RelocAtom::Symbol(symbol.into()).into(),
+            span,
+        }
     }
 }
 

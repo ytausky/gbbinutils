@@ -5,8 +5,9 @@ use backend::{
     lowering::Lower,
     object::{Node, Object},
 };
+use expr::{Expr, ExprVariant};
 use instruction::Instruction;
-use span::{Source, Span};
+use span::Span;
 use Width;
 
 mod lowering;
@@ -26,12 +27,18 @@ pub enum Item<R> {
     Instruction(Instruction<R>),
 }
 
+pub type RelocExpr<S> = Expr<RelocAtom, Empty, BinaryOperator, S>;
+
+type RelocExprVariant<S> = ExprVariant<RelocAtom, Empty, BinaryOperator, S>;
+
 #[derive(Clone, Debug, PartialEq)]
-pub enum RelocExpr<SR> {
-    BinaryOperation(Box<RelocExpr<SR>>, Box<RelocExpr<SR>>, BinaryOperator, SR),
-    Literal(i32, SR),
-    LocationCounter(SR),
-    Symbol(String, SR),
+pub enum Empty {}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum RelocAtom {
+    Literal(i32),
+    LocationCounter,
+    Symbol(String),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -40,15 +47,18 @@ pub enum BinaryOperator {
     Plus,
 }
 
-impl<S: Span> Source for RelocExpr<S> {
-    type Span = S;
-    fn span(&self) -> Self::Span {
-        use backend::RelocExpr::*;
-        match self {
-            BinaryOperation(_, _, _, span)
-            | Literal(_, span)
-            | Symbol(_, span)
-            | LocationCounter(span) => (*span).clone(),
+impl<S> From<i32> for RelocExprVariant<S> {
+    fn from(n: i32) -> Self {
+        ExprVariant::Atom(RelocAtom::Literal(n))
+    }
+}
+
+#[cfg(test)]
+impl<T: Into<RelocExprVariant<()>>> From<T> for RelocExpr<()> {
+    fn from(variant: T) -> Self {
+        Expr {
+            variant: variant.into(),
+            span: (),
         }
     }
 }
@@ -165,7 +175,7 @@ mod tests {
     }
 
     fn byte_literal(value: i32) -> Item<()> {
-        Item::Data(RelocExpr::Literal(value, ()), Width::Byte)
+        Item::Data(value.into(), Width::Byte)
     }
 
     #[test]
@@ -225,12 +235,14 @@ mod tests {
         let ident2 = "ident2";
         let (_, diagnostics) = with_object_builder(|builder| {
             builder.emit_item(Item::Data(
-                RelocExpr::BinaryOperation(
-                    Box::new(symbol_expr(ident1)),
-                    Box::new(symbol_expr(ident2)),
-                    BinaryOperator::Minus,
-                    (),
-                ),
+                RelocExpr {
+                    variant: ExprVariant::Binary(
+                        BinaryOperator::Minus,
+                        Box::new(symbol_expr(ident1)),
+                        Box::new(symbol_expr(ident2)),
+                    ),
+                    span: (),
+                },
                 Width::Word,
             ))
         });
@@ -279,7 +291,10 @@ mod tests {
     }
 
     fn symbol_expr(symbol: impl Into<String>) -> RelocExpr<()> {
-        RelocExpr::Symbol(symbol.into(), ())
+        RelocExpr {
+            variant: ExprVariant::Atom(RelocAtom::Symbol(symbol.into())),
+            span: (),
+        }
     }
 
     fn unresolved(symbol: impl Into<String>) -> InternalDiagnostic<()> {

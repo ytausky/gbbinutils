@@ -150,8 +150,9 @@ fn is_in_u8_range(n: i32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use backend::BinaryOperator;
+    use backend::{BinaryOperator, RelocAtom};
     use diagnostics::IgnoreDiagnostics;
+    use expr::ExprVariant;
     use std::borrow::Borrow;
 
     #[test]
@@ -177,26 +178,25 @@ mod tests {
     fn test_translation_of_ld_inline_addr(opcode: u8, addr: u16, expected: impl Borrow<[u8]>) {
         let actual = translate_chunk_item(Node::LdInlineAddr(
             opcode,
-            RelocExpr::Literal(addr.into(), ()),
+            RelocAtom::Literal(addr.into()).into(),
         ));
         assert_eq!(actual, expected.borrow())
     }
 
     #[test]
     fn translate_embedded() {
-        let actual = translate_chunk_item(Node::Embedded(0b01_000_110, RelocExpr::Literal(4, ())));
+        let actual = translate_chunk_item(Node::Embedded(0b01_000_110, 4.into()));
         assert_eq!(actual, [0x66])
     }
 
     #[test]
     fn translate_expr_with_subtraction() {
         let actual = translate_chunk_item(Node::Expr(
-            RelocExpr::BinaryOperation(
-                Box::new(RelocExpr::Literal(4, ())),
-                Box::new(RelocExpr::Literal(3, ())),
+            ExprVariant::Binary(
                 BinaryOperator::Minus,
-                (),
-            ),
+                Box::new(4.into()),
+                Box::new(3.into()),
+            ).into(),
             Width::Byte,
         ));
         assert_eq!(actual, [0x01])
@@ -218,7 +218,7 @@ mod tests {
     fn set_origin_of_translated_chunk() {
         let addr = 0x7ff0;
         let chunk = Chunk {
-            origin: Some(RelocExpr::Literal(addr, ())),
+            origin: Some(addr.into()),
             items: Vec::new(),
         };
         let translated = translate_without_context(chunk);
@@ -231,7 +231,7 @@ mod tests {
         let mut chunk = Chunk::new();
         chunk.items.extend(vec![
             Node::Byte(byte),
-            Node::Expr(RelocExpr::LocationCounter(()), Width::Byte),
+            Node::Expr(RelocAtom::LocationCounter.into(), Width::Byte),
         ]);
         let binary = translate_without_context(chunk);
         assert_eq!(binary.data, [byte, 0x02])
@@ -240,10 +240,10 @@ mod tests {
     #[test]
     fn location_counter_starts_from_chunk_origin() {
         let mut chunk = Chunk::new();
-        chunk.origin = Some(RelocExpr::Literal(0xffe1, ()));
+        chunk.origin = Some(0xffe1.into());
         chunk
             .items
-            .push(Node::Expr(RelocExpr::LocationCounter(()), Width::Word));
+            .push(Node::Expr(RelocAtom::LocationCounter.into(), Width::Word));
         let binary = translate_without_context(chunk);
         assert_eq!(binary.data, [0xe3, 0xff])
     }

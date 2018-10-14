@@ -1,5 +1,6 @@
 use backend::object::Node;
-use backend::{BinaryOperator, Item};
+use backend::{BinaryOperator, Item, RelocAtom};
+use expr::ExprVariant;
 use instruction::*;
 use span::{Source, Span};
 use std::mem;
@@ -209,12 +210,17 @@ fn encode_branch<S: Span>(branch: Branch<S>, condition: Option<Condition>) -> Lo
 
 fn mk_relative_expr<S: Span>(expr: RelocExpr<S>) -> RelocExpr<S> {
     let span = expr.span();
-    RelocExpr::BinaryOperation(
-        Box::new(expr),
-        Box::new(RelocExpr::LocationCounter(span.clone())),
-        BinaryOperator::Minus,
+    RelocExpr {
+        variant: ExprVariant::Binary(
+            BinaryOperator::Minus,
+            Box::new(expr),
+            Box::new(RelocExpr {
+                variant: ExprVariant::Atom(RelocAtom::LocationCounter),
+                span: span.clone(),
+            }),
+        ),
         span,
-    )
+    }
 }
 
 fn encode_bit_operation(operation: BitOperation) -> u8 {
@@ -456,7 +462,7 @@ mod tests {
     #[test]
     fn encode_ld_simple_immediate() {
         use instruction::SimpleOperand::*;
-        let immediate = RelocExpr::Literal(0x42, ());
+        let immediate: RelocExpr<_> = 0x42.into();
         vec![
             (B, 0x06),
             (C, 0x0e),
@@ -481,7 +487,7 @@ mod tests {
     #[test]
     fn encode_ld_immediate16() {
         use instruction::Reg16::*;
-        let immediate = RelocExpr::Literal(0x1234, ());
+        let immediate: RelocExpr<_> = 0x1234.into();
         let test_cases = &[(Bc, 0x01), (De, 0x11), (Hl, 0x21), (Sp, 0x31)];
         for &(reg16, opcode) in test_cases {
             test_instruction(
@@ -496,7 +502,7 @@ mod tests {
 
     #[test]
     fn encode_ld_inline_addr() {
-        let addr = RelocExpr::Literal(0x1234, ());
+        let addr: RelocExpr<_> = 0x1234.into();
         let test_cases = &[(Direction::FromA, 0xea), (Direction::IntoA, 0xfa)];
         for &(direction, opcode) in test_cases {
             test_instruction(
@@ -550,7 +556,7 @@ mod tests {
 
     #[test]
     fn lower_ldhl_sp_expr() {
-        let expr = RelocExpr::Literal(0x42, ());
+        let expr: RelocExpr<_> = 0x42.into();
         test_instruction(
             Ldhl(expr.clone()),
             [Node::Byte(0xf8), Node::Expr(expr, Width::Byte)],
@@ -560,7 +566,7 @@ mod tests {
     #[test]
     fn encode_alu_immediate() {
         use instruction::AluOperation::*;
-        let expr = RelocExpr::Literal(0x42, ());
+        let expr: RelocExpr<_> = 0x42.into();
         [
             (Add, 0xc6),
             (Adc, 0xce),
@@ -717,7 +723,7 @@ mod tests {
     #[test]
     fn encode_call() {
         use instruction::Condition::*;
-        let target_expr = RelocExpr::Literal(0x1234, ());
+        let target_expr: RelocExpr<_> = 0x1234.into();
         let test_cases = &[
             (None, 0xcd),
             (Some(C), 0xdc),
@@ -739,7 +745,7 @@ mod tests {
     #[test]
     fn encode_jp() {
         use instruction::Condition::*;
-        let target_expr = RelocExpr::Literal(0x1234, ());
+        let target_expr: RelocExpr<_> = 0x1234.into();
         let test_cases = &[
             (None, 0xc3),
             (Some(C), 0xda),
@@ -766,7 +772,7 @@ mod tests {
     #[test]
     fn encode_jr() {
         use instruction::Condition::*;
-        let target_expr = RelocExpr::Literal(0x1234, ());
+        let target_expr: RelocExpr<_> = 0x1234.into();
         let test_cases = &[
             (None, 0x18),
             (Some(C), 0x38),
@@ -881,7 +887,7 @@ mod tests {
 
     #[test]
     fn lower_rst() {
-        let n = RelocExpr::Literal(3, ());
+        let n: RelocExpr<_> = 3.into();
         test_instruction(
             Instruction::Rst(n.clone()),
             [Node::Embedded(0b11_000_111, n)],
@@ -891,7 +897,7 @@ mod tests {
     #[test]
     fn lower_bit_operations() {
         use instruction::{BitOperation::*, SimpleOperand::*};
-        let n = RelocExpr::Literal(3, ());
+        let n: RelocExpr<_> = 3.into();
         let test_cases = &[
             (Bit, B, 0b01_000_000),
             (Bit, C, 0b01_000_001),

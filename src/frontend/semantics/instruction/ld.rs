@@ -244,8 +244,8 @@ impl<S: Span> Source for LdDest16<S> {
 
 #[cfg(test)]
 mod tests {
+    use expr::Expr;
     use frontend::semantics::instruction::tests::*;
-    use frontend::semantics::Expr;
     use frontend::syntax::keyword::Mnemonic;
     use instruction::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
     use Width;
