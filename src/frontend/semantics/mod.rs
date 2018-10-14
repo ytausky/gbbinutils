@@ -294,8 +294,7 @@ fn analyze_include<'a, F: Session + 'a>(
 
 fn analyze_org<'a, S: Session + 'a>(args: CommandArgs<S>, actions: &mut SemanticActions<'a, S>) {
     let mut args = args.into_iter();
-    let mut factory = StrExprFactory::new();
-    let expr = analyze_reloc_expr(args.next().unwrap(), &mut factory).unwrap();
+    let expr = analyze_reloc_expr(args.next().unwrap(), &mut actions.expr_factory).unwrap();
     assert_eq!(args.next(), None);
     actions.session.set_origin(expr)
 }
@@ -305,8 +304,8 @@ fn analyze_mnemonic<'a, F: Session + 'a>(
     args: CommandArgs<F>,
     actions: &mut SemanticActions<'a, F>,
 ) -> Result<(), InternalDiagnostic<F::Span>> {
-    let mut factory = StrExprFactory::new();
-    let instruction = instruction::analyze_instruction(name, args.into_iter(), &mut factory)?;
+    let instruction =
+        instruction::analyze_instruction(name, args.into_iter(), &mut actions.expr_factory)?;
     actions
         .session
         .emit_item(backend::Item::Instruction(instruction));
