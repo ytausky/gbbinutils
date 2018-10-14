@@ -5,6 +5,7 @@ use frontend::session::{ChunkId, Session};
 use frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token};
 use frontend::{ExprFactory, Literal, StrExprFactory};
 use span::Span;
+use std::fmt::Debug;
 use std::iter;
 use Width;
 
@@ -258,16 +259,7 @@ fn analyze_ds<'a, S: Session + 'a>(
     actions: &mut SemanticActions<'a, S>,
 ) -> Result<(), InternalDiagnostic<S::Span>> {
     use backend::RelocExpr;
-    let mut args = args.into_iter();
-    let arg = args.next().ok_or(InternalDiagnostic::new(
-        Message::OperandCount {
-            actual: 0,
-            expected: 1,
-        },
-        iter::empty(),
-        span,
-    ))?;
-    assert_eq!(args.next(), None);
+    let arg = single_arg(span, args)?;
     let span = arg.span.clone();
     let count = analyze_reloc_expr(arg, &mut actions.expr_factory)?;
     let expr = RelocExpr {
@@ -297,6 +289,16 @@ fn analyze_org<'a, S: Session + 'a>(
     args: CommandArgs<S>,
     actions: &mut SemanticActions<'a, S>,
 ) -> Result<(), InternalDiagnostic<S::Span>> {
+    let arg = single_arg(span, args)?;
+    let expr = analyze_reloc_expr(arg, &mut actions.expr_factory)?;
+    actions.session.set_origin(expr);
+    Ok(())
+}
+
+fn single_arg<T: Debug + PartialEq, S>(
+    span: S,
+    args: impl IntoIterator<Item = T>,
+) -> Result<T, InternalDiagnostic<S>> {
     let mut args = args.into_iter();
     let arg = args.next().ok_or(InternalDiagnostic::new(
         Message::OperandCount {
@@ -306,10 +308,8 @@ fn analyze_org<'a, S: Session + 'a>(
         iter::empty(),
         span,
     ))?;
-    let expr = analyze_reloc_expr(arg, &mut actions.expr_factory)?;
     assert_eq!(args.next(), None);
-    actions.session.set_origin(expr);
-    Ok(())
+    Ok(arg)
 }
 
 fn analyze_mnemonic<'a, F: Session + 'a>(
