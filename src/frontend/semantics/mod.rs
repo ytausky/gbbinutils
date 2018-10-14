@@ -258,23 +258,27 @@ fn analyze_ds<'a, S: Session + 'a>(
     args: CommandArgs<S>,
     actions: &mut SemanticActions<'a, S>,
 ) -> Result<(), InternalDiagnostic<S::Span>> {
-    use backend::RelocExpr;
     let arg = single_arg(span, args)?;
-    let span = arg.span.clone();
     let count = analyze_reloc_expr(arg, &mut actions.expr_factory)?;
-    let expr = RelocExpr {
+    actions
+        .session
+        .set_origin(location_counter_plus_expr(count));
+    Ok(())
+}
+
+fn location_counter_plus_expr<S: Clone>(expr: RelocExpr<S>) -> RelocExpr<S> {
+    let span = expr.span.clone();
+    RelocExpr {
         variant: ExprVariant::Binary(
             BinaryOperator::Plus,
             Box::new(RelocExpr {
                 variant: ExprVariant::Atom(RelocAtom::LocationCounter),
                 span: span.clone(),
             }),
-            Box::new(count),
+            Box::new(expr),
         ),
         span,
-    };
-    actions.session.set_origin(expr);
-    Ok(())
+    }
 }
 
 fn analyze_include<'a, F: Session + 'a>(
