@@ -236,7 +236,7 @@ fn analyze_directive<'a, S: Session + 'a>(
         Directive::Ds => analyze_ds(directive.1, args, actions),
         Directive::Dw => analyze_data(Width::Word, args, actions),
         Directive::Include => Ok(analyze_include(args, actions)),
-        Directive::Org => Ok(analyze_org(args, actions)),
+        Directive::Org => analyze_org(directive.1, args, actions),
     }
 }
 
@@ -292,11 +292,24 @@ fn analyze_include<'a, F: Session + 'a>(
     actions.session.analyze_chunk(reduce_include(args));
 }
 
-fn analyze_org<'a, S: Session + 'a>(args: CommandArgs<S>, actions: &mut SemanticActions<'a, S>) {
+fn analyze_org<'a, S: Session + 'a>(
+    span: S::Span,
+    args: CommandArgs<S>,
+    actions: &mut SemanticActions<'a, S>,
+) -> Result<(), InternalDiagnostic<S::Span>> {
     let mut args = args.into_iter();
-    let expr = analyze_reloc_expr(args.next().unwrap(), &mut actions.expr_factory).unwrap();
+    let arg = args.next().ok_or(InternalDiagnostic::new(
+        Message::OperandCount {
+            actual: 0,
+            expected: 1,
+        },
+        iter::empty(),
+        span,
+    ))?;
+    let expr = analyze_reloc_expr(arg, &mut actions.expr_factory)?;
     assert_eq!(args.next(), None);
-    actions.session.set_origin(expr)
+    actions.session.set_origin(expr);
+    Ok(())
 }
 
 fn analyze_mnemonic<'a, F: Session + 'a>(
@@ -889,7 +902,16 @@ mod tests {
 
     #[test]
     fn ds_without_args() {
-        let actions = with_directive(Directive::Ds, |command| command);
+        test_unary_directive_without_args(Directive::Ds)
+    }
+
+    #[test]
+    fn org_without_args() {
+        test_unary_directive_without_args(Directive::Org)
+    }
+
+    fn test_unary_directive_without_args(directive: Directive) {
+        let actions = with_directive(directive, |command| command);
         assert_eq!(
             actions,
             [TestOperation::EmitDiagnostic(InternalDiagnostic::new(
