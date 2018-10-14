@@ -1,10 +1,11 @@
-use backend::{self, BinaryOperator, RelocAtom};
-use diagnostics::{DiagnosticsListener, InternalDiagnostic};
+use backend::{self, BinaryOperator, RelocAtom, RelocExpr};
+use diagnostics::{DiagnosticsListener, InternalDiagnostic, Message};
 use expr::ExprVariant;
 use frontend::session::{ChunkId, Session};
 use frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token};
-use frontend::{Literal, StrExprFactory};
+use frontend::{ExprFactory, Literal, StrExprFactory};
 use span::Span;
+use std::iter;
 use Width;
 
 mod instruction;
@@ -241,8 +242,8 @@ fn analyze_data<'a, S: Session + 'a>(
     for arg in args {
         use frontend::ExprFactory;
         let expr = match arg.variant {
-            ExprVariant::Atom(SemanticAtom::Literal(literal)) => {
-                actions.expr_factory.mk_literal((literal, arg.span))
+            ExprVariant::Atom(SemanticAtom::Literal(Literal::Number(n))) => {
+                actions.expr_factory.mk_literal((n, arg.span))
             }
             ExprVariant::Atom(SemanticAtom::Ident(ident)) => {
                 actions.expr_factory.mk_symbol((ident, arg.span))
@@ -259,8 +260,8 @@ fn analyze_ds<'a, S: Session + 'a>(args: CommandArgs<S>, actions: &mut SemanticA
     let arg = args.into_iter().next().unwrap();
     let span = arg.span.clone();
     let count = match arg.variant {
-        ExprVariant::Atom(SemanticAtom::Literal(literal)) => {
-            actions.expr_factory.mk_literal((literal, arg.span))
+        ExprVariant::Atom(SemanticAtom::Literal(Literal::Number(n))) => {
+            actions.expr_factory.mk_literal((n, arg.span))
         }
         _ => panic!(),
     };
@@ -287,7 +288,8 @@ fn analyze_include<'a, F: Session + 'a>(
 
 fn analyze_org<'a, S: Session + 'a>(args: CommandArgs<S>, actions: &mut SemanticActions<'a, S>) {
     let mut args = args.into_iter();
-    let expr = operand::analyze_reloc_expr(args.next().unwrap()).unwrap();
+    let mut factory = StrExprFactory::new();
+    let expr = analyze_reloc_expr(args.next().unwrap(), &mut factory).unwrap();
     assert!(args.next().is_none());
     actions.session.set_origin(expr)
 }
@@ -297,7 +299,8 @@ fn analyze_mnemonic<'a, F: Session + 'a>(
     args: CommandArgs<F>,
     actions: &mut SemanticActions<'a, F>,
 ) {
-    let analysis_result = instruction::analyze_instruction(name, args.into_iter());
+    let mut factory = StrExprFactory::new();
+    let analysis_result = instruction::analyze_instruction(name, args.into_iter(), &mut factory);
     match analysis_result {
         Ok(instruction) => actions
             .session
@@ -453,6 +456,33 @@ fn reduce_include<I, S: Span>(mut arguments: Vec<SemanticExpr<I, S>>) -> ChunkId
             ChunkId::File((path_str, Some(path.span)))
         }
         _ => panic!(),
+    }
+}
+
+fn analyze_reloc_expr<I: Into<String>, S: Clone>(
+    expr: SemanticExpr<I, S>,
+    factory: &mut impl ExprFactory,
+) -> Result<RelocExpr<S>, InternalDiagnostic<S>> {
+    match expr.variant {
+        ExprVariant::Atom(SemanticAtom::Ident(ident)) => Ok(factory.mk_symbol((ident, expr.span))),
+        ExprVariant::Atom(SemanticAtom::Literal(Literal::Number(n))) => {
+            Ok(factory.mk_literal((n, expr.span)))
+        }
+        ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(_))) => Err(
+            InternalDiagnostic::new(Message::KeywordInExpr, iter::once(expr.span.clone()), expr.span),
+        ),
+        ExprVariant::Atom(SemanticAtom::Literal(Literal::String(_))) => Err(
+            InternalDiagnostic::new(Message::StringInInstruction, iter::empty(), expr.span),
+        ),
+        ExprVariant::Unary(SemanticUnary::Parentheses, expr) => analyze_reloc_expr(*expr, factory),
+        ExprVariant::Binary(SemanticBinary::Plus, left, right) => {
+            let left = analyze_reloc_expr(*left, factory)?;
+            let right = analyze_reloc_expr(*right, factory)?;
+            Ok(RelocExpr {
+                variant: ExprVariant::Binary(BinaryOperator::Plus, Box::new(left), Box::new(right)),
+                span: expr.span,
+            })
+        }
     }
 }
 

@@ -13,6 +13,7 @@ pub enum ExprVariant<A, U, B, S> {
     Binary(B, Box<Expr<A, U, B, S>>, Box<Expr<A, U, B, S>>),
 }
 
+#[cfg(test)]
 impl<A, U, B, S> Expr<A, U, B, S> {
     pub fn from_atom<T: Into<ExprVariant<A, U, B, S>>>(atom: T, span: S) -> Self {
         Expr {

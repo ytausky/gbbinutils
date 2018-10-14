@@ -88,7 +88,7 @@ impl<Id: Into<String>> AnalysisFactory<Id> for SemanticAnalysisFactory {
 }
 
 pub trait ExprFactory {
-    fn mk_literal<I: Into<String>, S>(&mut self, literal: (Literal<I>, S)) -> RelocExpr<S>;
+    fn mk_literal<S>(&mut self, literal: (i32, S)) -> RelocExpr<S>;
     fn mk_symbol<I: Into<String>, S>(&mut self, symbol: (I, S)) -> RelocExpr<S>;
 }
 
@@ -101,13 +101,10 @@ impl StrExprFactory {
 }
 
 impl ExprFactory for StrExprFactory {
-    fn mk_literal<I: Into<String>, S>(&mut self, (literal, span): (Literal<I>, S)) -> RelocExpr<S> {
-        match literal {
-            Literal::Number(number) => RelocExpr {
-                variant: number.into(),
-                span,
-            },
-            _ => panic!(),
+    fn mk_literal<S>(&mut self, (literal, span): (i32, S)) -> RelocExpr<S> {
+        RelocExpr {
+            variant: literal.into(),
+            span,
         }
     }
 

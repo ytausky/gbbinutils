@@ -1,8 +1,9 @@
-use super::{ExprVariant, SemanticAtom, SemanticBinary, SemanticExpr, SemanticUnary};
+use super::{analyze_reloc_expr, ExprVariant, SemanticAtom, SemanticExpr, SemanticUnary};
 use diagnostics::{InternalDiagnostic, KeywordOperandCategory, Message};
 use frontend::syntax::keyword as kw;
 use frontend::syntax::Literal;
-use instruction::{BinaryOperator, Condition, PtrReg, Reg16, RegPair, RelocExpr, SimpleOperand};
+use frontend::ExprFactory;
+use instruction::{Condition, PtrReg, Reg16, RegPair, RelocExpr, SimpleOperand};
 use span::{Source, Span};
 use std::iter;
 
@@ -45,27 +46,29 @@ type OperandResult<S> = Result<Operand<S>, InternalDiagnostic<S>>;
 pub fn analyze_operand<I: Into<String>, S: Clone>(
     expr: SemanticExpr<I, S>,
     context: Context,
+    factory: &mut impl ExprFactory,
 ) -> OperandResult<S> {
     match expr.variant {
         ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(keyword))) => {
             analyze_keyword_operand((keyword, expr.span), context)
         }
         ExprVariant::Unary(SemanticUnary::Parentheses, inner) => {
-            analyze_deref_operand(*inner, expr.span)
+            analyze_deref_operand(*inner, expr.span, factory)
         }
-        _ => Ok(Operand::Const(analyze_reloc_expr(expr)?)),
+        _ => Ok(Operand::Const(analyze_reloc_expr(expr, factory)?)),
     }
 }
 
 fn analyze_deref_operand<I: Into<String>, S: Clone>(
     expr: SemanticExpr<I, S>,
     deref_span: S,
+    factory: &mut impl ExprFactory,
 ) -> OperandResult<S> {
     match expr.variant {
         ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(keyword))) => {
             analyze_deref_operand_keyword((keyword, expr.span), deref_span)
         }
-        _ => Ok(Operand::Deref(analyze_reloc_expr(expr)?)),
+        _ => Ok(Operand::Deref(analyze_reloc_expr(expr, factory)?)),
     }
 }
 
@@ -92,36 +95,6 @@ fn try_deref_operand_keyword(keyword: kw::Operand) -> Result<AtomKind, KeywordOp
         A | B | D | E | H | L | Sp => Err(KeywordOperandCategory::Reg),
         Af => Err(KeywordOperandCategory::RegPair),
         Nc | Nz | Z => Err(KeywordOperandCategory::ConditionCode),
-    }
-}
-
-pub fn analyze_reloc_expr<I: Into<String>, S: Clone>(
-    expr: SemanticExpr<I, S>,
-) -> Result<RelocExpr<S>, InternalDiagnostic<S>> {
-    use backend::RelocAtom;
-    match expr.variant {
-        ExprVariant::Atom(SemanticAtom::Ident(ident)) => Ok(RelocExpr {
-            variant: ExprVariant::Atom(RelocAtom::Symbol(ident.into())),
-            span: expr.span,
-        }),
-        ExprVariant::Atom(SemanticAtom::Literal(Literal::Number(n))) => {
-            Ok(RelocExpr::from_atom(n, expr.span))
-        }
-        ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(_))) => Err(
-            InternalDiagnostic::new(Message::KeywordInExpr, vec![expr.span.clone()], expr.span),
-        ),
-        ExprVariant::Atom(SemanticAtom::Literal(Literal::String(_))) => Err(
-            InternalDiagnostic::new(Message::StringInInstruction, iter::empty(), expr.span),
-        ),
-        ExprVariant::Unary(SemanticUnary::Parentheses, expr) => analyze_reloc_expr(*expr),
-        ExprVariant::Binary(SemanticBinary::Plus, left, right) => {
-            let left = analyze_reloc_expr(*left)?;
-            let right = analyze_reloc_expr(*right)?;
-            Ok(RelocExpr {
-                variant: ExprVariant::Binary(BinaryOperator::Plus, Box::new(left), Box::new(right)),
-                span: expr.span,
-            })
-        }
     }
 }
 
@@ -245,6 +218,15 @@ mod tests {
             analyze_operand(expr, Context::Other),
             Ok(Operand::Atom(AtomKind::DerefPtrReg(ptr_reg), 1))
         )
+    }
+
+    fn analyze_operand<I: Into<String>, S: Clone>(
+        expr: SemanticExpr<I, S>,
+        context: Context,
+    ) -> OperandResult<S> {
+        use frontend::StrExprFactory;
+        let mut factory = StrExprFactory::new();
+        super::analyze_operand(expr, context, &mut factory)
     }
 
     #[test]

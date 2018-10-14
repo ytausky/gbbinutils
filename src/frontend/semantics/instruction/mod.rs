@@ -3,6 +3,7 @@ use super::SemanticExpr;
 use diagnostics::{InternalDiagnostic, Message};
 use frontend::semantics::operand::{self, AtomKind, Context, Operand, OperandCounter};
 use frontend::syntax::keyword as kw;
+use frontend::ExprFactory;
 use instruction::*;
 use span::{Source, Span};
 use std::iter;
@@ -13,6 +14,7 @@ mod ld;
 pub fn analyze_instruction<Id: Into<String>, I, S>(
     mnemonic: (kw::Mnemonic, S),
     operands: I,
+    expr_factory: &mut impl ExprFactory,
 ) -> AnalysisResult<S>
 where
     I: IntoIterator<Item = SemanticExpr<Id, S>>,
@@ -24,7 +26,7 @@ where
         mnemonic,
         operands
             .into_iter()
-            .map(|x| operand::analyze_operand(x, context)),
+            .map(|x| operand::analyze_operand(x, context, expr_factory)),
     ).run()
 }
 
@@ -769,9 +771,12 @@ mod tests {
     where
         I: IntoIterator<Item = Input>,
     {
+        use frontend::StrExprFactory;
+        let mut factory = StrExprFactory::new();
         Result(analyze_instruction(
             (mnemonic, TokenId::Mnemonic.into()),
             operands.into_iter().enumerate().map(add_token_spans),
+            &mut factory,
         ))
     }
 
