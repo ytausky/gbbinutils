@@ -240,31 +240,20 @@ fn analyze_data<'a, S: Session + 'a>(
     actions: &mut SemanticActions<'a, S>,
 ) {
     for arg in args {
-        use frontend::ExprFactory;
-        let expr = match arg.variant {
-            ExprVariant::Atom(SemanticAtom::Literal(Literal::Number(n))) => {
-                actions.expr_factory.mk_literal((n, arg.span))
-            }
-            ExprVariant::Atom(SemanticAtom::Ident(ident)) => {
-                actions.expr_factory.mk_symbol((ident, arg.span))
-            }
-            _ => panic!(),
-        };
+        let expr = analyze_reloc_expr(arg, &mut actions.expr_factory)
+            .ok()
+            .unwrap();
         actions.session.emit_item(backend::Item::Data(expr, width))
     }
 }
 
 fn analyze_ds<'a, S: Session + 'a>(args: CommandArgs<S>, actions: &mut SemanticActions<'a, S>) {
     use backend::RelocExpr;
-    use frontend::ExprFactory;
     let arg = args.into_iter().next().unwrap();
     let span = arg.span.clone();
-    let count = match arg.variant {
-        ExprVariant::Atom(SemanticAtom::Literal(Literal::Number(n))) => {
-            actions.expr_factory.mk_literal((n, arg.span))
-        }
-        _ => panic!(),
-    };
+    let count = analyze_reloc_expr(arg, &mut actions.expr_factory)
+        .ok()
+        .unwrap();
     let expr = RelocExpr {
         variant: ExprVariant::Binary(
             BinaryOperator::Plus,
@@ -468,9 +457,13 @@ fn analyze_reloc_expr<I: Into<String>, S: Clone>(
         ExprVariant::Atom(SemanticAtom::Literal(Literal::Number(n))) => {
             Ok(factory.mk_literal((n, expr.span)))
         }
-        ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(_))) => Err(
-            InternalDiagnostic::new(Message::KeywordInExpr, iter::once(expr.span.clone()), expr.span),
-        ),
+        ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(_))) => {
+            Err(InternalDiagnostic::new(
+                Message::KeywordInExpr,
+                iter::once(expr.span.clone()),
+                expr.span,
+            ))
+        }
         ExprVariant::Atom(SemanticAtom::Literal(Literal::String(_))) => Err(
             InternalDiagnostic::new(Message::StringInInstruction, iter::empty(), expr.span),
         ),
