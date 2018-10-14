@@ -155,11 +155,9 @@ impl<'a, F: Session + 'a> syntax::CommandContext<F::Span> for CommandActions<'a,
             (Command::Directive(directive), _) => {
                 analyze_directive(directive, self.args, &mut self.parent)
             }
-            (Command::Mnemonic(mnemonic), range) => Ok(analyze_mnemonic(
-                (mnemonic, range),
-                self.args,
-                &mut self.parent,
-            )),
+            (Command::Mnemonic(mnemonic), range) => {
+                analyze_mnemonic((mnemonic, range), self.args, &mut self.parent)
+            }
         };
         if let Err(diagnostic) = result {
             self.parent.emit_diagnostic(diagnostic);
@@ -294,15 +292,13 @@ fn analyze_mnemonic<'a, F: Session + 'a>(
     name: (Mnemonic, F::Span),
     args: CommandArgs<F>,
     actions: &mut SemanticActions<'a, F>,
-) {
+) -> Result<(), InternalDiagnostic<F::Span>> {
     let mut factory = StrExprFactory::new();
-    let analysis_result = instruction::analyze_instruction(name, args.into_iter(), &mut factory);
-    match analysis_result {
-        Ok(instruction) => actions
-            .session
-            .emit_item(backend::Item::Instruction(instruction)),
-        Err(diagnostic) => actions.session.emit_diagnostic(diagnostic),
-    }
+    let instruction = instruction::analyze_instruction(name, args.into_iter(), &mut factory)?;
+    actions
+        .session
+        .emit_item(backend::Item::Instruction(instruction));
+    Ok(())
 }
 
 pub struct MacroDefActions<'a, F: Session + 'a> {
