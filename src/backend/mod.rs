@@ -29,8 +29,6 @@ pub enum Item<R> {
 
 pub type RelocExpr<S> = Expr<RelocAtom, Empty, BinaryOperator, S>;
 
-type RelocExprVariant<S> = ExprVariant<RelocAtom, Empty, BinaryOperator, S>;
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum Empty {}
 
@@ -47,14 +45,14 @@ pub enum BinaryOperator {
     Plus,
 }
 
-impl<S> From<i32> for RelocExprVariant<S> {
+impl<S> From<i32> for ExprVariant<RelocAtom, Empty, BinaryOperator, S> {
     fn from(n: i32) -> Self {
         ExprVariant::Atom(RelocAtom::Literal(n))
     }
 }
 
 #[cfg(test)]
-impl<T: Into<RelocExprVariant<()>>> From<T> for RelocExpr<()> {
+impl<T: Into<ExprVariant<RelocAtom, Empty, BinaryOperator, ()>>> From<T> for RelocExpr<()> {
     fn from(variant: T) -> Self {
         Expr {
             variant: variant.into(),
