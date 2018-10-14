@@ -9,6 +9,7 @@ use frontend::session::{BorrowedComponents, ChunkId, Components, Session};
 use frontend::syntax::*;
 use span::{LexemeRefFactory, Span, TokenTracker};
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::hash::Hash;
 use std::rc::Rc;
 
@@ -40,7 +41,7 @@ pub struct Downstream<'a, B: 'a, D: 'a> {
     diagnostics: &'a mut D,
 }
 
-trait Analysis<Id: Into<String>> {
+trait Analysis<Id: Into<String> + Debug + PartialEq> {
     fn run<I, S>(&mut self, tokens: I, session: &mut S)
     where
         I: Iterator<Item = (Token<Id>, S::Span)>,
@@ -55,7 +56,7 @@ impl SemanticAnalysis {
     }
 }
 
-impl<Id: Into<String>> Analysis<Id> for SemanticAnalysis {
+impl<Id: Into<String> + Debug + PartialEq> Analysis<Id> for SemanticAnalysis {
     fn run<I, S>(&mut self, tokens: I, session: &mut S)
     where
         I: Iterator<Item = (Token<Id>, S::Span)>,
@@ -66,7 +67,7 @@ impl<Id: Into<String>> Analysis<Id> for SemanticAnalysis {
     }
 }
 
-trait AnalysisFactory<Id: Into<String>> {
+trait AnalysisFactory<Id: Into<String> + Debug + PartialEq> {
     type Analysis: Analysis<Id>;
     fn mk_analysis(&mut self) -> Self::Analysis;
 }
@@ -79,7 +80,7 @@ impl SemanticAnalysisFactory {
     }
 }
 
-impl<Id: Into<String>> AnalysisFactory<Id> for SemanticAnalysisFactory {
+impl<Id: Into<String> + Debug + PartialEq> AnalysisFactory<Id> for SemanticAnalysisFactory {
     type Analysis = SemanticAnalysis;
 
     fn mk_analysis(&mut self) -> Self::Analysis {
@@ -117,7 +118,7 @@ impl ExprFactory for StrExprFactory {
 }
 
 pub trait Frontend {
-    type Ident: AsRef<str> + Clone + Into<String>;
+    type Ident: AsRef<str> + Clone + Into<String> + Debug + PartialEq;
     type Span: Span;
     fn analyze_chunk(
         &mut self,
@@ -364,7 +365,7 @@ trait TokenizedCodeSource
 where
     for<'c> &'c Self::Tokenized: IntoIterator<Item = (Token<Self::Ident>, Self::Span)>,
 {
-    type Ident: AsRef<str> + Clone + Into<String>;
+    type Ident: AsRef<str> + Clone + Into<String> + Debug + PartialEq;
     type Span: Span;
     type Tokenized;
     fn tokenize_file(&mut self, filename: &str) -> Self::Tokenized;

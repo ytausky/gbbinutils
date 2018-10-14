@@ -1,8 +1,9 @@
 use codebase::{BufId, BufRange};
+use std::cmp;
+use std::fmt::Debug;
 use std::rc::Rc;
-use std::{cmp, fmt};
 
-pub trait Span: Clone + fmt::Debug {
+pub trait Span: Clone + Debug + PartialEq {
     fn extend(&self, other: &Self) -> Self;
 }
 

@@ -17,6 +17,7 @@ mod expr {
     use expr::ExprVariant;
     use frontend::Literal;
 
+    #[derive(Debug, PartialEq)]
     pub enum SemanticAtom<I> {
         Ident(I),
         Literal(Literal<I>),
@@ -28,10 +29,12 @@ mod expr {
         }
     }
 
+    #[derive(Debug, PartialEq)]
     pub enum SemanticUnary {
         Parentheses,
     }
 
+    #[derive(Debug, PartialEq)]
     pub enum SemanticBinary {
         Plus,
     }
@@ -255,7 +258,8 @@ fn analyze_ds<'a, S: Session + 'a>(
     actions: &mut SemanticActions<'a, S>,
 ) -> Result<(), InternalDiagnostic<S::Span>> {
     use backend::RelocExpr;
-    let arg = args.into_iter().next().ok_or(InternalDiagnostic::new(
+    let mut args = args.into_iter();
+    let arg = args.next().ok_or(InternalDiagnostic::new(
         Message::OperandCount {
             actual: 0,
             expected: 1,
@@ -263,6 +267,7 @@ fn analyze_ds<'a, S: Session + 'a>(
         iter::empty(),
         span,
     ))?;
+    assert_eq!(args.next(), None);
     let span = arg.span.clone();
     let count = analyze_reloc_expr(arg, &mut actions.expr_factory)?;
     let expr = RelocExpr {
@@ -291,7 +296,7 @@ fn analyze_org<'a, S: Session + 'a>(args: CommandArgs<S>, actions: &mut Semantic
     let mut args = args.into_iter();
     let mut factory = StrExprFactory::new();
     let expr = analyze_reloc_expr(args.next().unwrap(), &mut factory).unwrap();
-    assert!(args.next().is_none());
+    assert_eq!(args.next(), None);
     actions.session.set_origin(expr)
 }
 

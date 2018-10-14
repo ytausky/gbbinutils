@@ -147,7 +147,7 @@ impl<T: Clone> From<T> for SymRange<T> {
     }
 }
 
-impl<T: Clone + Debug> Span for SymRange<T> {
+impl<T: Clone + Debug + PartialEq> Span for SymRange<T> {
     fn extend(&self, other: &Self) -> Self {
         SymRange {
             start: self.start.clone(),
@@ -177,7 +177,7 @@ pub enum Action {
     PushTerminal(usize),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum TokenRef {
     Id(usize),
     Name(String),

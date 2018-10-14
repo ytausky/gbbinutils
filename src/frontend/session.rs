@@ -4,10 +4,11 @@ use diagnostics::InternalDiagnostic;
 use frontend;
 use span;
 use std::borrow::BorrowMut;
+use std::fmt::Debug;
 use std::marker;
 
 pub trait Session {
-    type Ident: Into<String>;
+    type Ident: Into<String> + Debug + PartialEq;
     type Span: span::Span;
     fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::Ident, Self::Span>);
     fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<Self::Span>);
