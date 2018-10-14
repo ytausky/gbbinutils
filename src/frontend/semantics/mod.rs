@@ -236,7 +236,10 @@ fn analyze_directive<'a, S: Session + 'a>(
         Directive::Db => analyze_data(Width::Byte, args, actions),
         Directive::Ds => analyze_ds(directive.1, args, actions),
         Directive::Dw => analyze_data(Width::Word, args, actions),
-        Directive::Include => Ok(analyze_include(args, actions)),
+        Directive::Include => {
+            analyze_include(args, actions);
+            Ok(())
+        }
         Directive::Org => analyze_org(directive.1, args, actions),
     }
 }
@@ -304,14 +307,16 @@ fn single_arg<T: Debug + PartialEq, S>(
     args: impl IntoIterator<Item = T>,
 ) -> Result<T, InternalDiagnostic<S>> {
     let mut args = args.into_iter();
-    let arg = args.next().ok_or(InternalDiagnostic::new(
-        Message::OperandCount {
-            actual: 0,
-            expected: 1,
-        },
-        iter::empty(),
-        span,
-    ))?;
+    let arg = args.next().ok_or_else(|| {
+        InternalDiagnostic::new(
+            Message::OperandCount {
+                actual: 0,
+                expected: 1,
+            },
+            iter::empty(),
+            span,
+        )
+    })?;
     assert_eq!(args.next(), None);
     Ok(arg)
 }
