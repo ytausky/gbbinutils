@@ -853,14 +853,7 @@ mod tests {
 
     #[test]
     fn reserve_3_bytes() {
-        let actions = collect_semantic_actions(|actions| {
-            let mut arg = actions
-                .enter_line(None)
-                .enter_command((Command::Directive(Directive::Ds), ()))
-                .add_argument();
-            arg.push_atom(mk_literal(3));
-            arg.exit().exit().exit()
-        });
+        let actions = ds(|arg| arg.push_atom(mk_literal(3)));
         assert_eq!(
             actions,
             [TestOperation::SetOrigin(
@@ -875,14 +868,8 @@ mod tests {
 
     #[test]
     fn ds_with_malformed_expr() {
-        let actions = collect_semantic_actions(|actions| {
-            let mut arg = actions
-                .enter_line(None)
-                .enter_command((Command::Directive(Directive::Ds), ()))
-                .add_argument();
-            arg.push_atom((ExprAtom::Literal(Literal::Operand(Operand::A)), ()));
-            arg.exit().exit().exit()
-        });
+        let actions =
+            ds(|arg| arg.push_atom((ExprAtom::Literal(Literal::Operand(Operand::A)), ())));
         assert_eq!(
             actions,
             [TestOperation::EmitDiagnostic(InternalDiagnostic::new(
@@ -891,6 +878,17 @@ mod tests {
                 (),
             ))]
         )
+    }
+
+    fn ds(f: impl for<'a> FnOnce(&mut super::ExprActions<'a, TestFrontend>)) -> Vec<TestOperation> {
+        collect_semantic_actions(|actions| {
+            let mut arg = actions
+                .enter_line(None)
+                .enter_command((Command::Directive(Directive::Ds), ()))
+                .add_argument();
+            f(&mut arg);
+            arg.exit().exit().exit()
+        })
     }
 
     fn collect_semantic_actions<F>(f: F) -> Vec<TestOperation>
