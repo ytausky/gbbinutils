@@ -151,13 +151,18 @@ impl<'a, F: Session + 'a> syntax::CommandContext<F::Span> for CommandActions<'a,
     }
 
     fn exit(mut self) -> Self::Parent {
-        match self.name {
+        let result = match self.name {
             (Command::Directive(directive), _) => {
                 analyze_directive(directive, self.args, &mut self.parent)
             }
-            (Command::Mnemonic(mnemonic), range) => {
-                analyze_mnemonic((mnemonic, range), self.args, &mut self.parent)
-            }
+            (Command::Mnemonic(mnemonic), range) => Ok(analyze_mnemonic(
+                (mnemonic, range),
+                self.args,
+                &mut self.parent,
+            )),
+        };
+        if let Err(diagnostic) = result {
+            self.parent.emit_diagnostic(diagnostic);
         }
         self.parent
     }
@@ -224,13 +229,13 @@ fn analyze_directive<'a, S: Session + 'a>(
     directive: Directive,
     args: CommandArgs<S>,
     actions: &mut SemanticActions<'a, S>,
-) {
+) -> Result<(), InternalDiagnostic<S::Span>> {
     match directive {
-        Directive::Db => analyze_data(Width::Byte, args, actions),
+        Directive::Db => Ok(analyze_data(Width::Byte, args, actions)),
         Directive::Ds => analyze_ds(args, actions),
-        Directive::Dw => analyze_data(Width::Word, args, actions),
-        Directive::Include => analyze_include(args, actions),
-        Directive::Org => analyze_org(args, actions),
+        Directive::Dw => Ok(analyze_data(Width::Word, args, actions)),
+        Directive::Include => Ok(analyze_include(args, actions)),
+        Directive::Org => Ok(analyze_org(args, actions)),
     }
 }
 
@@ -247,13 +252,14 @@ fn analyze_data<'a, S: Session + 'a>(
     }
 }
 
-fn analyze_ds<'a, S: Session + 'a>(args: CommandArgs<S>, actions: &mut SemanticActions<'a, S>) {
+fn analyze_ds<'a, S: Session + 'a>(
+    args: CommandArgs<S>,
+    actions: &mut SemanticActions<'a, S>,
+) -> Result<(), InternalDiagnostic<S::Span>> {
     use backend::RelocExpr;
     let arg = args.into_iter().next().unwrap();
     let span = arg.span.clone();
-    let count = analyze_reloc_expr(arg, &mut actions.expr_factory)
-        .ok()
-        .unwrap();
+    let count = analyze_reloc_expr(arg, &mut actions.expr_factory)?;
     let expr = RelocExpr {
         variant: ExprVariant::Binary(
             BinaryOperator::Plus,
@@ -265,7 +271,8 @@ fn analyze_ds<'a, S: Session + 'a>(args: CommandArgs<S>, actions: &mut SemanticA
         ),
         span,
     };
-    actions.session.set_origin(expr)
+    actions.session.set_origin(expr);
+    Ok(())
 }
 
 fn analyze_include<'a, F: Session + 'a>(
@@ -863,6 +870,26 @@ mod tests {
                     Box::new(3.into()),
                 ).into()
             )]
+        )
+    }
+
+    #[test]
+    fn ds_with_malformed_expr() {
+        let actions = collect_semantic_actions(|actions| {
+            let mut arg = actions
+                .enter_line(None)
+                .enter_command((Command::Directive(Directive::Ds), ()))
+                .add_argument();
+            arg.push_atom((ExprAtom::Literal(Literal::Operand(Operand::A)), ()));
+            arg.exit().exit().exit()
+        });
+        assert_eq!(
+            actions,
+            [TestOperation::EmitDiagnostic(InternalDiagnostic::new(
+                Message::KeywordInExpr,
+                iter::once(()),
+                (),
+            ))]
         )
     }
 
