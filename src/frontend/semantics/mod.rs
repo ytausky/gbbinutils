@@ -229,9 +229,9 @@ fn analyze_directive<'a, S: Session + 'a>(
     actions: &mut SemanticActions<'a, S>,
 ) -> Result<(), InternalDiagnostic<S::Span>> {
     match directive {
-        Directive::Db => Ok(analyze_data(Width::Byte, args, actions)),
+        Directive::Db => analyze_data(Width::Byte, args, actions),
         Directive::Ds => analyze_ds(args, actions),
-        Directive::Dw => Ok(analyze_data(Width::Word, args, actions)),
+        Directive::Dw => analyze_data(Width::Word, args, actions),
         Directive::Include => Ok(analyze_include(args, actions)),
         Directive::Org => Ok(analyze_org(args, actions)),
     }
@@ -241,13 +241,12 @@ fn analyze_data<'a, S: Session + 'a>(
     width: Width,
     args: CommandArgs<S>,
     actions: &mut SemanticActions<'a, S>,
-) {
+) -> Result<(), InternalDiagnostic<S::Span>> {
     for arg in args {
-        let expr = analyze_reloc_expr(arg, &mut actions.expr_factory)
-            .ok()
-            .unwrap();
+        let expr = analyze_reloc_expr(arg, &mut actions.expr_factory)?;
         actions.session.emit_item(backend::Item::Data(expr, width))
     }
+    Ok(())
 }
 
 fn analyze_ds<'a, S: Session + 'a>(
@@ -877,10 +876,32 @@ mod tests {
     }
 
     fn ds(f: impl for<'a> FnOnce(&mut super::ExprActions<'a, TestFrontend>)) -> Vec<TestOperation> {
+        unary_directive(Directive::Ds, f)
+    }
+
+    #[test]
+    fn data_with_malformed_expr() {
+        let actions = unary_directive(Directive::Db, |arg| {
+            arg.push_atom((ExprAtom::Literal(Literal::Operand(Operand::A)), ()))
+        });
+        assert_eq!(
+            actions,
+            [TestOperation::EmitDiagnostic(InternalDiagnostic::new(
+                Message::KeywordInExpr,
+                iter::once(()),
+                (),
+            ))]
+        )
+    }
+
+    fn unary_directive<F>(directive: Directive, f: F) -> Vec<TestOperation>
+    where
+        F: for<'a> FnOnce(&mut super::ExprActions<'a, TestFrontend>),
+    {
         collect_semantic_actions(|actions| {
             let mut arg = actions
                 .enter_line(None)
-                .enter_command((Command::Directive(Directive::Ds), ()))
+                .enter_command((Command::Directive(directive), ()))
                 .add_argument();
             f(&mut arg);
             arg.exit().exit().exit()
