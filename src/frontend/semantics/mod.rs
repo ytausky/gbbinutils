@@ -152,8 +152,8 @@ impl<'a, F: Session + 'a> syntax::CommandContext<F::Span> for CommandActions<'a,
 
     fn exit(mut self) -> Self::Parent {
         let result = match self.name {
-            (Command::Directive(directive), _) => {
-                analyze_directive(directive, self.args, &mut self.parent)
+            (Command::Directive(directive), span) => {
+                analyze_directive((directive, span), self.args, &mut self.parent)
             }
             (Command::Mnemonic(mnemonic), range) => {
                 analyze_mnemonic((mnemonic, range), self.args, &mut self.parent)
@@ -224,13 +224,13 @@ impl<'a, F: Session + 'a> syntax::ExprActions<F::Span> for ExprActions<'a, F> {
 }
 
 fn analyze_directive<'a, S: Session + 'a>(
-    directive: Directive,
+    directive: (Directive, S::Span),
     args: CommandArgs<S>,
     actions: &mut SemanticActions<'a, S>,
 ) -> Result<(), InternalDiagnostic<S::Span>> {
-    match directive {
+    match directive.0 {
         Directive::Db => analyze_data(Width::Byte, args, actions),
-        Directive::Ds => analyze_ds(args, actions),
+        Directive::Ds => analyze_ds(directive.1, args, actions),
         Directive::Dw => analyze_data(Width::Word, args, actions),
         Directive::Include => Ok(analyze_include(args, actions)),
         Directive::Org => Ok(analyze_org(args, actions)),
@@ -250,11 +250,19 @@ fn analyze_data<'a, S: Session + 'a>(
 }
 
 fn analyze_ds<'a, S: Session + 'a>(
+    span: S::Span,
     args: CommandArgs<S>,
     actions: &mut SemanticActions<'a, S>,
 ) -> Result<(), InternalDiagnostic<S::Span>> {
     use backend::RelocExpr;
-    let arg = args.into_iter().next().unwrap();
+    let arg = args.into_iter().next().ok_or(InternalDiagnostic::new(
+        Message::OperandCount {
+            actual: 0,
+            expected: 1,
+        },
+        iter::empty(),
+        span,
+    ))?;
     let span = arg.span.clone();
     let count = analyze_reloc_expr(arg, &mut actions.expr_factory)?;
     let expr = RelocExpr {
@@ -875,6 +883,22 @@ mod tests {
         )
     }
 
+    #[test]
+    fn ds_without_args() {
+        let actions = with_directive(Directive::Ds, |command| command);
+        assert_eq!(
+            actions,
+            [TestOperation::EmitDiagnostic(InternalDiagnostic::new(
+                Message::OperandCount {
+                    actual: 0,
+                    expected: 1
+                },
+                iter::empty(),
+                (),
+            ))]
+        )
+    }
+
     fn ds(f: impl for<'a> FnOnce(&mut super::ExprActions<'a, TestFrontend>)) -> Vec<TestOperation> {
         unary_directive(Directive::Ds, f)
     }
@@ -898,13 +922,23 @@ mod tests {
     where
         F: for<'a> FnOnce(&mut super::ExprActions<'a, TestFrontend>),
     {
-        collect_semantic_actions(|actions| {
-            let mut arg = actions
-                .enter_line(None)
-                .enter_command((Command::Directive(directive), ()))
-                .add_argument();
+        with_directive(directive, |command| {
+            let mut arg = command.add_argument();
             f(&mut arg);
-            arg.exit().exit().exit()
+            arg.exit()
+        })
+    }
+
+    fn with_directive<F>(directive: Directive, f: F) -> Vec<TestOperation>
+    where
+        F: for<'a> FnOnce(super::CommandActions<'a, TestFrontend>)
+            -> super::CommandActions<'a, TestFrontend>,
+    {
+        collect_semantic_actions(|actions| {
+            let command = actions
+                .enter_line(None)
+                .enter_command((Command::Directive(directive), ()));
+            f(command).exit().exit()
         })
     }
 
