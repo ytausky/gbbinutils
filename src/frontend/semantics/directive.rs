@@ -130,13 +130,8 @@ mod tests {
     #[test]
     fn build_include_item() {
         let filename = "file.asm";
-        let actions = collect_semantic_actions(|actions| {
-            let mut arg = actions
-                .enter_line(None)
-                .enter_command((Command::Directive(Directive::Include), ()))
-                .add_argument();
+        let actions = unary_directive(Directive::Include, |arg| {
             arg.push_atom((ExprAtom::Literal(Literal::String(filename.to_string())), ()));
-            arg.exit().exit().exit()
         });
         assert_eq!(
             actions,
@@ -150,14 +145,7 @@ mod tests {
     #[test]
     fn set_origin() {
         let origin = 0x3000;
-        let actions = collect_semantic_actions(|actions| {
-            let mut arg = actions
-                .enter_line(None)
-                .enter_command((Command::Directive(Directive::Org), ()))
-                .add_argument();
-            arg.push_atom((ExprAtom::Literal(Literal::Number(origin)), ()));
-            arg.exit().exit().exit()
-        });
+        let actions = unary_directive(Directive::Org, |arg| arg.push_atom(mk_literal(origin)));
         assert_eq!(actions, [TestOperation::SetOrigin(origin.into())])
     }
 
@@ -184,16 +172,13 @@ mod tests {
         mk_item: impl Fn(&i32) -> backend::Item<()>,
         data: impl Borrow<[i32]>,
     ) {
-        let actions = collect_semantic_actions(|actions| {
-            let mut command = actions
-                .enter_line(None)
-                .enter_command((Command::Directive(directive), ()));
+        let actions = with_directive(directive, |mut command| {
             for datum in data.borrow().iter() {
                 let mut arg = command.add_argument();
                 arg.push_atom(mk_literal(*datum));
                 command = arg.exit();
             }
-            command.exit().exit()
+            command
         });
         assert_eq!(
             actions,
