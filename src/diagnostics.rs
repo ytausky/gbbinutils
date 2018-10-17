@@ -95,6 +95,7 @@ pub enum Message {
     DestCannotBeConst,
     DestMustBeA,
     DestMustBeHl,
+    ExpectedString,
     IncompatibleOperand,
     KeywordInExpr,
     LdSpHlOperands,
@@ -149,6 +150,7 @@ impl Message {
             DestCannotBeConst => "destination operand cannot be a constant".into(),
             DestMustBeA => "destination of ALU operation must be `a`".into(),
             DestMustBeHl => "destination operand must be `hl`".into(),
+            ExpectedString => "expected string argument".into(),
             IncompatibleOperand => "operand cannot be used with this instruction".into(),
             KeywordInExpr => format!(
                 "keyword `{}` cannot appear in expression",

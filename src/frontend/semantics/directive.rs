@@ -89,7 +89,11 @@ where
         ExprVariant::Atom(SemanticAtom::Literal(Literal::String(path))) => {
             Ok(ChunkId::File((path, Some(arg.span))))
         }
-        _ => panic!(),
+        _ => Err(InternalDiagnostic::new(
+            Message::ExpectedString,
+            iter::empty(),
+            arg.span,
+        )),
     }
 }
 
@@ -241,6 +245,19 @@ mod tests {
     #[test]
     fn include_without_args() {
         test_unary_directive_without_args(Directive::Include)
+    }
+
+    #[test]
+    fn include_with_number() {
+        let actions = unary_directive(Directive::Include, |arg| arg.push_atom(mk_literal(7)));
+        assert_eq!(
+            actions,
+            [TestOperation::EmitDiagnostic(InternalDiagnostic::new(
+                Message::ExpectedString,
+                iter::empty(),
+                (),
+            ))]
+        )
     }
 
     #[test]
