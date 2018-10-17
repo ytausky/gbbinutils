@@ -204,15 +204,15 @@ impl<'a, F: Session + 'a> syntax::ExprActions<F::Span> for ExprActions<'a, F> {
     fn apply_operator(&mut self, operator: (ExprOperator, F::Span)) {
         match operator.0 {
             ExprOperator::Parentheses => {
-                let inner = self.stack.pop().unwrap();
+                let inner = self.stack.pop().unwrap_or_else(|| unreachable!());
                 self.stack.push(SemanticExpr {
                     variant: ExprVariant::Unary(SemanticUnary::Parentheses, Box::new(inner)),
                     span: operator.1,
                 })
             }
             ExprOperator::Plus => {
-                let rhs = self.stack.pop().unwrap();
-                let lhs = self.stack.pop().unwrap();
+                let rhs = self.stack.pop().unwrap_or_else(|| unreachable!());
+                let lhs = self.stack.pop().unwrap_or_else(|| unreachable!());
                 self.stack.push(SemanticExpr {
                     variant: ExprVariant::Binary(
                         SemanticBinary::Plus,

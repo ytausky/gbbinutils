@@ -142,7 +142,7 @@ impl Message {
             CannotDereference { category } => format!(
                 "{} `{}` cannot be dereferenced",
                 category,
-                snippets.next().unwrap(),
+                snippets.next().unwrap_or_else(|| unreachable!()),
             ),
             CannotSpecifyTarget => "branch target cannot be specified explicitly".into(),
             ConditionOutsideBranch => {
@@ -155,7 +155,7 @@ impl Message {
             IncompatibleOperand => "operand cannot be used with this instruction".into(),
             KeywordInExpr => format!(
                 "keyword `{}` cannot appear in expression",
-                snippets.next().unwrap(),
+                snippets.next().unwrap_or_else(|| unreachable!()),
             ),
             LdSpHlOperands => {
                 "the only legal 16-bit register to register transfer is from `hl` to `sp`".into()
@@ -168,21 +168,21 @@ impl Message {
                 format!(
                     "cannot load {}-bit source `{}` into {}-bit destination `{}`",
                     src_bits,
-                    snippets.next().unwrap(),
+                    snippets.next().unwrap_or_else(|| unreachable!()),
                     dest_bits,
-                    snippets.next().unwrap(),
+                    snippets.next().unwrap_or_else(|| unreachable!()),
                 )
             }
             MacroRequiresName => "macro definition must be preceded by label".into(),
             MissingTarget => "branch instruction requires target".into(),
             MustBeBit => format!(
                 "first operand of `{}` must be bit number",
-                snippets.next().unwrap()
+                snippets.next().unwrap_or_else(|| unreachable!())
             ),
             MustBeConst => "operand must be a constant".into(),
             MustBeDeref => format!(
                 "operand `{}` must be dereferenced",
-                snippets.next().unwrap()
+                snippets.next().unwrap_or_else(|| unreachable!())
             ),
             OnlySupportedByA => "only `a` can be used for this operand".into(),
             OperandCannotBeIncDec(operation) => format!(
@@ -200,7 +200,7 @@ impl Message {
             ),
             RequiresConstantTarget => format!(
                 "instruction `{}` requires a constant target",
-                snippets.next().unwrap(),
+                snippets.next().unwrap_or_else(|| unreachable!()),
             ),
             RequiresRegPair => "instruction requires a register pair".into(),
             RequiresSimpleOperand => "instruction requires 8-bit register or `(hl)`".into(),
@@ -210,7 +210,7 @@ impl Message {
             UnexpectedEof => "unexpected end of file".into(),
             UnexpectedToken => format!(
                 "encountered unexpected token `{}`",
-                snippets.next().unwrap(),
+                snippets.next().unwrap_or_else(|| unreachable!()),
             ),
             UnresolvedSymbol { symbol } => format!("symbol `{}` could not be resolved", symbol),
             ValueOutOfRange { value, width } => {
