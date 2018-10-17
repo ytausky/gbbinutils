@@ -1,14 +1,12 @@
-use backend::{self, BinaryOperator, RelocAtom, RelocExpr};
+use backend::{self, BinaryOperator, RelocExpr};
 use diagnostics::{DiagnosticsListener, InternalDiagnostic, Message};
 use expr::ExprVariant;
 use frontend::session::{ChunkId, Session};
 use frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token};
 use frontend::{ExprFactory, Literal, StrExprFactory};
-use span::Span;
-use std::fmt::Debug;
 use std::iter;
-use Width;
 
+mod directive;
 mod instruction;
 mod operand;
 
@@ -157,7 +155,7 @@ impl<'a, F: Session + 'a> syntax::CommandContext<F::Span> for CommandActions<'a,
     fn exit(mut self) -> Self::Parent {
         let result = match self.name {
             (Command::Directive(directive), span) => {
-                analyze_directive((directive, span), self.args, &mut self.parent)
+                directive::analyze_directive((directive, span), self.args, &mut self.parent)
             }
             (Command::Mnemonic(mnemonic), range) => {
                 analyze_mnemonic((mnemonic, range), self.args, &mut self.parent)
@@ -225,100 +223,6 @@ impl<'a, F: Session + 'a> syntax::ExprActions<F::Span> for ExprActions<'a, F> {
         self.parent.args.push(self.stack.pop().unwrap());
         self.parent
     }
-}
-
-fn analyze_directive<'a, S: Session + 'a>(
-    directive: (Directive, S::Span),
-    args: CommandArgs<S>,
-    actions: &mut SemanticActions<'a, S>,
-) -> Result<(), InternalDiagnostic<S::Span>> {
-    match directive.0 {
-        Directive::Db => analyze_data(Width::Byte, args, actions),
-        Directive::Ds => analyze_ds(directive.1, args, actions),
-        Directive::Dw => analyze_data(Width::Word, args, actions),
-        Directive::Include => {
-            analyze_include(args, actions);
-            Ok(())
-        }
-        Directive::Org => analyze_org(directive.1, args, actions),
-    }
-}
-
-fn analyze_data<'a, S: Session + 'a>(
-    width: Width,
-    args: CommandArgs<S>,
-    actions: &mut SemanticActions<'a, S>,
-) -> Result<(), InternalDiagnostic<S::Span>> {
-    for arg in args {
-        let expr = analyze_reloc_expr(arg, &mut actions.expr_factory)?;
-        actions.session.emit_item(backend::Item::Data(expr, width))
-    }
-    Ok(())
-}
-
-fn analyze_ds<'a, S: Session + 'a>(
-    span: S::Span,
-    args: CommandArgs<S>,
-    actions: &mut SemanticActions<'a, S>,
-) -> Result<(), InternalDiagnostic<S::Span>> {
-    let arg = single_arg(span, args)?;
-    let count = analyze_reloc_expr(arg, &mut actions.expr_factory)?;
-    actions
-        .session
-        .set_origin(location_counter_plus_expr(count));
-    Ok(())
-}
-
-fn location_counter_plus_expr<S: Clone>(expr: RelocExpr<S>) -> RelocExpr<S> {
-    let span = expr.span.clone();
-    RelocExpr {
-        variant: ExprVariant::Binary(
-            BinaryOperator::Plus,
-            Box::new(RelocExpr {
-                variant: ExprVariant::Atom(RelocAtom::LocationCounter),
-                span: span.clone(),
-            }),
-            Box::new(expr),
-        ),
-        span,
-    }
-}
-
-fn analyze_include<'a, F: Session + 'a>(
-    args: CommandArgs<F>,
-    actions: &mut SemanticActions<'a, F>,
-) {
-    actions.session.analyze_chunk(reduce_include(args));
-}
-
-fn analyze_org<'a, S: Session + 'a>(
-    span: S::Span,
-    args: CommandArgs<S>,
-    actions: &mut SemanticActions<'a, S>,
-) -> Result<(), InternalDiagnostic<S::Span>> {
-    let arg = single_arg(span, args)?;
-    let expr = analyze_reloc_expr(arg, &mut actions.expr_factory)?;
-    actions.session.set_origin(expr);
-    Ok(())
-}
-
-fn single_arg<T: Debug + PartialEq, S>(
-    span: S,
-    args: impl IntoIterator<Item = T>,
-) -> Result<T, InternalDiagnostic<S>> {
-    let mut args = args.into_iter();
-    let arg = args.next().ok_or_else(|| {
-        InternalDiagnostic::new(
-            Message::OperandCount {
-                actual: 0,
-                expected: 1,
-            },
-            iter::empty(),
-            span,
-        )
-    })?;
-    assert_eq!(args.next(), None);
-    Ok(arg)
 }
 
 fn analyze_mnemonic<'a, F: Session + 'a>(
@@ -473,17 +377,6 @@ impl<'a, F: Session + 'a> syntax::TokenSeqContext<F::Span> for MacroArgActions<'
     }
 }
 
-fn reduce_include<I, S: Span>(mut arguments: Vec<SemanticExpr<I, S>>) -> ChunkId<I, S> {
-    assert_eq!(arguments.len(), 1);
-    let path = arguments.pop().unwrap();
-    match path.variant {
-        ExprVariant::Atom(SemanticAtom::Literal(Literal::String(path_str))) => {
-            ChunkId::File((path_str, Some(path.span)))
-        }
-        _ => panic!(),
-    }
-}
-
 fn analyze_reloc_expr<I: Into<String>, S: Clone>(
     expr: SemanticExpr<I, S>,
     factory: &mut impl ExprFactory,
@@ -519,6 +412,7 @@ fn analyze_reloc_expr<I: Into<String>, S: Clone>(
 mod tests {
     use super::*;
 
+    use backend::RelocAtom;
     use diagnostics::{InternalDiagnostic, Message};
     use frontend::syntax::{
         keyword::Operand, CommandContext, ExprActions, FileContext, LineActions,
@@ -528,6 +422,7 @@ mod tests {
     use std::borrow::Borrow;
     use std::cell::RefCell;
     use std::iter::{empty, once};
+    use Width;
 
     struct TestFrontend(RefCell<Vec<TestOperation>>);
 
