@@ -117,3 +117,194 @@ fn single_arg<T: Debug + PartialEq, S>(
     assert_eq!(args.next(), None);
     Ok(arg)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use frontend::semantics;
+    use frontend::semantics::tests::*;
+    use frontend::syntax::keyword::{Command, Operand};
+    use frontend::syntax::{CommandContext, ExprActions, ExprAtom, FileContext, LineActions};
+    use std::borrow::Borrow;
+
+    #[test]
+    fn build_include_item() {
+        let filename = "file.asm";
+        let actions = collect_semantic_actions(|actions| {
+            let mut arg = actions
+                .enter_line(None)
+                .enter_command((Command::Directive(Directive::Include), ()))
+                .add_argument();
+            arg.push_atom((ExprAtom::Literal(Literal::String(filename.to_string())), ()));
+            arg.exit().exit().exit()
+        });
+        assert_eq!(
+            actions,
+            [TestOperation::AnalyzeChunk(ChunkId::File((
+                filename.to_string(),
+                Some(())
+            )))]
+        )
+    }
+
+    #[test]
+    fn set_origin() {
+        let origin = 0x3000;
+        let actions = collect_semantic_actions(|actions| {
+            let mut arg = actions
+                .enter_line(None)
+                .enter_command((Command::Directive(Directive::Org), ()))
+                .add_argument();
+            arg.push_atom((ExprAtom::Literal(Literal::Number(origin)), ()));
+            arg.exit().exit().exit()
+        });
+        assert_eq!(actions, [TestOperation::SetOrigin(origin.into())])
+    }
+
+    #[test]
+    fn emit_byte_items() {
+        test_data_items_emission(Directive::Db, mk_byte, [0x42, 0x78])
+    }
+
+    #[test]
+    fn emit_word_items() {
+        test_data_items_emission(Directive::Dw, mk_word, [0x4332, 0x780f])
+    }
+
+    fn mk_byte(byte: &i32) -> backend::Item<()> {
+        backend::Item::Data((*byte).into(), Width::Byte)
+    }
+
+    fn mk_word(word: &i32) -> backend::Item<()> {
+        backend::Item::Data((*word).into(), Width::Word)
+    }
+
+    fn test_data_items_emission(
+        directive: Directive,
+        mk_item: impl Fn(&i32) -> backend::Item<()>,
+        data: impl Borrow<[i32]>,
+    ) {
+        let actions = collect_semantic_actions(|actions| {
+            let mut command = actions
+                .enter_line(None)
+                .enter_command((Command::Directive(directive), ()));
+            for datum in data.borrow().iter() {
+                let mut arg = command.add_argument();
+                arg.push_atom(mk_literal(*datum));
+                command = arg.exit();
+            }
+            command.exit().exit()
+        });
+        assert_eq!(
+            actions,
+            data.borrow()
+                .iter()
+                .map(mk_item)
+                .map(TestOperation::EmitItem)
+                .collect::<Vec<_>>()
+        )
+    }
+
+    #[test]
+    fn reserve_3_bytes() {
+        let actions = ds(|arg| arg.push_atom(mk_literal(3)));
+        assert_eq!(
+            actions,
+            [TestOperation::SetOrigin(
+                ExprVariant::Binary(
+                    BinaryOperator::Plus,
+                    Box::new(RelocAtom::LocationCounter.into()),
+                    Box::new(3.into()),
+                ).into()
+            )]
+        )
+    }
+
+    fn mk_literal(n: i32) -> (ExprAtom<String, Literal<String>>, ()) {
+        (ExprAtom::Literal(Literal::Number(n)), ())
+    }
+
+    #[test]
+    fn ds_with_malformed_expr() {
+        let actions =
+            ds(|arg| arg.push_atom((ExprAtom::Literal(Literal::Operand(Operand::A)), ())));
+        assert_eq!(
+            actions,
+            [TestOperation::EmitDiagnostic(InternalDiagnostic::new(
+                Message::KeywordInExpr,
+                iter::once(()),
+                (),
+            ))]
+        )
+    }
+
+    #[test]
+    fn ds_without_args() {
+        test_unary_directive_without_args(Directive::Ds)
+    }
+
+    #[test]
+    fn org_without_args() {
+        test_unary_directive_without_args(Directive::Org)
+    }
+
+    #[test]
+    fn data_with_malformed_expr() {
+        let actions = unary_directive(Directive::Db, |arg| {
+            arg.push_atom((ExprAtom::Literal(Literal::Operand(Operand::A)), ()))
+        });
+        assert_eq!(
+            actions,
+            [TestOperation::EmitDiagnostic(InternalDiagnostic::new(
+                Message::KeywordInExpr,
+                iter::once(()),
+                (),
+            ))]
+        )
+    }
+
+    fn ds(
+        f: impl for<'a> FnOnce(&mut semantics::ExprActions<'a, TestFrontend>),
+    ) -> Vec<TestOperation> {
+        unary_directive(Directive::Ds, f)
+    }
+
+    fn unary_directive<F>(directive: Directive, f: F) -> Vec<TestOperation>
+    where
+        F: for<'a> FnOnce(&mut semantics::ExprActions<'a, TestFrontend>),
+    {
+        with_directive(directive, |command| {
+            let mut arg = command.add_argument();
+            f(&mut arg);
+            arg.exit()
+        })
+    }
+
+    fn test_unary_directive_without_args(directive: Directive) {
+        let actions = with_directive(directive, |command| command);
+        assert_eq!(
+            actions,
+            [TestOperation::EmitDiagnostic(InternalDiagnostic::new(
+                Message::OperandCount {
+                    actual: 0,
+                    expected: 1
+                },
+                iter::empty(),
+                (),
+            ))]
+        )
+    }
+
+    fn with_directive<F>(directive: Directive, f: F) -> Vec<TestOperation>
+    where
+        F: for<'a> FnOnce(semantics::CommandActions<'a, TestFrontend>)
+            -> semantics::CommandActions<'a, TestFrontend>,
+    {
+        collect_semantic_actions(|actions| {
+            let command = actions
+                .enter_line(None)
+                .enter_command((Command::Directive(directive), ()));
+            f(command).exit().exit()
+        })
+    }
+}
