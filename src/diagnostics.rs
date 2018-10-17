@@ -100,6 +100,7 @@ pub enum Message {
     KeywordInExpr,
     LdSpHlOperands,
     LdWidthMismatch { src: Width },
+    MacroRequiresName,
     MissingTarget,
     MustBeBit,
     MustBeConst,
@@ -172,6 +173,7 @@ impl Message {
                     snippets.next().unwrap(),
                 )
             }
+            MacroRequiresName => "macro definition must be preceded by label".into(),
             MissingTarget => "branch instruction requires target".into(),
             MustBeBit => format!(
                 "first operand of `{}` must be bit number",

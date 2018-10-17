@@ -99,8 +99,15 @@ impl<'a, F: Session + 'a> syntax::LineActions<F::Ident, Command, Literal<F::Iden
         CommandActions::new(name, self)
     }
 
-    fn enter_macro_def(mut self) -> Self::MacroParamsActions {
-        MacroDefActions::new(self.label.take().unwrap(), self)
+    fn enter_macro_def(mut self, keyword: F::Span) -> Self::MacroParamsActions {
+        if self.label.is_none() {
+            self.emit_diagnostic(InternalDiagnostic::new(
+                Message::MacroRequiresName,
+                iter::empty(),
+                keyword,
+            ))
+        }
+        MacroDefActions::new(self.label.take(), self)
     }
 
     fn enter_macro_invocation(mut self, name: (F::Ident, F::Span)) -> Self::MacroInvocationContext {
@@ -239,14 +246,17 @@ fn analyze_mnemonic<'a, F: Session + 'a>(
 }
 
 pub struct MacroDefActions<'a, F: Session + 'a> {
-    name: (F::Ident, F::Span),
+    name: Option<(F::Ident, F::Span)>,
     params: Vec<(F::Ident, F::Span)>,
     tokens: Vec<(Token<F::Ident>, F::Span)>,
     parent: SemanticActions<'a, F>,
 }
 
 impl<'a, F: Session + 'a> MacroDefActions<'a, F> {
-    fn new(name: (F::Ident, F::Span), parent: SemanticActions<'a, F>) -> MacroDefActions<'a, F> {
+    fn new(
+        name: Option<(F::Ident, F::Span)>,
+        parent: SemanticActions<'a, F>,
+    ) -> MacroDefActions<'a, F> {
         MacroDefActions {
             name,
             params: Vec::new(),
@@ -287,9 +297,11 @@ impl<'a, F: Session + 'a> syntax::TokenSeqContext<F::Span> for MacroDefActions<'
     }
 
     fn exit(self) -> Self::Parent {
-        self.parent
-            .session
-            .define_macro(self.name, self.params, self.tokens);
+        if let Some(name) = self.name {
+            self.parent
+                .session
+                .define_macro(name, self.params, self.tokens)
+        }
         self.parent
     }
 }
@@ -588,6 +600,22 @@ mod tests {
         )
     }
 
+    #[test]
+    fn define_nameless_macro() {
+        let actions = collect_semantic_actions(|actions| {
+            let params = actions.enter_line(None).enter_macro_def(());
+            TokenSeqContext::exit(MacroParamsActions::exit(params))
+        });
+        assert_eq!(
+            actions,
+            [TestOperation::EmitDiagnostic(InternalDiagnostic::new(
+                Message::MacroRequiresName,
+                empty(),
+                ()
+            ))]
+        )
+    }
+
     fn test_macro_definition(
         name: &str,
         params: impl Borrow<[&'static str]>,
@@ -596,7 +624,7 @@ mod tests {
         let actions = collect_semantic_actions(|actions| {
             let mut params_actions = actions
                 .enter_line(Some((name.to_string(), ())))
-                .enter_macro_def();
+                .enter_macro_def(());
             for param in params.borrow().iter().map(|t| (t.to_string(), ())) {
                 params_actions.add_parameter(param)
             }

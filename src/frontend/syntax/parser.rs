@@ -183,12 +183,12 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I> {
     }
 
     fn parse_macro_def<LA: LineActions<Id, C, L, S>>(&mut self, actions: LA) -> LA {
-        self.expect(Token::Macro);
+        let (_, span) = self.expect(Token::Macro);
         let mut actions = self.parse_terminated_list(
             Token::Comma,
             LINE_FOLLOW_SET,
             |p, a| p.parse_macro_param(a),
-            actions.enter_macro_def(),
+            actions.enter_macro_def(span),
         );
         if self.consume(Token::Eol) {
             let mut body_actions = actions.exit();
@@ -484,7 +484,7 @@ mod tests {
             self
         }
 
-        fn enter_macro_def(self) -> Self::MacroParamsActions {
+        fn enter_macro_def(self, _: SymRange<usize>) -> Self::MacroParamsActions {
             self.actions.borrow_mut().push(Action::EnterMacroDef);
             self.token_seq_kind = Some(TokenSeqKind::MacroDef);
             self

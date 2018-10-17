@@ -68,7 +68,7 @@ where
     type MacroInvocationContext: MacroInvocationContext<S, Token = Token<I, C, L>, Parent = Self>;
     type Parent;
     fn enter_command(self, name: (C, S)) -> Self::CommandContext;
-    fn enter_macro_def(self) -> Self::MacroParamsActions;
+    fn enter_macro_def(self, keyword: S) -> Self::MacroParamsActions;
     fn enter_macro_invocation(self, name: (I, S)) -> Self::MacroInvocationContext;
     fn exit(self) -> Self::Parent;
 }
