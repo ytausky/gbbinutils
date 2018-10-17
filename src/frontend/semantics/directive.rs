@@ -22,10 +22,7 @@ pub fn analyze_directive<'a, S: Session + 'a>(
         Directive::Db => analyze_data(Width::Byte, args, actions),
         Directive::Ds => analyze_ds(directive.1, args, actions),
         Directive::Dw => analyze_data(Width::Word, args, actions),
-        Directive::Include => {
-            analyze_include(args, actions);
-            Ok(())
-        }
+        Directive::Include => analyze_include(directive.1, args, actions),
         Directive::Org => analyze_org(directive.1, args, actions),
     }
 }
@@ -71,18 +68,26 @@ fn location_counter_plus_expr<S: Clone>(expr: RelocExpr<S>) -> RelocExpr<S> {
 }
 
 fn analyze_include<'a, F: Session + 'a>(
+    span: F::Span,
     args: CommandArgs<F>,
     actions: &mut SemanticActions<'a, F>,
-) {
-    actions.session.analyze_chunk(reduce_include(args));
+) -> Result<(), InternalDiagnostic<F::Span>> {
+    actions.session.analyze_chunk(reduce_include(span, args)?);
+    Ok(())
 }
 
-fn reduce_include<I, S: Span>(mut arguments: Vec<SemanticExpr<I, S>>) -> ChunkId<I, S> {
-    assert_eq!(arguments.len(), 1);
-    let path = arguments.pop().unwrap();
-    match path.variant {
-        ExprVariant::Atom(SemanticAtom::Literal(Literal::String(path_str))) => {
-            ChunkId::File((path_str, Some(path.span)))
+fn reduce_include<I, S>(
+    span: S,
+    args: Vec<SemanticExpr<I, S>>,
+) -> Result<ChunkId<I, S>, InternalDiagnostic<S>>
+where
+    I: Debug + PartialEq,
+    S: Span,
+{
+    let arg = single_arg(span, args)?;
+    match arg.variant {
+        ExprVariant::Atom(SemanticAtom::Literal(Literal::String(path))) => {
+            Ok(ChunkId::File((path, Some(arg.span))))
         }
         _ => panic!(),
     }
@@ -231,6 +236,11 @@ mod tests {
     #[test]
     fn org_without_args() {
         test_unary_directive_without_args(Directive::Org)
+    }
+
+    #[test]
+    fn include_without_args() {
+        test_unary_directive_without_args(Directive::Include)
     }
 
     #[test]
