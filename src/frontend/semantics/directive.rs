@@ -5,7 +5,7 @@ use backend;
 use backend::{BinaryOperator, RelocAtom};
 use diagnostics::{InternalDiagnostic, Message};
 use expr::ExprVariant;
-use frontend::session::{ChunkId, Session};
+use frontend::session::Session;
 use frontend::syntax::Literal;
 use instruction::RelocExpr;
 use span::Span;
@@ -72,23 +72,24 @@ fn analyze_include<'a, F: Session + 'a>(
     args: CommandArgs<F>,
     actions: &mut SemanticActions<'a, F>,
 ) -> Result<(), InternalDiagnostic<F::Span>> {
-    actions.session.analyze_chunk(reduce_include(span, args)?);
+    let path = reduce_include(span, args)?;
+    if let Err(_) = actions.session.analyze_file(path.0) {
+        unimplemented!()
+    }
     Ok(())
 }
 
 fn reduce_include<I, S>(
     span: S,
     args: Vec<SemanticExpr<I, S>>,
-) -> Result<ChunkId<I, S>, InternalDiagnostic<S>>
+) -> Result<(I, S), InternalDiagnostic<S>>
 where
     I: Debug + PartialEq,
     S: Span,
 {
     let arg = single_arg(span, args)?;
     match arg.variant {
-        ExprVariant::Atom(SemanticAtom::Literal(Literal::String(path))) => {
-            Ok(ChunkId::File((path, Some(arg.span))))
-        }
+        ExprVariant::Atom(SemanticAtom::Literal(Literal::String(path))) => Ok((path, arg.span)),
         _ => Err(InternalDiagnostic::new(
             Message::ExpectedString,
             iter::empty(),
@@ -142,13 +143,7 @@ mod tests {
         let actions = unary_directive(Directive::Include, |arg| {
             arg.push_atom((ExprAtom::Literal(Literal::String(filename.to_string())), ()));
         });
-        assert_eq!(
-            actions,
-            [TestOperation::AnalyzeChunk(ChunkId::File((
-                filename.to_string(),
-                Some(())
-            )))]
-        )
+        assert_eq!(actions, [TestOperation::AnalyzeFile(filename.to_string())])
     }
 
     #[test]

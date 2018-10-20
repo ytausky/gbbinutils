@@ -243,6 +243,7 @@ pub trait Codebase {
     fn buf(&self, buf_id: BufId) -> Rc<str>;
 }
 
+#[derive(Debug)]
 pub enum CodebaseError {
     Utf8Error,
 }

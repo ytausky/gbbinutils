@@ -5,7 +5,7 @@ mod syntax;
 use backend::*;
 use codebase::{Codebase, CodebaseError};
 use diagnostics::*;
-use frontend::session::{BorrowedComponents, ChunkId, Components, Session};
+use frontend::session::{BorrowedComponents, Components, Session};
 use frontend::syntax::*;
 use span::{LexemeRefFactory, Span, TokenTracker};
 use std::collections::HashMap;
@@ -32,7 +32,7 @@ pub fn analyze_file<
     let file_parser = FileParser::new(factory, MacroExpander::new(), token_provider);
     let mut session: Components<_, _, D, _, _, _> =
         Components::new(file_parser, backend, diagnostics);
-    session.analyze_chunk(ChunkId::File((name, None)));
+    session.analyze_file(name).unwrap();
     session.build_object()
 }
 
@@ -120,11 +120,25 @@ impl ExprFactory for StrExprFactory {
 pub trait Frontend {
     type Ident: AsRef<str> + Clone + Into<String> + Debug + PartialEq;
     type Span: Span;
-    fn analyze_chunk(
+
+    fn analyze_file<B, D>(
         &mut self,
-        chunk_id: ChunkId<Self::Ident, Self::Span>,
-        downstream: Downstream<impl Backend<Self::Span>, impl DiagnosticsListener<Self::Span>>,
-    );
+        path: Self::Ident,
+        downstream: Downstream<B, D>,
+    ) -> Result<(), CodebaseError>
+    where
+        B: Backend<Self::Span>,
+        D: DiagnosticsListener<Self::Span>;
+
+    fn invoke_macro<B, D>(
+        &mut self,
+        name: (Self::Ident, Self::Span),
+        args: Vec<Vec<(Token<Self::Ident>, Self::Span)>>,
+        downstream: Downstream<B, D>,
+    ) where
+        B: Backend<Self::Span>,
+        D: DiagnosticsListener<Self::Span>;
+
     fn define_macro(
         &mut self,
         name: (impl Into<Self::Ident>, Self::Span),
@@ -163,39 +177,6 @@ where
         let mut session = BorrowedComponents::new(self, downstream.backend, downstream.diagnostics);
         analysis.run(tokens.into_iter(), &mut session)
     }
-
-    fn include_source_file(
-        &mut self,
-        (filename, _): (&str, Option<TCS::Span>),
-        mut downstream: Downstream<impl Backend<TCS::Span>, impl DiagnosticsListener<TCS::Span>>,
-    ) {
-        let tokenized_src = self.tokenized_code_source.tokenize_file(filename);
-        match tokenized_src {
-            Ok(tokenized) => self.analyze_token_seq(&tokenized, &mut downstream),
-            Err(_) => unimplemented!(),
-        }
-    }
-
-    fn invoke_macro(
-        &mut self,
-        name: (<Self as Frontend>::Ident, <Self as Frontend>::Span),
-        args: Vec<TokenSeq<<Self as Frontend>::Ident, <Self as Frontend>::Span>>,
-        mut downstream: Downstream<impl Backend<TCS::Span>, impl DiagnosticsListener<TCS::Span>>,
-    ) {
-        match self.macros.expand(name.clone(), args) {
-            Some(tokens) => self.analyze_token_seq(tokens, &mut downstream),
-            None => {
-                let (name, name_ref) = name;
-                downstream
-                    .diagnostics
-                    .emit_diagnostic(InternalDiagnostic::new(
-                        Message::UndefinedMacro { name: name.into() },
-                        vec![],
-                        name_ref,
-                    ))
-            }
-        }
-    }
 }
 
 type TokenSeq<I, S> = Vec<(Token<I>, S)>;
@@ -210,16 +191,41 @@ where
     type Ident = TCS::Ident;
     type Span = TCS::Span;
 
-    fn analyze_chunk(
+    fn analyze_file<B, D>(
         &mut self,
-        chunk_id: ChunkId<Self::Ident, Self::Span>,
-        downstream: Downstream<impl Backend<Self::Span>, impl DiagnosticsListener<Self::Span>>,
-    ) {
-        match chunk_id {
-            ChunkId::File((name, span)) => {
-                self.include_source_file((name.as_ref(), span), downstream)
+        path: Self::Ident,
+        mut downstream: Downstream<B, D>,
+    ) -> Result<(), CodebaseError>
+    where
+        B: Backend<Self::Span>,
+        D: DiagnosticsListener<Self::Span>,
+    {
+        let tokenized_src = self.tokenized_code_source.tokenize_file(path.as_ref())?;
+        self.analyze_token_seq(&tokenized_src, &mut downstream);
+        Ok(())
+    }
+
+    fn invoke_macro<B, D>(
+        &mut self,
+        name: (Self::Ident, Self::Span),
+        args: Vec<Vec<(Token<Self::Ident>, Self::Span)>>,
+        mut downstream: Downstream<B, D>,
+    ) where
+        B: Backend<Self::Span>,
+        D: DiagnosticsListener<Self::Span>,
+    {
+        match self.macros.expand(name.clone(), args) {
+            Some(tokens) => self.analyze_token_seq(tokens, &mut downstream),
+            None => {
+                let (name, name_ref) = name;
+                downstream
+                    .diagnostics
+                    .emit_diagnostic(InternalDiagnostic::new(
+                        Message::UndefinedMacro { name: name.into() },
+                        vec![],
+                        name_ref,
+                    ))
             }
-            ChunkId::Macro { name, args } => self.invoke_macro(name, args, downstream),
         }
     }
 
@@ -460,8 +466,7 @@ mod tests {
             .given(|f| {
                 f.mock_token_source
                     .add_file(filename, add_code_refs(&contents))
-            })
-            .when(|mut session| session.analyze_chunk(ChunkId::File((filename.to_string(), None))));
+            }).when(|mut session| session.analyze_file(filename.to_string()).unwrap());
         assert_eq!(*log.borrow(), [TestEvent::AnalyzeTokens(contents)]);
     }
 
@@ -496,10 +501,7 @@ mod tests {
         let log = TestLog::default();
         TestFixture::new(&log).when(|mut session| {
             session.define_macro((name.to_string(), ()), Vec::new(), add_code_refs(&tokens));
-            session.analyze_chunk(ChunkId::Macro {
-                name: (name.to_string(), ()),
-                args: vec![],
-            })
+            session.invoke_macro((name.to_string(), ()), vec![])
         });
         assert_eq!(*log.borrow(), [TestEvent::AnalyzeTokens(tokens)]);
     }
@@ -522,10 +524,7 @@ mod tests {
                     (literal0.clone(), ()),
                 ],
             );
-            session.analyze_chunk(ChunkId::Macro {
-                name: (name.to_string(), ()),
-                args: vec![vec![(arg.clone(), ())]],
-            })
+            session.invoke_macro((name.to_string(), ()), vec![vec![(arg.clone(), ())]])
         });
         assert_eq!(
             *log.borrow(),
@@ -539,12 +538,7 @@ mod tests {
     fn diagnose_undefined_macro() {
         let name = "my_macro".to_string();
         let log = TestLog::default();
-        TestFixture::new(&log).when(|mut session| {
-            session.analyze_chunk(ChunkId::Macro {
-                name: (name.clone(), ()),
-                args: vec![],
-            })
-        });
+        TestFixture::new(&log).when(|mut session| session.invoke_macro((name.clone(), ()), vec![]));
         assert_eq!(
             *log.borrow(),
             [TestEvent::Diagnostic(InternalDiagnostic::new(

@@ -1,7 +1,9 @@
 use backend;
+use codebase::CodebaseError;
 use diagnostics;
 use diagnostics::InternalDiagnostic;
 use frontend;
+use frontend::{Downstream, Token};
 use span;
 use std::borrow::BorrowMut;
 use std::fmt::Debug;
@@ -10,7 +12,12 @@ use std::marker;
 pub trait Session {
     type Ident: Into<String> + Debug + PartialEq;
     type Span: span::Span;
-    fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::Ident, Self::Span>);
+    fn analyze_file(&mut self, path: Self::Ident) -> Result<(), CodebaseError>;
+    fn invoke_macro(
+        &mut self,
+        name: (Self::Ident, Self::Span),
+        args: Vec<Vec<(Token<Self::Ident>, Self::Span)>>,
+    );
     fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<Self::Span>);
     fn emit_item(&mut self, item: backend::Item<Self::Span>);
     fn define_label(&mut self, label: (String, Self::Span));
@@ -18,18 +25,9 @@ pub trait Session {
         &mut self,
         name: (impl Into<Self::Ident>, Self::Span),
         params: Vec<(Self::Ident, Self::Span)>,
-        tokens: Vec<(frontend::Token<Self::Ident>, Self::Span)>,
+        tokens: Vec<(Token<Self::Ident>, Self::Span)>,
     );
     fn set_origin(&mut self, origin: backend::RelocExpr<Self::Span>);
-}
-
-#[derive(Debug, PartialEq)]
-pub enum ChunkId<I, S> {
-    File((I, Option<S>)),
-    Macro {
-        name: (I, S),
-        args: Vec<Vec<(frontend::Token<I>, S)>>,
-    },
 }
 
 pub struct Components<F, B, D, BMF, BMB, BMD>
@@ -91,10 +89,25 @@ where
     type Ident = F::Ident;
     type Span = F::Span;
 
-    fn analyze_chunk(&mut self, chunk_id: ChunkId<Self::Ident, Self::Span>) {
-        self.frontend.borrow_mut().analyze_chunk(
-            chunk_id,
-            frontend::Downstream {
+    fn analyze_file(&mut self, path: Self::Ident) -> Result<(), CodebaseError> {
+        self.frontend.borrow_mut().analyze_file(
+            path,
+            Downstream {
+                backend: self.backend.borrow_mut(),
+                diagnostics: self.diagnostics.borrow_mut(),
+            },
+        )
+    }
+
+    fn invoke_macro(
+        &mut self,
+        name: (Self::Ident, Self::Span),
+        args: Vec<Vec<(Token<Self::Ident>, Self::Span)>>,
+    ) {
+        self.frontend.borrow_mut().invoke_macro(
+            name,
+            args,
+            Downstream {
                 backend: self.backend.borrow_mut(),
                 diagnostics: self.diagnostics.borrow_mut(),
             },
@@ -117,7 +130,7 @@ where
         &mut self,
         name: (impl Into<Self::Ident>, Self::Span),
         params: Vec<(Self::Ident, Self::Span)>,
-        tokens: Vec<(frontend::Token<Self::Ident>, Self::Span)>,
+        tokens: Vec<(Token<Self::Ident>, Self::Span)>,
     ) {
         self.frontend
             .borrow_mut()

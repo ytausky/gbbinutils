@@ -1,7 +1,7 @@
 use backend::{self, BinaryOperator, RelocExpr};
 use diagnostics::{DiagnosticsListener, InternalDiagnostic, Message};
 use expr::ExprVariant;
-use frontend::session::{ChunkId, Session};
+use frontend::session::Session;
 use frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token};
 use frontend::{ExprFactory, Literal, StrExprFactory};
 use std::iter;
@@ -347,10 +347,7 @@ impl<'a, F: Session + 'a> syntax::MacroInvocationContext<F::Span>
     }
 
     fn exit(self) -> Self::Parent {
-        self.parent.session.analyze_chunk(ChunkId::Macro {
-            name: self.name,
-            args: self.args,
-        });
+        self.parent.session.invoke_macro(self.name, self.args);
         self.parent
     }
 }
@@ -425,6 +422,7 @@ mod tests {
     use super::*;
 
     use backend::RelocAtom;
+    use codebase::CodebaseError;
     use diagnostics::{InternalDiagnostic, Message};
     use frontend::syntax::{
         keyword::Operand, CommandContext, ExprActions, FileContext, LineActions,
@@ -446,7 +444,8 @@ mod tests {
 
     #[derive(Debug, PartialEq)]
     pub enum TestOperation {
-        AnalyzeChunk(ChunkId<String, ()>),
+        AnalyzeFile(String),
+        InvokeMacro(String, Vec<Vec<Token<String>>>),
         DefineMacro(String, Vec<String>, Vec<Token<String>>),
         EmitDiagnostic(InternalDiagnostic<()>),
         EmitItem(backend::Item<()>),
@@ -458,10 +457,22 @@ mod tests {
         type Ident = String;
         type Span = ();
 
-        fn analyze_chunk(&mut self, chunk_id: ChunkId<String, Self::Span>) {
-            self.0
-                .borrow_mut()
-                .push(TestOperation::AnalyzeChunk(chunk_id))
+        fn analyze_file(&mut self, path: Self::Ident) -> Result<(), CodebaseError> {
+            self.0.borrow_mut().push(TestOperation::AnalyzeFile(path));
+            Ok(())
+        }
+
+        fn invoke_macro(
+            &mut self,
+            name: (Self::Ident, Self::Span),
+            args: Vec<Vec<(Token<Self::Ident>, Self::Span)>>,
+        ) {
+            self.0.borrow_mut().push(TestOperation::InvokeMacro(
+                name.0,
+                args.into_iter()
+                    .map(|arg| arg.into_iter().map(|(token, _)| token).collect())
+                    .collect(),
+            ))
         }
 
         fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<Self::Span>) {
@@ -655,10 +666,7 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [TestOperation::AnalyzeChunk(ChunkId::Macro {
-                name: (name.to_string(), ()),
-                args: Vec::new(),
-            })]
+            [TestOperation::InvokeMacro(name.to_string(), Vec::new())]
         )
     }
 
@@ -679,10 +687,10 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [TestOperation::AnalyzeChunk(ChunkId::Macro {
-                name: (name.to_string(), ()),
-                args: vec![vec![(arg_token, ())]],
-            })]
+            [TestOperation::InvokeMacro(
+                name.to_string(),
+                vec![vec![arg_token]]
+            )]
         )
     }
 
