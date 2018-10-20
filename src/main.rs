@@ -9,7 +9,8 @@ fn main() {
         println!("{}: error: no input files", args[0]);
         std::process::exit(1)
     }
-    let mut config = gbas::DiagnosticsConfig {
+    let mut config = gbas::Config {
+        input: &mut gbas::StdFileSystem::new(),
         output: &mut gbas::TerminalOutput {},
     };
     let filename = &args[1];

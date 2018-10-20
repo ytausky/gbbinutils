@@ -254,13 +254,13 @@ impl From<FromUtf8Error> for CodebaseError {
     }
 }
 
-pub struct FileCodebase<FS: FileSystem> {
-    fs: FS,
+pub struct FileCodebase<'a, FS: FileSystem + ?Sized + 'a> {
+    fs: &'a mut FS,
     pub cache: RefCell<TextCache>,
 }
 
-impl<FS: FileSystem> FileCodebase<FS> {
-    pub fn new(fs: FS) -> FileCodebase<FS> {
+impl<'a, FS: FileSystem + ?Sized> FileCodebase<'a, FS> {
+    pub fn new(fs: &'a mut FS) -> FileCodebase<FS> {
         FileCodebase {
             fs,
             cache: RefCell::new(TextCache::new()),
@@ -268,7 +268,7 @@ impl<FS: FileSystem> FileCodebase<FS> {
     }
 }
 
-impl<FS: FileSystem> Codebase for FileCodebase<FS> {
+impl<'a, FS: FileSystem + ?Sized> Codebase for FileCodebase<'a, FS> {
     fn open(&self, path: &str) -> Result<BufId, CodebaseError> {
         let data = self.fs.read_file(path);
         Ok(self

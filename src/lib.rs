@@ -1,4 +1,5 @@
 pub use backend::Rom;
+pub use codebase::StdFileSystem;
 pub use diagnostics::TerminalOutput;
 
 mod backend;
@@ -24,12 +25,13 @@ impl Width {
     }
 }
 
-pub struct DiagnosticsConfig<'a> {
+pub struct Config<'a> {
+    pub input: &'a mut dyn codebase::FileSystem,
     pub output: &'a mut dyn diagnostics::DiagnosticsOutput,
 }
 
-pub fn assemble<'a>(name: &str, config: &mut DiagnosticsConfig<'a>) -> Rom {
-    let codebase = codebase::FileCodebase::new(codebase::StdFileSystem::new());
+pub fn assemble<'a>(name: &str, config: &mut Config<'a>) -> Rom {
+    let codebase = codebase::FileCodebase::new(config.input);
     let mut diagnostics = diagnostics::OutputForwarder {
         output: config.output,
         codebase: &codebase.cache,
