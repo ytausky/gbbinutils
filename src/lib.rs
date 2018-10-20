@@ -34,12 +34,14 @@ pub fn assemble<'a>(name: &str, config: &mut DiagnosticsConfig<'a>) -> Rom {
         output: config.output,
         codebase: &codebase.cache,
     };
-    let object = frontend::analyze_file(
+    match frontend::analyze_file(
         name.to_string(),
         &codebase,
         span::SimpleTokenTracker {},
         backend::ObjectBuilder::new(),
         &mut diagnostics,
-    );
-    backend::link(object, &mut diagnostics).into_rom()
+    ) {
+        Ok(object) => backend::link(object, &mut diagnostics).into_rom(),
+        Err(_) => unimplemented!(),
+    }
 }

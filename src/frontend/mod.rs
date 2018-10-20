@@ -26,14 +26,14 @@ pub fn analyze_file<
     token_tracker: TT,
     backend: B,
     diagnostics: &mut D,
-) -> B::Object {
+) -> Result<B::Object, CodebaseError> {
     let factory = SemanticAnalysisFactory::new();
     let token_provider = TokenStreamSource::new(codebase, token_tracker);
     let file_parser = FileParser::new(factory, MacroExpander::new(), token_provider);
     let mut session: Components<_, _, D, _, _, _> =
         Components::new(file_parser, backend, diagnostics);
-    session.analyze_file(name).unwrap();
-    session.build_object()
+    session.analyze_file(name)?;
+    Ok(session.build_object())
 }
 
 pub struct Downstream<'a, B: 'a, D: 'a> {
