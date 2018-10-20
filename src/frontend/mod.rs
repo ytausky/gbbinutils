@@ -3,7 +3,7 @@ mod session;
 mod syntax;
 
 use backend::*;
-use codebase::Codebase;
+use codebase::{Codebase, CodebaseError};
 use diagnostics::*;
 use frontend::session::{BorrowedComponents, ChunkId, Components, Session};
 use frontend::syntax::*;
@@ -166,11 +166,14 @@ where
 
     fn include_source_file(
         &mut self,
-        filename: &str,
+        (filename, _): (&str, Option<TCS::Span>),
         mut downstream: Downstream<impl Backend<TCS::Span>, impl DiagnosticsListener<TCS::Span>>,
     ) {
         let tokenized_src = self.tokenized_code_source.tokenize_file(filename);
-        self.analyze_token_seq(&tokenized_src, &mut downstream)
+        match tokenized_src {
+            Ok(tokenized) => self.analyze_token_seq(&tokenized, &mut downstream),
+            Err(_) => unimplemented!(),
+        }
     }
 
     fn invoke_macro(
@@ -213,7 +216,9 @@ where
         downstream: Downstream<impl Backend<Self::Span>, impl DiagnosticsListener<Self::Span>>,
     ) {
         match chunk_id {
-            ChunkId::File((name, _)) => self.include_source_file(name.as_ref(), downstream),
+            ChunkId::File((name, span)) => {
+                self.include_source_file((name.as_ref(), span), downstream)
+            }
             ChunkId::Macro { name, args } => self.invoke_macro(name, args, downstream),
         }
     }
@@ -368,7 +373,7 @@ where
     type Ident: AsRef<str> + Clone + Into<String> + Debug + PartialEq;
     type Span: Span;
     type Tokenized;
-    fn tokenize_file(&mut self, filename: &str) -> Self::Tokenized;
+    fn tokenize_file(&mut self, filename: &str) -> Result<Self::Tokenized, CodebaseError>;
 }
 
 struct TokenStreamSource<'a, C: Codebase + 'a, TT: TokenTracker> {
@@ -390,10 +395,13 @@ impl<'a, C: Codebase + 'a, TT: TokenTracker> TokenizedCodeSource for TokenStream
     type Span = TT::Span;
     type Tokenized = TokenizedSrc<TT::BufContext>;
 
-    fn tokenize_file(&mut self, filename: &str) -> Self::Tokenized {
-        let buf_id = self.codebase.open(filename);
+    fn tokenize_file(&mut self, filename: &str) -> Result<Self::Tokenized, CodebaseError> {
+        let buf_id = self.codebase.open(filename)?;
         let rc_src = self.codebase.buf(buf_id);
-        TokenizedSrc::new(rc_src, self.token_tracker.mk_buf_context(buf_id, None))
+        Ok(TokenizedSrc::new(
+            rc_src,
+            self.token_tracker.mk_buf_context(buf_id, None),
+        ))
     }
 }
 
@@ -568,8 +576,8 @@ mod tests {
         type Span = ();
         type Tokenized = MockTokenized;
 
-        fn tokenize_file(&mut self, filename: &str) -> Self::Tokenized {
-            MockTokenized(self.files.get(filename).unwrap().clone())
+        fn tokenize_file(&mut self, filename: &str) -> Result<Self::Tokenized, CodebaseError> {
+            Ok(MockTokenized(self.files.get(filename).unwrap().clone()))
         }
     }
 

@@ -1,3 +1,4 @@
+use std::string::FromUtf8Error;
 use std::{cell::RefCell, cmp, fmt, fs, ops, rc::Rc};
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
@@ -216,7 +217,7 @@ fn build_line_ranges(src: &str) -> Vec<ops::Range<usize>> {
 }
 
 pub trait FileSystem {
-    fn read_file(&self, filename: &str) -> String;
+    fn read_file(&self, filename: &str) -> Vec<u8>;
 }
 
 pub struct StdFileSystem;
@@ -228,18 +229,28 @@ impl StdFileSystem {
 }
 
 impl FileSystem for StdFileSystem {
-    fn read_file(&self, filename: &str) -> String {
+    fn read_file(&self, filename: &str) -> Vec<u8> {
         use std::io::prelude::*;
         let mut file = fs::File::open(filename).unwrap();
-        let mut src = String::new();
-        file.read_to_string(&mut src).unwrap();
-        src
+        let mut data = Vec::new();
+        file.read_to_end(&mut data).unwrap();
+        data
     }
 }
 
 pub trait Codebase {
-    fn open(&self, path: &str) -> BufId;
+    fn open(&self, path: &str) -> Result<BufId, CodebaseError>;
     fn buf(&self, buf_id: BufId) -> Rc<str>;
+}
+
+pub enum CodebaseError {
+    Utf8Error,
+}
+
+impl From<FromUtf8Error> for CodebaseError {
+    fn from(_: FromUtf8Error) -> CodebaseError {
+        CodebaseError::Utf8Error
+    }
 }
 
 pub struct FileCodebase<FS: FileSystem> {
@@ -257,9 +268,12 @@ impl<FS: FileSystem> FileCodebase<FS> {
 }
 
 impl<FS: FileSystem> Codebase for FileCodebase<FS> {
-    fn open(&self, path: &str) -> BufId {
-        let text = self.fs.read_file(path);
-        self.cache.borrow_mut().add_src_buf(path.to_string(), text)
+    fn open(&self, path: &str) -> Result<BufId, CodebaseError> {
+        let data = self.fs.read_file(path);
+        Ok(self
+            .cache
+            .borrow_mut()
+            .add_src_buf(path.to_string(), String::from_utf8(data)?))
     }
 
     fn buf(&self, buf_id: BufId) -> Rc<str> {
