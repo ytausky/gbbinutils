@@ -252,8 +252,13 @@ impl fmt::Display for Width {
 #[derive(Debug, PartialEq)]
 pub struct Diagnostic<T> {
     file: T,
-    line: LineNumber,
     message: String,
+    location: Option<DiagnosticLocation<T>>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct DiagnosticLocation<T> {
+    line: LineNumber,
     source: T,
     highlight: TextRange,
 }
@@ -274,10 +279,12 @@ impl InternalDiagnostic<TokenRefData> {
                 let snippets = self.spans.iter().map(|span| mk_snippet(codebase, span));
                 Diagnostic {
                     file: buf.name().into(),
-                    line: highlight.start.line.into(),
                     message: self.message.render(snippets),
-                    source: source.into(),
-                    highlight,
+                    location: Some(DiagnosticLocation {
+                        line: highlight.start.line.into(),
+                        source: source.into(),
+                        highlight,
+                    }),
                 }
             }
         }
@@ -286,28 +293,33 @@ impl InternalDiagnostic<TokenRefData> {
 
 impl<T: Borrow<str>> fmt::Display for Diagnostic<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        assert_eq!(self.highlight.start.line, self.highlight.end.line);
-        let mut highlight = String::new();
-        let space_count = self.highlight.start.column_index;
-        let tilde_count = match self.highlight.end.column_index - space_count {
-            0 => 1,
-            n => n,
-        };
-        for _ in 0..space_count {
-            highlight.push(' ');
+        match &self.location {
+            None => writeln!(f, "{}: error: {}", self.file.borrow(), self.message),
+            Some(location) => {
+                assert_eq!(location.highlight.start.line, location.highlight.end.line);
+                let mut highlight = String::new();
+                let space_count = location.highlight.start.column_index;
+                let tilde_count = match location.highlight.end.column_index - space_count {
+                    0 => 1,
+                    n => n,
+                };
+                for _ in 0..space_count {
+                    highlight.push(' ');
+                }
+                for _ in 0..tilde_count {
+                    highlight.push('~');
+                }
+                writeln!(
+                    f,
+                    "{}:{}: error: {}\n{}\n{}",
+                    self.file.borrow(),
+                    location.line,
+                    self.message,
+                    location.source.borrow(),
+                    highlight,
+                )
+            }
         }
-        for _ in 0..tilde_count {
-            highlight.push('~');
-        }
-        writeln!(
-            f,
-            "{}:{}: error: {}\n{}\n{}",
-            self.file.borrow(),
-            self.line,
-            self.message,
-            self.source.borrow(),
-            highlight,
-        )
     }
 }
 
@@ -368,10 +380,12 @@ mod tests {
             diagnostic.elaborate(&codebase),
             Diagnostic {
                 file: DUMMY_FILE,
-                line: LineNumber(2),
                 message: "invocation of undefined macro `my_macro`".to_string(),
-                source: "    my_macro a, $12",
-                highlight: mk_highlight(LineNumber(2), 4, 12),
+                location: Some(DiagnosticLocation {
+                    line: LineNumber(2),
+                    source: "    my_macro a, $12",
+                    highlight: mk_highlight(LineNumber(2), 4, 12),
+                })
             }
         )
     }
@@ -380,10 +394,12 @@ mod tests {
     fn render_elaborated_diagnostic() {
         let elaborated_diagnostic = Diagnostic {
             file: DUMMY_FILE,
-            line: LineNumber(2),
             message: "invocation of undefined macro `my_macro`".to_string(),
-            source: "    my_macro a, $12",
-            highlight: mk_highlight(LineNumber(2), 4, 12),
+            location: Some(DiagnosticLocation {
+                line: LineNumber(2),
+                source: "    my_macro a, $12",
+                highlight: mk_highlight(LineNumber(2), 4, 12),
+            }),
         };
         let expected = r"/my/file:2: error: invocation of undefined macro `my_macro`
     my_macro a, $12
@@ -393,13 +409,27 @@ mod tests {
     }
 
     #[test]
+    fn render_diagnostic_without_source() {
+        let diagnostic = Diagnostic {
+            file: DUMMY_FILE,
+            message: "file constains invalid UTF-8".to_string(),
+            location: None,
+        };
+        let expected = r"/my/file: error: file constains invalid UTF-8
+";
+        assert_eq!(diagnostic.to_string(), expected);
+    }
+
+    #[test]
     fn highlight_eof_with_one_tilde() {
         let elaborated = Diagnostic {
             file: DUMMY_FILE,
-            line: LineNumber(2),
             message: "unexpected end of file".into(),
-            source: "dummy",
-            highlight: mk_highlight(LineNumber(2), 5, 5),
+            location: Some(DiagnosticLocation {
+                line: LineNumber(2),
+                source: "dummy",
+                highlight: mk_highlight(LineNumber(2), 5, 5),
+            }),
         };
         let expected = r"/my/file:2: error: unexpected end of file
 dummy
