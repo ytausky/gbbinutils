@@ -125,6 +125,7 @@ pub struct CommandActions<'a, F: Session + 'a> {
     name: (Command, F::Span),
     args: CommandArgs<F>,
     parent: SemanticActions<'a, F>,
+    has_errors: bool,
 }
 
 type CommandArgs<F> = Vec<SemanticExpr<<F as Session>::Ident, <F as Session>::Span>>;
@@ -135,12 +136,14 @@ impl<'a, F: Session + 'a> CommandActions<'a, F> {
             name,
             args: Vec::new(),
             parent,
+            has_errors: false,
         }
     }
 }
 
 impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for CommandActions<'a, F> {
     fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<F::Span>) {
+        self.has_errors = true;
         self.parent.emit_diagnostic(diagnostic)
     }
 }
@@ -160,16 +163,18 @@ impl<'a, F: Session + 'a> syntax::CommandContext<F::Span> for CommandActions<'a,
     }
 
     fn exit(mut self) -> Self::Parent {
-        let result = match self.name {
-            (Command::Directive(directive), span) => {
-                directive::analyze_directive((directive, span), self.args, &mut self.parent)
+        if !self.has_errors {
+            let result = match self.name {
+                (Command::Directive(directive), span) => {
+                    directive::analyze_directive((directive, span), self.args, &mut self.parent)
+                }
+                (Command::Mnemonic(mnemonic), range) => {
+                    analyze_mnemonic((mnemonic, range), self.args, &mut self.parent)
+                }
+            };
+            if let Err(diagnostic) = result {
+                self.parent.emit_diagnostic(diagnostic);
             }
-            (Command::Mnemonic(mnemonic), range) => {
-                analyze_mnemonic((mnemonic, range), self.args, &mut self.parent)
-            }
-        };
-        if let Err(diagnostic) = result {
-            self.parent.emit_diagnostic(diagnostic);
         }
         self.parent
     }
@@ -226,8 +231,10 @@ impl<'a, F: Session + 'a> syntax::ExprActions<F::Span> for ExprActions<'a, F> {
     }
 
     fn exit(mut self) -> Self::Parent {
-        assert_eq!(self.stack.len(), 1);
-        self.parent.args.push(self.stack.pop().unwrap());
+        if !self.parent.has_errors {
+            assert_eq!(self.stack.len(), 1);
+            self.parent.args.push(self.stack.pop().unwrap());
+        }
         self.parent
     }
 }
@@ -725,6 +732,20 @@ mod tests {
             let mut stmt = actions.enter_line(None);
             stmt.emit_diagnostic(diagnostic.clone());
             stmt.exit()
+        });
+        assert_eq!(actions, [TestOperation::EmitDiagnostic(diagnostic)])
+    }
+
+    #[test]
+    fn recover_from_malformed_expr() {
+        let diagnostic = InternalDiagnostic::new(Message::UnexpectedToken, once(()), ());
+        let actions = collect_semantic_actions(|file| {
+            let mut expr = file
+                .enter_line(None)
+                .enter_command((Command::Mnemonic(Mnemonic::Add), ()))
+                .add_argument();
+            expr.emit_diagnostic(diagnostic.clone());
+            expr.exit().exit().exit()
         });
         assert_eq!(actions, [TestOperation::EmitDiagnostic(diagnostic)])
     }
