@@ -5,15 +5,16 @@ use span::Span;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::iter;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum RpnAction<I, L> {
-    Push(ExprAtom<I, L>),
-    Apply(ExprOperator),
-    Error(Message),
+pub enum RpnAction<I, L, S> {
+    Push(ExprAtom<I, L>, S),
+    Apply(ExprOperator, S),
+    Diagnostic(InternalDiagnostic<S>),
 }
 
-pub type RpnExpr<I, L, S> = Vec<(RpnAction<I, L>, S)>;
+pub type RpnExpr<I, L, S> = Vec<RpnAction<I, L, S>>;
 
 pub fn expr() -> SymExpr {
     SymExpr(Vec::new())
@@ -34,8 +35,8 @@ impl SymExpr {
         atom_ctor: impl Fn(TokenRef) -> ExprAtom<TokenRef, TokenRef>,
     ) -> Self {
         let token_ref = token.into();
-        self.0.push((
-            RpnAction::Push(atom_ctor(token_ref.clone())),
+        self.0.push(RpnAction::Push(
+            atom_ctor(token_ref.clone()),
             token_ref.into(),
         ));
         self
@@ -44,18 +45,22 @@ impl SymExpr {
     pub fn parentheses(mut self, left: impl Into<TokenRef>, right: impl Into<TokenRef>) -> Self {
         let span = SymRange::from(left.into()).extend(&right.into().into());
         self.0
-            .push((RpnAction::Apply(ExprOperator::Parentheses), span));
+            .push(RpnAction::Apply(ExprOperator::Parentheses, span));
         self
     }
 
     pub fn plus(mut self, token: impl Into<TokenRef>) -> Self {
         self.0
-            .push((RpnAction::Apply(ExprOperator::Plus), token.into().into()));
+            .push(RpnAction::Apply(ExprOperator::Plus, token.into().into()));
         self
     }
 
     pub fn error(mut self, message: Message, highlight: impl Into<SymRange<TokenRef>>) -> Self {
-        self.0.push((RpnAction::Error(message), highlight.into()));
+        self.0.push(RpnAction::Diagnostic(InternalDiagnostic::new(
+            message,
+            iter::empty(),
+            highlight.into(),
+        )));
         self
     }
 }
@@ -263,10 +268,16 @@ pub fn empty() -> Option<StmtBody> {
 
 #[derive(Clone)]
 pub enum StmtBody {
-    Command(TokenRef, Vec<SymExpr>, Option<SymDiagnostic>),
+    Command(TokenRef, Vec<CommandBody>),
     Error(SymDiagnostic),
     Invoke(usize, Vec<TokenSeq>),
     MacroDef(Vec<usize>, MacroDefTail),
+}
+
+#[derive(Clone)]
+pub enum CommandBody {
+    Arg(SymExpr),
+    Diagnostic(SymDiagnostic),
 }
 
 #[derive(Clone)]
@@ -276,20 +287,19 @@ impl SymExpr {
     pub fn resolve(self, input: &InputTokens) -> RpnExpr<SymIdent, SymLiteral, SymRange<usize>> {
         self.0
             .into_iter()
-            .map(|(rpn, span)| {
-                (
-                    match rpn {
-                        RpnAction::Push(ExprAtom::Ident(ident)) => {
-                            RpnAction::Push(ExprAtom::Ident(SymIdent(ident.resolve(input))))
-                        }
-                        RpnAction::Push(ExprAtom::Literal(literal)) => {
-                            RpnAction::Push(ExprAtom::Literal(SymLiteral(literal.resolve(input))))
-                        }
-                        RpnAction::Apply(operator) => RpnAction::Apply(operator),
-                        RpnAction::Error(message) => RpnAction::Error(message),
-                    },
+            .map(|item| match item {
+                RpnAction::Push(ExprAtom::Ident(ident), span) => RpnAction::Push(
+                    ExprAtom::Ident(SymIdent(ident.resolve(input))),
                     span.resolve(input),
-                )
+                ),
+                RpnAction::Push(ExprAtom::Literal(literal), span) => RpnAction::Push(
+                    ExprAtom::Literal(SymLiteral(literal.resolve(input))),
+                    span.resolve(input),
+                ),
+                RpnAction::Apply(operator, span) => RpnAction::Apply(operator, span.resolve(input)),
+                RpnAction::Diagnostic(diagnostic) => {
+                    RpnAction::Diagnostic(diagnostic.resolve(input))
+                }
             }).collect()
     }
 
@@ -313,6 +323,16 @@ impl From<SymDiagnostic> for StmtBody {
     }
 }
 
+impl InternalDiagnostic<SymRange<TokenRef>> {
+    fn resolve(self, input: &InputTokens) -> InternalDiagnostic<SymRange<usize>> {
+        InternalDiagnostic::new(
+            self.message,
+            self.spans.into_iter().map(|span| span.resolve(input)),
+            self.highlight.resolve(input),
+        )
+    }
+}
+
 impl SymDiagnostic {
     pub fn resolve(self, input: &InputTokens) -> InternalDiagnostic<SymRange<usize>> {
         InternalDiagnostic::new(
@@ -330,8 +350,11 @@ impl SymDiagnostic {
 pub fn command(id: impl Into<TokenRef>, args: impl Borrow<[SymExpr]>) -> Option<StmtBody> {
     Some(StmtBody::Command(
         id.into(),
-        args.borrow().iter().cloned().collect(),
-        None,
+        args.borrow()
+            .iter()
+            .cloned()
+            .map(CommandBody::Arg)
+            .collect(),
     ))
 }
 
@@ -342,8 +365,12 @@ pub fn malformed_command(
 ) -> Option<StmtBody> {
     Some(StmtBody::Command(
         id.into(),
-        args.borrow().iter().cloned().collect(),
-        Some(diagnostic),
+        args.borrow()
+            .iter()
+            .cloned()
+            .map(CommandBody::Arg)
+            .chain(iter::once(CommandBody::Diagnostic(diagnostic)))
+            .collect(),
     ))
 }
 
@@ -394,15 +421,19 @@ impl StmtBody {
     fn into_actions(self, input: &InputTokens) -> Vec<Action> {
         let mut actions = Vec::new();
         match self {
-            StmtBody::Command(id, args, error) => {
+            StmtBody::Command(id, items) => {
                 actions.push(Action::EnterInstruction(SymCommand(id.resolve(input))));
-                for mut arg in args {
-                    actions.push(Action::EnterArgument);
-                    actions.push(arg.into_action(input));
-                    actions.push(Action::ExitArgument)
-                }
-                if let Some(diagnostic) = error {
-                    actions.push(diagnostic.into_action(input))
+                for mut item in items {
+                    match item {
+                        CommandBody::Arg(arg) => {
+                            actions.push(Action::EnterArgument);
+                            actions.push(arg.into_action(input));
+                            actions.push(Action::ExitArgument)
+                        }
+                        CommandBody::Diagnostic(diagnostic) => {
+                            actions.push(diagnostic.into_action(input))
+                        }
+                    }
                 }
                 actions.push(Action::ExitInstruction)
             }

@@ -598,10 +598,8 @@ mod tests {
 
     impl DiagnosticsListener<SymRange<usize>> for ExprContext {
         fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymRange<usize>>) {
-            self.rpn_expr.push((
-                RpnAction::Error(diagnostic.message.clone()),
-                diagnostic.highlight.clone(),
-            ));
+            self.rpn_expr
+                .push(RpnAction::Diagnostic(diagnostic.clone()));
             self.diagnostics.push(diagnostic)
         }
     }
@@ -612,12 +610,11 @@ mod tests {
         type Parent = (TestRpnExpr, Vec<InternalDiagnostic<SymRange<usize>>>);
 
         fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, SymRange<usize>)) {
-            self.rpn_expr.push((RpnAction::Push(atom.0), atom.1))
+            self.rpn_expr.push(RpnAction::Push(atom.0, atom.1))
         }
 
         fn apply_operator(&mut self, operator: (ExprOperator, SymRange<usize>)) {
-            self.rpn_expr
-                .push((RpnAction::Apply(operator.0), operator.1))
+            self.rpn_expr.push(RpnAction::Apply(operator.0, operator.1))
         }
 
         fn exit(self) -> Self::Parent {
