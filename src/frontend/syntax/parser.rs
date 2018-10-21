@@ -386,9 +386,17 @@ where
     fn parse_parenthesized_expression(&mut self) {
         let (_, left) = self.expect(Token::OpeningParenthesis);
         self.parse_expression();
-        let (_, right) = self.expect(Token::ClosingParenthesis);
-        self.actions
-            .apply_operator((ExprOperator::Parentheses, left.extend(&right)))
+        if self.lookahead() == Token::ClosingParenthesis {
+            let (_, right) = self.expect(Token::ClosingParenthesis);
+            self.actions
+                .apply_operator((ExprOperator::Parentheses, left.extend(&right)))
+        } else {
+            self.actions.emit_diagnostic(InternalDiagnostic::new(
+                Message::UnmatchedParenthesis,
+                iter::empty(),
+                left,
+            ));
+        }
     }
 
     fn parse_infix_expr(&mut self) {
@@ -401,6 +409,10 @@ where
     }
 
     fn parse_atomic_expr(&mut self) {
+        if self.lookahead() == Token::Eof {
+            return;
+        }
+
         let (token, span) = self.bump();
         match token {
             Token::Ident(ident) => self.actions.push_atom((ExprAtom::Ident(ident), span)),
@@ -540,8 +552,8 @@ mod tests {
     }
 
     impl<'a> DiagnosticsListener<SymRange<usize>> for ArgContext<'a> {
-        fn emit_diagnostic(&mut self, _: InternalDiagnostic<SymRange<usize>>) {
-            unimplemented!()
+        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymRange<usize>>) {
+            self.expr_context.emit_diagnostic(diagnostic)
         }
     }
 
@@ -586,6 +598,10 @@ mod tests {
 
     impl DiagnosticsListener<SymRange<usize>> for ExprContext {
         fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymRange<usize>>) {
+            self.rpn_expr.push((
+                RpnAction::Error(diagnostic.message.clone()),
+                diagnostic.highlight.clone(),
+            ));
             self.diagnostics.push(diagnostic)
         }
     }
@@ -992,6 +1008,17 @@ mod tests {
         assert_eq_expr_diagnostics(
             input,
             InternalDiagnostic::new(Message::UnexpectedToken, iter::once(span.clone()), span),
+        )
+    }
+
+    #[test]
+    fn diagnose_unmatched_parentheses() {
+        assert_eq_actions(
+            input_tokens![Command(()), paren @ OpeningParenthesis],
+            file([unlabeled(command(
+                0,
+                [expr().error(Message::UnmatchedParenthesis, TokenRef::from("paren"))],
+            ))]),
         )
     }
 }

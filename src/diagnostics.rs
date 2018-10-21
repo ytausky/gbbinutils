@@ -118,6 +118,7 @@ pub enum Message {
     UndefinedMacro { name: String },
     UnexpectedEof,
     UnexpectedToken,
+    UnmatchedParenthesis,
     UnresolvedSymbol { symbol: String },
     ValueOutOfRange { value: i32, width: Width },
 }
@@ -215,6 +216,7 @@ impl Message {
                 "encountered unexpected token `{}`",
                 snippets.next().unwrap_or_else(|| unreachable!()),
             ),
+            UnmatchedParenthesis => "unmatched parenthesis".into(),
             UnresolvedSymbol { symbol } => format!("symbol `{}` could not be resolved", symbol),
             ValueOutOfRange { value, width } => {
                 format!("value {} cannot be represented in a {}", value, width)

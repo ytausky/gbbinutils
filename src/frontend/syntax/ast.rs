@@ -10,6 +10,7 @@ use std::fmt::Debug;
 pub enum RpnAction<I, L> {
     Push(ExprAtom<I, L>),
     Apply(ExprOperator),
+    Error(Message),
 }
 
 pub type RpnExpr<I, L, S> = Vec<(RpnAction<I, L>, S)>;
@@ -50,6 +51,11 @@ impl SymExpr {
     pub fn plus(mut self, token: impl Into<TokenRef>) -> Self {
         self.0
             .push((RpnAction::Apply(ExprOperator::Plus), token.into().into()));
+        self
+    }
+
+    pub fn error(mut self, message: Message, highlight: impl Into<SymRange<TokenRef>>) -> Self {
+        self.0.push((RpnAction::Error(message), highlight.into()));
         self
     }
 }
@@ -280,6 +286,7 @@ impl SymExpr {
                             RpnAction::Push(ExprAtom::Literal(SymLiteral(literal.resolve(input))))
                         }
                         RpnAction::Apply(operator) => RpnAction::Apply(operator),
+                        RpnAction::Error(message) => RpnAction::Error(message),
                     },
                     span.resolve(input),
                 )
