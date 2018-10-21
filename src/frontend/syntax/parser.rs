@@ -407,7 +407,7 @@ where
             Token::Literal(literal) => self.actions.push_atom((ExprAtom::Literal(literal), span)),
             _ => self.actions.emit_diagnostic(InternalDiagnostic::new(
                 Message::UnexpectedToken,
-                iter::empty(),
+                iter::once(span.clone()),
                 span,
             )),
         }
@@ -988,13 +988,10 @@ mod tests {
     #[test]
     fn diagnose_unexpected_token_in_expr() {
         let input = input_tokens![plus @ Plus];
+        let span: SymRange<_> = TokenRef::from("plus").into();
         assert_eq_expr_diagnostics(
             input,
-            InternalDiagnostic::new(
-                Message::UnexpectedToken,
-                iter::empty(),
-                TokenRef::from("plus").into(),
-            ),
+            InternalDiagnostic::new(Message::UnexpectedToken, iter::once(span.clone()), span),
         )
     }
 }
