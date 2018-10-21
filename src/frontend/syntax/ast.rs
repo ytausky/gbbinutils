@@ -169,7 +169,7 @@ pub enum Action {
     AddParameter(SymIdent),
     EnterArgument,
     EnterInstruction(SymCommand),
-    EnterLine(Option<SymIdent>),
+    EnterStmt(Option<SymIdent>),
     EnterMacroArg,
     EnterMacroBody,
     EnterMacroDef,
@@ -177,7 +177,7 @@ pub enum Action {
     Error(InternalDiagnostic<SymRange<usize>>),
     ExitArgument,
     ExitInstruction,
-    ExitLine,
+    ExitStmt,
     ExitMacroArg,
     ExitMacroDef,
     ExitMacroInvocation,
@@ -220,49 +220,49 @@ impl SymRange<TokenRef> {
     }
 }
 
-pub struct File(Vec<Line>);
+pub struct File(Vec<Stmt>);
 
-pub fn file(lines: impl Borrow<[Line]>) -> File {
-    File(lines.borrow().iter().cloned().collect())
+pub fn file(stmts: impl Borrow<[Stmt]>) -> File {
+    File(stmts.borrow().iter().cloned().collect())
 }
 
 impl File {
     pub fn into_actions(self, input: &InputTokens) -> Vec<Action> {
         self.0
             .into_iter()
-            .flat_map(|line| line.into_actions(input))
+            .flat_map(|stmt| stmt.into_actions(input))
             .collect()
     }
 }
 
 #[derive(Clone)]
-pub struct Line(Option<usize>, Option<LineBody>);
+pub struct Stmt(Option<usize>, Option<StmtBody>);
 
-pub fn labeled(label: usize, body: Option<LineBody>) -> Line {
-    Line(Some(label), body)
+pub fn labeled(label: usize, body: Option<StmtBody>) -> Stmt {
+    Stmt(Some(label), body)
 }
 
-pub fn unlabeled(body: Option<LineBody>) -> Line {
-    Line(None, body)
+pub fn unlabeled(body: Option<StmtBody>) -> Stmt {
+    Stmt(None, body)
 }
 
-impl Line {
+impl Stmt {
     fn into_actions(self, input: &InputTokens) -> Vec<Action> {
-        let mut actions = vec![Action::EnterLine(self.0.map(|id| SymIdent(id)))];
+        let mut actions = vec![Action::EnterStmt(self.0.map(|id| SymIdent(id)))];
         if let Some(body) = self.1 {
             actions.append(&mut body.into_actions(input))
         }
-        actions.push(Action::ExitLine);
+        actions.push(Action::ExitStmt);
         actions
     }
 }
 
-pub fn empty() -> Option<LineBody> {
+pub fn empty() -> Option<StmtBody> {
     None
 }
 
 #[derive(Clone)]
-pub enum LineBody {
+pub enum StmtBody {
     Command(TokenRef, Vec<SymExpr>, Option<SymDiagnostic>),
     Error(SymDiagnostic),
     Invoke(usize, Vec<TokenSeq>),
@@ -307,9 +307,9 @@ pub enum MacroDefTail {
 #[derive(Clone)]
 pub struct SymDiagnostic(pub InternalDiagnostic<SymRange<TokenRef>>);
 
-impl From<SymDiagnostic> for LineBody {
+impl From<SymDiagnostic> for StmtBody {
     fn from(diagnostic: SymDiagnostic) -> Self {
-        LineBody::Error(diagnostic)
+        StmtBody::Error(diagnostic)
     }
 }
 
@@ -327,8 +327,8 @@ impl SymDiagnostic {
     }
 }
 
-pub fn command(id: impl Into<TokenRef>, args: impl Borrow<[SymExpr]>) -> Option<LineBody> {
-    Some(LineBody::Command(
+pub fn command(id: impl Into<TokenRef>, args: impl Borrow<[SymExpr]>) -> Option<StmtBody> {
+    Some(StmtBody::Command(
         id.into(),
         args.borrow().iter().cloned().collect(),
         None,
@@ -339,16 +339,16 @@ pub fn malformed_command(
     id: impl Into<TokenRef>,
     args: impl Borrow<[SymExpr]>,
     diagnostic: SymDiagnostic,
-) -> Option<LineBody> {
-    Some(LineBody::Command(
+) -> Option<StmtBody> {
+    Some(StmtBody::Command(
         id.into(),
         args.borrow().iter().cloned().collect(),
         Some(diagnostic),
     ))
 }
 
-pub fn invoke(id: usize, args: impl Borrow<[TokenSeq]>) -> Option<LineBody> {
-    Some(LineBody::Invoke(
+pub fn invoke(id: usize, args: impl Borrow<[TokenSeq]>) -> Option<StmtBody> {
+    Some(StmtBody::Invoke(
         id,
         args.borrow().iter().cloned().collect(),
     ))
@@ -358,9 +358,9 @@ pub fn macro_def(
     params: impl Borrow<[usize]>,
     body: impl Borrow<[usize]>,
     endm: usize,
-) -> Option<LineBody> {
+) -> Option<StmtBody> {
     use std::iter::once;
-    Some(LineBody::MacroDef(
+    Some(StmtBody::MacroDef(
         params.borrow().iter().cloned().collect(),
         MacroDefTail::Body(
             body.borrow().iter().cloned().chain(once(endm)).collect(),
@@ -372,8 +372,8 @@ pub fn macro_def(
 pub fn malformed_macro_def_head(
     params: impl Borrow<[usize]>,
     diagnostic: SymDiagnostic,
-) -> Option<LineBody> {
-    Some(LineBody::MacroDef(
+) -> Option<StmtBody> {
+    Some(StmtBody::MacroDef(
         params.borrow().iter().cloned().collect(),
         MacroDefTail::Error(diagnostic),
     ))
@@ -383,18 +383,18 @@ pub fn malformed_macro_def(
     params: impl Borrow<[usize]>,
     body: impl Borrow<[usize]>,
     diagnostic: SymDiagnostic,
-) -> Option<LineBody> {
-    Some(LineBody::MacroDef(
+) -> Option<StmtBody> {
+    Some(StmtBody::MacroDef(
         params.borrow().iter().cloned().collect(),
         MacroDefTail::Body(body.borrow().iter().cloned().collect(), Some(diagnostic)),
     ))
 }
 
-impl LineBody {
+impl StmtBody {
     fn into_actions(self, input: &InputTokens) -> Vec<Action> {
         let mut actions = Vec::new();
         match self {
-            LineBody::Command(id, args, error) => {
+            StmtBody::Command(id, args, error) => {
                 actions.push(Action::EnterInstruction(SymCommand(id.resolve(input))));
                 for mut arg in args {
                     actions.push(Action::EnterArgument);
@@ -406,8 +406,8 @@ impl LineBody {
                 }
                 actions.push(Action::ExitInstruction)
             }
-            LineBody::Error(diagnostic) => actions.push(diagnostic.into_action(input)),
-            LineBody::Invoke(id, args) => {
+            StmtBody::Error(diagnostic) => actions.push(diagnostic.into_action(input)),
+            StmtBody::Invoke(id, args) => {
                 actions.push(Action::EnterMacroInvocation(SymIdent(id)));
                 for arg in args {
                     actions.push(Action::EnterMacroArg);
@@ -416,7 +416,7 @@ impl LineBody {
                 }
                 actions.push(Action::ExitMacroInvocation)
             }
-            LineBody::MacroDef(params, tail) => {
+            StmtBody::MacroDef(params, tail) => {
                 actions.push(Action::EnterMacroDef);
                 actions.extend(
                     params
@@ -459,11 +459,11 @@ impl TokenSeq {
     }
 }
 
-pub fn line_error(
+pub fn stmt_error(
     message: Message,
     ranges: impl Borrow<[&'static str]>,
     highlight: impl Into<TokenRef>,
-) -> Option<LineBody> {
+) -> Option<StmtBody> {
     Some(arg_error(message, ranges, highlight).into())
 }
 

@@ -134,7 +134,7 @@ mod tests {
     use frontend::semantics;
     use frontend::semantics::tests::*;
     use frontend::syntax::keyword::{Command, Operand};
-    use frontend::syntax::{CommandContext, ExprActions, ExprAtom, FileContext, LineActions};
+    use frontend::syntax::{CommandContext, ExprAtom, ExprContext, FileContext, StmtContext};
     use std::borrow::Borrow;
 
     #[test]
@@ -271,14 +271,14 @@ mod tests {
     }
 
     fn ds(
-        f: impl for<'a> FnOnce(&mut semantics::ExprActions<'a, TestFrontend>),
+        f: impl for<'a> FnOnce(&mut semantics::ExprContext<'a, TestFrontend>),
     ) -> Vec<TestOperation> {
         unary_directive(Directive::Ds, f)
     }
 
     fn unary_directive<F>(directive: Directive, f: F) -> Vec<TestOperation>
     where
-        F: for<'a> FnOnce(&mut semantics::ExprActions<'a, TestFrontend>),
+        F: for<'a> FnOnce(&mut semantics::ExprContext<'a, TestFrontend>),
     {
         with_directive(directive, |command| {
             let mut arg = command.add_argument();
@@ -309,7 +309,7 @@ mod tests {
     {
         collect_semantic_actions(|actions| {
             let command = actions
-                .enter_line(None)
+                .enter_stmt(None)
                 .enter_command((Command::Directive(directive), ()));
             f(command).exit().exit()
         })

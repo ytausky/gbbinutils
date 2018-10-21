@@ -31,7 +31,7 @@ impl<C, I, L, E> Token<C, I, L, E> {
 
 const LINE_FOLLOW_SET: &[TokenKind] = &[Token::Eol, Token::Eof];
 
-pub fn parse_src<Id, C, L, S, I, F>(tokens: I, actions: F)
+pub fn parse_src<Id, C, L, S, I, F>(tokens: I, context: F)
 where
     S: Span,
     I: Iterator<Item = (Token<Id, C, L>, S)>,
@@ -40,7 +40,7 @@ where
     let mut parser = Parser {
         tokens: tokens.peekable(),
     };
-    parser.parse_file(actions)
+    parser.parse_file(context)
 }
 
 struct Parser<I: Iterator> {
@@ -141,138 +141,138 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I> {
     mk_expect!(expect_command, Command, C);
     mk_expect!(expect_ident, Ident, Id);
 
-    fn parse_file<F: FileContext<Id, C, L, S>>(&mut self, actions: F) {
-        self.parse_terminated_list(Token::Eol, &[Token::Eof], |p, c| p.parse_line(c), actions);
+    fn parse_file<F: FileContext<Id, C, L, S>>(&mut self, context: F) {
+        self.parse_terminated_list(Token::Eol, &[Token::Eof], |p, c| p.parse_stmt(c), context);
     }
 
-    fn parse_line<F: FileContext<Id, C, L, S>>(&mut self, actions: F) -> F {
+    fn parse_stmt<F: FileContext<Id, C, L, S>>(&mut self, context: F) -> F {
         if self.lookahead() == Token::Ident(()) {
-            self.parse_potentially_labeled_line(actions)
+            self.parse_potentially_labeled_stmt(context)
         } else {
-            self.parse_unlabeled_line(actions.enter_line(None)).exit()
+            self.parse_unlabeled_stmt(context.enter_stmt(None)).exit()
         }
     }
 
-    fn parse_potentially_labeled_line<F: FileContext<Id, C, L, S>>(&mut self, actions: F) -> F {
+    fn parse_potentially_labeled_stmt<F: FileContext<Id, C, L, S>>(&mut self, context: F) -> F {
         let ident = self.expect_ident();
         if self.consume(Token::Colon) {
-            self.parse_unlabeled_line(actions.enter_line(Some(ident)))
+            self.parse_unlabeled_stmt(context.enter_stmt(Some(ident)))
         } else {
-            self.parse_macro_invocation(ident, actions.enter_line(None))
+            self.parse_macro_invocation(ident, context.enter_stmt(None))
         }.exit()
     }
 
-    fn parse_unlabeled_line<LA: LineActions<Id, C, L, S>>(&mut self, mut actions: LA) -> LA {
+    fn parse_unlabeled_stmt<LA: StmtContext<Id, C, L, S>>(&mut self, mut context: LA) -> LA {
         match self.lookahead() {
-            Token::Eol | Token::Eof => actions,
-            Token::Command(()) => self.parse_command(actions),
+            Token::Eol | Token::Eof => context,
+            Token::Command(()) => self.parse_command(context),
             Token::Ident(()) => {
                 let ident = self.expect_ident();
-                self.parse_macro_invocation(ident, actions)
+                self.parse_macro_invocation(ident, context)
             }
-            Token::Macro => self.parse_macro_def(actions),
+            Token::Macro => self.parse_macro_def(context),
             _ => {
                 let (_, range) = self.bump();
-                actions.emit_diagnostic(InternalDiagnostic::new(
+                context.emit_diagnostic(InternalDiagnostic::new(
                     Message::UnexpectedToken,
                     vec![range.clone()],
                     range,
                 ));
-                actions
+                context
             }
         }
     }
 
-    fn parse_macro_def<LA: LineActions<Id, C, L, S>>(&mut self, actions: LA) -> LA {
+    fn parse_macro_def<LA: StmtContext<Id, C, L, S>>(&mut self, context: LA) -> LA {
         let (_, span) = self.expect(Token::Macro);
-        let mut actions = self.parse_terminated_list(
+        let mut context = self.parse_terminated_list(
             Token::Comma,
             LINE_FOLLOW_SET,
             |p, a| p.parse_macro_param(a),
-            actions.enter_macro_def(span),
+            context.enter_macro_def(span),
         );
         if self.consume(Token::Eol) {
-            let mut body_actions = actions.exit();
+            let mut body_context = context.exit();
             self.take_token_while(
                 |x| x != Token::Endm && x != Token::Eof,
-                |token| body_actions.push_token(token),
+                |token| body_context.push_token(token),
             );
             if self.lookahead() == Token::Endm {
                 let endm = self.bump();
-                body_actions.push_token((Token::Eof, endm.1));
+                body_context.push_token((Token::Eof, endm.1));
             } else {
                 assert_eq!(self.lookahead(), Token::Eof);
-                body_actions.emit_diagnostic(InternalDiagnostic::new(
+                body_context.emit_diagnostic(InternalDiagnostic::new(
                     Message::UnexpectedEof,
                     iter::empty(),
                     self.tokens.peek().unwrap().1.clone(),
                 ))
             }
-            body_actions
+            body_context
         } else {
             assert_eq!(self.lookahead(), Token::Eof);
-            actions.emit_diagnostic(InternalDiagnostic::new(
+            context.emit_diagnostic(InternalDiagnostic::new(
                 Message::UnexpectedEof,
                 iter::empty(),
                 self.tokens.peek().unwrap().1.clone(),
             ));
-            actions.exit()
+            context.exit()
         }.exit()
     }
 
-    fn parse_macro_param<MPA>(&mut self, mut actions: MPA) -> MPA
+    fn parse_macro_param<MPA>(&mut self, mut context: MPA) -> MPA
     where
-        MPA: MacroParamsActions<S, Command = C, Ident = Id, Literal = L>,
+        MPA: MacroParamsContext<S, Command = C, Ident = Id, Literal = L>,
     {
-        actions.add_parameter(self.expect_ident());
-        actions
+        context.add_parameter(self.expect_ident());
+        context
     }
 
-    fn parse_command<LA: LineActions<Id, C, L, S>>(&mut self, actions: LA) -> LA {
+    fn parse_command<LA: StmtContext<Id, C, L, S>>(&mut self, context: LA) -> LA {
         let first_token = self.expect_command();
-        let mut command_context = actions.enter_command(first_token);
+        let mut command_context = context.enter_command(first_token);
         command_context = self.parse_argument_list(command_context);
         command_context.exit()
     }
 
-    fn parse_macro_invocation<LA: LineActions<Id, C, L, S>>(
+    fn parse_macro_invocation<LA: StmtContext<Id, C, L, S>>(
         &mut self,
         name: (Id, S),
-        actions: LA,
+        context: LA,
     ) -> LA {
-        let mut invocation_context = actions.enter_macro_invocation(name);
+        let mut invocation_context = context.enter_macro_invocation(name);
         invocation_context = self.parse_macro_arg_list(invocation_context);
         invocation_context.exit()
     }
 
     fn parse_argument_list<CC: CommandContext<S, Command = C, Ident = Id, Literal = L>>(
         &mut self,
-        actions: CC,
+        context: CC,
     ) -> CC {
         self.parse_terminated_list(
             Token::Comma,
             LINE_FOLLOW_SET,
             |p, c| p.parse_argument(c),
-            actions,
+            context,
         )
     }
 
     fn parse_macro_arg_list<M: MacroInvocationContext<S, Token = Token<Id, C, L>>>(
         &mut self,
-        actions: M,
+        context: M,
     ) -> M {
         self.parse_terminated_list(
             Token::Comma,
             LINE_FOLLOW_SET,
-            |p, actions| {
-                let mut arg_context = actions.enter_macro_arg();
+            |p, context| {
+                let mut arg_context = context.enter_macro_arg();
                 p.take_token_while(
                     |x| x != Token::Comma && x != Token::Eol && x != Token::Eof,
                     |token| arg_context.push_token(token),
                 );
                 arg_context.exit()
             },
-            actions,
+            context,
         )
     }
 
@@ -324,33 +324,33 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I> {
         &mut self,
         delimiter: TokenKind,
         parser: &mut P,
-        mut actions: A,
+        mut context: A,
     ) -> A
     where
         P: FnMut(&mut Self, A) -> A,
         A: DiagnosticsListener<S>,
     {
-        actions = parser(self, actions);
+        context = parser(self, context);
         while self.consume(delimiter) {
-            actions = parser(self, actions)
+            context = parser(self, context)
         }
-        actions
+        context
     }
 
     fn parse_argument<CC: CommandContext<S, Command = C, Ident = Id, Literal = L>>(
         &mut self,
-        actions: CC,
+        context: CC,
     ) -> CC {
         ExprParser {
             tokens: self,
-            actions: actions.add_argument(),
+            context: context.add_argument(),
         }.parse()
     }
 }
 
 struct ExprParser<'a, T: 'a, A> {
     tokens: &'a mut T,
-    actions: A,
+    context: A,
 }
 
 impl<'a, T: TokenStream + 'a, A> TokenStream for ExprParser<'a, T, A> {
@@ -368,11 +368,11 @@ impl<'a, T: TokenStream + 'a, A> TokenStream for ExprParser<'a, T, A> {
 impl<'a, T, A> ExprParser<'a, T, A>
 where
     T: TokenStream + 'a,
-    A: ExprActions<T::Span, Ident = T::Ident, Literal = T::Literal>,
+    A: ExprContext<T::Span, Ident = T::Ident, Literal = T::Literal>,
 {
     fn parse(mut self) -> A::Parent {
         self.parse_expression();
-        self.actions.exit()
+        self.context.exit()
     }
 
     fn parse_expression(&mut self) {
@@ -388,10 +388,10 @@ where
         self.parse_expression();
         if self.lookahead() == Token::ClosingParenthesis {
             let (_, right) = self.expect(Token::ClosingParenthesis);
-            self.actions
+            self.context
                 .apply_operator((ExprOperator::Parentheses, left.extend(&right)))
         } else {
-            self.actions.emit_diagnostic(InternalDiagnostic::new(
+            self.context.emit_diagnostic(InternalDiagnostic::new(
                 Message::UnmatchedParenthesis,
                 iter::empty(),
                 left,
@@ -404,7 +404,7 @@ where
         while self.lookahead() == Token::Plus {
             let (_, plus_span) = self.bump();
             self.parse_atomic_expr();
-            self.actions.apply_operator((ExprOperator::Plus, plus_span));
+            self.context.apply_operator((ExprOperator::Plus, plus_span));
         }
     }
 
@@ -415,9 +415,9 @@ where
 
         let (token, span) = self.bump();
         match token {
-            Token::Ident(ident) => self.actions.push_atom((ExprAtom::Ident(ident), span)),
-            Token::Literal(literal) => self.actions.push_atom((ExprAtom::Literal(literal), span)),
-            _ => self.actions.emit_diagnostic(InternalDiagnostic::new(
+            Token::Ident(ident) => self.context.push_atom((ExprAtom::Ident(ident), span)),
+            Token::Literal(literal) => self.context.push_atom((ExprAtom::Literal(literal), span)),
+            _ => self.context.emit_diagnostic(InternalDiagnostic::new(
                 Message::UnexpectedToken,
                 iter::once(span.clone()),
                 span,
@@ -469,21 +469,21 @@ mod tests {
     impl<'a> syntax::FileContext<SymIdent, SymCommand, SymLiteral, SymRange<usize>>
         for &'a mut TestContext
     {
-        type LineActions = Self;
+        type StmtContext = Self;
 
-        fn enter_line(self, label: Option<(SymIdent, SymRange<usize>)>) -> Self::LineActions {
+        fn enter_stmt(self, label: Option<(SymIdent, SymRange<usize>)>) -> Self::StmtContext {
             self.actions
                 .borrow_mut()
-                .push(Action::EnterLine(label.map(|(ident, _)| ident)));
+                .push(Action::EnterStmt(label.map(|(ident, _)| ident)));
             self
         }
     }
 
-    impl<'a> syntax::LineActions<SymIdent, SymCommand, SymLiteral, SymRange<usize>>
+    impl<'a> syntax::StmtContext<SymIdent, SymCommand, SymLiteral, SymRange<usize>>
         for &'a mut TestContext
     {
         type CommandContext = Self;
-        type MacroParamsActions = Self;
+        type MacroParamsContext = Self;
         type MacroInvocationContext = Self;
         type Parent = Self;
 
@@ -497,7 +497,7 @@ mod tests {
             self
         }
 
-        fn enter_macro_def(self, _: SymRange<usize>) -> Self::MacroParamsActions {
+        fn enter_macro_def(self, _: SymRange<usize>) -> Self::MacroParamsContext {
             self.actions.borrow_mut().push(Action::EnterMacroDef);
             self.token_seq_kind = Some(TokenSeqKind::MacroDef);
             self
@@ -514,7 +514,7 @@ mod tests {
         }
 
         fn exit(self) -> Self::Parent {
-            self.actions.borrow_mut().push(Action::ExitLine);
+            self.actions.borrow_mut().push(Action::ExitStmt);
             self
         }
     }
@@ -523,10 +523,10 @@ mod tests {
         type Command = SymCommand;
         type Ident = SymIdent;
         type Literal = SymLiteral;
-        type ArgActions = ArgContext<'a>;
+        type ArgContext = ArgContext<'a>;
         type Parent = Self;
 
-        fn add_argument(self) -> Self::ArgActions {
+        fn add_argument(self) -> Self::ArgContext {
             self.actions.borrow_mut().push(Action::EnterArgument);
             ArgContext::new(self)
         }
@@ -557,7 +557,7 @@ mod tests {
         }
     }
 
-    impl<'a> syntax::ExprActions<SymRange<usize>> for ArgContext<'a> {
+    impl<'a> syntax::ExprContext<SymRange<usize>> for ArgContext<'a> {
         type Ident = SymIdent;
         type Literal = SymLiteral;
         type Parent = &'a mut TestContext;
@@ -606,7 +606,7 @@ mod tests {
         }
     }
 
-    impl syntax::ExprActions<SymRange<usize>> for ExprContext {
+    impl syntax::ExprContext<SymRange<usize>> for ExprContext {
         type Ident = SymIdent;
         type Literal = SymLiteral;
         type Parent = (TestRpnExpr, Vec<InternalDiagnostic<SymRange<usize>>>);
@@ -625,18 +625,18 @@ mod tests {
         }
     }
 
-    impl<'a> syntax::MacroParamsActions<SymRange<usize>> for &'a mut TestContext {
+    impl<'a> syntax::MacroParamsContext<SymRange<usize>> for &'a mut TestContext {
         type Ident = SymIdent;
         type Command = SymCommand;
         type Literal = SymLiteral;
-        type MacroBodyActions = Self;
+        type MacroBodyContext = Self;
         type Parent = Self;
 
         fn add_parameter(&mut self, (ident, _): (SymIdent, SymRange<usize>)) {
             self.actions.borrow_mut().push(Action::AddParameter(ident))
         }
 
-        fn exit(self) -> Self::MacroBodyActions {
+        fn exit(self) -> Self::MacroBodyContext {
             self.actions.borrow_mut().push(Action::EnterMacroBody);
             self
         }
@@ -682,7 +682,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_empty_line() {
+    fn parse_empty_stmt() {
         assert_eq_actions(
             input_tokens![Eol],
             file([unlabeled(empty()), unlabeled(empty())]),
@@ -953,7 +953,7 @@ mod tests {
         let tokens = &mut with_spans(&input.tokens).peekable();
         let parser = ExprParser {
             tokens,
-            actions: ExprContext::new(),
+            context: ExprContext::new(),
         };
         parser.parse()
     }
@@ -962,7 +962,7 @@ mod tests {
     fn diagnose_stmt_starting_with_literal() {
         assert_eq_actions(
             input_tokens![a @ Literal(())],
-            file([unlabeled(line_error(Message::UnexpectedToken, ["a"], "a"))]),
+            file([unlabeled(stmt_error(Message::UnexpectedToken, ["a"], "a"))]),
         )
     }
 

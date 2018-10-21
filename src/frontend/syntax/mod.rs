@@ -50,16 +50,16 @@ pub trait FileContext<I, C, L, S>
 where
     Self: DiagnosticsListener<S> + Sized,
 {
-    type LineActions: LineActions<I, C, L, S, Parent = Self>;
-    fn enter_line(self, label: Option<(I, S)>) -> Self::LineActions;
+    type StmtContext: StmtContext<I, C, L, S, Parent = Self>;
+    fn enter_stmt(self, label: Option<(I, S)>) -> Self::StmtContext;
 }
 
-pub trait LineActions<I, C, L, S>
+pub trait StmtContext<I, C, L, S>
 where
     Self: DiagnosticsListener<S> + Sized,
 {
     type CommandContext: CommandContext<S, Ident = I, Command = C, Literal = L, Parent = Self>;
-    type MacroParamsActions: MacroParamsActions<
+    type MacroParamsContext: MacroParamsContext<
         S,
         Ident = I,
         Command = C,
@@ -69,7 +69,7 @@ where
     type MacroInvocationContext: MacroInvocationContext<S, Token = Token<I, C, L>, Parent = Self>;
     type Parent;
     fn enter_command(self, name: (C, S)) -> Self::CommandContext;
-    fn enter_macro_def(self, keyword: S) -> Self::MacroParamsActions;
+    fn enter_macro_def(self, keyword: S) -> Self::MacroParamsContext;
     fn enter_macro_invocation(self, name: (I, S)) -> Self::MacroInvocationContext;
     fn exit(self) -> Self::Parent;
 }
@@ -81,13 +81,13 @@ where
     type Ident;
     type Command;
     type Literal;
-    type ArgActions: ExprActions<S, Ident = Self::Ident, Literal = Self::Literal, Parent = Self>;
+    type ArgContext: ExprContext<S, Ident = Self::Ident, Literal = Self::Literal, Parent = Self>;
     type Parent;
-    fn add_argument(self) -> Self::ArgActions;
+    fn add_argument(self) -> Self::ArgContext;
     fn exit(self) -> Self::Parent;
 }
 
-pub trait ExprActions<S>
+pub trait ExprContext<S>
 where
     Self: DiagnosticsListener<S>,
 {
@@ -111,18 +111,18 @@ pub enum ExprOperator {
     Plus,
 }
 
-pub trait MacroParamsActions<S>: DiagnosticsListener<S> {
+pub trait MacroParamsContext<S>: DiagnosticsListener<S> {
     type Ident;
     type Command;
     type Literal;
-    type MacroBodyActions: TokenSeqContext<
+    type MacroBodyContext: TokenSeqContext<
         S,
         Token = Token<Self::Ident, Self::Command, Self::Literal>,
         Parent = Self::Parent,
     >;
     type Parent;
     fn add_parameter(&mut self, param: (Self::Ident, S));
-    fn exit(self) -> Self::MacroBodyActions;
+    fn exit(self) -> Self::MacroBodyContext;
 }
 
 pub trait MacroInvocationContext<S>

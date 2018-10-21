@@ -78,19 +78,19 @@ impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for SemanticActions<'a, F
 impl<'a, F: Session + 'a> syntax::FileContext<F::Ident, Command, Literal<F::Ident>, F::Span>
     for SemanticActions<'a, F>
 {
-    type LineActions = Self;
+    type StmtContext = Self;
 
-    fn enter_line(mut self, label: Option<(F::Ident, F::Span)>) -> Self::LineActions {
+    fn enter_stmt(mut self, label: Option<(F::Ident, F::Span)>) -> Self::StmtContext {
         self.label = label;
         self
     }
 }
 
-impl<'a, F: Session + 'a> syntax::LineActions<F::Ident, Command, Literal<F::Ident>, F::Span>
+impl<'a, F: Session + 'a> syntax::StmtContext<F::Ident, Command, Literal<F::Ident>, F::Span>
     for SemanticActions<'a, F>
 {
     type CommandContext = CommandActions<'a, F>;
-    type MacroParamsActions = MacroDefActions<'a, F>;
+    type MacroParamsContext = MacroDefActions<'a, F>;
     type MacroInvocationContext = MacroInvocationActions<'a, F>;
     type Parent = Self;
 
@@ -99,7 +99,7 @@ impl<'a, F: Session + 'a> syntax::LineActions<F::Ident, Command, Literal<F::Iden
         CommandActions::new(name, self)
     }
 
-    fn enter_macro_def(mut self, keyword: F::Span) -> Self::MacroParamsActions {
+    fn enter_macro_def(mut self, keyword: F::Span) -> Self::MacroParamsContext {
         if self.label.is_none() {
             self.emit_diagnostic(InternalDiagnostic::new(
                 Message::MacroRequiresName,
@@ -152,11 +152,11 @@ impl<'a, F: Session + 'a> syntax::CommandContext<F::Span> for CommandActions<'a,
     type Ident = F::Ident;
     type Command = Command;
     type Literal = Literal<F::Ident>;
-    type ArgActions = ExprActions<'a, F>;
+    type ArgContext = ExprContext<'a, F>;
     type Parent = SemanticActions<'a, F>;
 
-    fn add_argument(self) -> Self::ArgActions {
-        ExprActions {
+    fn add_argument(self) -> Self::ArgContext {
+        ExprContext {
             stack: Vec::new(),
             parent: self,
         }
@@ -180,18 +180,18 @@ impl<'a, F: Session + 'a> syntax::CommandContext<F::Span> for CommandActions<'a,
     }
 }
 
-pub struct ExprActions<'a, F: Session + 'a> {
+pub struct ExprContext<'a, F: Session + 'a> {
     stack: Vec<SemanticExpr<F::Ident, F::Span>>,
     parent: CommandActions<'a, F>,
 }
 
-impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for ExprActions<'a, F> {
+impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for ExprContext<'a, F> {
     fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<F::Span>) {
         self.parent.emit_diagnostic(diagnostic)
     }
 }
 
-impl<'a, F: Session + 'a> syntax::ExprActions<F::Span> for ExprActions<'a, F> {
+impl<'a, F: Session + 'a> syntax::ExprContext<F::Span> for ExprContext<'a, F> {
     type Ident = F::Ident;
     type Literal = Literal<F::Ident>;
     type Parent = CommandActions<'a, F>;
@@ -279,18 +279,18 @@ impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for MacroDefActions<'a, F
     }
 }
 
-impl<'a, F: Session + 'a> syntax::MacroParamsActions<F::Span> for MacroDefActions<'a, F> {
+impl<'a, F: Session + 'a> syntax::MacroParamsContext<F::Span> for MacroDefActions<'a, F> {
     type Ident = F::Ident;
     type Command = Command;
     type Literal = Literal<F::Ident>;
-    type MacroBodyActions = Self;
+    type MacroBodyContext = Self;
     type Parent = SemanticActions<'a, F>;
 
     fn add_parameter(&mut self, param: (Self::Ident, F::Span)) {
         self.params.push(param)
     }
 
-    fn exit(self) -> Self::MacroBodyActions {
+    fn exit(self) -> Self::MacroBodyContext {
         self
     }
 }
@@ -347,10 +347,10 @@ impl<'a, F: Session + 'a> syntax::MacroInvocationContext<F::Span>
 {
     type Token = Token<F::Ident>;
     type Parent = SemanticActions<'a, F>;
-    type MacroArgContext = MacroArgActions<'a, F>;
+    type MacroArgContext = MacroArgContext<'a, F>;
 
     fn enter_macro_arg(self) -> Self::MacroArgContext {
-        MacroArgActions::new(self)
+        MacroArgContext::new(self)
     }
 
     fn exit(self) -> Self::Parent {
@@ -359,27 +359,27 @@ impl<'a, F: Session + 'a> syntax::MacroInvocationContext<F::Span>
     }
 }
 
-pub struct MacroArgActions<'a, F: Session + 'a> {
+pub struct MacroArgContext<'a, F: Session + 'a> {
     tokens: Vec<(Token<F::Ident>, F::Span)>,
     parent: MacroInvocationActions<'a, F>,
 }
 
-impl<'a, F: Session + 'a> MacroArgActions<'a, F> {
-    fn new(parent: MacroInvocationActions<'a, F>) -> MacroArgActions<'a, F> {
-        MacroArgActions {
+impl<'a, F: Session + 'a> MacroArgContext<'a, F> {
+    fn new(parent: MacroInvocationActions<'a, F>) -> MacroArgContext<'a, F> {
+        MacroArgContext {
             tokens: Vec::new(),
             parent,
         }
     }
 }
 
-impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for MacroArgActions<'a, F> {
+impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for MacroArgContext<'a, F> {
     fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<F::Span>) {
         self.parent.parent.session.emit_diagnostic(diagnostic)
     }
 }
 
-impl<'a, F: Session + 'a> syntax::TokenSeqContext<F::Span> for MacroArgActions<'a, F> {
+impl<'a, F: Session + 'a> syntax::TokenSeqContext<F::Span> for MacroArgContext<'a, F> {
     type Token = Token<F::Ident>;
     type Parent = MacroInvocationActions<'a, F>;
 
@@ -432,8 +432,8 @@ mod tests {
     use codebase::CodebaseError;
     use diagnostics::{InternalDiagnostic, Message};
     use frontend::syntax::{
-        keyword::Operand, CommandContext, ExprActions, FileContext, LineActions,
-        MacroInvocationContext, MacroParamsActions, TokenSeqContext,
+        keyword::Operand, CommandContext, ExprContext, FileContext, MacroInvocationContext,
+        MacroParamsContext, StmtContext, TokenSeqContext,
     };
     use instruction::RelocExpr;
     use std::borrow::Borrow;
@@ -519,7 +519,7 @@ mod tests {
         use instruction::*;
         let actions = collect_semantic_actions(|actions| {
             let mut command = actions
-                .enter_line(None)
+                .enter_stmt(None)
                 .enter_command((Command::Mnemonic(Mnemonic::Ld), ()));
             let mut arg1 = command.add_argument();
             arg1.push_atom((ExprAtom::Literal(Literal::Operand(Operand::B)), ()));
@@ -542,7 +542,7 @@ mod tests {
         use instruction::*;
         let actions = collect_semantic_actions(|actions| {
             let command = actions
-                .enter_line(None)
+                .enter_stmt(None)
                 .enter_command((Command::Mnemonic(Mnemonic::Rst), ()));
             let mut expr = command.add_argument();
             expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
@@ -569,7 +569,7 @@ mod tests {
         let label = "my_label";
         let actions = collect_semantic_actions(|actions| {
             let mut arg = actions
-                .enter_line(None)
+                .enter_stmt(None)
                 .enter_command((Command::Directive(Directive::Dw), ()))
                 .add_argument();
             arg.push_atom((ExprAtom::Ident(label.to_string()), ()));
@@ -588,7 +588,7 @@ mod tests {
     fn analyze_label() {
         let label = "label";
         let actions = collect_semantic_actions(|actions| {
-            actions.enter_line(Some((label.to_string(), ()))).exit()
+            actions.enter_stmt(Some((label.to_string(), ()))).exit()
         });
         assert_eq!(actions, [TestOperation::Label(label.to_string())])
     }
@@ -621,8 +621,8 @@ mod tests {
     #[test]
     fn define_nameless_macro() {
         let actions = collect_semantic_actions(|actions| {
-            let params = actions.enter_line(None).enter_macro_def(());
-            TokenSeqContext::exit(MacroParamsActions::exit(params))
+            let params = actions.enter_stmt(None).enter_macro_def(());
+            TokenSeqContext::exit(MacroParamsContext::exit(params))
         });
         assert_eq!(
             actions,
@@ -641,12 +641,12 @@ mod tests {
     ) {
         let actions = collect_semantic_actions(|actions| {
             let mut params_actions = actions
-                .enter_line(Some((name.to_string(), ())))
+                .enter_stmt(Some((name.to_string(), ())))
                 .enter_macro_def(());
             for param in params.borrow().iter().map(|t| (t.to_string(), ())) {
                 params_actions.add_parameter(param)
             }
-            let mut token_seq_actions = MacroParamsActions::exit(params_actions);
+            let mut token_seq_actions = MacroParamsContext::exit(params_actions);
             for token in body.borrow().iter().cloned().map(|t| (t, ())) {
                 token_seq_actions.push_token(token)
             }
@@ -667,7 +667,7 @@ mod tests {
         let name = "my_macro";
         let actions = collect_semantic_actions(|actions| {
             let invocation = actions
-                .enter_line(None)
+                .enter_stmt(None)
                 .enter_macro_invocation((name.to_string(), ()));
             invocation.exit().exit()
         });
@@ -683,7 +683,7 @@ mod tests {
         let arg_token = Token::Literal(Literal::Operand(Operand::A));
         let actions = collect_semantic_actions(|actions| {
             let mut invocation = actions
-                .enter_line(None)
+                .enter_stmt(None)
                 .enter_macro_invocation((name.to_string(), ()));
             invocation = {
                 let mut arg = invocation.enter_macro_arg();
@@ -705,7 +705,7 @@ mod tests {
     fn diagnose_wrong_operand_count() {
         let actions = collect_semantic_actions(|actions| {
             let mut arg = actions
-                .enter_line(None)
+                .enter_stmt(None)
                 .enter_command((Command::Mnemonic(Mnemonic::Nop), ()))
                 .add_argument();
             let literal_a = Literal::Operand(Operand::A);
@@ -729,7 +729,7 @@ mod tests {
     fn diagnose_parsing_error() {
         let diagnostic = InternalDiagnostic::new(Message::UnexpectedToken, once(()), ());
         let actions = collect_semantic_actions(|actions| {
-            let mut stmt = actions.enter_line(None);
+            let mut stmt = actions.enter_stmt(None);
             stmt.emit_diagnostic(diagnostic.clone());
             stmt.exit()
         });
@@ -741,7 +741,7 @@ mod tests {
         let diagnostic = InternalDiagnostic::new(Message::UnexpectedToken, once(()), ());
         let actions = collect_semantic_actions(|file| {
             let mut expr = file
-                .enter_line(None)
+                .enter_stmt(None)
                 .enter_command((Command::Mnemonic(Mnemonic::Add), ()))
                 .add_argument();
             expr.emit_diagnostic(diagnostic.clone());
