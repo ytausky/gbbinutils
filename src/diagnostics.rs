@@ -4,16 +4,17 @@ use span::TokenRefData;
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::fmt;
+use std::iter;
 use Width;
 
 pub trait DiagnosticsOutput {
-    fn emit(&self, diagnostic: Diagnostic<String>);
+    fn emit(&mut self, diagnostic: Diagnostic<String>);
 }
 
 pub struct TerminalOutput;
 
 impl DiagnosticsOutput for TerminalOutput {
-    fn emit(&self, diagnostic: Diagnostic<String>) {
+    fn emit(&mut self, diagnostic: Diagnostic<String>) {
         print!("{}", diagnostic)
     }
 }
@@ -97,6 +98,7 @@ pub enum Message {
     DestMustBeHl,
     ExpectedString,
     IncompatibleOperand,
+    InvalidUtf8,
     KeywordInExpr,
     LdSpHlOperands,
     LdWidthMismatch { src: Width },
@@ -153,6 +155,7 @@ impl Message {
             DestMustBeHl => "destination operand must be `hl`".into(),
             ExpectedString => "expected string argument".into(),
             IncompatibleOperand => "operand cannot be used with this instruction".into(),
+            InvalidUtf8 => "file contains invalid UTF-8".into(),
             KeywordInExpr => format!(
                 "keyword `{}` cannot appear in expression",
                 snippets.next().unwrap_or_else(|| unreachable!()),
@@ -251,16 +254,24 @@ impl fmt::Display for Width {
 
 #[derive(Debug, PartialEq)]
 pub struct Diagnostic<T> {
-    file: T,
-    message: String,
-    location: Option<DiagnosticLocation<T>>,
+    pub file: T,
+    pub message: String,
+    pub location: Option<DiagnosticLocation<T>>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct DiagnosticLocation<T> {
-    line: LineNumber,
-    source: T,
-    highlight: TextRange,
+    pub line: LineNumber,
+    pub source: T,
+    pub highlight: TextRange,
+}
+
+pub fn mk_diagnostic(file: impl Into<String>, message: Message) -> Diagnostic<String> {
+    Diagnostic {
+        file: file.into(),
+        message: message.render(iter::empty()),
+        location: None,
+    }
 }
 
 impl InternalDiagnostic<TokenRefData> {

@@ -14,7 +14,8 @@ fn main() {
         output: &mut gbas::TerminalOutput {},
     };
     let filename = &args[1];
-    let rom = gbas::assemble(filename, &mut config);
-    let mut rom_file = File::create(filename.to_owned() + ".o").unwrap();
-    rom_file.write_all(&rom.data).unwrap()
+    if let Some(rom) = gbas::assemble(filename, &mut config) {
+        let mut rom_file = File::create(filename.to_owned() + ".o").unwrap();
+        rom_file.write_all(&rom.data).unwrap()
+    }
 }
