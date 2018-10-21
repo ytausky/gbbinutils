@@ -4,11 +4,11 @@ use span::Span;
 
 use std::iter;
 
-type TokenKind = Token<(), (), ()>;
+type TokenKind = Token<(), (), (), ()>;
 
 impl Copy for TokenKind {}
 
-impl<C, I, L> Token<C, I, L> {
+impl<C, I, L, E> Token<C, I, L, E> {
     fn kind(&self) -> TokenKind {
         use self::Token::*;
         match *self {
@@ -19,6 +19,7 @@ impl<C, I, L> Token<C, I, L> {
             Endm => Endm,
             Eof => Eof,
             Eol => Eol,
+            Error(_) => Error(()),
             Ident(_) => Ident(()),
             Literal(_) => Literal(()),
             Macro => Macro,

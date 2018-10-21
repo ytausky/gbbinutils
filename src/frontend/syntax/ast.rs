@@ -76,6 +76,7 @@ pub fn mk_sym_token(id: usize, token: Token<(), (), ()>) -> SymToken {
         Endm => Endm,
         Eof => Eof,
         Eol => Eol,
+        Error(error) => Error(error),
         Macro => Macro,
         OpeningParenthesis => OpeningParenthesis,
         Plus => Plus,

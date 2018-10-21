@@ -15,6 +15,7 @@ enum TokenKind {
     Comma,
     Eof,
     Eol,
+    Error(LexError),
     Ident,
     Number(Radix),
     OpeningParenthesis,
@@ -26,6 +27,11 @@ enum TokenKind {
 enum Radix {
     Decimal,
     Hexadecimal,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum LexError {
+    UnterminatedString,
 }
 
 struct Scanner<I: Iterator> {
@@ -123,9 +129,13 @@ impl<I: Iterator<Item = char>> Scanner<I> {
 
     fn lex_quoted_string(&mut self) -> TokenKind {
         self.advance();
-        self.skip_characters_if(|c| c != '"');
-        self.advance();
-        TokenKind::String
+        self.skip_characters_if(|c| c != '"' && c != '\n');
+        if self.current_char() == Some('"') {
+            self.advance();
+            TokenKind::String
+        } else {
+            TokenKind::Error(LexError::UnterminatedString)
+        }
     }
 
     fn lex_ident(&mut self) -> TokenKind {
@@ -186,6 +196,7 @@ fn mk_token(kind: TokenKind, lexeme: &str) -> Token<String> {
         TokenKind::Comma => Token::Comma,
         TokenKind::Eof => Token::Eof,
         TokenKind::Eol => Token::Eol,
+        TokenKind::Error(error) => Token::Error(error),
         TokenKind::Ident => mk_keyword_or(Token::Ident, lexeme),
         TokenKind::Number(Radix::Decimal) => {
             Token::Literal(Literal::Number(i32::from_str_radix(lexeme, 10).unwrap()))
@@ -464,6 +475,11 @@ mod tests {
     #[test]
     fn ignore_comment_at_end_of_input() {
         assert_eq_tokens("nop ; comment", [Nop.into()])
+    }
+
+    #[test]
+    fn lex_unterminated_string() {
+        assert_eq_tokens("\"unterminated", [Error(LexError::UnterminatedString)])
     }
 
     impl<T: Into<kw::Command>> From<T> for Token<String> {

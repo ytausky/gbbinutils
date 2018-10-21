@@ -11,7 +11,7 @@ mod parser;
 pub use frontend::syntax::keyword::Operand;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Token<I, C = keyword::Command, L = Literal<I>> {
+pub enum Token<I, C = keyword::Command, L = Literal<I>, E = lexer::LexError> {
     ClosingParenthesis,
     Colon,
     Comma,
@@ -19,6 +19,7 @@ pub enum Token<I, C = keyword::Command, L = Literal<I>> {
     Endm,
     Eof,
     Eol,
+    Error(E),
     Ident(I),
     Literal(L),
     Macro,
