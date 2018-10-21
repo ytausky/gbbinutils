@@ -31,6 +31,7 @@ enum Radix {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum LexError {
+    NoDigits,
     UnterminatedString,
 }
 
@@ -201,9 +202,10 @@ fn mk_token(kind: TokenKind, lexeme: &str) -> Token<String> {
         TokenKind::Number(Radix::Decimal) => {
             Token::Literal(Literal::Number(i32::from_str_radix(lexeme, 10).unwrap()))
         }
-        TokenKind::Number(Radix::Hexadecimal) => Token::Literal(Literal::Number(
-            i32::from_str_radix(&lexeme[1..], 16).unwrap(),
-        )),
+        TokenKind::Number(Radix::Hexadecimal) => match i32::from_str_radix(&lexeme[1..], 16) {
+            Ok(n) => Token::Literal(Literal::Number(n)),
+            Err(_) => Token::Error(LexError::NoDigits),
+        },
         TokenKind::OpeningParenthesis => Token::OpeningParenthesis,
         TokenKind::Plus => Token::Plus,
         TokenKind::String => {
@@ -480,6 +482,11 @@ mod tests {
     #[test]
     fn lex_unterminated_string() {
         assert_eq_tokens("\"unterminated", [Error(LexError::UnterminatedString)])
+    }
+
+    #[test]
+    fn lex_number_without_digits() {
+        assert_eq_tokens("$", [Error(LexError::NoDigits)])
     }
 
     impl<T: Into<kw::Command>> From<T> for Token<String> {
