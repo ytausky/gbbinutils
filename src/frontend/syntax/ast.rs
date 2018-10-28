@@ -7,108 +7,131 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::iter;
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum RpnAction<I, L, S> {
-    Push(ExprAtom<I, L>, S),
-    Apply(ExprOperator, S),
-    Diagnostic(InternalDiagnostic<S>),
-}
-
-pub type RpnExpr<I, L, S> = Vec<RpnAction<I, L, S>>;
-
 pub fn expr() -> SymExpr {
     SymExpr(Vec::new())
 }
 
 impl SymExpr {
     pub fn ident(self, token: impl Into<TokenRef>) -> Self {
-        self.push(token, ExprAtom::Ident)
+        self.push(token, |t| ExprAtom::Ident(SymIdent(t)))
     }
 
     pub fn literal(self, token: impl Into<TokenRef>) -> Self {
-        self.push(token, ExprAtom::Literal)
+        self.push(token, |t| ExprAtom::Literal(SymLiteral(t)))
     }
 
     fn push(
         mut self,
         token: impl Into<TokenRef>,
-        atom_ctor: impl Fn(TokenRef) -> ExprAtom<TokenRef, TokenRef>,
+        atom_ctor: impl Fn(TokenRef) -> ExprAtom<SymIdent, SymLiteral>,
     ) -> Self {
         let token_ref = token.into();
-        self.0.push(RpnAction::Push(
+        self.0.push(ExprAction::PushAtom((
             atom_ctor(token_ref.clone()),
             token_ref.into(),
-        ));
+        )));
         self
     }
 
     pub fn parentheses(mut self, left: impl Into<TokenRef>, right: impl Into<TokenRef>) -> Self {
         let span = SymRange::from(left.into()).extend(&right.into().into());
         self.0
-            .push(RpnAction::Apply(ExprOperator::Parentheses, span));
+            .push(ExprAction::ApplyOperator((ExprOperator::Parentheses, span)));
         self
     }
 
     pub fn plus(mut self, token: impl Into<TokenRef>) -> Self {
-        self.0
-            .push(RpnAction::Apply(ExprOperator::Plus, token.into().into()));
+        self.0.push(ExprAction::ApplyOperator((
+            ExprOperator::Plus,
+            token.into().into(),
+        )));
         self
     }
 
     pub fn error(mut self, message: Message, highlight: impl Into<SymRange<TokenRef>>) -> Self {
-        self.0.push(RpnAction::Diagnostic(InternalDiagnostic::new(
-            message,
-            iter::empty(),
-            highlight.into(),
-        )));
+        self.0
+            .push(ExprAction::EmitDiagnostic(InternalDiagnostic::new(
+                message,
+                iter::empty(),
+                highlight.into(),
+            )));
         self
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct SymCommand(pub usize);
+pub struct SymCommand(pub TokenRef);
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct SymIdent(pub usize);
+pub struct SymIdent(pub TokenRef);
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct SymLiteral(pub usize);
+pub struct SymLiteral(pub TokenRef);
 
 pub type SymToken = Token<SymIdent, SymCommand, SymLiteral>;
 
-pub fn mk_sym_token(id: usize, token: Token<(), (), ()>) -> SymToken {
-    match token {
-        Command(()) => Command(SymCommand(id)),
-        Ident(()) => Ident(SymIdent(id)),
-        Literal(()) => Literal(SymLiteral(id)),
-        ClosingParenthesis => ClosingParenthesis,
-        Colon => Colon,
-        Comma => Comma,
-        Endm => Endm,
-        Eof => Eof,
-        Eol => Eol,
-        Error(error) => Error(error),
-        Macro => Macro,
-        OpeningParenthesis => OpeningParenthesis,
-        Plus => Plus,
-    }
+pub fn mk_sym_token(id: impl Into<TokenRef>, token: Token<(), (), ()>) -> (SymToken, TokenRef) {
+    let token_ref = id.into();
+    (
+        match token {
+            Command(()) => Command(SymCommand(token_ref.clone())),
+            Ident(()) => Ident(SymIdent(token_ref.clone())),
+            Literal(()) => Literal(SymLiteral(token_ref.clone())),
+            ClosingParenthesis => ClosingParenthesis,
+            Colon => Colon,
+            Comma => Comma,
+            Endm => Endm,
+            Eof => Eof,
+            Eol => Eol,
+            Error(error) => Error(error),
+            Macro => Macro,
+            OpeningParenthesis => OpeningParenthesis,
+            Plus => Plus,
+        },
+        token_ref,
+    )
 }
 
 pub struct InputTokens {
-    pub tokens: Vec<SymToken>,
+    pub tokens: Vec<(SymToken, TokenRef)>,
     pub names: HashMap<String, usize>,
+}
+
+impl InputTokens {
+    fn token(&self, token_ref: impl Into<TokenRef>) -> SymToken {
+        let id = match token_ref.into() {
+            TokenRef::Id(n) => n,
+            TokenRef::Name(name) => *self.names.get(&name).unwrap(),
+        };
+        self.tokens[id].0.clone()
+    }
+
+    pub fn token_seq<T>(&self, tokens: impl Borrow<[T]>) -> Vec<TokenSeqAction<SymRange<TokenRef>>>
+    where
+        T: Clone + Into<TokenRef>,
+    {
+        tokens
+            .borrow()
+            .iter()
+            .cloned()
+            .map(Into::into)
+            .map(|t| TokenSeqAction::PushToken((self.token(t.clone()), t.into())))
+            .collect()
+    }
 }
 
 macro_rules! add_token {
     ($input:expr, $token:expr) => {
         let id = $input.tokens.len();
-        $input.tokens.push(mk_sym_token(id, $token))
+        add_token!($input, $token, id)
     };
     ($input:expr, $name:ident @ $token:expr) => {
-        $input
-            .names
-            .insert(stringify!($name).into(), $input.tokens.len());
-        add_token!($input, $token)
+        let id = stringify!($name);
+        $input.names.insert(id.into(), $input.tokens.len());
+        add_token!($input, $token, id)
+    };
+    ($input:expr, $token:expr, $id:expr) => {
+        $input.tokens.push(mk_sym_token($id, $token))
     };
 }
 
@@ -168,27 +191,6 @@ impl<T: Clone + Debug + PartialEq> Span for SymRange<T> {
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub enum Action {
-    AcceptExpr(RpnExpr<SymIdent, SymLiteral, SymRange<usize>>),
-    AddParameter(SymIdent),
-    EnterArgument,
-    EnterInstruction(SymCommand),
-    EnterStmt(Option<SymIdent>),
-    EnterMacroArg,
-    EnterMacroBody,
-    EnterMacroDef,
-    EnterMacroInvocation(SymIdent),
-    Error(InternalDiagnostic<SymRange<usize>>),
-    ExitArgument,
-    ExitInstruction,
-    ExitStmt,
-    ExitMacroArg,
-    ExitMacroDef,
-    ExitMacroInvocation,
-    PushTerminal(usize),
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum TokenRef {
     Id(usize),
@@ -207,307 +209,215 @@ impl From<&'static str> for TokenRef {
     }
 }
 
-impl TokenRef {
-    fn resolve(&self, input: &InputTokens) -> usize {
-        match self {
-            TokenRef::Id(id) => *id,
-            TokenRef::Name(name) => *input.names.get(name).unwrap(),
-        }
-    }
+#[derive(Debug, PartialEq)]
+pub enum FileAction<S> {
+    Stmt {
+        label: Option<(SymIdent, S)>,
+        actions: Vec<StmtAction<S>>,
+    },
+    EmitDiagnostic(InternalDiagnostic<S>),
 }
 
-impl SymRange<TokenRef> {
-    fn resolve(&self, input: &InputTokens) -> SymRange<usize> {
-        SymRange {
-            start: self.start.resolve(input),
-            end: self.end.resolve(input),
-        }
-    }
+#[derive(Debug, PartialEq)]
+pub enum StmtAction<S> {
+    Command {
+        command: (SymCommand, S),
+        actions: Vec<CommandAction<S>>,
+    },
+    MacroDef {
+        keyword: S,
+        params: Vec<MacroParamsAction<S>>,
+        body: Vec<TokenSeqAction<S>>,
+    },
+    MacroInvocation {
+        name: (SymIdent, S),
+        actions: Vec<MacroInvocationAction<S>>,
+    },
+    EmitDiagnostic(InternalDiagnostic<S>),
 }
 
-pub struct File(Vec<Stmt>);
-
-pub fn file(stmts: impl Borrow<[Stmt]>) -> File {
-    File(stmts.borrow().iter().cloned().collect())
+#[derive(Debug, PartialEq)]
+pub enum CommandAction<S> {
+    AddArgument { actions: Vec<ExprAction<S>> },
+    EmitDiagnostic(InternalDiagnostic<S>),
 }
 
-impl File {
-    pub fn into_actions(self, input: &InputTokens) -> Vec<Action> {
-        self.0
-            .into_iter()
-            .flat_map(|stmt| stmt.into_actions(input))
-            .collect()
-    }
+#[derive(Debug, PartialEq, Clone)]
+pub enum ExprAction<S> {
+    PushAtom((ExprAtom<SymIdent, SymLiteral>, S)),
+    ApplyOperator((ExprOperator, S)),
+    EmitDiagnostic(InternalDiagnostic<S>),
 }
 
-#[derive(Clone)]
-pub struct Stmt(Option<usize>, Option<StmtBody>);
-
-pub fn labeled(label: usize, body: Option<StmtBody>) -> Stmt {
-    Stmt(Some(label), body)
+#[derive(Debug, PartialEq)]
+pub enum MacroParamsAction<S> {
+    AddParameter((SymIdent, S)),
+    EmitDiagnostic(InternalDiagnostic<S>),
 }
 
-pub fn unlabeled(body: Option<StmtBody>) -> Stmt {
-    Stmt(None, body)
+#[derive(Clone, Debug, PartialEq)]
+pub enum TokenSeqAction<S> {
+    PushToken((Token<SymIdent, SymCommand, SymLiteral>, S)),
+    EmitDiagnostic(InternalDiagnostic<S>),
 }
 
-impl Stmt {
-    fn into_actions(self, input: &InputTokens) -> Vec<Action> {
-        let mut actions = vec![Action::EnterStmt(self.0.map(|id| SymIdent(id)))];
-        if let Some(body) = self.1 {
-            actions.append(&mut body.into_actions(input))
-        }
-        actions.push(Action::ExitStmt);
-        actions
-    }
-}
-
-pub fn empty() -> Option<StmtBody> {
-    None
-}
-
-#[derive(Clone)]
-pub enum StmtBody {
-    Command(TokenRef, Vec<CommandBody>),
-    Error(SymDiagnostic),
-    Invoke(usize, Vec<TokenSeq>),
-    MacroDef(Vec<usize>, MacroDefTail),
+#[derive(Debug, PartialEq)]
+pub enum MacroInvocationAction<S> {
+    MacroArg(Vec<TokenSeqAction<S>>),
+    EmitDiagnostic(InternalDiagnostic<S>),
 }
 
 #[derive(Clone)]
-pub enum CommandBody {
-    Arg(SymExpr),
-    Diagnostic(SymDiagnostic),
-}
+pub struct SymExpr(pub Vec<ExprAction<SymRange<TokenRef>>>);
 
-#[derive(Clone)]
-pub struct SymExpr(RpnExpr<TokenRef, TokenRef, SymRange<TokenRef>>);
-
-impl SymExpr {
-    pub fn resolve(self, input: &InputTokens) -> RpnExpr<SymIdent, SymLiteral, SymRange<usize>> {
-        self.0
-            .into_iter()
-            .map(|item| match item {
-                RpnAction::Push(ExprAtom::Ident(ident), span) => RpnAction::Push(
-                    ExprAtom::Ident(SymIdent(ident.resolve(input))),
-                    span.resolve(input),
-                ),
-                RpnAction::Push(ExprAtom::Literal(literal), span) => RpnAction::Push(
-                    ExprAtom::Literal(SymLiteral(literal.resolve(input))),
-                    span.resolve(input),
-                ),
-                RpnAction::Apply(operator, span) => RpnAction::Apply(operator, span.resolve(input)),
-                RpnAction::Diagnostic(diagnostic) => {
-                    RpnAction::Diagnostic(diagnostic.resolve(input))
-                }
-            }).collect()
-    }
-
-    fn into_action(self, input: &InputTokens) -> Action {
-        Action::AcceptExpr(self.resolve(input))
+pub fn labeled(
+    label: impl Into<TokenRef>,
+    actions: Vec<StmtAction<SymRange<TokenRef>>>,
+) -> FileAction<SymRange<TokenRef>> {
+    let label = label.into();
+    FileAction::Stmt {
+        label: Some((SymIdent(label.clone()), label.into())),
+        actions,
     }
 }
 
-#[derive(Clone)]
-pub enum MacroDefTail {
-    Body(Vec<usize>, Option<SymDiagnostic>),
-    Error(SymDiagnostic),
-}
-
-#[derive(Clone)]
-pub struct SymDiagnostic(pub InternalDiagnostic<SymRange<TokenRef>>);
-
-impl From<SymDiagnostic> for StmtBody {
-    fn from(diagnostic: SymDiagnostic) -> Self {
-        StmtBody::Error(diagnostic)
+pub fn unlabeled(actions: Vec<StmtAction<SymRange<TokenRef>>>) -> FileAction<SymRange<TokenRef>> {
+    FileAction::Stmt {
+        label: None,
+        actions,
     }
 }
 
-impl InternalDiagnostic<SymRange<TokenRef>> {
-    fn resolve(self, input: &InputTokens) -> InternalDiagnostic<SymRange<usize>> {
-        InternalDiagnostic::new(
-            self.message,
-            self.spans.into_iter().map(|span| span.resolve(input)),
-            self.highlight.resolve(input),
-        )
-    }
+pub fn empty() -> Vec<StmtAction<SymRange<TokenRef>>> {
+    Vec::new()
 }
 
-impl SymDiagnostic {
-    pub fn resolve(self, input: &InputTokens) -> InternalDiagnostic<SymRange<usize>> {
-        InternalDiagnostic::new(
-            self.0.message,
-            self.0.spans.into_iter().map(|span| span.resolve(input)),
-            self.0.highlight.resolve(input),
-        )
-    }
-
-    fn into_action(self, input: &InputTokens) -> Action {
-        Action::Error(self.resolve(input))
-    }
-}
-
-pub fn command(id: impl Into<TokenRef>, args: impl Borrow<[SymExpr]>) -> Option<StmtBody> {
-    Some(StmtBody::Command(
-        id.into(),
-        args.borrow()
+pub fn command(
+    id: impl Into<TokenRef>,
+    args: impl Borrow<[SymExpr]>,
+) -> Vec<StmtAction<SymRange<TokenRef>>> {
+    let id = id.into();
+    vec![StmtAction::Command {
+        command: (SymCommand(id.clone()), id.into()),
+        actions: args
+            .borrow()
             .iter()
             .cloned()
-            .map(CommandBody::Arg)
+            .map(|SymExpr(expr)| CommandAction::AddArgument { actions: expr })
             .collect(),
-    ))
+    }]
 }
 
 pub fn malformed_command(
     id: impl Into<TokenRef>,
     args: impl Borrow<[SymExpr]>,
-    diagnostic: SymDiagnostic,
-) -> Option<StmtBody> {
-    Some(StmtBody::Command(
-        id.into(),
-        args.borrow()
+    diagnostic: InternalDiagnostic<SymRange<TokenRef>>,
+) -> Vec<StmtAction<SymRange<TokenRef>>> {
+    let id = id.into();
+    vec![StmtAction::Command {
+        command: (SymCommand(id.clone()), id.into()),
+        actions: args
+            .borrow()
             .iter()
             .cloned()
-            .map(CommandBody::Arg)
-            .chain(iter::once(CommandBody::Diagnostic(diagnostic)))
+            .map(|SymExpr(expr)| CommandAction::AddArgument { actions: expr })
+            .chain(iter::once(CommandAction::EmitDiagnostic(diagnostic)))
             .collect(),
-    ))
+    }]
 }
 
-pub fn invoke(id: usize, args: impl Borrow<[TokenSeq]>) -> Option<StmtBody> {
-    Some(StmtBody::Invoke(
-        id,
-        args.borrow().iter().cloned().collect(),
-    ))
+pub fn invoke(
+    id: impl Into<TokenRef>,
+    args: impl Borrow<[Vec<TokenSeqAction<SymRange<TokenRef>>>]>,
+) -> Vec<StmtAction<SymRange<TokenRef>>> {
+    let id = id.into();
+    vec![StmtAction::MacroInvocation {
+        name: (SymIdent(id.clone()), id.into()),
+        actions: args
+            .borrow()
+            .iter()
+            .cloned()
+            .map(MacroInvocationAction::MacroArg)
+            .collect(),
+    }]
 }
 
 pub fn macro_def(
-    params: impl Borrow<[usize]>,
-    body: impl Borrow<[usize]>,
-    endm: usize,
-) -> Option<StmtBody> {
-    use std::iter::once;
-    Some(StmtBody::MacroDef(
-        params.borrow().iter().cloned().collect(),
-        MacroDefTail::Body(
-            body.borrow().iter().cloned().chain(once(endm)).collect(),
-            None,
-        ),
-    ))
+    keyword: impl Into<TokenRef>,
+    params: impl Borrow<[TokenRef]>,
+    mut body: Vec<TokenSeqAction<SymRange<TokenRef>>>,
+    endm: impl Into<TokenRef>,
+) -> Vec<StmtAction<SymRange<TokenRef>>> {
+    body.push(TokenSeqAction::PushToken((Token::Eof, endm.into().into())));
+    vec![StmtAction::MacroDef {
+        keyword: keyword.into().into(),
+        params: params
+            .borrow()
+            .iter()
+            .cloned()
+            .map(|t| MacroParamsAction::AddParameter((SymIdent(t.clone()), t.into())))
+            .collect(),
+        body,
+    }]
 }
 
 pub fn malformed_macro_def_head(
-    params: impl Borrow<[usize]>,
-    diagnostic: SymDiagnostic,
-) -> Option<StmtBody> {
-    Some(StmtBody::MacroDef(
-        params.borrow().iter().cloned().collect(),
-        MacroDefTail::Error(diagnostic),
-    ))
+    keyword: impl Into<TokenRef>,
+    params: impl Borrow<[TokenRef]>,
+    diagnostic: InternalDiagnostic<SymRange<TokenRef>>,
+) -> Vec<StmtAction<SymRange<TokenRef>>> {
+    vec![StmtAction::MacroDef {
+        keyword: keyword.into().into(),
+        params: params
+            .borrow()
+            .iter()
+            .cloned()
+            .map(|t| MacroParamsAction::AddParameter((SymIdent(t.clone()), t.into())))
+            .chain(iter::once(MacroParamsAction::EmitDiagnostic(diagnostic)))
+            .collect(),
+        body: Vec::new(),
+    }]
 }
 
 pub fn malformed_macro_def(
-    params: impl Borrow<[usize]>,
-    body: impl Borrow<[usize]>,
-    diagnostic: SymDiagnostic,
-) -> Option<StmtBody> {
-    Some(StmtBody::MacroDef(
-        params.borrow().iter().cloned().collect(),
-        MacroDefTail::Body(body.borrow().iter().cloned().collect(), Some(diagnostic)),
-    ))
-}
-
-impl StmtBody {
-    fn into_actions(self, input: &InputTokens) -> Vec<Action> {
-        let mut actions = Vec::new();
-        match self {
-            StmtBody::Command(id, items) => {
-                actions.push(Action::EnterInstruction(SymCommand(id.resolve(input))));
-                for mut item in items {
-                    match item {
-                        CommandBody::Arg(arg) => {
-                            actions.push(Action::EnterArgument);
-                            actions.push(arg.into_action(input));
-                            actions.push(Action::ExitArgument)
-                        }
-                        CommandBody::Diagnostic(diagnostic) => {
-                            actions.push(diagnostic.into_action(input))
-                        }
-                    }
-                }
-                actions.push(Action::ExitInstruction)
-            }
-            StmtBody::Error(diagnostic) => actions.push(diagnostic.into_action(input)),
-            StmtBody::Invoke(id, args) => {
-                actions.push(Action::EnterMacroInvocation(SymIdent(id)));
-                for arg in args {
-                    actions.push(Action::EnterMacroArg);
-                    actions.append(&mut arg.into_actions());
-                    actions.push(Action::ExitMacroArg)
-                }
-                actions.push(Action::ExitMacroInvocation)
-            }
-            StmtBody::MacroDef(params, tail) => {
-                actions.push(Action::EnterMacroDef);
-                actions.extend(
-                    params
-                        .into_iter()
-                        .map(|id| Action::AddParameter(SymIdent(id))),
-                );
-                match tail {
-                    MacroDefTail::Body(body, error) => {
-                        actions.push(Action::EnterMacroBody);
-                        actions.extend(body.into_iter().map(|t| Action::PushTerminal(t)));
-                        if let Some(diagnostic) = error {
-                            actions.push(diagnostic.into_action(input))
-                        }
-                    }
-                    MacroDefTail::Error(diagnostic) => {
-                        actions.push(diagnostic.into_action(input));
-                        actions.push(Action::EnterMacroBody)
-                    }
-                }
-                actions.push(Action::ExitMacroDef)
-            }
-        }
-        actions
-    }
-}
-
-#[derive(Clone)]
-pub struct TokenSeq(Vec<usize>);
-
-pub fn token_seq(ids: impl Borrow<[usize]>) -> TokenSeq {
-    TokenSeq(ids.borrow().iter().cloned().collect())
-}
-
-impl TokenSeq {
-    fn into_actions(self) -> Vec<Action> {
-        self.0
-            .into_iter()
-            .map(|id| Action::PushTerminal(id))
-            .collect()
-    }
+    keyword: impl Into<TokenRef>,
+    params: impl Borrow<[TokenRef]>,
+    mut body: Vec<TokenSeqAction<SymRange<TokenRef>>>,
+    diagnostic: InternalDiagnostic<SymRange<TokenRef>>,
+) -> Vec<StmtAction<SymRange<TokenRef>>> {
+    body.push(TokenSeqAction::EmitDiagnostic(diagnostic));
+    vec![StmtAction::MacroDef {
+        keyword: keyword.into().into(),
+        params: params
+            .borrow()
+            .iter()
+            .cloned()
+            .map(|t| MacroParamsAction::AddParameter((SymIdent(t.clone()), t.into())))
+            .collect(),
+        body,
+    }]
 }
 
 pub fn stmt_error(
     message: Message,
     ranges: impl Borrow<[&'static str]>,
     highlight: impl Into<TokenRef>,
-) -> Option<StmtBody> {
-    Some(arg_error(message, ranges, highlight).into())
+) -> Vec<StmtAction<SymRange<TokenRef>>> {
+    vec![StmtAction::EmitDiagnostic(arg_error(
+        message, ranges, highlight,
+    ))]
 }
 
 pub fn arg_error(
     message: Message,
     ranges: impl Borrow<[&'static str]>,
     highlight: impl Into<TokenRef>,
-) -> SymDiagnostic {
-    SymDiagnostic(InternalDiagnostic::new(
+) -> InternalDiagnostic<SymRange<TokenRef>> {
+    InternalDiagnostic::new(
         message,
         ranges.borrow().iter().map(|s| TokenRef::from(*s).into()),
         highlight.into().into(),
-    ))
+    )
 }
 
 mod tests {
@@ -522,7 +432,11 @@ mod tests {
         ];
         assert_eq!(
             tokens.tokens,
-            [Command(SymCommand(0)), Literal(SymLiteral(1)), Macro]
+            [
+                (Command(SymCommand("my_tok".into())), "my_tok".into()),
+                (Literal(SymLiteral(1.into())), 1.into()),
+                (Macro, "next_one".into())
+            ]
         );
         assert_eq!(tokens.names.get("my_tok"), Some(&0));
         assert_eq!(tokens.names.get("next_one"), Some(&2))

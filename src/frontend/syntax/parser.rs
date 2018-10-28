@@ -31,7 +31,7 @@ impl<C, I, L, E> Token<C, I, L, E> {
 
 const LINE_FOLLOW_SET: &[TokenKind] = &[Token::Eol, Token::Eof];
 
-pub fn parse_src<Id, C, L, S, I, F>(tokens: I, context: F)
+pub fn parse_src<Id, C, L, S, I, F>(tokens: I, context: F) -> F
 where
     S: Span,
     I: Iterator<Item = (Token<Id, C, L>, S)>,
@@ -141,8 +141,8 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I> {
     mk_expect!(expect_command, Command, C);
     mk_expect!(expect_ident, Ident, Id);
 
-    fn parse_file<F: FileContext<Id, C, L, S>>(&mut self, context: F) {
-        self.parse_terminated_list(Token::Eol, &[Token::Eof], |p, c| p.parse_stmt(c), context);
+    fn parse_file<F: FileContext<Id, C, L, S>>(&mut self, context: F) -> F {
+        self.parse_terminated_list(Token::Eol, &[Token::Eof], |p, c| p.parse_stmt(c), context)
     }
 
     fn parse_stmt<F: FileContext<Id, C, L, S>>(&mut self, context: F) -> F {
@@ -432,291 +432,363 @@ mod tests {
     use super::Token::*;
     use super::*;
     use diagnostics::{DiagnosticsListener, InternalDiagnostic, Message};
-    use frontend::syntax::{self, ExprAtom, ExprOperator};
-    use std::cell::RefCell;
+    use frontend::syntax::{ExprAtom, ExprOperator};
+    use std::borrow::Borrow;
     use std::collections::HashMap;
 
     #[test]
     fn parse_empty_src() {
-        assert_eq_actions(input_tokens![], file([]))
+        assert_eq_actions(input_tokens![], [])
     }
 
-    struct TestContext {
-        actions: RefCell<Vec<Action>>,
-        token_seq_kind: Option<TokenSeqKind>,
+    struct FileActionCollector {
+        actions: Vec<FileAction<SymRange<TokenRef>>>,
     }
 
-    impl TestContext {
-        fn new() -> TestContext {
-            TestContext {
-                actions: RefCell::new(Vec::new()),
-                token_seq_kind: None,
+    impl FileActionCollector {
+        fn new() -> FileActionCollector {
+            FileActionCollector {
+                actions: Vec::new(),
             }
         }
     }
 
-    enum TokenSeqKind {
-        MacroArg,
-        MacroDef,
-    }
-
-    impl<'a> DiagnosticsListener<SymRange<usize>> for &'a mut TestContext {
-        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymRange<usize>>) {
-            self.actions.borrow_mut().push(Action::Error(diagnostic))
+    impl DiagnosticsListener<SymRange<TokenRef>> for FileActionCollector {
+        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymRange<TokenRef>>) {
+            self.actions.push(FileAction::EmitDiagnostic(diagnostic))
         }
     }
 
-    impl<'a> syntax::FileContext<SymIdent, SymCommand, SymLiteral, SymRange<usize>>
-        for &'a mut TestContext
-    {
-        type StmtContext = Self;
+    impl FileContext<SymIdent, SymCommand, SymLiteral, SymRange<TokenRef>> for FileActionCollector {
+        type StmtContext = StmtActionCollector;
 
-        fn enter_stmt(self, label: Option<(SymIdent, SymRange<usize>)>) -> Self::StmtContext {
-            self.actions
-                .borrow_mut()
-                .push(Action::EnterStmt(label.map(|(ident, _)| ident)));
-            self
+        fn enter_stmt(self, label: Option<(SymIdent, SymRange<TokenRef>)>) -> StmtActionCollector {
+            StmtActionCollector {
+                label,
+                actions: Vec::new(),
+                parent: self,
+            }
         }
     }
 
-    impl<'a> syntax::StmtContext<SymIdent, SymCommand, SymLiteral, SymRange<usize>>
-        for &'a mut TestContext
-    {
-        type CommandContext = Self;
-        type MacroParamsContext = Self;
-        type MacroInvocationContext = Self;
-        type Parent = Self;
+    struct StmtActionCollector {
+        label: Option<(SymIdent, SymRange<TokenRef>)>,
+        actions: Vec<StmtAction<SymRange<TokenRef>>>,
+        parent: FileActionCollector,
+    }
+
+    impl DiagnosticsListener<SymRange<TokenRef>> for StmtActionCollector {
+        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymRange<TokenRef>>) {
+            self.actions.push(StmtAction::EmitDiagnostic(diagnostic))
+        }
+    }
+
+    impl StmtContext<SymIdent, SymCommand, SymLiteral, SymRange<TokenRef>> for StmtActionCollector {
+        type CommandContext = CommandActionCollector;
+        type MacroParamsContext = MacroParamsActionCollector;
+        type MacroInvocationContext = MacroInvocationActionCollector;
+        type Parent = FileActionCollector;
 
         fn enter_command(
             self,
-            (command, _): (SymCommand, SymRange<usize>),
-        ) -> Self::CommandContext {
-            self.actions
-                .borrow_mut()
-                .push(Action::EnterInstruction(command));
-            self
+            command: (SymCommand, SymRange<TokenRef>),
+        ) -> CommandActionCollector {
+            CommandActionCollector {
+                command,
+                actions: Vec::new(),
+                parent: self,
+            }
         }
 
-        fn enter_macro_def(self, _: SymRange<usize>) -> Self::MacroParamsContext {
-            self.actions.borrow_mut().push(Action::EnterMacroDef);
-            self.token_seq_kind = Some(TokenSeqKind::MacroDef);
-            self
+        fn enter_macro_def(self, keyword: SymRange<TokenRef>) -> MacroParamsActionCollector {
+            MacroParamsActionCollector {
+                keyword,
+                actions: Vec::new(),
+                parent: self,
+            }
         }
 
         fn enter_macro_invocation(
             self,
-            name: (SymIdent, SymRange<usize>),
-        ) -> Self::MacroInvocationContext {
-            self.actions
-                .borrow_mut()
-                .push(Action::EnterMacroInvocation(name.0));
-            self
-        }
-
-        fn exit(self) -> Self::Parent {
-            self.actions.borrow_mut().push(Action::ExitStmt);
-            self
-        }
-    }
-
-    impl<'a> syntax::CommandContext<SymRange<usize>> for &'a mut TestContext {
-        type Command = SymCommand;
-        type Ident = SymIdent;
-        type Literal = SymLiteral;
-        type ArgContext = ArgContext<'a>;
-        type Parent = Self;
-
-        fn add_argument(self) -> Self::ArgContext {
-            self.actions.borrow_mut().push(Action::EnterArgument);
-            ArgContext::new(self)
-        }
-
-        fn exit(self) -> Self::Parent {
-            self.actions.borrow_mut().push(Action::ExitInstruction);
-            self
-        }
-    }
-
-    struct ArgContext<'a> {
-        expr_context: ExprContext,
-        parent: &'a mut TestContext,
-    }
-
-    impl<'a> ArgContext<'a> {
-        fn new(parent: &'a mut TestContext) -> Self {
-            ArgContext {
-                expr_context: ExprContext::new(),
-                parent,
+            name: (SymIdent, SymRange<TokenRef>),
+        ) -> MacroInvocationActionCollector {
+            MacroInvocationActionCollector {
+                name,
+                actions: Vec::new(),
+                parent: self,
             }
         }
-    }
 
-    impl<'a> DiagnosticsListener<SymRange<usize>> for ArgContext<'a> {
-        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymRange<usize>>) {
-            self.expr_context.emit_diagnostic(diagnostic)
-        }
-    }
-
-    impl<'a> syntax::ExprContext<SymRange<usize>> for ArgContext<'a> {
-        type Ident = SymIdent;
-        type Literal = SymLiteral;
-        type Parent = &'a mut TestContext;
-
-        fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, SymRange<usize>)) {
-            self.expr_context.push_atom(atom)
-        }
-
-        fn apply_operator(&mut self, operator: (ExprOperator, SymRange<usize>)) {
-            self.expr_context.apply_operator(operator)
-        }
-
-        fn exit(self) -> Self::Parent {
-            {
-                let mut actions = self.parent.actions.borrow_mut();
-                actions.push(Action::AcceptExpr(self.expr_context.rpn_expr));
-                actions.push(Action::ExitArgument)
-            }
+        fn exit(mut self) -> FileActionCollector {
+            self.parent.actions.push(FileAction::Stmt {
+                label: self.label,
+                actions: self.actions,
+            });
             self.parent
         }
     }
 
-    struct ExprContext {
-        rpn_expr: TestRpnExpr,
-        diagnostics: Vec<InternalDiagnostic<SymRange<usize>>>,
+    struct CommandActionCollector {
+        command: (SymCommand, SymRange<TokenRef>),
+        actions: Vec<CommandAction<SymRange<TokenRef>>>,
+        parent: StmtActionCollector,
     }
 
-    type TestRpnExpr = RpnExpr<SymIdent, SymLiteral, SymRange<usize>>;
+    impl DiagnosticsListener<SymRange<TokenRef>> for CommandActionCollector {
+        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymRange<TokenRef>>) {
+            self.actions.push(CommandAction::EmitDiagnostic(diagnostic))
+        }
+    }
 
-    impl ExprContext {
-        fn new() -> Self {
-            ExprContext {
-                rpn_expr: Vec::new(),
-                diagnostics: Vec::new(),
+    impl CommandContext<SymRange<TokenRef>> for CommandActionCollector {
+        type Command = SymCommand;
+        type Ident = SymIdent;
+        type Literal = SymLiteral;
+        type ArgContext = ArgActionCollector;
+        type Parent = StmtActionCollector;
+
+        fn add_argument(self) -> ArgActionCollector {
+            ArgActionCollector {
+                expr_action_collector: ExprActionCollector::new(),
+                parent: self,
+            }
+        }
+
+        fn exit(mut self) -> StmtActionCollector {
+            self.parent.actions.push(StmtAction::Command {
+                command: self.command,
+                actions: self.actions,
+            });
+            self.parent
+        }
+    }
+
+    struct ArgActionCollector {
+        expr_action_collector: ExprActionCollector,
+        parent: CommandActionCollector,
+    }
+
+    impl DiagnosticsListener<SymRange<TokenRef>> for ArgActionCollector {
+        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymRange<TokenRef>>) {
+            self.expr_action_collector.emit_diagnostic(diagnostic)
+        }
+    }
+
+    impl ExprContext<SymRange<TokenRef>> for ArgActionCollector {
+        type Ident = SymIdent;
+        type Literal = SymLiteral;
+        type Parent = CommandActionCollector;
+
+        fn push_atom(&mut self, atom: (ExprAtom<SymIdent, SymLiteral>, SymRange<TokenRef>)) {
+            self.expr_action_collector.push_atom(atom)
+        }
+
+        fn apply_operator(&mut self, operator: (ExprOperator, SymRange<TokenRef>)) {
+            self.expr_action_collector.apply_operator(operator)
+        }
+
+        fn exit(mut self) -> CommandActionCollector {
+            self.parent.actions.push(CommandAction::AddArgument {
+                actions: self.expr_action_collector.exit(),
+            });
+            self.parent
+        }
+    }
+
+    struct ExprActionCollector {
+        actions: Vec<ExprAction<SymRange<TokenRef>>>,
+    }
+
+    impl ExprActionCollector {
+        fn new() -> ExprActionCollector {
+            ExprActionCollector {
+                actions: Vec::new(),
             }
         }
     }
 
-    impl DiagnosticsListener<SymRange<usize>> for ExprContext {
-        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymRange<usize>>) {
-            self.rpn_expr
-                .push(RpnAction::Diagnostic(diagnostic.clone()));
-            self.diagnostics.push(diagnostic)
+    impl DiagnosticsListener<SymRange<TokenRef>> for ExprActionCollector {
+        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymRange<TokenRef>>) {
+            self.actions.push(ExprAction::EmitDiagnostic(diagnostic))
         }
     }
 
-    impl syntax::ExprContext<SymRange<usize>> for ExprContext {
+    impl ExprContext<SymRange<TokenRef>> for ExprActionCollector {
         type Ident = SymIdent;
         type Literal = SymLiteral;
-        type Parent = (TestRpnExpr, Vec<InternalDiagnostic<SymRange<usize>>>);
+        type Parent = Vec<ExprAction<SymRange<TokenRef>>>;
 
-        fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, SymRange<usize>)) {
-            self.rpn_expr.push(RpnAction::Push(atom.0, atom.1))
+        fn push_atom(&mut self, atom: (ExprAtom<SymIdent, SymLiteral>, SymRange<TokenRef>)) {
+            self.actions.push(ExprAction::PushAtom(atom))
         }
 
-        fn apply_operator(&mut self, operator: (ExprOperator, SymRange<usize>)) {
-            self.rpn_expr.push(RpnAction::Apply(operator.0, operator.1))
-        }
-
-        fn exit(self) -> Self::Parent {
-            (self.rpn_expr, self.diagnostics)
-        }
-    }
-
-    impl<'a> syntax::MacroParamsContext<SymRange<usize>> for &'a mut TestContext {
-        type Ident = SymIdent;
-        type Command = SymCommand;
-        type Literal = SymLiteral;
-        type MacroBodyContext = Self;
-        type Parent = Self;
-
-        fn add_parameter(&mut self, (ident, _): (SymIdent, SymRange<usize>)) {
-            self.actions.borrow_mut().push(Action::AddParameter(ident))
-        }
-
-        fn exit(self) -> Self::MacroBodyContext {
-            self.actions.borrow_mut().push(Action::EnterMacroBody);
-            self
-        }
-    }
-
-    impl<'a> syntax::MacroInvocationContext<SymRange<usize>> for &'a mut TestContext {
-        type Token = SymToken;
-        type Parent = Self;
-        type MacroArgContext = Self;
-
-        fn enter_macro_arg(self) -> Self::MacroArgContext {
-            self.actions.borrow_mut().push(Action::EnterMacroArg);
-            self.token_seq_kind = Some(TokenSeqKind::MacroArg);
-            self
-        }
-
-        fn exit(self) -> Self::Parent {
-            self.actions.borrow_mut().push(Action::ExitMacroInvocation);
-            self
-        }
-    }
-
-    impl<'a> syntax::TokenSeqContext<SymRange<usize>> for &'a mut TestContext {
-        type Token = SymToken;
-        type Parent = Self;
-
-        fn push_token(&mut self, token: (Self::Token, SymRange<usize>)) {
-            let id = token.1.start;
-            assert_eq!(id, token.1.end);
-            self.actions.borrow_mut().push(Action::PushTerminal(id))
+        fn apply_operator(&mut self, operator: (ExprOperator, SymRange<TokenRef>)) {
+            self.actions.push(ExprAction::ApplyOperator(operator))
         }
 
         fn exit(self) -> Self::Parent {
             self.actions
-                .borrow_mut()
-                .push(match *self.token_seq_kind.as_ref().unwrap() {
-                    TokenSeqKind::MacroArg => Action::ExitMacroArg,
-                    TokenSeqKind::MacroDef => Action::ExitMacroDef,
-                });
-            self.token_seq_kind = None;
-            self
+        }
+    }
+
+    struct MacroParamsActionCollector {
+        keyword: SymRange<TokenRef>,
+        actions: Vec<MacroParamsAction<SymRange<TokenRef>>>,
+        parent: StmtActionCollector,
+    }
+
+    impl DiagnosticsListener<SymRange<TokenRef>> for MacroParamsActionCollector {
+        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymRange<TokenRef>>) {
+            self.actions
+                .push(MacroParamsAction::EmitDiagnostic(diagnostic))
+        }
+    }
+
+    impl MacroParamsContext<SymRange<TokenRef>> for MacroParamsActionCollector {
+        type Command = SymCommand;
+        type Ident = SymIdent;
+        type Literal = SymLiteral;
+        type MacroBodyContext = MacroBodyActionCollector;
+        type Parent = StmtActionCollector;
+
+        fn add_parameter(&mut self, param: (SymIdent, SymRange<TokenRef>)) {
+            self.actions.push(MacroParamsAction::AddParameter(param))
+        }
+
+        fn exit(self) -> MacroBodyActionCollector {
+            MacroBodyActionCollector {
+                actions: Vec::new(),
+                parent: self,
+            }
+        }
+    }
+
+    struct MacroBodyActionCollector {
+        actions: Vec<TokenSeqAction<SymRange<TokenRef>>>,
+        parent: MacroParamsActionCollector,
+    }
+
+    impl DiagnosticsListener<SymRange<TokenRef>> for MacroBodyActionCollector {
+        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymRange<TokenRef>>) {
+            self.actions
+                .push(TokenSeqAction::EmitDiagnostic(diagnostic))
+        }
+    }
+
+    impl TokenSeqContext<SymRange<TokenRef>> for MacroBodyActionCollector {
+        type Token = Token<SymIdent, SymCommand, SymLiteral>;
+        type Parent = StmtActionCollector;
+
+        fn push_token(&mut self, token: (Self::Token, SymRange<TokenRef>)) {
+            self.actions.push(TokenSeqAction::PushToken(token))
+        }
+
+        fn exit(mut self) -> StmtActionCollector {
+            self.parent.parent.actions.push(StmtAction::MacroDef {
+                keyword: self.parent.keyword,
+                params: self.parent.actions,
+                body: self.actions,
+            });
+            self.parent.parent
+        }
+    }
+
+    struct MacroInvocationActionCollector {
+        name: (SymIdent, SymRange<TokenRef>),
+        actions: Vec<MacroInvocationAction<SymRange<TokenRef>>>,
+        parent: StmtActionCollector,
+    }
+
+    impl DiagnosticsListener<SymRange<TokenRef>> for MacroInvocationActionCollector {
+        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymRange<TokenRef>>) {
+            self.actions
+                .push(MacroInvocationAction::EmitDiagnostic(diagnostic))
+        }
+    }
+
+    impl MacroInvocationContext<SymRange<TokenRef>> for MacroInvocationActionCollector {
+        type Token = Token<SymIdent, SymCommand, SymLiteral>;
+        type MacroArgContext = MacroArgActionCollector;
+        type Parent = StmtActionCollector;
+
+        fn enter_macro_arg(self) -> MacroArgActionCollector {
+            MacroArgActionCollector {
+                actions: Vec::new(),
+                parent: self,
+            }
+        }
+
+        fn exit(mut self) -> StmtActionCollector {
+            self.parent.actions.push(StmtAction::MacroInvocation {
+                name: self.name,
+                actions: self.actions,
+            });
+            self.parent
+        }
+    }
+
+    struct MacroArgActionCollector {
+        actions: Vec<TokenSeqAction<SymRange<TokenRef>>>,
+        parent: MacroInvocationActionCollector,
+    }
+
+    impl DiagnosticsListener<SymRange<TokenRef>> for MacroArgActionCollector {
+        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymRange<TokenRef>>) {
+            self.actions
+                .push(TokenSeqAction::EmitDiagnostic(diagnostic))
+        }
+    }
+
+    impl TokenSeqContext<SymRange<TokenRef>> for MacroArgActionCollector {
+        type Token = Token<SymIdent, SymCommand, SymLiteral>;
+        type Parent = MacroInvocationActionCollector;
+
+        fn push_token(&mut self, token: (Self::Token, SymRange<TokenRef>)) {
+            self.actions.push(TokenSeqAction::PushToken(token))
+        }
+
+        fn exit(mut self) -> MacroInvocationActionCollector {
+            self.parent
+                .actions
+                .push(MacroInvocationAction::MacroArg(self.actions));
+            self.parent
         }
     }
 
     #[test]
     fn parse_empty_stmt() {
-        assert_eq_actions(
-            input_tokens![Eol],
-            file([unlabeled(empty()), unlabeled(empty())]),
-        )
+        assert_eq_actions(input_tokens![Eol], [unlabeled(empty()), unlabeled(empty())])
     }
 
-    fn assert_eq_actions(mut input: InputTokens, expected: File) {
+    fn assert_eq_actions(
+        mut input: InputTokens,
+        expected: impl Borrow<[FileAction<SymRange<TokenRef>>]>,
+    ) {
         if input
             .tokens
             .last()
-            .map(|token| token.kind() != Token::Eof)
+            .map(|(token, _)| token.kind() != Token::Eof)
             .unwrap_or(true)
         {
-            input.tokens.push(Token::Eof)
+            let eof_id = input.tokens.len().into();
+            input.tokens.push((Token::Eof, eof_id))
         }
-        let mut parsing_context = TestContext::new();
-        parse_src(with_spans(&input.tokens), &mut parsing_context);
-        assert_eq!(
-            parsing_context.actions.into_inner(),
-            expected.into_actions(&input)
-        )
+        let mut parsing_context = FileActionCollector::new();
+        parsing_context = parse_src(with_spans(&input.tokens), parsing_context);
+        assert_eq!(parsing_context.actions, expected.borrow())
     }
 
     fn with_spans<'a>(
-        tokens: impl IntoIterator<Item = &'a SymToken>,
-    ) -> impl Iterator<Item = (SymToken, SymRange<usize>)> {
-        tokens
-            .into_iter()
-            .cloned()
-            .zip((0..).map(|n| SymRange::from(n)))
+        tokens: impl IntoIterator<Item = &'a (SymToken, TokenRef)>,
+    ) -> impl Iterator<Item = (SymToken, SymRange<TokenRef>)> {
+        tokens.into_iter().cloned().map(|(t, r)| (t, r.into()))
     }
 
     #[test]
     fn parse_nullary_instruction() {
         assert_eq_actions(
             input_tokens![nop @ Command(())],
-            file([unlabeled(command("nop", []))]),
+            [unlabeled(command("nop", []))],
         )
     }
 
@@ -724,7 +796,7 @@ mod tests {
     fn parse_nullary_instruction_after_eol() {
         assert_eq_actions(
             input_tokens![Eol, nop @ Command(())],
-            file([unlabeled(empty()), unlabeled(command("nop", []))]),
+            [unlabeled(empty()), unlabeled(command("nop", []))],
         )
     }
 
@@ -732,7 +804,7 @@ mod tests {
     fn parse_nullary_instruction_followed_by_eol() {
         assert_eq_actions(
             input_tokens![daa @ Command(()), Eol],
-            file([unlabeled(command("daa", [])), unlabeled(empty())]),
+            [unlabeled(command("daa", [])), unlabeled(empty())],
         )
     }
 
@@ -740,7 +812,7 @@ mod tests {
     fn parse_unary_instruction() {
         assert_eq_actions(
             input_tokens![db @ Command(()), my_ptr @ Ident(())],
-            file([unlabeled(command("db", [expr().ident("my_ptr")]))]),
+            [unlabeled(command("db", [expr().ident("my_ptr")]))],
         )
     }
 
@@ -748,7 +820,7 @@ mod tests {
     fn parse_binary_instruction() {
         assert_eq_actions(
             input_tokens![Command(()), Ident(()), Comma, Literal(())],
-            file([unlabeled(command(0, [expr().ident(1), expr().literal(3)]))]),
+            [unlabeled(command(0, [expr().ident(1), expr().literal(3)]))],
         );
     }
 
@@ -765,13 +837,13 @@ mod tests {
             Comma,
             some_const @ Ident(()),
         ];
-        let expected = file([
+        let expected = [
             unlabeled(command(0, [expr().ident(1), expr().literal(3)])),
             unlabeled(command(
                 "ld",
                 [expr().literal("a"), expr().ident("some_const")],
             )),
-        ]);
+        ];
         assert_eq_actions(tokens, expected)
     }
 
@@ -789,25 +861,25 @@ mod tests {
             Comma,
             Literal(()),
         ];
-        let expected = file([
+        let expected = [
             unlabeled(command(0, [expr().literal(1), expr().ident(3)])),
             unlabeled(empty()),
             unlabeled(command(6, [expr().ident(7), expr().literal(9)])),
-        ]);
+        ];
         assert_eq_actions(tokens, expected)
     }
 
     #[test]
     fn parse_empty_macro_definition() {
         let tokens = input_tokens![Ident(()), Colon, Macro, Eol, Endm];
-        let expected_actions = file([labeled(0, macro_def([], [], 4))]);
+        let expected_actions = [labeled(0, macro_def(2, [], Vec::new(), 4))];
         assert_eq_actions(tokens, expected_actions);
     }
 
     #[test]
     fn parse_macro_definition_with_instruction() {
         let tokens = input_tokens![Ident(()), Colon, Macro, Eol, Command(()), Eol, Endm];
-        let expected_actions = file([labeled(0, macro_def([], [4, 5], 6))]);
+        let expected_actions = [labeled(0, macro_def(2, [], tokens.token_seq([4, 5]), 6))];
         assert_eq_actions(tokens, expected_actions)
     }
 
@@ -825,21 +897,24 @@ mod tests {
             Eol,
             Endm,
         ];
-        let expected = file([labeled(0, macro_def([3, 5], [7, 8], 9))]);
+        let expected = [labeled(
+            0,
+            macro_def(2, [3.into(), 5.into()], tokens.token_seq([7, 8]), 9),
+        )];
         assert_eq_actions(tokens, expected)
     }
 
     #[test]
     fn parse_label() {
         let tokens = input_tokens![Ident(()), Colon, Eol];
-        let expected_actions = file([labeled(0, empty()), unlabeled(empty())]);
+        let expected_actions = [labeled(0, empty()), unlabeled(empty())];
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_labeled_instruction() {
         let tokens = input_tokens![Ident(()), Colon, Command(()), Eol];
-        let expected = file([labeled(0, command(2, [])), unlabeled(empty())]);
+        let expected = [labeled(0, command(2, [])), unlabeled(empty())];
         assert_eq_actions(tokens, expected)
     }
 
@@ -851,31 +926,31 @@ mod tests {
             hl @ Literal(()),
             close @ ClosingParenthesis,
         ];
-        let expected = file([unlabeled(command(
+        let expected = [unlabeled(command(
             "jp",
             [expr().literal("hl").parentheses("open", "close")],
-        ))]);
+        ))];
         assert_eq_actions(tokens, expected)
     }
 
     #[test]
     fn parse_nullary_macro_invocation() {
         let tokens = input_tokens![Ident(())];
-        let expected_actions = file([unlabeled(invoke(0, []))]);
+        let expected_actions = [unlabeled(invoke(0, []))];
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_unary_macro_invocation() {
         let tokens = input_tokens![Ident(()), Literal(())];
-        let expected_actions = file([unlabeled(invoke(0, [token_seq([1])]))]);
+        let expected_actions = [unlabeled(invoke(0, [tokens.token_seq([1])]))];
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_unary_macro_invocation_with_multiple_terminals() {
         let tokens = input_tokens![Ident(()), Literal(()), Literal(()), Literal(())];
-        let expected_actions = file([unlabeled(invoke(0, [token_seq([1, 2, 3])]))]);
+        let expected_actions = [unlabeled(invoke(0, [tokens.token_seq([1, 2, 3])]))];
         assert_eq_actions(tokens, expected_actions)
     }
 
@@ -890,10 +965,10 @@ mod tests {
             Literal(()),
             Literal(()),
         ];
-        let expected_actions = file([unlabeled(invoke(
+        let expected_actions = [unlabeled(invoke(
             0,
-            [token_seq([1, 2]), token_seq([4, 5, 6])],
-        ))]);
+            [tokens.token_seq([1, 2]), tokens.token_seq([4, 5, 6])],
+        ))];
         assert_eq_actions(tokens, expected_actions)
     }
 
@@ -905,10 +980,10 @@ mod tests {
             plus @ Plus,
             y @ Literal(()),
         ];
-        let expected_actions = file([unlabeled(command(
+        let expected_actions = [unlabeled(command(
             0,
             [expr().ident("x").literal("y").plus("plus")],
-        ))]);
+        ))];
         assert_eq_actions(tokens, expected_actions)
     }
 
@@ -930,27 +1005,26 @@ mod tests {
         assert_eq_rpn_expr(tokens, expected)
     }
 
-    fn assert_eq_rpn_expr(mut input: InputTokens, expected: SymExpr) {
-        let (parsed_rpn_expr, _) = parse_sym_expr(&mut input);
-        assert_eq!(parsed_rpn_expr, expected.resolve(&input));
+    fn assert_eq_rpn_expr(mut input: InputTokens, SymExpr(expected): SymExpr) {
+        let parsed_rpn_expr = parse_sym_expr(&mut input);
+        assert_eq!(parsed_rpn_expr, expected);
     }
 
     fn assert_eq_expr_diagnostics(
         mut input: InputTokens,
         expected: InternalDiagnostic<SymRange<TokenRef>>,
     ) {
-        let (_, diagnostics) = parse_sym_expr(&mut input);
-        assert_eq!(diagnostics, [SymDiagnostic(expected).resolve(&input)])
+        let expr_actions = parse_sym_expr(&mut input);
+        assert_eq!(expr_actions, [ExprAction::EmitDiagnostic(expected)])
     }
 
-    fn parse_sym_expr(
-        input: &mut InputTokens,
-    ) -> (TestRpnExpr, Vec<InternalDiagnostic<SymRange<usize>>>) {
-        input.tokens.push(Token::Eof);
+    fn parse_sym_expr(input: &mut InputTokens) -> Vec<ExprAction<SymRange<TokenRef>>> {
+        let eof_id = input.tokens.len().into();
+        input.tokens.push((Token::Eof, eof_id));
         let tokens = &mut with_spans(&input.tokens).peekable();
         let parser = ExprParser {
             tokens,
-            context: ExprContext::new(),
+            context: ExprActionCollector::new(),
         };
         parser.parse()
     }
@@ -959,7 +1033,7 @@ mod tests {
     fn diagnose_stmt_starting_with_literal() {
         assert_eq_actions(
             input_tokens![a @ Literal(())],
-            file([unlabeled(stmt_error(Message::UnexpectedToken, ["a"], "a"))]),
+            [unlabeled(stmt_error(Message::UnexpectedToken, ["a"], "a"))],
         )
     }
 
@@ -967,11 +1041,11 @@ mod tests {
     fn diagnose_missing_comma_in_arg_list() {
         assert_eq_actions(
             input_tokens![Command(()), Literal(()), unexpected @ Literal(())],
-            file([unlabeled(malformed_command(
+            [unlabeled(malformed_command(
                 0,
                 [expr().literal(1)],
                 arg_error(Message::UnexpectedToken, ["unexpected"], "unexpected"),
-            ))]),
+            ))],
         )
     }
 
@@ -979,10 +1053,11 @@ mod tests {
     fn diagnose_eof_after_macro_param_list() {
         assert_eq_actions(
             input_tokens![Macro, eof @ Eof],
-            file([unlabeled(malformed_macro_def_head(
+            [unlabeled(malformed_macro_def_head(
+                0,
                 [],
                 arg_error(Message::UnexpectedEof, [], "eof"),
-            ))]),
+            ))],
         )
     }
 
@@ -990,11 +1065,12 @@ mod tests {
     fn diagnose_eof_in_macro_body() {
         assert_eq_actions(
             input_tokens![Macro, Eol, eof @ Eof],
-            file([unlabeled(malformed_macro_def(
+            [unlabeled(malformed_macro_def(
+                0,
                 [],
-                [],
+                Vec::new(),
                 arg_error(Message::UnexpectedEof, [], "eof"),
-            ))]),
+            ))],
         )
     }
 
@@ -1012,10 +1088,10 @@ mod tests {
     fn diagnose_unmatched_parentheses() {
         assert_eq_actions(
             input_tokens![Command(()), paren @ OpeningParenthesis],
-            file([unlabeled(command(
+            [unlabeled(command(
                 0,
                 [expr().error(Message::UnmatchedParenthesis, TokenRef::from("paren"))],
-            ))]),
+            ))],
         )
     }
 }

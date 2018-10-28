@@ -36,7 +36,7 @@ where
     I: Iterator<Item = (Token<Id>, S)>,
     F: FileContext<Id, keyword::Command, Literal<Id>, S>,
 {
-    self::parser::parse_src(tokens, actions)
+    self::parser::parse_src(tokens, actions);
 }
 
 #[derive(Clone, Debug, PartialEq)]
