@@ -372,7 +372,10 @@ where
 {
     fn parse(mut self) -> A::Parent {
         if let Err(diagnostic) = self.parse_expression() {
-            self.context.emit_diagnostic(diagnostic)
+            self.context.emit_diagnostic(diagnostic);
+            while !self.lookahead_is_in(LINE_FOLLOW_SET) {
+                self.bump();
+            }
         }
         self.context.exit()
     }
@@ -420,12 +423,12 @@ where
         match token {
             Token::Ident(ident) => self.context.push_atom((ExprAtom::Ident(ident), span)),
             Token::Literal(literal) => self.context.push_atom((ExprAtom::Literal(literal), span)),
-            _ => self.context.emit_diagnostic(InternalDiagnostic::new(
+            _ => Err(InternalDiagnostic::new(
                 Message::UnexpectedToken {
                     token: span.clone(),
                 },
                 span,
-            )),
+            ))?,
         }
         Ok(())
     }
@@ -1104,6 +1107,33 @@ mod tests {
             expr()
                 .ident(0)
                 .error(Message::UnexpectedEof, TokenRef::from(2)),
+        )
+    }
+
+    #[test]
+    fn recover_from_unexpected_token_in_expr() {
+        let paren_span: SymSpan = TokenRef::from("paren").into();
+        assert_eq_actions(
+            input_tokens![
+                Command(()),
+                paren @ ClosingParenthesis,
+                Plus,
+                Ident(()),
+                Eol,
+                nop @ Command(())
+            ],
+            [
+                unlabeled(command(
+                    0,
+                    [expr().error(
+                        Message::UnexpectedToken {
+                            token: paren_span.clone(),
+                        },
+                        paren_span,
+                    )],
+                )),
+                unlabeled(command("nop", [])),
+            ],
         )
     }
 }
