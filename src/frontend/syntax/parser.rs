@@ -761,18 +761,9 @@ mod tests {
     }
 
     fn assert_eq_actions(
-        mut input: InputTokens,
+        input: InputTokens,
         expected: impl Borrow<[FileAction<SymRange<TokenRef>>]>,
     ) {
-        if input
-            .tokens
-            .last()
-            .map(|(token, _)| token.kind() != Token::Eof)
-            .unwrap_or(true)
-        {
-            let eof_id = input.tokens.len().into();
-            input.tokens.push((Token::Eof, eof_id))
-        }
         let mut parsing_context = FileActionCollector::new();
         parsing_context = parse_src(with_spans(&input.tokens), parsing_context);
         assert_eq!(parsing_context.actions, expected.borrow())
@@ -1019,8 +1010,6 @@ mod tests {
     }
 
     fn parse_sym_expr(input: &mut InputTokens) -> Vec<ExprAction<SymRange<TokenRef>>> {
-        let eof_id = input.tokens.len().into();
-        input.tokens.push((Token::Eof, eof_id));
         let tokens = &mut with_spans(&input.tokens).peekable();
         let parser = ExprParser {
             tokens,

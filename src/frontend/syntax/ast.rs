@@ -98,12 +98,8 @@ pub struct InputTokens {
 }
 
 impl InputTokens {
-    fn token(&self, token_ref: impl Into<TokenRef>) -> SymToken {
-        let id = match token_ref.into() {
-            TokenRef::Id(n) => n,
-            TokenRef::Name(name) => *self.names.get(&name).unwrap(),
-        };
-        self.tokens[id].0.clone()
+    pub fn insert_token(&mut self, id: impl Into<TokenRef>, token: Token<(), (), ()>) {
+        self.tokens.push(mk_sym_token(id, token))
     }
 
     pub fn token_seq<T>(&self, tokens: impl Borrow<[T]>) -> Vec<TokenSeqAction<SymRange<TokenRef>>>
@@ -118,20 +114,25 @@ impl InputTokens {
             .map(|t| TokenSeqAction::PushToken((self.token(t.clone()), t.into())))
             .collect()
     }
+
+    fn token(&self, token_ref: impl Into<TokenRef>) -> SymToken {
+        let id = match token_ref.into() {
+            TokenRef::Id(n) => n,
+            TokenRef::Name(name) => *self.names.get(&name).unwrap(),
+        };
+        self.tokens[id].0.clone()
+    }
 }
 
 macro_rules! add_token {
     ($input:expr, $token:expr) => {
         let id = $input.tokens.len();
-        add_token!($input, $token, id)
+        $input.insert_token(id, $token)
     };
     ($input:expr, $name:ident @ $token:expr) => {
         let id = stringify!($name);
         $input.names.insert(id.into(), $input.tokens.len());
-        add_token!($input, $token, id)
-    };
-    ($input:expr, $token:expr, $id:expr) => {
-        $input.tokens.push(mk_sym_token($id, $token))
+        $input.insert_token(id, $token)
     };
 }
 
@@ -154,15 +155,21 @@ macro_rules! input_tokens_impl {
 }
 
 macro_rules! input_tokens {
-    () => {
-        InputTokens {
+    ($($tokens:tt)*) => {{
+        let mut input = InputTokens {
             tokens: Vec::new(),
             names: HashMap::new(),
-        }
-    };
-    ($($tokens:tt)*) => {{
-        let mut input = input_tokens![];
+        };
         input_tokens_impl!(input, $($tokens)*);
+        if input
+            .tokens
+            .last()
+            .map(|(token, _)| *token != Token::Eof)
+            .unwrap_or(true)
+        {
+            let eof_id = input.tokens.len().into();
+            input.tokens.push((Token::Eof, eof_id))
+        }
         input
     }};
 }
@@ -435,7 +442,8 @@ mod tests {
             [
                 (Command(SymCommand("my_tok".into())), "my_tok".into()),
                 (Literal(SymLiteral(1.into())), 1.into()),
-                (Macro, "next_one".into())
+                (Macro, "next_one".into()),
+                (Eof, 3.into()),
             ]
         );
         assert_eq!(tokens.names.get("my_tok"), Some(&0));
