@@ -4,7 +4,6 @@ use diagnostics::{InternalDiagnostic, Message};
 use frontend::semantics::operand::AtomKind;
 use instruction::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
 use span::{Source, Span};
-use std::iter;
 use Width;
 
 impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>> Analysis<S, I> {
@@ -22,15 +21,21 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
             (LdDest::Word(dest), LdOperand::Const(src)) => self.analyze_16_bit_ld(dest, src),
             (LdDest::Byte(dest), LdOperand::Other(LdDest::Word(src))) => {
                 Err(InternalDiagnostic::new(
-                    Message::LdWidthMismatch { src: Width::Word },
-                    vec![src.span(), dest.span()],
+                    Message::LdWidthMismatch {
+                        src_width: Width::Word,
+                        src: src.span(),
+                        dest: dest.span(),
+                    },
                     dest.span().extend(&src.span()),
                 ))
             }
             (LdDest::Word(dest), LdOperand::Other(LdDest::Byte(src))) => {
                 Err(InternalDiagnostic::new(
-                    Message::LdWidthMismatch { src: Width::Byte },
-                    vec![src.span(), dest.span()],
+                    Message::LdWidthMismatch {
+                        src_width: Width::Byte,
+                        src: src.span(),
+                        dest: dest.span(),
+                    },
                     dest.span().extend(&src.span()),
                 ))
             }
@@ -69,13 +74,9 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
             (LdDest16::Reg16(Reg16::Sp, _), LdOperand::Other(LdDest16::Reg16(Reg16::Hl, _))) => {
                 Ok(Instruction::Ld(Ld::SpHl))
             }
-            (LdDest16::Reg16(_, dest_span), LdOperand::Other(LdDest16::Reg16(_, src_span))) => {
-                Err(InternalDiagnostic::new(
-                    Message::LdSpHlOperands,
-                    iter::empty(),
-                    dest_span.extend(&src_span),
-                ))
-            }
+            (LdDest16::Reg16(_, dest_span), LdOperand::Other(LdDest16::Reg16(_, src_span))) => Err(
+                InternalDiagnostic::new(Message::LdSpHlOperands, dest_span.extend(&src_span)),
+            ),
             (LdDest16::Reg16(dest, _), LdOperand::Const(expr)) => {
                 Ok(Instruction::Ld(Ld::Immediate16(dest, expr)))
             }
@@ -101,7 +102,6 @@ impl<S: Span> Operand<S> {
             Operand::Atom(kind, span) => match kind {
                 AtomKind::Condition(_) => Err(InternalDiagnostic::new(
                     Message::ConditionOutsideBranch,
-                    iter::empty(),
                     span,
                 )),
                 AtomKind::Simple(simple) => Ok(LdDest::Byte(LdDest8::Simple(simple, span))),
@@ -115,14 +115,12 @@ impl<S: Span> Operand<S> {
                     assert_eq!(reg_pair, RegPair::Af);
                     Err(InternalDiagnostic::new(
                         Message::AfOutsideStackOperation,
-                        iter::empty(),
                         span,
                     ))
                 }
             },
             Operand::Const(expr) => Err(InternalDiagnostic::new(
                 Message::DestCannotBeConst,
-                iter::empty(),
                 expr.span(),
             )),
         }
@@ -198,7 +196,7 @@ impl<S: Span> LdDest8<S> {
 }
 
 fn diagnose_not_a<S>(span: S) -> InternalDiagnostic<S> {
-    InternalDiagnostic::new(Message::OnlySupportedByA, iter::empty(), span)
+    InternalDiagnostic::new(Message::OnlySupportedByA, span)
 }
 
 impl<S: Span, T: Source<Span = S>> Source for LdOperand<S, T> {
@@ -411,22 +409,26 @@ mod tests {
     #[test]
     fn analyze_ld_a_bc() {
         analyze(Mnemonic::Ld, vec![literal(A), literal(Bc)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::LdWidthMismatch { src: Width::Word })
-                .with_spans(vec![TokenId::Operand(1, 0), TokenId::Operand(0, 0)])
-                .with_highlight(
-                    TokenSpan::from(TokenId::Operand(0, 0)).extend(&TokenId::Operand(1, 0).into()),
-                ),
+            ExpectedDiagnostic::new(Message::LdWidthMismatch {
+                src_width: Width::Word,
+                src: TokenId::Operand(1, 0).into(),
+                dest: TokenId::Operand(0, 0).into(),
+            }).with_highlight(
+                TokenSpan::from(TokenId::Operand(0, 0)).extend(&TokenId::Operand(1, 0).into()),
+            ),
         )
     }
 
     #[test]
     fn analyze_ld_bc_a() {
         analyze(Mnemonic::Ld, vec![literal(Bc), literal(A)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::LdWidthMismatch { src: Width::Byte })
-                .with_spans(vec![TokenId::Operand(1, 0), TokenId::Operand(0, 0)])
-                .with_highlight(
-                    TokenSpan::from(TokenId::Operand(0, 0)).extend(&TokenId::Operand(1, 0).into()),
-                ),
+            ExpectedDiagnostic::new(Message::LdWidthMismatch {
+                src_width: Width::Byte,
+                src: TokenId::Operand(1, 0).into(),
+                dest: TokenId::Operand(0, 0).into(),
+            }).with_highlight(
+                TokenSpan::from(TokenId::Operand(0, 0)).extend(&TokenId::Operand(1, 0).into()),
+            ),
         )
     }
 

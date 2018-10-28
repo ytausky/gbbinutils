@@ -4,7 +4,6 @@ use span::TokenRefData;
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::fmt;
-use std::iter;
 use Width;
 
 pub trait DiagnosticsOutput {
@@ -66,31 +65,25 @@ impl DiagnosticsListener<()> for TestDiagnosticsListener {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct InternalDiagnostic<S> {
-    pub message: Message,
-    pub spans: Vec<S>,
+    pub message: Message<S>,
     pub highlight: S,
 }
 
 impl<S> InternalDiagnostic<S> {
-    pub fn new(
-        message: Message,
-        spans: impl IntoIterator<Item = S>,
-        highlight: S,
-    ) -> InternalDiagnostic<S> {
-        InternalDiagnostic {
-            message,
-            spans: spans.into_iter().collect(),
-            highlight,
-        }
+    pub fn new(message: Message<S>, highlight: S) -> InternalDiagnostic<S> {
+        InternalDiagnostic { message, highlight }
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Message {
+pub enum Message<S> {
     AfOutsideStackOperation,
     AlwaysUnconditional,
     CannotBeUsedAsTarget,
-    CannotDereference { category: KeywordOperandCategory },
+    CannotDereference {
+        category: KeywordOperandCategory,
+        operand: S,
+    },
     CannotSpecifyTarget,
     ConditionOutsideBranch,
     DestCannotBeConst,
@@ -99,28 +92,52 @@ pub enum Message {
     ExpectedString,
     IncompatibleOperand,
     InvalidUtf8,
-    KeywordInExpr,
+    KeywordInExpr {
+        keyword: S,
+    },
     LdSpHlOperands,
-    LdWidthMismatch { src: Width },
+    LdWidthMismatch {
+        src_width: Width,
+        src: S,
+        dest: S,
+    },
     MacroRequiresName,
     MissingTarget,
-    MustBeBit,
+    MustBeBit {
+        mnemonic: S,
+    },
     MustBeConst,
-    MustBeDeref,
+    MustBeDeref {
+        operand: S,
+    },
     OnlySupportedByA,
     OperandCannotBeIncDec(IncDec),
-    OperandCount { actual: usize, expected: usize },
-    RequiresConstantTarget,
+    OperandCount {
+        actual: usize,
+        expected: usize,
+    },
+    RequiresConstantTarget {
+        mnemonic: S,
+    },
     RequiresRegPair,
     RequiresSimpleOperand,
     SrcMustBeSp,
     StringInInstruction,
-    UndefinedMacro { name: String },
+    UndefinedMacro {
+        name: String,
+    },
     UnexpectedEof,
-    UnexpectedToken,
+    UnexpectedToken {
+        token: S,
+    },
     UnmatchedParenthesis,
-    UnresolvedSymbol { symbol: String },
-    ValueOutOfRange { value: i32, width: Width },
+    UnresolvedSymbol {
+        symbol: String,
+    },
+    ValueOutOfRange {
+        value: i32,
+        width: Width,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -130,10 +147,9 @@ pub enum KeywordOperandCategory {
     ConditionCode,
 }
 
-impl Message {
-    fn render<'a>(&self, snippets: impl IntoIterator<Item = &'a str>) -> String {
+impl Message<TokenRefData> {
+    fn render<'a>(&self, codebase: &'a TextCache) -> String {
         use diagnostics::Message::*;
-        let mut snippets = snippets.into_iter();
         let string = match self {
             AfOutsideStackOperation => {
                 "register pair `af` can only be used with `push` and `pop`".into()
@@ -142,10 +158,10 @@ impl Message {
             CannotBeUsedAsTarget => {
                 "operand cannot be used as target for branching instructions".into()
             }
-            CannotDereference { category } => format!(
+            CannotDereference { category, operand } => format!(
                 "{} `{}` cannot be dereferenced",
                 category,
-                snippets.next().unwrap_or_else(|| unreachable!()),
+                mk_snippet(codebase, operand),
             ),
             CannotSpecifyTarget => "branch target cannot be specified explicitly".into(),
             ConditionOutsideBranch => {
@@ -157,36 +173,40 @@ impl Message {
             ExpectedString => "expected string argument".into(),
             IncompatibleOperand => "operand cannot be used with this instruction".into(),
             InvalidUtf8 => "file contains invalid UTF-8".into(),
-            KeywordInExpr => format!(
+            KeywordInExpr { keyword } => format!(
                 "keyword `{}` cannot appear in expression",
-                snippets.next().unwrap_or_else(|| unreachable!()),
+                mk_snippet(codebase, keyword),
             ),
             LdSpHlOperands => {
                 "the only legal 16-bit register to register transfer is from `hl` to `sp`".into()
             }
-            LdWidthMismatch { src } => {
-                let (src_bits, dest_bits) = match src {
+            LdWidthMismatch {
+                src_width,
+                src,
+                dest,
+            } => {
+                let (src_bits, dest_bits) = match src_width {
                     Width::Byte => (8, 16),
                     Width::Word => (16, 8),
                 };
                 format!(
                     "cannot load {}-bit source `{}` into {}-bit destination `{}`",
                     src_bits,
-                    snippets.next().unwrap_or_else(|| unreachable!()),
+                    mk_snippet(codebase, src),
                     dest_bits,
-                    snippets.next().unwrap_or_else(|| unreachable!()),
+                    mk_snippet(codebase, dest),
                 )
             }
             MacroRequiresName => "macro definition must be preceded by label".into(),
             MissingTarget => "branch instruction requires target".into(),
-            MustBeBit => format!(
+            MustBeBit { mnemonic } => format!(
                 "first operand of `{}` must be bit number",
-                snippets.next().unwrap_or_else(|| unreachable!())
+                mk_snippet(codebase, mnemonic),
             ),
             MustBeConst => "operand must be a constant".into(),
-            MustBeDeref => format!(
+            MustBeDeref { operand } => format!(
                 "operand `{}` must be dereferenced",
-                snippets.next().unwrap_or_else(|| unreachable!())
+                mk_snippet(codebase, operand),
             ),
             OnlySupportedByA => "only `a` can be used for this operand".into(),
             OperandCannotBeIncDec(operation) => format!(
@@ -202,9 +222,9 @@ impl Message {
                 pluralize(*expected),
                 actual
             ),
-            RequiresConstantTarget => format!(
+            RequiresConstantTarget { mnemonic } => format!(
                 "instruction `{}` requires a constant target",
-                snippets.next().unwrap_or_else(|| unreachable!()),
+                mk_snippet(codebase, mnemonic),
             ),
             RequiresRegPair => "instruction requires a register pair".into(),
             RequiresSimpleOperand => "instruction requires 8-bit register or `(hl)`".into(),
@@ -212,9 +232,9 @@ impl Message {
             StringInInstruction => "strings cannot appear in instruction operands".into(),
             UndefinedMacro { name } => format!("invocation of undefined macro `{}`", name),
             UnexpectedEof => "unexpected end of file".into(),
-            UnexpectedToken => format!(
+            UnexpectedToken { token } => format!(
                 "encountered unexpected token `{}`",
-                snippets.next().unwrap_or_else(|| unreachable!()),
+                mk_snippet(codebase, token),
             ),
             UnmatchedParenthesis => "unmatched parenthesis".into(),
             UnresolvedSymbol { symbol } => format!("symbol `{}` could not be resolved", symbol),
@@ -222,7 +242,6 @@ impl Message {
                 format!("value {} cannot be represented in a {}", value, width)
             }
         };
-        assert_eq!(snippets.next(), None);
         string
     }
 }
@@ -268,10 +287,13 @@ pub struct DiagnosticLocation<T> {
     pub highlight: TextRange,
 }
 
-pub fn mk_diagnostic(file: impl Into<String>, message: Message) -> Diagnostic<String> {
+pub fn mk_diagnostic(
+    file: impl Into<String>,
+    message: Message<TokenRefData>,
+) -> Diagnostic<String> {
     Diagnostic {
         file: file.into(),
-        message: message.render(iter::empty()),
+        message: message.render(&TextCache::new()),
         location: None,
     }
 }
@@ -289,10 +311,9 @@ impl InternalDiagnostic<TokenRefData> {
                     .lines(highlight.start.line..=highlight.end.line)
                     .next()
                     .unwrap();
-                let snippets = self.spans.iter().map(|span| mk_snippet(codebase, span));
                 Diagnostic {
                     file: buf.name().into(),
-                    message: self.message.render(snippets),
+                    message: self.message.render(codebase),
                     location: Some(DiagnosticLocation {
                         line: highlight.start.line.into(),
                         source: source.into(),
@@ -386,7 +407,6 @@ mod tests {
             message: Message::UndefinedMacro {
                 name: "my_macro".to_string(),
             },
-            spans: Vec::new(),
             highlight: token_ref,
         };
         assert_eq!(
@@ -457,7 +477,10 @@ dummy
             actual: 0,
             expected: 1,
         };
-        assert_eq!(message.render(Vec::new()), "expected 1 operand, found 0")
+        assert_eq!(
+            message.render(&TextCache::new()),
+            "expected 1 operand, found 0"
+        )
     }
 
     fn mk_highlight(line_number: LineNumber, start: usize, end: usize) -> TextRange {

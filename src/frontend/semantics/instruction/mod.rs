@@ -6,7 +6,6 @@ use frontend::syntax::keyword as kw;
 use frontend::ExprFactory;
 use instruction::*;
 use span::{Source, Span};
-use std::iter;
 
 mod branch;
 mod ld;
@@ -82,11 +81,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
     fn analyze_add_reg16_instruction(&mut self, target: (Reg16, S)) -> AnalysisResult<S> {
         match target.0 {
             Reg16::Hl => self.analyze_add_hl_instruction(),
-            _ => Err(InternalDiagnostic::new(
-                Message::DestMustBeHl,
-                iter::empty(),
-                target.1,
-            )),
+            _ => Err(InternalDiagnostic::new(Message::DestMustBeHl, target.1)),
         }
     }
 
@@ -95,7 +90,6 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
             Operand::Atom(AtomKind::Reg16(src), _) => Ok(Instruction::AddHl(src)),
             operand => Err(InternalDiagnostic::new(
                 Message::IncompatibleOperand,
-                iter::empty(),
                 operand.span(),
             )),
         }
@@ -121,7 +115,6 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
             Operand::Const(expr) => Ok(Instruction::Alu(operation, AluSource::Immediate(expr))),
             src => Err(InternalDiagnostic::new(
                 Message::IncompatibleOperand,
-                iter::empty(),
                 src.span(),
             )),
         }
@@ -134,8 +127,9 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
             expr
         } else {
             return Err(InternalDiagnostic::new(
-                Message::MustBeBit,
-                iter::once(self.mnemonic.1.clone()),
+                Message::MustBeBit {
+                    mnemonic: self.mnemonic.1.clone(),
+                },
                 bit_number.span(),
             ));
         };
@@ -169,7 +163,6 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
             Operand::Atom(AtomKind::Reg16(operand), _) => Ok(Instruction::IncDec16(mode, operand)),
             operand => Err(InternalDiagnostic::new(
                 Message::OperandCannotBeIncDec(mode),
-                iter::empty(),
                 operand.span(),
             )),
         }
@@ -189,7 +182,6 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
                     actual,
                     expected: out_of,
                 },
-                iter::empty(),
                 self.mnemonic.1.clone(),
             )
         })
@@ -200,7 +192,7 @@ impl<S: Span> Operand<S> {
     fn expect_specific_atom(
         self,
         expected: AtomKind,
-        message: Message,
+        message: Message<S>,
     ) -> Result<(), InternalDiagnostic<S>> {
         match self {
             Operand::Atom(ref actual, _) if *actual == expected => Ok(()),
@@ -229,8 +221,8 @@ impl<S: Span> Operand<S> {
         }
     }
 
-    fn error<T>(self, message: Message) -> Result<T, InternalDiagnostic<S>> {
-        Err(InternalDiagnostic::new(message, iter::empty(), self.span()))
+    fn error<T>(self, message: Message<S>) -> Result<T, InternalDiagnostic<S>> {
+        Err(InternalDiagnostic::new(message, self.span()))
     }
 }
 
@@ -760,7 +752,6 @@ mod tests {
                 self.0,
                 Err(InternalDiagnostic::new(
                     expected.message,
-                    expected.spans,
                     expected.highlight.unwrap(),
                 ))
             )
@@ -809,27 +800,16 @@ mod tests {
     }
 
     pub struct ExpectedDiagnostic {
-        message: Message,
-        spans: Vec<TokenSpan>,
+        message: Message<TokenSpan>,
         highlight: Option<TokenSpan>,
     }
 
     impl ExpectedDiagnostic {
-        pub fn new(message: Message) -> Self {
+        pub fn new(message: Message<TokenSpan>) -> Self {
             ExpectedDiagnostic {
                 message,
-                spans: Vec::new(),
                 highlight: None,
             }
-        }
-
-        pub fn with_spans<I>(mut self, spans: I) -> Self
-        where
-            I: IntoIterator,
-            I::Item: Into<TokenSpan>,
-        {
-            self.spans.extend(spans.into_iter().map(Into::into));
-            self
         }
 
         pub fn with_highlight(mut self, highlight: impl Into<TokenSpan>) -> Self {
@@ -838,8 +818,8 @@ mod tests {
         }
     }
 
-    impl From<Message> for ExpectedDiagnostic {
-        fn from(message: Message) -> Self {
+    impl From<Message<TokenSpan>> for ExpectedDiagnostic {
+        fn from(message: Message<TokenSpan>) -> Self {
             ExpectedDiagnostic::new(message).with_highlight(TokenId::Mnemonic)
         }
     }
@@ -960,9 +940,9 @@ mod tests {
     #[test]
     fn analyze_bit_a_b() {
         analyze(kw::Mnemonic::Bit, vec![literal(A), literal(B)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::MustBeBit)
-                .with_spans(iter::once(TokenId::Mnemonic))
-                .with_highlight(TokenId::Operand(0, 0)),
+            ExpectedDiagnostic::new(Message::MustBeBit {
+                mnemonic: TokenId::Mnemonic.into(),
+            }).with_highlight(TokenId::Operand(0, 0)),
         )
     }
 

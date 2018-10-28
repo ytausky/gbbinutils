@@ -222,7 +222,6 @@ where
                     .diagnostics
                     .emit_diagnostic(InternalDiagnostic::new(
                         Message::UndefinedMacro { name: name.into() },
-                        vec![],
                         name_ref,
                     ))
             }
@@ -543,7 +542,6 @@ mod tests {
             *log.borrow(),
             [TestEvent::Diagnostic(InternalDiagnostic::new(
                 Message::UndefinedMacro { name },
-                vec![],
                 ()
             ))]
         );

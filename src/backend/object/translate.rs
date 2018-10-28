@@ -102,7 +102,6 @@ fn resolve_expr_item<S: Span>(
                 Message::UnresolvedSymbol {
                     symbol: symbol.to_string(),
                 },
-                vec![],
                 span.clone(),
             ))
         }).exact()
@@ -118,7 +117,6 @@ fn fit_to_width<SR: Clone>(
     if !is_in_range(value, width) {
         diagnostics.emit_diagnostic(InternalDiagnostic::new(
             Message::ValueOutOfRange { value, width },
-            vec![],
             value_ref,
         ))
     }

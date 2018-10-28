@@ -47,11 +47,10 @@ impl SymExpr {
         self
     }
 
-    pub fn error(mut self, message: Message, highlight: impl Into<SymSpan>) -> Self {
+    pub fn error(mut self, message: Message<SymSpan>, highlight: impl Into<SymSpan>) -> Self {
         self.0
             .push(ExprAction::EmitDiagnostic(InternalDiagnostic::new(
                 message,
-                iter::empty(),
                 highlight.into(),
             )));
         self
@@ -402,25 +401,17 @@ pub fn malformed_macro_def(
 }
 
 pub fn stmt_error(
-    message: Message,
-    ranges: impl Borrow<[&'static str]>,
+    message: Message<SymSpan>,
     highlight: impl Into<TokenRef>,
 ) -> Vec<StmtAction<SymSpan>> {
-    vec![StmtAction::EmitDiagnostic(arg_error(
-        message, ranges, highlight,
-    ))]
+    vec![StmtAction::EmitDiagnostic(arg_error(message, highlight))]
 }
 
 pub fn arg_error(
-    message: Message,
-    ranges: impl Borrow<[&'static str]>,
+    message: Message<SymSpan>,
     highlight: impl Into<TokenRef>,
 ) -> InternalDiagnostic<SymSpan> {
-    InternalDiagnostic::new(
-        message,
-        ranges.borrow().iter().map(|s| TokenRef::from(*s).into()),
-        highlight.into().into(),
-    )
+    InternalDiagnostic::new(message, highlight.into().into())
 }
 
 mod tests {

@@ -4,7 +4,6 @@ use expr::ExprVariant;
 use frontend::session::Session;
 use frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token};
 use frontend::{ExprFactory, Literal, StrExprFactory};
-use std::iter;
 
 mod directive;
 mod instruction;
@@ -101,11 +100,7 @@ impl<'a, F: Session + 'a> syntax::StmtContext<F::Ident, Command, Literal<F::Iden
 
     fn enter_macro_def(mut self, keyword: F::Span) -> Self::MacroParamsContext {
         if self.label.is_none() {
-            self.emit_diagnostic(InternalDiagnostic::new(
-                Message::MacroRequiresName,
-                iter::empty(),
-                keyword,
-            ))
+            self.emit_diagnostic(InternalDiagnostic::new(Message::MacroRequiresName, keyword))
         }
         MacroDefActions::new(self.label.take(), self)
     }
@@ -404,13 +399,14 @@ fn analyze_reloc_expr<I: Into<String>, S: Clone>(
         }
         ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(_))) => {
             Err(InternalDiagnostic::new(
-                Message::KeywordInExpr,
-                iter::once(expr.span.clone()),
+                Message::KeywordInExpr {
+                    keyword: expr.span.clone(),
+                },
                 expr.span,
             ))
         }
         ExprVariant::Atom(SemanticAtom::Literal(Literal::String(_))) => Err(
-            InternalDiagnostic::new(Message::StringInInstruction, iter::empty(), expr.span),
+            InternalDiagnostic::new(Message::StringInInstruction, expr.span),
         ),
         ExprVariant::Unary(SemanticUnary::Parentheses, expr) => analyze_reloc_expr(*expr, factory),
         ExprVariant::Binary(SemanticBinary::Plus, left, right) => {
@@ -438,7 +434,6 @@ mod tests {
     use instruction::RelocExpr;
     use std::borrow::Borrow;
     use std::cell::RefCell;
-    use std::iter::{empty, once};
     use Width;
 
     pub struct TestFrontend(RefCell<Vec<TestOperation>>);
@@ -628,7 +623,6 @@ mod tests {
             actions,
             [TestOperation::EmitDiagnostic(InternalDiagnostic::new(
                 Message::MacroRequiresName,
-                empty(),
                 ()
             ))]
         )
@@ -719,7 +713,6 @@ mod tests {
                     actual: 1,
                     expected: 0
                 },
-                empty(),
                 ()
             ))]
         )
@@ -727,7 +720,7 @@ mod tests {
 
     #[test]
     fn diagnose_parsing_error() {
-        let diagnostic = InternalDiagnostic::new(Message::UnexpectedToken, once(()), ());
+        let diagnostic = InternalDiagnostic::new(Message::UnexpectedToken { token: () }, ());
         let actions = collect_semantic_actions(|actions| {
             let mut stmt = actions.enter_stmt(None);
             stmt.emit_diagnostic(diagnostic.clone());
@@ -738,7 +731,7 @@ mod tests {
 
     #[test]
     fn recover_from_malformed_expr() {
-        let diagnostic = InternalDiagnostic::new(Message::UnexpectedToken, once(()), ());
+        let diagnostic = InternalDiagnostic::new(Message::UnexpectedToken { token: () }, ());
         let actions = collect_semantic_actions(|file| {
             let mut expr = file
                 .enter_stmt(None)

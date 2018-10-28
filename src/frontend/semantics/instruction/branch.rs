@@ -2,7 +2,6 @@ use super::{Analysis, AnalysisResult, AtomKind, Operand, SimpleOperand};
 use diagnostics::{InternalDiagnostic, Message};
 use instruction::{Branch, Condition, Instruction, Nullary, RelocExpr};
 use span::{Source, Span};
-use std::iter;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BranchKind {
@@ -32,7 +31,6 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
                 None => Ok(branch.into()),
                 Some((_, condition_span)) => Err(InternalDiagnostic::new(
                     Message::AlwaysUnconditional,
-                    iter::empty(),
                     condition_span,
                 )),
             },
@@ -89,7 +87,6 @@ fn analyze_branch_target<S: Span>(
         }
         operand => Err(InternalDiagnostic::new(
             Message::CannotBeUsedAsTarget,
-            iter::empty(),
             operand.span(),
         )),
     }
@@ -124,8 +121,9 @@ fn analyze_branch_variant<S: Span>(
         }
         (BranchKind::Explicit(_), Some(BranchTarget::DerefHl(span))) => {
             Err(InternalDiagnostic::new(
-                Message::RequiresConstantTarget,
-                iter::once(kind.1.clone()),
+                Message::RequiresConstantTarget {
+                    mnemonic: kind.1.clone(),
+                },
                 span,
             ))
         }
@@ -140,12 +138,10 @@ fn analyze_branch_variant<S: Span>(
         }
         (BranchKind::Explicit(_), None) => Err(InternalDiagnostic::new(
             Message::MissingTarget,
-            iter::empty(),
             kind.1.clone(),
         )),
         (BranchKind::Implicit(_), Some(target)) => Err(InternalDiagnostic::new(
             Message::CannotSpecifyTarget,
-            iter::empty(),
             target.span(),
         )),
     }
@@ -288,11 +284,11 @@ mod tests {
     #[test]
     fn analyze_call_deref_hl() {
         analyze(Mnemonic::Call, vec![deref(literal(Hl))]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::RequiresConstantTarget)
-                .with_spans(iter::once(TokenId::Mnemonic))
-                .with_highlight(
-                    TokenSpan::from(TokenId::Operand(0, 0)).extend(&TokenId::Operand(0, 2).into()),
-                ),
+            ExpectedDiagnostic::new(Message::RequiresConstantTarget {
+                mnemonic: TokenId::Mnemonic.into(),
+            }).with_highlight(
+                TokenSpan::from(TokenId::Operand(0, 0)).extend(&TokenId::Operand(0, 2).into()),
+            ),
         )
     }
 }

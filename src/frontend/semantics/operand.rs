@@ -5,7 +5,6 @@ use frontend::syntax::Literal;
 use frontend::ExprFactory;
 use instruction::{Condition, PtrReg, Reg16, RegPair, RelocExpr, SimpleOperand};
 use span::{Source, Span};
-use std::iter;
 
 #[derive(Debug, PartialEq)]
 pub enum Operand<R> {
@@ -76,8 +75,10 @@ fn analyze_deref_operand_keyword<SI>(keyword: (kw::Operand, SI), deref: SI) -> O
     match try_deref_operand_keyword(keyword.0) {
         Ok(atom) => Ok(Operand::Atom(atom, deref)),
         Err(category) => Err(InternalDiagnostic::new(
-            Message::CannotDereference { category },
-            vec![keyword.1],
+            Message::CannotDereference {
+                category,
+                operand: keyword.1,
+            },
             deref,
         )),
     }
@@ -128,8 +129,9 @@ fn analyze_keyword_operand<S: Clone>(
             _ => AtomKind::Reg16(Reg16::Hl),
         },
         Hld | Hli => Err(InternalDiagnostic::new(
-            Message::MustBeDeref,
-            iter::once(span.clone()),
+            Message::MustBeDeref {
+                operand: span.clone(),
+            },
             span.clone(),
         ))?,
         L => AtomKind::Simple(SimpleOperand::L),
@@ -171,7 +173,6 @@ impl<I: Iterator<Item = Result<T, E>>, T, E> OperandCounter<I> {
         } else {
             Err(InternalDiagnostic::new(
                 Message::OperandCount { actual, expected },
-                iter::empty(),
                 span,
             ))
         }
@@ -245,9 +246,9 @@ mod tests {
             analyze_operand(parsed_expr, Context::Other),
             Err(InternalDiagnostic::new(
                 Message::CannotDereference {
-                    category: KeywordOperandCategory::RegPair
+                    category: KeywordOperandCategory::RegPair,
+                    operand: 0,
                 },
-                vec![0],
                 1
             ))
         )
@@ -304,8 +305,7 @@ mod tests {
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
             Err(InternalDiagnostic::new(
-                Message::KeywordInExpr,
-                vec![span],
+                Message::KeywordInExpr { keyword: span },
                 span
             ))
         )
@@ -320,11 +320,7 @@ mod tests {
         );
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Err(InternalDiagnostic::new(
-                Message::StringInInstruction,
-                iter::empty(),
-                span
-            ))
+            Err(InternalDiagnostic::new(Message::StringInInstruction, span))
         )
     }
 
@@ -347,8 +343,7 @@ mod tests {
         assert_eq!(
             analyze_operand(expr, Context::Other),
             Err(InternalDiagnostic::new(
-                Message::MustBeDeref,
-                iter::once(span),
+                Message::MustBeDeref { operand: span },
                 span
             ))
         )

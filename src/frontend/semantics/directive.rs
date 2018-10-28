@@ -10,7 +10,6 @@ use frontend::syntax::Literal;
 use instruction::RelocExpr;
 use span::Span;
 use std::fmt::Debug;
-use std::iter;
 use Width;
 
 pub fn analyze_directive<'a, S: Session + 'a>(
@@ -90,11 +89,7 @@ where
     let arg = single_arg(span, args)?;
     match arg.variant {
         ExprVariant::Atom(SemanticAtom::Literal(Literal::String(path))) => Ok((path, arg.span)),
-        _ => Err(InternalDiagnostic::new(
-            Message::ExpectedString,
-            iter::empty(),
-            arg.span,
-        )),
+        _ => Err(InternalDiagnostic::new(Message::ExpectedString, arg.span)),
     }
 }
 
@@ -120,7 +115,6 @@ fn single_arg<T: Debug + PartialEq, S>(
                 actual: 0,
                 expected: 1,
             },
-            iter::empty(),
             span,
         )
     })?;
@@ -220,8 +214,7 @@ mod tests {
         assert_eq!(
             actions,
             [TestOperation::EmitDiagnostic(InternalDiagnostic::new(
-                Message::KeywordInExpr,
-                iter::once(()),
+                Message::KeywordInExpr { keyword: () },
                 (),
             ))]
         )
@@ -249,7 +242,6 @@ mod tests {
             actions,
             [TestOperation::EmitDiagnostic(InternalDiagnostic::new(
                 Message::ExpectedString,
-                iter::empty(),
                 (),
             ))]
         )
@@ -263,8 +255,7 @@ mod tests {
         assert_eq!(
             actions,
             [TestOperation::EmitDiagnostic(InternalDiagnostic::new(
-                Message::KeywordInExpr,
-                iter::once(()),
+                Message::KeywordInExpr { keyword: () },
                 (),
             ))]
         )
@@ -296,7 +287,6 @@ mod tests {
                     actual: 0,
                     expected: 1
                 },
-                iter::empty(),
                 (),
             ))]
         )

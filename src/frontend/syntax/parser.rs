@@ -172,11 +172,12 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I> {
             }
             Token::Macro => self.parse_macro_def(context),
             _ => {
-                let (_, range) = self.bump();
+                let (_, span) = self.bump();
                 context.emit_diagnostic(InternalDiagnostic::new(
-                    Message::UnexpectedToken,
-                    vec![range.clone()],
-                    range,
+                    Message::UnexpectedToken {
+                        token: span.clone(),
+                    },
+                    span,
                 ));
                 context
             }
@@ -204,7 +205,6 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I> {
                 assert_eq!(self.lookahead(), Token::Eof);
                 body_context.emit_diagnostic(InternalDiagnostic::new(
                     Message::UnexpectedEof,
-                    iter::empty(),
                     self.tokens.peek().unwrap().1.clone(),
                 ))
             }
@@ -213,7 +213,6 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I> {
             assert_eq!(self.lookahead(), Token::Eof);
             context.emit_diagnostic(InternalDiagnostic::new(
                 Message::UnexpectedEof,
-                iter::empty(),
                 self.tokens.peek().unwrap().1.clone(),
             ));
             context.exit()
@@ -291,8 +290,9 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I> {
         if !self.lookahead_is_in(terminators) {
             let (_, unexpected_range) = self.bump();
             context.emit_diagnostic(InternalDiagnostic::new(
-                Message::UnexpectedToken,
-                vec![unexpected_range.clone()],
+                Message::UnexpectedToken {
+                    token: unexpected_range.clone(),
+                },
                 unexpected_range,
             ));
             while !self.lookahead_is_in(terminators) {
@@ -391,11 +391,8 @@ where
             self.context
                 .apply_operator((ExprOperator::Parentheses, left.extend(&right)))
         } else {
-            self.context.emit_diagnostic(InternalDiagnostic::new(
-                Message::UnmatchedParenthesis,
-                iter::empty(),
-                left,
-            ));
+            self.context
+                .emit_diagnostic(InternalDiagnostic::new(Message::UnmatchedParenthesis, left));
         }
     }
 
@@ -418,8 +415,9 @@ where
             Token::Ident(ident) => self.context.push_atom((ExprAtom::Ident(ident), span)),
             Token::Literal(literal) => self.context.push_atom((ExprAtom::Literal(literal), span)),
             _ => self.context.emit_diagnostic(InternalDiagnostic::new(
-                Message::UnexpectedToken,
-                iter::once(span.clone()),
+                Message::UnexpectedToken {
+                    token: span.clone(),
+                },
                 span,
             )),
         }
@@ -1011,20 +1009,30 @@ mod tests {
 
     #[test]
     fn diagnose_stmt_starting_with_literal() {
+        let token: SymSpan = TokenRef::from("a").into();
         assert_eq_actions(
             input_tokens![a @ Literal(())],
-            [unlabeled(stmt_error(Message::UnexpectedToken, ["a"], "a"))],
+            [unlabeled(stmt_error(
+                Message::UnexpectedToken { token },
+                "a",
+            ))],
         )
     }
 
     #[test]
     fn diagnose_missing_comma_in_arg_list() {
+        let span: SymSpan = TokenRef::from("unexpected").into();
         assert_eq_actions(
             input_tokens![Command(()), Literal(()), unexpected @ Literal(())],
             [unlabeled(malformed_command(
                 0,
                 [expr().literal(1)],
-                arg_error(Message::UnexpectedToken, ["unexpected"], "unexpected"),
+                InternalDiagnostic::new(
+                    Message::UnexpectedToken {
+                        token: span.clone(),
+                    },
+                    span,
+                ),
             ))],
         )
     }
@@ -1036,7 +1044,7 @@ mod tests {
             [unlabeled(malformed_macro_def_head(
                 0,
                 [],
-                arg_error(Message::UnexpectedEof, [], "eof"),
+                arg_error(Message::UnexpectedEof, "eof"),
             ))],
         )
     }
@@ -1049,7 +1057,7 @@ mod tests {
                 0,
                 [],
                 Vec::new(),
-                arg_error(Message::UnexpectedEof, [], "eof"),
+                arg_error(Message::UnexpectedEof, "eof"),
             ))],
         )
     }
@@ -1060,7 +1068,12 @@ mod tests {
         let span: SymSpan = TokenRef::from("plus").into();
         assert_eq_expr_diagnostics(
             input,
-            InternalDiagnostic::new(Message::UnexpectedToken, iter::once(span.clone()), span),
+            InternalDiagnostic::new(
+                Message::UnexpectedToken {
+                    token: span.clone(),
+                },
+                span,
+            ),
         )
     }
 
