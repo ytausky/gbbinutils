@@ -4,7 +4,6 @@ use diagnostics::{InternalDiagnostic, Message};
 use span::Span;
 use std::borrow::Borrow;
 use std::collections::HashMap;
-use std::fmt::Debug;
 use std::iter;
 
 pub fn expr() -> SymExpr {
@@ -34,7 +33,7 @@ impl SymExpr {
     }
 
     pub fn parentheses(mut self, left: impl Into<TokenRef>, right: impl Into<TokenRef>) -> Self {
-        let span = SymRange::from(left.into()).extend(&right.into().into());
+        let span = SymSpan::from(left.into()).extend(&right.into().into());
         self.0
             .push(ExprAction::ApplyOperator((ExprOperator::Parentheses, span)));
         self
@@ -48,7 +47,7 @@ impl SymExpr {
         self
     }
 
-    pub fn error(mut self, message: Message, highlight: impl Into<SymRange<TokenRef>>) -> Self {
+    pub fn error(mut self, message: Message, highlight: impl Into<SymSpan>) -> Self {
         self.0
             .push(ExprAction::EmitDiagnostic(InternalDiagnostic::new(
                 message,
@@ -102,7 +101,7 @@ impl InputTokens {
         self.tokens.push(mk_sym_token(id, token))
     }
 
-    pub fn token_seq<T>(&self, tokens: impl Borrow<[T]>) -> Vec<TokenSeqAction<SymRange<TokenRef>>>
+    pub fn token_seq<T>(&self, tokens: impl Borrow<[T]>) -> Vec<TokenSeqAction<SymSpan>>
     where
         T: Clone + Into<TokenRef>,
     {
@@ -175,23 +174,23 @@ macro_rules! input_tokens {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct SymRange<T> {
-    pub start: T,
-    pub end: T,
+pub struct SymSpan {
+    pub start: TokenRef,
+    pub end: TokenRef,
 }
 
-impl<T: Clone> From<T> for SymRange<T> {
-    fn from(x: T) -> SymRange<T> {
-        SymRange {
-            start: x.clone(),
-            end: x,
+impl From<TokenRef> for SymSpan {
+    fn from(token_ref: TokenRef) -> SymSpan {
+        SymSpan {
+            start: token_ref.clone(),
+            end: token_ref,
         }
     }
 }
 
-impl<T: Clone + Debug + PartialEq> Span for SymRange<T> {
+impl Span for SymSpan {
     fn extend(&self, other: &Self) -> Self {
-        SymRange {
+        SymSpan {
             start: self.start.clone(),
             end: other.end.clone(),
         }
@@ -275,12 +274,12 @@ pub enum MacroInvocationAction<S> {
 }
 
 #[derive(Clone)]
-pub struct SymExpr(pub Vec<ExprAction<SymRange<TokenRef>>>);
+pub struct SymExpr(pub Vec<ExprAction<SymSpan>>);
 
 pub fn labeled(
     label: impl Into<TokenRef>,
-    actions: Vec<StmtAction<SymRange<TokenRef>>>,
-) -> FileAction<SymRange<TokenRef>> {
+    actions: Vec<StmtAction<SymSpan>>,
+) -> FileAction<SymSpan> {
     let label = label.into();
     FileAction::Stmt {
         label: Some((SymIdent(label.clone()), label.into())),
@@ -288,21 +287,18 @@ pub fn labeled(
     }
 }
 
-pub fn unlabeled(actions: Vec<StmtAction<SymRange<TokenRef>>>) -> FileAction<SymRange<TokenRef>> {
+pub fn unlabeled(actions: Vec<StmtAction<SymSpan>>) -> FileAction<SymSpan> {
     FileAction::Stmt {
         label: None,
         actions,
     }
 }
 
-pub fn empty() -> Vec<StmtAction<SymRange<TokenRef>>> {
+pub fn empty() -> Vec<StmtAction<SymSpan>> {
     Vec::new()
 }
 
-pub fn command(
-    id: impl Into<TokenRef>,
-    args: impl Borrow<[SymExpr]>,
-) -> Vec<StmtAction<SymRange<TokenRef>>> {
+pub fn command(id: impl Into<TokenRef>, args: impl Borrow<[SymExpr]>) -> Vec<StmtAction<SymSpan>> {
     let id = id.into();
     vec![StmtAction::Command {
         command: (SymCommand(id.clone()), id.into()),
@@ -318,8 +314,8 @@ pub fn command(
 pub fn malformed_command(
     id: impl Into<TokenRef>,
     args: impl Borrow<[SymExpr]>,
-    diagnostic: InternalDiagnostic<SymRange<TokenRef>>,
-) -> Vec<StmtAction<SymRange<TokenRef>>> {
+    diagnostic: InternalDiagnostic<SymSpan>,
+) -> Vec<StmtAction<SymSpan>> {
     let id = id.into();
     vec![StmtAction::Command {
         command: (SymCommand(id.clone()), id.into()),
@@ -335,8 +331,8 @@ pub fn malformed_command(
 
 pub fn invoke(
     id: impl Into<TokenRef>,
-    args: impl Borrow<[Vec<TokenSeqAction<SymRange<TokenRef>>>]>,
-) -> Vec<StmtAction<SymRange<TokenRef>>> {
+    args: impl Borrow<[Vec<TokenSeqAction<SymSpan>>]>,
+) -> Vec<StmtAction<SymSpan>> {
     let id = id.into();
     vec![StmtAction::MacroInvocation {
         name: (SymIdent(id.clone()), id.into()),
@@ -352,9 +348,9 @@ pub fn invoke(
 pub fn macro_def(
     keyword: impl Into<TokenRef>,
     params: impl Borrow<[TokenRef]>,
-    mut body: Vec<TokenSeqAction<SymRange<TokenRef>>>,
+    mut body: Vec<TokenSeqAction<SymSpan>>,
     endm: impl Into<TokenRef>,
-) -> Vec<StmtAction<SymRange<TokenRef>>> {
+) -> Vec<StmtAction<SymSpan>> {
     body.push(TokenSeqAction::PushToken((Token::Eof, endm.into().into())));
     vec![StmtAction::MacroDef {
         keyword: keyword.into().into(),
@@ -371,8 +367,8 @@ pub fn macro_def(
 pub fn malformed_macro_def_head(
     keyword: impl Into<TokenRef>,
     params: impl Borrow<[TokenRef]>,
-    diagnostic: InternalDiagnostic<SymRange<TokenRef>>,
-) -> Vec<StmtAction<SymRange<TokenRef>>> {
+    diagnostic: InternalDiagnostic<SymSpan>,
+) -> Vec<StmtAction<SymSpan>> {
     vec![StmtAction::MacroDef {
         keyword: keyword.into().into(),
         params: params
@@ -389,9 +385,9 @@ pub fn malformed_macro_def_head(
 pub fn malformed_macro_def(
     keyword: impl Into<TokenRef>,
     params: impl Borrow<[TokenRef]>,
-    mut body: Vec<TokenSeqAction<SymRange<TokenRef>>>,
-    diagnostic: InternalDiagnostic<SymRange<TokenRef>>,
-) -> Vec<StmtAction<SymRange<TokenRef>>> {
+    mut body: Vec<TokenSeqAction<SymSpan>>,
+    diagnostic: InternalDiagnostic<SymSpan>,
+) -> Vec<StmtAction<SymSpan>> {
     body.push(TokenSeqAction::EmitDiagnostic(diagnostic));
     vec![StmtAction::MacroDef {
         keyword: keyword.into().into(),
@@ -409,7 +405,7 @@ pub fn stmt_error(
     message: Message,
     ranges: impl Borrow<[&'static str]>,
     highlight: impl Into<TokenRef>,
-) -> Vec<StmtAction<SymRange<TokenRef>>> {
+) -> Vec<StmtAction<SymSpan>> {
     vec![StmtAction::EmitDiagnostic(arg_error(
         message, ranges, highlight,
     ))]
@@ -419,7 +415,7 @@ pub fn arg_error(
     message: Message,
     ranges: impl Borrow<[&'static str]>,
     highlight: impl Into<TokenRef>,
-) -> InternalDiagnostic<SymRange<TokenRef>> {
+) -> InternalDiagnostic<SymSpan> {
     InternalDiagnostic::new(
         message,
         ranges.borrow().iter().map(|s| TokenRef::from(*s).into()),
