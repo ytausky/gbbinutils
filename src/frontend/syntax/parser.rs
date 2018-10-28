@@ -371,11 +371,13 @@ where
     A: ExprContext<T::Span, Ident = T::Ident, Literal = T::Literal>,
 {
     fn parse(mut self) -> A::Parent {
-        self.parse_expression();
+        if let Err(diagnostic) = self.parse_expression() {
+            self.context.emit_diagnostic(diagnostic)
+        }
         self.context.exit()
     }
 
-    fn parse_expression(&mut self) {
+    fn parse_expression(&mut self) -> Result<(), InternalDiagnostic<T::Span>> {
         if self.lookahead() == Token::OpeningParenthesis {
             self.parse_parenthesized_expression()
         } else {
@@ -383,31 +385,35 @@ where
         }
     }
 
-    fn parse_parenthesized_expression(&mut self) {
+    fn parse_parenthesized_expression(&mut self) -> Result<(), InternalDiagnostic<T::Span>> {
         let (_, left) = self.expect(Token::OpeningParenthesis);
-        self.parse_expression();
+        self.parse_expression()?;
         if self.lookahead() == Token::ClosingParenthesis {
             let (_, right) = self.expect(Token::ClosingParenthesis);
             self.context
-                .apply_operator((ExprOperator::Parentheses, left.extend(&right)))
+                .apply_operator((ExprOperator::Parentheses, left.extend(&right)));
+            Ok(())
         } else {
-            self.context
-                .emit_diagnostic(InternalDiagnostic::new(Message::UnmatchedParenthesis, left));
+            Err(InternalDiagnostic::new(Message::UnmatchedParenthesis, left))
         }
     }
 
-    fn parse_infix_expr(&mut self) {
-        self.parse_atomic_expr();
+    fn parse_infix_expr(&mut self) -> Result<(), InternalDiagnostic<T::Span>> {
+        self.parse_atomic_expr()?;
         while self.lookahead() == Token::Plus {
             let (_, plus_span) = self.bump();
-            self.parse_atomic_expr();
+            self.parse_atomic_expr()?;
             self.context.apply_operator((ExprOperator::Plus, plus_span));
         }
+        Ok(())
     }
 
-    fn parse_atomic_expr(&mut self) {
+    fn parse_atomic_expr(&mut self) -> Result<(), InternalDiagnostic<T::Span>> {
         if self.lookahead() == Token::Eof {
-            return;
+            return Err(InternalDiagnostic::new(
+                Message::UnexpectedEof,
+                self.tokens.tokens().peek().unwrap().1.clone(),
+            ));
         }
 
         let (token, span) = self.bump();
@@ -421,6 +427,7 @@ where
                 span,
             )),
         }
+        Ok(())
     }
 }
 
@@ -1080,11 +1087,23 @@ mod tests {
     #[test]
     fn diagnose_unmatched_parentheses() {
         assert_eq_actions(
-            input_tokens![Command(()), paren @ OpeningParenthesis],
+            input_tokens![Command(()), paren @ OpeningParenthesis, Literal(())],
             [unlabeled(command(
                 0,
-                [expr().error(Message::UnmatchedParenthesis, TokenRef::from("paren"))],
+                [expr()
+                    .literal(2)
+                    .error(Message::UnmatchedParenthesis, TokenRef::from("paren"))],
             ))],
+        )
+    }
+
+    #[test]
+    fn diagnose_eof_for_rhs_operand() {
+        assert_eq_rpn_expr(
+            input_tokens![Ident(()), Plus],
+            expr()
+                .ident(0)
+                .error(Message::UnexpectedEof, TokenRef::from(2)),
         )
     }
 }
