@@ -5,7 +5,7 @@ mod syntax;
 use backend::*;
 use codebase::{Codebase, CodebaseError};
 use diagnostics::*;
-use frontend::session::{BorrowedComponents, Components, Session};
+use frontend::session::*;
 use frontend::syntax::*;
 use span::{LexemeRefFactory, Span, TokenTracker};
 use std::collections::HashMap;
@@ -133,7 +133,7 @@ pub trait Frontend {
     fn invoke_macro<B, D>(
         &mut self,
         name: (Self::Ident, Self::Span),
-        args: Vec<Vec<(Token<Self::Ident>, Self::Span)>>,
+        args: MacroArgs<Self::Ident, Self::Span>,
         downstream: Downstream<B, D>,
     ) where
         B: Backend<Self::Span>,
@@ -208,7 +208,7 @@ where
     fn invoke_macro<B, D>(
         &mut self,
         name: (Self::Ident, Self::Span),
-        args: Vec<Vec<(Token<Self::Ident>, Self::Span)>>,
+        args: MacroArgs<Self::Ident, Self::Span>,
         mut downstream: Downstream<B, D>,
     ) where
         B: Backend<Self::Span>,

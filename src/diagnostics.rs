@@ -150,7 +150,7 @@ pub enum KeywordOperandCategory {
 impl Message<TokenRefData> {
     fn render<'a>(&self, codebase: &'a TextCache) -> String {
         use diagnostics::Message::*;
-        let string = match self {
+        match self {
             AfOutsideStackOperation => {
                 "register pair `af` can only be used with `push` and `pop`".into()
             }
@@ -241,8 +241,7 @@ impl Message<TokenRefData> {
             ValueOutOfRange { value, width } => {
                 format!("value {} cannot be represented in a {}", value, width)
             }
-        };
-        string
+        }
     }
 }
 
@@ -289,7 +288,7 @@ pub struct DiagnosticLocation<T> {
 
 pub fn mk_diagnostic(
     file: impl Into<String>,
-    message: Message<TokenRefData>,
+    message: &Message<TokenRefData>,
 ) -> Diagnostic<String> {
     Diagnostic {
         file: file.into(),

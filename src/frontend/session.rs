@@ -16,7 +16,7 @@ pub trait Session {
     fn invoke_macro(
         &mut self,
         name: (Self::Ident, Self::Span),
-        args: Vec<Vec<(Token<Self::Ident>, Self::Span)>>,
+        args: MacroArgs<Self::Ident, Self::Span>,
     );
     fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<Self::Span>);
     fn emit_item(&mut self, item: backend::Item<Self::Span>);
@@ -29,6 +29,8 @@ pub trait Session {
     );
     fn set_origin(&mut self, origin: backend::RelocExpr<Self::Span>);
 }
+
+pub type MacroArgs<I, S> = Vec<Vec<(Token<I>, S)>>;
 
 pub struct Components<F, B, D, BMF, BMB, BMD>
 where
@@ -102,7 +104,7 @@ where
     fn invoke_macro(
         &mut self,
         name: (Self::Ident, Self::Span),
-        args: Vec<Vec<(Token<Self::Ident>, Self::Span)>>,
+        args: MacroArgs<Self::Ident, Self::Span>,
     ) {
         self.frontend.borrow_mut().invoke_macro(
             name,

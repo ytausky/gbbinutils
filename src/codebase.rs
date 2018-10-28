@@ -220,6 +220,7 @@ pub trait FileSystem {
     fn read_file(&self, filename: &str) -> Vec<u8>;
 }
 
+#[derive(Default)]
 pub struct StdFileSystem;
 
 impl StdFileSystem {

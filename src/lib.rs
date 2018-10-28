@@ -40,7 +40,7 @@ pub fn assemble<'a>(name: &str, config: &mut Config<'a>) -> Option<Rom> {
         Err(CodebaseError::Utf8Error) => {
             config
                 .output
-                .emit(mk_diagnostic(name, Message::InvalidUtf8));
+                .emit(mk_diagnostic(name, &Message::InvalidUtf8));
             None
         }
     }

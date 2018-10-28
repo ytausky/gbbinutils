@@ -72,7 +72,7 @@ fn analyze_include<'a, F: Session + 'a>(
     actions: &mut SemanticActions<'a, F>,
 ) -> Result<(), InternalDiagnostic<F::Span>> {
     let path = reduce_include(span, args)?;
-    if let Err(_) = actions.session.analyze_file(path.0) {
+    if actions.session.analyze_file(path.0).is_err() {
         unimplemented!()
     }
     Ok(())
