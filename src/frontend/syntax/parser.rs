@@ -222,7 +222,7 @@ where
             Ok(parser) => parser,
             Err((mut parser, diagnostic)) => {
                 parser.context.emit_diagnostic(diagnostic);
-                while !LINE_FOLLOW_SET.iter().any(|x| *x == parser.token.0.kind()) {
+                while !parser.token_is_in(LINE_FOLLOW_SET) {
                     bump!(parser);
                 }
                 parser
