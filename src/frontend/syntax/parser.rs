@@ -218,16 +218,14 @@ where
     Ctx: ExprContext<S, Ident = Id, Literal = L>,
 {
     fn parse(self) -> Self {
-        match self.parse_expression() {
-            Ok(parser) => parser,
-            Err((mut parser, diagnostic)) => {
+        self.parse_expression()
+            .unwrap_or_else(|(mut parser, diagnostic)| {
                 parser.context.emit_diagnostic(diagnostic);
                 while !parser.token_is_in(LINE_FOLLOW_SET) {
                     bump!(parser);
                 }
                 parser
-            }
-        }
+            })
     }
 
     fn parse_expression(mut self) -> Result<Self, (Self, InternalDiagnostic<S>)> {
