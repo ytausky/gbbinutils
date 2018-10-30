@@ -44,32 +44,6 @@ where
     context
 }
 
-trait TokenStream {
-    type Ident;
-    type Command;
-    type Literal;
-    type Span: Span;
-    type Iter: Iterator<Item = (Token<Self::Ident, Self::Command, Self::Literal>, Self::Span)>;
-
-    fn tokens(&mut self) -> &mut Self::Iter;
-
-    fn bump(&mut self) -> <Self::Iter as Iterator>::Item {
-        self.tokens().next().unwrap()
-    }
-}
-
-impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> TokenStream for I {
-    type Ident = Id;
-    type Command = C;
-    type Literal = L;
-    type Span = S;
-    type Iter = I;
-
-    fn tokens(&mut self) -> &mut Self::Iter {
-        self
-    }
-}
-
 struct State<'a, T, I: 'a, C> {
     token: T,
     tokens: &'a mut I,
@@ -230,15 +204,99 @@ where
         self.parse_terminated_list(Token::Comma, LINE_FOLLOW_SET, |p| p.parse_argument())
     }
 
-    fn parse_argument(mut self) -> Self {
-        let (token, context) = ExprParser {
-            tokens: &mut self.tokens,
-            context: self.context.add_argument(),
-        }.parse(self.token);
-        State {
-            token,
-            tokens: self.tokens,
-            context,
+    fn parse_argument(self) -> Self {
+        self.change_context(|c| c.add_argument())
+            .parse()
+            .change_context(|c| c.exit())
+    }
+}
+
+impl<'a, Id, C, L, S, I, Ctx> State<'a, (Token<Id, C, L>, S), I, Ctx>
+where
+    S: Span,
+    I: Iterator<Item = (Token<Id, C, L>, S)>,
+    Ctx: ExprContext<S, Ident = Id, Literal = L>,
+{
+    fn parse(self) -> Self {
+        match self.parse_expression() {
+            Ok(parser) => parser,
+            Err((mut parser, diagnostic)) => {
+                parser.context.emit_diagnostic(diagnostic);
+                while !LINE_FOLLOW_SET.iter().any(|x| *x == parser.token.0.kind()) {
+                    bump!(parser);
+                }
+                parser
+            }
+        }
+    }
+
+    fn parse_expression(mut self) -> Result<Self, (Self, InternalDiagnostic<S>)> {
+        match self.token {
+            (Token::OpeningParenthesis, span) => {
+                bump!(self);
+                self.parse_parenthesized_expression(span)
+            }
+            _ => self.parse_infix_expr(),
+        }
+    }
+
+    fn parse_parenthesized_expression(
+        mut self,
+        left: S,
+    ) -> Result<Self, (Self, InternalDiagnostic<S>)> {
+        self = self.parse_expression()?;
+        match self.token {
+            (Token::ClosingParenthesis, right) => {
+                bump!(self);
+                self.context
+                    .apply_operator((ExprOperator::Parentheses, left.extend(&right)));
+                Ok(self)
+            }
+            _ => Err((
+                self,
+                InternalDiagnostic::new(Message::UnmatchedParenthesis, left),
+            )),
+        }
+    }
+
+    fn parse_infix_expr(mut self) -> Result<Self, (Self, InternalDiagnostic<S>)> {
+        self = self.parse_atomic_expr()?;
+        while let (Token::Plus, span) = self.token {
+            bump!(self);
+            self = self.parse_atomic_expr()?;
+            self.context.apply_operator((ExprOperator::Plus, span));
+        }
+        Ok(self)
+    }
+
+    fn parse_atomic_expr(mut self) -> Result<Self, (Self, InternalDiagnostic<S>)> {
+        match self.token {
+            (Token::Eof, _) => {
+                let span = self.token.1.clone();
+                Err((self, InternalDiagnostic::new(Message::UnexpectedEof, span)))
+            }
+            (Token::Ident(ident), span) => {
+                self.context.push_atom((ExprAtom::Ident(ident), span));
+                bump!(self);
+                Ok(self)
+            }
+            (Token::Literal(literal), span) => {
+                self.context.push_atom((ExprAtom::Literal(literal), span));
+                bump!(self);
+                Ok(self)
+            }
+            (_, span) => {
+                bump!(self);
+                Err((
+                    self,
+                    InternalDiagnostic::new(
+                        Message::UnexpectedToken {
+                            token: span.clone(),
+                        },
+                        span,
+                    ),
+                ))
+            }
         }
     }
 }
@@ -336,120 +394,6 @@ where
             self = parser(self);
         }
         self
-    }
-}
-
-struct ExprParser<'a, T: 'a, A> {
-    tokens: &'a mut T,
-    context: A,
-}
-
-impl<'a, T: TokenStream + 'a, A> TokenStream for ExprParser<'a, T, A> {
-    type Ident = T::Ident;
-    type Command = T::Command;
-    type Literal = T::Literal;
-    type Span = T::Span;
-    type Iter = T::Iter;
-
-    fn tokens(&mut self) -> &mut Self::Iter {
-        self.tokens.tokens()
-    }
-}
-
-type ExprParsingResult<T> = Result<
-    <<T as TokenStream>::Iter as Iterator>::Item,
-    (
-        <<T as TokenStream>::Iter as Iterator>::Item,
-        InternalDiagnostic<<T as TokenStream>::Span>,
-    ),
->;
-
-impl<'a, T, A> ExprParser<'a, T, A>
-where
-    T: TokenStream + 'a,
-    A: ExprContext<T::Span, Ident = T::Ident, Literal = T::Literal>,
-{
-    fn parse(
-        mut self,
-        mut token: <T::Iter as Iterator>::Item,
-    ) -> (<T::Iter as Iterator>::Item, A::Parent) {
-        token = match self.parse_expression(token) {
-            Ok(token) => token,
-            Err((mut token, diagnostic)) => {
-                self.context.emit_diagnostic(diagnostic);
-                while !LINE_FOLLOW_SET.iter().any(|x| *x == token.0.kind()) {
-                    token = self.bump();
-                }
-                token
-            }
-        };
-        (token, self.context.exit())
-    }
-
-    fn parse_expression(&mut self, mut token: <T::Iter as Iterator>::Item) -> ExprParsingResult<T> {
-        match token {
-            (Token::OpeningParenthesis, span) => {
-                token = self.bump();
-                self.parse_parenthesized_expression(span, token)
-            }
-            other => self.parse_infix_expr(other),
-        }
-    }
-
-    fn parse_parenthesized_expression(
-        &mut self,
-        left: T::Span,
-        token: <T::Iter as Iterator>::Item,
-    ) -> ExprParsingResult<T> {
-        let mut token = self.parse_expression(token)?;
-        match token {
-            (Token::ClosingParenthesis, right) => {
-                token = self.bump();
-                self.context
-                    .apply_operator((ExprOperator::Parentheses, left.extend(&right)));
-                Ok(token)
-            }
-            other => Err((
-                other,
-                InternalDiagnostic::new(Message::UnmatchedParenthesis, left),
-            )),
-        }
-    }
-
-    fn parse_infix_expr(&mut self, token: <T::Iter as Iterator>::Item) -> ExprParsingResult<T> {
-        let mut token = self.parse_atomic_expr(token)?;
-        while let (Token::Plus, span) = token {
-            token = self.bump();
-            token = self.parse_atomic_expr(token)?;
-            self.context.apply_operator((ExprOperator::Plus, span));
-        }
-        Ok(token)
-    }
-
-    fn parse_atomic_expr(&mut self, token: <T::Iter as Iterator>::Item) -> ExprParsingResult<T> {
-        match token {
-            (Token::Eof, _) => {
-                let span = token.1.clone();
-                Err((token, InternalDiagnostic::new(Message::UnexpectedEof, span)))
-            }
-            (Token::Ident(ident), span) => {
-                self.context.push_atom((ExprAtom::Ident(ident), span));
-                Ok(self.bump())
-            }
-            (Token::Literal(literal), span) => {
-                self.context.push_atom((ExprAtom::Literal(literal), span));
-                Ok(self.bump())
-            }
-            (_, span) => Err((
-                self.bump(),
-                InternalDiagnostic::new(
-                    Message::UnexpectedToken {
-                        token: span.clone(),
-                    },
-                    span,
-                ),
-            )),
-        }
     }
 }
 
@@ -1029,12 +973,13 @@ mod tests {
 
     fn parse_sym_expr(input: &mut InputTokens) -> Vec<ExprAction<SymSpan>> {
         let tokens = &mut with_spans(&input.tokens);
-        let mut parser = ExprParser {
+        State {
+            token: tokens.next().unwrap(),
             tokens,
             context: ExprActionCollector::new(),
-        };
-        let token = parser.bump();
-        parser.parse(token).1
+        }.parse()
+        .change_context(|c| c.exit())
+        .context
     }
 
     #[test]
