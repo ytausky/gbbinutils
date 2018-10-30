@@ -29,21 +29,18 @@ impl<C, I, L, E> Token<C, I, L, E> {
 
 const LINE_FOLLOW_SET: &[TokenKind] = &[Token::Eol, Token::Eof];
 
-pub fn parse_src<Id, C, L, S, I, F>(tokens: I, context: F) -> F
+pub fn parse_src<Id, C, L, S, I, F>(mut tokens: I, context: F) -> F
 where
     S: Span,
     I: Iterator<Item = (Token<Id, C, L>, S)>,
     F: FileContext<Id, C, L, S>,
 {
-    let mut parser = Parser { tokens };
-    let token = parser.bump();
-    let State { token, context } = parser.parse_file(State { token, context });
+    let State { token, context } = State {
+        token: tokens.next().unwrap(),
+        context,
+    }.parse_file(&mut tokens);
     assert_eq!(token.0.kind(), Token::Eof);
     context
-}
-
-struct Parser<I: Iterator> {
-    tokens: I,
 }
 
 trait TokenStream {
@@ -72,18 +69,6 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> TokenStream fo
     }
 }
 
-impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> TokenStream for Parser<I> {
-    type Ident = Id;
-    type Command = C;
-    type Literal = L;
-    type Span = S;
-    type Iter = I;
-
-    fn tokens(&mut self) -> &mut Self::Iter {
-        &mut self.tokens
-    }
-}
-
 struct State<T, C> {
     token: T,
     context: C,
@@ -104,86 +89,97 @@ impl<I, C, L, S, A> State<(Token<I, C, L>, S), A> {
     }
 }
 
-impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I> {
-    fn parse_file<F: FileContext<Id, C, L, S>>(
-        &mut self,
-        state: State<I::Item, F>,
-    ) -> State<I::Item, F> {
-        self.parse_terminated_list(Token::Eol, &[Token::Eof], |p, s| p.parse_stmt(s), state)
+impl<Id, C, L, S: Span, Ctx: FileContext<Id, C, L, S>> State<(Token<Id, C, L>, S), Ctx> {
+    fn parse_file<I: Iterator<Item = (Token<Id, C, L>, S)>>(self, tokens: &mut I) -> Self {
+        self.parse_terminated_list(Token::Eol, &[Token::Eof], |p, s| p.parse_stmt(s), tokens)
     }
 
-    fn parse_stmt<F: FileContext<Id, C, L, S>>(
-        &mut self,
-        mut state: State<I::Item, F>,
-    ) -> State<I::Item, F> {
-        match state.token {
+    fn parse_stmt<I: Iterator<Item = (Token<Id, C, L>, S)>>(mut self, tokens: &mut I) -> Self {
+        match self.token {
             (Token::Ident(ident), span) => {
-                state.token = self.bump();
-                self.parse_potentially_labeled_stmt((ident, span), state)
+                self.token = tokens.next().unwrap();
+                self.parse_potentially_labeled_stmt((ident, span), tokens)
             }
             _ => self
-                .parse_unlabeled_stmt(state.change_context(|c| c.enter_stmt(None)))
+                .change_context(|c| c.enter_stmt(None))
+                .parse_unlabeled_stmt(tokens)
                 .change_context(|c| c.exit()),
         }
     }
 
-    fn parse_potentially_labeled_stmt<F: FileContext<Id, C, L, S>>(
-        &mut self,
+    fn parse_potentially_labeled_stmt<I: Iterator<Item = (Token<Id, C, L>, S)>>(
+        mut self,
         ident: (Id, S),
-        mut state: State<I::Item, F>,
-    ) -> State<I::Item, F> {
-        if let (Token::Colon, _) = state.token {
-            state.token = self.bump();
-            self.parse_unlabeled_stmt(state.change_context(|c| c.enter_stmt(Some(ident))))
+        tokens: &mut I,
+    ) -> Self {
+        if let (Token::Colon, _) = self.token {
+            self.token = tokens.next().unwrap();
+            self.change_context(|c| c.enter_stmt(Some(ident)))
+                .parse_unlabeled_stmt(tokens)
         } else {
-            self.parse_macro_invocation(ident, state.change_context(|c| c.enter_stmt(None)))
+            self.change_context(|c| c.enter_stmt(None))
+                .parse_macro_invocation(ident, tokens)
         }.change_context(|c| c.exit())
     }
+}
 
-    fn parse_unlabeled_stmt<LA: StmtContext<Id, C, L, S>>(
-        &mut self,
-        mut state: State<I::Item, LA>,
-    ) -> State<I::Item, LA> {
-        match state.token {
-            (Token::Eol, _) | (Token::Eof, _) => state,
+impl<Id, C, L, S: Span, Ctx: StmtContext<Id, C, L, S>> State<(Token<Id, C, L>, S), Ctx> {
+    fn parse_unlabeled_stmt<I: Iterator<Item = (Token<Id, C, L>, S)>>(
+        mut self,
+        tokens: &mut I,
+    ) -> Self {
+        match self.token {
+            (Token::Eol, _) | (Token::Eof, _) => self,
             (Token::Command(command), span) => {
-                state.token = self.bump();
-                self.parse_command((command, span), state)
+                self.token = tokens.next().unwrap();
+                self.parse_command((command, span), tokens)
             }
             (Token::Ident(ident), span) => {
-                state.token = self.bump();
-                self.parse_macro_invocation((ident, span), state)
+                self.token = tokens.next().unwrap();
+                self.parse_macro_invocation((ident, span), tokens)
             }
             (Token::Macro, span) => {
-                state.token = self.bump();
-                self.parse_macro_def(span, state)
+                self.token = tokens.next().unwrap();
+                self.parse_macro_def(span, tokens)
             }
             (_, span) => {
-                state.token = self.bump();
-                state.context.emit_diagnostic(InternalDiagnostic::new(
+                self.token = tokens.next().unwrap();
+                self.context.emit_diagnostic(InternalDiagnostic::new(
                     Message::UnexpectedToken {
                         token: span.clone(),
                     },
                     span,
                 ));
-                state
+                self
             }
         }
     }
 
-    fn parse_macro_def<LA: StmtContext<Id, C, L, S>>(
-        &mut self,
+    fn parse_command<I: Iterator<Item = (Token<Id, C, L>, S)>>(
+        self,
+        command: (C, S),
+        tokens: &mut I,
+    ) -> Self {
+        self.change_context(|c| c.enter_command(command))
+            .parse_argument_list(tokens)
+            .change_context(|c| c.exit())
+    }
+
+    fn parse_macro_def<I: Iterator<Item = (Token<Id, C, L>, S)>>(
+        self,
         span: S,
-        state: State<I::Item, LA>,
-    ) -> State<I::Item, LA> {
-        let mut state = self.parse_terminated_list(
-            Token::Comma,
-            LINE_FOLLOW_SET,
-            |p, s| p.parse_macro_param(s),
-            state.change_context(|c| c.enter_macro_def(span)),
-        );
+        tokens: &mut I,
+    ) -> Self {
+        let mut state = self
+            .change_context(|c| c.enter_macro_def(span))
+            .parse_terminated_list(
+                Token::Comma,
+                LINE_FOLLOW_SET,
+                |p, s| p.parse_macro_param(s),
+                tokens,
+            );
         if state.token.0.kind() == Token::Eol {
-            state.token = self.bump();
+            state.token = tokens.next().unwrap();
             let mut state = state.change_context(|c| c.exit());
             loop {
                 match state.token {
@@ -191,7 +187,7 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I> {
                         state
                             .context
                             .push_token((Token::Eof, state.token.1.clone()));
-                        state.token = self.bump();
+                        state.token = tokens.next().unwrap();
                         break;
                     }
                     (Token::Eof, _) => {
@@ -203,7 +199,7 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I> {
                     }
                     other => {
                         state.context.push_token(other);
-                        state.token = self.bump()
+                        state.token = tokens.next().unwrap();
                     }
                 }
             }
@@ -218,145 +214,145 @@ impl<Id, C, L, S: Span, I: Iterator<Item = (Token<Id, C, L>, S)>> Parser<I> {
         }.change_context(|c| c.exit())
     }
 
-    fn parse_macro_param<MPA>(&mut self, mut state: State<I::Item, MPA>) -> State<I::Item, MPA>
-    where
-        MPA: MacroParamsContext<S, Command = C, Ident = Id, Literal = L>,
-    {
-        let ident = match state.token {
-            (Token::Ident(ident), span) => (ident, span),
-            _ => panic!(),
-        };
-        state.token = self.bump();
-        state.context.add_parameter(ident);
-        state
-    }
-
-    fn parse_command<LA: StmtContext<Id, C, L, S>>(
-        &mut self,
-        command: (C, S),
-        state: State<I::Item, LA>,
-    ) -> State<I::Item, LA> {
-        self.parse_argument_list(state.change_context(|c| c.enter_command(command)))
-            .change_context(|c| c.exit())
-    }
-
-    fn parse_macro_invocation<LA: StmtContext<Id, C, L, S>>(
-        &mut self,
+    fn parse_macro_invocation<I: Iterator<Item = (Token<Id, C, L>, S)>>(
+        self,
         name: (Id, S),
-        state: State<I::Item, LA>,
-    ) -> State<I::Item, LA> {
-        self.parse_macro_arg_list(state.change_context(|c| c.enter_macro_invocation(name)))
+        tokens: &mut I,
+    ) -> Self {
+        self.change_context(|c| c.enter_macro_invocation(name))
+            .parse_macro_arg_list(tokens)
             .change_context(|c| c.exit())
     }
+}
 
-    fn parse_argument_list<CC: CommandContext<S, Command = C, Ident = Id, Literal = L>>(
-        &mut self,
-        state: State<I::Item, CC>,
-    ) -> State<I::Item, CC> {
+impl<Id, C, L, S: Span, Ctx: CommandContext<S, Command = C, Ident = Id, Literal = L>>
+    State<(Token<Id, C, L>, S), Ctx>
+{
+    fn parse_argument_list<I: Iterator<Item = (Token<Id, C, L>, S)>>(self, tokens: &mut I) -> Self {
         self.parse_terminated_list(
             Token::Comma,
             LINE_FOLLOW_SET,
             |p, s| p.parse_argument(s),
-            state,
+            tokens,
         )
     }
 
-    fn parse_macro_arg_list<M: MacroInvocationContext<S, Token = Token<Id, C, L>>>(
-        &mut self,
-        state: State<I::Item, M>,
-    ) -> State<I::Item, M> {
+    fn parse_argument<I: Iterator<Item = (Token<Id, C, L>, S)>>(self, tokens: &mut I) -> Self {
+        ExprParser {
+            tokens,
+            context: self.context.add_argument(),
+        }.parse(self.token)
+    }
+}
+
+impl<Id, C, L, S: Span, Ctx: MacroParamsContext<S, Command = C, Ident = Id, Literal = L>>
+    State<(Token<Id, C, L>, S), Ctx>
+{
+    fn parse_macro_param<I: Iterator<Item = (Token<Id, C, L>, S)>>(
+        mut self,
+        tokens: &mut I,
+    ) -> Self {
+        let ident = match self.token {
+            (Token::Ident(ident), span) => (ident, span),
+            _ => panic!(),
+        };
+        self.token = tokens.next().unwrap();
+        self.context.add_parameter(ident);
+        self
+    }
+}
+
+impl<Id, C, L, S: Span, Ctx: MacroInvocationContext<S, Token = Token<Id, C, L>>>
+    State<(Token<Id, C, L>, S), Ctx>
+{
+    fn parse_macro_arg_list<I: Iterator<Item = (Token<Id, C, L>, S)>>(
+        self,
+        tokens: &mut I,
+    ) -> Self {
         self.parse_terminated_list(
             Token::Comma,
             LINE_FOLLOW_SET,
-            |p, state| {
+            |state, tokens| {
                 let mut state = state.change_context(|c| c.enter_macro_arg());
                 loop {
                     match state.token {
                         (Token::Comma, _) | (Token::Eol, _) | (Token::Eof, _) => break,
                         other => {
-                            state.token = p.bump();
+                            state.token = tokens.next().unwrap();
                             state.context.push_token(other)
                         }
                     }
                 }
                 state.change_context(|c| c.exit())
             },
-            state,
+            tokens,
         )
     }
+}
 
-    fn parse_terminated_list<P, A>(
-        &mut self,
+impl<Id, C, L, S: Span, Ctx: DiagnosticsListener<S>> State<(Token<Id, C, L>, S), Ctx> {
+    fn parse_terminated_list<P, I>(
+        mut self,
         delimiter: TokenKind,
         terminators: &[TokenKind],
         parser: P,
-        mut state: State<I::Item, A>,
-    ) -> State<I::Item, A>
+        tokens: &mut I,
+    ) -> Self
     where
-        P: FnMut(&mut Self, State<I::Item, A>) -> State<I::Item, A>,
-        A: DiagnosticsListener<S>,
+        P: FnMut(Self, &mut I) -> Self,
+        I: Iterator<Item = (Token<Id, C, L>, S)>,
     {
-        state = self.parse_list(delimiter, terminators, parser, state);
-        if !state.token_is_in(terminators) {
-            let unexpected_span = state.token.1;
-            state.context.emit_diagnostic(InternalDiagnostic::new(
+        self = self.parse_list(delimiter, terminators, parser, tokens);
+        if !self.token_is_in(terminators) {
+            let unexpected_span = self.token.1;
+            self.context.emit_diagnostic(InternalDiagnostic::new(
                 Message::UnexpectedToken {
                     token: unexpected_span.clone(),
                 },
                 unexpected_span,
             ));
-            state.token = self.bump();
-            while !state.token_is_in(terminators) {
-                state.token = self.bump();
+            self.token = tokens.next().unwrap();
+            while !self.token_is_in(terminators) {
+                self.token = tokens.next().unwrap();
             }
         }
-        state
+        self
     }
 
-    fn parse_list<P, A>(
-        &mut self,
+    fn parse_list<P, I>(
+        self,
         delimiter: TokenKind,
         terminators: &[TokenKind],
         mut parser: P,
-        state: State<I::Item, A>,
-    ) -> State<I::Item, A>
+        tokens: &mut I,
+    ) -> Self
     where
-        P: FnMut(&mut Self, State<I::Item, A>) -> State<I::Item, A>,
-        A: DiagnosticsListener<S>,
+        P: FnMut(Self, &mut I) -> Self,
+        I: Iterator<Item = (Token<Id, C, L>, S)>,
     {
-        if state.token_is_in(terminators) {
-            state
+        if self.token_is_in(terminators) {
+            self
         } else {
-            self.parse_nonempty_list(delimiter, &mut parser, state)
+            self.parse_nonempty_list(delimiter, &mut parser, tokens)
         }
     }
 
-    fn parse_nonempty_list<P, A>(
-        &mut self,
+    fn parse_nonempty_list<P, I>(
+        mut self,
         delimiter: TokenKind,
         parser: &mut P,
-        mut state: State<I::Item, A>,
-    ) -> State<I::Item, A>
+        tokens: &mut I,
+    ) -> Self
     where
-        P: FnMut(&mut Self, State<I::Item, A>) -> State<I::Item, A>,
-        A: DiagnosticsListener<S>,
+        P: FnMut(Self, &mut I) -> Self,
+        I: Iterator<Item = (Token<Id, C, L>, S)>,
     {
-        state = parser(self, state);
-        while state.token.0.kind() == delimiter {
-            state.token = self.bump();
-            state = parser(self, state);
+        self = parser(self, tokens);
+        while self.token.0.kind() == delimiter {
+            self.token = tokens.next().unwrap();
+            self = parser(self, tokens);
         }
-        state
-    }
-
-    fn parse_argument<CC: CommandContext<S, Command = C, Ident = Id, Literal = L>>(
-        &mut self,
-        state: State<I::Item, CC>,
-    ) -> State<I::Item, CC> {
-        ExprParser {
-            tokens: self,
-            context: state.context.add_argument(),
-        }.parse(state.token)
+        self
     }
 }
 
