@@ -35,44 +35,50 @@ where
     I: Iterator<Item = (Token<Id, C, L>, S)>,
     F: FileContext<Id, C, L, S>,
 {
-    let State { token, context, .. } = State {
-        token: tokens.next().unwrap(),
-        tokens: &mut tokens,
-        context,
-    }.parse_file();
+    let Parser { token, context, .. } = Parser::new(&mut tokens, context).parse_file();
     assert_eq!(token.0.kind(), Token::Eof);
     context
 }
 
-struct State<'a, T, I: 'a, C> {
+struct Parser<'a, T, I: 'a, C> {
     token: T,
-    tokens: &'a mut I,
+    remaining: &'a mut I,
     context: C,
+}
+
+impl<'a, T, I: Iterator<Item = T>, C> Parser<'a, T, I, C> {
+    fn new(tokens: &'a mut I, context: C) -> Self {
+        Parser {
+            token: tokens.next().unwrap(),
+            remaining: tokens,
+            context,
+        }
+    }
 }
 
 macro_rules! bump {
     ($parser:expr) => {
-        $parser.token = $parser.tokens.next().unwrap()
+        $parser.token = $parser.remaining.next().unwrap()
     };
 }
 
-impl<'a, T, I, C> State<'a, T, I, C> {
-    fn change_context<D, F: FnOnce(C) -> D>(self, f: F) -> State<'a, T, I, D> {
-        State {
+impl<'a, T, I, C> Parser<'a, T, I, C> {
+    fn change_context<D, F: FnOnce(C) -> D>(self, f: F) -> Parser<'a, T, I, D> {
+        Parser {
             token: self.token,
-            tokens: self.tokens,
+            remaining: self.remaining,
             context: f(self.context),
         }
     }
 }
 
-impl<'a, Id, C, L, S, I, A> State<'a, (Token<Id, C, L>, S), I, A> {
+impl<'a, Id, C, L, S, I, A> Parser<'a, (Token<Id, C, L>, S), I, A> {
     fn token_is_in(&self, kinds: &[TokenKind]) -> bool {
         kinds.iter().any(|x| *x == self.token.0.kind())
     }
 }
 
-impl<'a, Id, C, L, S, I, Ctx> State<'a, (Token<Id, C, L>, S), I, Ctx>
+impl<'a, Id, C, L, S, I, Ctx> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
 where
     S: Span,
     I: Iterator<Item = (Token<Id, C, L>, S)>,
@@ -107,7 +113,7 @@ where
     }
 }
 
-impl<'a, Id, C, L, S, I, Ctx> State<'a, (Token<Id, C, L>, S), I, Ctx>
+impl<'a, Id, C, L, S, I, Ctx> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
 where
     S: Span,
     I: Iterator<Item = (Token<Id, C, L>, S)>,
@@ -194,7 +200,7 @@ where
     }
 }
 
-impl<'a, Id, C, L, S, I, Ctx> State<'a, (Token<Id, C, L>, S), I, Ctx>
+impl<'a, Id, C, L, S, I, Ctx> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
 where
     S: Span,
     I: Iterator<Item = (Token<Id, C, L>, S)>,
@@ -211,7 +217,7 @@ where
     }
 }
 
-impl<'a, Id, C, L, S, I, Ctx> State<'a, (Token<Id, C, L>, S), I, Ctx>
+impl<'a, Id, C, L, S, I, Ctx> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
 where
     S: Span,
     I: Iterator<Item = (Token<Id, C, L>, S)>,
@@ -299,7 +305,7 @@ where
     }
 }
 
-impl<'a, Id, C, L, S, I, Ctx> State<'a, (Token<Id, C, L>, S), I, Ctx>
+impl<'a, Id, C, L, S, I, Ctx> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
 where
     S: Span,
     I: Iterator<Item = (Token<Id, C, L>, S)>,
@@ -316,7 +322,7 @@ where
     }
 }
 
-impl<'a, Id, C, L, S, I, Ctx> State<'a, (Token<Id, C, L>, S), I, Ctx>
+impl<'a, Id, C, L, S, I, Ctx> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
 where
     S: Span,
     I: Iterator<Item = (Token<Id, C, L>, S)>,
@@ -339,7 +345,7 @@ where
     }
 }
 
-impl<'a, Id, C, L, S, I, Ctx> State<'a, (Token<Id, C, L>, S), I, Ctx>
+impl<'a, Id, C, L, S, I, Ctx> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
 where
     S: Span,
     I: Iterator<Item = (Token<Id, C, L>, S)>,
@@ -971,13 +977,10 @@ mod tests {
 
     fn parse_sym_expr(input: &mut InputTokens) -> Vec<ExprAction<SymSpan>> {
         let tokens = &mut with_spans(&input.tokens);
-        State {
-            token: tokens.next().unwrap(),
-            tokens,
-            context: ExprActionCollector::new(),
-        }.parse()
-        .change_context(|c| c.exit())
-        .context
+        Parser::new(tokens, ExprActionCollector::new())
+            .parse()
+            .change_context(|c| c.exit())
+            .context
     }
 
     #[test]
