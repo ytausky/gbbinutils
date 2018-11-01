@@ -306,9 +306,10 @@ impl InternalDiagnostic<TokenRefData> {
             } => {
                 let buf = codebase.buf(context.buf_id);
                 let highlight = buf.text_range(&range);
-                let (_, source) = buf
+                let source = buf
                     .lines(highlight.start.line..=highlight.end.line)
                     .next()
+                    .map(|(_, line)| line.trim_right())
                     .unwrap();
                 Diagnostic {
                     file: buf.name().into(),

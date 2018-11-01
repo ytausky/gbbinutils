@@ -186,13 +186,6 @@ impl TextCache {
     pub fn buf(&self, buf_id: BufId) -> &StringSrcBuf {
         &self.bufs[buf_id.0]
     }
-
-    #[cfg(test)]
-    fn get_line(&self, buf_id: BufId, line_index: usize) -> &str {
-        let buf = &self.bufs[buf_id.0];
-        let &ops::Range { start, end } = &buf.line_ranges[line_index];
-        &buf.src[start..end]
-    }
 }
 
 fn build_line_ranges(src: &str) -> Vec<ops::Range<usize>> {
@@ -203,16 +196,19 @@ fn build_line_ranges(src: &str) -> Vec<ops::Range<usize>> {
         .filter(|&(_, ch)| ch == '\n')
         .map(|(index, _)| index)
     {
+        let next_index = index + '\n'.len_utf8();
         line_ranges.push(ops::Range {
             start: current_line_start,
-            end: index,
+            end: next_index,
         });
-        current_line_start = index + '\n'.len_utf8()
+        current_line_start = next_index
     }
-    line_ranges.push(ops::Range {
-        start: current_line_start,
-        end: src.len(),
-    });
+    if current_line_start < src.len() {
+        line_ranges.push(ops::Range {
+            start: current_line_start,
+            end: src.len(),
+        });
+    }
     line_ranges
 }
 
@@ -303,14 +299,6 @@ mod tests {
     }
 
     #[test]
-    fn get_line() {
-        let mut cache = TextCache::new();
-        let src = "first line\nsecond line\nthird line";
-        let buf_id = cache.add_src_buf(NONE, src);
-        assert_eq!(cache.get_line(buf_id, 1), "second line")
-    }
-
-    #[test]
     fn text_range_in_middle_of_line() {
         let src = "abcdefg\nhijklmn";
         let buf = StringSrcBuf::new(NONE, src);
@@ -339,7 +327,7 @@ mod tests {
         assert_eq!(
             lines.collect::<Vec<_>>(),
             [
-                (LineNumber(2), "some second line"),
+                (LineNumber(2), "some second line\n"),
                 (LineNumber(3), "and a third"),
             ]
         )
@@ -348,6 +336,6 @@ mod tests {
     #[test]
     fn line_ranges() {
         let text = "    nop\n    my_macro a, $12\n\n";
-        assert_eq!(build_line_ranges(text), [0..7, 8..27, 28..28, 29..29])
+        assert_eq!(build_line_ranges(text), [0..8, 8..28, 28..29])
     }
 }
