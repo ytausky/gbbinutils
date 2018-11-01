@@ -217,6 +217,11 @@ where
     }
 }
 
+enum ExprParsingError<S> {
+    NothingParsed,
+    Other(InternalDiagnostic<S>),
+}
+
 impl<'a, Id, C, L, S, I, Ctx> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
 where
     S: Span,
@@ -225,7 +230,19 @@ where
 {
     fn parse(self) -> Self {
         self.parse_expression()
-            .unwrap_or_else(|(mut parser, diagnostic)| {
+            .unwrap_or_else(|(mut parser, error)| {
+                let diagnostic = match error {
+                    ExprParsingError::NothingParsed => InternalDiagnostic::new(
+                        match parser.token.0 {
+                            Token::Eof => Message::UnexpectedEof,
+                            _ => Message::UnexpectedToken {
+                                token: parser.token.1.clone(),
+                            },
+                        },
+                        parser.token.1.clone(),
+                    ),
+                    ExprParsingError::Other(diagnostic) => diagnostic,
+                };
                 parser.context.emit_diagnostic(diagnostic);
                 while !parser.token_is_in(LINE_FOLLOW_SET) {
                     bump!(parser);
@@ -234,7 +251,7 @@ where
             })
     }
 
-    fn parse_expression(mut self) -> Result<Self, (Self, InternalDiagnostic<S>)> {
+    fn parse_expression(mut self) -> Result<Self, (Self, ExprParsingError<S>)> {
         match self.token {
             (Token::OpeningParenthesis, span) => {
                 bump!(self);
@@ -247,8 +264,22 @@ where
     fn parse_parenthesized_expression(
         mut self,
         left: S,
-    ) -> Result<Self, (Self, InternalDiagnostic<S>)> {
-        self = self.parse_expression()?;
+    ) -> Result<Self, (Self, ExprParsingError<S>)> {
+        self = match self.parse_expression() {
+            Ok(parser) => parser,
+            Err((parser, error)) => {
+                let error = match error {
+                    error @ ExprParsingError::NothingParsed => match parser.token.0 {
+                        Token::Eof | Token::Eol => ExprParsingError::Other(
+                            InternalDiagnostic::new(Message::UnmatchedParenthesis, left),
+                        ),
+                        _ => error,
+                    },
+                    error => error,
+                };
+                return Err((parser, error));
+            }
+        };
         match self.token {
             (Token::ClosingParenthesis, right) => {
                 bump!(self);
@@ -258,12 +289,15 @@ where
             }
             _ => Err((
                 self,
-                InternalDiagnostic::new(Message::UnmatchedParenthesis, left),
+                ExprParsingError::Other(InternalDiagnostic::new(
+                    Message::UnmatchedParenthesis,
+                    left,
+                )),
             )),
         }
     }
 
-    fn parse_infix_expr(mut self) -> Result<Self, (Self, InternalDiagnostic<S>)> {
+    fn parse_infix_expr(mut self) -> Result<Self, (Self, ExprParsingError<S>)> {
         self = self.parse_atomic_expr()?;
         while let (Token::Plus, span) = self.token {
             bump!(self);
@@ -273,32 +307,32 @@ where
         Ok(self)
     }
 
-    fn parse_atomic_expr(mut self) -> Result<Self, (Self, InternalDiagnostic<S>)> {
-        match self.token {
-            (Token::Eof, _) => {
-                let span = self.token.1.clone();
-                Err((self, InternalDiagnostic::new(Message::UnexpectedEof, span)))
-            }
-            (Token::Ident(ident), span) => {
-                self.context.push_atom((ExprAtom::Ident(ident), span));
+    fn parse_atomic_expr(mut self) -> Result<Self, (Self, ExprParsingError<S>)> {
+        match self.token.0 {
+            Token::Eof | Token::Eol => Err((self, ExprParsingError::NothingParsed)),
+            Token::Ident(ident) => {
+                self.context
+                    .push_atom((ExprAtom::Ident(ident), self.token.1));
                 bump!(self);
                 Ok(self)
             }
-            (Token::Literal(literal), span) => {
-                self.context.push_atom((ExprAtom::Literal(literal), span));
+            Token::Literal(literal) => {
+                self.context
+                    .push_atom((ExprAtom::Literal(literal), self.token.1));
                 bump!(self);
                 Ok(self)
             }
-            (_, span) => {
+            _ => {
+                let span = self.token.1;
                 bump!(self);
                 Err((
                     self,
-                    InternalDiagnostic::new(
+                    ExprParsingError::Other(InternalDiagnostic::new(
                         Message::UnexpectedToken {
                             token: span.clone(),
                         },
                         span,
-                    ),
+                    )),
                 ))
             }
         }
@@ -1099,6 +1133,20 @@ mod tests {
                     )],
                 )),
                 unlabeled(command("nop", [])),
+            ],
+        )
+    }
+
+    #[test]
+    fn diagnose_unmatched_parenthesis_at_eol() {
+        assert_eq_actions(
+            input_tokens![Command(()), OpeningParenthesis, Eol],
+            [
+                unlabeled(command(
+                    0,
+                    [expr().error(Message::UnmatchedParenthesis, TokenRef::from(1))],
+                )),
+                unlabeled(empty()),
             ],
         )
     }
