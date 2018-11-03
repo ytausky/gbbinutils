@@ -346,12 +346,16 @@ where
     Ctx: MacroParamsContext<S, Command = C, Ident = Id, Literal = L>,
 {
     fn parse_macro_param(mut self) -> Self {
-        let ident = match self.token {
-            (Token::Ident(ident), span) => (ident, span),
-            _ => panic!(),
+        match self.token.0 {
+            Token::Ident(ident) => self.context.add_parameter((ident, self.token.1)),
+            _ => self.context.emit_diagnostic(InternalDiagnostic::new(
+                Message::UnexpectedToken {
+                    token: self.token.1.clone(),
+                },
+                self.token.1.clone(),
+            )),
         };
         bump!(self);
-        self.context.add_parameter(ident);
         self
     }
 }
@@ -1148,6 +1152,24 @@ mod tests {
                 )),
                 unlabeled(empty()),
             ],
+        )
+    }
+
+    #[test]
+    fn diagnose_unexpected_token_in_macro_param() {
+        let span: SymSpan = TokenRef::from(1).into();
+        assert_eq_actions(
+            input_tokens![Macro, Literal(()), Eol, Endm],
+            [unlabeled(vec![StmtAction::MacroDef {
+                keyword: TokenRef::from(0).into(),
+                params: vec![MacroParamsAction::EmitDiagnostic(InternalDiagnostic::new(
+                    Message::UnexpectedToken {
+                        token: span.clone(),
+                    },
+                    span,
+                ))],
+                body: vec![TokenSeqAction::PushToken((Eof, TokenRef::from(3).into()))],
+            }])],
         )
     }
 }
