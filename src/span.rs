@@ -98,7 +98,7 @@ impl Span for TokenRefData {
                     context: (*context).clone(),
                 }
             }
-            _ => panic!(),
+            _ => unreachable!(),
         }
     }
 }
