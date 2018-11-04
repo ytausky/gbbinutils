@@ -3,7 +3,7 @@ pub use codebase::StdFileSystem;
 pub use diagnostics::TerminalOutput;
 
 use codebase::CodebaseError;
-use diagnostics::{mk_diagnostic, Message};
+use diagnostics::mk_diagnostic;
 
 mod backend;
 mod codebase;
@@ -37,11 +37,8 @@ pub fn assemble<'a>(name: &str, config: &mut Config<'a>) -> Option<Rom> {
     let result = try_assemble(name, config);
     match result {
         Ok(rom) => Some(rom),
-        Err(CodebaseError::IoError(_)) => unimplemented!(),
-        Err(CodebaseError::Utf8Error) => {
-            config
-                .output
-                .emit(mk_diagnostic(name, &Message::InvalidUtf8));
+        Err(error) => {
+            config.output.emit(mk_diagnostic(name, &error.into()));
             None
         }
     }
@@ -88,7 +85,10 @@ mod tests {
 
     impl codebase::FileSystem for MockFileSystem {
         fn read_file(&self, filename: &str) -> io::Result<Vec<u8>> {
-            Ok(self.files.get(filename).unwrap().clone())
+            self.files
+                .get(filename)
+                .cloned()
+                .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "file does not exist"))
         }
     }
 
@@ -128,6 +128,28 @@ mod tests {
             [Diagnostic {
                 file: path.to_string(),
                 message: "file contains invalid UTF-8".to_string(),
+                location: None
+            }]
+        )
+    }
+
+    #[test]
+    fn nonexistent_file() {
+        let path = "/my/file";
+        let mut fs = MockFileSystem::new();
+        let mut output = MockDiagnosticOutput::new();
+        {
+            let mut config = Config {
+                input: &mut fs,
+                output: &mut output,
+            };
+            assemble(path, &mut config);
+        }
+        assert_eq!(
+            output.diagnostics,
+            [Diagnostic {
+                file: path.to_string(),
+                message: "file does not exist".to_string(),
                 location: None
             }]
         )

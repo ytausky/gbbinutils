@@ -1,4 +1,4 @@
-use codebase::{LineNumber, TextBuf, TextCache, TextRange};
+use codebase::{CodebaseError, LineNumber, TextBuf, TextCache, TextRange};
 use instruction::IncDec;
 use span::TokenRefData;
 use std::borrow::Borrow;
@@ -148,6 +148,17 @@ pub enum KeywordOperandCategory {
     Reg,
     RegPair,
     ConditionCode,
+}
+
+impl<S> From<CodebaseError> for Message<S> {
+    fn from(error: CodebaseError) -> Message<S> {
+        match error {
+            CodebaseError::IoError(error) => Message::IoError {
+                string: error.to_string(),
+            },
+            CodebaseError::Utf8Error => Message::InvalidUtf8,
+        }
+    }
 }
 
 impl Message<TokenRefData> {

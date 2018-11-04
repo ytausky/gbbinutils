@@ -3,7 +3,6 @@ use super::{
 };
 use backend;
 use backend::{BinaryOperator, RelocAtom};
-use codebase::CodebaseError;
 use diagnostics::{InternalDiagnostic, Message};
 use expr::ExprVariant;
 use frontend::session::Session;
@@ -73,17 +72,10 @@ fn analyze_include<'a, F: Session + 'a>(
     actions: &mut SemanticActions<'a, F>,
 ) -> Result<(), InternalDiagnostic<F::Span>> {
     let (path, span) = reduce_include(span, args)?;
-    actions.session.analyze_file(path).map_err(|err| {
-        InternalDiagnostic::new(
-            match err {
-                CodebaseError::IoError(error) => Message::IoError {
-                    string: error.to_string(),
-                },
-                CodebaseError::Utf8Error => Message::InvalidUtf8,
-            },
-            span,
-        )
-    })
+    actions
+        .session
+        .analyze_file(path)
+        .map_err(|err| InternalDiagnostic::new(err.into(), span))
 }
 
 fn reduce_include<I, S>(
@@ -133,6 +125,7 @@ fn single_arg<T: Debug + PartialEq, S>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use codebase::CodebaseError;
     use frontend::semantics;
     use frontend::semantics::tests::*;
     use frontend::syntax::keyword::{Command, Operand};
