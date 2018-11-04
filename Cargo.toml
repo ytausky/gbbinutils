@@ -1,6 +1,6 @@
 [package]
 name = "gbas"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Yaron Tausky <yaron.tausky@gmail.com>"]
 description = "An assembler for Game Boy"
 repository = "https://github.com/ytausky/gbas"
