@@ -436,11 +436,30 @@ mod tests {
     use std::cell::RefCell;
     use Width;
 
-    pub struct TestFrontend(RefCell<Vec<TestOperation>>);
+    pub struct TestFrontend {
+        operations: RefCell<Vec<TestOperation>>,
+        mode: Mode,
+    }
+
+    pub enum Mode {
+        Fail,
+        Succeed,
+    }
 
     impl TestFrontend {
-        fn new() -> TestFrontend {
-            TestFrontend(RefCell::new(Vec::new()))
+        pub fn new() -> TestFrontend {
+            TestFrontend {
+                operations: RefCell::new(Vec::new()),
+                mode: Mode::Succeed,
+            }
+        }
+
+        pub fn fail(&mut self) {
+            self.mode = Mode::Fail
+        }
+
+        pub fn into_inner(self) -> Vec<TestOperation> {
+            self.operations.into_inner()
         }
     }
 
@@ -460,8 +479,13 @@ mod tests {
         type Span = ();
 
         fn analyze_file(&mut self, path: Self::Ident) -> Result<(), CodebaseError> {
-            self.0.borrow_mut().push(TestOperation::AnalyzeFile(path));
-            Ok(())
+            self.operations
+                .borrow_mut()
+                .push(TestOperation::AnalyzeFile(path));
+            match self.mode {
+                Mode::Fail => Err(CodebaseError::Utf8Error),
+                Mode::Succeed => Ok(()),
+            }
         }
 
         fn invoke_macro(
@@ -469,26 +493,32 @@ mod tests {
             name: (Self::Ident, Self::Span),
             args: Vec<Vec<(Token<Self::Ident>, Self::Span)>>,
         ) {
-            self.0.borrow_mut().push(TestOperation::InvokeMacro(
-                name.0,
-                args.into_iter()
-                    .map(|arg| arg.into_iter().map(|(token, _)| token).collect())
-                    .collect(),
-            ))
+            self.operations
+                .borrow_mut()
+                .push(TestOperation::InvokeMacro(
+                    name.0,
+                    args.into_iter()
+                        .map(|arg| arg.into_iter().map(|(token, _)| token).collect())
+                        .collect(),
+                ))
         }
 
         fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<Self::Span>) {
-            self.0
+            self.operations
                 .borrow_mut()
                 .push(TestOperation::EmitDiagnostic(diagnostic))
         }
 
         fn emit_item(&mut self, item: backend::Item<()>) {
-            self.0.borrow_mut().push(TestOperation::EmitItem(item))
+            self.operations
+                .borrow_mut()
+                .push(TestOperation::EmitItem(item))
         }
 
         fn define_label(&mut self, (label, _): (String, Self::Span)) {
-            self.0.borrow_mut().push(TestOperation::Label(label))
+            self.operations
+                .borrow_mut()
+                .push(TestOperation::Label(label))
         }
 
         fn define_macro(
@@ -497,15 +527,19 @@ mod tests {
             params: Vec<(String, Self::Span)>,
             tokens: Vec<(Token<String>, ())>,
         ) {
-            self.0.borrow_mut().push(TestOperation::DefineMacro(
-                name.into(),
-                params.into_iter().map(|(s, _)| s).collect(),
-                tokens.into_iter().map(|(t, _)| t).collect(),
-            ))
+            self.operations
+                .borrow_mut()
+                .push(TestOperation::DefineMacro(
+                    name.into(),
+                    params.into_iter().map(|(s, _)| s).collect(),
+                    tokens.into_iter().map(|(t, _)| t).collect(),
+                ))
         }
 
         fn set_origin(&mut self, origin: RelocExpr<()>) {
-            self.0.borrow_mut().push(TestOperation::SetOrigin(origin))
+            self.operations
+                .borrow_mut()
+                .push(TestOperation::SetOrigin(origin))
         }
     }
 
@@ -749,6 +783,6 @@ mod tests {
     {
         let mut operations = TestFrontend::new();
         f(SemanticActions::new(&mut operations));
-        operations.0.into_inner()
+        operations.operations.into_inner()
     }
 }

@@ -37,6 +37,7 @@ pub fn assemble<'a>(name: &str, config: &mut Config<'a>) -> Option<Rom> {
     let result = try_assemble(name, config);
     match result {
         Ok(rom) => Some(rom),
+        Err(CodebaseError::IoError(_)) => unimplemented!(),
         Err(CodebaseError::Utf8Error) => {
             config
                 .output
@@ -67,6 +68,7 @@ mod tests {
     use super::*;
     use diagnostics::Diagnostic;
     use std::collections::HashMap;
+    use std::io;
 
     struct MockFileSystem {
         files: HashMap<String, Vec<u8>>,
@@ -85,8 +87,8 @@ mod tests {
     }
 
     impl codebase::FileSystem for MockFileSystem {
-        fn read_file(&self, filename: &str) -> Vec<u8> {
-            self.files.get(filename).unwrap().clone()
+        fn read_file(&self, filename: &str) -> io::Result<Vec<u8>> {
+            Ok(self.files.get(filename).unwrap().clone())
         }
     }
 

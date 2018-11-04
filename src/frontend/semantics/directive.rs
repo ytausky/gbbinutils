@@ -3,6 +3,7 @@ use super::{
 };
 use backend;
 use backend::{BinaryOperator, RelocAtom};
+use codebase::CodebaseError;
 use diagnostics::{InternalDiagnostic, Message};
 use expr::ExprVariant;
 use frontend::session::Session;
@@ -71,11 +72,11 @@ fn analyze_include<'a, F: Session + 'a>(
     args: CommandArgs<F>,
     actions: &mut SemanticActions<'a, F>,
 ) -> Result<(), InternalDiagnostic<F::Span>> {
-    let path = reduce_include(span, args)?;
-    if actions.session.analyze_file(path.0).is_err() {
-        unimplemented!()
-    }
-    Ok(())
+    let (path, span) = reduce_include(span, args)?;
+    actions.session.analyze_file(path).map_err(|err| match err {
+        CodebaseError::IoError(_) => unimplemented!(),
+        CodebaseError::Utf8Error => InternalDiagnostic::new(Message::InvalidUtf8, span),
+    })
 }
 
 fn reduce_include<I, S>(
@@ -258,6 +259,28 @@ mod tests {
                 Message::KeywordInExpr { keyword: () },
                 (),
             ))]
+        )
+    }
+
+    #[test]
+    fn include_nonexistent_file() {
+        let name = "nonexistent.s";
+        let mut frontend = TestFrontend::new();
+        frontend.fail();
+        {
+            let mut context = SemanticActions::new(&mut frontend)
+                .enter_stmt(None)
+                .enter_command((Command::Directive(Directive::Include), ()))
+                .add_argument();
+            context.push_atom((ExprAtom::Literal(Literal::String(name.into())), ()));
+            context.exit().exit().exit();
+        }
+        assert_eq!(
+            frontend.into_inner(),
+            [
+                TestOperation::AnalyzeFile(name.into()),
+                TestOperation::EmitDiagnostic(InternalDiagnostic::new(Message::InvalidUtf8, ()))
+            ]
         )
     }
 

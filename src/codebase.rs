@@ -1,3 +1,4 @@
+use std::io;
 use std::string::FromUtf8Error;
 use std::{cell::RefCell, cmp, fmt, fs, ops, rc::Rc};
 
@@ -213,7 +214,7 @@ fn build_line_ranges(src: &str) -> Vec<ops::Range<usize>> {
 }
 
 pub trait FileSystem {
-    fn read_file(&self, filename: &str) -> Vec<u8>;
+    fn read_file(&self, filename: &str) -> io::Result<Vec<u8>>;
 }
 
 #[derive(Default)]
@@ -226,12 +227,12 @@ impl StdFileSystem {
 }
 
 impl FileSystem for StdFileSystem {
-    fn read_file(&self, filename: &str) -> Vec<u8> {
+    fn read_file(&self, filename: &str) -> io::Result<Vec<u8>> {
         use std::io::prelude::*;
-        let mut file = fs::File::open(filename).unwrap();
+        let mut file = fs::File::open(filename)?;
         let mut data = Vec::new();
-        file.read_to_end(&mut data).unwrap();
-        data
+        file.read_to_end(&mut data)?;
+        Ok(data)
     }
 }
 
@@ -242,7 +243,14 @@ pub trait Codebase {
 
 #[derive(Debug)]
 pub enum CodebaseError {
+    IoError(io::Error),
     Utf8Error,
+}
+
+impl From<io::Error> for CodebaseError {
+    fn from(error: io::Error) -> CodebaseError {
+        CodebaseError::IoError(error)
+    }
 }
 
 impl From<FromUtf8Error> for CodebaseError {
@@ -267,7 +275,7 @@ impl<'a, FS: FileSystem + ?Sized> FileCodebase<'a, FS> {
 
 impl<'a, FS: FileSystem + ?Sized> Codebase for FileCodebase<'a, FS> {
     fn open(&self, path: &str) -> Result<BufId, CodebaseError> {
-        let data = self.fs.read_file(path);
+        let data = self.fs.read_file(path)?;
         Ok(self
             .cache
             .borrow_mut()
