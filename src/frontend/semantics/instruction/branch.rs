@@ -1,7 +1,7 @@
 use super::{Analysis, AnalysisResult, AtomKind, Operand, SimpleOperand};
-use diagnostics::{InternalDiagnostic, Message};
-use instruction::{Branch, Condition, Instruction, Nullary, RelocExpr};
-use span::{Source, Span};
+use crate::diagnostics::{InternalDiagnostic, Message};
+use crate::instruction::{Branch, Condition, Instruction, Nullary, RelocExpr};
+use crate::span::{Source, Span};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BranchKind {
@@ -158,9 +158,9 @@ fn mk_explicit_branch<S>(branch: ExplicitBranch, target: RelocExpr<S>) -> Branch
 #[cfg(test)]
 mod tests {
     use super::*;
-    use expr::Expr;
-    use frontend::semantics::instruction::tests::*;
-    use frontend::syntax::keyword::Mnemonic;
+    use crate::expr::Expr;
+    use crate::frontend::semantics::instruction::tests::*;
+    use crate::frontend::syntax::keyword::Mnemonic;
 
     #[test]
     fn analyze_legal_branch_instructions() {

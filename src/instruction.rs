@@ -1,4 +1,4 @@
-pub use backend::{BinaryOperator, RelocExpr};
+pub use crate::backend::{BinaryOperator, RelocExpr};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Instruction<R> {

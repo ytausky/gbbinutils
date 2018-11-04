@@ -1,19 +1,19 @@
-use backend::{self, BinaryOperator, RelocExpr};
-use diagnostics::{DiagnosticsListener, InternalDiagnostic, Message};
-use expr::ExprVariant;
-use frontend::session::Session;
-use frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token};
-use frontend::{ExprFactory, Literal, StrExprFactory};
+use crate::backend::{self, BinaryOperator, RelocExpr};
+use crate::diagnostics::{DiagnosticsListener, InternalDiagnostic, Message};
+use crate::expr::ExprVariant;
+use crate::frontend::session::Session;
+use crate::frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token};
+use crate::frontend::{ExprFactory, Literal, StrExprFactory};
 
 mod directive;
 mod instruction;
 mod operand;
 
 mod expr {
-    use expr::Expr;
+    use crate::expr::Expr;
     #[cfg(test)]
-    use expr::ExprVariant;
-    use frontend::Literal;
+    use crate::expr::ExprVariant;
+    use crate::frontend::Literal;
 
     #[derive(Debug, PartialEq)]
     pub enum SemanticAtom<I> {
@@ -424,17 +424,17 @@ fn analyze_reloc_expr<I: Into<String>, S: Clone>(
 mod tests {
     use super::*;
 
-    use backend::RelocAtom;
-    use codebase::CodebaseError;
-    use diagnostics::{InternalDiagnostic, Message};
-    use frontend::syntax::{
+    use crate::backend::RelocAtom;
+    use crate::codebase::CodebaseError;
+    use crate::diagnostics::{InternalDiagnostic, Message};
+    use crate::frontend::syntax::{
         keyword::Operand, CommandContext, ExprContext, FileContext, MacroInvocationContext,
         MacroParamsContext, StmtContext, TokenSeqContext,
     };
-    use instruction::RelocExpr;
+    use crate::instruction::RelocExpr;
+    use crate::Width;
     use std::borrow::Borrow;
     use std::cell::RefCell;
-    use Width;
 
     pub struct TestFrontend {
         operations: RefCell<Vec<TestOperation>>,
@@ -540,7 +540,7 @@ mod tests {
 
     #[test]
     fn emit_ld_b_deref_hl() {
-        use instruction::*;
+        use crate::instruction::*;
         let actions = collect_semantic_actions(|actions| {
             let mut command = actions
                 .enter_stmt(None)
@@ -563,7 +563,7 @@ mod tests {
 
     #[test]
     fn emit_rst_1_plus_1() {
-        use instruction::*;
+        use crate::instruction::*;
         let actions = collect_semantic_actions(|actions| {
             let command = actions
                 .enter_stmt(None)

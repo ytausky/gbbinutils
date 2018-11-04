@@ -1,10 +1,10 @@
 use super::{analyze_reloc_expr, ExprVariant, SemanticAtom, SemanticExpr, SemanticUnary};
-use diagnostics::{InternalDiagnostic, KeywordOperandCategory, Message};
-use frontend::syntax::keyword as kw;
-use frontend::syntax::Literal;
-use frontend::ExprFactory;
-use instruction::{Condition, PtrReg, Reg16, RegPair, RelocExpr, SimpleOperand};
-use span::{Source, Span};
+use crate::diagnostics::{InternalDiagnostic, KeywordOperandCategory, Message};
+use crate::frontend::syntax::keyword as kw;
+use crate::frontend::syntax::Literal;
+use crate::frontend::ExprFactory;
+use crate::instruction::{Condition, PtrReg, Reg16, RegPair, RelocExpr, SimpleOperand};
+use crate::span::{Source, Span};
 
 #[derive(Debug, PartialEq)]
 pub enum Operand<R> {
@@ -182,7 +182,7 @@ impl<I: Iterator<Item = Result<T, E>>, T, E> OperandCounter<I> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use backend::RelocAtom;
+    use crate::backend::RelocAtom;
 
     #[test]
     fn analyze_deref_bc() {
@@ -225,7 +225,7 @@ mod tests {
         expr: SemanticExpr<I, S>,
         context: Context,
     ) -> OperandResult<S> {
-        use frontend::StrExprFactory;
+        use crate::frontend::StrExprFactory;
         let mut factory = StrExprFactory::new();
         super::analyze_operand(expr, context, &mut factory)
     }

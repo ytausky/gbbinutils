@@ -1,4 +1,4 @@
-use span::{Source, Span};
+use crate::span::{Source, Span};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Expr<A, U, B, S> {

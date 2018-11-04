@@ -1,9 +1,9 @@
 pub use super::context::{EvalContext, SymbolTable};
 
 use super::context::ChunkSize;
-use backend::{Node, Object, RelocAtom, RelocExpr};
-use expr::ExprVariant;
-use span::{Source, Span};
+use crate::backend::{Node, Object, RelocAtom, RelocExpr};
+use crate::expr::ExprVariant;
+use crate::span::{Source, Span};
 use std::borrow::Borrow;
 use std::ops::{Add, AddAssign, Sub};
 
@@ -138,7 +138,7 @@ impl<S: Span> RelocExpr<S> {
         match &self.variant {
             ExprVariant::Unary(_, _) => unreachable!(),
             ExprVariant::Binary(operator, lhs, rhs) => {
-                use backend::BinaryOperator;
+                use crate::backend::BinaryOperator;
                 let lhs = lhs.evaluate_strictly(context, on_undefined_symbol);
                 let rhs = rhs.evaluate_strictly(context, on_undefined_symbol);
                 match operator {
@@ -179,8 +179,8 @@ impl<S: Span> Node<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use backend::object::Chunk;
-    use backend::{object::ObjectBuilder, Backend};
+    use crate::backend::object::Chunk;
+    use crate::backend::{object::ObjectBuilder, Backend};
 
     #[test]
     fn label_defined_as_chunk_origin_plus_offset() {

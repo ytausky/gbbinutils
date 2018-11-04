@@ -1,11 +1,11 @@
 use self::branch::*;
 use super::SemanticExpr;
-use diagnostics::{InternalDiagnostic, Message};
-use frontend::semantics::operand::{self, AtomKind, Context, Operand, OperandCounter};
-use frontend::syntax::keyword as kw;
-use frontend::ExprFactory;
-use instruction::*;
-use span::{Source, Span};
+use crate::diagnostics::{InternalDiagnostic, Message};
+use crate::frontend::semantics::operand::{self, AtomKind, Context, Operand, OperandCounter};
+use crate::frontend::syntax::keyword as kw;
+use crate::frontend::ExprFactory;
+use crate::instruction::*;
+use crate::span::{Source, Span};
 
 mod branch;
 mod ld;
@@ -262,7 +262,7 @@ impl AluOperation {
     }
 
     fn implicit_dest(self) -> bool {
-        use instruction::AluOperation::*;
+        use crate::instruction::AluOperation::*;
         match self {
             Add | Adc | Sbc => false,
             _ => true,
@@ -336,12 +336,14 @@ impl From<kw::Mnemonic> for Mnemonic {
 mod tests {
     pub use self::kw::Operand::*;
     use super::*;
-    use backend::RelocAtom;
-    pub use diagnostics::Message;
-    use expr::{Expr, ExprVariant};
-    use frontend::semantics::{SemanticAtom, SemanticExpr, SemanticExprVariant, SemanticUnary};
-    use frontend::syntax::Literal;
-    pub use span::Span;
+    use crate::backend::RelocAtom;
+    pub use crate::diagnostics::Message;
+    use crate::expr::{Expr, ExprVariant};
+    use crate::frontend::semantics::{
+        SemanticAtom, SemanticExpr, SemanticExprVariant, SemanticUnary,
+    };
+    use crate::frontend::syntax::Literal;
+    pub use crate::span::Span;
     use std::cmp;
 
     type Input = SemanticExpr<String, ()>;
@@ -762,7 +764,7 @@ mod tests {
     where
         I: IntoIterator<Item = Input>,
     {
-        use frontend::StrExprFactory;
+        use crate::frontend::StrExprFactory;
         let mut factory = StrExprFactory::new();
         Result(analyze_instruction(
             (mnemonic, TokenId::Mnemonic.into()),

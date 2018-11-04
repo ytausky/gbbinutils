@@ -1,10 +1,10 @@
-use codebase::{CodebaseError, LineNumber, TextBuf, TextCache, TextRange};
-use instruction::IncDec;
-use span::TokenRefData;
+use crate::codebase::{CodebaseError, LineNumber, TextBuf, TextCache, TextRange};
+use crate::instruction::IncDec;
+use crate::span::TokenRefData;
+use crate::Width;
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::fmt;
-use Width;
 
 pub trait DiagnosticsOutput {
     fn emit(&mut self, diagnostic: Diagnostic<String>);
@@ -168,7 +168,7 @@ impl<S> From<CodebaseError> for Message<S> {
 
 impl Message<TokenRefData> {
     fn render<'a>(&self, codebase: &'a TextCache) -> String {
-        use diagnostics::Message::*;
+        use crate::diagnostics::Message::*;
         match self {
             AfOutsideStackOperation => {
                 "register pair `af` can only be used with `push` and `pop`".into()
@@ -398,8 +398,8 @@ fn mk_snippet<'a>(codebase: &'a TextCache, span: &TokenRefData) -> &'a str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codebase::{BufRange, TextPosition};
-    use span::BufContextData;
+    use crate::codebase::{BufRange, TextPosition};
+    use crate::span::BufContextData;
     use std::rc::Rc;
 
     static DUMMY_FILE: &str = "/my/file";

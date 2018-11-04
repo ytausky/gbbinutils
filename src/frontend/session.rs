@@ -1,10 +1,10 @@
-use backend;
-use codebase::CodebaseError;
-use diagnostics;
-use diagnostics::InternalDiagnostic;
-use frontend;
-use frontend::{Downstream, Token};
-use span;
+use crate::backend;
+use crate::codebase::CodebaseError;
+use crate::diagnostics;
+use crate::diagnostics::InternalDiagnostic;
+use crate::frontend;
+use crate::frontend::{Downstream, Token};
+use crate::span;
 use std::borrow::BorrowMut;
 use std::fmt::Debug;
 use std::marker;

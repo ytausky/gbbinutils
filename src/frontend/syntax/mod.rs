@@ -1,5 +1,5 @@
-use diagnostics::DiagnosticsListener;
-use span::Span;
+use crate::diagnostics::DiagnosticsListener;
+use crate::span::Span;
 
 #[cfg(test)]
 #[macro_use]
@@ -8,7 +8,7 @@ pub mod keyword;
 pub mod lexer;
 mod parser;
 
-pub use frontend::syntax::keyword::Operand;
+pub use crate::frontend::syntax::keyword::Operand;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token<I, C = keyword::Command, L = Literal<I>, E = lexer::LexError> {

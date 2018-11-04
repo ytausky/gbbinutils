@@ -1,7 +1,7 @@
 use super::Token::*;
 use super::{ExprAtom, ExprOperator, Token};
-use diagnostics::{InternalDiagnostic, Message};
-use span::Span;
+use crate::diagnostics::{InternalDiagnostic, Message};
+use crate::span::Span;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::iter;

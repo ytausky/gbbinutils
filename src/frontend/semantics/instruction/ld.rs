@@ -1,10 +1,10 @@
 use super::{Analysis, AnalysisResult, Operand};
-use backend::RelocExpr;
-use diagnostics::{InternalDiagnostic, Message};
-use frontend::semantics::operand::AtomKind;
-use instruction::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
-use span::{Source, Span};
-use Width;
+use crate::backend::RelocExpr;
+use crate::diagnostics::{InternalDiagnostic, Message};
+use crate::frontend::semantics::operand::AtomKind;
+use crate::instruction::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
+use crate::span::{Source, Span};
+use crate::Width;
 
 impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>> Analysis<S, I> {
     pub fn analyze_ld(&mut self) -> AnalysisResult<S> {
@@ -122,7 +122,7 @@ impl<S: Span> Operand<S> {
                 ))),
                 AtomKind::Reg16(reg16) => Ok(LdDest::Word(LdDest16::Reg16(reg16, span))),
                 AtomKind::RegPair(reg_pair) => {
-                    use instruction::RegPair;
+                    use crate::instruction::RegPair;
                     assert_eq!(reg_pair, RegPair::Af);
                     Err(InternalDiagnostic::new(
                         Message::AfOutsideStackOperation,
@@ -253,11 +253,11 @@ impl<S: Span> Source for LdDest16<S> {
 
 #[cfg(test)]
 mod tests {
-    use expr::Expr;
-    use frontend::semantics::instruction::tests::*;
-    use frontend::syntax::keyword::Mnemonic;
-    use instruction::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
-    use Width;
+    use crate::expr::Expr;
+    use crate::frontend::semantics::instruction::tests::*;
+    use crate::frontend::syntax::keyword::Mnemonic;
+    use crate::instruction::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
+    use crate::Width;
 
     #[test]
     fn analyze_ld_deref_symbol_a() {

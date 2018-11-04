@@ -1,10 +1,10 @@
 use super::context::{EvalContext, SymbolTable};
 use super::{traverse_chunk_items, Chunk, Node};
-use backend::{BinarySection, RelocExpr};
-use diagnostics::{DiagnosticsListener, InternalDiagnostic, Message};
-use span::{Source, Span};
+use crate::backend::{BinarySection, RelocExpr};
+use crate::diagnostics::{DiagnosticsListener, InternalDiagnostic, Message};
+use crate::span::{Source, Span};
+use crate::Width;
 use std::vec::IntoIter;
-use Width;
 
 impl<S: Span> Chunk<S> {
     pub fn translate(
@@ -148,9 +148,9 @@ fn is_in_u8_range(n: i32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use backend::{BinaryOperator, RelocAtom};
-    use diagnostics::IgnoreDiagnostics;
-    use expr::ExprVariant;
+    use crate::backend::{BinaryOperator, RelocAtom};
+    use crate::diagnostics::IgnoreDiagnostics;
+    use crate::expr::ExprVariant;
     use std::borrow::Borrow;
 
     #[test]
@@ -201,8 +201,8 @@ mod tests {
     }
 
     fn translate_chunk_item<S: Span>(item: Node<S>) -> Vec<u8> {
-        use backend::object::resolve::Value;
-        use diagnostics;
+        use crate::backend::object::resolve::Value;
+        use crate::diagnostics;
         item.translate(
             &EvalContext {
                 symbols: &SymbolTable::new(),

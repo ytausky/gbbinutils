@@ -1,6 +1,6 @@
 use super::*;
-use diagnostics::{InternalDiagnostic, Message};
-use span::Span;
+use crate::diagnostics::{InternalDiagnostic, Message};
+use crate::span::Span;
 
 type TokenKind = Token<(), (), (), ()>;
 
@@ -444,8 +444,8 @@ mod tests {
     use super::ast::*;
     use super::Token::*;
     use super::*;
-    use diagnostics::{DiagnosticsListener, InternalDiagnostic, Message};
-    use frontend::syntax::{ExprAtom, ExprOperator};
+    use crate::diagnostics::{DiagnosticsListener, InternalDiagnostic, Message};
+    use crate::frontend::syntax::{ExprAtom, ExprOperator};
     use std::borrow::Borrow;
     use std::collections::HashMap;
 

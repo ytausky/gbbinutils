@@ -1,4 +1,4 @@
-use frontend::syntax::{
+use crate::frontend::syntax::{
     self,
     keyword::{self as kw, *},
     Literal, Token,

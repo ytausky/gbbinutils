@@ -1,9 +1,9 @@
-pub use backend::Rom;
-pub use codebase::StdFileSystem;
-pub use diagnostics::TerminalOutput;
+pub use crate::backend::Rom;
+pub use crate::codebase::StdFileSystem;
+pub use crate::diagnostics::TerminalOutput;
 
-use codebase::CodebaseError;
-use diagnostics::mk_diagnostic;
+use crate::codebase::CodebaseError;
+use crate::diagnostics::mk_diagnostic;
 
 mod backend;
 mod codebase;
@@ -63,7 +63,7 @@ fn try_assemble<'a>(name: &str, config: &mut Config<'a>) -> Result<Rom, Codebase
 #[cfg(test)]
 mod tests {
     use super::*;
-    use diagnostics::Diagnostic;
+    use crate::diagnostics::Diagnostic;
     use std::collections::HashMap;
     use std::io;
 

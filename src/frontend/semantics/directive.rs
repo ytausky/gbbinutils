@@ -1,16 +1,16 @@
 use super::{
     analyze_reloc_expr, CommandArgs, Directive, SemanticActions, SemanticAtom, SemanticExpr,
 };
-use backend;
-use backend::{BinaryOperator, RelocAtom};
-use diagnostics::{InternalDiagnostic, Message};
-use expr::ExprVariant;
-use frontend::session::Session;
-use frontend::syntax::Literal;
-use instruction::RelocExpr;
-use span::Span;
+use crate::backend;
+use crate::backend::{BinaryOperator, RelocAtom};
+use crate::diagnostics::{InternalDiagnostic, Message};
+use crate::expr::ExprVariant;
+use crate::frontend::session::Session;
+use crate::frontend::syntax::Literal;
+use crate::instruction::RelocExpr;
+use crate::span::Span;
+use crate::Width;
 use std::fmt::Debug;
-use Width;
 
 pub fn analyze_directive<'a, S: Session + 'a>(
     directive: (Directive, S::Span),
@@ -125,11 +125,13 @@ fn single_arg<T: Debug + PartialEq, S>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codebase::CodebaseError;
-    use frontend::semantics;
-    use frontend::semantics::tests::*;
-    use frontend::syntax::keyword::{Command, Operand};
-    use frontend::syntax::{CommandContext, ExprAtom, ExprContext, FileContext, StmtContext};
+    use crate::codebase::CodebaseError;
+    use crate::frontend::semantics;
+    use crate::frontend::semantics::tests::*;
+    use crate::frontend::syntax::keyword::{Command, Operand};
+    use crate::frontend::syntax::{
+        CommandContext, ExprAtom, ExprContext, FileContext, StmtContext,
+    };
     use std::borrow::Borrow;
     use std::io;
 

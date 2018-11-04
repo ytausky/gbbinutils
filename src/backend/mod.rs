@@ -1,14 +1,14 @@
-pub use backend::object::link;
-pub use backend::object::ObjectBuilder;
+pub use crate::backend::object::link;
+pub use crate::backend::object::ObjectBuilder;
 
-use backend::{
+use crate::backend::{
     lowering::Lower,
     object::{Node, Object},
 };
-use expr::{Expr, ExprVariant};
-use instruction::Instruction;
-use span::Span;
-use Width;
+use crate::expr::{Expr, ExprVariant};
+use crate::instruction::Instruction;
+use crate::span::Span;
+use crate::Width;
 
 mod lowering;
 mod object;
@@ -120,8 +120,8 @@ pub struct BinarySection {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use diagnostics::{InternalDiagnostic, Message, TestDiagnosticsListener};
-    use instruction::Nullary;
+    use crate::diagnostics::{InternalDiagnostic, Message, TestDiagnosticsListener};
+    use crate::instruction::Nullary;
     use std::borrow::Borrow;
 
     #[test]

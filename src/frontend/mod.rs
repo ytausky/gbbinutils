@@ -2,18 +2,18 @@ mod semantics;
 mod session;
 mod syntax;
 
-use backend::*;
-use codebase::{Codebase, CodebaseError};
-use diagnostics::*;
-use frontend::session::*;
-use frontend::syntax::*;
-use span::{LexemeRefFactory, Span, TokenTracker};
+use crate::backend::*;
+use crate::codebase::{Codebase, CodebaseError};
+use crate::diagnostics::*;
+use crate::frontend::session::*;
+use crate::frontend::syntax::*;
+use crate::span::{LexemeRefFactory, Span, TokenTracker};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::rc::Rc;
 
-pub use frontend::syntax::Token;
+pub use crate::frontend::syntax::Token;
 
 pub fn analyze_file<
     C: Codebase,
@@ -452,8 +452,8 @@ impl<'a, LRF: LexemeRefFactory> Iterator for TokenizedSrcIter<'a, LRF> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use frontend::syntax::keyword::Mnemonic;
-    use instruction::{Instruction, Nullary};
+    use crate::frontend::syntax::keyword::Mnemonic;
+    use crate::instruction::{Instruction, Nullary};
     use std::{self, cell::RefCell};
 
     #[test]
@@ -491,7 +491,7 @@ mod tests {
         assert_eq!(*log.borrow(), [TestEvent::AddLabel(String::from(label))]);
     }
 
-    use frontend::syntax::keyword::*;
+    use crate::frontend::syntax::keyword::*;
 
     #[test]
     fn define_and_invoke_macro() {
@@ -531,7 +531,7 @@ mod tests {
         );
     }
 
-    use diagnostics::InternalDiagnostic;
+    use crate::diagnostics::InternalDiagnostic;
 
     #[test]
     fn diagnose_undefined_macro() {

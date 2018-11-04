@@ -1,10 +1,10 @@
 use self::context::{EvalContext, SymbolTable};
 use self::resolve::Value;
-use backend::{BinaryObject, RelocExpr};
-use diagnostics::DiagnosticsListener;
-use span::Span;
+use crate::backend::{BinaryObject, RelocExpr};
+use crate::diagnostics::DiagnosticsListener;
+use crate::span::Span;
+use crate::Width;
 use std::borrow::Borrow;
-use Width;
 
 mod context;
 mod resolve;
@@ -157,9 +157,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use backend::{BinaryOperator, RelocAtom};
-    use diagnostics::IgnoreDiagnostics;
-    use expr::ExprVariant;
+    use crate::backend::{BinaryOperator, RelocAtom};
+    use crate::diagnostics::IgnoreDiagnostics;
+    use crate::expr::ExprVariant;
 
     #[test]
     fn new_object_has_no_chunks() {

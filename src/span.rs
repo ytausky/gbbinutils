@@ -1,4 +1,4 @@
-use codebase::{BufId, BufRange};
+use crate::codebase::{BufId, BufRange};
 use std::cmp;
 use std::fmt::Debug;
 use std::rc::Rc;
@@ -106,7 +106,7 @@ impl Span for TokenRefData {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codebase::TextCache;
+    use crate::codebase::TextCache;
 
     #[test]
     fn extend_span() {
