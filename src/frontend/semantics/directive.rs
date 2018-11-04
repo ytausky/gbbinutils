@@ -73,9 +73,16 @@ fn analyze_include<'a, F: Session + 'a>(
     actions: &mut SemanticActions<'a, F>,
 ) -> Result<(), InternalDiagnostic<F::Span>> {
     let (path, span) = reduce_include(span, args)?;
-    actions.session.analyze_file(path).map_err(|err| match err {
-        CodebaseError::IoError(_) => unimplemented!(),
-        CodebaseError::Utf8Error => InternalDiagnostic::new(Message::InvalidUtf8, span),
+    actions.session.analyze_file(path).map_err(|err| {
+        InternalDiagnostic::new(
+            match err {
+                CodebaseError::IoError(error) => Message::IoError {
+                    string: error.to_string(),
+                },
+                CodebaseError::Utf8Error => Message::InvalidUtf8,
+            },
+            span,
+        )
     })
 }
 
@@ -131,6 +138,7 @@ mod tests {
     use frontend::syntax::keyword::{Command, Operand};
     use frontend::syntax::{CommandContext, ExprAtom, ExprContext, FileContext, StmtContext};
     use std::borrow::Borrow;
+    use std::io;
 
     #[test]
     fn build_include_item() {
@@ -263,10 +271,10 @@ mod tests {
     }
 
     #[test]
-    fn include_nonexistent_file() {
-        let name = "nonexistent.s";
+    fn include_file_with_invalid_utf8() {
+        let name = "invalid_utf8.s";
         let mut frontend = TestFrontend::new();
-        frontend.fail();
+        frontend.fail(CodebaseError::Utf8Error);
         {
             let mut context = SemanticActions::new(&mut frontend)
                 .enter_stmt(None)
@@ -280,6 +288,37 @@ mod tests {
             [
                 TestOperation::AnalyzeFile(name.into()),
                 TestOperation::EmitDiagnostic(InternalDiagnostic::new(Message::InvalidUtf8, ()))
+            ]
+        )
+    }
+
+    #[test]
+    fn include_nonexistent_file() {
+        let name = "nonexistent.s";
+        let message = "some message";
+        let mut frontend = TestFrontend::new();
+        frontend.fail(CodebaseError::IoError(io::Error::new(
+            io::ErrorKind::NotFound,
+            message,
+        )));
+        {
+            let mut context = SemanticActions::new(&mut frontend)
+                .enter_stmt(None)
+                .enter_command((Command::Directive(Directive::Include), ()))
+                .add_argument();
+            context.push_atom((ExprAtom::Literal(Literal::String(name.into())), ()));
+            context.exit().exit().exit();
+        }
+        assert_eq!(
+            frontend.into_inner(),
+            [
+                TestOperation::AnalyzeFile(name.into()),
+                TestOperation::EmitDiagnostic(InternalDiagnostic::new(
+                    Message::IoError {
+                        string: message.to_string()
+                    },
+                    ()
+                ))
             ]
         )
     }

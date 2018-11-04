@@ -92,6 +92,9 @@ pub enum Message<S> {
     ExpectedString,
     IncompatibleOperand,
     InvalidUtf8,
+    IoError {
+        string: String,
+    },
     KeywordInExpr {
         keyword: S,
     },
@@ -173,6 +176,7 @@ impl Message<TokenRefData> {
             ExpectedString => "expected string argument".into(),
             IncompatibleOperand => "operand cannot be used with this instruction".into(),
             InvalidUtf8 => "file contains invalid UTF-8".into(),
+            IoError { string } => string.clone(),
             KeywordInExpr { keyword } => format!(
                 "keyword `{}` cannot appear in expression",
                 mk_snippet(codebase, keyword),

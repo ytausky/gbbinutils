@@ -438,24 +438,19 @@ mod tests {
 
     pub struct TestFrontend {
         operations: RefCell<Vec<TestOperation>>,
-        mode: Mode,
-    }
-
-    pub enum Mode {
-        Fail,
-        Succeed,
+        error: Option<CodebaseError>,
     }
 
     impl TestFrontend {
         pub fn new() -> TestFrontend {
             TestFrontend {
                 operations: RefCell::new(Vec::new()),
-                mode: Mode::Succeed,
+                error: None,
             }
         }
 
-        pub fn fail(&mut self) {
-            self.mode = Mode::Fail
+        pub fn fail(&mut self, error: CodebaseError) {
+            self.error = Some(error)
         }
 
         pub fn into_inner(self) -> Vec<TestOperation> {
@@ -482,9 +477,9 @@ mod tests {
             self.operations
                 .borrow_mut()
                 .push(TestOperation::AnalyzeFile(path));
-            match self.mode {
-                Mode::Fail => Err(CodebaseError::Utf8Error),
-                Mode::Succeed => Ok(()),
+            match self.error.take() {
+                Some(error) => Err(error),
+                None => Ok(()),
             }
         }
 
