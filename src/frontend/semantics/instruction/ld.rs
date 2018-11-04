@@ -48,6 +48,17 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
         src: impl Into<LdOperand<S, LdDest8<S>>>,
     ) -> AnalysisResult<S> {
         match (dest, src.into()) {
+            (
+                LdDest8::Simple(SimpleOperand::DerefHl, dest),
+                LdOperand::Other(LdDest8::Simple(SimpleOperand::DerefHl, src)),
+            ) => Err(InternalDiagnostic::new(
+                Message::LdDerefHlDerefHl {
+                    mnemonic: self.mnemonic.1.clone(),
+                    dest,
+                    src: src.clone(),
+                },
+                self.mnemonic.1.extend(&src),
+            )),
             (LdDest8::Simple(dest, _), LdOperand::Other(LdDest8::Simple(src, _))) => {
                 Ok(Instruction::Ld(Ld::Simple(dest, src)))
             }
@@ -470,6 +481,20 @@ mod tests {
         analyze(Mnemonic::Ld, vec![literal(Sp), literal(Af)]).expect_diagnostic(
             ExpectedDiagnostic::new(Message::AfOutsideStackOperation)
                 .with_highlight(TokenId::Operand(1, 0)),
+        )
+    }
+
+    #[test]
+    fn analyze_ld_deref_hl_deref_hl() {
+        analyze(Mnemonic::Ld, vec![deref(literal(Hl)), deref(literal(Hl))]).expect_diagnostic(
+            ExpectedDiagnostic::new(Message::LdDerefHlDerefHl {
+                mnemonic: TokenId::Mnemonic.into(),
+                dest: TokenSpan::from(TokenId::Operand(0, 0))
+                    .extend(&TokenId::Operand(0, 2).into()),
+                src: TokenSpan::from(TokenId::Operand(1, 0)).extend(&TokenId::Operand(1, 2).into()),
+            }).with_highlight(
+                TokenSpan::from(TokenId::Mnemonic).extend(&TokenId::Operand(1, 2).into()),
+            ),
         )
     }
 }

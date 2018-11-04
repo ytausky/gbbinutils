@@ -98,6 +98,11 @@ pub enum Message<S> {
     KeywordInExpr {
         keyword: S,
     },
+    LdDerefHlDerefHl {
+        mnemonic: S,
+        dest: S,
+        src: S,
+    },
     LdSpHlOperands,
     LdWidthMismatch {
         src_width: Width,
@@ -191,6 +196,16 @@ impl Message<TokenRefData> {
             KeywordInExpr { keyword } => format!(
                 "keyword `{}` cannot appear in expression",
                 mk_snippet(codebase, keyword),
+            ),
+            LdDerefHlDerefHl {
+                mnemonic,
+                dest,
+                src,
+            } => format!(
+                "`{} {}, {}` is not a legal instruction",
+                mk_snippet(codebase, mnemonic),
+                mk_snippet(codebase, dest),
+                mk_snippet(codebase, src)
             ),
             LdSpHlOperands => {
                 "the only legal 16-bit register to register transfer is from `hl` to `sp`".into()
