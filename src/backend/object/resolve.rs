@@ -87,7 +87,7 @@ fn collect_symbols<S: Span>(object: &Object<S>) -> SymbolTable {
             symbols: &mut symbols,
             location: Value::Unknown,
         };
-        for (i, chunk) in (&object.chunks).into_iter().enumerate() {
+        for (i, chunk) in object.chunks.iter().enumerate() {
             let size = chunk.traverse(&mut context, |item, context| {
                 if let Node::Label(symbol, _) = item {
                     context
@@ -107,7 +107,7 @@ fn refine_symbols<S: Span>(object: &Object<S>, symbols: &mut SymbolTable) -> i32
         symbols,
         location: Value::Unknown,
     };
-    for (i, chunk) in (&object.chunks).into_iter().enumerate() {
+    for (i, chunk) in object.chunks.iter().enumerate() {
         let size = chunk.traverse(context, |item, context| {
             if let Node::Label(symbol, _) = item {
                 refinements += context
