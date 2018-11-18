@@ -90,27 +90,15 @@ where
     }
 
     fn parse_stmt(mut self) -> Self {
-        match self.token {
-            (Token::Ident(ident), span) => {
-                bump!(self);
-                self.parse_potentially_labeled_stmt((ident, span))
-            }
-            _ => self
-                .change_context(|c| c.enter_stmt(None))
-                .parse_unlabeled_stmt()
-                .change_context(|c| c.exit()),
-        }
-    }
-
-    fn parse_potentially_labeled_stmt(mut self, ident: (Id, S)) -> Self {
-        if let (Token::Colon, _) = self.token {
+        let label = if let (Token::Label(label), span) = self.token {
             bump!(self);
-            self.change_context(|c| c.enter_stmt(Some(ident)))
-                .parse_unlabeled_stmt()
+            Some((label, span))
         } else {
-            self.change_context(|c| c.enter_stmt(None))
-                .parse_macro_invocation(ident)
-        }.change_context(|c| c.exit())
+            None
+        };
+        self.change_context(|c| c.enter_stmt(label))
+            .parse_unlabeled_stmt()
+            .change_context(|c| c.exit())
     }
 }
 
@@ -870,23 +858,22 @@ mod tests {
 
     #[test]
     fn parse_empty_macro_definition() {
-        let tokens = input_tokens![Ident(()), Colon, Macro, Eol, Endm];
-        let expected_actions = [labeled(0, macro_def(2, [], Vec::new(), 4))];
+        let tokens = input_tokens![Label(()), Macro, Eol, Endm];
+        let expected_actions = [labeled(0, macro_def(1, [], Vec::new(), 3))];
         assert_eq_actions(tokens, expected_actions);
     }
 
     #[test]
     fn parse_macro_definition_with_instruction() {
-        let tokens = input_tokens![Ident(()), Colon, Macro, Eol, Command(()), Eol, Endm];
-        let expected_actions = [labeled(0, macro_def(2, [], tokens.token_seq([4, 5]), 6))];
+        let tokens = input_tokens![Label(()), Macro, Eol, Command(()), Eol, Endm];
+        let expected_actions = [labeled(0, macro_def(1, [], tokens.token_seq([3, 4]), 5))];
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_nonempty_macro_def_with_two_params() {
         let tokens = input_tokens![
-            Ident(()),
-            Colon,
+            Label(()),
             Macro,
             Ident(()),
             Comma,
@@ -898,22 +885,22 @@ mod tests {
         ];
         let expected = [labeled(
             0,
-            macro_def(2, [3.into(), 5.into()], tokens.token_seq([7, 8]), 9),
+            macro_def(1, [2.into(), 4.into()], tokens.token_seq([6, 7]), 8),
         )];
         assert_eq_actions(tokens, expected)
     }
 
     #[test]
     fn parse_label() {
-        let tokens = input_tokens![Ident(()), Colon, Eol];
+        let tokens = input_tokens![Label(()), Eol];
         let expected_actions = [labeled(0, empty()), unlabeled(empty())];
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_labeled_instruction() {
-        let tokens = input_tokens![Ident(()), Colon, Command(()), Eol];
-        let expected = [labeled(0, command(2, [])), unlabeled(empty())];
+        let tokens = input_tokens![Label(()), Command(()), Eol];
+        let expected = [labeled(0, command(1, [])), unlabeled(empty())];
         assert_eq_actions(tokens, expected)
     }
 
