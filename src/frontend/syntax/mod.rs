@@ -13,7 +13,6 @@ pub use crate::frontend::syntax::keyword::Operand;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token<I, C = keyword::Command, L = Literal<I>, E = lexer::LexError> {
     ClosingParenthesis,
-    Colon,
     Comma,
     Command(C),
     Endm,

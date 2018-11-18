@@ -11,7 +11,6 @@ use std::str;
 #[derive(Clone, Copy, PartialEq)]
 enum TokenKind {
     ClosingParenthesis,
-    Colon,
     Comma,
     Eof,
     Eol,
@@ -97,7 +96,6 @@ impl<I: Iterator<Item = char>> Scanner<I> {
         let first_char = self.current_char().unwrap();
         let next_token = match first_char {
             ')' => self.take(TokenKind::ClosingParenthesis),
-            ':' => self.take(TokenKind::Colon),
             ',' => self.take(TokenKind::Comma),
             '\n' => self.take(TokenKind::Eol),
             '(' => self.take(TokenKind::OpeningParenthesis),
@@ -197,7 +195,6 @@ impl<'a> Iterator for Lexer<'a> {
 fn mk_token(kind: TokenKind, lexeme: &str) -> Token<String> {
     match kind {
         TokenKind::ClosingParenthesis => Token::ClosingParenthesis,
-        TokenKind::Colon => Token::Colon,
         TokenKind::Comma => Token::Comma,
         TokenKind::Eof => Token::Eof,
         TokenKind::Eol => Token::Eol,

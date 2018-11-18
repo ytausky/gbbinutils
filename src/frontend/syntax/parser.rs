@@ -11,7 +11,6 @@ impl<C, I, L, E> Token<C, I, L, E> {
         use self::Token::*;
         match *self {
             ClosingParenthesis => ClosingParenthesis,
-            Colon => Colon,
             Comma => Comma,
             Command(_) => Command(()),
             Endm => Endm,

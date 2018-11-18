@@ -77,7 +77,6 @@ pub fn mk_sym_token(id: impl Into<TokenRef>, token: Token<(), (), ()>) -> (SymTo
             Label(()) => Label(SymIdent(token_ref.clone())),
             Literal(()) => Literal(SymLiteral(token_ref.clone())),
             ClosingParenthesis => ClosingParenthesis,
-            Colon => Colon,
             Comma => Comma,
             Endm => Endm,
             Eof => Eof,
