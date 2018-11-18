@@ -17,6 +17,7 @@ enum TokenKind {
     Eol,
     Error(LexError),
     Ident,
+    Label,
     Number(Radix),
     OpeningParenthesis,
     Plus,
@@ -87,9 +88,7 @@ impl<I: Iterator<Item = char>> Scanner<I> {
     }
 
     fn advance(&mut self) -> Option<char> {
-        if self.current_char() != Some('\n') {
-            self.is_at_line_start = false;
-        }
+        self.is_at_line_start = self.current_char() == Some('\n');
         self.range.end += self.current_char().map_or(0, |ch| ch.len_utf8());
         self.chars.next()
     }
@@ -140,9 +139,14 @@ impl<I: Iterator<Item = char>> Scanner<I> {
     }
 
     fn lex_ident(&mut self) -> TokenKind {
+        let is_label = self.is_at_line_start;
         self.advance();
         self.find_word_end();
-        TokenKind::Ident
+        if is_label {
+            TokenKind::Label
+        } else {
+            TokenKind::Ident
+        }
     }
 
     fn find_word_end(&mut self) {
@@ -199,6 +203,7 @@ fn mk_token(kind: TokenKind, lexeme: &str) -> Token<String> {
         TokenKind::Eol => Token::Eol,
         TokenKind::Error(error) => Token::Error(error),
         TokenKind::Ident => mk_keyword_or(Token::Ident, lexeme),
+        TokenKind::Label => mk_keyword_or(Token::Label, lexeme),
         TokenKind::Number(Radix::Decimal) => {
             Token::Literal(Literal::Number(i32::from_str_radix(lexeme, 10).unwrap()))
         }
@@ -342,12 +347,12 @@ mod tests {
 
     #[test]
     fn range_of_eof_after_ident() {
-        test_byte_range_at_eof("ident", [(Ident("ident".into()), 0..5), (Eof, 5..5)])
+        test_byte_range_at_eof("    ident", [(Ident("ident".into()), 4..9), (Eof, 9..9)])
     }
 
     #[test]
     fn range_of_eof_after_trailing_whitespace() {
-        test_byte_range_at_eof("ident ", [(Ident("ident".into()), 0..5), (Eof, 6..6)])
+        test_byte_range_at_eof("    ident ", [(Ident("ident".into()), 4..9), (Eof, 10..10)])
     }
 
     fn test_byte_range_at_eof(src: &str, tokens: impl Borrow<[(Token<String>, Range<usize>)]>) {
@@ -375,23 +380,18 @@ mod tests {
 
     #[test]
     fn lex_ident() {
-        assert_eq_tokens("ident", [Ident("ident".to_string())])
+        assert_eq_tokens("    ident", [Ident("ident".to_string())])
     }
 
     #[test]
     fn lex_ident_after_eol() {
-        assert_eq_tokens("    \nident", [Eol, Ident("ident".to_string())])
-    }
-
-    #[test]
-    fn lex_ident_after_whitespace() {
-        assert_eq_tokens("    ident", [Ident("ident".to_string())])
+        assert_eq_tokens("    \n    ident", [Eol, Ident("ident".to_string())])
     }
 
     #[test]
     fn lex_ident_with_underscore() {
         assert_eq_tokens(
-            "ident_with_underscore",
+            "    ident_with_underscore",
             [Ident("ident_with_underscore".to_string())],
         )
     }
@@ -426,10 +426,12 @@ mod tests {
 
     #[test]
     fn lex_label() {
-        assert_eq_tokens(
-            "label: nop\n",
-            [Ident("label".to_string()), Colon, Nop.into(), Eol],
-        )
+        assert_eq_tokens("label nop\n", [Label("label".to_string()), Nop.into(), Eol])
+    }
+
+    #[test]
+    fn lex_label_after_eol() {
+        assert_eq_tokens("    \nlabel", [Eol, Label("label".to_string())])
     }
 
     #[test]
