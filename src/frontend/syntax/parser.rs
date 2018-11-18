@@ -19,6 +19,7 @@ impl<C, I, L, E> Token<C, I, L, E> {
             Eol => Eol,
             Error(_) => Error(()),
             Ident(_) => Ident(()),
+            Label(_) => Label(()),
             Literal(_) => Literal(()),
             Macro => Macro,
             OpeningParenthesis => OpeningParenthesis,

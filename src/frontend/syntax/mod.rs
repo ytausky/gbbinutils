@@ -21,6 +21,7 @@ pub enum Token<I, C = keyword::Command, L = Literal<I>, E = lexer::LexError> {
     Eol,
     Error(E),
     Ident(I),
+    Label(I),
     Literal(L),
     Macro,
     OpeningParenthesis,
