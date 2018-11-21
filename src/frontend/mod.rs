@@ -305,7 +305,13 @@ struct ExpandedMacro<I, S> {
     def: Rc<MacroDef<I, S>>,
     args: Vec<Vec<(Token<I>, S)>>,
     body_index: usize,
-    arg_index: Option<(usize, usize)>,
+    expansion_state: Option<ExpansionState>,
+}
+
+#[derive(Debug, PartialEq)]
+enum ExpansionState {
+    Ident(usize, usize),
+    Label(usize),
 }
 
 impl<I: AsRef<str> + PartialEq, S> ExpandedMacro<I, S> {
@@ -314,7 +320,7 @@ impl<I: AsRef<str> + PartialEq, S> ExpandedMacro<I, S> {
             def,
             args,
             body_index: 0,
-            arg_index: None,
+            expansion_state: None,
         };
         expanded_macro.try_expand();
         expanded_macro
@@ -330,27 +336,36 @@ impl<I: AsRef<str> + PartialEq, S> ExpandedMacro<I, S> {
     }
 
     fn advance(&mut self) {
-        if let Some((position, index)) = self.arg_index {
-            if index + 1 < self.args[position].len() {
-                self.arg_index = Some((position, index + 1))
-            } else {
-                self.arg_index = None
+        self.expansion_state = match self.expansion_state {
+            Some(ExpansionState::Ident(position, index))
+                if index + 1 < self.args[position].len() =>
+            {
+                Some(ExpansionState::Ident(position, index + 1))
             }
-        }
-        if self.arg_index.is_none() {
+            _ => None,
+        };
+        if self.expansion_state.is_none() {
             self.body_index += 1;
             self.try_expand()
         }
     }
 
     fn try_expand(&mut self) {
-        assert_eq!(self.arg_index, None);
+        assert_eq!(self.expansion_state, None);
         if self.body_index < self.def.body.len() {
-            if let Token::Ident(ref name) = self.def.body[self.body_index].0 {
-                if let Some(position) = self.param_position(name.as_ref()) {
-                    self.arg_index = Some((position, 0))
-                }
-            }
+            self.expansion_state = self.expand_token(&self.def.body[self.body_index].0);
+        }
+    }
+
+    fn expand_token(&self, token: &Token<I>) -> Option<ExpansionState> {
+        match token {
+            Token::Ident(ident) => self
+                .param_position(ident.as_ref())
+                .map(|position| ExpansionState::Ident(position, 0)),
+            Token::Label(label) => self
+                .param_position(label.as_ref())
+                .map(ExpansionState::Label),
+            _ => None,
         }
     }
 }
@@ -359,8 +374,14 @@ impl<I: AsRef<str> + Clone + Eq, S: Clone> Iterator for ExpandedMacro<I, S> {
     type Item = (Token<I>, S);
     fn next(&mut self) -> Option<Self::Item> {
         if self.body_index < self.def.body.len() {
-            let item = match self.arg_index {
-                Some((position, index)) => self.args[position][index].clone(),
+            let item = match self.expansion_state {
+                Some(ExpansionState::Ident(position, index)) => self.args[position][index].clone(),
+                Some(ExpansionState::Label(position)) => match self.args[position][0] {
+                    (Token::Ident(ref ident), ref span) => {
+                        (Token::Label(ident.clone()), span.clone())
+                    }
+                    _ => unimplemented!(),
+                },
                 None => self.def.body[self.body_index].clone(),
             };
             self.advance();
@@ -528,6 +549,27 @@ mod tests {
         assert_eq!(
             *log.borrow(),
             [TestEvent::AnalyzeTokens(vec![db, arg, literal0])]
+        );
+    }
+
+    #[test]
+    fn define_and_invoke_macro_with_label() {
+        let nop = Token::Command(Command::Mnemonic(Mnemonic::Nop));
+        let label = String::from("label");
+        let log = TestLog::default();
+        TestFixture::new(&log).when(|mut session| {
+            let name = String::from("my_macro");
+            let param = String::from("x");
+            session.define_macro(
+                (name.clone(), ()),
+                vec![(param.clone(), ())],
+                vec![(Token::Label(param), ()), (nop.clone(), ())],
+            );
+            session.invoke_macro((name, ()), vec![vec![(Token::Ident(label.clone()), ())]])
+        });
+        assert_eq!(
+            *log.borrow(),
+            [TestEvent::AnalyzeTokens(vec![Token::Label(label), nop])]
         );
     }
 
