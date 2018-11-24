@@ -214,8 +214,8 @@ where
         B: Backend<Self::Span>,
         D: DiagnosticsListener<Self::Span>,
     {
-        match self.macros.expand(name.clone(), args) {
-            Some(tokens) => self.analyze_token_seq(tokens, &mut downstream),
+        match self.macros.get(&name) {
+            Some(def) => self.analyze_token_seq(def.expand(args, ()), &mut downstream),
             None => {
                 let (name, name_ref) = name;
                 downstream
@@ -241,7 +241,7 @@ where
 trait Macros {
     type Ident;
     type Span: Span;
-    type ExpandedMacro: Iterator<Item = (Token<Self::Ident>, Self::Span)>;
+    type Def: MacroDef<Ident = Self::Ident, Span = Self::Span> + Clone;
 
     fn define(
         &mut self,
@@ -250,18 +250,26 @@ trait Macros {
         body: Vec<(Token<Self::Ident>, Self::Span)>,
     );
 
+    fn get(&self, name: &(Self::Ident, Self::Span)) -> Option<Self::Def>;
+}
+
+trait MacroDef {
+    type Ident;
+    type Span: Span;
+    type ExpandedMacro: Iterator<Item = (Token<Self::Ident>, Self::Span)>;
+
     fn expand(
-        &mut self,
-        name: (Self::Ident, Self::Span),
+        &self,
         args: Vec<TokenSeq<Self::Ident, Self::Span>>,
-    ) -> Option<Self::ExpandedMacro>;
+        context: (),
+    ) -> Self::ExpandedMacro;
 }
 
 struct MacroExpander<I, S: Span> {
-    macro_defs: HashMap<I, Rc<MacroDef<I, S>>>,
+    macro_defs: HashMap<I, Rc<MacroDefData<I, S>>>,
 }
 
-struct MacroDef<I, S> {
+struct MacroDefData<I, S> {
     params: Vec<(I, S)>,
     body: Vec<(Token<I>, S)>,
 }
@@ -277,7 +285,7 @@ impl<I: Eq + Hash, S: Span> MacroExpander<I, S> {
 impl<I: AsRef<str> + Clone + Eq + Hash, S: Span> Macros for MacroExpander<I, S> {
     type Ident = I;
     type Span = S;
-    type ExpandedMacro = ExpandedMacro<Self::Ident, Self::Span>;
+    type Def = Rc<MacroDefData<I, S>>;
 
     fn define(
         &mut self,
@@ -286,23 +294,26 @@ impl<I: AsRef<str> + Clone + Eq + Hash, S: Span> Macros for MacroExpander<I, S> 
         body: Vec<(Token<Self::Ident>, Self::Span)>,
     ) {
         self.macro_defs
-            .insert(name.0.into(), Rc::new(MacroDef { params, body }));
+            .insert(name.0.into(), Rc::new(MacroDefData { params, body }));
     }
 
-    fn expand(
-        &mut self,
-        name: (Self::Ident, Self::Span),
-        args: Vec<TokenSeq<Self::Ident, Self::Span>>,
-    ) -> Option<Self::ExpandedMacro> {
-        self.macro_defs
-            .get(&name.0)
-            .cloned()
-            .map(|def| ExpandedMacro::new(def, args))
+    fn get(&self, name: &(Self::Ident, Self::Span)) -> Option<Self::Def> {
+        self.macro_defs.get(&name.0).cloned()
+    }
+}
+
+impl<I: AsRef<str> + Clone + Eq, S: Span> MacroDef for Rc<MacroDefData<I, S>> {
+    type Ident = I;
+    type Span = S;
+    type ExpandedMacro = ExpandedMacro<I, S>;
+
+    fn expand(&self, args: Vec<TokenSeq<I, S>>, _context: ()) -> Self::ExpandedMacro {
+        ExpandedMacro::new(self.clone(), args)
     }
 }
 
 struct ExpandedMacro<I, S> {
-    def: Rc<MacroDef<I, S>>,
+    def: Rc<MacroDefData<I, S>>,
     args: Vec<Vec<(Token<I>, S)>>,
     body_index: usize,
     expansion_state: Option<ExpansionState>,
@@ -315,7 +326,7 @@ enum ExpansionState {
 }
 
 impl<I: AsRef<str> + PartialEq, S> ExpandedMacro<I, S> {
-    fn new(def: Rc<MacroDef<I, S>>, args: Vec<Vec<(Token<I>, S)>>) -> ExpandedMacro<I, S> {
+    fn new(def: Rc<MacroDefData<I, S>>, args: Vec<Vec<(Token<I>, S)>>) -> ExpandedMacro<I, S> {
         let mut expanded_macro = ExpandedMacro {
             def,
             args,
