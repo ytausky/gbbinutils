@@ -424,7 +424,7 @@ fn analyze_reloc_expr<I: Into<String>, S: Clone>(
 mod tests {
     use super::*;
 
-    use crate::backend::RelocAtom;
+    use crate::backend::{RelocAtom, Width};
     use crate::codebase::CodebaseError;
     use crate::diagnostics::{InternalDiagnostic, Message};
     use crate::frontend::syntax::{
@@ -432,7 +432,6 @@ mod tests {
         MacroParamsContext, StmtContext, TokenSeqContext,
     };
     use crate::instruction::RelocExpr;
-    use crate::Width;
     use std::borrow::Borrow;
     use std::cell::RefCell;
 

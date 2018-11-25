@@ -1,7 +1,7 @@
+use crate::backend::Width;
 use crate::codebase::{CodebaseError, LineNumber, TextBuf, TextCache, TextRange};
 use crate::instruction::IncDec;
 use crate::span::TokenRefData;
-use crate::Width;
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::fmt;

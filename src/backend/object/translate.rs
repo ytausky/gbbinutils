@@ -1,9 +1,8 @@
 use super::context::{EvalContext, SymbolTable};
 use super::{traverse_chunk_items, Chunk, Node};
-use crate::backend::{BinarySection, RelocExpr};
+use crate::backend::{BinarySection, RelocExpr, Width};
 use crate::diagnostics::{DiagnosticsListener, InternalDiagnostic, Message};
 use crate::span::{Source, Span};
-use crate::Width;
 use std::vec::IntoIter;
 
 impl<S: Span> Chunk<S> {

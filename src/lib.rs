@@ -13,21 +13,6 @@ mod frontend;
 mod instruction;
 mod span;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Width {
-    Byte,
-    Word,
-}
-
-impl Width {
-    fn len(self) -> i32 {
-        match self {
-            Width::Byte => 1,
-            Width::Word => 2,
-        }
-    }
-}
-
 pub struct Config<'a> {
     pub input: &'a mut dyn codebase::FileSystem,
     pub output: &'a mut dyn diagnostics::DiagnosticsOutput,

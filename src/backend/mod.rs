@@ -8,10 +8,24 @@ use crate::backend::{
 use crate::expr::{Expr, ExprVariant};
 use crate::instruction::Instruction;
 use crate::span::Span;
-use crate::Width;
 
 mod lowering;
 mod object;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Width {
+    Byte,
+    Word,
+}
+
+impl Width {
+    fn len(self) -> i32 {
+        match self {
+            Width::Byte => 1,
+            Width::Word => 2,
+        }
+    }
+}
 
 pub trait Backend<R> {
     type Object;

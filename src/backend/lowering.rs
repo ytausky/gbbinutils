@@ -1,9 +1,8 @@
 use crate::backend::object::Node;
-use crate::backend::{BinaryOperator, Item, RelocAtom};
+use crate::backend::{BinaryOperator, Item, RelocAtom, Width};
 use crate::expr::ExprVariant;
 use crate::instruction::*;
 use crate::span::{Source, Span};
-use crate::Width;
 use std::mem;
 
 pub trait Lower<S> {

@@ -1,9 +1,8 @@
 use self::context::{EvalContext, SymbolTable};
 use self::resolve::Value;
-use crate::backend::{BinaryObject, RelocExpr};
+use crate::backend::{BinaryObject, RelocExpr, Width};
 use crate::diagnostics::DiagnosticsListener;
 use crate::span::Span;
-use crate::Width;
 use std::borrow::Borrow;
 
 mod context;

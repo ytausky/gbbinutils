@@ -2,14 +2,13 @@ use super::{
     analyze_reloc_expr, CommandArgs, Directive, SemanticActions, SemanticAtom, SemanticExpr,
 };
 use crate::backend;
-use crate::backend::{BinaryOperator, RelocAtom};
+use crate::backend::{BinaryOperator, RelocAtom, Width};
 use crate::diagnostics::{InternalDiagnostic, Message};
 use crate::expr::ExprVariant;
 use crate::frontend::session::Session;
 use crate::frontend::syntax::Literal;
 use crate::instruction::RelocExpr;
 use crate::span::Span;
-use crate::Width;
 use std::fmt::Debug;
 
 pub fn analyze_directive<'a, S: Session + 'a>(
