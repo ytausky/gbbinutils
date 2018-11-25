@@ -45,21 +45,14 @@ pub fn assemble<'a>(name: &str, config: &mut Config<'a>) -> Option<Rom> {
         OutputConfig::Default => output_holder.get_or_insert_with(|| TerminalOutput {}),
         OutputConfig::Custom(ref mut output) => *output,
     };
-    let result = {
-        let mut input_holder = None;
-        let input: &mut dyn codebase::FileSystem = match config.input {
-            InputConfig::Default => input_holder.get_or_insert_with(|| StdFileSystem::new()),
-            InputConfig::Custom(ref mut input) => *input,
-        };
-        try_assemble(name, input, output)
+    let mut input_holder = None;
+    let input: &mut dyn codebase::FileSystem = match config.input {
+        InputConfig::Default => input_holder.get_or_insert_with(|| StdFileSystem::new()),
+        InputConfig::Custom(ref mut input) => *input,
     };
-    match result {
-        Ok(rom) => Some(rom),
-        Err(error) => {
-            output.emit(mk_diagnostic(name, &error.into()));
-            None
-        }
-    }
+    try_assemble(name, input, output)
+        .map_err(|error| output.emit(mk_diagnostic(name, &error.into())))
+        .ok()
 }
 
 fn try_assemble<'a>(
