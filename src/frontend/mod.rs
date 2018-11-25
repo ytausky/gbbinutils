@@ -7,7 +7,7 @@ use crate::codebase::{Codebase, CodebaseError};
 use crate::diagnostics::*;
 use crate::frontend::session::*;
 use crate::frontend::syntax::*;
-use crate::span::{LexemeRefFactory, Span, TokenTracker};
+use crate::span::{BufContext, Span, TokenTracker};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -442,42 +442,39 @@ impl<'a, C: Codebase + 'a, TT: TokenTracker> TokenizedCodeSource for TokenStream
     }
 }
 
-struct TokenizedSrc<LRF> {
+struct TokenizedSrc<C> {
     src: Rc<str>,
-    lexeme_ref_factory: LRF,
+    context: C,
 }
 
-impl<LRF: LexemeRefFactory> TokenizedSrc<LRF> {
-    fn new(src: Rc<str>, lexeme_ref_factory: LRF) -> TokenizedSrc<LRF> {
-        TokenizedSrc {
-            src,
-            lexeme_ref_factory,
-        }
+impl<C: BufContext> TokenizedSrc<C> {
+    fn new(src: Rc<str>, context: C) -> TokenizedSrc<C> {
+        TokenizedSrc { src, context }
     }
 }
 
-impl<'a, LRF: LexemeRefFactory> IntoIterator for &'a TokenizedSrc<LRF> {
+impl<'a, C: BufContext> IntoIterator for &'a TokenizedSrc<C> {
     type Item = <Self::IntoIter as Iterator>::Item;
-    type IntoIter = TokenizedSrcIter<'a, LRF>;
+    type IntoIter = TokenizedSrcIter<'a, C>;
     fn into_iter(self) -> Self::IntoIter {
         TokenizedSrcIter {
             tokens: syntax::tokenize(&self.src),
-            lexeme_ref_factory: &self.lexeme_ref_factory,
+            context: &self.context,
         }
     }
 }
 
-struct TokenizedSrcIter<'a, LRF: LexemeRefFactory + 'a> {
+struct TokenizedSrcIter<'a, C: BufContext + 'a> {
     tokens: syntax::lexer::Lexer<'a>,
-    lexeme_ref_factory: &'a LRF,
+    context: &'a C,
 }
 
-impl<'a, LRF: LexemeRefFactory> Iterator for TokenizedSrcIter<'a, LRF> {
-    type Item = (Token<String>, LRF::Span);
+impl<'a, C: BufContext> Iterator for TokenizedSrcIter<'a, C> {
+    type Item = (Token<String>, C::Span);
     fn next(&mut self) -> Option<Self::Item> {
         self.tokens
             .next()
-            .map(|(t, r)| (t, self.lexeme_ref_factory.mk_lexeme_ref(r)))
+            .map(|(t, r)| (t, self.context.mk_span(r)))
     }
 }
 

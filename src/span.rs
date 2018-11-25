@@ -19,7 +19,7 @@ pub trait Source {
 
 pub trait TokenTracker {
     type Span: Span;
-    type BufContext: Clone + LexemeRefFactory<Span = Self::Span>;
+    type BufContext: Clone + BufContext<Span = Self::Span>;
     fn mk_buf_context(
         &mut self,
         buf_id: BufId,
@@ -27,9 +27,9 @@ pub trait TokenTracker {
     ) -> Self::BufContext;
 }
 
-pub trait LexemeRefFactory {
+pub trait BufContext {
     type Span;
-    fn mk_lexeme_ref(&self, range: BufRange) -> Self::Span;
+    fn mk_span(&self, range: BufRange) -> Self::Span;
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -69,9 +69,9 @@ pub struct SimpleBufTokenRefFactory {
     context: Rc<BufContextData>,
 }
 
-impl LexemeRefFactory for SimpleBufTokenRefFactory {
+impl BufContext for SimpleBufTokenRefFactory {
     type Span = TokenRefData;
-    fn mk_lexeme_ref(&self, range: BufRange) -> Self::Span {
+    fn mk_span(&self, range: BufRange) -> Self::Span {
         TokenRefData::Lexeme {
             range,
             context: self.context.clone(),
