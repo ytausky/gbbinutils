@@ -1,9 +1,7 @@
 pub use crate::backend::Rom;
-pub use crate::codebase::StdFileSystem;
-pub use crate::diagnostics::TerminalOutput;
 
-use crate::codebase::CodebaseError;
-use crate::diagnostics::mk_diagnostic;
+use crate::codebase::{CodebaseError, StdFileSystem};
+use crate::diagnostics::{mk_diagnostic, TerminalOutput};
 
 mod backend;
 mod codebase;
@@ -13,26 +11,65 @@ mod frontend;
 mod instruction;
 mod span;
 
+#[derive(Default)]
 pub struct Config<'a> {
-    pub input: &'a mut dyn codebase::FileSystem,
-    pub output: &'a mut dyn diagnostics::DiagnosticsOutput,
+    pub input: InputConfig<'a>,
+    pub output: OutputConfig<'a>,
+}
+
+pub enum InputConfig<'a> {
+    Default,
+    Custom(&'a mut dyn codebase::FileSystem),
+}
+
+impl<'a> Default for InputConfig<'a> {
+    fn default() -> Self {
+        InputConfig::Default
+    }
+}
+
+pub enum OutputConfig<'a> {
+    Default,
+    Custom(&'a mut dyn diagnostics::DiagnosticsOutput),
+}
+
+impl<'a> Default for OutputConfig<'a> {
+    fn default() -> Self {
+        OutputConfig::Default
+    }
 }
 
 pub fn assemble<'a>(name: &str, config: &mut Config<'a>) -> Option<Rom> {
-    let result = try_assemble(name, config);
+    let mut output_holder = None;
+    let output: &mut dyn diagnostics::DiagnosticsOutput = match config.output {
+        OutputConfig::Default => output_holder.get_or_insert_with(|| TerminalOutput {}),
+        OutputConfig::Custom(ref mut output) => *output,
+    };
+    let result = {
+        let mut input_holder = None;
+        let input: &mut dyn codebase::FileSystem = match config.input {
+            InputConfig::Default => input_holder.get_or_insert_with(|| StdFileSystem::new()),
+            InputConfig::Custom(ref mut input) => *input,
+        };
+        try_assemble(name, input, output)
+    };
     match result {
         Ok(rom) => Some(rom),
         Err(error) => {
-            config.output.emit(mk_diagnostic(name, &error.into()));
+            output.emit(mk_diagnostic(name, &error.into()));
             None
         }
     }
 }
 
-fn try_assemble<'a>(name: &str, config: &mut Config<'a>) -> Result<Rom, CodebaseError> {
-    let codebase = codebase::FileCodebase::new(config.input);
+fn try_assemble<'a>(
+    name: &str,
+    input: &mut dyn codebase::FileSystem,
+    output: &mut dyn diagnostics::DiagnosticsOutput,
+) -> Result<Rom, CodebaseError> {
+    let codebase = codebase::FileCodebase::new(input);
     let mut diagnostics = diagnostics::OutputForwarder {
-        output: config.output,
+        output,
         codebase: &codebase.cache,
     };
     let object = frontend::analyze_file(
@@ -103,8 +140,8 @@ mod tests {
         let mut output = MockDiagnosticOutput::new();
         {
             let mut config = Config {
-                input: &mut fs,
-                output: &mut output,
+                input: InputConfig::Custom(&mut fs),
+                output: OutputConfig::Custom(&mut output),
             };
             assemble(path, &mut config);
         }
@@ -125,8 +162,8 @@ mod tests {
         let mut output = MockDiagnosticOutput::new();
         {
             let mut config = Config {
-                input: &mut fs,
-                output: &mut output,
+                input: InputConfig::Custom(&mut fs),
+                output: OutputConfig::Custom(&mut output),
             };
             assemble(path, &mut config);
         }
