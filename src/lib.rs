@@ -58,7 +58,7 @@ pub fn assemble<'a>(name: &str, config: &mut Config<'a>) -> Option<Rom> {
     };
     let mut input_holder = None;
     let input: &mut dyn codebase::FileSystem = match config.input {
-        InputConfig::Default => input_holder.get_or_insert_with(|| StdFileSystem::new()),
+        InputConfig::Default => input_holder.get_or_insert_with(StdFileSystem::new),
         InputConfig::Custom(ref mut input) => *input,
     };
     try_assemble(name, input, output)
@@ -66,7 +66,7 @@ pub fn assemble<'a>(name: &str, config: &mut Config<'a>) -> Option<Rom> {
         .ok()
 }
 
-fn try_assemble<'a>(
+fn try_assemble(
     name: &str,
     input: &mut dyn codebase::FileSystem,
     output: &mut dyn diagnostics::DiagnosticsOutput,
