@@ -20,7 +20,7 @@ pub trait Source {
 pub trait ContextFactory {
     type Span: Span;
     type MacroDefId;
-    type BufContext: Clone + BufContext<Span = Self::Span>;
+    type BufContext: BufContext<Span = Self::Span>;
     type MacroExpansionContext: MacroExpansionContext<Span = Self::Span>;
 
     fn add_macro_def<P, B>(name: Self::Span, params: P, body: B) -> Self::MacroDefId
