@@ -33,7 +33,7 @@ pub trait BufContext {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum TokenRefData {
+pub enum SpanData {
     Lexeme {
         range: BufRange,
         context: Rc<BufContextData>,
@@ -43,13 +43,13 @@ pub enum TokenRefData {
 #[derive(Debug, PartialEq)]
 pub struct BufContextData {
     pub buf_id: BufId,
-    pub included_from: Option<TokenRefData>,
+    pub included_from: Option<SpanData>,
 }
 
 pub struct SimpleTokenTracker;
 
 impl TokenTracker for SimpleTokenTracker {
-    type Span = TokenRefData;
+    type Span = SpanData;
     type BufContext = SimpleBufTokenRefFactory;
     fn mk_buf_context(
         &mut self,
@@ -70,18 +70,18 @@ pub struct SimpleBufTokenRefFactory {
 }
 
 impl BufContext for SimpleBufTokenRefFactory {
-    type Span = TokenRefData;
+    type Span = SpanData;
     fn mk_span(&self, range: BufRange) -> Self::Span {
-        TokenRefData::Lexeme {
+        SpanData::Lexeme {
             range,
             context: self.context.clone(),
         }
     }
 }
 
-impl Span for TokenRefData {
+impl Span for SpanData {
     fn extend(&self, other: &Self) -> Self {
-        use self::TokenRefData::*;
+        use self::SpanData::*;
         match (self, other) {
             (
                 Lexeme { range, context },
@@ -117,18 +117,18 @@ mod tests {
             buf_id,
             included_from: None,
         });
-        let left = TokenRefData::Lexeme {
+        let left = SpanData::Lexeme {
             range: BufRange::from(0..4),
             context: context.clone(),
         };
-        let right = TokenRefData::Lexeme {
+        let right = SpanData::Lexeme {
             range: BufRange::from(5..10),
             context: context.clone(),
         };
         let combined = left.extend(&right);
         assert_eq!(
             combined,
-            TokenRefData::Lexeme {
+            SpanData::Lexeme {
                 range: BufRange::from(0..10),
                 context
             }

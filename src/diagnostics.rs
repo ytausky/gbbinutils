@@ -1,7 +1,7 @@
 use crate::backend::Width;
 use crate::codebase::{CodebaseError, LineNumber, TextBuf, TextCache, TextRange};
 use crate::instruction::IncDec;
-use crate::span::TokenRefData;
+use crate::span::SpanData;
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::fmt;
@@ -27,8 +27,8 @@ pub struct OutputForwarder<'a> {
     pub codebase: &'a RefCell<TextCache>,
 }
 
-impl<'a> DiagnosticsListener<TokenRefData> for OutputForwarder<'a> {
-    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<TokenRefData>) {
+impl<'a> DiagnosticsListener<SpanData> for OutputForwarder<'a> {
+    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SpanData>) {
         self.output
             .emit(diagnostic.elaborate(&self.codebase.borrow()))
     }
@@ -166,7 +166,7 @@ impl<S> From<CodebaseError> for Message<S> {
     }
 }
 
-impl Message<TokenRefData> {
+impl Message<SpanData> {
     fn render<'a>(&self, codebase: &'a TextCache) -> String {
         use crate::diagnostics::Message::*;
         match self {
@@ -316,10 +316,7 @@ pub struct DiagnosticLocation<T> {
     pub highlight: TextRange,
 }
 
-pub fn mk_diagnostic(
-    file: impl Into<String>,
-    message: &Message<TokenRefData>,
-) -> Diagnostic<String> {
+pub fn mk_diagnostic(file: impl Into<String>, message: &Message<SpanData>) -> Diagnostic<String> {
     Diagnostic {
         file: file.into(),
         message: message.render(&TextCache::new()),
@@ -327,10 +324,10 @@ pub fn mk_diagnostic(
     }
 }
 
-impl InternalDiagnostic<TokenRefData> {
+impl InternalDiagnostic<SpanData> {
     fn elaborate<'a, T: From<&'a str>>(&self, codebase: &'a TextCache) -> Diagnostic<T> {
         match self.highlight {
-            TokenRefData::Lexeme {
+            SpanData::Lexeme {
                 ref range,
                 ref context,
             } => {
@@ -387,9 +384,9 @@ impl<T: Borrow<str>> fmt::Display for Diagnostic<T> {
     }
 }
 
-fn mk_snippet<'a>(codebase: &'a TextCache, span: &TokenRefData) -> &'a str {
+fn mk_snippet<'a>(codebase: &'a TextCache, span: &SpanData) -> &'a str {
     match span {
-        TokenRefData::Lexeme { range, context } => {
+        SpanData::Lexeme { range, context } => {
             &codebase.buf(context.buf_id).as_str()[range.start..range.end]
         }
     }
@@ -413,7 +410,7 @@ mod tests {
             buf_id,
             included_from: None,
         });
-        let span = TokenRefData::Lexeme {
+        let span = SpanData::Lexeme {
             range: BufRange::from(4..11),
             context: context.clone(),
         };
@@ -426,7 +423,7 @@ mod tests {
         let src = "    nop\n    my_macro a, $12\n\n";
         let buf_id = codebase.add_src_buf(DUMMY_FILE, src);
         let range = BufRange::from(12..20);
-        let token_ref = TokenRefData::Lexeme {
+        let token_ref = SpanData::Lexeme {
             range,
             context: Rc::new(BufContextData {
                 buf_id,
