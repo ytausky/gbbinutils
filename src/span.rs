@@ -50,7 +50,7 @@ pub struct RcContextFactory;
 
 impl ContextFactory for RcContextFactory {
     type Span = SpanData;
-    type BufContext = SimpleBufTokenRefFactory;
+    type BufContext = RcBufContext;
     fn mk_buf_context(
         &mut self,
         buf_id: BufId,
@@ -60,16 +60,16 @@ impl ContextFactory for RcContextFactory {
             buf_id,
             included_from,
         });
-        SimpleBufTokenRefFactory { context }
+        RcBufContext { context }
     }
 }
 
 #[derive(Clone)]
-pub struct SimpleBufTokenRefFactory {
+pub struct RcBufContext {
     context: Rc<BufContextData>,
 }
 
-impl BufContext for SimpleBufTokenRefFactory {
+impl BufContext for RcBufContext {
     type Span = SpanData;
     fn mk_span(&self, range: BufRange) -> Self::Span {
         SpanData::Lexeme {
