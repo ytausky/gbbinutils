@@ -1,3 +1,6 @@
+//! `gbas` is an assembler targeting Game Boy, Game Boy Pocket, Game Boy Light, and Game Boy Color.
+//! Its customizable IO functions make it suitable for embedding in other tools, in unit tests, etc.
+
 pub use crate::backend::Rom;
 
 use crate::codebase::{CodebaseError, StdFileSystem};
@@ -39,6 +42,14 @@ impl<'a> Default for OutputConfig<'a> {
     }
 }
 
+/// Parses input files and generates a ROM.
+///
+/// # Examples
+///
+/// ```rust
+/// let rom = gbas::assemble("game.s", &mut gbas::Config::default());
+/// assert!(rom.is_none())
+/// ```
 pub fn assemble<'a>(name: &str, config: &mut Config<'a>) -> Option<Rom> {
     let mut output_holder = None;
     let output: &mut dyn diagnostics::DiagnosticsOutput = match config.output {
