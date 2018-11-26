@@ -7,7 +7,7 @@ use crate::codebase::{Codebase, CodebaseError};
 use crate::diagnostics::*;
 use crate::frontend::session::*;
 use crate::frontend::syntax::*;
-use crate::span::{BufContext, Span, TokenTracker};
+use crate::span::{BufContext, ContextFactory, Span};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -17,18 +17,18 @@ pub use crate::frontend::syntax::Token;
 
 pub fn analyze_file<
     C: Codebase,
-    TT: TokenTracker,
-    B: Backend<TT::Span>,
-    D: DiagnosticsListener<TT::Span>,
+    F: ContextFactory,
+    B: Backend<F::Span>,
+    D: DiagnosticsListener<F::Span>,
 >(
     name: String,
     codebase: &C,
-    token_tracker: TT,
+    context_factory: F,
     backend: B,
     diagnostics: &mut D,
 ) -> Result<B::Object, CodebaseError> {
     let factory = SemanticAnalysisFactory::new();
-    let token_provider = TokenStreamSource::new(codebase, token_tracker);
+    let token_provider = TokenStreamSource::new(codebase, context_factory);
     let file_parser = FileParser::new(factory, MacroExpander::new(), token_provider);
     let mut session: Components<_, _, D, _, _, _> =
         Components::new(file_parser, backend, diagnostics);
@@ -413,31 +413,31 @@ where
     fn tokenize_file(&mut self, filename: &str) -> Result<Self::Tokenized, CodebaseError>;
 }
 
-struct TokenStreamSource<'a, C: Codebase + 'a, TT: TokenTracker> {
+struct TokenStreamSource<'a, C: Codebase + 'a, F: ContextFactory> {
     codebase: &'a C,
-    token_tracker: TT,
+    context_factory: F,
 }
 
-impl<'a, C: Codebase + 'a, TT: TokenTracker> TokenStreamSource<'a, C, TT> {
-    fn new(codebase: &'a C, token_tracker: TT) -> TokenStreamSource<C, TT> {
+impl<'a, C: Codebase + 'a, F: ContextFactory> TokenStreamSource<'a, C, F> {
+    fn new(codebase: &'a C, context_factory: F) -> TokenStreamSource<C, F> {
         TokenStreamSource {
             codebase,
-            token_tracker,
+            context_factory,
         }
     }
 }
 
-impl<'a, C: Codebase + 'a, TT: TokenTracker> TokenizedCodeSource for TokenStreamSource<'a, C, TT> {
+impl<'a, C: Codebase + 'a, F: ContextFactory> TokenizedCodeSource for TokenStreamSource<'a, C, F> {
     type Ident = String;
-    type Span = TT::Span;
-    type Tokenized = TokenizedSrc<TT::BufContext>;
+    type Span = F::Span;
+    type Tokenized = TokenizedSrc<F::BufContext>;
 
     fn tokenize_file(&mut self, filename: &str) -> Result<Self::Tokenized, CodebaseError> {
         let buf_id = self.codebase.open(filename)?;
         let rc_src = self.codebase.buf(buf_id);
         Ok(TokenizedSrc::new(
             rc_src,
-            self.token_tracker.mk_buf_context(buf_id, None),
+            self.context_factory.mk_buf_context(buf_id, None),
         ))
     }
 }

@@ -17,7 +17,7 @@ pub trait Source {
     fn span(&self) -> Self::Span;
 }
 
-pub trait TokenTracker {
+pub trait ContextFactory {
     type Span: Span;
     type BufContext: Clone + BufContext<Span = Self::Span>;
     fn mk_buf_context(
@@ -46,9 +46,9 @@ pub struct BufContextData {
     pub included_from: Option<SpanData>,
 }
 
-pub struct SimpleTokenTracker;
+pub struct RcContextFactory;
 
-impl TokenTracker for SimpleTokenTracker {
+impl ContextFactory for RcContextFactory {
     type Span = SpanData;
     type BufContext = SimpleBufTokenRefFactory;
     fn mk_buf_context(
