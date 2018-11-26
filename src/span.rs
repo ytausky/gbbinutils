@@ -34,7 +34,7 @@ pub trait BufContext {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SpanData {
-    Lexeme {
+    Buf {
         range: BufRange,
         context: Rc<BufContextData>,
     },
@@ -72,7 +72,7 @@ pub struct RcBufContext {
 impl BufContext for RcBufContext {
     type Span = SpanData;
     fn mk_span(&self, range: BufRange) -> Self::Span {
-        SpanData::Lexeme {
+        SpanData::Buf {
             range,
             context: self.context.clone(),
         }
@@ -84,15 +84,15 @@ impl Span for SpanData {
         use self::SpanData::*;
         match (self, other) {
             (
-                Lexeme { range, context },
-                Lexeme {
+                Buf { range, context },
+                Buf {
                     range: other_range,
                     context: other_context,
                 },
             )
                 if Rc::ptr_eq(context, other_context) =>
             {
-                Lexeme {
+                Buf {
                     range: cmp::min(range.start, other_range.start)
                         ..cmp::max(range.end, other_range.end),
                     context: (*context).clone(),
@@ -117,18 +117,18 @@ mod tests {
             buf_id,
             included_from: None,
         });
-        let left = SpanData::Lexeme {
+        let left = SpanData::Buf {
             range: BufRange::from(0..4),
             context: context.clone(),
         };
-        let right = SpanData::Lexeme {
+        let right = SpanData::Buf {
             range: BufRange::from(5..10),
             context: context.clone(),
         };
         let combined = left.extend(&right);
         assert_eq!(
             combined,
-            SpanData::Lexeme {
+            SpanData::Buf {
                 range: BufRange::from(0..10),
                 context
             }

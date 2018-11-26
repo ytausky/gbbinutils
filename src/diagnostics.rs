@@ -327,7 +327,7 @@ pub fn mk_diagnostic(file: impl Into<String>, message: &Message<SpanData>) -> Di
 impl InternalDiagnostic<SpanData> {
     fn elaborate<'a, T: From<&'a str>>(&self, codebase: &'a TextCache) -> Diagnostic<T> {
         match self.highlight {
-            SpanData::Lexeme {
+            SpanData::Buf {
                 ref range,
                 ref context,
             } => {
@@ -386,7 +386,7 @@ impl<T: Borrow<str>> fmt::Display for Diagnostic<T> {
 
 fn mk_snippet<'a>(codebase: &'a TextCache, span: &SpanData) -> &'a str {
     match span {
-        SpanData::Lexeme { range, context } => {
+        SpanData::Buf { range, context } => {
             &codebase.buf(context.buf_id).as_str()[range.start..range.end]
         }
     }
@@ -410,7 +410,7 @@ mod tests {
             buf_id,
             included_from: None,
         });
-        let span = SpanData::Lexeme {
+        let span = SpanData::Buf {
             range: BufRange::from(4..11),
             context: context.clone(),
         };
@@ -423,7 +423,7 @@ mod tests {
         let src = "    nop\n    my_macro a, $12\n\n";
         let buf_id = codebase.add_src_buf(DUMMY_FILE, src);
         let range = BufRange::from(12..20);
-        let token_ref = SpanData::Lexeme {
+        let token_ref = SpanData::Buf {
             range,
             context: Rc::new(BufContextData {
                 buf_id,
