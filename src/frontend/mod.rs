@@ -156,7 +156,7 @@ struct FileParser<AF, M, TCS> {
 impl<AF, M, TCS> FileParser<AF, M, TCS>
 where
     AF: AnalysisFactory<TCS::Ident>,
-    M: Macros<Ident = TCS::Ident, Span = TCS::Span>,
+    M: MacroTable<Ident = TCS::Ident, Span = TCS::Span>,
     TCS: TokenizedCodeSource,
     for<'a> &'a TCS::Tokenized: IntoIterator<Item = (Token<TCS::Ident>, TCS::Span)>,
 {
@@ -184,7 +184,7 @@ type TokenSeq<I, S> = Vec<(Token<I>, S)>;
 impl<AF, M, TCS> Frontend for FileParser<AF, M, TCS>
 where
     AF: AnalysisFactory<TCS::Ident>,
-    M: Macros<Ident = TCS::Ident, Span = TCS::Span>,
+    M: MacroTable<Ident = TCS::Ident, Span = TCS::Span>,
     TCS: TokenizedCodeSource,
     for<'a> &'a TCS::Tokenized: IntoIterator<Item = (Token<TCS::Ident>, TCS::Span)>,
 {
@@ -238,7 +238,7 @@ where
     }
 }
 
-trait Macros {
+trait MacroTable {
     type Ident;
     type Span: Span;
     type Def: MacroDef<Ident = Self::Ident, Span = Self::Span> + Clone;
@@ -282,7 +282,7 @@ impl<I: Eq + Hash, S: Span> MacroExpander<I, S> {
     }
 }
 
-impl<I: AsRef<str> + Clone + Eq + Hash, S: Span> Macros for MacroExpander<I, S> {
+impl<I: AsRef<str> + Clone + Eq + Hash, S: Span> MacroTable for MacroExpander<I, S> {
     type Ident = I;
     type Span = S;
     type Def = Rc<MacroDefData<I, S>>;
