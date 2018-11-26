@@ -19,12 +19,30 @@ pub trait Source {
 
 pub trait ContextFactory {
     type Span: Span;
+    type MacroDefId;
     type BufContext: Clone + BufContext<Span = Self::Span>;
+    type MacroExpansionContext: MacroExpansionContext<Span = Self::Span>;
+
+    fn add_macro_def<P, B>(name: Self::Span, params: P, body: B) -> Self::MacroDefId
+    where
+        P: Iterator<Item = Self::Span>,
+        B: Iterator<Item = Self::Span>;
+
     fn mk_buf_context(
         &mut self,
         buf_id: BufId,
         included_from: Option<Self::Span>,
     ) -> Self::BufContext;
+
+    fn mk_macro_expansion_context<I, J>(
+        &mut self,
+        name: Self::Span,
+        args: I,
+        def: &Self::MacroDefId,
+    ) -> Self::MacroExpansionContext
+    where
+        I: IntoIterator<Item = J>,
+        J: IntoIterator<Item = Self::Span>;
 }
 
 pub trait BufContext {
@@ -32,11 +50,27 @@ pub trait BufContext {
     fn mk_span(&self, range: BufRange) -> Self::Span;
 }
 
+pub trait MacroExpansionContext {
+    type Span;
+    fn mk_span(&self, token: usize, expansion: Option<TokenExpansion>) -> Self::Span;
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TokenExpansion {
+    arg: usize,
+    index: usize,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum SpanData {
     Buf {
         range: BufRange,
         context: Rc<BufContextData>,
+    },
+    Macro {
+        token: usize,
+        expansion: Option<TokenExpansion>,
+        context: Rc<MacroExpansionData<SpanData>>,
     },
 }
 
@@ -46,11 +80,40 @@ pub struct BufContextData {
     pub included_from: Option<SpanData>,
 }
 
+#[derive(Debug, PartialEq)]
+pub struct MacroExpansionData<S> {
+    name: S,
+    args: Vec<Vec<S>>,
+    def: Rc<MacroDef<S>>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct MacroDef<S> {
+    name: S,
+    params: Vec<S>,
+    body: Vec<S>,
+}
+
 pub struct RcContextFactory;
 
 impl ContextFactory for RcContextFactory {
     type Span = SpanData;
+    type MacroDefId = Rc<MacroDef<Self::Span>>;
     type BufContext = RcBufContext;
+    type MacroExpansionContext = RcMacroExpansionContext;
+
+    fn add_macro_def<P, B>(name: Self::Span, params: P, body: B) -> Self::MacroDefId
+    where
+        P: Iterator<Item = Self::Span>,
+        B: Iterator<Item = Self::Span>,
+    {
+        Rc::new(MacroDef {
+            name,
+            params: params.collect(),
+            body: body.collect(),
+        })
+    }
+
     fn mk_buf_context(
         &mut self,
         buf_id: BufId,
@@ -61,6 +124,29 @@ impl ContextFactory for RcContextFactory {
             included_from,
         });
         RcBufContext { context }
+    }
+
+    fn mk_macro_expansion_context<I, J>(
+        &mut self,
+        name: Self::Span,
+        args: I,
+        def: &Self::MacroDefId,
+    ) -> Self::MacroExpansionContext
+    where
+        I: IntoIterator<Item = J>,
+        J: IntoIterator<Item = Self::Span>,
+    {
+        RcMacroExpansionContext {
+            context: Rc::new(MacroExpansionData {
+                name,
+                args: args
+                    .into_iter()
+                    .map(IntoIterator::into_iter)
+                    .map(Iterator::collect)
+                    .collect(),
+                def: Rc::clone(def),
+            }),
+        }
     }
 }
 
@@ -75,6 +161,22 @@ impl BufContext for RcBufContext {
         SpanData::Buf {
             range,
             context: self.context.clone(),
+        }
+    }
+}
+
+pub struct RcMacroExpansionContext {
+    context: Rc<MacroExpansionData<SpanData>>,
+}
+
+impl MacroExpansionContext for RcMacroExpansionContext {
+    type Span = SpanData;
+
+    fn mk_span(&self, token: usize, expansion: Option<TokenExpansion>) -> Self::Span {
+        SpanData::Macro {
+            token,
+            expansion,
+            context: Rc::clone(&self.context),
         }
     }
 }

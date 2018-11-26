@@ -348,6 +348,7 @@ impl InternalDiagnostic<SpanData> {
                     }),
                 }
             }
+            SpanData::Macro { .. } => unimplemented!(),
         }
     }
 }
@@ -389,6 +390,7 @@ fn mk_snippet<'a>(codebase: &'a TextCache, span: &SpanData) -> &'a str {
         SpanData::Buf { range, context } => {
             &codebase.buf(context.buf_id).as_str()[range.start..range.end]
         }
+        SpanData::Macro { .. } => unimplemented!(),
     }
 }
 
