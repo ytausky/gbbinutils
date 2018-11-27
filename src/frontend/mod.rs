@@ -3,7 +3,7 @@ mod session;
 mod syntax;
 
 use crate::backend::*;
-use crate::codebase::{Codebase, CodebaseError};
+use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diagnostics::*;
 use crate::frontend::session::*;
 use crate::frontend::syntax::*;
@@ -163,7 +163,7 @@ impl<AF, M, TCS, F> FileParser<AF, M, TCS, F>
 where
     AF: AnalysisFactory<TCS::Ident>,
     M: MacroTable<Ident = TCS::Ident, Span = TCS::Span>,
-    TCS: TokenizedCodeSource<F>,
+    TCS: TokenizedCodeSource<F::BufContext>,
     F: ContextFactory,
     for<'a> &'a TCS::Tokenized: IntoIterator<Item = (Token<TCS::Ident>, TCS::Span)>,
 {
@@ -198,7 +198,7 @@ impl<AF, M, TCS, F> Frontend for FileParser<AF, M, TCS, F>
 where
     AF: AnalysisFactory<TCS::Ident>,
     M: MacroTable<Ident = TCS::Ident, Span = TCS::Span>,
-    TCS: TokenizedCodeSource<F>,
+    TCS: TokenizedCodeSource<F::BufContext>,
     F: ContextFactory,
     for<'a> &'a TCS::Tokenized: IntoIterator<Item = (Token<TCS::Ident>, TCS::Span)>,
 {
@@ -214,9 +214,13 @@ where
         B: Backend<Self::Span>,
         D: DiagnosticsListener<Self::Span>,
     {
-        let tokenized_src = self
-            .tokenized_code_source
-            .tokenize_file(path.as_ref(), &mut self.context_factory)?;
+        let tokenized_src = {
+            let context_factory = &mut self.context_factory;
+            self.tokenized_code_source
+                .tokenize_file(path.as_ref(), |buf_id| {
+                    context_factory.mk_buf_context(buf_id, None)
+                })?
+        };
         self.analyze_token_seq(&tokenized_src, &mut downstream);
         Ok(())
     }
@@ -419,17 +423,17 @@ impl<I: AsRef<str> + Clone + Eq, S: Clone> Iterator for ExpandedMacro<I, S> {
     }
 }
 
-trait TokenizedCodeSource<F: ContextFactory>
+trait TokenizedCodeSource<C: BufContext>
 where
     for<'c> &'c Self::Tokenized: IntoIterator<Item = (Token<Self::Ident>, Self::Span)>,
 {
     type Ident: AsRef<str> + Clone + Into<String> + Debug + PartialEq;
     type Span: Span;
     type Tokenized;
-    fn tokenize_file(
+    fn tokenize_file<F: FnOnce(BufId) -> C>(
         &mut self,
         filename: &str,
-        context_factory: &mut F,
+        mk_context: F,
     ) -> Result<Self::Tokenized, CodebaseError>;
 }
 
@@ -443,22 +447,19 @@ impl<'a, C: Codebase + 'a> TokenStreamSource<'a, C> {
     }
 }
 
-impl<'a, C: Codebase + 'a, F: ContextFactory> TokenizedCodeSource<F> for TokenStreamSource<'a, C> {
+impl<'a, C: Codebase + 'a, B: BufContext> TokenizedCodeSource<B> for TokenStreamSource<'a, C> {
     type Ident = String;
-    type Span = F::Span;
-    type Tokenized = TokenizedSrc<F::BufContext>;
+    type Span = B::Span;
+    type Tokenized = TokenizedSrc<B>;
 
-    fn tokenize_file(
+    fn tokenize_file<F: FnOnce(BufId) -> B>(
         &mut self,
         filename: &str,
-        context_factory: &mut F,
+        mk_context: F,
     ) -> Result<Self::Tokenized, CodebaseError> {
         let buf_id = self.codebase.open(filename)?;
         let rc_src = self.codebase.buf(buf_id);
-        Ok(TokenizedSrc::new(
-            rc_src,
-            context_factory.mk_buf_context(buf_id, None),
-        ))
+        Ok(TokenizedSrc::new(rc_src, mk_context(buf_id)))
     }
 }
 
@@ -640,10 +641,10 @@ mod tests {
         type Span = ();
         type Tokenized = MockTokenized;
 
-        fn tokenize_file(
+        fn tokenize_file<F: FnOnce(BufId) -> Mock<'a>>(
             &mut self,
             filename: &str,
-            _: &mut Mock<'a>,
+            _: F,
         ) -> Result<Self::Tokenized, CodebaseError> {
             Ok(MockTokenized(self.files.get(filename).unwrap().clone()))
         }
@@ -683,11 +684,7 @@ mod tests {
         {
         }
 
-        fn mk_buf_context(
-            &mut self,
-            _: codebase::BufId,
-            _: Option<Self::Span>,
-        ) -> Self::BufContext {
+        fn mk_buf_context(&mut self, _: BufId, _: Option<Self::Span>) -> Self::BufContext {
             self.clone()
         }
 

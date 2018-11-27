@@ -46,7 +46,7 @@ pub trait ContextFactory {
 }
 
 pub trait BufContext {
-    type Span;
+    type Span: Span;
     fn mk_span(&self, range: BufRange) -> Self::Span;
 }
 
