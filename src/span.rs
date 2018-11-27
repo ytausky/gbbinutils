@@ -23,7 +23,7 @@ pub trait ContextFactory {
     type BufContext: BufContext<Span = Self::Span>;
     type MacroExpansionContext: MacroExpansionContext<Span = Self::Span>;
 
-    fn add_macro_def<P, B>(name: Self::Span, params: P, body: B) -> Self::MacroDefId
+    fn add_macro_def<P, B>(&mut self, name: Self::Span, params: P, body: B) -> Self::MacroDefId
     where
         P: Iterator<Item = Self::Span>,
         B: Iterator<Item = Self::Span>;
@@ -102,7 +102,7 @@ impl ContextFactory for RcContextFactory {
     type BufContext = RcBufContext;
     type MacroExpansionContext = RcMacroExpansionContext;
 
-    fn add_macro_def<P, B>(name: Self::Span, params: P, body: B) -> Self::MacroDefId
+    fn add_macro_def<P, B>(&mut self, name: Self::Span, params: P, body: B) -> Self::MacroDefId
     where
         P: Iterator<Item = Self::Span>,
         B: Iterator<Item = Self::Span>,
