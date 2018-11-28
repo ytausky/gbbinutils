@@ -150,7 +150,7 @@ pub trait Frontend {
 struct CodebaseAnalyzer<'a, AF, M, T: 'a, F> {
     analysis_factory: AF,
     macros: M,
-    tokenized_codebase: &'a T,
+    codebase: &'a T,
     context_factory: F,
 }
 
@@ -158,20 +158,20 @@ impl<'a, AF, M, T: 'a, F> CodebaseAnalyzer<'a, AF, M, T, F>
 where
     AF: AnalysisFactory<T::Ident>,
     M: MacroTable<Ident = T::Ident, Span = F::Span>,
-    T: TokenizedCodebase<F::BufContext>,
+    T: Tokenize<F::BufContext>,
     F: ContextFactory,
     for<'b> &'b T::Tokenized: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
 {
     fn new(
         analysis_factory: AF,
         macros: M,
-        tokenized_codebase: &T,
+        codebase: &T,
         context_factory: F,
     ) -> CodebaseAnalyzer<AF, M, T, F> {
         CodebaseAnalyzer {
             analysis_factory,
             macros,
-            tokenized_codebase,
+            codebase,
             context_factory,
         }
     }
@@ -193,7 +193,7 @@ impl<'a, AF, M, T: 'a, F> Frontend for CodebaseAnalyzer<'a, AF, M, T, F>
 where
     AF: AnalysisFactory<T::Ident>,
     M: MacroTable<Ident = T::Ident, Span = F::Span>,
-    T: TokenizedCodebase<F::BufContext>,
+    T: Tokenize<F::BufContext>,
     F: ContextFactory,
     for<'b> &'b T::Tokenized: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
 {
@@ -211,10 +211,9 @@ where
     {
         let tokenized_src = {
             let context_factory = &mut self.context_factory;
-            self.tokenized_codebase
-                .tokenize_file(path.as_ref(), |buf_id| {
-                    context_factory.mk_buf_context(buf_id, None)
-                })?
+            self.codebase.tokenize_file(path.as_ref(), |buf_id| {
+                context_factory.mk_buf_context(buf_id, None)
+            })?
         };
         self.analyze_token_seq(&tokenized_src, &mut downstream);
         Ok(())
@@ -418,7 +417,7 @@ impl<I: AsRef<str> + Clone + Eq, S: Clone> Iterator for ExpandedMacro<I, S> {
     }
 }
 
-trait TokenizedCodebase<C: BufContext>
+trait Tokenize<C: BufContext>
 where
     for<'c> &'c Self::Tokenized: IntoIterator<Item = (Token<Self::Ident>, C::Span)>,
 {
@@ -431,7 +430,7 @@ where
     ) -> Result<Self::Tokenized, CodebaseError>;
 }
 
-impl<C: Codebase, B: BufContext> TokenizedCodebase<B> for C {
+impl<C: Codebase, B: BufContext> Tokenize<B> for C {
     type Ident = String;
     type Tokenized = TokenizedSrc<B>;
 
@@ -619,7 +618,7 @@ mod tests {
         }
     }
 
-    impl<'a> TokenizedCodebase<Mock<'a>> for MockTokenSource {
+    impl<'a> Tokenize<Mock<'a>> for MockTokenSource {
         type Ident = String;
         type Tokenized = MockTokenized;
 
