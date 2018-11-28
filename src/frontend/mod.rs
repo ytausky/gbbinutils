@@ -152,39 +152,39 @@ pub trait Frontend {
     );
 }
 
-struct CodebaseAnalyzer<AF, M, TCS, F> {
+struct CodebaseAnalyzer<AF, M, T, F> {
     analysis_factory: AF,
     macros: M,
-    tokenized_code_source: TCS,
+    tokenized_codebase: T,
     context_factory: F,
 }
 
-impl<AF, M, TCS, F> CodebaseAnalyzer<AF, M, TCS, F>
+impl<AF, M, T, F> CodebaseAnalyzer<AF, M, T, F>
 where
-    AF: AnalysisFactory<TCS::Ident>,
-    M: MacroTable<Ident = TCS::Ident, Span = TCS::Span>,
-    TCS: TokenizedCodeSource<F::BufContext>,
+    AF: AnalysisFactory<T::Ident>,
+    M: MacroTable<Ident = T::Ident, Span = F::Span>,
+    T: TokenizedCodebase<F::BufContext>,
     F: ContextFactory,
-    for<'a> &'a TCS::Tokenized: IntoIterator<Item = (Token<TCS::Ident>, TCS::Span)>,
+    for<'a> &'a T::Tokenized: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
 {
     fn new(
         analysis_factory: AF,
         macros: M,
-        tokenized_code_source: TCS,
+        tokenized_codebase: T,
         context_factory: F,
-    ) -> CodebaseAnalyzer<AF, M, TCS, F> {
+    ) -> CodebaseAnalyzer<AF, M, T, F> {
         CodebaseAnalyzer {
             analysis_factory,
             macros,
-            tokenized_code_source,
+            tokenized_codebase,
             context_factory,
         }
     }
 
-    fn analyze_token_seq<I: IntoIterator<Item = (Token<TCS::Ident>, TCS::Span)>>(
+    fn analyze_token_seq<I: IntoIterator<Item = (Token<T::Ident>, F::Span)>>(
         &mut self,
         tokens: I,
-        downstream: &mut Downstream<impl Backend<TCS::Span>, impl DiagnosticsListener<TCS::Span>>,
+        downstream: &mut Downstream<impl Backend<F::Span>, impl DiagnosticsListener<F::Span>>,
     ) {
         let mut analysis = self.analysis_factory.mk_analysis();
         let mut session = BorrowedComponents::new(self, downstream.backend, downstream.diagnostics);
@@ -194,16 +194,16 @@ where
 
 type TokenSeq<I, S> = Vec<(Token<I>, S)>;
 
-impl<AF, M, TCS, F> Frontend for CodebaseAnalyzer<AF, M, TCS, F>
+impl<AF, M, T, F> Frontend for CodebaseAnalyzer<AF, M, T, F>
 where
-    AF: AnalysisFactory<TCS::Ident>,
-    M: MacroTable<Ident = TCS::Ident, Span = TCS::Span>,
-    TCS: TokenizedCodeSource<F::BufContext>,
+    AF: AnalysisFactory<T::Ident>,
+    M: MacroTable<Ident = T::Ident, Span = F::Span>,
+    T: TokenizedCodebase<F::BufContext>,
     F: ContextFactory,
-    for<'a> &'a TCS::Tokenized: IntoIterator<Item = (Token<TCS::Ident>, TCS::Span)>,
+    for<'a> &'a T::Tokenized: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
 {
-    type Ident = TCS::Ident;
-    type Span = TCS::Span;
+    type Ident = T::Ident;
+    type Span = F::Span;
 
     fn analyze_file<B, D>(
         &mut self,
@@ -216,7 +216,7 @@ where
     {
         let tokenized_src = {
             let context_factory = &mut self.context_factory;
-            self.tokenized_code_source
+            self.tokenized_codebase
                 .tokenize_file(path.as_ref(), |buf_id| {
                     context_factory.mk_buf_context(buf_id, None)
                 })?
@@ -423,12 +423,11 @@ impl<I: AsRef<str> + Clone + Eq, S: Clone> Iterator for ExpandedMacro<I, S> {
     }
 }
 
-trait TokenizedCodeSource<C: BufContext>
+trait TokenizedCodebase<C: BufContext>
 where
-    for<'c> &'c Self::Tokenized: IntoIterator<Item = (Token<Self::Ident>, Self::Span)>,
+    for<'c> &'c Self::Tokenized: IntoIterator<Item = (Token<Self::Ident>, C::Span)>,
 {
     type Ident: AsRef<str> + Clone + Into<String> + Debug + PartialEq;
-    type Span: Span;
     type Tokenized;
     fn tokenize_file<F: FnOnce(BufId) -> C>(
         &mut self,
@@ -447,9 +446,8 @@ impl<'a, C: Codebase + 'a> TokenStreamSource<'a, C> {
     }
 }
 
-impl<'a, C: Codebase + 'a, B: BufContext> TokenizedCodeSource<B> for TokenStreamSource<'a, C> {
+impl<'a, C: Codebase + 'a, B: BufContext> TokenizedCodebase<B> for TokenStreamSource<'a, C> {
     type Ident = String;
-    type Span = B::Span;
     type Tokenized = TokenizedSrc<B>;
 
     fn tokenize_file<F: FnOnce(BufId) -> B>(
@@ -636,9 +634,8 @@ mod tests {
         }
     }
 
-    impl<'a> TokenizedCodeSource<Mock<'a>> for MockTokenSource {
+    impl<'a> TokenizedCodebase<Mock<'a>> for MockTokenSource {
         type Ident = String;
-        type Span = ();
         type Tokenized = MockTokenized;
 
         fn tokenize_file<F: FnOnce(BufId) -> Mock<'a>>(
