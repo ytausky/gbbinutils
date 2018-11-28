@@ -28,13 +28,8 @@ pub fn analyze_file<
     diagnostics: &mut D,
 ) -> Result<B::Object, CodebaseError> {
     let factory = SemanticAnalysisFactory::new();
-    let token_provider = TokenStreamSource::new(codebase);
-    let file_parser = CodebaseAnalyzer::new(
-        factory,
-        MacroExpander::new(),
-        token_provider,
-        context_factory,
-    );
+    let file_parser =
+        CodebaseAnalyzer::new(factory, MacroExpander::new(), codebase, context_factory);
     let mut session: Components<_, _, D, _, _, _> =
         Components::new(file_parser, backend, diagnostics);
     session.analyze_file(name)?;
@@ -152,25 +147,25 @@ pub trait Frontend {
     );
 }
 
-struct CodebaseAnalyzer<AF, M, T, F> {
+struct CodebaseAnalyzer<'a, AF, M, T: 'a, F> {
     analysis_factory: AF,
     macros: M,
-    tokenized_codebase: T,
+    tokenized_codebase: &'a T,
     context_factory: F,
 }
 
-impl<AF, M, T, F> CodebaseAnalyzer<AF, M, T, F>
+impl<'a, AF, M, T: 'a, F> CodebaseAnalyzer<'a, AF, M, T, F>
 where
     AF: AnalysisFactory<T::Ident>,
     M: MacroTable<Ident = T::Ident, Span = F::Span>,
     T: TokenizedCodebase<F::BufContext>,
     F: ContextFactory,
-    for<'a> &'a T::Tokenized: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
+    for<'b> &'b T::Tokenized: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
 {
     fn new(
         analysis_factory: AF,
         macros: M,
-        tokenized_codebase: T,
+        tokenized_codebase: &T,
         context_factory: F,
     ) -> CodebaseAnalyzer<AF, M, T, F> {
         CodebaseAnalyzer {
@@ -194,13 +189,13 @@ where
 
 type TokenSeq<I, S> = Vec<(Token<I>, S)>;
 
-impl<AF, M, T, F> Frontend for CodebaseAnalyzer<AF, M, T, F>
+impl<'a, AF, M, T: 'a, F> Frontend for CodebaseAnalyzer<'a, AF, M, T, F>
 where
     AF: AnalysisFactory<T::Ident>,
     M: MacroTable<Ident = T::Ident, Span = F::Span>,
     T: TokenizedCodebase<F::BufContext>,
     F: ContextFactory,
-    for<'a> &'a T::Tokenized: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
+    for<'b> &'b T::Tokenized: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
 {
     type Ident = T::Ident;
     type Span = F::Span;
@@ -430,33 +425,23 @@ where
     type Ident: AsRef<str> + Clone + Into<String> + Debug + PartialEq;
     type Tokenized;
     fn tokenize_file<F: FnOnce(BufId) -> C>(
-        &mut self,
+        &self,
         filename: &str,
         mk_context: F,
     ) -> Result<Self::Tokenized, CodebaseError>;
 }
 
-struct TokenStreamSource<'a, C: Codebase + 'a> {
-    codebase: &'a C,
-}
-
-impl<'a, C: Codebase + 'a> TokenStreamSource<'a, C> {
-    fn new(codebase: &'a C) -> TokenStreamSource<C> {
-        TokenStreamSource { codebase }
-    }
-}
-
-impl<'a, C: Codebase + 'a, B: BufContext> TokenizedCodebase<B> for TokenStreamSource<'a, C> {
+impl<C: Codebase, B: BufContext> TokenizedCodebase<B> for C {
     type Ident = String;
     type Tokenized = TokenizedSrc<B>;
 
     fn tokenize_file<F: FnOnce(BufId) -> B>(
-        &mut self,
+        &self,
         filename: &str,
         mk_context: F,
     ) -> Result<Self::Tokenized, CodebaseError> {
-        let buf_id = self.codebase.open(filename)?;
-        let rc_src = self.codebase.buf(buf_id);
+        let buf_id = self.open(filename)?;
+        let rc_src = self.buf(buf_id);
         Ok(TokenizedSrc::new(rc_src, mk_context(buf_id)))
     }
 }
@@ -639,7 +624,7 @@ mod tests {
         type Tokenized = MockTokenized;
 
         fn tokenize_file<F: FnOnce(BufId) -> Mock<'a>>(
-            &mut self,
+            &self,
             filename: &str,
             _: F,
         ) -> Result<Self::Tokenized, CodebaseError> {
@@ -796,7 +781,7 @@ mod tests {
             let file_parser = CodebaseAnalyzer::new(
                 self.analysis_factory,
                 self.macros,
-                self.mock_token_source,
+                &self.mock_token_source,
                 self.mock_context_factory,
             );
             let session = Components::new(file_parser, self.object, self.diagnostics);
@@ -805,7 +790,7 @@ mod tests {
     }
 
     type TestCodebaseAnalyzer<'a> =
-        CodebaseAnalyzer<Mock<'a>, MacroExpander<String, ()>, MockTokenSource, Mock<'a>>;
+        CodebaseAnalyzer<'a, Mock<'a>, MacroExpander<String, ()>, MockTokenSource, Mock<'a>>;
     type TestSession<'a> = Components<
         TestCodebaseAnalyzer<'a>,
         Mock<'a>,
