@@ -149,7 +149,7 @@ pub trait Frontend {
 
 struct CodebaseAnalyzer<'a, AF, M, T: 'a, F> {
     analysis_factory: AF,
-    macros: M,
+    macro_table: M,
     codebase: &'a T,
     context_factory: F,
 }
@@ -164,13 +164,13 @@ where
 {
     fn new(
         analysis_factory: AF,
-        macros: M,
+        macro_table: M,
         codebase: &T,
         context_factory: F,
     ) -> CodebaseAnalyzer<AF, M, T, F> {
         CodebaseAnalyzer {
             analysis_factory,
-            macros,
+            macro_table,
             codebase,
             context_factory,
         }
@@ -228,7 +228,7 @@ where
         B: Backend<Self::Span>,
         D: DiagnosticsListener<Self::Span>,
     {
-        match self.macros.get(&name) {
+        match self.macro_table.get(&name) {
             Some(def) => self.analyze_token_seq(def.expand(args, ()), &mut downstream),
             None => {
                 let (name, name_ref) = name;
@@ -248,7 +248,7 @@ where
         params: Vec<(Self::Ident, Self::Span)>,
         tokens: Vec<(Token<Self::Ident>, Self::Span)>,
     ) {
-        self.macros.define(name, params, tokens)
+        self.macro_table.define(name, params, tokens)
     }
 }
 
@@ -751,7 +751,7 @@ mod tests {
     }
 
     struct TestFixture<'a> {
-        macros: MacroExpander<String, ()>,
+        macro_table: MacroExpander<String, ()>,
         mock_token_source: MockTokenSource,
         mock_context_factory: Mock<'a>,
         analysis_factory: Mock<'a>,
@@ -762,7 +762,7 @@ mod tests {
     impl<'a> TestFixture<'a> {
         fn new(log: &'a TestLog) -> TestFixture<'a> {
             TestFixture {
-                macros: MacroExpander::new(),
+                macro_table: MacroExpander::new(),
                 mock_token_source: MockTokenSource::new(),
                 mock_context_factory: Mock::new(log),
                 analysis_factory: Mock::new(log),
@@ -779,7 +779,7 @@ mod tests {
         fn when<F: for<'b> FnOnce(TestSession<'b>)>(self, f: F) {
             let file_parser = CodebaseAnalyzer::new(
                 self.analysis_factory,
-                self.macros,
+                self.macro_table,
                 &self.mock_token_source,
                 self.mock_context_factory,
             );
