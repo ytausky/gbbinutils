@@ -29,7 +29,7 @@ pub fn analyze_file<
 ) -> Result<B::Object, CodebaseError> {
     let factory = SemanticAnalysisFactory::new();
     let token_provider = TokenStreamSource::new(codebase);
-    let file_parser = FileParser::new(
+    let file_parser = CodebaseAnalyzer::new(
         factory,
         MacroExpander::new(),
         token_provider,
@@ -152,14 +152,14 @@ pub trait Frontend {
     );
 }
 
-struct FileParser<AF, M, TCS, F> {
+struct CodebaseAnalyzer<AF, M, TCS, F> {
     analysis_factory: AF,
     macros: M,
     tokenized_code_source: TCS,
     context_factory: F,
 }
 
-impl<AF, M, TCS, F> FileParser<AF, M, TCS, F>
+impl<AF, M, TCS, F> CodebaseAnalyzer<AF, M, TCS, F>
 where
     AF: AnalysisFactory<TCS::Ident>,
     M: MacroTable<Ident = TCS::Ident, Span = TCS::Span>,
@@ -172,8 +172,8 @@ where
         macros: M,
         tokenized_code_source: TCS,
         context_factory: F,
-    ) -> FileParser<AF, M, TCS, F> {
-        FileParser {
+    ) -> CodebaseAnalyzer<AF, M, TCS, F> {
+        CodebaseAnalyzer {
             analysis_factory,
             macros,
             tokenized_code_source,
@@ -194,7 +194,7 @@ where
 
 type TokenSeq<I, S> = Vec<(Token<I>, S)>;
 
-impl<AF, M, TCS, F> Frontend for FileParser<AF, M, TCS, F>
+impl<AF, M, TCS, F> Frontend for CodebaseAnalyzer<AF, M, TCS, F>
 where
     AF: AnalysisFactory<TCS::Ident>,
     M: MacroTable<Ident = TCS::Ident, Span = TCS::Span>,
@@ -796,7 +796,7 @@ mod tests {
         }
 
         fn when<F: for<'b> FnOnce(TestSession<'b>)>(self, f: F) {
-            let file_parser = FileParser::new(
+            let file_parser = CodebaseAnalyzer::new(
                 self.analysis_factory,
                 self.macros,
                 self.mock_token_source,
@@ -807,8 +807,14 @@ mod tests {
         }
     }
 
-    type TestFileParser<'a> =
-        FileParser<Mock<'a>, MacroExpander<String, ()>, MockTokenSource, Mock<'a>>;
-    type TestSession<'a> =
-        Components<TestFileParser<'a>, Mock<'a>, Mock<'a>, TestFileParser<'a>, Mock<'a>, Mock<'a>>;
+    type TestCodebaseAnalyzer<'a> =
+        CodebaseAnalyzer<Mock<'a>, MacroExpander<String, ()>, MockTokenSource, Mock<'a>>;
+    type TestSession<'a> = Components<
+        TestCodebaseAnalyzer<'a>,
+        Mock<'a>,
+        Mock<'a>,
+        TestCodebaseAnalyzer<'a>,
+        Mock<'a>,
+        Mock<'a>,
+    >;
 }
