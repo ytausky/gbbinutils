@@ -27,9 +27,12 @@ pub fn analyze_file<
     backend: B,
     diagnostics: &mut D,
 ) -> Result<B::Object, CodebaseError> {
-    let factory = SemanticAnalysisFactory::new();
-    let file_parser =
-        CodebaseAnalyzer::new(factory, MacroExpander::new(), codebase, context_factory);
+    let file_parser = CodebaseAnalyzer::new(
+        MacroExpander::new(),
+        codebase,
+        context_factory,
+        SemanticAnalysis {},
+    );
     let mut session: Components<_, _, D, _, _, _> =
         Components::new(file_parser, backend, diagnostics);
     session.analyze_file(name)?;
@@ -41,52 +44,18 @@ pub struct Downstream<'a, B: 'a, D: 'a> {
     diagnostics: &'a mut D,
 }
 
-trait Analysis<Id: Into<String> + Debug + PartialEq> {
-    fn run<I, S>(&mut self, tokens: I, session: &mut S)
+trait Analysis<Id: Into<String> + Debug + PartialEq>
+where
+    Self: Copy,
+{
+    fn run<I, S>(&self, tokens: I, session: &mut S)
     where
         I: Iterator<Item = (Token<Id>, S::Span)>,
         S: Session<Ident = Id>;
 }
 
+#[derive(Clone, Copy)]
 struct SemanticAnalysis;
-
-impl SemanticAnalysis {
-    fn new() -> SemanticAnalysis {
-        SemanticAnalysis {}
-    }
-}
-
-impl<Id: Into<String> + Debug + PartialEq> Analysis<Id> for SemanticAnalysis {
-    fn run<I, S>(&mut self, tokens: I, session: &mut S)
-    where
-        I: Iterator<Item = (Token<Id>, S::Span)>,
-        S: Session<Ident = Id>,
-    {
-        let actions = semantics::SemanticActions::new(session);
-        syntax::parse_token_seq(tokens, actions)
-    }
-}
-
-trait AnalysisFactory<Id: Into<String> + Debug + PartialEq> {
-    type Analysis: Analysis<Id>;
-    fn mk_analysis(&mut self) -> Self::Analysis;
-}
-
-struct SemanticAnalysisFactory;
-
-impl SemanticAnalysisFactory {
-    fn new() -> SemanticAnalysisFactory {
-        SemanticAnalysisFactory {}
-    }
-}
-
-impl<Id: Into<String> + Debug + PartialEq> AnalysisFactory<Id> for SemanticAnalysisFactory {
-    type Analysis = SemanticAnalysis;
-
-    fn mk_analysis(&mut self) -> Self::Analysis {
-        SemanticAnalysis::new()
-    }
-}
 
 pub trait ExprFactory {
     fn mk_literal<S>(&mut self, literal: (i32, S)) -> RelocExpr<S>;
@@ -147,32 +116,43 @@ pub trait Frontend {
     );
 }
 
-struct CodebaseAnalyzer<'a, AF, M, T: 'a, F> {
-    analysis_factory: AF,
+impl<Id: Into<String> + Debug + PartialEq> Analysis<Id> for SemanticAnalysis {
+    fn run<I, S>(&self, tokens: I, session: &mut S)
+    where
+        I: Iterator<Item = (Token<Id>, S::Span)>,
+        S: Session<Ident = Id>,
+    {
+        let actions = semantics::SemanticActions::new(session);
+        syntax::parse_token_seq(tokens, actions)
+    }
+}
+
+struct CodebaseAnalyzer<'a, M, T: 'a, F, A> {
     macro_table: M,
     codebase: &'a T,
     context_factory: F,
+    analysis: A,
 }
 
-impl<'a, AF, M, T: 'a, F> CodebaseAnalyzer<'a, AF, M, T, F>
+impl<'a, M, T: 'a, F, A> CodebaseAnalyzer<'a, M, T, F, A>
 where
-    AF: AnalysisFactory<T::Ident>,
     M: MacroTable<Ident = T::Ident, Span = F::Span>,
     T: Tokenize<F::BufContext>,
     F: ContextFactory,
+    A: Analysis<T::Ident>,
     for<'b> &'b T::Tokenized: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
 {
     fn new(
-        analysis_factory: AF,
         macro_table: M,
         codebase: &T,
         context_factory: F,
-    ) -> CodebaseAnalyzer<AF, M, T, F> {
+        analysis: A,
+    ) -> CodebaseAnalyzer<M, T, F, A> {
         CodebaseAnalyzer {
-            analysis_factory,
             macro_table,
             codebase,
             context_factory,
+            analysis,
         }
     }
 
@@ -181,7 +161,7 @@ where
         tokens: I,
         downstream: &mut Downstream<impl Backend<F::Span>, impl DiagnosticsListener<F::Span>>,
     ) {
-        let mut analysis = self.analysis_factory.mk_analysis();
+        let analysis = self.analysis;
         let mut session = BorrowedComponents::new(self, downstream.backend, downstream.diagnostics);
         analysis.run(tokens.into_iter(), &mut session)
     }
@@ -189,12 +169,12 @@ where
 
 type TokenSeq<I, S> = Vec<(Token<I>, S)>;
 
-impl<'a, AF, M, T: 'a, F> Frontend for CodebaseAnalyzer<'a, AF, M, T, F>
+impl<'a, M, T, F, A> Frontend for CodebaseAnalyzer<'a, M, T, F, A>
 where
-    AF: AnalysisFactory<T::Ident>,
     M: MacroTable<Ident = T::Ident, Span = F::Span>,
-    T: Tokenize<F::BufContext>,
+    T: Tokenize<F::BufContext> + 'a,
     F: ContextFactory,
+    A: Analysis<T::Ident>,
     for<'b> &'b T::Tokenized: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
 {
     type Ident = T::Ident;
@@ -641,7 +621,7 @@ mod tests {
         }
     }
 
-    #[derive(Clone)]
+    #[derive(Clone, Copy)]
     struct Mock<'a> {
         log: &'a TestLog,
     }
@@ -693,15 +673,8 @@ mod tests {
         fn mk_span(&self, _: usize, _: Option<TokenExpansion>) -> Self::Span {}
     }
 
-    impl<'a> AnalysisFactory<String> for Mock<'a> {
-        type Analysis = Self;
-        fn mk_analysis(&mut self) -> Self::Analysis {
-            self.clone()
-        }
-    }
-
     impl<'a> Analysis<String> for Mock<'a> {
-        fn run<I, F>(&mut self, tokens: I, _frontend: &mut F)
+        fn run<I, F>(&self, tokens: I, _frontend: &mut F)
         where
             I: Iterator<Item = (Token<String>, F::Span)>,
             F: Session<Ident = String>,
@@ -754,7 +727,7 @@ mod tests {
         macro_table: MacroExpander<String, ()>,
         mock_token_source: MockTokenSource,
         mock_context_factory: Mock<'a>,
-        analysis_factory: Mock<'a>,
+        analysis: Mock<'a>,
         object: Mock<'a>,
         diagnostics: Mock<'a>,
     }
@@ -765,7 +738,7 @@ mod tests {
                 macro_table: MacroExpander::new(),
                 mock_token_source: MockTokenSource::new(),
                 mock_context_factory: Mock::new(log),
-                analysis_factory: Mock::new(log),
+                analysis: Mock::new(log),
                 object: Mock::new(log),
                 diagnostics: Mock::new(log),
             }
@@ -778,10 +751,10 @@ mod tests {
 
         fn when<F: for<'b> FnOnce(TestSession<'b>)>(self, f: F) {
             let file_parser = CodebaseAnalyzer::new(
-                self.analysis_factory,
                 self.macro_table,
                 &self.mock_token_source,
                 self.mock_context_factory,
+                self.analysis,
             );
             let session = Components::new(file_parser, self.object, self.diagnostics);
             f(session);
@@ -789,7 +762,7 @@ mod tests {
     }
 
     type TestCodebaseAnalyzer<'a> =
-        CodebaseAnalyzer<'a, Mock<'a>, MacroExpander<String, ()>, MockTokenSource, Mock<'a>>;
+        CodebaseAnalyzer<'a, MacroExpander<String, ()>, MockTokenSource, Mock<'a>, Mock<'a>>;
     type TestSession<'a> = Components<
         TestCodebaseAnalyzer<'a>,
         Mock<'a>,
