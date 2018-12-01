@@ -26,8 +26,8 @@ pub trait ContextFactory<I = BufId, R = BufRange> {
 
     fn add_macro_def<P, B>(&mut self, name: Self::Span, params: P, body: B) -> Self::MacroDefId
     where
-        P: Iterator<Item = Self::Span>,
-        B: Iterator<Item = Self::Span>;
+        P: IntoIterator<Item = Self::Span>,
+        B: IntoIterator<Item = Self::Span>;
 
     fn mk_buf_context(&mut self, buf_id: I, included_from: Option<Self::Span>) -> Self::BufContext;
 
@@ -110,13 +110,13 @@ where
 
     fn add_macro_def<P, C>(&mut self, name: Self::Span, params: P, body: C) -> Self::MacroDefId
     where
-        P: Iterator<Item = Self::Span>,
-        C: Iterator<Item = Self::Span>,
+        P: IntoIterator<Item = Self::Span>,
+        C: IntoIterator<Item = Self::Span>,
     {
         Rc::new(MacroDef {
             name,
-            params: params.collect(),
-            body: body.collect(),
+            params: params.into_iter().collect(),
+            body: body.into_iter().collect(),
         })
     }
 

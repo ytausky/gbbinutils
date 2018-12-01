@@ -136,8 +136,8 @@ struct CodebaseAnalyzer<'a, M, T: 'a, F, A> {
 
 impl<'a, M, T: 'a, F, A> CodebaseAnalyzer<'a, M, T, F, A>
 where
-    M: Define<F::MacroDefId, Ident = T::Ident, Span = F::Span>,
-    M: Get<F::MacroDefId, Ident = T::Ident, Span = F::Span>,
+    M: Define<F::MacroDefId, Ident = T::Ident>,
+    M: Get<F::MacroDefId, Ident = T::Ident>,
     M::Def: MacroDef<F::MacroDefId, F::MacroExpansionContext, Ident = T::Ident, Span = F::Span>,
     T: Tokenize<F::BufContext>,
     F: ContextFactory,
@@ -173,8 +173,8 @@ type TokenSeq<I, S> = Vec<(Token<I>, S)>;
 
 impl<'a, M, T, F, A> Frontend for CodebaseAnalyzer<'a, M, T, F, A>
 where
-    M: Define<F::MacroDefId, Ident = T::Ident, Span = F::Span>,
-    M: Get<F::MacroDefId, Ident = T::Ident, Span = F::Span>,
+    M: Define<F::MacroDefId, Ident = T::Ident>,
+    M: Get<F::MacroDefId, Ident = T::Ident>,
     M::Def: MacroDef<F::MacroDefId, F::MacroExpansionContext, Ident = T::Ident, Span = F::Span>,
     T: Tokenize<F::BufContext> + 'a,
     F: ContextFactory,
@@ -234,33 +234,42 @@ where
         &mut self,
         name: (impl Into<Self::Ident>, Self::Span),
         params: Vec<(Self::Ident, Self::Span)>,
-        tokens: Vec<(Token<Self::Ident>, Self::Span)>,
+        body: Vec<(Token<Self::Ident>, Self::Span)>,
     ) {
-        let id = self.context_factory.add_macro_def(
-            name.1.clone(),
-            params.iter().map(|(_, span)| span.clone()),
-            tokens.iter().map(|(_, span)| span.clone()),
-        );
-        self.macro_table.define(id, name, params, tokens)
+        let (param_tokens, param_spans) = split(params);
+        let (body_tokens, body_spans) = split(body);
+        let id = self
+            .context_factory
+            .add_macro_def(name.1, param_spans, body_spans);
+        self.macro_table
+            .define(id, name.0, param_tokens, body_tokens)
     }
+}
+
+fn split<I: IntoIterator<Item = (L, R)>, L, R>(iter: I) -> (Vec<L>, Vec<R>) {
+    let mut left = Vec::new();
+    let mut right = Vec::new();
+    for (l, r) in iter {
+        left.push(l);
+        right.push(r);
+    }
+    (left, right)
 }
 
 trait Define<I> {
     type Ident;
-    type Span: Span;
 
     fn define(
         &mut self,
         id: I,
-        name: (impl Into<Self::Ident>, Self::Span),
-        params: Vec<(Self::Ident, Self::Span)>,
-        body: Vec<(Token<Self::Ident>, Self::Span)>,
+        name: impl Into<Self::Ident>,
+        params: Vec<Self::Ident>,
+        body: Vec<Token<Self::Ident>>,
     );
 }
 
 trait Get<I> {
     type Ident;
-    type Span: Span;
     type Def: Clone;
 
     fn get(&self, name: &Self::Ident) -> Option<Self::Def>;
@@ -280,45 +289,43 @@ trait MacroDef<D, C: MacroExpansionContext> {
     ) -> Self::ExpandedMacro;
 }
 
-struct MacroExpander<I, S: Span, D> {
-    macro_defs: HashMap<I, Rc<MacroTableEntry<I, S, D>>>,
+struct MacroExpander<I, D> {
+    macro_defs: HashMap<I, Rc<MacroTableEntry<I, D>>>,
 }
 
-struct MacroTableEntry<I, S, D> {
-    data: Rc<MacroDefData<I, S>>,
+struct MacroTableEntry<I, D> {
+    data: Rc<MacroDefData<I>>,
     id: D,
 }
 
-struct MacroDefData<I, S> {
-    params: Vec<(I, S)>,
-    body: Vec<(Token<I>, S)>,
+struct MacroDefData<I> {
+    params: Vec<I>,
+    body: Vec<Token<I>>,
 }
 
-impl<I: Eq + Hash, S: Span, D> MacroExpander<I, S, D> {
-    fn new() -> MacroExpander<I, S, D> {
+impl<I: Eq + Hash, D> MacroExpander<I, D> {
+    fn new() -> MacroExpander<I, D> {
         MacroExpander {
             macro_defs: HashMap::new(),
         }
     }
 }
 
-impl<I, S, D> Define<D> for MacroExpander<I, S, D>
+impl<I, D> Define<D> for MacroExpander<I, D>
 where
     I: AsRef<str> + Clone + Eq + Hash,
-    S: Span,
 {
     type Ident = I;
-    type Span = S;
 
     fn define(
         &mut self,
         id: D,
-        name: (impl Into<Self::Ident>, Self::Span),
-        params: Vec<(Self::Ident, Self::Span)>,
-        body: Vec<(Token<Self::Ident>, Self::Span)>,
+        name: impl Into<Self::Ident>,
+        params: Vec<Self::Ident>,
+        body: Vec<Token<Self::Ident>>,
     ) {
         self.macro_defs.insert(
-            name.0.into(),
+            name.into(),
             Rc::new(MacroTableEntry {
                 data: Rc::new(MacroDefData { params, body }),
                 id,
@@ -327,21 +334,19 @@ where
     }
 }
 
-impl<I, S, D> Get<D> for MacroExpander<I, S, D>
+impl<I, D> Get<D> for MacroExpander<I, D>
 where
     I: AsRef<str> + Clone + Eq + Hash,
-    S: Span,
 {
     type Ident = I;
-    type Span = S;
-    type Def = Rc<MacroTableEntry<I, S, D>>;
+    type Def = Rc<MacroTableEntry<I, D>>;
 
     fn get(&self, name: &Self::Ident) -> Option<Self::Def> {
         self.macro_defs.get(name).cloned()
     }
 }
 
-impl<I, S, D, C> MacroDef<D, C> for Rc<MacroTableEntry<I, S, D>>
+impl<I, S, D, C> MacroDef<D, C> for Rc<MacroTableEntry<I, D>>
 where
     I: AsRef<str> + Clone + Eq,
     S: Span,
@@ -361,7 +366,7 @@ where
 }
 
 struct ExpandedMacro<I, S, C> {
-    def: Rc<MacroDefData<I, S>>,
+    def: Rc<MacroDefData<I>>,
     args: Vec<Vec<(Token<I>, S)>>,
     context: C,
     body_index: usize,
@@ -376,7 +381,7 @@ enum ExpansionState {
 
 impl<I: AsRef<str> + PartialEq, S, C> ExpandedMacro<I, S, C> {
     fn new(
-        def: Rc<MacroDefData<I, S>>,
+        def: Rc<MacroDefData<I>>,
         args: Vec<Vec<(Token<I>, S)>>,
         context: C,
     ) -> ExpandedMacro<I, S, C> {
@@ -393,7 +398,7 @@ impl<I: AsRef<str> + PartialEq, S, C> ExpandedMacro<I, S, C> {
 
     fn param_position(&self, name: &str) -> Option<usize> {
         for i in 0..self.def.params.len() {
-            if self.def.params[i].0.as_ref() == name {
+            if self.def.params[i].as_ref() == name {
                 return Some(i);
             }
         }
@@ -418,7 +423,7 @@ impl<I: AsRef<str> + PartialEq, S, C> ExpandedMacro<I, S, C> {
     fn try_expand(&mut self) {
         assert_eq!(self.expansion_state, None);
         if self.body_index < self.def.body.len() {
-            self.expansion_state = self.expand_token(&self.def.body[self.body_index].0);
+            self.expansion_state = self.expand_token(&self.def.body[self.body_index]);
         }
     }
 
@@ -453,7 +458,7 @@ where
                     _ => unimplemented!(),
                 },
                 None => (
-                    self.def.body[self.body_index].0.clone(),
+                    self.def.body[self.body_index].clone(),
                     self.context.mk_span(self.body_index, None),
                 ),
             };
@@ -657,7 +662,7 @@ mod tests {
             buf_id: (),
             included_from: None,
         });
-        let mut table = MacroExpander::<&'static str, _, _>::new();
+        let mut table = MacroExpander::<&'static str, _>::new();
         let name = (
             "my_macro",
             SpanData::Buf {
@@ -677,7 +682,7 @@ mod tests {
             params: vec![],
             body: vec![body.1.clone()],
         });
-        table.define(def_id.clone(), name.clone(), vec![], vec![body.clone()]);
+        table.define(def_id.clone(), name.0.clone(), vec![], vec![body.0.clone()]);
 
         let data = Rc::new(MacroExpansionData {
             name: SpanData::Buf {
@@ -713,7 +718,11 @@ mod tests {
             buf_id: (),
             included_from: None,
         });
-        let mut table = MacroExpander::<&'static str, _, _>::new();
+        let mk_span_from_buf = |n| SpanData::Buf {
+            range: n,
+            context: Rc::clone(&buf),
+        };
+        let mut table = MacroExpander::<&'static str, _>::new();
         let name = (
             "my_macro",
             SpanData::Buf {
@@ -721,42 +730,14 @@ mod tests {
                 context: buf.clone(),
             },
         );
-        let params = vec![(
-            "x",
-            SpanData::Buf {
-                range: 1,
-                context: buf.clone(),
-            },
-        )];
-        let body = vec![
-            (
-                Token::Ident("a"),
-                SpanData::Buf {
-                    range: 2,
-                    context: buf.clone(),
-                },
-            ),
-            (
-                Token::Ident("x"),
-                SpanData::Buf {
-                    range: 3,
-                    context: buf.clone(),
-                },
-            ),
-            (
-                Token::Ident("b"),
-                SpanData::Buf {
-                    range: 4,
-                    context: buf.clone(),
-                },
-            ),
-        ];
+        let body_tokens = vec![Token::Ident("a"), Token::Ident("x"), Token::Ident("b")];
+        let body_spans = (2..=4).map(mk_span_from_buf).collect();
         let def_id = Rc::new(crate::span::MacroDef {
             name: name.1.clone(),
-            params: params.iter().map(|(_, span)| span).cloned().collect(),
-            body: body.iter().map(|(_, span)| span).cloned().collect(),
+            params: vec![mk_span_from_buf(1)],
+            body: body_spans,
         });
-        table.define(def_id.clone(), name.clone(), params.clone(), body.clone());
+        table.define(def_id.clone(), name.0.clone(), vec!["x"], body_tokens);
         let data = Rc::new(MacroExpansionData {
             name: SpanData::Buf {
                 range: 7,
@@ -900,8 +881,8 @@ mod tests {
 
         fn add_macro_def<P, B>(&mut self, _: Self::Span, _: P, _: B) -> Self::MacroDefId
         where
-            P: Iterator<Item = Self::Span>,
-            B: Iterator<Item = Self::Span>,
+            P: IntoIterator<Item = Self::Span>,
+            B: IntoIterator<Item = Self::Span>,
         {
         }
 
@@ -984,7 +965,7 @@ mod tests {
     }
 
     struct TestFixture<'a> {
-        macro_table: MacroExpander<String, (), ()>,
+        macro_table: MacroExpander<String, ()>,
         mock_token_source: MockTokenSource,
         mock_context_factory: Mock<'a>,
         analysis: Mock<'a>,
@@ -1022,7 +1003,7 @@ mod tests {
     }
 
     type TestCodebaseAnalyzer<'a> =
-        CodebaseAnalyzer<'a, MacroExpander<String, (), ()>, MockTokenSource, Mock<'a>, Mock<'a>>;
+        CodebaseAnalyzer<'a, MacroExpander<String, ()>, MockTokenSource, Mock<'a>, Mock<'a>>;
     type TestSession<'a> = Components<
         TestCodebaseAnalyzer<'a>,
         Mock<'a>,
