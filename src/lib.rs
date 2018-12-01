@@ -79,7 +79,7 @@ fn try_assemble(
     let object = frontend::analyze_file(
         name.to_string(),
         &codebase,
-        span::RcContextFactory {},
+        span::RcContextFactory::new(),
         backend::ObjectBuilder::new(),
         &mut diagnostics,
     )?;
