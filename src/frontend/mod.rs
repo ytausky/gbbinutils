@@ -662,46 +662,31 @@ mod tests {
             buf_id: (),
             included_from: None,
         });
+        let mk_span = |n| SpanData::Buf {
+            range: n,
+            context: Rc::clone(&buf),
+        };
         let mut table = MacroExpander::<&'static str, _>::new();
-        let name = (
-            "my_macro",
-            SpanData::Buf {
-                range: 0,
-                context: buf.clone(),
-            },
-        );
-        let body = (
-            Token::Ident("a"),
-            SpanData::Buf {
-                range: 1,
-                context: buf.clone(),
-            },
-        );
+        let name = "my_macro";
+        let body = Token::Ident("a");
         let def_id = Rc::new(crate::span::MacroDef {
-            name: name.1.clone(),
+            name: mk_span(0),
             params: vec![],
-            body: vec![body.1.clone()],
+            body: vec![mk_span(1)],
         });
-        table.define(def_id.clone(), name.0.clone(), vec![], vec![body.0.clone()]);
+        table.define(def_id.clone(), name, vec![], vec![body.clone()]);
 
         let data = Rc::new(MacroExpansionData {
-            name: SpanData::Buf {
-                range: 2,
-                context: buf.clone(),
-            },
+            name: mk_span(2),
             args: vec![],
             def: def_id,
         });
         let context = Rc::clone(&data);
-        let expanded: Vec<_> = table
-            .get(&"my_macro")
-            .unwrap()
-            .expand(vec![], context)
-            .collect();
+        let expanded: Vec<_> = table.get(&name).unwrap().expand(vec![], context).collect();
         assert_eq!(
             expanded,
             [(
-                Token::Ident("a"),
+                body,
                 SpanData::Macro {
                     token: 0,
                     expansion: None,
