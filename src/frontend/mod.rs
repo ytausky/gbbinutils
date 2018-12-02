@@ -713,27 +713,22 @@ mod tests {
             buf_id: (),
             included_from: None,
         });
-        let mk_span_from_buf = |n| SpanData::Buf {
+        let mk_span = |n| SpanData::Buf {
             range: n,
             context: Rc::clone(&buf),
         };
         let mut table = MacroExpander::<&'static str, _>::new();
-        let def_name = ("my_macro", mk_span_from_buf(0));
+        let def_name = ("my_macro", mk_span(0));
         let body = vec![Token::Ident("a"), Token::Ident("x"), Token::Ident("b")]
             .into_iter()
-            .zip((2..=4).map(mk_span_from_buf));
+            .zip((2..=4).map(mk_span));
         let def_id = Rc::new(crate::span::MacroDef {
             name: def_name.1.clone(),
-            params: vec![mk_span_from_buf(1)],
-            body: (2..=4).map(mk_span_from_buf).collect(),
+            params: vec![mk_span(1)],
+            body: (2..=4).map(mk_span).collect(),
         });
         let factory = &mut RcContextFactory::new();
-        table.define(
-            def_name,
-            vec![("x", mk_span_from_buf(1))],
-            body.collect(),
-            factory,
-        );
+        table.define(def_name, vec![("x", mk_span(1))], body.collect(), factory);
         let data = Rc::new(MacroExpansionData {
             name: SpanData::Buf {
                 range: 7,
@@ -751,7 +746,7 @@ mod tests {
             ]],
             def: def_id,
         });
-        let invocation_name = ("my_macro", mk_span_from_buf(7));
+        let invocation_name = ("my_macro", mk_span(7));
         let expanded: Vec<_> = table
             .get(&invocation_name.0)
             .unwrap()
@@ -760,7 +755,7 @@ mod tests {
                 vec![
                     vec![Token::Ident("y"), Token::Ident("z")]
                         .into_iter()
-                        .zip((8..=9).map(mk_span_from_buf))
+                        .zip((8..=9).map(mk_span))
                         .collect(),
                 ],
                 factory,
