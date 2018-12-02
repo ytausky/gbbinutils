@@ -18,18 +18,15 @@ pub trait Source {
     fn span(&self) -> Self::Span;
 }
 
-pub trait ContextFactory<I = BufId, R = BufRange> {
+pub trait MacroContextFactory {
     type Span: Span;
     type MacroDefId: Clone;
-    type BufContext: BufContext<R, Span = Self::Span>;
     type MacroExpansionContext: MacroExpansionContext<Span = Self::Span>;
 
     fn add_macro_def<P, B>(&mut self, name: Self::Span, params: P, body: B) -> Self::MacroDefId
     where
         P: IntoIterator<Item = Self::Span>,
         B: IntoIterator<Item = Self::Span>;
-
-    fn mk_buf_context(&mut self, buf_id: I, included_from: Option<Self::Span>) -> Self::BufContext;
 
     fn mk_macro_expansion_context<A, J>(
         &mut self,
@@ -40,6 +37,16 @@ pub trait ContextFactory<I = BufId, R = BufRange> {
     where
         A: IntoIterator<Item = J>,
         J: IntoIterator<Item = Self::Span>;
+}
+
+pub trait ContextFactory<I = BufId, R = BufRange> {
+    type Span: Span;
+    type BufContext: BufContext<R, Span = Self::Span>;
+    type MacroContextFactory: MacroContextFactory<Span = Self::Span>;
+
+    fn macro_context_factory(&mut self) -> &mut Self::MacroContextFactory;
+
+    fn mk_buf_context(&mut self, buf_id: I, included_from: Option<Self::Span>) -> Self::BufContext;
 }
 
 pub trait BufContext<R = BufRange> {
@@ -99,13 +106,12 @@ impl<B, R> RcContextFactory<B, R> {
     }
 }
 
-impl<B, R> ContextFactory<B, R> for RcContextFactory<B, R>
+impl<B, R> MacroContextFactory for RcContextFactory<B, R>
 where
     SpanData<B, R>: Span,
 {
     type Span = SpanData<B, R>;
     type MacroDefId = Rc<MacroDef<Self::Span>>;
-    type BufContext = RcBufContext<B, R>;
     type MacroExpansionContext = Rc<MacroExpansionData<SpanData<B, R>>>;
 
     fn add_macro_def<P, C>(&mut self, name: Self::Span, params: P, body: C) -> Self::MacroDefId
@@ -118,14 +124,6 @@ where
             params: params.into_iter().collect(),
             body: body.into_iter().collect(),
         })
-    }
-
-    fn mk_buf_context(&mut self, buf_id: B, included_from: Option<Self::Span>) -> Self::BufContext {
-        let context = Rc::new(BufContextData {
-            buf_id,
-            included_from,
-        });
-        RcBufContext { context }
     }
 
     fn mk_macro_expansion_context<I, J>(
@@ -147,6 +145,27 @@ where
                 .collect(),
             def: Rc::clone(def),
         })
+    }
+}
+
+impl<B, R> ContextFactory<B, R> for RcContextFactory<B, R>
+where
+    SpanData<B, R>: Span,
+{
+    type Span = SpanData<B, R>;
+    type BufContext = RcBufContext<B, R>;
+    type MacroContextFactory = Self;
+
+    fn macro_context_factory(&mut self) -> &mut Self::MacroContextFactory {
+        self
+    }
+
+    fn mk_buf_context(&mut self, buf_id: B, included_from: Option<Self::Span>) -> Self::BufContext {
+        let context = Rc::new(BufContextData {
+            buf_id,
+            included_from,
+        });
+        RcBufContext { context }
     }
 }
 
