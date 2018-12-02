@@ -59,7 +59,6 @@ impl<I: Eq + Hash, D> MacroExpander<I, D> {
 impl<I, F: MacroContextFactory> MacroTable<I, F> for MacroExpander<I, F::MacroDefId>
 where
     I: AsRef<str> + Clone + Eq + Hash,
-    F::Span: Clone,
 {
     fn define(
         &mut self,
@@ -191,13 +190,13 @@ impl<I: AsRef<str> + PartialEq, C> ExpandedMacro<I, C> {
     }
 }
 
-impl<I, S, C> Iterator for ExpandedMacro<I, C>
+impl<I, C> Iterator for ExpandedMacro<I, C>
 where
     I: AsRef<str> + Clone + Eq,
-    S: Clone,
-    C: MacroExpansionContext<Span = S>,
+    C: MacroExpansionContext,
 {
-    type Item = (Token<I>, S);
+    type Item = (Token<I>, C::Span);
+
     fn next(&mut self) -> Option<Self::Item> {
         if self.body_index < self.def.body.len() {
             let (token, expansion) = match self.expansion_state {
