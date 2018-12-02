@@ -4,6 +4,7 @@ use crate::expr::ExprVariant;
 use crate::frontend::session::Session;
 use crate::frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token};
 use crate::frontend::{ExprFactory, Literal, StrExprFactory};
+use crate::span::HasSpan;
 
 mod directive;
 mod instruction;
@@ -68,13 +69,17 @@ impl<'a, F: Session + 'a> SemanticActions<'a, F> {
     }
 }
 
-impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for SemanticActions<'a, F> {
+impl<'a, F: Session + 'a> HasSpan for SemanticActions<'a, F> {
+    type Span = F::Span;
+}
+
+impl<'a, F: Session + 'a> DiagnosticsListener for SemanticActions<'a, F> {
     fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<F::Span>) {
         self.session.emit_diagnostic(diagnostic)
     }
 }
 
-impl<'a, F: Session + 'a> syntax::FileContext<F::Ident, Command, Literal<F::Ident>, F::Span>
+impl<'a, F: Session + 'a> syntax::FileContext<F::Ident, Command, Literal<F::Ident>>
     for SemanticActions<'a, F>
 {
     type StmtContext = Self;
@@ -85,7 +90,7 @@ impl<'a, F: Session + 'a> syntax::FileContext<F::Ident, Command, Literal<F::Iden
     }
 }
 
-impl<'a, F: Session + 'a> syntax::StmtContext<F::Ident, Command, Literal<F::Ident>, F::Span>
+impl<'a, F: Session + 'a> syntax::StmtContext<F::Ident, Command, Literal<F::Ident>>
     for SemanticActions<'a, F>
 {
     type CommandContext = CommandActions<'a, F>;
@@ -136,14 +141,18 @@ impl<'a, F: Session + 'a> CommandActions<'a, F> {
     }
 }
 
-impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for CommandActions<'a, F> {
+impl<'a, F: Session + 'a> HasSpan for CommandActions<'a, F> {
+    type Span = F::Span;
+}
+
+impl<'a, F: Session + 'a> DiagnosticsListener for CommandActions<'a, F> {
     fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<F::Span>) {
         self.has_errors = true;
         self.parent.emit_diagnostic(diagnostic)
     }
 }
 
-impl<'a, F: Session + 'a> syntax::CommandContext<F::Span> for CommandActions<'a, F> {
+impl<'a, F: Session + 'a> syntax::CommandContext for CommandActions<'a, F> {
     type Ident = F::Ident;
     type Command = Command;
     type Literal = Literal<F::Ident>;
@@ -180,13 +189,17 @@ pub struct ExprContext<'a, F: Session + 'a> {
     parent: CommandActions<'a, F>,
 }
 
-impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for ExprContext<'a, F> {
+impl<'a, F: Session + 'a> HasSpan for ExprContext<'a, F> {
+    type Span = F::Span;
+}
+
+impl<'a, F: Session + 'a> DiagnosticsListener for ExprContext<'a, F> {
     fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<F::Span>) {
         self.parent.emit_diagnostic(diagnostic)
     }
 }
 
-impl<'a, F: Session + 'a> syntax::ExprContext<F::Span> for ExprContext<'a, F> {
+impl<'a, F: Session + 'a> syntax::ExprContext for ExprContext<'a, F> {
     type Ident = F::Ident;
     type Literal = Literal<F::Ident>;
     type Parent = CommandActions<'a, F>;
@@ -268,13 +281,17 @@ impl<'a, F: Session + 'a> MacroDefActions<'a, F> {
     }
 }
 
-impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for MacroDefActions<'a, F> {
+impl<'a, F: Session + 'a> HasSpan for MacroDefActions<'a, F> {
+    type Span = F::Span;
+}
+
+impl<'a, F: Session + 'a> DiagnosticsListener for MacroDefActions<'a, F> {
     fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<F::Span>) {
         self.parent.emit_diagnostic(diagnostic)
     }
 }
 
-impl<'a, F: Session + 'a> syntax::MacroParamsContext<F::Span> for MacroDefActions<'a, F> {
+impl<'a, F: Session + 'a> syntax::MacroParamsContext for MacroDefActions<'a, F> {
     type Ident = F::Ident;
     type Command = Command;
     type Literal = Literal<F::Ident>;
@@ -290,7 +307,7 @@ impl<'a, F: Session + 'a> syntax::MacroParamsContext<F::Span> for MacroDefAction
     }
 }
 
-impl<'a, F: Session + 'a> syntax::TokenSeqContext<F::Span> for MacroDefActions<'a, F> {
+impl<'a, F: Session + 'a> syntax::TokenSeqContext for MacroDefActions<'a, F> {
     type Token = Token<F::Ident>;
     type Parent = SemanticActions<'a, F>;
 
@@ -331,15 +348,17 @@ impl<'a, F: Session + 'a> MacroInvocationActions<'a, F> {
     }
 }
 
-impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for MacroInvocationActions<'a, F> {
+impl<'a, F: Session + 'a> HasSpan for MacroInvocationActions<'a, F> {
+    type Span = F::Span;
+}
+
+impl<'a, F: Session + 'a> DiagnosticsListener for MacroInvocationActions<'a, F> {
     fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<F::Span>) {
         self.parent.emit_diagnostic(diagnostic)
     }
 }
 
-impl<'a, F: Session + 'a> syntax::MacroInvocationContext<F::Span>
-    for MacroInvocationActions<'a, F>
-{
+impl<'a, F: Session + 'a> syntax::MacroInvocationContext for MacroInvocationActions<'a, F> {
     type Token = Token<F::Ident>;
     type Parent = SemanticActions<'a, F>;
     type MacroArgContext = MacroArgContext<'a, F>;
@@ -368,13 +387,17 @@ impl<'a, F: Session + 'a> MacroArgContext<'a, F> {
     }
 }
 
-impl<'a, F: Session + 'a> DiagnosticsListener<F::Span> for MacroArgContext<'a, F> {
+impl<'a, F: Session + 'a> HasSpan for MacroArgContext<'a, F> {
+    type Span = F::Span;
+}
+
+impl<'a, F: Session + 'a> DiagnosticsListener for MacroArgContext<'a, F> {
     fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<F::Span>) {
         self.parent.parent.session.emit_diagnostic(diagnostic)
     }
 }
 
-impl<'a, F: Session + 'a> syntax::TokenSeqContext<F::Span> for MacroArgContext<'a, F> {
+impl<'a, F: Session + 'a> syntax::TokenSeqContext for MacroArgContext<'a, F> {
     type Token = Token<F::Ident>;
     type Parent = MacroInvocationActions<'a, F>;
 

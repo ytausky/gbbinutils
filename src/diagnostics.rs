@@ -1,10 +1,14 @@
 use crate::backend::Width;
 use crate::codebase::{CodebaseError, LineNumber, TextBuf, TextCache, TextRange};
 use crate::instruction::IncDec;
-use crate::span::SpanData;
+#[cfg(test)]
+use crate::span::Span;
+use crate::span::{HasSpan, SpanData};
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::fmt;
+#[cfg(test)]
+use std::marker::PhantomData;
 
 pub trait DiagnosticsOutput {
     fn emit(&mut self, diagnostic: Diagnostic<String>);
@@ -18,8 +22,11 @@ impl DiagnosticsOutput for TerminalOutput {
     }
 }
 
-pub trait DiagnosticsListener<S> {
-    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<S>);
+pub trait DiagnosticsListener
+where
+    Self: HasSpan,
+{
+    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<Self::Span>);
 }
 
 pub struct OutputForwarder<'a> {
@@ -27,7 +34,11 @@ pub struct OutputForwarder<'a> {
     pub codebase: &'a RefCell<TextCache>,
 }
 
-impl<'a> DiagnosticsListener<SpanData> for OutputForwarder<'a> {
+impl<'a> HasSpan for OutputForwarder<'a> {
+    type Span = SpanData;
+}
+
+impl<'a> DiagnosticsListener for OutputForwarder<'a> {
     fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SpanData>) {
         self.output
             .emit(diagnostic.elaborate(&self.codebase.borrow()))
@@ -35,10 +46,22 @@ impl<'a> DiagnosticsListener<SpanData> for OutputForwarder<'a> {
 }
 
 #[cfg(test)]
-pub struct IgnoreDiagnostics;
+pub struct IgnoreDiagnostics<S>(PhantomData<S>);
 
 #[cfg(test)]
-impl<S> DiagnosticsListener<S> for IgnoreDiagnostics {
+impl<S> IgnoreDiagnostics<S> {
+    pub fn new() -> Self {
+        IgnoreDiagnostics(PhantomData)
+    }
+}
+
+#[cfg(test)]
+impl<S: Span> HasSpan for IgnoreDiagnostics<S> {
+    type Span = S;
+}
+
+#[cfg(test)]
+impl<S: Span> DiagnosticsListener for IgnoreDiagnostics<S> {
     fn emit_diagnostic(&mut self, _: InternalDiagnostic<S>) {}
 }
 
@@ -57,7 +80,12 @@ impl TestDiagnosticsListener {
 }
 
 #[cfg(test)]
-impl DiagnosticsListener<()> for TestDiagnosticsListener {
+impl HasSpan for TestDiagnosticsListener {
+    type Span = ();
+}
+
+#[cfg(test)]
+impl DiagnosticsListener for TestDiagnosticsListener {
     fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<()>) {
         self.diagnostics.borrow_mut().push(diagnostic)
     }

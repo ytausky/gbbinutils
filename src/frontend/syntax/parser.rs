@@ -29,11 +29,10 @@ impl<C, I, L, E> Token<C, I, L, E> {
 
 const LINE_FOLLOW_SET: &[TokenKind] = &[Token::Eol, Token::Eof];
 
-pub fn parse_src<Id, C, L, S, I, F>(mut tokens: I, context: F) -> F
+pub fn parse_src<Id, C, L, I, F>(mut tokens: I, context: F) -> F
 where
-    S: Span,
-    I: Iterator<Item = (Token<Id, C, L>, S)>,
-    F: FileContext<Id, C, L, S>,
+    I: Iterator<Item = (Token<Id, C, L>, F::Span)>,
+    F: FileContext<Id, C, L>,
 {
     let Parser { token, context, .. } = Parser::new(&mut tokens, context).parse_file();
     assert_eq!(token.0.kind(), Token::Eof);
@@ -78,11 +77,10 @@ impl<'a, Id, C, L, S, I, A> Parser<'a, (Token<Id, C, L>, S), I, A> {
     }
 }
 
-impl<'a, Id, C, L, S, I, Ctx> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
+impl<'a, Id, C, L, I, Ctx> Parser<'a, (Token<Id, C, L>, Ctx::Span), I, Ctx>
 where
-    S: Span,
-    I: Iterator<Item = (Token<Id, C, L>, S)>,
-    Ctx: FileContext<Id, C, L, S>,
+    I: Iterator<Item = (Token<Id, C, L>, Ctx::Span)>,
+    Ctx: FileContext<Id, C, L>,
 {
     fn parse_file(self) -> Self {
         self.parse_terminated_list(Token::Eol, &[Token::Eof], |p| p.parse_stmt())
@@ -101,11 +99,10 @@ where
     }
 }
 
-impl<'a, Id, C, L, S, I, Ctx> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
+impl<'a, Id, C, L, I, Ctx> Parser<'a, (Token<Id, C, L>, Ctx::Span), I, Ctx>
 where
-    S: Span,
-    I: Iterator<Item = (Token<Id, C, L>, S)>,
-    Ctx: StmtContext<Id, C, L, S>,
+    I: Iterator<Item = (Token<Id, C, L>, Ctx::Span)>,
+    Ctx: StmtContext<Id, C, L>,
 {
     fn parse_unlabeled_stmt(mut self) -> Self {
         match self.token {
@@ -135,13 +132,13 @@ where
         }
     }
 
-    fn parse_command(self, command: (C, S)) -> Self {
+    fn parse_command(self, command: (C, Ctx::Span)) -> Self {
         self.change_context(|c| c.enter_command(command))
             .parse_argument_list()
             .change_context(|c| c.exit())
     }
 
-    fn parse_macro_def(self, span: S) -> Self {
+    fn parse_macro_def(self, span: Ctx::Span) -> Self {
         let mut state = self
             .change_context(|c| c.enter_macro_def(span))
             .parse_terminated_list(Token::Comma, LINE_FOLLOW_SET, |p| p.parse_macro_param());
@@ -181,18 +178,17 @@ where
         }.change_context(|c| c.exit())
     }
 
-    fn parse_macro_invocation(self, name: (Id, S)) -> Self {
+    fn parse_macro_invocation(self, name: (Id, Ctx::Span)) -> Self {
         self.change_context(|c| c.enter_macro_invocation(name))
             .parse_macro_arg_list()
             .change_context(|c| c.exit())
     }
 }
 
-impl<'a, Id, C, L, S, I, Ctx> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
+impl<'a, Id, C, L, I, Ctx> Parser<'a, (Token<Id, C, L>, Ctx::Span), I, Ctx>
 where
-    S: Span,
-    I: Iterator<Item = (Token<Id, C, L>, S)>,
-    Ctx: CommandContext<S, Command = C, Ident = Id, Literal = L>,
+    I: Iterator<Item = (Token<Id, C, L>, Ctx::Span)>,
+    Ctx: CommandContext<Command = C, Ident = Id, Literal = L>,
 {
     fn parse_argument_list(self) -> Self {
         self.parse_terminated_list(Token::Comma, LINE_FOLLOW_SET, |p| p.parse_argument())
@@ -210,11 +206,10 @@ enum ExprParsingError<S> {
     Other(InternalDiagnostic<S>),
 }
 
-impl<'a, Id, C, L, S, I, Ctx> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
+impl<'a, Id, C, L, I, Ctx> Parser<'a, (Token<Id, C, L>, Ctx::Span), I, Ctx>
 where
-    S: Span,
-    I: Iterator<Item = (Token<Id, C, L>, S)>,
-    Ctx: ExprContext<S, Ident = Id, Literal = L>,
+    I: Iterator<Item = (Token<Id, C, L>, Ctx::Span)>,
+    Ctx: ExprContext<Ident = Id, Literal = L>,
 {
     fn parse(self) -> Self {
         self.parse_expression()
@@ -239,7 +234,7 @@ where
             })
     }
 
-    fn parse_expression(mut self) -> Result<Self, (Self, ExprParsingError<S>)> {
+    fn parse_expression(mut self) -> Result<Self, (Self, ExprParsingError<Ctx::Span>)> {
         match self.token {
             (Token::OpeningParenthesis, span) => {
                 bump!(self);
@@ -251,8 +246,8 @@ where
 
     fn parse_parenthesized_expression(
         mut self,
-        left: S,
-    ) -> Result<Self, (Self, ExprParsingError<S>)> {
+        left: Ctx::Span,
+    ) -> Result<Self, (Self, ExprParsingError<Ctx::Span>)> {
         self = match self.parse_expression() {
             Ok(parser) => parser,
             Err((parser, error)) => {
@@ -285,7 +280,7 @@ where
         }
     }
 
-    fn parse_infix_expr(mut self) -> Result<Self, (Self, ExprParsingError<S>)> {
+    fn parse_infix_expr(mut self) -> Result<Self, (Self, ExprParsingError<Ctx::Span>)> {
         self = self.parse_atomic_expr()?;
         while let (Token::Plus, span) = self.token {
             bump!(self);
@@ -295,7 +290,7 @@ where
         Ok(self)
     }
 
-    fn parse_atomic_expr(mut self) -> Result<Self, (Self, ExprParsingError<S>)> {
+    fn parse_atomic_expr(mut self) -> Result<Self, (Self, ExprParsingError<Ctx::Span>)> {
         match self.token.0 {
             Token::Eof | Token::Eol => Err((self, ExprParsingError::NothingParsed)),
             Token::Ident(ident) => {
@@ -327,11 +322,10 @@ where
     }
 }
 
-impl<'a, Id, C, L, S, I, Ctx> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
+impl<'a, Id, C, L, I, Ctx> Parser<'a, (Token<Id, C, L>, Ctx::Span), I, Ctx>
 where
-    S: Span,
-    I: Iterator<Item = (Token<Id, C, L>, S)>,
-    Ctx: MacroParamsContext<S, Command = C, Ident = Id, Literal = L>,
+    I: Iterator<Item = (Token<Id, C, L>, Ctx::Span)>,
+    Ctx: MacroParamsContext<Command = C, Ident = Id, Literal = L>,
 {
     fn parse_macro_param(mut self) -> Self {
         match self.token.0 {
@@ -348,11 +342,10 @@ where
     }
 }
 
-impl<'a, Id, C, L, S, I, Ctx> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
+impl<'a, Id, C, L, I, Ctx> Parser<'a, (Token<Id, C, L>, Ctx::Span), I, Ctx>
 where
-    S: Span,
-    I: Iterator<Item = (Token<Id, C, L>, S)>,
-    Ctx: MacroInvocationContext<S, Token = Token<Id, C, L>>,
+    I: Iterator<Item = (Token<Id, C, L>, Ctx::Span)>,
+    Ctx: MacroInvocationContext<Token = Token<Id, C, L>>,
 {
     fn parse_macro_arg_list(self) -> Self {
         self.parse_terminated_list(Token::Comma, LINE_FOLLOW_SET, |p| {
@@ -371,11 +364,10 @@ where
     }
 }
 
-impl<'a, Id, C, L, S, I, Ctx> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
+impl<'a, Id, C, L, I, Ctx> Parser<'a, (Token<Id, C, L>, Ctx::Span), I, Ctx>
 where
-    S: Span,
-    I: Iterator<Item = (Token<Id, C, L>, S)>,
-    Ctx: DiagnosticsListener<S>,
+    I: Iterator<Item = (Token<Id, C, L>, Ctx::Span)>,
+    Ctx: DiagnosticsListener,
 {
     fn parse_terminated_list<P>(
         mut self,
@@ -434,6 +426,7 @@ mod tests {
     use super::*;
     use crate::diagnostics::{DiagnosticsListener, InternalDiagnostic, Message};
     use crate::frontend::syntax::{ExprAtom, ExprOperator};
+    use crate::span::HasSpan;
     use std::borrow::Borrow;
     use std::collections::HashMap;
 
@@ -454,13 +447,17 @@ mod tests {
         }
     }
 
-    impl DiagnosticsListener<SymSpan> for FileActionCollector {
+    impl HasSpan for FileActionCollector {
+        type Span = SymSpan;
+    }
+
+    impl DiagnosticsListener for FileActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymSpan>) {
             self.actions.push(FileAction::EmitDiagnostic(diagnostic))
         }
     }
 
-    impl FileContext<SymIdent, SymCommand, SymLiteral, SymSpan> for FileActionCollector {
+    impl FileContext<SymIdent, SymCommand, SymLiteral> for FileActionCollector {
         type StmtContext = StmtActionCollector;
 
         fn enter_stmt(self, label: Option<(SymIdent, SymSpan)>) -> StmtActionCollector {
@@ -478,13 +475,17 @@ mod tests {
         parent: FileActionCollector,
     }
 
-    impl DiagnosticsListener<SymSpan> for StmtActionCollector {
+    impl HasSpan for StmtActionCollector {
+        type Span = SymSpan;
+    }
+
+    impl DiagnosticsListener for StmtActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymSpan>) {
             self.actions.push(StmtAction::EmitDiagnostic(diagnostic))
         }
     }
 
-    impl StmtContext<SymIdent, SymCommand, SymLiteral, SymSpan> for StmtActionCollector {
+    impl StmtContext<SymIdent, SymCommand, SymLiteral> for StmtActionCollector {
         type CommandContext = CommandActionCollector;
         type MacroParamsContext = MacroParamsActionCollector;
         type MacroInvocationContext = MacroInvocationActionCollector;
@@ -532,13 +533,17 @@ mod tests {
         parent: StmtActionCollector,
     }
 
-    impl DiagnosticsListener<SymSpan> for CommandActionCollector {
+    impl HasSpan for CommandActionCollector {
+        type Span = SymSpan;
+    }
+
+    impl DiagnosticsListener for CommandActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymSpan>) {
             self.actions.push(CommandAction::EmitDiagnostic(diagnostic))
         }
     }
 
-    impl CommandContext<SymSpan> for CommandActionCollector {
+    impl CommandContext for CommandActionCollector {
         type Command = SymCommand;
         type Ident = SymIdent;
         type Literal = SymLiteral;
@@ -566,13 +571,17 @@ mod tests {
         parent: CommandActionCollector,
     }
 
-    impl DiagnosticsListener<SymSpan> for ArgActionCollector {
+    impl HasSpan for ArgActionCollector {
+        type Span = SymSpan;
+    }
+
+    impl DiagnosticsListener for ArgActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymSpan>) {
             self.expr_action_collector.emit_diagnostic(diagnostic)
         }
     }
 
-    impl ExprContext<SymSpan> for ArgActionCollector {
+    impl ExprContext for ArgActionCollector {
         type Ident = SymIdent;
         type Literal = SymLiteral;
         type Parent = CommandActionCollector;
@@ -605,13 +614,17 @@ mod tests {
         }
     }
 
-    impl DiagnosticsListener<SymSpan> for ExprActionCollector {
+    impl HasSpan for ExprActionCollector {
+        type Span = SymSpan;
+    }
+
+    impl DiagnosticsListener for ExprActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymSpan>) {
             self.actions.push(ExprAction::EmitDiagnostic(diagnostic))
         }
     }
 
-    impl ExprContext<SymSpan> for ExprActionCollector {
+    impl ExprContext for ExprActionCollector {
         type Ident = SymIdent;
         type Literal = SymLiteral;
         type Parent = Vec<ExprAction<SymSpan>>;
@@ -635,14 +648,18 @@ mod tests {
         parent: StmtActionCollector,
     }
 
-    impl DiagnosticsListener<SymSpan> for MacroParamsActionCollector {
+    impl HasSpan for MacroParamsActionCollector {
+        type Span = SymSpan;
+    }
+
+    impl DiagnosticsListener for MacroParamsActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymSpan>) {
             self.actions
                 .push(MacroParamsAction::EmitDiagnostic(diagnostic))
         }
     }
 
-    impl MacroParamsContext<SymSpan> for MacroParamsActionCollector {
+    impl MacroParamsContext for MacroParamsActionCollector {
         type Command = SymCommand;
         type Ident = SymIdent;
         type Literal = SymLiteral;
@@ -666,14 +683,18 @@ mod tests {
         parent: MacroParamsActionCollector,
     }
 
-    impl DiagnosticsListener<SymSpan> for MacroBodyActionCollector {
+    impl HasSpan for MacroBodyActionCollector {
+        type Span = SymSpan;
+    }
+
+    impl DiagnosticsListener for MacroBodyActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymSpan>) {
             self.actions
                 .push(TokenSeqAction::EmitDiagnostic(diagnostic))
         }
     }
 
-    impl TokenSeqContext<SymSpan> for MacroBodyActionCollector {
+    impl TokenSeqContext for MacroBodyActionCollector {
         type Token = Token<SymIdent, SymCommand, SymLiteral>;
         type Parent = StmtActionCollector;
 
@@ -697,14 +718,18 @@ mod tests {
         parent: StmtActionCollector,
     }
 
-    impl DiagnosticsListener<SymSpan> for MacroInvocationActionCollector {
+    impl HasSpan for MacroInvocationActionCollector {
+        type Span = SymSpan;
+    }
+
+    impl DiagnosticsListener for MacroInvocationActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymSpan>) {
             self.actions
                 .push(MacroInvocationAction::EmitDiagnostic(diagnostic))
         }
     }
 
-    impl MacroInvocationContext<SymSpan> for MacroInvocationActionCollector {
+    impl MacroInvocationContext for MacroInvocationActionCollector {
         type Token = Token<SymIdent, SymCommand, SymLiteral>;
         type MacroArgContext = MacroArgActionCollector;
         type Parent = StmtActionCollector;
@@ -730,14 +755,18 @@ mod tests {
         parent: MacroInvocationActionCollector,
     }
 
-    impl DiagnosticsListener<SymSpan> for MacroArgActionCollector {
+    impl HasSpan for MacroArgActionCollector {
+        type Span = SymSpan;
+    }
+
+    impl DiagnosticsListener for MacroArgActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymSpan>) {
             self.actions
                 .push(TokenSeqAction::EmitDiagnostic(diagnostic))
         }
     }
 
-    impl TokenSeqContext<SymSpan> for MacroArgActionCollector {
+    impl TokenSeqContext for MacroArgActionCollector {
         type Token = Token<SymIdent, SymCommand, SymLiteral>;
         type Parent = MacroInvocationActionCollector;
 

@@ -40,7 +40,7 @@ impl<SR> Object<SR> {
 pub fn link<'a, S, D>(object: Object<S>, diagnostics: &mut D) -> BinaryObject
 where
     S: Span,
-    D: DiagnosticsListener<S> + 'a,
+    D: DiagnosticsListener<Span = S> + 'a,
 {
     let symbols = resolve::resolve_symbols(&object);
     let mut context = EvalContext {
@@ -204,7 +204,7 @@ mod tests {
                 },
             ],
         };
-        let binary = link(object, &mut IgnoreDiagnostics {});
+        let binary = link(object, &mut IgnoreDiagnostics::new());
         assert_eq!(
             binary.sections[1].origin,
             (origin1 + 1 + skipped_bytes) as usize

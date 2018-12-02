@@ -36,7 +36,7 @@ pub struct Components<F, B, D, BMF, BMB, BMD>
 where
     F: frontend::Frontend,
     B: backend::Backend<F::Span>,
-    D: diagnostics::DiagnosticsListener<F::Span>,
+    D: diagnostics::DiagnosticsListener<Span = F::Span>,
     BMF: BorrowMut<F>,
     BMB: BorrowMut<B>,
     BMD: BorrowMut<D>,
@@ -53,7 +53,7 @@ impl<F, B, D, BMF, BMB, BMD> Components<F, B, D, BMF, BMB, BMD>
 where
     F: frontend::Frontend,
     B: backend::Backend<F::Span>,
-    D: diagnostics::DiagnosticsListener<F::Span>,
+    D: diagnostics::DiagnosticsListener<Span = F::Span>,
     BMF: BorrowMut<F>,
     BMB: BorrowMut<B>,
     BMD: BorrowMut<D>,
@@ -83,7 +83,7 @@ impl<F, B, D, BMF, BMB, BMD> Session for Components<F, B, D, BMF, BMB, BMD>
 where
     F: frontend::Frontend,
     B: backend::Backend<F::Span>,
-    D: diagnostics::DiagnosticsListener<F::Span>,
+    D: diagnostics::DiagnosticsListener<Span = F::Span>,
     BMF: BorrowMut<F>,
     BMB: BorrowMut<B>,
     BMD: BorrowMut<D>,
