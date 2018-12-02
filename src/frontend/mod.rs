@@ -15,18 +15,20 @@ use std::rc::Rc;
 
 pub use crate::frontend::syntax::Token;
 
-pub fn analyze_file<
-    C: Codebase,
-    F: ContextFactory,
-    B: Backend<F::Span>,
-    D: DiagnosticsListener<F::Span>,
->(
+pub fn analyze_file<C, F, B, D>(
     name: String,
     codebase: &C,
     context_factory: F,
     backend: B,
     diagnostics: &mut D,
-) -> Result<B::Object, CodebaseError> {
+) -> Result<B::Object, CodebaseError>
+where
+    C: Codebase,
+    F: ContextFactory<BufId = BufId>,
+    F::BufContext: BufContext<Span = F::Span>,
+    B: Backend<F::Span>,
+    D: DiagnosticsListener<F::Span>,
+{
     let file_parser = CodebaseAnalyzer::new(
         MacroExpander::new(),
         codebase,
@@ -139,7 +141,8 @@ where
     M: MacroTable<T::Ident, F::MacroContextFactory>,
     M::Entry: Expand<T::Ident, F::MacroContextFactory>,
     T: Tokenize<F::BufContext>,
-    F: ContextFactory,
+    F: ContextFactory<BufId = BufId>,
+    F::BufContext: BufContext<Span = F::Span>,
     A: Analysis<T::Ident>,
     for<'b> &'b T::Tokenized: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
 {
@@ -175,7 +178,8 @@ where
     M: MacroTable<T::Ident, F::MacroContextFactory>,
     M::Entry: Expand<T::Ident, F::MacroContextFactory>,
     T: Tokenize<F::BufContext> + 'a,
-    F: ContextFactory,
+    F: ContextFactory<BufId = BufId>,
+    F::BufContext: BufContext<Span = F::Span>,
     A: Analysis<T::Ident>,
     for<'b> &'b T::Tokenized: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
 {
@@ -513,6 +517,8 @@ mod tests {
     }
 
     impl<'a> ContextFactory for Mock<'a> {
+        type BufId = BufId;
+        type BufRange = codebase::BufRange;
         type Span = ();
         type BufContext = Mock<'a>;
         type MacroContextFactory = Self;

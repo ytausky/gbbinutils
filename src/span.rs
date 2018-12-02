@@ -39,14 +39,20 @@ pub trait MacroContextFactory {
         J: IntoIterator<Item = Self::Span>;
 }
 
-pub trait ContextFactory<I = BufId, R = BufRange> {
+pub trait ContextFactory {
+    type BufId;
+    type BufRange;
     type Span: Span;
-    type BufContext: BufContext<R, Span = Self::Span>;
+    type BufContext: BufContext<Self::BufRange, Span = Self::Span>;
     type MacroContextFactory: MacroContextFactory<Span = Self::Span>;
 
     fn macro_context_factory(&mut self) -> &mut Self::MacroContextFactory;
 
-    fn mk_buf_context(&mut self, buf_id: I, included_from: Option<Self::Span>) -> Self::BufContext;
+    fn mk_buf_context(
+        &mut self,
+        buf_id: Self::BufId,
+        included_from: Option<Self::Span>,
+    ) -> Self::BufContext;
 }
 
 pub trait BufContext<R = BufRange> {
@@ -148,10 +154,12 @@ where
     }
 }
 
-impl<B, R> ContextFactory<B, R> for RcContextFactory<B, R>
+impl<B, R> ContextFactory for RcContextFactory<B, R>
 where
     SpanData<B, R>: Span,
 {
+    type BufId = B;
+    type BufRange = R;
     type Span = SpanData<B, R>;
     type BufContext = RcBufContext<B, R>;
     type MacroContextFactory = Self;
@@ -160,7 +168,11 @@ where
         self
     }
 
-    fn mk_buf_context(&mut self, buf_id: B, included_from: Option<Self::Span>) -> Self::BufContext {
+    fn mk_buf_context(
+        &mut self,
+        buf_id: Self::BufId,
+        included_from: Option<Self::Span>,
+    ) -> Self::BufContext {
         let context = Rc::new(BufContextData {
             buf_id,
             included_from,
