@@ -138,7 +138,7 @@ impl<'a, M, T: 'a, F, A> CodebaseAnalyzer<'a, M, T, F, A>
 where
     M: Define<F::MacroDefId, Ident = T::Ident>,
     M: Get<F::MacroDefId, Ident = T::Ident>,
-    M::Def: MacroDef<F::MacroExpansionContext, Ident = T::Ident, Span = F::Span>,
+    M::Def: MacroDef<F::MacroExpansionContext, Ident = T::Ident>,
     T: Tokenize<F::BufContext>,
     F: ContextFactory,
     A: Analysis<T::Ident>,
@@ -175,7 +175,7 @@ impl<'a, M, T, F, A> Frontend for CodebaseAnalyzer<'a, M, T, F, A>
 where
     M: Define<F::MacroDefId, Ident = T::Ident>,
     M: Get<F::MacroDefId, Ident = T::Ident>,
-    M::Def: MacroDef<F::MacroExpansionContext, Ident = T::Ident, Span = F::Span>,
+    M::Def: MacroDef<F::MacroExpansionContext, Ident = T::Ident>,
     T: Tokenize<F::BufContext> + 'a,
     F: ContextFactory,
     A: Analysis<T::Ident>,
@@ -214,12 +214,17 @@ where
     {
         let expansion = match self.macro_table.get(&name) {
             Some(entry) => {
-                let context = self.context_factory.mk_macro_expansion_context(
-                    span,
-                    args.iter().map(|arg| arg.iter().map(|(_, s)| s).cloned()),
-                    &entry.id,
-                );
-                Some(entry.def.expand(args, context))
+                let mut arg_tokens = Vec::new();
+                let mut arg_spans = Vec::new();
+                for arg in args {
+                    let (tokens, spans) = split(arg);
+                    arg_tokens.push(tokens);
+                    arg_spans.push(spans);
+                }
+                let context = self
+                    .context_factory
+                    .mk_macro_expansion_context(span, arg_spans, &entry.id);
+                Some(entry.def.expand(arg_tokens, context))
             }
             None => {
                 downstream
@@ -283,14 +288,9 @@ trait Get<I> {
 
 trait MacroDef<C: MacroExpansionContext> {
     type Ident;
-    type Span: Span;
-    type ExpandedMacro: Iterator<Item = (Token<Self::Ident>, Self::Span)>;
+    type ExpandedMacro: Iterator<Item = (Token<Self::Ident>, C::Span)>;
 
-    fn expand(
-        &self,
-        args: Vec<TokenSeq<Self::Ident, Self::Span>>,
-        context: C,
-    ) -> Self::ExpandedMacro;
+    fn expand(&self, args: Vec<Vec<Token<Self::Ident>>>, context: C) -> Self::ExpandedMacro;
 }
 
 struct MacroExpander<I, D> {
@@ -357,17 +357,16 @@ where
     C: MacroExpansionContext<Span = S>,
 {
     type Ident = I;
-    type Span = S;
-    type ExpandedMacro = ExpandedMacro<I, S, C>;
+    type ExpandedMacro = ExpandedMacro<I, C>;
 
-    fn expand(&self, args: Vec<TokenSeq<I, S>>, context: C) -> Self::ExpandedMacro {
+    fn expand(&self, args: Vec<Vec<Token<I>>>, context: C) -> Self::ExpandedMacro {
         ExpandedMacro::new(Rc::clone(self), args, context)
     }
 }
 
-struct ExpandedMacro<I, S, C> {
+struct ExpandedMacro<I, C> {
     def: Rc<MacroDefData<I>>,
-    args: Vec<Vec<(Token<I>, S)>>,
+    args: Vec<Vec<Token<I>>>,
     context: C,
     body_index: usize,
     expansion_state: Option<ExpansionState>,
@@ -379,12 +378,8 @@ enum ExpansionState {
     Label(usize),
 }
 
-impl<I: AsRef<str> + PartialEq, S, C> ExpandedMacro<I, S, C> {
-    fn new(
-        def: Rc<MacroDefData<I>>,
-        args: Vec<Vec<(Token<I>, S)>>,
-        context: C,
-    ) -> ExpandedMacro<I, S, C> {
+impl<I: AsRef<str> + PartialEq, C> ExpandedMacro<I, C> {
+    fn new(def: Rc<MacroDefData<I>>, args: Vec<Vec<Token<I>>>, context: C) -> ExpandedMacro<I, C> {
         let mut expanded_macro = ExpandedMacro {
             def,
             args,
@@ -440,7 +435,7 @@ impl<I: AsRef<str> + PartialEq, S, C> ExpandedMacro<I, S, C> {
     }
 }
 
-impl<I, S, C> Iterator for ExpandedMacro<I, S, C>
+impl<I, S, C> Iterator for ExpandedMacro<I, C>
 where
     I: AsRef<str> + Clone + Eq,
     S: Clone,
@@ -450,11 +445,15 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         if self.body_index < self.def.body.len() {
             let item = match self.expansion_state {
-                Some(ExpansionState::Ident(position, index)) => self.args[position][index].clone(),
+                Some(ExpansionState::Ident(position, index)) => (
+                    self.args[position][index].clone(),
+                    self.context.mk_span(self.body_index, None),
+                ),
                 Some(ExpansionState::Label(position)) => match self.args[position][0] {
-                    (Token::Ident(ref ident), ref span) => {
-                        (Token::Label(ident.clone()), span.clone())
-                    }
+                    Token::Ident(ref ident) => (
+                        Token::Label(ident.clone()),
+                        self.context.mk_span(self.body_index, None),
+                    ),
                     _ => unimplemented!(),
                 },
                 None => (
@@ -750,25 +749,8 @@ mod tests {
             .get(&"my_macro")
             .unwrap()
             .def
-            .expand(
-                vec![vec![
-                    (
-                        Token::Ident("y"),
-                        SpanData::Buf {
-                            range: 5,
-                            context: buf.clone(),
-                        },
-                    ),
-                    (
-                        Token::Ident("z"),
-                        SpanData::Buf {
-                            range: 6,
-                            context: buf.clone(),
-                        },
-                    ),
-                ]],
-                context,
-            ).collect();
+            .expand(vec![vec![Token::Ident("y"), Token::Ident("z")]], context)
+            .collect();
         assert_eq!(
             expanded,
             [
