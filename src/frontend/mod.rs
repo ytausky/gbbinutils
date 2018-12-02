@@ -138,7 +138,7 @@ impl<'a, M, T: 'a, F, A> CodebaseAnalyzer<'a, M, T, F, A>
 where
     M: Define<F::MacroDefId, Ident = T::Ident>,
     M: Get<F::MacroDefId, Ident = T::Ident>,
-    M::Def: MacroDef<F::MacroExpansionContext, Ident = T::Ident>,
+    M::Def: Expand<F::MacroExpansionContext, Ident = T::Ident>,
     T: Tokenize<F::BufContext>,
     F: ContextFactory,
     A: Analysis<T::Ident>,
@@ -175,7 +175,7 @@ impl<'a, M, T, F, A> Frontend for CodebaseAnalyzer<'a, M, T, F, A>
 where
     M: Define<F::MacroDefId, Ident = T::Ident>,
     M: Get<F::MacroDefId, Ident = T::Ident>,
-    M::Def: MacroDef<F::MacroExpansionContext, Ident = T::Ident>,
+    M::Def: Expand<F::MacroExpansionContext, Ident = T::Ident>,
     T: Tokenize<F::BufContext> + 'a,
     F: ContextFactory,
     A: Analysis<T::Ident>,
@@ -286,11 +286,11 @@ trait Get<I> {
     fn get(&self, name: &Self::Ident) -> Option<&MacroTableEntry<I, Self::Def>>;
 }
 
-trait MacroDef<C: MacroExpansionContext> {
+trait Expand<C: MacroExpansionContext> {
     type Ident;
-    type ExpandedMacro: Iterator<Item = (Token<Self::Ident>, C::Span)>;
+    type Iter: Iterator<Item = (Token<Self::Ident>, C::Span)>;
 
-    fn expand(&self, args: Vec<Vec<Token<Self::Ident>>>, context: C) -> Self::ExpandedMacro;
+    fn expand(&self, args: Vec<Vec<Token<Self::Ident>>>, context: C) -> Self::Iter;
 }
 
 struct MacroExpander<I, D> {
@@ -350,16 +350,16 @@ where
     }
 }
 
-impl<I, S, C> MacroDef<C> for Rc<MacroDefData<I>>
+impl<I, S, C> Expand<C> for Rc<MacroDefData<I>>
 where
     I: AsRef<str> + Clone + Eq,
     S: Span,
     C: MacroExpansionContext<Span = S>,
 {
     type Ident = I;
-    type ExpandedMacro = ExpandedMacro<I, C>;
+    type Iter = ExpandedMacro<I, C>;
 
-    fn expand(&self, args: Vec<Vec<Token<I>>>, context: C) -> Self::ExpandedMacro {
+    fn expand(&self, args: Vec<Vec<Token<I>>>, context: C) -> Self::Iter {
         ExpandedMacro::new(Rc::clone(self), args, context)
     }
 }
@@ -538,7 +538,7 @@ mod tests {
     use super::*;
     use crate::codebase;
     use crate::frontend::syntax::keyword::Mnemonic;
-    use crate::frontend::MacroDef;
+    use crate::frontend::Expand;
     use crate::instruction::{Instruction, Nullary};
     use crate::span::*;
     use std::{self, cell::RefCell};
