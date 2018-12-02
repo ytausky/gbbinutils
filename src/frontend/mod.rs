@@ -138,7 +138,7 @@ impl<'a, M, T: 'a, F, A> CodebaseAnalyzer<'a, M, T, F, A>
 where
     M: Define<F::MacroDefId, Ident = T::Ident>,
     M: Get<F::MacroDefId, Ident = T::Ident>,
-    M::Def: MacroDef<F::MacroDefId, F::MacroExpansionContext, Ident = T::Ident, Span = F::Span>,
+    M::Def: MacroDef<F::MacroExpansionContext, Ident = T::Ident, Span = F::Span>,
     T: Tokenize<F::BufContext>,
     F: ContextFactory,
     A: Analysis<T::Ident>,
@@ -175,7 +175,7 @@ impl<'a, M, T, F, A> Frontend for CodebaseAnalyzer<'a, M, T, F, A>
 where
     M: Define<F::MacroDefId, Ident = T::Ident>,
     M: Get<F::MacroDefId, Ident = T::Ident>,
-    M::Def: MacroDef<F::MacroDefId, F::MacroExpansionContext, Ident = T::Ident, Span = F::Span>,
+    M::Def: MacroDef<F::MacroExpansionContext, Ident = T::Ident, Span = F::Span>,
     T: Tokenize<F::BufContext> + 'a,
     F: ContextFactory,
     A: Analysis<T::Ident>,
@@ -212,15 +212,19 @@ where
         B: Backend<Self::Span>,
         D: DiagnosticsListener<Self::Span>,
     {
-        match self.macro_table.get(&name) {
-            Some(def) => {
+        let expansion = match self.macro_table.get(&name) {
+            Some(entry) => {
                 let context = self.context_factory.mk_macro_expansion_context(
-                    span,
+                    span.clone(),
                     args.iter().map(|arg| arg.iter().map(|(_, s)| s).cloned()),
-                    &def.id(),
+                    &entry.id,
                 );
-                self.analyze_token_seq(def.expand(args, context), &mut downstream)
+                Some(entry.def.expand(args, context))
             }
+            None => None,
+        };
+        match expansion {
+            Some(expansion) => self.analyze_token_seq(expansion, &mut downstream),
             None => downstream
                 .diagnostics
                 .emit_diagnostic(InternalDiagnostic::new(
@@ -272,15 +276,13 @@ trait Get<I> {
     type Ident;
     type Def: Clone;
 
-    fn get(&self, name: &Self::Ident) -> Option<Self::Def>;
+    fn get(&self, name: &Self::Ident) -> Option<&MacroTableEntry<I, Self::Def>>;
 }
 
-trait MacroDef<D, C: MacroExpansionContext> {
+trait MacroDef<C: MacroExpansionContext> {
     type Ident;
     type Span: Span;
     type ExpandedMacro: Iterator<Item = (Token<Self::Ident>, Self::Span)>;
-
-    fn id(&self) -> &D;
 
     fn expand(
         &self,
@@ -290,12 +292,12 @@ trait MacroDef<D, C: MacroExpansionContext> {
 }
 
 struct MacroExpander<I, D> {
-    macro_defs: HashMap<I, Rc<MacroTableEntry<I, D>>>,
+    macro_defs: HashMap<I, MacroTableEntry<D, Rc<MacroDefData<I>>>>,
 }
 
 struct MacroTableEntry<I, D> {
-    data: Rc<MacroDefData<I>>,
-    id: D,
+    id: I,
+    def: D,
 }
 
 struct MacroDefData<I> {
@@ -326,10 +328,10 @@ where
     ) {
         self.macro_defs.insert(
             name.into(),
-            Rc::new(MacroTableEntry {
-                data: Rc::new(MacroDefData { params, body }),
+            MacroTableEntry {
                 id,
-            }),
+                def: Rc::new(MacroDefData { params, body }),
+            },
         );
     }
 }
@@ -339,14 +341,14 @@ where
     I: AsRef<str> + Clone + Eq + Hash,
 {
     type Ident = I;
-    type Def = Rc<MacroTableEntry<I, D>>;
+    type Def = Rc<MacroDefData<I>>;
 
-    fn get(&self, name: &Self::Ident) -> Option<Self::Def> {
-        self.macro_defs.get(name).cloned()
+    fn get(&self, name: &Self::Ident) -> Option<&MacroTableEntry<D, Self::Def>> {
+        self.macro_defs.get(name)
     }
 }
 
-impl<I, S, D, C> MacroDef<D, C> for Rc<MacroTableEntry<I, D>>
+impl<I, S, C> MacroDef<C> for Rc<MacroDefData<I>>
 where
     I: AsRef<str> + Clone + Eq,
     S: Span,
@@ -356,12 +358,8 @@ where
     type Span = S;
     type ExpandedMacro = ExpandedMacro<I, S, C>;
 
-    fn id(&self) -> &D {
-        &self.id
-    }
-
     fn expand(&self, args: Vec<TokenSeq<I, S>>, context: C) -> Self::ExpandedMacro {
-        ExpandedMacro::new(self.data.clone(), args, context)
+        ExpandedMacro::new(Rc::clone(self), args, context)
     }
 }
 
@@ -682,7 +680,12 @@ mod tests {
             def: def_id,
         });
         let context = Rc::clone(&data);
-        let expanded: Vec<_> = table.get(&name).unwrap().expand(vec![], context).collect();
+        let expanded: Vec<_> = table
+            .get(&name)
+            .unwrap()
+            .def
+            .expand(vec![], context)
+            .collect();
         assert_eq!(
             expanded,
             [(
@@ -744,6 +747,7 @@ mod tests {
         let expanded: Vec<_> = table
             .get(&"my_macro")
             .unwrap()
+            .def
             .expand(
                 vec![vec![
                     (
