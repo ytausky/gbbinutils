@@ -138,8 +138,8 @@ struct CodebaseAnalyzer<'a, M, T: 'a, F, A> {
 
 impl<'a, M, T: 'a, F, A> CodebaseAnalyzer<'a, M, T, F, A>
 where
-    M: MacroTable<T::Ident, F::MacroContextFactory>,
-    M::Entry: Expand<T::Ident, F::MacroContextFactory>,
+    M: MacroTable<T::Ident, F>,
+    M::Entry: Expand<T::Ident, F>,
     T: Tokenize<F::BufContext>,
     F: ContextFactory,
     F::BufContext: BufContext<Span = F::Span>,
@@ -175,8 +175,8 @@ type TokenSeq<I, S> = Vec<(Token<I>, S)>;
 
 impl<'a, M, T, F, A> Frontend for CodebaseAnalyzer<'a, M, T, F, A>
 where
-    M: MacroTable<T::Ident, F::MacroContextFactory>,
-    M::Entry: Expand<T::Ident, F::MacroContextFactory>,
+    M: MacroTable<T::Ident, F>,
+    M::Entry: Expand<T::Ident, F>,
     T: Tokenize<F::BufContext> + 'a,
     F: ContextFactory,
     F::BufContext: BufContext<Span = F::Span>,
@@ -215,9 +215,7 @@ where
         D: DiagnosticsListener<Self::Span>,
     {
         let expansion = match self.macro_table.get(&name) {
-            Some(entry) => {
-                Some(entry.expand(span, args, self.context_factory.macro_context_factory()))
-            }
+            Some(entry) => Some(entry.expand(span, args, &mut self.context_factory)),
             None => {
                 downstream
                     .diagnostics
@@ -239,12 +237,8 @@ where
         params: Vec<(Self::Ident, Self::Span)>,
         body: Vec<(Token<Self::Ident>, Self::Span)>,
     ) {
-        self.macro_table.define(
-            name,
-            params,
-            body,
-            self.context_factory.macro_context_factory(),
-        );
+        self.macro_table
+            .define(name, params, body, &mut self.context_factory);
     }
 }
 
@@ -521,11 +515,6 @@ mod tests {
 
     impl<'a> ContextFactory for Mock<'a> {
         type BufContext = Mock<'a>;
-        type MacroContextFactory = Self;
-
-        fn macro_context_factory(&mut self) -> &mut Self::MacroContextFactory {
-            self
-        }
 
         fn mk_buf_context(&mut self, _: BufId, _: Option<Self::Span>) -> Self::BufContext {
             self.clone()

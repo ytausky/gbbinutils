@@ -47,12 +47,9 @@ where
 
 pub trait ContextFactory
 where
-    Self: HasSpan,
+    Self: MacroContextFactory,
 {
     type BufContext: BufContext<Span = Self::Span>;
-    type MacroContextFactory: MacroContextFactory<Span = Self::Span>;
-
-    fn macro_context_factory(&mut self) -> &mut Self::MacroContextFactory;
 
     fn mk_buf_context(
         &mut self,
@@ -168,11 +165,6 @@ where
 
 impl ContextFactory for RcContextFactory<BufId, BufRange> {
     type BufContext = RcBufContext<BufId, BufRange>;
-    type MacroContextFactory = Self;
-
-    fn macro_context_factory(&mut self) -> &mut Self::MacroContextFactory {
-        self
-    }
 
     fn mk_buf_context(
         &mut self,
