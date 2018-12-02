@@ -8,6 +8,10 @@ pub trait Span: Clone + Debug + PartialEq {
     fn extend(&self, other: &Self) -> Self;
 }
 
+pub trait HasSpan {
+    type Span: Span;
+}
+
 #[cfg(test)]
 impl Span for () {
     fn extend(&self, _: &Self) -> Self {}
@@ -18,8 +22,10 @@ pub trait Source {
     fn span(&self) -> Self::Span;
 }
 
-pub trait MacroContextFactory {
-    type Span: Span;
+pub trait MacroContextFactory
+where
+    Self: HasSpan,
+{
     type MacroDefId: Clone;
     type MacroExpansionContext: MacroExpansionContext<Span = Self::Span>;
 
@@ -39,8 +45,10 @@ pub trait MacroContextFactory {
         J: IntoIterator<Item = Self::Span>;
 }
 
-pub trait ContextFactory {
-    type Span: Span;
+pub trait ContextFactory
+where
+    Self: HasSpan,
+{
     type BufContext: BufContext<Span = Self::Span>;
     type MacroContextFactory: MacroContextFactory<Span = Self::Span>;
 
@@ -110,11 +118,17 @@ impl<B, R> RcContextFactory<B, R> {
     }
 }
 
-impl<B, R> MacroContextFactory for RcContextFactory<B, R>
+impl<B, R> HasSpan for RcContextFactory<B, R>
 where
     SpanData<B, R>: Span,
 {
     type Span = SpanData<B, R>;
+}
+
+impl<B, R> MacroContextFactory for RcContextFactory<B, R>
+where
+    SpanData<B, R>: Span,
+{
     type MacroDefId = Rc<MacroDef<Self::Span>>;
     type MacroExpansionContext = Rc<MacroExpansionData<SpanData<B, R>>>;
 
@@ -153,7 +167,6 @@ where
 }
 
 impl ContextFactory for RcContextFactory<BufId, BufRange> {
-    type Span = SpanData<BufId, BufRange>;
     type BufContext = RcBufContext<BufId, BufRange>;
     type MacroContextFactory = Self;
 

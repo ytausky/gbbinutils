@@ -490,8 +490,11 @@ mod tests {
         }
     }
 
-    impl<'a> MacroContextFactory for Mock<'a> {
+    impl<'a> HasSpan for Mock<'a> {
         type Span = ();
+    }
+
+    impl<'a> MacroContextFactory for Mock<'a> {
         type MacroDefId = ();
         type MacroExpansionContext = Mock<'a>;
 
@@ -517,7 +520,6 @@ mod tests {
     }
 
     impl<'a> ContextFactory for Mock<'a> {
-        type Span = ();
         type BufContext = Mock<'a>;
         type MacroContextFactory = Self;
 
