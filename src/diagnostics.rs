@@ -10,6 +10,42 @@ use std::fmt;
 #[cfg(test)]
 use std::marker::PhantomData;
 
+pub trait Diagnostics
+where
+    Self: DownstreamDiagnostics,
+{
+}
+
+pub trait DownstreamDiagnostics
+where
+    Self: DiagnosticsListener,
+{
+}
+
+pub struct DiagnosticsSystem<O> {
+    pub output: O,
+}
+
+impl<O> HasSpan for DiagnosticsSystem<O>
+where
+    O: DiagnosticsListener,
+{
+    type Span = O::Span;
+}
+
+impl<O> DiagnosticsListener for DiagnosticsSystem<O>
+where
+    O: DiagnosticsListener,
+{
+    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<Self::Span>) {
+        self.output.emit_diagnostic(diagnostic)
+    }
+}
+
+impl<O> DownstreamDiagnostics for DiagnosticsSystem<O> where O: DiagnosticsListener {}
+
+impl<O> Diagnostics for DiagnosticsSystem<O> where O: DiagnosticsListener {}
+
 pub trait DiagnosticsOutput {
     fn emit(&mut self, diagnostic: Diagnostic<String>);
 }

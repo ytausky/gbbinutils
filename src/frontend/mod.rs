@@ -27,7 +27,7 @@ where
     F: ContextFactory,
     F::BufContext: BufContext<Span = F::Span>,
     B: Backend<F::Span>,
-    D: DiagnosticsListener<Span = F::Span>,
+    D: Diagnostics<Span = F::Span>,
 {
     let file_parser = CodebaseAnalyzer::new(
         MacroExpander::new(),
@@ -99,7 +99,7 @@ pub trait Frontend {
     ) -> Result<(), CodebaseError>
     where
         B: Backend<Self::Span>,
-        D: DiagnosticsListener<Span = Self::Span>;
+        D: Diagnostics<Span = Self::Span>;
 
     fn invoke_macro<B, D>(
         &mut self,
@@ -108,7 +108,7 @@ pub trait Frontend {
         downstream: Downstream<B, D>,
     ) where
         B: Backend<Self::Span>,
-        D: DiagnosticsListener<Span = Self::Span>;
+        D: Diagnostics<Span = Self::Span>;
 
     fn define_macro(
         &mut self,
@@ -163,10 +163,7 @@ where
     fn analyze_token_seq<I: IntoIterator<Item = (Token<T::Ident>, F::Span)>>(
         &mut self,
         tokens: I,
-        downstream: &mut Downstream<
-            impl Backend<F::Span>,
-            impl DiagnosticsListener<Span = F::Span>,
-        >,
+        downstream: &mut Downstream<impl Backend<F::Span>, impl Diagnostics<Span = F::Span>>,
     ) {
         let analysis = self.analysis;
         let mut session = BorrowedComponents::new(self, downstream.backend, downstream.diagnostics);
@@ -196,7 +193,7 @@ where
     ) -> Result<(), CodebaseError>
     where
         B: Backend<Self::Span>,
-        D: DiagnosticsListener<Span = Self::Span>,
+        D: Diagnostics<Span = Self::Span>,
     {
         let tokenized_src = {
             let context_factory = &mut self.context_factory;
@@ -215,7 +212,7 @@ where
         mut downstream: Downstream<B, D>,
     ) where
         B: Backend<Self::Span>,
-        D: DiagnosticsListener<Span = Self::Span>,
+        D: Diagnostics<Span = Self::Span>,
     {
         let expansion = match self.macro_table.get(&name) {
             Some(entry) => Some(entry.expand(span, args, &mut self.context_factory)),
@@ -573,6 +570,10 @@ mod tests {
                 .push(TestEvent::Diagnostic(diagnostic))
         }
     }
+
+    impl<'a> DownstreamDiagnostics for Mock<'a> {}
+
+    impl<'a> Diagnostics for Mock<'a> {}
 
     type TestLog = RefCell<Vec<TestEvent>>;
 

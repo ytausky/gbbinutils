@@ -4,7 +4,7 @@
 pub use crate::backend::Rom;
 
 use crate::codebase::{CodebaseError, StdFileSystem};
-use crate::diagnostics::{mk_diagnostic, TerminalOutput};
+use crate::diagnostics::*;
 
 mod backend;
 mod codebase;
@@ -72,9 +72,11 @@ fn try_assemble(
     output: &mut dyn diagnostics::DiagnosticsOutput,
 ) -> Result<Rom, CodebaseError> {
     let codebase = codebase::FileCodebase::new(input);
-    let mut diagnostics = diagnostics::OutputForwarder {
-        output,
-        codebase: &codebase.cache,
+    let mut diagnostics = DiagnosticsSystem {
+        output: OutputForwarder {
+            output,
+            codebase: &codebase.cache,
+        },
     };
     let object = frontend::analyze_file(
         name.to_string(),
