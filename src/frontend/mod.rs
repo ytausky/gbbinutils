@@ -451,23 +451,17 @@ where
     type Item = (Token<I>, S);
     fn next(&mut self) -> Option<Self::Item> {
         if self.body_index < self.def.body.len() {
-            let item = match self.expansion_state {
-                Some(ExpansionState::Ident(position, index)) => (
-                    self.args[position][index].clone(),
-                    self.context.mk_span(self.body_index, None),
-                ),
+            let (token, expansion) = match self.expansion_state {
+                Some(ExpansionState::Ident(position, index)) => {
+                    (self.args[position][index].clone(), None)
+                }
                 Some(ExpansionState::Label(position)) => match self.args[position][0] {
-                    Token::Ident(ref ident) => (
-                        Token::Label(ident.clone()),
-                        self.context.mk_span(self.body_index, None),
-                    ),
+                    Token::Ident(ref ident) => (Token::Label(ident.clone()), None),
                     _ => unimplemented!(),
                 },
-                None => (
-                    self.def.body[self.body_index].clone(),
-                    self.context.mk_span(self.body_index, None),
-                ),
+                None => (self.def.body[self.body_index].clone(), None),
             };
+            let item = (token, self.context.mk_span(self.body_index, expansion));
             self.advance();
             Some(item)
         } else {
