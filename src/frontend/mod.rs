@@ -24,7 +24,7 @@ pub fn analyze_file<C, F, B, D>(
 ) -> Result<B::Object, CodebaseError>
 where
     C: Codebase,
-    F: ContextFactory<BufId = BufId>,
+    F: ContextFactory,
     F::BufContext: BufContext<Span = F::Span>,
     B: Backend<F::Span>,
     D: DiagnosticsListener<F::Span>,
@@ -141,7 +141,7 @@ where
     M: MacroTable<T::Ident, F::MacroContextFactory>,
     M::Entry: Expand<T::Ident, F::MacroContextFactory>,
     T: Tokenize<F::BufContext>,
-    F: ContextFactory<BufId = BufId>,
+    F: ContextFactory,
     F::BufContext: BufContext<Span = F::Span>,
     A: Analysis<T::Ident>,
     for<'b> &'b T::Tokenized: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
@@ -178,7 +178,7 @@ where
     M: MacroTable<T::Ident, F::MacroContextFactory>,
     M::Entry: Expand<T::Ident, F::MacroContextFactory>,
     T: Tokenize<F::BufContext> + 'a,
-    F: ContextFactory<BufId = BufId>,
+    F: ContextFactory,
     F::BufContext: BufContext<Span = F::Span>,
     A: Analysis<T::Ident>,
     for<'b> &'b T::Tokenized: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
@@ -517,8 +517,6 @@ mod tests {
     }
 
     impl<'a> ContextFactory for Mock<'a> {
-        type BufId = BufId;
-        type BufRange = codebase::BufRange;
         type Span = ();
         type BufContext = Mock<'a>;
         type MacroContextFactory = Self;

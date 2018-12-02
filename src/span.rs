@@ -40,24 +40,22 @@ pub trait MacroContextFactory {
 }
 
 pub trait ContextFactory {
-    type BufId;
-    type BufRange;
     type Span: Span;
-    type BufContext: BufContext<Self::BufRange, Span = Self::Span>;
+    type BufContext: BufContext<Span = Self::Span>;
     type MacroContextFactory: MacroContextFactory<Span = Self::Span>;
 
     fn macro_context_factory(&mut self) -> &mut Self::MacroContextFactory;
 
     fn mk_buf_context(
         &mut self,
-        buf_id: Self::BufId,
+        buf_id: BufId,
         included_from: Option<Self::Span>,
     ) -> Self::BufContext;
 }
 
-pub trait BufContext<R = BufRange> {
+pub trait BufContext {
     type Span: Span;
-    fn mk_span(&self, range: R) -> Self::Span;
+    fn mk_span(&self, range: BufRange) -> Self::Span;
 }
 
 pub trait MacroExpansionContext {
@@ -154,14 +152,9 @@ where
     }
 }
 
-impl<B, R> ContextFactory for RcContextFactory<B, R>
-where
-    SpanData<B, R>: Span,
-{
-    type BufId = B;
-    type BufRange = R;
-    type Span = SpanData<B, R>;
-    type BufContext = RcBufContext<B, R>;
+impl ContextFactory for RcContextFactory<BufId, BufRange> {
+    type Span = SpanData<BufId, BufRange>;
+    type BufContext = RcBufContext<BufId, BufRange>;
     type MacroContextFactory = Self;
 
     fn macro_context_factory(&mut self) -> &mut Self::MacroContextFactory {
@@ -170,7 +163,7 @@ where
 
     fn mk_buf_context(
         &mut self,
-        buf_id: Self::BufId,
+        buf_id: BufId,
         included_from: Option<Self::Span>,
     ) -> Self::BufContext {
         let context = Rc::new(BufContextData {
@@ -186,12 +179,9 @@ pub struct RcBufContext<B, R> {
     context: Rc<BufContextData<B, R>>,
 }
 
-impl<B, R> BufContext<R> for RcBufContext<B, R>
-where
-    SpanData<B, R>: Span,
-{
-    type Span = SpanData<B, R>;
-    fn mk_span(&self, range: R) -> Self::Span {
+impl BufContext for RcBufContext<BufId, BufRange> {
+    type Span = SpanData<BufId, BufRange>;
+    fn mk_span(&self, range: BufRange) -> Self::Span {
         SpanData::Buf {
             range,
             context: self.context.clone(),
