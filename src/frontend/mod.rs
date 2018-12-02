@@ -215,22 +215,24 @@ where
         let expansion = match self.macro_table.get(&name) {
             Some(entry) => {
                 let context = self.context_factory.mk_macro_expansion_context(
-                    span.clone(),
+                    span,
                     args.iter().map(|arg| arg.iter().map(|(_, s)| s).cloned()),
                     &entry.id,
                 );
                 Some(entry.def.expand(args, context))
             }
-            None => None,
+            None => {
+                downstream
+                    .diagnostics
+                    .emit_diagnostic(InternalDiagnostic::new(
+                        Message::UndefinedMacro { name: name.into() },
+                        span,
+                    ));
+                None
+            }
         };
-        match expansion {
-            Some(expansion) => self.analyze_token_seq(expansion, &mut downstream),
-            None => downstream
-                .diagnostics
-                .emit_diagnostic(InternalDiagnostic::new(
-                    Message::UndefinedMacro { name: name.into() },
-                    span,
-                )),
+        if let Some(expansion) = expansion {
+            self.analyze_token_seq(expansion, &mut downstream)
         }
     }
 
