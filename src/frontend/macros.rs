@@ -4,18 +4,21 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::rc::Rc;
 
-pub trait MacroTable<I, F: MacroContextFactory>
+pub trait MacroTable<I>
 where
     Self: Get<I>,
-    <Self as Get<I>>::Entry: Expand<I, F>,
 {
-    fn define(
+    type MacroDefId: Clone;
+
+    fn define<F>(
         &mut self,
         name: (impl Into<I>, F::Span),
         params: Vec<(I, F::Span)>,
         body: Vec<(Token<I>, F::Span)>,
         factory: &mut F,
-    );
+    ) where
+        F: MacroContextFactory<MacroDefId = Self::MacroDefId>,
+        Self::Entry: Expand<I, F>;
 }
 
 pub trait Get<I> {
@@ -56,17 +59,22 @@ impl<I: Eq + Hash, D> MacroExpander<I, D> {
     }
 }
 
-impl<I, F: MacroContextFactory> MacroTable<I, F> for MacroExpander<I, F::MacroDefId>
+impl<I, D> MacroTable<I> for MacroExpander<I, D>
 where
     I: AsRef<str> + Clone + Eq + Hash,
+    D: Clone,
 {
-    fn define(
+    type MacroDefId = D;
+
+    fn define<F>(
         &mut self,
         name: (impl Into<I>, F::Span),
         params: Vec<(I, F::Span)>,
         body: Vec<(Token<I>, F::Span)>,
         factory: &mut F,
-    ) {
+    ) where
+        F: MacroContextFactory<MacroDefId = D>,
+    {
         let (param_tokens, param_spans) = split(params);
         let (body_tokens, body_spans) = split(body);
         let id = factory.add_macro_def(name.1, param_spans, body_spans);

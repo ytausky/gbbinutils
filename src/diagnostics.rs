@@ -1,9 +1,9 @@
 use crate::backend::Width;
-use crate::codebase::{CodebaseError, LineNumber, TextBuf, TextCache, TextRange};
+use crate::codebase::{BufId, CodebaseError, LineNumber, TextBuf, TextCache, TextRange};
 use crate::instruction::IncDec;
 #[cfg(test)]
 use crate::span::Span;
-use crate::span::{HasSpan, SpanData};
+use crate::span::{ContextFactory, HasSpan, MacroContextFactory, SpanData};
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::fmt;
@@ -13,6 +13,7 @@ use std::marker::PhantomData;
 pub trait Diagnostics
 where
     Self: DownstreamDiagnostics,
+    Self: ContextFactory,
 {
 }
 
@@ -22,29 +23,86 @@ where
 {
 }
 
-pub struct DiagnosticsSystem<O> {
+pub struct DiagnosticsSystem<C, O> {
+    pub context: C,
     pub output: O,
 }
 
-impl<O> HasSpan for DiagnosticsSystem<O>
+impl<C, O> HasSpan for DiagnosticsSystem<C, O>
 where
-    O: DiagnosticsListener,
+    C: ContextFactory,
+    O: DiagnosticsListener<Span = C::Span>,
 {
-    type Span = O::Span;
+    type Span = C::Span;
 }
 
-impl<O> DiagnosticsListener for DiagnosticsSystem<O>
+impl<C, O> DiagnosticsListener for DiagnosticsSystem<C, O>
 where
-    O: DiagnosticsListener,
+    C: ContextFactory,
+    O: DiagnosticsListener<Span = C::Span>,
 {
     fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<Self::Span>) {
         self.output.emit_diagnostic(diagnostic)
     }
 }
 
-impl<O> DownstreamDiagnostics for DiagnosticsSystem<O> where O: DiagnosticsListener {}
+impl<C, O> DownstreamDiagnostics for DiagnosticsSystem<C, O>
+where
+    C: ContextFactory,
+    O: DiagnosticsListener<Span = C::Span>,
+{}
 
-impl<O> Diagnostics for DiagnosticsSystem<O> where O: DiagnosticsListener {}
+impl<C, O> MacroContextFactory for DiagnosticsSystem<C, O>
+where
+    C: ContextFactory,
+    O: DiagnosticsListener<Span = C::Span>,
+{
+    type MacroDefId = C::MacroDefId;
+    type MacroExpansionContext = C::MacroExpansionContext;
+
+    fn add_macro_def<P, B>(&mut self, name: Self::Span, params: P, body: B) -> Self::MacroDefId
+    where
+        P: IntoIterator<Item = Self::Span>,
+        B: IntoIterator<Item = Self::Span>,
+    {
+        self.context.add_macro_def(name, params, body)
+    }
+
+    fn mk_macro_expansion_context<A, J>(
+        &mut self,
+        name: Self::Span,
+        args: A,
+        def: &Self::MacroDefId,
+    ) -> Self::MacroExpansionContext
+    where
+        A: IntoIterator<Item = J>,
+        J: IntoIterator<Item = Self::Span>,
+    {
+        self.context.mk_macro_expansion_context(name, args, def)
+    }
+}
+
+impl<C, O> ContextFactory for DiagnosticsSystem<C, O>
+where
+    C: ContextFactory,
+    O: DiagnosticsListener<Span = C::Span>,
+{
+    type BufContext = C::BufContext;
+
+    fn mk_buf_context(
+        &mut self,
+        buf_id: BufId,
+        included_from: Option<Self::Span>,
+    ) -> Self::BufContext {
+        self.context.mk_buf_context(buf_id, included_from)
+    }
+}
+
+impl<C, O> Diagnostics for DiagnosticsSystem<C, O>
+where
+    C: ContextFactory,
+    O: DiagnosticsListener<Span = C::Span>,
+{}
 
 pub trait DiagnosticsOutput {
     fn emit(&mut self, diagnostic: Diagnostic<String>);

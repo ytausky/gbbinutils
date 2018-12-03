@@ -34,9 +34,9 @@ pub type MacroArgs<I, S> = Vec<Vec<(Token<I>, S)>>;
 
 pub struct Components<F, B, D, BMF, BMB, BMD>
 where
-    F: frontend::Frontend,
-    B: backend::Backend<F::Span>,
-    D: diagnostics::DiagnosticsListener<Span = F::Span>,
+    F: frontend::Frontend<D>,
+    B: backend::Backend<D::Span>,
+    D: diagnostics::Diagnostics,
     BMF: BorrowMut<F>,
     BMB: BorrowMut<B>,
     BMD: BorrowMut<D>,
@@ -51,9 +51,9 @@ pub type BorrowedComponents<'a, F, B, D> = Components<F, B, D, &'a mut F, &'a mu
 
 impl<F, B, D, BMF, BMB, BMD> Components<F, B, D, BMF, BMB, BMD>
 where
-    F: frontend::Frontend,
-    B: backend::Backend<F::Span>,
-    D: diagnostics::Diagnostics<Span = F::Span>,
+    F: frontend::Frontend<D>,
+    B: backend::Backend<D::Span>,
+    D: diagnostics::Diagnostics,
     BMF: BorrowMut<F>,
     BMB: BorrowMut<B>,
     BMD: BorrowMut<D>,
@@ -81,15 +81,15 @@ where
 
 impl<F, B, D, BMF, BMB, BMD> Session for Components<F, B, D, BMF, BMB, BMD>
 where
-    F: frontend::Frontend,
-    B: backend::Backend<F::Span>,
-    D: diagnostics::Diagnostics<Span = F::Span>,
+    F: frontend::Frontend<D>,
+    B: backend::Backend<D::Span>,
+    D: diagnostics::Diagnostics,
     BMF: BorrowMut<F>,
     BMB: BorrowMut<B>,
     BMD: BorrowMut<D>,
 {
     type Ident = F::Ident;
-    type Span = F::Span;
+    type Span = D::Span;
 
     fn analyze_file(&mut self, path: Self::Ident) -> Result<(), CodebaseError> {
         self.frontend.borrow_mut().analyze_file(
@@ -136,7 +136,7 @@ where
     ) {
         self.frontend
             .borrow_mut()
-            .define_macro(name, params, tokens)
+            .define_macro(name, params, tokens, self.diagnostics.borrow_mut())
     }
 
     fn set_origin(&mut self, origin: backend::RelocExpr<Self::Span>) {

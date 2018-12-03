@@ -73,6 +73,7 @@ fn try_assemble(
 ) -> Result<Rom, CodebaseError> {
     let codebase = codebase::FileCodebase::new(input);
     let mut diagnostics = DiagnosticsSystem {
+        context: span::RcContextFactory::new(),
         output: OutputForwarder {
             output,
             codebase: &codebase.cache,
@@ -81,7 +82,6 @@ fn try_assemble(
     let object = frontend::analyze_file(
         name.to_string(),
         &codebase,
-        span::RcContextFactory::new(),
         backend::ObjectBuilder::new(),
         &mut diagnostics,
     )?;

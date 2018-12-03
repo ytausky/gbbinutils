@@ -9,32 +9,24 @@ use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diagnostics::*;
 use crate::frontend::session::*;
 use crate::frontend::syntax::*;
-use crate::span::{BufContext, ContextFactory, Span};
+use crate::span::{BufContext, Span};
 use std::fmt::Debug;
 use std::rc::Rc;
 
 pub use crate::frontend::syntax::Token;
 
-pub fn analyze_file<C, F, B, D>(
+pub fn analyze_file<C, B, D>(
     name: String,
     codebase: &C,
-    context_factory: F,
     backend: B,
     diagnostics: &mut D,
 ) -> Result<B::Object, CodebaseError>
 where
     C: Codebase,
-    F: ContextFactory,
-    F::BufContext: BufContext<Span = F::Span>,
-    B: Backend<F::Span>,
-    D: Diagnostics<Span = F::Span>,
+    B: Backend<D::Span>,
+    D: Diagnostics,
 {
-    let file_parser = CodebaseAnalyzer::new(
-        MacroExpander::new(),
-        codebase,
-        context_factory,
-        SemanticAnalysis {},
-    );
+    let file_parser = CodebaseAnalyzer::new(MacroExpander::new(), codebase, SemanticAnalysis {});
     let mut session: Components<_, _, D, _, _, _> =
         Components::new(file_parser, backend, diagnostics);
     session.analyze_file(name)?;
@@ -88,33 +80,33 @@ impl ExprFactory for StrExprFactory {
     }
 }
 
-pub trait Frontend {
+pub trait Frontend<D: Diagnostics> {
     type Ident: AsRef<str> + Clone + Into<String> + Debug + PartialEq;
     type Span: Span;
+    type MacroDefId: Clone;
 
-    fn analyze_file<B, D>(
+    fn analyze_file<B>(
         &mut self,
         path: Self::Ident,
         downstream: Downstream<B, D>,
     ) -> Result<(), CodebaseError>
     where
-        B: Backend<Self::Span>,
-        D: Diagnostics<Span = Self::Span>;
+        B: Backend<D::Span>;
 
-    fn invoke_macro<B, D>(
+    fn invoke_macro<B>(
         &mut self,
-        name: (Self::Ident, Self::Span),
-        args: MacroArgs<Self::Ident, Self::Span>,
+        name: (Self::Ident, D::Span),
+        args: MacroArgs<Self::Ident, D::Span>,
         downstream: Downstream<B, D>,
     ) where
-        B: Backend<Self::Span>,
-        D: Diagnostics<Span = Self::Span>;
+        B: Backend<D::Span>;
 
     fn define_macro(
         &mut self,
-        name: (impl Into<Self::Ident>, Self::Span),
-        params: Vec<(Self::Ident, Self::Span)>,
-        tokens: Vec<(Token<Self::Ident>, Self::Span)>,
+        name: (impl Into<Self::Ident>, D::Span),
+        params: Vec<(Self::Ident, D::Span)>,
+        tokens: Vec<(Token<Self::Ident>, D::Span)>,
+        diagnostics: &mut D,
     );
 }
 
@@ -129,42 +121,37 @@ impl<Id: Into<String> + Debug + PartialEq> Analysis<Id> for SemanticAnalysis {
     }
 }
 
-struct CodebaseAnalyzer<'a, M, T: 'a, F, A> {
+struct CodebaseAnalyzer<'a, M, T: 'a, A> {
     macro_table: M,
     codebase: &'a T,
-    context_factory: F,
     analysis: A,
 }
 
-impl<'a, M, T: 'a, F, A> CodebaseAnalyzer<'a, M, T, F, A>
+impl<'a, M, T: 'a, A> CodebaseAnalyzer<'a, M, T, A>
 where
-    M: MacroTable<T::Ident, F>,
-    M::Entry: Expand<T::Ident, F>,
-    T: Tokenize<F::BufContext>,
-    F: ContextFactory,
-    F::BufContext: BufContext<Span = F::Span>,
+    M: MacroTable<T::Ident>,
+    T: HasIdent,
     A: Analysis<T::Ident>,
-    for<'b> &'b T::Tokenized: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
 {
-    fn new(
-        macro_table: M,
-        codebase: &T,
-        context_factory: F,
-        analysis: A,
-    ) -> CodebaseAnalyzer<M, T, F, A> {
+    fn new(macro_table: M, codebase: &T, analysis: A) -> CodebaseAnalyzer<M, T, A> {
         CodebaseAnalyzer {
             macro_table,
             codebase,
-            context_factory,
             analysis,
         }
     }
 
-    fn analyze_token_seq<I: IntoIterator<Item = (Token<T::Ident>, F::Span)>>(
+    fn analyze_token_seq<I, F>(
         &mut self,
         tokens: I,
-        downstream: &mut Downstream<impl Backend<F::Span>, impl Diagnostics<Span = F::Span>>,
-    ) {
+        downstream: &mut Downstream<impl Backend<F::Span>, F>,
+    ) where
+        I: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
+        F: Diagnostics<MacroDefId = M::MacroDefId>,
+        T: Tokenize<F::BufContext>,
+        M::Entry: Expand<T::Ident, F>,
+        for<'b> &'b T::Tokenized: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
+    {
         let analysis = self.analysis;
         let mut session = BorrowedComponents::new(self, downstream.backend, downstream.diagnostics);
         analysis.run(tokens.into_iter(), &mut session)
@@ -173,49 +160,47 @@ where
 
 type TokenSeq<I, S> = Vec<(Token<I>, S)>;
 
-impl<'a, M, T, F, A> Frontend for CodebaseAnalyzer<'a, M, T, F, A>
+impl<'a, M, T, A, D> Frontend<D> for CodebaseAnalyzer<'a, M, T, A>
 where
-    M: MacroTable<T::Ident, F>,
-    M::Entry: Expand<T::Ident, F>,
-    T: Tokenize<F::BufContext> + 'a,
-    F: ContextFactory,
-    F::BufContext: BufContext<Span = F::Span>,
+    M: MacroTable<T::Ident, MacroDefId = D::MacroDefId>,
+    M::Entry: Expand<T::Ident, D>,
+    T: Tokenize<D::BufContext> + 'a,
+    D::BufContext: BufContext,
     A: Analysis<T::Ident>,
-    for<'b> &'b T::Tokenized: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
+    D: Diagnostics,
+    for<'b> &'b T::Tokenized: IntoIterator<Item = (Token<T::Ident>, D::Span)>,
 {
     type Ident = T::Ident;
-    type Span = F::Span;
+    type Span = D::Span;
+    type MacroDefId = D::MacroDefId;
 
-    fn analyze_file<B, D>(
+    fn analyze_file<B>(
         &mut self,
         path: Self::Ident,
         mut downstream: Downstream<B, D>,
     ) -> Result<(), CodebaseError>
     where
         B: Backend<Self::Span>,
-        D: Diagnostics<Span = Self::Span>,
     {
         let tokenized_src = {
-            let context_factory = &mut self.context_factory;
             self.codebase.tokenize_file(path.as_ref(), |buf_id| {
-                context_factory.mk_buf_context(buf_id, None)
+                downstream.diagnostics.mk_buf_context(buf_id, None)
             })?
         };
         self.analyze_token_seq(&tokenized_src, &mut downstream);
         Ok(())
     }
 
-    fn invoke_macro<B, D>(
+    fn invoke_macro<B>(
         &mut self,
         (name, span): (Self::Ident, Self::Span),
         args: MacroArgs<Self::Ident, Self::Span>,
         mut downstream: Downstream<B, D>,
     ) where
         B: Backend<Self::Span>,
-        D: Diagnostics<Span = Self::Span>,
     {
         let expansion = match self.macro_table.get(&name) {
-            Some(entry) => Some(entry.expand(span, args, &mut self.context_factory)),
+            Some(entry) => Some(entry.expand(span, args, downstream.diagnostics)),
             None => {
                 downstream
                     .diagnostics
@@ -236,17 +221,21 @@ where
         name: (impl Into<Self::Ident>, Self::Span),
         params: Vec<(Self::Ident, Self::Span)>,
         body: Vec<(Token<Self::Ident>, Self::Span)>,
+        diagnostics: &mut D,
     ) {
-        self.macro_table
-            .define(name, params, body, &mut self.context_factory);
+        self.macro_table.define(name, params, body, diagnostics);
     }
+}
+
+trait HasIdent {
+    type Ident: AsRef<str> + Clone + Into<String> + Debug + PartialEq;
 }
 
 trait Tokenize<C: BufContext>
 where
+    Self: HasIdent,
     for<'c> &'c Self::Tokenized: IntoIterator<Item = (Token<Self::Ident>, C::Span)>,
 {
-    type Ident: AsRef<str> + Clone + Into<String> + Debug + PartialEq;
     type Tokenized;
     fn tokenize_file<F: FnOnce(BufId) -> C>(
         &self,
@@ -255,8 +244,11 @@ where
     ) -> Result<Self::Tokenized, CodebaseError>;
 }
 
-impl<C: Codebase, B: BufContext> Tokenize<B> for C {
+impl<C: Codebase> HasIdent for C {
     type Ident = String;
+}
+
+impl<C: Codebase, B: BufContext> Tokenize<B> for C {
     type Tokenized = TokenizedSrc<B>;
 
     fn tokenize_file<F: FnOnce(BufId) -> B>(
@@ -450,8 +442,11 @@ mod tests {
         }
     }
 
-    impl<'a> Tokenize<Mock<'a>> for MockTokenSource {
+    impl<'a> HasIdent for MockTokenSource {
         type Ident = String;
+    }
+
+    impl<'a> Tokenize<Mock<'a>> for MockTokenSource {
         type Tokenized = MockTokenized;
 
         fn tokenize_file<F: FnOnce(BufId) -> Mock<'a>>(
@@ -588,7 +583,6 @@ mod tests {
     struct TestFixture<'a> {
         macro_table: MacroExpander<String, ()>,
         mock_token_source: MockTokenSource,
-        mock_context_factory: Mock<'a>,
         analysis: Mock<'a>,
         object: Mock<'a>,
         diagnostics: Mock<'a>,
@@ -599,7 +593,6 @@ mod tests {
             TestFixture {
                 macro_table: MacroExpander::new(),
                 mock_token_source: MockTokenSource::new(),
-                mock_context_factory: Mock::new(log),
                 analysis: Mock::new(log),
                 object: Mock::new(log),
                 diagnostics: Mock::new(log),
@@ -612,19 +605,15 @@ mod tests {
         }
 
         fn when<F: for<'b> FnOnce(TestSession<'b>)>(self, f: F) {
-            let file_parser = CodebaseAnalyzer::new(
-                self.macro_table,
-                &self.mock_token_source,
-                self.mock_context_factory,
-                self.analysis,
-            );
+            let file_parser =
+                CodebaseAnalyzer::new(self.macro_table, &self.mock_token_source, self.analysis);
             let session = Components::new(file_parser, self.object, self.diagnostics);
             f(session);
         }
     }
 
     type TestCodebaseAnalyzer<'a> =
-        CodebaseAnalyzer<'a, MacroExpander<String, ()>, MockTokenSource, Mock<'a>, Mock<'a>>;
+        CodebaseAnalyzer<'a, MacroExpander<String, ()>, MockTokenSource, Mock<'a>>;
     type TestSession<'a> = Components<
         TestCodebaseAnalyzer<'a>,
         Mock<'a>,
