@@ -22,6 +22,13 @@ pub trait Source {
     fn span(&self) -> Self::Span;
 }
 
+pub trait Merge
+where
+    Self: HasSpan,
+{
+    fn merge(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span;
+}
+
 pub trait MacroContextFactory
 where
     Self: HasSpan,
@@ -47,6 +54,7 @@ where
 
 pub trait ContextFactory
 where
+    Self: Merge,
     Self: MacroContextFactory,
 {
     type BufContext: BufContext<Span = Self::Span>;
@@ -160,6 +168,12 @@ where
                 .collect(),
             def: Rc::clone(def),
         })
+    }
+}
+
+impl Merge for RcContextFactory<BufId, BufRange> {
+    fn merge(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
+        left.extend(right)
     }
 }
 

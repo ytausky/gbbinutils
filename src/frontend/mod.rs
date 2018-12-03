@@ -9,7 +9,7 @@ use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diagnostics::*;
 use crate::frontend::session::*;
 use crate::frontend::syntax::*;
-use crate::span::BufContext;
+use crate::span::{BufContext, HasSpan};
 use std::fmt::Debug;
 use std::rc::Rc;
 
@@ -25,6 +25,7 @@ where
     C: Codebase,
     B: Backend<D::Span>,
     D: Diagnostics,
+    D::Output: HasSpan<Span = D::Span>,
 {
     let file_parser = CodebaseAnalyzer::new(MacroExpander::new(), codebase, SemanticAnalysis {});
     let mut session: Components<_, _, D, _, _, _> =
@@ -147,6 +148,7 @@ where
     ) where
         I: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
         F: Diagnostics<MacroDefId = M::MacroDefId>,
+        F::Output: HasSpan<Span = F::Span>,
         T: Tokenize<F::BufContext>,
         M::Entry: Expand<T::Ident, F>,
         for<'b> &'b T::Tokenized: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
@@ -179,6 +181,7 @@ where
     ) -> Result<(), CodebaseError>
     where
         B: Backend<D::Span>,
+        D::Output: HasSpan<Span = D::Span>,
     {
         let tokenized_src = {
             self.codebase.tokenize_file(path.as_ref(), |buf_id| {
@@ -196,12 +199,14 @@ where
         mut downstream: Downstream<B, D>,
     ) where
         B: Backend<D::Span>,
+        D::Output: HasSpan<Span = D::Span>,
     {
         let expansion = match self.macro_table.get(&name) {
             Some(entry) => Some(entry.expand(span, args, downstream.diagnostics)),
             None => {
                 downstream
                     .diagnostics
+                    .diagnostics()
                     .emit_diagnostic(InternalDiagnostic::new(
                         Message::UndefinedMacro { name: name.into() },
                         span,
@@ -564,7 +569,9 @@ mod tests {
         }
     }
 
-    impl<'a> DownstreamDiagnostics for Mock<'a> {}
+    impl<'a> Merge for Mock<'a> {
+        fn merge(&mut self, _: &(), _: &()) {}
+    }
 
     impl<'a> Diagnostics for Mock<'a> {}
 

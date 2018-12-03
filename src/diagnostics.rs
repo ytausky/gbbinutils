@@ -3,7 +3,7 @@ use crate::codebase::{BufId, CodebaseError, LineNumber, TextBuf, TextCache, Text
 use crate::instruction::IncDec;
 #[cfg(test)]
 use crate::span::Span;
-use crate::span::{ContextFactory, HasSpan, MacroContextFactory, SpanData};
+use crate::span::{ContextFactory, HasSpan, MacroContextFactory, Merge, SpanData};
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::fmt;
@@ -13,14 +13,27 @@ use std::marker::PhantomData;
 pub trait Diagnostics
 where
     Self: DownstreamDiagnostics,
+    <Self as DownstreamDiagnostics>::Output: HasSpan<Span = <Self as HasSpan>::Span>,
     Self: ContextFactory,
 {
 }
 
 pub trait DownstreamDiagnostics
 where
-    Self: DiagnosticsListener,
+    Self: HasSpan,
 {
+    type Output: HasSpan<Span = Self::Span> + DiagnosticsListener + Merge;
+    fn diagnostics(&mut self) -> &mut Self::Output;
+}
+
+impl<T> DownstreamDiagnostics for T
+where
+    T: DiagnosticsListener + Merge,
+{
+    type Output = Self;
+    fn diagnostics(&mut self) -> &mut Self {
+        self
+    }
 }
 
 pub struct DiagnosticsSystem<C, O> {
@@ -36,6 +49,16 @@ where
     type Span = C::Span;
 }
 
+impl<C, O> Merge for DiagnosticsSystem<C, O>
+where
+    C: ContextFactory,
+    O: DiagnosticsListener<Span = C::Span>,
+{
+    fn merge(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
+        self.context.merge(left, right)
+    }
+}
+
 impl<C, O> DiagnosticsListener for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
@@ -45,12 +68,6 @@ where
         self.output.emit_diagnostic(diagnostic)
     }
 }
-
-impl<C, O> DownstreamDiagnostics for DiagnosticsSystem<C, O>
-where
-    C: ContextFactory,
-    O: DiagnosticsListener<Span = C::Span>,
-{}
 
 impl<C, O> MacroContextFactory for DiagnosticsSystem<C, O>
 where

@@ -1,6 +1,6 @@
 use super::*;
-use crate::diagnostics::{InternalDiagnostic, Message};
-use crate::span::Span;
+use crate::diagnostics::{DiagnosticsListener, InternalDiagnostic, Message};
+use crate::span::Merge;
 
 type TokenKind = Token<(), (), (), ()>;
 
@@ -121,12 +121,14 @@ where
             }
             (_, span) => {
                 bump!(self);
-                self.context.emit_diagnostic(InternalDiagnostic::new(
-                    Message::UnexpectedToken {
-                        token: span.clone(),
-                    },
-                    span,
-                ));
+                self.context
+                    .diagnostics()
+                    .emit_diagnostic(InternalDiagnostic::new(
+                        Message::UnexpectedToken {
+                            token: span.clone(),
+                        },
+                        span,
+                    ));
                 self
             }
         }
@@ -155,10 +157,13 @@ where
                         break;
                     }
                     (Token::Eof, _) => {
-                        state.context.emit_diagnostic(InternalDiagnostic::new(
-                            Message::UnexpectedEof,
-                            state.token.1.clone(),
-                        ));
+                        state
+                            .context
+                            .diagnostics()
+                            .emit_diagnostic(InternalDiagnostic::new(
+                                Message::UnexpectedEof,
+                                state.token.1.clone(),
+                            ));
                         break;
                     }
                     other => {
@@ -170,10 +175,13 @@ where
             state
         } else {
             assert_eq!(state.token.0.kind(), Token::Eof);
-            state.context.emit_diagnostic(InternalDiagnostic::new(
-                Message::UnexpectedEof,
-                state.token.1.clone(),
-            ));
+            state
+                .context
+                .diagnostics()
+                .emit_diagnostic(InternalDiagnostic::new(
+                    Message::UnexpectedEof,
+                    state.token.1.clone(),
+                ));
             state.change_context(|c| c.exit())
         }.change_context(|c| c.exit())
     }
@@ -226,7 +234,7 @@ where
                     ),
                     ExprParsingError::Other(diagnostic) => diagnostic,
                 };
-                parser.context.emit_diagnostic(diagnostic);
+                parser.context.diagnostics().emit_diagnostic(diagnostic);
                 while !parser.token_is_in(LINE_FOLLOW_SET) {
                     bump!(parser);
                 }
@@ -266,8 +274,9 @@ where
         match self.token {
             (Token::ClosingParenthesis, right) => {
                 bump!(self);
+                let span = self.context.diagnostics().merge(&left, &right);
                 self.context
-                    .apply_operator((ExprOperator::Parentheses, left.extend(&right)));
+                    .apply_operator((ExprOperator::Parentheses, span));
                 Ok(self)
             }
             _ => Err((
@@ -330,12 +339,15 @@ where
     fn parse_macro_param(mut self) -> Self {
         match self.token.0 {
             Token::Ident(ident) => self.context.add_parameter((ident, self.token.1)),
-            _ => self.context.emit_diagnostic(InternalDiagnostic::new(
-                Message::UnexpectedToken {
-                    token: self.token.1.clone(),
-                },
-                self.token.1.clone(),
-            )),
+            _ => self
+                .context
+                .diagnostics()
+                .emit_diagnostic(InternalDiagnostic::new(
+                    Message::UnexpectedToken {
+                        token: self.token.1.clone(),
+                    },
+                    self.token.1.clone(),
+                )),
         };
         bump!(self);
         self
@@ -367,7 +379,7 @@ where
 impl<'a, Id, C, L, I, Ctx> Parser<'a, (Token<Id, C, L>, Ctx::Span), I, Ctx>
 where
     I: Iterator<Item = (Token<Id, C, L>, Ctx::Span)>,
-    Ctx: DiagnosticsListener,
+    Ctx: DownstreamDiagnostics,
 {
     fn parse_terminated_list<P>(
         mut self,
@@ -381,12 +393,14 @@ where
         self = self.parse_list(delimiter, terminators, parser);
         if !self.token_is_in(terminators) {
             let unexpected_span = self.token.1;
-            self.context.emit_diagnostic(InternalDiagnostic::new(
-                Message::UnexpectedToken {
-                    token: unexpected_span.clone(),
-                },
-                unexpected_span,
-            ));
+            self.context
+                .diagnostics()
+                .emit_diagnostic(InternalDiagnostic::new(
+                    Message::UnexpectedToken {
+                        token: unexpected_span.clone(),
+                    },
+                    unexpected_span,
+                ));
             bump!(self);
             while !self.token_is_in(terminators) {
                 bump!(self);
@@ -426,7 +440,7 @@ mod tests {
     use super::*;
     use crate::diagnostics::{DiagnosticsListener, InternalDiagnostic, Message};
     use crate::frontend::syntax::{ExprAtom, ExprOperator};
-    use crate::span::HasSpan;
+    use crate::span::{HasSpan, Merge, Span};
     use std::borrow::Borrow;
     use std::collections::HashMap;
 
@@ -449,6 +463,12 @@ mod tests {
 
     impl HasSpan for FileActionCollector {
         type Span = SymSpan;
+    }
+
+    impl Merge for FileActionCollector {
+        fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
+            left.extend(right)
+        }
     }
 
     impl DiagnosticsListener for FileActionCollector {
@@ -477,6 +497,12 @@ mod tests {
 
     impl HasSpan for StmtActionCollector {
         type Span = SymSpan;
+    }
+
+    impl Merge for StmtActionCollector {
+        fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
+            left.extend(right)
+        }
     }
 
     impl DiagnosticsListener for StmtActionCollector {
@@ -537,6 +563,12 @@ mod tests {
         type Span = SymSpan;
     }
 
+    impl Merge for CommandActionCollector {
+        fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
+            left.extend(right)
+        }
+    }
+
     impl DiagnosticsListener for CommandActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymSpan>) {
             self.actions.push(CommandAction::EmitDiagnostic(diagnostic))
@@ -573,6 +605,12 @@ mod tests {
 
     impl HasSpan for ArgActionCollector {
         type Span = SymSpan;
+    }
+
+    impl Merge for ArgActionCollector {
+        fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
+            left.extend(right)
+        }
     }
 
     impl DiagnosticsListener for ArgActionCollector {
@@ -618,6 +656,12 @@ mod tests {
         type Span = SymSpan;
     }
 
+    impl Merge for ExprActionCollector {
+        fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
+            left.extend(right)
+        }
+    }
+
     impl DiagnosticsListener for ExprActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymSpan>) {
             self.actions.push(ExprAction::EmitDiagnostic(diagnostic))
@@ -650,6 +694,12 @@ mod tests {
 
     impl HasSpan for MacroParamsActionCollector {
         type Span = SymSpan;
+    }
+
+    impl Merge for MacroParamsActionCollector {
+        fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
+            left.extend(right)
+        }
     }
 
     impl DiagnosticsListener for MacroParamsActionCollector {
@@ -687,6 +737,12 @@ mod tests {
         type Span = SymSpan;
     }
 
+    impl Merge for MacroBodyActionCollector {
+        fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
+            left.extend(right)
+        }
+    }
+
     impl DiagnosticsListener for MacroBodyActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymSpan>) {
             self.actions
@@ -720,6 +776,12 @@ mod tests {
 
     impl HasSpan for MacroInvocationActionCollector {
         type Span = SymSpan;
+    }
+
+    impl Merge for MacroInvocationActionCollector {
+        fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
+            left.extend(right)
+        }
     }
 
     impl DiagnosticsListener for MacroInvocationActionCollector {
@@ -757,6 +819,12 @@ mod tests {
 
     impl HasSpan for MacroArgActionCollector {
         type Span = SymSpan;
+    }
+
+    impl Merge for MacroArgActionCollector {
+        fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
+            left.extend(right)
+        }
     }
 
     impl DiagnosticsListener for MacroArgActionCollector {

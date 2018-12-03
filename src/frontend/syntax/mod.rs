@@ -1,4 +1,4 @@
-use crate::diagnostics::DiagnosticsListener;
+use crate::diagnostics::DownstreamDiagnostics;
 
 #[cfg(test)]
 #[macro_use]
@@ -47,7 +47,7 @@ pub enum Literal<S> {
 
 pub trait FileContext<I, C, L>
 where
-    Self: DiagnosticsListener + Sized,
+    Self: DownstreamDiagnostics + Sized,
 {
     type StmtContext: StmtContext<I, C, L, Span = Self::Span, Parent = Self>;
     fn enter_stmt(self, label: Option<(I, Self::Span)>) -> Self::StmtContext;
@@ -55,7 +55,7 @@ where
 
 pub trait StmtContext<I, C, L>
 where
-    Self: DiagnosticsListener + Sized,
+    Self: DownstreamDiagnostics + Sized,
 {
     type CommandContext: CommandContext<
         Ident = I,
@@ -85,7 +85,7 @@ where
 
 pub trait CommandContext
 where
-    Self: DiagnosticsListener + Sized,
+    Self: DownstreamDiagnostics + Sized,
 {
     type Ident;
     type Command;
@@ -103,7 +103,7 @@ where
 
 pub trait ExprContext
 where
-    Self: DiagnosticsListener,
+    Self: DownstreamDiagnostics,
 {
     type Ident;
     type Literal;
@@ -127,7 +127,7 @@ pub enum ExprOperator {
 
 pub trait MacroParamsContext
 where
-    Self: DiagnosticsListener,
+    Self: DownstreamDiagnostics,
 {
     type Ident;
     type Command;
@@ -144,7 +144,7 @@ where
 
 pub trait MacroInvocationContext
 where
-    Self: DiagnosticsListener + Sized,
+    Self: DownstreamDiagnostics + Sized,
 {
     type Token;
     type Parent;
@@ -155,7 +155,7 @@ where
 
 pub trait TokenSeqContext
 where
-    Self: DiagnosticsListener,
+    Self: DownstreamDiagnostics,
 {
     type Token;
     type Parent;

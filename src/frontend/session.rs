@@ -1,24 +1,26 @@
 use crate::backend;
 use crate::codebase::CodebaseError;
 use crate::diagnostics;
-use crate::diagnostics::InternalDiagnostic;
+use crate::diagnostics::{DiagnosticsListener, InternalDiagnostic};
 use crate::frontend;
 use crate::frontend::{Downstream, Token};
-use crate::span;
+use crate::span::{HasSpan, Merge};
 use std::borrow::BorrowMut;
 use std::fmt::Debug;
 use std::marker;
 
-pub trait Session {
+pub trait Session
+where
+    Self: Merge,
+    Self: DiagnosticsListener,
+{
     type Ident: Into<String> + Debug + PartialEq;
-    type Span: span::Span;
     fn analyze_file(&mut self, path: Self::Ident) -> Result<(), CodebaseError>;
     fn invoke_macro(
         &mut self,
         name: (Self::Ident, Self::Span),
         args: MacroArgs<Self::Ident, Self::Span>,
     );
-    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<Self::Span>);
     fn emit_item(&mut self, item: backend::Item<Self::Span>);
     fn define_label(&mut self, label: (String, Self::Span));
     fn define_macro(
@@ -79,17 +81,66 @@ where
     }
 }
 
+impl<F, B, D, BMF, BMB, BMD> HasSpan for Components<F, B, D, BMF, BMB, BMD>
+where
+    F: frontend::Frontend<D>,
+    B: backend::Backend<D::Span>,
+    D: diagnostics::Diagnostics,
+    D::Output: HasSpan<Span = D::Span>,
+    BMF: BorrowMut<F>,
+    BMB: BorrowMut<B>,
+    BMD: BorrowMut<D>,
+{
+    type Span = D::Span;
+}
+
+impl<F, B, D, BMF, BMB, BMD> Merge for Components<F, B, D, BMF, BMB, BMD>
+where
+    F: frontend::Frontend<D>,
+    B: backend::Backend<D::Span>,
+    D: diagnostics::Diagnostics,
+    D::Output: HasSpan<Span = D::Span>,
+    BMF: BorrowMut<F>,
+    BMB: BorrowMut<B>,
+    BMD: BorrowMut<D>,
+{
+    fn merge(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
+        self.diagnostics
+            .borrow_mut()
+            .diagnostics()
+            .merge(left, right)
+    }
+}
+
+impl<F, B, D, BMF, BMB, BMD> DiagnosticsListener for Components<F, B, D, BMF, BMB, BMD>
+where
+    F: frontend::Frontend<D>,
+    B: backend::Backend<D::Span>,
+    D: diagnostics::Diagnostics,
+    D::Output: HasSpan<Span = D::Span>,
+    BMF: BorrowMut<F>,
+    BMB: BorrowMut<B>,
+    BMD: BorrowMut<D>,
+{
+    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<Self::Span>) {
+        self.diagnostics
+            .borrow_mut()
+            .diagnostics()
+            .emit_diagnostic(diagnostic)
+    }
+}
+
 impl<F, B, D, BMF, BMB, BMD> Session for Components<F, B, D, BMF, BMB, BMD>
 where
     F: frontend::Frontend<D>,
     B: backend::Backend<D::Span>,
     D: diagnostics::Diagnostics,
+    D::Output: HasSpan<Span = D::Span>,
     BMF: BorrowMut<F>,
     BMB: BorrowMut<B>,
     BMD: BorrowMut<D>,
 {
     type Ident = F::Ident;
-    type Span = D::Span;
 
     fn analyze_file(&mut self, path: Self::Ident) -> Result<(), CodebaseError> {
         self.frontend.borrow_mut().analyze_file(
@@ -114,10 +165,6 @@ where
                 diagnostics: self.diagnostics.borrow_mut(),
             },
         )
-    }
-
-    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<Self::Span>) {
-        self.diagnostics.borrow_mut().emit_diagnostic(diagnostic)
     }
 
     fn emit_item(&mut self, item: backend::Item<Self::Span>) {

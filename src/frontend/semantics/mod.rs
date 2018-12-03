@@ -1,10 +1,10 @@
 use crate::backend::{self, BinaryOperator, RelocExpr};
-use crate::diagnostics::{DiagnosticsListener, InternalDiagnostic, Message};
+use crate::diagnostics::{DiagnosticsListener, DownstreamDiagnostics, InternalDiagnostic, Message};
 use crate::expr::ExprVariant;
 use crate::frontend::session::Session;
 use crate::frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token};
 use crate::frontend::{ExprFactory, Literal, StrExprFactory};
-use crate::span::HasSpan;
+use crate::span::{HasSpan, Merge};
 
 mod directive;
 mod instruction;
@@ -73,9 +73,10 @@ impl<'a, F: Session + 'a> HasSpan for SemanticActions<'a, F> {
     type Span = F::Span;
 }
 
-impl<'a, F: Session + 'a> DiagnosticsListener for SemanticActions<'a, F> {
-    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<F::Span>) {
-        self.session.emit_diagnostic(diagnostic)
+impl<'a, F: Session + 'a> DownstreamDiagnostics for SemanticActions<'a, F> {
+    type Output = F;
+    fn diagnostics(&mut self) -> &mut F {
+        self.session
     }
 }
 
@@ -105,7 +106,8 @@ impl<'a, F: Session + 'a> syntax::StmtContext<F::Ident, Command, Literal<F::Iden
 
     fn enter_macro_def(mut self, keyword: F::Span) -> Self::MacroParamsContext {
         if self.label.is_none() {
-            self.emit_diagnostic(InternalDiagnostic::new(Message::MacroRequiresName, keyword))
+            self.diagnostics()
+                .emit_diagnostic(InternalDiagnostic::new(Message::MacroRequiresName, keyword))
         }
         MacroDefActions::new(self.label.take(), self)
     }
@@ -128,7 +130,7 @@ pub struct CommandActions<'a, F: Session + 'a> {
     has_errors: bool,
 }
 
-type CommandArgs<F> = Vec<SemanticExpr<<F as Session>::Ident, <F as Session>::Span>>;
+type CommandArgs<F> = Vec<SemanticExpr<<F as Session>::Ident, <F as HasSpan>::Span>>;
 
 impl<'a, F: Session + 'a> CommandActions<'a, F> {
     fn new(name: (Command, F::Span), parent: SemanticActions<'a, F>) -> CommandActions<'a, F> {
@@ -145,10 +147,16 @@ impl<'a, F: Session + 'a> HasSpan for CommandActions<'a, F> {
     type Span = F::Span;
 }
 
+impl<'a, F: Session + 'a> Merge for CommandActions<'a, F> {
+    fn merge(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
+        self.parent.diagnostics().merge(left, right)
+    }
+}
+
 impl<'a, F: Session + 'a> DiagnosticsListener for CommandActions<'a, F> {
     fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<F::Span>) {
         self.has_errors = true;
-        self.parent.emit_diagnostic(diagnostic)
+        self.parent.diagnostics().emit_diagnostic(diagnostic)
     }
 }
 
@@ -177,7 +185,7 @@ impl<'a, F: Session + 'a> syntax::CommandContext for CommandActions<'a, F> {
                 }
             };
             if let Err(diagnostic) = result {
-                self.parent.emit_diagnostic(diagnostic);
+                self.parent.diagnostics().emit_diagnostic(diagnostic);
             }
         }
         self.parent
@@ -193,9 +201,10 @@ impl<'a, F: Session + 'a> HasSpan for ExprContext<'a, F> {
     type Span = F::Span;
 }
 
-impl<'a, F: Session + 'a> DiagnosticsListener for ExprContext<'a, F> {
-    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<F::Span>) {
-        self.parent.emit_diagnostic(diagnostic)
+impl<'a, F: Session + 'a> DownstreamDiagnostics for ExprContext<'a, F> {
+    type Output = CommandActions<'a, F>;
+    fn diagnostics(&mut self) -> &mut Self::Output {
+        &mut self.parent
     }
 }
 
@@ -285,9 +294,10 @@ impl<'a, F: Session + 'a> HasSpan for MacroDefActions<'a, F> {
     type Span = F::Span;
 }
 
-impl<'a, F: Session + 'a> DiagnosticsListener for MacroDefActions<'a, F> {
-    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<F::Span>) {
-        self.parent.emit_diagnostic(diagnostic)
+impl<'a, F: Session + 'a> DownstreamDiagnostics for MacroDefActions<'a, F> {
+    type Output = F;
+    fn diagnostics(&mut self) -> &mut Self::Output {
+        self.parent.diagnostics()
     }
 }
 
@@ -352,9 +362,10 @@ impl<'a, F: Session + 'a> HasSpan for MacroInvocationActions<'a, F> {
     type Span = F::Span;
 }
 
-impl<'a, F: Session + 'a> DiagnosticsListener for MacroInvocationActions<'a, F> {
-    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<F::Span>) {
-        self.parent.emit_diagnostic(diagnostic)
+impl<'a, F: Session + 'a> DownstreamDiagnostics for MacroInvocationActions<'a, F> {
+    type Output = F;
+    fn diagnostics(&mut self) -> &mut Self::Output {
+        self.parent.diagnostics()
     }
 }
 
@@ -391,9 +402,10 @@ impl<'a, F: Session + 'a> HasSpan for MacroArgContext<'a, F> {
     type Span = F::Span;
 }
 
-impl<'a, F: Session + 'a> DiagnosticsListener for MacroArgContext<'a, F> {
-    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<F::Span>) {
-        self.parent.parent.session.emit_diagnostic(diagnostic)
+impl<'a, F: Session + 'a> DownstreamDiagnostics for MacroArgContext<'a, F> {
+    type Output = F;
+    fn diagnostics(&mut self) -> &mut Self::Output {
+        self.parent.parent.diagnostics()
     }
 }
 
@@ -491,9 +503,24 @@ mod tests {
         SetOrigin(RelocExpr<()>),
     }
 
+    impl HasSpan for TestFrontend {
+        type Span = ();
+    }
+
+    impl Merge for TestFrontend {
+        fn merge(&mut self, _: &(), _: &()) {}
+    }
+
+    impl DiagnosticsListener for TestFrontend {
+        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<Self::Span>) {
+            self.operations
+                .borrow_mut()
+                .push(TestOperation::EmitDiagnostic(diagnostic))
+        }
+    }
+
     impl Session for TestFrontend {
         type Ident = String;
-        type Span = ();
 
         fn analyze_file(&mut self, path: Self::Ident) -> Result<(), CodebaseError> {
             self.operations
@@ -518,12 +545,6 @@ mod tests {
                         .map(|arg| arg.into_iter().map(|(token, _)| token).collect())
                         .collect(),
                 ))
-        }
-
-        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<Self::Span>) {
-            self.operations
-                .borrow_mut()
-                .push(TestOperation::EmitDiagnostic(diagnostic))
         }
 
         fn emit_item(&mut self, item: backend::Item<()>) {
@@ -774,7 +795,7 @@ mod tests {
         let diagnostic = InternalDiagnostic::new(Message::UnexpectedToken { token: () }, ());
         let actions = collect_semantic_actions(|actions| {
             let mut stmt = actions.enter_stmt(None);
-            stmt.emit_diagnostic(diagnostic.clone());
+            stmt.diagnostics().emit_diagnostic(diagnostic.clone());
             stmt.exit()
         });
         assert_eq!(actions, [TestOperation::EmitDiagnostic(diagnostic)])
@@ -788,7 +809,7 @@ mod tests {
                 .enter_stmt(None)
                 .enter_command((Command::Mnemonic(Mnemonic::Add), ()))
                 .add_argument();
-            expr.emit_diagnostic(diagnostic.clone());
+            expr.diagnostics().emit_diagnostic(diagnostic.clone());
             expr.exit().exit().exit()
         });
         assert_eq!(actions, [TestOperation::EmitDiagnostic(diagnostic)])
