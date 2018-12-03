@@ -129,7 +129,7 @@ struct CodebaseAnalyzer<'a, M, T: 'a, A> {
 impl<'a, M, T: 'a, A> CodebaseAnalyzer<'a, M, T, A>
 where
     M: MacroTable<T::Ident>,
-    T: HasIdent,
+    T: Ident,
     A: Analysis<T::Ident>,
 {
     fn new(macro_table: M, codebase: &T, analysis: A) -> CodebaseAnalyzer<M, T, A> {
@@ -228,13 +228,13 @@ where
     }
 }
 
-trait HasIdent {
+trait Ident {
     type Ident: AsRef<str> + Clone + Into<String> + Debug + PartialEq;
 }
 
 trait Tokenize<C: BufContext>
 where
-    Self: HasIdent,
+    Self: Ident,
     for<'c> &'c Self::Tokenized: IntoIterator<Item = (Token<Self::Ident>, C::Span)>,
 {
     type Tokenized;
@@ -245,7 +245,7 @@ where
     ) -> Result<Self::Tokenized, CodebaseError>;
 }
 
-impl<C: Codebase> HasIdent for C {
+impl<C: Codebase> Ident for C {
     type Ident = String;
 }
 
@@ -443,7 +443,7 @@ mod tests {
         }
     }
 
-    impl<'a> HasIdent for MockTokenSource {
+    impl<'a> Ident for MockTokenSource {
         type Ident = String;
     }
 
