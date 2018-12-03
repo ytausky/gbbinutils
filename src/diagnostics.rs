@@ -13,7 +13,6 @@ use std::marker::PhantomData;
 pub trait Diagnostics
 where
     Self: DownstreamDiagnostics,
-    <Self as DownstreamDiagnostics>::Output: HasSpan<Span = <Self as HasSpan>::Span>,
     Self: ContextFactory,
 {
 }

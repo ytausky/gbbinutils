@@ -25,7 +25,6 @@ where
     C: Codebase,
     B: Backend<D::Span>,
     D: Diagnostics,
-    D::Output: HasSpan<Span = D::Span>,
 {
     let file_parser = CodebaseAnalyzer::new(MacroExpander::new(), codebase, SemanticAnalysis {});
     let mut session: Components<_, _, D, _, _, _> =
@@ -166,7 +165,6 @@ where
     M: MacroTable<T::Ident, MacroDefId = D::MacroDefId>,
     M::Entry: Expand<T::Ident, D>,
     T: Tokenize<D::BufContext> + 'a,
-    D::BufContext: BufContext,
     A: Analysis<T::Ident>,
     D: Diagnostics,
     for<'b> &'b T::Tokenized: IntoIterator<Item = (Token<T::Ident>, D::Span)>,
