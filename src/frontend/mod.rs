@@ -9,7 +9,7 @@ use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diagnostics::*;
 use crate::frontend::session::*;
 use crate::frontend::syntax::*;
-use crate::span::{BufContext, Span};
+use crate::span::BufContext;
 use std::fmt::Debug;
 use std::rc::Rc;
 
@@ -82,7 +82,6 @@ impl ExprFactory for StrExprFactory {
 
 pub trait Frontend<D: Diagnostics> {
     type Ident: AsRef<str> + Clone + Into<String> + Debug + PartialEq;
-    type Span: Span;
     type MacroDefId: Clone;
 
     fn analyze_file<B>(
@@ -171,7 +170,6 @@ where
     for<'b> &'b T::Tokenized: IntoIterator<Item = (Token<T::Ident>, D::Span)>,
 {
     type Ident = T::Ident;
-    type Span = D::Span;
     type MacroDefId = D::MacroDefId;
 
     fn analyze_file<B>(
@@ -180,7 +178,7 @@ where
         mut downstream: Downstream<B, D>,
     ) -> Result<(), CodebaseError>
     where
-        B: Backend<Self::Span>,
+        B: Backend<D::Span>,
     {
         let tokenized_src = {
             self.codebase.tokenize_file(path.as_ref(), |buf_id| {
@@ -193,11 +191,11 @@ where
 
     fn invoke_macro<B>(
         &mut self,
-        (name, span): (Self::Ident, Self::Span),
-        args: MacroArgs<Self::Ident, Self::Span>,
+        (name, span): (Self::Ident, D::Span),
+        args: MacroArgs<Self::Ident, D::Span>,
         mut downstream: Downstream<B, D>,
     ) where
-        B: Backend<Self::Span>,
+        B: Backend<D::Span>,
     {
         let expansion = match self.macro_table.get(&name) {
             Some(entry) => Some(entry.expand(span, args, downstream.diagnostics)),
@@ -218,9 +216,9 @@ where
 
     fn define_macro(
         &mut self,
-        name: (impl Into<Self::Ident>, Self::Span),
-        params: Vec<(Self::Ident, Self::Span)>,
-        body: Vec<(Token<Self::Ident>, Self::Span)>,
+        name: (impl Into<Self::Ident>, D::Span),
+        params: Vec<(Self::Ident, D::Span)>,
+        body: Vec<(Token<Self::Ident>, D::Span)>,
         diagnostics: &mut D,
     ) {
         self.macro_table.define(name, params, body, diagnostics);
