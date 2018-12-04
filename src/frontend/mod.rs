@@ -421,8 +421,6 @@ mod tests {
         );
     }
 
-    impl Span for SpanData<(), i32> {}
-
     struct MockTokenSource {
         files: HashMap<String, Vec<(Token<String>, ())>>,
     }

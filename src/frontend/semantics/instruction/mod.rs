@@ -357,7 +357,7 @@ mod tests {
         SemanticAtom, SemanticExpr, SemanticExprVariant, SemanticUnary,
     };
     use crate::frontend::syntax::Literal;
-    pub use crate::span::{HasSpan, Span};
+    pub use crate::span::HasSpan;
     use std::cmp;
 
     type Input = SemanticExpr<String, ()>;
