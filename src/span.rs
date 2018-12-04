@@ -125,14 +125,14 @@ impl<B, R> RcContextFactory<B, R> {
 
 impl<B, R> HasSpan for RcContextFactory<B, R>
 where
-    SpanData<B, R>: Span,
+    SpanData<B, R>: Clone + Debug + PartialEq,
 {
     type Span = SpanData<B, R>;
 }
 
 impl<B, R> MacroContextFactory for RcContextFactory<B, R>
 where
-    SpanData<B, R>: Span,
+    SpanData<B, R>: Clone + Debug + PartialEq,
 {
     type MacroDefId = Rc<MacroDef<Self::Span>>;
     type MacroExpansionContext = Rc<MacroExpansionData<SpanData<B, R>>>;
@@ -173,7 +173,25 @@ where
 
 impl Merge for RcContextFactory<BufId, BufRange> {
     fn merge(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
-        left.extend(right)
+        use self::SpanData::*;
+        match (left, right) {
+            (
+                Buf { range, context },
+                Buf {
+                    range: other_range,
+                    context: other_context,
+                },
+            )
+                if Rc::ptr_eq(context, other_context) =>
+            {
+                Buf {
+                    range: cmp::min(range.start, other_range.start)
+                        ..cmp::max(range.end, other_range.end),
+                    context: (*context).clone(),
+                }
+            }
+            _ => unreachable!(),
+        }
     }
 }
 
@@ -220,30 +238,6 @@ impl<B, R> MacroExpansionContext for Rc<MacroExpansionData<SpanData<B, R>>> {
     }
 }
 
-impl Span for SpanData<BufId, BufRange> {
-    fn extend(&self, other: &Self) -> Self {
-        use self::SpanData::*;
-        match (self, other) {
-            (
-                Buf { range, context },
-                Buf {
-                    range: other_range,
-                    context: other_context,
-                },
-            )
-                if Rc::ptr_eq(context, other_context) =>
-            {
-                Buf {
-                    range: cmp::min(range.start, other_range.start)
-                        ..cmp::max(range.end, other_range.end),
-                    context: (*context).clone(),
-                }
-            }
-            _ => unreachable!(),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -266,7 +260,7 @@ mod tests {
             range: BufRange::from(5..10),
             context: context.clone(),
         };
-        let combined = left.extend(&right);
+        let combined = RcContextFactory::new().merge(&left, &right);
         assert_eq!(
             combined,
             SpanData::Buf {
