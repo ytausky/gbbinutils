@@ -440,7 +440,7 @@ mod tests {
     use super::*;
     use crate::diagnostics::{DiagnosticsListener, InternalDiagnostic, Message};
     use crate::frontend::syntax::{ExprAtom, ExprOperator};
-    use crate::span::{HasSpan, Merge};
+    use crate::span::{Merge, Span};
     use std::borrow::Borrow;
     use std::collections::HashMap;
 
@@ -461,7 +461,7 @@ mod tests {
         }
     }
 
-    impl HasSpan for FileActionCollector {
+    impl Span for FileActionCollector {
         type Span = SymSpan;
     }
 
@@ -495,7 +495,7 @@ mod tests {
         parent: FileActionCollector,
     }
 
-    impl HasSpan for StmtActionCollector {
+    impl Span for StmtActionCollector {
         type Span = SymSpan;
     }
 
@@ -559,7 +559,7 @@ mod tests {
         parent: StmtActionCollector,
     }
 
-    impl HasSpan for CommandActionCollector {
+    impl Span for CommandActionCollector {
         type Span = SymSpan;
     }
 
@@ -603,7 +603,7 @@ mod tests {
         parent: CommandActionCollector,
     }
 
-    impl HasSpan for ArgActionCollector {
+    impl Span for ArgActionCollector {
         type Span = SymSpan;
     }
 
@@ -652,7 +652,7 @@ mod tests {
         }
     }
 
-    impl HasSpan for ExprActionCollector {
+    impl Span for ExprActionCollector {
         type Span = SymSpan;
     }
 
@@ -692,7 +692,7 @@ mod tests {
         parent: StmtActionCollector,
     }
 
-    impl HasSpan for MacroParamsActionCollector {
+    impl Span for MacroParamsActionCollector {
         type Span = SymSpan;
     }
 
@@ -733,7 +733,7 @@ mod tests {
         parent: MacroParamsActionCollector,
     }
 
-    impl HasSpan for MacroBodyActionCollector {
+    impl Span for MacroBodyActionCollector {
         type Span = SymSpan;
     }
 
@@ -774,7 +774,7 @@ mod tests {
         parent: StmtActionCollector,
     }
 
-    impl HasSpan for MacroInvocationActionCollector {
+    impl Span for MacroInvocationActionCollector {
         type Span = SymSpan;
     }
 
@@ -817,7 +817,7 @@ mod tests {
         parent: MacroInvocationActionCollector,
     }
 
-    impl HasSpan for MacroArgActionCollector {
+    impl Span for MacroArgActionCollector {
         type Span = SymSpan;
     }
 

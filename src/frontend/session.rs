@@ -4,7 +4,7 @@ use crate::diagnostics;
 use crate::diagnostics::{DiagnosticsListener, InternalDiagnostic};
 use crate::frontend;
 use crate::frontend::{Downstream, Token};
-use crate::span::{HasSpan, Merge};
+use crate::span::{Merge, Span};
 use std::borrow::BorrowMut;
 use std::fmt::Debug;
 use std::marker;
@@ -81,7 +81,7 @@ where
     }
 }
 
-impl<F, B, D, BMF, BMB, BMD> HasSpan for Components<F, B, D, BMF, BMB, BMD>
+impl<F, B, D, BMF, BMB, BMD> Span for Components<F, B, D, BMF, BMB, BMD>
 where
     F: frontend::Frontend<D>,
     B: backend::Backend<D::Span>,

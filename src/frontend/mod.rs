@@ -9,7 +9,7 @@ use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diagnostics::*;
 use crate::frontend::session::*;
 use crate::frontend::syntax::*;
-use crate::span::{BufContext, HasSpan};
+use crate::span::{BufContext, Span};
 use std::fmt::Debug;
 use std::rc::Rc;
 
@@ -147,7 +147,7 @@ where
     ) where
         I: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
         F: Diagnostics<MacroDefId = M::MacroDefId>,
-        F::Output: HasSpan<Span = F::Span>,
+        F::Output: Span<Span = F::Span>,
         T: Tokenize<F::BufContext>,
         M::Entry: Expand<T::Ident, F>,
         for<'b> &'b T::Tokenized: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
@@ -179,7 +179,7 @@ where
     ) -> Result<(), CodebaseError>
     where
         B: Backend<D::Span>,
-        D::Output: HasSpan<Span = D::Span>,
+        D::Output: Span<Span = D::Span>,
     {
         let tokenized_src = {
             self.codebase.tokenize_file(path.as_ref(), |buf_id| {
@@ -197,7 +197,7 @@ where
         mut downstream: Downstream<B, D>,
     ) where
         B: Backend<D::Span>,
-        D::Output: HasSpan<Span = D::Span>,
+        D::Output: Span<Span = D::Span>,
     {
         let expansion = match self.macro_table.get(&name) {
             Some(entry) => Some(entry.expand(span, args, downstream.diagnostics)),
@@ -474,7 +474,7 @@ mod tests {
         }
     }
 
-    impl<'a> HasSpan for Mock<'a> {
+    impl<'a> Span for Mock<'a> {
         type Span = ();
     }
 

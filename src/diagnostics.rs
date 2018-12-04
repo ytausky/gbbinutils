@@ -1,7 +1,7 @@
 use crate::backend::Width;
 use crate::codebase::{BufId, CodebaseError, LineNumber, TextBuf, TextCache, TextRange};
 use crate::instruction::IncDec;
-use crate::span::{ContextFactory, HasSpan, MacroContextFactory, Merge, SpanData};
+use crate::span::{ContextFactory, MacroContextFactory, Merge, Span, SpanData};
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::fmt;
@@ -17,9 +17,9 @@ where
 
 pub trait DownstreamDiagnostics
 where
-    Self: HasSpan,
+    Self: Span,
 {
-    type Output: HasSpan<Span = Self::Span> + DiagnosticsListener + Merge;
+    type Output: Span<Span = Self::Span> + DiagnosticsListener + Merge;
     fn diagnostics(&mut self) -> &mut Self::Output;
 }
 
@@ -38,7 +38,7 @@ pub struct DiagnosticsSystem<C, O> {
     pub output: O,
 }
 
-impl<C, O> HasSpan for DiagnosticsSystem<C, O>
+impl<C, O> Span for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
     O: DiagnosticsListener<Span = C::Span>,
@@ -132,7 +132,7 @@ impl DiagnosticsOutput for TerminalOutput {
 
 pub trait DiagnosticsListener
 where
-    Self: HasSpan,
+    Self: Span,
 {
     fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<Self::Span>);
 }
@@ -142,7 +142,7 @@ pub struct OutputForwarder<'a> {
     pub codebase: &'a RefCell<TextCache>,
 }
 
-impl<'a> HasSpan for OutputForwarder<'a> {
+impl<'a> Span for OutputForwarder<'a> {
     type Span = SpanData;
 }
 
@@ -164,7 +164,7 @@ impl<S> IgnoreDiagnostics<S> {
 }
 
 #[cfg(test)]
-impl<S: Clone + fmt::Debug + PartialEq> HasSpan for IgnoreDiagnostics<S> {
+impl<S: Clone + fmt::Debug + PartialEq> Span for IgnoreDiagnostics<S> {
     type Span = S;
 }
 
@@ -188,7 +188,7 @@ impl TestDiagnosticsListener {
 }
 
 #[cfg(test)]
-impl HasSpan for TestDiagnosticsListener {
+impl Span for TestDiagnosticsListener {
     type Span = ();
 }
 

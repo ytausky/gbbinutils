@@ -4,7 +4,7 @@ use crate::expr::ExprVariant;
 use crate::frontend::session::Session;
 use crate::frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token};
 use crate::frontend::{ExprFactory, Literal, StrExprFactory};
-use crate::span::{HasSpan, Merge};
+use crate::span::{Merge, Span};
 
 mod directive;
 mod instruction;
@@ -69,7 +69,7 @@ impl<'a, F: Session + 'a> SemanticActions<'a, F> {
     }
 }
 
-impl<'a, F: Session + 'a> HasSpan for SemanticActions<'a, F> {
+impl<'a, F: Session + 'a> Span for SemanticActions<'a, F> {
     type Span = F::Span;
 }
 
@@ -130,7 +130,7 @@ pub struct CommandActions<'a, F: Session + 'a> {
     has_errors: bool,
 }
 
-type CommandArgs<F> = Vec<SemanticExpr<<F as Session>::Ident, <F as HasSpan>::Span>>;
+type CommandArgs<F> = Vec<SemanticExpr<<F as Session>::Ident, <F as Span>::Span>>;
 
 impl<'a, F: Session + 'a> CommandActions<'a, F> {
     fn new(name: (Command, F::Span), parent: SemanticActions<'a, F>) -> CommandActions<'a, F> {
@@ -143,7 +143,7 @@ impl<'a, F: Session + 'a> CommandActions<'a, F> {
     }
 }
 
-impl<'a, F: Session + 'a> HasSpan for CommandActions<'a, F> {
+impl<'a, F: Session + 'a> Span for CommandActions<'a, F> {
     type Span = F::Span;
 }
 
@@ -197,7 +197,7 @@ pub struct ExprContext<'a, F: Session + 'a> {
     parent: CommandActions<'a, F>,
 }
 
-impl<'a, F: Session + 'a> HasSpan for ExprContext<'a, F> {
+impl<'a, F: Session + 'a> Span for ExprContext<'a, F> {
     type Span = F::Span;
 }
 
@@ -294,7 +294,7 @@ impl<'a, F: Session + 'a> MacroDefActions<'a, F> {
     }
 }
 
-impl<'a, F: Session + 'a> HasSpan for MacroDefActions<'a, F> {
+impl<'a, F: Session + 'a> Span for MacroDefActions<'a, F> {
     type Span = F::Span;
 }
 
@@ -362,7 +362,7 @@ impl<'a, F: Session + 'a> MacroInvocationActions<'a, F> {
     }
 }
 
-impl<'a, F: Session + 'a> HasSpan for MacroInvocationActions<'a, F> {
+impl<'a, F: Session + 'a> Span for MacroInvocationActions<'a, F> {
     type Span = F::Span;
 }
 
@@ -402,7 +402,7 @@ impl<'a, F: Session + 'a> MacroArgContext<'a, F> {
     }
 }
 
-impl<'a, F: Session + 'a> HasSpan for MacroArgContext<'a, F> {
+impl<'a, F: Session + 'a> Span for MacroArgContext<'a, F> {
     type Span = F::Span;
 }
 
@@ -507,7 +507,7 @@ mod tests {
         SetOrigin(RelocExpr<()>),
     }
 
-    impl HasSpan for TestFrontend {
+    impl Span for TestFrontend {
         type Span = ();
     }
 

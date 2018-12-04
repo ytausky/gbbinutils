@@ -357,7 +357,7 @@ mod tests {
         SemanticAtom, SemanticExpr, SemanticExprVariant, SemanticUnary,
     };
     use crate::frontend::syntax::Literal;
-    pub use crate::span::HasSpan;
+    pub use crate::span::Span;
     use std::cmp;
 
     type Input = SemanticExpr<String, ()>;
@@ -790,7 +790,7 @@ mod tests {
 
     struct Testing;
 
-    impl HasSpan for Testing {
+    impl Span for Testing {
         type Span = TokenSpan;
     }
 

@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
-pub trait HasSpan {
+pub trait Span {
     type Span: Clone + Debug + PartialEq;
 }
 
@@ -15,14 +15,14 @@ pub trait Source {
 
 pub trait Merge
 where
-    Self: HasSpan,
+    Self: Span,
 {
     fn merge(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span;
 }
 
 pub trait MacroContextFactory
 where
-    Self: HasSpan,
+    Self: Span,
 {
     type MacroDefId: Clone;
     type MacroExpansionContext: MacroExpansionContext<Span = Self::Span>;
@@ -114,7 +114,7 @@ impl<B, R> RcContextFactory<B, R> {
     }
 }
 
-impl<B, R> HasSpan for RcContextFactory<B, R>
+impl<B, R> Span for RcContextFactory<B, R>
 where
     SpanData<B, R>: Clone + Debug + PartialEq,
 {
