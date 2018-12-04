@@ -1,8 +1,6 @@
 use crate::backend::Width;
 use crate::codebase::{BufId, CodebaseError, LineNumber, TextBuf, TextCache, TextRange};
 use crate::instruction::IncDec;
-#[cfg(test)]
-use crate::span::Span;
 use crate::span::{ContextFactory, HasSpan, MacroContextFactory, Merge, SpanData};
 use std::borrow::Borrow;
 use std::cell::RefCell;
@@ -166,12 +164,12 @@ impl<S> IgnoreDiagnostics<S> {
 }
 
 #[cfg(test)]
-impl<S: Span> HasSpan for IgnoreDiagnostics<S> {
+impl<S: Clone + fmt::Debug + PartialEq> HasSpan for IgnoreDiagnostics<S> {
     type Span = S;
 }
 
 #[cfg(test)]
-impl<S: Span> DiagnosticsListener for IgnoreDiagnostics<S> {
+impl<S: Clone + fmt::Debug + PartialEq> DiagnosticsListener for IgnoreDiagnostics<S> {
     fn emit_diagnostic(&mut self, _: InternalDiagnostic<S>) {}
 }
 

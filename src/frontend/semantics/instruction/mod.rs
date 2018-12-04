@@ -5,7 +5,7 @@ use crate::frontend::semantics::operand::{self, AtomKind, Context, Operand, Oper
 use crate::frontend::syntax::keyword as kw;
 use crate::frontend::ExprFactory;
 use crate::instruction::*;
-use crate::span::{Merge, Source, Span};
+use crate::span::{Merge, Source};
 
 mod branch;
 mod ld;
@@ -202,7 +202,7 @@ where
     }
 }
 
-impl<S: Span> Operand<S> {
+impl<S: Clone> Operand<S> {
     fn expect_specific_atom(
         self,
         expected: AtomKind,

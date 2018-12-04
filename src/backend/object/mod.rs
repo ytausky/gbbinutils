@@ -2,7 +2,6 @@ use self::context::{EvalContext, SymbolTable};
 use self::resolve::Value;
 use crate::backend::{BinaryObject, RelocExpr, Width};
 use crate::diagnostics::DiagnosticsListener;
-use crate::span::Span;
 use std::borrow::Borrow;
 
 mod context;
@@ -37,10 +36,9 @@ impl<SR> Object<SR> {
     }
 }
 
-pub fn link<'a, S, D>(object: Object<S>, diagnostics: &mut D) -> BinaryObject
+pub fn link<'a, D>(object: Object<D::Span>, diagnostics: &mut D) -> BinaryObject
 where
-    S: Span,
-    D: DiagnosticsListener<Span = S> + 'a,
+    D: DiagnosticsListener + 'a,
 {
     let symbols = resolve::resolve_symbols(&object);
     let mut context = EvalContext {
@@ -115,7 +113,7 @@ impl<SR> ObjectBuilder<SR> {
     }
 }
 
-impl<S: Span> Chunk<S> {
+impl<S: Clone> Chunk<S> {
     fn traverse<ST, F>(&self, context: &mut EvalContext<ST>, f: F) -> Value
     where
         ST: Borrow<SymbolTable>,
@@ -139,7 +137,7 @@ fn traverse_chunk_items<S, ST, F>(
     mut f: F,
 ) -> Value
 where
-    S: Span,
+    S: Clone,
     ST: Borrow<SymbolTable>,
     F: FnMut(&Node<S>, &mut EvalContext<ST>),
 {

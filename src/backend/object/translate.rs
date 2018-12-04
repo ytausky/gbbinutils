@@ -2,10 +2,11 @@ use super::context::{EvalContext, SymbolTable};
 use super::{traverse_chunk_items, Chunk, Node};
 use crate::backend::{BinarySection, RelocExpr, Width};
 use crate::diagnostics::{DiagnosticsListener, InternalDiagnostic, Message};
-use crate::span::{Source, Span};
+use crate::span::Source;
+use std::fmt::Debug;
 use std::vec::IntoIter;
 
-impl<S: Span> Chunk<S> {
+impl<S: Clone + Debug + PartialEq> Chunk<S> {
     pub fn translate(
         &self,
         context: &mut EvalContext<&SymbolTable>,
@@ -24,7 +25,7 @@ impl<S: Span> Chunk<S> {
     }
 }
 
-impl<S: Span> Node<S> {
+impl<S: Clone + Debug + PartialEq> Node<S> {
     fn translate(
         &self,
         context: &EvalContext<&SymbolTable>,
@@ -88,7 +89,7 @@ impl Data {
     }
 }
 
-fn resolve_expr_item<S: Span>(
+fn resolve_expr_item<S: Clone + Debug + PartialEq>(
     expr: &RelocExpr<S>,
     width: Width,
     context: &EvalContext<&SymbolTable>,
@@ -108,7 +109,7 @@ fn resolve_expr_item<S: Span>(
     fit_to_width((value, span), width, diagnostics)
 }
 
-fn fit_to_width<S: Span>(
+fn fit_to_width<S: Clone + Debug + PartialEq>(
     (value, value_ref): (i32, S),
     width: Width,
     diagnostics: &mut impl DiagnosticsListener<Span = S>,
@@ -199,7 +200,7 @@ mod tests {
         assert_eq!(actual, [0x01])
     }
 
-    fn translate_chunk_item<S: Span>(item: Node<S>) -> Vec<u8> {
+    fn translate_chunk_item<S: Clone + Debug + PartialEq>(item: Node<S>) -> Vec<u8> {
         use crate::backend::object::resolve::Value;
         use crate::diagnostics;
         item.translate(
@@ -245,7 +246,7 @@ mod tests {
         assert_eq!(binary.data, [0xe3, 0xff])
     }
 
-    fn translate_without_context<S: Span>(chunk: Chunk<S>) -> BinarySection {
+    fn translate_without_context<S: Clone + Debug + PartialEq>(chunk: Chunk<S>) -> BinarySection {
         let mut context = EvalContext {
             symbols: &SymbolTable::new(),
             location: 0.into(),

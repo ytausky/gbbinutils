@@ -9,7 +9,7 @@ pub trait Span: Clone + Debug + PartialEq {
 }
 
 pub trait HasSpan {
-    type Span: Span;
+    type Span: Clone + Debug + PartialEq;
 }
 
 #[cfg(test)]
@@ -67,7 +67,7 @@ where
 }
 
 pub trait BufContext {
-    type Span: Span;
+    type Span;
     fn mk_span(&self, range: BufRange) -> Self::Span;
 }
 

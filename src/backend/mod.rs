@@ -7,7 +7,6 @@ use crate::backend::{
 };
 use crate::expr::{Expr, ExprVariant};
 use crate::instruction::Instruction;
-use crate::span::Span;
 
 mod lowering;
 mod object;
@@ -106,7 +105,7 @@ pub struct Rom {
     pub data: Box<[u8]>,
 }
 
-impl<S: Span> Backend<S> for ObjectBuilder<S> {
+impl<S: Clone> Backend<S> for ObjectBuilder<S> {
     type Object = Object<S>;
 
     fn add_label(&mut self, label: (impl Into<String>, S)) {

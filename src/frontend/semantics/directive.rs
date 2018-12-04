@@ -8,7 +8,6 @@ use crate::expr::ExprVariant;
 use crate::frontend::session::Session;
 use crate::frontend::syntax::Literal;
 use crate::instruction::RelocExpr;
-use crate::span::Span;
 use std::fmt::Debug;
 
 pub fn analyze_directive<'a, S: Session + 'a>(
@@ -83,7 +82,7 @@ fn reduce_include<I, S>(
 ) -> Result<(I, S), InternalDiagnostic<S>>
 where
     I: Debug + PartialEq,
-    S: Span,
+    S: Debug + PartialEq,
 {
     let arg = single_arg(span, args)?;
     match arg.variant {

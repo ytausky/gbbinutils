@@ -2,7 +2,7 @@ use crate::backend::object::Node;
 use crate::backend::{BinaryOperator, Item, RelocAtom, Width};
 use crate::expr::ExprVariant;
 use crate::instruction::*;
-use crate::span::{Source, Span};
+use crate::span::Source;
 use std::mem;
 
 pub trait Lower<S> {
@@ -60,7 +60,7 @@ impl<S> From<u8> for Node<S> {
     }
 }
 
-impl<S: Span> Lower<S> for Item<S> {
+impl<S: Clone> Lower<S> for Item<S> {
     fn lower(self) -> LoweredItem<S> {
         match self {
             Item::Data(expr, width) => LoweredItem::One(Node::Expr(expr, width)),
@@ -69,7 +69,7 @@ impl<S: Span> Lower<S> for Item<S> {
     }
 }
 
-impl<S: Span> Lower<S> for Instruction<S> {
+impl<S: Clone> Lower<S> for Instruction<S> {
     fn lower(self) -> LoweredItem<S> {
         use crate::instruction::Instruction::*;
         match self {
@@ -185,7 +185,7 @@ fn encode_alu_operation(operation: AluOperation) -> u8 {
     }) << 3
 }
 
-fn encode_branch<S: Span>(branch: Branch<S>, condition: Option<Condition>) -> LoweredItem<S> {
+fn encode_branch<S: Clone>(branch: Branch<S>, condition: Option<Condition>) -> LoweredItem<S> {
     use crate::instruction::Branch::*;
     match branch {
         Call(target) => LoweredItem::with_opcode(match condition {
@@ -207,7 +207,7 @@ fn encode_branch<S: Span>(branch: Branch<S>, condition: Option<Condition>) -> Lo
     }
 }
 
-fn mk_relative_expr<S: Span>(expr: RelocExpr<S>) -> RelocExpr<S> {
+fn mk_relative_expr<S: Clone>(expr: RelocExpr<S>) -> RelocExpr<S> {
     let span = expr.span();
     RelocExpr {
         variant: ExprVariant::Binary(

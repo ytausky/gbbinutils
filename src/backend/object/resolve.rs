@@ -3,7 +3,7 @@ pub use super::context::{EvalContext, SymbolTable};
 use super::context::ChunkSize;
 use crate::backend::{Node, Object, RelocAtom, RelocExpr};
 use crate::expr::ExprVariant;
-use crate::span::{Source, Span};
+use crate::span::Source;
 use std::borrow::Borrow;
 use std::ops::{Add, AddAssign, Sub};
 
@@ -73,13 +73,13 @@ impl Sub<Value> for Value {
     }
 }
 
-pub fn resolve_symbols<S: Span>(object: &Object<S>) -> SymbolTable {
+pub fn resolve_symbols<S: Clone>(object: &Object<S>) -> SymbolTable {
     let mut symbols = collect_symbols(object);
     refine_symbols(object, &mut symbols);
     symbols
 }
 
-fn collect_symbols<S: Span>(object: &Object<S>) -> SymbolTable {
+fn collect_symbols<S: Clone>(object: &Object<S>) -> SymbolTable {
     let mut symbols = SymbolTable::new();
     (0..object.chunks.len()).for_each(|i| symbols.define(ChunkSize(i), Value::Unknown));
     {
@@ -101,7 +101,7 @@ fn collect_symbols<S: Span>(object: &Object<S>) -> SymbolTable {
     symbols
 }
 
-fn refine_symbols<S: Span>(object: &Object<S>, symbols: &mut SymbolTable) -> i32 {
+fn refine_symbols<S: Clone>(object: &Object<S>, symbols: &mut SymbolTable) -> i32 {
     let mut refinements = 0;
     let context = &mut EvalContext {
         symbols,
@@ -121,7 +121,7 @@ fn refine_symbols<S: Span>(object: &Object<S>, symbols: &mut SymbolTable) -> i32
     refinements
 }
 
-impl<S: Span> RelocExpr<S> {
+impl<S: Clone> RelocExpr<S> {
     pub fn evaluate<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
         self.evaluate_strictly(context, &mut |_: &str, _: &S| ())
     }
@@ -161,7 +161,7 @@ impl<S: Span> RelocExpr<S> {
     }
 }
 
-impl<S: Span> Node<S> {
+impl<S: Clone> Node<S> {
     pub fn size<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
         match self {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),
