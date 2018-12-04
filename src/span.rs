@@ -4,18 +4,14 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
-pub trait Span: Clone + Debug + PartialEq {
-    fn extend(&self, other: &Self) -> Self;
-}
+pub trait Span: Clone + Debug + PartialEq {}
 
 pub trait HasSpan {
     type Span: Clone + Debug + PartialEq;
 }
 
 #[cfg(test)]
-impl Span for () {
-    fn extend(&self, _: &Self) -> Self {}
-}
+impl Span for () {}
 
 pub trait Source {
     type Span;

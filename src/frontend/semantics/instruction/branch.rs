@@ -292,9 +292,10 @@ mod tests {
         analyze(Mnemonic::Call, vec![deref(literal(Hl))]).expect_diagnostic(
             ExpectedDiagnostic::new(Message::RequiresConstantTarget {
                 mnemonic: TokenId::Mnemonic.into(),
-            }).with_highlight(
-                TokenSpan::from(TokenId::Operand(0, 0)).extend(&TokenId::Operand(0, 2).into()),
-            ),
+            }).with_highlight(TokenSpan::merge(
+                &TokenSpan::from(TokenId::Operand(0, 0)),
+                &TokenId::Operand(0, 2).into(),
+            )),
         )
     }
 }

@@ -1,7 +1,6 @@
 use super::Token::*;
 use super::{ExprAtom, ExprOperator, Token};
 use crate::diagnostics::{InternalDiagnostic, Message};
-use crate::span::Span;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::iter;
@@ -33,7 +32,7 @@ impl SymExpr {
     }
 
     pub fn parentheses(mut self, left: impl Into<TokenRef>, right: impl Into<TokenRef>) -> Self {
-        let span = SymSpan::from(left.into()).extend(&right.into().into());
+        let span = SymSpan::merge(&SymSpan::from(left.into()), &right.into().into());
         self.0
             .push(ExprAction::ApplyOperator((ExprOperator::Parentheses, span)));
         self
@@ -187,11 +186,11 @@ impl From<TokenRef> for SymSpan {
     }
 }
 
-impl Span for SymSpan {
-    fn extend(&self, other: &Self) -> Self {
+impl SymSpan {
+    pub fn merge(left: &SymSpan, right: &SymSpan) -> SymSpan {
         SymSpan {
-            start: self.start.clone(),
-            end: other.end.clone(),
+            start: left.start.clone(),
+            end: right.end.clone(),
         }
     }
 }

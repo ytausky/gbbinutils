@@ -796,7 +796,7 @@ mod tests {
 
     impl Merge for Testing {
         fn merge(&mut self, left: &TokenSpan, right: &TokenSpan) -> TokenSpan {
-            left.extend(right)
+            TokenSpan::merge(left, right)
         }
     }
 
@@ -814,7 +814,7 @@ mod tests {
             ExprVariant::Unary(SemanticUnary::Parentheses, expr) => {
                 let (new_j, inner) = add_token_spans_recursive(i, j + 1, *expr);
                 j = new_j;
-                span = span.extend(&TokenId::Operand(i, j).into());
+                span = TokenSpan::merge(&span, &TokenId::Operand(i, j).into());
                 ExprVariant::Unary(SemanticUnary::Parentheses, Box::new(inner))
             }
             ExprVariant::Binary(_, _, _) => panic!(),
@@ -1049,11 +1049,11 @@ mod tests {
         }
     }
 
-    impl Span for TokenSpan {
-        fn extend(&self, other: &Self) -> Self {
+    impl TokenSpan {
+        pub fn merge(left: &TokenSpan, right: &TokenSpan) -> TokenSpan {
             TokenSpan {
-                first: cmp::min(self.first, other.first),
-                last: cmp::max(self.last, other.last),
+                first: cmp::min(left.first, right.first),
+                last: cmp::max(left.last, right.last),
             }
         }
     }

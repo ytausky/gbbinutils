@@ -430,9 +430,10 @@ mod tests {
                 src_width: Width::Word,
                 src: TokenId::Operand(1, 0).into(),
                 dest: TokenId::Operand(0, 0).into(),
-            }).with_highlight(
-                TokenSpan::from(TokenId::Operand(0, 0)).extend(&TokenId::Operand(1, 0).into()),
-            ),
+            }).with_highlight(TokenSpan::merge(
+                &TokenSpan::from(TokenId::Operand(0, 0)),
+                &TokenId::Operand(1, 0).into(),
+            )),
         )
     }
 
@@ -443,9 +444,10 @@ mod tests {
                 src_width: Width::Byte,
                 src: TokenId::Operand(1, 0).into(),
                 dest: TokenId::Operand(0, 0).into(),
-            }).with_highlight(
-                TokenSpan::from(TokenId::Operand(0, 0)).extend(&TokenId::Operand(1, 0).into()),
-            ),
+            }).with_highlight(TokenSpan::merge(
+                &TokenSpan::from(TokenId::Operand(0, 0)),
+                &TokenId::Operand(1, 0).into(),
+            )),
         )
     }
 
@@ -468,9 +470,10 @@ mod tests {
     #[test]
     fn analyze_ld_hl_sp() {
         analyze(Mnemonic::Ld, vec![literal(Hl), literal(Sp)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::LdSpHlOperands).with_highlight(
-                TokenSpan::from(TokenId::Operand(0, 0)).extend(&TokenId::Operand(1, 0).into()),
-            ),
+            ExpectedDiagnostic::new(Message::LdSpHlOperands).with_highlight(TokenSpan::merge(
+                &TokenSpan::from(TokenId::Operand(0, 0)),
+                &TokenId::Operand(1, 0).into(),
+            )),
         )
     }
 
@@ -495,12 +498,18 @@ mod tests {
         analyze(Mnemonic::Ld, vec![deref(literal(Hl)), deref(literal(Hl))]).expect_diagnostic(
             ExpectedDiagnostic::new(Message::LdDerefHlDerefHl {
                 mnemonic: TokenId::Mnemonic.into(),
-                dest: TokenSpan::from(TokenId::Operand(0, 0))
-                    .extend(&TokenId::Operand(0, 2).into()),
-                src: TokenSpan::from(TokenId::Operand(1, 0)).extend(&TokenId::Operand(1, 2).into()),
-            }).with_highlight(
-                TokenSpan::from(TokenId::Mnemonic).extend(&TokenId::Operand(1, 2).into()),
-            ),
+                dest: TokenSpan::merge(
+                    &TokenSpan::from(TokenId::Operand(0, 0)),
+                    &TokenId::Operand(0, 2).into(),
+                ),
+                src: TokenSpan::merge(
+                    &TokenSpan::from(TokenId::Operand(1, 0)),
+                    &TokenId::Operand(1, 2).into(),
+                ),
+            }).with_highlight(TokenSpan::merge(
+                &TokenSpan::from(TokenId::Mnemonic),
+                &TokenId::Operand(1, 2).into(),
+            )),
         )
     }
 }

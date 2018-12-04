@@ -440,7 +440,7 @@ mod tests {
     use super::*;
     use crate::diagnostics::{DiagnosticsListener, InternalDiagnostic, Message};
     use crate::frontend::syntax::{ExprAtom, ExprOperator};
-    use crate::span::{HasSpan, Merge, Span};
+    use crate::span::{HasSpan, Merge};
     use std::borrow::Borrow;
     use std::collections::HashMap;
 
@@ -467,7 +467,7 @@ mod tests {
 
     impl Merge for FileActionCollector {
         fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            left.extend(right)
+            SymSpan::merge(left, right)
         }
     }
 
@@ -501,7 +501,7 @@ mod tests {
 
     impl Merge for StmtActionCollector {
         fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            left.extend(right)
+            SymSpan::merge(left, right)
         }
     }
 
@@ -565,7 +565,7 @@ mod tests {
 
     impl Merge for CommandActionCollector {
         fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            left.extend(right)
+            SymSpan::merge(left, right)
         }
     }
 
@@ -609,7 +609,7 @@ mod tests {
 
     impl Merge for ArgActionCollector {
         fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            left.extend(right)
+            SymSpan::merge(left, right)
         }
     }
 
@@ -658,7 +658,7 @@ mod tests {
 
     impl Merge for ExprActionCollector {
         fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            left.extend(right)
+            SymSpan::merge(left, right)
         }
     }
 
@@ -698,7 +698,7 @@ mod tests {
 
     impl Merge for MacroParamsActionCollector {
         fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            left.extend(right)
+            SymSpan::merge(left, right)
         }
     }
 
@@ -739,7 +739,7 @@ mod tests {
 
     impl Merge for MacroBodyActionCollector {
         fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            left.extend(right)
+            SymSpan::merge(left, right)
         }
     }
 
@@ -780,7 +780,7 @@ mod tests {
 
     impl Merge for MacroInvocationActionCollector {
         fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            left.extend(right)
+            SymSpan::merge(left, right)
         }
     }
 
@@ -823,7 +823,7 @@ mod tests {
 
     impl Merge for MacroArgActionCollector {
         fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            left.extend(right)
+            SymSpan::merge(left, right)
         }
     }
 
