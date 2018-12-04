@@ -1,7 +1,7 @@
 use super::{Analysis, AnalysisResult, AtomKind, Operand, SimpleOperand};
 use crate::diagnostics::{InternalDiagnostic, Message};
 use crate::instruction::{Branch, Condition, Instruction, Nullary, RelocExpr};
-use crate::span::{Source, Span};
+use crate::span::{Merge, Source};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BranchKind {
@@ -22,8 +22,12 @@ pub enum ImplicitBranch {
     Reti,
 }
 
-impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>> Analysis<S, I> {
-    pub fn analyze_branch(&mut self, branch: BranchKind) -> AnalysisResult<S> {
+impl<'a, I, M> Analysis<'a, I, M>
+where
+    I: Iterator<Item = Result<Operand<M::Span>, InternalDiagnostic<M::Span>>>,
+    M: Merge,
+{
+    pub fn analyze_branch(&mut self, branch: BranchKind) -> AnalysisResult<M::Span> {
         let (condition, target) = self.collect_branch_operands()?;
         let variant = analyze_branch_variant((branch, &self.mnemonic.1), target)?;
         match variant {
@@ -41,7 +45,9 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
         }
     }
 
-    fn collect_branch_operands(&mut self) -> Result<BranchOperands<S>, InternalDiagnostic<S>> {
+    fn collect_branch_operands(
+        &mut self,
+    ) -> Result<BranchOperands<M::Span>, InternalDiagnostic<M::Span>> {
         let first_operand = self.operands.next()?;
         Ok(
             if let Some(Operand::Atom(AtomKind::Condition(condition), range)) = first_operand {
@@ -63,7 +69,7 @@ enum BranchTarget<S> {
     Expr(RelocExpr<S>),
 }
 
-impl<S: Span> Source for BranchTarget<S> {
+impl<S: Clone> Source for BranchTarget<S> {
     type Span = S;
     fn span(&self) -> Self::Span {
         match self {
@@ -73,7 +79,7 @@ impl<S: Span> Source for BranchTarget<S> {
     }
 }
 
-fn analyze_branch_target<S: Span>(
+fn analyze_branch_target<S: Clone>(
     target: Option<Operand<S>>,
 ) -> Result<Option<BranchTarget<S>>, InternalDiagnostic<S>> {
     let target = match target {
@@ -111,7 +117,7 @@ impl<S> From<UnconditionalBranch> for Instruction<S> {
     }
 }
 
-fn analyze_branch_variant<S: Span>(
+fn analyze_branch_variant<S: Clone>(
     kind: (BranchKind, &S),
     target: Option<BranchTarget<S>>,
 ) -> Result<BranchVariant<S>, InternalDiagnostic<S>> {

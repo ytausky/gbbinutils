@@ -261,8 +261,12 @@ fn analyze_mnemonic<'a, F: Session + 'a>(
     args: CommandArgs<F>,
     actions: &mut SemanticActions<'a, F>,
 ) -> Result<(), InternalDiagnostic<F::Span>> {
-    let instruction =
-        instruction::analyze_instruction(name, args.into_iter(), &mut actions.expr_factory)?;
+    let instruction = instruction::analyze_instruction(
+        name,
+        args.into_iter(),
+        &mut actions.expr_factory,
+        actions.session.diagnostics(),
+    )?;
     actions
         .session
         .emit_item(backend::Item::Instruction(instruction));

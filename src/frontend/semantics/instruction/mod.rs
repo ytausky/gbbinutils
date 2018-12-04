@@ -5,51 +5,59 @@ use crate::frontend::semantics::operand::{self, AtomKind, Context, Operand, Oper
 use crate::frontend::syntax::keyword as kw;
 use crate::frontend::ExprFactory;
 use crate::instruction::*;
-use crate::span::{Source, Span};
+use crate::span::{Merge, Source, Span};
 
 mod branch;
 mod ld;
 
-pub fn analyze_instruction<Id: Into<String>, I, S>(
-    mnemonic: (kw::Mnemonic, S),
+pub fn analyze_instruction<Id: Into<String>, I, M>(
+    mnemonic: (kw::Mnemonic, M::Span),
     operands: I,
     expr_factory: &mut impl ExprFactory,
-) -> AnalysisResult<S>
+    spans: &mut M,
+) -> AnalysisResult<M::Span>
 where
-    I: IntoIterator<Item = SemanticExpr<Id, S>>,
-    S: Span,
+    I: IntoIterator<Item = SemanticExpr<Id, M::Span>>,
+    M: Merge,
 {
-    let mnemonic: (Mnemonic, S) = (mnemonic.0.into(), mnemonic.1);
+    let mnemonic: (Mnemonic, _) = (mnemonic.0.into(), mnemonic.1);
     let context = mnemonic.0.context();
     Analysis::new(
         mnemonic,
         operands
             .into_iter()
             .map(|x| operand::analyze_operand(x, context, expr_factory)),
+        spans,
     ).run()
 }
 
-struct Analysis<R, I> {
-    mnemonic: (Mnemonic, R),
+struct Analysis<'a, I, M: Merge + 'a> {
+    mnemonic: (Mnemonic, M::Span),
     operands: OperandCounter<I>,
+    spans: &'a mut M,
 }
 
-impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>> Analysis<S, I> {
-    fn new(mnemonic: (Mnemonic, S), operands: I) -> Analysis<S, I> {
+impl<'a, I, M> Analysis<'a, I, M>
+where
+    I: Iterator<Item = Result<Operand<M::Span>, InternalDiagnostic<M::Span>>>,
+    M: Merge,
+{
+    fn new(mnemonic: (Mnemonic, M::Span), operands: I, spans: &'a mut M) -> Analysis<'a, I, M> {
         Analysis {
             mnemonic,
             operands: OperandCounter::new(operands),
+            spans,
         }
     }
 
-    fn run(mut self) -> AnalysisResult<S> {
+    fn run(mut self) -> AnalysisResult<M::Span> {
         let instruction = self.analyze_mnemonic()?;
         self.operands
             .check_for_unexpected_operands(self.mnemonic.1)?;
         Ok(instruction)
     }
 
-    fn analyze_mnemonic(&mut self) -> AnalysisResult<S> {
+    fn analyze_mnemonic(&mut self) -> AnalysisResult<M::Span> {
         use self::Mnemonic::*;
         match self.mnemonic.0 {
             Alu(AluOperation::Add) => self.analyze_add_instruction(),
@@ -69,7 +77,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
         }
     }
 
-    fn analyze_add_instruction(&mut self) -> AnalysisResult<S> {
+    fn analyze_add_instruction(&mut self) -> AnalysisResult<M::Span> {
         match self.next_operand_out_of(2)? {
             Operand::Atom(AtomKind::Reg16(reg16), range) => {
                 self.analyze_add_reg16_instruction((reg16, range))
@@ -78,14 +86,17 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
         }
     }
 
-    fn analyze_add_reg16_instruction(&mut self, target: (Reg16, S)) -> AnalysisResult<S> {
+    fn analyze_add_reg16_instruction(
+        &mut self,
+        target: (Reg16, M::Span),
+    ) -> AnalysisResult<M::Span> {
         match target.0 {
             Reg16::Hl => self.analyze_add_hl_instruction(),
             _ => Err(InternalDiagnostic::new(Message::DestMustBeHl, target.1)),
         }
     }
 
-    fn analyze_add_hl_instruction(&mut self) -> AnalysisResult<S> {
+    fn analyze_add_hl_instruction(&mut self) -> AnalysisResult<M::Span> {
         match self.next_operand_out_of(2)? {
             Operand::Atom(AtomKind::Reg16(src), _) => Ok(Instruction::AddHl(src)),
             operand => Err(InternalDiagnostic::new(
@@ -98,8 +109,8 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
     fn analyze_alu_instruction(
         &mut self,
         operation: AluOperation,
-        first_operand: Operand<S>,
-    ) -> AnalysisResult<S> {
+        first_operand: Operand<M::Span>,
+    ) -> AnalysisResult<M::Span> {
         let src = if operation.implicit_dest() {
             first_operand
         } else {
@@ -120,7 +131,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
         }
     }
 
-    fn analyze_bit_operation(&mut self, operation: BitOperation) -> AnalysisResult<S> {
+    fn analyze_bit_operation(&mut self, operation: BitOperation) -> AnalysisResult<M::Span> {
         let bit_number = self.next_operand_out_of(2)?;
         let operand = self.next_operand_out_of(2)?;
         let expr = if let Operand::Const(expr) = bit_number {
@@ -136,19 +147,19 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
         Ok(Instruction::Bit(operation, expr, operand.expect_simple()?))
     }
 
-    fn analyze_ldhl(&mut self) -> AnalysisResult<S> {
+    fn analyze_ldhl(&mut self) -> AnalysisResult<M::Span> {
         let src = self.next_operand_out_of(2)?;
         let offset = self.next_operand_out_of(2)?;
         src.expect_specific_atom(AtomKind::Reg16(Reg16::Sp), Message::SrcMustBeSp)?;
         Ok(Instruction::Ldhl(offset.expect_const()?))
     }
 
-    fn analyze_misc(&mut self, operation: MiscOperation) -> AnalysisResult<S> {
+    fn analyze_misc(&mut self, operation: MiscOperation) -> AnalysisResult<M::Span> {
         let operand = self.next_operand_out_of(1)?;
         Ok(Instruction::Misc(operation, operand.expect_simple()?))
     }
 
-    fn analyze_stack_operation(&mut self, operation: StackOperation) -> AnalysisResult<S> {
+    fn analyze_stack_operation(&mut self, operation: StackOperation) -> AnalysisResult<M::Span> {
         let reg_pair = self.next_operand_out_of(1)?.expect_reg_pair()?;
         let instruction_ctor = match operation {
             StackOperation::Push => Instruction::Push,
@@ -157,7 +168,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
         Ok(instruction_ctor(reg_pair))
     }
 
-    fn analyze_inc_dec(&mut self, mode: IncDec) -> AnalysisResult<S> {
+    fn analyze_inc_dec(&mut self, mode: IncDec) -> AnalysisResult<M::Span> {
         match self.next_operand_out_of(1)? {
             Operand::Atom(AtomKind::Simple(operand), _) => Ok(Instruction::IncDec8(mode, operand)),
             Operand::Atom(AtomKind::Reg16(operand), _) => Ok(Instruction::IncDec16(mode, operand)),
@@ -168,13 +179,16 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
         }
     }
 
-    fn analyze_rst(&mut self) -> AnalysisResult<S> {
+    fn analyze_rst(&mut self) -> AnalysisResult<M::Span> {
         Ok(Instruction::Rst(
             self.next_operand_out_of(1)?.expect_const()?,
         ))
     }
 
-    fn next_operand_out_of(&mut self, out_of: usize) -> Result<Operand<S>, InternalDiagnostic<S>> {
+    fn next_operand_out_of(
+        &mut self,
+        out_of: usize,
+    ) -> Result<Operand<M::Span>, InternalDiagnostic<M::Span>> {
         let actual = self.operands.seen();
         self.operands.next()?.ok_or_else(|| {
             InternalDiagnostic::new(
@@ -343,7 +357,7 @@ mod tests {
         SemanticAtom, SemanticExpr, SemanticExprVariant, SemanticUnary,
     };
     use crate::frontend::syntax::Literal;
-    pub use crate::span::Span;
+    pub use crate::span::{HasSpan, Span};
     use std::cmp;
 
     type Input = SemanticExpr<String, ()>;
@@ -770,7 +784,20 @@ mod tests {
             (mnemonic, TokenId::Mnemonic.into()),
             operands.into_iter().enumerate().map(add_token_spans),
             &mut factory,
+            &mut Testing,
         ))
+    }
+
+    struct Testing;
+
+    impl HasSpan for Testing {
+        type Span = TokenSpan;
+    }
+
+    impl Merge for Testing {
+        fn merge(&mut self, left: &TokenSpan, right: &TokenSpan) -> TokenSpan {
+            left.extend(right)
+        }
     }
 
     fn add_token_spans((i, operand): (usize, Input)) -> SemanticExpr<String, TokenSpan> {

@@ -3,10 +3,14 @@ use crate::backend::{RelocExpr, Width};
 use crate::diagnostics::{InternalDiagnostic, Message};
 use crate::frontend::semantics::operand::AtomKind;
 use crate::instruction::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
-use crate::span::{Source, Span};
+use crate::span::{Merge, Source};
 
-impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>> Analysis<S, I> {
-    pub fn analyze_ld(&mut self) -> AnalysisResult<S> {
+impl<'a, I, M> Analysis<'a, I, M>
+where
+    I: Iterator<Item = Result<Operand<M::Span>, InternalDiagnostic<M::Span>>>,
+    M: Merge,
+{
+    pub fn analyze_ld(&mut self) -> AnalysisResult<M::Span> {
         let dest = self.next_operand_out_of(2)?;
         let src = self.next_operand_out_of(2)?;
         match (dest.into_ld_dest()?, src.into_ld_src()?) {
@@ -25,7 +29,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
                         src: src.span(),
                         dest: dest.span(),
                     },
-                    dest.span().extend(&src.span()),
+                    self.spans.merge(&dest.span(), &src.span()),
                 ))
             }
             (LdDest::Word(dest), LdOperand::Other(LdDest::Byte(src))) => {
@@ -35,7 +39,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
                         src: src.span(),
                         dest: dest.span(),
                     },
-                    dest.span().extend(&src.span()),
+                    self.spans.merge(&dest.span(), &src.span()),
                 ))
             }
         }
@@ -43,9 +47,9 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
 
     fn analyze_8_bit_ld(
         &mut self,
-        dest: LdDest8<S>,
-        src: impl Into<LdOperand<S, LdDest8<S>>>,
-    ) -> AnalysisResult<S> {
+        dest: LdDest8<M::Span>,
+        src: impl Into<LdOperand<M::Span, LdDest8<M::Span>>>,
+    ) -> AnalysisResult<M::Span> {
         match (dest, src.into()) {
             (
                 LdDest8::Simple(SimpleOperand::DerefHl, dest),
@@ -56,7 +60,7 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
                     dest,
                     src: src.clone(),
                 },
-                self.mnemonic.1.extend(&src),
+                self.spans.merge(&self.mnemonic.1, &src),
             )),
             (LdDest8::Simple(dest, _), LdOperand::Other(LdDest8::Simple(src, _))) => {
                 Ok(Instruction::Ld(Ld::Simple(dest, src)))
@@ -77,16 +81,19 @@ impl<'a, S: Span, I: Iterator<Item = Result<Operand<S>, InternalDiagnostic<S>>>>
 
     fn analyze_16_bit_ld(
         &mut self,
-        dest: LdDest16<S>,
-        src: impl Into<LdOperand<S, LdDest16<S>>>,
-    ) -> AnalysisResult<S> {
+        dest: LdDest16<M::Span>,
+        src: impl Into<LdOperand<M::Span, LdDest16<M::Span>>>,
+    ) -> AnalysisResult<M::Span> {
         match (dest, src.into()) {
             (LdDest16::Reg16(Reg16::Sp, _), LdOperand::Other(LdDest16::Reg16(Reg16::Hl, _))) => {
                 Ok(Instruction::Ld(Ld::SpHl))
             }
-            (LdDest16::Reg16(_, dest_span), LdOperand::Other(LdDest16::Reg16(_, src_span))) => Err(
-                InternalDiagnostic::new(Message::LdSpHlOperands, dest_span.extend(&src_span)),
-            ),
+            (LdDest16::Reg16(_, dest_span), LdOperand::Other(LdDest16::Reg16(_, src_span))) => {
+                Err(InternalDiagnostic::new(
+                    Message::LdSpHlOperands,
+                    self.spans.merge(&dest_span, &src_span),
+                ))
+            }
             (LdDest16::Reg16(dest, _), LdOperand::Const(expr)) => {
                 Ok(Instruction::Ld(Ld::Immediate16(dest, expr)))
             }
@@ -105,7 +112,7 @@ fn analyze_special_ld<S>(other: LdSpecial<S>, direction: Direction) -> AnalysisR
     )))
 }
 
-impl<S: Span> Operand<S> {
+impl<S: Clone> Operand<S> {
     fn into_ld_dest(self) -> Result<LdDest<S>, InternalDiagnostic<S>> {
         match self {
             Operand::Deref(expr) => Ok(LdDest::Byte(LdDest8::Special(LdSpecial::Deref(expr)))),
@@ -187,7 +194,7 @@ enum LdDest16<S> {
     Reg16(Reg16, S),
 }
 
-impl<S: Span> LdOperand<S, LdDest8<S>> {
+impl<S: Clone> LdOperand<S, LdDest8<S>> {
     fn expect_a(self) -> Result<(), InternalDiagnostic<S>> {
         match self {
             LdOperand::Const(expr) => Err(diagnose_not_a(expr.span())),
@@ -196,7 +203,7 @@ impl<S: Span> LdOperand<S, LdDest8<S>> {
     }
 }
 
-impl<S: Span> LdDest8<S> {
+impl<S: Clone> LdDest8<S> {
     fn expect_a(self) -> Result<(), InternalDiagnostic<S>> {
         match self {
             LdDest8::Simple(SimpleOperand::A, _) => Ok(()),
@@ -209,7 +216,7 @@ fn diagnose_not_a<S>(span: S) -> InternalDiagnostic<S> {
     InternalDiagnostic::new(Message::OnlySupportedByA, span)
 }
 
-impl<S: Span, T: Source<Span = S>> Source for LdOperand<S, T> {
+impl<S: Clone, T: Source<Span = S>> Source for LdOperand<S, T> {
     type Span = S;
     fn span(&self) -> Self::Span {
         match self {
@@ -219,7 +226,7 @@ impl<S: Span, T: Source<Span = S>> Source for LdOperand<S, T> {
     }
 }
 
-impl<S: Span> Source for LdDest8<S> {
+impl<S: Clone> Source for LdDest8<S> {
     type Span = S;
     fn span(&self) -> Self::Span {
         use self::LdDest8::*;
@@ -230,7 +237,7 @@ impl<S: Span> Source for LdDest8<S> {
     }
 }
 
-impl<S: Span> Source for LdSpecial<S> {
+impl<S: Clone> Source for LdSpecial<S> {
     type Span = S;
     fn span(&self) -> Self::Span {
         use self::LdSpecial::*;
@@ -241,7 +248,7 @@ impl<S: Span> Source for LdSpecial<S> {
     }
 }
 
-impl<S: Span> Source for LdDest16<S> {
+impl<S: Clone> Source for LdDest16<S> {
     type Span = S;
     fn span(&self) -> Self::Span {
         match self {

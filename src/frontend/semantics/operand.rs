@@ -4,7 +4,7 @@ use crate::frontend::syntax::keyword as kw;
 use crate::frontend::syntax::Literal;
 use crate::frontend::ExprFactory;
 use crate::instruction::{Condition, PtrReg, Reg16, RegPair, RelocExpr, SimpleOperand};
-use crate::span::{Source, Span};
+use crate::span::Source;
 
 #[derive(Debug, PartialEq)]
 pub enum Operand<R> {
@@ -13,7 +13,7 @@ pub enum Operand<R> {
     Deref(RelocExpr<R>),
 }
 
-impl<S: Span> Source for Operand<S> {
+impl<S: Clone> Source for Operand<S> {
     type Span = S;
     fn span(&self) -> Self::Span {
         match self {

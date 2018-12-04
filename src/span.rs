@@ -18,7 +18,7 @@ impl Span for () {
 }
 
 pub trait Source {
-    type Span: Span;
+    type Span;
     fn span(&self) -> Self::Span;
 }
 
