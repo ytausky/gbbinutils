@@ -388,7 +388,8 @@ mod tests {
                     Direction::IntoA,
                 )),
             ),
-        ].into_iter()
+        ]
+        .into_iter()
     }
 
     const PTR_REGS: &[PtrReg] = &[PtrReg::Bc, PtrReg::De, PtrReg::Hli, PtrReg::Hld];
@@ -401,7 +402,8 @@ mod tests {
             ExpectedDiagnostic::new(Message::OperandCount {
                 actual: 0,
                 expected: 2,
-            }).with_highlight(TokenId::Mnemonic),
+            })
+            .with_highlight(TokenId::Mnemonic),
         )
     }
 
@@ -411,7 +413,8 @@ mod tests {
             ExpectedDiagnostic::new(Message::OperandCount {
                 actual: 1,
                 expected: 2,
-            }).with_highlight(TokenId::Mnemonic),
+            })
+            .with_highlight(TokenId::Mnemonic),
         )
     }
 
@@ -430,7 +433,8 @@ mod tests {
                 src_width: Width::Word,
                 src: TokenId::Operand(1, 0).into(),
                 dest: TokenId::Operand(0, 0).into(),
-            }).with_highlight(TokenSpan::merge(
+            })
+            .with_highlight(TokenSpan::merge(
                 &TokenSpan::from(TokenId::Operand(0, 0)),
                 &TokenId::Operand(1, 0).into(),
             )),
@@ -444,7 +448,8 @@ mod tests {
                 src_width: Width::Byte,
                 src: TokenId::Operand(1, 0).into(),
                 dest: TokenId::Operand(0, 0).into(),
-            }).with_highlight(TokenSpan::merge(
+            })
+            .with_highlight(TokenSpan::merge(
                 &TokenSpan::from(TokenId::Operand(0, 0)),
                 &TokenId::Operand(1, 0).into(),
             )),
@@ -506,7 +511,8 @@ mod tests {
                     &TokenSpan::from(TokenId::Operand(1, 0)),
                     &TokenId::Operand(1, 2).into(),
                 ),
-            }).with_highlight(TokenSpan::merge(
+            })
+            .with_highlight(TokenSpan::merge(
                 &TokenSpan::from(TokenId::Mnemonic),
                 &TokenId::Operand(1, 2).into(),
             )),

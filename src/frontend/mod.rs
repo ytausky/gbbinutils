@@ -318,7 +318,8 @@ mod tests {
             .given(|f| {
                 f.mock_token_source
                     .add_file(filename, add_code_refs(&contents))
-            }).when(|mut session| session.analyze_file(filename.to_string()).unwrap());
+            })
+            .when(|mut session| session.analyze_file(filename.to_string()).unwrap());
         assert_eq!(*log.borrow(), [TestEvent::AnalyzeTokens(contents)]);
     }
 

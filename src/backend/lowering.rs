@@ -191,15 +191,18 @@ fn encode_branch<S: Clone>(branch: Branch<S>, condition: Option<Condition>) -> L
         Call(target) => LoweredItem::with_opcode(match condition {
             None => 0xcd,
             Some(condition) => 0xc4 | encode_condition(condition),
-        }).and_word(target),
+        })
+        .and_word(target),
         Jp(target) => LoweredItem::with_opcode(match condition {
             None => 0xc3,
             Some(condition) => 0xc2 | encode_condition(condition),
-        }).and_word(target),
+        })
+        .and_word(target),
         Jr(target) => LoweredItem::with_opcode(match condition {
             None => 0x18,
             Some(condition) => 0x20 | encode_condition(condition),
-        }).and_byte(mk_relative_expr(target)),
+        })
+        .and_byte(mk_relative_expr(target)),
         Ret => LoweredItem::with_opcode(match condition {
             None => 0xc9,
             Some(condition) => 0b11_000_000 | encode_condition(condition),
@@ -471,7 +474,8 @@ mod tests {
             (L, 0x2e),
             (DerefHl, 0x36),
             (A, 0x3e),
-        ].into_iter()
+        ]
+        .into_iter()
         .for_each(|(dest, opcode)| {
             test_instruction(
                 Ld(Immediate8(dest, immediate.clone())),
@@ -576,13 +580,13 @@ mod tests {
             (Or, 0xf6),
             (Cp, 0xfe),
         ]
-            .iter()
-            .for_each(|(alu_operation, opcode)| {
-                test_instruction(
-                    Instruction::Alu(*alu_operation, AluSource::Immediate(expr.clone())),
-                    [Node::Byte(*opcode), Node::Expr(expr.clone(), Width::Byte)],
-                )
-            })
+        .iter()
+        .for_each(|(alu_operation, opcode)| {
+            test_instruction(
+                Instruction::Alu(*alu_operation, AluSource::Immediate(expr.clone())),
+                [Node::Byte(*opcode), Node::Expr(expr.clone(), Width::Byte)],
+            )
+        })
     }
 
     #[test]

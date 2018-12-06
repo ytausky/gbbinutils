@@ -196,7 +196,8 @@ mod tests {
                             BinaryOperator::Plus,
                             Box::new(RelocAtom::LocationCounter.into()),
                             Box::new(skipped_bytes.into()),
-                        ).into(),
+                        )
+                        .into(),
                     ),
                     items: vec![Node::Byte(0x43)],
                 },

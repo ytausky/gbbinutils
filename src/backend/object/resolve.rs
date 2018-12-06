@@ -228,8 +228,8 @@ mod tests {
                     Node::LdInlineAddr(0, RelocAtom::Symbol("label".to_string()).into()),
                     Node::Label("label".to_string(), ()),
                 ]
-                    .iter()
-                    .cloned(),
+                .iter()
+                .cloned(),
             )
         })
     }

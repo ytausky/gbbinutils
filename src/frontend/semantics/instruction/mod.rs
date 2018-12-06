@@ -28,7 +28,8 @@ where
             .into_iter()
             .map(|x| operand::analyze_operand(x, context, expr_factory)),
         spans,
-    ).run()
+    )
+    .run()
 }
 
 struct Analysis<'a, I, M: Merge + 'a> {
@@ -601,8 +602,8 @@ mod tests {
             (kw::Mnemonic::Rrca, Nullary::Rrca),
             (kw::Mnemonic::Stop, Nullary::Stop),
         ]
-            .iter()
-            .map(|(mnemonic, nullary)| ((*mnemonic, vec![]), Instruction::Nullary(nullary.clone())))
+        .iter()
+        .map(|(mnemonic, nullary)| ((*mnemonic, vec![]), Instruction::Nullary(nullary.clone())))
     }
 
     fn describe_alu_simple_instructions() -> impl Iterator<Item = InstructionDescriptor> {
@@ -859,7 +860,8 @@ mod tests {
             ExpectedDiagnostic::new(Message::OperandCount {
                 actual: 1,
                 expected: 0,
-            }).with_highlight(TokenId::Mnemonic),
+            })
+            .with_highlight(TokenId::Mnemonic),
         )
     }
 
@@ -868,11 +870,13 @@ mod tests {
         analyze(
             kw::Mnemonic::Add,
             vec![A, A, A].into_iter().map(|a| literal(a)),
-        ).expect_diagnostic(
+        )
+        .expect_diagnostic(
             ExpectedDiagnostic::new(Message::OperandCount {
                 actual: 3,
                 expected: 2,
-            }).with_highlight(TokenId::Mnemonic),
+            })
+            .with_highlight(TokenId::Mnemonic),
         )
     }
 
@@ -882,7 +886,8 @@ mod tests {
             ExpectedDiagnostic::new(Message::OperandCount {
                 actual: 0,
                 expected: 2,
-            }).with_highlight(TokenId::Mnemonic),
+            })
+            .with_highlight(TokenId::Mnemonic),
         )
     }
 
@@ -892,7 +897,8 @@ mod tests {
             ExpectedDiagnostic::new(Message::OperandCount {
                 actual: 1,
                 expected: 2,
-            }).with_highlight(TokenId::Mnemonic),
+            })
+            .with_highlight(TokenId::Mnemonic),
         )
     }
 
@@ -924,7 +930,8 @@ mod tests {
             ExpectedDiagnostic::new(Message::OperandCount {
                 actual: 1,
                 expected: 2,
-            }).with_highlight(TokenId::Mnemonic),
+            })
+            .with_highlight(TokenId::Mnemonic),
         )
     }
 
@@ -934,7 +941,8 @@ mod tests {
             ExpectedDiagnostic::new(Message::OperandCount {
                 actual: 0,
                 expected: 1,
-            }).with_highlight(TokenId::Mnemonic),
+            })
+            .with_highlight(TokenId::Mnemonic),
         )
     }
 
@@ -944,7 +952,8 @@ mod tests {
             ExpectedDiagnostic::new(Message::OperandCount {
                 actual: 0,
                 expected: 1,
-            }).with_highlight(TokenId::Mnemonic),
+            })
+            .with_highlight(TokenId::Mnemonic),
         )
     }
 
@@ -971,7 +980,8 @@ mod tests {
         analyze(kw::Mnemonic::Bit, vec![literal(A), literal(B)]).expect_diagnostic(
             ExpectedDiagnostic::new(Message::MustBeBit {
                 mnemonic: TokenId::Mnemonic.into(),
-            }).with_highlight(TokenId::Operand(0, 0)),
+            })
+            .with_highlight(TokenId::Operand(0, 0)),
         )
     }
 

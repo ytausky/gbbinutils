@@ -48,10 +48,11 @@ impl<S: Clone + Debug + PartialEq> Node<S> {
                 } else {
                     AddrKind::High
                 };
-                let opcode = opcode | match kind {
-                    AddrKind::Low => 0x0a,
-                    AddrKind::High => 0x00,
-                };
+                let opcode = opcode
+                    | match kind {
+                        AddrKind::Low => 0x0a,
+                        AddrKind::High => 0x00,
+                    };
                 let mut bytes = vec![opcode];
                 let addr_repr = match kind {
                     AddrKind::Low => Data::Word(addr as u16),
@@ -60,7 +61,8 @@ impl<S: Clone + Debug + PartialEq> Node<S> {
                 bytes.extend(addr_repr.into_bytes());
                 bytes
             }
-        }.into_iter()
+        }
+        .into_iter()
     }
 }
 
@@ -104,7 +106,8 @@ fn resolve_expr_item<S: Clone + Debug + PartialEq>(
                 },
                 span.clone(),
             ))
-        }).exact()
+        })
+        .exact()
         .unwrap_or(0);
     fit_to_width((value, span), width, diagnostics)
 }
@@ -194,7 +197,8 @@ mod tests {
                 BinaryOperator::Minus,
                 Box::new(4.into()),
                 Box::new(3.into()),
-            ).into(),
+            )
+            .into(),
             Width::Byte,
         ));
         assert_eq!(actual, [0x01])
@@ -209,7 +213,8 @@ mod tests {
                 location: Value::Unknown,
             },
             &mut diagnostics::IgnoreDiagnostics::new(),
-        ).collect()
+        )
+        .collect()
     }
 
     #[test]

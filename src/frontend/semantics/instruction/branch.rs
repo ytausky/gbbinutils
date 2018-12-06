@@ -250,7 +250,8 @@ mod tests {
         analyze(
             Mnemonic::Jp,
             vec![literal(C), SimpleOperand::DerefHl.into()],
-        ).expect_diagnostic(
+        )
+        .expect_diagnostic(
             ExpectedDiagnostic::new(Message::AlwaysUnconditional)
                 .with_highlight(TokenId::Operand(0, 0)),
         )
@@ -292,7 +293,8 @@ mod tests {
         analyze(Mnemonic::Call, vec![deref(literal(Hl))]).expect_diagnostic(
             ExpectedDiagnostic::new(Message::RequiresConstantTarget {
                 mnemonic: TokenId::Mnemonic.into(),
-            }).with_highlight(TokenSpan::merge(
+            })
+            .with_highlight(TokenSpan::merge(
                 &TokenSpan::from(TokenId::Operand(0, 0)),
                 &TokenId::Operand(0, 2).into(),
             )),

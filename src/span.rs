@@ -172,15 +172,11 @@ impl Merge for RcContextFactory<BufId, BufRange> {
                     range: other_range,
                     context: other_context,
                 },
-            )
-                if Rc::ptr_eq(context, other_context) =>
-            {
-                Buf {
-                    range: cmp::min(range.start, other_range.start)
-                        ..cmp::max(range.end, other_range.end),
-                    context: (*context).clone(),
-                }
-            }
+            ) if Rc::ptr_eq(context, other_context) => Buf {
+                range: cmp::min(range.start, other_range.start)
+                    ..cmp::max(range.end, other_range.end),
+                context: (*context).clone(),
+            },
             _ => unreachable!(),
         }
     }

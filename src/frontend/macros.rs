@@ -333,14 +333,13 @@ mod tests {
             .unwrap()
             .expand(
                 invocation_name.1,
-                vec![
-                    vec![Token::Ident("y"), Token::Ident("z")]
-                        .into_iter()
-                        .zip((8..=9).map(mk_span))
-                        .collect(),
-                ],
+                vec![vec![Token::Ident("y"), Token::Ident("z")]
+                    .into_iter()
+                    .zip((8..=9).map(mk_span))
+                    .collect()],
                 factory,
-            ).collect();
+            )
+            .collect();
         assert_eq!(
             expanded,
             [

@@ -200,7 +200,8 @@ mod tests {
                     BinaryOperator::Plus,
                     Box::new(RelocAtom::LocationCounter.into()),
                     Box::new(3.into()),
-                ).into()
+                )
+                .into()
             )]
         )
     }
@@ -349,8 +350,9 @@ mod tests {
 
     fn with_directive<F>(directive: Directive, f: F) -> Vec<TestOperation>
     where
-        F: for<'a> FnOnce(semantics::CommandActions<'a, TestFrontend>)
-            -> semantics::CommandActions<'a, TestFrontend>,
+        F: for<'a> FnOnce(
+            semantics::CommandActions<'a, TestFrontend>,
+        ) -> semantics::CommandActions<'a, TestFrontend>,
     {
         collect_semantic_actions(|actions| {
             let command = actions

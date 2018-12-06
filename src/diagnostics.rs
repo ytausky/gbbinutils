@@ -116,7 +116,8 @@ impl<C, O> Diagnostics for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
     O: DiagnosticsListener<Span = C::Span>,
-{}
+{
+}
 
 pub trait DiagnosticsOutput {
     fn emit(&mut self, diagnostic: Diagnostic<String>);

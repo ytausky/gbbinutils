@@ -629,7 +629,8 @@ mod tests {
                         BinaryOperator::Plus,
                         Box::new(1.into()),
                         Box::new(1.into()),
-                    ).into()
+                    )
+                    .into()
                 )
             ))]
         )

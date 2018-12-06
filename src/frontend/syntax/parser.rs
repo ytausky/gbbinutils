@@ -183,7 +183,8 @@ where
                     state.token.1.clone(),
                 ));
             state.change_context(|c| c.exit())
-        }.change_context(|c| c.exit())
+        }
+        .change_context(|c| c.exit())
     }
 
     fn parse_macro_invocation(self, name: (Id, Ctx::Span)) -> Self {
