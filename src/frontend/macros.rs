@@ -1,5 +1,5 @@
 use super::Token;
-use span::{MacroContextFactory, MacroExpansionContext};
+use crate::span::{MacroContextFactory, MacroExpansionContext};
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::rc::Rc;

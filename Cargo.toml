@@ -5,5 +5,6 @@ authors = ["Yaron Tausky <yaron.tausky@gmail.com>"]
 description = "An assembler for Game Boy"
 repository = "https://github.com/ytausky/gbas"
 license = "GPL-3.0-or-later"
+edition = "2018"
 
 [dependencies]
