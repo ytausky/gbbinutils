@@ -19,6 +19,7 @@ pub fn analyze_directive<'a, S: Session + 'a>(
         Directive::Db => analyze_data(Width::Byte, args, actions),
         Directive::Ds => analyze_ds(directive.1, args, actions),
         Directive::Dw => analyze_data(Width::Word, args, actions),
+        Directive::Equ => unimplemented!(),
         Directive::Include => analyze_include(directive.1, args, actions),
         Directive::Org => analyze_org(directive.1, args, actions),
     }

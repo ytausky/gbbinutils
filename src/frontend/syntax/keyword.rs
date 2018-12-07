@@ -21,6 +21,7 @@ pub enum Directive {
     Db,
     Ds,
     Dw,
+    Equ,
     Include,
     Org,
 }
