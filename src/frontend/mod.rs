@@ -38,14 +38,17 @@ pub struct Downstream<'a, B: 'a, D: 'a> {
     diagnostics: &'a mut D,
 }
 
-trait Analysis<Id: Into<String> + Debug + PartialEq>
+trait Analysis<Id>
 where
     Self: Copy,
+    Id: Into<String> + Clone + AsRef<str> + Debug + PartialEq,
 {
-    fn run<I, S>(&self, tokens: I, session: &mut S)
+    fn run<I, F, B, D>(&self, tokens: I, session: &mut BorrowedComponents<F, B, D>)
     where
-        I: Iterator<Item = (Token<Id>, S::Span)>,
-        S: Session<Ident = Id>;
+        I: Iterator<Item = (Token<Id>, D::Span)>,
+        F: Frontend<D, Ident = Id>,
+        B: Backend<D::Span>,
+        D: Diagnostics;
 }
 
 #[derive(Clone, Copy)]
@@ -109,11 +112,16 @@ pub trait Frontend<D: Diagnostics> {
     );
 }
 
-impl<Id: Into<String> + Debug + PartialEq> Analysis<Id> for SemanticAnalysis {
-    fn run<I, S>(&self, tokens: I, session: &mut S)
+impl<Id> Analysis<Id> for SemanticAnalysis
+where
+    Id: Into<String> + Clone + AsRef<str> + Debug + PartialEq,
+{
+    fn run<I, F, B, D>(&self, tokens: I, session: &mut BorrowedComponents<F, B, D>)
     where
-        I: Iterator<Item = (Token<Id>, S::Span)>,
-        S: Session<Ident = Id>,
+        I: Iterator<Item = (Token<Id>, D::Span)>,
+        F: Frontend<D, Ident = Id>,
+        B: Backend<D::Span>,
+        D: Diagnostics,
     {
         let actions = semantics::SemanticActions::new(session);
         syntax::parse_token_seq(tokens, actions)
@@ -319,7 +327,12 @@ mod tests {
                 f.mock_token_source
                     .add_file(filename, add_code_refs(&contents))
             })
-            .when(|mut session| session.analyze_file(filename.to_string()).unwrap());
+            .when(|mut fixture| {
+                fixture
+                    .session()
+                    .analyze_file(filename.to_string())
+                    .unwrap()
+            });
         assert_eq!(*log.borrow(), [TestEvent::AnalyzeTokens(contents)]);
     }
 
@@ -333,7 +346,7 @@ mod tests {
     fn emit_instruction_item() {
         let item = Item::Instruction(Instruction::Nullary(Nullary::Nop));
         let log = TestLog::default();
-        TestFixture::new(&log).when(|mut session| session.emit_item(item.clone()));
+        TestFixture::new(&log).when(|mut fixture| fixture.session().emit_item(item.clone()));
         assert_eq!(*log.borrow(), [TestEvent::EmitItem(item)]);
     }
 
@@ -341,7 +354,8 @@ mod tests {
     fn define_label() {
         let label = "label";
         let log = TestLog::default();
-        TestFixture::new(&log).when(|mut session| session.define_label((label.to_string(), ())));
+        TestFixture::new(&log)
+            .when(|mut fixture| fixture.session().define_label((label.to_string(), ())));
         assert_eq!(*log.borrow(), [TestEvent::AddLabel(String::from(label))]);
     }
 
@@ -352,7 +366,8 @@ mod tests {
         let name = "my_macro";
         let tokens = vec![Token::Command(Command::Mnemonic(Mnemonic::Nop))];
         let log = TestLog::default();
-        TestFixture::new(&log).when(|mut session| {
+        TestFixture::new(&log).when(|mut fixture| {
+            let mut session = fixture.session();
             session.define_macro((name.to_string(), ()), Vec::new(), add_code_refs(&tokens));
             session.invoke_macro((name.to_string(), ()), vec![])
         });
@@ -365,9 +380,10 @@ mod tests {
         let arg = Token::Literal(Literal::Number(0x42));
         let literal0 = Token::Literal(Literal::Number(0));
         let log = TestLog::default();
-        TestFixture::new(&log).when(|mut session| {
+        TestFixture::new(&log).when(|mut fixture| {
             let name = "my_db";
             let param = "x";
+            let mut session = fixture.session();
             session.define_macro(
                 (name.to_string(), ()),
                 vec![(param.to_string(), ())],
@@ -390,9 +406,10 @@ mod tests {
         let nop = Token::Command(Command::Mnemonic(Mnemonic::Nop));
         let label = String::from("label");
         let log = TestLog::default();
-        TestFixture::new(&log).when(|mut session| {
+        TestFixture::new(&log).when(|mut fixture| {
             let name = String::from("my_macro");
             let param = String::from("x");
+            let mut session = fixture.session();
             session.define_macro(
                 (name.clone(), ()),
                 vec![(param.clone(), ())],
@@ -412,7 +429,8 @@ mod tests {
     fn diagnose_undefined_macro() {
         let name = "my_macro".to_string();
         let log = TestLog::default();
-        TestFixture::new(&log).when(|mut session| session.invoke_macro((name.clone(), ()), vec![]));
+        TestFixture::new(&log)
+            .when(|mut fixture| fixture.session().invoke_macro((name.clone(), ()), vec![]));
         assert_eq!(
             *log.borrow(),
             [TestEvent::Diagnostic(InternalDiagnostic::new(
@@ -523,10 +541,12 @@ mod tests {
     }
 
     impl<'a> Analysis<String> for Mock<'a> {
-        fn run<I, F>(&self, tokens: I, _frontend: &mut F)
+        fn run<I, F, B, D>(&self, tokens: I, _frontend: &mut BorrowedComponents<F, B, D>)
         where
-            I: Iterator<Item = (Token<String>, F::Span)>,
-            F: Session<Ident = String>,
+            I: Iterator<Item = (Token<String>, D::Span)>,
+            F: Frontend<D, Ident = String>,
+            B: Backend<D::Span>,
+            D: Diagnostics,
         {
             self.log.borrow_mut().push(TestEvent::AnalyzeTokens(
                 tokens.map(|(t, _)| t.into()).collect(),
@@ -586,6 +606,22 @@ mod tests {
         diagnostics: Mock<'a>,
     }
 
+    struct PreparedFixture<'a, 'b> {
+        code_analyzer: CodebaseAnalyzer<'b, MacroExpander<String, ()>, MockTokenSource, Mock<'a>>,
+        object: Mock<'a>,
+        diagnostics: Mock<'a>,
+    }
+
+    impl<'a, 'b> PreparedFixture<'a, 'b> {
+        fn session<'r>(&'r mut self) -> TestSession<'a, 'b, 'r> {
+            Components::new(
+                &mut self.code_analyzer,
+                &mut self.object,
+                &mut self.diagnostics,
+            )
+        }
+    }
+
     impl<'a> TestFixture<'a> {
         fn new(log: &'a TestLog) -> TestFixture<'a> {
             TestFixture {
@@ -602,22 +638,28 @@ mod tests {
             self
         }
 
-        fn when<F: for<'b> FnOnce(TestSession<'b>)>(self, f: F) {
-            let file_parser =
-                CodebaseAnalyzer::new(self.macro_table, &self.mock_token_source, self.analysis);
-            let session = Components::new(file_parser, self.object, self.diagnostics);
-            f(session);
+        fn when<F: for<'b> FnOnce(PreparedFixture<'a, 'b>)>(self, f: F) {
+            let prepared = PreparedFixture {
+                code_analyzer: CodebaseAnalyzer::new(
+                    self.macro_table,
+                    &self.mock_token_source,
+                    self.analysis,
+                ),
+                object: self.object,
+                diagnostics: self.diagnostics,
+            };
+            f(prepared);
         }
     }
 
-    type TestCodebaseAnalyzer<'a> =
-        CodebaseAnalyzer<'a, MacroExpander<String, ()>, MockTokenSource, Mock<'a>>;
-    type TestSession<'a> = Components<
-        TestCodebaseAnalyzer<'a>,
+    type TestCodebaseAnalyzer<'a, 'r> =
+        CodebaseAnalyzer<'r, MacroExpander<String, ()>, MockTokenSource, Mock<'a>>;
+    type TestSession<'a, 'b, 'r> = Components<
+        TestCodebaseAnalyzer<'a, 'b>,
         Mock<'a>,
         Mock<'a>,
-        TestCodebaseAnalyzer<'a>,
-        Mock<'a>,
-        Mock<'a>,
+        &'r mut TestCodebaseAnalyzer<'a, 'b>,
+        &'r mut Mock<'a>,
+        &'r mut Mock<'a>,
     >;
 }
