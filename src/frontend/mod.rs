@@ -18,7 +18,7 @@ pub use crate::frontend::syntax::Token;
 pub fn analyze_file<C, B, D>(
     name: String,
     codebase: &C,
-    backend: B,
+    mut backend: B,
     diagnostics: &mut D,
 ) -> Result<B::Object, CodebaseError>
 where
@@ -26,11 +26,11 @@ where
     B: Backend<D::Span>,
     D: Diagnostics,
 {
-    let file_parser = CodebaseAnalyzer::new(MacroExpander::new(), codebase, SemanticAnalysis {});
-    let mut session: Components<_, _, D, _, _, _> =
-        Components::new(file_parser, backend, diagnostics);
+    let mut file_parser =
+        CodebaseAnalyzer::new(MacroExpander::new(), codebase, SemanticAnalysis {});
+    let mut session = Components::new(&mut file_parser, &mut backend, diagnostics);
     session.analyze_file(name)?;
-    Ok(session.build_object())
+    Ok(backend.into_object())
 }
 
 pub struct Downstream<'a, B: 'a, D: 'a> {
@@ -43,7 +43,7 @@ where
     Self: Copy,
     Id: Into<String> + Clone + AsRef<str> + Debug + PartialEq,
 {
-    fn run<I, F, B, D>(&self, tokens: I, session: &mut BorrowedComponents<F, B, D>)
+    fn run<I, F, B, D>(&self, tokens: I, session: &mut Components<F, B, D>)
     where
         I: Iterator<Item = (Token<Id>, D::Span)>,
         F: Frontend<D, Ident = Id>,
@@ -116,7 +116,7 @@ impl<Id> Analysis<Id> for SemanticAnalysis
 where
     Id: Into<String> + Clone + AsRef<str> + Debug + PartialEq,
 {
-    fn run<I, F, B, D>(&self, tokens: I, session: &mut BorrowedComponents<F, B, D>)
+    fn run<I, F, B, D>(&self, tokens: I, session: &mut Components<F, B, D>)
     where
         I: Iterator<Item = (Token<Id>, D::Span)>,
         F: Frontend<D, Ident = Id>,
@@ -161,7 +161,7 @@ where
         for<'b> &'b T::Tokenized: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
     {
         let analysis = self.analysis;
-        let mut session = BorrowedComponents::new(self, downstream.backend, downstream.diagnostics);
+        let mut session = Components::new(self, downstream.backend, downstream.diagnostics);
         analysis.run(tokens.into_iter(), &mut session)
     }
 }
@@ -541,7 +541,7 @@ mod tests {
     }
 
     impl<'a> Analysis<String> for Mock<'a> {
-        fn run<I, F, B, D>(&self, tokens: I, _frontend: &mut BorrowedComponents<F, B, D>)
+        fn run<I, F, B, D>(&self, tokens: I, _frontend: &mut Components<F, B, D>)
         where
             I: Iterator<Item = (Token<String>, D::Span)>,
             F: Frontend<D, Ident = String>,
@@ -654,12 +654,5 @@ mod tests {
 
     type TestCodebaseAnalyzer<'a, 'r> =
         CodebaseAnalyzer<'r, MacroExpander<String, ()>, MockTokenSource, Mock<'a>>;
-    type TestSession<'a, 'b, 'r> = Components<
-        TestCodebaseAnalyzer<'a, 'b>,
-        Mock<'a>,
-        Mock<'a>,
-        &'r mut TestCodebaseAnalyzer<'a, 'b>,
-        &'r mut Mock<'a>,
-        &'r mut Mock<'a>,
-    >;
+    type TestSession<'a, 'b, 'r> = Components<'r, TestCodebaseAnalyzer<'a, 'b>, Mock<'a>, Mock<'a>>;
 }
