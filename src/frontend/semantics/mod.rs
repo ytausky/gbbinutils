@@ -212,7 +212,7 @@ impl<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics> syntax::CommandCon
 }
 
 impl Directive {
-    fn requires_symbol(&self) -> bool {
+    fn requires_symbol(self) -> bool {
         match self {
             Directive::Equ => true,
             _ => false,

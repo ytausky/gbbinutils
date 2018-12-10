@@ -10,7 +10,7 @@ use crate::span::{Merge, Source, Span};
 mod branch;
 mod ld;
 
-pub fn analyze_instruction<'a, Id: Into<String>, I, V, B, M>(
+pub fn analyze_instruction<Id: Into<String>, I, V, B, M>(
     mnemonic: (kw::Mnemonic, M::Span),
     operands: I,
     builder: &mut B,
