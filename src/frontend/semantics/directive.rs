@@ -10,78 +10,92 @@ use crate::frontend::Frontend;
 use crate::span::Source;
 use std::fmt::Debug;
 
-pub fn analyze_directive<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
+pub fn analyze_directive<'a: 'b, 'b, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
     directive: (Directive, D::Span),
     args: CommandArgs<F::Ident, D::Span>,
-    actions: &mut SemanticActions<'a, F, B, D>,
+    actions: &'b mut SemanticActions<'a, F, B, D>,
 ) -> Result<(), InternalDiagnostic<D::Span>> {
-    match directive.0 {
-        Directive::Db => analyze_data(Width::Byte, args, actions),
-        Directive::Ds => analyze_ds(directive.1, args, actions),
-        Directive::Dw => analyze_data(Width::Word, args, actions),
-        Directive::Equ => analyze_equ(directive.1, args, actions),
-        Directive::Include => analyze_include(directive.1, args, actions),
-        Directive::Org => analyze_org(directive.1, args, actions),
-    }
-}
-
-fn analyze_data<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
-    width: Width,
-    args: CommandArgs<F::Ident, D::Span>,
-    actions: &mut SemanticActions<'a, F, B, D>,
-) -> Result<(), InternalDiagnostic<D::Span>> {
-    for arg in args {
-        let expr = analyze_reloc_expr(arg, &mut actions.session.backend.build_value())?;
-        actions
-            .session
-            .backend
-            .emit_item(backend::Item::Data(expr, width))
-    }
-    Ok(())
-}
-
-fn analyze_ds<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
-    span: D::Span,
-    args: CommandArgs<F::Ident, D::Span>,
-    actions: &mut SemanticActions<'a, F, B, D>,
-) -> Result<(), InternalDiagnostic<D::Span>> {
-    let origin = {
-        let arg = single_arg(span, args)?;
-        let builder = &mut actions.session.backend.build_value();
-        let count = analyze_reloc_expr(arg, builder)?;
-        location_counter_plus_expr(count, builder)
+    let context = DirectiveContext {
+        span: directive.1,
+        args,
+        actions,
     };
-    actions.session.backend.set_origin(origin);
-    Ok(())
+    context.analyze(directive.0)
+}
+
+struct DirectiveContext<'a, A, I, S> {
+    span: S,
+    args: CommandArgs<I, S>,
+    actions: &'a mut A,
+}
+
+impl<'a, 'b, F, B, D> DirectiveContext<'b, SemanticActions<'a, F, B, D>, F::Ident, D::Span>
+where
+    'a: 'b,
+    F: Frontend<D>,
+    B: Backend<D::Span>,
+    D: Diagnostics,
+{
+    fn analyze(self, directive: Directive) -> Result<(), InternalDiagnostic<D::Span>> {
+        match directive {
+            Directive::Db => self.analyze_data(Width::Byte),
+            Directive::Ds => self.analyze_ds(),
+            Directive::Dw => self.analyze_data(Width::Word),
+            Directive::Equ => self.analyze_equ(),
+            Directive::Include => self.analyze_include(),
+            Directive::Org => self.analyze_org(),
+        }
+    }
+
+    fn analyze_data(self, width: Width) -> Result<(), InternalDiagnostic<D::Span>> {
+        for arg in self.args {
+            let expr = analyze_reloc_expr(arg, &mut self.actions.session.backend.build_value())?;
+            self.actions
+                .session
+                .backend
+                .emit_item(backend::Item::Data(expr, width))
+        }
+        Ok(())
+    }
+
+    fn analyze_ds(self) -> Result<(), InternalDiagnostic<D::Span>> {
+        let origin = {
+            let arg = single_arg(self.span, self.args)?;
+            let builder = &mut self.actions.session.backend.build_value();
+            let count = analyze_reloc_expr(arg, builder)?;
+            location_counter_plus_expr(count, builder)
+        };
+        self.actions.session.backend.set_origin(origin);
+        Ok(())
+    }
+
+    fn analyze_equ(self) -> Result<(), InternalDiagnostic<D::Span>> {
+        let symbol = self.actions.label.take().unwrap();
+        let arg = single_arg(self.span, self.args)?;
+        let value = analyze_reloc_expr(arg, &mut self.actions.session.backend.build_value())?;
+        self.actions.session.backend.define_symbol(symbol, value);
+        Ok(())
+    }
+
+    fn analyze_include(self) -> Result<(), InternalDiagnostic<D::Span>> {
+        let (path, span) = reduce_include(self.span, self.args)?;
+        self.actions
+            .session
+            .analyze_file(path)
+            .map_err(|err| InternalDiagnostic::new(err.into(), span))
+    }
+
+    fn analyze_org(self) -> Result<(), InternalDiagnostic<D::Span>> {
+        let arg = single_arg(self.span, self.args)?;
+        let expr = analyze_reloc_expr(arg, &mut self.actions.session.backend.build_value())?;
+        self.actions.session.backend.set_origin(expr);
+        Ok(())
+    }
 }
 
 fn location_counter_plus_expr<V: Source, B: ValueBuilder<V>>(expr: V, builder: &mut B) -> V {
     let location = builder.location(expr.span());
     builder.apply_binary_operator((BinaryOperator::Plus, expr.span()), location, expr)
-}
-
-fn analyze_equ<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
-    span: D::Span,
-    args: CommandArgs<F::Ident, D::Span>,
-    actions: &mut SemanticActions<'a, F, B, D>,
-) -> Result<(), InternalDiagnostic<D::Span>> {
-    let symbol = actions.label.take().unwrap();
-    let arg = single_arg(span, args)?;
-    let value = analyze_reloc_expr(arg, &mut actions.session.backend.build_value())?;
-    actions.session.backend.define_symbol(symbol, value);
-    Ok(())
-}
-
-fn analyze_include<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
-    span: D::Span,
-    args: CommandArgs<F::Ident, D::Span>,
-    actions: &mut SemanticActions<'a, F, B, D>,
-) -> Result<(), InternalDiagnostic<D::Span>> {
-    let (path, span) = reduce_include(span, args)?;
-    actions
-        .session
-        .analyze_file(path)
-        .map_err(|err| InternalDiagnostic::new(err.into(), span))
 }
 
 fn reduce_include<I, S>(
@@ -97,17 +111,6 @@ where
         ExprVariant::Atom(SemanticAtom::Literal(Literal::String(path))) => Ok((path, arg.span)),
         _ => Err(InternalDiagnostic::new(Message::ExpectedString, arg.span)),
     }
-}
-
-fn analyze_org<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
-    span: D::Span,
-    args: CommandArgs<F::Ident, D::Span>,
-    actions: &mut SemanticActions<'a, F, B, D>,
-) -> Result<(), InternalDiagnostic<D::Span>> {
-    let arg = single_arg(span, args)?;
-    let expr = analyze_reloc_expr(arg, &mut actions.session.backend.build_value())?;
-    actions.session.backend.set_origin(expr);
-    Ok(())
 }
 
 fn single_arg<T: Debug + PartialEq, S>(
