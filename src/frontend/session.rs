@@ -8,19 +8,19 @@ use crate::span::{Merge, Span};
 
 pub type MacroArgs<I, S> = Vec<Vec<(Token<I>, S)>>;
 
-pub struct Components<'a, F, B, D> {
+pub struct Session<'a, F, B, D> {
     pub frontend: &'a mut F,
     pub backend: &'a mut B,
     pub diagnostics: &'a mut D,
 }
 
-impl<'a, F, B, D> Components<'a, F, B, D> {
+impl<'a, F, B, D> Session<'a, F, B, D> {
     pub fn new(
         frontend: &'a mut F,
         backend: &'a mut B,
         diagnostics: &'a mut D,
-    ) -> Components<'a, F, B, D> {
-        Components {
+    ) -> Session<'a, F, B, D> {
+        Session {
             frontend,
             backend,
             diagnostics,
@@ -28,7 +28,7 @@ impl<'a, F, B, D> Components<'a, F, B, D> {
     }
 }
 
-impl<'a, F, B, D> Components<'a, F, B, D>
+impl<'a, F, B, D> Session<'a, F, B, D>
 where
     F: frontend::Frontend<D>,
     D: diagnostics::Diagnostics,
@@ -44,7 +44,7 @@ where
     }
 }
 
-impl<'a, F, B, D> Components<'a, F, B, D>
+impl<'a, F, B, D> Session<'a, F, B, D>
 where
     F: frontend::Frontend<D>,
     B: backend::Backend<D::Span>,
@@ -61,7 +61,7 @@ where
     }
 }
 
-impl<'a, F, B, D> Span for Components<'a, F, B, D>
+impl<'a, F, B, D> Span for Session<'a, F, B, D>
 where
     F: frontend::Frontend<D>,
     B: backend::Backend<D::Span>,
@@ -70,7 +70,7 @@ where
     type Span = D::Span;
 }
 
-impl<'a, F, B, D> Merge for Components<'a, F, B, D>
+impl<'a, F, B, D> Merge for Session<'a, F, B, D>
 where
     F: frontend::Frontend<D>,
     B: backend::Backend<D::Span>,
@@ -81,7 +81,7 @@ where
     }
 }
 
-impl<'a, F, B, D> DiagnosticsListener for Components<'a, F, B, D>
+impl<'a, F, B, D> DiagnosticsListener for Session<'a, F, B, D>
 where
     F: frontend::Frontend<D>,
     B: backend::Backend<D::Span>,
@@ -92,7 +92,7 @@ where
     }
 }
 
-impl<'a, F, B, D> Components<'a, F, B, D>
+impl<'a, F, B, D> Session<'a, F, B, D>
 where
     F: frontend::Frontend<D>,
     B: backend::Backend<D::Span>,

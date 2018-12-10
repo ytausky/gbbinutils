@@ -3,7 +3,7 @@ use crate::diagnostics::{
     Diagnostics, DiagnosticsListener, DownstreamDiagnostics, InternalDiagnostic, Message,
 };
 use crate::expr::ExprVariant;
-use crate::frontend::session::Components;
+use crate::frontend::session::Session;
 use crate::frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token};
 use crate::frontend::{ExprFactory, Frontend, Literal, StrExprFactory};
 use crate::span::{Merge, Span};
@@ -50,13 +50,13 @@ mod expr {
 use self::expr::*;
 
 pub struct SemanticActions<'a, F: Frontend<D>, B, D: Diagnostics> {
-    session: Components<'a, F, B, D>,
+    session: Session<'a, F, B, D>,
     expr_factory: StrExprFactory,
     label: Option<(F::Ident, D::Span)>,
 }
 
 impl<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics> SemanticActions<'a, F, B, D> {
-    pub fn new(session: Components<'a, F, B, D>) -> SemanticActions<'a, F, B, D> {
+    pub fn new(session: Session<'a, F, B, D>) -> SemanticActions<'a, F, B, D> {
         SemanticActions {
             session,
             expr_factory: StrExprFactory::new(),
@@ -951,7 +951,7 @@ mod tests {
         let mut frontend = TestFrontend::new(&operations);
         let mut backend = TestBackend::new(&operations);
         let mut diagnostics = TestDiagnostics::new(&operations);
-        let session = Components::new(&mut frontend, &mut backend, &mut diagnostics);
+        let session = Session::new(&mut frontend, &mut backend, &mut diagnostics);
         f(SemanticActions::new(session));
         operations.into_inner()
     }

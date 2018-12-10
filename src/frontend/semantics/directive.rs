@@ -131,7 +131,7 @@ mod tests {
     use crate::codebase::CodebaseError;
     use crate::frontend::semantics;
     use crate::frontend::semantics::tests::*;
-    use crate::frontend::session::Components;
+    use crate::frontend::session::Session;
     use crate::frontend::syntax::keyword::{Command, Operand};
     use crate::frontend::syntax::{
         CommandContext, ExprAtom, ExprContext, FileContext, StmtContext,
@@ -279,7 +279,7 @@ mod tests {
         frontend.fail(CodebaseError::Utf8Error);
         let mut backend = TestBackend::new(&operations);
         let mut diagnostics = TestDiagnostics::new(&operations);
-        let session = Components::new(&mut frontend, &mut backend, &mut diagnostics);
+        let session = Session::new(&mut frontend, &mut backend, &mut diagnostics);
         {
             let mut context = SemanticActions::new(session)
                 .enter_stmt(None)
@@ -309,7 +309,7 @@ mod tests {
         )));
         let mut backend = TestBackend::new(&operations);
         let mut diagnostics = TestDiagnostics::new(&operations);
-        let session = Components::new(&mut frontend, &mut backend, &mut diagnostics);
+        let session = Session::new(&mut frontend, &mut backend, &mut diagnostics);
         {
             let mut context = SemanticActions::new(session)
                 .enter_stmt(None)

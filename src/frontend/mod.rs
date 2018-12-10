@@ -28,7 +28,7 @@ where
 {
     let mut file_parser =
         CodebaseAnalyzer::new(MacroExpander::new(), codebase, SemanticAnalysis {});
-    let mut session = Components::new(&mut file_parser, &mut backend, diagnostics);
+    let mut session = Session::new(&mut file_parser, &mut backend, diagnostics);
     session.analyze_file(name)?;
     Ok(backend.into_object())
 }
@@ -43,7 +43,7 @@ where
     Self: Copy,
     Id: Into<String> + Clone + AsRef<str> + Debug + PartialEq,
 {
-    fn run<I, F, B, D>(&self, tokens: I, session: Components<F, B, D>)
+    fn run<I, F, B, D>(&self, tokens: I, session: Session<F, B, D>)
     where
         I: Iterator<Item = (Token<Id>, D::Span)>,
         F: Frontend<D, Ident = Id>,
@@ -116,7 +116,7 @@ impl<Id> Analysis<Id> for SemanticAnalysis
 where
     Id: Into<String> + Clone + AsRef<str> + Debug + PartialEq,
 {
-    fn run<'a, I, F, B, D>(&self, tokens: I, session: Components<'a, F, B, D>)
+    fn run<'a, I, F, B, D>(&self, tokens: I, session: Session<'a, F, B, D>)
     where
         I: Iterator<Item = (Token<Id>, D::Span)>,
         F: Frontend<D, Ident = Id>,
@@ -161,7 +161,7 @@ where
         for<'b> &'b T::Tokenized: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
     {
         let analysis = self.analysis;
-        let session = Components::new(self, downstream.backend, downstream.diagnostics);
+        let session = Session::new(self, downstream.backend, downstream.diagnostics);
         analysis.run(tokens.into_iter(), session)
     }
 }
@@ -542,7 +542,7 @@ mod tests {
     }
 
     impl<'a> Analysis<String> for Mock<'a> {
-        fn run<I, F, B, D>(&self, tokens: I, _frontend: Components<F, B, D>)
+        fn run<I, F, B, D>(&self, tokens: I, _frontend: Session<F, B, D>)
         where
             I: Iterator<Item = (Token<String>, D::Span)>,
             F: Frontend<D, Ident = String>,
@@ -615,7 +615,7 @@ mod tests {
 
     impl<'a, 'b> PreparedFixture<'a, 'b> {
         fn session<'r>(&'r mut self) -> TestSession<'a, 'b, 'r> {
-            Components::new(
+            Session::new(
                 &mut self.code_analyzer,
                 &mut self.object,
                 &mut self.diagnostics,
@@ -655,5 +655,5 @@ mod tests {
 
     type TestCodebaseAnalyzer<'a, 'r> =
         CodebaseAnalyzer<'r, MacroExpander<String, ()>, MockTokenSource, Mock<'a>>;
-    type TestSession<'a, 'b, 'r> = Components<'r, TestCodebaseAnalyzer<'a, 'b>, Mock<'a>, Mock<'a>>;
+    type TestSession<'a, 'b, 'r> = Session<'r, TestCodebaseAnalyzer<'a, 'b>, Mock<'a>, Mock<'a>>;
 }
