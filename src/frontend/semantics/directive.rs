@@ -2,19 +2,19 @@ use super::{
     analyze_reloc_expr, CommandArgs, Directive, SemanticActions, SemanticAtom, SemanticExpr,
 };
 use crate::backend;
-use crate::backend::{BinaryOperator, RelocAtom, Width};
-use crate::diagnostics::{InternalDiagnostic, Message};
+use crate::backend::{Backend, BinaryOperator, RelocAtom, Width};
+use crate::diagnostics::{Diagnostics, InternalDiagnostic, Message};
 use crate::expr::ExprVariant;
-use crate::frontend::session::Session;
 use crate::frontend::syntax::Literal;
+use crate::frontend::Frontend;
 use crate::instruction::RelocExpr;
 use std::fmt::Debug;
 
-pub fn analyze_directive<'a, S: Session + 'a>(
-    directive: (Directive, S::Span),
-    args: CommandArgs<S>,
-    actions: &mut SemanticActions<'a, S>,
-) -> Result<(), InternalDiagnostic<S::Span>> {
+pub fn analyze_directive<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
+    directive: (Directive, D::Span),
+    args: CommandArgs<F::Ident, D::Span>,
+    actions: &mut SemanticActions<'a, F, B, D>,
+) -> Result<(), InternalDiagnostic<D::Span>> {
     match directive.0 {
         Directive::Db => analyze_data(Width::Byte, args, actions),
         Directive::Ds => analyze_ds(directive.1, args, actions),
@@ -25,27 +25,31 @@ pub fn analyze_directive<'a, S: Session + 'a>(
     }
 }
 
-fn analyze_data<'a, S: Session + 'a>(
+fn analyze_data<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
     width: Width,
-    args: CommandArgs<S>,
-    actions: &mut SemanticActions<'a, S>,
-) -> Result<(), InternalDiagnostic<S::Span>> {
+    args: CommandArgs<F::Ident, D::Span>,
+    actions: &mut SemanticActions<'a, F, B, D>,
+) -> Result<(), InternalDiagnostic<D::Span>> {
     for arg in args {
         let expr = analyze_reloc_expr(arg, &mut actions.expr_factory)?;
-        actions.session.emit_item(backend::Item::Data(expr, width))
+        actions
+            .session
+            .backend
+            .emit_item(backend::Item::Data(expr, width))
     }
     Ok(())
 }
 
-fn analyze_ds<'a, S: Session + 'a>(
-    span: S::Span,
-    args: CommandArgs<S>,
-    actions: &mut SemanticActions<'a, S>,
-) -> Result<(), InternalDiagnostic<S::Span>> {
+fn analyze_ds<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
+    span: D::Span,
+    args: CommandArgs<F::Ident, D::Span>,
+    actions: &mut SemanticActions<'a, F, B, D>,
+) -> Result<(), InternalDiagnostic<D::Span>> {
     let arg = single_arg(span, args)?;
     let count = analyze_reloc_expr(arg, &mut actions.expr_factory)?;
     actions
         .session
+        .backend
         .set_origin(location_counter_plus_expr(count));
     Ok(())
 }
@@ -65,11 +69,11 @@ fn location_counter_plus_expr<S: Clone>(expr: RelocExpr<S>) -> RelocExpr<S> {
     }
 }
 
-fn analyze_include<'a, F: Session + 'a>(
-    span: F::Span,
-    args: CommandArgs<F>,
-    actions: &mut SemanticActions<'a, F>,
-) -> Result<(), InternalDiagnostic<F::Span>> {
+fn analyze_include<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
+    span: D::Span,
+    args: CommandArgs<F::Ident, D::Span>,
+    actions: &mut SemanticActions<'a, F, B, D>,
+) -> Result<(), InternalDiagnostic<D::Span>> {
     let (path, span) = reduce_include(span, args)?;
     actions
         .session
@@ -92,14 +96,14 @@ where
     }
 }
 
-fn analyze_org<'a, S: Session + 'a>(
-    span: S::Span,
-    args: CommandArgs<S>,
-    actions: &mut SemanticActions<'a, S>,
-) -> Result<(), InternalDiagnostic<S::Span>> {
+fn analyze_org<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
+    span: D::Span,
+    args: CommandArgs<F::Ident, D::Span>,
+    actions: &mut SemanticActions<'a, F, B, D>,
+) -> Result<(), InternalDiagnostic<D::Span>> {
     let arg = single_arg(span, args)?;
     let expr = analyze_reloc_expr(arg, &mut actions.expr_factory)?;
-    actions.session.set_origin(expr);
+    actions.session.backend.set_origin(expr);
     Ok(())
 }
 
@@ -127,11 +131,13 @@ mod tests {
     use crate::codebase::CodebaseError;
     use crate::frontend::semantics;
     use crate::frontend::semantics::tests::*;
+    use crate::frontend::session::Components;
     use crate::frontend::syntax::keyword::{Command, Operand};
     use crate::frontend::syntax::{
         CommandContext, ExprAtom, ExprContext, FileContext, StmtContext,
     };
     use std::borrow::Borrow;
+    use std::cell::RefCell;
     use std::io;
 
     #[test]
@@ -268,10 +274,14 @@ mod tests {
     #[test]
     fn include_file_with_invalid_utf8() {
         let name = "invalid_utf8.s";
-        let mut frontend = TestFrontend::new();
+        let operations = RefCell::new(Vec::new());
+        let mut frontend = TestFrontend::new(&operations);
         frontend.fail(CodebaseError::Utf8Error);
+        let mut backend = TestBackend::new(&operations);
+        let mut diagnostics = TestDiagnostics::new(&operations);
+        let session = Components::new(&mut frontend, &mut backend, &mut diagnostics);
         {
-            let mut context = SemanticActions::new(&mut frontend)
+            let mut context = SemanticActions::new(session)
                 .enter_stmt(None)
                 .enter_command((Command::Directive(Directive::Include), ()))
                 .add_argument();
@@ -279,7 +289,7 @@ mod tests {
             context.exit().exit().exit();
         }
         assert_eq!(
-            frontend.into_inner(),
+            operations.into_inner(),
             [
                 TestOperation::AnalyzeFile(name.into()),
                 TestOperation::EmitDiagnostic(InternalDiagnostic::new(Message::InvalidUtf8, ()))
@@ -291,13 +301,17 @@ mod tests {
     fn include_nonexistent_file() {
         let name = "nonexistent.s";
         let message = "some message";
-        let mut frontend = TestFrontend::new();
+        let operations = RefCell::new(Vec::new());
+        let mut frontend = TestFrontend::new(&operations);
         frontend.fail(CodebaseError::IoError(io::Error::new(
             io::ErrorKind::NotFound,
             message,
         )));
+        let mut backend = TestBackend::new(&operations);
+        let mut diagnostics = TestDiagnostics::new(&operations);
+        let session = Components::new(&mut frontend, &mut backend, &mut diagnostics);
         {
-            let mut context = SemanticActions::new(&mut frontend)
+            let mut context = SemanticActions::new(session)
                 .enter_stmt(None)
                 .enter_command((Command::Directive(Directive::Include), ()))
                 .add_argument();
@@ -305,7 +319,7 @@ mod tests {
             context.exit().exit().exit();
         }
         assert_eq!(
-            frontend.into_inner(),
+            operations.into_inner(),
             [
                 TestOperation::AnalyzeFile(name.into()),
                 TestOperation::EmitDiagnostic(InternalDiagnostic::new(
@@ -319,14 +333,18 @@ mod tests {
     }
 
     fn ds(
-        f: impl for<'a> FnOnce(&mut semantics::ExprContext<'a, TestFrontend>),
+        f: impl for<'a> FnOnce(
+            &mut semantics::ExprContext<'a, TestFrontend<'a>, TestBackend<'a>, TestDiagnostics<'a>>,
+        ),
     ) -> Vec<TestOperation> {
         unary_directive(Directive::Ds, f)
     }
 
     fn unary_directive<F>(directive: Directive, f: F) -> Vec<TestOperation>
     where
-        F: for<'a> FnOnce(&mut semantics::ExprContext<'a, TestFrontend>),
+        F: for<'a> FnOnce(
+            &mut semantics::ExprContext<'a, TestFrontend<'a>, TestBackend<'a>, TestDiagnostics<'a>>,
+        ),
     {
         with_directive(directive, |command| {
             let mut arg = command.add_argument();
@@ -352,8 +370,13 @@ mod tests {
     fn with_directive<F>(directive: Directive, f: F) -> Vec<TestOperation>
     where
         F: for<'a> FnOnce(
-            semantics::CommandActions<'a, TestFrontend>,
-        ) -> semantics::CommandActions<'a, TestFrontend>,
+            semantics::CommandActions<'a, TestFrontend<'a>, TestBackend<'a>, TestDiagnostics<'a>>,
+        ) -> semantics::CommandActions<
+            'a,
+            TestFrontend<'a>,
+            TestBackend<'a>,
+            TestDiagnostics<'a>,
+        >,
     {
         collect_semantic_actions(|actions| {
             let command = actions

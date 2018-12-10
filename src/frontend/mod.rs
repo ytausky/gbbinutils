@@ -43,7 +43,7 @@ where
     Self: Copy,
     Id: Into<String> + Clone + AsRef<str> + Debug + PartialEq,
 {
-    fn run<I, F, B, D>(&self, tokens: I, session: &mut Components<F, B, D>)
+    fn run<I, F, B, D>(&self, tokens: I, session: Components<F, B, D>)
     where
         I: Iterator<Item = (Token<Id>, D::Span)>,
         F: Frontend<D, Ident = Id>,
@@ -116,7 +116,7 @@ impl<Id> Analysis<Id> for SemanticAnalysis
 where
     Id: Into<String> + Clone + AsRef<str> + Debug + PartialEq,
 {
-    fn run<I, F, B, D>(&self, tokens: I, session: &mut Components<F, B, D>)
+    fn run<'a, I, F, B, D>(&self, tokens: I, session: Components<'a, F, B, D>)
     where
         I: Iterator<Item = (Token<Id>, D::Span)>,
         F: Frontend<D, Ident = Id>,
@@ -161,8 +161,8 @@ where
         for<'b> &'b T::Tokenized: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
     {
         let analysis = self.analysis;
-        let mut session = Components::new(self, downstream.backend, downstream.diagnostics);
-        analysis.run(tokens.into_iter(), &mut session)
+        let session = Components::new(self, downstream.backend, downstream.diagnostics);
+        analysis.run(tokens.into_iter(), session)
     }
 }
 
@@ -346,7 +346,8 @@ mod tests {
     fn emit_instruction_item() {
         let item = Item::Instruction(Instruction::Nullary(Nullary::Nop));
         let log = TestLog::default();
-        TestFixture::new(&log).when(|mut fixture| fixture.session().emit_item(item.clone()));
+        TestFixture::new(&log)
+            .when(|mut fixture| fixture.session().backend.emit_item(item.clone()));
         assert_eq!(*log.borrow(), [TestEvent::EmitItem(item)]);
     }
 
@@ -355,7 +356,7 @@ mod tests {
         let label = "label";
         let log = TestLog::default();
         TestFixture::new(&log)
-            .when(|mut fixture| fixture.session().define_label((label.to_string(), ())));
+            .when(|mut fixture| fixture.session().backend.add_label((label.to_string(), ())));
         assert_eq!(*log.borrow(), [TestEvent::AddLabel(String::from(label))]);
     }
 
@@ -541,7 +542,7 @@ mod tests {
     }
 
     impl<'a> Analysis<String> for Mock<'a> {
-        fn run<I, F, B, D>(&self, tokens: I, _frontend: &mut Components<F, B, D>)
+        fn run<I, F, B, D>(&self, tokens: I, _frontend: Components<F, B, D>)
         where
             I: Iterator<Item = (Token<String>, D::Span)>,
             F: Frontend<D, Ident = String>,
