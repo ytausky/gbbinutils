@@ -198,7 +198,10 @@ impl<S: Clone + Debug + PartialEq> Backend<S> for ObjectBuilder<S> {
     type Object = Object<S>;
 
     fn add_label(&mut self, label: (impl Into<String>, S)) {
-        self.push(Node::Label(label.0.into(), label.1))
+        self.push(Node::Symbol(
+            (label.0.into(), label.1.clone()),
+            Expr::from_atom(RelocAtom::LocationCounter, label.1),
+        ))
     }
 
     fn emit_item(&mut self, item: Item<RelocExpr<S>>) {

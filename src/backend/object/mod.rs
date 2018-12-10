@@ -22,9 +22,9 @@ pub struct Chunk<R> {
 pub enum Node<SR> {
     Byte(u8),
     Expr(RelocExpr<SR>, Width),
-    Label(String, SR),
     LdInlineAddr(u8, RelocExpr<SR>),
     Embedded(u8, RelocExpr<SR>),
+    Symbol((String, SR), RelocExpr<SR>),
 }
 
 impl<SR> Object<SR> {

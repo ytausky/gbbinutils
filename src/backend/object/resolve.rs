@@ -90,10 +90,9 @@ fn collect_symbols<S: Clone + Debug + PartialEq>(object: &Object<S>) -> SymbolTa
         };
         for (i, chunk) in object.chunks.iter().enumerate() {
             let size = chunk.traverse(&mut context, |item, context| {
-                if let Node::Label(symbol, _) = item {
-                    context
-                        .symbols
-                        .define(symbol.as_str(), context.location.clone())
+                if let Node::Symbol((symbol, _), expr) = item {
+                    let value = expr.evaluate(context);
+                    context.symbols.define(symbol.as_str(), value)
                 }
             });
             context.symbols.refine(ChunkSize(i), size);
@@ -113,11 +112,9 @@ fn refine_symbols<S: Clone + Debug + PartialEq>(
     };
     for (i, chunk) in object.chunks.iter().enumerate() {
         let size = chunk.traverse(context, |item, context| {
-            if let Node::Label(symbol, _) = item {
-                refinements += context
-                    .symbols
-                    .refine(symbol.as_str(), context.location.clone())
-                    as i32
+            if let Node::Symbol((symbol, _), expr) = item {
+                let value = expr.evaluate(context);
+                refinements += context.symbols.refine(symbol.as_str(), value) as i32
             }
         });
         refinements += context.symbols.refine(ChunkSize(i), size) as i32
@@ -170,12 +167,12 @@ impl<S: Clone + Debug + PartialEq> Node<S> {
         match self {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),
             Node::Expr(_, width) => width.len().into(),
-            Node::Label(..) => 0.into(),
             Node::LdInlineAddr(_, expr) => match expr.evaluate(context) {
                 Value::Range { min, .. } if min >= 0xff00 => 2.into(),
                 Value::Range { max, .. } if max < 0xff00 => 3.into(),
                 _ => Value::Range { min: 2, max: 3 },
             },
+            Node::Symbol(..) => 0.into(),
         }
     }
 }
@@ -230,7 +227,7 @@ mod tests {
             section.items.extend(
                 [
                     Node::LdInlineAddr(0, RelocAtom::Symbol("label".to_string()).into()),
-                    Node::Label("label".to_string(), ()),
+                    Node::Symbol(("label".to_string(), ()), RelocAtom::LocationCounter.into()),
                 ]
                 .iter()
                 .cloned(),

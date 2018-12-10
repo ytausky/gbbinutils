@@ -40,7 +40,6 @@ impl<S: Clone + Debug + PartialEq> Node<S> {
             Node::Expr(expr, width) => {
                 resolve_expr_item(&expr, *width, context, diagnostics).into_bytes()
             }
-            Node::Label(..) => vec![],
             Node::LdInlineAddr(opcode, expr) => {
                 let addr = expr.evaluate(context).exact().unwrap();
                 let kind = if addr < 0xff00 {
@@ -61,6 +60,7 @@ impl<S: Clone + Debug + PartialEq> Node<S> {
                 bytes.extend(addr_repr.into_bytes());
                 bytes
             }
+            Node::Symbol(..) => vec![],
         }
         .into_iter()
     }
