@@ -1,27 +1,33 @@
 use super::{Analysis, AnalysisResult, Operand};
-use crate::backend::{RelocExpr, Width};
+use crate::backend::Width;
 use crate::diagnostics::{InternalDiagnostic, Message};
 use crate::frontend::semantics::operand::AtomKind;
 use crate::instruction::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
-use crate::span::{Merge, Source};
+use crate::span::{Merge, Source, Span};
+use std::fmt::Debug;
 
-impl<'a, I, M> Analysis<'a, I, M>
+impl<'a, I, V, M> Analysis<'a, I, M>
 where
-    I: Iterator<Item = Result<Operand<M::Span>, InternalDiagnostic<M::Span>>>,
+    I: Iterator<Item = Result<Operand<V>, InternalDiagnostic<M::Span>>>,
+    V: Source<Span = M::Span>,
     M: Merge,
 {
-    pub fn analyze_ld(&mut self) -> AnalysisResult<M::Span> {
+    pub fn analyze_ld(&mut self) -> AnalysisResult<V> {
         let dest = self.next_operand_out_of(2)?;
         let src = self.next_operand_out_of(2)?;
         match (dest.into_ld_dest()?, src.into_ld_src()?) {
             (LdDest::Byte(dest), LdOperand::Other(LdDest::Byte(src))) => {
                 self.analyze_8_bit_ld(dest, src)
             }
-            (LdDest::Byte(dest), LdOperand::Const(src)) => self.analyze_8_bit_ld(dest, src),
+            (LdDest::Byte(dest), LdOperand::Const(src)) => {
+                self.analyze_8_bit_ld(dest, LdOperand::Const(src))
+            }
             (LdDest::Word(dest), LdOperand::Other(LdDest::Word(src))) => {
                 self.analyze_16_bit_ld(dest, src)
             }
-            (LdDest::Word(dest), LdOperand::Const(src)) => self.analyze_16_bit_ld(dest, src),
+            (LdDest::Word(dest), LdOperand::Const(src)) => {
+                self.analyze_16_bit_ld(dest, LdOperand::Const(src))
+            }
             (LdDest::Byte(dest), LdOperand::Other(LdDest::Word(src))) => {
                 Err(InternalDiagnostic::new(
                     Message::LdWidthMismatch {
@@ -47,9 +53,9 @@ where
 
     fn analyze_8_bit_ld(
         &mut self,
-        dest: LdDest8<M::Span>,
-        src: impl Into<LdOperand<M::Span, LdDest8<M::Span>>>,
-    ) -> AnalysisResult<M::Span> {
+        dest: LdDest8<V>,
+        src: impl Into<LdOperand<V, LdDest8<V>>>,
+    ) -> AnalysisResult<V> {
         match (dest, src.into()) {
             (
                 LdDest8::Simple(SimpleOperand::DerefHl, dest),
@@ -82,8 +88,8 @@ where
     fn analyze_16_bit_ld(
         &mut self,
         dest: LdDest16<M::Span>,
-        src: impl Into<LdOperand<M::Span, LdDest16<M::Span>>>,
-    ) -> AnalysisResult<M::Span> {
+        src: impl Into<LdOperand<V, LdDest16<M::Span>>>,
+    ) -> AnalysisResult<V> {
         match (dest, src.into()) {
             (LdDest16::Reg16(Reg16::Sp, _), LdOperand::Other(LdDest16::Reg16(Reg16::Hl, _))) => {
                 Ok(Instruction::Ld(Ld::SpHl))
@@ -101,7 +107,7 @@ where
     }
 }
 
-fn analyze_special_ld<S>(other: LdSpecial<S>, direction: Direction) -> AnalysisResult<S> {
+fn analyze_special_ld<V: Source>(other: LdSpecial<V>, direction: Direction) -> AnalysisResult<V> {
     Ok(Instruction::Ld(Ld::Special(
         match other {
             LdSpecial::Deref(expr) => SpecialLd::InlineAddr(expr),
@@ -112,8 +118,8 @@ fn analyze_special_ld<S>(other: LdSpecial<S>, direction: Direction) -> AnalysisR
     )))
 }
 
-impl<S: Clone> Operand<S> {
-    fn into_ld_dest(self) -> Result<LdDest<S>, InternalDiagnostic<S>> {
+impl<V: Source> Operand<V> {
+    fn into_ld_dest(self) -> Result<LdDest<V>, InternalDiagnostic<V::Span>> {
         match self {
             Operand::Deref(expr) => Ok(LdDest::Byte(LdDest8::Special(LdSpecial::Deref(expr)))),
             Operand::Atom(kind, span) => match kind {
@@ -143,7 +149,7 @@ impl<S: Clone> Operand<S> {
         }
     }
 
-    fn into_ld_src(self) -> Result<LdOperand<S, LdDest<S>>, InternalDiagnostic<S>> {
+    fn into_ld_src(self) -> Result<LdOperand<V, LdDest<V>>, InternalDiagnostic<V::Span>> {
         match self {
             Operand::Const(expr) => Ok(LdOperand::Const(expr)),
             operand => Ok(LdOperand::Other(operand.into_ld_dest()?)),
@@ -151,51 +157,45 @@ impl<S: Clone> Operand<S> {
     }
 }
 
-enum LdOperand<S, T> {
-    Const(RelocExpr<S>),
+enum LdOperand<V, T> {
+    Const(V),
     Other(T),
 }
 
-impl<S, T> From<RelocExpr<S>> for LdOperand<S, T> {
-    fn from(expr: RelocExpr<S>) -> Self {
-        LdOperand::Const(expr)
-    }
-}
-
-impl<S> From<LdDest8<S>> for LdOperand<S, LdDest8<S>> {
-    fn from(dest: LdDest8<S>) -> Self {
+impl<V: Source> From<LdDest8<V>> for LdOperand<V, LdDest8<V>> {
+    fn from(dest: LdDest8<V>) -> Self {
         LdOperand::Other(dest)
     }
 }
 
-impl<S> From<LdDest16<S>> for LdOperand<S, LdDest16<S>> {
+impl<V, S> From<LdDest16<S>> for LdOperand<V, LdDest16<S>> {
     fn from(dest: LdDest16<S>) -> Self {
         LdOperand::Other(dest)
     }
 }
 
-enum LdDest<S> {
-    Byte(LdDest8<S>),
-    Word(LdDest16<S>),
+enum LdDest<V: Source> {
+    Byte(LdDest8<V>),
+    Word(LdDest16<V::Span>),
 }
 
-enum LdDest8<S> {
-    Simple(SimpleOperand, S),
-    Special(LdSpecial<S>),
+enum LdDest8<V: Source> {
+    Simple(SimpleOperand, V::Span),
+    Special(LdSpecial<V>),
 }
 
-enum LdSpecial<S> {
-    Deref(RelocExpr<S>),
-    DerefC(S),
-    DerefPtrReg(PtrReg, S),
+enum LdSpecial<V: Source> {
+    Deref(V),
+    DerefC(V::Span),
+    DerefPtrReg(PtrReg, V::Span),
 }
 
 enum LdDest16<S> {
     Reg16(Reg16, S),
 }
 
-impl<S: Clone> LdOperand<S, LdDest8<S>> {
-    fn expect_a(self) -> Result<(), InternalDiagnostic<S>> {
+impl<V: Source> LdOperand<V, LdDest8<V>> {
+    fn expect_a(self) -> Result<(), InternalDiagnostic<V::Span>> {
         match self {
             LdOperand::Const(expr) => Err(diagnose_not_a(expr.span())),
             LdOperand::Other(other) => other.expect_a(),
@@ -203,8 +203,8 @@ impl<S: Clone> LdOperand<S, LdDest8<S>> {
     }
 }
 
-impl<S: Clone> LdDest8<S> {
-    fn expect_a(self) -> Result<(), InternalDiagnostic<S>> {
+impl<V: Source> LdDest8<V> {
+    fn expect_a(self) -> Result<(), InternalDiagnostic<V::Span>> {
         match self {
             LdDest8::Simple(SimpleOperand::A, _) => Ok(()),
             operand => Err(diagnose_not_a(operand.span())),
@@ -216,8 +216,11 @@ fn diagnose_not_a<S>(span: S) -> InternalDiagnostic<S> {
     InternalDiagnostic::new(Message::OnlySupportedByA, span)
 }
 
-impl<S: Clone, T: Source<Span = S>> Source for LdOperand<S, T> {
-    type Span = S;
+impl<V: Span, T: Span<Span = V::Span>> Span for LdOperand<V, T> {
+    type Span = V::Span;
+}
+
+impl<V: Source, T: Source<Span = V::Span>> Source for LdOperand<V, T> {
     fn span(&self) -> Self::Span {
         match self {
             LdOperand::Const(expr) => expr.span(),
@@ -226,8 +229,11 @@ impl<S: Clone, T: Source<Span = S>> Source for LdOperand<S, T> {
     }
 }
 
-impl<S: Clone> Source for LdDest8<S> {
-    type Span = S;
+impl<V: Source> Span for LdDest8<V> {
+    type Span = V::Span;
+}
+
+impl<V: Source> Source for LdDest8<V> {
     fn span(&self) -> Self::Span {
         use self::LdDest8::*;
         match self {
@@ -237,8 +243,11 @@ impl<S: Clone> Source for LdDest8<S> {
     }
 }
 
-impl<S: Clone> Source for LdSpecial<S> {
-    type Span = S;
+impl<V: Source> Span for LdSpecial<V> {
+    type Span = V::Span;
+}
+
+impl<V: Source> Source for LdSpecial<V> {
     fn span(&self) -> Self::Span {
         use self::LdSpecial::*;
         match self {
@@ -248,8 +257,11 @@ impl<S: Clone> Source for LdSpecial<S> {
     }
 }
 
-impl<S: Clone> Source for LdDest16<S> {
+impl<S: Clone + Debug + PartialEq> Span for LdDest16<S> {
     type Span = S;
+}
+
+impl<S: Clone + Debug + PartialEq> Source for LdDest16<S> {
     fn span(&self) -> Self::Span {
         match self {
             LdDest16::Reg16(_, span) => span.clone(),

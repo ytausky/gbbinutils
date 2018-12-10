@@ -1,4 +1,5 @@
-use crate::span::Source;
+use crate::span::{Source, Span};
+use std::fmt::Debug;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Expr<A, U, B, S> {
@@ -13,7 +14,6 @@ pub enum ExprVariant<A, U, B, S> {
     Binary(B, Box<Expr<A, U, B, S>>, Box<Expr<A, U, B, S>>),
 }
 
-#[cfg(test)]
 impl<A, U, B, S> Expr<A, U, B, S> {
     pub fn from_atom<T: Into<ExprVariant<A, U, B, S>>>(atom: T, span: S) -> Self {
         Expr {
@@ -29,8 +29,11 @@ impl<A, U, B, S> From<A> for ExprVariant<A, U, B, S> {
     }
 }
 
-impl<A, U, B, S: Clone> Source for Expr<A, U, B, S> {
+impl<A, U, B, S: Clone + Debug + PartialEq> Span for Expr<A, U, B, S> {
     type Span = S;
+}
+
+impl<A, U, B, S: Clone + Debug + PartialEq> Source for Expr<A, U, B, S> {
     fn span(&self) -> Self::Span {
         self.span.clone()
     }

@@ -7,6 +7,9 @@ use crate::backend::{
 };
 use crate::expr::{Expr, ExprVariant};
 use crate::instruction::Instruction;
+use crate::span::{Source, Span};
+use std::fmt::Debug;
+use std::marker::PhantomData;
 
 mod lowering;
 mod object;
@@ -26,18 +29,50 @@ impl Width {
     }
 }
 
-pub trait Backend<R> {
+pub trait HasValue
+where
+    Self: Span,
+{
+    type Value: Source<Span = Self::Span>;
+}
+
+pub trait BuildValue<'a, V: Source> {
+    type Builder: ValueBuilder<V>;
+    fn build_value(&'a mut self) -> Self::Builder;
+}
+
+pub trait ValueBuilder<V: Source>
+where
+    Self: Span<Span = V::Span>,
+{
+    fn location(&mut self, span: V::Span) -> V;
+    fn number(&mut self, number: (i32, V::Span)) -> V;
+    fn symbol(&mut self, symbol: (String, V::Span)) -> V;
+
+    fn apply_binary_operator(
+        &mut self,
+        operator: (BinaryOperator, V::Span),
+        left: V,
+        right: V,
+    ) -> V;
+}
+
+pub trait Backend<S: Clone + Debug + PartialEq>
+where
+    Self: HasValue<Span = S>,
+    for<'a> Self: BuildValue<'a, <Self as HasValue>::Value>,
+{
     type Object;
-    fn add_label(&mut self, label: (impl Into<String>, R));
-    fn emit_item(&mut self, item: Item<R>);
+    fn add_label(&mut self, label: (impl Into<String>, S));
+    fn emit_item(&mut self, item: Item<Self::Value>);
     fn into_object(self) -> Self::Object;
-    fn set_origin(&mut self, origin: RelocExpr<R>);
+    fn set_origin(&mut self, origin: Self::Value);
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Item<R> {
-    Data(RelocExpr<R>, Width),
-    Instruction(Instruction<R>),
+pub enum Item<V: Source> {
+    Data(V, Width),
+    Instruction(Instruction<V>),
 }
 
 pub type RelocExpr<S> = Expr<RelocAtom, Empty, BinaryOperator, S>;
@@ -105,14 +140,68 @@ pub struct Rom {
     pub data: Box<[u8]>,
 }
 
-impl<S: Clone> Backend<S> for ObjectBuilder<S> {
+pub struct RelocExprBuilder<S>(PhantomData<S>);
+
+impl<S> RelocExprBuilder<S> {
+    pub fn new() -> Self {
+        RelocExprBuilder(PhantomData)
+    }
+}
+
+impl<S: Clone + Debug + PartialEq> Span for RelocExprBuilder<S> {
+    type Span = S;
+}
+
+impl<S: Clone + Debug + PartialEq> ValueBuilder<RelocExpr<S>> for RelocExprBuilder<S> {
+    fn location(&mut self, span: S) -> RelocExpr<S> {
+        RelocExpr::from_atom(RelocAtom::LocationCounter, span)
+    }
+
+    fn number(&mut self, (number, span): (i32, S)) -> RelocExpr<S> {
+        RelocExpr::from_atom(RelocAtom::Literal(number), span)
+    }
+
+    fn symbol(&mut self, (symbol, span): (String, S)) -> RelocExpr<S> {
+        RelocExpr::from_atom(RelocAtom::Symbol(symbol), span)
+    }
+
+    fn apply_binary_operator(
+        &mut self,
+        operator: (BinaryOperator, S),
+        left: RelocExpr<S>,
+        right: RelocExpr<S>,
+    ) -> RelocExpr<S> {
+        Expr {
+            variant: ExprVariant::Binary(operator.0, Box::new(left), Box::new(right)),
+            span: operator.1,
+        }
+    }
+}
+
+impl<S: Clone + Debug + PartialEq> Span for ObjectBuilder<S> {
+    type Span = S;
+}
+
+impl<S: Clone + Debug + PartialEq> HasValue for ObjectBuilder<S> {
+    type Value = RelocExpr<S>;
+}
+
+impl<'a, S: Clone + Debug + PartialEq> BuildValue<'a, RelocExpr<S>> for ObjectBuilder<S> {
+    type Builder = RelocExprBuilder<S>;
+
+    fn build_value(&'a mut self) -> Self::Builder {
+        RelocExprBuilder::new()
+    }
+}
+
+impl<S: Clone + Debug + PartialEq> Backend<S> for ObjectBuilder<S> {
     type Object = Object<S>;
 
     fn add_label(&mut self, label: (impl Into<String>, S)) {
         self.push(Node::Label(label.0.into(), label.1))
     }
 
-    fn emit_item(&mut self, item: Item<S>) {
+    fn emit_item(&mut self, item: Item<RelocExpr<S>>) {
         item.lower().for_each(|data_item| self.push(data_item))
     }
 
@@ -185,7 +274,7 @@ mod tests {
         emit_items_and_compare([byte_literal(0x12), byte_literal(0x34)], [0x12, 0x34])
     }
 
-    fn byte_literal(value: i32) -> Item<()> {
+    fn byte_literal(value: i32) -> Item<RelocExpr<()>> {
         Item::Data(value.into(), Width::Byte)
     }
 
@@ -199,7 +288,7 @@ mod tests {
 
     fn emit_items_and_compare<I, B>(items: I, bytes: B)
     where
-        I: Borrow<[Item<()>]>,
+        I: Borrow<[Item<RelocExpr<()>>]>,
         B: Borrow<[u8]>,
     {
         let (object, _) = with_object_builder(|builder| {
@@ -296,7 +385,7 @@ mod tests {
         (object, diagnostics)
     }
 
-    fn symbol_expr_item(symbol: impl Into<String>) -> Item<()> {
+    fn symbol_expr_item(symbol: impl Into<String>) -> Item<RelocExpr<()>> {
         Item::Data(symbol_expr(symbol), Width::Word)
     }
 

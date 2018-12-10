@@ -1,20 +1,23 @@
 use super::{analyze_reloc_expr, ExprVariant, SemanticAtom, SemanticExpr, SemanticUnary};
+use crate::backend::ValueBuilder;
 use crate::diagnostics::{InternalDiagnostic, KeywordOperandCategory, Message};
 use crate::frontend::syntax::keyword as kw;
 use crate::frontend::syntax::Literal;
-use crate::frontend::ExprFactory;
-use crate::instruction::{Condition, PtrReg, Reg16, RegPair, RelocExpr, SimpleOperand};
-use crate::span::Source;
+use crate::instruction::{Condition, PtrReg, Reg16, RegPair, SimpleOperand};
+use crate::span::{Source, Span};
 
 #[derive(Debug, PartialEq)]
-pub enum Operand<R> {
-    Atom(AtomKind, R),
-    Const(RelocExpr<R>),
-    Deref(RelocExpr<R>),
+pub enum Operand<V: Source> {
+    Atom(AtomKind, V::Span),
+    Const(V),
+    Deref(V),
 }
 
-impl<S: Clone> Source for Operand<S> {
-    type Span = S;
+impl<V: Source> Span for Operand<V> {
+    type Span = V::Span;
+}
+
+impl<V: Source> Source for Operand<V> {
     fn span(&self) -> Self::Span {
         match self {
             Operand::Atom(_, span) => (*span).clone(),
@@ -40,38 +43,41 @@ pub enum Context {
     Other,
 }
 
-type OperandResult<S> = Result<Operand<S>, InternalDiagnostic<S>>;
+type OperandResult<V> = Result<Operand<V>, InternalDiagnostic<<V as Span>::Span>>;
 
-pub fn analyze_operand<I: Into<String>, S: Clone>(
-    expr: SemanticExpr<I, S>,
+pub fn analyze_operand<I: Into<String>, V: Source>(
+    expr: SemanticExpr<I, V::Span>,
     context: Context,
-    factory: &mut impl ExprFactory,
-) -> OperandResult<S> {
+    builder: &mut impl ValueBuilder<V>,
+) -> OperandResult<V> {
     match expr.variant {
         ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(keyword))) => {
             analyze_keyword_operand((keyword, expr.span), context)
         }
         ExprVariant::Unary(SemanticUnary::Parentheses, inner) => {
-            analyze_deref_operand(*inner, expr.span, factory)
+            analyze_deref_operand(*inner, expr.span, builder)
         }
-        _ => Ok(Operand::Const(analyze_reloc_expr(expr, factory)?)),
+        _ => Ok(Operand::Const(analyze_reloc_expr(expr, builder)?)),
     }
 }
 
-fn analyze_deref_operand<I: Into<String>, S: Clone>(
-    expr: SemanticExpr<I, S>,
-    deref_span: S,
-    factory: &mut impl ExprFactory,
-) -> OperandResult<S> {
+fn analyze_deref_operand<I: Into<String>, V: Source>(
+    expr: SemanticExpr<I, V::Span>,
+    deref_span: V::Span,
+    builder: &mut impl ValueBuilder<V>,
+) -> OperandResult<V> {
     match expr.variant {
         ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(keyword))) => {
             analyze_deref_operand_keyword((keyword, expr.span), deref_span)
         }
-        _ => Ok(Operand::Deref(analyze_reloc_expr(expr, factory)?)),
+        _ => Ok(Operand::Deref(analyze_reloc_expr(expr, builder)?)),
     }
 }
 
-fn analyze_deref_operand_keyword<SI>(keyword: (kw::Operand, SI), deref: SI) -> OperandResult<SI> {
+fn analyze_deref_operand_keyword<V: Source>(
+    keyword: (kw::Operand, V::Span),
+    deref: V::Span,
+) -> OperandResult<V> {
     match try_deref_operand_keyword(keyword.0) {
         Ok(atom) => Ok(Operand::Atom(atom, deref)),
         Err(category) => Err(InternalDiagnostic::new(
@@ -99,10 +105,10 @@ fn try_deref_operand_keyword(keyword: kw::Operand) -> Result<AtomKind, KeywordOp
     }
 }
 
-fn analyze_keyword_operand<S: Clone>(
-    (keyword, span): (kw::Operand, S),
+fn analyze_keyword_operand<V: Source>(
+    (keyword, span): (kw::Operand, V::Span),
     context: Context,
-) -> OperandResult<S> {
+) -> OperandResult<V> {
     use self::kw::Operand::*;
     use self::Context::*;
     let kind = match keyword {
@@ -182,7 +188,8 @@ impl<I: Iterator<Item = Result<T, E>>, T, E> OperandCounter<I> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::RelocAtom;
+    use crate::backend::{RelocAtom, RelocExpr, RelocExprBuilder};
+    use std::fmt::Debug;
 
     #[test]
     fn analyze_deref_bc() {
@@ -221,13 +228,11 @@ mod tests {
         )
     }
 
-    fn analyze_operand<I: Into<String>, S: Clone>(
+    fn analyze_operand<I: Into<String>, S: Clone + Debug + PartialEq>(
         expr: SemanticExpr<I, S>,
         context: Context,
-    ) -> OperandResult<S> {
-        use crate::frontend::StrExprFactory;
-        let mut factory = StrExprFactory::new();
-        super::analyze_operand(expr, context, &mut factory)
+    ) -> OperandResult<RelocExpr<S>> {
+        super::analyze_operand(expr, context, &mut RelocExprBuilder::new())
     }
 
     #[test]

@@ -1,21 +1,22 @@
-pub use crate::backend::{BinaryOperator, RelocExpr};
+pub use crate::backend::BinaryOperator;
+use crate::span::Source;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Instruction<R> {
+pub enum Instruction<V: Source> {
     AddHl(Reg16),
-    Alu(AluOperation, AluSource<R>),
-    Bit(BitOperation, RelocExpr<R>, SimpleOperand),
+    Alu(AluOperation, AluSource<V>),
+    Bit(BitOperation, V, SimpleOperand),
     IncDec8(IncDec, SimpleOperand),
     IncDec16(IncDec, Reg16),
     JpDerefHl,
-    Branch(Branch<R>, Option<Condition>),
-    Ld(Ld<R>),
-    Ldhl(RelocExpr<R>),
+    Branch(Branch<V>, Option<Condition>),
+    Ld(Ld<V>),
+    Ldhl(V),
     Misc(MiscOperation, SimpleOperand),
     Nullary(Nullary),
     Pop(RegPair),
     Push(RegPair),
-    Rst(RelocExpr<R>),
+    Rst(V),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -47,9 +48,9 @@ pub enum AluOperation {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum AluSource<R> {
+pub enum AluSource<V> {
     Simple(SimpleOperand),
-    Immediate(RelocExpr<R>),
+    Immediate(V),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -84,18 +85,18 @@ pub enum SimpleOperand {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Ld<R> {
+pub enum Ld<V> {
     Simple(SimpleOperand, SimpleOperand),
-    Special(SpecialLd<R>, Direction),
+    Special(SpecialLd<V>, Direction),
     SpHl,
-    Immediate8(SimpleOperand, RelocExpr<R>),
-    Immediate16(Reg16, RelocExpr<R>),
+    Immediate8(SimpleOperand, V),
+    Immediate16(Reg16, V),
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum SpecialLd<R> {
+pub enum SpecialLd<V> {
     DerefPtrReg(PtrReg),
-    InlineAddr(RelocExpr<R>),
+    InlineAddr(V),
     RegIndex,
 }
 
@@ -130,10 +131,10 @@ pub enum PtrReg {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Branch<R> {
-    Call(RelocExpr<R>),
-    Jp(RelocExpr<R>),
-    Jr(RelocExpr<R>),
+pub enum Branch<V> {
+    Call(V),
+    Jp(V),
+    Jr(V),
     Ret,
 }
 

@@ -54,35 +54,6 @@ where
 #[derive(Clone, Copy)]
 struct SemanticAnalysis;
 
-pub trait ExprFactory {
-    fn mk_literal<S>(&mut self, literal: (i32, S)) -> RelocExpr<S>;
-    fn mk_symbol<I: Into<String>, S>(&mut self, symbol: (I, S)) -> RelocExpr<S>;
-}
-
-pub struct StrExprFactory;
-
-impl StrExprFactory {
-    fn new() -> StrExprFactory {
-        StrExprFactory {}
-    }
-}
-
-impl ExprFactory for StrExprFactory {
-    fn mk_literal<S>(&mut self, (literal, span): (i32, S)) -> RelocExpr<S> {
-        RelocExpr {
-            variant: literal.into(),
-            span,
-        }
-    }
-
-    fn mk_symbol<I: Into<String>, S>(&mut self, (symbol, span): (I, S)) -> RelocExpr<S> {
-        RelocExpr {
-            variant: RelocAtom::Symbol(symbol.into()).into(),
-            span,
-        }
-    }
-}
-
 pub trait Frontend<D: Diagnostics> {
     type Ident: AsRef<str> + Clone + Into<String> + Debug + PartialEq;
     type MacroDefId: Clone;
@@ -555,6 +526,18 @@ mod tests {
         }
     }
 
+    impl<'a, 'b> BuildValue<'b, RelocExpr<()>> for Mock<'a> {
+        type Builder = RelocExprBuilder<()>;
+
+        fn build_value(&'b mut self) -> Self::Builder {
+            RelocExprBuilder::new()
+        }
+    }
+
+    impl<'a> HasValue for Mock<'a> {
+        type Value = RelocExpr<()>;
+    }
+
     impl<'a> Backend<()> for Mock<'a> {
         type Object = ();
 
@@ -564,7 +547,7 @@ mod tests {
                 .push(TestEvent::AddLabel(label.into()))
         }
 
-        fn emit_item(&mut self, item: Item<()>) {
+        fn emit_item(&mut self, item: Item<RelocExpr<()>>) {
             self.log.borrow_mut().push(TestEvent::EmitItem(item))
         }
 
@@ -596,7 +579,7 @@ mod tests {
         AnalyzeTokens(Vec<Token<String>>),
         AddLabel(String),
         Diagnostic(InternalDiagnostic<()>),
-        EmitItem(Item<()>),
+        EmitItem(Item<RelocExpr<()>>),
     }
 
     struct TestFixture<'a> {

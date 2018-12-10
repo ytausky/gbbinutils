@@ -8,8 +8,10 @@ pub trait Span {
     type Span: Clone + Debug + PartialEq;
 }
 
-pub trait Source {
-    type Span;
+pub trait Source
+where
+    Self: Span,
+{
     fn span(&self) -> Self::Span;
 }
 

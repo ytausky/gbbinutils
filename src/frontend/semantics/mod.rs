@@ -1,12 +1,12 @@
-use crate::backend::{self, Backend, BinaryOperator, RelocExpr};
+use crate::backend::{self, Backend, BinaryOperator, ValueBuilder};
 use crate::diagnostics::{
     Diagnostics, DiagnosticsListener, DownstreamDiagnostics, InternalDiagnostic, Message,
 };
 use crate::expr::ExprVariant;
 use crate::frontend::session::Session;
 use crate::frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token};
-use crate::frontend::{ExprFactory, Frontend, Literal, StrExprFactory};
-use crate::span::{Merge, Span};
+use crate::frontend::{Frontend, Literal};
+use crate::span::{Merge, Source, Span};
 
 mod directive;
 mod instruction;
@@ -51,7 +51,6 @@ use self::expr::*;
 
 pub struct SemanticActions<'a, F: Frontend<D>, B, D: Diagnostics> {
     session: Session<'a, F, B, D>,
-    expr_factory: StrExprFactory,
     label: Option<(F::Ident, D::Span)>,
 }
 
@@ -59,7 +58,6 @@ impl<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics> SemanticActions<'a
     pub fn new(session: Session<'a, F, B, D>) -> SemanticActions<'a, F, B, D> {
         SemanticActions {
             session,
-            expr_factory: StrExprFactory::new(),
             label: None,
         }
     }
@@ -279,7 +277,7 @@ fn analyze_mnemonic<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
     let instruction = instruction::analyze_instruction(
         name,
         args.into_iter(),
-        &mut actions.expr_factory,
+        &mut actions.session.backend.build_value(),
         actions.session.diagnostics.diagnostics(),
     )?;
     actions
@@ -453,14 +451,16 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> syntax::TokenSeqContext
     }
 }
 
-fn analyze_reloc_expr<I: Into<String>, S: Clone>(
-    expr: SemanticExpr<I, S>,
-    factory: &mut impl ExprFactory,
-) -> Result<RelocExpr<S>, InternalDiagnostic<S>> {
+fn analyze_reloc_expr<I: Into<String>, V: Source>(
+    expr: SemanticExpr<I, V::Span>,
+    builder: &mut impl ValueBuilder<V>,
+) -> Result<V, InternalDiagnostic<V::Span>> {
     match expr.variant {
-        ExprVariant::Atom(SemanticAtom::Ident(ident)) => Ok(factory.mk_symbol((ident, expr.span))),
+        ExprVariant::Atom(SemanticAtom::Ident(ident)) => {
+            Ok(builder.symbol((ident.into(), expr.span)))
+        }
         ExprVariant::Atom(SemanticAtom::Literal(Literal::Number(n))) => {
-            Ok(factory.mk_literal((n, expr.span)))
+            Ok(builder.number((n, expr.span)))
         }
         ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(_))) => {
             Err(InternalDiagnostic::new(
@@ -473,14 +473,11 @@ fn analyze_reloc_expr<I: Into<String>, S: Clone>(
         ExprVariant::Atom(SemanticAtom::Literal(Literal::String(_))) => Err(
             InternalDiagnostic::new(Message::StringInInstruction, expr.span),
         ),
-        ExprVariant::Unary(SemanticUnary::Parentheses, expr) => analyze_reloc_expr(*expr, factory),
+        ExprVariant::Unary(SemanticUnary::Parentheses, expr) => analyze_reloc_expr(*expr, builder),
         ExprVariant::Binary(SemanticBinary::Plus, left, right) => {
-            let left = analyze_reloc_expr(*left, factory)?;
-            let right = analyze_reloc_expr(*right, factory)?;
-            Ok(RelocExpr {
-                variant: ExprVariant::Binary(BinaryOperator::Plus, Box::new(left), Box::new(right)),
-                span: expr.span,
-            })
+            let left = analyze_reloc_expr(*left, builder)?;
+            let right = analyze_reloc_expr(*right, builder)?;
+            Ok(builder.apply_binary_operator((BinaryOperator::Plus, expr.span), left, right))
         }
     }
 }
@@ -489,7 +486,7 @@ fn analyze_reloc_expr<I: Into<String>, S: Clone>(
 mod tests {
     use super::*;
 
-    use crate::backend::{RelocAtom, Width};
+    use crate::backend::{BuildValue, HasValue, RelocAtom, RelocExpr, RelocExprBuilder, Width};
     use crate::codebase::{BufId, BufRange, CodebaseError};
     use crate::diagnostics::{InternalDiagnostic, Message};
     use crate::frontend::syntax::{
@@ -497,7 +494,6 @@ mod tests {
         MacroParamsContext, StmtContext, TokenSeqContext,
     };
     use crate::frontend::{Downstream, MacroArgs};
-    use crate::instruction::RelocExpr;
     use crate::span::*;
     use std::borrow::Borrow;
     use std::cell::RefCell;
@@ -586,6 +582,22 @@ mod tests {
         }
     }
 
+    impl<'a> Span for TestBackend<'a> {
+        type Span = ();
+    }
+
+    impl<'a> HasValue for TestBackend<'a> {
+        type Value = RelocExpr<()>;
+    }
+
+    impl<'a, 'b> BuildValue<'b, RelocExpr<()>> for TestBackend<'a> {
+        type Builder = RelocExprBuilder<()>;
+
+        fn build_value(&mut self) -> Self::Builder {
+            RelocExprBuilder::new()
+        }
+    }
+
     impl<'a> Backend<()> for TestBackend<'a> {
         type Object = ();
 
@@ -595,7 +607,7 @@ mod tests {
                 .push(TestOperation::Label(label.0.into()))
         }
 
-        fn emit_item(&mut self, item: backend::Item<()>) {
+        fn emit_item(&mut self, item: backend::Item<RelocExpr<()>>) {
             self.operations
                 .borrow_mut()
                 .push(TestOperation::EmitItem(item))
@@ -703,7 +715,7 @@ mod tests {
         InvokeMacro(String, Vec<Vec<Token<String>>>),
         DefineMacro(String, Vec<String>, Vec<Token<String>>),
         EmitDiagnostic(InternalDiagnostic<()>),
-        EmitItem(backend::Item<()>),
+        EmitItem(backend::Item<RelocExpr<()>>),
         Label(String),
         SetOrigin(RelocExpr<()>),
     }

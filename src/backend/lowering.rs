@@ -1,8 +1,9 @@
 use crate::backend::object::Node;
-use crate::backend::{BinaryOperator, Item, RelocAtom, Width};
+use crate::backend::{BinaryOperator, Item, RelocAtom, RelocExpr, Width};
 use crate::expr::ExprVariant;
 use crate::instruction::*;
 use crate::span::Source;
+use std::fmt::Debug;
 use std::mem;
 
 pub trait Lower<S> {
@@ -60,7 +61,7 @@ impl<S> From<u8> for Node<S> {
     }
 }
 
-impl<S: Clone> Lower<S> for Item<S> {
+impl<S: Clone + Debug + PartialEq> Lower<S> for Item<RelocExpr<S>> {
     fn lower(self) -> LoweredItem<S> {
         match self {
             Item::Data(expr, width) => LoweredItem::One(Node::Expr(expr, width)),
@@ -69,7 +70,7 @@ impl<S: Clone> Lower<S> for Item<S> {
     }
 }
 
-impl<S: Clone> Lower<S> for Instruction<S> {
+impl<S: Clone + Debug + PartialEq> Lower<S> for Instruction<RelocExpr<S>> {
     fn lower(self) -> LoweredItem<S> {
         use crate::instruction::Instruction::*;
         match self {
@@ -128,7 +129,7 @@ impl<SR> Lower<SR> for Nullary {
     }
 }
 
-impl<S> Lower<S> for Ld<S> {
+impl<S> Lower<S> for Ld<RelocExpr<S>> {
     fn lower(self) -> LoweredItem<S> {
         match self {
             Ld::Simple(dest, src) => encode_ld_to_reg_from_reg(dest, src),
@@ -145,7 +146,7 @@ impl<S> Lower<S> for Ld<S> {
     }
 }
 
-fn encode_special_ld<S>(ld: SpecialLd<S>, direction: Direction) -> LoweredItem<S> {
+fn encode_special_ld<S>(ld: SpecialLd<RelocExpr<S>>, direction: Direction) -> LoweredItem<S> {
     let direction_bit = encode_direction(direction);
     match ld {
         SpecialLd::DerefPtrReg(ptr_reg) => {
@@ -185,7 +186,10 @@ fn encode_alu_operation(operation: AluOperation) -> u8 {
     }) << 3
 }
 
-fn encode_branch<S: Clone>(branch: Branch<S>, condition: Option<Condition>) -> LoweredItem<S> {
+fn encode_branch<S: Clone + Debug + PartialEq>(
+    branch: Branch<RelocExpr<S>>,
+    condition: Option<Condition>,
+) -> LoweredItem<S> {
     use crate::instruction::Branch::*;
     match branch {
         Call(target) => LoweredItem::with_opcode(match condition {
@@ -210,7 +214,7 @@ fn encode_branch<S: Clone>(branch: Branch<S>, condition: Option<Condition>) -> L
     }
 }
 
-fn mk_relative_expr<S: Clone>(expr: RelocExpr<S>) -> RelocExpr<S> {
+fn mk_relative_expr<S: Clone + Debug + PartialEq>(expr: RelocExpr<S>) -> RelocExpr<S> {
     let span = expr.span();
     RelocExpr {
         variant: ExprVariant::Binary(
@@ -338,7 +342,10 @@ mod tests {
 
     use crate::instruction::{self, Branch::*, Instruction::*, Ld::*, Nullary::*};
 
-    fn test_instruction(instruction: Instruction<()>, data_items: impl Borrow<[Node<()>]>) {
+    fn test_instruction(
+        instruction: Instruction<RelocExpr<()>>,
+        data_items: impl Borrow<[Node<()>]>,
+    ) {
         let code: Vec<_> = instruction.lower().collect();
         assert_eq!(code, data_items.borrow())
     }

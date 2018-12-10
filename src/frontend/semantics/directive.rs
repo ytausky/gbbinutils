@@ -2,12 +2,12 @@ use super::{
     analyze_reloc_expr, CommandArgs, Directive, SemanticActions, SemanticAtom, SemanticExpr,
 };
 use crate::backend;
-use crate::backend::{Backend, BinaryOperator, RelocAtom, Width};
+use crate::backend::{Backend, BinaryOperator, ValueBuilder, Width};
 use crate::diagnostics::{Diagnostics, InternalDiagnostic, Message};
 use crate::expr::ExprVariant;
 use crate::frontend::syntax::Literal;
 use crate::frontend::Frontend;
-use crate::instruction::RelocExpr;
+use crate::span::Source;
 use std::fmt::Debug;
 
 pub fn analyze_directive<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
@@ -31,7 +31,7 @@ fn analyze_data<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
     actions: &mut SemanticActions<'a, F, B, D>,
 ) -> Result<(), InternalDiagnostic<D::Span>> {
     for arg in args {
-        let expr = analyze_reloc_expr(arg, &mut actions.expr_factory)?;
+        let expr = analyze_reloc_expr(arg, &mut actions.session.backend.build_value())?;
         actions
             .session
             .backend
@@ -45,28 +45,19 @@ fn analyze_ds<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
     args: CommandArgs<F::Ident, D::Span>,
     actions: &mut SemanticActions<'a, F, B, D>,
 ) -> Result<(), InternalDiagnostic<D::Span>> {
-    let arg = single_arg(span, args)?;
-    let count = analyze_reloc_expr(arg, &mut actions.expr_factory)?;
-    actions
-        .session
-        .backend
-        .set_origin(location_counter_plus_expr(count));
+    let origin = {
+        let arg = single_arg(span, args)?;
+        let builder = &mut actions.session.backend.build_value();
+        let count = analyze_reloc_expr(arg, builder)?;
+        location_counter_plus_expr(count, builder)
+    };
+    actions.session.backend.set_origin(origin);
     Ok(())
 }
 
-fn location_counter_plus_expr<S: Clone>(expr: RelocExpr<S>) -> RelocExpr<S> {
-    let span = expr.span.clone();
-    RelocExpr {
-        variant: ExprVariant::Binary(
-            BinaryOperator::Plus,
-            Box::new(RelocExpr {
-                variant: ExprVariant::Atom(RelocAtom::LocationCounter),
-                span: span.clone(),
-            }),
-            Box::new(expr),
-        ),
-        span,
-    }
+fn location_counter_plus_expr<V: Source, B: ValueBuilder<V>>(expr: V, builder: &mut B) -> V {
+    let location = builder.location(expr.span());
+    builder.apply_binary_operator((BinaryOperator::Plus, expr.span()), location, expr)
 }
 
 fn analyze_include<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
@@ -102,7 +93,7 @@ fn analyze_org<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
     actions: &mut SemanticActions<'a, F, B, D>,
 ) -> Result<(), InternalDiagnostic<D::Span>> {
     let arg = single_arg(span, args)?;
-    let expr = analyze_reloc_expr(arg, &mut actions.expr_factory)?;
+    let expr = analyze_reloc_expr(arg, &mut actions.session.backend.build_value())?;
     actions.session.backend.set_origin(expr);
     Ok(())
 }
@@ -128,6 +119,7 @@ fn single_arg<T: Debug + PartialEq, S>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backend::{RelocAtom, RelocExpr};
     use crate::codebase::CodebaseError;
     use crate::frontend::semantics;
     use crate::frontend::semantics::tests::*;
@@ -166,17 +158,17 @@ mod tests {
         test_data_items_emission(Directive::Dw, mk_word, [0x4332, 0x780f])
     }
 
-    fn mk_byte(byte: &i32) -> backend::Item<()> {
+    fn mk_byte(byte: &i32) -> backend::Item<RelocExpr<()>> {
         backend::Item::Data((*byte).into(), Width::Byte)
     }
 
-    fn mk_word(word: &i32) -> backend::Item<()> {
+    fn mk_word(word: &i32) -> backend::Item<RelocExpr<()>> {
         backend::Item::Data((*word).into(), Width::Word)
     }
 
     fn test_data_items_emission(
         directive: Directive,
-        mk_item: impl Fn(&i32) -> backend::Item<()>,
+        mk_item: impl Fn(&i32) -> backend::Item<RelocExpr<()>>,
         data: impl Borrow<[i32]>,
     ) {
         let actions = with_directive(directive, |mut command| {

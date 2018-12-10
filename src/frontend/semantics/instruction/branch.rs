@@ -1,7 +1,7 @@
 use super::{Analysis, AnalysisResult, AtomKind, Operand, SimpleOperand};
 use crate::diagnostics::{InternalDiagnostic, Message};
-use crate::instruction::{Branch, Condition, Instruction, Nullary, RelocExpr};
-use crate::span::{Merge, Source};
+use crate::instruction::{Branch, Condition, Instruction, Nullary};
+use crate::span::{Merge, Source, Span};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BranchKind {
@@ -22,12 +22,13 @@ pub enum ImplicitBranch {
     Reti,
 }
 
-impl<'a, I, M> Analysis<'a, I, M>
+impl<'a, I, V, M> Analysis<'a, I, M>
 where
-    I: Iterator<Item = Result<Operand<M::Span>, InternalDiagnostic<M::Span>>>,
+    I: Iterator<Item = Result<Operand<V>, InternalDiagnostic<M::Span>>>,
+    V: Source<Span = M::Span>,
     M: Merge,
 {
-    pub fn analyze_branch(&mut self, branch: BranchKind) -> AnalysisResult<M::Span> {
+    pub fn analyze_branch(&mut self, branch: BranchKind) -> AnalysisResult<V> {
         let (condition, target) = self.collect_branch_operands()?;
         let variant = analyze_branch_variant((branch, &self.mnemonic.1), target)?;
         match variant {
@@ -47,7 +48,7 @@ where
 
     fn collect_branch_operands(
         &mut self,
-    ) -> Result<BranchOperands<M::Span>, InternalDiagnostic<M::Span>> {
+    ) -> Result<BranchOperands<V>, InternalDiagnostic<M::Span>> {
         let first_operand = self.operands.next()?;
         Ok(
             if let Some(Operand::Atom(AtomKind::Condition(condition), range)) = first_operand {
@@ -62,15 +63,21 @@ where
     }
 }
 
-type BranchOperands<S> = (Option<(Condition, S)>, Option<BranchTarget<S>>);
+type BranchOperands<V> = (
+    Option<(Condition, <V as Span>::Span)>,
+    Option<BranchTarget<V>>,
+);
 
-enum BranchTarget<S> {
-    DerefHl(S),
-    Expr(RelocExpr<S>),
+enum BranchTarget<V: Source> {
+    DerefHl(V::Span),
+    Expr(V),
 }
 
-impl<S: Clone> Source for BranchTarget<S> {
-    type Span = S;
+impl<V: Source> Span for BranchTarget<V> {
+    type Span = V::Span;
+}
+
+impl<V: Source> Source for BranchTarget<V> {
     fn span(&self) -> Self::Span {
         match self {
             BranchTarget::DerefHl(span) => span.clone(),
@@ -79,9 +86,9 @@ impl<S: Clone> Source for BranchTarget<S> {
     }
 }
 
-fn analyze_branch_target<S: Clone>(
-    target: Option<Operand<S>>,
-) -> Result<Option<BranchTarget<S>>, InternalDiagnostic<S>> {
+fn analyze_branch_target<V: Source>(
+    target: Option<Operand<V>>,
+) -> Result<Option<BranchTarget<V>>, InternalDiagnostic<V::Span>> {
     let target = match target {
         Some(target) => target,
         None => return Ok(None),
@@ -98,8 +105,8 @@ fn analyze_branch_target<S: Clone>(
     }
 }
 
-enum BranchVariant<S> {
-    PotentiallyConditional(Branch<S>),
+enum BranchVariant<V> {
+    PotentiallyConditional(Branch<V>),
     Unconditional(UnconditionalBranch),
 }
 
@@ -108,7 +115,7 @@ enum UnconditionalBranch {
     Reti,
 }
 
-impl<S> From<UnconditionalBranch> for Instruction<S> {
+impl<V: Source> From<UnconditionalBranch> for Instruction<V> {
     fn from(branch: UnconditionalBranch) -> Self {
         match branch {
             UnconditionalBranch::JpDerefHl => Instruction::JpDerefHl,
@@ -117,10 +124,10 @@ impl<S> From<UnconditionalBranch> for Instruction<S> {
     }
 }
 
-fn analyze_branch_variant<S: Clone>(
-    kind: (BranchKind, &S),
-    target: Option<BranchTarget<S>>,
-) -> Result<BranchVariant<S>, InternalDiagnostic<S>> {
+fn analyze_branch_variant<V: Source>(
+    kind: (BranchKind, &V::Span),
+    target: Option<BranchTarget<V>>,
+) -> Result<BranchVariant<V>, InternalDiagnostic<V::Span>> {
     match (kind.0, target) {
         (BranchKind::Explicit(ExplicitBranch::Jp), Some(BranchTarget::DerefHl(_))) => {
             Ok(BranchVariant::Unconditional(UnconditionalBranch::JpDerefHl))
@@ -153,7 +160,7 @@ fn analyze_branch_variant<S: Clone>(
     }
 }
 
-fn mk_explicit_branch<S>(branch: ExplicitBranch, target: RelocExpr<S>) -> Branch<S> {
+fn mk_explicit_branch<V>(branch: ExplicitBranch, target: V) -> Branch<V> {
     match branch {
         ExplicitBranch::Call => Branch::Call(target),
         ExplicitBranch::Jp => Branch::Jp(target),
