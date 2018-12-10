@@ -19,7 +19,7 @@ pub fn analyze_directive<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics
         Directive::Db => analyze_data(Width::Byte, args, actions),
         Directive::Ds => analyze_ds(directive.1, args, actions),
         Directive::Dw => analyze_data(Width::Word, args, actions),
-        Directive::Equ => unimplemented!(),
+        Directive::Equ => analyze_equ(directive.1, args, actions),
         Directive::Include => analyze_include(directive.1, args, actions),
         Directive::Org => analyze_org(directive.1, args, actions),
     }
@@ -58,6 +58,18 @@ fn analyze_ds<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
 fn location_counter_plus_expr<V: Source, B: ValueBuilder<V>>(expr: V, builder: &mut B) -> V {
     let location = builder.location(expr.span());
     builder.apply_binary_operator((BinaryOperator::Plus, expr.span()), location, expr)
+}
+
+fn analyze_equ<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
+    span: D::Span,
+    args: CommandArgs<F::Ident, D::Span>,
+    actions: &mut SemanticActions<'a, F, B, D>,
+) -> Result<(), InternalDiagnostic<D::Span>> {
+    let symbol = actions.label.take().unwrap();
+    let arg = single_arg(span, args)?;
+    let value = analyze_reloc_expr(arg, &mut actions.session.backend.build_value())?;
+    actions.session.backend.define_symbol(symbol, value);
+    Ok(())
 }
 
 fn analyze_include<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
@@ -324,6 +336,19 @@ mod tests {
         )
     }
 
+    #[test]
+    fn define_symbol() {
+        let symbol = "sym";
+        let value = 3;
+        let actions = with_labeled_directive(symbol, Directive::Equ, |arg| {
+            arg.push_atom((ExprAtom::Literal(Literal::Number(value)), ()))
+        });
+        assert_eq!(
+            actions,
+            [TestOperation::DefineSymbol(symbol.into(), value.into())]
+        )
+    }
+
     fn ds(
         f: impl for<'a> FnOnce(
             &mut semantics::ExprContext<'a, TestFrontend<'a>, TestBackend<'a>, TestDiagnostics<'a>>,
@@ -332,11 +357,12 @@ mod tests {
         unary_directive(Directive::Ds, f)
     }
 
+    type TestExprContext<'a> =
+        semantics::ExprContext<'a, TestFrontend<'a>, TestBackend<'a>, TestDiagnostics<'a>>;
+
     fn unary_directive<F>(directive: Directive, f: F) -> Vec<TestOperation>
     where
-        F: for<'a> FnOnce(
-            &mut semantics::ExprContext<'a, TestFrontend<'a>, TestBackend<'a>, TestDiagnostics<'a>>,
-        ),
+        F: for<'a> FnOnce(&mut TestExprContext<'a>),
     {
         with_directive(directive, |command| {
             let mut arg = command.add_argument();
@@ -359,22 +385,32 @@ mod tests {
         )
     }
 
+    type TestCommandActions<'a> =
+        semantics::CommandActions<'a, TestFrontend<'a>, TestBackend<'a>, TestDiagnostics<'a>>;
+
     fn with_directive<F>(directive: Directive, f: F) -> Vec<TestOperation>
     where
-        F: for<'a> FnOnce(
-            semantics::CommandActions<'a, TestFrontend<'a>, TestBackend<'a>, TestDiagnostics<'a>>,
-        ) -> semantics::CommandActions<
-            'a,
-            TestFrontend<'a>,
-            TestBackend<'a>,
-            TestDiagnostics<'a>,
-        >,
+        F: for<'a> FnOnce(TestCommandActions<'a>) -> TestCommandActions<'a>,
     {
         collect_semantic_actions(|actions| {
             let command = actions
                 .enter_stmt(None)
                 .enter_command((Command::Directive(directive), ()));
             f(command).exit().exit()
+        })
+    }
+
+    fn with_labeled_directive<F>(label: &str, directive: Directive, f: F) -> Vec<TestOperation>
+    where
+        F: for<'a> FnOnce(&mut TestExprContext<'a>),
+    {
+        collect_semantic_actions(|actions| {
+            let mut arg = actions
+                .enter_stmt(Some((label.into(), ())))
+                .enter_command((Command::Directive(directive), ()))
+                .add_argument();
+            f(&mut arg);
+            arg.exit().exit().exit()
         })
     }
 }

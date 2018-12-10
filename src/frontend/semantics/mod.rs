@@ -110,8 +110,7 @@ where
     type MacroInvocationContext = MacroInvocationActions<'a, F, B, D>;
     type Parent = Self;
 
-    fn enter_command(mut self, name: (Command, D::Span)) -> Self::CommandContext {
-        self.define_label_if_present();
+    fn enter_command(self, name: (Command, D::Span)) -> Self::CommandContext {
         CommandActions::new(name, self)
     }
 
@@ -194,9 +193,13 @@ impl<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics> syntax::CommandCon
         if !self.has_errors {
             let result = match self.name {
                 (Command::Directive(directive), span) => {
+                    if !directive.requires_symbol() {
+                        self.parent.define_label_if_present()
+                    }
                     directive::analyze_directive((directive, span), self.args, &mut self.parent)
                 }
                 (Command::Mnemonic(mnemonic), range) => {
+                    self.parent.define_label_if_present();
                     analyze_mnemonic((mnemonic, range), self.args, &mut self.parent)
                 }
             };
@@ -205,6 +208,15 @@ impl<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics> syntax::CommandCon
             }
         }
         self.parent
+    }
+}
+
+impl Directive {
+    fn requires_symbol(&self) -> bool {
+        match self {
+            Directive::Equ => true,
+            _ => false,
+        }
     }
 }
 
