@@ -63,7 +63,7 @@ where
     for<'a> Self: BuildValue<'a, <Self as HasValue>::Value>,
 {
     type Object;
-    fn add_label(&mut self, label: (impl Into<String>, S));
+    fn define_symbol(&mut self, symbol: (impl Into<String>, S), value: Self::Value);
     fn emit_item(&mut self, item: Item<Self::Value>);
     fn into_object(self) -> Self::Object;
     fn set_origin(&mut self, origin: Self::Value);
@@ -197,11 +197,8 @@ impl<'a, S: Clone + Debug + PartialEq> BuildValue<'a, RelocExpr<S>> for ObjectBu
 impl<S: Clone + Debug + PartialEq> Backend<S> for ObjectBuilder<S> {
     type Object = Object<S>;
 
-    fn add_label(&mut self, label: (impl Into<String>, S)) {
-        self.push(Node::Symbol(
-            (label.0.into(), label.1.clone()),
-            Expr::from_atom(RelocAtom::LocationCounter, label.1),
-        ))
+    fn define_symbol(&mut self, symbol: (impl Into<String>, S), value: Self::Value) {
+        self.push(Node::Symbol((symbol.0.into(), symbol.1), value))
     }
 
     fn emit_item(&mut self, item: Item<RelocExpr<S>>) {
@@ -355,7 +352,7 @@ mod tests {
     fn emit_defined_symbol() {
         let label = "label";
         let (object, diagnostics) = with_object_builder(|builder| {
-            builder.add_label((label, ()));
+            builder.define_symbol((label, ()), RelocAtom::LocationCounter.into());
             builder.emit_item(symbol_expr_item(label));
         });
         assert_eq!(*diagnostics, []);
@@ -367,7 +364,7 @@ mod tests {
         let label = "label";
         let (object, diagnostics) = with_object_builder(|builder| {
             builder.emit_item(symbol_expr_item(label));
-            builder.add_label((label, ()));
+            builder.define_symbol((label, ()), RelocAtom::LocationCounter.into());
         });
         assert_eq!(*diagnostics, []);
         assert_eq!(object.sections.last().unwrap().data, [0x02, 0x00])

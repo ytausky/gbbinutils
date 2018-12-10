@@ -189,7 +189,7 @@ mod tests {
         let addr = 0xffe1;
         let mut builder = ObjectBuilder::new();
         builder.set_origin(addr.into());
-        builder.add_label((label, ()));
+        builder.define_symbol((label, ()), RelocAtom::LocationCounter.into());
         let object = builder.into_object();
         let symbols = resolve_symbols(&object);
         assert_eq!(symbols.get(label), Some(&addr.into()))

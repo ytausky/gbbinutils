@@ -64,7 +64,10 @@ impl<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics> SemanticActions<'a
 
     fn define_label_if_present(&mut self) {
         if let Some((label, span)) = self.label.take() {
-            self.session.backend.add_label((label.into(), span))
+            let value = self.session.backend.build_value().location(span.clone());
+            self.session
+                .backend
+                .define_symbol((label.into(), span), value)
         }
     }
 }
@@ -601,10 +604,10 @@ mod tests {
     impl<'a> Backend<()> for TestBackend<'a> {
         type Object = ();
 
-        fn add_label(&mut self, label: (impl Into<String>, ())) {
+        fn define_symbol(&mut self, symbol: (impl Into<String>, ()), value: RelocExpr<()>) {
             self.operations
                 .borrow_mut()
-                .push(TestOperation::Label(label.0.into()))
+                .push(TestOperation::DefineSymbol(symbol.0.into(), value))
         }
 
         fn emit_item(&mut self, item: backend::Item<RelocExpr<()>>) {
@@ -714,9 +717,9 @@ mod tests {
         AnalyzeFile(String),
         InvokeMacro(String, Vec<Vec<Token<String>>>),
         DefineMacro(String, Vec<String>, Vec<Token<String>>),
+        DefineSymbol(String, RelocExpr<()>),
         EmitDiagnostic(InternalDiagnostic<()>),
         EmitItem(backend::Item<RelocExpr<()>>),
-        Label(String),
         SetOrigin(RelocExpr<()>),
     }
 
@@ -797,7 +800,13 @@ mod tests {
         let actions = collect_semantic_actions(|actions| {
             actions.enter_stmt(Some((label.to_string(), ()))).exit()
         });
-        assert_eq!(actions, [TestOperation::Label(label.to_string())])
+        assert_eq!(
+            actions,
+            [TestOperation::DefineSymbol(
+                label.to_string(),
+                RelocAtom::LocationCounter.into()
+            )]
+        )
     }
 
     #[test]

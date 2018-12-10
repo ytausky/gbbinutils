@@ -326,9 +326,19 @@ mod tests {
     fn define_label() {
         let label = "label";
         let log = TestLog::default();
-        TestFixture::new(&log)
-            .when(|mut fixture| fixture.session().backend.add_label((label.to_string(), ())));
-        assert_eq!(*log.borrow(), [TestEvent::AddLabel(String::from(label))]);
+        TestFixture::new(&log).when(|mut fixture| {
+            fixture
+                .session()
+                .backend
+                .define_symbol((label.to_string(), ()), RelocAtom::LocationCounter.into())
+        });
+        assert_eq!(
+            *log.borrow(),
+            [TestEvent::DefineSymbol(
+                String::from(label),
+                RelocAtom::LocationCounter.into()
+            )]
+        );
     }
 
     use crate::frontend::syntax::keyword::*;
@@ -541,10 +551,10 @@ mod tests {
     impl<'a> Backend<()> for Mock<'a> {
         type Object = ();
 
-        fn add_label(&mut self, (label, _): (impl Into<String>, ())) {
+        fn define_symbol(&mut self, symbol: (impl Into<String>, ()), value: RelocExpr<()>) {
             self.log
                 .borrow_mut()
-                .push(TestEvent::AddLabel(label.into()))
+                .push(TestEvent::DefineSymbol(symbol.0.into(), value))
         }
 
         fn emit_item(&mut self, item: Item<RelocExpr<()>>) {
@@ -577,7 +587,7 @@ mod tests {
     #[derive(Debug, PartialEq)]
     enum TestEvent {
         AnalyzeTokens(Vec<Token<String>>),
-        AddLabel(String),
+        DefineSymbol(String, RelocExpr<()>),
         Diagnostic(InternalDiagnostic<()>),
         EmitItem(Item<RelocExpr<()>>),
     }
