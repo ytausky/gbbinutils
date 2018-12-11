@@ -485,7 +485,13 @@ pub fn mk_diagnostic(file: impl Into<String>, message: &Message<SpanData>) -> Di
 
 impl InternalDiagnostic<SpanData> {
     fn elaborate<'a, T: From<&'a str>>(&self, codebase: &'a TextCache) -> Diagnostic<T> {
-        match &self.highlight {
+        Diagnostic {
+            clauses: vec![self.main_clause(codebase)],
+        }
+    }
+
+    fn main_clause<'a, T: From<&'a str>>(&self, codebase: &'a TextCache) -> DiagnosticClause<T> {
+        let (file, source, highlight) = match &self.highlight {
             SpanData::Buf { range, context } => {
                 let buf = codebase.buf(context.buf_id);
                 let highlight = buf.text_range(&range);
@@ -494,20 +500,19 @@ impl InternalDiagnostic<SpanData> {
                     .next()
                     .map(|(_, line)| line.trim_right())
                     .unwrap();
-                Diagnostic {
-                    clauses: vec![DiagnosticClause {
-                        file: buf.name().into(),
-                        tag: DiagnosticClauseTag::Error,
-                        message: self.message.render(codebase),
-                        location: Some(DiagnosticLocation {
-                            line: highlight.start.line.into(),
-                            source: source.into(),
-                            highlight: Some(highlight),
-                        }),
-                    }],
-                }
+                (buf.name().into(), source, highlight)
             }
             SpanData::Macro { .. } => unimplemented!(),
+        };
+        DiagnosticClause {
+            file,
+            tag: DiagnosticClauseTag::Error,
+            message: self.message.render(codebase),
+            location: Some(DiagnosticLocation {
+                line: highlight.start.line.into(),
+                source: source.into(),
+                highlight: Some(highlight),
+            }),
         }
     }
 }
