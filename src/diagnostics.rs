@@ -463,11 +463,8 @@ pub fn mk_diagnostic(file: impl Into<String>, message: &Message<SpanData>) -> Di
 
 impl InternalDiagnostic<SpanData> {
     fn elaborate<'a, T: From<&'a str>>(&self, codebase: &'a TextCache) -> Diagnostic<T> {
-        match self.highlight {
-            SpanData::Buf {
-                ref range,
-                ref context,
-            } => {
+        match &self.highlight {
+            SpanData::Buf { range, context } => {
                 let buf = codebase.buf(context.buf_id);
                 let highlight = buf.text_range(&range);
                 let source = buf
@@ -498,7 +495,7 @@ impl<T: Borrow<str>> fmt::Display for Diagnostic<T> {
                 let squiggle = location
                     .highlight
                     .as_ref()
-                    .map_or_else(|| String::new(), mk_squiggle);
+                    .map_or_else(String::new, mk_squiggle);
                 writeln!(
                     f,
                     "{}:{}: error: {}\n{}{}",
@@ -515,26 +512,20 @@ impl<T: Borrow<str>> fmt::Display for Diagnostic<T> {
 
 fn mk_squiggle(range: &TextRange) -> String {
     assert_eq!(range.start.line, range.end.line);
-    let mut squiggle = "\n".to_string();
+
+    use std::cmp::max;
     let space_count = range.start.column_index;
-    let tilde_count = match range.end.column_index - space_count {
-        0 => 1,
-        n => n,
-    };
-    for _ in 0..space_count {
-        squiggle.push(' ');
-    }
-    for _ in 0..tilde_count {
-        squiggle.push('~');
-    }
-    squiggle
+    let tilde_count = max(range.end.column_index - space_count, 1);
+
+    use std::iter::{once, repeat};
+    let spaces = repeat(' ').take(space_count);
+    let tildes = repeat('~').take(tilde_count);
+    once('\n').chain(spaces).chain(tildes).collect()
 }
 
 fn mk_snippet<'a>(codebase: &'a TextCache, span: &SpanData) -> &'a str {
     match span {
-        SpanData::Buf { range, context } => {
-            &codebase.buf(context.buf_id).as_str()[range.start..range.end]
-        }
+        SpanData::Buf { range, context } => &codebase.buf(context.buf_id).as_str()[range.clone()],
         SpanData::Macro { .. } => unimplemented!(),
     }
 }
