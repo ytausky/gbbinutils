@@ -155,12 +155,7 @@ impl<I: AsRef<str> + PartialEq, C> ExpandedMacro<I, C> {
     }
 
     fn param_position(&self, name: &str) -> Option<usize> {
-        for i in 0..self.def.params.len() {
-            if self.def.params[i].as_ref() == name {
-                return Some(i);
-            }
-        }
-        None
+        self.def.params.iter().position(|x| x.as_ref() == name)
     }
 
     fn advance(&mut self) {
