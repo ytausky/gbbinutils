@@ -239,9 +239,7 @@ fn split<I: IntoIterator<Item = (L, R)>, L, R>(iter: I) -> (Vec<L>, Vec<R>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::span::{
-        BufContextData, MacroExpansionData, RcContextFactory, SpanData, TokenExpansion,
-    };
+    use crate::span::*;
 
     #[test]
     fn expand_macro_with_one_token() {
@@ -274,13 +272,16 @@ mod tests {
             .unwrap()
             .expand(invocation_name.1, vec![], &mut factory)
             .collect();
+        let macro_expansion_position = MacroExpansionPosition {
+            token: 0,
+            expansion: None,
+        };
         assert_eq!(
             expanded,
             [(
                 body.0,
                 SpanData::Macro {
-                    token: 0,
-                    expansion: None,
+                    range: macro_expansion_position.clone()..=macro_expansion_position,
                     context: data,
                 }
             )]
@@ -340,41 +341,26 @@ mod tests {
                 factory,
             )
             .collect();
+        let mk_span_data = |token, expansion| {
+            let position = MacroExpansionPosition { token, expansion };
+            SpanData::Macro {
+                range: position.clone()..=position,
+                context: data.clone(),
+            }
+        };
         assert_eq!(
             expanded,
             [
-                (
-                    Token::Ident("a"),
-                    SpanData::Macro {
-                        token: 0,
-                        expansion: None,
-                        context: data.clone()
-                    }
-                ),
+                (Token::Ident("a"), mk_span_data(0, None)),
                 (
                     Token::Ident("y"),
-                    SpanData::Macro {
-                        token: 1,
-                        expansion: Some(TokenExpansion { arg: 0, index: 0 }),
-                        context: data.clone()
-                    }
+                    mk_span_data(1, Some(TokenExpansion { arg: 0, index: 0 })),
                 ),
                 (
                     Token::Ident("z"),
-                    SpanData::Macro {
-                        token: 1,
-                        expansion: Some(TokenExpansion { arg: 0, index: 1 }),
-                        context: data.clone()
-                    }
+                    mk_span_data(1, Some(TokenExpansion { arg: 0, index: 1 })),
                 ),
-                (
-                    Token::Ident("b"),
-                    SpanData::Macro {
-                        token: 2,
-                        expansion: None,
-                        context: data.clone()
-                    }
-                ),
+                (Token::Ident("b"), mk_span_data(2, None)),
             ]
         )
     }

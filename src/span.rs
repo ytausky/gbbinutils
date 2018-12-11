@@ -2,6 +2,7 @@ use crate::codebase::{BufId, BufRange};
 use std::cmp;
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::ops::RangeInclusive;
 use std::rc::Rc;
 
 pub trait Span {
@@ -82,10 +83,15 @@ pub enum SpanData<B = BufId, R = BufRange> {
         context: Rc<BufContextData<B, R>>,
     },
     Macro {
-        token: usize,
-        expansion: Option<TokenExpansion>,
+        range: RangeInclusive<MacroExpansionPosition>,
         context: Rc<MacroExpansionData<SpanData<B, R>>>,
     },
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct MacroExpansionPosition {
+    pub token: usize,
+    pub expansion: Option<TokenExpansion>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -219,9 +225,9 @@ impl<B, R> MacroExpansionContext for Rc<MacroExpansionData<SpanData<B, R>>> {
     type Span = SpanData<B, R>;
 
     fn mk_span(&self, token: usize, expansion: Option<TokenExpansion>) -> Self::Span {
+        let position = MacroExpansionPosition { token, expansion };
         SpanData::Macro {
-            token,
-            expansion,
+            range: position.clone()..=position,
             context: Rc::clone(self),
         }
     }
