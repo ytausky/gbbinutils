@@ -94,6 +94,32 @@ pub struct MacroExpansionPosition {
     pub expansion: Option<TokenExpansion>,
 }
 
+impl PartialOrd for MacroExpansionPosition {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        if self.token != other.token {
+            self.token.partial_cmp(&other.token)
+        } else {
+            match (&self.expansion, &other.expansion) {
+                (Some(expansion), Some(other_expansion))
+                    if expansion.arg == other_expansion.arg =>
+                {
+                    expansion.index.partial_cmp(&other_expansion.index)
+                }
+                (None, None) => Some(cmp::Ordering::Equal),
+                _ => None,
+            }
+        }
+    }
+}
+
+fn merge_macro_expansion_ranges(
+    left: &RangeInclusive<MacroExpansionPosition>,
+    right: &RangeInclusive<MacroExpansionPosition>,
+) -> RangeInclusive<MacroExpansionPosition> {
+    assert!(left.start() <= right.end());
+    left.start().clone()..=right.end().clone()
+}
+
 #[derive(Debug, PartialEq)]
 pub struct BufContextData<B, R> {
     pub buf_id: B,
@@ -185,6 +211,16 @@ impl Merge for RcContextFactory<BufId, BufRange> {
                     ..cmp::max(range.end, other_range.end),
                 context: (*context).clone(),
             },
+            (
+                Macro { range, context },
+                Macro {
+                    range: other_range,
+                    context: other_context,
+                },
+            ) if Rc::ptr_eq(context, other_context) => Macro {
+                range: merge_macro_expansion_ranges(range, other_range),
+                context: Rc::clone(context),
+            },
             _ => unreachable!(),
         }
     }
@@ -262,6 +298,24 @@ mod tests {
                 range: BufRange::from(0..10),
                 context
             }
+        )
+    }
+
+    #[test]
+    fn merge_simple_macro_expansion_positions() {
+        let start_pos = MacroExpansionPosition {
+            token: 2,
+            expansion: None,
+        };
+        let start = start_pos.clone()..=start_pos.clone();
+        let end_pos = MacroExpansionPosition {
+            token: 7,
+            expansion: None,
+        };
+        let end = end_pos.clone()..=end_pos.clone();
+        assert_eq!(
+            merge_macro_expansion_ranges(&start, &end),
+            start_pos..=end_pos
         )
     }
 }
