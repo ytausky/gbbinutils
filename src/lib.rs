@@ -154,9 +154,11 @@ mod tests {
         assert_eq!(
             output.diagnostics,
             [Diagnostic {
-                file: path.to_string(),
-                message: "file contains invalid UTF-8".to_string(),
-                location: None
+                clauses: vec![DiagnosticClause {
+                    file: path.to_string(),
+                    message: "file contains invalid UTF-8".to_string(),
+                    location: None
+                }]
             }]
         )
     }
@@ -176,9 +178,11 @@ mod tests {
         assert_eq!(
             output.diagnostics,
             [Diagnostic {
-                file: path.to_string(),
-                message: "file does not exist".to_string(),
-                location: None
+                clauses: vec![DiagnosticClause {
+                    file: path.to_string(),
+                    message: "file does not exist".to_string(),
+                    location: None
+                }]
             }]
         )
     }

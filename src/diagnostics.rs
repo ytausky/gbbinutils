@@ -441,6 +441,11 @@ impl fmt::Display for Width {
 
 #[derive(Debug, PartialEq)]
 pub struct Diagnostic<T> {
+    pub clauses: Vec<DiagnosticClause<T>>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct DiagnosticClause<T> {
     pub file: T,
     pub message: String,
     pub location: Option<DiagnosticLocation<T>>,
@@ -455,9 +460,11 @@ pub struct DiagnosticLocation<T> {
 
 pub fn mk_diagnostic(file: impl Into<String>, message: &Message<SpanData>) -> Diagnostic<String> {
     Diagnostic {
-        file: file.into(),
-        message: message.render(&TextCache::new()),
-        location: None,
+        clauses: vec![DiagnosticClause {
+            file: file.into(),
+            message: message.render(&TextCache::new()),
+            location: None,
+        }],
     }
 }
 
@@ -473,13 +480,15 @@ impl InternalDiagnostic<SpanData> {
                     .map(|(_, line)| line.trim_right())
                     .unwrap();
                 Diagnostic {
-                    file: buf.name().into(),
-                    message: self.message.render(codebase),
-                    location: Some(DiagnosticLocation {
-                        line: highlight.start.line.into(),
-                        source: source.into(),
-                        highlight: Some(highlight),
-                    }),
+                    clauses: vec![DiagnosticClause {
+                        file: buf.name().into(),
+                        message: self.message.render(codebase),
+                        location: Some(DiagnosticLocation {
+                            line: highlight.start.line.into(),
+                            source: source.into(),
+                            highlight: Some(highlight),
+                        }),
+                    }],
                 }
             }
             SpanData::Macro { .. } => unimplemented!(),
@@ -488,6 +497,15 @@ impl InternalDiagnostic<SpanData> {
 }
 
 impl<T: Borrow<str>> fmt::Display for Diagnostic<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for clause in &self.clauses {
+            clause.fmt(f)?
+        }
+        Ok(())
+    }
+}
+
+impl<T: Borrow<str>> fmt::Display for DiagnosticClause<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.location {
             None => writeln!(f, "{}: error: {}", self.file.borrow(), self.message),
@@ -577,13 +595,15 @@ mod tests {
         assert_eq!(
             diagnostic.elaborate(&codebase),
             Diagnostic {
-                file: DUMMY_FILE,
-                message: "invocation of undefined macro `my_macro`".to_string(),
-                location: Some(DiagnosticLocation {
-                    line: LineNumber(2),
-                    source: "    my_macro a, $12",
-                    highlight: mk_highlight(LineNumber(2), 4, 12),
-                })
+                clauses: vec![DiagnosticClause {
+                    file: DUMMY_FILE,
+                    message: "invocation of undefined macro `my_macro`".to_string(),
+                    location: Some(DiagnosticLocation {
+                        line: LineNumber(2),
+                        source: "    my_macro a, $12",
+                        highlight: mk_highlight(LineNumber(2), 4, 12),
+                    })
+                }]
             }
         )
     }
@@ -591,13 +611,15 @@ mod tests {
     #[test]
     fn render_elaborated_diagnostic() {
         let elaborated_diagnostic = Diagnostic {
-            file: DUMMY_FILE,
-            message: "invocation of undefined macro `my_macro`".to_string(),
-            location: Some(DiagnosticLocation {
-                line: LineNumber(2),
-                source: "    my_macro a, $12",
-                highlight: mk_highlight(LineNumber(2), 4, 12),
-            }),
+            clauses: vec![DiagnosticClause {
+                file: DUMMY_FILE,
+                message: "invocation of undefined macro `my_macro`".to_string(),
+                location: Some(DiagnosticLocation {
+                    line: LineNumber(2),
+                    source: "    my_macro a, $12",
+                    highlight: mk_highlight(LineNumber(2), 4, 12),
+                }),
+            }],
         };
         let expected = r"/my/file:2: error: invocation of undefined macro `my_macro`
     my_macro a, $12
@@ -609,9 +631,11 @@ mod tests {
     #[test]
     fn render_diagnostic_without_source() {
         let diagnostic = Diagnostic {
-            file: DUMMY_FILE,
-            message: "file constains invalid UTF-8".to_string(),
-            location: None,
+            clauses: vec![DiagnosticClause {
+                file: DUMMY_FILE,
+                message: "file constains invalid UTF-8".to_string(),
+                location: None,
+            }],
         };
         let expected = r"/my/file: error: file constains invalid UTF-8
 ";
@@ -621,13 +645,15 @@ mod tests {
     #[test]
     fn highlight_eof_with_one_tilde() {
         let elaborated = Diagnostic {
-            file: DUMMY_FILE,
-            message: "unexpected end of file".into(),
-            location: Some(DiagnosticLocation {
-                line: LineNumber(2),
-                source: "dummy",
-                highlight: mk_highlight(LineNumber(2), 5, 5),
-            }),
+            clauses: vec![DiagnosticClause {
+                file: DUMMY_FILE,
+                message: "unexpected end of file".into(),
+                location: Some(DiagnosticLocation {
+                    line: LineNumber(2),
+                    source: "dummy",
+                    highlight: mk_highlight(LineNumber(2), 5, 5),
+                }),
+            }],
         };
         let expected = r"/my/file:2: error: unexpected end of file
 dummy
