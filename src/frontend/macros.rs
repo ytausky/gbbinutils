@@ -141,7 +141,7 @@ enum ExpansionState {
     Label(usize),
 }
 
-impl<I: AsRef<str> + PartialEq, C> ExpandedMacro<I, C> {
+impl<I: PartialEq, C> ExpandedMacro<I, C> {
     fn new(def: Rc<MacroDefData<I>>, args: Vec<Vec<Token<I>>>, context: C) -> ExpandedMacro<I, C> {
         let mut expanded_macro = ExpandedMacro {
             def,
@@ -154,8 +154,8 @@ impl<I: AsRef<str> + PartialEq, C> ExpandedMacro<I, C> {
         expanded_macro
     }
 
-    fn param_position(&self, name: &str) -> Option<usize> {
-        self.def.params.iter().position(|x| x.as_ref() == name)
+    fn param_position(&self, name: &I) -> Option<usize> {
+        self.def.params.iter().position(|x| x == name)
     }
 
     fn advance(&mut self) {
@@ -183,11 +183,9 @@ impl<I: AsRef<str> + PartialEq, C> ExpandedMacro<I, C> {
     fn expand_token(&self, token: &Token<I>) -> Option<ExpansionState> {
         match token {
             Token::Ident(ident) => self
-                .param_position(ident.as_ref())
+                .param_position(ident)
                 .map(|position| ExpansionState::Ident(position, 0)),
-            Token::Label(label) => self
-                .param_position(label.as_ref())
-                .map(ExpansionState::Label),
+            Token::Label(label) => self.param_position(label).map(ExpansionState::Label),
             _ => None,
         }
     }
@@ -195,7 +193,7 @@ impl<I: AsRef<str> + PartialEq, C> ExpandedMacro<I, C> {
 
 impl<I, C> Iterator for ExpandedMacro<I, C>
 where
-    I: AsRef<str> + Clone + Eq,
+    I: Clone + Eq,
     C: MacroExpansionContext,
 {
     type Item = (Token<I>, C::Span);
