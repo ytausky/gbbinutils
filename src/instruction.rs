@@ -1,4 +1,3 @@
-pub use crate::backend::BinaryOperator;
 use crate::span::Source;
 
 #[derive(Clone, Debug, PartialEq)]
