@@ -156,6 +156,7 @@ mod tests {
             [Diagnostic {
                 clauses: vec![DiagnosticClause {
                     file: path.to_string(),
+                    tag: DiagnosticClauseTag::Error,
                     message: "file contains invalid UTF-8".to_string(),
                     location: None
                 }]
@@ -180,6 +181,7 @@ mod tests {
             [Diagnostic {
                 clauses: vec![DiagnosticClause {
                     file: path.to_string(),
+                    tag: DiagnosticClauseTag::Error,
                     message: "file does not exist".to_string(),
                     location: None
                 }]

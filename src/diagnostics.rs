@@ -447,8 +447,22 @@ pub struct Diagnostic<T> {
 #[derive(Debug, PartialEq)]
 pub struct DiagnosticClause<T> {
     pub file: T,
+    pub tag: DiagnosticClauseTag,
     pub message: String,
     pub location: Option<DiagnosticLocation<T>>,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum DiagnosticClauseTag {
+    Error,
+}
+
+impl fmt::Display for DiagnosticClauseTag {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match self {
+            DiagnosticClauseTag::Error => "error",
+        })
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -462,6 +476,7 @@ pub fn mk_diagnostic(file: impl Into<String>, message: &Message<SpanData>) -> Di
     Diagnostic {
         clauses: vec![DiagnosticClause {
             file: file.into(),
+            tag: DiagnosticClauseTag::Error,
             message: message.render(&TextCache::new()),
             location: None,
         }],
@@ -482,6 +497,7 @@ impl InternalDiagnostic<SpanData> {
                 Diagnostic {
                     clauses: vec![DiagnosticClause {
                         file: buf.name().into(),
+                        tag: DiagnosticClauseTag::Error,
                         message: self.message.render(codebase),
                         location: Some(DiagnosticLocation {
                             line: highlight.start.line.into(),
@@ -508,7 +524,7 @@ impl<T: Borrow<str>> fmt::Display for Diagnostic<T> {
 impl<T: Borrow<str>> fmt::Display for DiagnosticClause<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.location {
-            None => writeln!(f, "{}: error: {}", self.file.borrow(), self.message),
+            None => writeln!(f, "{}: {}: {}", self.file.borrow(), self.tag, self.message),
             Some(location) => {
                 let squiggle = location
                     .highlight
@@ -516,9 +532,10 @@ impl<T: Borrow<str>> fmt::Display for DiagnosticClause<T> {
                     .map_or_else(String::new, mk_squiggle);
                 writeln!(
                     f,
-                    "{}:{}: error: {}\n{}{}",
+                    "{}:{}: {}: {}\n{}{}",
                     self.file.borrow(),
                     location.line,
+                    self.tag,
                     self.message,
                     location.source.borrow(),
                     squiggle,
@@ -597,6 +614,7 @@ mod tests {
             Diagnostic {
                 clauses: vec![DiagnosticClause {
                     file: DUMMY_FILE,
+                    tag: DiagnosticClauseTag::Error,
                     message: "invocation of undefined macro `my_macro`".to_string(),
                     location: Some(DiagnosticLocation {
                         line: LineNumber(2),
@@ -613,6 +631,7 @@ mod tests {
         let elaborated_diagnostic = Diagnostic {
             clauses: vec![DiagnosticClause {
                 file: DUMMY_FILE,
+                tag: DiagnosticClauseTag::Error,
                 message: "invocation of undefined macro `my_macro`".to_string(),
                 location: Some(DiagnosticLocation {
                     line: LineNumber(2),
@@ -633,6 +652,7 @@ mod tests {
         let diagnostic = Diagnostic {
             clauses: vec![DiagnosticClause {
                 file: DUMMY_FILE,
+                tag: DiagnosticClauseTag::Error,
                 message: "file constains invalid UTF-8".to_string(),
                 location: None,
             }],
@@ -647,6 +667,7 @@ mod tests {
         let elaborated = Diagnostic {
             clauses: vec![DiagnosticClause {
                 file: DUMMY_FILE,
+                tag: DiagnosticClauseTag::Error,
                 message: "unexpected end of file".into(),
                 location: Some(DiagnosticLocation {
                     line: LineNumber(2),
