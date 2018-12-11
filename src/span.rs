@@ -1,5 +1,5 @@
 use crate::codebase::{BufId, BufRange};
-use std::cmp;
+use std::cmp::Ordering;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::RangeInclusive;
@@ -95,7 +95,7 @@ pub struct MacroExpansionPosition {
 }
 
 impl PartialOrd for MacroExpansionPosition {
-    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         if self.token != other.token {
             self.token.partial_cmp(&other.token)
         } else {
@@ -105,7 +105,7 @@ impl PartialOrd for MacroExpansionPosition {
                 {
                     expansion.index.partial_cmp(&other_expansion.index)
                 }
-                (None, None) => Some(cmp::Ordering::Equal),
+                (None, None) => Some(Ordering::Equal),
                 _ => None,
             }
         }
@@ -207,9 +207,8 @@ impl Merge for RcContextFactory<BufId, BufRange> {
                     context: other_context,
                 },
             ) if Rc::ptr_eq(context, other_context) => Buf {
-                range: cmp::min(range.start, other_range.start)
-                    ..cmp::max(range.end, other_range.end),
-                context: (*context).clone(),
+                range: range.start..other_range.end,
+                context: Rc::clone(context),
             },
             (
                 Macro { range, context },
