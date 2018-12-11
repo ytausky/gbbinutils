@@ -450,7 +450,7 @@ pub struct Diagnostic<T> {
 pub struct DiagnosticLocation<T> {
     pub line: LineNumber,
     pub source: T,
-    pub highlight: TextRange,
+    pub highlight: Option<TextRange>,
 }
 
 pub fn mk_diagnostic(file: impl Into<String>, message: &Message<SpanData>) -> Diagnostic<String> {
@@ -481,7 +481,7 @@ impl InternalDiagnostic<SpanData> {
                     location: Some(DiagnosticLocation {
                         line: highlight.start.line.into(),
                         source: source.into(),
-                        highlight,
+                        highlight: Some(highlight),
                     }),
                 }
             }
@@ -495,31 +495,39 @@ impl<T: Borrow<str>> fmt::Display for Diagnostic<T> {
         match &self.location {
             None => writeln!(f, "{}: error: {}", self.file.borrow(), self.message),
             Some(location) => {
-                assert_eq!(location.highlight.start.line, location.highlight.end.line);
-                let mut highlight = String::new();
-                let space_count = location.highlight.start.column_index;
-                let tilde_count = match location.highlight.end.column_index - space_count {
-                    0 => 1,
-                    n => n,
-                };
-                for _ in 0..space_count {
-                    highlight.push(' ');
-                }
-                for _ in 0..tilde_count {
-                    highlight.push('~');
-                }
+                let squiggle = location
+                    .highlight
+                    .as_ref()
+                    .map_or_else(|| String::new(), mk_squiggle);
                 writeln!(
                     f,
-                    "{}:{}: error: {}\n{}\n{}",
+                    "{}:{}: error: {}\n{}{}",
                     self.file.borrow(),
                     location.line,
                     self.message,
                     location.source.borrow(),
-                    highlight,
+                    squiggle,
                 )
             }
         }
     }
+}
+
+fn mk_squiggle(range: &TextRange) -> String {
+    assert_eq!(range.start.line, range.end.line);
+    let mut squiggle = "\n".to_string();
+    let space_count = range.start.column_index;
+    let tilde_count = match range.end.column_index - space_count {
+        0 => 1,
+        n => n,
+    };
+    for _ in 0..space_count {
+        squiggle.push(' ');
+    }
+    for _ in 0..tilde_count {
+        squiggle.push('~');
+    }
+    squiggle
 }
 
 fn mk_snippet<'a>(codebase: &'a TextCache, span: &SpanData) -> &'a str {
@@ -649,8 +657,8 @@ dummy
         )
     }
 
-    fn mk_highlight(line_number: LineNumber, start: usize, end: usize) -> TextRange {
-        TextRange {
+    fn mk_highlight(line_number: LineNumber, start: usize, end: usize) -> Option<TextRange> {
+        Some(TextRange {
             start: TextPosition {
                 line: line_number.into(),
                 column_index: start,
@@ -659,6 +667,6 @@ dummy
                 line: line_number.into(),
                 column_index: end,
             },
-        }
+        })
     }
 }
