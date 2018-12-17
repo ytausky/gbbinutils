@@ -1,5 +1,5 @@
 use super::*;
-use crate::diagnostics::{CompactDiagnostic, DiagnosticsListener, Message};
+use crate::diagnostics::{CompactDiagnostic, EmitDiagnostic, Message};
 
 type TokenKind = Token<(), (), (), ()>;
 
@@ -426,7 +426,7 @@ mod tests {
     use super::ast::*;
     use super::Token::*;
     use super::*;
-    use crate::diagnostics::{CompactDiagnostic, DiagnosticsListener, Message};
+    use crate::diagnostics::{CompactDiagnostic, EmitDiagnostic, Message};
     use crate::frontend::syntax::{ExprAtom, ExprOperator};
     use crate::span::{Merge, Span};
     use std::borrow::Borrow;
@@ -459,7 +459,7 @@ mod tests {
         }
     }
 
-    impl DiagnosticsListener for FileActionCollector {
+    impl EmitDiagnostic for FileActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
             self.actions.push(FileAction::EmitDiagnostic(diagnostic))
         }
@@ -493,7 +493,7 @@ mod tests {
         }
     }
 
-    impl DiagnosticsListener for StmtActionCollector {
+    impl EmitDiagnostic for StmtActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
             self.actions.push(StmtAction::EmitDiagnostic(diagnostic))
         }
@@ -557,7 +557,7 @@ mod tests {
         }
     }
 
-    impl DiagnosticsListener for CommandActionCollector {
+    impl EmitDiagnostic for CommandActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
             self.actions.push(CommandAction::EmitDiagnostic(diagnostic))
         }
@@ -601,7 +601,7 @@ mod tests {
         }
     }
 
-    impl DiagnosticsListener for ArgActionCollector {
+    impl EmitDiagnostic for ArgActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
             self.expr_action_collector.emit_diagnostic(diagnostic)
         }
@@ -650,7 +650,7 @@ mod tests {
         }
     }
 
-    impl DiagnosticsListener for ExprActionCollector {
+    impl EmitDiagnostic for ExprActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
             self.actions.push(ExprAction::EmitDiagnostic(diagnostic))
         }
@@ -690,7 +690,7 @@ mod tests {
         }
     }
 
-    impl DiagnosticsListener for MacroParamsActionCollector {
+    impl EmitDiagnostic for MacroParamsActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
             self.actions
                 .push(MacroParamsAction::EmitDiagnostic(diagnostic))
@@ -731,7 +731,7 @@ mod tests {
         }
     }
 
-    impl DiagnosticsListener for MacroBodyActionCollector {
+    impl EmitDiagnostic for MacroBodyActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
             self.actions
                 .push(TokenSeqAction::EmitDiagnostic(diagnostic))
@@ -772,7 +772,7 @@ mod tests {
         }
     }
 
-    impl DiagnosticsListener for MacroInvocationActionCollector {
+    impl EmitDiagnostic for MacroInvocationActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
             self.actions
                 .push(MacroInvocationAction::EmitDiagnostic(diagnostic))
@@ -815,7 +815,7 @@ mod tests {
         }
     }
 
-    impl DiagnosticsListener for MacroArgActionCollector {
+    impl EmitDiagnostic for MacroArgActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
             self.actions
                 .push(TokenSeqAction::EmitDiagnostic(diagnostic))

@@ -1,7 +1,7 @@
 use self::context::{EvalContext, SymbolTable};
 use self::resolve::Value;
 use crate::backend::{BinaryObject, RelocExpr, Width};
-use crate::diagnostics::DiagnosticsListener;
+use crate::diagnostics::EmitDiagnostic;
 use std::borrow::Borrow;
 use std::fmt::Debug;
 
@@ -39,7 +39,7 @@ impl<SR> Object<SR> {
 
 pub fn link<'a, D>(object: Object<D::Span>, diagnostics: &mut D) -> BinaryObject
 where
-    D: DiagnosticsListener + 'a,
+    D: EmitDiagnostic + 'a,
 {
     let symbols = resolve::resolve_symbols(&object);
     let mut context = EvalContext {

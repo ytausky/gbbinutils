@@ -1,7 +1,7 @@
 use super::context::{EvalContext, SymbolTable};
 use super::{traverse_chunk_items, Chunk, Node};
 use crate::backend::{BinarySection, RelocExpr, Width};
-use crate::diagnostics::{CompactDiagnostic, DiagnosticsListener, Message};
+use crate::diagnostics::{CompactDiagnostic, EmitDiagnostic, Message};
 use crate::span::Source;
 use std::fmt::Debug;
 use std::vec::IntoIter;
@@ -10,7 +10,7 @@ impl<S: Clone + Debug + PartialEq> Chunk<S> {
     pub fn translate(
         &self,
         context: &mut EvalContext<&SymbolTable>,
-        diagnostics: &mut impl DiagnosticsListener<Span = S>,
+        diagnostics: &mut impl EmitDiagnostic<Span = S>,
     ) -> BinarySection {
         let mut data = Vec::<u8>::new();
         let origin = self.evaluate_origin(&context);
@@ -29,7 +29,7 @@ impl<S: Clone + Debug + PartialEq> Node<S> {
     fn translate(
         &self,
         context: &EvalContext<&SymbolTable>,
-        diagnostics: &mut impl DiagnosticsListener<Span = S>,
+        diagnostics: &mut impl EmitDiagnostic<Span = S>,
     ) -> IntoIter<u8> {
         match self {
             Node::Byte(value) => vec![*value],
@@ -95,7 +95,7 @@ fn resolve_expr_item<S: Clone + Debug + PartialEq>(
     expr: &RelocExpr<S>,
     width: Width,
     context: &EvalContext<&SymbolTable>,
-    diagnostics: &mut impl DiagnosticsListener<Span = S>,
+    diagnostics: &mut impl EmitDiagnostic<Span = S>,
 ) -> Data {
     let span = expr.span();
     let value = expr
@@ -115,7 +115,7 @@ fn resolve_expr_item<S: Clone + Debug + PartialEq>(
 fn fit_to_width<S: Clone + Debug + PartialEq>(
     (value, value_ref): (i32, S),
     width: Width,
-    diagnostics: &mut impl DiagnosticsListener<Span = S>,
+    diagnostics: &mut impl EmitDiagnostic<Span = S>,
 ) -> Data {
     if !is_in_range(value, width) {
         diagnostics.emit_diagnostic(CompactDiagnostic::new(

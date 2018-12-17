@@ -1,6 +1,6 @@
 use crate::backend::{self, Backend, BinaryOperator, ValueBuilder};
 use crate::diagnostics::{
-    CompactDiagnostic, DelegateDiagnostics, Diagnostics, DiagnosticsListener, Message,
+    CompactDiagnostic, DelegateDiagnostics, Diagnostics, EmitDiagnostic, Message,
 };
 use crate::expr::ExprVariant;
 use crate::frontend::session::Session;
@@ -162,7 +162,7 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> Merge for CommandActions<'a, F, B, D
     }
 }
 
-impl<'a, F: Frontend<D>, B, D: Diagnostics> DiagnosticsListener for CommandActions<'a, F, B, D> {
+impl<'a, F: Frontend<D>, B, D: Diagnostics> EmitDiagnostic for CommandActions<'a, F, B, D> {
     fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<D::Span>) {
         self.has_errors = true;
         self.parent.emit_diagnostic(diagnostic)
@@ -641,7 +641,7 @@ mod tests {
         fn merge(&mut self, _: &(), _: &()) {}
     }
 
-    impl<'a> DiagnosticsListener for TestDiagnostics<'a> {
+    impl<'a> EmitDiagnostic for TestDiagnostics<'a> {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span>) {
             self.operations
                 .borrow_mut()

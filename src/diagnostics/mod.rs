@@ -19,12 +19,12 @@ where
 
 pub trait DownstreamDiagnostics
 where
-    Self: DiagnosticsListener,
+    Self: EmitDiagnostic,
     Self: Merge,
 {
 }
 
-impl<T> DownstreamDiagnostics for T where T: DiagnosticsListener + Merge {}
+impl<T> DownstreamDiagnostics for T where T: EmitDiagnostic + Merge {}
 
 pub trait DelegateDiagnostics {
     type Delegate: DownstreamDiagnostics;
@@ -41,7 +41,7 @@ impl<T: DelegateDiagnostics> Merge for T {
     }
 }
 
-impl<T: DelegateDiagnostics> DiagnosticsListener for T {
+impl<T: DelegateDiagnostics> EmitDiagnostic for T {
     fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span>) {
         self.delegate().emit_diagnostic(diagnostic)
     }
@@ -55,7 +55,7 @@ pub struct DiagnosticsSystem<C, O> {
 impl<C, O> Span for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
-    O: DiagnosticsListener<Span = C::Span>,
+    O: EmitDiagnostic<Span = C::Span>,
 {
     type Span = C::Span;
 }
@@ -63,17 +63,17 @@ where
 impl<C, O> Merge for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
-    O: DiagnosticsListener<Span = C::Span>,
+    O: EmitDiagnostic<Span = C::Span>,
 {
     fn merge(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
         self.context.merge(left, right)
     }
 }
 
-impl<C, O> DiagnosticsListener for DiagnosticsSystem<C, O>
+impl<C, O> EmitDiagnostic for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
-    O: DiagnosticsListener<Span = C::Span>,
+    O: EmitDiagnostic<Span = C::Span>,
 {
     fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span>) {
         self.output.emit_diagnostic(diagnostic)
@@ -83,7 +83,7 @@ where
 impl<C, O> MacroContextFactory for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
-    O: DiagnosticsListener<Span = C::Span>,
+    O: EmitDiagnostic<Span = C::Span>,
 {
     type MacroDefId = C::MacroDefId;
     type MacroExpansionContext = C::MacroExpansionContext;
@@ -113,7 +113,7 @@ where
 impl<C, O> ContextFactory for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
-    O: DiagnosticsListener<Span = C::Span>,
+    O: EmitDiagnostic<Span = C::Span>,
 {
     type BufContext = C::BufContext;
 
@@ -129,7 +129,7 @@ where
 impl<C, O> Diagnostics for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
-    O: DiagnosticsListener<Span = C::Span>,
+    O: EmitDiagnostic<Span = C::Span>,
 {
 }
 
@@ -145,7 +145,7 @@ impl DiagnosticsOutput for TerminalOutput {
     }
 }
 
-pub trait DiagnosticsListener
+pub trait EmitDiagnostic
 where
     Self: Span,
 {
@@ -161,7 +161,7 @@ impl<'a> Span for OutputForwarder<'a> {
     type Span = SpanData;
 }
 
-impl<'a> DiagnosticsListener for OutputForwarder<'a> {
+impl<'a> EmitDiagnostic for OutputForwarder<'a> {
     fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SpanData>) {
         self.output
             .emit(diagnostic.elaborate(&self.codebase.borrow()))
@@ -184,7 +184,7 @@ impl<S: Clone + fmt::Debug + PartialEq> Span for IgnoreDiagnostics<S> {
 }
 
 #[cfg(test)]
-impl<S: Clone + fmt::Debug + PartialEq> DiagnosticsListener for IgnoreDiagnostics<S> {
+impl<S: Clone + fmt::Debug + PartialEq> EmitDiagnostic for IgnoreDiagnostics<S> {
     fn emit_diagnostic(&mut self, _: CompactDiagnostic<S>) {}
 }
 
@@ -208,7 +208,7 @@ impl Span for TestDiagnosticsListener {
 }
 
 #[cfg(test)]
-impl DiagnosticsListener for TestDiagnosticsListener {
+impl EmitDiagnostic for TestDiagnosticsListener {
     fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<()>) {
         self.diagnostics.borrow_mut().push(diagnostic)
     }
