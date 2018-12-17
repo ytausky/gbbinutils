@@ -184,7 +184,7 @@ where
                 downstream
                     .diagnostics
                     .diagnostics()
-                    .emit_diagnostic(InternalDiagnostic::new(
+                    .emit_diagnostic(CompactDiagnostic::new(
                         Message::UndefinedMacro { name: name.into() },
                         span,
                     ));
@@ -405,7 +405,7 @@ mod tests {
         );
     }
 
-    use crate::diagnostics::InternalDiagnostic;
+    use crate::diagnostics::CompactDiagnostic;
 
     #[test]
     fn diagnose_undefined_macro() {
@@ -415,7 +415,7 @@ mod tests {
             .when(|mut fixture| fixture.session().invoke_macro((name.clone(), ()), vec![]));
         assert_eq!(
             *log.borrow(),
-            [TestEvent::Diagnostic(InternalDiagnostic::new(
+            [TestEvent::Diagnostic(CompactDiagnostic::new(
                 Message::UndefinedMacro { name },
                 ()
             ))]
@@ -569,7 +569,7 @@ mod tests {
     }
 
     impl<'a> DiagnosticsListener for Mock<'a> {
-        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<()>) {
+        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<()>) {
             self.log
                 .borrow_mut()
                 .push(TestEvent::Diagnostic(diagnostic))
@@ -588,7 +588,7 @@ mod tests {
     enum TestEvent {
         AnalyzeTokens(Vec<Token<String>>),
         DefineSymbol(String, RelocExpr<()>),
-        Diagnostic(InternalDiagnostic<()>),
+        Diagnostic(CompactDiagnostic<()>),
         EmitItem(Item<RelocExpr<()>>),
     }
 

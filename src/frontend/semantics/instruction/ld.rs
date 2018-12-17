@@ -1,6 +1,6 @@
 use super::{Analysis, AnalysisResult, Operand};
 use crate::backend::Width;
-use crate::diagnostics::{InternalDiagnostic, Message};
+use crate::diagnostics::{CompactDiagnostic, Message};
 use crate::frontend::semantics::operand::AtomKind;
 use crate::instruction::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
 use crate::span::{Merge, Source, Span};
@@ -8,7 +8,7 @@ use std::fmt::Debug;
 
 impl<'a, I, V, M> Analysis<'a, I, M>
 where
-    I: Iterator<Item = Result<Operand<V>, InternalDiagnostic<M::Span>>>,
+    I: Iterator<Item = Result<Operand<V>, CompactDiagnostic<M::Span>>>,
     V: Source<Span = M::Span>,
     M: Merge,
 {
@@ -29,7 +29,7 @@ where
                 self.analyze_16_bit_ld(dest, LdOperand::Const(src))
             }
             (LdDest::Byte(dest), LdOperand::Other(LdDest::Word(src))) => {
-                Err(InternalDiagnostic::new(
+                Err(CompactDiagnostic::new(
                     Message::LdWidthMismatch {
                         src_width: Width::Word,
                         src: src.span(),
@@ -39,7 +39,7 @@ where
                 ))
             }
             (LdDest::Word(dest), LdOperand::Other(LdDest::Byte(src))) => {
-                Err(InternalDiagnostic::new(
+                Err(CompactDiagnostic::new(
                     Message::LdWidthMismatch {
                         src_width: Width::Byte,
                         src: src.span(),
@@ -60,7 +60,7 @@ where
             (
                 LdDest8::Simple(SimpleOperand::DerefHl, dest),
                 LdOperand::Other(LdDest8::Simple(SimpleOperand::DerefHl, src)),
-            ) => Err(InternalDiagnostic::new(
+            ) => Err(CompactDiagnostic::new(
                 Message::LdDerefHlDerefHl {
                     mnemonic: self.mnemonic.1.clone(),
                     dest,
@@ -95,7 +95,7 @@ where
                 Ok(Instruction::Ld(Ld::SpHl))
             }
             (LdDest16::Reg16(_, dest_span), LdOperand::Other(LdDest16::Reg16(_, src_span))) => {
-                Err(InternalDiagnostic::new(
+                Err(CompactDiagnostic::new(
                     Message::LdSpHlOperands,
                     self.spans.merge(&dest_span, &src_span),
                 ))
@@ -119,11 +119,11 @@ fn analyze_special_ld<V: Source>(other: LdSpecial<V>, direction: Direction) -> A
 }
 
 impl<V: Source> Operand<V> {
-    fn into_ld_dest(self) -> Result<LdDest<V>, InternalDiagnostic<V::Span>> {
+    fn into_ld_dest(self) -> Result<LdDest<V>, CompactDiagnostic<V::Span>> {
         match self {
             Operand::Deref(expr) => Ok(LdDest::Byte(LdDest8::Special(LdSpecial::Deref(expr)))),
             Operand::Atom(kind, span) => match kind {
-                AtomKind::Condition(_) => Err(InternalDiagnostic::new(
+                AtomKind::Condition(_) => Err(CompactDiagnostic::new(
                     Message::ConditionOutsideBranch,
                     span,
                 )),
@@ -136,20 +136,20 @@ impl<V: Source> Operand<V> {
                 AtomKind::RegPair(reg_pair) => {
                     use crate::instruction::RegPair;
                     assert_eq!(reg_pair, RegPair::Af);
-                    Err(InternalDiagnostic::new(
+                    Err(CompactDiagnostic::new(
                         Message::AfOutsideStackOperation,
                         span,
                     ))
                 }
             },
-            Operand::Const(expr) => Err(InternalDiagnostic::new(
+            Operand::Const(expr) => Err(CompactDiagnostic::new(
                 Message::DestCannotBeConst,
                 expr.span(),
             )),
         }
     }
 
-    fn into_ld_src(self) -> Result<LdOperand<V, LdDest<V>>, InternalDiagnostic<V::Span>> {
+    fn into_ld_src(self) -> Result<LdOperand<V, LdDest<V>>, CompactDiagnostic<V::Span>> {
         match self {
             Operand::Const(expr) => Ok(LdOperand::Const(expr)),
             operand => Ok(LdOperand::Other(operand.into_ld_dest()?)),
@@ -195,7 +195,7 @@ enum LdDest16<S> {
 }
 
 impl<V: Source> LdOperand<V, LdDest8<V>> {
-    fn expect_a(self) -> Result<(), InternalDiagnostic<V::Span>> {
+    fn expect_a(self) -> Result<(), CompactDiagnostic<V::Span>> {
         match self {
             LdOperand::Const(expr) => Err(diagnose_not_a(expr.span())),
             LdOperand::Other(other) => other.expect_a(),
@@ -204,7 +204,7 @@ impl<V: Source> LdOperand<V, LdDest8<V>> {
 }
 
 impl<V: Source> LdDest8<V> {
-    fn expect_a(self) -> Result<(), InternalDiagnostic<V::Span>> {
+    fn expect_a(self) -> Result<(), CompactDiagnostic<V::Span>> {
         match self {
             LdDest8::Simple(SimpleOperand::A, _) => Ok(()),
             operand => Err(diagnose_not_a(operand.span())),
@@ -212,8 +212,8 @@ impl<V: Source> LdDest8<V> {
     }
 }
 
-fn diagnose_not_a<S>(span: S) -> InternalDiagnostic<S> {
-    InternalDiagnostic::new(Message::OnlySupportedByA, span)
+fn diagnose_not_a<S>(span: S) -> CompactDiagnostic<S> {
+    CompactDiagnostic::new(Message::OnlySupportedByA, span)
 }
 
 impl<V: Span, T: Span<Span = V::Span>> Span for LdOperand<V, T> {

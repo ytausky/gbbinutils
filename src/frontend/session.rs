@@ -1,7 +1,7 @@
 use crate::backend;
 use crate::codebase::CodebaseError;
 use crate::diagnostics;
-use crate::diagnostics::{DiagnosticsListener, InternalDiagnostic};
+use crate::diagnostics::{CompactDiagnostic, DiagnosticsListener};
 use crate::frontend;
 use crate::frontend::{Downstream, Token};
 use crate::span::{Merge, Span};
@@ -87,7 +87,7 @@ where
     B: backend::Backend<D::Span>,
     D: diagnostics::Diagnostics,
 {
-    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<Self::Span>) {
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span>) {
         self.diagnostics.diagnostics().emit_diagnostic(diagnostic)
     }
 }

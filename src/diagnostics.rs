@@ -61,7 +61,7 @@ where
     C: ContextFactory,
     O: DiagnosticsListener<Span = C::Span>,
 {
-    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<Self::Span>) {
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span>) {
         self.output.emit_diagnostic(diagnostic)
     }
 }
@@ -135,7 +135,7 @@ pub trait DiagnosticsListener
 where
     Self: Span,
 {
-    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<Self::Span>);
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span>);
 }
 
 pub struct OutputForwarder<'a> {
@@ -148,7 +148,7 @@ impl<'a> Span for OutputForwarder<'a> {
 }
 
 impl<'a> DiagnosticsListener for OutputForwarder<'a> {
-    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SpanData>) {
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SpanData>) {
         self.output
             .emit(diagnostic.elaborate(&self.codebase.borrow()))
     }
@@ -171,12 +171,12 @@ impl<S: Clone + fmt::Debug + PartialEq> Span for IgnoreDiagnostics<S> {
 
 #[cfg(test)]
 impl<S: Clone + fmt::Debug + PartialEq> DiagnosticsListener for IgnoreDiagnostics<S> {
-    fn emit_diagnostic(&mut self, _: InternalDiagnostic<S>) {}
+    fn emit_diagnostic(&mut self, _: CompactDiagnostic<S>) {}
 }
 
 #[cfg(test)]
 pub struct TestDiagnosticsListener {
-    pub diagnostics: RefCell<Vec<InternalDiagnostic<()>>>,
+    pub diagnostics: RefCell<Vec<CompactDiagnostic<()>>>,
 }
 
 #[cfg(test)]
@@ -195,20 +195,20 @@ impl Span for TestDiagnosticsListener {
 
 #[cfg(test)]
 impl DiagnosticsListener for TestDiagnosticsListener {
-    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<()>) {
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<()>) {
         self.diagnostics.borrow_mut().push(diagnostic)
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct InternalDiagnostic<S> {
+pub struct CompactDiagnostic<S> {
     pub message: Message<S>,
     pub highlight: S,
 }
 
-impl<S> InternalDiagnostic<S> {
-    pub fn new(message: Message<S>, highlight: S) -> InternalDiagnostic<S> {
-        InternalDiagnostic { message, highlight }
+impl<S> CompactDiagnostic<S> {
+    pub fn new(message: Message<S>, highlight: S) -> CompactDiagnostic<S> {
+        CompactDiagnostic { message, highlight }
     }
 }
 
@@ -483,7 +483,7 @@ pub fn mk_diagnostic(file: impl Into<String>, message: &Message<SpanData>) -> Di
     }
 }
 
-impl InternalDiagnostic<SpanData> {
+impl CompactDiagnostic<SpanData> {
     fn elaborate<'a, T: From<&'a str>>(&self, codebase: &'a TextCache) -> Diagnostic<T> {
         Diagnostic {
             clauses: vec![self.main_clause(codebase)],
@@ -608,7 +608,7 @@ mod tests {
                 included_from: None,
             }),
         };
-        let diagnostic = InternalDiagnostic {
+        let diagnostic = CompactDiagnostic {
             message: Message::UndefinedMacro {
                 name: "my_macro".to_string(),
             },

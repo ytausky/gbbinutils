@@ -1,7 +1,7 @@
 use self::branch::*;
 use super::SemanticExpr;
 use crate::backend::ValueBuilder;
-use crate::diagnostics::{InternalDiagnostic, Message};
+use crate::diagnostics::{CompactDiagnostic, Message};
 use crate::frontend::semantics::operand::{self, AtomKind, Context, Operand, OperandCounter};
 use crate::frontend::syntax::keyword as kw;
 use crate::instruction::*;
@@ -42,7 +42,7 @@ struct Analysis<'a, I, M: Merge + 'a> {
 
 impl<'a, I, V, M> Analysis<'a, I, M>
 where
-    I: Iterator<Item = Result<Operand<V>, InternalDiagnostic<M::Span>>>,
+    I: Iterator<Item = Result<Operand<V>, CompactDiagnostic<M::Span>>>,
     V: Source<Span = M::Span>,
     M: Merge,
 {
@@ -93,14 +93,14 @@ where
     fn analyze_add_reg16_instruction(&mut self, target: (Reg16, M::Span)) -> AnalysisResult<V> {
         match target.0 {
             Reg16::Hl => self.analyze_add_hl_instruction(),
-            _ => Err(InternalDiagnostic::new(Message::DestMustBeHl, target.1)),
+            _ => Err(CompactDiagnostic::new(Message::DestMustBeHl, target.1)),
         }
     }
 
     fn analyze_add_hl_instruction(&mut self) -> AnalysisResult<V> {
         match self.next_operand_out_of(2)? {
             Operand::Atom(AtomKind::Reg16(src), _) => Ok(Instruction::AddHl(src)),
-            operand => Err(InternalDiagnostic::new(
+            operand => Err(CompactDiagnostic::new(
                 Message::IncompatibleOperand,
                 operand.span(),
             )),
@@ -125,7 +125,7 @@ where
                 Ok(Instruction::Alu(operation, AluSource::Simple(src)))
             }
             Operand::Const(expr) => Ok(Instruction::Alu(operation, AluSource::Immediate(expr))),
-            src => Err(InternalDiagnostic::new(
+            src => Err(CompactDiagnostic::new(
                 Message::IncompatibleOperand,
                 src.span(),
             )),
@@ -138,7 +138,7 @@ where
         let expr = if let Operand::Const(expr) = bit_number {
             expr
         } else {
-            return Err(InternalDiagnostic::new(
+            return Err(CompactDiagnostic::new(
                 Message::MustBeBit {
                     mnemonic: self.mnemonic.1.clone(),
                 },
@@ -173,7 +173,7 @@ where
         match self.next_operand_out_of(1)? {
             Operand::Atom(AtomKind::Simple(operand), _) => Ok(Instruction::IncDec8(mode, operand)),
             Operand::Atom(AtomKind::Reg16(operand), _) => Ok(Instruction::IncDec16(mode, operand)),
-            operand => Err(InternalDiagnostic::new(
+            operand => Err(CompactDiagnostic::new(
                 Message::OperandCannotBeIncDec(mode),
                 operand.span(),
             )),
@@ -189,10 +189,10 @@ where
     fn next_operand_out_of(
         &mut self,
         out_of: usize,
-    ) -> Result<Operand<V>, InternalDiagnostic<M::Span>> {
+    ) -> Result<Operand<V>, CompactDiagnostic<M::Span>> {
         let actual = self.operands.seen();
         self.operands.next()?.ok_or_else(|| {
-            InternalDiagnostic::new(
+            CompactDiagnostic::new(
                 Message::OperandCount {
                     actual,
                     expected: out_of,
@@ -208,40 +208,40 @@ impl<V: Source> Operand<V> {
         self,
         expected: AtomKind,
         message: Message<V::Span>,
-    ) -> Result<(), InternalDiagnostic<V::Span>> {
+    ) -> Result<(), CompactDiagnostic<V::Span>> {
         match self {
             Operand::Atom(ref actual, _) if *actual == expected => Ok(()),
             operand => operand.error(message),
         }
     }
 
-    fn expect_simple(self) -> Result<SimpleOperand, InternalDiagnostic<V::Span>> {
+    fn expect_simple(self) -> Result<SimpleOperand, CompactDiagnostic<V::Span>> {
         match self {
             Operand::Atom(AtomKind::Simple(simple), _) => Ok(simple),
             operand => operand.error(Message::RequiresSimpleOperand),
         }
     }
 
-    fn expect_const(self) -> Result<V, InternalDiagnostic<V::Span>> {
+    fn expect_const(self) -> Result<V, CompactDiagnostic<V::Span>> {
         match self {
             Operand::Const(expr) => Ok(expr),
             operand => operand.error(Message::MustBeConst),
         }
     }
 
-    fn expect_reg_pair(self) -> Result<RegPair, InternalDiagnostic<V::Span>> {
+    fn expect_reg_pair(self) -> Result<RegPair, CompactDiagnostic<V::Span>> {
         match self {
             Operand::Atom(AtomKind::RegPair(reg_pair), _) => Ok(reg_pair),
             operand => operand.error(Message::RequiresRegPair),
         }
     }
 
-    fn error<T>(self, message: Message<V::Span>) -> Result<T, InternalDiagnostic<V::Span>> {
-        Err(InternalDiagnostic::new(message, self.span()))
+    fn error<T>(self, message: Message<V::Span>) -> Result<T, CompactDiagnostic<V::Span>> {
+        Err(CompactDiagnostic::new(message, self.span()))
     }
 }
 
-pub type AnalysisResult<V> = Result<Instruction<V>, InternalDiagnostic<<V as Span>::Span>>;
+pub type AnalysisResult<V> = Result<Instruction<V>, CompactDiagnostic<<V as Span>::Span>>;
 
 #[derive(Debug, PartialEq)]
 enum Mnemonic {
@@ -770,7 +770,7 @@ mod tests {
             let expected = diagnostic.into();
             assert_eq!(
                 self.0,
-                Err(InternalDiagnostic::new(
+                Err(CompactDiagnostic::new(
                     expected.message,
                     expected.highlight.unwrap(),
                 ))

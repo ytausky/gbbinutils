@@ -1,5 +1,5 @@
 use super::*;
-use crate::diagnostics::{DiagnosticsListener, InternalDiagnostic, Message};
+use crate::diagnostics::{CompactDiagnostic, DiagnosticsListener, Message};
 use crate::span::Merge;
 
 type TokenKind = Token<(), (), (), ()>;
@@ -123,7 +123,7 @@ where
                 bump!(self);
                 self.context
                     .diagnostics()
-                    .emit_diagnostic(InternalDiagnostic::new(
+                    .emit_diagnostic(CompactDiagnostic::new(
                         Message::UnexpectedToken {
                             token: span.clone(),
                         },
@@ -160,7 +160,7 @@ where
                         state
                             .context
                             .diagnostics()
-                            .emit_diagnostic(InternalDiagnostic::new(
+                            .emit_diagnostic(CompactDiagnostic::new(
                                 Message::UnexpectedEof,
                                 state.token.1.clone(),
                             ));
@@ -178,7 +178,7 @@ where
             state
                 .context
                 .diagnostics()
-                .emit_diagnostic(InternalDiagnostic::new(
+                .emit_diagnostic(CompactDiagnostic::new(
                     Message::UnexpectedEof,
                     state.token.1.clone(),
                 ));
@@ -212,7 +212,7 @@ where
 
 enum ExprParsingError<S> {
     NothingParsed,
-    Other(InternalDiagnostic<S>),
+    Other(CompactDiagnostic<S>),
 }
 
 impl<'a, Id, C, L, I, Ctx> Parser<'a, (Token<Id, C, L>, Ctx::Span), I, Ctx>
@@ -224,7 +224,7 @@ where
         self.parse_expression()
             .unwrap_or_else(|(mut parser, error)| {
                 let diagnostic = match error {
-                    ExprParsingError::NothingParsed => InternalDiagnostic::new(
+                    ExprParsingError::NothingParsed => CompactDiagnostic::new(
                         match parser.token.0 {
                             Token::Eof => Message::UnexpectedEof,
                             _ => Message::UnexpectedToken {
@@ -262,9 +262,10 @@ where
             Err((parser, error)) => {
                 let error = match error {
                     error @ ExprParsingError::NothingParsed => match parser.token.0 {
-                        Token::Eof | Token::Eol => ExprParsingError::Other(
-                            InternalDiagnostic::new(Message::UnmatchedParenthesis, left),
-                        ),
+                        Token::Eof | Token::Eol => ExprParsingError::Other(CompactDiagnostic::new(
+                            Message::UnmatchedParenthesis,
+                            left,
+                        )),
                         _ => error,
                     },
                     error => error,
@@ -282,7 +283,7 @@ where
             }
             _ => Err((
                 self,
-                ExprParsingError::Other(InternalDiagnostic::new(
+                ExprParsingError::Other(CompactDiagnostic::new(
                     Message::UnmatchedParenthesis,
                     left,
                 )),
@@ -320,7 +321,7 @@ where
                 bump!(self);
                 Err((
                     self,
-                    ExprParsingError::Other(InternalDiagnostic::new(
+                    ExprParsingError::Other(CompactDiagnostic::new(
                         Message::UnexpectedToken {
                             token: span.clone(),
                         },
@@ -343,7 +344,7 @@ where
             _ => self
                 .context
                 .diagnostics()
-                .emit_diagnostic(InternalDiagnostic::new(
+                .emit_diagnostic(CompactDiagnostic::new(
                     Message::UnexpectedToken {
                         token: self.token.1.clone(),
                     },
@@ -396,7 +397,7 @@ where
             let unexpected_span = self.token.1;
             self.context
                 .diagnostics()
-                .emit_diagnostic(InternalDiagnostic::new(
+                .emit_diagnostic(CompactDiagnostic::new(
                     Message::UnexpectedToken {
                         token: unexpected_span.clone(),
                     },
@@ -439,7 +440,7 @@ mod tests {
     use super::ast::*;
     use super::Token::*;
     use super::*;
-    use crate::diagnostics::{DiagnosticsListener, InternalDiagnostic, Message};
+    use crate::diagnostics::{CompactDiagnostic, DiagnosticsListener, Message};
     use crate::frontend::syntax::{ExprAtom, ExprOperator};
     use crate::span::{Merge, Span};
     use std::borrow::Borrow;
@@ -473,7 +474,7 @@ mod tests {
     }
 
     impl DiagnosticsListener for FileActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymSpan>) {
+        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
             self.actions.push(FileAction::EmitDiagnostic(diagnostic))
         }
     }
@@ -507,7 +508,7 @@ mod tests {
     }
 
     impl DiagnosticsListener for StmtActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymSpan>) {
+        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
             self.actions.push(StmtAction::EmitDiagnostic(diagnostic))
         }
     }
@@ -571,7 +572,7 @@ mod tests {
     }
 
     impl DiagnosticsListener for CommandActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymSpan>) {
+        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
             self.actions.push(CommandAction::EmitDiagnostic(diagnostic))
         }
     }
@@ -615,7 +616,7 @@ mod tests {
     }
 
     impl DiagnosticsListener for ArgActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymSpan>) {
+        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
             self.expr_action_collector.emit_diagnostic(diagnostic)
         }
     }
@@ -664,7 +665,7 @@ mod tests {
     }
 
     impl DiagnosticsListener for ExprActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymSpan>) {
+        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
             self.actions.push(ExprAction::EmitDiagnostic(diagnostic))
         }
     }
@@ -704,7 +705,7 @@ mod tests {
     }
 
     impl DiagnosticsListener for MacroParamsActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymSpan>) {
+        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
             self.actions
                 .push(MacroParamsAction::EmitDiagnostic(diagnostic))
         }
@@ -745,7 +746,7 @@ mod tests {
     }
 
     impl DiagnosticsListener for MacroBodyActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymSpan>) {
+        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
             self.actions
                 .push(TokenSeqAction::EmitDiagnostic(diagnostic))
         }
@@ -786,7 +787,7 @@ mod tests {
     }
 
     impl DiagnosticsListener for MacroInvocationActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymSpan>) {
+        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
             self.actions
                 .push(MacroInvocationAction::EmitDiagnostic(diagnostic))
         }
@@ -829,7 +830,7 @@ mod tests {
     }
 
     impl DiagnosticsListener for MacroArgActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<SymSpan>) {
+        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
             self.actions
                 .push(TokenSeqAction::EmitDiagnostic(diagnostic))
         }
@@ -1093,7 +1094,7 @@ mod tests {
         assert_eq!(parsed_rpn_expr, expected);
     }
 
-    fn assert_eq_expr_diagnostics(mut input: InputTokens, expected: InternalDiagnostic<SymSpan>) {
+    fn assert_eq_expr_diagnostics(mut input: InputTokens, expected: CompactDiagnostic<SymSpan>) {
         let expr_actions = parse_sym_expr(&mut input);
         assert_eq!(expr_actions, [ExprAction::EmitDiagnostic(expected)])
     }
@@ -1126,7 +1127,7 @@ mod tests {
             [unlabeled(malformed_command(
                 0,
                 [expr().literal(1)],
-                InternalDiagnostic::new(
+                CompactDiagnostic::new(
                     Message::UnexpectedToken {
                         token: span.clone(),
                     },
@@ -1167,7 +1168,7 @@ mod tests {
         let span: SymSpan = TokenRef::from("plus").into();
         assert_eq_expr_diagnostics(
             input,
-            InternalDiagnostic::new(
+            CompactDiagnostic::new(
                 Message::UnexpectedToken {
                     token: span.clone(),
                 },
@@ -1247,7 +1248,7 @@ mod tests {
             input_tokens![Macro, Literal(()), Eol, Endm],
             [unlabeled(vec![StmtAction::MacroDef {
                 keyword: TokenRef::from(0).into(),
-                params: vec![MacroParamsAction::EmitDiagnostic(InternalDiagnostic::new(
+                params: vec![MacroParamsAction::EmitDiagnostic(CompactDiagnostic::new(
                     Message::UnexpectedToken {
                         token: span.clone(),
                     },

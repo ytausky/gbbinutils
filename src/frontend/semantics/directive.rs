@@ -3,7 +3,7 @@ use super::{
 };
 use crate::backend;
 use crate::backend::{Backend, BinaryOperator, ValueBuilder, Width};
-use crate::diagnostics::{Diagnostics, InternalDiagnostic, Message};
+use crate::diagnostics::{CompactDiagnostic, Diagnostics, Message};
 use crate::expr::ExprVariant;
 use crate::frontend::syntax::Literal;
 use crate::frontend::Frontend;
@@ -14,7 +14,7 @@ pub fn analyze_directive<'a: 'b, 'b, F: Frontend<D>, B: Backend<D::Span>, D: Dia
     directive: (Directive, D::Span),
     args: CommandArgs<F::Ident, D::Span>,
     actions: &'b mut SemanticActions<'a, F, B, D>,
-) -> Result<(), InternalDiagnostic<D::Span>> {
+) -> Result<(), CompactDiagnostic<D::Span>> {
     let context = DirectiveContext {
         span: directive.1,
         args,
@@ -36,7 +36,7 @@ where
     B: Backend<D::Span>,
     D: Diagnostics,
 {
-    fn analyze(self, directive: Directive) -> Result<(), InternalDiagnostic<D::Span>> {
+    fn analyze(self, directive: Directive) -> Result<(), CompactDiagnostic<D::Span>> {
         match directive {
             Directive::Db => self.analyze_data(Width::Byte),
             Directive::Ds => self.analyze_ds(),
@@ -47,7 +47,7 @@ where
         }
     }
 
-    fn analyze_data(self, width: Width) -> Result<(), InternalDiagnostic<D::Span>> {
+    fn analyze_data(self, width: Width) -> Result<(), CompactDiagnostic<D::Span>> {
         for arg in self.args {
             let expr = analyze_reloc_expr(arg, &mut self.actions.session.backend.build_value())?;
             self.actions
@@ -58,7 +58,7 @@ where
         Ok(())
     }
 
-    fn analyze_ds(self) -> Result<(), InternalDiagnostic<D::Span>> {
+    fn analyze_ds(self) -> Result<(), CompactDiagnostic<D::Span>> {
         let origin = {
             let arg = single_arg(self.span, self.args)?;
             let builder = &mut self.actions.session.backend.build_value();
@@ -69,7 +69,7 @@ where
         Ok(())
     }
 
-    fn analyze_equ(self) -> Result<(), InternalDiagnostic<D::Span>> {
+    fn analyze_equ(self) -> Result<(), CompactDiagnostic<D::Span>> {
         let symbol = self.actions.label.take().unwrap();
         let arg = single_arg(self.span, self.args)?;
         let value = analyze_reloc_expr(arg, &mut self.actions.session.backend.build_value())?;
@@ -77,15 +77,15 @@ where
         Ok(())
     }
 
-    fn analyze_include(self) -> Result<(), InternalDiagnostic<D::Span>> {
+    fn analyze_include(self) -> Result<(), CompactDiagnostic<D::Span>> {
         let (path, span) = reduce_include(self.span, self.args)?;
         self.actions
             .session
             .analyze_file(path)
-            .map_err(|err| InternalDiagnostic::new(err.into(), span))
+            .map_err(|err| CompactDiagnostic::new(err.into(), span))
     }
 
-    fn analyze_org(self) -> Result<(), InternalDiagnostic<D::Span>> {
+    fn analyze_org(self) -> Result<(), CompactDiagnostic<D::Span>> {
         let arg = single_arg(self.span, self.args)?;
         let expr = analyze_reloc_expr(arg, &mut self.actions.session.backend.build_value())?;
         self.actions.session.backend.set_origin(expr);
@@ -101,7 +101,7 @@ fn location_counter_plus_expr<V: Source, B: ValueBuilder<V>>(expr: V, builder: &
 fn reduce_include<I, S>(
     span: S,
     args: Vec<SemanticExpr<I, S>>,
-) -> Result<(I, S), InternalDiagnostic<S>>
+) -> Result<(I, S), CompactDiagnostic<S>>
 where
     I: Debug + PartialEq,
     S: Debug + PartialEq,
@@ -109,17 +109,17 @@ where
     let arg = single_arg(span, args)?;
     match arg.variant {
         ExprVariant::Atom(SemanticAtom::Literal(Literal::String(path))) => Ok((path, arg.span)),
-        _ => Err(InternalDiagnostic::new(Message::ExpectedString, arg.span)),
+        _ => Err(CompactDiagnostic::new(Message::ExpectedString, arg.span)),
     }
 }
 
 fn single_arg<T: Debug + PartialEq, S>(
     span: S,
     args: impl IntoIterator<Item = T>,
-) -> Result<T, InternalDiagnostic<S>> {
+) -> Result<T, CompactDiagnostic<S>> {
     let mut args = args.into_iter();
     let arg = args.next().ok_or_else(|| {
-        InternalDiagnostic::new(
+        CompactDiagnostic::new(
             Message::OperandCount {
                 actual: 0,
                 expected: 1,
@@ -230,7 +230,7 @@ mod tests {
             ds(|arg| arg.push_atom((ExprAtom::Literal(Literal::Operand(Operand::A)), ())));
         assert_eq!(
             actions,
-            [TestOperation::EmitDiagnostic(InternalDiagnostic::new(
+            [TestOperation::EmitDiagnostic(CompactDiagnostic::new(
                 Message::KeywordInExpr { keyword: () },
                 (),
             ))]
@@ -257,7 +257,7 @@ mod tests {
         let actions = unary_directive(Directive::Include, |arg| arg.push_atom(mk_literal(7)));
         assert_eq!(
             actions,
-            [TestOperation::EmitDiagnostic(InternalDiagnostic::new(
+            [TestOperation::EmitDiagnostic(CompactDiagnostic::new(
                 Message::ExpectedString,
                 (),
             ))]
@@ -271,7 +271,7 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [TestOperation::EmitDiagnostic(InternalDiagnostic::new(
+            [TestOperation::EmitDiagnostic(CompactDiagnostic::new(
                 Message::KeywordInExpr { keyword: () },
                 (),
             ))]
@@ -299,7 +299,7 @@ mod tests {
             operations.into_inner(),
             [
                 TestOperation::AnalyzeFile(name.into()),
-                TestOperation::EmitDiagnostic(InternalDiagnostic::new(Message::InvalidUtf8, ()))
+                TestOperation::EmitDiagnostic(CompactDiagnostic::new(Message::InvalidUtf8, ()))
             ]
         )
     }
@@ -329,7 +329,7 @@ mod tests {
             operations.into_inner(),
             [
                 TestOperation::AnalyzeFile(name.into()),
-                TestOperation::EmitDiagnostic(InternalDiagnostic::new(
+                TestOperation::EmitDiagnostic(CompactDiagnostic::new(
                     Message::IoError {
                         string: message.to_string()
                     },
@@ -378,7 +378,7 @@ mod tests {
         let actions = with_directive(directive, |command| command);
         assert_eq!(
             actions,
-            [TestOperation::EmitDiagnostic(InternalDiagnostic::new(
+            [TestOperation::EmitDiagnostic(CompactDiagnostic::new(
                 Message::OperandCount {
                     actual: 0,
                     expected: 1

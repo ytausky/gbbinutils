@@ -1,5 +1,5 @@
 use super::{Analysis, AnalysisResult, AtomKind, Operand, SimpleOperand};
-use crate::diagnostics::{InternalDiagnostic, Message};
+use crate::diagnostics::{CompactDiagnostic, Message};
 use crate::instruction::{Branch, Condition, Instruction, Nullary};
 use crate::span::{Merge, Source, Span};
 
@@ -24,7 +24,7 @@ pub enum ImplicitBranch {
 
 impl<'a, I, V, M> Analysis<'a, I, M>
 where
-    I: Iterator<Item = Result<Operand<V>, InternalDiagnostic<M::Span>>>,
+    I: Iterator<Item = Result<Operand<V>, CompactDiagnostic<M::Span>>>,
     V: Source<Span = M::Span>,
     M: Merge,
 {
@@ -34,7 +34,7 @@ where
         match variant {
             BranchVariant::Unconditional(branch) => match condition {
                 None => Ok(branch.into()),
-                Some((_, condition_span)) => Err(InternalDiagnostic::new(
+                Some((_, condition_span)) => Err(CompactDiagnostic::new(
                     Message::AlwaysUnconditional,
                     condition_span,
                 )),
@@ -46,9 +46,7 @@ where
         }
     }
 
-    fn collect_branch_operands(
-        &mut self,
-    ) -> Result<BranchOperands<V>, InternalDiagnostic<M::Span>> {
+    fn collect_branch_operands(&mut self) -> Result<BranchOperands<V>, CompactDiagnostic<M::Span>> {
         let first_operand = self.operands.next()?;
         Ok(
             if let Some(Operand::Atom(AtomKind::Condition(condition), range)) = first_operand {
@@ -88,7 +86,7 @@ impl<V: Source> Source for BranchTarget<V> {
 
 fn analyze_branch_target<V: Source>(
     target: Option<Operand<V>>,
-) -> Result<Option<BranchTarget<V>>, InternalDiagnostic<V::Span>> {
+) -> Result<Option<BranchTarget<V>>, CompactDiagnostic<V::Span>> {
     let target = match target {
         Some(target) => target,
         None => return Ok(None),
@@ -98,7 +96,7 @@ fn analyze_branch_target<V: Source>(
         Operand::Atom(AtomKind::Simple(SimpleOperand::DerefHl), span) => {
             Ok(Some(BranchTarget::DerefHl(span)))
         }
-        operand => Err(InternalDiagnostic::new(
+        operand => Err(CompactDiagnostic::new(
             Message::CannotBeUsedAsTarget,
             operand.span(),
         )),
@@ -127,13 +125,13 @@ impl<V: Source> From<UnconditionalBranch> for Instruction<V> {
 fn analyze_branch_variant<V: Source>(
     kind: (BranchKind, &V::Span),
     target: Option<BranchTarget<V>>,
-) -> Result<BranchVariant<V>, InternalDiagnostic<V::Span>> {
+) -> Result<BranchVariant<V>, CompactDiagnostic<V::Span>> {
     match (kind.0, target) {
         (BranchKind::Explicit(ExplicitBranch::Jp), Some(BranchTarget::DerefHl(_))) => {
             Ok(BranchVariant::Unconditional(UnconditionalBranch::JpDerefHl))
         }
         (BranchKind::Explicit(_), Some(BranchTarget::DerefHl(span))) => {
-            Err(InternalDiagnostic::new(
+            Err(CompactDiagnostic::new(
                 Message::RequiresConstantTarget {
                     mnemonic: kind.1.clone(),
                 },
@@ -149,11 +147,11 @@ fn analyze_branch_variant<V: Source>(
         (BranchKind::Implicit(ImplicitBranch::Reti), None) => {
             Ok(BranchVariant::Unconditional(UnconditionalBranch::Reti))
         }
-        (BranchKind::Explicit(_), None) => Err(InternalDiagnostic::new(
+        (BranchKind::Explicit(_), None) => Err(CompactDiagnostic::new(
             Message::MissingTarget,
             kind.1.clone(),
         )),
-        (BranchKind::Implicit(_), Some(target)) => Err(InternalDiagnostic::new(
+        (BranchKind::Implicit(_), Some(target)) => Err(CompactDiagnostic::new(
             Message::CannotSpecifyTarget,
             target.span(),
         )),

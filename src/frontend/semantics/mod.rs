@@ -1,6 +1,6 @@
 use crate::backend::{self, Backend, BinaryOperator, ValueBuilder};
 use crate::diagnostics::{
-    Diagnostics, DiagnosticsListener, DownstreamDiagnostics, InternalDiagnostic, Message,
+    CompactDiagnostic, Diagnostics, DiagnosticsListener, DownstreamDiagnostics, Message,
 };
 use crate::expr::ExprVariant;
 use crate::frontend::session::Session;
@@ -117,7 +117,7 @@ where
     fn enter_macro_def(mut self, keyword: D::Span) -> Self::MacroParamsContext {
         if self.label.is_none() {
             self.diagnostics()
-                .emit_diagnostic(InternalDiagnostic::new(Message::MacroRequiresName, keyword))
+                .emit_diagnostic(CompactDiagnostic::new(Message::MacroRequiresName, keyword))
         }
         MacroDefActions::new(self.label.take(), self)
     }
@@ -167,7 +167,7 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> Merge for CommandActions<'a, F, B, D
 }
 
 impl<'a, F: Frontend<D>, B, D: Diagnostics> DiagnosticsListener for CommandActions<'a, F, B, D> {
-    fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<D::Span>) {
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<D::Span>) {
         self.has_errors = true;
         self.parent.diagnostics().emit_diagnostic(diagnostic)
     }
@@ -288,7 +288,7 @@ fn analyze_mnemonic<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
     name: (Mnemonic, D::Span),
     args: CommandArgs<F::Ident, D::Span>,
     actions: &mut SemanticActions<'a, F, B, D>,
-) -> Result<(), InternalDiagnostic<D::Span>> {
+) -> Result<(), CompactDiagnostic<D::Span>> {
     let instruction = instruction::analyze_instruction(
         name,
         args.into_iter(),
@@ -469,7 +469,7 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> syntax::TokenSeqContext
 fn analyze_reloc_expr<I: Into<String>, V: Source>(
     expr: SemanticExpr<I, V::Span>,
     builder: &mut impl ValueBuilder<V>,
-) -> Result<V, InternalDiagnostic<V::Span>> {
+) -> Result<V, CompactDiagnostic<V::Span>> {
     match expr.variant {
         ExprVariant::Atom(SemanticAtom::Ident(ident)) => {
             Ok(builder.symbol((ident.into(), expr.span)))
@@ -478,7 +478,7 @@ fn analyze_reloc_expr<I: Into<String>, V: Source>(
             Ok(builder.number((n, expr.span)))
         }
         ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(_))) => {
-            Err(InternalDiagnostic::new(
+            Err(CompactDiagnostic::new(
                 Message::KeywordInExpr {
                     keyword: expr.span.clone(),
                 },
@@ -486,7 +486,7 @@ fn analyze_reloc_expr<I: Into<String>, V: Source>(
             ))
         }
         ExprVariant::Atom(SemanticAtom::Literal(Literal::String(_))) => Err(
-            InternalDiagnostic::new(Message::StringInInstruction, expr.span),
+            CompactDiagnostic::new(Message::StringInInstruction, expr.span),
         ),
         ExprVariant::Unary(SemanticUnary::Parentheses, expr) => analyze_reloc_expr(*expr, builder),
         ExprVariant::Binary(SemanticBinary::Plus, left, right) => {
@@ -503,7 +503,7 @@ mod tests {
 
     use crate::backend::{BuildValue, HasValue, RelocAtom, RelocExpr, RelocExprBuilder, Width};
     use crate::codebase::{BufId, BufRange, CodebaseError};
-    use crate::diagnostics::{InternalDiagnostic, Message};
+    use crate::diagnostics::{CompactDiagnostic, Message};
     use crate::frontend::syntax::{
         keyword::Operand, CommandContext, ExprContext, FileContext, MacroInvocationContext,
         MacroParamsContext, StmtContext, TokenSeqContext,
@@ -658,7 +658,7 @@ mod tests {
     }
 
     impl<'a> DiagnosticsListener for TestDiagnostics<'a> {
-        fn emit_diagnostic(&mut self, diagnostic: InternalDiagnostic<Self::Span>) {
+        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span>) {
             self.operations
                 .borrow_mut()
                 .push(TestOperation::EmitDiagnostic(diagnostic))
@@ -730,7 +730,7 @@ mod tests {
         InvokeMacro(String, Vec<Vec<Token<String>>>),
         DefineMacro(String, Vec<String>, Vec<Token<String>>),
         DefineSymbol(String, RelocExpr<()>),
-        EmitDiagnostic(InternalDiagnostic<()>),
+        EmitDiagnostic(CompactDiagnostic<()>),
         EmitItem(backend::Item<RelocExpr<()>>),
         SetOrigin(RelocExpr<()>),
     }
@@ -854,7 +854,7 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [TestOperation::EmitDiagnostic(InternalDiagnostic::new(
+            [TestOperation::EmitDiagnostic(CompactDiagnostic::new(
                 Message::MacroRequiresName,
                 ()
             ))]
@@ -941,7 +941,7 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [TestOperation::EmitDiagnostic(InternalDiagnostic::new(
+            [TestOperation::EmitDiagnostic(CompactDiagnostic::new(
                 Message::OperandCount {
                     actual: 1,
                     expected: 0
@@ -953,7 +953,7 @@ mod tests {
 
     #[test]
     fn diagnose_parsing_error() {
-        let diagnostic = InternalDiagnostic::new(Message::UnexpectedToken { token: () }, ());
+        let diagnostic = CompactDiagnostic::new(Message::UnexpectedToken { token: () }, ());
         let actions = collect_semantic_actions(|actions| {
             let mut stmt = actions.enter_stmt(None);
             stmt.diagnostics().emit_diagnostic(diagnostic.clone());
@@ -964,7 +964,7 @@ mod tests {
 
     #[test]
     fn recover_from_malformed_expr() {
-        let diagnostic = InternalDiagnostic::new(Message::UnexpectedToken { token: () }, ());
+        let diagnostic = CompactDiagnostic::new(Message::UnexpectedToken { token: () }, ());
         let actions = collect_semantic_actions(|file| {
             let mut expr = file
                 .enter_stmt(None)

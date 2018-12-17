@@ -1,6 +1,6 @@
 use super::{analyze_reloc_expr, ExprVariant, SemanticAtom, SemanticExpr, SemanticUnary};
 use crate::backend::ValueBuilder;
-use crate::diagnostics::{InternalDiagnostic, KeywordOperandCategory, Message};
+use crate::diagnostics::{CompactDiagnostic, KeywordOperandCategory, Message};
 use crate::frontend::syntax::keyword as kw;
 use crate::frontend::syntax::Literal;
 use crate::instruction::{Condition, PtrReg, Reg16, RegPair, SimpleOperand};
@@ -43,7 +43,7 @@ pub enum Context {
     Other,
 }
 
-type OperandResult<V> = Result<Operand<V>, InternalDiagnostic<<V as Span>::Span>>;
+type OperandResult<V> = Result<Operand<V>, CompactDiagnostic<<V as Span>::Span>>;
 
 pub fn analyze_operand<I: Into<String>, V: Source>(
     expr: SemanticExpr<I, V::Span>,
@@ -80,7 +80,7 @@ fn analyze_deref_operand_keyword<V: Source>(
 ) -> OperandResult<V> {
     match try_deref_operand_keyword(keyword.0) {
         Ok(atom) => Ok(Operand::Atom(atom, deref)),
-        Err(category) => Err(InternalDiagnostic::new(
+        Err(category) => Err(CompactDiagnostic::new(
             Message::CannotDereference {
                 category,
                 operand: keyword.1,
@@ -134,7 +134,7 @@ fn analyze_keyword_operand<V: Source>(
             Stack => AtomKind::RegPair(RegPair::Hl),
             _ => AtomKind::Reg16(Reg16::Hl),
         },
-        Hld | Hli => Err(InternalDiagnostic::new(
+        Hld | Hli => Err(CompactDiagnostic::new(
             Message::MustBeDeref {
                 operand: span.clone(),
             },
@@ -170,14 +170,14 @@ impl<I: Iterator<Item = Result<T, E>>, T, E> OperandCounter<I> {
         })
     }
 
-    pub fn check_for_unexpected_operands<S>(self, span: S) -> Result<(), InternalDiagnostic<S>> {
+    pub fn check_for_unexpected_operands<S>(self, span: S) -> Result<(), CompactDiagnostic<S>> {
         let expected = self.count;
         let extra = self.operands.count();
         let actual = expected + extra;
         if actual == expected {
             Ok(())
         } else {
-            Err(InternalDiagnostic::new(
+            Err(CompactDiagnostic::new(
                 Message::OperandCount { actual, expected },
                 span,
             ))
@@ -249,7 +249,7 @@ mod tests {
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Err(InternalDiagnostic::new(
+            Err(CompactDiagnostic::new(
                 Message::CannotDereference {
                     category: KeywordOperandCategory::RegPair,
                     operand: 0,
@@ -309,7 +309,7 @@ mod tests {
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Err(InternalDiagnostic::new(
+            Err(CompactDiagnostic::new(
                 Message::KeywordInExpr { keyword: span },
                 span
             ))
@@ -325,7 +325,7 @@ mod tests {
         );
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Err(InternalDiagnostic::new(Message::StringInInstruction, span))
+            Err(CompactDiagnostic::new(Message::StringInInstruction, span))
         )
     }
 
@@ -347,7 +347,7 @@ mod tests {
         );
         assert_eq!(
             analyze_operand(expr, Context::Other),
-            Err(InternalDiagnostic::new(
+            Err(CompactDiagnostic::new(
                 Message::MustBeDeref { operand: span },
                 span
             ))
