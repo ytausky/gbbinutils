@@ -4,10 +4,7 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::rc::Rc;
 
-pub trait MacroTable<I>
-where
-    Self: Get<I>,
-{
+pub trait MacroTable<I>: Get<I> {
     type MacroDefId: Clone;
 
     fn define<F>(

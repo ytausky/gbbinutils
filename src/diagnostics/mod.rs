@@ -10,21 +10,11 @@ use std::marker::PhantomData;
 
 pub mod span;
 
-pub trait Diagnostics
-where
-    Self: DownstreamDiagnostics,
-    Self: ContextFactory,
-{
-}
+pub trait Diagnostics: DownstreamDiagnostics + ContextFactory {}
 
-pub trait DownstreamDiagnostics
-where
-    Self: EmitDiagnostic,
-    Self: MergeSpans,
-{
-}
+pub trait DownstreamDiagnostics: EmitDiagnostic + MergeSpans {}
 
-impl<T> DownstreamDiagnostics for T where T: EmitDiagnostic + MergeSpans {}
+impl<T: EmitDiagnostic + MergeSpans> DownstreamDiagnostics for T {}
 
 pub trait DelegateDiagnostics {
     type Delegate: DownstreamDiagnostics;
@@ -145,10 +135,7 @@ impl DiagnosticsOutput for TerminalOutput {
     }
 }
 
-pub trait EmitDiagnostic
-where
-    Self: Span,
-{
+pub trait EmitDiagnostic: Span {
     fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span>);
 }
 

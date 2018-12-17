@@ -29,10 +29,7 @@ impl Width {
     }
 }
 
-pub trait HasValue
-where
-    Self: Span,
-{
+pub trait HasValue: Span {
     type Value: Source<Span = Self::Span>;
 }
 
@@ -41,10 +38,7 @@ pub trait BuildValue<'a, V: Source> {
     fn build_value(&'a mut self) -> Self::Builder;
 }
 
-pub trait ValueBuilder<V: Source>
-where
-    Self: Span<Span = V::Span>,
-{
+pub trait ValueBuilder<V: Source>: Span<Span = V::Span> {
     fn location(&mut self, span: V::Span) -> V;
     fn number(&mut self, number: (i32, V::Span)) -> V;
     fn symbol(&mut self, symbol: (String, V::Span)) -> V;
@@ -57,8 +51,9 @@ where
     ) -> V;
 }
 
-pub trait Backend<S: Clone + Debug + PartialEq>
+pub trait Backend<S>
 where
+    S: Clone + Debug + PartialEq,
     Self: HasValue<Span = S>,
     for<'a> Self: BuildValue<'a, <Self as HasValue>::Value>,
 {

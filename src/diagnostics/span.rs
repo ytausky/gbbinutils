@@ -9,24 +9,15 @@ pub trait Span {
     type Span: Clone + Debug + PartialEq;
 }
 
-pub trait Source
-where
-    Self: Span,
-{
+pub trait Source: Span {
     fn span(&self) -> Self::Span;
 }
 
-pub trait MergeSpans
-where
-    Self: Span,
-{
+pub trait MergeSpans: Span {
     fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span;
 }
 
-pub trait MacroContextFactory
-where
-    Self: Span,
-{
+pub trait MacroContextFactory: Span {
     type MacroDefId: Clone;
     type MacroExpansionContext: MacroExpansionContext<Span = Self::Span>;
 
@@ -46,11 +37,7 @@ where
         J: IntoIterator<Item = Self::Span>;
 }
 
-pub trait ContextFactory
-where
-    Self: MergeSpans,
-    Self: MacroContextFactory,
-{
+pub trait ContextFactory: MacroContextFactory + MergeSpans {
     type BufContext: BufContext<Span = Self::Span>;
 
     fn mk_buf_context(

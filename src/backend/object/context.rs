@@ -11,10 +11,7 @@ pub struct SymbolTable {
 #[derive(Clone, Copy)]
 pub struct SymbolId(usize);
 
-pub trait SymbolKey
-where
-    Self: Copy,
-{
+pub trait SymbolKey: Copy {
     fn associate(&self, context: &mut SymbolTable, id: SymbolId);
     fn to_symbol_id(&self, table: &SymbolTable) -> Option<SymbolId>;
 }

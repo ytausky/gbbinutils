@@ -45,18 +45,12 @@ pub enum Literal<S> {
     String(S),
 }
 
-pub trait FileContext<I, C, L>
-where
-    Self: DownstreamDiagnostics + Sized,
-{
+pub trait FileContext<I, C, L>: DownstreamDiagnostics + Sized {
     type StmtContext: StmtContext<I, C, L, Span = Self::Span, Parent = Self>;
     fn enter_stmt(self, label: Option<(I, Self::Span)>) -> Self::StmtContext;
 }
 
-pub trait StmtContext<I, C, L>
-where
-    Self: DownstreamDiagnostics + Sized,
-{
+pub trait StmtContext<I, C, L>: DownstreamDiagnostics + Sized {
     type CommandContext: CommandContext<
         Ident = I,
         Command = C,
@@ -83,10 +77,7 @@ where
     fn exit(self) -> Self::Parent;
 }
 
-pub trait CommandContext
-where
-    Self: DownstreamDiagnostics + Sized,
-{
+pub trait CommandContext: DownstreamDiagnostics + Sized {
     type Ident;
     type Command;
     type Literal;
@@ -101,10 +92,7 @@ where
     fn exit(self) -> Self::Parent;
 }
 
-pub trait ExprContext
-where
-    Self: DownstreamDiagnostics,
-{
+pub trait ExprContext: DownstreamDiagnostics {
     type Ident;
     type Literal;
     type Parent;
@@ -125,10 +113,7 @@ pub enum ExprOperator {
     Plus,
 }
 
-pub trait MacroParamsContext
-where
-    Self: DownstreamDiagnostics,
-{
+pub trait MacroParamsContext: DownstreamDiagnostics {
     type Ident;
     type Command;
     type Literal;
@@ -142,10 +127,7 @@ where
     fn exit(self) -> Self::MacroBodyContext;
 }
 
-pub trait MacroInvocationContext
-where
-    Self: DownstreamDiagnostics + Sized,
-{
+pub trait MacroInvocationContext: DownstreamDiagnostics + Sized {
     type Token;
     type Parent;
     type MacroArgContext: TokenSeqContext<Token = Self::Token, Span = Self::Span, Parent = Self>;
@@ -153,10 +135,7 @@ where
     fn exit(self) -> Self::Parent;
 }
 
-pub trait TokenSeqContext
-where
-    Self: DownstreamDiagnostics,
-{
+pub trait TokenSeqContext: DownstreamDiagnostics {
     type Token;
     type Parent;
     fn push_token(&mut self, token: (Self::Token, Self::Span));
