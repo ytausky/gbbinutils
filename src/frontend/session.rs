@@ -1,10 +1,9 @@
 use crate::backend;
 use crate::codebase::CodebaseError;
 use crate::diagnostics;
-use crate::diagnostics::{CompactDiagnostic, DiagnosticsListener};
+use crate::diagnostics::{DelegateDiagnostics, DownstreamDiagnostics};
 use crate::frontend;
 use crate::frontend::{Downstream, Token};
-use crate::span::{Merge, Span};
 
 pub type MacroArgs<I, S> = Vec<Vec<(Token<I>, S)>>;
 
@@ -61,34 +60,11 @@ where
     }
 }
 
-impl<'a, F, B, D> Span for Session<'a, F, B, D>
-where
-    F: frontend::Frontend<D>,
-    B: backend::Backend<D::Span>,
-    D: diagnostics::Diagnostics,
-{
-    type Span = D::Span;
-}
+impl<'a, F, B, D: DownstreamDiagnostics> DelegateDiagnostics for Session<'a, F, B, D> {
+    type Delegate = D;
 
-impl<'a, F, B, D> Merge for Session<'a, F, B, D>
-where
-    F: frontend::Frontend<D>,
-    B: backend::Backend<D::Span>,
-    D: diagnostics::Diagnostics,
-{
-    fn merge(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
-        self.diagnostics.diagnostics().merge(left, right)
-    }
-}
-
-impl<'a, F, B, D> DiagnosticsListener for Session<'a, F, B, D>
-where
-    F: frontend::Frontend<D>,
-    B: backend::Backend<D::Span>,
-    D: diagnostics::Diagnostics,
-{
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span>) {
-        self.diagnostics.diagnostics().emit_diagnostic(diagnostic)
+    fn delegate(&mut self) -> &mut Self::Delegate {
+        self.diagnostics
     }
 }
 

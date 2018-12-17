@@ -19,21 +19,12 @@ where
 
 pub trait DownstreamDiagnostics
 where
-    Self: Span,
+    Self: DiagnosticsListener,
+    Self: Merge,
 {
-    type Output: Span<Span = Self::Span> + DiagnosticsListener + Merge;
-    fn diagnostics(&mut self) -> &mut Self::Output;
 }
 
-impl<T> DownstreamDiagnostics for T
-where
-    T: DiagnosticsListener + Merge,
-{
-    type Output = Self;
-    fn diagnostics(&mut self) -> &mut Self {
-        self
-    }
-}
+impl<T> DownstreamDiagnostics for T where T: DiagnosticsListener + Merge {}
 
 pub trait DelegateDiagnostics {
     type Delegate: DownstreamDiagnostics;
@@ -46,13 +37,13 @@ impl<T: DelegateDiagnostics> Span for T {
 
 impl<T: DelegateDiagnostics> Merge for T {
     fn merge(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
-        self.delegate().diagnostics().merge(left, right)
+        self.delegate().merge(left, right)
     }
 }
 
 impl<T: DelegateDiagnostics> DiagnosticsListener for T {
     fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span>) {
-        self.delegate().diagnostics().emit_diagnostic(diagnostic)
+        self.delegate().emit_diagnostic(diagnostic)
     }
 }
 

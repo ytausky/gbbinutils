@@ -1,7 +1,6 @@
 use crate::backend::{self, Backend, BinaryOperator, ValueBuilder};
 use crate::diagnostics::{
-    CompactDiagnostic, DelegateDiagnostics, Diagnostics, DiagnosticsListener,
-    DownstreamDiagnostics, Message,
+    CompactDiagnostic, DelegateDiagnostics, Diagnostics, DiagnosticsListener, Message,
 };
 use crate::expr::ExprVariant;
 use crate::frontend::session::Session;
@@ -114,8 +113,7 @@ where
 
     fn enter_macro_def(mut self, keyword: D::Span) -> Self::MacroParamsContext {
         if self.label.is_none() {
-            self.diagnostics()
-                .emit_diagnostic(CompactDiagnostic::new(Message::MacroRequiresName, keyword))
+            self.emit_diagnostic(CompactDiagnostic::new(Message::MacroRequiresName, keyword))
         }
         MacroDefActions::new(self.label.take(), self)
     }
@@ -160,14 +158,14 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> Span for CommandActions<'a, F, B, D>
 
 impl<'a, F: Frontend<D>, B, D: Diagnostics> Merge for CommandActions<'a, F, B, D> {
     fn merge(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
-        self.parent.diagnostics().merge(left, right)
+        self.parent.merge(left, right)
     }
 }
 
 impl<'a, F: Frontend<D>, B, D: Diagnostics> DiagnosticsListener for CommandActions<'a, F, B, D> {
     fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<D::Span>) {
         self.has_errors = true;
-        self.parent.diagnostics().emit_diagnostic(diagnostic)
+        self.parent.emit_diagnostic(diagnostic)
     }
 }
 
@@ -202,7 +200,7 @@ impl<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics> syntax::CommandCon
                 }
             };
             if let Err(diagnostic) = result {
-                self.parent.diagnostics().emit_diagnostic(diagnostic);
+                self.parent.emit_diagnostic(diagnostic);
             }
         }
         self.parent
@@ -223,13 +221,10 @@ pub struct ExprContext<'a, F: Frontend<D>, B, D: Diagnostics> {
     parent: CommandActions<'a, F, B, D>,
 }
 
-impl<'a, F: Frontend<D>, B, D: Diagnostics> Span for ExprContext<'a, F, B, D> {
-    type Span = D::Span;
-}
+impl<'a, F: Frontend<D>, B, D: Diagnostics> DelegateDiagnostics for ExprContext<'a, F, B, D> {
+    type Delegate = CommandActions<'a, F, B, D>;
 
-impl<'a, F: Frontend<D>, B, D: Diagnostics> DownstreamDiagnostics for ExprContext<'a, F, B, D> {
-    type Output = CommandActions<'a, F, B, D>;
-    fn diagnostics(&mut self) -> &mut Self::Output {
+    fn delegate(&mut self) -> &mut Self::Delegate {
         &mut self.parent
     }
 }
@@ -291,7 +286,7 @@ fn analyze_mnemonic<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
         name,
         args.into_iter(),
         &mut actions.session.backend.build_value(),
-        actions.session.diagnostics.diagnostics(),
+        actions.session.diagnostics,
     )?;
     actions
         .session
@@ -945,7 +940,7 @@ mod tests {
         let diagnostic = CompactDiagnostic::new(Message::UnexpectedToken { token: () }, ());
         let actions = collect_semantic_actions(|actions| {
             let mut stmt = actions.enter_stmt(None);
-            stmt.diagnostics().emit_diagnostic(diagnostic.clone());
+            stmt.emit_diagnostic(diagnostic.clone());
             stmt.exit()
         });
         assert_eq!(actions, [TestOperation::EmitDiagnostic(diagnostic)])
@@ -959,7 +954,7 @@ mod tests {
                 .enter_stmt(None)
                 .enter_command((Command::Mnemonic(Mnemonic::Add), ()))
                 .add_argument();
-            expr.diagnostics().emit_diagnostic(diagnostic.clone());
+            expr.emit_diagnostic(diagnostic.clone());
             expr.exit().exit().exit()
         });
         assert_eq!(actions, [TestOperation::EmitDiagnostic(diagnostic)])

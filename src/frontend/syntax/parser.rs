@@ -1,6 +1,5 @@
 use super::*;
 use crate::diagnostics::{CompactDiagnostic, DiagnosticsListener, Message};
-use crate::span::Merge;
 
 type TokenKind = Token<(), (), (), ()>;
 
@@ -121,14 +120,12 @@ where
             }
             (_, span) => {
                 bump!(self);
-                self.context
-                    .diagnostics()
-                    .emit_diagnostic(CompactDiagnostic::new(
-                        Message::UnexpectedToken {
-                            token: span.clone(),
-                        },
-                        span,
-                    ));
+                self.context.emit_diagnostic(CompactDiagnostic::new(
+                    Message::UnexpectedToken {
+                        token: span.clone(),
+                    },
+                    span,
+                ));
                 self
             }
         }
@@ -157,13 +154,10 @@ where
                         break;
                     }
                     (Token::Eof, _) => {
-                        state
-                            .context
-                            .diagnostics()
-                            .emit_diagnostic(CompactDiagnostic::new(
-                                Message::UnexpectedEof,
-                                state.token.1.clone(),
-                            ));
+                        state.context.emit_diagnostic(CompactDiagnostic::new(
+                            Message::UnexpectedEof,
+                            state.token.1.clone(),
+                        ));
                         break;
                     }
                     other => {
@@ -175,13 +169,10 @@ where
             state
         } else {
             assert_eq!(state.token.0.kind(), Token::Eof);
-            state
-                .context
-                .diagnostics()
-                .emit_diagnostic(CompactDiagnostic::new(
-                    Message::UnexpectedEof,
-                    state.token.1.clone(),
-                ));
+            state.context.emit_diagnostic(CompactDiagnostic::new(
+                Message::UnexpectedEof,
+                state.token.1.clone(),
+            ));
             state.change_context(|c| c.exit())
         }
         .change_context(|c| c.exit())
@@ -235,7 +226,7 @@ where
                     ),
                     ExprParsingError::Other(diagnostic) => diagnostic,
                 };
-                parser.context.diagnostics().emit_diagnostic(diagnostic);
+                parser.context.emit_diagnostic(diagnostic);
                 while !parser.token_is_in(LINE_FOLLOW_SET) {
                     bump!(parser);
                 }
@@ -276,7 +267,7 @@ where
         match self.token {
             (Token::ClosingParenthesis, right) => {
                 bump!(self);
-                let span = self.context.diagnostics().merge(&left, &right);
+                let span = self.context.merge(&left, &right);
                 self.context
                     .apply_operator((ExprOperator::Parentheses, span));
                 Ok(self)
@@ -341,15 +332,12 @@ where
     fn parse_macro_param(mut self) -> Self {
         match self.token.0 {
             Token::Ident(ident) => self.context.add_parameter((ident, self.token.1)),
-            _ => self
-                .context
-                .diagnostics()
-                .emit_diagnostic(CompactDiagnostic::new(
-                    Message::UnexpectedToken {
-                        token: self.token.1.clone(),
-                    },
-                    self.token.1.clone(),
-                )),
+            _ => self.context.emit_diagnostic(CompactDiagnostic::new(
+                Message::UnexpectedToken {
+                    token: self.token.1.clone(),
+                },
+                self.token.1.clone(),
+            )),
         };
         bump!(self);
         self
@@ -395,14 +383,12 @@ where
         self = self.parse_list(delimiter, terminators, parser);
         if !self.token_is_in(terminators) {
             let unexpected_span = self.token.1;
-            self.context
-                .diagnostics()
-                .emit_diagnostic(CompactDiagnostic::new(
-                    Message::UnexpectedToken {
-                        token: unexpected_span.clone(),
-                    },
-                    unexpected_span,
-                ));
+            self.context.emit_diagnostic(CompactDiagnostic::new(
+                Message::UnexpectedToken {
+                    token: unexpected_span.clone(),
+                },
+                unexpected_span,
+            ));
             bump!(self);
             while !self.token_is_in(terminators) {
                 bump!(self);
