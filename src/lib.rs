@@ -12,7 +12,6 @@ mod diagnostics;
 mod expr;
 mod frontend;
 mod instruction;
-mod span;
 
 #[derive(Default)]
 pub struct Config<'a> {

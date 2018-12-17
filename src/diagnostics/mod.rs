@@ -8,6 +8,8 @@ use std::fmt;
 #[cfg(test)]
 use std::marker::PhantomData;
 
+pub mod span;
+
 pub trait Diagnostics
 where
     Self: DownstreamDiagnostics,
