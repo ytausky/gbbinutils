@@ -1,4 +1,5 @@
-use super::{Analysis, AnalysisResult, AtomKind, Operand, SimpleOperand};
+use super::{Analysis, AnalysisResult, AtomKind, Operand, SemanticExpr, SimpleOperand};
+use crate::backend::ValueBuilder;
 use crate::diagnostics::{CompactDiagnostic, Message};
 use crate::instruction::{Branch, Condition, Instruction, Nullary};
 use crate::span::{MergeSpans, Source, Span};
@@ -22,13 +23,14 @@ pub enum ImplicitBranch {
     Reti,
 }
 
-impl<'a, I, V, M> Analysis<'a, I, M>
+impl<'a, Id, I, B, M> Analysis<'a, I, B, M>
 where
-    I: Iterator<Item = Result<Operand<V>, CompactDiagnostic<M::Span>>>,
-    V: Source<Span = M::Span>,
+    Id: Into<String>,
+    I: Iterator<Item = SemanticExpr<Id, M::Span>>,
+    B: ValueBuilder<Span = M::Span>,
     M: MergeSpans,
 {
-    pub fn analyze_branch(&mut self, branch: BranchKind) -> AnalysisResult<V> {
+    pub fn analyze_branch(&mut self, branch: BranchKind) -> AnalysisResult<B::Value> {
         let (condition, target) = self.collect_branch_operands()?;
         let variant = analyze_branch_variant((branch, &self.mnemonic.1), target)?;
         match variant {
@@ -46,13 +48,15 @@ where
         }
     }
 
-    fn collect_branch_operands(&mut self) -> Result<BranchOperands<V>, CompactDiagnostic<M::Span>> {
-        let first_operand = self.operands.next()?;
+    fn collect_branch_operands(
+        &mut self,
+    ) -> Result<BranchOperands<B::Value>, CompactDiagnostic<M::Span>> {
+        let first_operand = self.next_operand()?;
         Ok(
             if let Some(Operand::Atom(AtomKind::Condition(condition), range)) = first_operand {
                 (
                     Some((condition, range)),
-                    analyze_branch_target(self.operands.next()?)?,
+                    analyze_branch_target(self.next_operand()?)?,
                 )
             } else {
                 (None, analyze_branch_target(first_operand)?)

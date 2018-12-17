@@ -45,11 +45,11 @@ pub enum Context {
 
 type OperandResult<V> = Result<Operand<V>, CompactDiagnostic<<V as Span>::Span>>;
 
-pub fn analyze_operand<I: Into<String>, V: Source>(
-    expr: SemanticExpr<I, V::Span>,
+pub fn analyze_operand<I: Into<String>, B: ValueBuilder>(
+    expr: SemanticExpr<I, B::Span>,
     context: Context,
-    builder: &mut impl ValueBuilder<V>,
-) -> OperandResult<V> {
+    builder: &mut B,
+) -> OperandResult<B::Value> {
     match expr.variant {
         ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(keyword))) => {
             analyze_keyword_operand((keyword, expr.span), context)
@@ -61,11 +61,11 @@ pub fn analyze_operand<I: Into<String>, V: Source>(
     }
 }
 
-fn analyze_deref_operand<I: Into<String>, V: Source>(
-    expr: SemanticExpr<I, V::Span>,
-    deref_span: V::Span,
-    builder: &mut impl ValueBuilder<V>,
-) -> OperandResult<V> {
+fn analyze_deref_operand<I: Into<String>, B: ValueBuilder>(
+    expr: SemanticExpr<I, B::Span>,
+    deref_span: B::Span,
+    builder: &mut B,
+) -> OperandResult<B::Value> {
     match expr.variant {
         ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(keyword))) => {
             analyze_deref_operand_keyword((keyword, expr.span), deref_span)
@@ -154,7 +154,7 @@ pub struct OperandCounter<I> {
     count: usize,
 }
 
-impl<I: Iterator<Item = Result<T, E>>, T, E> OperandCounter<I> {
+impl<I> OperandCounter<I> {
     pub fn new(operands: I) -> OperandCounter<I> {
         OperandCounter { operands, count: 0 }
     }
@@ -162,26 +162,17 @@ impl<I: Iterator<Item = Result<T, E>>, T, E> OperandCounter<I> {
     pub fn seen(&self) -> usize {
         self.count
     }
+}
 
-    pub fn next(&mut self) -> Result<Option<T>, E> {
-        self.operands.next().map_or(Ok(None), |operand| {
+impl<I: Iterator> Iterator for OperandCounter<I> {
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let item = self.operands.next();
+        if item.is_some() {
             self.count += 1;
-            operand.map(Some)
-        })
-    }
-
-    pub fn check_for_unexpected_operands<S>(self, span: S) -> Result<(), CompactDiagnostic<S>> {
-        let expected = self.count;
-        let extra = self.operands.count();
-        let actual = expected + extra;
-        if actual == expected {
-            Ok(())
-        } else {
-            Err(CompactDiagnostic::new(
-                Message::OperandCount { actual, expected },
-                span,
-            ))
         }
+        item
     }
 }
 

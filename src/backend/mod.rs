@@ -34,21 +34,23 @@ pub trait HasValue: Span {
 }
 
 pub trait BuildValue<'a, V: Source> {
-    type Builder: ValueBuilder<V>;
+    type Builder: Span<Span = V::Span> + ValueBuilder<Value = V>;
     fn build_value(&'a mut self) -> Self::Builder;
 }
 
-pub trait ValueBuilder<V: Source>: Span<Span = V::Span> {
-    fn location(&mut self, span: V::Span) -> V;
-    fn number(&mut self, number: (i32, V::Span)) -> V;
-    fn symbol(&mut self, symbol: (String, V::Span)) -> V;
+pub trait ValueBuilder: Span {
+    type Value: Source<Span = Self::Span>;
+
+    fn location(&mut self, span: Self::Span) -> Self::Value;
+    fn number(&mut self, number: (i32, Self::Span)) -> Self::Value;
+    fn symbol(&mut self, symbol: (String, Self::Span)) -> Self::Value;
 
     fn apply_binary_operator(
         &mut self,
-        operator: (BinaryOperator, V::Span),
-        left: V,
-        right: V,
-    ) -> V;
+        operator: (BinaryOperator, Self::Span),
+        left: Self::Value,
+        right: Self::Value,
+    ) -> Self::Value;
 }
 
 pub trait Backend<S>
@@ -147,7 +149,9 @@ impl<S: Clone + Debug + PartialEq> Span for RelocExprBuilder<S> {
     type Span = S;
 }
 
-impl<S: Clone + Debug + PartialEq> ValueBuilder<RelocExpr<S>> for RelocExprBuilder<S> {
+impl<S: Clone + Debug + PartialEq> ValueBuilder for RelocExprBuilder<S> {
+    type Value = RelocExpr<S>;
+
     fn location(&mut self, span: S) -> RelocExpr<S> {
         RelocExpr::from_atom(RelocAtom::LocationCounter, span)
     }

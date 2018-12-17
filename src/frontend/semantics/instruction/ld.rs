@@ -1,18 +1,19 @@
-use super::{Analysis, AnalysisResult, Operand};
-use crate::backend::Width;
+use super::{Analysis, AnalysisResult, Operand, SemanticExpr};
+use crate::backend::{ValueBuilder, Width};
 use crate::diagnostics::{CompactDiagnostic, Message};
 use crate::frontend::semantics::operand::AtomKind;
 use crate::instruction::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
 use crate::span::{MergeSpans, Source, Span};
 use std::fmt::Debug;
 
-impl<'a, I, V, M> Analysis<'a, I, M>
+impl<'a, Id, I, B, M> Analysis<'a, I, B, M>
 where
-    I: Iterator<Item = Result<Operand<V>, CompactDiagnostic<M::Span>>>,
-    V: Source<Span = M::Span>,
+    Id: Into<String>,
+    I: Iterator<Item = SemanticExpr<Id, M::Span>>,
+    B: ValueBuilder<Span = M::Span>,
     M: MergeSpans,
 {
-    pub fn analyze_ld(&mut self) -> AnalysisResult<V> {
+    pub fn analyze_ld(&mut self) -> AnalysisResult<B::Value> {
         let dest = self.next_operand_out_of(2)?;
         let src = self.next_operand_out_of(2)?;
         match (dest.into_ld_dest()?, src.into_ld_src()?) {
@@ -53,9 +54,9 @@ where
 
     fn analyze_8_bit_ld(
         &mut self,
-        dest: LdDest8<V>,
-        src: impl Into<LdOperand<V, LdDest8<V>>>,
-    ) -> AnalysisResult<V> {
+        dest: LdDest8<B::Value>,
+        src: impl Into<LdOperand<B::Value, LdDest8<B::Value>>>,
+    ) -> AnalysisResult<B::Value> {
         match (dest, src.into()) {
             (
                 LdDest8::Simple(SimpleOperand::DerefHl, dest),
@@ -88,8 +89,8 @@ where
     fn analyze_16_bit_ld(
         &mut self,
         dest: LdDest16<M::Span>,
-        src: impl Into<LdOperand<V, LdDest16<M::Span>>>,
-    ) -> AnalysisResult<V> {
+        src: impl Into<LdOperand<B::Value, LdDest16<M::Span>>>,
+    ) -> AnalysisResult<B::Value> {
         match (dest, src.into()) {
             (LdDest16::Reg16(Reg16::Sp, _), LdOperand::Other(LdDest16::Reg16(Reg16::Hl, _))) => {
                 Ok(Instruction::Ld(Ld::SpHl))

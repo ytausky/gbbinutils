@@ -1,5 +1,5 @@
 use crate::backend::{self, Backend, BinaryOperator, ValueBuilder};
-use crate::diagnostics::span::{MergeSpans, MkSnippetRef, SnippetRef, Source, Span};
+use crate::diagnostics::span::{MergeSpans, MkSnippetRef, SnippetRef, Span};
 use crate::diagnostics::{
     CompactDiagnostic, DelegateDiagnostics, Diagnostics, EmitDiagnostic, Message,
 };
@@ -460,10 +460,10 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> syntax::TokenSeqContext
     }
 }
 
-fn analyze_reloc_expr<I: Into<String>, V: Source>(
-    expr: SemanticExpr<I, V::Span>,
-    builder: &mut impl ValueBuilder<V>,
-) -> Result<V, CompactDiagnostic<V::Span>> {
+fn analyze_reloc_expr<I: Into<String>, B: ValueBuilder>(
+    expr: SemanticExpr<I, B::Span>,
+    builder: &mut B,
+) -> Result<B::Value, CompactDiagnostic<B::Span>> {
     match expr.variant {
         ExprVariant::Atom(SemanticAtom::Ident(ident)) => {
             Ok(builder.symbol((ident.into(), expr.span)))
