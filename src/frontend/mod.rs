@@ -475,6 +475,10 @@ mod tests {
         type Span = ();
     }
 
+    impl<'a> SnippetRef for Mock<'a> {
+        type SnippetRef = ();
+    }
+
     impl<'a> MacroContextFactory for Mock<'a> {
         type MacroDefId = ();
         type MacroExpansionContext = Mock<'a>;
@@ -498,6 +502,10 @@ mod tests {
         {
             self.clone()
         }
+    }
+
+    impl<'a> MkSnippetRef for Mock<'a> {
+        fn mk_snippet_ref(&mut self, _: &Self::Span) {}
     }
 
     impl<'a> ContextFactory for Mock<'a> {

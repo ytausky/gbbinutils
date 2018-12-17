@@ -9,12 +9,20 @@ pub trait Span {
     type Span: Clone + Debug + PartialEq;
 }
 
+pub trait SnippetRef {
+    type SnippetRef;
+}
+
 pub trait Source: Span {
     fn span(&self) -> Self::Span;
 }
 
 pub trait MergeSpans: Span {
     fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span;
+}
+
+pub trait MkSnippetRef: Span + SnippetRef {
+    fn mk_snippet_ref(&mut self, span: &Self::Span) -> Self::SnippetRef;
 }
 
 pub trait MacroContextFactory: Span {
@@ -37,7 +45,7 @@ pub trait MacroContextFactory: Span {
         J: IntoIterator<Item = Self::Span>;
 }
 
-pub trait ContextFactory: MacroContextFactory + MergeSpans {
+pub trait ContextFactory: MacroContextFactory + MergeSpans + MkSnippetRef {
     type BufContext: BufContext<Span = Self::Span>;
 
     fn mk_buf_context(
@@ -142,6 +150,10 @@ where
     type Span = SpanData<B, R>;
 }
 
+impl<B, R> SnippetRef for RcContextFactory<B, R> {
+    type SnippetRef = SpanData<B, R>;
+}
+
 impl<B, R> MacroContextFactory for RcContextFactory<B, R>
 where
     SpanData<B, R>: Clone + Debug + PartialEq,
@@ -209,6 +221,12 @@ impl MergeSpans for RcContextFactory<BufId, BufRange> {
             },
             _ => unreachable!(),
         }
+    }
+}
+
+impl MkSnippetRef for RcContextFactory<BufId, BufRange> {
+    fn mk_snippet_ref(&mut self, span: &Self::Span) -> Self::SnippetRef {
+        span.clone()
     }
 }
 

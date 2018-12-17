@@ -1,6 +1,6 @@
 pub use self::message::{KeywordOperandCategory, Message};
 use crate::codebase::{BufId, LineNumber, TextBuf, TextCache, TextRange};
-use crate::span::{ContextFactory, MacroContextFactory, MergeSpans, Span, SpanData};
+use crate::span::*;
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::fmt;
@@ -12,9 +12,9 @@ pub mod span;
 
 pub trait Diagnostics: DownstreamDiagnostics + ContextFactory {}
 
-pub trait DownstreamDiagnostics: EmitDiagnostic + MergeSpans {}
+pub trait DownstreamDiagnostics: EmitDiagnostic + MergeSpans + MkSnippetRef {}
 
-impl<T: EmitDiagnostic + MergeSpans> DownstreamDiagnostics for T {}
+impl<T: EmitDiagnostic + MergeSpans + MkSnippetRef> DownstreamDiagnostics for T {}
 
 pub trait DelegateDiagnostics {
     type Delegate: DownstreamDiagnostics;
@@ -25,9 +25,19 @@ impl<T: DelegateDiagnostics> Span for T {
     type Span = <T::Delegate as Span>::Span;
 }
 
+impl<T: DelegateDiagnostics> SnippetRef for T {
+    type SnippetRef = <T::Delegate as SnippetRef>::SnippetRef;
+}
+
 impl<T: DelegateDiagnostics> MergeSpans for T {
     fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
         self.delegate().merge_spans(left, right)
+    }
+}
+
+impl<T: DelegateDiagnostics> MkSnippetRef for T {
+    fn mk_snippet_ref(&mut self, span: &Self::Span) -> Self::SnippetRef {
+        self.delegate().mk_snippet_ref(span)
     }
 }
 
@@ -50,6 +60,14 @@ where
     type Span = C::Span;
 }
 
+impl<C, O> SnippetRef for DiagnosticsSystem<C, O>
+where
+    C: ContextFactory,
+    O: EmitDiagnostic<Span = C::Span, SnippetRef = C::SnippetRef>,
+{
+    type SnippetRef = C::SnippetRef;
+}
+
 impl<C, O> MergeSpans for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
@@ -60,10 +78,20 @@ where
     }
 }
 
+impl<C, O> MkSnippetRef for DiagnosticsSystem<C, O>
+where
+    C: ContextFactory,
+    O: EmitDiagnostic<Span = C::Span, SnippetRef = C::SnippetRef>,
+{
+    fn mk_snippet_ref(&mut self, span: &Self::Span) -> Self::SnippetRef {
+        self.context.mk_snippet_ref(span)
+    }
+}
+
 impl<C, O> EmitDiagnostic for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
-    O: EmitDiagnostic<Span = C::Span>,
+    O: EmitDiagnostic<Span = C::Span, SnippetRef = C::SnippetRef>,
 {
     fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span>) {
         self.output.emit_diagnostic(diagnostic)
@@ -73,7 +101,7 @@ where
 impl<C, O> MacroContextFactory for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
-    O: EmitDiagnostic<Span = C::Span>,
+    O: EmitDiagnostic<Span = C::Span, SnippetRef = C::SnippetRef>,
 {
     type MacroDefId = C::MacroDefId;
     type MacroExpansionContext = C::MacroExpansionContext;
@@ -103,7 +131,7 @@ where
 impl<C, O> ContextFactory for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
-    O: EmitDiagnostic<Span = C::Span>,
+    O: EmitDiagnostic<Span = C::Span, SnippetRef = C::SnippetRef>,
 {
     type BufContext = C::BufContext;
 
@@ -119,7 +147,7 @@ where
 impl<C, O> Diagnostics for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
-    O: EmitDiagnostic<Span = C::Span>,
+    O: EmitDiagnostic<Span = C::Span, SnippetRef = C::SnippetRef>,
 {
 }
 
@@ -135,13 +163,17 @@ impl DiagnosticsOutput for TerminalOutput {
     }
 }
 
-pub trait EmitDiagnostic: Span {
+pub trait EmitDiagnostic: SnippetRef + Span {
     fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span>);
 }
 
 pub struct OutputForwarder<'a> {
     pub output: &'a mut dyn DiagnosticsOutput,
     pub codebase: &'a RefCell<TextCache>,
+}
+
+impl<'a> SnippetRef for OutputForwarder<'a> {
+    type SnippetRef = SpanData;
 }
 
 impl<'a> Span for OutputForwarder<'a> {
@@ -171,6 +203,11 @@ impl<S: Clone + fmt::Debug + PartialEq> Span for IgnoreDiagnostics<S> {
 }
 
 #[cfg(test)]
+impl<S> SnippetRef for IgnoreDiagnostics<S> {
+    type SnippetRef = S;
+}
+
+#[cfg(test)]
 impl<S: Clone + fmt::Debug + PartialEq> EmitDiagnostic for IgnoreDiagnostics<S> {
     fn emit_diagnostic(&mut self, _: CompactDiagnostic<S>) {}
 }
@@ -192,6 +229,11 @@ impl TestDiagnosticsListener {
 #[cfg(test)]
 impl Span for TestDiagnosticsListener {
     type Span = ();
+}
+
+#[cfg(test)]
+impl SnippetRef for TestDiagnosticsListener {
+    type SnippetRef = ();
 }
 
 #[cfg(test)]

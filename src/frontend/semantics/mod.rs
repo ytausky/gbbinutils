@@ -1,4 +1,5 @@
 use crate::backend::{self, Backend, BinaryOperator, ValueBuilder};
+use crate::diagnostics::span::{MergeSpans, MkSnippetRef, SnippetRef, Source, Span};
 use crate::diagnostics::{
     CompactDiagnostic, DelegateDiagnostics, Diagnostics, EmitDiagnostic, Message,
 };
@@ -6,7 +7,6 @@ use crate::expr::ExprVariant;
 use crate::frontend::session::Session;
 use crate::frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token};
 use crate::frontend::{Frontend, Literal};
-use crate::span::{MergeSpans, Source, Span};
 
 mod directive;
 mod instruction;
@@ -156,9 +156,19 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> Span for CommandActions<'a, F, B, D>
     type Span = D::Span;
 }
 
+impl<'a, F: Frontend<D>, B, D: Diagnostics> SnippetRef for CommandActions<'a, F, B, D> {
+    type SnippetRef = D::SnippetRef;
+}
+
 impl<'a, F: Frontend<D>, B, D: Diagnostics> MergeSpans for CommandActions<'a, F, B, D> {
     fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
         self.parent.merge_spans(left, right)
+    }
+}
+
+impl<'a, F: Frontend<D>, B, D: Diagnostics> MkSnippetRef for CommandActions<'a, F, B, D> {
+    fn mk_snippet_ref(&mut self, span: &Self::Span) -> Self::SnippetRef {
+        self.parent.mk_snippet_ref(span)
     }
 }
 
@@ -637,8 +647,16 @@ mod tests {
         type Span = ();
     }
 
+    impl<'a> SnippetRef for TestDiagnostics<'a> {
+        type SnippetRef = ();
+    }
+
     impl<'a> MergeSpans for TestDiagnostics<'a> {
         fn merge_spans(&mut self, _: &(), _: &()) {}
+    }
+
+    impl<'a> MkSnippetRef for TestDiagnostics<'a> {
+        fn mk_snippet_ref(&mut self, _: &Self::Span) {}
     }
 
     impl<'a> EmitDiagnostic for TestDiagnostics<'a> {
