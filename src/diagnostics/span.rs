@@ -16,11 +16,11 @@ where
     fn span(&self) -> Self::Span;
 }
 
-pub trait Merge
+pub trait MergeSpans
 where
     Self: Span,
 {
-    fn merge(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span;
+    fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span;
 }
 
 pub trait MacroContextFactory
@@ -48,7 +48,7 @@ where
 
 pub trait ContextFactory
 where
-    Self: Merge,
+    Self: MergeSpans,
     Self: MacroContextFactory,
 {
     type BufContext: BufContext<Span = Self::Span>;
@@ -196,8 +196,8 @@ where
     }
 }
 
-impl Merge for RcContextFactory<BufId, BufRange> {
-    fn merge(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
+impl MergeSpans for RcContextFactory<BufId, BufRange> {
+    fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
         use self::SpanData::*;
         match (left, right) {
             (
@@ -290,7 +290,7 @@ mod tests {
             range: BufRange::from(5..10),
             context: context.clone(),
         };
-        let combined = RcContextFactory::new().merge(&left, &right);
+        let combined = RcContextFactory::new().merge_spans(&left, &right);
         assert_eq!(
             combined,
             SpanData::Buf {

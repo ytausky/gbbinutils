@@ -6,7 +6,7 @@ use crate::expr::ExprVariant;
 use crate::frontend::session::Session;
 use crate::frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token};
 use crate::frontend::{Frontend, Literal};
-use crate::span::{Merge, Source, Span};
+use crate::span::{MergeSpans, Source, Span};
 
 mod directive;
 mod instruction;
@@ -156,9 +156,9 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> Span for CommandActions<'a, F, B, D>
     type Span = D::Span;
 }
 
-impl<'a, F: Frontend<D>, B, D: Diagnostics> Merge for CommandActions<'a, F, B, D> {
-    fn merge(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
-        self.parent.merge(left, right)
+impl<'a, F: Frontend<D>, B, D: Diagnostics> MergeSpans for CommandActions<'a, F, B, D> {
+    fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
+        self.parent.merge_spans(left, right)
     }
 }
 
@@ -637,8 +637,8 @@ mod tests {
         type Span = ();
     }
 
-    impl<'a> Merge for TestDiagnostics<'a> {
-        fn merge(&mut self, _: &(), _: &()) {}
+    impl<'a> MergeSpans for TestDiagnostics<'a> {
+        fn merge_spans(&mut self, _: &(), _: &()) {}
     }
 
     impl<'a> EmitDiagnostic for TestDiagnostics<'a> {

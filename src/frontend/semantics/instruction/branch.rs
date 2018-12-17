@@ -1,7 +1,7 @@
 use super::{Analysis, AnalysisResult, AtomKind, Operand, SimpleOperand};
 use crate::diagnostics::{CompactDiagnostic, Message};
 use crate::instruction::{Branch, Condition, Instruction, Nullary};
-use crate::span::{Merge, Source, Span};
+use crate::span::{MergeSpans, Source, Span};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BranchKind {
@@ -26,7 +26,7 @@ impl<'a, I, V, M> Analysis<'a, I, M>
 where
     I: Iterator<Item = Result<Operand<V>, CompactDiagnostic<M::Span>>>,
     V: Source<Span = M::Span>,
-    M: Merge,
+    M: MergeSpans,
 {
     pub fn analyze_branch(&mut self, branch: BranchKind) -> AnalysisResult<V> {
         let (condition, target) = self.collect_branch_operands()?;

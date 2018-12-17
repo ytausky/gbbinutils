@@ -5,7 +5,7 @@ use crate::diagnostics::{CompactDiagnostic, Message};
 use crate::frontend::semantics::operand::{self, AtomKind, Context, Operand, OperandCounter};
 use crate::frontend::syntax::keyword as kw;
 use crate::instruction::*;
-use crate::span::{Merge, Source, Span};
+use crate::span::{MergeSpans, Source, Span};
 
 mod branch;
 mod ld;
@@ -20,7 +20,7 @@ where
     I: IntoIterator<Item = SemanticExpr<Id, M::Span>>,
     V: Source<Span = M::Span>,
     B: ValueBuilder<V>,
-    M: Merge,
+    M: MergeSpans,
 {
     let mnemonic: (Mnemonic, _) = (mnemonic.0.into(), mnemonic.1);
     let context = mnemonic.0.context();
@@ -34,7 +34,7 @@ where
     .run()
 }
 
-struct Analysis<'a, I, M: Merge + 'a> {
+struct Analysis<'a, I, M: MergeSpans + 'a> {
     mnemonic: (Mnemonic, M::Span),
     operands: OperandCounter<I>,
     spans: &'a mut M,
@@ -44,7 +44,7 @@ impl<'a, I, V, M> Analysis<'a, I, M>
 where
     I: Iterator<Item = Result<Operand<V>, CompactDiagnostic<M::Span>>>,
     V: Source<Span = M::Span>,
-    M: Merge,
+    M: MergeSpans,
 {
     fn new(mnemonic: (Mnemonic, M::Span), operands: I, spans: &'a mut M) -> Analysis<'a, I, M> {
         Analysis {
@@ -797,8 +797,8 @@ mod tests {
         type Span = TokenSpan;
     }
 
-    impl Merge for Testing {
-        fn merge(&mut self, left: &TokenSpan, right: &TokenSpan) -> TokenSpan {
+    impl MergeSpans for Testing {
+        fn merge_spans(&mut self, left: &TokenSpan, right: &TokenSpan) -> TokenSpan {
             TokenSpan::merge(left, right)
         }
     }

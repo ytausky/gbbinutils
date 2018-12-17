@@ -572,8 +572,8 @@ mod tests {
         }
     }
 
-    impl<'a> Merge for Mock<'a> {
-        fn merge(&mut self, _: &(), _: &()) {}
+    impl<'a> MergeSpans for Mock<'a> {
+        fn merge_spans(&mut self, _: &(), _: &()) {}
     }
 
     impl<'a> Diagnostics for Mock<'a> {}

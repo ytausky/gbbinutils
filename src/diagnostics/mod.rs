@@ -1,7 +1,7 @@
 use crate::backend::Width;
 use crate::codebase::{BufId, CodebaseError, LineNumber, TextBuf, TextCache, TextRange};
 use crate::instruction::IncDec;
-use crate::span::{ContextFactory, MacroContextFactory, Merge, Span, SpanData};
+use crate::span::{ContextFactory, MacroContextFactory, MergeSpans, Span, SpanData};
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::fmt;
@@ -20,11 +20,11 @@ where
 pub trait DownstreamDiagnostics
 where
     Self: EmitDiagnostic,
-    Self: Merge,
+    Self: MergeSpans,
 {
 }
 
-impl<T> DownstreamDiagnostics for T where T: EmitDiagnostic + Merge {}
+impl<T> DownstreamDiagnostics for T where T: EmitDiagnostic + MergeSpans {}
 
 pub trait DelegateDiagnostics {
     type Delegate: DownstreamDiagnostics;
@@ -35,9 +35,9 @@ impl<T: DelegateDiagnostics> Span for T {
     type Span = <T::Delegate as Span>::Span;
 }
 
-impl<T: DelegateDiagnostics> Merge for T {
-    fn merge(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
-        self.delegate().merge(left, right)
+impl<T: DelegateDiagnostics> MergeSpans for T {
+    fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
+        self.delegate().merge_spans(left, right)
     }
 }
 
@@ -60,13 +60,13 @@ where
     type Span = C::Span;
 }
 
-impl<C, O> Merge for DiagnosticsSystem<C, O>
+impl<C, O> MergeSpans for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
     O: EmitDiagnostic<Span = C::Span>,
 {
-    fn merge(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
-        self.context.merge(left, right)
+    fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
+        self.context.merge_spans(left, right)
     }
 }
 

@@ -267,7 +267,7 @@ where
         match self.token {
             (Token::ClosingParenthesis, right) => {
                 bump!(self);
-                let span = self.context.merge(&left, &right);
+                let span = self.context.merge_spans(&left, &right);
                 self.context
                     .apply_operator((ExprOperator::Parentheses, span));
                 Ok(self)
@@ -428,7 +428,7 @@ mod tests {
     use super::*;
     use crate::diagnostics::{CompactDiagnostic, EmitDiagnostic, Message};
     use crate::frontend::syntax::{ExprAtom, ExprOperator};
-    use crate::span::{Merge, Span};
+    use crate::span::{MergeSpans, Span};
     use std::borrow::Borrow;
     use std::collections::HashMap;
 
@@ -453,8 +453,8 @@ mod tests {
         type Span = SymSpan;
     }
 
-    impl Merge for FileActionCollector {
-        fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
+    impl MergeSpans for FileActionCollector {
+        fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
             SymSpan::merge(left, right)
         }
     }
@@ -487,8 +487,8 @@ mod tests {
         type Span = SymSpan;
     }
 
-    impl Merge for StmtActionCollector {
-        fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
+    impl MergeSpans for StmtActionCollector {
+        fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
             SymSpan::merge(left, right)
         }
     }
@@ -551,8 +551,8 @@ mod tests {
         type Span = SymSpan;
     }
 
-    impl Merge for CommandActionCollector {
-        fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
+    impl MergeSpans for CommandActionCollector {
+        fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
             SymSpan::merge(left, right)
         }
     }
@@ -595,8 +595,8 @@ mod tests {
         type Span = SymSpan;
     }
 
-    impl Merge for ArgActionCollector {
-        fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
+    impl MergeSpans for ArgActionCollector {
+        fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
             SymSpan::merge(left, right)
         }
     }
@@ -644,8 +644,8 @@ mod tests {
         type Span = SymSpan;
     }
 
-    impl Merge for ExprActionCollector {
-        fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
+    impl MergeSpans for ExprActionCollector {
+        fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
             SymSpan::merge(left, right)
         }
     }
@@ -684,8 +684,8 @@ mod tests {
         type Span = SymSpan;
     }
 
-    impl Merge for MacroParamsActionCollector {
-        fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
+    impl MergeSpans for MacroParamsActionCollector {
+        fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
             SymSpan::merge(left, right)
         }
     }
@@ -725,8 +725,8 @@ mod tests {
         type Span = SymSpan;
     }
 
-    impl Merge for MacroBodyActionCollector {
-        fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
+    impl MergeSpans for MacroBodyActionCollector {
+        fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
             SymSpan::merge(left, right)
         }
     }
@@ -766,8 +766,8 @@ mod tests {
         type Span = SymSpan;
     }
 
-    impl Merge for MacroInvocationActionCollector {
-        fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
+    impl MergeSpans for MacroInvocationActionCollector {
+        fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
             SymSpan::merge(left, right)
         }
     }
@@ -809,8 +809,8 @@ mod tests {
         type Span = SymSpan;
     }
 
-    impl Merge for MacroArgActionCollector {
-        fn merge(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
+    impl MergeSpans for MacroArgActionCollector {
+        fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
             SymSpan::merge(left, right)
         }
     }

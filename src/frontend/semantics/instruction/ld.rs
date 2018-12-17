@@ -3,14 +3,14 @@ use crate::backend::Width;
 use crate::diagnostics::{CompactDiagnostic, Message};
 use crate::frontend::semantics::operand::AtomKind;
 use crate::instruction::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
-use crate::span::{Merge, Source, Span};
+use crate::span::{MergeSpans, Source, Span};
 use std::fmt::Debug;
 
 impl<'a, I, V, M> Analysis<'a, I, M>
 where
     I: Iterator<Item = Result<Operand<V>, CompactDiagnostic<M::Span>>>,
     V: Source<Span = M::Span>,
-    M: Merge,
+    M: MergeSpans,
 {
     pub fn analyze_ld(&mut self) -> AnalysisResult<V> {
         let dest = self.next_operand_out_of(2)?;
@@ -35,7 +35,7 @@ where
                         src: src.span(),
                         dest: dest.span(),
                     },
-                    self.spans.merge(&dest.span(), &src.span()),
+                    self.spans.merge_spans(&dest.span(), &src.span()),
                 ))
             }
             (LdDest::Word(dest), LdOperand::Other(LdDest::Byte(src))) => {
@@ -45,7 +45,7 @@ where
                         src: src.span(),
                         dest: dest.span(),
                     },
-                    self.spans.merge(&dest.span(), &src.span()),
+                    self.spans.merge_spans(&dest.span(), &src.span()),
                 ))
             }
         }
@@ -66,7 +66,7 @@ where
                     dest,
                     src: src.clone(),
                 },
-                self.spans.merge(&self.mnemonic.1, &src),
+                self.spans.merge_spans(&self.mnemonic.1, &src),
             )),
             (LdDest8::Simple(dest, _), LdOperand::Other(LdDest8::Simple(src, _))) => {
                 Ok(Instruction::Ld(Ld::Simple(dest, src)))
@@ -97,7 +97,7 @@ where
             (LdDest16::Reg16(_, dest_span), LdOperand::Other(LdDest16::Reg16(_, src_span))) => {
                 Err(CompactDiagnostic::new(
                     Message::LdSpHlOperands,
-                    self.spans.merge(&dest_span, &src_span),
+                    self.spans.merge_spans(&dest_span, &src_span),
                 ))
             }
             (LdDest16::Reg16(dest, _), LdOperand::Const(expr)) => {
