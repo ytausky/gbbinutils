@@ -35,6 +35,27 @@ where
     }
 }
 
+pub trait DelegateDiagnostics {
+    type Delegate: DownstreamDiagnostics;
+    fn delegate(&mut self) -> &mut Self::Delegate;
+}
+
+impl<T: DelegateDiagnostics> Span for T {
+    type Span = <T::Delegate as Span>::Span;
+}
+
+impl<T: DelegateDiagnostics> Merge for T {
+    fn merge(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
+        self.delegate().diagnostics().merge(left, right)
+    }
+}
+
+impl<T: DelegateDiagnostics> DiagnosticsListener for T {
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span>) {
+        self.delegate().diagnostics().emit_diagnostic(diagnostic)
+    }
+}
+
 pub struct DiagnosticsSystem<C, O> {
     pub context: C,
     pub output: O,

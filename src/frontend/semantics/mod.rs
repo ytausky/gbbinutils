@@ -1,6 +1,7 @@
 use crate::backend::{self, Backend, BinaryOperator, ValueBuilder};
 use crate::diagnostics::{
-    CompactDiagnostic, Diagnostics, DiagnosticsListener, DownstreamDiagnostics, Message,
+    CompactDiagnostic, DelegateDiagnostics, Diagnostics, DiagnosticsListener,
+    DownstreamDiagnostics, Message,
 };
 use crate::expr::ExprVariant;
 use crate::frontend::session::Session;
@@ -72,14 +73,11 @@ impl<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics> SemanticActions<'a
     }
 }
 
-impl<'a, F: Frontend<D>, B, D: Diagnostics> Span for SemanticActions<'a, F, B, D> {
-    type Span = D::Span;
-}
+impl<'a, F: Frontend<D>, B, D: Diagnostics> DelegateDiagnostics for SemanticActions<'a, F, B, D> {
+    type Delegate = D;
 
-impl<'a, F: Frontend<D>, B, D: Diagnostics> DownstreamDiagnostics for SemanticActions<'a, F, B, D> {
-    type Output = D::Output;
-    fn diagnostics(&mut self) -> &mut Self::Output {
-        self.session.diagnostics.diagnostics()
+    fn delegate(&mut self) -> &mut Self::Delegate {
+        self.session.diagnostics
     }
 }
 
@@ -323,14 +321,11 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> MacroDefActions<'a, F, B, D> {
     }
 }
 
-impl<'a, F: Frontend<D>, B, D: Diagnostics> Span for MacroDefActions<'a, F, B, D> {
-    type Span = D::Span;
-}
+impl<'a, F: Frontend<D>, B, D: Diagnostics> DelegateDiagnostics for MacroDefActions<'a, F, B, D> {
+    type Delegate = D;
 
-impl<'a, F: Frontend<D>, B, D: Diagnostics> DownstreamDiagnostics for MacroDefActions<'a, F, B, D> {
-    type Output = D::Output;
-    fn diagnostics(&mut self) -> &mut Self::Output {
-        self.parent.diagnostics()
+    fn delegate(&mut self) -> &mut Self::Delegate {
+        self.parent.delegate()
     }
 }
 
@@ -395,16 +390,13 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> MacroInvocationActions<'a, F, B, D> 
     }
 }
 
-impl<'a, F: Frontend<D>, B, D: Diagnostics> Span for MacroInvocationActions<'a, F, B, D> {
-    type Span = D::Span;
-}
-
-impl<'a, F: Frontend<D>, B, D: Diagnostics> DownstreamDiagnostics
+impl<'a, F: Frontend<D>, B, D: Diagnostics> DelegateDiagnostics
     for MacroInvocationActions<'a, F, B, D>
 {
-    type Output = D::Output;
-    fn diagnostics(&mut self) -> &mut Self::Output {
-        self.parent.diagnostics()
+    type Delegate = D;
+
+    fn delegate(&mut self) -> &mut Self::Delegate {
+        self.parent.delegate()
     }
 }
 
@@ -439,14 +431,11 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> MacroArgContext<'a, F, B, D> {
     }
 }
 
-impl<'a, F: Frontend<D>, B, D: Diagnostics> Span for MacroArgContext<'a, F, B, D> {
-    type Span = D::Span;
-}
+impl<'a, F: Frontend<D>, B, D: Diagnostics> DelegateDiagnostics for MacroArgContext<'a, F, B, D> {
+    type Delegate = D;
 
-impl<'a, F: Frontend<D>, B, D: Diagnostics> DownstreamDiagnostics for MacroArgContext<'a, F, B, D> {
-    type Output = D::Output;
-    fn diagnostics(&mut self) -> &mut Self::Output {
-        self.parent.parent.diagnostics()
+    fn delegate(&mut self) -> &mut Self::Delegate {
+        self.parent.parent.delegate()
     }
 }
 
