@@ -373,7 +373,7 @@ mod tests {
 
     fn with_object_builder<F: FnOnce(&mut TestObjectBuilder)>(
         f: F,
-    ) -> (BinaryObject, Box<[CompactDiagnostic<()>]>) {
+    ) -> (BinaryObject, Box<[CompactDiagnostic<(), ()>]>) {
         let mut diagnostics = TestDiagnosticsListener::new();
         let object = {
             let mut builder = ObjectBuilder::new();
@@ -395,7 +395,7 @@ mod tests {
         }
     }
 
-    fn unresolved(symbol: impl Into<String>) -> CompactDiagnostic<()> {
+    fn unresolved(symbol: impl Into<String>) -> CompactDiagnostic<(), ()> {
         CompactDiagnostic::new(
             Message::UnresolvedSymbol {
                 symbol: symbol.into(),

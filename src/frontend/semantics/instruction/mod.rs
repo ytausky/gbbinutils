@@ -1,7 +1,7 @@
 use self::branch::*;
 use super::{SemanticExpr, ValueContext};
 use crate::backend::ValueBuilder;
-use crate::diagnostics::span::Source;
+use crate::diagnostics::span::{MkSnippetRef, Source};
 use crate::diagnostics::{
     CompactDiagnostic, DelegateDiagnostics, DownstreamDiagnostics, EmitDiagnostic, Message,
 };
@@ -160,9 +160,10 @@ where
         let expr = if let Operand::Const(expr) = bit_number {
             expr
         } else {
+            let snippet_ref = self.value_context.mk_snippet_ref(&self.mnemonic.1);
             self.emit_diagnostic(CompactDiagnostic::new(
                 Message::MustBeBit {
-                    mnemonic: self.mnemonic.1.clone(),
+                    mnemonic: snippet_ref,
                 },
                 bit_number.span(),
             ));
@@ -273,7 +274,7 @@ impl<V: Source> Operand<V> {
     fn expect_specific_atom<D>(
         self,
         expected: AtomKind,
-        message: Message<V::Span>,
+        message: Message<D::SnippetRef>,
         diagnostics: &mut D,
     ) -> Result<(), ()>
     where
@@ -315,7 +316,7 @@ impl<V: Source> Operand<V> {
         }
     }
 
-    fn error<T, D>(self, message: Message<V::Span>, diagnostics: &mut D) -> Result<T, ()>
+    fn error<T, D>(self, message: Message<D::SnippetRef>, diagnostics: &mut D) -> Result<T, ()>
     where
         D: DownstreamDiagnostics<Span = V::Span>,
     {
@@ -843,7 +844,7 @@ mod tests {
     }
 
     pub struct AnalysisResult(
-        Result<Instruction<RelocExpr<TokenSpan>>, Vec<CompactDiagnostic<TokenSpan>>>,
+        Result<Instruction<RelocExpr<TokenSpan>>, Vec<CompactDiagnostic<TokenSpan, TokenSpan>>>,
     );
 
     impl AnalysisResult {

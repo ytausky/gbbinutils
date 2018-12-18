@@ -219,7 +219,7 @@ pub enum FileAction<S> {
         label: Option<(SymIdent, S)>,
         actions: Vec<StmtAction<S>>,
     },
-    EmitDiagnostic(CompactDiagnostic<S>),
+    EmitDiagnostic(CompactDiagnostic<S, S>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -237,38 +237,38 @@ pub enum StmtAction<S> {
         name: (SymIdent, S),
         actions: Vec<MacroInvocationAction<S>>,
     },
-    EmitDiagnostic(CompactDiagnostic<S>),
+    EmitDiagnostic(CompactDiagnostic<S, S>),
 }
 
 #[derive(Debug, PartialEq)]
 pub enum CommandAction<S> {
     AddArgument { actions: Vec<ExprAction<S>> },
-    EmitDiagnostic(CompactDiagnostic<S>),
+    EmitDiagnostic(CompactDiagnostic<S, S>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ExprAction<S> {
     PushAtom((ExprAtom<SymIdent, SymLiteral>, S)),
     ApplyOperator((ExprOperator, S)),
-    EmitDiagnostic(CompactDiagnostic<S>),
+    EmitDiagnostic(CompactDiagnostic<S, S>),
 }
 
 #[derive(Debug, PartialEq)]
 pub enum MacroParamsAction<S> {
     AddParameter((SymIdent, S)),
-    EmitDiagnostic(CompactDiagnostic<S>),
+    EmitDiagnostic(CompactDiagnostic<S, S>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TokenSeqAction<S> {
     PushToken((Token<SymIdent, SymCommand, SymLiteral>, S)),
-    EmitDiagnostic(CompactDiagnostic<S>),
+    EmitDiagnostic(CompactDiagnostic<S, S>),
 }
 
 #[derive(Debug, PartialEq)]
 pub enum MacroInvocationAction<S> {
     MacroArg(Vec<TokenSeqAction<S>>),
-    EmitDiagnostic(CompactDiagnostic<S>),
+    EmitDiagnostic(CompactDiagnostic<S, S>),
 }
 
 #[derive(Clone)]
@@ -312,7 +312,7 @@ pub fn command(id: impl Into<TokenRef>, args: impl Borrow<[SymExpr]>) -> Vec<Stm
 pub fn malformed_command(
     id: impl Into<TokenRef>,
     args: impl Borrow<[SymExpr]>,
-    diagnostic: CompactDiagnostic<SymSpan>,
+    diagnostic: CompactDiagnostic<SymSpan, SymSpan>,
 ) -> Vec<StmtAction<SymSpan>> {
     let id = id.into();
     vec![StmtAction::Command {
@@ -365,7 +365,7 @@ pub fn macro_def(
 pub fn malformed_macro_def_head(
     keyword: impl Into<TokenRef>,
     params: impl Borrow<[TokenRef]>,
-    diagnostic: CompactDiagnostic<SymSpan>,
+    diagnostic: CompactDiagnostic<SymSpan, SymSpan>,
 ) -> Vec<StmtAction<SymSpan>> {
     vec![StmtAction::MacroDef {
         keyword: keyword.into().into(),
@@ -384,7 +384,7 @@ pub fn malformed_macro_def(
     keyword: impl Into<TokenRef>,
     params: impl Borrow<[TokenRef]>,
     mut body: Vec<TokenSeqAction<SymSpan>>,
-    diagnostic: CompactDiagnostic<SymSpan>,
+    diagnostic: CompactDiagnostic<SymSpan, SymSpan>,
 ) -> Vec<StmtAction<SymSpan>> {
     body.push(TokenSeqAction::EmitDiagnostic(diagnostic));
     vec![StmtAction::MacroDef {
@@ -409,7 +409,7 @@ pub fn stmt_error(
 pub fn arg_error(
     message: Message<SymSpan>,
     highlight: impl Into<TokenRef>,
-) -> CompactDiagnostic<SymSpan> {
+) -> CompactDiagnostic<SymSpan, SymSpan> {
     CompactDiagnostic::new(message, highlight.into().into())
 }
 

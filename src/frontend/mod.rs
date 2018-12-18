@@ -573,7 +573,7 @@ mod tests {
     }
 
     impl<'a> EmitDiagnostic for Mock<'a> {
-        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<()>) {
+        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<(), ()>) {
             self.log
                 .borrow_mut()
                 .push(TestEvent::Diagnostic(diagnostic))
@@ -592,7 +592,7 @@ mod tests {
     enum TestEvent {
         AnalyzeTokens(Vec<Token<String>>),
         DefineSymbol(String, RelocExpr<()>),
-        Diagnostic(CompactDiagnostic<()>),
+        Diagnostic(CompactDiagnostic<(), ()>),
         EmitItem(Item<RelocExpr<()>>),
     }
 

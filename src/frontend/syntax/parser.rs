@@ -120,10 +120,9 @@ where
             }
             (_, span) => {
                 bump!(self);
+                let snippet_ref = self.context.mk_snippet_ref(&span);
                 self.context.emit_diagnostic(CompactDiagnostic::new(
-                    Message::UnexpectedToken {
-                        token: span.clone(),
-                    },
+                    Message::UnexpectedToken { token: snippet_ref },
                     span,
                 ));
                 self
@@ -201,9 +200,9 @@ where
     }
 }
 
-enum ExprParsingError<S> {
+enum ExprParsingError<S, R> {
     NothingParsed,
-    Other(CompactDiagnostic<S>),
+    Other(CompactDiagnostic<S, R>),
 }
 
 impl<'a, Id, C, L, I, Ctx> Parser<'a, (Token<Id, C, L>, Ctx::Span), I, Ctx>
@@ -219,7 +218,7 @@ where
                         match parser.token.0 {
                             Token::Eof => Message::UnexpectedEof,
                             _ => Message::UnexpectedToken {
-                                token: parser.token.1.clone(),
+                                token: parser.context.mk_snippet_ref(&parser.token.1),
                             },
                         },
                         parser.token.1.clone(),
@@ -234,7 +233,9 @@ where
             })
     }
 
-    fn parse_expression(mut self) -> Result<Self, (Self, ExprParsingError<Ctx::Span>)> {
+    fn parse_expression(
+        mut self,
+    ) -> Result<Self, (Self, ExprParsingError<Ctx::Span, Ctx::SnippetRef>)> {
         match self.token {
             (Token::OpeningParenthesis, span) => {
                 bump!(self);
@@ -247,7 +248,7 @@ where
     fn parse_parenthesized_expression(
         mut self,
         left: Ctx::Span,
-    ) -> Result<Self, (Self, ExprParsingError<Ctx::Span>)> {
+    ) -> Result<Self, (Self, ExprParsingError<Ctx::Span, Ctx::SnippetRef>)> {
         self = match self.parse_expression() {
             Ok(parser) => parser,
             Err((parser, error)) => {
@@ -282,7 +283,9 @@ where
         }
     }
 
-    fn parse_infix_expr(mut self) -> Result<Self, (Self, ExprParsingError<Ctx::Span>)> {
+    fn parse_infix_expr(
+        mut self,
+    ) -> Result<Self, (Self, ExprParsingError<Ctx::Span, Ctx::SnippetRef>)> {
         self = self.parse_atomic_expr()?;
         while let (Token::Plus, span) = self.token {
             bump!(self);
@@ -292,7 +295,9 @@ where
         Ok(self)
     }
 
-    fn parse_atomic_expr(mut self) -> Result<Self, (Self, ExprParsingError<Ctx::Span>)> {
+    fn parse_atomic_expr(
+        mut self,
+    ) -> Result<Self, (Self, ExprParsingError<Ctx::Span, Ctx::SnippetRef>)> {
         match self.token.0 {
             Token::Eof | Token::Eol => Err((self, ExprParsingError::NothingParsed)),
             Token::Ident(ident) => {
@@ -309,13 +314,12 @@ where
             }
             _ => {
                 let span = self.token.1;
+                let snippet_ref = self.context.mk_snippet_ref(&span);
                 bump!(self);
                 Err((
                     self,
                     ExprParsingError::Other(CompactDiagnostic::new(
-                        Message::UnexpectedToken {
-                            token: span.clone(),
-                        },
+                        Message::UnexpectedToken { token: snippet_ref },
                         span,
                     )),
                 ))
@@ -332,12 +336,13 @@ where
     fn parse_macro_param(mut self) -> Self {
         match self.token.0 {
             Token::Ident(ident) => self.context.add_parameter((ident, self.token.1)),
-            _ => self.context.emit_diagnostic(CompactDiagnostic::new(
-                Message::UnexpectedToken {
-                    token: self.token.1.clone(),
-                },
-                self.token.1.clone(),
-            )),
+            _ => {
+                let snippet_ref = self.context.mk_snippet_ref(&self.token.1);
+                self.context.emit_diagnostic(CompactDiagnostic::new(
+                    Message::UnexpectedToken { token: snippet_ref },
+                    self.token.1.clone(),
+                ))
+            }
         };
         bump!(self);
         self
@@ -383,10 +388,9 @@ where
         self = self.parse_list(delimiter, terminators, parser);
         if !self.token_is_in(terminators) {
             let unexpected_span = self.token.1;
+            let snippet_ref = self.context.mk_snippet_ref(&unexpected_span);
             self.context.emit_diagnostic(CompactDiagnostic::new(
-                Message::UnexpectedToken {
-                    token: unexpected_span.clone(),
-                },
+                Message::UnexpectedToken { token: snippet_ref },
                 unexpected_span,
             ));
             bump!(self);
@@ -470,7 +474,7 @@ mod tests {
     }
 
     impl EmitDiagnostic for FileActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
+        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.actions.push(FileAction::EmitDiagnostic(diagnostic))
         }
     }
@@ -514,7 +518,7 @@ mod tests {
     }
 
     impl EmitDiagnostic for StmtActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
+        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.actions.push(StmtAction::EmitDiagnostic(diagnostic))
         }
     }
@@ -588,7 +592,7 @@ mod tests {
     }
 
     impl EmitDiagnostic for CommandActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
+        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.actions.push(CommandAction::EmitDiagnostic(diagnostic))
         }
     }
@@ -642,7 +646,7 @@ mod tests {
     }
 
     impl EmitDiagnostic for ArgActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
+        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.expr_action_collector.emit_diagnostic(diagnostic)
         }
     }
@@ -701,7 +705,7 @@ mod tests {
     }
 
     impl EmitDiagnostic for ExprActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
+        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.actions.push(ExprAction::EmitDiagnostic(diagnostic))
         }
     }
@@ -751,7 +755,7 @@ mod tests {
     }
 
     impl EmitDiagnostic for MacroParamsActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
+        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.actions
                 .push(MacroParamsAction::EmitDiagnostic(diagnostic))
         }
@@ -802,7 +806,7 @@ mod tests {
     }
 
     impl EmitDiagnostic for MacroBodyActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
+        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.actions
                 .push(TokenSeqAction::EmitDiagnostic(diagnostic))
         }
@@ -853,7 +857,7 @@ mod tests {
     }
 
     impl EmitDiagnostic for MacroInvocationActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
+        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.actions
                 .push(MacroInvocationAction::EmitDiagnostic(diagnostic))
         }
@@ -906,7 +910,7 @@ mod tests {
     }
 
     impl EmitDiagnostic for MacroArgActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan>) {
+        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.actions
                 .push(TokenSeqAction::EmitDiagnostic(diagnostic))
         }
@@ -1170,7 +1174,10 @@ mod tests {
         assert_eq!(parsed_rpn_expr, expected);
     }
 
-    fn assert_eq_expr_diagnostics(mut input: InputTokens, expected: CompactDiagnostic<SymSpan>) {
+    fn assert_eq_expr_diagnostics(
+        mut input: InputTokens,
+        expected: CompactDiagnostic<SymSpan, SymSpan>,
+    ) {
         let expr_actions = parse_sym_expr(&mut input);
         assert_eq!(expr_actions, [ExprAction::EmitDiagnostic(expected)])
     }

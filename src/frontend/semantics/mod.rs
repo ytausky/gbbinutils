@@ -173,7 +173,7 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> MkSnippetRef for CommandActions<'a, 
 }
 
 impl<'a, F: Frontend<D>, B, D: Diagnostics> EmitDiagnostic for CommandActions<'a, F, B, D> {
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<D::Span>) {
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<D::Span, D::SnippetRef>) {
         self.has_errors = true;
         self.parent.emit_diagnostic(diagnostic)
     }
@@ -474,6 +474,14 @@ impl<'a, B: 'a, D: 'a> ValueContext<'a, B, D> {
     }
 }
 
+impl<'a, B: 'a, D: DownstreamDiagnostics + 'a> DelegateDiagnostics for ValueContext<'a, B, D> {
+    type Delegate = D;
+
+    fn diagnostics(&mut self) -> &mut Self::Delegate {
+        self.diagnostics
+    }
+}
+
 trait AnalyzeExpr {
     type Span;
     type Value;
@@ -505,7 +513,7 @@ where
             ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(_))) => {
                 Err(CompactDiagnostic::new(
                     Message::KeywordInExpr {
-                        keyword: expr.span.clone(),
+                        keyword: self.mk_snippet_ref(&expr.span),
                     },
                     expr.span,
                 ))
@@ -545,7 +553,7 @@ pub struct TokenSpan {
 }
 
 #[cfg(test)]
-pub struct DiagnosticsCollector<S>(Vec<CompactDiagnostic<S>>);
+pub struct DiagnosticsCollector<S>(Vec<CompactDiagnostic<S, S>>);
 
 #[cfg(test)]
 impl<S: Clone + Debug + PartialEq> Span for DiagnosticsCollector<S> {
@@ -573,7 +581,7 @@ impl<S: Clone + Debug + PartialEq> MkSnippetRef for DiagnosticsCollector<S> {
 
 #[cfg(test)]
 impl<S: Clone + Debug + PartialEq> EmitDiagnostic for DiagnosticsCollector<S> {
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span>) {
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span, Self::SnippetRef>) {
         self.0.push(diagnostic)
     }
 }
@@ -747,7 +755,7 @@ mod tests {
     }
 
     impl<'a> EmitDiagnostic for TestDiagnostics<'a> {
-        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span>) {
+        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span, Self::SnippetRef>) {
             self.operations
                 .borrow_mut()
                 .push(TestOperation::EmitDiagnostic(diagnostic))
@@ -819,7 +827,7 @@ mod tests {
         InvokeMacro(String, Vec<Vec<Token<String>>>),
         DefineMacro(String, Vec<String>, Vec<Token<String>>),
         DefineSymbol(String, RelocExpr<()>),
-        EmitDiagnostic(CompactDiagnostic<()>),
+        EmitDiagnostic(CompactDiagnostic<(), ()>),
         EmitItem(backend::Item<RelocExpr<()>>),
         SetOrigin(RelocExpr<()>),
     }

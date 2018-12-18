@@ -1,6 +1,6 @@
 use super::{Analysis, Operand, SemanticExpr};
 use crate::backend::{ValueBuilder, Width};
-use crate::diagnostics::span::{MergeSpans, Source, Span};
+use crate::diagnostics::span::{MergeSpans, MkSnippetRef, Source, Span};
 use crate::diagnostics::{CompactDiagnostic, DownstreamDiagnostics, EmitDiagnostic, Message};
 use crate::frontend::semantics::operand::AtomKind;
 use crate::instruction::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
@@ -33,27 +33,27 @@ where
                 self.analyze_16_bit_ld(dest, LdOperand::Const(src))
             }
             (LdDest::Byte(dest), LdOperand::Other(LdDest::Word(src))) => {
-                let merged_span = self.merge_spans(&dest.span(), &src.span());
-                self.emit_diagnostic(CompactDiagnostic::new(
+                let diagnostic = CompactDiagnostic::new(
                     Message::LdWidthMismatch {
                         src_width: Width::Word,
-                        src: src.span(),
-                        dest: dest.span(),
+                        src: self.mk_snippet_ref(&src.span()),
+                        dest: self.mk_snippet_ref(&dest.span()),
                     },
-                    merged_span,
-                ));
+                    self.merge_spans(&dest.span(), &src.span()),
+                );
+                self.emit_diagnostic(diagnostic);
                 Err(())
             }
             (LdDest::Word(dest), LdOperand::Other(LdDest::Byte(src))) => {
-                let merged_span = self.merge_spans(&dest.span(), &src.span());
-                self.emit_diagnostic(CompactDiagnostic::new(
+                let diagnostic = CompactDiagnostic::new(
                     Message::LdWidthMismatch {
                         src_width: Width::Byte,
-                        src: src.span(),
-                        dest: dest.span(),
+                        src: self.mk_snippet_ref(&src.span()),
+                        dest: self.mk_snippet_ref(&dest.span()),
                     },
-                    merged_span,
-                ));
+                    self.merge_spans(&dest.span(), &src.span()),
+                );
+                self.emit_diagnostic(diagnostic);
                 Err(())
             }
         }
@@ -69,18 +69,15 @@ where
                 LdDest8::Simple(SimpleOperand::DerefHl, dest),
                 LdOperand::Other(LdDest8::Simple(SimpleOperand::DerefHl, src)),
             ) => {
-                let merged_span = self
-                    .value_context
-                    .diagnostics
-                    .merge_spans(&self.mnemonic.1, &src);
-                self.emit_diagnostic(CompactDiagnostic::new(
+                let diagnostic = CompactDiagnostic::new(
                     Message::LdDerefHlDerefHl {
-                        mnemonic: self.mnemonic.1.clone(),
-                        dest,
-                        src: src.clone(),
+                        mnemonic: self.value_context.mk_snippet_ref(&self.mnemonic.1),
+                        dest: self.mk_snippet_ref(&dest),
+                        src: self.mk_snippet_ref(&src),
                     },
-                    merged_span,
-                ));
+                    self.value_context.merge_spans(&self.mnemonic.1, &src),
+                );
+                self.emit_diagnostic(diagnostic);
                 Err(())
             }
             (LdDest8::Simple(dest, _), LdOperand::Other(LdDest8::Simple(src, _))) => {

@@ -98,10 +98,11 @@ where
     match try_deref_operand_keyword(keyword.0) {
         Ok(atom) => Ok(Operand::Atom(atom, deref)),
         Err(category) => {
+            let snippet_ref = diagnostics.mk_snippet_ref(&keyword.1);
             diagnostics.emit_diagnostic(CompactDiagnostic::new(
                 Message::CannotDereference {
                     category,
-                    operand: keyword.1,
+                    operand: snippet_ref,
                 },
                 deref,
             ));
@@ -160,9 +161,10 @@ where
             _ => AtomKind::Reg16(Reg16::Hl),
         },
         Hld | Hli => {
+            let snippet_ref = diagnostics.mk_snippet_ref(&span);
             diagnostics.emit_diagnostic(CompactDiagnostic::new(
                 Message::MustBeDeref {
-                    operand: span.clone(),
+                    operand: snippet_ref,
                 },
                 span.clone(),
             ));
@@ -252,7 +254,7 @@ mod tests {
     fn analyze_operand<I: Into<String>, S: Clone + Debug + PartialEq>(
         expr: SemanticExpr<I, S>,
         context: Context,
-    ) -> Result<Operand<RelocExpr<S>>, Vec<CompactDiagnostic<S>>>
+    ) -> Result<Operand<RelocExpr<S>>, Vec<CompactDiagnostic<S, S>>>
     where
         DiagnosticsCollector<S>: DownstreamDiagnostics<Span = S>,
     {

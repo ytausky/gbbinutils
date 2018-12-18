@@ -43,7 +43,7 @@ impl<T: DelegateDiagnostics> MkSnippetRef for T {
 }
 
 impl<T: DelegateDiagnostics> EmitDiagnostic for T {
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span>) {
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span, Self::SnippetRef>) {
         self.diagnostics().emit_diagnostic(diagnostic)
     }
 }
@@ -94,7 +94,7 @@ where
     C: ContextFactory,
     O: EmitDiagnostic<Span = C::Span, SnippetRef = C::SnippetRef>,
 {
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span>) {
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span, Self::SnippetRef>) {
         self.output.emit_diagnostic(diagnostic)
     }
 }
@@ -165,7 +165,7 @@ impl DiagnosticsOutput for TerminalOutput {
 }
 
 pub trait EmitDiagnostic: SnippetRef + Span {
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span>);
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span, Self::SnippetRef>);
 }
 
 pub struct OutputForwarder<'a> {
@@ -182,7 +182,7 @@ impl<'a> Span for OutputForwarder<'a> {
 }
 
 impl<'a> EmitDiagnostic for OutputForwarder<'a> {
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SpanData>) {
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SpanData, SpanData>) {
         self.output
             .emit(diagnostic.elaborate(&self.codebase.borrow()))
     }
@@ -210,12 +210,12 @@ impl<S> SnippetRef for IgnoreDiagnostics<S> {
 
 #[cfg(test)]
 impl<S: Clone + fmt::Debug + PartialEq> EmitDiagnostic for IgnoreDiagnostics<S> {
-    fn emit_diagnostic(&mut self, _: CompactDiagnostic<S>) {}
+    fn emit_diagnostic(&mut self, _: CompactDiagnostic<S, S>) {}
 }
 
 #[cfg(test)]
 pub struct TestDiagnosticsListener {
-    pub diagnostics: RefCell<Vec<CompactDiagnostic<()>>>,
+    pub diagnostics: RefCell<Vec<CompactDiagnostic<(), ()>>>,
 }
 
 #[cfg(test)]
@@ -239,19 +239,19 @@ impl SnippetRef for TestDiagnosticsListener {
 
 #[cfg(test)]
 impl EmitDiagnostic for TestDiagnosticsListener {
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<()>) {
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<(), ()>) {
         self.diagnostics.borrow_mut().push(diagnostic)
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct CompactDiagnostic<S> {
-    pub message: Message<S>,
+pub struct CompactDiagnostic<S, R> {
+    pub message: Message<R>,
     pub highlight: S,
 }
 
-impl<S> CompactDiagnostic<S> {
-    pub fn new(message: Message<S>, highlight: S) -> CompactDiagnostic<S> {
+impl<S, R> CompactDiagnostic<S, R> {
+    pub fn new(message: Message<R>, highlight: S) -> CompactDiagnostic<S, R> {
         CompactDiagnostic { message, highlight }
     }
 }
@@ -300,7 +300,7 @@ pub fn mk_diagnostic(file: impl Into<String>, message: &Message<SpanData>) -> Di
     }
 }
 
-impl CompactDiagnostic<SpanData> {
+impl CompactDiagnostic<SpanData, SpanData> {
     fn elaborate<'a, T: From<&'a str>>(&self, codebase: &'a TextCache) -> Diagnostic<T> {
         Diagnostic {
             clauses: vec![self.main_clause(codebase)],
