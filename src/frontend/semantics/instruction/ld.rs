@@ -17,8 +17,8 @@ where
         let dest = self.next_operand_out_of(2)?;
         let src = self.next_operand_out_of(2)?;
         match (
-            dest.into_ld_dest(self.expr_analysis_context.diagnostics)?,
-            src.into_ld_src(self.expr_analysis_context.diagnostics)?,
+            dest.into_ld_dest(self.value_context.diagnostics)?,
+            src.into_ld_src(self.value_context.diagnostics)?,
         ) {
             (LdDest::Byte(dest), LdOperand::Other(LdDest::Byte(src))) => {
                 self.analyze_8_bit_ld(dest, src)
@@ -70,7 +70,7 @@ where
                 LdOperand::Other(LdDest8::Simple(SimpleOperand::DerefHl, src)),
             ) => {
                 let merged_span = self
-                    .expr_analysis_context
+                    .value_context
                     .diagnostics
                     .merge_spans(&self.mnemonic.1, &src);
                 self.emit_diagnostic(CompactDiagnostic::new(
@@ -90,11 +90,11 @@ where
                 Ok(Instruction::Ld(Ld::Immediate8(dest, expr)))
             }
             (LdDest8::Special(dest), src) => {
-                src.expect_a(self.expr_analysis_context.diagnostics)?;
+                src.expect_a(self.value_context.diagnostics)?;
                 analyze_special_ld(dest, Direction::FromA)
             }
             (dest, LdOperand::Other(LdDest8::Special(src))) => {
-                dest.expect_a(self.expr_analysis_context.diagnostics)?;
+                dest.expect_a(self.value_context.diagnostics)?;
                 analyze_special_ld(src, Direction::IntoA)
             }
         }

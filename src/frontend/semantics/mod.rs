@@ -292,7 +292,7 @@ fn analyze_mnemonic<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
     let result = instruction::analyze_instruction(
         name,
         args.into_iter(),
-        ExprAnalysisContext::new(
+        ValueContext::new(
             &mut actions.session.backend.build_value(),
             actions.session.diagnostics,
         ),
@@ -460,14 +460,14 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> syntax::TokenSeqContext
     }
 }
 
-pub struct ExprAnalysisContext<'a, B: 'a, D: 'a> {
+pub struct ValueContext<'a, B: 'a, D: 'a> {
     builder: &'a mut B,
     diagnostics: &'a mut D,
 }
 
-impl<'a, B: 'a, D: 'a> ExprAnalysisContext<'a, B, D> {
+impl<'a, B: 'a, D: 'a> ValueContext<'a, B, D> {
     fn new(builder: &'a mut B, diagnostics: &'a mut D) -> Self {
-        ExprAnalysisContext {
+        ValueContext {
             builder,
             diagnostics,
         }
@@ -483,7 +483,7 @@ trait AnalyzeExpr {
         I: Into<String>;
 }
 
-impl<'a, B, D> AnalyzeExpr for ExprAnalysisContext<'a, B, D>
+impl<'a, B, D> AnalyzeExpr for ValueContext<'a, B, D>
 where
     B: ValueBuilder<Span = D::Span>,
     D: DownstreamDiagnostics,

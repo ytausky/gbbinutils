@@ -1,6 +1,5 @@
 use super::{
-    AnalyzeExpr, CommandArgs, Directive, ExprAnalysisContext, SemanticActions, SemanticAtom,
-    SemanticExpr,
+    AnalyzeExpr, CommandArgs, Directive, SemanticActions, SemanticAtom, SemanticExpr, ValueContext,
 };
 use crate::backend;
 use crate::backend::{Backend, BinaryOperator, ValueBuilder, Width};
@@ -66,8 +65,7 @@ where
         for arg in self.args {
             let expr = {
                 let builder = &mut self.actions.session.backend.build_value();
-                let mut context =
-                    ExprAnalysisContext::new(builder, self.actions.session.diagnostics);
+                let mut context = ValueContext::new(builder, self.actions.session.diagnostics);
                 if let Ok(expr) = context.analyze_expr(arg) {
                     expr
                 } else {
@@ -91,7 +89,7 @@ where
                 return;
             };
             let builder = &mut self.actions.session.backend.build_value();
-            let mut context = ExprAnalysisContext::new(builder, self.actions.session.diagnostics);
+            let mut context = ValueContext::new(builder, self.actions.session.diagnostics);
             let count = if let Ok(count) = context.analyze_expr(arg) {
                 count
             } else {
@@ -113,7 +111,7 @@ where
 
         let value = {
             let builder = &mut self.actions.session.backend.build_value();
-            let mut context = ExprAnalysisContext::new(builder, self.actions.session.diagnostics);
+            let mut context = ValueContext::new(builder, self.actions.session.diagnostics);
             if let Ok(value) = context.analyze_expr(arg) {
                 value
             } else {
@@ -146,7 +144,7 @@ where
             };
         let expr = {
             let builder = &mut self.actions.session.backend.build_value();
-            let mut context = ExprAnalysisContext::new(builder, self.actions.session.diagnostics);
+            let mut context = ValueContext::new(builder, self.actions.session.diagnostics);
             if let Ok(expr) = context.analyze_expr(arg) {
                 expr
             } else {

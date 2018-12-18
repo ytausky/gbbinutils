@@ -1,6 +1,4 @@
-use super::{
-    AnalyzeExpr, ExprAnalysisContext, ExprVariant, SemanticAtom, SemanticExpr, SemanticUnary,
-};
+use super::{AnalyzeExpr, ExprVariant, SemanticAtom, SemanticExpr, SemanticUnary, ValueContext};
 use crate::backend::ValueBuilder;
 use crate::diagnostics::*;
 use crate::frontend::syntax::keyword as kw;
@@ -48,7 +46,7 @@ pub enum Context {
 pub fn analyze_operand<I, B, D>(
     expr: SemanticExpr<I, D::Span>,
     context: Context,
-    expr_analysis_context: &mut ExprAnalysisContext<B, D>,
+    value_context: &mut ValueContext<B, D>,
 ) -> Result<Operand<B::Value>, ()>
 where
     I: Into<String>,
@@ -57,23 +55,19 @@ where
 {
     match expr.variant {
         ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(keyword))) => {
-            analyze_keyword_operand(
-                (keyword, expr.span),
-                context,
-                expr_analysis_context.diagnostics,
-            )
+            analyze_keyword_operand((keyword, expr.span), context, value_context.diagnostics)
         }
         ExprVariant::Unary(SemanticUnary::Parentheses, inner) => {
-            analyze_deref_operand(*inner, expr.span, expr_analysis_context)
+            analyze_deref_operand(*inner, expr.span, value_context)
         }
-        _ => Ok(Operand::Const(expr_analysis_context.analyze_expr(expr)?)),
+        _ => Ok(Operand::Const(value_context.analyze_expr(expr)?)),
     }
 }
 
 fn analyze_deref_operand<I, B, D>(
     expr: SemanticExpr<I, D::Span>,
     deref_span: D::Span,
-    expr_analysis_context: &mut ExprAnalysisContext<B, D>,
+    value_context: &mut ValueContext<B, D>,
 ) -> Result<Operand<B::Value>, ()>
 where
     I: Into<String>,
@@ -85,10 +79,10 @@ where
             analyze_deref_operand_keyword(
                 (keyword, expr.span),
                 deref_span,
-                expr_analysis_context.diagnostics,
+                value_context.diagnostics,
             )
         }
-        _ => Ok(Operand::Deref(expr_analysis_context.analyze_expr(expr)?)),
+        _ => Ok(Operand::Deref(value_context.analyze_expr(expr)?)),
     }
 }
 
@@ -266,7 +260,7 @@ mod tests {
         let result = super::analyze_operand(
             expr,
             context,
-            &mut ExprAnalysisContext::new(&mut RelocExprBuilder::new(), &mut collector),
+            &mut ValueContext::new(&mut RelocExprBuilder::new(), &mut collector),
         );
         result.map_err(|_| collector.0)
     }

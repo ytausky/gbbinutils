@@ -35,7 +35,7 @@ where
         let variant = analyze_branch_variant(
             (branch, &self.mnemonic.1),
             target,
-            self.expr_analysis_context.diagnostics,
+            self.value_context.diagnostics,
         )?;
         match variant {
             BranchVariant::Unconditional(branch) => match condition {
@@ -61,15 +61,12 @@ where
             if let Some(Operand::Atom(AtomKind::Condition(condition), range)) = first_operand {
                 (
                     Some((condition, range)),
-                    analyze_branch_target(
-                        self.next_operand()?,
-                        self.expr_analysis_context.diagnostics,
-                    )?,
+                    analyze_branch_target(self.next_operand()?, self.value_context.diagnostics)?,
                 )
             } else {
                 (
                     None,
-                    analyze_branch_target(first_operand, self.expr_analysis_context.diagnostics)?,
+                    analyze_branch_target(first_operand, self.value_context.diagnostics)?,
                 )
             },
         )

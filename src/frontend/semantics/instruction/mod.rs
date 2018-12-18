@@ -1,5 +1,5 @@
 use self::branch::*;
-use super::{ExprAnalysisContext, SemanticExpr};
+use super::{SemanticExpr, ValueContext};
 use crate::backend::ValueBuilder;
 use crate::diagnostics::span::Source;
 use crate::diagnostics::{
@@ -15,7 +15,7 @@ mod ld;
 pub fn analyze_instruction<Id: Into<String>, I, B, D>(
     mnemonic: (kw::Mnemonic, D::Span),
     operands: I,
-    expr_analysis_context: ExprAnalysisContext<B, D>,
+    value_context: ValueContext<B, D>,
 ) -> Result<Instruction<B::Value>, ()>
 where
     I: IntoIterator<Item = SemanticExpr<Id, D::Span>>,
@@ -23,20 +23,20 @@ where
     D: DownstreamDiagnostics,
 {
     let mnemonic: (Mnemonic, _) = (mnemonic.0.into(), mnemonic.1);
-    Analysis::new(mnemonic, operands.into_iter(), expr_analysis_context).run()
+    Analysis::new(mnemonic, operands.into_iter(), value_context).run()
 }
 
 struct Analysis<'a, I, B: 'a, D: DownstreamDiagnostics + 'a> {
     mnemonic: (Mnemonic, D::Span),
     operands: OperandCounter<I>,
-    expr_analysis_context: ExprAnalysisContext<'a, B, D>,
+    value_context: ValueContext<'a, B, D>,
 }
 
 impl<'a, I, B: 'a, D: DownstreamDiagnostics + 'a> DelegateDiagnostics for Analysis<'a, I, B, D> {
     type Delegate = D;
 
     fn delegate(&mut self) -> &mut Self::Delegate {
-        self.expr_analysis_context.diagnostics
+        self.value_context.diagnostics
     }
 }
 
@@ -50,12 +50,12 @@ where
     fn new(
         mnemonic: (Mnemonic, D::Span),
         operands: I,
-        expr_analysis_context: ExprAnalysisContext<'a, B, D>,
+        value_context: ValueContext<'a, B, D>,
     ) -> Analysis<'a, I, B, D> {
         Analysis {
             mnemonic,
             operands: OperandCounter::new(operands),
-            expr_analysis_context,
+            value_context,
         }
     }
 
@@ -132,7 +132,7 @@ where
             first_operand.expect_specific_atom(
                 AtomKind::Simple(SimpleOperand::A),
                 Message::DestMustBeA,
-                self.expr_analysis_context.diagnostics,
+                self.value_context.diagnostics,
             )?;
             second_operand
         };
@@ -171,7 +171,7 @@ where
         Ok(Instruction::Bit(
             operation,
             expr,
-            operand.expect_simple(self.expr_analysis_context.diagnostics)?,
+            operand.expect_simple(self.value_context.diagnostics)?,
         ))
     }
 
@@ -181,10 +181,10 @@ where
         src.expect_specific_atom(
             AtomKind::Reg16(Reg16::Sp),
             Message::SrcMustBeSp,
-            self.expr_analysis_context.diagnostics,
+            self.value_context.diagnostics,
         )?;
         Ok(Instruction::Ldhl(
-            offset.expect_const(self.expr_analysis_context.diagnostics)?,
+            offset.expect_const(self.value_context.diagnostics)?,
         ))
     }
 
@@ -192,7 +192,7 @@ where
         let operand = self.next_operand_out_of(1)?;
         Ok(Instruction::Misc(
             operation,
-            operand.expect_simple(self.expr_analysis_context.diagnostics)?,
+            operand.expect_simple(self.value_context.diagnostics)?,
         ))
     }
 
@@ -202,7 +202,7 @@ where
     ) -> Result<Instruction<B::Value>, ()> {
         let reg_pair = self
             .next_operand_out_of(1)?
-            .expect_reg_pair(self.expr_analysis_context.diagnostics)?;
+            .expect_reg_pair(self.value_context.diagnostics)?;
         let instruction_ctor = match operation {
             StackOperation::Push => Instruction::Push,
             StackOperation::Pop => Instruction::Pop,
@@ -227,7 +227,7 @@ where
     fn analyze_rst(&mut self) -> Result<Instruction<B::Value>, ()> {
         Ok(Instruction::Rst(
             self.next_operand_out_of(1)?
-                .expect_const(self.expr_analysis_context.diagnostics)?,
+                .expect_const(self.value_context.diagnostics)?,
         ))
     }
 
@@ -246,12 +246,8 @@ where
 
     fn next_operand(&mut self) -> Result<Option<Operand<B::Value>>, ()> {
         self.operands.next().map_or(Ok(None), |expr| {
-            operand::analyze_operand(
-                expr,
-                self.mnemonic.0.context(),
-                &mut self.expr_analysis_context,
-            )
-            .map(Some)
+            operand::analyze_operand(expr, self.mnemonic.0.context(), &mut self.value_context)
+                .map(Some)
         })
     }
 
@@ -262,7 +258,7 @@ where
         if actual == expected {
             Ok(())
         } else {
-            self.expr_analysis_context
+            self.value_context
                 .diagnostics
                 .emit_diagnostic(CompactDiagnostic::new(
                     Message::OperandCount { actual, expected },
@@ -876,7 +872,7 @@ mod tests {
         let result = analyze_instruction(
             (mnemonic, TokenId::Mnemonic.into()),
             operands.into_iter().enumerate().map(add_token_spans),
-            ExprAnalysisContext::new(&mut RelocExprBuilder::new(), &mut collector),
+            ValueContext::new(&mut RelocExprBuilder::new(), &mut collector),
         );
         AnalysisResult(result.map_err(|_| collector.0))
     }
