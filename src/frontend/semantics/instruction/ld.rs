@@ -1,9 +1,9 @@
 use super::{Analysis, Operand, SemanticExpr};
 use crate::backend::{ValueBuilder, Width};
+use crate::diagnostics::span::{MergeSpans, Source, Span};
 use crate::diagnostics::{CompactDiagnostic, DownstreamDiagnostics, EmitDiagnostic, Message};
 use crate::frontend::semantics::operand::AtomKind;
 use crate::instruction::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
-use crate::span::{Source, Span};
 use std::fmt::Debug;
 
 impl<'a, Id, I, B, D> Analysis<'a, I, B, D>
@@ -17,8 +17,8 @@ where
         let dest = self.next_operand_out_of(2)?;
         let src = self.next_operand_out_of(2)?;
         match (
-            dest.into_ld_dest(self.diagnostics)?,
-            src.into_ld_src(self.diagnostics)?,
+            dest.into_ld_dest(self.expr_analysis_context.diagnostics)?,
+            src.into_ld_src(self.expr_analysis_context.diagnostics)?,
         ) {
             (LdDest::Byte(dest), LdOperand::Other(LdDest::Byte(src))) => {
                 self.analyze_8_bit_ld(dest, src)
@@ -33,8 +33,8 @@ where
                 self.analyze_16_bit_ld(dest, LdOperand::Const(src))
             }
             (LdDest::Byte(dest), LdOperand::Other(LdDest::Word(src))) => {
-                let merged_span = self.diagnostics.merge_spans(&dest.span(), &src.span());
-                self.diagnostics.emit_diagnostic(CompactDiagnostic::new(
+                let merged_span = self.merge_spans(&dest.span(), &src.span());
+                self.emit_diagnostic(CompactDiagnostic::new(
                     Message::LdWidthMismatch {
                         src_width: Width::Word,
                         src: src.span(),
@@ -45,8 +45,8 @@ where
                 Err(())
             }
             (LdDest::Word(dest), LdOperand::Other(LdDest::Byte(src))) => {
-                let merged_span = self.diagnostics.merge_spans(&dest.span(), &src.span());
-                self.diagnostics.emit_diagnostic(CompactDiagnostic::new(
+                let merged_span = self.merge_spans(&dest.span(), &src.span());
+                self.emit_diagnostic(CompactDiagnostic::new(
                     Message::LdWidthMismatch {
                         src_width: Width::Byte,
                         src: src.span(),
@@ -69,8 +69,11 @@ where
                 LdDest8::Simple(SimpleOperand::DerefHl, dest),
                 LdOperand::Other(LdDest8::Simple(SimpleOperand::DerefHl, src)),
             ) => {
-                let merged_span = self.diagnostics.merge_spans(&self.mnemonic.1, &src);
-                self.diagnostics.emit_diagnostic(CompactDiagnostic::new(
+                let merged_span = self
+                    .expr_analysis_context
+                    .diagnostics
+                    .merge_spans(&self.mnemonic.1, &src);
+                self.emit_diagnostic(CompactDiagnostic::new(
                     Message::LdDerefHlDerefHl {
                         mnemonic: self.mnemonic.1.clone(),
                         dest,
@@ -87,11 +90,11 @@ where
                 Ok(Instruction::Ld(Ld::Immediate8(dest, expr)))
             }
             (LdDest8::Special(dest), src) => {
-                src.expect_a(self.diagnostics)?;
+                src.expect_a(self.expr_analysis_context.diagnostics)?;
                 analyze_special_ld(dest, Direction::FromA)
             }
             (dest, LdOperand::Other(LdDest8::Special(src))) => {
-                dest.expect_a(self.diagnostics)?;
+                dest.expect_a(self.expr_analysis_context.diagnostics)?;
                 analyze_special_ld(src, Direction::IntoA)
             }
         }
@@ -107,9 +110,8 @@ where
                 Ok(Instruction::Ld(Ld::SpHl))
             }
             (LdDest16::Reg16(_, dest_span), LdOperand::Other(LdDest16::Reg16(_, src_span))) => {
-                let merged_span = self.diagnostics.merge_spans(&dest_span, &src_span);
-                self.diagnostics
-                    .emit_diagnostic(CompactDiagnostic::new(Message::LdSpHlOperands, merged_span));
+                let merged_span = self.merge_spans(&dest_span, &src_span);
+                self.emit_diagnostic(CompactDiagnostic::new(Message::LdSpHlOperands, merged_span));
                 Err(())
             }
             (LdDest16::Reg16(dest, _), LdOperand::Const(expr)) => {

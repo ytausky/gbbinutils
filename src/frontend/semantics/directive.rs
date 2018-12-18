@@ -1,5 +1,6 @@
 use super::{
-    analyze_reloc_expr, CommandArgs, Directive, SemanticActions, SemanticAtom, SemanticExpr,
+    AnalyzeExpr, CommandArgs, Directive, ExprAnalysisContext, SemanticActions, SemanticAtom,
+    SemanticExpr,
 };
 use crate::backend;
 use crate::backend::{Backend, BinaryOperator, ValueBuilder, Width};
@@ -63,14 +64,15 @@ where
 
     fn analyze_data(self, width: Width) {
         for arg in self.args {
-            let expr = if let Ok(expr) = analyze_reloc_expr(
-                arg,
-                &mut self.actions.session.backend.build_value(),
-                self.actions.session.diagnostics,
-            ) {
-                expr
-            } else {
-                return;
+            let expr = {
+                let builder = &mut self.actions.session.backend.build_value();
+                let mut context =
+                    ExprAnalysisContext::new(builder, self.actions.session.diagnostics);
+                if let Ok(expr) = context.analyze_expr(arg) {
+                    expr
+                } else {
+                    return;
+                }
             };
             self.actions
                 .session
@@ -89,9 +91,8 @@ where
                 return;
             };
             let builder = &mut self.actions.session.backend.build_value();
-            let count = if let Ok(count) =
-                analyze_reloc_expr(arg, builder, self.actions.session.diagnostics)
-            {
+            let mut context = ExprAnalysisContext::new(builder, self.actions.session.diagnostics);
+            let count = if let Ok(count) = context.analyze_expr(arg) {
                 count
             } else {
                 return;
@@ -109,14 +110,15 @@ where
             } else {
                 return;
             };
-        let value = if let Ok(value) = analyze_reloc_expr(
-            arg,
-            &mut self.actions.session.backend.build_value(),
-            self.actions.session.diagnostics,
-        ) {
-            value
-        } else {
-            return;
+
+        let value = {
+            let builder = &mut self.actions.session.backend.build_value();
+            let mut context = ExprAnalysisContext::new(builder, self.actions.session.diagnostics);
+            if let Ok(value) = context.analyze_expr(arg) {
+                value
+            } else {
+                return;
+            }
         };
         self.actions.session.backend.define_symbol(symbol, value)
     }
@@ -142,14 +144,14 @@ where
             } else {
                 return;
             };
-        let expr = if let Ok(expr) = analyze_reloc_expr(
-            arg,
-            &mut self.actions.session.backend.build_value(),
-            self.actions.session.diagnostics,
-        ) {
-            expr
-        } else {
-            return;
+        let expr = {
+            let builder = &mut self.actions.session.backend.build_value();
+            let mut context = ExprAnalysisContext::new(builder, self.actions.session.diagnostics);
+            if let Ok(expr) = context.analyze_expr(arg) {
+                expr
+            } else {
+                return;
+            }
         };
         self.actions.session.backend.set_origin(expr)
     }

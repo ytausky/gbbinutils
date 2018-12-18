@@ -1,6 +1,6 @@
 use super::{Analysis, AtomKind, Operand, SemanticExpr, SimpleOperand};
 use crate::backend::ValueBuilder;
-use crate::diagnostics::{CompactDiagnostic, DownstreamDiagnostics, Message};
+use crate::diagnostics::{CompactDiagnostic, DownstreamDiagnostics, EmitDiagnostic, Message};
 use crate::instruction::{Branch, Condition, Instruction, Nullary};
 use crate::span::{Source, Span};
 
@@ -32,12 +32,16 @@ where
 {
     pub fn analyze_branch(&mut self, branch: BranchKind) -> Result<Instruction<B::Value>, ()> {
         let (condition, target) = self.collect_branch_operands()?;
-        let variant = analyze_branch_variant((branch, &self.mnemonic.1), target, self.diagnostics)?;
+        let variant = analyze_branch_variant(
+            (branch, &self.mnemonic.1),
+            target,
+            self.expr_analysis_context.diagnostics,
+        )?;
         match variant {
             BranchVariant::Unconditional(branch) => match condition {
                 None => Ok(branch.into()),
                 Some((_, condition_span)) => {
-                    self.diagnostics.emit_diagnostic(CompactDiagnostic::new(
+                    self.emit_diagnostic(CompactDiagnostic::new(
                         Message::AlwaysUnconditional,
                         condition_span,
                     ));
@@ -57,12 +61,15 @@ where
             if let Some(Operand::Atom(AtomKind::Condition(condition), range)) = first_operand {
                 (
                     Some((condition, range)),
-                    analyze_branch_target(self.next_operand()?, self.diagnostics)?,
+                    analyze_branch_target(
+                        self.next_operand()?,
+                        self.expr_analysis_context.diagnostics,
+                    )?,
                 )
             } else {
                 (
                     None,
-                    analyze_branch_target(first_operand, self.diagnostics)?,
+                    analyze_branch_target(first_operand, self.expr_analysis_context.diagnostics)?,
                 )
             },
         )

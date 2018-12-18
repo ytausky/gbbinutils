@@ -1,8 +1,10 @@
 use self::branch::*;
-use super::SemanticExpr;
+use super::{ExprAnalysisContext, SemanticExpr};
 use crate::backend::ValueBuilder;
 use crate::diagnostics::span::Source;
-use crate::diagnostics::{CompactDiagnostic, DownstreamDiagnostics, Message};
+use crate::diagnostics::{
+    CompactDiagnostic, DelegateDiagnostics, DownstreamDiagnostics, EmitDiagnostic, Message,
+};
 use crate::frontend::semantics::operand::{self, AtomKind, Context, Operand, OperandCounter};
 use crate::frontend::syntax::keyword as kw;
 use crate::instruction::*;
@@ -13,8 +15,7 @@ mod ld;
 pub fn analyze_instruction<Id: Into<String>, I, B, D>(
     mnemonic: (kw::Mnemonic, D::Span),
     operands: I,
-    builder: &mut B,
-    diagnostics: &mut D,
+    expr_analysis_context: ExprAnalysisContext<B, D>,
 ) -> Result<Instruction<B::Value>, ()>
 where
     I: IntoIterator<Item = SemanticExpr<Id, D::Span>>,
@@ -22,14 +23,21 @@ where
     D: DownstreamDiagnostics,
 {
     let mnemonic: (Mnemonic, _) = (mnemonic.0.into(), mnemonic.1);
-    Analysis::new(mnemonic, operands.into_iter(), builder, diagnostics).run()
+    Analysis::new(mnemonic, operands.into_iter(), expr_analysis_context).run()
 }
 
 struct Analysis<'a, I, B: 'a, D: DownstreamDiagnostics + 'a> {
     mnemonic: (Mnemonic, D::Span),
     operands: OperandCounter<I>,
-    builder: &'a mut B,
-    diagnostics: &'a mut D,
+    expr_analysis_context: ExprAnalysisContext<'a, B, D>,
+}
+
+impl<'a, I, B: 'a, D: DownstreamDiagnostics + 'a> DelegateDiagnostics for Analysis<'a, I, B, D> {
+    type Delegate = D;
+
+    fn delegate(&mut self) -> &mut Self::Delegate {
+        self.expr_analysis_context.diagnostics
+    }
 }
 
 impl<'a, Id, I, B, D> Analysis<'a, I, B, D>
@@ -42,14 +50,12 @@ where
     fn new(
         mnemonic: (Mnemonic, D::Span),
         operands: I,
-        builder: &'a mut B,
-        diagnostics: &'a mut D,
+        expr_analysis_context: ExprAnalysisContext<'a, B, D>,
     ) -> Analysis<'a, I, B, D> {
         Analysis {
             mnemonic,
             operands: OperandCounter::new(operands),
-            builder,
-            diagnostics,
+            expr_analysis_context,
         }
     }
 
@@ -95,8 +101,7 @@ where
         match target.0 {
             Reg16::Hl => self.analyze_add_hl_instruction(),
             _ => {
-                self.diagnostics
-                    .emit_diagnostic(CompactDiagnostic::new(Message::DestMustBeHl, target.1));
+                self.emit_diagnostic(CompactDiagnostic::new(Message::DestMustBeHl, target.1));
                 Err(())
             }
         }
@@ -106,7 +111,7 @@ where
         match self.next_operand_out_of(2)? {
             Operand::Atom(AtomKind::Reg16(src), _) => Ok(Instruction::AddHl(src)),
             operand => {
-                self.diagnostics.emit_diagnostic(CompactDiagnostic::new(
+                self.emit_diagnostic(CompactDiagnostic::new(
                     Message::IncompatibleOperand,
                     operand.span(),
                 ));
@@ -127,7 +132,7 @@ where
             first_operand.expect_specific_atom(
                 AtomKind::Simple(SimpleOperand::A),
                 Message::DestMustBeA,
-                self.diagnostics,
+                self.expr_analysis_context.diagnostics,
             )?;
             second_operand
         };
@@ -137,7 +142,7 @@ where
             }
             Operand::Const(expr) => Ok(Instruction::Alu(operation, AluSource::Immediate(expr))),
             src => {
-                self.diagnostics.emit_diagnostic(CompactDiagnostic::new(
+                self.emit_diagnostic(CompactDiagnostic::new(
                     Message::IncompatibleOperand,
                     src.span(),
                 ));
@@ -155,7 +160,7 @@ where
         let expr = if let Operand::Const(expr) = bit_number {
             expr
         } else {
-            self.diagnostics.emit_diagnostic(CompactDiagnostic::new(
+            self.emit_diagnostic(CompactDiagnostic::new(
                 Message::MustBeBit {
                     mnemonic: self.mnemonic.1.clone(),
                 },
@@ -166,7 +171,7 @@ where
         Ok(Instruction::Bit(
             operation,
             expr,
-            operand.expect_simple(self.diagnostics)?,
+            operand.expect_simple(self.expr_analysis_context.diagnostics)?,
         ))
     }
 
@@ -176,16 +181,18 @@ where
         src.expect_specific_atom(
             AtomKind::Reg16(Reg16::Sp),
             Message::SrcMustBeSp,
-            self.diagnostics,
+            self.expr_analysis_context.diagnostics,
         )?;
-        Ok(Instruction::Ldhl(offset.expect_const(self.diagnostics)?))
+        Ok(Instruction::Ldhl(
+            offset.expect_const(self.expr_analysis_context.diagnostics)?,
+        ))
     }
 
     fn analyze_misc(&mut self, operation: MiscOperation) -> Result<Instruction<B::Value>, ()> {
         let operand = self.next_operand_out_of(1)?;
         Ok(Instruction::Misc(
             operation,
-            operand.expect_simple(self.diagnostics)?,
+            operand.expect_simple(self.expr_analysis_context.diagnostics)?,
         ))
     }
 
@@ -195,7 +202,7 @@ where
     ) -> Result<Instruction<B::Value>, ()> {
         let reg_pair = self
             .next_operand_out_of(1)?
-            .expect_reg_pair(self.diagnostics)?;
+            .expect_reg_pair(self.expr_analysis_context.diagnostics)?;
         let instruction_ctor = match operation {
             StackOperation::Push => Instruction::Push,
             StackOperation::Pop => Instruction::Pop,
@@ -208,7 +215,7 @@ where
             Operand::Atom(AtomKind::Simple(operand), _) => Ok(Instruction::IncDec8(mode, operand)),
             Operand::Atom(AtomKind::Reg16(operand), _) => Ok(Instruction::IncDec16(mode, operand)),
             operand => {
-                self.diagnostics.emit_diagnostic(CompactDiagnostic::new(
+                self.emit_diagnostic(CompactDiagnostic::new(
                     Message::OperandCannotBeIncDec(mode),
                     operand.span(),
                 ));
@@ -220,14 +227,14 @@ where
     fn analyze_rst(&mut self) -> Result<Instruction<B::Value>, ()> {
         Ok(Instruction::Rst(
             self.next_operand_out_of(1)?
-                .expect_const(self.diagnostics)?,
+                .expect_const(self.expr_analysis_context.diagnostics)?,
         ))
     }
 
     fn next_operand_out_of(&mut self, out_of: usize) -> Result<Operand<B::Value>, ()> {
         let actual = self.operands.seen();
         self.next_operand()?.ok_or_else(|| {
-            self.diagnostics.emit_diagnostic(CompactDiagnostic::new(
+            self.emit_diagnostic(CompactDiagnostic::new(
                 Message::OperandCount {
                     actual,
                     expected: out_of,
@@ -242,8 +249,7 @@ where
             operand::analyze_operand(
                 expr,
                 self.mnemonic.0.context(),
-                self.builder,
-                self.diagnostics,
+                &mut self.expr_analysis_context,
             )
             .map(Some)
         })
@@ -256,10 +262,12 @@ where
         if actual == expected {
             Ok(())
         } else {
-            self.diagnostics.emit_diagnostic(CompactDiagnostic::new(
-                Message::OperandCount { actual, expected },
-                self.mnemonic.1,
-            ));
+            self.expr_analysis_context
+                .diagnostics
+                .emit_diagnostic(CompactDiagnostic::new(
+                    Message::OperandCount { actual, expected },
+                    self.mnemonic.1,
+                ));
             Err(())
         }
     }
@@ -868,8 +876,7 @@ mod tests {
         let result = analyze_instruction(
             (mnemonic, TokenId::Mnemonic.into()),
             operands.into_iter().enumerate().map(add_token_spans),
-            &mut RelocExprBuilder::new(),
-            &mut collector,
+            ExprAnalysisContext::new(&mut RelocExprBuilder::new(), &mut collector),
         );
         AnalysisResult(result.map_err(|_| collector.0))
     }

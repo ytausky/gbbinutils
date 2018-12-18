@@ -292,8 +292,10 @@ fn analyze_mnemonic<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
     let result = instruction::analyze_instruction(
         name,
         args.into_iter(),
-        &mut actions.session.backend.build_value(),
-        actions.session.diagnostics,
+        ExprAnalysisContext::new(
+            &mut actions.session.backend.build_value(),
+            actions.session.diagnostics,
+        ),
     );
     if let Ok(instruction) = result {
         actions
@@ -458,46 +460,74 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> syntax::TokenSeqContext
     }
 }
 
-fn analyze_reloc_expr<I, B, D>(
-    expr: SemanticExpr<I, D::Span>,
-    builder: &mut B,
-    diagnostics: &mut D,
-) -> Result<B::Value, ()>
+pub struct ExprAnalysisContext<'a, B: 'a, D: 'a> {
+    builder: &'a mut B,
+    diagnostics: &'a mut D,
+}
+
+impl<'a, B: 'a, D: 'a> ExprAnalysisContext<'a, B, D> {
+    fn new(builder: &'a mut B, diagnostics: &'a mut D) -> Self {
+        ExprAnalysisContext {
+            builder,
+            diagnostics,
+        }
+    }
+}
+
+trait AnalyzeExpr {
+    type Span;
+    type Value;
+
+    fn analyze_expr<I>(&mut self, expr: SemanticExpr<I, Self::Span>) -> Result<Self::Value, ()>
+    where
+        I: Into<String>;
+}
+
+impl<'a, B, D> AnalyzeExpr for ExprAnalysisContext<'a, B, D>
 where
-    I: Into<String>,
     B: ValueBuilder<Span = D::Span>,
     D: DownstreamDiagnostics,
 {
-    match expr.variant {
-        ExprVariant::Atom(SemanticAtom::Ident(ident)) => {
-            Ok(builder.symbol((ident.into(), expr.span)))
+    type Span = D::Span;
+    type Value = B::Value;
+
+    fn analyze_expr<I>(&mut self, expr: SemanticExpr<I, Self::Span>) -> Result<Self::Value, ()>
+    where
+        I: Into<String>,
+    {
+        match expr.variant {
+            ExprVariant::Atom(SemanticAtom::Ident(ident)) => {
+                Ok(self.builder.symbol((ident.into(), expr.span)))
+            }
+            ExprVariant::Atom(SemanticAtom::Literal(Literal::Number(n))) => {
+                Ok(self.builder.number((n, expr.span)))
+            }
+            ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(_))) => {
+                Err(CompactDiagnostic::new(
+                    Message::KeywordInExpr {
+                        keyword: expr.span.clone(),
+                    },
+                    expr.span,
+                ))
+            }
+            ExprVariant::Atom(SemanticAtom::Literal(Literal::String(_))) => Err(
+                CompactDiagnostic::new(Message::StringInInstruction, expr.span),
+            ),
+            ExprVariant::Unary(SemanticUnary::Parentheses, expr) => Ok(self.analyze_expr(*expr)?),
+            ExprVariant::Binary(SemanticBinary::Plus, left, right) => {
+                let left = self.analyze_expr(*left)?;
+                let right = self.analyze_expr(*right)?;
+                Ok(self.builder.apply_binary_operator(
+                    (BinaryOperator::Plus, expr.span),
+                    left,
+                    right,
+                ))
+            }
         }
-        ExprVariant::Atom(SemanticAtom::Literal(Literal::Number(n))) => {
-            Ok(builder.number((n, expr.span)))
-        }
-        ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(_))) => {
-            Err(CompactDiagnostic::new(
-                Message::KeywordInExpr {
-                    keyword: expr.span.clone(),
-                },
-                expr.span,
-            ))
-        }
-        ExprVariant::Atom(SemanticAtom::Literal(Literal::String(_))) => Err(
-            CompactDiagnostic::new(Message::StringInInstruction, expr.span),
-        ),
-        ExprVariant::Unary(SemanticUnary::Parentheses, expr) => {
-            Ok(analyze_reloc_expr(*expr, builder, diagnostics)?)
-        }
-        ExprVariant::Binary(SemanticBinary::Plus, left, right) => {
-            let left = analyze_reloc_expr(*left, builder, diagnostics)?;
-            let right = analyze_reloc_expr(*right, builder, diagnostics)?;
-            Ok(builder.apply_binary_operator((BinaryOperator::Plus, expr.span), left, right))
-        }
+        .map_err(|diagnostic| {
+            self.diagnostics.emit_diagnostic(diagnostic);
+        })
     }
-    .map_err(|diagnostic| {
-        diagnostics.emit_diagnostic(diagnostic);
-    })
 }
 
 #[cfg(test)]

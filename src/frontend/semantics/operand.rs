@@ -1,4 +1,6 @@
-use super::{analyze_reloc_expr, ExprVariant, SemanticAtom, SemanticExpr, SemanticUnary};
+use super::{
+    AnalyzeExpr, ExprAnalysisContext, ExprVariant, SemanticAtom, SemanticExpr, SemanticUnary,
+};
 use crate::backend::ValueBuilder;
 use crate::diagnostics::*;
 use crate::frontend::syntax::keyword as kw;
@@ -46,8 +48,7 @@ pub enum Context {
 pub fn analyze_operand<I, B, D>(
     expr: SemanticExpr<I, D::Span>,
     context: Context,
-    builder: &mut B,
-    diagnostics: &mut D,
+    expr_analysis_context: &mut ExprAnalysisContext<B, D>,
 ) -> Result<Operand<B::Value>, ()>
 where
     I: Into<String>,
@@ -56,24 +57,23 @@ where
 {
     match expr.variant {
         ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(keyword))) => {
-            analyze_keyword_operand((keyword, expr.span), context, diagnostics)
+            analyze_keyword_operand(
+                (keyword, expr.span),
+                context,
+                expr_analysis_context.diagnostics,
+            )
         }
         ExprVariant::Unary(SemanticUnary::Parentheses, inner) => {
-            analyze_deref_operand(*inner, expr.span, builder, diagnostics)
+            analyze_deref_operand(*inner, expr.span, expr_analysis_context)
         }
-        _ => Ok(Operand::Const(analyze_reloc_expr(
-            expr,
-            builder,
-            diagnostics,
-        )?)),
+        _ => Ok(Operand::Const(expr_analysis_context.analyze_expr(expr)?)),
     }
 }
 
 fn analyze_deref_operand<I, B, D>(
     expr: SemanticExpr<I, D::Span>,
     deref_span: D::Span,
-    builder: &mut B,
-    diagnostics: &mut D,
+    expr_analysis_context: &mut ExprAnalysisContext<B, D>,
 ) -> Result<Operand<B::Value>, ()>
 where
     I: Into<String>,
@@ -82,13 +82,13 @@ where
 {
     match expr.variant {
         ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(keyword))) => {
-            analyze_deref_operand_keyword((keyword, expr.span), deref_span, diagnostics)
+            analyze_deref_operand_keyword(
+                (keyword, expr.span),
+                deref_span,
+                expr_analysis_context.diagnostics,
+            )
         }
-        _ => Ok(Operand::Deref(analyze_reloc_expr(
-            expr,
-            builder,
-            diagnostics,
-        )?)),
+        _ => Ok(Operand::Deref(expr_analysis_context.analyze_expr(expr)?)),
     }
 }
 
@@ -263,8 +263,11 @@ mod tests {
         DiagnosticsCollector<S>: DownstreamDiagnostics<Span = S>,
     {
         let mut collector = DiagnosticsCollector(Vec::new());
-        let result =
-            super::analyze_operand(expr, context, &mut RelocExprBuilder::new(), &mut collector);
+        let result = super::analyze_operand(
+            expr,
+            context,
+            &mut ExprAnalysisContext::new(&mut RelocExprBuilder::new(), &mut collector),
+        );
         result.map_err(|_| collector.0)
     }
 
