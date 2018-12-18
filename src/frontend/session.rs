@@ -61,7 +61,7 @@ where
 impl<'a, F, B, D: DownstreamDiagnostics> DelegateDiagnostics for Session<'a, F, B, D> {
     type Delegate = D;
 
-    fn delegate(&mut self) -> &mut Self::Delegate {
+    fn diagnostics(&mut self) -> &mut Self::Delegate {
         self.diagnostics
     }
 }

@@ -75,7 +75,7 @@ impl<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics> SemanticActions<'a
 impl<'a, F: Frontend<D>, B, D: Diagnostics> DelegateDiagnostics for SemanticActions<'a, F, B, D> {
     type Delegate = D;
 
-    fn delegate(&mut self) -> &mut Self::Delegate {
+    fn diagnostics(&mut self) -> &mut Self::Delegate {
         self.session.diagnostics
     }
 }
@@ -231,7 +231,7 @@ pub struct ExprContext<'a, F: Frontend<D>, B, D: Diagnostics> {
 impl<'a, F: Frontend<D>, B, D: Diagnostics> DelegateDiagnostics for ExprContext<'a, F, B, D> {
     type Delegate = CommandActions<'a, F, B, D>;
 
-    fn delegate(&mut self) -> &mut Self::Delegate {
+    fn diagnostics(&mut self) -> &mut Self::Delegate {
         &mut self.parent
     }
 }
@@ -329,8 +329,8 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> MacroDefActions<'a, F, B, D> {
 impl<'a, F: Frontend<D>, B, D: Diagnostics> DelegateDiagnostics for MacroDefActions<'a, F, B, D> {
     type Delegate = D;
 
-    fn delegate(&mut self) -> &mut Self::Delegate {
-        self.parent.delegate()
+    fn diagnostics(&mut self) -> &mut Self::Delegate {
+        self.parent.diagnostics()
     }
 }
 
@@ -400,8 +400,8 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> DelegateDiagnostics
 {
     type Delegate = D;
 
-    fn delegate(&mut self) -> &mut Self::Delegate {
-        self.parent.delegate()
+    fn diagnostics(&mut self) -> &mut Self::Delegate {
+        self.parent.diagnostics()
     }
 }
 
@@ -439,8 +439,8 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> MacroArgContext<'a, F, B, D> {
 impl<'a, F: Frontend<D>, B, D: Diagnostics> DelegateDiagnostics for MacroArgContext<'a, F, B, D> {
     type Delegate = D;
 
-    fn delegate(&mut self) -> &mut Self::Delegate {
-        self.parent.parent.delegate()
+    fn diagnostics(&mut self) -> &mut Self::Delegate {
+        self.parent.parent.diagnostics()
     }
 }
 

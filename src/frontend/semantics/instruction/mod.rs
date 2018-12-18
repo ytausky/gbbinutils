@@ -35,7 +35,7 @@ struct Analysis<'a, I, B: 'a, D: DownstreamDiagnostics + 'a> {
 impl<'a, I, B: 'a, D: DownstreamDiagnostics + 'a> DelegateDiagnostics for Analysis<'a, I, B, D> {
     type Delegate = D;
 
-    fn delegate(&mut self) -> &mut Self::Delegate {
+    fn diagnostics(&mut self) -> &mut Self::Delegate {
         self.value_context.diagnostics
     }
 }

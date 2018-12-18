@@ -38,8 +38,8 @@ where
 {
     type Delegate = D;
 
-    fn delegate(&mut self) -> &mut Self::Delegate {
-        self.actions.delegate()
+    fn diagnostics(&mut self) -> &mut Self::Delegate {
+        self.actions.diagnostics()
     }
 }
 

@@ -18,7 +18,8 @@ impl<T: EmitDiagnostic + MergeSpans + MkSnippetRef> DownstreamDiagnostics for T 
 
 pub trait DelegateDiagnostics {
     type Delegate: DownstreamDiagnostics;
-    fn delegate(&mut self) -> &mut Self::Delegate;
+
+    fn diagnostics(&mut self) -> &mut Self::Delegate;
 }
 
 impl<T: DelegateDiagnostics> Span for T {
@@ -31,19 +32,19 @@ impl<T: DelegateDiagnostics> SnippetRef for T {
 
 impl<T: DelegateDiagnostics> MergeSpans for T {
     fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
-        self.delegate().merge_spans(left, right)
+        self.diagnostics().merge_spans(left, right)
     }
 }
 
 impl<T: DelegateDiagnostics> MkSnippetRef for T {
     fn mk_snippet_ref(&mut self, span: &Self::Span) -> Self::SnippetRef {
-        self.delegate().mk_snippet_ref(span)
+        self.diagnostics().mk_snippet_ref(span)
     }
 }
 
 impl<T: DelegateDiagnostics> EmitDiagnostic for T {
     fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span>) {
-        self.delegate().emit_diagnostic(diagnostic)
+        self.diagnostics().emit_diagnostic(diagnostic)
     }
 }
 
