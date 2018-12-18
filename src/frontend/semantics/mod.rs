@@ -1,12 +1,12 @@
 use crate::backend::{self, Backend, BinaryOperator, ValueBuilder};
 use crate::diagnostics::span::{MergeSpans, MkSnippetRef, SnippetRef, Span};
-use crate::diagnostics::{
-    CompactDiagnostic, DelegateDiagnostics, Diagnostics, EmitDiagnostic, Message,
-};
+use crate::diagnostics::*;
 use crate::expr::ExprVariant;
 use crate::frontend::session::Session;
 use crate::frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token};
 use crate::frontend::{Frontend, Literal};
+#[cfg(test)]
+use std::fmt::Debug;
 
 mod directive;
 mod instruction;
@@ -197,7 +197,7 @@ impl<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics> syntax::CommandCon
 
     fn exit(mut self) -> Self::Parent {
         if !self.has_errors {
-            let result = match self.name {
+            match self.name {
                 (Command::Directive(directive), span) => {
                     if !directive.requires_symbol() {
                         self.parent.define_label_if_present()
@@ -209,9 +209,6 @@ impl<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics> syntax::CommandCon
                     analyze_mnemonic((mnemonic, range), self.args, &mut self.parent)
                 }
             };
-            if let Err(diagnostic) = result {
-                self.parent.emit_diagnostic(diagnostic);
-            }
         }
         self.parent
     }
@@ -291,18 +288,19 @@ fn analyze_mnemonic<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
     name: (Mnemonic, D::Span),
     args: CommandArgs<F::Ident, D::Span>,
     actions: &mut SemanticActions<'a, F, B, D>,
-) -> Result<(), CompactDiagnostic<D::Span>> {
-    let instruction = instruction::analyze_instruction(
+) {
+    let result = instruction::analyze_instruction(
         name,
         args.into_iter(),
         &mut actions.session.backend.build_value(),
         actions.session.diagnostics,
-    )?;
-    actions
-        .session
-        .backend
-        .emit_item(backend::Item::Instruction(instruction));
-    Ok(())
+    );
+    if let Ok(instruction) = result {
+        actions
+            .session
+            .backend
+            .emit_item(backend::Item::Instruction(instruction))
+    }
 }
 
 pub struct MacroDefActions<'a, F: Frontend<D>, B, D: Diagnostics> {
@@ -460,10 +458,16 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> syntax::TokenSeqContext
     }
 }
 
-fn analyze_reloc_expr<I: Into<String>, B: ValueBuilder>(
-    expr: SemanticExpr<I, B::Span>,
+fn analyze_reloc_expr<I, B, D>(
+    expr: SemanticExpr<I, D::Span>,
     builder: &mut B,
-) -> Result<B::Value, CompactDiagnostic<B::Span>> {
+    diagnostics: &mut D,
+) -> Result<B::Value, ()>
+where
+    I: Into<String>,
+    B: ValueBuilder<Span = D::Span>,
+    D: DownstreamDiagnostics,
+{
     match expr.variant {
         ExprVariant::Atom(SemanticAtom::Ident(ident)) => {
             Ok(builder.symbol((ident.into(), expr.span)))
@@ -482,12 +486,65 @@ fn analyze_reloc_expr<I: Into<String>, B: ValueBuilder>(
         ExprVariant::Atom(SemanticAtom::Literal(Literal::String(_))) => Err(
             CompactDiagnostic::new(Message::StringInInstruction, expr.span),
         ),
-        ExprVariant::Unary(SemanticUnary::Parentheses, expr) => analyze_reloc_expr(*expr, builder),
+        ExprVariant::Unary(SemanticUnary::Parentheses, expr) => {
+            Ok(analyze_reloc_expr(*expr, builder, diagnostics)?)
+        }
         ExprVariant::Binary(SemanticBinary::Plus, left, right) => {
-            let left = analyze_reloc_expr(*left, builder)?;
-            let right = analyze_reloc_expr(*right, builder)?;
+            let left = analyze_reloc_expr(*left, builder, diagnostics)?;
+            let right = analyze_reloc_expr(*right, builder, diagnostics)?;
             Ok(builder.apply_binary_operator((BinaryOperator::Plus, expr.span), left, right))
         }
+    }
+    .map_err(|diagnostic| {
+        diagnostics.emit_diagnostic(diagnostic);
+    })
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum TokenId {
+    Mnemonic,
+    Operand(usize, usize),
+}
+
+#[cfg(test)]
+#[derive(Clone, Debug, PartialEq)]
+pub struct TokenSpan {
+    first: TokenId,
+    last: TokenId,
+}
+
+#[cfg(test)]
+pub struct DiagnosticsCollector<S>(Vec<CompactDiagnostic<S>>);
+
+#[cfg(test)]
+impl<S: Clone + Debug + PartialEq> Span for DiagnosticsCollector<S> {
+    type Span = S;
+}
+
+#[cfg(test)]
+impl<S> SnippetRef for DiagnosticsCollector<S> {
+    type SnippetRef = S;
+}
+
+#[cfg(test)]
+impl MergeSpans for DiagnosticsCollector<TokenSpan> {
+    fn merge_spans(&mut self, left: &TokenSpan, right: &TokenSpan) -> TokenSpan {
+        TokenSpan::merge(left, right)
+    }
+}
+
+#[cfg(test)]
+impl<S: Clone + Debug + PartialEq> MkSnippetRef for DiagnosticsCollector<S> {
+    fn mk_snippet_ref(&mut self, span: &Self::Span) -> Self::SnippetRef {
+        span.clone()
+    }
+}
+
+#[cfg(test)]
+impl<S: Clone + Debug + PartialEq> EmitDiagnostic for DiagnosticsCollector<S> {
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span>) {
+        self.0.push(diagnostic)
     }
 }
 

@@ -1,6 +1,6 @@
 use super::{analyze_reloc_expr, ExprVariant, SemanticAtom, SemanticExpr, SemanticUnary};
 use crate::backend::ValueBuilder;
-use crate::diagnostics::{CompactDiagnostic, KeywordOperandCategory, Message};
+use crate::diagnostics::*;
 use crate::frontend::syntax::keyword as kw;
 use crate::frontend::syntax::Literal;
 use crate::instruction::{Condition, PtrReg, Reg16, RegPair, SimpleOperand};
@@ -43,50 +43,76 @@ pub enum Context {
     Other,
 }
 
-type OperandResult<V> = Result<Operand<V>, CompactDiagnostic<<V as Span>::Span>>;
-
-pub fn analyze_operand<I: Into<String>, B: ValueBuilder>(
-    expr: SemanticExpr<I, B::Span>,
+pub fn analyze_operand<I, B, D>(
+    expr: SemanticExpr<I, D::Span>,
     context: Context,
     builder: &mut B,
-) -> OperandResult<B::Value> {
+    diagnostics: &mut D,
+) -> Result<Operand<B::Value>, ()>
+where
+    I: Into<String>,
+    B: ValueBuilder<Span = D::Span>,
+    D: DownstreamDiagnostics,
+{
     match expr.variant {
         ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(keyword))) => {
-            analyze_keyword_operand((keyword, expr.span), context)
+            analyze_keyword_operand((keyword, expr.span), context, diagnostics)
         }
         ExprVariant::Unary(SemanticUnary::Parentheses, inner) => {
-            analyze_deref_operand(*inner, expr.span, builder)
+            analyze_deref_operand(*inner, expr.span, builder, diagnostics)
         }
-        _ => Ok(Operand::Const(analyze_reloc_expr(expr, builder)?)),
+        _ => Ok(Operand::Const(analyze_reloc_expr(
+            expr,
+            builder,
+            diagnostics,
+        )?)),
     }
 }
 
-fn analyze_deref_operand<I: Into<String>, B: ValueBuilder>(
-    expr: SemanticExpr<I, B::Span>,
-    deref_span: B::Span,
+fn analyze_deref_operand<I, B, D>(
+    expr: SemanticExpr<I, D::Span>,
+    deref_span: D::Span,
     builder: &mut B,
-) -> OperandResult<B::Value> {
+    diagnostics: &mut D,
+) -> Result<Operand<B::Value>, ()>
+where
+    I: Into<String>,
+    B: ValueBuilder<Span = D::Span>,
+    D: DownstreamDiagnostics,
+{
     match expr.variant {
         ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(keyword))) => {
-            analyze_deref_operand_keyword((keyword, expr.span), deref_span)
+            analyze_deref_operand_keyword((keyword, expr.span), deref_span, diagnostics)
         }
-        _ => Ok(Operand::Deref(analyze_reloc_expr(expr, builder)?)),
+        _ => Ok(Operand::Deref(analyze_reloc_expr(
+            expr,
+            builder,
+            diagnostics,
+        )?)),
     }
 }
 
-fn analyze_deref_operand_keyword<V: Source>(
-    keyword: (kw::Operand, V::Span),
-    deref: V::Span,
-) -> OperandResult<V> {
+fn analyze_deref_operand_keyword<V: Source, D>(
+    keyword: (kw::Operand, D::Span),
+    deref: D::Span,
+    diagnostics: &mut D,
+) -> Result<Operand<V>, ()>
+where
+    V: Source<Span = D::Span>,
+    D: DownstreamDiagnostics,
+{
     match try_deref_operand_keyword(keyword.0) {
         Ok(atom) => Ok(Operand::Atom(atom, deref)),
-        Err(category) => Err(CompactDiagnostic::new(
-            Message::CannotDereference {
-                category,
-                operand: keyword.1,
-            },
-            deref,
-        )),
+        Err(category) => {
+            diagnostics.emit_diagnostic(CompactDiagnostic::new(
+                Message::CannotDereference {
+                    category,
+                    operand: keyword.1,
+                },
+                deref,
+            ));
+            Err(())
+        }
     }
 }
 
@@ -105,10 +131,15 @@ fn try_deref_operand_keyword(keyword: kw::Operand) -> Result<AtomKind, KeywordOp
     }
 }
 
-fn analyze_keyword_operand<V: Source>(
+fn analyze_keyword_operand<V: Source, D>(
     (keyword, span): (kw::Operand, V::Span),
     context: Context,
-) -> OperandResult<V> {
+    diagnostics: &mut D,
+) -> Result<Operand<V>, ()>
+where
+    V: Source<Span = D::Span>,
+    D: DownstreamDiagnostics,
+{
     use self::kw::Operand::*;
     use self::Context::*;
     let kind = match keyword {
@@ -134,12 +165,15 @@ fn analyze_keyword_operand<V: Source>(
             Stack => AtomKind::RegPair(RegPair::Hl),
             _ => AtomKind::Reg16(Reg16::Hl),
         },
-        Hld | Hli => Err(CompactDiagnostic::new(
-            Message::MustBeDeref {
-                operand: span.clone(),
-            },
-            span.clone(),
-        ))?,
+        Hld | Hli => {
+            diagnostics.emit_diagnostic(CompactDiagnostic::new(
+                Message::MustBeDeref {
+                    operand: span.clone(),
+                },
+                span.clone(),
+            ));
+            Err(())?
+        }
         L => AtomKind::Simple(SimpleOperand::L),
         Nc => AtomKind::Condition(Condition::Nc),
         Nz => AtomKind::Condition(Condition::Nz),
@@ -180,6 +214,8 @@ impl<I: Iterator> Iterator for OperandCounter<I> {
 mod tests {
     use super::*;
     use crate::backend::{RelocAtom, RelocExpr, RelocExprBuilder};
+    use crate::diagnostics::span::MergeSpans;
+    use crate::frontend::semantics::DiagnosticsCollector;
     use std::fmt::Debug;
 
     #[test]
@@ -222,8 +258,20 @@ mod tests {
     fn analyze_operand<I: Into<String>, S: Clone + Debug + PartialEq>(
         expr: SemanticExpr<I, S>,
         context: Context,
-    ) -> OperandResult<RelocExpr<S>> {
-        super::analyze_operand(expr, context, &mut RelocExprBuilder::new())
+    ) -> Result<Operand<RelocExpr<S>>, Vec<CompactDiagnostic<S>>>
+    where
+        DiagnosticsCollector<S>: DownstreamDiagnostics<Span = S>,
+    {
+        let mut collector = DiagnosticsCollector(Vec::new());
+        let result =
+            super::analyze_operand(expr, context, &mut RelocExprBuilder::new(), &mut collector);
+        result.map_err(|_| collector.0)
+    }
+
+    impl MergeSpans for DiagnosticsCollector<i32> {
+        fn merge_spans(&mut self, _: &Self::Span, _: &Self::Span) -> Self::Span {
+            unreachable!()
+        }
     }
 
     #[test]
@@ -240,13 +288,13 @@ mod tests {
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Err(CompactDiagnostic::new(
+            Err(vec![CompactDiagnostic::new(
                 Message::CannotDereference {
                     category: KeywordOperandCategory::RegPair,
                     operand: 0,
                 },
                 1
-            ))
+            )])
         )
     }
 
@@ -300,10 +348,10 @@ mod tests {
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Err(CompactDiagnostic::new(
+            Err(vec![CompactDiagnostic::new(
                 Message::KeywordInExpr { keyword: span },
                 span
-            ))
+            )])
         )
     }
 
@@ -316,7 +364,10 @@ mod tests {
         );
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Err(CompactDiagnostic::new(Message::StringInInstruction, span))
+            Err(vec![CompactDiagnostic::new(
+                Message::StringInInstruction,
+                span
+            )])
         )
     }
 
@@ -338,10 +389,10 @@ mod tests {
         );
         assert_eq!(
             analyze_operand(expr, Context::Other),
-            Err(CompactDiagnostic::new(
+            Err(vec![CompactDiagnostic::new(
                 Message::MustBeDeref { operand: span },
                 span
-            ))
+            )])
         )
     }
 }

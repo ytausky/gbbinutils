@@ -3,7 +3,7 @@ use super::{
 };
 use crate::backend;
 use crate::backend::{Backend, BinaryOperator, ValueBuilder, Width};
-use crate::diagnostics::{CompactDiagnostic, Diagnostics, Message};
+use crate::diagnostics::*;
 use crate::expr::ExprVariant;
 use crate::frontend::syntax::Literal;
 use crate::frontend::Frontend;
@@ -14,7 +14,7 @@ pub fn analyze_directive<'a: 'b, 'b, F: Frontend<D>, B: Backend<D::Span>, D: Dia
     directive: (Directive, D::Span),
     args: CommandArgs<F::Ident, D::Span>,
     actions: &'b mut SemanticActions<'a, F, B, D>,
-) -> Result<(), CompactDiagnostic<D::Span>> {
+) {
     let context = DirectiveContext {
         span: directive.1,
         args,
@@ -29,6 +29,20 @@ struct DirectiveContext<'a, A, I, S> {
     actions: &'a mut A,
 }
 
+impl<'a, 'b, F, B, D> DelegateDiagnostics
+    for DirectiveContext<'b, SemanticActions<'a, F, B, D>, F::Ident, D::Span>
+where
+    'a: 'b,
+    F: Frontend<D>,
+    D: Diagnostics,
+{
+    type Delegate = D;
+
+    fn delegate(&mut self) -> &mut Self::Delegate {
+        self.actions.delegate()
+    }
+}
+
 impl<'a, 'b, F, B, D> DirectiveContext<'b, SemanticActions<'a, F, B, D>, F::Ident, D::Span>
 where
     'a: 'b,
@@ -36,7 +50,7 @@ where
     B: Backend<D::Span>,
     D: Diagnostics,
 {
-    fn analyze(self, directive: Directive) -> Result<(), CompactDiagnostic<D::Span>> {
+    fn analyze(self, directive: Directive) {
         match directive {
             Directive::Db => self.analyze_data(Width::Byte),
             Directive::Ds => self.analyze_ds(),
@@ -47,49 +61,97 @@ where
         }
     }
 
-    fn analyze_data(self, width: Width) -> Result<(), CompactDiagnostic<D::Span>> {
+    fn analyze_data(self, width: Width) {
         for arg in self.args {
-            let expr = analyze_reloc_expr(arg, &mut self.actions.session.backend.build_value())?;
+            let expr = if let Ok(expr) = analyze_reloc_expr(
+                arg,
+                &mut self.actions.session.backend.build_value(),
+                self.actions.session.diagnostics,
+            ) {
+                expr
+            } else {
+                return;
+            };
             self.actions
                 .session
                 .backend
                 .emit_item(backend::Item::Data(expr, width))
         }
-        Ok(())
     }
 
-    fn analyze_ds(self) -> Result<(), CompactDiagnostic<D::Span>> {
+    fn analyze_ds(self) {
         let origin = {
-            let arg = single_arg(self.span, self.args)?;
+            let arg = if let Ok(arg) =
+                single_arg(self.span, self.args, self.actions.session.diagnostics)
+            {
+                arg
+            } else {
+                return;
+            };
             let builder = &mut self.actions.session.backend.build_value();
-            let count = analyze_reloc_expr(arg, builder)?;
+            let count = if let Ok(count) =
+                analyze_reloc_expr(arg, builder, self.actions.session.diagnostics)
+            {
+                count
+            } else {
+                return;
+            };
             location_counter_plus_expr(count, builder)
         };
-        self.actions.session.backend.set_origin(origin);
-        Ok(())
+        self.actions.session.backend.set_origin(origin)
     }
 
-    fn analyze_equ(self) -> Result<(), CompactDiagnostic<D::Span>> {
+    fn analyze_equ(self) {
         let symbol = self.actions.label.take().unwrap();
-        let arg = single_arg(self.span, self.args)?;
-        let value = analyze_reloc_expr(arg, &mut self.actions.session.backend.build_value())?;
-        self.actions.session.backend.define_symbol(symbol, value);
-        Ok(())
+        let arg =
+            if let Ok(arg) = single_arg(self.span, self.args, self.actions.session.diagnostics) {
+                arg
+            } else {
+                return;
+            };
+        let value = if let Ok(value) = analyze_reloc_expr(
+            arg,
+            &mut self.actions.session.backend.build_value(),
+            self.actions.session.diagnostics,
+        ) {
+            value
+        } else {
+            return;
+        };
+        self.actions.session.backend.define_symbol(symbol, value)
     }
 
-    fn analyze_include(self) -> Result<(), CompactDiagnostic<D::Span>> {
-        let (path, span) = reduce_include(self.span, self.args)?;
-        self.actions
-            .session
-            .analyze_file(path)
-            .map_err(|err| CompactDiagnostic::new(err.into(), span))
+    fn analyze_include(self) {
+        let (path, span) = if let Ok(result) =
+            reduce_include(self.span, self.args, self.actions.session.diagnostics)
+        {
+            result
+        } else {
+            return;
+        };
+        if let Err(err) = self.actions.session.analyze_file(path) {
+            self.actions
+                .emit_diagnostic(CompactDiagnostic::new(err.into(), span))
+        }
     }
 
-    fn analyze_org(self) -> Result<(), CompactDiagnostic<D::Span>> {
-        let arg = single_arg(self.span, self.args)?;
-        let expr = analyze_reloc_expr(arg, &mut self.actions.session.backend.build_value())?;
-        self.actions.session.backend.set_origin(expr);
-        Ok(())
+    fn analyze_org(self) {
+        let arg =
+            if let Ok(arg) = single_arg(self.span, self.args, self.actions.session.diagnostics) {
+                arg
+            } else {
+                return;
+            };
+        let expr = if let Ok(expr) = analyze_reloc_expr(
+            arg,
+            &mut self.actions.session.backend.build_value(),
+            self.actions.session.diagnostics,
+        ) {
+            expr
+        } else {
+            return;
+        };
+        self.actions.session.backend.set_origin(expr)
     }
 }
 
@@ -98,37 +160,40 @@ fn location_counter_plus_expr<B: ValueBuilder>(expr: B::Value, builder: &mut B) 
     builder.apply_binary_operator((BinaryOperator::Plus, expr.span()), location, expr)
 }
 
-fn reduce_include<I, S>(
-    span: S,
-    args: Vec<SemanticExpr<I, S>>,
-) -> Result<(I, S), CompactDiagnostic<S>>
-where
-    I: Debug + PartialEq,
-    S: Debug + PartialEq,
-{
-    let arg = single_arg(span, args)?;
+fn reduce_include<I: Debug + PartialEq, D: DownstreamDiagnostics>(
+    span: D::Span,
+    args: Vec<SemanticExpr<I, D::Span>>,
+    diagnostics: &mut D,
+) -> Result<(I, D::Span), ()> {
+    let arg = single_arg(span, args, diagnostics)?;
     match arg.variant {
         ExprVariant::Atom(SemanticAtom::Literal(Literal::String(path))) => Ok((path, arg.span)),
-        _ => Err(CompactDiagnostic::new(Message::ExpectedString, arg.span)),
+        _ => {
+            diagnostics.emit_diagnostic(CompactDiagnostic::new(Message::ExpectedString, arg.span));
+            Err(())
+        }
     }
 }
 
-fn single_arg<T: Debug + PartialEq, S>(
-    span: S,
+fn single_arg<T: Debug + PartialEq, D: DownstreamDiagnostics>(
+    span: D::Span,
     args: impl IntoIterator<Item = T>,
-) -> Result<T, CompactDiagnostic<S>> {
+    diagnostics: &mut D,
+) -> Result<T, ()> {
     let mut args = args.into_iter();
-    let arg = args.next().ok_or_else(|| {
-        CompactDiagnostic::new(
+    if let Some(arg) = args.next() {
+        assert_eq!(args.next(), None);
+        Ok(arg)
+    } else {
+        diagnostics.emit_diagnostic(CompactDiagnostic::new(
             Message::OperandCount {
                 actual: 0,
                 expected: 1,
             },
             span,
-        )
-    })?;
-    assert_eq!(args.next(), None);
-    Ok(arg)
+        ));
+        Err(())
+    }
 }
 
 #[cfg(test)]

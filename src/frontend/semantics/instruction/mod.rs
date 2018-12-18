@@ -1,65 +1,65 @@
 use self::branch::*;
 use super::SemanticExpr;
 use crate::backend::ValueBuilder;
-use crate::diagnostics::{CompactDiagnostic, Message};
+use crate::diagnostics::span::Source;
+use crate::diagnostics::{CompactDiagnostic, DownstreamDiagnostics, Message};
 use crate::frontend::semantics::operand::{self, AtomKind, Context, Operand, OperandCounter};
 use crate::frontend::syntax::keyword as kw;
 use crate::instruction::*;
-use crate::span::{MergeSpans, Source, Span};
 
 mod branch;
 mod ld;
 
-pub fn analyze_instruction<Id: Into<String>, I, B, M>(
-    mnemonic: (kw::Mnemonic, M::Span),
+pub fn analyze_instruction<Id: Into<String>, I, B, D>(
+    mnemonic: (kw::Mnemonic, D::Span),
     operands: I,
     builder: &mut B,
-    diagnostics: &mut M,
-) -> AnalysisResult<B::Value>
+    diagnostics: &mut D,
+) -> Result<Instruction<B::Value>, ()>
 where
-    I: IntoIterator<Item = SemanticExpr<Id, M::Span>>,
-    B: ValueBuilder<Span = M::Span>,
-    M: MergeSpans,
+    I: IntoIterator<Item = SemanticExpr<Id, D::Span>>,
+    B: ValueBuilder<Span = D::Span>,
+    D: DownstreamDiagnostics,
 {
     let mnemonic: (Mnemonic, _) = (mnemonic.0.into(), mnemonic.1);
     Analysis::new(mnemonic, operands.into_iter(), builder, diagnostics).run()
 }
 
-struct Analysis<'a, I, B: 'a, M: MergeSpans + 'a> {
-    mnemonic: (Mnemonic, M::Span),
+struct Analysis<'a, I, B: 'a, D: DownstreamDiagnostics + 'a> {
+    mnemonic: (Mnemonic, D::Span),
     operands: OperandCounter<I>,
     builder: &'a mut B,
-    spans: &'a mut M,
+    diagnostics: &'a mut D,
 }
 
-impl<'a, Id, I, B, M> Analysis<'a, I, B, M>
+impl<'a, Id, I, B, D> Analysis<'a, I, B, D>
 where
     Id: Into<String>,
-    I: Iterator<Item = SemanticExpr<Id, M::Span>>,
-    B: ValueBuilder<Span = M::Span>,
-    M: MergeSpans,
+    I: Iterator<Item = SemanticExpr<Id, D::Span>>,
+    B: ValueBuilder<Span = D::Span>,
+    D: DownstreamDiagnostics,
 {
     fn new(
-        mnemonic: (Mnemonic, M::Span),
+        mnemonic: (Mnemonic, D::Span),
         operands: I,
         builder: &'a mut B,
-        spans: &'a mut M,
-    ) -> Analysis<'a, I, B, M> {
+        diagnostics: &'a mut D,
+    ) -> Analysis<'a, I, B, D> {
         Analysis {
             mnemonic,
             operands: OperandCounter::new(operands),
             builder,
-            spans,
+            diagnostics,
         }
     }
 
-    fn run(mut self) -> AnalysisResult<B::Value> {
+    fn run(mut self) -> Result<Instruction<B::Value>, ()> {
         let instruction = self.analyze_mnemonic()?;
         self.check_for_unexpected_operands()?;
         Ok(instruction)
     }
 
-    fn analyze_mnemonic(&mut self) -> AnalysisResult<B::Value> {
+    fn analyze_mnemonic(&mut self) -> Result<Instruction<B::Value>, ()> {
         use self::Mnemonic::*;
         match self.mnemonic.0 {
             Alu(AluOperation::Add) => self.analyze_add_instruction(),
@@ -79,7 +79,7 @@ where
         }
     }
 
-    fn analyze_add_instruction(&mut self) -> AnalysisResult<B::Value> {
+    fn analyze_add_instruction(&mut self) -> Result<Instruction<B::Value>, ()> {
         match self.next_operand_out_of(2)? {
             Operand::Atom(AtomKind::Reg16(reg16), range) => {
                 self.analyze_add_reg16_instruction((reg16, range))
@@ -90,21 +90,28 @@ where
 
     fn analyze_add_reg16_instruction(
         &mut self,
-        target: (Reg16, M::Span),
-    ) -> AnalysisResult<B::Value> {
+        target: (Reg16, D::Span),
+    ) -> Result<Instruction<B::Value>, ()> {
         match target.0 {
             Reg16::Hl => self.analyze_add_hl_instruction(),
-            _ => Err(CompactDiagnostic::new(Message::DestMustBeHl, target.1)),
+            _ => {
+                self.diagnostics
+                    .emit_diagnostic(CompactDiagnostic::new(Message::DestMustBeHl, target.1));
+                Err(())
+            }
         }
     }
 
-    fn analyze_add_hl_instruction(&mut self) -> AnalysisResult<B::Value> {
+    fn analyze_add_hl_instruction(&mut self) -> Result<Instruction<B::Value>, ()> {
         match self.next_operand_out_of(2)? {
             Operand::Atom(AtomKind::Reg16(src), _) => Ok(Instruction::AddHl(src)),
-            operand => Err(CompactDiagnostic::new(
-                Message::IncompatibleOperand,
-                operand.span(),
-            )),
+            operand => {
+                self.diagnostics.emit_diagnostic(CompactDiagnostic::new(
+                    Message::IncompatibleOperand,
+                    operand.span(),
+                ));
+                Err(())
+            }
         }
     }
 
@@ -112,13 +119,16 @@ where
         &mut self,
         operation: AluOperation,
         first_operand: Operand<B::Value>,
-    ) -> AnalysisResult<B::Value> {
+    ) -> Result<Instruction<B::Value>, ()> {
         let src = if operation.implicit_dest() {
             first_operand
         } else {
             let second_operand = self.next_operand_out_of(2)?;
-            first_operand
-                .expect_specific_atom(AtomKind::Simple(SimpleOperand::A), Message::DestMustBeA)?;
+            first_operand.expect_specific_atom(
+                AtomKind::Simple(SimpleOperand::A),
+                Message::DestMustBeA,
+                self.diagnostics,
+            )?;
             second_operand
         };
         match src {
@@ -126,43 +136,66 @@ where
                 Ok(Instruction::Alu(operation, AluSource::Simple(src)))
             }
             Operand::Const(expr) => Ok(Instruction::Alu(operation, AluSource::Immediate(expr))),
-            src => Err(CompactDiagnostic::new(
-                Message::IncompatibleOperand,
-                src.span(),
-            )),
+            src => {
+                self.diagnostics.emit_diagnostic(CompactDiagnostic::new(
+                    Message::IncompatibleOperand,
+                    src.span(),
+                ));
+                Err(())
+            }
         }
     }
 
-    fn analyze_bit_operation(&mut self, operation: BitOperation) -> AnalysisResult<B::Value> {
+    fn analyze_bit_operation(
+        &mut self,
+        operation: BitOperation,
+    ) -> Result<Instruction<B::Value>, ()> {
         let bit_number = self.next_operand_out_of(2)?;
         let operand = self.next_operand_out_of(2)?;
         let expr = if let Operand::Const(expr) = bit_number {
             expr
         } else {
-            return Err(CompactDiagnostic::new(
+            self.diagnostics.emit_diagnostic(CompactDiagnostic::new(
                 Message::MustBeBit {
                     mnemonic: self.mnemonic.1.clone(),
                 },
                 bit_number.span(),
             ));
+            return Err(());
         };
-        Ok(Instruction::Bit(operation, expr, operand.expect_simple()?))
+        Ok(Instruction::Bit(
+            operation,
+            expr,
+            operand.expect_simple(self.diagnostics)?,
+        ))
     }
 
-    fn analyze_ldhl(&mut self) -> AnalysisResult<B::Value> {
+    fn analyze_ldhl(&mut self) -> Result<Instruction<B::Value>, ()> {
         let src = self.next_operand_out_of(2)?;
         let offset = self.next_operand_out_of(2)?;
-        src.expect_specific_atom(AtomKind::Reg16(Reg16::Sp), Message::SrcMustBeSp)?;
-        Ok(Instruction::Ldhl(offset.expect_const()?))
+        src.expect_specific_atom(
+            AtomKind::Reg16(Reg16::Sp),
+            Message::SrcMustBeSp,
+            self.diagnostics,
+        )?;
+        Ok(Instruction::Ldhl(offset.expect_const(self.diagnostics)?))
     }
 
-    fn analyze_misc(&mut self, operation: MiscOperation) -> AnalysisResult<B::Value> {
+    fn analyze_misc(&mut self, operation: MiscOperation) -> Result<Instruction<B::Value>, ()> {
         let operand = self.next_operand_out_of(1)?;
-        Ok(Instruction::Misc(operation, operand.expect_simple()?))
+        Ok(Instruction::Misc(
+            operation,
+            operand.expect_simple(self.diagnostics)?,
+        ))
     }
 
-    fn analyze_stack_operation(&mut self, operation: StackOperation) -> AnalysisResult<B::Value> {
-        let reg_pair = self.next_operand_out_of(1)?.expect_reg_pair()?;
+    fn analyze_stack_operation(
+        &mut self,
+        operation: StackOperation,
+    ) -> Result<Instruction<B::Value>, ()> {
+        let reg_pair = self
+            .next_operand_out_of(1)?
+            .expect_reg_pair(self.diagnostics)?;
         let instruction_ctor = match operation {
             StackOperation::Push => Instruction::Push,
             StackOperation::Pop => Instruction::Pop,
@@ -170,99 +203,122 @@ where
         Ok(instruction_ctor(reg_pair))
     }
 
-    fn analyze_inc_dec(&mut self, mode: IncDec) -> AnalysisResult<B::Value> {
+    fn analyze_inc_dec(&mut self, mode: IncDec) -> Result<Instruction<B::Value>, ()> {
         match self.next_operand_out_of(1)? {
             Operand::Atom(AtomKind::Simple(operand), _) => Ok(Instruction::IncDec8(mode, operand)),
             Operand::Atom(AtomKind::Reg16(operand), _) => Ok(Instruction::IncDec16(mode, operand)),
-            operand => Err(CompactDiagnostic::new(
-                Message::OperandCannotBeIncDec(mode),
-                operand.span(),
-            )),
+            operand => {
+                self.diagnostics.emit_diagnostic(CompactDiagnostic::new(
+                    Message::OperandCannotBeIncDec(mode),
+                    operand.span(),
+                ));
+                Err(())
+            }
         }
     }
 
-    fn analyze_rst(&mut self) -> AnalysisResult<B::Value> {
+    fn analyze_rst(&mut self) -> Result<Instruction<B::Value>, ()> {
         Ok(Instruction::Rst(
-            self.next_operand_out_of(1)?.expect_const()?,
+            self.next_operand_out_of(1)?
+                .expect_const(self.diagnostics)?,
         ))
     }
 
-    fn next_operand_out_of(
-        &mut self,
-        out_of: usize,
-    ) -> Result<Operand<B::Value>, CompactDiagnostic<M::Span>> {
+    fn next_operand_out_of(&mut self, out_of: usize) -> Result<Operand<B::Value>, ()> {
         let actual = self.operands.seen();
         self.next_operand()?.ok_or_else(|| {
-            CompactDiagnostic::new(
+            self.diagnostics.emit_diagnostic(CompactDiagnostic::new(
                 Message::OperandCount {
                     actual,
                     expected: out_of,
                 },
                 self.mnemonic.1.clone(),
-            )
+            ));
         })
     }
 
-    fn next_operand(&mut self) -> Result<Option<Operand<B::Value>>, CompactDiagnostic<M::Span>> {
+    fn next_operand(&mut self) -> Result<Option<Operand<B::Value>>, ()> {
         self.operands.next().map_or(Ok(None), |expr| {
-            operand::analyze_operand(expr, self.mnemonic.0.context(), self.builder).map(Some)
+            operand::analyze_operand(
+                expr,
+                self.mnemonic.0.context(),
+                self.builder,
+                self.diagnostics,
+            )
+            .map(Some)
         })
     }
 
-    fn check_for_unexpected_operands(self) -> Result<(), CompactDiagnostic<M::Span>> {
+    fn check_for_unexpected_operands(self) -> Result<(), ()> {
         let expected = self.operands.seen();
         let extra = self.operands.count();
         let actual = expected + extra;
         if actual == expected {
             Ok(())
         } else {
-            Err(CompactDiagnostic::new(
+            self.diagnostics.emit_diagnostic(CompactDiagnostic::new(
                 Message::OperandCount { actual, expected },
                 self.mnemonic.1,
-            ))
+            ));
+            Err(())
         }
     }
 }
 
 impl<V: Source> Operand<V> {
-    fn expect_specific_atom(
+    fn expect_specific_atom<D>(
         self,
         expected: AtomKind,
         message: Message<V::Span>,
-    ) -> Result<(), CompactDiagnostic<V::Span>> {
+        diagnostics: &mut D,
+    ) -> Result<(), ()>
+    where
+        D: DownstreamDiagnostics<Span = V::Span>,
+    {
         match self {
             Operand::Atom(ref actual, _) if *actual == expected => Ok(()),
-            operand => operand.error(message),
+            operand => operand.error(message, diagnostics),
         }
     }
 
-    fn expect_simple(self) -> Result<SimpleOperand, CompactDiagnostic<V::Span>> {
+    fn expect_simple<D>(self, diagnostics: &mut D) -> Result<SimpleOperand, ()>
+    where
+        D: DownstreamDiagnostics<Span = V::Span>,
+    {
         match self {
             Operand::Atom(AtomKind::Simple(simple), _) => Ok(simple),
-            operand => operand.error(Message::RequiresSimpleOperand),
+            operand => operand.error(Message::RequiresSimpleOperand, diagnostics),
         }
     }
 
-    fn expect_const(self) -> Result<V, CompactDiagnostic<V::Span>> {
+    fn expect_const<D>(self, diagnostics: &mut D) -> Result<V, ()>
+    where
+        D: DownstreamDiagnostics<Span = V::Span>,
+    {
         match self {
             Operand::Const(expr) => Ok(expr),
-            operand => operand.error(Message::MustBeConst),
+            operand => operand.error(Message::MustBeConst, diagnostics),
         }
     }
 
-    fn expect_reg_pair(self) -> Result<RegPair, CompactDiagnostic<V::Span>> {
+    fn expect_reg_pair<D>(self, diagnostics: &mut D) -> Result<RegPair, ()>
+    where
+        D: DownstreamDiagnostics<Span = V::Span>,
+    {
         match self {
             Operand::Atom(AtomKind::RegPair(reg_pair), _) => Ok(reg_pair),
-            operand => operand.error(Message::RequiresRegPair),
+            operand => operand.error(Message::RequiresRegPair, diagnostics),
         }
     }
 
-    fn error<T>(self, message: Message<V::Span>) -> Result<T, CompactDiagnostic<V::Span>> {
-        Err(CompactDiagnostic::new(message, self.span()))
+    fn error<T, D>(self, message: Message<V::Span>, diagnostics: &mut D) -> Result<T, ()>
+    where
+        D: DownstreamDiagnostics<Span = V::Span>,
+    {
+        diagnostics.emit_diagnostic(CompactDiagnostic::new(message, self.span()));
+        Err(())
     }
 }
-
-pub type AnalysisResult<V> = Result<Instruction<V>, CompactDiagnostic<<V as Span>::Span>>;
 
 #[derive(Debug, PartialEq)]
 enum Mnemonic {
@@ -374,12 +430,14 @@ mod tests {
     use super::*;
     use crate::backend::{RelocAtom, RelocExpr};
     pub use crate::diagnostics::Message;
+    use crate::diagnostics::*;
     use crate::expr::{Expr, ExprVariant};
+    pub use crate::frontend::semantics::{DiagnosticsCollector, TokenId, TokenSpan};
     use crate::frontend::semantics::{
         SemanticAtom, SemanticExpr, SemanticExprVariant, SemanticUnary,
     };
     use crate::frontend::syntax::Literal;
-    pub use crate::span::Span;
+    pub use crate::span::{MergeSpans, Span};
     use std::cmp;
 
     type Input = SemanticExpr<String, ()>;
@@ -780,9 +838,11 @@ mod tests {
         }
     }
 
-    pub struct Result(AnalysisResult<RelocExpr<TokenSpan>>);
+    pub struct AnalysisResult(
+        Result<Instruction<RelocExpr<TokenSpan>>, Vec<CompactDiagnostic<TokenSpan>>>,
+    );
 
-    impl Result {
+    impl AnalysisResult {
         pub fn expect_instruction(self, expected: Instruction<RelocExpr<TokenSpan>>) {
             assert_eq!(self.0, Ok(expected))
         }
@@ -791,37 +851,27 @@ mod tests {
             let expected = diagnostic.into();
             assert_eq!(
                 self.0,
-                Err(CompactDiagnostic::new(
+                Err(vec![CompactDiagnostic::new(
                     expected.message,
                     expected.highlight.unwrap(),
-                ))
+                )])
             )
         }
     }
 
-    pub fn analyze<I>(mnemonic: kw::Mnemonic, operands: I) -> Result
+    pub fn analyze<I>(mnemonic: kw::Mnemonic, operands: I) -> AnalysisResult
     where
         I: IntoIterator<Item = Input>,
     {
         use crate::backend::RelocExprBuilder;
-        Result(analyze_instruction(
+        let mut collector = DiagnosticsCollector(Vec::new());
+        let result = analyze_instruction(
             (mnemonic, TokenId::Mnemonic.into()),
             operands.into_iter().enumerate().map(add_token_spans),
             &mut RelocExprBuilder::new(),
-            &mut Testing,
-        ))
-    }
-
-    struct Testing;
-
-    impl Span for Testing {
-        type Span = TokenSpan;
-    }
-
-    impl MergeSpans for Testing {
-        fn merge_spans(&mut self, left: &TokenSpan, right: &TokenSpan) -> TokenSpan {
-            TokenSpan::merge(left, right)
-        }
+            &mut collector,
+        );
+        AnalysisResult(result.map_err(|_| collector.0))
     }
 
     fn add_token_spans((i, operand): (usize, Input)) -> SemanticExpr<String, TokenSpan> {
@@ -1059,18 +1109,6 @@ mod tests {
             ExpectedDiagnostic::new(Message::OperandCannotBeIncDec(IncDec::Inc))
                 .with_highlight(TokenId::Operand(0, 0)),
         )
-    }
-
-    #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-    pub enum TokenId {
-        Mnemonic,
-        Operand(usize, usize),
-    }
-
-    #[derive(Clone, Debug, PartialEq)]
-    pub struct TokenSpan {
-        first: TokenId,
-        last: TokenId,
     }
 
     impl From<TokenId> for TokenSpan {
