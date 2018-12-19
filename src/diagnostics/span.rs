@@ -5,7 +5,7 @@ use std::ops::{Range, RangeInclusive};
 use std::rc::Rc;
 
 pub trait Span {
-    type Span: Clone + PartialEq;
+    type Span: Clone;
 }
 
 pub trait SnippetRef {

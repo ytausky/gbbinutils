@@ -175,7 +175,7 @@ fn reduce_include<I: Debug + PartialEq, D: DownstreamDiagnostics>(
     }
 }
 
-fn single_arg<T: PartialEq, D: DownstreamDiagnostics>(
+fn single_arg<T, D: DownstreamDiagnostics>(
     span: D::Span,
     args: impl IntoIterator<Item = T>,
     diagnostics: &mut D,

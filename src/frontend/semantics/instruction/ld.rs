@@ -286,11 +286,11 @@ impl<V: Source> Source for LdSpecial<V> {
     }
 }
 
-impl<S: Clone + PartialEq> Span for LdDest16<S> {
+impl<S: Clone> Span for LdDest16<S> {
     type Span = S;
 }
 
-impl<S: Clone + PartialEq> Source for LdDest16<S> {
+impl<S: Clone> Source for LdDest16<S> {
     fn span(&self) -> Self::Span {
         match self {
             LdDest16::Reg16(_, span) => span.clone(),

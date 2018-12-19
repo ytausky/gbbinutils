@@ -5,7 +5,7 @@ use crate::diagnostics::{CompactDiagnostic, EmitDiagnostic, Message};
 use crate::span::Source;
 use std::vec::IntoIter;
 
-impl<S: Clone + PartialEq> Chunk<S> {
+impl<S: Clone> Chunk<S> {
     pub fn translate(
         &self,
         context: &mut EvalContext<&SymbolTable>,
@@ -24,7 +24,7 @@ impl<S: Clone + PartialEq> Chunk<S> {
     }
 }
 
-impl<S: Clone + PartialEq> Node<S> {
+impl<S: Clone> Node<S> {
     fn translate(
         &self,
         context: &EvalContext<&SymbolTable>,
@@ -90,7 +90,7 @@ impl Data {
     }
 }
 
-fn resolve_expr_item<S: Clone + PartialEq>(
+fn resolve_expr_item<S: Clone>(
     expr: &RelocExpr<S>,
     width: Width,
     context: &EvalContext<&SymbolTable>,
@@ -111,7 +111,7 @@ fn resolve_expr_item<S: Clone + PartialEq>(
     fit_to_width((value, span), width, diagnostics)
 }
 
-fn fit_to_width<S: Clone + PartialEq>(
+fn fit_to_width<S: Clone>(
     (value, value_ref): (i32, S),
     width: Width,
     diagnostics: &mut impl EmitDiagnostic<Span = S>,

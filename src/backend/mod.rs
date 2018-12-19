@@ -55,7 +55,7 @@ pub trait ValueBuilder: Span {
 
 pub trait Backend<S>
 where
-    S: Clone + PartialEq,
+    S: Clone,
     Self: HasValue<Span = S>,
     for<'a> Self: BuildValue<'a, <Self as HasValue>::Value>,
 {

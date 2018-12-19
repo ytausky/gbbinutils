@@ -113,7 +113,7 @@ impl<SR> ObjectBuilder<SR> {
     }
 }
 
-impl<S: Clone + PartialEq> Chunk<S> {
+impl<S: Clone> Chunk<S> {
     fn traverse<ST, F>(&self, context: &mut EvalContext<ST>, f: F) -> Value
     where
         ST: Borrow<SymbolTable>,
@@ -131,7 +131,7 @@ impl<S: Clone + PartialEq> Chunk<S> {
     }
 }
 
-fn traverse_chunk_items<S: Clone + PartialEq, ST, F>(
+fn traverse_chunk_items<S, ST, F>(
     items: &[Node<S>],
     context: &mut EvalContext<ST>,
     mut f: F,
