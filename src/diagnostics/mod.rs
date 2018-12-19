@@ -256,10 +256,12 @@ impl<S, R> CompactDiagnostic<S, R> {
     }
 }
 
+#[derive(Debug, PartialEq)]
 struct ExpandedDiagnostic<S, B, R> {
     clauses: Vec<ExpandedDiagnosticClause<S, B, R>>,
 }
 
+#[derive(Debug, PartialEq)]
 struct ExpandedDiagnosticClause<S, B, R> {
     buf_id: B,
     tag: DiagnosticClauseTag,
@@ -267,15 +269,15 @@ struct ExpandedDiagnosticClause<S, B, R> {
     location: Option<R>,
 }
 
-impl CompactDiagnostic<SpanData, BufSnippetRef> {
-    fn expand(self) -> ExpandedDiagnostic<BufSnippetRef, BufId, BufRange> {
+impl<B: Clone, R> CompactDiagnostic<SpanData<B, R>, BufSnippetRef<B, R>> {
+    fn expand(self) -> ExpandedDiagnostic<BufSnippetRef<B, R>, B, R> {
         let (range, context) = if let SpanData::Buf { range, context } = self.highlight {
             (range, context)
         } else {
             unimplemented!()
         };
         let main_clause = ExpandedDiagnosticClause {
-            buf_id: context.buf_id,
+            buf_id: context.buf_id.clone(),
             tag: DiagnosticClauseTag::Error,
             message: self.message,
             location: Some(range),
@@ -302,12 +304,14 @@ pub struct DiagnosticClause<T> {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum DiagnosticClauseTag {
     Error,
+    Note,
 }
 
 impl fmt::Display for DiagnosticClauseTag {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str(match self {
             DiagnosticClauseTag::Error => "error",
+            DiagnosticClauseTag::Note => "note",
         })
     }
 }
@@ -529,6 +533,58 @@ dummy
             message.render(&TextCache::new()),
             "expected 1 operand, found 0"
         )
+    }
+
+    #[ignore]
+    #[test]
+    fn expand_error_in_macro() {
+        let buf_context = Rc::new(BufContextData {
+            buf_id: (),
+            included_from: None,
+        });
+        let macro_def = Rc::new(MacroDef {
+            name: SpanData::Buf {
+                range: 0,
+                context: Rc::clone(&buf_context),
+            },
+            params: vec![],
+            body: vec![],
+        });
+        let context = Rc::new(MacroExpansionData {
+            name: SpanData::Buf {
+                range: 1,
+                context: Rc::clone(&buf_context),
+            },
+            args: vec![],
+            def: macro_def,
+        });
+        let position = MacroExpansionPosition {
+            token: 0,
+            expansion: None,
+        };
+        let span = SpanData::Macro {
+            range: position.clone()..=position,
+            context,
+        };
+        let message = Message::AfOutsideStackOperation;
+        let compact = CompactDiagnostic::new(message.clone(), span);
+        let expected = ExpandedDiagnostic {
+            clauses: vec![
+                ExpandedDiagnosticClause {
+                    buf_id: (),
+                    tag: DiagnosticClauseTag::Error,
+                    message,
+                    location: Some(1),
+                },
+                ExpandedDiagnosticClause {
+                    buf_id: (),
+                    tag: DiagnosticClauseTag::Note,
+                    message: Message::InvokedHere,
+                    location: Some(0),
+                },
+            ],
+        };
+        assert_eq!(compact.expand(), expected)
     }
 
     fn mk_highlight(line_number: LineNumber, start: usize, end: usize) -> Option<TextRange> {
