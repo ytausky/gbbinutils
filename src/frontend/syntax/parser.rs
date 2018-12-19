@@ -1,4 +1,5 @@
 use super::*;
+use crate::diagnostics::span::{SnippetRef, Span};
 use crate::diagnostics::{CompactDiagnostic, EmitDiagnostic, Message};
 
 type TokenKind = Token<(), (), (), ()>;
@@ -200,6 +201,14 @@ where
     }
 }
 
+type ParserResult<P, C> = Result<
+    P,
+    (
+        P,
+        ExprParsingError<<C as Span>::Span, <C as SnippetRef>::SnippetRef>,
+    ),
+>;
+
 enum ExprParsingError<S, R> {
     NothingParsed,
     Other(CompactDiagnostic<S, R>),
@@ -233,9 +242,7 @@ where
             })
     }
 
-    fn parse_expression(
-        mut self,
-    ) -> Result<Self, (Self, ExprParsingError<Ctx::Span, Ctx::SnippetRef>)> {
+    fn parse_expression(mut self) -> ParserResult<Self, Ctx> {
         match self.token {
             (Token::OpeningParenthesis, span) => {
                 bump!(self);
@@ -245,10 +252,7 @@ where
         }
     }
 
-    fn parse_parenthesized_expression(
-        mut self,
-        left: Ctx::Span,
-    ) -> Result<Self, (Self, ExprParsingError<Ctx::Span, Ctx::SnippetRef>)> {
+    fn parse_parenthesized_expression(mut self, left: Ctx::Span) -> ParserResult<Self, Ctx> {
         self = match self.parse_expression() {
             Ok(parser) => parser,
             Err((parser, error)) => {
@@ -283,9 +287,7 @@ where
         }
     }
 
-    fn parse_infix_expr(
-        mut self,
-    ) -> Result<Self, (Self, ExprParsingError<Ctx::Span, Ctx::SnippetRef>)> {
+    fn parse_infix_expr(mut self) -> ParserResult<Self, Ctx> {
         self = self.parse_atomic_expr()?;
         while let (Token::Plus, span) = self.token {
             bump!(self);
@@ -295,9 +297,7 @@ where
         Ok(self)
     }
 
-    fn parse_atomic_expr(
-        mut self,
-    ) -> Result<Self, (Self, ExprParsingError<Ctx::Span, Ctx::SnippetRef>)> {
+    fn parse_atomic_expr(mut self) -> ParserResult<Self, Ctx> {
         match self.token.0 {
             Token::Eof | Token::Eol => Err((self, ExprParsingError::NothingParsed)),
             Token::Ident(ident) => {

@@ -77,7 +77,7 @@ where
     match expr.variant {
         ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(keyword))) => {
             analyze_deref_operand_keyword(
-                (keyword, expr.span),
+                (keyword, &expr.span),
                 deref_span,
                 value_context.diagnostics,
             )
@@ -87,7 +87,7 @@ where
 }
 
 fn analyze_deref_operand_keyword<V: Source, D>(
-    keyword: (kw::Operand, D::Span),
+    keyword: (kw::Operand, &D::Span),
     deref: D::Span,
     diagnostics: &mut D,
 ) -> Result<Operand<V>, ()>
@@ -98,7 +98,7 @@ where
     match try_deref_operand_keyword(keyword.0) {
         Ok(atom) => Ok(Operand::Atom(atom, deref)),
         Err(category) => {
-            let snippet_ref = diagnostics.mk_snippet_ref(&keyword.1);
+            let snippet_ref = diagnostics.mk_snippet_ref(keyword.1);
             diagnostics.emit_diagnostic(CompactDiagnostic::new(
                 Message::CannotDereference {
                     category,
