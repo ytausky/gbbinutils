@@ -1,4 +1,4 @@
-use crate::codebase::{BufId, BufRange};
+use crate::codebase::{BufId, BufRange, TextCache};
 use std::cmp::Ordering;
 use std::fmt::Debug;
 use std::marker::PhantomData;
@@ -84,6 +84,18 @@ pub enum SpanData<B = BufId, R = BufRange> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct BufSnippetRef<B = BufId, R = BufRange> {
+    buf_id: B,
+    range: R,
+}
+
+impl TextCache {
+    pub fn snippet(&self, snippet_ref: &BufSnippetRef) -> &str {
+        &self.buf(snippet_ref.buf_id).as_str()[snippet_ref.range.clone()]
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct MacroExpansionPosition {
     pub token: usize,
     pub expansion: Option<TokenExpansion>,
@@ -151,7 +163,7 @@ where
 }
 
 impl<B, R> SnippetRef for RcContextFactory<B, R> {
-    type SnippetRef = SpanData<B, R>;
+    type SnippetRef = BufSnippetRef<B, R>;
 }
 
 impl<B, R> MacroContextFactory for RcContextFactory<B, R>
@@ -226,7 +238,14 @@ impl MergeSpans for RcContextFactory<BufId, BufRange> {
 
 impl MkSnippetRef for RcContextFactory<BufId, BufRange> {
     fn mk_snippet_ref(&mut self, span: &Self::Span) -> Self::SnippetRef {
-        span.clone()
+        if let SpanData::Buf { range, context } = span {
+            BufSnippetRef {
+                buf_id: context.buf_id,
+                range: range.clone(),
+            }
+        } else {
+            unimplemented!()
+        }
     }
 }
 

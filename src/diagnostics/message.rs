@@ -1,6 +1,6 @@
 use crate::backend::Width;
 use crate::codebase::{CodebaseError, TextCache};
-use crate::diagnostics::span::SpanData;
+use crate::diagnostics::span::BufSnippetRef;
 use crate::instruction::IncDec;
 use std::fmt;
 
@@ -95,7 +95,7 @@ impl<S> From<CodebaseError> for Message<S> {
     }
 }
 
-impl Message<SpanData> {
+impl Message<BufSnippetRef> {
     pub fn render<'a>(&self, codebase: &'a TextCache) -> String {
         use self::Message::*;
         match self {
@@ -109,7 +109,7 @@ impl Message<SpanData> {
             CannotDereference { category, operand } => format!(
                 "{} `{}` cannot be dereferenced",
                 category,
-                mk_snippet(codebase, operand),
+                codebase.snippet(operand),
             ),
             CannotSpecifyTarget => "branch target cannot be specified explicitly".into(),
             ConditionOutsideBranch => {
@@ -124,7 +124,7 @@ impl Message<SpanData> {
             IoError { string } => string.clone(),
             KeywordInExpr { keyword } => format!(
                 "keyword `{}` cannot appear in expression",
-                mk_snippet(codebase, keyword),
+                codebase.snippet(keyword),
             ),
             LdDerefHlDerefHl {
                 mnemonic,
@@ -132,9 +132,9 @@ impl Message<SpanData> {
                 src,
             } => format!(
                 "`{} {}, {}` is not a legal instruction",
-                mk_snippet(codebase, mnemonic),
-                mk_snippet(codebase, dest),
-                mk_snippet(codebase, src)
+                codebase.snippet(mnemonic),
+                codebase.snippet(dest),
+                codebase.snippet(src)
             ),
             LdSpHlOperands => {
                 "the only legal 16-bit register to register transfer is from `hl` to `sp`".into()
@@ -151,21 +151,21 @@ impl Message<SpanData> {
                 format!(
                     "cannot load {}-bit source `{}` into {}-bit destination `{}`",
                     src_bits,
-                    mk_snippet(codebase, src),
+                    codebase.snippet(src),
                     dest_bits,
-                    mk_snippet(codebase, dest),
+                    codebase.snippet(dest),
                 )
             }
             MacroRequiresName => "macro definition must be preceded by label".into(),
             MissingTarget => "branch instruction requires target".into(),
             MustBeBit { mnemonic } => format!(
                 "first operand of `{}` must be bit number",
-                mk_snippet(codebase, mnemonic),
+                codebase.snippet(mnemonic),
             ),
             MustBeConst => "operand must be a constant".into(),
             MustBeDeref { operand } => format!(
                 "operand `{}` must be dereferenced",
-                mk_snippet(codebase, operand),
+                codebase.snippet(operand),
             ),
             OnlySupportedByA => "only `a` can be used for this operand".into(),
             OperandCannotBeIncDec(operation) => format!(
@@ -183,7 +183,7 @@ impl Message<SpanData> {
             ),
             RequiresConstantTarget { mnemonic } => format!(
                 "instruction `{}` requires a constant target",
-                mk_snippet(codebase, mnemonic),
+                codebase.snippet(mnemonic),
             ),
             RequiresRegPair => "instruction requires a register pair".into(),
             RequiresSimpleOperand => "instruction requires 8-bit register or `(hl)`".into(),
@@ -191,10 +191,9 @@ impl Message<SpanData> {
             StringInInstruction => "strings cannot appear in instruction operands".into(),
             UndefinedMacro { name } => format!("invocation of undefined macro `{}`", name),
             UnexpectedEof => "unexpected end of file".into(),
-            UnexpectedToken { token } => format!(
-                "encountered unexpected token `{}`",
-                mk_snippet(codebase, token),
-            ),
+            UnexpectedToken { token } => {
+                format!("encountered unexpected token `{}`", codebase.snippet(token))
+            }
             UnmatchedParenthesis => "unmatched parenthesis".into(),
             UnresolvedSymbol { symbol } => format!("symbol `{}` could not be resolved", symbol),
             ValueOutOfRange { value, width } => {
@@ -228,36 +227,5 @@ impl fmt::Display for Width {
             Width::Byte => f.write_str("byte"),
             Width::Word => f.write_str("word"),
         }
-    }
-}
-
-fn mk_snippet<'a>(codebase: &'a TextCache, span: &SpanData) -> &'a str {
-    match span {
-        SpanData::Buf { range, context } => &codebase.buf(context.buf_id).as_str()[range.clone()],
-        SpanData::Macro { .. } => unimplemented!(),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::codebase::BufRange;
-    use crate::diagnostics::span::BufContextData;
-    use std::rc::Rc;
-
-    #[test]
-    fn get_snippet() {
-        let mut codebase = TextCache::new();
-        let src = "add snippet, my";
-        let buf_id = codebase.add_src_buf("some_file", src);
-        let context = Rc::new(BufContextData {
-            buf_id,
-            included_from: None,
-        });
-        let span = SpanData::Buf {
-            range: BufRange::from(4..11),
-            context: context.clone(),
-        };
-        assert_eq!(mk_snippet(&codebase, &span), "snippet")
     }
 }

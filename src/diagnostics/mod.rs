@@ -174,7 +174,7 @@ pub struct OutputForwarder<'a> {
 }
 
 impl<'a> SnippetRef for OutputForwarder<'a> {
-    type SnippetRef = SpanData;
+    type SnippetRef = BufSnippetRef;
 }
 
 impl<'a> Span for OutputForwarder<'a> {
@@ -182,7 +182,7 @@ impl<'a> Span for OutputForwarder<'a> {
 }
 
 impl<'a> EmitDiagnostic for OutputForwarder<'a> {
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SpanData, SpanData>) {
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SpanData, BufSnippetRef>) {
         self.output
             .emit(diagnostic.elaborate(&self.codebase.borrow()))
     }
@@ -289,7 +289,10 @@ pub struct DiagnosticLocation<T> {
     pub highlight: Option<TextRange>,
 }
 
-pub fn mk_diagnostic(file: impl Into<String>, message: &Message<SpanData>) -> Diagnostic<String> {
+pub fn mk_diagnostic(
+    file: impl Into<String>,
+    message: &Message<BufSnippetRef>,
+) -> Diagnostic<String> {
     Diagnostic {
         clauses: vec![DiagnosticClause {
             file: file.into(),
@@ -300,7 +303,7 @@ pub fn mk_diagnostic(file: impl Into<String>, message: &Message<SpanData>) -> Di
     }
 }
 
-impl CompactDiagnostic<SpanData, SpanData> {
+impl CompactDiagnostic<SpanData, BufSnippetRef> {
     fn elaborate<'a, T: From<&'a str>>(&self, codebase: &'a TextCache) -> Diagnostic<T> {
         Diagnostic {
             clauses: vec![self.main_clause(codebase)],
