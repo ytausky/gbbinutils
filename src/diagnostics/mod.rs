@@ -1,5 +1,5 @@
 pub use self::message::{KeywordOperandCategory, Message};
-use crate::codebase::{BufId, LineNumber, TextBuf, TextCache, TextRange};
+use crate::codebase::{BufId, BufRange, LineNumber, TextBuf, TextCache, TextRange};
 use crate::span::*;
 use std::borrow::Borrow;
 use std::cell::RefCell;
@@ -184,7 +184,7 @@ impl<'a> Span for OutputForwarder<'a> {
 impl<'a> EmitDiagnostic for OutputForwarder<'a> {
     fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SpanData, BufSnippetRef>) {
         self.output
-            .emit(diagnostic.elaborate(&self.codebase.borrow()))
+            .emit(diagnostic.expand().render(&self.codebase.borrow()))
     }
 }
 
@@ -256,6 +256,36 @@ impl<S, R> CompactDiagnostic<S, R> {
     }
 }
 
+struct ExpandedDiagnostic<S, B, R> {
+    clauses: Vec<ExpandedDiagnosticClause<S, B, R>>,
+}
+
+struct ExpandedDiagnosticClause<S, B, R> {
+    buf_id: B,
+    tag: DiagnosticClauseTag,
+    message: Message<S>,
+    location: Option<R>,
+}
+
+impl CompactDiagnostic<SpanData, BufSnippetRef> {
+    fn expand(self) -> ExpandedDiagnostic<BufSnippetRef, BufId, BufRange> {
+        let (range, context) = if let SpanData::Buf { range, context } = self.highlight {
+            (range, context)
+        } else {
+            unimplemented!()
+        };
+        let main_clause = ExpandedDiagnosticClause {
+            buf_id: context.buf_id,
+            tag: DiagnosticClauseTag::Error,
+            message: self.message,
+            location: Some(range),
+        };
+        ExpandedDiagnostic {
+            clauses: vec![main_clause],
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct Diagnostic<T> {
     pub clauses: Vec<DiagnosticClause<T>>,
@@ -269,7 +299,7 @@ pub struct DiagnosticClause<T> {
     pub location: Option<DiagnosticLocation<T>>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum DiagnosticClauseTag {
     Error,
 }
@@ -303,36 +333,40 @@ pub fn mk_diagnostic(
     }
 }
 
-impl CompactDiagnostic<SpanData, BufSnippetRef> {
-    fn elaborate<'a, T: From<&'a str>>(&self, codebase: &'a TextCache) -> Diagnostic<T> {
+impl ExpandedDiagnostic<BufSnippetRef, BufId, BufRange> {
+    fn render<'a, T: From<&'a str>>(&self, codebase: &'a TextCache) -> Diagnostic<T> {
         Diagnostic {
-            clauses: vec![self.main_clause(codebase)],
+            clauses: self
+                .clauses
+                .iter()
+                .map(|clause| clause.render(codebase))
+                .collect(),
         }
     }
+}
 
-    fn main_clause<'a, T: From<&'a str>>(&self, codebase: &'a TextCache) -> DiagnosticClause<T> {
-        let (file, source, highlight) = match &self.highlight {
-            SpanData::Buf { range, context } => {
-                let buf = codebase.buf(context.buf_id);
-                let highlight = buf.text_range(&range);
-                let source = buf
-                    .lines(highlight.start.line..=highlight.end.line)
-                    .next()
-                    .map(|(_, line)| line.trim_right())
-                    .unwrap();
-                (buf.name().into(), source, highlight)
-            }
-            SpanData::Macro { .. } => unimplemented!(),
-        };
-        DiagnosticClause {
-            file,
-            tag: DiagnosticClauseTag::Error,
-            message: self.message.render(codebase),
-            location: Some(DiagnosticLocation {
+impl ExpandedDiagnosticClause<BufSnippetRef, BufId, BufRange> {
+    fn render<'a, T: From<&'a str>>(&self, codebase: &'a TextCache) -> DiagnosticClause<T> {
+        let buf = codebase.buf(self.buf_id);
+        let location = self.location.as_ref().map(|range| {
+            let highlight = buf.text_range(&range);
+            let source = buf
+                .lines(highlight.start.line..=highlight.end.line)
+                .next()
+                .map(|(_, line)| line.trim_right())
+                .unwrap()
+                .into();
+            DiagnosticLocation {
                 line: highlight.start.line.into(),
-                source: source.into(),
+                source,
                 highlight: Some(highlight),
-            }),
+            }
+        });
+        DiagnosticClause {
+            file: buf.name().into(),
+            tag: self.tag,
+            message: self.message.render(codebase),
+            location,
         }
     }
 }
@@ -412,7 +446,7 @@ mod tests {
             highlight: token_ref,
         };
         assert_eq!(
-            diagnostic.elaborate(&codebase),
+            diagnostic.expand().render(&codebase),
             Diagnostic {
                 clauses: vec![DiagnosticClause {
                     file: DUMMY_FILE,
