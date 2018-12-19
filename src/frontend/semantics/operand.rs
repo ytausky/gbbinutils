@@ -212,7 +212,6 @@ mod tests {
     use crate::backend::{RelocAtom, RelocExpr, RelocExprBuilder};
     use crate::diagnostics::span::MergeSpans;
     use crate::frontend::semantics::DiagnosticsCollector;
-    use std::fmt::Debug;
 
     #[test]
     fn analyze_deref_bc() {
@@ -251,7 +250,7 @@ mod tests {
         )
     }
 
-    fn analyze_operand<I: Into<String>, S: Clone + Debug + PartialEq>(
+    fn analyze_operand<I: Into<String>, S: Clone + PartialEq>(
         expr: SemanticExpr<I, S>,
         context: Context,
     ) -> Result<Operand<RelocExpr<S>>, Vec<CompactDiagnostic<S, S>>>

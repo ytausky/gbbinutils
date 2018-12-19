@@ -8,7 +8,6 @@ use crate::expr::ExprVariant;
 use crate::frontend::syntax::Literal;
 use crate::frontend::Frontend;
 use crate::span::Source;
-use std::fmt::Debug;
 
 pub fn analyze_directive<'a: 'b, 'b, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
     directive: (Directive, D::Span),
@@ -160,7 +159,7 @@ fn location_counter_plus_expr<B: ValueBuilder>(expr: B::Value, builder: &mut B) 
     builder.apply_binary_operator((BinaryOperator::Plus, expr.span()), location, expr)
 }
 
-fn reduce_include<I: Debug + PartialEq, D: DownstreamDiagnostics>(
+fn reduce_include<I: PartialEq, D: DownstreamDiagnostics>(
     span: D::Span,
     args: Vec<SemanticExpr<I, D::Span>>,
     diagnostics: &mut D,

@@ -8,7 +8,6 @@ use crate::backend::{
 use crate::expr::{Expr, ExprVariant};
 use crate::instruction::Instruction;
 use crate::span::{Source, Span};
-use std::fmt::Debug;
 use std::marker::PhantomData;
 
 mod lowering;
@@ -145,11 +144,11 @@ impl<S> RelocExprBuilder<S> {
     }
 }
 
-impl<S: Clone + Debug + PartialEq> Span for RelocExprBuilder<S> {
+impl<S: Clone> Span for RelocExprBuilder<S> {
     type Span = S;
 }
 
-impl<S: Clone + Debug + PartialEq> ValueBuilder for RelocExprBuilder<S> {
+impl<S: Clone> ValueBuilder for RelocExprBuilder<S> {
     type Value = RelocExpr<S>;
 
     fn location(&mut self, span: S) -> RelocExpr<S> {
@@ -177,15 +176,15 @@ impl<S: Clone + Debug + PartialEq> ValueBuilder for RelocExprBuilder<S> {
     }
 }
 
-impl<S: Clone + Debug + PartialEq> Span for ObjectBuilder<S> {
+impl<S: Clone> Span for ObjectBuilder<S> {
     type Span = S;
 }
 
-impl<S: Clone + Debug + PartialEq> HasValue for ObjectBuilder<S> {
+impl<S: Clone> HasValue for ObjectBuilder<S> {
     type Value = RelocExpr<S>;
 }
 
-impl<'a, S: Clone + Debug + PartialEq> BuildValue<'a, RelocExpr<S>> for ObjectBuilder<S> {
+impl<'a, S: Clone> BuildValue<'a, RelocExpr<S>> for ObjectBuilder<S> {
     type Builder = RelocExprBuilder<S>;
 
     fn build_value(&'a mut self) -> Self::Builder {
@@ -193,7 +192,7 @@ impl<'a, S: Clone + Debug + PartialEq> BuildValue<'a, RelocExpr<S>> for ObjectBu
     }
 }
 
-impl<S: Clone + Debug + PartialEq> Backend<S> for ObjectBuilder<S> {
+impl<S: Clone> Backend<S> for ObjectBuilder<S> {
     type Object = Object<S>;
 
     fn define_symbol(&mut self, symbol: (impl Into<String>, S), value: Self::Value) {

@@ -10,7 +10,6 @@ use crate::diagnostics::*;
 use crate::frontend::session::*;
 use crate::frontend::syntax::*;
 use crate::span::BufContext;
-use std::fmt::Debug;
 use std::rc::Rc;
 
 pub use crate::frontend::syntax::Token;
@@ -41,7 +40,7 @@ pub struct Downstream<'a, B: 'a, D: 'a> {
 trait Analysis<Id>
 where
     Self: Copy,
-    Id: Into<String> + Clone + AsRef<str> + Debug + PartialEq,
+    Id: Into<String> + Clone + AsRef<str> + PartialEq,
 {
     fn run<I, F, B, D>(&self, tokens: I, session: Session<F, B, D>)
     where
@@ -55,7 +54,7 @@ where
 struct SemanticAnalysis;
 
 pub trait Frontend<D: Diagnostics> {
-    type Ident: AsRef<str> + Clone + Into<String> + Debug + PartialEq;
+    type Ident: AsRef<str> + Clone + Into<String> + PartialEq;
     type MacroDefId: Clone;
 
     fn analyze_file<B>(
@@ -85,7 +84,7 @@ pub trait Frontend<D: Diagnostics> {
 
 impl<Id> Analysis<Id> for SemanticAnalysis
 where
-    Id: Into<String> + Clone + AsRef<str> + Debug + PartialEq,
+    Id: Into<String> + Clone + AsRef<str> + PartialEq,
 {
     fn run<'a, I, F, B, D>(&self, tokens: I, session: Session<'a, F, B, D>)
     where
@@ -204,7 +203,7 @@ where
 }
 
 trait Ident {
-    type Ident: AsRef<str> + Clone + Into<String> + Debug + PartialEq;
+    type Ident: AsRef<str> + Clone + Into<String> + PartialEq;
 }
 
 trait Tokenize<C: BufContext>
