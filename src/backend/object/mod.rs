@@ -3,7 +3,6 @@ use self::resolve::Value;
 use crate::backend::{BinaryObject, RelocExpr, Width};
 use crate::diagnostics::EmitDiagnostic;
 use std::borrow::Borrow;
-use std::fmt::Debug;
 
 mod context;
 mod resolve;
@@ -114,7 +113,7 @@ impl<SR> ObjectBuilder<SR> {
     }
 }
 
-impl<S: Clone + Debug + PartialEq> Chunk<S> {
+impl<S: Clone + PartialEq> Chunk<S> {
     fn traverse<ST, F>(&self, context: &mut EvalContext<ST>, f: F) -> Value
     where
         ST: Borrow<SymbolTable>,
@@ -132,7 +131,7 @@ impl<S: Clone + Debug + PartialEq> Chunk<S> {
     }
 }
 
-fn traverse_chunk_items<S: Clone + Debug + PartialEq, ST, F>(
+fn traverse_chunk_items<S: Clone + PartialEq, ST, F>(
     items: &[Node<S>],
     context: &mut EvalContext<ST>,
     mut f: F,

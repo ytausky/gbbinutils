@@ -1,12 +1,11 @@
 use crate::codebase::{BufId, BufRange, TextCache};
 use std::cmp::Ordering;
-use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::{Range, RangeInclusive};
 use std::rc::Rc;
 
 pub trait Span {
-    type Span: Clone + Debug + PartialEq;
+    type Span: Clone + PartialEq;
 }
 
 pub trait SnippetRef {
@@ -189,7 +188,7 @@ impl<B, R> RcContextFactory<B, R> {
 
 impl<B, R> Span for RcContextFactory<B, R>
 where
-    SpanData<B, R>: Clone + Debug + PartialEq,
+    SpanData<B, R>: Clone + PartialEq,
 {
     type Span = SpanData<B, R>;
 }
@@ -200,7 +199,7 @@ impl<B, R> SnippetRef for RcContextFactory<B, R> {
 
 impl<B, R> MacroContextFactory for RcContextFactory<B, R>
 where
-    SpanData<B, R>: Clone + Debug + PartialEq,
+    SpanData<B, R>: Clone + PartialEq,
 {
     type MacroDefId = Rc<MacroDef<Self::Span>>;
     type MacroExpansionContext = Rc<MacroExpansionData<SpanData<B, R>>>;

@@ -200,7 +200,7 @@ impl<S> IgnoreDiagnostics<S> {
 }
 
 #[cfg(test)]
-impl<S: Clone + fmt::Debug + PartialEq> Span for IgnoreDiagnostics<S> {
+impl<S: Clone + PartialEq> Span for IgnoreDiagnostics<S> {
     type Span = S;
 }
 
@@ -210,7 +210,7 @@ impl<S> SnippetRef for IgnoreDiagnostics<S> {
 }
 
 #[cfg(test)]
-impl<S: Clone + fmt::Debug + PartialEq> EmitDiagnostic for IgnoreDiagnostics<S> {
+impl<S: Clone + PartialEq> EmitDiagnostic for IgnoreDiagnostics<S> {
     fn emit_diagnostic(&mut self, _: CompactDiagnostic<S, S>) {}
 }
 

@@ -175,14 +175,14 @@ fn reduce_include<I: Debug + PartialEq, D: DownstreamDiagnostics>(
     }
 }
 
-fn single_arg<T: Debug + PartialEq, D: DownstreamDiagnostics>(
+fn single_arg<T: PartialEq, D: DownstreamDiagnostics>(
     span: D::Span,
     args: impl IntoIterator<Item = T>,
     diagnostics: &mut D,
 ) -> Result<T, ()> {
     let mut args = args.into_iter();
     if let Some(arg) = args.next() {
-        assert_eq!(args.next(), None);
+        assert!(args.next().is_none());
         Ok(arg)
     } else {
         diagnostics.emit_diagnostic(CompactDiagnostic::new(

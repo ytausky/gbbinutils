@@ -5,8 +5,6 @@ use crate::expr::ExprVariant;
 use crate::frontend::session::Session;
 use crate::frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token};
 use crate::frontend::{Frontend, Literal};
-#[cfg(test)]
-use std::fmt::Debug;
 
 mod directive;
 mod instruction;
@@ -556,7 +554,7 @@ pub struct TokenSpan {
 pub struct DiagnosticsCollector<S>(Vec<CompactDiagnostic<S, S>>);
 
 #[cfg(test)]
-impl<S: Clone + Debug + PartialEq> Span for DiagnosticsCollector<S> {
+impl<S: Clone + PartialEq> Span for DiagnosticsCollector<S> {
     type Span = S;
 }
 
@@ -573,14 +571,14 @@ impl MergeSpans for DiagnosticsCollector<TokenSpan> {
 }
 
 #[cfg(test)]
-impl<S: Clone + Debug + PartialEq> MkSnippetRef for DiagnosticsCollector<S> {
+impl<S: Clone + PartialEq> MkSnippetRef for DiagnosticsCollector<S> {
     fn mk_snippet_ref(&mut self, span: &Self::Span) -> Self::SnippetRef {
         span.clone()
     }
 }
 
 #[cfg(test)]
-impl<S: Clone + Debug + PartialEq> EmitDiagnostic for DiagnosticsCollector<S> {
+impl<S: Clone + PartialEq> EmitDiagnostic for DiagnosticsCollector<S> {
     fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span, Self::SnippetRef>) {
         self.0.push(diagnostic)
     }

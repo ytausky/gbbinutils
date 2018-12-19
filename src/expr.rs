@@ -1,5 +1,4 @@
 use crate::span::{Source, Span};
-use std::fmt::Debug;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Expr<A, U, B, S> {
@@ -29,11 +28,11 @@ impl<A, U, B, S> From<A> for ExprVariant<A, U, B, S> {
     }
 }
 
-impl<A, U, B, S: Clone + Debug + PartialEq> Span for Expr<A, U, B, S> {
+impl<A, U, B, S: Clone + PartialEq> Span for Expr<A, U, B, S> {
     type Span = S;
 }
 
-impl<A, U, B, S: Clone + Debug + PartialEq> Source for Expr<A, U, B, S> {
+impl<A, U, B, S: Clone + PartialEq> Source for Expr<A, U, B, S> {
     fn span(&self) -> Self::Span {
         self.span.clone()
     }

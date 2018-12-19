@@ -5,7 +5,6 @@ use crate::backend::{Node, Object, RelocAtom, RelocExpr};
 use crate::expr::ExprVariant;
 use crate::span::Source;
 use std::borrow::Borrow;
-use std::fmt::Debug;
 use std::ops::{Add, AddAssign, Sub};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -74,13 +73,13 @@ impl Sub<Value> for Value {
     }
 }
 
-pub fn resolve_symbols<S: Clone + Debug + PartialEq>(object: &Object<S>) -> SymbolTable {
+pub fn resolve_symbols<S: Clone + PartialEq>(object: &Object<S>) -> SymbolTable {
     let mut symbols = collect_symbols(object);
     refine_symbols(object, &mut symbols);
     symbols
 }
 
-fn collect_symbols<S: Clone + Debug + PartialEq>(object: &Object<S>) -> SymbolTable {
+fn collect_symbols<S: Clone + PartialEq>(object: &Object<S>) -> SymbolTable {
     let mut symbols = SymbolTable::new();
     (0..object.chunks.len()).for_each(|i| symbols.define(ChunkSize(i), Value::Unknown));
     {
@@ -101,10 +100,7 @@ fn collect_symbols<S: Clone + Debug + PartialEq>(object: &Object<S>) -> SymbolTa
     symbols
 }
 
-fn refine_symbols<S: Clone + Debug + PartialEq>(
-    object: &Object<S>,
-    symbols: &mut SymbolTable,
-) -> i32 {
+fn refine_symbols<S: Clone + PartialEq>(object: &Object<S>, symbols: &mut SymbolTable) -> i32 {
     let mut refinements = 0;
     let context = &mut EvalContext {
         symbols,
@@ -122,7 +118,7 @@ fn refine_symbols<S: Clone + Debug + PartialEq>(
     refinements
 }
 
-impl<S: Clone + Debug + PartialEq> RelocExpr<S> {
+impl<S: Clone + PartialEq> RelocExpr<S> {
     pub fn evaluate<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
         self.evaluate_strictly(context, &mut |_: &str, _: &S| ())
     }
@@ -162,7 +158,7 @@ impl<S: Clone + Debug + PartialEq> RelocExpr<S> {
     }
 }
 
-impl<S: Clone + Debug + PartialEq> Node<S> {
+impl<S: Clone + PartialEq> Node<S> {
     pub fn size<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
         match self {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),

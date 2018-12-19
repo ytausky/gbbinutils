@@ -4,7 +4,6 @@ use crate::diagnostics::span::{MergeSpans, MkSnippetRef, Source, Span};
 use crate::diagnostics::{CompactDiagnostic, DownstreamDiagnostics, EmitDiagnostic, Message};
 use crate::frontend::semantics::operand::AtomKind;
 use crate::instruction::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
-use std::fmt::Debug;
 
 impl<'a, Id, I, B, D> Analysis<'a, I, B, D>
 where
@@ -287,11 +286,11 @@ impl<V: Source> Source for LdSpecial<V> {
     }
 }
 
-impl<S: Clone + Debug + PartialEq> Span for LdDest16<S> {
+impl<S: Clone + PartialEq> Span for LdDest16<S> {
     type Span = S;
 }
 
-impl<S: Clone + Debug + PartialEq> Source for LdDest16<S> {
+impl<S: Clone + PartialEq> Source for LdDest16<S> {
     fn span(&self) -> Self::Span {
         match self {
             LdDest16::Reg16(_, span) => span.clone(),
