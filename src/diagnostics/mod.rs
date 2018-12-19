@@ -6,6 +6,7 @@ use std::cell::RefCell;
 use std::fmt;
 #[cfg(test)]
 use std::marker::PhantomData;
+use std::ops::Range;
 
 mod message;
 pub mod span;
@@ -269,23 +270,40 @@ struct ExpandedDiagnosticClause<S, B, R> {
     location: Option<R>,
 }
 
-impl<B: Clone, R> CompactDiagnostic<SpanData<B, R>, BufSnippetRef<B, R>> {
-    fn expand(self) -> ExpandedDiagnostic<BufSnippetRef<B, R>, B, R> {
-        let (range, context) = if let SpanData::Buf { range, context } = self.highlight {
-            (range, context)
-        } else {
-            unimplemented!()
-        };
+impl<B: Clone, T: Clone> CompactDiagnostic<SpanData<B, Range<T>>, BufSnippetRef<B, Range<T>>> {
+    fn expand(self) -> ExpandedDiagnostic<BufSnippetRef<B, Range<T>>, B, Range<T>> {
+        let BufSnippetRef { buf_id, range } = self.highlight.to_snippet_ref();
         let main_clause = ExpandedDiagnosticClause {
-            buf_id: context.buf_id.clone(),
+            buf_id,
             tag: DiagnosticClauseTag::Error,
             message: self.message,
             location: Some(range),
         };
-        ExpandedDiagnostic {
-            clauses: vec![main_clause],
+        let mut clauses = vec![main_clause];
+        if let Some(note) = mk_invoked_here_clause(&self.highlight) {
+            clauses.push(note)
         }
+        ExpandedDiagnostic { clauses }
     }
+}
+
+type BufSnippetClause<B, T> = ExpandedDiagnosticClause<BufSnippetRef<B, Range<T>>, B, Range<T>>;
+
+fn mk_invoked_here_clause<B: Clone, T: Clone>(
+    span: &SpanData<B, Range<T>>,
+) -> Option<BufSnippetClause<B, T>> {
+    let invocation = if let SpanData::Macro { context, .. } = span {
+        context.name.clone()
+    } else {
+        return None;
+    };
+    let snippet_ref = invocation.to_snippet_ref();
+    Some(ExpandedDiagnosticClause {
+        buf_id: snippet_ref.buf_id.clone(),
+        tag: DiagnosticClauseTag::Note,
+        location: Some(snippet_ref.range.clone()),
+        message: Message::InvokedHere { name: snippet_ref },
+    })
 }
 
 #[derive(Debug, PartialEq)]
@@ -535,25 +553,28 @@ dummy
         )
     }
 
-    #[ignore]
     #[test]
     fn expand_error_in_macro() {
-        let buf_context = Rc::new(BufContextData {
+        let buf_context = &Rc::new(BufContextData {
             buf_id: (),
             included_from: None,
         });
         let macro_def = Rc::new(MacroDef {
             name: SpanData::Buf {
-                range: 0,
-                context: Rc::clone(&buf_context),
+                range: 0..1,
+                context: Rc::clone(buf_context),
             },
             params: vec![],
-            body: vec![],
+            body: vec![SpanData::Buf {
+                range: 2..3,
+                context: Rc::clone(buf_context),
+            }],
         });
+        let incovation_range = 10..11;
         let context = Rc::new(MacroExpansionData {
             name: SpanData::Buf {
-                range: 1,
-                context: Rc::clone(&buf_context),
+                range: incovation_range.clone(),
+                context: Rc::clone(buf_context),
             },
             args: vec![],
             def: macro_def,
@@ -574,13 +595,18 @@ dummy
                     buf_id: (),
                     tag: DiagnosticClauseTag::Error,
                     message,
-                    location: Some(1),
+                    location: Some(2..3),
                 },
                 ExpandedDiagnosticClause {
                     buf_id: (),
                     tag: DiagnosticClauseTag::Note,
-                    message: Message::InvokedHere,
-                    location: Some(0),
+                    message: Message::InvokedHere {
+                        name: BufSnippetRef {
+                            buf_id: (),
+                            range: incovation_range,
+                        },
+                    },
+                    location: Some(10..11),
                 },
             ],
         };

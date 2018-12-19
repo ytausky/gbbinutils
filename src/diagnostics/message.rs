@@ -21,8 +21,9 @@ pub enum Message<S> {
     ExpectedString,
     IncompatibleOperand,
     InvalidUtf8,
-    #[cfg(test)]
-    InvokedHere,
+    InvokedHere {
+        name: S,
+    },
     IoError {
         string: String,
     },
@@ -123,8 +124,7 @@ impl Message<BufSnippetRef> {
             ExpectedString => "expected string argument".into(),
             IncompatibleOperand => "operand cannot be used with this instruction".into(),
             InvalidUtf8 => "file contains invalid UTF-8".into(),
-            #[cfg(test)]
-            InvokedHere => "invoked here".into(),
+            InvokedHere { name } => format!("in macro `{}`, invoked here", codebase.snippet(name)),
             IoError { string } => string.clone(),
             KeywordInExpr { keyword } => format!(
                 "keyword `{}` cannot appear in expression",

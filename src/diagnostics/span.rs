@@ -2,7 +2,7 @@ use crate::codebase::{BufId, BufRange, TextCache};
 use std::cmp::Ordering;
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::ops::RangeInclusive;
+use std::ops::{Range, RangeInclusive};
 use std::rc::Rc;
 
 pub trait Span {
@@ -85,8 +85,40 @@ pub enum SpanData<B = BufId, R = BufRange> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct BufSnippetRef<B = BufId, R = BufRange> {
-    buf_id: B,
-    range: R,
+    pub buf_id: B,
+    pub range: R,
+}
+
+impl<B: Clone, T: Clone> SpanData<B, Range<T>> {
+    pub fn to_snippet_ref(&self) -> BufSnippetRef<B, Range<T>> {
+        match self {
+            SpanData::Buf { range, context } => BufSnippetRef {
+                buf_id: context.buf_id.clone(),
+                range: range.clone(),
+            },
+            SpanData::Macro { range, context } => {
+                let start = &context.def.body[range.start().token];
+                let end = &context.def.body[range.end().token];
+                let (buf_id, range) = match (start, end) {
+                    (
+                        SpanData::Buf {
+                            ref range,
+                            ref context,
+                        },
+                        SpanData::Buf {
+                            range: ref other_range,
+                            context: ref other_context,
+                        },
+                    ) if Rc::ptr_eq(context, other_context) => (
+                        context.buf_id.clone(),
+                        range.start.clone()..other_range.end.clone(),
+                    ),
+                    _ => unimplemented!(),
+                };
+                BufSnippetRef { buf_id, range }
+            }
+        }
+    }
 }
 
 impl TextCache {
@@ -238,14 +270,7 @@ impl MergeSpans for RcContextFactory<BufId, BufRange> {
 
 impl MkSnippetRef for RcContextFactory<BufId, BufRange> {
     fn mk_snippet_ref(&mut self, span: &Self::Span) -> Self::SnippetRef {
-        if let SpanData::Buf { range, context } = span {
-            BufSnippetRef {
-                buf_id: context.buf_id,
-                range: range.clone(),
-            }
-        } else {
-            unimplemented!()
-        }
+        span.to_snippet_ref()
     }
 }
 
