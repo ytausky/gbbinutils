@@ -1,6 +1,6 @@
 use crate::backend::Width;
 use crate::codebase::{CodebaseError, TextCache};
-use crate::diagnostics::span::BufSnippetRef;
+use crate::diagnostics::span::StrippedBufSpan;
 use crate::instruction::IncDec;
 use std::fmt;
 
@@ -98,7 +98,7 @@ impl<S> From<CodebaseError> for Message<S> {
     }
 }
 
-impl Message<BufSnippetRef> {
+impl Message<StrippedBufSpan> {
     pub fn render<'a>(&self, codebase: &'a TextCache) -> String {
         use self::Message::*;
         match self {

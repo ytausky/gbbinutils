@@ -98,11 +98,11 @@ where
     match try_deref_operand_keyword(keyword.0) {
         Ok(atom) => Ok(Operand::Atom(atom, deref)),
         Err(category) => {
-            let snippet_ref = diagnostics.mk_snippet_ref(keyword.1);
+            let stripped = diagnostics.strip_span(keyword.1);
             diagnostics.emit_diagnostic(CompactDiagnostic::new(
                 Message::CannotDereference {
                     category,
-                    operand: snippet_ref,
+                    operand: stripped,
                 },
                 deref,
             ));
@@ -161,11 +161,9 @@ where
             _ => AtomKind::Reg16(Reg16::Hl),
         },
         Hld | Hli => {
-            let snippet_ref = diagnostics.mk_snippet_ref(&span);
+            let stripped = diagnostics.strip_span(&span);
             diagnostics.emit_diagnostic(CompactDiagnostic::new(
-                Message::MustBeDeref {
-                    operand: snippet_ref,
-                },
+                Message::MustBeDeref { operand: stripped },
                 span.clone(),
             ));
             Err(())?

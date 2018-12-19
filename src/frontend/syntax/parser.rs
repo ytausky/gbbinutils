@@ -1,5 +1,5 @@
 use super::*;
-use crate::diagnostics::span::{SnippetRef, Span};
+use crate::diagnostics::span::{Span, StrippedSpan};
 use crate::diagnostics::{CompactDiagnostic, EmitDiagnostic, Message};
 
 type TokenKind = Token<(), (), (), ()>;
@@ -121,9 +121,9 @@ where
             }
             (_, span) => {
                 bump!(self);
-                let snippet_ref = self.context.mk_snippet_ref(&span);
+                let stripped = self.context.strip_span(&span);
                 self.context.emit_diagnostic(CompactDiagnostic::new(
-                    Message::UnexpectedToken { token: snippet_ref },
+                    Message::UnexpectedToken { token: stripped },
                     span,
                 ));
                 self
@@ -205,7 +205,7 @@ type ParserResult<P, C> = Result<
     P,
     (
         P,
-        ExprParsingError<<C as Span>::Span, <C as SnippetRef>::SnippetRef>,
+        ExprParsingError<<C as Span>::Span, <C as StrippedSpan>::StrippedSpan>,
     ),
 >;
 
@@ -227,7 +227,7 @@ where
                         match parser.token.0 {
                             Token::Eof => Message::UnexpectedEof,
                             _ => Message::UnexpectedToken {
-                                token: parser.context.mk_snippet_ref(&parser.token.1),
+                                token: parser.context.strip_span(&parser.token.1),
                             },
                         },
                         parser.token.1.clone(),
@@ -314,12 +314,12 @@ where
             }
             _ => {
                 let span = self.token.1;
-                let snippet_ref = self.context.mk_snippet_ref(&span);
+                let stripped = self.context.strip_span(&span);
                 bump!(self);
                 Err((
                     self,
                     ExprParsingError::Other(CompactDiagnostic::new(
-                        Message::UnexpectedToken { token: snippet_ref },
+                        Message::UnexpectedToken { token: stripped },
                         span,
                     )),
                 ))
@@ -337,9 +337,9 @@ where
         match self.token.0 {
             Token::Ident(ident) => self.context.add_parameter((ident, self.token.1)),
             _ => {
-                let snippet_ref = self.context.mk_snippet_ref(&self.token.1);
+                let stripped = self.context.strip_span(&self.token.1);
                 self.context.emit_diagnostic(CompactDiagnostic::new(
-                    Message::UnexpectedToken { token: snippet_ref },
+                    Message::UnexpectedToken { token: stripped },
                     self.token.1.clone(),
                 ))
             }
@@ -388,9 +388,9 @@ where
         self = self.parse_list(delimiter, terminators, parser);
         if !self.token_is_in(terminators) {
             let unexpected_span = self.token.1;
-            let snippet_ref = self.context.mk_snippet_ref(&unexpected_span);
+            let stripped = self.context.strip_span(&unexpected_span);
             self.context.emit_diagnostic(CompactDiagnostic::new(
-                Message::UnexpectedToken { token: snippet_ref },
+                Message::UnexpectedToken { token: stripped },
                 unexpected_span,
             ));
             bump!(self);
@@ -430,7 +430,7 @@ mod tests {
     use super::ast::*;
     use super::Token::*;
     use super::*;
-    use crate::diagnostics::span::{MergeSpans, MkSnippetRef, SnippetRef, Span};
+    use crate::diagnostics::span::{MergeSpans, Span, StripSpan, StrippedSpan};
     use crate::diagnostics::{CompactDiagnostic, EmitDiagnostic, Message};
     use crate::frontend::syntax::{ExprAtom, ExprOperator};
     use std::borrow::Borrow;
@@ -457,8 +457,8 @@ mod tests {
         type Span = SymSpan;
     }
 
-    impl SnippetRef for FileActionCollector {
-        type SnippetRef = SymSpan;
+    impl StrippedSpan for FileActionCollector {
+        type StrippedSpan = SymSpan;
     }
 
     impl MergeSpans for FileActionCollector {
@@ -467,8 +467,8 @@ mod tests {
         }
     }
 
-    impl MkSnippetRef for FileActionCollector {
-        fn mk_snippet_ref(&mut self, span: &Self::Span) -> Self::SnippetRef {
+    impl StripSpan for FileActionCollector {
+        fn strip_span(&mut self, span: &Self::Span) -> Self::StrippedSpan {
             span.clone()
         }
     }
@@ -501,8 +501,8 @@ mod tests {
         type Span = SymSpan;
     }
 
-    impl SnippetRef for StmtActionCollector {
-        type SnippetRef = SymSpan;
+    impl StrippedSpan for StmtActionCollector {
+        type StrippedSpan = SymSpan;
     }
 
     impl MergeSpans for StmtActionCollector {
@@ -511,8 +511,8 @@ mod tests {
         }
     }
 
-    impl MkSnippetRef for StmtActionCollector {
-        fn mk_snippet_ref(&mut self, span: &Self::Span) -> Self::SnippetRef {
+    impl StripSpan for StmtActionCollector {
+        fn strip_span(&mut self, span: &Self::Span) -> Self::StrippedSpan {
             span.clone()
         }
     }
@@ -575,8 +575,8 @@ mod tests {
         type Span = SymSpan;
     }
 
-    impl SnippetRef for CommandActionCollector {
-        type SnippetRef = SymSpan;
+    impl StrippedSpan for CommandActionCollector {
+        type StrippedSpan = SymSpan;
     }
 
     impl MergeSpans for CommandActionCollector {
@@ -585,8 +585,8 @@ mod tests {
         }
     }
 
-    impl MkSnippetRef for CommandActionCollector {
-        fn mk_snippet_ref(&mut self, span: &Self::Span) -> Self::SnippetRef {
+    impl StripSpan for CommandActionCollector {
+        fn strip_span(&mut self, span: &Self::Span) -> Self::StrippedSpan {
             span.clone()
         }
     }
@@ -629,8 +629,8 @@ mod tests {
         type Span = SymSpan;
     }
 
-    impl SnippetRef for ArgActionCollector {
-        type SnippetRef = SymSpan;
+    impl StrippedSpan for ArgActionCollector {
+        type StrippedSpan = SymSpan;
     }
 
     impl MergeSpans for ArgActionCollector {
@@ -639,8 +639,8 @@ mod tests {
         }
     }
 
-    impl MkSnippetRef for ArgActionCollector {
-        fn mk_snippet_ref(&mut self, span: &Self::Span) -> Self::SnippetRef {
+    impl StripSpan for ArgActionCollector {
+        fn strip_span(&mut self, span: &Self::Span) -> Self::StrippedSpan {
             span.clone()
         }
     }
@@ -688,8 +688,8 @@ mod tests {
         type Span = SymSpan;
     }
 
-    impl SnippetRef for ExprActionCollector {
-        type SnippetRef = SymSpan;
+    impl StrippedSpan for ExprActionCollector {
+        type StrippedSpan = SymSpan;
     }
 
     impl MergeSpans for ExprActionCollector {
@@ -698,8 +698,8 @@ mod tests {
         }
     }
 
-    impl MkSnippetRef for ExprActionCollector {
-        fn mk_snippet_ref(&mut self, span: &Self::Span) -> Self::SnippetRef {
+    impl StripSpan for ExprActionCollector {
+        fn strip_span(&mut self, span: &Self::Span) -> Self::StrippedSpan {
             span.clone()
         }
     }
@@ -738,8 +738,8 @@ mod tests {
         type Span = SymSpan;
     }
 
-    impl SnippetRef for MacroParamsActionCollector {
-        type SnippetRef = SymSpan;
+    impl StrippedSpan for MacroParamsActionCollector {
+        type StrippedSpan = SymSpan;
     }
 
     impl MergeSpans for MacroParamsActionCollector {
@@ -748,8 +748,8 @@ mod tests {
         }
     }
 
-    impl MkSnippetRef for MacroParamsActionCollector {
-        fn mk_snippet_ref(&mut self, span: &Self::Span) -> Self::SnippetRef {
+    impl StripSpan for MacroParamsActionCollector {
+        fn strip_span(&mut self, span: &Self::Span) -> Self::StrippedSpan {
             span.clone()
         }
     }
@@ -789,8 +789,8 @@ mod tests {
         type Span = SymSpan;
     }
 
-    impl SnippetRef for MacroBodyActionCollector {
-        type SnippetRef = SymSpan;
+    impl StrippedSpan for MacroBodyActionCollector {
+        type StrippedSpan = SymSpan;
     }
 
     impl MergeSpans for MacroBodyActionCollector {
@@ -799,8 +799,8 @@ mod tests {
         }
     }
 
-    impl MkSnippetRef for MacroBodyActionCollector {
-        fn mk_snippet_ref(&mut self, span: &Self::Span) -> Self::SnippetRef {
+    impl StripSpan for MacroBodyActionCollector {
+        fn strip_span(&mut self, span: &Self::Span) -> Self::StrippedSpan {
             span.clone()
         }
     }
@@ -840,8 +840,8 @@ mod tests {
         type Span = SymSpan;
     }
 
-    impl SnippetRef for MacroInvocationActionCollector {
-        type SnippetRef = SymSpan;
+    impl StrippedSpan for MacroInvocationActionCollector {
+        type StrippedSpan = SymSpan;
     }
 
     impl MergeSpans for MacroInvocationActionCollector {
@@ -850,8 +850,8 @@ mod tests {
         }
     }
 
-    impl MkSnippetRef for MacroInvocationActionCollector {
-        fn mk_snippet_ref(&mut self, span: &Self::Span) -> Self::SnippetRef {
+    impl StripSpan for MacroInvocationActionCollector {
+        fn strip_span(&mut self, span: &Self::Span) -> Self::StrippedSpan {
             span.clone()
         }
     }
@@ -893,8 +893,8 @@ mod tests {
         type Span = SymSpan;
     }
 
-    impl SnippetRef for MacroArgActionCollector {
-        type SnippetRef = SymSpan;
+    impl StrippedSpan for MacroArgActionCollector {
+        type StrippedSpan = SymSpan;
     }
 
     impl MergeSpans for MacroArgActionCollector {
@@ -903,8 +903,8 @@ mod tests {
         }
     }
 
-    impl MkSnippetRef for MacroArgActionCollector {
-        fn mk_snippet_ref(&mut self, span: &Self::Span) -> Self::SnippetRef {
+    impl StripSpan for MacroArgActionCollector {
+        fn strip_span(&mut self, span: &Self::Span) -> Self::StrippedSpan {
             span.clone()
         }
     }

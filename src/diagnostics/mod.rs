@@ -13,9 +13,9 @@ pub mod span;
 
 pub trait Diagnostics: DownstreamDiagnostics + ContextFactory {}
 
-pub trait DownstreamDiagnostics: EmitDiagnostic + MergeSpans + MkSnippetRef {}
+pub trait DownstreamDiagnostics: EmitDiagnostic + MergeSpans + StripSpan {}
 
-impl<T: EmitDiagnostic + MergeSpans + MkSnippetRef> DownstreamDiagnostics for T {}
+impl<T: EmitDiagnostic + MergeSpans + StripSpan> DownstreamDiagnostics for T {}
 
 pub trait DelegateDiagnostics {
     type Delegate: DownstreamDiagnostics;
@@ -27,8 +27,8 @@ impl<T: DelegateDiagnostics> Span for T {
     type Span = <T::Delegate as Span>::Span;
 }
 
-impl<T: DelegateDiagnostics> SnippetRef for T {
-    type SnippetRef = <T::Delegate as SnippetRef>::SnippetRef;
+impl<T: DelegateDiagnostics> StrippedSpan for T {
+    type StrippedSpan = <T::Delegate as StrippedSpan>::StrippedSpan;
 }
 
 impl<T: DelegateDiagnostics> MergeSpans for T {
@@ -37,14 +37,14 @@ impl<T: DelegateDiagnostics> MergeSpans for T {
     }
 }
 
-impl<T: DelegateDiagnostics> MkSnippetRef for T {
-    fn mk_snippet_ref(&mut self, span: &Self::Span) -> Self::SnippetRef {
-        self.diagnostics().mk_snippet_ref(span)
+impl<T: DelegateDiagnostics> StripSpan for T {
+    fn strip_span(&mut self, span: &Self::Span) -> Self::StrippedSpan {
+        self.diagnostics().strip_span(span)
     }
 }
 
 impl<T: DelegateDiagnostics> EmitDiagnostic for T {
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span, Self::SnippetRef>) {
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span, Self::StrippedSpan>) {
         self.diagnostics().emit_diagnostic(diagnostic)
     }
 }
@@ -62,12 +62,12 @@ where
     type Span = C::Span;
 }
 
-impl<C, O> SnippetRef for DiagnosticsSystem<C, O>
+impl<C, O> StrippedSpan for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
-    O: EmitDiagnostic<Span = C::Span, SnippetRef = C::SnippetRef>,
+    O: EmitDiagnostic<Span = C::Span, StrippedSpan = C::StrippedSpan>,
 {
-    type SnippetRef = C::SnippetRef;
+    type StrippedSpan = C::StrippedSpan;
 }
 
 impl<C, O> MergeSpans for DiagnosticsSystem<C, O>
@@ -80,22 +80,22 @@ where
     }
 }
 
-impl<C, O> MkSnippetRef for DiagnosticsSystem<C, O>
+impl<C, O> StripSpan for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
-    O: EmitDiagnostic<Span = C::Span, SnippetRef = C::SnippetRef>,
+    O: EmitDiagnostic<Span = C::Span, StrippedSpan = C::StrippedSpan>,
 {
-    fn mk_snippet_ref(&mut self, span: &Self::Span) -> Self::SnippetRef {
-        self.context.mk_snippet_ref(span)
+    fn strip_span(&mut self, span: &Self::Span) -> Self::StrippedSpan {
+        self.context.strip_span(span)
     }
 }
 
 impl<C, O> EmitDiagnostic for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
-    O: EmitDiagnostic<Span = C::Span, SnippetRef = C::SnippetRef>,
+    O: EmitDiagnostic<Span = C::Span, StrippedSpan = C::StrippedSpan>,
 {
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span, Self::SnippetRef>) {
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span, Self::StrippedSpan>) {
         self.output.emit_diagnostic(diagnostic)
     }
 }
@@ -103,7 +103,7 @@ where
 impl<C, O> MacroContextFactory for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
-    O: EmitDiagnostic<Span = C::Span, SnippetRef = C::SnippetRef>,
+    O: EmitDiagnostic<Span = C::Span, StrippedSpan = C::StrippedSpan>,
 {
     type MacroDefId = C::MacroDefId;
     type MacroExpansionContext = C::MacroExpansionContext;
@@ -133,7 +133,7 @@ where
 impl<C, O> ContextFactory for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
-    O: EmitDiagnostic<Span = C::Span, SnippetRef = C::SnippetRef>,
+    O: EmitDiagnostic<Span = C::Span, StrippedSpan = C::StrippedSpan>,
 {
     type BufContext = C::BufContext;
 
@@ -149,7 +149,7 @@ where
 impl<C, O> Diagnostics for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
-    O: EmitDiagnostic<Span = C::Span, SnippetRef = C::SnippetRef>,
+    O: EmitDiagnostic<Span = C::Span, StrippedSpan = C::StrippedSpan>,
 {
 }
 
@@ -165,8 +165,8 @@ impl DiagnosticsOutput for TerminalOutput {
     }
 }
 
-pub trait EmitDiagnostic: SnippetRef + Span {
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span, Self::SnippetRef>);
+pub trait EmitDiagnostic: StrippedSpan + Span {
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span, Self::StrippedSpan>);
 }
 
 pub struct OutputForwarder<'a> {
@@ -174,8 +174,8 @@ pub struct OutputForwarder<'a> {
     pub codebase: &'a RefCell<TextCache>,
 }
 
-impl<'a> SnippetRef for OutputForwarder<'a> {
-    type SnippetRef = BufSnippetRef;
+impl<'a> StrippedSpan for OutputForwarder<'a> {
+    type StrippedSpan = StrippedBufSpan;
 }
 
 impl<'a> Span for OutputForwarder<'a> {
@@ -183,7 +183,7 @@ impl<'a> Span for OutputForwarder<'a> {
 }
 
 impl<'a> EmitDiagnostic for OutputForwarder<'a> {
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SpanData, BufSnippetRef>) {
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SpanData, StrippedBufSpan>) {
         self.output
             .emit(diagnostic.expand().render(&self.codebase.borrow()))
     }
@@ -205,8 +205,8 @@ impl<S: Clone + PartialEq> Span for IgnoreDiagnostics<S> {
 }
 
 #[cfg(test)]
-impl<S> SnippetRef for IgnoreDiagnostics<S> {
-    type SnippetRef = S;
+impl<S> StrippedSpan for IgnoreDiagnostics<S> {
+    type StrippedSpan = S;
 }
 
 #[cfg(test)]
@@ -234,8 +234,8 @@ impl Span for TestDiagnosticsListener {
 }
 
 #[cfg(test)]
-impl SnippetRef for TestDiagnosticsListener {
-    type SnippetRef = ();
+impl StrippedSpan for TestDiagnosticsListener {
+    type StrippedSpan = ();
 }
 
 #[cfg(test)]
@@ -270,9 +270,9 @@ struct ExpandedDiagnosticClause<S, B, R> {
     location: Option<R>,
 }
 
-impl<B: Clone, T: Clone> CompactDiagnostic<SpanData<B, Range<T>>, BufSnippetRef<B, Range<T>>> {
-    fn expand(self) -> ExpandedDiagnostic<BufSnippetRef<B, Range<T>>, B, Range<T>> {
-        let BufSnippetRef { buf_id, range } = self.highlight.to_snippet_ref();
+impl<B: Clone, T: Clone> CompactDiagnostic<SpanData<B, Range<T>>, StrippedBufSpan<B, Range<T>>> {
+    fn expand(self) -> ExpandedDiagnostic<StrippedBufSpan<B, Range<T>>, B, Range<T>> {
+        let StrippedBufSpan { buf_id, range } = self.highlight.to_stripped();
         let main_clause = ExpandedDiagnosticClause {
             buf_id,
             tag: DiagnosticClauseTag::Error,
@@ -287,7 +287,7 @@ impl<B: Clone, T: Clone> CompactDiagnostic<SpanData<B, Range<T>>, BufSnippetRef<
     }
 }
 
-type BufSnippetClause<B, T> = ExpandedDiagnosticClause<BufSnippetRef<B, Range<T>>, B, Range<T>>;
+type BufSnippetClause<B, T> = ExpandedDiagnosticClause<StrippedBufSpan<B, Range<T>>, B, Range<T>>;
 
 fn mk_invoked_here_clause<B: Clone, T: Clone>(
     span: &SpanData<B, Range<T>>,
@@ -297,12 +297,12 @@ fn mk_invoked_here_clause<B: Clone, T: Clone>(
     } else {
         return None;
     };
-    let snippet_ref = invocation.to_snippet_ref();
+    let stripped = invocation.to_stripped();
     Some(ExpandedDiagnosticClause {
-        buf_id: snippet_ref.buf_id.clone(),
+        buf_id: stripped.buf_id.clone(),
         tag: DiagnosticClauseTag::Note,
-        location: Some(snippet_ref.range.clone()),
-        message: Message::InvokedHere { name: snippet_ref },
+        location: Some(stripped.range.clone()),
+        message: Message::InvokedHere { name: stripped },
     })
 }
 
@@ -343,7 +343,7 @@ pub struct DiagnosticLocation<T> {
 
 pub fn mk_diagnostic(
     file: impl Into<String>,
-    message: &Message<BufSnippetRef>,
+    message: &Message<StrippedBufSpan>,
 ) -> Diagnostic<String> {
     Diagnostic {
         clauses: vec![DiagnosticClause {
@@ -355,7 +355,7 @@ pub fn mk_diagnostic(
     }
 }
 
-impl ExpandedDiagnostic<BufSnippetRef, BufId, BufRange> {
+impl ExpandedDiagnostic<StrippedBufSpan, BufId, BufRange> {
     fn render<'a, T: From<&'a str>>(&self, codebase: &'a TextCache) -> Diagnostic<T> {
         Diagnostic {
             clauses: self
@@ -367,7 +367,7 @@ impl ExpandedDiagnostic<BufSnippetRef, BufId, BufRange> {
     }
 }
 
-impl ExpandedDiagnosticClause<BufSnippetRef, BufId, BufRange> {
+impl ExpandedDiagnosticClause<StrippedBufSpan, BufId, BufRange> {
     fn render<'a, T: From<&'a str>>(&self, codebase: &'a TextCache) -> DiagnosticClause<T> {
         let buf = codebase.buf(self.buf_id);
         let location = self.location.as_ref().map(|range| {
@@ -601,7 +601,7 @@ dummy
                     buf_id: (),
                     tag: DiagnosticClauseTag::Note,
                     message: Message::InvokedHere {
-                        name: BufSnippetRef {
+                        name: StrippedBufSpan {
                             buf_id: (),
                             range: incovation_range,
                         },

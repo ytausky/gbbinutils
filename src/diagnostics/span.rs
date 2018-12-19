@@ -8,8 +8,8 @@ pub trait Span {
     type Span: Clone;
 }
 
-pub trait SnippetRef {
-    type SnippetRef;
+pub trait StrippedSpan {
+    type StrippedSpan;
 }
 
 pub trait Source: Span {
@@ -20,8 +20,8 @@ pub trait MergeSpans: Span {
     fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span;
 }
 
-pub trait MkSnippetRef: Span + SnippetRef {
-    fn mk_snippet_ref(&mut self, span: &Self::Span) -> Self::SnippetRef;
+pub trait StripSpan: Span + StrippedSpan {
+    fn strip_span(&mut self, span: &Self::Span) -> Self::StrippedSpan;
 }
 
 pub trait MacroContextFactory: Span {
@@ -44,7 +44,7 @@ pub trait MacroContextFactory: Span {
         J: IntoIterator<Item = Self::Span>;
 }
 
-pub trait ContextFactory: MacroContextFactory + MergeSpans + MkSnippetRef {
+pub trait ContextFactory: MacroContextFactory + MergeSpans + StripSpan {
     type BufContext: BufContext<Span = Self::Span>;
 
     fn mk_buf_context(
@@ -83,15 +83,15 @@ pub enum SpanData<B = BufId, R = BufRange> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct BufSnippetRef<B = BufId, R = BufRange> {
+pub struct StrippedBufSpan<B = BufId, R = BufRange> {
     pub buf_id: B,
     pub range: R,
 }
 
 impl<B: Clone, T: Clone> SpanData<B, Range<T>> {
-    pub fn to_snippet_ref(&self) -> BufSnippetRef<B, Range<T>> {
+    pub fn to_stripped(&self) -> StrippedBufSpan<B, Range<T>> {
         match self {
-            SpanData::Buf { range, context } => BufSnippetRef {
+            SpanData::Buf { range, context } => StrippedBufSpan {
                 buf_id: context.buf_id.clone(),
                 range: range.clone(),
             },
@@ -114,15 +114,15 @@ impl<B: Clone, T: Clone> SpanData<B, Range<T>> {
                     ),
                     _ => unimplemented!(),
                 };
-                BufSnippetRef { buf_id, range }
+                StrippedBufSpan { buf_id, range }
             }
         }
     }
 }
 
 impl TextCache {
-    pub fn snippet(&self, snippet_ref: &BufSnippetRef) -> &str {
-        &self.buf(snippet_ref.buf_id).as_str()[snippet_ref.range.clone()]
+    pub fn snippet(&self, stripped: &StrippedBufSpan) -> &str {
+        &self.buf(stripped.buf_id).as_str()[stripped.range.clone()]
     }
 }
 
@@ -193,8 +193,8 @@ where
     type Span = SpanData<B, R>;
 }
 
-impl<B, R> SnippetRef for RcContextFactory<B, R> {
-    type SnippetRef = BufSnippetRef<B, R>;
+impl<B, R> StrippedSpan for RcContextFactory<B, R> {
+    type StrippedSpan = StrippedBufSpan<B, R>;
 }
 
 impl<B, R> MacroContextFactory for RcContextFactory<B, R>
@@ -267,9 +267,9 @@ impl MergeSpans for RcContextFactory<BufId, BufRange> {
     }
 }
 
-impl MkSnippetRef for RcContextFactory<BufId, BufRange> {
-    fn mk_snippet_ref(&mut self, span: &Self::Span) -> Self::SnippetRef {
-        span.to_snippet_ref()
+impl StripSpan for RcContextFactory<BufId, BufRange> {
+    fn strip_span(&mut self, span: &Self::Span) -> Self::StrippedSpan {
+        span.to_stripped()
     }
 }
 

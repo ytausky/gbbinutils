@@ -158,7 +158,7 @@ where
         (BranchKind::Explicit(_), Some(BranchTarget::DerefHl(span))) => {
             Err(CompactDiagnostic::new(
                 Message::RequiresConstantTarget {
-                    mnemonic: diagnostics.mk_snippet_ref(&kind.1),
+                    mnemonic: diagnostics.strip_span(&kind.1),
                 },
                 span,
             ))

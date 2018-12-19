@@ -1,5 +1,5 @@
 use crate::backend::{self, Backend, BinaryOperator, ValueBuilder};
-use crate::diagnostics::span::{MergeSpans, MkSnippetRef, SnippetRef, Span};
+use crate::diagnostics::span::{MergeSpans, Span, StripSpan, StrippedSpan};
 use crate::diagnostics::*;
 use crate::expr::ExprVariant;
 use crate::frontend::session::Session;
@@ -154,8 +154,8 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> Span for CommandActions<'a, F, B, D>
     type Span = D::Span;
 }
 
-impl<'a, F: Frontend<D>, B, D: Diagnostics> SnippetRef for CommandActions<'a, F, B, D> {
-    type SnippetRef = D::SnippetRef;
+impl<'a, F: Frontend<D>, B, D: Diagnostics> StrippedSpan for CommandActions<'a, F, B, D> {
+    type StrippedSpan = D::StrippedSpan;
 }
 
 impl<'a, F: Frontend<D>, B, D: Diagnostics> MergeSpans for CommandActions<'a, F, B, D> {
@@ -164,14 +164,14 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> MergeSpans for CommandActions<'a, F,
     }
 }
 
-impl<'a, F: Frontend<D>, B, D: Diagnostics> MkSnippetRef for CommandActions<'a, F, B, D> {
-    fn mk_snippet_ref(&mut self, span: &Self::Span) -> Self::SnippetRef {
-        self.parent.mk_snippet_ref(span)
+impl<'a, F: Frontend<D>, B, D: Diagnostics> StripSpan for CommandActions<'a, F, B, D> {
+    fn strip_span(&mut self, span: &Self::Span) -> Self::StrippedSpan {
+        self.parent.strip_span(span)
     }
 }
 
 impl<'a, F: Frontend<D>, B, D: Diagnostics> EmitDiagnostic for CommandActions<'a, F, B, D> {
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<D::Span, D::SnippetRef>) {
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<D::Span, D::StrippedSpan>) {
         self.has_errors = true;
         self.parent.emit_diagnostic(diagnostic)
     }
@@ -511,7 +511,7 @@ where
             ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(_))) => {
                 Err(CompactDiagnostic::new(
                     Message::KeywordInExpr {
-                        keyword: self.mk_snippet_ref(&expr.span),
+                        keyword: self.strip_span(&expr.span),
                     },
                     expr.span,
                 ))
@@ -559,8 +559,8 @@ impl<S: Clone + PartialEq> Span for DiagnosticsCollector<S> {
 }
 
 #[cfg(test)]
-impl<S> SnippetRef for DiagnosticsCollector<S> {
-    type SnippetRef = S;
+impl<S> StrippedSpan for DiagnosticsCollector<S> {
+    type StrippedSpan = S;
 }
 
 #[cfg(test)]
@@ -571,15 +571,15 @@ impl MergeSpans for DiagnosticsCollector<TokenSpan> {
 }
 
 #[cfg(test)]
-impl<S: Clone + PartialEq> MkSnippetRef for DiagnosticsCollector<S> {
-    fn mk_snippet_ref(&mut self, span: &Self::Span) -> Self::SnippetRef {
+impl<S: Clone + PartialEq> StripSpan for DiagnosticsCollector<S> {
+    fn strip_span(&mut self, span: &Self::Span) -> Self::StrippedSpan {
         span.clone()
     }
 }
 
 #[cfg(test)]
 impl<S: Clone + PartialEq> EmitDiagnostic for DiagnosticsCollector<S> {
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span, Self::SnippetRef>) {
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span, Self::StrippedSpan>) {
         self.0.push(diagnostic)
     }
 }
@@ -740,20 +740,23 @@ mod tests {
         type Span = ();
     }
 
-    impl<'a> SnippetRef for TestDiagnostics<'a> {
-        type SnippetRef = ();
+    impl<'a> StrippedSpan for TestDiagnostics<'a> {
+        type StrippedSpan = ();
     }
 
     impl<'a> MergeSpans for TestDiagnostics<'a> {
         fn merge_spans(&mut self, _: &(), _: &()) {}
     }
 
-    impl<'a> MkSnippetRef for TestDiagnostics<'a> {
-        fn mk_snippet_ref(&mut self, _: &Self::Span) {}
+    impl<'a> StripSpan for TestDiagnostics<'a> {
+        fn strip_span(&mut self, _: &Self::Span) {}
     }
 
     impl<'a> EmitDiagnostic for TestDiagnostics<'a> {
-        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span, Self::SnippetRef>) {
+        fn emit_diagnostic(
+            &mut self,
+            diagnostic: CompactDiagnostic<Self::Span, Self::StrippedSpan>,
+        ) {
             self.operations
                 .borrow_mut()
                 .push(TestOperation::EmitDiagnostic(diagnostic))

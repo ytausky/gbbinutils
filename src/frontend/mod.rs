@@ -474,8 +474,8 @@ mod tests {
         type Span = ();
     }
 
-    impl<'a> SnippetRef for Mock<'a> {
-        type SnippetRef = ();
+    impl<'a> StrippedSpan for Mock<'a> {
+        type StrippedSpan = ();
     }
 
     impl<'a> MacroContextFactory for Mock<'a> {
@@ -503,8 +503,8 @@ mod tests {
         }
     }
 
-    impl<'a> MkSnippetRef for Mock<'a> {
-        fn mk_snippet_ref(&mut self, _: &Self::Span) {}
+    impl<'a> StripSpan for Mock<'a> {
+        fn strip_span(&mut self, _: &Self::Span) {}
     }
 
     impl<'a> ContextFactory for Mock<'a> {

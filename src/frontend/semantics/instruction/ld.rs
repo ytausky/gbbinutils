@@ -1,6 +1,6 @@
 use super::{Analysis, Operand, SemanticExpr};
 use crate::backend::{ValueBuilder, Width};
-use crate::diagnostics::span::{MergeSpans, MkSnippetRef, Source, Span};
+use crate::diagnostics::span::{MergeSpans, Source, Span, StripSpan};
 use crate::diagnostics::{CompactDiagnostic, DownstreamDiagnostics, EmitDiagnostic, Message};
 use crate::frontend::semantics::operand::AtomKind;
 use crate::instruction::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
@@ -35,8 +35,8 @@ where
                 let diagnostic = CompactDiagnostic::new(
                     Message::LdWidthMismatch {
                         src_width: Width::Word,
-                        src: self.mk_snippet_ref(&src.span()),
-                        dest: self.mk_snippet_ref(&dest.span()),
+                        src: self.strip_span(&src.span()),
+                        dest: self.strip_span(&dest.span()),
                     },
                     self.merge_spans(&dest.span(), &src.span()),
                 );
@@ -47,8 +47,8 @@ where
                 let diagnostic = CompactDiagnostic::new(
                     Message::LdWidthMismatch {
                         src_width: Width::Byte,
-                        src: self.mk_snippet_ref(&src.span()),
-                        dest: self.mk_snippet_ref(&dest.span()),
+                        src: self.strip_span(&src.span()),
+                        dest: self.strip_span(&dest.span()),
                     },
                     self.merge_spans(&dest.span(), &src.span()),
                 );
@@ -70,9 +70,9 @@ where
             ) => {
                 let diagnostic = CompactDiagnostic::new(
                     Message::LdDerefHlDerefHl {
-                        mnemonic: self.value_context.mk_snippet_ref(&self.mnemonic.1),
-                        dest: self.mk_snippet_ref(&dest),
-                        src: self.mk_snippet_ref(&src),
+                        mnemonic: self.value_context.strip_span(&self.mnemonic.1),
+                        dest: self.strip_span(&dest),
+                        src: self.strip_span(&src),
                     },
                     self.value_context.merge_spans(&self.mnemonic.1, &src),
                 );
