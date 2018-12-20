@@ -8,10 +8,6 @@ pub trait Span {
     type Span: Clone;
 }
 
-pub trait StrippedSpan {
-    type StrippedSpan;
-}
-
 pub trait Source: Span {
     fn span(&self) -> Self::Span;
 }
@@ -20,8 +16,10 @@ pub trait MergeSpans: Span {
     fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span;
 }
 
-pub trait StripSpan: Span + StrippedSpan {
-    fn strip_span(&mut self, span: &Self::Span) -> Self::StrippedSpan;
+pub trait StripSpan: Span {
+    type Stripped;
+
+    fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped;
 }
 
 pub trait MacroContextFactory: Span {
@@ -188,18 +186,14 @@ impl<B, R> RcContextFactory<B, R> {
 
 impl<B, R> Span for RcContextFactory<B, R>
 where
-    SpanData<B, R>: Clone + PartialEq,
+    SpanData<B, R>: Clone,
 {
     type Span = SpanData<B, R>;
 }
 
-impl<B, R> StrippedSpan for RcContextFactory<B, R> {
-    type StrippedSpan = StrippedBufSpan<B, R>;
-}
-
 impl<B, R> MacroContextFactory for RcContextFactory<B, R>
 where
-    SpanData<B, R>: Clone + PartialEq,
+    SpanData<B, R>: Clone,
 {
     type MacroDefId = Rc<MacroDef<Self::Span>>;
     type MacroExpansionContext = Rc<MacroExpansionData<SpanData<B, R>>>;
@@ -268,7 +262,9 @@ impl MergeSpans for RcContextFactory<BufId, BufRange> {
 }
 
 impl StripSpan for RcContextFactory<BufId, BufRange> {
-    fn strip_span(&mut self, span: &Self::Span) -> Self::StrippedSpan {
+    type Stripped = StrippedBufSpan<BufId, BufRange>;
+
+    fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped {
         span.to_stripped()
     }
 }

@@ -474,10 +474,6 @@ mod tests {
         type Span = ();
     }
 
-    impl<'a> StrippedSpan for Mock<'a> {
-        type StrippedSpan = ();
-    }
-
     impl<'a> MacroContextFactory for Mock<'a> {
         type MacroDefId = ();
         type MacroExpansionContext = Mock<'a>;
@@ -504,6 +500,8 @@ mod tests {
     }
 
     impl<'a> StripSpan for Mock<'a> {
+        type Stripped = ();
+
         fn strip_span(&mut self, _: &Self::Span) {}
     }
 
@@ -571,7 +569,7 @@ mod tests {
         }
     }
 
-    impl<'a> EmitDiagnostic for Mock<'a> {
+    impl<'a> EmitDiagnostic<()> for Mock<'a> {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<(), ()>) {
             self.log
                 .borrow_mut()

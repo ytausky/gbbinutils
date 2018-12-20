@@ -240,7 +240,7 @@ impl<V: Source> LdDest8<V> {
     }
 }
 
-fn diagnose_not_a<D: EmitDiagnostic>(span: D::Span, diagnostics: &mut D) -> Result<(), ()> {
+fn diagnose_not_a<T, D: EmitDiagnostic<T>>(span: D::Span, diagnostics: &mut D) -> Result<(), ()> {
     diagnostics.emit_diagnostic(CompactDiagnostic::new(Message::OnlySupportedByA, span));
     Err(())
 }

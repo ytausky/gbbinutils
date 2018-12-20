@@ -1,5 +1,5 @@
 use crate::backend::{self, Backend, BinaryOperator, ValueBuilder};
-use crate::diagnostics::span::{MergeSpans, Span, StripSpan, StrippedSpan};
+use crate::diagnostics::span::{MergeSpans, Span, StripSpan};
 use crate::diagnostics::*;
 use crate::expr::ExprVariant;
 use crate::frontend::session::Session;
@@ -154,10 +154,6 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> Span for CommandActions<'a, F, B, D>
     type Span = D::Span;
 }
 
-impl<'a, F: Frontend<D>, B, D: Diagnostics> StrippedSpan for CommandActions<'a, F, B, D> {
-    type StrippedSpan = D::StrippedSpan;
-}
-
 impl<'a, F: Frontend<D>, B, D: Diagnostics> MergeSpans for CommandActions<'a, F, B, D> {
     fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
         self.parent.merge_spans(left, right)
@@ -165,13 +161,19 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> MergeSpans for CommandActions<'a, F,
 }
 
 impl<'a, F: Frontend<D>, B, D: Diagnostics> StripSpan for CommandActions<'a, F, B, D> {
-    fn strip_span(&mut self, span: &Self::Span) -> Self::StrippedSpan {
+    type Stripped = D::Stripped;
+
+    fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped {
         self.parent.strip_span(span)
     }
 }
 
-impl<'a, F: Frontend<D>, B, D: Diagnostics> EmitDiagnostic for CommandActions<'a, F, B, D> {
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<D::Span, D::StrippedSpan>) {
+impl<'a, F, B, D> EmitDiagnostic<D::Stripped> for CommandActions<'a, F, B, D>
+where
+    F: Frontend<D>,
+    D: Diagnostics,
+{
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<D::Span, D::Stripped>) {
         self.has_errors = true;
         self.parent.emit_diagnostic(diagnostic)
     }
@@ -554,13 +556,8 @@ pub struct TokenSpan {
 pub struct DiagnosticsCollector<S>(Vec<CompactDiagnostic<S, S>>);
 
 #[cfg(test)]
-impl<S: Clone + PartialEq> Span for DiagnosticsCollector<S> {
+impl<S: Clone> Span for DiagnosticsCollector<S> {
     type Span = S;
-}
-
-#[cfg(test)]
-impl<S> StrippedSpan for DiagnosticsCollector<S> {
-    type StrippedSpan = S;
 }
 
 #[cfg(test)]
@@ -571,15 +568,17 @@ impl MergeSpans for DiagnosticsCollector<TokenSpan> {
 }
 
 #[cfg(test)]
-impl<S: Clone + PartialEq> StripSpan for DiagnosticsCollector<S> {
-    fn strip_span(&mut self, span: &Self::Span) -> Self::StrippedSpan {
+impl<S: Clone> StripSpan for DiagnosticsCollector<S> {
+    type Stripped = S;
+
+    fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped {
         span.clone()
     }
 }
 
 #[cfg(test)]
-impl<S: Clone + PartialEq> EmitDiagnostic for DiagnosticsCollector<S> {
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span, Self::StrippedSpan>) {
+impl<S: Clone> EmitDiagnostic<S> for DiagnosticsCollector<S> {
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<S, S>) {
         self.0.push(diagnostic)
     }
 }
@@ -740,23 +739,18 @@ mod tests {
         type Span = ();
     }
 
-    impl<'a> StrippedSpan for TestDiagnostics<'a> {
-        type StrippedSpan = ();
-    }
-
     impl<'a> MergeSpans for TestDiagnostics<'a> {
         fn merge_spans(&mut self, _: &(), _: &()) {}
     }
 
     impl<'a> StripSpan for TestDiagnostics<'a> {
+        type Stripped = ();
+
         fn strip_span(&mut self, _: &Self::Span) {}
     }
 
-    impl<'a> EmitDiagnostic for TestDiagnostics<'a> {
-        fn emit_diagnostic(
-            &mut self,
-            diagnostic: CompactDiagnostic<Self::Span, Self::StrippedSpan>,
-        ) {
+    impl<'a> EmitDiagnostic<()> for TestDiagnostics<'a> {
+        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<(), ()>) {
             self.operations
                 .borrow_mut()
                 .push(TestOperation::EmitDiagnostic(diagnostic))

@@ -272,7 +272,7 @@ impl<V: Source> Operand<V> {
     fn expect_specific_atom<D>(
         self,
         expected: AtomKind,
-        message: Message<D::StrippedSpan>,
+        message: Message<D::Stripped>,
         diagnostics: &mut D,
     ) -> Result<(), ()>
     where
@@ -314,7 +314,7 @@ impl<V: Source> Operand<V> {
         }
     }
 
-    fn error<T, D>(self, message: Message<D::StrippedSpan>, diagnostics: &mut D) -> Result<T, ()>
+    fn error<T, D>(self, message: Message<D::Stripped>, diagnostics: &mut D) -> Result<T, ()>
     where
         D: DownstreamDiagnostics<Span = V::Span>,
     {

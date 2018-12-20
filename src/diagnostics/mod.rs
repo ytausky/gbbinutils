@@ -13,9 +13,19 @@ pub mod span;
 
 pub trait Diagnostics: DownstreamDiagnostics + ContextFactory {}
 
-pub trait DownstreamDiagnostics: EmitDiagnostic + MergeSpans + StripSpan {}
+pub trait DownstreamDiagnostics
+where
+    Self: MergeSpans + StripSpan,
+    Self: EmitDiagnostic<<Self as StripSpan>::Stripped>,
+{
+}
 
-impl<T: EmitDiagnostic + MergeSpans + StripSpan> DownstreamDiagnostics for T {}
+impl<T> DownstreamDiagnostics for T
+where
+    T: MergeSpans + StripSpan,
+    T: EmitDiagnostic<<T as StripSpan>::Stripped>,
+{
+}
 
 pub trait DelegateDiagnostics {
     type Delegate: DownstreamDiagnostics;
@@ -27,10 +37,6 @@ impl<T: DelegateDiagnostics> Span for T {
     type Span = <T::Delegate as Span>::Span;
 }
 
-impl<T: DelegateDiagnostics> StrippedSpan for T {
-    type StrippedSpan = <T::Delegate as StrippedSpan>::StrippedSpan;
-}
-
 impl<T: DelegateDiagnostics> MergeSpans for T {
     fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
         self.diagnostics().merge_spans(left, right)
@@ -38,13 +44,18 @@ impl<T: DelegateDiagnostics> MergeSpans for T {
 }
 
 impl<T: DelegateDiagnostics> StripSpan for T {
-    fn strip_span(&mut self, span: &Self::Span) -> Self::StrippedSpan {
+    type Stripped = <T::Delegate as StripSpan>::Stripped;
+
+    fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped {
         self.diagnostics().strip_span(span)
     }
 }
 
-impl<T: DelegateDiagnostics> EmitDiagnostic for T {
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span, Self::StrippedSpan>) {
+impl<T: DelegateDiagnostics> EmitDiagnostic<<T::Delegate as StripSpan>::Stripped> for T {
+    fn emit_diagnostic(
+        &mut self,
+        diagnostic: CompactDiagnostic<Self::Span, <Self as StripSpan>::Stripped>,
+    ) {
         self.diagnostics().emit_diagnostic(diagnostic)
     }
 }
@@ -57,23 +68,15 @@ pub struct DiagnosticsSystem<C, O> {
 impl<C, O> Span for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
-    O: EmitDiagnostic<Span = C::Span>,
+    O: EmitDiagnostic<C::Stripped, Span = C::Span>,
 {
     type Span = C::Span;
-}
-
-impl<C, O> StrippedSpan for DiagnosticsSystem<C, O>
-where
-    C: ContextFactory,
-    O: EmitDiagnostic<Span = C::Span, StrippedSpan = C::StrippedSpan>,
-{
-    type StrippedSpan = C::StrippedSpan;
 }
 
 impl<C, O> MergeSpans for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
-    O: EmitDiagnostic<Span = C::Span>,
+    O: EmitDiagnostic<C::Stripped, Span = C::Span>,
 {
     fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
         self.context.merge_spans(left, right)
@@ -83,19 +86,21 @@ where
 impl<C, O> StripSpan for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
-    O: EmitDiagnostic<Span = C::Span, StrippedSpan = C::StrippedSpan>,
+    O: EmitDiagnostic<C::Stripped, Span = C::Span>,
 {
-    fn strip_span(&mut self, span: &Self::Span) -> Self::StrippedSpan {
+    type Stripped = C::Stripped;
+
+    fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped {
         self.context.strip_span(span)
     }
 }
 
-impl<C, O> EmitDiagnostic for DiagnosticsSystem<C, O>
+impl<C, O> EmitDiagnostic<C::Stripped> for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
-    O: EmitDiagnostic<Span = C::Span, StrippedSpan = C::StrippedSpan>,
+    O: EmitDiagnostic<C::Stripped, Span = C::Span>,
 {
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span, Self::StrippedSpan>) {
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span, C::Stripped>) {
         self.output.emit_diagnostic(diagnostic)
     }
 }
@@ -103,7 +108,7 @@ where
 impl<C, O> MacroContextFactory for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
-    O: EmitDiagnostic<Span = C::Span, StrippedSpan = C::StrippedSpan>,
+    O: EmitDiagnostic<C::Stripped, Span = C::Span>,
 {
     type MacroDefId = C::MacroDefId;
     type MacroExpansionContext = C::MacroExpansionContext;
@@ -133,7 +138,7 @@ where
 impl<C, O> ContextFactory for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
-    O: EmitDiagnostic<Span = C::Span, StrippedSpan = C::StrippedSpan>,
+    O: EmitDiagnostic<C::Stripped, Span = C::Span>,
 {
     type BufContext = C::BufContext;
 
@@ -149,7 +154,7 @@ where
 impl<C, O> Diagnostics for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
-    O: EmitDiagnostic<Span = C::Span, StrippedSpan = C::StrippedSpan>,
+    O: EmitDiagnostic<C::Stripped, Span = C::Span>,
 {
 }
 
@@ -165,8 +170,8 @@ impl DiagnosticsOutput for TerminalOutput {
     }
 }
 
-pub trait EmitDiagnostic: StrippedSpan + Span {
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span, Self::StrippedSpan>);
+pub trait EmitDiagnostic<T>: Span {
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<Self::Span, T>);
 }
 
 pub struct OutputForwarder<'a> {
@@ -174,15 +179,11 @@ pub struct OutputForwarder<'a> {
     pub codebase: &'a RefCell<TextCache>,
 }
 
-impl<'a> StrippedSpan for OutputForwarder<'a> {
-    type StrippedSpan = StrippedBufSpan;
-}
-
 impl<'a> Span for OutputForwarder<'a> {
     type Span = SpanData;
 }
 
-impl<'a> EmitDiagnostic for OutputForwarder<'a> {
+impl<'a> EmitDiagnostic<StrippedBufSpan> for OutputForwarder<'a> {
     fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SpanData, StrippedBufSpan>) {
         self.output
             .emit(diagnostic.expand().render(&self.codebase.borrow()))
@@ -200,17 +201,12 @@ impl<S> IgnoreDiagnostics<S> {
 }
 
 #[cfg(test)]
-impl<S: Clone + PartialEq> Span for IgnoreDiagnostics<S> {
+impl<S: Clone> Span for IgnoreDiagnostics<S> {
     type Span = S;
 }
 
 #[cfg(test)]
-impl<S> StrippedSpan for IgnoreDiagnostics<S> {
-    type StrippedSpan = S;
-}
-
-#[cfg(test)]
-impl<S: Clone + PartialEq> EmitDiagnostic for IgnoreDiagnostics<S> {
+impl<S: Clone> EmitDiagnostic<S> for IgnoreDiagnostics<S> {
     fn emit_diagnostic(&mut self, _: CompactDiagnostic<S, S>) {}
 }
 
@@ -234,12 +230,7 @@ impl Span for TestDiagnosticsListener {
 }
 
 #[cfg(test)]
-impl StrippedSpan for TestDiagnosticsListener {
-    type StrippedSpan = ();
-}
-
-#[cfg(test)]
-impl EmitDiagnostic for TestDiagnosticsListener {
+impl EmitDiagnostic<()> for TestDiagnosticsListener {
     fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<(), ()>) {
         self.diagnostics.borrow_mut().push(diagnostic)
     }
