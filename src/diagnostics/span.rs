@@ -8,7 +8,9 @@ pub trait Span {
     type Span: Clone;
 }
 
-pub trait Source: Span {
+pub trait Source {
+    type Span: Clone;
+
     fn span(&self) -> Self::Span;
 }
 

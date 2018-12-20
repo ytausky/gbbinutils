@@ -1,6 +1,6 @@
 use super::{Analysis, Operand, SemanticExpr};
 use crate::backend::{ValueBuilder, Width};
-use crate::diagnostics::span::{Source, Span};
+use crate::diagnostics::span::Source;
 use crate::diagnostics::{CompactDiagnostic, DownstreamDiagnostics, EmitDiagnostic, Message};
 use crate::frontend::semantics::operand::AtomKind;
 use crate::instruction::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
@@ -251,11 +251,9 @@ fn diagnose_not_a<T, D: EmitDiagnostic<S, T>, S>(span: S, diagnostics: &mut D) -
     Err(())
 }
 
-impl<V: Span, T: Span<Span = V::Span>> Span for LdOperand<V, T> {
-    type Span = V::Span;
-}
-
 impl<V: Source, T: Source<Span = V::Span>> Source for LdOperand<V, T> {
+    type Span = V::Span;
+
     fn span(&self) -> Self::Span {
         match self {
             LdOperand::Const(expr) => expr.span(),
@@ -264,11 +262,9 @@ impl<V: Source, T: Source<Span = V::Span>> Source for LdOperand<V, T> {
     }
 }
 
-impl<V: Source> Span for LdDest8<V> {
-    type Span = V::Span;
-}
-
 impl<V: Source> Source for LdDest8<V> {
+    type Span = V::Span;
+
     fn span(&self) -> Self::Span {
         use self::LdDest8::*;
         match self {
@@ -278,11 +274,9 @@ impl<V: Source> Source for LdDest8<V> {
     }
 }
 
-impl<V: Source> Span for LdSpecial<V> {
-    type Span = V::Span;
-}
-
 impl<V: Source> Source for LdSpecial<V> {
+    type Span = V::Span;
+
     fn span(&self) -> Self::Span {
         use self::LdSpecial::*;
         match self {
@@ -292,11 +286,9 @@ impl<V: Source> Source for LdSpecial<V> {
     }
 }
 
-impl<S: Clone> Span for LdDest16<S> {
-    type Span = S;
-}
-
 impl<S: Clone> Source for LdDest16<S> {
+    type Span = S;
+
     fn span(&self) -> Self::Span {
         match self {
             LdDest16::Reg16(_, span) => span.clone(),

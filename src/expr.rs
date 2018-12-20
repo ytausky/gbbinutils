@@ -1,4 +1,4 @@
-use crate::span::{Source, Span};
+use crate::span::Source;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Expr<A, U, B, S> {
@@ -28,11 +28,9 @@ impl<A, U, B, S> From<A> for ExprVariant<A, U, B, S> {
     }
 }
 
-impl<A, U, B, S: Clone> Span for Expr<A, U, B, S> {
-    type Span = S;
-}
-
 impl<A, U, B, S: Clone> Source for Expr<A, U, B, S> {
+    type Span = S;
+
     fn span(&self) -> Self::Span {
         self.span.clone()
     }

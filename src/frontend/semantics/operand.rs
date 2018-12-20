@@ -4,7 +4,7 @@ use crate::diagnostics::*;
 use crate::frontend::syntax::keyword as kw;
 use crate::frontend::syntax::Literal;
 use crate::instruction::{Condition, PtrReg, Reg16, RegPair, SimpleOperand};
-use crate::span::{Source, Span};
+use crate::span::Source;
 
 #[derive(Debug, PartialEq)]
 pub enum Operand<V: Source> {
@@ -13,11 +13,9 @@ pub enum Operand<V: Source> {
     Deref(V),
 }
 
-impl<V: Source> Span for Operand<V> {
-    type Span = V::Span;
-}
-
 impl<V: Source> Source for Operand<V> {
+    type Span = V::Span;
+
     fn span(&self) -> Self::Span {
         match self {
             Operand::Atom(_, span) => (*span).clone(),
