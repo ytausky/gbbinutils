@@ -30,10 +30,11 @@ pub fn tokenize(src: &str) -> self::lexer::Lexer {
     self::lexer::Lexer::new(src)
 }
 
-pub fn parse_token_seq<Id, I, F>(tokens: I, actions: F)
+pub fn parse_token_seq<Id, I, F, S>(tokens: I, actions: F)
 where
-    I: Iterator<Item = (Token<Id>, F::Span)>,
-    F: FileContext<Id, keyword::Command, Literal<Id>>,
+    I: Iterator<Item = (Token<Id>, S)>,
+    F: FileContext<Id, keyword::Command, Literal<Id>, S>,
+    S: Clone,
 {
     self::parser::parse_src(tokens, actions);
 }
@@ -45,59 +46,44 @@ pub enum Literal<S> {
     String(S),
 }
 
-pub trait FileContext<I, C, L>: DownstreamDiagnostics + Sized {
-    type StmtContext: StmtContext<I, C, L, Span = Self::Span, Parent = Self>;
-    fn enter_stmt(self, label: Option<(I, Self::Span)>) -> Self::StmtContext;
+pub trait FileContext<I, C, L, S: Clone>: DownstreamDiagnostics<Span = S> + Sized {
+    type StmtContext: StmtContext<I, C, L, S, Parent = Self>;
+    fn enter_stmt(self, label: Option<(I, S)>) -> Self::StmtContext;
 }
 
-pub trait StmtContext<I, C, L>: DownstreamDiagnostics + Sized {
-    type CommandContext: CommandContext<
-        Ident = I,
-        Command = C,
-        Literal = L,
-        Span = Self::Span,
-        Parent = Self,
-    >;
+pub trait StmtContext<I, C, L, S: Clone>: DownstreamDiagnostics<Span = S> + Sized {
+    type CommandContext: CommandContext<S, Ident = I, Command = C, Literal = L, Parent = Self>;
     type MacroParamsContext: MacroParamsContext<
+        S,
         Ident = I,
         Command = C,
         Literal = L,
-        Span = Self::Span,
         Parent = Self,
     >;
-    type MacroInvocationContext: MacroInvocationContext<
-        Token = Token<I, C, L>,
-        Span = Self::Span,
-        Parent = Self,
-    >;
+    type MacroInvocationContext: MacroInvocationContext<S, Token = Token<I, C, L>, Parent = Self>;
     type Parent;
-    fn enter_command(self, name: (C, Self::Span)) -> Self::CommandContext;
-    fn enter_macro_def(self, keyword: Self::Span) -> Self::MacroParamsContext;
-    fn enter_macro_invocation(self, name: (I, Self::Span)) -> Self::MacroInvocationContext;
+    fn enter_command(self, name: (C, S)) -> Self::CommandContext;
+    fn enter_macro_def(self, keyword: S) -> Self::MacroParamsContext;
+    fn enter_macro_invocation(self, name: (I, S)) -> Self::MacroInvocationContext;
     fn exit(self) -> Self::Parent;
 }
 
-pub trait CommandContext: DownstreamDiagnostics + Sized {
+pub trait CommandContext<S: Clone>: DownstreamDiagnostics<Span = S> + Sized {
     type Ident;
     type Command;
     type Literal;
-    type ArgContext: ExprContext<
-        Ident = Self::Ident,
-        Literal = Self::Literal,
-        Span = Self::Span,
-        Parent = Self,
-    >;
+    type ArgContext: ExprContext<S, Ident = Self::Ident, Literal = Self::Literal, Parent = Self>;
     type Parent;
     fn add_argument(self) -> Self::ArgContext;
     fn exit(self) -> Self::Parent;
 }
 
-pub trait ExprContext: DownstreamDiagnostics {
+pub trait ExprContext<S: Clone>: DownstreamDiagnostics<Span = S> {
     type Ident;
     type Literal;
     type Parent;
-    fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, Self::Span));
-    fn apply_operator(&mut self, operator: (ExprOperator, Self::Span));
+    fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, S));
+    fn apply_operator(&mut self, operator: (ExprOperator, S));
     fn exit(self) -> Self::Parent;
 }
 
@@ -113,31 +99,31 @@ pub enum ExprOperator {
     Plus,
 }
 
-pub trait MacroParamsContext: DownstreamDiagnostics {
+pub trait MacroParamsContext<S: Clone>: DownstreamDiagnostics<Span = S> {
     type Ident;
     type Command;
     type Literal;
     type MacroBodyContext: TokenSeqContext<
+        S,
         Token = Token<Self::Ident, Self::Command, Self::Literal>,
-        Span = Self::Span,
         Parent = Self::Parent,
     >;
     type Parent;
-    fn add_parameter(&mut self, param: (Self::Ident, Self::Span));
+    fn add_parameter(&mut self, param: (Self::Ident, S));
     fn exit(self) -> Self::MacroBodyContext;
 }
 
-pub trait MacroInvocationContext: DownstreamDiagnostics + Sized {
+pub trait MacroInvocationContext<S: Clone>: DownstreamDiagnostics<Span = S> + Sized {
     type Token;
     type Parent;
-    type MacroArgContext: TokenSeqContext<Token = Self::Token, Span = Self::Span, Parent = Self>;
+    type MacroArgContext: TokenSeqContext<S, Token = Self::Token, Parent = Self>;
     fn enter_macro_arg(self) -> Self::MacroArgContext;
     fn exit(self) -> Self::Parent;
 }
 
-pub trait TokenSeqContext: DownstreamDiagnostics {
+pub trait TokenSeqContext<S: Clone>: DownstreamDiagnostics<Span = S> {
     type Token;
     type Parent;
-    fn push_token(&mut self, token: (Self::Token, Self::Span));
+    fn push_token(&mut self, token: (Self::Token, S));
     fn exit(self) -> Self::Parent;
 }

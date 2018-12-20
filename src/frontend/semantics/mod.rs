@@ -78,7 +78,7 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> DelegateDiagnostics for SemanticActi
     }
 }
 
-impl<'a, F, B, D> syntax::FileContext<F::Ident, Command, Literal<F::Ident>>
+impl<'a, F, B, D> syntax::FileContext<F::Ident, Command, Literal<F::Ident>, D::Span>
     for SemanticActions<'a, F, B, D>
 where
     F: Frontend<D>,
@@ -93,7 +93,7 @@ where
     }
 }
 
-impl<'a, F, B, D> syntax::StmtContext<F::Ident, Command, Literal<F::Ident>>
+impl<'a, F, B, D> syntax::StmtContext<F::Ident, Command, Literal<F::Ident>, D::Span>
     for SemanticActions<'a, F, B, D>
 where
     F: Frontend<D>,
@@ -179,8 +179,11 @@ where
     }
 }
 
-impl<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics> syntax::CommandContext
-    for CommandActions<'a, F, B, D>
+impl<'a, F, B, D> syntax::CommandContext<D::Span> for CommandActions<'a, F, B, D>
+where
+    F: Frontend<D>,
+    B: Backend<D::Span>,
+    D: Diagnostics,
 {
     type Ident = F::Ident;
     type Command = Command;
@@ -236,7 +239,11 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> DelegateDiagnostics for ExprContext<
     }
 }
 
-impl<'a, F: Frontend<D>, B, D: Diagnostics> syntax::ExprContext for ExprContext<'a, F, B, D> {
+impl<'a, F, B, D> syntax::ExprContext<D::Span> for ExprContext<'a, F, B, D>
+where
+    F: Frontend<D>,
+    D: Diagnostics,
+{
     type Ident = F::Ident;
     type Literal = Literal<F::Ident>;
     type Parent = CommandActions<'a, F, B, D>;
@@ -334,8 +341,10 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> DelegateDiagnostics for MacroDefActi
     }
 }
 
-impl<'a, F: Frontend<D>, B, D: Diagnostics> syntax::MacroParamsContext
-    for MacroDefActions<'a, F, B, D>
+impl<'a, F, B, D> syntax::MacroParamsContext<D::Span> for MacroDefActions<'a, F, B, D>
+where
+    F: Frontend<D>,
+    D: Diagnostics,
 {
     type Ident = F::Ident;
     type Command = Command;
@@ -352,8 +361,10 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> syntax::MacroParamsContext
     }
 }
 
-impl<'a, F: Frontend<D>, B, D: Diagnostics> syntax::TokenSeqContext
-    for MacroDefActions<'a, F, B, D>
+impl<'a, F, B, D> syntax::TokenSeqContext<D::Span> for MacroDefActions<'a, F, B, D>
+where
+    F: Frontend<D>,
+    D: Diagnostics,
 {
     type Token = Token<F::Ident>;
     type Parent = SemanticActions<'a, F, B, D>;
@@ -405,8 +416,11 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> DelegateDiagnostics
     }
 }
 
-impl<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics> syntax::MacroInvocationContext
-    for MacroInvocationActions<'a, F, B, D>
+impl<'a, F, B, D> syntax::MacroInvocationContext<D::Span> for MacroInvocationActions<'a, F, B, D>
+where
+    F: Frontend<D>,
+    B: Backend<D::Span>,
+    D: Diagnostics,
 {
     type Token = Token<F::Ident>;
     type Parent = SemanticActions<'a, F, B, D>;
@@ -444,8 +458,10 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> DelegateDiagnostics for MacroArgCont
     }
 }
 
-impl<'a, F: Frontend<D>, B, D: Diagnostics> syntax::TokenSeqContext
-    for MacroArgContext<'a, F, B, D>
+impl<'a, F, B, D> syntax::TokenSeqContext<D::Span> for MacroArgContext<'a, F, B, D>
+where
+    F: Frontend<D>,
+    D: Diagnostics,
 {
     type Token = Token<F::Ident>;
     type Parent = MacroInvocationActions<'a, F, B, D>;

@@ -29,10 +29,11 @@ impl<C, I, L, E> Token<C, I, L, E> {
 
 const LINE_FOLLOW_SET: &[TokenKind] = &[Token::Eol, Token::Eof];
 
-pub fn parse_src<Id, C, L, I, F>(mut tokens: I, context: F) -> F
+pub fn parse_src<Id, C, L, I, F, S>(mut tokens: I, context: F) -> F
 where
-    I: Iterator<Item = (Token<Id, C, L>, F::Span)>,
-    F: FileContext<Id, C, L>,
+    I: Iterator<Item = (Token<Id, C, L>, S)>,
+    F: FileContext<Id, C, L, S>,
+    S: Clone,
 {
     let Parser { token, context, .. } = Parser::new(&mut tokens, context).parse_file();
     assert_eq!(token.0.kind(), Token::Eof);
@@ -77,10 +78,11 @@ impl<'a, Id, C, L, S, I, A> Parser<'a, (Token<Id, C, L>, S), I, A> {
     }
 }
 
-impl<'a, Id, C, L, I, Ctx> Parser<'a, (Token<Id, C, L>, Ctx::Span), I, Ctx>
+impl<'a, Id, C, L, I, Ctx, S> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
 where
-    I: Iterator<Item = (Token<Id, C, L>, Ctx::Span)>,
-    Ctx: FileContext<Id, C, L>,
+    I: Iterator<Item = (Token<Id, C, L>, S)>,
+    Ctx: FileContext<Id, C, L, S>,
+    S: Clone,
 {
     fn parse_file(self) -> Self {
         self.parse_terminated_list(Token::Eol, &[Token::Eof], |p| p.parse_stmt())
@@ -99,10 +101,11 @@ where
     }
 }
 
-impl<'a, Id, C, L, I, Ctx> Parser<'a, (Token<Id, C, L>, Ctx::Span), I, Ctx>
+impl<'a, Id, C, L, I, Ctx, S> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
 where
-    I: Iterator<Item = (Token<Id, C, L>, Ctx::Span)>,
-    Ctx: StmtContext<Id, C, L>,
+    I: Iterator<Item = (Token<Id, C, L>, S)>,
+    Ctx: StmtContext<Id, C, L, S>,
+    S: Clone,
 {
     fn parse_unlabeled_stmt(mut self) -> Self {
         match self.token {
@@ -131,13 +134,13 @@ where
         }
     }
 
-    fn parse_command(self, command: (C, Ctx::Span)) -> Self {
+    fn parse_command(self, command: (C, S)) -> Self {
         self.change_context(|c| c.enter_command(command))
             .parse_argument_list()
             .change_context(|c| c.exit())
     }
 
-    fn parse_macro_def(self, span: Ctx::Span) -> Self {
+    fn parse_macro_def(self, span: S) -> Self {
         let mut state = self
             .change_context(|c| c.enter_macro_def(span))
             .parse_terminated_list(Token::Comma, LINE_FOLLOW_SET, |p| p.parse_macro_param());
@@ -178,17 +181,18 @@ where
         .change_context(|c| c.exit())
     }
 
-    fn parse_macro_invocation(self, name: (Id, Ctx::Span)) -> Self {
+    fn parse_macro_invocation(self, name: (Id, S)) -> Self {
         self.change_context(|c| c.enter_macro_invocation(name))
             .parse_macro_arg_list()
             .change_context(|c| c.exit())
     }
 }
 
-impl<'a, Id, C, L, I, Ctx> Parser<'a, (Token<Id, C, L>, Ctx::Span), I, Ctx>
+impl<'a, Id, C, L, I, Ctx, S> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
 where
-    I: Iterator<Item = (Token<Id, C, L>, Ctx::Span)>,
-    Ctx: CommandContext<Command = C, Ident = Id, Literal = L>,
+    I: Iterator<Item = (Token<Id, C, L>, S)>,
+    Ctx: CommandContext<S, Command = C, Ident = Id, Literal = L>,
+    S: Clone,
 {
     fn parse_argument_list(self) -> Self {
         self.parse_terminated_list(Token::Comma, LINE_FOLLOW_SET, |p| p.parse_argument())
@@ -214,10 +218,11 @@ enum ExprParsingError<S, R> {
     Other(CompactDiagnostic<S, R>),
 }
 
-impl<'a, Id, C, L, I, Ctx> Parser<'a, (Token<Id, C, L>, Ctx::Span), I, Ctx>
+impl<'a, Id, C, L, I, Ctx, S> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
 where
-    I: Iterator<Item = (Token<Id, C, L>, Ctx::Span)>,
-    Ctx: ExprContext<Ident = Id, Literal = L>,
+    I: Iterator<Item = (Token<Id, C, L>, S)>,
+    Ctx: ExprContext<S, Ident = Id, Literal = L>,
+    S: Clone,
 {
     fn parse(self) -> Self {
         self.parse_expression()
@@ -252,7 +257,7 @@ where
         }
     }
 
-    fn parse_parenthesized_expression(mut self, left: Ctx::Span) -> ParserResult<Self, Ctx> {
+    fn parse_parenthesized_expression(mut self, left: S) -> ParserResult<Self, Ctx> {
         self = match self.parse_expression() {
             Ok(parser) => parser,
             Err((parser, error)) => {
@@ -328,10 +333,11 @@ where
     }
 }
 
-impl<'a, Id, C, L, I, Ctx> Parser<'a, (Token<Id, C, L>, Ctx::Span), I, Ctx>
+impl<'a, Id, C, L, I, Ctx, S> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
 where
-    I: Iterator<Item = (Token<Id, C, L>, Ctx::Span)>,
-    Ctx: MacroParamsContext<Command = C, Ident = Id, Literal = L>,
+    I: Iterator<Item = (Token<Id, C, L>, S)>,
+    Ctx: MacroParamsContext<S, Command = C, Ident = Id, Literal = L>,
+    S: Clone,
 {
     fn parse_macro_param(mut self) -> Self {
         match self.token.0 {
@@ -349,10 +355,11 @@ where
     }
 }
 
-impl<'a, Id, C, L, I, Ctx> Parser<'a, (Token<Id, C, L>, Ctx::Span), I, Ctx>
+impl<'a, Id, C, L, I, Ctx, S> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
 where
-    I: Iterator<Item = (Token<Id, C, L>, Ctx::Span)>,
-    Ctx: MacroInvocationContext<Token = Token<Id, C, L>>,
+    I: Iterator<Item = (Token<Id, C, L>, S)>,
+    Ctx: MacroInvocationContext<S, Token = Token<Id, C, L>>,
+    S: Clone,
 {
     fn parse_macro_arg_list(self) -> Self {
         self.parse_terminated_list(Token::Comma, LINE_FOLLOW_SET, |p| {
@@ -371,10 +378,11 @@ where
     }
 }
 
-impl<'a, Id, C, L, I, Ctx> Parser<'a, (Token<Id, C, L>, Ctx::Span), I, Ctx>
+impl<'a, Id, C, L, I, Ctx, S> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
 where
-    I: Iterator<Item = (Token<Id, C, L>, Ctx::Span)>,
-    Ctx: DownstreamDiagnostics,
+    I: Iterator<Item = (Token<Id, C, L>, S)>,
+    Ctx: DownstreamDiagnostics<Span = S>,
+    S: Clone,
 {
     fn parse_terminated_list<P>(
         mut self,
@@ -477,7 +485,7 @@ mod tests {
         }
     }
 
-    impl FileContext<SymIdent, SymCommand, SymLiteral> for FileActionCollector {
+    impl FileContext<SymIdent, SymCommand, SymLiteral, SymSpan> for FileActionCollector {
         type StmtContext = StmtActionCollector;
 
         fn enter_stmt(self, label: Option<(SymIdent, SymSpan)>) -> StmtActionCollector {
@@ -519,7 +527,7 @@ mod tests {
         }
     }
 
-    impl StmtContext<SymIdent, SymCommand, SymLiteral> for StmtActionCollector {
+    impl StmtContext<SymIdent, SymCommand, SymLiteral, SymSpan> for StmtActionCollector {
         type CommandContext = CommandActionCollector;
         type MacroParamsContext = MacroParamsActionCollector;
         type MacroInvocationContext = MacroInvocationActionCollector;
@@ -591,7 +599,7 @@ mod tests {
         }
     }
 
-    impl CommandContext for CommandActionCollector {
+    impl CommandContext<SymSpan> for CommandActionCollector {
         type Command = SymCommand;
         type Ident = SymIdent;
         type Literal = SymLiteral;
@@ -643,7 +651,7 @@ mod tests {
         }
     }
 
-    impl ExprContext for ArgActionCollector {
+    impl ExprContext<SymSpan> for ArgActionCollector {
         type Ident = SymIdent;
         type Literal = SymLiteral;
         type Parent = CommandActionCollector;
@@ -700,7 +708,7 @@ mod tests {
         }
     }
 
-    impl ExprContext for ExprActionCollector {
+    impl ExprContext<SymSpan> for ExprActionCollector {
         type Ident = SymIdent;
         type Literal = SymLiteral;
         type Parent = Vec<ExprAction<SymSpan>>;
@@ -749,7 +757,7 @@ mod tests {
         }
     }
 
-    impl MacroParamsContext for MacroParamsActionCollector {
+    impl MacroParamsContext<SymSpan> for MacroParamsActionCollector {
         type Command = SymCommand;
         type Ident = SymIdent;
         type Literal = SymLiteral;
@@ -798,7 +806,7 @@ mod tests {
         }
     }
 
-    impl TokenSeqContext for MacroBodyActionCollector {
+    impl TokenSeqContext<SymSpan> for MacroBodyActionCollector {
         type Token = Token<SymIdent, SymCommand, SymLiteral>;
         type Parent = StmtActionCollector;
 
@@ -847,7 +855,7 @@ mod tests {
         }
     }
 
-    impl MacroInvocationContext for MacroInvocationActionCollector {
+    impl MacroInvocationContext<SymSpan> for MacroInvocationActionCollector {
         type Token = Token<SymIdent, SymCommand, SymLiteral>;
         type MacroArgContext = MacroArgActionCollector;
         type Parent = StmtActionCollector;
@@ -898,7 +906,7 @@ mod tests {
         }
     }
 
-    impl TokenSeqContext for MacroArgActionCollector {
+    impl TokenSeqContext<SymSpan> for MacroArgActionCollector {
         type Token = Token<SymIdent, SymCommand, SymLiteral>;
         type Parent = MacroInvocationActionCollector;
 
