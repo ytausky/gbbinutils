@@ -1,5 +1,5 @@
 use crate::backend::{self, Backend, BinaryOperator, ValueBuilder};
-use crate::diagnostics::span::{MergeSpans, Span, StripSpan};
+use crate::diagnostics::span::{MergeSpans, StripSpan};
 use crate::diagnostics::*;
 use crate::expr::ExprVariant;
 use crate::frontend::session::Session;
@@ -70,7 +70,11 @@ impl<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics> SemanticActions<'a
     }
 }
 
-impl<'a, F: Frontend<D>, B, D: Diagnostics> DelegateDiagnostics for SemanticActions<'a, F, B, D> {
+impl<'a, F, B, D> DelegateDiagnostics<D::Span> for SemanticActions<'a, F, B, D>
+where
+    F: Frontend<D>,
+    D: Diagnostics,
+{
     type Delegate = D;
 
     fn diagnostics(&mut self) -> &mut Self::Delegate {
@@ -111,7 +115,8 @@ where
 
     fn enter_macro_def(mut self, keyword: D::Span) -> Self::MacroParamsContext {
         if self.label.is_none() {
-            self.emit_diagnostic(CompactDiagnostic::new(Message::MacroRequiresName, keyword))
+            self.diagnostics()
+                .emit_diagnostic(CompactDiagnostic::new(Message::MacroRequiresName, keyword))
         }
         MacroDefActions::new(self.label.take(), self)
     }
@@ -150,32 +155,40 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> CommandActions<'a, F, B, D> {
     }
 }
 
-impl<'a, F: Frontend<D>, B, D: Diagnostics> Span for CommandActions<'a, F, B, D> {
-    type Span = D::Span;
-}
-
-impl<'a, F: Frontend<D>, B, D: Diagnostics> MergeSpans for CommandActions<'a, F, B, D> {
-    fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
-        self.parent.merge_spans(left, right)
+impl<'a, F: Frontend<D>, B, D: Diagnostics> MergeSpans<D::Span> for CommandActions<'a, F, B, D> {
+    fn merge_spans(&mut self, left: &D::Span, right: &D::Span) -> D::Span {
+        self.parent.diagnostics().merge_spans(left, right)
     }
 }
 
-impl<'a, F: Frontend<D>, B, D: Diagnostics> StripSpan for CommandActions<'a, F, B, D> {
+impl<'a, F: Frontend<D>, B, D: Diagnostics> StripSpan<D::Span> for CommandActions<'a, F, B, D> {
     type Stripped = D::Stripped;
 
-    fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped {
-        self.parent.strip_span(span)
+    fn strip_span(&mut self, span: &D::Span) -> Self::Stripped {
+        self.parent.diagnostics().strip_span(span)
     }
 }
 
-impl<'a, F, B, D> EmitDiagnostic<D::Stripped> for CommandActions<'a, F, B, D>
+impl<'a, F, B, D> EmitDiagnostic<D::Span, D::Stripped> for CommandActions<'a, F, B, D>
 where
     F: Frontend<D>,
     D: Diagnostics,
 {
     fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<D::Span, D::Stripped>) {
         self.has_errors = true;
-        self.parent.emit_diagnostic(diagnostic)
+        self.parent.diagnostics().emit_diagnostic(diagnostic)
+    }
+}
+
+impl<'a, F, B, D> DelegateDiagnostics<D::Span> for CommandActions<'a, F, B, D>
+where
+    F: Frontend<D>,
+    D: Diagnostics,
+{
+    type Delegate = Self;
+
+    fn diagnostics(&mut self) -> &mut Self::Delegate {
+        self
     }
 }
 
@@ -231,7 +244,11 @@ pub struct ExprContext<'a, F: Frontend<D>, B, D: Diagnostics> {
     parent: CommandActions<'a, F, B, D>,
 }
 
-impl<'a, F: Frontend<D>, B, D: Diagnostics> DelegateDiagnostics for ExprContext<'a, F, B, D> {
+impl<'a, F, B, D> DelegateDiagnostics<D::Span> for ExprContext<'a, F, B, D>
+where
+    F: Frontend<D>,
+    D: Diagnostics,
+{
     type Delegate = CommandActions<'a, F, B, D>;
 
     fn diagnostics(&mut self) -> &mut Self::Delegate {
@@ -333,7 +350,11 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> MacroDefActions<'a, F, B, D> {
     }
 }
 
-impl<'a, F: Frontend<D>, B, D: Diagnostics> DelegateDiagnostics for MacroDefActions<'a, F, B, D> {
+impl<'a, F, B, D> DelegateDiagnostics<D::Span> for MacroDefActions<'a, F, B, D>
+where
+    F: Frontend<D>,
+    D: Diagnostics,
+{
     type Delegate = D;
 
     fn diagnostics(&mut self) -> &mut Self::Delegate {
@@ -406,8 +427,10 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> MacroInvocationActions<'a, F, B, D> 
     }
 }
 
-impl<'a, F: Frontend<D>, B, D: Diagnostics> DelegateDiagnostics
-    for MacroInvocationActions<'a, F, B, D>
+impl<'a, F, B, D> DelegateDiagnostics<D::Span> for MacroInvocationActions<'a, F, B, D>
+where
+    F: Frontend<D>,
+    D: Diagnostics,
 {
     type Delegate = D;
 
@@ -450,7 +473,11 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> MacroArgContext<'a, F, B, D> {
     }
 }
 
-impl<'a, F: Frontend<D>, B, D: Diagnostics> DelegateDiagnostics for MacroArgContext<'a, F, B, D> {
+impl<'a, F, B, D> DelegateDiagnostics<D::Span> for MacroArgContext<'a, F, B, D>
+where
+    F: Frontend<D>,
+    D: Diagnostics,
+{
     type Delegate = D;
 
     fn diagnostics(&mut self) -> &mut Self::Delegate {
@@ -490,7 +517,11 @@ impl<'a, B: 'a, D: 'a> ValueContext<'a, B, D> {
     }
 }
 
-impl<'a, B: 'a, D: DownstreamDiagnostics + 'a> DelegateDiagnostics for ValueContext<'a, B, D> {
+impl<'a, B, D, S> DelegateDiagnostics<S> for ValueContext<'a, B, D>
+where
+    B: 'a,
+    D: DownstreamDiagnostics<S> + 'a,
+{
     type Delegate = D;
 
     fn diagnostics(&mut self) -> &mut Self::Delegate {
@@ -509,10 +540,10 @@ trait AnalyzeExpr {
 
 impl<'a, B, D> AnalyzeExpr for ValueContext<'a, B, D>
 where
-    B: ValueBuilder<Span = D::Span>,
-    D: DownstreamDiagnostics,
+    B: ValueBuilder,
+    D: DownstreamDiagnostics<B::Span>,
 {
-    type Span = D::Span;
+    type Span = B::Span;
     type Value = B::Value;
 
     fn analyze_expr<I>(&mut self, expr: SemanticExpr<I, Self::Span>) -> Result<Self::Value, ()>
@@ -529,7 +560,7 @@ where
             ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(_))) => {
                 Err(CompactDiagnostic::new(
                     Message::KeywordInExpr {
-                        keyword: self.strip_span(&expr.span),
+                        keyword: self.diagnostics.strip_span(&expr.span),
                     },
                     expr.span,
                 ))
@@ -572,28 +603,23 @@ pub struct TokenSpan {
 pub struct DiagnosticsCollector<S>(Vec<CompactDiagnostic<S, S>>);
 
 #[cfg(test)]
-impl<S: Clone> Span for DiagnosticsCollector<S> {
-    type Span = S;
-}
-
-#[cfg(test)]
-impl MergeSpans for DiagnosticsCollector<TokenSpan> {
+impl MergeSpans<TokenSpan> for DiagnosticsCollector<TokenSpan> {
     fn merge_spans(&mut self, left: &TokenSpan, right: &TokenSpan) -> TokenSpan {
         TokenSpan::merge(left, right)
     }
 }
 
 #[cfg(test)]
-impl<S: Clone> StripSpan for DiagnosticsCollector<S> {
+impl<S: Clone> StripSpan<S> for DiagnosticsCollector<S> {
     type Stripped = S;
 
-    fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped {
+    fn strip_span(&mut self, span: &S) -> Self::Stripped {
         span.clone()
     }
 }
 
 #[cfg(test)]
-impl<S: Clone> EmitDiagnostic<S> for DiagnosticsCollector<S> {
+impl<S: Clone> EmitDiagnostic<S, S> for DiagnosticsCollector<S> {
     fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<S, S>) {
         self.0.push(diagnostic)
     }
@@ -755,17 +781,17 @@ mod tests {
         type Span = ();
     }
 
-    impl<'a> MergeSpans for TestDiagnostics<'a> {
+    impl<'a> MergeSpans<()> for TestDiagnostics<'a> {
         fn merge_spans(&mut self, _: &(), _: &()) {}
     }
 
-    impl<'a> StripSpan for TestDiagnostics<'a> {
+    impl<'a> StripSpan<()> for TestDiagnostics<'a> {
         type Stripped = ();
 
-        fn strip_span(&mut self, _: &Self::Span) {}
+        fn strip_span(&mut self, _: &()) {}
     }
 
-    impl<'a> EmitDiagnostic<()> for TestDiagnostics<'a> {
+    impl<'a> EmitDiagnostic<(), ()> for TestDiagnostics<'a> {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<(), ()>) {
             self.operations
                 .borrow_mut()
@@ -773,32 +799,27 @@ mod tests {
         }
     }
 
-    impl<'a> MacroContextFactory for TestDiagnostics<'a> {
+    impl<'a> MacroContextFactory<()> for TestDiagnostics<'a> {
         type MacroDefId = usize;
         type MacroExpansionContext = TestMacroExpansionContext;
 
-        fn add_macro_def<P, B>(
-            &mut self,
-            _name: Self::Span,
-            _params: P,
-            _body: B,
-        ) -> Self::MacroDefId
+        fn add_macro_def<P, B>(&mut self, _name: (), _params: P, _body: B) -> Self::MacroDefId
         where
-            P: IntoIterator<Item = Self::Span>,
-            B: IntoIterator<Item = Self::Span>,
+            P: IntoIterator<Item = ()>,
+            B: IntoIterator<Item = ()>,
         {
             0
         }
 
         fn mk_macro_expansion_context<A, J>(
             &mut self,
-            _name: Self::Span,
+            _name: (),
             _args: A,
             _def: &Self::MacroDefId,
         ) -> Self::MacroExpansionContext
         where
             A: IntoIterator<Item = J>,
-            J: IntoIterator<Item = Self::Span>,
+            J: IntoIterator<Item = ()>,
         {
             TestMacroExpansionContext
         }
@@ -1064,7 +1085,7 @@ mod tests {
         let diagnostic = CompactDiagnostic::new(Message::UnexpectedToken { token: () }, ());
         let actions = collect_semantic_actions(|actions| {
             let mut stmt = actions.enter_stmt(None);
-            stmt.emit_diagnostic(diagnostic.clone());
+            stmt.diagnostics().emit_diagnostic(diagnostic.clone());
             stmt.exit()
         });
         assert_eq!(actions, [TestOperation::EmitDiagnostic(diagnostic)])
@@ -1078,7 +1099,7 @@ mod tests {
                 .enter_stmt(None)
                 .enter_command((Command::Mnemonic(Mnemonic::Add), ()))
                 .add_argument();
-            expr.emit_diagnostic(diagnostic.clone());
+            expr.diagnostics().emit_diagnostic(diagnostic.clone());
             expr.exit().exit().exit()
         });
         assert_eq!(actions, [TestOperation::EmitDiagnostic(diagnostic)])

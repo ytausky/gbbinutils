@@ -126,7 +126,7 @@ where
         I: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
         F: Diagnostics<MacroDefId = M::MacroDefId>,
         T: Tokenize<F::BufContext>,
-        M::Entry: Expand<T::Ident, F>,
+        M::Entry: Expand<T::Ident, F, F::Span>,
         for<'b> &'b T::Tokenized: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
     {
         let analysis = self.analysis;
@@ -140,7 +140,7 @@ type TokenSeq<I, S> = Vec<(Token<I>, S)>;
 impl<'a, M, T, A, D> Frontend<D> for CodebaseAnalyzer<'a, M, T, A>
 where
     M: MacroTable<T::Ident, MacroDefId = D::MacroDefId>,
-    M::Entry: Expand<T::Ident, D>,
+    M::Entry: Expand<T::Ident, D, D::Span>,
     T: Tokenize<D::BufContext> + 'a,
     A: Analysis<T::Ident>,
     D: Diagnostics,
@@ -474,35 +474,35 @@ mod tests {
         type Span = ();
     }
 
-    impl<'a> MacroContextFactory for Mock<'a> {
+    impl<'a> MacroContextFactory<()> for Mock<'a> {
         type MacroDefId = ();
         type MacroExpansionContext = Mock<'a>;
 
-        fn add_macro_def<P, B>(&mut self, _: Self::Span, _: P, _: B) -> Self::MacroDefId
+        fn add_macro_def<P, B>(&mut self, _: (), _: P, _: B) -> Self::MacroDefId
         where
-            P: IntoIterator<Item = Self::Span>,
-            B: IntoIterator<Item = Self::Span>,
+            P: IntoIterator<Item = ()>,
+            B: IntoIterator<Item = ()>,
         {
         }
 
         fn mk_macro_expansion_context<I, J>(
             &mut self,
-            _: Self::Span,
+            _: (),
             _: I,
             _: &Self::MacroDefId,
         ) -> Self::MacroExpansionContext
         where
             I: IntoIterator<Item = J>,
-            J: IntoIterator<Item = Self::Span>,
+            J: IntoIterator<Item = ()>,
         {
             self.clone()
         }
     }
 
-    impl<'a> StripSpan for Mock<'a> {
+    impl<'a> StripSpan<()> for Mock<'a> {
         type Stripped = ();
 
-        fn strip_span(&mut self, _: &Self::Span) {}
+        fn strip_span(&mut self, _: &()) {}
     }
 
     impl<'a> ContextFactory for Mock<'a> {
@@ -569,7 +569,7 @@ mod tests {
         }
     }
 
-    impl<'a> EmitDiagnostic<()> for Mock<'a> {
+    impl<'a> EmitDiagnostic<(), ()> for Mock<'a> {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<(), ()>) {
             self.log
                 .borrow_mut()
@@ -577,7 +577,7 @@ mod tests {
         }
     }
 
-    impl<'a> MergeSpans for Mock<'a> {
+    impl<'a> MergeSpans<()> for Mock<'a> {
         fn merge_spans(&mut self, _: &(), _: &()) {}
     }
 

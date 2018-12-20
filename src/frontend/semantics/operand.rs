@@ -44,14 +44,14 @@ pub enum Context {
 }
 
 pub fn analyze_operand<I, B, D>(
-    expr: SemanticExpr<I, D::Span>,
+    expr: SemanticExpr<I, B::Span>,
     context: Context,
     value_context: &mut ValueContext<B, D>,
 ) -> Result<Operand<B::Value>, ()>
 where
     I: Into<String>,
-    B: ValueBuilder<Span = D::Span>,
-    D: DownstreamDiagnostics,
+    B: ValueBuilder,
+    D: DownstreamDiagnostics<B::Span>,
 {
     match expr.variant {
         ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(keyword))) => {
@@ -65,14 +65,14 @@ where
 }
 
 fn analyze_deref_operand<I, B, D>(
-    expr: SemanticExpr<I, D::Span>,
-    deref_span: D::Span,
+    expr: SemanticExpr<I, B::Span>,
+    deref_span: B::Span,
     value_context: &mut ValueContext<B, D>,
 ) -> Result<Operand<B::Value>, ()>
 where
     I: Into<String>,
-    B: ValueBuilder<Span = D::Span>,
-    D: DownstreamDiagnostics,
+    B: ValueBuilder,
+    D: DownstreamDiagnostics<B::Span>,
 {
     match expr.variant {
         ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(keyword))) => {
@@ -87,13 +87,13 @@ where
 }
 
 fn analyze_deref_operand_keyword<V: Source, D>(
-    keyword: (kw::Operand, &D::Span),
-    deref: D::Span,
+    keyword: (kw::Operand, &V::Span),
+    deref: V::Span,
     diagnostics: &mut D,
 ) -> Result<Operand<V>, ()>
 where
-    V: Source<Span = D::Span>,
-    D: DownstreamDiagnostics,
+    V: Source,
+    D: DownstreamDiagnostics<V::Span>,
 {
     match try_deref_operand_keyword(keyword.0) {
         Ok(atom) => Ok(Operand::Atom(atom, deref)),
@@ -132,8 +132,8 @@ fn analyze_keyword_operand<V: Source, D>(
     diagnostics: &mut D,
 ) -> Result<Operand<V>, ()>
 where
-    V: Source<Span = D::Span>,
-    D: DownstreamDiagnostics,
+    V: Source,
+    D: DownstreamDiagnostics<V::Span>,
 {
     use self::kw::Operand::*;
     use self::Context::*;
@@ -253,7 +253,7 @@ mod tests {
         context: Context,
     ) -> Result<Operand<RelocExpr<S>>, Vec<CompactDiagnostic<S, S>>>
     where
-        DiagnosticsCollector<S>: DownstreamDiagnostics<Span = S>,
+        DiagnosticsCollector<S>: DownstreamDiagnostics<S>,
     {
         let mut collector = DiagnosticsCollector(Vec::new());
         let result = super::analyze_operand(
@@ -264,8 +264,8 @@ mod tests {
         result.map_err(|_| collector.0)
     }
 
-    impl MergeSpans for DiagnosticsCollector<i32> {
-        fn merge_spans(&mut self, _: &Self::Span, _: &Self::Span) -> Self::Span {
+    impl MergeSpans<i32> for DiagnosticsCollector<i32> {
+        fn merge_spans(&mut self, _: &i32, _: &i32) -> i32 {
             unreachable!()
         }
     }

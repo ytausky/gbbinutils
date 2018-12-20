@@ -12,37 +12,43 @@ pub trait Source: Span {
     fn span(&self) -> Self::Span;
 }
 
-pub trait MergeSpans: Span {
-    fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span;
+pub trait MergeSpans<S> {
+    fn merge_spans(&mut self, left: &S, right: &S) -> S;
 }
 
-pub trait StripSpan: Span {
+pub trait StripSpan<S> {
     type Stripped;
 
-    fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped;
+    fn strip_span(&mut self, span: &S) -> Self::Stripped;
 }
 
-pub trait MacroContextFactory: Span {
+pub trait MacroContextFactory<S> {
     type MacroDefId: Clone;
-    type MacroExpansionContext: MacroExpansionContext<Span = Self::Span>;
+    type MacroExpansionContext: MacroExpansionContext<Span = S>;
 
-    fn add_macro_def<P, B>(&mut self, name: Self::Span, params: P, body: B) -> Self::MacroDefId
+    fn add_macro_def<P, B>(&mut self, name: S, params: P, body: B) -> Self::MacroDefId
     where
-        P: IntoIterator<Item = Self::Span>,
-        B: IntoIterator<Item = Self::Span>;
+        P: IntoIterator<Item = S>,
+        B: IntoIterator<Item = S>;
 
     fn mk_macro_expansion_context<A, J>(
         &mut self,
-        name: Self::Span,
+        name: S,
         args: A,
         def: &Self::MacroDefId,
     ) -> Self::MacroExpansionContext
     where
         A: IntoIterator<Item = J>,
-        J: IntoIterator<Item = Self::Span>;
+        J: IntoIterator<Item = S>;
 }
 
-pub trait ContextFactory: MacroContextFactory + MergeSpans + StripSpan {
+pub trait ContextFactory
+where
+    Self: Span,
+    Self: MacroContextFactory<<Self as Span>::Span>,
+    Self: MergeSpans<<Self as Span>::Span>,
+    Self: StripSpan<<Self as Span>::Span>,
+{
     type BufContext: BufContext<Span = Self::Span>;
 
     fn mk_buf_context(
@@ -191,17 +197,17 @@ where
     type Span = SpanData<B, R>;
 }
 
-impl<B, R> MacroContextFactory for RcContextFactory<B, R>
+impl<B, R> MacroContextFactory<SpanData<B, R>> for RcContextFactory<B, R>
 where
     SpanData<B, R>: Clone,
 {
-    type MacroDefId = Rc<MacroDef<Self::Span>>;
+    type MacroDefId = Rc<MacroDef<SpanData<B, R>>>;
     type MacroExpansionContext = Rc<MacroExpansionData<SpanData<B, R>>>;
 
-    fn add_macro_def<P, C>(&mut self, name: Self::Span, params: P, body: C) -> Self::MacroDefId
+    fn add_macro_def<P, C>(&mut self, name: SpanData<B, R>, params: P, body: C) -> Self::MacroDefId
     where
-        P: IntoIterator<Item = Self::Span>,
-        C: IntoIterator<Item = Self::Span>,
+        P: IntoIterator<Item = SpanData<B, R>>,
+        C: IntoIterator<Item = SpanData<B, R>>,
     {
         Rc::new(MacroDef {
             name,
@@ -212,13 +218,13 @@ where
 
     fn mk_macro_expansion_context<I, J>(
         &mut self,
-        name: Self::Span,
+        name: SpanData<B, R>,
         args: I,
         def: &Self::MacroDefId,
     ) -> Self::MacroExpansionContext
     where
         I: IntoIterator<Item = J>,
-        J: IntoIterator<Item = Self::Span>,
+        J: IntoIterator<Item = SpanData<B, R>>,
     {
         Rc::new(MacroExpansionData {
             name,
@@ -232,8 +238,12 @@ where
     }
 }
 
-impl MergeSpans for RcContextFactory<BufId, BufRange> {
-    fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
+impl MergeSpans<SpanData<BufId, BufRange>> for RcContextFactory<BufId, BufRange> {
+    fn merge_spans(
+        &mut self,
+        left: &SpanData<BufId, BufRange>,
+        right: &SpanData<BufId, BufRange>,
+    ) -> SpanData<BufId, BufRange> {
         use self::SpanData::*;
         match (left, right) {
             (
@@ -261,10 +271,10 @@ impl MergeSpans for RcContextFactory<BufId, BufRange> {
     }
 }
 
-impl StripSpan for RcContextFactory<BufId, BufRange> {
+impl StripSpan<SpanData<BufId, BufRange>> for RcContextFactory<BufId, BufRange> {
     type Stripped = StrippedBufSpan<BufId, BufRange>;
 
-    fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped {
+    fn strip_span(&mut self, span: &SpanData<BufId, BufRange>) -> Self::Stripped {
         span.to_stripped()
     }
 }

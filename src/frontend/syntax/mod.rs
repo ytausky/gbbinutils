@@ -1,4 +1,4 @@
-use crate::diagnostics::DownstreamDiagnostics;
+use crate::diagnostics::DelegateDiagnostics;
 
 #[cfg(test)]
 #[macro_use]
@@ -46,12 +46,12 @@ pub enum Literal<S> {
     String(S),
 }
 
-pub trait FileContext<I, C, L, S: Clone>: DownstreamDiagnostics<Span = S> + Sized {
+pub trait FileContext<I, C, L, S: Clone>: DelegateDiagnostics<S> + Sized {
     type StmtContext: StmtContext<I, C, L, S, Parent = Self>;
     fn enter_stmt(self, label: Option<(I, S)>) -> Self::StmtContext;
 }
 
-pub trait StmtContext<I, C, L, S: Clone>: DownstreamDiagnostics<Span = S> + Sized {
+pub trait StmtContext<I, C, L, S: Clone>: DelegateDiagnostics<S> + Sized {
     type CommandContext: CommandContext<S, Ident = I, Command = C, Literal = L, Parent = Self>;
     type MacroParamsContext: MacroParamsContext<
         S,
@@ -68,7 +68,7 @@ pub trait StmtContext<I, C, L, S: Clone>: DownstreamDiagnostics<Span = S> + Size
     fn exit(self) -> Self::Parent;
 }
 
-pub trait CommandContext<S: Clone>: DownstreamDiagnostics<Span = S> + Sized {
+pub trait CommandContext<S: Clone>: DelegateDiagnostics<S> + Sized {
     type Ident;
     type Command;
     type Literal;
@@ -78,7 +78,7 @@ pub trait CommandContext<S: Clone>: DownstreamDiagnostics<Span = S> + Sized {
     fn exit(self) -> Self::Parent;
 }
 
-pub trait ExprContext<S: Clone>: DownstreamDiagnostics<Span = S> {
+pub trait ExprContext<S: Clone>: DelegateDiagnostics<S> {
     type Ident;
     type Literal;
     type Parent;
@@ -99,7 +99,7 @@ pub enum ExprOperator {
     Plus,
 }
 
-pub trait MacroParamsContext<S: Clone>: DownstreamDiagnostics<Span = S> {
+pub trait MacroParamsContext<S: Clone>: DelegateDiagnostics<S> {
     type Ident;
     type Command;
     type Literal;
@@ -113,7 +113,7 @@ pub trait MacroParamsContext<S: Clone>: DownstreamDiagnostics<Span = S> {
     fn exit(self) -> Self::MacroBodyContext;
 }
 
-pub trait MacroInvocationContext<S: Clone>: DownstreamDiagnostics<Span = S> + Sized {
+pub trait MacroInvocationContext<S: Clone>: DelegateDiagnostics<S> + Sized {
     type Token;
     type Parent;
     type MacroArgContext: TokenSeqContext<S, Token = Self::Token, Parent = Self>;
@@ -121,7 +121,7 @@ pub trait MacroInvocationContext<S: Clone>: DownstreamDiagnostics<Span = S> + Si
     fn exit(self) -> Self::Parent;
 }
 
-pub trait TokenSeqContext<S: Clone>: DownstreamDiagnostics<Span = S> {
+pub trait TokenSeqContext<S: Clone>: DelegateDiagnostics<S> {
     type Token;
     type Parent;
     fn push_token(&mut self, token: (Self::Token, S));

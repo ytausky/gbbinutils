@@ -28,7 +28,7 @@ struct DirectiveContext<'a, A, I, S> {
     actions: &'a mut A,
 }
 
-impl<'a, 'b, F, B, D> DelegateDiagnostics
+impl<'a, 'b, F, B, D> DelegateDiagnostics<D::Span>
     for DirectiveContext<'b, SemanticActions<'a, F, B, D>, F::Ident, D::Span>
 where
     'a: 'b,
@@ -130,6 +130,7 @@ where
         };
         if let Err(err) = self.actions.session.analyze_file(path) {
             self.actions
+                .diagnostics()
                 .emit_diagnostic(CompactDiagnostic::new(err.into(), span))
         }
     }
@@ -159,11 +160,11 @@ fn location_counter_plus_expr<B: ValueBuilder>(expr: B::Value, builder: &mut B) 
     builder.apply_binary_operator((BinaryOperator::Plus, expr.span()), location, expr)
 }
 
-fn reduce_include<I: PartialEq, D: DownstreamDiagnostics>(
-    span: D::Span,
-    args: Vec<SemanticExpr<I, D::Span>>,
+fn reduce_include<I: PartialEq, D: DownstreamDiagnostics<S>, S>(
+    span: S,
+    args: Vec<SemanticExpr<I, S>>,
     diagnostics: &mut D,
-) -> Result<(I, D::Span), ()> {
+) -> Result<(I, S), ()> {
     let arg = single_arg(span, args, diagnostics)?;
     match arg.variant {
         ExprVariant::Atom(SemanticAtom::Literal(Literal::String(path))) => Ok((path, arg.span)),
@@ -174,8 +175,8 @@ fn reduce_include<I: PartialEq, D: DownstreamDiagnostics>(
     }
 }
 
-fn single_arg<T, D: DownstreamDiagnostics>(
-    span: D::Span,
+fn single_arg<T, D: DownstreamDiagnostics<S>, S>(
+    span: S,
     args: impl IntoIterator<Item = T>,
     diagnostics: &mut D,
 ) -> Result<T, ()> {

@@ -1,5 +1,5 @@
 use super::*;
-use crate::diagnostics::span::{Span, StripSpan};
+use crate::diagnostics::span::{MergeSpans, StripSpan};
 use crate::diagnostics::{CompactDiagnostic, EmitDiagnostic, Message};
 
 type TokenKind = Token<(), (), (), ()>;
@@ -124,11 +124,13 @@ where
             }
             (_, span) => {
                 bump!(self);
-                let stripped = self.context.strip_span(&span);
-                self.context.emit_diagnostic(CompactDiagnostic::new(
-                    Message::UnexpectedToken { token: stripped },
-                    span,
-                ));
+                let stripped = self.context.diagnostics().strip_span(&span);
+                self.context
+                    .diagnostics()
+                    .emit_diagnostic(CompactDiagnostic::new(
+                        Message::UnexpectedToken { token: stripped },
+                        span,
+                    ));
                 self
             }
         }
@@ -157,10 +159,13 @@ where
                         break;
                     }
                     (Token::Eof, _) => {
-                        state.context.emit_diagnostic(CompactDiagnostic::new(
-                            Message::UnexpectedEof,
-                            state.token.1.clone(),
-                        ));
+                        state
+                            .context
+                            .diagnostics()
+                            .emit_diagnostic(CompactDiagnostic::new(
+                                Message::UnexpectedEof,
+                                state.token.1.clone(),
+                            ));
                         break;
                     }
                     other => {
@@ -172,10 +177,13 @@ where
             state
         } else {
             assert_eq!(state.token.0.kind(), Token::Eof);
-            state.context.emit_diagnostic(CompactDiagnostic::new(
-                Message::UnexpectedEof,
-                state.token.1.clone(),
-            ));
+            state
+                .context
+                .diagnostics()
+                .emit_diagnostic(CompactDiagnostic::new(
+                    Message::UnexpectedEof,
+                    state.token.1.clone(),
+                ));
             state.change_context(|c| c.exit())
         }
         .change_context(|c| c.exit())
@@ -205,13 +213,15 @@ where
     }
 }
 
-type ParserResult<P, C> = Result<
+type ParserResult<P, C, S> = Result<
     P,
     (
         P,
-        ExprParsingError<<C as Span>::Span, <C as StripSpan>::Stripped>,
+        ExpandedExprParsingError<<C as DelegateDiagnostics<S>>::Delegate, S>,
     ),
 >;
+
+type ExpandedExprParsingError<D, S> = ExprParsingError<S, <D as StripSpan<S>>::Stripped>;
 
 enum ExprParsingError<S, R> {
     NothingParsed,
@@ -232,14 +242,14 @@ where
                         match parser.token.0 {
                             Token::Eof => Message::UnexpectedEof,
                             _ => Message::UnexpectedToken {
-                                token: parser.context.strip_span(&parser.token.1),
+                                token: parser.context.diagnostics().strip_span(&parser.token.1),
                             },
                         },
                         parser.token.1.clone(),
                     ),
                     ExprParsingError::Other(diagnostic) => diagnostic,
                 };
-                parser.context.emit_diagnostic(diagnostic);
+                parser.context.diagnostics().emit_diagnostic(diagnostic);
                 while !parser.token_is_in(LINE_FOLLOW_SET) {
                     bump!(parser);
                 }
@@ -247,7 +257,7 @@ where
             })
     }
 
-    fn parse_expression(mut self) -> ParserResult<Self, Ctx> {
+    fn parse_expression(mut self) -> ParserResult<Self, Ctx, S> {
         match self.token {
             (Token::OpeningParenthesis, span) => {
                 bump!(self);
@@ -257,7 +267,7 @@ where
         }
     }
 
-    fn parse_parenthesized_expression(mut self, left: S) -> ParserResult<Self, Ctx> {
+    fn parse_parenthesized_expression(mut self, left: S) -> ParserResult<Self, Ctx, S> {
         self = match self.parse_expression() {
             Ok(parser) => parser,
             Err((parser, error)) => {
@@ -277,7 +287,7 @@ where
         match self.token {
             (Token::ClosingParenthesis, right) => {
                 bump!(self);
-                let span = self.context.merge_spans(&left, &right);
+                let span = self.context.diagnostics().merge_spans(&left, &right);
                 self.context
                     .apply_operator((ExprOperator::Parentheses, span));
                 Ok(self)
@@ -292,7 +302,7 @@ where
         }
     }
 
-    fn parse_infix_expr(mut self) -> ParserResult<Self, Ctx> {
+    fn parse_infix_expr(mut self) -> ParserResult<Self, Ctx, S> {
         self = self.parse_atomic_expr()?;
         while let (Token::Plus, span) = self.token {
             bump!(self);
@@ -302,7 +312,7 @@ where
         Ok(self)
     }
 
-    fn parse_atomic_expr(mut self) -> ParserResult<Self, Ctx> {
+    fn parse_atomic_expr(mut self) -> ParserResult<Self, Ctx, S> {
         match self.token.0 {
             Token::Eof | Token::Eol => Err((self, ExprParsingError::NothingParsed)),
             Token::Ident(ident) => {
@@ -319,7 +329,7 @@ where
             }
             _ => {
                 let span = self.token.1;
-                let stripped = self.context.strip_span(&span);
+                let stripped = self.context.diagnostics().strip_span(&span);
                 bump!(self);
                 Err((
                     self,
@@ -343,11 +353,13 @@ where
         match self.token.0 {
             Token::Ident(ident) => self.context.add_parameter((ident, self.token.1)),
             _ => {
-                let stripped = self.context.strip_span(&self.token.1);
-                self.context.emit_diagnostic(CompactDiagnostic::new(
-                    Message::UnexpectedToken { token: stripped },
-                    self.token.1.clone(),
-                ))
+                let stripped = self.context.diagnostics().strip_span(&self.token.1);
+                self.context
+                    .diagnostics()
+                    .emit_diagnostic(CompactDiagnostic::new(
+                        Message::UnexpectedToken { token: stripped },
+                        self.token.1.clone(),
+                    ))
             }
         };
         bump!(self);
@@ -381,7 +393,7 @@ where
 impl<'a, Id, C, L, I, Ctx, S> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
 where
     I: Iterator<Item = (Token<Id, C, L>, S)>,
-    Ctx: DownstreamDiagnostics<Span = S>,
+    Ctx: DelegateDiagnostics<S>,
     S: Clone,
 {
     fn parse_terminated_list<P>(
@@ -396,11 +408,13 @@ where
         self = self.parse_list(delimiter, terminators, parser);
         if !self.token_is_in(terminators) {
             let unexpected_span = self.token.1;
-            let stripped = self.context.strip_span(&unexpected_span);
-            self.context.emit_diagnostic(CompactDiagnostic::new(
-                Message::UnexpectedToken { token: stripped },
-                unexpected_span,
-            ));
+            let stripped = self.context.diagnostics().strip_span(&unexpected_span);
+            self.context
+                .diagnostics()
+                .emit_diagnostic(CompactDiagnostic::new(
+                    Message::UnexpectedToken { token: stripped },
+                    unexpected_span,
+                ));
             bump!(self);
             while !self.token_is_in(terminators) {
                 bump!(self);
@@ -438,7 +452,7 @@ mod tests {
     use super::ast::*;
     use super::Token::*;
     use super::*;
-    use crate::diagnostics::span::{MergeSpans, Span, StripSpan};
+    use crate::diagnostics::span::{MergeSpans, StripSpan};
     use crate::diagnostics::{CompactDiagnostic, EmitDiagnostic, Message};
     use crate::frontend::syntax::{ExprAtom, ExprOperator};
     use std::borrow::Borrow;
@@ -461,27 +475,31 @@ mod tests {
         }
     }
 
-    impl Span for FileActionCollector {
-        type Span = SymSpan;
-    }
-
-    impl MergeSpans for FileActionCollector {
+    impl MergeSpans<SymSpan> for FileActionCollector {
         fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
             SymSpan::merge(left, right)
         }
     }
 
-    impl StripSpan for FileActionCollector {
+    impl StripSpan<SymSpan> for FileActionCollector {
         type Stripped = SymSpan;
 
-        fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped {
+        fn strip_span(&mut self, span: &SymSpan) -> Self::Stripped {
             span.clone()
         }
     }
 
-    impl EmitDiagnostic<SymSpan> for FileActionCollector {
+    impl EmitDiagnostic<SymSpan, SymSpan> for FileActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.actions.push(FileAction::EmitDiagnostic(diagnostic))
+        }
+    }
+
+    impl DelegateDiagnostics<SymSpan> for FileActionCollector {
+        type Delegate = Self;
+
+        fn diagnostics(&mut self) -> &mut Self::Delegate {
+            self
         }
     }
 
@@ -503,27 +521,31 @@ mod tests {
         parent: FileActionCollector,
     }
 
-    impl Span for StmtActionCollector {
-        type Span = SymSpan;
-    }
-
-    impl MergeSpans for StmtActionCollector {
+    impl MergeSpans<SymSpan> for StmtActionCollector {
         fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
             SymSpan::merge(left, right)
         }
     }
 
-    impl StripSpan for StmtActionCollector {
+    impl StripSpan<SymSpan> for StmtActionCollector {
         type Stripped = SymSpan;
 
-        fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped {
+        fn strip_span(&mut self, span: &SymSpan) -> Self::Stripped {
             span.clone()
         }
     }
 
-    impl EmitDiagnostic<SymSpan> for StmtActionCollector {
+    impl EmitDiagnostic<SymSpan, SymSpan> for StmtActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.actions.push(StmtAction::EmitDiagnostic(diagnostic))
+        }
+    }
+
+    impl DelegateDiagnostics<SymSpan> for StmtActionCollector {
+        type Delegate = Self;
+
+        fn diagnostics(&mut self) -> &mut Self::Delegate {
+            self
         }
     }
 
@@ -575,27 +597,31 @@ mod tests {
         parent: StmtActionCollector,
     }
 
-    impl Span for CommandActionCollector {
-        type Span = SymSpan;
-    }
-
-    impl MergeSpans for CommandActionCollector {
+    impl MergeSpans<SymSpan> for CommandActionCollector {
         fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
             SymSpan::merge(left, right)
         }
     }
 
-    impl StripSpan for CommandActionCollector {
+    impl StripSpan<SymSpan> for CommandActionCollector {
         type Stripped = SymSpan;
 
-        fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped {
+        fn strip_span(&mut self, span: &SymSpan) -> Self::Stripped {
             span.clone()
         }
     }
 
-    impl EmitDiagnostic<SymSpan> for CommandActionCollector {
+    impl EmitDiagnostic<SymSpan, SymSpan> for CommandActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.actions.push(CommandAction::EmitDiagnostic(diagnostic))
+        }
+    }
+
+    impl DelegateDiagnostics<SymSpan> for CommandActionCollector {
+        type Delegate = Self;
+
+        fn diagnostics(&mut self) -> &mut Self::Delegate {
+            self
         }
     }
 
@@ -627,27 +653,31 @@ mod tests {
         parent: CommandActionCollector,
     }
 
-    impl Span for ArgActionCollector {
-        type Span = SymSpan;
-    }
-
-    impl MergeSpans for ArgActionCollector {
+    impl MergeSpans<SymSpan> for ArgActionCollector {
         fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
             SymSpan::merge(left, right)
         }
     }
 
-    impl StripSpan for ArgActionCollector {
+    impl StripSpan<SymSpan> for ArgActionCollector {
         type Stripped = SymSpan;
 
-        fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped {
+        fn strip_span(&mut self, span: &SymSpan) -> Self::Stripped {
             span.clone()
         }
     }
 
-    impl EmitDiagnostic<SymSpan> for ArgActionCollector {
+    impl EmitDiagnostic<SymSpan, SymSpan> for ArgActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.expr_action_collector.emit_diagnostic(diagnostic)
+        }
+    }
+
+    impl DelegateDiagnostics<SymSpan> for ArgActionCollector {
+        type Delegate = Self;
+
+        fn diagnostics(&mut self) -> &mut Self::Delegate {
+            self
         }
     }
 
@@ -684,27 +714,31 @@ mod tests {
         }
     }
 
-    impl Span for ExprActionCollector {
-        type Span = SymSpan;
-    }
-
-    impl MergeSpans for ExprActionCollector {
+    impl MergeSpans<SymSpan> for ExprActionCollector {
         fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
             SymSpan::merge(left, right)
         }
     }
 
-    impl StripSpan for ExprActionCollector {
+    impl StripSpan<SymSpan> for ExprActionCollector {
         type Stripped = SymSpan;
 
-        fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped {
+        fn strip_span(&mut self, span: &SymSpan) -> Self::Stripped {
             span.clone()
         }
     }
 
-    impl EmitDiagnostic<SymSpan> for ExprActionCollector {
+    impl EmitDiagnostic<SymSpan, SymSpan> for ExprActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.actions.push(ExprAction::EmitDiagnostic(diagnostic))
+        }
+    }
+
+    impl DelegateDiagnostics<SymSpan> for ExprActionCollector {
+        type Delegate = Self;
+
+        fn diagnostics(&mut self) -> &mut Self::Delegate {
+            self
         }
     }
 
@@ -732,28 +766,32 @@ mod tests {
         parent: StmtActionCollector,
     }
 
-    impl Span for MacroParamsActionCollector {
-        type Span = SymSpan;
-    }
-
-    impl MergeSpans for MacroParamsActionCollector {
+    impl MergeSpans<SymSpan> for MacroParamsActionCollector {
         fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
             SymSpan::merge(left, right)
         }
     }
 
-    impl StripSpan for MacroParamsActionCollector {
+    impl StripSpan<SymSpan> for MacroParamsActionCollector {
         type Stripped = SymSpan;
 
-        fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped {
+        fn strip_span(&mut self, span: &SymSpan) -> Self::Stripped {
             span.clone()
         }
     }
 
-    impl EmitDiagnostic<SymSpan> for MacroParamsActionCollector {
+    impl EmitDiagnostic<SymSpan, SymSpan> for MacroParamsActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.actions
                 .push(MacroParamsAction::EmitDiagnostic(diagnostic))
+        }
+    }
+
+    impl DelegateDiagnostics<SymSpan> for MacroParamsActionCollector {
+        type Delegate = Self;
+
+        fn diagnostics(&mut self) -> &mut Self::Delegate {
+            self
         }
     }
 
@@ -781,28 +819,32 @@ mod tests {
         parent: MacroParamsActionCollector,
     }
 
-    impl Span for MacroBodyActionCollector {
-        type Span = SymSpan;
-    }
-
-    impl MergeSpans for MacroBodyActionCollector {
+    impl MergeSpans<SymSpan> for MacroBodyActionCollector {
         fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
             SymSpan::merge(left, right)
         }
     }
 
-    impl StripSpan for MacroBodyActionCollector {
+    impl StripSpan<SymSpan> for MacroBodyActionCollector {
         type Stripped = SymSpan;
 
-        fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped {
+        fn strip_span(&mut self, span: &SymSpan) -> Self::Stripped {
             span.clone()
         }
     }
 
-    impl EmitDiagnostic<SymSpan> for MacroBodyActionCollector {
+    impl EmitDiagnostic<SymSpan, SymSpan> for MacroBodyActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.actions
                 .push(TokenSeqAction::EmitDiagnostic(diagnostic))
+        }
+    }
+
+    impl DelegateDiagnostics<SymSpan> for MacroBodyActionCollector {
+        type Delegate = Self;
+
+        fn diagnostics(&mut self) -> &mut Self::Delegate {
+            self
         }
     }
 
@@ -830,28 +872,32 @@ mod tests {
         parent: StmtActionCollector,
     }
 
-    impl Span for MacroInvocationActionCollector {
-        type Span = SymSpan;
-    }
-
-    impl MergeSpans for MacroInvocationActionCollector {
+    impl MergeSpans<SymSpan> for MacroInvocationActionCollector {
         fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
             SymSpan::merge(left, right)
         }
     }
 
-    impl StripSpan for MacroInvocationActionCollector {
+    impl StripSpan<SymSpan> for MacroInvocationActionCollector {
         type Stripped = SymSpan;
 
-        fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped {
+        fn strip_span(&mut self, span: &SymSpan) -> Self::Stripped {
             span.clone()
         }
     }
 
-    impl EmitDiagnostic<SymSpan> for MacroInvocationActionCollector {
+    impl EmitDiagnostic<SymSpan, SymSpan> for MacroInvocationActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.actions
                 .push(MacroInvocationAction::EmitDiagnostic(diagnostic))
+        }
+    }
+
+    impl DelegateDiagnostics<SymSpan> for MacroInvocationActionCollector {
+        type Delegate = Self;
+
+        fn diagnostics(&mut self) -> &mut Self::Delegate {
+            self
         }
     }
 
@@ -881,28 +927,32 @@ mod tests {
         parent: MacroInvocationActionCollector,
     }
 
-    impl Span for MacroArgActionCollector {
-        type Span = SymSpan;
-    }
-
-    impl MergeSpans for MacroArgActionCollector {
+    impl MergeSpans<SymSpan> for MacroArgActionCollector {
         fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
             SymSpan::merge(left, right)
         }
     }
 
-    impl StripSpan for MacroArgActionCollector {
+    impl StripSpan<SymSpan> for MacroArgActionCollector {
         type Stripped = SymSpan;
 
-        fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped {
+        fn strip_span(&mut self, span: &SymSpan) -> Self::Stripped {
             span.clone()
         }
     }
 
-    impl EmitDiagnostic<SymSpan> for MacroArgActionCollector {
+    impl EmitDiagnostic<SymSpan, SymSpan> for MacroArgActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.actions
                 .push(TokenSeqAction::EmitDiagnostic(diagnostic))
+        }
+    }
+
+    impl DelegateDiagnostics<SymSpan> for MacroArgActionCollector {
+        type Delegate = Self;
+
+        fn diagnostics(&mut self) -> &mut Self::Delegate {
+            self
         }
     }
 

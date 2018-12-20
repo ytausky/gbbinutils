@@ -1,16 +1,16 @@
 use super::{Analysis, Operand, SemanticExpr};
 use crate::backend::{ValueBuilder, Width};
-use crate::diagnostics::span::{MergeSpans, Source, Span, StripSpan};
+use crate::diagnostics::span::{Source, Span};
 use crate::diagnostics::{CompactDiagnostic, DownstreamDiagnostics, EmitDiagnostic, Message};
 use crate::frontend::semantics::operand::AtomKind;
 use crate::instruction::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
 
-impl<'a, Id, I, B, D> Analysis<'a, I, B, D>
+impl<'a, Id, I, B, D> Analysis<'a, I, B, D, B::Span>
 where
     Id: Into<String>,
-    I: Iterator<Item = SemanticExpr<Id, D::Span>>,
-    B: ValueBuilder<Span = D::Span>,
-    D: DownstreamDiagnostics,
+    I: Iterator<Item = SemanticExpr<Id, B::Span>>,
+    B: ValueBuilder,
+    D: DownstreamDiagnostics<B::Span>,
 {
     pub fn analyze_ld(&mut self) -> Result<Instruction<B::Value>, ()> {
         let dest = self.next_operand_out_of(2)?;
@@ -32,27 +32,29 @@ where
                 self.analyze_16_bit_ld(dest, LdOperand::Const(src))
             }
             (LdDest::Byte(dest), LdOperand::Other(LdDest::Word(src))) => {
+                let diagnostics = &mut self.value_context.diagnostics;
                 let diagnostic = CompactDiagnostic::new(
                     Message::LdWidthMismatch {
                         src_width: Width::Word,
-                        src: self.strip_span(&src.span()),
-                        dest: self.strip_span(&dest.span()),
+                        src: diagnostics.strip_span(&src.span()),
+                        dest: diagnostics.strip_span(&dest.span()),
                     },
-                    self.merge_spans(&dest.span(), &src.span()),
+                    diagnostics.merge_spans(&dest.span(), &src.span()),
                 );
-                self.emit_diagnostic(diagnostic);
+                diagnostics.emit_diagnostic(diagnostic);
                 Err(())
             }
             (LdDest::Word(dest), LdOperand::Other(LdDest::Byte(src))) => {
+                let diagnostics = &mut self.value_context.diagnostics;
                 let diagnostic = CompactDiagnostic::new(
                     Message::LdWidthMismatch {
                         src_width: Width::Byte,
-                        src: self.strip_span(&src.span()),
-                        dest: self.strip_span(&dest.span()),
+                        src: diagnostics.strip_span(&src.span()),
+                        dest: diagnostics.strip_span(&dest.span()),
                     },
-                    self.merge_spans(&dest.span(), &src.span()),
+                    diagnostics.merge_spans(&dest.span(), &src.span()),
                 );
-                self.emit_diagnostic(diagnostic);
+                diagnostics.emit_diagnostic(diagnostic);
                 Err(())
             }
         }
@@ -68,13 +70,14 @@ where
                 LdDest8::Simple(SimpleOperand::DerefHl, dest),
                 LdOperand::Other(LdDest8::Simple(SimpleOperand::DerefHl, src)),
             ) => {
+                let diagnostics = &mut self.value_context.diagnostics;
                 let diagnostic = CompactDiagnostic::new(
                     Message::LdDerefHlDerefHl {
-                        mnemonic: self.value_context.strip_span(&self.mnemonic.1),
-                        dest: self.strip_span(&dest),
-                        src: self.strip_span(&src),
+                        mnemonic: diagnostics.strip_span(&self.mnemonic.1),
+                        dest: diagnostics.strip_span(&dest),
+                        src: diagnostics.strip_span(&src),
                     },
-                    self.value_context.merge_spans(&self.mnemonic.1, &src),
+                    diagnostics.merge_spans(&self.mnemonic.1, &src),
                 );
                 self.emit_diagnostic(diagnostic);
                 Err(())
@@ -98,16 +101,18 @@ where
 
     fn analyze_16_bit_ld(
         &mut self,
-        dest: LdDest16<D::Span>,
-        src: impl Into<LdOperand<B::Value, LdDest16<D::Span>>>,
+        dest: LdDest16<B::Span>,
+        src: impl Into<LdOperand<B::Value, LdDest16<B::Span>>>,
     ) -> Result<Instruction<B::Value>, ()> {
         match (dest, src.into()) {
             (LdDest16::Reg16(Reg16::Sp, _), LdOperand::Other(LdDest16::Reg16(Reg16::Hl, _))) => {
                 Ok(Instruction::Ld(Ld::SpHl))
             }
             (LdDest16::Reg16(_, dest_span), LdOperand::Other(LdDest16::Reg16(_, src_span))) => {
-                let merged_span = self.merge_spans(&dest_span, &src_span);
-                self.emit_diagnostic(CompactDiagnostic::new(Message::LdSpHlOperands, merged_span));
+                let diagnostics = &mut self.value_context.diagnostics;
+                let merged_span = diagnostics.merge_spans(&dest_span, &src_span);
+                diagnostics
+                    .emit_diagnostic(CompactDiagnostic::new(Message::LdSpHlOperands, merged_span));
                 Err(())
             }
             (LdDest16::Reg16(dest, _), LdOperand::Const(expr)) => {
@@ -134,7 +139,7 @@ fn analyze_special_ld<V: Source>(
 impl<V: Source> Operand<V> {
     fn into_ld_dest<D>(self, diagnostics: &mut D) -> Result<LdDest<V>, ()>
     where
-        D: DownstreamDiagnostics<Span = V::Span>,
+        D: DownstreamDiagnostics<V::Span>,
     {
         match self {
             Operand::Deref(expr) => Ok(LdDest::Byte(LdDest8::Special(LdSpecial::Deref(expr)))),
@@ -170,7 +175,7 @@ impl<V: Source> Operand<V> {
 
     fn into_ld_src<D>(self, diagnostics: &mut D) -> Result<LdOperand<V, LdDest<V>>, ()>
     where
-        D: DownstreamDiagnostics<Span = V::Span>,
+        D: DownstreamDiagnostics<V::Span>,
     {
         match self {
             Operand::Const(expr) => Ok(LdOperand::Const(expr)),
@@ -219,7 +224,7 @@ enum LdDest16<S> {
 impl<V: Source> LdOperand<V, LdDest8<V>> {
     fn expect_a<D>(self, diagnostics: &mut D) -> Result<(), ()>
     where
-        D: DownstreamDiagnostics<Span = V::Span>,
+        D: DownstreamDiagnostics<V::Span>,
     {
         match self {
             LdOperand::Const(expr) => diagnose_not_a(expr.span(), diagnostics),
@@ -231,7 +236,7 @@ impl<V: Source> LdOperand<V, LdDest8<V>> {
 impl<V: Source> LdDest8<V> {
     fn expect_a<D>(self, diagnostics: &mut D) -> Result<(), ()>
     where
-        D: DownstreamDiagnostics<Span = V::Span>,
+        D: DownstreamDiagnostics<V::Span>,
     {
         match self {
             LdDest8::Simple(SimpleOperand::A, _) => Ok(()),
@@ -240,7 +245,7 @@ impl<V: Source> LdDest8<V> {
     }
 }
 
-fn diagnose_not_a<T, D: EmitDiagnostic<T>>(span: D::Span, diagnostics: &mut D) -> Result<(), ()> {
+fn diagnose_not_a<T, D: EmitDiagnostic<S, T>, S>(span: S, diagnostics: &mut D) -> Result<(), ()> {
     diagnostics.emit_diagnostic(CompactDiagnostic::new(Message::OnlySupportedByA, span));
     Err(())
 }

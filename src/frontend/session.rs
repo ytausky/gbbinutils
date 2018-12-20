@@ -58,7 +58,7 @@ where
     }
 }
 
-impl<'a, F, B, D: DownstreamDiagnostics> DelegateDiagnostics for Session<'a, F, B, D> {
+impl<'a, F, B, D: DownstreamDiagnostics<S>, S> DelegateDiagnostics<S> for Session<'a, F, B, D> {
     type Delegate = D;
 
     fn diagnostics(&mut self) -> &mut Self::Delegate {

@@ -7,15 +7,15 @@ use std::rc::Rc;
 pub trait MacroTable<I>: Get<I> {
     type MacroDefId: Clone;
 
-    fn define<F>(
+    fn define<F, S>(
         &mut self,
-        name: (impl Into<I>, F::Span),
-        params: Vec<(I, F::Span)>,
-        body: Vec<(Token<I>, F::Span)>,
+        name: (impl Into<I>, S),
+        params: Vec<(I, S)>,
+        body: Vec<(Token<I>, S)>,
         factory: &mut F,
     ) where
-        F: MacroContextFactory<MacroDefId = Self::MacroDefId>,
-        Self::Entry: Expand<I, F>;
+        F: MacroContextFactory<S, MacroDefId = Self::MacroDefId>,
+        Self::Entry: Expand<I, F, S>;
 }
 
 pub trait Get<I> {
@@ -23,15 +23,10 @@ pub trait Get<I> {
     fn get(&self, name: &I) -> Option<&Self::Entry>;
 }
 
-pub trait Expand<I, F: MacroContextFactory> {
-    type Iter: Iterator<Item = (Token<I>, F::Span)>;
+pub trait Expand<I, F: MacroContextFactory<S>, S> {
+    type Iter: Iterator<Item = (Token<I>, S)>;
 
-    fn expand(
-        &self,
-        name: F::Span,
-        args: Vec<Vec<(Token<I>, F::Span)>>,
-        factory: &mut F,
-    ) -> Self::Iter;
+    fn expand(&self, name: S, args: Vec<Vec<(Token<I>, S)>>, factory: &mut F) -> Self::Iter;
 }
 
 pub struct MacroExpander<I, D> {
@@ -63,14 +58,14 @@ where
 {
     type MacroDefId = D;
 
-    fn define<F>(
+    fn define<F, S>(
         &mut self,
-        name: (impl Into<I>, F::Span),
-        params: Vec<(I, F::Span)>,
-        body: Vec<(Token<I>, F::Span)>,
+        name: (impl Into<I>, S),
+        params: Vec<(I, S)>,
+        body: Vec<(Token<I>, S)>,
         factory: &mut F,
     ) where
-        F: MacroContextFactory<MacroDefId = D>,
+        F: MacroContextFactory<S, MacroDefId = D>,
     {
         let (param_tokens, param_spans) = split(params);
         let (body_tokens, body_spans) = split(body);
@@ -99,19 +94,14 @@ where
     }
 }
 
-impl<I, F> Expand<I, F> for MacroTableEntry<F::MacroDefId, Rc<MacroDefData<I>>>
+impl<I, F, S> Expand<I, F, S> for MacroTableEntry<F::MacroDefId, Rc<MacroDefData<I>>>
 where
     I: AsRef<str> + Clone + Eq,
-    F: MacroContextFactory,
+    F: MacroContextFactory<S>,
 {
     type Iter = ExpandedMacro<I, F::MacroExpansionContext>;
 
-    fn expand(
-        &self,
-        name: F::Span,
-        args: Vec<Vec<(Token<I>, F::Span)>>,
-        factory: &mut F,
-    ) -> Self::Iter {
+    fn expand(&self, name: S, args: Vec<Vec<(Token<I>, S)>>, factory: &mut F) -> Self::Iter {
         let mut arg_tokens = Vec::new();
         let mut arg_spans = Vec::new();
         for arg in args {

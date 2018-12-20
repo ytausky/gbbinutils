@@ -23,12 +23,12 @@ pub enum ImplicitBranch {
     Reti,
 }
 
-impl<'a, Id, I, B, D> Analysis<'a, I, B, D>
+impl<'a, Id, I, B, D> Analysis<'a, I, B, D, B::Span>
 where
     Id: Into<String>,
-    I: Iterator<Item = SemanticExpr<Id, D::Span>>,
-    B: ValueBuilder<Span = D::Span>,
-    D: DownstreamDiagnostics,
+    I: Iterator<Item = SemanticExpr<Id, B::Span>>,
+    B: ValueBuilder,
+    D: DownstreamDiagnostics<B::Span>,
 {
     pub fn analyze_branch(&mut self, branch: BranchKind) -> Result<Instruction<B::Value>, ()> {
         let (condition, target) = self.collect_branch_operands()?;
@@ -101,8 +101,8 @@ fn analyze_branch_target<V, D>(
     diagnostics: &mut D,
 ) -> Result<Option<BranchTarget<V>>, ()>
 where
-    V: Source<Span = D::Span>,
-    D: DownstreamDiagnostics,
+    V: Source,
+    D: DownstreamDiagnostics<V::Span>,
 {
     let target = match target {
         Some(target) => target,
@@ -143,13 +143,13 @@ impl<V: Source> From<UnconditionalBranch> for Instruction<V> {
 }
 
 fn analyze_branch_variant<V, D>(
-    kind: (BranchKind, &D::Span),
+    kind: (BranchKind, &V::Span),
     target: Option<BranchTarget<V>>,
     diagnostics: &mut D,
 ) -> Result<BranchVariant<V>, ()>
 where
-    V: Source<Span = D::Span>,
-    D: DownstreamDiagnostics,
+    V: Source,
+    D: DownstreamDiagnostics<V::Span>,
 {
     match (kind.0, target) {
         (BranchKind::Explicit(ExplicitBranch::Jp), Some(BranchTarget::DerefHl(_))) => {

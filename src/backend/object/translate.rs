@@ -9,7 +9,7 @@ impl<S: Clone> Chunk<S> {
     pub fn translate<T>(
         &self,
         context: &mut EvalContext<&SymbolTable>,
-        diagnostics: &mut impl EmitDiagnostic<T, Span = S>,
+        diagnostics: &mut impl EmitDiagnostic<S, T>,
     ) -> BinarySection {
         let mut data = Vec::<u8>::new();
         let origin = self.evaluate_origin(&context);
@@ -28,7 +28,7 @@ impl<S: Clone> Node<S> {
     fn translate<T>(
         &self,
         context: &EvalContext<&SymbolTable>,
-        diagnostics: &mut impl EmitDiagnostic<T, Span = S>,
+        diagnostics: &mut impl EmitDiagnostic<S, T>,
     ) -> IntoIter<u8> {
         match self {
             Node::Byte(value) => vec![*value],
@@ -94,7 +94,7 @@ fn resolve_expr_item<T, S: Clone>(
     expr: &RelocExpr<S>,
     width: Width,
     context: &EvalContext<&SymbolTable>,
-    diagnostics: &mut impl EmitDiagnostic<T, Span = S>,
+    diagnostics: &mut impl EmitDiagnostic<S, T>,
 ) -> Data {
     let span = expr.span();
     let value = expr
@@ -114,7 +114,7 @@ fn resolve_expr_item<T, S: Clone>(
 fn fit_to_width<T, S: Clone>(
     (value, value_ref): (i32, S),
     width: Width,
-    diagnostics: &mut impl EmitDiagnostic<T, Span = S>,
+    diagnostics: &mut impl EmitDiagnostic<S, T>,
 ) -> Data {
     if !is_in_range(value, width) {
         diagnostics.emit_diagnostic(CompactDiagnostic::new(

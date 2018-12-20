@@ -36,9 +36,10 @@ impl<SR> Object<SR> {
     }
 }
 
-pub fn link<'a, T, D>(object: Object<D::Span>, diagnostics: &mut D) -> BinaryObject
+pub fn link<'a, S, T, D>(object: Object<S>, diagnostics: &mut D) -> BinaryObject
 where
-    D: EmitDiagnostic<T> + 'a,
+    S: Clone,
+    D: EmitDiagnostic<S, T> + 'a,
 {
     let symbols = resolve::resolve_symbols(&object);
     let mut context = EvalContext {

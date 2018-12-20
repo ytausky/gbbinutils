@@ -1,7 +1,7 @@
 use self::branch::*;
 use super::{SemanticExpr, ValueContext};
 use crate::backend::ValueBuilder;
-use crate::diagnostics::span::{Source, StripSpan};
+use crate::diagnostics::span::Source;
 use crate::diagnostics::{
     CompactDiagnostic, DelegateDiagnostics, DownstreamDiagnostics, EmitDiagnostic, Message,
 };
@@ -13,26 +13,30 @@ mod branch;
 mod ld;
 
 pub fn analyze_instruction<Id: Into<String>, I, B, D>(
-    mnemonic: (kw::Mnemonic, D::Span),
+    mnemonic: (kw::Mnemonic, B::Span),
     operands: I,
     value_context: ValueContext<B, D>,
 ) -> Result<Instruction<B::Value>, ()>
 where
-    I: IntoIterator<Item = SemanticExpr<Id, D::Span>>,
-    B: ValueBuilder<Span = D::Span>,
-    D: DownstreamDiagnostics,
+    I: IntoIterator<Item = SemanticExpr<Id, B::Span>>,
+    B: ValueBuilder,
+    D: DownstreamDiagnostics<B::Span>,
 {
     let mnemonic: (Mnemonic, _) = (mnemonic.0.into(), mnemonic.1);
     Analysis::new(mnemonic, operands.into_iter(), value_context).run()
 }
 
-struct Analysis<'a, I, B: 'a, D: DownstreamDiagnostics + 'a> {
-    mnemonic: (Mnemonic, D::Span),
+struct Analysis<'a, I, B: 'a, D: 'a, S> {
+    mnemonic: (Mnemonic, S),
     operands: OperandCounter<I>,
     value_context: ValueContext<'a, B, D>,
 }
 
-impl<'a, I, B: 'a, D: DownstreamDiagnostics + 'a> DelegateDiagnostics for Analysis<'a, I, B, D> {
+impl<'a, I, B, D, S> DelegateDiagnostics<S> for Analysis<'a, I, B, D, S>
+where
+    B: 'a,
+    D: DownstreamDiagnostics<S> + 'a,
+{
     type Delegate = D;
 
     fn diagnostics(&mut self) -> &mut Self::Delegate {
@@ -40,18 +44,28 @@ impl<'a, I, B: 'a, D: DownstreamDiagnostics + 'a> DelegateDiagnostics for Analys
     }
 }
 
-impl<'a, Id, I, B, D> Analysis<'a, I, B, D>
+impl<'a, I, B, D, S> EmitDiagnostic<S, D::Stripped> for Analysis<'a, I, B, D, S>
+where
+    B: 'a,
+    D: DownstreamDiagnostics<S> + 'a,
+{
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<S, D::Stripped>) {
+        self.value_context.diagnostics.emit_diagnostic(diagnostic)
+    }
+}
+
+impl<'a, Id, I, B, D> Analysis<'a, I, B, D, B::Span>
 where
     Id: Into<String>,
-    I: Iterator<Item = SemanticExpr<Id, D::Span>>,
-    B: ValueBuilder<Span = D::Span>,
-    D: DownstreamDiagnostics,
+    I: Iterator<Item = SemanticExpr<Id, B::Span>>,
+    B: ValueBuilder,
+    D: DownstreamDiagnostics<B::Span>,
 {
     fn new(
-        mnemonic: (Mnemonic, D::Span),
+        mnemonic: (Mnemonic, B::Span),
         operands: I,
         value_context: ValueContext<'a, B, D>,
-    ) -> Analysis<'a, I, B, D> {
+    ) -> Analysis<'a, I, B, D, B::Span> {
         Analysis {
             mnemonic,
             operands: OperandCounter::new(operands),
@@ -96,7 +110,7 @@ where
 
     fn analyze_add_reg16_instruction(
         &mut self,
-        target: (Reg16, D::Span),
+        target: (Reg16, B::Span),
     ) -> Result<Instruction<B::Value>, ()> {
         match target.0 {
             Reg16::Hl => self.analyze_add_hl_instruction(),
@@ -160,7 +174,7 @@ where
         let expr = if let Operand::Const(expr) = bit_number {
             expr
         } else {
-            let stripped = self.value_context.strip_span(&self.mnemonic.1);
+            let stripped = self.value_context.diagnostics.strip_span(&self.mnemonic.1);
             self.emit_diagnostic(CompactDiagnostic::new(
                 Message::MustBeBit { mnemonic: stripped },
                 bit_number.span(),
@@ -276,7 +290,7 @@ impl<V: Source> Operand<V> {
         diagnostics: &mut D,
     ) -> Result<(), ()>
     where
-        D: DownstreamDiagnostics<Span = V::Span>,
+        D: DownstreamDiagnostics<V::Span>,
     {
         match self {
             Operand::Atom(ref actual, _) if *actual == expected => Ok(()),
@@ -286,7 +300,7 @@ impl<V: Source> Operand<V> {
 
     fn expect_simple<D>(self, diagnostics: &mut D) -> Result<SimpleOperand, ()>
     where
-        D: DownstreamDiagnostics<Span = V::Span>,
+        D: DownstreamDiagnostics<V::Span>,
     {
         match self {
             Operand::Atom(AtomKind::Simple(simple), _) => Ok(simple),
@@ -296,7 +310,7 @@ impl<V: Source> Operand<V> {
 
     fn expect_const<D>(self, diagnostics: &mut D) -> Result<V, ()>
     where
-        D: DownstreamDiagnostics<Span = V::Span>,
+        D: DownstreamDiagnostics<V::Span>,
     {
         match self {
             Operand::Const(expr) => Ok(expr),
@@ -306,7 +320,7 @@ impl<V: Source> Operand<V> {
 
     fn expect_reg_pair<D>(self, diagnostics: &mut D) -> Result<RegPair, ()>
     where
-        D: DownstreamDiagnostics<Span = V::Span>,
+        D: DownstreamDiagnostics<V::Span>,
     {
         match self {
             Operand::Atom(AtomKind::RegPair(reg_pair), _) => Ok(reg_pair),
@@ -316,7 +330,7 @@ impl<V: Source> Operand<V> {
 
     fn error<T, D>(self, message: Message<D::Stripped>, diagnostics: &mut D) -> Result<T, ()>
     where
-        D: DownstreamDiagnostics<Span = V::Span>,
+        D: DownstreamDiagnostics<V::Span>,
     {
         diagnostics.emit_diagnostic(CompactDiagnostic::new(message, self.span()));
         Err(())
