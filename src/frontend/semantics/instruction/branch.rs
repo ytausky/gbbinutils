@@ -23,12 +23,13 @@ pub enum ImplicitBranch {
     Reti,
 }
 
-impl<'a, Id, I, B, D> Analysis<'a, I, B, D, B::Span>
+impl<'a, Id, I, B, D, S> Analysis<'a, I, B, D, S>
 where
     Id: Into<String>,
-    I: Iterator<Item = SemanticExpr<Id, B::Span>>,
-    B: ValueBuilder,
-    D: DownstreamDiagnostics<B::Span>,
+    I: Iterator<Item = SemanticExpr<Id, S>>,
+    B: ValueBuilder<S>,
+    D: DownstreamDiagnostics<S>,
+    S: Clone,
 {
     pub fn analyze_branch(&mut self, branch: BranchKind) -> Result<Instruction<B::Value>, ()> {
         let (condition, target) = self.collect_branch_operands()?;

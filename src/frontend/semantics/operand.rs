@@ -43,15 +43,16 @@ pub enum Context {
     Other,
 }
 
-pub fn analyze_operand<I, B, D>(
-    expr: SemanticExpr<I, B::Span>,
+pub fn analyze_operand<I, B, D, S>(
+    expr: SemanticExpr<I, S>,
     context: Context,
     value_context: &mut ValueContext<B, D>,
 ) -> Result<Operand<B::Value>, ()>
 where
     I: Into<String>,
-    B: ValueBuilder,
-    D: DownstreamDiagnostics<B::Span>,
+    B: ValueBuilder<S>,
+    D: DownstreamDiagnostics<S>,
+    S: Clone,
 {
     match expr.variant {
         ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(keyword))) => {
@@ -64,15 +65,16 @@ where
     }
 }
 
-fn analyze_deref_operand<I, B, D>(
-    expr: SemanticExpr<I, B::Span>,
-    deref_span: B::Span,
+fn analyze_deref_operand<I, B, D, S>(
+    expr: SemanticExpr<I, S>,
+    deref_span: S,
     value_context: &mut ValueContext<B, D>,
 ) -> Result<Operand<B::Value>, ()>
 where
     I: Into<String>,
-    B: ValueBuilder,
-    D: DownstreamDiagnostics<B::Span>,
+    B: ValueBuilder<S>,
+    D: DownstreamDiagnostics<S>,
+    S: Clone,
 {
     match expr.variant {
         ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(keyword))) => {

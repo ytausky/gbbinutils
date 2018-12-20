@@ -155,7 +155,11 @@ where
     }
 }
 
-fn location_counter_plus_expr<B: ValueBuilder>(expr: B::Value, builder: &mut B) -> B::Value {
+fn location_counter_plus_expr<B, S>(expr: B::Value, builder: &mut B) -> B::Value
+where
+    B: ValueBuilder<S>,
+    S: Clone,
+{
     let location = builder.location(expr.span());
     builder.apply_binary_operator((BinaryOperator::Plus, expr.span()), location, expr)
 }

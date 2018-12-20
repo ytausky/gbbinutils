@@ -7,7 +7,7 @@ use crate::backend::{
 };
 use crate::expr::{Expr, ExprVariant};
 use crate::instruction::Instruction;
-use crate::span::{Source, Span};
+use crate::span::Source;
 use std::marker::PhantomData;
 
 mod lowering;
@@ -28,25 +28,28 @@ impl Width {
     }
 }
 
-pub trait HasValue: Span {
-    type Value: Source<Span = Self::Span>;
+pub trait HasValue<S: Clone> {
+    type Value: Source<Span = S>;
 }
 
-pub trait BuildValue<'a, V: Source> {
-    type Builder: Span<Span = V::Span> + ValueBuilder<Value = V>;
+pub trait BuildValue<'a, S: Clone>
+where
+    Self: HasValue<S>,
+{
+    type Builder: ValueBuilder<S, Value = Self::Value>;
     fn build_value(&'a mut self) -> Self::Builder;
 }
 
-pub trait ValueBuilder: Span {
-    type Value: Source<Span = Self::Span>;
+pub trait ValueBuilder<S: Clone> {
+    type Value: Source<Span = S>;
 
-    fn location(&mut self, span: Self::Span) -> Self::Value;
-    fn number(&mut self, number: (i32, Self::Span)) -> Self::Value;
-    fn symbol(&mut self, symbol: (String, Self::Span)) -> Self::Value;
+    fn location(&mut self, span: S) -> Self::Value;
+    fn number(&mut self, number: (i32, S)) -> Self::Value;
+    fn symbol(&mut self, symbol: (String, S)) -> Self::Value;
 
     fn apply_binary_operator(
         &mut self,
-        operator: (BinaryOperator, Self::Span),
+        operator: (BinaryOperator, S),
         left: Self::Value,
         right: Self::Value,
     ) -> Self::Value;
@@ -55,8 +58,7 @@ pub trait ValueBuilder: Span {
 pub trait Backend<S>
 where
     S: Clone,
-    Self: HasValue<Span = S>,
-    for<'a> Self: BuildValue<'a, <Self as HasValue>::Value>,
+    for<'a> Self: BuildValue<'a, S>,
 {
     type Object;
     fn define_symbol(&mut self, symbol: (impl Into<String>, S), value: Self::Value);
@@ -144,11 +146,7 @@ impl<S> RelocExprBuilder<S> {
     }
 }
 
-impl<S: Clone> Span for RelocExprBuilder<S> {
-    type Span = S;
-}
-
-impl<S: Clone> ValueBuilder for RelocExprBuilder<S> {
+impl<S: Clone> ValueBuilder<S> for RelocExprBuilder<S> {
     type Value = RelocExpr<S>;
 
     fn location(&mut self, span: S) -> RelocExpr<S> {
@@ -176,15 +174,11 @@ impl<S: Clone> ValueBuilder for RelocExprBuilder<S> {
     }
 }
 
-impl<S: Clone> Span for ObjectBuilder<S> {
-    type Span = S;
-}
-
-impl<S: Clone> HasValue for ObjectBuilder<S> {
+impl<S: Clone> HasValue<S> for ObjectBuilder<S> {
     type Value = RelocExpr<S>;
 }
 
-impl<'a, S: Clone> BuildValue<'a, RelocExpr<S>> for ObjectBuilder<S> {
+impl<'a, S: Clone> BuildValue<'a, S> for ObjectBuilder<S> {
     type Builder = RelocExprBuilder<S>;
 
     fn build_value(&'a mut self) -> Self::Builder {

@@ -12,15 +12,16 @@ use crate::instruction::*;
 mod branch;
 mod ld;
 
-pub fn analyze_instruction<Id: Into<String>, I, B, D>(
-    mnemonic: (kw::Mnemonic, B::Span),
+pub fn analyze_instruction<Id: Into<String>, I, B, D, S>(
+    mnemonic: (kw::Mnemonic, S),
     operands: I,
     value_context: ValueContext<B, D>,
 ) -> Result<Instruction<B::Value>, ()>
 where
-    I: IntoIterator<Item = SemanticExpr<Id, B::Span>>,
-    B: ValueBuilder,
-    D: DownstreamDiagnostics<B::Span>,
+    I: IntoIterator<Item = SemanticExpr<Id, S>>,
+    B: ValueBuilder<S>,
+    D: DownstreamDiagnostics<S>,
+    S: Clone,
 {
     let mnemonic: (Mnemonic, _) = (mnemonic.0.into(), mnemonic.1);
     Analysis::new(mnemonic, operands.into_iter(), value_context).run()
@@ -54,18 +55,19 @@ where
     }
 }
 
-impl<'a, Id, I, B, D> Analysis<'a, I, B, D, B::Span>
+impl<'a, Id, I, B, D, S> Analysis<'a, I, B, D, S>
 where
     Id: Into<String>,
-    I: Iterator<Item = SemanticExpr<Id, B::Span>>,
-    B: ValueBuilder,
-    D: DownstreamDiagnostics<B::Span>,
+    I: Iterator<Item = SemanticExpr<Id, S>>,
+    B: ValueBuilder<S>,
+    D: DownstreamDiagnostics<S>,
+    S: Clone,
 {
     fn new(
-        mnemonic: (Mnemonic, B::Span),
+        mnemonic: (Mnemonic, S),
         operands: I,
         value_context: ValueContext<'a, B, D>,
-    ) -> Analysis<'a, I, B, D, B::Span> {
+    ) -> Analysis<'a, I, B, D, S> {
         Analysis {
             mnemonic,
             operands: OperandCounter::new(operands),
@@ -110,7 +112,7 @@ where
 
     fn analyze_add_reg16_instruction(
         &mut self,
-        target: (Reg16, B::Span),
+        target: (Reg16, S),
     ) -> Result<Instruction<B::Value>, ()> {
         match target.0 {
             Reg16::Hl => self.analyze_add_hl_instruction(),

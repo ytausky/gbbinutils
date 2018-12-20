@@ -5,12 +5,13 @@ use crate::diagnostics::{CompactDiagnostic, DownstreamDiagnostics, EmitDiagnosti
 use crate::frontend::semantics::operand::AtomKind;
 use crate::instruction::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
 
-impl<'a, Id, I, B, D> Analysis<'a, I, B, D, B::Span>
+impl<'a, Id, I, B, D, S> Analysis<'a, I, B, D, S>
 where
     Id: Into<String>,
-    I: Iterator<Item = SemanticExpr<Id, B::Span>>,
-    B: ValueBuilder,
-    D: DownstreamDiagnostics<B::Span>,
+    I: Iterator<Item = SemanticExpr<Id, S>>,
+    B: ValueBuilder<S>,
+    D: DownstreamDiagnostics<S>,
+    S: Clone,
 {
     pub fn analyze_ld(&mut self) -> Result<Instruction<B::Value>, ()> {
         let dest = self.next_operand_out_of(2)?;
@@ -101,8 +102,8 @@ where
 
     fn analyze_16_bit_ld(
         &mut self,
-        dest: LdDest16<B::Span>,
-        src: impl Into<LdOperand<B::Value, LdDest16<B::Span>>>,
+        dest: LdDest16<S>,
+        src: impl Into<LdOperand<B::Value, LdDest16<S>>>,
     ) -> Result<Instruction<B::Value>, ()> {
         match (dest, src.into()) {
             (LdDest16::Reg16(Reg16::Sp, _), LdOperand::Other(LdDest16::Reg16(Reg16::Hl, _))) => {

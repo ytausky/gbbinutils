@@ -537,7 +537,7 @@ mod tests {
         }
     }
 
-    impl<'a, 'b> BuildValue<'b, RelocExpr<()>> for Mock<'a> {
+    impl<'a, 'b> BuildValue<'b, ()> for Mock<'a> {
         type Builder = RelocExprBuilder<()>;
 
         fn build_value(&'b mut self) -> Self::Builder {
@@ -545,7 +545,7 @@ mod tests {
         }
     }
 
-    impl<'a> HasValue for Mock<'a> {
+    impl<'a> HasValue<()> for Mock<'a> {
         type Value = RelocExpr<()>;
     }
 

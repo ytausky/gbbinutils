@@ -1,5 +1,5 @@
 use crate::backend::{self, Backend, BinaryOperator, ValueBuilder};
-use crate::diagnostics::span::{MergeSpans, StripSpan};
+use crate::diagnostics::span::{MergeSpans, Source, StripSpan};
 use crate::diagnostics::*;
 use crate::expr::ExprVariant;
 use crate::frontend::session::Session;
@@ -529,24 +529,23 @@ where
     }
 }
 
-trait AnalyzeExpr {
-    type Span;
-    type Value;
+trait AnalyzeExpr<S: Clone> {
+    type Value: Source<Span = S>;
 
-    fn analyze_expr<I>(&mut self, expr: SemanticExpr<I, Self::Span>) -> Result<Self::Value, ()>
+    fn analyze_expr<I>(&mut self, expr: SemanticExpr<I, S>) -> Result<Self::Value, ()>
     where
         I: Into<String>;
 }
 
-impl<'a, B, D> AnalyzeExpr for ValueContext<'a, B, D>
+impl<'a, B, D, S> AnalyzeExpr<S> for ValueContext<'a, B, D>
 where
-    B: ValueBuilder,
-    D: DownstreamDiagnostics<B::Span>,
+    B: ValueBuilder<S>,
+    D: DownstreamDiagnostics<S>,
+    S: Clone,
 {
-    type Span = B::Span;
     type Value = B::Value;
 
-    fn analyze_expr<I>(&mut self, expr: SemanticExpr<I, Self::Span>) -> Result<Self::Value, ()>
+    fn analyze_expr<I>(&mut self, expr: SemanticExpr<I, S>) -> Result<Self::Value, ()>
     where
         I: Into<String>,
     {
@@ -725,15 +724,11 @@ mod tests {
         }
     }
 
-    impl<'a> Span for TestBackend<'a> {
-        type Span = ();
-    }
-
-    impl<'a> HasValue for TestBackend<'a> {
+    impl<'a> HasValue<()> for TestBackend<'a> {
         type Value = RelocExpr<()>;
     }
 
-    impl<'a, 'b> BuildValue<'b, RelocExpr<()>> for TestBackend<'a> {
+    impl<'a, 'b> BuildValue<'b, ()> for TestBackend<'a> {
         type Builder = RelocExprBuilder<()>;
 
         fn build_value(&mut self) -> Self::Builder {
