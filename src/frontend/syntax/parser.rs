@@ -84,8 +84,11 @@ where
     Ctx: FileContext<Id, C, L, S>,
     S: Clone,
 {
-    fn parse_file(self) -> Self {
-        self.parse_terminated_list(Token::Eol, &[Token::Eof], |p| p.parse_stmt())
+    fn parse_file(mut self) -> Self {
+        while self.token.0.kind() != Token::Eof {
+            self = self.parse_stmt()
+        }
+        self
     }
 
     fn parse_stmt(mut self) -> Self {
@@ -108,31 +111,37 @@ where
     S: Clone,
 {
     fn parse_unlabeled_stmt(mut self) -> Self {
-        match self.token {
-            (Token::Eol, _) | (Token::Eof, _) => self,
-            (Token::Command(command), span) => {
-                bump!(self);
-                self.parse_command((command, span))
-            }
-            (Token::Ident(ident), span) => {
-                bump!(self);
-                self.parse_macro_invocation((ident, span))
-            }
-            (Token::Macro, span) => {
-                bump!(self);
-                self.parse_macro_def(span)
-            }
-            (_, span) => {
-                bump!(self);
-                let stripped = self.context.diagnostics().strip_span(&span);
-                self.context
-                    .diagnostics()
-                    .emit_diagnostic(CompactDiagnostic::new(
-                        Message::UnexpectedToken { token: stripped },
-                        span,
-                    ));
-                self
-            }
+        loop {
+            return match self.token {
+                (Token::Eol, _) => {
+                    bump!(self);
+                    continue;
+                }
+                (Token::Label(_), _) | (Token::Eof, _) => self,
+                (Token::Command(command), span) => {
+                    bump!(self);
+                    self.parse_command((command, span))
+                }
+                (Token::Ident(ident), span) => {
+                    bump!(self);
+                    self.parse_macro_invocation((ident, span))
+                }
+                (Token::Macro, span) => {
+                    bump!(self);
+                    self.parse_macro_def(span)
+                }
+                (_, span) => {
+                    bump!(self);
+                    let stripped = self.context.diagnostics().strip_span(&span);
+                    self.context
+                        .diagnostics()
+                        .emit_diagnostic(CompactDiagnostic::new(
+                            Message::UnexpectedToken { token: stripped },
+                            span,
+                        ));
+                    self
+                }
+            };
         }
     }
 
@@ -974,7 +983,7 @@ mod tests {
 
     #[test]
     fn parse_empty_stmt() {
-        assert_eq_actions(input_tokens![Eol], [unlabeled(empty()), unlabeled(empty())])
+        assert_eq_actions(input_tokens![Eol], [unlabeled(empty())])
     }
 
     fn assert_eq_actions(input: InputTokens, expected: impl Borrow<[FileAction<SymSpan>]>) {
@@ -1001,7 +1010,7 @@ mod tests {
     fn parse_nullary_instruction_after_eol() {
         assert_eq_actions(
             input_tokens![Eol, nop @ Command(())],
-            [unlabeled(empty()), unlabeled(command("nop", []))],
+            [unlabeled(command("nop", []))],
         )
     }
 
@@ -1068,7 +1077,6 @@ mod tests {
         ];
         let expected = [
             unlabeled(command(0, [expr().literal(1), expr().ident(3)])),
-            unlabeled(empty()),
             unlabeled(command(6, [expr().ident(7), expr().literal(9)])),
         ];
         assert_eq_actions(tokens, expected)
@@ -1111,14 +1119,28 @@ mod tests {
     #[test]
     fn parse_label() {
         let tokens = input_tokens![Label(()), Eol];
-        let expected_actions = [labeled(0, empty()), unlabeled(empty())];
+        let expected_actions = [labeled(0, empty())];
         assert_eq_actions(tokens, expected_actions)
+    }
+
+    #[test]
+    fn parse_two_consecutive_labels() {
+        let tokens = input_tokens![Label(()), Eol, Label(())];
+        let expected = [labeled(0, empty()), labeled(2, empty())];
+        assert_eq_actions(tokens, expected)
     }
 
     #[test]
     fn parse_labeled_instruction() {
         let tokens = input_tokens![Label(()), Command(()), Eol];
         let expected = [labeled(0, command(1, [])), unlabeled(empty())];
+        assert_eq_actions(tokens, expected)
+    }
+
+    #[test]
+    fn parse_labeled_command_with_eol_separators() {
+        let tokens = input_tokens![Label(()), Eol, Eol, Command(())];
+        let expected = [labeled(0, command(3, []))];
         assert_eq_actions(tokens, expected)
     }
 
