@@ -277,6 +277,7 @@ where
 
     fn apply_operator(&mut self, operator: (ExprOperator, D::Span)) {
         match operator.0 {
+            ExprOperator::Minus => unimplemented!(),
             ExprOperator::Parentheses => {
                 let inner = self.stack.pop().unwrap_or_else(|| unreachable!());
                 self.stack.push(SemanticExpr {

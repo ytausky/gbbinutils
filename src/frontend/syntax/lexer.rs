@@ -17,6 +17,7 @@ enum TokenKind {
     Error(LexError),
     Ident,
     Label,
+    Minus,
     Number(Radix),
     OpeningParenthesis,
     Plus,
@@ -98,6 +99,7 @@ impl<I: Iterator<Item = char>> Scanner<I> {
             ')' => self.take(TokenKind::ClosingParenthesis),
             ',' => self.take(TokenKind::Comma),
             '\n' => self.take(TokenKind::Eol),
+            '-' => self.take(TokenKind::Minus),
             '(' => self.take(TokenKind::OpeningParenthesis),
             '+' => self.take(TokenKind::Plus),
             '0'...'9' => self.lex_decimal_number(),
@@ -201,6 +203,7 @@ fn mk_token(kind: TokenKind, lexeme: &str) -> Token<String> {
         TokenKind::Error(error) => Token::Error(error),
         TokenKind::Ident => mk_keyword_or(Token::Ident, lexeme),
         TokenKind::Label => mk_keyword_or(Token::Label, lexeme),
+        TokenKind::Minus => Token::Minus,
         TokenKind::Number(Radix::Decimal) => {
             Token::Literal(Literal::Number(i32::from_str_radix(lexeme, 10).unwrap()))
         }
@@ -462,6 +465,11 @@ mod tests {
     #[test]
     fn lex_plus() {
         assert_eq_tokens("+", [Plus])
+    }
+
+    #[test]
+    fn lex_minus() {
+        assert_eq_tokens("-", [Minus])
     }
 
     #[test]

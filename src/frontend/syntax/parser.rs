@@ -21,6 +21,7 @@ impl<C, I, L, E> Token<C, I, L, E> {
             Label(_) => Label(()),
             Literal(_) => Literal(()),
             Macro => Macro,
+            Minus => Minus,
             OpeningParenthesis => OpeningParenthesis,
             Plus => Plus,
         }
@@ -237,6 +238,30 @@ enum ExprParsingError<S, R> {
     Other(CompactDiagnostic<S, R>),
 }
 
+enum BinaryOperator {
+    Minus,
+    Plus,
+}
+
+impl Into<ExprOperator> for BinaryOperator {
+    fn into(self) -> ExprOperator {
+        match self {
+            BinaryOperator::Minus => ExprOperator::Minus,
+            BinaryOperator::Plus => ExprOperator::Plus,
+        }
+    }
+}
+
+impl<I, C, L> Token<I, C, L> {
+    fn as_binary_operator(&self) -> Option<BinaryOperator> {
+        match self {
+            Token::Minus => Some(BinaryOperator::Minus),
+            Token::Plus => Some(BinaryOperator::Plus),
+            _ => None,
+        }
+    }
+}
+
 impl<'a, Id, C, L, I, Ctx, S> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
 where
     I: Iterator<Item = (Token<Id, C, L>, S)>,
@@ -313,10 +338,11 @@ where
 
     fn parse_infix_expr(mut self) -> ParserResult<Self, Ctx, S> {
         self = self.parse_atomic_expr()?;
-        while let (Token::Plus, span) = self.token {
+        while let Some(binary_operator) = self.token.0.as_binary_operator() {
+            let operator = (binary_operator.into(), self.token.1);
             bump!(self);
             self = self.parse_atomic_expr()?;
-            self.context.apply_operator((ExprOperator::Plus, span));
+            self.context.apply_operator(operator);
         }
         Ok(self)
     }
@@ -1228,6 +1254,13 @@ mod tests {
             .plus("plus1")
             .ident("z")
             .plus("plus2");
+        assert_eq_rpn_expr(tokens, expected)
+    }
+
+    #[test]
+    fn parse_subtraction() {
+        let tokens = input_tokens![x @ Ident(()), minus @ Minus, y @ Literal(())];
+        let expected = expr().ident("x").literal("y").minus("minus");
         assert_eq_rpn_expr(tokens, expected)
     }
 

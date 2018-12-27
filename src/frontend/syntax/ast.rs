@@ -46,6 +46,14 @@ impl SymExpr {
         self
     }
 
+    pub fn minus(mut self, token: impl Into<TokenRef>) -> Self {
+        self.0.push(ExprAction::ApplyOperator((
+            ExprOperator::Minus,
+            token.into().into(),
+        )));
+        self
+    }
+
     pub fn error(mut self, message: Message<SymSpan>, highlight: impl Into<SymSpan>) -> Self {
         self.0
             .push(ExprAction::EmitDiagnostic(CompactDiagnostic::new(
@@ -82,6 +90,7 @@ pub fn mk_sym_token(id: impl Into<TokenRef>, token: Token<(), (), ()>) -> (SymTo
             Eol => Eol,
             Error(error) => Error(error),
             Macro => Macro,
+            Minus => Minus,
             OpeningParenthesis => OpeningParenthesis,
             Plus => Plus,
         },

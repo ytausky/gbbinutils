@@ -22,6 +22,7 @@ pub enum Token<I, C = keyword::Command, L = Literal<I>, E = lexer::LexError> {
     Label(I),
     Literal(L),
     Macro,
+    Minus,
     OpeningParenthesis,
     Plus,
 }
@@ -95,6 +96,7 @@ pub enum ExprAtom<I, L> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExprOperator {
+    Minus,
     Parentheses,
     Plus,
 }
