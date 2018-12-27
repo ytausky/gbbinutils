@@ -1,3 +1,4 @@
+use super::SimpleToken::*;
 use super::Token::*;
 use super::{ExprAtom, Operator, Token, UnaryOperator};
 use crate::diagnostics::{CompactDiagnostic, Message};
@@ -86,16 +87,8 @@ pub fn mk_sym_token(id: impl Into<TokenRef>, token: Token<(), (), ()>) -> (SymTo
             Ident(()) => Ident(SymIdent(token_ref.clone())),
             Label(()) => Label(SymIdent(token_ref.clone())),
             Literal(()) => Literal(SymLiteral(token_ref.clone())),
-            ClosingParenthesis => ClosingParenthesis,
-            Comma => Comma,
-            Endm => Endm,
-            Eof => Eof,
-            Eol => Eol,
             Error(error) => Error(error),
-            Macro => Macro,
-            Minus => Minus,
-            OpeningParenthesis => OpeningParenthesis,
-            Plus => Plus,
+            Simple(simple) => Simple(simple),
         },
         token_ref,
     )
@@ -136,12 +129,12 @@ impl InputTokens {
 macro_rules! add_token {
     ($input:expr, $token:expr) => {
         let id = $input.tokens.len();
-        $input.insert_token(id, $token)
+        $input.insert_token(id, $token.into())
     };
     ($input:expr, $name:ident @ $token:expr) => {
         let id = stringify!($name);
         $input.names.insert(id.into(), $input.tokens.len());
-        $input.insert_token(id, $token)
+        $input.insert_token(id, $token.into())
     };
 }
 
@@ -173,11 +166,11 @@ macro_rules! input_tokens {
         if input
             .tokens
             .last()
-            .map(|(token, _)| *token != Token::Eof)
+            .map(|(token, _)| *token != Eof.into())
             .unwrap_or(true)
         {
             let eof_id = input.tokens.len().into();
-            input.tokens.push((Token::Eof, eof_id))
+            input.tokens.push((Eof.into(), eof_id))
         }
         input
     }};
@@ -361,7 +354,7 @@ pub fn macro_def(
     mut body: Vec<TokenSeqAction<SymSpan>>,
     endm: impl Into<TokenRef>,
 ) -> Vec<StmtAction<SymSpan>> {
-    body.push(TokenSeqAction::PushToken((Token::Eof, endm.into().into())));
+    body.push(TokenSeqAction::PushToken((Eof.into(), endm.into().into())));
     vec![StmtAction::MacroDef {
         keyword: keyword.into().into(),
         params: params
@@ -440,8 +433,8 @@ mod tests {
             [
                 (Command(SymCommand("my_tok".into())), "my_tok".into()),
                 (Literal(SymLiteral(1.into())), 1.into()),
-                (Macro, "next_one".into()),
-                (Eof, 3.into()),
+                (Macro.into(), "next_one".into()),
+                (Eof.into(), 3.into()),
             ]
         );
         assert_eq!(tokens.names.get("my_tok"), Some(&0));

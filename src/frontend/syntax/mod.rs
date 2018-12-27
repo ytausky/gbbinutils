@@ -12,20 +12,31 @@ pub use crate::frontend::syntax::keyword::Operand;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token<I, C = keyword::Command, L = Literal<I>, E = lexer::LexError> {
-    ClosingParenthesis,
-    Comma,
     Command(C),
-    Endm,
-    Eof,
-    Eol,
     Error(E),
     Ident(I),
     Label(I),
     Literal(L),
+    Simple(SimpleToken),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SimpleToken {
+    ClosingParenthesis,
+    Comma,
+    Endm,
+    Eof,
+    Eol,
     Macro,
     Minus,
     OpeningParenthesis,
     Plus,
+}
+
+impl<I, C, L, E> From<SimpleToken> for Token<I, C, L, E> {
+    fn from(simple: SimpleToken) -> Self {
+        Token::Simple(simple)
+    }
 }
 
 pub fn tokenize(src: &str) -> self::lexer::Lexer {

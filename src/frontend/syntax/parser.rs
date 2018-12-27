@@ -1,3 +1,4 @@
+use super::SimpleToken::*;
 use super::*;
 use crate::diagnostics::span::{MergeSpans, StripSpan};
 use crate::diagnostics::{CompactDiagnostic, EmitDiagnostic, Message};
@@ -11,25 +12,17 @@ impl<C, I, L, E> Token<C, I, L, E> {
     fn kind(&self) -> TokenKind {
         use self::Token::*;
         match *self {
-            ClosingParenthesis => ClosingParenthesis,
-            Comma => Comma,
             Command(_) => Command(()),
-            Endm => Endm,
-            Eof => Eof,
-            Eol => Eol,
             Error(_) => Error(()),
             Ident(_) => Ident(()),
             Label(_) => Label(()),
             Literal(_) => Literal(()),
-            Macro => Macro,
-            Minus => Minus,
-            OpeningParenthesis => OpeningParenthesis,
-            Plus => Plus,
+            Simple(simple) => Simple(simple),
         }
     }
 }
 
-const LINE_FOLLOW_SET: &[TokenKind] = &[Token::Eol, Token::Eof];
+const LINE_FOLLOW_SET: &[TokenKind] = &[Token::Simple(Eol), Token::Simple(Eof)];
 
 pub fn parse_src<Id, C, L, I, F, S>(mut tokens: I, context: F) -> F
 where
@@ -38,7 +31,7 @@ where
     S: Clone,
 {
     let Parser { token, context, .. } = Parser::new(&mut tokens, context).parse_file();
-    assert_eq!(token.0.kind(), Token::Eof);
+    assert_eq!(token.0.kind(), Token::Simple(SimpleToken::Eof));
     context
 }
 
@@ -87,7 +80,7 @@ where
     S: Clone,
 {
     fn parse_file(mut self) -> Self {
-        while self.token.0.kind() != Token::Eof {
+        while self.token.0.kind() != Token::Simple(SimpleToken::Eof) {
             self = self.parse_stmt()
         }
         self
@@ -115,11 +108,11 @@ where
     fn parse_unlabeled_stmt(mut self) -> Self {
         loop {
             return match self.token {
-                (Token::Eol, _) => {
+                (Token::Simple(SimpleToken::Eol), _) => {
                     bump!(self);
                     continue;
                 }
-                (Token::Label(_), _) | (Token::Eof, _) => self,
+                (Token::Label(_), _) | (Token::Simple(SimpleToken::Eof), _) => self,
                 (Token::Command(command), span) => {
                     bump!(self);
                     self.parse_command((command, span))
@@ -128,7 +121,7 @@ where
                     bump!(self);
                     self.parse_macro_invocation((ident, span))
                 }
-                (Token::Macro, span) => {
+                (Token::Simple(SimpleToken::Macro), span) => {
                     bump!(self);
                     self.parse_macro_def(span)
                 }
@@ -156,20 +149,20 @@ where
     fn parse_macro_def(self, span: S) -> Self {
         let mut state = self
             .change_context(|c| c.enter_macro_def(span))
-            .parse_terminated_list(Token::Comma, LINE_FOLLOW_SET, |p| p.parse_macro_param());
-        if state.token.0.kind() == Token::Eol {
+            .parse_terminated_list(Comma.into(), LINE_FOLLOW_SET, |p| p.parse_macro_param());
+        if state.token.0.kind() == Eol.into() {
             bump!(state);
             let mut state = state.change_context(|c| c.exit());
             loop {
                 match state.token {
-                    (Token::Endm, _) => {
+                    (Token::Simple(Endm), _) => {
                         state
                             .context
-                            .push_token((Token::Eof, state.token.1.clone()));
+                            .push_token((Eof.into(), state.token.1.clone()));
                         bump!(state);
                         break;
                     }
-                    (Token::Eof, _) => {
+                    (Token::Simple(Eof), _) => {
                         state
                             .context
                             .diagnostics()
@@ -187,7 +180,7 @@ where
             }
             state
         } else {
-            assert_eq!(state.token.0.kind(), Token::Eof);
+            assert_eq!(state.token.0.kind(), Eof.into());
             state
                 .context
                 .diagnostics()
@@ -214,7 +207,7 @@ where
     S: Clone,
 {
     fn parse_argument_list(self) -> Self {
-        self.parse_terminated_list(Token::Comma, LINE_FOLLOW_SET, |p| p.parse_argument())
+        self.parse_terminated_list(Comma.into(), LINE_FOLLOW_SET, |p| p.parse_argument())
     }
 
     fn parse_argument(self) -> Self {
@@ -242,8 +235,8 @@ enum ExprParsingError<S, R> {
 impl<I, C, L> Token<I, C, L> {
     fn as_binary_operator(&self) -> Option<BinaryOperator> {
         match self {
-            Token::Minus => Some(BinaryOperator::Minus),
-            Token::Plus => Some(BinaryOperator::Plus),
+            Token::Simple(Minus) => Some(BinaryOperator::Minus),
+            Token::Simple(Plus) => Some(BinaryOperator::Plus),
             _ => None,
         }
     }
@@ -261,7 +254,7 @@ where
                 let diagnostic = match error {
                     ExprParsingError::NothingParsed => CompactDiagnostic::new(
                         match parser.token.0 {
-                            Token::Eof => Message::UnexpectedEof,
+                            Token::Simple(Eof) => Message::UnexpectedEof,
                             _ => Message::UnexpectedToken {
                                 token: parser.context.diagnostics().strip_span(&parser.token.1),
                             },
@@ -280,7 +273,7 @@ where
 
     fn parse_expression(mut self) -> ParserResult<Self, Ctx, S> {
         match self.token {
-            (Token::OpeningParenthesis, span) => {
+            (Token::Simple(OpeningParenthesis), span) => {
                 bump!(self);
                 self.parse_parenthesized_expression(span)
             }
@@ -294,10 +287,9 @@ where
             Err((parser, error)) => {
                 let error = match error {
                     error @ ExprParsingError::NothingParsed => match parser.token.0 {
-                        Token::Eof | Token::Eol => ExprParsingError::Other(CompactDiagnostic::new(
-                            Message::UnmatchedParenthesis,
-                            left,
-                        )),
+                        Token::Simple(Eof) | Token::Simple(Eol) => ExprParsingError::Other(
+                            CompactDiagnostic::new(Message::UnmatchedParenthesis, left),
+                        ),
                         _ => error,
                     },
                     error => error,
@@ -306,7 +298,7 @@ where
             }
         };
         match self.token {
-            (Token::ClosingParenthesis, right) => {
+            (Token::Simple(ClosingParenthesis), right) => {
                 bump!(self);
                 let span = self.context.diagnostics().merge_spans(&left, &right);
                 self.context
@@ -336,7 +328,7 @@ where
 
     fn parse_atomic_expr(mut self) -> ParserResult<Self, Ctx, S> {
         match self.token.0 {
-            Token::Eof | Token::Eol => Err((self, ExprParsingError::NothingParsed)),
+            Token::Simple(Eof) | Token::Simple(Eol) => Err((self, ExprParsingError::NothingParsed)),
             Token::Ident(ident) => {
                 self.context
                     .push_atom((ExprAtom::Ident(ident), self.token.1));
@@ -396,11 +388,13 @@ where
     S: Clone,
 {
     fn parse_macro_arg_list(self) -> Self {
-        self.parse_terminated_list(Token::Comma, LINE_FOLLOW_SET, |p| {
+        self.parse_terminated_list(Comma.into(), LINE_FOLLOW_SET, |p| {
             let mut state = p.change_context(|c| c.enter_macro_arg());
             loop {
                 match state.token {
-                    (Token::Comma, _) | (Token::Eol, _) | (Token::Eof, _) => break,
+                    (Token::Simple(Comma), _)
+                    | (Token::Simple(Eol), _)
+                    | (Token::Simple(Eof), _) => break,
                     other => {
                         bump!(state);
                         state.context.push_token(other)
@@ -1419,7 +1413,10 @@ mod tests {
                     },
                     span,
                 ))],
-                body: vec![TokenSeqAction::PushToken((Eof, TokenRef::from(3).into()))],
+                body: vec![TokenSeqAction::PushToken((
+                    Eof.into(),
+                    TokenRef::from(3).into(),
+                ))],
             }])],
         )
     }

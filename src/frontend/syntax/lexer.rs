@@ -1,8 +1,8 @@
-use crate::frontend::syntax::{
-    self,
-    keyword::{self as kw, *},
-    Literal, Token,
-};
+use crate::frontend::syntax;
+use crate::frontend::syntax::keyword as kw;
+use crate::frontend::syntax::keyword::*;
+use crate::frontend::syntax::SimpleToken::*;
+use crate::frontend::syntax::{Literal, SimpleToken, Token};
 
 use std::iter;
 use std::ops::{Index, Range};
@@ -10,18 +10,18 @@ use std::str;
 
 #[derive(Clone, Copy, PartialEq)]
 enum TokenKind {
-    ClosingParenthesis,
-    Comma,
-    Eof,
-    Eol,
     Error(LexError),
     Ident,
     Label,
-    Minus,
     Number(Radix),
-    OpeningParenthesis,
-    Plus,
+    Simple(SimpleToken),
     String,
+}
+
+impl From<SimpleToken> for TokenKind {
+    fn from(simple: SimpleToken) -> Self {
+        TokenKind::Simple(simple)
+    }
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -53,7 +53,7 @@ impl<I: Iterator<Item = char>> Iterator for Scanner<I> {
             Some(self.lex_token())
         } else if !self.is_at_file_end {
             self.is_at_file_end = true;
-            Some((TokenKind::Eof, self.range.end..self.range.end))
+            Some((Eof.into(), self.range.end..self.range.end))
         } else {
             None
         }
@@ -96,12 +96,12 @@ impl<I: Iterator<Item = char>> Scanner<I> {
     fn lex_token(&mut self) -> <Self as Iterator>::Item {
         let first_char = self.current_char().unwrap();
         let next_token = match first_char {
-            ')' => self.take(TokenKind::ClosingParenthesis),
-            ',' => self.take(TokenKind::Comma),
-            '\n' => self.take(TokenKind::Eol),
-            '-' => self.take(TokenKind::Minus),
-            '(' => self.take(TokenKind::OpeningParenthesis),
-            '+' => self.take(TokenKind::Plus),
+            ')' => self.take(ClosingParenthesis),
+            ',' => self.take(Comma),
+            '\n' => self.take(Eol),
+            '-' => self.take(Minus),
+            '(' => self.take(OpeningParenthesis),
+            '+' => self.take(Plus),
             '0'...'9' => self.lex_decimal_number(),
             '$' => self.lex_hex_number(),
             '"' => self.lex_quoted_string(),
@@ -110,9 +110,9 @@ impl<I: Iterator<Item = char>> Scanner<I> {
         (next_token, self.range.clone())
     }
 
-    fn take(&mut self, token: TokenKind) -> TokenKind {
+    fn take(&mut self, token: impl Into<TokenKind>) -> TokenKind {
         self.advance();
-        token
+        token.into()
     }
 
     fn lex_decimal_number(&mut self) -> TokenKind {
@@ -196,14 +196,9 @@ impl<'a> Iterator for Lexer<'a> {
 
 fn mk_token(kind: TokenKind, lexeme: &str) -> Token<String> {
     match kind {
-        TokenKind::ClosingParenthesis => Token::ClosingParenthesis,
-        TokenKind::Comma => Token::Comma,
-        TokenKind::Eof => Token::Eof,
-        TokenKind::Eol => Token::Eol,
         TokenKind::Error(error) => Token::Error(error),
         TokenKind::Ident => mk_keyword_or(Token::Ident, lexeme),
         TokenKind::Label => mk_keyword_or(Token::Label, lexeme),
-        TokenKind::Minus => Token::Minus,
         TokenKind::Number(Radix::Decimal) => {
             Token::Literal(Literal::Number(i32::from_str_radix(lexeme, 10).unwrap()))
         }
@@ -211,8 +206,7 @@ fn mk_token(kind: TokenKind, lexeme: &str) -> Token<String> {
             Ok(n) => Token::Literal(Literal::Number(n)),
             Err(_) => Token::Error(LexError::NoDigits),
         },
-        TokenKind::OpeningParenthesis => Token::OpeningParenthesis,
-        TokenKind::Plus => Token::Plus,
+        TokenKind::Simple(simple) => Token::Simple(simple),
         TokenKind::String => {
             Token::Literal(Literal::String(lexeme[1..(lexeme.len() - 1)].to_string()))
         }
@@ -224,8 +218,8 @@ fn mk_keyword_or<F: FnOnce(String) -> Token<String>>(f: F, lexeme: &str) -> Toke
         || f(lexeme.to_string()),
         |keyword| match keyword {
             Keyword::Command(command) => Token::Command(command),
-            Keyword::Endm => Token::Endm,
-            Keyword::Macro => Token::Macro,
+            Keyword::Endm => Endm.into(),
+            Keyword::Macro => Macro.into(),
             Keyword::Operand(operand) => Token::Literal(syntax::Literal::Operand(operand)),
         },
     )
@@ -343,17 +337,23 @@ mod tests {
 
     #[test]
     fn range_of_eof_in_empty_str() {
-        test_byte_range_at_eof("", [(Eof, 0..0)])
+        test_byte_range_at_eof("", [(Eof.into(), 0..0)])
     }
 
     #[test]
     fn range_of_eof_after_ident() {
-        test_byte_range_at_eof("    ident", [(Ident("ident".into()), 4..9), (Eof, 9..9)])
+        test_byte_range_at_eof(
+            "    ident",
+            [(Ident("ident".into()), 4..9), (Eof.into(), 9..9)],
+        )
     }
 
     #[test]
     fn range_of_eof_after_trailing_whitespace() {
-        test_byte_range_at_eof("    ident ", [(Ident("ident".into()), 4..9), (Eof, 10..10)])
+        test_byte_range_at_eof(
+            "    ident ",
+            [(Ident("ident".into()), 4..9), (Eof.into(), 10..10)],
+        )
     }
 
     fn test_byte_range_at_eof(src: &str, tokens: impl Borrow<[(Token<String>, Range<usize>)]>) {
@@ -362,7 +362,7 @@ mod tests {
 
     fn assert_eq_tokens<'a>(src: &'a str, expected_without_eof: impl Borrow<[Token<String>]>) {
         let mut expected: Vec<_> = expected_without_eof.borrow().iter().cloned().collect();
-        expected.push(Eof);
+        expected.push(Eof.into());
         assert_eq!(
             Lexer::new(src).map(|(t, _)| t).collect::<Vec<_>>(),
             expected
@@ -376,7 +376,7 @@ mod tests {
 
     #[test]
     fn lex_eol() {
-        assert_eq_tokens("\n", [Eol])
+        assert_eq_tokens("\n", [Eol.into()])
     }
 
     #[test]
@@ -386,7 +386,7 @@ mod tests {
 
     #[test]
     fn lex_ident_after_eol() {
-        assert_eq_tokens("    \n    ident", [Eol, Ident("ident".to_string())])
+        assert_eq_tokens("    \n    ident", [Eol.into(), Ident("ident".to_string())])
     }
 
     #[test]
@@ -404,7 +404,7 @@ mod tests {
 
     #[test]
     fn lex_comma() {
-        assert_eq_tokens(",", [Comma])
+        assert_eq_tokens(",", [Comma.into()])
     }
 
     #[test]
@@ -427,12 +427,15 @@ mod tests {
 
     #[test]
     fn lex_label() {
-        assert_eq_tokens("label nop\n", [Label("label".to_string()), Nop.into(), Eol])
+        assert_eq_tokens(
+            "label nop\n",
+            [Label("label".to_string()), Nop.into(), Eol.into()],
+        )
     }
 
     #[test]
     fn lex_label_after_eol() {
-        assert_eq_tokens("    \nlabel", [Eol, Label("label".to_string())])
+        assert_eq_tokens("    \nlabel", [Eol.into(), Label("label".to_string())])
     }
 
     #[test]
@@ -449,8 +452,8 @@ mod tests {
         for &(spelling, keyword) in KEYWORDS.iter() {
             let token = match keyword {
                 Keyword::Command(command) => Command(command),
-                Keyword::Endm => Endm,
-                Keyword::Macro => Macro,
+                Keyword::Endm => Endm.into(),
+                Keyword::Macro => Macro.into(),
                 Keyword::Operand(operand) => Literal(Operand(operand)),
             };
             assert_eq_tokens(&f(spelling), [token])
@@ -459,17 +462,17 @@ mod tests {
 
     #[test]
     fn lex_brackets() {
-        assert_eq_tokens("()", [OpeningParenthesis, ClosingParenthesis])
+        assert_eq_tokens("()", [OpeningParenthesis.into(), ClosingParenthesis.into()])
     }
 
     #[test]
     fn lex_plus() {
-        assert_eq_tokens("+", [Plus])
+        assert_eq_tokens("+", [Plus.into()])
     }
 
     #[test]
     fn lex_minus() {
-        assert_eq_tokens("-", [Minus])
+        assert_eq_tokens("-", [Minus.into()])
     }
 
     #[test]
@@ -479,7 +482,7 @@ mod tests {
 
     #[test]
     fn ignore_comment_at_end_of_line() {
-        assert_eq_tokens("nop ; comment\n", [Nop.into(), Eol])
+        assert_eq_tokens("nop ; comment\n", [Nop.into(), Eol.into()])
     }
 
     #[test]
