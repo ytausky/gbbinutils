@@ -244,6 +244,22 @@ impl<I, C, L> Token<I, C, L> {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, PartialOrd)]
+enum Precedence {
+    None,
+    Addition,
+    Multiplication,
+}
+
+impl BinaryOperator {
+    fn precedence(self) -> Precedence {
+        match self {
+            BinaryOperator::Plus | BinaryOperator::Minus => Precedence::Addition,
+            BinaryOperator::Multiplication | BinaryOperator::Division => Precedence::Multiplication,
+        }
+    }
+}
+
 impl<'a, Id, C, L, I, Ctx, S> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
 where
     I: Iterator<Item = (Token<Id, C, L>, S)>,
@@ -279,7 +295,7 @@ where
                 bump!(self);
                 self.parse_parenthesized_expression(span)
             }
-            _ => self.parse_infix_expr(),
+            _ => self.parse_infix_expr(Precedence::None),
         }
     }
 
@@ -317,12 +333,16 @@ where
         }
     }
 
-    fn parse_infix_expr(mut self) -> ParserResult<Self, Ctx, S> {
+    fn parse_infix_expr(mut self, lowest: Precedence) -> ParserResult<Self, Ctx, S> {
         self = self.parse_atomic_expr()?;
         while let Some(binary_operator) = self.token.0.as_binary_operator() {
+            let precedence = binary_operator.precedence();
+            if precedence <= lowest {
+                break;
+            }
             let operator = (Operator::Binary(binary_operator), self.token.1);
             bump!(self);
-            self = self.parse_atomic_expr()?;
+            self = self.parse_infix_expr(precedence)?;
             self.context.apply_operator(operator);
         }
         Ok(self)
@@ -1251,6 +1271,24 @@ mod tests {
     fn parse_division() {
         let tokens = input_tokens![x @ Ident(()), slash @ Slash, y @ Literal(())];
         let expected = expr().ident("x").literal("y").divide("slash");
+        assert_eq_rpn_expr(tokens, expected)
+    }
+
+    #[test]
+    fn multiplication_precedes_addition() {
+        let tokens = input_tokens![
+            a @ Literal(()),
+            plus @ Plus,
+            b @ Literal(()),
+            star @ Star,
+            c @ Literal(()),
+        ];
+        let expected = expr()
+            .literal("a")
+            .literal("b")
+            .literal("c")
+            .multiply("star")
+            .plus("plus");
         assert_eq_rpn_expr(tokens, expected)
     }
 
