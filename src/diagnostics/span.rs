@@ -388,4 +388,46 @@ mod tests {
         };
         assert_eq!(span.to_stripped(), StrippedBufSpan { buf_id, range })
     }
+
+    #[test]
+    fn strip_macro_span() {
+        let buf_id = 1;
+        let buf_context = Rc::new(BufContextData {
+            buf_id,
+            included_from: None,
+        });
+        let body_range = 20..30;
+        let macro_def = Rc::new(MacroDef {
+            name: SpanData::Buf {
+                range: 0..10,
+                context: Rc::clone(&buf_context),
+            },
+            params: vec![],
+            body: vec![SpanData::Buf {
+                range: body_range.clone(),
+                context: Rc::clone(&buf_context),
+            }],
+        });
+        let position = MacroExpansionPosition {
+            token: 0,
+            expansion: None,
+        };
+        let expansion = MacroExpansionData {
+            name: SpanData::Buf {
+                range: 40..50,
+                context: Rc::clone(&buf_context),
+            },
+            args: vec![],
+            def: macro_def,
+        };
+        let span = SpanData::Macro {
+            range: position.clone()..=position,
+            context: Rc::new(expansion),
+        };
+        let stripped = StrippedBufSpan {
+            buf_id,
+            range: body_range,
+        };
+        assert_eq!(span.to_stripped(), stripped)
+    }
 }
