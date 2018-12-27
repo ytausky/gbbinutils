@@ -396,29 +396,18 @@ mod tests {
             buf_id,
             included_from: None,
         });
-        let body_range = 20..30;
-        let macro_def = Rc::new(MacroDef {
-            name: SpanData::Buf {
-                range: 0..10,
-                context: Rc::clone(&buf_context),
-            },
-            params: vec![],
-            body: vec![SpanData::Buf {
-                range: body_range.clone(),
-                context: Rc::clone(&buf_context),
-            }],
-        });
         let position = MacroExpansionPosition {
             token: 0,
             expansion: None,
         };
+        let macro_base = 0;
         let expansion = MacroExpansionData {
             name: SpanData::Buf {
                 range: 40..50,
                 context: Rc::clone(&buf_context),
             },
             args: vec![],
-            def: macro_def,
+            def: mk_macro_def(&buf_context, macro_base),
         };
         let span = SpanData::Macro {
             range: position.clone()..=position,
@@ -426,8 +415,33 @@ mod tests {
         };
         let stripped = StrippedBufSpan {
             buf_id,
-            range: body_range,
+            range: macro_body_range(macro_base),
         };
         assert_eq!(span.to_stripped(), stripped)
+    }
+
+    fn mk_macro_def<B>(
+        buf_context: &Rc<BufContextData<B, Range<usize>>>,
+        base: usize,
+    ) -> Rc<MacroDef<SpanData<B, Range<usize>>>> {
+        Rc::new(MacroDef {
+            name: SpanData::Buf {
+                range: macro_name_range(base),
+                context: Rc::clone(buf_context),
+            },
+            params: vec![],
+            body: vec![SpanData::Buf {
+                range: macro_body_range(base),
+                context: Rc::clone(buf_context),
+            }],
+        })
+    }
+
+    fn macro_name_range(base: usize) -> Range<usize> {
+        base..base + 10
+    }
+
+    fn macro_body_range(base: usize) -> Range<usize> {
+        base + 20..base + 30
     }
 }
