@@ -1,5 +1,5 @@
 use super::Token::*;
-use super::{ExprAtom, ExprOperator, Token};
+use super::{BinaryOperator, ExprAtom, Operator, Token, UnaryOperator};
 use crate::diagnostics::{CompactDiagnostic, Message};
 use std::borrow::Borrow;
 use std::collections::HashMap;
@@ -33,14 +33,16 @@ impl SymExpr {
 
     pub fn parentheses(mut self, left: impl Into<TokenRef>, right: impl Into<TokenRef>) -> Self {
         let span = SymSpan::merge(&SymSpan::from(left.into()), &right.into().into());
-        self.0
-            .push(ExprAction::ApplyOperator((ExprOperator::Parentheses, span)));
+        self.0.push(ExprAction::ApplyOperator((
+            Operator::Unary(UnaryOperator::Parentheses),
+            span,
+        )));
         self
     }
 
     pub fn plus(mut self, token: impl Into<TokenRef>) -> Self {
         self.0.push(ExprAction::ApplyOperator((
-            ExprOperator::Plus,
+            Operator::Binary(BinaryOperator::Plus),
             token.into().into(),
         )));
         self
@@ -48,7 +50,7 @@ impl SymExpr {
 
     pub fn minus(mut self, token: impl Into<TokenRef>) -> Self {
         self.0.push(ExprAction::ApplyOperator((
-            ExprOperator::Minus,
+            Operator::Binary(BinaryOperator::Minus),
             token.into().into(),
         )));
         self
@@ -258,7 +260,7 @@ pub enum CommandAction<S> {
 #[derive(Debug, PartialEq, Clone)]
 pub enum ExprAction<S> {
     PushAtom((ExprAtom<SymIdent, SymLiteral>, S)),
-    ApplyOperator((ExprOperator, S)),
+    ApplyOperator((Operator, S)),
     EmitDiagnostic(CompactDiagnostic<S, S>),
 }
 

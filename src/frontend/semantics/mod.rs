@@ -1,9 +1,11 @@
-use crate::backend::{self, Backend, BinaryOperator, ValueBuilder};
+use crate::backend::{self, Backend, ValueBuilder};
 use crate::diagnostics::span::{MergeSpans, Source, StripSpan};
 use crate::diagnostics::*;
 use crate::expr::ExprVariant;
 use crate::frontend::session::Session;
-use crate::frontend::syntax::{self, keyword::*, ExprAtom, ExprOperator, Token};
+use crate::frontend::syntax::{
+    self, keyword::*, BinaryOperator, ExprAtom, Operator, Token, UnaryOperator,
+};
 use crate::frontend::{Frontend, Literal};
 
 mod directive;
@@ -275,17 +277,17 @@ where
         })
     }
 
-    fn apply_operator(&mut self, operator: (ExprOperator, D::Span)) {
+    fn apply_operator(&mut self, operator: (Operator, D::Span)) {
         match operator.0 {
-            ExprOperator::Minus => unimplemented!(),
-            ExprOperator::Parentheses => {
+            Operator::Binary(BinaryOperator::Minus) => unimplemented!(),
+            Operator::Unary(UnaryOperator::Parentheses) => {
                 let inner = self.stack.pop().unwrap_or_else(|| unreachable!());
                 self.stack.push(SemanticExpr {
                     variant: ExprVariant::Unary(SemanticUnary::Parentheses, Box::new(inner)),
                     span: operator.1,
                 })
             }
-            ExprOperator::Plus => {
+            Operator::Binary(BinaryOperator::Plus) => {
                 let rhs = self.stack.pop().unwrap_or_else(|| unreachable!());
                 let lhs = self.stack.pop().unwrap_or_else(|| unreachable!());
                 self.stack.push(SemanticExpr {
@@ -573,7 +575,7 @@ where
                 let left = self.analyze_expr(*left)?;
                 let right = self.analyze_expr(*right)?;
                 Ok(self.builder.apply_binary_operator(
-                    (BinaryOperator::Plus, expr.span),
+                    (backend::BinaryOperator::Plus, expr.span),
                     left,
                     right,
                 ))
@@ -872,7 +874,7 @@ mod tests {
             command = arg1.exit();
             let mut arg2 = command.add_argument();
             arg2.push_atom((ExprAtom::Literal(Literal::Operand(Operand::Hl)), ()));
-            arg2.apply_operator((ExprOperator::Parentheses, ()));
+            arg2.apply_operator((Operator::Unary(UnaryOperator::Parentheses), ()));
             arg2.exit().exit().exit()
         });
         assert_eq!(
@@ -893,7 +895,7 @@ mod tests {
             let mut expr = command.add_argument();
             expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
             expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
-            expr.apply_operator((ExprOperator::Plus, ()));
+            expr.apply_operator((Operator::Binary(BinaryOperator::Plus), ()));
             expr.exit().exit().exit()
         });
         assert_eq!(
@@ -901,7 +903,7 @@ mod tests {
             [TestOperation::EmitItem(backend::Item::Instruction(
                 Instruction::Rst(
                     ExprVariant::Binary(
-                        BinaryOperator::Plus,
+                        backend::BinaryOperator::Plus,
                         Box::new(1.into()),
                         Box::new(1.into()),
                     )

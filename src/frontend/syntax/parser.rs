@@ -238,20 +238,6 @@ enum ExprParsingError<S, R> {
     Other(CompactDiagnostic<S, R>),
 }
 
-enum BinaryOperator {
-    Minus,
-    Plus,
-}
-
-impl Into<ExprOperator> for BinaryOperator {
-    fn into(self) -> ExprOperator {
-        match self {
-            BinaryOperator::Minus => ExprOperator::Minus,
-            BinaryOperator::Plus => ExprOperator::Plus,
-        }
-    }
-}
-
 impl<I, C, L> Token<I, C, L> {
     fn as_binary_operator(&self) -> Option<BinaryOperator> {
         match self {
@@ -323,7 +309,7 @@ where
                 bump!(self);
                 let span = self.context.diagnostics().merge_spans(&left, &right);
                 self.context
-                    .apply_operator((ExprOperator::Parentheses, span));
+                    .apply_operator((Operator::Unary(UnaryOperator::Parentheses), span));
                 Ok(self)
             }
             _ => Err((
@@ -339,7 +325,7 @@ where
     fn parse_infix_expr(mut self) -> ParserResult<Self, Ctx, S> {
         self = self.parse_atomic_expr()?;
         while let Some(binary_operator) = self.token.0.as_binary_operator() {
-            let operator = (binary_operator.into(), self.token.1);
+            let operator = (Operator::Binary(binary_operator), self.token.1);
             bump!(self);
             self = self.parse_atomic_expr()?;
             self.context.apply_operator(operator);
@@ -489,7 +475,7 @@ mod tests {
     use super::*;
     use crate::diagnostics::span::{MergeSpans, StripSpan};
     use crate::diagnostics::{CompactDiagnostic, EmitDiagnostic, Message};
-    use crate::frontend::syntax::{ExprAtom, ExprOperator};
+    use crate::frontend::syntax::ExprAtom;
     use std::borrow::Borrow;
     use std::collections::HashMap;
 
@@ -725,7 +711,7 @@ mod tests {
             self.expr_action_collector.push_atom(atom)
         }
 
-        fn apply_operator(&mut self, operator: (ExprOperator, SymSpan)) {
+        fn apply_operator(&mut self, operator: (Operator, SymSpan)) {
             self.expr_action_collector.apply_operator(operator)
         }
 
@@ -786,7 +772,7 @@ mod tests {
             self.actions.push(ExprAction::PushAtom(atom))
         }
 
-        fn apply_operator(&mut self, operator: (ExprOperator, SymSpan)) {
+        fn apply_operator(&mut self, operator: (Operator, SymSpan)) {
             self.actions.push(ExprAction::ApplyOperator(operator))
         }
 

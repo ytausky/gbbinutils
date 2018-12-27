@@ -84,7 +84,7 @@ pub trait ExprContext<S: Clone>: DelegateDiagnostics<S> {
     type Literal;
     type Parent;
     fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, S));
-    fn apply_operator(&mut self, operator: (ExprOperator, S));
+    fn apply_operator(&mut self, operator: (Operator, S));
     fn exit(self) -> Self::Parent;
 }
 
@@ -95,9 +95,19 @@ pub enum ExprAtom<I, L> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ExprOperator {
-    Minus,
+pub enum Operator {
+    Unary(UnaryOperator),
+    Binary(BinaryOperator),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum UnaryOperator {
     Parentheses,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum BinaryOperator {
+    Minus,
     Plus,
 }
 
