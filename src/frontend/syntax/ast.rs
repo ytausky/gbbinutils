@@ -33,6 +33,22 @@ impl SymExpr {
         self
     }
 
+    pub fn divide(mut self, token: impl Into<TokenRef>) -> Self {
+        self.0.push(ExprAction::ApplyOperator((
+            Operator::Binary(BinaryOperator::Division),
+            token.into().into(),
+        )));
+        self
+    }
+
+    pub fn multiply(mut self, token: impl Into<TokenRef>) -> Self {
+        self.0.push(ExprAction::ApplyOperator((
+            Operator::Binary(BinaryOperator::Multiplication),
+            token.into().into(),
+        )));
+        self
+    }
+
     pub fn parentheses(mut self, left: impl Into<TokenRef>, right: impl Into<TokenRef>) -> Self {
         let span = SymSpan::merge(&SymSpan::from(left.into()), &right.into().into());
         self.0.push(ExprAction::ApplyOperator((

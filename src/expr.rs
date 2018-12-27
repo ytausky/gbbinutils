@@ -2,7 +2,9 @@ use crate::span::Source;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BinaryOperator {
+    Division,
     Minus,
+    Multiplication,
     Plus,
 }
 

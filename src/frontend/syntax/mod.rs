@@ -31,6 +31,8 @@ pub enum SimpleToken {
     Minus,
     OpeningParenthesis,
     Plus,
+    Slash,
+    Star,
 }
 
 impl<I, C, L, E> From<SimpleToken> for Token<I, C, L, E> {

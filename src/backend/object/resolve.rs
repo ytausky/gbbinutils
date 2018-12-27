@@ -141,6 +141,7 @@ impl<S: Clone> RelocExpr<S> {
                 match operator {
                     BinaryOperator::Minus => lhs - rhs,
                     BinaryOperator::Plus => lhs + rhs,
+                    _ => unimplemented!(),
                 }
             }
             ExprVariant::Atom(RelocAtom::Literal(value)) => (*value).into(),

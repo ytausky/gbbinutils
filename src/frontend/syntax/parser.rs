@@ -237,6 +237,8 @@ impl<I, C, L> Token<I, C, L> {
         match self {
             Token::Simple(Minus) => Some(BinaryOperator::Minus),
             Token::Simple(Plus) => Some(BinaryOperator::Plus),
+            Token::Simple(Slash) => Some(BinaryOperator::Division),
+            Token::Simple(Star) => Some(BinaryOperator::Multiplication),
             _ => None,
         }
     }
@@ -1242,6 +1244,20 @@ mod tests {
     fn parse_subtraction() {
         let tokens = input_tokens![x @ Ident(()), minus @ Minus, y @ Literal(())];
         let expected = expr().ident("x").literal("y").minus("minus");
+        assert_eq_rpn_expr(tokens, expected)
+    }
+
+    #[test]
+    fn parse_division() {
+        let tokens = input_tokens![x @ Ident(()), slash @ Slash, y @ Literal(())];
+        let expected = expr().ident("x").literal("y").divide("slash");
+        assert_eq_rpn_expr(tokens, expected)
+    }
+
+    #[test]
+    fn parse_multiplication() {
+        let tokens = input_tokens![x @ Ident(()), star @ Star, y @ Literal(())];
+        let expected = expr().ident("x").literal("y").multiply("star");
         assert_eq_rpn_expr(tokens, expected)
     }
 

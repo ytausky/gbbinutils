@@ -102,6 +102,8 @@ impl<I: Iterator<Item = char>> Scanner<I> {
             '-' => self.take(Minus),
             '(' => self.take(OpeningParenthesis),
             '+' => self.take(Plus),
+            '/' => self.take(Slash),
+            '*' => self.take(Star),
             '0'...'9' => self.lex_decimal_number(),
             '$' => self.lex_hex_number(),
             '"' => self.lex_quoted_string(),
@@ -473,6 +475,16 @@ mod tests {
     #[test]
     fn lex_minus() {
         assert_eq_tokens("-", [Minus.into()])
+    }
+
+    #[test]
+    fn lex_slash() {
+        assert_eq_tokens("/", [Slash.into()])
+    }
+
+    #[test]
+    fn lex_star() {
+        assert_eq_tokens("*", [Star.into()])
     }
 
     #[test]
