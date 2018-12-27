@@ -541,10 +541,10 @@ dummy
                 context: Rc::clone(buf_context),
             }],
         });
-        let incovation_range = 10..11;
+        let invocation_range = 10..11;
         let context = Rc::new(MacroExpansionData {
             name: SpanData::Buf {
-                range: incovation_range.clone(),
+                range: invocation_range.clone(),
                 context: Rc::clone(buf_context),
             },
             args: vec![],
@@ -574,7 +574,7 @@ dummy
                     message: Message::InvokedHere {
                         name: StrippedBufSpan {
                             buf_id: (),
-                            range: incovation_range,
+                            range: invocation_range,
                         },
                     },
                     location: Some(10..11),
