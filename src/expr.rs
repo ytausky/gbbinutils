@@ -1,6 +1,6 @@
 use crate::span::Source;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BinaryOperator {
     Minus,
     Plus,

@@ -873,7 +873,16 @@ mod tests {
     }
 
     #[test]
+    fn emit_rst_1_minus_1() {
+        test_rst_1_op_1(BinaryOperator::Minus)
+    }
+
+    #[test]
     fn emit_rst_1_plus_1() {
+        test_rst_1_op_1(BinaryOperator::Plus)
+    }
+
+    fn test_rst_1_op_1(op: BinaryOperator) {
         use crate::instruction::*;
         let actions = collect_semantic_actions(|actions| {
             let command = actions
@@ -882,19 +891,14 @@ mod tests {
             let mut expr = command.add_argument();
             expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
             expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
-            expr.apply_operator((Operator::Binary(BinaryOperator::Plus), ()));
+            expr.apply_operator((Operator::Binary(op), ()));
             expr.exit().exit().exit()
         });
         assert_eq!(
             actions,
             [TestOperation::EmitItem(backend::Item::Instruction(
                 Instruction::Rst(
-                    ExprVariant::Binary(
-                        BinaryOperator::Plus,
-                        Box::new(1.into()),
-                        Box::new(1.into()),
-                    )
-                    .into()
+                    ExprVariant::Binary(op, Box::new(1.into()), Box::new(1.into()),).into()
                 )
             ))]
         )
