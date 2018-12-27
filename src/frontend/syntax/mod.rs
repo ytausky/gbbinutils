@@ -1,4 +1,5 @@
 use crate::diagnostics::DelegateDiagnostics;
+use crate::expr::BinaryOperator;
 
 #[cfg(test)]
 #[macro_use]
@@ -103,12 +104,6 @@ pub enum Operator {
 #[derive(Clone, Debug, PartialEq)]
 pub enum UnaryOperator {
     Parentheses,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum BinaryOperator {
-    Minus,
-    Plus,
 }
 
 pub trait MacroParamsContext<S: Clone>: DelegateDiagnostics<S> {

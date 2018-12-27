@@ -1,6 +1,12 @@
 use crate::span::Source;
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum BinaryOperator {
+    Minus,
+    Plus,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct Expr<A, U, B, S> {
     pub variant: ExprVariant<A, U, B, S>,
     pub span: S,

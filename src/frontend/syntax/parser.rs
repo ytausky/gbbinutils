@@ -1,6 +1,7 @@
 use super::*;
 use crate::diagnostics::span::{MergeSpans, StripSpan};
 use crate::diagnostics::{CompactDiagnostic, EmitDiagnostic, Message};
+use crate::expr::BinaryOperator;
 
 type TokenKind = Token<(), (), (), ()>;
 

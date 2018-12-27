@@ -5,7 +5,7 @@ use crate::backend::{
     lowering::Lower,
     object::{Node, Object},
 };
-use crate::expr::{Expr, ExprVariant};
+use crate::expr::{BinaryOperator, Expr, ExprVariant};
 use crate::instruction::Instruction;
 use crate::span::Source;
 use std::marker::PhantomData;
@@ -83,12 +83,6 @@ pub enum RelocAtom {
     Literal(i32),
     LocationCounter,
     Symbol(String),
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum BinaryOperator {
-    Minus,
-    Plus,
 }
 
 impl<S> From<i32> for ExprVariant<RelocAtom, Empty, BinaryOperator, S> {

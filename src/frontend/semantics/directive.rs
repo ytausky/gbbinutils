@@ -2,9 +2,9 @@ use super::{
     AnalyzeExpr, CommandArgs, Directive, SemanticActions, SemanticAtom, SemanticExpr, ValueContext,
 };
 use crate::backend;
-use crate::backend::{Backend, BinaryOperator, ValueBuilder, Width};
+use crate::backend::{Backend, ValueBuilder, Width};
 use crate::diagnostics::*;
-use crate::expr::ExprVariant;
+use crate::expr::{BinaryOperator, ExprVariant};
 use crate::frontend::syntax::Literal;
 use crate::frontend::Frontend;
 use crate::span::Source;

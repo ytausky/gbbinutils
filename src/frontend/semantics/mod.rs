@@ -3,9 +3,7 @@ use crate::diagnostics::span::{MergeSpans, Source, StripSpan};
 use crate::diagnostics::*;
 use crate::expr::ExprVariant;
 use crate::frontend::session::Session;
-use crate::frontend::syntax::{
-    self, keyword::*, BinaryOperator, ExprAtom, Operator, Token, UnaryOperator,
-};
+use crate::frontend::syntax::{self, keyword::*, ExprAtom, Operator, Token, UnaryOperator};
 use crate::frontend::{Frontend, Literal};
 
 mod directive;
@@ -13,9 +11,9 @@ mod instruction;
 mod operand;
 
 mod expr {
-    use crate::expr::Expr;
     #[cfg(test)]
     use crate::expr::ExprVariant;
+    use crate::expr::{BinaryOperator, Expr};
     use crate::frontend::Literal;
 
     #[derive(Debug, PartialEq)]
@@ -35,16 +33,11 @@ mod expr {
         Parentheses,
     }
 
-    #[derive(Debug, PartialEq)]
-    pub enum SemanticBinary {
-        Plus,
-    }
-
-    pub type SemanticExpr<I, S> = Expr<SemanticAtom<I>, SemanticUnary, SemanticBinary, S>;
+    pub type SemanticExpr<I, S> = Expr<SemanticAtom<I>, SemanticUnary, BinaryOperator, S>;
 
     #[cfg(test)]
     pub type SemanticExprVariant<I, S> =
-        ExprVariant<SemanticAtom<I>, SemanticUnary, SemanticBinary, S>;
+        ExprVariant<SemanticAtom<I>, SemanticUnary, BinaryOperator, S>;
 }
 
 use self::expr::*;
@@ -279,7 +272,6 @@ where
 
     fn apply_operator(&mut self, operator: (Operator, D::Span)) {
         match operator.0 {
-            Operator::Binary(BinaryOperator::Minus) => unimplemented!(),
             Operator::Unary(UnaryOperator::Parentheses) => {
                 let inner = self.stack.pop().unwrap_or_else(|| unreachable!());
                 self.stack.push(SemanticExpr {
@@ -287,15 +279,11 @@ where
                     span: operator.1,
                 })
             }
-            Operator::Binary(BinaryOperator::Plus) => {
+            Operator::Binary(binary) => {
                 let rhs = self.stack.pop().unwrap_or_else(|| unreachable!());
                 let lhs = self.stack.pop().unwrap_or_else(|| unreachable!());
                 self.stack.push(SemanticExpr {
-                    variant: ExprVariant::Binary(
-                        SemanticBinary::Plus,
-                        Box::new(lhs),
-                        Box::new(rhs),
-                    ),
+                    variant: ExprVariant::Binary(binary, Box::new(lhs), Box::new(rhs)),
                     span: operator.1,
                 })
             }
@@ -571,14 +559,12 @@ where
                 CompactDiagnostic::new(Message::StringInInstruction, expr.span),
             ),
             ExprVariant::Unary(SemanticUnary::Parentheses, expr) => Ok(self.analyze_expr(*expr)?),
-            ExprVariant::Binary(SemanticBinary::Plus, left, right) => {
+            ExprVariant::Binary(binary, left, right) => {
                 let left = self.analyze_expr(*left)?;
                 let right = self.analyze_expr(*right)?;
-                Ok(self.builder.apply_binary_operator(
-                    (backend::BinaryOperator::Plus, expr.span),
-                    left,
-                    right,
-                ))
+                Ok(self
+                    .builder
+                    .apply_binary_operator((binary, expr.span), left, right))
             }
         }
         .map_err(|diagnostic| {
@@ -634,6 +620,7 @@ mod tests {
     use crate::backend::{BuildValue, HasValue, RelocAtom, RelocExpr, RelocExprBuilder, Width};
     use crate::codebase::{BufId, BufRange, CodebaseError};
     use crate::diagnostics::{CompactDiagnostic, Message};
+    use crate::expr::BinaryOperator;
     use crate::frontend::syntax::{
         keyword::Operand, CommandContext, ExprContext, FileContext, MacroInvocationContext,
         MacroParamsContext, StmtContext, TokenSeqContext,
@@ -903,7 +890,7 @@ mod tests {
             [TestOperation::EmitItem(backend::Item::Instruction(
                 Instruction::Rst(
                     ExprVariant::Binary(
-                        backend::BinaryOperator::Plus,
+                        BinaryOperator::Plus,
                         Box::new(1.into()),
                         Box::new(1.into()),
                     )
