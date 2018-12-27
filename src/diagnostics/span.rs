@@ -373,4 +373,19 @@ mod tests {
             start_pos..=end_pos
         )
     }
+
+    #[test]
+    fn strip_buf_span() {
+        let buf_id = 7;
+        let range = 0..1;
+        let context = Rc::new(BufContextData {
+            buf_id,
+            included_from: None,
+        });
+        let span = SpanData::Buf {
+            range: range.clone(),
+            context,
+        };
+        assert_eq!(span.to_stripped(), StrippedBufSpan { buf_id, range })
+    }
 }
