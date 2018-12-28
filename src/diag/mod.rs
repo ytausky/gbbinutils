@@ -267,11 +267,20 @@ fn mk_invoked_here_clause<B: Clone, T: Clone>(
     })
 }
 
+/// A full description of an assembler diagnostic.
+///
+/// A `Diagnostic` contains all the information required to display a meaningful diagnostic message
+/// to a user. It consists of one or more `Clause`s, where the first one describes the object of the
+/// diagnostic and the rest provide more context if necessary.
 #[derive(Debug, PartialEq)]
 pub struct Diagnostic {
     pub clauses: Vec<Clause>,
 }
 
+/// A single clause of an assembler diagnostic.
+///
+/// A `Clause` contains a message that's relevant to a particular source file or a part thereof. In
+/// addition it may include an excerpt from said file, as well as an optional highlight within it.
 #[derive(Debug, PartialEq)]
 pub struct Clause {
     pub file: String,
