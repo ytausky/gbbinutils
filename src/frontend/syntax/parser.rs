@@ -1245,18 +1245,22 @@ mod tests {
     #[test]
     fn parse_long_sum_arg() {
         let tokens = input_tokens![
-            x @ Ident(()),
+            w @ Ident(()),
             plus1 @ Plus,
-            y @ Literal(()),
+            x @ Ident(()),
             plus2 @ Plus,
+            y @ Literal(()),
+            plus3 @ Plus,
             z @ Ident(()),
         ];
         let expected = expr()
+            .ident("w")
             .ident("x")
-            .literal("y")
             .plus("plus1")
+            .literal("y")
+            .plus("plus2")
             .ident("z")
-            .plus("plus2");
+            .plus("plus3");
         assert_eq_rpn_expr(tokens, expected)
     }
 
@@ -1287,6 +1291,28 @@ mod tests {
             .literal("a")
             .literal("b")
             .literal("c")
+            .multiply("star")
+            .plus("plus");
+        assert_eq_rpn_expr(tokens, expected)
+    }
+
+    #[test]
+    fn parse_sum_of_terms() {
+        let tokens = input_tokens![
+            a @ Literal(()),
+            slash @ Slash,
+            b @ Literal(()),
+            plus @ Plus,
+            c @ Literal(()),
+            star @ Star,
+            d @ Ident(()),
+        ];
+        let expected = expr()
+            .literal("a")
+            .literal("b")
+            .divide("slash")
+            .literal("c")
+            .ident("d")
             .multiply("star")
             .plus("plus");
         assert_eq_rpn_expr(tokens, expected)
