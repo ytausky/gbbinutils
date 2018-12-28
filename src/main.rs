@@ -23,6 +23,8 @@ fn main() {
 
 struct GbasDiagnostic(Diagnostic);
 struct GbasClause<'a>(&'a Clause);
+struct GbasLineNumber(LineNumber);
+struct GbasTag(Tag);
 
 impl fmt::Display for GbasDiagnostic {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -36,7 +38,13 @@ impl fmt::Display for GbasDiagnostic {
 impl<'a> fmt::Display for GbasClause<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.0.location {
-            None => writeln!(f, "{}: {}: {}", self.0.file, self.0.tag, self.0.message),
+            None => writeln!(
+                f,
+                "{}: {}: {}",
+                self.0.file,
+                GbasTag(self.0.tag),
+                self.0.message
+            ),
             Some(location) => {
                 let squiggle = location
                     .highlight
@@ -46,14 +54,29 @@ impl<'a> fmt::Display for GbasClause<'a> {
                     f,
                     "{}:{}: {}: {}\n{}{}",
                     self.0.file,
-                    location.line,
-                    self.0.tag,
+                    GbasLineNumber(location.line),
+                    GbasTag(self.0.tag),
                     self.0.message,
                     location.source,
                     squiggle,
                 )
             }
         }
+    }
+}
+
+impl fmt::Display for GbasLineNumber {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        (self.0).0.fmt(formatter)
+    }
+}
+
+impl fmt::Display for GbasTag {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match self.0 {
+            Tag::Error => "error",
+            Tag::Note => "note",
+        })
     }
 }
 

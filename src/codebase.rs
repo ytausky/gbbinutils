@@ -1,6 +1,8 @@
 use std::io;
 use std::string::FromUtf8Error;
-use std::{cell::RefCell, cmp, fmt, fs, ops, rc::Rc};
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::{cmp, fs, ops};
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub struct LineIndex(usize);
@@ -21,12 +23,6 @@ impl ops::AddAssign<usize> for LineIndex {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LineNumber(pub usize);
-
-impl fmt::Display for LineNumber {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        self.0.fmt(formatter)
-    }
-}
 
 impl From<LineIndex> for LineNumber {
     fn from(LineIndex(index): LineIndex) -> LineNumber {

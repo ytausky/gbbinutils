@@ -3,7 +3,6 @@ use crate::codebase::{BufId, BufRange, TextBuf, TextCache};
 pub use crate::codebase::{LineNumber, TextPosition, TextRange};
 use crate::span::*;
 use std::cell::RefCell;
-use std::fmt;
 #[cfg(test)]
 use std::marker::PhantomData;
 use std::ops::Range;
@@ -285,15 +284,6 @@ pub struct Clause {
 pub enum Tag {
     Error,
     Note,
-}
-
-impl fmt::Display for Tag {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(match self {
-            Tag::Error => "error",
-            Tag::Note => "note",
-        })
-    }
 }
 
 #[derive(Debug, PartialEq)]
