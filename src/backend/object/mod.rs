@@ -12,7 +12,7 @@ pub struct Object<SR> {
     chunks: Vec<Chunk<SR>>,
 }
 
-pub struct Chunk<R> {
+pub(crate) struct Chunk<R> {
     origin: Option<RelocExpr<R>>,
     items: Vec<Node<R>>,
 }
@@ -36,7 +36,7 @@ impl<SR> Object<SR> {
     }
 }
 
-pub fn link<'a, S, T, D>(object: Object<S>, diagnostics: &mut D) -> BinaryObject
+pub(crate) fn link<'a, S, T, D>(object: Object<S>, diagnostics: &mut D) -> BinaryObject
 where
     S: Clone,
     D: EmitDiagnostic<S, T> + 'a,

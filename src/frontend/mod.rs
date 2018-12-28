@@ -14,7 +14,7 @@ use std::rc::Rc;
 
 pub use crate::frontend::syntax::Token;
 
-pub fn analyze_file<C, B, D>(
+pub(crate) fn analyze_file<C, B, D>(
     name: String,
     codebase: &C,
     mut backend: B,
@@ -53,7 +53,7 @@ where
 #[derive(Clone, Copy)]
 struct SemanticAnalysis;
 
-pub trait Frontend<D: Diagnostics> {
+pub(crate) trait Frontend<D: Diagnostics> {
     type Ident: AsRef<str> + Clone + Into<String> + PartialEq;
     type MacroDefId: Clone;
 

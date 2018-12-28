@@ -5,7 +5,7 @@ use crate::frontend::{Downstream, Frontend, Token};
 
 pub type MacroArgs<I, S> = Vec<Vec<(Token<I>, S)>>;
 
-pub struct Session<'a, F, B, D> {
+pub(crate) struct Session<'a, F, B, D> {
     pub frontend: &'a mut F,
     pub backend: &'a mut B,
     pub diagnostics: &'a mut D,

@@ -42,7 +42,7 @@ mod expr {
 
 use self::expr::*;
 
-pub struct SemanticActions<'a, F: Frontend<D>, B, D: Diagnostics> {
+pub(crate) struct SemanticActions<'a, F: Frontend<D>, B, D: Diagnostics> {
     session: Session<'a, F, B, D>,
     label: Option<(F::Ident, D::Span)>,
 }
@@ -127,7 +127,7 @@ where
     }
 }
 
-pub struct CommandActions<'a, F: Frontend<D>, B, D: Diagnostics> {
+pub(crate) struct CommandActions<'a, F: Frontend<D>, B, D: Diagnostics> {
     name: (Command, D::Span),
     args: CommandArgs<F::Ident, D::Span>,
     parent: SemanticActions<'a, F, B, D>,
@@ -234,7 +234,7 @@ impl Directive {
     }
 }
 
-pub struct ExprContext<'a, F: Frontend<D>, B, D: Diagnostics> {
+pub(crate) struct ExprContext<'a, F: Frontend<D>, B, D: Diagnostics> {
     stack: Vec<SemanticExpr<F::Ident, D::Span>>,
     parent: CommandActions<'a, F, B, D>,
 }
@@ -320,7 +320,7 @@ fn analyze_mnemonic<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
     }
 }
 
-pub struct MacroDefActions<'a, F: Frontend<D>, B, D: Diagnostics> {
+pub(crate) struct MacroDefActions<'a, F: Frontend<D>, B, D: Diagnostics> {
     name: Option<(F::Ident, D::Span)>,
     params: Vec<(F::Ident, D::Span)>,
     tokens: Vec<(Token<F::Ident>, D::Span)>,
@@ -395,7 +395,7 @@ where
     }
 }
 
-pub struct MacroInvocationActions<'a, F: Frontend<D>, B, D: Diagnostics> {
+pub(crate) struct MacroInvocationActions<'a, F: Frontend<D>, B, D: Diagnostics> {
     name: (F::Ident, D::Span),
     args: Vec<super::TokenSeq<F::Ident, D::Span>>,
     parent: SemanticActions<'a, F, B, D>,
@@ -450,7 +450,7 @@ where
     }
 }
 
-pub struct MacroArgContext<'a, F: Frontend<D>, B, D: Diagnostics> {
+pub(crate) struct MacroArgContext<'a, F: Frontend<D>, B, D: Diagnostics> {
     tokens: Vec<(Token<F::Ident>, D::Span)>,
     parent: MacroInvocationActions<'a, F, B, D>,
 }
@@ -630,7 +630,7 @@ mod tests {
     use std::borrow::Borrow;
     use std::cell::RefCell;
 
-    pub struct TestFrontend<'a> {
+    pub(crate) struct TestFrontend<'a> {
         operations: &'a RefCell<Vec<TestOperation>>,
         error: Option<CodebaseError>,
     }
@@ -704,7 +704,7 @@ mod tests {
         }
     }
 
-    pub struct TestBackend<'a> {
+    pub(crate) struct TestBackend<'a> {
         operations: &'a RefCell<Vec<TestOperation>>,
     }
 
@@ -750,7 +750,7 @@ mod tests {
         }
     }
 
-    pub struct TestDiagnostics<'a> {
+    pub(crate) struct TestDiagnostics<'a> {
         operations: &'a RefCell<Vec<TestOperation>>,
     }
 
@@ -839,7 +839,7 @@ mod tests {
     }
 
     #[derive(Debug, PartialEq)]
-    pub enum TestOperation {
+    pub(crate) enum TestOperation {
         AnalyzeFile(String),
         InvokeMacro(String, Vec<Vec<Token<String>>>),
         DefineMacro(String, Vec<String>, Vec<Token<String>>),
@@ -1094,7 +1094,7 @@ mod tests {
         assert_eq!(actions, [TestOperation::EmitDiagnostic(diagnostic)])
     }
 
-    pub fn collect_semantic_actions<F>(f: F) -> Vec<TestOperation>
+    pub(crate) fn collect_semantic_actions<F>(f: F) -> Vec<TestOperation>
     where
         F: for<'a> FnOnce(TestSemanticActions<'a>) -> TestSemanticActions<'a>,
     {

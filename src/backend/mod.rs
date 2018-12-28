@@ -1,4 +1,4 @@
-pub use crate::backend::object::link;
+pub(crate) use crate::backend::object::link;
 pub use crate::backend::object::ObjectBuilder;
 
 use crate::backend::{

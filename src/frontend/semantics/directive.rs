@@ -9,7 +9,7 @@ use crate::frontend::syntax::Literal;
 use crate::frontend::Frontend;
 use crate::span::Source;
 
-pub fn analyze_directive<'a: 'b, 'b, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
+pub(crate) fn analyze_directive<'a: 'b, 'b, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
     directive: (Directive, D::Span),
     args: CommandArgs<F::Ident, D::Span>,
     actions: &'b mut SemanticActions<'a, F, B, D>,

@@ -1,4 +1,4 @@
-pub use self::message::{KeywordOperandCategory, Message};
+pub(crate) use self::message::{KeywordOperandCategory, Message};
 use crate::codebase::{BufId, BufRange, LineNumber, TextBuf, TextCache, TextRange};
 use crate::span::*;
 use std::cell::RefCell;
@@ -8,9 +8,9 @@ use std::marker::PhantomData;
 use std::ops::Range;
 
 mod message;
-pub mod span;
+pub(crate) mod span;
 
-pub trait Diagnostics
+pub(crate) trait Diagnostics
 where
     Self: Span,
     Self: ContextFactory,
@@ -18,7 +18,7 @@ where
 {
 }
 
-pub trait DownstreamDiagnostics<S>
+pub(crate) trait DownstreamDiagnostics<S>
 where
     Self: MergeSpans<S> + StripSpan<S>,
     Self: EmitDiagnostic<S, <Self as StripSpan<S>>::Stripped>,
@@ -33,13 +33,13 @@ where
 {
 }
 
-pub trait DelegateDiagnostics<S> {
+pub(crate) trait DelegateDiagnostics<S> {
     type Delegate: DownstreamDiagnostics<S>;
 
     fn diagnostics(&mut self) -> &mut Self::Delegate;
 }
 
-pub struct DiagnosticsSystem<C, O> {
+pub(crate) struct DiagnosticsSystem<C, O> {
     pub context: C,
     pub output: O,
 }
@@ -141,7 +141,7 @@ pub trait DiagnosticsOutput {
     fn emit(&mut self, diagnostic: Diagnostic);
 }
 
-pub struct TerminalOutput;
+pub(crate) struct TerminalOutput;
 
 impl DiagnosticsOutput for TerminalOutput {
     fn emit(&mut self, diagnostic: Diagnostic) {
@@ -149,11 +149,11 @@ impl DiagnosticsOutput for TerminalOutput {
     }
 }
 
-pub trait EmitDiagnostic<S, T> {
+pub(crate) trait EmitDiagnostic<S, T> {
     fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<S, T>);
 }
 
-pub struct OutputForwarder<'a> {
+pub(crate) struct OutputForwarder<'a> {
     pub output: &'a mut dyn DiagnosticsOutput,
     pub codebase: &'a RefCell<TextCache>,
 }
@@ -170,7 +170,7 @@ impl<'a> EmitDiagnostic<SpanData, StrippedBufSpan> for OutputForwarder<'a> {
 }
 
 #[cfg(test)]
-pub struct IgnoreDiagnostics<S>(PhantomData<S>);
+pub(crate) struct IgnoreDiagnostics<S>(PhantomData<S>);
 
 #[cfg(test)]
 impl<S> IgnoreDiagnostics<S> {
@@ -190,7 +190,7 @@ impl<S: Clone> EmitDiagnostic<S, S> for IgnoreDiagnostics<S> {
 }
 
 #[cfg(test)]
-pub struct TestDiagnosticsListener {
+pub(crate) struct TestDiagnosticsListener {
     pub diagnostics: RefCell<Vec<CompactDiagnostic<(), ()>>>,
 }
 
@@ -216,7 +216,7 @@ impl EmitDiagnostic<(), ()> for TestDiagnosticsListener {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct CompactDiagnostic<S, R> {
+pub(crate) struct CompactDiagnostic<S, R> {
     pub message: Message<R>,
     pub highlight: S,
 }
@@ -311,7 +311,10 @@ pub struct DiagnosticLocation {
     pub highlight: Option<TextRange>,
 }
 
-pub fn mk_diagnostic(file: impl Into<String>, message: &Message<StrippedBufSpan>) -> Diagnostic {
+pub(crate) fn mk_diagnostic(
+    file: impl Into<String>,
+    message: &Message<StrippedBufSpan>,
+) -> Diagnostic {
     Diagnostic {
         clauses: vec![DiagnosticClause {
             file: file.into(),

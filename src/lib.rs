@@ -8,7 +8,7 @@ use crate::diagnostics::*;
 
 mod backend;
 mod codebase;
-mod diagnostics;
+pub mod diagnostics;
 mod expr;
 mod frontend;
 mod instruction;

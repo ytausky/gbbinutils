@@ -12,7 +12,7 @@ use crate::instruction::*;
 mod branch;
 mod ld;
 
-pub fn analyze_instruction<Id: Into<String>, I, B, D, S>(
+pub(crate) fn analyze_instruction<Id: Into<String>, I, B, D, S>(
     mnemonic: (kw::Mnemonic, S),
     operands: I,
     value_context: ValueContext<B, D>,
@@ -448,7 +448,7 @@ mod tests {
     pub use self::kw::Operand::*;
     use super::*;
     use crate::backend::{RelocAtom, RelocExpr};
-    pub use crate::diagnostics::Message;
+    pub(crate) use crate::diagnostics::Message;
     use crate::diagnostics::*;
     use crate::expr::{Expr, ExprVariant};
     pub use crate::frontend::semantics::{DiagnosticsCollector, TokenId, TokenSpan};

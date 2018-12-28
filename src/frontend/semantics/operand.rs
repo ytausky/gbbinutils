@@ -41,7 +41,7 @@ pub enum Context {
     Other,
 }
 
-pub fn analyze_operand<I, B, D, S>(
+pub(crate) fn analyze_operand<I, B, D, S>(
     expr: SemanticExpr<I, S>,
     context: Context,
     value_context: &mut ValueContext<B, D>,
