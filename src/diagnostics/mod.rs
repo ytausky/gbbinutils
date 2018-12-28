@@ -1,7 +1,6 @@
 pub use self::message::{KeywordOperandCategory, Message};
 use crate::codebase::{BufId, BufRange, LineNumber, TextBuf, TextCache, TextRange};
 use crate::span::*;
-use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::fmt;
 #[cfg(test)]
@@ -139,13 +138,13 @@ where
 }
 
 pub trait DiagnosticsOutput {
-    fn emit(&mut self, diagnostic: Diagnostic<String>);
+    fn emit(&mut self, diagnostic: Diagnostic);
 }
 
 pub struct TerminalOutput;
 
 impl DiagnosticsOutput for TerminalOutput {
-    fn emit(&mut self, diagnostic: Diagnostic<String>) {
+    fn emit(&mut self, diagnostic: Diagnostic) {
         print!("{}", diagnostic)
     }
 }
@@ -278,16 +277,16 @@ fn mk_invoked_here_clause<B: Clone, T: Clone>(
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Diagnostic<T> {
-    pub clauses: Vec<DiagnosticClause<T>>,
+pub struct Diagnostic {
+    pub clauses: Vec<DiagnosticClause>,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct DiagnosticClause<T> {
-    pub file: T,
+pub struct DiagnosticClause {
+    pub file: String,
     pub tag: DiagnosticClauseTag,
     pub message: String,
-    pub location: Option<DiagnosticLocation<T>>,
+    pub location: Option<DiagnosticLocation>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -306,16 +305,13 @@ impl fmt::Display for DiagnosticClauseTag {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct DiagnosticLocation<T> {
+pub struct DiagnosticLocation {
     pub line: LineNumber,
-    pub source: T,
+    pub source: String,
     pub highlight: Option<TextRange>,
 }
 
-pub fn mk_diagnostic(
-    file: impl Into<String>,
-    message: &Message<StrippedBufSpan>,
-) -> Diagnostic<String> {
+pub fn mk_diagnostic(file: impl Into<String>, message: &Message<StrippedBufSpan>) -> Diagnostic {
     Diagnostic {
         clauses: vec![DiagnosticClause {
             file: file.into(),
@@ -327,7 +323,7 @@ pub fn mk_diagnostic(
 }
 
 impl ExpandedDiagnostic<StrippedBufSpan, BufId, BufRange> {
-    fn render<'a, T: From<&'a str>>(&self, codebase: &'a TextCache) -> Diagnostic<T> {
+    fn render(&self, codebase: &TextCache) -> Diagnostic {
         Diagnostic {
             clauses: self
                 .clauses
@@ -339,7 +335,7 @@ impl ExpandedDiagnostic<StrippedBufSpan, BufId, BufRange> {
 }
 
 impl ExpandedDiagnosticClause<StrippedBufSpan, BufId, BufRange> {
-    fn render<'a, T: From<&'a str>>(&self, codebase: &'a TextCache) -> DiagnosticClause<T> {
+    fn render(&self, codebase: &TextCache) -> DiagnosticClause {
         let buf = codebase.buf(self.buf_id);
         let location = self.location.as_ref().map(|range| {
             let highlight = buf.text_range(&range);
@@ -364,7 +360,7 @@ impl ExpandedDiagnosticClause<StrippedBufSpan, BufId, BufRange> {
     }
 }
 
-impl<T: Borrow<str>> fmt::Display for Diagnostic<T> {
+impl fmt::Display for Diagnostic {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for clause in &self.clauses {
             clause.fmt(f)?
@@ -373,10 +369,10 @@ impl<T: Borrow<str>> fmt::Display for Diagnostic<T> {
     }
 }
 
-impl<T: Borrow<str>> fmt::Display for DiagnosticClause<T> {
+impl fmt::Display for DiagnosticClause {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.location {
-            None => writeln!(f, "{}: {}: {}", self.file.borrow(), self.tag, self.message),
+            None => writeln!(f, "{}: {}: {}", self.file, self.tag, self.message),
             Some(location) => {
                 let squiggle = location
                     .highlight
@@ -385,12 +381,7 @@ impl<T: Borrow<str>> fmt::Display for DiagnosticClause<T> {
                 writeln!(
                     f,
                     "{}:{}: {}: {}\n{}{}",
-                    self.file.borrow(),
-                    location.line,
-                    self.tag,
-                    self.message,
-                    location.source.borrow(),
-                    squiggle,
+                    self.file, location.line, self.tag, self.message, location.source, squiggle,
                 )
             }
         }
@@ -442,12 +433,12 @@ mod tests {
             diagnostic.expand().render(&codebase),
             Diagnostic {
                 clauses: vec![DiagnosticClause {
-                    file: DUMMY_FILE,
+                    file: DUMMY_FILE.to_string(),
                     tag: DiagnosticClauseTag::Error,
                     message: "invocation of undefined macro `my_macro`".to_string(),
                     location: Some(DiagnosticLocation {
                         line: LineNumber(2),
-                        source: "    my_macro a, $12",
+                        source: "    my_macro a, $12".to_string(),
                         highlight: mk_highlight(LineNumber(2), 4, 12),
                     })
                 }]
@@ -459,12 +450,12 @@ mod tests {
     fn render_elaborated_diagnostic() {
         let elaborated_diagnostic = Diagnostic {
             clauses: vec![DiagnosticClause {
-                file: DUMMY_FILE,
+                file: DUMMY_FILE.to_string(),
                 tag: DiagnosticClauseTag::Error,
                 message: "invocation of undefined macro `my_macro`".to_string(),
                 location: Some(DiagnosticLocation {
                     line: LineNumber(2),
-                    source: "    my_macro a, $12",
+                    source: "    my_macro a, $12".to_string(),
                     highlight: mk_highlight(LineNumber(2), 4, 12),
                 }),
             }],
@@ -480,7 +471,7 @@ mod tests {
     fn render_diagnostic_without_source() {
         let diagnostic = Diagnostic {
             clauses: vec![DiagnosticClause {
-                file: DUMMY_FILE,
+                file: DUMMY_FILE.to_string(),
                 tag: DiagnosticClauseTag::Error,
                 message: "file constains invalid UTF-8".to_string(),
                 location: None,
@@ -495,12 +486,12 @@ mod tests {
     fn highlight_eof_with_one_tilde() {
         let elaborated = Diagnostic {
             clauses: vec![DiagnosticClause {
-                file: DUMMY_FILE,
+                file: DUMMY_FILE.to_string(),
                 tag: DiagnosticClauseTag::Error,
                 message: "unexpected end of file".into(),
                 location: Some(DiagnosticLocation {
                     line: LineNumber(2),
-                    source: "dummy",
+                    source: "dummy".to_string(),
                     highlight: mk_highlight(LineNumber(2), 5, 5),
                 }),
             }],

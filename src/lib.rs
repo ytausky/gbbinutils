@@ -120,7 +120,7 @@ mod tests {
     }
 
     struct MockDiagnosticOutput {
-        diagnostics: Vec<Diagnostic<String>>,
+        diagnostics: Vec<Diagnostic>,
     }
 
     impl MockDiagnosticOutput {
@@ -132,7 +132,7 @@ mod tests {
     }
 
     impl diagnostics::DiagnosticsOutput for MockDiagnosticOutput {
-        fn emit(&mut self, diagnostic: Diagnostic<String>) {
+        fn emit(&mut self, diagnostic: Diagnostic) {
             self.diagnostics.push(diagnostic)
         }
     }
