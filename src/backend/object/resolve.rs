@@ -3,7 +3,6 @@ pub use super::context::{EvalContext, SymbolTable};
 use super::context::ChunkSize;
 use crate::backend::{Node, Object, RelocAtom, RelocExpr};
 use crate::expr::{BinaryOperator, ExprVariant};
-use crate::span::Source;
 use std::borrow::Borrow;
 use std::ops::{Add, AddAssign, Sub};
 
@@ -132,22 +131,42 @@ impl<S: Clone> RelocExpr<S> {
         ST: Borrow<SymbolTable>,
         F: FnMut(&str, &S),
     {
+        use self::ExprVariant::*;
         match &self.variant {
-            ExprVariant::Unary(_, _) => unreachable!(),
-            ExprVariant::Binary(operator, lhs, rhs) => {
+            Unary(_, _) => unreachable!(),
+            Binary(operator, lhs, rhs) => {
                 let lhs = lhs.evaluate_strictly(context, on_undefined_symbol);
                 let rhs = rhs.evaluate_strictly(context, on_undefined_symbol);
                 operator.apply(lhs, rhs)
             }
-            ExprVariant::Atom(RelocAtom::Literal(value)) => (*value).into(),
-            ExprVariant::Atom(RelocAtom::LocationCounter) => context.location.clone(),
-            ExprVariant::Atom(RelocAtom::Symbol(symbol)) => context
+            Atom(atom) => {
+                atom.evaluate_strictly(context, |symbol| on_undefined_symbol(symbol, &self.span))
+            }
+        }
+    }
+}
+
+impl RelocAtom {
+    fn evaluate_strictly<ST, F>(
+        &self,
+        context: &EvalContext<ST>,
+        mut on_undefined_symbol: F,
+    ) -> Value
+    where
+        ST: Borrow<SymbolTable>,
+        F: FnMut(&str),
+    {
+        use self::RelocAtom::*;
+        match self {
+            Literal(value) => (*value).into(),
+            LocationCounter => context.location.clone(),
+            Symbol(symbol) => context
                 .symbols
                 .borrow()
                 .get(symbol.as_str())
                 .cloned()
                 .unwrap_or_else(|| {
-                    on_undefined_symbol(&symbol, &self.span());
+                    on_undefined_symbol(&symbol);
                     Value::Unknown
                 }),
         }
