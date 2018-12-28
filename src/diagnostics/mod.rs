@@ -227,7 +227,7 @@ struct ExpandedDiagnostic<S, B, R> {
 #[derive(Debug, PartialEq)]
 struct ExpandedDiagnosticClause<S, B, R> {
     buf_id: B,
-    tag: DiagnosticClauseTag,
+    tag: Tag,
     message: Message<S>,
     location: Option<R>,
 }
@@ -237,7 +237,7 @@ impl<B: Clone, T: Clone> CompactDiagnostic<SpanData<B, Range<T>>, StrippedBufSpa
         let StrippedBufSpan { buf_id, range } = self.highlight.to_stripped();
         let main_clause = ExpandedDiagnosticClause {
             buf_id,
-            tag: DiagnosticClauseTag::Error,
+            tag: Tag::Error,
             message: self.message,
             location: Some(range),
         };
@@ -262,7 +262,7 @@ fn mk_invoked_here_clause<B: Clone, T: Clone>(
     let stripped = invocation.to_stripped();
     Some(ExpandedDiagnosticClause {
         buf_id: stripped.buf_id.clone(),
-        tag: DiagnosticClauseTag::Note,
+        tag: Tag::Note,
         location: Some(stripped.range.clone()),
         message: Message::InvokedHere { name: stripped },
     })
@@ -270,34 +270,34 @@ fn mk_invoked_here_clause<B: Clone, T: Clone>(
 
 #[derive(Debug, PartialEq)]
 pub struct Diagnostic {
-    pub clauses: Vec<DiagnosticClause>,
+    pub clauses: Vec<Clause>,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct DiagnosticClause {
+pub struct Clause {
     pub file: String,
-    pub tag: DiagnosticClauseTag,
+    pub tag: Tag,
     pub message: String,
-    pub location: Option<DiagnosticLocation>,
+    pub location: Option<Location>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum DiagnosticClauseTag {
+pub enum Tag {
     Error,
     Note,
 }
 
-impl fmt::Display for DiagnosticClauseTag {
+impl fmt::Display for Tag {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str(match self {
-            DiagnosticClauseTag::Error => "error",
-            DiagnosticClauseTag::Note => "note",
+            Tag::Error => "error",
+            Tag::Note => "note",
         })
     }
 }
 
 #[derive(Debug, PartialEq)]
-pub struct DiagnosticLocation {
+pub struct Location {
     pub line: LineNumber,
     pub source: String,
     pub highlight: Option<TextRange>,
@@ -308,9 +308,9 @@ pub(crate) fn mk_diagnostic(
     message: &Message<StrippedBufSpan>,
 ) -> Diagnostic {
     Diagnostic {
-        clauses: vec![DiagnosticClause {
+        clauses: vec![Clause {
             file: file.into(),
-            tag: DiagnosticClauseTag::Error,
+            tag: Tag::Error,
             message: message.render(&TextCache::new()),
             location: None,
         }],
@@ -330,7 +330,7 @@ impl ExpandedDiagnostic<StrippedBufSpan, BufId, BufRange> {
 }
 
 impl ExpandedDiagnosticClause<StrippedBufSpan, BufId, BufRange> {
-    fn render(&self, codebase: &TextCache) -> DiagnosticClause {
+    fn render(&self, codebase: &TextCache) -> Clause {
         let buf = codebase.buf(self.buf_id);
         let location = self.location.as_ref().map(|range| {
             let highlight = buf.text_range(&range);
@@ -340,13 +340,13 @@ impl ExpandedDiagnosticClause<StrippedBufSpan, BufId, BufRange> {
                 .map(|(_, line)| line.trim_right())
                 .unwrap()
                 .into();
-            DiagnosticLocation {
+            Location {
                 line: highlight.start.line.into(),
                 source,
                 highlight: Some(highlight),
             }
         });
-        DiagnosticClause {
+        Clause {
             file: buf.name().into(),
             tag: self.tag,
             message: self.message.render(codebase),
@@ -386,11 +386,11 @@ mod tests {
         assert_eq!(
             diagnostic.expand().render(&codebase),
             Diagnostic {
-                clauses: vec![DiagnosticClause {
+                clauses: vec![Clause {
                     file: DUMMY_FILE.to_string(),
-                    tag: DiagnosticClauseTag::Error,
+                    tag: Tag::Error,
                     message: "invocation of undefined macro `my_macro`".to_string(),
-                    location: Some(DiagnosticLocation {
+                    location: Some(Location {
                         line: LineNumber(2),
                         source: "    my_macro a, $12".to_string(),
                         highlight: mk_highlight(LineNumber(2), 4, 12),
@@ -452,13 +452,13 @@ mod tests {
             clauses: vec![
                 ExpandedDiagnosticClause {
                     buf_id: (),
-                    tag: DiagnosticClauseTag::Error,
+                    tag: Tag::Error,
                     message,
                     location: Some(2..3),
                 },
                 ExpandedDiagnosticClause {
                     buf_id: (),
-                    tag: DiagnosticClauseTag::Note,
+                    tag: Tag::Note,
                     message: Message::InvokedHere {
                         name: StrippedBufSpan {
                             buf_id: (),

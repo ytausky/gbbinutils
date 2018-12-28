@@ -22,7 +22,7 @@ fn main() {
 }
 
 struct GbasDiagnostic(Diagnostic);
-struct GbasClause<'a>(&'a DiagnosticClause);
+struct GbasClause<'a>(&'a Clause);
 
 impl fmt::Display for GbasDiagnostic {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -79,11 +79,11 @@ mod tests {
     #[test]
     fn render_elaborated_diagnostic() {
         let diagnostic = Diagnostic {
-            clauses: vec![DiagnosticClause {
+            clauses: vec![Clause {
                 file: DUMMY_FILE.to_string(),
-                tag: DiagnosticClauseTag::Error,
+                tag: Tag::Error,
                 message: "invocation of undefined macro `my_macro`".to_string(),
-                location: Some(DiagnosticLocation {
+                location: Some(Location {
                     line: LineNumber(2),
                     source: "    my_macro a, $12".to_string(),
                     highlight: mk_highlight(LineNumber(2), 4, 12),
@@ -100,9 +100,9 @@ mod tests {
     #[test]
     fn render_diagnostic_without_source() {
         let diagnostic = Diagnostic {
-            clauses: vec![DiagnosticClause {
+            clauses: vec![Clause {
                 file: DUMMY_FILE.to_string(),
-                tag: DiagnosticClauseTag::Error,
+                tag: Tag::Error,
                 message: "file constains invalid UTF-8".to_string(),
                 location: None,
             }],
@@ -115,11 +115,11 @@ mod tests {
     #[test]
     fn highlight_eof_with_one_tilde() {
         let elaborated = Diagnostic {
-            clauses: vec![DiagnosticClause {
+            clauses: vec![Clause {
                 file: DUMMY_FILE.to_string(),
-                tag: DiagnosticClauseTag::Error,
+                tag: Tag::Error,
                 message: "unexpected end of file".into(),
-                location: Some(DiagnosticLocation {
+                location: Some(Location {
                     line: LineNumber(2),
                     source: "dummy".to_string(),
                     highlight: mk_highlight(LineNumber(2), 5, 5),
