@@ -208,7 +208,7 @@ pub struct BinarySection {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::diagnostics::{CompactDiagnostic, Message, TestDiagnosticsListener};
+    use crate::diag::{CompactDiagnostic, Message, TestDiagnosticsListener};
     use crate::instruction::Nullary;
     use std::borrow::Borrow;
 

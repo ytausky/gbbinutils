@@ -1,7 +1,7 @@
 use super::SimpleToken::*;
 use super::Token::*;
 use super::{ExprAtom, Operator, Token, UnaryOperator};
-use crate::diagnostics::{CompactDiagnostic, Message};
+use crate::diag::{CompactDiagnostic, Message};
 use crate::expr::BinaryOperator;
 use std::borrow::Borrow;
 use std::collections::HashMap;

@@ -1,6 +1,6 @@
 use crate::backend::{self, Backend, ValueBuilder};
-use crate::diagnostics::span::{MergeSpans, Source, StripSpan};
-use crate::diagnostics::*;
+use crate::diag::span::{MergeSpans, Source, StripSpan};
+use crate::diag::*;
 use crate::expr::ExprVariant;
 use crate::frontend::session::Session;
 use crate::frontend::syntax::{self, keyword::*, ExprAtom, Operator, Token, UnaryOperator};
@@ -619,7 +619,7 @@ mod tests {
 
     use crate::backend::{BuildValue, HasValue, RelocAtom, RelocExpr, RelocExprBuilder, Width};
     use crate::codebase::{BufId, BufRange, CodebaseError};
-    use crate::diagnostics::{CompactDiagnostic, Message};
+    use crate::diag::{CompactDiagnostic, Message};
     use crate::expr::BinaryOperator;
     use crate::frontend::syntax::{
         keyword::Operand, CommandContext, ExprContext, FileContext, MacroInvocationContext,

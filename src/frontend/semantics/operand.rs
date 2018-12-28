@@ -1,6 +1,6 @@
 use super::{AnalyzeExpr, ExprVariant, SemanticAtom, SemanticExpr, SemanticUnary, ValueContext};
 use crate::backend::ValueBuilder;
-use crate::diagnostics::*;
+use crate::diag::*;
 use crate::frontend::syntax::keyword as kw;
 use crate::frontend::syntax::Literal;
 use crate::instruction::{Condition, PtrReg, Reg16, RegPair, SimpleOperand};
@@ -208,7 +208,7 @@ impl<I: Iterator> Iterator for OperandCounter<I> {
 mod tests {
     use super::*;
     use crate::backend::{RelocAtom, RelocExpr, RelocExprBuilder};
-    use crate::diagnostics::span::MergeSpans;
+    use crate::diag::span::MergeSpans;
     use crate::frontend::semantics::DiagnosticsCollector;
 
     #[test]

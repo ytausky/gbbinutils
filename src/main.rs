@@ -1,4 +1,4 @@
-use gbas::diagnostics::*;
+use gbas::diag::*;
 use std::fmt;
 use std::fs::File;
 use std::io::Write;

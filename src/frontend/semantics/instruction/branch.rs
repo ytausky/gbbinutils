@@ -1,6 +1,6 @@
 use super::{Analysis, AtomKind, Operand, SemanticExpr, SimpleOperand};
 use crate::backend::ValueBuilder;
-use crate::diagnostics::{CompactDiagnostic, DownstreamDiagnostics, EmitDiagnostic, Message};
+use crate::diag::{CompactDiagnostic, DownstreamDiagnostics, EmitDiagnostic, Message};
 use crate::instruction::{Branch, Condition, Instruction, Nullary};
 use crate::span::Source;
 

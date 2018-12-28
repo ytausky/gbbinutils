@@ -1,6 +1,6 @@
 use crate::backend::Width;
 use crate::codebase::{CodebaseError, TextCache};
-use crate::diagnostics::span::StrippedBufSpan;
+use crate::diag::span::StrippedBufSpan;
 use crate::instruction::IncDec;
 use std::fmt;
 

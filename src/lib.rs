@@ -4,11 +4,11 @@
 pub use crate::backend::Rom;
 
 use crate::codebase::{CodebaseError, StdFileSystem};
-use crate::diagnostics::*;
+use crate::diag::*;
 
 mod backend;
 mod codebase;
-pub mod diagnostics;
+pub mod diag;
 mod expr;
 mod frontend;
 mod instruction;
@@ -32,7 +32,7 @@ impl<'a> Default for InputConfig<'a> {
 
 pub enum DiagnosticsConfig<'a> {
     Ignore,
-    Output(&'a mut dyn FnMut(diagnostics::Diagnostic)),
+    Output(&'a mut dyn FnMut(diag::Diagnostic)),
 }
 
 impl<'a> Default for DiagnosticsConfig<'a> {
@@ -56,7 +56,7 @@ pub fn assemble<'a>(name: &str, config: &mut Config<'a>) -> Option<Rom> {
         InputConfig::Default => input_holder.get_or_insert_with(StdFileSystem::new),
         InputConfig::Custom(ref mut input) => *input,
     };
-    let diagnostics: &mut dyn FnMut(diagnostics::Diagnostic) = match config.diagnostics {
+    let diagnostics: &mut dyn FnMut(diag::Diagnostic) = match config.diagnostics {
         DiagnosticsConfig::Ignore => diagnostics_holder.get_or_insert(|_| {}),
         DiagnosticsConfig::Output(ref mut diagnostics) => *diagnostics,
     };
@@ -68,7 +68,7 @@ pub fn assemble<'a>(name: &str, config: &mut Config<'a>) -> Option<Rom> {
 fn try_assemble(
     name: &str,
     input: &mut dyn codebase::FileSystem,
-    output: &mut dyn FnMut(diagnostics::Diagnostic),
+    output: &mut dyn FnMut(diag::Diagnostic),
 ) -> Result<Rom, CodebaseError> {
     let codebase = codebase::FileCodebase::new(input);
     let mut diagnostics = DiagnosticsSystem {
@@ -90,7 +90,7 @@ fn try_assemble(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::diagnostics::Diagnostic;
+    use crate::diag::Diagnostic;
     use std::collections::HashMap;
     use std::io;
 

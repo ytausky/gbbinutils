@@ -1,6 +1,6 @@
 use crate::backend::Backend;
 use crate::codebase::CodebaseError;
-use crate::diagnostics::{DelegateDiagnostics, Diagnostics, DownstreamDiagnostics};
+use crate::diag::{DelegateDiagnostics, Diagnostics, DownstreamDiagnostics};
 use crate::frontend::{Downstream, Frontend, Token};
 
 pub type MacroArgs<I, S> = Vec<Vec<(Token<I>, S)>>;

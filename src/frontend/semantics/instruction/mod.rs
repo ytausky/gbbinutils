@@ -1,8 +1,8 @@
 use self::branch::*;
 use super::{SemanticExpr, ValueContext};
 use crate::backend::ValueBuilder;
-use crate::diagnostics::span::Source;
-use crate::diagnostics::{
+use crate::diag::span::Source;
+use crate::diag::{
     CompactDiagnostic, DelegateDiagnostics, DownstreamDiagnostics, EmitDiagnostic, Message,
 };
 use crate::frontend::semantics::operand::{self, AtomKind, Context, Operand, OperandCounter};
@@ -448,8 +448,8 @@ mod tests {
     pub use self::kw::Operand::*;
     use super::*;
     use crate::backend::{RelocAtom, RelocExpr};
-    pub(crate) use crate::diagnostics::Message;
-    use crate::diagnostics::*;
+    pub(crate) use crate::diag::Message;
+    use crate::diag::*;
     use crate::expr::{Expr, ExprVariant};
     pub use crate::frontend::semantics::{DiagnosticsCollector, TokenId, TokenSpan};
     use crate::frontend::semantics::{

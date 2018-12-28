@@ -6,7 +6,7 @@ mod syntax;
 use self::macros::{Expand, MacroExpander, MacroTable};
 use crate::backend::*;
 use crate::codebase::{BufId, Codebase, CodebaseError};
-use crate::diagnostics::*;
+use crate::diag::*;
 use crate::frontend::session::*;
 use crate::frontend::syntax::*;
 use crate::span::BufContext;
@@ -400,7 +400,7 @@ mod tests {
         );
     }
 
-    use crate::diagnostics::CompactDiagnostic;
+    use crate::diag::CompactDiagnostic;
 
     #[test]
     fn diagnose_undefined_macro() {

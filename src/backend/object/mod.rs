@@ -1,7 +1,7 @@
 use self::context::{EvalContext, SymbolTable};
 use self::resolve::Value;
 use crate::backend::{BinaryObject, RelocExpr, Width};
-use crate::diagnostics::EmitDiagnostic;
+use crate::diag::EmitDiagnostic;
 use std::borrow::Borrow;
 
 mod context;
@@ -156,7 +156,7 @@ where
 mod tests {
     use super::*;
     use crate::backend::{BinaryOperator, RelocAtom};
-    use crate::diagnostics::IgnoreDiagnostics;
+    use crate::diag::IgnoreDiagnostics;
     use crate::expr::ExprVariant;
 
     #[test]

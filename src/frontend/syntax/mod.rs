@@ -1,4 +1,4 @@
-use crate::diagnostics::DelegateDiagnostics;
+use crate::diag::DelegateDiagnostics;
 use crate::expr::BinaryOperator;
 
 #[cfg(test)]

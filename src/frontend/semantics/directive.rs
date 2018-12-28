@@ -3,7 +3,7 @@ use super::{
 };
 use crate::backend;
 use crate::backend::{Backend, ValueBuilder, Width};
-use crate::diagnostics::*;
+use crate::diag::*;
 use crate::expr::{BinaryOperator, ExprVariant};
 use crate::frontend::syntax::Literal;
 use crate::frontend::Frontend;

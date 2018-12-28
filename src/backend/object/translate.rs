@@ -1,7 +1,7 @@
 use super::context::{EvalContext, SymbolTable};
 use super::{traverse_chunk_items, Chunk, Node};
 use crate::backend::{BinarySection, RelocExpr, Width};
-use crate::diagnostics::{CompactDiagnostic, EmitDiagnostic, Message};
+use crate::diag::{CompactDiagnostic, EmitDiagnostic, Message};
 use crate::span::Source;
 use std::vec::IntoIter;
 
@@ -151,7 +151,7 @@ fn is_in_u8_range(n: i32) -> bool {
 mod tests {
     use super::*;
     use crate::backend::{BinaryOperator, RelocAtom};
-    use crate::diagnostics::IgnoreDiagnostics;
+    use crate::diag::IgnoreDiagnostics;
     use crate::expr::ExprVariant;
     use std::borrow::Borrow;
 
@@ -205,13 +205,13 @@ mod tests {
 
     fn translate_chunk_item<S: Clone + PartialEq>(item: Node<S>) -> Vec<u8> {
         use crate::backend::object::resolve::Value;
-        use crate::diagnostics;
+        use crate::diag;
         item.translate(
             &EvalContext {
                 symbols: &SymbolTable::new(),
                 location: Value::Unknown,
             },
-            &mut diagnostics::IgnoreDiagnostics::new(),
+            &mut diag::IgnoreDiagnostics::new(),
         )
         .collect()
     }

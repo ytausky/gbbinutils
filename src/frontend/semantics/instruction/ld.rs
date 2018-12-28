@@ -1,7 +1,7 @@
 use super::{Analysis, Operand, SemanticExpr};
 use crate::backend::{ValueBuilder, Width};
-use crate::diagnostics::span::Source;
-use crate::diagnostics::{CompactDiagnostic, DownstreamDiagnostics, EmitDiagnostic, Message};
+use crate::diag::span::Source;
+use crate::diag::{CompactDiagnostic, DownstreamDiagnostics, EmitDiagnostic, Message};
 use crate::frontend::semantics::operand::AtomKind;
 use crate::instruction::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
 

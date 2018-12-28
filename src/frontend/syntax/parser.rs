@@ -1,7 +1,7 @@
 use super::SimpleToken::*;
 use super::*;
-use crate::diagnostics::span::{MergeSpans, StripSpan};
-use crate::diagnostics::{CompactDiagnostic, EmitDiagnostic, Message};
+use crate::diag::span::{MergeSpans, StripSpan};
+use crate::diag::{CompactDiagnostic, EmitDiagnostic, Message};
 use crate::expr::BinaryOperator;
 
 type TokenKind = Token<(), (), (), ()>;
@@ -490,8 +490,8 @@ mod tests {
     use super::ast::*;
     use super::Token::*;
     use super::*;
-    use crate::diagnostics::span::{MergeSpans, StripSpan};
-    use crate::diagnostics::{CompactDiagnostic, EmitDiagnostic, Message};
+    use crate::diag::span::{MergeSpans, StripSpan};
+    use crate::diag::{CompactDiagnostic, EmitDiagnostic, Message};
     use crate::frontend::syntax::ExprAtom;
     use std::borrow::Borrow;
     use std::collections::HashMap;
