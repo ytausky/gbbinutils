@@ -124,15 +124,8 @@ mod tests {
         let path = "/my/file";
         let mut fs = MockFileSystem::new();
         fs.add(path, &[0x5a, 0x0a, 0xf6, 0xa6]);
-        let mut diagnostics = vec![];
-        let mut output = |diagnostic| diagnostics.push(diagnostic);
-        let mut config = Config {
-            input: InputConfig::Custom(&mut fs),
-            diagnostics: DiagnosticsConfig::Output(&mut output),
-        };
-        assemble(path, &mut config);
         assert_eq!(
-            diagnostics,
+            collect_diagnostics(path, &mut fs),
             [Diagnostic {
                 clauses: vec![DiagnosticClause {
                     file: path.to_string(),
@@ -147,16 +140,8 @@ mod tests {
     #[test]
     fn nonexistent_file() {
         let path = "/my/file";
-        let mut fs = MockFileSystem::new();
-        let mut diagnostics = vec![];
-        let mut output = |diagnostic| diagnostics.push(diagnostic);
-        let mut config = Config {
-            input: InputConfig::Custom(&mut fs),
-            diagnostics: DiagnosticsConfig::Output(&mut output),
-        };
-        assemble(path, &mut config);
         assert_eq!(
-            diagnostics,
+            collect_diagnostics(path, &mut MockFileSystem::new()),
             [Diagnostic {
                 clauses: vec![DiagnosticClause {
                     file: path.to_string(),
@@ -166,5 +151,19 @@ mod tests {
                 }]
             }]
         )
+    }
+
+    fn collect_diagnostics(path: &str, fs: &mut MockFileSystem) -> Vec<Diagnostic> {
+        let mut diagnostics = Vec::new();
+        assemble(
+            path,
+            &mut Config {
+                input: InputConfig::Custom(fs),
+                diagnostics: DiagnosticsConfig::Output(&mut |diagnostic| {
+                    diagnostics.push(diagnostic)
+                }),
+            },
+        );
+        diagnostics
     }
 }
