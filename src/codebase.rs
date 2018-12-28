@@ -34,7 +34,6 @@ impl From<LineIndex> for LineNumber {
     }
 }
 
-#[cfg(test)]
 impl From<LineNumber> for LineIndex {
     fn from(LineNumber(n): LineNumber) -> LineIndex {
         assert_ne!(n, 0);

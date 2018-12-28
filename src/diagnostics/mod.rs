@@ -1,5 +1,6 @@
 pub(crate) use self::message::{KeywordOperandCategory, Message};
-use crate::codebase::{BufId, BufRange, LineNumber, TextBuf, TextCache, TextRange};
+use crate::codebase::{BufId, BufRange, TextBuf, TextCache};
+pub use crate::codebase::{LineNumber, TextPosition, TextRange};
 use crate::span::*;
 use std::cell::RefCell;
 use std::fmt;
@@ -141,20 +142,12 @@ pub trait DiagnosticsOutput {
     fn emit(&mut self, diagnostic: Diagnostic);
 }
 
-pub(crate) struct TerminalOutput;
-
-impl DiagnosticsOutput for TerminalOutput {
-    fn emit(&mut self, diagnostic: Diagnostic) {
-        print!("{}", diagnostic)
-    }
-}
-
 pub(crate) trait EmitDiagnostic<S, T> {
     fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<S, T>);
 }
 
 pub(crate) struct OutputForwarder<'a> {
-    pub output: &'a mut dyn DiagnosticsOutput,
+    pub output: &'a mut dyn FnMut(Diagnostic),
     pub codebase: &'a RefCell<TextCache>,
 }
 
@@ -164,8 +157,7 @@ impl<'a> Span for OutputForwarder<'a> {
 
 impl<'a> EmitDiagnostic<SpanData, StrippedBufSpan> for OutputForwarder<'a> {
     fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SpanData, StrippedBufSpan>) {
-        self.output
-            .emit(diagnostic.expand().render(&self.codebase.borrow()))
+        (self.output)(diagnostic.expand().render(&self.codebase.borrow()))
     }
 }
 
@@ -363,47 +355,6 @@ impl ExpandedDiagnosticClause<StrippedBufSpan, BufId, BufRange> {
     }
 }
 
-impl fmt::Display for Diagnostic {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for clause in &self.clauses {
-            clause.fmt(f)?
-        }
-        Ok(())
-    }
-}
-
-impl fmt::Display for DiagnosticClause {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match &self.location {
-            None => writeln!(f, "{}: {}: {}", self.file, self.tag, self.message),
-            Some(location) => {
-                let squiggle = location
-                    .highlight
-                    .as_ref()
-                    .map_or_else(String::new, mk_squiggle);
-                writeln!(
-                    f,
-                    "{}:{}: {}: {}\n{}{}",
-                    self.file, location.line, self.tag, self.message, location.source, squiggle,
-                )
-            }
-        }
-    }
-}
-
-fn mk_squiggle(range: &TextRange) -> String {
-    assert_eq!(range.start.line, range.end.line);
-
-    use std::cmp::max;
-    let space_count = range.start.column_index;
-    let tilde_count = max(range.end.column_index - space_count, 1);
-
-    use std::iter::{once, repeat};
-    let spaces = repeat(' ').take(space_count);
-    let tildes = repeat('~').take(tilde_count);
-    once('\n').chain(spaces).chain(tildes).collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -447,63 +398,6 @@ mod tests {
                 }]
             }
         )
-    }
-
-    #[test]
-    fn render_elaborated_diagnostic() {
-        let elaborated_diagnostic = Diagnostic {
-            clauses: vec![DiagnosticClause {
-                file: DUMMY_FILE.to_string(),
-                tag: DiagnosticClauseTag::Error,
-                message: "invocation of undefined macro `my_macro`".to_string(),
-                location: Some(DiagnosticLocation {
-                    line: LineNumber(2),
-                    source: "    my_macro a, $12".to_string(),
-                    highlight: mk_highlight(LineNumber(2), 4, 12),
-                }),
-            }],
-        };
-        let expected = r"/my/file:2: error: invocation of undefined macro `my_macro`
-    my_macro a, $12
-    ~~~~~~~~
-";
-        assert_eq!(elaborated_diagnostic.to_string(), expected)
-    }
-
-    #[test]
-    fn render_diagnostic_without_source() {
-        let diagnostic = Diagnostic {
-            clauses: vec![DiagnosticClause {
-                file: DUMMY_FILE.to_string(),
-                tag: DiagnosticClauseTag::Error,
-                message: "file constains invalid UTF-8".to_string(),
-                location: None,
-            }],
-        };
-        let expected = r"/my/file: error: file constains invalid UTF-8
-";
-        assert_eq!(diagnostic.to_string(), expected);
-    }
-
-    #[test]
-    fn highlight_eof_with_one_tilde() {
-        let elaborated = Diagnostic {
-            clauses: vec![DiagnosticClause {
-                file: DUMMY_FILE.to_string(),
-                tag: DiagnosticClauseTag::Error,
-                message: "unexpected end of file".into(),
-                location: Some(DiagnosticLocation {
-                    line: LineNumber(2),
-                    source: "dummy".to_string(),
-                    highlight: mk_highlight(LineNumber(2), 5, 5),
-                }),
-            }],
-        };
-        let expected = r"/my/file:2: error: unexpected end of file
-dummy
-     ~
-";
-        assert_eq!(elaborated.to_string(), expected)
     }
 
     #[test]

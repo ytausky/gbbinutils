@@ -16,7 +16,7 @@ mod instruction;
 #[derive(Default)]
 pub struct Config<'a> {
     pub input: InputConfig<'a>,
-    pub output: OutputConfig<'a>,
+    pub diagnostics: DiagnosticsConfig<'a>,
 }
 
 pub enum InputConfig<'a> {
@@ -30,14 +30,14 @@ impl<'a> Default for InputConfig<'a> {
     }
 }
 
-pub enum OutputConfig<'a> {
-    Default,
-    Custom(&'a mut dyn diagnostics::DiagnosticsOutput),
+pub enum DiagnosticsConfig<'a> {
+    Ignore,
+    Output(&'a mut dyn FnMut(diagnostics::Diagnostic)),
 }
 
-impl<'a> Default for OutputConfig<'a> {
+impl<'a> Default for DiagnosticsConfig<'a> {
     fn default() -> Self {
-        OutputConfig::Default
+        DiagnosticsConfig::Ignore
     }
 }
 
@@ -50,25 +50,25 @@ impl<'a> Default for OutputConfig<'a> {
 /// assert!(rom.is_none())
 /// ```
 pub fn assemble<'a>(name: &str, config: &mut Config<'a>) -> Option<Rom> {
-    let mut output_holder = None;
-    let output: &mut dyn diagnostics::DiagnosticsOutput = match config.output {
-        OutputConfig::Default => output_holder.get_or_insert_with(|| TerminalOutput {}),
-        OutputConfig::Custom(ref mut output) => *output,
-    };
     let mut input_holder = None;
+    let mut diagnostics_holder = None;
     let input: &mut dyn codebase::FileSystem = match config.input {
         InputConfig::Default => input_holder.get_or_insert_with(StdFileSystem::new),
         InputConfig::Custom(ref mut input) => *input,
     };
-    try_assemble(name, input, output)
-        .map_err(|error| output.emit(mk_diagnostic(name, &error.into())))
+    let diagnostics: &mut dyn FnMut(diagnostics::Diagnostic) = match config.diagnostics {
+        DiagnosticsConfig::Ignore => diagnostics_holder.get_or_insert(|_| {}),
+        DiagnosticsConfig::Output(ref mut diagnostics) => *diagnostics,
+    };
+    try_assemble(name, input, diagnostics)
+        .map_err(|error| diagnostics(mk_diagnostic(name, &error.into())))
         .ok()
 }
 
 fn try_assemble(
     name: &str,
     input: &mut dyn codebase::FileSystem,
-    output: &mut dyn diagnostics::DiagnosticsOutput,
+    output: &mut dyn FnMut(diagnostics::Diagnostic),
 ) -> Result<Rom, CodebaseError> {
     let codebase = codebase::FileCodebase::new(input);
     let mut diagnostics = DiagnosticsSystem {
@@ -119,39 +119,20 @@ mod tests {
         }
     }
 
-    struct MockDiagnosticOutput {
-        diagnostics: Vec<Diagnostic>,
-    }
-
-    impl MockDiagnosticOutput {
-        fn new() -> MockDiagnosticOutput {
-            MockDiagnosticOutput {
-                diagnostics: Vec::new(),
-            }
-        }
-    }
-
-    impl diagnostics::DiagnosticsOutput for MockDiagnosticOutput {
-        fn emit(&mut self, diagnostic: Diagnostic) {
-            self.diagnostics.push(diagnostic)
-        }
-    }
-
     #[test]
     fn invalid_utf8() {
         let path = "/my/file";
         let mut fs = MockFileSystem::new();
         fs.add(path, &[0x5a, 0x0a, 0xf6, 0xa6]);
-        let mut output = MockDiagnosticOutput::new();
-        {
-            let mut config = Config {
-                input: InputConfig::Custom(&mut fs),
-                output: OutputConfig::Custom(&mut output),
-            };
-            assemble(path, &mut config);
-        }
+        let mut diagnostics = vec![];
+        let mut output = |diagnostic| diagnostics.push(diagnostic);
+        let mut config = Config {
+            input: InputConfig::Custom(&mut fs),
+            diagnostics: DiagnosticsConfig::Output(&mut output),
+        };
+        assemble(path, &mut config);
         assert_eq!(
-            output.diagnostics,
+            diagnostics,
             [Diagnostic {
                 clauses: vec![DiagnosticClause {
                     file: path.to_string(),
@@ -167,16 +148,15 @@ mod tests {
     fn nonexistent_file() {
         let path = "/my/file";
         let mut fs = MockFileSystem::new();
-        let mut output = MockDiagnosticOutput::new();
-        {
-            let mut config = Config {
-                input: InputConfig::Custom(&mut fs),
-                output: OutputConfig::Custom(&mut output),
-            };
-            assemble(path, &mut config);
-        }
+        let mut diagnostics = vec![];
+        let mut output = |diagnostic| diagnostics.push(diagnostic);
+        let mut config = Config {
+            input: InputConfig::Custom(&mut fs),
+            diagnostics: DiagnosticsConfig::Output(&mut output),
+        };
+        assemble(path, &mut config);
         assert_eq!(
-            output.diagnostics,
+            diagnostics,
             [Diagnostic {
                 clauses: vec![DiagnosticClause {
                     file: path.to_string(),
