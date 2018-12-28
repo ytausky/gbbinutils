@@ -2,7 +2,7 @@ pub use super::context::{EvalContext, SymbolTable};
 
 use super::context::ChunkSize;
 use crate::backend::{Node, Object, RelocAtom, RelocExpr};
-use crate::expr::ExprVariant;
+use crate::expr::{BinaryOperator, ExprVariant};
 use crate::span::Source;
 use std::borrow::Borrow;
 use std::ops::{Add, AddAssign, Sub};
@@ -135,14 +135,9 @@ impl<S: Clone> RelocExpr<S> {
         match &self.variant {
             ExprVariant::Unary(_, _) => unreachable!(),
             ExprVariant::Binary(operator, lhs, rhs) => {
-                use crate::backend::BinaryOperator;
                 let lhs = lhs.evaluate_strictly(context, on_undefined_symbol);
                 let rhs = rhs.evaluate_strictly(context, on_undefined_symbol);
-                match operator {
-                    BinaryOperator::Minus => lhs - rhs,
-                    BinaryOperator::Plus => lhs + rhs,
-                    _ => unimplemented!(),
-                }
+                operator.apply(lhs, rhs)
             }
             ExprVariant::Atom(RelocAtom::Literal(value)) => (*value).into(),
             ExprVariant::Atom(RelocAtom::LocationCounter) => context.location.clone(),
@@ -155,6 +150,16 @@ impl<S: Clone> RelocExpr<S> {
                     on_undefined_symbol(&symbol, &self.span());
                     Value::Unknown
                 }),
+        }
+    }
+}
+
+impl BinaryOperator {
+    fn apply(self, lhs: Value, rhs: Value) -> Value {
+        match self {
+            BinaryOperator::Minus => lhs - rhs,
+            BinaryOperator::Plus => lhs + rhs,
+            _ => unimplemented!(),
         }
     }
 }
