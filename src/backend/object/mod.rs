@@ -145,8 +145,8 @@ where
     let origin = context.location.clone();
     let mut offset = Value::from(0);
     for item in items {
-        offset += item.size(&context);
-        context.location = origin.clone() + offset.clone();
+        offset += &item.size(&context);
+        context.location = &origin + &offset;
         f(item, context)
     }
     offset

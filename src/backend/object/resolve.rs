@@ -4,7 +4,7 @@ use super::context::ChunkSize;
 use crate::backend::{Node, Object, RelocAtom, RelocExpr};
 use crate::expr::{BinaryOperator, ExprVariant};
 use std::borrow::Borrow;
-use std::ops::{Add, AddAssign, Sub};
+use std::ops::{Add, AddAssign, Mul, RangeInclusive, Sub};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
@@ -27,8 +27,17 @@ impl From<i32> for Value {
     }
 }
 
-impl AddAssign<Value> for Value {
-    fn add_assign(&mut self, rhs: Value) {
+impl From<RangeInclusive<i32>> for Value {
+    fn from(range: RangeInclusive<i32>) -> Self {
+        Value::Range {
+            min: *range.start(),
+            max: *range.end(),
+        }
+    }
+}
+
+impl AddAssign<&Value> for Value {
+    fn add_assign(&mut self, rhs: &Value) {
         match (self, rhs) {
             (
                 Value::Range { min, max },
@@ -45,17 +54,18 @@ impl AddAssign<Value> for Value {
     }
 }
 
-impl<T: Into<Value>> Add<T> for Value {
+impl Add for &Value {
     type Output = Value;
-    fn add(mut self, rhs: T) -> Self::Output {
-        self += rhs.into();
-        self
+    fn add(self, rhs: &Value) -> Self::Output {
+        let mut result = self.clone();
+        result += rhs;
+        result
     }
 }
 
-impl Sub<Value> for Value {
+impl Sub for &Value {
     type Output = Value;
-    fn sub(self, rhs: Value) -> Self::Output {
+    fn sub(self, rhs: &Value) -> Self::Output {
         match (self, rhs) {
             (
                 Value::Range { min, max },
@@ -67,6 +77,37 @@ impl Sub<Value> for Value {
                 min: min - rhs_max,
                 max: max - rhs_min,
             },
+            _ => Value::Unknown,
+        }
+    }
+}
+
+impl Mul for &Value {
+    type Output = Value;
+
+    fn mul(self, rhs: &Value) -> Self::Output {
+        match (self, rhs) {
+            (
+                Value::Range {
+                    min: lhs_min,
+                    max: lhs_max,
+                },
+                Value::Range {
+                    min: rhs_min,
+                    max: rhs_max,
+                },
+            ) => {
+                let lhs_endpoints = [lhs_min, lhs_max];
+                let rhs_endpoints = [rhs_min, rhs_max];
+                let products = lhs_endpoints
+                    .iter()
+                    .cloned()
+                    .flat_map(|n| rhs_endpoints.iter().map(move |&m| m * n));
+                Value::Range {
+                    min: products.clone().min().unwrap(),
+                    max: products.max().unwrap(),
+                }
+            }
             _ => Value::Unknown,
         }
     }
@@ -137,7 +178,7 @@ impl<S: Clone> RelocExpr<S> {
             Binary(operator, lhs, rhs) => {
                 let lhs = lhs.evaluate_strictly(context, on_undefined_symbol);
                 let rhs = rhs.evaluate_strictly(context, on_undefined_symbol);
-                operator.apply(lhs, rhs)
+                operator.apply(&lhs, &rhs)
             }
             Atom(atom) => {
                 atom.evaluate_strictly(context, |symbol| on_undefined_symbol(symbol, &self.span))
@@ -174,9 +215,10 @@ impl RelocAtom {
 }
 
 impl BinaryOperator {
-    fn apply(self, lhs: Value, rhs: Value) -> Value {
+    fn apply(self, lhs: &Value, rhs: &Value) -> Value {
         match self {
             BinaryOperator::Minus => lhs - rhs,
+            BinaryOperator::Multiplication => lhs * rhs,
             BinaryOperator::Plus => lhs + rhs,
             _ => unimplemented!(),
         }
@@ -254,6 +296,25 @@ mod tests {
                 .cloned(),
             )
         })
+    }
+
+    macro_rules! triples {
+        ($(($lhs:expr, $rhs:expr, $result:expr)),*) => {
+            [$(($lhs.into(), $rhs.into(), $result.into())),*]
+        };
+    }
+
+    #[test]
+    fn multiply_ranges() {
+        let cases: &[(Value, Value, Value)] = &triples![
+            (2, 3, 6),
+            (-1..=1, -1..=1, -1..=1),
+            (1..=6, -1, -6..=-1),
+            (-6..=1, -6..=1, -6..=36)
+        ];
+        for (lhs, rhs, product) in cases {
+            assert_eq!(BinaryOperator::Multiplication.apply(lhs, rhs), *product)
+        }
     }
 
     fn assert_chunk_size(expected: impl Into<Value>, f: impl FnOnce(&mut Chunk<()>)) {
