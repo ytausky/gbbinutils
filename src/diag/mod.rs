@@ -286,7 +286,7 @@ pub struct Clause {
     pub file: String,
     pub tag: Tag,
     pub message: String,
-    pub location: Option<Location>,
+    pub excerpt: Option<Excerpt>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -296,7 +296,7 @@ pub enum Tag {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Location {
+pub struct Excerpt {
     pub line: LineNumber,
     pub source: String,
     pub highlight: Option<TextRange>,
@@ -311,7 +311,7 @@ pub(crate) fn mk_diagnostic(
             file: file.into(),
             tag: Tag::Error,
             message: message.render(&TextCache::new()),
-            location: None,
+            excerpt: None,
         }],
     }
 }
@@ -331,7 +331,7 @@ impl ExpandedDiagnostic<StrippedBufSpan, BufId, BufRange> {
 impl ExpandedDiagnosticClause<StrippedBufSpan, BufId, BufRange> {
     fn render(&self, codebase: &TextCache) -> Clause {
         let buf = codebase.buf(self.buf_id);
-        let location = self.location.as_ref().map(|range| {
+        let excerpt = self.location.as_ref().map(|range| {
             let highlight = buf.text_range(&range);
             let source = buf
                 .lines(highlight.start.line..=highlight.end.line)
@@ -339,7 +339,7 @@ impl ExpandedDiagnosticClause<StrippedBufSpan, BufId, BufRange> {
                 .map(|(_, line)| line.trim_right())
                 .unwrap()
                 .into();
-            Location {
+            Excerpt {
                 line: highlight.start.line.into(),
                 source,
                 highlight: Some(highlight),
@@ -349,7 +349,7 @@ impl ExpandedDiagnosticClause<StrippedBufSpan, BufId, BufRange> {
             file: buf.name().into(),
             tag: self.tag,
             message: self.message.render(codebase),
-            location,
+            excerpt,
         }
     }
 }
@@ -389,7 +389,7 @@ mod tests {
                     file: DUMMY_FILE.to_string(),
                     tag: Tag::Error,
                     message: "invocation of undefined macro `my_macro`".to_string(),
-                    location: Some(Location {
+                    excerpt: Some(Excerpt {
                         line: LineNumber(2),
                         source: "    my_macro a, $12".to_string(),
                         highlight: mk_highlight(LineNumber(2), 4, 12),

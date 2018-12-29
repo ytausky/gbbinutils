@@ -37,7 +37,7 @@ impl fmt::Display for GbasDiagnostic {
 
 impl<'a> fmt::Display for GbasClause<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match &self.0.location {
+        match &self.0.excerpt {
             None => writeln!(
                 f,
                 "{}: {}: {}",
@@ -106,7 +106,7 @@ mod tests {
                 file: DUMMY_FILE.to_string(),
                 tag: Tag::Error,
                 message: "invocation of undefined macro `my_macro`".to_string(),
-                location: Some(Location {
+                excerpt: Some(Excerpt {
                     line: LineNumber(2),
                     source: "    my_macro a, $12".to_string(),
                     highlight: mk_highlight(LineNumber(2), 4, 12),
@@ -127,7 +127,7 @@ mod tests {
                 file: DUMMY_FILE.to_string(),
                 tag: Tag::Error,
                 message: "file constains invalid UTF-8".to_string(),
-                location: None,
+                excerpt: None,
             }],
         };
         let expected = r"/my/file: error: file constains invalid UTF-8
@@ -142,7 +142,7 @@ mod tests {
                 file: DUMMY_FILE.to_string(),
                 tag: Tag::Error,
                 message: "unexpected end of file".into(),
-                location: Some(Location {
+                excerpt: Some(Excerpt {
                     line: LineNumber(2),
                     source: "dummy".to_string(),
                     highlight: mk_highlight(LineNumber(2), 5, 5),

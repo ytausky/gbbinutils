@@ -131,7 +131,7 @@ mod tests {
                     file: path.to_string(),
                     tag: Tag::Error,
                     message: "file contains invalid UTF-8".to_string(),
-                    location: None
+                    excerpt: None
                 }]
             }]
         )
@@ -147,7 +147,7 @@ mod tests {
                     file: path.to_string(),
                     tag: Tag::Error,
                     message: "file does not exist".to_string(),
-                    location: None
+                    excerpt: None
                 }]
             }]
         )

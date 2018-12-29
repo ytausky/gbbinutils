@@ -1,7 +1,7 @@
-use std::io;
-use std::string::FromUtf8Error;
 use std::cell::RefCell;
+use std::io;
 use std::rc::Rc;
+use std::string::FromUtf8Error;
 use std::{cmp, fs, ops};
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
