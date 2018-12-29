@@ -51,7 +51,7 @@ impl<'a> Default for DiagnosticsConfig<'a> {
 /// let rom = gbas::assemble("game.s", &mut gbas::Config::default());
 /// assert!(rom.is_none())
 /// ```
-pub fn assemble<'a>(name: &str, config: &mut Config<'a>) -> Option<Rom> {
+pub fn assemble(name: &str, config: &mut Config) -> Option<Rom> {
     let mut input_holder = None;
     let mut diagnostics_holder = None;
     let input: &mut dyn codebase::FileSystem = match config.input {
