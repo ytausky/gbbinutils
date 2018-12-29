@@ -1,3 +1,5 @@
+//! An assembler for Game Boy.
+//!
 //! `gbas` is an assembler targeting Game Boy, Game Boy Pocket, Game Boy Light, and Game Boy Color.
 //! Its customizable IO functions make it suitable for embedding in other tools, in unit tests, etc.
 

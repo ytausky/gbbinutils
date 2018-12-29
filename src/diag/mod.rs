@@ -1,3 +1,9 @@
+//! Types comprising the assembler's diagnostic output.
+//!
+//! During assembly the assembler may emit any number of diagnostic messages, each of which is
+//! encoded in a [`Diagnostic`](struct.Diagnostic.html) along with all the information necessary to
+//! present it to the end user.
+
 pub(crate) use self::message::{KeywordOperandCategory, Message};
 use crate::codebase::{BufId, BufRange, TextBuf, TextCache};
 pub use crate::codebase::{LineNumber, TextPosition, TextRange};
@@ -269,9 +275,10 @@ fn mk_invoked_here_clause<B: Clone, T: Clone>(
 
 /// A full description of an assembler diagnostic.
 ///
-/// A `Diagnostic` contains all the information required to display a meaningful diagnostic message
-/// to a user. It consists of one or more `Clause`s, where the first one describes the object of the
-/// diagnostic and the rest provide more context if necessary.
+/// A [`Diagnostic`](struct.Diagnostic.html) contains all the information required to display a
+/// meaningful diagnostic message to a user. It consists of one or more
+/// [`Clause`](struct.Clause.html)s, where the first one describes the object of the diagnostic and
+/// the rest provide more context if necessary.
 #[derive(Debug, PartialEq)]
 pub struct Diagnostic {
     pub clauses: Vec<Clause>,
@@ -279,8 +286,9 @@ pub struct Diagnostic {
 
 /// A single clause of an assembler diagnostic.
 ///
-/// A `Clause` contains a message that's relevant to a particular source file or a part thereof. In
-/// addition it may include an excerpt from said file, as well as an optional highlight within it.
+/// A [`Clause`](struct.Clause.html) contains a message that's relevant to a particular source file
+/// or a part thereof. In addition it may include an excerpt from said file, as well as an optional
+/// highlight within it.
 #[derive(Debug, PartialEq)]
 pub struct Clause {
     pub file: String,
@@ -295,6 +303,10 @@ pub enum Tag {
     Note,
 }
 
+/// A code excerpt with an optional highlight.
+///
+/// An [`Excerpt`](struct.Excerpt.html) contains a single line of code meant to provide context for
+/// a diagnostic clause. The optional highlight can pinpoint the interesting part of the line.
 #[derive(Debug, PartialEq)]
 pub struct Excerpt {
     pub line: LineNumber,
