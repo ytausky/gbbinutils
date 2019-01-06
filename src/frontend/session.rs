@@ -44,7 +44,7 @@ where
 impl<'a, F, B, D> Session<'a, F, B, D>
 where
     F: Frontend<D>,
-    B: Backend<D::Span>,
+    B: Backend<F::Ident, D::Span>,
     D: Diagnostics,
 {
     pub fn analyze_file(&mut self, path: F::Ident) -> Result<(), CodebaseError> {
@@ -69,7 +69,7 @@ impl<'a, F, B, D: DownstreamDiagnostics<S>, S> DelegateDiagnostics<S> for Sessio
 impl<'a, F, B, D> Session<'a, F, B, D>
 where
     F: Frontend<D>,
-    B: Backend<D::Span>,
+    B: Backend<F::Ident, D::Span>,
     D: Diagnostics,
 {
     pub fn invoke_macro(&mut self, name: (F::Ident, D::Span), args: MacroArgs<F::Ident, D::Span>) {

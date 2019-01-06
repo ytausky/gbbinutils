@@ -22,7 +22,7 @@ pub(crate) fn analyze_file<C, B, D>(
 ) -> Result<B::Object, CodebaseError>
 where
     C: Codebase,
-    B: Backend<D::Span>,
+    B: Backend<String, D::Span>,
     D: Diagnostics,
 {
     let mut file_parser =
@@ -46,7 +46,7 @@ where
     where
         I: Iterator<Item = (Token<Id>, D::Span)>,
         F: Frontend<D, Ident = Id>,
-        B: Backend<D::Span>,
+        B: Backend<Id, D::Span>,
         D: Diagnostics;
 }
 
@@ -63,7 +63,7 @@ pub(crate) trait Frontend<D: Diagnostics> {
         downstream: Downstream<B, D>,
     ) -> Result<(), CodebaseError>
     where
-        B: Backend<D::Span>;
+        B: Backend<Self::Ident, D::Span>;
 
     fn invoke_macro<B>(
         &mut self,
@@ -71,7 +71,7 @@ pub(crate) trait Frontend<D: Diagnostics> {
         args: MacroArgs<Self::Ident, D::Span>,
         downstream: Downstream<B, D>,
     ) where
-        B: Backend<D::Span>;
+        B: Backend<Self::Ident, D::Span>;
 
     fn define_macro(
         &mut self,
@@ -90,7 +90,7 @@ where
     where
         I: Iterator<Item = (Token<Id>, D::Span)>,
         F: Frontend<D, Ident = Id>,
-        B: Backend<D::Span>,
+        B: Backend<Id, D::Span>,
         D: Diagnostics,
     {
         let actions = semantics::SemanticActions::new(session);
@@ -121,7 +121,7 @@ where
     fn analyze_token_seq<I, F>(
         &mut self,
         tokens: I,
-        downstream: &mut Downstream<impl Backend<F::Span>, F>,
+        downstream: &mut Downstream<impl Backend<T::Ident, F::Span>, F>,
     ) where
         I: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
         F: Diagnostics<MacroDefId = M::MacroDefId>,
@@ -155,7 +155,7 @@ where
         mut downstream: Downstream<B, D>,
     ) -> Result<(), CodebaseError>
     where
-        B: Backend<D::Span>,
+        B: Backend<Self::Ident, D::Span>,
     {
         let tokenized_src = {
             self.codebase.tokenize_file(path.as_ref(), |buf_id| {
@@ -172,7 +172,7 @@ where
         args: MacroArgs<Self::Ident, D::Span>,
         mut downstream: Downstream<B, D>,
     ) where
-        B: Backend<D::Span>,
+        B: Backend<Self::Ident, D::Span>,
     {
         let expansion = match self.macro_table.get(&name) {
             Some(entry) => Some(entry.expand(span, args, downstream.diagnostics)),
@@ -528,7 +528,7 @@ mod tests {
         where
             I: Iterator<Item = (Token<String>, D::Span)>,
             F: Frontend<D, Ident = String>,
-            B: Backend<D::Span>,
+            B: Backend<F::Ident, D::Span>,
             D: Diagnostics,
         {
             self.log.borrow_mut().push(TestEvent::AnalyzeTokens(
@@ -537,7 +537,7 @@ mod tests {
         }
     }
 
-    impl<'a, 'b> BuildValue<'b, ()> for Mock<'a> {
+    impl<'a, 'b> BuildValue<'b, String, ()> for Mock<'a> {
         type Builder = RelocExprBuilder<()>;
 
         fn build_value(&'b mut self) -> Self::Builder {
@@ -549,13 +549,13 @@ mod tests {
         type Value = RelocExpr<()>;
     }
 
-    impl<'a> Backend<()> for Mock<'a> {
+    impl<'a> Backend<String, ()> for Mock<'a> {
         type Object = ();
 
-        fn define_symbol(&mut self, symbol: (impl Into<String>, ()), value: RelocExpr<()>) {
+        fn define_symbol(&mut self, symbol: (String, ()), value: RelocExpr<()>) {
             self.log
                 .borrow_mut()
-                .push(TestEvent::DefineSymbol(symbol.0.into(), value))
+                .push(TestEvent::DefineSymbol(symbol.0, value))
         }
 
         fn emit_item(&mut self, item: Item<RelocExpr<()>>) {

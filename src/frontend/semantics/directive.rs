@@ -9,11 +9,16 @@ use crate::frontend::syntax::Literal;
 use crate::frontend::Frontend;
 use crate::span::Source;
 
-pub(crate) fn analyze_directive<'a: 'b, 'b, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
+pub(crate) fn analyze_directive<'a, 'b, F, B, D>(
     directive: (Directive, D::Span),
     args: CommandArgs<F::Ident, D::Span>,
     actions: &'b mut SemanticActions<'a, F, B, D>,
-) {
+) where
+    'a: 'b,
+    F: Frontend<D>,
+    B: Backend<F::Ident, D::Span>,
+    D: Diagnostics,
+{
     let context = DirectiveContext {
         span: directive.1,
         args,
@@ -46,7 +51,7 @@ impl<'a, 'b, F, B, D> DirectiveContext<'b, SemanticActions<'a, F, B, D>, F::Iden
 where
     'a: 'b,
     F: Frontend<D>,
-    B: Backend<D::Span>,
+    B: Backend<F::Ident, D::Span>,
     D: Diagnostics,
 {
     fn analyze(self, directive: Directive) {
@@ -155,9 +160,9 @@ where
     }
 }
 
-fn location_counter_plus_expr<B, S>(expr: B::Value, builder: &mut B) -> B::Value
+fn location_counter_plus_expr<I, B, S>(expr: B::Value, builder: &mut B) -> B::Value
 where
-    B: ValueBuilder<S>,
+    B: ValueBuilder<I, S>,
     S: Clone,
 {
     let location = builder.location(expr.span());

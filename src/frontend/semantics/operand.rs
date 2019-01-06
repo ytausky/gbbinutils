@@ -48,7 +48,7 @@ pub(crate) fn analyze_operand<I, B, D, S>(
 ) -> Result<Operand<B::Value>, ()>
 where
     I: Into<String>,
-    B: ValueBuilder<S>,
+    B: ValueBuilder<I, S>,
     D: DownstreamDiagnostics<S>,
     S: Clone,
 {
@@ -70,7 +70,7 @@ fn analyze_deref_operand<I, B, D, S>(
 ) -> Result<Operand<B::Value>, ()>
 where
     I: Into<String>,
-    B: ValueBuilder<S>,
+    B: ValueBuilder<I, S>,
     D: DownstreamDiagnostics<S>,
     S: Clone,
 {
@@ -248,8 +248,8 @@ mod tests {
         )
     }
 
-    fn analyze_operand<I: Into<String>, S: Clone + PartialEq>(
-        expr: SemanticExpr<I, S>,
+    fn analyze_operand<S: Clone + PartialEq>(
+        expr: SemanticExpr<String, S>,
         context: Context,
     ) -> Result<Operand<RelocExpr<S>>, Vec<CompactDiagnostic<S, S>>>
     where

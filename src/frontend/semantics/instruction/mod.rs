@@ -19,7 +19,7 @@ pub(crate) fn analyze_instruction<Id: Into<String>, I, B, D, S>(
 ) -> Result<Instruction<B::Value>, ()>
 where
     I: IntoIterator<Item = SemanticExpr<Id, S>>,
-    B: ValueBuilder<S>,
+    B: ValueBuilder<Id, S>,
     D: DownstreamDiagnostics<S>,
     S: Clone,
 {
@@ -59,7 +59,7 @@ impl<'a, Id, I, B, D, S> Analysis<'a, I, B, D, S>
 where
     Id: Into<String>,
     I: Iterator<Item = SemanticExpr<Id, S>>,
-    B: ValueBuilder<S>,
+    B: ValueBuilder<Id, S>,
     D: DownstreamDiagnostics<S>,
     S: Clone,
 {

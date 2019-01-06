@@ -32,20 +32,20 @@ pub trait HasValue<S: Clone> {
     type Value: Source<Span = S>;
 }
 
-pub trait BuildValue<'a, S: Clone>
+pub trait BuildValue<'a, I, S: Clone>
 where
     Self: HasValue<S>,
 {
-    type Builder: ValueBuilder<S, Value = Self::Value>;
+    type Builder: ValueBuilder<I, S, Value = Self::Value>;
     fn build_value(&'a mut self) -> Self::Builder;
 }
 
-pub trait ValueBuilder<S: Clone> {
+pub trait ValueBuilder<I, S: Clone> {
     type Value: Source<Span = S>;
 
     fn location(&mut self, span: S) -> Self::Value;
     fn number(&mut self, number: (i32, S)) -> Self::Value;
-    fn symbol(&mut self, symbol: (String, S)) -> Self::Value;
+    fn symbol(&mut self, symbol: (I, S)) -> Self::Value;
 
     fn apply_binary_operator(
         &mut self,
@@ -55,13 +55,13 @@ pub trait ValueBuilder<S: Clone> {
     ) -> Self::Value;
 }
 
-pub trait Backend<S>
+pub trait Backend<I, S>
 where
     S: Clone,
-    for<'a> Self: BuildValue<'a, S>,
+    for<'a> Self: BuildValue<'a, I, S>,
 {
     type Object;
-    fn define_symbol(&mut self, symbol: (impl Into<String>, S), value: Self::Value);
+    fn define_symbol(&mut self, symbol: (I, S), value: Self::Value);
     fn emit_item(&mut self, item: Item<Self::Value>);
     fn into_object(self) -> Self::Object;
     fn set_origin(&mut self, origin: Self::Value);
@@ -140,7 +140,7 @@ impl<S> RelocExprBuilder<S> {
     }
 }
 
-impl<S: Clone> ValueBuilder<S> for RelocExprBuilder<S> {
+impl<S: Clone> ValueBuilder<String, S> for RelocExprBuilder<S> {
     type Value = RelocExpr<S>;
 
     fn location(&mut self, span: S) -> RelocExpr<S> {
@@ -172,7 +172,7 @@ impl<S: Clone> HasValue<S> for ObjectBuilder<S> {
     type Value = RelocExpr<S>;
 }
 
-impl<'a, S: Clone> BuildValue<'a, S> for ObjectBuilder<S> {
+impl<'a, S: Clone> BuildValue<'a, String, S> for ObjectBuilder<S> {
     type Builder = RelocExprBuilder<S>;
 
     fn build_value(&'a mut self) -> Self::Builder {
@@ -180,11 +180,11 @@ impl<'a, S: Clone> BuildValue<'a, S> for ObjectBuilder<S> {
     }
 }
 
-impl<S: Clone> Backend<S> for ObjectBuilder<S> {
+impl<S: Clone> Backend<String, S> for ObjectBuilder<S> {
     type Object = Object<S>;
 
-    fn define_symbol(&mut self, symbol: (impl Into<String>, S), value: Self::Value) {
-        self.push(Node::Symbol((symbol.0.into(), symbol.1), value))
+    fn define_symbol(&mut self, symbol: (String, S), value: Self::Value) {
+        self.push(Node::Symbol(symbol, value))
     }
 
     fn emit_item(&mut self, item: Item<RelocExpr<S>>) {
@@ -338,7 +338,7 @@ mod tests {
     fn emit_defined_symbol() {
         let label = "label";
         let (object, diagnostics) = with_object_builder(|builder| {
-            builder.define_symbol((label, ()), RelocAtom::LocationCounter.into());
+            builder.define_symbol((label.into(), ()), RelocAtom::LocationCounter.into());
             builder.emit_item(symbol_expr_item(label));
         });
         assert_eq!(*diagnostics, []);
@@ -350,7 +350,7 @@ mod tests {
         let label = "label";
         let (object, diagnostics) = with_object_builder(|builder| {
             builder.emit_item(symbol_expr_item(label));
-            builder.define_symbol((label, ()), RelocAtom::LocationCounter.into());
+            builder.define_symbol((label.into(), ()), RelocAtom::LocationCounter.into());
         });
         assert_eq!(*diagnostics, []);
         assert_eq!(object.sections.last().unwrap().data, [0x02, 0x00])

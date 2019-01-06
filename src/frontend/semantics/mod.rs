@@ -47,7 +47,12 @@ pub(crate) struct SemanticActions<'a, F: Frontend<D>, B, D: Diagnostics> {
     label: Option<(F::Ident, D::Span)>,
 }
 
-impl<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics> SemanticActions<'a, F, B, D> {
+impl<'a, F, B, D> SemanticActions<'a, F, B, D>
+where
+    F: Frontend<D>,
+    B: Backend<F::Ident, D::Span>,
+    D: Diagnostics,
+{
     pub fn new(session: Session<'a, F, B, D>) -> SemanticActions<'a, F, B, D> {
         SemanticActions {
             session,
@@ -58,9 +63,7 @@ impl<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics> SemanticActions<'a
     fn define_label_if_present(&mut self) {
         if let Some((label, span)) = self.label.take() {
             let value = self.session.backend.build_value().location(span.clone());
-            self.session
-                .backend
-                .define_symbol((label.into(), span), value)
+            self.session.backend.define_symbol((label, span), value)
         }
     }
 }
@@ -81,7 +84,7 @@ impl<'a, F, B, D> syntax::FileContext<F::Ident, Command, Literal<F::Ident>, D::S
     for SemanticActions<'a, F, B, D>
 where
     F: Frontend<D>,
-    B: Backend<D::Span>,
+    B: Backend<F::Ident, D::Span>,
     D: Diagnostics,
 {
     type StmtContext = Self;
@@ -96,7 +99,7 @@ impl<'a, F, B, D> syntax::StmtContext<F::Ident, Command, Literal<F::Ident>, D::S
     for SemanticActions<'a, F, B, D>
 where
     F: Frontend<D>,
-    B: Backend<D::Span>,
+    B: Backend<F::Ident, D::Span>,
     D: Diagnostics,
 {
     type CommandContext = CommandActions<'a, F, B, D>;
@@ -190,7 +193,7 @@ where
 impl<'a, F, B, D> syntax::CommandContext<D::Span> for CommandActions<'a, F, B, D>
 where
     F: Frontend<D>,
-    B: Backend<D::Span>,
+    B: Backend<F::Ident, D::Span>,
     D: Diagnostics,
 {
     type Ident = F::Ident;
@@ -299,11 +302,15 @@ where
     }
 }
 
-fn analyze_mnemonic<'a, F: Frontend<D>, B: Backend<D::Span>, D: Diagnostics>(
+fn analyze_mnemonic<'a, F, B, D>(
     name: (Mnemonic, D::Span),
     args: CommandArgs<F::Ident, D::Span>,
     actions: &mut SemanticActions<'a, F, B, D>,
-) {
+) where
+    F: Frontend<D>,
+    B: Backend<F::Ident, D::Span>,
+    D: Diagnostics,
+{
     let result = instruction::analyze_instruction(
         name,
         args.into_iter(),
@@ -433,7 +440,7 @@ where
 impl<'a, F, B, D> syntax::MacroInvocationContext<D::Span> for MacroInvocationActions<'a, F, B, D>
 where
     F: Frontend<D>,
-    B: Backend<D::Span>,
+    B: Backend<F::Ident, D::Span>,
     D: Diagnostics,
 {
     type Token = Token<F::Ident>;
@@ -520,29 +527,24 @@ where
     }
 }
 
-trait AnalyzeExpr<S: Clone> {
+trait AnalyzeExpr<I, S: Clone> {
     type Value: Source<Span = S>;
 
-    fn analyze_expr<I>(&mut self, expr: SemanticExpr<I, S>) -> Result<Self::Value, ()>
-    where
-        I: Into<String>;
+    fn analyze_expr(&mut self, expr: SemanticExpr<I, S>) -> Result<Self::Value, ()>;
 }
 
-impl<'a, B, D, S> AnalyzeExpr<S> for ValueContext<'a, B, D>
+impl<'a, I, B, D, S> AnalyzeExpr<I, S> for ValueContext<'a, B, D>
 where
-    B: ValueBuilder<S>,
+    B: ValueBuilder<I, S>,
     D: DownstreamDiagnostics<S>,
     S: Clone,
 {
     type Value = B::Value;
 
-    fn analyze_expr<I>(&mut self, expr: SemanticExpr<I, S>) -> Result<Self::Value, ()>
-    where
-        I: Into<String>,
-    {
+    fn analyze_expr(&mut self, expr: SemanticExpr<I, S>) -> Result<Self::Value, ()> {
         match expr.variant {
             ExprVariant::Atom(SemanticAtom::Ident(ident)) => {
-                Ok(self.builder.symbol((ident.into(), expr.span)))
+                Ok(self.builder.symbol((ident, expr.span)))
             }
             ExprVariant::Atom(SemanticAtom::Literal(Literal::Number(n))) => {
                 Ok(self.builder.number((n, expr.span)))
@@ -658,7 +660,7 @@ mod tests {
             _downstream: Downstream<B, TestDiagnostics<'a>>,
         ) -> Result<(), CodebaseError>
         where
-            B: Backend<()>,
+            B: Backend<String, ()>,
         {
             self.operations
                 .borrow_mut()
@@ -675,7 +677,7 @@ mod tests {
             args: MacroArgs<Self::Ident, ()>,
             _downstream: Downstream<B, TestDiagnostics<'a>>,
         ) where
-            B: Backend<()>,
+            B: Backend<String, ()>,
         {
             self.operations
                 .borrow_mut()
@@ -718,7 +720,7 @@ mod tests {
         type Value = RelocExpr<()>;
     }
 
-    impl<'a, 'b> BuildValue<'b, ()> for TestBackend<'a> {
+    impl<'a, 'b> BuildValue<'b, String, ()> for TestBackend<'a> {
         type Builder = RelocExprBuilder<()>;
 
         fn build_value(&mut self) -> Self::Builder {
@@ -726,13 +728,13 @@ mod tests {
         }
     }
 
-    impl<'a> Backend<()> for TestBackend<'a> {
+    impl<'a> Backend<String, ()> for TestBackend<'a> {
         type Object = ();
 
-        fn define_symbol(&mut self, symbol: (impl Into<String>, ()), value: RelocExpr<()>) {
+        fn define_symbol(&mut self, symbol: (String, ()), value: RelocExpr<()>) {
             self.operations
                 .borrow_mut()
-                .push(TestOperation::DefineSymbol(symbol.0.into(), value))
+                .push(TestOperation::DefineSymbol(symbol.0, value))
         }
 
         fn emit_item(&mut self, item: backend::Item<RelocExpr<()>>) {
