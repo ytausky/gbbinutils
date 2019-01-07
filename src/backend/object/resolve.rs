@@ -211,7 +211,48 @@ impl<S: Clone> Node<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::{object::ObjectBuilder, Backend};
+
+    use crate::backend::Backend;
+    use crate::backend::object::{ObjectBuilder, Chunk, SymbolId};
+    use crate::diag::IgnoreDiagnostics;
+
+    #[test]
+    fn resolve_origin_relative_to_previous_chunk() {
+        let origin1 = 0x150;
+        let skipped_bytes = 0x10;
+        let object = Object {
+            chunks: vec![
+                Chunk {
+                    origin: Some(origin1.into()),
+                    size: SymbolId(0),
+                    items: vec![Node::Byte(0x42)],
+                },
+                Chunk {
+                    origin: Some(
+                        ExprVariant::Binary(
+                            BinaryOperator::Plus,
+                            Box::new(RelocAtom::LocationCounter.into()),
+                            Box::new(skipped_bytes.into()),
+                        )
+                        .into(),
+                    ),
+                    size: SymbolId(1),
+                    items: vec![Node::Byte(0x43)],
+                },
+            ],
+            symbols: {
+                let mut table = SymbolTable::new();
+                table.new_symbol(Value::Unknown);
+                table.new_symbol(Value::Unknown);
+                table
+            },
+        };
+        let binary = object.link(&mut IgnoreDiagnostics::new());
+        assert_eq!(
+            binary.sections[1].origin,
+            (origin1 + 1 + skipped_bytes) as usize
+        )
+    }
 
     #[test]
     fn label_defined_as_chunk_origin_plus_offset() {
