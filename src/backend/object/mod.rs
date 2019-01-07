@@ -4,7 +4,6 @@ use crate::backend::{BinaryObject, RelocExpr, Width};
 use crate::diag::BackendDiagnostics;
 use std::borrow::Borrow;
 use std::collections::HashMap;
-use std::hash::Hash;
 
 mod context;
 mod resolve;
@@ -16,8 +15,8 @@ pub struct SymbolId(usize);
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct NameId(usize);
 
-pub struct Object<I, S> {
-    chunks: Vec<Chunk<I, S>>,
+pub struct Object<S> {
+    chunks: Vec<Chunk<NameId, S>>,
     symbols: SymbolTable,
 }
 
@@ -36,8 +35,8 @@ pub enum Node<I, S> {
     Symbol((I, S), RelocExpr<I, S>),
 }
 
-impl<I: Eq + Hash, S> Object<I, S> {
-    pub fn new() -> Object<I, S> {
+impl<S> Object<S> {
+    pub fn new() -> Object<S> {
         Object {
             chunks: Vec::new(),
             symbols: SymbolTable::new(),
@@ -50,7 +49,7 @@ impl<I: Eq + Hash, S> Object<I, S> {
     }
 }
 
-impl<S: Clone> Object<NameId, S> {
+impl<S: Clone> Object<S> {
     pub(crate) fn link(mut self, diagnostics: &mut impl BackendDiagnostics<S>) -> BinaryObject {
         self.resolve_symbols();
         let mut context = EvalContext {
@@ -78,7 +77,7 @@ impl<I, S> Chunk<I, S> {
 }
 
 pub struct ObjectBuilder<SR> {
-    object: Object<NameId, SR>,
+    object: Object<SR>,
     state: Option<BuilderState<SR>>,
     names: HashMap<String, NameId>,
 }
@@ -103,7 +102,7 @@ impl<SR> ObjectBuilder<SR> {
         self.current_chunk().items.push(node)
     }
 
-    pub fn build(self) -> Object<NameId, SR> {
+    pub fn build(self) -> Object<SR> {
         self.object
     }
 
@@ -213,7 +212,7 @@ mod tests {
     fn resolve_origin_relative_to_previous_chunk() {
         let origin1 = 0x150;
         let skipped_bytes = 0x10;
-        let object = Object::<NameId, _> {
+        let object = Object {
             chunks: vec![
                 Chunk {
                     origin: Some(origin1.into()),
@@ -247,7 +246,7 @@ mod tests {
         )
     }
 
-    fn build_object(f: impl FnOnce(&mut ObjectBuilder<()>)) -> Object<NameId, ()> {
+    fn build_object(f: impl FnOnce(&mut ObjectBuilder<()>)) -> Object<()> {
         let mut builder = ObjectBuilder::new();
         f(&mut builder);
         builder.build()

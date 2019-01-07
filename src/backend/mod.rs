@@ -240,7 +240,7 @@ impl<'a, S: Clone + 'static> BuildValue<'a, String, S> for ObjectBuilder<S> {
 }
 
 impl<S: Clone + 'static> Backend<String, S> for ObjectBuilder<S> {
-    type Object = Object<NameId, S>;
+    type Object = Object<S>;
 
     fn define_symbol(&mut self, symbol: (String, S), value: Self::Value) {
         self.define(symbol, value)

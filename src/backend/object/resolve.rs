@@ -113,7 +113,7 @@ impl Mul for &Value {
     }
 }
 
-impl<S: Clone> Object<NameId, S> {
+impl<S: Clone> Object<S> {
     pub fn resolve_symbols(&mut self) {
         self.refine_symbols();
         self.refine_symbols();
@@ -283,7 +283,7 @@ mod tests {
         }
     }
 
-    fn assert_chunk_size(expected: impl Into<Value>, f: impl FnOnce(&mut Object<NameId, ()>)) {
+    fn assert_chunk_size(expected: impl Into<Value>, f: impl FnOnce(&mut Object<()>)) {
         let mut object = Object::new();
         object.add_chunk();
         f(&mut object);
