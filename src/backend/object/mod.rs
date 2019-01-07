@@ -3,18 +3,19 @@ use self::resolve::Value;
 use crate::backend::{BinaryObject, RelocExpr, Width};
 use crate::diag::BackendDiagnostics;
 use std::borrow::Borrow;
+use std::hash::Hash;
 
 mod context;
 mod resolve;
 mod translate;
 
 pub struct Object<SR> {
-    chunks: Vec<Chunk<SR>>,
+    chunks: Vec<Chunk<String, SR>>,
 }
 
-pub(crate) struct Chunk<R> {
-    origin: Option<RelocExpr<String, R>>,
-    items: Vec<Node<String, R>>,
+pub(crate) struct Chunk<I, S> {
+    origin: Option<RelocExpr<I, S>>,
+    items: Vec<Node<I, S>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -55,8 +56,8 @@ where
     }
 }
 
-impl<SR> Chunk<SR> {
-    pub fn new() -> Chunk<SR> {
+impl<I, S> Chunk<I, S> {
+    pub fn new() -> Chunk<I, S> {
         Chunk {
             origin: None,
             items: Vec::new(),
@@ -92,7 +93,7 @@ impl<SR> ObjectBuilder<SR> {
         self.object
     }
 
-    fn current_chunk(&mut self) -> &mut Chunk<SR> {
+    fn current_chunk(&mut self) -> &mut Chunk<String, SR> {
         match self.state.take().unwrap() {
             BuilderState::Pending { origin } => {
                 self.object.add_chunk();
@@ -116,17 +117,17 @@ impl<SR> ObjectBuilder<SR> {
     }
 }
 
-impl<S: Clone> Chunk<S> {
+impl<I: Eq + Hash, S: Clone> Chunk<I, S> {
     fn traverse<ST, F>(&self, context: &mut EvalContext<ST>, f: F) -> Value
     where
-        ST: Borrow<SymbolTable<String>>,
-        F: FnMut(&Node<String, S>, &mut EvalContext<ST>),
+        ST: Borrow<SymbolTable<I>>,
+        F: FnMut(&Node<I, S>, &mut EvalContext<ST>),
     {
         context.location = self.evaluate_origin(context);
         traverse_chunk_items(&self.items, context, f)
     }
 
-    fn evaluate_origin<ST: Borrow<SymbolTable<String>>>(&self, context: &EvalContext<ST>) -> Value {
+    fn evaluate_origin<ST: Borrow<SymbolTable<I>>>(&self, context: &EvalContext<ST>) -> Value {
         self.origin
             .as_ref()
             .map(|expr| expr.evaluate(context))
@@ -134,15 +135,16 @@ impl<S: Clone> Chunk<S> {
     }
 }
 
-fn traverse_chunk_items<S, ST, F>(
-    items: &[Node<String, S>],
+fn traverse_chunk_items<I, S, ST, F>(
+    items: &[Node<I, S>],
     context: &mut EvalContext<ST>,
     mut f: F,
 ) -> Value
 where
+    I: Eq + Hash,
     S: Clone,
-    ST: Borrow<SymbolTable<String>>,
-    F: FnMut(&Node<String, S>, &mut EvalContext<ST>),
+    ST: Borrow<SymbolTable<I>>,
+    F: FnMut(&Node<I, S>, &mut EvalContext<ST>),
 {
     let origin = context.location.clone();
     let mut offset = Value::from(0);

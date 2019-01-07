@@ -6,10 +6,10 @@ use crate::span::Source;
 use std::hash::Hash;
 use std::vec::IntoIter;
 
-impl<S: Clone> Chunk<S> {
+impl<I: Eq + Hash, S: Clone> Chunk<I, S> {
     pub fn translate(
         &self,
-        context: &mut EvalContext<&SymbolTable<String>>,
+        context: &mut EvalContext<&SymbolTable<I>>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> BinarySection {
         let mut data = Vec::<u8>::new();
@@ -250,7 +250,7 @@ mod tests {
         assert_eq!(binary.data, [0xe3, 0xff])
     }
 
-    fn translate_without_context<S: Clone + PartialEq>(chunk: Chunk<S>) -> BinarySection {
+    fn translate_without_context<S: Clone + PartialEq>(chunk: Chunk<String, S>) -> BinarySection {
         let mut context = EvalContext {
             symbols: &SymbolTable::new(),
             location: 0.into(),
