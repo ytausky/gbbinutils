@@ -26,21 +26,11 @@ impl<SR> ObjectBuilder<SR> {
         }
     }
 
-    pub fn push(&mut self, node: Node<SR>) {
+    fn push(&mut self, node: Node<SR>) {
         self.current_chunk().items.push(node)
     }
 
-    pub fn build(self) -> Object<SR> {
-        self.object
-    }
-
-    pub fn define(&mut self, (name, span): (String, SR), value: RelocExpr<NameId, SR>) {
-        let name_id = self.lookup(name);
-        self.object.symbols.define_name(name_id, Value::Unknown);
-        self.push(Node::Symbol((name_id, span), value))
-    }
-
-    pub fn lookup(&mut self, name: String) -> NameId {
+    fn lookup(&mut self, name: String) -> NameId {
         let symbols = &mut self.object.symbols;
         *self.names.entry(name).or_insert_with(|| symbols.new_name())
     }
@@ -61,19 +51,15 @@ impl<SR> ObjectBuilder<SR> {
             }
         }
     }
-
-    pub fn constrain_origin(&mut self, origin: RelocExpr<NameId, SR>) {
-        self.state = Some(BuilderState::Pending {
-            origin: Some(origin),
-        })
-    }
 }
 
 impl<S: Clone + 'static> Backend<String, S> for ObjectBuilder<S> {
     type Object = Object<S>;
 
-    fn define_symbol(&mut self, symbol: (String, S), value: Self::Value) {
-        self.define(symbol, value)
+    fn define_symbol(&mut self, (name, span): (String, S), value: Self::Value) {
+        let name_id = self.lookup(name);
+        self.object.symbols.define_name(name_id, Value::Unknown);
+        self.push(Node::Symbol((name_id, span), value))
     }
 
     fn emit_item(&mut self, item: Item<Self::Value>) {
@@ -82,11 +68,13 @@ impl<S: Clone + 'static> Backend<String, S> for ObjectBuilder<S> {
     }
 
     fn into_object(self) -> Self::Object {
-        self.build()
+        self.object
     }
 
     fn set_origin(&mut self, origin: Self::Value) {
-        self.constrain_origin(origin)
+        self.state = Some(BuilderState::Pending {
+            origin: Some(origin),
+        })
     }
 }
 
@@ -139,7 +127,7 @@ mod tests {
     fn constrain_origin_determines_origin_of_new_chunk() {
         let origin: RelocExpr<_, _> = 0x3000.into();
         let object = build_object(|builder| {
-            builder.constrain_origin(origin.clone());
+            builder.set_origin(origin.clone());
             builder.push(Node::Byte(0xcd))
         });
         assert_eq!(object.chunks[0].origin, Some(origin))
@@ -148,7 +136,7 @@ mod tests {
     fn build_object(f: impl FnOnce(&mut ObjectBuilder<()>)) -> Object<()> {
         let mut builder = ObjectBuilder::new();
         f(&mut builder);
-        builder.build()
+        builder.into_object()
     }
 
     #[test]
@@ -259,14 +247,14 @@ mod tests {
         assert_eq!(object.sections.last().unwrap().data, [0x02, 0x00])
     }
 
-    fn with_object_builder<S: Clone, F: FnOnce(&mut ObjectBuilder<S>)>(
+    fn with_object_builder<S: Clone + 'static, F: FnOnce(&mut ObjectBuilder<S>)>(
         f: F,
     ) -> (BinaryObject, Box<[CompactDiagnostic<S, S>]>) {
         let mut diagnostics = TestDiagnosticsListener::new();
         let object = {
             let mut builder = ObjectBuilder::new();
             f(&mut builder);
-            builder.build().link(&mut diagnostics)
+            builder.into_object().link(&mut diagnostics)
         };
         let diagnostics = diagnostics.diagnostics.into_inner().into_boxed_slice();
         (object, diagnostics)
