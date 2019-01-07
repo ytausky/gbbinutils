@@ -73,26 +73,28 @@ pub enum Item<V: Source> {
     Instruction(Instruction<V>),
 }
 
-pub type RelocExpr<S> = Expr<RelocAtom, Empty, BinaryOperator, S>;
+pub type RelocExpr<I, S> = Expr<RelocAtom<I>, Empty, BinaryOperator, S>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Empty {}
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum RelocAtom {
+pub enum RelocAtom<I> {
     Literal(i32),
     LocationCounter,
-    Symbol(String),
+    Symbol(I),
 }
 
-impl<S> From<i32> for ExprVariant<RelocAtom, Empty, BinaryOperator, S> {
+impl<I, S> From<i32> for ExprVariant<RelocAtom<I>, Empty, BinaryOperator, S> {
     fn from(n: i32) -> Self {
         ExprVariant::Atom(RelocAtom::Literal(n))
     }
 }
 
 #[cfg(test)]
-impl<T: Into<ExprVariant<RelocAtom, Empty, BinaryOperator, ()>>> From<T> for RelocExpr<()> {
+impl<I, T: Into<ExprVariant<RelocAtom<I>, Empty, BinaryOperator, ()>>> From<T>
+    for RelocExpr<I, ()>
+{
     fn from(variant: T) -> Self {
         Expr {
             variant: variant.into(),
@@ -141,26 +143,26 @@ impl<S> RelocExprBuilder<S> {
 }
 
 impl<S: Clone> ValueBuilder<String, S> for RelocExprBuilder<S> {
-    type Value = RelocExpr<S>;
+    type Value = RelocExpr<String, S>;
 
-    fn location(&mut self, span: S) -> RelocExpr<S> {
+    fn location(&mut self, span: S) -> Self::Value {
         RelocExpr::from_atom(RelocAtom::LocationCounter, span)
     }
 
-    fn number(&mut self, (number, span): (i32, S)) -> RelocExpr<S> {
+    fn number(&mut self, (number, span): (i32, S)) -> Self::Value {
         RelocExpr::from_atom(RelocAtom::Literal(number), span)
     }
 
-    fn symbol(&mut self, (symbol, span): (String, S)) -> RelocExpr<S> {
+    fn symbol(&mut self, (symbol, span): (String, S)) -> Self::Value {
         RelocExpr::from_atom(RelocAtom::Symbol(symbol), span)
     }
 
     fn apply_binary_operator(
         &mut self,
         operator: (BinaryOperator, S),
-        left: RelocExpr<S>,
-        right: RelocExpr<S>,
-    ) -> RelocExpr<S> {
+        left: Self::Value,
+        right: Self::Value,
+    ) -> Self::Value {
         Expr {
             variant: ExprVariant::Binary(operator.0, Box::new(left), Box::new(right)),
             span: operator.1,
@@ -169,7 +171,7 @@ impl<S: Clone> ValueBuilder<String, S> for RelocExprBuilder<S> {
 }
 
 impl<S: Clone> HasValue<S> for ObjectBuilder<S> {
-    type Value = RelocExpr<S>;
+    type Value = RelocExpr<String, S>;
 }
 
 impl<'a, S: Clone> BuildValue<'a, String, S> for ObjectBuilder<S> {
@@ -187,7 +189,7 @@ impl<S: Clone> Backend<String, S> for ObjectBuilder<S> {
         self.push(Node::Symbol(symbol, value))
     }
 
-    fn emit_item(&mut self, item: Item<RelocExpr<S>>) {
+    fn emit_item(&mut self, item: Item<Self::Value>) {
         item.lower().for_each(|data_item| self.push(data_item))
     }
 
@@ -195,7 +197,7 @@ impl<S: Clone> Backend<String, S> for ObjectBuilder<S> {
         self.build()
     }
 
-    fn set_origin(&mut self, origin: RelocExpr<S>) {
+    fn set_origin(&mut self, origin: Self::Value) {
         self.constrain_origin(origin)
     }
 }
@@ -260,7 +262,7 @@ mod tests {
         emit_items_and_compare([byte_literal(0x12), byte_literal(0x34)], [0x12, 0x34])
     }
 
-    fn byte_literal(value: i32) -> Item<RelocExpr<()>> {
+    fn byte_literal(value: i32) -> Item<RelocExpr<String, ()>> {
         Item::Data(value.into(), Width::Byte)
     }
 
@@ -274,7 +276,7 @@ mod tests {
 
     fn emit_items_and_compare<I, B>(items: I, bytes: B)
     where
-        I: Borrow<[Item<RelocExpr<()>>]>,
+        I: Borrow<[Item<RelocExpr<String, ()>>]>,
         B: Borrow<[u8]>,
     {
         let (object, _) = with_object_builder(|builder| {
@@ -369,11 +371,14 @@ mod tests {
         (object, diagnostics)
     }
 
-    fn symbol_expr_item<S: Clone>(symbol: impl Into<String>, span: S) -> Item<RelocExpr<S>> {
+    fn symbol_expr_item<S: Clone>(
+        symbol: impl Into<String>,
+        span: S,
+    ) -> Item<RelocExpr<String, S>> {
         Item::Data(symbol_expr(symbol, span), Width::Word)
     }
 
-    fn symbol_expr<S>(symbol: impl Into<String>, span: S) -> RelocExpr<S> {
+    fn symbol_expr<S>(symbol: impl Into<String>, span: S) -> RelocExpr<String, S> {
         RelocExpr {
             variant: ExprVariant::Atom(RelocAtom::Symbol(symbol.into())),
             span,

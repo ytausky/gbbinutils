@@ -12,25 +12,32 @@ pub struct SymbolTable<I> {
 #[derive(Clone, Copy)]
 pub struct SymbolId(usize);
 
-pub trait SymbolKey<I>: Copy {
+pub trait Associate<I> {
     fn associate(self, context: &mut SymbolTable<I>, id: SymbolId);
-    fn to_symbol_id(self, table: &SymbolTable<I>) -> Option<SymbolId>;
 }
 
-impl<I> SymbolKey<I> for SymbolId {
+pub trait ToSymbolId<I> {
+    fn to_symbol_id(&self, table: &SymbolTable<I>) -> Option<SymbolId>;
+}
+
+impl<I> Associate<I> for SymbolId {
     fn associate(self, _: &mut SymbolTable<I>, _: SymbolId) {}
+}
 
-    fn to_symbol_id(self, _: &SymbolTable<I>) -> Option<SymbolId> {
-        Some(self)
+impl<I> ToSymbolId<I> for SymbolId {
+    fn to_symbol_id(&self, _: &SymbolTable<I>) -> Option<SymbolId> {
+        Some(*self)
     }
 }
 
-impl<'a, I: Borrow<Q> + Eq + From<&'a Q> + Hash, Q: Eq + Hash + ?Sized> SymbolKey<I> for &'a Q {
+impl<I: Eq + Hash> Associate<I> for I {
     fn associate(self, context: &mut SymbolTable<I>, id: SymbolId) {
-        context.names.insert(self.into(), id);
+        context.names.insert(self, id);
     }
+}
 
-    fn to_symbol_id(self, table: &SymbolTable<I>) -> Option<SymbolId> {
+impl<I: Borrow<Q> + Eq + Hash, Q: Eq + Hash + ?Sized> ToSymbolId<I> for Q {
+    fn to_symbol_id(&self, table: &SymbolTable<I>) -> Option<SymbolId> {
         table.names.get(self).cloned()
     }
 }
@@ -38,15 +45,17 @@ impl<'a, I: Borrow<Q> + Eq + From<&'a Q> + Hash, Q: Eq + Hash + ?Sized> SymbolKe
 #[derive(Clone, Copy)]
 pub struct ChunkSize(pub usize);
 
-impl<I> SymbolKey<I> for ChunkSize {
+impl<I> Associate<I> for ChunkSize {
     fn associate(self, context: &mut SymbolTable<I>, id: SymbolId) {
         let ChunkSize(index) = self;
         assert_eq!(index, context.sizes.len());
         context.sizes.push(id)
     }
+}
 
-    fn to_symbol_id(self, context: &SymbolTable<I>) -> Option<SymbolId> {
-        let ChunkSize(index) = self;
+impl<I> ToSymbolId<I> for ChunkSize {
+    fn to_symbol_id(&self, context: &SymbolTable<I>) -> Option<SymbolId> {
+        let ChunkSize(index) = *self;
         context.sizes.get(index).cloned()
     }
 }
@@ -60,22 +69,22 @@ impl<I: Eq + Hash> SymbolTable<I> {
         }
     }
 
-    pub fn define(&mut self, key: impl SymbolKey<I>, value: Value) {
+    pub fn define(&mut self, key: impl Associate<I>, value: Value) {
         let id = SymbolId(self.symbols.len());
         self.symbols.push(value);
         key.associate(self, id)
     }
 
-    pub fn get(&self, key: impl SymbolKey<I>) -> Option<&Value> {
+    pub fn get<K: ToSymbolId<I> + ?Sized>(&self, key: &K) -> Option<&Value> {
         key.to_symbol_id(self).map(|SymbolId(id)| &self.symbols[id])
     }
 
-    fn get_mut(&mut self, key: impl SymbolKey<I>) -> Option<&mut Value> {
+    fn get_mut(&mut self, key: &impl ToSymbolId<I>) -> Option<&mut Value> {
         key.to_symbol_id(self)
             .map(move |SymbolId(id)| &mut self.symbols[id])
     }
 
-    pub fn refine(&mut self, key: impl SymbolKey<I>, value: Value) -> bool {
+    pub fn refine(&mut self, key: &impl ToSymbolId<I>, value: Value) -> bool {
         let stored_value = self.get_mut(key).unwrap();
         let old_value = stored_value.clone();
         let was_refined = match (old_value, &value) {

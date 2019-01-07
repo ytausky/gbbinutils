@@ -477,11 +477,11 @@ mod tests {
         Literal::Operand(keyword).into()
     }
 
-    pub fn number(n: i32, span: impl Into<TokenSpan>) -> RelocExpr<TokenSpan> {
+    pub fn number(n: i32, span: impl Into<TokenSpan>) -> RelocExpr<String, TokenSpan> {
         RelocExpr::from_atom(n, span.into())
     }
 
-    pub fn symbol(ident: &str, span: impl Into<TokenSpan>) -> RelocExpr<TokenSpan> {
+    pub fn symbol(ident: &str, span: impl Into<TokenSpan>) -> RelocExpr<String, TokenSpan> {
         RelocExpr::from_atom(RelocAtom::Symbol(ident.to_string()), span.into())
     }
 
@@ -633,7 +633,7 @@ mod tests {
         test_cp_const_analysis(n.into(), number(n, TokenId::Operand(0, 0)))
     }
 
-    fn test_cp_const_analysis(parsed: Input, expr: RelocExpr<TokenSpan>) {
+    fn test_cp_const_analysis(parsed: Input, expr: RelocExpr<String, TokenSpan>) {
         analyze(kw::Mnemonic::Cp, Some(parsed)).expect_instruction(Instruction::Alu(
             AluOperation::Cp,
             AluSource::Immediate(expr),
@@ -654,7 +654,7 @@ mod tests {
 
     pub type InstructionDescriptor = (
         (kw::Mnemonic, Vec<Input>),
-        Instruction<RelocExpr<TokenSpan>>,
+        Instruction<RelocExpr<String, TokenSpan>>,
     );
 
     fn describe_legal_instructions() -> Vec<InstructionDescriptor> {
@@ -858,11 +858,14 @@ mod tests {
     }
 
     pub struct AnalysisResult(
-        Result<Instruction<RelocExpr<TokenSpan>>, Vec<CompactDiagnostic<TokenSpan, TokenSpan>>>,
+        Result<
+            Instruction<RelocExpr<String, TokenSpan>>,
+            Vec<CompactDiagnostic<TokenSpan, TokenSpan>>,
+        >,
     );
 
     impl AnalysisResult {
-        pub fn expect_instruction(self, expected: Instruction<RelocExpr<TokenSpan>>) {
+        pub fn expect_instruction(self, expected: Instruction<RelocExpr<String, TokenSpan>>) {
             assert_eq!(self.0, Ok(expected))
         }
 

@@ -13,17 +13,17 @@ pub struct Object<SR> {
 }
 
 pub(crate) struct Chunk<R> {
-    origin: Option<RelocExpr<R>>,
+    origin: Option<RelocExpr<String, R>>,
     items: Vec<Node<R>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Node<SR> {
     Byte(u8),
-    Expr(RelocExpr<SR>, Width),
-    LdInlineAddr(u8, RelocExpr<SR>),
-    Embedded(u8, RelocExpr<SR>),
-    Symbol((String, SR), RelocExpr<SR>),
+    Expr(RelocExpr<String, SR>, Width),
+    LdInlineAddr(u8, RelocExpr<String, SR>),
+    Embedded(u8, RelocExpr<String, SR>),
+    Symbol((String, SR), RelocExpr<String, SR>),
 }
 
 impl<SR> Object<SR> {
@@ -70,7 +70,9 @@ pub struct ObjectBuilder<SR> {
 }
 
 enum BuilderState<SR> {
-    Pending { origin: Option<RelocExpr<SR>> },
+    Pending {
+        origin: Option<RelocExpr<String, SR>>,
+    },
     InChunk(usize),
 }
 
@@ -107,7 +109,7 @@ impl<SR> ObjectBuilder<SR> {
         }
     }
 
-    pub fn constrain_origin(&mut self, origin: RelocExpr<SR>) {
+    pub fn constrain_origin(&mut self, origin: RelocExpr<String, SR>) {
         self.state = Some(BuilderState::Pending {
             origin: Some(origin),
         })
@@ -173,7 +175,7 @@ mod tests {
 
     #[test]
     fn constrain_origin_determines_origin_of_new_chunk() {
-        let origin: RelocExpr<_> = 0x3000.into();
+        let origin: RelocExpr<_, _> = 0x3000.into();
         let object = build_object(|builder| {
             builder.constrain_origin(origin.clone());
             builder.push(Node::Byte(0xcd))

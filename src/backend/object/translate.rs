@@ -91,7 +91,7 @@ impl Data {
 }
 
 fn resolve_expr_item<S: Clone>(
-    expr: &RelocExpr<S>,
+    expr: &RelocExpr<String, S>,
     width: Width,
     context: &EvalContext<&SymbolTable<String>>,
     diagnostics: &mut impl BackendDiagnostics<S>,

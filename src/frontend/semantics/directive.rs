@@ -247,17 +247,17 @@ mod tests {
         test_data_items_emission(Directive::Dw, mk_word, [0x4332, 0x780f])
     }
 
-    fn mk_byte(byte: &i32) -> backend::Item<RelocExpr<()>> {
+    fn mk_byte(byte: &i32) -> backend::Item<RelocExpr<String, ()>> {
         backend::Item::Data((*byte).into(), Width::Byte)
     }
 
-    fn mk_word(word: &i32) -> backend::Item<RelocExpr<()>> {
+    fn mk_word(word: &i32) -> backend::Item<RelocExpr<String, ()>> {
         backend::Item::Data((*word).into(), Width::Word)
     }
 
     fn test_data_items_emission(
         directive: Directive,
-        mk_item: impl Fn(&i32) -> backend::Item<RelocExpr<()>>,
+        mk_item: impl Fn(&i32) -> backend::Item<RelocExpr<String, ()>>,
         data: impl Borrow<[i32]>,
     ) {
         let actions = with_directive(directive, |mut command| {

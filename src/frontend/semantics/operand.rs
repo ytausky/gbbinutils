@@ -251,7 +251,7 @@ mod tests {
     fn analyze_operand<S: Clone + PartialEq>(
         expr: SemanticExpr<String, S>,
         context: Context,
-    ) -> Result<Operand<RelocExpr<S>>, Vec<CompactDiagnostic<S, S>>>
+    ) -> Result<Operand<RelocExpr<String, S>>, Vec<CompactDiagnostic<S, S>>>
     where
         DiagnosticsCollector<S>: DownstreamDiagnostics<S>,
     {

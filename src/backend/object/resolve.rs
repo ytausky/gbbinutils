@@ -4,6 +4,7 @@ use super::context::ChunkSize;
 use crate::backend::{Node, Object, RelocAtom, RelocExpr};
 use crate::expr::{BinaryOperator, ExprVariant};
 use std::borrow::Borrow;
+use std::hash::Hash;
 use std::ops::{Add, AddAssign, Mul, RangeInclusive, Sub};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -131,10 +132,10 @@ fn collect_symbols<S: Clone>(object: &Object<S>) -> SymbolTable<String> {
             let size = chunk.traverse(&mut context, |item, context| {
                 if let Node::Symbol((symbol, _), expr) = item {
                     let value = expr.evaluate(context);
-                    context.symbols.define(symbol.as_str(), value)
+                    context.symbols.define(symbol.clone(), value)
                 }
             });
-            context.symbols.refine(ChunkSize(i), size);
+            context.symbols.refine(&ChunkSize(i), size);
         }
     }
     symbols
@@ -150,16 +151,16 @@ fn refine_symbols<S: Clone>(object: &Object<S>, symbols: &mut SymbolTable<String
         let size = chunk.traverse(context, |item, context| {
             if let Node::Symbol((symbol, _), expr) = item {
                 let value = expr.evaluate(context);
-                refinements += context.symbols.refine(symbol.as_str(), value) as i32
+                refinements += context.symbols.refine(symbol, value) as i32
             }
         });
-        refinements += context.symbols.refine(ChunkSize(i), size) as i32
+        refinements += context.symbols.refine(&ChunkSize(i), size) as i32
     }
     refinements
 }
 
-impl<S: Clone> RelocExpr<S> {
-    pub fn evaluate<ST: Borrow<SymbolTable<String>>>(&self, context: &EvalContext<ST>) -> Value {
+impl<I: Eq + Hash, S: Clone> RelocExpr<I, S> {
+    pub fn evaluate<ST: Borrow<SymbolTable<I>>>(&self, context: &EvalContext<ST>) -> Value {
         self.evaluate_strictly(context, &mut |_: &S| ())
     }
 
@@ -169,7 +170,7 @@ impl<S: Clone> RelocExpr<S> {
         on_undefined_symbol: &mut F,
     ) -> Value
     where
-        ST: Borrow<SymbolTable<String>>,
+        ST: Borrow<SymbolTable<I>>,
         F: FnMut(&S),
     {
         use self::ExprVariant::*;
@@ -188,21 +189,16 @@ impl<S: Clone> RelocExpr<S> {
     }
 }
 
-impl RelocAtom {
+impl<I: Eq + Hash> RelocAtom<I> {
     fn evaluate_strictly<ST>(&self, context: &EvalContext<ST>) -> Result<Value, ()>
     where
-        ST: Borrow<SymbolTable<String>>,
+        ST: Borrow<SymbolTable<I>>,
     {
         use self::RelocAtom::*;
         match self {
             Literal(value) => Ok((*value).into()),
             LocationCounter => Ok(context.location.clone()),
-            Symbol(symbol) => context
-                .symbols
-                .borrow()
-                .get(symbol.as_str())
-                .cloned()
-                .ok_or(()),
+            Symbol(symbol) => context.symbols.borrow().get(symbol).cloned().ok_or(()),
         }
     }
 }
@@ -315,6 +311,6 @@ mod tests {
         object.add_chunk();
         f(&mut object.chunks[0]);
         let symbols = resolve_symbols(&object);
-        assert_eq!(symbols.get(ChunkSize(0)).cloned(), Some(expected.into()))
+        assert_eq!(symbols.get(&ChunkSize(0)).cloned(), Some(expected.into()))
     }
 }

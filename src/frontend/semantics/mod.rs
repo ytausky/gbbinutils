@@ -717,7 +717,7 @@ mod tests {
     }
 
     impl<'a> HasValue<()> for TestBackend<'a> {
-        type Value = RelocExpr<()>;
+        type Value = RelocExpr<String, ()>;
     }
 
     impl<'a, 'b> BuildValue<'b, String, ()> for TestBackend<'a> {
@@ -731,13 +731,13 @@ mod tests {
     impl<'a> Backend<String, ()> for TestBackend<'a> {
         type Object = ();
 
-        fn define_symbol(&mut self, symbol: (String, ()), value: RelocExpr<()>) {
+        fn define_symbol(&mut self, symbol: (String, ()), value: RelocExpr<String, ()>) {
             self.operations
                 .borrow_mut()
                 .push(TestOperation::DefineSymbol(symbol.0, value))
         }
 
-        fn emit_item(&mut self, item: backend::Item<RelocExpr<()>>) {
+        fn emit_item(&mut self, item: backend::Item<RelocExpr<String, ()>>) {
             self.operations
                 .borrow_mut()
                 .push(TestOperation::EmitItem(item))
@@ -745,7 +745,7 @@ mod tests {
 
         fn into_object(self) -> Self::Object {}
 
-        fn set_origin(&mut self, origin: RelocExpr<()>) {
+        fn set_origin(&mut self, origin: RelocExpr<String, ()>) {
             self.operations
                 .borrow_mut()
                 .push(TestOperation::SetOrigin(origin))
@@ -845,10 +845,10 @@ mod tests {
         AnalyzeFile(String),
         InvokeMacro(String, Vec<Vec<Token<String>>>),
         DefineMacro(String, Vec<String>, Vec<Token<String>>),
-        DefineSymbol(String, RelocExpr<()>),
+        DefineSymbol(String, RelocExpr<String, ()>),
         EmitDiagnostic(CompactDiagnostic<(), ()>),
-        EmitItem(backend::Item<RelocExpr<()>>),
-        SetOrigin(RelocExpr<()>),
+        EmitItem(backend::Item<RelocExpr<String, ()>>),
+        SetOrigin(RelocExpr<String, ()>),
     }
 
     #[test]

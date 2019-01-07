@@ -546,25 +546,25 @@ mod tests {
     }
 
     impl<'a> HasValue<()> for Mock<'a> {
-        type Value = RelocExpr<()>;
+        type Value = RelocExpr<String, ()>;
     }
 
     impl<'a> Backend<String, ()> for Mock<'a> {
         type Object = ();
 
-        fn define_symbol(&mut self, symbol: (String, ()), value: RelocExpr<()>) {
+        fn define_symbol(&mut self, symbol: (String, ()), value: RelocExpr<String, ()>) {
             self.log
                 .borrow_mut()
                 .push(TestEvent::DefineSymbol(symbol.0, value))
         }
 
-        fn emit_item(&mut self, item: Item<RelocExpr<()>>) {
+        fn emit_item(&mut self, item: Item<RelocExpr<String, ()>>) {
             self.log.borrow_mut().push(TestEvent::EmitItem(item))
         }
 
         fn into_object(self) {}
 
-        fn set_origin(&mut self, _origin: RelocExpr<()>) {
+        fn set_origin(&mut self, _origin: RelocExpr<String, ()>) {
             unimplemented!()
         }
     }
@@ -588,9 +588,9 @@ mod tests {
     #[derive(Debug, PartialEq)]
     enum TestEvent {
         AnalyzeTokens(Vec<Token<String>>),
-        DefineSymbol(String, RelocExpr<()>),
+        DefineSymbol(String, RelocExpr<String, ()>),
         Diagnostic(CompactDiagnostic<(), ()>),
-        EmitItem(Item<RelocExpr<()>>),
+        EmitItem(Item<RelocExpr<String, ()>>),
     }
 
     struct TestFixture<'a> {
