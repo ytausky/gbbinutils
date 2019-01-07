@@ -23,16 +23,16 @@ pub struct Object<S> {
 pub(crate) struct Chunk<S> {
     origin: Option<RelocExpr<NameId, S>>,
     size: SymbolId,
-    items: Vec<Node<NameId, S>>,
+    items: Vec<Node<S>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Node<I, S> {
+pub enum Node<S> {
     Byte(u8),
-    Expr(RelocExpr<I, S>, Width),
-    LdInlineAddr(u8, RelocExpr<I, S>),
-    Embedded(u8, RelocExpr<I, S>),
-    Symbol((I, S), RelocExpr<I, S>),
+    Expr(RelocExpr<NameId, S>, Width),
+    LdInlineAddr(u8, RelocExpr<NameId, S>),
+    Embedded(u8, RelocExpr<NameId, S>),
+    Symbol((NameId, S), RelocExpr<NameId, S>),
 }
 
 impl<S> Object<S> {
@@ -98,7 +98,7 @@ impl<SR> ObjectBuilder<SR> {
         }
     }
 
-    pub fn push(&mut self, node: Node<NameId, SR>) {
+    pub fn push(&mut self, node: Node<SR>) {
         self.current_chunk().items.push(node)
     }
 
@@ -145,7 +145,7 @@ impl<S: Clone> Chunk<S> {
     fn traverse<ST, F>(&self, context: &mut EvalContext<ST>, f: F) -> Value
     where
         ST: Borrow<SymbolTable>,
-        F: FnMut(&Node<NameId, S>, &mut EvalContext<ST>),
+        F: FnMut(&Node<S>, &mut EvalContext<ST>),
     {
         context.location = self.evaluate_origin(context);
         traverse_chunk_items(&self.items, context, f)
@@ -160,14 +160,14 @@ impl<S: Clone> Chunk<S> {
 }
 
 fn traverse_chunk_items<S, ST, F>(
-    items: &[Node<NameId, S>],
+    items: &[Node<S>],
     context: &mut EvalContext<ST>,
     mut f: F,
 ) -> Value
 where
     S: Clone,
     ST: Borrow<SymbolTable>,
-    F: FnMut(&Node<NameId, S>, &mut EvalContext<ST>),
+    F: FnMut(&Node<S>, &mut EvalContext<ST>),
 {
     let origin = context.location.clone();
     let mut offset = Value::from(0);

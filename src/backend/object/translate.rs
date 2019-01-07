@@ -24,7 +24,7 @@ impl<S: Clone> Chunk<S> {
     }
 }
 
-impl<S: Clone> Node<NameId, S> {
+impl<S: Clone> Node<S> {
     fn translate(
         &self,
         context: &EvalContext<&SymbolTable>,
@@ -203,7 +203,7 @@ mod tests {
         assert_eq!(actual, [0x01])
     }
 
-    fn translate_chunk_item<S: Clone + PartialEq>(item: Node<NameId, S>) -> Vec<u8> {
+    fn translate_chunk_item<S: Clone + PartialEq>(item: Node<S>) -> Vec<u8> {
         use crate::backend::object::resolve::Value;
         use crate::diag;
         item.translate(

@@ -193,7 +193,7 @@ impl BinaryOperator {
     }
 }
 
-impl<S: Clone> Node<NameId, S> {
+impl<S: Clone> Node<S> {
     pub fn size<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
         match self {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),
