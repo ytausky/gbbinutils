@@ -1,6 +1,6 @@
-use crate::backend::object::{NameId, Node};
-use crate::backend::{BinaryOperator, Item, RelocAtom, RelocExpr, Width};
-use crate::expr::ExprVariant;
+use super::{NameId, Node};
+use crate::backend::{Item, RelocAtom, RelocExpr, Width};
+use crate::expr::{BinaryOperator, ExprVariant};
 use crate::instruction::*;
 use crate::span::Source;
 use std::mem;

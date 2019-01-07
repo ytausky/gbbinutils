@@ -1,8 +1,8 @@
 pub use super::context::EvalContext;
 
 use super::context::SymbolTable;
-use super::{NameId, Node};
-use crate::backend::{Object, RelocAtom, RelocExpr, Width};
+use super::{NameId, Node, Object};
+use crate::backend::{RelocAtom, RelocExpr, Width};
 use crate::expr::{BinaryOperator, ExprVariant};
 use std::borrow::Borrow;
 use std::ops::{Add, AddAssign, Mul, RangeInclusive, Sub};
@@ -222,9 +222,9 @@ impl Width {
 mod tests {
     use super::*;
 
-    use crate::backend::object::{Chunk, ObjectBuilder, SymbolId};
     use crate::backend::Backend;
     use crate::diag::IgnoreDiagnostics;
+    use crate::object::{Chunk, ObjectBuilder, SymbolId};
 
     #[test]
     fn resolve_origin_relative_to_previous_chunk() {

@@ -1,13 +1,8 @@
-pub use crate::backend::object::ObjectBuilder;
-
-use crate::backend::object::Object;
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
 use crate::instruction::Instruction;
 use crate::span::Source;
 #[cfg(test)]
 use std::marker::PhantomData;
-
-mod object;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Width {
@@ -115,7 +110,7 @@ impl<I, T: Into<ExprVariant<RelocAtom<I>, Empty, BinaryOperator, ()>>> From<T>
 }
 
 pub struct BinaryObject {
-    sections: Vec<BinarySection>,
+    pub sections: Vec<BinarySection>,
 }
 
 impl BinaryObject {
@@ -145,7 +140,7 @@ pub struct Rom {
     pub data: Box<[u8]>,
 }
 
-pub struct RelocExprBuilder<T>(T);
+pub struct RelocExprBuilder<T>(pub T);
 
 #[cfg(test)]
 pub type IndependentValueBuilder<S> = RelocExprBuilder<PhantomData<S>>;
@@ -205,8 +200,8 @@ where
 }
 
 pub struct BinarySection {
-    origin: usize,
-    data: Vec<u8>,
+    pub origin: usize,
+    pub data: Vec<u8>,
 }
 
 #[cfg(test)]

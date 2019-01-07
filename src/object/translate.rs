@@ -149,10 +149,11 @@ fn is_in_u8_range(n: i32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::object::SymbolId;
-    use crate::backend::{BinaryOperator, RelocAtom};
+
+    use crate::backend::RelocAtom;
     use crate::diag::IgnoreDiagnostics;
-    use crate::expr::ExprVariant;
+    use crate::expr::{BinaryOperator, ExprVariant};
+    use crate::object::SymbolId;
     use std::borrow::Borrow;
 
     #[test]
@@ -204,8 +205,8 @@ mod tests {
     }
 
     fn translate_chunk_item<S: Clone + PartialEq>(item: Node<S>) -> Vec<u8> {
-        use crate::backend::object::resolve::Value;
         use crate::diag;
+        use crate::object::resolve::Value;
         item.translate(
             &EvalContext {
                 symbols: &SymbolTable::new(),
