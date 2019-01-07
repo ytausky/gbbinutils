@@ -150,6 +150,7 @@ fn is_in_u8_range(n: i32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backend::object::SymbolId;
     use crate::backend::{BinaryOperator, RelocAtom};
     use crate::diag::IgnoreDiagnostics;
     use crate::expr::ExprVariant;
@@ -221,6 +222,7 @@ mod tests {
         let addr = 0x7ff0;
         let chunk = Chunk {
             origin: Some(addr.into()),
+            size: SymbolId(0),
             items: Vec::new(),
         };
         let translated = translate_without_context(chunk);
@@ -230,7 +232,7 @@ mod tests {
     #[test]
     fn translate_expr_with_location_counter() {
         let byte = 0x42;
-        let mut chunk = Chunk::new();
+        let mut chunk = Chunk::new(SymbolId(0));
         chunk.items.extend(vec![
             Node::Byte(byte),
             Node::Expr(RelocAtom::LocationCounter.into(), Width::Byte),
@@ -241,7 +243,7 @@ mod tests {
 
     #[test]
     fn location_counter_starts_from_chunk_origin() {
-        let mut chunk = Chunk::new();
+        let mut chunk = Chunk::new(SymbolId(0));
         chunk.origin = Some(0xffe1.into());
         chunk
             .items

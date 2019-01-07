@@ -1,6 +1,5 @@
 pub use super::context::{EvalContext, SymbolTable};
 
-use super::context::ChunkSize;
 use crate::backend::{Node, Object, RelocAtom, RelocExpr};
 use crate::expr::{BinaryOperator, ExprVariant};
 use std::borrow::Borrow;
@@ -121,21 +120,18 @@ impl<I: Clone + Eq + Hash, S: Clone> Object<I, S> {
     }
 
     fn collect_symbols(&mut self) {
-        (0..self.chunks.len()).for_each(|i| self.symbols.define(ChunkSize(i), Value::Unknown));
-        {
-            let mut context = EvalContext {
-                symbols: &mut self.symbols,
-                location: Value::Unknown,
-            };
-            for (i, chunk) in self.chunks.iter().enumerate() {
-                let size = chunk.traverse(&mut context, |item, context| {
-                    if let Node::Symbol((symbol, _), expr) = item {
-                        let value = expr.evaluate(context);
-                        context.symbols.define(symbol.clone(), value)
-                    }
-                });
-                context.symbols.refine(&ChunkSize(i), size);
-            }
+        let mut context = EvalContext {
+            symbols: &mut self.symbols,
+            location: Value::Unknown,
+        };
+        for chunk in self.chunks.iter() {
+            let size = chunk.traverse(&mut context, |item, context| {
+                if let Node::Symbol((symbol, _), expr) = item {
+                    let value = expr.evaluate(context);
+                    context.symbols.define(symbol.clone(), value)
+                }
+            });
+            context.symbols.refine(&chunk.size, size);
         }
     }
 
@@ -145,14 +141,14 @@ impl<I: Clone + Eq + Hash, S: Clone> Object<I, S> {
             symbols: &mut self.symbols,
             location: Value::Unknown,
         };
-        for (i, chunk) in self.chunks.iter().enumerate() {
+        for chunk in self.chunks.iter() {
             let size = chunk.traverse(context, |item, context| {
                 if let Node::Symbol((symbol, _), expr) = item {
                     let value = expr.evaluate(context);
                     refinements += context.symbols.refine(symbol, value) as i32
                 }
             });
-            refinements += context.symbols.refine(&ChunkSize(i), size) as i32
+            refinements += context.symbols.refine(&chunk.size, size) as i32
         }
         refinements
     }
@@ -311,7 +307,7 @@ mod tests {
         f(&mut object.chunks[0]);
         object.resolve_symbols();
         assert_eq!(
-            object.symbols.get(&ChunkSize(0)).cloned(),
+            object.symbols.get(&object.chunks[0].size).cloned(),
             Some(expected.into())
         )
     }

@@ -9,6 +9,9 @@ mod context;
 mod resolve;
 mod translate;
 
+#[derive(Clone, Copy)]
+pub struct SymbolId(usize);
+
 pub struct Object<I, S> {
     chunks: Vec<Chunk<I, S>>,
     symbols: SymbolTable<I>,
@@ -16,6 +19,7 @@ pub struct Object<I, S> {
 
 pub(crate) struct Chunk<I, S> {
     origin: Option<RelocExpr<I, S>>,
+    size: SymbolId,
     items: Vec<Node<I, S>>,
 }
 
@@ -37,7 +41,9 @@ impl<I: Eq + Hash, S> Object<I, S> {
     }
 
     fn add_chunk(&mut self) {
-        self.chunks.push(Chunk::new())
+        let size_symbol_id = SymbolId(self.symbols.symbols.len());
+        self.symbols.symbols.push(Value::Unknown);
+        self.chunks.push(Chunk::new(size_symbol_id))
     }
 }
 
@@ -59,9 +65,10 @@ impl<I: Clone + Eq + Hash, S: Clone> Object<I, S> {
 }
 
 impl<I, S> Chunk<I, S> {
-    pub fn new() -> Chunk<I, S> {
+    pub fn new(size: SymbolId) -> Chunk<I, S> {
         Chunk {
             origin: None,
+            size,
             items: Vec::new(),
         }
     }
@@ -195,6 +202,7 @@ mod tests {
             chunks: vec![
                 Chunk {
                     origin: Some(origin1.into()),
+                    size: SymbolId(0),
                     items: vec![Node::Byte(0x42)],
                 },
                 Chunk {
@@ -206,10 +214,16 @@ mod tests {
                         )
                         .into(),
                     ),
+                    size: SymbolId(1),
                     items: vec![Node::Byte(0x43)],
                 },
             ],
-            symbols: SymbolTable::new(),
+            symbols: {
+                let mut table = SymbolTable::new();
+                table.symbols.push(Value::Unknown);
+                table.symbols.push(Value::Unknown);
+                table
+            },
         };
         let binary = object.link(&mut IgnoreDiagnostics::new());
         assert_eq!(

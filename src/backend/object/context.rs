@@ -1,16 +1,13 @@
 use super::resolve::Value;
+use super::SymbolId;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::hash::Hash;
 
 pub struct SymbolTable<I> {
-    symbols: Vec<Value>,
+    pub symbols: Vec<Value>,
     names: HashMap<I, SymbolId>,
-    sizes: Vec<SymbolId>,
 }
-
-#[derive(Clone, Copy)]
-pub struct SymbolId(usize);
 
 pub trait Associate<I> {
     fn associate(self, context: &mut SymbolTable<I>, id: SymbolId);
@@ -42,30 +39,11 @@ impl<I: Borrow<Q> + Eq + Hash, Q: Eq + Hash + ?Sized> ToSymbolId<I> for Q {
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct ChunkSize(pub usize);
-
-impl<I> Associate<I> for ChunkSize {
-    fn associate(self, context: &mut SymbolTable<I>, id: SymbolId) {
-        let ChunkSize(index) = self;
-        assert_eq!(index, context.sizes.len());
-        context.sizes.push(id)
-    }
-}
-
-impl<I> ToSymbolId<I> for ChunkSize {
-    fn to_symbol_id(&self, context: &SymbolTable<I>) -> Option<SymbolId> {
-        let ChunkSize(index) = *self;
-        context.sizes.get(index).cloned()
-    }
-}
-
 impl<I: Eq + Hash> SymbolTable<I> {
     pub fn new() -> SymbolTable<I> {
         SymbolTable {
             symbols: Vec::new(),
             names: HashMap::new(),
-            sizes: Vec::new(),
         }
     }
 
