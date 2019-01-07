@@ -26,16 +26,29 @@ where
 
 pub(crate) trait DownstreamDiagnostics<S>
 where
-    Self: MergeSpans<S> + StripSpan<S>,
+    Self: MergeSpans<S>,
+    Self: BackendDiagnostics<S>,
+{
+}
+
+pub(crate) trait BackendDiagnostics<S>
+where
+    Self: StripSpan<S>,
     Self: EmitDiagnostic<S, <Self as StripSpan<S>>::Stripped>,
+{
+}
+
+impl<T, S> BackendDiagnostics<S> for T
+where
+    T: StripSpan<S>,
+    T: EmitDiagnostic<S, <T as StripSpan<S>>::Stripped>,
 {
 }
 
 impl<T, S> DownstreamDiagnostics<S> for T
 where
     T: MergeSpans<S>,
-    T: StripSpan<S>,
-    T: EmitDiagnostic<S, <T as StripSpan<S>>::Stripped>,
+    T: BackendDiagnostics<S>,
 {
 }
 
@@ -182,18 +195,27 @@ impl<S: Clone> Span for IgnoreDiagnostics<S> {
 }
 
 #[cfg(test)]
+impl<S: Clone> StripSpan<S> for IgnoreDiagnostics<S> {
+    type Stripped = S;
+
+    fn strip_span(&mut self, span: &S) -> Self::Stripped {
+        span.clone()
+    }
+}
+
+#[cfg(test)]
 impl<S: Clone> EmitDiagnostic<S, S> for IgnoreDiagnostics<S> {
     fn emit_diagnostic(&mut self, _: CompactDiagnostic<S, S>) {}
 }
 
 #[cfg(test)]
-pub(crate) struct TestDiagnosticsListener {
-    pub diagnostics: RefCell<Vec<CompactDiagnostic<(), ()>>>,
+pub(crate) struct TestDiagnosticsListener<S> {
+    pub diagnostics: RefCell<Vec<CompactDiagnostic<S, S>>>,
 }
 
 #[cfg(test)]
-impl TestDiagnosticsListener {
-    pub fn new() -> TestDiagnosticsListener {
+impl<S> TestDiagnosticsListener<S> {
+    pub fn new() -> TestDiagnosticsListener<S> {
         TestDiagnosticsListener {
             diagnostics: RefCell::new(Vec::new()),
         }
@@ -201,13 +223,22 @@ impl TestDiagnosticsListener {
 }
 
 #[cfg(test)]
-impl Span for TestDiagnosticsListener {
-    type Span = ();
+impl<S: Clone> Span for TestDiagnosticsListener<S> {
+    type Span = S;
 }
 
 #[cfg(test)]
-impl EmitDiagnostic<(), ()> for TestDiagnosticsListener {
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<(), ()>) {
+impl<S: Clone> StripSpan<S> for TestDiagnosticsListener<S> {
+    type Stripped = S;
+
+    fn strip_span(&mut self, span: &S) -> Self::Stripped {
+        span.clone()
+    }
+}
+
+#[cfg(test)]
+impl<S> EmitDiagnostic<S, S> for TestDiagnosticsListener<S> {
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<S, S>) {
         self.diagnostics.borrow_mut().push(diagnostic)
     }
 }

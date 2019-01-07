@@ -1,15 +1,15 @@
 use super::context::{EvalContext, SymbolTable};
 use super::{traverse_chunk_items, Chunk, Node};
 use crate::backend::{BinarySection, RelocExpr, Width};
-use crate::diag::{CompactDiagnostic, EmitDiagnostic, Message};
+use crate::diag::{BackendDiagnostics, CompactDiagnostic, Message};
 use crate::span::Source;
 use std::vec::IntoIter;
 
 impl<S: Clone> Chunk<S> {
-    pub fn translate<T>(
+    pub fn translate(
         &self,
         context: &mut EvalContext<&SymbolTable>,
-        diagnostics: &mut impl EmitDiagnostic<S, T>,
+        diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> BinarySection {
         let mut data = Vec::<u8>::new();
         let origin = self.evaluate_origin(&context);
@@ -25,10 +25,10 @@ impl<S: Clone> Chunk<S> {
 }
 
 impl<S: Clone> Node<S> {
-    fn translate<T>(
+    fn translate(
         &self,
         context: &EvalContext<&SymbolTable>,
-        diagnostics: &mut impl EmitDiagnostic<S, T>,
+        diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> IntoIter<u8> {
         match self {
             Node::Byte(value) => vec![*value],
@@ -90,19 +90,18 @@ impl Data {
     }
 }
 
-fn resolve_expr_item<T, S: Clone>(
+fn resolve_expr_item<S: Clone>(
     expr: &RelocExpr<S>,
     width: Width,
     context: &EvalContext<&SymbolTable>,
-    diagnostics: &mut impl EmitDiagnostic<S, T>,
+    diagnostics: &mut impl BackendDiagnostics<S>,
 ) -> Data {
     let span = expr.span();
     let value = expr
-        .evaluate_strictly(context, &mut |symbol, span| {
+        .evaluate_strictly(context, &mut |_, span| {
+            let symbol = diagnostics.strip_span(span);
             diagnostics.emit_diagnostic(CompactDiagnostic::new(
-                Message::UnresolvedSymbol {
-                    symbol: symbol.to_string(),
-                },
+                Message::UnresolvedSymbol { symbol },
                 span.clone(),
             ))
         })
@@ -111,10 +110,10 @@ fn resolve_expr_item<T, S: Clone>(
     fit_to_width((value, span), width, diagnostics)
 }
 
-fn fit_to_width<T, S: Clone>(
+fn fit_to_width<S: Clone>(
     (value, value_ref): (i32, S),
     width: Width,
-    diagnostics: &mut impl EmitDiagnostic<S, T>,
+    diagnostics: &mut impl BackendDiagnostics<S>,
 ) -> Data {
     if !is_in_range(value, width) {
         diagnostics.emit_diagnostic(CompactDiagnostic::new(

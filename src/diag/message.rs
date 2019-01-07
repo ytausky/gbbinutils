@@ -72,7 +72,7 @@ pub enum Message<S> {
     },
     UnmatchedParenthesis,
     UnresolvedSymbol {
-        symbol: String,
+        symbol: S,
     },
     ValueOutOfRange {
         value: i32,
@@ -199,7 +199,10 @@ impl Message<StrippedBufSpan> {
                 format!("encountered unexpected token `{}`", codebase.snippet(token))
             }
             UnmatchedParenthesis => "unmatched parenthesis".into(),
-            UnresolvedSymbol { symbol } => format!("symbol `{}` could not be resolved", symbol),
+            UnresolvedSymbol { symbol } => format!(
+                "symbol `{}` could not be resolved",
+                codebase.snippet(symbol)
+            ),
             ValueOutOfRange { value, width } => {
                 format!("value {} cannot be represented in a {}", value, width)
             }

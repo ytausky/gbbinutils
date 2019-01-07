@@ -1,7 +1,7 @@
 use self::context::{EvalContext, SymbolTable};
 use self::resolve::Value;
 use crate::backend::{BinaryObject, RelocExpr, Width};
-use crate::diag::EmitDiagnostic;
+use crate::diag::BackendDiagnostics;
 use std::borrow::Borrow;
 
 mod context;
@@ -36,10 +36,10 @@ impl<SR> Object<SR> {
     }
 }
 
-pub(crate) fn link<'a, S, T, D>(object: Object<S>, diagnostics: &mut D) -> BinaryObject
+pub(crate) fn link<'a, S, D>(object: Object<S>, diagnostics: &mut D) -> BinaryObject
 where
     S: Clone,
-    D: EmitDiagnostic<S, T> + 'a,
+    D: BackendDiagnostics<S> + 'a,
 {
     let symbols = resolve::resolve_symbols(&object);
     let mut context = EvalContext {

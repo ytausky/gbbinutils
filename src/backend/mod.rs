@@ -310,7 +310,7 @@ mod tests {
     fn diagnose_unresolved_symbol() {
         let ident = "ident";
         let (_, diagnostics) =
-            with_object_builder(|builder| builder.emit_item(symbol_expr_item(ident)));
+            with_object_builder(|builder| builder.emit_item(symbol_expr_item(ident, ident.into())));
         assert_eq!(*diagnostics, [unresolved(ident)]);
     }
 
@@ -323,10 +323,10 @@ mod tests {
                 RelocExpr {
                     variant: ExprVariant::Binary(
                         BinaryOperator::Minus,
-                        Box::new(symbol_expr(ident1)),
-                        Box::new(symbol_expr(ident2)),
+                        Box::new(symbol_expr(ident1, ident1.into())),
+                        Box::new(symbol_expr(ident2, ident2.into())),
                     ),
-                    span: (),
+                    span: "diff".into(),
                 },
                 Width::Word,
             ))
@@ -339,7 +339,7 @@ mod tests {
         let label = "label";
         let (object, diagnostics) = with_object_builder(|builder| {
             builder.define_symbol((label.into(), ()), RelocAtom::LocationCounter.into());
-            builder.emit_item(symbol_expr_item(label));
+            builder.emit_item(symbol_expr_item(label, ()));
         });
         assert_eq!(*diagnostics, []);
         assert_eq!(object.sections.last().unwrap().data, [0x00, 0x00])
@@ -349,18 +349,16 @@ mod tests {
     fn emit_symbol_defined_after_use() {
         let label = "label";
         let (object, diagnostics) = with_object_builder(|builder| {
-            builder.emit_item(symbol_expr_item(label));
+            builder.emit_item(symbol_expr_item(label, ()));
             builder.define_symbol((label.into(), ()), RelocAtom::LocationCounter.into());
         });
         assert_eq!(*diagnostics, []);
         assert_eq!(object.sections.last().unwrap().data, [0x02, 0x00])
     }
 
-    type TestObjectBuilder = ObjectBuilder<()>;
-
-    fn with_object_builder<F: FnOnce(&mut TestObjectBuilder)>(
+    fn with_object_builder<S: Clone, F: FnOnce(&mut ObjectBuilder<S>)>(
         f: F,
-    ) -> (BinaryObject, Box<[CompactDiagnostic<(), ()>]>) {
+    ) -> (BinaryObject, Box<[CompactDiagnostic<S, S>]>) {
         let mut diagnostics = TestDiagnosticsListener::new();
         let object = {
             let mut builder = ObjectBuilder::new();
@@ -371,23 +369,24 @@ mod tests {
         (object, diagnostics)
     }
 
-    fn symbol_expr_item(symbol: impl Into<String>) -> Item<RelocExpr<()>> {
-        Item::Data(symbol_expr(symbol), Width::Word)
+    fn symbol_expr_item<S: Clone>(symbol: impl Into<String>, span: S) -> Item<RelocExpr<S>> {
+        Item::Data(symbol_expr(symbol, span), Width::Word)
     }
 
-    fn symbol_expr(symbol: impl Into<String>) -> RelocExpr<()> {
+    fn symbol_expr<S>(symbol: impl Into<String>, span: S) -> RelocExpr<S> {
         RelocExpr {
             variant: ExprVariant::Atom(RelocAtom::Symbol(symbol.into())),
-            span: (),
+            span,
         }
     }
 
-    fn unresolved(symbol: impl Into<String>) -> CompactDiagnostic<(), ()> {
+    fn unresolved(symbol: impl Into<String>) -> CompactDiagnostic<String, String> {
+        let symbol = symbol.into();
         CompactDiagnostic::new(
             Message::UnresolvedSymbol {
-                symbol: symbol.into(),
+                symbol: symbol.clone(),
             },
-            (),
+            symbol,
         )
     }
 }
