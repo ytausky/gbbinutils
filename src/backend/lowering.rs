@@ -5,18 +5,19 @@ use crate::instruction::*;
 use crate::span::Source;
 use std::mem;
 
-pub trait Lower<S> {
-    fn lower(self) -> LoweredItem<S>;
+pub trait Lower<I, S> {
+    fn lower(self) -> LoweredItem<I, S>;
 }
 
-pub enum LoweredItem<S> {
+pub enum LoweredItem<I, S> {
     None,
-    One(Node<S>),
-    Two(Node<S>, Node<S>),
+    One(Node<I, S>),
+    Two(Node<I, S>, Node<I, S>),
 }
 
-impl<SR> Iterator for LoweredItem<SR> {
-    type Item = Node<SR>;
+impl<I, S> Iterator for LoweredItem<I, S> {
+    type Item = Node<I, S>;
+
     fn next(&mut self) -> Option<Self::Item> {
         match mem::replace(self, LoweredItem::None) {
             LoweredItem::None => None,
@@ -29,24 +30,24 @@ impl<SR> Iterator for LoweredItem<SR> {
     }
 }
 
-impl<S> LoweredItem<S> {
-    fn with_opcode(opcode: u8) -> LoweredItem<S> {
+impl<I, S> LoweredItem<I, S> {
+    fn with_opcode(opcode: u8) -> LoweredItem<I, S> {
         LoweredItem::One(Node::Byte(opcode))
     }
 
-    fn extended(opcode: impl Into<Node<S>>) -> LoweredItem<S> {
+    fn extended(opcode: impl Into<Node<I, S>>) -> LoweredItem<I, S> {
         LoweredItem::Two(Node::Byte(0xcb), opcode.into())
     }
 
-    fn and_byte(self, expr: RelocExpr<String, S>) -> Self {
+    fn and_byte(self, expr: RelocExpr<I, S>) -> Self {
         self.and_expr(expr, Width::Byte)
     }
 
-    fn and_word(self, expr: RelocExpr<String, S>) -> Self {
+    fn and_word(self, expr: RelocExpr<I, S>) -> Self {
         self.and_expr(expr, Width::Word)
     }
 
-    fn and_expr(self, expr: RelocExpr<String, S>, width: Width) -> Self {
+    fn and_expr(self, expr: RelocExpr<I, S>, width: Width) -> Self {
         match self {
             LoweredItem::One(item) => LoweredItem::Two(item, Node::Expr(expr, width)),
             LoweredItem::None | LoweredItem::Two(..) => panic!(),
@@ -54,14 +55,14 @@ impl<S> LoweredItem<S> {
     }
 }
 
-impl<S> From<u8> for Node<S> {
+impl<I, S> From<u8> for Node<I, S> {
     fn from(byte: u8) -> Self {
         Node::Byte(byte)
     }
 }
 
-impl<S: Clone> Lower<S> for Item<RelocExpr<String, S>> {
-    fn lower(self) -> LoweredItem<S> {
+impl<I, S: Clone> Lower<I, S> for Item<RelocExpr<I, S>> {
+    fn lower(self) -> LoweredItem<I, S> {
         match self {
             Item::Data(expr, width) => LoweredItem::One(Node::Expr(expr, width)),
             Item::Instruction(instruction) => instruction.lower(),
@@ -69,8 +70,8 @@ impl<S: Clone> Lower<S> for Item<RelocExpr<String, S>> {
     }
 }
 
-impl<S: Clone> Lower<S> for Instruction<RelocExpr<String, S>> {
-    fn lower(self) -> LoweredItem<S> {
+impl<I, S: Clone> Lower<I, S> for Instruction<RelocExpr<I, S>> {
+    fn lower(self) -> LoweredItem<I, S> {
         use crate::instruction::Instruction::*;
         match self {
             AddHl(reg16) => LoweredItem::with_opcode(0x09 | encode_reg16(reg16)),
@@ -103,8 +104,8 @@ impl<S: Clone> Lower<S> for Instruction<RelocExpr<String, S>> {
     }
 }
 
-impl<SR> Lower<SR> for Nullary {
-    fn lower(self) -> LoweredItem<SR> {
+impl<I, S> Lower<I, S> for Nullary {
+    fn lower(self) -> LoweredItem<I, S> {
         use crate::instruction::Nullary::*;
         let opcode = match self {
             Cpl => 0x2f,
@@ -128,8 +129,8 @@ impl<SR> Lower<SR> for Nullary {
     }
 }
 
-impl<S> Lower<S> for Ld<RelocExpr<String, S>> {
-    fn lower(self) -> LoweredItem<S> {
+impl<I, S> Lower<I, S> for Ld<RelocExpr<I, S>> {
+    fn lower(self) -> LoweredItem<I, S> {
         match self {
             Ld::Simple(dest, src) => encode_ld_to_reg_from_reg(dest, src),
             Ld::Special(special, direction) => encode_special_ld(special, direction),
@@ -145,10 +146,10 @@ impl<S> Lower<S> for Ld<RelocExpr<String, S>> {
     }
 }
 
-fn encode_special_ld<S>(
-    ld: SpecialLd<RelocExpr<String, S>>,
+fn encode_special_ld<I, S>(
+    ld: SpecialLd<RelocExpr<I, S>>,
     direction: Direction,
-) -> LoweredItem<S> {
+) -> LoweredItem<I, S> {
     let direction_bit = encode_direction(direction);
     match ld {
         SpecialLd::DerefPtrReg(ptr_reg) => {
@@ -161,16 +162,19 @@ fn encode_special_ld<S>(
     }
 }
 
-fn encode_simple_alu_operation<S>(operation: AluOperation, src: SimpleOperand) -> LoweredItem<S> {
+fn encode_simple_alu_operation<I, S>(
+    operation: AluOperation,
+    src: SimpleOperand,
+) -> LoweredItem<I, S> {
     LoweredItem::with_opcode(
         0b10_000_000 | encode_alu_operation(operation) | encode_simple_operand(src),
     )
 }
 
-fn encode_immediate_alu_operation<S>(
+fn encode_immediate_alu_operation<I, S>(
     operation: AluOperation,
-    expr: RelocExpr<String, S>,
-) -> LoweredItem<S> {
+    expr: RelocExpr<I, S>,
+) -> LoweredItem<I, S> {
     LoweredItem::with_opcode(0b11_000_110 | encode_alu_operation(operation)).and_byte(expr)
 }
 
@@ -188,10 +192,10 @@ fn encode_alu_operation(operation: AluOperation) -> u8 {
     }) << 3
 }
 
-fn encode_branch<S: Clone>(
-    branch: Branch<RelocExpr<String, S>>,
+fn encode_branch<I, S: Clone>(
+    branch: Branch<RelocExpr<I, S>>,
     condition: Option<Condition>,
-) -> LoweredItem<S> {
+) -> LoweredItem<I, S> {
     use crate::instruction::Branch::*;
     match branch {
         Call(target) => LoweredItem::with_opcode(match condition {
@@ -216,7 +220,7 @@ fn encode_branch<S: Clone>(
     }
 }
 
-fn mk_relative_expr<S: Clone>(expr: RelocExpr<String, S>) -> RelocExpr<String, S> {
+fn mk_relative_expr<I, S: Clone>(expr: RelocExpr<I, S>) -> RelocExpr<I, S> {
     let span = expr.span();
     RelocExpr {
         variant: ExprVariant::Binary(
@@ -273,7 +277,7 @@ fn encode_direction(direction: Direction) -> u8 {
     }
 }
 
-fn encode_ld_to_reg_from_reg<S>(dest: SimpleOperand, src: SimpleOperand) -> LoweredItem<S> {
+fn encode_ld_to_reg_from_reg<I, S>(dest: SimpleOperand, src: SimpleOperand) -> LoweredItem<I, S> {
     LoweredItem::with_opcode(
         0b01_000_000 | (encode_simple_operand(dest) << 3) | encode_simple_operand(src),
     )
@@ -346,7 +350,7 @@ mod tests {
 
     fn test_instruction(
         instruction: Instruction<RelocExpr<String, ()>>,
-        data_items: impl Borrow<[Node<()>]>,
+        data_items: impl Borrow<[Node<String, ()>]>,
     ) {
         let code: Vec<_> = instruction.lower().collect();
         assert_eq!(code, data_items.borrow())
@@ -407,7 +411,7 @@ mod tests {
         test_nullary(Cpl, bytes([0x2f]))
     }
 
-    fn test_nullary(nullary: instruction::Nullary, items: impl Borrow<[Node<()>]>) {
+    fn test_nullary(nullary: instruction::Nullary, items: impl Borrow<[Node<String, ()>]>) {
         test_instruction(Nullary(nullary), items)
     }
 
@@ -962,11 +966,11 @@ mod tests {
         }
     }
 
-    fn extended(suffix: impl Into<Node<()>>) -> Vec<Node<()>> {
+    fn extended(suffix: impl Into<Node<String, ()>>) -> Vec<Node<String, ()>> {
         vec![Node::Byte(0xcb), suffix.into()]
     }
 
-    fn bytes(data: impl Borrow<[u8]>) -> Vec<Node<()>> {
+    fn bytes(data: impl Borrow<[u8]>) -> Vec<Node<String, ()>> {
         data.borrow().iter().map(|&b| Node::Byte(b)).collect()
     }
 }

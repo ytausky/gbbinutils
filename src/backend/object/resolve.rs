@@ -214,8 +214,8 @@ impl BinaryOperator {
     }
 }
 
-impl<S: Clone> Node<S> {
-    pub fn size<ST: Borrow<SymbolTable<String>>>(&self, context: &EvalContext<ST>) -> Value {
+impl<I: Eq + Hash, S: Clone> Node<I, S> {
+    pub fn size<ST: Borrow<SymbolTable<I>>>(&self, context: &EvalContext<ST>) -> Value {
         match self {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),
             Node::Expr(_, width) => width.len().into(),

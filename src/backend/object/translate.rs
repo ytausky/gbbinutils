@@ -3,6 +3,7 @@ use super::{traverse_chunk_items, Chunk, Node};
 use crate::backend::{BinarySection, RelocExpr, Width};
 use crate::diag::{BackendDiagnostics, CompactDiagnostic, Message};
 use crate::span::Source;
+use std::hash::Hash;
 use std::vec::IntoIter;
 
 impl<S: Clone> Chunk<S> {
@@ -24,10 +25,10 @@ impl<S: Clone> Chunk<S> {
     }
 }
 
-impl<S: Clone> Node<S> {
+impl<I: Eq + Hash, S: Clone> Node<I, S> {
     fn translate(
         &self,
-        context: &EvalContext<&SymbolTable<String>>,
+        context: &EvalContext<&SymbolTable<I>>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> IntoIter<u8> {
         match self {
@@ -90,10 +91,10 @@ impl Data {
     }
 }
 
-fn resolve_expr_item<S: Clone>(
-    expr: &RelocExpr<String, S>,
+fn resolve_expr_item<I: Eq + Hash, S: Clone>(
+    expr: &RelocExpr<I, S>,
     width: Width,
-    context: &EvalContext<&SymbolTable<String>>,
+    context: &EvalContext<&SymbolTable<I>>,
     diagnostics: &mut impl BackendDiagnostics<S>,
 ) -> Data {
     let span = expr.span();
@@ -202,7 +203,7 @@ mod tests {
         assert_eq!(actual, [0x01])
     }
 
-    fn translate_chunk_item<S: Clone + PartialEq>(item: Node<S>) -> Vec<u8> {
+    fn translate_chunk_item<S: Clone + PartialEq>(item: Node<String, S>) -> Vec<u8> {
         use crate::backend::object::resolve::Value;
         use crate::diag;
         item.translate(
