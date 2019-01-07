@@ -11,6 +11,7 @@ mod translate;
 
 pub struct Object<I, S> {
     chunks: Vec<Chunk<I, S>>,
+    symbols: SymbolTable<I>,
 }
 
 pub(crate) struct Chunk<I, S> {
@@ -27,9 +28,12 @@ pub enum Node<I, S> {
     Symbol((I, S), RelocExpr<I, S>),
 }
 
-impl<I, S> Object<I, S> {
+impl<I: Eq + Hash, S> Object<I, S> {
     pub fn new() -> Object<I, S> {
-        Object { chunks: Vec::new() }
+        Object {
+            chunks: Vec::new(),
+            symbols: SymbolTable::new(),
+        }
     }
 
     fn add_chunk(&mut self) {
@@ -37,23 +41,20 @@ impl<I, S> Object<I, S> {
     }
 }
 
-pub(crate) fn link<'a, I, S, D>(object: Object<I, S>, diagnostics: &mut D) -> BinaryObject
-where
-    I: Clone + Eq + Hash,
-    S: Clone,
-    D: BackendDiagnostics<S> + 'a,
-{
-    let symbols = resolve::resolve_symbols(&object);
-    let mut context = EvalContext {
-        symbols: &symbols,
-        location: 0.into(),
-    };
-    BinaryObject {
-        sections: object
-            .chunks
-            .into_iter()
-            .map(|chunk| chunk.translate(&mut context, diagnostics))
-            .collect(),
+impl<I: Clone + Eq + Hash, S: Clone> Object<I, S> {
+    pub(crate) fn link(mut self, diagnostics: &mut impl BackendDiagnostics<S>) -> BinaryObject {
+        self.resolve_symbols();
+        let mut context = EvalContext {
+            symbols: &self.symbols,
+            location: 0.into(),
+        };
+        BinaryObject {
+            sections: self
+                .chunks
+                .into_iter()
+                .map(|chunk| chunk.translate(&mut context, diagnostics))
+                .collect(),
+        }
     }
 }
 
@@ -208,8 +209,9 @@ mod tests {
                     items: vec![Node::Byte(0x43)],
                 },
             ],
+            symbols: SymbolTable::new(),
         };
-        let binary = link(object, &mut IgnoreDiagnostics::new());
+        let binary = object.link(&mut IgnoreDiagnostics::new());
         assert_eq!(
             binary.sections[1].origin,
             (origin1 + 1 + skipped_bytes) as usize

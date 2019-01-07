@@ -86,7 +86,7 @@ fn try_assemble(
         backend::ObjectBuilder::new(),
         &mut diagnostics,
     )?;
-    Ok(backend::link(object, &mut diagnostics).into_rom())
+    Ok(object.link(&mut diagnostics).into_rom())
 }
 
 #[cfg(test)]

@@ -1,4 +1,3 @@
-pub(crate) use crate::backend::object::link;
 pub use crate::backend::object::ObjectBuilder;
 
 use crate::backend::{
@@ -365,7 +364,7 @@ mod tests {
         let object = {
             let mut builder = ObjectBuilder::new();
             f(&mut builder);
-            link(builder.build(), &mut diagnostics)
+            builder.build().link(&mut diagnostics)
         };
         let diagnostics = diagnostics.diagnostics.into_inner().into_boxed_slice();
         (object, diagnostics)

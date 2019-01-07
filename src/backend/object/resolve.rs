@@ -114,53 +114,48 @@ impl Mul for &Value {
     }
 }
 
-pub fn resolve_symbols<I: Clone + Eq + Hash, S: Clone>(object: &Object<I, S>) -> SymbolTable<I> {
-    let mut symbols = collect_symbols(object);
-    refine_symbols(object, &mut symbols);
-    symbols
-}
+impl<I: Clone + Eq + Hash, S: Clone> Object<I, S> {
+    pub fn resolve_symbols(&mut self) {
+        self.collect_symbols();
+        self.refine_symbols();
+    }
 
-fn collect_symbols<I: Clone + Eq + Hash, S: Clone>(object: &Object<I, S>) -> SymbolTable<I> {
-    let mut symbols = SymbolTable::new();
-    (0..object.chunks.len()).for_each(|i| symbols.define(ChunkSize(i), Value::Unknown));
-    {
-        let mut context = EvalContext {
-            symbols: &mut symbols,
-            location: Value::Unknown,
-        };
-        for (i, chunk) in object.chunks.iter().enumerate() {
-            let size = chunk.traverse(&mut context, |item, context| {
-                if let Node::Symbol((symbol, _), expr) = item {
-                    let value = expr.evaluate(context);
-                    context.symbols.define(symbol.clone(), value)
-                }
-            });
-            context.symbols.refine(&ChunkSize(i), size);
+    fn collect_symbols(&mut self) {
+        (0..self.chunks.len()).for_each(|i| self.symbols.define(ChunkSize(i), Value::Unknown));
+        {
+            let mut context = EvalContext {
+                symbols: &mut self.symbols,
+                location: Value::Unknown,
+            };
+            for (i, chunk) in self.chunks.iter().enumerate() {
+                let size = chunk.traverse(&mut context, |item, context| {
+                    if let Node::Symbol((symbol, _), expr) = item {
+                        let value = expr.evaluate(context);
+                        context.symbols.define(symbol.clone(), value)
+                    }
+                });
+                context.symbols.refine(&ChunkSize(i), size);
+            }
         }
     }
-    symbols
-}
 
-fn refine_symbols<I, S>(object: &Object<I, S>, symbols: &mut SymbolTable<I>) -> i32
-where
-    I: Eq + Hash,
-    S: Clone,
-{
-    let mut refinements = 0;
-    let context = &mut EvalContext {
-        symbols,
-        location: Value::Unknown,
-    };
-    for (i, chunk) in object.chunks.iter().enumerate() {
-        let size = chunk.traverse(context, |item, context| {
-            if let Node::Symbol((symbol, _), expr) = item {
-                let value = expr.evaluate(context);
-                refinements += context.symbols.refine(symbol, value) as i32
-            }
-        });
-        refinements += context.symbols.refine(&ChunkSize(i), size) as i32
+    fn refine_symbols(&mut self) -> i32 {
+        let mut refinements = 0;
+        let context = &mut EvalContext {
+            symbols: &mut self.symbols,
+            location: Value::Unknown,
+        };
+        for (i, chunk) in self.chunks.iter().enumerate() {
+            let size = chunk.traverse(context, |item, context| {
+                if let Node::Symbol((symbol, _), expr) = item {
+                    let value = expr.evaluate(context);
+                    refinements += context.symbols.refine(symbol, value) as i32
+                }
+            });
+            refinements += context.symbols.refine(&ChunkSize(i), size) as i32
+        }
+        refinements
     }
-    refinements
 }
 
 impl<I: Eq + Hash, S: Clone> RelocExpr<I, S> {
@@ -246,9 +241,9 @@ mod tests {
         let mut builder = ObjectBuilder::new();
         builder.set_origin(addr.into());
         builder.define_symbol((label.into(), ()), RelocAtom::LocationCounter.into());
-        let object = builder.into_object();
-        let symbols = resolve_symbols(&object);
-        assert_eq!(symbols.get(label), Some(&addr.into()))
+        let mut object = builder.into_object();
+        object.resolve_symbols();
+        assert_eq!(object.symbols.get(label), Some(&addr.into()))
     }
 
     #[test]
@@ -314,7 +309,10 @@ mod tests {
         let mut object = Object::<String, ()>::new();
         object.add_chunk();
         f(&mut object.chunks[0]);
-        let symbols = resolve_symbols(&object);
-        assert_eq!(symbols.get(&ChunkSize(0)).cloned(), Some(expected.into()))
+        object.resolve_symbols();
+        assert_eq!(
+            object.symbols.get(&ChunkSize(0)).cloned(),
+            Some(expected.into())
+        )
     }
 }
