@@ -84,7 +84,7 @@ fn try_assemble(
     let object = frontend::analyze_file(
         name.to_string(),
         &codebase,
-        program::ObjectBuilder::new(),
+        program::ProgramBuilder::new(),
         &mut diagnostics,
     )?;
     Ok(object.link(&mut diagnostics).into_rom())

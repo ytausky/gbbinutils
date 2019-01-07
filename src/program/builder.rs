@@ -1,11 +1,11 @@
-use super::{Chunk, NameId, Node, Object, Value};
+use super::{Chunk, NameId, Node, Program, Value};
 use crate::backend::{
     Backend, BuildValue, HasValue, Item, RelocAtom, RelocExpr, RelocExprBuilder, ToValue,
 };
 use std::collections::HashMap;
 
-pub struct ObjectBuilder<SR> {
-    object: Object<SR>,
+pub struct ProgramBuilder<SR> {
+    program: Program<SR>,
     state: Option<BuilderState<SR>>,
     names: HashMap<String, NameId>,
 }
@@ -17,10 +17,10 @@ enum BuilderState<SR> {
     InChunk(usize),
 }
 
-impl<SR> ObjectBuilder<SR> {
-    pub fn new() -> ObjectBuilder<SR> {
-        ObjectBuilder {
-            object: Object::new(),
+impl<SR> ProgramBuilder<SR> {
+    pub fn new() -> ProgramBuilder<SR> {
+        ProgramBuilder {
+            program: Program::new(),
             state: Some(BuilderState::Pending { origin: None }),
             names: HashMap::new(),
         }
@@ -31,34 +31,34 @@ impl<SR> ObjectBuilder<SR> {
     }
 
     fn lookup(&mut self, name: String) -> NameId {
-        let symbols = &mut self.object.symbols;
+        let symbols = &mut self.program.symbols;
         *self.names.entry(name).or_insert_with(|| symbols.new_name())
     }
 
     fn current_chunk(&mut self) -> &mut Chunk<SR> {
         match self.state.take().unwrap() {
             BuilderState::Pending { origin } => {
-                self.object.add_chunk();
-                let index = self.object.chunks.len() - 1;
+                self.program.add_chunk();
+                let index = self.program.chunks.len() - 1;
                 self.state = Some(BuilderState::InChunk(index));
-                let chunk = &mut self.object.chunks[index];
+                let chunk = &mut self.program.chunks[index];
                 chunk.origin = origin;
                 chunk
             }
             BuilderState::InChunk(index) => {
                 self.state = Some(BuilderState::InChunk(index));
-                &mut self.object.chunks[index]
+                &mut self.program.chunks[index]
             }
         }
     }
 }
 
-impl<S: Clone + 'static> Backend<String, S> for ObjectBuilder<S> {
-    type Object = Object<S>;
+impl<S: Clone + 'static> Backend<String, S> for ProgramBuilder<S> {
+    type Object = Program<S>;
 
     fn define_symbol(&mut self, (name, span): (String, S), value: Self::Value) {
         let name_id = self.lookup(name);
-        self.object.symbols.define_name(name_id, Value::Unknown);
+        self.program.symbols.define_name(name_id, Value::Unknown);
         self.push(Node::Symbol((name_id, span), value))
     }
 
@@ -68,7 +68,7 @@ impl<S: Clone + 'static> Backend<String, S> for ObjectBuilder<S> {
     }
 
     fn into_object(self) -> Self::Object {
-        self.object
+        self.program
     }
 
     fn set_origin(&mut self, origin: Self::Value) {
@@ -78,21 +78,21 @@ impl<S: Clone + 'static> Backend<String, S> for ObjectBuilder<S> {
     }
 }
 
-impl<'a, S: Clone> HasValue<S> for RelocExprBuilder<&'a mut ObjectBuilder<S>> {
+impl<'a, S: Clone> HasValue<S> for RelocExprBuilder<&'a mut ProgramBuilder<S>> {
     type Value = RelocExpr<NameId, S>;
 }
 
-impl<'a, S: Clone> ToValue<String, S> for RelocExprBuilder<&'a mut ObjectBuilder<S>> {
+impl<'a, S: Clone> ToValue<String, S> for RelocExprBuilder<&'a mut ProgramBuilder<S>> {
     fn to_value(&mut self, (name, span): (String, S)) -> Self::Value {
         RelocExpr::from_atom(RelocAtom::Symbol(self.0.lookup(name)), span)
     }
 }
 
-impl<S: Clone> HasValue<S> for ObjectBuilder<S> {
+impl<S: Clone> HasValue<S> for ProgramBuilder<S> {
     type Value = RelocExpr<NameId, S>;
 }
 
-impl<'a, S: Clone + 'static> BuildValue<'a, String, S> for ObjectBuilder<S> {
+impl<'a, S: Clone + 'static> BuildValue<'a, String, S> for ProgramBuilder<S> {
     type Builder = RelocExprBuilder<&'a mut Self>;
 
     fn build_value(&'a mut self) -> Self::Builder {
@@ -133,8 +133,8 @@ mod tests {
         assert_eq!(object.chunks[0].origin, Some(origin))
     }
 
-    fn build_object(f: impl FnOnce(&mut ObjectBuilder<()>)) -> Object<()> {
-        let mut builder = ObjectBuilder::new();
+    fn build_object(f: impl FnOnce(&mut ProgramBuilder<()>)) -> Program<()> {
+        let mut builder = ProgramBuilder::new();
         f(&mut builder);
         builder.into_object()
     }
@@ -247,12 +247,12 @@ mod tests {
         assert_eq!(object.sections.last().unwrap().data, [0x02, 0x00])
     }
 
-    fn with_object_builder<S: Clone + 'static, F: FnOnce(&mut ObjectBuilder<S>)>(
+    fn with_object_builder<S: Clone + 'static, F: FnOnce(&mut ProgramBuilder<S>)>(
         f: F,
     ) -> (BinaryObject, Box<[CompactDiagnostic<S, S>]>) {
         let mut diagnostics = TestDiagnosticsListener::new();
         let object = {
-            let mut builder = ObjectBuilder::new();
+            let mut builder = ProgramBuilder::new();
             f(&mut builder);
             builder.into_object().link(&mut diagnostics)
         };

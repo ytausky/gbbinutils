@@ -1,7 +1,7 @@
 pub use super::context::EvalContext;
 
 use super::context::SymbolTable;
-use super::{NameId, Node, Object};
+use super::{NameId, Node, Program};
 use crate::backend::{RelocAtom, RelocExpr, Width};
 use crate::expr::{BinaryOperator, ExprVariant};
 use std::borrow::Borrow;
@@ -114,7 +114,7 @@ impl Mul for &Value {
     }
 }
 
-impl<S: Clone> Object<S> {
+impl<S: Clone> Program<S> {
     pub fn resolve_symbols(&mut self) {
         self.refine_symbols();
         self.refine_symbols();
@@ -224,13 +224,13 @@ mod tests {
 
     use crate::backend::Backend;
     use crate::diag::IgnoreDiagnostics;
-    use crate::program::{Chunk, ObjectBuilder, SymbolId};
+    use crate::program::{Chunk, ProgramBuilder, SymbolId};
 
     #[test]
     fn resolve_origin_relative_to_previous_chunk() {
         let origin1 = 0x150;
         let skipped_bytes = 0x10;
-        let object = Object {
+        let object = Program {
             chunks: vec![
                 Chunk {
                     origin: Some(origin1.into()),
@@ -268,7 +268,7 @@ mod tests {
     fn label_defined_as_chunk_origin_plus_offset() {
         let label = "label";
         let addr = 0xffe1;
-        let mut builder = ObjectBuilder::new();
+        let mut builder = ProgramBuilder::new();
         builder.set_origin(addr.into());
         builder.define_symbol((label.into(), ()), RelocAtom::LocationCounter.into());
         let mut object = builder.into_object();
@@ -334,13 +334,13 @@ mod tests {
         }
     }
 
-    fn assert_chunk_size(expected: impl Into<Value>, f: impl FnOnce(&mut Object<()>)) {
-        let mut object = Object::new();
-        object.add_chunk();
-        f(&mut object);
-        object.resolve_symbols();
+    fn assert_chunk_size(expected: impl Into<Value>, f: impl FnOnce(&mut Program<()>)) {
+        let mut program = Program::new();
+        program.add_chunk();
+        f(&mut program);
+        program.resolve_symbols();
         assert_eq!(
-            object.symbols.get(object.chunks[0].size).cloned(),
+            program.symbols.get(program.chunks[0].size).cloned(),
             Some(expected.into())
         )
     }

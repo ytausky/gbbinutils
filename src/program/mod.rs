@@ -1,4 +1,4 @@
-pub use self::builder::ObjectBuilder;
+pub use self::builder::ProgramBuilder;
 
 use self::context::{EvalContext, SymbolTable};
 use self::resolve::Value;
@@ -18,7 +18,7 @@ struct SymbolId(usize);
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct NameId(usize);
 
-pub struct Object<S> {
+pub struct Program<S> {
     chunks: Vec<Chunk<S>>,
     symbols: SymbolTable,
 }
@@ -38,9 +38,9 @@ enum Node<S> {
     Symbol((NameId, S), RelocExpr<NameId, S>),
 }
 
-impl<S> Object<S> {
-    pub fn new() -> Object<S> {
-        Object {
+impl<S> Program<S> {
+    pub fn new() -> Program<S> {
+        Program {
             chunks: Vec::new(),
             symbols: SymbolTable::new(),
         }
@@ -52,7 +52,7 @@ impl<S> Object<S> {
     }
 }
 
-impl<S: Clone> Object<S> {
+impl<S: Clone> Program<S> {
     pub(crate) fn link(mut self, diagnostics: &mut impl BackendDiagnostics<S>) -> BinaryObject {
         self.resolve_symbols();
         let mut context = EvalContext {
