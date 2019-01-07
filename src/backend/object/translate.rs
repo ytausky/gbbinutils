@@ -8,7 +8,7 @@ use std::vec::IntoIter;
 impl<S: Clone> Chunk<S> {
     pub fn translate(
         &self,
-        context: &mut EvalContext<&SymbolTable>,
+        context: &mut EvalContext<&SymbolTable<String>>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> BinarySection {
         let mut data = Vec::<u8>::new();
@@ -27,7 +27,7 @@ impl<S: Clone> Chunk<S> {
 impl<S: Clone> Node<S> {
     fn translate(
         &self,
-        context: &EvalContext<&SymbolTable>,
+        context: &EvalContext<&SymbolTable<String>>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> IntoIter<u8> {
         match self {
@@ -93,7 +93,7 @@ impl Data {
 fn resolve_expr_item<S: Clone>(
     expr: &RelocExpr<S>,
     width: Width,
-    context: &EvalContext<&SymbolTable>,
+    context: &EvalContext<&SymbolTable<String>>,
     diagnostics: &mut impl BackendDiagnostics<S>,
 ) -> Data {
     let span = expr.span();

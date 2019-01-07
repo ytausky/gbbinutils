@@ -113,13 +113,13 @@ impl Mul for &Value {
     }
 }
 
-pub fn resolve_symbols<S: Clone>(object: &Object<S>) -> SymbolTable {
+pub fn resolve_symbols<S: Clone>(object: &Object<S>) -> SymbolTable<String> {
     let mut symbols = collect_symbols(object);
     refine_symbols(object, &mut symbols);
     symbols
 }
 
-fn collect_symbols<S: Clone>(object: &Object<S>) -> SymbolTable {
+fn collect_symbols<S: Clone>(object: &Object<S>) -> SymbolTable<String> {
     let mut symbols = SymbolTable::new();
     (0..object.chunks.len()).for_each(|i| symbols.define(ChunkSize(i), Value::Unknown));
     {
@@ -140,7 +140,7 @@ fn collect_symbols<S: Clone>(object: &Object<S>) -> SymbolTable {
     symbols
 }
 
-fn refine_symbols<S: Clone>(object: &Object<S>, symbols: &mut SymbolTable) -> i32 {
+fn refine_symbols<S: Clone>(object: &Object<S>, symbols: &mut SymbolTable<String>) -> i32 {
     let mut refinements = 0;
     let context = &mut EvalContext {
         symbols,
@@ -159,7 +159,7 @@ fn refine_symbols<S: Clone>(object: &Object<S>, symbols: &mut SymbolTable) -> i3
 }
 
 impl<S: Clone> RelocExpr<S> {
-    pub fn evaluate<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
+    pub fn evaluate<ST: Borrow<SymbolTable<String>>>(&self, context: &EvalContext<ST>) -> Value {
         self.evaluate_strictly(context, &mut |_: &S| ())
     }
 
@@ -169,7 +169,7 @@ impl<S: Clone> RelocExpr<S> {
         on_undefined_symbol: &mut F,
     ) -> Value
     where
-        ST: Borrow<SymbolTable>,
+        ST: Borrow<SymbolTable<String>>,
         F: FnMut(&S),
     {
         use self::ExprVariant::*;
@@ -191,7 +191,7 @@ impl<S: Clone> RelocExpr<S> {
 impl RelocAtom {
     fn evaluate_strictly<ST>(&self, context: &EvalContext<ST>) -> Result<Value, ()>
     where
-        ST: Borrow<SymbolTable>,
+        ST: Borrow<SymbolTable<String>>,
     {
         use self::RelocAtom::*;
         match self {
@@ -219,7 +219,7 @@ impl BinaryOperator {
 }
 
 impl<S: Clone> Node<S> {
-    pub fn size<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
+    pub fn size<ST: Borrow<SymbolTable<String>>>(&self, context: &EvalContext<ST>) -> Value {
         match self {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),
             Node::Expr(_, width) => width.len().into(),

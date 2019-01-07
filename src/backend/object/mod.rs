@@ -117,14 +117,14 @@ impl<SR> ObjectBuilder<SR> {
 impl<S: Clone> Chunk<S> {
     fn traverse<ST, F>(&self, context: &mut EvalContext<ST>, f: F) -> Value
     where
-        ST: Borrow<SymbolTable>,
+        ST: Borrow<SymbolTable<String>>,
         F: FnMut(&Node<S>, &mut EvalContext<ST>),
     {
         context.location = self.evaluate_origin(context);
         traverse_chunk_items(&self.items, context, f)
     }
 
-    fn evaluate_origin<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
+    fn evaluate_origin<ST: Borrow<SymbolTable<String>>>(&self, context: &EvalContext<ST>) -> Value {
         self.origin
             .as_ref()
             .map(|expr| expr.evaluate(context))
@@ -139,7 +139,7 @@ fn traverse_chunk_items<S, ST, F>(
 ) -> Value
 where
     S: Clone,
-    ST: Borrow<SymbolTable>,
+    ST: Borrow<SymbolTable<String>>,
     F: FnMut(&Node<S>, &mut EvalContext<ST>),
 {
     let origin = context.location.clone();

@@ -1,57 +1,58 @@
 use super::resolve::Value;
 use std::borrow::Borrow;
 use std::collections::HashMap;
+use std::hash::Hash;
 
-pub struct SymbolTable {
+pub struct SymbolTable<I> {
     symbols: Vec<Value>,
-    names: HashMap<String, SymbolId>,
+    names: HashMap<I, SymbolId>,
     sizes: Vec<SymbolId>,
 }
 
 #[derive(Clone, Copy)]
 pub struct SymbolId(usize);
 
-pub trait SymbolKey: Copy {
-    fn associate(&self, context: &mut SymbolTable, id: SymbolId);
-    fn to_symbol_id(&self, table: &SymbolTable) -> Option<SymbolId>;
+pub trait SymbolKey<I>: Copy {
+    fn associate(self, context: &mut SymbolTable<I>, id: SymbolId);
+    fn to_symbol_id(self, table: &SymbolTable<I>) -> Option<SymbolId>;
 }
 
-impl SymbolKey for SymbolId {
-    fn associate(&self, _: &mut SymbolTable, _: SymbolId) {}
+impl<I> SymbolKey<I> for SymbolId {
+    fn associate(self, _: &mut SymbolTable<I>, _: SymbolId) {}
 
-    fn to_symbol_id(&self, _: &SymbolTable) -> Option<SymbolId> {
-        Some(*self)
+    fn to_symbol_id(self, _: &SymbolTable<I>) -> Option<SymbolId> {
+        Some(self)
     }
 }
 
-impl<Q: Borrow<str> + Copy> SymbolKey for Q {
-    fn associate(&self, context: &mut SymbolTable, id: SymbolId) {
-        context.names.insert(self.borrow().to_string(), id);
+impl<'a, I: Borrow<Q> + Eq + From<&'a Q> + Hash, Q: Eq + Hash + ?Sized> SymbolKey<I> for &'a Q {
+    fn associate(self, context: &mut SymbolTable<I>, id: SymbolId) {
+        context.names.insert(self.into(), id);
     }
 
-    fn to_symbol_id(&self, table: &SymbolTable) -> Option<SymbolId> {
-        table.names.get(self.borrow()).cloned()
+    fn to_symbol_id(self, table: &SymbolTable<I>) -> Option<SymbolId> {
+        table.names.get(self).cloned()
     }
 }
 
 #[derive(Clone, Copy)]
 pub struct ChunkSize(pub usize);
 
-impl SymbolKey for ChunkSize {
-    fn associate(&self, context: &mut SymbolTable, id: SymbolId) {
-        let ChunkSize(index) = *self;
+impl<I> SymbolKey<I> for ChunkSize {
+    fn associate(self, context: &mut SymbolTable<I>, id: SymbolId) {
+        let ChunkSize(index) = self;
         assert_eq!(index, context.sizes.len());
         context.sizes.push(id)
     }
 
-    fn to_symbol_id(&self, context: &SymbolTable) -> Option<SymbolId> {
-        let ChunkSize(index) = *self;
+    fn to_symbol_id(self, context: &SymbolTable<I>) -> Option<SymbolId> {
+        let ChunkSize(index) = self;
         context.sizes.get(index).cloned()
     }
 }
 
-impl SymbolTable {
-    pub fn new() -> SymbolTable {
+impl<I: Eq + Hash> SymbolTable<I> {
+    pub fn new() -> SymbolTable<I> {
         SymbolTable {
             symbols: Vec::new(),
             names: HashMap::new(),
@@ -59,22 +60,22 @@ impl SymbolTable {
         }
     }
 
-    pub fn define(&mut self, key: impl SymbolKey, value: Value) {
+    pub fn define(&mut self, key: impl SymbolKey<I>, value: Value) {
         let id = SymbolId(self.symbols.len());
         self.symbols.push(value);
         key.associate(self, id)
     }
 
-    pub fn get(&self, key: impl SymbolKey) -> Option<&Value> {
+    pub fn get(&self, key: impl SymbolKey<I>) -> Option<&Value> {
         key.to_symbol_id(self).map(|SymbolId(id)| &self.symbols[id])
     }
 
-    fn get_mut(&mut self, key: impl SymbolKey) -> Option<&mut Value> {
+    fn get_mut(&mut self, key: impl SymbolKey<I>) -> Option<&mut Value> {
         key.to_symbol_id(self)
             .map(move |SymbolId(id)| &mut self.symbols[id])
     }
 
-    pub fn refine(&mut self, key: impl SymbolKey, value: Value) -> bool {
+    pub fn refine(&mut self, key: impl SymbolKey<I>, value: Value) -> bool {
         let stored_value = self.get_mut(key).unwrap();
         let old_value = stored_value.clone();
         let was_refined = match (old_value, &value) {
