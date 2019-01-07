@@ -114,13 +114,13 @@ impl Mul for &Value {
     }
 }
 
-pub fn resolve_symbols<S: Clone>(object: &Object<S>) -> SymbolTable<String> {
+pub fn resolve_symbols<I: Clone + Eq + Hash, S: Clone>(object: &Object<I, S>) -> SymbolTable<I> {
     let mut symbols = collect_symbols(object);
     refine_symbols(object, &mut symbols);
     symbols
 }
 
-fn collect_symbols<S: Clone>(object: &Object<S>) -> SymbolTable<String> {
+fn collect_symbols<I: Clone + Eq + Hash, S: Clone>(object: &Object<I, S>) -> SymbolTable<I> {
     let mut symbols = SymbolTable::new();
     (0..object.chunks.len()).for_each(|i| symbols.define(ChunkSize(i), Value::Unknown));
     {
@@ -141,7 +141,11 @@ fn collect_symbols<S: Clone>(object: &Object<S>) -> SymbolTable<String> {
     symbols
 }
 
-fn refine_symbols<S: Clone>(object: &Object<S>, symbols: &mut SymbolTable<String>) -> i32 {
+fn refine_symbols<I, S>(object: &Object<I, S>, symbols: &mut SymbolTable<I>) -> i32
+where
+    I: Eq + Hash,
+    S: Clone,
+{
     let mut refinements = 0;
     let context = &mut EvalContext {
         symbols,
@@ -307,7 +311,7 @@ mod tests {
     }
 
     fn assert_chunk_size(expected: impl Into<Value>, f: impl FnOnce(&mut Chunk<String, ()>)) {
-        let mut object = Object::<()>::new();
+        let mut object = Object::<String, ()>::new();
         object.add_chunk();
         f(&mut object.chunks[0]);
         let symbols = resolve_symbols(&object);

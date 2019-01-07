@@ -9,8 +9,8 @@ mod context;
 mod resolve;
 mod translate;
 
-pub struct Object<SR> {
-    chunks: Vec<Chunk<String, SR>>,
+pub struct Object<I, S> {
+    chunks: Vec<Chunk<I, S>>,
 }
 
 pub(crate) struct Chunk<I, S> {
@@ -27,8 +27,8 @@ pub enum Node<I, S> {
     Symbol((I, S), RelocExpr<I, S>),
 }
 
-impl<SR> Object<SR> {
-    pub fn new() -> Object<SR> {
+impl<I, S> Object<I, S> {
+    pub fn new() -> Object<I, S> {
         Object { chunks: Vec::new() }
     }
 
@@ -37,8 +37,9 @@ impl<SR> Object<SR> {
     }
 }
 
-pub(crate) fn link<'a, S, D>(object: Object<S>, diagnostics: &mut D) -> BinaryObject
+pub(crate) fn link<'a, I, S, D>(object: Object<I, S>, diagnostics: &mut D) -> BinaryObject
 where
+    I: Clone + Eq + Hash,
     S: Clone,
     D: BackendDiagnostics<S> + 'a,
 {
@@ -66,7 +67,7 @@ impl<I, S> Chunk<I, S> {
 }
 
 pub struct ObjectBuilder<SR> {
-    object: Object<SR>,
+    object: Object<String, SR>,
     state: Option<BuilderState<SR>>,
 }
 
@@ -89,7 +90,7 @@ impl<SR> ObjectBuilder<SR> {
         self.current_chunk().items.push(node)
     }
 
-    pub fn build(self) -> Object<SR> {
+    pub fn build(self) -> Object<String, SR> {
         self.object
     }
 
@@ -189,7 +190,7 @@ mod tests {
     fn resolve_origin_relative_to_previous_chunk() {
         let origin1 = 0x150;
         let skipped_bytes = 0x10;
-        let object = Object {
+        let object = Object::<String, _> {
             chunks: vec![
                 Chunk {
                     origin: Some(origin1.into()),
@@ -215,7 +216,7 @@ mod tests {
         )
     }
 
-    fn build_object(f: impl FnOnce(&mut ObjectBuilder<()>)) -> Object<()> {
+    fn build_object(f: impl FnOnce(&mut ObjectBuilder<()>)) -> Object<String, ()> {
         let mut builder = ObjectBuilder::new();
         f(&mut builder);
         builder.build()

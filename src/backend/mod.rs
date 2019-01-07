@@ -183,7 +183,7 @@ impl<'a, S: Clone> BuildValue<'a, String, S> for ObjectBuilder<S> {
 }
 
 impl<S: Clone> Backend<String, S> for ObjectBuilder<S> {
-    type Object = Object<S>;
+    type Object = Object<String, S>;
 
     fn define_symbol(&mut self, symbol: (String, S), value: Self::Value) {
         self.push(Node::Symbol(symbol, value))
