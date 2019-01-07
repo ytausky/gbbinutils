@@ -23,7 +23,7 @@ pub struct Object<S> {
     symbols: SymbolTable,
 }
 
-pub(crate) struct Chunk<S> {
+struct Chunk<S> {
     origin: Option<RelocExpr<NameId, S>>,
     size: SymbolId,
     items: Vec<Node<S>>,
