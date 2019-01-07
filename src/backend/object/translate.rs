@@ -5,7 +5,7 @@ use crate::diag::{BackendDiagnostics, CompactDiagnostic, Message};
 use crate::span::Source;
 use std::vec::IntoIter;
 
-impl<S: Clone> Chunk<NameId, S> {
+impl<S: Clone> Chunk<S> {
     pub fn translate(
         &self,
         context: &mut EvalContext<&SymbolTable>,
@@ -251,7 +251,7 @@ mod tests {
         assert_eq!(binary.data, [0xe3, 0xff])
     }
 
-    fn translate_without_context<S: Clone + PartialEq>(chunk: Chunk<NameId, S>) -> BinarySection {
+    fn translate_without_context<S: Clone + PartialEq>(chunk: Chunk<S>) -> BinarySection {
         let mut context = EvalContext {
             symbols: &SymbolTable::new(),
             location: 0.into(),

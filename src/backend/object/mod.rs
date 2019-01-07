@@ -16,14 +16,14 @@ pub struct SymbolId(usize);
 pub struct NameId(usize);
 
 pub struct Object<S> {
-    chunks: Vec<Chunk<NameId, S>>,
+    chunks: Vec<Chunk<S>>,
     symbols: SymbolTable,
 }
 
-pub(crate) struct Chunk<I, S> {
-    origin: Option<RelocExpr<I, S>>,
+pub(crate) struct Chunk<S> {
+    origin: Option<RelocExpr<NameId, S>>,
     size: SymbolId,
-    items: Vec<Node<I, S>>,
+    items: Vec<Node<NameId, S>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -66,8 +66,8 @@ impl<S: Clone> Object<S> {
     }
 }
 
-impl<I, S> Chunk<I, S> {
-    pub fn new(size: SymbolId) -> Chunk<I, S> {
+impl<S> Chunk<S> {
+    pub fn new(size: SymbolId) -> Chunk<S> {
         Chunk {
             origin: None,
             size,
@@ -117,7 +117,7 @@ impl<SR> ObjectBuilder<SR> {
         *self.names.entry(name).or_insert_with(|| symbols.new_name())
     }
 
-    fn current_chunk(&mut self) -> &mut Chunk<NameId, SR> {
+    fn current_chunk(&mut self) -> &mut Chunk<SR> {
         match self.state.take().unwrap() {
             BuilderState::Pending { origin } => {
                 self.object.add_chunk();
@@ -141,7 +141,7 @@ impl<SR> ObjectBuilder<SR> {
     }
 }
 
-impl<S: Clone> Chunk<NameId, S> {
+impl<S: Clone> Chunk<S> {
     fn traverse<ST, F>(&self, context: &mut EvalContext<ST>, f: F) -> Value
     where
         ST: Borrow<SymbolTable>,
