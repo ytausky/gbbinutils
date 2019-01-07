@@ -3,6 +3,7 @@ use self::resolve::Value;
 use crate::backend::{BinaryObject, RelocExpr, Width};
 use crate::diag::BackendDiagnostics;
 use std::borrow::Borrow;
+use std::collections::HashMap;
 use std::hash::Hash;
 
 mod context;
@@ -12,9 +13,12 @@ mod translate;
 #[derive(Clone, Copy)]
 pub struct SymbolId(usize);
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct NameId(usize);
+
 pub struct Object<I, S> {
     chunks: Vec<Chunk<I, S>>,
-    symbols: SymbolTable<I>,
+    symbols: SymbolTable,
 }
 
 pub(crate) struct Chunk<I, S> {
@@ -47,7 +51,7 @@ impl<I: Eq + Hash, S> Object<I, S> {
     }
 }
 
-impl<I: Clone + Eq + Hash, S: Clone> Object<I, S> {
+impl<S: Clone> Object<NameId, S> {
     pub(crate) fn link(mut self, diagnostics: &mut impl BackendDiagnostics<S>) -> BinaryObject {
         self.resolve_symbols();
         let mut context = EvalContext {
@@ -75,13 +79,14 @@ impl<I, S> Chunk<I, S> {
 }
 
 pub struct ObjectBuilder<SR> {
-    object: Object<String, SR>,
+    object: Object<NameId, SR>,
     state: Option<BuilderState<SR>>,
+    names: HashMap<String, NameId>,
 }
 
 enum BuilderState<SR> {
     Pending {
-        origin: Option<RelocExpr<String, SR>>,
+        origin: Option<RelocExpr<NameId, SR>>,
     },
     InChunk(usize),
 }
@@ -91,18 +96,37 @@ impl<SR> ObjectBuilder<SR> {
         ObjectBuilder {
             object: Object::new(),
             state: Some(BuilderState::Pending { origin: None }),
+            names: HashMap::new(),
         }
     }
 
-    pub fn push(&mut self, node: Node<String, SR>) {
+    pub fn push(&mut self, node: Node<NameId, SR>) {
         self.current_chunk().items.push(node)
     }
 
-    pub fn build(self) -> Object<String, SR> {
+    pub fn build(self) -> Object<NameId, SR> {
         self.object
     }
 
-    fn current_chunk(&mut self) -> &mut Chunk<String, SR> {
+    pub fn define(&mut self, symbol: (String, SR), value: RelocExpr<NameId, SR>) {
+        let name_id = self.lookup(symbol.0);
+        assert!(self.object.symbols.names[name_id.0].is_none());
+        let symbol_id = self.object.symbols.symbols.len();
+        self.object.symbols.symbols.push(Value::Unknown);
+        self.object.symbols.names[name_id.0] = Some(SymbolId(symbol_id));
+        self.push(Node::Symbol((name_id, symbol.1), value))
+    }
+
+    pub fn lookup(&mut self, name: String) -> NameId {
+        let symbols = &mut self.object.symbols;
+        *self.names.entry(name).or_insert_with(|| {
+            let id = symbols.names.len();
+            symbols.names.push(None);
+            NameId(id)
+        })
+    }
+
+    fn current_chunk(&mut self) -> &mut Chunk<NameId, SR> {
         match self.state.take().unwrap() {
             BuilderState::Pending { origin } => {
                 self.object.add_chunk();
@@ -119,24 +143,24 @@ impl<SR> ObjectBuilder<SR> {
         }
     }
 
-    pub fn constrain_origin(&mut self, origin: RelocExpr<String, SR>) {
+    pub fn constrain_origin(&mut self, origin: RelocExpr<NameId, SR>) {
         self.state = Some(BuilderState::Pending {
             origin: Some(origin),
         })
     }
 }
 
-impl<I: Eq + Hash, S: Clone> Chunk<I, S> {
+impl<S: Clone> Chunk<NameId, S> {
     fn traverse<ST, F>(&self, context: &mut EvalContext<ST>, f: F) -> Value
     where
-        ST: Borrow<SymbolTable<I>>,
-        F: FnMut(&Node<I, S>, &mut EvalContext<ST>),
+        ST: Borrow<SymbolTable>,
+        F: FnMut(&Node<NameId, S>, &mut EvalContext<ST>),
     {
         context.location = self.evaluate_origin(context);
         traverse_chunk_items(&self.items, context, f)
     }
 
-    fn evaluate_origin<ST: Borrow<SymbolTable<I>>>(&self, context: &EvalContext<ST>) -> Value {
+    fn evaluate_origin<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
         self.origin
             .as_ref()
             .map(|expr| expr.evaluate(context))
@@ -144,16 +168,15 @@ impl<I: Eq + Hash, S: Clone> Chunk<I, S> {
     }
 }
 
-fn traverse_chunk_items<I, S, ST, F>(
-    items: &[Node<I, S>],
+fn traverse_chunk_items<S, ST, F>(
+    items: &[Node<NameId, S>],
     context: &mut EvalContext<ST>,
     mut f: F,
 ) -> Value
 where
-    I: Eq + Hash,
     S: Clone,
-    ST: Borrow<SymbolTable<I>>,
-    F: FnMut(&Node<I, S>, &mut EvalContext<ST>),
+    ST: Borrow<SymbolTable>,
+    F: FnMut(&Node<NameId, S>, &mut EvalContext<ST>),
 {
     let origin = context.location.clone();
     let mut offset = Value::from(0);
@@ -198,7 +221,7 @@ mod tests {
     fn resolve_origin_relative_to_previous_chunk() {
         let origin1 = 0x150;
         let skipped_bytes = 0x10;
-        let object = Object::<String, _> {
+        let object = Object::<NameId, _> {
             chunks: vec![
                 Chunk {
                     origin: Some(origin1.into()),
@@ -232,7 +255,7 @@ mod tests {
         )
     }
 
-    fn build_object(f: impl FnOnce(&mut ObjectBuilder<()>)) -> Object<String, ()> {
+    fn build_object(f: impl FnOnce(&mut ObjectBuilder<()>)) -> Object<NameId, ()> {
         let mut builder = ObjectBuilder::new();
         f(&mut builder);
         builder.build()

@@ -2,7 +2,7 @@ pub use crate::backend::object::ObjectBuilder;
 
 use crate::backend::{
     lowering::Lower,
-    object::{Node, Object},
+    object::{NameId, Node, Object},
 };
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
 use crate::instruction::Instruction;
@@ -47,13 +47,17 @@ where
     Self: ToValue<LocationCounter, S>,
     Self: ToValue<i32, S>,
     Self: ToValue<I, S>,
+    Self: ApplyBinaryOperator<S>,
 {
-    fn apply_binary_operator(
-        &mut self,
-        operator: (BinaryOperator, S),
-        left: Self::Value,
-        right: Self::Value,
-    ) -> Self::Value;
+}
+
+impl<T, I, S: Clone> ValueBuilder<I, S> for T
+where
+    T: ToValue<LocationCounter, S>,
+    T: ToValue<i32, S>,
+    T: ToValue<I, S>,
+    T: ApplyBinaryOperator<S>,
+{
 }
 
 pub trait ToValue<T, S: Clone>
@@ -61,6 +65,18 @@ where
     Self: HasValue<S>,
 {
     fn to_value(&mut self, atom: (T, S)) -> Self::Value;
+}
+
+pub trait ApplyBinaryOperator<S: Clone>
+where
+    Self: HasValue<S>,
+{
+    fn apply_binary_operator(
+        &mut self,
+        operator: (BinaryOperator, S),
+        left: Self::Value,
+        right: Self::Value,
+    ) -> Self::Value;
 }
 
 pub trait Backend<I, S>
@@ -185,21 +201,18 @@ impl<S: Clone> ToValue<String, S> for IndependentValueBuilder<S> {
 }
 
 impl<'a, S: Clone> HasValue<S> for RelocExprBuilder<&'a mut ObjectBuilder<S>> {
-    type Value = RelocExpr<String, S>;
+    type Value = RelocExpr<NameId, S>;
 }
 
 impl<'a, S: Clone> ToValue<String, S> for RelocExprBuilder<&'a mut ObjectBuilder<S>> {
     fn to_value(&mut self, (name, span): (String, S)) -> Self::Value {
-        RelocExpr::from_atom(RelocAtom::Symbol(name), span)
+        RelocExpr::from_atom(RelocAtom::Symbol(self.0.lookup(name)), span)
     }
 }
 
-impl<I, T, S: Clone> ValueBuilder<I, S> for RelocExprBuilder<T>
+impl<I, T, S: Clone> ApplyBinaryOperator<S> for RelocExprBuilder<T>
 where
     Self: HasValue<S, Value = RelocExpr<I, S>>,
-    Self: ToValue<LocationCounter, S>,
-    Self: ToValue<i32, S>,
-    Self: ToValue<I, S>,
 {
     fn apply_binary_operator(
         &mut self,
@@ -215,7 +228,7 @@ where
 }
 
 impl<S: Clone> HasValue<S> for ObjectBuilder<S> {
-    type Value = RelocExpr<String, S>;
+    type Value = RelocExpr<NameId, S>;
 }
 
 impl<'a, S: Clone + 'static> BuildValue<'a, String, S> for ObjectBuilder<S> {
@@ -227,10 +240,10 @@ impl<'a, S: Clone + 'static> BuildValue<'a, String, S> for ObjectBuilder<S> {
 }
 
 impl<S: Clone + 'static> Backend<String, S> for ObjectBuilder<S> {
-    type Object = Object<String, S>;
+    type Object = Object<NameId, S>;
 
     fn define_symbol(&mut self, symbol: (String, S), value: Self::Value) {
-        self.push(Node::Symbol(symbol, value))
+        self.define(symbol, value)
     }
 
     fn emit_item(&mut self, item: Item<Self::Value>) {
@@ -306,7 +319,7 @@ mod tests {
         emit_items_and_compare([byte_literal(0x12), byte_literal(0x34)], [0x12, 0x34])
     }
 
-    fn byte_literal(value: i32) -> Item<RelocExpr<String, ()>> {
+    fn byte_literal(value: i32) -> Item<RelocExpr<NameId, ()>> {
         Item::Data(value.into(), Width::Byte)
     }
 
@@ -320,7 +333,7 @@ mod tests {
 
     fn emit_items_and_compare<I, B>(items: I, bytes: B)
     where
-        I: Borrow<[Item<RelocExpr<String, ()>>]>,
+        I: Borrow<[Item<RelocExpr<NameId, ()>>]>,
         B: Borrow<[u8]>,
     {
         let (object, _) = with_object_builder(|builder| {
@@ -417,7 +430,7 @@ mod tests {
         (object, diagnostics)
     }
 
-    fn word_item<S: Clone>(value: RelocExpr<String, S>) -> Item<RelocExpr<String, S>> {
+    fn word_item<S: Clone>(value: RelocExpr<NameId, S>) -> Item<RelocExpr<NameId, S>> {
         Item::Data(value, Width::Word)
     }
 

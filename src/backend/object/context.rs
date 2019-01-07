@@ -1,68 +1,46 @@
 use super::resolve::Value;
-use super::SymbolId;
-use std::borrow::Borrow;
-use std::collections::HashMap;
-use std::hash::Hash;
+use super::{NameId, SymbolId};
 
-pub struct SymbolTable<I> {
+pub struct SymbolTable {
     pub symbols: Vec<Value>,
-    names: HashMap<I, SymbolId>,
+    pub names: Vec<Option<SymbolId>>,
 }
 
-pub trait Associate<I> {
-    fn associate(self, context: &mut SymbolTable<I>, id: SymbolId);
+pub trait ToSymbolId: Copy {
+    fn to_symbol_id(self, table: &SymbolTable) -> Option<SymbolId>;
 }
 
-pub trait ToSymbolId<I> {
-    fn to_symbol_id(&self, table: &SymbolTable<I>) -> Option<SymbolId>;
-}
-
-impl<I> Associate<I> for SymbolId {
-    fn associate(self, _: &mut SymbolTable<I>, _: SymbolId) {}
-}
-
-impl<I> ToSymbolId<I> for SymbolId {
-    fn to_symbol_id(&self, _: &SymbolTable<I>) -> Option<SymbolId> {
-        Some(*self)
+impl ToSymbolId for SymbolId {
+    fn to_symbol_id(self, _: &SymbolTable) -> Option<SymbolId> {
+        Some(self)
     }
 }
 
-impl<I: Eq + Hash> Associate<I> for I {
-    fn associate(self, context: &mut SymbolTable<I>, id: SymbolId) {
-        context.names.insert(self, id);
+impl ToSymbolId for NameId {
+    fn to_symbol_id(self, table: &SymbolTable) -> Option<SymbolId> {
+        let NameId(name_id) = self;
+        table.names[name_id]
     }
 }
 
-impl<I: Borrow<Q> + Eq + Hash, Q: Eq + Hash + ?Sized> ToSymbolId<I> for Q {
-    fn to_symbol_id(&self, table: &SymbolTable<I>) -> Option<SymbolId> {
-        table.names.get(self).cloned()
-    }
-}
-
-impl<I: Eq + Hash> SymbolTable<I> {
-    pub fn new() -> SymbolTable<I> {
+impl SymbolTable {
+    pub fn new() -> SymbolTable {
         SymbolTable {
             symbols: Vec::new(),
-            names: HashMap::new(),
+            names: Vec::new(),
         }
     }
 
-    pub fn define(&mut self, key: impl Associate<I>, value: Value) {
-        let id = SymbolId(self.symbols.len());
-        self.symbols.push(value);
-        key.associate(self, id)
-    }
-
-    pub fn get<K: ToSymbolId<I> + ?Sized>(&self, key: &K) -> Option<&Value> {
+    pub fn get<K: ToSymbolId>(&self, key: K) -> Option<&Value> {
         key.to_symbol_id(self).map(|SymbolId(id)| &self.symbols[id])
     }
 
-    fn get_mut(&mut self, key: &impl ToSymbolId<I>) -> Option<&mut Value> {
+    fn get_mut(&mut self, key: impl ToSymbolId) -> Option<&mut Value> {
         key.to_symbol_id(self)
             .map(move |SymbolId(id)| &mut self.symbols[id])
     }
 
-    pub fn refine(&mut self, key: &impl ToSymbolId<I>, value: Value) -> bool {
+    pub fn refine(&mut self, key: impl ToSymbolId, value: Value) -> bool {
         let stored_value = self.get_mut(key).unwrap();
         let old_value = stored_value.clone();
         let was_refined = match (old_value, &value) {

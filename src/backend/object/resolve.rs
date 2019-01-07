@@ -1,9 +1,9 @@
 pub use super::context::{EvalContext, SymbolTable};
 
+use super::NameId;
 use crate::backend::{Node, Object, RelocAtom, RelocExpr};
 use crate::expr::{BinaryOperator, ExprVariant};
 use std::borrow::Borrow;
-use std::hash::Hash;
 use std::ops::{Add, AddAssign, Mul, RangeInclusive, Sub};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -113,26 +113,10 @@ impl Mul for &Value {
     }
 }
 
-impl<I: Clone + Eq + Hash, S: Clone> Object<I, S> {
+impl<S: Clone> Object<NameId, S> {
     pub fn resolve_symbols(&mut self) {
-        self.collect_symbols();
         self.refine_symbols();
-    }
-
-    fn collect_symbols(&mut self) {
-        let mut context = EvalContext {
-            symbols: &mut self.symbols,
-            location: Value::Unknown,
-        };
-        for chunk in self.chunks.iter() {
-            let size = chunk.traverse(&mut context, |item, context| {
-                if let Node::Symbol((symbol, _), expr) = item {
-                    let value = expr.evaluate(context);
-                    context.symbols.define(symbol.clone(), value)
-                }
-            });
-            context.symbols.refine(&chunk.size, size);
-        }
+        self.refine_symbols();
     }
 
     fn refine_symbols(&mut self) -> i32 {
@@ -145,17 +129,17 @@ impl<I: Clone + Eq + Hash, S: Clone> Object<I, S> {
             let size = chunk.traverse(context, |item, context| {
                 if let Node::Symbol((symbol, _), expr) = item {
                     let value = expr.evaluate(context);
-                    refinements += context.symbols.refine(symbol, value) as i32
+                    refinements += context.symbols.refine(*symbol, value) as i32
                 }
             });
-            refinements += context.symbols.refine(&chunk.size, size) as i32
+            refinements += context.symbols.refine(chunk.size, size) as i32
         }
         refinements
     }
 }
 
-impl<I: Eq + Hash, S: Clone> RelocExpr<I, S> {
-    pub fn evaluate<ST: Borrow<SymbolTable<I>>>(&self, context: &EvalContext<ST>) -> Value {
+impl<S: Clone> RelocExpr<NameId, S> {
+    pub fn evaluate<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
         self.evaluate_strictly(context, &mut |_: &S| ())
     }
 
@@ -165,7 +149,7 @@ impl<I: Eq + Hash, S: Clone> RelocExpr<I, S> {
         on_undefined_symbol: &mut F,
     ) -> Value
     where
-        ST: Borrow<SymbolTable<I>>,
+        ST: Borrow<SymbolTable>,
         F: FnMut(&S),
     {
         use self::ExprVariant::*;
@@ -184,16 +168,16 @@ impl<I: Eq + Hash, S: Clone> RelocExpr<I, S> {
     }
 }
 
-impl<I: Eq + Hash> RelocAtom<I> {
+impl RelocAtom<NameId> {
     fn evaluate_strictly<ST>(&self, context: &EvalContext<ST>) -> Result<Value, ()>
     where
-        ST: Borrow<SymbolTable<I>>,
+        ST: Borrow<SymbolTable>,
     {
         use self::RelocAtom::*;
         match self {
             Literal(value) => Ok((*value).into()),
             LocationCounter => Ok(context.location.clone()),
-            Symbol(symbol) => context.symbols.borrow().get(symbol).cloned().ok_or(()),
+            &Symbol(symbol) => context.symbols.borrow().get(symbol).cloned().ok_or(()),
         }
     }
 }
@@ -209,8 +193,8 @@ impl BinaryOperator {
     }
 }
 
-impl<I: Eq + Hash, S: Clone> Node<I, S> {
-    pub fn size<ST: Borrow<SymbolTable<I>>>(&self, context: &EvalContext<ST>) -> Value {
+impl<S: Clone> Node<NameId, S> {
+    pub fn size<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
         match self {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),
             Node::Expr(_, width) => width.len().into(),
@@ -227,7 +211,7 @@ impl<I: Eq + Hash, S: Clone> Node<I, S> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::object::Chunk;
+    use crate::backend::object::{Chunk, SymbolId};
     use crate::backend::{object::ObjectBuilder, Backend};
 
     #[test]
@@ -239,7 +223,8 @@ mod tests {
         builder.define_symbol((label.into(), ()), RelocAtom::LocationCounter.into());
         let mut object = builder.into_object();
         object.resolve_symbols();
-        assert_eq!(object.symbols.get(label), Some(&addr.into()))
+        let symbol_id = object.symbols.names[0].unwrap();
+        assert_eq!(object.symbols.symbols[symbol_id.0], addr.into())
     }
 
     #[test]
@@ -270,11 +255,12 @@ mod tests {
 
     #[test]
     fn ld_inline_addr_with_symbol_after_instruction_has_size_three() {
+        let label = NameId(0);
         assert_chunk_size(3, |section| {
             section.items.extend(
                 [
-                    Node::LdInlineAddr(0, RelocAtom::Symbol("label".to_string()).into()),
-                    Node::Symbol(("label".to_string(), ()), RelocAtom::LocationCounter.into()),
+                    Node::LdInlineAddr(0, RelocAtom::Symbol(label).into()),
+                    Node::Symbol((label, ()), RelocAtom::LocationCounter.into()),
                 ]
                 .iter()
                 .cloned(),
@@ -301,13 +287,18 @@ mod tests {
         }
     }
 
-    fn assert_chunk_size(expected: impl Into<Value>, f: impl FnOnce(&mut Chunk<String, ()>)) {
-        let mut object = Object::<String, ()>::new();
+    fn assert_chunk_size(expected: impl Into<Value>, f: impl FnOnce(&mut Chunk<NameId, ()>)) {
+        let mut object = Object::<NameId, ()>::new();
         object.add_chunk();
+        object
+            .symbols
+            .names
+            .push(Some(SymbolId(object.symbols.symbols.len())));
+        object.symbols.symbols.push(Value::Unknown);
         f(&mut object.chunks[0]);
         object.resolve_symbols();
         assert_eq!(
-            object.symbols.get(&object.chunks[0].size).cloned(),
+            object.symbols.get(object.chunks[0].size).cloned(),
             Some(expected.into())
         )
     }

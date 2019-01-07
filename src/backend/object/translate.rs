@@ -1,15 +1,14 @@
 use super::context::{EvalContext, SymbolTable};
-use super::{traverse_chunk_items, Chunk, Node};
+use super::{traverse_chunk_items, Chunk, NameId, Node};
 use crate::backend::{BinarySection, RelocExpr, Width};
 use crate::diag::{BackendDiagnostics, CompactDiagnostic, Message};
 use crate::span::Source;
-use std::hash::Hash;
 use std::vec::IntoIter;
 
-impl<I: Eq + Hash, S: Clone> Chunk<I, S> {
+impl<S: Clone> Chunk<NameId, S> {
     pub fn translate(
         &self,
-        context: &mut EvalContext<&SymbolTable<I>>,
+        context: &mut EvalContext<&SymbolTable>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> BinarySection {
         let mut data = Vec::<u8>::new();
@@ -25,10 +24,10 @@ impl<I: Eq + Hash, S: Clone> Chunk<I, S> {
     }
 }
 
-impl<I: Eq + Hash, S: Clone> Node<I, S> {
+impl<S: Clone> Node<NameId, S> {
     fn translate(
         &self,
-        context: &EvalContext<&SymbolTable<I>>,
+        context: &EvalContext<&SymbolTable>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> IntoIter<u8> {
         match self {
@@ -91,10 +90,10 @@ impl Data {
     }
 }
 
-fn resolve_expr_item<I: Eq + Hash, S: Clone>(
-    expr: &RelocExpr<I, S>,
+fn resolve_expr_item<S: Clone>(
+    expr: &RelocExpr<NameId, S>,
     width: Width,
-    context: &EvalContext<&SymbolTable<I>>,
+    context: &EvalContext<&SymbolTable>,
     diagnostics: &mut impl BackendDiagnostics<S>,
 ) -> Data {
     let span = expr.span();
@@ -204,7 +203,7 @@ mod tests {
         assert_eq!(actual, [0x01])
     }
 
-    fn translate_chunk_item<S: Clone + PartialEq>(item: Node<String, S>) -> Vec<u8> {
+    fn translate_chunk_item<S: Clone + PartialEq>(item: Node<NameId, S>) -> Vec<u8> {
         use crate::backend::object::resolve::Value;
         use crate::diag;
         item.translate(
@@ -252,7 +251,7 @@ mod tests {
         assert_eq!(binary.data, [0xe3, 0xff])
     }
 
-    fn translate_without_context<S: Clone + PartialEq>(chunk: Chunk<String, S>) -> BinarySection {
+    fn translate_without_context<S: Clone + PartialEq>(chunk: Chunk<NameId, S>) -> BinarySection {
         let mut context = EvalContext {
             symbols: &SymbolTable::new(),
             location: 0.into(),
