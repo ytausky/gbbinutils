@@ -153,7 +153,7 @@ mod tests {
     use crate::backend::RelocAtom;
     use crate::diag::IgnoreDiagnostics;
     use crate::expr::{BinaryOperator, ExprVariant};
-    use crate::object::SymbolId;
+    use crate::program::SymbolId;
     use std::borrow::Borrow;
 
     #[test]
@@ -206,7 +206,7 @@ mod tests {
 
     fn translate_chunk_item<S: Clone + PartialEq>(item: Node<S>) -> Vec<u8> {
         use crate::diag;
-        use crate::object::resolve::Value;
+        use crate::program::resolve::Value;
         item.translate(
             &EvalContext {
                 symbols: &SymbolTable::new(),

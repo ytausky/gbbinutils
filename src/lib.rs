@@ -14,7 +14,7 @@ pub mod diag;
 mod expr;
 mod frontend;
 mod instruction;
-mod object;
+mod program;
 
 #[derive(Default)]
 pub struct Config<'a> {
@@ -84,7 +84,7 @@ fn try_assemble(
     let object = frontend::analyze_file(
         name.to_string(),
         &codebase,
-        object::ObjectBuilder::new(),
+        program::ObjectBuilder::new(),
         &mut diagnostics,
     )?;
     Ok(object.link(&mut diagnostics).into_rom())

@@ -224,7 +224,7 @@ mod tests {
 
     use crate::backend::Backend;
     use crate::diag::IgnoreDiagnostics;
-    use crate::object::{Chunk, ObjectBuilder, SymbolId};
+    use crate::program::{Chunk, ObjectBuilder, SymbolId};
 
     #[test]
     fn resolve_origin_relative_to_previous_chunk() {
