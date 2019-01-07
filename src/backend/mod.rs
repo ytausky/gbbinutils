@@ -7,6 +7,7 @@ use crate::backend::{
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
 use crate::instruction::Instruction;
 use crate::span::Source;
+#[cfg(test)]
 use std::marker::PhantomData;
 
 mod lowering;
@@ -143,15 +144,18 @@ pub struct Rom {
 
 pub struct RelocExprBuilder<T>(T);
 
+#[cfg(test)]
 pub type IndependentValueBuilder<S> = RelocExprBuilder<PhantomData<S>>;
 
+#[cfg(test)]
 impl<S> IndependentValueBuilder<S> {
     pub fn new() -> Self {
         RelocExprBuilder(PhantomData)
     }
 }
 
-impl<S: Clone> HasValue<S> for RelocExprBuilder<PhantomData<S>> {
+#[cfg(test)]
+impl<S: Clone> HasValue<S> for IndependentValueBuilder<S> {
     type Value = RelocExpr<String, S>;
 }
 
@@ -173,7 +177,18 @@ where
     }
 }
 
-impl<S: Clone> ToValue<String, S> for RelocExprBuilder<PhantomData<S>> {
+#[cfg(test)]
+impl<S: Clone> ToValue<String, S> for IndependentValueBuilder<S> {
+    fn to_value(&mut self, (name, span): (String, S)) -> Self::Value {
+        RelocExpr::from_atom(RelocAtom::Symbol(name), span)
+    }
+}
+
+impl<'a, S: Clone> HasValue<S> for RelocExprBuilder<&'a mut ObjectBuilder<S>> {
+    type Value = RelocExpr<String, S>;
+}
+
+impl<'a, S: Clone> ToValue<String, S> for RelocExprBuilder<&'a mut ObjectBuilder<S>> {
     fn to_value(&mut self, (name, span): (String, S)) -> Self::Value {
         RelocExpr::from_atom(RelocAtom::Symbol(name), span)
     }
@@ -203,15 +218,15 @@ impl<S: Clone> HasValue<S> for ObjectBuilder<S> {
     type Value = RelocExpr<String, S>;
 }
 
-impl<'a, S: Clone> BuildValue<'a, String, S> for ObjectBuilder<S> {
-    type Builder = IndependentValueBuilder<S>;
+impl<'a, S: Clone + 'static> BuildValue<'a, String, S> for ObjectBuilder<S> {
+    type Builder = RelocExprBuilder<&'a mut Self>;
 
     fn build_value(&'a mut self) -> Self::Builder {
-        IndependentValueBuilder::new()
+        RelocExprBuilder(self)
     }
 }
 
-impl<S: Clone> Backend<String, S> for ObjectBuilder<S> {
+impl<S: Clone + 'static> Backend<String, S> for ObjectBuilder<S> {
     type Object = Object<String, S>;
 
     fn define_symbol(&mut self, symbol: (String, S), value: Self::Value) {
@@ -340,8 +355,12 @@ mod tests {
     #[test]
     fn diagnose_unresolved_symbol() {
         let ident = "ident";
-        let (_, diagnostics) =
-            with_object_builder(|builder| builder.emit_item(symbol_expr_item(ident, ident.into())));
+        let (_, diagnostics) = with_object_builder(|builder| {
+            let value = builder
+                .build_value()
+                .to_value((ident.to_string(), ident.into()));
+            builder.emit_item(word_item(value))
+        });
         assert_eq!(*diagnostics, [unresolved(ident)]);
     }
 
@@ -350,17 +369,13 @@ mod tests {
         let ident1 = "ident1";
         let ident2 = "ident2";
         let (_, diagnostics) = with_object_builder(|builder| {
-            builder.emit_item(Item::Data(
-                RelocExpr {
-                    variant: ExprVariant::Binary(
-                        BinaryOperator::Minus,
-                        Box::new(symbol_expr(ident1, ident1.into())),
-                        Box::new(symbol_expr(ident2, ident2.into())),
-                    ),
-                    span: "diff".into(),
-                },
-                Width::Word,
-            ))
+            let value = {
+                let mut builder = builder.build_value();
+                let lhs = builder.to_value((ident1.to_string(), ident1.into()));
+                let rhs = builder.to_value((ident2.to_string(), ident2.into()));
+                builder.apply_binary_operator((BinaryOperator::Minus, "diff".into()), lhs, rhs)
+            };
+            builder.emit_item(word_item(value))
         });
         assert_eq!(*diagnostics, [unresolved(ident1), unresolved(ident2)]);
     }
@@ -370,7 +385,8 @@ mod tests {
         let label = "label";
         let (object, diagnostics) = with_object_builder(|builder| {
             builder.define_symbol((label.into(), ()), RelocAtom::LocationCounter.into());
-            builder.emit_item(symbol_expr_item(label, ()));
+            let value = builder.build_value().to_value((label.to_string(), ()));
+            builder.emit_item(word_item(value));
         });
         assert_eq!(*diagnostics, []);
         assert_eq!(object.sections.last().unwrap().data, [0x00, 0x00])
@@ -380,7 +396,8 @@ mod tests {
     fn emit_symbol_defined_after_use() {
         let label = "label";
         let (object, diagnostics) = with_object_builder(|builder| {
-            builder.emit_item(symbol_expr_item(label, ()));
+            let value = builder.build_value().to_value((label.to_string(), ()));
+            builder.emit_item(word_item(value));
             builder.define_symbol((label.into(), ()), RelocAtom::LocationCounter.into());
         });
         assert_eq!(*diagnostics, []);
@@ -400,18 +417,8 @@ mod tests {
         (object, diagnostics)
     }
 
-    fn symbol_expr_item<S: Clone>(
-        symbol: impl Into<String>,
-        span: S,
-    ) -> Item<RelocExpr<String, S>> {
-        Item::Data(symbol_expr(symbol, span), Width::Word)
-    }
-
-    fn symbol_expr<S>(symbol: impl Into<String>, span: S) -> RelocExpr<String, S> {
-        RelocExpr {
-            variant: ExprVariant::Atom(RelocAtom::Symbol(symbol.into())),
-            span,
-        }
+    fn word_item<S: Clone>(value: RelocExpr<String, S>) -> Item<RelocExpr<String, S>> {
+        Item::Data(value, Width::Word)
     }
 
     fn unresolved(symbol: impl Into<String>) -> CompactDiagnostic<String, String> {
