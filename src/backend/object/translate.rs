@@ -98,7 +98,7 @@ fn resolve_expr_item<S: Clone>(
 ) -> Data {
     let span = expr.span();
     let value = expr
-        .evaluate_strictly(context, &mut |_, span| {
+        .evaluate_strictly(context, &mut |span| {
             let symbol = diagnostics.strip_span(span);
             diagnostics.emit_diagnostic(CompactDiagnostic::new(
                 Message::UnresolvedSymbol { symbol },

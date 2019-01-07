@@ -160,7 +160,7 @@ fn refine_symbols<S: Clone>(object: &Object<S>, symbols: &mut SymbolTable) -> i3
 
 impl<S: Clone> RelocExpr<S> {
     pub fn evaluate<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
-        self.evaluate_strictly(context, &mut |_: &str, _: &S| ())
+        self.evaluate_strictly(context, &mut |_: &S| ())
     }
 
     pub fn evaluate_strictly<ST, F>(
@@ -170,7 +170,7 @@ impl<S: Clone> RelocExpr<S> {
     ) -> Value
     where
         ST: Borrow<SymbolTable>,
-        F: FnMut(&str, &S),
+        F: FnMut(&S),
     {
         use self::ExprVariant::*;
         match &self.variant {
@@ -180,36 +180,29 @@ impl<S: Clone> RelocExpr<S> {
                 let rhs = rhs.evaluate_strictly(context, on_undefined_symbol);
                 operator.apply(&lhs, &rhs)
             }
-            Atom(atom) => {
-                atom.evaluate_strictly(context, |symbol| on_undefined_symbol(symbol, &self.span))
-            }
+            Atom(atom) => atom.evaluate_strictly(context).unwrap_or_else(|()| {
+                on_undefined_symbol(&self.span);
+                Value::Unknown
+            }),
         }
     }
 }
 
 impl RelocAtom {
-    fn evaluate_strictly<ST, F>(
-        &self,
-        context: &EvalContext<ST>,
-        mut on_undefined_symbol: F,
-    ) -> Value
+    fn evaluate_strictly<ST>(&self, context: &EvalContext<ST>) -> Result<Value, ()>
     where
         ST: Borrow<SymbolTable>,
-        F: FnMut(&str),
     {
         use self::RelocAtom::*;
         match self {
-            Literal(value) => (*value).into(),
-            LocationCounter => context.location.clone(),
+            Literal(value) => Ok((*value).into()),
+            LocationCounter => Ok(context.location.clone()),
             Symbol(symbol) => context
                 .symbols
                 .borrow()
                 .get(symbol.as_str())
                 .cloned()
-                .unwrap_or_else(|| {
-                    on_undefined_symbol(&symbol);
-                    Value::Unknown
-                }),
+                .ok_or(()),
         }
     }
 }
