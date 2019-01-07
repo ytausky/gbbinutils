@@ -1,4 +1,4 @@
-use crate::backend::{self, Backend, ValueBuilder};
+use crate::backend::{self, Backend, LocationCounter, ToValue, ValueBuilder};
 use crate::diag::span::{MergeSpans, Source, StripSpan};
 use crate::diag::*;
 use crate::expr::ExprVariant;
@@ -62,7 +62,13 @@ where
 
     fn define_label_if_present(&mut self) {
         if let Some((label, span)) = self.label.take() {
-            let value = self.session.backend.build_value().location(span.clone());
+            let value = {
+                let mut builder = self.session.backend.build_value();
+                ToValue::<LocationCounter, D::Span>::to_value(
+                    &mut builder,
+                    (LocationCounter, span.clone()),
+                )
+            };
             self.session.backend.define_symbol((label, span), value)
         }
     }
@@ -544,10 +550,10 @@ where
     fn analyze_expr(&mut self, expr: SemanticExpr<I, S>) -> Result<Self::Value, ()> {
         match expr.variant {
             ExprVariant::Atom(SemanticAtom::Ident(ident)) => {
-                Ok(self.builder.symbol((ident, expr.span)))
+                Ok(self.builder.to_value((ident, expr.span)))
             }
             ExprVariant::Atom(SemanticAtom::Literal(Literal::Number(n))) => {
-                Ok(self.builder.number((n, expr.span)))
+                Ok(self.builder.to_value((n, expr.span)))
             }
             ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(_))) => {
                 Err(CompactDiagnostic::new(
@@ -619,7 +625,9 @@ impl<S: Clone> EmitDiagnostic<S, S> for DiagnosticsCollector<S> {
 mod tests {
     use super::*;
 
-    use crate::backend::{BuildValue, HasValue, RelocAtom, RelocExpr, RelocExprBuilder, Width};
+    use crate::backend::{
+        BuildValue, HasValue, IndependentValueBuilder, RelocAtom, RelocExpr, Width,
+    };
     use crate::codebase::{BufId, BufRange, CodebaseError};
     use crate::diag::{CompactDiagnostic, Message};
     use crate::expr::BinaryOperator;
@@ -721,10 +729,10 @@ mod tests {
     }
 
     impl<'a, 'b> BuildValue<'b, String, ()> for TestBackend<'a> {
-        type Builder = RelocExprBuilder<()>;
+        type Builder = IndependentValueBuilder<()>;
 
         fn build_value(&mut self) -> Self::Builder {
-            RelocExprBuilder::new()
+            IndependentValueBuilder::new()
         }
     }
 

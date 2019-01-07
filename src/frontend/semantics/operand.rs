@@ -207,7 +207,7 @@ impl<I: Iterator> Iterator for OperandCounter<I> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::{RelocAtom, RelocExpr, RelocExprBuilder};
+    use crate::backend::{IndependentValueBuilder, RelocAtom, RelocExpr};
     use crate::diag::span::MergeSpans;
     use crate::frontend::semantics::DiagnosticsCollector;
 
@@ -259,7 +259,7 @@ mod tests {
         let result = super::analyze_operand(
             expr,
             context,
-            &mut ValueContext::new(&mut RelocExprBuilder::new(), &mut collector),
+            &mut ValueContext::new(&mut IndependentValueBuilder::new(), &mut collector),
         );
         result.map_err(|_| collector.0)
     }

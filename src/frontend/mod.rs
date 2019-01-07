@@ -538,10 +538,10 @@ mod tests {
     }
 
     impl<'a, 'b> BuildValue<'b, String, ()> for Mock<'a> {
-        type Builder = RelocExprBuilder<()>;
+        type Builder = IndependentValueBuilder<()>;
 
         fn build_value(&'b mut self) -> Self::Builder {
-            RelocExprBuilder::new()
+            IndependentValueBuilder::new()
         }
     }
 

@@ -2,7 +2,7 @@ use super::{
     AnalyzeExpr, CommandArgs, Directive, SemanticActions, SemanticAtom, SemanticExpr, ValueContext,
 };
 use crate::backend;
-use crate::backend::{Backend, ValueBuilder, Width};
+use crate::backend::{Backend, LocationCounter, ValueBuilder, Width};
 use crate::diag::*;
 use crate::expr::{BinaryOperator, ExprVariant};
 use crate::frontend::syntax::Literal;
@@ -165,7 +165,7 @@ where
     B: ValueBuilder<I, S>,
     S: Clone,
 {
-    let location = builder.location(expr.span());
+    let location = builder.to_value((LocationCounter, expr.span()));
     builder.apply_binary_operator((BinaryOperator::Plus, expr.span()), location, expr)
 }
 
