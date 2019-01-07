@@ -1,6 +1,6 @@
 pub use crate::backend::object::ObjectBuilder;
 
-use crate::backend::object::{Node, Object};
+use crate::backend::object::Object;
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
 use crate::instruction::Instruction;
 use crate::span::Source;

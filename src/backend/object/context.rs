@@ -37,13 +37,13 @@ impl SymbolTable {
         id
     }
 
-    pub fn new_name(&mut self) -> NameId {
+    pub(super) fn new_name(&mut self) -> NameId {
         let id = NameId(self.names.len());
         self.names.push(None);
         id
     }
 
-    pub fn define_name(&mut self, NameId(id): NameId, value: Value) {
+    pub(super) fn define_name(&mut self, NameId(id): NameId, value: Value) {
         assert!(self.names[id].is_none());
         let symbol_id = self.new_symbol(value);
         self.names[id] = Some(symbol_id);

@@ -5,11 +5,11 @@ use crate::instruction::*;
 use crate::span::Source;
 use std::mem;
 
-pub trait Lower<S> {
+pub(super) trait Lower<S> {
     fn lower(self) -> LoweredItem<S>;
 }
 
-pub enum LoweredItem<S> {
+pub(super) enum LoweredItem<S> {
     None,
     One(Node<S>),
     Two(Node<S>, Node<S>),

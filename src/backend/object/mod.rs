@@ -30,7 +30,7 @@ pub(crate) struct Chunk<S> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Node<S> {
+enum Node<S> {
     Byte(u8),
     Expr(RelocExpr<NameId, S>, Width),
     LdInlineAddr(u8, RelocExpr<NameId, S>),

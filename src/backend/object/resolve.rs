@@ -1,7 +1,7 @@
 pub use super::context::{EvalContext, SymbolTable};
 
-use super::NameId;
-use crate::backend::{Node, Object, RelocAtom, RelocExpr, Width};
+use super::{NameId, Node};
+use crate::backend::{Object, RelocAtom, RelocExpr, Width};
 use crate::expr::{BinaryOperator, ExprVariant};
 use std::borrow::Borrow;
 use std::ops::{Add, AddAssign, Mul, RangeInclusive, Sub};
