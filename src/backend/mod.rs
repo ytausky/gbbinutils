@@ -1,16 +1,12 @@
 pub use crate::backend::object::ObjectBuilder;
 
-use crate::backend::{
-    lowering::Lower,
-    object::{NameId, Node, Object},
-};
+use crate::backend::object::{NameId, Node, Object};
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
 use crate::instruction::Instruction;
 use crate::span::Source;
 #[cfg(test)]
 use std::marker::PhantomData;
 
-mod lowering;
 mod object;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -236,26 +232,6 @@ impl<'a, S: Clone + 'static> BuildValue<'a, String, S> for ObjectBuilder<S> {
 
     fn build_value(&'a mut self) -> Self::Builder {
         RelocExprBuilder(self)
-    }
-}
-
-impl<S: Clone + 'static> Backend<String, S> for ObjectBuilder<S> {
-    type Object = Object<S>;
-
-    fn define_symbol(&mut self, symbol: (String, S), value: Self::Value) {
-        self.define(symbol, value)
-    }
-
-    fn emit_item(&mut self, item: Item<Self::Value>) {
-        item.lower().for_each(|data_item| self.push(data_item))
-    }
-
-    fn into_object(self) -> Self::Object {
-        self.build()
-    }
-
-    fn set_origin(&mut self, origin: Self::Value) {
-        self.constrain_origin(origin)
     }
 }
 

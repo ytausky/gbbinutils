@@ -1,11 +1,12 @@
 use self::context::{EvalContext, SymbolTable};
 use self::resolve::Value;
-use crate::backend::{BinaryObject, RelocExpr, Width};
+use crate::backend::{Backend, BinaryObject, Item, RelocExpr, Width};
 use crate::diag::BackendDiagnostics;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 
 mod context;
+mod lowering;
 mod resolve;
 mod translate;
 
@@ -177,6 +178,27 @@ where
         f(item, context)
     }
     offset
+}
+
+impl<S: Clone + 'static> Backend<String, S> for ObjectBuilder<S> {
+    type Object = Object<S>;
+
+    fn define_symbol(&mut self, symbol: (String, S), value: Self::Value) {
+        self.define(symbol, value)
+    }
+
+    fn emit_item(&mut self, item: Item<Self::Value>) {
+        use self::lowering::Lower;
+        item.lower().for_each(|data_item| self.push(data_item))
+    }
+
+    fn into_object(self) -> Self::Object {
+        self.build()
+    }
+
+    fn set_origin(&mut self, origin: Self::Value) {
+        self.constrain_origin(origin)
+    }
 }
 
 #[cfg(test)]
