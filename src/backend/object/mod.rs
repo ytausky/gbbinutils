@@ -13,7 +13,7 @@ mod resolve;
 mod translate;
 
 #[derive(Clone, Copy)]
-pub struct SymbolId(usize);
+struct SymbolId(usize);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct NameId(usize);

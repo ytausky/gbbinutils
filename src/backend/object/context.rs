@@ -1,12 +1,12 @@
 use super::resolve::Value;
 use super::{NameId, SymbolId};
 
-pub struct SymbolTable {
+pub(super) struct SymbolTable {
     symbols: Vec<Value>,
     names: Vec<Option<SymbolId>>,
 }
 
-pub trait ToSymbolId: Copy {
+pub(super) trait ToSymbolId: Copy {
     fn to_symbol_id(self, table: &SymbolTable) -> Option<SymbolId>;
 }
 

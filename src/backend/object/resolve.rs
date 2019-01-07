@@ -1,5 +1,6 @@
-pub use super::context::{EvalContext, SymbolTable};
+pub use super::context::EvalContext;
 
+use super::context::SymbolTable;
 use super::{NameId, Node};
 use crate::backend::{Object, RelocAtom, RelocExpr, Width};
 use crate::expr::{BinaryOperator, ExprVariant};
@@ -139,11 +140,11 @@ impl<S: Clone> Object<S> {
 }
 
 impl<S: Clone> RelocExpr<NameId, S> {
-    pub fn evaluate<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
+    pub(super) fn evaluate<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
         self.evaluate_strictly(context, &mut |_: &S| ())
     }
 
-    pub fn evaluate_strictly<ST, F>(
+    pub(super) fn evaluate_strictly<ST, F>(
         &self,
         context: &EvalContext<ST>,
         on_undefined_symbol: &mut F,
