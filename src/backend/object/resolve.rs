@@ -1,7 +1,7 @@
 pub use super::context::{EvalContext, SymbolTable};
 
 use super::NameId;
-use crate::backend::{Node, Object, RelocAtom, RelocExpr};
+use crate::backend::{Node, Object, RelocAtom, RelocExpr, Width};
 use crate::expr::{BinaryOperator, ExprVariant};
 use std::borrow::Borrow;
 use std::ops::{Add, AddAssign, Mul, RangeInclusive, Sub};
@@ -208,12 +208,21 @@ impl<S: Clone> Node<S> {
     }
 }
 
+impl Width {
+    fn len(self) -> i32 {
+        match self {
+            Width::Byte => 1,
+            Width::Word => 2,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    use crate::backend::object::{Chunk, ObjectBuilder, SymbolId};
     use crate::backend::Backend;
-    use crate::backend::object::{ObjectBuilder, Chunk, SymbolId};
     use crate::diag::IgnoreDiagnostics;
 
     #[test]

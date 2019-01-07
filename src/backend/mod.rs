@@ -15,15 +15,6 @@ pub enum Width {
     Word,
 }
 
-impl Width {
-    fn len(self) -> i32 {
-        match self {
-            Width::Byte => 1,
-            Width::Word => 2,
-        }
-    }
-}
-
 pub struct LocationCounter;
 
 pub trait HasValue<S: Clone> {
