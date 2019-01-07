@@ -127,7 +127,7 @@ impl<S: Clone> Program<S> {
             location: Value::Unknown,
         };
         for chunk in self.chunks.iter() {
-            let size = chunk.traverse(context, |item, context| {
+            let (_, size) = chunk.traverse(context, |item, context| {
                 if let Node::Symbol((symbol, _), expr) = item {
                     let value = expr.evaluate(context);
                     refinements += context.symbols.refine(*symbol, value) as i32

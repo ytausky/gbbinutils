@@ -80,13 +80,19 @@ impl<S> Chunk<S> {
 }
 
 impl<S: Clone> Chunk<S> {
-    fn traverse<ST, F>(&self, context: &mut EvalContext<ST>, f: F) -> Value
+    fn traverse<ST, F>(&self, context: &mut EvalContext<ST>, mut f: F) -> (Value, Value)
     where
         ST: Borrow<SymbolTable>,
         F: FnMut(&Node<S>, &mut EvalContext<ST>),
     {
-        context.location = self.evaluate_origin(context);
-        traverse_chunk_items(&self.items, context, f)
+        let origin = self.evaluate_origin(context);
+        let mut offset = Value::from(0);
+        for item in &self.items {
+            offset += &item.size(&context);
+            context.location = &origin + &offset;
+            f(item, context)
+        }
+        (origin, offset)
     }
 
     fn evaluate_origin<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
@@ -95,24 +101,4 @@ impl<S: Clone> Chunk<S> {
             .map(|expr| expr.evaluate(context))
             .unwrap_or_else(|| 0.into())
     }
-}
-
-fn traverse_chunk_items<S, ST, F>(
-    items: &[Node<S>],
-    context: &mut EvalContext<ST>,
-    mut f: F,
-) -> Value
-where
-    S: Clone,
-    ST: Borrow<SymbolTable>,
-    F: FnMut(&Node<S>, &mut EvalContext<ST>),
-{
-    let origin = context.location.clone();
-    let mut offset = Value::from(0);
-    for item in items {
-        offset += &item.size(&context);
-        context.location = &origin + &offset;
-        f(item, context)
-    }
-    offset
 }

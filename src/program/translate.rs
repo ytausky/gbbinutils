@@ -1,5 +1,5 @@
 use super::context::{EvalContext, SymbolTable};
-use super::{traverse_chunk_items, Chunk, NameId, Node};
+use super::{Chunk, NameId, Node};
 use crate::backend::{BinarySection, RelocExpr, Width};
 use crate::diag::{BackendDiagnostics, CompactDiagnostic, Message};
 use crate::span::Source;
@@ -11,10 +11,8 @@ impl<S: Clone> Chunk<S> {
         context: &mut EvalContext<&SymbolTable>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> BinarySection {
-        let mut data = Vec::<u8>::new();
-        let origin = self.evaluate_origin(&context);
-        context.location = origin.clone();
-        traverse_chunk_items(&self.items, context, |item, context| {
+        let mut data = Vec::new();
+        let (origin, _) = self.traverse(context, |item, context| {
             data.extend(item.translate(context, diagnostics))
         });
         BinarySection {
