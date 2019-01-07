@@ -211,7 +211,6 @@ impl<S: Clone> Node<NameId, S> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::object::{Chunk, SymbolId};
     use crate::backend::{object::ObjectBuilder, Backend};
 
     #[test]
@@ -223,8 +222,7 @@ mod tests {
         builder.define_symbol((label.into(), ()), RelocAtom::LocationCounter.into());
         let mut object = builder.into_object();
         object.resolve_symbols();
-        let symbol_id = object.symbols.names[0].unwrap();
-        assert_eq!(object.symbols.symbols[symbol_id.0], addr.into())
+        assert_eq!(object.symbols.names().next(), Some(Some(&addr.into())));
     }
 
     #[test]
@@ -234,7 +232,7 @@ mod tests {
 
     #[test]
     fn chunk_with_one_byte_has_size_one() {
-        assert_chunk_size(1, |section| section.items.push(Node::Byte(0x42)));
+        assert_chunk_size(1, |object| object.chunks[0].items.push(Node::Byte(0x42)));
     }
 
     #[test]
@@ -248,23 +246,21 @@ mod tests {
     }
 
     fn test_chunk_size_with_literal_ld_inline_addr(addr: i32, expected: i32) {
-        assert_chunk_size(expected, |section| {
-            section.items.push(Node::LdInlineAddr(0, addr.into()))
+        assert_chunk_size(expected, |object| {
+            object.chunks[0]
+                .items
+                .push(Node::LdInlineAddr(0, addr.into()))
         });
     }
 
     #[test]
     fn ld_inline_addr_with_symbol_after_instruction_has_size_three() {
-        let label = NameId(0);
-        assert_chunk_size(3, |section| {
-            section.items.extend(
-                [
-                    Node::LdInlineAddr(0, RelocAtom::Symbol(label).into()),
-                    Node::Symbol((label, ()), RelocAtom::LocationCounter.into()),
-                ]
-                .iter()
-                .cloned(),
-            )
+        assert_chunk_size(3, |object| {
+            let name = object.symbols.new_name();
+            let items = &mut object.chunks[0].items;
+            items.push(Node::LdInlineAddr(0, RelocAtom::Symbol(name).into()));
+            object.symbols.define_name(name, Value::Unknown);
+            items.push(Node::Symbol((name, ()), RelocAtom::LocationCounter.into()))
         })
     }
 
@@ -287,15 +283,10 @@ mod tests {
         }
     }
 
-    fn assert_chunk_size(expected: impl Into<Value>, f: impl FnOnce(&mut Chunk<NameId, ()>)) {
-        let mut object = Object::<NameId, ()>::new();
+    fn assert_chunk_size(expected: impl Into<Value>, f: impl FnOnce(&mut Object<NameId, ()>)) {
+        let mut object = Object::new();
         object.add_chunk();
-        object
-            .symbols
-            .names
-            .push(Some(SymbolId(object.symbols.symbols.len())));
-        object.symbols.symbols.push(Value::Unknown);
-        f(&mut object.chunks[0]);
+        f(&mut object);
         object.resolve_symbols();
         assert_eq!(
             object.symbols.get(object.chunks[0].size).cloned(),

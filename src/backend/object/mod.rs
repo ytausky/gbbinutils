@@ -45,8 +45,7 @@ impl<I: Eq + Hash, S> Object<I, S> {
     }
 
     fn add_chunk(&mut self) {
-        let size_symbol_id = SymbolId(self.symbols.symbols.len());
-        self.symbols.symbols.push(Value::Unknown);
+        let size_symbol_id = self.symbols.new_symbol(Value::Unknown);
         self.chunks.push(Chunk::new(size_symbol_id))
     }
 }
@@ -108,22 +107,15 @@ impl<SR> ObjectBuilder<SR> {
         self.object
     }
 
-    pub fn define(&mut self, symbol: (String, SR), value: RelocExpr<NameId, SR>) {
-        let name_id = self.lookup(symbol.0);
-        assert!(self.object.symbols.names[name_id.0].is_none());
-        let symbol_id = self.object.symbols.symbols.len();
-        self.object.symbols.symbols.push(Value::Unknown);
-        self.object.symbols.names[name_id.0] = Some(SymbolId(symbol_id));
-        self.push(Node::Symbol((name_id, symbol.1), value))
+    pub fn define(&mut self, (name, span): (String, SR), value: RelocExpr<NameId, SR>) {
+        let name_id = self.lookup(name);
+        self.object.symbols.define_name(name_id, Value::Unknown);
+        self.push(Node::Symbol((name_id, span), value))
     }
 
     pub fn lookup(&mut self, name: String) -> NameId {
         let symbols = &mut self.object.symbols;
-        *self.names.entry(name).or_insert_with(|| {
-            let id = symbols.names.len();
-            symbols.names.push(None);
-            NameId(id)
-        })
+        *self.names.entry(name).or_insert_with(|| symbols.new_name())
     }
 
     fn current_chunk(&mut self) -> &mut Chunk<NameId, SR> {
@@ -243,8 +235,8 @@ mod tests {
             ],
             symbols: {
                 let mut table = SymbolTable::new();
-                table.symbols.push(Value::Unknown);
-                table.symbols.push(Value::Unknown);
+                table.new_symbol(Value::Unknown);
+                table.new_symbol(Value::Unknown);
                 table
             },
         };

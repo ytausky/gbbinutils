@@ -2,8 +2,8 @@ use super::resolve::Value;
 use super::{NameId, SymbolId};
 
 pub struct SymbolTable {
-    pub symbols: Vec<Value>,
-    pub names: Vec<Option<SymbolId>>,
+    symbols: Vec<Value>,
+    names: Vec<Option<SymbolId>>,
 }
 
 pub trait ToSymbolId: Copy {
@@ -29,6 +29,24 @@ impl SymbolTable {
             symbols: Vec::new(),
             names: Vec::new(),
         }
+    }
+
+    pub fn new_symbol(&mut self, value: Value) -> SymbolId {
+        let id = SymbolId(self.symbols.len());
+        self.symbols.push(value);
+        id
+    }
+
+    pub fn new_name(&mut self) -> NameId {
+        let id = NameId(self.names.len());
+        self.names.push(None);
+        id
+    }
+
+    pub fn define_name(&mut self, NameId(id): NameId, value: Value) {
+        assert!(self.names[id].is_none());
+        let symbol_id = self.new_symbol(value);
+        self.names[id] = Some(symbol_id);
     }
 
     pub fn get<K: ToSymbolId>(&self, key: K) -> Option<&Value> {
@@ -65,6 +83,13 @@ impl SymbolTable {
         };
         *stored_value = value;
         was_refined
+    }
+
+    #[cfg(test)]
+    pub fn names(&self) -> impl Iterator<Item = Option<&Value>> {
+        self.names
+            .iter()
+            .map(move |entry| entry.map(|SymbolId(id)| &self.symbols[id]))
     }
 }
 
