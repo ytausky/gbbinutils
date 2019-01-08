@@ -18,7 +18,7 @@ type RelocExpr<S> = backend::RelocExpr<NameId, S>;
 #[derive(Clone, Copy)]
 struct SymbolId(usize);
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NameId(usize);
 
 pub struct Program<S> {
