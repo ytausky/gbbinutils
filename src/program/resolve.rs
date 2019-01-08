@@ -1,8 +1,8 @@
 pub use super::context::EvalContext;
 
 use super::context::SymbolTable;
-use super::{NameId, Node, Program};
-use crate::backend::{RelocAtom, RelocExpr, Width};
+use super::{NameId, Node, Program, RelocExpr};
+use crate::backend::{RelocAtom, Width};
 use crate::expr::{BinaryOperator, ExprVariant};
 use std::borrow::Borrow;
 use std::ops::{Add, AddAssign, Mul, RangeInclusive, Sub};
@@ -139,7 +139,7 @@ impl<S: Clone> Program<S> {
     }
 }
 
-impl<S: Clone> RelocExpr<NameId, S> {
+impl<S: Clone> RelocExpr<S> {
     pub(super) fn evaluate<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
         self.evaluate_strictly(context, &mut |_: &S| ())
     }

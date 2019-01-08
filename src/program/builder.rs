@@ -1,7 +1,5 @@
-use super::{Chunk, NameId, Node, Program, Value};
-use crate::backend::{
-    Backend, BuildValue, HasValue, Item, RelocAtom, RelocExpr, RelocExprBuilder, ToValue,
-};
+use super::{Chunk, NameId, Node, Program, RelocExpr, Value};
+use crate::backend::{Backend, BuildValue, HasValue, Item, RelocAtom, RelocExprBuilder, ToValue};
 use std::collections::HashMap;
 
 pub struct ProgramBuilder<SR> {
@@ -10,10 +8,8 @@ pub struct ProgramBuilder<SR> {
     names: HashMap<String, NameId>,
 }
 
-enum BuilderState<SR> {
-    Pending {
-        origin: Option<RelocExpr<NameId, SR>>,
-    },
+enum BuilderState<S> {
+    Pending { origin: Option<RelocExpr<S>> },
     InChunk(usize),
 }
 
@@ -79,7 +75,7 @@ impl<S: Clone + 'static> Backend<String, S> for ProgramBuilder<S> {
 }
 
 impl<'a, S: Clone> HasValue<S> for RelocExprBuilder<&'a mut ProgramBuilder<S>> {
-    type Value = RelocExpr<NameId, S>;
+    type Value = RelocExpr<S>;
 }
 
 impl<'a, S: Clone> ToValue<String, S> for RelocExprBuilder<&'a mut ProgramBuilder<S>> {
@@ -89,7 +85,7 @@ impl<'a, S: Clone> ToValue<String, S> for RelocExprBuilder<&'a mut ProgramBuilde
 }
 
 impl<S: Clone> HasValue<S> for ProgramBuilder<S> {
-    type Value = RelocExpr<NameId, S>;
+    type Value = RelocExpr<S>;
 }
 
 impl<'a, S: Clone + 'static> BuildValue<'a, String, S> for ProgramBuilder<S> {
@@ -125,7 +121,7 @@ mod tests {
 
     #[test]
     fn constrain_origin_determines_origin_of_new_chunk() {
-        let origin: RelocExpr<_, _> = 0x3000.into();
+        let origin: RelocExpr<_> = 0x3000.into();
         let object = build_object(|builder| {
             builder.set_origin(origin.clone());
             builder.push(Node::Byte(0xcd))
@@ -149,7 +145,7 @@ mod tests {
 
     fn emit_items_and_compare<I, B>(items: I, bytes: B)
     where
-        I: Borrow<[Item<RelocExpr<NameId, ()>>]>,
+        I: Borrow<[Item<RelocExpr<()>>]>,
         B: Borrow<[u8]>,
     {
         let (object, _) = with_object_builder(|builder| {
@@ -170,7 +166,7 @@ mod tests {
         emit_items_and_compare([byte_literal(0x12), byte_literal(0x34)], [0x12, 0x34])
     }
 
-    fn byte_literal(value: i32) -> Item<RelocExpr<NameId, ()>> {
+    fn byte_literal(value: i32) -> Item<RelocExpr<()>> {
         Item::Data(value.into(), Width::Byte)
     }
 
@@ -260,7 +256,7 @@ mod tests {
         (object, diagnostics)
     }
 
-    fn word_item<S: Clone>(value: RelocExpr<NameId, S>) -> Item<RelocExpr<NameId, S>> {
+    fn word_item<S: Clone>(value: RelocExpr<S>) -> Item<RelocExpr<S>> {
         Item::Data(value, Width::Word)
     }
 

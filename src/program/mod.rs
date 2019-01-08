@@ -2,7 +2,8 @@ pub use self::builder::ProgramBuilder;
 
 use self::context::{EvalContext, SymbolTable};
 use self::resolve::Value;
-use crate::backend::{BinaryObject, RelocExpr, Width};
+use crate::backend;
+use crate::backend::{BinaryObject, Width};
 use crate::diag::BackendDiagnostics;
 use std::borrow::Borrow;
 
@@ -11,6 +12,8 @@ mod context;
 mod lowering;
 mod resolve;
 mod translate;
+
+type RelocExpr<S> = backend::RelocExpr<NameId, S>;
 
 #[derive(Clone, Copy)]
 struct SymbolId(usize);
@@ -24,7 +27,7 @@ pub struct Program<S> {
 }
 
 struct Chunk<S> {
-    origin: Option<RelocExpr<NameId, S>>,
+    origin: Option<RelocExpr<S>>,
     size: SymbolId,
     items: Vec<Node<S>>,
 }
@@ -32,10 +35,10 @@ struct Chunk<S> {
 #[derive(Clone, Debug, PartialEq)]
 enum Node<S> {
     Byte(u8),
-    Expr(RelocExpr<NameId, S>, Width),
-    LdInlineAddr(u8, RelocExpr<NameId, S>),
-    Embedded(u8, RelocExpr<NameId, S>),
-    Symbol((NameId, S), RelocExpr<NameId, S>),
+    Expr(RelocExpr<S>, Width),
+    LdInlineAddr(u8, RelocExpr<S>),
+    Embedded(u8, RelocExpr<S>),
+    Symbol((NameId, S), RelocExpr<S>),
 }
 
 impl<S> Program<S> {

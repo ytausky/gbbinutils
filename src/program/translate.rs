@@ -1,6 +1,6 @@
 use super::context::{EvalContext, SymbolTable};
-use super::{Chunk, NameId, Node};
-use crate::backend::{BinarySection, RelocExpr, Width};
+use super::{Chunk, Node, RelocExpr};
+use crate::backend::{BinarySection, Width};
 use crate::diag::{BackendDiagnostics, CompactDiagnostic, Message};
 use crate::span::Source;
 use std::vec::IntoIter;
@@ -89,7 +89,7 @@ impl Data {
 }
 
 fn resolve_expr_item<S: Clone>(
-    expr: &RelocExpr<NameId, S>,
+    expr: &RelocExpr<S>,
     width: Width,
     context: &EvalContext<&SymbolTable>,
     diagnostics: &mut impl BackendDiagnostics<S>,
