@@ -1,3 +1,4 @@
+use super::LexItem;
 use crate::diag::DelegateDiagnostics;
 use crate::expr::BinaryOperator;
 
@@ -13,9 +14,8 @@ pub use crate::frontend::syntax::keyword::Operand;
 pub type SemanticToken<T> = Token<T, Literal<T>>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Token<I, L, C = keyword::Command, E = lexer::LexError> {
+pub enum Token<I, L, C = keyword::Command> {
     Command(C),
-    Error(E),
     Ident(I),
     Label(I),
     Literal(L),
@@ -37,7 +37,7 @@ pub enum SimpleToken {
     Star,
 }
 
-impl<I, L, C, E> From<SimpleToken> for Token<I, L, C, E> {
+impl<I, L, C> From<SimpleToken> for Token<I, L, C> {
     fn from(simple: SimpleToken) -> Self {
         Token::Simple(simple)
     }
@@ -49,7 +49,7 @@ pub fn tokenize(src: &str) -> self::lexer::Lexer {
 
 pub(crate) fn parse_token_seq<Id, I, F, S>(tokens: I, actions: F)
 where
-    I: Iterator<Item = (SemanticToken<Id>, S)>,
+    I: Iterator<Item = LexItem<Id, S>>,
     F: FileContext<Id, Literal<Id>, keyword::Command, S>,
     S: Clone,
 {

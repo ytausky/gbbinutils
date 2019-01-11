@@ -187,7 +187,7 @@ impl<'a> Lexer<'a> {
 }
 
 impl<'a> Iterator for Lexer<'a> {
-    type Item = (SemanticToken<String>, Range<usize>);
+    type Item = (Result<SemanticToken<String>, LexError>, Range<usize>);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.scanner
@@ -196,22 +196,22 @@ impl<'a> Iterator for Lexer<'a> {
     }
 }
 
-fn mk_token(kind: TokenKind, lexeme: &str) -> SemanticToken<String> {
+fn mk_token(kind: TokenKind, lexeme: &str) -> Result<SemanticToken<String>, LexError> {
     match kind {
-        TokenKind::Error(error) => Token::Error(error),
-        TokenKind::Ident => mk_keyword_or(Token::Ident, lexeme),
-        TokenKind::Label => mk_keyword_or(Token::Label, lexeme),
-        TokenKind::Number(Radix::Decimal) => {
-            Token::Literal(Literal::Number(i32::from_str_radix(lexeme, 10).unwrap()))
-        }
+        TokenKind::Error(error) => Err(error),
+        TokenKind::Ident => Ok(mk_keyword_or(Token::Ident, lexeme)),
+        TokenKind::Label => Ok(mk_keyword_or(Token::Label, lexeme)),
+        TokenKind::Number(Radix::Decimal) => Ok(Token::Literal(Literal::Number(
+            i32::from_str_radix(lexeme, 10).unwrap(),
+        ))),
         TokenKind::Number(Radix::Hexadecimal) => match i32::from_str_radix(&lexeme[1..], 16) {
-            Ok(n) => Token::Literal(Literal::Number(n)),
-            Err(_) => Token::Error(LexError::NoDigits),
+            Ok(n) => Ok(Token::Literal(Literal::Number(n))),
+            Err(_) => Err(LexError::NoDigits),
         },
-        TokenKind::Simple(simple) => Token::Simple(simple),
-        TokenKind::String => {
-            Token::Literal(Literal::String(lexeme[1..(lexeme.len() - 1)].to_string()))
-        }
+        TokenKind::Simple(simple) => Ok(Token::Simple(simple)),
+        TokenKind::String => Ok(Token::Literal(Literal::String(
+            lexeme[1..(lexeme.len() - 1)].to_string(),
+        ))),
     }
 }
 
@@ -365,15 +365,28 @@ mod tests {
         src: &str,
         tokens: impl Borrow<[(SemanticToken<String>, Range<usize>)]>,
     ) {
-        assert_eq!(Lexer::new(src).collect::<Vec<_>>(), tokens.borrow())
+        let expected: Vec<_> = tokens
+            .borrow()
+            .iter()
+            .cloned()
+            .map(|(t, r)| (Ok(t), r))
+            .collect();
+        assert_eq!(Lexer::new(src).collect::<Vec<_>>(), expected)
     }
 
     fn assert_eq_tokens<'a>(
         src: &'a str,
         expected_without_eof: impl Borrow<[SemanticToken<String>]>,
     ) {
-        let mut expected: Vec<_> = expected_without_eof.borrow().iter().cloned().collect();
-        expected.push(Eof.into());
+        assert_eq_lex_results(src, expected_without_eof.borrow().iter().cloned().map(Ok))
+    }
+
+    fn assert_eq_lex_results<'a, I>(src: &'a str, expected_without_eof: I)
+    where
+        I: IntoIterator<Item = Result<SemanticToken<String>, LexError>>,
+    {
+        let mut expected: Vec<_> = expected_without_eof.into_iter().collect();
+        expected.push(Ok(Eof.into()));
         assert_eq!(
             Lexer::new(src).map(|(t, _)| t).collect::<Vec<_>>(),
             expected
@@ -513,12 +526,12 @@ mod tests {
 
     #[test]
     fn lex_unterminated_string() {
-        assert_eq_tokens("\"unterminated", [Error(LexError::UnterminatedString)])
+        assert_eq_lex_results("\"unterminated", vec![Err(LexError::UnterminatedString)])
     }
 
     #[test]
     fn lex_number_without_digits() {
-        assert_eq_tokens("$", [Error(LexError::NoDigits)])
+        assert_eq_lex_results("$", vec![Err(LexError::NoDigits)])
     }
 
     impl<T: Into<kw::Command>> From<T> for SemanticToken<String> {

@@ -4,16 +4,15 @@ use crate::diag::span::{MergeSpans, StripSpan};
 use crate::diag::{CompactDiagnostic, EmitDiagnostic, Message};
 use crate::expr::BinaryOperator;
 
-type TokenKind = Token<(), (), (), ()>;
+type TokenKind = Token<(), (), ()>;
 
 impl Copy for TokenKind {}
 
-impl<I, L, C, E> Token<I, L, C, E> {
+impl<I, L, C> Token<I, L, C> {
     fn kind(&self) -> TokenKind {
         use self::Token::*;
         match *self {
             Command(_) => Command(()),
-            Error(_) => Error(()),
             Ident(_) => Ident(()),
             Label(_) => Label(()),
             Literal(_) => Literal(()),
@@ -24,14 +23,17 @@ impl<I, L, C, E> Token<I, L, C, E> {
 
 const LINE_FOLLOW_SET: &[TokenKind] = &[Token::Simple(Eol), Token::Simple(Eof)];
 
-pub(crate) fn parse_src<Id, L, C, I, F, S>(mut tokens: I, context: F) -> F
+pub(crate) fn parse_src<Id, L, C, E, I, F, S>(mut tokens: I, context: F) -> F
 where
-    I: Iterator<Item = (Token<Id, L, C>, S)>,
+    I: Iterator<Item = (Result<Token<Id, L, C>, E>, S)>,
     F: FileContext<Id, L, C, S>,
     S: Clone,
 {
     let Parser { token, context, .. } = Parser::new(&mut tokens, context).parse_file();
-    assert_eq!(token.0.kind(), Token::Simple(SimpleToken::Eof));
+    assert_eq!(
+        token.0.ok().as_ref().map(Token::kind),
+        Some(Token::Simple(SimpleToken::Eof))
+    );
     context
 }
 
@@ -67,27 +69,34 @@ impl<'a, T, I, C> Parser<'a, T, I, C> {
     }
 }
 
-impl<'a, Id, L, C, S, I, A> Parser<'a, (Token<Id, L, C>, S), I, A> {
+impl<'a, Id, L, C, E, S, I, A> Parser<'a, (Result<Token<Id, L, C>, E>, S), I, A> {
+    fn token_kind(&self) -> Option<TokenKind> {
+        self.token.0.as_ref().ok().map(Token::kind)
+    }
+
     fn token_is_in(&self, kinds: &[TokenKind]) -> bool {
-        kinds.iter().any(|x| *x == self.token.0.kind())
+        match &self.token.0 {
+            Ok(token) => kinds.iter().any(|x| *x == token.kind()),
+            Err(_) => false,
+        }
     }
 }
 
-impl<'a, Id, L, C, I, Ctx, S> Parser<'a, (Token<Id, L, C>, S), I, Ctx>
+impl<'a, Id, L, C, E, I, Ctx, S> Parser<'a, (Result<Token<Id, L, C>, E>, S), I, Ctx>
 where
-    I: Iterator<Item = (Token<Id, L, C>, S)>,
+    I: Iterator<Item = (Result<Token<Id, L, C>, E>, S)>,
     Ctx: FileContext<Id, L, C, S>,
     S: Clone,
 {
     fn parse_file(mut self) -> Self {
-        while self.token.0.kind() != Token::Simple(SimpleToken::Eof) {
+        while self.token_kind() != Some(Token::Simple(SimpleToken::Eof)) {
             self = self.parse_stmt()
         }
         self
     }
 
     fn parse_stmt(mut self) -> Self {
-        let label = if let (Token::Label(label), span) = self.token {
+        let label = if let (Ok(Token::Label(label)), span) = self.token {
             bump!(self);
             Some((label, span))
         } else {
@@ -99,29 +108,29 @@ where
     }
 }
 
-impl<'a, Id, L, C, I, Ctx, S> Parser<'a, (Token<Id, L, C>, S), I, Ctx>
+impl<'a, Id, L, C, E, I, Ctx, S> Parser<'a, (Result<Token<Id, L, C>, E>, S), I, Ctx>
 where
-    I: Iterator<Item = (Token<Id, L, C>, S)>,
+    I: Iterator<Item = (Result<Token<Id, L, C>, E>, S)>,
     Ctx: StmtContext<Id, L, C, S>,
     S: Clone,
 {
     fn parse_unlabeled_stmt(mut self) -> Self {
         loop {
             return match self.token {
-                (Token::Simple(SimpleToken::Eol), _) => {
+                (Ok(Token::Simple(SimpleToken::Eol)), _) => {
                     bump!(self);
                     continue;
                 }
-                (Token::Label(_), _) | (Token::Simple(SimpleToken::Eof), _) => self,
-                (Token::Command(command), span) => {
+                (Ok(Token::Label(_)), _) | (Ok(Token::Simple(SimpleToken::Eof)), _) => self,
+                (Ok(Token::Command(command)), span) => {
                     bump!(self);
                     self.parse_command((command, span))
                 }
-                (Token::Ident(ident), span) => {
+                (Ok(Token::Ident(ident)), span) => {
                     bump!(self);
                     self.parse_macro_invocation((ident, span))
                 }
-                (Token::Simple(SimpleToken::Macro), span) => {
+                (Ok(Token::Simple(SimpleToken::Macro)), span) => {
                     bump!(self);
                     self.parse_macro_def(span)
                 }
@@ -150,19 +159,19 @@ where
         let mut state = self
             .change_context(|c| c.enter_macro_def(span))
             .parse_terminated_list(Comma.into(), LINE_FOLLOW_SET, |p| p.parse_macro_param());
-        if state.token.0.kind() == Eol.into() {
+        if state.token_kind() == Some(Eol.into()) {
             bump!(state);
             let mut state = state.change_context(|c| c.exit());
             loop {
                 match state.token {
-                    (Token::Simple(Endm), _) => {
+                    (Ok(Token::Simple(Endm)), _) => {
                         state
                             .context
                             .push_token((Eof.into(), state.token.1.clone()));
                         bump!(state);
                         break;
                     }
-                    (Token::Simple(Eof), _) => {
+                    (Ok(Token::Simple(Eof)), _) => {
                         state
                             .context
                             .diagnostics()
@@ -172,15 +181,16 @@ where
                             ));
                         break;
                     }
-                    other => {
-                        state.context.push_token(other);
+                    (Ok(other), span) => {
+                        state.context.push_token((other, span));
                         bump!(state);
                     }
+                    (Err(_), _) => unimplemented!(),
                 }
             }
             state
         } else {
-            assert_eq!(state.token.0.kind(), Eof.into());
+            assert_eq!(state.token_kind(), Some(Eof.into()));
             state
                 .context
                 .diagnostics()
@@ -200,9 +210,9 @@ where
     }
 }
 
-impl<'a, Id, L, C, I, Ctx, S> Parser<'a, (Token<Id, L, C>, S), I, Ctx>
+impl<'a, Id, L, C, E, I, Ctx, S> Parser<'a, (Result<Token<Id, L, C>, E>, S), I, Ctx>
 where
-    I: Iterator<Item = (Token<Id, L, C>, S)>,
+    I: Iterator<Item = (Result<Token<Id, L, C>, E>, S)>,
     Ctx: CommandContext<S, Command = C, Ident = Id, Literal = L>,
     S: Clone,
 {
@@ -260,9 +270,9 @@ impl BinaryOperator {
     }
 }
 
-impl<'a, Id, L, C, I, Ctx, S> Parser<'a, (Token<Id, L, C>, S), I, Ctx>
+impl<'a, Id, L, C, E, I, Ctx, S> Parser<'a, (Result<Token<Id, L, C>, E>, S), I, Ctx>
 where
-    I: Iterator<Item = (Token<Id, L, C>, S)>,
+    I: Iterator<Item = (Result<Token<Id, L, C>, E>, S)>,
     Ctx: ExprContext<S, Ident = Id, Literal = L>,
     S: Clone,
 {
@@ -272,7 +282,7 @@ where
                 let diagnostic = match error {
                     ExprParsingError::NothingParsed => CompactDiagnostic::new(
                         match parser.token.0 {
-                            Token::Simple(Eof) => Message::UnexpectedEof,
+                            Ok(Token::Simple(Eof)) => Message::UnexpectedEof,
                             _ => Message::UnexpectedToken {
                                 token: parser.context.diagnostics().strip_span(&parser.token.1),
                             },
@@ -291,7 +301,7 @@ where
 
     fn parse_expression(mut self) -> ParserResult<Self, Ctx, S> {
         match self.token {
-            (Token::Simple(OpeningParenthesis), span) => {
+            (Ok(Token::Simple(OpeningParenthesis)), span) => {
                 bump!(self);
                 self.parse_parenthesized_expression(span)
             }
@@ -305,7 +315,7 @@ where
             Err((parser, error)) => {
                 let error = match error {
                     error @ ExprParsingError::NothingParsed => match parser.token.0 {
-                        Token::Simple(Eof) | Token::Simple(Eol) => ExprParsingError::Other(
+                        Ok(Token::Simple(Eof)) | Ok(Token::Simple(Eol)) => ExprParsingError::Other(
                             CompactDiagnostic::new(Message::UnmatchedParenthesis, left),
                         ),
                         _ => error,
@@ -316,7 +326,7 @@ where
             }
         };
         match self.token {
-            (Token::Simple(ClosingParenthesis), right) => {
+            (Ok(Token::Simple(ClosingParenthesis)), right) => {
                 bump!(self);
                 let span = self.context.diagnostics().merge_spans(&left, &right);
                 self.context
@@ -335,7 +345,14 @@ where
 
     fn parse_infix_expr(mut self, lowest: Precedence) -> ParserResult<Self, Ctx, S> {
         self = self.parse_atomic_expr()?;
-        while let Some(binary_operator) = self.token.0.as_binary_operator() {
+        while let Some(binary_operator) = self
+            .token
+            .0
+            .as_ref()
+            .ok()
+            .map(Token::as_binary_operator)
+            .unwrap_or(None)
+        {
             let precedence = binary_operator.precedence();
             if precedence <= lowest {
                 break;
@@ -350,14 +367,16 @@ where
 
     fn parse_atomic_expr(mut self) -> ParserResult<Self, Ctx, S> {
         match self.token.0 {
-            Token::Simple(Eof) | Token::Simple(Eol) => Err((self, ExprParsingError::NothingParsed)),
-            Token::Ident(ident) => {
+            Ok(Token::Simple(Eof)) | Ok(Token::Simple(Eol)) => {
+                Err((self, ExprParsingError::NothingParsed))
+            }
+            Ok(Token::Ident(ident)) => {
                 self.context
                     .push_atom((ExprAtom::Ident(ident), self.token.1));
                 bump!(self);
                 Ok(self)
             }
-            Token::Literal(literal) => {
+            Ok(Token::Literal(literal)) => {
                 self.context
                     .push_atom((ExprAtom::Literal(literal), self.token.1));
                 bump!(self);
@@ -379,15 +398,15 @@ where
     }
 }
 
-impl<'a, Id, L, C, I, Ctx, S> Parser<'a, (Token<Id, L, C>, S), I, Ctx>
+impl<'a, Id, L, C, E, I, Ctx, S> Parser<'a, (Result<Token<Id, L, C>, E>, S), I, Ctx>
 where
-    I: Iterator<Item = (Token<Id, L, C>, S)>,
+    I: Iterator<Item = (Result<Token<Id, L, C>, E>, S)>,
     Ctx: MacroParamsContext<S, Command = C, Ident = Id, Literal = L>,
     S: Clone,
 {
     fn parse_macro_param(mut self) -> Self {
         match self.token.0 {
-            Token::Ident(ident) => self.context.add_parameter((ident, self.token.1)),
+            Ok(Token::Ident(ident)) => self.context.add_parameter((ident, self.token.1)),
             _ => {
                 let stripped = self.context.diagnostics().strip_span(&self.token.1);
                 self.context
@@ -403,9 +422,9 @@ where
     }
 }
 
-impl<'a, Id, L, C, I, Ctx, S> Parser<'a, (Token<Id, L, C>, S), I, Ctx>
+impl<'a, Id, L, C, E, I, Ctx, S> Parser<'a, (Result<Token<Id, L, C>, E>, S), I, Ctx>
 where
-    I: Iterator<Item = (Token<Id, L, C>, S)>,
+    I: Iterator<Item = (Result<Token<Id, L, C>, E>, S)>,
     Ctx: MacroInvocationContext<S, Token = Token<Id, L, C>>,
     S: Clone,
 {
@@ -414,13 +433,14 @@ where
             let mut state = p.change_context(|c| c.enter_macro_arg());
             loop {
                 match state.token {
-                    (Token::Simple(Comma), _)
-                    | (Token::Simple(Eol), _)
-                    | (Token::Simple(Eof), _) => break,
-                    other => {
+                    (Ok(Token::Simple(Comma)), _)
+                    | (Ok(Token::Simple(Eol)), _)
+                    | (Ok(Token::Simple(Eof)), _) => break,
+                    (Ok(other), span) => {
                         bump!(state);
-                        state.context.push_token(other)
+                        state.context.push_token((other, span))
                     }
+                    (Err(_), _) => unimplemented!(),
                 }
             }
             state.change_context(|c| c.exit())
@@ -428,9 +448,9 @@ where
     }
 }
 
-impl<'a, Id, L, C, I, Ctx, S> Parser<'a, (Token<Id, L, C>, S), I, Ctx>
+impl<'a, Id, L, C, E, I, Ctx, S> Parser<'a, (Result<Token<Id, L, C>, E>, S), I, Ctx>
 where
-    I: Iterator<Item = (Token<Id, L, C>, S)>,
+    I: Iterator<Item = (Result<Token<Id, L, C>, E>, S)>,
     Ctx: DelegateDiagnostics<S>,
     S: Clone,
 {
@@ -477,7 +497,7 @@ where
         P: FnMut(Self) -> Self,
     {
         self = parser(self);
-        while self.token.0.kind() == delimiter {
+        while self.token_kind() == Some(delimiter) {
             bump!(self);
             self = parser(self);
         }
@@ -1023,8 +1043,8 @@ mod tests {
 
     fn with_spans<'a>(
         tokens: impl IntoIterator<Item = &'a (SymToken, TokenRef)>,
-    ) -> impl Iterator<Item = (SymToken, SymSpan)> {
-        tokens.into_iter().cloned().map(|(t, r)| (t, r.into()))
+    ) -> impl Iterator<Item = (Result<SymToken, ()>, SymSpan)> {
+        tokens.into_iter().cloned().map(|(t, r)| (Ok(t), r.into()))
     }
 
     #[test]

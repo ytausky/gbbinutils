@@ -8,6 +8,7 @@ use crate::backend::*;
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diag::*;
 use crate::frontend::session::*;
+use crate::frontend::syntax::lexer::LexError;
 use crate::frontend::syntax::*;
 use crate::span::BufContext;
 use std::rc::Rc;
@@ -37,6 +38,8 @@ pub struct Downstream<'a, B: 'a, D: 'a> {
     diagnostics: &'a mut D,
 }
 
+type LexItem<T, S> = (Result<SemanticToken<T>, LexError>, S);
+
 trait Analysis<Id>
 where
     Self: Copy,
@@ -44,7 +47,7 @@ where
 {
     fn run<I, F, B, D>(&self, tokens: I, session: Session<F, B, D>)
     where
-        I: Iterator<Item = (SemanticToken<Id>, D::Span)>,
+        I: Iterator<Item = LexItem<Id, D::Span>>,
         F: Frontend<D, Ident = Id>,
         B: Backend<Id, D::Span>,
         D: Diagnostics;
@@ -88,7 +91,7 @@ where
 {
     fn run<'a, I, F, B, D>(&self, tokens: I, session: Session<'a, F, B, D>)
     where
-        I: Iterator<Item = (SemanticToken<Id>, D::Span)>,
+        I: Iterator<Item = LexItem<Id, D::Span>>,
         F: Frontend<D, Ident = Id>,
         B: Backend<Id, D::Span>,
         D: Diagnostics,
@@ -123,11 +126,11 @@ where
         tokens: I,
         downstream: &mut Downstream<impl Backend<T::Ident, F::Span>, F>,
     ) where
-        I: IntoIterator<Item = (SemanticToken<T::Ident>, F::Span)>,
+        I: IntoIterator<Item = LexItem<T::Ident, F::Span>>,
         F: Diagnostics<MacroDefId = M::MacroDefId>,
         T: Tokenize<F::BufContext>,
         M::Entry: Expand<T::Ident, F, F::Span>,
-        for<'b> &'b T::Tokenized: IntoIterator<Item = (SemanticToken<T::Ident>, F::Span)>,
+        for<'b> &'b T::Tokenized: IntoIterator<Item = LexItem<T::Ident, F::Span>>,
     {
         let analysis = self.analysis;
         let session = Session::new(self, downstream.backend, downstream.diagnostics);
@@ -144,7 +147,7 @@ where
     T: Tokenize<D::BufContext> + 'a,
     A: Analysis<T::Ident>,
     D: Diagnostics,
-    for<'b> &'b T::Tokenized: IntoIterator<Item = (SemanticToken<T::Ident>, D::Span)>,
+    for<'b> &'b T::Tokenized: IntoIterator<Item = LexItem<T::Ident, D::Span>>,
 {
     type Ident = T::Ident;
     type MacroDefId = D::MacroDefId;
@@ -187,7 +190,7 @@ where
             }
         };
         if let Some(expansion) = expansion {
-            self.analyze_token_seq(expansion, &mut downstream)
+            self.analyze_token_seq(expansion.map(|(t, s)| (Ok(t), s)), &mut downstream)
         }
     }
 
@@ -209,7 +212,7 @@ trait Ident {
 trait Tokenize<C: BufContext>
 where
     Self: Ident,
-    for<'c> &'c Self::Tokenized: IntoIterator<Item = (SemanticToken<Self::Ident>, C::Span)>,
+    for<'c> &'c Self::Tokenized: IntoIterator<Item = LexItem<Self::Ident, C::Span>>,
 {
     type Tokenized;
     fn tokenize_file<F: FnOnce(BufId) -> C>(
@@ -265,7 +268,8 @@ struct TokenizedSrcIter<'a, C: BufContext + 'a> {
 }
 
 impl<'a, C: BufContext> Iterator for TokenizedSrcIter<'a, C> {
-    type Item = (SemanticToken<String>, C::Span);
+    type Item = LexItem<String, C::Span>;
+
     fn next(&mut self) -> Option<Self::Item> {
         self.tokens
             .next()
@@ -286,7 +290,7 @@ mod tests {
     #[test]
     fn include_source_file() {
         let filename = "my_file.asm";
-        let contents = vec![Token::Command(Command::Mnemonic(Mnemonic::Nop))];
+        let contents = vec![Ok(Token::Command(Command::Mnemonic(Mnemonic::Nop)))];
         let log = TestLog::default();
         TestFixture::new(&log)
             .given(|f| {
@@ -302,9 +306,11 @@ mod tests {
         assert_eq!(*log.borrow(), [TestEvent::AnalyzeTokens(contents)]);
     }
 
-    fn add_code_refs<'a, I: IntoIterator<Item = &'a SemanticToken<String>>>(
-        tokens: I,
-    ) -> Vec<(SemanticToken<String>, ())> {
+    fn add_code_refs<'a, T, I>(tokens: I) -> Vec<(T, ())>
+    where
+        T: Clone + 'a,
+        I: IntoIterator<Item = &'a T>,
+    {
         tokens.into_iter().map(|t| (t.clone(), ())).collect()
     }
 
@@ -348,7 +354,12 @@ mod tests {
             session.define_macro((name.to_string(), ()), Vec::new(), add_code_refs(&tokens));
             session.invoke_macro((name.to_string(), ()), vec![])
         });
-        assert_eq!(*log.borrow(), [TestEvent::AnalyzeTokens(tokens)]);
+        assert_eq!(
+            *log.borrow(),
+            [TestEvent::AnalyzeTokens(
+                tokens.into_iter().map(Ok).collect()
+            )]
+        );
     }
 
     #[test]
@@ -374,7 +385,11 @@ mod tests {
         });
         assert_eq!(
             *log.borrow(),
-            [TestEvent::AnalyzeTokens(vec![db, arg, literal0])]
+            [TestEvent::AnalyzeTokens(vec![
+                Ok(db),
+                Ok(arg),
+                Ok(literal0)
+            ])]
         );
     }
 
@@ -396,7 +411,10 @@ mod tests {
         });
         assert_eq!(
             *log.borrow(),
-            [TestEvent::AnalyzeTokens(vec![Token::Label(label), nop])]
+            [TestEvent::AnalyzeTokens(vec![
+                Ok(Token::Label(label)),
+                Ok(nop)
+            ])]
         );
     }
 
@@ -418,7 +436,7 @@ mod tests {
     }
 
     struct MockTokenSource {
-        files: HashMap<String, Vec<(SemanticToken<String>, ())>>,
+        files: HashMap<String, Vec<LexItem<String, ()>>>,
     }
 
     impl MockTokenSource {
@@ -428,7 +446,7 @@ mod tests {
             }
         }
 
-        fn add_file(&mut self, name: &str, tokens: Vec<(SemanticToken<String>, ())>) {
+        fn add_file(&mut self, name: &str, tokens: Vec<LexItem<String, ()>>) {
             self.files.insert(name.to_string(), tokens);
         }
     }
@@ -449,11 +467,12 @@ mod tests {
         }
     }
 
-    struct MockTokenized(Vec<(SemanticToken<String>, ())>);
+    struct MockTokenized(Vec<LexItem<String, ()>>);
 
     impl<'b> IntoIterator for &'b MockTokenized {
-        type Item = (SemanticToken<String>, ());
-        type IntoIter = std::iter::Cloned<std::slice::Iter<'b, (SemanticToken<String>, ())>>;
+        type Item = LexItem<String, ()>;
+        type IntoIter = std::iter::Cloned<std::slice::Iter<'b, LexItem<String, ()>>>;
+
         fn into_iter(self) -> Self::IntoIter {
             (&self.0).into_iter().cloned()
         }
@@ -526,7 +545,7 @@ mod tests {
     impl<'a> Analysis<String> for Mock<'a> {
         fn run<I, F, B, D>(&self, tokens: I, _frontend: Session<F, B, D>)
         where
-            I: Iterator<Item = (SemanticToken<String>, D::Span)>,
+            I: Iterator<Item = LexItem<String, D::Span>>,
             F: Frontend<D, Ident = String>,
             B: Backend<F::Ident, D::Span>,
             D: Diagnostics,
@@ -587,7 +606,7 @@ mod tests {
 
     #[derive(Debug, PartialEq)]
     enum TestEvent {
-        AnalyzeTokens(Vec<SemanticToken<String>>),
+        AnalyzeTokens(Vec<Result<SemanticToken<String>, syntax::lexer::LexError>>),
         DefineSymbol(String, RelocExpr<String, ()>),
         Diagnostic(CompactDiagnostic<(), ()>),
         EmitItem(Item<RelocExpr<String, ()>>),
