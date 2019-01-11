@@ -2,7 +2,7 @@ use crate::frontend::syntax;
 use crate::frontend::syntax::keyword as kw;
 use crate::frontend::syntax::keyword::*;
 use crate::frontend::syntax::SimpleToken::*;
-use crate::frontend::syntax::{Literal, SimpleToken, Token};
+use crate::frontend::syntax::{Literal, SemanticToken, SimpleToken, Token};
 
 use std::iter;
 use std::ops::{Index, Range};
@@ -187,7 +187,7 @@ impl<'a> Lexer<'a> {
 }
 
 impl<'a> Iterator for Lexer<'a> {
-    type Item = (Token<String>, Range<usize>);
+    type Item = (SemanticToken<String>, Range<usize>);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.scanner
@@ -196,7 +196,7 @@ impl<'a> Iterator for Lexer<'a> {
     }
 }
 
-fn mk_token(kind: TokenKind, lexeme: &str) -> Token<String> {
+fn mk_token(kind: TokenKind, lexeme: &str) -> SemanticToken<String> {
     match kind {
         TokenKind::Error(error) => Token::Error(error),
         TokenKind::Ident => mk_keyword_or(Token::Ident, lexeme),
@@ -215,7 +215,10 @@ fn mk_token(kind: TokenKind, lexeme: &str) -> Token<String> {
     }
 }
 
-fn mk_keyword_or<F: FnOnce(String) -> Token<String>>(f: F, lexeme: &str) -> Token<String> {
+fn mk_keyword_or<F>(f: F, lexeme: &str) -> SemanticToken<String>
+where
+    F: FnOnce(String) -> SemanticToken<String>,
+{
     identify_keyword(lexeme).map_or_else(
         || f(lexeme.to_string()),
         |keyword| match keyword {
@@ -358,11 +361,17 @@ mod tests {
         )
     }
 
-    fn test_byte_range_at_eof(src: &str, tokens: impl Borrow<[(Token<String>, Range<usize>)]>) {
+    fn test_byte_range_at_eof(
+        src: &str,
+        tokens: impl Borrow<[(SemanticToken<String>, Range<usize>)]>,
+    ) {
         assert_eq!(Lexer::new(src).collect::<Vec<_>>(), tokens.borrow())
     }
 
-    fn assert_eq_tokens<'a>(src: &'a str, expected_without_eof: impl Borrow<[Token<String>]>) {
+    fn assert_eq_tokens<'a>(
+        src: &'a str,
+        expected_without_eof: impl Borrow<[SemanticToken<String>]>,
+    ) {
         let mut expected: Vec<_> = expected_without_eof.borrow().iter().cloned().collect();
         expected.push(Eof.into());
         assert_eq!(
@@ -512,7 +521,7 @@ mod tests {
         assert_eq_tokens("$", [Error(LexError::NoDigits)])
     }
 
-    impl<T: Into<kw::Command>> From<T> for Token<String> {
+    impl<T: Into<kw::Command>> From<T> for SemanticToken<String> {
         fn from(t: T) -> Self {
             Command(t.into())
         }

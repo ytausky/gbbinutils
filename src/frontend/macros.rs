@@ -1,4 +1,4 @@
-use super::Token;
+use super::{SemanticToken, Token};
 use crate::span::{MacroContextFactory, MacroExpansionContext};
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -11,7 +11,7 @@ pub trait MacroTable<I>: Get<I> {
         &mut self,
         name: (impl Into<I>, S),
         params: Vec<(I, S)>,
-        body: Vec<(Token<I>, S)>,
+        body: Vec<(SemanticToken<I>, S)>,
         factory: &mut F,
     ) where
         F: MacroContextFactory<S, MacroDefId = Self::MacroDefId>,
@@ -24,9 +24,10 @@ pub trait Get<I> {
 }
 
 pub trait Expand<I, F: MacroContextFactory<S>, S> {
-    type Iter: Iterator<Item = (Token<I>, S)>;
+    type Iter: Iterator<Item = (SemanticToken<I>, S)>;
 
-    fn expand(&self, name: S, args: Vec<Vec<(Token<I>, S)>>, factory: &mut F) -> Self::Iter;
+    fn expand(&self, name: S, args: Vec<Vec<(SemanticToken<I>, S)>>, factory: &mut F)
+        -> Self::Iter;
 }
 
 pub struct MacroExpander<I, D> {
@@ -40,7 +41,7 @@ pub struct MacroTableEntry<I, D> {
 
 pub struct MacroDefData<I> {
     params: Vec<I>,
-    body: Vec<Token<I>>,
+    body: Vec<SemanticToken<I>>,
 }
 
 impl<I: Eq + Hash, D> MacroExpander<I, D> {
@@ -62,7 +63,7 @@ where
         &mut self,
         name: (impl Into<I>, S),
         params: Vec<(I, S)>,
-        body: Vec<(Token<I>, S)>,
+        body: Vec<(SemanticToken<I>, S)>,
         factory: &mut F,
     ) where
         F: MacroContextFactory<S, MacroDefId = D>,
@@ -101,7 +102,12 @@ where
 {
     type Iter = ExpandedMacro<I, F::MacroExpansionContext>;
 
-    fn expand(&self, name: S, args: Vec<Vec<(Token<I>, S)>>, factory: &mut F) -> Self::Iter {
+    fn expand(
+        &self,
+        name: S,
+        args: Vec<Vec<(SemanticToken<I>, S)>>,
+        factory: &mut F,
+    ) -> Self::Iter {
         let mut arg_tokens = Vec::new();
         let mut arg_spans = Vec::new();
         for arg in args {
@@ -116,7 +122,7 @@ where
 
 pub struct ExpandedMacro<I, C> {
     def: Rc<MacroDefData<I>>,
-    args: Vec<Vec<Token<I>>>,
+    args: Vec<Vec<SemanticToken<I>>>,
     context: C,
     body_index: usize,
     expansion_state: Option<ExpansionState>,
@@ -129,7 +135,11 @@ enum ExpansionState {
 }
 
 impl<I: PartialEq, C> ExpandedMacro<I, C> {
-    fn new(def: Rc<MacroDefData<I>>, args: Vec<Vec<Token<I>>>, context: C) -> ExpandedMacro<I, C> {
+    fn new(
+        def: Rc<MacroDefData<I>>,
+        args: Vec<Vec<SemanticToken<I>>>,
+        context: C,
+    ) -> ExpandedMacro<I, C> {
         let mut expanded_macro = ExpandedMacro {
             def,
             args,
@@ -167,7 +177,7 @@ impl<I: PartialEq, C> ExpandedMacro<I, C> {
         }
     }
 
-    fn expand_token(&self, token: &Token<I>) -> Option<ExpansionState> {
+    fn expand_token(&self, token: &SemanticToken<I>) -> Option<ExpansionState> {
         match token {
             Token::Ident(ident) => self
                 .param_position(ident)
@@ -183,7 +193,7 @@ where
     I: Clone + Eq,
     C: MacroExpansionContext,
 {
-    type Item = (Token<I>, C::Span);
+    type Item = (SemanticToken<I>, C::Span);
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.body_index < self.def.body.len() {

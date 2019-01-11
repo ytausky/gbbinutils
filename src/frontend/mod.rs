@@ -44,7 +44,7 @@ where
 {
     fn run<I, F, B, D>(&self, tokens: I, session: Session<F, B, D>)
     where
-        I: Iterator<Item = (Token<Id>, D::Span)>,
+        I: Iterator<Item = (SemanticToken<Id>, D::Span)>,
         F: Frontend<D, Ident = Id>,
         B: Backend<Id, D::Span>,
         D: Diagnostics;
@@ -77,7 +77,7 @@ pub(crate) trait Frontend<D: Diagnostics> {
         &mut self,
         name: (impl Into<Self::Ident>, D::Span),
         params: Vec<(Self::Ident, D::Span)>,
-        tokens: Vec<(Token<Self::Ident>, D::Span)>,
+        tokens: Vec<(SemanticToken<Self::Ident>, D::Span)>,
         diagnostics: &mut D,
     );
 }
@@ -88,7 +88,7 @@ where
 {
     fn run<'a, I, F, B, D>(&self, tokens: I, session: Session<'a, F, B, D>)
     where
-        I: Iterator<Item = (Token<Id>, D::Span)>,
+        I: Iterator<Item = (SemanticToken<Id>, D::Span)>,
         F: Frontend<D, Ident = Id>,
         B: Backend<Id, D::Span>,
         D: Diagnostics,
@@ -123,11 +123,11 @@ where
         tokens: I,
         downstream: &mut Downstream<impl Backend<T::Ident, F::Span>, F>,
     ) where
-        I: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
+        I: IntoIterator<Item = (SemanticToken<T::Ident>, F::Span)>,
         F: Diagnostics<MacroDefId = M::MacroDefId>,
         T: Tokenize<F::BufContext>,
         M::Entry: Expand<T::Ident, F, F::Span>,
-        for<'b> &'b T::Tokenized: IntoIterator<Item = (Token<T::Ident>, F::Span)>,
+        for<'b> &'b T::Tokenized: IntoIterator<Item = (SemanticToken<T::Ident>, F::Span)>,
     {
         let analysis = self.analysis;
         let session = Session::new(self, downstream.backend, downstream.diagnostics);
@@ -135,7 +135,7 @@ where
     }
 }
 
-type TokenSeq<I, S> = Vec<(Token<I>, S)>;
+type TokenSeq<I, S> = Vec<(SemanticToken<I>, S)>;
 
 impl<'a, M, T, A, D> Frontend<D> for CodebaseAnalyzer<'a, M, T, A>
 where
@@ -144,7 +144,7 @@ where
     T: Tokenize<D::BufContext> + 'a,
     A: Analysis<T::Ident>,
     D: Diagnostics,
-    for<'b> &'b T::Tokenized: IntoIterator<Item = (Token<T::Ident>, D::Span)>,
+    for<'b> &'b T::Tokenized: IntoIterator<Item = (SemanticToken<T::Ident>, D::Span)>,
 {
     type Ident = T::Ident;
     type MacroDefId = D::MacroDefId;
@@ -195,7 +195,7 @@ where
         &mut self,
         name: (impl Into<Self::Ident>, D::Span),
         params: Vec<(Self::Ident, D::Span)>,
-        body: Vec<(Token<Self::Ident>, D::Span)>,
+        body: Vec<(SemanticToken<Self::Ident>, D::Span)>,
         diagnostics: &mut D,
     ) {
         self.macro_table.define(name, params, body, diagnostics);
@@ -209,7 +209,7 @@ trait Ident {
 trait Tokenize<C: BufContext>
 where
     Self: Ident,
-    for<'c> &'c Self::Tokenized: IntoIterator<Item = (Token<Self::Ident>, C::Span)>,
+    for<'c> &'c Self::Tokenized: IntoIterator<Item = (SemanticToken<Self::Ident>, C::Span)>,
 {
     type Tokenized;
     fn tokenize_file<F: FnOnce(BufId) -> C>(
@@ -265,7 +265,7 @@ struct TokenizedSrcIter<'a, C: BufContext + 'a> {
 }
 
 impl<'a, C: BufContext> Iterator for TokenizedSrcIter<'a, C> {
-    type Item = (Token<String>, C::Span);
+    type Item = (SemanticToken<String>, C::Span);
     fn next(&mut self) -> Option<Self::Item> {
         self.tokens
             .next()
@@ -302,9 +302,9 @@ mod tests {
         assert_eq!(*log.borrow(), [TestEvent::AnalyzeTokens(contents)]);
     }
 
-    fn add_code_refs<'a, I: IntoIterator<Item = &'a Token<String>>>(
+    fn add_code_refs<'a, I: IntoIterator<Item = &'a SemanticToken<String>>>(
         tokens: I,
-    ) -> Vec<(Token<String>, ())> {
+    ) -> Vec<(SemanticToken<String>, ())> {
         tokens.into_iter().map(|t| (t.clone(), ())).collect()
     }
 
@@ -418,7 +418,7 @@ mod tests {
     }
 
     struct MockTokenSource {
-        files: HashMap<String, Vec<(Token<String>, ())>>,
+        files: HashMap<String, Vec<(SemanticToken<String>, ())>>,
     }
 
     impl MockTokenSource {
@@ -428,7 +428,7 @@ mod tests {
             }
         }
 
-        fn add_file(&mut self, name: &str, tokens: Vec<(Token<String>, ())>) {
+        fn add_file(&mut self, name: &str, tokens: Vec<(SemanticToken<String>, ())>) {
             self.files.insert(name.to_string(), tokens);
         }
     }
@@ -449,11 +449,11 @@ mod tests {
         }
     }
 
-    struct MockTokenized(Vec<(Token<String>, ())>);
+    struct MockTokenized(Vec<(SemanticToken<String>, ())>);
 
     impl<'b> IntoIterator for &'b MockTokenized {
-        type Item = (Token<String>, ());
-        type IntoIter = std::iter::Cloned<std::slice::Iter<'b, (Token<String>, ())>>;
+        type Item = (SemanticToken<String>, ());
+        type IntoIter = std::iter::Cloned<std::slice::Iter<'b, (SemanticToken<String>, ())>>;
         fn into_iter(self) -> Self::IntoIter {
             (&self.0).into_iter().cloned()
         }
@@ -526,7 +526,7 @@ mod tests {
     impl<'a> Analysis<String> for Mock<'a> {
         fn run<I, F, B, D>(&self, tokens: I, _frontend: Session<F, B, D>)
         where
-            I: Iterator<Item = (Token<String>, D::Span)>,
+            I: Iterator<Item = (SemanticToken<String>, D::Span)>,
             F: Frontend<D, Ident = String>,
             B: Backend<F::Ident, D::Span>,
             D: Diagnostics,
@@ -587,7 +587,7 @@ mod tests {
 
     #[derive(Debug, PartialEq)]
     enum TestEvent {
-        AnalyzeTokens(Vec<Token<String>>),
+        AnalyzeTokens(Vec<SemanticToken<String>>),
         DefineSymbol(String, RelocExpr<String, ()>),
         Diagnostic(CompactDiagnostic<(), ()>),
         EmitItem(Item<RelocExpr<String, ()>>),

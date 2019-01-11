@@ -3,7 +3,7 @@ use crate::diag::span::{MergeSpans, Source, StripSpan};
 use crate::diag::*;
 use crate::expr::ExprVariant;
 use crate::frontend::session::Session;
-use crate::frontend::syntax::{self, keyword::*, ExprAtom, Operator, Token, UnaryOperator};
+use crate::frontend::syntax::{self, keyword::*, ExprAtom, Operator, SemanticToken, UnaryOperator};
 use crate::frontend::{Frontend, Literal};
 
 mod directive;
@@ -336,7 +336,7 @@ fn analyze_mnemonic<'a, F, B, D>(
 pub(crate) struct MacroDefActions<'a, F: Frontend<D>, B, D: Diagnostics> {
     name: Option<(F::Ident, D::Span)>,
     params: Vec<(F::Ident, D::Span)>,
-    tokens: Vec<(Token<F::Ident>, D::Span)>,
+    tokens: Vec<(SemanticToken<F::Ident>, D::Span)>,
     parent: SemanticActions<'a, F, B, D>,
 }
 
@@ -391,7 +391,7 @@ where
     F: Frontend<D>,
     D: Diagnostics,
 {
-    type Token = Token<F::Ident>;
+    type Token = SemanticToken<F::Ident>;
     type Parent = SemanticActions<'a, F, B, D>;
 
     fn push_token(&mut self, token: (Self::Token, D::Span)) {
@@ -426,7 +426,7 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> MacroInvocationActions<'a, F, B, D> 
         }
     }
 
-    fn push_arg(&mut self, arg: Vec<(Token<F::Ident>, D::Span)>) {
+    fn push_arg(&mut self, arg: Vec<(SemanticToken<F::Ident>, D::Span)>) {
         self.args.push(arg)
     }
 }
@@ -449,7 +449,7 @@ where
     B: Backend<F::Ident, D::Span>,
     D: Diagnostics,
 {
-    type Token = Token<F::Ident>;
+    type Token = SemanticToken<F::Ident>;
     type Parent = SemanticActions<'a, F, B, D>;
     type MacroArgContext = MacroArgContext<'a, F, B, D>;
 
@@ -464,7 +464,7 @@ where
 }
 
 pub(crate) struct MacroArgContext<'a, F: Frontend<D>, B, D: Diagnostics> {
-    tokens: Vec<(Token<F::Ident>, D::Span)>,
+    tokens: Vec<(SemanticToken<F::Ident>, D::Span)>,
     parent: MacroInvocationActions<'a, F, B, D>,
 }
 
@@ -494,7 +494,7 @@ where
     F: Frontend<D>,
     D: Diagnostics,
 {
-    type Token = Token<F::Ident>;
+    type Token = SemanticToken<F::Ident>;
     type Parent = MacroInvocationActions<'a, F, B, D>;
 
     fn push_token(&mut self, token: (Self::Token, D::Span)) {
@@ -633,7 +633,7 @@ mod tests {
     use crate::expr::BinaryOperator;
     use crate::frontend::syntax::{
         keyword::Operand, CommandContext, ExprContext, FileContext, MacroInvocationContext,
-        MacroParamsContext, StmtContext, TokenSeqContext,
+        MacroParamsContext, StmtContext, Token, TokenSeqContext,
     };
     use crate::frontend::{Downstream, MacroArgs};
     use crate::span::*;
@@ -701,7 +701,7 @@ mod tests {
             &mut self,
             name: (impl Into<Self::Ident>, ()),
             params: Vec<(Self::Ident, ())>,
-            tokens: Vec<(Token<Self::Ident>, ())>,
+            tokens: Vec<(SemanticToken<Self::Ident>, ())>,
             _diagnostics: &mut TestDiagnostics<'a>,
         ) {
             self.operations
@@ -851,8 +851,8 @@ mod tests {
     #[derive(Debug, PartialEq)]
     pub(crate) enum TestOperation {
         AnalyzeFile(String),
-        InvokeMacro(String, Vec<Vec<Token<String>>>),
-        DefineMacro(String, Vec<String>, Vec<Token<String>>),
+        InvokeMacro(String, Vec<Vec<SemanticToken<String>>>),
+        DefineMacro(String, Vec<String>, Vec<SemanticToken<String>>),
         DefineSymbol(String, RelocExpr<String, ()>),
         EmitDiagnostic(CompactDiagnostic<(), ()>),
         EmitItem(backend::Item<RelocExpr<String, ()>>),
@@ -992,7 +992,7 @@ mod tests {
     fn test_macro_definition(
         name: &str,
         params: impl Borrow<[&'static str]>,
-        body: impl Borrow<[Token<String>]>,
+        body: impl Borrow<[SemanticToken<String>]>,
     ) {
         let actions = collect_semantic_actions(|actions| {
             let mut params_actions = actions

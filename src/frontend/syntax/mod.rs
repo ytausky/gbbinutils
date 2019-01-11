@@ -10,8 +10,10 @@ mod parser;
 
 pub use crate::frontend::syntax::keyword::Operand;
 
+pub type SemanticToken<T> = Token<T, Literal<T>>;
+
 #[derive(Clone, Debug, PartialEq)]
-pub enum Token<I, L = Literal<I>, C = keyword::Command, E = lexer::LexError> {
+pub enum Token<I, L, C = keyword::Command, E = lexer::LexError> {
     Command(C),
     Error(E),
     Ident(I),
@@ -47,7 +49,7 @@ pub fn tokenize(src: &str) -> self::lexer::Lexer {
 
 pub(crate) fn parse_token_seq<Id, I, F, S>(tokens: I, actions: F)
 where
-    I: Iterator<Item = (Token<Id>, S)>,
+    I: Iterator<Item = (SemanticToken<Id>, S)>,
     F: FileContext<Id, Literal<Id>, keyword::Command, S>,
     S: Clone,
 {

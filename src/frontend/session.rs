@@ -1,9 +1,9 @@
 use crate::backend::Backend;
 use crate::codebase::CodebaseError;
 use crate::diag::{DelegateDiagnostics, Diagnostics, DownstreamDiagnostics};
-use crate::frontend::{Downstream, Frontend, Token};
+use crate::frontend::{Downstream, Frontend, SemanticToken};
 
-pub type MacroArgs<I, S> = Vec<Vec<(Token<I>, S)>>;
+pub type MacroArgs<I, S> = Vec<Vec<(SemanticToken<I>, S)>>;
 
 pub(crate) struct Session<'a, F, B, D> {
     pub frontend: &'a mut F,
@@ -34,7 +34,7 @@ where
         &mut self,
         name: (impl Into<F::Ident>, D::Span),
         params: Vec<(F::Ident, D::Span)>,
-        tokens: Vec<(Token<F::Ident>, D::Span)>,
+        tokens: Vec<(SemanticToken<F::Ident>, D::Span)>,
     ) {
         self.frontend
             .define_macro(name, params, tokens, &mut self.diagnostics)
