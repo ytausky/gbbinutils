@@ -40,7 +40,7 @@ pub struct Downstream<'a, B: 'a, D: 'a> {
 
 type LexItem<T, S> = (Result<SemanticToken<T>, LexError>, S);
 
-type SemanticToken<T> = Token<Ident<T>, Literal<T>>;
+type SemanticToken<T> = Token<Ident<T>, Literal<T>, syntax::Command>;
 
 pub type Ident<T> = T;
 
