@@ -17,7 +17,7 @@ mod expr {
     use crate::frontend::{Ident, Literal};
 
     #[derive(Debug, PartialEq)]
-    pub enum SemanticAtom<I> {
+    pub(super) enum SemanticAtom<I> {
         Ident(Ident<I>),
         Literal(Literal<I>),
     }
@@ -33,10 +33,10 @@ mod expr {
         Parentheses,
     }
 
-    pub type SemanticExpr<I, S> = Expr<SemanticAtom<I>, SemanticUnary, BinaryOperator, S>;
+    pub(super) type SemanticExpr<I, S> = Expr<SemanticAtom<I>, SemanticUnary, BinaryOperator, S>;
 
     #[cfg(test)]
-    pub type SemanticExprVariant<I, S> =
+    pub(super) type SemanticExprVariant<I, S> =
         ExprVariant<SemanticAtom<I>, SemanticUnary, BinaryOperator, S>;
 }
 

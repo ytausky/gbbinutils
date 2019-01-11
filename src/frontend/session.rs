@@ -3,7 +3,7 @@ use crate::codebase::CodebaseError;
 use crate::diag::{DelegateDiagnostics, Diagnostics, DownstreamDiagnostics};
 use crate::frontend::{Downstream, Frontend, Ident, SemanticToken};
 
-pub type MacroArgs<I, S> = Vec<Vec<(SemanticToken<I>, S)>>;
+pub(super) type MacroArgs<I, S> = Vec<Vec<(SemanticToken<I>, S)>>;
 
 pub(crate) struct Session<'a, F, B, D> {
     pub frontend: &'a mut F,

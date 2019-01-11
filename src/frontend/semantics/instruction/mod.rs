@@ -12,7 +12,7 @@ use crate::instruction::*;
 mod branch;
 mod ld;
 
-pub(crate) fn analyze_instruction<Id: Into<String>, I, B, D, S>(
+pub(super) fn analyze_instruction<Id: Into<String>, I, B, D, S>(
     mnemonic: (kw::Mnemonic, S),
     operands: I,
     value_context: ValueContext<B, D>,
@@ -473,7 +473,7 @@ mod tests {
         }
     }
 
-    pub fn literal(keyword: kw::Operand) -> Input {
+    pub(super) fn literal(keyword: kw::Operand) -> Input {
         Literal::Operand(keyword).into()
     }
 
@@ -485,7 +485,7 @@ mod tests {
         RelocExpr::from_atom(RelocAtom::Symbol(ident.to_string()), span.into())
     }
 
-    pub fn deref(expr: Input) -> Input {
+    pub(super) fn deref(expr: Input) -> Input {
         Expr {
             variant: ExprVariant::Unary(SemanticUnary::Parentheses, Box::new(expr)),
             span: (),
@@ -652,7 +652,7 @@ mod tests {
         test_instruction_analysis(describe_legal_instructions());
     }
 
-    pub type InstructionDescriptor = (
+    pub(super) type InstructionDescriptor = (
         (kw::Mnemonic, Vec<Input>),
         Instruction<RelocExpr<String, TokenSpan>>,
     );
@@ -851,7 +851,7 @@ mod tests {
 
     const INC_DEC: &[IncDec] = &[IncDec::Inc, IncDec::Dec];
 
-    pub fn test_instruction_analysis(descriptors: Vec<InstructionDescriptor>) {
+    pub(super) fn test_instruction_analysis(descriptors: Vec<InstructionDescriptor>) {
         for ((mnemonic, operands), expected) in descriptors {
             analyze(mnemonic, operands).expect_instruction(expected)
         }
@@ -881,7 +881,7 @@ mod tests {
         }
     }
 
-    pub fn analyze<I>(mnemonic: kw::Mnemonic, operands: I) -> AnalysisResult
+    pub(super) fn analyze<I>(mnemonic: kw::Mnemonic, operands: I) -> AnalysisResult
     where
         I: IntoIterator<Item = Input>,
     {

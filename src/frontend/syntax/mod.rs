@@ -40,7 +40,7 @@ impl<I, L, C> From<SimpleToken> for Token<I, L, C> {
     }
 }
 
-pub fn tokenize(src: &str) -> self::lexer::Lexer {
+pub(super) fn tokenize(src: &str) -> self::lexer::Lexer {
     self::lexer::Lexer::new(src)
 }
 

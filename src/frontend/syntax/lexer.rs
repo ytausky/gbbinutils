@@ -172,7 +172,7 @@ fn is_hex_digit(character: char) -> bool {
     character.is_digit(16)
 }
 
-pub struct Lexer<'a> {
+pub(in crate::frontend) struct Lexer<'a> {
     src: &'a str,
     scanner: Scanner<str::Chars<'a>>,
 }

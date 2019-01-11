@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::rc::Rc;
 
-pub trait MacroTable<I>: Get<I> {
+pub(super) trait MacroTable<I>: Get<I> {
     type MacroDefId: Clone;
 
     fn define<F, S>(
@@ -23,14 +23,14 @@ pub trait Get<I> {
     fn get(&self, name: &I) -> Option<&Self::Entry>;
 }
 
-pub trait Expand<I, F: MacroContextFactory<S>, S> {
+pub(super) trait Expand<I, F: MacroContextFactory<S>, S> {
     type Iter: Iterator<Item = (SemanticToken<I>, S)>;
 
     fn expand(&self, name: S, args: Vec<Vec<(SemanticToken<I>, S)>>, factory: &mut F)
         -> Self::Iter;
 }
 
-pub struct MacroExpander<I, D> {
+pub(super) struct MacroExpander<I, D> {
     macro_defs: HashMap<I, MacroTableEntry<D, Rc<MacroDefData<I>>>>,
 }
 
@@ -120,7 +120,7 @@ where
     }
 }
 
-pub struct ExpandedMacro<I, C> {
+pub(super) struct ExpandedMacro<I, C> {
     def: Rc<MacroDefData<I>>,
     args: Vec<Vec<SemanticToken<I>>>,
     context: C,

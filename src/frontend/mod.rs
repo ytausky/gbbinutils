@@ -40,12 +40,12 @@ pub struct Downstream<'a, B: 'a, D: 'a> {
 
 type LexItem<T, S> = (Result<SemanticToken<T>, LexError>, S);
 
-pub type SemanticToken<T> = Token<T, Literal<T>>;
+type SemanticToken<T> = Token<Ident<T>, Literal<T>>;
 
 pub type Ident<T> = T;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Literal<S> {
+pub(super) enum Literal<S> {
     Operand(Operand),
     Number(i32),
     String(S),

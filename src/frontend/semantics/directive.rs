@@ -8,7 +8,7 @@ use crate::expr::{BinaryOperator, ExprVariant};
 use crate::frontend::{Frontend, Ident, Literal};
 use crate::span::Source;
 
-pub(crate) fn analyze_directive<'a, 'b, F, B, D>(
+pub(super) fn analyze_directive<'a, 'b, F, B, D>(
     directive: (Directive, D::Span),
     args: CommandArgs<F::StringRef, D::Span>,
     actions: &'b mut SemanticActions<'a, F, B, D>,
