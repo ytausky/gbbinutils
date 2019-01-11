@@ -5,8 +5,7 @@ use crate::backend;
 use crate::backend::{Backend, LocationCounter, ValueBuilder, Width};
 use crate::diag::*;
 use crate::expr::{BinaryOperator, ExprVariant};
-use crate::frontend::syntax::Literal;
-use crate::frontend::{Frontend, Ident};
+use crate::frontend::{Frontend, Ident, Literal};
 use crate::span::Source;
 
 pub(crate) fn analyze_directive<'a, 'b, F, B, D>(

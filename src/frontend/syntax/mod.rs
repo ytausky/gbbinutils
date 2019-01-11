@@ -1,4 +1,3 @@
-use super::LexItem;
 use crate::diag::DelegateDiagnostics;
 use crate::expr::BinaryOperator;
 
@@ -10,8 +9,6 @@ pub mod lexer;
 mod parser;
 
 pub use crate::frontend::syntax::keyword::Operand;
-
-pub type SemanticToken<T> = Token<T, Literal<T>>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token<I, L, C = keyword::Command> {
@@ -47,21 +44,7 @@ pub fn tokenize(src: &str) -> self::lexer::Lexer {
     self::lexer::Lexer::new(src)
 }
 
-pub(crate) fn parse_token_seq<Id, I, F, S>(tokens: I, actions: F)
-where
-    I: Iterator<Item = LexItem<Id, S>>,
-    F: FileContext<Id, Literal<Id>, keyword::Command, S>,
-    S: Clone,
-{
-    self::parser::parse_src(tokens, actions);
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum Literal<S> {
-    Operand(Operand),
-    Number(i32),
-    String(S),
-}
+pub(crate) use self::parser::parse_src as parse_token_seq;
 
 pub(crate) trait FileContext<I, L, C, S: Clone>: DelegateDiagnostics<S> + Sized {
     type StmtContext: StmtContext<I, L, C, S, Parent = Self>;

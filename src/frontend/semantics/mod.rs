@@ -3,8 +3,8 @@ use crate::diag::span::{MergeSpans, Source, StripSpan};
 use crate::diag::*;
 use crate::expr::ExprVariant;
 use crate::frontend::session::Session;
-use crate::frontend::syntax::{self, keyword::*, ExprAtom, Operator, SemanticToken, UnaryOperator};
-use crate::frontend::{Frontend, Ident, Literal};
+use crate::frontend::syntax::{self, keyword::*, ExprAtom, Operator, UnaryOperator};
+use crate::frontend::{Frontend, Ident, Literal, SemanticToken};
 
 mod directive;
 mod instruction;

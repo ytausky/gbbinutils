@@ -1,8 +1,8 @@
-use crate::frontend::syntax;
 use crate::frontend::syntax::keyword as kw;
 use crate::frontend::syntax::keyword::*;
 use crate::frontend::syntax::SimpleToken::*;
-use crate::frontend::syntax::{Literal, SemanticToken, SimpleToken, Token};
+use crate::frontend::syntax::{SimpleToken, Token};
+use crate::frontend::{Literal, SemanticToken};
 
 use std::iter;
 use std::ops::{Index, Range};
@@ -225,7 +225,7 @@ where
             Keyword::Command(command) => Token::Command(command),
             Keyword::Endm => Endm.into(),
             Keyword::Macro => Macro.into(),
-            Keyword::Operand(operand) => Token::Literal(syntax::Literal::Operand(operand)),
+            Keyword::Operand(operand) => Token::Literal(Literal::Operand(operand)),
         },
     )
 }
@@ -335,9 +335,9 @@ mod tests {
     use super::*;
 
     use super::kw::Mnemonic::*;
-    use super::syntax::Literal::{Number, Operand};
-    use super::syntax::Token::*;
+    use super::Literal::{Number, Operand};
     use super::Operand::*;
+    use super::Token::*;
     use std::borrow::Borrow;
 
     #[test]
@@ -435,7 +435,7 @@ mod tests {
     fn lex_quoted_string() {
         assert_eq_tokens(
             "\"file.asm\"",
-            [Literal(syntax::Literal::String("file.asm".to_string()))],
+            [Literal(super::Literal::String("file.asm".to_string()))],
         )
     }
 

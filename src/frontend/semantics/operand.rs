@@ -2,7 +2,7 @@ use super::{AnalyzeExpr, ExprVariant, SemanticAtom, SemanticExpr, SemanticUnary,
 use crate::backend::ValueBuilder;
 use crate::diag::*;
 use crate::frontend::syntax::keyword as kw;
-use crate::frontend::syntax::Literal;
+use crate::frontend::Literal;
 use crate::instruction::{Condition, PtrReg, Reg16, RegPair, SimpleOperand};
 use crate::span::Source;
 

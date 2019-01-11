@@ -40,7 +40,16 @@ pub struct Downstream<'a, B: 'a, D: 'a> {
 
 type LexItem<T, S> = (Result<SemanticToken<T>, LexError>, S);
 
+pub type SemanticToken<T> = Token<T, Literal<T>>;
+
 pub type Ident<T> = T;
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Literal<S> {
+    Operand(Operand),
+    Number(i32),
+    String(S),
+}
 
 trait Analysis<Id>
 where
@@ -99,7 +108,7 @@ where
         D: Diagnostics,
     {
         let actions = semantics::SemanticActions::new(session);
-        syntax::parse_token_seq(tokens, actions)
+        syntax::parse_token_seq(tokens, actions);
     }
 }
 

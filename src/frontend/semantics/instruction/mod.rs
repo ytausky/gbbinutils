@@ -455,7 +455,7 @@ mod tests {
     use crate::frontend::semantics::{
         SemanticAtom, SemanticExpr, SemanticExprVariant, SemanticUnary,
     };
-    use crate::frontend::syntax::Literal;
+    use crate::frontend::Literal;
     pub use crate::span::{MergeSpans, Span};
     use std::cmp;
 
