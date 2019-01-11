@@ -1,7 +1,7 @@
 use crate::backend::Backend;
 use crate::codebase::CodebaseError;
 use crate::diag::{DelegateDiagnostics, Diagnostics, DownstreamDiagnostics};
-use crate::frontend::{Downstream, Frontend, SemanticToken};
+use crate::frontend::{Downstream, Frontend, Ident, SemanticToken};
 
 pub type MacroArgs<I, S> = Vec<Vec<(SemanticToken<I>, S)>>;
 
@@ -32,9 +32,9 @@ where
 {
     pub fn define_macro(
         &mut self,
-        name: (impl Into<F::Ident>, D::Span),
-        params: Vec<(F::Ident, D::Span)>,
-        tokens: Vec<(SemanticToken<F::Ident>, D::Span)>,
+        name: (impl Into<Ident<F::StringRef>>, D::Span),
+        params: Vec<(Ident<F::StringRef>, D::Span)>,
+        tokens: Vec<(SemanticToken<F::StringRef>, D::Span)>,
     ) {
         self.frontend
             .define_macro(name, params, tokens, &mut self.diagnostics)
@@ -44,10 +44,10 @@ where
 impl<'a, F, B, D> Session<'a, F, B, D>
 where
     F: Frontend<D>,
-    B: Backend<F::Ident, D::Span>,
+    B: Backend<Ident<F::StringRef>, D::Span>,
     D: Diagnostics,
 {
-    pub fn analyze_file(&mut self, path: F::Ident) -> Result<(), CodebaseError> {
+    pub fn analyze_file(&mut self, path: F::StringRef) -> Result<(), CodebaseError> {
         self.frontend.analyze_file(
             path,
             Downstream {
@@ -69,10 +69,14 @@ impl<'a, F, B, D: DownstreamDiagnostics<S>, S> DelegateDiagnostics<S> for Sessio
 impl<'a, F, B, D> Session<'a, F, B, D>
 where
     F: Frontend<D>,
-    B: Backend<F::Ident, D::Span>,
+    B: Backend<Ident<F::StringRef>, D::Span>,
     D: Diagnostics,
 {
-    pub fn invoke_macro(&mut self, name: (F::Ident, D::Span), args: MacroArgs<F::Ident, D::Span>) {
+    pub fn invoke_macro(
+        &mut self,
+        name: (Ident<F::StringRef>, D::Span),
+        args: MacroArgs<F::StringRef, D::Span>,
+    ) {
         self.frontend.invoke_macro(
             name,
             args,

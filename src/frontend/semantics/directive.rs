@@ -6,17 +6,17 @@ use crate::backend::{Backend, LocationCounter, ValueBuilder, Width};
 use crate::diag::*;
 use crate::expr::{BinaryOperator, ExprVariant};
 use crate::frontend::syntax::Literal;
-use crate::frontend::Frontend;
+use crate::frontend::{Frontend, Ident};
 use crate::span::Source;
 
 pub(crate) fn analyze_directive<'a, 'b, F, B, D>(
     directive: (Directive, D::Span),
-    args: CommandArgs<F::Ident, D::Span>,
+    args: CommandArgs<F::StringRef, D::Span>,
     actions: &'b mut SemanticActions<'a, F, B, D>,
 ) where
     'a: 'b,
     F: Frontend<D>,
-    B: Backend<F::Ident, D::Span>,
+    B: Backend<Ident<F::StringRef>, D::Span>,
     D: Diagnostics,
 {
     let context = DirectiveContext {
@@ -34,7 +34,7 @@ struct DirectiveContext<'a, A, I, S> {
 }
 
 impl<'a, 'b, F, B, D> DelegateDiagnostics<D::Span>
-    for DirectiveContext<'b, SemanticActions<'a, F, B, D>, F::Ident, D::Span>
+    for DirectiveContext<'b, SemanticActions<'a, F, B, D>, F::StringRef, D::Span>
 where
     'a: 'b,
     F: Frontend<D>,
@@ -47,11 +47,11 @@ where
     }
 }
 
-impl<'a, 'b, F, B, D> DirectiveContext<'b, SemanticActions<'a, F, B, D>, F::Ident, D::Span>
+impl<'a, 'b, F, B, D> DirectiveContext<'b, SemanticActions<'a, F, B, D>, F::StringRef, D::Span>
 where
     'a: 'b,
     F: Frontend<D>,
-    B: Backend<F::Ident, D::Span>,
+    B: Backend<Ident<F::StringRef>, D::Span>,
     D: Diagnostics,
 {
     fn analyze(self, directive: Directive) {

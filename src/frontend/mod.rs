@@ -40,6 +40,8 @@ pub struct Downstream<'a, B: 'a, D: 'a> {
 
 type LexItem<T, S> = (Result<SemanticToken<T>, LexError>, S);
 
+pub type Ident<T> = T;
+
 trait Analysis<Id>
 where
     Self: Copy,
@@ -48,7 +50,7 @@ where
     fn run<I, F, B, D>(&self, tokens: I, session: Session<F, B, D>)
     where
         I: Iterator<Item = LexItem<Id, D::Span>>,
-        F: Frontend<D, Ident = Id>,
+        F: Frontend<D, StringRef = Id>,
         B: Backend<Id, D::Span>,
         D: Diagnostics;
 }
@@ -57,30 +59,30 @@ where
 struct SemanticAnalysis;
 
 pub(crate) trait Frontend<D: Diagnostics> {
-    type Ident: AsRef<str> + Clone + Into<String> + PartialEq;
+    type StringRef: AsRef<str> + Clone + Into<String> + PartialEq;
     type MacroDefId: Clone;
 
     fn analyze_file<B>(
         &mut self,
-        path: Self::Ident,
+        path: Self::StringRef,
         downstream: Downstream<B, D>,
     ) -> Result<(), CodebaseError>
     where
-        B: Backend<Self::Ident, D::Span>;
+        B: Backend<Ident<Self::StringRef>, D::Span>;
 
     fn invoke_macro<B>(
         &mut self,
-        name: (Self::Ident, D::Span),
-        args: MacroArgs<Self::Ident, D::Span>,
+        name: (Ident<Self::StringRef>, D::Span),
+        args: MacroArgs<Ident<Self::StringRef>, D::Span>,
         downstream: Downstream<B, D>,
     ) where
-        B: Backend<Self::Ident, D::Span>;
+        B: Backend<Ident<Self::StringRef>, D::Span>;
 
     fn define_macro(
         &mut self,
-        name: (impl Into<Self::Ident>, D::Span),
-        params: Vec<(Self::Ident, D::Span)>,
-        tokens: Vec<(SemanticToken<Self::Ident>, D::Span)>,
+        name: (impl Into<Ident<Self::StringRef>>, D::Span),
+        params: Vec<(Ident<Self::StringRef>, D::Span)>,
+        tokens: Vec<(SemanticToken<Self::StringRef>, D::Span)>,
         diagnostics: &mut D,
     );
 }
@@ -92,7 +94,7 @@ where
     fn run<'a, I, F, B, D>(&self, tokens: I, session: Session<'a, F, B, D>)
     where
         I: Iterator<Item = LexItem<Id, D::Span>>,
-        F: Frontend<D, Ident = Id>,
+        F: Frontend<D, StringRef = Id>,
         B: Backend<Id, D::Span>,
         D: Diagnostics,
     {
@@ -109,9 +111,9 @@ struct CodebaseAnalyzer<'a, M, T: 'a, A> {
 
 impl<'a, M, T: 'a, A> CodebaseAnalyzer<'a, M, T, A>
 where
-    M: MacroTable<T::Ident>,
-    T: Ident,
-    A: Analysis<T::Ident>,
+    M: MacroTable<T::StringRef>,
+    T: StringRef,
+    A: Analysis<T::StringRef>,
 {
     fn new(macro_table: M, codebase: &T, analysis: A) -> CodebaseAnalyzer<M, T, A> {
         CodebaseAnalyzer {
@@ -124,13 +126,13 @@ where
     fn analyze_token_seq<I, F>(
         &mut self,
         tokens: I,
-        downstream: &mut Downstream<impl Backend<T::Ident, F::Span>, F>,
+        downstream: &mut Downstream<impl Backend<Ident<T::StringRef>, F::Span>, F>,
     ) where
-        I: IntoIterator<Item = LexItem<T::Ident, F::Span>>,
+        I: IntoIterator<Item = LexItem<T::StringRef, F::Span>>,
         F: Diagnostics<MacroDefId = M::MacroDefId>,
         T: Tokenize<F::BufContext>,
-        M::Entry: Expand<T::Ident, F, F::Span>,
-        for<'b> &'b T::Tokenized: IntoIterator<Item = LexItem<T::Ident, F::Span>>,
+        M::Entry: Expand<T::StringRef, F, F::Span>,
+        for<'b> &'b T::Tokenized: IntoIterator<Item = LexItem<T::StringRef, F::Span>>,
     {
         let analysis = self.analysis;
         let session = Session::new(self, downstream.backend, downstream.diagnostics);
@@ -142,23 +144,23 @@ type TokenSeq<I, S> = Vec<(SemanticToken<I>, S)>;
 
 impl<'a, M, T, A, D> Frontend<D> for CodebaseAnalyzer<'a, M, T, A>
 where
-    M: MacroTable<T::Ident, MacroDefId = D::MacroDefId>,
-    M::Entry: Expand<T::Ident, D, D::Span>,
+    M: MacroTable<T::StringRef, MacroDefId = D::MacroDefId>,
+    M::Entry: Expand<T::StringRef, D, D::Span>,
     T: Tokenize<D::BufContext> + 'a,
-    A: Analysis<T::Ident>,
+    A: Analysis<T::StringRef>,
     D: Diagnostics,
-    for<'b> &'b T::Tokenized: IntoIterator<Item = LexItem<T::Ident, D::Span>>,
+    for<'b> &'b T::Tokenized: IntoIterator<Item = LexItem<T::StringRef, D::Span>>,
 {
-    type Ident = T::Ident;
+    type StringRef = T::StringRef;
     type MacroDefId = D::MacroDefId;
 
     fn analyze_file<B>(
         &mut self,
-        path: Self::Ident,
+        path: Self::StringRef,
         mut downstream: Downstream<B, D>,
     ) -> Result<(), CodebaseError>
     where
-        B: Backend<Self::Ident, D::Span>,
+        B: Backend<Ident<Self::StringRef>, D::Span>,
     {
         let tokenized_src = {
             self.codebase.tokenize_file(path.as_ref(), |buf_id| {
@@ -171,11 +173,11 @@ where
 
     fn invoke_macro<B>(
         &mut self,
-        (name, span): (Self::Ident, D::Span),
-        args: MacroArgs<Self::Ident, D::Span>,
+        (name, span): (Ident<Self::StringRef>, D::Span),
+        args: MacroArgs<Self::StringRef, D::Span>,
         mut downstream: Downstream<B, D>,
     ) where
-        B: Backend<Self::Ident, D::Span>,
+        B: Backend<Ident<Self::StringRef>, D::Span>,
     {
         let expansion = match self.macro_table.get(&name) {
             Some(entry) => Some(entry.expand(span, args, downstream.diagnostics)),
@@ -196,23 +198,23 @@ where
 
     fn define_macro(
         &mut self,
-        name: (impl Into<Self::Ident>, D::Span),
-        params: Vec<(Self::Ident, D::Span)>,
-        body: Vec<(SemanticToken<Self::Ident>, D::Span)>,
+        name: (impl Into<Ident<Self::StringRef>>, D::Span),
+        params: Vec<(Ident<Self::StringRef>, D::Span)>,
+        body: Vec<(SemanticToken<Self::StringRef>, D::Span)>,
         diagnostics: &mut D,
     ) {
         self.macro_table.define(name, params, body, diagnostics);
     }
 }
 
-trait Ident {
-    type Ident: AsRef<str> + Clone + Into<String> + PartialEq;
+trait StringRef {
+    type StringRef: AsRef<str> + Clone + Into<String> + PartialEq;
 }
 
 trait Tokenize<C: BufContext>
 where
-    Self: Ident,
-    for<'c> &'c Self::Tokenized: IntoIterator<Item = LexItem<Self::Ident, C::Span>>,
+    Self: StringRef,
+    for<'c> &'c Self::Tokenized: IntoIterator<Item = LexItem<Self::StringRef, C::Span>>,
 {
     type Tokenized;
     fn tokenize_file<F: FnOnce(BufId) -> C>(
@@ -222,8 +224,8 @@ where
     ) -> Result<Self::Tokenized, CodebaseError>;
 }
 
-impl<C: Codebase> Ident for C {
-    type Ident = String;
+impl<C: Codebase> StringRef for C {
+    type StringRef = String;
 }
 
 impl<C: Codebase, B: BufContext> Tokenize<B> for C {
@@ -451,8 +453,8 @@ mod tests {
         }
     }
 
-    impl<'a> Ident for MockTokenSource {
-        type Ident = String;
+    impl<'a> StringRef for MockTokenSource {
+        type StringRef = String;
     }
 
     impl<'a> Tokenize<Mock<'a>> for MockTokenSource {
@@ -546,8 +548,8 @@ mod tests {
         fn run<I, F, B, D>(&self, tokens: I, _frontend: Session<F, B, D>)
         where
             I: Iterator<Item = LexItem<String, D::Span>>,
-            F: Frontend<D, Ident = String>,
-            B: Backend<F::Ident, D::Span>,
+            F: Frontend<D, StringRef = String>,
+            B: Backend<Ident<F::StringRef>, D::Span>,
             D: Diagnostics,
         {
             self.log.borrow_mut().push(TestEvent::AnalyzeTokens(

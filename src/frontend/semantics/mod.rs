@@ -4,7 +4,7 @@ use crate::diag::*;
 use crate::expr::ExprVariant;
 use crate::frontend::session::Session;
 use crate::frontend::syntax::{self, keyword::*, ExprAtom, Operator, SemanticToken, UnaryOperator};
-use crate::frontend::{Frontend, Literal};
+use crate::frontend::{Frontend, Ident, Literal};
 
 mod directive;
 mod instruction;
@@ -14,11 +14,11 @@ mod expr {
     #[cfg(test)]
     use crate::expr::ExprVariant;
     use crate::expr::{BinaryOperator, Expr};
-    use crate::frontend::Literal;
+    use crate::frontend::{Ident, Literal};
 
     #[derive(Debug, PartialEq)]
     pub enum SemanticAtom<I> {
-        Ident(I),
+        Ident(Ident<I>),
         Literal(Literal<I>),
     }
 
@@ -44,13 +44,13 @@ use self::expr::*;
 
 pub(crate) struct SemanticActions<'a, F: Frontend<D>, B, D: Diagnostics> {
     session: Session<'a, F, B, D>,
-    label: Option<(F::Ident, D::Span)>,
+    label: Option<(Ident<F::StringRef>, D::Span)>,
 }
 
 impl<'a, F, B, D> SemanticActions<'a, F, B, D>
 where
     F: Frontend<D>,
-    B: Backend<F::Ident, D::Span>,
+    B: Backend<Ident<F::StringRef>, D::Span>,
     D: Diagnostics,
 {
     pub fn new(session: Session<'a, F, B, D>) -> SemanticActions<'a, F, B, D> {
@@ -86,26 +86,26 @@ where
     }
 }
 
-impl<'a, F, B, D> syntax::FileContext<F::Ident, Literal<F::Ident>, Command, D::Span>
+impl<'a, F, B, D> syntax::FileContext<Ident<F::StringRef>, Literal<F::StringRef>, Command, D::Span>
     for SemanticActions<'a, F, B, D>
 where
     F: Frontend<D>,
-    B: Backend<F::Ident, D::Span>,
+    B: Backend<Ident<F::StringRef>, D::Span>,
     D: Diagnostics,
 {
     type StmtContext = Self;
 
-    fn enter_stmt(mut self, label: Option<(F::Ident, D::Span)>) -> Self::StmtContext {
+    fn enter_stmt(mut self, label: Option<(Ident<F::StringRef>, D::Span)>) -> Self::StmtContext {
         self.label = label;
         self
     }
 }
 
-impl<'a, F, B, D> syntax::StmtContext<F::Ident, Literal<F::Ident>, Command, D::Span>
+impl<'a, F, B, D> syntax::StmtContext<Ident<F::StringRef>, Literal<F::StringRef>, Command, D::Span>
     for SemanticActions<'a, F, B, D>
 where
     F: Frontend<D>,
-    B: Backend<F::Ident, D::Span>,
+    B: Backend<Ident<F::StringRef>, D::Span>,
     D: Diagnostics,
 {
     type CommandContext = CommandActions<'a, F, B, D>;
@@ -125,7 +125,10 @@ where
         MacroDefActions::new(self.label.take(), self)
     }
 
-    fn enter_macro_invocation(mut self, name: (F::Ident, D::Span)) -> Self::MacroInvocationContext {
+    fn enter_macro_invocation(
+        mut self,
+        name: (Ident<F::StringRef>, D::Span),
+    ) -> Self::MacroInvocationContext {
         self.define_label_if_present();
         MacroInvocationActions::new(name, self)
     }
@@ -138,7 +141,7 @@ where
 
 pub(crate) struct CommandActions<'a, F: Frontend<D>, B, D: Diagnostics> {
     name: (Command, D::Span),
-    args: CommandArgs<F::Ident, D::Span>,
+    args: CommandArgs<Ident<F::StringRef>, D::Span>,
     parent: SemanticActions<'a, F, B, D>,
     has_errors: bool,
 }
@@ -199,12 +202,12 @@ where
 impl<'a, F, B, D> syntax::CommandContext<D::Span> for CommandActions<'a, F, B, D>
 where
     F: Frontend<D>,
-    B: Backend<F::Ident, D::Span>,
+    B: Backend<Ident<F::StringRef>, D::Span>,
     D: Diagnostics,
 {
-    type Ident = F::Ident;
+    type Ident = Ident<F::StringRef>;
     type Command = Command;
-    type Literal = Literal<F::Ident>;
+    type Literal = Literal<F::StringRef>;
     type ArgContext = ExprContext<'a, F, B, D>;
     type Parent = SemanticActions<'a, F, B, D>;
 
@@ -244,7 +247,7 @@ impl Directive {
 }
 
 pub(crate) struct ExprContext<'a, F: Frontend<D>, B, D: Diagnostics> {
-    stack: Vec<SemanticExpr<F::Ident, D::Span>>,
+    stack: Vec<SemanticExpr<F::StringRef, D::Span>>,
     parent: CommandActions<'a, F, B, D>,
 }
 
@@ -265,8 +268,8 @@ where
     F: Frontend<D>,
     D: Diagnostics,
 {
-    type Ident = F::Ident;
-    type Literal = Literal<F::Ident>;
+    type Ident = Ident<F::StringRef>;
+    type Literal = Literal<F::StringRef>;
     type Parent = CommandActions<'a, F, B, D>;
 
     fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, D::Span)) {
@@ -310,11 +313,11 @@ where
 
 fn analyze_mnemonic<'a, F, B, D>(
     name: (Mnemonic, D::Span),
-    args: CommandArgs<F::Ident, D::Span>,
+    args: CommandArgs<F::StringRef, D::Span>,
     actions: &mut SemanticActions<'a, F, B, D>,
 ) where
     F: Frontend<D>,
-    B: Backend<F::Ident, D::Span>,
+    B: Backend<Ident<F::StringRef>, D::Span>,
     D: Diagnostics,
 {
     let result = instruction::analyze_instruction(
@@ -334,15 +337,15 @@ fn analyze_mnemonic<'a, F, B, D>(
 }
 
 pub(crate) struct MacroDefActions<'a, F: Frontend<D>, B, D: Diagnostics> {
-    name: Option<(F::Ident, D::Span)>,
-    params: Vec<(F::Ident, D::Span)>,
-    tokens: Vec<(SemanticToken<F::Ident>, D::Span)>,
+    name: Option<(Ident<F::StringRef>, D::Span)>,
+    params: Vec<(Ident<F::StringRef>, D::Span)>,
+    tokens: Vec<(SemanticToken<F::StringRef>, D::Span)>,
     parent: SemanticActions<'a, F, B, D>,
 }
 
 impl<'a, F: Frontend<D>, B, D: Diagnostics> MacroDefActions<'a, F, B, D> {
     fn new(
-        name: Option<(F::Ident, D::Span)>,
+        name: Option<(Ident<F::StringRef>, D::Span)>,
         parent: SemanticActions<'a, F, B, D>,
     ) -> MacroDefActions<'a, F, B, D> {
         MacroDefActions {
@@ -371,9 +374,9 @@ where
     F: Frontend<D>,
     D: Diagnostics,
 {
-    type Ident = F::Ident;
+    type Ident = Ident<F::StringRef>;
     type Command = Command;
-    type Literal = Literal<F::Ident>;
+    type Literal = Literal<F::StringRef>;
     type MacroBodyContext = Self;
     type Parent = SemanticActions<'a, F, B, D>;
 
@@ -391,7 +394,7 @@ where
     F: Frontend<D>,
     D: Diagnostics,
 {
-    type Token = SemanticToken<F::Ident>;
+    type Token = SemanticToken<F::StringRef>;
     type Parent = SemanticActions<'a, F, B, D>;
 
     fn push_token(&mut self, token: (Self::Token, D::Span)) {
@@ -409,14 +412,14 @@ where
 }
 
 pub(crate) struct MacroInvocationActions<'a, F: Frontend<D>, B, D: Diagnostics> {
-    name: (F::Ident, D::Span),
-    args: Vec<super::TokenSeq<F::Ident, D::Span>>,
+    name: (Ident<F::StringRef>, D::Span),
+    args: Vec<super::TokenSeq<F::StringRef, D::Span>>,
     parent: SemanticActions<'a, F, B, D>,
 }
 
 impl<'a, F: Frontend<D>, B, D: Diagnostics> MacroInvocationActions<'a, F, B, D> {
     fn new(
-        name: (F::Ident, D::Span),
+        name: (Ident<F::StringRef>, D::Span),
         parent: SemanticActions<'a, F, B, D>,
     ) -> MacroInvocationActions<'a, F, B, D> {
         MacroInvocationActions {
@@ -426,7 +429,7 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> MacroInvocationActions<'a, F, B, D> 
         }
     }
 
-    fn push_arg(&mut self, arg: Vec<(SemanticToken<F::Ident>, D::Span)>) {
+    fn push_arg(&mut self, arg: Vec<(SemanticToken<F::StringRef>, D::Span)>) {
         self.args.push(arg)
     }
 }
@@ -446,10 +449,10 @@ where
 impl<'a, F, B, D> syntax::MacroInvocationContext<D::Span> for MacroInvocationActions<'a, F, B, D>
 where
     F: Frontend<D>,
-    B: Backend<F::Ident, D::Span>,
+    B: Backend<Ident<F::StringRef>, D::Span>,
     D: Diagnostics,
 {
-    type Token = SemanticToken<F::Ident>;
+    type Token = SemanticToken<F::StringRef>;
     type Parent = SemanticActions<'a, F, B, D>;
     type MacroArgContext = MacroArgContext<'a, F, B, D>;
 
@@ -464,7 +467,7 @@ where
 }
 
 pub(crate) struct MacroArgContext<'a, F: Frontend<D>, B, D: Diagnostics> {
-    tokens: Vec<(SemanticToken<F::Ident>, D::Span)>,
+    tokens: Vec<(SemanticToken<F::StringRef>, D::Span)>,
     parent: MacroInvocationActions<'a, F, B, D>,
 }
 
@@ -494,7 +497,7 @@ where
     F: Frontend<D>,
     D: Diagnostics,
 {
-    type Token = SemanticToken<F::Ident>;
+    type Token = SemanticToken<F::StringRef>;
     type Parent = MacroInvocationActions<'a, F, B, D>;
 
     fn push_token(&mut self, token: (Self::Token, D::Span)) {
@@ -659,12 +662,12 @@ mod tests {
     }
 
     impl<'a> Frontend<TestDiagnostics<'a>> for TestFrontend<'a> {
-        type Ident = String;
+        type StringRef = String;
         type MacroDefId = usize;
 
         fn analyze_file<B>(
             &mut self,
-            path: Self::Ident,
+            path: Self::StringRef,
             _downstream: Downstream<B, TestDiagnostics<'a>>,
         ) -> Result<(), CodebaseError>
         where
@@ -681,8 +684,8 @@ mod tests {
 
         fn invoke_macro<B>(
             &mut self,
-            name: (Self::Ident, ()),
-            args: MacroArgs<Self::Ident, ()>,
+            name: (Ident<Self::StringRef>, ()),
+            args: MacroArgs<Self::StringRef, ()>,
             _downstream: Downstream<B, TestDiagnostics<'a>>,
         ) where
             B: Backend<String, ()>,
@@ -699,9 +702,9 @@ mod tests {
 
         fn define_macro(
             &mut self,
-            name: (impl Into<Self::Ident>, ()),
-            params: Vec<(Self::Ident, ())>,
-            tokens: Vec<(SemanticToken<Self::Ident>, ())>,
+            name: (impl Into<Ident<Self::StringRef>>, ()),
+            params: Vec<(Ident<Self::StringRef>, ())>,
+            tokens: Vec<(SemanticToken<Self::StringRef>, ())>,
             _diagnostics: &mut TestDiagnostics<'a>,
         ) {
             self.operations
