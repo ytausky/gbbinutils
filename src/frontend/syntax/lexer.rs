@@ -1,4 +1,3 @@
-use crate::frontend::syntax::keyword as kw;
 use crate::frontend::syntax::keyword::*;
 use crate::frontend::syntax::SimpleToken::*;
 use crate::frontend::syntax::{SimpleToken, Token};
@@ -239,14 +238,14 @@ fn identify_keyword(word: &str) -> Option<Keyword> {
 
 #[derive(Clone, Copy)]
 enum Keyword {
-    Command(kw::Command),
+    Command(Command),
     Endm,
     Macro,
     Operand(Operand),
 }
 
-impl From<kw::Command> for Keyword {
-    fn from(command: kw::Command) -> Self {
+impl From<Command> for Keyword {
+    fn from(command: Command) -> Self {
         Keyword::Command(command)
     }
 }
@@ -334,8 +333,8 @@ const KEYWORDS: &[(&str, Keyword)] = &[
 mod tests {
     use super::*;
 
-    use super::kw::Mnemonic::*;
     use super::Literal::{Number, Operand};
+    use super::Mnemonic::*;
     use super::Operand::*;
     use super::Token::*;
     use std::borrow::Borrow;
@@ -534,7 +533,7 @@ mod tests {
         assert_eq_lex_results("$", vec![Err(LexError::NoDigits)])
     }
 
-    impl<T: Into<kw::Command>> From<T> for SemanticToken<String> {
+    impl<T: Into<super::Command>> From<T> for SemanticToken<String> {
         fn from(t: T) -> Self {
             Command(t.into())
         }
