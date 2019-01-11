@@ -86,7 +86,7 @@ where
     }
 }
 
-impl<'a, F, B, D> syntax::FileContext<F::Ident, Command, Literal<F::Ident>, D::Span>
+impl<'a, F, B, D> syntax::FileContext<F::Ident, Literal<F::Ident>, Command, D::Span>
     for SemanticActions<'a, F, B, D>
 where
     F: Frontend<D>,
@@ -101,7 +101,7 @@ where
     }
 }
 
-impl<'a, F, B, D> syntax::StmtContext<F::Ident, Command, Literal<F::Ident>, D::Span>
+impl<'a, F, B, D> syntax::StmtContext<F::Ident, Literal<F::Ident>, Command, D::Span>
     for SemanticActions<'a, F, B, D>
 where
     F: Frontend<D>,

@@ -8,7 +8,7 @@ type TokenKind = Token<(), (), (), ()>;
 
 impl Copy for TokenKind {}
 
-impl<C, I, L, E> Token<C, I, L, E> {
+impl<I, L, C, E> Token<I, L, C, E> {
     fn kind(&self) -> TokenKind {
         use self::Token::*;
         match *self {
@@ -24,10 +24,10 @@ impl<C, I, L, E> Token<C, I, L, E> {
 
 const LINE_FOLLOW_SET: &[TokenKind] = &[Token::Simple(Eol), Token::Simple(Eof)];
 
-pub(crate) fn parse_src<Id, C, L, I, F, S>(mut tokens: I, context: F) -> F
+pub(crate) fn parse_src<Id, L, C, I, F, S>(mut tokens: I, context: F) -> F
 where
-    I: Iterator<Item = (Token<Id, C, L>, S)>,
-    F: FileContext<Id, C, L, S>,
+    I: Iterator<Item = (Token<Id, L, C>, S)>,
+    F: FileContext<Id, L, C, S>,
     S: Clone,
 {
     let Parser { token, context, .. } = Parser::new(&mut tokens, context).parse_file();
@@ -67,16 +67,16 @@ impl<'a, T, I, C> Parser<'a, T, I, C> {
     }
 }
 
-impl<'a, Id, C, L, S, I, A> Parser<'a, (Token<Id, C, L>, S), I, A> {
+impl<'a, Id, L, C, S, I, A> Parser<'a, (Token<Id, L, C>, S), I, A> {
     fn token_is_in(&self, kinds: &[TokenKind]) -> bool {
         kinds.iter().any(|x| *x == self.token.0.kind())
     }
 }
 
-impl<'a, Id, C, L, I, Ctx, S> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
+impl<'a, Id, L, C, I, Ctx, S> Parser<'a, (Token<Id, L, C>, S), I, Ctx>
 where
-    I: Iterator<Item = (Token<Id, C, L>, S)>,
-    Ctx: FileContext<Id, C, L, S>,
+    I: Iterator<Item = (Token<Id, L, C>, S)>,
+    Ctx: FileContext<Id, L, C, S>,
     S: Clone,
 {
     fn parse_file(mut self) -> Self {
@@ -99,10 +99,10 @@ where
     }
 }
 
-impl<'a, Id, C, L, I, Ctx, S> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
+impl<'a, Id, L, C, I, Ctx, S> Parser<'a, (Token<Id, L, C>, S), I, Ctx>
 where
-    I: Iterator<Item = (Token<Id, C, L>, S)>,
-    Ctx: StmtContext<Id, C, L, S>,
+    I: Iterator<Item = (Token<Id, L, C>, S)>,
+    Ctx: StmtContext<Id, L, C, S>,
     S: Clone,
 {
     fn parse_unlabeled_stmt(mut self) -> Self {
@@ -200,9 +200,9 @@ where
     }
 }
 
-impl<'a, Id, C, L, I, Ctx, S> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
+impl<'a, Id, L, C, I, Ctx, S> Parser<'a, (Token<Id, L, C>, S), I, Ctx>
 where
-    I: Iterator<Item = (Token<Id, C, L>, S)>,
+    I: Iterator<Item = (Token<Id, L, C>, S)>,
     Ctx: CommandContext<S, Command = C, Ident = Id, Literal = L>,
     S: Clone,
 {
@@ -260,9 +260,9 @@ impl BinaryOperator {
     }
 }
 
-impl<'a, Id, C, L, I, Ctx, S> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
+impl<'a, Id, L, C, I, Ctx, S> Parser<'a, (Token<Id, L, C>, S), I, Ctx>
 where
-    I: Iterator<Item = (Token<Id, C, L>, S)>,
+    I: Iterator<Item = (Token<Id, L, C>, S)>,
     Ctx: ExprContext<S, Ident = Id, Literal = L>,
     S: Clone,
 {
@@ -379,9 +379,9 @@ where
     }
 }
 
-impl<'a, Id, C, L, I, Ctx, S> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
+impl<'a, Id, L, C, I, Ctx, S> Parser<'a, (Token<Id, L, C>, S), I, Ctx>
 where
-    I: Iterator<Item = (Token<Id, C, L>, S)>,
+    I: Iterator<Item = (Token<Id, L, C>, S)>,
     Ctx: MacroParamsContext<S, Command = C, Ident = Id, Literal = L>,
     S: Clone,
 {
@@ -403,10 +403,10 @@ where
     }
 }
 
-impl<'a, Id, C, L, I, Ctx, S> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
+impl<'a, Id, L, C, I, Ctx, S> Parser<'a, (Token<Id, L, C>, S), I, Ctx>
 where
-    I: Iterator<Item = (Token<Id, C, L>, S)>,
-    Ctx: MacroInvocationContext<S, Token = Token<Id, C, L>>,
+    I: Iterator<Item = (Token<Id, L, C>, S)>,
+    Ctx: MacroInvocationContext<S, Token = Token<Id, L, C>>,
     S: Clone,
 {
     fn parse_macro_arg_list(self) -> Self {
@@ -428,9 +428,9 @@ where
     }
 }
 
-impl<'a, Id, C, L, I, Ctx, S> Parser<'a, (Token<Id, C, L>, S), I, Ctx>
+impl<'a, Id, L, C, I, Ctx, S> Parser<'a, (Token<Id, L, C>, S), I, Ctx>
 where
-    I: Iterator<Item = (Token<Id, C, L>, S)>,
+    I: Iterator<Item = (Token<Id, L, C>, S)>,
     Ctx: DelegateDiagnostics<S>,
     S: Clone,
 {
@@ -541,7 +541,7 @@ mod tests {
         }
     }
 
-    impl FileContext<SymIdent, SymCommand, SymLiteral, SymSpan> for FileActionCollector {
+    impl FileContext<SymIdent, SymLiteral, SymCommand, SymSpan> for FileActionCollector {
         type StmtContext = StmtActionCollector;
 
         fn enter_stmt(self, label: Option<(SymIdent, SymSpan)>) -> StmtActionCollector {
@@ -587,7 +587,7 @@ mod tests {
         }
     }
 
-    impl StmtContext<SymIdent, SymCommand, SymLiteral, SymSpan> for StmtActionCollector {
+    impl StmtContext<SymIdent, SymLiteral, SymCommand, SymSpan> for StmtActionCollector {
         type CommandContext = CommandActionCollector;
         type MacroParamsContext = MacroParamsActionCollector;
         type MacroInvocationContext = MacroInvocationActionCollector;
@@ -887,7 +887,7 @@ mod tests {
     }
 
     impl TokenSeqContext<SymSpan> for MacroBodyActionCollector {
-        type Token = Token<SymIdent, SymCommand, SymLiteral>;
+        type Token = Token<SymIdent, SymLiteral, SymCommand>;
         type Parent = StmtActionCollector;
 
         fn push_token(&mut self, token: (Self::Token, SymSpan)) {
@@ -940,7 +940,7 @@ mod tests {
     }
 
     impl MacroInvocationContext<SymSpan> for MacroInvocationActionCollector {
-        type Token = Token<SymIdent, SymCommand, SymLiteral>;
+        type Token = Token<SymIdent, SymLiteral, SymCommand>;
         type MacroArgContext = MacroArgActionCollector;
         type Parent = StmtActionCollector;
 
@@ -995,7 +995,7 @@ mod tests {
     }
 
     impl TokenSeqContext<SymSpan> for MacroArgActionCollector {
-        type Token = Token<SymIdent, SymCommand, SymLiteral>;
+        type Token = Token<SymIdent, SymLiteral, SymCommand>;
         type Parent = MacroInvocationActionCollector;
 
         fn push_token(&mut self, token: (Self::Token, SymSpan)) {

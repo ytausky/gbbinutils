@@ -93,7 +93,7 @@ pub struct SymIdent(pub TokenRef);
 #[derive(Clone, Debug, PartialEq)]
 pub struct SymLiteral(pub TokenRef);
 
-pub type SymToken = Token<SymIdent, SymCommand, SymLiteral>;
+pub type SymToken = Token<SymIdent, SymLiteral, SymCommand>;
 
 pub fn mk_sym_token(id: impl Into<TokenRef>, token: Token<(), (), ()>) -> (SymToken, TokenRef) {
     let token_ref = id.into();
@@ -282,7 +282,7 @@ pub(crate) enum MacroParamsAction<S> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum TokenSeqAction<S> {
-    PushToken((Token<SymIdent, SymCommand, SymLiteral>, S)),
+    PushToken((Token<SymIdent, SymLiteral, SymCommand>, S)),
     EmitDiagnostic(CompactDiagnostic<S, S>),
 }
 
