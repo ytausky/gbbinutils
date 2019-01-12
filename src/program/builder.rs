@@ -1,12 +1,12 @@
 use super::{Chunk, NameId, Node, Program, RelocExpr, Value};
-use crate::backend::{Backend, BuildValue, HasValue, Item, RelocAtom, RelocExprBuilder, ToValue};
+use crate::backend::{
+    Backend, BuildValue, HasValue, Item, NameTable, RelocAtom, RelocExprBuilder, ToValue,
+};
 use crate::frontend::Ident;
-use std::collections::HashMap;
 
 pub struct ProgramBuilder<SR> {
     program: Program<SR>,
     state: Option<BuilderState<SR>>,
-    names: HashMap<String, NameId>,
 }
 
 enum BuilderState<S> {
@@ -19,7 +19,6 @@ impl<SR> ProgramBuilder<SR> {
         ProgramBuilder {
             program: Program::new(),
             state: Some(BuilderState::Pending { origin: None }),
-            names: HashMap::new(),
         }
     }
 
@@ -27,9 +26,9 @@ impl<SR> ProgramBuilder<SR> {
         self.current_chunk().items.push(node)
     }
 
-    fn lookup(&mut self, name: String) -> NameId {
+    fn lookup(&mut self, name: String, table: &mut NameTable) -> NameId {
         let symbols = &mut self.program.symbols;
-        *self.names.entry(name).or_insert_with(|| symbols.new_name())
+        *table.entry(name).or_insert_with(|| symbols.new_name())
     }
 
     fn current_chunk(&mut self) -> &mut Chunk<SR> {
@@ -53,8 +52,13 @@ impl<SR> ProgramBuilder<SR> {
 impl<S: Clone + 'static> Backend<Ident<String>, S> for ProgramBuilder<S> {
     type Object = Program<S>;
 
-    fn define_symbol(&mut self, (ident, span): (Ident<String>, S), value: Self::Value) {
-        let name_id = self.lookup(ident.name);
+    fn define_symbol(
+        &mut self,
+        (ident, span): (Ident<String>, S),
+        value: Self::Value,
+        table: &mut NameTable,
+    ) {
+        let name_id = self.lookup(ident.name, table);
         self.program.symbols.define_name(name_id, Value::Unknown);
         self.push(Node::Symbol((name_id, span), value))
     }
@@ -75,13 +79,13 @@ impl<S: Clone + 'static> Backend<Ident<String>, S> for ProgramBuilder<S> {
     }
 }
 
-impl<'a, S: Clone> HasValue<S> for RelocExprBuilder<&'a mut ProgramBuilder<S>> {
+impl<'a, S: Clone> HasValue<S> for RelocExprBuilder<'a, &'a mut ProgramBuilder<S>> {
     type Value = RelocExpr<S>;
 }
 
-impl<'a, S: Clone> ToValue<Ident<String>, S> for RelocExprBuilder<&'a mut ProgramBuilder<S>> {
+impl<'a, S: Clone> ToValue<Ident<String>, S> for RelocExprBuilder<'a, &'a mut ProgramBuilder<S>> {
     fn to_value(&mut self, (ident, span): (Ident<String>, S)) -> Self::Value {
-        RelocExpr::from_atom(RelocAtom::Symbol(self.0.lookup(ident.name)), span)
+        RelocExpr::from_atom(RelocAtom::Symbol(self.0.lookup(ident.name, self.1)), span)
     }
 }
 
@@ -90,10 +94,10 @@ impl<S: Clone> HasValue<S> for ProgramBuilder<S> {
 }
 
 impl<'a, S: Clone + 'static> BuildValue<'a, Ident<String>, S> for ProgramBuilder<S> {
-    type Builder = RelocExprBuilder<&'a mut Self>;
+    type Builder = RelocExprBuilder<'a, &'a mut Self>;
 
-    fn build_value(&'a mut self) -> Self::Builder {
-        RelocExprBuilder(self)
+    fn build_value(&'a mut self, table: &'a mut NameTable) -> Self::Builder {
+        RelocExprBuilder(self, table)
     }
 }
 
@@ -197,7 +201,9 @@ mod tests {
         let name = "ident";
         let ident = Ident { name: name.into() };
         let (_, diagnostics) = with_object_builder(|builder| {
-            let value = builder.build_value().to_value((ident, name.into()));
+            let value = builder
+                .build_value(&mut NameTable::new())
+                .to_value((ident, name.into()));
             builder.emit_item(word_item(value))
         });
         assert_eq!(*diagnostics, [unresolved(name)]);
@@ -214,8 +220,9 @@ mod tests {
             name: name2.to_string(),
         };
         let (_, diagnostics) = with_object_builder(|builder| {
+            let names = &mut NameTable::new();
             let value = {
-                let mut builder = builder.build_value();
+                let mut builder = builder.build_value(names);
                 let lhs = builder.to_value((ident1, name1.into()));
                 let rhs = builder.to_value((ident2, name2.into()));
                 builder.apply_binary_operator((BinaryOperator::Minus, "diff".into()), lhs, rhs)
@@ -230,8 +237,13 @@ mod tests {
         let label = "label";
         let ident = Ident { name: label.into() };
         let (object, diagnostics) = with_object_builder(|builder| {
-            builder.define_symbol((ident.clone(), ()), RelocAtom::LocationCounter.into());
-            let value = builder.build_value().to_value((ident, ()));
+            let mut table = NameTable::new();
+            builder.define_symbol(
+                (ident.clone(), ()),
+                RelocAtom::LocationCounter.into(),
+                &mut table,
+            );
+            let value = builder.build_value(&mut table).to_value((ident, ()));
             builder.emit_item(word_item(value));
         });
         assert_eq!(*diagnostics, []);
@@ -242,9 +254,16 @@ mod tests {
     fn emit_symbol_defined_after_use() {
         let label = "label";
         let (object, diagnostics) = with_object_builder(|builder| {
-            let value = builder.build_value().to_value((Ident::from(label), ()));
+            let mut table = NameTable::new();
+            let value = builder
+                .build_value(&mut table)
+                .to_value((Ident::from(label), ()));
             builder.emit_item(word_item(value));
-            builder.define_symbol((label.into(), ()), RelocAtom::LocationCounter.into());
+            builder.define_symbol(
+                (label.into(), ()),
+                RelocAtom::LocationCounter.into(),
+                &mut table,
+            );
         });
         assert_eq!(*diagnostics, []);
         assert_eq!(object.sections.last().unwrap().data, [0x02, 0x00])

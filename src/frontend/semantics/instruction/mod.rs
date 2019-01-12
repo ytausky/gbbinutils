@@ -889,12 +889,15 @@ mod tests {
     where
         I: IntoIterator<Item = Input>,
     {
-        use crate::backend::RelocExprBuilder;
+        use crate::backend::{NameTable, RelocExprBuilder};
         let mut collector = DiagnosticsCollector(Vec::new());
         let result = analyze_instruction(
             (mnemonic, TokenId::Mnemonic.into()),
             operands.into_iter().enumerate().map(add_token_spans),
-            ValueContext::new(&mut RelocExprBuilder::new(), &mut collector),
+            ValueContext::new(
+                &mut RelocExprBuilder::new(&mut NameTable::new()),
+                &mut collector,
+            ),
         );
         AnalysisResult(result.map_err(|_| collector.0))
     }

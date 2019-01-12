@@ -65,34 +65,31 @@ where
     }
 
     fn analyze_data(self, width: Width) {
+        let session = &mut self.actions.session;
         for arg in self.args {
             let expr = {
-                let builder = &mut self.actions.session.backend.build_value();
-                let mut context = ValueContext::new(builder, self.actions.session.diagnostics);
+                let builder = &mut session.backend.build_value(session.names);
+                let mut context = ValueContext::new(builder, session.diagnostics);
                 if let Ok(expr) = context.analyze_expr(arg) {
                     expr
                 } else {
                     return;
                 }
             };
-            self.actions
-                .session
-                .backend
-                .emit_item(backend::Item::Data(expr, width))
+            session.backend.emit_item(backend::Item::Data(expr, width))
         }
     }
 
     fn analyze_ds(self) {
+        let session = &mut self.actions.session;
         let origin = {
-            let arg = if let Ok(arg) =
-                single_arg(self.span, self.args, self.actions.session.diagnostics)
-            {
+            let arg = if let Ok(arg) = single_arg(self.span, self.args, session.diagnostics) {
                 arg
             } else {
                 return;
             };
-            let builder = &mut self.actions.session.backend.build_value();
-            let mut context = ValueContext::new(builder, self.actions.session.diagnostics);
+            let builder = &mut session.backend.build_value(session.names);
+            let mut context = ValueContext::new(builder, session.diagnostics);
             let count = if let Ok(count) = context.analyze_expr(arg) {
                 count
             } else {
@@ -100,28 +97,28 @@ where
             };
             location_counter_plus_expr(count, builder)
         };
-        self.actions.session.backend.set_origin(origin)
+        session.backend.set_origin(origin)
     }
 
     fn analyze_equ(self) {
+        let session = &mut self.actions.session;
         let symbol = self.actions.label.take().unwrap();
-        let arg =
-            if let Ok(arg) = single_arg(self.span, self.args, self.actions.session.diagnostics) {
-                arg
-            } else {
-                return;
-            };
+        let arg = if let Ok(arg) = single_arg(self.span, self.args, session.diagnostics) {
+            arg
+        } else {
+            return;
+        };
 
         let value = {
-            let builder = &mut self.actions.session.backend.build_value();
-            let mut context = ValueContext::new(builder, self.actions.session.diagnostics);
+            let builder = &mut session.backend.build_value(session.names);
+            let mut context = ValueContext::new(builder, session.diagnostics);
             if let Ok(value) = context.analyze_expr(arg) {
                 value
             } else {
                 return;
             }
         };
-        self.actions.session.backend.define_symbol(symbol, value)
+        session.backend.define_symbol(symbol, value, session.names)
     }
 
     fn analyze_include(self) {
@@ -140,22 +137,22 @@ where
     }
 
     fn analyze_org(self) {
-        let arg =
-            if let Ok(arg) = single_arg(self.span, self.args, self.actions.session.diagnostics) {
-                arg
-            } else {
-                return;
-            };
+        let session = &mut self.actions.session;
+        let arg = if let Ok(arg) = single_arg(self.span, self.args, session.diagnostics) {
+            arg
+        } else {
+            return;
+        };
         let expr = {
-            let builder = &mut self.actions.session.backend.build_value();
-            let mut context = ValueContext::new(builder, self.actions.session.diagnostics);
+            let builder = &mut session.backend.build_value(session.names);
+            let mut context = ValueContext::new(builder, session.diagnostics);
             if let Ok(expr) = context.analyze_expr(arg) {
                 expr
             } else {
                 return;
             }
         };
-        self.actions.session.backend.set_origin(expr)
+        session.backend.set_origin(expr)
     }
 }
 
@@ -207,7 +204,7 @@ fn single_arg<T, D: DownstreamDiagnostics<S>, S>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::{RelocAtom, RelocExpr};
+    use crate::backend::{NameTable, RelocAtom, RelocExpr};
     use crate::codebase::CodebaseError;
     use crate::frontend::semantics;
     use crate::frontend::semantics::tests::*;
@@ -358,8 +355,9 @@ mod tests {
         let mut frontend = TestFrontend::new(&operations);
         frontend.fail(CodebaseError::Utf8Error);
         let mut backend = TestBackend::new(&operations);
+        let mut names = NameTable::new();
         let mut diagnostics = TestDiagnostics::new(&operations);
-        let session = Session::new(&mut frontend, &mut backend, &mut diagnostics);
+        let session = Session::new(&mut frontend, &mut backend, &mut names, &mut diagnostics);
         {
             let mut context = SemanticActions::new(session)
                 .enter_stmt(None)
@@ -388,8 +386,9 @@ mod tests {
             message,
         )));
         let mut backend = TestBackend::new(&operations);
+        let mut names = NameTable::new();
         let mut diagnostics = TestDiagnostics::new(&operations);
-        let session = Session::new(&mut frontend, &mut backend, &mut diagnostics);
+        let session = Session::new(&mut frontend, &mut backend, &mut names, &mut diagnostics);
         {
             let mut context = SemanticActions::new(session)
                 .enter_stmt(None)

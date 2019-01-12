@@ -28,13 +28,15 @@ where
 {
     let mut file_parser =
         CodebaseAnalyzer::new(MacroExpander::new(), codebase, SemanticAnalysis {});
-    let mut session = Session::new(&mut file_parser, &mut backend, diagnostics);
+    let mut names = NameTable::new();
+    let mut session = Session::new(&mut file_parser, &mut backend, &mut names, diagnostics);
     session.analyze_file(name)?;
     Ok(backend.into_object())
 }
 
-pub struct Downstream<'a, B: 'a, D: 'a> {
+pub struct Downstream<'a, B: 'a, N: 'a, D: 'a> {
     backend: &'a mut B,
+    names: &'a mut N,
     diagnostics: &'a mut D,
 }
 
@@ -73,7 +75,7 @@ where
     Self: Clone,
     Id: Into<String> + Clone + AsRef<str> + PartialEq,
 {
-    fn run<I, F, B, D>(&self, tokens: I, session: Session<F, B, D>)
+    fn run<I, F, B, D>(&self, tokens: I, session: Session<F, B, NameTable, D>)
     where
         I: Iterator<Item = LexItem<Id, D::Span>>,
         F: Frontend<D, StringRef = Id>,
@@ -91,7 +93,7 @@ pub(crate) trait Frontend<D: Diagnostics> {
     fn analyze_file<B>(
         &mut self,
         path: Self::StringRef,
-        downstream: Downstream<B, D>,
+        downstream: Downstream<B, NameTable, D>,
     ) -> Result<(), CodebaseError>
     where
         B: Backend<Ident<Self::StringRef>, D::Span>;
@@ -100,7 +102,7 @@ pub(crate) trait Frontend<D: Diagnostics> {
         &mut self,
         name: (Ident<Self::StringRef>, D::Span),
         args: MacroArgs<Self::StringRef, D::Span>,
-        downstream: Downstream<B, D>,
+        downstream: Downstream<B, NameTable, D>,
     ) where
         B: Backend<Ident<Self::StringRef>, D::Span>;
 
@@ -117,7 +119,7 @@ impl<Id> Analysis<Id> for SemanticAnalysis
 where
     Id: Into<String> + Clone + AsRef<str> + PartialEq,
 {
-    fn run<'a, I, F, B, D>(&self, tokens: I, session: Session<'a, F, B, D>)
+    fn run<'a, I, F, B, D>(&self, tokens: I, session: Session<'a, F, B, NameTable, D>)
     where
         I: Iterator<Item = LexItem<Id, D::Span>>,
         F: Frontend<D, StringRef = Id>,
@@ -149,19 +151,25 @@ where
         }
     }
 
-    fn analyze_token_seq<I, F>(
+    fn analyze_token_seq<I, B, D>(
         &mut self,
         tokens: I,
-        downstream: &mut Downstream<impl Backend<Ident<T::StringRef>, F::Span>, F>,
+        downstream: &mut Downstream<B, NameTable, D>,
     ) where
-        I: IntoIterator<Item = LexItem<T::StringRef, F::Span>>,
-        F: Diagnostics<MacroDefId = M::MacroDefId>,
-        T: Tokenize<F::BufContext>,
-        M::Entry: Expand<T::StringRef, F, F::Span>,
-        for<'b> &'b T::Tokenized: IntoIterator<Item = LexItem<T::StringRef, F::Span>>,
+        I: IntoIterator<Item = LexItem<T::StringRef, D::Span>>,
+        B: Backend<Ident<T::StringRef>, D::Span>,
+        D: Diagnostics<MacroDefId = M::MacroDefId>,
+        T: Tokenize<D::BufContext>,
+        M::Entry: Expand<T::StringRef, D, D::Span>,
+        for<'b> &'b T::Tokenized: IntoIterator<Item = LexItem<T::StringRef, D::Span>>,
     {
         let analysis = self.analysis.clone();
-        let session = Session::new(self, downstream.backend, downstream.diagnostics);
+        let session = Session::new(
+            self,
+            downstream.backend,
+            downstream.names,
+            downstream.diagnostics,
+        );
         analysis.run(tokens.into_iter(), session)
     }
 }
@@ -183,7 +191,7 @@ where
     fn analyze_file<B>(
         &mut self,
         path: Self::StringRef,
-        mut downstream: Downstream<B, D>,
+        mut downstream: Downstream<B, NameTable, D>,
     ) -> Result<(), CodebaseError>
     where
         B: Backend<Ident<Self::StringRef>, D::Span>,
@@ -201,7 +209,7 @@ where
         &mut self,
         (name, span): (Ident<Self::StringRef>, D::Span),
         args: MacroArgs<Self::StringRef, D::Span>,
-        mut downstream: Downstream<B, D>,
+        mut downstream: Downstream<B, NameTable, D>,
     ) where
         B: Backend<Ident<Self::StringRef>, D::Span>,
     {
@@ -309,6 +317,7 @@ impl<'a, C: BufContext> Iterator for TokenizedSrcIter<'a, C> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backend::NameTable;
     use crate::codebase;
     use crate::frontend::syntax::keyword::Mnemonic;
     use crate::instruction::{Instruction, Nullary};
@@ -357,10 +366,11 @@ mod tests {
         let label = "label";
         let log = TestLog::default();
         TestFixture::new(&log).when(|mut fixture| {
-            fixture
-                .session()
-                .backend
-                .define_symbol((label.into(), ()), RelocAtom::LocationCounter.into())
+            fixture.session().backend.define_symbol(
+                (label.into(), ()),
+                RelocAtom::LocationCounter.into(),
+                &mut NameTable::new(),
+            )
         });
         assert_eq!(
             *log.borrow(),
@@ -583,7 +593,7 @@ mod tests {
     }
 
     impl<'a, S: Clone> Analysis<String> for Mock<'a, S> {
-        fn run<I, F, B, D>(&self, tokens: I, _frontend: Session<F, B, D>)
+        fn run<I, F, B, D>(&self, tokens: I, _frontend: Session<F, B, NameTable, D>)
         where
             I: Iterator<Item = LexItem<String, D::Span>>,
             F: Frontend<D, StringRef = String>,
@@ -597,10 +607,10 @@ mod tests {
     }
 
     impl<'a, 'b, S: Clone> BuildValue<'b, Ident<String>, S> for Mock<'a, S> {
-        type Builder = IndependentValueBuilder<S>;
+        type Builder = IndependentValueBuilder<'b, S>;
 
-        fn build_value(&'b mut self) -> Self::Builder {
-            IndependentValueBuilder::new()
+        fn build_value(&'b mut self, names: &'b mut NameTable) -> Self::Builder {
+            IndependentValueBuilder::new(names)
         }
     }
 
@@ -611,7 +621,12 @@ mod tests {
     impl<'a, S: Clone> Backend<Ident<String>, S> for Mock<'a, S> {
         type Object = ();
 
-        fn define_symbol(&mut self, symbol: (Ident<String>, S), value: Self::Value) {
+        fn define_symbol(
+            &mut self,
+            symbol: (Ident<String>, S),
+            value: Self::Value,
+            _: &mut NameTable,
+        ) {
             self.log
                 .borrow_mut()
                 .push(TestEvent::DefineSymbol(symbol.0, value))
@@ -666,6 +681,7 @@ mod tests {
         code_analyzer:
             CodebaseAnalyzer<'b, MacroExpander<String, ()>, MockTokenSource<S>, Mock<'a, S>>,
         object: Mock<'a, S>,
+        names: NameTable,
         diagnostics: Mock<'a, S>,
     }
 
@@ -674,6 +690,7 @@ mod tests {
             Session::new(
                 &mut self.code_analyzer,
                 &mut self.object,
+                &mut self.names,
                 &mut self.diagnostics,
             )
         }
@@ -703,6 +720,7 @@ mod tests {
                     self.analysis,
                 ),
                 object: self.object,
+                names: NameTable::new(),
                 diagnostics: self.diagnostics,
             };
             f(prepared);
@@ -712,5 +730,5 @@ mod tests {
     type TestCodebaseAnalyzer<'a, 'r, S> =
         CodebaseAnalyzer<'r, MacroExpander<String, ()>, MockTokenSource<S>, Mock<'a, S>>;
     type TestSession<'a, 'b, 'r, S> =
-        Session<'r, TestCodebaseAnalyzer<'a, 'b, S>, Mock<'a, S>, Mock<'a, S>>;
+        Session<'r, TestCodebaseAnalyzer<'a, 'b, S>, Mock<'a, S>, NameTable, Mock<'a, S>>;
 }

@@ -222,7 +222,7 @@ impl Width {
 mod tests {
     use super::*;
 
-    use crate::backend::Backend;
+    use crate::backend::{Backend, NameTable};
     use crate::diag::IgnoreDiagnostics;
     use crate::program::{Chunk, ProgramBuilder, ValueId};
 
@@ -270,7 +270,11 @@ mod tests {
         let addr = 0xffe1;
         let mut builder = ProgramBuilder::new();
         builder.set_origin(addr.into());
-        builder.define_symbol((label.into(), ()), RelocAtom::LocationCounter.into());
+        builder.define_symbol(
+            (label.into(), ()),
+            RelocAtom::LocationCounter.into(),
+            &mut NameTable::new(),
+        );
         let mut object = builder.into_object();
         object.resolve_symbols();
         assert_eq!(object.symbols.names().next(), Some(Some(&addr.into())));

@@ -1,4 +1,4 @@
-use crate::backend::{self, Backend, LocationCounter, ToValue, ValueBuilder};
+use crate::backend::{self, Backend, LocationCounter, NameTable, ToValue, ValueBuilder};
 use crate::diag::span::{MergeSpans, Source, StripSpan};
 use crate::diag::*;
 use crate::expr::ExprVariant;
@@ -43,7 +43,7 @@ mod expr {
 use self::expr::*;
 
 pub(crate) struct SemanticActions<'a, F: Frontend<D>, B, D: Diagnostics> {
-    session: Session<'a, F, B, D>,
+    session: Session<'a, F, B, NameTable, D>,
     label: Option<(Ident<F::StringRef>, D::Span)>,
 }
 
@@ -53,7 +53,7 @@ where
     B: Backend<Ident<F::StringRef>, D::Span>,
     D: Diagnostics,
 {
-    pub fn new(session: Session<'a, F, B, D>) -> SemanticActions<'a, F, B, D> {
+    pub fn new(session: Session<'a, F, B, NameTable, D>) -> SemanticActions<'a, F, B, D> {
         SemanticActions {
             session,
             label: None,
@@ -63,13 +63,15 @@ where
     fn define_label_if_present(&mut self) {
         if let Some((label, span)) = self.label.take() {
             let value = {
-                let mut builder = self.session.backend.build_value();
+                let mut builder = self.session.backend.build_value(self.session.names);
                 ToValue::<LocationCounter, D::Span>::to_value(
                     &mut builder,
                     (LocationCounter, span.clone()),
                 )
             };
-            self.session.backend.define_symbol((label, span), value)
+            self.session
+                .backend
+                .define_symbol((label, span), value, self.session.names)
         }
     }
 }
@@ -324,7 +326,7 @@ fn analyze_mnemonic<'a, F, B, D>(
         name,
         args.into_iter(),
         ValueContext::new(
-            &mut actions.session.backend.build_value(),
+            &mut actions.session.backend.build_value(actions.session.names),
             actions.session.diagnostics,
         ),
     );
@@ -668,7 +670,7 @@ mod tests {
         fn analyze_file<B>(
             &mut self,
             path: Self::StringRef,
-            _downstream: Downstream<B, TestDiagnostics<'a>>,
+            _downstream: Downstream<B, NameTable, TestDiagnostics<'a>>,
         ) -> Result<(), CodebaseError>
         where
             B: Backend<Ident<String>, ()>,
@@ -686,7 +688,7 @@ mod tests {
             &mut self,
             name: (Ident<Self::StringRef>, ()),
             args: MacroArgs<Self::StringRef, ()>,
-            _downstream: Downstream<B, TestDiagnostics<'a>>,
+            _downstream: Downstream<B, NameTable, TestDiagnostics<'a>>,
         ) where
             B: Backend<Ident<String>, ()>,
         {
@@ -732,17 +734,22 @@ mod tests {
     }
 
     impl<'a, 'b> BuildValue<'b, Ident<String>, ()> for TestBackend<'a> {
-        type Builder = IndependentValueBuilder<()>;
+        type Builder = IndependentValueBuilder<'b, ()>;
 
-        fn build_value(&mut self) -> Self::Builder {
-            IndependentValueBuilder::new()
+        fn build_value(&mut self, names: &'b mut NameTable) -> Self::Builder {
+            IndependentValueBuilder::new(names)
         }
     }
 
     impl<'a> Backend<Ident<String>, ()> for TestBackend<'a> {
         type Object = ();
 
-        fn define_symbol(&mut self, symbol: (Ident<String>, ()), value: Self::Value) {
+        fn define_symbol(
+            &mut self,
+            symbol: (Ident<String>, ()),
+            value: Self::Value,
+            _: &mut NameTable,
+        ) {
             self.operations
                 .borrow_mut()
                 .push(TestOperation::DefineSymbol(symbol.0, value))
@@ -1117,8 +1124,9 @@ mod tests {
         let operations = RefCell::new(Vec::new());
         let mut frontend = TestFrontend::new(&operations);
         let mut backend = TestBackend::new(&operations);
+        let mut names = NameTable::new();
         let mut diagnostics = TestDiagnostics::new(&operations);
-        let session = Session::new(&mut frontend, &mut backend, &mut diagnostics);
+        let session = Session::new(&mut frontend, &mut backend, &mut names, &mut diagnostics);
         f(SemanticActions::new(session));
         operations.into_inner()
     }

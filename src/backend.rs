@@ -2,7 +2,9 @@ use crate::expr::{BinaryOperator, Expr, ExprVariant};
 #[cfg(test)]
 use crate::frontend::Ident;
 use crate::instruction::Instruction;
+use crate::program::NameId;
 use crate::span::Source;
+use std::collections::HashMap;
 #[cfg(test)]
 use std::marker::PhantomData;
 
@@ -11,6 +13,8 @@ pub enum Width {
     Byte,
     Word,
 }
+
+pub type NameTable = HashMap<String, NameId>;
 
 pub struct LocationCounter;
 
@@ -23,7 +27,7 @@ where
     Self: HasValue<S>,
 {
     type Builder: ValueBuilder<I, S, Value = Self::Value>;
-    fn build_value(&'a mut self) -> Self::Builder;
+    fn build_value(&'a mut self, names: &'a mut NameTable) -> Self::Builder;
 }
 
 pub trait ValueBuilder<I, S: Clone>
@@ -69,7 +73,7 @@ where
     for<'a> Self: BuildValue<'a, I, S>,
 {
     type Object;
-    fn define_symbol(&mut self, symbol: (I, S), value: Self::Value);
+    fn define_symbol(&mut self, symbol: (I, S), value: Self::Value, names: &mut NameTable);
     fn emit_item(&mut self, item: Item<Self::Value>);
     fn into_object(self) -> Self::Object;
     fn set_origin(&mut self, origin: Self::Value);
@@ -142,24 +146,24 @@ pub struct Rom {
     pub data: Box<[u8]>,
 }
 
-pub struct RelocExprBuilder<T>(pub T);
+pub struct RelocExprBuilder<'a, T>(pub T, pub &'a mut NameTable);
 
 #[cfg(test)]
-pub type IndependentValueBuilder<S> = RelocExprBuilder<PhantomData<S>>;
+pub type IndependentValueBuilder<'a, S> = RelocExprBuilder<'a, PhantomData<S>>;
 
 #[cfg(test)]
-impl<S> IndependentValueBuilder<S> {
-    pub fn new() -> Self {
-        RelocExprBuilder(PhantomData)
+impl<'a, S> IndependentValueBuilder<'a, S> {
+    pub fn new(names: &'a mut NameTable) -> Self {
+        RelocExprBuilder(PhantomData, names)
     }
 }
 
 #[cfg(test)]
-impl<S: Clone> HasValue<S> for IndependentValueBuilder<S> {
+impl<'a, S: Clone> HasValue<S> for IndependentValueBuilder<'a, S> {
     type Value = RelocExpr<Ident<String>, S>;
 }
 
-impl<I, T, S: Clone> ToValue<LocationCounter, S> for RelocExprBuilder<T>
+impl<'a, I, T, S: Clone> ToValue<LocationCounter, S> for RelocExprBuilder<'a, T>
 where
     Self: HasValue<S, Value = RelocExpr<I, S>>,
 {
@@ -168,7 +172,7 @@ where
     }
 }
 
-impl<I, T, S: Clone> ToValue<i32, S> for RelocExprBuilder<T>
+impl<'a, I, T, S: Clone> ToValue<i32, S> for RelocExprBuilder<'a, T>
 where
     Self: HasValue<S, Value = RelocExpr<I, S>>,
 {
@@ -178,13 +182,13 @@ where
 }
 
 #[cfg(test)]
-impl<S: Clone> ToValue<Ident<String>, S> for IndependentValueBuilder<S> {
+impl<'a, S: Clone> ToValue<Ident<String>, S> for IndependentValueBuilder<'a, S> {
     fn to_value(&mut self, (name, span): (Ident<String>, S)) -> Self::Value {
         RelocExpr::from_atom(RelocAtom::Symbol(name), span)
     }
 }
 
-impl<I, T, S: Clone> ApplyBinaryOperator<S> for RelocExprBuilder<T>
+impl<'a, I, T, S: Clone> ApplyBinaryOperator<S> for RelocExprBuilder<'a, T>
 where
     Self: HasValue<S, Value = RelocExpr<I, S>>,
 {
