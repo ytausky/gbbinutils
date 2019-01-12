@@ -1,5 +1,6 @@
 use super::{Chunk, NameId, Node, Program, RelocExpr, Value};
 use crate::backend::{Backend, BuildValue, HasValue, Item, RelocAtom, RelocExprBuilder, ToValue};
+use crate::frontend::Ident;
 use std::collections::HashMap;
 
 pub struct ProgramBuilder<SR> {
@@ -49,11 +50,11 @@ impl<SR> ProgramBuilder<SR> {
     }
 }
 
-impl<S: Clone + 'static> Backend<String, S> for ProgramBuilder<S> {
+impl<S: Clone + 'static> Backend<Ident<String>, S> for ProgramBuilder<S> {
     type Object = Program<S>;
 
-    fn define_symbol(&mut self, (name, span): (String, S), value: Self::Value) {
-        let name_id = self.lookup(name);
+    fn define_symbol(&mut self, (ident, span): (Ident<String>, S), value: Self::Value) {
+        let name_id = self.lookup(ident.name);
         self.program.symbols.define_name(name_id, Value::Unknown);
         self.push(Node::Symbol((name_id, span), value))
     }
@@ -78,9 +79,9 @@ impl<'a, S: Clone> HasValue<S> for RelocExprBuilder<&'a mut ProgramBuilder<S>> {
     type Value = RelocExpr<S>;
 }
 
-impl<'a, S: Clone> ToValue<String, S> for RelocExprBuilder<&'a mut ProgramBuilder<S>> {
-    fn to_value(&mut self, (name, span): (String, S)) -> Self::Value {
-        RelocExpr::from_atom(RelocAtom::Symbol(self.0.lookup(name)), span)
+impl<'a, S: Clone> ToValue<Ident<String>, S> for RelocExprBuilder<&'a mut ProgramBuilder<S>> {
+    fn to_value(&mut self, (ident, span): (Ident<String>, S)) -> Self::Value {
+        RelocExpr::from_atom(RelocAtom::Symbol(self.0.lookup(ident.name)), span)
     }
 }
 
@@ -88,7 +89,7 @@ impl<S: Clone> HasValue<S> for ProgramBuilder<S> {
     type Value = RelocExpr<S>;
 }
 
-impl<'a, S: Clone + 'static> BuildValue<'a, String, S> for ProgramBuilder<S> {
+impl<'a, S: Clone + 'static> BuildValue<'a, Ident<String>, S> for ProgramBuilder<S> {
     type Builder = RelocExprBuilder<&'a mut Self>;
 
     fn build_value(&'a mut self) -> Self::Builder {
@@ -193,38 +194,44 @@ mod tests {
 
     #[test]
     fn diagnose_unresolved_symbol() {
-        let ident = "ident";
+        let name = "ident";
+        let ident = Ident { name: name.into() };
         let (_, diagnostics) = with_object_builder(|builder| {
-            let value = builder
-                .build_value()
-                .to_value((ident.to_string(), ident.into()));
+            let value = builder.build_value().to_value((ident, name.into()));
             builder.emit_item(word_item(value))
         });
-        assert_eq!(*diagnostics, [unresolved(ident)]);
+        assert_eq!(*diagnostics, [unresolved(name)]);
     }
 
     #[test]
     fn diagnose_two_unresolved_symbols_in_one_expr() {
-        let ident1 = "ident1";
-        let ident2 = "ident2";
+        let name1 = "ident1";
+        let name2 = "ident2";
+        let ident1 = Ident {
+            name: name1.to_string(),
+        };
+        let ident2 = Ident {
+            name: name2.to_string(),
+        };
         let (_, diagnostics) = with_object_builder(|builder| {
             let value = {
                 let mut builder = builder.build_value();
-                let lhs = builder.to_value((ident1.to_string(), ident1.into()));
-                let rhs = builder.to_value((ident2.to_string(), ident2.into()));
+                let lhs = builder.to_value((ident1, name1.into()));
+                let rhs = builder.to_value((ident2, name2.into()));
                 builder.apply_binary_operator((BinaryOperator::Minus, "diff".into()), lhs, rhs)
             };
             builder.emit_item(word_item(value))
         });
-        assert_eq!(*diagnostics, [unresolved(ident1), unresolved(ident2)]);
+        assert_eq!(*diagnostics, [unresolved(name1), unresolved(name2)]);
     }
 
     #[test]
     fn emit_defined_symbol() {
         let label = "label";
+        let ident = Ident { name: label.into() };
         let (object, diagnostics) = with_object_builder(|builder| {
-            builder.define_symbol((label.into(), ()), RelocAtom::LocationCounter.into());
-            let value = builder.build_value().to_value((label.to_string(), ()));
+            builder.define_symbol((ident.clone(), ()), RelocAtom::LocationCounter.into());
+            let value = builder.build_value().to_value((ident, ()));
             builder.emit_item(word_item(value));
         });
         assert_eq!(*diagnostics, []);
@@ -235,7 +242,7 @@ mod tests {
     fn emit_symbol_defined_after_use() {
         let label = "label";
         let (object, diagnostics) = with_object_builder(|builder| {
-            let value = builder.build_value().to_value((label.to_string(), ()));
+            let value = builder.build_value().to_value((Ident::from(label), ()));
             builder.emit_item(word_item(value));
             builder.define_symbol((label.into(), ()), RelocAtom::LocationCounter.into());
         });

@@ -1,16 +1,16 @@
-use super::{SemanticToken, Token};
+use super::{Ident, SemanticToken, Token};
 use crate::span::{MacroContextFactory, MacroExpansionContext};
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::rc::Rc;
 
-pub(super) trait MacroTable<I>: Get<I> {
+pub(super) trait MacroTable<I>: Get<Ident<I>> {
     type MacroDefId: Clone;
 
     fn define<F, S>(
         &mut self,
-        name: (impl Into<I>, S),
-        params: Vec<(I, S)>,
+        name: (Ident<I>, S),
+        params: Vec<(Ident<I>, S)>,
         body: Vec<(SemanticToken<I>, S)>,
         factory: &mut F,
     ) where
@@ -40,7 +40,7 @@ pub struct MacroTableEntry<I, D> {
 }
 
 pub struct MacroDefData<I> {
-    params: Vec<I>,
+    params: Vec<Ident<I>>,
     body: Vec<SemanticToken<I>>,
 }
 
@@ -61,8 +61,8 @@ where
 
     fn define<F, S>(
         &mut self,
-        name: (impl Into<I>, S),
-        params: Vec<(I, S)>,
+        name: (Ident<I>, S),
+        params: Vec<(Ident<I>, S)>,
         body: Vec<(SemanticToken<I>, S)>,
         factory: &mut F,
     ) where
@@ -72,7 +72,7 @@ where
         let (body_tokens, body_spans) = split(body);
         let id = factory.add_macro_def(name.1, param_spans, body_spans);
         self.macro_defs.insert(
-            name.0.into(),
+            name.0.name,
             MacroTableEntry {
                 id,
                 def: Rc::new(MacroDefData {
@@ -84,20 +84,20 @@ where
     }
 }
 
-impl<I, Id> Get<I> for MacroExpander<I, Id>
+impl<I, Id> Get<Ident<I>> for MacroExpander<I, Id>
 where
     I: Eq + Hash,
 {
     type Entry = MacroTableEntry<Id, Rc<MacroDefData<I>>>;
 
-    fn get(&self, name: &I) -> Option<&Self::Entry> {
-        self.macro_defs.get(name)
+    fn get(&self, ident: &Ident<I>) -> Option<&Self::Entry> {
+        self.macro_defs.get(&ident.name)
     }
 }
 
 impl<I, F, S> Expand<I, F, S> for MacroTableEntry<F::MacroDefId, Rc<MacroDefData<I>>>
 where
-    I: AsRef<str> + Clone + Eq,
+    I: Clone + Eq,
     F: MacroContextFactory<S>,
 {
     type Iter = ExpandedMacro<I, F::MacroExpansionContext>;
@@ -152,7 +152,7 @@ impl<I: PartialEq, C> ExpandedMacro<I, C> {
     }
 
     fn param_position(&self, name: &I) -> Option<usize> {
-        self.def.params.iter().position(|x| x == name)
+        self.def.params.iter().position(|x| x.name == *name)
     }
 
     fn advance(&mut self) {
@@ -180,9 +180,9 @@ impl<I: PartialEq, C> ExpandedMacro<I, C> {
     fn expand_token(&self, token: &SemanticToken<I>) -> Option<ExpansionState> {
         match token {
             Token::Ident(ident) => self
-                .param_position(ident)
+                .param_position(&ident.name)
                 .map(|position| ExpansionState::Ident(position, 0)),
-            Token::Label(label) => self.param_position(label).map(ExpansionState::Label),
+            Token::Label(label) => self.param_position(&label.name).map(ExpansionState::Label),
             _ => None,
         }
     }
@@ -242,8 +242,8 @@ mod tests {
             context: Rc::clone(&buf),
         };
         let mut table = MacroExpander::<&'static str, _>::new();
-        let def_name = ("my_macro", mk_span(0));
-        let body = (Token::Ident("a"), mk_span(1));
+        let def_name = ("my_macro".into(), mk_span(0));
+        let body = (Token::Ident("a".into()), mk_span(1));
         let def_id = Rc::new(crate::span::MacroDef {
             name: mk_span(0),
             params: vec![],
@@ -251,7 +251,7 @@ mod tests {
         });
         let mut factory = RcContextFactory::new();
         table.define(def_name, vec![], vec![body.clone()], &mut factory);
-        let invocation_name = ("my_macro", mk_span(2));
+        let invocation_name = ("my_macro".into(), mk_span(2));
         let data = Rc::new(MacroExpansionData {
             name: invocation_name.1.clone(),
             args: vec![],
@@ -290,17 +290,26 @@ mod tests {
             context: Rc::clone(&buf),
         };
         let mut table = MacroExpander::<&'static str, _>::new();
-        let def_name = ("my_macro", mk_span(0));
-        let body = vec![Token::Ident("a"), Token::Ident("x"), Token::Ident("b")]
-            .into_iter()
-            .zip((2..=4).map(mk_span));
+        let def_name = ("my_macro".into(), mk_span(0));
+        let body = vec![
+            Token::Ident("a".into()),
+            Token::Ident("x".into()),
+            Token::Ident("b".into()),
+        ]
+        .into_iter()
+        .zip((2..=4).map(mk_span));
         let def_id = Rc::new(crate::span::MacroDef {
             name: def_name.1.clone(),
             params: vec![mk_span(1)],
             body: (2..=4).map(mk_span).collect(),
         });
         let factory = &mut RcContextFactory::new();
-        table.define(def_name, vec![("x", mk_span(1))], body.collect(), factory);
+        table.define(
+            def_name,
+            vec![("x".into(), mk_span(1))],
+            body.collect(),
+            factory,
+        );
         let data = Rc::new(MacroExpansionData {
             name: SpanData::Buf {
                 range: 7,
@@ -318,13 +327,13 @@ mod tests {
             ]],
             def: def_id,
         });
-        let invocation_name = ("my_macro", mk_span(7));
+        let invocation_name = ("my_macro".into(), mk_span(7));
         let expanded: Vec<_> = table
             .get(&invocation_name.0)
             .unwrap()
             .expand(
                 invocation_name.1,
-                vec![vec![Token::Ident("y"), Token::Ident("z")]
+                vec![vec![Token::Ident("y".into()), Token::Ident("z".into())]
                     .into_iter()
                     .zip((8..=9).map(mk_span))
                     .collect()],
@@ -341,16 +350,16 @@ mod tests {
         assert_eq!(
             expanded,
             [
-                (Token::Ident("a"), mk_span_data(0, None)),
+                (Token::Ident("a".into()), mk_span_data(0, None)),
                 (
-                    Token::Ident("y"),
+                    Token::Ident("y".into()),
                     mk_span_data(1, Some(TokenExpansion { arg: 0, index: 0 })),
                 ),
                 (
-                    Token::Ident("z"),
+                    Token::Ident("z".into()),
                     mk_span_data(1, Some(TokenExpansion { arg: 0, index: 1 })),
                 ),
-                (Token::Ident("b"), mk_span_data(2, None)),
+                (Token::Ident("b".into()), mk_span_data(2, None)),
             ]
         )
     }

@@ -7,6 +7,7 @@ use crate::diag::{
 };
 use crate::frontend::semantics::operand::{self, AtomKind, Context, Operand, OperandCounter};
 use crate::frontend::syntax::keyword as kw;
+use crate::frontend::Ident;
 use crate::instruction::*;
 
 mod branch;
@@ -19,7 +20,7 @@ pub(super) fn analyze_instruction<Id: Into<String>, I, B, D, S>(
 ) -> Result<Instruction<B::Value>, ()>
 where
     I: IntoIterator<Item = SemanticExpr<Id, S>>,
-    B: ValueBuilder<Id, S>,
+    B: ValueBuilder<Ident<Id>, S>,
     D: DownstreamDiagnostics<S>,
     S: Clone,
 {
@@ -59,7 +60,7 @@ impl<'a, Id, I, B, D, S> Analysis<'a, I, B, D, S>
 where
     Id: Into<String>,
     I: Iterator<Item = SemanticExpr<Id, S>>,
-    B: ValueBuilder<Id, S>,
+    B: ValueBuilder<Ident<Id>, S>,
     D: DownstreamDiagnostics<S>,
     S: Clone,
 {
@@ -477,12 +478,12 @@ mod tests {
         Literal::Operand(keyword).into()
     }
 
-    pub fn number(n: i32, span: impl Into<TokenSpan>) -> RelocExpr<String, TokenSpan> {
+    pub fn number(n: i32, span: impl Into<TokenSpan>) -> RelocExpr<Ident<String>, TokenSpan> {
         RelocExpr::from_atom(n, span.into())
     }
 
-    pub fn symbol(ident: &str, span: impl Into<TokenSpan>) -> RelocExpr<String, TokenSpan> {
-        RelocExpr::from_atom(RelocAtom::Symbol(ident.to_string()), span.into())
+    pub fn symbol(ident: &str, span: impl Into<TokenSpan>) -> RelocExpr<Ident<String>, TokenSpan> {
+        RelocExpr::from_atom(RelocAtom::Symbol(ident.into()), span.into())
     }
 
     pub(super) fn deref(expr: Input) -> Input {
@@ -611,7 +612,7 @@ mod tests {
 
     impl<'a> From<&'a str> for Input {
         fn from(ident: &'a str) -> Self {
-            Expr::from_atom(SemanticAtom::Ident(ident.to_string()), ())
+            Expr::from_atom(SemanticAtom::Ident(ident.into()), ())
         }
     }
 
@@ -633,7 +634,7 @@ mod tests {
         test_cp_const_analysis(n.into(), number(n, TokenId::Operand(0, 0)))
     }
 
-    fn test_cp_const_analysis(parsed: Input, expr: RelocExpr<String, TokenSpan>) {
+    fn test_cp_const_analysis(parsed: Input, expr: RelocExpr<Ident<String>, TokenSpan>) {
         analyze(kw::Mnemonic::Cp, Some(parsed)).expect_instruction(Instruction::Alu(
             AluOperation::Cp,
             AluSource::Immediate(expr),
@@ -654,7 +655,7 @@ mod tests {
 
     pub(super) type InstructionDescriptor = (
         (kw::Mnemonic, Vec<Input>),
-        Instruction<RelocExpr<String, TokenSpan>>,
+        Instruction<RelocExpr<Ident<String>, TokenSpan>>,
     );
 
     fn describe_legal_instructions() -> Vec<InstructionDescriptor> {
@@ -859,13 +860,16 @@ mod tests {
 
     pub struct AnalysisResult(
         Result<
-            Instruction<RelocExpr<String, TokenSpan>>,
+            Instruction<RelocExpr<Ident<String>, TokenSpan>>,
             Vec<CompactDiagnostic<TokenSpan, TokenSpan>>,
         >,
     );
 
     impl AnalysisResult {
-        pub fn expect_instruction(self, expected: Instruction<RelocExpr<String, TokenSpan>>) {
+        pub fn expect_instruction(
+            self,
+            expected: Instruction<RelocExpr<Ident<String>, TokenSpan>>,
+        ) {
             assert_eq!(self.0, Ok(expected))
         }
 

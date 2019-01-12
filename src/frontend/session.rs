@@ -32,7 +32,7 @@ where
 {
     pub fn define_macro(
         &mut self,
-        name: (impl Into<Ident<F::StringRef>>, D::Span),
+        name: (Ident<F::StringRef>, D::Span),
         params: Vec<(Ident<F::StringRef>, D::Span)>,
         tokens: Vec<(SemanticToken<F::StringRef>, D::Span)>,
     ) {

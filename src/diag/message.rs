@@ -64,7 +64,7 @@ pub enum Message<S> {
     SrcMustBeSp,
     StringInInstruction,
     UndefinedMacro {
-        name: String,
+        name: S,
     },
     UnexpectedEof,
     UnexpectedToken {
@@ -193,7 +193,9 @@ impl Message<StrippedBufSpan> {
             RequiresSimpleOperand => "instruction requires 8-bit register or `(hl)`".into(),
             SrcMustBeSp => "source operand must be `sp`".into(),
             StringInInstruction => "strings cannot appear in instruction operands".into(),
-            UndefinedMacro { name } => format!("invocation of undefined macro `{}`", name),
+            UndefinedMacro { name } => {
+                format!("invocation of undefined macro `{}`", codebase.snippet(name))
+            }
             UnexpectedEof => "unexpected end of file".into(),
             UnexpectedToken { token } => {
                 format!("encountered unexpected token `{}`", codebase.snippet(token))

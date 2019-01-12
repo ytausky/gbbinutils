@@ -23,7 +23,7 @@ pub(crate) fn analyze_file<C, B, D>(
 ) -> Result<B::Object, CodebaseError>
 where
     C: Codebase,
-    B: Backend<String, D::Span>,
+    B: Backend<Ident<String>, D::Span>,
     D: Diagnostics,
 {
     let mut file_parser =
@@ -42,7 +42,24 @@ type LexItem<T, S> = (Result<SemanticToken<T>, LexError>, S);
 
 type SemanticToken<T> = Token<Ident<T>, Literal<T>, syntax::Command>;
 
-pub type Ident<T> = T;
+#[derive(Clone, Debug, PartialEq)]
+pub struct Ident<T> {
+    pub name: T,
+}
+
+#[cfg(test)]
+impl<T> From<T> for Ident<T> {
+    fn from(name: T) -> Ident<T> {
+        Ident { name }
+    }
+}
+
+#[cfg(test)]
+impl From<&str> for Ident<String> {
+    fn from(name: &str) -> Ident<String> {
+        Ident { name: name.into() }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum Literal<S> {
@@ -53,14 +70,14 @@ pub(super) enum Literal<S> {
 
 trait Analysis<Id>
 where
-    Self: Copy,
+    Self: Clone,
     Id: Into<String> + Clone + AsRef<str> + PartialEq,
 {
     fn run<I, F, B, D>(&self, tokens: I, session: Session<F, B, D>)
     where
         I: Iterator<Item = LexItem<Id, D::Span>>,
         F: Frontend<D, StringRef = Id>,
-        B: Backend<Id, D::Span>,
+        B: Backend<Ident<Id>, D::Span>,
         D: Diagnostics;
 }
 
@@ -82,14 +99,14 @@ pub(crate) trait Frontend<D: Diagnostics> {
     fn invoke_macro<B>(
         &mut self,
         name: (Ident<Self::StringRef>, D::Span),
-        args: MacroArgs<Ident<Self::StringRef>, D::Span>,
+        args: MacroArgs<Self::StringRef, D::Span>,
         downstream: Downstream<B, D>,
     ) where
         B: Backend<Ident<Self::StringRef>, D::Span>;
 
     fn define_macro(
         &mut self,
-        name: (impl Into<Ident<Self::StringRef>>, D::Span),
+        name: (Ident<Self::StringRef>, D::Span),
         params: Vec<(Ident<Self::StringRef>, D::Span)>,
         tokens: Vec<(SemanticToken<Self::StringRef>, D::Span)>,
         diagnostics: &mut D,
@@ -104,7 +121,7 @@ where
     where
         I: Iterator<Item = LexItem<Id, D::Span>>,
         F: Frontend<D, StringRef = Id>,
-        B: Backend<Id, D::Span>,
+        B: Backend<Ident<Id>, D::Span>,
         D: Diagnostics,
     {
         let actions = semantics::SemanticActions::new(session);
@@ -143,7 +160,7 @@ where
         M::Entry: Expand<T::StringRef, F, F::Span>,
         for<'b> &'b T::Tokenized: IntoIterator<Item = LexItem<T::StringRef, F::Span>>,
     {
-        let analysis = self.analysis;
+        let analysis = self.analysis.clone();
         let session = Session::new(self, downstream.backend, downstream.diagnostics);
         analysis.run(tokens.into_iter(), session)
     }
@@ -191,10 +208,11 @@ where
         let expansion = match self.macro_table.get(&name) {
             Some(entry) => Some(entry.expand(span, args, downstream.diagnostics)),
             None => {
+                let stripped = downstream.diagnostics.strip_span(&span);
                 downstream
                     .diagnostics
                     .emit_diagnostic(CompactDiagnostic::new(
-                        Message::UndefinedMacro { name: name.into() },
+                        Message::UndefinedMacro { name: stripped },
                         span,
                     ));
                 None
@@ -207,7 +225,7 @@ where
 
     fn define_macro(
         &mut self,
-        name: (impl Into<Ident<Self::StringRef>>, D::Span),
+        name: (Ident<Self::StringRef>, D::Span),
         params: Vec<(Ident<Self::StringRef>, D::Span)>,
         body: Vec<(SemanticToken<Self::StringRef>, D::Span)>,
         diagnostics: &mut D,
@@ -328,7 +346,7 @@ mod tests {
     #[test]
     fn emit_instruction_item() {
         let item = Item::Instruction(Instruction::Nullary(Nullary::Nop));
-        let log = TestLog::default();
+        let log = TestLog::<()>::default();
         TestFixture::new(&log)
             .when(|mut fixture| fixture.session().backend.emit_item(item.clone()));
         assert_eq!(*log.borrow(), [TestEvent::EmitItem(item)]);
@@ -342,12 +360,12 @@ mod tests {
             fixture
                 .session()
                 .backend
-                .define_symbol((label.to_string(), ()), RelocAtom::LocationCounter.into())
+                .define_symbol((label.into(), ()), RelocAtom::LocationCounter.into())
         });
         assert_eq!(
             *log.borrow(),
             [TestEvent::DefineSymbol(
-                String::from(label),
+                label.into(),
                 RelocAtom::LocationCounter.into()
             )]
         );
@@ -359,11 +377,11 @@ mod tests {
     fn define_and_invoke_macro() {
         let name = "my_macro";
         let tokens = vec![Token::Command(Command::Mnemonic(Mnemonic::Nop))];
-        let log = TestLog::default();
+        let log = TestLog::<()>::default();
         TestFixture::new(&log).when(|mut fixture| {
             let mut session = fixture.session();
-            session.define_macro((name.to_string(), ()), Vec::new(), add_code_refs(&tokens));
-            session.invoke_macro((name.to_string(), ()), vec![])
+            session.define_macro((name.into(), ()), Vec::new(), add_code_refs(&tokens));
+            session.invoke_macro((name.into(), ()), vec![])
         });
         assert_eq!(
             *log.borrow(),
@@ -384,15 +402,15 @@ mod tests {
             let param = "x";
             let mut session = fixture.session();
             session.define_macro(
-                (name.to_string(), ()),
-                vec![(param.to_string(), ())],
+                (name.into(), ()),
+                vec![(param.into(), ())],
                 vec![
                     (db.clone(), ()),
-                    (Token::Ident(param.to_string()), ()),
+                    (Token::Ident(param.into()), ()),
                     (literal0.clone(), ()),
                 ],
             );
-            session.invoke_macro((name.to_string(), ()), vec![vec![(arg.clone(), ())]])
+            session.invoke_macro((name.into(), ()), vec![vec![(arg.clone(), ())]])
         });
         assert_eq!(
             *log.borrow(),
@@ -407,23 +425,26 @@ mod tests {
     #[test]
     fn define_and_invoke_macro_with_label() {
         let nop = Token::Command(Command::Mnemonic(Mnemonic::Nop));
-        let label = String::from("label");
+        let label = "label";
         let log = TestLog::default();
         TestFixture::new(&log).when(|mut fixture| {
-            let name = String::from("my_macro");
-            let param = String::from("x");
+            let name = "my_macro";
+            let param = "x";
             let mut session = fixture.session();
             session.define_macro(
-                (name.clone(), ()),
-                vec![(param.clone(), ())],
-                vec![(Token::Label(param), ()), (nop.clone(), ())],
+                (name.into(), ()),
+                vec![(param.into(), ())],
+                vec![(Token::Label(param.into()), ()), (nop.clone(), ())],
             );
-            session.invoke_macro((name, ()), vec![vec![(Token::Ident(label.clone()), ())]])
+            session.invoke_macro(
+                (name.into(), ()),
+                vec![vec![(Token::Ident(label.into()), ())]],
+            )
         });
         assert_eq!(
             *log.borrow(),
             [TestEvent::AnalyzeTokens(vec![
-                Ok(Token::Label(label)),
+                Ok(Token::Label(label.into())),
                 Ok(nop)
             ])]
         );
@@ -433,43 +454,43 @@ mod tests {
 
     #[test]
     fn diagnose_undefined_macro() {
-        let name = "my_macro".to_string();
-        let log = TestLog::default();
+        let name = "my_macro";
+        let log = TestLog::<&'static str>::default();
         TestFixture::new(&log)
-            .when(|mut fixture| fixture.session().invoke_macro((name.clone(), ()), vec![]));
+            .when(|mut fixture| fixture.session().invoke_macro((name.into(), name), vec![]));
         assert_eq!(
             *log.borrow(),
             [TestEvent::Diagnostic(CompactDiagnostic::new(
                 Message::UndefinedMacro { name },
-                ()
+                name
             ))]
         );
     }
 
-    struct MockTokenSource {
-        files: HashMap<String, Vec<LexItem<String, ()>>>,
+    struct MockTokenSource<S> {
+        files: HashMap<String, Vec<LexItem<String, S>>>,
     }
 
-    impl MockTokenSource {
-        fn new() -> MockTokenSource {
+    impl<S> MockTokenSource<S> {
+        fn new() -> MockTokenSource<S> {
             MockTokenSource {
                 files: HashMap::new(),
             }
         }
 
-        fn add_file(&mut self, name: &str, tokens: Vec<LexItem<String, ()>>) {
+        fn add_file(&mut self, name: &str, tokens: Vec<LexItem<String, S>>) {
             self.files.insert(name.to_string(), tokens);
         }
     }
 
-    impl<'a> StringRef for MockTokenSource {
+    impl<'a, S> StringRef for MockTokenSource<S> {
         type StringRef = String;
     }
 
-    impl<'a> Tokenize<Mock<'a>> for MockTokenSource {
-        type Tokenized = MockTokenized;
+    impl<'a, S: Clone> Tokenize<Mock<'a, S>> for MockTokenSource<S> {
+        type Tokenized = MockTokenized<S>;
 
-        fn tokenize_file<F: FnOnce(BufId) -> Mock<'a>>(
+        fn tokenize_file<F: FnOnce(BufId) -> Mock<'a, S>>(
             &self,
             filename: &str,
             _: F,
@@ -478,82 +499,90 @@ mod tests {
         }
     }
 
-    struct MockTokenized(Vec<LexItem<String, ()>>);
+    struct MockTokenized<S>(Vec<LexItem<String, S>>);
 
-    impl<'b> IntoIterator for &'b MockTokenized {
-        type Item = LexItem<String, ()>;
-        type IntoIter = std::iter::Cloned<std::slice::Iter<'b, LexItem<String, ()>>>;
+    impl<'b, S: Clone> IntoIterator for &'b MockTokenized<S> {
+        type Item = LexItem<String, S>;
+        type IntoIter = std::iter::Cloned<std::slice::Iter<'b, LexItem<String, S>>>;
 
         fn into_iter(self) -> Self::IntoIter {
             (&self.0).into_iter().cloned()
         }
     }
 
-    #[derive(Clone, Copy)]
-    struct Mock<'a> {
-        log: &'a TestLog,
+    #[derive(Clone)]
+    struct Mock<'a, S: Clone> {
+        log: &'a TestLog<S>,
     }
 
-    impl<'a> Mock<'a> {
-        fn new(log: &'a TestLog) -> Mock<'a> {
+    impl<'a, S: Clone> Mock<'a, S> {
+        fn new(log: &'a TestLog<S>) -> Mock<'a, S> {
             Mock { log }
         }
     }
 
-    impl<'a> Span for Mock<'a> {
-        type Span = ();
+    impl<'a, S: Clone> Span for Mock<'a, S> {
+        type Span = S;
     }
 
-    impl<'a> MacroContextFactory<()> for Mock<'a> {
+    impl<'a, S: Clone + Default> MacroContextFactory<S> for Mock<'a, S> {
         type MacroDefId = ();
-        type MacroExpansionContext = Mock<'a>;
+        type MacroExpansionContext = Mock<'a, S>;
 
-        fn add_macro_def<P, B>(&mut self, _: (), _: P, _: B) -> Self::MacroDefId
+        fn add_macro_def<P, B>(&mut self, _: S, _: P, _: B) -> Self::MacroDefId
         where
-            P: IntoIterator<Item = ()>,
-            B: IntoIterator<Item = ()>,
+            P: IntoIterator<Item = S>,
+            B: IntoIterator<Item = S>,
         {
         }
 
         fn mk_macro_expansion_context<I, J>(
             &mut self,
-            _: (),
+            _: S,
             _: I,
             _: &Self::MacroDefId,
         ) -> Self::MacroExpansionContext
         where
             I: IntoIterator<Item = J>,
-            J: IntoIterator<Item = ()>,
+            J: IntoIterator<Item = S>,
         {
             self.clone()
         }
     }
 
-    impl<'a> StripSpan<()> for Mock<'a> {
-        type Stripped = ();
+    impl<'a, S: Clone> StripSpan<S> for Mock<'a, S> {
+        type Stripped = S;
 
-        fn strip_span(&mut self, _: &()) {}
+        fn strip_span(&mut self, span: &S) -> S {
+            span.clone()
+        }
     }
 
-    impl<'a> ContextFactory for Mock<'a> {
-        type BufContext = Mock<'a>;
+    impl<'a, S: Clone + Default> ContextFactory for Mock<'a, S> {
+        type BufContext = Mock<'a, S>;
 
         fn mk_buf_context(&mut self, _: BufId, _: Option<Self::Span>) -> Self::BufContext {
             self.clone()
         }
     }
 
-    impl<'a> BufContext for Mock<'a> {
-        type Span = ();
-        fn mk_span(&self, _: codebase::BufRange) -> Self::Span {}
+    impl<'a, S: Clone> BufContext for Mock<'a, S> {
+        type Span = S;
+
+        fn mk_span(&self, _: codebase::BufRange) -> Self::Span {
+            unreachable!()
+        }
     }
 
-    impl<'a> MacroExpansionContext for Mock<'a> {
-        type Span = ();
-        fn mk_span(&self, _: usize, _: Option<TokenExpansion>) -> Self::Span {}
+    impl<'a, S: Clone + Default> MacroExpansionContext for Mock<'a, S> {
+        type Span = S;
+
+        fn mk_span(&self, _: usize, _: Option<TokenExpansion>) -> Self::Span {
+            S::default()
+        }
     }
 
-    impl<'a> Analysis<String> for Mock<'a> {
+    impl<'a, S: Clone> Analysis<String> for Mock<'a, S> {
         fn run<I, F, B, D>(&self, tokens: I, _frontend: Session<F, B, D>)
         where
             I: Iterator<Item = LexItem<String, D::Span>>,
@@ -567,78 +596,81 @@ mod tests {
         }
     }
 
-    impl<'a, 'b> BuildValue<'b, String, ()> for Mock<'a> {
-        type Builder = IndependentValueBuilder<()>;
+    impl<'a, 'b, S: Clone> BuildValue<'b, Ident<String>, S> for Mock<'a, S> {
+        type Builder = IndependentValueBuilder<S>;
 
         fn build_value(&'b mut self) -> Self::Builder {
             IndependentValueBuilder::new()
         }
     }
 
-    impl<'a> HasValue<()> for Mock<'a> {
-        type Value = RelocExpr<String, ()>;
+    impl<'a, S: Clone> HasValue<S> for Mock<'a, S> {
+        type Value = RelocExpr<Ident<String>, S>;
     }
 
-    impl<'a> Backend<String, ()> for Mock<'a> {
+    impl<'a, S: Clone> Backend<Ident<String>, S> for Mock<'a, S> {
         type Object = ();
 
-        fn define_symbol(&mut self, symbol: (String, ()), value: RelocExpr<String, ()>) {
+        fn define_symbol(&mut self, symbol: (Ident<String>, S), value: Self::Value) {
             self.log
                 .borrow_mut()
                 .push(TestEvent::DefineSymbol(symbol.0, value))
         }
 
-        fn emit_item(&mut self, item: Item<RelocExpr<String, ()>>) {
+        fn emit_item(&mut self, item: Item<Self::Value>) {
             self.log.borrow_mut().push(TestEvent::EmitItem(item))
         }
 
         fn into_object(self) {}
 
-        fn set_origin(&mut self, _origin: RelocExpr<String, ()>) {
+        fn set_origin(&mut self, _origin: Self::Value) {
             unimplemented!()
         }
     }
 
-    impl<'a> EmitDiagnostic<(), ()> for Mock<'a> {
-        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<(), ()>) {
+    impl<'a, S: Clone> EmitDiagnostic<S, S> for Mock<'a, S> {
+        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<S, S>) {
             self.log
                 .borrow_mut()
                 .push(TestEvent::Diagnostic(diagnostic))
         }
     }
 
-    impl<'a> MergeSpans<()> for Mock<'a> {
-        fn merge_spans(&mut self, _: &(), _: &()) {}
+    impl<'a, S: Clone> MergeSpans<S> for Mock<'a, S> {
+        fn merge_spans(&mut self, _: &S, _: &S) -> S {
+            unreachable!()
+        }
     }
 
-    impl<'a> Diagnostics for Mock<'a> {}
+    impl<'a, S: Clone + Default> Diagnostics for Mock<'a, S> {}
 
-    type TestLog = RefCell<Vec<TestEvent>>;
+    type TestLog<S> = RefCell<Vec<TestEvent<S>>>;
 
     #[derive(Debug, PartialEq)]
-    enum TestEvent {
+    enum TestEvent<S: Clone> {
         AnalyzeTokens(Vec<Result<SemanticToken<String>, syntax::lexer::LexError>>),
-        DefineSymbol(String, RelocExpr<String, ()>),
-        Diagnostic(CompactDiagnostic<(), ()>),
-        EmitItem(Item<RelocExpr<String, ()>>),
+        DefineSymbol(Ident<String>, RelocExpr<Ident<String>, S>),
+        Diagnostic(CompactDiagnostic<S, S>),
+        EmitItem(Item<RelocExpr<Ident<String>, S>>),
     }
 
-    struct TestFixture<'a> {
+    struct TestFixture<'a, S: Clone> {
         macro_table: MacroExpander<String, ()>,
-        mock_token_source: MockTokenSource,
-        analysis: Mock<'a>,
-        object: Mock<'a>,
-        diagnostics: Mock<'a>,
+        mock_token_source: MockTokenSource<S>,
+        analysis: Mock<'a, S>,
+        object: Mock<'a, S>,
+        diagnostics: Mock<'a, S>,
     }
 
-    struct PreparedFixture<'a, 'b> {
-        code_analyzer: CodebaseAnalyzer<'b, MacroExpander<String, ()>, MockTokenSource, Mock<'a>>,
-        object: Mock<'a>,
-        diagnostics: Mock<'a>,
+    struct PreparedFixture<'a, 'b, S: Clone> {
+        code_analyzer:
+            CodebaseAnalyzer<'b, MacroExpander<String, ()>, MockTokenSource<S>, Mock<'a, S>>,
+        object: Mock<'a, S>,
+        diagnostics: Mock<'a, S>,
     }
 
-    impl<'a, 'b> PreparedFixture<'a, 'b> {
-        fn session<'r>(&'r mut self) -> TestSession<'a, 'b, 'r> {
+    impl<'a, 'b, S: Clone> PreparedFixture<'a, 'b, S> {
+        fn session<'r>(&'r mut self) -> TestSession<'a, 'b, 'r, S> {
             Session::new(
                 &mut self.code_analyzer,
                 &mut self.object,
@@ -647,8 +679,8 @@ mod tests {
         }
     }
 
-    impl<'a> TestFixture<'a> {
-        fn new(log: &'a TestLog) -> TestFixture<'a> {
+    impl<'a, S: Clone> TestFixture<'a, S> {
+        fn new(log: &'a TestLog<S>) -> TestFixture<'a, S> {
             TestFixture {
                 macro_table: MacroExpander::new(),
                 mock_token_source: MockTokenSource::new(),
@@ -663,7 +695,7 @@ mod tests {
             self
         }
 
-        fn when<F: for<'b> FnOnce(PreparedFixture<'a, 'b>)>(self, f: F) {
+        fn when<F: for<'b> FnOnce(PreparedFixture<'a, 'b, S>)>(self, f: F) {
             let prepared = PreparedFixture {
                 code_analyzer: CodebaseAnalyzer::new(
                     self.macro_table,
@@ -677,7 +709,8 @@ mod tests {
         }
     }
 
-    type TestCodebaseAnalyzer<'a, 'r> =
-        CodebaseAnalyzer<'r, MacroExpander<String, ()>, MockTokenSource, Mock<'a>>;
-    type TestSession<'a, 'b, 'r> = Session<'r, TestCodebaseAnalyzer<'a, 'b>, Mock<'a>, Mock<'a>>;
+    type TestCodebaseAnalyzer<'a, 'r, S> =
+        CodebaseAnalyzer<'r, MacroExpander<String, ()>, MockTokenSource<S>, Mock<'a, S>>;
+    type TestSession<'a, 'b, 'r, S> =
+        Session<'r, TestCodebaseAnalyzer<'a, 'b, S>, Mock<'a, S>, Mock<'a, S>>;
 }

@@ -1,6 +1,7 @@
 use super::{Analysis, AtomKind, Operand, SemanticExpr, SimpleOperand};
 use crate::backend::ValueBuilder;
 use crate::diag::{CompactDiagnostic, DownstreamDiagnostics, EmitDiagnostic, Message};
+use crate::frontend::Ident;
 use crate::instruction::{Branch, Condition, Instruction, Nullary};
 use crate::span::Source;
 
@@ -27,7 +28,7 @@ impl<'a, Id, I, B, D, S> Analysis<'a, I, B, D, S>
 where
     Id: Into<String>,
     I: Iterator<Item = SemanticExpr<Id, S>>,
-    B: ValueBuilder<Id, S>,
+    B: ValueBuilder<Ident<Id>, S>,
     D: DownstreamDiagnostics<S>,
     S: Clone,
 {

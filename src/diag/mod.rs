@@ -413,7 +413,7 @@ mod tests {
         let buf_id = codebase.add_src_buf(DUMMY_FILE, src);
         let range = BufRange::from(12..20);
         let token_ref = SpanData::Buf {
-            range,
+            range: range.clone(),
             context: Rc::new(BufContextData {
                 buf_id,
                 included_from: None,
@@ -421,7 +421,7 @@ mod tests {
         };
         let diagnostic = CompactDiagnostic {
             message: Message::UndefinedMacro {
-                name: "my_macro".to_string(),
+                name: StrippedBufSpan { buf_id, range },
             },
             highlight: token_ref,
         };

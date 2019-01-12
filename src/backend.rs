@@ -1,4 +1,6 @@
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
+#[cfg(test)]
+use crate::frontend::Ident;
 use crate::instruction::Instruction;
 use crate::span::Source;
 #[cfg(test)]
@@ -154,7 +156,7 @@ impl<S> IndependentValueBuilder<S> {
 
 #[cfg(test)]
 impl<S: Clone> HasValue<S> for IndependentValueBuilder<S> {
-    type Value = RelocExpr<String, S>;
+    type Value = RelocExpr<Ident<String>, S>;
 }
 
 impl<I, T, S: Clone> ToValue<LocationCounter, S> for RelocExprBuilder<T>
@@ -176,8 +178,8 @@ where
 }
 
 #[cfg(test)]
-impl<S: Clone> ToValue<String, S> for IndependentValueBuilder<S> {
-    fn to_value(&mut self, (name, span): (String, S)) -> Self::Value {
+impl<S: Clone> ToValue<Ident<String>, S> for IndependentValueBuilder<S> {
+    fn to_value(&mut self, (name, span): (Ident<String>, S)) -> Self::Value {
         RelocExpr::from_atom(RelocAtom::Symbol(name), span)
     }
 }

@@ -3,13 +3,14 @@ use crate::backend::{ValueBuilder, Width};
 use crate::diag::span::Source;
 use crate::diag::{CompactDiagnostic, DownstreamDiagnostics, EmitDiagnostic, Message};
 use crate::frontend::semantics::operand::AtomKind;
+use crate::frontend::Ident;
 use crate::instruction::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
 
 impl<'a, Id, I, B, D, S> Analysis<'a, I, B, D, S>
 where
     Id: Into<String>,
     I: Iterator<Item = SemanticExpr<Id, S>>,
-    B: ValueBuilder<Id, S>,
+    B: ValueBuilder<Ident<Id>, S>,
     D: DownstreamDiagnostics<S>,
     S: Clone,
 {

@@ -2,7 +2,7 @@ use super::{AnalyzeExpr, ExprVariant, SemanticAtom, SemanticExpr, SemanticUnary,
 use crate::backend::ValueBuilder;
 use crate::diag::*;
 use crate::frontend::syntax::keyword as kw;
-use crate::frontend::Literal;
+use crate::frontend::{Ident, Literal};
 use crate::instruction::{Condition, PtrReg, Reg16, RegPair, SimpleOperand};
 use crate::span::Source;
 
@@ -48,7 +48,7 @@ pub(super) fn analyze_operand<I, B, D, S>(
 ) -> Result<Operand<B::Value>, ()>
 where
     I: Into<String>,
-    B: ValueBuilder<I, S>,
+    B: ValueBuilder<Ident<I>, S>,
     D: DownstreamDiagnostics<S>,
     S: Clone,
 {
@@ -70,7 +70,7 @@ fn analyze_deref_operand<I, B, D, S>(
 ) -> Result<Operand<B::Value>, ()>
 where
     I: Into<String>,
-    B: ValueBuilder<I, S>,
+    B: ValueBuilder<Ident<I>, S>,
     D: DownstreamDiagnostics<S>,
     S: Clone,
 {
@@ -251,7 +251,7 @@ mod tests {
     fn analyze_operand<S: Clone + PartialEq>(
         expr: SemanticExpr<String, S>,
         context: Context,
-    ) -> Result<Operand<RelocExpr<String, S>>, Vec<CompactDiagnostic<S, S>>>
+    ) -> Result<Operand<RelocExpr<Ident<String>, S>>, Vec<CompactDiagnostic<S, S>>>
     where
         DiagnosticsCollector<S>: DownstreamDiagnostics<S>,
     {

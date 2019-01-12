@@ -141,7 +141,7 @@ where
 
 pub(crate) struct CommandActions<'a, F: Frontend<D>, B, D: Diagnostics> {
     name: (Command, D::Span),
-    args: CommandArgs<Ident<F::StringRef>, D::Span>,
+    args: CommandArgs<F::StringRef, D::Span>,
     parent: SemanticActions<'a, F, B, D>,
     has_errors: bool,
 }
@@ -544,7 +544,7 @@ trait AnalyzeExpr<I, S: Clone> {
 
 impl<'a, I, B, D, S> AnalyzeExpr<I, S> for ValueContext<'a, B, D>
 where
-    B: ValueBuilder<I, S>,
+    B: ValueBuilder<Ident<I>, S>,
     D: DownstreamDiagnostics<S>,
     S: Clone,
 {
@@ -671,7 +671,7 @@ mod tests {
             _downstream: Downstream<B, TestDiagnostics<'a>>,
         ) -> Result<(), CodebaseError>
         where
-            B: Backend<String, ()>,
+            B: Backend<Ident<String>, ()>,
         {
             self.operations
                 .borrow_mut()
@@ -688,7 +688,7 @@ mod tests {
             args: MacroArgs<Self::StringRef, ()>,
             _downstream: Downstream<B, TestDiagnostics<'a>>,
         ) where
-            B: Backend<String, ()>,
+            B: Backend<Ident<String>, ()>,
         {
             self.operations
                 .borrow_mut()
@@ -702,7 +702,7 @@ mod tests {
 
         fn define_macro(
             &mut self,
-            name: (impl Into<Ident<Self::StringRef>>, ()),
+            name: (Ident<Self::StringRef>, ()),
             params: Vec<(Ident<Self::StringRef>, ())>,
             tokens: Vec<(SemanticToken<Self::StringRef>, ())>,
             _diagnostics: &mut TestDiagnostics<'a>,
@@ -728,10 +728,10 @@ mod tests {
     }
 
     impl<'a> HasValue<()> for TestBackend<'a> {
-        type Value = RelocExpr<String, ()>;
+        type Value = RelocExpr<Ident<String>, ()>;
     }
 
-    impl<'a, 'b> BuildValue<'b, String, ()> for TestBackend<'a> {
+    impl<'a, 'b> BuildValue<'b, Ident<String>, ()> for TestBackend<'a> {
         type Builder = IndependentValueBuilder<()>;
 
         fn build_value(&mut self) -> Self::Builder {
@@ -739,16 +739,16 @@ mod tests {
         }
     }
 
-    impl<'a> Backend<String, ()> for TestBackend<'a> {
+    impl<'a> Backend<Ident<String>, ()> for TestBackend<'a> {
         type Object = ();
 
-        fn define_symbol(&mut self, symbol: (String, ()), value: RelocExpr<String, ()>) {
+        fn define_symbol(&mut self, symbol: (Ident<String>, ()), value: Self::Value) {
             self.operations
                 .borrow_mut()
                 .push(TestOperation::DefineSymbol(symbol.0, value))
         }
 
-        fn emit_item(&mut self, item: backend::Item<RelocExpr<String, ()>>) {
+        fn emit_item(&mut self, item: backend::Item<Self::Value>) {
             self.operations
                 .borrow_mut()
                 .push(TestOperation::EmitItem(item))
@@ -756,7 +756,7 @@ mod tests {
 
         fn into_object(self) -> Self::Object {}
 
-        fn set_origin(&mut self, origin: RelocExpr<String, ()>) {
+        fn set_origin(&mut self, origin: Self::Value) {
             self.operations
                 .borrow_mut()
                 .push(TestOperation::SetOrigin(origin))
@@ -854,12 +854,16 @@ mod tests {
     #[derive(Debug, PartialEq)]
     pub(crate) enum TestOperation {
         AnalyzeFile(String),
-        InvokeMacro(String, Vec<Vec<SemanticToken<String>>>),
-        DefineMacro(String, Vec<String>, Vec<SemanticToken<String>>),
-        DefineSymbol(String, RelocExpr<String, ()>),
+        InvokeMacro(Ident<String>, Vec<Vec<SemanticToken<String>>>),
+        DefineMacro(
+            Ident<String>,
+            Vec<Ident<String>>,
+            Vec<SemanticToken<String>>,
+        ),
+        DefineSymbol(Ident<String>, RelocExpr<Ident<String>, ()>),
         EmitDiagnostic(CompactDiagnostic<(), ()>),
-        EmitItem(backend::Item<RelocExpr<String, ()>>),
-        SetOrigin(RelocExpr<String, ()>),
+        EmitItem(backend::Item<RelocExpr<Ident<String>, ()>>),
+        SetOrigin(RelocExpr<Ident<String>, ()>),
     }
 
     #[test]
@@ -925,13 +929,13 @@ mod tests {
                 .enter_stmt(None)
                 .enter_command((Command::Directive(Directive::Dw), ()))
                 .add_argument();
-            arg.push_atom((ExprAtom::Ident(label.to_string()), ()));
+            arg.push_atom((ExprAtom::Ident(label.into()), ()));
             arg.exit().exit().exit()
         });
         assert_eq!(
             actions,
             [TestOperation::EmitItem(backend::Item::Data(
-                RelocAtom::Symbol(label.to_string()).into(),
+                RelocAtom::Symbol(label.into()).into(),
                 Width::Word
             ))]
         );
@@ -940,13 +944,12 @@ mod tests {
     #[test]
     fn analyze_label() {
         let label = "label";
-        let actions = collect_semantic_actions(|actions| {
-            actions.enter_stmt(Some((label.to_string(), ()))).exit()
-        });
+        let actions =
+            collect_semantic_actions(|actions| actions.enter_stmt(Some((label.into(), ()))).exit());
         assert_eq!(
             actions,
             [TestOperation::DefineSymbol(
-                label.to_string(),
+                label.into(),
                 RelocAtom::LocationCounter.into()
             )]
         )
@@ -972,7 +975,7 @@ mod tests {
             [param],
             [
                 Token::Command(Command::Mnemonic(Mnemonic::Xor)),
-                Token::Ident(param.to_string()),
+                Token::Ident(param.into()),
             ],
         )
     }
@@ -999,9 +1002,9 @@ mod tests {
     ) {
         let actions = collect_semantic_actions(|actions| {
             let mut params_actions = actions
-                .enter_stmt(Some((name.to_string(), ())))
+                .enter_stmt(Some((name.into(), ())))
                 .enter_macro_def(());
-            for param in params.borrow().iter().map(|t| (t.to_string(), ())) {
+            for param in params.borrow().iter().map(|&t| (t.into(), ())) {
                 params_actions.add_parameter(param)
             }
             let mut token_seq_actions = MacroParamsContext::exit(params_actions);
@@ -1013,8 +1016,8 @@ mod tests {
         assert_eq!(
             actions,
             [TestOperation::DefineMacro(
-                name.to_string(),
-                params.borrow().iter().cloned().map(String::from).collect(),
+                name.into(),
+                params.borrow().iter().cloned().map(Into::into).collect(),
                 body.borrow().iter().cloned().collect()
             )]
         )
@@ -1026,12 +1029,12 @@ mod tests {
         let actions = collect_semantic_actions(|actions| {
             let invocation = actions
                 .enter_stmt(None)
-                .enter_macro_invocation((name.to_string(), ()));
+                .enter_macro_invocation((name.into(), ()));
             invocation.exit().exit()
         });
         assert_eq!(
             actions,
-            [TestOperation::InvokeMacro(name.to_string(), Vec::new())]
+            [TestOperation::InvokeMacro(name.into(), Vec::new())]
         )
     }
 
@@ -1042,7 +1045,7 @@ mod tests {
         let actions = collect_semantic_actions(|actions| {
             let mut invocation = actions
                 .enter_stmt(None)
-                .enter_macro_invocation((name.to_string(), ()));
+                .enter_macro_invocation((name.into(), ()));
             invocation = {
                 let mut arg = invocation.enter_macro_arg();
                 arg.push_token((arg_token.clone(), ()));
@@ -1053,7 +1056,7 @@ mod tests {
         assert_eq!(
             actions,
             [TestOperation::InvokeMacro(
-                name.to_string(),
+                name.into(),
                 vec![vec![arg_token]]
             )]
         )

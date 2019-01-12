@@ -1,7 +1,7 @@
 use crate::frontend::syntax::keyword::*;
 use crate::frontend::syntax::SimpleToken::*;
 use crate::frontend::syntax::{SimpleToken, Token};
-use crate::frontend::{Literal, SemanticToken};
+use crate::frontend::{Ident, Literal, SemanticToken};
 
 use std::iter;
 use std::ops::{Index, Range};
@@ -216,10 +216,14 @@ fn mk_token(kind: TokenKind, lexeme: &str) -> Result<SemanticToken<String>, LexE
 
 fn mk_keyword_or<F>(f: F, lexeme: &str) -> SemanticToken<String>
 where
-    F: FnOnce(String) -> SemanticToken<String>,
+    F: FnOnce(Ident<String>) -> SemanticToken<String>,
 {
     identify_keyword(lexeme).map_or_else(
-        || f(lexeme.to_string()),
+        || {
+            f(Ident {
+                name: lexeme.to_string(),
+            })
+        },
         |keyword| match keyword {
             Keyword::Command(command) => Token::Command(command),
             Keyword::Endm => Endm.into(),
@@ -404,19 +408,19 @@ mod tests {
 
     #[test]
     fn lex_ident() {
-        assert_eq_tokens("    ident", [Ident("ident".to_string())])
+        assert_eq_tokens("    ident", [Ident("ident".into())])
     }
 
     #[test]
     fn lex_ident_after_eol() {
-        assert_eq_tokens("    \n    ident", [Eol.into(), Ident("ident".to_string())])
+        assert_eq_tokens("    \n    ident", [Eol.into(), Ident("ident".into())])
     }
 
     #[test]
     fn lex_ident_with_underscore() {
         assert_eq_tokens(
             "    ident_with_underscore",
-            [Ident("ident_with_underscore".to_string())],
+            [Ident("ident_with_underscore".into())],
         )
     }
 
@@ -452,13 +456,13 @@ mod tests {
     fn lex_label() {
         assert_eq_tokens(
             "label nop\n",
-            [Label("label".to_string()), Nop.into(), Eol.into()],
+            [Label("label".into()), Nop.into(), Eol.into()],
         )
     }
 
     #[test]
     fn lex_label_after_eol() {
-        assert_eq_tokens("    \nlabel", [Eol.into(), Label("label".to_string())])
+        assert_eq_tokens("    \nlabel", [Eol.into(), Label("label".into())])
     }
 
     #[test]

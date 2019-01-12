@@ -246,17 +246,17 @@ mod tests {
         test_data_items_emission(Directive::Dw, mk_word, [0x4332, 0x780f])
     }
 
-    fn mk_byte(byte: &i32) -> backend::Item<RelocExpr<String, ()>> {
+    fn mk_byte(byte: &i32) -> backend::Item<RelocExpr<Ident<String>, ()>> {
         backend::Item::Data((*byte).into(), Width::Byte)
     }
 
-    fn mk_word(word: &i32) -> backend::Item<RelocExpr<String, ()>> {
+    fn mk_word(word: &i32) -> backend::Item<RelocExpr<Ident<String>, ()>> {
         backend::Item::Data((*word).into(), Width::Word)
     }
 
     fn test_data_items_emission(
         directive: Directive,
-        mk_item: impl Fn(&i32) -> backend::Item<RelocExpr<String, ()>>,
+        mk_item: impl Fn(&i32) -> backend::Item<RelocExpr<Ident<String>, ()>>,
         data: impl Borrow<[i32]>,
     ) {
         let actions = with_directive(directive, |mut command| {
@@ -293,7 +293,7 @@ mod tests {
         )
     }
 
-    fn mk_literal(n: i32) -> (ExprAtom<String, Literal<String>>, ()) {
+    fn mk_literal(n: i32) -> (ExprAtom<Ident<String>, Literal<String>>, ()) {
         (ExprAtom::Literal(Literal::Number(n)), ())
     }
 
