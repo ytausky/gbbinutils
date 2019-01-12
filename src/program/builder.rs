@@ -1,6 +1,6 @@
 use super::{Chunk, NameId, Node, Program, RelocExpr, Value};
 use crate::backend::{
-    Backend, BuildValue, HasValue, Item, NameTable, RelocAtom, RelocExprBuilder, ToValue,
+    Backend, BuildValue, HasValue, Item, Name, NameTable, RelocAtom, RelocExprBuilder, ToValue,
 };
 use crate::frontend::Ident;
 
@@ -27,8 +27,12 @@ impl<SR> ProgramBuilder<SR> {
     }
 
     fn lookup(&mut self, name: String, table: &mut NameTable) -> NameId {
-        let symbols = &mut self.program.symbols;
-        *table.entry(name).or_insert_with(|| symbols.new_name())
+        match table
+            .entry(name)
+            .or_insert_with(|| Name::Symbol(self.program.symbols.new_name()))
+        {
+            Name::Symbol(id) => *id,
+        }
     }
 
     fn current_chunk(&mut self) -> &mut Chunk<SR> {

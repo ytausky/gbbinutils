@@ -14,7 +14,11 @@ pub enum Width {
     Word,
 }
 
-pub type NameTable = HashMap<String, NameId>;
+pub type NameTable = HashMap<String, Name>;
+
+pub enum Name {
+    Symbol(NameId),
+}
 
 pub struct LocationCounter;
 
