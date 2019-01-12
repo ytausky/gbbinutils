@@ -224,7 +224,7 @@ mod tests {
 
     use crate::backend::Backend;
     use crate::diag::IgnoreDiagnostics;
-    use crate::program::{Chunk, ProgramBuilder, SymbolId};
+    use crate::program::{Chunk, ProgramBuilder, ValueId};
 
     #[test]
     fn resolve_origin_relative_to_previous_chunk() {
@@ -234,7 +234,7 @@ mod tests {
             chunks: vec![
                 Chunk {
                     origin: Some(origin1.into()),
-                    size: SymbolId(0),
+                    size: ValueId(0),
                     items: vec![Node::Byte(0x42)],
                 },
                 Chunk {
@@ -246,7 +246,7 @@ mod tests {
                         )
                         .into(),
                     ),
-                    size: SymbolId(1),
+                    size: ValueId(1),
                     items: vec![Node::Byte(0x43)],
                 },
             ],

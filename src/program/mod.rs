@@ -16,7 +16,7 @@ mod translate;
 type RelocExpr<S> = backend::RelocExpr<NameId, S>;
 
 #[derive(Clone, Copy)]
-struct SymbolId(usize);
+struct ValueId(usize);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NameId(usize);
@@ -28,7 +28,7 @@ pub struct Program<S> {
 
 struct Chunk<S> {
     origin: Option<RelocExpr<S>>,
-    size: SymbolId,
+    size: ValueId,
     items: Vec<Node<S>>,
 }
 
@@ -73,7 +73,7 @@ impl<S: Clone> Program<S> {
 }
 
 impl<S> Chunk<S> {
-    pub fn new(size: SymbolId) -> Chunk<S> {
+    pub fn new(size: ValueId) -> Chunk<S> {
         Chunk {
             origin: None,
             size,

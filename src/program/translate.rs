@@ -151,7 +151,7 @@ mod tests {
     use crate::backend::RelocAtom;
     use crate::diag::IgnoreDiagnostics;
     use crate::expr::{BinaryOperator, ExprVariant};
-    use crate::program::SymbolId;
+    use crate::program::ValueId;
     use std::borrow::Borrow;
 
     #[test]
@@ -220,7 +220,7 @@ mod tests {
         let addr = 0x7ff0;
         let chunk = Chunk {
             origin: Some(addr.into()),
-            size: SymbolId(0),
+            size: ValueId(0),
             items: Vec::new(),
         };
         let translated = translate_without_context(chunk);
@@ -230,7 +230,7 @@ mod tests {
     #[test]
     fn translate_expr_with_location_counter() {
         let byte = 0x42;
-        let mut chunk = Chunk::new(SymbolId(0));
+        let mut chunk = Chunk::new(ValueId(0));
         chunk.items.extend(vec![
             Node::Byte(byte),
             Node::Expr(RelocAtom::LocationCounter.into(), Width::Byte),
@@ -241,7 +241,7 @@ mod tests {
 
     #[test]
     fn location_counter_starts_from_chunk_origin() {
-        let mut chunk = Chunk::new(SymbolId(0));
+        let mut chunk = Chunk::new(ValueId(0));
         chunk.origin = Some(0xffe1.into());
         chunk
             .items
