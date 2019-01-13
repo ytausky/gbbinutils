@@ -18,9 +18,9 @@ pub use crate::frontend::syntax::Token;
 pub(crate) fn analyze_file<'a, C, B, D>(
     name: String,
     codebase: &'a C,
-    mut backend: B,
+    backend: &mut B,
     diagnostics: &mut D,
-) -> Result<B::Object, CodebaseError>
+) -> Result<(), CodebaseError>
 where
     C: Codebase,
     B: Backend<Ident<String>, D::Span, MacroTableEntry<D::MacroDefId, Rc<MacroDefData<String>>>>,
@@ -28,9 +28,9 @@ where
 {
     let mut file_parser = CodebaseAnalyzer::new(MacroExpander::new(), codebase, SemanticAnalysis);
     let mut names = NameTable::new();
-    let mut session = Session::new(&mut file_parser, &mut backend, &mut names, diagnostics);
+    let mut session = Session::new(&mut file_parser, backend, &mut names, diagnostics);
     session.analyze_file(name)?;
-    Ok(backend.into_object())
+    Ok(())
 }
 
 pub struct Downstream<'a, B: 'a, N: 'a, D: 'a> {
@@ -563,13 +563,9 @@ mod tests {
     }
 
     impl<'a, S: Clone> PartialBackend<S> for Mock<'a, S> {
-        type Object = ();
-
         fn emit_item(&mut self, item: Item<Self::Value>) {
             self.log.borrow_mut().push(TestEvent::EmitItem(item))
         }
-
-        fn into_object(self) {}
 
         fn set_origin(&mut self, _origin: Self::Value) {
             unimplemented!()

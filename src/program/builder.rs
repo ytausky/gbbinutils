@@ -23,6 +23,10 @@ impl<SR> ProgramBuilder<SR> {
         }
     }
 
+    pub fn into_object(self) -> Program<SR> {
+        self.program
+    }
+
     fn push(&mut self, node: Node<SR>) {
         self.current_chunk().items.push(node)
     }
@@ -56,15 +60,9 @@ impl<SR> ProgramBuilder<SR> {
 }
 
 impl<S: Clone> PartialBackend<S> for ProgramBuilder<S> {
-    type Object = Program<S>;
-
     fn emit_item(&mut self, item: Item<Self::Value>) {
         use super::lowering::Lower;
         item.lower().for_each(|data_item| self.push(data_item))
-    }
-
-    fn into_object(self) -> Self::Object {
-        self.program
     }
 
     fn set_origin(&mut self, origin: Self::Value) {

@@ -755,15 +755,11 @@ mod tests {
     }
 
     impl<'a> PartialBackend<()> for TestBackend<'a> {
-        type Object = ();
-
         fn emit_item(&mut self, item: backend::Item<Self::Value>) {
             self.operations
                 .borrow_mut()
                 .push(TestOperation::EmitItem(item))
         }
-
-        fn into_object(self) -> Self::Object {}
 
         fn set_origin(&mut self, origin: Self::Value) {
             self.operations

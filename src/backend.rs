@@ -91,10 +91,7 @@ where
     S: Clone,
     Self: HasValue<S>,
 {
-    type Object;
-
     fn emit_item(&mut self, item: Item<Self::Value>);
-    fn into_object(self) -> Self::Object;
     fn set_origin(&mut self, origin: Self::Value);
 }
 
