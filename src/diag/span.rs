@@ -184,7 +184,7 @@ pub struct MacroDef<S> {
     pub body: Vec<S>,
 }
 
-pub struct RcContextFactory<B, R>(PhantomData<(B, R)>);
+pub struct RcContextFactory<B = BufId, R = BufRange>(PhantomData<(B, R)>);
 
 impl<B, R> RcContextFactory<B, R> {
     pub fn new() -> Self {

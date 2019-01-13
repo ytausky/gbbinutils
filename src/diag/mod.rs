@@ -63,6 +63,15 @@ pub(crate) struct DiagnosticsSystem<C, O> {
     pub output: O,
 }
 
+impl<'a> DiagnosticsSystem<RcContextFactory, OutputForwarder<'a>> {
+    pub fn new(codebase: &'a RefCell<TextCache>, output: &'a mut dyn FnMut(Diagnostic)) -> Self {
+        DiagnosticsSystem {
+            context: RcContextFactory::new(),
+            output: OutputForwarder { output, codebase },
+        }
+    }
+}
+
 impl<C, O> Span for DiagnosticsSystem<C, O>
 where
     C: ContextFactory,
