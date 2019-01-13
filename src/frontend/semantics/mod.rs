@@ -343,8 +343,8 @@ fn analyze_mnemonic<'a, F, B, D>(
 
 pub(crate) struct MacroDefActions<'a, F: Frontend<D>, B, D: Diagnostics> {
     name: Option<(Ident<F::StringRef>, D::Span)>,
-    params: Vec<(Ident<F::StringRef>, D::Span)>,
-    tokens: Vec<(SemanticToken<F::StringRef>, D::Span)>,
+    params: (Vec<Ident<F::StringRef>>, Vec<D::Span>),
+    tokens: (Vec<SemanticToken<F::StringRef>>, Vec<D::Span>),
     parent: SemanticActions<'a, F, B, D>,
 }
 
@@ -355,8 +355,8 @@ impl<'a, F: Frontend<D>, B, D: Diagnostics> MacroDefActions<'a, F, B, D> {
     ) -> MacroDefActions<'a, F, B, D> {
         MacroDefActions {
             name,
-            params: Vec::new(),
-            tokens: Vec::new(),
+            params: (Vec::new(), Vec::new()),
+            tokens: (Vec::new(), Vec::new()),
             parent,
         }
     }
@@ -385,8 +385,9 @@ where
     type MacroBodyContext = Self;
     type Parent = SemanticActions<'a, F, B, D>;
 
-    fn add_parameter(&mut self, param: (Self::Ident, D::Span)) {
-        self.params.push(param)
+    fn add_parameter(&mut self, (param, span): (Self::Ident, D::Span)) {
+        self.params.0.push(param);
+        self.params.1.push(span)
     }
 
     fn exit(self) -> Self::MacroBodyContext {
@@ -402,15 +403,16 @@ where
     type Token = SemanticToken<F::StringRef>;
     type Parent = SemanticActions<'a, F, B, D>;
 
-    fn push_token(&mut self, token: (Self::Token, D::Span)) {
-        self.tokens.push(token)
+    fn push_token(&mut self, (token, span): (Self::Token, D::Span)) {
+        self.tokens.0.push(token);
+        self.tokens.1.push(span)
     }
 
     fn exit(mut self) -> Self::Parent {
         if let Some(name) = self.name {
-            self.parent
-                .session
-                .define_macro(name, self.params, self.tokens)
+            let params = self.params.0.into_iter().zip(self.params.1).collect();
+            let tokens = self.tokens.0.into_iter().zip(self.tokens.1).collect();
+            self.parent.session.define_macro(name, params, tokens)
         }
         self.parent
     }
