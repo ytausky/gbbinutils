@@ -4,7 +4,7 @@ use crate::frontend::Ident;
 use crate::instruction::Instruction;
 use crate::program::NameId;
 use crate::span::Source;
-use std::collections::HashMap;
+use std::collections::hash_map::{Entry, HashMap};
 #[cfg(test)]
 use std::marker::PhantomData;
 
@@ -14,11 +14,25 @@ pub enum Width {
     Word,
 }
 
-pub type NameTable<M> = HashMap<String, Name<M>>;
+pub struct NameTable<M> {
+    table: HashMap<String, Name<M>>,
+}
 
 pub enum Name<M> {
     Macro(M),
     Symbol(NameId),
+}
+
+impl<M> NameTable<M> {
+    pub fn new() -> Self {
+        NameTable {
+            table: HashMap::new(),
+        }
+    }
+
+    pub fn entry(&mut self, name: String) -> Entry<String, Name<M>> {
+        self.table.entry(name)
+    }
 }
 
 pub struct LocationCounter;
