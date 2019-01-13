@@ -116,10 +116,10 @@ pub(crate) trait Frontend<D: Diagnostics> {
 
     fn define_macro(
         &mut self,
-        name: (Ident<Self::StringRef>, D::Span),
-        params: Vec<(Ident<Self::StringRef>, D::Span)>,
-        tokens: Vec<(SemanticToken<Self::StringRef>, D::Span)>,
-        diagnostics: &mut D,
+        name: Ident<Self::StringRef>,
+        params: Vec<Ident<Self::StringRef>>,
+        tokens: Vec<SemanticToken<Self::StringRef>>,
+        context: D::MacroDefId,
     );
 }
 
@@ -244,12 +244,12 @@ where
 
     fn define_macro(
         &mut self,
-        name: (Ident<Self::StringRef>, D::Span),
-        params: Vec<(Ident<Self::StringRef>, D::Span)>,
-        body: Vec<(SemanticToken<Self::StringRef>, D::Span)>,
-        diagnostics: &mut D,
+        name: Ident<Self::StringRef>,
+        params: Vec<Ident<Self::StringRef>>,
+        body: Vec<SemanticToken<Self::StringRef>>,
+        context: D::MacroDefId,
     ) {
-        self.macro_table.define(name, params, body, diagnostics);
+        self.macro_table.define(name, params, body, context);
     }
 }
 
@@ -402,7 +402,13 @@ mod tests {
         let log = TestLog::<()>::default();
         TestFixture::new(&log).when(|mut fixture| {
             let mut session = fixture.session();
-            session.define_macro((name.into(), ()), Vec::new(), add_code_refs(&tokens));
+            Frontend::<MockDiagnostics<()>>::define_macro(
+                session.frontend,
+                name.into(),
+                Vec::new(),
+                tokens.clone(),
+                0,
+            );
             session.invoke_macro((name.into(), ()), vec![])
         });
         assert_eq!(
@@ -423,14 +429,12 @@ mod tests {
             let name = "my_db";
             let param = "x";
             let mut session = fixture.session();
-            session.define_macro(
-                (name.into(), ()),
-                vec![(param.into(), ())],
-                vec![
-                    (db.clone(), ()),
-                    (Token::Ident(param.into()), ()),
-                    (literal0.clone(), ()),
-                ],
+            Frontend::<MockDiagnostics<()>>::define_macro(
+                session.frontend,
+                name.into(),
+                vec![param.into()],
+                vec![db.clone(), Token::Ident(param.into()), literal0.clone()],
+                0,
             );
             session.invoke_macro((name.into(), ()), vec![vec![(arg.clone(), ())]])
         });
@@ -453,10 +457,12 @@ mod tests {
             let name = "my_macro";
             let param = "x";
             let mut session = fixture.session();
-            session.define_macro(
-                (name.into(), ()),
-                vec![(param.into(), ())],
-                vec![(Token::Label(param.into()), ()), (nop.clone(), ())],
+            Frontend::<MockDiagnostics<()>>::define_macro(
+                session.frontend,
+                name.into(),
+                vec![param.into()],
+                vec![Token::Label(param.into()), nop.clone()],
+                0,
             );
             session.invoke_macro(
                 (name.into(), ()),

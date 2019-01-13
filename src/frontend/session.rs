@@ -29,23 +29,6 @@ impl<'a, F, B: ?Sized, N, D> Session<'a, F, B, N, D> {
     }
 }
 
-impl<'a, F, B, N, D> Session<'a, F, B, N, D>
-where
-    F: Frontend<D>,
-    B: ?Sized,
-    D: Diagnostics,
-{
-    pub fn define_macro(
-        &mut self,
-        name: (Ident<F::StringRef>, D::Span),
-        params: Vec<(Ident<F::StringRef>, D::Span)>,
-        tokens: Vec<(SemanticToken<F::StringRef>, D::Span)>,
-    ) {
-        self.frontend
-            .define_macro(name, params, tokens, &mut self.diagnostics)
-    }
-}
-
 impl<'a, F, B, D> Session<'a, F, B, NameTable<MacroEntry<F, D>>, D>
 where
     F: Frontend<D>,

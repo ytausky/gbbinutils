@@ -426,11 +426,17 @@ where
         self.tokens.1.push(span)
     }
 
-    fn exit(mut self) -> Self::Parent {
+    fn exit(self) -> Self::Parent {
         if let Some(name) = self.name {
-            let params = self.params.0.into_iter().zip(self.params.1).collect();
-            let tokens = self.tokens.0.into_iter().zip(self.tokens.1).collect();
-            self.parent.session.define_macro(name, params, tokens)
+            let context = self.parent.session.diagnostics.add_macro_def(
+                name.1.clone(),
+                self.params.1.clone(),
+                self.tokens.1.clone(),
+            );
+            self.parent
+                .session
+                .frontend
+                .define_macro(name.0, self.params.0, self.tokens.0, context)
         }
         self.parent
     }
@@ -738,18 +744,14 @@ mod tests {
 
         fn define_macro(
             &mut self,
-            name: (Ident<Self::StringRef>, ()),
-            params: Vec<(Ident<Self::StringRef>, ())>,
-            tokens: Vec<(SemanticToken<Self::StringRef>, ())>,
-            _diagnostics: &mut MockDiagnostics<'a>,
+            name: Ident<Self::StringRef>,
+            params: Vec<Ident<Self::StringRef>>,
+            tokens: Vec<SemanticToken<Self::StringRef>>,
+            _context: usize,
         ) {
             self.operations
                 .borrow_mut()
-                .push(TestOperation::DefineMacro(
-                    name.0.into(),
-                    params.into_iter().map(|(s, _)| s).collect(),
-                    tokens.into_iter().map(|(t, _)| t).collect(),
-                ))
+                .push(TestOperation::DefineMacro(name, params, tokens))
         }
     }
 
