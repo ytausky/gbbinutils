@@ -28,7 +28,7 @@ where
     ) -> Result<(), CodebaseError> {
         let mut file_parser =
             CodebaseAnalyzer::new(MacroExpander::new(), codebase, SemanticAnalysis);
-        let mut names = NameTable::new();
+        let mut names = HashMapNameTable::new();
         let mut session = Session::new(&mut file_parser, self, &mut names, diagnostics);
         session.analyze_file(name.into())?;
         Ok(())
@@ -83,8 +83,11 @@ where
     Self: Clone,
     Id: Into<String> + Clone + AsRef<str> + PartialEq,
 {
-    fn run<I, F, B, D>(&self, tokens: I, session: Session<F, B, NameTable<MacroEntry<F, D>>, D>)
-    where
+    fn run<I, F, B, D>(
+        &self,
+        tokens: I,
+        session: Session<F, B, HashMapNameTable<MacroEntry<F, D>>, D>,
+    ) where
         I: Iterator<Item = LexItem<Id, D::Span>>,
         F: Frontend<D, StringRef = Id>,
         B: Backend<Ident<Id>, D::Span, MacroEntry<F, D>> + ?Sized,
@@ -101,7 +104,7 @@ pub(crate) trait Frontend<D: Diagnostics> {
     fn analyze_file<B>(
         &mut self,
         path: Self::StringRef,
-        downstream: Downstream<B, NameTable<MacroEntry<Self, D>>, D>,
+        downstream: Downstream<B, HashMapNameTable<MacroEntry<Self, D>>, D>,
     ) -> Result<(), CodebaseError>
     where
         B: Backend<Ident<Self::StringRef>, D::Span, MacroEntry<Self, D>> + ?Sized;
@@ -110,7 +113,7 @@ pub(crate) trait Frontend<D: Diagnostics> {
         &mut self,
         name: (Ident<Self::StringRef>, D::Span),
         args: MacroArgs<Self::StringRef, D::Span>,
-        downstream: Downstream<B, NameTable<MacroEntry<Self, D>>, D>,
+        downstream: Downstream<B, HashMapNameTable<MacroEntry<Self, D>>, D>,
     ) where
         B: Backend<Ident<Self::StringRef>, D::Span, MacroEntry<Self, D>> + ?Sized;
 
@@ -130,7 +133,7 @@ where
     fn run<'a, I, F, B, D>(
         &self,
         tokens: I,
-        session: Session<'a, F, B, NameTable<MacroEntry<F, D>>, D>,
+        session: Session<'a, F, B, HashMapNameTable<MacroEntry<F, D>>, D>,
     ) where
         I: Iterator<Item = LexItem<Id, D::Span>>,
         F: Frontend<D, StringRef = Id>,
@@ -165,7 +168,7 @@ where
     fn analyze_token_seq<I, B, D>(
         &mut self,
         tokens: I,
-        downstream: &mut Downstream<B, NameTable<MacroEntry<Self, D>>, D>,
+        downstream: &mut Downstream<B, HashMapNameTable<MacroEntry<Self, D>>, D>,
     ) where
         I: IntoIterator<Item = LexItem<T::StringRef, D::Span>>,
         B: Backend<Ident<T::StringRef>, D::Span, MacroEntry<Self, D>> + ?Sized,
@@ -202,7 +205,7 @@ where
     fn analyze_file<B>(
         &mut self,
         path: Self::StringRef,
-        mut downstream: Downstream<B, NameTable<MacroEntry<Self, D>>, D>,
+        mut downstream: Downstream<B, HashMapNameTable<MacroEntry<Self, D>>, D>,
     ) -> Result<(), CodebaseError>
     where
         B: Backend<Ident<Self::StringRef>, D::Span, MacroEntry<Self, D>> + ?Sized,
@@ -220,7 +223,7 @@ where
         &mut self,
         (name, span): (Ident<Self::StringRef>, D::Span),
         args: MacroArgs<Self::StringRef, D::Span>,
-        mut downstream: Downstream<B, NameTable<MacroEntry<Self, D>>, D>,
+        mut downstream: Downstream<B, HashMapNameTable<MacroEntry<Self, D>>, D>,
     ) where
         B: Backend<Ident<Self::StringRef>, D::Span, MacroEntry<Self, D>> + ?Sized,
     {
@@ -328,7 +331,7 @@ impl<'a, C: BufContext> Iterator for TokenizedSrcIter<'a, C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::NameTable;
+    use crate::backend::HashMapNameTable;
     use crate::diag;
     use crate::diag::CompactDiagnostic;
     use crate::frontend::syntax::keyword::Mnemonic;
@@ -381,7 +384,7 @@ mod tests {
                 fixture.session().backend,
                 (label.into(), ()),
                 RelocAtom::LocationCounter.into(),
-                &mut NameTable::new(),
+                &mut HashMapNameTable::new(),
             )
         });
         assert_eq!(
@@ -552,7 +555,7 @@ mod tests {
         fn run<I, F, B, D>(
             &self,
             tokens: I,
-            _frontend: Session<F, B, NameTable<MacroEntry<F, D>>, D>,
+            _frontend: Session<F, B, HashMapNameTable<MacroEntry<F, D>>, D>,
         ) where
             I: Iterator<Item = LexItem<String, D::Span>>,
             F: Frontend<D, StringRef = String>,
@@ -568,7 +571,7 @@ mod tests {
     impl<'a, 'b, M: 'b, S: Clone> BuildValue<'b, Ident<String>, M, S> for Mock<'a, S> {
         type Builder = IndependentValueBuilder<'b, S, M>;
 
-        fn build_value(&'b mut self, names: &'b mut NameTable<M>) -> Self::Builder {
+        fn build_value(&'b mut self, names: &'b mut HashMapNameTable<M>) -> Self::Builder {
             IndependentValueBuilder::new(names)
         }
     }
@@ -592,7 +595,7 @@ mod tests {
             &mut self,
             symbol: (Ident<String>, S),
             value: Self::Value,
-            _: &mut NameTable<M>,
+            _: &mut HashMapNameTable<M>,
         ) {
             self.log
                 .borrow_mut()
@@ -668,7 +671,7 @@ mod tests {
                     self.analysis,
                 ),
                 object: self.object,
-                names: NameTable::new(),
+                names: HashMapNameTable::new(),
                 diagnostics: self.diagnostics,
             };
             f(prepared);
@@ -679,7 +682,7 @@ mod tests {
         CodebaseAnalyzer<'r, MacroExpander<String, usize>, MockTokenSource<S>, Mock<'a, S>>;
 
     type TestNameTable<'a, 'b, S> =
-        NameTable<MacroEntry<TestCodebaseAnalyzer<'a, 'b, S>, MockDiagnostics<'a, S>>>;
+        HashMapNameTable<MacroEntry<TestCodebaseAnalyzer<'a, 'b, S>, MockDiagnostics<'a, S>>>;
 
     type TestSession<'a, 'b, 'r, S> = Session<
         'r,

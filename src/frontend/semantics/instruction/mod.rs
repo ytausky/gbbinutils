@@ -889,13 +889,13 @@ mod tests {
     where
         I: IntoIterator<Item = Input>,
     {
-        use crate::backend::{NameTable, RelocExprBuilder};
+        use crate::backend::{HashMapNameTable, RelocExprBuilder};
         let mut collector = DiagnosticsCollector(Vec::new());
         let result = analyze_instruction(
             (mnemonic, TokenId::Mnemonic.into()),
             operands.into_iter().enumerate().map(add_token_spans),
             ValueContext::new(
-                &mut RelocExprBuilder::<_, ()>::new(&mut NameTable::new()),
+                &mut RelocExprBuilder::<_, ()>::new(&mut HashMapNameTable::new()),
                 &mut collector,
             ),
         );

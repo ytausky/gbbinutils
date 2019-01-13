@@ -207,7 +207,7 @@ impl<I: Iterator> Iterator for OperandCounter<I> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::{IndependentValueBuilder, NameTable, RelocAtom, RelocExpr};
+    use crate::backend::{HashMapNameTable, IndependentValueBuilder, RelocAtom, RelocExpr};
     use crate::diag::span::MergeSpans;
     use crate::frontend::semantics::DiagnosticsCollector;
 
@@ -260,7 +260,7 @@ mod tests {
             expr,
             context,
             &mut ValueContext::new(
-                &mut IndependentValueBuilder::<_, ()>::new(&mut NameTable::new()),
+                &mut IndependentValueBuilder::<_, ()>::new(&mut HashMapNameTable::new()),
                 &mut collector,
             ),
         );

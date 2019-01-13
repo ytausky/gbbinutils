@@ -1,4 +1,4 @@
-use crate::backend::{self, Backend, LocationCounter, NameTable, ToValue, ValueBuilder};
+use crate::backend::{self, Backend, HashMapNameTable, LocationCounter, ToValue, ValueBuilder};
 use crate::diag::span::{MergeSpans, Source, StripSpan};
 use crate::diag::*;
 use crate::expr::ExprVariant;
@@ -44,7 +44,7 @@ mod expr {
 use self::expr::*;
 
 pub(crate) struct SemanticActions<'a, F: Frontend<D>, B: ?Sized, D: Diagnostics> {
-    session: Session<'a, F, B, NameTable<MacroEntry<F, D>>, D>,
+    session: Session<'a, F, B, HashMapNameTable<MacroEntry<F, D>>, D>,
     label: Option<(Ident<F::StringRef>, D::Span)>,
 }
 
@@ -55,7 +55,7 @@ where
     D: Diagnostics,
 {
     pub fn new(
-        session: Session<'a, F, B, NameTable<MacroEntry<F, D>>, D>,
+        session: Session<'a, F, B, HashMapNameTable<MacroEntry<F, D>>, D>,
     ) -> SemanticActions<'a, F, B, D> {
         SemanticActions {
             session,
@@ -704,7 +704,7 @@ mod tests {
             path: Self::StringRef,
             _downstream: Downstream<
                 B,
-                NameTable<MacroEntry<Self, MockDiagnostics<'a>>>,
+                HashMapNameTable<MacroEntry<Self, MockDiagnostics<'a>>>,
                 MockDiagnostics<'a>,
             >,
         ) -> Result<(), CodebaseError>
@@ -726,7 +726,7 @@ mod tests {
             args: MacroArgs<Self::StringRef, ()>,
             _downstream: Downstream<
                 B,
-                NameTable<MacroEntry<Self, MockDiagnostics<'a>>>,
+                HashMapNameTable<MacroEntry<Self, MockDiagnostics<'a>>>,
                 MockDiagnostics<'a>,
             >,
         ) where
@@ -772,7 +772,7 @@ mod tests {
     impl<'a, 'b, M: 'b> BuildValue<'b, Ident<String>, M, ()> for TestBackend<'a> {
         type Builder = IndependentValueBuilder<'b, (), M>;
 
-        fn build_value(&mut self, names: &'b mut NameTable<M>) -> Self::Builder {
+        fn build_value(&mut self, names: &'b mut HashMapNameTable<M>) -> Self::Builder {
             IndependentValueBuilder::new(names)
         }
     }
@@ -796,7 +796,7 @@ mod tests {
             &mut self,
             symbol: (Ident<String>, ()),
             value: Self::Value,
-            _: &mut NameTable<M>,
+            _: &mut HashMapNameTable<M>,
         ) {
             self.operations
                 .borrow_mut()
@@ -1079,7 +1079,7 @@ mod tests {
         let operations = RefCell::new(Vec::new());
         let mut frontend = TestFrontend::new(&operations);
         let mut backend = TestBackend::new(&operations);
-        let mut names = NameTable::new();
+        let mut names = HashMapNameTable::new();
         let mut diagnostics = MockDiagnostics::new(&operations);
         let session = Session::new(&mut frontend, &mut backend, &mut names, &mut diagnostics);
         f(SemanticActions::new(session));

@@ -205,7 +205,7 @@ fn single_arg<T, D: DownstreamDiagnostics<S>, S>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::{NameTable, RelocAtom, RelocExpr};
+    use crate::backend::{HashMapNameTable, RelocAtom, RelocExpr};
     use crate::codebase::CodebaseError;
     use crate::diag;
     use crate::frontend::semantics;
@@ -359,7 +359,7 @@ mod tests {
         let mut frontend = TestFrontend::new(&operations);
         frontend.fail(CodebaseError::Utf8Error);
         let mut backend = TestBackend::new(&operations);
-        let mut names = NameTable::new();
+        let mut names = HashMapNameTable::new();
         let mut diagnostics = MockDiagnostics::new(&operations);
         let session = Session::new(&mut frontend, &mut backend, &mut names, &mut diagnostics);
         {
@@ -391,7 +391,7 @@ mod tests {
             message,
         )));
         let mut backend = TestBackend::new(&operations);
-        let mut names = NameTable::new();
+        let mut names = HashMapNameTable::new();
         let mut diagnostics = MockDiagnostics::new(&operations);
         let session = Session::new(&mut frontend, &mut backend, &mut names, &mut diagnostics);
         {

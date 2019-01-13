@@ -14,7 +14,7 @@ pub enum Width {
     Word,
 }
 
-pub struct NameTable<M> {
+pub struct HashMapNameTable<M> {
     table: HashMap<String, Name<M>>,
 }
 
@@ -23,9 +23,9 @@ pub enum Name<M> {
     Symbol(NameId),
 }
 
-impl<M> NameTable<M> {
+impl<M> HashMapNameTable<M> {
     pub fn new() -> Self {
-        NameTable {
+        HashMapNameTable {
             table: HashMap::new(),
         }
     }
@@ -46,7 +46,7 @@ where
     Self: HasValue<S>,
 {
     type Builder: ValueBuilder<I, S, Value = Self::Value>;
-    fn build_value(&'a mut self, names: &'a mut NameTable<M>) -> Self::Builder;
+    fn build_value(&'a mut self, names: &'a mut HashMapNameTable<M>) -> Self::Builder;
 }
 
 pub trait ValueBuilder<I, S: Clone>
@@ -101,7 +101,12 @@ where
     Self: PartialBackend<S>,
     for<'a> Self: BuildValue<'a, I, M, S>,
 {
-    fn define_symbol(&mut self, symbol: (I, S), value: Self::Value, names: &mut NameTable<M>);
+    fn define_symbol(
+        &mut self,
+        symbol: (I, S),
+        value: Self::Value,
+        names: &mut HashMapNameTable<M>,
+    );
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -171,14 +176,14 @@ pub struct Rom {
     pub data: Box<[u8]>,
 }
 
-pub struct RelocExprBuilder<'a, T, M>(pub T, pub &'a mut NameTable<M>);
+pub struct RelocExprBuilder<'a, T, M>(pub T, pub &'a mut HashMapNameTable<M>);
 
 #[cfg(test)]
 pub type IndependentValueBuilder<'a, S, M> = RelocExprBuilder<'a, PhantomData<S>, M>;
 
 #[cfg(test)]
 impl<'a, S, M> IndependentValueBuilder<'a, S, M> {
-    pub fn new(names: &'a mut NameTable<M>) -> Self {
+    pub fn new(names: &'a mut HashMapNameTable<M>) -> Self {
         RelocExprBuilder(PhantomData, names)
     }
 }

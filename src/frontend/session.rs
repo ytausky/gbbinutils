@@ -1,4 +1,4 @@
-use crate::backend::{Backend, NameTable};
+use crate::backend::{Backend, HashMapNameTable};
 use crate::codebase::CodebaseError;
 use crate::diag::{DelegateDiagnostics, Diagnostics, DownstreamDiagnostics};
 use crate::frontend::macros::MacroEntry;
@@ -29,7 +29,7 @@ impl<'a, F, B: ?Sized, N, D> Session<'a, F, B, N, D> {
     }
 }
 
-impl<'a, F, B, D> Session<'a, F, B, NameTable<MacroEntry<F, D>>, D>
+impl<'a, F, B, D> Session<'a, F, B, HashMapNameTable<MacroEntry<F, D>>, D>
 where
     F: Frontend<D>,
     B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>> + ?Sized,
@@ -57,7 +57,7 @@ impl<'a, F, B, N, D: DownstreamDiagnostics<S>, S> DelegateDiagnostics<S>
     }
 }
 
-impl<'a, F, B, D> Session<'a, F, B, NameTable<MacroEntry<F, D>>, D>
+impl<'a, F, B, D> Session<'a, F, B, HashMapNameTable<MacroEntry<F, D>>, D>
 where
     F: Frontend<D>,
     B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>> + ?Sized,
