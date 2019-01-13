@@ -15,25 +15,34 @@ use std::rc::Rc;
 
 pub use crate::frontend::syntax::Token;
 
-pub(crate) fn analyze_file<'a, C, B, D>(
-    name: String,
-    codebase: &'a C,
-    backend: &mut B,
-    diagnostics: &mut D,
-) -> Result<(), CodebaseError>
+pub(crate) trait Assemble<D>
 where
-    C: Codebase,
-    B: Backend<Ident<String>, D::Span, MacroTableEntry<D::MacroDefId, Rc<MacroDefData<String>>>>,
     D: Diagnostics,
+    Self: Backend<Ident<String>, D::Span, MacroTableEntry<D::MacroDefId, Rc<MacroDefData<String>>>>,
 {
-    let mut file_parser = CodebaseAnalyzer::new(MacroExpander::new(), codebase, SemanticAnalysis);
-    let mut names = NameTable::new();
-    let mut session = Session::new(&mut file_parser, backend, &mut names, diagnostics);
-    session.analyze_file(name)?;
-    Ok(())
+    fn assemble<C: Codebase>(
+        &mut self,
+        name: &str,
+        codebase: &C,
+        diagnostics: &mut D,
+    ) -> Result<(), CodebaseError> {
+        let mut file_parser =
+            CodebaseAnalyzer::new(MacroExpander::new(), codebase, SemanticAnalysis);
+        let mut names = NameTable::new();
+        let mut session = Session::new(&mut file_parser, self, &mut names, diagnostics);
+        session.analyze_file(name.into())?;
+        Ok(())
+    }
 }
 
-pub struct Downstream<'a, B: 'a, N: 'a, D: 'a> {
+impl<B, D> Assemble<D> for B
+where
+    D: Diagnostics,
+    B: Backend<Ident<String>, D::Span, MacroTableEntry<D::MacroDefId, Rc<MacroDefData<String>>>>,
+{
+}
+
+pub struct Downstream<'a, B: ?Sized + 'a, N: 'a, D: 'a> {
     backend: &'a mut B,
     names: &'a mut N,
     diagnostics: &'a mut D,
@@ -78,7 +87,7 @@ where
     where
         I: Iterator<Item = LexItem<Id, D::Span>>,
         F: Frontend<D, StringRef = Id>,
-        B: Backend<Ident<Id>, D::Span, MacroEntry<F, D>>,
+        B: Backend<Ident<Id>, D::Span, MacroEntry<F, D>> + ?Sized,
         D: Diagnostics;
 }
 
@@ -95,7 +104,7 @@ pub(crate) trait Frontend<D: Diagnostics> {
         downstream: Downstream<B, NameTable<MacroEntry<Self, D>>, D>,
     ) -> Result<(), CodebaseError>
     where
-        B: Backend<Ident<Self::StringRef>, D::Span, MacroEntry<Self, D>>;
+        B: Backend<Ident<Self::StringRef>, D::Span, MacroEntry<Self, D>> + ?Sized;
 
     fn invoke_macro<B>(
         &mut self,
@@ -103,7 +112,7 @@ pub(crate) trait Frontend<D: Diagnostics> {
         args: MacroArgs<Self::StringRef, D::Span>,
         downstream: Downstream<B, NameTable<MacroEntry<Self, D>>, D>,
     ) where
-        B: Backend<Ident<Self::StringRef>, D::Span, MacroEntry<Self, D>>;
+        B: Backend<Ident<Self::StringRef>, D::Span, MacroEntry<Self, D>> + ?Sized;
 
     fn define_macro(
         &mut self,
@@ -125,7 +134,7 @@ where
     ) where
         I: Iterator<Item = LexItem<Id, D::Span>>,
         F: Frontend<D, StringRef = Id>,
-        B: Backend<Ident<Id>, D::Span, MacroEntry<F, D>>,
+        B: Backend<Ident<Id>, D::Span, MacroEntry<F, D>> + ?Sized,
         D: Diagnostics,
     {
         let actions = semantics::SemanticActions::new(session);
@@ -159,7 +168,7 @@ where
         downstream: &mut Downstream<B, NameTable<MacroEntry<Self, D>>, D>,
     ) where
         I: IntoIterator<Item = LexItem<T::StringRef, D::Span>>,
-        B: Backend<Ident<T::StringRef>, D::Span, MacroEntry<Self, D>>,
+        B: Backend<Ident<T::StringRef>, D::Span, MacroEntry<Self, D>> + ?Sized,
         D: Diagnostics<MacroDefId = M::MacroDefId>,
         T: Tokenize<D::BufContext>,
         M::Entry: Expand<T::StringRef, D, D::Span>,
@@ -196,7 +205,7 @@ where
         mut downstream: Downstream<B, NameTable<MacroEntry<Self, D>>, D>,
     ) -> Result<(), CodebaseError>
     where
-        B: Backend<Ident<Self::StringRef>, D::Span, MacroEntry<Self, D>>,
+        B: Backend<Ident<Self::StringRef>, D::Span, MacroEntry<Self, D>> + ?Sized,
     {
         let tokenized_src = {
             self.codebase.tokenize_file(path.as_ref(), |buf_id| {
@@ -213,7 +222,7 @@ where
         args: MacroArgs<Self::StringRef, D::Span>,
         mut downstream: Downstream<B, NameTable<MacroEntry<Self, D>>, D>,
     ) where
-        B: Backend<Ident<Self::StringRef>, D::Span, MacroEntry<Self, D>>,
+        B: Backend<Ident<Self::StringRef>, D::Span, MacroEntry<Self, D>> + ?Sized,
     {
         let expansion = match self.macro_table.get(&name) {
             Some(entry) => Some(entry.expand(span, args, downstream.diagnostics)),
@@ -541,7 +550,7 @@ mod tests {
         ) where
             I: Iterator<Item = LexItem<String, D::Span>>,
             F: Frontend<D, StringRef = String>,
-            B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>>,
+            B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>> + ?Sized,
             D: Diagnostics,
         {
             self.log.borrow_mut().push(TestEvent::AnalyzeTokens(

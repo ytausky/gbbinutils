@@ -16,7 +16,7 @@ pub(super) fn analyze_directive<'a, 'b, F, B, D>(
 ) where
     'a: 'b,
     F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>>,
+    B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>> + ?Sized,
     D: Diagnostics,
 {
     let context = DirectiveContext {
@@ -51,7 +51,7 @@ impl<'a, 'b, F, B, D> DirectiveContext<'b, SemanticActions<'a, F, B, D>, F::Stri
 where
     'a: 'b,
     F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>>,
+    B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>> + ?Sized,
     D: Diagnostics,
 {
     fn analyze(self, directive: Directive) {

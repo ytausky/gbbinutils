@@ -6,14 +6,14 @@ use crate::frontend::{Downstream, Frontend, Ident, SemanticToken};
 
 pub(super) type MacroArgs<I, S> = Vec<Vec<(SemanticToken<I>, S)>>;
 
-pub(crate) struct Session<'a, F, B, N, D> {
+pub(crate) struct Session<'a, F, B: ?Sized, N, D> {
     pub frontend: &'a mut F,
     pub backend: &'a mut B,
     pub names: &'a mut N,
     pub diagnostics: &'a mut D,
 }
 
-impl<'a, F, B, N, D> Session<'a, F, B, N, D> {
+impl<'a, F, B: ?Sized, N, D> Session<'a, F, B, N, D> {
     pub fn new(
         frontend: &'a mut F,
         backend: &'a mut B,
@@ -32,6 +32,7 @@ impl<'a, F, B, N, D> Session<'a, F, B, N, D> {
 impl<'a, F, B, N, D> Session<'a, F, B, N, D>
 where
     F: Frontend<D>,
+    B: ?Sized,
     D: Diagnostics,
 {
     pub fn define_macro(
@@ -48,7 +49,7 @@ where
 impl<'a, F, B, D> Session<'a, F, B, NameTable<MacroEntry<F, D>>, D>
 where
     F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>>,
+    B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>> + ?Sized,
     D: Diagnostics,
 {
     pub fn analyze_file(&mut self, path: F::StringRef) -> Result<(), CodebaseError> {
@@ -76,7 +77,7 @@ impl<'a, F, B, N, D: DownstreamDiagnostics<S>, S> DelegateDiagnostics<S>
 impl<'a, F, B, D> Session<'a, F, B, NameTable<MacroEntry<F, D>>, D>
 where
     F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>>,
+    B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>> + ?Sized,
     D: Diagnostics,
 {
     pub fn invoke_macro(

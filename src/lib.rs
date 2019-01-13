@@ -7,6 +7,7 @@ pub use crate::backend::Rom;
 
 use crate::codebase::{CodebaseError, StdFileSystem};
 use crate::diag::*;
+use crate::frontend::Assemble;
 
 mod backend;
 mod codebase;
@@ -82,7 +83,7 @@ fn try_assemble(
         },
     };
     let mut builder = program::ProgramBuilder::new();
-    frontend::analyze_file(name.to_string(), &codebase, &mut builder, &mut diagnostics)?;
+    builder.assemble(name, &codebase, &mut diagnostics)?;
     let object = builder.into_object();
     Ok(object.link(&mut diagnostics).into_rom())
 }
