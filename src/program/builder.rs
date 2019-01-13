@@ -1,6 +1,7 @@
 use super::{Chunk, NameId, Node, Program, RelocExpr, Value};
 use crate::backend::{
-    Backend, BuildValue, HasValue, Item, Name, NameTable, RelocAtom, RelocExprBuilder, ToValue,
+    Backend, BuildValue, HasValue, Item, Name, NameTable, PartialBackend, RelocAtom,
+    RelocExprBuilder, ToValue,
 };
 use crate::frontend::Ident;
 
@@ -26,11 +27,12 @@ impl<SR> ProgramBuilder<SR> {
         self.current_chunk().items.push(node)
     }
 
-    fn lookup(&mut self, name: String, table: &mut NameTable) -> NameId {
+    fn lookup<M>(&mut self, name: String, table: &mut NameTable<M>) -> NameId {
         match table
             .entry(name)
             .or_insert_with(|| Name::Symbol(self.program.symbols.new_name()))
         {
+            Name::Macro(_) => unimplemented!(),
             Name::Symbol(id) => *id,
         }
     }
@@ -53,19 +55,8 @@ impl<SR> ProgramBuilder<SR> {
     }
 }
 
-impl<S: Clone + 'static> Backend<Ident<String>, S> for ProgramBuilder<S> {
+impl<S: Clone> PartialBackend<S> for ProgramBuilder<S> {
     type Object = Program<S>;
-
-    fn define_symbol(
-        &mut self,
-        (ident, span): (Ident<String>, S),
-        value: Self::Value,
-        table: &mut NameTable,
-    ) {
-        let name_id = self.lookup(ident.name, table);
-        self.program.symbols.define_name(name_id, Value::Unknown);
-        self.push(Node::Symbol((name_id, span), value))
-    }
 
     fn emit_item(&mut self, item: Item<Self::Value>) {
         use super::lowering::Lower;
@@ -83,11 +74,26 @@ impl<S: Clone + 'static> Backend<Ident<String>, S> for ProgramBuilder<S> {
     }
 }
 
-impl<'a, S: Clone> HasValue<S> for RelocExprBuilder<'a, &'a mut ProgramBuilder<S>> {
+impl<S: Clone + 'static, M: 'static> Backend<Ident<String>, S, M> for ProgramBuilder<S> {
+    fn define_symbol(
+        &mut self,
+        (ident, span): (Ident<String>, S),
+        value: Self::Value,
+        table: &mut NameTable<M>,
+    ) {
+        let name_id = self.lookup(ident.name, table);
+        self.program.symbols.define_name(name_id, Value::Unknown);
+        self.push(Node::Symbol((name_id, span), value))
+    }
+}
+
+impl<'a, M, S: Clone> HasValue<S> for RelocExprBuilder<'a, &'a mut ProgramBuilder<S>, M> {
     type Value = RelocExpr<S>;
 }
 
-impl<'a, S: Clone> ToValue<Ident<String>, S> for RelocExprBuilder<'a, &'a mut ProgramBuilder<S>> {
+impl<'a, M, S: Clone> ToValue<Ident<String>, S>
+    for RelocExprBuilder<'a, &'a mut ProgramBuilder<S>, M>
+{
     fn to_value(&mut self, (ident, span): (Ident<String>, S)) -> Self::Value {
         RelocExpr::from_atom(RelocAtom::Symbol(self.0.lookup(ident.name, self.1)), span)
     }
@@ -97,10 +103,10 @@ impl<S: Clone> HasValue<S> for ProgramBuilder<S> {
     type Value = RelocExpr<S>;
 }
 
-impl<'a, S: Clone + 'static> BuildValue<'a, Ident<String>, S> for ProgramBuilder<S> {
-    type Builder = RelocExprBuilder<'a, &'a mut Self>;
+impl<'a, M: 'a, S: Clone + 'static> BuildValue<'a, Ident<String>, M, S> for ProgramBuilder<S> {
+    type Builder = RelocExprBuilder<'a, &'a mut Self, M>;
 
-    fn build_value(&'a mut self, table: &'a mut NameTable) -> Self::Builder {
+    fn build_value(&'a mut self, table: &'a mut NameTable<M>) -> Self::Builder {
         RelocExprBuilder(self, table)
     }
 }
@@ -115,6 +121,8 @@ mod tests {
     use crate::expr::BinaryOperator;
     use crate::instruction::{Instruction, Nullary};
     use std::borrow::Borrow;
+
+    type NameTable = super::NameTable<()>;
 
     #[test]
     fn new_object_has_no_chunks() {

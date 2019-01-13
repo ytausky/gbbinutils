@@ -1,5 +1,5 @@
-use super::{Ident, SemanticToken, Token};
-use crate::span::{MacroContextFactory, MacroExpansionContext};
+use super::{Frontend, Ident, SemanticToken, Token};
+use crate::diag::span::{MacroContextFactory, MacroExpansionContext, Span};
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::rc::Rc;
@@ -94,6 +94,11 @@ where
         self.macro_defs.get(&ident.name)
     }
 }
+
+pub(crate) type MacroEntry<F, D> = MacroTableEntry<
+    <D as MacroContextFactory<<D as Span>::Span>>::MacroDefId,
+    Rc<MacroDefData<<F as Frontend<D>>::StringRef>>,
+>;
 
 impl<I, F, S> Expand<I, F, S> for MacroTableEntry<F::MacroDefId, Rc<MacroDefData<I>>>
 where

@@ -2,6 +2,7 @@ use crate::backend::{self, Backend, LocationCounter, NameTable, ToValue, ValueBu
 use crate::diag::span::{MergeSpans, Source, StripSpan};
 use crate::diag::*;
 use crate::expr::ExprVariant;
+use crate::frontend::macros::MacroEntry;
 use crate::frontend::session::Session;
 use crate::frontend::syntax::{self, keyword::*, ExprAtom, Operator, UnaryOperator};
 use crate::frontend::{Frontend, Ident, Literal, SemanticToken};
@@ -43,17 +44,19 @@ mod expr {
 use self::expr::*;
 
 pub(crate) struct SemanticActions<'a, F: Frontend<D>, B, D: Diagnostics> {
-    session: Session<'a, F, B, NameTable, D>,
+    session: Session<'a, F, B, NameTable<MacroEntry<F, D>>, D>,
     label: Option<(Ident<F::StringRef>, D::Span)>,
 }
 
 impl<'a, F, B, D> SemanticActions<'a, F, B, D>
 where
     F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span>,
+    B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>>,
     D: Diagnostics,
 {
-    pub fn new(session: Session<'a, F, B, NameTable, D>) -> SemanticActions<'a, F, B, D> {
+    pub fn new(
+        session: Session<'a, F, B, NameTable<MacroEntry<F, D>>, D>,
+    ) -> SemanticActions<'a, F, B, D> {
         SemanticActions {
             session,
             label: None,
@@ -92,7 +95,7 @@ impl<'a, F, B, D> syntax::FileContext<Ident<F::StringRef>, Literal<F::StringRef>
     for SemanticActions<'a, F, B, D>
 where
     F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span>,
+    B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>>,
     D: Diagnostics,
 {
     type StmtContext = Self;
@@ -107,7 +110,7 @@ impl<'a, F, B, D> syntax::StmtContext<Ident<F::StringRef>, Literal<F::StringRef>
     for SemanticActions<'a, F, B, D>
 where
     F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span>,
+    B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>>,
     D: Diagnostics,
 {
     type CommandContext = CommandActions<'a, F, B, D>;
@@ -204,7 +207,7 @@ where
 impl<'a, F, B, D> syntax::CommandContext<D::Span> for CommandActions<'a, F, B, D>
 where
     F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span>,
+    B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>>,
     D: Diagnostics,
 {
     type Ident = Ident<F::StringRef>;
@@ -319,7 +322,7 @@ fn analyze_mnemonic<'a, F, B, D>(
     actions: &mut SemanticActions<'a, F, B, D>,
 ) where
     F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span>,
+    B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>>,
     D: Diagnostics,
 {
     let result = instruction::analyze_instruction(
@@ -451,7 +454,7 @@ where
 impl<'a, F, B, D> syntax::MacroInvocationContext<D::Span> for MacroInvocationActions<'a, F, B, D>
 where
     F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span>,
+    B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>>,
     D: Diagnostics,
 {
     type Token = SemanticToken<F::StringRef>;
@@ -631,7 +634,7 @@ mod tests {
     use super::*;
 
     use crate::backend::{
-        BuildValue, HasValue, IndependentValueBuilder, RelocAtom, RelocExpr, Width,
+        BuildValue, HasValue, IndependentValueBuilder, PartialBackend, RelocAtom, RelocExpr, Width,
     };
     use crate::codebase::{BufId, BufRange, CodebaseError};
     use crate::diag::{CompactDiagnostic, Message};
@@ -670,10 +673,14 @@ mod tests {
         fn analyze_file<B>(
             &mut self,
             path: Self::StringRef,
-            _downstream: Downstream<B, NameTable, TestDiagnostics<'a>>,
+            _downstream: Downstream<
+                B,
+                NameTable<MacroEntry<Self, TestDiagnostics<'a>>>,
+                TestDiagnostics<'a>,
+            >,
         ) -> Result<(), CodebaseError>
         where
-            B: Backend<Ident<String>, ()>,
+            B: Backend<Ident<String>, (), MacroEntry<Self, TestDiagnostics<'a>>>,
         {
             self.operations
                 .borrow_mut()
@@ -688,9 +695,13 @@ mod tests {
             &mut self,
             name: (Ident<Self::StringRef>, ()),
             args: MacroArgs<Self::StringRef, ()>,
-            _downstream: Downstream<B, NameTable, TestDiagnostics<'a>>,
+            _downstream: Downstream<
+                B,
+                NameTable<MacroEntry<Self, TestDiagnostics<'a>>>,
+                TestDiagnostics<'a>,
+            >,
         ) where
-            B: Backend<Ident<String>, ()>,
+            B: Backend<Ident<String>, (), MacroEntry<Self, TestDiagnostics<'a>>>,
         {
             self.operations
                 .borrow_mut()
@@ -733,27 +744,16 @@ mod tests {
         type Value = RelocExpr<Ident<String>, ()>;
     }
 
-    impl<'a, 'b> BuildValue<'b, Ident<String>, ()> for TestBackend<'a> {
-        type Builder = IndependentValueBuilder<'b, ()>;
+    impl<'a, 'b, M: 'b> BuildValue<'b, Ident<String>, M, ()> for TestBackend<'a> {
+        type Builder = IndependentValueBuilder<'b, (), M>;
 
-        fn build_value(&mut self, names: &'b mut NameTable) -> Self::Builder {
+        fn build_value(&mut self, names: &'b mut NameTable<M>) -> Self::Builder {
             IndependentValueBuilder::new(names)
         }
     }
 
-    impl<'a> Backend<Ident<String>, ()> for TestBackend<'a> {
+    impl<'a> PartialBackend<()> for TestBackend<'a> {
         type Object = ();
-
-        fn define_symbol(
-            &mut self,
-            symbol: (Ident<String>, ()),
-            value: Self::Value,
-            _: &mut NameTable,
-        ) {
-            self.operations
-                .borrow_mut()
-                .push(TestOperation::DefineSymbol(symbol.0, value))
-        }
 
         fn emit_item(&mut self, item: backend::Item<Self::Value>) {
             self.operations
@@ -767,6 +767,19 @@ mod tests {
             self.operations
                 .borrow_mut()
                 .push(TestOperation::SetOrigin(origin))
+        }
+    }
+
+    impl<'a, M: 'static> Backend<Ident<String>, (), M> for TestBackend<'a> {
+        fn define_symbol(
+            &mut self,
+            symbol: (Ident<String>, ()),
+            value: Self::Value,
+            _: &mut NameTable<M>,
+        ) {
+            self.operations
+                .borrow_mut()
+                .push(TestOperation::DefineSymbol(symbol.0, value))
         }
     }
 
