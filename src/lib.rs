@@ -75,11 +75,11 @@ fn try_assemble(
     output: &mut dyn FnMut(diag::Diagnostic),
 ) -> Result<Rom, CodebaseError> {
     let codebase = codebase::FileCodebase::new(input);
-    let mut diagnostics = DiagnosticsSystem::new(&codebase.cache, output);
+    let diagnostics = &mut DiagnosticsSystem::new(&codebase.cache, output);
     let mut builder = program::ProgramBuilder::new();
-    builder.assemble(name, &codebase, &mut diagnostics)?;
+    builder.assemble(name, &codebase, diagnostics)?;
     let object = builder.into_object();
-    Ok(object.link(&mut diagnostics).into_rom())
+    Ok(object.link(diagnostics).into_rom())
 }
 
 #[cfg(test)]
