@@ -207,8 +207,9 @@ mod tests {
     use super::*;
     use crate::backend::{NameTable, RelocAtom, RelocExpr};
     use crate::codebase::CodebaseError;
+    use crate::diag;
     use crate::frontend::semantics;
-    use crate::frontend::semantics::tests::*;
+    use crate::frontend::semantics::tests::{MockDiagnostics, *};
     use crate::frontend::session::Session;
     use crate::frontend::syntax::keyword::{Command, Operand};
     use crate::frontend::syntax::{
@@ -301,10 +302,11 @@ mod tests {
             ds(|arg| arg.push_atom((ExprAtom::Literal(Literal::Operand(Operand::A)), ())));
         assert_eq!(
             actions,
-            [TestOperation::EmitDiagnostic(CompactDiagnostic::new(
+            [diag::Event::EmitDiagnostic(CompactDiagnostic::new(
                 Message::KeywordInExpr { keyword: () },
                 (),
-            ))]
+            ))
+            .into()]
         )
     }
 
@@ -328,10 +330,10 @@ mod tests {
         let actions = unary_directive(Directive::Include, |arg| arg.push_atom(mk_literal(7)));
         assert_eq!(
             actions,
-            [TestOperation::EmitDiagnostic(CompactDiagnostic::new(
-                Message::ExpectedString,
-                (),
-            ))]
+            [
+                diag::Event::EmitDiagnostic(CompactDiagnostic::new(Message::ExpectedString, (),))
+                    .into()
+            ]
         )
     }
 
@@ -342,10 +344,11 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [TestOperation::EmitDiagnostic(CompactDiagnostic::new(
+            [diag::Event::EmitDiagnostic(CompactDiagnostic::new(
                 Message::KeywordInExpr { keyword: () },
                 (),
-            ))]
+            ))
+            .into()]
         )
     }
 
@@ -357,7 +360,7 @@ mod tests {
         frontend.fail(CodebaseError::Utf8Error);
         let mut backend = TestBackend::new(&operations);
         let mut names = NameTable::new();
-        let mut diagnostics = TestDiagnostics::new(&operations);
+        let mut diagnostics = MockDiagnostics::new(&operations);
         let session = Session::new(&mut frontend, &mut backend, &mut names, &mut diagnostics);
         {
             let mut context = SemanticActions::new(session)
@@ -371,7 +374,8 @@ mod tests {
             operations.into_inner(),
             [
                 TestOperation::AnalyzeFile(name.into()),
-                TestOperation::EmitDiagnostic(CompactDiagnostic::new(Message::InvalidUtf8, ()))
+                diag::Event::EmitDiagnostic(CompactDiagnostic::new(Message::InvalidUtf8, ()))
+                    .into()
             ]
         )
     }
@@ -388,7 +392,7 @@ mod tests {
         )));
         let mut backend = TestBackend::new(&operations);
         let mut names = NameTable::new();
-        let mut diagnostics = TestDiagnostics::new(&operations);
+        let mut diagnostics = MockDiagnostics::new(&operations);
         let session = Session::new(&mut frontend, &mut backend, &mut names, &mut diagnostics);
         {
             let mut context = SemanticActions::new(session)
@@ -402,12 +406,13 @@ mod tests {
             operations.into_inner(),
             [
                 TestOperation::AnalyzeFile(name.into()),
-                TestOperation::EmitDiagnostic(CompactDiagnostic::new(
+                diag::Event::EmitDiagnostic(CompactDiagnostic::new(
                     Message::IoError {
                         string: message.to_string()
                     },
                     ()
                 ))
+                .into()
             ]
         )
     }
@@ -427,14 +432,14 @@ mod tests {
 
     fn ds(
         f: impl for<'a> FnOnce(
-            &mut semantics::ExprContext<'a, TestFrontend<'a>, TestBackend<'a>, TestDiagnostics<'a>>,
+            &mut semantics::ExprContext<'a, TestFrontend<'a>, TestBackend<'a>, MockDiagnostics<'a>>,
         ),
     ) -> Vec<TestOperation> {
         unary_directive(Directive::Ds, f)
     }
 
     type TestExprContext<'a> =
-        semantics::ExprContext<'a, TestFrontend<'a>, TestBackend<'a>, TestDiagnostics<'a>>;
+        semantics::ExprContext<'a, TestFrontend<'a>, TestBackend<'a>, MockDiagnostics<'a>>;
 
     fn unary_directive<F>(directive: Directive, f: F) -> Vec<TestOperation>
     where
@@ -451,18 +456,19 @@ mod tests {
         let actions = with_directive(directive, |command| command);
         assert_eq!(
             actions,
-            [TestOperation::EmitDiagnostic(CompactDiagnostic::new(
+            [diag::Event::EmitDiagnostic(CompactDiagnostic::new(
                 Message::OperandCount {
                     actual: 0,
                     expected: 1
                 },
                 (),
-            ))]
+            ))
+            .into()]
         )
     }
 
     type TestCommandActions<'a> =
-        semantics::CommandActions<'a, TestFrontend<'a>, TestBackend<'a>, TestDiagnostics<'a>>;
+        semantics::CommandActions<'a, TestFrontend<'a>, TestBackend<'a>, MockDiagnostics<'a>>;
 
     fn with_directive<F>(directive: Directive, f: F) -> Vec<TestOperation>
     where

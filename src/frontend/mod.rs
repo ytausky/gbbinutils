@@ -320,10 +320,10 @@ impl<'a, C: BufContext> Iterator for TokenizedSrcIter<'a, C> {
 mod tests {
     use super::*;
     use crate::backend::NameTable;
-    use crate::codebase;
+    use crate::diag;
+    use crate::diag::CompactDiagnostic;
     use crate::frontend::syntax::keyword::Mnemonic;
     use crate::instruction::{Instruction, Nullary};
-    use crate::span::*;
     use std::collections::HashMap;
     use std::{self, cell::RefCell};
 
@@ -463,8 +463,6 @@ mod tests {
         );
     }
 
-    use crate::diag::CompactDiagnostic;
-
     #[test]
     fn diagnose_undefined_macro() {
         let name = "my_macro";
@@ -473,10 +471,11 @@ mod tests {
             .when(|mut fixture| fixture.session().invoke_macro((name.into(), name), vec![]));
         assert_eq!(
             *log.borrow(),
-            [TestEvent::Diagnostic(CompactDiagnostic::new(
+            [diag::Event::EmitDiagnostic(CompactDiagnostic::new(
                 Message::UndefinedMacro { name },
                 name
-            ))]
+            ))
+            .into()]
         );
     }
 
@@ -500,10 +499,10 @@ mod tests {
         type StringRef = String;
     }
 
-    impl<'a, S: Clone> Tokenize<Mock<'a, S>> for MockTokenSource<S> {
+    impl<'a, S: Clone + Default> Tokenize<MockDiagnostics<'a, S>> for MockTokenSource<S> {
         type Tokenized = MockTokenized<S>;
 
-        fn tokenize_file<F: FnOnce(BufId) -> Mock<'a, S>>(
+        fn tokenize_file<F: FnOnce(BufId) -> MockDiagnostics<'a, S>>(
             &self,
             filename: &str,
             _: F,
@@ -531,67 +530,6 @@ mod tests {
     impl<'a, S: Clone> Mock<'a, S> {
         fn new(log: &'a TestLog<S>) -> Mock<'a, S> {
             Mock { log }
-        }
-    }
-
-    impl<'a, S: Clone> Span for Mock<'a, S> {
-        type Span = S;
-    }
-
-    impl<'a, S: Clone + Default> MacroContextFactory<S> for Mock<'a, S> {
-        type MacroDefId = ();
-        type MacroExpansionContext = Mock<'a, S>;
-
-        fn add_macro_def<P, B>(&mut self, _: S, _: P, _: B) -> Self::MacroDefId
-        where
-            P: IntoIterator<Item = S>,
-            B: IntoIterator<Item = S>,
-        {
-        }
-
-        fn mk_macro_expansion_context<I, J>(
-            &mut self,
-            _: S,
-            _: I,
-            _: &Self::MacroDefId,
-        ) -> Self::MacroExpansionContext
-        where
-            I: IntoIterator<Item = J>,
-            J: IntoIterator<Item = S>,
-        {
-            self.clone()
-        }
-    }
-
-    impl<'a, S: Clone> StripSpan<S> for Mock<'a, S> {
-        type Stripped = S;
-
-        fn strip_span(&mut self, span: &S) -> S {
-            span.clone()
-        }
-    }
-
-    impl<'a, S: Clone + Default> ContextFactory for Mock<'a, S> {
-        type BufContext = Mock<'a, S>;
-
-        fn mk_buf_context(&mut self, _: BufId, _: Option<Self::Span>) -> Self::BufContext {
-            self.clone()
-        }
-    }
-
-    impl<'a, S: Clone> BufContext for Mock<'a, S> {
-        type Span = S;
-
-        fn mk_span(&self, _: codebase::BufRange) -> Self::Span {
-            unreachable!()
-        }
-    }
-
-    impl<'a, S: Clone + Default> MacroExpansionContext for Mock<'a, S> {
-        type Span = S;
-
-        fn mk_span(&self, _: usize, _: Option<TokenExpansion>) -> Self::Span {
-            S::default()
         }
     }
 
@@ -651,45 +589,37 @@ mod tests {
         }
     }
 
-    impl<'a, S: Clone> EmitDiagnostic<S, S> for Mock<'a, S> {
-        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<S, S>) {
-            self.log
-                .borrow_mut()
-                .push(TestEvent::Diagnostic(diagnostic))
-        }
-    }
-
-    impl<'a, S: Clone> MergeSpans<S> for Mock<'a, S> {
-        fn merge_spans(&mut self, _: &S, _: &S) -> S {
-            unreachable!()
-        }
-    }
-
-    impl<'a, S: Clone + Default> Diagnostics for Mock<'a, S> {}
-
     type TestLog<S> = RefCell<Vec<TestEvent<S>>>;
 
     #[derive(Debug, PartialEq)]
     enum TestEvent<S: Clone> {
         AnalyzeTokens(Vec<Result<SemanticToken<String>, syntax::lexer::LexError>>),
         DefineSymbol(Ident<String>, RelocExpr<Ident<String>, S>),
-        Diagnostic(CompactDiagnostic<S, S>),
+        Diagnostics(diag::Event<S>),
         EmitItem(Item<RelocExpr<Ident<String>, S>>),
     }
 
+    impl<S: Clone> From<diag::Event<S>> for TestEvent<S> {
+        fn from(event: diag::Event<S>) -> Self {
+            TestEvent::Diagnostics(event)
+        }
+    }
+
+    type MockDiagnostics<'a, S> = diag::MockDiagnostics<'a, TestEvent<S>, S>;
+
     struct TestFixture<'a, S: Clone> {
-        macro_table: MacroExpander<String, ()>,
+        macro_table: MacroExpander<String, usize>,
         mock_token_source: MockTokenSource<S>,
         analysis: Mock<'a, S>,
         object: Mock<'a, S>,
-        diagnostics: Mock<'a, S>,
+        diagnostics: MockDiagnostics<'a, S>,
     }
 
     struct PreparedFixture<'a, 'b, S: Clone + Default> {
         code_analyzer: TestCodebaseAnalyzer<'a, 'b, S>,
         object: Mock<'a, S>,
         names: TestNameTable<'a, 'b, S>,
-        diagnostics: Mock<'a, S>,
+        diagnostics: MockDiagnostics<'a, S>,
     }
 
     impl<'a, 'b, S: Clone + Default> PreparedFixture<'a, 'b, S> {
@@ -710,7 +640,7 @@ mod tests {
                 mock_token_source: MockTokenSource::new(),
                 analysis: Mock::new(log),
                 object: Mock::new(log),
-                diagnostics: Mock::new(log),
+                diagnostics: MockDiagnostics::new(log),
             }
         }
 
@@ -735,14 +665,16 @@ mod tests {
     }
 
     type TestCodebaseAnalyzer<'a, 'r, S> =
-        CodebaseAnalyzer<'r, MacroExpander<String, ()>, MockTokenSource<S>, Mock<'a, S>>;
+        CodebaseAnalyzer<'r, MacroExpander<String, usize>, MockTokenSource<S>, Mock<'a, S>>;
+
     type TestNameTable<'a, 'b, S> =
-        NameTable<MacroEntry<TestCodebaseAnalyzer<'a, 'b, S>, Mock<'a, S>>>;
+        NameTable<MacroEntry<TestCodebaseAnalyzer<'a, 'b, S>, MockDiagnostics<'a, S>>>;
+
     type TestSession<'a, 'b, 'r, S> = Session<
         'r,
         TestCodebaseAnalyzer<'a, 'b, S>,
         Mock<'a, S>,
         TestNameTable<'a, 'b, S>,
-        Mock<'a, S>,
+        MockDiagnostics<'a, S>,
     >;
 }

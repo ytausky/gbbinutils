@@ -398,6 +398,140 @@ impl ExpandedDiagnosticClause<StrippedBufSpan, BufId, BufRange> {
 }
 
 #[cfg(test)]
+pub(crate) struct MockDiagnostics<'a, T, S> {
+    log: &'a RefCell<Vec<T>>,
+    _span: PhantomData<S>,
+}
+
+#[cfg(test)]
+impl<'a, T, S> MockDiagnostics<'a, T, S> {
+    pub fn new(log: &'a RefCell<Vec<T>>) -> Self {
+        MockDiagnostics {
+            log,
+            _span: PhantomData,
+        }
+    }
+}
+
+#[cfg(test)]
+impl<'a, T, S> Clone for MockDiagnostics<'a, T, S> {
+    fn clone(&self) -> Self {
+        MockDiagnostics {
+            log: self.log,
+            _span: PhantomData,
+        }
+    }
+}
+
+#[cfg(test)]
+#[derive(Debug, PartialEq)]
+pub(crate) enum Event<S> {
+    EmitDiagnostic(CompactDiagnostic<S, S>),
+}
+
+#[cfg(test)]
+impl<'a, T, S: Clone + Default> Diagnostics for MockDiagnostics<'a, T, S>
+where
+    T: From<Event<S>>,
+    S: Clone + Default,
+{
+}
+
+#[cfg(test)]
+impl<'a, T, S> ContextFactory for MockDiagnostics<'a, T, S>
+where
+    S: Clone + Default,
+{
+    type BufContext = Self;
+
+    fn mk_buf_context(&mut self, _: BufId, _: Option<Self::Span>) -> Self::BufContext {
+        self.clone()
+    }
+}
+
+#[cfg(test)]
+impl<'a, T, S: Clone + Default> BufContext for MockDiagnostics<'a, T, S> {
+    type Span = S;
+
+    fn mk_span(&self, _: BufRange) -> Self::Span {
+        S::default()
+    }
+}
+
+#[cfg(test)]
+impl<'a, T, S> MacroContextFactory<S> for MockDiagnostics<'a, T, S>
+where
+    S: Clone + Default,
+{
+    type MacroDefId = usize;
+    type MacroExpansionContext = Self;
+
+    fn add_macro_def<P, B>(&mut self, _: S, _: P, _: B) -> Self::MacroDefId
+    where
+        P: IntoIterator<Item = S>,
+        B: IntoIterator<Item = S>,
+    {
+        0
+    }
+
+    fn mk_macro_expansion_context<A, J>(
+        &mut self,
+        _: S,
+        _: A,
+        _: &Self::MacroDefId,
+    ) -> Self::MacroExpansionContext
+    where
+        A: IntoIterator<Item = J>,
+        J: IntoIterator<Item = S>,
+    {
+        self.clone()
+    }
+}
+
+#[cfg(test)]
+impl<'a, T, S: Clone + Default> MacroExpansionContext for MockDiagnostics<'a, T, S> {
+    type Span = S;
+
+    fn mk_span(&self, _: usize, _: Option<TokenExpansion>) -> Self::Span {
+        S::default()
+    }
+}
+
+#[cfg(test)]
+impl<'a, T, S: Clone> Span for MockDiagnostics<'a, T, S> {
+    type Span = S;
+}
+
+#[cfg(test)]
+impl<'a, T, S: Clone> StripSpan<S> for MockDiagnostics<'a, T, S> {
+    type Stripped = S;
+
+    fn strip_span(&mut self, span: &S) -> Self::Stripped {
+        span.clone()
+    }
+}
+
+#[cfg(test)]
+impl<'a, T, S: Clone + Default> MergeSpans<S> for MockDiagnostics<'a, T, S> {
+    fn merge_spans(&mut self, _: &S, _: &S) -> S {
+        S::default()
+    }
+}
+
+#[cfg(test)]
+impl<'a, T, S> EmitDiagnostic<S, S> for MockDiagnostics<'a, T, S>
+where
+    T: From<Event<S>>,
+    S: Clone + Default,
+{
+    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<S, S>) {
+        self.log
+            .borrow_mut()
+            .push(Event::EmitDiagnostic(diagnostic).into())
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::codebase::{BufRange, TextPosition};

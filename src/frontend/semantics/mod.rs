@@ -638,7 +638,8 @@ mod tests {
     use crate::backend::{
         BuildValue, HasValue, IndependentValueBuilder, PartialBackend, RelocAtom, RelocExpr, Width,
     };
-    use crate::codebase::{BufId, BufRange, CodebaseError};
+    use crate::codebase::CodebaseError;
+    use crate::diag;
     use crate::diag::{CompactDiagnostic, Message};
     use crate::expr::BinaryOperator;
     use crate::frontend::syntax::{
@@ -646,7 +647,6 @@ mod tests {
         MacroParamsContext, StmtContext, Token, TokenSeqContext,
     };
     use crate::frontend::{Downstream, MacroArgs};
-    use crate::span::*;
     use std::borrow::Borrow;
     use std::cell::RefCell;
 
@@ -668,7 +668,7 @@ mod tests {
         }
     }
 
-    impl<'a> Frontend<TestDiagnostics<'a>> for TestFrontend<'a> {
+    impl<'a> Frontend<MockDiagnostics<'a>> for TestFrontend<'a> {
         type StringRef = String;
         type MacroDefId = usize;
 
@@ -677,12 +677,12 @@ mod tests {
             path: Self::StringRef,
             _downstream: Downstream<
                 B,
-                NameTable<MacroEntry<Self, TestDiagnostics<'a>>>,
-                TestDiagnostics<'a>,
+                NameTable<MacroEntry<Self, MockDiagnostics<'a>>>,
+                MockDiagnostics<'a>,
             >,
         ) -> Result<(), CodebaseError>
         where
-            B: Backend<Ident<String>, (), MacroEntry<Self, TestDiagnostics<'a>>>,
+            B: Backend<Ident<String>, (), MacroEntry<Self, MockDiagnostics<'a>>>,
         {
             self.operations
                 .borrow_mut()
@@ -699,11 +699,11 @@ mod tests {
             args: MacroArgs<Self::StringRef, ()>,
             _downstream: Downstream<
                 B,
-                NameTable<MacroEntry<Self, TestDiagnostics<'a>>>,
-                TestDiagnostics<'a>,
+                NameTable<MacroEntry<Self, MockDiagnostics<'a>>>,
+                MockDiagnostics<'a>,
             >,
         ) where
-            B: Backend<Ident<String>, (), MacroEntry<Self, TestDiagnostics<'a>>>,
+            B: Backend<Ident<String>, (), MacroEntry<Self, MockDiagnostics<'a>>>,
         {
             self.operations
                 .borrow_mut()
@@ -720,7 +720,7 @@ mod tests {
             name: (Ident<Self::StringRef>, ()),
             params: Vec<(Ident<Self::StringRef>, ())>,
             tokens: Vec<(SemanticToken<Self::StringRef>, ())>,
-            _diagnostics: &mut TestDiagnostics<'a>,
+            _diagnostics: &mut MockDiagnostics<'a>,
         ) {
             self.operations
                 .borrow_mut()
@@ -785,94 +785,6 @@ mod tests {
         }
     }
 
-    pub(crate) struct TestDiagnostics<'a> {
-        operations: &'a RefCell<Vec<TestOperation>>,
-    }
-
-    impl<'a> TestDiagnostics<'a> {
-        pub fn new(operations: &'a RefCell<Vec<TestOperation>>) -> Self {
-            TestDiagnostics { operations }
-        }
-    }
-
-    impl<'a> Diagnostics for TestDiagnostics<'a> {}
-
-    impl<'a> Span for TestDiagnostics<'a> {
-        type Span = ();
-    }
-
-    impl<'a> MergeSpans<()> for TestDiagnostics<'a> {
-        fn merge_spans(&mut self, _: &(), _: &()) {}
-    }
-
-    impl<'a> StripSpan<()> for TestDiagnostics<'a> {
-        type Stripped = ();
-
-        fn strip_span(&mut self, _: &()) {}
-    }
-
-    impl<'a> EmitDiagnostic<(), ()> for TestDiagnostics<'a> {
-        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<(), ()>) {
-            self.operations
-                .borrow_mut()
-                .push(TestOperation::EmitDiagnostic(diagnostic))
-        }
-    }
-
-    impl<'a> MacroContextFactory<()> for TestDiagnostics<'a> {
-        type MacroDefId = usize;
-        type MacroExpansionContext = TestMacroExpansionContext;
-
-        fn add_macro_def<P, B>(&mut self, _name: (), _params: P, _body: B) -> Self::MacroDefId
-        where
-            P: IntoIterator<Item = ()>,
-            B: IntoIterator<Item = ()>,
-        {
-            0
-        }
-
-        fn mk_macro_expansion_context<A, J>(
-            &mut self,
-            _name: (),
-            _args: A,
-            _def: &Self::MacroDefId,
-        ) -> Self::MacroExpansionContext
-        where
-            A: IntoIterator<Item = J>,
-            J: IntoIterator<Item = ()>,
-        {
-            TestMacroExpansionContext
-        }
-    }
-
-    pub struct TestMacroExpansionContext;
-
-    impl MacroExpansionContext for TestMacroExpansionContext {
-        type Span = ();
-
-        fn mk_span(&self, _token: usize, _expansion: Option<TokenExpansion>) -> Self::Span {}
-    }
-
-    impl<'a> ContextFactory for TestDiagnostics<'a> {
-        type BufContext = TestBufContext;
-
-        fn mk_buf_context(
-            &mut self,
-            _buf_id: BufId,
-            _included_from: Option<Self::Span>,
-        ) -> Self::BufContext {
-            TestBufContext
-        }
-    }
-
-    pub struct TestBufContext;
-
-    impl BufContext for TestBufContext {
-        type Span = ();
-
-        fn mk_span(&self, _range: BufRange) -> Self::Span {}
-    }
-
     #[derive(Debug, PartialEq)]
     pub(crate) enum TestOperation {
         AnalyzeFile(String),
@@ -883,9 +795,15 @@ mod tests {
             Vec<SemanticToken<String>>,
         ),
         DefineSymbol(Ident<String>, RelocExpr<Ident<String>, ()>),
-        EmitDiagnostic(CompactDiagnostic<(), ()>),
+        Diagnostics(diag::Event<()>),
         EmitItem(backend::Item<RelocExpr<Ident<String>, ()>>),
         SetOrigin(RelocExpr<Ident<String>, ()>),
+    }
+
+    impl<'a> From<diag::Event<()>> for TestOperation {
+        fn from(event: diag::Event<()>) -> Self {
+            TestOperation::Diagnostics(event)
+        }
     }
 
     #[test]
@@ -1010,10 +928,10 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [TestOperation::EmitDiagnostic(CompactDiagnostic::new(
-                Message::MacroRequiresName,
-                ()
-            ))]
+            [
+                diag::Event::EmitDiagnostic(CompactDiagnostic::new(Message::MacroRequiresName, ()))
+                    .into()
+            ]
         )
     }
 
@@ -1097,13 +1015,14 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [TestOperation::EmitDiagnostic(CompactDiagnostic::new(
+            [diag::Event::EmitDiagnostic(CompactDiagnostic::new(
                 Message::OperandCount {
                     actual: 1,
                     expected: 0
                 },
                 ()
-            ))]
+            ))
+            .into()]
         )
     }
 
@@ -1115,7 +1034,7 @@ mod tests {
             stmt.diagnostics().emit_diagnostic(diagnostic.clone());
             stmt.exit()
         });
-        assert_eq!(actions, [TestOperation::EmitDiagnostic(diagnostic)])
+        assert_eq!(actions, [diag::Event::EmitDiagnostic(diagnostic).into()])
     }
 
     #[test]
@@ -1129,8 +1048,10 @@ mod tests {
             expr.diagnostics().emit_diagnostic(diagnostic.clone());
             expr.exit().exit().exit()
         });
-        assert_eq!(actions, [TestOperation::EmitDiagnostic(diagnostic)])
+        assert_eq!(actions, [diag::Event::EmitDiagnostic(diagnostic).into()])
     }
+
+    pub(super) type MockDiagnostics<'a> = diag::MockDiagnostics<'a, TestOperation, ()>;
 
     pub(crate) fn collect_semantic_actions<F>(f: F) -> Vec<TestOperation>
     where
@@ -1140,12 +1061,12 @@ mod tests {
         let mut frontend = TestFrontend::new(&operations);
         let mut backend = TestBackend::new(&operations);
         let mut names = NameTable::new();
-        let mut diagnostics = TestDiagnostics::new(&operations);
+        let mut diagnostics = MockDiagnostics::new(&operations);
         let session = Session::new(&mut frontend, &mut backend, &mut names, &mut diagnostics);
         f(SemanticActions::new(session));
         operations.into_inner()
     }
 
     type TestSemanticActions<'a> =
-        SemanticActions<'a, TestFrontend<'a>, TestBackend<'a>, TestDiagnostics<'a>>;
+        SemanticActions<'a, TestFrontend<'a>, TestBackend<'a>, MockDiagnostics<'a>>;
 }
