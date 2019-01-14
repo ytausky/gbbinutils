@@ -2,7 +2,7 @@ use self::invoke::MacroInvocationActions;
 use crate::backend::{self, Backend, LocationCounter, ToValue, ValueBuilder};
 use crate::diag::span::{MergeSpans, Source, StripSpan};
 use crate::diag::*;
-use crate::expr::ExprVariant;
+use crate::expr::{BinaryOperator, Expr, ExprVariant};
 use crate::frontend::session::Session;
 use crate::frontend::syntax::{self, keyword::*, ExprAtom, Operator, UnaryOperator};
 use crate::frontend::{Frontend, Ident, Literal, SemanticToken};
@@ -12,37 +12,27 @@ mod instruction;
 mod invoke;
 mod operand;
 
-mod expr {
-    #[cfg(test)]
-    use crate::expr::ExprVariant;
-    use crate::expr::{BinaryOperator, Expr};
-    use crate::frontend::{Ident, Literal};
-
-    #[derive(Debug, PartialEq)]
-    pub(super) enum SemanticAtom<I> {
-        Ident(Ident<I>),
-        Literal(Literal<I>),
-    }
-
-    impl<I> From<Literal<I>> for SemanticAtom<I> {
-        fn from(literal: Literal<I>) -> Self {
-            SemanticAtom::Literal(literal)
-        }
-    }
-
-    #[derive(Debug, PartialEq)]
-    pub enum SemanticUnary {
-        Parentheses,
-    }
-
-    pub(super) type SemanticExpr<I, S> = Expr<SemanticAtom<I>, SemanticUnary, BinaryOperator, S>;
-
-    #[cfg(test)]
-    pub(super) type SemanticExprVariant<I, S> =
-        ExprVariant<SemanticAtom<I>, SemanticUnary, BinaryOperator, S>;
+#[derive(Debug, PartialEq)]
+enum SemanticAtom<I> {
+    Ident(Ident<I>),
+    Literal(Literal<I>),
 }
 
-use self::expr::*;
+impl<I> From<Literal<I>> for SemanticAtom<I> {
+    fn from(literal: Literal<I>) -> Self {
+        SemanticAtom::Literal(literal)
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum SemanticUnary {
+    Parentheses,
+}
+
+type SemanticExpr<I, S> = Expr<SemanticAtom<I>, SemanticUnary, BinaryOperator, S>;
+
+#[cfg(test)]
+type SemanticExprVariant<I, S> = ExprVariant<SemanticAtom<I>, SemanticUnary, BinaryOperator, S>;
 
 pub(crate) struct SemanticActions<'a, F: Frontend<D>, B: ?Sized, N, D: Diagnostics> {
     session: Session<'a, F, B, N, D>,
