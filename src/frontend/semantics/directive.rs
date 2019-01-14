@@ -232,7 +232,7 @@ mod tests {
     fn set_origin() {
         let origin = 0x3000;
         let actions = unary_directive(Directive::Org, |arg| arg.push_atom(mk_literal(origin)));
-        assert_eq!(actions, [TestOperation::SetOrigin(origin.into())])
+        assert_eq!(actions, [backend::Event::SetOrigin(origin.into()).into()])
     }
 
     #[test]
@@ -271,7 +271,8 @@ mod tests {
             data.borrow()
                 .iter()
                 .map(mk_item)
-                .map(TestOperation::EmitItem)
+                .map(backend::Event::EmitItem)
+                .map(Into::into)
                 .collect::<Vec<_>>()
         )
     }
@@ -281,14 +282,15 @@ mod tests {
         let actions = ds(|arg| arg.push_atom(mk_literal(3)));
         assert_eq!(
             actions,
-            [TestOperation::SetOrigin(
+            [backend::Event::SetOrigin(
                 ExprVariant::Binary(
                     BinaryOperator::Plus,
                     Box::new(RelocAtom::LocationCounter.into()),
                     Box::new(3.into()),
                 )
                 .into()
-            )]
+            )
+            .into()]
         )
     }
 
@@ -358,7 +360,7 @@ mod tests {
         let operations = RefCell::new(Vec::new());
         let mut frontend = TestFrontend::new(&operations);
         frontend.fail(CodebaseError::Utf8Error);
-        let mut backend = TestBackend::new(&operations);
+        let mut backend = MockBackend::new(&operations);
         let mut names = HashMapNameTable::<()>::new();
         let mut diagnostics = MockDiagnostics::new(&operations);
         let session = Session::new(&mut frontend, &mut backend, &mut names, &mut diagnostics);
@@ -390,7 +392,7 @@ mod tests {
             io::ErrorKind::NotFound,
             message,
         )));
-        let mut backend = TestBackend::new(&operations);
+        let mut backend = MockBackend::new(&operations);
         let mut names = HashMapNameTable::<()>::new();
         let mut diagnostics = MockDiagnostics::new(&operations);
         let session = Session::new(&mut frontend, &mut backend, &mut names, &mut diagnostics);
@@ -426,7 +428,7 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [TestOperation::DefineSymbol(symbol.into(), value.into())]
+            [backend::Event::DefineSymbol((symbol.into(), ()), value.into()).into()]
         )
     }
 
@@ -437,7 +439,7 @@ mod tests {
     type TestExprContext<'a> = semantics::ExprContext<
         'a,
         TestFrontend<'a>,
-        TestBackend<'a>,
+        MockBackend<'a>,
         TestNameTable<'a>,
         MockDiagnostics<'a>,
     >;
@@ -471,7 +473,7 @@ mod tests {
     type TestCommandActions<'a> = semantics::CommandActions<
         'a,
         TestFrontend<'a>,
-        TestBackend<'a>,
+        MockBackend<'a>,
         TestNameTable<'a>,
         MockDiagnostics<'a>,
     >;

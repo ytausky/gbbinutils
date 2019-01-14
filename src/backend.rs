@@ -3,6 +3,8 @@ use crate::frontend::Ident;
 use crate::instruction::Instruction;
 use crate::program::NameId;
 use crate::span::Source;
+#[cfg(test)]
+use std::cell::RefCell;
 use std::collections::HashMap;
 #[cfg(test)]
 use std::marker::PhantomData;
@@ -247,6 +249,78 @@ where
 pub struct BinarySection {
     pub origin: usize,
     pub data: Vec<u8>,
+}
+
+#[cfg(test)]
+pub struct MockBackend<'a, T> {
+    pub log: &'a RefCell<Vec<T>>,
+}
+
+#[cfg(test)]
+#[derive(Debug, PartialEq)]
+pub enum Event<V: Source> {
+    EmitItem(Item<V>),
+    SetOrigin(V),
+    DefineSymbol((Ident<String>, V::Span), V),
+}
+
+#[cfg(test)]
+impl<'a, T> MockBackend<'a, T> {
+    pub fn new(log: &'a RefCell<Vec<T>>) -> Self {
+        MockBackend { log }
+    }
+}
+
+#[cfg(test)]
+impl<'a, T, S, N> Backend<Ident<String>, S, N> for MockBackend<'a, T>
+where
+    T: From<Event<RelocExpr<Ident<String>, S>>>,
+    S: Clone,
+    N: 'static,
+{
+    fn define_symbol(&mut self, symbol: (Ident<String>, S), value: Self::Value, _: &mut N) {
+        self.log
+            .borrow_mut()
+            .push(Event::DefineSymbol(symbol, value).into())
+    }
+}
+
+#[cfg(test)]
+impl<'a, 'b, T, N, S> BuildValue<'b, Ident<String>, N, S> for MockBackend<'a, T>
+where
+    T: From<Event<RelocExpr<Ident<String>, S>>>,
+    N: 'b,
+    S: Clone,
+{
+    type Builder = IndependentValueBuilder<'b, S, N>;
+
+    fn build_value(&'b mut self, names: &'b mut N) -> Self::Builder {
+        IndependentValueBuilder::new(names)
+    }
+}
+
+#[cfg(test)]
+impl<'a, T, S> HasValue<S> for MockBackend<'a, T>
+where
+    T: From<Event<RelocExpr<Ident<String>, S>>>,
+    S: Clone,
+{
+    type Value = RelocExpr<Ident<String>, S>;
+}
+
+#[cfg(test)]
+impl<'a, T, S> PartialBackend<S> for MockBackend<'a, T>
+where
+    T: From<Event<RelocExpr<Ident<String>, S>>>,
+    S: Clone,
+{
+    fn emit_item(&mut self, item: Item<Self::Value>) {
+        self.log.borrow_mut().push(Event::EmitItem(item).into())
+    }
+
+    fn set_origin(&mut self, origin: Self::Value) {
+        self.log.borrow_mut().push(Event::SetOrigin(origin).into())
+    }
 }
 
 #[cfg(test)]

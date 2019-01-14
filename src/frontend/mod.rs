@@ -331,6 +331,7 @@ impl<'a, C: BufContext> Iterator for TokenizedSrcIter<'a, C> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backend;
     use crate::backend::HashMapNameTable;
     use crate::diag;
     use crate::diag::CompactDiagnostic;
@@ -373,7 +374,7 @@ mod tests {
         let log = TestLog::<()>::default();
         TestFixture::new(&log)
             .when(|mut fixture| fixture.session().backend.emit_item(item.clone()));
-        assert_eq!(*log.borrow(), [TestEvent::EmitItem(item)]);
+        assert_eq!(*log.borrow(), [backend::Event::EmitItem(item).into()]);
     }
 
     #[test]
@@ -389,10 +390,10 @@ mod tests {
         });
         assert_eq!(
             *log.borrow(),
-            [TestEvent::DefineSymbol(
-                label.into(),
-                RelocAtom::LocationCounter.into()
-            )]
+            [
+                backend::Event::DefineSymbol((label.into(), ()), RelocAtom::LocationCounter.into())
+                    .into()
+            ]
         );
     }
 
@@ -565,44 +566,21 @@ mod tests {
         }
     }
 
-    impl<'a, 'b, N: 'b, S: Clone> BuildValue<'b, Ident<String>, N, S> for Mock<'a, S> {
-        type Builder = IndependentValueBuilder<'b, S, N>;
-
-        fn build_value(&'b mut self, names: &'b mut N) -> Self::Builder {
-            IndependentValueBuilder::new(names)
-        }
-    }
-
-    impl<'a, S: Clone> HasValue<S> for Mock<'a, S> {
-        type Value = RelocExpr<Ident<String>, S>;
-    }
-
-    impl<'a, S: Clone> PartialBackend<S> for Mock<'a, S> {
-        fn emit_item(&mut self, item: Item<Self::Value>) {
-            self.log.borrow_mut().push(TestEvent::EmitItem(item))
-        }
-
-        fn set_origin(&mut self, _origin: Self::Value) {
-            unimplemented!()
-        }
-    }
-
-    impl<'a, S: Clone, N: 'static> Backend<Ident<String>, S, N> for Mock<'a, S> {
-        fn define_symbol(&mut self, symbol: (Ident<String>, S), value: Self::Value, _: &mut N) {
-            self.log
-                .borrow_mut()
-                .push(TestEvent::DefineSymbol(symbol.0, value))
-        }
-    }
-
     type TestLog<S> = RefCell<Vec<TestEvent<S>>>;
 
     #[derive(Debug, PartialEq)]
     enum TestEvent<S: Clone> {
+        Backend(backend::Event<RelocExpr<S>>),
         AnalyzeTokens(Vec<Result<SemanticToken<String>, syntax::lexer::LexError>>),
-        DefineSymbol(Ident<String>, RelocExpr<Ident<String>, S>),
         Diagnostics(diag::Event<S>),
-        EmitItem(Item<RelocExpr<Ident<String>, S>>),
+    }
+
+    type RelocExpr<S> = backend::RelocExpr<Ident<String>, S>;
+
+    impl<S: Clone> From<backend::Event<RelocExpr<S>>> for TestEvent<S> {
+        fn from(event: backend::Event<RelocExpr<S>>) -> Self {
+            TestEvent::Backend(event)
+        }
     }
 
     impl<S: Clone> From<diag::Event<S>> for TestEvent<S> {
@@ -611,19 +589,20 @@ mod tests {
         }
     }
 
+    type MockBackend<'a, S> = backend::MockBackend<'a, TestEvent<S>>;
     type MockDiagnostics<'a, S> = diag::MockDiagnostics<'a, TestEvent<S>, S>;
 
     struct TestFixture<'a, S: Clone> {
         macro_table: MacroExpander<String, usize>,
         mock_token_source: MockTokenSource<S>,
         analysis: Mock<'a, S>,
-        object: Mock<'a, S>,
+        object: MockBackend<'a, S>,
         diagnostics: MockDiagnostics<'a, S>,
     }
 
     struct PreparedFixture<'a, 'b, S: Clone + Default> {
         code_analyzer: TestCodebaseAnalyzer<'a, 'b, S>,
-        object: Mock<'a, S>,
+        object: MockBackend<'a, S>,
         names: TestNameTable<'a, 'b, S>,
         diagnostics: MockDiagnostics<'a, S>,
     }
@@ -645,7 +624,7 @@ mod tests {
                 macro_table: MacroExpander::new(),
                 mock_token_source: MockTokenSource::new(),
                 analysis: Mock::new(log),
-                object: Mock::new(log),
+                object: MockBackend::new(log),
                 diagnostics: MockDiagnostics::new(log),
             }
         }
@@ -679,7 +658,7 @@ mod tests {
     type TestSession<'a, 'b, 'r, S> = Session<
         'r,
         TestCodebaseAnalyzer<'a, 'b, S>,
-        Mock<'a, S>,
+        MockBackend<'a, S>,
         TestNameTable<'a, 'b, S>,
         MockDiagnostics<'a, S>,
     >;

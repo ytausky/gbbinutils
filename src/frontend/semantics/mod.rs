@@ -662,10 +662,8 @@ impl<S: Clone> EmitDiagnostic<S, S> for DiagnosticsCollector<S> {
 mod tests {
     use super::*;
 
-    use crate::backend::{
-        BuildValue, HasValue, HashMapNameTable, IndependentValueBuilder, PartialBackend, RelocAtom,
-        RelocExpr, Width,
-    };
+    use crate::backend;
+    use crate::backend::{HashMapNameTable, RelocAtom, Width};
     use crate::codebase::CodebaseError;
     use crate::diag;
     use crate::diag::{CompactDiagnostic, Message};
@@ -761,50 +759,6 @@ mod tests {
         }
     }
 
-    pub(crate) struct TestBackend<'a> {
-        operations: &'a RefCell<Vec<TestOperation>>,
-    }
-
-    impl<'a> TestBackend<'a> {
-        pub fn new(operations: &'a RefCell<Vec<TestOperation>>) -> Self {
-            TestBackend { operations }
-        }
-    }
-
-    impl<'a> HasValue<()> for TestBackend<'a> {
-        type Value = RelocExpr<Ident<String>, ()>;
-    }
-
-    impl<'a, 'b, N: 'b> BuildValue<'b, Ident<String>, N, ()> for TestBackend<'a> {
-        type Builder = IndependentValueBuilder<'b, (), N>;
-
-        fn build_value(&mut self, names: &'b mut N) -> Self::Builder {
-            IndependentValueBuilder::new(names)
-        }
-    }
-
-    impl<'a> PartialBackend<()> for TestBackend<'a> {
-        fn emit_item(&mut self, item: backend::Item<Self::Value>) {
-            self.operations
-                .borrow_mut()
-                .push(TestOperation::EmitItem(item))
-        }
-
-        fn set_origin(&mut self, origin: Self::Value) {
-            self.operations
-                .borrow_mut()
-                .push(TestOperation::SetOrigin(origin))
-        }
-    }
-
-    impl<'a, N: 'static> Backend<Ident<String>, (), N> for TestBackend<'a> {
-        fn define_symbol(&mut self, symbol: (Ident<String>, ()), value: Self::Value, _: &mut N) {
-            self.operations
-                .borrow_mut()
-                .push(TestOperation::DefineSymbol(symbol.0, value))
-        }
-    }
-
     #[derive(Debug, PartialEq)]
     pub(crate) enum TestOperation {
         AnalyzeFile(String),
@@ -814,10 +768,16 @@ mod tests {
             Vec<Ident<String>>,
             Vec<SemanticToken<String>>,
         ),
-        DefineSymbol(Ident<String>, RelocExpr<Ident<String>, ()>),
+        Backend(backend::Event<RelocExpr>),
         Diagnostics(diag::Event<()>),
-        EmitItem(backend::Item<RelocExpr<Ident<String>, ()>>),
-        SetOrigin(RelocExpr<Ident<String>, ()>),
+    }
+
+    type RelocExpr = backend::RelocExpr<Ident<String>, ()>;
+
+    impl<'a> From<backend::Event<RelocExpr>> for TestOperation {
+        fn from(event: backend::Event<RelocExpr>) -> Self {
+            TestOperation::Backend(event)
+        }
     }
 
     impl<'a> From<diag::Event<()>> for TestOperation {
@@ -843,9 +803,13 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [TestOperation::EmitItem(backend::Item::Instruction(
-                Instruction::Ld(Ld::Simple(SimpleOperand::B, SimpleOperand::DerefHl))
-            ))]
+            [
+                backend::Event::EmitItem(backend::Item::Instruction(Instruction::Ld(Ld::Simple(
+                    SimpleOperand::B,
+                    SimpleOperand::DerefHl
+                ))))
+                .into()
+            ]
         )
     }
 
@@ -873,11 +837,12 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [TestOperation::EmitItem(backend::Item::Instruction(
-                Instruction::Rst(
+            [
+                backend::Event::EmitItem(backend::Item::Instruction(Instruction::Rst(
                     ExprVariant::Binary(op, Box::new(1.into()), Box::new(1.into()),).into()
-                )
-            ))]
+                )))
+                .into()
+            ]
         )
     }
 
@@ -894,10 +859,11 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [TestOperation::EmitItem(backend::Item::Data(
+            [backend::Event::EmitItem(backend::Item::Data(
                 RelocAtom::Symbol(label.into()).into(),
                 Width::Word
-            ))]
+            ))
+            .into()]
         );
     }
 
@@ -908,10 +874,10 @@ mod tests {
             collect_semantic_actions(|actions| actions.enter_stmt(Some((label.into(), ()))).exit());
         assert_eq!(
             actions,
-            [TestOperation::DefineSymbol(
-                label.into(),
-                RelocAtom::LocationCounter.into()
-            )]
+            [
+                backend::Event::DefineSymbol((label.into(), ()), RelocAtom::LocationCounter.into())
+                    .into()
+            ]
         )
     }
 
@@ -1071,6 +1037,7 @@ mod tests {
         assert_eq!(actions, [diag::Event::EmitDiagnostic(diagnostic).into()])
     }
 
+    pub(crate) type MockBackend<'a> = backend::MockBackend<'a, TestOperation>;
     pub(super) type MockDiagnostics<'a> = diag::MockDiagnostics<'a, TestOperation, ()>;
 
     pub(crate) fn collect_semantic_actions<F>(f: F) -> Vec<TestOperation>
@@ -1079,7 +1046,7 @@ mod tests {
     {
         let operations = RefCell::new(Vec::new());
         let mut frontend = TestFrontend::new(&operations);
-        let mut backend = TestBackend::new(&operations);
+        let mut backend = MockBackend::new(&operations);
         let mut names = HashMapNameTable::new();
         let mut diagnostics = MockDiagnostics::new(&operations);
         let session = Session::new(&mut frontend, &mut backend, &mut names, &mut diagnostics);
@@ -1092,7 +1059,7 @@ mod tests {
     type TestSemanticActions<'a> = SemanticActions<
         'a,
         TestFrontend<'a>,
-        TestBackend<'a>,
+        MockBackend<'a>,
         TestNameTable<'a>,
         MockDiagnostics<'a>,
     >;
