@@ -675,7 +675,7 @@ mod tests {
         keyword::Operand, CommandContext, ExprContext, FileContext, MacroInvocationContext,
         MacroParamsContext, StmtContext, Token, TokenSeqContext,
     };
-    use crate::frontend::{Downstream, MacroArgs};
+    use crate::frontend::{Downstream, LexItem, MacroArgs};
     use std::borrow::Borrow;
     use std::cell::RefCell;
     use std::rc::Rc;
@@ -717,6 +717,17 @@ mod tests {
                 Some(error) => Err(error),
                 None => Ok(()),
             }
+        }
+
+        fn analyze_token_seq<I, B, N>(
+            &mut self,
+            _tokens: I,
+            _downstream: &mut Downstream<B, N, MockDiagnostics<'a>>,
+        ) where
+            I: IntoIterator<Item = LexItem<Self::StringRef, ()>>,
+            B: Backend<Ident<Self::StringRef>, (), N> + ?Sized,
+        {
+            unimplemented!()
         }
 
         fn invoke_macro<B, N>(

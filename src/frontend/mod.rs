@@ -114,6 +114,11 @@ pub(crate) trait Frontend<D: Diagnostics> {
     where
         B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized;
 
+    fn analyze_token_seq<I, B, N>(&mut self, tokens: I, downstream: &mut Downstream<B, N, D>)
+    where
+        I: IntoIterator<Item = LexItem<Self::StringRef, D::Span>>,
+        B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized;
+
     fn invoke_macro<B, N>(
         &mut self,
         name: (Ident<Self::StringRef>, D::Span),
@@ -166,25 +171,6 @@ where
             analysis,
         }
     }
-
-    fn analyze_token_seq<I, B, N, D>(&mut self, tokens: I, downstream: &mut Downstream<B, N, D>)
-    where
-        I: IntoIterator<Item = LexItem<T::StringRef, D::Span>>,
-        B: Backend<Ident<T::StringRef>, D::Span, N> + ?Sized,
-        D: Diagnostics<MacroDefId = M::MacroDefId>,
-        T: Tokenize<D::BufContext>,
-        M::Entry: Expand<T::StringRef, D, D::Span>,
-        for<'b> &'b T::Tokenized: IntoIterator<Item = LexItem<T::StringRef, D::Span>>,
-    {
-        let analysis = self.analysis.clone();
-        let session = Session::new(
-            self,
-            downstream.backend,
-            downstream.names,
-            downstream.diagnostics,
-        );
-        analysis.run(tokens.into_iter(), session)
-    }
 }
 
 type TokenSeq<I, S> = Vec<(SemanticToken<I>, S)>;
@@ -216,6 +202,21 @@ where
         };
         self.analyze_token_seq(&tokenized_src, &mut downstream);
         Ok(())
+    }
+
+    fn analyze_token_seq<I, B, N>(&mut self, tokens: I, downstream: &mut Downstream<B, N, D>)
+    where
+        I: IntoIterator<Item = LexItem<Self::StringRef, D::Span>>,
+        B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
+    {
+        let analysis = self.analysis.clone();
+        let session = Session::new(
+            self,
+            downstream.backend,
+            downstream.names,
+            downstream.diagnostics,
+        );
+        analysis.run(tokens.into_iter(), session)
     }
 
     fn invoke_macro<B, N>(
