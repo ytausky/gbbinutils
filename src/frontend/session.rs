@@ -1,6 +1,7 @@
-use crate::backend::Backend;
+use crate::backend::{Backend, NameTable};
 use crate::codebase::CodebaseError;
 use crate::diag::{DelegateDiagnostics, Diagnostics, DownstreamDiagnostics};
+use crate::frontend::macros::MacroEntry;
 use crate::frontend::{Downstream, Frontend, Ident, SemanticToken};
 
 pub(super) type MacroArgs<I, S> = Vec<Vec<(SemanticToken<I>, S)>>;
@@ -32,6 +33,7 @@ impl<'a, F, B, N, D> Session<'a, F, B, N, D>
 where
     F: Frontend<D>,
     B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
+    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
     D: Diagnostics,
 {
     pub fn analyze_file(&mut self, path: F::StringRef) -> Result<(), CodebaseError> {
@@ -60,6 +62,7 @@ impl<'a, F, B, N, D> Session<'a, F, B, N, D>
 where
     F: Frontend<D>,
     B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
+    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
     D: Diagnostics,
 {
     pub fn invoke_macro(

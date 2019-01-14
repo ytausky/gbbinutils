@@ -2,9 +2,10 @@ use super::{
     AnalyzeExpr, CommandArgs, Directive, SemanticActions, SemanticAtom, SemanticExpr, ValueContext,
 };
 use crate::backend;
-use crate::backend::{Backend, LocationCounter, ValueBuilder, Width};
+use crate::backend::{Backend, LocationCounter, NameTable, ValueBuilder, Width};
 use crate::diag::*;
 use crate::expr::{BinaryOperator, ExprVariant};
+use crate::frontend::macros::MacroEntry;
 use crate::frontend::{Frontend, Ident, Literal};
 use crate::span::Source;
 
@@ -16,6 +17,7 @@ pub(super) fn analyze_directive<'a, 'b, F, B, N, D>(
     'a: 'b,
     F: Frontend<D>,
     B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
+    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
     D: Diagnostics,
 {
     let context = DirectiveContext {
@@ -52,6 +54,7 @@ where
     'a: 'b,
     F: Frontend<D>,
     B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
+    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
     D: Diagnostics,
 {
     fn analyze(self, directive: Directive) {
@@ -361,7 +364,7 @@ mod tests {
         let mut frontend = TestFrontend::new(&operations);
         frontend.fail(CodebaseError::Utf8Error);
         let mut backend = MockBackend::new(&operations);
-        let mut names = HashMapNameTable::<()>::new();
+        let mut names = HashMapNameTable::new();
         let mut diagnostics = MockDiagnostics::new(&operations);
         let session = Session::new(&mut frontend, &mut backend, &mut names, &mut diagnostics);
         {
@@ -393,7 +396,7 @@ mod tests {
             message,
         )));
         let mut backend = MockBackend::new(&operations);
-        let mut names = HashMapNameTable::<()>::new();
+        let mut names = HashMapNameTable::new();
         let mut diagnostics = MockDiagnostics::new(&operations);
         let session = Session::new(&mut frontend, &mut backend, &mut names, &mut diagnostics);
         {

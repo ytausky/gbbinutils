@@ -3,7 +3,7 @@ mod semantics;
 mod session;
 mod syntax;
 
-use self::macros::{Expand, MacroDefData, MacroExpander, MacroTable, MacroTableEntry};
+use self::macros::{Expand, MacroDefData, MacroEntry, MacroExpander, MacroTable, MacroTableEntry};
 use crate::backend::*;
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diag::*;
@@ -96,6 +96,7 @@ where
         I: Iterator<Item = LexItem<Id, D::Span>>,
         F: Frontend<D, StringRef = Id>,
         B: Backend<Ident<Id>, D::Span, N> + ?Sized,
+        N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
         D: Diagnostics;
 }
 
@@ -112,12 +113,14 @@ pub(crate) trait Frontend<D: Diagnostics> {
         downstream: Downstream<B, N, D>,
     ) -> Result<(), CodebaseError>
     where
-        B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized;
+        B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
+        N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>;
 
     fn analyze_token_seq<I, B, N>(&mut self, tokens: I, downstream: &mut Downstream<B, N, D>)
     where
         I: IntoIterator<Item = LexItem<Self::StringRef, D::Span>>,
-        B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized;
+        B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
+        N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>;
 
     fn invoke_macro<B, N>(
         &mut self,
@@ -125,7 +128,8 @@ pub(crate) trait Frontend<D: Diagnostics> {
         args: MacroArgs<Self::StringRef, D::Span>,
         downstream: Downstream<B, N, D>,
     ) where
-        B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized;
+        B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
+        N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>;
 
     fn define_macro(
         &mut self,
@@ -145,6 +149,7 @@ where
         I: Iterator<Item = LexItem<Id, D::Span>>,
         F: Frontend<D, StringRef = Id>,
         B: Backend<Ident<Id>, D::Span, N> + ?Sized,
+        N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
         D: Diagnostics,
     {
         let actions = semantics::SemanticActions::new(session);
@@ -194,6 +199,7 @@ where
     ) -> Result<(), CodebaseError>
     where
         B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
+        N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>,
     {
         let tokenized_src = {
             self.codebase.tokenize_file(path.as_ref(), |buf_id| {
@@ -208,6 +214,7 @@ where
     where
         I: IntoIterator<Item = LexItem<Self::StringRef, D::Span>>,
         B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
+        N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>,
     {
         let analysis = self.analysis.clone();
         let session = Session::new(
@@ -226,6 +233,7 @@ where
         mut downstream: Downstream<B, N, D>,
     ) where
         B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
+        N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>,
     {
         let expansion = match self.macro_table.get(&name) {
             Some(entry) => Some(entry.expand(span, args, downstream.diagnostics)),

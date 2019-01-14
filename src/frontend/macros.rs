@@ -1,9 +1,5 @@
-#[cfg(test)]
-use super::Frontend;
-use super::{Ident, SemanticToken, Token};
-#[cfg(test)]
-use crate::diag::span::Span;
-use crate::diag::span::{MacroContextFactory, MacroExpansionContext};
+use super::{Frontend, Ident, SemanticToken, Token};
+use crate::diag::span::{MacroContextFactory, MacroExpansionContext, Span};
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::rc::Rc;
@@ -89,7 +85,6 @@ where
     }
 }
 
-#[cfg(test)]
 pub(crate) type MacroEntry<F, D> = MacroTableEntry<
     <D as MacroContextFactory<<D as Span>::Span>>::MacroDefId,
     Rc<MacroDefData<<F as Frontend<D>>::StringRef>>,

@@ -1,6 +1,7 @@
 use super::SemanticActions;
-use crate::backend::Backend;
+use crate::backend::{Backend, NameTable};
 use crate::diag::{DelegateDiagnostics, Diagnostics};
+use crate::frontend::macros::MacroEntry;
 use crate::frontend::syntax::{MacroInvocationContext, TokenSeqContext};
 use crate::frontend::{Frontend, Ident, SemanticToken, TokenSeq};
 
@@ -44,6 +45,7 @@ impl<'a, F, B, N, D> MacroInvocationContext<D::Span> for MacroInvocationActions<
 where
     F: Frontend<D>,
     B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
+    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
     D: Diagnostics,
 {
     type Token = SemanticToken<F::StringRef>;

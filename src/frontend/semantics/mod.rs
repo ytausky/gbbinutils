@@ -1,8 +1,9 @@
 use self::invoke::MacroInvocationActions;
-use crate::backend::{self, Backend, LocationCounter, ToValue, ValueBuilder};
+use crate::backend::{self, Backend, LocationCounter, NameTable, ToValue, ValueBuilder};
 use crate::diag::span::{MergeSpans, Source, StripSpan};
 use crate::diag::*;
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
+use crate::frontend::macros::MacroEntry;
 use crate::frontend::session::Session;
 use crate::frontend::syntax::{self, keyword::*, ExprAtom, Operator, UnaryOperator};
 use crate::frontend::{Frontend, Ident, Literal, SemanticToken};
@@ -87,6 +88,7 @@ impl<'a, F, B, N, D>
 where
     F: Frontend<D>,
     B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
+    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
     D: Diagnostics,
 {
     type StmtContext = Self;
@@ -103,6 +105,7 @@ impl<'a, F, B, N, D>
 where
     F: Frontend<D>,
     B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
+    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
     D: Diagnostics,
 {
     type CommandContext = CommandActions<'a, F, B, N, D>;
@@ -212,6 +215,7 @@ impl<'a, F, B, N, D> syntax::CommandContext<D::Span> for CommandActions<'a, F, B
 where
     F: Frontend<D>,
     B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
+    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
     D: Diagnostics,
 {
     type Ident = Ident<F::StringRef>;
