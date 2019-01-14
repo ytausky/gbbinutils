@@ -1,7 +1,7 @@
 use super::{Chunk, NameId, Node, Program, RelocExpr, Value};
 use crate::backend::{
-    Backend, BuildValue, HasValue, HashMapNameTable, Item, Name, PartialBackend, RelocAtom,
-    RelocExprBuilder, ToValue,
+    Backend, BuildValue, HasValue, HashMapNameTable, Item, Name, NameTable, PartialBackend,
+    RelocAtom, RelocExprBuilder, ToValue,
 };
 use crate::frontend::Ident;
 
@@ -31,13 +31,15 @@ impl<SR> ProgramBuilder<SR> {
         self.current_chunk().items.push(node)
     }
 
-    fn lookup<M>(&mut self, name: String, table: &mut HashMapNameTable<M>) -> NameId {
-        match table
-            .entry(name)
-            .or_insert_with(|| Name::Symbol(self.program.symbols.new_name()))
-        {
-            Name::Macro(_) => unimplemented!(),
-            Name::Symbol(id) => *id,
+    fn lookup<M>(&mut self, name: Ident<String>, table: &mut HashMapNameTable<M>) -> NameId {
+        match table.get(&name) {
+            None => {
+                let id = self.program.symbols.new_name();
+                table.insert(name, Name::Symbol(id));
+                id
+            }
+            Some(Name::Macro(_)) => unimplemented!(),
+            Some(Name::Symbol(id)) => *id,
         }
     }
 
@@ -79,7 +81,7 @@ impl<S: Clone + 'static, M: 'static> Backend<Ident<String>, S, M> for ProgramBui
         value: Self::Value,
         table: &mut HashMapNameTable<M>,
     ) {
-        let name_id = self.lookup(ident.name, table);
+        let name_id = self.lookup(ident, table);
         self.program.symbols.define_name(name_id, Value::Unknown);
         self.push(Node::Symbol((name_id, span), value))
     }
@@ -93,7 +95,7 @@ impl<'a, M, S: Clone> ToValue<Ident<String>, S>
     for RelocExprBuilder<'a, &'a mut ProgramBuilder<S>, M>
 {
     fn to_value(&mut self, (ident, span): (Ident<String>, S)) -> Self::Value {
-        RelocExpr::from_atom(RelocAtom::Symbol(self.0.lookup(ident.name, self.1)), span)
+        RelocExpr::from_atom(RelocAtom::Symbol(self.0.lookup(ident, self.1)), span)
     }
 }
 

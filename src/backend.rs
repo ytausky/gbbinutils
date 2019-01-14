@@ -1,10 +1,9 @@
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
-#[cfg(test)]
 use crate::frontend::Ident;
 use crate::instruction::Instruction;
 use crate::program::NameId;
 use crate::span::Source;
-use std::collections::hash_map::{Entry, HashMap};
+use std::collections::HashMap;
 #[cfg(test)]
 use std::marker::PhantomData;
 
@@ -12,6 +11,13 @@ use std::marker::PhantomData;
 pub enum Width {
     Byte,
     Word,
+}
+
+pub trait NameTable<I> {
+    type MacroEntry;
+
+    fn get(&self, ident: &I) -> Option<&Name<Self::MacroEntry>>;
+    fn insert(&mut self, ident: I, entry: Name<Self::MacroEntry>);
 }
 
 pub struct HashMapNameTable<M> {
@@ -29,9 +35,17 @@ impl<M> HashMapNameTable<M> {
             table: HashMap::new(),
         }
     }
+}
 
-    pub fn entry(&mut self, name: String) -> Entry<String, Name<M>> {
-        self.table.entry(name)
+impl<M> NameTable<Ident<String>> for HashMapNameTable<M> {
+    type MacroEntry = M;
+
+    fn get(&self, ident: &Ident<String>) -> Option<&Name<Self::MacroEntry>> {
+        self.table.get(&ident.name)
+    }
+
+    fn insert(&mut self, ident: Ident<String>, entry: Name<Self::MacroEntry>) {
+        self.table.insert(ident.name, entry);
     }
 }
 
