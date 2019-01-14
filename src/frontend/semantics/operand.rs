@@ -260,7 +260,7 @@ mod tests {
             expr,
             context,
             &mut ValueContext::new(
-                &mut IndependentValueBuilder::<_, ()>::new(&mut HashMapNameTable::new()),
+                &mut IndependentValueBuilder::new(&mut HashMapNameTable::<()>::new()),
                 &mut collector,
             ),
         );

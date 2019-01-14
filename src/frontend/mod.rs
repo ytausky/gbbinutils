@@ -3,7 +3,7 @@ mod semantics;
 mod session;
 mod syntax;
 
-use self::macros::{Expand, MacroDefData, MacroEntry, MacroExpander, MacroTable, MacroTableEntry};
+use self::macros::{Expand, MacroDefData, MacroExpander, MacroTable, MacroTableEntry};
 use crate::backend::*;
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diag::*;
@@ -18,7 +18,11 @@ pub use crate::frontend::syntax::Token;
 pub(crate) trait Assemble<D>
 where
     D: Diagnostics,
-    Self: Backend<Ident<String>, D::Span, MacroTableEntry<D::MacroDefId, Rc<MacroDefData<String>>>>,
+    Self: Backend<
+        Ident<String>,
+        D::Span,
+        HashMapNameTable<MacroTableEntry<D::MacroDefId, Rc<MacroDefData<String>>>>,
+    >,
 {
     fn assemble<C: Codebase>(
         &mut self,
@@ -38,7 +42,11 @@ where
 impl<B, D> Assemble<D> for B
 where
     D: Diagnostics,
-    B: Backend<Ident<String>, D::Span, MacroTableEntry<D::MacroDefId, Rc<MacroDefData<String>>>>,
+    B: Backend<
+        Ident<String>,
+        D::Span,
+        HashMapNameTable<MacroTableEntry<D::MacroDefId, Rc<MacroDefData<String>>>>,
+    >,
 {
 }
 
@@ -83,14 +91,11 @@ where
     Self: Clone,
     Id: Into<String> + Clone + AsRef<str> + PartialEq,
 {
-    fn run<I, F, B, D>(
-        &self,
-        tokens: I,
-        session: Session<F, B, HashMapNameTable<MacroEntry<F, D>>, D>,
-    ) where
+    fn run<I, F, B, N, D>(&self, tokens: I, session: Session<F, B, N, D>)
+    where
         I: Iterator<Item = LexItem<Id, D::Span>>,
         F: Frontend<D, StringRef = Id>,
-        B: Backend<Ident<Id>, D::Span, MacroEntry<F, D>> + ?Sized,
+        B: Backend<Ident<Id>, D::Span, N> + ?Sized,
         D: Diagnostics;
 }
 
@@ -101,21 +106,21 @@ pub(crate) trait Frontend<D: Diagnostics> {
     type StringRef: AsRef<str> + Clone + Into<String> + PartialEq;
     type MacroDefId: Clone;
 
-    fn analyze_file<B>(
+    fn analyze_file<B, N>(
         &mut self,
         path: Self::StringRef,
-        downstream: Downstream<B, HashMapNameTable<MacroEntry<Self, D>>, D>,
+        downstream: Downstream<B, N, D>,
     ) -> Result<(), CodebaseError>
     where
-        B: Backend<Ident<Self::StringRef>, D::Span, MacroEntry<Self, D>> + ?Sized;
+        B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized;
 
-    fn invoke_macro<B>(
+    fn invoke_macro<B, N>(
         &mut self,
         name: (Ident<Self::StringRef>, D::Span),
         args: MacroArgs<Self::StringRef, D::Span>,
-        downstream: Downstream<B, HashMapNameTable<MacroEntry<Self, D>>, D>,
+        downstream: Downstream<B, N, D>,
     ) where
-        B: Backend<Ident<Self::StringRef>, D::Span, MacroEntry<Self, D>> + ?Sized;
+        B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized;
 
     fn define_macro(
         &mut self,
@@ -130,14 +135,11 @@ impl<Id> Analysis<Id> for SemanticAnalysis
 where
     Id: Into<String> + Clone + AsRef<str> + PartialEq,
 {
-    fn run<'a, I, F, B, D>(
-        &self,
-        tokens: I,
-        session: Session<'a, F, B, HashMapNameTable<MacroEntry<F, D>>, D>,
-    ) where
+    fn run<'a, I, F, B, N, D>(&self, tokens: I, session: Session<'a, F, B, N, D>)
+    where
         I: Iterator<Item = LexItem<Id, D::Span>>,
         F: Frontend<D, StringRef = Id>,
-        B: Backend<Ident<Id>, D::Span, MacroEntry<F, D>> + ?Sized,
+        B: Backend<Ident<Id>, D::Span, N> + ?Sized,
         D: Diagnostics,
     {
         let actions = semantics::SemanticActions::new(session);
@@ -165,13 +167,10 @@ where
         }
     }
 
-    fn analyze_token_seq<I, B, D>(
-        &mut self,
-        tokens: I,
-        downstream: &mut Downstream<B, HashMapNameTable<MacroEntry<Self, D>>, D>,
-    ) where
+    fn analyze_token_seq<I, B, N, D>(&mut self, tokens: I, downstream: &mut Downstream<B, N, D>)
+    where
         I: IntoIterator<Item = LexItem<T::StringRef, D::Span>>,
-        B: Backend<Ident<T::StringRef>, D::Span, MacroEntry<Self, D>> + ?Sized,
+        B: Backend<Ident<T::StringRef>, D::Span, N> + ?Sized,
         D: Diagnostics<MacroDefId = M::MacroDefId>,
         T: Tokenize<D::BufContext>,
         M::Entry: Expand<T::StringRef, D, D::Span>,
@@ -202,13 +201,13 @@ where
     type StringRef = T::StringRef;
     type MacroDefId = D::MacroDefId;
 
-    fn analyze_file<B>(
+    fn analyze_file<B, N>(
         &mut self,
         path: Self::StringRef,
-        mut downstream: Downstream<B, HashMapNameTable<MacroEntry<Self, D>>, D>,
+        mut downstream: Downstream<B, N, D>,
     ) -> Result<(), CodebaseError>
     where
-        B: Backend<Ident<Self::StringRef>, D::Span, MacroEntry<Self, D>> + ?Sized,
+        B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
     {
         let tokenized_src = {
             self.codebase.tokenize_file(path.as_ref(), |buf_id| {
@@ -219,13 +218,13 @@ where
         Ok(())
     }
 
-    fn invoke_macro<B>(
+    fn invoke_macro<B, N>(
         &mut self,
         (name, span): (Ident<Self::StringRef>, D::Span),
         args: MacroArgs<Self::StringRef, D::Span>,
-        mut downstream: Downstream<B, HashMapNameTable<MacroEntry<Self, D>>, D>,
+        mut downstream: Downstream<B, N, D>,
     ) where
-        B: Backend<Ident<Self::StringRef>, D::Span, MacroEntry<Self, D>> + ?Sized,
+        B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
     {
         let expansion = match self.macro_table.get(&name) {
             Some(entry) => Some(entry.expand(span, args, downstream.diagnostics)),
@@ -334,6 +333,7 @@ mod tests {
     use crate::backend::HashMapNameTable;
     use crate::diag;
     use crate::diag::CompactDiagnostic;
+    use crate::frontend::macros::MacroEntry;
     use crate::frontend::syntax::keyword::Mnemonic;
     use crate::instruction::{Instruction, Nullary};
     use std::collections::HashMap;
@@ -380,11 +380,10 @@ mod tests {
         let label = "label";
         let log = TestLog::default();
         TestFixture::new(&log).when(|mut fixture| {
-            Backend::<_, _, ()>::define_symbol(
-                fixture.session().backend,
+            fixture.session().backend.define_symbol(
                 (label.into(), ()),
                 RelocAtom::LocationCounter.into(),
-                &mut HashMapNameTable::new(),
+                &mut HashMapNameTable::<()>::new(),
             )
         });
         assert_eq!(
@@ -552,14 +551,11 @@ mod tests {
     }
 
     impl<'a, S: Clone> Analysis<String> for Mock<'a, S> {
-        fn run<I, F, B, D>(
-            &self,
-            tokens: I,
-            _frontend: Session<F, B, HashMapNameTable<MacroEntry<F, D>>, D>,
-        ) where
+        fn run<I, F, B, N, D>(&self, tokens: I, _frontend: Session<F, B, N, D>)
+        where
             I: Iterator<Item = LexItem<String, D::Span>>,
             F: Frontend<D, StringRef = String>,
-            B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>> + ?Sized,
+            B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
             D: Diagnostics,
         {
             self.log.borrow_mut().push(TestEvent::AnalyzeTokens(
@@ -568,10 +564,10 @@ mod tests {
         }
     }
 
-    impl<'a, 'b, M: 'b, S: Clone> BuildValue<'b, Ident<String>, M, S> for Mock<'a, S> {
-        type Builder = IndependentValueBuilder<'b, S, M>;
+    impl<'a, 'b, N: 'b, S: Clone> BuildValue<'b, Ident<String>, N, S> for Mock<'a, S> {
+        type Builder = IndependentValueBuilder<'b, S, N>;
 
-        fn build_value(&'b mut self, names: &'b mut HashMapNameTable<M>) -> Self::Builder {
+        fn build_value(&'b mut self, names: &'b mut N) -> Self::Builder {
             IndependentValueBuilder::new(names)
         }
     }
@@ -590,13 +586,8 @@ mod tests {
         }
     }
 
-    impl<'a, S: Clone, M: 'static> Backend<Ident<String>, S, M> for Mock<'a, S> {
-        fn define_symbol(
-            &mut self,
-            symbol: (Ident<String>, S),
-            value: Self::Value,
-            _: &mut HashMapNameTable<M>,
-        ) {
+    impl<'a, S: Clone, N: 'static> Backend<Ident<String>, S, N> for Mock<'a, S> {
+        fn define_symbol(&mut self, symbol: (Ident<String>, S), value: Self::Value, _: &mut N) {
             self.log
                 .borrow_mut()
                 .push(TestEvent::DefineSymbol(symbol.0, value))

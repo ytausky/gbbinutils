@@ -1,8 +1,7 @@
-use crate::backend::{self, Backend, HashMapNameTable, LocationCounter, ToValue, ValueBuilder};
+use crate::backend::{self, Backend, LocationCounter, ToValue, ValueBuilder};
 use crate::diag::span::{MergeSpans, Source, StripSpan};
 use crate::diag::*;
 use crate::expr::ExprVariant;
-use crate::frontend::macros::MacroEntry;
 use crate::frontend::session::Session;
 use crate::frontend::syntax::{self, keyword::*, ExprAtom, Operator, UnaryOperator};
 use crate::frontend::{Frontend, Ident, Literal, SemanticToken};
@@ -43,20 +42,18 @@ mod expr {
 
 use self::expr::*;
 
-pub(crate) struct SemanticActions<'a, F: Frontend<D>, B: ?Sized, D: Diagnostics> {
-    session: Session<'a, F, B, HashMapNameTable<MacroEntry<F, D>>, D>,
+pub(crate) struct SemanticActions<'a, F: Frontend<D>, B: ?Sized, N, D: Diagnostics> {
+    session: Session<'a, F, B, N, D>,
     label: Option<(Ident<F::StringRef>, D::Span)>,
 }
 
-impl<'a, F, B, D> SemanticActions<'a, F, B, D>
+impl<'a, F, B, N, D> SemanticActions<'a, F, B, N, D>
 where
     F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>> + ?Sized,
+    B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
     D: Diagnostics,
 {
-    pub fn new(
-        session: Session<'a, F, B, HashMapNameTable<MacroEntry<F, D>>, D>,
-    ) -> SemanticActions<'a, F, B, D> {
+    pub fn new(session: Session<'a, F, B, N, D>) -> SemanticActions<'a, F, B, N, D> {
         SemanticActions {
             session,
             label: None,
@@ -79,7 +76,7 @@ where
     }
 }
 
-impl<'a, F, B, D> DelegateDiagnostics<D::Span> for SemanticActions<'a, F, B, D>
+impl<'a, F, B, N, D> DelegateDiagnostics<D::Span> for SemanticActions<'a, F, B, N, D>
 where
     F: Frontend<D>,
     B: ?Sized,
@@ -92,11 +89,12 @@ where
     }
 }
 
-impl<'a, F, B, D> syntax::FileContext<Ident<F::StringRef>, Literal<F::StringRef>, Command, D::Span>
-    for SemanticActions<'a, F, B, D>
+impl<'a, F, B, N, D>
+    syntax::FileContext<Ident<F::StringRef>, Literal<F::StringRef>, Command, D::Span>
+    for SemanticActions<'a, F, B, N, D>
 where
     F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>> + ?Sized,
+    B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
     D: Diagnostics,
 {
     type StmtContext = Self;
@@ -107,16 +105,17 @@ where
     }
 }
 
-impl<'a, F, B, D> syntax::StmtContext<Ident<F::StringRef>, Literal<F::StringRef>, Command, D::Span>
-    for SemanticActions<'a, F, B, D>
+impl<'a, F, B, N, D>
+    syntax::StmtContext<Ident<F::StringRef>, Literal<F::StringRef>, Command, D::Span>
+    for SemanticActions<'a, F, B, N, D>
 where
     F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>> + ?Sized,
+    B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
     D: Diagnostics,
 {
-    type CommandContext = CommandActions<'a, F, B, D>;
-    type MacroParamsContext = MacroDefActions<'a, F, B, D>;
-    type MacroInvocationContext = MacroInvocationActions<'a, F, B, D>;
+    type CommandContext = CommandActions<'a, F, B, N, D>;
+    type MacroParamsContext = MacroDefActions<'a, F, B, N, D>;
+    type MacroInvocationContext = MacroInvocationActions<'a, F, B, N, D>;
     type Parent = Self;
 
     fn enter_command(self, name: (Command, D::Span)) -> Self::CommandContext {
@@ -145,20 +144,20 @@ where
     }
 }
 
-pub(crate) struct CommandActions<'a, F: Frontend<D>, B: ?Sized, D: Diagnostics> {
+pub(crate) struct CommandActions<'a, F: Frontend<D>, B: ?Sized, N, D: Diagnostics> {
     name: (Command, D::Span),
     args: CommandArgs<F::StringRef, D::Span>,
-    parent: SemanticActions<'a, F, B, D>,
+    parent: SemanticActions<'a, F, B, N, D>,
     has_errors: bool,
 }
 
 type CommandArgs<I, S> = Vec<SemanticExpr<I, S>>;
 
-impl<'a, F: Frontend<D>, B: ?Sized, D: Diagnostics> CommandActions<'a, F, B, D> {
+impl<'a, F: Frontend<D>, B: ?Sized, N, D: Diagnostics> CommandActions<'a, F, B, N, D> {
     fn new(
         name: (Command, D::Span),
-        parent: SemanticActions<'a, F, B, D>,
-    ) -> CommandActions<'a, F, B, D> {
+        parent: SemanticActions<'a, F, B, N, D>,
+    ) -> CommandActions<'a, F, B, N, D> {
         CommandActions {
             name,
             args: Vec::new(),
@@ -168,7 +167,7 @@ impl<'a, F: Frontend<D>, B: ?Sized, D: Diagnostics> CommandActions<'a, F, B, D> 
     }
 }
 
-impl<'a, F, B, D> MergeSpans<D::Span> for CommandActions<'a, F, B, D>
+impl<'a, F, B, N, D> MergeSpans<D::Span> for CommandActions<'a, F, B, N, D>
 where
     F: Frontend<D>,
     B: ?Sized,
@@ -179,7 +178,7 @@ where
     }
 }
 
-impl<'a, F, B, D> StripSpan<D::Span> for CommandActions<'a, F, B, D>
+impl<'a, F, B, N, D> StripSpan<D::Span> for CommandActions<'a, F, B, N, D>
 where
     F: Frontend<D>,
     B: ?Sized,
@@ -192,7 +191,7 @@ where
     }
 }
 
-impl<'a, F, B, D> EmitDiagnostic<D::Span, D::Stripped> for CommandActions<'a, F, B, D>
+impl<'a, F, B, N, D> EmitDiagnostic<D::Span, D::Stripped> for CommandActions<'a, F, B, N, D>
 where
     F: Frontend<D>,
     B: ?Sized,
@@ -204,7 +203,7 @@ where
     }
 }
 
-impl<'a, F, B, D> DelegateDiagnostics<D::Span> for CommandActions<'a, F, B, D>
+impl<'a, F, B, N, D> DelegateDiagnostics<D::Span> for CommandActions<'a, F, B, N, D>
 where
     F: Frontend<D>,
     B: ?Sized,
@@ -217,17 +216,17 @@ where
     }
 }
 
-impl<'a, F, B, D> syntax::CommandContext<D::Span> for CommandActions<'a, F, B, D>
+impl<'a, F, B, N, D> syntax::CommandContext<D::Span> for CommandActions<'a, F, B, N, D>
 where
     F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>> + ?Sized,
+    B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
     D: Diagnostics,
 {
     type Ident = Ident<F::StringRef>;
     type Command = Command;
     type Literal = Literal<F::StringRef>;
-    type ArgContext = ExprContext<'a, F, B, D>;
-    type Parent = SemanticActions<'a, F, B, D>;
+    type ArgContext = ExprContext<'a, F, B, N, D>;
+    type Parent = SemanticActions<'a, F, B, N, D>;
 
     fn add_argument(self) -> Self::ArgContext {
         ExprContext {
@@ -264,25 +263,25 @@ impl Directive {
     }
 }
 
-pub(crate) struct ExprContext<'a, F: Frontend<D>, B: ?Sized, D: Diagnostics> {
+pub(crate) struct ExprContext<'a, F: Frontend<D>, B: ?Sized, N, D: Diagnostics> {
     stack: Vec<SemanticExpr<F::StringRef, D::Span>>,
-    parent: CommandActions<'a, F, B, D>,
+    parent: CommandActions<'a, F, B, N, D>,
 }
 
-impl<'a, F, B, D> DelegateDiagnostics<D::Span> for ExprContext<'a, F, B, D>
+impl<'a, F, B, N, D> DelegateDiagnostics<D::Span> for ExprContext<'a, F, B, N, D>
 where
     F: Frontend<D>,
     B: ?Sized,
     D: Diagnostics,
 {
-    type Delegate = CommandActions<'a, F, B, D>;
+    type Delegate = CommandActions<'a, F, B, N, D>;
 
     fn diagnostics(&mut self) -> &mut Self::Delegate {
         &mut self.parent
     }
 }
 
-impl<'a, F, B, D> syntax::ExprContext<D::Span> for ExprContext<'a, F, B, D>
+impl<'a, F, B, N, D> syntax::ExprContext<D::Span> for ExprContext<'a, F, B, N, D>
 where
     F: Frontend<D>,
     B: ?Sized,
@@ -290,7 +289,7 @@ where
 {
     type Ident = Ident<F::StringRef>;
     type Literal = Literal<F::StringRef>;
-    type Parent = CommandActions<'a, F, B, D>;
+    type Parent = CommandActions<'a, F, B, N, D>;
 
     fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, D::Span)) {
         self.stack.push(SemanticExpr {
@@ -331,13 +330,13 @@ where
     }
 }
 
-fn analyze_mnemonic<'a, F, B, D>(
+fn analyze_mnemonic<'a, F, B, N, D>(
     name: (Mnemonic, D::Span),
     args: CommandArgs<F::StringRef, D::Span>,
-    actions: &mut SemanticActions<'a, F, B, D>,
+    actions: &mut SemanticActions<'a, F, B, N, D>,
 ) where
     F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>> + ?Sized,
+    B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
     D: Diagnostics,
 {
     let result = instruction::analyze_instruction(
@@ -356,18 +355,18 @@ fn analyze_mnemonic<'a, F, B, D>(
     }
 }
 
-pub(crate) struct MacroDefActions<'a, F: Frontend<D>, B: ?Sized, D: Diagnostics> {
+pub(crate) struct MacroDefActions<'a, F: Frontend<D>, B: ?Sized, N, D: Diagnostics> {
     name: Option<(Ident<F::StringRef>, D::Span)>,
     params: (Vec<Ident<F::StringRef>>, Vec<D::Span>),
     tokens: (Vec<SemanticToken<F::StringRef>>, Vec<D::Span>),
-    parent: SemanticActions<'a, F, B, D>,
+    parent: SemanticActions<'a, F, B, N, D>,
 }
 
-impl<'a, F: Frontend<D>, B: ?Sized, D: Diagnostics> MacroDefActions<'a, F, B, D> {
+impl<'a, F: Frontend<D>, B: ?Sized, N, D: Diagnostics> MacroDefActions<'a, F, B, N, D> {
     fn new(
         name: Option<(Ident<F::StringRef>, D::Span)>,
-        parent: SemanticActions<'a, F, B, D>,
-    ) -> MacroDefActions<'a, F, B, D> {
+        parent: SemanticActions<'a, F, B, N, D>,
+    ) -> MacroDefActions<'a, F, B, N, D> {
         MacroDefActions {
             name,
             params: (Vec::new(), Vec::new()),
@@ -377,7 +376,7 @@ impl<'a, F: Frontend<D>, B: ?Sized, D: Diagnostics> MacroDefActions<'a, F, B, D>
     }
 }
 
-impl<'a, F, B, D> DelegateDiagnostics<D::Span> for MacroDefActions<'a, F, B, D>
+impl<'a, F, B, N, D> DelegateDiagnostics<D::Span> for MacroDefActions<'a, F, B, N, D>
 where
     F: Frontend<D>,
     B: ?Sized,
@@ -390,7 +389,7 @@ where
     }
 }
 
-impl<'a, F, B, D> syntax::MacroParamsContext<D::Span> for MacroDefActions<'a, F, B, D>
+impl<'a, F, B, N, D> syntax::MacroParamsContext<D::Span> for MacroDefActions<'a, F, B, N, D>
 where
     F: Frontend<D>,
     B: ?Sized,
@@ -400,7 +399,7 @@ where
     type Command = Command;
     type Literal = Literal<F::StringRef>;
     type MacroBodyContext = Self;
-    type Parent = SemanticActions<'a, F, B, D>;
+    type Parent = SemanticActions<'a, F, B, N, D>;
 
     fn add_parameter(&mut self, (param, span): (Self::Ident, D::Span)) {
         self.params.0.push(param);
@@ -412,14 +411,14 @@ where
     }
 }
 
-impl<'a, F, B, D> syntax::TokenSeqContext<D::Span> for MacroDefActions<'a, F, B, D>
+impl<'a, F, B, N, D> syntax::TokenSeqContext<D::Span> for MacroDefActions<'a, F, B, N, D>
 where
     F: Frontend<D>,
     B: ?Sized,
     D: Diagnostics,
 {
     type Token = SemanticToken<F::StringRef>;
-    type Parent = SemanticActions<'a, F, B, D>;
+    type Parent = SemanticActions<'a, F, B, N, D>;
 
     fn push_token(&mut self, (token, span): (Self::Token, D::Span)) {
         self.tokens.0.push(token);
@@ -442,17 +441,17 @@ where
     }
 }
 
-pub(crate) struct MacroInvocationActions<'a, F: Frontend<D>, B: ?Sized, D: Diagnostics> {
+pub(crate) struct MacroInvocationActions<'a, F: Frontend<D>, B: ?Sized, N, D: Diagnostics> {
     name: (Ident<F::StringRef>, D::Span),
     args: Vec<super::TokenSeq<F::StringRef, D::Span>>,
-    parent: SemanticActions<'a, F, B, D>,
+    parent: SemanticActions<'a, F, B, N, D>,
 }
 
-impl<'a, F: Frontend<D>, B: ?Sized, D: Diagnostics> MacroInvocationActions<'a, F, B, D> {
+impl<'a, F: Frontend<D>, B: ?Sized, N, D: Diagnostics> MacroInvocationActions<'a, F, B, N, D> {
     fn new(
         name: (Ident<F::StringRef>, D::Span),
-        parent: SemanticActions<'a, F, B, D>,
-    ) -> MacroInvocationActions<'a, F, B, D> {
+        parent: SemanticActions<'a, F, B, N, D>,
+    ) -> MacroInvocationActions<'a, F, B, N, D> {
         MacroInvocationActions {
             name,
             args: Vec::new(),
@@ -465,7 +464,7 @@ impl<'a, F: Frontend<D>, B: ?Sized, D: Diagnostics> MacroInvocationActions<'a, F
     }
 }
 
-impl<'a, F, B, D> DelegateDiagnostics<D::Span> for MacroInvocationActions<'a, F, B, D>
+impl<'a, F, B, N, D> DelegateDiagnostics<D::Span> for MacroInvocationActions<'a, F, B, N, D>
 where
     F: Frontend<D>,
     B: ?Sized,
@@ -478,15 +477,16 @@ where
     }
 }
 
-impl<'a, F, B, D> syntax::MacroInvocationContext<D::Span> for MacroInvocationActions<'a, F, B, D>
+impl<'a, F, B, N, D> syntax::MacroInvocationContext<D::Span>
+    for MacroInvocationActions<'a, F, B, N, D>
 where
     F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>> + ?Sized,
+    B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
     D: Diagnostics,
 {
     type Token = SemanticToken<F::StringRef>;
-    type Parent = SemanticActions<'a, F, B, D>;
-    type MacroArgContext = MacroArgContext<'a, F, B, D>;
+    type Parent = SemanticActions<'a, F, B, N, D>;
+    type MacroArgContext = MacroArgContext<'a, F, B, N, D>;
 
     fn enter_macro_arg(self) -> Self::MacroArgContext {
         MacroArgContext::new(self)
@@ -498,13 +498,13 @@ where
     }
 }
 
-pub(crate) struct MacroArgContext<'a, F: Frontend<D>, B: ?Sized, D: Diagnostics> {
+pub(crate) struct MacroArgContext<'a, F: Frontend<D>, B: ?Sized, N, D: Diagnostics> {
     tokens: Vec<(SemanticToken<F::StringRef>, D::Span)>,
-    parent: MacroInvocationActions<'a, F, B, D>,
+    parent: MacroInvocationActions<'a, F, B, N, D>,
 }
 
-impl<'a, F: Frontend<D>, B: ?Sized, D: Diagnostics> MacroArgContext<'a, F, B, D> {
-    fn new(parent: MacroInvocationActions<'a, F, B, D>) -> MacroArgContext<'a, F, B, D> {
+impl<'a, F: Frontend<D>, B: ?Sized, N, D: Diagnostics> MacroArgContext<'a, F, B, N, D> {
+    fn new(parent: MacroInvocationActions<'a, F, B, N, D>) -> MacroArgContext<'a, F, B, N, D> {
         MacroArgContext {
             tokens: Vec::new(),
             parent,
@@ -512,7 +512,7 @@ impl<'a, F: Frontend<D>, B: ?Sized, D: Diagnostics> MacroArgContext<'a, F, B, D>
     }
 }
 
-impl<'a, F, B, D> DelegateDiagnostics<D::Span> for MacroArgContext<'a, F, B, D>
+impl<'a, F, B, N, D> DelegateDiagnostics<D::Span> for MacroArgContext<'a, F, B, N, D>
 where
     F: Frontend<D>,
     B: ?Sized,
@@ -525,14 +525,14 @@ where
     }
 }
 
-impl<'a, F, B, D> syntax::TokenSeqContext<D::Span> for MacroArgContext<'a, F, B, D>
+impl<'a, F, B, N, D> syntax::TokenSeqContext<D::Span> for MacroArgContext<'a, F, B, N, D>
 where
     F: Frontend<D>,
     B: ?Sized,
     D: Diagnostics,
 {
     type Token = SemanticToken<F::StringRef>;
-    type Parent = MacroInvocationActions<'a, F, B, D>;
+    type Parent = MacroInvocationActions<'a, F, B, N, D>;
 
     fn push_token(&mut self, token: (Self::Token, D::Span)) {
         self.tokens.push(token)
@@ -663,12 +663,14 @@ mod tests {
     use super::*;
 
     use crate::backend::{
-        BuildValue, HasValue, IndependentValueBuilder, PartialBackend, RelocAtom, RelocExpr, Width,
+        BuildValue, HasValue, HashMapNameTable, IndependentValueBuilder, PartialBackend, RelocAtom,
+        RelocExpr, Width,
     };
     use crate::codebase::CodebaseError;
     use crate::diag;
     use crate::diag::{CompactDiagnostic, Message};
     use crate::expr::BinaryOperator;
+    use crate::frontend::macros::{MacroDefData, MacroTableEntry};
     use crate::frontend::syntax::{
         keyword::Operand, CommandContext, ExprContext, FileContext, MacroInvocationContext,
         MacroParamsContext, StmtContext, Token, TokenSeqContext,
@@ -676,6 +678,7 @@ mod tests {
     use crate::frontend::{Downstream, MacroArgs};
     use std::borrow::Borrow;
     use std::cell::RefCell;
+    use std::rc::Rc;
 
     pub(crate) struct TestFrontend<'a> {
         operations: &'a RefCell<Vec<TestOperation>>,
@@ -699,17 +702,13 @@ mod tests {
         type StringRef = String;
         type MacroDefId = usize;
 
-        fn analyze_file<B>(
+        fn analyze_file<B, N>(
             &mut self,
             path: Self::StringRef,
-            _downstream: Downstream<
-                B,
-                HashMapNameTable<MacroEntry<Self, MockDiagnostics<'a>>>,
-                MockDiagnostics<'a>,
-            >,
+            _downstream: Downstream<B, N, MockDiagnostics<'a>>,
         ) -> Result<(), CodebaseError>
         where
-            B: Backend<Ident<String>, (), MacroEntry<Self, MockDiagnostics<'a>>> + ?Sized,
+            B: Backend<Ident<String>, (), N> + ?Sized,
         {
             self.operations
                 .borrow_mut()
@@ -720,17 +719,13 @@ mod tests {
             }
         }
 
-        fn invoke_macro<B>(
+        fn invoke_macro<B, N>(
             &mut self,
             name: (Ident<Self::StringRef>, ()),
             args: MacroArgs<Self::StringRef, ()>,
-            _downstream: Downstream<
-                B,
-                HashMapNameTable<MacroEntry<Self, MockDiagnostics<'a>>>,
-                MockDiagnostics<'a>,
-            >,
+            _downstream: Downstream<B, N, MockDiagnostics<'a>>,
         ) where
-            B: Backend<Ident<String>, (), MacroEntry<Self, MockDiagnostics<'a>>> + ?Sized,
+            B: Backend<Ident<String>, (), N> + ?Sized,
         {
             self.operations
                 .borrow_mut()
@@ -769,10 +764,10 @@ mod tests {
         type Value = RelocExpr<Ident<String>, ()>;
     }
 
-    impl<'a, 'b, M: 'b> BuildValue<'b, Ident<String>, M, ()> for TestBackend<'a> {
-        type Builder = IndependentValueBuilder<'b, (), M>;
+    impl<'a, 'b, N: 'b> BuildValue<'b, Ident<String>, N, ()> for TestBackend<'a> {
+        type Builder = IndependentValueBuilder<'b, (), N>;
 
-        fn build_value(&mut self, names: &'b mut HashMapNameTable<M>) -> Self::Builder {
+        fn build_value(&mut self, names: &'b mut N) -> Self::Builder {
             IndependentValueBuilder::new(names)
         }
     }
@@ -791,13 +786,8 @@ mod tests {
         }
     }
 
-    impl<'a, M: 'static> Backend<Ident<String>, (), M> for TestBackend<'a> {
-        fn define_symbol(
-            &mut self,
-            symbol: (Ident<String>, ()),
-            value: Self::Value,
-            _: &mut HashMapNameTable<M>,
-        ) {
+    impl<'a, N: 'static> Backend<Ident<String>, (), N> for TestBackend<'a> {
+        fn define_symbol(&mut self, symbol: (Ident<String>, ()), value: Self::Value, _: &mut N) {
             self.operations
                 .borrow_mut()
                 .push(TestOperation::DefineSymbol(symbol.0, value))
@@ -1086,6 +1076,13 @@ mod tests {
         operations.into_inner()
     }
 
-    type TestSemanticActions<'a> =
-        SemanticActions<'a, TestFrontend<'a>, TestBackend<'a>, MockDiagnostics<'a>>;
+    pub type TestNameTable<'a> = HashMapNameTable<MacroTableEntry<usize, Rc<MacroDefData<String>>>>;
+
+    type TestSemanticActions<'a> = SemanticActions<
+        'a,
+        TestFrontend<'a>,
+        TestBackend<'a>,
+        TestNameTable<'a>,
+        MockDiagnostics<'a>,
+    >;
 }

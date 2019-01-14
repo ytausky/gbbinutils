@@ -5,18 +5,17 @@ use crate::backend;
 use crate::backend::{Backend, LocationCounter, ValueBuilder, Width};
 use crate::diag::*;
 use crate::expr::{BinaryOperator, ExprVariant};
-use crate::frontend::macros::MacroEntry;
 use crate::frontend::{Frontend, Ident, Literal};
 use crate::span::Source;
 
-pub(super) fn analyze_directive<'a, 'b, F, B, D>(
+pub(super) fn analyze_directive<'a, 'b, F, B, N, D>(
     directive: (Directive, D::Span),
     args: CommandArgs<F::StringRef, D::Span>,
-    actions: &'b mut SemanticActions<'a, F, B, D>,
+    actions: &'b mut SemanticActions<'a, F, B, N, D>,
 ) where
     'a: 'b,
     F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>> + ?Sized,
+    B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
     D: Diagnostics,
 {
     let context = DirectiveContext {
@@ -33,8 +32,8 @@ struct DirectiveContext<'a, A, I, S> {
     actions: &'a mut A,
 }
 
-impl<'a, 'b, F, B, D> DelegateDiagnostics<D::Span>
-    for DirectiveContext<'b, SemanticActions<'a, F, B, D>, F::StringRef, D::Span>
+impl<'a, 'b, F, B, N, D> DelegateDiagnostics<D::Span>
+    for DirectiveContext<'b, SemanticActions<'a, F, B, N, D>, F::StringRef, D::Span>
 where
     'a: 'b,
     F: Frontend<D>,
@@ -47,11 +46,12 @@ where
     }
 }
 
-impl<'a, 'b, F, B, D> DirectiveContext<'b, SemanticActions<'a, F, B, D>, F::StringRef, D::Span>
+impl<'a, 'b, F, B, N, D>
+    DirectiveContext<'b, SemanticActions<'a, F, B, N, D>, F::StringRef, D::Span>
 where
     'a: 'b,
     F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span, MacroEntry<F, D>> + ?Sized,
+    B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
     D: Diagnostics,
 {
     fn analyze(self, directive: Directive) {
@@ -359,7 +359,7 @@ mod tests {
         let mut frontend = TestFrontend::new(&operations);
         frontend.fail(CodebaseError::Utf8Error);
         let mut backend = TestBackend::new(&operations);
-        let mut names = HashMapNameTable::new();
+        let mut names = HashMapNameTable::<()>::new();
         let mut diagnostics = MockDiagnostics::new(&operations);
         let session = Session::new(&mut frontend, &mut backend, &mut names, &mut diagnostics);
         {
@@ -391,7 +391,7 @@ mod tests {
             message,
         )));
         let mut backend = TestBackend::new(&operations);
-        let mut names = HashMapNameTable::new();
+        let mut names = HashMapNameTable::<()>::new();
         let mut diagnostics = MockDiagnostics::new(&operations);
         let session = Session::new(&mut frontend, &mut backend, &mut names, &mut diagnostics);
         {
@@ -430,16 +430,17 @@ mod tests {
         )
     }
 
-    fn ds(
-        f: impl for<'a> FnOnce(
-            &mut semantics::ExprContext<'a, TestFrontend<'a>, TestBackend<'a>, MockDiagnostics<'a>>,
-        ),
-    ) -> Vec<TestOperation> {
+    fn ds(f: impl for<'a> FnOnce(&mut TestExprContext<'a>)) -> Vec<TestOperation> {
         unary_directive(Directive::Ds, f)
     }
 
-    type TestExprContext<'a> =
-        semantics::ExprContext<'a, TestFrontend<'a>, TestBackend<'a>, MockDiagnostics<'a>>;
+    type TestExprContext<'a> = semantics::ExprContext<
+        'a,
+        TestFrontend<'a>,
+        TestBackend<'a>,
+        TestNameTable<'a>,
+        MockDiagnostics<'a>,
+    >;
 
     fn unary_directive<F>(directive: Directive, f: F) -> Vec<TestOperation>
     where
@@ -467,8 +468,13 @@ mod tests {
         )
     }
 
-    type TestCommandActions<'a> =
-        semantics::CommandActions<'a, TestFrontend<'a>, TestBackend<'a>, MockDiagnostics<'a>>;
+    type TestCommandActions<'a> = semantics::CommandActions<
+        'a,
+        TestFrontend<'a>,
+        TestBackend<'a>,
+        TestNameTable<'a>,
+        MockDiagnostics<'a>,
+    >;
 
     fn with_directive<F>(directive: Directive, f: F) -> Vec<TestOperation>
     where

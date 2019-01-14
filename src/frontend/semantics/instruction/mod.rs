@@ -895,7 +895,7 @@ mod tests {
             (mnemonic, TokenId::Mnemonic.into()),
             operands.into_iter().enumerate().map(add_token_spans),
             ValueContext::new(
-                &mut RelocExprBuilder::<_, ()>::new(&mut HashMapNameTable::new()),
+                &mut RelocExprBuilder::new(&mut HashMapNameTable::<()>::new()),
                 &mut collector,
             ),
         );
