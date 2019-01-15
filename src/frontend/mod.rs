@@ -3,7 +3,7 @@ mod semantics;
 mod session;
 mod syntax;
 
-use self::macros::{Expand, MacroDefData, MacroEntry, MacroExpander, MacroTable, MacroTableEntry};
+use self::macros::{DefineMacro, Expand, MacroDefData, MacroEntry, MacroTableEntry};
 use crate::backend::*;
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diag::*;
@@ -30,8 +30,7 @@ where
         codebase: &C,
         diagnostics: &mut D,
     ) -> Result<(), CodebaseError> {
-        let mut file_parser =
-            CodebaseAnalyzer::new(MacroExpander::new(), codebase, SemanticAnalysis);
+        let mut file_parser = CodebaseAnalyzer::new(codebase, SemanticAnalysis);
         let mut names = HashMapNameTable::new();
         let mut session = Session::new(&mut file_parser, self, &mut names, diagnostics);
         session.analyze_file(name.into())?;
@@ -89,7 +88,7 @@ pub(super) enum Literal<S> {
 trait Analysis<Id>
 where
     Self: Clone,
-    Id: Into<String> + Clone + AsRef<str> + PartialEq,
+    Id: Into<String> + Clone + Eq + AsRef<str>,
 {
     fn run<I, F, B, N, D>(&self, tokens: I, session: Session<F, B, N, D>)
     where
@@ -131,18 +130,20 @@ pub(crate) trait Frontend<D: Diagnostics> {
         B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
         N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>;
 
-    fn define_macro(
+    fn define_macro<B, N>(
         &mut self,
-        name: Ident<Self::StringRef>,
-        params: Vec<Ident<Self::StringRef>>,
-        tokens: Vec<SemanticToken<Self::StringRef>>,
-        context: D::MacroDefId,
-    );
+        name: (Ident<Self::StringRef>, D::Span),
+        params: (Vec<Ident<Self::StringRef>>, Vec<D::Span>),
+        body: (Vec<SemanticToken<Self::StringRef>>, Vec<D::Span>),
+        downstream: Downstream<B, N, D>,
+    ) where
+        B: ?Sized,
+        N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>;
 }
 
 impl<Id> Analysis<Id> for SemanticAnalysis
 where
-    Id: Into<String> + Clone + AsRef<str> + PartialEq,
+    Id: Into<String> + Clone + Eq + AsRef<str>,
 {
     fn run<'a, I, F, B, N, D>(&self, tokens: I, session: Session<'a, F, B, N, D>)
     where
@@ -157,33 +158,25 @@ where
     }
 }
 
-struct CodebaseAnalyzer<'a, M, T: 'a, A> {
-    macro_table: M,
+struct CodebaseAnalyzer<'a, T: 'a, A> {
     codebase: &'a T,
     analysis: A,
 }
 
-impl<'a, M, T: 'a, A> CodebaseAnalyzer<'a, M, T, A>
+impl<'a, T: 'a, A> CodebaseAnalyzer<'a, T, A>
 where
-    M: MacroTable<T::StringRef>,
     T: StringRef,
     A: Analysis<T::StringRef>,
 {
-    fn new(macro_table: M, codebase: &T, analysis: A) -> CodebaseAnalyzer<M, T, A> {
-        CodebaseAnalyzer {
-            macro_table,
-            codebase,
-            analysis,
-        }
+    fn new(codebase: &T, analysis: A) -> CodebaseAnalyzer<T, A> {
+        CodebaseAnalyzer { codebase, analysis }
     }
 }
 
 type TokenSeq<I, S> = Vec<(SemanticToken<I>, S)>;
 
-impl<'a, M, T, A, D> Frontend<D> for CodebaseAnalyzer<'a, M, T, A>
+impl<'a, T, A, D> Frontend<D> for CodebaseAnalyzer<'a, T, A>
 where
-    M: MacroTable<T::StringRef, MacroDefId = D::MacroDefId>,
-    M::Entry: Expand<T::StringRef, D, D::Span>,
     T: Tokenize<D::BufContext> + 'a,
     A: Analysis<T::StringRef>,
     D: Diagnostics,
@@ -235,8 +228,9 @@ where
         B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
         N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>,
     {
-        let expansion = match self.macro_table.get(&name) {
-            Some(entry) => Some(entry.expand(span, args, downstream.diagnostics)),
+        let expansion = match downstream.names.get(&name) {
+            Some(Name::Macro(entry)) => Some(entry.expand(span, args, downstream.diagnostics)),
+            Some(_) => unimplemented!(),
             None => {
                 let stripped = downstream.diagnostics.strip_span(&span);
                 downstream
@@ -253,19 +247,24 @@ where
         }
     }
 
-    fn define_macro(
+    fn define_macro<B, N>(
         &mut self,
-        name: Ident<Self::StringRef>,
-        params: Vec<Ident<Self::StringRef>>,
-        body: Vec<SemanticToken<Self::StringRef>>,
-        context: D::MacroDefId,
-    ) {
-        self.macro_table.define(name, params, body, context);
+        name: (Ident<Self::StringRef>, D::Span),
+        params: (Vec<Ident<Self::StringRef>>, Vec<D::Span>),
+        body: (Vec<SemanticToken<Self::StringRef>>, Vec<D::Span>),
+        downstream: Downstream<B, N, D>,
+    ) where
+        B: ?Sized,
+        N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>,
+    {
+        downstream
+            .names
+            .define_macro(name, params, body, downstream.diagnostics)
     }
 }
 
 trait StringRef {
-    type StringRef: AsRef<str> + Clone + Into<String> + PartialEq;
+    type StringRef: AsRef<str> + Clone + Eq + Into<String>;
 }
 
 trait Tokenize<C: BufContext>
@@ -414,12 +413,10 @@ mod tests {
         let log = TestLog::<()>::default();
         TestFixture::new(&log).when(|mut fixture| {
             let mut session = fixture.session();
-            Frontend::<MockDiagnostics<()>>::define_macro(
-                session.frontend,
-                name.into(),
-                Vec::new(),
-                tokens.clone(),
-                0,
+            session.define_macro(
+                (name.into(), ()),
+                (vec![], vec![]),
+                (tokens.clone(), vec![]),
             );
             session.invoke_macro((name.into(), ()), vec![])
         });
@@ -441,12 +438,13 @@ mod tests {
             let name = "my_db";
             let param = "x";
             let mut session = fixture.session();
-            Frontend::<MockDiagnostics<()>>::define_macro(
-                session.frontend,
-                name.into(),
-                vec![param.into()],
-                vec![db.clone(), Token::Ident(param.into()), literal0.clone()],
-                0,
+            session.define_macro(
+                (name.into(), ()),
+                (vec![param.into()], vec![()]),
+                (
+                    vec![db.clone(), Token::Ident(param.into()), literal0.clone()],
+                    vec![(), (), ()],
+                ),
             );
             session.invoke_macro((name.into(), ()), vec![vec![(arg.clone(), ())]])
         });
@@ -469,12 +467,10 @@ mod tests {
             let name = "my_macro";
             let param = "x";
             let mut session = fixture.session();
-            Frontend::<MockDiagnostics<()>>::define_macro(
-                session.frontend,
-                name.into(),
-                vec![param.into()],
-                vec![Token::Label(param.into()), nop.clone()],
-                0,
+            session.define_macro(
+                (name.into(), ()),
+                (vec![param.into()], vec![()]),
+                (vec![Token::Label(param.into()), nop.clone()], vec![(), ()]),
             );
             session.invoke_macro(
                 (name.into(), ()),
@@ -601,7 +597,6 @@ mod tests {
     type MockDiagnostics<'a, S> = diag::MockDiagnostics<'a, TestEvent<S>, S>;
 
     struct TestFixture<'a, S: Clone> {
-        macro_table: MacroExpander<String, usize>,
         mock_token_source: MockTokenSource<S>,
         analysis: Mock<'a, S>,
         object: MockBackend<'a, S>,
@@ -629,7 +624,6 @@ mod tests {
     impl<'a, S: Clone + Default> TestFixture<'a, S> {
         fn new(log: &'a TestLog<S>) -> TestFixture<'a, S> {
             TestFixture {
-                macro_table: MacroExpander::new(),
                 mock_token_source: MockTokenSource::new(),
                 analysis: Mock::new(log),
                 object: MockBackend::new(log),
@@ -644,11 +638,7 @@ mod tests {
 
         fn when<F: for<'b> FnOnce(PreparedFixture<'a, 'b, S>)>(self, f: F) {
             let prepared = PreparedFixture {
-                code_analyzer: CodebaseAnalyzer::new(
-                    self.macro_table,
-                    &self.mock_token_source,
-                    self.analysis,
-                ),
+                code_analyzer: CodebaseAnalyzer::new(&self.mock_token_source, self.analysis),
                 object: self.object,
                 names: HashMapNameTable::new(),
                 diagnostics: self.diagnostics,
@@ -657,8 +647,7 @@ mod tests {
         }
     }
 
-    type TestCodebaseAnalyzer<'a, 'r, S> =
-        CodebaseAnalyzer<'r, MacroExpander<String, usize>, MockTokenSource<S>, Mock<'a, S>>;
+    type TestCodebaseAnalyzer<'a, 'r, S> = CodebaseAnalyzer<'r, MockTokenSource<S>, Mock<'a, S>>;
 
     type TestNameTable<'a, 'b, S> =
         HashMapNameTable<MacroEntry<TestCodebaseAnalyzer<'a, 'b, S>, MockDiagnostics<'a, S>>>;

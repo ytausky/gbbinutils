@@ -389,6 +389,7 @@ impl<'a, F, B, N, D> syntax::MacroParamsContext<D::Span> for MacroDefActions<'a,
 where
     F: Frontend<D>,
     B: ?Sized,
+    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
     D: Diagnostics,
 {
     type Ident = Ident<F::StringRef>;
@@ -411,6 +412,7 @@ impl<'a, F, B, N, D> syntax::TokenSeqContext<D::Span> for MacroDefActions<'a, F,
 where
     F: Frontend<D>,
     B: ?Sized,
+    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
     D: Diagnostics,
 {
     type Token = SemanticToken<F::StringRef>;
@@ -421,17 +423,11 @@ where
         self.tokens.1.push(span)
     }
 
-    fn exit(self) -> Self::Parent {
+    fn exit(mut self) -> Self::Parent {
         if let Some(name) = self.name {
-            let context = self.parent.session.diagnostics.add_macro_def(
-                name.1.clone(),
-                self.params.1.clone(),
-                self.tokens.1.clone(),
-            );
             self.parent
                 .session
-                .frontend
-                .define_macro(name.0, self.params.0, self.tokens.0, context)
+                .define_macro(name, self.params, self.tokens)
         }
         self.parent
     }
@@ -589,17 +585,17 @@ mod tests {
         }
     }
 
-    impl<'a> Frontend<MockDiagnostics<'a>> for TestFrontend<'a> {
+    impl<'a, D: Diagnostics> Frontend<D> for TestFrontend<'a> {
         type StringRef = String;
         type MacroDefId = usize;
 
         fn analyze_file<B, N>(
             &mut self,
             path: Self::StringRef,
-            _downstream: Downstream<B, N, MockDiagnostics<'a>>,
+            _: Downstream<B, N, D>,
         ) -> Result<(), CodebaseError>
         where
-            B: Backend<Ident<String>, (), N> + ?Sized,
+            B: Backend<Ident<String>, D::Span, N> + ?Sized,
         {
             self.operations
                 .borrow_mut()
@@ -610,24 +606,21 @@ mod tests {
             }
         }
 
-        fn analyze_token_seq<I, B, N>(
-            &mut self,
-            _tokens: I,
-            _downstream: &mut Downstream<B, N, MockDiagnostics<'a>>,
-        ) where
-            I: IntoIterator<Item = LexItem<Self::StringRef, ()>>,
-            B: Backend<Ident<Self::StringRef>, (), N> + ?Sized,
+        fn analyze_token_seq<I, B, N>(&mut self, _tokens: I, _: &mut Downstream<B, N, D>)
+        where
+            I: IntoIterator<Item = LexItem<Self::StringRef, D::Span>>,
+            B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
         {
             unimplemented!()
         }
 
         fn invoke_macro<B, N>(
             &mut self,
-            name: (Ident<Self::StringRef>, ()),
-            args: MacroArgs<Self::StringRef, ()>,
-            _downstream: Downstream<B, N, MockDiagnostics<'a>>,
+            name: (Ident<Self::StringRef>, D::Span),
+            args: MacroArgs<Self::StringRef, D::Span>,
+            _: Downstream<B, N, D>,
         ) where
-            B: Backend<Ident<String>, (), N> + ?Sized,
+            B: Backend<Ident<String>, D::Span, N> + ?Sized,
         {
             self.operations
                 .borrow_mut()
@@ -639,16 +632,19 @@ mod tests {
                 ))
         }
 
-        fn define_macro(
+        fn define_macro<B, N>(
             &mut self,
-            name: Ident<Self::StringRef>,
-            params: Vec<Ident<Self::StringRef>>,
-            tokens: Vec<SemanticToken<Self::StringRef>>,
-            _context: usize,
-        ) {
+            name: (Ident<Self::StringRef>, D::Span),
+            params: (Vec<Ident<Self::StringRef>>, Vec<D::Span>),
+            body: (Vec<SemanticToken<Self::StringRef>>, Vec<D::Span>),
+            _: Downstream<B, N, D>,
+        ) where
+            B: ?Sized,
+            N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>,
+        {
             self.operations
                 .borrow_mut()
-                .push(TestOperation::DefineMacro(name, params, tokens))
+                .push(TestOperation::DefineMacro(name.0, params.0, body.0))
         }
     }
 
@@ -947,7 +943,8 @@ mod tests {
         operations.into_inner()
     }
 
-    pub type TestNameTable<'a> = HashMapNameTable<MacroTableEntry<usize, Rc<MacroDefData<String>>>>;
+    pub(crate) type TestNameTable<'a> =
+        HashMapNameTable<MacroTableEntry<usize, Rc<MacroDefData<String>>>>;
 
     type TestSemanticActions<'a> = SemanticActions<
         'a,

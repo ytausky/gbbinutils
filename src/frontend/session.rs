@@ -29,6 +29,16 @@ impl<'a, F, B: ?Sized, N, D> Session<'a, F, B, N, D> {
     }
 }
 
+macro_rules! downstream {
+    ($session:expr) => {
+        Downstream {
+            backend: $session.backend,
+            names: $session.names,
+            diagnostics: $session.diagnostics,
+        }
+    };
+}
+
 impl<'a, F, B, N, D> Session<'a, F, B, N, D>
 where
     F: Frontend<D>,
@@ -37,14 +47,25 @@ where
     D: Diagnostics,
 {
     pub fn analyze_file(&mut self, path: F::StringRef) -> Result<(), CodebaseError> {
-        self.frontend.analyze_file(
-            path,
-            Downstream {
-                backend: self.backend,
-                names: self.names,
-                diagnostics: self.diagnostics,
-            },
-        )
+        self.frontend.analyze_file(path, downstream!(self))
+    }
+}
+
+impl<'a, F, B, N, D> Session<'a, F, B, N, D>
+where
+    F: Frontend<D>,
+    B: ?Sized,
+    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
+    D: Diagnostics,
+{
+    pub fn define_macro(
+        &mut self,
+        name: (Ident<F::StringRef>, D::Span),
+        params: (Vec<Ident<F::StringRef>>, Vec<D::Span>),
+        body: (Vec<SemanticToken<F::StringRef>>, Vec<D::Span>),
+    ) {
+        self.frontend
+            .define_macro(name, params, body, downstream!(self))
     }
 }
 
@@ -70,14 +91,6 @@ where
         name: (Ident<F::StringRef>, D::Span),
         args: MacroArgs<F::StringRef, D::Span>,
     ) {
-        self.frontend.invoke_macro(
-            name,
-            args,
-            Downstream {
-                backend: self.backend,
-                names: self.names,
-                diagnostics: self.diagnostics,
-            },
-        )
+        self.frontend.invoke_macro(name, args, downstream!(self))
     }
 }
