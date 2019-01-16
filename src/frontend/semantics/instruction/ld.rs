@@ -302,8 +302,8 @@ mod tests {
     use crate::backend::Width;
     use crate::expr::Expr;
     use crate::frontend::semantics::instruction::tests::*;
-    use crate::frontend::syntax::keyword::Mnemonic;
     use crate::instruction::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
+    use crate::syntax::keyword::Mnemonic;
 
     #[test]
     fn analyze_ld_deref_symbol_a() {

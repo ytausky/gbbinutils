@@ -16,6 +16,7 @@ mod expr;
 mod frontend;
 mod instruction;
 mod program;
+mod syntax;
 
 #[derive(Default)]
 pub struct Config<'a> {

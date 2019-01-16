@@ -8,7 +8,7 @@ pub mod keyword;
 pub mod lexer;
 mod parser;
 
-pub use crate::frontend::syntax::keyword::{Command, Operand};
+pub use self::keyword::{Command, Operand};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token<I, L, C> {

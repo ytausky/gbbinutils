@@ -2,8 +2,8 @@ use super::SemanticActions;
 use crate::backend::{Backend, NameTable};
 use crate::diag::{DelegateDiagnostics, Diagnostics};
 use crate::frontend::macros::MacroEntry;
-use crate::frontend::syntax::{MacroInvocationContext, TokenSeqContext};
 use crate::frontend::{Frontend, Ident, SemanticToken, TokenSeq};
+use crate::syntax::{MacroInvocationContext, TokenSeqContext};
 
 pub(crate) struct MacroInvocationActions<'a, F: Frontend<D>, B: ?Sized, N, D: Diagnostics> {
     name: (Ident<F::StringRef>, D::Span),

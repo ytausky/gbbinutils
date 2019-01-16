@@ -1,6 +1,6 @@
-use crate::frontend::syntax::keyword::*;
-use crate::frontend::syntax::SimpleToken::*;
-use crate::frontend::syntax::{SimpleToken, Token};
+use super::keyword::*;
+use super::SimpleToken::*;
+use super::{SimpleToken, Token};
 use crate::frontend::{Ident, Literal, SemanticToken};
 
 use std::iter;
@@ -171,7 +171,7 @@ fn is_hex_digit(character: char) -> bool {
     character.is_digit(16)
 }
 
-pub(in crate::frontend) struct Lexer<'a> {
+pub(crate) struct Lexer<'a> {
     src: &'a str,
     scanner: Scanner<str::Chars<'a>>,
 }

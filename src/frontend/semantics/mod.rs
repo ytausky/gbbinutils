@@ -5,8 +5,8 @@ use crate::diag::*;
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
 use crate::frontend::macros::MacroEntry;
 use crate::frontend::session::Session;
-use crate::frontend::syntax::{self, keyword::*, ExprAtom, Operator, UnaryOperator};
 use crate::frontend::{Frontend, Ident, Literal, SemanticToken};
+use crate::syntax::{self, keyword::*, ExprAtom, Operator, UnaryOperator};
 
 mod directive;
 mod instruction;
@@ -558,11 +558,11 @@ mod tests {
     use crate::diag::{CompactDiagnostic, Message};
     use crate::expr::BinaryOperator;
     use crate::frontend::macros::{MacroDefData, MacroTableEntry};
-    use crate::frontend::syntax::{
+    use crate::frontend::{Downstream, LexItem, MacroArgs};
+    use crate::syntax::{
         keyword::Operand, CommandContext, ExprContext, FileContext, MacroInvocationContext,
         MacroParamsContext, StmtContext, Token, TokenSeqContext,
     };
-    use crate::frontend::{Downstream, LexItem, MacroArgs};
     use std::borrow::Borrow;
     use std::cell::RefCell;
     use std::rc::Rc;

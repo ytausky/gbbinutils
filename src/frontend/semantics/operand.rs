@@ -1,10 +1,10 @@
 use super::{AnalyzeExpr, ExprVariant, SemanticAtom, SemanticExpr, SemanticUnary, ValueContext};
 use crate::backend::ValueBuilder;
 use crate::diag::*;
-use crate::frontend::syntax::keyword as kw;
 use crate::frontend::{Ident, Literal};
 use crate::instruction::{Condition, PtrReg, Reg16, RegPair, SimpleOperand};
 use crate::span::Source;
+use crate::syntax::keyword as kw;
 
 #[derive(Debug, PartialEq)]
 pub enum Operand<V: Source> {

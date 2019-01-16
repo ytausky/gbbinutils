@@ -214,10 +214,8 @@ mod tests {
     use crate::frontend::semantics;
     use crate::frontend::semantics::tests::{MockDiagnostics, *};
     use crate::frontend::session::Session;
-    use crate::frontend::syntax::keyword::{Command, Operand};
-    use crate::frontend::syntax::{
-        CommandContext, ExprAtom, ExprContext, FileContext, StmtContext,
-    };
+    use crate::syntax::keyword::{Command, Operand};
+    use crate::syntax::{CommandContext, ExprAtom, ExprContext, FileContext, StmtContext};
     use std::borrow::Borrow;
     use std::cell::RefCell;
     use std::io;

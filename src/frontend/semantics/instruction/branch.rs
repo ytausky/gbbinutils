@@ -199,7 +199,7 @@ mod tests {
     use super::*;
     use crate::expr::Expr;
     use crate::frontend::semantics::instruction::tests::*;
-    use crate::frontend::syntax::keyword::Mnemonic;
+    use crate::syntax::keyword::Mnemonic;
 
     #[test]
     fn analyze_legal_branch_instructions() {

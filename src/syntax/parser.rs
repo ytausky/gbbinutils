@@ -512,7 +512,7 @@ mod tests {
     use super::*;
     use crate::diag::span::{MergeSpans, StripSpan};
     use crate::diag::{CompactDiagnostic, EmitDiagnostic, Message};
-    use crate::frontend::syntax::ExprAtom;
+    use crate::syntax::ExprAtom;
     use std::borrow::Borrow;
     use std::collections::HashMap;
 

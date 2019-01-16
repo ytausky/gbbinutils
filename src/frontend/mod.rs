@@ -1,19 +1,18 @@
 mod macros;
 mod semantics;
 mod session;
-mod syntax;
 
 use self::macros::{DefineMacro, Expand, MacroDefData, MacroEntry, MacroTableEntry};
 use crate::backend::*;
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diag::*;
 use crate::frontend::session::*;
-use crate::frontend::syntax::lexer::LexError;
-use crate::frontend::syntax::*;
 use crate::span::BufContext;
+use crate::syntax::lexer::{LexError, Lexer};
+use crate::syntax::*;
 use std::rc::Rc;
 
-pub use crate::frontend::syntax::Token;
+pub use crate::syntax::Token;
 
 pub(crate) trait Assemble<D>
 where
@@ -57,7 +56,7 @@ pub struct Downstream<'a, B: ?Sized + 'a, N: 'a, D: 'a> {
 
 type LexItem<T, S> = (Result<SemanticToken<T>, LexError>, S);
 
-type SemanticToken<T> = Token<Ident<T>, Literal<T>, syntax::Command>;
+pub(crate) type SemanticToken<T> = Token<Ident<T>, Literal<T>, Command>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Ident<T> {
@@ -154,7 +153,7 @@ where
         D: Diagnostics,
     {
         let actions = semantics::SemanticActions::new(session);
-        syntax::parse_token_seq(tokens, actions);
+        crate::syntax::parse_token_seq(tokens, actions);
     }
 }
 
@@ -314,14 +313,14 @@ impl<'a, C: BufContext> IntoIterator for &'a TokenizedSrc<C> {
     type IntoIter = TokenizedSrcIter<'a, C>;
     fn into_iter(self) -> Self::IntoIter {
         TokenizedSrcIter {
-            tokens: syntax::tokenize(&self.src),
+            tokens: crate::syntax::tokenize(&self.src),
             context: &self.context,
         }
     }
 }
 
 struct TokenizedSrcIter<'a, C: BufContext + 'a> {
-    tokens: syntax::lexer::Lexer<'a>,
+    tokens: Lexer<'a>,
     context: &'a C,
 }
 
@@ -343,8 +342,8 @@ mod tests {
     use crate::diag;
     use crate::diag::CompactDiagnostic;
     use crate::frontend::macros::MacroEntry;
-    use crate::frontend::syntax::keyword::Mnemonic;
     use crate::instruction::{Instruction, Nullary};
+    use crate::syntax::keyword::Mnemonic;
     use std::collections::HashMap;
     use std::{self, cell::RefCell};
 
@@ -404,7 +403,7 @@ mod tests {
         );
     }
 
-    use crate::frontend::syntax::keyword::*;
+    use crate::syntax::keyword::*;
 
     #[test]
     fn define_and_invoke_macro() {
@@ -575,7 +574,7 @@ mod tests {
     #[derive(Debug, PartialEq)]
     enum TestEvent<S: Clone> {
         Backend(backend::Event<RelocExpr<S>>),
-        AnalyzeTokens(Vec<Result<SemanticToken<String>, syntax::lexer::LexError>>),
+        AnalyzeTokens(Vec<Result<SemanticToken<String>, LexError>>),
         Diagnostics(diag::Event<S>),
     }
 

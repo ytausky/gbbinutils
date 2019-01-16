@@ -6,9 +6,9 @@ use crate::diag::{
     CompactDiagnostic, DelegateDiagnostics, DownstreamDiagnostics, EmitDiagnostic, Message,
 };
 use crate::frontend::semantics::operand::{self, AtomKind, Context, Operand, OperandCounter};
-use crate::frontend::syntax::keyword as kw;
 use crate::frontend::Ident;
 use crate::instruction::*;
+use crate::syntax::keyword as kw;
 
 mod branch;
 mod ld;
