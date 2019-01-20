@@ -14,7 +14,7 @@ mod invoke;
 mod operand;
 
 #[derive(Debug, PartialEq)]
-enum SemanticAtom<I> {
+pub(crate) enum SemanticAtom<I> {
     Ident(Ident<I>),
     Literal(Literal<I>),
 }
@@ -30,7 +30,7 @@ pub enum SemanticUnary {
     Parentheses,
 }
 
-type SemanticExpr<I, S> = Expr<SemanticAtom<I>, SemanticUnary, BinaryOperator, S>;
+pub(crate) type SemanticExpr<I, S> = Expr<SemanticAtom<I>, SemanticUnary, BinaryOperator, S>;
 
 #[cfg(test)]
 type SemanticExprVariant<I, S> = ExprVariant<SemanticAtom<I>, SemanticUnary, BinaryOperator, S>;
@@ -221,7 +221,7 @@ where
     type Ident = Ident<F::StringRef>;
     type Command = Command;
     type Literal = Literal<F::StringRef>;
-    type ArgContext = ExprContext<'a, F, B, N, D>;
+    type ArgContext = ExprContext<F, D, Self>;
     type Parent = SemanticActions<'a, F, B, N, D>;
 
     fn add_argument(self) -> Self::ArgContext {
@@ -259,33 +259,59 @@ impl Directive {
     }
 }
 
-pub(crate) struct ExprContext<'a, F: Frontend<D>, B: ?Sized, N, D: Diagnostics> {
+pub(crate) struct ExprContext<F, D, P>
+where
+    F: Frontend<D>,
+    D: Diagnostics,
+{
     stack: Vec<SemanticExpr<F::StringRef, D::Span>>,
-    parent: CommandActions<'a, F, B, N, D>,
+    parent: P,
 }
 
-impl<'a, F, B, N, D> DelegateDiagnostics<D::Span> for ExprContext<'a, F, B, N, D>
+pub(crate) trait Args<R, S> {
+    fn push_arg(&mut self, arg: SemanticExpr<R, S>);
+    fn has_errors(&self) -> bool;
+}
+
+impl<'a, F, B, N, D> Args<F::StringRef, D::Span> for CommandActions<'a, F, B, N, D>
 where
     F: Frontend<D>,
     B: ?Sized,
     D: Diagnostics,
 {
-    type Delegate = CommandActions<'a, F, B, N, D>;
+    fn push_arg(&mut self, arg: SemanticExpr<F::StringRef, D::Span>) {
+        self.args.push(arg)
+    }
+
+    fn has_errors(&self) -> bool {
+        self.has_errors
+    }
+}
+
+impl<F, D, P> DelegateDiagnostics<D::Span> for ExprContext<F, D, P>
+where
+    F: Frontend<D>,
+    D: Diagnostics,
+    P: DownstreamDiagnostics<D::Span>,
+{
+    type Delegate = P;
 
     fn diagnostics(&mut self) -> &mut Self::Delegate {
         &mut self.parent
     }
 }
 
-impl<'a, F, B, N, D> syntax::ExprContext<D::Span> for ExprContext<'a, F, B, N, D>
+impl<F, D, P> syntax::ExprContext<D::Span> for ExprContext<F, D, P>
 where
     F: Frontend<D>,
-    B: ?Sized,
     D: Diagnostics,
+    P: Args<F::StringRef, D::Span>,
+    P: DelegateDiagnostics<D::Span> + MergeSpans<D::Span> + StripSpan<D::Span>,
+    P: EmitDiagnostic<D::Span, <P as StripSpan<D::Span>>::Stripped>,
 {
     type Ident = Ident<F::StringRef>;
     type Literal = Literal<F::StringRef>;
-    type Parent = CommandActions<'a, F, B, N, D>;
+    type Parent = P;
 
     fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, D::Span)) {
         self.stack.push(SemanticExpr {
@@ -318,9 +344,9 @@ where
     }
 
     fn exit(mut self) -> Self::Parent {
-        if !self.parent.has_errors {
+        if !self.parent.has_errors() {
             assert_eq!(self.stack.len(), 1);
-            self.parent.args.push(self.stack.pop().unwrap());
+            self.parent.push_arg(self.stack.pop().unwrap());
         }
         self.parent
     }

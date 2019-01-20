@@ -437,13 +437,8 @@ mod tests {
         unary_directive(Directive::Ds, f)
     }
 
-    type TestExprContext<'a> = semantics::ExprContext<
-        'a,
-        TestFrontend<'a>,
-        MockBackend<'a>,
-        TestNameTable<'a>,
-        MockDiagnostics<'a>,
-    >;
+    type TestExprContext<'a> =
+        semantics::ExprContext<TestFrontend<'a>, MockDiagnostics<'a>, TestCommandActions<'a>>;
 
     fn unary_directive<F>(directive: Directive, f: F) -> Vec<TestOperation>
     where
