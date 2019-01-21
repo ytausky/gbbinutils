@@ -361,14 +361,20 @@ fn analyze_mnemonic<'a, F, B, N, D>(
     B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
     D: Diagnostics,
 {
-    let result = instruction::analyze_instruction(
-        name,
-        args.into_iter(),
-        ValueContext::new(
-            &mut actions.session.backend.build_value(actions.session.names),
-            actions.session.diagnostics,
-        ),
-    );
+    let operands: Vec<_> = args
+        .into_iter()
+        .map(|arg| {
+            operand::analyze_operand(
+                arg,
+                name.0.context(),
+                &mut ValueContext::new(
+                    &mut actions.session.backend.build_value(actions.session.names),
+                    actions.session.diagnostics,
+                ),
+            )
+        })
+        .collect();
+    let result = instruction::analyze_instruction(name, operands, actions.session.diagnostics);
     if let Ok(instruction) = result {
         actions
             .session

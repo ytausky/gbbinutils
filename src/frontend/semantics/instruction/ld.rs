@@ -1,25 +1,23 @@
-use super::{Analysis, Operand, SemanticExpr};
-use crate::backend::{ValueBuilder, Width};
+use super::{Analysis, Operand};
+use crate::backend::Width;
 use crate::diag::span::Source;
 use crate::diag::{CompactDiagnostic, DownstreamDiagnostics, EmitDiagnostic, Message};
 use crate::frontend::semantics::operand::AtomKind;
-use crate::frontend::Ident;
 use crate::instruction::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
 
-impl<'a, Id, I, B, D, S> Analysis<'a, I, B, D, S>
+impl<'a, I, V, D, S> Analysis<'a, I, D, S>
 where
-    Id: Into<String>,
-    I: Iterator<Item = SemanticExpr<Id, S>>,
-    B: ValueBuilder<Ident<Id>, S>,
+    I: Iterator<Item = Result<Operand<V>, ()>>,
+    V: Source<Span = S>,
     D: DownstreamDiagnostics<S>,
     S: Clone,
 {
-    pub fn analyze_ld(&mut self) -> Result<Instruction<B::Value>, ()> {
+    pub fn analyze_ld(&mut self) -> Result<Instruction<V>, ()> {
         let dest = self.next_operand_out_of(2)?;
         let src = self.next_operand_out_of(2)?;
         match (
-            dest.into_ld_dest(self.value_context.diagnostics)?,
-            src.into_ld_src(self.value_context.diagnostics)?,
+            dest.into_ld_dest(self.diagnostics)?,
+            src.into_ld_src(self.diagnostics)?,
         ) {
             (LdDest::Byte(dest), LdOperand::Other(LdDest::Byte(src))) => {
                 self.analyze_8_bit_ld(dest, src)
@@ -34,7 +32,7 @@ where
                 self.analyze_16_bit_ld(dest, LdOperand::Const(src))
             }
             (LdDest::Byte(dest), LdOperand::Other(LdDest::Word(src))) => {
-                let diagnostics = &mut self.value_context.diagnostics;
+                let diagnostics = &mut self.diagnostics;
                 let diagnostic = CompactDiagnostic::new(
                     Message::LdWidthMismatch {
                         src_width: Width::Word,
@@ -47,7 +45,7 @@ where
                 Err(())
             }
             (LdDest::Word(dest), LdOperand::Other(LdDest::Byte(src))) => {
-                let diagnostics = &mut self.value_context.diagnostics;
+                let diagnostics = &mut self.diagnostics;
                 let diagnostic = CompactDiagnostic::new(
                     Message::LdWidthMismatch {
                         src_width: Width::Byte,
@@ -64,15 +62,15 @@ where
 
     fn analyze_8_bit_ld(
         &mut self,
-        dest: LdDest8<B::Value>,
-        src: impl Into<LdOperand<B::Value, LdDest8<B::Value>>>,
-    ) -> Result<Instruction<B::Value>, ()> {
+        dest: LdDest8<V>,
+        src: impl Into<LdOperand<V, LdDest8<V>>>,
+    ) -> Result<Instruction<V>, ()> {
         match (dest, src.into()) {
             (
                 LdDest8::Simple(SimpleOperand::DerefHl, dest),
                 LdOperand::Other(LdDest8::Simple(SimpleOperand::DerefHl, src)),
             ) => {
-                let diagnostics = &mut self.value_context.diagnostics;
+                let diagnostics = &mut self.diagnostics;
                 let diagnostic = CompactDiagnostic::new(
                     Message::LdDerefHlDerefHl {
                         mnemonic: diagnostics.strip_span(&self.mnemonic.1),
@@ -91,11 +89,11 @@ where
                 Ok(Instruction::Ld(Ld::Immediate8(dest, expr)))
             }
             (LdDest8::Special(dest), src) => {
-                src.expect_a(self.value_context.diagnostics)?;
+                src.expect_a(self.diagnostics)?;
                 analyze_special_ld(dest, Direction::FromA)
             }
             (dest, LdOperand::Other(LdDest8::Special(src))) => {
-                dest.expect_a(self.value_context.diagnostics)?;
+                dest.expect_a(self.diagnostics)?;
                 analyze_special_ld(src, Direction::IntoA)
             }
         }
@@ -104,14 +102,14 @@ where
     fn analyze_16_bit_ld(
         &mut self,
         dest: LdDest16<S>,
-        src: impl Into<LdOperand<B::Value, LdDest16<S>>>,
-    ) -> Result<Instruction<B::Value>, ()> {
+        src: impl Into<LdOperand<V, LdDest16<S>>>,
+    ) -> Result<Instruction<V>, ()> {
         match (dest, src.into()) {
             (LdDest16::Reg16(Reg16::Sp, _), LdOperand::Other(LdDest16::Reg16(Reg16::Hl, _))) => {
                 Ok(Instruction::Ld(Ld::SpHl))
             }
             (LdDest16::Reg16(_, dest_span), LdOperand::Other(LdDest16::Reg16(_, src_span))) => {
-                let diagnostics = &mut self.value_context.diagnostics;
+                let diagnostics = &mut self.diagnostics;
                 let merged_span = diagnostics.merge_spans(&dest_span, &src_span);
                 diagnostics
                     .emit_diagnostic(CompactDiagnostic::new(Message::LdSpHlOperands, merged_span));

@@ -1,7 +1,5 @@
-use super::{Analysis, AtomKind, Operand, SemanticExpr, SimpleOperand};
-use crate::backend::ValueBuilder;
+use super::{Analysis, AtomKind, Operand, SimpleOperand};
 use crate::diag::{CompactDiagnostic, DownstreamDiagnostics, EmitDiagnostic, Message};
-use crate::frontend::Ident;
 use crate::instruction::{Branch, Condition, Instruction, Nullary};
 use crate::span::Source;
 
@@ -24,21 +22,16 @@ pub enum ImplicitBranch {
     Reti,
 }
 
-impl<'a, Id, I, B, D, S> Analysis<'a, I, B, D, S>
+impl<'a, I, V, D, S> Analysis<'a, I, D, S>
 where
-    Id: Into<String>,
-    I: Iterator<Item = SemanticExpr<Id, S>>,
-    B: ValueBuilder<Ident<Id>, S>,
+    I: Iterator<Item = Result<Operand<V>, ()>>,
+    V: Source<Span = S>,
     D: DownstreamDiagnostics<S>,
     S: Clone,
 {
-    pub fn analyze_branch(&mut self, branch: BranchKind) -> Result<Instruction<B::Value>, ()> {
+    pub fn analyze_branch(&mut self, branch: BranchKind) -> Result<Instruction<V>, ()> {
         let (condition, target) = self.collect_branch_operands()?;
-        let variant = analyze_branch_variant(
-            (branch, &self.mnemonic.1),
-            target,
-            self.value_context.diagnostics,
-        )?;
+        let variant = analyze_branch_variant((branch, &self.mnemonic.1), target, self.diagnostics)?;
         match variant {
             BranchVariant::Unconditional(branch) => match condition {
                 None => Ok(branch.into()),
@@ -57,18 +50,18 @@ where
         }
     }
 
-    fn collect_branch_operands(&mut self) -> Result<BranchOperands<B::Value>, ()> {
+    fn collect_branch_operands(&mut self) -> Result<BranchOperands<V>, ()> {
         let first_operand = self.next_operand()?;
         Ok(
             if let Some(Operand::Atom(AtomKind::Condition(condition), range)) = first_operand {
                 (
                     Some((condition, range)),
-                    analyze_branch_target(self.next_operand()?, self.value_context.diagnostics)?,
+                    analyze_branch_target(self.next_operand()?, self.diagnostics)?,
                 )
             } else {
                 (
                     None,
-                    analyze_branch_target(first_operand, self.value_context.diagnostics)?,
+                    analyze_branch_target(first_operand, self.diagnostics)?,
                 )
             },
         )

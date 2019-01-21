@@ -1,88 +1,78 @@
 use self::branch::*;
-use super::{SemanticExpr, ValueContext};
-use crate::backend::ValueBuilder;
 use crate::diag::span::Source;
 use crate::diag::{
     CompactDiagnostic, DelegateDiagnostics, DownstreamDiagnostics, EmitDiagnostic, Message,
 };
-use crate::frontend::semantics::operand::{self, AtomKind, Context, Operand, OperandCounter};
-use crate::frontend::Ident;
+use crate::frontend::semantics::operand::{AtomKind, Context, Operand, OperandCounter};
 use crate::instruction::*;
 use crate::syntax::keyword as kw;
 
 mod branch;
 mod ld;
 
-pub(super) fn analyze_instruction<Id: Into<String>, I, B, D, S>(
+pub(super) fn analyze_instruction<I, V, D, S>(
     mnemonic: (kw::Mnemonic, S),
     operands: I,
-    value_context: ValueContext<B, D>,
-) -> Result<Instruction<B::Value>, ()>
+    diagnostics: &mut D,
+) -> Result<Instruction<V>, ()>
 where
-    I: IntoIterator<Item = SemanticExpr<Id, S>>,
-    B: ValueBuilder<Ident<Id>, S>,
+    I: IntoIterator<Item = Result<Operand<V>, ()>>,
+    V: Source<Span = S>,
     D: DownstreamDiagnostics<S>,
     S: Clone,
 {
     let mnemonic: (Mnemonic, _) = (mnemonic.0.into(), mnemonic.1);
-    Analysis::new(mnemonic, operands.into_iter(), value_context).run()
+    Analysis::new(mnemonic, operands.into_iter(), diagnostics).run()
 }
 
-struct Analysis<'a, I, B: 'a, D: 'a, S> {
+struct Analysis<'a, I, D: 'a, S> {
     mnemonic: (Mnemonic, S),
     operands: OperandCounter<I>,
-    value_context: ValueContext<'a, B, D>,
+    diagnostics: &'a mut D,
 }
 
-impl<'a, I, B, D, S> DelegateDiagnostics<S> for Analysis<'a, I, B, D, S>
+impl<'a, I, D, S> DelegateDiagnostics<S> for Analysis<'a, I, D, S>
 where
-    B: 'a,
     D: DownstreamDiagnostics<S> + 'a,
 {
     type Delegate = D;
 
     fn diagnostics(&mut self) -> &mut Self::Delegate {
-        self.value_context.diagnostics
+        self.diagnostics
     }
 }
 
-impl<'a, I, B, D, S> EmitDiagnostic<S, D::Stripped> for Analysis<'a, I, B, D, S>
+impl<'a, I, D, S> EmitDiagnostic<S, D::Stripped> for Analysis<'a, I, D, S>
 where
-    B: 'a,
     D: DownstreamDiagnostics<S> + 'a,
 {
     fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<S, D::Stripped>) {
-        self.value_context.diagnostics.emit_diagnostic(diagnostic)
+        self.diagnostics.emit_diagnostic(diagnostic)
     }
 }
 
-impl<'a, Id, I, B, D, S> Analysis<'a, I, B, D, S>
+impl<'a, I, V, D, S> Analysis<'a, I, D, S>
 where
-    Id: Into<String>,
-    I: Iterator<Item = SemanticExpr<Id, S>>,
-    B: ValueBuilder<Ident<Id>, S>,
+    I: Iterator<Item = Result<Operand<V>, ()>>,
+    V: Source<Span = S>,
     D: DownstreamDiagnostics<S>,
     S: Clone,
 {
-    fn new(
-        mnemonic: (Mnemonic, S),
-        operands: I,
-        value_context: ValueContext<'a, B, D>,
-    ) -> Analysis<'a, I, B, D, S> {
+    fn new(mnemonic: (Mnemonic, S), operands: I, diagnostics: &'a mut D) -> Analysis<'a, I, D, S> {
         Analysis {
             mnemonic,
             operands: OperandCounter::new(operands),
-            value_context,
+            diagnostics,
         }
     }
 
-    fn run(mut self) -> Result<Instruction<B::Value>, ()> {
+    fn run(mut self) -> Result<Instruction<V>, ()> {
         let instruction = self.analyze_mnemonic()?;
         self.check_for_unexpected_operands()?;
         Ok(instruction)
     }
 
-    fn analyze_mnemonic(&mut self) -> Result<Instruction<B::Value>, ()> {
+    fn analyze_mnemonic(&mut self) -> Result<Instruction<V>, ()> {
         use self::Mnemonic::*;
         match self.mnemonic.0 {
             Alu(AluOperation::Add) => self.analyze_add_instruction(),
@@ -102,7 +92,7 @@ where
         }
     }
 
-    fn analyze_add_instruction(&mut self) -> Result<Instruction<B::Value>, ()> {
+    fn analyze_add_instruction(&mut self) -> Result<Instruction<V>, ()> {
         match self.next_operand_out_of(2)? {
             Operand::Atom(AtomKind::Reg16(reg16), range) => {
                 self.analyze_add_reg16_instruction((reg16, range))
@@ -111,10 +101,7 @@ where
         }
     }
 
-    fn analyze_add_reg16_instruction(
-        &mut self,
-        target: (Reg16, S),
-    ) -> Result<Instruction<B::Value>, ()> {
+    fn analyze_add_reg16_instruction(&mut self, target: (Reg16, S)) -> Result<Instruction<V>, ()> {
         match target.0 {
             Reg16::Hl => self.analyze_add_hl_instruction(),
             _ => {
@@ -124,7 +111,7 @@ where
         }
     }
 
-    fn analyze_add_hl_instruction(&mut self) -> Result<Instruction<B::Value>, ()> {
+    fn analyze_add_hl_instruction(&mut self) -> Result<Instruction<V>, ()> {
         match self.next_operand_out_of(2)? {
             Operand::Atom(AtomKind::Reg16(src), _) => Ok(Instruction::AddHl(src)),
             operand => {
@@ -140,8 +127,8 @@ where
     fn analyze_alu_instruction(
         &mut self,
         operation: AluOperation,
-        first_operand: Operand<B::Value>,
-    ) -> Result<Instruction<B::Value>, ()> {
+        first_operand: Operand<V>,
+    ) -> Result<Instruction<V>, ()> {
         let src = if operation.implicit_dest() {
             first_operand
         } else {
@@ -149,7 +136,7 @@ where
             first_operand.expect_specific_atom(
                 AtomKind::Simple(SimpleOperand::A),
                 Message::DestMustBeA,
-                self.value_context.diagnostics,
+                self.diagnostics,
             )?;
             second_operand
         };
@@ -168,16 +155,13 @@ where
         }
     }
 
-    fn analyze_bit_operation(
-        &mut self,
-        operation: BitOperation,
-    ) -> Result<Instruction<B::Value>, ()> {
+    fn analyze_bit_operation(&mut self, operation: BitOperation) -> Result<Instruction<V>, ()> {
         let bit_number = self.next_operand_out_of(2)?;
         let operand = self.next_operand_out_of(2)?;
         let expr = if let Operand::Const(expr) = bit_number {
             expr
         } else {
-            let stripped = self.value_context.diagnostics.strip_span(&self.mnemonic.1);
+            let stripped = self.diagnostics.strip_span(&self.mnemonic.1);
             self.emit_diagnostic(CompactDiagnostic::new(
                 Message::MustBeBit { mnemonic: stripped },
                 bit_number.span(),
@@ -187,38 +171,33 @@ where
         Ok(Instruction::Bit(
             operation,
             expr,
-            operand.expect_simple(self.value_context.diagnostics)?,
+            operand.expect_simple(self.diagnostics)?,
         ))
     }
 
-    fn analyze_ldhl(&mut self) -> Result<Instruction<B::Value>, ()> {
+    fn analyze_ldhl(&mut self) -> Result<Instruction<V>, ()> {
         let src = self.next_operand_out_of(2)?;
         let offset = self.next_operand_out_of(2)?;
         src.expect_specific_atom(
             AtomKind::Reg16(Reg16::Sp),
             Message::SrcMustBeSp,
-            self.value_context.diagnostics,
+            self.diagnostics,
         )?;
-        Ok(Instruction::Ldhl(
-            offset.expect_const(self.value_context.diagnostics)?,
-        ))
+        Ok(Instruction::Ldhl(offset.expect_const(self.diagnostics)?))
     }
 
-    fn analyze_misc(&mut self, operation: MiscOperation) -> Result<Instruction<B::Value>, ()> {
+    fn analyze_misc(&mut self, operation: MiscOperation) -> Result<Instruction<V>, ()> {
         let operand = self.next_operand_out_of(1)?;
         Ok(Instruction::Misc(
             operation,
-            operand.expect_simple(self.value_context.diagnostics)?,
+            operand.expect_simple(self.diagnostics)?,
         ))
     }
 
-    fn analyze_stack_operation(
-        &mut self,
-        operation: StackOperation,
-    ) -> Result<Instruction<B::Value>, ()> {
+    fn analyze_stack_operation(&mut self, operation: StackOperation) -> Result<Instruction<V>, ()> {
         let reg_pair = self
             .next_operand_out_of(1)?
-            .expect_reg_pair(self.value_context.diagnostics)?;
+            .expect_reg_pair(self.diagnostics)?;
         let instruction_ctor = match operation {
             StackOperation::Push => Instruction::Push,
             StackOperation::Pop => Instruction::Pop,
@@ -226,7 +205,7 @@ where
         Ok(instruction_ctor(reg_pair))
     }
 
-    fn analyze_inc_dec(&mut self, mode: IncDec) -> Result<Instruction<B::Value>, ()> {
+    fn analyze_inc_dec(&mut self, mode: IncDec) -> Result<Instruction<V>, ()> {
         match self.next_operand_out_of(1)? {
             Operand::Atom(AtomKind::Simple(operand), _) => Ok(Instruction::IncDec8(mode, operand)),
             Operand::Atom(AtomKind::Reg16(operand), _) => Ok(Instruction::IncDec16(mode, operand)),
@@ -240,14 +219,14 @@ where
         }
     }
 
-    fn analyze_rst(&mut self) -> Result<Instruction<B::Value>, ()> {
+    fn analyze_rst(&mut self) -> Result<Instruction<V>, ()> {
         Ok(Instruction::Rst(
             self.next_operand_out_of(1)?
-                .expect_const(self.value_context.diagnostics)?,
+                .expect_const(self.diagnostics)?,
         ))
     }
 
-    fn next_operand_out_of(&mut self, out_of: usize) -> Result<Operand<B::Value>, ()> {
+    fn next_operand_out_of(&mut self, out_of: usize) -> Result<Operand<V>, ()> {
         let actual = self.operands.seen();
         self.next_operand()?.ok_or_else(|| {
             self.emit_diagnostic(CompactDiagnostic::new(
@@ -260,11 +239,10 @@ where
         })
     }
 
-    fn next_operand(&mut self) -> Result<Option<Operand<B::Value>>, ()> {
-        self.operands.next().map_or(Ok(None), |expr| {
-            operand::analyze_operand(expr, self.mnemonic.0.context(), &mut self.value_context)
-                .map(Some)
-        })
+    fn next_operand(&mut self) -> Result<Option<Operand<V>>, ()> {
+        self.operands
+            .next()
+            .map_or(Ok(None), |result| result.map(Some))
     }
 
     fn check_for_unexpected_operands(self) -> Result<(), ()> {
@@ -274,12 +252,10 @@ where
         if actual == expected {
             Ok(())
         } else {
-            self.value_context
-                .diagnostics
-                .emit_diagnostic(CompactDiagnostic::new(
-                    Message::OperandCount { actual, expected },
-                    self.mnemonic.1,
-                ));
+            self.diagnostics.emit_diagnostic(CompactDiagnostic::new(
+                Message::OperandCount { actual, expected },
+                self.mnemonic.1,
+            ));
             Err(())
         }
     }
@@ -361,6 +337,12 @@ impl Mnemonic {
             Mnemonic::Stack(_) => Context::Stack,
             _ => Context::Other,
         }
+    }
+}
+
+impl kw::Mnemonic {
+    pub fn context(&self) -> Context {
+        Mnemonic::from(*self).context()
     }
 }
 
@@ -456,7 +438,7 @@ mod tests {
     use crate::frontend::semantics::{
         SemanticAtom, SemanticExpr, SemanticExprVariant, SemanticUnary,
     };
-    use crate::frontend::Literal;
+    use crate::frontend::{Ident, Literal};
     pub use crate::span::{MergeSpans, Span};
     use std::cmp;
 
@@ -890,14 +872,28 @@ mod tests {
         I: IntoIterator<Item = Input>,
     {
         use crate::backend::{HashMapNameTable, RelocExprBuilder};
+        use crate::frontend::semantics::operand::analyze_operand;
+        use crate::frontend::semantics::ValueContext;
         let mut collector = DiagnosticsCollector(Vec::new());
+        let operands: Vec<_> = operands
+            .into_iter()
+            .enumerate()
+            .map(add_token_spans)
+            .map(|op| {
+                analyze_operand(
+                    op,
+                    Mnemonic::from(mnemonic).context(),
+                    &mut ValueContext::new(
+                        &mut RelocExprBuilder::new(&mut HashMapNameTable::<()>::new()),
+                        &mut collector,
+                    ),
+                )
+            })
+            .collect();
         let result = analyze_instruction(
             (mnemonic, TokenId::Mnemonic.into()),
-            operands.into_iter().enumerate().map(add_token_spans),
-            ValueContext::new(
-                &mut RelocExprBuilder::new(&mut HashMapNameTable::<()>::new()),
-                &mut collector,
-            ),
+            operands,
+            &mut collector,
         );
         AnalysisResult(result.map_err(|_| collector.0))
     }
