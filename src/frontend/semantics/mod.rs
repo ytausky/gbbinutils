@@ -6,7 +6,7 @@ use crate::diag::span::{MergeSpans, Source, StripSpan};
 use crate::diag::*;
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
 use crate::frontend::macros::MacroEntry;
-use crate::frontend::session::{CompositeSession, Session};
+use crate::frontend::session::{BuildValue, CompositeSession, Session};
 use crate::frontend::{Frontend, Ident, Literal, SemanticToken};
 use crate::syntax::{self, keyword::*, ExprAtom, Operator, UnaryOperator};
 
@@ -59,7 +59,7 @@ where
     fn define_label_if_present(&mut self) {
         if let Some((label, span)) = self.label.take() {
             let value = {
-                let mut builder = self.session.value_context();
+                let mut builder = self.session.build_value();
                 ToValue::<LocationCounter, D::Span>::to_value(
                     &mut builder,
                     (LocationCounter, span.clone()),
@@ -366,7 +366,7 @@ fn analyze_mnemonic<'a, F, B, N, D>(
     let operands: Vec<_> = args
         .into_iter()
         .map(|arg| {
-            operand::analyze_operand(arg, name.0.context(), &mut actions.session.value_context())
+            operand::analyze_operand(arg, name.0.context(), &mut actions.session.build_value())
         })
         .collect();
     let result = instruction::analyze_instruction(name, operands, actions.session.diagnostics());

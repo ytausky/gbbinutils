@@ -4,7 +4,7 @@ use crate::backend::{Backend, LocationCounter, NameTable, PartialBackend, ValueB
 use crate::diag::*;
 use crate::expr::{BinaryOperator, ExprVariant};
 use crate::frontend::macros::MacroEntry;
-use crate::frontend::session::Session;
+use crate::frontend::session::{BuildValue, Session};
 use crate::frontend::{Frontend, Ident, Literal};
 use crate::span::Source;
 
@@ -71,8 +71,8 @@ where
         let session = &mut self.actions.session;
         for arg in self.args {
             let expr = {
-                let mut context = session.value_context();
-                if let Ok(expr) = context.analyze_expr(arg) {
+                let mut builder = session.build_value();
+                if let Ok(expr) = builder.analyze_expr(arg) {
                     expr
                 } else {
                     return;
@@ -90,13 +90,13 @@ where
             } else {
                 return;
             };
-            let mut context = session.value_context();
-            let count = if let Ok(count) = context.analyze_expr(arg) {
+            let mut builder = session.build_value();
+            let count = if let Ok(count) = builder.analyze_expr(arg) {
                 count
             } else {
                 return;
             };
-            location_counter_plus_expr(count, &mut context)
+            location_counter_plus_expr(count, &mut builder)
         };
         session.set_origin(origin)
     }
@@ -111,8 +111,8 @@ where
         };
 
         let value = {
-            let mut context = session.value_context();
-            if let Ok(value) = context.analyze_expr(arg) {
+            let mut builder = session.build_value();
+            if let Ok(value) = builder.analyze_expr(arg) {
                 value
             } else {
                 return;
@@ -143,8 +143,8 @@ where
             return;
         };
         let expr = {
-            let mut context = session.value_context();
-            if let Ok(expr) = context.analyze_expr(arg) {
+            let mut builder = session.build_value();
+            if let Ok(expr) = builder.analyze_expr(arg) {
                 expr
             } else {
                 return;

@@ -1,5 +1,6 @@
+use crate::backend;
 use crate::backend::{
-    ApplyBinaryOperator, Backend, BuildValue, HasValue, Item, NameTable, PartialBackend, ToValue,
+    ApplyBinaryOperator, Backend, HasValue, Item, NameTable, PartialBackend, ToValue,
 };
 use crate::codebase::CodebaseError;
 use crate::diag::span::Span;
@@ -27,6 +28,17 @@ where
         args: MacroArgs<Self::StringRef, Self::Span>,
     );
     fn define_symbol(&mut self, symbol: (Ident<Self::StringRef>, Self::Span), value: Self::Value);
+}
+
+pub(crate) trait BuildValue<'a>
+where
+    Self: Span + StringRef,
+    Self: HasValue<<Self as Span>::Span>,
+{
+    type Builder: backend::ValueBuilder<Ident<Self::StringRef>, Self::Span>
+        + DelegateDiagnostics<Self::Span>;
+
+    fn build_value(&'a mut self) -> Self::Builder;
 }
 
 pub(super) type MacroArgs<I, S> = Vec<Vec<(SemanticToken<I>, S)>>;
@@ -104,6 +116,26 @@ where
         self.backend.set_origin(origin)
     }
 }
+
+impl<'a, 'b, F, B, N, D> BuildValue<'b> for CompositeSession<'a, F, B, N, D>
+where
+    'a: 'b,
+    F: Frontend<D>,
+    B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
+    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
+    D: Diagnostics,
+{
+    type Builder = ValueContext<'b, ValueBuilder<'b, B, N, F::StringRef, D::Span>, D>;
+
+    fn build_value(&'b mut self) -> Self::Builder {
+        ValueContext::new(
+            self.backend.build_value(&mut self.names),
+            &mut self.diagnostics,
+        )
+    }
+}
+
+type ValueBuilder<'a, B, N, R, S> = <B as backend::BuildValue<'a, Ident<R>, N, S>>::Builder;
 
 impl<'a, F, B, N, D> Session for CompositeSession<'a, F, B, N, D>
 where
@@ -221,26 +253,5 @@ where
         right: Self::Value,
     ) -> Self::Value {
         self.builder.apply_binary_operator(operator, left, right)
-    }
-}
-
-type SessionValueContext<'a, F, B, N, D> = ValueContext<
-    'a,
-    <B as BuildValue<'a, Ident<<F as Frontend<D>>::StringRef>, N, <D as Span>::Span>>::Builder,
-    D,
->;
-
-impl<'a, F, B, N, D> CompositeSession<'a, F, B, N, D>
-where
-    F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
-    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
-    D: Diagnostics,
-{
-    pub fn value_context(&mut self) -> SessionValueContext<F, B, N, D> {
-        ValueContext::new(
-            self.backend.build_value(&mut self.names),
-            &mut self.diagnostics,
-        )
     }
 }
