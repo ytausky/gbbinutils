@@ -31,7 +31,7 @@ where
     ) -> Result<(), CodebaseError> {
         let mut file_parser = CodebaseAnalyzer::new(codebase, SemanticAnalysis);
         let mut names = HashMapNameTable::new();
-        let mut session = Session::new(&mut file_parser, self, &mut names, diagnostics);
+        let mut session = CompositeSession::new(&mut file_parser, self, &mut names, diagnostics);
         session.analyze_file(name.into())?;
         Ok(())
     }
@@ -89,7 +89,7 @@ where
     Self: Clone,
     Id: Into<String> + Clone + Eq + AsRef<str>,
 {
-    fn run<I, F, B, N, D>(&self, tokens: I, session: Session<F, B, N, D>)
+    fn run<I, F, B, N, D>(&self, tokens: I, session: CompositeSession<F, B, N, D>)
     where
         I: Iterator<Item = LexItem<Id, D::Span>>,
         F: Frontend<D, StringRef = Id>,
@@ -144,7 +144,7 @@ impl<Id> Analysis<Id> for SemanticAnalysis
 where
     Id: Into<String> + Clone + Eq + AsRef<str>,
 {
-    fn run<'a, I, F, B, N, D>(&self, tokens: I, session: Session<'a, F, B, N, D>)
+    fn run<'a, I, F, B, N, D>(&self, tokens: I, session: CompositeSession<'a, F, B, N, D>)
     where
         I: Iterator<Item = LexItem<Id, D::Span>>,
         F: Frontend<D, StringRef = Id>,
@@ -209,7 +209,7 @@ where
         N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>,
     {
         let analysis = self.analysis.clone();
-        let session = Session::new(
+        let session = CompositeSession::new(
             self,
             downstream.backend,
             downstream.names,
@@ -556,7 +556,7 @@ mod tests {
     }
 
     impl<'a, S: Clone> Analysis<String> for Mock<'a, S> {
-        fn run<I, F, B, N, D>(&self, tokens: I, _frontend: Session<F, B, N, D>)
+        fn run<I, F, B, N, D>(&self, tokens: I, _frontend: CompositeSession<F, B, N, D>)
         where
             I: Iterator<Item = LexItem<String, D::Span>>,
             F: Frontend<D, StringRef = String>,
@@ -611,7 +611,7 @@ mod tests {
 
     impl<'a, 'b, S: Clone + Default> PreparedFixture<'a, 'b, S> {
         fn session<'r>(&'r mut self) -> TestSession<'a, 'b, 'r, S> {
-            Session::new(
+            CompositeSession::new(
                 &mut self.code_analyzer,
                 &mut self.object,
                 &mut self.names,
@@ -651,7 +651,7 @@ mod tests {
     type TestNameTable<'a, 'b, S> =
         HashMapNameTable<MacroEntry<TestCodebaseAnalyzer<'a, 'b, S>, MockDiagnostics<'a, S>>>;
 
-    type TestSession<'a, 'b, 'r, S> = Session<
+    type TestSession<'a, 'b, 'r, S> = CompositeSession<
         'r,
         TestCodebaseAnalyzer<'a, 'b, S>,
         MockBackend<'a, S>,

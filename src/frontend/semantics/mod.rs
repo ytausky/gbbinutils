@@ -4,7 +4,7 @@ use crate::diag::span::{MergeSpans, Source, StripSpan};
 use crate::diag::*;
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
 use crate::frontend::macros::MacroEntry;
-use crate::frontend::session::Session;
+use crate::frontend::session::CompositeSession;
 use crate::frontend::{Frontend, Ident, Literal, SemanticToken};
 use crate::syntax::{self, keyword::*, ExprAtom, Operator, UnaryOperator};
 
@@ -36,7 +36,7 @@ pub(crate) type SemanticExpr<I, S> = Expr<SemanticAtom<I>, SemanticUnary, Binary
 type SemanticExprVariant<I, S> = ExprVariant<SemanticAtom<I>, SemanticUnary, BinaryOperator, S>;
 
 pub(crate) struct SemanticActions<'a, F: Frontend<D>, B: ?Sized, N, D: Diagnostics> {
-    session: Session<'a, F, B, N, D>,
+    session: CompositeSession<'a, F, B, N, D>,
     label: Option<(Ident<F::StringRef>, D::Span)>,
 }
 
@@ -46,7 +46,7 @@ where
     B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
     D: Diagnostics,
 {
-    pub fn new(session: Session<'a, F, B, N, D>) -> SemanticActions<'a, F, B, N, D> {
+    pub fn new(session: CompositeSession<'a, F, B, N, D>) -> SemanticActions<'a, F, B, N, D> {
         SemanticActions {
             session,
             label: None,
@@ -933,7 +933,8 @@ mod tests {
         let mut backend = MockBackend::new(&operations);
         let mut names = HashMapNameTable::new();
         let mut diagnostics = MockDiagnostics::new(&operations);
-        let session = Session::new(&mut frontend, &mut backend, &mut names, &mut diagnostics);
+        let session =
+            CompositeSession::new(&mut frontend, &mut backend, &mut names, &mut diagnostics);
         f(SemanticActions::new(session));
         operations.into_inner()
     }

@@ -8,21 +8,21 @@ use crate::frontend::{Downstream, Frontend, Ident, SemanticToken};
 
 pub(super) type MacroArgs<I, S> = Vec<Vec<(SemanticToken<I>, S)>>;
 
-pub(crate) struct Session<'a, F, B: ?Sized, N, D> {
+pub(crate) struct CompositeSession<'a, F, B: ?Sized, N, D> {
     pub frontend: &'a mut F,
     pub backend: &'a mut B,
     pub names: &'a mut N,
     pub diagnostics: &'a mut D,
 }
 
-impl<'a, F, B: ?Sized, N, D> Session<'a, F, B, N, D> {
+impl<'a, F, B: ?Sized, N, D> CompositeSession<'a, F, B, N, D> {
     pub fn new(
         frontend: &'a mut F,
         backend: &'a mut B,
         names: &'a mut N,
         diagnostics: &'a mut D,
-    ) -> Session<'a, F, B, N, D> {
-        Session {
+    ) -> CompositeSession<'a, F, B, N, D> {
+        CompositeSession {
             frontend,
             backend,
             names,
@@ -41,7 +41,7 @@ macro_rules! downstream {
     };
 }
 
-impl<'a, F, B, N, D> Session<'a, F, B, N, D>
+impl<'a, F, B, N, D> CompositeSession<'a, F, B, N, D>
 where
     F: Frontend<D>,
     B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
@@ -53,7 +53,7 @@ where
     }
 }
 
-impl<'a, F, B, N, D> Session<'a, F, B, N, D>
+impl<'a, F, B, N, D> CompositeSession<'a, F, B, N, D>
 where
     F: Frontend<D>,
     B: ?Sized,
@@ -72,7 +72,7 @@ where
 }
 
 impl<'a, F, B, N, D: DownstreamDiagnostics<S>, S> DelegateDiagnostics<S>
-    for Session<'a, F, B, N, D>
+    for CompositeSession<'a, F, B, N, D>
 {
     type Delegate = D;
 
@@ -81,7 +81,7 @@ impl<'a, F, B, N, D: DownstreamDiagnostics<S>, S> DelegateDiagnostics<S>
     }
 }
 
-impl<'a, F, B, N, D> Session<'a, F, B, N, D>
+impl<'a, F, B, N, D> CompositeSession<'a, F, B, N, D>
 where
     F: Frontend<D>,
     B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
@@ -164,7 +164,7 @@ type SessionValueContext<'a, F, B, N, D> = ValueContext<
     D,
 >;
 
-impl<'a, F, B, N, D> Session<'a, F, B, N, D>
+impl<'a, F, B, N, D> CompositeSession<'a, F, B, N, D>
 where
     F: Frontend<D>,
     B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,

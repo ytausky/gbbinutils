@@ -207,7 +207,7 @@ mod tests {
     use crate::diag;
     use crate::frontend::semantics;
     use crate::frontend::semantics::tests::{MockDiagnostics, *};
-    use crate::frontend::session::Session;
+    use crate::frontend::session::CompositeSession;
     use crate::syntax::keyword::{Command, Operand};
     use crate::syntax::{CommandContext, ExprAtom, ExprContext, FileContext, StmtContext};
     use std::borrow::Borrow;
@@ -358,7 +358,8 @@ mod tests {
         let mut backend = MockBackend::new(&operations);
         let mut names = HashMapNameTable::new();
         let mut diagnostics = MockDiagnostics::new(&operations);
-        let session = Session::new(&mut frontend, &mut backend, &mut names, &mut diagnostics);
+        let session =
+            CompositeSession::new(&mut frontend, &mut backend, &mut names, &mut diagnostics);
         {
             let mut context = SemanticActions::new(session)
                 .enter_stmt(None)
@@ -390,7 +391,8 @@ mod tests {
         let mut backend = MockBackend::new(&operations);
         let mut names = HashMapNameTable::new();
         let mut diagnostics = MockDiagnostics::new(&operations);
-        let session = Session::new(&mut frontend, &mut backend, &mut names, &mut diagnostics);
+        let session =
+            CompositeSession::new(&mut frontend, &mut backend, &mut names, &mut diagnostics);
         {
             let mut context = SemanticActions::new(session)
                 .enter_stmt(None)
