@@ -1,4 +1,4 @@
-use super::{AnalyzeExpr, ExprVariant, SemanticAtom, SemanticExpr, SemanticUnary, ValueContext};
+use super::{AnalyzeExpr, ExprVariant, SemanticAtom, SemanticExpr, SemanticUnary};
 use crate::backend::ValueBuilder;
 use crate::diag::*;
 use crate::frontend::{Ident, Literal};
@@ -41,20 +41,19 @@ pub enum Context {
     Other,
 }
 
-pub(super) fn analyze_operand<I, B, D, S>(
+pub(super) fn analyze_operand<C, I, S>(
     expr: SemanticExpr<I, S>,
     context: Context,
-    value_context: &mut ValueContext<B, D>,
-) -> Result<Operand<B::Value>, ()>
+    value_context: &mut C,
+) -> Result<Operand<C::Value>, ()>
 where
+    C: ValueBuilder<Ident<I>, S> + DelegateDiagnostics<S>,
     I: Into<String>,
-    B: ValueBuilder<Ident<I>, S>,
-    D: DownstreamDiagnostics<S>,
     S: Clone,
 {
     match expr.variant {
         ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(keyword))) => {
-            analyze_keyword_operand((keyword, expr.span), context, value_context.diagnostics)
+            analyze_keyword_operand((keyword, expr.span), context, value_context.diagnostics())
         }
         ExprVariant::Unary(SemanticUnary::Parentheses, inner) => {
             analyze_deref_operand(*inner, expr.span, value_context)
@@ -63,15 +62,14 @@ where
     }
 }
 
-fn analyze_deref_operand<I, B, D, S>(
+fn analyze_deref_operand<C, I, S>(
     expr: SemanticExpr<I, S>,
     deref_span: S,
-    value_context: &mut ValueContext<B, D>,
-) -> Result<Operand<B::Value>, ()>
+    value_context: &mut C,
+) -> Result<Operand<C::Value>, ()>
 where
+    C: ValueBuilder<Ident<I>, S> + DelegateDiagnostics<S>,
     I: Into<String>,
-    B: ValueBuilder<Ident<I>, S>,
-    D: DownstreamDiagnostics<S>,
     S: Clone,
 {
     match expr.variant {
@@ -79,7 +77,7 @@ where
             analyze_deref_operand_keyword(
                 (keyword, &expr.span),
                 deref_span,
-                value_context.diagnostics,
+                value_context.diagnostics(),
             )
         }
         _ => Ok(Operand::Deref(value_context.analyze_expr(expr)?)),
@@ -210,6 +208,7 @@ mod tests {
     use crate::backend::{HashMapNameTable, IndependentValueBuilder, RelocAtom, RelocExpr};
     use crate::diag::span::MergeSpans;
     use crate::frontend::semantics::DiagnosticsCollector;
+    use crate::frontend::session::ValueContext;
 
     #[test]
     fn analyze_deref_bc() {
@@ -260,7 +259,7 @@ mod tests {
             expr,
             context,
             &mut ValueContext::new(
-                &mut IndependentValueBuilder::new(&mut HashMapNameTable::<()>::new()),
+                IndependentValueBuilder::new(&mut HashMapNameTable::<()>::new()),
                 &mut collector,
             ),
         );

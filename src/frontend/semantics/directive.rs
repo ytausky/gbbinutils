@@ -1,6 +1,4 @@
-use super::{
-    AnalyzeExpr, CommandArgs, Directive, SemanticActions, SemanticAtom, SemanticExpr, ValueContext,
-};
+use super::{AnalyzeExpr, CommandArgs, Directive, SemanticActions, SemanticAtom, SemanticExpr};
 use crate::backend;
 use crate::backend::{Backend, LocationCounter, NameTable, ValueBuilder, Width};
 use crate::diag::*;
@@ -72,8 +70,7 @@ where
         let session = &mut self.actions.session;
         for arg in self.args {
             let expr = {
-                let builder = &mut session.backend.build_value(session.names);
-                let mut context = ValueContext::new(builder, session.diagnostics);
+                let mut context = session.value_context();
                 if let Ok(expr) = context.analyze_expr(arg) {
                     expr
                 } else {
@@ -92,14 +89,13 @@ where
             } else {
                 return;
             };
-            let builder = &mut session.backend.build_value(session.names);
-            let mut context = ValueContext::new(builder, session.diagnostics);
+            let mut context = session.value_context();
             let count = if let Ok(count) = context.analyze_expr(arg) {
                 count
             } else {
                 return;
             };
-            location_counter_plus_expr(count, builder)
+            location_counter_plus_expr(count, &mut context)
         };
         session.backend.set_origin(origin)
     }
@@ -114,8 +110,7 @@ where
         };
 
         let value = {
-            let builder = &mut session.backend.build_value(session.names);
-            let mut context = ValueContext::new(builder, session.diagnostics);
+            let mut context = session.value_context();
             if let Ok(value) = context.analyze_expr(arg) {
                 value
             } else {
@@ -148,8 +143,7 @@ where
             return;
         };
         let expr = {
-            let builder = &mut session.backend.build_value(session.names);
-            let mut context = ValueContext::new(builder, session.diagnostics);
+            let mut context = session.value_context();
             if let Ok(expr) = context.analyze_expr(arg) {
                 expr
             } else {

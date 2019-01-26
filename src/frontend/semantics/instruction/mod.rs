@@ -341,8 +341,8 @@ impl Mnemonic {
 }
 
 impl kw::Mnemonic {
-    pub fn context(&self) -> Context {
-        Mnemonic::from(*self).context()
+    pub fn context(self) -> Context {
+        Mnemonic::from(self).context()
     }
 }
 
@@ -873,7 +873,8 @@ mod tests {
     {
         use crate::backend::{HashMapNameTable, RelocExprBuilder};
         use crate::frontend::semantics::operand::analyze_operand;
-        use crate::frontend::semantics::ValueContext;
+        use crate::frontend::session::ValueContext;
+
         let mut collector = DiagnosticsCollector(Vec::new());
         let operands: Vec<_> = operands
             .into_iter()
@@ -884,7 +885,7 @@ mod tests {
                     op,
                     Mnemonic::from(mnemonic).context(),
                     &mut ValueContext::new(
-                        &mut RelocExprBuilder::new(&mut HashMapNameTable::<()>::new()),
+                        RelocExprBuilder::new(&mut HashMapNameTable::<()>::new()),
                         &mut collector,
                     ),
                 )

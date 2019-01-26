@@ -359,19 +359,13 @@ fn analyze_mnemonic<'a, F, B, N, D>(
 ) where
     F: Frontend<D>,
     B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
+    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
     D: Diagnostics,
 {
     let operands: Vec<_> = args
         .into_iter()
         .map(|arg| {
-            operand::analyze_operand(
-                arg,
-                name.0.context(),
-                &mut ValueContext::new(
-                    &mut actions.session.backend.build_value(actions.session.names),
-                    actions.session.diagnostics,
-                ),
-            )
+            operand::analyze_operand(arg, name.0.context(), &mut actions.session.value_context())
         })
         .collect();
     let result = instruction::analyze_instruction(name, operands, actions.session.diagnostics);
@@ -465,58 +459,29 @@ where
     }
 }
 
-pub struct ValueContext<'a, B: 'a, D: 'a> {
-    builder: &'a mut B,
-    diagnostics: &'a mut D,
-}
-
-impl<'a, B: 'a, D: 'a> ValueContext<'a, B, D> {
-    fn new(builder: &'a mut B, diagnostics: &'a mut D) -> Self {
-        ValueContext {
-            builder,
-            diagnostics,
-        }
-    }
-}
-
-impl<'a, B, D, S> DelegateDiagnostics<S> for ValueContext<'a, B, D>
-where
-    B: 'a,
-    D: DownstreamDiagnostics<S> + 'a,
-{
-    type Delegate = D;
-
-    fn diagnostics(&mut self) -> &mut Self::Delegate {
-        self.diagnostics
-    }
-}
-
 trait AnalyzeExpr<I, S: Clone> {
     type Value: Source<Span = S>;
 
     fn analyze_expr(&mut self, expr: SemanticExpr<I, S>) -> Result<Self::Value, ()>;
 }
 
-impl<'a, I, B, D, S> AnalyzeExpr<I, S> for ValueContext<'a, B, D>
+impl<'a, T, I, S> AnalyzeExpr<I, S> for T
 where
-    B: ValueBuilder<Ident<I>, S>,
-    D: DownstreamDiagnostics<S>,
+    T: ValueBuilder<Ident<I>, S> + DelegateDiagnostics<S>,
     S: Clone,
 {
-    type Value = B::Value;
+    type Value = T::Value;
 
     fn analyze_expr(&mut self, expr: SemanticExpr<I, S>) -> Result<Self::Value, ()> {
         match expr.variant {
-            ExprVariant::Atom(SemanticAtom::Ident(ident)) => {
-                Ok(self.builder.to_value((ident, expr.span)))
-            }
+            ExprVariant::Atom(SemanticAtom::Ident(ident)) => Ok(self.to_value((ident, expr.span))),
             ExprVariant::Atom(SemanticAtom::Literal(Literal::Number(n))) => {
-                Ok(self.builder.to_value((n, expr.span)))
+                Ok(self.to_value((n, expr.span)))
             }
             ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(_))) => {
                 Err(CompactDiagnostic::new(
                     Message::KeywordInExpr {
-                        keyword: self.diagnostics.strip_span(&expr.span),
+                        keyword: self.diagnostics().strip_span(&expr.span),
                     },
                     expr.span,
                 ))
@@ -528,13 +493,11 @@ where
             ExprVariant::Binary(binary, left, right) => {
                 let left = self.analyze_expr(*left)?;
                 let right = self.analyze_expr(*right)?;
-                Ok(self
-                    .builder
-                    .apply_binary_operator((binary, expr.span), left, right))
+                Ok(self.apply_binary_operator((binary, expr.span), left, right))
             }
         }
         .map_err(|diagnostic| {
-            self.diagnostics.emit_diagnostic(diagnostic);
+            self.diagnostics().emit_diagnostic(diagnostic);
         })
     }
 }
