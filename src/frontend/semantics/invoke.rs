@@ -2,6 +2,7 @@ use super::SemanticActions;
 use crate::backend::{Backend, NameTable};
 use crate::diag::{DelegateDiagnostics, Diagnostics};
 use crate::frontend::macros::MacroEntry;
+use crate::frontend::session::Session;
 use crate::frontend::{Frontend, Ident, SemanticToken, TokenSeq};
 use crate::syntax::{MacroInvocationContext, TokenSeqContext};
 

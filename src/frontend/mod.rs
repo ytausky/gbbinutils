@@ -102,7 +102,7 @@ where
 struct SemanticAnalysis;
 
 pub(crate) trait Frontend<D: Diagnostics> {
-    type StringRef: AsRef<str> + Clone + Into<String> + PartialEq;
+    type StringRef: AsRef<str> + Clone + Eq + Into<String>;
     type MacroDefId: Clone;
 
     fn analyze_file<B, N>(
@@ -262,7 +262,7 @@ where
     }
 }
 
-trait StringRef {
+pub(crate) trait StringRef {
     type StringRef: AsRef<str> + Clone + Eq + Into<String>;
 }
 
@@ -378,8 +378,7 @@ mod tests {
     fn emit_instruction_item() {
         let item = Item::Instruction(Instruction::Nullary(Nullary::Nop));
         let log = TestLog::<()>::default();
-        TestFixture::new(&log)
-            .when(|mut fixture| fixture.session().backend.emit_item(item.clone()));
+        TestFixture::new(&log).when(|mut fixture| fixture.session().emit_item(item.clone()));
         assert_eq!(*log.borrow(), [backend::Event::EmitItem(item).into()]);
     }
 
@@ -388,11 +387,9 @@ mod tests {
         let label = "label";
         let log = TestLog::default();
         TestFixture::new(&log).when(|mut fixture| {
-            fixture.session().backend.define_symbol(
-                (label.into(), ()),
-                RelocAtom::LocationCounter.into(),
-                &mut HashMapNameTable::<()>::new(),
-            )
+            fixture
+                .session()
+                .define_symbol((label.into(), ()), RelocAtom::LocationCounter.into())
         });
         assert_eq!(
             *log.borrow(),

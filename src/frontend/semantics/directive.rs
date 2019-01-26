@@ -1,9 +1,10 @@
 use super::{AnalyzeExpr, CommandArgs, Directive, SemanticActions, SemanticAtom, SemanticExpr};
 use crate::backend;
-use crate::backend::{Backend, LocationCounter, NameTable, ValueBuilder, Width};
+use crate::backend::{Backend, LocationCounter, NameTable, PartialBackend, ValueBuilder, Width};
 use crate::diag::*;
 use crate::expr::{BinaryOperator, ExprVariant};
 use crate::frontend::macros::MacroEntry;
+use crate::frontend::session::Session;
 use crate::frontend::{Frontend, Ident, Literal};
 use crate::span::Source;
 
@@ -77,14 +78,14 @@ where
                     return;
                 }
             };
-            session.backend.emit_item(backend::Item::Data(expr, width))
+            session.emit_item(backend::Item::Data(expr, width))
         }
     }
 
     fn analyze_ds(self) {
         let session = &mut self.actions.session;
         let origin = {
-            let arg = if let Ok(arg) = single_arg(self.span, self.args, session.diagnostics) {
+            let arg = if let Ok(arg) = single_arg(self.span, self.args, session.diagnostics()) {
                 arg
             } else {
                 return;
@@ -97,13 +98,13 @@ where
             };
             location_counter_plus_expr(count, &mut context)
         };
-        session.backend.set_origin(origin)
+        session.set_origin(origin)
     }
 
     fn analyze_equ(self) {
         let session = &mut self.actions.session;
         let symbol = self.actions.label.take().unwrap();
-        let arg = if let Ok(arg) = single_arg(self.span, self.args, session.diagnostics) {
+        let arg = if let Ok(arg) = single_arg(self.span, self.args, session.diagnostics()) {
             arg
         } else {
             return;
@@ -117,17 +118,16 @@ where
                 return;
             }
         };
-        session.backend.define_symbol(symbol, value, session.names)
+        session.define_symbol(symbol, value)
     }
 
     fn analyze_include(self) {
-        let (path, span) = if let Ok(result) =
-            reduce_include(self.span, self.args, self.actions.session.diagnostics)
-        {
-            result
-        } else {
-            return;
-        };
+        let (path, span) =
+            if let Ok(result) = reduce_include(self.span, self.args, self.actions.diagnostics()) {
+                result
+            } else {
+                return;
+            };
         if let Err(err) = self.actions.session.analyze_file(path) {
             self.actions
                 .diagnostics()
@@ -137,7 +137,7 @@ where
 
     fn analyze_org(self) {
         let session = &mut self.actions.session;
-        let arg = if let Ok(arg) = single_arg(self.span, self.args, session.diagnostics) {
+        let arg = if let Ok(arg) = single_arg(self.span, self.args, session.diagnostics()) {
             arg
         } else {
             return;
@@ -150,7 +150,7 @@ where
                 return;
             }
         };
-        session.backend.set_origin(expr)
+        session.set_origin(expr)
     }
 }
 

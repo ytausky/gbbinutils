@@ -1,10 +1,12 @@
 use self::invoke::MacroInvocationActions;
-use crate::backend::{self, Backend, LocationCounter, NameTable, ToValue, ValueBuilder};
+use crate::backend::{
+    self, Backend, LocationCounter, NameTable, PartialBackend, ToValue, ValueBuilder,
+};
 use crate::diag::span::{MergeSpans, Source, StripSpan};
 use crate::diag::*;
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
 use crate::frontend::macros::MacroEntry;
-use crate::frontend::session::CompositeSession;
+use crate::frontend::session::{CompositeSession, Session};
 use crate::frontend::{Frontend, Ident, Literal, SemanticToken};
 use crate::syntax::{self, keyword::*, ExprAtom, Operator, UnaryOperator};
 
@@ -44,6 +46,7 @@ impl<'a, F, B, N, D> SemanticActions<'a, F, B, N, D>
 where
     F: Frontend<D>,
     B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
+    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
     D: Diagnostics,
 {
     pub fn new(session: CompositeSession<'a, F, B, N, D>) -> SemanticActions<'a, F, B, N, D> {
@@ -56,15 +59,13 @@ where
     fn define_label_if_present(&mut self) {
         if let Some((label, span)) = self.label.take() {
             let value = {
-                let mut builder = self.session.backend.build_value(self.session.names);
+                let mut builder = self.session.value_context();
                 ToValue::<LocationCounter, D::Span>::to_value(
                     &mut builder,
                     (LocationCounter, span.clone()),
                 )
             };
-            self.session
-                .backend
-                .define_symbol((label, span), value, self.session.names)
+            self.session.define_symbol((label, span), value)
         }
     }
 }
@@ -78,7 +79,7 @@ where
     type Delegate = D;
 
     fn diagnostics(&mut self) -> &mut Self::Delegate {
-        self.session.diagnostics
+        self.session.diagnostics()
     }
 }
 
@@ -368,11 +369,10 @@ fn analyze_mnemonic<'a, F, B, N, D>(
             operand::analyze_operand(arg, name.0.context(), &mut actions.session.value_context())
         })
         .collect();
-    let result = instruction::analyze_instruction(name, operands, actions.session.diagnostics);
+    let result = instruction::analyze_instruction(name, operands, actions.session.diagnostics());
     if let Ok(instruction) = result {
         actions
             .session
-            .backend
             .emit_item(backend::Item::Instruction(instruction))
     }
 }
@@ -414,7 +414,7 @@ where
 impl<'a, F, B, N, D> syntax::MacroParamsContext<D::Span> for MacroDefActions<'a, F, B, N, D>
 where
     F: Frontend<D>,
-    B: ?Sized,
+    B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
     N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
     D: Diagnostics,
 {
@@ -437,7 +437,7 @@ where
 impl<'a, F, B, N, D> syntax::TokenSeqContext<D::Span> for MacroDefActions<'a, F, B, N, D>
 where
     F: Frontend<D>,
-    B: ?Sized,
+    B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
     N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
     D: Diagnostics,
 {
