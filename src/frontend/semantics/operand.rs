@@ -48,7 +48,6 @@ pub(super) fn analyze_operand<C, I, S>(
 ) -> Result<Operand<C::Value>, ()>
 where
     C: ValueBuilder<Ident<I>, S> + DelegateDiagnostics<S>,
-    I: Into<String>,
     S: Clone,
 {
     match expr.variant {
@@ -69,7 +68,6 @@ fn analyze_deref_operand<C, I, S>(
 ) -> Result<Operand<C::Value>, ()>
 where
     C: ValueBuilder<Ident<I>, S> + DelegateDiagnostics<S>,
-    I: Into<String>,
     S: Clone,
 {
     match expr.variant {
