@@ -1,12 +1,10 @@
 use self::invoke::MacroInvocationActions;
-use crate::backend::{
-    self, Backend, LocationCounter, NameTable, PartialBackend, ToValue, ValueBuilder,
-};
+use crate::backend::{self, Backend, NameTable, PartialBackend, ValueFromSimple};
 use crate::diag::span::{MergeSpans, Source, StripSpan};
 use crate::diag::*;
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
 use crate::frontend::macros::MacroEntry;
-use crate::frontend::session::{BuildValue, CompositeSession, Session};
+use crate::frontend::session::{CompositeSession, Session, ValueBuilder};
 use crate::frontend::{Frontend, Ident, Literal, SemanticToken};
 use crate::syntax::{self, keyword::*, ExprAtom, Operator, UnaryOperator};
 
@@ -58,13 +56,7 @@ where
 
     fn define_label_if_present(&mut self) {
         if let Some((label, span)) = self.label.take() {
-            let value = {
-                let mut builder = self.session.build_value();
-                ToValue::<LocationCounter, D::Span>::to_value(
-                    &mut builder,
-                    (LocationCounter, span.clone()),
-                )
-            };
+            let value = self.session.from_location_counter(span.clone());
             self.session.define_symbol((label, span), value)
         }
     }
@@ -365,9 +357,7 @@ fn analyze_mnemonic<'a, F, B, N, D>(
 {
     let operands: Vec<_> = args
         .into_iter()
-        .map(|arg| {
-            operand::analyze_operand(arg, name.0.context(), &mut actions.session.build_value())
-        })
+        .map(|arg| operand::analyze_operand(arg, name.0.context(), &mut actions.session))
         .collect();
     let result = instruction::analyze_instruction(name, operands, actions.session.diagnostics());
     if let Ok(instruction) = result {
@@ -474,9 +464,9 @@ where
 
     fn analyze_expr(&mut self, expr: SemanticExpr<I, S>) -> Result<Self::Value, ()> {
         match expr.variant {
-            ExprVariant::Atom(SemanticAtom::Ident(ident)) => Ok(self.to_value((ident, expr.span))),
+            ExprVariant::Atom(SemanticAtom::Ident(ident)) => Ok(self.from_ident(ident, expr.span)),
             ExprVariant::Atom(SemanticAtom::Literal(Literal::Number(n))) => {
-                Ok(self.to_value((n, expr.span)))
+                Ok(self.from_number(n, expr.span))
             }
             ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(_))) => {
                 Err(CompactDiagnostic::new(

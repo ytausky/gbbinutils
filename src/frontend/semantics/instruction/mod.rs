@@ -871,7 +871,6 @@ mod tests {
     where
         I: IntoIterator<Item = Input>,
     {
-        use crate::backend::{HashMapNameTable, RelocExprBuilder};
         use crate::frontend::semantics::operand::analyze_operand;
         use crate::frontend::session::ValueContext;
 
@@ -884,10 +883,7 @@ mod tests {
                 analyze_operand(
                     op,
                     Mnemonic::from(mnemonic).context(),
-                    &mut ValueContext::new(
-                        RelocExprBuilder::new(&mut HashMapNameTable::<()>::new()),
-                        &mut collector,
-                    ),
+                    &mut ValueContext::new(&mut collector),
                 )
             })
             .collect();

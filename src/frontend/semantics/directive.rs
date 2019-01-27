@@ -1,10 +1,10 @@
 use super::{AnalyzeExpr, CommandArgs, Directive, SemanticActions, SemanticAtom, SemanticExpr};
 use crate::backend;
-use crate::backend::{Backend, LocationCounter, NameTable, PartialBackend, ValueBuilder, Width};
+use crate::backend::{Backend, NameTable, PartialBackend, Width};
 use crate::diag::*;
 use crate::expr::{BinaryOperator, ExprVariant};
 use crate::frontend::macros::MacroEntry;
-use crate::frontend::session::{BuildValue, Session};
+use crate::frontend::session::{Session, ValueBuilder};
 use crate::frontend::{Frontend, Ident, Literal};
 use crate::span::Source;
 
@@ -71,8 +71,7 @@ where
         let session = &mut self.actions.session;
         for arg in self.args {
             let expr = {
-                let mut builder = session.build_value();
-                if let Ok(expr) = builder.analyze_expr(arg) {
+                if let Ok(expr) = session.analyze_expr(arg) {
                     expr
                 } else {
                     return;
@@ -90,13 +89,12 @@ where
             } else {
                 return;
             };
-            let mut builder = session.build_value();
-            let count = if let Ok(count) = builder.analyze_expr(arg) {
+            let count = if let Ok(count) = session.analyze_expr(arg) {
                 count
             } else {
                 return;
             };
-            location_counter_plus_expr(count, &mut builder)
+            location_counter_plus_expr(count, session)
         };
         session.set_origin(origin)
     }
@@ -109,10 +107,8 @@ where
         } else {
             return;
         };
-
         let value = {
-            let mut builder = session.build_value();
-            if let Ok(value) = builder.analyze_expr(arg) {
+            if let Ok(value) = session.analyze_expr(arg) {
                 value
             } else {
                 return;
@@ -143,8 +139,7 @@ where
             return;
         };
         let expr = {
-            let mut builder = session.build_value();
-            if let Ok(expr) = builder.analyze_expr(arg) {
+            if let Ok(expr) = session.analyze_expr(arg) {
                 expr
             } else {
                 return;
@@ -159,7 +154,7 @@ where
     B: ValueBuilder<I, S>,
     S: Clone,
 {
-    let location = builder.to_value((LocationCounter, expr.span()));
+    let location = builder.from_location_counter(expr.span());
     builder.apply_binary_operator((BinaryOperator::Plus, expr.span()), location, expr)
 }
 

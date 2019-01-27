@@ -1,11 +1,15 @@
 use crate::backend;
 use crate::backend::{
-    ApplyBinaryOperator, Backend, HasValue, Item, NameTable, PartialBackend, ToValue,
+    ApplyBinaryOperator, Backend, HasValue, Item, NameTable, PartialBackend, ValueFromSimple,
 };
+#[cfg(test)]
+use crate::backend::{RelocAtom, RelocExpr};
 use crate::codebase::CodebaseError;
 use crate::diag::span::Span;
 use crate::diag::{DelegateDiagnostics, Diagnostics, DownstreamDiagnostics};
 use crate::expr::BinaryOperator;
+#[cfg(test)]
+use crate::expr::{Expr, ExprVariant};
 use crate::frontend::macros::MacroEntry;
 use crate::frontend::{Downstream, Frontend, Ident, SemanticToken, StringRef};
 
@@ -14,6 +18,7 @@ where
     Self: Span + StringRef,
     Self: DelegateDiagnostics<<Self as Span>::Span>,
     Self: PartialBackend<<Self as Span>::Span>,
+    Self: ValueBuilder<Ident<<Self as StringRef>::StringRef>, <Self as Span>::Span>,
 {
     fn analyze_file(&mut self, path: Self::StringRef) -> Result<(), CodebaseError>;
     fn define_macro(
@@ -39,6 +44,15 @@ where
         + DelegateDiagnostics<Self::Span>;
 
     fn build_value(&'a mut self) -> Self::Builder;
+}
+
+pub(crate) trait ValueBuilder<I, S: Clone>
+where
+    Self: HasValue<S>,
+    Self: backend::ValueFromSimple<S>,
+    Self: backend::ApplyBinaryOperator<S>,
+{
+    fn from_ident(&mut self, ident: I, span: S) -> Self::Value;
 }
 
 pub(super) type MacroArgs<I, S> = Vec<Vec<(SemanticToken<I>, S)>>;
@@ -117,25 +131,50 @@ where
     }
 }
 
-impl<'a, 'b, F, B, N, D> BuildValue<'b> for CompositeSession<'a, F, B, N, D>
+impl<'a, F, B, N, D> ValueFromSimple<D::Span> for CompositeSession<'a, F, B, N, D>
 where
-    'a: 'b,
     F: Frontend<D>,
     B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
     N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
     D: Diagnostics,
 {
-    type Builder = ValueContext<'b, ValueBuilder<'b, B, N, F::StringRef, D::Span>, D>;
+    fn from_location_counter(&mut self, span: D::Span) -> Self::Value {
+        self.backend.from_location_counter(span)
+    }
 
-    fn build_value(&'b mut self) -> Self::Builder {
-        ValueContext::new(
-            self.backend.build_value(&mut self.names),
-            &mut self.diagnostics,
-        )
+    fn from_number(&mut self, n: i32, span: D::Span) -> Self::Value {
+        self.backend.from_number(n, span)
     }
 }
 
-type ValueBuilder<'a, B, N, R, S> = <B as backend::BuildValue<'a, Ident<R>, N, S>>::Builder;
+impl<'a, F, B, N, D> ApplyBinaryOperator<D::Span> for CompositeSession<'a, F, B, N, D>
+where
+    F: Frontend<D>,
+    B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
+    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
+    D: Diagnostics,
+{
+    fn apply_binary_operator(
+        &mut self,
+        operator: (BinaryOperator, D::Span),
+        left: Self::Value,
+        right: Self::Value,
+    ) -> Self::Value {
+        self.backend.apply_binary_operator(operator, left, right)
+    }
+}
+
+impl<'a, F, B, N, D> ValueBuilder<Ident<F::StringRef>, D::Span> for CompositeSession<'a, F, B, N, D>
+where
+    F: Frontend<D>,
+    B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
+    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
+    D: Diagnostics,
+{
+    fn from_ident(&mut self, ident: Ident<F::StringRef>, span: D::Span) -> Self::Value {
+        self.backend.from_ident(ident, span, self.names)
+    }
+}
 
 impl<'a, F, B, N, D> Session for CompositeSession<'a, F, B, N, D>
 where
@@ -195,21 +234,20 @@ where
     }
 }
 
-pub(crate) struct ValueContext<'a, B, D: 'a> {
-    builder: B,
+#[cfg(test)]
+pub(crate) struct ValueContext<'a, D: 'a> {
     diagnostics: &'a mut D,
 }
 
-impl<'a, B, D: 'a> ValueContext<'a, B, D> {
-    pub fn new(builder: B, diagnostics: &'a mut D) -> Self {
-        ValueContext {
-            builder,
-            diagnostics,
-        }
+#[cfg(test)]
+impl<'a, D: 'a> ValueContext<'a, D> {
+    pub fn new(diagnostics: &'a mut D) -> Self {
+        ValueContext { diagnostics }
     }
 }
 
-impl<'a, B, D, S> DelegateDiagnostics<S> for ValueContext<'a, B, D>
+#[cfg(test)]
+impl<'a, D, S> DelegateDiagnostics<S> for ValueContext<'a, D>
 where
     D: DownstreamDiagnostics<S> + 'a,
 {
@@ -220,29 +258,33 @@ where
     }
 }
 
-impl<'a, B, D, S> HasValue<S> for ValueContext<'a, B, D>
+#[cfg(test)]
+impl<'a, D, S> HasValue<S> for ValueContext<'a, D>
 where
-    B: HasValue<S>,
     D: 'a,
     S: Clone,
 {
-    type Value = B::Value;
+    type Value = RelocExpr<Ident<String>, S>;
 }
 
-impl<'a, B, D, T, S> ToValue<T, S> for ValueContext<'a, B, D>
+#[cfg(test)]
+impl<'a, D, S> ValueFromSimple<S> for ValueContext<'a, D>
 where
-    B: ToValue<T, S> + 'a,
     D: 'a,
     S: Clone,
 {
-    fn to_value(&mut self, atom: (T, S)) -> Self::Value {
-        self.builder.to_value(atom)
+    fn from_location_counter(&mut self, span: S) -> Self::Value {
+        RelocExpr::from_atom(RelocAtom::LocationCounter, span)
+    }
+
+    fn from_number(&mut self, n: i32, span: S) -> Self::Value {
+        RelocExpr::from_atom(RelocAtom::Literal(n), span)
     }
 }
 
-impl<'a, B, D, S> ApplyBinaryOperator<S> for ValueContext<'a, B, D>
+#[cfg(test)]
+impl<'a, D, S> ApplyBinaryOperator<S> for ValueContext<'a, D>
 where
-    B: ApplyBinaryOperator<S> + 'a,
     D: 'a,
     S: Clone,
 {
@@ -252,6 +294,20 @@ where
         left: Self::Value,
         right: Self::Value,
     ) -> Self::Value {
-        self.builder.apply_binary_operator(operator, left, right)
+        Expr {
+            variant: ExprVariant::Binary(operator.0, Box::new(left), Box::new(right)),
+            span: operator.1,
+        }
+    }
+}
+
+#[cfg(test)]
+impl<'a, D, S> ValueBuilder<Ident<String>, S> for ValueContext<'a, D>
+where
+    D: 'a,
+    S: Clone,
+{
+    fn from_ident(&mut self, ident: Ident<String>, span: S) -> Self::Value {
+        RelocExpr::from_atom(RelocAtom::Symbol(ident), span)
     }
 }

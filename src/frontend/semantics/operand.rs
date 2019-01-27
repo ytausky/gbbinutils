@@ -1,6 +1,6 @@
 use super::{AnalyzeExpr, ExprVariant, SemanticAtom, SemanticExpr, SemanticUnary};
-use crate::backend::ValueBuilder;
 use crate::diag::*;
+use crate::frontend::session::ValueBuilder;
 use crate::frontend::{Ident, Literal};
 use crate::instruction::{Condition, PtrReg, Reg16, RegPair, SimpleOperand};
 use crate::span::Source;
@@ -203,7 +203,7 @@ impl<I: Iterator> Iterator for OperandCounter<I> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::{HashMapNameTable, IndependentValueBuilder, RelocAtom, RelocExpr};
+    use crate::backend::{RelocAtom, RelocExpr};
     use crate::diag::span::MergeSpans;
     use crate::frontend::semantics::DiagnosticsCollector;
     use crate::frontend::session::ValueContext;
@@ -253,14 +253,7 @@ mod tests {
         DiagnosticsCollector<S>: DownstreamDiagnostics<S>,
     {
         let mut collector = DiagnosticsCollector(Vec::new());
-        let result = super::analyze_operand(
-            expr,
-            context,
-            &mut ValueContext::new(
-                IndependentValueBuilder::new(&mut HashMapNameTable::<()>::new()),
-                &mut collector,
-            ),
-        );
+        let result = super::analyze_operand(expr, context, &mut ValueContext::new(&mut collector));
         result.map_err(|_| collector.0)
     }
 
