@@ -204,9 +204,18 @@ impl<I: Iterator> Iterator for OperandCounter<I> {
 mod tests {
     use super::*;
     use crate::backend::{RelocAtom, RelocExpr};
-    use crate::diag::span::MergeSpans;
-    use crate::frontend::semantics::DiagnosticsCollector;
-    use crate::frontend::session::ValueContext;
+    use crate::diag;
+    use crate::diag::MockSpan;
+
+    impl MockSpan for i32 {
+        fn default() -> Self {
+            unimplemented!()
+        }
+
+        fn merge(&self, _: &Self) -> Self {
+            unimplemented!()
+        }
+    }
 
     #[test]
     fn analyze_deref_bc() {
@@ -245,22 +254,17 @@ mod tests {
         )
     }
 
-    fn analyze_operand<S: Clone + PartialEq>(
+    fn analyze_operand<S: Clone + MockSpan + PartialEq>(
         expr: SemanticExpr<String, S>,
         context: Context,
-    ) -> Result<Operand<RelocExpr<Ident<String>, S>>, Vec<CompactDiagnostic<S, S>>>
-    where
-        DiagnosticsCollector<S>: DownstreamDiagnostics<S>,
-    {
-        let mut collector = DiagnosticsCollector(Vec::new());
-        let result = super::analyze_operand(expr, context, &mut ValueContext::new(&mut collector));
-        result.map_err(|_| collector.0)
-    }
+    ) -> Result<Operand<RelocExpr<Ident<String>, S>>, Vec<diag::Event<S>>> {
+        use crate::frontend::session::MockSession;
+        use std::cell::RefCell;
 
-    impl MergeSpans<i32> for DiagnosticsCollector<i32> {
-        fn merge_spans(&mut self, _: &i32, _: &i32) -> i32 {
-            unreachable!()
-        }
+        let log = RefCell::new(Vec::new());
+        let mut session = MockSession::new(&log);
+        let result = super::analyze_operand(expr, context, &mut session);
+        result.map_err(|_| log.into_inner())
     }
 
     #[test]
@@ -283,7 +287,8 @@ mod tests {
                     operand: 0,
                 },
                 1
-            )])
+            )
+            .into()])
         )
     }
 
@@ -340,7 +345,8 @@ mod tests {
             Err(vec![CompactDiagnostic::new(
                 Message::KeywordInExpr { keyword: span },
                 span
-            )])
+            )
+            .into()])
         )
     }
 
@@ -356,7 +362,8 @@ mod tests {
             Err(vec![CompactDiagnostic::new(
                 Message::StringInInstruction,
                 span
-            )])
+            )
+            .into()])
         )
     }
 
@@ -381,7 +388,8 @@ mod tests {
             Err(vec![CompactDiagnostic::new(
                 Message::MustBeDeref { operand: span },
                 span
-            )])
+            )
+            .into()])
         )
     }
 }

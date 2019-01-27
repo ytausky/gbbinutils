@@ -340,7 +340,7 @@ mod tests {
     use crate::backend;
     use crate::backend::HashMapNameTable;
     use crate::diag;
-    use crate::diag::CompactDiagnostic;
+    use crate::diag::{CompactDiagnostic, MockSpan};
     use crate::frontend::macros::MacroEntry;
     use crate::instruction::{Instruction, Nullary};
     use crate::syntax::keyword::Mnemonic;
@@ -498,6 +498,16 @@ mod tests {
         );
     }
 
+    impl MockSpan for &'static str {
+        fn default() -> Self {
+            unimplemented!()
+        }
+
+        fn merge(&self, _: &Self) -> Self {
+            unimplemented!()
+        }
+    }
+
     struct MockTokenSource<S> {
         files: HashMap<String, Vec<LexItem<String, S>>>,
     }
@@ -518,7 +528,7 @@ mod tests {
         type StringRef = String;
     }
 
-    impl<'a, S: Clone + Default> Tokenize<MockDiagnostics<'a, S>> for MockTokenSource<S> {
+    impl<'a, S: Clone + MockSpan> Tokenize<MockDiagnostics<'a, S>> for MockTokenSource<S> {
         type Tokenized = MockTokenized<S>;
 
         fn tokenize_file<F: FnOnce(BufId) -> MockDiagnostics<'a, S>>(
@@ -599,14 +609,14 @@ mod tests {
         diagnostics: MockDiagnostics<'a, S>,
     }
 
-    struct PreparedFixture<'a, 'b, S: Clone + Default> {
+    struct PreparedFixture<'a, 'b, S: Clone + MockSpan> {
         code_analyzer: TestCodebaseAnalyzer<'a, 'b, S>,
         object: MockBackend<'a, S>,
         names: TestNameTable<'a, 'b, S>,
         diagnostics: MockDiagnostics<'a, S>,
     }
 
-    impl<'a, 'b, S: Clone + Default> PreparedFixture<'a, 'b, S> {
+    impl<'a, 'b, S: Clone + MockSpan> PreparedFixture<'a, 'b, S> {
         fn session<'r>(&'r mut self) -> TestSession<'a, 'b, 'r, S> {
             CompositeSession::new(
                 &mut self.code_analyzer,
@@ -617,7 +627,7 @@ mod tests {
         }
     }
 
-    impl<'a, S: Clone + Default> TestFixture<'a, S> {
+    impl<'a, S: Clone + MockSpan> TestFixture<'a, S> {
         fn new(log: &'a TestLog<S>) -> TestFixture<'a, S> {
             TestFixture {
                 mock_token_source: MockTokenSource::new(),

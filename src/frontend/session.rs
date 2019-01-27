@@ -13,6 +13,9 @@ use crate::expr::{Expr, ExprVariant};
 use crate::frontend::macros::MacroEntry;
 use crate::frontend::{Downstream, Frontend, Ident, SemanticToken, StringRef};
 
+#[cfg(test)]
+pub use self::mock::*;
+
 pub(crate) trait Session
 where
     Self: Span + StringRef,
@@ -224,79 +227,70 @@ where
 }
 
 #[cfg(test)]
-pub(crate) struct ValueContext<'a, D: 'a> {
-    diagnostics: &'a mut D,
-}
+mod mock {
+    use super::*;
 
-#[cfg(test)]
-impl<'a, D: 'a> ValueContext<'a, D> {
-    pub fn new(diagnostics: &'a mut D) -> Self {
-        ValueContext { diagnostics }
-    }
-}
+    use crate::diag;
+    use crate::diag::{MockDiagnostics, MockSpan};
+    use std::cell::RefCell;
 
-#[cfg(test)]
-impl<'a, D, S> DelegateDiagnostics<S> for ValueContext<'a, D>
-where
-    D: DownstreamDiagnostics<S> + 'a,
-{
-    type Delegate = D;
-
-    fn diagnostics(&mut self) -> &mut Self::Delegate {
-        self.diagnostics
-    }
-}
-
-#[cfg(test)]
-impl<'a, D, S> HasValue<S> for ValueContext<'a, D>
-where
-    D: 'a,
-    S: Clone,
-{
-    type Value = RelocExpr<Ident<String>, S>;
-}
-
-#[cfg(test)]
-impl<'a, D, S> ValueFromSimple<S> for ValueContext<'a, D>
-where
-    D: 'a,
-    S: Clone,
-{
-    fn from_location_counter(&mut self, span: S) -> Self::Value {
-        RelocExpr::from_atom(RelocAtom::LocationCounter, span)
+    pub struct MockSession<'a, T, S> {
+        _log: &'a RefCell<Vec<T>>,
+        diagnostics: MockDiagnostics<'a, T, S>,
     }
 
-    fn from_number(&mut self, n: i32, span: S) -> Self::Value {
-        RelocExpr::from_atom(RelocAtom::Literal(n), span)
-    }
-}
-
-#[cfg(test)]
-impl<'a, D, S> ApplyBinaryOperator<S> for ValueContext<'a, D>
-where
-    D: 'a,
-    S: Clone,
-{
-    fn apply_binary_operator(
-        &mut self,
-        operator: (BinaryOperator, S),
-        left: Self::Value,
-        right: Self::Value,
-    ) -> Self::Value {
-        Expr {
-            variant: ExprVariant::Binary(operator.0, Box::new(left), Box::new(right)),
-            span: operator.1,
+    impl<'a, T, S> MockSession<'a, T, S> {
+        pub fn new(log: &'a RefCell<Vec<T>>) -> Self {
+            Self {
+                _log: log,
+                diagnostics: MockDiagnostics::new(log),
+            }
         }
     }
-}
 
-#[cfg(test)]
-impl<'a, D, S> ValueBuilder<Ident<String>, S> for ValueContext<'a, D>
-where
-    D: 'a,
-    S: Clone,
-{
-    fn from_ident(&mut self, ident: Ident<String>, span: S) -> Self::Value {
-        RelocExpr::from_atom(RelocAtom::Symbol(ident), span)
+    impl<'a, T, S: Clone> HasValue<S> for MockSession<'a, T, S> {
+        type Value = RelocExpr<Ident<String>, S>;
+    }
+
+    impl<'a, T, S: Clone> ValueFromSimple<S> for MockSession<'a, T, S> {
+        fn from_location_counter(&mut self, span: S) -> Self::Value {
+            RelocExpr::from_atom(RelocAtom::LocationCounter, span)
+        }
+
+        fn from_number(&mut self, n: i32, span: S) -> Self::Value {
+            RelocExpr::from_atom(RelocAtom::Literal(n), span)
+        }
+    }
+
+    impl<'a, T, S: Clone> ApplyBinaryOperator<S> for MockSession<'a, T, S> {
+        fn apply_binary_operator(
+            &mut self,
+            operator: (BinaryOperator, S),
+            left: Self::Value,
+            right: Self::Value,
+        ) -> Self::Value {
+            Expr {
+                variant: ExprVariant::Binary(operator.0, Box::new(left), Box::new(right)),
+                span: operator.1,
+            }
+        }
+    }
+
+    impl<'a, T, S: Clone> ValueBuilder<Ident<String>, S> for MockSession<'a, T, S> {
+        fn from_ident(&mut self, ident: Ident<String>, span: S) -> Self::Value {
+            RelocExpr::from_atom(RelocAtom::Symbol(ident), span)
+        }
+    }
+
+    impl<'a, T, S> DelegateDiagnostics<S> for MockSession<'a, T, S>
+    where
+        T: From<diag::Event<S>>,
+        S: Clone + MockSpan,
+    {
+        type Delegate = MockDiagnostics<'a, T, S>;
+
+        fn diagnostics(&mut self) -> &mut Self::Delegate {
+            &mut self.diagnostics
+        }
     }
 }

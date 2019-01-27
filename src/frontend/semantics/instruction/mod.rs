@@ -431,13 +431,14 @@ mod tests {
     pub use self::kw::Operand::*;
     use super::*;
     use crate::backend::{RelocAtom, RelocExpr};
+    use crate::diag;
     pub(crate) use crate::diag::Message;
     use crate::diag::*;
     use crate::expr::{Expr, ExprVariant};
-    pub use crate::frontend::semantics::{DiagnosticsCollector, TokenId, TokenSpan};
     use crate::frontend::semantics::{
         SemanticAtom, SemanticExpr, SemanticExprVariant, SemanticUnary,
     };
+    pub use crate::frontend::semantics::{TokenId, TokenSpan};
     use crate::frontend::{Ident, Literal};
     pub use crate::span::{MergeSpans, Span};
     use std::cmp;
@@ -841,10 +842,7 @@ mod tests {
     }
 
     pub struct AnalysisResult(
-        Result<
-            Instruction<RelocExpr<Ident<String>, TokenSpan>>,
-            Vec<CompactDiagnostic<TokenSpan, TokenSpan>>,
-        >,
+        Result<Instruction<RelocExpr<Ident<String>, TokenSpan>>, Vec<diag::Event<TokenSpan>>>,
     );
 
     impl AnalysisResult {
@@ -859,10 +857,10 @@ mod tests {
             let expected = diagnostic.into();
             assert_eq!(
                 self.0,
-                Err(vec![CompactDiagnostic::new(
+                Err(vec![diag::Event::EmitDiagnostic(CompactDiagnostic::new(
                     expected.message,
                     expected.highlight.unwrap(),
-                )])
+                ))])
             )
         }
     }
@@ -872,27 +870,23 @@ mod tests {
         I: IntoIterator<Item = Input>,
     {
         use crate::frontend::semantics::operand::analyze_operand;
-        use crate::frontend::session::ValueContext;
+        use crate::frontend::session::MockSession;
+        use std::cell::RefCell;
 
-        let mut collector = DiagnosticsCollector(Vec::new());
+        let log = RefCell::new(Vec::new());
+        let mut session = MockSession::new(&log);
         let operands: Vec<_> = operands
             .into_iter()
             .enumerate()
             .map(add_token_spans)
-            .map(|op| {
-                analyze_operand(
-                    op,
-                    Mnemonic::from(mnemonic).context(),
-                    &mut ValueContext::new(&mut collector),
-                )
-            })
+            .map(|op| analyze_operand(op, Mnemonic::from(mnemonic).context(), &mut session))
             .collect();
         let result = analyze_instruction(
             (mnemonic, TokenId::Mnemonic.into()),
             operands,
-            &mut collector,
+            session.diagnostics(),
         );
-        AnalysisResult(result.map_err(|_| collector.0))
+        AnalysisResult(result.map_err(|_| log.into_inner()))
     }
 
     fn add_token_spans((i, operand): (usize, Input)) -> SemanticExpr<String, TokenSpan> {

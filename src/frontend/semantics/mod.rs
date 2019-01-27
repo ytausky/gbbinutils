@@ -507,28 +507,13 @@ pub struct TokenSpan {
 }
 
 #[cfg(test)]
-pub struct DiagnosticsCollector<S>(Vec<CompactDiagnostic<S, S>>);
-
-#[cfg(test)]
-impl MergeSpans<TokenSpan> for DiagnosticsCollector<TokenSpan> {
-    fn merge_spans(&mut self, left: &TokenSpan, right: &TokenSpan) -> TokenSpan {
-        TokenSpan::merge(left, right)
+impl MockSpan for TokenSpan {
+    fn default() -> Self {
+        unimplemented!()
     }
-}
 
-#[cfg(test)]
-impl<S: Clone> StripSpan<S> for DiagnosticsCollector<S> {
-    type Stripped = S;
-
-    fn strip_span(&mut self, span: &S) -> Self::Stripped {
-        span.clone()
-    }
-}
-
-#[cfg(test)]
-impl<S: Clone> EmitDiagnostic<S, S> for DiagnosticsCollector<S> {
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<S, S>) {
-        self.0.push(diagnostic)
+    fn merge(&self, other: &Self) -> Self {
+        TokenSpan::merge(self, other)
     }
 }
 
