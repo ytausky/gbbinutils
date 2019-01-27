@@ -2,14 +2,10 @@ use crate::backend;
 use crate::backend::{
     ApplyBinaryOperator, Backend, HasValue, Item, NameTable, PartialBackend, ValueFromSimple,
 };
-#[cfg(test)]
-use crate::backend::{RelocAtom, RelocExpr};
 use crate::codebase::CodebaseError;
 use crate::diag::span::Span;
 use crate::diag::{DelegateDiagnostics, Diagnostics, DownstreamDiagnostics};
 use crate::expr::BinaryOperator;
-#[cfg(test)]
-use crate::expr::{Expr, ExprVariant};
 use crate::frontend::macros::MacroEntry;
 use crate::frontend::{Downstream, Frontend, Ident, SemanticToken, StringRef};
 
@@ -230,8 +226,10 @@ where
 mod mock {
     use super::*;
 
+    use crate::backend::{RelocAtom, RelocExpr};
     use crate::diag;
     use crate::diag::{MockDiagnostics, MockSpan};
+    use crate::expr::{Expr, ExprVariant};
     use std::cell::RefCell;
 
     pub struct MockSession<'a, T, S> {
