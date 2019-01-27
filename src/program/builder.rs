@@ -1,7 +1,7 @@
 use super::{Chunk, NameId, Node, Program, RelocExpr, Value};
 use crate::backend::{
-    ApplyBinaryOperator, Backend, BuildValue, HasValue, Item, Name, NameTable, PartialBackend,
-    RelocAtom, RelocExprBuilder, ToValue, ValueFromIdent, ValueFromSimple,
+    ApplyBinaryOperator, Backend, HasValue, Item, Name, NameTable, PartialBackend, RelocAtom,
+    ValueFromIdent, ValueFromSimple,
 };
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
 use crate::frontend::Ident;
@@ -129,34 +129,8 @@ impl<S: Clone> ApplyBinaryOperator<S> for ProgramBuilder<S> {
     }
 }
 
-impl<'a, M, S: Clone> HasValue<S> for RelocExprBuilder<'a, &'a mut ProgramBuilder<S>, M> {
-    type Value = RelocExpr<S>;
-}
-
-impl<'a, N, S> ToValue<Ident<String>, S> for RelocExprBuilder<'a, &'a mut ProgramBuilder<S>, N>
-where
-    N: NameTable<Ident<String>>,
-    S: Clone,
-{
-    fn to_value(&mut self, (ident, span): (Ident<String>, S)) -> Self::Value {
-        RelocExpr::from_atom(RelocAtom::Symbol(self.0.lookup(ident, self.1)), span)
-    }
-}
-
 impl<S: Clone> HasValue<S> for ProgramBuilder<S> {
     type Value = RelocExpr<S>;
-}
-
-impl<'a, N, S> BuildValue<'a, Ident<String>, N, S> for ProgramBuilder<S>
-where
-    N: NameTable<Ident<String>> + 'a,
-    S: Clone + 'static,
-{
-    type Builder = RelocExprBuilder<'a, &'a mut Self, N>;
-
-    fn build_value(&'a mut self, table: &'a mut N) -> Self::Builder {
-        RelocExprBuilder(self, table)
-    }
 }
 
 #[cfg(test)]
@@ -260,9 +234,7 @@ mod tests {
         let name = "ident";
         let ident = Ident { name: name.into() };
         let (_, diagnostics) = with_object_builder(|builder| {
-            let value = builder
-                .build_value(&mut NameTable::new())
-                .to_value((ident, name.into()));
+            let value = builder.from_ident(ident, name.into(), &mut NameTable::new());
             builder.emit_item(word_item(value))
         });
         assert_eq!(*diagnostics, [unresolved(name)]);
@@ -281,9 +253,8 @@ mod tests {
         let (_, diagnostics) = with_object_builder(|builder| {
             let names = &mut NameTable::new();
             let value = {
-                let mut builder = builder.build_value(names);
-                let lhs = builder.to_value((ident1, name1.into()));
-                let rhs = builder.to_value((ident2, name2.into()));
+                let lhs = builder.from_ident(ident1, name1.into(), names);
+                let rhs = builder.from_ident(ident2, name2.into(), names);
                 builder.apply_binary_operator((BinaryOperator::Minus, "diff".into()), lhs, rhs)
             };
             builder.emit_item(word_item(value))
@@ -302,7 +273,7 @@ mod tests {
                 RelocAtom::LocationCounter.into(),
                 &mut table,
             );
-            let value = builder.build_value(&mut table).to_value((ident, ()));
+            let value = builder.from_ident(ident, (), &mut table);
             builder.emit_item(word_item(value));
         });
         assert_eq!(*diagnostics, []);
@@ -314,9 +285,7 @@ mod tests {
         let label = "label";
         let (object, diagnostics) = with_object_builder(|builder| {
             let mut table = NameTable::new();
-            let value = builder
-                .build_value(&mut table)
-                .to_value((Ident::from(label), ()));
+            let value = builder.from_ident(Ident::from(label), (), &mut table);
             builder.emit_item(word_item(value));
             builder.define_symbol(
                 (label.into(), ()),

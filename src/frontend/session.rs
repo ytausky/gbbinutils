@@ -35,17 +35,6 @@ where
     fn define_symbol(&mut self, symbol: (Ident<Self::StringRef>, Self::Span), value: Self::Value);
 }
 
-pub(crate) trait BuildValue<'a>
-where
-    Self: Span + StringRef,
-    Self: HasValue<<Self as Span>::Span>,
-{
-    type Builder: backend::ValueBuilder<Ident<Self::StringRef>, Self::Span>
-        + DelegateDiagnostics<Self::Span>;
-
-    fn build_value(&'a mut self) -> Self::Builder;
-}
-
 pub(crate) trait ValueBuilder<I, S: Clone>
 where
     Self: HasValue<S>,
