@@ -57,6 +57,21 @@ pub trait HasValue<S: Clone> {
     type Value: Source<Span = S>;
 }
 
+pub trait ValueFromSimple<S: Clone>
+where
+    Self: HasValue<S>,
+{
+    fn from_location_counter(&mut self, span: S) -> Self::Value;
+    fn from_number(&mut self, n: i32, span: S) -> Self::Value;
+}
+
+pub trait ValueFromIdent<N, I, S: Clone>
+where
+    Self: HasValue<S>,
+{
+    fn from_ident(&mut self, ident: I, span: S, names: &mut N) -> Self::Value;
+}
+
 pub trait BuildValue<'a, I, N, S: Clone>
 where
     Self: HasValue<S>,
@@ -115,6 +130,9 @@ pub trait Backend<I, S, N>
 where
     S: Clone,
     Self: PartialBackend<S>,
+    Self: ValueFromSimple<S>,
+    Self: ValueFromIdent<N, I, S>,
+    Self: ApplyBinaryOperator<S>,
     for<'a> Self: BuildValue<'a, I, N, S>,
 {
     fn define_symbol(&mut self, symbol: (I, S), value: Self::Value, names: &mut N);
@@ -286,6 +304,39 @@ where
 }
 
 #[cfg(test)]
+impl<'a, T, S: Clone> ValueFromSimple<S> for MockBackend<'a, T> {
+    fn from_location_counter(&mut self, span: S) -> Self::Value {
+        RelocExpr::from_atom(RelocAtom::LocationCounter, span)
+    }
+
+    fn from_number(&mut self, n: i32, span: S) -> Self::Value {
+        RelocExpr::from_atom(RelocAtom::Literal(n), span)
+    }
+}
+
+#[cfg(test)]
+impl<'a, T, N, S: Clone> ValueFromIdent<N, Ident<String>, S> for MockBackend<'a, T> {
+    fn from_ident(&mut self, ident: Ident<String>, span: S, _: &mut N) -> Self::Value {
+        RelocExpr::from_atom(RelocAtom::Symbol(ident), span)
+    }
+}
+
+#[cfg(test)]
+impl<'a, T, S: Clone> ApplyBinaryOperator<S> for MockBackend<'a, T> {
+    fn apply_binary_operator(
+        &mut self,
+        operator: (BinaryOperator, S),
+        left: Self::Value,
+        right: Self::Value,
+    ) -> Self::Value {
+        Expr {
+            variant: ExprVariant::Binary(operator.0, Box::new(left), Box::new(right)),
+            span: operator.1,
+        }
+    }
+}
+
+#[cfg(test)]
 impl<'a, 'b, T, N, S> BuildValue<'b, Ident<String>, N, S> for MockBackend<'a, T>
 where
     T: From<Event<RelocExpr<Ident<String>, S>>>,
@@ -300,11 +351,7 @@ where
 }
 
 #[cfg(test)]
-impl<'a, T, S> HasValue<S> for MockBackend<'a, T>
-where
-    T: From<Event<RelocExpr<Ident<String>, S>>>,
-    S: Clone,
-{
+impl<'a, T, S: Clone> HasValue<S> for MockBackend<'a, T> {
     type Value = RelocExpr<Ident<String>, S>;
 }
 

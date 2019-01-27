@@ -1,8 +1,9 @@
 use super::{Chunk, NameId, Node, Program, RelocExpr, Value};
 use crate::backend::{
-    Backend, BuildValue, HasValue, Item, Name, NameTable, PartialBackend, RelocAtom,
-    RelocExprBuilder, ToValue,
+    ApplyBinaryOperator, Backend, BuildValue, HasValue, Item, Name, NameTable, PartialBackend,
+    RelocAtom, RelocExprBuilder, ToValue, ValueFromIdent, ValueFromSimple,
 };
+use crate::expr::{BinaryOperator, Expr, ExprVariant};
 use crate::frontend::Ident;
 
 pub struct ProgramBuilder<SR> {
@@ -91,6 +92,40 @@ where
         let name_id = self.lookup(ident, table);
         self.program.symbols.define_name(name_id, Value::Unknown);
         self.push(Node::Symbol((name_id, span), value))
+    }
+}
+
+impl<S: Clone> ValueFromSimple<S> for ProgramBuilder<S> {
+    fn from_location_counter(&mut self, span: S) -> Self::Value {
+        RelocExpr::from_atom(RelocAtom::LocationCounter, span)
+    }
+
+    fn from_number(&mut self, n: i32, span: S) -> Self::Value {
+        RelocExpr::from_atom(RelocAtom::Literal(n), span)
+    }
+}
+
+impl<N, S> ValueFromIdent<N, Ident<String>, S> for ProgramBuilder<S>
+where
+    N: NameTable<Ident<String>>,
+    S: Clone,
+{
+    fn from_ident(&mut self, ident: Ident<String>, span: S, names: &mut N) -> Self::Value {
+        RelocExpr::from_atom(RelocAtom::Symbol(self.lookup(ident, names)), span)
+    }
+}
+
+impl<S: Clone> ApplyBinaryOperator<S> for ProgramBuilder<S> {
+    fn apply_binary_operator(
+        &mut self,
+        operator: (BinaryOperator, S),
+        left: Self::Value,
+        right: Self::Value,
+    ) -> Self::Value {
+        Expr {
+            variant: ExprVariant::Binary(operator.0, Box::new(left), Box::new(right)),
+            span: operator.1,
+        }
     }
 }
 
