@@ -3,9 +3,10 @@ use crate::frontend::Ident;
 use crate::instruction::Instruction;
 use crate::program::NameId;
 use crate::span::Source;
-#[cfg(test)]
-use std::cell::RefCell;
 use std::collections::HashMap;
+
+#[cfg(test)]
+pub use mock::*;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Width {
@@ -173,89 +174,87 @@ pub struct BinarySection {
 }
 
 #[cfg(test)]
-pub struct MockBackend<'a, T> {
-    pub log: &'a RefCell<Vec<T>>,
-}
+mod mock {
+    use super::*;
 
-#[cfg(test)]
-#[derive(Debug, PartialEq)]
-pub enum Event<V: Source> {
-    EmitItem(Item<V>),
-    SetOrigin(V),
-    DefineSymbol((Ident<String>, V::Span), V),
-}
+    use std::cell::RefCell;
 
-#[cfg(test)]
-impl<'a, T> MockBackend<'a, T> {
-    pub fn new(log: &'a RefCell<Vec<T>>) -> Self {
-        MockBackend { log }
-    }
-}
-
-#[cfg(test)]
-impl<'a, T, S, N> Backend<Ident<String>, S, N> for MockBackend<'a, T>
-where
-    T: From<Event<RelocExpr<Ident<String>, S>>>,
-    S: Clone,
-    N: 'static,
-{
-    fn define_symbol(&mut self, symbol: (Ident<String>, S), value: Self::Value, _: &mut N) {
-        self.log
-            .borrow_mut()
-            .push(Event::DefineSymbol(symbol, value).into())
-    }
-}
-
-#[cfg(test)]
-impl<'a, T, S: Clone> ValueFromSimple<S> for MockBackend<'a, T> {
-    fn from_location_counter(&mut self, span: S) -> Self::Value {
-        RelocExpr::from_atom(RelocAtom::LocationCounter, span)
+    pub struct MockBackend<'a, T> {
+        pub log: &'a RefCell<Vec<T>>,
     }
 
-    fn from_number(&mut self, n: i32, span: S) -> Self::Value {
-        RelocExpr::from_atom(RelocAtom::Literal(n), span)
+    #[derive(Debug, PartialEq)]
+    pub enum Event<V: Source> {
+        EmitItem(Item<V>),
+        SetOrigin(V),
+        DefineSymbol((Ident<String>, V::Span), V),
     }
-}
 
-#[cfg(test)]
-impl<'a, T, N, S: Clone> ValueFromIdent<N, Ident<String>, S> for MockBackend<'a, T> {
-    fn from_ident(&mut self, ident: Ident<String>, span: S, _: &mut N) -> Self::Value {
-        RelocExpr::from_atom(RelocAtom::Symbol(ident), span)
-    }
-}
-
-#[cfg(test)]
-impl<'a, T, S: Clone> ApplyBinaryOperator<S> for MockBackend<'a, T> {
-    fn apply_binary_operator(
-        &mut self,
-        operator: (BinaryOperator, S),
-        left: Self::Value,
-        right: Self::Value,
-    ) -> Self::Value {
-        Expr {
-            variant: ExprVariant::Binary(operator.0, Box::new(left), Box::new(right)),
-            span: operator.1,
+    impl<'a, T> MockBackend<'a, T> {
+        pub fn new(log: &'a RefCell<Vec<T>>) -> Self {
+            MockBackend { log }
         }
     }
-}
 
-#[cfg(test)]
-impl<'a, T, S: Clone> HasValue<S> for MockBackend<'a, T> {
-    type Value = RelocExpr<Ident<String>, S>;
-}
-
-#[cfg(test)]
-impl<'a, T, S> PartialBackend<S> for MockBackend<'a, T>
-where
-    T: From<Event<RelocExpr<Ident<String>, S>>>,
-    S: Clone,
-{
-    fn emit_item(&mut self, item: Item<Self::Value>) {
-        self.log.borrow_mut().push(Event::EmitItem(item).into())
+    impl<'a, T, S, N> Backend<Ident<String>, S, N> for MockBackend<'a, T>
+    where
+        T: From<Event<RelocExpr<Ident<String>, S>>>,
+        S: Clone,
+        N: 'static,
+    {
+        fn define_symbol(&mut self, symbol: (Ident<String>, S), value: Self::Value, _: &mut N) {
+            self.log
+                .borrow_mut()
+                .push(Event::DefineSymbol(symbol, value).into())
+        }
     }
 
-    fn set_origin(&mut self, origin: Self::Value) {
-        self.log.borrow_mut().push(Event::SetOrigin(origin).into())
+    impl<'a, T, S: Clone> ValueFromSimple<S> for MockBackend<'a, T> {
+        fn from_location_counter(&mut self, span: S) -> Self::Value {
+            RelocExpr::from_atom(RelocAtom::LocationCounter, span)
+        }
+
+        fn from_number(&mut self, n: i32, span: S) -> Self::Value {
+            RelocExpr::from_atom(RelocAtom::Literal(n), span)
+        }
+    }
+
+    impl<'a, T, N, S: Clone> ValueFromIdent<N, Ident<String>, S> for MockBackend<'a, T> {
+        fn from_ident(&mut self, ident: Ident<String>, span: S, _: &mut N) -> Self::Value {
+            RelocExpr::from_atom(RelocAtom::Symbol(ident), span)
+        }
+    }
+
+    impl<'a, T, S: Clone> ApplyBinaryOperator<S> for MockBackend<'a, T> {
+        fn apply_binary_operator(
+            &mut self,
+            operator: (BinaryOperator, S),
+            left: Self::Value,
+            right: Self::Value,
+        ) -> Self::Value {
+            Expr {
+                variant: ExprVariant::Binary(operator.0, Box::new(left), Box::new(right)),
+                span: operator.1,
+            }
+        }
+    }
+
+    impl<'a, T, S: Clone> HasValue<S> for MockBackend<'a, T> {
+        type Value = RelocExpr<Ident<String>, S>;
+    }
+
+    impl<'a, T, S> PartialBackend<S> for MockBackend<'a, T>
+    where
+        T: From<Event<RelocExpr<Ident<String>, S>>>,
+        S: Clone,
+    {
+        fn emit_item(&mut self, item: Item<Self::Value>) {
+            self.log.borrow_mut().push(Event::EmitItem(item).into())
+        }
+
+        fn set_origin(&mut self, origin: Self::Value) {
+            self.log.borrow_mut().push(Event::SetOrigin(origin).into())
+        }
     }
 }
 
