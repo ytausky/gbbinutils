@@ -1,22 +1,20 @@
 use super::SemanticActions;
-use crate::backend::{Backend, NameTable};
-use crate::diag::{DelegateDiagnostics, Diagnostics};
-use crate::frontend::macros::MacroEntry;
+use crate::diag::DelegateDiagnostics;
 use crate::frontend::session::Session;
-use crate::frontend::{Frontend, Ident, SemanticToken, TokenSeq};
+use crate::frontend::{Ident, SemanticToken, TokenSeq};
 use crate::syntax::{MacroInvocationContext, TokenSeqContext};
 
-pub(crate) struct MacroInvocationActions<'a, F: Frontend<D>, B: ?Sized, N, D: Diagnostics> {
-    name: (Ident<F::StringRef>, D::Span),
-    args: Vec<TokenSeq<F::StringRef, D::Span>>,
-    parent: SemanticActions<'a, F, B, N, D>,
+pub(crate) struct MacroInvocationActions<S: Session> {
+    name: (Ident<S::StringRef>, S::Span),
+    args: Vec<TokenSeq<S::StringRef, S::Span>>,
+    parent: SemanticActions<S>,
 }
 
-impl<'a, F: Frontend<D>, B: ?Sized, N, D: Diagnostics> MacroInvocationActions<'a, F, B, N, D> {
+impl<S: Session> MacroInvocationActions<S> {
     pub fn new(
-        name: (Ident<F::StringRef>, D::Span),
-        parent: SemanticActions<'a, F, B, N, D>,
-    ) -> MacroInvocationActions<'a, F, B, N, D> {
+        name: (Ident<S::StringRef>, S::Span),
+        parent: SemanticActions<S>,
+    ) -> MacroInvocationActions<S> {
         MacroInvocationActions {
             name,
             args: Vec::new(),
@@ -24,34 +22,23 @@ impl<'a, F: Frontend<D>, B: ?Sized, N, D: Diagnostics> MacroInvocationActions<'a
         }
     }
 
-    fn push_arg(&mut self, arg: Vec<(SemanticToken<F::StringRef>, D::Span)>) {
+    fn push_arg(&mut self, arg: Vec<(SemanticToken<S::StringRef>, S::Span)>) {
         self.args.push(arg)
     }
 }
 
-impl<'a, F, B, N, D> DelegateDiagnostics<D::Span> for MacroInvocationActions<'a, F, B, N, D>
-where
-    F: Frontend<D>,
-    B: ?Sized,
-    D: Diagnostics,
-{
-    type Delegate = D;
+impl<S: Session> DelegateDiagnostics<S::Span> for MacroInvocationActions<S> {
+    type Delegate = S::Delegate;
 
     fn diagnostics(&mut self) -> &mut Self::Delegate {
         self.parent.diagnostics()
     }
 }
 
-impl<'a, F, B, N, D> MacroInvocationContext<D::Span> for MacroInvocationActions<'a, F, B, N, D>
-where
-    F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
-    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
-    D: Diagnostics,
-{
-    type Token = SemanticToken<F::StringRef>;
-    type Parent = SemanticActions<'a, F, B, N, D>;
-    type MacroArgContext = MacroArgContext<'a, F, B, N, D>;
+impl<S: Session> MacroInvocationContext<S::Span> for MacroInvocationActions<S> {
+    type Token = SemanticToken<S::StringRef>;
+    type Parent = SemanticActions<S>;
+    type MacroArgContext = MacroArgContext<S>;
 
     fn enter_macro_arg(self) -> Self::MacroArgContext {
         MacroArgContext::new(self)
@@ -63,13 +50,13 @@ where
     }
 }
 
-pub(crate) struct MacroArgContext<'a, F: Frontend<D>, B: ?Sized, N, D: Diagnostics> {
-    tokens: Vec<(SemanticToken<F::StringRef>, D::Span)>,
-    parent: MacroInvocationActions<'a, F, B, N, D>,
+pub(crate) struct MacroArgContext<S: Session> {
+    tokens: Vec<(SemanticToken<S::StringRef>, S::Span)>,
+    parent: MacroInvocationActions<S>,
 }
 
-impl<'a, F: Frontend<D>, B: ?Sized, N, D: Diagnostics> MacroArgContext<'a, F, B, N, D> {
-    fn new(parent: MacroInvocationActions<'a, F, B, N, D>) -> MacroArgContext<'a, F, B, N, D> {
+impl<S: Session> MacroArgContext<S> {
+    fn new(parent: MacroInvocationActions<S>) -> MacroArgContext<S> {
         MacroArgContext {
             tokens: Vec::new(),
             parent,
@@ -77,29 +64,19 @@ impl<'a, F: Frontend<D>, B: ?Sized, N, D: Diagnostics> MacroArgContext<'a, F, B,
     }
 }
 
-impl<'a, F, B, N, D> DelegateDiagnostics<D::Span> for MacroArgContext<'a, F, B, N, D>
-where
-    F: Frontend<D>,
-    B: ?Sized,
-    D: Diagnostics,
-{
-    type Delegate = D;
+impl<S: Session> DelegateDiagnostics<S::Span> for MacroArgContext<S> {
+    type Delegate = S::Delegate;
 
     fn diagnostics(&mut self) -> &mut Self::Delegate {
         self.parent.parent.diagnostics()
     }
 }
 
-impl<'a, F, B, N, D> TokenSeqContext<D::Span> for MacroArgContext<'a, F, B, N, D>
-where
-    F: Frontend<D>,
-    B: ?Sized,
-    D: Diagnostics,
-{
-    type Token = SemanticToken<F::StringRef>;
-    type Parent = MacroInvocationActions<'a, F, B, N, D>;
+impl<S: Session> TokenSeqContext<S::Span> for MacroArgContext<S> {
+    type Token = SemanticToken<S::StringRef>;
+    type Parent = MacroInvocationActions<S>;
 
-    fn push_token(&mut self, token: (Self::Token, D::Span)) {
+    fn push_token(&mut self, token: (Self::Token, S::Span)) {
         self.tokens.push(token)
     }
 

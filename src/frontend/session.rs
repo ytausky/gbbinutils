@@ -10,7 +10,7 @@ use crate::frontend::macros::MacroEntry;
 use crate::frontend::{Downstream, Frontend, Ident, SemanticToken, StringRef};
 
 #[cfg(test)]
-pub use self::mock::*;
+pub(crate) use self::mock::*;
 
 pub(crate) trait Session
 where
@@ -232,17 +232,34 @@ mod mock {
     use crate::expr::{Expr, ExprVariant};
     use std::cell::RefCell;
 
-    pub struct MockSession<'a, T, S> {
-        _log: &'a RefCell<Vec<T>>,
+    #[derive(Debug, PartialEq)]
+    pub(crate) enum Event {
+        AnalyzeFile(String),
+        DefineMacro(
+            Ident<String>,
+            Vec<Ident<String>>,
+            Vec<SemanticToken<String>>,
+        ),
+        InvokeMacro(Ident<String>, Vec<Vec<SemanticToken<String>>>),
+    }
+
+    pub(crate) struct MockSession<'a, T, S> {
+        log: &'a RefCell<Vec<T>>,
+        error: Option<CodebaseError>,
         diagnostics: MockDiagnostics<'a, T, S>,
     }
 
     impl<'a, T, S> MockSession<'a, T, S> {
         pub fn new(log: &'a RefCell<Vec<T>>) -> Self {
             Self {
-                _log: log,
+                log,
+                error: None,
                 diagnostics: MockDiagnostics::new(log),
             }
+        }
+
+        pub fn fail(&mut self, error: CodebaseError) {
+            self.error = Some(error)
         }
     }
 
@@ -289,6 +306,82 @@ mod mock {
 
         fn diagnostics(&mut self) -> &mut Self::Delegate {
             &mut self.diagnostics
+        }
+    }
+
+    impl<'a, T, S: Clone + MockSpan> Span for MockSession<'a, T, S> {
+        type Span = S;
+    }
+
+    impl<'a, T, S> StringRef for MockSession<'a, T, S> {
+        type StringRef = String;
+    }
+
+    impl<'a, T, S> Session for MockSession<'a, T, S>
+    where
+        T: From<Event>,
+        T: From<backend::Event<RelocExpr<Ident<String>, S>>>,
+        T: From<diag::Event<S>>,
+        S: Clone + MockSpan,
+    {
+        fn analyze_file(&mut self, path: String) -> Result<(), CodebaseError> {
+            self.log.borrow_mut().push(Event::AnalyzeFile(path).into());
+            self.error.take().map_or(Ok(()), Err)
+        }
+
+        fn define_macro(
+            &mut self,
+            name: (Ident<Self::StringRef>, Self::Span),
+            params: (Vec<Ident<Self::StringRef>>, Vec<Self::Span>),
+            body: (Vec<SemanticToken<Self::StringRef>>, Vec<Self::Span>),
+        ) {
+            self.log
+                .borrow_mut()
+                .push(Event::DefineMacro(name.0, params.0, body.0).into())
+        }
+
+        fn invoke_macro(
+            &mut self,
+            name: (Ident<Self::StringRef>, Self::Span),
+            args: MacroArgs<Self::StringRef, Self::Span>,
+        ) {
+            self.log.borrow_mut().push(
+                Event::InvokeMacro(
+                    name.0,
+                    args.into_iter()
+                        .map(|arg| arg.into_iter().map(|(token, _)| token).collect())
+                        .collect(),
+                )
+                .into(),
+            )
+        }
+
+        fn define_symbol(
+            &mut self,
+            symbol: (Ident<Self::StringRef>, Self::Span),
+            value: Self::Value,
+        ) {
+            self.log
+                .borrow_mut()
+                .push(backend::Event::DefineSymbol(symbol, value).into())
+        }
+    }
+
+    impl<'a, T, S> PartialBackend<S> for MockSession<'a, T, S>
+    where
+        T: From<backend::Event<RelocExpr<Ident<String>, S>>>,
+        S: Clone + MockSpan,
+    {
+        fn emit_item(&mut self, item: Item<Self::Value>) {
+            self.log
+                .borrow_mut()
+                .push(backend::Event::EmitItem(item).into())
+        }
+
+        fn set_origin(&mut self, origin: Self::Value) {
+            self.log
+                .borrow_mut()
+                .push(backend::Event::SetOrigin(origin).into())
         }
     }
 }

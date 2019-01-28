@@ -1,24 +1,17 @@
 use super::{AnalyzeExpr, CommandArgs, Directive, SemanticActions, SemanticAtom, SemanticExpr};
 use crate::backend;
-use crate::backend::{Backend, NameTable, PartialBackend, Width};
+use crate::backend::Width;
 use crate::diag::*;
 use crate::expr::{BinaryOperator, ExprVariant};
-use crate::frontend::macros::MacroEntry;
 use crate::frontend::session::{Session, ValueBuilder};
-use crate::frontend::{Frontend, Ident, Literal};
+use crate::frontend::Literal;
 use crate::span::Source;
 
-pub(super) fn analyze_directive<'a, 'b, F, B, N, D>(
-    directive: (Directive, D::Span),
-    args: CommandArgs<F::StringRef, D::Span>,
-    actions: &'b mut SemanticActions<'a, F, B, N, D>,
-) where
-    'a: 'b,
-    F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
-    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
-    D: Diagnostics,
-{
+pub(super) fn analyze_directive<'a, S: Session>(
+    directive: (Directive, S::Span),
+    args: CommandArgs<S::StringRef, S::Span>,
+    actions: &'a mut SemanticActions<S>,
+) {
     let context = DirectiveContext {
         span: directive.1,
         args,
@@ -33,29 +26,17 @@ struct DirectiveContext<'a, A, I, S> {
     actions: &'a mut A,
 }
 
-impl<'a, 'b, F, B, N, D> DelegateDiagnostics<D::Span>
-    for DirectiveContext<'b, SemanticActions<'a, F, B, N, D>, F::StringRef, D::Span>
-where
-    'a: 'b,
-    F: Frontend<D>,
-    D: Diagnostics,
+impl<'a, S: Session> DelegateDiagnostics<S::Span>
+    for DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::Span>
 {
-    type Delegate = D;
+    type Delegate = S::Delegate;
 
     fn diagnostics(&mut self) -> &mut Self::Delegate {
         self.actions.diagnostics()
     }
 }
 
-impl<'a, 'b, F, B, N, D>
-    DirectiveContext<'b, SemanticActions<'a, F, B, N, D>, F::StringRef, D::Span>
-where
-    'a: 'b,
-    F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
-    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
-    D: Diagnostics,
-{
+impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::Span> {
     fn analyze(self, directive: Directive) {
         match directive {
             Directive::Db => self.analyze_data(Width::Byte),
@@ -197,12 +178,13 @@ fn single_arg<T, D: DownstreamDiagnostics<S>, S>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::{HashMapNameTable, RelocAtom, RelocExpr};
+    use crate::backend::{RelocAtom, RelocExpr};
     use crate::codebase::CodebaseError;
     use crate::diag;
     use crate::frontend::semantics;
-    use crate::frontend::semantics::tests::{MockDiagnostics, *};
-    use crate::frontend::session::CompositeSession;
+    use crate::frontend::semantics::tests::*;
+    use crate::frontend::session;
+    use crate::frontend::Ident;
     use crate::syntax::keyword::{Command, Operand};
     use crate::syntax::{CommandContext, ExprAtom, ExprContext, FileContext, StmtContext};
     use std::borrow::Borrow;
@@ -215,7 +197,10 @@ mod tests {
         let actions = unary_directive(Directive::Include, |arg| {
             arg.push_atom((ExprAtom::Literal(Literal::String(filename.to_string())), ()));
         });
-        assert_eq!(actions, [TestOperation::AnalyzeFile(filename.to_string())])
+        assert_eq!(
+            actions,
+            [session::Event::AnalyzeFile(filename.to_string()).into()]
+        )
     }
 
     #[test]
@@ -348,13 +333,8 @@ mod tests {
     fn include_file_with_invalid_utf8() {
         let name = "invalid_utf8.s";
         let operations = RefCell::new(Vec::new());
-        let mut frontend = TestFrontend::new(&operations);
-        frontend.fail(CodebaseError::Utf8Error);
-        let mut backend = MockBackend::new(&operations);
-        let mut names = HashMapNameTable::new();
-        let mut diagnostics = MockDiagnostics::new(&operations);
-        let session =
-            CompositeSession::new(&mut frontend, &mut backend, &mut names, &mut diagnostics);
+        let mut session = MockSession::new(&operations);
+        session.fail(CodebaseError::Utf8Error);
         {
             let mut context = SemanticActions::new(session)
                 .enter_stmt(None)
@@ -366,7 +346,7 @@ mod tests {
         assert_eq!(
             operations.into_inner(),
             [
-                TestOperation::AnalyzeFile(name.into()),
+                session::Event::AnalyzeFile(name.into()).into(),
                 diag::Event::EmitDiagnostic(CompactDiagnostic::new(Message::InvalidUtf8, ()))
                     .into()
             ]
@@ -378,16 +358,11 @@ mod tests {
         let name = "nonexistent.s";
         let message = "some message";
         let operations = RefCell::new(Vec::new());
-        let mut frontend = TestFrontend::new(&operations);
-        frontend.fail(CodebaseError::IoError(io::Error::new(
+        let mut session = MockSession::new(&operations);
+        session.fail(CodebaseError::IoError(io::Error::new(
             io::ErrorKind::NotFound,
             message,
         )));
-        let mut backend = MockBackend::new(&operations);
-        let mut names = HashMapNameTable::new();
-        let mut diagnostics = MockDiagnostics::new(&operations);
-        let session =
-            CompositeSession::new(&mut frontend, &mut backend, &mut names, &mut diagnostics);
         {
             let mut context = SemanticActions::new(session)
                 .enter_stmt(None)
@@ -399,7 +374,7 @@ mod tests {
         assert_eq!(
             operations.into_inner(),
             [
-                TestOperation::AnalyzeFile(name.into()),
+                session::Event::AnalyzeFile(name.into()).into(),
                 diag::Event::EmitDiagnostic(CompactDiagnostic::new(
                     Message::IoError {
                         string: message.to_string()
@@ -428,8 +403,7 @@ mod tests {
         unary_directive(Directive::Ds, f)
     }
 
-    type TestExprContext<'a> =
-        semantics::ExprContext<TestFrontend<'a>, MockDiagnostics<'a>, TestCommandActions<'a>>;
+    type TestExprContext<'a> = semantics::ExprContext<String, (), TestCommandActions<'a>>;
 
     fn unary_directive<F>(directive: Directive, f: F) -> Vec<TestOperation>
     where
@@ -457,13 +431,7 @@ mod tests {
         )
     }
 
-    type TestCommandActions<'a> = semantics::CommandActions<
-        'a,
-        TestFrontend<'a>,
-        MockBackend<'a>,
-        TestNameTable<'a>,
-        MockDiagnostics<'a>,
-    >;
+    type TestCommandActions<'a> = semantics::CommandActions<MockSession<'a>>;
 
     fn with_directive<F>(directive: Directive, f: F) -> Vec<TestOperation>
     where
