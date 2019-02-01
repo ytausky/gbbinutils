@@ -2,7 +2,7 @@ mod macros;
 mod semantics;
 mod session;
 
-use self::macros::{DefineMacro, Expand, MacroDefData, MacroEntry, MacroTableEntry};
+use self::macros::{MacroDefData, MacroEntry, MacroTableEntry};
 use crate::backend::*;
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diag::*;
@@ -122,25 +122,6 @@ pub(crate) trait Frontend<D: Diagnostics> {
         I: IntoIterator<Item = LexItem<Self::StringRef, D::Span>>,
         B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
         N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>;
-
-    fn invoke_macro<B, N>(
-        &mut self,
-        name: (Ident<Self::StringRef>, D::Span),
-        args: MacroArgs<Self::StringRef, D::Span>,
-        downstream: Downstream<B, N, D>,
-    ) where
-        B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
-        N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>;
-
-    fn define_macro<B, N>(
-        &mut self,
-        name: (Ident<Self::StringRef>, D::Span),
-        params: (Vec<Ident<Self::StringRef>>, Vec<D::Span>),
-        body: (Vec<SemanticToken<Self::StringRef>>, Vec<D::Span>),
-        downstream: Downstream<B, N, D>,
-    ) where
-        B: ?Sized,
-        N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>;
 }
 
 impl<Id> Analysis<Id> for SemanticAnalysis
@@ -219,49 +200,6 @@ where
             downstream.diagnostics,
         );
         analysis.run(tokens.into_iter(), session)
-    }
-
-    fn invoke_macro<B, N>(
-        &mut self,
-        (name, span): (Ident<Self::StringRef>, D::Span),
-        args: MacroArgs<Self::StringRef, D::Span>,
-        mut downstream: Downstream<B, N, D>,
-    ) where
-        B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
-        N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>,
-    {
-        let expansion = match downstream.names.get(&name) {
-            Some(Name::Macro(entry)) => Some(entry.expand(span, args, downstream.diagnostics)),
-            Some(_) => unimplemented!(),
-            None => {
-                let stripped = downstream.diagnostics.strip_span(&span);
-                downstream
-                    .diagnostics
-                    .emit_diagnostic(CompactDiagnostic::new(
-                        Message::UndefinedMacro { name: stripped },
-                        span,
-                    ));
-                None
-            }
-        };
-        if let Some(expansion) = expansion {
-            self.analyze_token_seq(expansion.map(|(t, s)| (Ok(t), s)), &mut downstream)
-        }
-    }
-
-    fn define_macro<B, N>(
-        &mut self,
-        name: (Ident<Self::StringRef>, D::Span),
-        params: (Vec<Ident<Self::StringRef>>, Vec<D::Span>),
-        body: (Vec<SemanticToken<Self::StringRef>>, Vec<D::Span>),
-        downstream: Downstream<B, N, D>,
-    ) where
-        B: ?Sized,
-        N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>,
-    {
-        downstream
-            .names
-            .define_macro(name, params, body, downstream.diagnostics)
     }
 }
 
@@ -382,31 +320,6 @@ mod mock {
             self.log
                 .borrow_mut()
                 .push(FrontendEvent::AnalyzeTokenSeq(tokens.into_iter().collect()).into())
-        }
-
-        fn invoke_macro<B, N>(
-            &mut self,
-            _name: (Ident<Self::StringRef>, D::Span),
-            _args: MacroArgs<Self::StringRef, D::Span>,
-            _: Downstream<B, N, D>,
-        ) where
-            B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
-            N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>,
-        {
-            unimplemented!()
-        }
-
-        fn define_macro<B, N>(
-            &mut self,
-            _name: (Ident<Self::StringRef>, D::Span),
-            _params: (Vec<Ident<Self::StringRef>>, Vec<D::Span>),
-            _body: (Vec<SemanticToken<Self::StringRef>>, Vec<D::Span>),
-            _: Downstream<B, N, D>,
-        ) where
-            B: ?Sized,
-            N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>,
-        {
-            unimplemented!()
         }
     }
 
