@@ -1,12 +1,14 @@
 use crate::backend;
 use crate::backend::{
-    ApplyBinaryOperator, Backend, HasValue, Item, NameTable, PartialBackend, ValueFromSimple,
+    ApplyBinaryOperator, Backend, HasValue, Item, Name, NameTable, PartialBackend, ValueFromSimple,
 };
 use crate::codebase::CodebaseError;
 use crate::diag::span::Span;
-use crate::diag::{DelegateDiagnostics, Diagnostics, DownstreamDiagnostics};
+use crate::diag::{
+    CompactDiagnostic, DelegateDiagnostics, Diagnostics, DownstreamDiagnostics, Message,
+};
 use crate::expr::BinaryOperator;
-use crate::frontend::macros::MacroEntry;
+use crate::frontend::macros::{DefineMacro, Expand, MacroEntry};
 use crate::frontend::{Downstream, Frontend, Ident, SemanticToken, StringRef};
 
 #[cfg(test)]
@@ -181,8 +183,8 @@ where
         params: (Vec<Ident<Self::StringRef>>, Vec<Self::Span>),
         body: (Vec<SemanticToken<Self::StringRef>>, Vec<Self::Span>),
     ) {
-        self.frontend
-            .define_macro(name, params, body, downstream!(self))
+        self.names
+            .define_macro(name, params, body, self.diagnostics)
     }
 
     fn invoke_macro(
@@ -190,7 +192,22 @@ where
         name: (Ident<Self::StringRef>, Self::Span),
         args: MacroArgs<Self::StringRef, Self::Span>,
     ) {
-        self.frontend.invoke_macro(name, args, downstream!(self))
+        let expansion = match self.names.get(&name.0) {
+            Some(Name::Macro(entry)) => Some(entry.expand(name.1, args, self.diagnostics)),
+            Some(_) => unimplemented!(),
+            None => {
+                let stripped = self.diagnostics.strip_span(&name.1);
+                self.diagnostics.emit_diagnostic(CompactDiagnostic::new(
+                    Message::UndefinedMacro { name: stripped },
+                    name.1,
+                ));
+                None
+            }
+        };
+        if let Some(expansion) = expansion {
+            self.frontend
+                .analyze_token_seq(expansion.map(|(t, s)| (Ok(t), s)), &mut downstream!(self))
+        }
     }
 
     fn define_symbol(&mut self, symbol: (Ident<Self::StringRef>, Self::Span), value: Self::Value) {
@@ -395,8 +412,8 @@ mod tests {
     use crate::diag;
     use crate::diag::MockSpan;
     use crate::frontend;
-    use crate::frontend::FrontendEvent;
-    use crate::syntax::{Command, Mnemonic, Token};
+    use crate::frontend::{FrontendEvent, Literal};
+    use crate::syntax::{Command, Directive, Mnemonic, Token};
 
     use std::cell::RefCell;
     use std::iter;
@@ -417,19 +434,88 @@ mod tests {
         session.invoke_macro((name.into(), ()), vec![]);
         assert_eq!(
             *log.borrow(),
-            [
-                FrontendEvent::DefineMacro {
-                    name: (name.into(), ()),
-                    params: (vec![], vec![]),
-                    body: (tokens, spans),
-                }
-                .into(),
-                FrontendEvent::InvokeMacro {
-                    name: (name.into(), ()),
-                    args: vec![],
-                }
-                .into(),
-            ]
+            [FrontendEvent::AnalyzeTokenSeq(
+                tokens.into_iter().map(|token| (Ok(token), ())).collect()
+            )
+            .into()]
+        );
+    }
+
+    #[test]
+    fn define_and_invoke_macro_with_param() {
+        let db = Token::Command(Command::Directive(Directive::Db));
+        let arg = Token::Literal(Literal::Number(0x42));
+        let literal0 = Token::Literal(Literal::Number(0));
+        let log = RefCell::new(Vec::new());
+        let mut fixture = Fixture::new(&log);
+        let mut session = fixture.session();
+        let name = "my_db";
+        let param = "x";
+        session.define_macro(
+            (name.into(), ()),
+            (vec![param.into()], vec![()]),
+            (
+                vec![db.clone(), Token::Ident(param.into()), literal0.clone()],
+                vec![(), (), ()],
+            ),
+        );
+        session.invoke_macro((name.into(), ()), vec![vec![(arg.clone(), ())]]);
+        assert_eq!(
+            *log.borrow(),
+            [FrontendEvent::AnalyzeTokenSeq(
+                vec![db, arg, literal0]
+                    .into_iter()
+                    .map(|token| (Ok(token), ()))
+                    .collect()
+            )
+            .into()]
+        );
+    }
+
+    #[test]
+    fn define_and_invoke_macro_with_label() {
+        let nop = Token::Command(Command::Mnemonic(Mnemonic::Nop));
+        let label = "label";
+        let log = RefCell::new(Vec::new());
+        let mut fixture = Fixture::new(&log);
+        let mut session = fixture.session();
+        let name = "my_macro";
+        let param = "x";
+        session.define_macro(
+            (name.into(), ()),
+            (vec![param.into()], vec![()]),
+            (vec![Token::Label(param.into()), nop.clone()], vec![(), ()]),
+        );
+        session.invoke_macro(
+            (name.into(), ()),
+            vec![vec![(Token::Ident(label.into()), ())]],
+        );
+        assert_eq!(
+            *log.borrow(),
+            [FrontendEvent::AnalyzeTokenSeq(
+                vec![Token::Label(label.into()), nop]
+                    .into_iter()
+                    .map(|token| (Ok(token), ()))
+                    .collect()
+            )
+            .into()]
+        );
+    }
+
+    #[test]
+    fn diagnose_undefined_macro() {
+        let name = "my_macro";
+        let log = RefCell::new(Vec::new());
+        let mut fixture = Fixture::new(&log);
+        let mut session = fixture.session();
+        session.invoke_macro((name.into(), name), vec![]);
+        assert_eq!(
+            *log.borrow(),
+            [diag::Event::EmitDiagnostic(CompactDiagnostic::new(
+                Message::UndefinedMacro { name },
+                name
+            ))
+            .into()]
         );
     }
 

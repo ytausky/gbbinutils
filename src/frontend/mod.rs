@@ -373,56 +373,46 @@ mod mock {
             unimplemented!()
         }
 
-        fn analyze_token_seq<I, B, N>(&mut self, _tokens: I, _downstream: &mut Downstream<B, N, D>)
+        fn analyze_token_seq<I, B, N>(&mut self, tokens: I, _downstream: &mut Downstream<B, N, D>)
         where
             I: IntoIterator<Item = LexItem<Self::StringRef, D::Span>>,
+            B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
+            N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>,
+        {
+            self.log
+                .borrow_mut()
+                .push(FrontendEvent::AnalyzeTokenSeq(tokens.into_iter().collect()).into())
+        }
+
+        fn invoke_macro<B, N>(
+            &mut self,
+            _name: (Ident<Self::StringRef>, D::Span),
+            _args: MacroArgs<Self::StringRef, D::Span>,
+            _: Downstream<B, N, D>,
+        ) where
             B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
             N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>,
         {
             unimplemented!()
         }
 
-        fn invoke_macro<B, N>(
-            &mut self,
-            name: (Ident<Self::StringRef>, D::Span),
-            args: MacroArgs<Self::StringRef, D::Span>,
-            _: Downstream<B, N, D>,
-        ) where
-            B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
-            N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>,
-        {
-            self.log
-                .borrow_mut()
-                .push(FrontendEvent::InvokeMacro { name, args }.into())
-        }
-
         fn define_macro<B, N>(
             &mut self,
-            name: (Ident<Self::StringRef>, D::Span),
-            params: (Vec<Ident<Self::StringRef>>, Vec<D::Span>),
-            body: (Vec<SemanticToken<Self::StringRef>>, Vec<D::Span>),
+            _name: (Ident<Self::StringRef>, D::Span),
+            _params: (Vec<Ident<Self::StringRef>>, Vec<D::Span>),
+            _body: (Vec<SemanticToken<Self::StringRef>>, Vec<D::Span>),
             _: Downstream<B, N, D>,
         ) where
             B: ?Sized,
             N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>,
         {
-            self.log
-                .borrow_mut()
-                .push(FrontendEvent::DefineMacro { name, params, body }.into())
+            unimplemented!()
         }
     }
 
     #[derive(Debug, PartialEq)]
     pub(crate) enum FrontendEvent<S> {
-        DefineMacro {
-            name: (Ident<String>, S),
-            params: (Vec<Ident<String>>, Vec<S>),
-            body: (Vec<SemanticToken<String>>, Vec<S>),
-        },
-        InvokeMacro {
-            name: (Ident<String>, S),
-            args: MacroArgs<String, S>,
-        },
+        AnalyzeTokenSeq(Vec<LexItem<String, S>>),
     }
 }
 
@@ -432,7 +422,7 @@ mod tests {
     use crate::backend;
     use crate::backend::HashMapNameTable;
     use crate::diag;
-    use crate::diag::{CompactDiagnostic, MockSpan};
+    use crate::diag::MockSpan;
     use crate::frontend::macros::MacroEntry;
     use crate::instruction::{Instruction, Nullary};
     use crate::syntax::keyword::Mnemonic;
@@ -493,102 +483,6 @@ mod tests {
     }
 
     use crate::syntax::keyword::*;
-
-    #[test]
-    fn define_and_invoke_macro() {
-        let name = "my_macro";
-        let tokens = vec![Token::Command(Command::Mnemonic(Mnemonic::Nop))];
-        let log = TestLog::<()>::default();
-        TestFixture::new(&log).when(|mut fixture| {
-            let mut session = fixture.session();
-            session.define_macro(
-                (name.into(), ()),
-                (vec![], vec![]),
-                (tokens.clone(), vec![]),
-            );
-            session.invoke_macro((name.into(), ()), vec![])
-        });
-        assert_eq!(
-            *log.borrow(),
-            [TestEvent::AnalyzeTokens(
-                tokens.into_iter().map(Ok).collect()
-            )]
-        );
-    }
-
-    #[test]
-    fn define_and_invoke_macro_with_param() {
-        let db = Token::Command(Command::Directive(Directive::Db));
-        let arg = Token::Literal(Literal::Number(0x42));
-        let literal0 = Token::Literal(Literal::Number(0));
-        let log = TestLog::default();
-        TestFixture::new(&log).when(|mut fixture| {
-            let name = "my_db";
-            let param = "x";
-            let mut session = fixture.session();
-            session.define_macro(
-                (name.into(), ()),
-                (vec![param.into()], vec![()]),
-                (
-                    vec![db.clone(), Token::Ident(param.into()), literal0.clone()],
-                    vec![(), (), ()],
-                ),
-            );
-            session.invoke_macro((name.into(), ()), vec![vec![(arg.clone(), ())]])
-        });
-        assert_eq!(
-            *log.borrow(),
-            [TestEvent::AnalyzeTokens(vec![
-                Ok(db),
-                Ok(arg),
-                Ok(literal0)
-            ])]
-        );
-    }
-
-    #[test]
-    fn define_and_invoke_macro_with_label() {
-        let nop = Token::Command(Command::Mnemonic(Mnemonic::Nop));
-        let label = "label";
-        let log = TestLog::default();
-        TestFixture::new(&log).when(|mut fixture| {
-            let name = "my_macro";
-            let param = "x";
-            let mut session = fixture.session();
-            session.define_macro(
-                (name.into(), ()),
-                (vec![param.into()], vec![()]),
-                (vec![Token::Label(param.into()), nop.clone()], vec![(), ()]),
-            );
-            session.invoke_macro(
-                (name.into(), ()),
-                vec![vec![(Token::Ident(label.into()), ())]],
-            )
-        });
-        assert_eq!(
-            *log.borrow(),
-            [TestEvent::AnalyzeTokens(vec![
-                Ok(Token::Label(label.into())),
-                Ok(nop)
-            ])]
-        );
-    }
-
-    #[test]
-    fn diagnose_undefined_macro() {
-        let name = "my_macro";
-        let log = TestLog::<&'static str>::default();
-        TestFixture::new(&log)
-            .when(|mut fixture| fixture.session().invoke_macro((name.into(), name), vec![]));
-        assert_eq!(
-            *log.borrow(),
-            [diag::Event::EmitDiagnostic(CompactDiagnostic::new(
-                Message::UndefinedMacro { name },
-                name
-            ))
-            .into()]
-        );
-    }
 
     impl MockSpan for &'static str {
         fn default() -> Self {
