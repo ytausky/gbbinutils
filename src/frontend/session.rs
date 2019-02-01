@@ -385,3 +385,116 @@ mod mock {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::backend;
+    use crate::backend::{HashMapNameTable, RelocExpr};
+    use crate::diag;
+    use crate::diag::MockSpan;
+    use crate::frontend;
+    use crate::frontend::FrontendEvent;
+    use crate::syntax::{Command, Mnemonic, Token};
+
+    use std::cell::RefCell;
+    use std::iter;
+
+    #[test]
+    fn define_and_invoke_macro() {
+        let name = "my_macro";
+        let tokens = vec![Token::Command(Command::Mnemonic(Mnemonic::Nop))];
+        let spans: Vec<_> = iter::repeat(()).take(tokens.len()).collect();
+        let log = RefCell::new(Vec::new());
+        let mut fixture = Fixture::new(&log);
+        let mut session = fixture.session();
+        session.define_macro(
+            (name.into(), ()),
+            (vec![], vec![]),
+            (tokens.clone(), spans.clone()),
+        );
+        session.invoke_macro((name.into(), ()), vec![]);
+        assert_eq!(
+            *log.borrow(),
+            [
+                FrontendEvent::DefineMacro {
+                    name: (name.into(), ()),
+                    params: (vec![], vec![]),
+                    body: (tokens, spans),
+                }
+                .into(),
+                FrontendEvent::InvokeMacro {
+                    name: (name.into(), ()),
+                    args: vec![],
+                }
+                .into(),
+            ]
+        );
+    }
+
+    type MockFrontend<'a, S> = frontend::MockFrontend<'a, Event<S>>;
+    type MockBackend<'a, S> = backend::MockBackend<'a, Event<S>>;
+    type MockDiagnostics<'a, S> = diag::MockDiagnostics<'a, Event<S>, S>;
+    type TestNameTable<'a, S> =
+        HashMapNameTable<MacroEntry<MockFrontend<'a, S>, MockDiagnostics<'a, S>>>;
+    type TestSession<'a, 'b, S> = CompositeSession<
+        'b,
+        MockFrontend<'a, S>,
+        MockBackend<'a, S>,
+        TestNameTable<'a, S>,
+        MockDiagnostics<'a, S>,
+    >;
+
+    #[derive(Debug, PartialEq)]
+    enum Event<S: Clone> {
+        Frontend(FrontendEvent<S>),
+        Backend(backend::Event<RelocExpr<Ident<String>, S>>),
+        Diagnostics(diag::Event<S>),
+    }
+
+    impl<S: Clone> From<FrontendEvent<S>> for Event<S> {
+        fn from(event: FrontendEvent<S>) -> Self {
+            Event::Frontend(event)
+        }
+    }
+
+    impl<S: Clone> From<backend::Event<RelocExpr<Ident<String>, S>>> for Event<S> {
+        fn from(event: backend::Event<RelocExpr<Ident<String>, S>>) -> Self {
+            Event::Backend(event)
+        }
+    }
+
+    impl<S: Clone> From<diag::Event<S>> for Event<S> {
+        fn from(event: diag::Event<S>) -> Self {
+            Event::Diagnostics(event)
+        }
+    }
+
+    struct Fixture<'a, S: Clone + MockSpan> {
+        frontend: MockFrontend<'a, S>,
+        backend: MockBackend<'a, S>,
+        names: TestNameTable<'a, S>,
+        diagnostics: MockDiagnostics<'a, S>,
+    }
+
+    impl<'a, S: Clone + MockSpan> Fixture<'a, S> {
+        fn new(log: &'a RefCell<Vec<Event<S>>>) -> Self {
+            Self {
+                frontend: MockFrontend::new(log),
+                backend: MockBackend::new(log),
+                names: HashMapNameTable::new(),
+                diagnostics: MockDiagnostics::new(log),
+            }
+        }
+
+        fn session<'b>(&'b mut self) -> TestSession<'a, 'b, S> {
+            CompositeSession::new(
+                &mut self.frontend,
+                &mut self.backend,
+                &mut self.names,
+                &mut self.diagnostics,
+            )
+        }
+    }
+}

@@ -8,7 +8,7 @@ pub mod keyword;
 pub mod lexer;
 mod parser;
 
-pub use self::keyword::{Command, Operand};
+pub use self::keyword::{Command, Mnemonic, Operand};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token<I, L, C> {

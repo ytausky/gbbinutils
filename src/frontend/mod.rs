@@ -14,6 +14,9 @@ use std::rc::Rc;
 
 pub use crate::syntax::Token;
 
+#[cfg(test)]
+pub use self::mock::*;
+
 pub(crate) trait Assemble<D>
 where
     D: Diagnostics,
@@ -331,6 +334,95 @@ impl<'a, C: BufContext> Iterator for TokenizedSrcIter<'a, C> {
         self.tokens
             .next()
             .map(|(t, r)| (t, self.context.mk_span(r)))
+    }
+}
+
+#[cfg(test)]
+mod mock {
+    use super::*;
+
+    use std::cell::RefCell;
+
+    pub struct MockFrontend<'a, T> {
+        log: &'a RefCell<Vec<T>>,
+    }
+
+    impl<'a, T> MockFrontend<'a, T> {
+        pub fn new(log: &'a RefCell<Vec<T>>) -> Self {
+            Self { log }
+        }
+    }
+
+    impl<'a, T, D> Frontend<D> for MockFrontend<'a, T>
+    where
+        T: From<FrontendEvent<D::Span>>,
+        D: Diagnostics,
+    {
+        type StringRef = String;
+        type MacroDefId = usize;
+
+        fn analyze_file<B, N>(
+            &mut self,
+            _path: Self::StringRef,
+            _downstream: Downstream<B, N, D>,
+        ) -> Result<(), CodebaseError>
+        where
+            B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
+            N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>,
+        {
+            unimplemented!()
+        }
+
+        fn analyze_token_seq<I, B, N>(&mut self, _tokens: I, _downstream: &mut Downstream<B, N, D>)
+        where
+            I: IntoIterator<Item = LexItem<Self::StringRef, D::Span>>,
+            B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
+            N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>,
+        {
+            unimplemented!()
+        }
+
+        fn invoke_macro<B, N>(
+            &mut self,
+            name: (Ident<Self::StringRef>, D::Span),
+            args: MacroArgs<Self::StringRef, D::Span>,
+            _: Downstream<B, N, D>,
+        ) where
+            B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
+            N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>,
+        {
+            self.log
+                .borrow_mut()
+                .push(FrontendEvent::InvokeMacro { name, args }.into())
+        }
+
+        fn define_macro<B, N>(
+            &mut self,
+            name: (Ident<Self::StringRef>, D::Span),
+            params: (Vec<Ident<Self::StringRef>>, Vec<D::Span>),
+            body: (Vec<SemanticToken<Self::StringRef>>, Vec<D::Span>),
+            _: Downstream<B, N, D>,
+        ) where
+            B: ?Sized,
+            N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>,
+        {
+            self.log
+                .borrow_mut()
+                .push(FrontendEvent::DefineMacro { name, params, body }.into())
+        }
+    }
+
+    #[derive(Debug, PartialEq)]
+    pub(crate) enum FrontendEvent<S> {
+        DefineMacro {
+            name: (Ident<String>, S),
+            params: (Vec<Ident<String>>, Vec<S>),
+            body: (Vec<SemanticToken<String>>, Vec<S>),
+        },
+        InvokeMacro {
+            name: (Ident<String>, S),
+            args: MacroArgs<String, S>,
+        },
     }
 }
 
