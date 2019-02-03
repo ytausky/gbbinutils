@@ -106,6 +106,7 @@ struct SemanticAnalysis;
 
 pub(crate) trait Frontend<D: Diagnostics> {
     type StringRef: AsRef<str> + Clone + Eq + Into<String>;
+    type TokenIter: Iterator<Item = LexItem<Self::StringRef, D::Span>>;
 
     fn analyze_file<B, N>(
         &mut self,
@@ -115,6 +116,12 @@ pub(crate) trait Frontend<D: Diagnostics> {
     where
         B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
         N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>;
+
+    fn lex_file(
+        &mut self,
+        path: Self::StringRef,
+        diagnostics: &mut D,
+    ) -> Result<Self::TokenIter, CodebaseError>;
 
     fn analyze_token_seq<I, B, N>(&mut self, tokens: I, downstream: &mut Downstream<B, N, D>)
     where
@@ -164,6 +171,7 @@ where
     D: Diagnostics,
 {
     type StringRef = T::StringRef;
+    type TokenIter = T::Tokenized;
 
     fn analyze_file<B, N>(
         &mut self,
@@ -174,13 +182,18 @@ where
         B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
         N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>,
     {
-        let tokenized_src = {
-            self.codebase.tokenize_file(path.as_ref(), |buf_id| {
-                downstream.diagnostics.mk_buf_context(buf_id, None)
-            })?
-        };
-        self.analyze_token_seq(tokenized_src, &mut downstream);
-        Ok(())
+        let tokenized_src = self.lex_file(path, downstream.diagnostics)?;
+        Ok(self.analyze_token_seq(tokenized_src, &mut downstream))
+    }
+
+    fn lex_file(
+        &mut self,
+        path: Self::StringRef,
+        diagnostics: &mut D,
+    ) -> Result<Self::TokenIter, CodebaseError> {
+        self.codebase.tokenize_file(path.as_ref(), |buf_id| {
+            diagnostics.mk_buf_context(buf_id, None)
+        })
     }
 
     fn analyze_token_seq<I, B, N>(&mut self, tokens: I, downstream: &mut Downstream<B, N, D>)
@@ -263,6 +276,7 @@ mod mock {
     use super::*;
 
     use std::cell::RefCell;
+    use std::iter::Empty;
 
     pub struct MockFrontend<'a, T> {
         log: &'a RefCell<Vec<T>>,
@@ -280,6 +294,7 @@ mod mock {
         D: Diagnostics,
     {
         type StringRef = String;
+        type TokenIter = Empty<LexItem<Self::StringRef, D::Span>>;
 
         fn analyze_file<B, N>(
             &mut self,
@@ -290,6 +305,14 @@ mod mock {
             B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
             N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>,
         {
+            unimplemented!()
+        }
+
+        fn lex_file(
+            &mut self,
+            _path: Self::StringRef,
+            _diagnostics: &mut D,
+        ) -> Result<Self::TokenIter, CodebaseError> {
             unimplemented!()
         }
 
