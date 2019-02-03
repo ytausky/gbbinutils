@@ -9,7 +9,6 @@ use std::str;
 
 #[derive(Clone, Copy, PartialEq)]
 enum TokenKind {
-    Error(LexError),
     Ident,
     Label,
     Number(Radix),
@@ -43,7 +42,7 @@ struct Scanner<B> {
 }
 
 impl<B: Borrow<str>> Iterator for Scanner<B> {
-    type Item = (TokenKind, Range<usize>);
+    type Item = (Result<TokenKind, LexError>, Range<usize>);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.skip_irrelevant_characters();
@@ -52,7 +51,7 @@ impl<B: Borrow<str>> Iterator for Scanner<B> {
             Some(self.lex_token())
         } else if !self.is_at_file_end {
             self.is_at_file_end = true;
-            Some((Eof.into(), self.range.end..self.range.end))
+            Some((Ok(Eof.into()), self.range.end..self.range.end))
         } else {
             None
         }
@@ -112,43 +111,43 @@ impl<B: Borrow<str>> Scanner<B> {
         (next_token, self.range.clone())
     }
 
-    fn take(&mut self, token: impl Into<TokenKind>) -> TokenKind {
+    fn take(&mut self, token: impl Into<TokenKind>) -> Result<TokenKind, LexError> {
         self.advance();
-        token.into()
+        Ok(token.into())
     }
 
-    fn lex_decimal_number(&mut self) -> TokenKind {
+    fn lex_decimal_number(&mut self) -> Result<TokenKind, LexError> {
         self.advance();
         self.skip_characters_if(is_dec_digit);
-        TokenKind::Number(Radix::Decimal)
+        Ok(TokenKind::Number(Radix::Decimal))
     }
 
-    fn lex_hex_number(&mut self) -> TokenKind {
+    fn lex_hex_number(&mut self) -> Result<TokenKind, LexError> {
         self.advance();
         self.skip_characters_if(is_hex_digit);
-        TokenKind::Number(Radix::Hexadecimal)
+        Ok(TokenKind::Number(Radix::Hexadecimal))
     }
 
-    fn lex_quoted_string(&mut self) -> TokenKind {
+    fn lex_quoted_string(&mut self) -> Result<TokenKind, LexError> {
         self.advance();
         self.skip_characters_if(|c| c != '"' && c != '\n');
         if self.current_char() == Some('"') {
             self.advance();
-            TokenKind::String
+            Ok(TokenKind::String)
         } else {
-            TokenKind::Error(LexError::UnterminatedString)
+            Err(LexError::UnterminatedString)
         }
     }
 
-    fn lex_ident(&mut self) -> TokenKind {
+    fn lex_ident(&mut self) -> Result<TokenKind, LexError> {
         let is_label = self.is_at_line_start;
         self.advance();
         self.find_word_end();
-        if is_label {
+        Ok(if is_label {
             TokenKind::Label
         } else {
             TokenKind::Ident
-        }
+        })
     }
 
     fn find_word_end(&mut self) {
@@ -188,9 +187,9 @@ impl<B: Borrow<str>> Iterator for Lexer<B> {
     type Item = (Result<SemanticToken<String>, LexError>, Range<usize>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.scanner.next().map(|(kind, range)| {
+        self.scanner.next().map(|(result, range)| {
             (
-                mk_token(kind, &self.scanner.src.borrow()[range.clone()]),
+                result.and_then(|kind| mk_token(kind, &self.scanner.src.borrow()[range.clone()])),
                 range,
             )
         })
@@ -199,7 +198,6 @@ impl<B: Borrow<str>> Iterator for Lexer<B> {
 
 fn mk_token(kind: TokenKind, lexeme: &str) -> Result<SemanticToken<String>, LexError> {
     match kind {
-        TokenKind::Error(error) => Err(error),
         TokenKind::Ident => Ok(mk_keyword_or(Token::Ident, lexeme)),
         TokenKind::Label => Ok(mk_keyword_or(Token::Label, lexeme)),
         TokenKind::Number(Radix::Decimal) => Ok(Token::Literal(Literal::Number(
