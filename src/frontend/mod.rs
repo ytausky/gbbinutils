@@ -106,7 +106,6 @@ struct SemanticAnalysis;
 
 pub(crate) trait Frontend<D: Diagnostics> {
     type StringRef: AsRef<str> + Clone + Eq + Into<String>;
-    type MacroDefId: Clone;
 
     fn analyze_file<B, N>(
         &mut self,
@@ -166,7 +165,6 @@ where
     for<'b> &'b T::Tokenized: IntoIterator<Item = LexItem<T::StringRef, D::Span>>,
 {
     type StringRef = T::StringRef;
-    type MacroDefId = D::MacroDefId;
 
     fn analyze_file<B, N>(
         &mut self,
@@ -297,7 +295,6 @@ mod mock {
         D: Diagnostics,
     {
         type StringRef = String;
-        type MacroDefId = usize;
 
         fn analyze_file<B, N>(
             &mut self,
