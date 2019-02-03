@@ -35,8 +35,7 @@ where
         let mut file_parser = CodebaseAnalyzer::new(codebase, SemanticAnalysis);
         let mut names = HashMapNameTable::new();
         let mut session = CompositeSession::new(&mut file_parser, self, &mut names, diagnostics);
-        session.analyze_file(name.into())?;
-        Ok(())
+        session.analyze_file(name.into())
     }
 }
 
@@ -183,7 +182,8 @@ where
         N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>,
     {
         let tokenized_src = self.lex_file(path, downstream.diagnostics)?;
-        Ok(self.analyze_token_seq(tokenized_src, &mut downstream))
+        self.analyze_token_seq(tokenized_src, &mut downstream);
+        Ok(())
     }
 
     fn lex_file(
