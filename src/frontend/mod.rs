@@ -259,7 +259,7 @@ impl<'a, C: BufContext> IntoIterator for &'a TokenizedSrc<C> {
 }
 
 struct TokenizedSrcIter<'a, C: BufContext + 'a> {
-    tokens: Lexer<'a>,
+    tokens: Lexer<&'a str>,
     context: &'a C,
 }
 

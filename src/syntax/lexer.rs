@@ -3,8 +3,8 @@ use super::SimpleToken::*;
 use super::{SimpleToken, Token};
 use crate::frontend::{Ident, Literal, SemanticToken};
 
-use std::iter;
-use std::ops::{Index, Range};
+use std::borrow::Borrow;
+use std::ops::Range;
 use std::str;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -35,19 +35,19 @@ pub enum LexError {
     UnterminatedString,
 }
 
-struct Scanner<I: Iterator> {
-    chars: iter::Peekable<I>,
+struct Scanner<B> {
+    src: B,
     range: Range<usize>,
     is_at_line_start: bool,
     is_at_file_end: bool,
 }
 
-impl<I: Iterator<Item = char>> Iterator for Scanner<I> {
+impl<B: Borrow<str>> Iterator for Scanner<B> {
     type Item = (TokenKind, Range<usize>);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.skip_irrelevant_characters();
-        if self.chars.peek().is_some() {
+        if self.range.end < self.src.borrow().len() {
             self.range.start = self.range.end;
             Some(self.lex_token())
         } else if !self.is_at_file_end {
@@ -59,10 +59,10 @@ impl<I: Iterator<Item = char>> Iterator for Scanner<I> {
     }
 }
 
-impl<I: Iterator<Item = char>> Scanner<I> {
-    pub fn new(chars: I) -> Scanner<I> {
+impl<B: Borrow<str>> Scanner<B> {
+    pub fn new(src: B) -> Scanner<B> {
         Scanner {
-            chars: chars.peekable(),
+            src,
             range: Range { start: 0, end: 0 },
             is_at_line_start: true,
             is_at_file_end: false,
@@ -83,13 +83,14 @@ impl<I: Iterator<Item = char>> Scanner<I> {
     }
 
     fn current_char(&mut self) -> Option<char> {
-        self.chars.peek().cloned()
+        self.src.borrow()[self.range.end..].chars().next()
     }
 
     fn advance(&mut self) -> Option<char> {
-        self.is_at_line_start = self.current_char() == Some('\n');
-        self.range.end += self.current_char().map_or(0, |ch| ch.len_utf8());
-        self.chars.next()
+        let current = self.current_char();
+        self.is_at_line_start = current == Some('\n');
+        self.range.end += current.map_or(0, |ch| ch.len_utf8());
+        current
     }
 
     fn lex_token(&mut self) -> <Self as Iterator>::Item {
@@ -171,27 +172,27 @@ fn is_hex_digit(character: char) -> bool {
     character.is_digit(16)
 }
 
-pub(crate) struct Lexer<'a> {
-    src: &'a str,
-    scanner: Scanner<str::Chars<'a>>,
+pub(crate) struct Lexer<B> {
+    src: B,
+    scanner: Scanner<B>,
 }
 
-impl<'a> Lexer<'a> {
-    pub fn new(src: &'a str) -> Lexer<'a> {
+impl<B: Borrow<str> + Clone> Lexer<B> {
+    pub fn new(src: B) -> Lexer<B> {
         Lexer {
+            scanner: Scanner::new(src.clone()),
             src,
-            scanner: Scanner::new(src.chars()),
         }
     }
 }
 
-impl<'a> Iterator for Lexer<'a> {
+impl<B: Borrow<str>> Iterator for Lexer<B> {
     type Item = (Result<SemanticToken<String>, LexError>, Range<usize>);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.scanner
             .next()
-            .map(|(kind, range)| (mk_token(kind, self.src.index(range.clone())), range))
+            .map(|(kind, range)| (mk_token(kind, &self.src.borrow()[range.clone()]), range))
     }
 }
 
