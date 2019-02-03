@@ -403,16 +403,6 @@ mod tests {
 
     use crate::syntax::keyword::*;
 
-    impl MockSpan for &'static str {
-        fn default() -> Self {
-            unimplemented!()
-        }
-
-        fn merge(&self, _: &Self) -> Self {
-            unimplemented!()
-        }
-    }
-
     struct MockTokenSource<S> {
         files: HashMap<String, Vec<LexItem<String, S>>>,
     }

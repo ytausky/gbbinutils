@@ -583,4 +583,14 @@ mod tests {
             )
         }
     }
+
+    impl MockSpan for &'static str {
+        fn default() -> Self {
+            unimplemented!()
+        }
+
+        fn merge(&self, _: &Self) -> Self {
+            unimplemented!()
+        }
+    }
 }
