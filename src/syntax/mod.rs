@@ -1,5 +1,6 @@
 use crate::diag::DelegateDiagnostics;
 use crate::expr::BinaryOperator;
+use std::borrow::Borrow;
 
 #[cfg(test)]
 #[macro_use]
@@ -40,7 +41,7 @@ impl<I, L, C> From<SimpleToken> for Token<I, L, C> {
     }
 }
 
-pub(super) fn tokenize<'a>(src: &'a str) -> self::lexer::Lexer<&'a str> {
+pub(super) fn tokenize<B: Borrow<str> + Clone>(src: B) -> self::lexer::Lexer<B> {
     self::lexer::Lexer::new(src)
 }
 

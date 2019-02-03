@@ -162,7 +162,6 @@ where
     T: Tokenize<D::BufContext> + 'a,
     A: Analysis<T::StringRef>,
     D: Diagnostics,
-    for<'b> &'b T::Tokenized: IntoIterator<Item = LexItem<T::StringRef, D::Span>>,
 {
     type StringRef = T::StringRef;
 
@@ -180,7 +179,7 @@ where
                 downstream.diagnostics.mk_buf_context(buf_id, None)
             })?
         };
-        self.analyze_token_seq(&tokenized_src, &mut downstream);
+        self.analyze_token_seq(tokenized_src, &mut downstream);
         Ok(())
     }
 
@@ -208,9 +207,8 @@ pub(crate) trait StringRef {
 trait Tokenize<C: BufContext>
 where
     Self: StringRef,
-    for<'c> &'c Self::Tokenized: IntoIterator<Item = LexItem<Self::StringRef, C::Span>>,
 {
-    type Tokenized;
+    type Tokenized: Iterator<Item = LexItem<Self::StringRef, C::Span>>;
     fn tokenize_file<F: FnOnce(BufId) -> C>(
         &self,
         filename: &str,
@@ -237,33 +235,20 @@ impl<C: Codebase, B: BufContext> Tokenize<B> for C {
 }
 
 struct TokenizedSrc<C> {
-    src: Rc<str>,
+    tokens: Lexer<Rc<str>>,
     context: C,
 }
 
 impl<C: BufContext> TokenizedSrc<C> {
     fn new(src: Rc<str>, context: C) -> TokenizedSrc<C> {
-        TokenizedSrc { src, context }
-    }
-}
-
-impl<'a, C: BufContext> IntoIterator for &'a TokenizedSrc<C> {
-    type Item = <Self::IntoIter as Iterator>::Item;
-    type IntoIter = TokenizedSrcIter<'a, C>;
-    fn into_iter(self) -> Self::IntoIter {
-        TokenizedSrcIter {
-            tokens: crate::syntax::tokenize(&self.src),
-            context: &self.context,
+        TokenizedSrc {
+            tokens: crate::syntax::tokenize(src),
+            context,
         }
     }
 }
 
-struct TokenizedSrcIter<'a, C: BufContext + 'a> {
-    tokens: Lexer<&'a str>,
-    context: &'a C,
-}
-
-impl<'a, C: BufContext> Iterator for TokenizedSrcIter<'a, C> {
+impl<'a, C: BufContext> Iterator for TokenizedSrc<C> {
     type Item = LexItem<String, C::Span>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -337,6 +322,7 @@ mod tests {
     use crate::instruction::{Instruction, Nullary};
     use crate::syntax::keyword::Mnemonic;
     use std::collections::HashMap;
+    use std::vec;
     use std::{self, cell::RefCell};
 
     #[test]
@@ -432,18 +418,19 @@ mod tests {
             filename: &str,
             _: F,
         ) -> Result<Self::Tokenized, CodebaseError> {
-            Ok(MockTokenized(self.files.get(filename).unwrap().clone()))
+            Ok(MockTokenized(
+                self.files.get(filename).unwrap().clone().into_iter(),
+            ))
         }
     }
 
-    struct MockTokenized<S>(Vec<LexItem<String, S>>);
+    struct MockTokenized<S>(vec::IntoIter<LexItem<String, S>>);
 
-    impl<'b, S: Clone> IntoIterator for &'b MockTokenized<S> {
+    impl<'b, S: Clone> Iterator for MockTokenized<S> {
         type Item = LexItem<String, S>;
-        type IntoIter = std::iter::Cloned<std::slice::Iter<'b, LexItem<String, S>>>;
 
-        fn into_iter(self) -> Self::IntoIter {
-            (&self.0).into_iter().cloned()
+        fn next(&mut self) -> Option<Self::Item> {
+            self.0.next()
         }
     }
 
