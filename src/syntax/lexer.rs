@@ -224,20 +224,15 @@ where
                 name: lexeme.to_string(),
             })
         },
-        |keyword| match keyword {
-            Keyword::Command(command) => Token::Command(command),
-            Keyword::Endm => Endm.into(),
-            Keyword::Macro => Macro.into(),
-            Keyword::Operand(operand) => Token::Literal(Literal::Operand(operand)),
-        },
+        Into::into,
     )
 }
 
 fn identify_keyword(word: &str) -> Option<Keyword> {
     KEYWORDS
         .iter()
-        .find(|&&(spelling, _)| spelling.eq_ignore_ascii_case(word))
-        .map(|&(_, keyword)| keyword)
+        .find(|(spelling, _)| spelling.eq_ignore_ascii_case(word))
+        .map(|(_, keyword)| *keyword)
 }
 
 #[derive(Clone, Copy)]
@@ -246,6 +241,17 @@ enum Keyword {
     Endm,
     Macro,
     Operand(Operand),
+}
+
+impl<I, R> From<Keyword> for Token<I, Literal<R>, Command> {
+    fn from(keyword: Keyword) -> Self {
+        match keyword {
+            Keyword::Command(command) => Token::Command(command),
+            Keyword::Endm => Endm.into(),
+            Keyword::Macro => Macro.into(),
+            Keyword::Operand(operand) => Token::Literal(Literal::Operand(operand)),
+        }
+    }
 }
 
 impl From<Command> for Keyword {
