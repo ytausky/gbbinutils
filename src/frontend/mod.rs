@@ -321,9 +321,9 @@ mod tests {
     use crate::frontend::macros::MacroEntry;
     use crate::instruction::{Instruction, Nullary};
     use crate::syntax::keyword::Mnemonic;
+    use std::cell::RefCell;
     use std::collections::HashMap;
     use std::vec;
-    use std::{self, cell::RefCell};
 
     #[test]
     fn include_source_file() {
