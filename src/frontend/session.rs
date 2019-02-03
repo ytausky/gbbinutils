@@ -433,7 +433,7 @@ mod tests {
         );
         session.invoke_macro((name.into(), ()), vec![]);
         assert_eq!(
-            *log.borrow(),
+            log.into_inner(),
             [FrontendEvent::AnalyzeTokenSeq(
                 tokens.into_iter().map(|token| (Ok(token), ())).collect()
             )
@@ -461,7 +461,7 @@ mod tests {
         );
         session.invoke_macro((name.into(), ()), vec![vec![(arg.clone(), ())]]);
         assert_eq!(
-            *log.borrow(),
+            log.into_inner(),
             [FrontendEvent::AnalyzeTokenSeq(
                 vec![db, arg, literal0]
                     .into_iter()
@@ -491,7 +491,7 @@ mod tests {
             vec![vec![(Token::Ident(label.into()), ())]],
         );
         assert_eq!(
-            *log.borrow(),
+            log.into_inner(),
             [FrontendEvent::AnalyzeTokenSeq(
                 vec![Token::Label(label.into()), nop]
                     .into_iter()
@@ -510,7 +510,7 @@ mod tests {
         let mut session = fixture.session();
         session.invoke_macro((name.into(), name), vec![]);
         assert_eq!(
-            *log.borrow(),
+            log.into_inner(),
             [diag::Event::EmitDiagnostic(CompactDiagnostic::new(
                 Message::UndefinedMacro { name },
                 name
