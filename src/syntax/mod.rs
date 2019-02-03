@@ -41,7 +41,7 @@ impl<I, L, C> From<SimpleToken> for Token<I, L, C> {
     }
 }
 
-pub(super) fn tokenize<B: Borrow<str> + Clone>(src: B) -> self::lexer::Lexer<B> {
+pub(super) fn tokenize<B: Borrow<str>>(src: B) -> self::lexer::Lexer<B> {
     self::lexer::Lexer::new(src)
 }
 

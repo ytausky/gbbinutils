@@ -173,15 +173,13 @@ fn is_hex_digit(character: char) -> bool {
 }
 
 pub(crate) struct Lexer<B> {
-    src: B,
     scanner: Scanner<B>,
 }
 
-impl<B: Borrow<str> + Clone> Lexer<B> {
+impl<B: Borrow<str>> Lexer<B> {
     pub fn new(src: B) -> Lexer<B> {
         Lexer {
-            scanner: Scanner::new(src.clone()),
-            src,
+            scanner: Scanner::new(src),
         }
     }
 }
@@ -190,9 +188,12 @@ impl<B: Borrow<str>> Iterator for Lexer<B> {
     type Item = (Result<SemanticToken<String>, LexError>, Range<usize>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.scanner
-            .next()
-            .map(|(kind, range)| (mk_token(kind, &self.src.borrow()[range.clone()]), range))
+        self.scanner.next().map(|(kind, range)| {
+            (
+                mk_token(kind, &self.scanner.src.borrow()[range.clone()]),
+                range,
+            )
+        })
     }
 }
 
