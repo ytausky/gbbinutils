@@ -232,7 +232,7 @@ mod tests {
     #[test]
     fn diagnose_unresolved_symbol() {
         let name = "ident";
-        let ident = Ident { name: name.into() };
+        let ident: Ident<_> = name.into();
         let (_, diagnostics) = with_object_builder(|builder| {
             let value = builder.from_ident(ident, name.into(), &mut NameTable::new());
             builder.emit_item(word_item(value))
@@ -244,12 +244,8 @@ mod tests {
     fn diagnose_two_unresolved_symbols_in_one_expr() {
         let name1 = "ident1";
         let name2 = "ident2";
-        let ident1 = Ident {
-            name: name1.to_string(),
-        };
-        let ident2 = Ident {
-            name: name2.to_string(),
-        };
+        let ident1: Ident<_> = name1.into();
+        let ident2: Ident<_> = name2.into();
         let (_, diagnostics) = with_object_builder(|builder| {
             let names = &mut NameTable::new();
             let value = {
@@ -265,7 +261,7 @@ mod tests {
     #[test]
     fn emit_defined_symbol() {
         let label = "label";
-        let ident = Ident { name: label.into() };
+        let ident: Ident<_> = label.into();
         let (object, diagnostics) = with_object_builder(|builder| {
             let mut table = NameTable::new();
             builder.define_symbol(
