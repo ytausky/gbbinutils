@@ -248,9 +248,11 @@ impl<C: Codebase, B: BufContext> Tokenize<B> for C {
 }
 
 struct TokenizedSrc<C> {
-    tokens: Lexer<Rc<str>, for<'a> fn(&'a str) -> Ident<String>>,
+    tokens: Lexer<Rc<str>, MkIdent>,
     context: C,
 }
+
+type MkIdent = for<'a> fn(&'a str) -> Ident<String>;
 
 impl<C: BufContext> TokenizedSrc<C> {
     fn new(src: Rc<str>, context: C) -> TokenizedSrc<C> {

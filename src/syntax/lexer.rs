@@ -219,15 +219,14 @@ where
     }
 }
 
+type LexResult<I> = Result<Token<I, Literal<String>, Command>, LexError>;
+
 impl<B, F, I> Iterator for Lexer<B, F>
 where
     B: Borrow<str>,
     F: for<'a> Fn(&'a str) -> I,
 {
-    type Item = (
-        Result<Token<I, Literal<String>, Command>, LexError>,
-        Range<usize>,
-    );
+    type Item = (LexResult<I>, Range<usize>);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.scanner.next().map(|(result, range)| {
