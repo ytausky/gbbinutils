@@ -63,19 +63,31 @@ pub(crate) type SemanticToken<T> = Token<Ident<T>, Literal<T>, Command>;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Ident<T> {
     pub name: T,
+    visibility: Visibility,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Visibility {
+    Global,
 }
 
 #[cfg(test)]
 impl<T> From<T> for Ident<T> {
     fn from(name: T) -> Ident<T> {
-        Ident { name }
+        Ident {
+            name,
+            visibility: Visibility::Global,
+        }
     }
 }
 
 #[cfg(test)]
 impl From<&str> for Ident<String> {
     fn from(name: &str) -> Ident<String> {
-        Ident { name: name.into() }
+        Ident {
+            name: name.into(),
+            visibility: Visibility::Global,
+        }
     }
 }
 
@@ -259,6 +271,7 @@ impl<C: BufContext> TokenizedSrc<C> {
         TokenizedSrc {
             tokens: crate::syntax::tokenize(src, |spelling| Ident {
                 name: spelling.to_string(),
+                visibility: Visibility::Global,
             }),
             context,
         }
