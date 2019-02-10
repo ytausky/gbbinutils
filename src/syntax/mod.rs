@@ -41,8 +41,12 @@ impl<I, L, C> From<SimpleToken> for Token<I, L, C> {
     }
 }
 
-pub(super) fn tokenize<B: Borrow<str>>(src: B) -> self::lexer::Lexer<B> {
-    self::lexer::Lexer::new(src)
+pub(super) fn tokenize<B, F, I>(src: B, mk_ident: F) -> self::lexer::Lexer<B, F>
+where
+    B: Borrow<str>,
+    F: for<'a> Fn(&'a str) -> I,
+{
+    self::lexer::Lexer::new(src, mk_ident)
 }
 
 pub(crate) use self::parser::parse_src as parse_token_seq;

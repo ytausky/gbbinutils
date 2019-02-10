@@ -248,14 +248,16 @@ impl<C: Codebase, B: BufContext> Tokenize<B> for C {
 }
 
 struct TokenizedSrc<C> {
-    tokens: Lexer<Rc<str>>,
+    tokens: Lexer<Rc<str>, for<'a> fn(&'a str) -> Ident<String>>,
     context: C,
 }
 
 impl<C: BufContext> TokenizedSrc<C> {
     fn new(src: Rc<str>, context: C) -> TokenizedSrc<C> {
         TokenizedSrc {
-            tokens: crate::syntax::tokenize(src),
+            tokens: crate::syntax::tokenize(src, |spelling| Ident {
+                name: spelling.to_string(),
+            }),
             context,
         }
     }

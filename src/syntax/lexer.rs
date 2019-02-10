@@ -1,7 +1,7 @@
 use super::keyword::*;
 use super::SimpleToken::*;
 use super::{SimpleToken, Token};
-use crate::frontend::{Ident, Literal, SemanticToken};
+use crate::frontend::Literal;
 
 use std::borrow::Borrow;
 use std::ops::Range;
@@ -171,61 +171,73 @@ fn is_hex_digit(character: char) -> bool {
     character.is_digit(16)
 }
 
-pub(crate) struct Lexer<B> {
+pub(crate) struct Lexer<B, F> {
     scanner: Scanner<B>,
+    mk_ident: F,
 }
 
-impl<B: Borrow<str>> Lexer<B> {
-    pub fn new(src: B) -> Lexer<B> {
+impl<B, F, I> Lexer<B, F>
+where
+    B: Borrow<str>,
+    F: for<'a> Fn(&'a str) -> I,
+{
+    pub fn new(src: B, mk_ident: F) -> Lexer<B, F> {
         Lexer {
             scanner: Scanner::new(src),
+            mk_ident,
         }
+    }
+
+    fn mk_token(
+        &self,
+        kind: TokenKind,
+        lexeme: &str,
+    ) -> Result<Token<I, Literal<String>, Command>, LexError> {
+        match kind {
+            TokenKind::Ident => Ok(self.mk_keyword_or(Token::Ident, lexeme)),
+            TokenKind::Label => Ok(self.mk_keyword_or(Token::Label, lexeme)),
+            TokenKind::Number(Radix::Decimal) => Ok(Token::Literal(Literal::Number(
+                i32::from_str_radix(lexeme, 10).unwrap(),
+            ))),
+            TokenKind::Number(Radix::Hexadecimal) => match i32::from_str_radix(&lexeme[1..], 16) {
+                Ok(n) => Ok(Token::Literal(Literal::Number(n))),
+                Err(_) => Err(LexError::NoDigits),
+            },
+            TokenKind::Simple(simple) => Ok(Token::Simple(simple)),
+            TokenKind::String => Ok(Token::Literal(Literal::String(
+                lexeme[1..(lexeme.len() - 1)].to_string(),
+            ))),
+        }
+    }
+
+    fn mk_keyword_or<G>(&self, g: G, lexeme: &str) -> Token<I, Literal<String>, Command>
+    where
+        G: FnOnce(I) -> Token<I, Literal<String>, Command>,
+    {
+        identify_keyword(lexeme).map_or_else(|| g((self.mk_ident)(lexeme)), Into::into)
     }
 }
 
-impl<B: Borrow<str>> Iterator for Lexer<B> {
-    type Item = (Result<SemanticToken<String>, LexError>, Range<usize>);
+impl<B, F, I> Iterator for Lexer<B, F>
+where
+    B: Borrow<str>,
+    F: for<'a> Fn(&'a str) -> I,
+{
+    type Item = (
+        Result<Token<I, Literal<String>, Command>, LexError>,
+        Range<usize>,
+    );
 
     fn next(&mut self) -> Option<Self::Item> {
         self.scanner.next().map(|(result, range)| {
             (
-                result.and_then(|kind| mk_token(kind, &self.scanner.src.borrow()[range.clone()])),
+                result.and_then(|kind| {
+                    self.mk_token(kind, &self.scanner.src.borrow()[range.clone()])
+                }),
                 range,
             )
         })
     }
-}
-
-fn mk_token(kind: TokenKind, lexeme: &str) -> Result<SemanticToken<String>, LexError> {
-    match kind {
-        TokenKind::Ident => Ok(mk_keyword_or(Token::Ident, lexeme)),
-        TokenKind::Label => Ok(mk_keyword_or(Token::Label, lexeme)),
-        TokenKind::Number(Radix::Decimal) => Ok(Token::Literal(Literal::Number(
-            i32::from_str_radix(lexeme, 10).unwrap(),
-        ))),
-        TokenKind::Number(Radix::Hexadecimal) => match i32::from_str_radix(&lexeme[1..], 16) {
-            Ok(n) => Ok(Token::Literal(Literal::Number(n))),
-            Err(_) => Err(LexError::NoDigits),
-        },
-        TokenKind::Simple(simple) => Ok(Token::Simple(simple)),
-        TokenKind::String => Ok(Token::Literal(Literal::String(
-            lexeme[1..(lexeme.len() - 1)].to_string(),
-        ))),
-    }
-}
-
-fn mk_keyword_or<F>(f: F, lexeme: &str) -> SemanticToken<String>
-where
-    F: FnOnce(Ident<String>) -> SemanticToken<String>,
-{
-    identify_keyword(lexeme).map_or_else(
-        || {
-            f(Ident {
-                name: lexeme.to_string(),
-            })
-        },
-        Into::into,
-    )
 }
 
 fn identify_keyword(word: &str) -> Option<Keyword> {
@@ -370,37 +382,38 @@ mod tests {
         )
     }
 
-    fn test_byte_range_at_eof(
-        src: &str,
-        tokens: impl Borrow<[(SemanticToken<String>, Range<usize>)]>,
-    ) {
+    fn test_byte_range_at_eof(src: &str, tokens: impl Borrow<[(TestToken, Range<usize>)]>) {
         let expected: Vec<_> = tokens
             .borrow()
             .iter()
             .cloned()
             .map(|(t, r)| (Ok(t), r))
             .collect();
-        assert_eq!(Lexer::new(src).collect::<Vec<_>>(), expected)
+        assert_eq!(
+            Lexer::new(src, |x| x.to_string()).collect::<Vec<_>>(),
+            expected
+        )
     }
 
-    fn assert_eq_tokens<'a>(
-        src: &'a str,
-        expected_without_eof: impl Borrow<[SemanticToken<String>]>,
-    ) {
+    fn assert_eq_tokens<'a>(src: &'a str, expected_without_eof: impl Borrow<[TestToken]>) {
         assert_eq_lex_results(src, expected_without_eof.borrow().iter().cloned().map(Ok))
     }
 
     fn assert_eq_lex_results<'a, I>(src: &'a str, expected_without_eof: I)
     where
-        I: IntoIterator<Item = Result<SemanticToken<String>, LexError>>,
+        I: IntoIterator<Item = Result<TestToken, LexError>>,
     {
         let mut expected: Vec<_> = expected_without_eof.into_iter().collect();
         expected.push(Ok(Eof.into()));
         assert_eq!(
-            Lexer::new(src).map(|(t, _)| t).collect::<Vec<_>>(),
+            Lexer::new(src, |x| x.to_string())
+                .map(|(t, _)| t)
+                .collect::<Vec<_>>(),
             expected
         )
     }
+
+    type TestToken = Token<String, crate::frontend::Literal<String>, crate::syntax::Command>;
 
     #[test]
     fn lex_empty_str() {
@@ -543,7 +556,7 @@ mod tests {
         assert_eq_lex_results("$", vec![Err(LexError::NoDigits)])
     }
 
-    impl<T: Into<super::Command>> From<T> for SemanticToken<String> {
+    impl<T: Into<super::Command>> From<T> for TestToken {
         fn from(t: T) -> Self {
             Command(t.into())
         }
