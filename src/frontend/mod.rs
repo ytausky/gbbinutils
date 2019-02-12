@@ -119,15 +119,6 @@ pub(crate) trait Frontend<D: Diagnostics> {
     type StringRef: AsRef<str> + Clone + Eq + Into<String>;
     type TokenIter: Iterator<Item = LexItem<Self::StringRef, D::Span>>;
 
-    fn analyze_file<B, N>(
-        &mut self,
-        path: Self::StringRef,
-        downstream: Downstream<B, N, D>,
-    ) -> Result<(), CodebaseError>
-    where
-        B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
-        N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>;
-
     fn lex_file(
         &mut self,
         path: Self::StringRef,
@@ -183,20 +174,6 @@ where
 {
     type StringRef = T::StringRef;
     type TokenIter = T::Tokenized;
-
-    fn analyze_file<B, N>(
-        &mut self,
-        path: Self::StringRef,
-        mut downstream: Downstream<B, N, D>,
-    ) -> Result<(), CodebaseError>
-    where
-        B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
-        N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>,
-    {
-        let tokenized_src = self.lex_file(path, downstream.diagnostics)?;
-        self.analyze_token_seq(tokenized_src, &mut downstream);
-        Ok(())
-    }
 
     fn lex_file(
         &mut self,
@@ -324,18 +301,6 @@ mod mock {
     {
         type StringRef = String;
         type TokenIter = IntoIter<LexItem<Self::StringRef, D::Span>>;
-
-        fn analyze_file<B, N>(
-            &mut self,
-            _path: Self::StringRef,
-            _downstream: Downstream<B, N, D>,
-        ) -> Result<(), CodebaseError>
-        where
-            B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
-            N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>,
-        {
-            unimplemented!()
-        }
 
         fn lex_file(
             &mut self,
