@@ -293,25 +293,37 @@ mod mock {
     use super::*;
 
     use std::cell::RefCell;
-    use std::iter::Empty;
+    use std::collections::HashMap;
+    use std::vec::IntoIter;
 
-    pub struct MockFrontend<'a, T> {
+    pub struct MockFrontend<'a, T, S> {
         log: &'a RefCell<Vec<T>>,
+        files: HashMap<String, Vec<LexItem<String, S>>>,
     }
 
-    impl<'a, T> MockFrontend<'a, T> {
+    impl<'a, T, S> MockFrontend<'a, T, S> {
         pub fn new(log: &'a RefCell<Vec<T>>) -> Self {
-            Self { log }
+            Self {
+                log,
+                files: HashMap::new(),
+            }
+        }
+
+        pub(crate) fn set_file<I>(&mut self, path: &str, tokens: I)
+        where
+            I: IntoIterator<Item = LexItem<String, S>>,
+        {
+            self.files.insert(path.into(), tokens.into_iter().collect());
         }
     }
 
-    impl<'a, T, D> Frontend<D> for MockFrontend<'a, T>
+    impl<'a, T, D> Frontend<D> for MockFrontend<'a, T, D::Span>
     where
         T: From<FrontendEvent<D::Span>>,
         D: Diagnostics,
     {
         type StringRef = String;
-        type TokenIter = Empty<LexItem<Self::StringRef, D::Span>>;
+        type TokenIter = IntoIter<LexItem<Self::StringRef, D::Span>>;
 
         fn analyze_file<B, N>(
             &mut self,
@@ -327,10 +339,10 @@ mod mock {
 
         fn lex_file(
             &mut self,
-            _path: Self::StringRef,
+            path: Self::StringRef,
             _diagnostics: &mut D,
         ) -> Result<Self::TokenIter, CodebaseError> {
-            unimplemented!()
+            Ok(self.files.get(&path).unwrap().clone().into_iter())
         }
 
         fn analyze_token_seq<I, B, N>(&mut self, tokens: I, _downstream: &mut Downstream<B, N, D>)
@@ -360,37 +372,9 @@ mod tests {
     use crate::diag::MockSpan;
     use crate::frontend::macros::MacroEntry;
     use crate::instruction::{Instruction, Nullary};
-    use crate::syntax::keyword::Mnemonic;
     use std::cell::RefCell;
     use std::collections::HashMap;
     use std::vec;
-
-    #[test]
-    fn include_source_file() {
-        let filename = "my_file.asm";
-        let contents = vec![Ok(Token::Command(Command::Mnemonic(Mnemonic::Nop)))];
-        let log = TestLog::default();
-        TestFixture::new(&log)
-            .given(|f| {
-                f.mock_token_source
-                    .add_file(filename, add_code_refs(&contents))
-            })
-            .when(|mut fixture| {
-                fixture
-                    .session()
-                    .analyze_file(filename.to_string())
-                    .unwrap()
-            });
-        assert_eq!(*log.borrow(), [TestEvent::AnalyzeTokens(contents)]);
-    }
-
-    fn add_code_refs<'a, T, I>(tokens: I) -> Vec<(T, ())>
-    where
-        T: Clone + 'a,
-        I: IntoIterator<Item = &'a T>,
-    {
-        tokens.into_iter().map(|t| (t.clone(), ())).collect()
-    }
 
     #[test]
     fn emit_instruction_item() {
@@ -418,8 +402,6 @@ mod tests {
         );
     }
 
-    use crate::syntax::keyword::*;
-
     struct MockTokenSource<S> {
         files: HashMap<String, Vec<LexItem<String, S>>>,
     }
@@ -429,10 +411,6 @@ mod tests {
             MockTokenSource {
                 files: HashMap::new(),
             }
-        }
-
-        fn add_file(&mut self, name: &str, tokens: Vec<LexItem<String, S>>) {
-            self.files.insert(name.to_string(), tokens);
         }
     }
 
@@ -548,11 +526,6 @@ mod tests {
                 object: MockBackend::new(log),
                 diagnostics: MockDiagnostics::new(log),
             }
-        }
-
-        fn given<F: FnOnce(&mut Self)>(mut self, f: F) -> Self {
-            f(&mut self);
-            self
         }
 
         fn when<F: for<'b> FnOnce(PreparedFixture<'a, 'b, S>)>(self, f: F) {

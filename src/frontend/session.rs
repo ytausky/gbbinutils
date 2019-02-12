@@ -174,7 +174,10 @@ where
     D: Diagnostics,
 {
     fn analyze_file(&mut self, path: Self::StringRef) -> Result<(), CodebaseError> {
-        self.frontend.analyze_file(path, downstream!(self))
+        let tokens = self.frontend.lex_file(path, self.diagnostics)?;
+        self.frontend
+            .analyze_token_seq(tokens, &mut downstream!(self));
+        Ok(())
     }
 
     fn define_macro(
@@ -212,18 +215,6 @@ where
 
     fn define_symbol(&mut self, symbol: (Ident<Self::StringRef>, Self::Span), value: Self::Value) {
         self.backend.define_symbol(symbol, value, &mut self.names)
-    }
-}
-
-impl<'a, F, B, N, D> CompositeSession<'a, F, B, N, D>
-where
-    F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
-    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
-    D: Diagnostics,
-{
-    pub fn analyze_file(&mut self, path: F::StringRef) -> Result<(), CodebaseError> {
-        self.frontend.analyze_file(path, downstream!(self))
     }
 }
 
@@ -419,6 +410,21 @@ mod tests {
     use std::iter;
 
     #[test]
+    fn include_source_file() {
+        let path = "my_file.s";
+        let tokens = vec![(Ok(Token::Command(Command::Mnemonic(Mnemonic::Nop))), ())];
+        let log = RefCell::new(Vec::new());
+        let mut fixture = Fixture::new(&log);
+        fixture.frontend.set_file(path, tokens.clone());
+        let mut session = fixture.session();
+        session.analyze_file(path.into()).unwrap();
+        assert_eq!(
+            log.into_inner(),
+            [FrontendEvent::AnalyzeTokenSeq(tokens).into()]
+        );
+    }
+
+    #[test]
     fn define_and_invoke_macro() {
         let name = "my_macro";
         let tokens = vec![Token::Command(Command::Mnemonic(Mnemonic::Nop))];
@@ -519,7 +525,7 @@ mod tests {
         );
     }
 
-    type MockFrontend<'a, S> = frontend::MockFrontend<'a, Event<S>>;
+    type MockFrontend<'a, S> = frontend::MockFrontend<'a, Event<S>, S>;
     type MockBackend<'a, S> = backend::MockBackend<'a, Event<S>>;
     type MockDiagnostics<'a, S> = diag::MockDiagnostics<'a, Event<S>, S>;
     type TestNameTable<'a, S> =
