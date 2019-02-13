@@ -431,7 +431,6 @@ mod tests {
     pub use self::kw::Operand::*;
     use super::*;
     use crate::backend::{RelocAtom, RelocExpr};
-    use crate::diag;
     pub(crate) use crate::diag::Message;
     use crate::diag::*;
     use crate::expr::{Expr, ExprVariant};
@@ -842,7 +841,7 @@ mod tests {
     }
 
     pub struct AnalysisResult(
-        Result<Instruction<RelocExpr<Ident<String>, TokenSpan>>, Vec<diag::Event<TokenSpan>>>,
+        Result<Instruction<RelocExpr<Ident<String>, TokenSpan>>, Vec<DiagnosticsEvent<TokenSpan>>>,
     );
 
     impl AnalysisResult {
@@ -857,10 +856,9 @@ mod tests {
             let expected = diagnostic.into();
             assert_eq!(
                 self.0,
-                Err(vec![diag::Event::EmitDiagnostic(CompactDiagnostic::new(
-                    expected.message,
-                    expected.highlight.unwrap(),
-                ))])
+                Err(vec![DiagnosticsEvent::EmitDiagnostic(
+                    CompactDiagnostic::new(expected.message, expected.highlight.unwrap(),)
+                )])
             )
         }
     }

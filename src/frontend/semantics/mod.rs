@@ -440,11 +440,11 @@ mod tests {
     use super::*;
 
     use crate::backend;
-    use crate::backend::{RelocAtom, Width};
-    use crate::diag;
+    use crate::backend::{BackendEvent, RelocAtom, Width};
     use crate::diag::{CompactDiagnostic, Message};
     use crate::expr::BinaryOperator;
     use crate::frontend::session;
+    use crate::frontend::session::SessionEvent;
     use crate::syntax::{
         keyword::Operand, CommandContext, ExprContext, FileContext, MacroInvocationContext,
         MacroParamsContext, StmtContext, Token, TokenSeqContext,
@@ -454,27 +454,27 @@ mod tests {
 
     #[derive(Debug, PartialEq)]
     pub(crate) enum TestOperation {
-        Backend(backend::Event<RelocExpr>),
-        Diagnostics(diag::Event<()>),
-        Session(session::Event),
+        Backend(BackendEvent<RelocExpr>),
+        Diagnostics(DiagnosticsEvent<()>),
+        Session(SessionEvent),
     }
 
     type RelocExpr = backend::RelocExpr<Ident<String>, ()>;
 
-    impl<'a> From<backend::Event<RelocExpr>> for TestOperation {
-        fn from(event: backend::Event<RelocExpr>) -> Self {
+    impl<'a> From<BackendEvent<RelocExpr>> for TestOperation {
+        fn from(event: BackendEvent<RelocExpr>) -> Self {
             TestOperation::Backend(event)
         }
     }
 
-    impl<'a> From<diag::Event<()>> for TestOperation {
-        fn from(event: diag::Event<()>) -> Self {
+    impl<'a> From<DiagnosticsEvent<()>> for TestOperation {
+        fn from(event: DiagnosticsEvent<()>) -> Self {
             TestOperation::Diagnostics(event)
         }
     }
 
-    impl<'a> From<session::Event> for TestOperation {
-        fn from(event: session::Event) -> Self {
+    impl<'a> From<SessionEvent> for TestOperation {
+        fn from(event: SessionEvent) -> Self {
             TestOperation::Session(event)
         }
     }
@@ -497,7 +497,7 @@ mod tests {
         assert_eq!(
             actions,
             [
-                backend::Event::EmitItem(backend::Item::Instruction(Instruction::Ld(Ld::Simple(
+                BackendEvent::EmitItem(backend::Item::Instruction(Instruction::Ld(Ld::Simple(
                     SimpleOperand::B,
                     SimpleOperand::DerefHl
                 ))))
@@ -531,7 +531,7 @@ mod tests {
         assert_eq!(
             actions,
             [
-                backend::Event::EmitItem(backend::Item::Instruction(Instruction::Rst(
+                BackendEvent::EmitItem(backend::Item::Instruction(Instruction::Rst(
                     ExprVariant::Binary(op, Box::new(1.into()), Box::new(1.into()),).into()
                 )))
                 .into()
@@ -552,7 +552,7 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [backend::Event::EmitItem(backend::Item::Data(
+            [BackendEvent::EmitItem(backend::Item::Data(
                 RelocAtom::Symbol(label.into()).into(),
                 Width::Word
             ))
@@ -568,7 +568,7 @@ mod tests {
         assert_eq!(
             actions,
             [
-                backend::Event::DefineSymbol((label.into(), ()), RelocAtom::LocationCounter.into())
+                BackendEvent::DefineSymbol((label.into(), ()), RelocAtom::LocationCounter.into())
                     .into()
             ]
         )
@@ -607,10 +607,11 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [
-                diag::Event::EmitDiagnostic(CompactDiagnostic::new(Message::MacroRequiresName, ()))
-                    .into()
-            ]
+            [DiagnosticsEvent::EmitDiagnostic(CompactDiagnostic::new(
+                Message::MacroRequiresName,
+                ()
+            ))
+            .into()]
         )
     }
 
@@ -634,7 +635,7 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [session::Event::DefineMacro(
+            [SessionEvent::DefineMacro(
                 name.into(),
                 params.borrow().iter().cloned().map(Into::into).collect(),
                 body.borrow().iter().cloned().collect()
@@ -654,7 +655,7 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [session::Event::InvokeMacro(name.into(), Vec::new()).into()]
+            [SessionEvent::InvokeMacro(name.into(), Vec::new()).into()]
         )
     }
 
@@ -675,7 +676,7 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [session::Event::InvokeMacro(name.into(), vec![vec![arg_token]]).into()]
+            [SessionEvent::InvokeMacro(name.into(), vec![vec![arg_token]]).into()]
         )
     }
 
@@ -692,7 +693,7 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [diag::Event::EmitDiagnostic(CompactDiagnostic::new(
+            [DiagnosticsEvent::EmitDiagnostic(CompactDiagnostic::new(
                 Message::OperandCount {
                     actual: 1,
                     expected: 0
@@ -711,7 +712,10 @@ mod tests {
             stmt.diagnostics().emit_diagnostic(diagnostic.clone());
             stmt.exit()
         });
-        assert_eq!(actions, [diag::Event::EmitDiagnostic(diagnostic).into()])
+        assert_eq!(
+            actions,
+            [DiagnosticsEvent::EmitDiagnostic(diagnostic).into()]
+        )
     }
 
     #[test]
@@ -725,7 +729,10 @@ mod tests {
             expr.diagnostics().emit_diagnostic(diagnostic.clone());
             expr.exit().exit().exit()
         });
-        assert_eq!(actions, [diag::Event::EmitDiagnostic(diagnostic).into()])
+        assert_eq!(
+            actions,
+            [DiagnosticsEvent::EmitDiagnostic(diagnostic).into()]
+        )
     }
 
     pub(super) type MockSession<'a> = session::MockSession<'a, TestOperation, ()>;

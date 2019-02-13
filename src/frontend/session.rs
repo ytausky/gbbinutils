@@ -1,4 +1,3 @@
-use crate::backend;
 use crate::backend::{
     ApplyBinaryOperator, Backend, HasValue, Item, Name, NameTable, PartialBackend, ValueFromSimple,
 };
@@ -39,8 +38,8 @@ where
 pub(crate) trait ValueBuilder<I, S: Clone>
 where
     Self: HasValue<S>,
-    Self: backend::ValueFromSimple<S>,
-    Self: backend::ApplyBinaryOperator<S>,
+    Self: ValueFromSimple<S>,
+    Self: ApplyBinaryOperator<S>,
 {
     fn from_ident(&mut self, ident: I, span: S) -> Self::Value;
 }
@@ -234,14 +233,13 @@ where
 mod mock {
     use super::*;
 
-    use crate::backend::{RelocAtom, RelocExpr};
-    use crate::diag;
-    use crate::diag::{MockDiagnostics, MockSpan};
+    use crate::backend::{BackendEvent, RelocAtom, RelocExpr};
+    use crate::diag::{DiagnosticsEvent, MockDiagnostics, MockSpan};
     use crate::expr::{Expr, ExprVariant};
     use std::cell::RefCell;
 
     #[derive(Debug, PartialEq)]
-    pub(crate) enum Event {
+    pub(crate) enum SessionEvent {
         AnalyzeFile(String),
         DefineMacro(
             Ident<String>,
@@ -307,7 +305,7 @@ mod mock {
 
     impl<'a, T, S> DelegateDiagnostics<S> for MockSession<'a, T, S>
     where
-        T: From<diag::Event<S>>,
+        T: From<DiagnosticsEvent<S>>,
         S: Clone + MockSpan,
     {
         type Delegate = MockDiagnostics<'a, T, S>;
@@ -327,13 +325,15 @@ mod mock {
 
     impl<'a, T, S> Session for MockSession<'a, T, S>
     where
-        T: From<Event>,
-        T: From<backend::Event<RelocExpr<Ident<String>, S>>>,
-        T: From<diag::Event<S>>,
+        T: From<SessionEvent>,
+        T: From<BackendEvent<RelocExpr<Ident<String>, S>>>,
+        T: From<DiagnosticsEvent<S>>,
         S: Clone + MockSpan,
     {
         fn analyze_file(&mut self, path: String) -> Result<(), CodebaseError> {
-            self.log.borrow_mut().push(Event::AnalyzeFile(path).into());
+            self.log
+                .borrow_mut()
+                .push(SessionEvent::AnalyzeFile(path).into());
             self.error.take().map_or(Ok(()), Err)
         }
 
@@ -345,7 +345,7 @@ mod mock {
         ) {
             self.log
                 .borrow_mut()
-                .push(Event::DefineMacro(name.0, params.0, body.0).into())
+                .push(SessionEvent::DefineMacro(name.0, params.0, body.0).into())
         }
 
         fn invoke_macro(
@@ -354,7 +354,7 @@ mod mock {
             args: MacroArgs<Self::StringRef, Self::Span>,
         ) {
             self.log.borrow_mut().push(
-                Event::InvokeMacro(
+                SessionEvent::InvokeMacro(
                     name.0,
                     args.into_iter()
                         .map(|arg| arg.into_iter().map(|(token, _)| token).collect())
@@ -371,25 +371,25 @@ mod mock {
         ) {
             self.log
                 .borrow_mut()
-                .push(backend::Event::DefineSymbol(symbol, value).into())
+                .push(BackendEvent::DefineSymbol(symbol, value).into())
         }
     }
 
     impl<'a, T, S> PartialBackend<S> for MockSession<'a, T, S>
     where
-        T: From<backend::Event<RelocExpr<Ident<String>, S>>>,
+        T: From<BackendEvent<RelocExpr<Ident<String>, S>>>,
         S: Clone + MockSpan,
     {
         fn emit_item(&mut self, item: Item<Self::Value>) {
             self.log
                 .borrow_mut()
-                .push(backend::Event::EmitItem(item).into())
+                .push(BackendEvent::EmitItem(item).into())
         }
 
         fn set_origin(&mut self, origin: Self::Value) {
             self.log
                 .borrow_mut()
-                .push(backend::Event::SetOrigin(origin).into())
+                .push(BackendEvent::SetOrigin(origin).into())
         }
     }
 }
@@ -399,9 +399,9 @@ mod tests {
     use super::*;
 
     use crate::backend;
-    use crate::backend::{HashMapNameTable, RelocExpr};
+    use crate::backend::{BackendEvent, HashMapNameTable, RelocExpr};
     use crate::diag;
-    use crate::diag::MockSpan;
+    use crate::diag::{DiagnosticsEvent, MockSpan};
     use crate::frontend;
     use crate::frontend::{FrontendEvent, Literal};
     use crate::syntax::{Command, Directive, Mnemonic, Token};
@@ -517,7 +517,7 @@ mod tests {
         session.invoke_macro((name.into(), name), vec![]);
         assert_eq!(
             log.into_inner(),
-            [diag::Event::EmitDiagnostic(CompactDiagnostic::new(
+            [DiagnosticsEvent::EmitDiagnostic(CompactDiagnostic::new(
                 Message::UndefinedMacro { name },
                 name
             ))
@@ -541,8 +541,8 @@ mod tests {
     #[derive(Debug, PartialEq)]
     enum Event<S: Clone> {
         Frontend(FrontendEvent<S>),
-        Backend(backend::Event<RelocExpr<Ident<String>, S>>),
-        Diagnostics(diag::Event<S>),
+        Backend(BackendEvent<RelocExpr<Ident<String>, S>>),
+        Diagnostics(DiagnosticsEvent<S>),
     }
 
     impl<S: Clone> From<FrontendEvent<S>> for Event<S> {
@@ -551,14 +551,14 @@ mod tests {
         }
     }
 
-    impl<S: Clone> From<backend::Event<RelocExpr<Ident<String>, S>>> for Event<S> {
-        fn from(event: backend::Event<RelocExpr<Ident<String>, S>>) -> Self {
+    impl<S: Clone> From<BackendEvent<RelocExpr<Ident<String>, S>>> for Event<S> {
+        fn from(event: BackendEvent<RelocExpr<Ident<String>, S>>) -> Self {
             Event::Backend(event)
         }
     }
 
-    impl<S: Clone> From<diag::Event<S>> for Event<S> {
-        fn from(event: diag::Event<S>) -> Self {
+    impl<S: Clone> From<DiagnosticsEvent<S>> for Event<S> {
+        fn from(event: DiagnosticsEvent<S>) -> Self {
             Event::Diagnostics(event)
         }
     }

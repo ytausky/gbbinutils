@@ -332,9 +332,9 @@ mod mock {
 mod tests {
     use super::*;
     use crate::backend;
-    use crate::backend::HashMapNameTable;
+    use crate::backend::{BackendEvent, HashMapNameTable};
     use crate::diag;
-    use crate::diag::MockSpan;
+    use crate::diag::{DiagnosticsEvent, MockSpan};
     use crate::frontend::macros::MacroEntry;
     use crate::instruction::{Instruction, Nullary};
     use std::cell::RefCell;
@@ -346,7 +346,7 @@ mod tests {
         let item = Item::Instruction(Instruction::Nullary(Nullary::Nop));
         let log = TestLog::<()>::default();
         TestFixture::new(&log).when(|mut fixture| fixture.session().emit_item(item.clone()));
-        assert_eq!(*log.borrow(), [backend::Event::EmitItem(item).into()]);
+        assert_eq!(*log.borrow(), [BackendEvent::EmitItem(item).into()]);
     }
 
     #[test]
@@ -361,7 +361,7 @@ mod tests {
         assert_eq!(
             *log.borrow(),
             [
-                backend::Event::DefineSymbol((label.into(), ()), RelocAtom::LocationCounter.into())
+                BackendEvent::DefineSymbol((label.into(), ()), RelocAtom::LocationCounter.into())
                     .into()
             ]
         );
@@ -436,21 +436,21 @@ mod tests {
 
     #[derive(Debug, PartialEq)]
     enum TestEvent<S: Clone> {
-        Backend(backend::Event<RelocExpr<S>>),
+        Backend(BackendEvent<RelocExpr<S>>),
         AnalyzeTokens(Vec<Result<SemanticToken<String>, LexError>>),
-        Diagnostics(diag::Event<S>),
+        Diagnostics(DiagnosticsEvent<S>),
     }
 
     type RelocExpr<S> = backend::RelocExpr<Ident<String>, S>;
 
-    impl<S: Clone> From<backend::Event<RelocExpr<S>>> for TestEvent<S> {
-        fn from(event: backend::Event<RelocExpr<S>>) -> Self {
+    impl<S: Clone> From<BackendEvent<RelocExpr<S>>> for TestEvent<S> {
+        fn from(event: BackendEvent<RelocExpr<S>>) -> Self {
             TestEvent::Backend(event)
         }
     }
 
-    impl<S: Clone> From<diag::Event<S>> for TestEvent<S> {
-        fn from(event: diag::Event<S>) -> Self {
+    impl<S: Clone> From<DiagnosticsEvent<S>> for TestEvent<S> {
+        fn from(event: DiagnosticsEvent<S>) -> Self {
             TestEvent::Diagnostics(event)
         }
     }

@@ -178,12 +178,11 @@ fn single_arg<T, D: DownstreamDiagnostics<S>, S>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::{RelocAtom, RelocExpr};
+    use crate::backend::{BackendEvent, RelocAtom, RelocExpr};
     use crate::codebase::CodebaseError;
-    use crate::diag;
     use crate::frontend::semantics;
     use crate::frontend::semantics::tests::*;
-    use crate::frontend::session;
+    use crate::frontend::session::SessionEvent;
     use crate::frontend::Ident;
     use crate::syntax::keyword::{Command, Operand};
     use crate::syntax::{CommandContext, ExprAtom, ExprContext, FileContext, StmtContext};
@@ -199,7 +198,7 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [session::Event::AnalyzeFile(filename.to_string()).into()]
+            [SessionEvent::AnalyzeFile(filename.to_string()).into()]
         )
     }
 
@@ -207,7 +206,7 @@ mod tests {
     fn set_origin() {
         let origin = 0x3000;
         let actions = unary_directive(Directive::Org, |arg| arg.push_atom(mk_literal(origin)));
-        assert_eq!(actions, [backend::Event::SetOrigin(origin.into()).into()])
+        assert_eq!(actions, [BackendEvent::SetOrigin(origin.into()).into()])
     }
 
     #[test]
@@ -246,7 +245,7 @@ mod tests {
             data.borrow()
                 .iter()
                 .map(mk_item)
-                .map(backend::Event::EmitItem)
+                .map(BackendEvent::EmitItem)
                 .map(Into::into)
                 .collect::<Vec<_>>()
         )
@@ -257,7 +256,7 @@ mod tests {
         let actions = ds(|arg| arg.push_atom(mk_literal(3)));
         assert_eq!(
             actions,
-            [backend::Event::SetOrigin(
+            [BackendEvent::SetOrigin(
                 ExprVariant::Binary(
                     BinaryOperator::Plus,
                     Box::new(RelocAtom::LocationCounter.into()),
@@ -279,7 +278,7 @@ mod tests {
             ds(|arg| arg.push_atom((ExprAtom::Literal(Literal::Operand(Operand::A)), ())));
         assert_eq!(
             actions,
-            [diag::Event::EmitDiagnostic(CompactDiagnostic::new(
+            [DiagnosticsEvent::EmitDiagnostic(CompactDiagnostic::new(
                 Message::KeywordInExpr { keyword: () },
                 (),
             ))
@@ -307,10 +306,10 @@ mod tests {
         let actions = unary_directive(Directive::Include, |arg| arg.push_atom(mk_literal(7)));
         assert_eq!(
             actions,
-            [
-                diag::Event::EmitDiagnostic(CompactDiagnostic::new(Message::ExpectedString, (),))
-                    .into()
-            ]
+            [DiagnosticsEvent::EmitDiagnostic(
+                CompactDiagnostic::new(Message::ExpectedString, (),)
+            )
+            .into()]
         )
     }
 
@@ -321,7 +320,7 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [diag::Event::EmitDiagnostic(CompactDiagnostic::new(
+            [DiagnosticsEvent::EmitDiagnostic(CompactDiagnostic::new(
                 Message::KeywordInExpr { keyword: () },
                 (),
             ))
@@ -346,8 +345,8 @@ mod tests {
         assert_eq!(
             operations.into_inner(),
             [
-                session::Event::AnalyzeFile(name.into()).into(),
-                diag::Event::EmitDiagnostic(CompactDiagnostic::new(Message::InvalidUtf8, ()))
+                SessionEvent::AnalyzeFile(name.into()).into(),
+                DiagnosticsEvent::EmitDiagnostic(CompactDiagnostic::new(Message::InvalidUtf8, ()))
                     .into()
             ]
         )
@@ -374,8 +373,8 @@ mod tests {
         assert_eq!(
             operations.into_inner(),
             [
-                session::Event::AnalyzeFile(name.into()).into(),
-                diag::Event::EmitDiagnostic(CompactDiagnostic::new(
+                SessionEvent::AnalyzeFile(name.into()).into(),
+                DiagnosticsEvent::EmitDiagnostic(CompactDiagnostic::new(
                     Message::IoError {
                         string: message.to_string()
                     },
@@ -395,7 +394,7 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [backend::Event::DefineSymbol((symbol.into(), ()), value.into()).into()]
+            [BackendEvent::DefineSymbol((symbol.into(), ()), value.into()).into()]
         )
     }
 
@@ -420,7 +419,7 @@ mod tests {
         let actions = with_directive(directive, |command| command);
         assert_eq!(
             actions,
-            [diag::Event::EmitDiagnostic(CompactDiagnostic::new(
+            [DiagnosticsEvent::EmitDiagnostic(CompactDiagnostic::new(
                 Message::OperandCount {
                     actual: 0,
                     expected: 1

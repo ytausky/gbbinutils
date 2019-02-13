@@ -204,7 +204,6 @@ impl<I: Iterator> Iterator for OperandCounter<I> {
 mod tests {
     use super::*;
     use crate::backend::{RelocAtom, RelocExpr};
-    use crate::diag;
     use crate::diag::MockSpan;
 
     impl MockSpan for i32 {
@@ -257,7 +256,7 @@ mod tests {
     fn analyze_operand<S: Clone + MockSpan + PartialEq>(
         expr: SemanticExpr<String, S>,
         context: Context,
-    ) -> Result<Operand<RelocExpr<Ident<String>, S>>, Vec<diag::Event<S>>> {
+    ) -> Result<Operand<RelocExpr<Ident<String>, S>>, Vec<DiagnosticsEvent<S>>> {
         use crate::frontend::session::MockSession;
         use std::cell::RefCell;
 

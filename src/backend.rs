@@ -184,7 +184,7 @@ mod mock {
     }
 
     #[derive(Debug, PartialEq)]
-    pub enum Event<V: Source> {
+    pub enum BackendEvent<V: Source> {
         EmitItem(Item<V>),
         SetOrigin(V),
         DefineSymbol((Ident<String>, V::Span), V),
@@ -198,14 +198,14 @@ mod mock {
 
     impl<'a, T, S, N> Backend<Ident<String>, S, N> for MockBackend<'a, T>
     where
-        T: From<Event<RelocExpr<Ident<String>, S>>>,
+        T: From<BackendEvent<RelocExpr<Ident<String>, S>>>,
         S: Clone,
         N: 'static,
     {
         fn define_symbol(&mut self, symbol: (Ident<String>, S), value: Self::Value, _: &mut N) {
             self.log
                 .borrow_mut()
-                .push(Event::DefineSymbol(symbol, value).into())
+                .push(BackendEvent::DefineSymbol(symbol, value).into())
         }
     }
 
@@ -245,15 +245,19 @@ mod mock {
 
     impl<'a, T, S> PartialBackend<S> for MockBackend<'a, T>
     where
-        T: From<Event<RelocExpr<Ident<String>, S>>>,
+        T: From<BackendEvent<RelocExpr<Ident<String>, S>>>,
         S: Clone,
     {
         fn emit_item(&mut self, item: Item<Self::Value>) {
-            self.log.borrow_mut().push(Event::EmitItem(item).into())
+            self.log
+                .borrow_mut()
+                .push(BackendEvent::EmitItem(item).into())
         }
 
         fn set_origin(&mut self, origin: Self::Value) {
-            self.log.borrow_mut().push(Event::SetOrigin(origin).into())
+            self.log
+                .borrow_mut()
+                .push(BackendEvent::SetOrigin(origin).into())
         }
     }
 }

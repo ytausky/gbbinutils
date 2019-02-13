@@ -447,19 +447,19 @@ mod mock {
     }
 
     #[derive(Debug, PartialEq)]
-    pub(crate) enum Event<S> {
+    pub(crate) enum DiagnosticsEvent<S> {
         EmitDiagnostic(CompactDiagnostic<S, S>),
     }
 
-    impl<S> From<CompactDiagnostic<S, S>> for Event<S> {
+    impl<S> From<CompactDiagnostic<S, S>> for DiagnosticsEvent<S> {
         fn from(diagnostic: CompactDiagnostic<S, S>) -> Self {
-            Event::EmitDiagnostic(diagnostic)
+            DiagnosticsEvent::EmitDiagnostic(diagnostic)
         }
     }
 
     impl<'a, T, S> Diagnostics for MockDiagnostics<'a, T, S>
     where
-        T: From<Event<S>>,
+        T: From<DiagnosticsEvent<S>>,
         S: Clone + MockSpan,
     {
     }
@@ -540,13 +540,13 @@ mod mock {
 
     impl<'a, T, S> EmitDiagnostic<S, S> for MockDiagnostics<'a, T, S>
     where
-        T: From<Event<S>>,
+        T: From<DiagnosticsEvent<S>>,
         S: Clone,
     {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<S, S>) {
             self.log
                 .borrow_mut()
-                .push(Event::EmitDiagnostic(diagnostic).into())
+                .push(DiagnosticsEvent::EmitDiagnostic(diagnostic).into())
         }
     }
 }
