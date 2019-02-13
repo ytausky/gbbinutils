@@ -190,8 +190,8 @@ fn mk_explicit_branch<V>(branch: ExplicitBranch, target: V) -> Branch<V> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analysis::semantics::instruction::tests::*;
     use crate::expr::Expr;
-    use crate::frontend::semantics::instruction::tests::*;
     use crate::syntax::keyword::Mnemonic;
 
     #[test]

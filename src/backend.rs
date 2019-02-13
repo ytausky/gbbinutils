@@ -1,5 +1,5 @@
+use crate::analysis::Ident;
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
-use crate::frontend::Ident;
 use crate::instruction::Instruction;
 use crate::program::NameId;
 use crate::span::Source;

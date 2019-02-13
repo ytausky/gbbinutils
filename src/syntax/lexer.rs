@@ -1,7 +1,7 @@
 use super::keyword::*;
 use super::SimpleToken::*;
 use super::{SimpleToken, Token};
-use crate::frontend::Literal;
+use crate::analysis::Literal;
 use crate::syntax::{Command::*, Directive::*, Mnemonic::*, Operand::*};
 
 use std::borrow::Borrow;
@@ -408,7 +408,7 @@ mod tests {
         )
     }
 
-    type TestToken = Token<String, crate::frontend::Literal<String>, crate::syntax::Command>;
+    type TestToken = Token<String, crate::analysis::Literal<String>, crate::syntax::Command>;
 
     #[test]
     fn lex_empty_str() {

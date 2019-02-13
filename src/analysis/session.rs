@@ -1,3 +1,5 @@
+use crate::analysis::macros::{DefineMacro, Expand, MacroEntry};
+use crate::analysis::{Downstream, Frontend, Ident, SemanticToken, StringRef};
 use crate::backend::{
     ApplyBinaryOperator, Backend, HasValue, Item, Name, NameTable, PartialBackend, ValueFromSimple,
 };
@@ -7,8 +9,6 @@ use crate::diag::{
     CompactDiagnostic, DelegateDiagnostics, Diagnostics, DownstreamDiagnostics, Message,
 };
 use crate::expr::BinaryOperator;
-use crate::frontend::macros::{DefineMacro, Expand, MacroEntry};
-use crate::frontend::{Downstream, Frontend, Ident, SemanticToken, StringRef};
 
 #[cfg(test)]
 pub(crate) use self::mock::*;
@@ -398,12 +398,12 @@ mod mock {
 mod tests {
     use super::*;
 
+    use crate::analysis;
+    use crate::analysis::{FrontendEvent, Literal};
     use crate::backend;
     use crate::backend::{BackendEvent, HashMapNameTable, RelocExpr};
     use crate::diag;
     use crate::diag::{DiagnosticsEvent, MockSpan};
-    use crate::frontend;
-    use crate::frontend::{FrontendEvent, Literal};
     use crate::syntax::{Command, Directive, Mnemonic, Token};
 
     use std::cell::RefCell;
@@ -525,7 +525,7 @@ mod tests {
         );
     }
 
-    type MockFrontend<'a, S> = frontend::MockFrontend<'a, Event<S>, S>;
+    type MockFrontend<'a, S> = analysis::MockFrontend<'a, Event<S>, S>;
     type MockBackend<'a, S> = backend::MockBackend<'a, Event<S>>;
     type MockDiagnostics<'a, S> = diag::MockDiagnostics<'a, Event<S>, S>;
     type TestNameTable<'a, S> =

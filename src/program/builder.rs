@@ -1,10 +1,10 @@
 use super::{Chunk, NameId, Node, Program, RelocExpr, Value};
+use crate::analysis::Ident;
 use crate::backend::{
     ApplyBinaryOperator, Backend, HasValue, Item, Name, NameTable, PartialBackend, RelocAtom,
     ValueFromIdent, ValueFromSimple,
 };
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
-use crate::frontend::Ident;
 
 pub struct ProgramBuilder<SR> {
     program: Program<SR>,

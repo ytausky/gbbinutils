@@ -1,7 +1,7 @@
 use super::SemanticActions;
+use crate::analysis::session::Session;
+use crate::analysis::{Ident, SemanticToken, TokenSeq};
 use crate::diag::DelegateDiagnostics;
-use crate::frontend::session::Session;
-use crate::frontend::{Ident, SemanticToken, TokenSeq};
 use crate::syntax::{MacroInvocationContext, TokenSeqContext};
 
 pub(crate) struct MacroInvocationActions<S: Session> {

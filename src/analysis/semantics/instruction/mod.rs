@@ -1,9 +1,9 @@
 use self::branch::*;
+use crate::analysis::semantics::operand::{AtomKind, Context, Operand, OperandCounter};
 use crate::diag::span::Source;
 use crate::diag::{
     CompactDiagnostic, DelegateDiagnostics, DownstreamDiagnostics, EmitDiagnostic, Message,
 };
-use crate::frontend::semantics::operand::{AtomKind, Context, Operand, OperandCounter};
 use crate::instruction::*;
 use crate::syntax::keyword as kw;
 
@@ -430,15 +430,15 @@ impl From<kw::Mnemonic> for Mnemonic {
 mod tests {
     pub use self::kw::Operand::*;
     use super::*;
+    use crate::analysis::semantics::{
+        SemanticAtom, SemanticExpr, SemanticExprVariant, SemanticUnary,
+    };
+    pub use crate::analysis::semantics::{TokenId, TokenSpan};
+    use crate::analysis::{Ident, Literal};
     use crate::backend::{RelocAtom, RelocExpr};
     pub(crate) use crate::diag::Message;
     use crate::diag::*;
     use crate::expr::{Expr, ExprVariant};
-    use crate::frontend::semantics::{
-        SemanticAtom, SemanticExpr, SemanticExprVariant, SemanticUnary,
-    };
-    pub use crate::frontend::semantics::{TokenId, TokenSpan};
-    use crate::frontend::{Ident, Literal};
     pub use crate::span::{MergeSpans, Span};
     use std::cmp;
 
@@ -867,8 +867,8 @@ mod tests {
     where
         I: IntoIterator<Item = Input>,
     {
-        use crate::frontend::semantics::operand::analyze_operand;
-        use crate::frontend::session::MockSession;
+        use crate::analysis::semantics::operand::analyze_operand;
+        use crate::analysis::session::MockSession;
         use std::cell::RefCell;
 
         let log = RefCell::new(Vec::new());

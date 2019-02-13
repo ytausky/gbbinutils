@@ -1,7 +1,7 @@
 use super::{AnalyzeExpr, ExprVariant, SemanticAtom, SemanticExpr, SemanticUnary};
+use crate::analysis::session::ValueBuilder;
+use crate::analysis::{Ident, Literal};
 use crate::diag::*;
-use crate::frontend::session::ValueBuilder;
-use crate::frontend::{Ident, Literal};
 use crate::instruction::{Condition, PtrReg, Reg16, RegPair, SimpleOperand};
 use crate::span::Source;
 use crate::syntax::keyword as kw;
@@ -257,7 +257,7 @@ mod tests {
         expr: SemanticExpr<String, S>,
         context: Context,
     ) -> Result<Operand<RelocExpr<Ident<String>, S>>, Vec<DiagnosticsEvent<S>>> {
-        use crate::frontend::session::MockSession;
+        use crate::analysis::session::MockSession;
         use std::cell::RefCell;
 
         let log = RefCell::new(Vec::new());

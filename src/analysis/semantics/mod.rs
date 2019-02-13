@@ -1,10 +1,10 @@
 use self::invoke::MacroInvocationActions;
+use crate::analysis::session::{Session, ValueBuilder};
+use crate::analysis::{Ident, Literal, SemanticToken};
 use crate::backend;
 use crate::diag::span::{MergeSpans, Source, StripSpan};
 use crate::diag::*;
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
-use crate::frontend::session::{Session, ValueBuilder};
-use crate::frontend::{Ident, Literal, SemanticToken};
 use crate::syntax::{self, keyword::*, ExprAtom, Operator, UnaryOperator};
 
 mod directive;
@@ -439,12 +439,12 @@ impl MockSpan for TokenSpan {
 mod tests {
     use super::*;
 
+    use crate::analysis::session;
+    use crate::analysis::session::SessionEvent;
     use crate::backend;
     use crate::backend::{BackendEvent, RelocAtom, Width};
     use crate::diag::{CompactDiagnostic, Message};
     use crate::expr::BinaryOperator;
-    use crate::frontend::session;
-    use crate::frontend::session::SessionEvent;
     use crate::syntax::{
         keyword::Operand, CommandContext, ExprContext, FileContext, MacroInvocationContext,
         MacroParamsContext, StmtContext, Token, TokenSeqContext,

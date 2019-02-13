@@ -1,10 +1,10 @@
 use super::{AnalyzeExpr, CommandArgs, Directive, SemanticActions, SemanticAtom, SemanticExpr};
+use crate::analysis::session::{Session, ValueBuilder};
+use crate::analysis::Literal;
 use crate::backend;
 use crate::backend::Width;
 use crate::diag::*;
 use crate::expr::{BinaryOperator, ExprVariant};
-use crate::frontend::session::{Session, ValueBuilder};
-use crate::frontend::Literal;
 use crate::span::Source;
 
 pub(super) fn analyze_directive<'a, S: Session>(
@@ -178,12 +178,12 @@ fn single_arg<T, D: DownstreamDiagnostics<S>, S>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analysis::semantics;
+    use crate::analysis::semantics::tests::*;
+    use crate::analysis::session::SessionEvent;
+    use crate::analysis::Ident;
     use crate::backend::{BackendEvent, RelocAtom, RelocExpr};
     use crate::codebase::CodebaseError;
-    use crate::frontend::semantics;
-    use crate::frontend::semantics::tests::*;
-    use crate::frontend::session::SessionEvent;
-    use crate::frontend::Ident;
     use crate::syntax::keyword::{Command, Operand};
     use crate::syntax::{CommandContext, ExprAtom, ExprContext, FileContext, StmtContext};
     use std::borrow::Borrow;

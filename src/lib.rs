@@ -5,15 +5,15 @@
 
 pub use crate::backend::Rom;
 
+use crate::analysis::Assemble;
 use crate::codebase::{CodebaseError, StdFileSystem};
 use crate::diag::*;
-use crate::frontend::Assemble;
 
+mod analysis;
 mod backend;
 mod codebase;
 pub mod diag;
 mod expr;
-mod frontend;
 mod instruction;
 mod program;
 mod syntax;

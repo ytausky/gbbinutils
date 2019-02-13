@@ -3,10 +3,10 @@ mod semantics;
 mod session;
 
 use self::macros::{MacroDefData, MacroEntry, MacroTableEntry};
+use crate::analysis::session::*;
 use crate::backend::*;
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diag::*;
-use crate::frontend::session::*;
 use crate::span::BufContext;
 use crate::syntax::lexer::{LexError, Lexer};
 use crate::syntax::*;
@@ -331,11 +331,11 @@ mod mock {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analysis::macros::MacroEntry;
     use crate::backend;
     use crate::backend::{BackendEvent, HashMapNameTable};
     use crate::diag;
     use crate::diag::{DiagnosticsEvent, MockSpan};
-    use crate::frontend::macros::MacroEntry;
     use crate::instruction::{Instruction, Nullary};
     use std::cell::RefCell;
     use std::collections::HashMap;
