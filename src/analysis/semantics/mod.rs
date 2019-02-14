@@ -1,10 +1,10 @@
 use self::invoke::MacroInvocationActions;
-use crate::analysis::backend;
 use crate::analysis::session::{Session, ValueBuilder};
 use crate::analysis::{Ident, Literal, SemanticToken};
 use crate::diag::span::{MergeSpans, Source, StripSpan};
 use crate::diag::*;
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
+use crate::model::Item;
 use crate::syntax::{self, keyword::*, ExprAtom, Operator, UnaryOperator};
 
 mod directive;
@@ -296,9 +296,7 @@ fn analyze_mnemonic<S: Session>(
         .collect();
     let result = instruction::analyze_instruction(name, operands, actions.session.diagnostics());
     if let Ok(instruction) = result {
-        actions
-            .session
-            .emit_item(backend::Item::Instruction(instruction))
+        actions.session.emit_item(Item::Instruction(instruction))
     }
 }
 
@@ -439,12 +437,13 @@ impl MockSpan for TokenSpan {
 mod tests {
     use super::*;
 
-    use crate::analysis::backend;
-    use crate::analysis::backend::{BackendEvent, RelocAtom, Width};
+    use crate::analysis::backend::BackendEvent;
     use crate::analysis::session;
     use crate::analysis::session::SessionEvent;
     use crate::diag::{CompactDiagnostic, Message};
     use crate::expr::BinaryOperator;
+    use crate::model;
+    use crate::model::{RelocAtom, Width};
     use crate::syntax::{
         keyword::Operand, CommandContext, ExprContext, FileContext, MacroInvocationContext,
         MacroParamsContext, StmtContext, Token, TokenSeqContext,
@@ -459,7 +458,7 @@ mod tests {
         Session(SessionEvent),
     }
 
-    type RelocExpr = backend::RelocExpr<Ident<String>, ()>;
+    type RelocExpr = model::RelocExpr<Ident<String>, ()>;
 
     impl<'a> From<BackendEvent<RelocExpr>> for TestOperation {
         fn from(event: BackendEvent<RelocExpr>) -> Self {
@@ -497,7 +496,7 @@ mod tests {
         assert_eq!(
             actions,
             [
-                BackendEvent::EmitItem(backend::Item::Instruction(Instruction::Ld(Ld::Simple(
+                BackendEvent::EmitItem(Item::Instruction(Instruction::Ld(Ld::Simple(
                     SimpleOperand::B,
                     SimpleOperand::DerefHl
                 ))))
@@ -530,12 +529,10 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [
-                BackendEvent::EmitItem(backend::Item::Instruction(Instruction::Rst(
-                    ExprVariant::Binary(op, Box::new(1.into()), Box::new(1.into()),).into()
-                )))
-                .into()
-            ]
+            [BackendEvent::EmitItem(Item::Instruction(Instruction::Rst(
+                ExprVariant::Binary(op, Box::new(1.into()), Box::new(1.into()),).into()
+            )))
+            .into()]
         )
     }
 
@@ -552,7 +549,7 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [BackendEvent::EmitItem(backend::Item::Data(
+            [BackendEvent::EmitItem(Item::Data(
                 RelocAtom::Symbol(label.into()).into(),
                 Width::Word
             ))

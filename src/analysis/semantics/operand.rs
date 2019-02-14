@@ -203,8 +203,8 @@ impl<I: Iterator> Iterator for OperandCounter<I> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::analysis::backend::{RelocAtom, RelocExpr};
     use crate::diag::MockSpan;
+    use crate::model::{RelocAtom, RelocExpr};
 
     impl MockSpan for i32 {
         fn default() -> Self {

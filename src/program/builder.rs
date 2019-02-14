@@ -1,10 +1,11 @@
 use super::{Chunk, NameId, Node, Program, RelocExpr, Value};
 use crate::analysis::backend::{
-    ApplyBinaryOperator, Backend, HasValue, Item, Name, NameTable, PartialBackend, RelocAtom,
-    ValueFromIdent, ValueFromSimple,
+    ApplyBinaryOperator, Backend, HasValue, Name, NameTable, PartialBackend, ValueFromIdent,
+    ValueFromSimple,
 };
 use crate::analysis::Ident;
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
+use crate::model::{Item, RelocAtom};
 
 pub struct ProgramBuilder<SR> {
     program: Program<SR>,
@@ -137,10 +138,10 @@ impl<S: Clone> HasValue<S> for ProgramBuilder<S> {
 mod tests {
     use super::*;
 
-    use crate::analysis::backend::{ApplyBinaryOperator, Width};
+    use crate::analysis::backend::ApplyBinaryOperator;
     use crate::diag::{CompactDiagnostic, Message, TestDiagnosticsListener};
     use crate::expr::BinaryOperator;
-    use crate::model::{Instruction, Nullary};
+    use crate::model::{Instruction, Nullary, Width};
     use crate::program::BinaryObject;
     use std::borrow::Borrow;
 

@@ -2,8 +2,8 @@ pub use super::context::EvalContext;
 
 use super::context::SymbolTable;
 use super::{NameId, Node, Program, RelocExpr};
-use crate::analysis::backend::{RelocAtom, Width};
 use crate::expr::{BinaryOperator, ExprVariant};
+use crate::model::{RelocAtom, Width};
 use std::borrow::Borrow;
 use std::ops::{Add, AddAssign, Mul, RangeInclusive, Sub};
 

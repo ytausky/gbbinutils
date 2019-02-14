@@ -1,5 +1,5 @@
 use super::backend::{
-    ApplyBinaryOperator, Backend, HasValue, Item, Name, NameTable, PartialBackend, ValueFromSimple,
+    ApplyBinaryOperator, Backend, HasValue, Name, NameTable, PartialBackend, ValueFromSimple,
 };
 use crate::analysis::macros::{DefineMacro, Expand, MacroEntry};
 use crate::analysis::{Downstream, Frontend, Ident, SemanticToken, StringRef};
@@ -9,6 +9,7 @@ use crate::diag::{
     CompactDiagnostic, DelegateDiagnostics, Diagnostics, DownstreamDiagnostics, Message,
 };
 use crate::expr::BinaryOperator;
+use crate::model::Item;
 
 #[cfg(test)]
 pub(crate) use self::mock::*;
@@ -233,9 +234,10 @@ where
 mod mock {
     use super::*;
 
-    use crate::analysis::backend::{BackendEvent, RelocAtom, RelocExpr};
+    use crate::analysis::backend::BackendEvent;
     use crate::diag::{DiagnosticsEvent, MockDiagnostics, MockSpan};
     use crate::expr::{Expr, ExprVariant};
+    use crate::model::{RelocAtom, RelocExpr};
     use std::cell::RefCell;
 
     #[derive(Debug, PartialEq)]
@@ -400,11 +402,11 @@ mod tests {
 
     use crate::analysis;
     use crate::analysis::backend;
-    use crate::analysis::backend::{BackendEvent, HashMapNameTable, RelocAtom, RelocExpr};
+    use crate::analysis::backend::{BackendEvent, HashMapNameTable};
     use crate::analysis::{FrontendEvent, Literal};
     use crate::diag;
     use crate::diag::{DiagnosticsEvent, MockSpan};
-    use crate::model::{Instruction, Nullary};
+    use crate::model::{Instruction, Nullary, RelocAtom, RelocExpr};
     use crate::syntax::{Command, Directive, Mnemonic, Token};
 
     use std::cell::RefCell;

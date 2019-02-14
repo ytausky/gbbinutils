@@ -1,18 +1,12 @@
 use crate::analysis::Ident;
-use crate::expr::{BinaryOperator, Expr, ExprVariant};
-use crate::model::Instruction;
+use crate::expr::BinaryOperator;
+use crate::model::Item;
 use crate::program::NameId;
 use crate::span::Source;
 use std::collections::HashMap;
 
 #[cfg(test)]
 pub use mock::*;
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Width {
-    Byte,
-    Word,
-}
 
 pub trait NameTable<I> {
     type MacroEntry;
@@ -101,45 +95,12 @@ where
     fn define_symbol(&mut self, symbol: (I, S), value: Self::Value, names: &mut N);
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum Item<V: Source> {
-    Data(V, Width),
-    Instruction(Instruction<V>),
-}
-
-pub type RelocExpr<I, S> = Expr<RelocAtom<I>, Empty, BinaryOperator, S>;
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum Empty {}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum RelocAtom<I> {
-    Literal(i32),
-    LocationCounter,
-    Symbol(I),
-}
-
-impl<I, S> From<i32> for ExprVariant<RelocAtom<I>, Empty, BinaryOperator, S> {
-    fn from(n: i32) -> Self {
-        ExprVariant::Atom(RelocAtom::Literal(n))
-    }
-}
-
-#[cfg(test)]
-impl<I, T: Into<ExprVariant<RelocAtom<I>, Empty, BinaryOperator, ()>>> From<T>
-    for RelocExpr<I, ()>
-{
-    fn from(variant: T) -> Self {
-        Expr {
-            variant: variant.into(),
-            span: (),
-        }
-    }
-}
-
 #[cfg(test)]
 mod mock {
     use super::*;
+
+    use crate::expr::{Expr, ExprVariant};
+    use crate::model::{RelocAtom, RelocExpr};
 
     use std::cell::RefCell;
 

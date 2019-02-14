@@ -1,7 +1,7 @@
 use super::context::{EvalContext, SymbolTable};
 use super::{BinarySection, Chunk, Node, RelocExpr};
-use crate::analysis::backend::Width;
 use crate::diag::{BackendDiagnostics, CompactDiagnostic, Message};
+use crate::model::Width;
 use crate::span::Source;
 use std::vec::IntoIter;
 
@@ -148,9 +148,9 @@ fn is_in_u8_range(n: i32) -> bool {
 mod tests {
     use super::*;
 
-    use crate::analysis::backend::RelocAtom;
     use crate::diag::IgnoreDiagnostics;
     use crate::expr::{BinaryOperator, ExprVariant};
+    use crate::model::RelocAtom;
     use crate::program::ValueId;
     use std::borrow::Borrow;
 

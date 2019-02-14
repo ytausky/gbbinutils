@@ -1,10 +1,9 @@
 use super::{AnalyzeExpr, CommandArgs, Directive, SemanticActions, SemanticAtom, SemanticExpr};
-use crate::analysis::backend;
-use crate::analysis::backend::Width;
 use crate::analysis::session::{Session, ValueBuilder};
 use crate::analysis::Literal;
 use crate::diag::*;
 use crate::expr::{BinaryOperator, ExprVariant};
+use crate::model::{Item, Width};
 use crate::span::Source;
 
 pub(super) fn analyze_directive<'a, S: Session>(
@@ -58,7 +57,7 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
                     return;
                 }
             };
-            session.emit_item(backend::Item::Data(expr, width))
+            session.emit_item(Item::Data(expr, width))
         }
     }
 
@@ -178,12 +177,13 @@ fn single_arg<T, D: DownstreamDiagnostics<S>, S>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::analysis::backend::{BackendEvent, RelocAtom, RelocExpr};
+    use crate::analysis::backend::BackendEvent;
     use crate::analysis::semantics;
     use crate::analysis::semantics::tests::*;
     use crate::analysis::session::SessionEvent;
     use crate::analysis::Ident;
     use crate::codebase::CodebaseError;
+    use crate::model::{RelocAtom, RelocExpr};
     use crate::syntax::keyword::{Command, Operand};
     use crate::syntax::{CommandContext, ExprAtom, ExprContext, FileContext, StmtContext};
     use std::borrow::Borrow;
@@ -219,17 +219,17 @@ mod tests {
         test_data_items_emission(Directive::Dw, mk_word, [0x4332, 0x780f])
     }
 
-    fn mk_byte(byte: &i32) -> backend::Item<RelocExpr<Ident<String>, ()>> {
-        backend::Item::Data((*byte).into(), Width::Byte)
+    fn mk_byte(byte: &i32) -> Item<RelocExpr<Ident<String>, ()>> {
+        Item::Data((*byte).into(), Width::Byte)
     }
 
-    fn mk_word(word: &i32) -> backend::Item<RelocExpr<Ident<String>, ()>> {
-        backend::Item::Data((*word).into(), Width::Word)
+    fn mk_word(word: &i32) -> Item<RelocExpr<Ident<String>, ()>> {
+        Item::Data((*word).into(), Width::Word)
     }
 
     fn test_data_items_emission(
         directive: Directive,
-        mk_item: impl Fn(&i32) -> backend::Item<RelocExpr<Ident<String>, ()>>,
+        mk_item: impl Fn(&i32) -> Item<RelocExpr<Ident<String>, ()>>,
         data: impl Borrow<[i32]>,
     ) {
         let actions = with_directive(directive, |mut command| {

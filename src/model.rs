@@ -1,4 +1,47 @@
+use crate::expr::{BinaryOperator, Expr, ExprVariant};
 use crate::span::Source;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Width {
+    Byte,
+    Word,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Item<V: Source> {
+    Data(V, Width),
+    Instruction(Instruction<V>),
+}
+
+pub type RelocExpr<I, S> = Expr<RelocAtom<I>, Empty, BinaryOperator, S>;
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Empty {}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum RelocAtom<I> {
+    Literal(i32),
+    LocationCounter,
+    Symbol(I),
+}
+
+impl<I, S> From<i32> for ExprVariant<RelocAtom<I>, Empty, BinaryOperator, S> {
+    fn from(n: i32) -> Self {
+        ExprVariant::Atom(RelocAtom::Literal(n))
+    }
+}
+
+#[cfg(test)]
+impl<I, T: Into<ExprVariant<RelocAtom<I>, Empty, BinaryOperator, ()>>> From<T>
+    for RelocExpr<I, ()>
+{
+    fn from(variant: T) -> Self {
+        Expr {
+            variant: variant.into(),
+            span: (),
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Instruction<V: Source> {

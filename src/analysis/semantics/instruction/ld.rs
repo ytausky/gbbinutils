@@ -1,9 +1,8 @@
 use super::{Analysis, Operand};
-use crate::analysis::backend::Width;
 use crate::analysis::semantics::operand::AtomKind;
 use crate::diag::span::Source;
 use crate::diag::{CompactDiagnostic, DownstreamDiagnostics, EmitDiagnostic, Message};
-use crate::model::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
+use crate::model::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd, Width};
 
 impl<'a, I, V, D, S> Analysis<'a, I, D, S>
 where
@@ -297,10 +296,11 @@ impl<S: Clone> Source for LdDest16<S> {
 
 #[cfg(test)]
 mod tests {
-    use crate::analysis::backend::Width;
     use crate::analysis::semantics::instruction::tests::*;
     use crate::expr::Expr;
-    use crate::model::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
+    use crate::model::{
+        Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd, Width,
+    };
     use crate::syntax::keyword::Mnemonic;
 
     #[test]
