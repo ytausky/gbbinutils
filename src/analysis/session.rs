@@ -401,13 +401,40 @@ mod tests {
     use crate::analysis;
     use crate::analysis::{FrontendEvent, Literal};
     use crate::backend;
-    use crate::backend::{BackendEvent, HashMapNameTable, RelocExpr};
+    use crate::backend::{BackendEvent, HashMapNameTable, RelocAtom, RelocExpr};
     use crate::diag;
     use crate::diag::{DiagnosticsEvent, MockSpan};
+    use crate::instruction::{Instruction, Nullary};
     use crate::syntax::{Command, Directive, Mnemonic, Token};
 
     use std::cell::RefCell;
     use std::iter;
+
+    #[test]
+    fn emit_instruction_item() {
+        let item = Item::Instruction(Instruction::Nullary(Nullary::Nop));
+        let log = RefCell::new(Vec::new());
+        let mut fixture = Fixture::<()>::new(&log);
+        let mut session = fixture.session();
+        session.emit_item(item.clone());
+        assert_eq!(log.into_inner(), [BackendEvent::EmitItem(item).into()]);
+    }
+
+    #[test]
+    fn define_label() {
+        let label = "label";
+        let log = RefCell::new(Vec::new());
+        let mut fixture = Fixture::new(&log);
+        let mut session = fixture.session();
+        session.define_symbol((label.into(), ()), RelocAtom::LocationCounter.into());
+        assert_eq!(
+            log.into_inner(),
+            [
+                BackendEvent::DefineSymbol((label.into(), ()), RelocAtom::LocationCounter.into())
+                    .into()
+            ]
+        );
+    }
 
     #[test]
     fn include_source_file() {
