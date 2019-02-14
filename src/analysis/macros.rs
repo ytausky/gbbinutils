@@ -1,7 +1,9 @@
 use super::backend::{Name, NameTable};
 use super::{Frontend, Ident, SemanticToken, Token};
+
 use crate::diag::span::{MacroContextFactory, MacroExpansionContext, Span};
 use crate::diag::Diagnostics;
+
 use std::rc::Rc;
 
 pub(super) trait MacroTable<I>: Get<Ident<I>> {
@@ -213,6 +215,7 @@ fn split<I: IntoIterator<Item = (L, R)>, L, R>(iter: I) -> (Vec<L>, Vec<R>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use crate::span::*;
 
     #[test]

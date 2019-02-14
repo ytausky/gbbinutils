@@ -1,5 +1,7 @@
 use self::branch::*;
-use crate::analysis::semantics::operand::{AtomKind, Context, Operand, OperandCounter};
+
+use super::operand::{AtomKind, Context, Operand, OperandCounter};
+
 use crate::diag::span::Source;
 use crate::diag::*;
 use crate::model::*;

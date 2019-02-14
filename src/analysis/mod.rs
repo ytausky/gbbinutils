@@ -1,14 +1,16 @@
+pub use crate::syntax::Token;
+
 use self::backend::*;
 use self::macros::{MacroDefData, MacroEntry, MacroTableEntry};
+
 use crate::analysis::session::*;
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diag::*;
 use crate::span::BufContext;
 use crate::syntax::lexer::{LexError, Lexer};
 use crate::syntax::*;
-use std::rc::Rc;
 
-pub use crate::syntax::Token;
+use std::rc::Rc;
 
 #[cfg(test)]
 pub use self::mock::*;

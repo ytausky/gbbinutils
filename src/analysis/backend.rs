@@ -3,6 +3,7 @@ use crate::expr::BinaryOperator;
 use crate::model::Item;
 use crate::program::NameId;
 use crate::span::Source;
+
 use std::collections::HashMap;
 
 #[cfg(test)]

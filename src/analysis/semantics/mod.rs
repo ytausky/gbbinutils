@@ -1,4 +1,5 @@
 use self::invoke::MacroInvocationActions;
+
 use crate::analysis::session::{Session, ValueBuilder};
 use crate::analysis::{Ident, Literal, SemanticToken};
 use crate::diag::span::{MergeSpans, Source, StripSpan};
@@ -438,17 +439,16 @@ mod tests {
     use super::*;
 
     use crate::analysis::backend::BackendEvent;
-    use crate::analysis::session;
     use crate::analysis::session::SessionEvent;
     use crate::diag::{CompactDiagnostic, Message};
     use crate::expr::BinaryOperator;
-    use crate::model;
     use crate::model::{RelocAtom, Width};
     use crate::syntax::{
         CommandContext, ExprContext, FileContext, MacroInvocationContext, MacroParamsContext,
         StmtContext, TokenSeqContext,
     };
     use crate::syntax::{Operand, Token};
+
     use std::borrow::Borrow;
     use std::cell::RefCell;
 
@@ -459,7 +459,7 @@ mod tests {
         Session(SessionEvent),
     }
 
-    type RelocExpr = model::RelocExpr<Ident<String>, ()>;
+    type RelocExpr = crate::model::RelocExpr<Ident<String>, ()>;
 
     impl<'a> From<BackendEvent<RelocExpr>> for TestOperation {
         fn from(event: BackendEvent<RelocExpr>) -> Self {
@@ -733,7 +733,7 @@ mod tests {
         )
     }
 
-    pub(super) type MockSession<'a> = session::MockSession<'a, TestOperation, ()>;
+    pub(super) type MockSession<'a> = crate::analysis::session::MockSession<'a, TestOperation, ()>;
 
     pub(crate) fn collect_semantic_actions<F>(f: F) -> Vec<TestOperation>
     where

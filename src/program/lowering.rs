@@ -1,7 +1,9 @@
 use super::{Node, RelocExpr};
+
 use crate::expr::{BinaryOperator, ExprVariant};
 use crate::model::*;
 use crate::span::Source;
+
 use std::mem;
 
 pub(super) trait Lower<S> {
@@ -337,9 +339,10 @@ fn encode_inc_dec(mode: IncDec) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::borrow::Borrow;
 
-    use crate::model::{self, Branch::*, Instruction::*, Ld::*, Nullary::*};
+    use crate::model::{Branch::*, Instruction::*, Ld::*, Nullary::*};
+
+    use std::borrow::Borrow;
 
     fn test_instruction(
         instruction: Instruction<RelocExpr<()>>,
@@ -404,7 +407,7 @@ mod tests {
         test_nullary(Cpl, bytes([0x2f]))
     }
 
-    fn test_nullary(nullary: model::Nullary, items: impl Borrow<[Node<()>]>) {
+    fn test_nullary(nullary: crate::model::Nullary, items: impl Borrow<[Node<()>]>) {
         test_instruction(Nullary(nullary), items)
     }
 

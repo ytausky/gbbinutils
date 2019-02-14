@@ -1,4 +1,5 @@
 use super::{Analysis, AtomKind, Operand, SimpleOperand};
+
 use crate::diag::{CompactDiagnostic, DownstreamDiagnostics, EmitDiagnostic, Message};
 use crate::model::{Branch, Condition, Instruction, Nullary};
 use crate::span::Source;
@@ -190,6 +191,7 @@ fn mk_explicit_branch<V>(branch: ExplicitBranch, target: V) -> Branch<V> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use crate::analysis::semantics::instruction::tests::*;
     use crate::expr::Expr;
     use crate::syntax::keyword::Mnemonic;

@@ -1,4 +1,5 @@
 use super::SemanticActions;
+
 use crate::analysis::session::Session;
 use crate::analysis::{Ident, SemanticToken, TokenSeq};
 use crate::diag::DelegateDiagnostics;

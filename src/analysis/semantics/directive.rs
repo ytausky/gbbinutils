@@ -177,8 +177,8 @@ fn single_arg<T, D: DownstreamDiagnostics<S>, S>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use crate::analysis::backend::BackendEvent;
-    use crate::analysis::semantics;
     use crate::analysis::semantics::tests::*;
     use crate::analysis::session::SessionEvent;
     use crate::analysis::Ident;
@@ -186,6 +186,7 @@ mod tests {
     use crate::model::{RelocAtom, RelocExpr};
     use crate::syntax::keyword::{Command, Operand};
     use crate::syntax::{CommandContext, ExprAtom, ExprContext, FileContext, StmtContext};
+
     use std::borrow::Borrow;
     use std::cell::RefCell;
     use std::io;
@@ -402,7 +403,8 @@ mod tests {
         unary_directive(Directive::Ds, f)
     }
 
-    type TestExprContext<'a> = semantics::ExprContext<String, (), TestCommandActions<'a>>;
+    type TestExprContext<'a> =
+        crate::analysis::semantics::ExprContext<String, (), TestCommandActions<'a>>;
 
     fn unary_directive<F>(directive: Directive, f: F) -> Vec<TestOperation>
     where
@@ -430,7 +432,7 @@ mod tests {
         )
     }
 
-    type TestCommandActions<'a> = semantics::CommandActions<MockSession<'a>>;
+    type TestCommandActions<'a> = crate::analysis::semantics::CommandActions<MockSession<'a>>;
 
     fn with_directive<F>(directive: Directive, f: F) -> Vec<TestOperation>
     where

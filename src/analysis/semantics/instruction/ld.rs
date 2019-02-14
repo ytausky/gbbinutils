@@ -1,4 +1,5 @@
 use super::{Analysis, Operand};
+
 use crate::analysis::semantics::operand::AtomKind;
 use crate::diag::span::Source;
 use crate::diag::{CompactDiagnostic, DownstreamDiagnostics, EmitDiagnostic, Message};

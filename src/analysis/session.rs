@@ -1,6 +1,7 @@
 use super::backend::*;
-use crate::analysis::macros::{DefineMacro, Expand, MacroEntry};
-use crate::analysis::{Downstream, Frontend, Ident, SemanticToken, StringRef};
+use super::macros::{DefineMacro, Expand, MacroEntry};
+use super::{Downstream, Frontend, Ident, SemanticToken, StringRef};
+
 use crate::codebase::CodebaseError;
 use crate::diag::span::Span;
 use crate::diag::*;
@@ -234,6 +235,7 @@ mod mock {
     use crate::diag::{DiagnosticsEvent, MockDiagnostics, MockSpan};
     use crate::expr::{Expr, ExprVariant};
     use crate::model::{RelocAtom, RelocExpr};
+
     use std::cell::RefCell;
 
     #[derive(Debug, PartialEq)]
@@ -396,11 +398,8 @@ mod mock {
 mod tests {
     use super::*;
 
-    use crate::analysis;
-    use crate::analysis::backend;
     use crate::analysis::backend::{BackendEvent, HashMapNameTable};
     use crate::analysis::{FrontendEvent, Literal};
-    use crate::diag;
     use crate::diag::{DiagnosticsEvent, MockSpan};
     use crate::model::{Instruction, Nullary, RelocAtom, RelocExpr};
     use crate::syntax::{Command, Directive, Mnemonic, Token};
@@ -550,9 +549,9 @@ mod tests {
         );
     }
 
-    type MockFrontend<'a, S> = analysis::MockFrontend<'a, Event<S>, S>;
-    type MockBackend<'a, S> = backend::MockBackend<'a, Event<S>>;
-    type MockDiagnostics<'a, S> = diag::MockDiagnostics<'a, Event<S>, S>;
+    type MockFrontend<'a, S> = crate::analysis::MockFrontend<'a, Event<S>, S>;
+    type MockBackend<'a, S> = crate::analysis::backend::MockBackend<'a, Event<S>>;
+    type MockDiagnostics<'a, S> = crate::diag::MockDiagnostics<'a, Event<S>, S>;
     type TestNameTable<'a, S> =
         HashMapNameTable<MacroEntry<MockFrontend<'a, S>, MockDiagnostics<'a, S>>>;
     type TestSession<'a, 'b, S> = CompositeSession<

@@ -1,8 +1,10 @@
 use super::context::{EvalContext, SymbolTable};
 use super::{BinarySection, Chunk, Node, RelocExpr};
+
 use crate::diag::{BackendDiagnostics, CompactDiagnostic, Message};
 use crate::model::Width;
 use crate::span::Source;
+
 use std::vec::IntoIter;
 
 impl<S: Clone> Chunk<S> {
@@ -152,6 +154,7 @@ mod tests {
     use crate::expr::{BinaryOperator, ExprVariant};
     use crate::model::RelocAtom;
     use crate::program::ValueId;
+
     use std::borrow::Borrow;
 
     #[test]

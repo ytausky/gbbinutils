@@ -1,4 +1,5 @@
 use super::{AnalyzeExpr, ExprVariant, SemanticAtom, SemanticExpr, SemanticUnary};
+
 use crate::analysis::session::ValueBuilder;
 use crate::analysis::{Ident, Literal};
 use crate::diag::*;
@@ -203,6 +204,7 @@ impl<I: Iterator> Iterator for OperandCounter<I> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use crate::diag::MockSpan;
     use crate::model::{RelocAtom, RelocExpr};
 

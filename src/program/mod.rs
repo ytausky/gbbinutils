@@ -3,7 +3,6 @@ pub use self::builder::ProgramBuilder;
 use self::context::{EvalContext, SymbolTable};
 use self::resolve::Value;
 use crate::diag::BackendDiagnostics;
-use crate::model;
 use crate::model::Width;
 use std::borrow::Borrow;
 
@@ -13,7 +12,7 @@ mod lowering;
 mod resolve;
 mod translate;
 
-type RelocExpr<S> = model::RelocExpr<NameId, S>;
+type RelocExpr<S> = crate::model::RelocExpr<NameId, S>;
 
 #[derive(Clone, Copy)]
 struct ValueId(usize);

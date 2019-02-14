@@ -1,6 +1,7 @@
 use crate::codebase::{CodebaseError, TextCache};
 use crate::diag::span::StrippedBufSpan;
 use crate::model::{IncDec, Width};
+
 use std::fmt;
 
 #[derive(Clone, Debug, PartialEq)]

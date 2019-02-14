@@ -5,9 +5,11 @@
 //! present it to the end user.
 
 pub(crate) use self::message::{KeywordOperandCategory, Message};
-use crate::codebase::{BufId, BufRange, TextBuf, TextCache};
 pub use crate::codebase::{LineNumber, TextPosition, TextRange};
+
+use crate::codebase::{BufId, BufRange, TextBuf, TextCache};
 use crate::span::*;
+
 use std::cell::RefCell;
 #[cfg(test)]
 use std::marker::PhantomData;
