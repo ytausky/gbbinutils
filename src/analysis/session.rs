@@ -1,13 +1,9 @@
-use super::backend::{
-    ApplyBinaryOperator, Backend, HasValue, Name, NameTable, PartialBackend, ValueFromSimple,
-};
+use super::backend::*;
 use crate::analysis::macros::{DefineMacro, Expand, MacroEntry};
 use crate::analysis::{Downstream, Frontend, Ident, SemanticToken, StringRef};
 use crate::codebase::CodebaseError;
 use crate::diag::span::Span;
-use crate::diag::{
-    CompactDiagnostic, DelegateDiagnostics, Diagnostics, DownstreamDiagnostics, Message,
-};
+use crate::diag::*;
 use crate::expr::BinaryOperator;
 use crate::model::Item;
 

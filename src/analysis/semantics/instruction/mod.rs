@@ -1,9 +1,7 @@
 use self::branch::*;
 use crate::analysis::semantics::operand::{AtomKind, Context, Operand, OperandCounter};
 use crate::diag::span::Source;
-use crate::diag::{
-    CompactDiagnostic, DelegateDiagnostics, DownstreamDiagnostics, EmitDiagnostic, Message,
-};
+use crate::diag::*;
 use crate::model::*;
 use crate::syntax::keyword as kw;
 
@@ -430,16 +428,14 @@ impl From<kw::Mnemonic> for Mnemonic {
 mod tests {
     pub use self::kw::Operand::*;
     use super::*;
-    use crate::analysis::semantics::{
-        SemanticAtom, SemanticExpr, SemanticExprVariant, SemanticUnary,
-    };
+    use crate::analysis::semantics::*;
     pub use crate::analysis::semantics::{TokenId, TokenSpan};
     use crate::analysis::{Ident, Literal};
     pub(crate) use crate::diag::Message;
-    use crate::diag::*;
     use crate::expr::{Expr, ExprVariant};
     use crate::model::{RelocAtom, RelocExpr};
     pub use crate::span::{MergeSpans, Span};
+    use crate::syntax::Mnemonic;
     use std::cmp;
 
     type Input = SemanticExpr<String, ()>;

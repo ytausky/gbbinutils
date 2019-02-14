@@ -1,8 +1,5 @@
 use super::{Chunk, NameId, Node, Program, RelocExpr, Value};
-use crate::analysis::backend::{
-    ApplyBinaryOperator, Backend, HasValue, Name, NameTable, PartialBackend, ValueFromIdent,
-    ValueFromSimple,
-};
+use crate::analysis::backend::*;
 use crate::analysis::Ident;
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
 use crate::model::{Item, RelocAtom};

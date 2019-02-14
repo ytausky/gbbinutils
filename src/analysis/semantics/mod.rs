@@ -445,9 +445,10 @@ mod tests {
     use crate::model;
     use crate::model::{RelocAtom, Width};
     use crate::syntax::{
-        keyword::Operand, CommandContext, ExprContext, FileContext, MacroInvocationContext,
-        MacroParamsContext, StmtContext, Token, TokenSeqContext,
+        CommandContext, ExprContext, FileContext, MacroInvocationContext, MacroParamsContext,
+        StmtContext, TokenSeqContext,
     };
+    use crate::syntax::{Operand, Token};
     use std::borrow::Borrow;
     use std::cell::RefCell;
 

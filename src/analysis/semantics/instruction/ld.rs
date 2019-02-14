@@ -298,9 +298,7 @@ impl<S: Clone> Source for LdDest16<S> {
 mod tests {
     use crate::analysis::semantics::instruction::tests::*;
     use crate::expr::Expr;
-    use crate::model::{
-        Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd, Width,
-    };
+    use crate::model::*;
     use crate::syntax::keyword::Mnemonic;
 
     #[test]
