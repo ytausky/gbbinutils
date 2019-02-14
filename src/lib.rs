@@ -13,7 +13,7 @@ mod analysis;
 mod codebase;
 pub mod diag;
 mod expr;
-mod instruction;
+mod model;
 mod program;
 mod syntax;
 

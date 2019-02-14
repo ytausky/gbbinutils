@@ -1,6 +1,6 @@
 use crate::analysis::Ident;
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
-use crate::instruction::Instruction;
+use crate::model::Instruction;
 use crate::program::NameId;
 use crate::span::Source;
 use std::collections::HashMap;

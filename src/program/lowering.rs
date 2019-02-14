@@ -1,7 +1,7 @@
 use super::{Node, RelocExpr};
 use crate::analysis::backend::{Item, RelocAtom, Width};
 use crate::expr::{BinaryOperator, ExprVariant};
-use crate::instruction::*;
+use crate::model::*;
 use crate::span::Source;
 use std::mem;
 
@@ -72,7 +72,7 @@ impl<S: Clone> Lower<S> for Item<RelocExpr<S>> {
 
 impl<S: Clone> Lower<S> for Instruction<RelocExpr<S>> {
     fn lower(self) -> LoweredItem<S> {
-        use crate::instruction::Instruction::*;
+        use self::Instruction::*;
         match self {
             AddHl(reg16) => LoweredItem::with_opcode(0x09 | encode_reg16(reg16)),
             Alu(operation, AluSource::Simple(src)) => encode_simple_alu_operation(operation, src),
@@ -106,7 +106,7 @@ impl<S: Clone> Lower<S> for Instruction<RelocExpr<S>> {
 
 impl<S> Lower<S> for Nullary {
     fn lower(self) -> LoweredItem<S> {
-        use crate::instruction::Nullary::*;
+        use self::Nullary::*;
         let opcode = match self {
             Cpl => 0x2f,
             Daa => 0x27,
@@ -173,7 +173,7 @@ fn encode_immediate_alu_operation<S>(
 }
 
 fn encode_alu_operation(operation: AluOperation) -> u8 {
-    use crate::instruction::AluOperation::*;
+    use self::AluOperation::*;
     (match operation {
         Add => 0b000,
         Adc => 0b001,
@@ -190,7 +190,7 @@ fn encode_branch<S: Clone>(
     branch: Branch<RelocExpr<S>>,
     condition: Option<Condition>,
 ) -> LoweredItem<S> {
-    use crate::instruction::Branch::*;
+    use self::Branch::*;
     match branch {
         Call(target) => LoweredItem::with_opcode(match condition {
             None => 0xcd,
@@ -230,7 +230,7 @@ fn mk_relative_expr<S: Clone>(expr: RelocExpr<S>) -> RelocExpr<S> {
 }
 
 fn encode_bit_operation(operation: BitOperation) -> u8 {
-    use crate::instruction::BitOperation::*;
+    use self::BitOperation::*;
     (match operation {
         Bit => 0b01,
         Set => 0b11,
@@ -240,7 +240,7 @@ fn encode_bit_operation(operation: BitOperation) -> u8 {
 
 impl MiscOperation {
     fn encode(self) -> u8 {
-        use crate::instruction::MiscOperation::*;
+        use self::MiscOperation::*;
         (match self {
             Rlc => 0b000,
             Rrc => 0b001,
@@ -255,7 +255,7 @@ impl MiscOperation {
 }
 
 fn encode_condition(condition: Condition) -> u8 {
-    use crate::instruction::Condition::*;
+    use self::Condition::*;
     (match condition {
         Nz => 0b00,
         Z => 0b01,
@@ -283,7 +283,7 @@ fn encode_simple_operand(operand: SimpleOperand) -> u8 {
 
 impl SimpleOperand {
     fn encode(self) -> u8 {
-        use crate::instruction::SimpleOperand::*;
+        use self::SimpleOperand::*;
         match self {
             B => 0b000,
             C => 0b001,
@@ -298,7 +298,7 @@ impl SimpleOperand {
 }
 
 fn encode_reg16(reg16: Reg16) -> u8 {
-    use crate::instruction::Reg16::*;
+    use self::Reg16::*;
     (match reg16 {
         Bc => 0b00,
         De => 0b01,
@@ -308,7 +308,7 @@ fn encode_reg16(reg16: Reg16) -> u8 {
 }
 
 fn encode_reg_pair(reg_pair: RegPair) -> u8 {
-    use crate::instruction::RegPair::*;
+    use self::RegPair::*;
     match reg_pair {
         Bc => 0b00,
         De => 0b01,
@@ -318,7 +318,7 @@ fn encode_reg_pair(reg_pair: RegPair) -> u8 {
 }
 
 fn encode_ptr_reg(ptr_reg: PtrReg) -> u8 {
-    use crate::instruction::PtrReg::*;
+    use self::PtrReg::*;
     (match ptr_reg {
         Bc => 0b00,
         De => 0b01,
@@ -328,7 +328,7 @@ fn encode_ptr_reg(ptr_reg: PtrReg) -> u8 {
 }
 
 fn encode_inc_dec(mode: IncDec) -> u8 {
-    use crate::instruction::IncDec::*;
+    use self::IncDec::*;
     match mode {
         Inc => 0,
         Dec => 1,
@@ -340,7 +340,7 @@ mod tests {
     use super::*;
     use std::borrow::Borrow;
 
-    use crate::instruction::{self, Branch::*, Instruction::*, Ld::*, Nullary::*};
+    use crate::model::{self, Branch::*, Instruction::*, Ld::*, Nullary::*};
 
     fn test_instruction(
         instruction: Instruction<RelocExpr<()>>,
@@ -405,7 +405,7 @@ mod tests {
         test_nullary(Cpl, bytes([0x2f]))
     }
 
-    fn test_nullary(nullary: instruction::Nullary, items: impl Borrow<[Node<()>]>) {
+    fn test_nullary(nullary: model::Nullary, items: impl Borrow<[Node<()>]>) {
         test_instruction(Nullary(nullary), items)
     }
 
@@ -470,7 +470,7 @@ mod tests {
 
     #[test]
     fn encode_ld_simple_immediate() {
-        use crate::instruction::SimpleOperand::*;
+        use self::SimpleOperand::*;
         let immediate: RelocExpr<_> = 0x42.into();
         vec![
             (B, 0x06),
@@ -496,7 +496,7 @@ mod tests {
 
     #[test]
     fn encode_ld_immediate16() {
-        use crate::instruction::Reg16::*;
+        use self::Reg16::*;
         let immediate: RelocExpr<_> = 0x1234.into();
         let test_cases = &[(Bc, 0x01), (De, 0x11), (Hl, 0x21), (Sp, 0x31)];
         for &(reg16, opcode) in test_cases {
@@ -540,7 +540,7 @@ mod tests {
 
     #[test]
     fn lower_ld_deref_ptr_reg() {
-        use crate::instruction::{Direction::*, PtrReg::*};
+        use self::{Direction::*, PtrReg::*};
         let test_cases = &[
             (Bc, FromA, 0x02),
             (De, FromA, 0x12),
@@ -575,7 +575,7 @@ mod tests {
 
     #[test]
     fn encode_alu_immediate() {
-        use crate::instruction::AluOperation::*;
+        use self::AluOperation::*;
         let expr: RelocExpr<_> = 0x42.into();
         [
             (Add, 0xc6),
@@ -598,7 +598,7 @@ mod tests {
 
     #[test]
     fn encode_simple_add() {
-        use crate::instruction::SimpleOperand::*;
+        use self::SimpleOperand::*;
         let src_and_opcode = vec![
             (B, 0x80),
             (C, 0x81),
@@ -614,7 +614,7 @@ mod tests {
 
     #[test]
     fn encode_simple_adc() {
-        use crate::instruction::SimpleOperand::*;
+        use self::SimpleOperand::*;
         let src_and_opcode = vec![
             (B, 0x88),
             (C, 0x89),
@@ -630,7 +630,7 @@ mod tests {
 
     #[test]
     fn lower_simple_sub() {
-        use crate::instruction::SimpleOperand::*;
+        use self::SimpleOperand::*;
         let src_and_opcode = vec![
             (B, 0x90),
             (C, 0x91),
@@ -646,7 +646,7 @@ mod tests {
 
     #[test]
     fn encode_simple_sbc() {
-        use crate::instruction::SimpleOperand::*;
+        use self::SimpleOperand::*;
         let src_and_opcode = vec![
             (B, 0x98),
             (C, 0x99),
@@ -662,7 +662,7 @@ mod tests {
 
     #[test]
     fn encode_simple_and() {
-        use crate::instruction::SimpleOperand::*;
+        use self::SimpleOperand::*;
         let src_and_opcode = vec![
             (B, 0xa0),
             (C, 0xa1),
@@ -678,7 +678,7 @@ mod tests {
 
     #[test]
     fn encode_simple_xor() {
-        use crate::instruction::SimpleOperand::*;
+        use self::SimpleOperand::*;
         let src_and_opcode = vec![
             (B, 0xa8),
             (C, 0xa9),
@@ -694,7 +694,7 @@ mod tests {
 
     #[test]
     fn encode_simple_or() {
-        use crate::instruction::SimpleOperand::*;
+        use self::SimpleOperand::*;
         let src_and_opcode = vec![
             (B, 0xb0),
             (C, 0xb1),
@@ -710,7 +710,7 @@ mod tests {
 
     #[test]
     fn encode_simple_cp() {
-        use crate::instruction::SimpleOperand::*;
+        use self::SimpleOperand::*;
         let src_and_opcode = vec![
             (B, 0xb8),
             (C, 0xb9),
@@ -732,7 +732,7 @@ mod tests {
 
     #[test]
     fn encode_call() {
-        use crate::instruction::Condition::*;
+        use self::Condition::*;
         let target_expr: RelocExpr<_> = 0x1234.into();
         let test_cases = &[
             (None, 0xcd),
@@ -754,7 +754,7 @@ mod tests {
 
     #[test]
     fn encode_jp() {
-        use crate::instruction::Condition::*;
+        use self::Condition::*;
         let target_expr: RelocExpr<_> = 0x1234.into();
         let test_cases = &[
             (None, 0xc3),
@@ -781,7 +781,7 @@ mod tests {
 
     #[test]
     fn encode_jr() {
-        use crate::instruction::Condition::*;
+        use self::Condition::*;
         let target_expr: RelocExpr<_> = 0x1234.into();
         let test_cases = &[
             (None, 0x18),
@@ -803,7 +803,7 @@ mod tests {
 
     #[test]
     fn encode_ret() {
-        use crate::instruction::Condition::*;
+        use self::Condition::*;
         let test_cases = &[
             (None, 0xc9),
             (Some(C), 0xd8),
@@ -818,7 +818,7 @@ mod tests {
 
     #[test]
     fn encode_add_hl() {
-        use crate::instruction::Reg16::*;
+        use self::Reg16::*;
         [(Bc, 0x09), (De, 0x19), (Hl, 0x29), (Sp, 0x39)]
             .iter()
             .for_each(|(reg16, opcode)| {
@@ -828,7 +828,7 @@ mod tests {
 
     #[test]
     fn encode_inc_dec8() {
-        use crate::instruction::{IncDec::*, SimpleOperand::*};
+        use self::{IncDec::*, SimpleOperand::*};
         let test_cases = &[
             (Inc, B, 0x04),
             (Inc, C, 0x0c),
@@ -854,7 +854,7 @@ mod tests {
 
     #[test]
     fn encode_inc_dec16() {
-        use crate::instruction::{IncDec::*, Reg16::*};
+        use self::{IncDec::*, Reg16::*};
         let test_cases = &[
             (Inc, Bc, 0x03),
             (Inc, De, 0x13),
@@ -872,7 +872,7 @@ mod tests {
 
     #[test]
     fn encode_pop() {
-        use crate::instruction::RegPair::*;
+        use self::RegPair::*;
         [(Bc, 0xc1), (De, 0xd1), (Hl, 0xe1), (Af, 0xf1)]
             .iter()
             .for_each(|(reg_pair, opcode)| {
@@ -882,7 +882,7 @@ mod tests {
 
     #[test]
     fn encode_push() {
-        use crate::instruction::RegPair::*;
+        use self::RegPair::*;
         [(Bc, 0xc5), (De, 0xd5), (Hl, 0xe5), (Af, 0xf5)]
             .iter()
             .for_each(|(reg_pair, opcode)| {
@@ -906,7 +906,7 @@ mod tests {
 
     #[test]
     fn lower_bit_operations() {
-        use crate::instruction::{BitOperation::*, SimpleOperand::*};
+        use self::{BitOperation::*, SimpleOperand::*};
         let n: RelocExpr<_> = 3.into();
         let test_cases = &[
             (Bit, B, 0b01_000_000),
@@ -944,7 +944,7 @@ mod tests {
 
     #[test]
     fn lower_misc_operations() {
-        use crate::instruction::{MiscOperation::*, SimpleOperand::*};
+        use self::{MiscOperation::*, SimpleOperand::*};
         let test_cases = &[
             (Rlc, H, 0x04),
             (Rrc, B, 0x08),

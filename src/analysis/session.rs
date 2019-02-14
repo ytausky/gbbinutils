@@ -404,7 +404,7 @@ mod tests {
     use crate::analysis::{FrontendEvent, Literal};
     use crate::diag;
     use crate::diag::{DiagnosticsEvent, MockSpan};
-    use crate::instruction::{Instruction, Nullary};
+    use crate::model::{Instruction, Nullary};
     use crate::syntax::{Command, Directive, Mnemonic, Token};
 
     use std::cell::RefCell;

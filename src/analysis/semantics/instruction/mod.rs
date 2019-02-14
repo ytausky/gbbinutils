@@ -4,7 +4,7 @@ use crate::diag::span::Source;
 use crate::diag::{
     CompactDiagnostic, DelegateDiagnostics, DownstreamDiagnostics, EmitDiagnostic, Message,
 };
-use crate::instruction::*;
+use crate::model::*;
 use crate::syntax::keyword as kw;
 
 mod branch;
@@ -356,7 +356,7 @@ impl AluOperation {
     }
 
     fn implicit_dest(self) -> bool {
-        use crate::instruction::AluOperation::*;
+        use self::AluOperation::*;
         match self {
             Add | Adc | Sbc => false,
             _ => true,

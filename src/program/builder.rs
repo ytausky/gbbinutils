@@ -140,7 +140,7 @@ mod tests {
     use crate::analysis::backend::{ApplyBinaryOperator, Width};
     use crate::diag::{CompactDiagnostic, Message, TestDiagnosticsListener};
     use crate::expr::BinaryOperator;
-    use crate::instruction::{Instruction, Nullary};
+    use crate::model::{Instruction, Nullary};
     use crate::program::BinaryObject;
     use std::borrow::Borrow;
 

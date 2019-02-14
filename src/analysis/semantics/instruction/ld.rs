@@ -3,7 +3,7 @@ use crate::analysis::backend::Width;
 use crate::analysis::semantics::operand::AtomKind;
 use crate::diag::span::Source;
 use crate::diag::{CompactDiagnostic, DownstreamDiagnostics, EmitDiagnostic, Message};
-use crate::instruction::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
+use crate::model::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
 
 impl<'a, I, V, D, S> Analysis<'a, I, D, S>
 where
@@ -155,7 +155,7 @@ impl<V: Source> Operand<V> {
                 ))),
                 AtomKind::Reg16(reg16) => Ok(LdDest::Word(LdDest16::Reg16(reg16, span))),
                 AtomKind::RegPair(reg_pair) => {
-                    use crate::instruction::RegPair;
+                    use crate::model::RegPair;
                     assert_eq!(reg_pair, RegPair::Af);
                     Err(CompactDiagnostic::new(
                         Message::AfOutsideStackOperation,
@@ -300,7 +300,7 @@ mod tests {
     use crate::analysis::backend::Width;
     use crate::analysis::semantics::instruction::tests::*;
     use crate::expr::Expr;
-    use crate::instruction::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
+    use crate::model::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd};
     use crate::syntax::keyword::Mnemonic;
 
     #[test]

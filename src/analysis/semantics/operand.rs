@@ -2,7 +2,7 @@ use super::{AnalyzeExpr, ExprVariant, SemanticAtom, SemanticExpr, SemanticUnary}
 use crate::analysis::session::ValueBuilder;
 use crate::analysis::{Ident, Literal};
 use crate::diag::*;
-use crate::instruction::{Condition, PtrReg, Reg16, RegPair, SimpleOperand};
+use crate::model::{Condition, PtrReg, Reg16, RegPair, SimpleOperand};
 use crate::span::Source;
 use crate::syntax::keyword as kw;
 

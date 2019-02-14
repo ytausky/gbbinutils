@@ -481,7 +481,7 @@ mod tests {
 
     #[test]
     fn emit_ld_b_deref_hl() {
-        use crate::instruction::*;
+        use crate::model::*;
         let actions = collect_semantic_actions(|actions| {
             let mut command = actions
                 .enter_stmt(None)
@@ -517,7 +517,7 @@ mod tests {
     }
 
     fn test_rst_1_op_1(op: BinaryOperator) {
-        use crate::instruction::*;
+        use crate::model::*;
         let actions = collect_semantic_actions(|actions| {
             let command = actions
                 .enter_stmt(None)
