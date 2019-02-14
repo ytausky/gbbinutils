@@ -1,5 +1,5 @@
 use super::{Node, RelocExpr};
-use crate::backend::{Item, RelocAtom, Width};
+use crate::analysis::backend::{Item, RelocAtom, Width};
 use crate::expr::{BinaryOperator, ExprVariant};
 use crate::instruction::*;
 use crate::span::Source;

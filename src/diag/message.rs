@@ -1,4 +1,4 @@
-use crate::backend::Width;
+use crate::analysis::backend::Width;
 use crate::codebase::{CodebaseError, TextCache};
 use crate::diag::span::StrippedBufSpan;
 use crate::instruction::IncDec;

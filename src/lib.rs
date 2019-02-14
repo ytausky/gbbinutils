@@ -10,7 +10,6 @@ use crate::codebase::{CodebaseError, StdFileSystem};
 use crate::diag::*;
 
 mod analysis;
-mod backend;
 mod codebase;
 pub mod diag;
 mod expr;

@@ -2,7 +2,7 @@ pub use super::context::EvalContext;
 
 use super::context::SymbolTable;
 use super::{NameId, Node, Program, RelocExpr};
-use crate::backend::{RelocAtom, Width};
+use crate::analysis::backend::{RelocAtom, Width};
 use crate::expr::{BinaryOperator, ExprVariant};
 use std::borrow::Borrow;
 use std::ops::{Add, AddAssign, Mul, RangeInclusive, Sub};
@@ -222,7 +222,7 @@ impl Width {
 mod tests {
     use super::*;
 
-    use crate::backend::{Backend, HashMapNameTable, PartialBackend};
+    use crate::analysis::backend::{Backend, HashMapNameTable, PartialBackend};
     use crate::diag::IgnoreDiagnostics;
     use crate::program::{Chunk, ProgramBuilder, ValueId};
 

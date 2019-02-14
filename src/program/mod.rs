@@ -2,8 +2,8 @@ pub use self::builder::ProgramBuilder;
 
 use self::context::{EvalContext, SymbolTable};
 use self::resolve::Value;
-use crate::backend;
-use crate::backend::Width;
+use crate::analysis::backend;
+use crate::analysis::backend::Width;
 use crate::diag::BackendDiagnostics;
 use std::borrow::Borrow;
 

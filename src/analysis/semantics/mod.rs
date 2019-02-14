@@ -1,7 +1,7 @@
 use self::invoke::MacroInvocationActions;
+use crate::analysis::backend;
 use crate::analysis::session::{Session, ValueBuilder};
 use crate::analysis::{Ident, Literal, SemanticToken};
-use crate::backend;
 use crate::diag::span::{MergeSpans, Source, StripSpan};
 use crate::diag::*;
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
@@ -439,10 +439,10 @@ impl MockSpan for TokenSpan {
 mod tests {
     use super::*;
 
+    use crate::analysis::backend;
+    use crate::analysis::backend::{BackendEvent, RelocAtom, Width};
     use crate::analysis::session;
     use crate::analysis::session::SessionEvent;
-    use crate::backend;
-    use crate::backend::{BackendEvent, RelocAtom, Width};
     use crate::diag::{CompactDiagnostic, Message};
     use crate::expr::BinaryOperator;
     use crate::syntax::{

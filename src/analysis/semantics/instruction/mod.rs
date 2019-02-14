@@ -430,12 +430,12 @@ impl From<kw::Mnemonic> for Mnemonic {
 mod tests {
     pub use self::kw::Operand::*;
     use super::*;
+    use crate::analysis::backend::{RelocAtom, RelocExpr};
     use crate::analysis::semantics::{
         SemanticAtom, SemanticExpr, SemanticExprVariant, SemanticUnary,
     };
     pub use crate::analysis::semantics::{TokenId, TokenSpan};
     use crate::analysis::{Ident, Literal};
-    use crate::backend::{RelocAtom, RelocExpr};
     pub(crate) use crate::diag::Message;
     use crate::diag::*;
     use crate::expr::{Expr, ExprVariant};

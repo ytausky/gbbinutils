@@ -1,9 +1,9 @@
 use super::{Chunk, NameId, Node, Program, RelocExpr, Value};
-use crate::analysis::Ident;
-use crate::backend::{
+use crate::analysis::backend::{
     ApplyBinaryOperator, Backend, HasValue, Item, Name, NameTable, PartialBackend, RelocAtom,
     ValueFromIdent, ValueFromSimple,
 };
+use crate::analysis::Ident;
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
 
 pub struct ProgramBuilder<SR> {
@@ -137,14 +137,14 @@ impl<S: Clone> HasValue<S> for ProgramBuilder<S> {
 mod tests {
     use super::*;
 
-    use crate::backend::{ApplyBinaryOperator, Width};
+    use crate::analysis::backend::{ApplyBinaryOperator, Width};
     use crate::diag::{CompactDiagnostic, Message, TestDiagnosticsListener};
     use crate::expr::BinaryOperator;
     use crate::instruction::{Instruction, Nullary};
     use crate::program::BinaryObject;
     use std::borrow::Borrow;
 
-    type NameTable = crate::backend::HashMapNameTable<()>;
+    type NameTable = crate::analysis::backend::HashMapNameTable<()>;
 
     #[test]
     fn new_object_has_no_chunks() {

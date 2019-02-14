@@ -1,8 +1,8 @@
-use crate::analysis::macros::{DefineMacro, Expand, MacroEntry};
-use crate::analysis::{Downstream, Frontend, Ident, SemanticToken, StringRef};
-use crate::backend::{
+use super::backend::{
     ApplyBinaryOperator, Backend, HasValue, Item, Name, NameTable, PartialBackend, ValueFromSimple,
 };
+use crate::analysis::macros::{DefineMacro, Expand, MacroEntry};
+use crate::analysis::{Downstream, Frontend, Ident, SemanticToken, StringRef};
 use crate::codebase::CodebaseError;
 use crate::diag::span::Span;
 use crate::diag::{
@@ -233,7 +233,7 @@ where
 mod mock {
     use super::*;
 
-    use crate::backend::{BackendEvent, RelocAtom, RelocExpr};
+    use crate::analysis::backend::{BackendEvent, RelocAtom, RelocExpr};
     use crate::diag::{DiagnosticsEvent, MockDiagnostics, MockSpan};
     use crate::expr::{Expr, ExprVariant};
     use std::cell::RefCell;
@@ -399,9 +399,9 @@ mod tests {
     use super::*;
 
     use crate::analysis;
+    use crate::analysis::backend;
+    use crate::analysis::backend::{BackendEvent, HashMapNameTable, RelocAtom, RelocExpr};
     use crate::analysis::{FrontendEvent, Literal};
-    use crate::backend;
-    use crate::backend::{BackendEvent, HashMapNameTable, RelocAtom, RelocExpr};
     use crate::diag;
     use crate::diag::{DiagnosticsEvent, MockSpan};
     use crate::instruction::{Instruction, Nullary};

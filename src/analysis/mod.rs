@@ -1,10 +1,6 @@
-mod macros;
-mod semantics;
-mod session;
-
+use self::backend::*;
 use self::macros::{MacroDefData, MacroEntry, MacroTableEntry};
 use crate::analysis::session::*;
-use crate::backend::*;
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diag::*;
 use crate::span::BufContext;
@@ -16,6 +12,11 @@ pub use crate::syntax::Token;
 
 #[cfg(test)]
 pub use self::mock::*;
+
+pub mod backend;
+mod macros;
+mod semantics;
+mod session;
 
 pub(crate) trait Assemble<D>
 where
