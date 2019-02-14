@@ -137,10 +137,11 @@ impl<S: Clone> HasValue<S> for ProgramBuilder<S> {
 mod tests {
     use super::*;
 
-    use crate::backend::{ApplyBinaryOperator, BinaryObject, Width};
+    use crate::backend::{ApplyBinaryOperator, Width};
     use crate::diag::{CompactDiagnostic, Message, TestDiagnosticsListener};
     use crate::expr::BinaryOperator;
     use crate::instruction::{Instruction, Nullary};
+    use crate::program::BinaryObject;
     use std::borrow::Borrow;
 
     type NameTable = crate::backend::HashMapNameTable<()>;

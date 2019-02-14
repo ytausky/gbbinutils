@@ -1,6 +1,6 @@
 use super::context::{EvalContext, SymbolTable};
-use super::{Chunk, Node, RelocExpr};
-use crate::backend::{BinarySection, Width};
+use super::{BinarySection, Chunk, Node, RelocExpr};
+use crate::backend::Width;
 use crate::diag::{BackendDiagnostics, CompactDiagnostic, Message};
 use crate::span::Source;
 use std::vec::IntoIter;

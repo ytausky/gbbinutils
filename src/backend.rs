@@ -137,42 +137,6 @@ impl<I, T: Into<ExprVariant<RelocAtom<I>, Empty, BinaryOperator, ()>>> From<T>
     }
 }
 
-pub struct BinaryObject {
-    pub sections: Vec<BinarySection>,
-}
-
-impl BinaryObject {
-    pub fn into_rom(self) -> Rom {
-        let mut data: Vec<u8> = Vec::new();
-        for chunk in self.sections {
-            if !chunk.data.is_empty() {
-                let end = chunk.origin + chunk.data.len();
-                if data.len() < end {
-                    data.resize(end, 0x00)
-                }
-                data[chunk.origin..end].copy_from_slice(&chunk.data)
-            }
-        }
-        if data.len() < MIN_ROM_LEN {
-            data.resize(MIN_ROM_LEN, 0x00)
-        }
-        Rom {
-            data: data.into_boxed_slice(),
-        }
-    }
-}
-
-const MIN_ROM_LEN: usize = 0x8000;
-
-pub struct Rom {
-    pub data: Box<[u8]>,
-}
-
-pub struct BinarySection {
-    pub origin: usize,
-    pub data: Vec<u8>,
-}
-
 #[cfg(test)]
 mod mock {
     use super::*;
@@ -259,48 +223,5 @@ mod mock {
                 .borrow_mut()
                 .push(BackendEvent::SetOrigin(origin).into())
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn empty_object_converted_to_all_zero_rom() {
-        let object = BinaryObject {
-            sections: Vec::new(),
-        };
-        let rom = object.into_rom();
-        assert_eq!(*rom.data, [0x00u8; MIN_ROM_LEN][..])
-    }
-
-    #[test]
-    fn chunk_placed_in_rom_starting_at_origin() {
-        let byte = 0x42;
-        let origin = 0x150;
-        let object = BinaryObject {
-            sections: vec![BinarySection {
-                origin,
-                data: vec![byte],
-            }],
-        };
-        let rom = object.into_rom();
-        let mut expected = [0x00u8; MIN_ROM_LEN];
-        expected[origin] = byte;
-        assert_eq!(*rom.data, expected[..])
-    }
-
-    #[test]
-    fn empty_chunk_does_not_extend_rom() {
-        let origin = MIN_ROM_LEN + 1;
-        let object = BinaryObject {
-            sections: vec![BinarySection {
-                origin,
-                data: Vec::new(),
-            }],
-        };
-        let rom = object.into_rom();
-        assert_eq!(rom.data.len(), MIN_ROM_LEN)
     }
 }
