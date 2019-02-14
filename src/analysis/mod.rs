@@ -118,7 +118,18 @@ where
 #[derive(Clone, Copy)]
 struct SemanticAnalysis;
 
-pub(crate) trait Frontend<D: Diagnostics> {
+pub(crate) trait Frontend<D: Diagnostics>
+where
+    Self: Lex<D>,
+{
+    fn analyze_token_seq<I, B, N>(&mut self, tokens: I, downstream: &mut Downstream<B, N, D>)
+    where
+        I: IntoIterator<Item = LexItem<Self::StringRef, D::Span>>,
+        B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
+        N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>;
+}
+
+pub(crate) trait Lex<D: Diagnostics> {
     type StringRef: AsRef<str> + Clone + Eq + Into<String>;
     type TokenIter: Iterator<Item = LexItem<Self::StringRef, D::Span>>;
 
@@ -127,12 +138,6 @@ pub(crate) trait Frontend<D: Diagnostics> {
         path: Self::StringRef,
         diagnostics: &mut D,
     ) -> Result<Self::TokenIter, CodebaseError>;
-
-    fn analyze_token_seq<I, B, N>(&mut self, tokens: I, downstream: &mut Downstream<B, N, D>)
-    where
-        I: IntoIterator<Item = LexItem<Self::StringRef, D::Span>>,
-        B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
-        N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>;
 }
 
 impl<Id> Analysis<Id> for SemanticAnalysis
@@ -169,10 +174,9 @@ where
 
 type TokenSeq<I, S> = Vec<(SemanticToken<I>, S)>;
 
-impl<'a, T, A, D> Frontend<D> for CodebaseAnalyzer<'a, T, A>
+impl<'a, T, A, D> Lex<D> for CodebaseAnalyzer<'a, T, A>
 where
     T: Tokenize<D::BufContext> + 'a,
-    A: Analysis<T::StringRef>,
     D: Diagnostics,
 {
     type StringRef = T::StringRef;
@@ -187,7 +191,14 @@ where
             diagnostics.mk_buf_context(buf_id, None)
         })
     }
+}
 
+impl<'a, T, A, D> Frontend<D> for CodebaseAnalyzer<'a, T, A>
+where
+    T: Tokenize<D::BufContext> + 'a,
+    A: Analysis<T::StringRef>,
+    D: Diagnostics,
+{
     fn analyze_token_seq<I, B, N>(&mut self, tokens: I, downstream: &mut Downstream<B, N, D>)
     where
         I: IntoIterator<Item = LexItem<Self::StringRef, D::Span>>,
@@ -297,7 +308,7 @@ mod mock {
         }
     }
 
-    impl<'a, T, D> Frontend<D> for MockFrontend<'a, T, D::Span>
+    impl<'a, T, D> Lex<D> for MockFrontend<'a, T, D::Span>
     where
         T: From<FrontendEvent<D::Span>>,
         D: Diagnostics,
@@ -312,7 +323,13 @@ mod mock {
         ) -> Result<Self::TokenIter, CodebaseError> {
             Ok(self.files.get(&path).unwrap().clone().into_iter())
         }
+    }
 
+    impl<'a, T, D> Frontend<D> for MockFrontend<'a, T, D::Span>
+    where
+        T: From<FrontendEvent<D::Span>>,
+        D: Diagnostics,
+    {
         fn analyze_token_seq<I, B, N>(&mut self, tokens: I, _downstream: &mut Downstream<B, N, D>)
         where
             I: IntoIterator<Item = LexItem<Self::StringRef, D::Span>>,
