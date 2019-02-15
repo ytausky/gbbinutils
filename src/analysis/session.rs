@@ -1,6 +1,7 @@
 use super::backend::*;
 use super::macros::{DefineMacro, Expand, MacroEntry};
-use super::{Analyze, Ident, Lex, SemanticToken, StringRef};
+use super::semantics::Analyze;
+use super::{Ident, Lex, SemanticToken, StringRef};
 
 use crate::codebase::CodebaseError;
 use crate::diag::span::Span;
@@ -411,7 +412,8 @@ mod tests {
     use super::*;
 
     use crate::analysis::backend::{BackendEvent, HashMapNameTable};
-    use crate::analysis::{FrontendEvent, Literal, MockCodebase};
+    use crate::analysis::semantics::AnalyzerEvent;
+    use crate::analysis::{Literal, MockCodebase};
     use crate::diag::{DiagnosticsEvent, MockSpan};
     use crate::model::{Instruction, Nullary, RelocAtom, RelocExpr};
     use crate::syntax::{Command, Directive, Mnemonic, Token};
@@ -456,7 +458,7 @@ mod tests {
         session.analyze_file(path.into()).unwrap();
         assert_eq!(
             log.into_inner(),
-            [FrontendEvent::AnalyzeTokenSeq(tokens).into()]
+            [AnalyzerEvent::AnalyzeTokenSeq(tokens).into()]
         );
     }
 
@@ -476,7 +478,7 @@ mod tests {
         session.invoke_macro((name.into(), ()), vec![]);
         assert_eq!(
             log.into_inner(),
-            [FrontendEvent::AnalyzeTokenSeq(
+            [AnalyzerEvent::AnalyzeTokenSeq(
                 tokens.into_iter().map(|token| (Ok(token), ())).collect()
             )
             .into()]
@@ -504,7 +506,7 @@ mod tests {
         session.invoke_macro((name.into(), ()), vec![vec![(arg.clone(), ())]]);
         assert_eq!(
             log.into_inner(),
-            [FrontendEvent::AnalyzeTokenSeq(
+            [AnalyzerEvent::AnalyzeTokenSeq(
                 vec![db, arg, literal0]
                     .into_iter()
                     .map(|token| (Ok(token), ()))
@@ -534,7 +536,7 @@ mod tests {
         );
         assert_eq!(
             log.into_inner(),
-            [FrontendEvent::AnalyzeTokenSeq(
+            [AnalyzerEvent::AnalyzeTokenSeq(
                 vec![Token::Label(label.into()), nop]
                     .into_iter()
                     .map(|token| (Ok(token), ()))
@@ -561,7 +563,7 @@ mod tests {
         );
     }
 
-    type MockAnalyzer<'a, S> = crate::analysis::MockAnalyzer<'a, Event<S>>;
+    type MockAnalyzer<'a, S> = crate::analysis::semantics::MockAnalyzer<'a, Event<S>>;
     type MockBackend<'a, S> = crate::analysis::backend::MockBackend<'a, Event<S>>;
     type MockDiagnostics<'a, S> = crate::diag::MockDiagnostics<'a, Event<S>, S>;
     type TestNameTable<'a, S> = HashMapNameTable<MacroEntry<String, MockDiagnostics<'a, S>>>;
@@ -576,13 +578,13 @@ mod tests {
 
     #[derive(Debug, PartialEq)]
     enum Event<S: Clone> {
-        Frontend(FrontendEvent<S>),
+        Frontend(AnalyzerEvent<S>),
         Backend(BackendEvent<RelocExpr<Ident<String>, S>>),
         Diagnostics(DiagnosticsEvent<S>),
     }
 
-    impl<S: Clone> From<FrontendEvent<S>> for Event<S> {
-        fn from(event: FrontendEvent<S>) -> Self {
+    impl<S: Clone> From<AnalyzerEvent<S>> for Event<S> {
+        fn from(event: AnalyzerEvent<S>) -> Self {
             Event::Frontend(event)
         }
     }
