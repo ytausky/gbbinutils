@@ -1,6 +1,6 @@
 use super::backend::*;
 use super::macros::{DefineMacro, Expand, MacroEntry};
-use super::{Analyze, Downstream, Ident, Lex, SemanticToken, StringRef};
+use super::{Analyze, Ident, Lex, PartialSession, SemanticToken, StringRef};
 
 use crate::codebase::CodebaseError;
 use crate::diag::span::Span;
@@ -70,9 +70,9 @@ impl<'a, C, A, B: ?Sized, N, D> CompositeSession<'a, C, A, B, N, D> {
     }
 }
 
-macro_rules! downstream {
+macro_rules! partial {
     ($session:expr) => {
-        Downstream {
+        PartialSession {
             codebase: $session.codebase,
             backend: $session.backend,
             names: $session.names,
@@ -178,8 +178,7 @@ where
 {
     fn analyze_file(&mut self, path: Self::StringRef) -> Result<(), CodebaseError> {
         let tokens = self.codebase.lex_file(path, self.diagnostics)?;
-        self.analyzer
-            .analyze_token_seq(tokens, &mut downstream!(self));
+        self.analyzer.analyze_token_seq(tokens, &mut partial!(self));
         Ok(())
     }
 
@@ -212,7 +211,7 @@ where
         };
         if let Some(expansion) = expansion {
             self.analyzer
-                .analyze_token_seq(expansion.map(|(t, s)| (Ok(t), s)), &mut downstream!(self))
+                .analyze_token_seq(expansion.map(|(t, s)| (Ok(t), s)), &mut partial!(self))
         }
     }
 
@@ -405,7 +404,7 @@ mod tests {
     use super::*;
 
     use crate::analysis::backend::{BackendEvent, HashMapNameTable};
-    use crate::analysis::{FrontendEvent, Literal, MockFrontend};
+    use crate::analysis::{FrontendEvent, Literal, MockCodebase};
     use crate::diag::{DiagnosticsEvent, MockSpan};
     use crate::model::{Instruction, Nullary, RelocAtom, RelocExpr};
     use crate::syntax::{Command, Directive, Mnemonic, Token};
@@ -445,7 +444,7 @@ mod tests {
         let tokens = vec![(Ok(Token::Command(Command::Mnemonic(Mnemonic::Nop))), ())];
         let log = RefCell::new(Vec::new());
         let mut fixture = Fixture::new(&log);
-        fixture.frontend.set_file(path, tokens.clone());
+        fixture.codebase.set_file(path, tokens.clone());
         let mut session = fixture.session();
         session.analyze_file(path.into()).unwrap();
         assert_eq!(
@@ -561,7 +560,7 @@ mod tests {
     type TestNameTable<'a, S> = HashMapNameTable<MacroEntry<String, MockDiagnostics<'a, S>>>;
     type TestSession<'a, 'b, S> = CompositeSession<
         'b,
-        MockFrontend<S>,
+        MockCodebase<S>,
         MockAnalyzer<'a, S>,
         MockBackend<'a, S>,
         TestNameTable<'a, S>,
@@ -594,7 +593,7 @@ mod tests {
     }
 
     struct Fixture<'a, S: Clone + MockSpan> {
-        frontend: MockFrontend<S>,
+        codebase: MockCodebase<S>,
         analyzer: MockAnalyzer<'a, S>,
         backend: MockBackend<'a, S>,
         names: TestNameTable<'a, S>,
@@ -604,7 +603,7 @@ mod tests {
     impl<'a, S: Clone + MockSpan> Fixture<'a, S> {
         fn new(log: &'a RefCell<Vec<Event<S>>>) -> Self {
             Self {
-                frontend: MockFrontend::new(),
+                codebase: MockCodebase::new(),
                 analyzer: MockAnalyzer::new(log),
                 backend: MockBackend::new(log),
                 names: HashMapNameTable::new(),
@@ -614,7 +613,7 @@ mod tests {
 
         fn session<'b>(&'b mut self) -> TestSession<'a, 'b, S> {
             CompositeSession::new(
-                &mut self.frontend,
+                &mut self.codebase,
                 &mut self.analyzer,
                 &mut self.backend,
                 &mut self.names,

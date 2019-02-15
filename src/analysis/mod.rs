@@ -60,7 +60,7 @@ where
 {
 }
 
-pub struct Downstream<'a, C: 'a, B: ?Sized + 'a, N: 'a, D: 'a> {
+pub struct PartialSession<'a, C: 'a, B: ?Sized + 'a, N: 'a, D: 'a> {
     codebase: &'a mut C,
     backend: &'a mut B,
     names: &'a mut N,
@@ -121,8 +121,11 @@ pub(crate) trait Lex<D: Diagnostics> {
 }
 
 pub(crate) trait Analyze<R: Clone + Eq, D: Diagnostics> {
-    fn analyze_token_seq<I, C, B, N>(&mut self, tokens: I, downstream: &mut Downstream<C, B, N, D>)
-    where
+    fn analyze_token_seq<I, C, B, N>(
+        &mut self,
+        tokens: I,
+        partial: &mut PartialSession<C, B, N, D>,
+    ) where
         I: IntoIterator<Item = LexItem<R, D::Span>>,
         C: Lex<D, StringRef = R>,
         B: Backend<Ident<R>, D::Span, N> + ?Sized,
@@ -167,7 +170,7 @@ where
 }
 
 impl<R: Clone + Eq, D: Diagnostics> Analyze<R, D> for SemanticAnalyzer {
-    fn analyze_token_seq<I, C, B, N>(&mut self, tokens: I, downstream: &mut Downstream<C, B, N, D>)
+    fn analyze_token_seq<I, C, B, N>(&mut self, tokens: I, partial: &mut PartialSession<C, B, N, D>)
     where
         I: IntoIterator<Item = LexItem<R, D::Span>>,
         C: Lex<D, StringRef = R>,
@@ -175,11 +178,11 @@ impl<R: Clone + Eq, D: Diagnostics> Analyze<R, D> for SemanticAnalyzer {
         N: NameTable<Ident<R>, MacroEntry = MacroEntry<R, D>>,
     {
         let session = CompositeSession::new(
-            downstream.codebase,
+            partial.codebase,
             self,
-            downstream.backend,
-            downstream.names,
-            downstream.diagnostics,
+            partial.backend,
+            partial.names,
+            partial.diagnostics,
         );
         let actions = semantics::SemanticActions::new(session);
         crate::syntax::parse_token_seq(tokens.into_iter(), actions);
@@ -257,13 +260,13 @@ mod mock {
     use std::collections::HashMap;
     use std::vec::IntoIter;
 
-    pub struct MockFrontend<S> {
+    pub struct MockCodebase<S> {
         files: HashMap<String, Vec<LexItem<String, S>>>,
     }
 
-    impl<S> MockFrontend<S> {
+    impl<S> MockCodebase<S> {
         pub fn new() -> Self {
-            Self {
+            MockCodebase {
                 files: HashMap::new(),
             }
         }
@@ -276,7 +279,7 @@ mod mock {
         }
     }
 
-    impl<'a, D> Lex<D> for MockFrontend<D::Span>
+    impl<'a, D> Lex<D> for MockCodebase<D::Span>
     where
         D: Diagnostics,
     {
@@ -310,7 +313,7 @@ mod mock {
         fn analyze_token_seq<I, C, B, N>(
             &mut self,
             tokens: I,
-            _downstream: &mut Downstream<C, B, N, D>,
+            _downstream: &mut PartialSession<C, B, N, D>,
         ) where
             I: IntoIterator<Item = LexItem<String, D::Span>>,
             C: Lex<D, StringRef = String>,
