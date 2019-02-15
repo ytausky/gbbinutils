@@ -35,7 +35,7 @@ where
         codebase: &C,
         diagnostics: &mut D,
     ) -> Result<(), CodebaseError> {
-        let mut file_parser = CodebaseAnalyzer::new(codebase, SemanticAnalysis);
+        let mut file_parser = CodebaseAnalyzer::new(codebase);
         let mut names = HashMapNameTable::new();
         let mut session = CompositeSession::new(&mut file_parser, self, &mut names, diagnostics);
         session.analyze_file(name.into())
@@ -101,23 +101,6 @@ pub(super) enum Literal<S> {
     String(S),
 }
 
-trait Analysis<Id>
-where
-    Self: Clone,
-    Id: Into<String> + Clone + Eq + AsRef<str>,
-{
-    fn run<I, F, B, N, D>(&self, tokens: I, session: CompositeSession<F, B, N, D>)
-    where
-        I: Iterator<Item = LexItem<Id, D::Span>>,
-        F: Frontend<D, StringRef = Id>,
-        B: Backend<Ident<Id>, D::Span, N> + ?Sized,
-        N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F::StringRef, D>>,
-        D: Diagnostics;
-}
-
-#[derive(Clone, Copy)]
-struct SemanticAnalysis;
-
 pub(crate) trait Frontend<D: Diagnostics>
 where
     Self: Lex<D>,
@@ -144,41 +127,22 @@ pub(crate) trait Analyze<R, D: Diagnostics> {
         N: NameTable<Ident<R>, MacroEntry = MacroEntry<R, D>>;
 }
 
-impl<Id> Analysis<Id> for SemanticAnalysis
-where
-    Id: Into<String> + Clone + Eq + AsRef<str>,
-{
-    fn run<'a, I, F, B, N, D>(&self, tokens: I, session: CompositeSession<'a, F, B, N, D>)
-    where
-        I: Iterator<Item = LexItem<Id, D::Span>>,
-        F: Frontend<D, StringRef = Id>,
-        B: Backend<Ident<Id>, D::Span, N> + ?Sized,
-        N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F::StringRef, D>>,
-        D: Diagnostics,
-    {
-        let actions = semantics::SemanticActions::new(session);
-        crate::syntax::parse_token_seq(tokens, actions);
-    }
-}
-
-struct CodebaseAnalyzer<'a, T: 'a, A> {
+struct CodebaseAnalyzer<'a, T: 'a> {
     codebase: &'a T,
-    analysis: A,
 }
 
-impl<'a, T: 'a, A> CodebaseAnalyzer<'a, T, A>
+impl<'a, T: 'a> CodebaseAnalyzer<'a, T>
 where
     T: StringRef,
-    A: Analysis<T::StringRef>,
 {
-    fn new(codebase: &T, analysis: A) -> CodebaseAnalyzer<T, A> {
-        CodebaseAnalyzer { codebase, analysis }
+    fn new(codebase: &T) -> CodebaseAnalyzer<T> {
+        CodebaseAnalyzer { codebase }
     }
 }
 
 type TokenSeq<I, S> = Vec<(SemanticToken<I>, S)>;
 
-impl<'a, T, A, D> Lex<D> for CodebaseAnalyzer<'a, T, A>
+impl<'a, T, D> Lex<D> for CodebaseAnalyzer<'a, T>
 where
     T: Tokenize<D::BufContext> + 'a,
     D: Diagnostics,
@@ -197,10 +161,9 @@ where
     }
 }
 
-impl<'a, T, A, D> Analyze<T::StringRef, D> for CodebaseAnalyzer<'a, T, A>
+impl<'a, T, D> Analyze<T::StringRef, D> for CodebaseAnalyzer<'a, T>
 where
     T: Tokenize<D::BufContext> + 'a,
-    A: Analysis<T::StringRef>,
     D: Diagnostics,
 {
     fn analyze_token_seq<I, B, N>(&mut self, tokens: I, downstream: &mut Downstream<B, N, D>)
@@ -209,21 +172,20 @@ where
         B: Backend<Ident<T::StringRef>, D::Span, N> + ?Sized,
         N: NameTable<Ident<T::StringRef>, MacroEntry = MacroEntry<T::StringRef, D>>,
     {
-        let analysis = self.analysis.clone();
         let session = CompositeSession::new(
             self,
             downstream.backend,
             downstream.names,
             downstream.diagnostics,
         );
-        analysis.run(tokens.into_iter(), session)
+        let actions = semantics::SemanticActions::new(session);
+        crate::syntax::parse_token_seq(tokens.into_iter(), actions);
     }
 }
 
-impl<'a, T, A, D> Frontend<D> for CodebaseAnalyzer<'a, T, A>
+impl<'a, T, D> Frontend<D> for CodebaseAnalyzer<'a, T>
 where
     T: Tokenize<D::BufContext> + 'a,
-    A: Analysis<T::StringRef>,
     D: Diagnostics,
 {
 }
