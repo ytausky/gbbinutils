@@ -36,8 +36,15 @@ where
         diagnostics: &mut D,
     ) -> Result<(), CodebaseError> {
         let mut file_parser = CodebaseAnalyzer::new(codebase);
+        let mut analyzer = SemanticAnalyzer;
         let mut names = HashMapNameTable::new();
-        let mut session = CompositeSession::new(&mut file_parser, self, &mut names, diagnostics);
+        let mut session = CompositeSession::new(
+            &mut file_parser,
+            &mut analyzer,
+            self,
+            &mut names,
+            diagnostics,
+        );
         session.analyze_file(name.into())
     }
 }
@@ -53,7 +60,8 @@ where
 {
 }
 
-pub struct Downstream<'a, B: ?Sized + 'a, N: 'a, D: 'a> {
+pub struct Downstream<'a, C: 'a, B: ?Sized + 'a, N: 'a, D: 'a> {
+    codebase: &'a mut C,
     backend: &'a mut B,
     names: &'a mut N,
     diagnostics: &'a mut D,
@@ -101,15 +109,8 @@ pub(super) enum Literal<S> {
     String(S),
 }
 
-pub(crate) trait Frontend<D: Diagnostics>
-where
-    Self: Lex<D>,
-    Self: Analyze<<Self as Lex<D>>::StringRef, D>,
-{
-}
-
 pub(crate) trait Lex<D: Diagnostics> {
-    type StringRef: AsRef<str> + Clone + Eq + Into<String>;
+    type StringRef: Clone + Eq;
     type TokenIter: Iterator<Item = LexItem<Self::StringRef, D::Span>>;
 
     fn lex_file(
@@ -119,13 +120,16 @@ pub(crate) trait Lex<D: Diagnostics> {
     ) -> Result<Self::TokenIter, CodebaseError>;
 }
 
-pub(crate) trait Analyze<R, D: Diagnostics> {
-    fn analyze_token_seq<I, B, N>(&mut self, tokens: I, downstream: &mut Downstream<B, N, D>)
+pub(crate) trait Analyze<R: Clone + Eq, D: Diagnostics> {
+    fn analyze_token_seq<I, C, B, N>(&mut self, tokens: I, downstream: &mut Downstream<C, B, N, D>)
     where
         I: IntoIterator<Item = LexItem<R, D::Span>>,
+        C: Lex<D, StringRef = R>,
         B: Backend<Ident<R>, D::Span, N> + ?Sized,
         N: NameTable<Ident<R>, MacroEntry = MacroEntry<R, D>>;
 }
+
+struct SemanticAnalyzer;
 
 struct CodebaseAnalyzer<'a, T: 'a> {
     codebase: &'a T,
@@ -145,6 +149,7 @@ type TokenSeq<I, S> = Vec<(SemanticToken<I>, S)>;
 impl<'a, T, D> Lex<D> for CodebaseAnalyzer<'a, T>
 where
     T: Tokenize<D::BufContext> + 'a,
+    T::StringRef: AsRef<str>,
     D: Diagnostics,
 {
     type StringRef = T::StringRef;
@@ -161,18 +166,16 @@ where
     }
 }
 
-impl<'a, T, D> Analyze<T::StringRef, D> for CodebaseAnalyzer<'a, T>
-where
-    T: Tokenize<D::BufContext> + 'a,
-    D: Diagnostics,
-{
-    fn analyze_token_seq<I, B, N>(&mut self, tokens: I, downstream: &mut Downstream<B, N, D>)
+impl<R: Clone + Eq, D: Diagnostics> Analyze<R, D> for SemanticAnalyzer {
+    fn analyze_token_seq<I, C, B, N>(&mut self, tokens: I, downstream: &mut Downstream<C, B, N, D>)
     where
-        I: IntoIterator<Item = LexItem<T::StringRef, D::Span>>,
-        B: Backend<Ident<T::StringRef>, D::Span, N> + ?Sized,
-        N: NameTable<Ident<T::StringRef>, MacroEntry = MacroEntry<T::StringRef, D>>,
+        I: IntoIterator<Item = LexItem<R, D::Span>>,
+        C: Lex<D, StringRef = R>,
+        B: Backend<Ident<R>, D::Span, N> + ?Sized,
+        N: NameTable<Ident<R>, MacroEntry = MacroEntry<R, D>>,
     {
         let session = CompositeSession::new(
+            downstream.codebase,
             self,
             downstream.backend,
             downstream.names,
@@ -183,15 +186,8 @@ where
     }
 }
 
-impl<'a, T, D> Frontend<D> for CodebaseAnalyzer<'a, T>
-where
-    T: Tokenize<D::BufContext> + 'a,
-    D: Diagnostics,
-{
-}
-
 pub(crate) trait StringRef {
-    type StringRef: AsRef<str> + Clone + Eq + Into<String>;
+    type StringRef: Clone + Eq;
 }
 
 trait Tokenize<C: BufContext>
@@ -261,15 +257,13 @@ mod mock {
     use std::collections::HashMap;
     use std::vec::IntoIter;
 
-    pub struct MockFrontend<'a, T, S> {
-        log: &'a RefCell<Vec<T>>,
+    pub struct MockFrontend<S> {
         files: HashMap<String, Vec<LexItem<String, S>>>,
     }
 
-    impl<'a, T, S> MockFrontend<'a, T, S> {
-        pub fn new(log: &'a RefCell<Vec<T>>) -> Self {
+    impl<S> MockFrontend<S> {
+        pub fn new() -> Self {
             Self {
-                log,
                 files: HashMap::new(),
             }
         }
@@ -282,9 +276,8 @@ mod mock {
         }
     }
 
-    impl<'a, T, D> Lex<D> for MockFrontend<'a, T, D::Span>
+    impl<'a, D> Lex<D> for MockFrontend<D::Span>
     where
-        T: From<FrontendEvent<D::Span>>,
         D: Diagnostics,
     {
         type StringRef = String;
@@ -299,14 +292,28 @@ mod mock {
         }
     }
 
-    impl<'a, T, D> Analyze<String, D> for MockFrontend<'a, T, D::Span>
+    pub struct MockAnalyzer<'a, T> {
+        log: &'a RefCell<Vec<T>>,
+    }
+
+    impl<'a, T> MockAnalyzer<'a, T> {
+        pub fn new(log: &'a RefCell<Vec<T>>) -> Self {
+            Self { log }
+        }
+    }
+
+    impl<'a, T, D> Analyze<String, D> for MockAnalyzer<'a, T>
     where
         T: From<FrontendEvent<D::Span>>,
         D: Diagnostics,
     {
-        fn analyze_token_seq<I, B, N>(&mut self, tokens: I, _downstream: &mut Downstream<B, N, D>)
-        where
+        fn analyze_token_seq<I, C, B, N>(
+            &mut self,
+            tokens: I,
+            _downstream: &mut Downstream<C, B, N, D>,
+        ) where
             I: IntoIterator<Item = LexItem<String, D::Span>>,
+            C: Lex<D, StringRef = String>,
             B: Backend<Ident<String>, D::Span, N> + ?Sized,
             N: NameTable<Ident<String>, MacroEntry = MacroEntry<String, D>>,
         {
@@ -314,13 +321,6 @@ mod mock {
                 .borrow_mut()
                 .push(FrontendEvent::AnalyzeTokenSeq(tokens.into_iter().collect()).into())
         }
-    }
-
-    impl<'a, T, D> Frontend<D> for MockFrontend<'a, T, D::Span>
-    where
-        T: From<FrontendEvent<D::Span>>,
-        D: Diagnostics,
-    {
     }
 
     #[derive(Debug, PartialEq)]

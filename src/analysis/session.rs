@@ -1,6 +1,6 @@
 use super::backend::*;
 use super::macros::{DefineMacro, Expand, MacroEntry};
-use super::{Downstream, Frontend, Ident, SemanticToken, StringRef};
+use super::{Analyze, Downstream, Ident, Lex, SemanticToken, StringRef};
 
 use crate::codebase::CodebaseError;
 use crate::diag::span::Span;
@@ -44,22 +44,25 @@ where
 
 pub(super) type MacroArgs<I, S> = Vec<Vec<(SemanticToken<I>, S)>>;
 
-pub(crate) struct CompositeSession<'a, F, B: ?Sized, N, D> {
-    frontend: &'a mut F,
+pub(crate) struct CompositeSession<'a, C, A, B: ?Sized, N, D> {
+    codebase: &'a mut C,
+    analyzer: &'a mut A,
     backend: &'a mut B,
     names: &'a mut N,
     diagnostics: &'a mut D,
 }
 
-impl<'a, F, B: ?Sized, N, D> CompositeSession<'a, F, B, N, D> {
+impl<'a, C, A, B: ?Sized, N, D> CompositeSession<'a, C, A, B, N, D> {
     pub fn new(
-        frontend: &'a mut F,
+        codebase: &'a mut C,
+        analyzer: &'a mut A,
         backend: &'a mut B,
         names: &'a mut N,
         diagnostics: &'a mut D,
-    ) -> CompositeSession<'a, F, B, N, D> {
+    ) -> CompositeSession<'a, C, A, B, N, D> {
         CompositeSession {
-            frontend,
+            codebase,
+            analyzer,
             backend,
             names,
             diagnostics,
@@ -70,6 +73,7 @@ impl<'a, F, B: ?Sized, N, D> CompositeSession<'a, F, B, N, D> {
 macro_rules! downstream {
     ($session:expr) => {
         Downstream {
+            codebase: $session.codebase,
             backend: $session.backend,
             names: $session.names,
             diagnostics: $session.diagnostics,
@@ -77,7 +81,7 @@ macro_rules! downstream {
     };
 }
 
-impl<'a, F, B, N, D> Span for CompositeSession<'a, F, B, N, D>
+impl<'a, F, A, B, N, D> Span for CompositeSession<'a, F, A, B, N, D>
 where
     B: ?Sized,
     D: Span,
@@ -85,16 +89,16 @@ where
     type Span = D::Span;
 }
 
-impl<'a, F, B, N, D> StringRef for CompositeSession<'a, F, B, N, D>
+impl<'a, C, A, B, N, D> StringRef for CompositeSession<'a, C, A, B, N, D>
 where
-    F: Frontend<D>,
+    C: Lex<D>,
     B: ?Sized,
     D: Diagnostics,
 {
-    type StringRef = F::StringRef;
+    type StringRef = C::StringRef;
 }
 
-impl<'a, F, B, N, D> HasValue<D::Span> for CompositeSession<'a, F, B, N, D>
+impl<'a, F, A, B, N, D> HasValue<D::Span> for CompositeSession<'a, F, A, B, N, D>
 where
     B: HasValue<D::Span> + ?Sized,
     D: Span,
@@ -102,11 +106,11 @@ where
     type Value = B::Value;
 }
 
-impl<'a, F, B, N, D> PartialBackend<D::Span> for CompositeSession<'a, F, B, N, D>
+impl<'a, C, A, B, N, D> PartialBackend<D::Span> for CompositeSession<'a, C, A, B, N, D>
 where
-    F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
-    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F::StringRef, D>>,
+    C: Lex<D>,
+    B: Backend<Ident<C::StringRef>, D::Span, N> + ?Sized,
+    N: NameTable<Ident<C::StringRef>, MacroEntry = MacroEntry<C::StringRef, D>>,
     D: Diagnostics,
 {
     fn emit_item(&mut self, item: Item<Self::Value>) {
@@ -118,11 +122,11 @@ where
     }
 }
 
-impl<'a, F, B, N, D> ValueFromSimple<D::Span> for CompositeSession<'a, F, B, N, D>
+impl<'a, C, A, B, N, D> ValueFromSimple<D::Span> for CompositeSession<'a, C, A, B, N, D>
 where
-    F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
-    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F::StringRef, D>>,
+    C: Lex<D>,
+    B: Backend<Ident<C::StringRef>, D::Span, N> + ?Sized,
+    N: NameTable<Ident<C::StringRef>, MacroEntry = MacroEntry<C::StringRef, D>>,
     D: Diagnostics,
 {
     fn from_location_counter(&mut self, span: D::Span) -> Self::Value {
@@ -134,11 +138,11 @@ where
     }
 }
 
-impl<'a, F, B, N, D> ApplyBinaryOperator<D::Span> for CompositeSession<'a, F, B, N, D>
+impl<'a, C, A, B, N, D> ApplyBinaryOperator<D::Span> for CompositeSession<'a, C, A, B, N, D>
 where
-    F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
-    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F::StringRef, D>>,
+    C: Lex<D>,
+    B: Backend<Ident<C::StringRef>, D::Span, N> + ?Sized,
+    N: NameTable<Ident<C::StringRef>, MacroEntry = MacroEntry<C::StringRef, D>>,
     D: Diagnostics,
 {
     fn apply_binary_operator(
@@ -151,28 +155,30 @@ where
     }
 }
 
-impl<'a, F, B, N, D> ValueBuilder<Ident<F::StringRef>, D::Span> for CompositeSession<'a, F, B, N, D>
+impl<'a, C, A, B, N, D> ValueBuilder<Ident<C::StringRef>, D::Span>
+    for CompositeSession<'a, C, A, B, N, D>
 where
-    F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
-    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F::StringRef, D>>,
+    C: Lex<D>,
+    B: Backend<Ident<C::StringRef>, D::Span, N> + ?Sized,
+    N: NameTable<Ident<C::StringRef>, MacroEntry = MacroEntry<C::StringRef, D>>,
     D: Diagnostics,
 {
-    fn from_ident(&mut self, ident: Ident<F::StringRef>, span: D::Span) -> Self::Value {
+    fn from_ident(&mut self, ident: Ident<C::StringRef>, span: D::Span) -> Self::Value {
         self.backend.from_ident(ident, span, self.names)
     }
 }
 
-impl<'a, F, B, N, D> Session for CompositeSession<'a, F, B, N, D>
+impl<'a, C, A, B, N, D> Session for CompositeSession<'a, C, A, B, N, D>
 where
-    F: Frontend<D>,
-    B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
-    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F::StringRef, D>>,
+    C: Lex<D>,
+    A: Analyze<C::StringRef, D>,
+    B: Backend<Ident<C::StringRef>, D::Span, N> + ?Sized,
+    N: NameTable<Ident<C::StringRef>, MacroEntry = MacroEntry<C::StringRef, D>>,
     D: Diagnostics,
 {
     fn analyze_file(&mut self, path: Self::StringRef) -> Result<(), CodebaseError> {
-        let tokens = self.frontend.lex_file(path, self.diagnostics)?;
-        self.frontend
+        let tokens = self.codebase.lex_file(path, self.diagnostics)?;
+        self.analyzer
             .analyze_token_seq(tokens, &mut downstream!(self));
         Ok(())
     }
@@ -205,7 +211,7 @@ where
             }
         };
         if let Some(expansion) = expansion {
-            self.frontend
+            self.analyzer
                 .analyze_token_seq(expansion.map(|(t, s)| (Ok(t), s)), &mut downstream!(self))
         }
     }
@@ -215,7 +221,7 @@ where
     }
 }
 
-impl<'a, F, B, N, D, S> DelegateDiagnostics<S> for CompositeSession<'a, F, B, N, D>
+impl<'a, F, A, B, N, D, S> DelegateDiagnostics<S> for CompositeSession<'a, F, A, B, N, D>
 where
     B: ?Sized,
     D: DownstreamDiagnostics<S>,
@@ -399,7 +405,7 @@ mod tests {
     use super::*;
 
     use crate::analysis::backend::{BackendEvent, HashMapNameTable};
-    use crate::analysis::{FrontendEvent, Literal};
+    use crate::analysis::{FrontendEvent, Literal, MockFrontend};
     use crate::diag::{DiagnosticsEvent, MockSpan};
     use crate::model::{Instruction, Nullary, RelocAtom, RelocExpr};
     use crate::syntax::{Command, Directive, Mnemonic, Token};
@@ -549,13 +555,14 @@ mod tests {
         );
     }
 
-    type MockFrontend<'a, S> = crate::analysis::MockFrontend<'a, Event<S>, S>;
+    type MockAnalyzer<'a, S> = crate::analysis::MockAnalyzer<'a, Event<S>>;
     type MockBackend<'a, S> = crate::analysis::backend::MockBackend<'a, Event<S>>;
     type MockDiagnostics<'a, S> = crate::diag::MockDiagnostics<'a, Event<S>, S>;
     type TestNameTable<'a, S> = HashMapNameTable<MacroEntry<String, MockDiagnostics<'a, S>>>;
     type TestSession<'a, 'b, S> = CompositeSession<
         'b,
-        MockFrontend<'a, S>,
+        MockFrontend<S>,
+        MockAnalyzer<'a, S>,
         MockBackend<'a, S>,
         TestNameTable<'a, S>,
         MockDiagnostics<'a, S>,
@@ -587,7 +594,8 @@ mod tests {
     }
 
     struct Fixture<'a, S: Clone + MockSpan> {
-        frontend: MockFrontend<'a, S>,
+        frontend: MockFrontend<S>,
+        analyzer: MockAnalyzer<'a, S>,
         backend: MockBackend<'a, S>,
         names: TestNameTable<'a, S>,
         diagnostics: MockDiagnostics<'a, S>,
@@ -596,7 +604,8 @@ mod tests {
     impl<'a, S: Clone + MockSpan> Fixture<'a, S> {
         fn new(log: &'a RefCell<Vec<Event<S>>>) -> Self {
             Self {
-                frontend: MockFrontend::new(log),
+                frontend: MockFrontend::new(),
+                analyzer: MockAnalyzer::new(log),
                 backend: MockBackend::new(log),
                 names: HashMapNameTable::new(),
                 diagnostics: MockDiagnostics::new(log),
@@ -606,6 +615,7 @@ mod tests {
         fn session<'b>(&'b mut self) -> TestSession<'a, 'b, S> {
             CompositeSession::new(
                 &mut self.frontend,
+                &mut self.analyzer,
                 &mut self.backend,
                 &mut self.names,
                 &mut self.diagnostics,
