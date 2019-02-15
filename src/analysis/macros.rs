@@ -1,5 +1,5 @@
 use super::backend::{Name, NameTable};
-use super::{Ident, Lex, SemanticToken, Token};
+use super::{Ident, SemanticToken, Token};
 
 use crate::diag::span::{MacroContextFactory, MacroExpansionContext, Span};
 use crate::diag::Diagnostics;
@@ -76,10 +76,8 @@ pub(crate) struct MacroDefData<I> {
     pub body: Vec<SemanticToken<I>>,
 }
 
-pub(crate) type MacroEntry<F, D> = MacroTableEntry<
-    <D as MacroContextFactory<<D as Span>::Span>>::MacroDefId,
-    Rc<MacroDefData<<F as Lex<D>>::StringRef>>,
->;
+pub(crate) type MacroEntry<R, D> =
+    MacroTableEntry<<D as MacroContextFactory<<D as Span>::Span>>::MacroDefId, Rc<MacroDefData<R>>>;
 
 impl<I, F, S> Expand<I, F, S> for MacroTableEntry<F::MacroDefId, Rc<MacroDefData<I>>>
 where

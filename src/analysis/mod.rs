@@ -111,7 +111,7 @@ where
         I: Iterator<Item = LexItem<Id, D::Span>>,
         F: Frontend<D, StringRef = Id>,
         B: Backend<Ident<Id>, D::Span, N> + ?Sized,
-        N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
+        N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F::StringRef, D>>,
         D: Diagnostics;
 }
 
@@ -126,7 +126,7 @@ where
     where
         I: IntoIterator<Item = LexItem<Self::StringRef, D::Span>>,
         B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
-        N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>;
+        N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self::StringRef, D>>;
 }
 
 pub(crate) trait Lex<D: Diagnostics> {
@@ -149,7 +149,7 @@ where
         I: Iterator<Item = LexItem<Id, D::Span>>,
         F: Frontend<D, StringRef = Id>,
         B: Backend<Ident<Id>, D::Span, N> + ?Sized,
-        N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
+        N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F::StringRef, D>>,
         D: Diagnostics,
     {
         let actions = semantics::SemanticActions::new(session);
@@ -203,7 +203,7 @@ where
     where
         I: IntoIterator<Item = LexItem<Self::StringRef, D::Span>>,
         B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
-        N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>,
+        N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self::StringRef, D>>,
     {
         let analysis = self.analysis.clone();
         let session = CompositeSession::new(
@@ -334,7 +334,7 @@ mod mock {
         where
             I: IntoIterator<Item = LexItem<Self::StringRef, D::Span>>,
             B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
-            N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self, D>>,
+            N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self::StringRef, D>>,
         {
             self.log
                 .borrow_mut()

@@ -106,7 +106,7 @@ impl<'a, F, B, N, D> PartialBackend<D::Span> for CompositeSession<'a, F, B, N, D
 where
     F: Frontend<D>,
     B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
-    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
+    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F::StringRef, D>>,
     D: Diagnostics,
 {
     fn emit_item(&mut self, item: Item<Self::Value>) {
@@ -122,7 +122,7 @@ impl<'a, F, B, N, D> ValueFromSimple<D::Span> for CompositeSession<'a, F, B, N, 
 where
     F: Frontend<D>,
     B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
-    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
+    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F::StringRef, D>>,
     D: Diagnostics,
 {
     fn from_location_counter(&mut self, span: D::Span) -> Self::Value {
@@ -138,7 +138,7 @@ impl<'a, F, B, N, D> ApplyBinaryOperator<D::Span> for CompositeSession<'a, F, B,
 where
     F: Frontend<D>,
     B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
-    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
+    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F::StringRef, D>>,
     D: Diagnostics,
 {
     fn apply_binary_operator(
@@ -155,7 +155,7 @@ impl<'a, F, B, N, D> ValueBuilder<Ident<F::StringRef>, D::Span> for CompositeSes
 where
     F: Frontend<D>,
     B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
-    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
+    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F::StringRef, D>>,
     D: Diagnostics,
 {
     fn from_ident(&mut self, ident: Ident<F::StringRef>, span: D::Span) -> Self::Value {
@@ -167,7 +167,7 @@ impl<'a, F, B, N, D> Session for CompositeSession<'a, F, B, N, D>
 where
     F: Frontend<D>,
     B: Backend<Ident<F::StringRef>, D::Span, N> + ?Sized,
-    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F, D>>,
+    N: NameTable<Ident<F::StringRef>, MacroEntry = MacroEntry<F::StringRef, D>>,
     D: Diagnostics,
 {
     fn analyze_file(&mut self, path: Self::StringRef) -> Result<(), CodebaseError> {
@@ -552,8 +552,7 @@ mod tests {
     type MockFrontend<'a, S> = crate::analysis::MockFrontend<'a, Event<S>, S>;
     type MockBackend<'a, S> = crate::analysis::backend::MockBackend<'a, Event<S>>;
     type MockDiagnostics<'a, S> = crate::diag::MockDiagnostics<'a, Event<S>, S>;
-    type TestNameTable<'a, S> =
-        HashMapNameTable<MacroEntry<MockFrontend<'a, S>, MockDiagnostics<'a, S>>>;
+    type TestNameTable<'a, S> = HashMapNameTable<MacroEntry<String, MockDiagnostics<'a, S>>>;
     type TestSession<'a, 'b, S> = CompositeSession<
         'b,
         MockFrontend<'a, S>,
