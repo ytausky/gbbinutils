@@ -121,12 +121,8 @@ struct SemanticAnalysis;
 pub(crate) trait Frontend<D: Diagnostics>
 where
     Self: Lex<D>,
+    Self: Analyze<<Self as Lex<D>>::StringRef, D>,
 {
-    fn analyze_token_seq<I, B, N>(&mut self, tokens: I, downstream: &mut Downstream<B, N, D>)
-    where
-        I: IntoIterator<Item = LexItem<Self::StringRef, D::Span>>,
-        B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
-        N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self::StringRef, D>>;
 }
 
 pub(crate) trait Lex<D: Diagnostics> {
@@ -138,6 +134,14 @@ pub(crate) trait Lex<D: Diagnostics> {
         path: Self::StringRef,
         diagnostics: &mut D,
     ) -> Result<Self::TokenIter, CodebaseError>;
+}
+
+pub(crate) trait Analyze<R, D: Diagnostics> {
+    fn analyze_token_seq<I, B, N>(&mut self, tokens: I, downstream: &mut Downstream<B, N, D>)
+    where
+        I: IntoIterator<Item = LexItem<R, D::Span>>,
+        B: Backend<Ident<R>, D::Span, N> + ?Sized,
+        N: NameTable<Ident<R>, MacroEntry = MacroEntry<R, D>>;
 }
 
 impl<Id> Analysis<Id> for SemanticAnalysis
@@ -193,7 +197,7 @@ where
     }
 }
 
-impl<'a, T, A, D> Frontend<D> for CodebaseAnalyzer<'a, T, A>
+impl<'a, T, A, D> Analyze<T::StringRef, D> for CodebaseAnalyzer<'a, T, A>
 where
     T: Tokenize<D::BufContext> + 'a,
     A: Analysis<T::StringRef>,
@@ -201,9 +205,9 @@ where
 {
     fn analyze_token_seq<I, B, N>(&mut self, tokens: I, downstream: &mut Downstream<B, N, D>)
     where
-        I: IntoIterator<Item = LexItem<Self::StringRef, D::Span>>,
-        B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
-        N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self::StringRef, D>>,
+        I: IntoIterator<Item = LexItem<T::StringRef, D::Span>>,
+        B: Backend<Ident<T::StringRef>, D::Span, N> + ?Sized,
+        N: NameTable<Ident<T::StringRef>, MacroEntry = MacroEntry<T::StringRef, D>>,
     {
         let analysis = self.analysis.clone();
         let session = CompositeSession::new(
@@ -214,6 +218,14 @@ where
         );
         analysis.run(tokens.into_iter(), session)
     }
+}
+
+impl<'a, T, A, D> Frontend<D> for CodebaseAnalyzer<'a, T, A>
+where
+    T: Tokenize<D::BufContext> + 'a,
+    A: Analysis<T::StringRef>,
+    D: Diagnostics,
+{
 }
 
 pub(crate) trait StringRef {
@@ -325,21 +337,28 @@ mod mock {
         }
     }
 
-    impl<'a, T, D> Frontend<D> for MockFrontend<'a, T, D::Span>
+    impl<'a, T, D> Analyze<String, D> for MockFrontend<'a, T, D::Span>
     where
         T: From<FrontendEvent<D::Span>>,
         D: Diagnostics,
     {
         fn analyze_token_seq<I, B, N>(&mut self, tokens: I, _downstream: &mut Downstream<B, N, D>)
         where
-            I: IntoIterator<Item = LexItem<Self::StringRef, D::Span>>,
-            B: Backend<Ident<Self::StringRef>, D::Span, N> + ?Sized,
-            N: NameTable<Ident<Self::StringRef>, MacroEntry = MacroEntry<Self::StringRef, D>>,
+            I: IntoIterator<Item = LexItem<String, D::Span>>,
+            B: Backend<Ident<String>, D::Span, N> + ?Sized,
+            N: NameTable<Ident<String>, MacroEntry = MacroEntry<String, D>>,
         {
             self.log
                 .borrow_mut()
                 .push(FrontendEvent::AnalyzeTokenSeq(tokens.into_iter().collect()).into())
         }
+    }
+
+    impl<'a, T, D> Frontend<D> for MockFrontend<'a, T, D::Span>
+    where
+        T: From<FrontendEvent<D::Span>>,
+        D: Diagnostics,
+    {
     }
 
     #[derive(Debug, PartialEq)]
