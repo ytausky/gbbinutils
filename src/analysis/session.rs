@@ -1,6 +1,6 @@
 use super::backend::*;
 use super::macros::{DefineMacro, Expand, MacroEntry};
-use super::{Analyze, Ident, Lex, PartialSession, SemanticToken, StringRef};
+use super::{Analyze, Ident, Lex, SemanticToken, StringRef};
 
 use crate::codebase::CodebaseError;
 use crate::diag::span::Span;
@@ -68,6 +68,13 @@ impl<'a, C, A, B: ?Sized, N, D> CompositeSession<'a, C, A, B, N, D> {
             diagnostics,
         }
     }
+}
+
+pub struct PartialSession<'a, C: 'a, B: ?Sized + 'a, N: 'a, D: 'a> {
+    pub codebase: &'a mut C,
+    pub backend: &'a mut B,
+    pub names: &'a mut N,
+    pub diagnostics: &'a mut D,
 }
 
 macro_rules! partial {

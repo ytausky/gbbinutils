@@ -2,6 +2,7 @@ pub use crate::syntax::Token;
 
 use self::backend::*;
 use self::macros::{MacroDefData, MacroEntry, MacroTableEntry};
+use self::session::PartialSession;
 
 use crate::analysis::session::*;
 use crate::codebase::{BufId, Codebase, CodebaseError};
@@ -58,13 +59,6 @@ where
         HashMapNameTable<MacroTableEntry<D::MacroDefId, Rc<MacroDefData<String>>>>,
     >,
 {
-}
-
-pub struct PartialSession<'a, C: 'a, B: ?Sized + 'a, N: 'a, D: 'a> {
-    codebase: &'a mut C,
-    backend: &'a mut B,
-    names: &'a mut N,
-    diagnostics: &'a mut D,
 }
 
 type LexItem<T, S> = (Result<SemanticToken<T>, LexError>, S);
