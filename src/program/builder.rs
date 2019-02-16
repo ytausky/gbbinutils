@@ -33,7 +33,7 @@ impl<SR> ProgramBuilder<SR> {
 
     fn lookup<N>(&mut self, name: Ident<String>, table: &mut N) -> NameId
     where
-        N: NameTable<Ident<String>>,
+        N: NameTable<Ident<String>, SymbolEntry = NameId>,
     {
         match table.get(&name) {
             None => {
@@ -80,7 +80,7 @@ impl<S: Clone> PartialBackend<S> for ProgramBuilder<S> {
 impl<S, N> Backend<Ident<String>, S, N> for ProgramBuilder<S>
 where
     S: Clone + 'static,
-    N: NameTable<Ident<String>> + 'static,
+    N: NameTable<Ident<String>, SymbolEntry = NameId> + 'static,
 {
     fn define_symbol(
         &mut self,
@@ -106,7 +106,7 @@ impl<S: Clone> ValueFromSimple<S> for ProgramBuilder<S> {
 
 impl<N, S> ValueFromIdent<N, Ident<String>, S> for ProgramBuilder<S>
 where
-    N: NameTable<Ident<String>>,
+    N: NameTable<Ident<String>, SymbolEntry = NameId>,
     S: Clone,
 {
     fn from_ident(&mut self, ident: Ident<String>, span: S, names: &mut N) -> Self::Value {
@@ -143,7 +143,7 @@ mod tests {
     use crate::program::BinaryObject;
     use std::borrow::Borrow;
 
-    type NameTable = crate::analysis::backend::HashMapNameTable<()>;
+    type NameTable = crate::analysis::backend::HashMapNameTable<(), NameId>;
 
     #[test]
     fn new_object_has_no_chunks() {

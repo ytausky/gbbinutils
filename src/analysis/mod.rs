@@ -20,13 +20,13 @@ mod macros;
 mod semantics;
 mod session;
 
-pub(crate) trait Assemble<D>
+pub(crate) trait Assemble<D, S>
 where
     D: Diagnostics,
     Self: Backend<
         Ident<String>,
         D::Span,
-        HashMapNameTable<MacroTableEntry<D::MacroDefId, Rc<MacroDefData<String>>>>,
+        HashMapNameTable<MacroTableEntry<D::MacroDefId, Rc<MacroDefData<String>>>, S>,
     >,
 {
     fn assemble<C: Codebase>(
@@ -49,13 +49,13 @@ where
     }
 }
 
-impl<B, D> Assemble<D> for B
+impl<B, D, S> Assemble<D, S> for B
 where
     D: Diagnostics,
     B: Backend<
         Ident<String>,
         D::Span,
-        HashMapNameTable<MacroTableEntry<D::MacroDefId, Rc<MacroDefData<String>>>>,
+        HashMapNameTable<MacroTableEntry<D::MacroDefId, Rc<MacroDefData<String>>>, S>,
     >,
 {
 }

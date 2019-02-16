@@ -566,7 +566,7 @@ mod tests {
     type MockAnalyzer<'a, S> = crate::analysis::semantics::MockAnalyzer<'a, Event<S>>;
     type MockBackend<'a, S> = crate::analysis::backend::MockBackend<'a, Event<S>>;
     type MockDiagnostics<'a, S> = crate::diag::MockDiagnostics<'a, Event<S>, S>;
-    type TestNameTable<'a, S> = HashMapNameTable<MacroEntry<String, MockDiagnostics<'a, S>>>;
+    type TestNameTable<'a, S> = HashMapNameTable<MacroEntry<String, MockDiagnostics<'a, S>>, ()>;
     type TestSession<'a, 'b, S> = CompositeSession<
         'b,
         MockCodebase<S>,

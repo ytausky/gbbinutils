@@ -275,7 +275,7 @@ mod tests {
         builder.define_symbol(
             (label.into(), ()),
             RelocAtom::LocationCounter.into(),
-            &mut HashMapNameTable::<()>::new(),
+            &mut HashMapNameTable::<(), NameId>::new(),
         );
         let mut object = builder.into_object();
         object.resolve_symbols();
