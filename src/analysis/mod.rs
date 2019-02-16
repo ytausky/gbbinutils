@@ -73,6 +73,7 @@ pub struct Ident<T> {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Visibility {
     Global,
+    Local,
 }
 
 #[cfg(test)]
@@ -201,7 +202,11 @@ impl<C: BufContext> TokenizedSrc<C> {
 fn mk_ident(spelling: &str) -> Ident<String> {
     Ident {
         name: spelling.to_string(),
-        visibility: Visibility::Global,
+        visibility: if spelling.starts_with('_') {
+            Visibility::Local
+        } else {
+            Visibility::Global
+        },
     }
 }
 
@@ -255,5 +260,20 @@ mod mock {
         ) -> Result<Self::TokenIter, CodebaseError> {
             Ok(self.files.get(&path).unwrap().clone().into_iter())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ident_with_underscore_prefix_is_local() {
+        assert_eq!(mk_ident("_loop").visibility, Visibility::Local)
+    }
+
+    #[test]
+    fn ident_without_underscore_prefix_is_global() {
+        assert_eq!(mk_ident("start").visibility, Visibility::Global)
     }
 }
