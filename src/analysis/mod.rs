@@ -192,12 +192,16 @@ type MkIdent = for<'a> fn(&'a str) -> Ident<String>;
 impl<C: BufContext> TokenizedSrc<C> {
     fn new(src: Rc<str>, context: C) -> TokenizedSrc<C> {
         TokenizedSrc {
-            tokens: crate::syntax::tokenize(src, |spelling| Ident {
-                name: spelling.to_string(),
-                visibility: Visibility::Global,
-            }),
+            tokens: crate::syntax::tokenize(src, mk_ident),
             context,
         }
+    }
+}
+
+fn mk_ident(spelling: &str) -> Ident<String> {
+    Ident {
+        name: spelling.to_string(),
+        visibility: Visibility::Global,
     }
 }
 
