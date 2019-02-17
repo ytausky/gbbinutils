@@ -143,7 +143,7 @@ mod tests {
     use crate::program::BinaryObject;
     use std::borrow::Borrow;
 
-    type NameTable = crate::analysis::backend::HashMapNameTable<(), NameId>;
+    type NameTable = crate::analysis::backend::BasicNameTable<(), NameId>;
 
     #[test]
     fn new_object_has_no_chunks() {

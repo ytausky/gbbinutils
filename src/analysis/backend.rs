@@ -16,7 +16,7 @@ pub trait NameTable<I> {
     fn insert(&mut self, ident: I, entry: Name<Self::MacroEntry, Self::SymbolEntry>);
 }
 
-pub struct HashMapNameTable<M, S> {
+pub struct BasicNameTable<M, S> {
     table: HashMap<String, Name<M, S>>,
 }
 
@@ -25,15 +25,15 @@ pub enum Name<M, S> {
     Symbol(S),
 }
 
-impl<M, S> HashMapNameTable<M, S> {
+impl<M, S> BasicNameTable<M, S> {
     pub fn new() -> Self {
-        HashMapNameTable {
+        BasicNameTable {
             table: HashMap::new(),
         }
     }
 }
 
-impl<M, S> NameTable<Ident<String>> for HashMapNameTable<M, S> {
+impl<M, S> NameTable<Ident<String>> for BasicNameTable<M, S> {
     type MacroEntry = M;
     type SymbolEntry = S;
 

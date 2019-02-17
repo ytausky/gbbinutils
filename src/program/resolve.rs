@@ -224,7 +224,7 @@ impl Width {
 mod tests {
     use super::*;
 
-    use crate::analysis::backend::{Backend, HashMapNameTable, PartialBackend};
+    use crate::analysis::backend::{Backend, BasicNameTable, PartialBackend};
     use crate::diag::IgnoreDiagnostics;
     use crate::program::{Chunk, ProgramBuilder, ValueId};
 
@@ -275,7 +275,7 @@ mod tests {
         builder.define_symbol(
             (label.into(), ()),
             RelocAtom::LocationCounter.into(),
-            &mut HashMapNameTable::<(), NameId>::new(),
+            &mut BasicNameTable::<(), NameId>::new(),
         );
         let mut object = builder.into_object();
         object.resolve_symbols();

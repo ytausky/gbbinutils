@@ -26,7 +26,7 @@ where
     Self: Backend<
         Ident<String>,
         D::Span,
-        HashMapNameTable<MacroTableEntry<D::MacroDefId, Rc<MacroDefData<String>>>, S>,
+        BasicNameTable<MacroTableEntry<D::MacroDefId, Rc<MacroDefData<String>>>, S>,
     >,
 {
     fn assemble<C: Codebase>(
@@ -37,7 +37,7 @@ where
     ) -> Result<(), CodebaseError> {
         let mut file_parser = CodebaseAnalyzer::new(codebase);
         let mut analyzer = semantics::SemanticAnalyzer;
-        let mut names = HashMapNameTable::new();
+        let mut names = BasicNameTable::new();
         let mut session = CompositeSession::new(
             &mut file_parser,
             &mut analyzer,
@@ -55,7 +55,7 @@ where
     B: Backend<
         Ident<String>,
         D::Span,
-        HashMapNameTable<MacroTableEntry<D::MacroDefId, Rc<MacroDefData<String>>>, S>,
+        BasicNameTable<MacroTableEntry<D::MacroDefId, Rc<MacroDefData<String>>>, S>,
     >,
 {
 }

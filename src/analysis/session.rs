@@ -411,7 +411,7 @@ mod mock {
 mod tests {
     use super::*;
 
-    use crate::analysis::backend::{BackendEvent, HashMapNameTable};
+    use crate::analysis::backend::{BackendEvent, BasicNameTable};
     use crate::analysis::semantics::AnalyzerEvent;
     use crate::analysis::{Literal, MockCodebase};
     use crate::diag::{DiagnosticsEvent, MockSpan};
@@ -566,7 +566,7 @@ mod tests {
     type MockAnalyzer<'a, S> = crate::analysis::semantics::MockAnalyzer<'a, Event<S>>;
     type MockBackend<'a, S> = crate::analysis::backend::MockBackend<'a, Event<S>>;
     type MockDiagnostics<'a, S> = crate::diag::MockDiagnostics<'a, Event<S>, S>;
-    type TestNameTable<'a, S> = HashMapNameTable<MacroEntry<String, MockDiagnostics<'a, S>>, ()>;
+    type TestNameTable<'a, S> = BasicNameTable<MacroEntry<String, MockDiagnostics<'a, S>>, ()>;
     type TestSession<'a, 'b, S> = CompositeSession<
         'b,
         MockCodebase<S>,
@@ -615,7 +615,7 @@ mod tests {
                 codebase: MockCodebase::new(),
                 analyzer: MockAnalyzer::new(log),
                 backend: MockBackend::new(log),
-                names: HashMapNameTable::new(),
+                names: BasicNameTable::new(),
                 diagnostics: MockDiagnostics::new(log),
             }
         }
