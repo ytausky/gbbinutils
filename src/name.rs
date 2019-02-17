@@ -8,6 +8,7 @@ pub trait NameTable<I> {
     fn insert(&mut self, ident: I, entry: Name<Self::MacroEntry, Self::SymbolEntry>);
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub enum Name<M, S> {
     Macro(M),
     Symbol(S),
@@ -81,6 +82,37 @@ impl<M, S> NameTable<Ident<String>> for BasicNameTable<M, S> {
     }
 }
 
+pub struct BiLevelNameTable<M, S> {
+    global: BasicNameTable<M, S>,
+}
+
+impl<M, S> BiLevelNameTable<M, S> {
+    pub fn new() -> Self {
+        BiLevelNameTable {
+            global: BasicNameTable::new(),
+        }
+    }
+}
+
+impl<M, S> NameTable<Ident<String>> for BiLevelNameTable<M, S> {
+    type MacroEntry = M;
+    type SymbolEntry = S;
+
+    fn get(&self, ident: &Ident<String>) -> Option<&Name<Self::MacroEntry, Self::SymbolEntry>> {
+        match ident.visibility {
+            Visibility::Global => self.global.get(ident),
+            Visibility::Local => unimplemented!(),
+        }
+    }
+
+    fn insert(&mut self, ident: Ident<String>, entry: Name<Self::MacroEntry, Self::SymbolEntry>) {
+        match ident.visibility {
+            Visibility::Global => self.global.insert(ident, entry),
+            Visibility::Local => unimplemented!(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -93,5 +125,25 @@ mod tests {
     #[test]
     fn ident_without_underscore_prefix_is_global() {
         assert_eq!(mk_ident("start").visibility, Visibility::Global)
+    }
+
+    #[test]
+    #[should_panic]
+    fn panic_when_first_definition_is_local() {
+        let ident = Ident {
+            name: "_loop".to_string(),
+            visibility: Visibility::Local,
+        };
+        let mut table = BiLevelNameTable::<(), _>::new();
+        table.insert(ident, Name::Symbol(()));
+    }
+
+    #[test]
+    fn retrieve_global_name() {
+        let ident = Ident::from("start");
+        let mut table = BiLevelNameTable::<(), _>::new();
+        let entry = Name::Symbol(42);
+        table.insert(ident.clone(), entry.clone());
+        assert_eq!(table.get(&ident), Some(&entry))
     }
 }

@@ -6,7 +6,7 @@ use self::session::*;
 
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diag::*;
-use crate::name::{BasicNameTable, Ident};
+use crate::name::{BiLevelNameTable, Ident};
 use crate::span::BufContext;
 use crate::syntax::lexer::{LexError, Lexer};
 use crate::syntax::*;
@@ -27,7 +27,7 @@ where
     Self: Backend<
         Ident<String>,
         D::Span,
-        BasicNameTable<MacroTableEntry<D::MacroDefId, Rc<MacroDefData<String>>>, S>,
+        BiLevelNameTable<MacroTableEntry<D::MacroDefId, Rc<MacroDefData<String>>>, S>,
     >,
 {
     fn assemble<C: Codebase>(
@@ -38,7 +38,7 @@ where
     ) -> Result<(), CodebaseError> {
         let mut file_parser = CodebaseAnalyzer::new(codebase);
         let mut analyzer = semantics::SemanticAnalyzer;
-        let mut names = BasicNameTable::new();
+        let mut names = BiLevelNameTable::new();
         let mut session = CompositeSession::new(
             &mut file_parser,
             &mut analyzer,
@@ -56,7 +56,7 @@ where
     B: Backend<
         Ident<String>,
         D::Span,
-        BasicNameTable<MacroTableEntry<D::MacroDefId, Rc<MacroDefData<String>>>, S>,
+        BiLevelNameTable<MacroTableEntry<D::MacroDefId, Rc<MacroDefData<String>>>, S>,
     >,
 {
 }
