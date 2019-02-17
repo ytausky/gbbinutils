@@ -71,12 +71,14 @@ impl<M, S> NameTable<Ident<String>> for BasicNameTable<M, S> {
 
 pub struct BiLevelNameTable<M, S> {
     global: BasicNameTable<M, S>,
+    local: Option<BasicNameTable<M, S>>,
 }
 
 impl<M, S> BiLevelNameTable<M, S> {
     pub fn new() -> Self {
         BiLevelNameTable {
             global: BasicNameTable::new(),
+            local: None,
         }
     }
 }
@@ -88,14 +90,17 @@ impl<M, S> NameTable<Ident<String>> for BiLevelNameTable<M, S> {
     fn get(&self, ident: &Ident<String>) -> Option<&Name<Self::MacroEntry, Self::SymbolEntry>> {
         match ident.visibility {
             Visibility::Global => self.global.get(ident),
-            Visibility::Local => unimplemented!(),
+            Visibility::Local => self.local.as_ref().unwrap().get(ident),
         }
     }
 
     fn insert(&mut self, ident: Ident<String>, entry: Name<Self::MacroEntry, Self::SymbolEntry>) {
         match ident.visibility {
-            Visibility::Global => self.global.insert(ident, entry),
-            Visibility::Local => unimplemented!(),
+            Visibility::Global => {
+                self.local.replace(BasicNameTable::new());
+                self.global.insert(ident, entry)
+            }
+            Visibility::Local => self.local.as_mut().unwrap().insert(ident, entry),
         }
     }
 }
@@ -128,5 +133,23 @@ mod tests {
         let entry = Name::Symbol(42);
         table.insert(name.into(), entry.clone());
         assert_eq!(table.get(&name.into()), Some(&entry))
+    }
+
+    #[test]
+    fn retrieve_local_name() {
+        let mut table = BiLevelNameTable::<(), _>::new();
+        let entry = Name::Symbol(42);
+        table.insert("global".into(), Name::Symbol(0));
+        table.insert("_local".into(), entry.clone());
+        assert_eq!(table.get(&"_local".into()), Some(&entry))
+    }
+
+    #[test]
+    fn local_name_not_accessible_after_new_global_name() {
+        let mut table = BiLevelNameTable::<(), _>::new();
+        table.insert("global1".into(), Name::Symbol(0));
+        table.insert("_local".into(), Name::Symbol(42));
+        table.insert("global2".into(), Name::Symbol(1));
+        assert_eq!(table.get(&"_local".into()), None)
     }
 }
