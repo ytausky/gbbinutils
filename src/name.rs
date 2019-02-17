@@ -38,22 +38,9 @@ pub fn mk_ident(spelling: &str) -> Ident<String> {
 }
 
 #[cfg(test)]
-impl<T> From<T> for Ident<T> {
-    fn from(name: T) -> Ident<T> {
-        Ident {
-            name,
-            visibility: Visibility::Global,
-        }
-    }
-}
-
-#[cfg(test)]
 impl From<&str> for Ident<String> {
     fn from(name: &str) -> Ident<String> {
-        Ident {
-            name: name.into(),
-            visibility: Visibility::Global,
-        }
+        mk_ident(name)
     }
 }
 
@@ -130,20 +117,16 @@ mod tests {
     #[test]
     #[should_panic]
     fn panic_when_first_definition_is_local() {
-        let ident = Ident {
-            name: "_loop".to_string(),
-            visibility: Visibility::Local,
-        };
         let mut table = BiLevelNameTable::<(), _>::new();
-        table.insert(ident, Name::Symbol(()));
+        table.insert("_loop".into(), Name::Symbol(()));
     }
 
     #[test]
     fn retrieve_global_name() {
-        let ident = Ident::from("start");
+        let name = "start";
         let mut table = BiLevelNameTable::<(), _>::new();
         let entry = Name::Symbol(42);
-        table.insert(ident.clone(), entry.clone());
-        assert_eq!(table.get(&ident), Some(&entry))
+        table.insert(name.into(), entry.clone());
+        assert_eq!(table.get(&name.into()), Some(&entry))
     }
 }

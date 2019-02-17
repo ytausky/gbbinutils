@@ -226,7 +226,7 @@ mod tests {
             range: n,
             context: Rc::clone(&buf),
         };
-        let body = Token::Ident(Ident::<&str>::from("a"));
+        let body = Token::Ident("a".into());
         let def_id = Rc::new(crate::span::MacroDef {
             name: mk_span(0),
             params: vec![],
@@ -277,7 +277,7 @@ mod tests {
             context: Rc::clone(&buf),
         };
         let body = vec![
-            Token::Ident(Ident::<&str>::from("a")),
+            Token::Ident("a".into()),
             Token::Ident("x".into()),
             Token::Ident("b".into()),
         ];
