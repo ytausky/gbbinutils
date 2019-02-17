@@ -6,6 +6,7 @@ use self::session::*;
 
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diag::*;
+use crate::name::{BasicNameTable, Ident};
 use crate::span::BufContext;
 use crate::syntax::lexer::{LexError, Lexer};
 use crate::syntax::*;
@@ -63,38 +64,6 @@ where
 type LexItem<T, S> = (Result<SemanticToken<T>, LexError>, S);
 
 pub(crate) type SemanticToken<T> = Token<Ident<T>, Literal<T>, Command>;
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Ident<T> {
-    pub name: T,
-    visibility: Visibility,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Visibility {
-    Global,
-    Local,
-}
-
-#[cfg(test)]
-impl<T> From<T> for Ident<T> {
-    fn from(name: T) -> Ident<T> {
-        Ident {
-            name,
-            visibility: Visibility::Global,
-        }
-    }
-}
-
-#[cfg(test)]
-impl From<&str> for Ident<String> {
-    fn from(name: &str) -> Ident<String> {
-        Ident {
-            name: name.into(),
-            visibility: Visibility::Global,
-        }
-    }
-}
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum Literal<S> {
@@ -193,20 +162,9 @@ type MkIdent = for<'a> fn(&'a str) -> Ident<String>;
 impl<C: BufContext> TokenizedSrc<C> {
     fn new(src: Rc<str>, context: C) -> TokenizedSrc<C> {
         TokenizedSrc {
-            tokens: crate::syntax::tokenize(src, mk_ident),
+            tokens: crate::syntax::tokenize(src, crate::name::mk_ident),
             context,
         }
-    }
-}
-
-fn mk_ident(spelling: &str) -> Ident<String> {
-    Ident {
-        name: spelling.to_string(),
-        visibility: if spelling.starts_with('_') {
-            Visibility::Local
-        } else {
-            Visibility::Global
-        },
     }
 }
 
@@ -260,20 +218,5 @@ mod mock {
         ) -> Result<Self::TokenIter, CodebaseError> {
             Ok(self.files.get(&path).unwrap().clone().into_iter())
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn ident_with_underscore_prefix_is_local() {
-        assert_eq!(mk_ident("_loop").visibility, Visibility::Local)
-    }
-
-    #[test]
-    fn ident_without_underscore_prefix_is_global() {
-        assert_eq!(mk_ident("start").visibility, Visibility::Global)
     }
 }

@@ -1,6 +1,6 @@
 use self::invoke::MacroInvocationActions;
 
-use super::backend::{Backend, NameTable};
+use super::backend::Backend;
 use super::macros::MacroEntry;
 use super::session::{CompositeSession, PartialSession, Session, ValueBuilder};
 use super::{Ident, Lex, LexItem, Literal, SemanticToken};
@@ -9,6 +9,7 @@ use crate::diag::span::{MergeSpans, Source, StripSpan};
 use crate::diag::*;
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
 use crate::model::Item;
+use crate::name::NameTable;
 use crate::syntax::{self, keyword::*, ExprAtom, Operator, UnaryOperator};
 
 #[cfg(test)]

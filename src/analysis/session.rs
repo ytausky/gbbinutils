@@ -1,13 +1,14 @@
 use super::backend::*;
 use super::macros::{DefineMacro, Expand, MacroEntry};
 use super::semantics::Analyze;
-use super::{Ident, Lex, SemanticToken, StringRef};
+use super::{Lex, SemanticToken, StringRef};
 
 use crate::codebase::CodebaseError;
 use crate::diag::span::Span;
 use crate::diag::*;
 use crate::expr::BinaryOperator;
 use crate::model::Item;
+use crate::name::{Ident, Name, NameTable};
 
 #[cfg(test)]
 pub(crate) use self::mock::*;
@@ -411,11 +412,12 @@ mod mock {
 mod tests {
     use super::*;
 
-    use crate::analysis::backend::{BackendEvent, BasicNameTable};
+    use crate::analysis::backend::BackendEvent;
     use crate::analysis::semantics::AnalyzerEvent;
     use crate::analysis::{Literal, MockCodebase};
     use crate::diag::{DiagnosticsEvent, MockSpan};
     use crate::model::{Instruction, Nullary, RelocAtom, RelocExpr};
+    use crate::name::BasicNameTable;
     use crate::syntax::{Command, Directive, Mnemonic, Token};
 
     use std::cell::RefCell;

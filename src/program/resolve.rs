@@ -224,8 +224,9 @@ impl Width {
 mod tests {
     use super::*;
 
-    use crate::analysis::backend::{Backend, BasicNameTable, PartialBackend};
+    use crate::analysis::backend::{Backend, PartialBackend};
     use crate::diag::IgnoreDiagnostics;
+    use crate::name::BasicNameTable;
     use crate::program::{Chunk, ProgramBuilder, ValueId};
 
     #[test]

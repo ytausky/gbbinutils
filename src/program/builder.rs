@@ -1,9 +1,9 @@
 use super::{Chunk, NameId, Node, Program, RelocExpr, Value};
 
 use crate::analysis::backend::*;
-use crate::analysis::Ident;
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
 use crate::model::{Item, RelocAtom};
+use crate::name::{Ident, Name, NameTable};
 
 pub struct ProgramBuilder<SR> {
     program: Program<SR>,
@@ -143,7 +143,7 @@ mod tests {
     use crate::program::BinaryObject;
     use std::borrow::Borrow;
 
-    type NameTable = crate::analysis::backend::BasicNameTable<(), NameId>;
+    type NameTable = crate::name::BasicNameTable<(), NameId>;
 
     #[test]
     fn new_object_has_no_chunks() {

@@ -1,8 +1,8 @@
-use super::backend::{Name, NameTable};
-use super::{Ident, SemanticToken, Token};
+use super::{SemanticToken, Token};
 
 use crate::diag::span::{MacroContextFactory, MacroExpansionContext, Span};
 use crate::diag::Diagnostics;
+use crate::name::{Ident, Name, NameTable};
 
 use std::rc::Rc;
 

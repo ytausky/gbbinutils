@@ -14,6 +14,7 @@ mod codebase;
 pub mod diag;
 mod expr;
 mod model;
+mod name;
 mod program;
 mod syntax;
 

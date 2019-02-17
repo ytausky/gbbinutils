@@ -1,50 +1,9 @@
-use crate::analysis::Ident;
 use crate::expr::BinaryOperator;
 use crate::model::Item;
 use crate::span::Source;
 
-use std::collections::HashMap;
-
 #[cfg(test)]
 pub use mock::*;
-
-pub trait NameTable<I> {
-    type MacroEntry;
-    type SymbolEntry;
-
-    fn get(&self, ident: &I) -> Option<&Name<Self::MacroEntry, Self::SymbolEntry>>;
-    fn insert(&mut self, ident: I, entry: Name<Self::MacroEntry, Self::SymbolEntry>);
-}
-
-pub struct BasicNameTable<M, S> {
-    table: HashMap<String, Name<M, S>>,
-}
-
-pub enum Name<M, S> {
-    Macro(M),
-    Symbol(S),
-}
-
-impl<M, S> BasicNameTable<M, S> {
-    pub fn new() -> Self {
-        BasicNameTable {
-            table: HashMap::new(),
-        }
-    }
-}
-
-impl<M, S> NameTable<Ident<String>> for BasicNameTable<M, S> {
-    type MacroEntry = M;
-    type SymbolEntry = S;
-
-    fn get(&self, ident: &Ident<String>) -> Option<&Name<Self::MacroEntry, Self::SymbolEntry>> {
-        self.table.get(&ident.name)
-    }
-
-    fn insert(&mut self, ident: Ident<String>, entry: Name<Self::MacroEntry, Self::SymbolEntry>) {
-        self.table.insert(ident.name, entry);
-    }
-}
 
 pub trait HasValue<S: Clone> {
     type Value: Source<Span = S>;
@@ -103,6 +62,7 @@ mod mock {
 
     use crate::expr::{Expr, ExprVariant};
     use crate::model::{RelocAtom, RelocExpr};
+    use crate::name::Ident;
 
     use std::cell::RefCell;
 
