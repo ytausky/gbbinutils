@@ -111,18 +111,19 @@ pub struct BinaryObject {
 
 impl BinaryObject {
     pub fn into_rom(self) -> Rom {
+        let default = 0xffu8;
         let mut data: Vec<u8> = Vec::new();
         for chunk in self.sections {
             if !chunk.data.is_empty() {
                 let end = chunk.origin + chunk.data.len();
                 if data.len() < end {
-                    data.resize(end, 0x00)
+                    data.resize(end, default)
                 }
                 data[chunk.origin..end].copy_from_slice(&chunk.data)
             }
         }
         if data.len() < MIN_ROM_LEN {
-            data.resize(MIN_ROM_LEN, 0x00)
+            data.resize(MIN_ROM_LEN, default)
         }
         Rom {
             data: data.into_boxed_slice(),
@@ -146,12 +147,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn empty_object_converted_to_all_zero_rom() {
+    fn empty_object_converted_to_all_0xff_rom() {
         let object = BinaryObject {
             sections: Vec::new(),
         };
         let rom = object.into_rom();
-        assert_eq!(*rom.data, [0x00u8; MIN_ROM_LEN][..])
+        assert_eq!(*rom.data, [0xffu8; MIN_ROM_LEN][..])
     }
 
     #[test]
@@ -165,7 +166,7 @@ mod tests {
             }],
         };
         let rom = object.into_rom();
-        let mut expected = [0x00u8; MIN_ROM_LEN];
+        let mut expected = [0xffu8; MIN_ROM_LEN];
         expected[origin] = byte;
         assert_eq!(*rom.data, expected[..])
     }
