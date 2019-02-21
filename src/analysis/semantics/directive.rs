@@ -44,6 +44,7 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
             Directive::Equ => self.analyze_equ(),
             Directive::Include => self.analyze_include(),
             Directive::Org => self.analyze_org(),
+            Directive::Section => unimplemented!(),
         }
     }
 

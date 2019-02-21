@@ -336,6 +336,7 @@ const KEYWORDS: &[(&str, Keyword)] = &[
     ("rrca", Keyword::Command(Mnemonic(Rrca))),
     ("rst", Keyword::Command(Mnemonic(Rst))),
     ("sbc", Keyword::Command(Mnemonic(Sbc))),
+    ("section", Keyword::Command(Directive(Section))),
     ("set", Keyword::Command(Mnemonic(Set))),
     ("sla", Keyword::Command(Mnemonic(Sla))),
     ("sp", Keyword::Operand(Sp)),

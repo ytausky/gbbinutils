@@ -24,6 +24,7 @@ pub enum Directive {
     Equ,
     Include,
     Org,
+    Section,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
