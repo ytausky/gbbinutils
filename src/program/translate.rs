@@ -1,5 +1,5 @@
 use super::context::{EvalContext, SymbolTable};
-use super::{BinarySection, Chunk, Node, RelocExpr};
+use super::{BinarySection, Node, RelocExpr, Section};
 
 use crate::diag::{BackendDiagnostics, CompactDiagnostic, Message};
 use crate::model::Width;
@@ -7,7 +7,7 @@ use crate::span::Source;
 
 use std::vec::IntoIter;
 
-impl<S: Clone> Chunk<S> {
+impl<S: Clone> Section<S> {
     pub fn translate(
         &self,
         context: &mut EvalContext<&SymbolTable>,
@@ -178,7 +178,7 @@ mod tests {
     }
 
     fn test_translation_of_ld_inline_addr(opcode: u8, addr: u16, expected: impl Borrow<[u8]>) {
-        let actual = translate_chunk_item(Node::LdInlineAddr(
+        let actual = translate_section_item(Node::LdInlineAddr(
             opcode,
             RelocAtom::Literal(addr.into()).into(),
         ));
@@ -187,13 +187,13 @@ mod tests {
 
     #[test]
     fn translate_embedded() {
-        let actual = translate_chunk_item(Node::Embedded(0b01_000_110, 4.into()));
+        let actual = translate_section_item(Node::Embedded(0b01_000_110, 4.into()));
         assert_eq!(actual, [0x66])
     }
 
     #[test]
     fn translate_expr_with_subtraction() {
-        let actual = translate_chunk_item(Node::Expr(
+        let actual = translate_section_item(Node::Expr(
             ExprVariant::Binary(
                 BinaryOperator::Minus,
                 Box::new(4.into()),
@@ -205,7 +205,7 @@ mod tests {
         assert_eq!(actual, [0x01])
     }
 
-    fn translate_chunk_item<S: Clone + PartialEq>(item: Node<S>) -> Vec<u8> {
+    fn translate_section_item<S: Clone + PartialEq>(item: Node<S>) -> Vec<u8> {
         use crate::diag;
         use crate::program::resolve::Value;
         item.translate(
@@ -219,45 +219,45 @@ mod tests {
     }
 
     #[test]
-    fn set_origin_of_translated_chunk() {
+    fn set_origin_of_translated_section() {
         let addr = 0x7ff0;
-        let chunk = Chunk {
+        let section = Section {
             origin: Some(addr.into()),
             size: ValueId(0),
             items: Vec::new(),
         };
-        let translated = translate_without_context(chunk);
+        let translated = translate_without_context(section);
         assert_eq!(translated.origin, addr as usize)
     }
 
     #[test]
     fn translate_expr_with_location_counter() {
         let byte = 0x42;
-        let mut chunk = Chunk::new(ValueId(0));
-        chunk.items.extend(vec![
+        let mut section = Section::new(ValueId(0));
+        section.items.extend(vec![
             Node::Byte(byte),
             Node::Expr(RelocAtom::LocationCounter.into(), Width::Byte),
         ]);
-        let binary = translate_without_context(chunk);
+        let binary = translate_without_context(section);
         assert_eq!(binary.data, [byte, 0x02])
     }
 
     #[test]
-    fn location_counter_starts_from_chunk_origin() {
-        let mut chunk = Chunk::new(ValueId(0));
-        chunk.origin = Some(0xffe1.into());
-        chunk
+    fn location_counter_starts_from_section_origin() {
+        let mut section = Section::new(ValueId(0));
+        section.origin = Some(0xffe1.into());
+        section
             .items
             .push(Node::Expr(RelocAtom::LocationCounter.into(), Width::Word));
-        let binary = translate_without_context(chunk);
+        let binary = translate_without_context(section);
         assert_eq!(binary.data, [0xe3, 0xff])
     }
 
-    fn translate_without_context<S: Clone + PartialEq>(chunk: Chunk<S>) -> BinarySection {
+    fn translate_without_context<S: Clone + PartialEq>(section: Section<S>) -> BinarySection {
         let mut context = EvalContext {
             symbols: &SymbolTable::new(),
             location: 0.into(),
         };
-        chunk.translate(&mut context, &mut IgnoreDiagnostics::new())
+        section.translate(&mut context, &mut IgnoreDiagnostics::new())
     }
 }

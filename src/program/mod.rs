@@ -21,11 +21,11 @@ struct ValueId(usize);
 pub struct NameId(usize);
 
 pub struct Program<S> {
-    chunks: Vec<Chunk<S>>,
+    sections: Vec<Section<S>>,
     symbols: SymbolTable,
 }
 
-struct Chunk<S> {
+struct Section<S> {
     origin: Option<RelocExpr<S>>,
     size: ValueId,
     items: Vec<Node<S>>,
@@ -43,14 +43,14 @@ enum Node<S> {
 impl<S> Program<S> {
     pub fn new() -> Program<S> {
         Program {
-            chunks: Vec::new(),
+            sections: Vec::new(),
             symbols: SymbolTable::new(),
         }
     }
 
-    fn add_chunk(&mut self) {
+    fn add_section(&mut self) {
         let size_symbol_id = self.symbols.new_symbol(Value::Unknown);
-        self.chunks.push(Chunk::new(size_symbol_id))
+        self.sections.push(Section::new(size_symbol_id))
     }
 }
 
@@ -63,17 +63,17 @@ impl<S: Clone> Program<S> {
         };
         BinaryObject {
             sections: self
-                .chunks
+                .sections
                 .into_iter()
-                .map(|chunk| chunk.translate(&mut context, diagnostics))
+                .map(|section| section.translate(&mut context, diagnostics))
                 .collect(),
         }
     }
 }
 
-impl<S> Chunk<S> {
-    pub fn new(size: ValueId) -> Chunk<S> {
-        Chunk {
+impl<S> Section<S> {
+    pub fn new(size: ValueId) -> Section<S> {
+        Section {
             origin: None,
             size,
             items: Vec::new(),
@@ -81,7 +81,7 @@ impl<S> Chunk<S> {
     }
 }
 
-impl<S: Clone> Chunk<S> {
+impl<S: Clone> Section<S> {
     fn traverse<ST, F>(&self, context: &mut EvalContext<ST>, mut f: F) -> (Value, Value)
     where
         ST: Borrow<SymbolTable>,
@@ -113,13 +113,13 @@ impl BinaryObject {
     pub fn into_rom(self) -> Rom {
         let default = 0xffu8;
         let mut data: Vec<u8> = Vec::new();
-        for chunk in self.sections {
-            if !chunk.data.is_empty() {
-                let end = chunk.origin + chunk.data.len();
+        for section in self.sections {
+            if !section.data.is_empty() {
+                let end = section.origin + section.data.len();
                 if data.len() < end {
                     data.resize(end, default)
                 }
-                data[chunk.origin..end].copy_from_slice(&chunk.data)
+                data[section.origin..end].copy_from_slice(&section.data)
             }
         }
         if data.len() < MIN_ROM_LEN {
@@ -156,7 +156,7 @@ mod tests {
     }
 
     #[test]
-    fn chunk_placed_in_rom_starting_at_origin() {
+    fn section_placed_in_rom_starting_at_origin() {
         let byte = 0x42;
         let origin = 0x150;
         let object = BinaryObject {
@@ -172,7 +172,7 @@ mod tests {
     }
 
     #[test]
-    fn empty_chunk_does_not_extend_rom() {
+    fn empty_section_does_not_extend_rom() {
         let origin = MIN_ROM_LEN + 1;
         let object = BinaryObject {
             sections: vec![BinarySection {

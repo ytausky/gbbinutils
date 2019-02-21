@@ -1,4 +1,4 @@
-use super::{Chunk, NameId, Node, Program, RelocExpr, Value};
+use super::{NameId, Node, Program, RelocExpr, Section, Value};
 
 use crate::analysis::backend::*;
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
@@ -12,7 +12,7 @@ pub struct ProgramBuilder<SR> {
 
 enum BuilderState<S> {
     Pending { origin: Option<RelocExpr<S>> },
-    InChunk(usize),
+    InSection(usize),
 }
 
 impl<SR> ProgramBuilder<SR> {
@@ -28,7 +28,7 @@ impl<SR> ProgramBuilder<SR> {
     }
 
     fn push(&mut self, node: Node<SR>) {
-        self.current_chunk().items.push(node)
+        self.current_section().items.push(node)
     }
 
     fn lookup<N>(&mut self, name: Ident<String>, table: &mut N) -> NameId
@@ -46,19 +46,19 @@ impl<SR> ProgramBuilder<SR> {
         }
     }
 
-    fn current_chunk(&mut self) -> &mut Chunk<SR> {
+    fn current_section(&mut self) -> &mut Section<SR> {
         match self.state.take().unwrap() {
             BuilderState::Pending { origin } => {
-                self.program.add_chunk();
-                let index = self.program.chunks.len() - 1;
-                self.state = Some(BuilderState::InChunk(index));
-                let chunk = &mut self.program.chunks[index];
-                chunk.origin = origin;
-                chunk
+                self.program.add_section();
+                let index = self.program.sections.len() - 1;
+                self.state = Some(BuilderState::InSection(index));
+                let section = &mut self.program.sections[index];
+                section.origin = origin;
+                section
             }
-            BuilderState::InChunk(index) => {
-                self.state = Some(BuilderState::InChunk(index));
-                &mut self.program.chunks[index]
+            BuilderState::InSection(index) => {
+                self.state = Some(BuilderState::InSection(index));
+                &mut self.program.sections[index]
             }
         }
     }
@@ -146,25 +146,25 @@ mod tests {
     type NameTable = crate::name::BasicNameTable<(), NameId>;
 
     #[test]
-    fn new_object_has_no_chunks() {
+    fn new_object_has_no_sections() {
         let object = build_object(|_| ());
-        assert_eq!(object.chunks.len(), 0)
+        assert_eq!(object.sections.len(), 0)
     }
 
     #[test]
     fn no_origin_by_default() {
         let object = build_object(|builder| builder.push(Node::Byte(0xcd)));
-        assert_eq!(object.chunks[0].origin, None)
+        assert_eq!(object.sections[0].origin, None)
     }
 
     #[test]
-    fn constrain_origin_determines_origin_of_new_chunk() {
+    fn constrain_origin_determines_origin_of_new_section() {
         let origin: RelocExpr<_> = 0x3000.into();
         let object = build_object(|builder| {
             builder.set_origin(origin.clone());
             builder.push(Node::Byte(0xcd))
         });
-        assert_eq!(object.chunks[0].origin, Some(origin))
+        assert_eq!(object.sections[0].origin, Some(origin))
     }
 
     fn build_object(f: impl FnOnce(&mut ProgramBuilder<()>)) -> Program<()> {

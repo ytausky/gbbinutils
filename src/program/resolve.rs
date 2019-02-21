@@ -128,14 +128,14 @@ impl<S: Clone> Program<S> {
             symbols: &mut self.symbols,
             location: Value::Unknown,
         };
-        for chunk in self.chunks.iter() {
-            let (_, size) = chunk.traverse(context, |item, context| {
+        for section in &self.sections {
+            let (_, size) = section.traverse(context, |item, context| {
                 if let Node::Symbol((symbol, _), expr) = item {
                     let value = expr.evaluate(context);
                     refinements += context.symbols.refine(*symbol, value) as i32
                 }
             });
-            refinements += context.symbols.refine(chunk.size, size) as i32
+            refinements += context.symbols.refine(section.size, size) as i32
         }
         refinements
     }
@@ -227,20 +227,20 @@ mod tests {
     use crate::analysis::backend::{Backend, PartialBackend};
     use crate::diag::IgnoreDiagnostics;
     use crate::name::BasicNameTable;
-    use crate::program::{Chunk, ProgramBuilder, ValueId};
+    use crate::program::{ProgramBuilder, Section, ValueId};
 
     #[test]
-    fn resolve_origin_relative_to_previous_chunk() {
+    fn resolve_origin_relative_to_previous_section() {
         let origin1 = 0x150;
         let skipped_bytes = 0x10;
         let object = Program {
-            chunks: vec![
-                Chunk {
+            sections: vec![
+                Section {
                     origin: Some(origin1.into()),
                     size: ValueId(0),
                     items: vec![Node::Byte(0x42)],
                 },
-                Chunk {
+                Section {
                     origin: Some(
                         ExprVariant::Binary(
                             BinaryOperator::Plus,
@@ -268,7 +268,7 @@ mod tests {
     }
 
     #[test]
-    fn label_defined_as_chunk_origin_plus_offset() {
+    fn label_defined_as_section_origin_plus_offset() {
         let label = "label";
         let addr = 0xffe1;
         let mut builder = ProgramBuilder::new();
@@ -284,28 +284,28 @@ mod tests {
     }
 
     #[test]
-    fn empty_chunk_has_size_zero() {
-        assert_chunk_size(0, |_| ())
+    fn empty_section_has_size_zero() {
+        assert_section_size(0, |_| ())
     }
 
     #[test]
-    fn chunk_with_one_byte_has_size_one() {
-        assert_chunk_size(1, |object| object.chunks[0].items.push(Node::Byte(0x42)));
+    fn section_with_one_byte_has_size_one() {
+        assert_section_size(1, |object| object.sections[0].items.push(Node::Byte(0x42)));
     }
 
     #[test]
-    fn chunk_with_const_inline_addr_ld_has_size_two() {
-        test_chunk_size_with_literal_ld_inline_addr(0xff00, 2)
+    fn section_with_const_inline_addr_ld_has_size_two() {
+        test_section_size_with_literal_ld_inline_addr(0xff00, 2)
     }
 
     #[test]
-    fn chunk_with_const_inline_addr_ld_has_size_three() {
-        test_chunk_size_with_literal_ld_inline_addr(0x1234, 3)
+    fn section_with_const_inline_addr_ld_has_size_three() {
+        test_section_size_with_literal_ld_inline_addr(0x1234, 3)
     }
 
-    fn test_chunk_size_with_literal_ld_inline_addr(addr: i32, expected: i32) {
-        assert_chunk_size(expected, |object| {
-            object.chunks[0]
+    fn test_section_size_with_literal_ld_inline_addr(addr: i32, expected: i32) {
+        assert_section_size(expected, |object| {
+            object.sections[0]
                 .items
                 .push(Node::LdInlineAddr(0, addr.into()))
         });
@@ -313,9 +313,9 @@ mod tests {
 
     #[test]
     fn ld_inline_addr_with_symbol_after_instruction_has_size_three() {
-        assert_chunk_size(3, |object| {
+        assert_section_size(3, |object| {
             let name = object.symbols.new_name();
-            let items = &mut object.chunks[0].items;
+            let items = &mut object.sections[0].items;
             items.push(Node::LdInlineAddr(0, RelocAtom::Symbol(name).into()));
             object.symbols.define_name(name, Value::Unknown);
             items.push(Node::Symbol((name, ()), RelocAtom::LocationCounter.into()))
@@ -341,13 +341,13 @@ mod tests {
         }
     }
 
-    fn assert_chunk_size(expected: impl Into<Value>, f: impl FnOnce(&mut Program<()>)) {
+    fn assert_section_size(expected: impl Into<Value>, f: impl FnOnce(&mut Program<()>)) {
         let mut program = Program::new();
-        program.add_chunk();
+        program.add_section();
         f(&mut program);
         program.resolve_symbols();
         assert_eq!(
-            program.symbols.get(program.chunks[0].size).cloned(),
+            program.symbols.get(program.sections[0].size).cloned(),
             Some(expected.into())
         )
     }
