@@ -18,6 +18,7 @@ impl<S: Clone> Section<S> {
             data.extend(item.translate(context, diagnostics))
         });
         BinarySection {
+            name: self.name.clone().map(|name| name.into()),
             origin: origin.exact().unwrap() as usize,
             data,
         }
@@ -222,6 +223,7 @@ mod tests {
     fn set_origin_of_translated_section() {
         let addr = 0x7ff0;
         let section = Section {
+            name: None,
             origin: Some(addr.into()),
             size: ValueId(0),
             items: Vec::new(),
@@ -233,7 +235,7 @@ mod tests {
     #[test]
     fn translate_expr_with_location_counter() {
         let byte = 0x42;
-        let mut section = Section::new(ValueId(0));
+        let mut section = Section::new(None, ValueId(0));
         section.items.extend(vec![
             Node::Byte(byte),
             Node::Expr(RelocAtom::LocationCounter.into(), Width::Byte),
@@ -244,13 +246,21 @@ mod tests {
 
     #[test]
     fn location_counter_starts_from_section_origin() {
-        let mut section = Section::new(ValueId(0));
+        let mut section = Section::new(None, ValueId(0));
         section.origin = Some(0xffe1.into());
         section
             .items
             .push(Node::Expr(RelocAtom::LocationCounter.into(), Width::Word));
         let binary = translate_without_context(section);
         assert_eq!(binary.data, [0xe3, 0xff])
+    }
+
+    #[test]
+    fn translate_section_name() {
+        let name = "my_section";
+        let section = Section::<()>::new(Some(name.into()), ValueId(0));
+        let binary = translate_without_context(section);
+        assert_eq!(binary.name, Some(name.into()))
     }
 
     fn translate_without_context<S: Clone + PartialEq>(section: Section<S>) -> BinarySection {

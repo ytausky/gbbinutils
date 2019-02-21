@@ -49,7 +49,7 @@ impl<SR> ProgramBuilder<SR> {
     fn current_section(&mut self) -> &mut Section<SR> {
         match self.state.take().unwrap() {
             BuilderState::Pending { origin } => {
-                self.program.add_section();
+                self.program.add_section(None);
                 let index = self.program.sections.len() - 1;
                 self.state = Some(BuilderState::InSection(index));
                 let section = &mut self.program.sections[index];

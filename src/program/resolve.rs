@@ -236,11 +236,13 @@ mod tests {
         let object = Program {
             sections: vec![
                 Section {
+                    name: None,
                     origin: Some(origin1.into()),
                     size: ValueId(0),
                     items: vec![Node::Byte(0x42)],
                 },
                 Section {
+                    name: None,
                     origin: Some(
                         ExprVariant::Binary(
                             BinaryOperator::Plus,
@@ -343,7 +345,7 @@ mod tests {
 
     fn assert_section_size(expected: impl Into<Value>, f: impl FnOnce(&mut Program<()>)) {
         let mut program = Program::new();
-        program.add_section();
+        program.add_section(None);
         f(&mut program);
         program.resolve_symbols();
         assert_eq!(

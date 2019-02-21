@@ -26,6 +26,7 @@ pub struct Program<S> {
 }
 
 struct Section<S> {
+    name: Option<String>,
     origin: Option<RelocExpr<S>>,
     size: ValueId,
     items: Vec<Node<S>>,
@@ -48,9 +49,9 @@ impl<S> Program<S> {
         }
     }
 
-    fn add_section(&mut self) {
+    fn add_section(&mut self, name: Option<String>) {
         let size_symbol_id = self.symbols.new_symbol(Value::Unknown);
-        self.sections.push(Section::new(size_symbol_id))
+        self.sections.push(Section::new(name, size_symbol_id))
     }
 }
 
@@ -72,8 +73,9 @@ impl<S: Clone> Program<S> {
 }
 
 impl<S> Section<S> {
-    pub fn new(size: ValueId) -> Section<S> {
+    pub fn new(name: Option<String>, size: ValueId) -> Section<S> {
         Section {
+            name,
             origin: None,
             size,
             items: Vec::new(),
@@ -138,6 +140,7 @@ pub struct Rom {
 }
 
 pub struct BinarySection {
+    pub name: Option<Box<str>>,
     pub origin: usize,
     pub data: Vec<u8>,
 }
@@ -161,6 +164,7 @@ mod tests {
         let origin = 0x150;
         let object = BinaryObject {
             sections: vec![BinarySection {
+                name: None,
                 origin,
                 data: vec![byte],
             }],
@@ -176,11 +180,20 @@ mod tests {
         let origin = MIN_ROM_LEN + 1;
         let object = BinaryObject {
             sections: vec![BinarySection {
+                name: None,
                 origin,
                 data: Vec::new(),
             }],
         };
         let rom = object.into_rom();
         assert_eq!(rom.data.len(), MIN_ROM_LEN)
+    }
+
+    #[test]
+    fn new_section_has_name() {
+        let name = "my_section";
+        let mut program = Program::<()>::new();
+        program.add_section(Some(name.into()));
+        assert_eq!(program.sections[0].name, Some(name.into()))
     }
 }
