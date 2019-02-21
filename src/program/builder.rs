@@ -11,7 +11,7 @@ pub struct ProgramBuilder<SR> {
 }
 
 enum BuilderState<S> {
-    Pending { origin: Option<RelocExpr<S>> },
+    PendingAnonymousSection { origin: Option<RelocExpr<S>> },
     InSection(usize),
 }
 
@@ -19,7 +19,7 @@ impl<SR> ProgramBuilder<SR> {
     pub fn new() -> ProgramBuilder<SR> {
         ProgramBuilder {
             program: Program::new(),
-            state: Some(BuilderState::Pending { origin: None }),
+            state: Some(BuilderState::PendingAnonymousSection { origin: None }),
         }
     }
 
@@ -48,7 +48,7 @@ impl<SR> ProgramBuilder<SR> {
 
     fn current_section(&mut self) -> &mut Section<SR> {
         match self.state.take().unwrap() {
-            BuilderState::Pending { origin } => {
+            BuilderState::PendingAnonymousSection { origin } => {
                 self.program.add_section(None);
                 let index = self.program.sections.len() - 1;
                 self.state = Some(BuilderState::InSection(index));
@@ -71,7 +71,7 @@ impl<S: Clone> PartialBackend<S> for ProgramBuilder<S> {
     }
 
     fn set_origin(&mut self, origin: Self::Value) {
-        self.state = Some(BuilderState::Pending {
+        self.state = Some(BuilderState::PendingAnonymousSection {
             origin: Some(origin),
         })
     }
