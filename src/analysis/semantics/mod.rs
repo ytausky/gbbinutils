@@ -240,7 +240,7 @@ impl<S: Session> syntax::CommandContext<S::Span> for CommandActions<S> {
 impl Directive {
     fn requires_symbol(self) -> bool {
         match self {
-            Directive::Equ => true,
+            Directive::Equ | Directive::Section => true,
             _ => false,
         }
     }

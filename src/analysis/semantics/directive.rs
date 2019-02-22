@@ -44,7 +44,7 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
             Directive::Equ => self.analyze_equ(),
             Directive::Include => self.analyze_include(),
             Directive::Org => self.analyze_org(),
-            Directive::Section => unimplemented!(),
+            Directive::Section => self.analyze_section(),
         }
     }
 
@@ -96,6 +96,11 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
             }
         };
         session.define_symbol(symbol, value)
+    }
+
+    fn analyze_section(self) {
+        let name = self.actions.label.take().unwrap();
+        self.actions.session.start_section(name)
     }
 
     fn analyze_include(self) {
@@ -397,6 +402,22 @@ mod tests {
         assert_eq!(
             actions,
             [BackendEvent::DefineSymbol((symbol.into(), ()), value.into()).into()]
+        )
+    }
+
+    #[test]
+    fn start_section() {
+        let name = "hot_stuff";
+        let actions = collect_semantic_actions(|actions| {
+            actions
+                .enter_stmt(Some((name.into(), ())))
+                .enter_command((Command::Directive(Directive::Section), ()))
+                .exit()
+                .exit()
+        });
+        assert_eq!(
+            actions,
+            [BackendEvent::StartSection((name.into(), ())).into()]
         )
     }
 

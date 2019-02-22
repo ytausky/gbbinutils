@@ -18,6 +18,7 @@ where
     Self: Span + StringRef,
     Self: DelegateDiagnostics<<Self as Span>::Span>,
     Self: PartialBackend<<Self as Span>::Span>,
+    Self: StartSection<Ident<<Self as StringRef>::StringRef>, <Self as Span>::Span>,
     Self: ValueBuilder<Ident<<Self as StringRef>::StringRef>, <Self as Span>::Span>,
 {
     fn analyze_file(&mut self, path: Self::StringRef) -> Result<(), CodebaseError>;
@@ -241,6 +242,18 @@ where
     }
 }
 
+impl<'a, C, A, B, N, D> StartSection<Ident<C::StringRef>, D::Span>
+    for CompositeSession<'a, C, A, B, N, D>
+where
+    C: Lex<D>,
+    B: ?Sized,
+    D: Diagnostics,
+{
+    fn start_section(&mut self, _name: (Ident<C::StringRef>, D::Span)) {
+        unimplemented!()
+    }
+}
+
 #[cfg(test)]
 mod mock {
     use super::*;
@@ -404,6 +417,18 @@ mod mock {
             self.log
                 .borrow_mut()
                 .push(BackendEvent::SetOrigin(origin).into())
+        }
+    }
+
+    impl<'a, T, S> StartSection<Ident<String>, S> for MockSession<'a, T, S>
+    where
+        T: From<BackendEvent<RelocExpr<Ident<String>, S>>>,
+        S: Clone + MockSpan,
+    {
+        fn start_section(&mut self, name: (Ident<String>, S)) {
+            self.log
+                .borrow_mut()
+                .push(BackendEvent::StartSection(name).into())
         }
     }
 }
