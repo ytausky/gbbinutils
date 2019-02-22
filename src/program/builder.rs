@@ -132,6 +132,12 @@ impl<S: Clone> HasValue<S> for ProgramBuilder<S> {
     type Value = RelocExpr<S>;
 }
 
+impl<S: Clone> StartSection<Ident<String>, S> for ProgramBuilder<S> {
+    fn start_section(&mut self, _name: (Ident<String>, S)) {
+        unimplemented!()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
