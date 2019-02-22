@@ -133,8 +133,10 @@ impl<S: Clone> HasValue<S> for ProgramBuilder<S> {
 }
 
 impl<S: Clone> StartSection<Ident<String>, S> for ProgramBuilder<S> {
-    fn start_section(&mut self, _name: (Ident<String>, S)) {
-        unimplemented!()
+    fn start_section(&mut self, name: (Ident<String>, S)) {
+        let index = self.program.sections.len();
+        self.state = Some(BuilderState::InSection(index));
+        self.program.add_section(Some(name.0.name))
     }
 }
 
@@ -171,6 +173,13 @@ mod tests {
             builder.push(Node::Byte(0xcd))
         });
         assert_eq!(object.sections[0].origin, Some(origin))
+    }
+
+    #[test]
+    fn start_section_adds_named_section() {
+        let name: Ident<_> = "my_section".into();
+        let object = build_object(|builder| builder.start_section((name.clone(), ())));
+        assert_eq!(object.sections[0].name, Some(name.name))
     }
 
     fn build_object(f: impl FnOnce(&mut ProgramBuilder<()>)) -> Program<()> {
