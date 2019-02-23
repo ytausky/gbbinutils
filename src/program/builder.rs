@@ -13,6 +13,7 @@ pub struct ProgramBuilder<SR> {
 enum BuilderState<S> {
     PendingAnonymousSection { origin: Option<RelocExpr<S>> },
     InSection(usize),
+    SectionPrelude(usize),
 }
 
 impl<SR> ProgramBuilder<SR> {
@@ -60,6 +61,7 @@ impl<SR> ProgramBuilder<SR> {
                 self.state = Some(BuilderState::InSection(index));
                 &mut self.program.sections[index]
             }
+            BuilderState::SectionPrelude(_index) => unimplemented!(),
         }
     }
 }
@@ -71,9 +73,17 @@ impl<S: Clone> PartialBackend<S> for ProgramBuilder<S> {
     }
 
     fn set_origin(&mut self, origin: Self::Value) {
-        self.state = Some(BuilderState::PendingAnonymousSection {
-            origin: Some(origin),
-        })
+        match self.state.take().unwrap() {
+            BuilderState::SectionPrelude(index) => {
+                self.program.sections[index].origin = Some(origin);
+                self.state = Some(BuilderState::SectionPrelude(index))
+            }
+            _ => {
+                self.state = Some(BuilderState::PendingAnonymousSection {
+                    origin: Some(origin),
+                })
+            }
+        }
     }
 }
 
@@ -135,7 +145,7 @@ impl<S: Clone> HasValue<S> for ProgramBuilder<S> {
 impl<S: Clone> StartSection<Ident<String>, S> for ProgramBuilder<S> {
     fn start_section(&mut self, name: (Ident<String>, S)) {
         let index = self.program.sections.len();
-        self.state = Some(BuilderState::InSection(index));
+        self.state = Some(BuilderState::SectionPrelude(index));
         self.program.add_section(Some(name.0.name))
     }
 }
@@ -180,6 +190,16 @@ mod tests {
         let name: Ident<_> = "my_section".into();
         let object = build_object(|builder| builder.start_section((name.clone(), ())));
         assert_eq!(object.sections[0].name, Some(name.name))
+    }
+
+    #[test]
+    fn set_origin_in_section_prelude_sets_origin() {
+        let origin: RelocExpr<_> = 0x0150.into();
+        let object = build_object(|builder| {
+            builder.start_section(("my_section".into(), ()));
+            builder.set_origin(origin.clone())
+        });
+        assert_eq!(object.sections[0].origin, Some(origin))
     }
 
     fn build_object(f: impl FnOnce(&mut ProgramBuilder<()>)) -> Program<()> {
