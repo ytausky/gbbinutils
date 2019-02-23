@@ -246,11 +246,11 @@ impl<'a, C, A, B, N, D> StartSection<Ident<C::StringRef>, D::Span>
     for CompositeSession<'a, C, A, B, N, D>
 where
     C: Lex<D>,
-    B: ?Sized,
+    B: StartSection<Ident<C::StringRef>, D::Span> + ?Sized,
     D: Diagnostics,
 {
-    fn start_section(&mut self, _name: (Ident<C::StringRef>, D::Span)) {
-        unimplemented!()
+    fn start_section(&mut self, name: (Ident<C::StringRef>, D::Span)) {
+        self.backend.start_section(name)
     }
 }
 
@@ -472,6 +472,16 @@ mod tests {
                     .into()
             ]
         );
+    }
+
+    #[test]
+    fn start_section() {
+        let name: Ident<_> = "my_section".into();
+        let log = RefCell::new(Vec::new());
+        let mut fixture = Fixture::new(&log);
+        let mut session = fixture.session();
+        session.start_section((name.clone(), ()));
+        assert_eq!(log.into_inner(), [BackendEvent::StartSection((name, ())).into()])
     }
 
     #[test]
