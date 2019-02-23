@@ -57,11 +57,10 @@ impl<SR> ProgramBuilder<SR> {
                 section.origin = origin;
                 section
             }
-            BuilderState::InSection(index) => {
+            BuilderState::SectionPrelude(index) | BuilderState::InSection(index) => {
                 self.state = Some(BuilderState::InSection(index));
                 &mut self.program.sections[index]
             }
-            BuilderState::SectionPrelude(_index) => unimplemented!(),
         }
     }
 }
@@ -200,6 +199,16 @@ mod tests {
             builder.set_origin(origin.clone())
         });
         assert_eq!(object.sections[0].origin, Some(origin))
+    }
+
+    #[test]
+    fn push_node_into_named_section() {
+        let node = Node::Byte(0x42);
+        let object = build_object(|builder| {
+            builder.start_section(("my_section".into(), ()));
+            builder.push(node.clone())
+        });
+        assert_eq!(object.sections[0].items, [node])
     }
 
     fn build_object(f: impl FnOnce(&mut ProgramBuilder<()>)) -> Program<()> {
