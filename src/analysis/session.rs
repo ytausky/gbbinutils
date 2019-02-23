@@ -481,7 +481,10 @@ mod tests {
         let mut fixture = Fixture::new(&log);
         let mut session = fixture.session();
         session.start_section((name.clone(), ()));
-        assert_eq!(log.into_inner(), [BackendEvent::StartSection((name, ())).into()])
+        assert_eq!(
+            log.into_inner(),
+            [BackendEvent::StartSection((name, ())).into()]
+        )
     }
 
     #[test]

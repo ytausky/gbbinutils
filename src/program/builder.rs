@@ -11,8 +11,8 @@ pub struct ProgramBuilder<SR> {
 }
 
 enum BuilderState<S> {
-    PendingAnonymousSection { origin: Option<RelocExpr<S>> },
-    InSection(usize),
+    AnonSectionPrelude { origin: Option<RelocExpr<S>> },
+    Section(usize),
     SectionPrelude(usize),
 }
 
@@ -20,7 +20,7 @@ impl<SR> ProgramBuilder<SR> {
     pub fn new() -> ProgramBuilder<SR> {
         ProgramBuilder {
             program: Program::new(),
-            state: Some(BuilderState::PendingAnonymousSection { origin: None }),
+            state: Some(BuilderState::AnonSectionPrelude { origin: None }),
         }
     }
 
@@ -49,16 +49,16 @@ impl<SR> ProgramBuilder<SR> {
 
     fn current_section(&mut self) -> &mut Section<SR> {
         match self.state.take().unwrap() {
-            BuilderState::PendingAnonymousSection { origin } => {
+            BuilderState::AnonSectionPrelude { origin } => {
                 self.program.add_section(None);
                 let index = self.program.sections.len() - 1;
-                self.state = Some(BuilderState::InSection(index));
+                self.state = Some(BuilderState::Section(index));
                 let section = &mut self.program.sections[index];
                 section.origin = origin;
                 section
             }
-            BuilderState::SectionPrelude(index) | BuilderState::InSection(index) => {
-                self.state = Some(BuilderState::InSection(index));
+            BuilderState::SectionPrelude(index) | BuilderState::Section(index) => {
+                self.state = Some(BuilderState::Section(index));
                 &mut self.program.sections[index]
             }
         }
@@ -78,7 +78,7 @@ impl<S: Clone> PartialBackend<S> for ProgramBuilder<S> {
                 self.state = Some(BuilderState::SectionPrelude(index))
             }
             _ => {
-                self.state = Some(BuilderState::PendingAnonymousSection {
+                self.state = Some(BuilderState::AnonSectionPrelude {
                     origin: Some(origin),
                 })
             }
