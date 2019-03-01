@@ -393,7 +393,7 @@ impl ExpandedDiagnosticClause<StrippedBufSpan, BufId, BufRange> {
             let source = buf
                 .lines(highlight.start.line..=highlight.end.line)
                 .next()
-                .map(|(_, line)| line.trim_right())
+                .map(|(_, line)| line.trim_end())
                 .unwrap()
                 .into();
             Excerpt {
