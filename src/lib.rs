@@ -3,7 +3,7 @@
 //! `gbas` is an assembler targeting Game Boy, Game Boy Pocket, Game Boy Light, and Game Boy Color.
 //! Its customizable IO functions make it suitable for embedding in other tools, in unit tests, etc.
 
-pub use crate::program::Rom;
+pub use crate::program::{BinaryObject, Rom};
 
 use crate::analysis::Assemble;
 use crate::codebase::{CodebaseError, StdFileSystem};
@@ -54,7 +54,7 @@ impl<'a> Default for DiagnosticsConfig<'a> {
 /// let rom = gbas::assemble("game.s", &mut gbas::Config::default());
 /// assert!(rom.is_none())
 /// ```
-pub fn assemble(name: &str, config: &mut Config) -> Option<Rom> {
+pub fn assemble(name: &str, config: &mut Config) -> Option<BinaryObject> {
     let mut input_holder = None;
     let mut diagnostics_holder = None;
     let input: &mut dyn codebase::FileSystem = match config.input {
@@ -74,13 +74,13 @@ fn try_assemble(
     name: &str,
     input: &mut dyn codebase::FileSystem,
     output: &mut dyn FnMut(diag::Diagnostic),
-) -> Result<Rom, CodebaseError> {
+) -> Result<BinaryObject, CodebaseError> {
     let codebase = codebase::FileCodebase::new(input);
     let diagnostics = &mut DiagnosticsSystem::new(&codebase.cache, output);
     let mut builder = program::ProgramBuilder::new();
     builder.assemble(name, &codebase, diagnostics)?;
     let object = builder.into_object();
-    Ok(object.link(diagnostics).into_rom())
+    Ok(object.link(diagnostics))
 }
 
 #[cfg(test)]

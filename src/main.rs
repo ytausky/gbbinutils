@@ -15,9 +15,9 @@ fn main() {
         input: gbas::InputConfig::default(),
         diagnostics: gbas::DiagnosticsConfig::Output(&mut diagnostics),
     };
-    if let Some(rom) = gbas::assemble(filename, &mut config) {
+    if let Some(program) = gbas::assemble(filename, &mut config) {
         let mut rom_file = File::create(filename.to_owned() + ".o").unwrap();
-        rom_file.write_all(&rom.data).unwrap()
+        rom_file.write_all(&program.into_rom().data).unwrap()
     }
 }
 
