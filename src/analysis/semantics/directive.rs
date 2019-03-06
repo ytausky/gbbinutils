@@ -401,7 +401,7 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [BackendEvent::DefineSymbol((symbol.into(), ()), value.into()).into()]
+            [SessionEvent::DefineSymbol((symbol.into(), ()), value.into()).into()]
         )
     }
 

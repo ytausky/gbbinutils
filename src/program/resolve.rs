@@ -224,9 +224,8 @@ impl Width {
 mod tests {
     use super::*;
 
-    use crate::analysis::backend::{Backend, PartialBackend};
+    use crate::analysis::backend::{Backend, CreateSymbol, PartialBackend};
     use crate::diag::IgnoreDiagnostics;
-    use crate::name::BasicNameTable;
     use crate::program::{ProgramBuilder, Section, ValueId};
 
     #[test]
@@ -271,15 +270,11 @@ mod tests {
 
     #[test]
     fn label_defined_as_section_origin_plus_offset() {
-        let label = "label";
         let addr = 0xffe1;
         let mut builder = ProgramBuilder::new();
         builder.set_origin(addr.into());
-        builder.define_symbol(
-            (label.into(), ()),
-            RelocAtom::LocationCounter.into(),
-            &mut BasicNameTable::<(), NameId>::new(),
-        );
+        let symbol_id = builder.create_symbol(());
+        builder.define_symbol((symbol_id, ()), RelocAtom::LocationCounter.into());
         let mut object = builder.into_object();
         object.resolve_symbols();
         assert_eq!(object.symbols.names().next(), Some(Some(&addr.into())));

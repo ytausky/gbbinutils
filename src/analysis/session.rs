@@ -73,6 +73,26 @@ impl<'a, C, A, B: ?Sized, N, D> CompositeSession<'a, C, A, B, N, D> {
     }
 }
 
+impl<'a, C, A, B, N, D> CompositeSession<'a, C, A, B, N, D>
+where
+    C: Lex<D>,
+    B: CreateSymbol<D::Span> + ?Sized,
+    N: NameTable<Ident<C::StringRef>, SymbolEntry = B::SymbolId>,
+    D: Diagnostics,
+{
+    fn look_up_symbol(&mut self, ident: Ident<C::StringRef>, span: &D::Span) -> B::SymbolId {
+        match self.names.get(&ident) {
+            Some(Name::Macro(_)) => unimplemented!(),
+            Some(Name::Symbol(id)) => id.clone(),
+            None => {
+                let id = self.backend.create_symbol(span.clone());
+                self.names.insert(ident, Name::Symbol(id.clone()));
+                id
+            }
+        }
+    }
+}
+
 pub struct PartialSession<'a, C: 'a, B: ?Sized + 'a, N: 'a, D: 'a> {
     pub codebase: &'a mut C,
     pub backend: &'a mut B,
@@ -119,7 +139,7 @@ where
 impl<'a, C, A, B, N, D> PartialBackend<D::Span> for CompositeSession<'a, C, A, B, N, D>
 where
     C: Lex<D>,
-    B: Backend<Ident<C::StringRef>, D::Span, N> + ?Sized,
+    B: Backend<Ident<C::StringRef>, D::Span> + ?Sized,
     N: NameTable<Ident<C::StringRef>, MacroEntry = MacroEntry<C::StringRef, D>>,
     D: Diagnostics,
 {
@@ -135,7 +155,7 @@ where
 impl<'a, C, A, B, N, D> ValueFromSimple<D::Span> for CompositeSession<'a, C, A, B, N, D>
 where
     C: Lex<D>,
-    B: Backend<Ident<C::StringRef>, D::Span, N> + ?Sized,
+    B: Backend<Ident<C::StringRef>, D::Span> + ?Sized,
     N: NameTable<Ident<C::StringRef>, MacroEntry = MacroEntry<C::StringRef, D>>,
     D: Diagnostics,
 {
@@ -151,7 +171,7 @@ where
 impl<'a, C, A, B, N, D> ApplyBinaryOperator<D::Span> for CompositeSession<'a, C, A, B, N, D>
 where
     C: Lex<D>,
-    B: Backend<Ident<C::StringRef>, D::Span, N> + ?Sized,
+    B: Backend<Ident<C::StringRef>, D::Span> + ?Sized,
     N: NameTable<Ident<C::StringRef>, MacroEntry = MacroEntry<C::StringRef, D>>,
     D: Diagnostics,
 {
@@ -169,12 +189,17 @@ impl<'a, C, A, B, N, D> ValueBuilder<Ident<C::StringRef>, D::Span>
     for CompositeSession<'a, C, A, B, N, D>
 where
     C: Lex<D>,
-    B: Backend<Ident<C::StringRef>, D::Span, N> + ?Sized,
-    N: NameTable<Ident<C::StringRef>, MacroEntry = MacroEntry<C::StringRef, D>>,
+    B: Backend<Ident<C::StringRef>, D::Span> + ?Sized,
+    N: NameTable<
+        Ident<C::StringRef>,
+        MacroEntry = MacroEntry<C::StringRef, D>,
+        SymbolEntry = B::SymbolId,
+    >,
     D: Diagnostics,
 {
     fn from_ident(&mut self, ident: Ident<C::StringRef>, span: D::Span) -> Self::Value {
-        self.backend.from_ident(ident, span, self.names)
+        let symbol_id = self.look_up_symbol(ident, &span);
+        self.backend.from_symbol(symbol_id, span)
     }
 }
 
@@ -182,9 +207,12 @@ impl<'a, C, A, B, N, D> Session for CompositeSession<'a, C, A, B, N, D>
 where
     C: Lex<D>,
     A: Analyze<C::StringRef, D>,
-    B: Backend<Ident<C::StringRef>, D::Span, N> + ?Sized,
-    N: NameTable<Ident<C::StringRef>, MacroEntry = MacroEntry<C::StringRef, D>>
-        + StartScope<Ident<C::StringRef>>,
+    B: Backend<Ident<C::StringRef>, D::Span> + ?Sized,
+    N: NameTable<
+            Ident<C::StringRef>,
+            MacroEntry = MacroEntry<C::StringRef, D>,
+            SymbolEntry = B::SymbolId,
+        > + StartScope<Ident<C::StringRef>>,
     D: Diagnostics,
 {
     fn analyze_file(&mut self, path: Self::StringRef) -> Result<(), CodebaseError> {
@@ -228,7 +256,8 @@ where
 
     fn define_symbol(&mut self, symbol: (Ident<Self::StringRef>, Self::Span), value: Self::Value) {
         self.names.start_scope(&symbol.0);
-        self.backend.define_symbol(symbol, value, &mut self.names)
+        let symbol_id = self.look_up_symbol(symbol.0, &symbol.1);
+        self.backend.define_symbol((symbol_id, symbol.1), value)
     }
 }
 
@@ -268,7 +297,7 @@ mod mock {
     use std::cell::RefCell;
 
     #[derive(Debug, PartialEq)]
-    pub(crate) enum SessionEvent {
+    pub(crate) enum SessionEvent<S> {
         AnalyzeFile(String),
         DefineMacro(
             Ident<String>,
@@ -276,6 +305,7 @@ mod mock {
             Vec<SemanticToken<String>>,
         ),
         InvokeMacro(Ident<String>, Vec<Vec<SemanticToken<String>>>),
+        DefineSymbol((Ident<String>, S), RelocExpr<Ident<String>, S>),
     }
 
     pub(crate) struct MockSession<'a, T, S> {
@@ -354,7 +384,7 @@ mod mock {
 
     impl<'a, T, S> Session for MockSession<'a, T, S>
     where
-        T: From<SessionEvent>,
+        T: From<SessionEvent<S>>,
         T: From<BackendEvent<RelocExpr<Ident<String>, S>>>,
         T: From<DiagnosticsEvent<S>>,
         S: Clone + MockSpan,
@@ -400,7 +430,7 @@ mod mock {
         ) {
             self.log
                 .borrow_mut()
-                .push(BackendEvent::DefineSymbol(symbol, value).into())
+                .push(SessionEvent::DefineSymbol(symbol, value).into())
         }
     }
 
@@ -471,8 +501,7 @@ mod tests {
             log.into_inner(),
             [
                 NameTableEvent::StartScope(label.into()).into(),
-                BackendEvent::DefineSymbol((label.into(), ()), RelocAtom::LocationCounter.into())
-                    .into()
+                BackendEvent::DefineSymbol((0, ()), RelocAtom::LocationCounter.into()).into()
             ]
         );
     }
@@ -611,7 +640,7 @@ mod tests {
     type MockDiagnostics<'a, S> = crate::diag::MockDiagnostics<'a, Event<S>, S>;
     type MockNameTable<'a, S> = crate::name::MockNameTable<
         'a,
-        BasicNameTable<MacroEntry<String, MockDiagnostics<'a, S>>, ()>,
+        BasicNameTable<MacroEntry<String, MockDiagnostics<'a, S>>, usize>,
         Event<S>,
     >;
     type TestSession<'a, 'b, S> = CompositeSession<
@@ -626,7 +655,7 @@ mod tests {
     #[derive(Debug, PartialEq)]
     enum Event<S: Clone> {
         Frontend(AnalyzerEvent<S>),
-        Backend(BackendEvent<RelocExpr<Ident<String>, S>>),
+        Backend(BackendEvent<RelocExpr<usize, S>>),
         NameTable(NameTableEvent),
         Diagnostics(DiagnosticsEvent<S>),
     }
@@ -637,8 +666,8 @@ mod tests {
         }
     }
 
-    impl<S: Clone> From<BackendEvent<RelocExpr<Ident<String>, S>>> for Event<S> {
-        fn from(event: BackendEvent<RelocExpr<Ident<String>, S>>) -> Self {
+    impl<S: Clone> From<BackendEvent<RelocExpr<usize, S>>> for Event<S> {
+        fn from(event: BackendEvent<RelocExpr<usize, S>>) -> Self {
             Event::Backend(event)
         }
     }

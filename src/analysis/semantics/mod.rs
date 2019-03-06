@@ -28,8 +28,9 @@ pub(crate) trait Analyze<R: Clone + Eq, D: Diagnostics> {
     ) where
         I: IntoIterator<Item = LexItem<R, D::Span>>,
         C: Lex<D, StringRef = R>,
-        B: Backend<Ident<R>, D::Span, N> + ?Sized,
-        N: NameTable<Ident<R>, MacroEntry = MacroEntry<R, D>> + StartScope<Ident<R>>;
+        B: Backend<Ident<R>, D::Span> + ?Sized,
+        N: NameTable<Ident<R>, MacroEntry = MacroEntry<R, D>, SymbolEntry = B::SymbolId>
+            + StartScope<Ident<R>>;
 }
 
 pub struct SemanticAnalyzer;
@@ -39,8 +40,9 @@ impl<R: Clone + Eq, D: Diagnostics> Analyze<R, D> for SemanticAnalyzer {
     where
         I: IntoIterator<Item = LexItem<R, D::Span>>,
         C: Lex<D, StringRef = R>,
-        B: Backend<Ident<R>, D::Span, N> + ?Sized,
-        N: NameTable<Ident<R>, MacroEntry = MacroEntry<R, D>> + StartScope<Ident<R>>,
+        B: Backend<Ident<R>, D::Span> + ?Sized,
+        N: NameTable<Ident<R>, MacroEntry = MacroEntry<R, D>, SymbolEntry = B::SymbolId>
+            + StartScope<Ident<R>>,
     {
         let session = CompositeSession::new(
             partial.codebase,
@@ -503,7 +505,7 @@ mod mock {
         ) where
             I: IntoIterator<Item = LexItem<String, D::Span>>,
             C: Lex<D, StringRef = String>,
-            B: Backend<Ident<String>, D::Span, N> + ?Sized,
+            B: Backend<Ident<String>, D::Span> + ?Sized,
             N: NameTable<Ident<String>, MacroEntry = MacroEntry<String, D>>,
         {
             self.log
@@ -540,7 +542,7 @@ mod tests {
     pub(crate) enum TestOperation {
         Backend(BackendEvent<RelocExpr>),
         Diagnostics(DiagnosticsEvent<()>),
-        Session(SessionEvent),
+        Session(SessionEvent<()>),
     }
 
     type RelocExpr = crate::model::RelocExpr<Ident<String>, ()>;
@@ -557,8 +559,8 @@ mod tests {
         }
     }
 
-    impl<'a> From<SessionEvent> for TestOperation {
-        fn from(event: SessionEvent) -> Self {
+    impl<'a> From<SessionEvent<()>> for TestOperation {
+        fn from(event: SessionEvent<()>) -> Self {
             TestOperation::Session(event)
         }
     }
@@ -650,7 +652,7 @@ mod tests {
         assert_eq!(
             actions,
             [
-                BackendEvent::DefineSymbol((label.into(), ()), RelocAtom::LocationCounter.into())
+                SessionEvent::DefineSymbol((label.into(), ()), RelocAtom::LocationCounter.into())
                     .into()
             ]
         )

@@ -3,7 +3,7 @@ use super::{NameId, Node, Program, RelocExpr, Section, Value};
 use crate::analysis::backend::*;
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
 use crate::model::{Item, RelocAtom};
-use crate::name::{Ident, Name, NameTable};
+use crate::name::Ident;
 
 pub struct ProgramBuilder<SR> {
     program: Program<SR>,
@@ -30,21 +30,6 @@ impl<SR> ProgramBuilder<SR> {
 
     fn push(&mut self, node: Node<SR>) {
         self.current_section().items.push(node)
-    }
-
-    fn lookup<N>(&mut self, name: Ident<String>, table: &mut N) -> NameId
-    where
-        N: NameTable<Ident<String>, SymbolEntry = NameId>,
-    {
-        match table.get(&name) {
-            None => {
-                let id = self.program.symbols.new_name();
-                table.insert(name, Name::Symbol(id));
-                id
-            }
-            Some(Name::Macro(_)) => unimplemented!(),
-            Some(Name::Symbol(id)) => *id,
-        }
     }
 
     fn current_section(&mut self) -> &mut Section<SR> {
@@ -86,20 +71,16 @@ impl<S: Clone> PartialBackend<S> for ProgramBuilder<S> {
     }
 }
 
-impl<S, N> Backend<Ident<String>, S, N> for ProgramBuilder<S>
-where
-    S: Clone + 'static,
-    N: NameTable<Ident<String>, SymbolEntry = NameId>,
-{
-    fn define_symbol(
-        &mut self,
-        (ident, span): (Ident<String>, S),
-        value: Self::Value,
-        table: &mut N,
-    ) {
-        let name_id = self.lookup(ident, table);
-        self.program.symbols.define_name(name_id, Value::Unknown);
-        self.push(Node::Symbol((name_id, span), value))
+impl<S: Clone> Backend<Ident<String>, S> for ProgramBuilder<S> {
+    fn define_symbol(&mut self, (symbol_id, span): (Self::SymbolId, S), value: Self::Value) {
+        self.program.symbols.define_name(symbol_id, Value::Unknown);
+        self.push(Node::Symbol((symbol_id, span), value))
+    }
+}
+
+impl<S: Clone> CreateSymbol<S> for ProgramBuilder<S> {
+    fn create_symbol(&mut self, _span: S) -> Self::SymbolId {
+        self.program.symbols.new_name()
     }
 }
 
@@ -113,13 +94,9 @@ impl<S: Clone> ValueFromSimple<S> for ProgramBuilder<S> {
     }
 }
 
-impl<N, S> ValueFromIdent<N, Ident<String>, S> for ProgramBuilder<S>
-where
-    N: NameTable<Ident<String>, SymbolEntry = NameId>,
-    S: Clone,
-{
-    fn from_ident(&mut self, ident: Ident<String>, span: S, names: &mut N) -> Self::Value {
-        RelocExpr::from_atom(RelocAtom::Symbol(self.lookup(ident, names)), span)
+impl<S: Clone> ValueFromSymbol<S> for ProgramBuilder<S> {
+    fn from_symbol(&mut self, symbol: Self::SymbolId, span: S) -> Self::Value {
+        RelocExpr::from_atom(RelocAtom::Symbol(symbol), span)
     }
 }
 
@@ -141,6 +118,10 @@ impl<S: Clone> HasValue<S> for ProgramBuilder<S> {
     type Value = RelocExpr<S>;
 }
 
+impl<S: Clone> HasSymbol for ProgramBuilder<S> {
+    type SymbolId = NameId;
+}
+
 impl<S: Clone> StartSection<Ident<String>, S> for ProgramBuilder<S> {
     fn start_section(&mut self, name: (Ident<String>, S)) {
         let index = self.program.sections.len();
@@ -159,8 +140,6 @@ mod tests {
     use crate::model::{Instruction, Nullary, Width};
     use crate::program::BinaryObject;
     use std::borrow::Borrow;
-
-    type NameTable = crate::name::BasicNameTable<(), NameId>;
 
     #[test]
     fn new_object_has_no_sections() {
@@ -276,9 +255,9 @@ mod tests {
     #[test]
     fn diagnose_unresolved_symbol() {
         let name = "ident";
-        let ident: Ident<_> = name.into();
         let (_, diagnostics) = with_object_builder(|builder| {
-            let value = builder.from_ident(ident, name.into(), &mut NameTable::new());
+            let symbol_id = builder.create_symbol(name.into());
+            let value = builder.from_symbol(symbol_id, name.into());
             builder.emit_item(word_item(value))
         });
         assert_eq!(*diagnostics, [unresolved(name)]);
@@ -288,13 +267,12 @@ mod tests {
     fn diagnose_two_unresolved_symbols_in_one_expr() {
         let name1 = "ident1";
         let name2 = "ident2";
-        let ident1: Ident<_> = name1.into();
-        let ident2: Ident<_> = name2.into();
         let (_, diagnostics) = with_object_builder(|builder| {
-            let names = &mut NameTable::new();
             let value = {
-                let lhs = builder.from_ident(ident1, name1.into(), names);
-                let rhs = builder.from_ident(ident2, name2.into(), names);
+                let id1 = builder.create_symbol(name1.into());
+                let lhs = builder.from_symbol(id1, name1.into());
+                let id2 = builder.create_symbol(name2.into());
+                let rhs = builder.from_symbol(id2, name2.into());
                 builder.apply_binary_operator((BinaryOperator::Minus, "diff".into()), lhs, rhs)
             };
             builder.emit_item(word_item(value))
@@ -304,16 +282,10 @@ mod tests {
 
     #[test]
     fn emit_defined_symbol() {
-        let label = "label";
-        let ident: Ident<_> = label.into();
         let (object, diagnostics) = with_object_builder(|builder| {
-            let mut table = NameTable::new();
-            builder.define_symbol(
-                (ident.clone(), ()),
-                RelocAtom::LocationCounter.into(),
-                &mut table,
-            );
-            let value = builder.from_ident(ident, (), &mut table);
+            let symbol_id = builder.create_symbol(());
+            builder.define_symbol((symbol_id, ()), RelocAtom::LocationCounter.into());
+            let value = builder.from_symbol(symbol_id, ());
             builder.emit_item(word_item(value));
         });
         assert_eq!(*diagnostics, []);
@@ -322,16 +294,11 @@ mod tests {
 
     #[test]
     fn emit_symbol_defined_after_use() {
-        let label = "label";
         let (object, diagnostics) = with_object_builder(|builder| {
-            let mut table = NameTable::new();
-            let value = builder.from_ident(Ident::from(label), (), &mut table);
+            let symbol_id = builder.create_symbol(());
+            let value = builder.from_symbol(symbol_id, ());
             builder.emit_item(word_item(value));
-            builder.define_symbol(
-                (label.into(), ()),
-                RelocAtom::LocationCounter.into(),
-                &mut table,
-            );
+            builder.define_symbol((symbol_id, ()), RelocAtom::LocationCounter.into());
         });
         assert_eq!(*diagnostics, []);
         assert_eq!(object.sections.last().unwrap().data, [0x02, 0x00])

@@ -1,7 +1,6 @@
 pub use crate::syntax::Token;
 
 use self::backend::*;
-use self::macros::{MacroDefData, MacroTableEntry};
 use self::session::*;
 
 use crate::codebase::{BufId, Codebase, CodebaseError};
@@ -21,14 +20,10 @@ mod macros;
 mod semantics;
 mod session;
 
-pub(crate) trait Assemble<D, S>
+pub(crate) trait Assemble<D>
 where
     D: Diagnostics,
-    Self: Backend<
-        Ident<String>,
-        D::Span,
-        BiLevelNameTable<MacroTableEntry<D::MacroDefId, Rc<MacroDefData<String>>>, S>,
-    >,
+    Self: Backend<Ident<String>, D::Span>,
 {
     fn assemble<C: Codebase>(
         &mut self,
@@ -50,14 +45,10 @@ where
     }
 }
 
-impl<B, D, S> Assemble<D, S> for B
+impl<B, D> Assemble<D> for B
 where
     D: Diagnostics,
-    B: Backend<
-        Ident<String>,
-        D::Span,
-        BiLevelNameTable<MacroTableEntry<D::MacroDefId, Rc<MacroDefData<String>>>, S>,
-    >,
+    B: Backend<Ident<String>, D::Span>,
 {
 }
 

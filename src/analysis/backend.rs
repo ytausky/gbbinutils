@@ -9,6 +9,17 @@ pub trait HasValue<S: Clone> {
     type Value: Source<Span = S>;
 }
 
+pub trait HasSymbol {
+    type SymbolId: Clone;
+}
+
+pub trait CreateSymbol<S: Clone>
+where
+    Self: HasSymbol,
+{
+    fn create_symbol(&mut self, span: S) -> Self::SymbolId;
+}
+
 pub trait ValueFromSimple<S: Clone>
 where
     Self: HasValue<S>,
@@ -17,11 +28,11 @@ where
     fn from_number(&mut self, n: i32, span: S) -> Self::Value;
 }
 
-pub trait ValueFromIdent<N, I, S: Clone>
+pub trait ValueFromSymbol<S: Clone>
 where
-    Self: HasValue<S>,
+    Self: HasSymbol + HasValue<S>,
 {
-    fn from_ident(&mut self, ident: I, span: S, names: &mut N) -> Self::Value;
+    fn from_symbol(&mut self, symbol: Self::SymbolId, span: S) -> Self::Value;
 }
 
 pub trait ApplyBinaryOperator<S: Clone>
@@ -49,16 +60,17 @@ pub trait StartSection<I, S> {
     fn start_section(&mut self, name: (I, S));
 }
 
-pub trait Backend<I, S, N>
+pub trait Backend<I, S>
 where
     S: Clone,
+    Self: CreateSymbol<S>,
     Self: PartialBackend<S>,
     Self: ValueFromSimple<S>,
-    Self: ValueFromIdent<N, I, S>,
+    Self: ValueFromSymbol<S>,
     Self: ApplyBinaryOperator<S>,
     Self: StartSection<I, S>,
 {
-    fn define_symbol(&mut self, symbol: (I, S), value: Self::Value, names: &mut N);
+    fn define_symbol(&mut self, symbol: (Self::SymbolId, S), value: Self::Value);
 }
 
 #[cfg(test)]
@@ -73,28 +85,32 @@ mod mock {
 
     pub struct MockBackend<'a, T> {
         pub log: &'a RefCell<Vec<T>>,
+        next_symbol_id: usize,
     }
 
     #[derive(Debug, PartialEq)]
     pub enum BackendEvent<V: Source> {
         EmitItem(Item<V>),
         SetOrigin(V),
-        DefineSymbol((Ident<String>, V::Span), V),
+        DefineSymbol((usize, V::Span), V),
         StartSection((Ident<String>, V::Span)),
     }
 
     impl<'a, T> MockBackend<'a, T> {
         pub fn new(log: &'a RefCell<Vec<T>>) -> Self {
-            MockBackend { log }
+            MockBackend {
+                log,
+                next_symbol_id: 0,
+            }
         }
     }
 
-    impl<'a, T, S, N> Backend<Ident<String>, S, N> for MockBackend<'a, T>
+    impl<'a, T, S> Backend<Ident<String>, S> for MockBackend<'a, T>
     where
-        T: From<BackendEvent<RelocExpr<Ident<String>, S>>>,
+        T: From<BackendEvent<RelocExpr<usize, S>>>,
         S: Clone,
     {
-        fn define_symbol(&mut self, symbol: (Ident<String>, S), value: Self::Value, _: &mut N) {
+        fn define_symbol(&mut self, symbol: (Self::SymbolId, S), value: Self::Value) {
             self.log
                 .borrow_mut()
                 .push(BackendEvent::DefineSymbol(symbol, value).into())
@@ -111,9 +127,9 @@ mod mock {
         }
     }
 
-    impl<'a, T, N, S: Clone> ValueFromIdent<N, Ident<String>, S> for MockBackend<'a, T> {
-        fn from_ident(&mut self, ident: Ident<String>, span: S, _: &mut N) -> Self::Value {
-            RelocExpr::from_atom(RelocAtom::Symbol(ident), span)
+    impl<'a, T, S: Clone> ValueFromSymbol<S> for MockBackend<'a, T> {
+        fn from_symbol(&mut self, symbol: Self::SymbolId, span: S) -> Self::Value {
+            RelocExpr::from_atom(RelocAtom::Symbol(symbol), span)
         }
     }
 
@@ -132,12 +148,24 @@ mod mock {
     }
 
     impl<'a, T, S: Clone> HasValue<S> for MockBackend<'a, T> {
-        type Value = RelocExpr<Ident<String>, S>;
+        type Value = RelocExpr<usize, S>;
+    }
+
+    impl<'a, T> HasSymbol for MockBackend<'a, T> {
+        type SymbolId = usize;
+    }
+
+    impl<'a, T, S: Clone> CreateSymbol<S> for MockBackend<'a, T> {
+        fn create_symbol(&mut self, _span: S) -> Self::SymbolId {
+            let id = self.next_symbol_id;
+            self.next_symbol_id += 1;
+            id
+        }
     }
 
     impl<'a, T, S> PartialBackend<S> for MockBackend<'a, T>
     where
-        T: From<BackendEvent<RelocExpr<Ident<String>, S>>>,
+        T: From<BackendEvent<RelocExpr<usize, S>>>,
         S: Clone,
     {
         fn emit_item(&mut self, item: Item<Self::Value>) {
@@ -155,7 +183,7 @@ mod mock {
 
     impl<'a, T, S> StartSection<Ident<String>, S> for MockBackend<'a, T>
     where
-        T: From<BackendEvent<RelocExpr<Ident<String>, S>>>,
+        T: From<BackendEvent<RelocExpr<usize, S>>>,
         S: Clone,
     {
         fn start_section(&mut self, name: (Ident<String>, S)) {
