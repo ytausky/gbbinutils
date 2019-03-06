@@ -93,7 +93,6 @@ mod mock {
     where
         T: From<BackendEvent<RelocExpr<Ident<String>, S>>>,
         S: Clone,
-        N: 'static,
     {
         fn define_symbol(&mut self, symbol: (Ident<String>, S), value: Self::Value, _: &mut N) {
             self.log

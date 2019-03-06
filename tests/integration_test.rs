@@ -3,7 +3,6 @@ use gbas;
 use std::io;
 
 #[test]
-#[ignore]
 fn undefined_global_names_do_not_interfere_with_local_names() {
     let src = r"
 global  and     a

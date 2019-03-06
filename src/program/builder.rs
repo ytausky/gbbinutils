@@ -89,7 +89,7 @@ impl<S: Clone> PartialBackend<S> for ProgramBuilder<S> {
 impl<S, N> Backend<Ident<String>, S, N> for ProgramBuilder<S>
 where
     S: Clone + 'static,
-    N: NameTable<Ident<String>, SymbolEntry = NameId> + 'static,
+    N: NameTable<Ident<String>, SymbolEntry = NameId>,
 {
     fn define_symbol(
         &mut self,

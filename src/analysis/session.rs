@@ -8,7 +8,7 @@ use crate::diag::span::Span;
 use crate::diag::*;
 use crate::expr::BinaryOperator;
 use crate::model::Item;
-use crate::name::{Ident, Name, NameTable};
+use crate::name::{Ident, Name, NameTable, StartScope};
 
 #[cfg(test)]
 pub(crate) use self::mock::*;
@@ -183,7 +183,8 @@ where
     C: Lex<D>,
     A: Analyze<C::StringRef, D>,
     B: Backend<Ident<C::StringRef>, D::Span, N> + ?Sized,
-    N: NameTable<Ident<C::StringRef>, MacroEntry = MacroEntry<C::StringRef, D>>,
+    N: NameTable<Ident<C::StringRef>, MacroEntry = MacroEntry<C::StringRef, D>>
+        + StartScope<Ident<C::StringRef>>,
     D: Diagnostics,
 {
     fn analyze_file(&mut self, path: Self::StringRef) -> Result<(), CodebaseError> {
@@ -226,6 +227,7 @@ where
     }
 
     fn define_symbol(&mut self, symbol: (Ident<Self::StringRef>, Self::Span), value: Self::Value) {
+        self.names.start_scope(&symbol.0);
         self.backend.define_symbol(symbol, value, &mut self.names)
     }
 }
@@ -442,7 +444,7 @@ mod tests {
     use crate::analysis::{Literal, MockCodebase};
     use crate::diag::{DiagnosticsEvent, MockSpan};
     use crate::model::{Instruction, Nullary, RelocAtom, RelocExpr};
-    use crate::name::BasicNameTable;
+    use crate::name::{BasicNameTable, NameTableEvent};
     use crate::syntax::{Command, Directive, Mnemonic, Token};
 
     use std::cell::RefCell;
@@ -468,6 +470,7 @@ mod tests {
         assert_eq!(
             log.into_inner(),
             [
+                NameTableEvent::StartScope(label.into()).into(),
                 BackendEvent::DefineSymbol((label.into(), ()), RelocAtom::LocationCounter.into())
                     .into()
             ]
@@ -606,13 +609,17 @@ mod tests {
     type MockAnalyzer<'a, S> = crate::analysis::semantics::MockAnalyzer<'a, Event<S>>;
     type MockBackend<'a, S> = crate::analysis::backend::MockBackend<'a, Event<S>>;
     type MockDiagnostics<'a, S> = crate::diag::MockDiagnostics<'a, Event<S>, S>;
-    type TestNameTable<'a, S> = BasicNameTable<MacroEntry<String, MockDiagnostics<'a, S>>, ()>;
+    type MockNameTable<'a, S> = crate::name::MockNameTable<
+        'a,
+        BasicNameTable<MacroEntry<String, MockDiagnostics<'a, S>>, ()>,
+        Event<S>,
+    >;
     type TestSession<'a, 'b, S> = CompositeSession<
         'b,
         MockCodebase<S>,
         MockAnalyzer<'a, S>,
         MockBackend<'a, S>,
-        TestNameTable<'a, S>,
+        MockNameTable<'a, S>,
         MockDiagnostics<'a, S>,
     >;
 
@@ -620,6 +627,7 @@ mod tests {
     enum Event<S: Clone> {
         Frontend(AnalyzerEvent<S>),
         Backend(BackendEvent<RelocExpr<Ident<String>, S>>),
+        NameTable(NameTableEvent),
         Diagnostics(DiagnosticsEvent<S>),
     }
 
@@ -635,6 +643,12 @@ mod tests {
         }
     }
 
+    impl<S: Clone> From<NameTableEvent> for Event<S> {
+        fn from(event: NameTableEvent) -> Self {
+            Event::NameTable(event)
+        }
+    }
+
     impl<S: Clone> From<DiagnosticsEvent<S>> for Event<S> {
         fn from(event: DiagnosticsEvent<S>) -> Self {
             Event::Diagnostics(event)
@@ -645,7 +659,7 @@ mod tests {
         codebase: MockCodebase<S>,
         analyzer: MockAnalyzer<'a, S>,
         backend: MockBackend<'a, S>,
-        names: TestNameTable<'a, S>,
+        names: MockNameTable<'a, S>,
         diagnostics: MockDiagnostics<'a, S>,
     }
 
@@ -655,7 +669,7 @@ mod tests {
                 codebase: MockCodebase::new(),
                 analyzer: MockAnalyzer::new(log),
                 backend: MockBackend::new(log),
-                names: BasicNameTable::new(),
+                names: MockNameTable::new(BasicNameTable::new(), log),
                 diagnostics: MockDiagnostics::new(log),
             }
         }

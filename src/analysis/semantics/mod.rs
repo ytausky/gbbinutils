@@ -9,7 +9,7 @@ use crate::diag::span::{MergeSpans, Source, StripSpan};
 use crate::diag::*;
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
 use crate::model::Item;
-use crate::name::NameTable;
+use crate::name::{NameTable, StartScope};
 use crate::syntax::{self, keyword::*, ExprAtom, Operator, UnaryOperator};
 
 #[cfg(test)]
@@ -29,7 +29,7 @@ pub(crate) trait Analyze<R: Clone + Eq, D: Diagnostics> {
         I: IntoIterator<Item = LexItem<R, D::Span>>,
         C: Lex<D, StringRef = R>,
         B: Backend<Ident<R>, D::Span, N> + ?Sized,
-        N: NameTable<Ident<R>, MacroEntry = MacroEntry<R, D>>;
+        N: NameTable<Ident<R>, MacroEntry = MacroEntry<R, D>> + StartScope<Ident<R>>;
 }
 
 pub struct SemanticAnalyzer;
@@ -40,7 +40,7 @@ impl<R: Clone + Eq, D: Diagnostics> Analyze<R, D> for SemanticAnalyzer {
         I: IntoIterator<Item = LexItem<R, D::Span>>,
         C: Lex<D, StringRef = R>,
         B: Backend<Ident<R>, D::Span, N> + ?Sized,
-        N: NameTable<Ident<R>, MacroEntry = MacroEntry<R, D>>,
+        N: NameTable<Ident<R>, MacroEntry = MacroEntry<R, D>> + StartScope<Ident<R>>,
     {
         let session = CompositeSession::new(
             partial.codebase,
