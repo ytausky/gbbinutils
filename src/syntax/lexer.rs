@@ -101,6 +101,7 @@ impl<B: Borrow<str>> Scanner<B> {
             '\n' => self.take(Eol),
             '-' => self.take(Minus),
             '(' => self.take(OpeningParenthesis),
+            '|' => self.take(Pipe),
             '+' => self.take(Plus),
             '/' => self.take(Slash),
             '*' => self.take(Star),
@@ -525,6 +526,11 @@ mod tests {
     #[test]
     fn lex_star() {
         assert_eq_tokens("*", [Star.into()])
+    }
+
+    #[test]
+    fn lex_pipe() {
+        assert_eq_tokens("|", [Pipe.into()])
     }
 
     #[test]

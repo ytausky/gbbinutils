@@ -30,6 +30,7 @@ pub enum SimpleToken {
     Macro,
     Minus,
     OpeningParenthesis,
+    Pipe,
     Plus,
     Slash,
     Star,
