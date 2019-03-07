@@ -74,6 +74,14 @@ impl SymExpr {
         self
     }
 
+    pub fn bitwise_or(mut self, token: impl Into<TokenRef>) -> Self {
+        self.0.push(ExprAction::ApplyOperator((
+            Operator::Binary(BinaryOperator::BitwiseOr),
+            token.into().into(),
+        )));
+        self
+    }
+
     pub fn error(mut self, message: Message<SymSpan>, highlight: impl Into<SymSpan>) -> Self {
         self.0
             .push(ExprAction::EmitDiagnostic(CompactDiagnostic::new(

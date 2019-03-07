@@ -246,6 +246,7 @@ impl<I, C, L> Token<I, C, L> {
     fn as_binary_operator(&self) -> Option<BinaryOperator> {
         match self {
             Token::Simple(Minus) => Some(BinaryOperator::Minus),
+            Token::Simple(Pipe) => Some(BinaryOperator::BitwiseOr),
             Token::Simple(Plus) => Some(BinaryOperator::Plus),
             Token::Simple(Slash) => Some(BinaryOperator::Division),
             Token::Simple(Star) => Some(BinaryOperator::Multiplication),
@@ -257,6 +258,7 @@ impl<I, C, L> Token<I, C, L> {
 #[derive(Clone, Copy, PartialEq, PartialOrd)]
 enum Precedence {
     None,
+    BitwiseOr,
     Addition,
     Multiplication,
 }
@@ -264,6 +266,7 @@ enum Precedence {
 impl BinaryOperator {
     fn precedence(self) -> Precedence {
         match self {
+            BinaryOperator::BitwiseOr => Precedence::BitwiseOr,
             BinaryOperator::Plus | BinaryOperator::Minus => Precedence::Addition,
             BinaryOperator::Multiplication | BinaryOperator::Division => Precedence::Multiplication,
         }
@@ -1342,6 +1345,26 @@ mod tests {
     fn parse_multiplication() {
         let tokens = input_tokens![x @ Ident(()), star @ Star, y @ Literal(())];
         let expected = expr().ident("x").literal("y").multiply("star");
+        assert_eq_rpn_expr(tokens, expected)
+    }
+
+    #[test]
+    fn parse_bitwise_or() {
+        let tokens = input_tokens![x @ Ident(()), pipe @ Pipe, y @ Literal(())];
+        let expected = expr().ident("x").literal("y").bitwise_or("pipe");
+        assert_eq_rpn_expr(tokens, expected)
+    }
+
+    #[test]
+    fn addition_precedes_bitwise_or() {
+        let tokens =
+            input_tokens![x @ Ident(()), pipe @ Pipe, y @ Ident(()), plus @ Plus, z @ Ident(())];
+        let expected = expr()
+            .ident("x")
+            .ident("y")
+            .ident("z")
+            .plus("plus")
+            .bitwise_or("pipe");
         assert_eq_rpn_expr(tokens, expected)
     }
 
