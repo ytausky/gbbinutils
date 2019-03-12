@@ -50,7 +50,7 @@ impl SymExpr {
     }
 
     pub fn parentheses(mut self, left: impl Into<TokenRef>, right: impl Into<TokenRef>) -> Self {
-        let span = SymSpan::merge(&SymSpan::from(left.into()), &right.into().into());
+        let span = SymSpan::merge(left.into(), right.into());
         self.0.push(ExprAction::ApplyOperator((
             Operator::Unary(UnaryOperator::Parentheses),
             span,
@@ -78,6 +78,14 @@ impl SymExpr {
         self.0.push(ExprAction::ApplyOperator((
             Operator::Binary(BinaryOperator::BitwiseOr),
             token.into().into(),
+        )));
+        self
+    }
+
+    pub fn fn_call(mut self, args: usize, span: impl Into<SymSpan>) -> Self {
+        self.0.push(ExprAction::ApplyOperator((
+            Operator::FnCall(args),
+            span.into(),
         )));
         self
     }
@@ -215,10 +223,10 @@ impl From<TokenRef> for SymSpan {
 }
 
 impl SymSpan {
-    pub fn merge(left: &SymSpan, right: &SymSpan) -> SymSpan {
+    pub fn merge(left: impl Into<SymSpan>, right: impl Into<SymSpan>) -> SymSpan {
         SymSpan {
-            start: left.start.clone(),
-            end: right.end.clone(),
+            start: left.into().start.clone(),
+            end: right.into().end.clone(),
         }
     }
 }

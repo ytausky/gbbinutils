@@ -317,6 +317,7 @@ where
                     span: operator.1,
                 })
             }
+            Operator::FnCall(_) => unimplemented!(),
         }
     }
 

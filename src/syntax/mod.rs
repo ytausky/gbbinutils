@@ -103,6 +103,7 @@ pub enum ExprAtom<I, L> {
 pub enum Operator {
     Unary(UnaryOperator),
     Binary(BinaryOperator),
+    FnCall(usize),
 }
 
 #[derive(Clone, Debug, PartialEq)]

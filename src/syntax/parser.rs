@@ -242,14 +242,21 @@ enum ExprParsingError<S, R> {
     Other(CompactDiagnostic<S, R>),
 }
 
+enum SuffixOperator {
+    Binary(BinaryOperator),
+    FnCall,
+}
+
 impl<I, C, L> Token<I, C, L> {
-    fn as_binary_operator(&self) -> Option<BinaryOperator> {
+    fn as_suffix_operator(&self) -> Option<SuffixOperator> {
+        use SuffixOperator::*;
         match self {
-            Token::Simple(Minus) => Some(BinaryOperator::Minus),
-            Token::Simple(Pipe) => Some(BinaryOperator::BitwiseOr),
-            Token::Simple(Plus) => Some(BinaryOperator::Plus),
-            Token::Simple(Slash) => Some(BinaryOperator::Division),
-            Token::Simple(Star) => Some(BinaryOperator::Multiplication),
+            Token::Simple(Minus) => Some(Binary(BinaryOperator::Minus)),
+            Token::Simple(OpeningParenthesis) => Some(FnCall),
+            Token::Simple(Pipe) => Some(Binary(BinaryOperator::BitwiseOr)),
+            Token::Simple(Plus) => Some(Binary(BinaryOperator::Plus)),
+            Token::Simple(Slash) => Some(Binary(BinaryOperator::Division)),
+            Token::Simple(Star) => Some(Binary(BinaryOperator::Multiplication)),
             _ => None,
         }
     }
@@ -261,14 +268,19 @@ enum Precedence {
     BitwiseOr,
     Addition,
     Multiplication,
+    FnCall,
 }
 
-impl BinaryOperator {
-    fn precedence(self) -> Precedence {
+impl SuffixOperator {
+    fn precedence(&self) -> Precedence {
+        use SuffixOperator::*;
         match self {
-            BinaryOperator::BitwiseOr => Precedence::BitwiseOr,
-            BinaryOperator::Plus | BinaryOperator::Minus => Precedence::Addition,
-            BinaryOperator::Multiplication | BinaryOperator::Division => Precedence::Multiplication,
+            Binary(BinaryOperator::BitwiseOr) => Precedence::BitwiseOr,
+            Binary(BinaryOperator::Plus) | Binary(BinaryOperator::Minus) => Precedence::Addition,
+            Binary(BinaryOperator::Multiplication) | Binary(BinaryOperator::Division) => {
+                Precedence::Multiplication
+            }
+            FnCall => Precedence::FnCall,
         }
     }
 }
@@ -348,21 +360,31 @@ where
 
     fn parse_infix_expr(mut self, lowest: Precedence) -> ParserResult<Self, Ctx, S> {
         self = self.parse_atomic_expr()?;
-        while let Some(binary_operator) = self
+        while let Some(suffix_operator) = self
             .token
             .0
             .as_ref()
             .ok()
-            .map(Token::as_binary_operator)
+            .map(Token::as_suffix_operator)
             .unwrap_or(None)
         {
-            let precedence = binary_operator.precedence();
+            let precedence = suffix_operator.precedence();
             if precedence <= lowest {
                 break;
             }
-            let operator = (Operator::Binary(binary_operator), self.token.1);
+            let span = self.token.1;
             bump!(self);
-            self = self.parse_infix_expr(precedence)?;
+            let operator = match suffix_operator {
+                SuffixOperator::Binary(binary_operator) => {
+                    self = self.parse_infix_expr(precedence)?;
+                    (Operator::Binary(binary_operator), span)
+                }
+                SuffixOperator::FnCall => {
+                    let span = self.context.diagnostics().merge_spans(&span, &self.token.1);
+                    bump!(self);
+                    (Operator::FnCall(0), span)
+                }
+            };
             self.context.apply_operator(operator);
         }
         Ok(self)
@@ -538,7 +560,7 @@ mod tests {
 
     impl MergeSpans<SymSpan> for FileActionCollector {
         fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            SymSpan::merge(left, right)
+            SymSpan::merge(left.clone(), right.clone())
         }
     }
 
@@ -584,7 +606,7 @@ mod tests {
 
     impl MergeSpans<SymSpan> for StmtActionCollector {
         fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            SymSpan::merge(left, right)
+            SymSpan::merge(left.clone(), right.clone())
         }
     }
 
@@ -660,7 +682,7 @@ mod tests {
 
     impl MergeSpans<SymSpan> for CommandActionCollector {
         fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            SymSpan::merge(left, right)
+            SymSpan::merge(left.clone(), right.clone())
         }
     }
 
@@ -716,7 +738,7 @@ mod tests {
 
     impl MergeSpans<SymSpan> for ArgActionCollector {
         fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            SymSpan::merge(left, right)
+            SymSpan::merge(left.clone(), right.clone())
         }
     }
 
@@ -777,7 +799,7 @@ mod tests {
 
     impl MergeSpans<SymSpan> for ExprActionCollector {
         fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            SymSpan::merge(left, right)
+            SymSpan::merge(left.clone(), right.clone())
         }
     }
 
@@ -829,7 +851,7 @@ mod tests {
 
     impl MergeSpans<SymSpan> for MacroParamsActionCollector {
         fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            SymSpan::merge(left, right)
+            SymSpan::merge(left.clone(), right.clone())
         }
     }
 
@@ -882,7 +904,7 @@ mod tests {
 
     impl MergeSpans<SymSpan> for MacroBodyActionCollector {
         fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            SymSpan::merge(left, right)
+            SymSpan::merge(left.clone(), right.clone())
         }
     }
 
@@ -935,7 +957,7 @@ mod tests {
 
     impl MergeSpans<SymSpan> for MacroInvocationActionCollector {
         fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            SymSpan::merge(left, right)
+            SymSpan::merge(left.clone(), right.clone())
         }
     }
 
@@ -990,7 +1012,7 @@ mod tests {
 
     impl MergeSpans<SymSpan> for MacroArgActionCollector {
         fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            SymSpan::merge(left, right)
+            SymSpan::merge(left.clone(), right.clone())
         }
     }
 
@@ -1365,6 +1387,17 @@ mod tests {
             .ident("z")
             .plus("plus")
             .bitwise_or("pipe");
+        assert_eq_rpn_expr(tokens, expected)
+    }
+
+    #[test]
+    fn parse_nullary_fn_call() {
+        let tokens =
+            input_tokens![name @ Ident(()), left @ OpeningParenthesis, right @ ClosingParenthesis];
+        let expected = expr().ident("name").fn_call(
+            0,
+            SymSpan::merge(TokenRef::from("left"), TokenRef::from("right")),
+        );
         assert_eq_rpn_expr(tokens, expected)
     }
 
