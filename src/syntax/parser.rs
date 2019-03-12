@@ -546,6 +546,46 @@ mod tests {
         assert_eq_actions(input_tokens![], [])
     }
 
+    macro_rules! impl_diag_traits {
+        ($($t:ty),* $(,)?) => {
+            $(
+                impl MergeSpans<SymSpan> for $t {
+                    fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
+                        SymSpan::merge(left.clone(), right.clone())
+                    }
+                }
+
+                impl StripSpan<SymSpan> for $t {
+                    type Stripped = SymSpan;
+
+                    fn strip_span(&mut self, span: &SymSpan) -> Self::Stripped {
+                        span.clone()
+                    }
+                }
+
+                impl DelegateDiagnostics<SymSpan> for $t {
+                    type Delegate = Self;
+
+                    fn diagnostics(&mut self) -> &mut Self::Delegate {
+                        self
+                    }
+                }
+            )*
+        };
+    }
+
+    impl_diag_traits! {
+        FileActionCollector,
+        StmtActionCollector,
+        CommandActionCollector,
+        ArgActionCollector,
+        ExprActionCollector,
+        MacroParamsActionCollector,
+        MacroBodyActionCollector,
+        MacroInvocationActionCollector,
+        MacroArgActionCollector,
+    }
+
     struct FileActionCollector {
         actions: Vec<FileAction<SymSpan>>,
     }
@@ -558,31 +598,9 @@ mod tests {
         }
     }
 
-    impl MergeSpans<SymSpan> for FileActionCollector {
-        fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            SymSpan::merge(left.clone(), right.clone())
-        }
-    }
-
-    impl StripSpan<SymSpan> for FileActionCollector {
-        type Stripped = SymSpan;
-
-        fn strip_span(&mut self, span: &SymSpan) -> Self::Stripped {
-            span.clone()
-        }
-    }
-
     impl EmitDiagnostic<SymSpan, SymSpan> for FileActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.actions.push(FileAction::EmitDiagnostic(diagnostic))
-        }
-    }
-
-    impl DelegateDiagnostics<SymSpan> for FileActionCollector {
-        type Delegate = Self;
-
-        fn diagnostics(&mut self) -> &mut Self::Delegate {
-            self
         }
     }
 
@@ -604,31 +622,9 @@ mod tests {
         parent: FileActionCollector,
     }
 
-    impl MergeSpans<SymSpan> for StmtActionCollector {
-        fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            SymSpan::merge(left.clone(), right.clone())
-        }
-    }
-
-    impl StripSpan<SymSpan> for StmtActionCollector {
-        type Stripped = SymSpan;
-
-        fn strip_span(&mut self, span: &SymSpan) -> Self::Stripped {
-            span.clone()
-        }
-    }
-
     impl EmitDiagnostic<SymSpan, SymSpan> for StmtActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.actions.push(StmtAction::EmitDiagnostic(diagnostic))
-        }
-    }
-
-    impl DelegateDiagnostics<SymSpan> for StmtActionCollector {
-        type Delegate = Self;
-
-        fn diagnostics(&mut self) -> &mut Self::Delegate {
-            self
         }
     }
 
@@ -680,31 +676,9 @@ mod tests {
         parent: StmtActionCollector,
     }
 
-    impl MergeSpans<SymSpan> for CommandActionCollector {
-        fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            SymSpan::merge(left.clone(), right.clone())
-        }
-    }
-
-    impl StripSpan<SymSpan> for CommandActionCollector {
-        type Stripped = SymSpan;
-
-        fn strip_span(&mut self, span: &SymSpan) -> Self::Stripped {
-            span.clone()
-        }
-    }
-
     impl EmitDiagnostic<SymSpan, SymSpan> for CommandActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.actions.push(CommandAction::EmitDiagnostic(diagnostic))
-        }
-    }
-
-    impl DelegateDiagnostics<SymSpan> for CommandActionCollector {
-        type Delegate = Self;
-
-        fn diagnostics(&mut self) -> &mut Self::Delegate {
-            self
         }
     }
 
@@ -736,31 +710,9 @@ mod tests {
         parent: CommandActionCollector,
     }
 
-    impl MergeSpans<SymSpan> for ArgActionCollector {
-        fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            SymSpan::merge(left.clone(), right.clone())
-        }
-    }
-
-    impl StripSpan<SymSpan> for ArgActionCollector {
-        type Stripped = SymSpan;
-
-        fn strip_span(&mut self, span: &SymSpan) -> Self::Stripped {
-            span.clone()
-        }
-    }
-
     impl EmitDiagnostic<SymSpan, SymSpan> for ArgActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.expr_action_collector.emit_diagnostic(diagnostic)
-        }
-    }
-
-    impl DelegateDiagnostics<SymSpan> for ArgActionCollector {
-        type Delegate = Self;
-
-        fn diagnostics(&mut self) -> &mut Self::Delegate {
-            self
         }
     }
 
@@ -797,31 +749,9 @@ mod tests {
         }
     }
 
-    impl MergeSpans<SymSpan> for ExprActionCollector {
-        fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            SymSpan::merge(left.clone(), right.clone())
-        }
-    }
-
-    impl StripSpan<SymSpan> for ExprActionCollector {
-        type Stripped = SymSpan;
-
-        fn strip_span(&mut self, span: &SymSpan) -> Self::Stripped {
-            span.clone()
-        }
-    }
-
     impl EmitDiagnostic<SymSpan, SymSpan> for ExprActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.actions.push(ExprAction::EmitDiagnostic(diagnostic))
-        }
-    }
-
-    impl DelegateDiagnostics<SymSpan> for ExprActionCollector {
-        type Delegate = Self;
-
-        fn diagnostics(&mut self) -> &mut Self::Delegate {
-            self
         }
     }
 
@@ -849,32 +779,10 @@ mod tests {
         parent: StmtActionCollector,
     }
 
-    impl MergeSpans<SymSpan> for MacroParamsActionCollector {
-        fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            SymSpan::merge(left.clone(), right.clone())
-        }
-    }
-
-    impl StripSpan<SymSpan> for MacroParamsActionCollector {
-        type Stripped = SymSpan;
-
-        fn strip_span(&mut self, span: &SymSpan) -> Self::Stripped {
-            span.clone()
-        }
-    }
-
     impl EmitDiagnostic<SymSpan, SymSpan> for MacroParamsActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.actions
                 .push(MacroParamsAction::EmitDiagnostic(diagnostic))
-        }
-    }
-
-    impl DelegateDiagnostics<SymSpan> for MacroParamsActionCollector {
-        type Delegate = Self;
-
-        fn diagnostics(&mut self) -> &mut Self::Delegate {
-            self
         }
     }
 
@@ -902,32 +810,10 @@ mod tests {
         parent: MacroParamsActionCollector,
     }
 
-    impl MergeSpans<SymSpan> for MacroBodyActionCollector {
-        fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            SymSpan::merge(left.clone(), right.clone())
-        }
-    }
-
-    impl StripSpan<SymSpan> for MacroBodyActionCollector {
-        type Stripped = SymSpan;
-
-        fn strip_span(&mut self, span: &SymSpan) -> Self::Stripped {
-            span.clone()
-        }
-    }
-
     impl EmitDiagnostic<SymSpan, SymSpan> for MacroBodyActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.actions
                 .push(TokenSeqAction::EmitDiagnostic(diagnostic))
-        }
-    }
-
-    impl DelegateDiagnostics<SymSpan> for MacroBodyActionCollector {
-        type Delegate = Self;
-
-        fn diagnostics(&mut self) -> &mut Self::Delegate {
-            self
         }
     }
 
@@ -955,32 +841,10 @@ mod tests {
         parent: StmtActionCollector,
     }
 
-    impl MergeSpans<SymSpan> for MacroInvocationActionCollector {
-        fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            SymSpan::merge(left.clone(), right.clone())
-        }
-    }
-
-    impl StripSpan<SymSpan> for MacroInvocationActionCollector {
-        type Stripped = SymSpan;
-
-        fn strip_span(&mut self, span: &SymSpan) -> Self::Stripped {
-            span.clone()
-        }
-    }
-
     impl EmitDiagnostic<SymSpan, SymSpan> for MacroInvocationActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.actions
                 .push(MacroInvocationAction::EmitDiagnostic(diagnostic))
-        }
-    }
-
-    impl DelegateDiagnostics<SymSpan> for MacroInvocationActionCollector {
-        type Delegate = Self;
-
-        fn diagnostics(&mut self) -> &mut Self::Delegate {
-            self
         }
     }
 
@@ -1010,32 +874,10 @@ mod tests {
         parent: MacroInvocationActionCollector,
     }
 
-    impl MergeSpans<SymSpan> for MacroArgActionCollector {
-        fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
-            SymSpan::merge(left.clone(), right.clone())
-        }
-    }
-
-    impl StripSpan<SymSpan> for MacroArgActionCollector {
-        type Stripped = SymSpan;
-
-        fn strip_span(&mut self, span: &SymSpan) -> Self::Stripped {
-            span.clone()
-        }
-    }
-
     impl EmitDiagnostic<SymSpan, SymSpan> for MacroArgActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
             self.actions
                 .push(TokenSeqAction::EmitDiagnostic(diagnostic))
-        }
-    }
-
-    impl DelegateDiagnostics<SymSpan> for MacroArgActionCollector {
-        type Delegate = Self;
-
-        fn diagnostics(&mut self) -> &mut Self::Delegate {
-            self
         }
     }
 
