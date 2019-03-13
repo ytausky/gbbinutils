@@ -1315,6 +1315,26 @@ mod tests {
         assert_eq_rpn_expr(tokens, expected)
     }
 
+    #[test]
+    fn fn_call_precedes_multiplication() {
+        let tokens = input_tokens![
+            literal @ Literal(()),
+            star @ Simple(Star),
+            name @ Ident(()),
+            left @ OpeningParenthesis,
+            right @ ClosingParenthesis,
+        ];
+        let expected = expr()
+            .literal("literal")
+            .ident("name")
+            .fn_call(
+                0,
+                SymSpan::merge(TokenRef::from("left"), TokenRef::from("right")),
+            )
+            .multiply("star");
+        assert_eq_rpn_expr(tokens, expected)
+    }
+
     fn assert_eq_rpn_expr(mut input: InputTokens, SymExpr(expected): SymExpr) {
         let parsed_rpn_expr = parse_sym_expr(&mut input);
         assert_eq!(parsed_rpn_expr, expected);
