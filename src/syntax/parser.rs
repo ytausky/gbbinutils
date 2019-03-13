@@ -391,14 +391,21 @@ where
         while let Ok(token) = &self.token.0 {
             match token {
                 Token::Simple(SimpleToken::ClosingParenthesis) => break,
-                _ => {
-                    self = self.parse_expression()?;
-                    args += 1;
+                Token::Simple(SimpleToken::Comma) => {
+                    bump!(self);
+                    self = self.parse_fn_arg(&mut args)?;
                 }
+                _ => self = self.parse_fn_arg(&mut args)?,
             }
         }
         let span = self.context.diagnostics().merge_spans(&left, &self.token.1);
         self.context.apply_operator((Operator::FnCall(args), span));
+        Ok(self)
+    }
+
+    fn parse_fn_arg(mut self, args: &mut usize) -> ParserResult<Self, Ctx, S> {
+        self = self.parse_expression()?;
+        *args += 1;
         Ok(self)
     }
 
@@ -1265,6 +1272,23 @@ mod tests {
         ];
         let expected = expr().ident("name").ident("arg").fn_call(
             1,
+            SymSpan::merge(TokenRef::from("left"), TokenRef::from("right")),
+        );
+        assert_eq_rpn_expr(tokens, expected)
+    }
+
+    #[test]
+    fn parse_binary_fn_call() {
+        let tokens = input_tokens![
+            name @ Ident(()),
+            left @ OpeningParenthesis,
+            arg1 @ Ident(()),
+            Simple(Comma),
+            arg2 @ Ident(()),
+            right @ ClosingParenthesis
+        ];
+        let expected = expr().ident("name").ident("arg1").ident("arg2").fn_call(
+            2,
             SymSpan::merge(TokenRef::from("left"), TokenRef::from("right")),
         );
         assert_eq_rpn_expr(tokens, expected)
