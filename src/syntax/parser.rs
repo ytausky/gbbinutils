@@ -400,6 +400,7 @@ where
         }
         let span = self.context.diagnostics().merge_spans(&left, &self.token.1);
         self.context.apply_operator((Operator::FnCall(args), span));
+        bump!(self);
         Ok(self)
     }
 
@@ -1291,6 +1292,26 @@ mod tests {
             2,
             SymSpan::merge(TokenRef::from("left"), TokenRef::from("right")),
         );
+        assert_eq_rpn_expr(tokens, expected)
+    }
+
+    #[test]
+    fn parse_fn_call_plus_literal() {
+        let tokens = input_tokens![
+            name @ Ident(()),
+            left @ OpeningParenthesis,
+            right @ ClosingParenthesis,
+            plus @ Simple(Plus),
+            literal @ Literal(())
+        ];
+        let expected = expr()
+            .ident("name")
+            .fn_call(
+                0,
+                SymSpan::merge(TokenRef::from("left"), TokenRef::from("right")),
+            )
+            .literal("literal")
+            .plus("plus");
         assert_eq_rpn_expr(tokens, expected)
     }
 
