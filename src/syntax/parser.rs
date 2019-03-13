@@ -374,19 +374,31 @@ where
             }
             let span = self.token.1;
             bump!(self);
-            let operator = match suffix_operator {
+            match suffix_operator {
                 SuffixOperator::Binary(binary_operator) => {
                     self = self.parse_infix_expr(precedence)?;
-                    (Operator::Binary(binary_operator), span)
+                    self.context
+                        .apply_operator((Operator::Binary(binary_operator), span))
                 }
-                SuffixOperator::FnCall => {
-                    let span = self.context.diagnostics().merge_spans(&span, &self.token.1);
-                    bump!(self);
-                    (Operator::FnCall(0), span)
-                }
-            };
-            self.context.apply_operator(operator);
+                SuffixOperator::FnCall => self = self.parse_fn_call(span)?,
+            }
         }
+        Ok(self)
+    }
+
+    fn parse_fn_call(mut self, left: S) -> ParserResult<Self, Ctx, S> {
+        let mut args = 0;
+        while let Ok(token) = &self.token.0 {
+            match token {
+                Token::Simple(SimpleToken::ClosingParenthesis) => break,
+                _ => {
+                    self = self.parse_expression()?;
+                    args += 1;
+                }
+            }
+        }
+        let span = self.context.diagnostics().merge_spans(&left, &self.token.1);
+        self.context.apply_operator((Operator::FnCall(args), span));
         Ok(self)
     }
 
@@ -1238,6 +1250,21 @@ mod tests {
             input_tokens![name @ Ident(()), left @ OpeningParenthesis, right @ ClosingParenthesis];
         let expected = expr().ident("name").fn_call(
             0,
+            SymSpan::merge(TokenRef::from("left"), TokenRef::from("right")),
+        );
+        assert_eq_rpn_expr(tokens, expected)
+    }
+
+    #[test]
+    fn parse_unary_fn_call() {
+        let tokens = input_tokens![
+            name @ Ident(()),
+            left @ OpeningParenthesis,
+            arg @ Ident(()),
+            right @ ClosingParenthesis
+        ];
+        let expected = expr().ident("name").ident("arg").fn_call(
+            1,
             SymSpan::merge(TokenRef::from("left"), TokenRef::from("right")),
         );
         assert_eq_rpn_expr(tokens, expected)
