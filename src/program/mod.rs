@@ -27,7 +27,7 @@ pub struct Program<S> {
 
 struct Section<S> {
     name: Option<String>,
-    origin: Option<RelocExpr<S>>,
+    addr: Option<RelocExpr<S>>,
     size: ValueId,
     items: Vec<Node<S>>,
 }
@@ -76,7 +76,7 @@ impl<S> Section<S> {
     pub fn new(name: Option<String>, size: ValueId) -> Section<S> {
         Section {
             name,
-            origin: None,
+            addr: None,
             size,
             items: Vec::new(),
         }
@@ -89,18 +89,18 @@ impl<S: Clone> Section<S> {
         ST: Borrow<SymbolTable>,
         F: FnMut(&Node<S>, &mut EvalContext<ST>),
     {
-        let origin = self.evaluate_origin(context);
+        let addr = self.evaluate_addr(context);
         let mut offset = Value::from(0);
         for item in &self.items {
             offset += &item.size(&context);
-            context.location = &origin + &offset;
+            context.location = &addr + &offset;
             f(item, context)
         }
-        (origin, offset)
+        (addr, offset)
     }
 
-    fn evaluate_origin<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
-        self.origin
+    fn evaluate_addr<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
+        self.addr
             .as_ref()
             .map(|expr| expr.evaluate(context))
             .unwrap_or_else(|| 0.into())
@@ -117,11 +117,11 @@ impl BinaryObject {
         let mut data: Vec<u8> = Vec::new();
         for section in self.sections {
             if !section.data.is_empty() {
-                let end = section.origin + section.data.len();
+                let end = section.addr + section.data.len();
                 if data.len() < end {
                     data.resize(end, default)
                 }
-                data[section.origin..end].copy_from_slice(&section.data)
+                data[section.addr..end].copy_from_slice(&section.data)
             }
         }
         if data.len() < MIN_ROM_LEN {
@@ -141,7 +141,7 @@ pub struct Rom {
 
 pub struct BinarySection {
     pub name: Option<Box<str>>,
-    pub origin: usize,
+    pub addr: usize,
     pub data: Vec<u8>,
 }
 
@@ -161,27 +161,27 @@ mod tests {
     #[test]
     fn section_placed_in_rom_starting_at_origin() {
         let byte = 0x42;
-        let origin = 0x150;
+        let addr = 0x150;
         let object = BinaryObject {
             sections: vec![BinarySection {
                 name: None,
-                origin,
+                addr,
                 data: vec![byte],
             }],
         };
         let rom = object.into_rom();
         let mut expected = [0xffu8; MIN_ROM_LEN];
-        expected[origin] = byte;
+        expected[addr] = byte;
         assert_eq!(*rom.data, expected[..])
     }
 
     #[test]
     fn empty_section_does_not_extend_rom() {
-        let origin = MIN_ROM_LEN + 1;
+        let addr = MIN_ROM_LEN + 1;
         let object = BinaryObject {
             sections: vec![BinarySection {
                 name: None,
-                origin,
+                addr,
                 data: Vec::new(),
             }],
         };

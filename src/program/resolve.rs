@@ -236,13 +236,13 @@ mod tests {
             sections: vec![
                 Section {
                     name: None,
-                    origin: Some(origin1.into()),
+                    addr: Some(origin1.into()),
                     size: ValueId(0),
                     items: vec![Node::Byte(0x42)],
                 },
                 Section {
                     name: None,
-                    origin: Some(
+                    addr: Some(
                         ExprVariant::Binary(
                             BinaryOperator::Plus,
                             Box::new(RelocAtom::LocationCounter.into()),
@@ -263,7 +263,7 @@ mod tests {
         };
         let binary = object.link(&mut IgnoreDiagnostics::new());
         assert_eq!(
-            binary.sections[1].origin,
+            binary.sections[1].addr,
             (origin1 + 1 + skipped_bytes) as usize
         )
     }

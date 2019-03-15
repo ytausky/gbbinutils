@@ -14,12 +14,12 @@ impl<S: Clone> Section<S> {
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> BinarySection {
         let mut data = Vec::new();
-        let (origin, _) = self.traverse(context, |item, context| {
+        let (addr, _) = self.traverse(context, |item, context| {
             data.extend(item.translate(context, diagnostics))
         });
         BinarySection {
             name: self.name.clone().map(|name| name.into()),
-            origin: origin.exact().unwrap() as usize,
+            addr: addr.exact().unwrap() as usize,
             data,
         }
     }
@@ -220,16 +220,16 @@ mod tests {
     }
 
     #[test]
-    fn set_origin_of_translated_section() {
+    fn set_addr_of_translated_section() {
         let addr = 0x7ff0;
         let section = Section {
             name: None,
-            origin: Some(addr.into()),
+            addr: Some(addr.into()),
             size: ValueId(0),
             items: Vec::new(),
         };
         let translated = translate_without_context(section);
-        assert_eq!(translated.origin, addr as usize)
+        assert_eq!(translated.addr, addr as usize)
     }
 
     #[test]
@@ -247,7 +247,7 @@ mod tests {
     #[test]
     fn location_counter_starts_from_section_origin() {
         let mut section = Section::new(None, ValueId(0));
-        section.origin = Some(0xffe1.into());
+        section.addr = Some(0xffe1.into());
         section
             .items
             .push(Node::Expr(RelocAtom::LocationCounter.into(), Width::Word));

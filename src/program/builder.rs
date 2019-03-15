@@ -11,7 +11,7 @@ pub struct ProgramBuilder<SR> {
 }
 
 enum BuilderState<S> {
-    AnonSectionPrelude { origin: Option<RelocExpr<S>> },
+    AnonSectionPrelude { addr: Option<RelocExpr<S>> },
     Section(usize),
     SectionPrelude(usize),
 }
@@ -20,7 +20,7 @@ impl<SR> ProgramBuilder<SR> {
     pub fn new() -> ProgramBuilder<SR> {
         ProgramBuilder {
             program: Program::new(),
-            state: Some(BuilderState::AnonSectionPrelude { origin: None }),
+            state: Some(BuilderState::AnonSectionPrelude { addr: None }),
         }
     }
 
@@ -34,12 +34,12 @@ impl<SR> ProgramBuilder<SR> {
 
     fn current_section(&mut self) -> &mut Section<SR> {
         match self.state.take().unwrap() {
-            BuilderState::AnonSectionPrelude { origin } => {
+            BuilderState::AnonSectionPrelude { addr } => {
                 self.program.add_section(None);
                 let index = self.program.sections.len() - 1;
                 self.state = Some(BuilderState::Section(index));
                 let section = &mut self.program.sections[index];
-                section.origin = origin;
+                section.addr = addr;
                 section
             }
             BuilderState::SectionPrelude(index) | BuilderState::Section(index) => {
@@ -56,17 +56,13 @@ impl<S: Clone> PartialBackend<S> for ProgramBuilder<S> {
         item.lower().for_each(|data_item| self.push(data_item))
     }
 
-    fn set_origin(&mut self, origin: Self::Value) {
+    fn set_origin(&mut self, addr: Self::Value) {
         match self.state.take().unwrap() {
             BuilderState::SectionPrelude(index) => {
-                self.program.sections[index].origin = Some(origin);
+                self.program.sections[index].addr = Some(addr);
                 self.state = Some(BuilderState::SectionPrelude(index))
             }
-            _ => {
-                self.state = Some(BuilderState::AnonSectionPrelude {
-                    origin: Some(origin),
-                })
-            }
+            _ => self.state = Some(BuilderState::AnonSectionPrelude { addr: Some(addr) }),
         }
     }
 }
@@ -150,7 +146,7 @@ mod tests {
     #[test]
     fn no_origin_by_default() {
         let object = build_object(|builder| builder.push(Node::Byte(0xcd)));
-        assert_eq!(object.sections[0].origin, None)
+        assert_eq!(object.sections[0].addr, None)
     }
 
     #[test]
@@ -160,7 +156,7 @@ mod tests {
             builder.set_origin(origin.clone());
             builder.push(Node::Byte(0xcd))
         });
-        assert_eq!(object.sections[0].origin, Some(origin))
+        assert_eq!(object.sections[0].addr, Some(origin))
     }
 
     #[test]
@@ -177,7 +173,7 @@ mod tests {
             builder.start_section(("my_section".into(), ()));
             builder.set_origin(origin.clone())
         });
-        assert_eq!(object.sections[0].origin, Some(origin))
+        assert_eq!(object.sections[0].addr, Some(origin))
     }
 
     #[test]
