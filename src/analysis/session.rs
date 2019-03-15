@@ -77,16 +77,16 @@ impl<'a, C, A, B, N, D> CompositeSession<'a, C, A, B, N, D>
 where
     C: Lex<D>,
     B: CreateSymbol<D::Span> + ?Sized,
-    N: NameTable<Ident<C::StringRef>, SymbolEntry = B::SymbolId>,
+    N: NameTable<Ident<C::StringRef>, BackendEntry = B::SymbolId>,
     D: Diagnostics,
 {
     fn look_up_symbol(&mut self, ident: Ident<C::StringRef>, span: &D::Span) -> B::SymbolId {
         match self.names.get(&ident) {
+            Some(Name::Backend(id)) => id.clone(),
             Some(Name::Macro(_)) => unimplemented!(),
-            Some(Name::Symbol(id)) => id.clone(),
             None => {
                 let id = self.backend.create_symbol(span.clone());
-                self.names.insert(ident, Name::Symbol(id.clone()));
+                self.names.insert(ident, Name::Backend(id.clone()));
                 id
             }
         }
@@ -192,8 +192,8 @@ where
     B: Backend<Ident<C::StringRef>, D::Span> + ?Sized,
     N: NameTable<
         Ident<C::StringRef>,
+        BackendEntry = B::SymbolId,
         MacroEntry = MacroEntry<C::StringRef, D>,
-        SymbolEntry = B::SymbolId,
     >,
     D: Diagnostics,
 {
@@ -210,8 +210,8 @@ where
     B: Backend<Ident<C::StringRef>, D::Span> + ?Sized,
     N: NameTable<
             Ident<C::StringRef>,
+            BackendEntry = B::SymbolId,
             MacroEntry = MacroEntry<C::StringRef, D>,
-            SymbolEntry = B::SymbolId,
         > + StartScope<Ident<C::StringRef>>,
     D: Diagnostics,
 {
@@ -640,7 +640,7 @@ mod tests {
     type MockDiagnostics<'a, S> = crate::diag::MockDiagnostics<'a, Event<S>, S>;
     type MockNameTable<'a, S> = crate::name::MockNameTable<
         'a,
-        BasicNameTable<MacroEntry<String, MockDiagnostics<'a, S>>, usize>,
+        BasicNameTable<usize, MacroEntry<String, MockDiagnostics<'a, S>>>,
         Event<S>,
     >;
     type TestSession<'a, 'b, S> = CompositeSession<

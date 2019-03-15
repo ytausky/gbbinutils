@@ -4,17 +4,17 @@ use std::collections::HashMap;
 pub use self::mock::*;
 
 pub trait NameTable<I> {
+    type BackendEntry;
     type MacroEntry;
-    type SymbolEntry;
 
-    fn get(&self, ident: &I) -> Option<&Name<Self::MacroEntry, Self::SymbolEntry>>;
-    fn insert(&mut self, ident: I, entry: Name<Self::MacroEntry, Self::SymbolEntry>);
+    fn get(&self, ident: &I) -> Option<&Name<Self::BackendEntry, Self::MacroEntry>>;
+    fn insert(&mut self, ident: I, entry: Name<Self::BackendEntry, Self::MacroEntry>);
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Name<M, S> {
+pub enum Name<B, M> {
+    Backend(B),
     Macro(M),
-    Symbol(S),
 }
 
 pub trait StartScope<I> {
@@ -51,11 +51,11 @@ impl From<&str> for Ident<String> {
     }
 }
 
-pub struct BasicNameTable<M, S> {
-    table: HashMap<String, Name<M, S>>,
+pub struct BasicNameTable<B, M> {
+    table: HashMap<String, Name<B, M>>,
 }
 
-impl<M, S> BasicNameTable<M, S> {
+impl<B, M> BasicNameTable<B, M> {
     pub fn new() -> Self {
         BasicNameTable {
             table: HashMap::new(),
@@ -63,22 +63,22 @@ impl<M, S> BasicNameTable<M, S> {
     }
 }
 
-impl<M, S> NameTable<Ident<String>> for BasicNameTable<M, S> {
+impl<B, M> NameTable<Ident<String>> for BasicNameTable<B, M> {
+    type BackendEntry = B;
     type MacroEntry = M;
-    type SymbolEntry = S;
 
-    fn get(&self, ident: &Ident<String>) -> Option<&Name<Self::MacroEntry, Self::SymbolEntry>> {
+    fn get(&self, ident: &Ident<String>) -> Option<&Name<Self::BackendEntry, Self::MacroEntry>> {
         self.table.get(&ident.name)
     }
 
-    fn insert(&mut self, ident: Ident<String>, entry: Name<Self::MacroEntry, Self::SymbolEntry>) {
+    fn insert(&mut self, ident: Ident<String>, entry: Name<Self::BackendEntry, Self::MacroEntry>) {
         self.table.insert(ident.name, entry);
     }
 }
 
-pub struct BiLevelNameTable<M, S> {
-    global: BasicNameTable<M, S>,
-    local: Option<BasicNameTable<M, S>>,
+pub struct BiLevelNameTable<B, M> {
+    global: BasicNameTable<B, M>,
+    local: Option<BasicNameTable<B, M>>,
 }
 
 impl<M, S> BiLevelNameTable<M, S> {
@@ -104,15 +104,15 @@ impl<M, S> BiLevelNameTable<M, S> {
     }
 }
 
-impl<M, S> NameTable<Ident<String>> for BiLevelNameTable<M, S> {
+impl<B, M> NameTable<Ident<String>> for BiLevelNameTable<B, M> {
+    type BackendEntry = B;
     type MacroEntry = M;
-    type SymbolEntry = S;
 
-    fn get(&self, ident: &Ident<String>) -> Option<&Name<Self::MacroEntry, Self::SymbolEntry>> {
+    fn get(&self, ident: &Ident<String>) -> Option<&Name<Self::BackendEntry, Self::MacroEntry>> {
         self.select_table(ident).get(ident)
     }
 
-    fn insert(&mut self, ident: Ident<String>, entry: Name<Self::MacroEntry, Self::SymbolEntry>) {
+    fn insert(&mut self, ident: Ident<String>, entry: Name<Self::BackendEntry, Self::MacroEntry>) {
         self.select_table_mut(&ident).insert(ident, entry)
     }
 }
@@ -143,17 +143,20 @@ mod mock {
     }
 
     impl<'a, N: NameTable<Ident<String>>, T> NameTable<Ident<String>> for MockNameTable<'a, N, T> {
+        type BackendEntry = N::BackendEntry;
         type MacroEntry = N::MacroEntry;
-        type SymbolEntry = N::SymbolEntry;
 
-        fn get(&self, ident: &Ident<String>) -> Option<&Name<Self::MacroEntry, Self::SymbolEntry>> {
+        fn get(
+            &self,
+            ident: &Ident<String>,
+        ) -> Option<&Name<Self::BackendEntry, Self::MacroEntry>> {
             self.names.get(ident)
         }
 
         fn insert(
             &mut self,
             ident: Ident<String>,
-            entry: Name<Self::MacroEntry, Self::SymbolEntry>,
+            entry: Name<Self::BackendEntry, Self::MacroEntry>,
         ) {
             self.names.insert(ident, entry)
         }
@@ -190,23 +193,23 @@ mod tests {
     #[test]
     #[should_panic]
     fn panic_when_first_definition_is_local() {
-        let mut table = BiLevelNameTable::<(), _>::new();
-        table.insert("_loop".into(), Name::Symbol(()));
+        let mut table = BiLevelNameTable::<_, ()>::new();
+        table.insert("_loop".into(), Name::Backend(()));
     }
 
     #[test]
     fn retrieve_global_name() {
         let name = "start";
-        let mut table = BiLevelNameTable::<(), _>::new();
-        let entry = Name::Symbol(42);
+        let mut table = BiLevelNameTable::<_, ()>::new();
+        let entry = Name::Backend(42);
         table.insert(name.into(), entry.clone());
         assert_eq!(table.get(&name.into()), Some(&entry))
     }
 
     #[test]
     fn retrieve_local_name() {
-        let mut table = BiLevelNameTable::<(), _>::new();
-        let entry = Name::Symbol(42);
+        let mut table = BiLevelNameTable::<_, ()>::new();
+        let entry = Name::Backend(42);
         table.start_scope(&"global".into());
         table.insert("_local".into(), entry.clone());
         assert_eq!(table.get(&"_local".into()), Some(&entry))
@@ -214,9 +217,9 @@ mod tests {
 
     #[test]
     fn local_name_not_accessible_after_new_global_name() {
-        let mut table = BiLevelNameTable::<(), _>::new();
+        let mut table = BiLevelNameTable::<_, ()>::new();
         table.start_scope(&"global1".into());
-        table.insert("_local".into(), Name::Symbol(42));
+        table.insert("_local".into(), Name::Backend(42));
         table.start_scope(&"global2".into());
         assert_eq!(table.get(&"_local".into()), None)
     }
