@@ -241,13 +241,11 @@ mod tests {
             with_object_builder(|builder| builder.emit_item(byte_literal(value)));
         assert_eq!(
             *diagnostics,
-            [CompactDiagnostic::new(
-                Message::ValueOutOfRange {
-                    value,
-                    width: Width::Byte,
-                },
-                ()
-            )]
+            [Message::ValueOutOfRange {
+                value,
+                width: Width::Byte,
+            }
+            .at(())]
         );
     }
 
@@ -322,11 +320,9 @@ mod tests {
 
     fn unresolved(symbol: impl Into<String>) -> CompactDiagnostic<String, String> {
         let symbol = symbol.into();
-        CompactDiagnostic::new(
-            Message::UnresolvedSymbol {
-                symbol: symbol.clone(),
-            },
-            symbol,
-        )
+        Message::UnresolvedSymbol {
+            symbol: symbol.clone(),
+        }
+        .at(symbol)
     }
 }

@@ -133,7 +133,7 @@ impl<S: Session> syntax::StmtContext<Ident<S::StringRef>, Literal<S::StringRef>,
     fn enter_macro_def(mut self, keyword: S::Span) -> Self::MacroParamsContext {
         if self.label.is_none() {
             self.diagnostics()
-                .emit_diagnostic(CompactDiagnostic::new(Message::MacroRequiresName, keyword))
+                .emit_diagnostic(Message::MacroRequiresName.at(keyword))
         }
         MacroDefActions::new(self.label.take(), self)
     }
@@ -430,16 +430,14 @@ where
                 Ok(self.from_number(n, expr.span))
             }
             ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(_))) => {
-                Err(CompactDiagnostic::new(
-                    Message::KeywordInExpr {
-                        keyword: self.diagnostics().strip_span(&expr.span),
-                    },
-                    expr.span,
-                ))
+                Err(Message::KeywordInExpr {
+                    keyword: self.diagnostics().strip_span(&expr.span),
+                }
+                .at(expr.span))
             }
-            ExprVariant::Atom(SemanticAtom::Literal(Literal::String(_))) => Err(
-                CompactDiagnostic::new(Message::StringInInstruction, expr.span),
-            ),
+            ExprVariant::Atom(SemanticAtom::Literal(Literal::String(_))) => {
+                Err(Message::StringInInstruction.at(expr.span))
+            }
             ExprVariant::Unary(SemanticUnary::Parentheses, expr) => Ok(self.analyze_expr(*expr)?),
             ExprVariant::Binary(binary, left, right) => {
                 let left = self.analyze_expr(*left)?;
@@ -527,7 +525,7 @@ mod tests {
 
     use crate::analysis::backend::BackendEvent;
     use crate::analysis::session::SessionEvent;
-    use crate::diag::{CompactDiagnostic, Message};
+    use crate::diag::Message;
     use crate::expr::BinaryOperator;
     use crate::model::{RelocAtom, Width};
     use crate::syntax::{
@@ -692,11 +690,7 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [DiagnosticsEvent::EmitDiagnostic(CompactDiagnostic::new(
-                Message::MacroRequiresName,
-                ()
-            ))
-            .into()]
+            [DiagnosticsEvent::EmitDiagnostic(Message::MacroRequiresName.at(())).into()]
         )
     }
 
@@ -778,20 +772,20 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [DiagnosticsEvent::EmitDiagnostic(CompactDiagnostic::new(
+            [DiagnosticsEvent::EmitDiagnostic(
                 Message::OperandCount {
                     actual: 1,
                     expected: 0
-                },
-                ()
-            ))
+                }
+                .at(())
+            )
             .into()]
         )
     }
 
     #[test]
     fn diagnose_parsing_error() {
-        let diagnostic = CompactDiagnostic::new(Message::UnexpectedToken { token: () }, ());
+        let diagnostic = Message::UnexpectedToken { token: () }.at(());
         let actions = collect_semantic_actions(|actions| {
             let mut stmt = actions.enter_stmt(None);
             stmt.diagnostics().emit_diagnostic(diagnostic.clone());
@@ -805,7 +799,7 @@ mod tests {
 
     #[test]
     fn recover_from_malformed_expr() {
-        let diagnostic = CompactDiagnostic::new(Message::UnexpectedToken { token: () }, ());
+        let diagnostic = Message::UnexpectedToken { token: () }.at(());
         let actions = collect_semantic_actions(|file| {
             let mut expr = file
                 .enter_stmt(None)

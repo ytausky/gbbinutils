@@ -266,9 +266,12 @@ pub(crate) struct CompactDiagnostic<S, R> {
     pub highlight: S,
 }
 
-impl<S, R> CompactDiagnostic<S, R> {
-    pub fn new(message: Message<R>, highlight: S) -> CompactDiagnostic<S, R> {
-        CompactDiagnostic { message, highlight }
+impl<R> Message<R> {
+    pub(crate) fn at<S>(self, highlight: S) -> CompactDiagnostic<S, R> {
+        CompactDiagnostic {
+            message: self,
+            highlight,
+        }
     }
 }
 
@@ -648,7 +651,7 @@ mod tests {
             context,
         };
         let message = Message::AfOutsideStackOperation;
-        let compact = CompactDiagnostic::new(message.clone(), span);
+        let compact = message.clone().at(span);
         let expected = ExpandedDiagnostic {
             clauses: vec![
                 ExpandedDiagnosticClause {

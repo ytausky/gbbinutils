@@ -92,10 +92,7 @@ impl SymExpr {
 
     pub fn error(mut self, message: Message<SymSpan>, highlight: impl Into<SymSpan>) -> Self {
         self.0
-            .push(ExprAction::EmitDiagnostic(CompactDiagnostic::new(
-                message,
-                highlight.into(),
-            )));
+            .push(ExprAction::EmitDiagnostic(message.at(highlight.into())));
         self
     }
 }
@@ -449,7 +446,7 @@ pub(crate) fn arg_error(
     message: Message<SymSpan>,
     highlight: impl Into<TokenRef>,
 ) -> CompactDiagnostic<SymSpan, SymSpan> {
-    CompactDiagnostic::new(message, highlight.into().into())
+    message.at(highlight.into().into())
 }
 
 mod tests {

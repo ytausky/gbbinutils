@@ -241,10 +241,8 @@ where
             Some(_) => unimplemented!(),
             None => {
                 let stripped = self.diagnostics.strip_span(&name.1);
-                self.diagnostics.emit_diagnostic(CompactDiagnostic::new(
-                    Message::UndefinedMacro { name: stripped },
-                    name.1,
-                ));
+                self.diagnostics
+                    .emit_diagnostic(Message::UndefinedMacro { name: stripped }.at(name.1));
                 None
             }
         };
@@ -627,11 +625,7 @@ mod tests {
         session.invoke_macro((name.into(), name), vec![]);
         assert_eq!(
             log.into_inner(),
-            [DiagnosticsEvent::EmitDiagnostic(CompactDiagnostic::new(
-                Message::UndefinedMacro { name },
-                name
-            ))
-            .into()]
+            [DiagnosticsEvent::EmitDiagnostic(Message::UndefinedMacro { name }.at(name)).into()]
         );
     }
 

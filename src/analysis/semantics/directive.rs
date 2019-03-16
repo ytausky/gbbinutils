@@ -113,7 +113,7 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
         if let Err(err) = self.actions.session.analyze_file(path) {
             self.actions
                 .diagnostics()
-                .emit_diagnostic(CompactDiagnostic::new(err.into(), span))
+                .emit_diagnostic(Message::from(err).at(span))
         }
     }
 
@@ -153,7 +153,7 @@ fn reduce_include<I: PartialEq, D: DownstreamDiagnostics<S>, S>(
     match arg.variant {
         ExprVariant::Atom(SemanticAtom::Literal(Literal::String(path))) => Ok((path, arg.span)),
         _ => {
-            diagnostics.emit_diagnostic(CompactDiagnostic::new(Message::ExpectedString, arg.span));
+            diagnostics.emit_diagnostic(Message::ExpectedString.at(arg.span));
             Err(())
         }
     }
@@ -169,13 +169,13 @@ fn single_arg<T, D: DownstreamDiagnostics<S>, S>(
         assert!(args.next().is_none());
         Ok(arg)
     } else {
-        diagnostics.emit_diagnostic(CompactDiagnostic::new(
+        diagnostics.emit_diagnostic(
             Message::OperandCount {
                 actual: 0,
                 expected: 1,
-            },
-            span,
-        ));
+            }
+            .at(span),
+        );
         Err(())
     }
 }
@@ -285,11 +285,10 @@ mod tests {
             ds(|arg| arg.push_atom((ExprAtom::Literal(Literal::Operand(Operand::A)), ())));
         assert_eq!(
             actions,
-            [DiagnosticsEvent::EmitDiagnostic(CompactDiagnostic::new(
-                Message::KeywordInExpr { keyword: () },
-                (),
-            ))
-            .into()]
+            [
+                DiagnosticsEvent::EmitDiagnostic(Message::KeywordInExpr { keyword: () }.at((),))
+                    .into()
+            ]
         )
     }
 
@@ -313,10 +312,7 @@ mod tests {
         let actions = unary_directive(Directive::Include, |arg| arg.push_atom(mk_literal(7)));
         assert_eq!(
             actions,
-            [DiagnosticsEvent::EmitDiagnostic(
-                CompactDiagnostic::new(Message::ExpectedString, (),)
-            )
-            .into()]
+            [DiagnosticsEvent::EmitDiagnostic(Message::ExpectedString.at((),)).into()]
         )
     }
 
@@ -327,11 +323,10 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [DiagnosticsEvent::EmitDiagnostic(CompactDiagnostic::new(
-                Message::KeywordInExpr { keyword: () },
-                (),
-            ))
-            .into()]
+            [
+                DiagnosticsEvent::EmitDiagnostic(Message::KeywordInExpr { keyword: () }.at((),))
+                    .into()
+            ]
         )
     }
 
@@ -353,8 +348,7 @@ mod tests {
             operations.into_inner(),
             [
                 SessionEvent::AnalyzeFile(name.into()).into(),
-                DiagnosticsEvent::EmitDiagnostic(CompactDiagnostic::new(Message::InvalidUtf8, ()))
-                    .into()
+                DiagnosticsEvent::EmitDiagnostic(Message::InvalidUtf8.at(())).into()
             ]
         )
     }
@@ -381,12 +375,12 @@ mod tests {
             operations.into_inner(),
             [
                 SessionEvent::AnalyzeFile(name.into()).into(),
-                DiagnosticsEvent::EmitDiagnostic(CompactDiagnostic::new(
+                DiagnosticsEvent::EmitDiagnostic(
                     Message::IoError {
                         string: message.to_string()
-                    },
-                    ()
-                ))
+                    }
+                    .at(())
+                )
                 .into()
             ]
         )
@@ -443,13 +437,13 @@ mod tests {
         let actions = with_directive(directive, |command| command);
         assert_eq!(
             actions,
-            [DiagnosticsEvent::EmitDiagnostic(CompactDiagnostic::new(
+            [DiagnosticsEvent::EmitDiagnostic(
                 Message::OperandCount {
                     actual: 0,
                     expected: 1
-                },
-                (),
-            ))
+                }
+                .at((),)
+            )
             .into()]
         )
     }

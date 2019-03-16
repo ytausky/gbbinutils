@@ -1,6 +1,6 @@
 use super::{Analysis, AtomKind, Operand, SimpleOperand};
 
-use crate::diag::{CompactDiagnostic, DownstreamDiagnostics, EmitDiagnostic, Message};
+use crate::diag::{DownstreamDiagnostics, EmitDiagnostic, Message};
 use crate::model::{Branch, Condition, Instruction, Nullary};
 use crate::span::Source;
 
@@ -37,10 +37,7 @@ where
             BranchVariant::Unconditional(branch) => match condition {
                 None => Ok(branch.into()),
                 Some((_, condition_span)) => {
-                    self.emit_diagnostic(CompactDiagnostic::new(
-                        Message::AlwaysUnconditional,
-                        condition_span,
-                    ));
+                    self.emit_diagnostic(Message::AlwaysUnconditional.at(condition_span));
                     Err(())
                 }
             },
@@ -108,10 +105,7 @@ where
             Ok(Some(BranchTarget::DerefHl(span)))
         }
         operand => {
-            diagnostics.emit_diagnostic(CompactDiagnostic::new(
-                Message::CannotBeUsedAsTarget,
-                operand.span(),
-            ));
+            diagnostics.emit_diagnostic(Message::CannotBeUsedAsTarget.at(operand.span()));
             Err(())
         }
     }
@@ -150,12 +144,10 @@ where
             Ok(BranchVariant::Unconditional(UnconditionalBranch::JpDerefHl))
         }
         (BranchKind::Explicit(_), Some(BranchTarget::DerefHl(span))) => {
-            Err(CompactDiagnostic::new(
-                Message::RequiresConstantTarget {
-                    mnemonic: diagnostics.strip_span(&kind.1),
-                },
-                span,
-            ))
+            Err(Message::RequiresConstantTarget {
+                mnemonic: diagnostics.strip_span(&kind.1),
+            }
+            .at(span))
         }
         (BranchKind::Explicit(branch), Some(BranchTarget::Expr(expr))) => Ok(
             BranchVariant::PotentiallyConditional(mk_explicit_branch(branch, expr)),
@@ -166,14 +158,10 @@ where
         (BranchKind::Implicit(ImplicitBranch::Reti), None) => {
             Ok(BranchVariant::Unconditional(UnconditionalBranch::Reti))
         }
-        (BranchKind::Explicit(_), None) => Err(CompactDiagnostic::new(
-            Message::MissingTarget,
-            kind.1.clone(),
-        )),
-        (BranchKind::Implicit(_), Some(target)) => Err(CompactDiagnostic::new(
-            Message::CannotSpecifyTarget,
-            target.span(),
-        )),
+        (BranchKind::Explicit(_), None) => Err(Message::MissingTarget.at(kind.1.clone())),
+        (BranchKind::Implicit(_), Some(target)) => {
+            Err(Message::CannotSpecifyTarget.at(target.span()))
+        }
     }
     .map_err(|diagnostic| {
         diagnostics.emit_diagnostic(diagnostic);

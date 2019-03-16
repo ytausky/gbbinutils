@@ -139,10 +139,7 @@ where
                     let stripped = self.context.diagnostics().strip_span(&span);
                     self.context
                         .diagnostics()
-                        .emit_diagnostic(CompactDiagnostic::new(
-                            Message::UnexpectedToken { token: stripped },
-                            span,
-                        ));
+                        .emit_diagnostic(Message::UnexpectedToken { token: stripped }.at(span));
                     self
                 }
             };
@@ -175,10 +172,7 @@ where
                         state
                             .context
                             .diagnostics()
-                            .emit_diagnostic(CompactDiagnostic::new(
-                                Message::UnexpectedEof,
-                                state.token.1.clone(),
-                            ));
+                            .emit_diagnostic(Message::UnexpectedEof.at(state.token.1.clone()));
                         break;
                     }
                     (Ok(other), span) => {
@@ -194,10 +188,7 @@ where
             state
                 .context
                 .diagnostics()
-                .emit_diagnostic(CompactDiagnostic::new(
-                    Message::UnexpectedEof,
-                    state.token.1.clone(),
-                ));
+                .emit_diagnostic(Message::UnexpectedEof.at(state.token.1.clone()));
             state.change_context(|c| c.exit())
         }
         .change_context(|c| c.exit())
@@ -295,15 +286,13 @@ where
         self.parse_expression()
             .unwrap_or_else(|(mut parser, error)| {
                 let diagnostic = match error {
-                    ExprParsingError::NothingParsed => CompactDiagnostic::new(
-                        match parser.token.0 {
-                            Ok(Token::Simple(Eof)) => Message::UnexpectedEof,
-                            _ => Message::UnexpectedToken {
-                                token: parser.context.diagnostics().strip_span(&parser.token.1),
-                            },
+                    ExprParsingError::NothingParsed => match parser.token.0 {
+                        Ok(Token::Simple(Eof)) => Message::UnexpectedEof,
+                        _ => Message::UnexpectedToken {
+                            token: parser.context.diagnostics().strip_span(&parser.token.1),
                         },
-                        parser.token.1.clone(),
-                    ),
+                    }
+                    .at(parser.token.1.clone()),
                     ExprParsingError::Other(diagnostic) => diagnostic,
                 };
                 parser.context.diagnostics().emit_diagnostic(diagnostic);
@@ -330,9 +319,9 @@ where
             Err((parser, error)) => {
                 let error = match error {
                     error @ ExprParsingError::NothingParsed => match parser.token.0 {
-                        Ok(Token::Simple(Eof)) | Ok(Token::Simple(Eol)) => ExprParsingError::Other(
-                            CompactDiagnostic::new(Message::UnmatchedParenthesis, left),
-                        ),
+                        Ok(Token::Simple(Eof)) | Ok(Token::Simple(Eol)) => {
+                            ExprParsingError::Other(Message::UnmatchedParenthesis.at(left))
+                        }
                         _ => error,
                     },
                     error => error,
@@ -350,10 +339,7 @@ where
             }
             _ => Err((
                 self,
-                ExprParsingError::Other(CompactDiagnostic::new(
-                    Message::UnmatchedParenthesis,
-                    left,
-                )),
+                ExprParsingError::Other(Message::UnmatchedParenthesis.at(left)),
             )),
         }
     }
@@ -433,10 +419,7 @@ where
                 bump!(self);
                 Err((
                     self,
-                    ExprParsingError::Other(CompactDiagnostic::new(
-                        Message::UnexpectedToken { token: stripped },
-                        span,
-                    )),
+                    ExprParsingError::Other(Message::UnexpectedToken { token: stripped }.at(span)),
                 ))
             }
         }
@@ -454,12 +437,9 @@ where
             Ok(Token::Ident(ident)) => self.context.add_parameter((ident, self.token.1)),
             _ => {
                 let stripped = self.context.diagnostics().strip_span(&self.token.1);
-                self.context
-                    .diagnostics()
-                    .emit_diagnostic(CompactDiagnostic::new(
-                        Message::UnexpectedToken { token: stripped },
-                        self.token.1.clone(),
-                    ))
+                self.context.diagnostics().emit_diagnostic(
+                    Message::UnexpectedToken { token: stripped }.at(self.token.1.clone()),
+                )
             }
         };
         bump!(self);
@@ -514,10 +494,7 @@ where
             let stripped = self.context.diagnostics().strip_span(&unexpected_span);
             self.context
                 .diagnostics()
-                .emit_diagnostic(CompactDiagnostic::new(
-                    Message::UnexpectedToken { token: stripped },
-                    unexpected_span,
-                ));
+                .emit_diagnostic(Message::UnexpectedToken { token: stripped }.at(unexpected_span));
             bump!(self);
             while !self.token_is_in(terminators) {
                 bump!(self);
@@ -1381,12 +1358,10 @@ mod tests {
             [unlabeled(malformed_command(
                 0,
                 [expr().literal(1)],
-                CompactDiagnostic::new(
-                    Message::UnexpectedToken {
-                        token: span.clone(),
-                    },
-                    span,
-                ),
+                Message::UnexpectedToken {
+                    token: span.clone(),
+                }
+                .at(span),
             ))],
         )
     }
@@ -1422,12 +1397,10 @@ mod tests {
         let span: SymSpan = TokenRef::from("plus").into();
         assert_eq_expr_diagnostics(
             input,
-            CompactDiagnostic::new(
-                Message::UnexpectedToken {
-                    token: span.clone(),
-                },
-                span,
-            ),
+            Message::UnexpectedToken {
+                token: span.clone(),
+            }
+            .at(span),
         )
     }
 
@@ -1502,12 +1475,12 @@ mod tests {
             input_tokens![Macro, Literal(()), Eol, Endm],
             [unlabeled(vec![StmtAction::MacroDef {
                 keyword: TokenRef::from(0).into(),
-                params: vec![MacroParamsAction::EmitDiagnostic(CompactDiagnostic::new(
+                params: vec![MacroParamsAction::EmitDiagnostic(
                     Message::UnexpectedToken {
                         token: span.clone(),
-                    },
-                    span,
-                ))],
+                    }
+                    .at(span),
+                )],
                 body: vec![TokenSeqAction::PushToken((
                     Eof.into(),
                     TokenRef::from(3).into(),
