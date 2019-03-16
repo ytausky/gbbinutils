@@ -180,7 +180,7 @@ impl RelocAtom<NameId> {
         match self {
             Literal(value) => Ok((*value).into()),
             LocationCounter => Ok(context.location.clone()),
-            &Symbol(symbol) => context.symbols.borrow().get(symbol).cloned().ok_or(()),
+            &Name(id) => context.symbols.borrow().get(id).cloned().ok_or(()),
         }
     }
 }
@@ -314,7 +314,7 @@ mod tests {
             let name = object.symbols.alloc_name();
             let value = object.symbols.new_symbol(Value::Unknown);
             let items = &mut object.sections[0].items;
-            items.push(Node::LdInlineAddr(0, RelocAtom::Symbol(name).into()));
+            items.push(Node::LdInlineAddr(0, RelocAtom::Name(name).into()));
             object.symbols.define_name(name, NameDef::Value(value));
             items.push(Node::Symbol((name, ()), RelocAtom::LocationCounter.into()))
         })

@@ -291,7 +291,7 @@ mod tests {
         let ident = "ident";
         analyze(Mnemonic::Ld, vec![deref(ident.into()), literal(A)]).expect_instruction(
             Instruction::Ld(Ld::Special(
-                SpecialLd::InlineAddr(symbol(ident, TokenId::Operand(0, 1))),
+                SpecialLd::InlineAddr(name(ident, TokenId::Operand(0, 1))),
                 Direction::FromA,
             )),
         )
@@ -302,7 +302,7 @@ mod tests {
         let ident = "ident";
         analyze(Mnemonic::Ld, vec![literal(A), deref(ident.into())]).expect_instruction(
             Instruction::Ld(Ld::Special(
-                SpecialLd::InlineAddr(symbol(ident, TokenId::Operand(1, 1))),
+                SpecialLd::InlineAddr(name(ident, TokenId::Operand(1, 1))),
                 Direction::IntoA,
             )),
         )
@@ -383,7 +383,7 @@ mod tests {
         let value = "value";
         (
             (Mnemonic::Ld, vec![Expr::from(dest), value.into()]),
-            Instruction::Ld(Ld::Immediate16(dest, symbol(value, TokenId::Operand(1, 0)))),
+            Instruction::Ld(Ld::Immediate16(dest, name(value, TokenId::Operand(1, 0)))),
         )
     }
 

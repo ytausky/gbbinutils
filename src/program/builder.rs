@@ -94,8 +94,8 @@ impl<S: Clone> ValueFromSimple<S> for ProgramBuilder<S> {
 }
 
 impl<S: Clone> ValueFromSymbol<S> for ProgramBuilder<S> {
-    fn from_symbol(&mut self, symbol: Self::SymbolId, span: S) -> Self::Value {
-        RelocExpr::from_atom(RelocAtom::Symbol(symbol), span)
+    fn from_symbol(&mut self, name: Self::SymbolId, span: S) -> Self::Value {
+        RelocExpr::from_atom(RelocAtom::Name(name), span)
     }
 }
 

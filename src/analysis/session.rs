@@ -356,7 +356,7 @@ mod mock {
 
     impl<'a, T, S: Clone> ValueBuilder<Ident<String>, S> for MockSession<'a, T, S> {
         fn from_ident(&mut self, ident: Ident<String>, span: S) -> Self::Value {
-            RelocExpr::from_atom(RelocAtom::Symbol(ident), span)
+            RelocExpr::from_atom(RelocAtom::Name(ident), span)
         }
     }
 

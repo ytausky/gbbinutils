@@ -250,7 +250,7 @@ mod tests {
                     Ret => Branch::Ret,
                     Explicit(explicit) => mk_explicit_branch(
                         explicit,
-                        symbol(
+                        name(
                             ident,
                             TokenId::Operand(if has_condition { 1 } else { 0 }, 0),
                         ),

@@ -636,7 +636,7 @@ mod tests {
         assert_eq!(
             actions,
             [BackendEvent::EmitItem(Item::Data(
-                RelocAtom::Symbol(label.into()).into(),
+                RelocAtom::Name(label.into()).into(),
                 Width::Word
             ))
             .into()]

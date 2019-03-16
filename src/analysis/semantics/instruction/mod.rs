@@ -449,8 +449,8 @@ mod tests {
         RelocExpr::from_atom(n, span.into())
     }
 
-    pub fn symbol(ident: &str, span: impl Into<TokenSpan>) -> RelocExpr<Ident<String>, TokenSpan> {
-        RelocExpr::from_atom(RelocAtom::Symbol(ident.into()), span.into())
+    pub fn name(ident: &str, span: impl Into<TokenSpan>) -> RelocExpr<Ident<String>, TokenSpan> {
+        RelocExpr::from_atom(RelocAtom::Name(ident.into()), span.into())
     }
 
     pub(super) fn deref(expr: Input) -> Input {
@@ -592,7 +592,7 @@ mod tests {
     #[test]
     fn analyze_cp_symbol() {
         let ident = "ident";
-        test_cp_const_analysis(ident.into(), symbol(ident, TokenId::Operand(0, 0)))
+        test_cp_const_analysis(ident.into(), name(ident, TokenId::Operand(0, 0)))
     }
 
     #[test]

@@ -22,7 +22,7 @@ pub enum Empty {}
 pub enum RelocAtom<I> {
     Literal(i32),
     LocationCounter,
-    Symbol(I),
+    Name(I),
 }
 
 impl<I, S> From<i32> for ExprVariant<RelocAtom<I>, Empty, BinaryOperator, S> {

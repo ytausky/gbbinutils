@@ -128,8 +128,8 @@ mod mock {
     }
 
     impl<'a, T, S: Clone> ValueFromSymbol<S> for MockBackend<'a, T> {
-        fn from_symbol(&mut self, symbol: Self::SymbolId, span: S) -> Self::Value {
-            RelocExpr::from_atom(RelocAtom::Symbol(symbol), span)
+        fn from_symbol(&mut self, name: Self::SymbolId, span: S) -> Self::Value {
+            RelocExpr::from_atom(RelocAtom::Name(name), span)
         }
     }
 
