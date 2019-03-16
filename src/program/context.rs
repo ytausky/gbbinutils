@@ -2,8 +2,8 @@ use super::resolve::Value;
 use super::{NameId, ValueId};
 
 pub(super) struct SymbolTable {
+    names: Vec<Option<NameDef>>,
     values: Vec<Value>,
-    defs: Vec<Option<NameDef>>,
 }
 
 enum NameDef {
@@ -23,7 +23,7 @@ impl ToValueId for ValueId {
 impl ToValueId for NameId {
     fn to_value_id(self, table: &SymbolTable) -> Option<ValueId> {
         let NameId(name_id) = self;
-        table.defs[name_id].as_ref().map(|body| match body {
+        table.names[name_id].as_ref().map(|body| match body {
             NameDef::Value(id) => *id,
         })
     }
@@ -32,8 +32,8 @@ impl ToValueId for NameId {
 impl SymbolTable {
     pub fn new() -> SymbolTable {
         SymbolTable {
+            names: Vec::new(),
             values: Vec::new(),
-            defs: Vec::new(),
         }
     }
 
@@ -44,15 +44,15 @@ impl SymbolTable {
     }
 
     pub(super) fn new_name(&mut self) -> NameId {
-        let id = NameId(self.defs.len());
-        self.defs.push(None);
+        let id = NameId(self.names.len());
+        self.names.push(None);
         id
     }
 
     pub(super) fn define_name(&mut self, NameId(id): NameId, value: Value) {
-        assert!(self.defs[id].is_none());
+        assert!(self.names[id].is_none());
         let symbol_id = self.new_symbol(value);
-        self.defs[id] = Some(NameDef::Value(symbol_id));
+        self.names[id] = Some(NameDef::Value(symbol_id));
     }
 
     pub fn get<K: ToValueId>(&self, key: K) -> Option<&Value> {
@@ -93,7 +93,7 @@ impl SymbolTable {
 
     #[cfg(test)]
     pub fn names(&self) -> impl Iterator<Item = Option<&Value>> {
-        self.defs.iter().map(move |entry| {
+        self.names.iter().map(move |entry| {
             entry
                 .as_ref()
                 .map(|NameDef::Value(ValueId(id))| &self.values[*id])
