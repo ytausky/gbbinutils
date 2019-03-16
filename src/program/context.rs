@@ -6,25 +6,6 @@ pub(super) struct SymbolTable {
     values: Vec<Value>,
 }
 
-pub(super) trait ToValueId: Copy {
-    fn to_value_id(self, table: &SymbolTable) -> Option<ValueId>;
-}
-
-impl ToValueId for ValueId {
-    fn to_value_id(self, _: &SymbolTable) -> Option<ValueId> {
-        Some(self)
-    }
-}
-
-impl ToValueId for NameId {
-    fn to_value_id(self, table: &SymbolTable) -> Option<ValueId> {
-        let NameId(name_id) = self;
-        table.names[name_id].as_ref().map(|body| match body {
-            NameDef::Value(id) => *id,
-        })
-    }
-}
-
 impl SymbolTable {
     pub fn new() -> SymbolTable {
         SymbolTable {
@@ -39,6 +20,10 @@ impl SymbolTable {
         id
     }
 
+    pub(super) fn get_value(&self, ValueId(id): ValueId) -> Value {
+        self.values[id].clone()
+    }
+
     pub(super) fn alloc_name(&mut self) -> NameId {
         let id = NameId(self.names.len());
         self.names.push(None);
@@ -50,17 +35,12 @@ impl SymbolTable {
         self.names[id] = Some(def);
     }
 
-    pub fn get<K: ToValueId>(&self, key: K) -> Option<&Value> {
-        key.to_value_id(self).map(|ValueId(id)| &self.values[id])
+    pub(super) fn get_name_def(&self, NameId(id): NameId) -> Option<&NameDef> {
+        self.names[id].as_ref()
     }
 
-    fn get_mut(&mut self, key: impl ToValueId) -> Option<&mut Value> {
-        key.to_value_id(self)
-            .map(move |ValueId(id)| &mut self.values[id])
-    }
-
-    pub fn refine(&mut self, key: impl ToValueId, value: Value) -> bool {
-        let stored_value = self.get_mut(key).unwrap();
+    pub fn refine(&mut self, ValueId(id): ValueId, value: Value) -> bool {
+        let stored_value = &mut self.values[id];
         let old_value = stored_value.clone();
         let was_refined = match (old_value, &value) {
             (Value::Unknown, new_value) => *new_value != Value::Unknown,

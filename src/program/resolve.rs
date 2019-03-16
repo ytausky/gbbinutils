@@ -1,7 +1,7 @@
 pub use super::context::EvalContext;
 
 use super::context::SymbolTable;
-use super::{NameId, Node, Program, RelocExpr};
+use super::{NameDef, NameId, Node, Program, RelocExpr};
 
 use crate::expr::{BinaryOperator, ExprVariant};
 use crate::model::{RelocAtom, Width};
@@ -130,9 +130,12 @@ impl<S: Clone> Program<S> {
         };
         for section in &self.sections {
             let (_, size) = section.traverse(context, |item, context| {
-                if let Node::Symbol((symbol, _), expr) = item {
+                if let Node::Symbol((name, _), expr) = item {
+                    let id = match context.symbols.get_name_def(*name).unwrap() {
+                        NameDef::Value(id) => *id,
+                    };
                     let value = expr.evaluate(context);
-                    refinements += context.symbols.refine(*symbol, value) as i32
+                    refinements += context.symbols.refine(id, value) as i32
                 }
             });
             refinements += context.symbols.refine(section.size, size) as i32
@@ -180,7 +183,14 @@ impl RelocAtom<NameId> {
         match self {
             Literal(value) => Ok((*value).into()),
             LocationCounter => Ok(context.location.clone()),
-            &Name(id) => context.symbols.borrow().get(id).cloned().ok_or(()),
+            &Name(id) => {
+                let name_def = context.symbols.borrow().get_name_def(id);
+                name_def
+                    .map(|def| match def {
+                        NameDef::Value(id) => context.symbols.borrow().get_value(*id),
+                    })
+                    .ok_or(())
+            }
         }
     }
 }
@@ -345,8 +355,8 @@ mod tests {
         f(&mut program);
         program.resolve_symbols();
         assert_eq!(
-            program.symbols.get(program.sections[0].size).cloned(),
-            Some(expected.into())
+            program.symbols.get_value(program.sections[0].size),
+            expected.into()
         )
     }
 }
