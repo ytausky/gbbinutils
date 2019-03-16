@@ -1,13 +1,9 @@
 use super::resolve::Value;
-use super::{NameId, ValueId};
+use super::{NameDef, NameId, ValueId};
 
 pub(super) struct SymbolTable {
     names: Vec<Option<NameDef>>,
     values: Vec<Value>,
-}
-
-enum NameDef {
-    Value(ValueId),
 }
 
 pub(super) trait ToValueId: Copy {
@@ -49,10 +45,9 @@ impl SymbolTable {
         id
     }
 
-    pub(super) fn define_name(&mut self, NameId(id): NameId, value: Value) {
+    pub(super) fn define_name(&mut self, NameId(id): NameId, def: NameDef) {
         assert!(self.names[id].is_none());
-        let symbol_id = self.new_symbol(value);
-        self.names[id] = Some(NameDef::Value(symbol_id));
+        self.names[id] = Some(def);
     }
 
     pub fn get<K: ToValueId>(&self, key: K) -> Option<&Value> {

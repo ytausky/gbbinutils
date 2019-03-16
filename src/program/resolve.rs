@@ -226,7 +226,7 @@ mod tests {
 
     use crate::analysis::backend::{Backend, CreateSymbol, PartialBackend};
     use crate::diag::IgnoreDiagnostics;
-    use crate::program::{ProgramBuilder, Section, ValueId};
+    use crate::program::{NameDef, ProgramBuilder, Section, ValueId};
 
     #[test]
     fn resolve_origin_relative_to_previous_section() {
@@ -312,9 +312,10 @@ mod tests {
     fn ld_inline_addr_with_symbol_after_instruction_has_size_three() {
         assert_section_size(3, |object| {
             let name = object.symbols.alloc_name();
+            let value = object.symbols.new_symbol(Value::Unknown);
             let items = &mut object.sections[0].items;
             items.push(Node::LdInlineAddr(0, RelocAtom::Symbol(name).into()));
-            object.symbols.define_name(name, Value::Unknown);
+            object.symbols.define_name(name, NameDef::Value(value));
             items.push(Node::Symbol((name, ()), RelocAtom::LocationCounter.into()))
         })
     }

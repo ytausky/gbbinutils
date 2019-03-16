@@ -41,6 +41,10 @@ enum Node<S> {
     Symbol((NameId, S), RelocExpr<S>),
 }
 
+enum NameDef {
+    Value(ValueId),
+}
+
 impl<S> Program<S> {
     pub fn new() -> Program<S> {
         Program {
