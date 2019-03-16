@@ -9,15 +9,15 @@ pub trait HasValue<S: Clone> {
     type Value: Source<Span = S>;
 }
 
-pub trait HasSymbol {
-    type SymbolId: Clone;
+pub trait HasName {
+    type Name: Clone;
 }
 
-pub trait CreateSymbol<S: Clone>
+pub trait AllocName<S: Clone>
 where
-    Self: HasSymbol,
+    Self: HasName,
 {
-    fn create_symbol(&mut self, span: S) -> Self::SymbolId;
+    fn alloc_name(&mut self, span: S) -> Self::Name;
 }
 
 pub trait ValueFromSimple<S: Clone>
@@ -28,11 +28,11 @@ where
     fn from_number(&mut self, n: i32, span: S) -> Self::Value;
 }
 
-pub trait ValueFromSymbol<S: Clone>
+pub trait ValueFromName<S: Clone>
 where
-    Self: HasSymbol + HasValue<S>,
+    Self: HasName + HasValue<S>,
 {
-    fn from_symbol(&mut self, symbol: Self::SymbolId, span: S) -> Self::Value;
+    fn from_name(&mut self, symbol: Self::Name, span: S) -> Self::Value;
 }
 
 pub trait ApplyBinaryOperator<S: Clone>
@@ -63,14 +63,14 @@ pub trait StartSection<I, S> {
 pub trait Backend<I, S>
 where
     S: Clone,
-    Self: CreateSymbol<S>,
+    Self: AllocName<S>,
     Self: PartialBackend<S>,
     Self: ValueFromSimple<S>,
-    Self: ValueFromSymbol<S>,
+    Self: ValueFromName<S>,
     Self: ApplyBinaryOperator<S>,
     Self: StartSection<I, S>,
 {
-    fn define_symbol(&mut self, symbol: (Self::SymbolId, S), value: Self::Value);
+    fn define_symbol(&mut self, symbol: (Self::Name, S), value: Self::Value);
 }
 
 #[cfg(test)]
@@ -110,7 +110,7 @@ mod mock {
         T: From<BackendEvent<RelocExpr<usize, S>>>,
         S: Clone,
     {
-        fn define_symbol(&mut self, symbol: (Self::SymbolId, S), value: Self::Value) {
+        fn define_symbol(&mut self, symbol: (Self::Name, S), value: Self::Value) {
             self.log
                 .borrow_mut()
                 .push(BackendEvent::DefineSymbol(symbol, value).into())
@@ -127,8 +127,8 @@ mod mock {
         }
     }
 
-    impl<'a, T, S: Clone> ValueFromSymbol<S> for MockBackend<'a, T> {
-        fn from_symbol(&mut self, name: Self::SymbolId, span: S) -> Self::Value {
+    impl<'a, T, S: Clone> ValueFromName<S> for MockBackend<'a, T> {
+        fn from_name(&mut self, name: Self::Name, span: S) -> Self::Value {
             RelocExpr::from_atom(RelocAtom::Name(name), span)
         }
     }
@@ -151,12 +151,12 @@ mod mock {
         type Value = RelocExpr<usize, S>;
     }
 
-    impl<'a, T> HasSymbol for MockBackend<'a, T> {
-        type SymbolId = usize;
+    impl<'a, T> HasName for MockBackend<'a, T> {
+        type Name = usize;
     }
 
-    impl<'a, T, S: Clone> CreateSymbol<S> for MockBackend<'a, T> {
-        fn create_symbol(&mut self, _span: S) -> Self::SymbolId {
+    impl<'a, T, S: Clone> AllocName<S> for MockBackend<'a, T> {
+        fn alloc_name(&mut self, _span: S) -> Self::Name {
             let id = self.next_symbol_id;
             self.next_symbol_id += 1;
             id

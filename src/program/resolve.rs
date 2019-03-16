@@ -224,7 +224,7 @@ impl Width {
 mod tests {
     use super::*;
 
-    use crate::analysis::backend::{Backend, CreateSymbol, PartialBackend};
+    use crate::analysis::backend::{AllocName, Backend, PartialBackend};
     use crate::diag::IgnoreDiagnostics;
     use crate::program::{NameDef, ProgramBuilder, Section, ValueId};
 
@@ -273,7 +273,7 @@ mod tests {
         let addr = 0xffe1;
         let mut builder = ProgramBuilder::new();
         builder.set_origin(addr.into());
-        let symbol_id = builder.create_symbol(());
+        let symbol_id = builder.alloc_name(());
         builder.define_symbol((symbol_id, ()), RelocAtom::LocationCounter.into());
         let mut object = builder.into_object();
         object.resolve_symbols();

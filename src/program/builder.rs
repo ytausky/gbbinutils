@@ -68,7 +68,7 @@ impl<S: Clone> PartialBackend<S> for ProgramBuilder<S> {
 }
 
 impl<S: Clone> Backend<Ident<String>, S> for ProgramBuilder<S> {
-    fn define_symbol(&mut self, (symbol_id, span): (Self::SymbolId, S), value: Self::Value) {
+    fn define_symbol(&mut self, (symbol_id, span): (Self::Name, S), value: Self::Value) {
         let value_id = self.program.symbols.new_symbol(Value::Unknown);
         self.program
             .symbols
@@ -77,8 +77,8 @@ impl<S: Clone> Backend<Ident<String>, S> for ProgramBuilder<S> {
     }
 }
 
-impl<S: Clone> CreateSymbol<S> for ProgramBuilder<S> {
-    fn create_symbol(&mut self, _span: S) -> Self::SymbolId {
+impl<S: Clone> AllocName<S> for ProgramBuilder<S> {
+    fn alloc_name(&mut self, _span: S) -> Self::Name {
         self.program.symbols.alloc_name()
     }
 }
@@ -93,8 +93,8 @@ impl<S: Clone> ValueFromSimple<S> for ProgramBuilder<S> {
     }
 }
 
-impl<S: Clone> ValueFromSymbol<S> for ProgramBuilder<S> {
-    fn from_symbol(&mut self, name: Self::SymbolId, span: S) -> Self::Value {
+impl<S: Clone> ValueFromName<S> for ProgramBuilder<S> {
+    fn from_name(&mut self, name: Self::Name, span: S) -> Self::Value {
         RelocExpr::from_atom(RelocAtom::Name(name), span)
     }
 }
@@ -117,8 +117,8 @@ impl<S: Clone> HasValue<S> for ProgramBuilder<S> {
     type Value = RelocExpr<S>;
 }
 
-impl<S: Clone> HasSymbol for ProgramBuilder<S> {
-    type SymbolId = NameId;
+impl<S: Clone> HasName for ProgramBuilder<S> {
+    type Name = NameId;
 }
 
 impl<S: Clone> StartSection<Ident<String>, S> for ProgramBuilder<S> {
@@ -254,8 +254,8 @@ mod tests {
     fn diagnose_unresolved_symbol() {
         let name = "ident";
         let (_, diagnostics) = with_object_builder(|builder| {
-            let symbol_id = builder.create_symbol(name.into());
-            let value = builder.from_symbol(symbol_id, name.into());
+            let symbol_id = builder.alloc_name(name.into());
+            let value = builder.from_name(symbol_id, name.into());
             builder.emit_item(word_item(value))
         });
         assert_eq!(*diagnostics, [unresolved(name)]);
@@ -267,10 +267,10 @@ mod tests {
         let name2 = "ident2";
         let (_, diagnostics) = with_object_builder(|builder| {
             let value = {
-                let id1 = builder.create_symbol(name1.into());
-                let lhs = builder.from_symbol(id1, name1.into());
-                let id2 = builder.create_symbol(name2.into());
-                let rhs = builder.from_symbol(id2, name2.into());
+                let id1 = builder.alloc_name(name1.into());
+                let lhs = builder.from_name(id1, name1.into());
+                let id2 = builder.alloc_name(name2.into());
+                let rhs = builder.from_name(id2, name2.into());
                 builder.apply_binary_operator((BinaryOperator::Minus, "diff".into()), lhs, rhs)
             };
             builder.emit_item(word_item(value))
@@ -281,9 +281,9 @@ mod tests {
     #[test]
     fn emit_defined_symbol() {
         let (object, diagnostics) = with_object_builder(|builder| {
-            let symbol_id = builder.create_symbol(());
+            let symbol_id = builder.alloc_name(());
             builder.define_symbol((symbol_id, ()), RelocAtom::LocationCounter.into());
-            let value = builder.from_symbol(symbol_id, ());
+            let value = builder.from_name(symbol_id, ());
             builder.emit_item(word_item(value));
         });
         assert_eq!(*diagnostics, []);
@@ -293,8 +293,8 @@ mod tests {
     #[test]
     fn emit_symbol_defined_after_use() {
         let (object, diagnostics) = with_object_builder(|builder| {
-            let symbol_id = builder.create_symbol(());
-            let value = builder.from_symbol(symbol_id, ());
+            let symbol_id = builder.alloc_name(());
+            let value = builder.from_name(symbol_id, ());
             builder.emit_item(word_item(value));
             builder.define_symbol((symbol_id, ()), RelocAtom::LocationCounter.into());
         });

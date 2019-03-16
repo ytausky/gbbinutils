@@ -76,16 +76,16 @@ impl<'a, C, A, B: ?Sized, N, D> CompositeSession<'a, C, A, B, N, D> {
 impl<'a, C, A, B, N, D> CompositeSession<'a, C, A, B, N, D>
 where
     C: Lex<D>,
-    B: CreateSymbol<D::Span> + ?Sized,
-    N: NameTable<Ident<C::StringRef>, BackendEntry = B::SymbolId>,
+    B: AllocName<D::Span> + ?Sized,
+    N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name>,
     D: Diagnostics,
 {
-    fn look_up_symbol(&mut self, ident: Ident<C::StringRef>, span: &D::Span) -> B::SymbolId {
+    fn look_up_symbol(&mut self, ident: Ident<C::StringRef>, span: &D::Span) -> B::Name {
         match self.names.get(&ident) {
             Some(Name::Backend(id)) => id.clone(),
             Some(Name::Macro(_)) => unimplemented!(),
             None => {
-                let id = self.backend.create_symbol(span.clone());
+                let id = self.backend.alloc_name(span.clone());
                 self.names.insert(ident, Name::Backend(id.clone()));
                 id
             }
@@ -192,14 +192,14 @@ where
     B: Backend<Ident<C::StringRef>, D::Span> + ?Sized,
     N: NameTable<
         Ident<C::StringRef>,
-        BackendEntry = B::SymbolId,
+        BackendEntry = B::Name,
         MacroEntry = MacroEntry<C::StringRef, D>,
     >,
     D: Diagnostics,
 {
     fn from_ident(&mut self, ident: Ident<C::StringRef>, span: D::Span) -> Self::Value {
         let symbol_id = self.look_up_symbol(ident, &span);
-        self.backend.from_symbol(symbol_id, span)
+        self.backend.from_name(symbol_id, span)
     }
 }
 
@@ -210,7 +210,7 @@ where
     B: Backend<Ident<C::StringRef>, D::Span> + ?Sized,
     N: NameTable<
             Ident<C::StringRef>,
-            BackendEntry = B::SymbolId,
+            BackendEntry = B::Name,
             MacroEntry = MacroEntry<C::StringRef, D>,
         > + StartScope<Ident<C::StringRef>>,
     D: Diagnostics,

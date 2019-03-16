@@ -29,7 +29,7 @@ pub(crate) trait Analyze<R: Clone + Eq, D: Diagnostics> {
         I: IntoIterator<Item = LexItem<R, D::Span>>,
         C: Lex<D, StringRef = R>,
         B: Backend<Ident<R>, D::Span> + ?Sized,
-        N: NameTable<Ident<R>, BackendEntry = B::SymbolId, MacroEntry = MacroEntry<R, D>>
+        N: NameTable<Ident<R>, BackendEntry = B::Name, MacroEntry = MacroEntry<R, D>>
             + StartScope<Ident<R>>;
 }
 
@@ -41,7 +41,7 @@ impl<R: Clone + Eq, D: Diagnostics> Analyze<R, D> for SemanticAnalyzer {
         I: IntoIterator<Item = LexItem<R, D::Span>>,
         C: Lex<D, StringRef = R>,
         B: Backend<Ident<R>, D::Span> + ?Sized,
-        N: NameTable<Ident<R>, BackendEntry = B::SymbolId, MacroEntry = MacroEntry<R, D>>
+        N: NameTable<Ident<R>, BackendEntry = B::Name, MacroEntry = MacroEntry<R, D>>
             + StartScope<Ident<R>>,
     {
         let session = CompositeSession::new(
