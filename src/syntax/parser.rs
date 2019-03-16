@@ -619,8 +619,9 @@ mod tests {
     }
 
     impl EmitDiagnostic<SymSpan, SymSpan> for FileActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
-            self.actions.push(FileAction::EmitDiagnostic(diagnostic))
+        fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
+            self.actions
+                .push(FileAction::EmitDiagnostic(diagnostic.into()))
         }
     }
 
@@ -643,8 +644,9 @@ mod tests {
     }
 
     impl EmitDiagnostic<SymSpan, SymSpan> for StmtActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
-            self.actions.push(StmtAction::EmitDiagnostic(diagnostic))
+        fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
+            self.actions
+                .push(StmtAction::EmitDiagnostic(diagnostic.into()))
         }
     }
 
@@ -697,8 +699,9 @@ mod tests {
     }
 
     impl EmitDiagnostic<SymSpan, SymSpan> for CommandActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
-            self.actions.push(CommandAction::EmitDiagnostic(diagnostic))
+        fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
+            self.actions
+                .push(CommandAction::EmitDiagnostic(diagnostic.into()))
         }
     }
 
@@ -731,8 +734,9 @@ mod tests {
     }
 
     impl EmitDiagnostic<SymSpan, SymSpan> for ArgActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
-            self.expr_action_collector.emit_diagnostic(diagnostic)
+        fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
+            self.expr_action_collector
+                .emit_diagnostic(diagnostic.into())
         }
     }
 
@@ -770,8 +774,9 @@ mod tests {
     }
 
     impl EmitDiagnostic<SymSpan, SymSpan> for ExprActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
-            self.actions.push(ExprAction::EmitDiagnostic(diagnostic))
+        fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
+            self.actions
+                .push(ExprAction::EmitDiagnostic(diagnostic.into()))
         }
     }
 
@@ -800,9 +805,9 @@ mod tests {
     }
 
     impl EmitDiagnostic<SymSpan, SymSpan> for MacroParamsActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
+        fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
             self.actions
-                .push(MacroParamsAction::EmitDiagnostic(diagnostic))
+                .push(MacroParamsAction::EmitDiagnostic(diagnostic.into()))
         }
     }
 
@@ -831,9 +836,9 @@ mod tests {
     }
 
     impl EmitDiagnostic<SymSpan, SymSpan> for MacroBodyActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
+        fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
             self.actions
-                .push(TokenSeqAction::EmitDiagnostic(diagnostic))
+                .push(TokenSeqAction::EmitDiagnostic(diagnostic.into()))
         }
     }
 
@@ -862,9 +867,9 @@ mod tests {
     }
 
     impl EmitDiagnostic<SymSpan, SymSpan> for MacroInvocationActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
+        fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
             self.actions
-                .push(MacroInvocationAction::EmitDiagnostic(diagnostic))
+                .push(MacroInvocationAction::EmitDiagnostic(diagnostic.into()))
         }
     }
 
@@ -895,9 +900,9 @@ mod tests {
     }
 
     impl EmitDiagnostic<SymSpan, SymSpan> for MacroArgActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SymSpan, SymSpan>) {
+        fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
             self.actions
-                .push(TokenSeqAction::EmitDiagnostic(diagnostic))
+                .push(TokenSeqAction::EmitDiagnostic(diagnostic.into()))
         }
     }
 

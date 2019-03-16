@@ -46,7 +46,7 @@ impl<'a, I, D, S> EmitDiagnostic<S, D::Stripped> for Analysis<'a, I, D, S>
 where
     D: DownstreamDiagnostics<S> + 'a,
 {
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<S, D::Stripped>) {
+    fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<S, D::Stripped>>) {
         self.diagnostics.emit_diagnostic(diagnostic)
     }
 }

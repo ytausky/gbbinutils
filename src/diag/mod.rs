@@ -112,7 +112,7 @@ where
     C: ContextFactory,
     O: EmitDiagnostic<C::Span, C::Stripped>,
 {
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<C::Span, C::Stripped>) {
+    fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<C::Span, C::Stripped>>) {
         self.output.emit_diagnostic(diagnostic)
     }
 }
@@ -175,7 +175,7 @@ pub trait DiagnosticsOutput {
 }
 
 pub(crate) trait EmitDiagnostic<S, T> {
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<S, T>);
+    fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<S, T>>);
 }
 
 pub(crate) struct OutputForwarder<'a> {
@@ -188,8 +188,11 @@ impl<'a> Span for OutputForwarder<'a> {
 }
 
 impl<'a> EmitDiagnostic<SpanData, StrippedBufSpan> for OutputForwarder<'a> {
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<SpanData, StrippedBufSpan>) {
-        (self.output)(diagnostic.expand().render(&self.codebase.borrow()))
+    fn emit_diagnostic(
+        &mut self,
+        diagnostic: impl Into<CompactDiagnostic<SpanData, StrippedBufSpan>>,
+    ) {
+        (self.output)(diagnostic.into().expand().render(&self.codebase.borrow()))
     }
 }
 
@@ -219,7 +222,7 @@ impl<S: Clone> StripSpan<S> for IgnoreDiagnostics<S> {
 
 #[cfg(test)]
 impl<S: Clone> EmitDiagnostic<S, S> for IgnoreDiagnostics<S> {
-    fn emit_diagnostic(&mut self, _: CompactDiagnostic<S, S>) {}
+    fn emit_diagnostic(&mut self, _: impl Into<CompactDiagnostic<S, S>>) {}
 }
 
 #[cfg(test)]
@@ -252,8 +255,8 @@ impl<S: Clone> StripSpan<S> for TestDiagnosticsListener<S> {
 
 #[cfg(test)]
 impl<S> EmitDiagnostic<S, S> for TestDiagnosticsListener<S> {
-    fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<S, S>) {
-        self.diagnostics.borrow_mut().push(diagnostic)
+    fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<S, S>>) {
+        self.diagnostics.borrow_mut().push(diagnostic.into())
     }
 }
 
@@ -545,10 +548,10 @@ mod mock {
         T: From<DiagnosticsEvent<S>>,
         S: Clone,
     {
-        fn emit_diagnostic(&mut self, diagnostic: CompactDiagnostic<S, S>) {
+        fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<S, S>>) {
             self.log
                 .borrow_mut()
-                .push(DiagnosticsEvent::EmitDiagnostic(diagnostic).into())
+                .push(DiagnosticsEvent::EmitDiagnostic(diagnostic.into()).into())
         }
     }
 }

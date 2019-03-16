@@ -191,7 +191,7 @@ impl<S: Session> EmitDiagnostic<S::Span, <S::Delegate as StripSpan<S::Span>>::St
 {
     fn emit_diagnostic(
         &mut self,
-        diagnostic: CompactDiagnostic<S::Span, <S::Delegate as StripSpan<S::Span>>::Stripped>,
+        diagnostic: impl Into<CompactDiagnostic<S::Span, <S::Delegate as StripSpan<S::Span>>::Stripped>>,
     ) {
         self.has_errors = true;
         self.parent.diagnostics().emit_diagnostic(diagnostic)
