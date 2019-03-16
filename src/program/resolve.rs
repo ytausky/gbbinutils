@@ -311,7 +311,7 @@ mod tests {
     #[test]
     fn ld_inline_addr_with_symbol_after_instruction_has_size_three() {
         assert_section_size(3, |object| {
-            let name = object.symbols.new_name();
+            let name = object.symbols.alloc_name();
             let items = &mut object.sections[0].items;
             items.push(Node::LdInlineAddr(0, RelocAtom::Symbol(name).into()));
             object.symbols.define_name(name, Value::Unknown);

@@ -43,7 +43,7 @@ impl SymbolTable {
         id
     }
 
-    pub(super) fn new_name(&mut self) -> NameId {
+    pub(super) fn alloc_name(&mut self) -> NameId {
         let id = NameId(self.names.len());
         self.names.push(None);
         id

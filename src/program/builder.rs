@@ -76,7 +76,7 @@ impl<S: Clone> Backend<Ident<String>, S> for ProgramBuilder<S> {
 
 impl<S: Clone> CreateSymbol<S> for ProgramBuilder<S> {
     fn create_symbol(&mut self, _span: S) -> Self::SymbolId {
-        self.program.symbols.new_name()
+        self.program.symbols.alloc_name()
     }
 }
 
