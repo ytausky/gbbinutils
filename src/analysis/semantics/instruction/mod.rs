@@ -842,7 +842,7 @@ mod tests {
             assert_eq!(
                 self.0,
                 Err(vec![DiagnosticsEvent::EmitDiagnostic(
-                    expected.message.at(expected.highlight.unwrap(),)
+                    expected.message.at(expected.highlight.unwrap()).into()
                 )])
             )
         }

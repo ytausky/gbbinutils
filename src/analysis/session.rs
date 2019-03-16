@@ -625,7 +625,10 @@ mod tests {
         session.invoke_macro((name.into(), name), vec![]);
         assert_eq!(
             log.into_inner(),
-            [DiagnosticsEvent::EmitDiagnostic(Message::UndefinedMacro { name }.at(name)).into()]
+            [
+                DiagnosticsEvent::EmitDiagnostic(Message::UndefinedMacro { name }.at(name).into())
+                    .into()
+            ]
         );
     }
 

@@ -280,11 +280,13 @@ mod tests {
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Err(vec![Message::CannotDereference {
-                category: KeywordOperandCategory::RegPair,
-                operand: 0,
-            }
-            .at(1)
+            Err(vec![CompactDiagnostic::from(
+                Message::CannotDereference {
+                    category: KeywordOperandCategory::RegPair,
+                    operand: 0,
+                }
+                .at(1)
+            )
             .into()])
         )
     }
@@ -339,9 +341,10 @@ mod tests {
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Err(vec![Message::KeywordInExpr { keyword: span }
-                .at(span)
-                .into()])
+            Err(vec![CompactDiagnostic::from(
+                Message::KeywordInExpr { keyword: span }.at(span)
+            )
+            .into()])
         )
     }
 
@@ -354,7 +357,10 @@ mod tests {
         );
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Err(vec![Message::StringInInstruction.at(span).into()])
+            Err(vec![CompactDiagnostic::from(
+                Message::StringInInstruction.at(span)
+            )
+            .into()])
         )
     }
 
@@ -376,7 +382,10 @@ mod tests {
         );
         assert_eq!(
             analyze_operand(expr, Context::Other),
-            Err(vec![Message::MustBeDeref { operand: span }.at(span).into()])
+            Err(vec![CompactDiagnostic::from(
+                Message::MustBeDeref { operand: span }.at(span)
+            )
+            .into()])
         )
     }
 }

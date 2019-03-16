@@ -285,10 +285,10 @@ mod tests {
             ds(|arg| arg.push_atom((ExprAtom::Literal(Literal::Operand(Operand::A)), ())));
         assert_eq!(
             actions,
-            [
-                DiagnosticsEvent::EmitDiagnostic(Message::KeywordInExpr { keyword: () }.at((),))
-                    .into()
-            ]
+            [DiagnosticsEvent::EmitDiagnostic(
+                Message::KeywordInExpr { keyword: () }.at(()).into()
+            )
+            .into()]
         )
     }
 
@@ -312,7 +312,7 @@ mod tests {
         let actions = unary_directive(Directive::Include, |arg| arg.push_atom(mk_literal(7)));
         assert_eq!(
             actions,
-            [DiagnosticsEvent::EmitDiagnostic(Message::ExpectedString.at((),)).into()]
+            [DiagnosticsEvent::EmitDiagnostic(Message::ExpectedString.at(()).into()).into()]
         )
     }
 
@@ -323,10 +323,10 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [
-                DiagnosticsEvent::EmitDiagnostic(Message::KeywordInExpr { keyword: () }.at((),))
-                    .into()
-            ]
+            [DiagnosticsEvent::EmitDiagnostic(
+                Message::KeywordInExpr { keyword: () }.at(()).into()
+            )
+            .into()]
         )
     }
 
@@ -348,7 +348,7 @@ mod tests {
             operations.into_inner(),
             [
                 SessionEvent::AnalyzeFile(name.into()).into(),
-                DiagnosticsEvent::EmitDiagnostic(Message::InvalidUtf8.at(())).into()
+                DiagnosticsEvent::EmitDiagnostic(Message::InvalidUtf8.at(()).into()).into()
             ]
         )
     }
@@ -380,6 +380,7 @@ mod tests {
                         string: message.to_string()
                     }
                     .at(())
+                    .into()
                 )
                 .into()
             ]
@@ -442,7 +443,8 @@ mod tests {
                     actual: 0,
                     expected: 1
                 }
-                .at((),)
+                .at(())
+                .into()
             )
             .into()]
         )

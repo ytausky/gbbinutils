@@ -292,7 +292,8 @@ where
                             token: parser.context.diagnostics().strip_span(&parser.token.1),
                         },
                     }
-                    .at(parser.token.1.clone()),
+                    .at(parser.token.1.clone())
+                    .into(),
                     ExprParsingError::Other(diagnostic) => diagnostic,
                 };
                 parser.context.diagnostics().emit_diagnostic(diagnostic);
@@ -320,7 +321,7 @@ where
                 let error = match error {
                     error @ ExprParsingError::NothingParsed => match parser.token.0 {
                         Ok(Token::Simple(Eof)) | Ok(Token::Simple(Eol)) => {
-                            ExprParsingError::Other(Message::UnmatchedParenthesis.at(left))
+                            ExprParsingError::Other(Message::UnmatchedParenthesis.at(left).into())
                         }
                         _ => error,
                     },
@@ -339,7 +340,7 @@ where
             }
             _ => Err((
                 self,
-                ExprParsingError::Other(Message::UnmatchedParenthesis.at(left)),
+                ExprParsingError::Other(Message::UnmatchedParenthesis.at(left).into()),
             )),
         }
     }
@@ -419,7 +420,9 @@ where
                 bump!(self);
                 Err((
                     self,
-                    ExprParsingError::Other(Message::UnexpectedToken { token: stripped }.at(span)),
+                    ExprParsingError::Other(
+                        Message::UnexpectedToken { token: stripped }.at(span).into(),
+                    ),
                 ))
             }
         }
@@ -1361,7 +1364,8 @@ mod tests {
                 Message::UnexpectedToken {
                     token: span.clone(),
                 }
-                .at(span),
+                .at(span)
+                .into(),
             ))],
         )
     }
@@ -1400,7 +1404,8 @@ mod tests {
             Message::UnexpectedToken {
                 token: span.clone(),
             }
-            .at(span),
+            .at(span)
+            .into(),
         )
     }
 
@@ -1479,7 +1484,8 @@ mod tests {
                     Message::UnexpectedToken {
                         token: span.clone(),
                     }
-                    .at(span),
+                    .at(span)
+                    .into(),
                 )],
                 body: vec![TokenSeqAction::PushToken((
                     Eof.into(),

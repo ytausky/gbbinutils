@@ -245,7 +245,8 @@ mod tests {
                 value,
                 width: Width::Byte,
             }
-            .at(())]
+            .at(())
+            .into()]
         );
     }
 
@@ -324,5 +325,6 @@ mod tests {
             symbol: symbol.clone(),
         }
         .at(symbol)
+        .into()
     }
 }

@@ -262,13 +262,24 @@ impl<S> EmitDiagnostic<S, S> for TestDiagnosticsListener<S> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct CompactDiagnostic<S, R> {
+    main: CompactClause<S, R>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct CompactClause<S, R> {
     pub message: Message<R>,
     pub highlight: S,
 }
 
+impl<S, R> From<CompactClause<S, R>> for CompactDiagnostic<S, R> {
+    fn from(clause: CompactClause<S, R>) -> Self {
+        Self { main: clause }
+    }
+}
+
 impl<R> Message<R> {
-    pub(crate) fn at<S>(self, highlight: S) -> CompactDiagnostic<S, R> {
-        CompactDiagnostic {
+    pub(crate) fn at<S>(self, highlight: S) -> CompactClause<S, R> {
+        CompactClause {
             message: self,
             highlight,
         }
@@ -290,15 +301,15 @@ struct ExpandedDiagnosticClause<S, B, R> {
 
 impl<B: Clone, T: Clone> CompactDiagnostic<SpanData<B, Range<T>>, StrippedBufSpan<B, Range<T>>> {
     fn expand(self) -> ExpandedDiagnostic<StrippedBufSpan<B, Range<T>>, B, Range<T>> {
-        let StrippedBufSpan { buf_id, range } = self.highlight.to_stripped();
+        let StrippedBufSpan { buf_id, range } = self.main.highlight.to_stripped();
         let main_clause = ExpandedDiagnosticClause {
             buf_id,
             tag: Tag::Error,
-            message: self.message,
+            message: self.main.message,
             location: Some(range),
         };
         let mut clauses = vec![main_clause];
-        if let Some(note) = mk_invoked_here_clause(&self.highlight) {
+        if let Some(note) = mk_invoked_here_clause(&self.main.highlight) {
             clauses.push(note)
         }
         ExpandedDiagnostic { clauses }
@@ -581,12 +592,12 @@ mod tests {
                 included_from: None,
             }),
         };
-        let diagnostic = CompactDiagnostic {
-            message: Message::UndefinedMacro {
+        let diagnostic = CompactDiagnostic::from(
+            Message::UndefinedMacro {
                 name: StrippedBufSpan { buf_id, range },
-            },
-            highlight: token_ref,
-        };
+            }
+            .at(token_ref),
+        );
         assert_eq!(
             diagnostic.expand().render(&codebase),
             Diagnostic {
@@ -651,7 +662,7 @@ mod tests {
             context,
         };
         let message = Message::AfOutsideStackOperation;
-        let compact = message.clone().at(span);
+        let compact = CompactDiagnostic::from(message.clone().at(span));
         let expected = ExpandedDiagnostic {
             clauses: vec![
                 ExpandedDiagnosticClause {
