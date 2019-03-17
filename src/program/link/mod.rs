@@ -29,31 +29,9 @@ impl<S: Clone> Program<S> {
 
     fn resolve_relocs(&self) -> RelocTable {
         let mut relocs = RelocTable::new(self.relocs);
-        self.refine_relocs(&mut relocs);
-        self.refine_relocs(&mut relocs);
+        relocs.refine_all(self);
+        relocs.refine_all(self);
         relocs
-    }
-
-    fn refine_relocs(&self, relocs: &mut RelocTable) -> i32 {
-        let mut refinements = 0;
-        let context = &mut EvalContext {
-            names: &self.names,
-            relocs,
-            location: Value::Unknown,
-        };
-        for section in &self.sections {
-            let (_, size) = section.traverse(context, |item, context| {
-                if let Node::Symbol((name, _), expr) = item {
-                    let id = match context.names.get_name_def(*name).unwrap() {
-                        NameDef::Value(id) => *id,
-                    };
-                    let value = expr.evaluate(context);
-                    refinements += context.relocs.refine(id, value) as i32
-                }
-            });
-            refinements += context.relocs.refine(section.size, size) as i32
-        }
-        refinements
     }
 }
 
@@ -99,6 +77,28 @@ impl RelocTable {
         };
         *stored_value = value;
         was_refined
+    }
+
+    fn refine_all<S: Clone>(&mut self, program: &Program<S>) -> i32 {
+        let mut refinements = 0;
+        let context = &mut EvalContext {
+            names: &program.names,
+            relocs: self,
+            location: Value::Unknown,
+        };
+        for section in &program.sections {
+            let (_, size) = section.traverse(context, |item, context| {
+                if let Node::Symbol((name, _), expr) = item {
+                    let id = match context.names.get_name_def(*name).unwrap() {
+                        NameDef::Value(id) => *id,
+                    };
+                    let value = expr.evaluate(context);
+                    refinements += context.relocs.refine(id, value) as i32
+                }
+            });
+            refinements += context.relocs.refine(section.size, size) as i32
+        }
+        refinements
     }
 }
 
