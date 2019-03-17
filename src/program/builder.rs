@@ -70,7 +70,7 @@ impl<S: Clone> PartialBackend<S> for ProgramBuilder<S> {
 impl<S: Clone> Backend<Ident<String>, S> for ProgramBuilder<S> {
     fn define_symbol(&mut self, (name, span): (Self::Name, S), value: Self::Value) {
         let reloc = self.program.alloc_reloc();
-        self.program.names.define(name, NameDef::Value(reloc));
+        self.program.names.define(name, NameDef::Reloc(reloc));
         self.push(Node::Symbol((name, span), value))
     }
 }

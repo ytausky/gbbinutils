@@ -90,7 +90,7 @@ impl RelocTable {
             let (_, size) = section.traverse(context, |item, context| {
                 if let Node::Symbol((name, _), expr) = item {
                     let id = match context.program.names.get(*name).unwrap() {
-                        NameDef::Value(id) => *id,
+                        NameDef::Reloc(id) => *id,
                     };
                     let value = expr.eval(context, &mut ignore_undefined);
                     refinements += context.relocs.refine(id, value) as i32
@@ -183,10 +183,10 @@ mod tests {
         builder.define_symbol((symbol_id, ()), Atom::LocationCounter.into());
         let object = builder.into_object();
         let relocs = object.resolve_relocs();
-        let value_id = match object.names.get(symbol_id).unwrap() {
-            NameDef::Value(id) => *id,
+        let reloc = match object.names.get(symbol_id).unwrap() {
+            NameDef::Reloc(id) => *id,
         };
-        assert_eq!(relocs.get(value_id), addr.into());
+        assert_eq!(relocs.get(reloc), addr.into());
     }
 
     #[test]
@@ -221,10 +221,10 @@ mod tests {
     fn ld_inline_addr_with_symbol_after_instruction_has_size_three() {
         assert_section_size(3, |object| {
             let name = object.names.alloc();
-            let value = object.alloc_reloc();
+            let reloc = object.alloc_reloc();
             let items = &mut object.sections[0].items;
             items.push(Node::LdInlineAddr(0, Atom::Attr(name, Attr::Addr).into()));
-            object.names.define(name, NameDef::Value(value));
+            object.names.define(name, NameDef::Reloc(reloc));
             items.push(Node::Symbol((name, ()), Atom::LocationCounter.into()))
         })
     }

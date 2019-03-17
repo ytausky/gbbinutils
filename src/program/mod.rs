@@ -37,7 +37,7 @@ enum Node<S> {
 }
 
 enum NameDef {
-    Value(RelocId),
+    Reloc(RelocId),
 }
 
 impl<S> Program<S> {

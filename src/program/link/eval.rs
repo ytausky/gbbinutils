@@ -35,7 +35,7 @@ impl Atom<NameId> {
                 let name_def = context.program.names.get(id);
                 name_def
                     .map(|def| match def {
-                        NameDef::Value(id) => context.relocs.borrow().get(*id),
+                        NameDef::Reloc(id) => context.relocs.borrow().get(*id),
                     })
                     .ok_or(())
             }
