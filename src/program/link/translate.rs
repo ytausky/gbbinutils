@@ -1,4 +1,4 @@
-use super::{EvalContext, RelocTable};
+use super::{ignore_undefined, EvalContext, RelocTable};
 
 use crate::diag::{BackendDiagnostics, Message};
 use crate::model::Width;
@@ -34,14 +34,14 @@ impl<S: Clone> Node<S> {
         match self {
             Node::Byte(value) => vec![*value],
             Node::Embedded(opcode, expr) => {
-                let n = expr.evaluate(context).exact().unwrap();
+                let n = expr.eval(context, &mut ignore_undefined).exact().unwrap();
                 vec![opcode | ((n as u8) << 3)]
             }
             Node::Expr(expr, width) => {
                 resolve_expr_item(&expr, *width, context, diagnostics).into_bytes()
             }
             Node::LdInlineAddr(opcode, expr) => {
-                let addr = expr.evaluate(context).exact().unwrap();
+                let addr = expr.eval(context, &mut ignore_undefined).exact().unwrap();
                 let kind = if addr < 0xff00 {
                     AddrKind::Low
                 } else {
@@ -99,7 +99,7 @@ fn resolve_expr_item<S: Clone>(
 ) -> Data {
     let span = expr.span();
     let value = expr
-        .evaluate_strictly(context, &mut |span| {
+        .eval(context, &mut |span| {
             let symbol = diagnostics.strip_span(span);
             diagnostics.emit_diagnostic(Message::UnresolvedSymbol { symbol }.at(span.clone()))
         })

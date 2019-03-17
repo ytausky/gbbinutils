@@ -92,7 +92,7 @@ impl RelocTable {
                     let id = match context.names.get_name_def(*name).unwrap() {
                         NameDef::Value(id) => *id,
                     };
-                    let value = expr.evaluate(context);
+                    let value = expr.eval(context, &mut ignore_undefined);
                     refinements += context.relocs.refine(id, value) as i32
                 }
             });
@@ -108,7 +108,7 @@ impl<S: Clone> Section<S> {
         R: Borrow<RelocTable>,
         F: FnMut(&Node<S>, &mut EvalContext<R>),
     {
-        let addr = self.evaluate_addr(context);
+        let addr = self.eval_addr(context);
         let mut offset = Value::from(0);
         for item in &self.items {
             offset += &item.size(&context);
@@ -118,13 +118,15 @@ impl<S: Clone> Section<S> {
         (addr, offset)
     }
 
-    fn evaluate_addr<R: Borrow<RelocTable>>(&self, context: &EvalContext<R>) -> Value {
+    fn eval_addr<R: Borrow<RelocTable>>(&self, context: &EvalContext<R>) -> Value {
         self.addr
             .as_ref()
-            .map(|expr| expr.evaluate(context))
+            .map(|expr| expr.eval(context, &mut ignore_undefined))
             .unwrap_or_else(|| 0.into())
     }
 }
+
+fn ignore_undefined<S>(_: &S) {}
 
 #[cfg(test)]
 mod tests {
