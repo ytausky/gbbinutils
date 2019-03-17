@@ -1,4 +1,4 @@
-use super::{NameDef, NameId, Node, Program, RelocExpr, Section, Value};
+use super::{NameDef, NameId, Node, Program, RelocExpr, Section};
 
 use crate::analysis::backend::*;
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
@@ -69,7 +69,7 @@ impl<S: Clone> PartialBackend<S> for ProgramBuilder<S> {
 
 impl<S: Clone> Backend<Ident<String>, S> for ProgramBuilder<S> {
     fn define_symbol(&mut self, (symbol_id, span): (Self::Name, S), value: Self::Value) {
-        let value_id = self.program.relocs.alloc(Value::Unknown);
+        let value_id = self.program.relocs.alloc();
         self.program
             .names
             .define_name(symbol_id, NameDef::Value(value_id));

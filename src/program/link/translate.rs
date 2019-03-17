@@ -1,8 +1,8 @@
-use super::context::{EvalContext, RelocTable};
-use super::{BinarySection, Node, RelocExpr, Section};
+use super::{EvalContext, RelocTable};
 
 use crate::diag::{BackendDiagnostics, Message};
 use crate::model::Width;
+use crate::program::{BinarySection, Node, RelocExpr, Section};
 use crate::span::Source;
 
 use std::vec::IntoIter;
@@ -201,15 +201,15 @@ mod tests {
     }
 
     fn translate_section_item<S: Clone + PartialEq>(item: Node<S>) -> Vec<u8> {
-        use crate::diag;
-        use crate::program::resolve::Value;
+        use crate::diag::IgnoreDiagnostics;
+        use crate::program::link::Value;
         item.translate(
             &EvalContext {
                 names: &NameTable::new(),
                 relocs: &RelocTable::new(),
                 location: Value::Unknown,
             },
-            &mut diag::IgnoreDiagnostics::new(),
+            &mut IgnoreDiagnostics::new(),
         )
         .collect()
     }

@@ -1,15 +1,12 @@
 pub use self::builder::ProgramBuilder;
 
-use self::context::{EvalContext, NameTable, RelocTable};
-use self::resolve::Value;
+use self::link::RelocTable;
+
 use crate::model::Width;
-use std::borrow::Borrow;
 
 mod builder;
-mod context;
+mod link;
 mod lowering;
-mod resolve;
-mod translate;
 
 type RelocExpr<S> = crate::model::RelocExpr<NameId, S>;
 
@@ -55,7 +52,7 @@ impl<S> Program<S> {
     }
 
     fn add_section(&mut self, name: Option<String>) {
-        let size_symbol_id = self.relocs.alloc(Value::Unknown);
+        let size_symbol_id = self.relocs.alloc();
         self.sections.push(Section::new(name, size_symbol_id))
     }
 }
@@ -71,27 +68,26 @@ impl<S> Section<S> {
     }
 }
 
-impl<S: Clone> Section<S> {
-    fn traverse<R, F>(&self, context: &mut EvalContext<R>, mut f: F) -> (Value, Value)
-    where
-        R: Borrow<RelocTable>,
-        F: FnMut(&Node<S>, &mut EvalContext<R>),
-    {
-        let addr = self.evaluate_addr(context);
-        let mut offset = Value::from(0);
-        for item in &self.items {
-            offset += &item.size(&context);
-            context.location = &addr + &offset;
-            f(item, context)
-        }
-        (addr, offset)
+struct NameTable(Vec<Option<NameDef>>);
+
+impl NameTable {
+    pub fn new() -> Self {
+        Self(Vec::new())
     }
 
-    fn evaluate_addr<R: Borrow<RelocTable>>(&self, context: &EvalContext<R>) -> Value {
-        self.addr
-            .as_ref()
-            .map(|expr| expr.evaluate(context))
-            .unwrap_or_else(|| 0.into())
+    fn alloc_name(&mut self) -> NameId {
+        let id = NameId(self.0.len());
+        self.0.push(None);
+        id
+    }
+
+    fn define_name(&mut self, NameId(id): NameId, def: NameDef) {
+        assert!(self.0[id].is_none());
+        self.0[id] = Some(def);
+    }
+
+    fn get_name_def(&self, NameId(id): NameId) -> Option<&NameDef> {
+        self.0[id].as_ref()
     }
 }
 
