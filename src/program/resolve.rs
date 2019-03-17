@@ -1,11 +1,30 @@
 use super::context::{EvalContext, SymbolTable};
-use super::{NameDef, NameId, Node, Program, RelocExpr};
+use super::{BinaryObject, NameDef, NameId, Node, Program, RelocExpr};
 
+use crate::diag::BackendDiagnostics;
 use crate::expr::{BinaryOperator, ExprVariant};
 use crate::model::{RelocAtom, Width};
 
 use std::borrow::Borrow;
 use std::ops::{Add, AddAssign, Mul, RangeInclusive, Sub};
+
+impl<S: Clone> Program<S> {
+    pub(crate) fn link(mut self, diagnostics: &mut impl BackendDiagnostics<S>) -> BinaryObject {
+        self.resolve_symbols();
+        let mut context = EvalContext {
+            names: &self.names,
+            symbols: &self.symbols,
+            location: 0.into(),
+        };
+        BinaryObject {
+            sections: self
+                .sections
+                .into_iter()
+                .map(|section| section.translate(&mut context, diagnostics))
+                .collect(),
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
@@ -115,7 +134,7 @@ impl Mul for &Value {
 }
 
 impl<S: Clone> Program<S> {
-    pub fn resolve_symbols(&mut self) {
+    fn resolve_symbols(&mut self) {
         self.refine_symbols();
         self.refine_symbols();
     }

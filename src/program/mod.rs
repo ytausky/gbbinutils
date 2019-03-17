@@ -2,7 +2,6 @@ pub use self::builder::ProgramBuilder;
 
 use self::context::{EvalContext, NameTable, SymbolTable};
 use self::resolve::Value;
-use crate::diag::BackendDiagnostics;
 use crate::model::Width;
 use std::borrow::Borrow;
 
@@ -58,24 +57,6 @@ impl<S> Program<S> {
     fn add_section(&mut self, name: Option<String>) {
         let size_symbol_id = self.symbols.new_symbol(Value::Unknown);
         self.sections.push(Section::new(name, size_symbol_id))
-    }
-}
-
-impl<S: Clone> Program<S> {
-    pub(crate) fn link(mut self, diagnostics: &mut impl BackendDiagnostics<S>) -> BinaryObject {
-        self.resolve_symbols();
-        let mut context = EvalContext {
-            names: &self.names,
-            symbols: &self.symbols,
-            location: 0.into(),
-        };
-        BinaryObject {
-            sections: self
-                .sections
-                .into_iter()
-                .map(|section| section.translate(&mut context, diagnostics))
-                .collect(),
-        }
     }
 }
 
