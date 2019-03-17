@@ -63,23 +63,19 @@ struct EvalContext<'a, R> {
     pub location: Value,
 }
 
-struct RelocTable {
-    values: Vec<Value>,
-}
+struct RelocTable(Vec<Value>);
 
 impl RelocTable {
     fn new(relocs: usize) -> Self {
-        Self {
-            values: vec![Value::Unknown; relocs],
-        }
+        Self(vec![Value::Unknown; relocs])
     }
 
-    fn get_value(&self, ValueId(id): ValueId) -> Value {
-        self.values[id].clone()
+    fn get(&self, ValueId(id): ValueId) -> Value {
+        self.0[id].clone()
     }
 
     fn refine(&mut self, ValueId(id): ValueId, value: Value) -> bool {
-        let stored_value = &mut self.values[id];
+        let stored_value = &mut self.0[id];
         let old_value = stored_value.clone();
         let was_refined = match (old_value, &value) {
             (Value::Unknown, new_value) => *new_value != Value::Unknown,
@@ -188,7 +184,7 @@ mod tests {
         let value_id = match object.names.get_name_def(symbol_id).unwrap() {
             NameDef::Value(id) => *id,
         };
-        assert_eq!(relocs.get_value(value_id), addr.into());
+        assert_eq!(relocs.get(value_id), addr.into());
     }
 
     #[test]
@@ -236,6 +232,6 @@ mod tests {
         program.add_section(None);
         f(&mut program);
         let relocs = program.resolve_relocs();
-        assert_eq!(relocs.get_value(program.sections[0].size), expected.into())
+        assert_eq!(relocs.get(program.sections[0].size), expected.into())
     }
 }

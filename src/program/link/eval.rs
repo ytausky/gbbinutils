@@ -49,7 +49,7 @@ impl RelocAtom<NameId> {
                 let name_def = context.names.get_name_def(id);
                 name_def
                     .map(|def| match def {
-                        NameDef::Value(id) => context.relocs.borrow().get_value(*id),
+                        NameDef::Value(id) => context.relocs.borrow().get(*id),
                     })
                     .ok_or(())
             }
