@@ -148,7 +148,7 @@ mod tests {
     use crate::diag::IgnoreDiagnostics;
     use crate::expr::{BinaryOperator, ExprVariant};
     use crate::model::RelocAtom;
-    use crate::program::{NameTable, ValueId};
+    use crate::program::{NameTable, RelocId};
 
     use std::borrow::Borrow;
 
@@ -220,7 +220,7 @@ mod tests {
         let section = Section {
             name: None,
             addr: Some(addr.into()),
-            size: ValueId(0),
+            size: RelocId(0),
             items: Vec::new(),
         };
         let translated = translate_without_context(section);
@@ -230,7 +230,7 @@ mod tests {
     #[test]
     fn translate_expr_with_location_counter() {
         let byte = 0x42;
-        let mut section = Section::new(None, ValueId(0));
+        let mut section = Section::new(None, RelocId(0));
         section.items.extend(vec![
             Node::Byte(byte),
             Node::Expr(RelocAtom::LocationCounter.into(), Width::Byte),
@@ -241,7 +241,7 @@ mod tests {
 
     #[test]
     fn location_counter_starts_from_section_origin() {
-        let mut section = Section::new(None, ValueId(0));
+        let mut section = Section::new(None, RelocId(0));
         section.addr = Some(0xffe1.into());
         section
             .items
@@ -253,7 +253,7 @@ mod tests {
     #[test]
     fn translate_section_name() {
         let name = "my_section";
-        let section = Section::<()>::new(Some(name.into()), ValueId(0));
+        let section = Section::<()>::new(Some(name.into()), RelocId(0));
         let binary = translate_without_context(section);
         assert_eq!(binary.name, Some(name.into()))
     }

@@ -9,7 +9,7 @@ mod lowering;
 type RelocExpr<S> = crate::model::RelocExpr<NameId, S>;
 
 #[derive(Clone, Copy)]
-struct ValueId(usize);
+struct RelocId(usize);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NameId(usize);
@@ -23,7 +23,7 @@ pub struct Program<S> {
 struct Section<S> {
     name: Option<String>,
     addr: Option<RelocExpr<S>>,
-    size: ValueId,
+    size: RelocId,
     items: Vec<Node<S>>,
 }
 
@@ -37,7 +37,7 @@ enum Node<S> {
 }
 
 enum NameDef {
-    Value(ValueId),
+    Value(RelocId),
 }
 
 impl<S> Program<S> {
@@ -54,15 +54,15 @@ impl<S> Program<S> {
         self.sections.push(Section::new(name, size))
     }
 
-    fn alloc_reloc(&mut self) -> ValueId {
+    fn alloc_reloc(&mut self) -> RelocId {
         let id = self.relocs;
         self.relocs += 1;
-        ValueId(id)
+        RelocId(id)
     }
 }
 
 impl<S> Section<S> {
-    pub fn new(name: Option<String>, size: ValueId) -> Section<S> {
+    pub fn new(name: Option<String>, size: RelocId) -> Section<S> {
         Section {
             name,
             addr: None,

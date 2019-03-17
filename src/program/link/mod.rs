@@ -1,6 +1,6 @@
 use self::value::Value;
 
-use super::{BinaryObject, NameDef, NameTable, Node, Program, Section, ValueId};
+use super::{BinaryObject, NameDef, NameTable, Node, Program, RelocId, Section};
 
 use crate::diag::BackendDiagnostics;
 
@@ -48,11 +48,11 @@ impl RelocTable {
         Self(vec![Value::Unknown; relocs])
     }
 
-    fn get(&self, ValueId(id): ValueId) -> Value {
+    fn get(&self, RelocId(id): RelocId) -> Value {
         self.0[id].clone()
     }
 
-    fn refine(&mut self, ValueId(id): ValueId, value: Value) -> bool {
+    fn refine(&mut self, RelocId(id): RelocId, value: Value) -> bool {
         let stored_value = &mut self.0[id];
         let old_value = stored_value.clone();
         let was_refined = match (old_value, &value) {
@@ -134,7 +134,7 @@ mod tests {
     use crate::diag::IgnoreDiagnostics;
     use crate::expr::{BinaryOperator, ExprVariant};
     use crate::model::RelocAtom;
-    use crate::program::{NameDef, ProgramBuilder, Section, ValueId};
+    use crate::program::{NameDef, ProgramBuilder, RelocId, Section};
 
     #[test]
     fn resolve_origin_relative_to_previous_section() {
@@ -145,7 +145,7 @@ mod tests {
                 Section {
                     name: None,
                     addr: Some(origin1.into()),
-                    size: ValueId(0),
+                    size: RelocId(0),
                     items: vec![Node::Byte(0x42)],
                 },
                 Section {
@@ -158,7 +158,7 @@ mod tests {
                         )
                         .into(),
                     ),
-                    size: ValueId(1),
+                    size: RelocId(1),
                     items: vec![Node::Byte(0x43)],
                 },
             ],
