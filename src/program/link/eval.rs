@@ -32,7 +32,7 @@ impl Atom<NameId> {
     fn eval<R: Borrow<RelocTable>, S>(&self, context: &EvalContext<R, S>) -> Result<Value, ()> {
         match self {
             &Atom::Attr(id, _attr) => {
-                let name_def = context.program.names.get_name_def(id);
+                let name_def = context.program.names.get(id);
                 name_def
                     .map(|def| match def {
                         NameDef::Value(id) => context.relocs.borrow().get(*id),

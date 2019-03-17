@@ -68,18 +68,16 @@ impl<S: Clone> PartialBackend<S> for ProgramBuilder<S> {
 }
 
 impl<S: Clone> Backend<Ident<String>, S> for ProgramBuilder<S> {
-    fn define_symbol(&mut self, (symbol_id, span): (Self::Name, S), value: Self::Value) {
+    fn define_symbol(&mut self, (name, span): (Self::Name, S), value: Self::Value) {
         let reloc = self.program.alloc_reloc();
-        self.program
-            .names
-            .define_name(symbol_id, NameDef::Value(reloc));
-        self.push(Node::Symbol((symbol_id, span), value))
+        self.program.names.define(name, NameDef::Value(reloc));
+        self.push(Node::Symbol((name, span), value))
     }
 }
 
 impl<S: Clone> AllocName<S> for ProgramBuilder<S> {
     fn alloc_name(&mut self, _span: S) -> Self::Name {
-        self.program.names.alloc_name()
+        self.program.names.alloc()
     }
 }
 

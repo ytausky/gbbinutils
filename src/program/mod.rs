@@ -79,18 +79,18 @@ impl NameTable {
         Self(Vec::new())
     }
 
-    fn alloc_name(&mut self) -> NameId {
+    fn alloc(&mut self) -> NameId {
         let id = NameId(self.0.len());
         self.0.push(None);
         id
     }
 
-    fn define_name(&mut self, NameId(id): NameId, def: NameDef) {
+    fn define(&mut self, NameId(id): NameId, def: NameDef) {
         assert!(self.0[id].is_none());
         self.0[id] = Some(def);
     }
 
-    fn get_name_def(&self, NameId(id): NameId) -> Option<&NameDef> {
+    fn get(&self, NameId(id): NameId) -> Option<&NameDef> {
         self.0[id].as_ref()
     }
 }

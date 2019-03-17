@@ -89,7 +89,7 @@ impl RelocTable {
         for section in &program.sections {
             let (_, size) = section.traverse(context, |item, context| {
                 if let Node::Symbol((name, _), expr) = item {
-                    let id = match context.program.names.get_name_def(*name).unwrap() {
+                    let id = match context.program.names.get(*name).unwrap() {
                         NameDef::Value(id) => *id,
                     };
                     let value = expr.eval(context, &mut ignore_undefined);
@@ -183,7 +183,7 @@ mod tests {
         builder.define_symbol((symbol_id, ()), Atom::LocationCounter.into());
         let object = builder.into_object();
         let relocs = object.resolve_relocs();
-        let value_id = match object.names.get_name_def(symbol_id).unwrap() {
+        let value_id = match object.names.get(symbol_id).unwrap() {
             NameDef::Value(id) => *id,
         };
         assert_eq!(relocs.get(value_id), addr.into());
@@ -220,11 +220,11 @@ mod tests {
     #[test]
     fn ld_inline_addr_with_symbol_after_instruction_has_size_three() {
         assert_section_size(3, |object| {
-            let name = object.names.alloc_name();
+            let name = object.names.alloc();
             let value = object.alloc_reloc();
             let items = &mut object.sections[0].items;
             items.push(Node::LdInlineAddr(0, Atom::Attr(name, Attr::Addr).into()));
-            object.names.define_name(name, NameDef::Value(value));
+            object.names.define(name, NameDef::Value(value));
             items.push(Node::Symbol((name, ()), Atom::LocationCounter.into()))
         })
     }
