@@ -2,7 +2,7 @@ use super::{ignore_undefined, EvalContext, RelocTable, Value};
 
 use crate::expr::BinaryOperator;
 use crate::model::{Atom, Width};
-use crate::program::{Expr, NameDef, NameId, Node};
+use crate::program::{Expr, NameDef, NameId, Node, SectionId};
 
 use std::borrow::Borrow;
 
@@ -36,6 +36,10 @@ impl Atom<NameId> {
                 name_def
                     .map(|def| match def {
                         NameDef::Reloc(id) => context.relocs.borrow().get(*id),
+                        NameDef::Section(SectionId(section)) => {
+                            let reloc = context.program.sections[*section].addr;
+                            context.relocs.borrow().get(reloc)
+                        }
                     })
                     .ok_or(())
             }
@@ -77,5 +81,39 @@ impl Width {
             Width::Byte => 1,
             Width::Word => 2,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::model::{Atom, Attr};
+    use crate::program::link::{EvalContext, RelocTable, Value};
+    use crate::program::{
+        Constraints, NameDef, NameId, NameTable, Program, RelocId, Section, SectionId,
+    };
+
+    #[test]
+    fn eval_section_addr() {
+        let addr = 0x0100;
+        let program = Program::<()> {
+            sections: vec![Section {
+                constraints: Constraints { addr: None },
+                addr: RelocId(0),
+                size: RelocId(1),
+                items: vec![],
+            }],
+            names: NameTable(vec![Some(NameDef::Section(SectionId(0)))]),
+            relocs: 2,
+        };
+        let relocs = RelocTable(vec![addr.into(), 0.into()]);
+        let context = EvalContext {
+            program: &program,
+            relocs: &relocs,
+            location: Value::Unknown,
+        };
+        assert_eq!(
+            Atom::Attr(NameId(0), Attr::Addr).eval(&context),
+            Ok(addr.into())
+        )
     }
 }

@@ -91,6 +91,7 @@ impl RelocTable {
                 if let Node::Symbol((name, _), expr) = item {
                     let id = match context.program.names.get(*name).unwrap() {
                         NameDef::Reloc(id) => *id,
+                        NameDef::Section(_) => unimplemented!(),
                     };
                     let value = expr.eval(context, &mut ignore_undefined);
                     refinements += context.relocs.refine(id, value) as i32
@@ -119,7 +120,8 @@ impl<S: Clone> Section<S> {
     }
 
     fn eval_addr<R: Borrow<RelocTable>>(&self, context: &EvalContext<R, S>) -> Value {
-        self.addr
+        self.constraints
+            .addr
             .as_ref()
             .map(|expr| expr.eval(context, &mut ignore_undefined))
             .unwrap_or_else(|| 0.into())
@@ -136,7 +138,7 @@ mod tests {
     use crate::diag::IgnoreDiagnostics;
     use crate::expr::{BinaryOperator, ExprVariant};
     use crate::model::{Atom, Attr};
-    use crate::program::{NameDef, NameTable, ProgramBuilder, RelocId, Section};
+    use crate::program::{Constraints, NameDef, NameTable, ProgramBuilder, RelocId, Section};
 
     #[test]
     fn resolve_origin_relative_to_previous_section() {
@@ -145,27 +147,31 @@ mod tests {
         let object = Program {
             sections: vec![
                 Section {
-                    name: None,
-                    addr: Some(origin1.into()),
-                    size: RelocId(0),
+                    constraints: Constraints {
+                        addr: Some(origin1.into()),
+                    },
+                    addr: RelocId(0),
+                    size: RelocId(1),
                     items: vec![Node::Byte(0x42)],
                 },
                 Section {
-                    name: None,
-                    addr: Some(
-                        ExprVariant::Binary(
-                            BinaryOperator::Plus,
-                            Box::new(Atom::LocationCounter.into()),
-                            Box::new(skipped_bytes.into()),
-                        )
-                        .into(),
-                    ),
-                    size: RelocId(1),
+                    constraints: Constraints {
+                        addr: Some(
+                            ExprVariant::Binary(
+                                BinaryOperator::Plus,
+                                Box::new(Atom::LocationCounter.into()),
+                                Box::new(skipped_bytes.into()),
+                            )
+                            .into(),
+                        ),
+                    },
+                    addr: RelocId(2),
+                    size: RelocId(3),
                     items: vec![Node::Byte(0x43)],
                 },
             ],
             names: NameTable::new(),
-            relocs: 2,
+            relocs: 4,
         };
         let binary = object.link(&mut IgnoreDiagnostics::new());
         assert_eq!(
@@ -185,6 +191,7 @@ mod tests {
         let relocs = object.resolve_relocs();
         let reloc = match object.names.get(symbol_id).unwrap() {
             NameDef::Reloc(id) => *id,
+            NameDef::Section(_) => unimplemented!(),
         };
         assert_eq!(relocs.get(reloc), addr.into());
     }

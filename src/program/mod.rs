@@ -8,7 +8,7 @@ mod lowering;
 
 type Expr<S> = crate::model::Expr<NameId, S>;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 struct RelocId(usize);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -21,10 +21,14 @@ pub struct Program<S> {
 }
 
 struct Section<S> {
-    name: Option<String>,
-    addr: Option<Expr<S>>,
+    constraints: Constraints<S>,
+    addr: RelocId,
     size: RelocId,
     items: Vec<Node<S>>,
+}
+
+struct Constraints<S> {
+    addr: Option<Expr<S>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -36,9 +40,14 @@ enum Node<S> {
     Symbol((NameId, S), Expr<S>),
 }
 
+#[derive(Debug, PartialEq)]
 enum NameDef {
     Reloc(RelocId),
+    Section(SectionId),
 }
+
+#[derive(Debug, PartialEq)]
+struct SectionId(usize);
 
 impl<S> Program<S> {
     pub fn new() -> Program<S> {
@@ -49,9 +58,14 @@ impl<S> Program<S> {
         }
     }
 
-    fn add_section(&mut self, name: Option<String>) {
+    fn add_section(&mut self, name: Option<NameId>) {
+        let section = SectionId(self.sections.len());
+        let addr = self.alloc_reloc();
         let size = self.alloc_reloc();
-        self.sections.push(Section::new(name, size))
+        self.sections.push(Section::new(addr, size));
+        if let Some(name) = name {
+            self.names.define(name, NameDef::Section(section))
+        }
     }
 
     fn alloc_reloc(&mut self) -> RelocId {
@@ -62,10 +76,10 @@ impl<S> Program<S> {
 }
 
 impl<S> Section<S> {
-    pub fn new(name: Option<String>, size: RelocId) -> Section<S> {
+    pub fn new(addr: RelocId, size: RelocId) -> Section<S> {
         Section {
-            name,
-            addr: None,
+            constraints: Constraints { addr: None },
+            addr,
             size,
             items: Vec::new(),
         }
@@ -128,7 +142,6 @@ pub struct Rom {
 }
 
 pub struct BinarySection {
-    pub name: Option<Box<str>>,
     pub addr: usize,
     pub data: Vec<u8>,
 }
@@ -152,7 +165,6 @@ mod tests {
         let addr = 0x150;
         let object = BinaryObject {
             sections: vec![BinarySection {
-                name: None,
                 addr,
                 data: vec![byte],
             }],
@@ -168,7 +180,6 @@ mod tests {
         let addr = MIN_ROM_LEN + 1;
         let object = BinaryObject {
             sections: vec![BinarySection {
-                name: None,
                 addr,
                 data: Vec::new(),
             }],
@@ -178,10 +189,13 @@ mod tests {
     }
 
     #[test]
-    fn new_section_has_name() {
-        let name = "my_section";
+    fn add_section_defines_name() {
         let mut program = Program::<()>::new();
-        program.add_section(Some(name.into()));
-        assert_eq!(program.sections[0].name, Some(name.into()))
+        let name = program.names.alloc();
+        program.add_section(Some(name));
+        assert_eq!(
+            program.names.get(name),
+            Some(&NameDef::Section(SectionId(0)))
+        )
     }
 }

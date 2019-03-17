@@ -56,8 +56,8 @@ where
     fn set_origin(&mut self, origin: Self::Value);
 }
 
-pub trait StartSection<I, S> {
-    fn start_section(&mut self, name: (I, S));
+pub trait StartSection<N, S> {
+    fn start_section(&mut self, name: (N, S));
 }
 
 pub trait Backend<I, S>
@@ -68,7 +68,7 @@ where
     Self: ValueFromSimple<S>,
     Self: ValueFromName<S>,
     Self: ApplyBinaryOperator<S>,
-    Self: StartSection<I, S>,
+    Self: StartSection<<Self as HasName>::Name, S>,
 {
     fn define_symbol(&mut self, symbol: (Self::Name, S), value: Self::Value);
 }
@@ -93,7 +93,7 @@ mod mock {
         EmitItem(Item<V>),
         SetOrigin(V),
         DefineSymbol((usize, V::Span), V),
-        StartSection((Ident<String>, V::Span)),
+        StartSection((usize, V::Span)),
     }
 
     impl<'a, T> MockBackend<'a, T> {
@@ -181,12 +181,12 @@ mod mock {
         }
     }
 
-    impl<'a, T, S> StartSection<Ident<String>, S> for MockBackend<'a, T>
+    impl<'a, T, S> StartSection<usize, S> for MockBackend<'a, T>
     where
         T: From<BackendEvent<Expr<usize, S>>>,
         S: Clone,
     {
-        fn start_section(&mut self, name: (Ident<String>, S)) {
+        fn start_section(&mut self, name: (usize, S)) {
             self.log
                 .borrow_mut()
                 .push(BackendEvent::StartSection(name).into())

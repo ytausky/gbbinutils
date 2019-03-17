@@ -39,7 +39,7 @@ impl<SR> ProgramBuilder<SR> {
                 let index = self.program.sections.len() - 1;
                 self.state = Some(BuilderState::Section(index));
                 let section = &mut self.program.sections[index];
-                section.addr = addr;
+                section.constraints.addr = addr;
                 section
             }
             BuilderState::SectionPrelude(index) | BuilderState::Section(index) => {
@@ -59,7 +59,7 @@ impl<S: Clone> PartialBackend<S> for ProgramBuilder<S> {
     fn set_origin(&mut self, addr: Self::Value) {
         match self.state.take().unwrap() {
             BuilderState::SectionPrelude(index) => {
-                self.program.sections[index].addr = Some(addr);
+                self.program.sections[index].constraints.addr = Some(addr);
                 self.state = Some(BuilderState::SectionPrelude(index))
             }
             _ => self.state = Some(BuilderState::AnonSectionPrelude { addr: Some(addr) }),
@@ -119,11 +119,11 @@ impl<S: Clone> HasName for ProgramBuilder<S> {
     type Name = NameId;
 }
 
-impl<S: Clone> StartSection<Ident<String>, S> for ProgramBuilder<S> {
-    fn start_section(&mut self, name: (Ident<String>, S)) {
+impl<S: Clone> StartSection<NameId, S> for ProgramBuilder<S> {
+    fn start_section(&mut self, name: (NameId, S)) {
         let index = self.program.sections.len();
         self.state = Some(BuilderState::SectionPrelude(index));
-        self.program.add_section(Some(name.0.name))
+        self.program.add_section(Some(name.0))
     }
 }
 
@@ -135,7 +135,7 @@ mod tests {
     use crate::diag::{CompactDiagnostic, Message, TestDiagnosticsListener};
     use crate::expr::BinaryOperator;
     use crate::model::{Instruction, Nullary, Width};
-    use crate::program::BinaryObject;
+    use crate::program::{BinaryObject, SectionId};
     use std::borrow::Borrow;
 
     #[test]
@@ -147,7 +147,7 @@ mod tests {
     #[test]
     fn no_origin_by_default() {
         let object = build_object(|builder| builder.push(Node::Byte(0xcd)));
-        assert_eq!(object.sections[0].addr, None)
+        assert_eq!(object.sections[0].constraints.addr, None)
     }
 
     #[test]
@@ -157,31 +157,40 @@ mod tests {
             builder.set_origin(origin.clone());
             builder.push(Node::Byte(0xcd))
         });
-        assert_eq!(object.sections[0].addr, Some(origin))
+        assert_eq!(object.sections[0].constraints.addr, Some(origin))
     }
 
     #[test]
     fn start_section_adds_named_section() {
-        let name: Ident<_> = "my_section".into();
-        let object = build_object(|builder| builder.start_section((name.clone(), ())));
-        assert_eq!(object.sections[0].name, Some(name.name))
+        let mut wrapped_name = None;
+        let object = build_object(|builder| {
+            let name = builder.alloc_name(());
+            builder.start_section((name, ()));
+            wrapped_name = Some(name);
+        });
+        assert_eq!(
+            object.names.get(wrapped_name.unwrap()),
+            Some(&NameDef::Section(SectionId(0)))
+        )
     }
 
     #[test]
     fn set_origin_in_section_prelude_sets_origin() {
         let origin: Expr<_> = 0x0150.into();
         let object = build_object(|builder| {
-            builder.start_section(("my_section".into(), ()));
+            let name = builder.alloc_name(());
+            builder.start_section((name, ()));
             builder.set_origin(origin.clone())
         });
-        assert_eq!(object.sections[0].addr, Some(origin))
+        assert_eq!(object.sections[0].constraints.addr, Some(origin))
     }
 
     #[test]
     fn push_node_into_named_section() {
         let node = Node::Byte(0x42);
         let object = build_object(|builder| {
-            builder.start_section(("my_section".into(), ()));
+            let name = builder.alloc_name(());
+            builder.start_section((name, ()));
             builder.push(node.clone())
         });
         assert_eq!(object.sections[0].items, [node])

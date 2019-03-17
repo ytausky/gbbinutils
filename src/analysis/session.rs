@@ -275,11 +275,13 @@ impl<'a, C, A, B, N, D> StartSection<Ident<C::StringRef>, D::Span>
     for CompositeSession<'a, C, A, B, N, D>
 where
     C: Lex<D>,
-    B: StartSection<Ident<C::StringRef>, D::Span> + ?Sized,
+    B: AllocName<D::Span> + StartSection<<B as HasName>::Name, D::Span> + ?Sized,
+    N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name>,
     D: Diagnostics,
 {
-    fn start_section(&mut self, name: (Ident<C::StringRef>, D::Span)) {
-        self.backend.start_section(name)
+    fn start_section(&mut self, (ident, span): (Ident<C::StringRef>, D::Span)) {
+        let name = self.look_up_symbol(ident, &span);
+        self.backend.start_section((name, span))
     }
 }
 
@@ -458,7 +460,7 @@ mod mock {
         fn start_section(&mut self, name: (Ident<String>, S)) {
             self.log
                 .borrow_mut()
-                .push(BackendEvent::StartSection(name).into())
+                .push(BackendEvent::StartSection((0, name.1)).into())
         }
     }
 }
@@ -471,7 +473,7 @@ mod tests {
     use crate::analysis::semantics::AnalyzerEvent;
     use crate::analysis::{Literal, MockCodebase};
     use crate::diag::{DiagnosticsEvent, MockSpan};
-    use crate::model::{Atom, Expr, Instruction, Nullary};
+    use crate::model::{Atom, Attr, Expr, Instruction, Nullary, Width};
     use crate::name::{BasicNameTable, NameTableEvent};
     use crate::syntax::{Command, Directive, Mnemonic, Token};
 
@@ -513,7 +515,26 @@ mod tests {
         session.start_section((name.clone(), ()));
         assert_eq!(
             log.into_inner(),
-            [BackendEvent::StartSection((name, ())).into()]
+            [BackendEvent::StartSection((0, ())).into()]
+        )
+    }
+
+    #[test]
+    fn look_up_section_name_after_definition() {
+        let ident: Ident<_> = "my_section".into();
+        let log = RefCell::new(Vec::new());
+        let mut fixture = Fixture::new(&log);
+        let mut session = fixture.session();
+        session.start_section((ident.clone(), ()));
+        let item = Item::Data(session.from_ident(ident, ()), Width::Word);
+        session.emit_item(item);
+        assert_eq!(
+            log.into_inner(),
+            [
+                BackendEvent::StartSection((0, ())).into(),
+                BackendEvent::EmitItem(Item::Data(Atom::Attr(0, Attr::Addr).into(), Width::Word))
+                    .into()
+            ]
         )
     }
 

@@ -410,10 +410,7 @@ mod tests {
                 .exit()
                 .exit()
         });
-        assert_eq!(
-            actions,
-            [BackendEvent::StartSection((name.into(), ())).into()]
-        )
+        assert_eq!(actions, [BackendEvent::StartSection((0, ())).into()])
     }
 
     fn ds(f: impl for<'a> FnOnce(&mut TestExprContext<'a>)) -> Vec<TestOperation> {
