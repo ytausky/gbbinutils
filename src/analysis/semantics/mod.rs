@@ -527,7 +527,7 @@ mod tests {
     use crate::analysis::session::SessionEvent;
     use crate::diag::Message;
     use crate::expr::BinaryOperator;
-    use crate::model::{RelocAtom, Width};
+    use crate::model::{Atom, Width};
     use crate::syntax::{
         CommandContext, ExprContext, FileContext, MacroInvocationContext, MacroParamsContext,
         StmtContext, TokenSeqContext,
@@ -635,11 +635,10 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [BackendEvent::EmitItem(Item::Data(
-                RelocAtom::Name(label.into()).into(),
-                Width::Word
-            ))
-            .into()]
+            [
+                BackendEvent::EmitItem(Item::Data(Atom::Name(label.into()).into(), Width::Word))
+                    .into()
+            ]
         );
     }
 
@@ -650,10 +649,7 @@ mod tests {
             collect_semantic_actions(|actions| actions.enter_stmt(Some((label.into(), ()))).exit());
         assert_eq!(
             actions,
-            [
-                SessionEvent::DefineSymbol((label.into(), ()), RelocAtom::LocationCounter.into())
-                    .into()
-            ]
+            [SessionEvent::DefineSymbol((label.into(), ()), Atom::LocationCounter.into()).into()]
         )
     }
 

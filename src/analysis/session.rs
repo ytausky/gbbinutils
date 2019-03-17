@@ -290,7 +290,7 @@ mod mock {
     use crate::analysis::backend::BackendEvent;
     use crate::diag::{DiagnosticsEvent, MockDiagnostics, MockSpan};
     use crate::expr::{Expr, ExprVariant};
-    use crate::model::{RelocAtom, RelocExpr};
+    use crate::model::{Atom, RelocExpr};
 
     use std::cell::RefCell;
 
@@ -332,11 +332,11 @@ mod mock {
 
     impl<'a, T, S: Clone> ValueFromSimple<S> for MockSession<'a, T, S> {
         fn from_location_counter(&mut self, span: S) -> Self::Value {
-            RelocExpr::from_atom(RelocAtom::LocationCounter, span)
+            RelocExpr::from_atom(Atom::LocationCounter, span)
         }
 
         fn from_number(&mut self, n: i32, span: S) -> Self::Value {
-            RelocExpr::from_atom(RelocAtom::Literal(n), span)
+            RelocExpr::from_atom(Atom::Literal(n), span)
         }
     }
 
@@ -356,7 +356,7 @@ mod mock {
 
     impl<'a, T, S: Clone> ValueBuilder<Ident<String>, S> for MockSession<'a, T, S> {
         fn from_ident(&mut self, ident: Ident<String>, span: S) -> Self::Value {
-            RelocExpr::from_atom(RelocAtom::Name(ident), span)
+            RelocExpr::from_atom(Atom::Name(ident), span)
         }
     }
 
@@ -471,7 +471,7 @@ mod tests {
     use crate::analysis::semantics::AnalyzerEvent;
     use crate::analysis::{Literal, MockCodebase};
     use crate::diag::{DiagnosticsEvent, MockSpan};
-    use crate::model::{Instruction, Nullary, RelocAtom, RelocExpr};
+    use crate::model::{Atom, Instruction, Nullary, RelocExpr};
     use crate::name::{BasicNameTable, NameTableEvent};
     use crate::syntax::{Command, Directive, Mnemonic, Token};
 
@@ -494,12 +494,12 @@ mod tests {
         let log = RefCell::new(Vec::new());
         let mut fixture = Fixture::new(&log);
         let mut session = fixture.session();
-        session.define_symbol((label.into(), ()), RelocAtom::LocationCounter.into());
+        session.define_symbol((label.into(), ()), Atom::LocationCounter.into());
         assert_eq!(
             log.into_inner(),
             [
                 NameTableEvent::StartScope(label.into()).into(),
-                BackendEvent::DefineSymbol((0, ()), RelocAtom::LocationCounter.into()).into()
+                BackendEvent::DefineSymbol((0, ()), Atom::LocationCounter.into()).into()
             ]
         );
     }

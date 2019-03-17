@@ -1,7 +1,7 @@
 use super::{EvalContext, RelocTable, Value};
 
 use crate::expr::BinaryOperator;
-use crate::model::{RelocAtom, Width};
+use crate::model::{Atom, Width};
 use crate::program::{NameDef, NameId, Node, RelocExpr};
 
 use std::borrow::Borrow;
@@ -36,16 +36,15 @@ impl<S: Clone> RelocExpr<S> {
     }
 }
 
-impl RelocAtom<NameId> {
+impl Atom<NameId> {
     fn evaluate_strictly<R>(&self, context: &EvalContext<R>) -> Result<Value, ()>
     where
         R: Borrow<RelocTable>,
     {
-        use self::RelocAtom::*;
         match self {
-            Literal(value) => Ok((*value).into()),
-            LocationCounter => Ok(context.location.clone()),
-            &Name(id) => {
+            Atom::Literal(value) => Ok((*value).into()),
+            Atom::LocationCounter => Ok(context.location.clone()),
+            &Atom::Name(id) => {
                 let name_def = context.names.get_name_def(id);
                 name_def
                     .map(|def| match def {

@@ -78,7 +78,7 @@ mod mock {
     use super::*;
 
     use crate::expr::{Expr, ExprVariant};
-    use crate::model::{RelocAtom, RelocExpr};
+    use crate::model::{Atom, RelocExpr};
     use crate::name::Ident;
 
     use std::cell::RefCell;
@@ -119,17 +119,17 @@ mod mock {
 
     impl<'a, T, S: Clone> ValueFromSimple<S> for MockBackend<'a, T> {
         fn from_location_counter(&mut self, span: S) -> Self::Value {
-            RelocExpr::from_atom(RelocAtom::LocationCounter, span)
+            RelocExpr::from_atom(Atom::LocationCounter, span)
         }
 
         fn from_number(&mut self, n: i32, span: S) -> Self::Value {
-            RelocExpr::from_atom(RelocAtom::Literal(n), span)
+            RelocExpr::from_atom(Atom::Literal(n), span)
         }
     }
 
     impl<'a, T, S: Clone> ValueFromName<S> for MockBackend<'a, T> {
         fn from_name(&mut self, name: Self::Name, span: S) -> Self::Value {
-            RelocExpr::from_atom(RelocAtom::Name(name), span)
+            RelocExpr::from_atom(Atom::Name(name), span)
         }
     }
 

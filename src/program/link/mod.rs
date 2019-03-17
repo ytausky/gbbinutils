@@ -133,7 +133,7 @@ mod tests {
     use crate::analysis::backend::{AllocName, Backend, PartialBackend};
     use crate::diag::IgnoreDiagnostics;
     use crate::expr::{BinaryOperator, ExprVariant};
-    use crate::model::RelocAtom;
+    use crate::model::Atom;
     use crate::program::{NameDef, ProgramBuilder, RelocId, Section};
 
     #[test]
@@ -153,7 +153,7 @@ mod tests {
                     addr: Some(
                         ExprVariant::Binary(
                             BinaryOperator::Plus,
-                            Box::new(RelocAtom::LocationCounter.into()),
+                            Box::new(Atom::LocationCounter.into()),
                             Box::new(skipped_bytes.into()),
                         )
                         .into(),
@@ -178,7 +178,7 @@ mod tests {
         let mut builder = ProgramBuilder::new();
         builder.set_origin(addr.into());
         let symbol_id = builder.alloc_name(());
-        builder.define_symbol((symbol_id, ()), RelocAtom::LocationCounter.into());
+        builder.define_symbol((symbol_id, ()), Atom::LocationCounter.into());
         let object = builder.into_object();
         let relocs = object.resolve_relocs();
         let value_id = match object.names.get_name_def(symbol_id).unwrap() {
@@ -221,9 +221,9 @@ mod tests {
             let name = object.names.alloc_name();
             let value = object.alloc_reloc();
             let items = &mut object.sections[0].items;
-            items.push(Node::LdInlineAddr(0, RelocAtom::Name(name).into()));
+            items.push(Node::LdInlineAddr(0, Atom::Name(name).into()));
             object.names.define_name(name, NameDef::Value(value));
-            items.push(Node::Symbol((name, ()), RelocAtom::LocationCounter.into()))
+            items.push(Node::Symbol((name, ()), Atom::LocationCounter.into()))
         })
     }
 

@@ -189,7 +189,7 @@ mod tests {
     use crate::analysis::session::SessionEvent;
     use crate::analysis::Ident;
     use crate::codebase::CodebaseError;
-    use crate::model::{RelocAtom, RelocExpr};
+    use crate::model::{Atom, RelocExpr};
     use crate::syntax::keyword::{Command, Operand};
     use crate::syntax::{CommandContext, ExprAtom, ExprContext, FileContext, StmtContext};
 
@@ -266,7 +266,7 @@ mod tests {
             [BackendEvent::SetOrigin(
                 ExprVariant::Binary(
                     BinaryOperator::Plus,
-                    Box::new(RelocAtom::LocationCounter.into()),
+                    Box::new(Atom::LocationCounter.into()),
                     Box::new(3.into()),
                 )
                 .into()

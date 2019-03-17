@@ -147,7 +147,7 @@ mod tests {
 
     use crate::diag::IgnoreDiagnostics;
     use crate::expr::{BinaryOperator, ExprVariant};
-    use crate::model::RelocAtom;
+    use crate::model::Atom;
     use crate::program::{NameTable, RelocId};
 
     use std::borrow::Borrow;
@@ -175,7 +175,7 @@ mod tests {
     fn test_translation_of_ld_inline_addr(opcode: u8, addr: u16, expected: impl Borrow<[u8]>) {
         let actual = translate_section_item(Node::LdInlineAddr(
             opcode,
-            RelocAtom::Literal(addr.into()).into(),
+            Atom::Literal(addr.into()).into(),
         ));
         assert_eq!(actual, expected.borrow())
     }
@@ -233,7 +233,7 @@ mod tests {
         let mut section = Section::new(None, RelocId(0));
         section.items.extend(vec![
             Node::Byte(byte),
-            Node::Expr(RelocAtom::LocationCounter.into(), Width::Byte),
+            Node::Expr(Atom::LocationCounter.into(), Width::Byte),
         ]);
         let binary = translate_without_context(section);
         assert_eq!(binary.data, [byte, 0x02])
@@ -245,7 +245,7 @@ mod tests {
         section.addr = Some(0xffe1.into());
         section
             .items
-            .push(Node::Expr(RelocAtom::LocationCounter.into(), Width::Word));
+            .push(Node::Expr(Atom::LocationCounter.into(), Width::Word));
         let binary = translate_without_context(section);
         assert_eq!(binary.data, [0xe3, 0xff])
     }

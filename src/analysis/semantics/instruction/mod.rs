@@ -423,7 +423,7 @@ mod tests {
     use crate::analysis::semantics::*;
     use crate::analysis::{Ident, Literal};
     use crate::expr::{Expr, ExprVariant};
-    use crate::model::{RelocAtom, RelocExpr};
+    use crate::model::{Atom, RelocExpr};
     use crate::syntax::Mnemonic;
     use std::cmp;
 
@@ -450,7 +450,7 @@ mod tests {
     }
 
     pub fn name(ident: &str, span: impl Into<TokenSpan>) -> RelocExpr<Ident<String>, TokenSpan> {
-        RelocExpr::from_atom(RelocAtom::Name(ident.into()), span.into())
+        RelocExpr::from_atom(Atom::Name(ident.into()), span.into())
     }
 
     pub(super) fn deref(expr: Input) -> Input {

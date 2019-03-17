@@ -222,7 +222,7 @@ fn mk_relative_expr<S: Clone>(expr: RelocExpr<S>) -> RelocExpr<S> {
             BinaryOperator::Minus,
             Box::new(expr),
             Box::new(RelocExpr {
-                variant: ExprVariant::Atom(RelocAtom::LocationCounter),
+                variant: ExprVariant::Atom(Atom::LocationCounter),
                 span: span.clone(),
             }),
         ),

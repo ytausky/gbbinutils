@@ -2,7 +2,7 @@ use super::{NameDef, NameId, Node, Program, RelocExpr, Section};
 
 use crate::analysis::backend::*;
 use crate::expr::{BinaryOperator, Expr, ExprVariant};
-use crate::model::{Item, RelocAtom};
+use crate::model::{Atom, Item};
 use crate::name::Ident;
 
 pub struct ProgramBuilder<SR> {
@@ -85,17 +85,17 @@ impl<S: Clone> AllocName<S> for ProgramBuilder<S> {
 
 impl<S: Clone> ValueFromSimple<S> for ProgramBuilder<S> {
     fn from_location_counter(&mut self, span: S) -> Self::Value {
-        RelocExpr::from_atom(RelocAtom::LocationCounter, span)
+        RelocExpr::from_atom(Atom::LocationCounter, span)
     }
 
     fn from_number(&mut self, n: i32, span: S) -> Self::Value {
-        RelocExpr::from_atom(RelocAtom::Literal(n), span)
+        RelocExpr::from_atom(Atom::Literal(n), span)
     }
 }
 
 impl<S: Clone> ValueFromName<S> for ProgramBuilder<S> {
     fn from_name(&mut self, name: Self::Name, span: S) -> Self::Value {
-        RelocExpr::from_atom(RelocAtom::Name(name), span)
+        RelocExpr::from_atom(Atom::Name(name), span)
     }
 }
 
@@ -282,7 +282,7 @@ mod tests {
     fn emit_defined_symbol() {
         let (object, diagnostics) = with_object_builder(|builder| {
             let symbol_id = builder.alloc_name(());
-            builder.define_symbol((symbol_id, ()), RelocAtom::LocationCounter.into());
+            builder.define_symbol((symbol_id, ()), Atom::LocationCounter.into());
             let value = builder.from_name(symbol_id, ());
             builder.emit_item(word_item(value));
         });
@@ -296,7 +296,7 @@ mod tests {
             let symbol_id = builder.alloc_name(());
             let value = builder.from_name(symbol_id, ());
             builder.emit_item(word_item(value));
-            builder.define_symbol((symbol_id, ()), RelocAtom::LocationCounter.into());
+            builder.define_symbol((symbol_id, ()), Atom::LocationCounter.into());
         });
         assert_eq!(*diagnostics, []);
         assert_eq!(object.sections.last().unwrap().data, [0x02, 0x00])

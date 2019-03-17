@@ -204,7 +204,7 @@ mod tests {
     use super::*;
 
     use crate::diag::MockSpan;
-    use crate::model::{RelocAtom, RelocExpr};
+    use crate::model::{Atom, RelocExpr};
 
     impl MockSpan for i32 {
         fn default() -> Self {
@@ -313,10 +313,7 @@ mod tests {
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Ok(Operand::Deref(RelocExpr::from_atom(
-                RelocAtom::Literal(n),
-                span
-            )))
+            Ok(Operand::Deref(RelocExpr::from_atom(Atom::Literal(n), span)))
         )
     }
 
