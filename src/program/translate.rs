@@ -1,4 +1,4 @@
-use super::context::{EvalContext, SymbolTable};
+use super::context::{EvalContext, RelocTable};
 use super::{BinarySection, Node, RelocExpr, Section};
 
 use crate::diag::{BackendDiagnostics, Message};
@@ -10,7 +10,7 @@ use std::vec::IntoIter;
 impl<S: Clone> Section<S> {
     pub fn translate(
         &self,
-        context: &mut EvalContext<&SymbolTable>,
+        context: &mut EvalContext<&RelocTable>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> BinarySection {
         let mut data = Vec::new();
@@ -28,7 +28,7 @@ impl<S: Clone> Section<S> {
 impl<S: Clone> Node<S> {
     fn translate(
         &self,
-        context: &EvalContext<&SymbolTable>,
+        context: &EvalContext<&RelocTable>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> IntoIter<u8> {
         match self {
@@ -94,7 +94,7 @@ impl Data {
 fn resolve_expr_item<S: Clone>(
     expr: &RelocExpr<S>,
     width: Width,
-    context: &EvalContext<&SymbolTable>,
+    context: &EvalContext<&RelocTable>,
     diagnostics: &mut impl BackendDiagnostics<S>,
 ) -> Data {
     let span = expr.span();
@@ -206,7 +206,7 @@ mod tests {
         item.translate(
             &EvalContext {
                 names: &NameTable::new(),
-                symbols: &SymbolTable::new(),
+                relocs: &RelocTable::new(),
                 location: Value::Unknown,
             },
             &mut diag::IgnoreDiagnostics::new(),
@@ -261,7 +261,7 @@ mod tests {
     fn translate_without_context<S: Clone + PartialEq>(section: Section<S>) -> BinarySection {
         let mut context = EvalContext {
             names: &NameTable::new(),
-            symbols: &SymbolTable::new(),
+            relocs: &RelocTable::new(),
             location: 0.into(),
         };
         section.translate(&mut context, &mut IgnoreDiagnostics::new())

@@ -24,16 +24,16 @@ impl NameTable {
     }
 }
 
-pub(super) struct SymbolTable {
+pub(super) struct RelocTable {
     values: Vec<Value>,
 }
 
-impl SymbolTable {
-    pub fn new() -> SymbolTable {
-        SymbolTable { values: Vec::new() }
+impl RelocTable {
+    pub fn new() -> Self {
+        Self { values: Vec::new() }
     }
 
-    pub fn new_symbol(&mut self, value: Value) -> ValueId {
+    pub fn alloc(&mut self, value: Value) -> ValueId {
         let id = ValueId(self.values.len());
         self.values.push(value);
         id
@@ -71,8 +71,8 @@ impl SymbolTable {
     }
 }
 
-pub(super) struct EvalContext<'a, ST> {
+pub(super) struct EvalContext<'a, R> {
     pub names: &'a NameTable,
-    pub symbols: ST,
+    pub relocs: R,
     pub location: Value,
 }

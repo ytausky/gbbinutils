@@ -1,4 +1,4 @@
-use super::context::{EvalContext, SymbolTable};
+use super::context::{EvalContext, RelocTable};
 use super::{BinaryObject, NameDef, NameId, Node, Program, RelocExpr};
 
 use crate::diag::BackendDiagnostics;
@@ -10,10 +10,10 @@ use std::ops::{Add, AddAssign, Mul, RangeInclusive, Sub};
 
 impl<S: Clone> Program<S> {
     pub(crate) fn link(mut self, diagnostics: &mut impl BackendDiagnostics<S>) -> BinaryObject {
-        self.resolve_symbols();
+        self.resolve_relocs();
         let mut context = EvalContext {
             names: &self.names,
-            symbols: &self.symbols,
+            relocs: &self.relocs,
             location: 0.into(),
         };
         BinaryObject {
@@ -134,7 +134,7 @@ impl Mul for &Value {
 }
 
 impl<S: Clone> Program<S> {
-    fn resolve_symbols(&mut self) {
+    fn resolve_relocs(&mut self) {
         self.refine_symbols();
         self.refine_symbols();
     }
@@ -143,7 +143,7 @@ impl<S: Clone> Program<S> {
         let mut refinements = 0;
         let context = &mut EvalContext {
             names: &self.names,
-            symbols: &mut self.symbols,
+            relocs: &mut self.relocs,
             location: Value::Unknown,
         };
         for section in &self.sections {
@@ -153,27 +153,27 @@ impl<S: Clone> Program<S> {
                         NameDef::Value(id) => *id,
                     };
                     let value = expr.evaluate(context);
-                    refinements += context.symbols.refine(id, value) as i32
+                    refinements += context.relocs.refine(id, value) as i32
                 }
             });
-            refinements += context.symbols.refine(section.size, size) as i32
+            refinements += context.relocs.refine(section.size, size) as i32
         }
         refinements
     }
 }
 
 impl<S: Clone> RelocExpr<S> {
-    pub(super) fn evaluate<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
+    pub(super) fn evaluate<R: Borrow<RelocTable>>(&self, context: &EvalContext<R>) -> Value {
         self.evaluate_strictly(context, &mut |_: &S| ())
     }
 
-    pub(super) fn evaluate_strictly<ST, F>(
+    pub(super) fn evaluate_strictly<R, F>(
         &self,
-        context: &EvalContext<ST>,
+        context: &EvalContext<R>,
         on_undefined_symbol: &mut F,
     ) -> Value
     where
-        ST: Borrow<SymbolTable>,
+        R: Borrow<RelocTable>,
         F: FnMut(&S),
     {
         use self::ExprVariant::*;
@@ -193,9 +193,9 @@ impl<S: Clone> RelocExpr<S> {
 }
 
 impl RelocAtom<NameId> {
-    fn evaluate_strictly<ST>(&self, context: &EvalContext<ST>) -> Result<Value, ()>
+    fn evaluate_strictly<R>(&self, context: &EvalContext<R>) -> Result<Value, ()>
     where
-        ST: Borrow<SymbolTable>,
+        R: Borrow<RelocTable>,
     {
         use self::RelocAtom::*;
         match self {
@@ -205,7 +205,7 @@ impl RelocAtom<NameId> {
                 let name_def = context.names.get_name_def(id);
                 name_def
                     .map(|def| match def {
-                        NameDef::Value(id) => context.symbols.borrow().get_value(*id),
+                        NameDef::Value(id) => context.relocs.borrow().get_value(*id),
                     })
                     .ok_or(())
             }
@@ -225,7 +225,7 @@ impl BinaryOperator {
 }
 
 impl<S: Clone> Node<S> {
-    pub fn size<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
+    pub fn size<R: Borrow<RelocTable>>(&self, context: &EvalContext<R>) -> Value {
         match self {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),
             Node::Expr(_, width) => width.len().into(),
@@ -284,10 +284,10 @@ mod tests {
                 },
             ],
             names: NameTable::new(),
-            symbols: {
-                let mut table = SymbolTable::new();
-                table.new_symbol(Value::Unknown);
-                table.new_symbol(Value::Unknown);
+            relocs: {
+                let mut table = RelocTable::new();
+                table.alloc(Value::Unknown);
+                table.alloc(Value::Unknown);
                 table
             },
         };
@@ -306,11 +306,11 @@ mod tests {
         let symbol_id = builder.alloc_name(());
         builder.define_symbol((symbol_id, ()), RelocAtom::LocationCounter.into());
         let mut object = builder.into_object();
-        object.resolve_symbols();
+        object.resolve_relocs();
         let value_id = match object.names.get_name_def(symbol_id).unwrap() {
             NameDef::Value(id) => *id,
         };
-        assert_eq!(object.symbols.get_value(value_id), addr.into());
+        assert_eq!(object.relocs.get_value(value_id), addr.into());
     }
 
     #[test]
@@ -345,7 +345,7 @@ mod tests {
     fn ld_inline_addr_with_symbol_after_instruction_has_size_three() {
         assert_section_size(3, |object| {
             let name = object.names.alloc_name();
-            let value = object.symbols.new_symbol(Value::Unknown);
+            let value = object.relocs.alloc(Value::Unknown);
             let items = &mut object.sections[0].items;
             items.push(Node::LdInlineAddr(0, RelocAtom::Name(name).into()));
             object.names.define_name(name, NameDef::Value(value));
@@ -376,9 +376,9 @@ mod tests {
         let mut program = Program::new();
         program.add_section(None);
         f(&mut program);
-        program.resolve_symbols();
+        program.resolve_relocs();
         assert_eq!(
-            program.symbols.get_value(program.sections[0].size),
+            program.relocs.get_value(program.sections[0].size),
             expected.into()
         )
     }

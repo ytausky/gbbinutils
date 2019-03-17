@@ -1,6 +1,6 @@
 pub use self::builder::ProgramBuilder;
 
-use self::context::{EvalContext, NameTable, SymbolTable};
+use self::context::{EvalContext, NameTable, RelocTable};
 use self::resolve::Value;
 use crate::model::Width;
 use std::borrow::Borrow;
@@ -22,7 +22,7 @@ pub struct NameId(usize);
 pub struct Program<S> {
     sections: Vec<Section<S>>,
     names: NameTable,
-    symbols: SymbolTable,
+    relocs: RelocTable,
 }
 
 struct Section<S> {
@@ -50,12 +50,12 @@ impl<S> Program<S> {
         Program {
             sections: Vec::new(),
             names: NameTable::new(),
-            symbols: SymbolTable::new(),
+            relocs: RelocTable::new(),
         }
     }
 
     fn add_section(&mut self, name: Option<String>) {
-        let size_symbol_id = self.symbols.new_symbol(Value::Unknown);
+        let size_symbol_id = self.relocs.alloc(Value::Unknown);
         self.sections.push(Section::new(name, size_symbol_id))
     }
 }
@@ -72,10 +72,10 @@ impl<S> Section<S> {
 }
 
 impl<S: Clone> Section<S> {
-    fn traverse<ST, F>(&self, context: &mut EvalContext<ST>, mut f: F) -> (Value, Value)
+    fn traverse<R, F>(&self, context: &mut EvalContext<R>, mut f: F) -> (Value, Value)
     where
-        ST: Borrow<SymbolTable>,
-        F: FnMut(&Node<S>, &mut EvalContext<ST>),
+        R: Borrow<RelocTable>,
+        F: FnMut(&Node<S>, &mut EvalContext<R>),
     {
         let addr = self.evaluate_addr(context);
         let mut offset = Value::from(0);
@@ -87,7 +87,7 @@ impl<S: Clone> Section<S> {
         (addr, offset)
     }
 
-    fn evaluate_addr<ST: Borrow<SymbolTable>>(&self, context: &EvalContext<ST>) -> Value {
+    fn evaluate_addr<R: Borrow<RelocTable>>(&self, context: &EvalContext<R>) -> Value {
         self.addr
             .as_ref()
             .map(|expr| expr.evaluate(context))
