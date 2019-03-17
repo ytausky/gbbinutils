@@ -1,6 +1,6 @@
 pub use self::builder::ProgramBuilder;
 
-use self::context::{EvalContext, SymbolTable};
+use self::context::{EvalContext, NameTable, SymbolTable};
 use self::resolve::Value;
 use crate::diag::BackendDiagnostics;
 use crate::model::Width;
@@ -22,6 +22,7 @@ pub struct NameId(usize);
 
 pub struct Program<S> {
     sections: Vec<Section<S>>,
+    names: NameTable,
     symbols: SymbolTable,
 }
 
@@ -49,6 +50,7 @@ impl<S> Program<S> {
     pub fn new() -> Program<S> {
         Program {
             sections: Vec::new(),
+            names: NameTable::new(),
             symbols: SymbolTable::new(),
         }
     }
@@ -63,6 +65,7 @@ impl<S: Clone> Program<S> {
     pub(crate) fn link(mut self, diagnostics: &mut impl BackendDiagnostics<S>) -> BinaryObject {
         self.resolve_symbols();
         let mut context = EvalContext {
+            names: &self.names,
             symbols: &self.symbols,
             location: 0.into(),
         };

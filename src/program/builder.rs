@@ -71,7 +71,7 @@ impl<S: Clone> Backend<Ident<String>, S> for ProgramBuilder<S> {
     fn define_symbol(&mut self, (symbol_id, span): (Self::Name, S), value: Self::Value) {
         let value_id = self.program.symbols.new_symbol(Value::Unknown);
         self.program
-            .symbols
+            .names
             .define_name(symbol_id, NameDef::Value(value_id));
         self.push(Node::Symbol((symbol_id, span), value))
     }
@@ -79,7 +79,7 @@ impl<S: Clone> Backend<Ident<String>, S> for ProgramBuilder<S> {
 
 impl<S: Clone> AllocName<S> for ProgramBuilder<S> {
     fn alloc_name(&mut self, _span: S) -> Self::Name {
-        self.program.symbols.alloc_name()
+        self.program.names.alloc_name()
     }
 }
 

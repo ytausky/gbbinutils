@@ -1,6 +1,4 @@
-pub use super::context::EvalContext;
-
-use super::context::SymbolTable;
+use super::context::{EvalContext, SymbolTable};
 use super::{NameDef, NameId, Node, Program, RelocExpr};
 
 use crate::expr::{BinaryOperator, ExprVariant};
@@ -125,13 +123,14 @@ impl<S: Clone> Program<S> {
     fn refine_symbols(&mut self) -> i32 {
         let mut refinements = 0;
         let context = &mut EvalContext {
+            names: &self.names,
             symbols: &mut self.symbols,
             location: Value::Unknown,
         };
         for section in &self.sections {
             let (_, size) = section.traverse(context, |item, context| {
                 if let Node::Symbol((name, _), expr) = item {
-                    let id = match context.symbols.get_name_def(*name).unwrap() {
+                    let id = match context.names.get_name_def(*name).unwrap() {
                         NameDef::Value(id) => *id,
                     };
                     let value = expr.evaluate(context);
@@ -184,7 +183,7 @@ impl RelocAtom<NameId> {
             Literal(value) => Ok((*value).into()),
             LocationCounter => Ok(context.location.clone()),
             &Name(id) => {
-                let name_def = context.symbols.borrow().get_name_def(id);
+                let name_def = context.names.get_name_def(id);
                 name_def
                     .map(|def| match def {
                         NameDef::Value(id) => context.symbols.borrow().get_value(*id),
@@ -236,6 +235,7 @@ mod tests {
 
     use crate::analysis::backend::{AllocName, Backend, PartialBackend};
     use crate::diag::IgnoreDiagnostics;
+    use crate::program::context::NameTable;
     use crate::program::{NameDef, ProgramBuilder, Section, ValueId};
 
     #[test]
@@ -264,6 +264,7 @@ mod tests {
                     items: vec![Node::Byte(0x43)],
                 },
             ],
+            names: NameTable::new(),
             symbols: {
                 let mut table = SymbolTable::new();
                 table.new_symbol(Value::Unknown);
@@ -287,7 +288,10 @@ mod tests {
         builder.define_symbol((symbol_id, ()), RelocAtom::LocationCounter.into());
         let mut object = builder.into_object();
         object.resolve_symbols();
-        assert_eq!(object.symbols.names().next(), Some(Some(&addr.into())));
+        let value_id = match object.names.get_name_def(symbol_id).unwrap() {
+            NameDef::Value(id) => *id,
+        };
+        assert_eq!(object.symbols.get_value(value_id), addr.into());
     }
 
     #[test]
@@ -321,11 +325,11 @@ mod tests {
     #[test]
     fn ld_inline_addr_with_symbol_after_instruction_has_size_three() {
         assert_section_size(3, |object| {
-            let name = object.symbols.alloc_name();
+            let name = object.names.alloc_name();
             let value = object.symbols.new_symbol(Value::Unknown);
             let items = &mut object.sections[0].items;
             items.push(Node::LdInlineAddr(0, RelocAtom::Name(name).into()));
-            object.symbols.define_name(name, NameDef::Value(value));
+            object.names.define_name(name, NameDef::Value(value));
             items.push(Node::Symbol((name, ()), RelocAtom::LocationCounter.into()))
         })
     }

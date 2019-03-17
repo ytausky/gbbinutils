@@ -148,7 +148,7 @@ mod tests {
     use crate::diag::IgnoreDiagnostics;
     use crate::expr::{BinaryOperator, ExprVariant};
     use crate::model::RelocAtom;
-    use crate::program::ValueId;
+    use crate::program::{NameTable, ValueId};
 
     use std::borrow::Borrow;
 
@@ -205,6 +205,7 @@ mod tests {
         use crate::program::resolve::Value;
         item.translate(
             &EvalContext {
+                names: &NameTable::new(),
                 symbols: &SymbolTable::new(),
                 location: Value::Unknown,
             },
@@ -259,6 +260,7 @@ mod tests {
 
     fn translate_without_context<S: Clone + PartialEq>(section: Section<S>) -> BinarySection {
         let mut context = EvalContext {
+            names: &NameTable::new(),
             symbols: &SymbolTable::new(),
             location: 0.into(),
         };

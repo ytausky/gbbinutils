@@ -1,17 +1,36 @@
 use super::resolve::Value;
 use super::{NameDef, NameId, ValueId};
 
+pub(super) struct NameTable(Vec<Option<NameDef>>);
+
+impl NameTable {
+    pub fn new() -> Self {
+        Self(Vec::new())
+    }
+
+    pub(super) fn alloc_name(&mut self) -> NameId {
+        let id = NameId(self.0.len());
+        self.0.push(None);
+        id
+    }
+
+    pub(super) fn define_name(&mut self, NameId(id): NameId, def: NameDef) {
+        assert!(self.0[id].is_none());
+        self.0[id] = Some(def);
+    }
+
+    pub(super) fn get_name_def(&self, NameId(id): NameId) -> Option<&NameDef> {
+        self.0[id].as_ref()
+    }
+}
+
 pub(super) struct SymbolTable {
-    names: Vec<Option<NameDef>>,
     values: Vec<Value>,
 }
 
 impl SymbolTable {
     pub fn new() -> SymbolTable {
-        SymbolTable {
-            names: Vec::new(),
-            values: Vec::new(),
-        }
+        SymbolTable { values: Vec::new() }
     }
 
     pub fn new_symbol(&mut self, value: Value) -> ValueId {
@@ -22,21 +41,6 @@ impl SymbolTable {
 
     pub(super) fn get_value(&self, ValueId(id): ValueId) -> Value {
         self.values[id].clone()
-    }
-
-    pub(super) fn alloc_name(&mut self) -> NameId {
-        let id = NameId(self.names.len());
-        self.names.push(None);
-        id
-    }
-
-    pub(super) fn define_name(&mut self, NameId(id): NameId, def: NameDef) {
-        assert!(self.names[id].is_none());
-        self.names[id] = Some(def);
-    }
-
-    pub(super) fn get_name_def(&self, NameId(id): NameId) -> Option<&NameDef> {
-        self.names[id].as_ref()
     }
 
     pub fn refine(&mut self, ValueId(id): ValueId, value: Value) -> bool {
@@ -65,18 +69,10 @@ impl SymbolTable {
         *stored_value = value;
         was_refined
     }
-
-    #[cfg(test)]
-    pub fn names(&self) -> impl Iterator<Item = Option<&Value>> {
-        self.names.iter().map(move |entry| {
-            entry
-                .as_ref()
-                .map(|NameDef::Value(ValueId(id))| &self.values[*id])
-        })
-    }
 }
 
-pub struct EvalContext<ST> {
+pub(super) struct EvalContext<'a, ST> {
+    pub names: &'a NameTable,
     pub symbols: ST,
     pub location: Value,
 }
