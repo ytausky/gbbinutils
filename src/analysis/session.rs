@@ -289,8 +289,8 @@ mod mock {
 
     use crate::analysis::backend::BackendEvent;
     use crate::diag::{DiagnosticsEvent, MockDiagnostics, MockSpan};
-    use crate::expr::{Expr, ExprVariant};
-    use crate::model::{Atom, RelocExpr};
+    use crate::expr::ExprVariant;
+    use crate::model::{Atom, Expr};
 
     use std::cell::RefCell;
 
@@ -303,7 +303,7 @@ mod mock {
             Vec<SemanticToken<String>>,
         ),
         InvokeMacro(Ident<String>, Vec<Vec<SemanticToken<String>>>),
-        DefineSymbol((Ident<String>, S), RelocExpr<Ident<String>, S>),
+        DefineSymbol((Ident<String>, S), Expr<Ident<String>, S>),
     }
 
     pub(crate) struct MockSession<'a, T, S> {
@@ -327,16 +327,16 @@ mod mock {
     }
 
     impl<'a, T, S: Clone> HasValue<S> for MockSession<'a, T, S> {
-        type Value = RelocExpr<Ident<String>, S>;
+        type Value = Expr<Ident<String>, S>;
     }
 
     impl<'a, T, S: Clone> ValueFromSimple<S> for MockSession<'a, T, S> {
         fn from_location_counter(&mut self, span: S) -> Self::Value {
-            RelocExpr::from_atom(Atom::LocationCounter, span)
+            Expr::from_atom(Atom::LocationCounter, span)
         }
 
         fn from_number(&mut self, n: i32, span: S) -> Self::Value {
-            RelocExpr::from_atom(Atom::Literal(n), span)
+            Expr::from_atom(Atom::Literal(n), span)
         }
     }
 
@@ -356,7 +356,7 @@ mod mock {
 
     impl<'a, T, S: Clone> ValueBuilder<Ident<String>, S> for MockSession<'a, T, S> {
         fn from_ident(&mut self, ident: Ident<String>, span: S) -> Self::Value {
-            RelocExpr::from_atom(Atom::Name(ident), span)
+            Expr::from_atom(Atom::Name(ident), span)
         }
     }
 
@@ -383,7 +383,7 @@ mod mock {
     impl<'a, T, S> Session for MockSession<'a, T, S>
     where
         T: From<SessionEvent<S>>,
-        T: From<BackendEvent<RelocExpr<Ident<String>, S>>>,
+        T: From<BackendEvent<Expr<Ident<String>, S>>>,
         T: From<DiagnosticsEvent<S>>,
         S: Clone + MockSpan,
     {
@@ -434,7 +434,7 @@ mod mock {
 
     impl<'a, T, S> PartialBackend<S> for MockSession<'a, T, S>
     where
-        T: From<BackendEvent<RelocExpr<Ident<String>, S>>>,
+        T: From<BackendEvent<Expr<Ident<String>, S>>>,
         S: Clone + MockSpan,
     {
         fn emit_item(&mut self, item: Item<Self::Value>) {
@@ -452,7 +452,7 @@ mod mock {
 
     impl<'a, T, S> StartSection<Ident<String>, S> for MockSession<'a, T, S>
     where
-        T: From<BackendEvent<RelocExpr<Ident<String>, S>>>,
+        T: From<BackendEvent<Expr<Ident<String>, S>>>,
         S: Clone + MockSpan,
     {
         fn start_section(&mut self, name: (Ident<String>, S)) {
@@ -471,7 +471,7 @@ mod tests {
     use crate::analysis::semantics::AnalyzerEvent;
     use crate::analysis::{Literal, MockCodebase};
     use crate::diag::{DiagnosticsEvent, MockSpan};
-    use crate::model::{Atom, Instruction, Nullary, RelocExpr};
+    use crate::model::{Atom, Expr, Instruction, Nullary};
     use crate::name::{BasicNameTable, NameTableEvent};
     use crate::syntax::{Command, Directive, Mnemonic, Token};
 
@@ -652,7 +652,7 @@ mod tests {
     #[derive(Debug, PartialEq)]
     enum Event<S: Clone> {
         Frontend(AnalyzerEvent<S>),
-        Backend(BackendEvent<RelocExpr<usize, S>>),
+        Backend(BackendEvent<Expr<usize, S>>),
         NameTable(NameTableEvent),
         Diagnostics(DiagnosticsEvent<S>),
     }
@@ -663,8 +663,8 @@ mod tests {
         }
     }
 
-    impl<S: Clone> From<BackendEvent<RelocExpr<usize, S>>> for Event<S> {
-        fn from(event: BackendEvent<RelocExpr<usize, S>>) -> Self {
+    impl<S: Clone> From<BackendEvent<Expr<usize, S>>> for Event<S> {
+        fn from(event: BackendEvent<Expr<usize, S>>) -> Self {
             Event::Backend(event)
         }
     }

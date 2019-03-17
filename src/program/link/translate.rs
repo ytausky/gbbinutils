@@ -2,7 +2,7 @@ use super::{EvalContext, RelocTable};
 
 use crate::diag::{BackendDiagnostics, Message};
 use crate::model::Width;
-use crate::program::{BinarySection, Node, RelocExpr, Section};
+use crate::program::{BinarySection, Expr, Node, Section};
 use crate::span::Source;
 
 use std::vec::IntoIter;
@@ -92,7 +92,7 @@ impl Data {
 }
 
 fn resolve_expr_item<S: Clone>(
-    expr: &RelocExpr<S>,
+    expr: &Expr<S>,
     width: Width,
     context: &EvalContext<&RelocTable>,
     diagnostics: &mut impl BackendDiagnostics<S>,

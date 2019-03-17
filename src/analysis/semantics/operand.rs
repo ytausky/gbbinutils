@@ -204,7 +204,7 @@ mod tests {
     use super::*;
 
     use crate::diag::MockSpan;
-    use crate::model::{Atom, RelocExpr};
+    use crate::model::{Atom, Expr};
 
     impl MockSpan for i32 {
         fn default() -> Self {
@@ -256,7 +256,7 @@ mod tests {
     fn analyze_operand<S: Clone + MockSpan + PartialEq>(
         expr: SemanticExpr<String, S>,
         context: Context,
-    ) -> Result<Operand<RelocExpr<Ident<String>, S>>, Vec<DiagnosticsEvent<S>>> {
+    ) -> Result<Operand<Expr<Ident<String>, S>>, Vec<DiagnosticsEvent<S>>> {
         use crate::analysis::session::MockSession;
         use std::cell::RefCell;
 
@@ -313,7 +313,7 @@ mod tests {
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Ok(Operand::Deref(RelocExpr::from_atom(Atom::Literal(n), span)))
+            Ok(Operand::Deref(Expr::from_atom(Atom::Literal(n), span)))
         )
     }
 

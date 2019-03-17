@@ -539,15 +539,15 @@ mod tests {
 
     #[derive(Debug, PartialEq)]
     pub(crate) enum TestOperation {
-        Backend(BackendEvent<RelocExpr>),
+        Backend(BackendEvent<Expr>),
         Diagnostics(DiagnosticsEvent<()>),
         Session(SessionEvent<()>),
     }
 
-    type RelocExpr = crate::model::RelocExpr<Ident<String>, ()>;
+    type Expr = crate::model::Expr<Ident<String>, ()>;
 
-    impl<'a> From<BackendEvent<RelocExpr>> for TestOperation {
-        fn from(event: BackendEvent<RelocExpr>) -> Self {
+    impl<'a> From<BackendEvent<Expr>> for TestOperation {
+        fn from(event: BackendEvent<Expr>) -> Self {
             TestOperation::Backend(event)
         }
     }

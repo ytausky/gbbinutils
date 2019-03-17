@@ -1,7 +1,7 @@
-use super::{NameDef, NameId, Node, Program, RelocExpr, Section};
+use super::{Expr, NameDef, NameId, Node, Program, Section};
 
 use crate::analysis::backend::*;
-use crate::expr::{BinaryOperator, Expr, ExprVariant};
+use crate::expr::{BinaryOperator, ExprVariant};
 use crate::model::{Atom, Item};
 use crate::name::Ident;
 
@@ -11,7 +11,7 @@ pub struct ProgramBuilder<SR> {
 }
 
 enum BuilderState<S> {
-    AnonSectionPrelude { addr: Option<RelocExpr<S>> },
+    AnonSectionPrelude { addr: Option<Expr<S>> },
     Section(usize),
     SectionPrelude(usize),
 }
@@ -85,17 +85,17 @@ impl<S: Clone> AllocName<S> for ProgramBuilder<S> {
 
 impl<S: Clone> ValueFromSimple<S> for ProgramBuilder<S> {
     fn from_location_counter(&mut self, span: S) -> Self::Value {
-        RelocExpr::from_atom(Atom::LocationCounter, span)
+        Expr::from_atom(Atom::LocationCounter, span)
     }
 
     fn from_number(&mut self, n: i32, span: S) -> Self::Value {
-        RelocExpr::from_atom(Atom::Literal(n), span)
+        Expr::from_atom(Atom::Literal(n), span)
     }
 }
 
 impl<S: Clone> ValueFromName<S> for ProgramBuilder<S> {
     fn from_name(&mut self, name: Self::Name, span: S) -> Self::Value {
-        RelocExpr::from_atom(Atom::Name(name), span)
+        Expr::from_atom(Atom::Name(name), span)
     }
 }
 
@@ -114,7 +114,7 @@ impl<S: Clone> ApplyBinaryOperator<S> for ProgramBuilder<S> {
 }
 
 impl<S: Clone> HasValue<S> for ProgramBuilder<S> {
-    type Value = RelocExpr<S>;
+    type Value = Expr<S>;
 }
 
 impl<S: Clone> HasName for ProgramBuilder<S> {
@@ -154,7 +154,7 @@ mod tests {
 
     #[test]
     fn constrain_origin_determines_origin_of_new_section() {
-        let origin: RelocExpr<_> = 0x3000.into();
+        let origin: Expr<_> = 0x3000.into();
         let object = build_object(|builder| {
             builder.set_origin(origin.clone());
             builder.push(Node::Byte(0xcd))
@@ -171,7 +171,7 @@ mod tests {
 
     #[test]
     fn set_origin_in_section_prelude_sets_origin() {
-        let origin: RelocExpr<_> = 0x0150.into();
+        let origin: Expr<_> = 0x0150.into();
         let object = build_object(|builder| {
             builder.start_section(("my_section".into(), ()));
             builder.set_origin(origin.clone())
@@ -205,7 +205,7 @@ mod tests {
 
     fn emit_items_and_compare<I, B>(items: I, bytes: B)
     where
-        I: Borrow<[Item<RelocExpr<()>>]>,
+        I: Borrow<[Item<Expr<()>>]>,
         B: Borrow<[u8]>,
     {
         let (object, _) = with_object_builder(|builder| {
@@ -226,7 +226,7 @@ mod tests {
         emit_items_and_compare([byte_literal(0x12), byte_literal(0x34)], [0x12, 0x34])
     }
 
-    fn byte_literal(value: i32) -> Item<RelocExpr<()>> {
+    fn byte_literal(value: i32) -> Item<Expr<()>> {
         Item::Data(value.into(), Width::Byte)
     }
 
@@ -315,7 +315,7 @@ mod tests {
         (object, diagnostics)
     }
 
-    fn word_item<S: Clone>(value: RelocExpr<S>) -> Item<RelocExpr<S>> {
+    fn word_item<S: Clone>(value: Expr<S>) -> Item<Expr<S>> {
         Item::Data(value, Width::Word)
     }
 

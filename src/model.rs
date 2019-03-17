@@ -1,4 +1,4 @@
-use crate::expr::{BinaryOperator, Expr, ExprVariant};
+use crate::expr::{BinaryOperator, ExprVariant};
 use crate::span::Source;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -13,7 +13,7 @@ pub enum Item<V: Source> {
     Instruction(Instruction<V>),
 }
 
-pub type RelocExpr<I, S> = Expr<Atom<I>, Empty, BinaryOperator, S>;
+pub type Expr<I, S> = crate::expr::Expr<Atom<I>, Empty, BinaryOperator, S>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Empty {}
@@ -32,7 +32,7 @@ impl<I, S> From<i32> for ExprVariant<Atom<I>, Empty, BinaryOperator, S> {
 }
 
 #[cfg(test)]
-impl<I, T: Into<ExprVariant<Atom<I>, Empty, BinaryOperator, ()>>> From<T> for RelocExpr<I, ()> {
+impl<I, T: Into<ExprVariant<Atom<I>, Empty, BinaryOperator, ()>>> From<T> for Expr<I, ()> {
     fn from(variant: T) -> Self {
         Expr {
             variant: variant.into(),

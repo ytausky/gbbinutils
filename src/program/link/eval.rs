@@ -2,11 +2,11 @@ use super::{EvalContext, RelocTable, Value};
 
 use crate::expr::BinaryOperator;
 use crate::model::{Atom, Width};
-use crate::program::{NameDef, NameId, Node, RelocExpr};
+use crate::program::{Expr, NameDef, NameId, Node};
 
 use std::borrow::Borrow;
 
-impl<S: Clone> RelocExpr<S> {
+impl<S: Clone> Expr<S> {
     pub(super) fn evaluate<R: Borrow<RelocTable>>(&self, context: &EvalContext<R>) -> Value {
         self.evaluate_strictly(context, &mut |_: &S| ())
     }

@@ -6,7 +6,7 @@ mod builder;
 mod link;
 mod lowering;
 
-type RelocExpr<S> = crate::model::RelocExpr<NameId, S>;
+type Expr<S> = crate::model::Expr<NameId, S>;
 
 #[derive(Clone, Copy)]
 struct RelocId(usize);
@@ -22,7 +22,7 @@ pub struct Program<S> {
 
 struct Section<S> {
     name: Option<String>,
-    addr: Option<RelocExpr<S>>,
+    addr: Option<Expr<S>>,
     size: RelocId,
     items: Vec<Node<S>>,
 }
@@ -30,10 +30,10 @@ struct Section<S> {
 #[derive(Clone, Debug, PartialEq)]
 enum Node<S> {
     Byte(u8),
-    Expr(RelocExpr<S>, Width),
-    LdInlineAddr(u8, RelocExpr<S>),
-    Embedded(u8, RelocExpr<S>),
-    Symbol((NameId, S), RelocExpr<S>),
+    Expr(Expr<S>, Width),
+    LdInlineAddr(u8, Expr<S>),
+    Embedded(u8, Expr<S>),
+    Symbol((NameId, S), Expr<S>),
 }
 
 enum NameDef {

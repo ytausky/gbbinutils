@@ -422,8 +422,8 @@ mod tests {
     use super::*;
     use crate::analysis::semantics::*;
     use crate::analysis::{Ident, Literal};
-    use crate::expr::{Expr, ExprVariant};
-    use crate::model::{Atom, RelocExpr};
+    use crate::expr::ExprVariant;
+    use crate::model::{Atom, Expr};
     use crate::syntax::Mnemonic;
     use std::cmp;
 
@@ -445,16 +445,16 @@ mod tests {
         Literal::Operand(keyword).into()
     }
 
-    pub fn number(n: i32, span: impl Into<TokenSpan>) -> RelocExpr<Ident<String>, TokenSpan> {
-        RelocExpr::from_atom(n, span.into())
+    pub fn number(n: i32, span: impl Into<TokenSpan>) -> Expr<Ident<String>, TokenSpan> {
+        Expr::from_atom(n, span.into())
     }
 
-    pub fn name(ident: &str, span: impl Into<TokenSpan>) -> RelocExpr<Ident<String>, TokenSpan> {
-        RelocExpr::from_atom(Atom::Name(ident.into()), span.into())
+    pub fn name(ident: &str, span: impl Into<TokenSpan>) -> Expr<Ident<String>, TokenSpan> {
+        Expr::from_atom(Atom::Name(ident.into()), span.into())
     }
 
     pub(super) fn deref(expr: Input) -> Input {
-        Expr {
+        SemanticExpr {
             variant: ExprVariant::Unary(SemanticUnary::Parentheses, Box::new(expr)),
             span: (),
         }
@@ -579,7 +579,7 @@ mod tests {
 
     impl<'a> From<&'a str> for Input {
         fn from(ident: &'a str) -> Self {
-            Expr::from_atom(SemanticAtom::Ident(ident.into()), ())
+            SemanticExpr::from_atom(SemanticAtom::Ident(ident.into()), ())
         }
     }
 
@@ -601,7 +601,7 @@ mod tests {
         test_cp_const_analysis(n.into(), number(n, TokenId::Operand(0, 0)))
     }
 
-    fn test_cp_const_analysis(parsed: Input, expr: RelocExpr<Ident<String>, TokenSpan>) {
+    fn test_cp_const_analysis(parsed: Input, expr: Expr<Ident<String>, TokenSpan>) {
         analyze(kw::Mnemonic::Cp, Some(parsed)).expect_instruction(Instruction::Alu(
             AluOperation::Cp,
             AluSource::Immediate(expr),
@@ -622,7 +622,7 @@ mod tests {
 
     pub(super) type InstructionDescriptor = (
         (kw::Mnemonic, Vec<Input>),
-        Instruction<RelocExpr<Ident<String>, TokenSpan>>,
+        Instruction<Expr<Ident<String>, TokenSpan>>,
     );
 
     fn describe_legal_instructions() -> Vec<InstructionDescriptor> {
@@ -705,7 +705,10 @@ mod tests {
         operand: SimpleOperand,
     ) -> InstructionDescriptor {
         (
-            (kw::Mnemonic::from(operation), vec![Expr::from(operand)]),
+            (
+                kw::Mnemonic::from(operation),
+                vec![SemanticExpr::from(operand)],
+            ),
             Instruction::Alu(operation, AluSource::Simple(operand)),
         )
     }
@@ -826,14 +829,11 @@ mod tests {
     }
 
     pub struct AnalysisResult(
-        Result<Instruction<RelocExpr<Ident<String>, TokenSpan>>, Vec<DiagnosticsEvent<TokenSpan>>>,
+        Result<Instruction<Expr<Ident<String>, TokenSpan>>, Vec<DiagnosticsEvent<TokenSpan>>>,
     );
 
     impl AnalysisResult {
-        pub fn expect_instruction(
-            self,
-            expected: Instruction<RelocExpr<Ident<String>, TokenSpan>>,
-        ) {
+        pub fn expect_instruction(self, expected: Instruction<Expr<Ident<String>, TokenSpan>>) {
             assert_eq!(self.0, Ok(expected))
         }
 
@@ -897,7 +897,7 @@ mod tests {
                 ExprVariant::Atom(SemanticAtom::Literal(literal))
             }
         };
-        (j + 1, Expr { variant, span })
+        (j + 1, SemanticExpr { variant, span })
     }
 
     pub struct ExpectedDiagnostic {

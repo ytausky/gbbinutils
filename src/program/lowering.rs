@@ -1,4 +1,4 @@
-use super::{Node, RelocExpr};
+use super::{Expr, Node};
 
 use crate::expr::{BinaryOperator, ExprVariant};
 use crate::model::*;
@@ -40,15 +40,15 @@ impl<S> LoweredItem<S> {
         LoweredItem::Two(Node::Byte(0xcb), opcode.into())
     }
 
-    fn and_byte(self, expr: RelocExpr<S>) -> Self {
+    fn and_byte(self, expr: Expr<S>) -> Self {
         self.and_expr(expr, Width::Byte)
     }
 
-    fn and_word(self, expr: RelocExpr<S>) -> Self {
+    fn and_word(self, expr: Expr<S>) -> Self {
         self.and_expr(expr, Width::Word)
     }
 
-    fn and_expr(self, expr: RelocExpr<S>, width: Width) -> Self {
+    fn and_expr(self, expr: Expr<S>, width: Width) -> Self {
         match self {
             LoweredItem::One(item) => LoweredItem::Two(item, Node::Expr(expr, width)),
             LoweredItem::None | LoweredItem::Two(..) => panic!(),
@@ -62,7 +62,7 @@ impl<S> From<u8> for Node<S> {
     }
 }
 
-impl<S: Clone> Lower<S> for Item<RelocExpr<S>> {
+impl<S: Clone> Lower<S> for Item<Expr<S>> {
     fn lower(self) -> LoweredItem<S> {
         match self {
             Item::Data(expr, width) => LoweredItem::One(Node::Expr(expr, width)),
@@ -71,7 +71,7 @@ impl<S: Clone> Lower<S> for Item<RelocExpr<S>> {
     }
 }
 
-impl<S: Clone> Lower<S> for Instruction<RelocExpr<S>> {
+impl<S: Clone> Lower<S> for Instruction<Expr<S>> {
     fn lower(self) -> LoweredItem<S> {
         use self::Instruction::*;
         match self {
@@ -130,7 +130,7 @@ impl<S> Lower<S> for Nullary {
     }
 }
 
-impl<S> Lower<S> for Ld<RelocExpr<S>> {
+impl<S> Lower<S> for Ld<Expr<S>> {
     fn lower(self) -> LoweredItem<S> {
         match self {
             Ld::Simple(dest, src) => encode_ld_to_reg_from_reg(dest, src),
@@ -147,7 +147,7 @@ impl<S> Lower<S> for Ld<RelocExpr<S>> {
     }
 }
 
-fn encode_special_ld<S>(ld: SpecialLd<RelocExpr<S>>, direction: Direction) -> LoweredItem<S> {
+fn encode_special_ld<S>(ld: SpecialLd<Expr<S>>, direction: Direction) -> LoweredItem<S> {
     let direction_bit = encode_direction(direction);
     match ld {
         SpecialLd::DerefPtrReg(ptr_reg) => {
@@ -166,10 +166,7 @@ fn encode_simple_alu_operation<S>(operation: AluOperation, src: SimpleOperand) -
     )
 }
 
-fn encode_immediate_alu_operation<S>(
-    operation: AluOperation,
-    expr: RelocExpr<S>,
-) -> LoweredItem<S> {
+fn encode_immediate_alu_operation<S>(operation: AluOperation, expr: Expr<S>) -> LoweredItem<S> {
     LoweredItem::with_opcode(0b11_000_110 | encode_alu_operation(operation)).and_byte(expr)
 }
 
@@ -188,7 +185,7 @@ fn encode_alu_operation(operation: AluOperation) -> u8 {
 }
 
 fn encode_branch<S: Clone>(
-    branch: Branch<RelocExpr<S>>,
+    branch: Branch<Expr<S>>,
     condition: Option<Condition>,
 ) -> LoweredItem<S> {
     use self::Branch::*;
@@ -215,13 +212,13 @@ fn encode_branch<S: Clone>(
     }
 }
 
-fn mk_relative_expr<S: Clone>(expr: RelocExpr<S>) -> RelocExpr<S> {
+fn mk_relative_expr<S: Clone>(expr: Expr<S>) -> Expr<S> {
     let span = expr.span();
-    RelocExpr {
+    Expr {
         variant: ExprVariant::Binary(
             BinaryOperator::Minus,
             Box::new(expr),
-            Box::new(RelocExpr {
+            Box::new(Expr {
                 variant: ExprVariant::Atom(Atom::LocationCounter),
                 span: span.clone(),
             }),
@@ -344,10 +341,7 @@ mod tests {
 
     use std::borrow::Borrow;
 
-    fn test_instruction(
-        instruction: Instruction<RelocExpr<()>>,
-        data_items: impl Borrow<[Node<()>]>,
-    ) {
+    fn test_instruction(instruction: Instruction<Expr<()>>, data_items: impl Borrow<[Node<()>]>) {
         let code: Vec<_> = instruction.lower().collect();
         assert_eq!(code, data_items.borrow())
     }
@@ -473,7 +467,7 @@ mod tests {
     #[test]
     fn encode_ld_simple_immediate() {
         use self::SimpleOperand::*;
-        let immediate: RelocExpr<_> = 0x42.into();
+        let immediate: Expr<_> = 0x42.into();
         vec![
             (B, 0x06),
             (C, 0x0e),
@@ -499,7 +493,7 @@ mod tests {
     #[test]
     fn encode_ld_immediate16() {
         use self::Reg16::*;
-        let immediate: RelocExpr<_> = 0x1234.into();
+        let immediate: Expr<_> = 0x1234.into();
         let test_cases = &[(Bc, 0x01), (De, 0x11), (Hl, 0x21), (Sp, 0x31)];
         for &(reg16, opcode) in test_cases {
             test_instruction(
@@ -514,7 +508,7 @@ mod tests {
 
     #[test]
     fn encode_ld_inline_addr() {
-        let addr: RelocExpr<_> = 0x1234.into();
+        let addr: Expr<_> = 0x1234.into();
         let test_cases = &[(Direction::FromA, 0xea), (Direction::IntoA, 0xfa)];
         for &(direction, opcode) in test_cases {
             test_instruction(
@@ -568,7 +562,7 @@ mod tests {
 
     #[test]
     fn lower_ldhl_sp_expr() {
-        let expr: RelocExpr<_> = 0x42.into();
+        let expr: Expr<_> = 0x42.into();
         test_instruction(
             Ldhl(expr.clone()),
             [Node::Byte(0xf8), Node::Expr(expr, Width::Byte)],
@@ -578,7 +572,7 @@ mod tests {
     #[test]
     fn encode_alu_immediate() {
         use self::AluOperation::*;
-        let expr: RelocExpr<_> = 0x42.into();
+        let expr: Expr<_> = 0x42.into();
         [
             (Add, 0xc6),
             (Adc, 0xce),
@@ -735,7 +729,7 @@ mod tests {
     #[test]
     fn encode_call() {
         use self::Condition::*;
-        let target_expr: RelocExpr<_> = 0x1234.into();
+        let target_expr: Expr<_> = 0x1234.into();
         let test_cases = &[
             (None, 0xcd),
             (Some(C), 0xdc),
@@ -757,7 +751,7 @@ mod tests {
     #[test]
     fn encode_jp() {
         use self::Condition::*;
-        let target_expr: RelocExpr<_> = 0x1234.into();
+        let target_expr: Expr<_> = 0x1234.into();
         let test_cases = &[
             (None, 0xc3),
             (Some(C), 0xda),
@@ -784,7 +778,7 @@ mod tests {
     #[test]
     fn encode_jr() {
         use self::Condition::*;
-        let target_expr: RelocExpr<_> = 0x1234.into();
+        let target_expr: Expr<_> = 0x1234.into();
         let test_cases = &[
             (None, 0x18),
             (Some(C), 0x38),
@@ -899,7 +893,7 @@ mod tests {
 
     #[test]
     fn lower_rst() {
-        let n: RelocExpr<_> = 3.into();
+        let n: Expr<_> = 3.into();
         test_instruction(
             Instruction::Rst(n.clone()),
             [Node::Embedded(0b11_000_111, n)],
@@ -909,7 +903,7 @@ mod tests {
     #[test]
     fn lower_bit_operations() {
         use self::{BitOperation::*, SimpleOperand::*};
-        let n: RelocExpr<_> = 3.into();
+        let n: Expr<_> = 3.into();
         let test_cases = &[
             (Bit, B, 0b01_000_000),
             (Bit, C, 0b01_000_001),

@@ -77,8 +77,8 @@ where
 mod mock {
     use super::*;
 
-    use crate::expr::{Expr, ExprVariant};
-    use crate::model::{Atom, RelocExpr};
+    use crate::expr::ExprVariant;
+    use crate::model::{Atom, Expr};
     use crate::name::Ident;
 
     use std::cell::RefCell;
@@ -107,7 +107,7 @@ mod mock {
 
     impl<'a, T, S> Backend<Ident<String>, S> for MockBackend<'a, T>
     where
-        T: From<BackendEvent<RelocExpr<usize, S>>>,
+        T: From<BackendEvent<Expr<usize, S>>>,
         S: Clone,
     {
         fn define_symbol(&mut self, symbol: (Self::Name, S), value: Self::Value) {
@@ -119,17 +119,17 @@ mod mock {
 
     impl<'a, T, S: Clone> ValueFromSimple<S> for MockBackend<'a, T> {
         fn from_location_counter(&mut self, span: S) -> Self::Value {
-            RelocExpr::from_atom(Atom::LocationCounter, span)
+            Expr::from_atom(Atom::LocationCounter, span)
         }
 
         fn from_number(&mut self, n: i32, span: S) -> Self::Value {
-            RelocExpr::from_atom(Atom::Literal(n), span)
+            Expr::from_atom(Atom::Literal(n), span)
         }
     }
 
     impl<'a, T, S: Clone> ValueFromName<S> for MockBackend<'a, T> {
         fn from_name(&mut self, name: Self::Name, span: S) -> Self::Value {
-            RelocExpr::from_atom(Atom::Name(name), span)
+            Expr::from_atom(Atom::Name(name), span)
         }
     }
 
@@ -148,7 +148,7 @@ mod mock {
     }
 
     impl<'a, T, S: Clone> HasValue<S> for MockBackend<'a, T> {
-        type Value = RelocExpr<usize, S>;
+        type Value = Expr<usize, S>;
     }
 
     impl<'a, T> HasName for MockBackend<'a, T> {
@@ -165,7 +165,7 @@ mod mock {
 
     impl<'a, T, S> PartialBackend<S> for MockBackend<'a, T>
     where
-        T: From<BackendEvent<RelocExpr<usize, S>>>,
+        T: From<BackendEvent<Expr<usize, S>>>,
         S: Clone,
     {
         fn emit_item(&mut self, item: Item<Self::Value>) {
@@ -183,7 +183,7 @@ mod mock {
 
     impl<'a, T, S> StartSection<Ident<String>, S> for MockBackend<'a, T>
     where
-        T: From<BackendEvent<RelocExpr<usize, S>>>,
+        T: From<BackendEvent<Expr<usize, S>>>,
         S: Clone,
     {
         fn start_section(&mut self, name: (Ident<String>, S)) {
