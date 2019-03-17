@@ -69,7 +69,7 @@ impl BinaryOperator {
 }
 
 impl<S: Clone> Node<S> {
-    pub fn size<R: Borrow<RelocTable>>(&self, context: &EvalContext<R>) -> Value {
+    pub(super) fn size<R: Borrow<RelocTable>>(&self, context: &EvalContext<R>) -> Value {
         match self {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),
             Node::Expr(_, width) => width.len().into(),

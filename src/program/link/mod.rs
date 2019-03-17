@@ -11,32 +11,34 @@ mod translate;
 mod value;
 
 impl<S: Clone> Program<S> {
-    pub(crate) fn link(mut self, diagnostics: &mut impl BackendDiagnostics<S>) -> BinaryObject {
-        self.resolve_relocs();
+    pub(crate) fn link(&self, diagnostics: &mut impl BackendDiagnostics<S>) -> BinaryObject {
+        let relocs = self.resolve_relocs();
         let mut context = EvalContext {
             names: &self.names,
-            relocs: &self.relocs,
+            relocs: &relocs,
             location: 0.into(),
         };
         BinaryObject {
             sections: self
                 .sections
-                .into_iter()
+                .iter()
                 .map(|section| section.translate(&mut context, diagnostics))
                 .collect(),
         }
     }
 
-    fn resolve_relocs(&mut self) {
-        self.refine_symbols();
-        self.refine_symbols();
+    fn resolve_relocs(&self) -> RelocTable {
+        let mut relocs = RelocTable::new(self.relocs);
+        self.refine_relocs(&mut relocs);
+        self.refine_relocs(&mut relocs);
+        relocs
     }
 
-    fn refine_symbols(&mut self) -> i32 {
+    fn refine_relocs(&self, relocs: &mut RelocTable) -> i32 {
         let mut refinements = 0;
         let context = &mut EvalContext {
             names: &self.names,
-            relocs: &mut self.relocs,
+            relocs,
             location: Value::Unknown,
         };
         for section in &self.sections {
@@ -55,32 +57,28 @@ impl<S: Clone> Program<S> {
     }
 }
 
-pub(super) struct EvalContext<'a, R> {
+struct EvalContext<'a, R> {
     pub names: &'a NameTable,
     pub relocs: R,
     pub location: Value,
 }
 
-pub(super) struct RelocTable {
+struct RelocTable {
     values: Vec<Value>,
 }
 
 impl RelocTable {
-    pub fn new() -> Self {
-        Self { values: Vec::new() }
+    fn new(relocs: usize) -> Self {
+        Self {
+            values: vec![Value::Unknown; relocs],
+        }
     }
 
-    pub fn alloc(&mut self) -> ValueId {
-        let id = ValueId(self.values.len());
-        self.values.push(Value::Unknown);
-        id
-    }
-
-    pub(super) fn get_value(&self, ValueId(id): ValueId) -> Value {
+    fn get_value(&self, ValueId(id): ValueId) -> Value {
         self.values[id].clone()
     }
 
-    pub fn refine(&mut self, ValueId(id): ValueId, value: Value) -> bool {
+    fn refine(&mut self, ValueId(id): ValueId, value: Value) -> bool {
         let stored_value = &mut self.values[id];
         let old_value = stored_value.clone();
         let was_refined = match (old_value, &value) {
@@ -169,12 +167,7 @@ mod tests {
                 },
             ],
             names: NameTable::new(),
-            relocs: {
-                let mut table = RelocTable::new();
-                table.alloc();
-                table.alloc();
-                table
-            },
+            relocs: 2,
         };
         let binary = object.link(&mut IgnoreDiagnostics::new());
         assert_eq!(
@@ -190,12 +183,12 @@ mod tests {
         builder.set_origin(addr.into());
         let symbol_id = builder.alloc_name(());
         builder.define_symbol((symbol_id, ()), RelocAtom::LocationCounter.into());
-        let mut object = builder.into_object();
-        object.resolve_relocs();
+        let object = builder.into_object();
+        let relocs = object.resolve_relocs();
         let value_id = match object.names.get_name_def(symbol_id).unwrap() {
             NameDef::Value(id) => *id,
         };
-        assert_eq!(object.relocs.get_value(value_id), addr.into());
+        assert_eq!(relocs.get_value(value_id), addr.into());
     }
 
     #[test]
@@ -230,7 +223,7 @@ mod tests {
     fn ld_inline_addr_with_symbol_after_instruction_has_size_three() {
         assert_section_size(3, |object| {
             let name = object.names.alloc_name();
-            let value = object.relocs.alloc();
+            let value = object.alloc_reloc();
             let items = &mut object.sections[0].items;
             items.push(Node::LdInlineAddr(0, RelocAtom::Name(name).into()));
             object.names.define_name(name, NameDef::Value(value));
@@ -242,10 +235,7 @@ mod tests {
         let mut program = Program::new();
         program.add_section(None);
         f(&mut program);
-        program.resolve_relocs();
-        assert_eq!(
-            program.relocs.get_value(program.sections[0].size),
-            expected.into()
-        )
+        let relocs = program.resolve_relocs();
+        assert_eq!(relocs.get_value(program.sections[0].size), expected.into())
     }
 }

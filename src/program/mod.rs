@@ -1,7 +1,5 @@
 pub use self::builder::ProgramBuilder;
 
-use self::link::RelocTable;
-
 use crate::model::Width;
 
 mod builder;
@@ -19,7 +17,7 @@ pub struct NameId(usize);
 pub struct Program<S> {
     sections: Vec<Section<S>>,
     names: NameTable,
-    relocs: RelocTable,
+    relocs: usize,
 }
 
 struct Section<S> {
@@ -47,13 +45,19 @@ impl<S> Program<S> {
         Program {
             sections: Vec::new(),
             names: NameTable::new(),
-            relocs: RelocTable::new(),
+            relocs: 0,
         }
     }
 
     fn add_section(&mut self, name: Option<String>) {
-        let size_symbol_id = self.relocs.alloc();
-        self.sections.push(Section::new(name, size_symbol_id))
+        let size = self.alloc_reloc();
+        self.sections.push(Section::new(name, size))
+    }
+
+    fn alloc_reloc(&mut self) -> ValueId {
+        let id = self.relocs;
+        self.relocs += 1;
+        ValueId(id)
     }
 }
 

@@ -8,7 +8,7 @@ use crate::span::Source;
 use std::vec::IntoIter;
 
 impl<S: Clone> Section<S> {
-    pub fn translate(
+    pub(super) fn translate(
         &self,
         context: &mut EvalContext<&RelocTable>,
         diagnostics: &mut impl BackendDiagnostics<S>,
@@ -206,7 +206,7 @@ mod tests {
         item.translate(
             &EvalContext {
                 names: &NameTable::new(),
-                relocs: &RelocTable::new(),
+                relocs: &RelocTable::new(0),
                 location: Value::Unknown,
             },
             &mut IgnoreDiagnostics::new(),
@@ -261,7 +261,7 @@ mod tests {
     fn translate_without_context<S: Clone + PartialEq>(section: Section<S>) -> BinarySection {
         let mut context = EvalContext {
             names: &NameTable::new(),
-            relocs: &RelocTable::new(),
+            relocs: &RelocTable::new(0),
             location: 0.into(),
         };
         section.translate(&mut context, &mut IgnoreDiagnostics::new())
