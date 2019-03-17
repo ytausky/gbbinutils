@@ -7,7 +7,7 @@ use crate::program::{Expr, NameDef, NameId, Node};
 use std::borrow::Borrow;
 
 impl<S: Clone> Expr<S> {
-    pub(super) fn eval<R, F>(&self, context: &EvalContext<R>, on_undefined: &mut F) -> Value
+    pub(super) fn eval<R, F>(&self, context: &EvalContext<R, S>, on_undefined: &mut F) -> Value
     where
         R: Borrow<RelocTable>,
         F: FnMut(&S),
@@ -29,10 +29,10 @@ impl<S: Clone> Expr<S> {
 }
 
 impl Atom<NameId> {
-    fn eval<R: Borrow<RelocTable>>(&self, context: &EvalContext<R>) -> Result<Value, ()> {
+    fn eval<R: Borrow<RelocTable>, S>(&self, context: &EvalContext<R, S>) -> Result<Value, ()> {
         match self {
             &Atom::Attr(id, _attr) => {
-                let name_def = context.names.get_name_def(id);
+                let name_def = context.program.names.get_name_def(id);
                 name_def
                     .map(|def| match def {
                         NameDef::Value(id) => context.relocs.borrow().get(*id),
@@ -57,7 +57,7 @@ impl BinaryOperator {
 }
 
 impl<S: Clone> Node<S> {
-    pub(super) fn size<R: Borrow<RelocTable>>(&self, context: &EvalContext<R>) -> Value {
+    pub(super) fn size<R: Borrow<RelocTable>>(&self, context: &EvalContext<R, S>) -> Value {
         match self {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),
             Node::Expr(_, width) => width.len().into(),

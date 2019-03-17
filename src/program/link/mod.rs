@@ -1,6 +1,6 @@
 use self::value::Value;
 
-use super::{BinaryObject, NameDef, NameTable, Node, Program, RelocId, Section};
+use super::{BinaryObject, NameDef, Node, Program, RelocId, Section};
 
 use crate::diag::BackendDiagnostics;
 
@@ -14,7 +14,7 @@ impl<S: Clone> Program<S> {
     pub(crate) fn link(&self, diagnostics: &mut impl BackendDiagnostics<S>) -> BinaryObject {
         let relocs = self.resolve_relocs();
         let mut context = EvalContext {
-            names: &self.names,
+            program: self,
             relocs: &relocs,
             location: 0.into(),
         };
@@ -35,10 +35,10 @@ impl<S: Clone> Program<S> {
     }
 }
 
-struct EvalContext<'a, R> {
-    pub names: &'a NameTable,
-    pub relocs: R,
-    pub location: Value,
+struct EvalContext<'a, R, S> {
+    program: &'a Program<S>,
+    relocs: R,
+    location: Value,
 }
 
 struct RelocTable(Vec<Value>);
@@ -82,14 +82,14 @@ impl RelocTable {
     fn refine_all<S: Clone>(&mut self, program: &Program<S>) -> i32 {
         let mut refinements = 0;
         let context = &mut EvalContext {
-            names: &program.names,
+            program,
             relocs: self,
             location: Value::Unknown,
         };
         for section in &program.sections {
             let (_, size) = section.traverse(context, |item, context| {
                 if let Node::Symbol((name, _), expr) = item {
-                    let id = match context.names.get_name_def(*name).unwrap() {
+                    let id = match context.program.names.get_name_def(*name).unwrap() {
                         NameDef::Value(id) => *id,
                     };
                     let value = expr.eval(context, &mut ignore_undefined);
@@ -103,10 +103,10 @@ impl RelocTable {
 }
 
 impl<S: Clone> Section<S> {
-    fn traverse<R, F>(&self, context: &mut EvalContext<R>, mut f: F) -> (Value, Value)
+    fn traverse<R, F>(&self, context: &mut EvalContext<R, S>, mut f: F) -> (Value, Value)
     where
         R: Borrow<RelocTable>,
-        F: FnMut(&Node<S>, &mut EvalContext<R>),
+        F: FnMut(&Node<S>, &mut EvalContext<R, S>),
     {
         let addr = self.eval_addr(context);
         let mut offset = Value::from(0);
@@ -118,7 +118,7 @@ impl<S: Clone> Section<S> {
         (addr, offset)
     }
 
-    fn eval_addr<R: Borrow<RelocTable>>(&self, context: &EvalContext<R>) -> Value {
+    fn eval_addr<R: Borrow<RelocTable>>(&self, context: &EvalContext<R, S>) -> Value {
         self.addr
             .as_ref()
             .map(|expr| expr.eval(context, &mut ignore_undefined))
@@ -136,7 +136,7 @@ mod tests {
     use crate::diag::IgnoreDiagnostics;
     use crate::expr::{BinaryOperator, ExprVariant};
     use crate::model::{Atom, Attr};
-    use crate::program::{NameDef, ProgramBuilder, RelocId, Section};
+    use crate::program::{NameDef, NameTable, ProgramBuilder, RelocId, Section};
 
     #[test]
     fn resolve_origin_relative_to_previous_section() {

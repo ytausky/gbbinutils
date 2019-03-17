@@ -10,7 +10,7 @@ use std::vec::IntoIter;
 impl<S: Clone> Section<S> {
     pub(super) fn translate(
         &self,
-        context: &mut EvalContext<&RelocTable>,
+        context: &mut EvalContext<&RelocTable, S>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> BinarySection {
         let mut data = Vec::new();
@@ -28,7 +28,7 @@ impl<S: Clone> Section<S> {
 impl<S: Clone> Node<S> {
     fn translate(
         &self,
-        context: &EvalContext<&RelocTable>,
+        context: &EvalContext<&RelocTable, S>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> IntoIter<u8> {
         match self {
@@ -94,7 +94,7 @@ impl Data {
 fn resolve_expr_item<S: Clone>(
     expr: &Expr<S>,
     width: Width,
-    context: &EvalContext<&RelocTable>,
+    context: &EvalContext<&RelocTable, S>,
     diagnostics: &mut impl BackendDiagnostics<S>,
 ) -> Data {
     let span = expr.span();
@@ -148,7 +148,7 @@ mod tests {
     use crate::diag::IgnoreDiagnostics;
     use crate::expr::{BinaryOperator, ExprVariant};
     use crate::model::Atom;
-    use crate::program::{NameTable, RelocId};
+    use crate::program::{Program, RelocId};
 
     use std::borrow::Borrow;
 
@@ -205,7 +205,7 @@ mod tests {
         use crate::program::link::Value;
         item.translate(
             &EvalContext {
-                names: &NameTable::new(),
+                program: &Program::new(),
                 relocs: &RelocTable::new(0),
                 location: Value::Unknown,
             },
@@ -260,7 +260,7 @@ mod tests {
 
     fn translate_without_context<S: Clone + PartialEq>(section: Section<S>) -> BinarySection {
         let mut context = EvalContext {
-            names: &NameTable::new(),
+            program: &Program::new(),
             relocs: &RelocTable::new(0),
             location: 0.into(),
         };
