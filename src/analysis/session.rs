@@ -290,7 +290,7 @@ mod mock {
     use crate::analysis::backend::BackendEvent;
     use crate::diag::{DiagnosticsEvent, MockDiagnostics, MockSpan};
     use crate::expr::ExprVariant;
-    use crate::model::{Atom, Expr};
+    use crate::model::{Atom, Attr, Expr};
 
     use std::cell::RefCell;
 
@@ -356,7 +356,7 @@ mod mock {
 
     impl<'a, T, S: Clone> ValueBuilder<Ident<String>, S> for MockSession<'a, T, S> {
         fn from_ident(&mut self, ident: Ident<String>, span: S) -> Self::Value {
-            Expr::from_atom(Atom::Name(ident), span)
+            Expr::from_atom(Atom::Attr(ident, Attr::Addr), span)
         }
     }
 

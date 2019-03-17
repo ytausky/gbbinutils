@@ -423,7 +423,7 @@ mod tests {
     use crate::analysis::semantics::*;
     use crate::analysis::{Ident, Literal};
     use crate::expr::ExprVariant;
-    use crate::model::{Atom, Expr};
+    use crate::model::{Atom, Attr, Expr};
     use crate::syntax::Mnemonic;
     use std::cmp;
 
@@ -450,7 +450,7 @@ mod tests {
     }
 
     pub fn name(ident: &str, span: impl Into<TokenSpan>) -> Expr<Ident<String>, TokenSpan> {
-        Expr::from_atom(Atom::Name(ident.into()), span.into())
+        Expr::from_atom(Atom::Attr(ident.into(), Attr::Addr), span.into())
     }
 
     pub(super) fn deref(expr: Input) -> Input {

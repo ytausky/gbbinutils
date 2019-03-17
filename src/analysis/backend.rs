@@ -78,7 +78,7 @@ mod mock {
     use super::*;
 
     use crate::expr::ExprVariant;
-    use crate::model::{Atom, Expr};
+    use crate::model::{Atom, Attr, Expr};
     use crate::name::Ident;
 
     use std::cell::RefCell;
@@ -129,7 +129,7 @@ mod mock {
 
     impl<'a, T, S: Clone> ValueFromName<S> for MockBackend<'a, T> {
         fn from_name(&mut self, name: Self::Name, span: S) -> Self::Value {
-            Expr::from_atom(Atom::Name(name), span)
+            Expr::from_atom(Atom::Attr(name, Attr::Addr), span)
         }
     }
 

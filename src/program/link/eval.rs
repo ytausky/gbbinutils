@@ -42,9 +42,7 @@ impl Atom<NameId> {
         R: Borrow<RelocTable>,
     {
         match self {
-            Atom::Literal(value) => Ok((*value).into()),
-            Atom::LocationCounter => Ok(context.location.clone()),
-            &Atom::Name(id) => {
+            &Atom::Attr(id, _attr) => {
                 let name_def = context.names.get_name_def(id);
                 name_def
                     .map(|def| match def {
@@ -52,6 +50,8 @@ impl Atom<NameId> {
                     })
                     .ok_or(())
             }
+            Atom::Literal(value) => Ok((*value).into()),
+            Atom::LocationCounter => Ok(context.location.clone()),
         }
     }
 }

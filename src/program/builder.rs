@@ -2,7 +2,7 @@ use super::{Expr, NameDef, NameId, Node, Program, Section};
 
 use crate::analysis::backend::*;
 use crate::expr::{BinaryOperator, ExprVariant};
-use crate::model::{Atom, Item};
+use crate::model::{Atom, Attr, Item};
 use crate::name::Ident;
 
 pub struct ProgramBuilder<SR> {
@@ -95,7 +95,7 @@ impl<S: Clone> ValueFromSimple<S> for ProgramBuilder<S> {
 
 impl<S: Clone> ValueFromName<S> for ProgramBuilder<S> {
     fn from_name(&mut self, name: Self::Name, span: S) -> Self::Value {
-        Expr::from_atom(Atom::Name(name), span)
+        Expr::from_atom(Atom::Attr(name, Attr::Addr), span)
     }
 }
 
