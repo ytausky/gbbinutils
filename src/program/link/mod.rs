@@ -87,7 +87,11 @@ impl RelocTable {
             location: Value::Unknown,
         };
         for section in &program.sections {
-            let (_, size) = section.traverse(context, |item, context| {
+            context.location = section.eval_addr(&context);
+            context
+                .relocs
+                .refine(section.addr, context.location.clone());
+            let size = section.traverse(context, |item, context| {
                 if let Node::Symbol((name, _), expr) = item {
                     let id = match context.program.names.get(*name).unwrap() {
                         NameDef::Reloc(id) => *id,
@@ -104,19 +108,19 @@ impl RelocTable {
 }
 
 impl<S: Clone> Section<S> {
-    fn traverse<R, F>(&self, context: &mut EvalContext<R, S>, mut f: F) -> (Value, Value)
+    fn traverse<R, F>(&self, context: &mut EvalContext<R, S>, mut f: F) -> Value
     where
         R: Borrow<RelocTable>,
         F: FnMut(&Node<S>, &mut EvalContext<R, S>),
     {
-        let addr = self.eval_addr(context);
+        let addr = context.location.clone();
         let mut offset = Value::from(0);
         for item in &self.items {
             offset += &item.size(&context);
             context.location = &addr + &offset;
             f(item, context)
         }
-        (addr, offset)
+        offset
     }
 
     fn eval_addr<R: Borrow<RelocTable>>(&self, context: &EvalContext<R, S>) -> Value {
@@ -137,8 +141,8 @@ mod tests {
     use crate::analysis::backend::{AllocName, Backend, PartialBackend};
     use crate::diag::IgnoreDiagnostics;
     use crate::expr::{BinaryOperator, ExprVariant};
-    use crate::model::{Atom, Attr};
-    use crate::program::{Constraints, NameDef, NameTable, ProgramBuilder, RelocId, Section};
+    use crate::model::{Atom, Attr, Width};
+    use crate::program::*;
 
     #[test]
     fn resolve_origin_relative_to_previous_section() {
@@ -234,6 +238,27 @@ mod tests {
             object.names.define(name, NameDef::Reloc(reloc));
             items.push(Node::Symbol((name, ()), Atom::LocationCounter.into()))
         })
+    }
+
+    #[test]
+    fn resolve_expr_with_section_addr() {
+        let program = Program {
+            sections: vec![Section {
+                constraints: Constraints {
+                    addr: Some(0x1337.into()),
+                },
+                addr: RelocId(0),
+                size: RelocId(1),
+                items: vec![Node::Expr(
+                    Atom::Attr(NameId(0), Attr::Addr).into(),
+                    Width::Word,
+                )],
+            }],
+            names: NameTable(vec![Some(NameDef::Section(SectionId(0)))]),
+            relocs: 2,
+        };
+        let binary = program.link(&mut IgnoreDiagnostics::new());
+        assert_eq!(binary.sections[0].data, [0x37, 0x13])
     }
 
     fn assert_section_size(expected: impl Into<Value>, f: impl FnOnce(&mut Program<()>)) {

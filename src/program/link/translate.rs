@@ -14,7 +14,9 @@ impl<S: Clone> Section<S> {
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> BinarySection {
         let mut data = Vec::new();
-        let (addr, _) = self.traverse(context, |item, context| {
+        let addr = context.relocs.get(self.addr);
+        context.location = addr.clone();
+        self.traverse(context, |item, context| {
             data.extend(item.translate(context, diagnostics))
         });
         BinarySection {
@@ -147,7 +149,7 @@ mod tests {
     use crate::diag::IgnoreDiagnostics;
     use crate::expr::{BinaryOperator, ExprVariant};
     use crate::model::Atom;
-    use crate::program::{Constraints, Program, RelocId};
+    use crate::program::{Constraints, NameTable, Program, RelocId};
 
     use std::borrow::Borrow;
 
@@ -216,47 +218,73 @@ mod tests {
     #[test]
     fn set_addr_of_translated_section() {
         let addr = 0x7ff0;
-        let section = Section {
-            constraints: Constraints {
-                addr: Some(addr.into()),
-            },
-            addr: RelocId(0),
-            size: RelocId(1),
-            items: Vec::new(),
+        let program = &Program {
+            sections: vec![Section {
+                constraints: Constraints {
+                    addr: Some(addr.into()),
+                },
+                addr: RelocId(0),
+                size: RelocId(1),
+                items: vec![],
+            }],
+            names: NameTable(vec![]),
+            relocs: 2,
         };
-        let translated = translate_without_context(section);
+        let context = &mut EvalContext {
+            program,
+            relocs: &RelocTable(vec![addr.into(), 0.into()]),
+            location: 0.into(),
+        };
+        let translated = program.sections[0].translate(context, &mut IgnoreDiagnostics::new());
         assert_eq!(translated.addr, addr as usize)
     }
 
     #[test]
     fn translate_expr_with_location_counter() {
         let byte = 0x42;
-        let mut section = Section::new(RelocId(0), RelocId(1));
-        section.items.extend(vec![
-            Node::Byte(byte),
-            Node::Expr(Atom::LocationCounter.into(), Width::Byte),
-        ]);
-        let binary = translate_without_context(section);
+        let program = &Program {
+            sections: vec![Section {
+                constraints: Constraints { addr: None },
+                addr: RelocId(0),
+                size: RelocId(1),
+                items: vec![
+                    Node::Byte(byte),
+                    Node::Expr(Atom::LocationCounter.into(), Width::Byte),
+                ],
+            }],
+            names: NameTable(vec![]),
+            relocs: 2,
+        };
+        let context = &mut EvalContext {
+            program,
+            relocs: &RelocTable(vec![0.into(), 2.into()]),
+            location: 0.into(),
+        };
+        let binary = program.sections[0].translate(context, &mut IgnoreDiagnostics::new());
         assert_eq!(binary.data, [byte, 0x02])
     }
 
     #[test]
     fn location_counter_starts_from_section_origin() {
-        let mut section = Section::new(RelocId(0), RelocId(1));
-        section.constraints.addr = Some(0xffe1.into());
-        section
-            .items
-            .push(Node::Expr(Atom::LocationCounter.into(), Width::Word));
-        let binary = translate_without_context(section);
-        assert_eq!(binary.data, [0xe3, 0xff])
-    }
-
-    fn translate_without_context<S: Clone + PartialEq>(section: Section<S>) -> BinarySection {
-        let mut context = EvalContext {
-            program: &Program::new(),
-            relocs: &RelocTable::new(0),
+        let addr = 0xffe1;
+        let program = &Program {
+            sections: vec![Section {
+                constraints: Constraints {
+                    addr: Some(addr.into()),
+                },
+                addr: RelocId(0),
+                size: RelocId(1),
+                items: vec![Node::Expr(Atom::LocationCounter.into(), Width::Word)],
+            }],
+            names: NameTable(vec![]),
+            relocs: 2,
+        };
+        let context = &mut EvalContext {
+            program,
+            relocs: &RelocTable(vec![addr.into(), 2.into()]),
             location: 0.into(),
         };
-        section.translate(&mut context, &mut IgnoreDiagnostics::new())
+        let binary = program.sections[0].translate(context, &mut IgnoreDiagnostics::new());
+        assert_eq!(binary.data, [0xe3, 0xff])
     }
 }
