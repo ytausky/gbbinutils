@@ -60,6 +60,7 @@ impl<R: Clone + Eq, D: Diagnostics> Analyze<R, D> for SemanticAnalyzer {
 pub(crate) enum SemanticAtom<I> {
     Ident(Ident<I>),
     Literal(Literal<I>),
+    LocationCounter,
 }
 
 impl<I> From<Literal<I>> for SemanticAtom<I> {
@@ -295,7 +296,7 @@ where
             variant: ExprVariant::Atom(match atom.0 {
                 ExprAtom::Ident(ident) => SemanticAtom::Ident(ident),
                 ExprAtom::Literal(literal) => SemanticAtom::Literal(literal),
-                ExprAtom::LocationCounter => unimplemented!(),
+                ExprAtom::LocationCounter => SemanticAtom::LocationCounter,
             }),
             span: atom.1,
         })
@@ -438,6 +439,9 @@ where
             }
             ExprVariant::Atom(SemanticAtom::Literal(Literal::String(_))) => {
                 Err(Message::StringInInstruction.at(expr.span))
+            }
+            ExprVariant::Atom(SemanticAtom::LocationCounter) => {
+                Ok(self.from_location_counter(expr.span))
             }
             ExprVariant::Unary(SemanticUnary::Parentheses, expr) => Ok(self.analyze_expr(*expr)?),
             ExprVariant::Binary(binary, left, right) => {
@@ -653,6 +657,22 @@ mod tests {
             actions,
             [SessionEvent::DefineSymbol((label.into(), ()), Atom::LocationCounter.into()).into()]
         )
+    }
+
+    #[test]
+    fn analyze_org_dot() {
+        let actions = collect_semantic_actions(|actions| {
+            let mut actions = actions
+                .enter_stmt(None)
+                .enter_command((Directive::Org.into(), ()))
+                .add_argument();
+            actions.push_atom((ExprAtom::LocationCounter, ()));
+            actions.exit().exit().exit()
+        });
+        assert_eq!(
+            actions,
+            [BackendEvent::SetOrigin(Atom::LocationCounter.into()).into()]
+        );
     }
 
     #[test]

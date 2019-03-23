@@ -890,12 +890,7 @@ mod tests {
                 ExprVariant::Unary(SemanticUnary::Parentheses, Box::new(inner))
             }
             ExprVariant::Binary(_, _, _) => panic!(),
-            ExprVariant::Atom(SemanticAtom::Ident(ident)) => {
-                ExprVariant::Atom(SemanticAtom::Ident(ident))
-            }
-            ExprVariant::Atom(SemanticAtom::Literal(literal)) => {
-                ExprVariant::Atom(SemanticAtom::Literal(literal))
-            }
+            ExprVariant::Atom(atom) => ExprVariant::Atom(atom),
         };
         (j + 1, SemanticExpr { variant, span })
     }
