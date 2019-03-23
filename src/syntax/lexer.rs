@@ -106,7 +106,7 @@ impl<B: Borrow<str>> Scanner<B> {
             '+' => self.take(Plus),
             '/' => self.take(Slash),
             '*' => self.take(Star),
-            '0'...'9' => self.lex_decimal_number(),
+            '0'..='9' => self.lex_decimal_number(),
             '$' => self.lex_hex_number(),
             '"' => self.lex_quoted_string(),
             _ => self.lex_ident(),
