@@ -414,6 +414,12 @@ where
                 bump!(self);
                 Ok(self)
             }
+            Ok(Token::Simple(SimpleToken::Dot)) => {
+                self.context
+                    .push_atom((ExprAtom::LocationCounter, self.token.1));
+                bump!(self);
+                Ok(self)
+            }
             _ => {
                 let span = self.token.1;
                 let stripped = self.context.diagnostics().strip_span(&span);
@@ -1317,6 +1323,13 @@ mod tests {
                 SymSpan::merge(TokenRef::from("left"), TokenRef::from("right")),
             )
             .multiply("star");
+        assert_eq_rpn_expr(tokens, expected)
+    }
+
+    #[test]
+    fn parse_location_counter() {
+        let tokens = input_tokens![dot @ Simple(Dot)];
+        let expected = expr().location_counter("dot");
         assert_eq_rpn_expr(tokens, expected)
     }
 

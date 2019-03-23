@@ -98,6 +98,7 @@ pub(crate) trait ExprContext<S: Clone>: DelegateDiagnostics<S> {
 pub enum ExprAtom<I, L> {
     Ident(I),
     Literal(L),
+    LocationCounter,
 }
 
 #[derive(Clone, Debug, PartialEq)]

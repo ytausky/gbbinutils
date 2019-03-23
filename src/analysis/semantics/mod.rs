@@ -295,6 +295,7 @@ where
             variant: ExprVariant::Atom(match atom.0 {
                 ExprAtom::Ident(ident) => SemanticAtom::Ident(ident),
                 ExprAtom::Literal(literal) => SemanticAtom::Literal(literal),
+                ExprAtom::LocationCounter => unimplemented!(),
             }),
             span: atom.1,
         })

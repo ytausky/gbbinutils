@@ -20,6 +20,10 @@ impl SymExpr {
         self.push(token, |t| ExprAtom::Literal(SymLiteral(t)))
     }
 
+    pub fn location_counter(self, token: impl Into<TokenRef>) -> Self {
+        self.push(token, |_| ExprAtom::LocationCounter)
+    }
+
     fn push(
         mut self,
         token: impl Into<TokenRef>,
