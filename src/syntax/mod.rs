@@ -24,6 +24,7 @@ pub enum Token<I, L, C> {
 pub enum SimpleToken {
     ClosingParenthesis,
     Comma,
+    Dot,
     Endm,
     Eof,
     Eol,

@@ -98,6 +98,7 @@ impl<B: Borrow<str>> Scanner<B> {
         let next_token = match first_char {
             ')' => self.take(ClosingParenthesis),
             ',' => self.take(Comma),
+            '.' => self.take(Dot),
             '\n' => self.take(Eol),
             '-' => self.take(Minus),
             '(' => self.take(OpeningParenthesis),
@@ -531,6 +532,11 @@ mod tests {
     #[test]
     fn lex_pipe() {
         assert_eq_tokens("|", [Pipe.into()])
+    }
+
+    #[test]
+    fn lex_dot() {
+        assert_eq_tokens(".", [Dot.into()])
     }
 
     #[test]
