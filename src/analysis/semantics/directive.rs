@@ -1,10 +1,9 @@
 use super::{AnalyzeExpr, CommandArgs, Directive, SemanticActions, SemanticAtom, SemanticExpr};
-use crate::analysis::session::{Session, ValueBuilder};
+use crate::analysis::session::Session;
 use crate::analysis::Literal;
 use crate::diag::*;
-use crate::expr::{BinaryOperator, ExprVariant};
+use crate::expr::ExprVariant;
 use crate::model::{Item, Width};
-use crate::span::Source;
 
 pub(super) fn analyze_directive<'a, S: Session>(
     directive: (Directive, S::Span),
@@ -64,20 +63,19 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
 
     fn analyze_ds(self) {
         let session = &mut self.actions.session;
-        let origin = {
+        let bytes = {
             let arg = if let Ok(arg) = single_arg(self.span, self.args, session.diagnostics()) {
                 arg
             } else {
                 return;
             };
-            let count = if let Ok(count) = session.analyze_expr(arg) {
-                count
+            if let Ok(bytes) = session.analyze_expr(arg) {
+                bytes
             } else {
                 return;
-            };
-            location_counter_plus_expr(count, session)
+            }
         };
-        session.set_origin(origin)
+        session.reserve(bytes)
     }
 
     fn analyze_equ(self) {
@@ -135,15 +133,6 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
     }
 }
 
-fn location_counter_plus_expr<I, B, S>(expr: B::Value, builder: &mut B) -> B::Value
-where
-    B: ValueBuilder<I, S>,
-    S: Clone,
-{
-    let location = builder.from_location_counter(expr.span());
-    builder.apply_binary_operator((BinaryOperator::Plus, expr.span()), location, expr)
-}
-
 fn reduce_include<I: PartialEq, D: DownstreamDiagnostics<S>, S>(
     span: S,
     args: Vec<SemanticExpr<I, S>>,
@@ -189,7 +178,7 @@ mod tests {
     use crate::analysis::session::SessionEvent;
     use crate::analysis::Ident;
     use crate::codebase::CodebaseError;
-    use crate::model::{Atom, Expr};
+    use crate::model::Expr;
     use crate::syntax::keyword::{Command, Operand};
     use crate::syntax::{CommandContext, ExprAtom, ExprContext, FileContext, StmtContext};
 
@@ -261,18 +250,7 @@ mod tests {
     #[test]
     fn reserve_3_bytes() {
         let actions = ds(|arg| arg.push_atom(mk_literal(3)));
-        assert_eq!(
-            actions,
-            [BackendEvent::SetOrigin(
-                ExprVariant::Binary(
-                    BinaryOperator::Plus,
-                    Box::new(Atom::LocationCounter.into()),
-                    Box::new(3.into()),
-                )
-                .into()
-            )
-            .into()]
-        )
+        assert_eq!(actions, [BackendEvent::Reserve(3.into()).into()])
     }
 
     fn mk_literal(n: i32) -> (ExprAtom<Ident<String>, Literal<String>>, ()) {

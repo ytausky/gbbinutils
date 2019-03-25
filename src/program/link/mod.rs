@@ -3,6 +3,7 @@ use self::value::Value;
 use super::{BinaryObject, NameDef, Node, Program, RelocId, Section};
 
 use crate::diag::BackendDiagnostics;
+use crate::model::Width;
 
 use std::borrow::Borrow;
 
@@ -22,7 +23,7 @@ impl<S: Clone> Program<S> {
             sections: self
                 .sections
                 .iter()
-                .map(|section| section.translate(&mut context, diagnostics))
+                .flat_map(|section| section.translate(&mut context, diagnostics))
                 .collect(),
         }
     }
@@ -129,6 +130,31 @@ impl<S: Clone> Section<S> {
             .as_ref()
             .map(|expr| expr.eval(context, &mut ignore_undefined))
             .unwrap_or_else(|| 0.into())
+    }
+}
+
+impl<S: Clone> Node<S> {
+    fn size<R: Borrow<RelocTable>>(&self, context: &EvalContext<R, S>) -> Value {
+        match self {
+            Node::Byte(_) | Node::Embedded(..) => 1.into(),
+            Node::Expr(_, width) => width.len().into(),
+            Node::LdInlineAddr(_, expr) => match expr.eval(context, &mut ignore_undefined) {
+                Value::Range { min, .. } if min >= 0xff00 => 2.into(),
+                Value::Range { max, .. } if max < 0xff00 => 3.into(),
+                _ => Value::Range { min: 2, max: 3 },
+            },
+            Node::Reserved(bytes) => bytes.eval(context, &mut ignore_undefined),
+            Node::Symbol(..) => 0.into(),
+        }
+    }
+}
+
+impl Width {
+    fn len(self) -> i32 {
+        match self {
+            Width::Byte => 1,
+            Width::Word => 2,
+        }
     }
 }
 
@@ -259,6 +285,30 @@ mod tests {
         };
         let binary = program.link(&mut IgnoreDiagnostics::new());
         assert_eq!(binary.sections[0].data, [0x37, 0x13])
+    }
+
+    #[test]
+    fn traverse_reserved_bytes() {
+        let addr = 0x0100;
+        let bytes = 10;
+        let symbol = RelocId(2);
+        let program = Program::<()> {
+            sections: vec![Section {
+                constraints: Constraints {
+                    addr: Some(addr.into()),
+                },
+                addr: RelocId(0),
+                size: RelocId(1),
+                items: vec![
+                    Node::Reserved(bytes.into()),
+                    Node::Symbol((NameId(0), ()), Atom::LocationCounter.into()),
+                ],
+            }],
+            names: NameTable(vec![Some(NameDef::Reloc(symbol))]),
+            relocs: 3,
+        };
+        let relocs = program.resolve_relocs();
+        assert_eq!(relocs.get(symbol), (addr + bytes).into())
     }
 
     fn assert_section_size(expected: impl Into<Value>, f: impl FnOnce(&mut Program<()>)) {

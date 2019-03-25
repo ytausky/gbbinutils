@@ -1,8 +1,8 @@
-use super::{ignore_undefined, EvalContext, RelocTable, Value};
+use super::{EvalContext, RelocTable, Value};
 
 use crate::expr::BinaryOperator;
-use crate::model::{Atom, Width};
-use crate::program::{Expr, NameDef, NameId, Node, SectionId};
+use crate::model::Atom;
+use crate::program::{Expr, NameDef, NameId, SectionId};
 
 use std::borrow::Borrow;
 
@@ -60,37 +60,11 @@ impl BinaryOperator {
     }
 }
 
-impl<S: Clone> Node<S> {
-    pub(super) fn size<R: Borrow<RelocTable>>(&self, context: &EvalContext<R, S>) -> Value {
-        match self {
-            Node::Byte(_) | Node::Embedded(..) => 1.into(),
-            Node::Expr(_, width) => width.len().into(),
-            Node::LdInlineAddr(_, expr) => match expr.eval(context, &mut ignore_undefined) {
-                Value::Range { min, .. } if min >= 0xff00 => 2.into(),
-                Value::Range { max, .. } if max < 0xff00 => 3.into(),
-                _ => Value::Range { min: 2, max: 3 },
-            },
-            Node::Symbol(..) => 0.into(),
-        }
-    }
-}
-
-impl Width {
-    fn len(self) -> i32 {
-        match self {
-            Width::Byte => 1,
-            Width::Word => 2,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::model::{Atom, Attr};
     use crate::program::link::{EvalContext, RelocTable, Value};
-    use crate::program::{
-        Constraints, NameDef, NameId, NameTable, Program, RelocId, Section, SectionId,
-    };
+    use crate::program::*;
 
     #[test]
     fn eval_section_addr() {

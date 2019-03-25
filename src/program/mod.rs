@@ -37,6 +37,7 @@ enum Node<S> {
     Expr(Expr<S>, Width),
     LdInlineAddr(u8, Expr<S>),
     Embedded(u8, Expr<S>),
+    Reserved(Expr<S>),
     Symbol((NameId, S), Expr<S>),
 }
 

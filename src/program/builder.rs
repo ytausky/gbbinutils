@@ -56,6 +56,10 @@ impl<S: Clone> PartialBackend<S> for ProgramBuilder<S> {
         item.lower().for_each(|data_item| self.push(data_item))
     }
 
+    fn reserve(&mut self, bytes: Self::Value) {
+        self.current_section().items.push(Node::Reserved(bytes))
+    }
+
     fn set_origin(&mut self, addr: Self::Value) {
         match self.state.take().unwrap() {
             BuilderState::SectionPrelude(index) => {
@@ -307,6 +311,15 @@ mod tests {
         });
         assert_eq!(*diagnostics, []);
         assert_eq!(object.sections.last().unwrap().data, [0x02, 0x00])
+    }
+
+    #[test]
+    fn reserve_bytes_in_section() {
+        let bytes = 3;
+        let mut builder = ProgramBuilder::new();
+        builder.reserve(bytes.into());
+        let program = builder.into_object();
+        assert_eq!(program.sections[0].items, [Node::Reserved(bytes.into())])
     }
 
     fn with_object_builder<S: Clone + 'static, F: FnOnce(&mut ProgramBuilder<S>)>(

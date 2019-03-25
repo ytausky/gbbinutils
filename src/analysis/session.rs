@@ -147,6 +147,10 @@ where
         self.backend.emit_item(item)
     }
 
+    fn reserve(&mut self, bytes: Self::Value) {
+        self.backend.reserve(bytes)
+    }
+
     fn set_origin(&mut self, origin: Self::Value) {
         self.backend.set_origin(origin)
     }
@@ -445,6 +449,12 @@ mod mock {
                 .push(BackendEvent::EmitItem(item).into())
         }
 
+        fn reserve(&mut self, bytes: Self::Value) {
+            self.log
+                .borrow_mut()
+                .push(BackendEvent::Reserve(bytes).into())
+        }
+
         fn set_origin(&mut self, origin: Self::Value) {
             self.log
                 .borrow_mut()
@@ -635,6 +645,19 @@ mod tests {
             )
             .into()]
         );
+    }
+
+    #[test]
+    fn reserve_bytes() {
+        let bytes = 10;
+        let log = RefCell::new(Vec::new());
+        let mut fixture = Fixture::new(&log);
+        let mut session = fixture.session();
+        session.reserve(bytes.into());
+        assert_eq!(
+            log.into_inner(),
+            [BackendEvent::Reserve(bytes.into()).into()]
+        )
     }
 
     #[test]

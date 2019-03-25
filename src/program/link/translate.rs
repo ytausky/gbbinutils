@@ -5,6 +5,7 @@ use crate::model::Width;
 use crate::program::{BinarySection, Expr, Node, Section};
 use crate::span::Source;
 
+use std::mem::replace;
 use std::vec::IntoIter;
 
 impl<S: Clone> Section<S> {
@@ -12,17 +13,33 @@ impl<S: Clone> Section<S> {
         &self,
         context: &mut EvalContext<&RelocTable, S>,
         diagnostics: &mut impl BackendDiagnostics<S>,
-    ) -> BinarySection {
+    ) -> Vec<BinarySection> {
+        let mut chunks = Vec::new();
         let mut data = Vec::new();
-        let addr = context.relocs.get(self.addr);
+        let mut addr = context.relocs.get(self.addr);
         context.location = addr.clone();
         self.traverse(context, |item, context| {
-            data.extend(item.translate(context, diagnostics))
+            if let Node::Reserved(expr) = item {
+                let bytes = expr.eval(context, &mut ignore_undefined);
+                if !data.is_empty() {
+                    chunks.push(BinarySection {
+                        addr: addr.exact().unwrap() as usize,
+                        data: replace(&mut data, Vec::new()),
+                    });
+                }
+                context.location += &bytes;
+                addr = context.location.clone();
+            } else {
+                data.extend(item.translate(context, diagnostics))
+            }
         });
-        BinarySection {
-            addr: addr.exact().unwrap() as usize,
-            data,
+        if !data.is_empty() {
+            chunks.push(BinarySection {
+                addr: addr.exact().unwrap() as usize,
+                data,
+            });
         }
+        chunks
     }
 }
 
@@ -61,6 +78,7 @@ impl<S: Clone> Node<S> {
                 bytes.extend(addr_repr.into_bytes());
                 bytes
             }
+            Node::Reserved(_) => unimplemented!(),
             Node::Symbol(..) => vec![],
         }
         .into_iter()
@@ -225,7 +243,7 @@ mod tests {
                 },
                 addr: RelocId(0),
                 size: RelocId(1),
-                items: vec![],
+                items: vec![Node::Byte(0x00)],
             }],
             names: NameTable(vec![]),
             relocs: 2,
@@ -236,7 +254,7 @@ mod tests {
             location: 0.into(),
         };
         let translated = program.sections[0].translate(context, &mut IgnoreDiagnostics::new());
-        assert_eq!(translated.addr, addr as usize)
+        assert_eq!(translated[0].addr, addr as usize)
     }
 
     #[test]
@@ -261,7 +279,7 @@ mod tests {
             location: 0.into(),
         };
         let binary = program.sections[0].translate(context, &mut IgnoreDiagnostics::new());
-        assert_eq!(binary.data, [byte, 0x02])
+        assert_eq!(binary[0].data, [byte, 0x02])
     }
 
     #[test]
@@ -285,6 +303,6 @@ mod tests {
             location: 0.into(),
         };
         let binary = program.sections[0].translate(context, &mut IgnoreDiagnostics::new());
-        assert_eq!(binary.data, [0xe3, 0xff])
+        assert_eq!(binary[0].data, [0xe3, 0xff])
     }
 }

@@ -53,6 +53,7 @@ where
     Self: HasValue<S>,
 {
     fn emit_item(&mut self, item: Item<Self::Value>);
+    fn reserve(&mut self, bytes: Self::Value);
     fn set_origin(&mut self, origin: Self::Value);
 }
 
@@ -91,6 +92,7 @@ mod mock {
     #[derive(Debug, PartialEq)]
     pub enum BackendEvent<V: Source> {
         EmitItem(Item<V>),
+        Reserve(V),
         SetOrigin(V),
         DefineSymbol((usize, V::Span), V),
         StartSection((usize, V::Span)),
@@ -172,6 +174,12 @@ mod mock {
             self.log
                 .borrow_mut()
                 .push(BackendEvent::EmitItem(item).into())
+        }
+
+        fn reserve(&mut self, bytes: Self::Value) {
+            self.log
+                .borrow_mut()
+                .push(BackendEvent::Reserve(bytes).into())
         }
 
         fn set_origin(&mut self, origin: Self::Value) {
