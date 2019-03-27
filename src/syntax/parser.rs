@@ -304,14 +304,8 @@ where
             })
     }
 
-    fn parse_expression(mut self) -> ParserResult<Self, Ctx, S> {
-        match self.token {
-            (Ok(Token::Simple(OpeningParenthesis)), span) => {
-                bump!(self);
-                self.parse_parenthesized_expression(span)
-            }
-            _ => self.parse_infix_expr(Precedence::None),
-        }
+    fn parse_expression(self) -> ParserResult<Self, Ctx, S> {
+        self.parse_infix_expr(Precedence::None)
     }
 
     fn parse_parenthesized_expression(mut self, left: S) -> ParserResult<Self, Ctx, S> {
@@ -346,7 +340,7 @@ where
     }
 
     fn parse_infix_expr(mut self, lowest: Precedence) -> ParserResult<Self, Ctx, S> {
-        self = self.parse_atomic_expr()?;
+        self = self.parse_primary_expr()?;
         while let Some(suffix_operator) = self
             .token
             .0
@@ -395,6 +389,16 @@ where
         self = self.parse_expression()?;
         *args += 1;
         Ok(self)
+    }
+
+    fn parse_primary_expr(mut self) -> ParserResult<Self, Ctx, S> {
+        match self.token {
+            (Ok(Token::Simple(OpeningParenthesis)), span) => {
+                bump!(self);
+                self.parse_parenthesized_expression(span)
+            }
+            _ => self.parse_atomic_expr(),
+        }
     }
 
     fn parse_atomic_expr(mut self) -> ParserResult<Self, Ctx, S> {
@@ -1330,6 +1334,27 @@ mod tests {
     fn parse_location_counter() {
         let tokens = input_tokens![dot @ Simple(Dot)];
         let expected = expr().location_counter("dot");
+        assert_eq_rpn_expr(tokens, expected)
+    }
+
+    #[test]
+    fn parse_sum_with_parentheses() {
+        let tokens = input_tokens![
+            a @ Ident(()),
+            plus1 @ Plus,
+            left @ OpeningParenthesis,
+            b @ Ident(()),
+            plus2 @ Plus,
+            c @ Ident(()),
+            right @ ClosingParenthesis,
+        ];
+        let expected = expr()
+            .ident("a")
+            .ident("b")
+            .ident("c")
+            .plus("plus2")
+            .parentheses("left", "right")
+            .plus("plus1");
         assert_eq_rpn_expr(tokens, expected)
     }
 
