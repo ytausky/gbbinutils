@@ -6,23 +6,6 @@ use crate::name::{Ident, Name, NameTable};
 
 use std::rc::Rc;
 
-pub(super) trait MacroTable<I>: Get<Ident<I>> {
-    type MacroDefId: Clone;
-
-    fn define(
-        &mut self,
-        name: Ident<I>,
-        params: Vec<Ident<I>>,
-        body: Vec<SemanticToken<I>>,
-        context: Self::MacroDefId,
-    );
-}
-
-pub trait Get<I> {
-    type Entry;
-    fn get(&self, name: &I) -> Option<&Self::Entry>;
-}
-
 pub(super) trait Expand<I, F: MacroContextFactory<S>, S> {
     type Iter: Iterator<Item = (SemanticToken<I>, S)>;
 
