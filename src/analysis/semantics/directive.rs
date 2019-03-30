@@ -180,7 +180,9 @@ mod tests {
     use crate::codebase::CodebaseError;
     use crate::model::Expr;
     use crate::syntax::keyword::{Command, Operand};
-    use crate::syntax::{CommandContext, ExprAtom, ExprContext, FileContext, StmtContext};
+    use crate::syntax::{
+        CommandContext, ExprAtom, ExprContext, FileContext, FinalContext, StmtContext,
+    };
 
     use std::borrow::Borrow;
     use std::cell::RefCell;

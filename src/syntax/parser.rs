@@ -130,6 +130,10 @@ where
                     bump!(self);
                     self.parse_macro_invocation((ident, span))
                 }
+                (Ok(Token::Simple(SimpleToken::Expr)), span) => {
+                    bump!(self);
+                    self.parse_expr_def(span)
+                }
                 (Ok(Token::Simple(SimpleToken::Macro)), span) => {
                     bump!(self);
                     self.parse_macro_def(span)
@@ -152,13 +156,33 @@ where
             .change_context(|c| c.exit())
     }
 
+    fn parse_expr_def(mut self, span: S) -> Self {
+        if self.token_kind() != Some(SimpleToken::OpeningParenthesis.into()) {
+            unimplemented!()
+        }
+        bump!(self);
+        let mut params_parser = self
+            .change_context(|c| c.enter_expr_def(span))
+            .parse_terminated_list(Comma.into(), &[ClosingParenthesis.into()], |p| {
+                p.parse_macro_param()
+            });
+        if params_parser.token_kind() != Some(SimpleToken::ClosingParenthesis.into()) {
+            unimplemented!()
+        }
+        bump!(params_parser);
+        params_parser
+            .change_context(|c| c.next())
+            .parse()
+            .change_context(|c| c.exit())
+    }
+
     fn parse_macro_def(self, span: S) -> Self {
         let mut state = self
             .change_context(|c| c.enter_macro_def(span))
             .parse_terminated_list(Comma.into(), LINE_FOLLOW_SET, |p| p.parse_macro_param());
         if state.token_kind() == Some(Eol.into()) {
             bump!(state);
-            let mut state = state.change_context(|c| c.exit());
+            let mut state = state.change_context(|c| c.next());
             loop {
                 match state.token {
                     (Ok(Token::Simple(Endm)), _) => {
@@ -189,7 +213,7 @@ where
                 .context
                 .diagnostics()
                 .emit_diagnostic(Message::UnexpectedEof.at(state.token.1.clone()));
-            state.change_context(|c| c.exit())
+            state.change_context(|c| c.next())
         }
         .change_context(|c| c.exit())
     }
@@ -442,7 +466,7 @@ where
 impl<'a, Id, L, C, E, I, Ctx, S> Parser<'a, (Result<Token<Id, L, C>, E>, S), I, Ctx>
 where
     I: Iterator<Item = (Result<Token<Id, L, C>, E>, S)>,
-    Ctx: MacroParamsContext<S, Command = C, Ident = Id, Literal = L>,
+    Ctx: ParamsContext<S, Ident = Id>,
     S: Clone,
 {
     fn parse_macro_param(mut self) -> Self {
@@ -588,8 +612,10 @@ mod tests {
         FileActionCollector,
         StmtActionCollector,
         CommandActionCollector,
-        ArgActionCollector,
-        ExprActionCollector,
+        ExprActionCollector<CommandActionCollector>,
+        ExprActionCollector<ExprParamsActionCollector>,
+        ExprActionCollector<()>,
+        ExprParamsActionCollector,
         MacroParamsActionCollector,
         MacroBodyActionCollector,
         MacroInvocationActionCollector,
@@ -642,6 +668,7 @@ mod tests {
 
     impl StmtContext<SymIdent, SymLiteral, SymCommand, SymSpan> for StmtActionCollector {
         type CommandContext = CommandActionCollector;
+        type ExprParamsContext = ExprParamsActionCollector;
         type MacroParamsContext = MacroParamsActionCollector;
         type MacroInvocationContext = MacroInvocationActionCollector;
         type Parent = FileActionCollector;
@@ -649,6 +676,14 @@ mod tests {
         fn enter_command(self, command: (SymCommand, SymSpan)) -> CommandActionCollector {
             CommandActionCollector {
                 command,
+                actions: Vec::new(),
+                parent: self,
+            }
+        }
+
+        fn enter_expr_def(self, keyword: SymSpan) -> Self::ExprParamsContext {
+            ExprParamsActionCollector {
+                keyword,
                 actions: Vec::new(),
                 parent: self,
             }
@@ -699,14 +734,11 @@ mod tests {
         type Command = SymCommand;
         type Ident = SymIdent;
         type Literal = SymLiteral;
-        type ArgContext = ArgActionCollector;
+        type ArgContext = ExprActionCollector<Self>;
         type Parent = StmtActionCollector;
 
-        fn add_argument(self) -> ArgActionCollector {
-            ArgActionCollector {
-                expr_action_collector: ExprActionCollector::new(),
-                parent: self,
-            }
+        fn add_argument(self) -> Self::ArgContext {
+            ExprActionCollector::new(self)
         }
 
         fn exit(mut self) -> StmtActionCollector {
@@ -718,63 +750,66 @@ mod tests {
         }
     }
 
-    struct ArgActionCollector {
-        expr_action_collector: ExprActionCollector,
-        parent: CommandActionCollector,
-    }
-
-    impl EmitDiagnostic<SymSpan, SymSpan> for ArgActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
-            self.expr_action_collector
-                .emit_diagnostic(diagnostic.into())
-        }
-    }
-
-    impl ExprContext<SymSpan> for ArgActionCollector {
-        type Ident = SymIdent;
-        type Literal = SymLiteral;
-        type Parent = CommandActionCollector;
-
-        fn push_atom(&mut self, atom: (ExprAtom<SymIdent, SymLiteral>, SymSpan)) {
-            self.expr_action_collector.push_atom(atom)
-        }
-
-        fn apply_operator(&mut self, operator: (Operator, SymSpan)) {
-            self.expr_action_collector.apply_operator(operator)
-        }
-
-        fn exit(mut self) -> CommandActionCollector {
-            self.parent.actions.push(CommandAction::AddArgument {
-                actions: self.expr_action_collector.exit(),
-            });
-            self.parent
-        }
-    }
-
-    struct ExprActionCollector {
+    struct ExprActionCollector<P> {
         actions: Vec<ExprAction<SymSpan>>,
+        parent: P,
     }
 
-    impl ExprActionCollector {
-        fn new() -> ExprActionCollector {
-            ExprActionCollector {
+    impl<P> ExprActionCollector<P> {
+        fn new(parent: P) -> Self {
+            Self {
                 actions: Vec::new(),
+                parent,
             }
         }
     }
 
-    impl EmitDiagnostic<SymSpan, SymSpan> for ExprActionCollector {
+    impl<P> EmitDiagnostic<SymSpan, SymSpan> for ExprActionCollector<P> {
         fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
             self.actions
                 .push(ExprAction::EmitDiagnostic(diagnostic.into()))
         }
     }
 
-    impl ExprContext<SymSpan> for ExprActionCollector {
+    impl<P> AssocIdent for ExprActionCollector<P> {
         type Ident = SymIdent;
-        type Literal = SymLiteral;
-        type Parent = Vec<ExprAction<SymSpan>>;
+    }
 
+    impl<P> AssocExpr for ExprActionCollector<P> {
+        type Literal = SymLiteral;
+    }
+
+    impl NestedContext for ExprActionCollector<CommandActionCollector> {
+        type Parent = CommandActionCollector;
+    }
+
+    impl FinalContext for ExprActionCollector<CommandActionCollector> {
+        type ReturnTo = CommandActionCollector;
+
+        fn exit(mut self) -> Self::ReturnTo {
+            self.parent.actions.push(CommandAction::AddArgument {
+                actions: self.actions,
+            });
+            self.parent
+        }
+    }
+
+    impl NestedContext for ExprActionCollector<()> {
+        type Parent = Vec<ExprAction<SymSpan>>;
+    }
+
+    impl FinalContext for ExprActionCollector<()> {
+        type ReturnTo = Vec<ExprAction<SymSpan>>;
+
+        fn exit(self) -> Self::ReturnTo {
+            self.actions
+        }
+    }
+
+    impl<P> ExprContext<SymSpan> for ExprActionCollector<P>
+    where
+        Self: DelegateDiagnostics<SymSpan>,
+    {
         fn push_atom(&mut self, atom: (ExprAtom<SymIdent, SymLiteral>, SymSpan)) {
             self.actions.push(ExprAction::PushAtom(atom))
         }
@@ -782,11 +817,61 @@ mod tests {
         fn apply_operator(&mut self, operator: (Operator, SymSpan)) {
             self.actions.push(ExprAction::ApplyOperator(operator))
         }
+    }
 
-        fn exit(self) -> Self::Parent {
+    struct ExprParamsActionCollector {
+        keyword: SymSpan,
+        actions: Vec<MacroParamsAction<SymSpan>>,
+        parent: StmtActionCollector,
+    }
+
+    impl EmitDiagnostic<SymSpan, SymSpan> for ExprParamsActionCollector {
+        fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
             self.actions
+                .push(MacroParamsAction::EmitDiagnostic(diagnostic.into()))
         }
     }
+
+    impl AssocIdent for ExprParamsActionCollector {
+        type Ident = SymIdent;
+    }
+
+    impl AssocExpr for ExprParamsActionCollector {
+        type Literal = SymLiteral;
+    }
+
+    impl NestedContext for ExprParamsActionCollector {
+        type Parent = StmtActionCollector;
+    }
+
+    impl ParamsContext<SymSpan> for ExprParamsActionCollector {
+        fn add_parameter(&mut self, param: (SymIdent, SymSpan)) {
+            self.actions.push(MacroParamsAction::AddParameter(param))
+        }
+    }
+
+    impl ToExprBody<SymSpan> for ExprParamsActionCollector {
+        type Next = ExprActionCollector<Self>;
+
+        fn next(self) -> Self::Next {
+            ExprActionCollector::new(self)
+        }
+    }
+
+    impl FinalContext for ExprActionCollector<ExprParamsActionCollector> {
+        type ReturnTo = StmtActionCollector;
+
+        fn exit(mut self) -> Self::ReturnTo {
+            self.parent.parent.actions.push(StmtAction::ExprDef {
+                keyword: self.parent.keyword,
+                params: self.parent.actions,
+                body: self.actions,
+            });
+            self.parent.parent
+        }
+    }
+
+    impl ExprParamsContext<SymSpan> for ExprParamsActionCollector {}
 
     struct MacroParamsActionCollector {
         keyword: SymSpan,
@@ -801,24 +886,40 @@ mod tests {
         }
     }
 
-    impl MacroParamsContext<SymSpan> for MacroParamsActionCollector {
-        type Command = SymCommand;
+    impl AssocIdent for MacroParamsActionCollector {
         type Ident = SymIdent;
-        type Literal = SymLiteral;
-        type MacroBodyContext = MacroBodyActionCollector;
-        type Parent = StmtActionCollector;
+    }
 
+    impl AssocExpr for MacroParamsActionCollector {
+        type Literal = SymLiteral;
+    }
+
+    impl AssocToken for MacroParamsActionCollector {
+        type Command = SymCommand;
+    }
+
+    impl ParamsContext<SymSpan> for MacroParamsActionCollector {
         fn add_parameter(&mut self, param: (SymIdent, SymSpan)) {
             self.actions.push(MacroParamsAction::AddParameter(param))
         }
+    }
 
-        fn exit(self) -> MacroBodyActionCollector {
+    impl ToMacroBody<SymSpan> for MacroParamsActionCollector {
+        type Next = MacroBodyActionCollector;
+
+        fn next(self) -> Self::Next {
             MacroBodyActionCollector {
                 actions: Vec::new(),
                 parent: self,
             }
         }
     }
+
+    impl NestedContext for MacroParamsActionCollector {
+        type Parent = StmtActionCollector;
+    }
+
+    impl MacroParamsContext<SymSpan> for MacroParamsActionCollector {}
 
     struct MacroBodyActionCollector {
         actions: Vec<TokenSeqAction<SymSpan>>,
@@ -1130,6 +1231,23 @@ mod tests {
     }
 
     #[test]
+    fn parse_named_expr_def() {
+        let tokens = input_tokens![
+            expr @ Expr,
+            left @ OpeningParenthesis,
+            x1 @ Ident(()),
+            right @ ClosingParenthesis,
+            x2 @ Ident(()),
+        ];
+        let expected = [unlabeled(expr_def(
+            "expr",
+            vec!["x1".into()],
+            expr().ident("x2"),
+        ))];
+        assert_eq_actions(tokens, expected)
+    }
+
+    #[test]
     fn parse_sum_arg() {
         let tokens = input_tokens![
             Command(()),
@@ -1373,7 +1491,7 @@ mod tests {
 
     fn parse_sym_expr(input: &mut InputTokens) -> Vec<ExprAction<SymSpan>> {
         let tokens = &mut with_spans(&input.tokens);
-        Parser::new(tokens, ExprActionCollector::new())
+        Parser::new(tokens, ExprActionCollector::new(()))
             .parse()
             .change_context(|c| c.exit())
             .context

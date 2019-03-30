@@ -266,6 +266,11 @@ pub(crate) enum StmtAction<S> {
         command: (SymCommand, S),
         actions: Vec<CommandAction<S>>,
     },
+    ExprDef {
+        keyword: S,
+        params: Vec<MacroParamsAction<S>>,
+        body: Vec<ExprAction<S>>,
+    },
     MacroDef {
         keyword: S,
         params: Vec<MacroParamsAction<S>>,
@@ -368,6 +373,18 @@ pub(crate) fn malformed_command(
     }]
 }
 
+pub(crate) fn expr_def(
+    keyword: impl Into<TokenRef>,
+    params: impl Borrow<[TokenRef]>,
+    body: SymExpr,
+) -> Vec<StmtAction<SymSpan>> {
+    vec![StmtAction::ExprDef {
+        keyword: keyword.into().into(),
+        params: convert_params(params),
+        body: body.0,
+    }]
+}
+
 pub(crate) fn invoke(
     id: impl Into<TokenRef>,
     args: impl Borrow<[Vec<TokenSeqAction<SymSpan>>]>,
@@ -393,14 +410,18 @@ pub(crate) fn macro_def(
     body.push(TokenSeqAction::PushToken((Eof.into(), endm.into().into())));
     vec![StmtAction::MacroDef {
         keyword: keyword.into().into(),
-        params: params
-            .borrow()
-            .iter()
-            .cloned()
-            .map(|t| MacroParamsAction::AddParameter((SymIdent(t.clone()), t.into())))
-            .collect(),
+        params: convert_params(params),
         body,
     }]
+}
+
+fn convert_params(params: impl Borrow<[TokenRef]>) -> Vec<MacroParamsAction<SymSpan>> {
+    params
+        .borrow()
+        .iter()
+        .cloned()
+        .map(|t| MacroParamsAction::AddParameter((SymIdent(t.clone()), t.into())))
+        .collect()
 }
 
 pub(crate) fn malformed_macro_def_head(

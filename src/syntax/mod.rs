@@ -28,6 +28,7 @@ pub enum SimpleToken {
     Endm,
     Eof,
     Eol,
+    Expr,
     Macro,
     Minus,
     OpeningParenthesis,
@@ -60,6 +61,7 @@ pub(crate) trait FileContext<I, L, C, S: Clone>: DelegateDiagnostics<S> + Sized 
 
 pub(crate) trait StmtContext<I, L, C, S: Clone>: DelegateDiagnostics<S> + Sized {
     type CommandContext: CommandContext<S, Ident = I, Command = C, Literal = L, Parent = Self>;
+    type ExprParamsContext: ExprParamsContext<S, Ident = I, Literal = L, Parent = Self>;
     type MacroParamsContext: MacroParamsContext<
         S,
         Ident = I,
@@ -70,6 +72,7 @@ pub(crate) trait StmtContext<I, L, C, S: Clone>: DelegateDiagnostics<S> + Sized 
     type MacroInvocationContext: MacroInvocationContext<S, Token = Token<I, L, C>, Parent = Self>;
     type Parent;
     fn enter_command(self, name: (C, S)) -> Self::CommandContext;
+    fn enter_expr_def(self, keyword: S) -> Self::ExprParamsContext;
     fn enter_macro_def(self, keyword: S) -> Self::MacroParamsContext;
     fn enter_macro_invocation(self, name: (I, S)) -> Self::MacroInvocationContext;
     fn exit(self) -> Self::Parent;
@@ -79,19 +82,22 @@ pub(crate) trait CommandContext<S: Clone>: DelegateDiagnostics<S> + Sized {
     type Ident;
     type Command;
     type Literal;
-    type ArgContext: ExprContext<S, Ident = Self::Ident, Literal = Self::Literal, Parent = Self>;
+    type ArgContext: ExprContext<S, Ident = Self::Ident, Literal = Self::Literal>
+        + FinalContext<ReturnTo = Self>;
     type Parent;
     fn add_argument(self) -> Self::ArgContext;
     fn exit(self) -> Self::Parent;
 }
 
-pub(crate) trait ExprContext<S: Clone>: DelegateDiagnostics<S> {
-    type Ident;
-    type Literal;
-    type Parent;
+pub(crate) trait FinalContext {
+    type ReturnTo;
+
+    fn exit(self) -> Self::ReturnTo;
+}
+
+pub(crate) trait ExprContext<S: Clone>: AssocExpr + DelegateDiagnostics<S> {
     fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, S));
     fn apply_operator(&mut self, operator: (Operator, S));
-    fn exit(self) -> Self::Parent;
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -113,19 +119,46 @@ pub enum UnaryOperator {
     Parentheses,
 }
 
-pub(crate) trait MacroParamsContext<S: Clone>: DelegateDiagnostics<S> {
+pub(crate) trait AssocIdent {
     type Ident;
-    type Command;
+}
+
+pub(crate) trait AssocExpr: AssocIdent {
     type Literal;
-    type MacroBodyContext: TokenSeqContext<
+}
+
+pub(crate) trait AssocToken: AssocExpr {
+    type Command;
+}
+
+pub(crate) trait NestedContext {
+    type Parent;
+}
+
+pub(crate) trait ParamsContext<S: Clone>: AssocIdent + DelegateDiagnostics<S> {
+    fn add_parameter(&mut self, param: (Self::Ident, S));
+}
+
+pub(crate) trait ToExprBody<S: Clone>: AssocExpr + NestedContext {
+    type Next: ExprContext<S, Ident = Self::Ident, Literal = Self::Literal>
+        + FinalContext<ReturnTo = Self::Parent>;
+
+    fn next(self) -> Self::Next;
+}
+
+pub(crate) trait ExprParamsContext<S: Clone>: ParamsContext<S> + ToExprBody<S> {}
+
+pub(crate) trait ToMacroBody<S: Clone>: AssocToken + NestedContext {
+    type Next: TokenSeqContext<
         S,
         Token = Token<Self::Ident, Self::Literal, Self::Command>,
         Parent = Self::Parent,
     >;
-    type Parent;
-    fn add_parameter(&mut self, param: (Self::Ident, S));
-    fn exit(self) -> Self::MacroBodyContext;
+
+    fn next(self) -> Self::Next;
 }
+
+pub(crate) trait MacroParamsContext<S: Clone>: ParamsContext<S> + ToMacroBody<S> {}
 
 pub(crate) trait MacroInvocationContext<S: Clone>: DelegateDiagnostics<S> + Sized {
     type Token;

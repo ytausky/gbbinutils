@@ -123,12 +123,17 @@ impl<S: Session> syntax::StmtContext<Ident<S::StringRef>, Literal<S::StringRef>,
     for SemanticActions<S>
 {
     type CommandContext = CommandActions<S>;
+    type ExprParamsContext = ExprDefActions<S>;
     type MacroParamsContext = MacroDefActions<S>;
     type MacroInvocationContext = MacroInvocationActions<S>;
     type Parent = Self;
 
     fn enter_command(self, name: (Command, S::Span)) -> Self::CommandContext {
         CommandActions::new(name, self)
+    }
+
+    fn enter_expr_def(self, _keyword: S::Span) -> Self::ExprParamsContext {
+        unimplemented!()
     }
 
     fn enter_macro_def(mut self, keyword: S::Span) -> Self::MacroParamsContext {
@@ -254,43 +259,54 @@ pub(crate) struct ExprContext<R, S, P> {
     parent: P,
 }
 
-pub(crate) trait Args<R, S> {
-    fn push_arg(&mut self, arg: SemanticExpr<R, S>);
-    fn has_errors(&self) -> bool;
-}
-
-impl<S: Session> Args<S::StringRef, S::Span> for CommandActions<S> {
-    fn push_arg(&mut self, arg: SemanticExpr<S::StringRef, S::Span>) {
-        self.args.push(arg)
-    }
-
-    fn has_errors(&self) -> bool {
-        self.has_errors
-    }
-}
-
 impl<R, S, P> DelegateDiagnostics<S> for ExprContext<R, S, P>
 where
-    P: DownstreamDiagnostics<S>,
+    P: DelegateDiagnostics<S>,
 {
-    type Delegate = P;
+    type Delegate = P::Delegate;
 
     fn diagnostics(&mut self) -> &mut Self::Delegate {
-        &mut self.parent
+        self.parent.diagnostics()
+    }
+}
+
+impl<R, S, P> syntax::AssocIdent for ExprContext<R, S, P> {
+    type Ident = Ident<R>;
+}
+
+impl<R, S, P> syntax::AssocExpr for ExprContext<R, S, P> {
+    type Literal = Literal<R>;
+}
+
+impl<R, S, P> syntax::NestedContext for ExprContext<R, S, P> {
+    type Parent = P;
+}
+
+impl<S: Session> syntax::FinalContext for ExprContext<S::StringRef, S::Span, CommandActions<S>> {
+    type ReturnTo = CommandActions<S>;
+
+    fn exit(mut self) -> Self::ReturnTo {
+        if !self.parent.has_errors {
+            assert_eq!(self.stack.len(), 1);
+            self.parent.args.push(self.stack.pop().unwrap());
+        }
+        self.parent
+    }
+}
+
+impl<S: Session> syntax::FinalContext for ExprContext<S::StringRef, S::Span, ExprDefActions<S>> {
+    type ReturnTo = SemanticActions<S>;
+
+    fn exit(self) -> Self::ReturnTo {
+        unimplemented!()
     }
 }
 
 impl<R, S, P> syntax::ExprContext<S> for ExprContext<R, S, P>
 where
     S: Clone,
-    P: Args<R, S>,
-    P: DelegateDiagnostics<S> + MergeSpans<S> + StripSpan<S>,
-    P: EmitDiagnostic<S, <P as StripSpan<S>>::Stripped>,
+    Self: DelegateDiagnostics<S>,
 {
-    type Ident = Ident<R>;
-    type Literal = Literal<R>;
-    type Parent = P;
-
     fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, S)) {
         self.stack.push(SemanticExpr {
             variant: ExprVariant::Atom(match atom.0 {
@@ -322,14 +338,6 @@ where
             Operator::FnCall(_) => unimplemented!(),
         }
     }
-
-    fn exit(mut self) -> Self::Parent {
-        if !self.parent.has_errors() {
-            assert_eq!(self.stack.len(), 1);
-            self.parent.push_arg(self.stack.pop().unwrap());
-        }
-        self.parent
-    }
 }
 
 fn analyze_mnemonic<S: Session>(
@@ -346,6 +354,49 @@ fn analyze_mnemonic<S: Session>(
         actions.session.emit_item(Item::Instruction(instruction))
     }
 }
+
+pub(crate) struct ExprDefActions<S: Session> {
+    parent: SemanticActions<S>,
+}
+
+impl<S: Session> DelegateDiagnostics<S::Span> for ExprDefActions<S> {
+    type Delegate = S::Delegate;
+
+    fn diagnostics(&mut self) -> &mut Self::Delegate {
+        self.parent.diagnostics()
+    }
+}
+
+impl<S: Session> syntax::NestedContext for ExprDefActions<S> {
+    type Parent = SemanticActions<S>;
+}
+
+impl<S: Session> syntax::AssocIdent for ExprDefActions<S> {
+    type Ident = Ident<S::StringRef>;
+}
+
+impl<S: Session> syntax::AssocExpr for ExprDefActions<S> {
+    type Literal = Literal<S::StringRef>;
+}
+
+impl<S: Session> syntax::ParamsContext<S::Span> for ExprDefActions<S> {
+    fn add_parameter(&mut self, (_param, _span): (Self::Ident, S::Span)) {
+        unimplemented!()
+    }
+}
+
+impl<S: Session> syntax::ToExprBody<S::Span> for ExprDefActions<S> {
+    type Next = ExprContext<S::StringRef, S::Span, Self>;
+
+    fn next(self) -> Self::Next {
+        ExprContext {
+            stack: Vec::new(),
+            parent: self,
+        }
+    }
+}
+
+impl<S: Session> syntax::ExprParamsContext<S::Span> for ExprDefActions<S> {}
 
 pub(crate) struct MacroDefActions<S: Session> {
     name: Option<(Ident<S::StringRef>, S::Span)>,
@@ -376,22 +427,38 @@ impl<S: Session> DelegateDiagnostics<S::Span> for MacroDefActions<S> {
     }
 }
 
-impl<S: Session> syntax::MacroParamsContext<S::Span> for MacroDefActions<S> {
+impl<S: Session> syntax::AssocIdent for MacroDefActions<S> {
     type Ident = Ident<S::StringRef>;
-    type Command = Command;
-    type Literal = Literal<S::StringRef>;
-    type MacroBodyContext = Self;
-    type Parent = SemanticActions<S>;
+}
 
+impl<S: Session> syntax::AssocExpr for MacroDefActions<S> {
+    type Literal = Literal<S::StringRef>;
+}
+
+impl<S: Session> syntax::AssocToken for MacroDefActions<S> {
+    type Command = Command;
+}
+
+impl<S: Session> syntax::NestedContext for MacroDefActions<S> {
+    type Parent = SemanticActions<S>;
+}
+
+impl<S: Session> syntax::ParamsContext<S::Span> for MacroDefActions<S> {
     fn add_parameter(&mut self, (param, span): (Self::Ident, S::Span)) {
         self.params.0.push(param);
         self.params.1.push(span)
     }
+}
 
-    fn exit(self) -> Self::MacroBodyContext {
+impl<S: Session> syntax::ToMacroBody<S::Span> for MacroDefActions<S> {
+    type Next = Self;
+
+    fn next(self) -> Self::Next {
         self
     }
 }
+
+impl<S: Session> syntax::MacroParamsContext<S::Span> for MacroDefActions<S> {}
 
 impl<S: Session> syntax::TokenSeqContext<S::Span> for MacroDefActions<S> {
     type Token = SemanticToken<S::StringRef>;
@@ -534,8 +601,8 @@ mod tests {
     use crate::expr::BinaryOperator;
     use crate::model::{Atom, Attr, Width};
     use crate::syntax::{
-        CommandContext, ExprContext, FileContext, MacroInvocationContext, MacroParamsContext,
-        StmtContext, TokenSeqContext,
+        CommandContext, ExprContext, FileContext, FinalContext, MacroInvocationContext,
+        ParamsContext, StmtContext, ToMacroBody, TokenSeqContext,
     };
     use crate::syntax::{Operand, Token};
 
@@ -704,7 +771,7 @@ mod tests {
     fn define_nameless_macro() {
         let actions = collect_semantic_actions(|actions| {
             let params = actions.enter_stmt(None).enter_macro_def(());
-            TokenSeqContext::exit(MacroParamsContext::exit(params))
+            TokenSeqContext::exit(params.next())
         });
         assert_eq!(
             actions,
@@ -724,7 +791,7 @@ mod tests {
             for param in params.borrow().iter().map(|&t| (t.into(), ())) {
                 params_actions.add_parameter(param)
             }
-            let mut token_seq_actions = MacroParamsContext::exit(params_actions);
+            let mut token_seq_actions = params_actions.next();
             for token in body.borrow().iter().cloned().map(|t| (t, ())) {
                 token_seq_actions.push_token(token)
             }

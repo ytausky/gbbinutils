@@ -253,6 +253,7 @@ fn identify_keyword(word: &str) -> Option<Keyword> {
 enum Keyword {
     Command(Command),
     Endm,
+    Expr,
     Macro,
     Operand(Operand),
 }
@@ -262,6 +263,7 @@ impl<I, R> From<Keyword> for Token<I, Literal<R>, Command> {
         match keyword {
             Keyword::Command(command) => Token::Command(command),
             Keyword::Endm => Endm.into(),
+            Keyword::Expr => Expr.into(),
             Keyword::Macro => Macro.into(),
             Keyword::Operand(operand) => Token::Literal(Literal::Operand(operand)),
         }
@@ -305,6 +307,7 @@ const KEYWORDS: &[(&str, Keyword)] = &[
     ("ei", Keyword::Command(Mnemonic(Ei))),
     ("endm", Keyword::Endm),
     ("equ", Keyword::Command(Directive(Equ))),
+    ("expr", Keyword::Expr),
     ("h", Keyword::Operand(H)),
     ("halt", Keyword::Command(Mnemonic(Halt))),
     ("hl", Keyword::Operand(Hl)),
@@ -497,6 +500,7 @@ mod tests {
             let token = match keyword {
                 Keyword::Command(command) => Command(command),
                 Keyword::Endm => Endm.into(),
+                Keyword::Expr => Expr.into(),
                 Keyword::Macro => Macro.into(),
                 Keyword::Operand(operand) => Literal(Operand(operand)),
             };
