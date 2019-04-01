@@ -61,14 +61,9 @@ pub(crate) trait FileContext<I, L, C, S: Clone>: DelegateDiagnostics<S> + Sized 
 
 pub(crate) trait StmtContext<I, L, C, S: Clone>: DelegateDiagnostics<S> + Sized {
     type CommandContext: CommandContext<S, Ident = I, Command = C, Literal = L, Parent = Self>;
-    type ExprParamsContext: ExprParamsContext<S, Ident = I, Literal = L, Parent = Self>;
-    type MacroParamsContext: MacroParamsContext<
-        S,
-        Ident = I,
-        Command = C,
-        Literal = L,
-        Parent = Self,
-    >;
+    type ExprParamsContext: ParamsContext<S, Ident = I> + ToExprBody<S, Literal = L, Parent = Self>;
+    type MacroParamsContext: ParamsContext<S, Ident = I>
+        + ToMacroBody<S, Command = C, Literal = L, Parent = Self>;
     type MacroInvocationContext: MacroInvocationContext<S, Token = Token<I, L, C>, Parent = Self>;
     type Parent;
     fn enter_command(self, name: (C, S)) -> Self::CommandContext;
@@ -146,8 +141,6 @@ pub(crate) trait ToExprBody<S: Clone>: AssocExpr + NestedContext {
     fn next(self) -> Self::Next;
 }
 
-pub(crate) trait ExprParamsContext<S: Clone>: ParamsContext<S> + ToExprBody<S> {}
-
 pub(crate) trait ToMacroBody<S: Clone>: AssocToken + NestedContext {
     type Next: TokenSeqContext<
         S,
@@ -157,8 +150,6 @@ pub(crate) trait ToMacroBody<S: Clone>: AssocToken + NestedContext {
 
     fn next(self) -> Self::Next;
 }
-
-pub(crate) trait MacroParamsContext<S: Clone>: ParamsContext<S> + ToMacroBody<S> {}
 
 pub(crate) trait MacroInvocationContext<S: Clone>: DelegateDiagnostics<S> + Sized {
     type Token;

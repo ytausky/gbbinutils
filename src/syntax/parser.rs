@@ -871,8 +871,6 @@ mod tests {
         }
     }
 
-    impl ExprParamsContext<SymSpan> for ExprParamsActionCollector {}
-
     struct MacroParamsActionCollector {
         keyword: SymSpan,
         actions: Vec<MacroParamsAction<SymSpan>>,
@@ -918,8 +916,6 @@ mod tests {
     impl NestedContext for MacroParamsActionCollector {
         type Parent = StmtActionCollector;
     }
-
-    impl MacroParamsContext<SymSpan> for MacroParamsActionCollector {}
 
     struct MacroBodyActionCollector {
         actions: Vec<TokenSeqAction<SymSpan>>,
