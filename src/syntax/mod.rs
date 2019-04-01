@@ -126,22 +126,20 @@ pub(crate) trait AssocToken: AssocExpr {
     type Command;
 }
 
-pub(crate) trait NestedContext {
-    type Parent;
-}
-
 pub(crate) trait ParamsContext<S: Clone>: AssocIdent + DelegateDiagnostics<S> {
     fn add_parameter(&mut self, param: (Self::Ident, S));
 }
 
-pub(crate) trait ToExprBody<S: Clone>: AssocExpr + NestedContext {
+pub(crate) trait ToExprBody<S: Clone>: AssocExpr {
+    type Parent;
     type Next: ExprContext<S, Ident = Self::Ident, Literal = Self::Literal>
         + FinalContext<ReturnTo = Self::Parent>;
 
     fn next(self) -> Self::Next;
 }
 
-pub(crate) trait ToMacroBody<S: Clone>: AssocToken + NestedContext {
+pub(crate) trait ToMacroBody<S: Clone>: AssocToken {
+    type Parent;
     type Next: TokenSeqContext<
         S,
         Token = Token<Self::Ident, Self::Literal, Self::Command>,

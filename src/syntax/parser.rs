@@ -779,10 +779,6 @@ mod tests {
         type Literal = SymLiteral;
     }
 
-    impl NestedContext for ExprActionCollector<CommandActionCollector> {
-        type Parent = CommandActionCollector;
-    }
-
     impl FinalContext for ExprActionCollector<CommandActionCollector> {
         type ReturnTo = CommandActionCollector;
 
@@ -792,10 +788,6 @@ mod tests {
             });
             self.parent
         }
-    }
-
-    impl NestedContext for ExprActionCollector<()> {
-        type Parent = Vec<ExprAction<SymSpan>>;
     }
 
     impl FinalContext for ExprActionCollector<()> {
@@ -840,10 +832,6 @@ mod tests {
         type Literal = SymLiteral;
     }
 
-    impl NestedContext for ExprParamsActionCollector {
-        type Parent = StmtActionCollector;
-    }
-
     impl ParamsContext<SymSpan> for ExprParamsActionCollector {
         fn add_parameter(&mut self, param: (SymIdent, SymSpan)) {
             self.actions.push(MacroParamsAction::AddParameter(param))
@@ -851,6 +839,7 @@ mod tests {
     }
 
     impl ToExprBody<SymSpan> for ExprParamsActionCollector {
+        type Parent = StmtActionCollector;
         type Next = ExprActionCollector<Self>;
 
         fn next(self) -> Self::Next {
@@ -903,6 +892,7 @@ mod tests {
     }
 
     impl ToMacroBody<SymSpan> for MacroParamsActionCollector {
+        type Parent = StmtActionCollector;
         type Next = MacroBodyActionCollector;
 
         fn next(self) -> Self::Next {
@@ -911,10 +901,6 @@ mod tests {
                 parent: self,
             }
         }
-    }
-
-    impl NestedContext for MacroParamsActionCollector {
-        type Parent = StmtActionCollector;
     }
 
     struct MacroBodyActionCollector {

@@ -257,10 +257,6 @@ impl<R, S, P> syntax::AssocExpr for ExprContext<R, S, P> {
     type Literal = Literal<R>;
 }
 
-impl<R, S, P> syntax::NestedContext for ExprContext<R, S, P> {
-    type Parent = P;
-}
-
 impl<S: Session> syntax::FinalContext for ExprContext<S::StringRef, S::Span, CommandActions<S>> {
     type ReturnTo = CommandActions<S>;
 
@@ -356,10 +352,6 @@ impl<S: Session, T> syntax::AssocToken for DefHeadActions<S, T> {
     type Command = Command;
 }
 
-impl<S: Session, T> syntax::NestedContext for DefHeadActions<S, T> {
-    type Parent = SemanticActions<S>;
-}
-
 impl<S: Session, T> DelegateDiagnostics<S::Span> for DefHeadActions<S, T> {
     type Delegate = S::Delegate;
 
@@ -378,6 +370,7 @@ impl<S: Session, T> syntax::ParamsContext<S::Span> for DefHeadActions<S, T> {
 pub(crate) struct ExprDef;
 
 impl<S: Session> syntax::ToExprBody<S::Span> for DefHeadActions<S, ExprDef> {
+    type Parent = SemanticActions<S>;
     type Next = ExprContext<S::StringRef, S::Span, Self>;
 
     fn next(self) -> Self::Next {
@@ -407,6 +400,7 @@ impl<S: Session> syntax::FinalContext
 pub(crate) struct MacroDef;
 
 impl<S: Session> syntax::ToMacroBody<S::Span> for DefHeadActions<S, MacroDef> {
+    type Parent = SemanticActions<S>;
     type Next = MacroDefActions<S>;
 
     fn next(self) -> Self::Next {
