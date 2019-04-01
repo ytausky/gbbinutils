@@ -1,14 +1,17 @@
 use super::backend::*;
 use super::macros::{DefineMacro, Expand, MacroEntry};
 use super::semantics::Analyze;
-use super::{Lex, SemanticToken, StringRef};
+use super::{Lex, Literal, SemanticToken, StringRef};
 
 use crate::codebase::CodebaseError;
 use crate::diag::span::Span;
 use crate::diag::*;
-use crate::expr::BinaryOperator;
+use crate::expr::{BinaryOperator, Expr};
 use crate::model::Item;
 use crate::name::{Ident, Name, NameTable, StartScope};
+
+#[cfg(test)]
+use crate::expr::ExprVariant;
 
 #[cfg(test)]
 pub(crate) use self::mock::*;
@@ -22,6 +25,12 @@ where
     Self: ValueBuilder<Ident<<Self as StringRef>::StringRef>, <Self as Span>::Span>,
 {
     fn analyze_file(&mut self, path: Self::StringRef) -> Result<(), CodebaseError>;
+    fn define_expr(
+        &mut self,
+        name: (Ident<Self::StringRef>, Self::Span),
+        params: (Vec<Ident<Self::StringRef>>, Vec<Self::Span>),
+        body: SemanticExpr<Self::StringRef, Self::Span>,
+    );
     fn define_macro(
         &mut self,
         name: (Ident<Self::StringRef>, Self::Span),
@@ -46,6 +55,30 @@ where
 }
 
 pub(super) type MacroArgs<I, S> = Vec<Vec<(SemanticToken<I>, S)>>;
+
+#[derive(Debug, PartialEq)]
+pub(crate) enum SemanticAtom<I> {
+    Ident(Ident<I>),
+    Literal(Literal<I>),
+    LocationCounter,
+}
+
+impl<I> From<Literal<I>> for SemanticAtom<I> {
+    fn from(literal: Literal<I>) -> Self {
+        SemanticAtom::Literal(literal)
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum SemanticUnary {
+    Parentheses,
+}
+
+pub(crate) type SemanticExpr<I, S> = Expr<SemanticAtom<I>, SemanticUnary, BinaryOperator, S>;
+
+#[cfg(test)]
+pub(crate) type SemanticExprVariant<I, S> =
+    ExprVariant<SemanticAtom<I>, SemanticUnary, BinaryOperator, S>;
 
 pub(crate) struct CompositeSession<'a, C, A, B: ?Sized, N, D> {
     codebase: &'a mut C,
@@ -225,6 +258,15 @@ where
         Ok(())
     }
 
+    fn define_expr(
+        &mut self,
+        _name: (Ident<Self::StringRef>, Self::Span),
+        _params: (Vec<Ident<Self::StringRef>>, Vec<Self::Span>),
+        _body: SemanticExpr<Self::StringRef, Self::Span>,
+    ) {
+        unimplemented!()
+    }
+
     fn define_macro(
         &mut self,
         name: (Ident<Self::StringRef>, Self::Span),
@@ -303,6 +345,7 @@ mod mock {
     #[derive(Debug, PartialEq)]
     pub(crate) enum SessionEvent<S> {
         AnalyzeFile(String),
+        DefineExpr(Ident<String>, Vec<Ident<String>>, SemanticExpr<String, S>),
         DefineMacro(
             Ident<String>,
             Vec<Ident<String>>,
@@ -398,6 +441,17 @@ mod mock {
                 .borrow_mut()
                 .push(SessionEvent::AnalyzeFile(path).into());
             self.error.take().map_or(Ok(()), Err)
+        }
+
+        fn define_expr(
+            &mut self,
+            (name, _): (Ident<Self::StringRef>, Self::Span),
+            (params, _): (Vec<Ident<Self::StringRef>>, Vec<Self::Span>),
+            body: SemanticExpr<Self::StringRef, Self::Span>,
+        ) {
+            self.log
+                .borrow_mut()
+                .push(SessionEvent::DefineExpr(name, params, body).into())
         }
 
         fn define_macro(

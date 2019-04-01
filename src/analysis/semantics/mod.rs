@@ -2,12 +2,12 @@ use self::invoke::MacroInvocationActions;
 
 use super::backend::Backend;
 use super::macros::MacroEntry;
-use super::session::{CompositeSession, PartialSession, Session, ValueBuilder};
+use super::session::*;
 use super::{Ident, Lex, LexItem, Literal, SemanticToken};
 
 use crate::diag::span::{MergeSpans, Source, StripSpan};
 use crate::diag::*;
-use crate::expr::{BinaryOperator, Expr, ExprVariant};
+use crate::expr::ExprVariant;
 use crate::model::Item;
 use crate::name::{NameTable, StartScope};
 use crate::syntax::{self, keyword::*, ExprAtom, Operator, UnaryOperator};
@@ -55,29 +55,6 @@ impl<R: Clone + Eq, D: Diagnostics> Analyze<R, D> for SemanticAnalyzer {
         crate::syntax::parse_token_seq(tokens.into_iter(), actions);
     }
 }
-
-#[derive(Debug, PartialEq)]
-pub(crate) enum SemanticAtom<I> {
-    Ident(Ident<I>),
-    Literal(Literal<I>),
-    LocationCounter,
-}
-
-impl<I> From<Literal<I>> for SemanticAtom<I> {
-    fn from(literal: Literal<I>) -> Self {
-        SemanticAtom::Literal(literal)
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub enum SemanticUnary {
-    Parentheses,
-}
-
-pub(crate) type SemanticExpr<I, S> = Expr<SemanticAtom<I>, SemanticUnary, BinaryOperator, S>;
-
-#[cfg(test)]
-type SemanticExprVariant<I, S> = ExprVariant<SemanticAtom<I>, SemanticUnary, BinaryOperator, S>;
 
 pub(crate) struct SemanticActions<S: Session> {
     session: S,
@@ -132,8 +109,8 @@ impl<S: Session> syntax::StmtContext<Ident<S::StringRef>, Literal<S::StringRef>,
         CommandActions::new(name, self)
     }
 
-    fn enter_expr_def(self, _keyword: S::Span) -> Self::ExprParamsContext {
-        unimplemented!()
+    fn enter_expr_def(mut self, _keyword: S::Span) -> Self::ExprParamsContext {
+        ExprDefActions::new(self.label.take(), self)
     }
 
     fn enter_macro_def(mut self, keyword: S::Span) -> Self::MacroParamsContext {
@@ -294,14 +271,6 @@ impl<S: Session> syntax::FinalContext for ExprContext<S::StringRef, S::Span, Com
     }
 }
 
-impl<S: Session> syntax::FinalContext for ExprContext<S::StringRef, S::Span, ExprDefActions<S>> {
-    type ReturnTo = SemanticActions<S>;
-
-    fn exit(self) -> Self::ReturnTo {
-        unimplemented!()
-    }
-}
-
 impl<R, S, P> syntax::ExprContext<S> for ExprContext<R, S, P>
 where
     S: Clone,
@@ -356,7 +325,28 @@ fn analyze_mnemonic<S: Session>(
 }
 
 pub(crate) struct ExprDefActions<S: Session> {
+    name: Option<(Ident<S::StringRef>, S::Span)>,
     parent: SemanticActions<S>,
+}
+
+impl<S: Session> ExprDefActions<S> {
+    fn new(name: Option<(Ident<S::StringRef>, S::Span)>, parent: SemanticActions<S>) -> Self {
+        Self { name, parent }
+    }
+}
+
+impl<S: Session> syntax::FinalContext for ExprContext<S::StringRef, S::Span, ExprDefActions<S>> {
+    type ReturnTo = SemanticActions<S>;
+
+    fn exit(mut self) -> Self::ReturnTo {
+        let session = &mut self.parent.parent.session;
+        session.define_expr(
+            self.parent.name.unwrap(),
+            (vec![], vec![]),
+            self.stack.pop().unwrap(),
+        );
+        self.parent.parent
+    }
 }
 
 impl<S: Session> DelegateDiagnostics<S::Span> for ExprDefActions<S> {
@@ -602,7 +592,7 @@ mod tests {
     use crate::model::{Atom, Attr, Width};
     use crate::syntax::{
         CommandContext, ExprContext, FileContext, FinalContext, MacroInvocationContext,
-        ParamsContext, StmtContext, ToMacroBody, TokenSeqContext,
+        ParamsContext, StmtContext, ToExprBody, ToMacroBody, TokenSeqContext,
     };
     use crate::syntax::{Operand, Token};
 
@@ -740,6 +730,29 @@ mod tests {
             actions,
             [BackendEvent::SetOrigin(Atom::LocationCounter.into()).into()]
         );
+    }
+
+    #[test]
+    fn define_named_expr() {
+        let name: Ident<_> = "my_expr".into();
+        let ident: Ident<_> = "id".into();
+        let actions = collect_semantic_actions(|actions| {
+            let mut actions = actions
+                .enter_stmt(Some((name.clone(), ())))
+                .enter_expr_def(())
+                .next();
+            actions.push_atom((ExprAtom::Ident(ident.clone()), ()));
+            actions.exit().exit()
+        });
+        assert_eq!(
+            actions,
+            [SessionEvent::DefineExpr(
+                name,
+                vec![],
+                ExprVariant::Atom(SemanticAtom::Ident(ident)).into()
+            )
+            .into()]
+        )
     }
 
     #[test]

@@ -421,6 +421,7 @@ mod tests {
 
     use super::*;
     use crate::analysis::semantics::*;
+    use crate::analysis::session::SemanticExprVariant;
     use crate::analysis::{Ident, Literal};
     use crate::expr::ExprVariant;
     use crate::model::{Atom, Attr, Expr};
