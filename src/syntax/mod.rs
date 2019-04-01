@@ -90,7 +90,9 @@ pub(crate) trait FinalContext {
     fn exit(self) -> Self::ReturnTo;
 }
 
-pub(crate) trait ExprContext<S: Clone>: AssocExpr + DelegateDiagnostics<S> {
+pub(crate) trait ExprContext<S: Clone>: AssocIdent + DelegateDiagnostics<S> {
+    type Literal;
+
     fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, S));
     fn apply_operator(&mut self, operator: (Operator, S));
 }
@@ -118,19 +120,12 @@ pub(crate) trait AssocIdent {
     type Ident;
 }
 
-pub(crate) trait AssocExpr: AssocIdent {
-    type Literal;
-}
-
-pub(crate) trait AssocToken: AssocExpr {
-    type Command;
-}
-
 pub(crate) trait ParamsContext<S: Clone>: AssocIdent + DelegateDiagnostics<S> {
     fn add_parameter(&mut self, param: (Self::Ident, S));
 }
 
-pub(crate) trait ToExprBody<S: Clone>: AssocExpr {
+pub(crate) trait ToExprBody<S: Clone>: AssocIdent {
+    type Literal;
     type Parent;
     type Next: ExprContext<S, Ident = Self::Ident, Literal = Self::Literal>
         + FinalContext<ReturnTo = Self::Parent>;
@@ -138,7 +133,9 @@ pub(crate) trait ToExprBody<S: Clone>: AssocExpr {
     fn next(self) -> Self::Next;
 }
 
-pub(crate) trait ToMacroBody<S: Clone>: AssocToken {
+pub(crate) trait ToMacroBody<S: Clone>: AssocIdent {
+    type Literal;
+    type Command;
     type Parent;
     type Next: TokenSeqContext<
         S,

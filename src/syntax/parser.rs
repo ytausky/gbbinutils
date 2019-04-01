@@ -775,10 +775,6 @@ mod tests {
         type Ident = SymIdent;
     }
 
-    impl<P> AssocExpr for ExprActionCollector<P> {
-        type Literal = SymLiteral;
-    }
-
     impl FinalContext for ExprActionCollector<CommandActionCollector> {
         type ReturnTo = CommandActionCollector;
 
@@ -802,6 +798,8 @@ mod tests {
     where
         Self: DelegateDiagnostics<SymSpan>,
     {
+        type Literal = SymLiteral;
+
         fn push_atom(&mut self, atom: (ExprAtom<SymIdent, SymLiteral>, SymSpan)) {
             self.actions.push(ExprAction::PushAtom(atom))
         }
@@ -828,10 +826,6 @@ mod tests {
         type Ident = SymIdent;
     }
 
-    impl AssocExpr for ExprParamsActionCollector {
-        type Literal = SymLiteral;
-    }
-
     impl ParamsContext<SymSpan> for ExprParamsActionCollector {
         fn add_parameter(&mut self, param: (SymIdent, SymSpan)) {
             self.actions.push(MacroParamsAction::AddParameter(param))
@@ -839,6 +833,7 @@ mod tests {
     }
 
     impl ToExprBody<SymSpan> for ExprParamsActionCollector {
+        type Literal = SymLiteral;
         type Parent = StmtActionCollector;
         type Next = ExprActionCollector<Self>;
 
@@ -877,14 +872,6 @@ mod tests {
         type Ident = SymIdent;
     }
 
-    impl AssocExpr for MacroParamsActionCollector {
-        type Literal = SymLiteral;
-    }
-
-    impl AssocToken for MacroParamsActionCollector {
-        type Command = SymCommand;
-    }
-
     impl ParamsContext<SymSpan> for MacroParamsActionCollector {
         fn add_parameter(&mut self, param: (SymIdent, SymSpan)) {
             self.actions.push(MacroParamsAction::AddParameter(param))
@@ -892,6 +879,8 @@ mod tests {
     }
 
     impl ToMacroBody<SymSpan> for MacroParamsActionCollector {
+        type Literal = SymLiteral;
+        type Command = SymCommand;
         type Parent = StmtActionCollector;
         type Next = MacroBodyActionCollector;
 
