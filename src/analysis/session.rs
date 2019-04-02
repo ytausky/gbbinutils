@@ -172,7 +172,7 @@ where
 impl<'a, C, A, B, N, D> PartialBackend<D::Span> for CompositeSession<'a, C, A, B, N, D>
 where
     C: Lex<D>,
-    B: Backend<Ident<C::StringRef>, D::Span> + ?Sized,
+    B: Backend<D::Span> + ?Sized,
     N: NameTable<Ident<C::StringRef>, MacroEntry = MacroEntry<C::StringRef, D>>,
     D: Diagnostics,
 {
@@ -192,7 +192,7 @@ where
 impl<'a, C, A, B, N, D> ValueFromSimple<D::Span> for CompositeSession<'a, C, A, B, N, D>
 where
     C: Lex<D>,
-    B: Backend<Ident<C::StringRef>, D::Span> + ?Sized,
+    B: Backend<D::Span> + ?Sized,
     N: NameTable<Ident<C::StringRef>, MacroEntry = MacroEntry<C::StringRef, D>>,
     D: Diagnostics,
 {
@@ -208,7 +208,7 @@ where
 impl<'a, C, A, B, N, D> ApplyBinaryOperator<D::Span> for CompositeSession<'a, C, A, B, N, D>
 where
     C: Lex<D>,
-    B: Backend<Ident<C::StringRef>, D::Span> + ?Sized,
+    B: Backend<D::Span> + ?Sized,
     N: NameTable<Ident<C::StringRef>, MacroEntry = MacroEntry<C::StringRef, D>>,
     D: Diagnostics,
 {
@@ -226,7 +226,7 @@ impl<'a, C, A, B, N, D> ValueBuilder<Ident<C::StringRef>, D::Span>
     for CompositeSession<'a, C, A, B, N, D>
 where
     C: Lex<D>,
-    B: Backend<Ident<C::StringRef>, D::Span> + ?Sized,
+    B: Backend<D::Span> + ?Sized,
     N: NameTable<
         Ident<C::StringRef>,
         BackendEntry = B::Name,
@@ -244,7 +244,7 @@ impl<'a, C, A, B, N, D> Session for CompositeSession<'a, C, A, B, N, D>
 where
     C: Lex<D>,
     A: Analyze<C::StringRef, D>,
-    B: Backend<Ident<C::StringRef>, D::Span> + ?Sized,
+    B: Backend<D::Span> + ?Sized,
     N: NameTable<
             Ident<C::StringRef>,
             BackendEntry = B::Name,

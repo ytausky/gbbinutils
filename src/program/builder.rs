@@ -3,7 +3,6 @@ use super::{Expr, NameDef, NameId, Node, Program, Section};
 use crate::analysis::backend::*;
 use crate::expr::{BinaryOperator, ExprVariant};
 use crate::model::{Atom, Attr, Item};
-use crate::name::Ident;
 
 pub struct ProgramBuilder<SR> {
     program: Program<SR>,
@@ -71,7 +70,7 @@ impl<S: Clone> PartialBackend<S> for ProgramBuilder<S> {
     }
 }
 
-impl<S: Clone> Backend<Ident<String>, S> for ProgramBuilder<S> {
+impl<S: Clone> Backend<S> for ProgramBuilder<S> {
     fn define_symbol(&mut self, (name, span): (Self::Name, S), value: Self::Value) {
         let reloc = self.program.alloc_reloc();
         self.program.names.define(name, NameDef::Reloc(reloc));

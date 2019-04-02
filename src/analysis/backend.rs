@@ -61,7 +61,7 @@ pub trait StartSection<N, S> {
     fn start_section(&mut self, name: (N, S));
 }
 
-pub trait Backend<I, S>
+pub trait Backend<S>
 where
     S: Clone,
     Self: AllocName<S>,
@@ -80,7 +80,6 @@ mod mock {
 
     use crate::expr::ExprVariant;
     use crate::model::{Atom, Attr, Expr};
-    use crate::name::Ident;
 
     use std::cell::RefCell;
 
@@ -107,7 +106,7 @@ mod mock {
         }
     }
 
-    impl<'a, T, S> Backend<Ident<String>, S> for MockBackend<'a, T>
+    impl<'a, T, S> Backend<S> for MockBackend<'a, T>
     where
         T: From<BackendEvent<Expr<usize, S>>>,
         S: Clone,

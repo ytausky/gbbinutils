@@ -23,7 +23,7 @@ mod session;
 pub(crate) trait Assemble<D>
 where
     D: Diagnostics,
-    Self: Backend<Ident<String>, D::Span>,
+    Self: Backend<D::Span>,
 {
     fn assemble<C: Codebase>(
         &mut self,
@@ -48,7 +48,7 @@ where
 impl<B, D> Assemble<D> for B
 where
     D: Diagnostics,
-    B: Backend<Ident<String>, D::Span>,
+    B: Backend<D::Span>,
 {
 }
 

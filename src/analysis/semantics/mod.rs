@@ -30,7 +30,7 @@ pub(crate) trait Analyze<R: Clone + Eq, D: Diagnostics> {
     ) where
         I: IntoIterator<Item = LexItem<R, D::Span>>,
         C: Lex<D, StringRef = R>,
-        B: Backend<Ident<R>, D::Span> + ?Sized,
+        B: Backend<D::Span> + ?Sized,
         N: NameTable<Ident<R>, BackendEntry = B::Name, MacroEntry = MacroEntry<R, D>>
             + StartScope<Ident<R>>;
 }
@@ -42,7 +42,7 @@ impl<R: Clone + Eq, D: Diagnostics> Analyze<R, D> for SemanticAnalyzer {
     where
         I: IntoIterator<Item = LexItem<R, D::Span>>,
         C: Lex<D, StringRef = R>,
-        B: Backend<Ident<R>, D::Span> + ?Sized,
+        B: Backend<D::Span> + ?Sized,
         N: NameTable<Ident<R>, BackendEntry = B::Name, MacroEntry = MacroEntry<R, D>>
             + StartScope<Ident<R>>,
     {
@@ -540,7 +540,7 @@ mod mock {
         ) where
             I: IntoIterator<Item = LexItem<String, D::Span>>,
             C: Lex<D, StringRef = String>,
-            B: Backend<Ident<String>, D::Span> + ?Sized,
+            B: Backend<D::Span> + ?Sized,
             N: NameTable<Ident<String>, MacroEntry = MacroEntry<String, D>>,
         {
             self.log
