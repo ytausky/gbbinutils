@@ -47,11 +47,9 @@ where
 
 pub(crate) trait ValueBuilder<I, S: Clone>
 where
-    Self: HasValue<S>,
-    Self: ValueFromSimple<S>,
+    Self: MkValue<LocationCounter, S> + MkValue<i32, S> + MkValue<I, S>,
     Self: ApplyBinaryOperator<S>,
 {
-    fn from_ident(&mut self, ident: I, span: S) -> Self::Value;
 }
 
 pub(super) type MacroArgs<I, S> = Vec<Vec<(SemanticToken<I>, S)>>;
@@ -189,27 +187,47 @@ where
     }
 }
 
-impl<'a, C, A, B, N, D> ValueFromSimple<D::Span> for CompositeSession<'a, C, A, B, N, D>
+impl<'a, C, A, B, N, D> MkValue<LocationCounter, D::Span> for CompositeSession<'a, C, A, B, N, D>
+where
+    B: Backend<D::Span> + ?Sized,
+    D: Diagnostics,
+{
+    fn mk_value(&mut self, _: LocationCounter, span: D::Span) -> Self::Value {
+        self.backend.mk_value(LocationCounter, span)
+    }
+}
+
+impl<'a, C, A, B, N, D> MkValue<i32, D::Span> for CompositeSession<'a, C, A, B, N, D>
+where
+    B: Backend<D::Span> + ?Sized,
+    D: Diagnostics,
+{
+    fn mk_value(&mut self, n: i32, span: D::Span) -> Self::Value {
+        self.backend.mk_value(n, span)
+    }
+}
+
+impl<'a, C, A, B, N, D> MkValue<Ident<C::StringRef>, D::Span>
+    for CompositeSession<'a, C, A, B, N, D>
 where
     C: Lex<D>,
     B: Backend<D::Span> + ?Sized,
-    N: NameTable<Ident<C::StringRef>, MacroEntry = MacroEntry<C::StringRef, D>>,
+    N: NameTable<
+        Ident<C::StringRef>,
+        BackendEntry = B::Name,
+        MacroEntry = MacroEntry<C::StringRef, D>,
+    >,
     D: Diagnostics,
 {
-    fn from_location_counter(&mut self, span: D::Span) -> Self::Value {
-        self.backend.from_location_counter(span)
-    }
-
-    fn from_number(&mut self, n: i32, span: D::Span) -> Self::Value {
-        self.backend.from_number(n, span)
+    fn mk_value(&mut self, ident: Ident<C::StringRef>, span: D::Span) -> Self::Value {
+        let symbol_id = self.look_up_symbol(ident, &span);
+        self.backend.mk_value(symbol_id, span)
     }
 }
 
 impl<'a, C, A, B, N, D> ApplyBinaryOperator<D::Span> for CompositeSession<'a, C, A, B, N, D>
 where
-    C: Lex<D>,
     B: Backend<D::Span> + ?Sized,
-    N: NameTable<Ident<C::StringRef>, MacroEntry = MacroEntry<C::StringRef, D>>,
     D: Diagnostics,
 {
     fn apply_binary_operator(
@@ -234,10 +252,6 @@ where
     >,
     D: Diagnostics,
 {
-    fn from_ident(&mut self, ident: Ident<C::StringRef>, span: D::Span) -> Self::Value {
-        let symbol_id = self.look_up_symbol(ident, &span);
-        self.backend.from_name(symbol_id, span)
-    }
 }
 
 impl<'a, C, A, B, N, D> Session for CompositeSession<'a, C, A, B, N, D>
@@ -379,13 +393,21 @@ mod mock {
         type Value = Expr<Ident<String>, S>;
     }
 
-    impl<'a, T, S: Clone> ValueFromSimple<S> for MockSession<'a, T, S> {
-        fn from_location_counter(&mut self, span: S) -> Self::Value {
+    impl<'a, T, S: Clone> MkValue<LocationCounter, S> for MockSession<'a, T, S> {
+        fn mk_value(&mut self, _: LocationCounter, span: S) -> Self::Value {
             Expr::from_atom(Atom::LocationCounter, span)
         }
+    }
 
-        fn from_number(&mut self, n: i32, span: S) -> Self::Value {
+    impl<'a, T, S: Clone> MkValue<i32, S> for MockSession<'a, T, S> {
+        fn mk_value(&mut self, n: i32, span: S) -> Self::Value {
             Expr::from_atom(Atom::Literal(n), span)
+        }
+    }
+
+    impl<'a, T, S: Clone> MkValue<Ident<String>, S> for MockSession<'a, T, S> {
+        fn mk_value(&mut self, ident: Ident<String>, span: S) -> Self::Value {
+            Expr::from_atom(Atom::Attr(ident, Attr::Addr), span)
         }
     }
 
@@ -403,11 +425,7 @@ mod mock {
         }
     }
 
-    impl<'a, T, S: Clone> ValueBuilder<Ident<String>, S> for MockSession<'a, T, S> {
-        fn from_ident(&mut self, ident: Ident<String>, span: S) -> Self::Value {
-            Expr::from_atom(Atom::Attr(ident, Attr::Addr), span)
-        }
-    }
+    impl<'a, T, S: Clone> ValueBuilder<Ident<String>, S> for MockSession<'a, T, S> {}
 
     impl<'a, T, S> DelegateDiagnostics<S> for MockSession<'a, T, S>
     where
@@ -590,7 +608,7 @@ mod tests {
         let mut fixture = Fixture::new(&log);
         let mut session = fixture.session();
         session.start_section((ident.clone(), ()));
-        let item = Item::Data(session.from_ident(ident, ()), Width::Word);
+        let item = Item::Data(session.mk_value(ident, ()), Width::Word);
         session.emit_item(item);
         assert_eq!(
             log.into_inner(),

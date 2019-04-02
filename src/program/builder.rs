@@ -84,18 +84,20 @@ impl<S: Clone> AllocName<S> for ProgramBuilder<S> {
     }
 }
 
-impl<S: Clone> ValueFromSimple<S> for ProgramBuilder<S> {
-    fn from_location_counter(&mut self, span: S) -> Self::Value {
+impl<S: Clone> MkValue<LocationCounter, S> for ProgramBuilder<S> {
+    fn mk_value(&mut self, _: LocationCounter, span: S) -> Self::Value {
         Expr::from_atom(Atom::LocationCounter, span)
     }
+}
 
-    fn from_number(&mut self, n: i32, span: S) -> Self::Value {
+impl<S: Clone> MkValue<i32, S> for ProgramBuilder<S> {
+    fn mk_value(&mut self, n: i32, span: S) -> Self::Value {
         Expr::from_atom(Atom::Literal(n), span)
     }
 }
 
-impl<S: Clone> ValueFromName<S> for ProgramBuilder<S> {
-    fn from_name(&mut self, name: Self::Name, span: S) -> Self::Value {
+impl<S: Clone> MkValue<NameId, S> for ProgramBuilder<S> {
+    fn mk_value(&mut self, name: NameId, span: S) -> Self::Value {
         Expr::from_atom(Atom::Attr(name, Attr::Addr), span)
     }
 }
@@ -265,7 +267,7 @@ mod tests {
         let name = "ident";
         let (_, diagnostics) = with_object_builder(|builder| {
             let symbol_id = builder.alloc_name(name.into());
-            let value = builder.from_name(symbol_id, name.into());
+            let value = builder.mk_value(symbol_id, name.into());
             builder.emit_item(word_item(value))
         });
         assert_eq!(*diagnostics, [unresolved(name)]);
@@ -278,9 +280,9 @@ mod tests {
         let (_, diagnostics) = with_object_builder(|builder| {
             let value = {
                 let id1 = builder.alloc_name(name1.into());
-                let lhs = builder.from_name(id1, name1.into());
+                let lhs = builder.mk_value(id1, name1.into());
                 let id2 = builder.alloc_name(name2.into());
-                let rhs = builder.from_name(id2, name2.into());
+                let rhs = builder.mk_value(id2, name2.into());
                 builder.apply_binary_operator((BinaryOperator::Minus, "diff".into()), lhs, rhs)
             };
             builder.emit_item(word_item(value))
@@ -293,7 +295,7 @@ mod tests {
         let (object, diagnostics) = with_object_builder(|builder| {
             let symbol_id = builder.alloc_name(());
             builder.define_symbol((symbol_id, ()), Atom::LocationCounter.into());
-            let value = builder.from_name(symbol_id, ());
+            let value = builder.mk_value(symbol_id, ());
             builder.emit_item(word_item(value));
         });
         assert_eq!(*diagnostics, []);
@@ -304,7 +306,7 @@ mod tests {
     fn emit_symbol_defined_after_use() {
         let (object, diagnostics) = with_object_builder(|builder| {
             let symbol_id = builder.alloc_name(());
-            let value = builder.from_name(symbol_id, ());
+            let value = builder.mk_value(symbol_id, ());
             builder.emit_item(word_item(value));
             builder.define_symbol((symbol_id, ()), Atom::LocationCounter.into());
         });

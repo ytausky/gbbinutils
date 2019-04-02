@@ -1,6 +1,6 @@
 use self::invoke::MacroInvocationActions;
 
-use super::backend::Backend;
+use super::backend::{Backend, LocationCounter};
 use super::macros::MacroEntry;
 use super::session::*;
 use super::{Ident, Lex, LexItem, Literal, SemanticToken};
@@ -73,7 +73,7 @@ impl<S: Session> SemanticActions<S> {
 
     fn define_label_if_present(&mut self) {
         if let Some((label, span)) = self.label.take() {
-            let value = self.session.from_location_counter(span.clone());
+            let value = self.session.mk_value(LocationCounter, span.clone());
             self.session.define_symbol((label, span), value)
         }
     }
@@ -458,9 +458,9 @@ where
 
     fn analyze_expr(&mut self, expr: SemanticExpr<I, S>) -> Result<Self::Value, ()> {
         match expr.variant {
-            ExprVariant::Atom(SemanticAtom::Ident(ident)) => Ok(self.from_ident(ident, expr.span)),
+            ExprVariant::Atom(SemanticAtom::Ident(ident)) => Ok(self.mk_value(ident, expr.span)),
             ExprVariant::Atom(SemanticAtom::Literal(Literal::Number(n))) => {
-                Ok(self.from_number(n, expr.span))
+                Ok(self.mk_value(n, expr.span))
             }
             ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(_))) => {
                 Err(Message::KeywordInExpr {
@@ -472,7 +472,7 @@ where
                 Err(Message::StringInInstruction.at(expr.span))
             }
             ExprVariant::Atom(SemanticAtom::LocationCounter) => {
-                Ok(self.from_location_counter(expr.span))
+                Ok(self.mk_value(LocationCounter, expr.span))
             }
             ExprVariant::Unary(SemanticUnary::Parentheses, expr) => Ok(self.analyze_expr(*expr)?),
             ExprVariant::Binary(binary, left, right) => {

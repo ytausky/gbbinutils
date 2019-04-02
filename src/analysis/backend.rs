@@ -20,19 +20,8 @@ where
     fn alloc_name(&mut self, span: S) -> Self::Name;
 }
 
-pub trait ValueFromSimple<S: Clone>
-where
-    Self: HasValue<S>,
-{
-    fn from_location_counter(&mut self, span: S) -> Self::Value;
-    fn from_number(&mut self, n: i32, span: S) -> Self::Value;
-}
-
-pub trait ValueFromName<S: Clone>
-where
-    Self: HasName + HasValue<S>,
-{
-    fn from_name(&mut self, symbol: Self::Name, span: S) -> Self::Value;
+pub trait MkValue<T, S: Clone>: HasValue<S> {
+    fn mk_value(&mut self, x: T, span: S) -> Self::Value;
 }
 
 pub trait ApplyBinaryOperator<S: Clone>
@@ -61,13 +50,14 @@ pub trait StartSection<N, S> {
     fn start_section(&mut self, name: (N, S));
 }
 
+pub struct LocationCounter;
+
 pub trait Backend<S>
 where
     S: Clone,
     Self: AllocName<S>,
     Self: PartialBackend<S>,
-    Self: ValueFromSimple<S>,
-    Self: ValueFromName<S>,
+    Self: MkValue<LocationCounter, S> + MkValue<i32, S> + MkValue<<Self as HasName>::Name, S>,
     Self: ApplyBinaryOperator<S>,
     Self: StartSection<<Self as HasName>::Name, S>,
 {
@@ -118,18 +108,20 @@ mod mock {
         }
     }
 
-    impl<'a, T, S: Clone> ValueFromSimple<S> for MockBackend<'a, T> {
-        fn from_location_counter(&mut self, span: S) -> Self::Value {
+    impl<'a, T, S: Clone> MkValue<LocationCounter, S> for MockBackend<'a, T> {
+        fn mk_value(&mut self, _: LocationCounter, span: S) -> Self::Value {
             Expr::from_atom(Atom::LocationCounter, span)
         }
+    }
 
-        fn from_number(&mut self, n: i32, span: S) -> Self::Value {
+    impl<'a, T, S: Clone> MkValue<i32, S> for MockBackend<'a, T> {
+        fn mk_value(&mut self, n: i32, span: S) -> Self::Value {
             Expr::from_atom(Atom::Literal(n), span)
         }
     }
 
-    impl<'a, T, S: Clone> ValueFromName<S> for MockBackend<'a, T> {
-        fn from_name(&mut self, name: Self::Name, span: S) -> Self::Value {
+    impl<'a, T, S: Clone> MkValue<usize, S> for MockBackend<'a, T> {
+        fn mk_value(&mut self, name: usize, span: S) -> Self::Value {
             Expr::from_atom(Atom::Attr(name, Attr::Addr), span)
         }
     }
