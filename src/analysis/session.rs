@@ -20,19 +20,19 @@ pub(crate) use self::mock::*;
 
 pub(crate) trait Session
 where
+    Self: Sized,
     Self: Span + StringRef,
     Self: DelegateDiagnostics<<Self as Span>::Span>,
     Self: PartialBackend<<Self as Span>::Span>,
     Self: StartSection<Ident<<Self as StringRef>::StringRef>, <Self as Span>::Span>,
     Self: ValueBuilder<Ident<<Self as StringRef>::StringRef>, <Self as Span>::Span>,
 {
+    type Builder: ValueBuilder<Ident<Self::StringRef>, Self::Span, Value = Self::Value>
+        + FinishFnDef<Self::Value, Return = Self>
+        + DelegateDiagnostics<Self::Span>;
+
     fn analyze_file(&mut self, path: Self::StringRef) -> Result<(), CodebaseError>;
-    fn define_expr(
-        &mut self,
-        name: (Ident<Self::StringRef>, Self::Span),
-        params: (Vec<Ident<Self::StringRef>>, Vec<Self::Span>),
-        body: SemanticExpr<Self::StringRef, Self::Span>,
-    );
+    fn define_fn(self, name: (Ident<Self::StringRef>, Self::Span)) -> Self::Builder;
     fn define_macro(
         &mut self,
         name: (Ident<Self::StringRef>, Self::Span),
@@ -45,6 +45,12 @@ where
         args: MacroArgs<Self::StringRef, Self::Span>,
     );
     fn define_symbol(&mut self, symbol: (Ident<Self::StringRef>, Self::Span), value: Self::Value);
+}
+
+pub trait FinishFnDef<V> {
+    type Return;
+
+    fn finish(self, value: V) -> Self::Return;
 }
 
 pub(super) type MacroArgs<I, S> = Vec<Vec<(SemanticToken<I>, S)>>;
@@ -235,6 +241,88 @@ where
     }
 }
 
+pub(crate) struct FnBuilder<'a, C, A, B: ?Sized, N, D> {
+    session: CompositeSession<'a, C, A, B, N, D>,
+}
+
+impl<'a, C, A, B, N, D> HasValue<D::Span> for FnBuilder<'a, C, A, B, N, D>
+where
+    B: HasValue<D::Span> + ?Sized,
+    D: Span,
+{
+    type Value = B::Value;
+}
+
+impl<'a, C, A, B, N, D> MkValue<LocationCounter, D::Span> for FnBuilder<'a, C, A, B, N, D>
+where
+    B: HasValue<D::Span> + ?Sized,
+    D: Span,
+{
+    fn mk_value(&mut self, _: LocationCounter, _span: D::Span) -> Self::Value {
+        unimplemented!()
+    }
+}
+
+impl<'a, C, A, B, N, D> MkValue<i32, D::Span> for FnBuilder<'a, C, A, B, N, D>
+where
+    B: HasValue<D::Span> + ?Sized,
+    D: Span,
+{
+    fn mk_value(&mut self, _n: i32, _span: D::Span) -> Self::Value {
+        unimplemented!()
+    }
+}
+
+impl<'a, C, A, B, N, D> MkValue<Ident<C::StringRef>, D::Span> for FnBuilder<'a, C, A, B, N, D>
+where
+    C: Lex<D>,
+    B: HasValue<D::Span> + ?Sized,
+    D: Diagnostics,
+{
+    fn mk_value(&mut self, _ident: Ident<C::StringRef>, _span: D::Span) -> Self::Value {
+        unimplemented!()
+    }
+}
+
+impl<'a, C, A, B, N, D> ApplyBinaryOperator<D::Span> for FnBuilder<'a, C, A, B, N, D>
+where
+    B: HasValue<D::Span> + ?Sized,
+    D: Span,
+{
+    fn apply_binary_operator(
+        &mut self,
+        _operator: (BinaryOperator, D::Span),
+        _left: Self::Value,
+        _right: Self::Value,
+    ) -> Self::Value {
+        unimplemented!()
+    }
+}
+
+impl<'a, C, A, B, N, D> FinishFnDef<B::Value> for FnBuilder<'a, C, A, B, N, D>
+where
+    B: Backend<D::Span> + ?Sized,
+    D: Diagnostics,
+{
+    type Return = CompositeSession<'a, C, A, B, N, D>;
+
+    fn finish(self, _value: B::Value) -> Self::Return {
+        unimplemented!()
+    }
+}
+
+impl<'a, C, A, B, N, D> DelegateDiagnostics<D::Span> for FnBuilder<'a, C, A, B, N, D>
+where
+    B: ?Sized,
+    D: Diagnostics,
+{
+    type Delegate = D;
+
+    fn diagnostics(&mut self) -> &mut Self::Delegate {
+        self.session.diagnostics
+    }
+}
+
 impl<'a, C, A, B, N, D> Session for CompositeSession<'a, C, A, B, N, D>
 where
     C: Lex<D>,
@@ -247,18 +335,15 @@ where
         > + StartScope<Ident<C::StringRef>>,
     D: Diagnostics,
 {
+    type Builder = FnBuilder<'a, C, A, B, N, D>;
+
     fn analyze_file(&mut self, path: Self::StringRef) -> Result<(), CodebaseError> {
         let tokens = self.codebase.lex_file(path, self.diagnostics)?;
         self.analyzer.analyze_token_seq(tokens, &mut partial!(self));
         Ok(())
     }
 
-    fn define_expr(
-        &mut self,
-        _name: (Ident<Self::StringRef>, Self::Span),
-        _params: (Vec<Ident<Self::StringRef>>, Vec<Self::Span>),
-        _body: SemanticExpr<Self::StringRef, Self::Span>,
-    ) {
+    fn define_fn(self, _name: (Ident<Self::StringRef>, Self::Span)) -> Self::Builder {
         unimplemented!()
     }
 
@@ -433,6 +518,8 @@ mod mock {
         T: From<DiagnosticsEvent<S>>,
         S: Clone + MockSpan,
     {
+        type Builder = Self;
+
         fn analyze_file(&mut self, path: String) -> Result<(), CodebaseError> {
             self.log
                 .borrow_mut()
@@ -440,15 +527,8 @@ mod mock {
             self.error.take().map_or(Ok(()), Err)
         }
 
-        fn define_expr(
-            &mut self,
-            (name, _): (Ident<Self::StringRef>, Self::Span),
-            (params, _): (Vec<Ident<Self::StringRef>>, Vec<Self::Span>),
-            body: SemanticExpr<Self::StringRef, Self::Span>,
-        ) {
-            self.log
-                .borrow_mut()
-                .push(SessionEvent::DefineExpr(name, params, body).into())
+        fn define_fn(self, (_name, _): (Ident<Self::StringRef>, Self::Span)) -> Self::Builder {
+            self
         }
 
         fn define_macro(
@@ -486,6 +566,14 @@ mod mock {
             self.log
                 .borrow_mut()
                 .push(SessionEvent::DefineSymbol(symbol, value).into())
+        }
+    }
+
+    impl<'a, T, S: Clone> FinishFnDef<Expr<Ident<String>, S>> for MockSession<'a, T, S> {
+        type Return = Self;
+
+        fn finish(self, _value: Expr<Ident<String>, S>) -> Self::Return {
+            unimplemented!()
         }
     }
 

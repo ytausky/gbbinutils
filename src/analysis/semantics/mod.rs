@@ -378,12 +378,13 @@ impl<S: Session> syntax::FinalContext
     type ReturnTo = SemanticActions<S>;
 
     fn exit(mut self) -> Self::ReturnTo {
-        let session = &mut self.parent.actions.session;
-        session.define_expr(
-            self.parent.name.unwrap(),
-            (vec![], vec![]),
-            self.stack.pop().unwrap(),
-        );
+        let mut builder = self
+            .parent
+            .actions
+            .session
+            .define_fn(self.parent.name.unwrap());
+        let value = builder.analyze_expr(self.stack.pop().unwrap()).unwrap();
+        self.parent.actions.session = builder.finish(value);
         self.parent.actions
     }
 }
