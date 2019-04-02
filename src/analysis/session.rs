@@ -1,3 +1,5 @@
+pub use super::backend::ValueBuilder;
+
 use super::backend::*;
 use super::macros::{DefineMacro, Expand, MacroEntry};
 use super::semantics::Analyze;
@@ -43,13 +45,6 @@ where
         args: MacroArgs<Self::StringRef, Self::Span>,
     );
     fn define_symbol(&mut self, symbol: (Ident<Self::StringRef>, Self::Span), value: Self::Value);
-}
-
-pub(crate) trait ValueBuilder<I, S: Clone>
-where
-    Self: MkValue<LocationCounter, S> + MkValue<i32, S> + MkValue<I, S>,
-    Self: ApplyBinaryOperator<S>,
-{
 }
 
 pub(super) type MacroArgs<I, S> = Vec<Vec<(SemanticToken<I>, S)>>;
@@ -240,20 +235,6 @@ where
     }
 }
 
-impl<'a, C, A, B, N, D> ValueBuilder<Ident<C::StringRef>, D::Span>
-    for CompositeSession<'a, C, A, B, N, D>
-where
-    C: Lex<D>,
-    B: Backend<D::Span> + ?Sized,
-    N: NameTable<
-        Ident<C::StringRef>,
-        BackendEntry = B::Name,
-        MacroEntry = MacroEntry<C::StringRef, D>,
-    >,
-    D: Diagnostics,
-{
-}
-
 impl<'a, C, A, B, N, D> Session for CompositeSession<'a, C, A, B, N, D>
 where
     C: Lex<D>,
@@ -424,8 +405,6 @@ mod mock {
             }
         }
     }
-
-    impl<'a, T, S: Clone> ValueBuilder<Ident<String>, S> for MockSession<'a, T, S> {}
 
     impl<'a, T, S> DelegateDiagnostics<S> for MockSession<'a, T, S>
     where

@@ -52,13 +52,22 @@ pub trait StartSection<N, S> {
 
 pub struct LocationCounter;
 
+pub trait ValueBuilder<N, S: Clone>:
+    MkValue<LocationCounter, S> + MkValue<i32, S> + MkValue<N, S> + ApplyBinaryOperator<S>
+{
+}
+
+impl<T, N, S: Clone> ValueBuilder<N, S> for T where
+    Self: MkValue<LocationCounter, S> + MkValue<i32, S> + MkValue<N, S> + ApplyBinaryOperator<S>
+{
+}
+
 pub trait Backend<S>
 where
     S: Clone,
     Self: AllocName<S>,
     Self: PartialBackend<S>,
-    Self: MkValue<LocationCounter, S> + MkValue<i32, S> + MkValue<<Self as HasName>::Name, S>,
-    Self: ApplyBinaryOperator<S>,
+    Self: ValueBuilder<<Self as HasName>::Name, S>,
     Self: StartSection<<Self as HasName>::Name, S>,
 {
     fn define_symbol(&mut self, symbol: (Self::Name, S), value: Self::Value);
