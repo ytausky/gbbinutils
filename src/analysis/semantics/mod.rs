@@ -564,7 +564,7 @@ mod tests {
     use crate::analysis::session::SessionEvent;
     use crate::diag::Message;
     use crate::expr::BinaryOperator;
-    use crate::model::{Atom, Attr, Width};
+    use crate::model::{Atom, Width};
     use crate::syntax::{
         CommandContext, ExprContext, FileContext, FinalContext, MacroInvocationContext,
         ParamsContext, StmtContext, ToExprBody, ToMacroBody, TokenSeqContext,
@@ -672,11 +672,10 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [BackendEvent::EmitItem(Item::Data(
-                Atom::Attr(label.into(), Attr::Addr).into(),
-                Width::Word
-            ))
-            .into()]
+            [
+                BackendEvent::EmitItem(Item::Data(Atom::Name(label.into()).into(), Width::Word))
+                    .into()
+            ]
         );
     }
 
@@ -721,12 +720,10 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [SessionEvent::DefineExpr(
-                name,
-                vec![],
-                ExprVariant::Atom(Atom::Attr(ident, Attr::Addr)).into()
-            )
-            .into()]
+            [
+                SessionEvent::DefineExpr(name, vec![], ExprVariant::Atom(Atom::Name(ident)).into())
+                    .into()
+            ]
         )
     }
 

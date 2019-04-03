@@ -78,7 +78,7 @@ mod mock {
     use super::*;
 
     use crate::expr::ExprVariant;
-    use crate::model::{Atom, Attr, Expr};
+    use crate::model::{Atom, Expr};
 
     use std::cell::RefCell;
 
@@ -131,7 +131,7 @@ mod mock {
 
     impl<'a, T, S: Clone> MkValue<usize, S> for MockBackend<'a, T> {
         fn mk_value(&mut self, name: usize, span: S) -> Self::Value {
-            Expr::from_atom(Atom::Attr(name, Attr::Addr), span)
+            Expr::from_atom(Atom::Name(name), span)
         }
     }
 

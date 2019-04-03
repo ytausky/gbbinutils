@@ -167,7 +167,7 @@ mod tests {
     use crate::analysis::backend::{AllocName, Backend, PartialBackend};
     use crate::diag::IgnoreDiagnostics;
     use crate::expr::{BinaryOperator, ExprVariant};
-    use crate::model::{Atom, Attr, Width};
+    use crate::model::{Atom, Width};
     use crate::program::*;
 
     #[test]
@@ -260,7 +260,7 @@ mod tests {
             let name = object.names.alloc();
             let reloc = object.alloc_reloc();
             let items = &mut object.sections[0].items;
-            items.push(Node::LdInlineAddr(0, Atom::Attr(name, Attr::Addr).into()));
+            items.push(Node::LdInlineAddr(0, Atom::Name(name).into()));
             object.names.define(name, NameDef::Reloc(reloc));
             items.push(Node::Symbol((name, ()), Atom::LocationCounter.into()))
         })
@@ -275,10 +275,7 @@ mod tests {
                 },
                 addr: RelocId(0),
                 size: RelocId(1),
-                items: vec![Node::Expr(
-                    Atom::Attr(NameId(0), Attr::Addr).into(),
-                    Width::Word,
-                )],
+                items: vec![Node::Expr(Atom::Name(NameId(0)).into(), Width::Word)],
             }],
             names: NameTable(vec![Some(NameDef::Section(SectionId(0)))]),
             relocs: 2,

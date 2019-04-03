@@ -20,14 +20,9 @@ pub enum Empty {}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Atom<N> {
-    Attr(N, Attr),
+    Name(N),
     Literal(i32),
     LocationCounter,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Attr {
-    Addr,
 }
 
 impl<N, S> From<i32> for ExprVariant<Atom<N>, Empty, BinaryOperator, S> {

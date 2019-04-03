@@ -31,7 +31,7 @@ impl<S: Clone> Expr<S> {
 impl Atom<NameId> {
     fn eval<R: Borrow<RelocTable>, S>(&self, context: &EvalContext<R, S>) -> Result<Value, ()> {
         match self {
-            &Atom::Attr(id, _attr) => {
+            &Atom::Name(id) => {
                 let name_def = context.program.names.get(id);
                 name_def
                     .map(|def| match def {
@@ -62,7 +62,7 @@ impl BinaryOperator {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::{Atom, Attr};
+    use crate::model::Atom;
     use crate::program::link::{EvalContext, RelocTable, Value};
     use crate::program::*;
 
@@ -85,9 +85,6 @@ mod tests {
             relocs: &relocs,
             location: Value::Unknown,
         };
-        assert_eq!(
-            Atom::Attr(NameId(0), Attr::Addr).eval(&context),
-            Ok(addr.into())
-        )
+        assert_eq!(Atom::Name(NameId(0)).eval(&context), Ok(addr.into()))
     }
 }

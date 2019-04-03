@@ -2,7 +2,7 @@ use super::{Expr, NameDef, NameId, Node, Program, Section};
 
 use crate::analysis::backend::*;
 use crate::expr::{BinaryOperator, ExprVariant};
-use crate::model::{Atom, Attr, Item};
+use crate::model::{Atom, Item};
 
 pub struct ProgramBuilder<SR> {
     program: Program<SR>,
@@ -98,7 +98,7 @@ impl<S: Clone> MkValue<i32, S> for ProgramBuilder<S> {
 
 impl<S: Clone> MkValue<NameId, S> for ProgramBuilder<S> {
     fn mk_value(&mut self, name: NameId, span: S) -> Self::Value {
-        Expr::from_atom(Atom::Attr(name, Attr::Addr), span)
+        Expr::from_atom(Atom::Name(name), span)
     }
 }
 

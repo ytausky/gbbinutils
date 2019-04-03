@@ -418,7 +418,7 @@ mod mock {
     use crate::analysis::backend::BackendEvent;
     use crate::diag::{DiagnosticsEvent, MockDiagnostics, MockSpan};
     use crate::expr::ExprVariant;
-    use crate::model::{Atom, Attr, Expr};
+    use crate::model::{Atom, Expr};
 
     use std::cell::RefCell;
 
@@ -475,7 +475,7 @@ mod mock {
 
     impl<'a, T, S: Clone> MkValue<Ident<String>, S> for MockSession<'a, T, S> {
         fn mk_value(&mut self, ident: Ident<String>, span: S) -> Self::Value {
-            Expr::from_atom(Atom::Attr(ident, Attr::Addr), span)
+            Expr::from_atom(Atom::Name(ident), span)
         }
     }
 
@@ -633,7 +633,7 @@ mod tests {
     use crate::analysis::semantics::AnalyzerEvent;
     use crate::analysis::{Literal, MockCodebase};
     use crate::diag::{DiagnosticsEvent, MockSpan};
-    use crate::model::{Atom, Attr, Expr, Instruction, Nullary, Width};
+    use crate::model::{Atom, Expr, Instruction, Nullary, Width};
     use crate::name::{BasicNameTable, NameTableEvent};
     use crate::syntax::{Command, Directive, Mnemonic, Token};
 
@@ -692,8 +692,7 @@ mod tests {
             log.into_inner(),
             [
                 BackendEvent::StartSection((0, ())).into(),
-                BackendEvent::EmitItem(Item::Data(Atom::Attr(0, Attr::Addr).into(), Width::Word))
-                    .into()
+                BackendEvent::EmitItem(Item::Data(Atom::Name(0).into(), Width::Word)).into()
             ]
         )
     }
