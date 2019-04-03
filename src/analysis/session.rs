@@ -425,7 +425,7 @@ mod mock {
     #[derive(Debug, PartialEq)]
     pub(crate) enum SessionEvent<S> {
         AnalyzeFile(String),
-        DefineExpr(Ident<String>, Vec<Ident<String>>, SemanticExpr<String, S>),
+        DefineExpr(Ident<String>, Vec<Ident<String>>, Expr<Ident<String>, S>),
         DefineMacro(
             Ident<String>,
             Vec<Ident<String>>,
@@ -439,6 +439,7 @@ mod mock {
         log: &'a RefCell<Vec<T>>,
         error: Option<CodebaseError>,
         diagnostics: MockDiagnostics<'a, T, S>,
+        name: Option<Ident<String>>,
     }
 
     impl<'a, T, S> MockSession<'a, T, S> {
@@ -447,6 +448,7 @@ mod mock {
                 log,
                 error: None,
                 diagnostics: MockDiagnostics::new(log),
+                name: None,
             }
         }
 
@@ -527,7 +529,9 @@ mod mock {
             self.error.take().map_or(Ok(()), Err)
         }
 
-        fn define_fn(self, (_name, _): (Ident<Self::StringRef>, Self::Span)) -> Self::Builder {
+        fn define_fn(mut self, (name, _): (Ident<Self::StringRef>, Self::Span)) -> Self::Builder {
+            assert_eq!(self.name, None);
+            self.name = Some(name);
             self
         }
 
@@ -569,11 +573,18 @@ mod mock {
         }
     }
 
-    impl<'a, T, S: Clone> FinishFnDef<Expr<Ident<String>, S>> for MockSession<'a, T, S> {
+    impl<'a, T, S> FinishFnDef<Expr<Ident<String>, S>> for MockSession<'a, T, S>
+    where
+        T: From<SessionEvent<S>>,
+        S: Clone,
+    {
         type Return = Self;
 
-        fn finish(self, _value: Expr<Ident<String>, S>) -> Self::Return {
-            unimplemented!()
+        fn finish(mut self, value: Expr<Ident<String>, S>) -> Self::Return {
+            self.log
+                .borrow_mut()
+                .push(SessionEvent::DefineExpr(self.name.take().unwrap(), vec![], value).into());
+            self
         }
     }
 

@@ -724,7 +724,7 @@ mod tests {
             [SessionEvent::DefineExpr(
                 name,
                 vec![],
-                ExprVariant::Atom(SemanticAtom::Ident(ident)).into()
+                ExprVariant::Atom(Atom::Attr(ident, Attr::Addr)).into()
             )
             .into()]
         )
