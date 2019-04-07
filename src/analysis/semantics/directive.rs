@@ -1,4 +1,4 @@
-use super::{AnalyzeExpr, CommandArgs, Directive, SemanticActions, SemanticAtom, SemanticExpr};
+use super::{CommandArgs, Directive, SemanticActions, SemanticAtom, SemanticExpr};
 use crate::analysis::session::Session;
 use crate::analysis::Literal;
 use crate::diag::*;
@@ -48,57 +48,55 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
     }
 
     fn analyze_data(self, width: Width) {
-        let session = &mut self.actions.session;
         for arg in self.args {
             let expr = {
-                if let Ok(expr) = session.analyze_expr(arg) {
+                if let Ok(expr) = self.actions.analyze_expr(arg) {
                     expr
                 } else {
                     return;
                 }
             };
-            session.emit_item(Item::Data(expr, width))
+            self.actions.session().emit_item(Item::Data(expr, width))
         }
     }
 
     fn analyze_ds(self) {
-        let session = &mut self.actions.session;
         let bytes = {
-            let arg = if let Ok(arg) = single_arg(self.span, self.args, session.diagnostics()) {
+            let arg = if let Ok(arg) = single_arg(self.span, self.args, self.actions.diagnostics())
+            {
                 arg
             } else {
                 return;
             };
-            if let Ok(bytes) = session.analyze_expr(arg) {
+            if let Ok(bytes) = self.actions.analyze_expr(arg) {
                 bytes
             } else {
                 return;
             }
         };
-        session.reserve(bytes)
+        self.actions.session().reserve(bytes)
     }
 
     fn analyze_equ(self) {
-        let session = &mut self.actions.session;
         let symbol = self.actions.label.take().unwrap();
-        let arg = if let Ok(arg) = single_arg(self.span, self.args, session.diagnostics()) {
+        let arg = if let Ok(arg) = single_arg(self.span, self.args, self.actions.diagnostics()) {
             arg
         } else {
             return;
         };
         let value = {
-            if let Ok(value) = session.analyze_expr(arg) {
+            if let Ok(value) = self.actions.analyze_expr(arg) {
                 value
             } else {
                 return;
             }
         };
-        session.define_symbol(symbol, value)
+        self.actions.session().define_symbol(symbol, value)
     }
 
     fn analyze_section(self) {
         let name = self.actions.label.take().unwrap();
-        self.actions.session.start_section(name)
+        self.actions.session().start_section(name)
     }
 
     fn analyze_include(self) {
@@ -108,7 +106,7 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
             } else {
                 return;
             };
-        if let Err(err) = self.actions.session.analyze_file(path) {
+        if let Err(err) = self.actions.session().analyze_file(path) {
             self.actions
                 .diagnostics()
                 .emit_diagnostic(Message::from(err).at(span))
@@ -116,20 +114,19 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
     }
 
     fn analyze_org(self) {
-        let session = &mut self.actions.session;
-        let arg = if let Ok(arg) = single_arg(self.span, self.args, session.diagnostics()) {
+        let arg = if let Ok(arg) = single_arg(self.span, self.args, self.actions.diagnostics()) {
             arg
         } else {
             return;
         };
         let expr = {
-            if let Ok(expr) = session.analyze_expr(arg) {
+            if let Ok(expr) = self.actions.analyze_expr(arg) {
                 expr
             } else {
                 return;
             }
         };
-        session.set_origin(expr)
+        self.actions.session().set_origin(expr)
     }
 }
 

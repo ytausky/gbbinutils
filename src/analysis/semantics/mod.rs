@@ -1,6 +1,6 @@
 use self::invoke::MacroInvocationActions;
 
-use super::backend::{Backend, LocationCounter};
+use super::backend::{Backend, LocationCounter, MkValue};
 use super::macros::MacroEntry;
 use super::session::*;
 use super::{Ident, Lex, LexItem, Literal, SemanticToken};
@@ -59,23 +59,43 @@ impl<R: Clone + Eq, D: Diagnostics> Analyze<R, D> for SemanticAnalyzer {
 }
 
 pub(crate) struct SemanticActions<S: Session> {
-    session: S,
+    session: Option<S>,
     label: Option<(Ident<S::StringRef>, S::Span)>,
 }
 
 impl<S: Session> SemanticActions<S> {
     pub fn new(session: S) -> SemanticActions<S> {
         SemanticActions {
-            session,
+            session: Some(session),
             label: None,
         }
     }
 
+    fn analyze_expr(&mut self, expr: SemanticExpr<S::StringRef, S::Span>) -> Result<S::Value, ()> {
+        self.build_value(|builder| builder.analyze_expr(expr))
+    }
+
+    fn build_value<F, T>(&mut self, f: F) -> T
+    where
+        F: FnOnce(&mut S::GeneralBuilder) -> T,
+    {
+        let mut builder = self.session.take().unwrap().build_value();
+        let result = f(&mut builder);
+        self.session = Some(builder.finish());
+        result
+    }
+
     fn define_label_if_present(&mut self) {
         if let Some((label, span)) = self.label.take() {
-            let value = self.session.mk_value(LocationCounter, span.clone());
-            self.session.define_symbol((label, span), value)
+            let value = self.build_value(|builder| {
+                MkValue::<LocationCounter, _>::mk_value(builder, LocationCounter, span.clone())
+            });
+            self.session().define_symbol((label, span), value)
         }
+    }
+
+    fn session(&mut self) -> &mut S {
+        self.session.as_mut().unwrap()
     }
 }
 
@@ -83,7 +103,7 @@ impl<S: Session> DelegateDiagnostics<S::Span> for SemanticActions<S> {
     type Delegate = S::Delegate;
 
     fn diagnostics(&mut self) -> &mut Self::Delegate {
-        self.session.diagnostics()
+        self.session().diagnostics()
     }
 }
 
@@ -312,11 +332,13 @@ fn analyze_mnemonic<S: Session>(
 ) {
     let operands: Vec<_> = args
         .into_iter()
-        .map(|arg| operand::analyze_operand(arg, name.0.context(), &mut actions.session))
+        .map(|arg| {
+            actions.build_value(|builder| operand::analyze_operand(arg, name.0.context(), builder))
+        })
         .collect();
-    let result = instruction::analyze_instruction(name, operands, actions.session.diagnostics());
-    if let Ok(instruction) = result {
-        actions.session.emit_item(Item::Instruction(instruction))
+    if let Ok(instruction) = instruction::analyze_instruction(name, operands, actions.diagnostics())
+    {
+        actions.session().emit_item(Item::Instruction(instruction))
     }
 }
 
@@ -382,9 +404,10 @@ impl<S: Session> syntax::FinalContext
             .parent
             .actions
             .session
+            .unwrap()
             .define_fn(self.parent.name.unwrap());
         let value = builder.analyze_expr(self.stack.pop().unwrap()).unwrap();
-        self.parent.actions.session = builder.finish(value);
+        self.parent.actions.session = Some(builder.finish_fn_def(value));
         self.parent.actions
     }
 }
@@ -438,6 +461,8 @@ impl<S: Session> syntax::TokenSeqContext<S::Span> for MacroDefActions<S> {
         if let Some(name) = self.head.name {
             actions
                 .session
+                .as_mut()
+                .unwrap()
                 .define_macro(name, self.head.params, self.tokens)
         }
         actions

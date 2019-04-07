@@ -25,14 +25,17 @@ where
     Self: DelegateDiagnostics<<Self as Span>::Span>,
     Self: PartialBackend<<Self as Span>::Span>,
     Self: StartSection<Ident<<Self as StringRef>::StringRef>, <Self as Span>::Span>,
-    Self: ValueBuilder<Ident<<Self as StringRef>::StringRef>, <Self as Span>::Span>,
 {
-    type Builder: ValueBuilder<Ident<Self::StringRef>, Self::Span, Value = Self::Value>
+    type FnBuilder: ValueBuilder<Ident<Self::StringRef>, Self::Span, Value = Self::Value>
         + FinishFnDef<Self::Value, Return = Self>
+        + DelegateDiagnostics<Self::Span>;
+    type GeneralBuilder: ValueBuilder<Ident<Self::StringRef>, Self::Span, Value = Self::Value>
+        + Finish<Return = Self>
         + DelegateDiagnostics<Self::Span>;
 
     fn analyze_file(&mut self, path: Self::StringRef) -> Result<(), CodebaseError>;
-    fn define_fn(self, name: (Ident<Self::StringRef>, Self::Span)) -> Self::Builder;
+    fn build_value(self) -> Self::GeneralBuilder;
+    fn define_fn(self, name: (Ident<Self::StringRef>, Self::Span)) -> Self::FnBuilder;
     fn define_macro(
         &mut self,
         name: (Ident<Self::StringRef>, Self::Span),
@@ -47,10 +50,16 @@ where
     fn define_symbol(&mut self, symbol: (Ident<Self::StringRef>, Self::Span), value: Self::Value);
 }
 
+pub trait Finish {
+    type Return;
+
+    fn finish(self) -> Self::Return;
+}
+
 pub trait FinishFnDef<V> {
     type Return;
 
-    fn finish(self, value: V) -> Self::Return;
+    fn finish_fn_def(self, value: V) -> Self::Return;
 }
 
 pub(super) type MacroArgs<I, S> = Vec<Vec<(SemanticToken<I>, S)>>;
@@ -188,61 +197,14 @@ where
     }
 }
 
-impl<'a, C, A, B, N, D> MkValue<LocationCounter, D::Span> for CompositeSession<'a, C, A, B, N, D>
-where
-    B: Backend<D::Span> + ?Sized,
-    D: Diagnostics,
-{
-    fn mk_value(&mut self, _: LocationCounter, span: D::Span) -> Self::Value {
-        self.backend.mk_value(LocationCounter, span)
-    }
-}
-
-impl<'a, C, A, B, N, D> MkValue<i32, D::Span> for CompositeSession<'a, C, A, B, N, D>
-where
-    B: Backend<D::Span> + ?Sized,
-    D: Diagnostics,
-{
-    fn mk_value(&mut self, n: i32, span: D::Span) -> Self::Value {
-        self.backend.mk_value(n, span)
-    }
-}
-
-impl<'a, C, A, B, N, D> MkValue<Ident<C::StringRef>, D::Span>
-    for CompositeSession<'a, C, A, B, N, D>
-where
-    C: Lex<D>,
-    B: Backend<D::Span> + ?Sized,
-    N: NameTable<
-        Ident<C::StringRef>,
-        BackendEntry = B::Name,
-        MacroEntry = MacroEntry<C::StringRef, D>,
-    >,
-    D: Diagnostics,
-{
-    fn mk_value(&mut self, ident: Ident<C::StringRef>, span: D::Span) -> Self::Value {
-        let symbol_id = self.look_up_symbol(ident, &span);
-        self.backend.mk_value(symbol_id, span)
-    }
-}
-
-impl<'a, C, A, B, N, D> ApplyBinaryOperator<D::Span> for CompositeSession<'a, C, A, B, N, D>
-where
-    B: Backend<D::Span> + ?Sized,
-    D: Diagnostics,
-{
-    fn apply_binary_operator(
-        &mut self,
-        operator: (BinaryOperator, D::Span),
-        left: Self::Value,
-        right: Self::Value,
-    ) -> Self::Value {
-        self.backend.apply_binary_operator(operator, left, right)
-    }
-}
-
 pub(crate) struct FnBuilder<'a, C, A, B: ?Sized, N, D> {
     session: CompositeSession<'a, C, A, B, N, D>,
+}
+
+impl<'a, C, A, B: ?Sized, N, D> FnBuilder<'a, C, A, B, N, D> {
+    fn new(session: CompositeSession<'a, C, A, B, N, D>) -> Self {
+        Self { session }
+    }
 }
 
 impl<'a, C, A, B, N, D> HasValue<D::Span> for FnBuilder<'a, C, A, B, N, D>
@@ -255,47 +217,59 @@ where
 
 impl<'a, C, A, B, N, D> MkValue<LocationCounter, D::Span> for FnBuilder<'a, C, A, B, N, D>
 where
-    B: HasValue<D::Span> + ?Sized,
+    B: Backend<D::Span> + ?Sized,
     D: Span,
 {
-    fn mk_value(&mut self, _: LocationCounter, _span: D::Span) -> Self::Value {
-        unimplemented!()
+    fn mk_value(&mut self, _: LocationCounter, span: D::Span) -> Self::Value {
+        self.session.backend.mk_value(LocationCounter, span)
     }
 }
 
 impl<'a, C, A, B, N, D> MkValue<i32, D::Span> for FnBuilder<'a, C, A, B, N, D>
 where
-    B: HasValue<D::Span> + ?Sized,
+    B: Backend<D::Span> + ?Sized,
     D: Span,
 {
-    fn mk_value(&mut self, _n: i32, _span: D::Span) -> Self::Value {
-        unimplemented!()
+    fn mk_value(&mut self, n: i32, span: D::Span) -> Self::Value {
+        self.session.backend.mk_value(n, span)
     }
 }
 
 impl<'a, C, A, B, N, D> MkValue<Ident<C::StringRef>, D::Span> for FnBuilder<'a, C, A, B, N, D>
 where
     C: Lex<D>,
-    B: HasValue<D::Span> + ?Sized,
+    B: Backend<D::Span> + ?Sized,
+    N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name>,
     D: Diagnostics,
 {
-    fn mk_value(&mut self, _ident: Ident<C::StringRef>, _span: D::Span) -> Self::Value {
-        unimplemented!()
+    fn mk_value(&mut self, ident: Ident<C::StringRef>, span: D::Span) -> Self::Value {
+        let symbol_id = self.session.look_up_symbol(ident, &span);
+        self.session.backend.mk_value(symbol_id, span)
     }
 }
 
 impl<'a, C, A, B, N, D> ApplyBinaryOperator<D::Span> for FnBuilder<'a, C, A, B, N, D>
 where
-    B: HasValue<D::Span> + ?Sized,
+    B: Backend<D::Span> + ?Sized,
     D: Span,
 {
     fn apply_binary_operator(
         &mut self,
-        _operator: (BinaryOperator, D::Span),
-        _left: Self::Value,
-        _right: Self::Value,
+        operator: (BinaryOperator, D::Span),
+        left: Self::Value,
+        right: Self::Value,
     ) -> Self::Value {
-        unimplemented!()
+        self.session
+            .backend
+            .apply_binary_operator(operator, left, right)
+    }
+}
+
+impl<'a, C, A, B: ?Sized, N, D> Finish for FnBuilder<'a, C, A, B, N, D> {
+    type Return = CompositeSession<'a, C, A, B, N, D>;
+
+    fn finish(self) -> Self::Return {
+        self.session
     }
 }
 
@@ -306,7 +280,7 @@ where
 {
     type Return = CompositeSession<'a, C, A, B, N, D>;
 
-    fn finish(self, _value: B::Value) -> Self::Return {
+    fn finish_fn_def(self, _value: B::Value) -> Self::Return {
         unimplemented!()
     }
 }
@@ -335,7 +309,8 @@ where
         > + StartScope<Ident<C::StringRef>>,
     D: Diagnostics,
 {
-    type Builder = FnBuilder<'a, C, A, B, N, D>;
+    type FnBuilder = FnBuilder<'a, C, A, B, N, D>;
+    type GeneralBuilder = FnBuilder<'a, C, A, B, N, D>;
 
     fn analyze_file(&mut self, path: Self::StringRef) -> Result<(), CodebaseError> {
         let tokens = self.codebase.lex_file(path, self.diagnostics)?;
@@ -343,7 +318,11 @@ where
         Ok(())
     }
 
-    fn define_fn(self, _name: (Ident<Self::StringRef>, Self::Span)) -> Self::Builder {
+    fn build_value(self) -> Self::GeneralBuilder {
+        FnBuilder::new(self)
+    }
+
+    fn define_fn(self, _name: (Ident<Self::StringRef>, Self::Span)) -> Self::FnBuilder {
         unimplemented!()
     }
 
@@ -520,7 +499,8 @@ mod mock {
         T: From<DiagnosticsEvent<S>>,
         S: Clone + MockSpan,
     {
-        type Builder = Self;
+        type FnBuilder = Self;
+        type GeneralBuilder = Self;
 
         fn analyze_file(&mut self, path: String) -> Result<(), CodebaseError> {
             self.log
@@ -529,7 +509,11 @@ mod mock {
             self.error.take().map_or(Ok(()), Err)
         }
 
-        fn define_fn(mut self, (name, _): (Ident<Self::StringRef>, Self::Span)) -> Self::Builder {
+        fn build_value(self) -> Self::GeneralBuilder {
+            self
+        }
+
+        fn define_fn(mut self, (name, _): (Ident<Self::StringRef>, Self::Span)) -> Self::FnBuilder {
             assert_eq!(self.name, None);
             self.name = Some(name);
             self
@@ -573,6 +557,14 @@ mod mock {
         }
     }
 
+    impl<'a, T, S> Finish for MockSession<'a, T, S> {
+        type Return = Self;
+
+        fn finish(self) -> Self::Return {
+            self
+        }
+    }
+
     impl<'a, T, S> FinishFnDef<Expr<Ident<String>, S>> for MockSession<'a, T, S>
     where
         T: From<SessionEvent<S>>,
@@ -580,7 +572,7 @@ mod mock {
     {
         type Return = Self;
 
-        fn finish(mut self, value: Expr<Ident<String>, S>) -> Self::Return {
+        fn finish_fn_def(mut self, value: Expr<Ident<String>, S>) -> Self::Return {
             self.log
                 .borrow_mut()
                 .push(SessionEvent::DefineExpr(self.name.take().unwrap(), vec![], value).into());
@@ -686,7 +678,9 @@ mod tests {
         let mut fixture = Fixture::new(&log);
         let mut session = fixture.session();
         session.start_section((ident.clone(), ()));
-        let item = Item::Data(session.mk_value(ident, ()), Width::Word);
+        let mut builder = session.build_value();
+        let item = Item::Data(builder.mk_value(ident, ()), Width::Word);
+        session = Finish::finish(builder);
         session.emit_item(item);
         assert_eq!(
             log.into_inner(),
@@ -823,6 +817,39 @@ mod tests {
                     .into()
             ]
         );
+    }
+
+    #[test]
+    fn build_value_from_number() {
+        let log = RefCell::new(Vec::new());
+        let mut fixture = Fixture::new(&log);
+        let session = fixture.session();
+        let mut builder = session.build_value();
+        let value = builder.mk_value(42, ());
+        builder.finish();
+        assert_eq!(value, 42.into())
+    }
+
+    #[test]
+    fn apply_operator_on_two_values() {
+        let log = RefCell::new(Vec::new());
+        let mut fixture = Fixture::new(&log);
+        let session = fixture.session();
+        let mut builder = session.build_value();
+        let left = builder.mk_value(42, ());
+        let right = builder.mk_value(Ident::from("ident"), ());
+        let value =
+            builder.apply_binary_operator((BinaryOperator::Multiplication, ()), left, right);
+        builder.finish();
+        assert_eq!(
+            value,
+            ExprVariant::Binary(
+                BinaryOperator::Multiplication,
+                Box::new(Atom::Literal(42).into()),
+                Box::new(Atom::Name(0).into()),
+            )
+            .into(),
+        )
     }
 
     type MockAnalyzer<'a, S> = crate::analysis::semantics::MockAnalyzer<'a, Event<S>>;

@@ -46,7 +46,11 @@ impl<S: Session> MacroInvocationContext<S::Span> for MacroInvocationActions<S> {
     }
 
     fn exit(mut self) -> Self::Parent {
-        self.parent.session.invoke_macro(self.name, self.args);
+        self.parent
+            .session
+            .as_mut()
+            .unwrap()
+            .invoke_macro(self.name, self.args);
         self.parent
     }
 }
