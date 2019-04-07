@@ -57,29 +57,21 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
         }
     }
 
-    fn analyze_ds(self) {
-        let arg = match single_arg(self.span, self.args, self.actions.diagnostics()) {
-            Ok(arg) => arg,
-            Err(()) => return,
-        };
-        let bytes = match self.actions.analyze_expr(arg) {
-            Ok(bytes) => bytes,
-            Err(()) => return,
-        };
-        self.actions.session().reserve(bytes)
+    fn analyze_ds(mut self) {
+        let actions = &mut self.actions;
+        single_arg(self.span, self.args, actions.diagnostics())
+            .and_then(|arg| actions.analyze_expr(arg))
+            .map(|bytes| actions.session().reserve(bytes))
+            .ok();
     }
 
-    fn analyze_equ(self) {
-        let symbol = self.actions.label.take().unwrap();
-        let arg = match single_arg(self.span, self.args, self.actions.diagnostics()) {
-            Ok(arg) => arg,
-            Err(()) => return,
-        };
-        let value = match self.actions.analyze_expr(arg) {
-            Ok(value) => value,
-            Err(()) => return,
-        };
-        self.actions.session().define_symbol(symbol, value)
+    fn analyze_equ(mut self) {
+        let actions = &mut self.actions;
+        let symbol = actions.label.take().unwrap();
+        single_arg(self.span, self.args, actions.diagnostics())
+            .and_then(|arg| actions.analyze_expr(arg))
+            .map(|value| actions.session().define_symbol(symbol, value))
+            .ok();
     }
 
     fn analyze_section(self) {
@@ -99,16 +91,12 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
         }
     }
 
-    fn analyze_org(self) {
-        let arg = match single_arg(self.span, self.args, self.actions.diagnostics()) {
-            Ok(arg) => arg,
-            Err(()) => return,
-        };
-        let expr = match self.actions.analyze_expr(arg) {
-            Ok(expr) => expr,
-            Err(()) => return,
-        };
-        self.actions.session().set_origin(expr)
+    fn analyze_org(mut self) {
+        let actions = &mut self.actions;
+        single_arg(self.span, self.args, actions.diagnostics())
+            .and_then(|arg| actions.analyze_expr(arg))
+            .map(|expr| actions.session().set_origin(expr))
+            .ok();
     }
 }
 
