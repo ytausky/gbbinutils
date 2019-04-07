@@ -197,17 +197,17 @@ where
     }
 }
 
-pub(crate) struct FnBuilder<'a, C, A, B: ?Sized, N, D> {
+pub(crate) struct RelocContext<'a, C, A, B: ?Sized, N, D> {
     session: CompositeSession<'a, C, A, B, N, D>,
 }
 
-impl<'a, C, A, B: ?Sized, N, D> FnBuilder<'a, C, A, B, N, D> {
+impl<'a, C, A, B: ?Sized, N, D> RelocContext<'a, C, A, B, N, D> {
     fn new(session: CompositeSession<'a, C, A, B, N, D>) -> Self {
-        Self { session }
+        RelocContext { session }
     }
 }
 
-impl<'a, C, A, B, N, D> HasValue<D::Span> for FnBuilder<'a, C, A, B, N, D>
+impl<'a, C, A, B, N, D> HasValue<D::Span> for RelocContext<'a, C, A, B, N, D>
 where
     B: HasValue<D::Span> + ?Sized,
     D: Span,
@@ -215,7 +215,7 @@ where
     type Value = B::Value;
 }
 
-impl<'a, C, A, B, N, D> MkValue<LocationCounter, D::Span> for FnBuilder<'a, C, A, B, N, D>
+impl<'a, C, A, B, N, D> MkValue<LocationCounter, D::Span> for RelocContext<'a, C, A, B, N, D>
 where
     B: Backend<D::Span> + ?Sized,
     D: Span,
@@ -225,7 +225,7 @@ where
     }
 }
 
-impl<'a, C, A, B, N, D> MkValue<i32, D::Span> for FnBuilder<'a, C, A, B, N, D>
+impl<'a, C, A, B, N, D> MkValue<i32, D::Span> for RelocContext<'a, C, A, B, N, D>
 where
     B: Backend<D::Span> + ?Sized,
     D: Span,
@@ -235,7 +235,7 @@ where
     }
 }
 
-impl<'a, C, A, B, N, D> MkValue<Ident<C::StringRef>, D::Span> for FnBuilder<'a, C, A, B, N, D>
+impl<'a, C, A, B, N, D> MkValue<Ident<C::StringRef>, D::Span> for RelocContext<'a, C, A, B, N, D>
 where
     C: Lex<D>,
     B: Backend<D::Span> + ?Sized,
@@ -248,7 +248,7 @@ where
     }
 }
 
-impl<'a, C, A, B, N, D> ApplyBinaryOperator<D::Span> for FnBuilder<'a, C, A, B, N, D>
+impl<'a, C, A, B, N, D> ApplyBinaryOperator<D::Span> for RelocContext<'a, C, A, B, N, D>
 where
     B: Backend<D::Span> + ?Sized,
     D: Span,
@@ -265,7 +265,7 @@ where
     }
 }
 
-impl<'a, C, A, B: ?Sized, N, D> Finish for FnBuilder<'a, C, A, B, N, D> {
+impl<'a, C, A, B: ?Sized, N, D> Finish for RelocContext<'a, C, A, B, N, D> {
     type Return = CompositeSession<'a, C, A, B, N, D>;
 
     fn finish(self) -> Self::Return {
@@ -273,7 +273,7 @@ impl<'a, C, A, B: ?Sized, N, D> Finish for FnBuilder<'a, C, A, B, N, D> {
     }
 }
 
-impl<'a, C, A, B, N, D> FinishFnDef<B::Value> for FnBuilder<'a, C, A, B, N, D>
+impl<'a, C, A, B, N, D> FinishFnDef<B::Value> for RelocContext<'a, C, A, B, N, D>
 where
     B: Backend<D::Span> + ?Sized,
     D: Diagnostics,
@@ -285,7 +285,7 @@ where
     }
 }
 
-impl<'a, C, A, B, N, D> DelegateDiagnostics<D::Span> for FnBuilder<'a, C, A, B, N, D>
+impl<'a, C, A, B, N, D> DelegateDiagnostics<D::Span> for RelocContext<'a, C, A, B, N, D>
 where
     B: ?Sized,
     D: Diagnostics,
@@ -309,8 +309,8 @@ where
         > + StartScope<Ident<C::StringRef>>,
     D: Diagnostics,
 {
-    type FnBuilder = FnBuilder<'a, C, A, B, N, D>;
-    type GeneralBuilder = FnBuilder<'a, C, A, B, N, D>;
+    type FnBuilder = RelocContext<'a, C, A, B, N, D>;
+    type GeneralBuilder = RelocContext<'a, C, A, B, N, D>;
 
     fn analyze_file(&mut self, path: Self::StringRef) -> Result<(), CodebaseError> {
         let tokens = self.codebase.lex_file(path, self.diagnostics)?;
@@ -319,7 +319,7 @@ where
     }
 
     fn build_value(self) -> Self::GeneralBuilder {
-        FnBuilder::new(self)
+        RelocContext::new(self)
     }
 
     fn define_fn(self, _name: (Ident<Self::StringRef>, Self::Span)) -> Self::FnBuilder {
