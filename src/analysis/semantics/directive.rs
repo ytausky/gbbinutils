@@ -49,47 +49,35 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
 
     fn analyze_data(self, width: Width) {
         for arg in self.args {
-            let expr = {
-                if let Ok(expr) = self.actions.analyze_expr(arg) {
-                    expr
-                } else {
-                    return;
-                }
+            let expr = match self.actions.analyze_expr(arg) {
+                Ok(expr) => expr,
+                Err(()) => return,
             };
             self.actions.session().emit_item(Item::Data(expr, width))
         }
     }
 
     fn analyze_ds(self) {
-        let bytes = {
-            let arg = if let Ok(arg) = single_arg(self.span, self.args, self.actions.diagnostics())
-            {
-                arg
-            } else {
-                return;
-            };
-            if let Ok(bytes) = self.actions.analyze_expr(arg) {
-                bytes
-            } else {
-                return;
-            }
+        let arg = match single_arg(self.span, self.args, self.actions.diagnostics()) {
+            Ok(arg) => arg,
+            Err(()) => return,
+        };
+        let bytes = match self.actions.analyze_expr(arg) {
+            Ok(bytes) => bytes,
+            Err(()) => return,
         };
         self.actions.session().reserve(bytes)
     }
 
     fn analyze_equ(self) {
         let symbol = self.actions.label.take().unwrap();
-        let arg = if let Ok(arg) = single_arg(self.span, self.args, self.actions.diagnostics()) {
-            arg
-        } else {
-            return;
+        let arg = match single_arg(self.span, self.args, self.actions.diagnostics()) {
+            Ok(arg) => arg,
+            Err(()) => return,
         };
-        let value = {
-            if let Ok(value) = self.actions.analyze_expr(arg) {
-                value
-            } else {
-                return;
-            }
+        let value = match self.actions.analyze_expr(arg) {
+            Ok(value) => value,
+            Err(()) => return,
         };
         self.actions.session().define_symbol(symbol, value)
     }
@@ -100,12 +88,10 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
     }
 
     fn analyze_include(self) {
-        let (path, span) =
-            if let Ok(result) = reduce_include(self.span, self.args, self.actions.diagnostics()) {
-                result
-            } else {
-                return;
-            };
+        let (path, span) = match reduce_include(self.span, self.args, self.actions.diagnostics()) {
+            Ok(result) => result,
+            Err(()) => return,
+        };
         if let Err(err) = self.actions.session().analyze_file(path) {
             self.actions
                 .diagnostics()
@@ -114,17 +100,13 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
     }
 
     fn analyze_org(self) {
-        let arg = if let Ok(arg) = single_arg(self.span, self.args, self.actions.diagnostics()) {
-            arg
-        } else {
-            return;
+        let arg = match single_arg(self.span, self.args, self.actions.diagnostics()) {
+            Ok(arg) => arg,
+            Err(()) => return,
         };
-        let expr = {
-            if let Ok(expr) = self.actions.analyze_expr(arg) {
-                expr
-            } else {
-                return;
-            }
+        let expr = match self.actions.analyze_expr(arg) {
+            Ok(expr) => expr,
+            Err(()) => return,
         };
         self.actions.session().set_origin(expr)
     }
