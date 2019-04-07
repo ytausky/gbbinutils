@@ -79,6 +79,8 @@ impl<S: Clone> Backend<S> for ProgramBuilder<S> {
 }
 
 impl<S: Clone> AllocName<S> for ProgramBuilder<S> {
+    type Name = NameId;
+
     fn alloc_name(&mut self, _span: S) -> Self::Name {
         self.program.names.alloc()
     }
@@ -118,10 +120,6 @@ impl<S: Clone> ApplyBinaryOperator<S> for ProgramBuilder<S> {
 
 impl<S: Clone> HasValue<S> for ProgramBuilder<S> {
     type Value = Expr<S>;
-}
-
-impl<S: Clone> HasName for ProgramBuilder<S> {
-    type Name = NameId;
 }
 
 impl<S: Clone> StartSection<NameId, S> for ProgramBuilder<S> {

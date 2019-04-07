@@ -9,14 +9,9 @@ pub trait HasValue<S: Clone> {
     type Value: Source<Span = S>;
 }
 
-pub trait HasName {
+pub trait AllocName<S: Clone> {
     type Name: Clone;
-}
 
-pub trait AllocName<S: Clone>
-where
-    Self: HasName,
-{
     fn alloc_name(&mut self, span: S) -> Self::Name;
 }
 
@@ -67,8 +62,8 @@ where
     S: Clone,
     Self: AllocName<S>,
     Self: PartialBackend<S>,
-    Self: ValueBuilder<<Self as HasName>::Name, S>,
-    Self: StartSection<<Self as HasName>::Name, S>,
+    Self: ValueBuilder<<Self as AllocName<S>>::Name, S>,
+    Self: StartSection<<Self as AllocName<S>>::Name, S>,
 {
     fn define_symbol(&mut self, symbol: (Self::Name, S), value: Self::Value);
 }
@@ -153,11 +148,9 @@ mod mock {
         type Value = Expr<usize, S>;
     }
 
-    impl<'a, T> HasName for MockBackend<'a, T> {
-        type Name = usize;
-    }
-
     impl<'a, T, S: Clone> AllocName<S> for MockBackend<'a, T> {
+        type Name = usize;
+
         fn alloc_name(&mut self, _span: S) -> Self::Name {
             let id = self.next_symbol_id;
             self.next_symbol_id += 1;

@@ -380,7 +380,7 @@ impl<'a, C, A, B, N, D> StartSection<Ident<C::StringRef>, D::Span>
     for CompositeSession<'a, C, A, B, N, D>
 where
     C: Lex<D>,
-    B: AllocName<D::Span> + StartSection<<B as HasName>::Name, D::Span> + ?Sized,
+    B: Backend<D::Span> + ?Sized,
     N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name>,
     D: Diagnostics,
 {
