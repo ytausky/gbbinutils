@@ -258,6 +258,12 @@ pub(crate) struct ExprContext<R, S, P> {
     parent: P,
 }
 
+impl<R, S, P> ExprContext<R, S, P> {
+    fn pop(&mut self) -> SemanticExpr<R, S> {
+        self.stack.pop().unwrap_or_else(|| unreachable!())
+    }
+}
+
 impl<R, S, P> DelegateDiagnostics<S> for ExprContext<R, S, P>
 where
     P: DelegateDiagnostics<S>,
@@ -306,15 +312,15 @@ where
     fn apply_operator(&mut self, operator: (Operator, S)) {
         match operator.0 {
             Operator::Unary(UnaryOperator::Parentheses) => {
-                let inner = self.stack.pop().unwrap_or_else(|| unreachable!());
+                let inner = self.pop();
                 self.stack.push(SemanticExpr {
                     variant: ExprVariant::Unary(SemanticUnary::Parentheses, Box::new(inner)),
                     span: operator.1,
                 })
             }
             Operator::Binary(binary) => {
-                let rhs = self.stack.pop().unwrap_or_else(|| unreachable!());
-                let lhs = self.stack.pop().unwrap_or_else(|| unreachable!());
+                let rhs = self.pop();
+                let lhs = self.pop();
                 self.stack.push(SemanticExpr {
                     variant: ExprVariant::Binary(binary, Box::new(lhs), Box::new(rhs)),
                     span: operator.1,
