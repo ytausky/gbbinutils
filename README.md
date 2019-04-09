@@ -1,3 +1,7 @@
 # gbas
 
-An assembler for the Game Boy.
+An assembler for Game Boy.
+
+## Note
+
+gbas is not ready for prime time yet. I recommend you do not use it for any serious project.
