@@ -217,25 +217,23 @@ impl<S: Session> HasValue<S::Span> for RelocContext<S, S::Value> {
     type Value = S::Value;
 }
 
-impl<P, B, S> PushOp<LocationCounter, S> for RelocContext<P, B>
-where
-    B: PushOp<LocationCounter, S>,
-    S: Clone,
-{
-    fn push_op(&mut self, _: LocationCounter, span: S) {
-        self.builder.push_op(LocationCounter, span)
-    }
+macro_rules! impl_push_op_for_reloc_context {
+    ($t:ty) => {
+        impl<P, B, S> PushOp<$t, S> for RelocContext<P, B>
+        where
+            B: PushOp<$t, S>,
+            S: Clone,
+        {
+            fn push_op(&mut self, op: $t, span: S) {
+                self.builder.push_op(op, span)
+            }
+        }
+    };
 }
 
-impl<P, B, S> PushOp<i32, S> for RelocContext<P, B>
-where
-    B: PushOp<i32, S>,
-    S: Clone,
-{
-    fn push_op(&mut self, n: i32, span: S) {
-        self.builder.push_op(n, span)
-    }
-}
+impl_push_op_for_reloc_context! {LocationCounter}
+impl_push_op_for_reloc_context! {i32}
+impl_push_op_for_reloc_context! {BinaryOperator}
 
 impl<'a, C, A, B, N, D> PushOp<Ident<C::StringRef>, D::Span>
     for RelocContext<CompositeSession<'a, C, A, B, N, D>, B::Value>
@@ -249,16 +247,6 @@ where
     fn push_op(&mut self, ident: Ident<C::StringRef>, span: D::Span) {
         let symbol_id = self.session.look_up_symbol(ident, &span);
         self.builder.push_op(symbol_id, span)
-    }
-}
-
-impl<B, T, S> PushOp<BinaryOperator, S> for RelocContext<T, B>
-where
-    B: PushOp<BinaryOperator, S>,
-    S: Clone,
-{
-    fn push_op(&mut self, op: BinaryOperator, span: S) {
-        self.builder.push_op(op, span)
     }
 }
 
