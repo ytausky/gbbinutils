@@ -5,8 +5,6 @@ use self::session::*;
 
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diag::*;
-use crate::expr::ExprVariant;
-use crate::model::{Atom, BinaryOperator};
 use crate::name::{BiLevelNameTable, Ident};
 use crate::span::BufContext;
 use crate::syntax::lexer::{LexError, Lexer};
@@ -168,28 +166,6 @@ impl<'a, C: BufContext> Iterator for TokenizedSrc<C> {
         self.tokens
             .next()
             .map(|(t, r)| (t, self.context.mk_span(r)))
-    }
-}
-
-#[cfg(test)]
-pub type Expr<I, S> = crate::expr::Expr<Atom<I>, Empty, BinaryOperator, S>;
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum Empty {}
-
-impl<N, S> From<i32> for ExprVariant<Atom<N>, Empty, BinaryOperator, S> {
-    fn from(n: i32) -> Self {
-        ExprVariant::Atom(Atom::Literal(n))
-    }
-}
-
-#[cfg(test)]
-impl<N, T: Into<ExprVariant<Atom<N>, Empty, BinaryOperator, ()>>> From<T> for Expr<N, ()> {
-    fn from(variant: T) -> Self {
-        Expr {
-            variant: variant.into(),
-            span: (),
-        }
     }
 }
 
