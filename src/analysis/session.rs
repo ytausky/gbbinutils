@@ -142,14 +142,6 @@ where
     type StringRef = C::StringRef;
 }
 
-impl<'a, F, A, B, N, D> HasValue<D::Span> for CompositeSession<'a, F, A, B, N, D>
-where
-    B: HasValue<D::Span> + ?Sized,
-    D: Span,
-{
-    type Value = B::Value;
-}
-
 impl<'a, C, A, B, N, D> PartialBackend<D::Span> for CompositeSession<'a, C, A, B, N, D>
 where
     C: Lex<D>,
@@ -158,6 +150,8 @@ where
     D: Diagnostics,
     B::Value: Default + ValueBuilder<B::Name, D::Span>,
 {
+    type Value = B::Value;
+
     fn emit_item(&mut self, item: Item<Self::Value>) {
         self.backend.emit_item(item)
     }
@@ -183,10 +177,6 @@ impl<S: Session, B: Default> RelocContext<S, B> {
             builder: Default::default(),
         }
     }
-}
-
-impl<S: Session> HasValue<S::Span> for RelocContext<S, S::Value> {
-    type Value = S::Value;
 }
 
 macro_rules! impl_push_op_for_reloc_context {
@@ -402,10 +392,6 @@ mod mock {
         }
     }
 
-    impl<'a, T, S: Clone> HasValue<S> for MockSession<'a, T, S> {
-        type Value = Expr<Ident<String>, S>;
-    }
-
     impl<'a, T, S> DelegateDiagnostics<S> for MockSession<'a, T, S>
     where
         T: From<DiagnosticsEvent<S>>,
@@ -557,6 +543,8 @@ mod mock {
         T: From<BackendEvent<Expr<Ident<String>, S>>>,
         S: Clone + MockSpan,
     {
+        type Value = Expr<Ident<String>, S>;
+
         fn emit_item(&mut self, item: Item<Self::Value>) {
             self.log
                 .borrow_mut()

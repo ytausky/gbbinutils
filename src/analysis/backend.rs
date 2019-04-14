@@ -4,10 +4,6 @@ use crate::span::Source;
 #[cfg(test)]
 pub use mock::*;
 
-pub trait HasValue<S: Clone> {
-    type Value: Source<Span = S>;
-}
-
 pub trait AllocName<S: Clone> {
     type Name: Clone;
 
@@ -18,11 +14,9 @@ pub trait PushOp<T, S: Clone> {
     fn push_op(&mut self, op: T, span: S);
 }
 
-pub trait PartialBackend<S>
-where
-    S: Clone,
-    Self: HasValue<S>,
-{
+pub trait PartialBackend<S: Clone> {
+    type Value: Source<Span = S>;
+
     fn emit_item(&mut self, item: Item<Self::Value>);
     fn reserve(&mut self, bytes: Self::Value);
     fn set_origin(&mut self, origin: Self::Value);
@@ -48,10 +42,6 @@ pub trait ValueBuilder<N, S: Clone>:
 impl<T, N, S: Clone> ValueBuilder<N, S> for T where
     Self: PushOp<LocationCounter, S> + PushOp<i32, S> + PushOp<N, S> + PushOp<BinaryOperator, S>
 {
-}
-
-impl<N, S: Clone> HasValue<S> for Expr<N, S> {
-    type Value = Self;
 }
 
 impl<T: Into<Atom<N>>, N: Clone, S: Clone> PushOp<T, S> for Expr<N, S> {
@@ -81,7 +71,7 @@ where
     Self: AllocName<S>,
     Self: PartialBackend<S>,
     Self: StartSection<<Self as AllocName<S>>::Name, S>,
-    <Self as HasValue<S>>::Value: Default + ValueBuilder<<Self as AllocName<S>>::Name, S>,
+    <Self as PartialBackend<S>>::Value: Default + ValueBuilder<<Self as AllocName<S>>::Name, S>,
 {
     fn define_symbol(&mut self, symbol: (Self::Name, S), value: Self::Value);
 }
@@ -135,10 +125,6 @@ mod mock {
         }
     }
 
-    impl<'a, T, S: Clone> HasValue<S> for MockBackend<'a, T> {
-        type Value = Expr<usize, S>;
-    }
-
     impl<'a, T, S: Clone> AllocName<S> for MockBackend<'a, T> {
         type Name = usize;
 
@@ -154,6 +140,8 @@ mod mock {
         T: From<BackendEvent<Expr<usize, S>>>,
         S: Clone,
     {
+        type Value = Expr<usize, S>;
+
         fn emit_item(&mut self, item: Item<Self::Value>) {
             self.log
                 .borrow_mut()

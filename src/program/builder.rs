@@ -49,6 +49,8 @@ impl<SR> ProgramBuilder<SR> {
 }
 
 impl<S: Clone> PartialBackend<S> for ProgramBuilder<S> {
+    type Value = Expr<S>;
+
     fn emit_item(&mut self, item: Item<Self::Value>) {
         use super::lowering::Lower;
         item.lower().for_each(|data_item| self.push(data_item))
@@ -83,10 +85,6 @@ impl<S: Clone> AllocName<S> for ProgramBuilder<S> {
     fn alloc_name(&mut self, _span: S) -> Self::Name {
         self.program.names.alloc()
     }
-}
-
-impl<S: Clone> HasValue<S> for ProgramBuilder<S> {
-    type Value = Expr<S>;
 }
 
 impl<S: Clone> StartSection<NameId, S> for ProgramBuilder<S> {
