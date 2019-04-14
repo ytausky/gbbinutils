@@ -5,8 +5,8 @@ use self::session::*;
 
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diag::*;
-use crate::expr::{BinaryOperator, ExprVariant};
-use crate::model::Atom;
+use crate::expr::ExprVariant;
+use crate::model::{Atom, BinaryOperator};
 use crate::name::{BiLevelNameTable, Ident};
 use crate::span::BufContext;
 use crate::syntax::lexer::{LexError, Lexer};

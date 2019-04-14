@@ -165,8 +165,7 @@ mod tests {
     use super::*;
 
     use crate::diag::IgnoreDiagnostics;
-    use crate::expr::BinaryOperator;
-    use crate::model::Atom;
+    use crate::model::{Atom, BinaryOperator};
     use crate::program::{Constraints, NameTable, Program, RelocId};
 
     use std::borrow::Borrow;

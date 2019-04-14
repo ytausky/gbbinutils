@@ -1,7 +1,6 @@
 use super::{EvalContext, RelocTable, Value};
 
-use crate::expr::BinaryOperator;
-use crate::model::Atom;
+use crate::model::{Atom, BinaryOperator};
 use crate::program::{Expr, ExprOperator, NameDef, NameId, SectionId};
 
 use std::borrow::Borrow;

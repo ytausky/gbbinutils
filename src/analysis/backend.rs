@@ -1,5 +1,4 @@
-use crate::expr::BinaryOperator;
-use crate::model::Item;
+use crate::model::{BinaryOperator, Item};
 use crate::span::Source;
 
 #[cfg(test)]

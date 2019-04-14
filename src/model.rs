@@ -1,6 +1,15 @@
 use crate::span::Source;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+pub enum BinaryOperator {
+    BitwiseOr,
+    Division,
+    Minus,
+    Multiplication,
+    Plus,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Width {
     Byte,
     Word,

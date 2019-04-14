@@ -1,6 +1,5 @@
 use super::{Expr, ExprItem, Node};
 
-use crate::expr::BinaryOperator;
 use crate::model::*;
 use crate::span::Source;
 

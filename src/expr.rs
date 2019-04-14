@@ -1,14 +1,5 @@
 use crate::span::Source;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum BinaryOperator {
-    BitwiseOr,
-    Division,
-    Minus,
-    Multiplication,
-    Plus,
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct Expr<A, U, B, S> {
     pub variant: ExprVariant<A, U, B, S>,

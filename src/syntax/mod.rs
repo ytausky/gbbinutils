@@ -1,5 +1,5 @@
 use crate::diag::DelegateDiagnostics;
-use crate::expr::BinaryOperator;
+use crate::model::BinaryOperator;
 use std::borrow::Borrow;
 
 #[cfg(test)]

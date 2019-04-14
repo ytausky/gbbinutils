@@ -8,8 +8,8 @@ use super::{Lex, Literal, SemanticToken, StringRef};
 use crate::codebase::CodebaseError;
 use crate::diag::span::Span;
 use crate::diag::*;
-use crate::expr::{BinaryOperator, Expr};
-use crate::model::Item;
+use crate::expr::Expr;
+use crate::model::{BinaryOperator, Item};
 use crate::name::{Ident, Name, NameTable, StartScope};
 
 #[cfg(test)]

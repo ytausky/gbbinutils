@@ -2,7 +2,7 @@ use super::SimpleToken::*;
 use super::Token::*;
 use super::{ExprAtom, Operator, Token, UnaryOperator};
 use crate::diag::{CompactDiagnostic, Message};
-use crate::expr::BinaryOperator;
+use crate::model::BinaryOperator;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::iter;

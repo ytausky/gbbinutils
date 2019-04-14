@@ -1,8 +1,7 @@
 use super::{Expr, ExprItem, ExprOperator, NameDef, NameId, Node, Program, Section};
 
 use crate::analysis::backend::*;
-use crate::expr::BinaryOperator;
-use crate::model::{Atom, Item};
+use crate::model::{Atom, BinaryOperator, Item};
 
 pub struct ProgramBuilder<SR> {
     program: Program<SR>,
@@ -139,8 +138,7 @@ mod tests {
 
     use crate::analysis::backend::ApplyBinaryOperator;
     use crate::diag::{CompactDiagnostic, Message, TestDiagnosticsListener};
-    use crate::expr::BinaryOperator;
-    use crate::model::{Instruction, Nullary, Width};
+    use crate::model::{BinaryOperator, Instruction, Nullary, Width};
     use crate::program::{BinaryObject, SectionId};
     use std::borrow::Borrow;
 

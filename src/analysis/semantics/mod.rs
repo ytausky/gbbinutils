@@ -594,8 +594,7 @@ mod tests {
     use crate::analysis::backend::BackendEvent;
     use crate::analysis::session::SessionEvent;
     use crate::diag::Message;
-    use crate::expr::BinaryOperator;
-    use crate::model::{Atom, Width};
+    use crate::model::{Atom, BinaryOperator, Width};
     use crate::syntax::{
         CommandContext, ExprContext, FileContext, FinalContext, MacroInvocationContext,
         ParamsContext, StmtContext, ToExprBody, ToMacroBody, TokenSeqContext,

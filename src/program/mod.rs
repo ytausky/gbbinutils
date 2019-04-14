@@ -1,8 +1,7 @@
 pub use self::builder::ProgramBuilder;
 
 use crate::diag::span::Source;
-use crate::expr::BinaryOperator;
-use crate::model::{Atom, Width};
+use crate::model::{Atom, BinaryOperator, Width};
 
 mod builder;
 mod link;

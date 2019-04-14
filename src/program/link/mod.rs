@@ -166,8 +166,7 @@ mod tests {
 
     use crate::analysis::backend::{AllocName, Backend, PartialBackend};
     use crate::diag::IgnoreDiagnostics;
-    use crate::expr::BinaryOperator;
-    use crate::model::{Atom, Width};
+    use crate::model::{Atom, BinaryOperator, Width};
     use crate::program::*;
 
     #[test]

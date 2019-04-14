@@ -2,7 +2,7 @@ use super::SimpleToken::*;
 use super::*;
 use crate::diag::span::{MergeSpans, StripSpan};
 use crate::diag::{CompactDiagnostic, EmitDiagnostic, Message};
-use crate::expr::BinaryOperator;
+use crate::model::BinaryOperator;
 
 type TokenKind = Token<(), (), ()>;
 
