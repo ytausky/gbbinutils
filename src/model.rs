@@ -13,7 +13,7 @@ pub struct ExprItem<N, S> {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExprOperator<N> {
     Atom(Atom<N>),
-    Binary(BinaryOperator),
+    Binary(BinOp),
 }
 
 impl<N, S> Default for Expr<N, S> {
@@ -94,14 +94,14 @@ impl<N> From<i32> for ExprOperator<N> {
     }
 }
 
-impl<N> From<BinaryOperator> for ExprOperator<N> {
-    fn from(op: BinaryOperator) -> Self {
+impl<N> From<BinOp> for ExprOperator<N> {
+    fn from(op: BinOp) -> Self {
         ExprOperator::Binary(op)
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum BinaryOperator {
+pub enum BinOp {
     BitwiseOr,
     Division,
     Minus,

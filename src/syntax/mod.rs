@@ -1,5 +1,5 @@
 use crate::diag::DelegateDiagnostics;
-use crate::model::BinaryOperator;
+use crate::model::BinOp;
 use std::borrow::Borrow;
 
 #[cfg(test)]
@@ -107,7 +107,7 @@ pub enum ExprAtom<I, L> {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Operator {
     Unary(UnaryOperator),
-    Binary(BinaryOperator),
+    Binary(BinOp),
     FnCall(usize),
 }
 

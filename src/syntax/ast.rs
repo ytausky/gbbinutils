@@ -2,7 +2,7 @@ use super::SimpleToken::*;
 use super::Token::*;
 use super::{ExprAtom, Operator, Token, UnaryOperator};
 use crate::diag::{CompactDiagnostic, Message};
-use crate::model::BinaryOperator;
+use crate::model::BinOp;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::iter;
@@ -39,7 +39,7 @@ impl SymExpr {
 
     pub fn divide(mut self, token: impl Into<TokenRef>) -> Self {
         self.0.push(ExprAction::ApplyOperator((
-            Operator::Binary(BinaryOperator::Division),
+            Operator::Binary(BinOp::Division),
             token.into().into(),
         )));
         self
@@ -47,7 +47,7 @@ impl SymExpr {
 
     pub fn multiply(mut self, token: impl Into<TokenRef>) -> Self {
         self.0.push(ExprAction::ApplyOperator((
-            Operator::Binary(BinaryOperator::Multiplication),
+            Operator::Binary(BinOp::Multiplication),
             token.into().into(),
         )));
         self
@@ -64,7 +64,7 @@ impl SymExpr {
 
     pub fn plus(mut self, token: impl Into<TokenRef>) -> Self {
         self.0.push(ExprAction::ApplyOperator((
-            Operator::Binary(BinaryOperator::Plus),
+            Operator::Binary(BinOp::Plus),
             token.into().into(),
         )));
         self
@@ -72,7 +72,7 @@ impl SymExpr {
 
     pub fn minus(mut self, token: impl Into<TokenRef>) -> Self {
         self.0.push(ExprAction::ApplyOperator((
-            Operator::Binary(BinaryOperator::Minus),
+            Operator::Binary(BinOp::Minus),
             token.into().into(),
         )));
         self
@@ -80,7 +80,7 @@ impl SymExpr {
 
     pub fn bitwise_or(mut self, token: impl Into<TokenRef>) -> Self {
         self.0.push(ExprAction::ApplyOperator((
-            Operator::Binary(BinaryOperator::BitwiseOr),
+            Operator::Binary(BinOp::BitwiseOr),
             token.into().into(),
         )));
         self

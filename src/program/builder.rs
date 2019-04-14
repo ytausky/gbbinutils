@@ -100,7 +100,7 @@ mod tests {
     use super::*;
 
     use crate::diag::{CompactDiagnostic, Message, TestDiagnosticsListener};
-    use crate::model::{Atom, BinaryOperator, Instruction, Nullary, Width};
+    use crate::model::{Atom, BinOp, Instruction, Nullary, Width};
     use crate::program::{BinaryObject, SectionId};
     use std::borrow::Borrow;
 
@@ -246,7 +246,7 @@ mod tests {
                 value.push_op(id1, name1.into());
                 let id2 = builder.alloc_name(name2.into());
                 value.push_op(id2, name2.into());
-                value.push_op(BinaryOperator::Minus, "diff".into());
+                value.push_op(BinOp::Minus, "diff".into());
                 value
             };
             builder.emit_item(word_item(value))

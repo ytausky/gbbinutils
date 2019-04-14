@@ -7,7 +7,7 @@ use super::{Ident, Lex, LexItem, Literal, SemanticToken};
 
 use crate::diag::span::{MergeSpans, Source, StripSpan};
 use crate::diag::*;
-use crate::model::{BinaryOperator, Item};
+use crate::model::{BinOp, Item};
 use crate::name::{NameTable, StartScope};
 use crate::syntax::{self, keyword::*, ExprAtom, Operator, UnaryOperator};
 
@@ -49,11 +49,7 @@ struct SemanticExpr<I, S> {
 enum ExprVariant<I, S> {
     Atom(SemanticAtom<I>),
     Unary(SemanticUnary, Box<SemanticExpr<I, S>>),
-    Binary(
-        BinaryOperator,
-        Box<SemanticExpr<I, S>>,
-        Box<SemanticExpr<I, S>>,
-    ),
+    Binary(BinOp, Box<SemanticExpr<I, S>>, Box<SemanticExpr<I, S>>),
 }
 
 #[cfg(test)]
@@ -662,7 +658,7 @@ mod tests {
     use crate::analysis::backend::BackendEvent;
     use crate::analysis::session::SessionEvent;
     use crate::diag::Message;
-    use crate::model::{Atom, BinaryOperator, Width};
+    use crate::model::{Atom, BinOp, Width};
     use crate::syntax::{
         CommandContext, ExprContext, FileContext, FinalContext, MacroInvocationContext,
         ParamsContext, StmtContext, ToExprBody, ToMacroBody, TokenSeqContext,
@@ -728,15 +724,15 @@ mod tests {
 
     #[test]
     fn emit_rst_1_minus_1() {
-        test_rst_1_op_1(BinaryOperator::Minus)
+        test_rst_1_op_1(BinOp::Minus)
     }
 
     #[test]
     fn emit_rst_1_plus_1() {
-        test_rst_1_op_1(BinaryOperator::Plus)
+        test_rst_1_op_1(BinOp::Plus)
     }
 
-    fn test_rst_1_op_1(op: BinaryOperator) {
+    fn test_rst_1_op_1(op: BinOp) {
         use crate::model::*;
         let actions = collect_semantic_actions(|actions| {
             let command = actions

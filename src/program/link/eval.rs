@@ -1,6 +1,6 @@
 use super::{EvalContext, RelocTable, Value};
 
-use crate::model::{Atom, BinaryOperator, ExprOperator};
+use crate::model::{Atom, BinOp, ExprOperator};
 use crate::program::{Expr, NameDef, NameId, SectionId};
 
 use std::borrow::Borrow;
@@ -53,12 +53,12 @@ impl Atom<NameId> {
     }
 }
 
-impl BinaryOperator {
+impl BinOp {
     fn apply(self, lhs: &Value, rhs: &Value) -> Value {
         match self {
-            BinaryOperator::Minus => lhs - rhs,
-            BinaryOperator::Multiplication => lhs * rhs,
-            BinaryOperator::Plus => lhs + rhs,
+            BinOp::Minus => lhs - rhs,
+            BinOp::Multiplication => lhs * rhs,
+            BinOp::Plus => lhs + rhs,
             _ => unimplemented!(),
         }
     }

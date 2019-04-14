@@ -165,7 +165,7 @@ mod tests {
     use super::*;
 
     use crate::diag::IgnoreDiagnostics;
-    use crate::model::{Atom, BinaryOperator};
+    use crate::model::{Atom, BinOp};
     use crate::program::{Constraints, NameTable, Program, RelocId};
 
     use std::borrow::Borrow;
@@ -207,7 +207,7 @@ mod tests {
     #[test]
     fn translate_expr_with_subtraction() {
         let actual = translate_section_item(Node::Expr(
-            Expr::from_items(&[4.into(), 3.into(), BinaryOperator::Minus.into()]),
+            Expr::from_items(&[4.into(), 3.into(), BinOp::Minus.into()]),
             Width::Byte,
         ));
         assert_eq!(actual, [0x01])

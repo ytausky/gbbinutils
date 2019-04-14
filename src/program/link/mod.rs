@@ -166,7 +166,7 @@ mod tests {
 
     use crate::analysis::backend::{AllocName, Backend, PartialBackend};
     use crate::diag::IgnoreDiagnostics;
-    use crate::model::{Atom, BinaryOperator, Width};
+    use crate::model::{Atom, BinOp, Width};
     use crate::program::*;
 
     #[test]
@@ -188,7 +188,7 @@ mod tests {
                         addr: Some(Expr::from_items(&[
                             Atom::LocationCounter.into(),
                             skipped_bytes.into(),
-                            BinaryOperator::Plus.into(),
+                            BinOp::Plus.into(),
                         ])),
                     },
                     addr: RelocId(2),

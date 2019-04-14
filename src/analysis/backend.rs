@@ -1,4 +1,4 @@
-use crate::model::{Atom, BinaryOperator, Expr, ExprItem, ExprOperator, Item};
+use crate::model::{Atom, BinOp, Expr, ExprItem, ExprOperator, Item};
 use crate::span::Source;
 
 #[cfg(test)]
@@ -35,12 +35,12 @@ impl<N> From<LocationCounter> for Atom<N> {
 }
 
 pub trait ValueBuilder<N, S: Clone>:
-    PushOp<LocationCounter, S> + PushOp<i32, S> + PushOp<N, S> + PushOp<BinaryOperator, S>
+    PushOp<LocationCounter, S> + PushOp<i32, S> + PushOp<N, S> + PushOp<BinOp, S>
 {
 }
 
 impl<T, N, S: Clone> ValueBuilder<N, S> for T where
-    Self: PushOp<LocationCounter, S> + PushOp<i32, S> + PushOp<N, S> + PushOp<BinaryOperator, S>
+    Self: PushOp<LocationCounter, S> + PushOp<i32, S> + PushOp<N, S> + PushOp<BinOp, S>
 {
 }
 
@@ -55,8 +55,8 @@ impl<T: Into<Atom<N>>, N: Clone, S: Clone> PushOp<T, S> for Expr<N, S> {
     }
 }
 
-impl<N, S: Clone> PushOp<BinaryOperator, S> for Expr<N, S> {
-    fn push_op(&mut self, op: BinaryOperator, span: S) {
+impl<N, S: Clone> PushOp<BinOp, S> for Expr<N, S> {
+    fn push_op(&mut self, op: BinOp, span: S) {
         self.0.push(ExprItem {
             op: ExprOperator::Binary(op),
             op_span: span.clone(),

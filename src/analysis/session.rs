@@ -8,7 +8,7 @@ use super::{Lex, SemanticToken, StringRef};
 use crate::codebase::CodebaseError;
 use crate::diag::span::{Source, Span};
 use crate::diag::*;
-use crate::model::{BinaryOperator, Item};
+use crate::model::{BinOp, Item};
 use crate::name::{Ident, Name, NameTable, StartScope};
 
 #[cfg(test)]
@@ -195,7 +195,7 @@ macro_rules! impl_push_op_for_reloc_context {
 
 impl_push_op_for_reloc_context! {LocationCounter}
 impl_push_op_for_reloc_context! {i32}
-impl_push_op_for_reloc_context! {BinaryOperator}
+impl_push_op_for_reloc_context! {BinOp}
 
 impl<'a, C, A, B, N, D> PushOp<Ident<C::StringRef>, D::Span>
     for RelocContext<CompositeSession<'a, C, A, B, N, D>, B::Value>
@@ -824,14 +824,14 @@ mod tests {
         let mut builder = session.build_value();
         builder.push_op(42, ());
         builder.push_op(Ident::from("ident"), ());
-        builder.push_op(BinaryOperator::Multiplication, ());
+        builder.push_op(BinOp::Multiplication, ());
         let (_, value) = builder.finish();
         assert_eq!(
             value,
             Expr::from_items(&[
                 42.into(),
                 Atom::Name(0).into(),
-                BinaryOperator::Multiplication.into()
+                BinOp::Multiplication.into()
             ])
         )
     }

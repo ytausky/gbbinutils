@@ -2,7 +2,7 @@ use super::SimpleToken::*;
 use super::*;
 use crate::diag::span::{MergeSpans, StripSpan};
 use crate::diag::{CompactDiagnostic, EmitDiagnostic, Message};
-use crate::model::BinaryOperator;
+use crate::model::BinOp;
 
 type TokenKind = Token<(), (), ()>;
 
@@ -258,7 +258,7 @@ enum ExprParsingError<S, R> {
 }
 
 enum SuffixOperator {
-    Binary(BinaryOperator),
+    Binary(BinOp),
     FnCall,
 }
 
@@ -266,12 +266,12 @@ impl<I, C, L> Token<I, C, L> {
     fn as_suffix_operator(&self) -> Option<SuffixOperator> {
         use SuffixOperator::*;
         match self {
-            Token::Simple(Minus) => Some(Binary(BinaryOperator::Minus)),
+            Token::Simple(Minus) => Some(Binary(BinOp::Minus)),
             Token::Simple(OpeningParenthesis) => Some(FnCall),
-            Token::Simple(Pipe) => Some(Binary(BinaryOperator::BitwiseOr)),
-            Token::Simple(Plus) => Some(Binary(BinaryOperator::Plus)),
-            Token::Simple(Slash) => Some(Binary(BinaryOperator::Division)),
-            Token::Simple(Star) => Some(Binary(BinaryOperator::Multiplication)),
+            Token::Simple(Pipe) => Some(Binary(BinOp::BitwiseOr)),
+            Token::Simple(Plus) => Some(Binary(BinOp::Plus)),
+            Token::Simple(Slash) => Some(Binary(BinOp::Division)),
+            Token::Simple(Star) => Some(Binary(BinOp::Multiplication)),
             _ => None,
         }
     }
@@ -290,11 +290,9 @@ impl SuffixOperator {
     fn precedence(&self) -> Precedence {
         use SuffixOperator::*;
         match self {
-            Binary(BinaryOperator::BitwiseOr) => Precedence::BitwiseOr,
-            Binary(BinaryOperator::Plus) | Binary(BinaryOperator::Minus) => Precedence::Addition,
-            Binary(BinaryOperator::Multiplication) | Binary(BinaryOperator::Division) => {
-                Precedence::Multiplication
-            }
+            Binary(BinOp::BitwiseOr) => Precedence::BitwiseOr,
+            Binary(BinOp::Plus) | Binary(BinOp::Minus) => Precedence::Addition,
+            Binary(BinOp::Multiplication) | Binary(BinOp::Division) => Precedence::Multiplication,
             FnCall => Precedence::FnCall,
         }
     }

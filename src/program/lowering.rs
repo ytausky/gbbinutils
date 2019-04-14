@@ -219,7 +219,7 @@ fn mk_relative_expr<S: Clone>(mut expr: Expr<S>) -> Expr<S> {
         expr_span: span.clone(),
     });
     expr.0.push(ExprItem {
-        op: BinaryOperator::Minus.into(),
+        op: BinOp::Minus.into(),
         op_span: span.clone(),
         expr_span: span,
     });
