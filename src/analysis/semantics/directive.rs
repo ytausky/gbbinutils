@@ -143,9 +143,8 @@ mod tests {
     use crate::analysis::backend::BackendEvent;
     use crate::analysis::semantics::tests::*;
     use crate::analysis::session::SessionEvent;
-    use crate::analysis::Ident;
+    use crate::analysis::{Expr, Ident};
     use crate::codebase::CodebaseError;
-    use crate::model::Expr;
     use crate::syntax::keyword::{Command, Operand};
     use crate::syntax::{
         CommandContext, ExprAtom, ExprContext, FileContext, FinalContext, StmtContext,

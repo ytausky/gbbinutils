@@ -72,8 +72,9 @@ where
 mod mock {
     use super::*;
 
+    use crate::analysis::Expr;
     use crate::expr::ExprVariant;
-    use crate::model::{Atom, Expr};
+    use crate::model::Atom;
 
     use std::cell::RefCell;
 

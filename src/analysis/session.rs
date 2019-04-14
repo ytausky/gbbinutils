@@ -395,9 +395,10 @@ mod mock {
     use super::*;
 
     use crate::analysis::backend::BackendEvent;
+    use crate::analysis::Expr;
     use crate::diag::{DiagnosticsEvent, MockDiagnostics, MockSpan};
     use crate::expr::ExprVariant;
-    use crate::model::{Atom, Expr};
+    use crate::model::Atom;
 
     use std::cell::RefCell;
 
@@ -623,9 +624,9 @@ mod tests {
 
     use crate::analysis::backend::BackendEvent;
     use crate::analysis::semantics::AnalyzerEvent;
-    use crate::analysis::{Literal, MockCodebase};
+    use crate::analysis::{Expr, Literal, MockCodebase};
     use crate::diag::{DiagnosticsEvent, MockSpan};
-    use crate::model::{Atom, Expr, Instruction, Nullary, Width};
+    use crate::model::{Atom, Instruction, Nullary, Width};
     use crate::name::{BasicNameTable, NameTableEvent};
     use crate::syntax::{Command, Directive, Mnemonic, Token};
 

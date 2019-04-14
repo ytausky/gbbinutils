@@ -422,9 +422,9 @@ mod tests {
     use super::*;
     use crate::analysis::semantics::*;
     use crate::analysis::session::SemanticExprVariant;
-    use crate::analysis::{Ident, Literal};
+    use crate::analysis::{Expr, Ident, Literal};
     use crate::expr::ExprVariant;
-    use crate::model::{Atom, Expr};
+    use crate::model::Atom;
     use crate::syntax::Mnemonic;
     use std::cmp;
 
