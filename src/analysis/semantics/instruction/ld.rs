@@ -288,23 +288,23 @@ mod tests {
     #[test]
     fn analyze_ld_deref_symbol_a() {
         let ident = "ident";
-        analyze(Mnemonic::Ld, vec![deref(ident.into()), literal(A)]).expect_instruction(
-            Instruction::Ld(Ld::Special(
+        analyze(Mnemonic::Ld, vec![deref(ident), literal(A)]).expect_instruction(Instruction::Ld(
+            Ld::Special(
                 SpecialLd::InlineAddr(name(ident, TokenId::Operand(0, 1))),
                 Direction::FromA,
-            )),
-        )
+            ),
+        ))
     }
 
     #[test]
     fn analyze_ld_a_deref_symbol() {
         let ident = "ident";
-        analyze(Mnemonic::Ld, vec![literal(A), deref(ident.into())]).expect_instruction(
-            Instruction::Ld(Ld::Special(
+        analyze(Mnemonic::Ld, vec![literal(A), deref(ident)]).expect_instruction(Instruction::Ld(
+            Ld::Special(
                 SpecialLd::InlineAddr(name(ident, TokenId::Operand(1, 1))),
                 Direction::IntoA,
-            )),
-        )
+            ),
+        ))
     }
 
     #[test]
@@ -369,7 +369,7 @@ mod tests {
     fn describe_ld_simple_immediate(dest: SimpleOperand) -> InstructionDescriptor {
         let n = 0x12;
         (
-            (Mnemonic::Ld, vec![SemanticExpr::from(dest), n.into()]),
+            (Mnemonic::Ld, vec![dest.into(), n.into()]),
             Instruction::Ld(Ld::Immediate8(dest, number(n, TokenId::Operand(1, 0)))),
         )
     }
@@ -381,7 +381,7 @@ mod tests {
     fn describe_ld_reg16_immediate(dest: Reg16) -> InstructionDescriptor {
         let value = "value";
         (
-            (Mnemonic::Ld, vec![SemanticExpr::from(dest), value.into()]),
+            (Mnemonic::Ld, vec![dest.into(), value.into()]),
             Instruction::Ld(Ld::Immediate16(dest, name(value, TokenId::Operand(1, 0)))),
         )
     }
@@ -395,20 +395,14 @@ mod tests {
     fn describe_ld_deref_ptr_reg(ptr_reg: PtrReg) -> impl Iterator<Item = InstructionDescriptor> {
         vec![
             (
-                (
-                    Mnemonic::Ld,
-                    vec![deref(SemanticExpr::from(ptr_reg)), literal(A)],
-                ),
+                (Mnemonic::Ld, vec![deref(ptr_reg), literal(A)]),
                 Instruction::Ld(Ld::Special(
                     SpecialLd::DerefPtrReg(ptr_reg),
                     Direction::FromA,
                 )),
             ),
             (
-                (
-                    Mnemonic::Ld,
-                    vec![literal(A), deref(SemanticExpr::from(ptr_reg))],
-                ),
+                (Mnemonic::Ld, vec![literal(A), deref(ptr_reg)]),
                 Instruction::Ld(Ld::Special(
                     SpecialLd::DerefPtrReg(ptr_reg),
                     Direction::IntoA,
@@ -461,7 +455,7 @@ mod tests {
                 dest: TokenId::Operand(0, 0).into(),
             })
             .with_highlight(TokenSpan::merge(
-                &TokenSpan::from(TokenId::Operand(0, 0)),
+                &TokenId::Operand(0, 0).into(),
                 &TokenId::Operand(1, 0).into(),
             )),
         )
@@ -476,7 +470,7 @@ mod tests {
                 dest: TokenId::Operand(0, 0).into(),
             })
             .with_highlight(TokenSpan::merge(
-                &TokenSpan::from(TokenId::Operand(0, 0)),
+                &TokenId::Operand(0, 0).into(),
                 &TokenId::Operand(1, 0).into(),
             )),
         )
@@ -502,7 +496,7 @@ mod tests {
     fn analyze_ld_hl_sp() {
         analyze(Mnemonic::Ld, vec![literal(Hl), literal(Sp)]).expect_diagnostic(
             ExpectedDiagnostic::new(Message::LdSpHlOperands).with_highlight(TokenSpan::merge(
-                &TokenSpan::from(TokenId::Operand(0, 0)),
+                &TokenId::Operand(0, 0).into(),
                 &TokenId::Operand(1, 0).into(),
             )),
         )
@@ -530,16 +524,16 @@ mod tests {
             ExpectedDiagnostic::new(Message::LdDerefHlDerefHl {
                 mnemonic: TokenId::Mnemonic.into(),
                 dest: TokenSpan::merge(
-                    &TokenSpan::from(TokenId::Operand(0, 0)),
+                    &TokenId::Operand(0, 0).into(),
                     &TokenId::Operand(0, 2).into(),
                 ),
                 src: TokenSpan::merge(
-                    &TokenSpan::from(TokenId::Operand(1, 0)),
+                    &TokenId::Operand(1, 0).into(),
                     &TokenId::Operand(1, 2).into(),
                 ),
             })
             .with_highlight(TokenSpan::merge(
-                &TokenSpan::from(TokenId::Mnemonic),
+                &TokenId::Mnemonic.into(),
                 &TokenId::Operand(1, 2).into(),
             )),
         )

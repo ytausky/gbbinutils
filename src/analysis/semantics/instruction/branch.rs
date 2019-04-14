@@ -236,14 +236,14 @@ mod tests {
         let mut operands = Vec::new();
         let mut has_condition = false;
         if let Some(condition) = condition {
-            operands.push(SemanticExpr::from(condition));
+            operands.push(condition.into());
             has_condition = true;
         };
         if branch != Ret {
             operands.push(ident.into());
         };
         (
-            (Mnemonic::from(branch), operands),
+            (branch.into(), operands),
             Instruction::Branch(
                 match branch {
                     Ret => Branch::Ret,
@@ -310,7 +310,7 @@ mod tests {
                 mnemonic: TokenId::Mnemonic.into(),
             })
             .with_highlight(TokenSpan::merge(
-                &TokenSpan::from(TokenId::Operand(0, 0)),
+                &TokenId::Operand(0, 0).into(),
                 &TokenId::Operand(0, 2).into(),
             )),
         )

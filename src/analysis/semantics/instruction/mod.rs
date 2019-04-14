@@ -415,15 +415,17 @@ impl From<kw::Mnemonic> for Mnemonic {
 #[cfg(test)]
 mod tests {
     pub use self::kw::Operand::*;
-    pub(super) use crate::analysis::semantics::{SemanticExpr, TokenId, TokenSpan};
+
+    pub(super) use crate::analysis::semantics::{TokenId, TokenSpan};
     pub(crate) use crate::diag::Message;
     pub use crate::span::{MergeSpans, Span};
 
     use super::*;
+
     use crate::analysis::semantics::*;
     use crate::analysis::{Ident, Literal};
     use crate::model::{Atom, Expr};
-    use crate::syntax::Mnemonic;
+
     use std::cmp;
 
     type Input = SemanticExpr<String, ()>;
@@ -452,9 +454,9 @@ mod tests {
         Expr::from_atom(Atom::Name(ident.into()), span.into())
     }
 
-    pub(super) fn deref(expr: Input) -> Input {
+    pub(super) fn deref(expr: impl Into<Input>) -> Input {
         SemanticExpr {
-            variant: ExprVariant::Unary(SemanticUnary::Parentheses, Box::new(expr)),
+            variant: ExprVariant::Unary(SemanticUnary::Parentheses, Box::new(expr.into())),
             span: (),
         }
     }
@@ -704,10 +706,7 @@ mod tests {
         operand: SimpleOperand,
     ) -> InstructionDescriptor {
         (
-            (
-                kw::Mnemonic::from(operation),
-                vec![SemanticExpr::from(operand)],
-            ),
+            (operation.into(), vec![operand.into()]),
             Instruction::Alu(operation, AluSource::Simple(operand)),
         )
     }
@@ -861,14 +860,7 @@ mod tests {
             .into_iter()
             .enumerate()
             .map(add_token_spans)
-            .map(|op| {
-                analyze_operand(
-                    op,
-                    Mnemonic::from(mnemonic).context(),
-                    MockBuilder::with_log(&log),
-                )
-                .1
-            })
+            .map(|op| analyze_operand(op, mnemonic.context(), MockBuilder::with_log(&log)).1)
             .collect();
         let result = analyze_instruction(
             (mnemonic, TokenId::Mnemonic.into()),
