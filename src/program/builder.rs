@@ -1,7 +1,7 @@
-use super::{Expr, NameDef, NameId, Node, Program, Section};
+use super::{Expr, ExprItem, ExprOperator, NameDef, NameId, Node, Program, Section};
 
 use crate::analysis::backend::*;
-use crate::expr::{BinaryOperator, ExprVariant};
+use crate::expr::BinaryOperator;
 use crate::model::{Atom, Item};
 
 pub struct ProgramBuilder<SR> {
@@ -108,13 +108,16 @@ impl<S: Clone> ApplyBinaryOperator<S> for ProgramBuilder<S> {
     fn apply_binary_operator(
         &mut self,
         operator: (BinaryOperator, S),
-        left: Self::Value,
+        mut left: Self::Value,
         right: Self::Value,
     ) -> Self::Value {
-        Expr {
-            variant: ExprVariant::Binary(operator.0, Box::new(left), Box::new(right)),
-            span: operator.1,
-        }
+        left.0.extend(right.0);
+        left.0.push(ExprItem {
+            op: ExprOperator::Binary(operator.0),
+            op_span: operator.1.clone(),
+            expr_span: operator.1,
+        });
+        left
     }
 }
 

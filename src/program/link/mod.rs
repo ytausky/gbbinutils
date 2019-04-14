@@ -166,7 +166,7 @@ mod tests {
 
     use crate::analysis::backend::{AllocName, Backend, PartialBackend};
     use crate::diag::IgnoreDiagnostics;
-    use crate::expr::{BinaryOperator, ExprVariant};
+    use crate::expr::BinaryOperator;
     use crate::model::{Atom, Width};
     use crate::program::*;
 
@@ -186,14 +186,11 @@ mod tests {
                 },
                 Section {
                     constraints: Constraints {
-                        addr: Some(
-                            ExprVariant::Binary(
-                                BinaryOperator::Plus,
-                                Box::new(Atom::LocationCounter.into()),
-                                Box::new(skipped_bytes.into()),
-                            )
-                            .into(),
-                        ),
+                        addr: Some(Expr(vec![
+                            Atom::LocationCounter.into(),
+                            skipped_bytes.into(),
+                            BinaryOperator::Plus.into(),
+                        ])),
                     },
                     addr: RelocId(2),
                     size: RelocId(3),

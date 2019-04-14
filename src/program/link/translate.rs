@@ -165,7 +165,7 @@ mod tests {
     use super::*;
 
     use crate::diag::IgnoreDiagnostics;
-    use crate::expr::{BinaryOperator, ExprVariant};
+    use crate::expr::BinaryOperator;
     use crate::model::Atom;
     use crate::program::{Constraints, NameTable, Program, RelocId};
 
@@ -208,12 +208,7 @@ mod tests {
     #[test]
     fn translate_expr_with_subtraction() {
         let actual = translate_section_item(Node::Expr(
-            ExprVariant::Binary(
-                BinaryOperator::Minus,
-                Box::new(4.into()),
-                Box::new(3.into()),
-            )
-            .into(),
+            Expr(vec![4.into(), 3.into(), BinaryOperator::Minus.into()]),
             Width::Byte,
         ));
         assert_eq!(actual, [0x01])

@@ -13,6 +13,7 @@ pub enum Item<V: Source> {
     Instruction(Instruction<V>),
 }
 
+#[cfg(test)]
 pub type Expr<I, S> = crate::expr::Expr<Atom<I>, Empty, BinaryOperator, S>;
 
 #[derive(Clone, Debug, PartialEq)]

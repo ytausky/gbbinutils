@@ -2,7 +2,7 @@ use super::{EvalContext, RelocTable, Value};
 
 use crate::expr::BinaryOperator;
 use crate::model::Atom;
-use crate::program::{Expr, NameDef, NameId, SectionId};
+use crate::program::{Expr, ExprOperator, NameDef, NameId, SectionId};
 
 use std::borrow::Borrow;
 
@@ -12,19 +12,24 @@ impl<S: Clone> Expr<S> {
         R: Borrow<RelocTable>,
         F: FnMut(&S),
     {
-        use crate::expr::ExprVariant::*;
-        match &self.variant {
-            Unary(_, _) => unreachable!(),
-            Binary(operator, lhs, rhs) => {
-                let lhs = lhs.eval(context, on_undefined);
-                let rhs = rhs.eval(context, on_undefined);
-                operator.apply(&lhs, &rhs)
+        let mut stack = Vec::new();
+        for item in &self.0 {
+            match &item.op {
+                ExprOperator::Atom(atom) => stack.push((
+                    atom.eval(context).unwrap_or_else(|()| {
+                        on_undefined(&item.op_span);
+                        Value::Unknown
+                    }),
+                    item.expr_span.clone(),
+                )),
+                ExprOperator::Binary(operator) => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+                    stack.push((operator.apply(&lhs.0, &rhs.0), item.expr_span.clone()))
+                }
             }
-            Atom(atom) => atom.eval(context).unwrap_or_else(|()| {
-                on_undefined(&self.span);
-                Value::Unknown
-            }),
         }
+        stack.pop().unwrap().0
     }
 }
 

@@ -1,6 +1,6 @@
-use super::{Expr, Node};
+use super::{Expr, ExprItem, Node};
 
-use crate::expr::{BinaryOperator, ExprVariant};
+use crate::expr::BinaryOperator;
 use crate::model::*;
 use crate::span::Source;
 
@@ -212,19 +212,19 @@ fn encode_branch<S: Clone>(
     }
 }
 
-fn mk_relative_expr<S: Clone>(expr: Expr<S>) -> Expr<S> {
+fn mk_relative_expr<S: Clone>(mut expr: Expr<S>) -> Expr<S> {
     let span = expr.span();
-    Expr {
-        variant: ExprVariant::Binary(
-            BinaryOperator::Minus,
-            Box::new(expr),
-            Box::new(Expr {
-                variant: ExprVariant::Atom(Atom::LocationCounter),
-                span: span.clone(),
-            }),
-        ),
-        span,
-    }
+    expr.0.push(ExprItem {
+        op: Atom::LocationCounter.into(),
+        op_span: span.clone(),
+        expr_span: span.clone(),
+    });
+    expr.0.push(ExprItem {
+        op: BinaryOperator::Minus.into(),
+        op_span: span.clone(),
+        expr_span: span,
+    });
+    expr
 }
 
 fn encode_bit_operation(operation: BitOperation) -> u8 {
