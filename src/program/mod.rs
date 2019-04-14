@@ -1,6 +1,6 @@
 pub use self::builder::ProgramBuilder;
 
-use crate::model::Width;
+use crate::model::{Atom, Width};
 
 mod builder;
 mod link;
@@ -13,6 +13,12 @@ struct RelocId(usize);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NameId(usize);
+
+impl From<NameId> for Atom<NameId> {
+    fn from(id: NameId) -> Self {
+        Atom::Name(id)
+    }
+}
 
 pub struct Program<S> {
     sections: Vec<Section<S>>,

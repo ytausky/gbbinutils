@@ -16,6 +16,12 @@ pub enum ExprOperator<N> {
     Binary(BinaryOperator),
 }
 
+impl<N, S> Default for Expr<N, S> {
+    fn default() -> Self {
+        Self(Vec::new())
+    }
+}
+
 impl<N, S: Clone> Source for Expr<N, S> {
     type Span = S;
 
@@ -24,6 +30,7 @@ impl<N, S: Clone> Source for Expr<N, S> {
     }
 }
 
+#[cfg(test)]
 impl<N, S: Clone> Expr<N, S> {
     pub fn from_atom(atom: Atom<N>, span: S) -> Self {
         Self(vec![ExprItem::from_atom(atom, span)])
@@ -42,6 +49,7 @@ impl<N: Clone, S: Clone> Expr<N, S> {
     }
 }
 
+#[cfg(test)]
 impl<N, S: Clone> ExprItem<N, S> {
     pub fn from_atom(atom: Atom<N>, span: S) -> Self {
         Self {

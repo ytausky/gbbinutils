@@ -1,6 +1,6 @@
 use super::{AnalyzeExpr, ExprVariant, SemanticAtom, SemanticExpr, SemanticUnary};
 
-use crate::analysis::session::ValueBuilder;
+use crate::analysis::session::{Finish, ValueBuilder};
 use crate::analysis::{Ident, Literal};
 use crate::diag::*;
 use crate::model::{Condition, PtrReg, Reg16, RegPair, SimpleOperand};
@@ -45,41 +45,56 @@ pub enum Context {
 pub(super) fn analyze_operand<C, I, S>(
     expr: SemanticExpr<I, S>,
     context: Context,
-    value_context: &mut C,
-) -> Result<Operand<C::Value>, ()>
+    mut value_context: C,
+) -> (C::Parent, Result<Operand<C::Value>, ()>)
 where
-    C: ValueBuilder<Ident<I>, S> + DelegateDiagnostics<S>,
+    C: ValueBuilder<Ident<I>, S> + DelegateDiagnostics<S> + Finish<S>,
     S: Clone,
 {
     match expr.variant {
         ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(keyword))) => {
-            analyze_keyword_operand((keyword, expr.span), context, value_context.diagnostics())
+            let result =
+                analyze_keyword_operand((keyword, expr.span), context, value_context.diagnostics());
+            (value_context.finish().0, result)
         }
         ExprVariant::Unary(SemanticUnary::Parentheses, inner) => {
             analyze_deref_operand(*inner, expr.span, value_context)
         }
-        _ => Ok(Operand::Const(value_context.analyze_expr(expr)?)),
+        _ => match value_context.analyze_expr(expr) {
+            Ok(()) => {
+                let (session, expr) = value_context.finish();
+                (session, Ok(Operand::Const(expr)))
+            }
+            Err(()) => (value_context.finish().0, Err(())),
+        },
     }
 }
 
 fn analyze_deref_operand<C, I, S>(
     expr: SemanticExpr<I, S>,
     deref_span: S,
-    value_context: &mut C,
-) -> Result<Operand<C::Value>, ()>
+    mut value_context: C,
+) -> (C::Parent, Result<Operand<C::Value>, ()>)
 where
-    C: ValueBuilder<Ident<I>, S> + DelegateDiagnostics<S>,
+    C: ValueBuilder<Ident<I>, S> + DelegateDiagnostics<S> + Finish<S>,
     S: Clone,
 {
     match expr.variant {
         ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(keyword))) => {
-            analyze_deref_operand_keyword(
+            let result = analyze_deref_operand_keyword(
                 (keyword, &expr.span),
                 deref_span,
                 value_context.diagnostics(),
-            )
+            );
+            (value_context.finish().0, result)
         }
-        _ => Ok(Operand::Deref(value_context.analyze_expr(expr)?)),
+        _ => match value_context.analyze_expr(expr) {
+            Ok(()) => {
+                let (session, expr) = value_context.finish();
+                (session, Ok(Operand::Deref(expr)))
+            }
+            Err(()) => (value_context.finish().0, Err(())),
+        },
     }
 }
 
@@ -257,12 +272,12 @@ mod tests {
         expr: SemanticExpr<String, S>,
         context: Context,
     ) -> Result<Operand<Expr<Ident<String>, S>>, Vec<DiagnosticsEvent<S>>> {
-        use crate::analysis::session::MockSession;
+        use crate::analysis::session::MockBuilder;
         use std::cell::RefCell;
 
         let log = RefCell::new(Vec::new());
-        let mut session = MockSession::new(&log);
-        let result = super::analyze_operand(expr, context, &mut session);
+        let builder = MockBuilder::with_log(&log);
+        let (_, result) = super::analyze_operand(expr, context, builder);
         result.map_err(|_| log.into_inner())
     }
 

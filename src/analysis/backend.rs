@@ -1,4 +1,4 @@
-use crate::model::{BinaryOperator, Item};
+use crate::model::{Atom, BinaryOperator, Expr, ExprItem, ExprOperator, Item};
 use crate::span::Source;
 
 #[cfg(test)]
@@ -14,20 +14,12 @@ pub trait AllocName<S: Clone> {
     fn alloc_name(&mut self, span: S) -> Self::Name;
 }
 
-pub trait MkValue<T, S: Clone>: HasValue<S> {
-    fn mk_value(&mut self, x: T, span: S) -> Self::Value;
+pub trait MkValue<T, S: Clone> {
+    fn mk_value(&mut self, x: T, span: S);
 }
 
-pub trait ApplyBinaryOperator<S: Clone>
-where
-    Self: HasValue<S>,
-{
-    fn apply_binary_operator(
-        &mut self,
-        operator: (BinaryOperator, S),
-        left: Self::Value,
-        right: Self::Value,
-    ) -> Self::Value;
+pub trait ApplyBinaryOperator<S: Clone> {
+    fn apply_binary_operator(&mut self, operator: (BinaryOperator, S));
 }
 
 pub trait PartialBackend<S>
@@ -46,6 +38,12 @@ pub trait StartSection<N, S> {
 
 pub struct LocationCounter;
 
+impl<N> From<LocationCounter> for Atom<N> {
+    fn from(_: LocationCounter) -> Self {
+        Atom::LocationCounter
+    }
+}
+
 pub trait ValueBuilder<N, S: Clone>:
     MkValue<LocationCounter, S> + MkValue<i32, S> + MkValue<N, S> + ApplyBinaryOperator<S>
 {
@@ -56,13 +54,38 @@ impl<T, N, S: Clone> ValueBuilder<N, S> for T where
 {
 }
 
+impl<N, S: Clone> HasValue<S> for Expr<N, S> {
+    type Value = Self;
+}
+
+impl<T: Into<Atom<N>>, N: Clone, S: Clone> MkValue<T, S> for Expr<N, S> {
+    fn mk_value(&mut self, atom: T, span: S) {
+        let atom = atom.into();
+        self.0.push(ExprItem {
+            op: ExprOperator::Atom(atom.clone()),
+            op_span: span.clone(),
+            expr_span: span.clone(),
+        })
+    }
+}
+
+impl<N, S: Clone> ApplyBinaryOperator<S> for Expr<N, S> {
+    fn apply_binary_operator(&mut self, operator: (BinaryOperator, S)) {
+        self.0.push(ExprItem {
+            op: ExprOperator::Binary(operator.0),
+            op_span: operator.1.clone(),
+            expr_span: operator.1,
+        })
+    }
+}
+
 pub trait Backend<S>
 where
     S: Clone,
     Self: AllocName<S>,
     Self: PartialBackend<S>,
-    Self: ValueBuilder<<Self as AllocName<S>>::Name, S>,
     Self: StartSection<<Self as AllocName<S>>::Name, S>,
+    <Self as HasValue<S>>::Value: Default + ValueBuilder<<Self as AllocName<S>>::Name, S>,
 {
     fn define_symbol(&mut self, symbol: (Self::Name, S), value: Self::Value);
 }
@@ -71,7 +94,7 @@ where
 mod mock {
     use super::*;
 
-    use crate::model::{Atom, Expr, ExprItem, ExprOperator};
+    use crate::model::{Atom, Expr};
 
     use std::cell::RefCell;
 
@@ -110,38 +133,9 @@ mod mock {
         }
     }
 
-    impl<'a, T, S: Clone> MkValue<LocationCounter, S> for MockBackend<'a, T> {
-        fn mk_value(&mut self, _: LocationCounter, span: S) -> Self::Value {
-            Expr::from_atom(Atom::LocationCounter, span)
-        }
-    }
-
-    impl<'a, T, S: Clone> MkValue<i32, S> for MockBackend<'a, T> {
-        fn mk_value(&mut self, n: i32, span: S) -> Self::Value {
-            Expr::from_atom(Atom::Literal(n), span)
-        }
-    }
-
-    impl<'a, T, S: Clone> MkValue<usize, S> for MockBackend<'a, T> {
-        fn mk_value(&mut self, name: usize, span: S) -> Self::Value {
-            Expr::from_atom(Atom::Name(name), span)
-        }
-    }
-
-    impl<'a, T, S: Clone> ApplyBinaryOperator<S> for MockBackend<'a, T> {
-        fn apply_binary_operator(
-            &mut self,
-            operator: (BinaryOperator, S),
-            mut left: Self::Value,
-            right: Self::Value,
-        ) -> Self::Value {
-            left.0.extend(right.0);
-            left.0.push(ExprItem {
-                op: ExprOperator::Binary(operator.0),
-                op_span: operator.1.clone(),
-                expr_span: operator.1,
-            });
-            left
+    impl From<usize> for Atom<usize> {
+        fn from(n: usize) -> Self {
+            Atom::Name(n)
         }
     }
 

@@ -24,6 +24,7 @@ pub(crate) trait Assemble<D>
 where
     D: Diagnostics,
     Self: Backend<D::Span>,
+    Self::Value: Default + ValueBuilder<Self::Name, D::Span>,
 {
     fn assemble<C: Codebase>(
         &mut self,
@@ -49,6 +50,7 @@ impl<B, D> Assemble<D> for B
 where
     D: Diagnostics,
     B: Backend<D::Span>,
+    B::Value: Default + ValueBuilder<B::Name, D::Span>,
 {
 }
 

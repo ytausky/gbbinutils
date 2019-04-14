@@ -6,7 +6,7 @@ use super::semantics::Analyze;
 use super::{Lex, Literal, SemanticToken, StringRef};
 
 use crate::codebase::CodebaseError;
-use crate::diag::span::Span;
+use crate::diag::span::{Source, Span};
 use crate::diag::*;
 use crate::expr::Expr;
 use crate::model::{BinaryOperator, Item};
@@ -26,11 +26,11 @@ where
     Self: PartialBackend<<Self as Span>::Span>,
     Self: StartSection<Ident<<Self as StringRef>::StringRef>, <Self as Span>::Span>,
 {
-    type FnBuilder: ValueBuilder<Ident<Self::StringRef>, Self::Span, Value = Self::Value>
-        + FinishFnDef<Self::Value, Return = Self>
+    type FnBuilder: ValueBuilder<Ident<Self::StringRef>, Self::Span>
+        + FinishFnDef<Return = Self>
         + DelegateDiagnostics<Self::Span>;
-    type GeneralBuilder: ValueBuilder<Ident<Self::StringRef>, Self::Span, Value = Self::Value>
-        + Finish<Return = Self>
+    type GeneralBuilder: ValueBuilder<Ident<Self::StringRef>, Self::Span>
+        + Finish<Self::Span, Parent = Self, Value = Self::Value>
         + DelegateDiagnostics<Self::Span>;
 
     fn analyze_file(&mut self, path: Self::StringRef) -> Result<(), CodebaseError>;
@@ -50,16 +50,17 @@ where
     fn define_symbol(&mut self, symbol: (Ident<Self::StringRef>, Self::Span), value: Self::Value);
 }
 
-pub trait Finish {
-    type Return;
+pub trait Finish<S: Clone> {
+    type Parent;
+    type Value: Source<Span = S>;
 
-    fn finish(self) -> Self::Return;
+    fn finish(self) -> (Self::Parent, Self::Value);
 }
 
-pub trait FinishFnDef<V> {
+pub trait FinishFnDef {
     type Return;
 
-    fn finish_fn_def(self, value: V) -> Self::Return;
+    fn finish_fn_def(self) -> Self::Return;
 }
 
 pub(super) type MacroArgs<I, S> = Vec<Vec<(SemanticToken<I>, S)>>;
@@ -183,6 +184,7 @@ where
     B: Backend<D::Span> + ?Sized,
     N: NameTable<Ident<C::StringRef>, MacroEntry = MacroEntry<C::StringRef, D>>,
     D: Diagnostics,
+    B::Value: Default + ValueBuilder<B::Name, D::Span>,
 {
     fn emit_item(&mut self, item: Item<Self::Value>) {
         self.backend.emit_item(item)
@@ -197,98 +199,101 @@ where
     }
 }
 
-pub(crate) struct RelocContext<'a, C, A, B: ?Sized, N, D> {
-    session: CompositeSession<'a, C, A, B, N, D>,
+pub(crate) struct RelocContext<S, B> {
+    session: S,
+    builder: B,
 }
 
-impl<'a, C, A, B: ?Sized, N, D> RelocContext<'a, C, A, B, N, D> {
-    fn new(session: CompositeSession<'a, C, A, B, N, D>) -> Self {
-        RelocContext { session }
+impl<S: Session, B: Default> RelocContext<S, B> {
+    pub fn new(session: S) -> Self {
+        RelocContext {
+            session,
+            builder: Default::default(),
+        }
     }
 }
 
-impl<'a, C, A, B, N, D> HasValue<D::Span> for RelocContext<'a, C, A, B, N, D>
-where
-    B: HasValue<D::Span> + ?Sized,
-    D: Span,
-{
-    type Value = B::Value;
+impl<S: Session> HasValue<S::Span> for RelocContext<S, S::Value> {
+    type Value = S::Value;
 }
 
-impl<'a, C, A, B, N, D> MkValue<LocationCounter, D::Span> for RelocContext<'a, C, A, B, N, D>
+impl<P, B, S> MkValue<LocationCounter, S> for RelocContext<P, B>
 where
-    B: Backend<D::Span> + ?Sized,
-    D: Span,
+    B: MkValue<LocationCounter, S>,
+    S: Clone,
 {
-    fn mk_value(&mut self, _: LocationCounter, span: D::Span) -> Self::Value {
-        self.session.backend.mk_value(LocationCounter, span)
+    fn mk_value(&mut self, _: LocationCounter, span: S) {
+        self.builder.mk_value(LocationCounter, span)
     }
 }
 
-impl<'a, C, A, B, N, D> MkValue<i32, D::Span> for RelocContext<'a, C, A, B, N, D>
+impl<P, B, S> MkValue<i32, S> for RelocContext<P, B>
 where
-    B: Backend<D::Span> + ?Sized,
-    D: Span,
+    B: MkValue<i32, S>,
+    S: Clone,
 {
-    fn mk_value(&mut self, n: i32, span: D::Span) -> Self::Value {
-        self.session.backend.mk_value(n, span)
+    fn mk_value(&mut self, n: i32, span: S) {
+        self.builder.mk_value(n, span)
     }
 }
 
-impl<'a, C, A, B, N, D> MkValue<Ident<C::StringRef>, D::Span> for RelocContext<'a, C, A, B, N, D>
+impl<'a, C, A, B, N, D> MkValue<Ident<C::StringRef>, D::Span>
+    for RelocContext<CompositeSession<'a, C, A, B, N, D>, B::Value>
 where
     C: Lex<D>,
     B: Backend<D::Span> + ?Sized,
     N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name>,
     D: Diagnostics,
+    B::Value: Default + ValueBuilder<B::Name, D::Span>,
 {
-    fn mk_value(&mut self, ident: Ident<C::StringRef>, span: D::Span) -> Self::Value {
+    fn mk_value(&mut self, ident: Ident<C::StringRef>, span: D::Span) {
         let symbol_id = self.session.look_up_symbol(ident, &span);
-        self.session.backend.mk_value(symbol_id, span)
+        self.builder.mk_value(symbol_id, span)
     }
 }
 
-impl<'a, C, A, B, N, D> ApplyBinaryOperator<D::Span> for RelocContext<'a, C, A, B, N, D>
+impl<B, T, S> ApplyBinaryOperator<S> for RelocContext<T, B>
 where
-    B: Backend<D::Span> + ?Sized,
-    D: Span,
+    B: ApplyBinaryOperator<S>,
+    S: Clone,
 {
-    fn apply_binary_operator(
-        &mut self,
-        operator: (BinaryOperator, D::Span),
-        left: Self::Value,
-        right: Self::Value,
-    ) -> Self::Value {
-        self.session
-            .backend
-            .apply_binary_operator(operator, left, right)
+    fn apply_binary_operator(&mut self, operator: (BinaryOperator, S)) {
+        self.builder.apply_binary_operator(operator)
     }
 }
 
-impl<'a, C, A, B: ?Sized, N, D> Finish for RelocContext<'a, C, A, B, N, D> {
-    type Return = CompositeSession<'a, C, A, B, N, D>;
+impl<P, B, S> Finish<S> for RelocContext<P, B>
+where
+    B: Source<Span = S>,
+    S: Clone,
+{
+    type Parent = P;
+    type Value = B;
 
-    fn finish(self) -> Self::Return {
-        self.session
+    fn finish(self) -> (Self::Parent, Self::Value) {
+        (self.session, self.builder)
     }
 }
 
-impl<'a, C, A, B, N, D> FinishFnDef<B::Value> for RelocContext<'a, C, A, B, N, D>
+impl<'a, C, A, B, N, D> FinishFnDef for RelocContext<CompositeSession<'a, C, A, B, N, D>, B::Value>
 where
     B: Backend<D::Span> + ?Sized,
     D: Diagnostics,
+    B::Value: Default + ValueBuilder<B::Name, D::Span>,
 {
     type Return = CompositeSession<'a, C, A, B, N, D>;
 
-    fn finish_fn_def(self, _value: B::Value) -> Self::Return {
+    fn finish_fn_def(self) -> Self::Return {
         unimplemented!()
     }
 }
 
-impl<'a, C, A, B, N, D> DelegateDiagnostics<D::Span> for RelocContext<'a, C, A, B, N, D>
+impl<'a, C, A, B, N, D> DelegateDiagnostics<D::Span>
+    for RelocContext<CompositeSession<'a, C, A, B, N, D>, B::Value>
 where
-    B: ?Sized,
+    B: Backend<D::Span> + ?Sized,
     D: Diagnostics,
+    B::Value: Default + ValueBuilder<B::Name, D::Span>,
 {
     type Delegate = D;
 
@@ -308,9 +313,10 @@ where
             MacroEntry = MacroEntry<C::StringRef, D>,
         > + StartScope<Ident<C::StringRef>>,
     D: Diagnostics,
+    B::Value: Default + ValueBuilder<B::Name, D::Span>,
 {
-    type FnBuilder = RelocContext<'a, C, A, B, N, D>;
-    type GeneralBuilder = RelocContext<'a, C, A, B, N, D>;
+    type FnBuilder = RelocContext<Self, B::Value>;
+    type GeneralBuilder = RelocContext<Self, B::Value>;
 
     fn analyze_file(&mut self, path: Self::StringRef) -> Result<(), CodebaseError> {
         let tokens = self.codebase.lex_file(path, self.diagnostics)?;
@@ -383,6 +389,7 @@ where
     B: Backend<D::Span> + ?Sized,
     N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name>,
     D: Diagnostics,
+    B::Value: Default + ValueBuilder<B::Name, D::Span>,
 {
     fn start_section(&mut self, (ident, span): (Ident<C::StringRef>, D::Span)) {
         let name = self.look_up_symbol(ident, &span);
@@ -396,7 +403,7 @@ mod mock {
 
     use crate::analysis::backend::BackendEvent;
     use crate::diag::{DiagnosticsEvent, MockDiagnostics, MockSpan};
-    use crate::model::{Atom, Expr, ExprItem, ExprOperator};
+    use crate::model::Expr;
 
     use std::cell::RefCell;
 
@@ -439,41 +446,6 @@ mod mock {
         type Value = Expr<Ident<String>, S>;
     }
 
-    impl<'a, T, S: Clone> MkValue<LocationCounter, S> for MockSession<'a, T, S> {
-        fn mk_value(&mut self, _: LocationCounter, span: S) -> Self::Value {
-            Expr::from_atom(Atom::LocationCounter, span)
-        }
-    }
-
-    impl<'a, T, S: Clone> MkValue<i32, S> for MockSession<'a, T, S> {
-        fn mk_value(&mut self, n: i32, span: S) -> Self::Value {
-            Expr::from_atom(Atom::Literal(n), span)
-        }
-    }
-
-    impl<'a, T, S: Clone> MkValue<Ident<String>, S> for MockSession<'a, T, S> {
-        fn mk_value(&mut self, ident: Ident<String>, span: S) -> Self::Value {
-            Expr::from_atom(Atom::Name(ident), span)
-        }
-    }
-
-    impl<'a, T, S: Clone> ApplyBinaryOperator<S> for MockSession<'a, T, S> {
-        fn apply_binary_operator(
-            &mut self,
-            operator: (BinaryOperator, S),
-            mut left: Self::Value,
-            right: Self::Value,
-        ) -> Self::Value {
-            left.0.extend(right.0);
-            left.0.push(ExprItem {
-                op: ExprOperator::Binary(operator.0),
-                op_span: operator.1.clone(),
-                expr_span: operator.1,
-            });
-            left
-        }
-    }
-
     impl<'a, T, S> DelegateDiagnostics<S> for MockSession<'a, T, S>
     where
         T: From<DiagnosticsEvent<S>>,
@@ -501,8 +473,8 @@ mod mock {
         T: From<DiagnosticsEvent<S>>,
         S: Clone + MockSpan,
     {
-        type FnBuilder = Self;
-        type GeneralBuilder = Self;
+        type FnBuilder = RelocContext<Self, Expr<Ident<String>, S>>;
+        type GeneralBuilder = RelocContext<Self, Expr<Ident<String>, S>>;
 
         fn analyze_file(&mut self, path: String) -> Result<(), CodebaseError> {
             self.log
@@ -512,13 +484,13 @@ mod mock {
         }
 
         fn build_value(self) -> Self::GeneralBuilder {
-            self
+            RelocContext::new(self)
         }
 
         fn define_fn(mut self, (name, _): (Ident<Self::StringRef>, Self::Span)) -> Self::FnBuilder {
             assert_eq!(self.name, None);
             self.name = Some(name);
-            self
+            RelocContext::new(self)
         }
 
         fn define_macro(
@@ -559,26 +531,64 @@ mod mock {
         }
     }
 
-    impl<'a, T, S> Finish for MockSession<'a, T, S> {
-        type Return = Self;
-
-        fn finish(self) -> Self::Return {
-            self
+    impl<'a, T, S> MkValue<Ident<String>, S>
+        for RelocContext<MockSession<'a, T, S>, Expr<Ident<String>, S>>
+    where
+        T: From<DiagnosticsEvent<S>>,
+        S: Clone,
+    {
+        fn mk_value(&mut self, ident: Ident<String>, span: S) {
+            use crate::model::{Atom, ExprItem};
+            self.builder.0.push(ExprItem {
+                op: Atom::Name(ident).into(),
+                op_span: span.clone(),
+                expr_span: span,
+            })
         }
     }
 
-    impl<'a, T, S> FinishFnDef<Expr<Ident<String>, S>> for MockSession<'a, T, S>
+    impl<'a, T, S> MkValue<Ident<String>, S>
+        for RelocContext<MockDiagnostics<'a, T, S>, Expr<Ident<String>, S>>
+    where
+        T: From<DiagnosticsEvent<S>>,
+        S: Clone,
+    {
+        fn mk_value(&mut self, ident: Ident<String>, span: S) {
+            use crate::model::{Atom, ExprItem};
+            self.builder.0.push(ExprItem {
+                op: Atom::Name(ident).into(),
+                op_span: span.clone(),
+                expr_span: span,
+            })
+        }
+    }
+
+    impl<'a, T, S> DelegateDiagnostics<S>
+        for RelocContext<MockSession<'a, T, S>, Expr<Ident<String>, S>>
+    where
+        T: From<DiagnosticsEvent<S>>,
+        S: Clone + MockSpan,
+    {
+        type Delegate = MockDiagnostics<'a, T, S>;
+
+        fn diagnostics(&mut self) -> &mut Self::Delegate {
+            self.session.diagnostics()
+        }
+    }
+
+    impl<'a, T, S> FinishFnDef for RelocContext<MockSession<'a, T, S>, Expr<Ident<String>, S>>
     where
         T: From<SessionEvent<S>>,
         S: Clone,
     {
-        type Return = Self;
+        type Return = MockSession<'a, T, S>;
 
-        fn finish_fn_def(mut self, value: Expr<Ident<String>, S>) -> Self::Return {
-            self.log
-                .borrow_mut()
-                .push(SessionEvent::DefineExpr(self.name.take().unwrap(), vec![], value).into());
-            self
+        fn finish_fn_def(self) -> Self::Return {
+            let mut session = self.session;
+            session.log.borrow_mut().push(
+                SessionEvent::DefineExpr(session.name.take().unwrap(), vec![], self.builder).into(),
+            );
+            session
         }
     }
 
@@ -615,6 +625,30 @@ mod mock {
             self.log
                 .borrow_mut()
                 .push(BackendEvent::StartSection((0, name.1)).into())
+        }
+    }
+
+    pub(crate) type MockBuilder<'a, T, S> =
+        RelocContext<MockDiagnostics<'a, T, S>, Expr<Ident<String>, S>>;
+
+    impl<'a, T, S> MockBuilder<'a, T, S> {
+        pub fn with_log(log: &'a RefCell<Vec<T>>) -> Self {
+            Self {
+                session: MockDiagnostics::new(log),
+                builder: Default::default(),
+            }
+        }
+    }
+
+    impl<'a, T, S> DelegateDiagnostics<S> for MockBuilder<'a, T, S>
+    where
+        T: From<DiagnosticsEvent<S>>,
+        S: Clone + MockSpan,
+    {
+        type Delegate = MockDiagnostics<'a, T, S>;
+
+        fn diagnostics(&mut self) -> &mut Self::Delegate {
+            &mut self.session
         }
     }
 }
@@ -681,8 +715,10 @@ mod tests {
         let mut session = fixture.session();
         session.start_section((ident.clone(), ()));
         let mut builder = session.build_value();
-        let item = Item::Data(builder.mk_value(ident, ()), Width::Word);
-        session = Finish::finish(builder);
+        builder.mk_value(ident, ());
+        let (s, value) = Finish::finish(builder);
+        let item = Item::Data(value, Width::Word);
+        session = s;
         session.emit_item(item);
         assert_eq!(
             log.into_inner(),
@@ -827,8 +863,8 @@ mod tests {
         let mut fixture = Fixture::new(&log);
         let session = fixture.session();
         let mut builder = session.build_value();
-        let value = builder.mk_value(42, ());
-        builder.finish();
+        builder.mk_value(42, ());
+        let (_, value) = builder.finish();
         assert_eq!(value, 42.into())
     }
 
@@ -838,11 +874,10 @@ mod tests {
         let mut fixture = Fixture::new(&log);
         let session = fixture.session();
         let mut builder = session.build_value();
-        let left = builder.mk_value(42, ());
-        let right = builder.mk_value(Ident::from("ident"), ());
-        let value =
-            builder.apply_binary_operator((BinaryOperator::Multiplication, ()), left, right);
-        builder.finish();
+        builder.mk_value(42, ());
+        builder.mk_value(Ident::from("ident"), ());
+        builder.apply_binary_operator((BinaryOperator::Multiplication, ()));
+        let (_, value) = builder.finish();
         assert_eq!(
             value,
             Expr::from_items(&[

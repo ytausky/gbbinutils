@@ -5,7 +5,7 @@ use super::macros::MacroEntry;
 use super::session::*;
 use super::{Ident, Lex, LexItem, Literal, SemanticToken};
 
-use crate::diag::span::{MergeSpans, Source, StripSpan};
+use crate::diag::span::{MergeSpans, StripSpan};
 use crate::diag::*;
 use crate::expr::ExprVariant;
 use crate::model::Item;
@@ -32,7 +32,8 @@ pub(crate) trait Analyze<R: Clone + Eq, D: Diagnostics> {
         C: Lex<D, StringRef = R>,
         B: Backend<D::Span> + ?Sized,
         N: NameTable<Ident<R>, BackendEntry = B::Name, MacroEntry = MacroEntry<R, D>>
-            + StartScope<Ident<R>>;
+            + StartScope<Ident<R>>,
+        B::Value: Default + ValueBuilder<B::Name, D::Span>;
 }
 
 pub struct SemanticAnalyzer;
@@ -45,6 +46,7 @@ impl<R: Clone + Eq, D: Diagnostics> Analyze<R, D> for SemanticAnalyzer {
         B: Backend<D::Span> + ?Sized,
         N: NameTable<Ident<R>, BackendEntry = B::Name, MacroEntry = MacroEntry<R, D>>
             + StartScope<Ident<R>>,
+        B::Value: Default + ValueBuilder<B::Name, D::Span>,
     {
         let session = CompositeSession::new(
             partial.codebase,
@@ -72,23 +74,32 @@ impl<S: Session> SemanticActions<S> {
     }
 
     fn analyze_expr(&mut self, expr: SemanticExpr<S::StringRef, S::Span>) -> Result<S::Value, ()> {
-        self.build_value(|builder| builder.analyze_expr(expr))
+        self.build_value(|mut builder| {
+            let result = builder.analyze_expr(expr);
+            let (session, value) = builder.finish();
+            (session, result.map(|()| value))
+        })
     }
 
     fn build_value<F, T>(&mut self, f: F) -> T
     where
-        F: FnOnce(&mut S::GeneralBuilder) -> T,
+        F: FnOnce(S::GeneralBuilder) -> (S, T),
     {
-        let mut builder = self.session.take().unwrap().build_value();
-        let result = f(&mut builder);
-        self.session = Some(builder.finish());
-        result
+        let builder = self.session.take().unwrap().build_value();
+        let result = f(builder);
+        self.session = Some(result.0);
+        result.1
     }
 
     fn define_label_if_present(&mut self) {
         if let Some((label, span)) = self.label.take() {
-            let value = self.build_value(|builder| {
-                MkValue::<LocationCounter, _>::mk_value(builder, LocationCounter, span.clone())
+            let value = self.build_value(|mut builder| {
+                MkValue::<LocationCounter, _>::mk_value(
+                    &mut builder,
+                    LocationCounter,
+                    span.clone(),
+                );
+                builder.finish()
             });
             self.session().define_symbol((label, span), value)
         }
@@ -412,8 +423,8 @@ impl<S: Session> syntax::FinalContext
             .session
             .unwrap()
             .define_fn(self.parent.name.unwrap());
-        let value = builder.analyze_expr(self.stack.pop().unwrap()).unwrap();
-        self.parent.actions.session = Some(builder.finish_fn_def(value));
+        builder.analyze_expr(self.stack.pop().unwrap()).unwrap();
+        self.parent.actions.session = Some(builder.finish_fn_def());
         self.parent.actions
     }
 }
@@ -476,9 +487,7 @@ impl<S: Session> syntax::TokenSeqContext<S::Span> for MacroDefActions<S> {
 }
 
 trait AnalyzeExpr<I, S: Clone> {
-    type Value: Source<Span = S>;
-
-    fn analyze_expr(&mut self, expr: SemanticExpr<I, S>) -> Result<Self::Value, ()>;
+    fn analyze_expr(&mut self, expr: SemanticExpr<I, S>) -> Result<(), ()>;
 }
 
 impl<'a, T, I, S> AnalyzeExpr<I, S> for T
@@ -486,13 +495,15 @@ where
     T: ValueBuilder<Ident<I>, S> + DelegateDiagnostics<S>,
     S: Clone,
 {
-    type Value = T::Value;
-
-    fn analyze_expr(&mut self, expr: SemanticExpr<I, S>) -> Result<Self::Value, ()> {
+    fn analyze_expr(&mut self, expr: SemanticExpr<I, S>) -> Result<(), ()> {
         match expr.variant {
-            ExprVariant::Atom(SemanticAtom::Ident(ident)) => Ok(self.mk_value(ident, expr.span)),
+            ExprVariant::Atom(SemanticAtom::Ident(ident)) => {
+                self.mk_value(ident, expr.span);
+                Ok(())
+            }
             ExprVariant::Atom(SemanticAtom::Literal(Literal::Number(n))) => {
-                Ok(self.mk_value(n, expr.span))
+                self.mk_value(n, expr.span);
+                Ok(())
             }
             ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(_))) => {
                 Err(Message::KeywordInExpr {
@@ -504,13 +515,15 @@ where
                 Err(Message::StringInInstruction.at(expr.span))
             }
             ExprVariant::Atom(SemanticAtom::LocationCounter) => {
-                Ok(self.mk_value(LocationCounter, expr.span))
+                self.mk_value(LocationCounter, expr.span);
+                Ok(())
             }
             ExprVariant::Unary(SemanticUnary::Parentheses, expr) => Ok(self.analyze_expr(*expr)?),
             ExprVariant::Binary(binary, left, right) => {
-                let left = self.analyze_expr(*left)?;
-                let right = self.analyze_expr(*right)?;
-                Ok(self.apply_binary_operator((binary, expr.span), left, right))
+                self.analyze_expr(*left)?;
+                self.analyze_expr(*right)?;
+                self.apply_binary_operator((binary, expr.span));
+                Ok(())
             }
         }
         .map_err(|diagnostic| {
@@ -574,6 +587,7 @@ mod mock {
             C: Lex<D, StringRef = String>,
             B: Backend<D::Span> + ?Sized,
             N: NameTable<Ident<String>, MacroEntry = MacroEntry<String, D>>,
+            B::Value: Default + ValueBuilder<B::Name, D::Span>,
         {
             self.log
                 .borrow_mut()

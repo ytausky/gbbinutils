@@ -863,7 +863,14 @@ mod tests {
             .into_iter()
             .enumerate()
             .map(add_token_spans)
-            .map(|op| analyze_operand(op, Mnemonic::from(mnemonic).context(), &mut session))
+            .map(|op| {
+                analyze_operand(
+                    op,
+                    Mnemonic::from(mnemonic).context(),
+                    MockBuilder::with_log(&log),
+                )
+                .1
+            })
             .collect();
         let result = analyze_instruction(
             (mnemonic, TokenId::Mnemonic.into()),
