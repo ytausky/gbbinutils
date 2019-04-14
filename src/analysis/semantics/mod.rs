@@ -1,6 +1,6 @@
 use self::invoke::MacroInvocationActions;
 
-use super::backend::{Backend, LocationCounter, MkValue};
+use super::backend::{Backend, LocationCounter, PushOp};
 use super::macros::MacroEntry;
 use super::session::*;
 use super::{Ident, Lex, LexItem, Literal, SemanticToken};
@@ -94,11 +94,7 @@ impl<S: Session> SemanticActions<S> {
     fn define_label_if_present(&mut self) {
         if let Some((label, span)) = self.label.take() {
             let value = self.build_value(|mut builder| {
-                MkValue::<LocationCounter, _>::mk_value(
-                    &mut builder,
-                    LocationCounter,
-                    span.clone(),
-                );
+                PushOp::<LocationCounter, _>::push_op(&mut builder, LocationCounter, span.clone());
                 builder.finish()
             });
             self.session().define_symbol((label, span), value)
@@ -498,11 +494,11 @@ where
     fn analyze_expr(&mut self, expr: SemanticExpr<I, S>) -> Result<(), ()> {
         match expr.variant {
             ExprVariant::Atom(SemanticAtom::Ident(ident)) => {
-                self.mk_value(ident, expr.span);
+                self.push_op(ident, expr.span);
                 Ok(())
             }
             ExprVariant::Atom(SemanticAtom::Literal(Literal::Number(n))) => {
-                self.mk_value(n, expr.span);
+                self.push_op(n, expr.span);
                 Ok(())
             }
             ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(_))) => {
@@ -515,14 +511,14 @@ where
                 Err(Message::StringInInstruction.at(expr.span))
             }
             ExprVariant::Atom(SemanticAtom::LocationCounter) => {
-                self.mk_value(LocationCounter, expr.span);
+                self.push_op(LocationCounter, expr.span);
                 Ok(())
             }
             ExprVariant::Unary(SemanticUnary::Parentheses, expr) => Ok(self.analyze_expr(*expr)?),
             ExprVariant::Binary(binary, left, right) => {
                 self.analyze_expr(*left)?;
                 self.analyze_expr(*right)?;
-                self.apply_binary_operator((binary, expr.span));
+                self.push_op(binary, expr.span);
                 Ok(())
             }
         }

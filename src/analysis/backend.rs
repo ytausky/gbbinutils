@@ -14,12 +14,8 @@ pub trait AllocName<S: Clone> {
     fn alloc_name(&mut self, span: S) -> Self::Name;
 }
 
-pub trait MkValue<T, S: Clone> {
-    fn mk_value(&mut self, x: T, span: S);
-}
-
-pub trait ApplyBinaryOperator<S: Clone> {
-    fn apply_binary_operator(&mut self, operator: (BinaryOperator, S));
+pub trait PushOp<T, S: Clone> {
+    fn push_op(&mut self, op: T, span: S);
 }
 
 pub trait PartialBackend<S>
@@ -45,12 +41,12 @@ impl<N> From<LocationCounter> for Atom<N> {
 }
 
 pub trait ValueBuilder<N, S: Clone>:
-    MkValue<LocationCounter, S> + MkValue<i32, S> + MkValue<N, S> + ApplyBinaryOperator<S>
+    PushOp<LocationCounter, S> + PushOp<i32, S> + PushOp<N, S> + PushOp<BinaryOperator, S>
 {
 }
 
 impl<T, N, S: Clone> ValueBuilder<N, S> for T where
-    Self: MkValue<LocationCounter, S> + MkValue<i32, S> + MkValue<N, S> + ApplyBinaryOperator<S>
+    Self: PushOp<LocationCounter, S> + PushOp<i32, S> + PushOp<N, S> + PushOp<BinaryOperator, S>
 {
 }
 
@@ -58,8 +54,8 @@ impl<N, S: Clone> HasValue<S> for Expr<N, S> {
     type Value = Self;
 }
 
-impl<T: Into<Atom<N>>, N: Clone, S: Clone> MkValue<T, S> for Expr<N, S> {
-    fn mk_value(&mut self, atom: T, span: S) {
+impl<T: Into<Atom<N>>, N: Clone, S: Clone> PushOp<T, S> for Expr<N, S> {
+    fn push_op(&mut self, atom: T, span: S) {
         let atom = atom.into();
         self.0.push(ExprItem {
             op: ExprOperator::Atom(atom.clone()),
@@ -69,12 +65,12 @@ impl<T: Into<Atom<N>>, N: Clone, S: Clone> MkValue<T, S> for Expr<N, S> {
     }
 }
 
-impl<N, S: Clone> ApplyBinaryOperator<S> for Expr<N, S> {
-    fn apply_binary_operator(&mut self, operator: (BinaryOperator, S)) {
+impl<N, S: Clone> PushOp<BinaryOperator, S> for Expr<N, S> {
+    fn push_op(&mut self, op: BinaryOperator, span: S) {
         self.0.push(ExprItem {
-            op: ExprOperator::Binary(operator.0),
-            op_span: operator.1.clone(),
-            expr_span: operator.1,
+            op: ExprOperator::Binary(op),
+            op_span: span.clone(),
+            expr_span: span,
         })
     }
 }

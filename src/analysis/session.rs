@@ -217,27 +217,27 @@ impl<S: Session> HasValue<S::Span> for RelocContext<S, S::Value> {
     type Value = S::Value;
 }
 
-impl<P, B, S> MkValue<LocationCounter, S> for RelocContext<P, B>
+impl<P, B, S> PushOp<LocationCounter, S> for RelocContext<P, B>
 where
-    B: MkValue<LocationCounter, S>,
+    B: PushOp<LocationCounter, S>,
     S: Clone,
 {
-    fn mk_value(&mut self, _: LocationCounter, span: S) {
-        self.builder.mk_value(LocationCounter, span)
+    fn push_op(&mut self, _: LocationCounter, span: S) {
+        self.builder.push_op(LocationCounter, span)
     }
 }
 
-impl<P, B, S> MkValue<i32, S> for RelocContext<P, B>
+impl<P, B, S> PushOp<i32, S> for RelocContext<P, B>
 where
-    B: MkValue<i32, S>,
+    B: PushOp<i32, S>,
     S: Clone,
 {
-    fn mk_value(&mut self, n: i32, span: S) {
-        self.builder.mk_value(n, span)
+    fn push_op(&mut self, n: i32, span: S) {
+        self.builder.push_op(n, span)
     }
 }
 
-impl<'a, C, A, B, N, D> MkValue<Ident<C::StringRef>, D::Span>
+impl<'a, C, A, B, N, D> PushOp<Ident<C::StringRef>, D::Span>
     for RelocContext<CompositeSession<'a, C, A, B, N, D>, B::Value>
 where
     C: Lex<D>,
@@ -246,19 +246,19 @@ where
     D: Diagnostics,
     B::Value: Default + ValueBuilder<B::Name, D::Span>,
 {
-    fn mk_value(&mut self, ident: Ident<C::StringRef>, span: D::Span) {
+    fn push_op(&mut self, ident: Ident<C::StringRef>, span: D::Span) {
         let symbol_id = self.session.look_up_symbol(ident, &span);
-        self.builder.mk_value(symbol_id, span)
+        self.builder.push_op(symbol_id, span)
     }
 }
 
-impl<B, T, S> ApplyBinaryOperator<S> for RelocContext<T, B>
+impl<B, T, S> PushOp<BinaryOperator, S> for RelocContext<T, B>
 where
-    B: ApplyBinaryOperator<S>,
+    B: PushOp<BinaryOperator, S>,
     S: Clone,
 {
-    fn apply_binary_operator(&mut self, operator: (BinaryOperator, S)) {
-        self.builder.apply_binary_operator(operator)
+    fn push_op(&mut self, op: BinaryOperator, span: S) {
+        self.builder.push_op(op, span)
     }
 }
 
@@ -531,13 +531,13 @@ mod mock {
         }
     }
 
-    impl<'a, T, S> MkValue<Ident<String>, S>
+    impl<'a, T, S> PushOp<Ident<String>, S>
         for RelocContext<MockSession<'a, T, S>, Expr<Ident<String>, S>>
     where
         T: From<DiagnosticsEvent<S>>,
         S: Clone,
     {
-        fn mk_value(&mut self, ident: Ident<String>, span: S) {
+        fn push_op(&mut self, ident: Ident<String>, span: S) {
             use crate::model::{Atom, ExprItem};
             self.builder.0.push(ExprItem {
                 op: Atom::Name(ident).into(),
@@ -547,13 +547,13 @@ mod mock {
         }
     }
 
-    impl<'a, T, S> MkValue<Ident<String>, S>
+    impl<'a, T, S> PushOp<Ident<String>, S>
         for RelocContext<MockDiagnostics<'a, T, S>, Expr<Ident<String>, S>>
     where
         T: From<DiagnosticsEvent<S>>,
         S: Clone,
     {
-        fn mk_value(&mut self, ident: Ident<String>, span: S) {
+        fn push_op(&mut self, ident: Ident<String>, span: S) {
             use crate::model::{Atom, ExprItem};
             self.builder.0.push(ExprItem {
                 op: Atom::Name(ident).into(),
@@ -715,7 +715,7 @@ mod tests {
         let mut session = fixture.session();
         session.start_section((ident.clone(), ()));
         let mut builder = session.build_value();
-        builder.mk_value(ident, ());
+        builder.push_op(ident, ());
         let (s, value) = Finish::finish(builder);
         let item = Item::Data(value, Width::Word);
         session = s;
@@ -863,7 +863,7 @@ mod tests {
         let mut fixture = Fixture::new(&log);
         let session = fixture.session();
         let mut builder = session.build_value();
-        builder.mk_value(42, ());
+        builder.push_op(42, ());
         let (_, value) = builder.finish();
         assert_eq!(value, 42.into())
     }
@@ -874,9 +874,9 @@ mod tests {
         let mut fixture = Fixture::new(&log);
         let session = fixture.session();
         let mut builder = session.build_value();
-        builder.mk_value(42, ());
-        builder.mk_value(Ident::from("ident"), ());
-        builder.apply_binary_operator((BinaryOperator::Multiplication, ()));
+        builder.push_op(42, ());
+        builder.push_op(Ident::from("ident"), ());
+        builder.push_op(BinaryOperator::Multiplication, ());
         let (_, value) = builder.finish();
         assert_eq!(
             value,

@@ -101,7 +101,6 @@ impl<S: Clone> StartSection<NameId, S> for ProgramBuilder<S> {
 mod tests {
     use super::*;
 
-    use crate::analysis::backend::ApplyBinaryOperator;
     use crate::diag::{CompactDiagnostic, Message, TestDiagnosticsListener};
     use crate::model::{Atom, BinaryOperator, Instruction, Nullary, Width};
     use crate::program::{BinaryObject, SectionId};
@@ -232,7 +231,7 @@ mod tests {
         let (_, diagnostics) = with_object_builder(|builder| {
             let symbol_id = builder.alloc_name(name.into());
             let mut value: Expr<_> = Default::default();
-            value.mk_value(symbol_id, name.into());
+            value.push_op(symbol_id, name.into());
             builder.emit_item(word_item(value))
         });
         assert_eq!(*diagnostics, [unresolved(name)]);
@@ -246,10 +245,10 @@ mod tests {
             let value = {
                 let id1 = builder.alloc_name(name1.into());
                 let mut value: Expr<_> = Default::default();
-                value.mk_value(id1, name1.into());
+                value.push_op(id1, name1.into());
                 let id2 = builder.alloc_name(name2.into());
-                value.mk_value(id2, name2.into());
-                value.apply_binary_operator((BinaryOperator::Minus, "diff".into()));
+                value.push_op(id2, name2.into());
+                value.push_op(BinaryOperator::Minus, "diff".into());
                 value
             };
             builder.emit_item(word_item(value))
@@ -263,7 +262,7 @@ mod tests {
             let symbol_id = builder.alloc_name(());
             builder.define_symbol((symbol_id, ()), Atom::LocationCounter.into());
             let mut value: Expr<_> = Default::default();
-            value.mk_value(symbol_id, ());
+            value.push_op(symbol_id, ());
             builder.emit_item(word_item(value));
         });
         assert_eq!(*diagnostics, []);
@@ -275,7 +274,7 @@ mod tests {
         let (object, diagnostics) = with_object_builder(|builder| {
             let symbol_id = builder.alloc_name(());
             let mut value: Expr<_> = Default::default();
-            value.mk_value(symbol_id, ());
+            value.push_op(symbol_id, ());
             builder.emit_item(word_item(value));
             builder.define_symbol((symbol_id, ()), Atom::LocationCounter.into());
         });
