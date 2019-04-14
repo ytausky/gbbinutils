@@ -104,7 +104,7 @@ where
         };
         self.change_context(|c| c.enter_stmt(label))
             .parse_unlabeled_stmt()
-            .change_context(|c| c.exit())
+            .change_context(StmtContext::exit)
     }
 }
 
@@ -153,7 +153,7 @@ where
     fn parse_command(self, command: (C, S)) -> Self {
         self.change_context(|c| c.enter_command(command))
             .parse_argument_list()
-            .change_context(|c| c.exit())
+            .change_context(CommandContext::exit)
     }
 
     fn parse_expr_def(mut self, span: S) -> Self {
@@ -171,18 +171,18 @@ where
         }
         bump!(params_parser);
         params_parser
-            .change_context(|c| c.next())
+            .change_context(ToExprBody::next)
             .parse()
-            .change_context(|c| c.exit())
+            .change_context(FinalContext::exit)
     }
 
     fn parse_macro_def(self, span: S) -> Self {
         let mut state = self
             .change_context(|c| c.enter_macro_def(span))
-            .parse_terminated_list(Comma.into(), LINE_FOLLOW_SET, |p| p.parse_macro_param());
+            .parse_terminated_list(Comma.into(), LINE_FOLLOW_SET, Parser::parse_macro_param);
         if state.token_kind() == Some(Eol.into()) {
             bump!(state);
-            let mut state = state.change_context(|c| c.next());
+            let mut state = state.change_context(ToMacroBody::next);
             loop {
                 match state.token {
                     (Ok(Token::Simple(Endm)), _) => {
@@ -213,15 +213,15 @@ where
                 .context
                 .diagnostics()
                 .emit_diagnostic(Message::UnexpectedEof.at(state.token.1.clone()));
-            state.change_context(|c| c.next())
+            state.change_context(ToMacroBody::next)
         }
-        .change_context(|c| c.exit())
+        .change_context(TokenSeqContext::exit)
     }
 
     fn parse_macro_invocation(self, name: (Id, S)) -> Self {
         self.change_context(|c| c.enter_macro_invocation(name))
             .parse_macro_arg_list()
-            .change_context(|c| c.exit())
+            .change_context(MacroInvocationContext::exit)
     }
 }
 
@@ -232,13 +232,13 @@ where
     S: Clone,
 {
     fn parse_argument_list(self) -> Self {
-        self.parse_terminated_list(Comma.into(), LINE_FOLLOW_SET, |p| p.parse_argument())
+        self.parse_terminated_list(Comma.into(), LINE_FOLLOW_SET, Parser::parse_argument)
     }
 
     fn parse_argument(self) -> Self {
-        self.change_context(|c| c.add_argument())
+        self.change_context(CommandContext::add_argument)
             .parse()
-            .change_context(|c| c.exit())
+            .change_context(FinalContext::exit)
     }
 }
 
@@ -492,7 +492,7 @@ where
 {
     fn parse_macro_arg_list(self) -> Self {
         self.parse_terminated_list(Comma.into(), LINE_FOLLOW_SET, |p| {
-            let mut state = p.change_context(|c| c.enter_macro_arg());
+            let mut state = p.change_context(MacroInvocationContext::enter_macro_arg);
             loop {
                 match state.token {
                     (Ok(Token::Simple(Comma)), _)
@@ -505,7 +505,7 @@ where
                     (Err(_), _) => unimplemented!(),
                 }
             }
-            state.change_context(|c| c.exit())
+            state.change_context(TokenSeqContext::exit)
         })
     }
 }

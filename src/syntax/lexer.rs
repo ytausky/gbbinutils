@@ -89,7 +89,7 @@ impl<B: Borrow<str>> Scanner<B> {
     fn advance(&mut self) -> Option<char> {
         let current = self.current_char();
         self.is_at_line_start = current == Some('\n');
-        self.range.end += current.map_or(0, |ch| ch.len_utf8());
+        self.range.end += current.map_or(0, char::len_utf8);
         current
     }
 
