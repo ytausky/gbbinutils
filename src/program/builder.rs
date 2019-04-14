@@ -1,7 +1,7 @@
-use super::{Expr, ExprItem, ExprOperator, NameDef, NameId, Node, Program, Section};
+use super::{Expr, NameDef, NameId, Node, Program, Section};
 
 use crate::analysis::backend::*;
-use crate::model::{Atom, BinaryOperator, Item};
+use crate::model::{Atom, BinaryOperator, ExprItem, ExprOperator, Item};
 
 pub struct ProgramBuilder<SR> {
     program: Program<SR>,

@@ -1,4 +1,4 @@
-use super::{Expr, ExprItem, Node};
+use super::{Expr, Node};
 
 use crate::model::*;
 use crate::span::Source;

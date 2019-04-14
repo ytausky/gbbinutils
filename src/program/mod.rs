@@ -1,91 +1,12 @@
 pub use self::builder::ProgramBuilder;
 
-use crate::diag::span::Source;
-use crate::model::{Atom, BinaryOperator, Width};
+use crate::model::Width;
 
 mod builder;
 mod link;
 mod lowering;
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Expr<S>(Vec<ExprItem<S>>);
-
-#[derive(Clone, Debug, PartialEq)]
-struct ExprItem<S> {
-    op: ExprOperator,
-    op_span: S,
-    expr_span: S,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-enum ExprOperator {
-    Atom(Atom<NameId>),
-    Binary(BinaryOperator),
-}
-
-impl<S: Clone> Source for Expr<S> {
-    type Span = S;
-
-    fn span(&self) -> Self::Span {
-        self.0.first().unwrap().expr_span.clone()
-    }
-}
-
-impl<S: Clone> Expr<S> {
-    fn from_atom(atom: Atom<NameId>, span: S) -> Self {
-        Self(vec![ExprItem::from_atom(atom, span)])
-    }
-}
-
-impl<S: Clone> ExprItem<S> {
-    fn from_atom(atom: Atom<NameId>, span: S) -> Self {
-        Self {
-            op: ExprOperator::Atom(atom),
-            op_span: span.clone(),
-            expr_span: span,
-        }
-    }
-}
-
-impl From<i32> for Expr<()> {
-    fn from(n: i32) -> Self {
-        Atom::Literal(n).into()
-    }
-}
-
-impl From<Atom<NameId>> for Expr<()> {
-    fn from(atom: Atom<NameId>) -> Self {
-        Self(vec![atom.into()])
-    }
-}
-
-impl<T: Into<ExprOperator>> From<T> for ExprItem<()> {
-    fn from(x: T) -> Self {
-        Self {
-            op: x.into(),
-            op_span: (),
-            expr_span: (),
-        }
-    }
-}
-
-impl From<Atom<NameId>> for ExprOperator {
-    fn from(atom: Atom<NameId>) -> Self {
-        ExprOperator::Atom(atom)
-    }
-}
-
-impl From<i32> for ExprOperator {
-    fn from(n: i32) -> Self {
-        ExprOperator::Atom(Atom::Literal(n))
-    }
-}
-
-impl From<BinaryOperator> for ExprOperator {
-    fn from(op: BinaryOperator) -> Self {
-        ExprOperator::Binary(op)
-    }
-}
+type Expr<S> = crate::model::Expr<NameId, S>;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct RelocId(usize);

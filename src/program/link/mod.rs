@@ -185,7 +185,7 @@ mod tests {
                 },
                 Section {
                     constraints: Constraints {
-                        addr: Some(Expr(vec![
+                        addr: Some(Expr::from_items(&[
                             Atom::LocationCounter.into(),
                             skipped_bytes.into(),
                             BinaryOperator::Plus.into(),

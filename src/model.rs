@@ -1,5 +1,97 @@
 use crate::span::Source;
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct Expr<N, S>(pub Vec<ExprItem<N, S>>);
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExprItem<N, S> {
+    pub op: ExprOperator<N>,
+    pub op_span: S,
+    pub expr_span: S,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ExprOperator<N> {
+    Atom(Atom<N>),
+    Binary(BinaryOperator),
+}
+
+impl<N, S: Clone> Source for Expr<N, S> {
+    type Span = S;
+
+    fn span(&self) -> Self::Span {
+        self.0.first().unwrap().expr_span.clone()
+    }
+}
+
+impl<N, S: Clone> Expr<N, S> {
+    pub fn from_atom(atom: Atom<N>, span: S) -> Self {
+        Self(vec![ExprItem::from_atom(atom, span)])
+    }
+}
+
+#[cfg(test)]
+impl<N: Clone, S: Clone> Expr<N, S> {
+    pub fn from_items<'a, I>(items: I) -> Self
+    where
+        N: 'a,
+        S: 'a,
+        I: IntoIterator<Item = &'a ExprItem<N, S>>,
+    {
+        Expr(items.into_iter().map(Clone::clone).collect())
+    }
+}
+
+impl<N, S: Clone> ExprItem<N, S> {
+    pub fn from_atom(atom: Atom<N>, span: S) -> Self {
+        Self {
+            op: ExprOperator::Atom(atom),
+            op_span: span.clone(),
+            expr_span: span,
+        }
+    }
+}
+
+impl<N> From<i32> for Expr<N, ()> {
+    fn from(n: i32) -> Self {
+        Atom::Literal(n).into()
+    }
+}
+
+impl<N> From<Atom<N>> for Expr<N, ()> {
+    fn from(atom: Atom<N>) -> Self {
+        Self(vec![atom.into()])
+    }
+}
+
+impl<N, T: Into<ExprOperator<N>>> From<T> for ExprItem<N, ()> {
+    fn from(x: T) -> Self {
+        Self {
+            op: x.into(),
+            op_span: (),
+            expr_span: (),
+        }
+    }
+}
+
+impl<N> From<Atom<N>> for ExprOperator<N> {
+    fn from(atom: Atom<N>) -> Self {
+        ExprOperator::Atom(atom)
+    }
+}
+
+impl<N> From<i32> for ExprOperator<N> {
+    fn from(n: i32) -> Self {
+        ExprOperator::Atom(Atom::Literal(n))
+    }
+}
+
+impl<N> From<BinaryOperator> for ExprOperator<N> {
+    fn from(op: BinaryOperator) -> Self {
+        ExprOperator::Binary(op)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BinaryOperator {
     BitwiseOr,
