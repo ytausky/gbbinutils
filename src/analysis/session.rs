@@ -3,7 +3,7 @@ pub use super::backend::ValueBuilder;
 use super::backend::*;
 use super::macros::{DefineMacro, Expand, MacroEntry};
 use super::semantics::Analyze;
-use super::{Lex, Literal, SemanticToken, StringRef};
+use super::{Lex, SemanticToken, StringRef};
 
 use crate::codebase::CodebaseError;
 use crate::diag::span::{Source, Span};
@@ -60,65 +60,6 @@ pub trait FinishFnDef {
 }
 
 pub(super) type MacroArgs<I, S> = Vec<Vec<(SemanticToken<I>, S)>>;
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) enum SemanticAtom<I> {
-    Ident(Ident<I>),
-    Literal(Literal<I>),
-    LocationCounter,
-}
-
-impl<I> From<Literal<I>> for SemanticAtom<I> {
-    fn from(literal: Literal<I>) -> Self {
-        SemanticAtom::Literal(literal)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum SemanticUnary {
-    Parentheses,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(super) struct SemanticExpr<I, S> {
-    pub variant: ExprVariant<I, S>,
-    pub span: S,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(super) enum ExprVariant<I, S> {
-    Atom(SemanticAtom<I>),
-    Unary(SemanticUnary, Box<SemanticExpr<I, S>>),
-    Binary(
-        BinaryOperator,
-        Box<SemanticExpr<I, S>>,
-        Box<SemanticExpr<I, S>>,
-    ),
-}
-
-#[cfg(test)]
-impl<I, S> SemanticExpr<I, S> {
-    pub fn from_atom<T: Into<ExprVariant<I, S>>>(atom: T, span: S) -> Self {
-        Self {
-            variant: atom.into(),
-            span,
-        }
-    }
-}
-
-impl<I, S> From<SemanticAtom<I>> for ExprVariant<I, S> {
-    fn from(atom: SemanticAtom<I>) -> Self {
-        ExprVariant::Atom(atom)
-    }
-}
-
-impl<I, S: Clone> Source for SemanticExpr<I, S> {
-    type Span = S;
-
-    fn span(&self) -> Self::Span {
-        self.span.clone()
-    }
-}
 
 pub(crate) struct CompositeSession<'a, C, A, B: ?Sized, N, D> {
     codebase: &'a mut C,

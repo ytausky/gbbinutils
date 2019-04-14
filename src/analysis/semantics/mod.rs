@@ -5,9 +5,9 @@ use super::macros::MacroEntry;
 use super::session::*;
 use super::{Ident, Lex, LexItem, Literal, SemanticToken};
 
-use crate::diag::span::{MergeSpans, StripSpan};
+use crate::diag::span::{MergeSpans, Source, StripSpan};
 use crate::diag::*;
-use crate::model::Item;
+use crate::model::{BinaryOperator, Item};
 use crate::name::{NameTable, StartScope};
 use crate::syntax::{self, keyword::*, ExprAtom, Operator, UnaryOperator};
 
@@ -20,6 +20,65 @@ mod directive;
 mod instruction;
 mod invoke;
 mod operand;
+
+#[derive(Clone, Debug, PartialEq)]
+enum SemanticAtom<I> {
+    Ident(Ident<I>),
+    Literal(Literal<I>),
+    LocationCounter,
+}
+
+impl<I> From<Literal<I>> for SemanticAtom<I> {
+    fn from(literal: Literal<I>) -> Self {
+        SemanticAtom::Literal(literal)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum SemanticUnary {
+    Parentheses,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct SemanticExpr<I, S> {
+    pub variant: ExprVariant<I, S>,
+    pub span: S,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum ExprVariant<I, S> {
+    Atom(SemanticAtom<I>),
+    Unary(SemanticUnary, Box<SemanticExpr<I, S>>),
+    Binary(
+        BinaryOperator,
+        Box<SemanticExpr<I, S>>,
+        Box<SemanticExpr<I, S>>,
+    ),
+}
+
+#[cfg(test)]
+impl<I, S> SemanticExpr<I, S> {
+    pub fn from_atom<T: Into<ExprVariant<I, S>>>(atom: T, span: S) -> Self {
+        Self {
+            variant: atom.into(),
+            span,
+        }
+    }
+}
+
+impl<I, S> From<SemanticAtom<I>> for ExprVariant<I, S> {
+    fn from(atom: SemanticAtom<I>) -> Self {
+        ExprVariant::Atom(atom)
+    }
+}
+
+impl<I, S: Clone> Source for SemanticExpr<I, S> {
+    type Span = S;
+
+    fn span(&self) -> Self::Span {
+        self.span.clone()
+    }
+}
 
 pub(crate) trait Analyze<R: Clone + Eq, D: Diagnostics> {
     fn analyze_token_seq<I, C, B, N>(

@@ -181,7 +181,6 @@ mod tests {
     use super::*;
 
     use crate::analysis::semantics::instruction::tests::*;
-    use crate::analysis::session::SemanticExpr;
     use crate::syntax::keyword::Mnemonic;
 
     #[test]

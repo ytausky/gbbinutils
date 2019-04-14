@@ -415,13 +415,12 @@ impl From<kw::Mnemonic> for Mnemonic {
 #[cfg(test)]
 mod tests {
     pub use self::kw::Operand::*;
-    pub use crate::analysis::semantics::{TokenId, TokenSpan};
+    pub(super) use crate::analysis::semantics::{SemanticExpr, TokenId, TokenSpan};
     pub(crate) use crate::diag::Message;
     pub use crate::span::{MergeSpans, Span};
 
     use super::*;
     use crate::analysis::semantics::*;
-    use crate::analysis::session::ExprVariant;
     use crate::analysis::{Ident, Literal};
     use crate::model::{Atom, Expr};
     use crate::syntax::Mnemonic;

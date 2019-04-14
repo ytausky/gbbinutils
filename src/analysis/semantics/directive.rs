@@ -1,5 +1,6 @@
-use super::{CommandArgs, Directive, SemanticActions, SemanticAtom, SemanticExpr};
-use crate::analysis::session::{ExprVariant, Session};
+use super::{CommandArgs, Directive, ExprVariant, SemanticActions, SemanticAtom, SemanticExpr};
+
+use crate::analysis::session::Session;
 use crate::analysis::Literal;
 use crate::diag::*;
 use crate::model::{Item, Width};
