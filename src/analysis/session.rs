@@ -8,12 +8,8 @@ use super::{Lex, Literal, SemanticToken, StringRef};
 use crate::codebase::CodebaseError;
 use crate::diag::span::{Source, Span};
 use crate::diag::*;
-use crate::expr::Expr;
 use crate::model::{BinaryOperator, Item};
 use crate::name::{Ident, Name, NameTable, StartScope};
-
-#[cfg(test)]
-use crate::expr::ExprVariant;
 
 #[cfg(test)]
 pub(crate) use self::mock::*;
@@ -65,7 +61,7 @@ pub trait FinishFnDef {
 
 pub(super) type MacroArgs<I, S> = Vec<Vec<(SemanticToken<I>, S)>>;
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum SemanticAtom<I> {
     Ident(Ident<I>),
     Literal(Literal<I>),
@@ -78,16 +74,51 @@ impl<I> From<Literal<I>> for SemanticAtom<I> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum SemanticUnary {
     Parentheses,
 }
 
-pub(crate) type SemanticExpr<I, S> = Expr<SemanticAtom<I>, SemanticUnary, BinaryOperator, S>;
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct SemanticExpr<I, S> {
+    pub variant: ExprVariant<I, S>,
+    pub span: S,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(super) enum ExprVariant<I, S> {
+    Atom(SemanticAtom<I>),
+    Unary(SemanticUnary, Box<SemanticExpr<I, S>>),
+    Binary(
+        BinaryOperator,
+        Box<SemanticExpr<I, S>>,
+        Box<SemanticExpr<I, S>>,
+    ),
+}
 
 #[cfg(test)]
-pub(crate) type SemanticExprVariant<I, S> =
-    ExprVariant<SemanticAtom<I>, SemanticUnary, BinaryOperator, S>;
+impl<I, S> SemanticExpr<I, S> {
+    pub fn from_atom<T: Into<ExprVariant<I, S>>>(atom: T, span: S) -> Self {
+        Self {
+            variant: atom.into(),
+            span,
+        }
+    }
+}
+
+impl<I, S> From<SemanticAtom<I>> for ExprVariant<I, S> {
+    fn from(atom: SemanticAtom<I>) -> Self {
+        ExprVariant::Atom(atom)
+    }
+}
+
+impl<I, S: Clone> Source for SemanticExpr<I, S> {
+    type Span = S;
+
+    fn span(&self) -> Self::Span {
+        self.span.clone()
+    }
+}
 
 pub(crate) struct CompositeSession<'a, C, A, B: ?Sized, N, D> {
     codebase: &'a mut C,

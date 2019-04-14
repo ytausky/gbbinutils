@@ -7,7 +7,6 @@ use super::{Ident, Lex, LexItem, Literal, SemanticToken};
 
 use crate::diag::span::{MergeSpans, StripSpan};
 use crate::diag::*;
-use crate::expr::ExprVariant;
 use crate::model::Item;
 use crate::name::{NameTable, StartScope};
 use crate::syntax::{self, keyword::*, ExprAtom, Operator, UnaryOperator};

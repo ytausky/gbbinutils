@@ -421,17 +421,16 @@ mod tests {
 
     use super::*;
     use crate::analysis::semantics::*;
-    use crate::analysis::session::SemanticExprVariant;
+    use crate::analysis::session::ExprVariant;
     use crate::analysis::{Ident, Literal};
-    use crate::expr::ExprVariant;
     use crate::model::{Atom, Expr};
     use crate::syntax::Mnemonic;
     use std::cmp;
 
     type Input = SemanticExpr<String, ()>;
 
-    impl From<SemanticExprVariant<String, ()>> for Input {
-        fn from(variant: SemanticExprVariant<String, ()>) -> Self {
+    impl From<ExprVariant<String, ()>> for Input {
+        fn from(variant: ExprVariant<String, ()>) -> Self {
             SemanticExpr { variant, span: () }
         }
     }

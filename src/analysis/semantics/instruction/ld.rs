@@ -282,7 +282,7 @@ impl<S: Clone> Source for LdDest16<S> {
 #[cfg(test)]
 mod tests {
     use crate::analysis::semantics::instruction::tests::*;
-    use crate::expr::Expr;
+    use crate::analysis::session::SemanticExpr;
     use crate::model::*;
     use crate::syntax::keyword::Mnemonic;
 
@@ -370,7 +370,7 @@ mod tests {
     fn describe_ld_simple_immediate(dest: SimpleOperand) -> InstructionDescriptor {
         let n = 0x12;
         (
-            (Mnemonic::Ld, vec![Expr::from(dest), n.into()]),
+            (Mnemonic::Ld, vec![SemanticExpr::from(dest), n.into()]),
             Instruction::Ld(Ld::Immediate8(dest, number(n, TokenId::Operand(1, 0)))),
         )
     }
@@ -382,7 +382,7 @@ mod tests {
     fn describe_ld_reg16_immediate(dest: Reg16) -> InstructionDescriptor {
         let value = "value";
         (
-            (Mnemonic::Ld, vec![Expr::from(dest), value.into()]),
+            (Mnemonic::Ld, vec![SemanticExpr::from(dest), value.into()]),
             Instruction::Ld(Ld::Immediate16(dest, name(value, TokenId::Operand(1, 0)))),
         )
     }
@@ -396,14 +396,20 @@ mod tests {
     fn describe_ld_deref_ptr_reg(ptr_reg: PtrReg) -> impl Iterator<Item = InstructionDescriptor> {
         vec![
             (
-                (Mnemonic::Ld, vec![deref(Expr::from(ptr_reg)), literal(A)]),
+                (
+                    Mnemonic::Ld,
+                    vec![deref(SemanticExpr::from(ptr_reg)), literal(A)],
+                ),
                 Instruction::Ld(Ld::Special(
                     SpecialLd::DerefPtrReg(ptr_reg),
                     Direction::FromA,
                 )),
             ),
             (
-                (Mnemonic::Ld, vec![literal(A), deref(Expr::from(ptr_reg))]),
+                (
+                    Mnemonic::Ld,
+                    vec![literal(A), deref(SemanticExpr::from(ptr_reg))],
+                ),
                 Instruction::Ld(Ld::Special(
                     SpecialLd::DerefPtrReg(ptr_reg),
                     Direction::IntoA,

@@ -181,7 +181,7 @@ mod tests {
     use super::*;
 
     use crate::analysis::semantics::instruction::tests::*;
-    use crate::expr::Expr;
+    use crate::analysis::session::SemanticExpr;
     use crate::syntax::keyword::Mnemonic;
 
     #[test]
@@ -237,7 +237,7 @@ mod tests {
         let mut operands = Vec::new();
         let mut has_condition = false;
         if let Some(condition) = condition {
-            operands.push(Expr::from(condition));
+            operands.push(SemanticExpr::from(condition));
             has_condition = true;
         };
         if branch != Ret {

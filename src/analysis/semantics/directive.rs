@@ -1,8 +1,7 @@
 use super::{CommandArgs, Directive, SemanticActions, SemanticAtom, SemanticExpr};
-use crate::analysis::session::Session;
+use crate::analysis::session::{ExprVariant, Session};
 use crate::analysis::Literal;
 use crate::diag::*;
-use crate::expr::ExprVariant;
 use crate::model::{Item, Width};
 
 pub(super) fn analyze_directive<'a, S: Session>(
