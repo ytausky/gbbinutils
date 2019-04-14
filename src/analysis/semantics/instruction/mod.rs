@@ -422,9 +422,9 @@ mod tests {
     use super::*;
     use crate::analysis::semantics::*;
     use crate::analysis::session::SemanticExprVariant;
-    use crate::analysis::{Expr, Ident, Literal};
+    use crate::analysis::{Ident, Literal};
     use crate::expr::ExprVariant;
-    use crate::model::Atom;
+    use crate::model::{Atom, Expr};
     use crate::syntax::Mnemonic;
     use std::cmp;
 
@@ -447,7 +447,7 @@ mod tests {
     }
 
     pub fn number(n: i32, span: impl Into<TokenSpan>) -> Expr<Ident<String>, TokenSpan> {
-        Expr::from_atom(n, span.into())
+        Expr::from_atom(n.into(), span.into())
     }
 
     pub fn name(ident: &str, span: impl Into<TokenSpan>) -> Expr<Ident<String>, TokenSpan> {

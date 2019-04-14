@@ -611,7 +611,7 @@ mod tests {
         Session(SessionEvent<()>),
     }
 
-    type Expr = crate::analysis::Expr<Ident<String>, ()>;
+    type Expr = crate::model::Expr<Ident<String>, ()>;
 
     impl<'a> From<BackendEvent<Expr>> for TestOperation {
         fn from(event: BackendEvent<Expr>) -> Self {
@@ -682,10 +682,14 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [BackendEvent::EmitItem(Item::Instruction(Instruction::Rst(
-                ExprVariant::Binary(op, Box::new(1.into()), Box::new(1.into()),).into()
-            )))
-            .into()]
+            [
+                BackendEvent::EmitItem(Item::Instruction(Instruction::Rst(Expr::from_items(&[
+                    1.into(),
+                    1.into(),
+                    op.into()
+                ]))))
+                .into()
+            ]
         )
     }
 
@@ -750,10 +754,7 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [
-                SessionEvent::DefineExpr(name, vec![], ExprVariant::Atom(Atom::Name(ident)).into())
-                    .into()
-            ]
+            [SessionEvent::DefineExpr(name, vec![], Atom::Name(ident).into()).into()]
         )
     }
 

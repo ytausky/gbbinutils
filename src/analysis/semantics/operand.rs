@@ -203,9 +203,8 @@ impl<I: Iterator> Iterator for OperandCounter<I> {
 mod tests {
     use super::*;
 
-    use crate::analysis::Expr;
     use crate::diag::MockSpan;
-    use crate::model::Atom;
+    use crate::model::{Atom, Expr};
 
     impl MockSpan for i32 {
         fn default() -> Self {

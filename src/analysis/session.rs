@@ -395,10 +395,8 @@ mod mock {
     use super::*;
 
     use crate::analysis::backend::BackendEvent;
-    use crate::analysis::Expr;
     use crate::diag::{DiagnosticsEvent, MockDiagnostics, MockSpan};
-    use crate::expr::ExprVariant;
-    use crate::model::Atom;
+    use crate::model::{Atom, Expr, ExprItem, ExprOperator};
 
     use std::cell::RefCell;
 
@@ -463,13 +461,16 @@ mod mock {
         fn apply_binary_operator(
             &mut self,
             operator: (BinaryOperator, S),
-            left: Self::Value,
+            mut left: Self::Value,
             right: Self::Value,
         ) -> Self::Value {
-            Expr {
-                variant: ExprVariant::Binary(operator.0, Box::new(left), Box::new(right)),
-                span: operator.1,
-            }
+            left.0.extend(right.0);
+            left.0.push(ExprItem {
+                op: ExprOperator::Binary(operator.0),
+                op_span: operator.1.clone(),
+                expr_span: operator.1,
+            });
+            left
         }
     }
 
@@ -624,9 +625,9 @@ mod tests {
 
     use crate::analysis::backend::BackendEvent;
     use crate::analysis::semantics::AnalyzerEvent;
-    use crate::analysis::{Expr, Literal, MockCodebase};
+    use crate::analysis::{Literal, MockCodebase};
     use crate::diag::{DiagnosticsEvent, MockSpan};
-    use crate::model::{Atom, Instruction, Nullary, Width};
+    use crate::model::{Atom, Expr, Instruction, Nullary, Width};
     use crate::name::{BasicNameTable, NameTableEvent};
     use crate::syntax::{Command, Directive, Mnemonic, Token};
 
@@ -844,12 +845,11 @@ mod tests {
         builder.finish();
         assert_eq!(
             value,
-            ExprVariant::Binary(
-                BinaryOperator::Multiplication,
-                Box::new(Atom::Literal(42).into()),
-                Box::new(Atom::Name(0).into()),
-            )
-            .into(),
+            Expr::from_items(&[
+                42.into(),
+                Atom::Name(0).into(),
+                BinaryOperator::Multiplication.into()
+            ])
         )
     }
 

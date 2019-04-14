@@ -120,6 +120,12 @@ pub enum Atom<N> {
     LocationCounter,
 }
 
+impl<N> From<i32> for Atom<N> {
+    fn from(n: i32) -> Self {
+        Atom::Literal(n)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Instruction<V: Source> {
     AddHl(Reg16),

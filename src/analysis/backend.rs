@@ -71,9 +71,7 @@ where
 mod mock {
     use super::*;
 
-    use crate::analysis::Expr;
-    use crate::expr::ExprVariant;
-    use crate::model::Atom;
+    use crate::model::{Atom, Expr, ExprItem, ExprOperator};
 
     use std::cell::RefCell;
 
@@ -134,13 +132,16 @@ mod mock {
         fn apply_binary_operator(
             &mut self,
             operator: (BinaryOperator, S),
-            left: Self::Value,
+            mut left: Self::Value,
             right: Self::Value,
         ) -> Self::Value {
-            Expr {
-                variant: ExprVariant::Binary(operator.0, Box::new(left), Box::new(right)),
-                span: operator.1,
-            }
+            left.0.extend(right.0);
+            left.0.push(ExprItem {
+                op: ExprOperator::Binary(operator.0),
+                op_span: operator.1.clone(),
+                expr_span: operator.1,
+            });
+            left
         }
     }
 
