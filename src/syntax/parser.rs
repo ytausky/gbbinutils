@@ -162,7 +162,7 @@ where
         }
         bump!(self);
         let mut params_parser = self
-            .change_context(|c| c.enter_expr_def(span))
+            .change_context(|c| c.enter_fn_def(span))
             .parse_terminated_list(Comma.into(), &[ClosingParenthesis.into()], |p| {
                 p.parse_macro_param()
             });
@@ -171,7 +171,7 @@ where
         }
         bump!(params_parser);
         params_parser
-            .change_context(ToExprBody::next)
+            .change_context(ToFnBody::next)
             .parse()
             .change_context(FinalContext::exit)
     }
@@ -611,9 +611,9 @@ mod tests {
         StmtActionCollector,
         CommandActionCollector,
         ExprActionCollector<CommandActionCollector>,
-        ExprActionCollector<ExprParamsActionCollector>,
+        ExprActionCollector<FnParamsActionCollector>,
         ExprActionCollector<()>,
-        ExprParamsActionCollector,
+        FnParamsActionCollector,
         MacroParamsActionCollector,
         MacroBodyActionCollector,
         MacroInvocationActionCollector,
@@ -666,7 +666,7 @@ mod tests {
 
     impl StmtContext<SymIdent, SymLiteral, SymCommand, SymSpan> for StmtActionCollector {
         type CommandContext = CommandActionCollector;
-        type ExprParamsContext = ExprParamsActionCollector;
+        type FnParamsContext = FnParamsActionCollector;
         type MacroParamsContext = MacroParamsActionCollector;
         type MacroInvocationContext = MacroInvocationActionCollector;
         type Parent = FileActionCollector;
@@ -679,8 +679,8 @@ mod tests {
             }
         }
 
-        fn enter_expr_def(self, keyword: SymSpan) -> Self::ExprParamsContext {
-            ExprParamsActionCollector {
+        fn enter_fn_def(self, keyword: SymSpan) -> Self::FnParamsContext {
+            FnParamsActionCollector {
                 keyword,
                 actions: Vec::new(),
                 parent: self,
@@ -807,30 +807,30 @@ mod tests {
         }
     }
 
-    struct ExprParamsActionCollector {
+    struct FnParamsActionCollector {
         keyword: SymSpan,
         actions: Vec<MacroParamsAction<SymSpan>>,
         parent: StmtActionCollector,
     }
 
-    impl EmitDiagnostic<SymSpan, SymSpan> for ExprParamsActionCollector {
+    impl EmitDiagnostic<SymSpan, SymSpan> for FnParamsActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
             self.actions
                 .push(MacroParamsAction::EmitDiagnostic(diagnostic.into()))
         }
     }
 
-    impl AssocIdent for ExprParamsActionCollector {
+    impl AssocIdent for FnParamsActionCollector {
         type Ident = SymIdent;
     }
 
-    impl ParamsContext<SymSpan> for ExprParamsActionCollector {
+    impl ParamsContext<SymSpan> for FnParamsActionCollector {
         fn add_parameter(&mut self, param: (SymIdent, SymSpan)) {
             self.actions.push(MacroParamsAction::AddParameter(param))
         }
     }
 
-    impl ToExprBody<SymSpan> for ExprParamsActionCollector {
+    impl ToFnBody<SymSpan> for FnParamsActionCollector {
         type Literal = SymLiteral;
         type Parent = StmtActionCollector;
         type Next = ExprActionCollector<Self>;
@@ -840,7 +840,7 @@ mod tests {
         }
     }
 
-    impl FinalContext for ExprActionCollector<ExprParamsActionCollector> {
+    impl FinalContext for ExprActionCollector<FnParamsActionCollector> {
         type ReturnTo = StmtActionCollector;
 
         fn exit(mut self) -> Self::ReturnTo {

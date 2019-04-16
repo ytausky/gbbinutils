@@ -183,7 +183,7 @@ impl<S: Session> syntax::StmtContext<Ident<S::StringRef>, Literal<S::StringRef>,
     for SemanticActions<S>
 {
     type CommandContext = CommandActions<S>;
-    type ExprParamsContext = DefHeadActions<S, ExprDef>;
+    type FnParamsContext = DefHeadActions<S, FnDef>;
     type MacroParamsContext = DefHeadActions<S, MacroDef>;
     type MacroInvocationContext = MacroInvocationActions<S>;
     type Parent = Self;
@@ -192,7 +192,7 @@ impl<S: Session> syntax::StmtContext<Ident<S::StringRef>, Literal<S::StringRef>,
         CommandActions::new(name, self)
     }
 
-    fn enter_expr_def(mut self, _keyword: S::Span) -> Self::ExprParamsContext {
+    fn enter_fn_def(mut self, _keyword: S::Span) -> Self::FnParamsContext {
         DefHeadActions::new(self.label.take(), self)
     }
 
@@ -446,9 +446,9 @@ impl<S: Session, T> syntax::ParamsContext<S::Span> for DefHeadActions<S, T> {
     }
 }
 
-pub(crate) struct ExprDef;
+pub(crate) struct FnDef;
 
-impl<S: Session> syntax::ToExprBody<S::Span> for DefHeadActions<S, ExprDef> {
+impl<S: Session> syntax::ToFnBody<S::Span> for DefHeadActions<S, FnDef> {
     type Literal = Literal<S::StringRef>;
     type Parent = SemanticActions<S>;
     type Next = ExprContext<S::StringRef, S::Span, Self>;
@@ -462,7 +462,7 @@ impl<S: Session> syntax::ToExprBody<S::Span> for DefHeadActions<S, ExprDef> {
 }
 
 impl<S: Session> syntax::FinalContext
-    for ExprContext<S::StringRef, S::Span, DefHeadActions<S, ExprDef>>
+    for ExprContext<S::StringRef, S::Span, DefHeadActions<S, FnDef>>
 {
     type ReturnTo = SemanticActions<S>;
 
@@ -661,7 +661,7 @@ mod tests {
     use crate::model::{Atom, BinOp, Width};
     use crate::syntax::{
         CommandContext, ExprContext, FileContext, FinalContext, MacroInvocationContext,
-        ParamsContext, StmtContext, ToExprBody, ToMacroBody, TokenSeqContext,
+        ParamsContext, StmtContext, ToFnBody, ToMacroBody, TokenSeqContext,
     };
     use crate::syntax::{Operand, Token};
 
@@ -805,20 +805,20 @@ mod tests {
     }
 
     #[test]
-    fn define_named_expr() {
+    fn define_nullary_fn() {
         let name: Ident<_> = "my_expr".into();
         let ident: Ident<_> = "id".into();
         let actions = collect_semantic_actions(|actions| {
             let mut actions = actions
                 .enter_stmt(Some((name.clone(), ())))
-                .enter_expr_def(())
+                .enter_fn_def(())
                 .next();
             actions.push_atom((ExprAtom::Ident(ident.clone()), ()));
             actions.exit().exit()
         });
         assert_eq!(
             actions,
-            [SessionEvent::DefineExpr(name, vec![], Atom::Name(ident).into()).into()]
+            [SessionEvent::DefineFn(name, vec![], Atom::Name(ident).into()).into()]
         )
     }
 

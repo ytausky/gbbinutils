@@ -360,7 +360,7 @@ mod mock {
     #[derive(Debug, PartialEq)]
     pub(crate) enum SessionEvent<S> {
         AnalyzeFile(String),
-        DefineExpr(Ident<String>, Vec<Ident<String>>, Expr<Ident<String>, S>),
+        DefineFn(Ident<String>, Vec<Ident<String>>, Expr<Ident<String>, S>),
         DefineMacro(
             Ident<String>,
             Vec<Ident<String>>,
@@ -532,7 +532,7 @@ mod mock {
         fn finish_fn_def(self) -> Self::Return {
             let mut session = self.session;
             session.log.borrow_mut().push(
-                SessionEvent::DefineExpr(session.name.take().unwrap(), vec![], self.builder).into(),
+                SessionEvent::DefineFn(session.name.take().unwrap(), vec![], self.builder).into(),
             );
             session
         }

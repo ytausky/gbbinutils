@@ -61,13 +61,13 @@ pub(crate) trait FileContext<I, L, C, S: Clone>: DelegateDiagnostics<S> + Sized 
 
 pub(crate) trait StmtContext<I, L, C, S: Clone>: DelegateDiagnostics<S> + Sized {
     type CommandContext: CommandContext<S, Ident = I, Command = C, Literal = L, Parent = Self>;
-    type ExprParamsContext: ParamsContext<S, Ident = I> + ToExprBody<S, Literal = L, Parent = Self>;
+    type FnParamsContext: ParamsContext<S, Ident = I> + ToFnBody<S, Literal = L, Parent = Self>;
     type MacroParamsContext: ParamsContext<S, Ident = I>
         + ToMacroBody<S, Command = C, Literal = L, Parent = Self>;
     type MacroInvocationContext: MacroInvocationContext<S, Token = Token<I, L, C>, Parent = Self>;
     type Parent;
     fn enter_command(self, name: (C, S)) -> Self::CommandContext;
-    fn enter_expr_def(self, keyword: S) -> Self::ExprParamsContext;
+    fn enter_fn_def(self, keyword: S) -> Self::FnParamsContext;
     fn enter_macro_def(self, keyword: S) -> Self::MacroParamsContext;
     fn enter_macro_invocation(self, name: (I, S)) -> Self::MacroInvocationContext;
     fn exit(self) -> Self::Parent;
@@ -124,7 +124,7 @@ pub(crate) trait ParamsContext<S: Clone>: AssocIdent + DelegateDiagnostics<S> {
     fn add_parameter(&mut self, param: (Self::Ident, S));
 }
 
-pub(crate) trait ToExprBody<S: Clone>: AssocIdent {
+pub(crate) trait ToFnBody<S: Clone>: AssocIdent {
     type Literal;
     type Parent;
     type Next: ExprContext<S, Ident = Self::Ident, Literal = Self::Literal>
