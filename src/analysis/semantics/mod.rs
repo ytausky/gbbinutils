@@ -9,7 +9,8 @@ use crate::diag::span::{MergeSpans, Source, StripSpan};
 use crate::diag::*;
 use crate::model::{BinOp, Item};
 use crate::name::{NameTable, StartScope};
-use crate::syntax::{self, keyword::*, ExprAtom, Operator, UnaryOperator};
+use crate::syntax::keyword::*;
+use crate::syntax::*;
 
 use std::marker::PhantomData;
 
@@ -168,7 +169,7 @@ impl<S: Session> DelegateDiagnostics<S::Span> for SemanticActions<S> {
     }
 }
 
-impl<S: Session> syntax::FileContext<Ident<S::StringRef>, Literal<S::StringRef>, Command, S::Span>
+impl<S: Session> FileContext<Ident<S::StringRef>, Literal<S::StringRef>, Command, S::Span>
     for SemanticActions<S>
 {
     type StmtContext = Self;
@@ -179,7 +180,7 @@ impl<S: Session> syntax::FileContext<Ident<S::StringRef>, Literal<S::StringRef>,
     }
 }
 
-impl<S: Session> syntax::StmtContext<Ident<S::StringRef>, Literal<S::StringRef>, Command, S::Span>
+impl<S: Session> StmtContext<Ident<S::StringRef>, Literal<S::StringRef>, Command, S::Span>
     for SemanticActions<S>
 {
     type CommandContext = CommandActions<S>;
@@ -272,15 +273,15 @@ impl<S: Session> DelegateDiagnostics<S::Span> for CommandActions<S> {
     }
 }
 
-impl<S: Session> syntax::CommandContext<S::Span> for CommandActions<S> {
+impl<S: Session> CommandContext<S::Span> for CommandActions<S> {
     type Ident = Ident<S::StringRef>;
     type Command = Command;
     type Literal = Literal<S::StringRef>;
-    type ArgContext = ExprContext<S::StringRef, S::Span, Self>;
+    type ArgContext = ExprBuilder<S::StringRef, S::Span, Self>;
     type Parent = SemanticActions<S>;
 
     fn add_argument(self) -> Self::ArgContext {
-        ExprContext {
+        ExprBuilder {
             stack: Vec::new(),
             parent: self,
         }
@@ -314,18 +315,18 @@ impl Directive {
     }
 }
 
-pub(crate) struct ExprContext<R, S, P> {
+pub(crate) struct ExprBuilder<R, S, P> {
     stack: Vec<SemanticExpr<R, S>>,
     parent: P,
 }
 
-impl<R, S, P> ExprContext<R, S, P> {
+impl<R, S, P> ExprBuilder<R, S, P> {
     fn pop(&mut self) -> SemanticExpr<R, S> {
         self.stack.pop().unwrap_or_else(|| unreachable!())
     }
 }
 
-impl<R, S, P> DelegateDiagnostics<S> for ExprContext<R, S, P>
+impl<R, S, P> DelegateDiagnostics<S> for ExprBuilder<R, S, P>
 where
     P: DelegateDiagnostics<S>,
 {
@@ -336,11 +337,11 @@ where
     }
 }
 
-impl<R, S, P> syntax::AssocIdent for ExprContext<R, S, P> {
+impl<R, S, P> AssocIdent for ExprBuilder<R, S, P> {
     type Ident = Ident<R>;
 }
 
-impl<S: Session> syntax::FinalContext for ExprContext<S::StringRef, S::Span, CommandActions<S>> {
+impl<S: Session> FinalContext for ExprBuilder<S::StringRef, S::Span, CommandActions<S>> {
     type ReturnTo = CommandActions<S>;
 
     fn exit(mut self) -> Self::ReturnTo {
@@ -352,7 +353,7 @@ impl<S: Session> syntax::FinalContext for ExprContext<S::StringRef, S::Span, Com
     }
 }
 
-impl<R, S, P> syntax::ExprContext<S> for ExprContext<R, S, P>
+impl<R, S, P> ExprContext<S> for ExprBuilder<R, S, P>
 where
     S: Clone,
     Self: DelegateDiagnostics<S>,
@@ -427,7 +428,7 @@ impl<S: Session, T> DefHeadActions<S, T> {
     }
 }
 
-impl<S: Session, T> syntax::AssocIdent for DefHeadActions<S, T> {
+impl<S: Session, T> AssocIdent for DefHeadActions<S, T> {
     type Ident = Ident<S::StringRef>;
 }
 
@@ -439,7 +440,7 @@ impl<S: Session, T> DelegateDiagnostics<S::Span> for DefHeadActions<S, T> {
     }
 }
 
-impl<S: Session, T> syntax::ParamsContext<S::Span> for DefHeadActions<S, T> {
+impl<S: Session, T> ParamsContext<S::Span> for DefHeadActions<S, T> {
     fn add_parameter(&mut self, (param, span): (Self::Ident, S::Span)) {
         self.params.0.push(param);
         self.params.1.push(span)
@@ -448,22 +449,20 @@ impl<S: Session, T> syntax::ParamsContext<S::Span> for DefHeadActions<S, T> {
 
 pub(crate) struct FnDef;
 
-impl<S: Session> syntax::ToFnBody<S::Span> for DefHeadActions<S, FnDef> {
+impl<S: Session> ToFnBody<S::Span> for DefHeadActions<S, FnDef> {
     type Literal = Literal<S::StringRef>;
     type Parent = SemanticActions<S>;
-    type Next = ExprContext<S::StringRef, S::Span, Self>;
+    type Next = ExprBuilder<S::StringRef, S::Span, Self>;
 
     fn next(self) -> Self::Next {
-        ExprContext {
+        ExprBuilder {
             stack: Vec::new(),
             parent: self,
         }
     }
 }
 
-impl<S: Session> syntax::FinalContext
-    for ExprContext<S::StringRef, S::Span, DefHeadActions<S, FnDef>>
-{
+impl<S: Session> FinalContext for ExprBuilder<S::StringRef, S::Span, DefHeadActions<S, FnDef>> {
     type ReturnTo = SemanticActions<S>;
 
     fn exit(mut self) -> Self::ReturnTo {
@@ -481,7 +480,7 @@ impl<S: Session> syntax::FinalContext
 
 pub(crate) struct MacroDef;
 
-impl<S: Session> syntax::ToMacroBody<S::Span> for DefHeadActions<S, MacroDef> {
+impl<S: Session> ToMacroBody<S::Span> for DefHeadActions<S, MacroDef> {
     type Literal = Literal<S::StringRef>;
     type Command = Command;
     type Parent = SemanticActions<S>;
@@ -514,7 +513,7 @@ impl<S: Session> DelegateDiagnostics<S::Span> for MacroDefActions<S> {
     }
 }
 
-impl<S: Session> syntax::TokenSeqContext<S::Span> for MacroDefActions<S> {
+impl<S: Session> TokenSeqContext<S::Span> for MacroDefActions<S> {
     type Token = SemanticToken<S::StringRef>;
     type Parent = SemanticActions<S>;
 
@@ -659,11 +658,6 @@ mod tests {
     use crate::analysis::session::SessionEvent;
     use crate::diag::Message;
     use crate::model::{Atom, BinOp, Width};
-    use crate::syntax::{
-        CommandContext, ExprContext, FileContext, FinalContext, MacroInvocationContext,
-        ParamsContext, StmtContext, ToFnBody, ToMacroBody, TokenSeqContext,
-    };
-    use crate::syntax::{Operand, Token};
 
     use std::borrow::Borrow;
     use std::cell::RefCell;

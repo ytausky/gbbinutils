@@ -147,9 +147,7 @@ mod tests {
     use crate::codebase::CodebaseError;
     use crate::model::Expr;
     use crate::syntax::keyword::{Command, Operand};
-    use crate::syntax::{
-        CommandContext, ExprAtom, ExprContext, FileContext, FinalContext, StmtContext,
-    };
+    use crate::syntax::*;
 
     use std::borrow::Borrow;
     use std::cell::RefCell;
@@ -365,7 +363,7 @@ mod tests {
     }
 
     type TestExprContext<'a> =
-        crate::analysis::semantics::ExprContext<String, (), TestCommandActions<'a>>;
+        crate::analysis::semantics::ExprBuilder<String, (), TestCommandActions<'a>>;
 
     fn unary_directive<F>(directive: Directive, f: F) -> Vec<TestOperation>
     where
