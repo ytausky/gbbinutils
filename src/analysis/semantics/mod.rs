@@ -471,7 +471,7 @@ impl<S: Session> FinalContext for ExprBuilder<S::StringRef, S::Span, DefHeadActi
             .actions
             .session
             .unwrap()
-            .define_fn(self.parent.name.unwrap());
+            .define_fn(self.parent.name.unwrap(), self.parent.params);
         builder.analyze_expr(self.stack.pop().unwrap()).unwrap();
         self.parent.actions.session = Some(builder.finish_fn_def());
         self.parent.actions
@@ -813,6 +813,25 @@ mod tests {
         assert_eq!(
             actions,
             [SessionEvent::DefineFn(name, vec![], Atom::Name(ident).into()).into()]
+        )
+    }
+
+    #[test]
+    fn define_unary_fn() {
+        let name: Ident<_> = "my_expr".into();
+        let ident: Ident<_> = "id".into();
+        let actions = collect_semantic_actions(|actions| {
+            let mut params = actions
+                .enter_stmt(Some((name.clone(), ())))
+                .enter_fn_def(());
+            params.add_parameter((ident.clone(), ()));
+            let mut body = params.next();
+            body.push_atom((ExprAtom::Ident(ident.clone()), ()));
+            body.exit().exit()
+        });
+        assert_eq!(
+            actions,
+            [SessionEvent::DefineFn(name, vec![ident.clone()], Atom::Name(ident).into()).into()]
         )
     }
 
