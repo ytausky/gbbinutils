@@ -55,7 +55,7 @@ pub(crate) use self::parser::parse_src as parse_token_seq;
 
 pub(crate) trait FileContext<I, L, C, S: Clone>: DelegateDiagnostics<S> + Sized {
     type StmtContext: StmtContext<I, L, C, S, Parent = Self>;
-    type LabelContext: ParamsContext<S, Ident = I> + IntermediateContext<Next = Self::StmtContext>;
+    type LabelContext: ParamsContext<I, S, Next = Self::StmtContext>;
 
     fn enter_stmt(self, label: Option<(I, S)>) -> Self::StmtContext;
     fn enter_labeled_stmt(self, label: (I, S)) -> Self::LabelContext;
@@ -89,7 +89,8 @@ pub(crate) trait FinalContext {
     fn exit(self) -> Self::ReturnTo;
 }
 
-pub(crate) trait ExprContext<S: Clone>: AssocIdent + DelegateDiagnostics<S> {
+pub(crate) trait ExprContext<S: Clone>: DelegateDiagnostics<S> {
+    type Ident;
     type Literal;
 
     fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, S));
@@ -115,26 +116,10 @@ pub enum UnaryOperator {
     Parentheses,
 }
 
-pub(crate) trait AssocIdent {
-    type Ident;
-}
-
-pub(crate) trait ParamsContext<S: Clone>: AssocIdent + DelegateDiagnostics<S> {
-    fn add_parameter(&mut self, param: (Self::Ident, S));
-}
-
-pub(crate) trait IntermediateContext {
+pub(crate) trait ParamsContext<I, S: Clone>: DelegateDiagnostics<S> {
     type Next;
 
-    fn next(self) -> Self::Next;
-}
-
-pub(crate) trait ToFnBody<S: Clone>: AssocIdent {
-    type Literal;
-    type Parent;
-    type Next: ExprContext<S, Ident = Self::Ident, Literal = Self::Literal>
-        + FinalContext<ReturnTo = Self::Parent>;
-
+    fn add_parameter(&mut self, param: (I, S));
     fn next(self) -> Self::Next;
 }
 

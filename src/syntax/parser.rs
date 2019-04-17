@@ -118,11 +118,11 @@ where
                 } else {
                     parser = parser.diagnose_unexpected_token();
                     return parser
-                        .change_context(IntermediateContext::next)
+                        .change_context(ParamsContext::next)
                         .change_context(StmtContext::exit);
                 }
             }
-            parser.change_context(IntermediateContext::next)
+            parser.change_context(ParamsContext::next)
         } else {
             self.change_context(|c| c.enter_stmt(None))
         }
@@ -461,7 +461,7 @@ where
 impl<'a, Id, L, C, E, I, Ctx, S> Parser<'a, (Result<Token<Id, L, C>, E>, S), I, Ctx>
 where
     I: Iterator<Item = (Result<Token<Id, L, C>, E>, S)>,
-    Ctx: ParamsContext<S, Ident = Id>,
+    Ctx: ParamsContext<Id, S>,
     S: Clone,
 {
     fn parse_macro_param(mut self) -> Self {
@@ -671,10 +671,6 @@ mod tests {
         parent: FileActionCollector,
     }
 
-    impl AssocIdent for LabelActionCollector {
-        type Ident = SymIdent;
-    }
-
     impl EmitDiagnostic<SymSpan, SymSpan> for LabelActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
             self.actions
@@ -682,14 +678,12 @@ mod tests {
         }
     }
 
-    impl ParamsContext<SymSpan> for LabelActionCollector {
-        fn add_parameter(&mut self, param: (Self::Ident, SymSpan)) {
+    impl ParamsContext<SymIdent, SymSpan> for LabelActionCollector {
+        type Next = StmtActionCollector;
+
+        fn add_parameter(&mut self, param: (SymIdent, SymSpan)) {
             self.actions.push(MacroParamsAction::AddParameter(param))
         }
-    }
-
-    impl IntermediateContext for LabelActionCollector {
-        type Next = StmtActionCollector;
 
         fn next(self) -> Self::Next {
             Self::Next {
@@ -809,10 +803,6 @@ mod tests {
         }
     }
 
-    impl<P> AssocIdent for ExprActionCollector<P> {
-        type Ident = SymIdent;
-    }
-
     impl FinalContext for ExprActionCollector<CommandActionCollector> {
         type ReturnTo = CommandActionCollector;
 
@@ -836,6 +826,7 @@ mod tests {
     where
         Self: DelegateDiagnostics<SymSpan>,
     {
+        type Ident = SymIdent;
         type Literal = SymLiteral;
 
         fn push_atom(&mut self, atom: (ExprAtom<SymIdent, SymLiteral>, SymSpan)) {

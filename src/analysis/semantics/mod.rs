@@ -186,20 +186,14 @@ impl<S: Session> FileContext<Ident<S::StringRef>, Literal<S::StringRef>, Command
     }
 }
 
-impl<S: Session> AssocIdent for SemanticActions<S> {
-    type Ident = Ident<S::StringRef>;
-}
+impl<S: Session> ParamsContext<Ident<S::StringRef>, S::Span> for SemanticActions<S> {
+    type Next = Self;
 
-impl<S: Session> ParamsContext<S::Span> for SemanticActions<S> {
-    fn add_parameter(&mut self, (ident, span): (Self::Ident, S::Span)) {
+    fn add_parameter(&mut self, (ident, span): (Ident<S::StringRef>, S::Span)) {
         let (_, (idents, spans)) = self.label.as_mut().unwrap();
         idents.push(ident);
         spans.push(span)
     }
-}
-
-impl<S: Session> IntermediateContext for SemanticActions<S> {
-    type Next = Self;
 
     fn next(self) -> Self::Next {
         self
@@ -358,10 +352,6 @@ where
     }
 }
 
-impl<R, S, P> AssocIdent for ExprBuilder<R, S, P> {
-    type Ident = Ident<R>;
-}
-
 impl<S: Session> FinalContext for ExprBuilder<S::StringRef, S::Span, CommandActions<S>> {
     type ReturnTo = CommandActions<S>;
 
@@ -379,6 +369,7 @@ where
     S: Clone,
     Self: DelegateDiagnostics<S>,
 {
+    type Ident = Ident<R>;
     type Literal = Literal<R>;
 
     fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, S)) {
