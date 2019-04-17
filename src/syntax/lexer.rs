@@ -96,14 +96,14 @@ impl<B: Borrow<str>> Scanner<B> {
     fn lex_token(&mut self) -> <Self as Iterator>::Item {
         let first_char = self.current_char().unwrap();
         let next_token = match first_char {
-            ')' => self.take(ClosingParenthesis),
             ',' => self.take(Comma),
             '.' => self.take(Dot),
             '\n' => self.take(Eol),
+            '(' => self.take(LParen),
             '-' => self.take(Minus),
-            '(' => self.take(OpeningParenthesis),
             '|' => self.take(Pipe),
             '+' => self.take(Plus),
+            ')' => self.take(RParen),
             '/' => self.take(Slash),
             '*' => self.take(Star),
             '0'..='9' => self.lex_decimal_number(),
@@ -506,7 +506,7 @@ mod tests {
 
     #[test]
     fn lex_brackets() {
-        assert_eq_tokens("()", [OpeningParenthesis.into(), ClosingParenthesis.into()])
+        assert_eq_tokens("()", [LParen.into(), RParen.into()])
     }
 
     #[test]

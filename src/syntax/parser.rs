@@ -106,14 +106,14 @@ where
         if let (Ok(Token::Label(label)), span) = self.token {
             bump!(self);
             let mut parser = self.change_context(|c| c.enter_labeled_stmt((label, span)));
-            if parser.token_kind() == Some(Token::Simple(SimpleToken::OpeningParenthesis)) {
+            if parser.token_kind() == Some(LParen.into()) {
                 bump!(parser);
                 parser = parser.parse_terminated_list(
                     Comma.into(),
-                    &[Token::Simple(SimpleToken::ClosingParenthesis)],
+                    &[RParen.into()],
                     Parser::parse_macro_param,
                 );
-                if parser.token_kind() == Some(Token::Simple(SimpleToken::ClosingParenthesis)) {
+                if parser.token_kind() == Some(RParen.into()) {
                     bump!(parser)
                 } else {
                     parser = parser.diagnose_unexpected_token();
@@ -264,7 +264,7 @@ impl<I, C, L> Token<I, C, L> {
         use SuffixOperator::*;
         match self {
             Token::Simple(Minus) => Some(Binary(BinOp::Minus)),
-            Token::Simple(OpeningParenthesis) => Some(FnCall),
+            Token::Simple(LParen) => Some(FnCall),
             Token::Simple(Pipe) => Some(Binary(BinOp::BitwiseOr)),
             Token::Simple(Plus) => Some(Binary(BinOp::Plus)),
             Token::Simple(Slash) => Some(Binary(BinOp::Division)),
@@ -344,7 +344,7 @@ where
             }
         };
         match self.token {
-            (Ok(Token::Simple(ClosingParenthesis)), right) => {
+            (Ok(Token::Simple(RParen)), right) => {
                 bump!(self);
                 let span = self.context.diagnostics().merge_spans(&left, &right);
                 self.context
@@ -390,7 +390,7 @@ where
         let mut args = 0;
         while let Ok(token) = &self.token.0 {
             match token {
-                Token::Simple(SimpleToken::ClosingParenthesis) => break,
+                Token::Simple(SimpleToken::RParen) => break,
                 Token::Simple(SimpleToken::Comma) => {
                     bump!(self);
                     self = self.parse_fn_arg(&mut args)?;
@@ -412,7 +412,7 @@ where
 
     fn parse_primary_expr(mut self) -> ParserResult<Self, Ctx, S> {
         match self.token {
-            (Ok(Token::Simple(OpeningParenthesis)), span) => {
+            (Ok(Token::Simple(LParen)), span) => {
                 bump!(self);
                 self.parse_parenthesized_expression(span)
             }
@@ -1062,11 +1062,11 @@ mod tests {
     fn parse_nonempty_macro_def_with_two_params() {
         let tokens = input_tokens![
             l @ Label(()),
-            OpeningParenthesis,
+            LParen,
             p1 @ Ident(()),
             Comma,
             p2 @ Ident(()),
-            ClosingParenthesis,
+            RParen,
             key @ Macro,
             Eol,
             t1 @ Command(()),
@@ -1113,9 +1113,9 @@ mod tests {
     fn parse_deref_operand() {
         let tokens = input_tokens![
             jp @ Command(()),
-            open @ OpeningParenthesis,
+            open @ LParen,
             hl @ Literal(()),
-            close @ ClosingParenthesis,
+            close @ RParen,
         ];
         let expected = [unlabeled(command(
             "jp",
@@ -1283,8 +1283,7 @@ mod tests {
 
     #[test]
     fn parse_nullary_fn_call() {
-        let tokens =
-            input_tokens![name @ Ident(()), left @ OpeningParenthesis, right @ ClosingParenthesis];
+        let tokens = input_tokens![name @ Ident(()), left @ LParen, right @ RParen];
         let expected = expr().ident("name").fn_call(
             0,
             SymSpan::merge(TokenRef::from("left"), TokenRef::from("right")),
@@ -1296,9 +1295,9 @@ mod tests {
     fn parse_unary_fn_call() {
         let tokens = input_tokens![
             name @ Ident(()),
-            left @ OpeningParenthesis,
+            left @ LParen,
             arg @ Ident(()),
-            right @ ClosingParenthesis
+            right @ RParen
         ];
         let expected = expr().ident("name").ident("arg").fn_call(
             1,
@@ -1311,11 +1310,11 @@ mod tests {
     fn parse_binary_fn_call() {
         let tokens = input_tokens![
             name @ Ident(()),
-            left @ OpeningParenthesis,
+            left @ LParen,
             arg1 @ Ident(()),
             Simple(Comma),
             arg2 @ Ident(()),
-            right @ ClosingParenthesis
+            right @ RParen
         ];
         let expected = expr().ident("name").ident("arg1").ident("arg2").fn_call(
             2,
@@ -1328,8 +1327,8 @@ mod tests {
     fn parse_fn_call_plus_literal() {
         let tokens = input_tokens![
             name @ Ident(()),
-            left @ OpeningParenthesis,
-            right @ ClosingParenthesis,
+            left @ LParen,
+            right @ RParen,
             plus @ Simple(Plus),
             literal @ Literal(())
         ];
@@ -1350,8 +1349,8 @@ mod tests {
             literal @ Literal(()),
             star @ Simple(Star),
             name @ Ident(()),
-            left @ OpeningParenthesis,
-            right @ ClosingParenthesis,
+            left @ LParen,
+            right @ RParen,
         ];
         let expected = expr()
             .literal("literal")
@@ -1376,11 +1375,11 @@ mod tests {
         let tokens = input_tokens![
             a @ Ident(()),
             plus1 @ Plus,
-            left @ OpeningParenthesis,
+            left @ LParen,
             b @ Ident(()),
             plus2 @ Plus,
             c @ Ident(()),
-            right @ ClosingParenthesis,
+            right @ RParen,
         ];
         let expected = expr()
             .ident("a")
@@ -1445,7 +1444,7 @@ mod tests {
     #[test]
     fn diagnose_eof_in_param_list() {
         assert_eq_actions(
-            input_tokens![label @ Label(()), OpeningParenthesis, eof @ Eof],
+            input_tokens![label @ Label(()), LParen, eof @ Eof],
             [FileAction::Stmt {
                 label: Some((
                     (SymIdent("label".into()), TokenRef::from("label").into()),
@@ -1488,7 +1487,7 @@ mod tests {
     #[test]
     fn diagnose_unmatched_parentheses() {
         assert_eq_actions(
-            input_tokens![Command(()), paren @ OpeningParenthesis, Literal(())],
+            input_tokens![Command(()), paren @ LParen, Literal(())],
             [unlabeled(command(
                 0,
                 [expr()
@@ -1514,7 +1513,7 @@ mod tests {
         assert_eq_actions(
             input_tokens![
                 Command(()),
-                paren @ ClosingParenthesis,
+                paren @ RParen,
                 Plus,
                 Ident(()),
                 Eol,
@@ -1538,7 +1537,7 @@ mod tests {
     #[test]
     fn diagnose_unmatched_parenthesis_at_eol() {
         assert_eq_actions(
-            input_tokens![Command(()), OpeningParenthesis, Eol],
+            input_tokens![Command(()), LParen, Eol],
             [
                 unlabeled(command(
                     0,
@@ -1555,9 +1554,9 @@ mod tests {
         assert_eq_actions(
             input_tokens![
                 label @ Label(()),
-                OpeningParenthesis,
+                LParen,
                 lit @ Literal(()),
-                ClosingParenthesis,
+                RParen,
                 key @ Macro,
                 Eol,
                 endm @ Endm

@@ -22,17 +22,17 @@ pub enum Token<I, L, C> {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SimpleToken {
-    ClosingParenthesis,
     Comma,
     Dot,
     Endm,
     Eof,
     Eol,
+    LParen,
     Macro,
     Minus,
-    OpeningParenthesis,
     Pipe,
     Plus,
+    RParen,
     Slash,
     Star,
 }
