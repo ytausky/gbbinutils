@@ -455,11 +455,7 @@ impl<S: Session> TokenSeqContext<S::Span> for MacroDefActions<S> {
     fn exit(self) -> Self::Parent {
         let mut actions = self.parent;
         if let Some((name, params)) = actions.label.take() {
-            actions
-                .session
-                .as_mut()
-                .unwrap()
-                .define_macro(name, params, self.tokens)
+            actions.session().define_macro(name, params, self.tokens)
         }
         actions
     }
