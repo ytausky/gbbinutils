@@ -115,11 +115,10 @@ impl<R: Clone + Eq, D: Diagnostics> Analyze<R, D> for SemanticAnalyzer {
 
 pub(crate) struct SemanticActions<S: Session> {
     session: Option<S>,
-    label: Option<(
-        (Ident<S::StringRef>, S::Span),
-        Params<S::StringRef, S::Span>,
-    )>,
+    label: Option<Label<S::StringRef, S::Span>>,
 }
+
+type Label<R, S> = ((Ident<R>, S), Params<R, S>);
 
 impl<S: Session> SemanticActions<S> {
     pub fn new(session: S) -> SemanticActions<S> {
