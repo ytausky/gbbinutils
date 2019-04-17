@@ -408,6 +408,13 @@ fn convert_params(params: impl Borrow<[TokenRef]>) -> Vec<MacroParamsAction<SymS
         .collect()
 }
 
+pub(crate) fn push_token(
+    token: impl Into<SymToken>,
+    span: impl Into<TokenRef>,
+) -> TokenSeqAction<SymSpan> {
+    TokenSeqAction::PushToken((token.into(), span.into().into()))
+}
+
 pub(crate) fn malformed_macro_def(
     keyword: impl Into<TokenRef>,
     mut body: Vec<TokenSeqAction<SymSpan>>,

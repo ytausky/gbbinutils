@@ -177,6 +177,12 @@ where
 
     fn parse_macro_def(self, span: S) -> Self {
         let mut state = self.change_context(|c| c.enter_macro_def(span));
+        if !state.token_is_in(LINE_FOLLOW_SET) {
+            state = state.diagnose_unexpected_token();
+            while !state.token_is_in(LINE_FOLLOW_SET) {
+                bump!(state)
+            }
+        }
         if state.token_kind() == Some(Eol.into()) {
             bump!(state);
             loop {
@@ -203,6 +209,7 @@ where
                 }
             }
         } else {
+            assert_eq!(state.token_kind(), Some(Eof.into()));
             state = state.diagnose_unexpected_token();
         }
         state.change_context(TokenSeqContext::exit)
@@ -1575,5 +1582,36 @@ mod tests {
                 }],
             }],
         )
+    }
+
+    #[test]
+    fn diagnose_unexpected_token_after_macro_keyword() {
+        let tokens = input_tokens![
+            label @ Label(()),
+            key @ Macro,
+            unexpected @ Ident(()),
+            Eol,
+            t1 @ Command(()),
+            t2 @ Eol,
+            t3 @ Endm,
+        ];
+        let unexpected = TokenRef::from("unexpected");
+        let mut body = vec![TokenSeqAction::EmitDiagnostic(arg_error(
+            Message::UnexpectedToken {
+                token: unexpected.clone().into(),
+            },
+            unexpected,
+        ))];
+        body.extend(tokens.token_seq(["t1", "t2"]));
+        body.push(push_token(Eof, "t3"));
+        let expected = [labeled(
+            "label",
+            vec![],
+            vec![StmtAction::MacroDef {
+                keyword: TokenRef::from("key").into(),
+                body,
+            }],
+        )];
+        assert_eq_actions(tokens, expected)
     }
 }
