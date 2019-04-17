@@ -67,7 +67,7 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
 
     fn analyze_equ(mut self) {
         let actions = &mut self.actions;
-        let symbol = actions.label.take().unwrap();
+        let symbol = actions.label.take().unwrap().0;
         single_arg(self.span, self.args, actions.diagnostics())
             .and_then(|arg| actions.analyze_expr(arg))
             .map(|value| actions.session().define_symbol(symbol, value))
@@ -75,7 +75,7 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
     }
 
     fn analyze_section(self) {
-        let name = self.actions.label.take().unwrap();
+        let name = self.actions.label.take().unwrap().0;
         self.actions.session().start_section(name)
     }
 

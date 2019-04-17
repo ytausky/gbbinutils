@@ -28,7 +28,6 @@ pub enum SimpleToken {
     Endm,
     Eof,
     Eol,
-    Expr,
     Macro,
     Minus,
     OpeningParenthesis,
@@ -56,19 +55,19 @@ pub(crate) use self::parser::parse_src as parse_token_seq;
 
 pub(crate) trait FileContext<I, L, C, S: Clone>: DelegateDiagnostics<S> + Sized {
     type StmtContext: StmtContext<I, L, C, S, Parent = Self>;
+    type LabelContext: ParamsContext<S, Ident = I> + IntermediateContext<Next = Self::StmtContext>;
+
     fn enter_stmt(self, label: Option<(I, S)>) -> Self::StmtContext;
+    fn enter_labeled_stmt(self, label: (I, S)) -> Self::LabelContext;
 }
 
 pub(crate) trait StmtContext<I, L, C, S: Clone>: DelegateDiagnostics<S> + Sized {
     type CommandContext: CommandContext<S, Ident = I, Command = C, Literal = L, Parent = Self>;
-    type FnParamsContext: ParamsContext<S, Ident = I> + ToFnBody<S, Literal = L, Parent = Self>;
-    type MacroParamsContext: ParamsContext<S, Ident = I>
-        + ToMacroBody<S, Command = C, Literal = L, Parent = Self>;
+    type MacroDefContext: TokenSeqContext<S, Token = Token<I, L, C>, Parent = Self>;
     type MacroInvocationContext: MacroInvocationContext<S, Token = Token<I, L, C>, Parent = Self>;
     type Parent;
     fn enter_command(self, name: (C, S)) -> Self::CommandContext;
-    fn enter_fn_def(self, keyword: S) -> Self::FnParamsContext;
-    fn enter_macro_def(self, keyword: S) -> Self::MacroParamsContext;
+    fn enter_macro_def(self, keyword: S) -> Self::MacroDefContext;
     fn enter_macro_invocation(self, name: (I, S)) -> Self::MacroInvocationContext;
     fn exit(self) -> Self::Parent;
 }
@@ -124,24 +123,17 @@ pub(crate) trait ParamsContext<S: Clone>: AssocIdent + DelegateDiagnostics<S> {
     fn add_parameter(&mut self, param: (Self::Ident, S));
 }
 
+pub(crate) trait IntermediateContext {
+    type Next;
+
+    fn next(self) -> Self::Next;
+}
+
 pub(crate) trait ToFnBody<S: Clone>: AssocIdent {
     type Literal;
     type Parent;
     type Next: ExprContext<S, Ident = Self::Ident, Literal = Self::Literal>
         + FinalContext<ReturnTo = Self::Parent>;
-
-    fn next(self) -> Self::Next;
-}
-
-pub(crate) trait ToMacroBody<S: Clone>: AssocIdent {
-    type Literal;
-    type Command;
-    type Parent;
-    type Next: TokenSeqContext<
-        S,
-        Token = Token<Self::Ident, Self::Literal, Self::Command>,
-        Parent = Self::Parent,
-    >;
 
     fn next(self) -> Self::Next;
 }

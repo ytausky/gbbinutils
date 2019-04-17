@@ -12,8 +12,6 @@ use crate::name::{NameTable, StartScope};
 use crate::syntax::keyword::*;
 use crate::syntax::*;
 
-use std::marker::PhantomData;
-
 #[cfg(test)]
 pub use self::mock::*;
 
@@ -117,7 +115,10 @@ impl<R: Clone + Eq, D: Diagnostics> Analyze<R, D> for SemanticAnalyzer {
 
 pub(crate) struct SemanticActions<S: Session> {
     session: Option<S>,
-    label: Option<(Ident<S::StringRef>, S::Span)>,
+    label: Option<(
+        (Ident<S::StringRef>, S::Span),
+        Params<S::StringRef, S::Span>,
+    )>,
 }
 
 impl<S: Session> SemanticActions<S> {
@@ -147,7 +148,7 @@ impl<S: Session> SemanticActions<S> {
     }
 
     fn define_label_if_present(&mut self) {
-        if let Some((label, span)) = self.label.take() {
+        if let Some(((label, span), _)) = self.label.take() {
             let value = self.build_value(|mut builder| {
                 PushOp::<LocationCounter, _>::push_op(&mut builder, LocationCounter, span.clone());
                 builder.finish()
@@ -173,9 +174,35 @@ impl<S: Session> FileContext<Ident<S::StringRef>, Literal<S::StringRef>, Command
     for SemanticActions<S>
 {
     type StmtContext = Self;
+    type LabelContext = Self;
+
+    fn enter_labeled_stmt(mut self, label: (Ident<S::StringRef>, S::Span)) -> Self::LabelContext {
+        self.label = Some((label, (vec![], vec![])));
+        self
+    }
 
     fn enter_stmt(mut self, label: Option<(Ident<S::StringRef>, S::Span)>) -> Self::StmtContext {
-        self.label = label;
+        self.label = label.map(|name| (name, (vec![], vec![])));
+        self
+    }
+}
+
+impl<S: Session> AssocIdent for SemanticActions<S> {
+    type Ident = Ident<S::StringRef>;
+}
+
+impl<S: Session> ParamsContext<S::Span> for SemanticActions<S> {
+    fn add_parameter(&mut self, (ident, span): (Self::Ident, S::Span)) {
+        let (_, (idents, spans)) = self.label.as_mut().unwrap();
+        idents.push(ident);
+        spans.push(span)
+    }
+}
+
+impl<S: Session> IntermediateContext for SemanticActions<S> {
+    type Next = Self;
+
+    fn next(self) -> Self::Next {
         self
     }
 }
@@ -184,8 +211,7 @@ impl<S: Session> StmtContext<Ident<S::StringRef>, Literal<S::StringRef>, Command
     for SemanticActions<S>
 {
     type CommandContext = CommandActions<S>;
-    type FnParamsContext = DefHeadActions<S, FnDef>;
-    type MacroParamsContext = DefHeadActions<S, MacroDef>;
+    type MacroDefContext = MacroDefActions<S>;
     type MacroInvocationContext = MacroInvocationActions<S>;
     type Parent = Self;
 
@@ -193,16 +219,12 @@ impl<S: Session> StmtContext<Ident<S::StringRef>, Literal<S::StringRef>, Command
         CommandActions::new(name, self)
     }
 
-    fn enter_fn_def(mut self, _keyword: S::Span) -> Self::FnParamsContext {
-        DefHeadActions::new(self.label.take(), self)
-    }
-
-    fn enter_macro_def(mut self, keyword: S::Span) -> Self::MacroParamsContext {
+    fn enter_macro_def(mut self, keyword: S::Span) -> Self::MacroDefContext {
         if self.label.is_none() {
             self.diagnostics()
                 .emit_diagnostic(Message::MacroRequiresName.at(keyword))
         }
-        DefHeadActions::new(self.label.take(), self)
+        MacroDefActions::new(self)
     }
 
     fn enter_macro_invocation(
@@ -410,96 +432,15 @@ fn analyze_mnemonic<S: Session>(
     }
 }
 
-pub(crate) struct DefHeadActions<S: Session, T> {
-    name: Option<(Ident<S::StringRef>, S::Span)>,
-    params: (Vec<Ident<S::StringRef>>, Vec<S::Span>),
-    actions: SemanticActions<S>,
-    _tag: PhantomData<T>,
-}
-
-impl<S: Session, T> DefHeadActions<S, T> {
-    fn new(name: Option<(Ident<S::StringRef>, S::Span)>, actions: SemanticActions<S>) -> Self {
-        Self {
-            name,
-            params: (Vec::new(), Vec::new()),
-            actions,
-            _tag: PhantomData,
-        }
-    }
-}
-
-impl<S: Session, T> AssocIdent for DefHeadActions<S, T> {
-    type Ident = Ident<S::StringRef>;
-}
-
-impl<S: Session, T> DelegateDiagnostics<S::Span> for DefHeadActions<S, T> {
-    type Delegate = S::Delegate;
-
-    fn diagnostics(&mut self) -> &mut Self::Delegate {
-        self.actions.diagnostics()
-    }
-}
-
-impl<S: Session, T> ParamsContext<S::Span> for DefHeadActions<S, T> {
-    fn add_parameter(&mut self, (param, span): (Self::Ident, S::Span)) {
-        self.params.0.push(param);
-        self.params.1.push(span)
-    }
-}
-
-pub(crate) struct FnDef;
-
-impl<S: Session> ToFnBody<S::Span> for DefHeadActions<S, FnDef> {
-    type Literal = Literal<S::StringRef>;
-    type Parent = SemanticActions<S>;
-    type Next = ExprBuilder<S::StringRef, S::Span, Self>;
-
-    fn next(self) -> Self::Next {
-        ExprBuilder {
-            stack: Vec::new(),
-            parent: self,
-        }
-    }
-}
-
-impl<S: Session> FinalContext for ExprBuilder<S::StringRef, S::Span, DefHeadActions<S, FnDef>> {
-    type ReturnTo = SemanticActions<S>;
-
-    fn exit(mut self) -> Self::ReturnTo {
-        let mut builder = self
-            .parent
-            .actions
-            .session
-            .unwrap()
-            .define_fn(self.parent.name.unwrap(), self.parent.params);
-        builder.analyze_expr(self.stack.pop().unwrap()).unwrap();
-        self.parent.actions.session = Some(builder.finish_fn_def());
-        self.parent.actions
-    }
-}
-
-pub(crate) struct MacroDef;
-
-impl<S: Session> ToMacroBody<S::Span> for DefHeadActions<S, MacroDef> {
-    type Literal = Literal<S::StringRef>;
-    type Command = Command;
-    type Parent = SemanticActions<S>;
-    type Next = MacroDefActions<S>;
-
-    fn next(self) -> Self::Next {
-        MacroDefActions::new(self)
-    }
-}
-
 pub(crate) struct MacroDefActions<S: Session> {
-    head: DefHeadActions<S, MacroDef>,
+    parent: SemanticActions<S>,
     tokens: (Vec<SemanticToken<S::StringRef>>, Vec<S::Span>),
 }
 
 impl<S: Session> MacroDefActions<S> {
-    fn new(head: DefHeadActions<S, MacroDef>) -> Self {
+    fn new(parent: SemanticActions<S>) -> Self {
         Self {
-            head,
+            parent,
             tokens: (Vec::new(), Vec::new()),
         }
     }
@@ -509,7 +450,7 @@ impl<S: Session> DelegateDiagnostics<S::Span> for MacroDefActions<S> {
     type Delegate = S::Delegate;
 
     fn diagnostics(&mut self) -> &mut Self::Delegate {
-        self.head.diagnostics()
+        self.parent.diagnostics()
     }
 }
 
@@ -523,13 +464,13 @@ impl<S: Session> TokenSeqContext<S::Span> for MacroDefActions<S> {
     }
 
     fn exit(self) -> Self::Parent {
-        let mut actions = self.head.actions;
-        if let Some(name) = self.head.name {
+        let mut actions = self.parent;
+        if let Some((name, params)) = actions.label.take() {
             actions
                 .session
                 .as_mut()
                 .unwrap()
-                .define_macro(name, self.head.params, self.tokens)
+                .define_macro(name, params, self.tokens)
         }
         actions
     }
@@ -799,43 +740,6 @@ mod tests {
     }
 
     #[test]
-    fn define_nullary_fn() {
-        let name: Ident<_> = "my_expr".into();
-        let ident: Ident<_> = "id".into();
-        let actions = collect_semantic_actions(|actions| {
-            let mut actions = actions
-                .enter_stmt(Some((name.clone(), ())))
-                .enter_fn_def(())
-                .next();
-            actions.push_atom((ExprAtom::Ident(ident.clone()), ()));
-            actions.exit().exit()
-        });
-        assert_eq!(
-            actions,
-            [SessionEvent::DefineFn(name, vec![], Atom::Name(ident).into()).into()]
-        )
-    }
-
-    #[test]
-    fn define_unary_fn() {
-        let name: Ident<_> = "my_expr".into();
-        let ident: Ident<_> = "id".into();
-        let actions = collect_semantic_actions(|actions| {
-            let mut params = actions
-                .enter_stmt(Some((name.clone(), ())))
-                .enter_fn_def(());
-            params.add_parameter((ident.clone(), ()));
-            let mut body = params.next();
-            body.push_atom((ExprAtom::Ident(ident.clone()), ()));
-            body.exit().exit()
-        });
-        assert_eq!(
-            actions,
-            [SessionEvent::DefineFn(name, vec![ident.clone()], Atom::Name(ident).into()).into()]
-        )
-    }
-
-    #[test]
     fn define_nullary_macro() {
         test_macro_definition(
             "my_macro",
@@ -862,10 +766,8 @@ mod tests {
 
     #[test]
     fn define_nameless_macro() {
-        let actions = collect_semantic_actions(|actions| {
-            let params = actions.enter_stmt(None).enter_macro_def(());
-            TokenSeqContext::exit(params.next())
-        });
+        let actions =
+            collect_semantic_actions(|actions| actions.enter_stmt(None).enter_macro_def(()).exit());
         assert_eq!(
             actions,
             [DiagnosticsEvent::EmitDiagnostic(Message::MacroRequiresName.at(()).into()).into()]
@@ -878,13 +780,11 @@ mod tests {
         body: impl Borrow<[SemanticToken<String>]>,
     ) {
         let actions = collect_semantic_actions(|actions| {
-            let mut params_actions = actions
-                .enter_stmt(Some((name.into(), ())))
-                .enter_macro_def(());
+            let mut params_actions = actions.enter_labeled_stmt((name.into(), ()));
             for param in params.borrow().iter().map(|&t| (t.into(), ())) {
                 params_actions.add_parameter(param)
             }
-            let mut token_seq_actions = params_actions.next();
+            let mut token_seq_actions = params_actions.next().enter_macro_def(());
             for token in body.borrow().iter().cloned().map(|t| (t, ())) {
                 token_seq_actions.push_token(token)
             }

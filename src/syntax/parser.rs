@@ -40,7 +40,12 @@ where
 struct Parser<'a, T, I: 'a, C> {
     token: T,
     remaining: &'a mut I,
+    recovery: Option<RecoveryState>,
     context: C,
+}
+
+enum RecoveryState {
+    DiagnosedEof,
 }
 
 impl<'a, T, I: Iterator<Item = T>, C> Parser<'a, T, I, C> {
@@ -48,6 +53,7 @@ impl<'a, T, I: Iterator<Item = T>, C> Parser<'a, T, I, C> {
         Parser {
             token: tokens.next().unwrap(),
             remaining: tokens,
+            recovery: None,
             context,
         }
     }
@@ -64,6 +70,7 @@ impl<'a, T, I, C> Parser<'a, T, I, C> {
         Parser {
             token: self.token,
             remaining: self.remaining,
+            recovery: self.recovery,
             context: f(self.context),
         }
     }
@@ -96,15 +103,31 @@ where
     }
 
     fn parse_stmt(mut self) -> Self {
-        let label = if let (Ok(Token::Label(label)), span) = self.token {
+        if let (Ok(Token::Label(label)), span) = self.token {
             bump!(self);
-            Some((label, span))
+            let mut parser = self.change_context(|c| c.enter_labeled_stmt((label, span)));
+            if parser.token_kind() == Some(Token::Simple(SimpleToken::OpeningParenthesis)) {
+                bump!(parser);
+                parser = parser.parse_terminated_list(
+                    Comma.into(),
+                    &[Token::Simple(SimpleToken::ClosingParenthesis)],
+                    Parser::parse_macro_param,
+                );
+                if parser.token_kind() == Some(Token::Simple(SimpleToken::ClosingParenthesis)) {
+                    bump!(parser)
+                } else {
+                    parser = parser.diagnose_unexpected_token();
+                    return parser
+                        .change_context(IntermediateContext::next)
+                        .change_context(StmtContext::exit);
+                }
+            }
+            parser.change_context(IntermediateContext::next)
         } else {
-            None
-        };
-        self.change_context(|c| c.enter_stmt(label))
-            .parse_unlabeled_stmt()
-            .change_context(StmtContext::exit)
+            self.change_context(|c| c.enter_stmt(None))
+        }
+        .parse_unlabeled_stmt()
+        .change_context(StmtContext::exit)
     }
 }
 
@@ -130,10 +153,6 @@ where
                     bump!(self);
                     self.parse_macro_invocation((ident, span))
                 }
-                (Ok(Token::Simple(SimpleToken::Expr)), span) => {
-                    bump!(self);
-                    self.parse_expr_def(span)
-                }
                 (Ok(Token::Simple(SimpleToken::Macro)), span) => {
                     bump!(self);
                     self.parse_macro_def(span)
@@ -156,33 +175,10 @@ where
             .change_context(CommandContext::exit)
     }
 
-    fn parse_expr_def(mut self, span: S) -> Self {
-        if self.token_kind() != Some(SimpleToken::OpeningParenthesis.into()) {
-            unimplemented!()
-        }
-        bump!(self);
-        let mut params_parser = self
-            .change_context(|c| c.enter_fn_def(span))
-            .parse_terminated_list(Comma.into(), &[ClosingParenthesis.into()], |p| {
-                p.parse_macro_param()
-            });
-        if params_parser.token_kind() != Some(SimpleToken::ClosingParenthesis.into()) {
-            unimplemented!()
-        }
-        bump!(params_parser);
-        params_parser
-            .change_context(ToFnBody::next)
-            .parse()
-            .change_context(FinalContext::exit)
-    }
-
     fn parse_macro_def(self, span: S) -> Self {
-        let mut state = self
-            .change_context(|c| c.enter_macro_def(span))
-            .parse_terminated_list(Comma.into(), LINE_FOLLOW_SET, Parser::parse_macro_param);
+        let mut state = self.change_context(|c| c.enter_macro_def(span));
         if state.token_kind() == Some(Eol.into()) {
             bump!(state);
-            let mut state = state.change_context(ToMacroBody::next);
             loop {
                 match state.token {
                     (Ok(Token::Simple(Endm)), _) => {
@@ -206,16 +202,10 @@ where
                     (Err(_), _) => unimplemented!(),
                 }
             }
-            state
         } else {
-            assert_eq!(state.token_kind(), Some(Eof.into()));
-            state
-                .context
-                .diagnostics()
-                .emit_diagnostic(Message::UnexpectedEof.at(state.token.1.clone()));
-            state.change_context(ToMacroBody::next)
+            state = state.diagnose_unexpected_token();
         }
-        .change_context(TokenSeqContext::exit)
+        state.change_context(TokenSeqContext::exit)
     }
 
     fn parse_macro_invocation(self, name: (Id, S)) -> Self {
@@ -469,15 +459,12 @@ where
 {
     fn parse_macro_param(mut self) -> Self {
         match self.token.0 {
-            Ok(Token::Ident(ident)) => self.context.add_parameter((ident, self.token.1)),
-            _ => {
-                let stripped = self.context.diagnostics().strip_span(&self.token.1);
-                self.context.diagnostics().emit_diagnostic(
-                    Message::UnexpectedToken { token: stripped }.at(self.token.1.clone()),
-                )
+            Ok(Token::Ident(ident)) => {
+                self.context.add_parameter((ident, self.token.1));
+                bump!(self)
             }
+            _ => self = self.diagnose_unexpected_token(),
         };
-        bump!(self);
         self
     }
 }
@@ -525,13 +512,8 @@ where
     {
         self = self.parse_list(delimiter, terminators, parser);
         if !self.token_is_in(terminators) {
-            let unexpected_span = self.token.1;
-            let stripped = self.context.diagnostics().strip_span(&unexpected_span);
-            self.context
-                .diagnostics()
-                .emit_diagnostic(Message::UnexpectedToken { token: stripped }.at(unexpected_span));
-            bump!(self);
-            while !self.token_is_in(terminators) {
+            self = self.diagnose_unexpected_token();
+            while !self.token_is_in(terminators) && self.token_kind() != Some(Token::Simple(Eof)) {
                 bump!(self);
             }
         }
@@ -557,6 +539,24 @@ where
         while self.token_kind() == Some(delimiter) {
             bump!(self);
             self = parser(self);
+        }
+        self
+    }
+
+    fn diagnose_unexpected_token(mut self) -> Self {
+        if self.token_kind() == Some(Token::Simple(Eof)) {
+            if self.recovery.is_none() {
+                self.context
+                    .diagnostics()
+                    .emit_diagnostic(Message::UnexpectedEof.at(self.token.1.clone()));
+                self.recovery = Some(RecoveryState::DiagnosedEof)
+            }
+        } else {
+            let stripped = self.context.diagnostics().strip_span(&self.token.1);
+            self.context
+                .diagnostics()
+                .emit_diagnostic(Message::UnexpectedToken { token: stripped }.at(self.token.1));
+            bump!(self)
         }
         self
     }
@@ -608,13 +608,11 @@ mod tests {
 
     impl_diag_traits! {
         FileActionCollector,
+        LabelActionCollector,
         StmtActionCollector,
         CommandActionCollector,
         ExprActionCollector<CommandActionCollector>,
-        ExprActionCollector<FnParamsActionCollector>,
         ExprActionCollector<()>,
-        FnParamsActionCollector,
-        MacroParamsActionCollector,
         MacroBodyActionCollector,
         MacroInvocationActionCollector,
         MacroArgActionCollector,
@@ -641,9 +639,18 @@ mod tests {
 
     impl FileContext<SymIdent, SymLiteral, SymCommand, SymSpan> for FileActionCollector {
         type StmtContext = StmtActionCollector;
+        type LabelContext = LabelActionCollector;
 
         fn enter_stmt(self, label: Option<(SymIdent, SymSpan)>) -> StmtActionCollector {
             StmtActionCollector {
+                label: label.map(|label| (label, vec![])),
+                actions: Vec::new(),
+                parent: self,
+            }
+        }
+
+        fn enter_labeled_stmt(self, label: (SymIdent, SymSpan)) -> Self::LabelContext {
+            LabelActionCollector {
                 label,
                 actions: Vec::new(),
                 parent: self,
@@ -651,8 +658,43 @@ mod tests {
         }
     }
 
+    struct LabelActionCollector {
+        label: (SymIdent, SymSpan),
+        actions: Vec<MacroParamsAction<SymSpan>>,
+        parent: FileActionCollector,
+    }
+
+    impl AssocIdent for LabelActionCollector {
+        type Ident = SymIdent;
+    }
+
+    impl EmitDiagnostic<SymSpan, SymSpan> for LabelActionCollector {
+        fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
+            self.actions
+                .push(MacroParamsAction::EmitDiagnostic(diagnostic.into()))
+        }
+    }
+
+    impl ParamsContext<SymSpan> for LabelActionCollector {
+        fn add_parameter(&mut self, param: (Self::Ident, SymSpan)) {
+            self.actions.push(MacroParamsAction::AddParameter(param))
+        }
+    }
+
+    impl IntermediateContext for LabelActionCollector {
+        type Next = StmtActionCollector;
+
+        fn next(self) -> Self::Next {
+            Self::Next {
+                label: Some((self.label, self.actions)),
+                actions: Vec::new(),
+                parent: self.parent,
+            }
+        }
+    }
+
     struct StmtActionCollector {
-        label: Option<(SymIdent, SymSpan)>,
+        label: Option<((SymIdent, SymSpan), Vec<MacroParamsAction<SymSpan>>)>,
         actions: Vec<StmtAction<SymSpan>>,
         parent: FileActionCollector,
     }
@@ -666,8 +708,7 @@ mod tests {
 
     impl StmtContext<SymIdent, SymLiteral, SymCommand, SymSpan> for StmtActionCollector {
         type CommandContext = CommandActionCollector;
-        type FnParamsContext = FnParamsActionCollector;
-        type MacroParamsContext = MacroParamsActionCollector;
+        type MacroDefContext = MacroBodyActionCollector;
         type MacroInvocationContext = MacroInvocationActionCollector;
         type Parent = FileActionCollector;
 
@@ -679,16 +720,8 @@ mod tests {
             }
         }
 
-        fn enter_fn_def(self, keyword: SymSpan) -> Self::FnParamsContext {
-            FnParamsActionCollector {
-                keyword,
-                actions: Vec::new(),
-                parent: self,
-            }
-        }
-
-        fn enter_macro_def(self, keyword: SymSpan) -> MacroParamsActionCollector {
-            MacroParamsActionCollector {
+        fn enter_macro_def(self, keyword: SymSpan) -> Self::MacroDefContext {
+            Self::MacroDefContext {
                 keyword,
                 actions: Vec::new(),
                 parent: self,
@@ -807,92 +840,10 @@ mod tests {
         }
     }
 
-    struct FnParamsActionCollector {
-        keyword: SymSpan,
-        actions: Vec<MacroParamsAction<SymSpan>>,
-        parent: StmtActionCollector,
-    }
-
-    impl EmitDiagnostic<SymSpan, SymSpan> for FnParamsActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
-            self.actions
-                .push(MacroParamsAction::EmitDiagnostic(diagnostic.into()))
-        }
-    }
-
-    impl AssocIdent for FnParamsActionCollector {
-        type Ident = SymIdent;
-    }
-
-    impl ParamsContext<SymSpan> for FnParamsActionCollector {
-        fn add_parameter(&mut self, param: (SymIdent, SymSpan)) {
-            self.actions.push(MacroParamsAction::AddParameter(param))
-        }
-    }
-
-    impl ToFnBody<SymSpan> for FnParamsActionCollector {
-        type Literal = SymLiteral;
-        type Parent = StmtActionCollector;
-        type Next = ExprActionCollector<Self>;
-
-        fn next(self) -> Self::Next {
-            ExprActionCollector::new(self)
-        }
-    }
-
-    impl FinalContext for ExprActionCollector<FnParamsActionCollector> {
-        type ReturnTo = StmtActionCollector;
-
-        fn exit(mut self) -> Self::ReturnTo {
-            self.parent.parent.actions.push(StmtAction::ExprDef {
-                keyword: self.parent.keyword,
-                params: self.parent.actions,
-                body: self.actions,
-            });
-            self.parent.parent
-        }
-    }
-
-    struct MacroParamsActionCollector {
-        keyword: SymSpan,
-        actions: Vec<MacroParamsAction<SymSpan>>,
-        parent: StmtActionCollector,
-    }
-
-    impl EmitDiagnostic<SymSpan, SymSpan> for MacroParamsActionCollector {
-        fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
-            self.actions
-                .push(MacroParamsAction::EmitDiagnostic(diagnostic.into()))
-        }
-    }
-
-    impl AssocIdent for MacroParamsActionCollector {
-        type Ident = SymIdent;
-    }
-
-    impl ParamsContext<SymSpan> for MacroParamsActionCollector {
-        fn add_parameter(&mut self, param: (SymIdent, SymSpan)) {
-            self.actions.push(MacroParamsAction::AddParameter(param))
-        }
-    }
-
-    impl ToMacroBody<SymSpan> for MacroParamsActionCollector {
-        type Literal = SymLiteral;
-        type Command = SymCommand;
-        type Parent = StmtActionCollector;
-        type Next = MacroBodyActionCollector;
-
-        fn next(self) -> Self::Next {
-            MacroBodyActionCollector {
-                actions: Vec::new(),
-                parent: self,
-            }
-        }
-    }
-
     struct MacroBodyActionCollector {
+        keyword: SymSpan,
         actions: Vec<TokenSeqAction<SymSpan>>,
-        parent: MacroParamsActionCollector,
+        parent: StmtActionCollector,
     }
 
     impl EmitDiagnostic<SymSpan, SymSpan> for MacroBodyActionCollector {
@@ -911,12 +862,11 @@ mod tests {
         }
 
         fn exit(mut self) -> StmtActionCollector {
-            self.parent.parent.actions.push(StmtAction::MacroDef {
-                keyword: self.parent.keyword,
-                params: self.parent.actions,
+            self.parent.actions.push(StmtAction::MacroDef {
+                keyword: self.keyword,
                 body: self.actions,
             });
-            self.parent.parent
+            self.parent
         }
     }
 
@@ -1086,33 +1036,40 @@ mod tests {
     #[test]
     fn parse_empty_macro_definition() {
         let tokens = input_tokens![Label(()), Macro, Eol, Endm];
-        let expected_actions = [labeled(0, macro_def(1, [], Vec::new(), 3))];
+        let expected_actions = [labeled(0, vec![], macro_def(1, Vec::new(), 3))];
         assert_eq_actions(tokens, expected_actions);
     }
 
     #[test]
     fn parse_macro_definition_with_instruction() {
         let tokens = input_tokens![Label(()), Macro, Eol, Command(()), Eol, Endm];
-        let expected_actions = [labeled(0, macro_def(1, [], tokens.token_seq([3, 4]), 5))];
+        let expected_actions = [labeled(
+            0,
+            vec![],
+            macro_def(1, tokens.token_seq([3, 4]), 5),
+        )];
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_nonempty_macro_def_with_two_params() {
         let tokens = input_tokens![
-            Label(()),
-            Macro,
-            Ident(()),
+            l @ Label(()),
+            OpeningParenthesis,
+            p1 @ Ident(()),
             Comma,
-            Ident(()),
+            p2 @ Ident(()),
+            ClosingParenthesis,
+            key @ Macro,
             Eol,
-            Command(()),
-            Eol,
-            Endm,
+            t1 @ Command(()),
+            t2 @ Eol,
+            endm @ Endm,
         ];
         let expected = [labeled(
-            0,
-            macro_def(1, [2.into(), 4.into()], tokens.token_seq([6, 7]), 8),
+            "l",
+            ["p1".into(), "p2".into()],
+            macro_def("key", tokens.token_seq(["t1", "t2"]), "endm"),
         )];
         assert_eq_actions(tokens, expected)
     }
@@ -1120,28 +1077,28 @@ mod tests {
     #[test]
     fn parse_label() {
         let tokens = input_tokens![Label(()), Eol];
-        let expected_actions = [labeled(0, empty())];
+        let expected_actions = [labeled(0, vec![], empty())];
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_two_consecutive_labels() {
         let tokens = input_tokens![Label(()), Eol, Label(())];
-        let expected = [labeled(0, empty()), labeled(2, empty())];
+        let expected = [labeled(0, vec![], empty()), labeled(2, vec![], empty())];
         assert_eq_actions(tokens, expected)
     }
 
     #[test]
     fn parse_labeled_instruction() {
         let tokens = input_tokens![Label(()), Command(()), Eol];
-        let expected = [labeled(0, command(1, [])), unlabeled(empty())];
+        let expected = [labeled(0, vec![], command(1, [])), unlabeled(empty())];
         assert_eq_actions(tokens, expected)
     }
 
     #[test]
     fn parse_labeled_command_with_eol_separators() {
         let tokens = input_tokens![Label(()), Eol, Eol, Command(())];
-        let expected = [labeled(0, command(3, []))];
+        let expected = [labeled(0, vec![], command(3, []))];
         assert_eq_actions(tokens, expected)
     }
 
@@ -1197,23 +1154,6 @@ mod tests {
             [tokens.token_seq([1, 2]), tokens.token_seq([4, 5, 6])],
         ))];
         assert_eq_actions(tokens, expected_actions)
-    }
-
-    #[test]
-    fn parse_named_expr_def() {
-        let tokens = input_tokens![
-            expr @ Expr,
-            left @ OpeningParenthesis,
-            x1 @ Ident(()),
-            right @ ClosingParenthesis,
-            x2 @ Ident(()),
-        ];
-        let expected = [unlabeled(expr_def(
-            "expr",
-            vec!["x1".into()],
-            expr().ident("x2"),
-        ))];
-        assert_eq_actions(tokens, expected)
     }
 
     #[test]
@@ -1496,14 +1436,19 @@ mod tests {
     }
 
     #[test]
-    fn diagnose_eof_after_macro_param_list() {
+    fn diagnose_eof_in_param_list() {
         assert_eq_actions(
-            input_tokens![Macro, eof @ Eof],
-            [unlabeled(malformed_macro_def_head(
-                0,
-                [],
-                arg_error(Message::UnexpectedEof, "eof"),
-            ))],
+            input_tokens![label @ Label(()), OpeningParenthesis, eof @ Eof],
+            [FileAction::Stmt {
+                label: Some((
+                    (SymIdent("label".into()), TokenRef::from("label").into()),
+                    vec![MacroParamsAction::EmitDiagnostic(arg_error(
+                        Message::UnexpectedEof,
+                        "eof",
+                    ))],
+                )),
+                actions: vec![],
+            }],
         )
     }
 
@@ -1513,7 +1458,6 @@ mod tests {
             input_tokens![Macro, Eol, eof @ Eof],
             [unlabeled(malformed_macro_def(
                 0,
-                [],
                 Vec::new(),
                 arg_error(Message::UnexpectedEof, "eof"),
             ))],
@@ -1599,24 +1543,37 @@ mod tests {
     }
 
     #[test]
-    fn diagnose_unexpected_token_in_macro_param() {
-        let span: SymSpan = TokenRef::from(1).into();
+    fn diagnose_unexpected_token_param_list() {
+        let span: SymSpan = TokenRef::from("lit").into();
         assert_eq_actions(
-            input_tokens![Macro, Literal(()), Eol, Endm],
-            [unlabeled(vec![StmtAction::MacroDef {
-                keyword: TokenRef::from(0).into(),
-                params: vec![MacroParamsAction::EmitDiagnostic(
-                    Message::UnexpectedToken {
-                        token: span.clone(),
-                    }
-                    .at(span)
-                    .into(),
-                )],
-                body: vec![TokenSeqAction::PushToken((
-                    Eof.into(),
-                    TokenRef::from(3).into(),
-                ))],
-            }])],
+            input_tokens![
+                label @ Label(()),
+                OpeningParenthesis,
+                lit @ Literal(()),
+                ClosingParenthesis,
+                key @ Macro,
+                Eol,
+                endm @ Endm
+            ],
+            [FileAction::Stmt {
+                label: Some((
+                    (SymIdent("label".into()), TokenRef::from("label").into()),
+                    vec![MacroParamsAction::EmitDiagnostic(
+                        Message::UnexpectedToken {
+                            token: span.clone(),
+                        }
+                        .at(span)
+                        .into(),
+                    )],
+                )),
+                actions: vec![StmtAction::MacroDef {
+                    keyword: TokenRef::from("key").into(),
+                    body: vec![TokenSeqAction::PushToken((
+                        Eof.into(),
+                        TokenRef::from("endm").into(),
+                    ))],
+                }],
+            }],
         )
     }
 }

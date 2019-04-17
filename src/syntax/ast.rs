@@ -254,7 +254,7 @@ impl From<&'static str> for TokenRef {
 #[derive(Debug, PartialEq)]
 pub(crate) enum FileAction<S> {
     Stmt {
-        label: Option<(SymIdent, S)>,
+        label: Option<((SymIdent, S), Vec<MacroParamsAction<S>>)>,
         actions: Vec<StmtAction<S>>,
     },
     EmitDiagnostic(CompactDiagnostic<S, S>),
@@ -266,14 +266,8 @@ pub(crate) enum StmtAction<S> {
         command: (SymCommand, S),
         actions: Vec<CommandAction<S>>,
     },
-    ExprDef {
-        keyword: S,
-        params: Vec<MacroParamsAction<S>>,
-        body: Vec<ExprAction<S>>,
-    },
     MacroDef {
         keyword: S,
-        params: Vec<MacroParamsAction<S>>,
         body: Vec<TokenSeqAction<S>>,
     },
     MacroInvocation {
@@ -319,11 +313,15 @@ pub(crate) struct SymExpr(pub Vec<ExprAction<SymSpan>>);
 
 pub(crate) fn labeled(
     label: impl Into<TokenRef>,
+    params: impl Borrow<[TokenRef]>,
     actions: Vec<StmtAction<SymSpan>>,
 ) -> FileAction<SymSpan> {
     let label = label.into();
     FileAction::Stmt {
-        label: Some((SymIdent(label.clone()), label.into())),
+        label: Some((
+            (SymIdent(label.clone()), label.into()),
+            convert_params(params),
+        )),
         actions,
     }
 }
@@ -373,18 +371,6 @@ pub(crate) fn malformed_command(
     }]
 }
 
-pub(crate) fn expr_def(
-    keyword: impl Into<TokenRef>,
-    params: impl Borrow<[TokenRef]>,
-    body: SymExpr,
-) -> Vec<StmtAction<SymSpan>> {
-    vec![StmtAction::ExprDef {
-        keyword: keyword.into().into(),
-        params: convert_params(params),
-        body: body.0,
-    }]
-}
-
 pub(crate) fn invoke(
     id: impl Into<TokenRef>,
     args: impl Borrow<[Vec<TokenSeqAction<SymSpan>>]>,
@@ -403,14 +389,12 @@ pub(crate) fn invoke(
 
 pub(crate) fn macro_def(
     keyword: impl Into<TokenRef>,
-    params: impl Borrow<[TokenRef]>,
     mut body: Vec<TokenSeqAction<SymSpan>>,
     endm: impl Into<TokenRef>,
 ) -> Vec<StmtAction<SymSpan>> {
     body.push(TokenSeqAction::PushToken((Eof.into(), endm.into().into())));
     vec![StmtAction::MacroDef {
         keyword: keyword.into().into(),
-        params: convert_params(params),
         body,
     }]
 }
@@ -424,39 +408,14 @@ fn convert_params(params: impl Borrow<[TokenRef]>) -> Vec<MacroParamsAction<SymS
         .collect()
 }
 
-pub(crate) fn malformed_macro_def_head(
-    keyword: impl Into<TokenRef>,
-    params: impl Borrow<[TokenRef]>,
-    diagnostic: CompactDiagnostic<SymSpan, SymSpan>,
-) -> Vec<StmtAction<SymSpan>> {
-    vec![StmtAction::MacroDef {
-        keyword: keyword.into().into(),
-        params: params
-            .borrow()
-            .iter()
-            .cloned()
-            .map(|t| MacroParamsAction::AddParameter((SymIdent(t.clone()), t.into())))
-            .chain(iter::once(MacroParamsAction::EmitDiagnostic(diagnostic)))
-            .collect(),
-        body: Vec::new(),
-    }]
-}
-
 pub(crate) fn malformed_macro_def(
     keyword: impl Into<TokenRef>,
-    params: impl Borrow<[TokenRef]>,
     mut body: Vec<TokenSeqAction<SymSpan>>,
     diagnostic: CompactDiagnostic<SymSpan, SymSpan>,
 ) -> Vec<StmtAction<SymSpan>> {
     body.push(TokenSeqAction::EmitDiagnostic(diagnostic));
     vec![StmtAction::MacroDef {
         keyword: keyword.into().into(),
-        params: params
-            .borrow()
-            .iter()
-            .cloned()
-            .map(|t| MacroParamsAction::AddParameter((SymIdent(t.clone()), t.into())))
-            .collect(),
         body,
     }]
 }
