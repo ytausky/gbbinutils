@@ -160,9 +160,7 @@ where
                 (_, span) => {
                     bump!(self);
                     let stripped = self.context.diagnostics().strip_span(&span);
-                    self.context
-                        .diagnostics()
-                        .emit_diagnostic(Message::UnexpectedToken { token: stripped }.at(span));
+                    self.emit_diagnostic(Message::UnexpectedToken { token: stripped }.at(span));
                     self
                 }
             };
@@ -195,10 +193,7 @@ where
                         break;
                     }
                     (Ok(Token::Simple(Eof)), _) => {
-                        state
-                            .context
-                            .diagnostics()
-                            .emit_diagnostic(Message::UnexpectedEof.at(state.token.1.clone()));
+                        state = state.diagnose_unexpected_token();
                         break;
                     }
                     (Ok(other), span) => {
@@ -304,18 +299,10 @@ where
     fn parse(self) -> Self {
         self.parse_expression()
             .unwrap_or_else(|(mut parser, error)| {
-                let diagnostic = match error {
-                    ExprParsingError::NothingParsed => match parser.token.0 {
-                        Ok(Token::Simple(Eof)) => Message::UnexpectedEof,
-                        _ => Message::UnexpectedToken {
-                            token: parser.context.diagnostics().strip_span(&parser.token.1),
-                        },
-                    }
-                    .at(parser.token.1.clone())
-                    .into(),
-                    ExprParsingError::Other(diagnostic) => diagnostic,
-                };
-                parser.context.diagnostics().emit_diagnostic(diagnostic);
+                match error {
+                    ExprParsingError::NothingParsed => parser = parser.diagnose_unexpected_token(),
+                    ExprParsingError::Other(diagnostic) => parser.emit_diagnostic(diagnostic),
+                }
                 while !parser.token_is_in(LINE_FOLLOW_SET) {
                     bump!(parser);
                 }
@@ -553,19 +540,31 @@ where
     fn diagnose_unexpected_token(mut self) -> Self {
         if self.token_kind() == Some(Token::Simple(Eof)) {
             if self.recovery.is_none() {
-                self.context
-                    .diagnostics()
-                    .emit_diagnostic(Message::UnexpectedEof.at(self.token.1.clone()));
+                self.emit_diagnostic(Message::UnexpectedEof.at(self.token.1.clone()));
                 self.recovery = Some(RecoveryState::DiagnosedEof)
             }
         } else {
-            let stripped = self.context.diagnostics().strip_span(&self.token.1);
-            self.context
-                .diagnostics()
-                .emit_diagnostic(Message::UnexpectedToken { token: stripped }.at(self.token.1));
-            bump!(self)
+            let token = self.token.1;
+            bump!(self);
+            let stripped = self.context.diagnostics().strip_span(&token);
+            self.emit_diagnostic(Message::UnexpectedToken { token: stripped }.at(token))
         }
         self
+    }
+}
+
+impl<'a, Id, L, C, E, I, Ctx, S> EmitDiagnostic<S, <Ctx::Delegate as StripSpan<S>>::Stripped>
+    for Parser<'a, (Result<Token<Id, L, C>, E>, S), I, Ctx>
+where
+    I: Iterator<Item = (Result<Token<Id, L, C>, E>, S)>,
+    Ctx: DelegateDiagnostics<S>,
+    S: Clone,
+{
+    fn emit_diagnostic(
+        &mut self,
+        diagnostic: impl Into<CompactDiagnostic<S, <Ctx::Delegate as StripSpan<S>>::Stripped>>,
+    ) {
+        self.context.diagnostics().emit_diagnostic(diagnostic)
     }
 }
 
