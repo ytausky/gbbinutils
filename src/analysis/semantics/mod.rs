@@ -180,8 +180,7 @@ impl<S: Session> FileContext<Ident<S::StringRef>, Literal<S::StringRef>, Command
         self
     }
 
-    fn enter_stmt(mut self, label: Option<(Ident<S::StringRef>, S::Span)>) -> Self::StmtContext {
-        self.label = label.map(|name| (name, (vec![], vec![])));
+    fn enter_unlabeled_stmt(self) -> Self::StmtContext {
         self
     }
 }
@@ -625,7 +624,7 @@ mod tests {
         use crate::model::*;
         let actions = collect_semantic_actions(|actions| {
             let mut command = actions
-                .enter_stmt(None)
+                .enter_unlabeled_stmt()
                 .enter_command((Command::Mnemonic(Mnemonic::Ld), ()));
             let mut arg1 = command.add_argument();
             arg1.push_atom((ExprAtom::Literal(Literal::Operand(Operand::B)), ()));
@@ -661,7 +660,7 @@ mod tests {
         use crate::model::*;
         let actions = collect_semantic_actions(|actions| {
             let command = actions
-                .enter_stmt(None)
+                .enter_unlabeled_stmt()
                 .enter_command((Command::Mnemonic(Mnemonic::Rst), ()));
             let mut expr = command.add_argument();
             expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
@@ -687,7 +686,7 @@ mod tests {
         let label = "my_label";
         let actions = collect_semantic_actions(|actions| {
             let mut arg = actions
-                .enter_stmt(None)
+                .enter_unlabeled_stmt()
                 .enter_command((Command::Directive(Directive::Dw), ()))
                 .add_argument();
             arg.push_atom((ExprAtom::Ident(label.into()), ()));
@@ -705,8 +704,9 @@ mod tests {
     #[test]
     fn analyze_label() {
         let label = "label";
-        let actions =
-            collect_semantic_actions(|actions| actions.enter_stmt(Some((label.into(), ()))).exit());
+        let actions = collect_semantic_actions(|actions| {
+            actions.enter_labeled_stmt((label.into(), ())).next().exit()
+        });
         assert_eq!(
             actions,
             [SessionEvent::DefineSymbol((label.into(), ()), Atom::LocationCounter.into()).into()]
@@ -717,7 +717,7 @@ mod tests {
     fn analyze_org_dot() {
         let actions = collect_semantic_actions(|actions| {
             let mut actions = actions
-                .enter_stmt(None)
+                .enter_unlabeled_stmt()
                 .enter_command((Directive::Org.into(), ()))
                 .add_argument();
             actions.push_atom((ExprAtom::LocationCounter, ()));
@@ -756,8 +756,9 @@ mod tests {
 
     #[test]
     fn define_nameless_macro() {
-        let actions =
-            collect_semantic_actions(|actions| actions.enter_stmt(None).enter_macro_def(()).exit());
+        let actions = collect_semantic_actions(|actions| {
+            actions.enter_unlabeled_stmt().enter_macro_def(()).exit()
+        });
         assert_eq!(
             actions,
             [DiagnosticsEvent::EmitDiagnostic(Message::MacroRequiresName.at(()).into()).into()]
@@ -796,7 +797,7 @@ mod tests {
         let name = "my_macro";
         let actions = collect_semantic_actions(|actions| {
             let invocation = actions
-                .enter_stmt(None)
+                .enter_unlabeled_stmt()
                 .enter_macro_invocation((name.into(), ()));
             invocation.exit().exit()
         });
@@ -812,7 +813,7 @@ mod tests {
         let arg_token = Token::Literal(Literal::Operand(Operand::A));
         let actions = collect_semantic_actions(|actions| {
             let mut invocation = actions
-                .enter_stmt(None)
+                .enter_unlabeled_stmt()
                 .enter_macro_invocation((name.into(), ()));
             invocation = {
                 let mut arg = invocation.enter_macro_arg();
@@ -831,7 +832,7 @@ mod tests {
     fn diagnose_wrong_operand_count() {
         let actions = collect_semantic_actions(|actions| {
             let mut arg = actions
-                .enter_stmt(None)
+                .enter_unlabeled_stmt()
                 .enter_command((Command::Mnemonic(Mnemonic::Nop), ()))
                 .add_argument();
             let literal_a = Literal::Operand(Operand::A);
@@ -856,7 +857,7 @@ mod tests {
     fn diagnose_parsing_error() {
         let diagnostic = Message::UnexpectedToken { token: () }.at(());
         let actions = collect_semantic_actions(|actions| {
-            let mut stmt = actions.enter_stmt(None);
+            let mut stmt = actions.enter_unlabeled_stmt();
             stmt.diagnostics().emit_diagnostic(diagnostic.clone());
             stmt.exit()
         });
@@ -871,7 +872,7 @@ mod tests {
         let diagnostic = Message::UnexpectedToken { token: () }.at(());
         let actions = collect_semantic_actions(|file| {
             let mut expr = file
-                .enter_stmt(None)
+                .enter_unlabeled_stmt()
                 .enter_command((Command::Mnemonic(Mnemonic::Add), ()))
                 .add_argument();
             expr.diagnostics().emit_diagnostic(diagnostic.clone());

@@ -283,7 +283,7 @@ mod tests {
         session.fail(CodebaseError::Utf8Error);
         {
             let mut context = SemanticActions::new(session)
-                .enter_stmt(None)
+                .enter_unlabeled_stmt()
                 .enter_command((Command::Directive(Directive::Include), ()))
                 .add_argument();
             context.push_atom((ExprAtom::Literal(Literal::String(name.into())), ()));
@@ -310,7 +310,7 @@ mod tests {
         )));
         {
             let mut context = SemanticActions::new(session)
-                .enter_stmt(None)
+                .enter_unlabeled_stmt()
                 .enter_command((Command::Directive(Directive::Include), ()))
                 .add_argument();
             context.push_atom((ExprAtom::Literal(Literal::String(name.into())), ()));
@@ -350,7 +350,8 @@ mod tests {
         let name = "hot_stuff";
         let actions = collect_semantic_actions(|actions| {
             actions
-                .enter_stmt(Some((name.into(), ())))
+                .enter_labeled_stmt((name.into(), ()))
+                .next()
                 .enter_command((Command::Directive(Directive::Section), ()))
                 .exit()
                 .exit()
@@ -400,7 +401,7 @@ mod tests {
     {
         collect_semantic_actions(|actions| {
             let command = actions
-                .enter_stmt(None)
+                .enter_unlabeled_stmt()
                 .enter_command((Command::Directive(directive), ()));
             f(command).exit().exit()
         })
@@ -412,7 +413,8 @@ mod tests {
     {
         collect_semantic_actions(|actions| {
             let mut arg = actions
-                .enter_stmt(Some((label.into(), ())))
+                .enter_labeled_stmt((label.into(), ()))
+                .next()
                 .enter_command((Command::Directive(directive), ()))
                 .add_argument();
             f(&mut arg);

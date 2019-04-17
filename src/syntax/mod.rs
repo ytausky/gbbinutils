@@ -54,11 +54,11 @@ where
 pub(crate) use self::parser::parse_src as parse_token_seq;
 
 pub(crate) trait FileContext<I, L, C, S: Clone>: DelegateDiagnostics<S> + Sized {
-    type StmtContext: StmtContext<I, L, C, S, Parent = Self>;
     type LabelContext: ParamsContext<I, S, Next = Self::StmtContext>;
+    type StmtContext: StmtContext<I, L, C, S, Parent = Self>;
 
-    fn enter_stmt(self, label: Option<(I, S)>) -> Self::StmtContext;
     fn enter_labeled_stmt(self, label: (I, S)) -> Self::LabelContext;
+    fn enter_unlabeled_stmt(self) -> Self::StmtContext;
 }
 
 pub(crate) trait StmtContext<I, L, C, S: Clone>: DelegateDiagnostics<S> + Sized {

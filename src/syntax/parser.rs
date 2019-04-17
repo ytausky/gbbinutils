@@ -124,7 +124,7 @@ where
             }
             parser.change_context(ParamsContext::next)
         } else {
-            self.change_context(|c| c.enter_stmt(None))
+            self.change_context(FileContext::enter_unlabeled_stmt)
         }
         .parse_unlabeled_stmt()
         .change_context(StmtContext::exit)
@@ -647,9 +647,9 @@ mod tests {
         type StmtContext = StmtActionCollector;
         type LabelContext = LabelActionCollector;
 
-        fn enter_stmt(self, label: Option<(SymIdent, SymSpan)>) -> StmtActionCollector {
+        fn enter_unlabeled_stmt(self) -> StmtActionCollector {
             StmtActionCollector {
-                label: label.map(|label| (label, vec![])),
+                label: None,
                 actions: Vec::new(),
                 parent: self,
             }
