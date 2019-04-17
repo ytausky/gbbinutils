@@ -173,11 +173,10 @@ impl<S: Session> FileContext<Ident<S::StringRef>, Literal<S::StringRef>, Command
     for SemanticActions<S>
 {
     type StmtContext = Self;
-    type LabelContext = Self;
+    type LabelContext = LabelActions<S>;
 
-    fn enter_labeled_stmt(mut self, label: (Ident<S::StringRef>, S::Span)) -> Self::LabelContext {
-        self.label = Some((label, (vec![], vec![])));
-        self
+    fn enter_labeled_stmt(self, label: (Ident<S::StringRef>, S::Span)) -> Self::LabelContext {
+        LabelActions::new(self, label)
     }
 
     fn enter_unlabeled_stmt(self) -> Self::StmtContext {
@@ -185,17 +184,43 @@ impl<S: Session> FileContext<Ident<S::StringRef>, Literal<S::StringRef>, Command
     }
 }
 
-impl<S: Session> ParamsContext<Ident<S::StringRef>, S::Span> for SemanticActions<S> {
-    type Next = Self;
+pub(crate) struct LabelActions<S: Session> {
+    parent: SemanticActions<S>,
+    label: (Ident<S::StringRef>, S::Span),
+    params: Params<S::StringRef, S::Span>,
+}
+
+impl<S: Session> LabelActions<S> {
+    fn new(parent: SemanticActions<S>, label: (Ident<S::StringRef>, S::Span)) -> Self {
+        Self {
+            parent,
+            label,
+            params: (Vec::new(), Vec::new()),
+        }
+    }
+}
+
+impl<S: Session> DelegateDiagnostics<S::Span> for LabelActions<S> {
+    type Delegate = S::Delegate;
+
+    fn diagnostics(&mut self) -> &mut Self::Delegate {
+        self.parent.diagnostics()
+    }
+}
+
+impl<S: Session> ParamsContext<Ident<S::StringRef>, S::Span> for LabelActions<S> {
+    type Next = SemanticActions<S>;
 
     fn add_parameter(&mut self, (ident, span): (Ident<S::StringRef>, S::Span)) {
-        let (_, (idents, spans)) = self.label.as_mut().unwrap();
-        idents.push(ident);
-        spans.push(span)
+        self.params.0.push(ident);
+        self.params.1.push(span)
     }
 
     fn next(self) -> Self::Next {
-        self
+        let mut parent = self.parent;
+        assert!(parent.label.is_none());
+        parent.label = Some((self.label, self.params));
+        parent
     }
 }
 
