@@ -111,7 +111,7 @@ where
                 parser = parser.parse_terminated_list(
                     Comma.into(),
                     &[RParen.into()],
-                    Parser::parse_macro_param,
+                    Parser::parse_param,
                 );
                 if parser.token_kind() == Some(RParen.into()) {
                     bump!(parser)
@@ -464,7 +464,7 @@ where
     Ctx: ParamsContext<Id, S>,
     S: Clone,
 {
-    fn parse_macro_param(mut self) -> Self {
+    fn parse_param(mut self) -> Self {
         match self.token.0 {
             Ok(Token::Ident(ident)) => {
                 self.context.add_parameter((ident, self.token.1));
@@ -667,14 +667,14 @@ mod tests {
 
     struct LabelActionCollector {
         label: (SymIdent, SymSpan),
-        actions: Vec<MacroParamsAction<SymSpan>>,
+        actions: Vec<ParamsAction<SymSpan>>,
         parent: FileActionCollector,
     }
 
     impl EmitDiagnostic<SymSpan, SymSpan> for LabelActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
             self.actions
-                .push(MacroParamsAction::EmitDiagnostic(diagnostic.into()))
+                .push(ParamsAction::EmitDiagnostic(diagnostic.into()))
         }
     }
 
@@ -682,7 +682,7 @@ mod tests {
         type Next = StmtActionCollector;
 
         fn add_parameter(&mut self, param: (SymIdent, SymSpan)) {
-            self.actions.push(MacroParamsAction::AddParameter(param))
+            self.actions.push(ParamsAction::AddParameter(param))
         }
 
         fn next(self) -> Self::Next {
@@ -695,7 +695,7 @@ mod tests {
     }
 
     struct StmtActionCollector {
-        label: Option<((SymIdent, SymSpan), Vec<MacroParamsAction<SymSpan>>)>,
+        label: Option<((SymIdent, SymSpan), Vec<ParamsAction<SymSpan>>)>,
         actions: Vec<StmtAction<SymSpan>>,
         parent: FileActionCollector,
     }
@@ -1439,7 +1439,7 @@ mod tests {
             [FileAction::Stmt {
                 label: Some((
                     (SymIdent("label".into()), TokenRef::from("label").into()),
-                    vec![MacroParamsAction::EmitDiagnostic(arg_error(
+                    vec![ParamsAction::EmitDiagnostic(arg_error(
                         Message::UnexpectedEof,
                         "eof",
                     ))],
@@ -1555,7 +1555,7 @@ mod tests {
             [FileAction::Stmt {
                 label: Some((
                     (SymIdent("label".into()), TokenRef::from("label").into()),
-                    vec![MacroParamsAction::EmitDiagnostic(
+                    vec![ParamsAction::EmitDiagnostic(
                         Message::UnexpectedToken {
                             token: span.clone(),
                         }

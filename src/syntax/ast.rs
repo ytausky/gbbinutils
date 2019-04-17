@@ -254,7 +254,7 @@ impl From<&'static str> for TokenRef {
 #[derive(Debug, PartialEq)]
 pub(crate) enum FileAction<S> {
     Stmt {
-        label: Option<((SymIdent, S), Vec<MacroParamsAction<S>>)>,
+        label: Option<((SymIdent, S), Vec<ParamsAction<S>>)>,
         actions: Vec<StmtAction<S>>,
     },
     EmitDiagnostic(CompactDiagnostic<S, S>),
@@ -291,7 +291,7 @@ pub(crate) enum ExprAction<S> {
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) enum MacroParamsAction<S> {
+pub(crate) enum ParamsAction<S> {
     AddParameter((SymIdent, S)),
     EmitDiagnostic(CompactDiagnostic<S, S>),
 }
@@ -399,12 +399,12 @@ pub(crate) fn macro_def(
     }]
 }
 
-fn convert_params(params: impl Borrow<[TokenRef]>) -> Vec<MacroParamsAction<SymSpan>> {
+fn convert_params(params: impl Borrow<[TokenRef]>) -> Vec<ParamsAction<SymSpan>> {
     params
         .borrow()
         .iter()
         .cloned()
-        .map(|t| MacroParamsAction::AddParameter((SymIdent(t.clone()), t.into())))
+        .map(|t| ParamsAction::AddParameter((SymIdent(t.clone()), t.into())))
         .collect()
 }
 
