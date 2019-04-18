@@ -212,7 +212,7 @@ mod tests {
         let mut builder = ProgramBuilder::new();
         builder.set_origin(addr.into());
         let symbol_id = builder.alloc_name(());
-        builder.define_symbol((symbol_id, ()), Atom::LocationCounter.into());
+        builder.define_fn((symbol_id, ()), Atom::LocationCounter.into());
         let object = builder.into_object();
         let relocs = object.resolve_relocs();
         let reloc = match object.names.get(symbol_id).unwrap() {

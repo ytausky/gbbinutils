@@ -73,7 +73,7 @@ where
     Self: StartSection<<Self as AllocName<S>>::Name, S>,
     <Self as PartialBackend<S>>::Value: Default + ValueBuilder<<Self as AllocName<S>>::Name, S>,
 {
-    fn define_symbol(&mut self, symbol: (Self::Name, S), value: Self::Value);
+    fn define_fn(&mut self, name: (Self::Name, S), value: Self::Value);
 }
 
 #[cfg(test)]
@@ -112,10 +112,10 @@ mod mock {
         T: From<BackendEvent<Expr<usize, S>>>,
         S: Clone,
     {
-        fn define_symbol(&mut self, symbol: (Self::Name, S), value: Self::Value) {
+        fn define_fn(&mut self, name: (Self::Name, S), value: Self::Value) {
             self.log
                 .borrow_mut()
-                .push(BackendEvent::DefineSymbol(symbol, value).into())
+                .push(BackendEvent::DefineSymbol(name, value).into())
         }
     }
 

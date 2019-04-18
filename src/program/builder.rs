@@ -72,7 +72,7 @@ impl<S: Clone> PartialBackend<S> for ProgramBuilder<S> {
 }
 
 impl<S: Clone> Backend<S> for ProgramBuilder<S> {
-    fn define_symbol(&mut self, (name, span): (Self::Name, S), value: Self::Value) {
+    fn define_fn(&mut self, (name, span): (Self::Name, S), value: Self::Value) {
         let reloc = self.program.alloc_reloc();
         self.program.names.define(name, NameDef::Reloc(reloc));
         self.push(Node::Symbol((name, span), value))
@@ -258,7 +258,7 @@ mod tests {
     fn emit_defined_symbol() {
         let (object, diagnostics) = with_object_builder(|builder| {
             let symbol_id = builder.alloc_name(());
-            builder.define_symbol((symbol_id, ()), Atom::LocationCounter.into());
+            builder.define_fn((symbol_id, ()), Atom::LocationCounter.into());
             let mut value: Expr<_> = Default::default();
             value.push_op(symbol_id, ());
             builder.emit_item(word_item(value));
@@ -274,7 +274,7 @@ mod tests {
             let mut value: Expr<_> = Default::default();
             value.push_op(symbol_id, ());
             builder.emit_item(word_item(value));
-            builder.define_symbol((symbol_id, ()), Atom::LocationCounter.into());
+            builder.define_fn((symbol_id, ()), Atom::LocationCounter.into());
         });
         assert_eq!(*diagnostics, []);
         assert_eq!(object.sections.last().unwrap().data, [0x02, 0x00])

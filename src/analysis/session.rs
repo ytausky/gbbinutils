@@ -378,7 +378,7 @@ where
     fn define_symbol(&mut self, symbol: (Ident<Self::StringRef>, Self::Span), value: Self::Value) {
         self.names.start_scope(&symbol.0);
         let symbol_id = self.look_up_symbol(symbol.0, &symbol.1);
-        self.backend.define_symbol((symbol_id, symbol.1), value)
+        self.backend.define_fn((symbol_id, symbol.1), value)
     }
 }
 
