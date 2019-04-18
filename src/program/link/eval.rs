@@ -1,6 +1,6 @@
 use super::{EvalContext, RelocTable, Value};
 
-use crate::model::{Atom, BinOp, ExprOperator};
+use crate::model::{Atom, BinOp, ExprOp};
 use crate::program::{Expr, NameDef, NameId, SectionId};
 
 use std::borrow::Borrow;
@@ -14,14 +14,14 @@ impl<S: Clone> Expr<S> {
         let mut stack = Vec::new();
         for item in &self.0 {
             match &item.op {
-                ExprOperator::Atom(atom) => stack.push((
+                ExprOp::Atom(atom) => stack.push((
                     atom.eval(context).unwrap_or_else(|()| {
                         on_undefined(&item.op_span);
                         Value::Unknown
                     }),
                     item.expr_span.clone(),
                 )),
-                ExprOperator::Binary(operator) => {
+                ExprOp::Binary(operator) => {
                     let rhs = stack.pop().unwrap();
                     let lhs = stack.pop().unwrap();
                     stack.push((operator.apply(&lhs.0, &rhs.0), item.expr_span.clone()))

@@ -1,4 +1,4 @@
-use crate::model::{Atom, BinOp, Expr, ExprItem, ExprOperator, Item};
+use crate::model::{Atom, BinOp, Expr, ExprItem, ExprOp, Item};
 use crate::span::Source;
 
 #[cfg(test)]
@@ -48,7 +48,7 @@ impl<T: Into<Atom<N>>, N: Clone, S: Clone> PushOp<T, S> for Expr<N, S> {
     fn push_op(&mut self, atom: T, span: S) {
         let atom = atom.into();
         self.0.push(ExprItem {
-            op: ExprOperator::Atom(atom.clone()),
+            op: ExprOp::Atom(atom.clone()),
             op_span: span.clone(),
             expr_span: span.clone(),
         })
@@ -58,7 +58,7 @@ impl<T: Into<Atom<N>>, N: Clone, S: Clone> PushOp<T, S> for Expr<N, S> {
 impl<N, S: Clone> PushOp<BinOp, S> for Expr<N, S> {
     fn push_op(&mut self, op: BinOp, span: S) {
         self.0.push(ExprItem {
-            op: ExprOperator::Binary(op),
+            op: ExprOp::Binary(op),
             op_span: span.clone(),
             expr_span: span,
         })

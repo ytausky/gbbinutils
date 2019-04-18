@@ -5,13 +5,13 @@ pub struct Expr<N, S>(pub Vec<ExprItem<N, S>>);
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExprItem<N, S> {
-    pub op: ExprOperator<N>,
+    pub op: ExprOp<N>,
     pub op_span: S,
     pub expr_span: S,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ExprOperator<N> {
+pub enum ExprOp<N> {
     Atom(Atom<N>),
     Binary(BinOp),
 }
@@ -53,7 +53,7 @@ impl<N: Clone, S: Clone> Expr<N, S> {
 impl<N, S: Clone> ExprItem<N, S> {
     pub fn from_atom(atom: Atom<N>, span: S) -> Self {
         Self {
-            op: ExprOperator::Atom(atom),
+            op: ExprOp::Atom(atom),
             op_span: span.clone(),
             expr_span: span,
         }
@@ -72,7 +72,7 @@ impl<N> From<Atom<N>> for Expr<N, ()> {
     }
 }
 
-impl<N, T: Into<ExprOperator<N>>> From<T> for ExprItem<N, ()> {
+impl<N, T: Into<ExprOp<N>>> From<T> for ExprItem<N, ()> {
     fn from(x: T) -> Self {
         Self {
             op: x.into(),
@@ -82,21 +82,21 @@ impl<N, T: Into<ExprOperator<N>>> From<T> for ExprItem<N, ()> {
     }
 }
 
-impl<N> From<Atom<N>> for ExprOperator<N> {
+impl<N> From<Atom<N>> for ExprOp<N> {
     fn from(atom: Atom<N>) -> Self {
-        ExprOperator::Atom(atom)
+        ExprOp::Atom(atom)
     }
 }
 
-impl<N> From<i32> for ExprOperator<N> {
+impl<N> From<i32> for ExprOp<N> {
     fn from(n: i32) -> Self {
-        ExprOperator::Atom(Atom::Literal(n))
+        ExprOp::Atom(Atom::Literal(n))
     }
 }
 
-impl<N> From<BinOp> for ExprOperator<N> {
+impl<N> From<BinOp> for ExprOp<N> {
     fn from(op: BinOp) -> Self {
-        ExprOperator::Binary(op)
+        ExprOp::Binary(op)
     }
 }
 
