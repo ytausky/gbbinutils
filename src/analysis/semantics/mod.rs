@@ -19,6 +19,7 @@ mod directive;
 mod instruction;
 mod invoke;
 mod operand;
+mod params;
 
 #[derive(Clone, Debug, PartialEq)]
 enum SemanticAtom<I> {

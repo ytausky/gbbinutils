@@ -123,14 +123,24 @@ pub enum Item<V: Source> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Atom<N> {
-    Name(N),
     Literal(i32),
     LocationCounter,
+    Name(N),
+    Param(ParamId),
 }
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ParamId(pub usize);
 
 impl<N> From<i32> for Atom<N> {
     fn from(n: i32) -> Self {
         Atom::Literal(n)
+    }
+}
+
+impl<N> From<ParamId> for Atom<N> {
+    fn from(id: ParamId) -> Self {
+        Atom::Param(id)
     }
 }
 

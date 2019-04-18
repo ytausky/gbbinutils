@@ -3,6 +3,9 @@ use std::collections::HashMap;
 #[cfg(test)]
 pub use self::mock::*;
 
+#[cfg(test)]
+use crate::model::Atom;
+
 pub trait NameTable<I> {
     type BackendEntry;
     type MacroEntry;
@@ -25,6 +28,13 @@ pub trait StartScope<I> {
 pub struct Ident<T> {
     pub name: T,
     visibility: Visibility,
+}
+
+#[cfg(test)]
+impl<T> From<Ident<T>> for Atom<Ident<T>> {
+    fn from(ident: Ident<T>) -> Self {
+        Atom::Name(ident)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

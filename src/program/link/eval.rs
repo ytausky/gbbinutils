@@ -35,6 +35,8 @@ impl<S: Clone> Expr<S> {
 impl Atom<NameId> {
     fn eval<R: Borrow<RelocTable>, S>(&self, context: &EvalContext<R, S>) -> Result<Value, ()> {
         match self {
+            Atom::Literal(value) => Ok((*value).into()),
+            Atom::LocationCounter => Ok(context.location.clone()),
             &Atom::Name(id) => {
                 let name_def = context.program.names.get(id);
                 name_def
@@ -47,8 +49,7 @@ impl Atom<NameId> {
                     })
                     .ok_or(())
             }
-            Atom::Literal(value) => Ok((*value).into()),
-            Atom::LocationCounter => Ok(context.location.clone()),
+            Atom::Param(_) => unimplemented!(),
         }
     }
 }
