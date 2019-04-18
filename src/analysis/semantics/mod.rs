@@ -16,6 +16,7 @@ pub use self::mock::*;
 
 mod command;
 mod invoke;
+#[cfg(test)]
 mod params;
 
 pub(crate) trait Analyze<R: Clone + Eq, D: Diagnostics> {
