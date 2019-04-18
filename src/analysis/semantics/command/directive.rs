@@ -1,4 +1,4 @@
-use super::{CommandArgs, Directive, ExprVariant, SemanticActions, SemanticAtom, SemanticExpr};
+use super::{Arg, ArgAtom, ArgVariant, CommandArgs, Directive, SemanticActions};
 
 use crate::analysis::session::Session;
 use crate::analysis::Literal;
@@ -102,12 +102,12 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
 
 fn reduce_include<I: PartialEq, D: DownstreamDiagnostics<S>, S>(
     span: S,
-    args: Vec<SemanticExpr<I, S>>,
+    args: Vec<Arg<I, S>>,
     diagnostics: &mut D,
 ) -> Result<(I, S), ()> {
     let arg = single_arg(span, args, diagnostics)?;
     match arg.variant {
-        ExprVariant::Atom(SemanticAtom::Literal(Literal::String(path))) => Ok((path, arg.span)),
+        ArgVariant::Atom(ArgAtom::Literal(Literal::String(path))) => Ok((path, arg.span)),
         _ => {
             diagnostics.emit_diagnostic(Message::ExpectedString.at(arg.span));
             Err(())

@@ -428,17 +428,17 @@ mod tests {
 
     use std::cmp;
 
-    type Input = SemanticExpr<String, ()>;
+    type Input = Arg<String, ()>;
 
-    impl From<ExprVariant<String, ()>> for Input {
-        fn from(variant: ExprVariant<String, ()>) -> Self {
-            SemanticExpr { variant, span: () }
+    impl From<ArgVariant<String, ()>> for Input {
+        fn from(variant: ArgVariant<String, ()>) -> Self {
+            Arg { variant, span: () }
         }
     }
 
     impl From<Literal<String>> for Input {
         fn from(literal: Literal<String>) -> Input {
-            ExprVariant::Atom(SemanticAtom::Literal(literal)).into()
+            ArgVariant::Atom(ArgAtom::Literal(literal)).into()
         }
     }
 
@@ -455,8 +455,8 @@ mod tests {
     }
 
     pub(super) fn deref(expr: impl Into<Input>) -> Input {
-        SemanticExpr {
-            variant: ExprVariant::Unary(SemanticUnary::Parentheses, Box::new(expr.into())),
+        Arg {
+            variant: ArgVariant::Unary(ArgUnaryOp::Parentheses, Box::new(expr.into())),
             span: (),
         }
     }
@@ -580,7 +580,7 @@ mod tests {
 
     impl<'a> From<&'a str> for Input {
         fn from(ident: &'a str) -> Self {
-            SemanticExpr::from_atom(SemanticAtom::Ident(ident.into()), ())
+            Arg::from_atom(ArgAtom::Ident(ident.into()), ())
         }
     }
 
@@ -871,27 +871,27 @@ mod tests {
         AnalysisResult(result.map_err(|_| log.into_inner()))
     }
 
-    fn add_token_spans((i, operand): (usize, Input)) -> SemanticExpr<String, TokenSpan> {
+    fn add_token_spans((i, operand): (usize, Input)) -> Arg<String, TokenSpan> {
         add_token_spans_recursive(i, 0, operand).1
     }
 
     fn add_token_spans_recursive(
         i: usize,
         mut j: usize,
-        expr: SemanticExpr<String, ()>,
-    ) -> (usize, SemanticExpr<String, TokenSpan>) {
+        expr: Arg<String, ()>,
+    ) -> (usize, Arg<String, TokenSpan>) {
         let mut span: TokenSpan = TokenId::Operand(i, j).into();
         let variant = match expr.variant {
-            ExprVariant::Unary(SemanticUnary::Parentheses, expr) => {
+            ArgVariant::Unary(ArgUnaryOp::Parentheses, expr) => {
                 let (new_j, inner) = add_token_spans_recursive(i, j + 1, *expr);
                 j = new_j;
                 span = TokenSpan::merge(&span, &TokenId::Operand(i, j).into());
-                ExprVariant::Unary(SemanticUnary::Parentheses, Box::new(inner))
+                ArgVariant::Unary(ArgUnaryOp::Parentheses, Box::new(inner))
             }
-            ExprVariant::Binary(_, _, _) => panic!(),
-            ExprVariant::Atom(atom) => ExprVariant::Atom(atom),
+            ArgVariant::Binary(_, _, _) => panic!(),
+            ArgVariant::Atom(atom) => ArgVariant::Atom(atom),
         };
-        (j + 1, SemanticExpr { variant, span })
+        (j + 1, Arg { variant, span })
     }
 
     pub struct ExpectedDiagnostic {

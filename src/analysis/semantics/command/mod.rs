@@ -109,12 +109,12 @@ impl Directive {
 }
 
 pub(crate) struct ExprBuilder<R, S, P> {
-    stack: Vec<SemanticExpr<R, S>>,
+    stack: Vec<Arg<R, S>>,
     parent: P,
 }
 
 impl<R, S, P> ExprBuilder<R, S, P> {
-    fn pop(&mut self) -> SemanticExpr<R, S> {
+    fn pop(&mut self) -> Arg<R, S> {
         self.stack.pop().unwrap_or_else(|| unreachable!())
     }
 }
@@ -151,11 +151,11 @@ where
     type Literal = Literal<R>;
 
     fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, S)) {
-        self.stack.push(SemanticExpr {
-            variant: ExprVariant::Atom(match atom.0 {
-                ExprAtom::Ident(ident) => SemanticAtom::Ident(ident),
-                ExprAtom::Literal(literal) => SemanticAtom::Literal(literal),
-                ExprAtom::LocationCounter => SemanticAtom::LocationCounter,
+        self.stack.push(Arg {
+            variant: ArgVariant::Atom(match atom.0 {
+                ExprAtom::Ident(ident) => ArgAtom::Ident(ident),
+                ExprAtom::Literal(literal) => ArgAtom::Literal(literal),
+                ExprAtom::LocationCounter => ArgAtom::LocationCounter,
             }),
             span: atom.1,
         })
@@ -165,16 +165,16 @@ where
         match operator.0 {
             Operator::Unary(UnaryOperator::Parentheses) => {
                 let inner = self.pop();
-                self.stack.push(SemanticExpr {
-                    variant: ExprVariant::Unary(SemanticUnary::Parentheses, Box::new(inner)),
+                self.stack.push(Arg {
+                    variant: ArgVariant::Unary(ArgUnaryOp::Parentheses, Box::new(inner)),
                     span: operator.1,
                 })
             }
             Operator::Binary(binary) => {
                 let rhs = self.pop();
                 let lhs = self.pop();
-                self.stack.push(SemanticExpr {
-                    variant: ExprVariant::Binary(binary, Box::new(lhs), Box::new(rhs)),
+                self.stack.push(Arg {
+                    variant: ArgVariant::Binary(binary, Box::new(lhs), Box::new(rhs)),
                     span: operator.1,
                 })
             }
@@ -200,7 +200,7 @@ fn analyze_mnemonic<S: Session>(
 }
 
 impl<S: Session> SemanticActions<S> {
-    fn analyze_expr(&mut self, expr: SemanticExpr<S::StringRef, S::Span>) -> Result<S::Value, ()> {
+    fn analyze_expr(&mut self, expr: Arg<S::StringRef, S::Span>) -> Result<S::Value, ()> {
         self.build_value(|mut builder| {
             let result = builder.analyze_expr(expr);
             let (session, value) = builder.finish();
@@ -210,7 +210,7 @@ impl<S: Session> SemanticActions<S> {
 }
 
 trait AnalyzeExpr<I, S: Clone> {
-    fn analyze_expr(&mut self, expr: SemanticExpr<I, S>) -> Result<(), ()>;
+    fn analyze_expr(&mut self, expr: Arg<I, S>) -> Result<(), ()>;
 }
 
 impl<'a, T, I, S> AnalyzeExpr<I, S> for T
@@ -218,31 +218,31 @@ where
     T: ValueBuilder<Ident<I>, S> + DelegateDiagnostics<S>,
     S: Clone,
 {
-    fn analyze_expr(&mut self, expr: SemanticExpr<I, S>) -> Result<(), ()> {
+    fn analyze_expr(&mut self, expr: Arg<I, S>) -> Result<(), ()> {
         match expr.variant {
-            ExprVariant::Atom(SemanticAtom::Ident(ident)) => {
+            ArgVariant::Atom(ArgAtom::Ident(ident)) => {
                 self.push_op(ident, expr.span);
                 Ok(())
             }
-            ExprVariant::Atom(SemanticAtom::Literal(Literal::Number(n))) => {
+            ArgVariant::Atom(ArgAtom::Literal(Literal::Number(n))) => {
                 self.push_op(n, expr.span);
                 Ok(())
             }
-            ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(_))) => {
+            ArgVariant::Atom(ArgAtom::Literal(Literal::Operand(_))) => {
                 Err(Message::KeywordInExpr {
                     keyword: self.diagnostics().strip_span(&expr.span),
                 }
                 .at(expr.span))
             }
-            ExprVariant::Atom(SemanticAtom::Literal(Literal::String(_))) => {
+            ArgVariant::Atom(ArgAtom::Literal(Literal::String(_))) => {
                 Err(Message::StringInInstruction.at(expr.span))
             }
-            ExprVariant::Atom(SemanticAtom::LocationCounter) => {
+            ArgVariant::Atom(ArgAtom::LocationCounter) => {
                 self.push_op(LocationCounter, expr.span);
                 Ok(())
             }
-            ExprVariant::Unary(SemanticUnary::Parentheses, expr) => Ok(self.analyze_expr(*expr)?),
-            ExprVariant::Binary(binary, left, right) => {
+            ArgVariant::Unary(ArgUnaryOp::Parentheses, expr) => Ok(self.analyze_expr(*expr)?),
+            ArgVariant::Binary(binary, left, right) => {
                 self.analyze_expr(*left)?;
                 self.analyze_expr(*right)?;
                 self.push_op(binary, expr.span);

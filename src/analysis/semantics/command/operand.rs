@@ -1,4 +1,4 @@
-use super::{AnalyzeExpr, ExprVariant, SemanticAtom, SemanticExpr, SemanticUnary};
+use super::{AnalyzeExpr, Arg, ArgAtom, ArgUnaryOp, ArgVariant};
 
 use crate::analysis::session::{Finish, ValueBuilder};
 use crate::analysis::{Ident, Literal};
@@ -43,7 +43,7 @@ pub enum Context {
 }
 
 pub(super) fn analyze_operand<C, I, S>(
-    expr: SemanticExpr<I, S>,
+    expr: Arg<I, S>,
     context: Context,
     mut value_context: C,
 ) -> (C::Parent, Result<Operand<C::Value>, ()>)
@@ -52,12 +52,12 @@ where
     S: Clone,
 {
     match expr.variant {
-        ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(keyword))) => {
+        ArgVariant::Atom(ArgAtom::Literal(Literal::Operand(keyword))) => {
             let result =
                 analyze_keyword_operand((keyword, expr.span), context, value_context.diagnostics());
             (value_context.finish().0, result)
         }
-        ExprVariant::Unary(SemanticUnary::Parentheses, inner) => {
+        ArgVariant::Unary(ArgUnaryOp::Parentheses, inner) => {
             analyze_deref_operand(*inner, expr.span, value_context)
         }
         _ => match value_context.analyze_expr(expr) {
@@ -71,7 +71,7 @@ where
 }
 
 fn analyze_deref_operand<C, I, S>(
-    expr: SemanticExpr<I, S>,
+    expr: Arg<I, S>,
     deref_span: S,
     mut value_context: C,
 ) -> (C::Parent, Result<Operand<C::Value>, ()>)
@@ -80,7 +80,7 @@ where
     S: Clone,
 {
     match expr.variant {
-        ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(keyword))) => {
+        ArgVariant::Atom(ArgAtom::Literal(Literal::Operand(keyword))) => {
             let result = analyze_deref_operand_keyword(
                 (keyword, &expr.span),
                 deref_span,
@@ -252,11 +252,11 @@ mod tests {
     }
 
     fn analyze_deref_ptr_reg(ptr_reg: PtrReg) {
-        let expr = SemanticExpr::<String, _> {
-            variant: ExprVariant::Unary(
-                SemanticUnary::Parentheses,
-                Box::new(SemanticExpr::from_atom(
-                    SemanticAtom::Literal(Literal::Operand(ptr_reg.into())),
+        let expr = Arg::<String, _> {
+            variant: ArgVariant::Unary(
+                ArgUnaryOp::Parentheses,
+                Box::new(Arg::from_atom(
+                    ArgAtom::Literal(Literal::Operand(ptr_reg.into())),
                     0,
                 )),
             ),
@@ -269,7 +269,7 @@ mod tests {
     }
 
     fn analyze_operand<S: Clone + MockSpan + PartialEq>(
-        expr: SemanticExpr<String, S>,
+        expr: Arg<String, S>,
         context: Context,
     ) -> Result<Operand<Expr<Ident<String>, S>>, Vec<DiagnosticsEvent<S>>> {
         use crate::analysis::session::MockBuilder;
@@ -283,11 +283,11 @@ mod tests {
 
     #[test]
     fn analyze_deref_af() {
-        let parsed_expr = SemanticExpr::<String, _> {
-            variant: ExprVariant::Unary(
-                SemanticUnary::Parentheses,
-                Box::new(SemanticExpr::from_atom(
-                    SemanticAtom::Literal(Literal::Operand(kw::Operand::Af)),
+        let parsed_expr = Arg::<String, _> {
+            variant: ArgVariant::Unary(
+                ArgUnaryOp::Parentheses,
+                Box::new(Arg::from_atom(
+                    ArgAtom::Literal(Literal::Operand(kw::Operand::Af)),
                     0,
                 )),
             ),
@@ -310,16 +310,13 @@ mod tests {
     fn analyze_repeated_parentheses() {
         let n = 0x42;
         let span = 0;
-        let parsed_expr = SemanticExpr::<String, _> {
-            variant: ExprVariant::Unary(
-                SemanticUnary::Parentheses,
-                Box::new(SemanticExpr {
-                    variant: ExprVariant::Unary(
-                        SemanticUnary::Parentheses,
-                        Box::new(SemanticExpr::from_atom(
-                            SemanticAtom::Literal(Literal::Number(n)),
-                            span,
-                        )),
+        let parsed_expr = Arg::<String, _> {
+            variant: ArgVariant::Unary(
+                ArgUnaryOp::Parentheses,
+                Box::new(Arg {
+                    variant: ArgVariant::Unary(
+                        ArgUnaryOp::Parentheses,
+                        Box::new(Arg::from_atom(ArgAtom::Literal(Literal::Number(n)), span)),
                     ),
                     span: 1,
                 }),
@@ -335,14 +332,14 @@ mod tests {
     #[test]
     fn analyze_reg_in_expr() {
         let span = 0;
-        let parsed_expr = SemanticExpr::<String, _> {
-            variant: ExprVariant::Unary(
-                SemanticUnary::Parentheses,
-                Box::new(SemanticExpr {
-                    variant: ExprVariant::Unary(
-                        SemanticUnary::Parentheses,
-                        Box::new(SemanticExpr::from_atom(
-                            SemanticAtom::Literal(Literal::Operand(kw::Operand::Z)),
+        let parsed_expr = Arg::<String, _> {
+            variant: ArgVariant::Unary(
+                ArgUnaryOp::Parentheses,
+                Box::new(Arg {
+                    variant: ArgVariant::Unary(
+                        ArgUnaryOp::Parentheses,
+                        Box::new(Arg::from_atom(
+                            ArgAtom::Literal(Literal::Operand(kw::Operand::Z)),
                             span,
                         )),
                     ),
@@ -363,8 +360,8 @@ mod tests {
     #[test]
     fn analyze_string_in_instruction() {
         let span = 0;
-        let parsed_expr = SemanticExpr::<String, _>::from_atom(
-            SemanticAtom::Literal(Literal::String("some_string".into())),
+        let parsed_expr = Arg::<String, _>::from_atom(
+            ArgAtom::Literal(Literal::String("some_string".into())),
             span,
         );
         assert_eq!(
@@ -388,10 +385,7 @@ mod tests {
 
     fn test_bare_ptr_reg(keyword: kw::Operand) {
         let span = 0;
-        let expr = SemanticExpr::<String, _>::from_atom(
-            SemanticAtom::Literal(Literal::Operand(keyword)),
-            span,
-        );
+        let expr = Arg::<String, _>::from_atom(ArgAtom::Literal(Literal::Operand(keyword)), span);
         assert_eq!(
             analyze_operand(expr, Context::Other),
             Err(vec![CompactDiagnostic::from(
