@@ -21,7 +21,7 @@ pub enum Message<S> {
     ExpectedString,
     IncompatibleOperand,
     InvalidUtf8,
-    InvokedHere {
+    CalledHere {
         name: S,
     },
     IoError {
@@ -106,6 +106,7 @@ impl Message<StrippedBufSpan> {
                 "register pair `af` can only be used with `push` and `pop`".into()
             }
             AlwaysUnconditional => "instruction cannot be made conditional".into(),
+            CalledHere { name } => format!("in macro `{}`, called here", codebase.snippet(name)),
             CannotBeUsedAsTarget => {
                 "operand cannot be used as target for branching instructions".into()
             }
@@ -124,7 +125,6 @@ impl Message<StrippedBufSpan> {
             ExpectedString => "expected string argument".into(),
             IncompatibleOperand => "operand cannot be used with this instruction".into(),
             InvalidUtf8 => "file contains invalid UTF-8".into(),
-            InvokedHere { name } => format!("in macro `{}`, invoked here", codebase.snippet(name)),
             IoError { string } => string.clone(),
             KeywordInExpr { keyword } => format!(
                 "keyword `{}` cannot appear in expression",

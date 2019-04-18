@@ -64,11 +64,12 @@ pub(crate) trait FileContext<I, L, C, S: Clone>: DelegateDiagnostics<S> + Sized 
 pub(crate) trait StmtContext<I, L, C, S: Clone>: DelegateDiagnostics<S> + Sized {
     type CommandContext: CommandContext<S, Ident = I, Command = C, Literal = L, Parent = Self>;
     type MacroDefContext: TokenSeqContext<S, Token = Token<I, L, C>, Parent = Self>;
-    type MacroInvocationContext: MacroInvocationContext<S, Token = Token<I, L, C>, Parent = Self>;
+    type MacroCallContext: MacroCallContext<S, Token = Token<I, L, C>, Parent = Self>;
     type Parent;
+
     fn enter_command(self, name: (C, S)) -> Self::CommandContext;
     fn enter_macro_def(self, keyword: S) -> Self::MacroDefContext;
-    fn enter_macro_invocation(self, name: (I, S)) -> Self::MacroInvocationContext;
+    fn enter_macro_call(self, name: (I, S)) -> Self::MacroCallContext;
     fn exit(self) -> Self::Parent;
 }
 
@@ -123,7 +124,7 @@ pub(crate) trait ParamsContext<I, S: Clone>: DelegateDiagnostics<S> {
     fn next(self) -> Self::Next;
 }
 
-pub(crate) trait MacroInvocationContext<S: Clone>: DelegateDiagnostics<S> + Sized {
+pub(crate) trait MacroCallContext<S: Clone>: DelegateDiagnostics<S> + Sized {
     type Token;
     type Parent;
     type MacroArgContext: TokenSeqContext<S, Token = Self::Token, Parent = Self>;

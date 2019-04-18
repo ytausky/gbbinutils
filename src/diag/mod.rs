@@ -309,7 +309,7 @@ impl<B: Clone, T: Clone> CompactDiagnostic<SpanData<B, Range<T>>, StrippedBufSpa
             location: Some(range),
         };
         let mut clauses = vec![main_clause];
-        if let Some(note) = mk_invoked_here_clause(&self.main.highlight) {
+        if let Some(note) = mk_called_here_clause(&self.main.highlight) {
             clauses.push(note)
         }
         ExpandedDiagnostic { clauses }
@@ -318,20 +318,20 @@ impl<B: Clone, T: Clone> CompactDiagnostic<SpanData<B, Range<T>>, StrippedBufSpa
 
 type BufSnippetClause<B, T> = ExpandedDiagnosticClause<StrippedBufSpan<B, Range<T>>, B, Range<T>>;
 
-fn mk_invoked_here_clause<B: Clone, T: Clone>(
+fn mk_called_here_clause<B: Clone, T: Clone>(
     span: &SpanData<B, Range<T>>,
 ) -> Option<BufSnippetClause<B, T>> {
-    let invocation = if let SpanData::Macro { context, .. } = span {
+    let call = if let SpanData::Macro { context, .. } = span {
         context.name.clone()
     } else {
         return None;
     };
-    let stripped = invocation.to_stripped();
+    let stripped = call.to_stripped();
     Some(ExpandedDiagnosticClause {
         buf_id: stripped.buf_id.clone(),
         tag: Tag::Note,
         location: Some(stripped.range.clone()),
-        message: Message::InvokedHere { name: stripped },
+        message: Message::CalledHere { name: stripped },
     })
 }
 
@@ -644,10 +644,10 @@ mod tests {
                 context: Rc::clone(buf_context),
             }],
         });
-        let invocation_range = 10..11;
+        let call_range = 10..11;
         let context = Rc::new(MacroExpansionData {
             name: SpanData::Buf {
-                range: invocation_range.clone(),
+                range: call_range.clone(),
                 context: Rc::clone(buf_context),
             },
             args: vec![],
@@ -674,10 +674,10 @@ mod tests {
                 ExpandedDiagnosticClause {
                     buf_id: (),
                     tag: Tag::Note,
-                    message: Message::InvokedHere {
+                    message: Message::CalledHere {
                         name: StrippedBufSpan {
                             buf_id: (),
-                            range: invocation_range,
+                            range: call_range,
                         },
                     },
                     location: Some(10..11),

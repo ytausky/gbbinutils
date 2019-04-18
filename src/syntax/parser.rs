@@ -151,7 +151,7 @@ where
                 }
                 (Ok(Token::Ident(ident)), span) => {
                     bump!(self);
-                    self.parse_macro_invocation((ident, span))
+                    self.parse_macro_call((ident, span))
                 }
                 (Ok(Token::Simple(SimpleToken::Macro)), span) => {
                     bump!(self);
@@ -210,10 +210,10 @@ where
         state.change_context(TokenSeqContext::exit)
     }
 
-    fn parse_macro_invocation(self, name: (Id, S)) -> Self {
-        self.change_context(|c| c.enter_macro_invocation(name))
+    fn parse_macro_call(self, name: (Id, S)) -> Self {
+        self.change_context(|c| c.enter_macro_call(name))
             .parse_macro_arg_list()
-            .change_context(MacroInvocationContext::exit)
+            .change_context(MacroCallContext::exit)
     }
 }
 
@@ -466,12 +466,12 @@ where
 impl<'a, Id, L, C, E, I, Ctx, S> Parser<'a, (Result<Token<Id, L, C>, E>, S), I, Ctx>
 where
     I: Iterator<Item = (Result<Token<Id, L, C>, E>, S)>,
-    Ctx: MacroInvocationContext<S, Token = Token<Id, L, C>>,
+    Ctx: MacroCallContext<S, Token = Token<Id, L, C>>,
     S: Clone,
 {
     fn parse_macro_arg_list(self) -> Self {
         self.parse_terminated_list(Comma.into(), LINE_FOLLOW_SET, |p| {
-            let mut state = p.change_context(MacroInvocationContext::enter_macro_arg);
+            let mut state = p.change_context(MacroCallContext::enter_macro_arg);
             loop {
                 match state.token {
                     (Ok(Token::Simple(Comma)), _)
@@ -620,7 +620,7 @@ mod tests {
         ExprActionCollector<CommandActionCollector>,
         ExprActionCollector<()>,
         MacroBodyActionCollector,
-        MacroInvocationActionCollector,
+        MacroCallActionCollector,
         MacroArgActionCollector,
     }
 
@@ -709,7 +709,7 @@ mod tests {
     impl StmtContext<SymIdent, SymLiteral, SymCommand, SymSpan> for StmtActionCollector {
         type CommandContext = CommandActionCollector;
         type MacroDefContext = MacroBodyActionCollector;
-        type MacroInvocationContext = MacroInvocationActionCollector;
+        type MacroCallContext = MacroCallActionCollector;
         type Parent = FileActionCollector;
 
         fn enter_command(self, command: (SymCommand, SymSpan)) -> CommandActionCollector {
@@ -728,11 +728,8 @@ mod tests {
             }
         }
 
-        fn enter_macro_invocation(
-            self,
-            name: (SymIdent, SymSpan),
-        ) -> MacroInvocationActionCollector {
-            MacroInvocationActionCollector {
+        fn enter_macro_call(self, name: (SymIdent, SymSpan)) -> MacroCallActionCollector {
+            MacroCallActionCollector {
                 name,
                 actions: Vec::new(),
                 parent: self,
@@ -867,20 +864,20 @@ mod tests {
         }
     }
 
-    struct MacroInvocationActionCollector {
+    struct MacroCallActionCollector {
         name: (SymIdent, SymSpan),
-        actions: Vec<MacroInvocationAction<SymSpan>>,
+        actions: Vec<MacroCallAction<SymSpan>>,
         parent: StmtActionCollector,
     }
 
-    impl EmitDiagnostic<SymSpan, SymSpan> for MacroInvocationActionCollector {
+    impl EmitDiagnostic<SymSpan, SymSpan> for MacroCallActionCollector {
         fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
             self.actions
-                .push(MacroInvocationAction::EmitDiagnostic(diagnostic.into()))
+                .push(MacroCallAction::EmitDiagnostic(diagnostic.into()))
         }
     }
 
-    impl MacroInvocationContext<SymSpan> for MacroInvocationActionCollector {
+    impl MacroCallContext<SymSpan> for MacroCallActionCollector {
         type Token = Token<SymIdent, SymLiteral, SymCommand>;
         type MacroArgContext = MacroArgActionCollector;
         type Parent = StmtActionCollector;
@@ -893,7 +890,7 @@ mod tests {
         }
 
         fn exit(mut self) -> StmtActionCollector {
-            self.parent.actions.push(StmtAction::MacroInvocation {
+            self.parent.actions.push(StmtAction::MacroCall {
                 name: self.name,
                 actions: self.actions,
             });
@@ -903,7 +900,7 @@ mod tests {
 
     struct MacroArgActionCollector {
         actions: Vec<TokenSeqAction<SymSpan>>,
-        parent: MacroInvocationActionCollector,
+        parent: MacroCallActionCollector,
     }
 
     impl EmitDiagnostic<SymSpan, SymSpan> for MacroArgActionCollector {
@@ -915,16 +912,16 @@ mod tests {
 
     impl TokenSeqContext<SymSpan> for MacroArgActionCollector {
         type Token = Token<SymIdent, SymLiteral, SymCommand>;
-        type Parent = MacroInvocationActionCollector;
+        type Parent = MacroCallActionCollector;
 
         fn push_token(&mut self, token: (Self::Token, SymSpan)) {
             self.actions.push(TokenSeqAction::PushToken(token))
         }
 
-        fn exit(mut self) -> MacroInvocationActionCollector {
+        fn exit(mut self) -> MacroCallActionCollector {
             self.parent
                 .actions
-                .push(MacroInvocationAction::MacroArg(self.actions));
+                .push(MacroCallAction::MacroArg(self.actions));
             self.parent
         }
     }
@@ -1115,28 +1112,28 @@ mod tests {
     }
 
     #[test]
-    fn parse_nullary_macro_invocation() {
+    fn parse_nullary_macro_call() {
         let tokens = input_tokens![Ident(())];
-        let expected_actions = [unlabeled(invoke(0, []))];
+        let expected_actions = [unlabeled(call_macro(0, []))];
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
-    fn parse_unary_macro_invocation() {
+    fn parse_unary_macro_call() {
         let tokens = input_tokens![Ident(()), Literal(())];
-        let expected_actions = [unlabeled(invoke(0, [tokens.token_seq([1])]))];
+        let expected_actions = [unlabeled(call_macro(0, [tokens.token_seq([1])]))];
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
-    fn parse_unary_macro_invocation_with_multiple_terminals() {
+    fn parse_unary_macro_call_with_multiple_terminals() {
         let tokens = input_tokens![Ident(()), Literal(()), Literal(()), Literal(())];
-        let expected_actions = [unlabeled(invoke(0, [tokens.token_seq([1, 2, 3])]))];
+        let expected_actions = [unlabeled(call_macro(0, [tokens.token_seq([1, 2, 3])]))];
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
-    fn parse_binary_macro_invocation_with_multiple_terminals() {
+    fn parse_binary_macro_call_with_multiple_terminals() {
         let tokens = input_tokens![
             Ident(()),
             Literal(()),
@@ -1146,7 +1143,7 @@ mod tests {
             Literal(()),
             Literal(()),
         ];
-        let expected_actions = [unlabeled(invoke(
+        let expected_actions = [unlabeled(call_macro(
             0,
             [tokens.token_seq([1, 2]), tokens.token_seq([4, 5, 6])],
         ))];

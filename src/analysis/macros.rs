@@ -223,15 +223,13 @@ mod tests {
                 body: vec![body.clone()],
             }),
         };
-        let invocation_name = ("my_macro", mk_span(2));
+        let call_name = ("my_macro", mk_span(2));
         let data = Rc::new(MacroExpansionData {
-            name: invocation_name.1.clone(),
+            name: call_name.1.clone(),
             args: vec![],
             def: def_id,
         });
-        let expanded: Vec<_> = entry
-            .expand(invocation_name.1, vec![], &mut factory)
-            .collect();
+        let expanded: Vec<_> = entry.expand(call_name.1, vec![], &mut factory).collect();
         let macro_expansion_position = MacroExpansionPosition {
             token: 0,
             expansion: None,
@@ -294,10 +292,10 @@ mod tests {
             ]],
             def: def_id,
         });
-        let invocation_name = ("my_macro", mk_span(7));
+        let call_name = ("my_macro", mk_span(7));
         let expanded: Vec<_> = entry
             .expand(
-                invocation_name.1,
+                call_name.1,
                 vec![vec![Token::Ident("y".into()), Token::Ident("z".into())]
                     .into_iter()
                     .zip((8..=9).map(mk_span))

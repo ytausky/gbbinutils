@@ -270,9 +270,9 @@ pub(crate) enum StmtAction<S> {
         keyword: S,
         body: Vec<TokenSeqAction<S>>,
     },
-    MacroInvocation {
+    MacroCall {
         name: (SymIdent, S),
-        actions: Vec<MacroInvocationAction<S>>,
+        actions: Vec<MacroCallAction<S>>,
     },
     EmitDiagnostic(CompactDiagnostic<S, S>),
 }
@@ -303,7 +303,7 @@ pub(crate) enum TokenSeqAction<S> {
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) enum MacroInvocationAction<S> {
+pub(crate) enum MacroCallAction<S> {
     MacroArg(Vec<TokenSeqAction<S>>),
     EmitDiagnostic(CompactDiagnostic<S, S>),
 }
@@ -371,18 +371,18 @@ pub(crate) fn malformed_command(
     }]
 }
 
-pub(crate) fn invoke(
+pub(crate) fn call_macro(
     id: impl Into<TokenRef>,
     args: impl Borrow<[Vec<TokenSeqAction<SymSpan>>]>,
 ) -> Vec<StmtAction<SymSpan>> {
     let id = id.into();
-    vec![StmtAction::MacroInvocation {
+    vec![StmtAction::MacroCall {
         name: (SymIdent(id.clone()), id.into()),
         actions: args
             .borrow()
             .iter()
             .cloned()
-            .map(MacroInvocationAction::MacroArg)
+            .map(MacroCallAction::MacroArg)
             .collect(),
     }]
 }

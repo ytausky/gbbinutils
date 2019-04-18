@@ -1,4 +1,4 @@
-use self::invoke::MacroInvocationActions;
+use self::invoke::MacroCallActions;
 
 use super::backend::{Backend, LocationCounter, PushOp};
 use super::macros::MacroEntry;
@@ -229,7 +229,7 @@ impl<S: Session> StmtContext<Ident<S::StringRef>, Literal<S::StringRef>, Command
 {
     type CommandContext = CommandActions<S>;
     type MacroDefContext = MacroDefActions<S>;
-    type MacroInvocationContext = MacroInvocationActions<S>;
+    type MacroCallContext = MacroCallActions<S>;
     type Parent = Self;
 
     fn enter_command(self, name: (Command, S::Span)) -> Self::CommandContext {
@@ -244,12 +244,9 @@ impl<S: Session> StmtContext<Ident<S::StringRef>, Literal<S::StringRef>, Command
         MacroDefActions::new(self)
     }
 
-    fn enter_macro_invocation(
-        mut self,
-        name: (Ident<S::StringRef>, S::Span),
-    ) -> Self::MacroInvocationContext {
+    fn enter_macro_call(mut self, name: (Ident<S::StringRef>, S::Span)) -> Self::MacroCallContext {
         self.define_label_if_present();
-        MacroInvocationActions::new(name, self)
+        MacroCallActions::new(name, self)
     }
 
     fn exit(mut self) -> Self::Parent {
@@ -814,13 +811,13 @@ mod tests {
     }
 
     #[test]
-    fn invoke_nullary_macro() {
+    fn call_nullary_macro() {
         let name = "my_macro";
         let actions = collect_semantic_actions(|actions| {
-            let invocation = actions
+            let call = actions
                 .enter_unlabeled_stmt()
-                .enter_macro_invocation((name.into(), ()));
-            invocation.exit().exit()
+                .enter_macro_call((name.into(), ()));
+            call.exit().exit()
         });
         assert_eq!(
             actions,
@@ -829,19 +826,19 @@ mod tests {
     }
 
     #[test]
-    fn invoke_unary_macro() {
+    fn call_unary_macro() {
         let name = "my_macro";
         let arg_token = Token::Literal(Literal::Operand(Operand::A));
         let actions = collect_semantic_actions(|actions| {
-            let mut invocation = actions
+            let mut call = actions
                 .enter_unlabeled_stmt()
-                .enter_macro_invocation((name.into(), ()));
-            invocation = {
-                let mut arg = invocation.enter_macro_arg();
+                .enter_macro_call((name.into(), ()));
+            call = {
+                let mut arg = call.enter_macro_arg();
                 arg.push_token((arg_token.clone(), ()));
                 arg.exit()
             };
-            invocation.exit().exit()
+            call.exit().exit()
         });
         assert_eq!(
             actions,

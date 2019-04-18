@@ -42,7 +42,7 @@ where
         params: Params<Self::StringRef, Self::Span>,
         body: (Vec<SemanticToken<Self::StringRef>>, Vec<Self::Span>),
     );
-    fn invoke_macro(
+    fn call_macro(
         &mut self,
         name: (Ident<Self::StringRef>, Self::Span),
         args: MacroArgs<Self::StringRef, Self::Span>,
@@ -354,7 +354,7 @@ where
             .define_macro(name, params, body, self.diagnostics)
     }
 
-    fn invoke_macro(
+    fn call_macro(
         &mut self,
         name: (Ident<Self::StringRef>, Self::Span),
         args: MacroArgs<Self::StringRef, Self::Span>,
@@ -516,7 +516,7 @@ mod mock {
                 .push(SessionEvent::DefineMacro(name.0, params.0, body.0).into())
         }
 
-        fn invoke_macro(
+        fn call_macro(
             &mut self,
             name: (Ident<Self::StringRef>, Self::Span),
             args: MacroArgs<Self::StringRef, Self::Span>,
@@ -762,7 +762,7 @@ mod tests {
     }
 
     #[test]
-    fn define_and_invoke_macro() {
+    fn define_and_call_macro() {
         let name = "my_macro";
         let tokens = vec![Token::Command(Command::Mnemonic(Mnemonic::Nop))];
         let spans: Vec<_> = iter::repeat(()).take(tokens.len()).collect();
@@ -774,7 +774,7 @@ mod tests {
             (vec![], vec![]),
             (tokens.clone(), spans.clone()),
         );
-        session.invoke_macro((name.into(), ()), vec![]);
+        session.call_macro((name.into(), ()), vec![]);
         assert_eq!(
             log.into_inner(),
             [AnalyzerEvent::AnalyzeTokenSeq(
@@ -785,7 +785,7 @@ mod tests {
     }
 
     #[test]
-    fn define_and_invoke_macro_with_param() {
+    fn define_and_call_macro_with_param() {
         let db = Token::Command(Command::Directive(Directive::Db));
         let arg = Token::Literal(Literal::Number(0x42));
         let literal0 = Token::Literal(Literal::Number(0));
@@ -802,7 +802,7 @@ mod tests {
                 vec![(), (), ()],
             ),
         );
-        session.invoke_macro((name.into(), ()), vec![vec![(arg.clone(), ())]]);
+        session.call_macro((name.into(), ()), vec![vec![(arg.clone(), ())]]);
         assert_eq!(
             log.into_inner(),
             [AnalyzerEvent::AnalyzeTokenSeq(
@@ -816,7 +816,7 @@ mod tests {
     }
 
     #[test]
-    fn define_and_invoke_macro_with_label() {
+    fn define_and_call_macro_with_label() {
         let nop = Token::Command(Command::Mnemonic(Mnemonic::Nop));
         let label = "label";
         let log = RefCell::new(Vec::new());
@@ -829,7 +829,7 @@ mod tests {
             (vec![param.into()], vec![()]),
             (vec![Token::Label(param.into()), nop.clone()], vec![(), ()]),
         );
-        session.invoke_macro(
+        session.call_macro(
             (name.into(), ()),
             vec![vec![(Token::Ident(label.into()), ())]],
         );
@@ -864,7 +864,7 @@ mod tests {
         let log = RefCell::new(Vec::new());
         let mut fixture = Fixture::new(&log);
         let mut session = fixture.session();
-        session.invoke_macro((name.into(), name), vec![]);
+        session.call_macro((name.into(), name), vec![]);
         assert_eq!(
             log.into_inner(),
             [

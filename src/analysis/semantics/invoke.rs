@@ -3,20 +3,20 @@ use super::SemanticActions;
 use crate::analysis::session::Session;
 use crate::analysis::{Ident, SemanticToken, TokenSeq};
 use crate::diag::DelegateDiagnostics;
-use crate::syntax::{MacroInvocationContext, TokenSeqContext};
+use crate::syntax::{MacroCallContext, TokenSeqContext};
 
-pub(crate) struct MacroInvocationActions<S: Session> {
+pub(crate) struct MacroCallActions<S: Session> {
     name: (Ident<S::StringRef>, S::Span),
     args: Vec<TokenSeq<S::StringRef, S::Span>>,
     parent: SemanticActions<S>,
 }
 
-impl<S: Session> MacroInvocationActions<S> {
+impl<S: Session> MacroCallActions<S> {
     pub fn new(
         name: (Ident<S::StringRef>, S::Span),
         parent: SemanticActions<S>,
-    ) -> MacroInvocationActions<S> {
-        MacroInvocationActions {
+    ) -> MacroCallActions<S> {
+        MacroCallActions {
             name,
             args: Vec::new(),
             parent,
@@ -28,7 +28,7 @@ impl<S: Session> MacroInvocationActions<S> {
     }
 }
 
-impl<S: Session> DelegateDiagnostics<S::Span> for MacroInvocationActions<S> {
+impl<S: Session> DelegateDiagnostics<S::Span> for MacroCallActions<S> {
     type Delegate = S::Delegate;
 
     fn diagnostics(&mut self) -> &mut Self::Delegate {
@@ -36,7 +36,7 @@ impl<S: Session> DelegateDiagnostics<S::Span> for MacroInvocationActions<S> {
     }
 }
 
-impl<S: Session> MacroInvocationContext<S::Span> for MacroInvocationActions<S> {
+impl<S: Session> MacroCallContext<S::Span> for MacroCallActions<S> {
     type Token = SemanticToken<S::StringRef>;
     type Parent = SemanticActions<S>;
     type MacroArgContext = MacroArgContext<S>;
@@ -50,18 +50,18 @@ impl<S: Session> MacroInvocationContext<S::Span> for MacroInvocationActions<S> {
             .session
             .as_mut()
             .unwrap()
-            .invoke_macro(self.name, self.args);
+            .call_macro(self.name, self.args);
         self.parent
     }
 }
 
 pub(crate) struct MacroArgContext<S: Session> {
     tokens: Vec<(SemanticToken<S::StringRef>, S::Span)>,
-    parent: MacroInvocationActions<S>,
+    parent: MacroCallActions<S>,
 }
 
 impl<S: Session> MacroArgContext<S> {
-    fn new(parent: MacroInvocationActions<S>) -> MacroArgContext<S> {
+    fn new(parent: MacroCallActions<S>) -> MacroArgContext<S> {
         MacroArgContext {
             tokens: Vec::new(),
             parent,
@@ -79,7 +79,7 @@ impl<S: Session> DelegateDiagnostics<S::Span> for MacroArgContext<S> {
 
 impl<S: Session> TokenSeqContext<S::Span> for MacroArgContext<S> {
     type Token = SemanticToken<S::StringRef>;
-    type Parent = MacroInvocationActions<S>;
+    type Parent = MacroCallActions<S>;
 
     fn push_token(&mut self, token: (Self::Token, S::Span)) {
         self.tokens.push(token)
