@@ -153,7 +153,7 @@ impl InputTokens {
     fn token(&self, token_ref: impl Into<TokenRef>) -> SymToken {
         let id = match token_ref.into() {
             TokenRef::Id(n) => n,
-            TokenRef::Name(name) => *self.names.get(&name).unwrap(),
+            TokenRef::Name(name) => self.names[&name],
         };
         self.tokens[id].0.clone()
     }
@@ -254,11 +254,13 @@ impl From<&'static str> for TokenRef {
 #[derive(Debug, PartialEq)]
 pub(crate) enum FileAction<S> {
     Stmt {
-        label: Option<((SymIdent, S), Vec<ParamsAction<S>>)>,
+        label: Option<Label<S>>,
         actions: Vec<StmtAction<S>>,
     },
     EmitDiagnostic(CompactDiagnostic<S, S>),
 }
+
+pub(crate) type Label<S> = ((SymIdent, S), Vec<ParamsAction<S>>);
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum StmtAction<S> {

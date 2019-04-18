@@ -694,7 +694,7 @@ mod tests {
     }
 
     struct StmtActionCollector {
-        label: Option<((SymIdent, SymSpan), Vec<ParamsAction<SymSpan>>)>,
+        label: Option<ast::Label<SymSpan>>,
         actions: Vec<StmtAction<SymSpan>>,
         parent: FileActionCollector,
     }
@@ -1395,7 +1395,7 @@ mod tests {
         let tokens = &mut with_spans(&input.tokens);
         Parser::new(tokens, ExprActionCollector::new(()))
             .parse()
-            .change_context(|c| c.exit())
+            .change_context(FinalContext::exit)
             .context
     }
 

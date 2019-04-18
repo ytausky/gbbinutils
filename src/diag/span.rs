@@ -340,18 +340,18 @@ mod tests {
             included_from: None,
         });
         let left = SpanData::Buf {
-            range: BufRange::from(0..4),
+            range: 0..4,
             context: context.clone(),
         };
         let right = SpanData::Buf {
-            range: BufRange::from(5..10),
+            range: 5..10,
             context: context.clone(),
         };
         let combined = RcContextFactory::new().merge_spans(&left, &right);
         assert_eq!(
             combined,
             SpanData::Buf {
-                range: BufRange::from(0..10),
+                range: 0..10,
                 context
             }
         )

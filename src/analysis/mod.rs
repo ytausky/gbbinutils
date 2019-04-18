@@ -209,7 +209,7 @@ mod mock {
             path: Self::StringRef,
             _diagnostics: &mut D,
         ) -> Result<Self::TokenIter, CodebaseError> {
-            Ok(self.files.get(&path).unwrap().clone().into_iter())
+            Ok(self.files[&path].clone().into_iter())
         }
     }
 }

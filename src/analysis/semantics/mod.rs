@@ -506,7 +506,7 @@ mod tests {
             [SessionEvent::DefineMacro(
                 name.into(),
                 params.borrow().iter().cloned().map(Into::into).collect(),
-                body.borrow().iter().cloned().collect()
+                body.borrow().to_vec()
             )
             .into()]
         )

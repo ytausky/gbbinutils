@@ -673,7 +673,7 @@ mod tests {
             (kw::Mnemonic::Stop, Nullary::Stop),
         ]
         .iter()
-        .map(|(mnemonic, nullary)| ((*mnemonic, vec![]), Instruction::Nullary(nullary.clone())))
+        .map(|(mnemonic, nullary)| ((*mnemonic, vec![]), Instruction::Nullary(*nullary)))
     }
 
     fn describe_alu_simple_instructions() -> impl Iterator<Item = InstructionDescriptor> {
@@ -826,9 +826,10 @@ mod tests {
         }
     }
 
-    pub struct AnalysisResult(
-        Result<Instruction<Expr<Ident<String>, TokenSpan>>, Vec<DiagnosticsEvent<TokenSpan>>>,
-    );
+    pub struct AnalysisResult(InnerAnalysisResult);
+
+    type InnerAnalysisResult =
+        Result<Instruction<Expr<Ident<String>, TokenSpan>>, Vec<DiagnosticsEvent<TokenSpan>>>;
 
     impl AnalysisResult {
         pub fn expect_instruction(self, expected: Instruction<Expr<Ident<String>, TokenSpan>>) {
@@ -932,11 +933,7 @@ mod tests {
 
     #[test]
     fn analyze_add_a_a_a() {
-        analyze(
-            kw::Mnemonic::Add,
-            vec![A, A, A].into_iter().map(|a| literal(a)),
-        )
-        .expect_diagnostic(
+        analyze(kw::Mnemonic::Add, vec![A, A, A].into_iter().map(literal)).expect_diagnostic(
             ExpectedDiagnostic::new(Message::OperandCount {
                 actual: 3,
                 expected: 2,

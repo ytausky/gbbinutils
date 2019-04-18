@@ -205,8 +205,8 @@ mod tests {
 
     #[test]
     fn emit_diagnostic_when_byte_item_out_of_range() {
-        test_diagnostic_for_out_of_range_byte(i8::min_value() as i32 - 1);
-        test_diagnostic_for_out_of_range_byte(u8::max_value() as i32 + 1)
+        test_diagnostic_for_out_of_range_byte(i32::from(i8::min_value()) - 1);
+        test_diagnostic_for_out_of_range_byte(i32::from(u8::max_value()) + 1)
     }
 
     fn test_diagnostic_for_out_of_range_byte(value: i32) {

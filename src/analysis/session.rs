@@ -474,6 +474,12 @@ mod mock {
         type StringRef = String;
     }
 
+    type FnBuilder<S> = RelocContext<
+        S,
+        Vec<Ident<<S as StringRef>::StringRef>>,
+        Expr<Ident<String>, <S as Span>::Span>,
+    >;
+
     impl<'a, T, S> Session for MockSession<'a, T, S>
     where
         T: From<SessionEvent<S>>,
@@ -481,7 +487,7 @@ mod mock {
         T: From<DiagnosticsEvent<S>>,
         S: Clone + MockSpan,
     {
-        type FnBuilder = RelocContext<Self, Vec<Ident<Self::StringRef>>, Expr<Ident<String>, S>>;
+        type FnBuilder = FnBuilder<Self>;
         type GeneralBuilder = RelocContext<Self, (), Expr<Ident<String>, S>>;
 
         fn analyze_file(&mut self, path: String) -> Result<(), CodebaseError> {

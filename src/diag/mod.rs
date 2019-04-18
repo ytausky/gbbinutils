@@ -573,7 +573,7 @@ mod mock {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::codebase::{BufRange, TextPosition};
+    use crate::codebase::TextPosition;
     use crate::span::BufContextData;
     use std::rc::Rc;
 
@@ -584,7 +584,7 @@ mod tests {
         let mut codebase = TextCache::new();
         let src = "    nop\n    my_macro a, $12\n\n";
         let buf_id = codebase.add_src_buf(DUMMY_FILE, src);
-        let range = BufRange::from(12..20);
+        let range = 12..20;
         let token_ref = SpanData::Buf {
             range: range.clone(),
             context: Rc::new(BufContextData {

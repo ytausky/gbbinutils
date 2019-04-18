@@ -25,7 +25,7 @@ where
             .0
             .iter()
             .position(|param| param.name == ident.name)
-            .map(|pos| ParamId(pos));
+            .map(ParamId);
         if let Some(id) = param {
             self.parent.push_op(id, span)
         } else {

@@ -388,23 +388,23 @@ mod tests {
             .map(|(t, r)| (Ok(t), r))
             .collect();
         assert_eq!(
-            Lexer::new(src, |x| x.to_string()).collect::<Vec<_>>(),
+            Lexer::new(src, ToString::to_string).collect::<Vec<_>>(),
             expected
         )
     }
 
-    fn assert_eq_tokens<'a>(src: &'a str, expected_without_eof: impl Borrow<[TestToken]>) {
+    fn assert_eq_tokens(src: &str, expected_without_eof: impl Borrow<[TestToken]>) {
         assert_eq_lex_results(src, expected_without_eof.borrow().iter().cloned().map(Ok))
     }
 
-    fn assert_eq_lex_results<'a, I>(src: &'a str, expected_without_eof: I)
+    fn assert_eq_lex_results<I>(src: &str, expected_without_eof: I)
     where
         I: IntoIterator<Item = Result<TestToken, LexError>>,
     {
         let mut expected: Vec<_> = expected_without_eof.into_iter().collect();
         expected.push(Ok(Eof.into()));
         assert_eq!(
-            Lexer::new(src, |x| x.to_string())
+            Lexer::new(src, ToString::to_string)
                 .map(|(t, _)| t)
                 .collect::<Vec<_>>(),
             expected
@@ -484,12 +484,12 @@ mod tests {
 
     #[test]
     fn lex_keywords_lowercase() {
-        lex_transformed_keywords(|k| k.to_lowercase())
+        lex_transformed_keywords(str::to_lowercase)
     }
 
     #[test]
     fn lex_keywords_uppercase() {
-        lex_transformed_keywords(|k| k.to_uppercase())
+        lex_transformed_keywords(str::to_uppercase)
     }
 
     fn lex_transformed_keywords<F: Fn(&str) -> String>(f: F) {
