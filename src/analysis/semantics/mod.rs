@@ -1,3 +1,4 @@
+use self::command::CommandActions;
 use self::invoke::MacroCallActions;
 
 use super::backend::{Backend, LocationCounter, PushOp};
@@ -5,9 +6,7 @@ use super::macros::MacroEntry;
 use super::session::*;
 use super::{Ident, Lex, LexItem, Literal, SemanticToken};
 
-use crate::diag::span::{MergeSpans, Source, StripSpan};
 use crate::diag::*;
-use crate::model::{BinOp, Item};
 use crate::name::{NameTable, StartScope};
 use crate::syntax::keyword::*;
 use crate::syntax::*;
@@ -15,66 +14,9 @@ use crate::syntax::*;
 #[cfg(test)]
 pub use self::mock::*;
 
-mod directive;
-mod instruction;
+mod command;
 mod invoke;
-mod operand;
 mod params;
-
-#[derive(Clone, Debug, PartialEq)]
-enum SemanticAtom<I> {
-    Ident(Ident<I>),
-    Literal(Literal<I>),
-    LocationCounter,
-}
-
-impl<I> From<Literal<I>> for SemanticAtom<I> {
-    fn from(literal: Literal<I>) -> Self {
-        SemanticAtom::Literal(literal)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-enum SemanticUnary {
-    Parentheses,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-struct SemanticExpr<I, S> {
-    pub variant: ExprVariant<I, S>,
-    pub span: S,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-enum ExprVariant<I, S> {
-    Atom(SemanticAtom<I>),
-    Unary(SemanticUnary, Box<SemanticExpr<I, S>>),
-    Binary(BinOp, Box<SemanticExpr<I, S>>, Box<SemanticExpr<I, S>>),
-}
-
-#[cfg(test)]
-impl<I, S> SemanticExpr<I, S> {
-    pub fn from_atom<T: Into<ExprVariant<I, S>>>(atom: T, span: S) -> Self {
-        Self {
-            variant: atom.into(),
-            span,
-        }
-    }
-}
-
-impl<I, S> From<SemanticAtom<I>> for ExprVariant<I, S> {
-    fn from(atom: SemanticAtom<I>) -> Self {
-        ExprVariant::Atom(atom)
-    }
-}
-
-impl<I, S: Clone> Source for SemanticExpr<I, S> {
-    type Span = S;
-
-    fn span(&self) -> Self::Span {
-        self.span.clone()
-    }
-}
 
 pub(crate) trait Analyze<R: Clone + Eq, D: Diagnostics> {
     fn analyze_token_seq<I, C, B, N>(
@@ -127,14 +69,6 @@ impl<S: Session> SemanticActions<S> {
             session: Some(session),
             label: None,
         }
-    }
-
-    fn analyze_expr(&mut self, expr: SemanticExpr<S::StringRef, S::Span>) -> Result<S::Value, ()> {
-        self.build_value(|mut builder| {
-            let result = builder.analyze_expr(expr);
-            let (session, value) = builder.finish();
-            (session, result.map(|()| value))
-        })
     }
 
     fn build_value<F, T>(&mut self, f: F) -> T
@@ -256,194 +190,6 @@ impl<S: Session> StmtContext<Ident<S::StringRef>, Literal<S::StringRef>, Command
     }
 }
 
-pub(crate) struct CommandActions<S: Session> {
-    name: (Command, S::Span),
-    args: CommandArgs<S::StringRef, S::Span>,
-    parent: SemanticActions<S>,
-    has_errors: bool,
-}
-
-type CommandArgs<I, S> = Vec<SemanticExpr<I, S>>;
-
-impl<S: Session> CommandActions<S> {
-    fn new(name: (Command, S::Span), parent: SemanticActions<S>) -> CommandActions<S> {
-        CommandActions {
-            name,
-            args: Vec::new(),
-            parent,
-            has_errors: false,
-        }
-    }
-}
-
-impl<S: Session> MergeSpans<S::Span> for CommandActions<S> {
-    fn merge_spans(&mut self, left: &S::Span, right: &S::Span) -> S::Span {
-        self.parent.diagnostics().merge_spans(left, right)
-    }
-}
-
-impl<S: Session> StripSpan<S::Span> for CommandActions<S> {
-    type Stripped = <S::Delegate as StripSpan<S::Span>>::Stripped;
-
-    fn strip_span(&mut self, span: &S::Span) -> Self::Stripped {
-        self.parent.diagnostics().strip_span(span)
-    }
-}
-
-impl<S: Session> EmitDiagnostic<S::Span, <S::Delegate as StripSpan<S::Span>>::Stripped>
-    for CommandActions<S>
-{
-    fn emit_diagnostic(
-        &mut self,
-        diagnostic: impl Into<CompactDiagnostic<S::Span, <S::Delegate as StripSpan<S::Span>>::Stripped>>,
-    ) {
-        self.has_errors = true;
-        self.parent.diagnostics().emit_diagnostic(diagnostic)
-    }
-}
-
-impl<S: Session> DelegateDiagnostics<S::Span> for CommandActions<S> {
-    type Delegate = Self;
-
-    fn diagnostics(&mut self) -> &mut Self::Delegate {
-        self
-    }
-}
-
-impl<S: Session> CommandContext<S::Span> for CommandActions<S> {
-    type Ident = Ident<S::StringRef>;
-    type Command = Command;
-    type Literal = Literal<S::StringRef>;
-    type ArgContext = ExprBuilder<S::StringRef, S::Span, Self>;
-    type Parent = SemanticActions<S>;
-
-    fn add_argument(self) -> Self::ArgContext {
-        ExprBuilder {
-            stack: Vec::new(),
-            parent: self,
-        }
-    }
-
-    fn exit(mut self) -> Self::Parent {
-        if !self.has_errors {
-            match self.name {
-                (Command::Directive(directive), span) => {
-                    if !directive.requires_symbol() {
-                        self.parent.define_label_if_present()
-                    }
-                    directive::analyze_directive((directive, span), self.args, &mut self.parent)
-                }
-                (Command::Mnemonic(mnemonic), range) => {
-                    self.parent.define_label_if_present();
-                    analyze_mnemonic((mnemonic, range), self.args, &mut self.parent)
-                }
-            };
-        }
-        self.parent
-    }
-}
-
-impl Directive {
-    fn requires_symbol(self) -> bool {
-        match self {
-            Directive::Equ | Directive::Section => true,
-            _ => false,
-        }
-    }
-}
-
-pub(crate) struct ExprBuilder<R, S, P> {
-    stack: Vec<SemanticExpr<R, S>>,
-    parent: P,
-}
-
-impl<R, S, P> ExprBuilder<R, S, P> {
-    fn pop(&mut self) -> SemanticExpr<R, S> {
-        self.stack.pop().unwrap_or_else(|| unreachable!())
-    }
-}
-
-impl<R, S, P> DelegateDiagnostics<S> for ExprBuilder<R, S, P>
-where
-    P: DelegateDiagnostics<S>,
-{
-    type Delegate = P::Delegate;
-
-    fn diagnostics(&mut self) -> &mut Self::Delegate {
-        self.parent.diagnostics()
-    }
-}
-
-impl<S: Session> FinalContext for ExprBuilder<S::StringRef, S::Span, CommandActions<S>> {
-    type ReturnTo = CommandActions<S>;
-
-    fn exit(mut self) -> Self::ReturnTo {
-        if !self.parent.has_errors {
-            assert_eq!(self.stack.len(), 1);
-            self.parent.args.push(self.stack.pop().unwrap());
-        }
-        self.parent
-    }
-}
-
-impl<R, S, P> ExprContext<S> for ExprBuilder<R, S, P>
-where
-    S: Clone,
-    Self: DelegateDiagnostics<S>,
-{
-    type Ident = Ident<R>;
-    type Literal = Literal<R>;
-
-    fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, S)) {
-        self.stack.push(SemanticExpr {
-            variant: ExprVariant::Atom(match atom.0 {
-                ExprAtom::Ident(ident) => SemanticAtom::Ident(ident),
-                ExprAtom::Literal(literal) => SemanticAtom::Literal(literal),
-                ExprAtom::LocationCounter => SemanticAtom::LocationCounter,
-            }),
-            span: atom.1,
-        })
-    }
-
-    fn apply_operator(&mut self, operator: (Operator, S)) {
-        match operator.0 {
-            Operator::Unary(UnaryOperator::Parentheses) => {
-                let inner = self.pop();
-                self.stack.push(SemanticExpr {
-                    variant: ExprVariant::Unary(SemanticUnary::Parentheses, Box::new(inner)),
-                    span: operator.1,
-                })
-            }
-            Operator::Binary(binary) => {
-                let rhs = self.pop();
-                let lhs = self.pop();
-                self.stack.push(SemanticExpr {
-                    variant: ExprVariant::Binary(binary, Box::new(lhs), Box::new(rhs)),
-                    span: operator.1,
-                })
-            }
-            Operator::FnCall(_) => unimplemented!(),
-        }
-    }
-}
-
-fn analyze_mnemonic<S: Session>(
-    name: (Mnemonic, S::Span),
-    args: CommandArgs<S::StringRef, S::Span>,
-    actions: &mut SemanticActions<S>,
-) {
-    let operands: Vec<_> = args
-        .into_iter()
-        .map(|arg| {
-            actions.build_value(|builder| operand::analyze_operand(arg, name.0.context(), builder))
-        })
-        .collect();
-    if let Ok(instruction) = instruction::analyze_instruction(name, operands, actions.diagnostics())
-    {
-        actions.session().emit_item(Item::Instruction(instruction))
-    }
-}
-
 pub(crate) struct MacroDefActions<S: Session> {
     parent: SemanticActions<S>,
     tokens: (Vec<SemanticToken<S::StringRef>>, Vec<S::Span>),
@@ -481,52 +227,6 @@ impl<S: Session> TokenSeqContext<S::Span> for MacroDefActions<S> {
             actions.session().define_macro(name, params, self.tokens)
         }
         actions
-    }
-}
-
-trait AnalyzeExpr<I, S: Clone> {
-    fn analyze_expr(&mut self, expr: SemanticExpr<I, S>) -> Result<(), ()>;
-}
-
-impl<'a, T, I, S> AnalyzeExpr<I, S> for T
-where
-    T: ValueBuilder<Ident<I>, S> + DelegateDiagnostics<S>,
-    S: Clone,
-{
-    fn analyze_expr(&mut self, expr: SemanticExpr<I, S>) -> Result<(), ()> {
-        match expr.variant {
-            ExprVariant::Atom(SemanticAtom::Ident(ident)) => {
-                self.push_op(ident, expr.span);
-                Ok(())
-            }
-            ExprVariant::Atom(SemanticAtom::Literal(Literal::Number(n))) => {
-                self.push_op(n, expr.span);
-                Ok(())
-            }
-            ExprVariant::Atom(SemanticAtom::Literal(Literal::Operand(_))) => {
-                Err(Message::KeywordInExpr {
-                    keyword: self.diagnostics().strip_span(&expr.span),
-                }
-                .at(expr.span))
-            }
-            ExprVariant::Atom(SemanticAtom::Literal(Literal::String(_))) => {
-                Err(Message::StringInInstruction.at(expr.span))
-            }
-            ExprVariant::Atom(SemanticAtom::LocationCounter) => {
-                self.push_op(LocationCounter, expr.span);
-                Ok(())
-            }
-            ExprVariant::Unary(SemanticUnary::Parentheses, expr) => Ok(self.analyze_expr(*expr)?),
-            ExprVariant::Binary(binary, left, right) => {
-                self.analyze_expr(*left)?;
-                self.analyze_expr(*right)?;
-                self.push_op(binary, expr.span);
-                Ok(())
-            }
-        }
-        .map_err(|diagnostic| {
-            self.diagnostics().emit_diagnostic(diagnostic);
-        })
     }
 }
 
@@ -606,7 +306,7 @@ mod tests {
     use crate::analysis::backend::BackendEvent;
     use crate::analysis::session::SessionEvent;
     use crate::diag::Message;
-    use crate::model::{Atom, BinOp, Width};
+    use crate::model::{Atom, BinOp, Item, Width};
 
     use std::borrow::Borrow;
     use std::cell::RefCell;

@@ -364,7 +364,7 @@ mod tests {
     }
 
     type TestExprContext<'a> =
-        crate::analysis::semantics::ExprBuilder<String, (), TestCommandActions<'a>>;
+        crate::analysis::semantics::command::ExprBuilder<String, (), TestCommandActions<'a>>;
 
     fn unary_directive<F>(directive: Directive, f: F) -> Vec<TestOperation>
     where

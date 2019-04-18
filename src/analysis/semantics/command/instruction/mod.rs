@@ -422,7 +422,7 @@ mod tests {
 
     use super::*;
 
-    use crate::analysis::semantics::*;
+    use crate::analysis::semantics::command::*;
     use crate::analysis::{Ident, Literal};
     use crate::model::{Atom, Expr};
 
@@ -850,8 +850,9 @@ mod tests {
     where
         I: IntoIterator<Item = Input>,
     {
-        use crate::analysis::semantics::operand::analyze_operand;
-        use crate::analysis::session::MockSession;
+        use crate::analysis::semantics::command::operand::analyze_operand;
+        use crate::analysis::session::{MockBuilder, MockSession};
+
         use std::cell::RefCell;
 
         let log = RefCell::new(Vec::new());
