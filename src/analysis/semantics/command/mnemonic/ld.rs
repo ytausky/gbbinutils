@@ -281,7 +281,7 @@ impl<S: Clone> Source for LdDest16<S> {
 
 #[cfg(test)]
 mod tests {
-    use crate::analysis::semantics::command::instruction::tests::*;
+    use crate::analysis::semantics::command::mnemonic::tests::*;
     use crate::model::*;
     use crate::syntax::keyword::Mnemonic;
 

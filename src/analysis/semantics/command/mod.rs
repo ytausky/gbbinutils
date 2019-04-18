@@ -8,7 +8,7 @@ use crate::model::{BinOp, Item};
 use crate::syntax::*;
 
 mod directive;
-mod instruction;
+mod mnemonic;
 mod operand;
 
 pub(crate) struct CommandActions<S: Session> {
@@ -248,8 +248,7 @@ fn analyze_mnemonic<S: Session>(
             actions.build_value(|builder| operand::analyze_operand(arg, name.0.context(), builder))
         })
         .collect();
-    if let Ok(instruction) = instruction::analyze_instruction(name, operands, actions.diagnostics())
-    {
+    if let Ok(instruction) = mnemonic::analyze_instruction(name, operands, actions.diagnostics()) {
         actions.session().emit_item(Item::Instruction(instruction))
     }
 }
