@@ -1,4 +1,4 @@
-use super::{AnalyzeExpr, Arg, ArgAtom, ArgUnaryOp, ArgVariant};
+use super::{Arg, ArgAtom, ArgUnaryOp, ArgVariant, EvalArg};
 
 use crate::analysis::session::{Finish, ValueBuilder};
 use crate::analysis::{Ident, Literal};
@@ -61,7 +61,7 @@ where
         ArgVariant::Unary(ArgUnaryOp::Parentheses, inner) => {
             analyze_deref_operand(*inner, expr.span, value_context)
         }
-        _ => match value_context.analyze_expr(expr) {
+        _ => match value_context.eval_arg(expr) {
             Ok(()) => {
                 let (session, expr) = value_context.finish();
                 (session, Ok(Operand::Const(expr)))
@@ -90,7 +90,7 @@ where
             );
             (value_context.finish().0, result)
         }
-        _ => match value_context.analyze_expr(expr) {
+        _ => match value_context.eval_arg(expr) {
             Ok(()) => {
                 let (session, expr) = value_context.finish();
                 (session, Ok(Operand::Deref(expr)))

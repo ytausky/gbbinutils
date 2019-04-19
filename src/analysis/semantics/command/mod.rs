@@ -229,51 +229,51 @@ impl<S: Session> SemanticActions<S> {
         expr: Arg<S::StringRef, S::Span>,
     ) -> Result<S::Value, ()> {
         self.build_value(params, |mut builder| {
-            let result = builder.analyze_expr(expr);
+            let result = builder.eval_arg(expr);
             let (session, value) = builder.finish();
             (session, result.map(|()| value))
         })
     }
 }
 
-trait AnalyzeExpr<I, S: Clone> {
-    fn analyze_expr(&mut self, expr: Arg<I, S>) -> Result<(), ()>;
+trait EvalArg<I, S: Clone> {
+    fn eval_arg(&mut self, arg: Arg<I, S>) -> Result<(), ()>;
 }
 
-impl<'a, T, R, S> AnalyzeExpr<R, S> for T
+impl<'a, T, R, S> EvalArg<R, S> for T
 where
     T: ValueBuilder<Ident<R>, S> + DelegateDiagnostics<S>,
     R: Eq,
     S: Clone,
 {
-    fn analyze_expr(&mut self, expr: Arg<R, S>) -> Result<(), ()> {
-        match expr.variant {
+    fn eval_arg(&mut self, arg: Arg<R, S>) -> Result<(), ()> {
+        match arg.variant {
             ArgVariant::Atom(ArgAtom::Ident(ident)) => {
-                self.push_op(ident, expr.span);
+                self.push_op(ident, arg.span);
                 Ok(())
             }
             ArgVariant::Atom(ArgAtom::Literal(Literal::Number(n))) => {
-                self.push_op(n, expr.span);
+                self.push_op(n, arg.span);
                 Ok(())
             }
             ArgVariant::Atom(ArgAtom::Literal(Literal::Operand(_))) => {
                 Err(Message::KeywordInExpr {
-                    keyword: self.diagnostics().strip_span(&expr.span),
+                    keyword: self.diagnostics().strip_span(&arg.span),
                 }
-                .at(expr.span))
+                .at(arg.span))
             }
             ArgVariant::Atom(ArgAtom::Literal(Literal::String(_))) => {
-                Err(Message::StringInInstruction.at(expr.span))
+                Err(Message::StringInInstruction.at(arg.span))
             }
             ArgVariant::Atom(ArgAtom::LocationCounter) => {
-                self.push_op(LocationCounter, expr.span);
+                self.push_op(LocationCounter, arg.span);
                 Ok(())
             }
-            ArgVariant::Unary(ArgUnaryOp::Parentheses, expr) => Ok(self.analyze_expr(*expr)?),
+            ArgVariant::Unary(ArgUnaryOp::Parentheses, expr) => Ok(self.eval_arg(*expr)?),
             ArgVariant::Binary(binary, left, right) => {
-                self.analyze_expr(*left)?;
-                self.analyze_expr(*right)?;
-                self.push_op(binary, expr.span);
+                self.eval_arg(*left)?;
+                self.eval_arg(*right)?;
+                self.push_op(binary, arg.span);
                 Ok(())
             }
         }
