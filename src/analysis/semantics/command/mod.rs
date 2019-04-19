@@ -260,7 +260,7 @@ impl<T, N, S: Clone> ArgEvaluator<N, S> for T where
 
 impl<'a, T, R, S> EvalArg<R, S> for T
 where
-    T: ArgEvaluator<Ident<R>, S> + DelegateDiagnostics<S>,
+    T: ArgEvaluator<Ident<R>, S>,
     R: Eq,
     S: Clone,
 {
