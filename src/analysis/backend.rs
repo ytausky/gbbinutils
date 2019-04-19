@@ -35,12 +35,16 @@ impl<N> From<LocationCounter> for Atom<N> {
 }
 
 pub trait ValueBuilder<N, S: Clone>:
-    PushOp<LocationCounter, S> + PushOp<i32, S> + PushOp<N, S> + PushOp<BinOp, S>
+    PushOp<LocationCounter, S> + PushOp<i32, S> + PushOp<N, S> + PushOp<BinOp, S> + PushOp<ParamId, S>
 {
 }
 
 impl<T, N, S: Clone> ValueBuilder<N, S> for T where
-    Self: PushOp<LocationCounter, S> + PushOp<i32, S> + PushOp<N, S> + PushOp<BinOp, S>
+    Self: PushOp<LocationCounter, S>
+        + PushOp<i32, S>
+        + PushOp<N, S>
+        + PushOp<BinOp, S>
+        + PushOp<ParamId, S>
 {
 }
 
@@ -71,8 +75,7 @@ where
     Self: AllocName<S>,
     Self: PartialBackend<S>,
     Self: StartSection<<Self as AllocName<S>>::Name, S>,
-    <Self as PartialBackend<S>>::Value:
-        Default + ValueBuilder<<Self as AllocName<S>>::Name, S> + PushOp<ParamId, S>,
+    <Self as PartialBackend<S>>::Value: Default + ValueBuilder<<Self as AllocName<S>>::Name, S>,
 {
     fn define_fn(&mut self, name: (Self::Name, S), value: Self::Value);
 }

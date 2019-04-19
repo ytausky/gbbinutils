@@ -1,6 +1,6 @@
-use super::{Arg, ArgAtom, ArgUnaryOp, ArgVariant, EvalArg};
+use super::{Arg, ArgAtom, ArgEvaluator, ArgUnaryOp, ArgVariant, EvalArg};
 
-use crate::analysis::session::{Finish, ValueBuilder};
+use crate::analysis::session::Finish;
 use crate::analysis::{Ident, Literal};
 use crate::diag::*;
 use crate::model::{Condition, PtrReg, Reg16, RegPair, SimpleOperand};
@@ -48,7 +48,7 @@ pub(super) fn analyze_operand<C, R, S>(
     mut value_context: C,
 ) -> (C::Parent, Result<Operand<C::Value>, ()>)
 where
-    C: ValueBuilder<Ident<R>, S> + DelegateDiagnostics<S> + Finish<S>,
+    C: ArgEvaluator<Ident<R>, S> + Finish<S>,
     R: Eq,
     S: Clone,
 {
@@ -77,7 +77,7 @@ fn analyze_deref_operand<C, R, S>(
     mut value_context: C,
 ) -> (C::Parent, Result<Operand<C::Value>, ()>)
 where
-    C: ValueBuilder<Ident<R>, S> + DelegateDiagnostics<S> + Finish<S>,
+    C: ArgEvaluator<Ident<R>, S> + Finish<S>,
     R: Eq,
     S: Clone,
 {

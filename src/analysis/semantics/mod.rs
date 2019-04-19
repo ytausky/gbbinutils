@@ -8,7 +8,6 @@ use super::session::*;
 use super::{Ident, Lex, LexItem, Literal, SemanticToken};
 
 use crate::diag::*;
-use crate::model::ParamId;
 use crate::name::{NameTable, StartScope};
 use crate::syntax::keyword::*;
 use crate::syntax::*;
@@ -31,7 +30,7 @@ pub(crate) trait Analyze<R: Clone + Eq, D: Diagnostics> {
         B: Backend<D::Span> + ?Sized,
         N: NameTable<Ident<R>, BackendEntry = B::Name, MacroEntry = MacroEntry<R, D>>
             + StartScope<Ident<R>>,
-        B::Value: Default + ValueBuilder<B::Name, D::Span> + PushOp<ParamId, D::Span>;
+        B::Value: Default + ValueBuilder<B::Name, D::Span>;
 }
 
 pub struct SemanticAnalyzer;
@@ -44,7 +43,7 @@ impl<R: Clone + Eq, D: Diagnostics> Analyze<R, D> for SemanticAnalyzer {
         B: Backend<D::Span> + ?Sized,
         N: NameTable<Ident<R>, BackendEntry = B::Name, MacroEntry = MacroEntry<R, D>>
             + StartScope<Ident<R>>,
-        B::Value: Default + ValueBuilder<B::Name, D::Span> + PushOp<ParamId, D::Span>,
+        B::Value: Default + ValueBuilder<B::Name, D::Span>,
     {
         let session = CompositeSession::new(
             partial.codebase,
@@ -306,7 +305,7 @@ mod mock {
             C: Lex<D, StringRef = String>,
             B: Backend<D::Span> + ?Sized,
             N: NameTable<Ident<String>, MacroEntry = MacroEntry<String, D>>,
-            B::Value: Default + ValueBuilder<B::Name, D::Span> + PushOp<ParamId, D::Span>,
+            B::Value: Default + ValueBuilder<B::Name, D::Span>,
         {
             self.log
                 .borrow_mut()

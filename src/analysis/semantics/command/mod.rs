@@ -2,11 +2,11 @@ use self::args::*;
 
 use super::{Ident, Label, Literal, Params, SemanticActions, StmtActions};
 
-use crate::analysis::backend::{LocationCounter, ValueBuilder};
+use crate::analysis::backend::{LocationCounter, PushOp};
 use crate::analysis::session::{Finish, Session};
 use crate::diag::span::{MergeSpans, StripSpan};
 use crate::diag::{CompactDiagnostic, DelegateDiagnostics, EmitDiagnostic, Message};
-use crate::model::Item;
+use crate::model::{BinOp, Item};
 use crate::syntax::*;
 
 mod args;
@@ -240,9 +240,27 @@ trait EvalArg<I, S: Clone> {
     fn eval_arg(&mut self, arg: Arg<I, S>) -> Result<(), ()>;
 }
 
+trait ArgEvaluator<N, S: Clone>:
+    PushOp<LocationCounter, S>
+    + PushOp<i32, S>
+    + PushOp<N, S>
+    + PushOp<BinOp, S>
+    + DelegateDiagnostics<S>
+{
+}
+
+impl<T, N, S: Clone> ArgEvaluator<N, S> for T where
+    Self: PushOp<LocationCounter, S>
+        + PushOp<i32, S>
+        + PushOp<N, S>
+        + PushOp<BinOp, S>
+        + DelegateDiagnostics<S>
+{
+}
+
 impl<'a, T, R, S> EvalArg<R, S> for T
 where
-    T: ValueBuilder<Ident<R>, S> + DelegateDiagnostics<S>,
+    T: ArgEvaluator<Ident<R>, S> + DelegateDiagnostics<S>,
     R: Eq,
     S: Clone,
 {
