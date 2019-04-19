@@ -72,7 +72,7 @@ impl<S: Session> SemanticActions<S> {
         self.session.as_mut().unwrap()
     }
 
-    fn build_value<F, T>(&mut self, params: Params<S::StringRef, S::Span>, f: F) -> T
+    fn build_value<F, T>(&mut self, params: &Params<S::StringRef, S::Span>, f: F) -> T
     where
         F: FnOnce(ParamsAdapter<S::GeneralBuilder, S::StringRef, S::Span>) -> (S, T),
     {
@@ -158,7 +158,7 @@ impl<S: Session> StmtActions<S> {
 
     fn define_label_if_present(&mut self) {
         if let Some(((label, span), params)) = self.label.take() {
-            let value = self.parent.build_value(params, |mut builder| {
+            let value = self.parent.build_value(&params, |mut builder| {
                 builder.push_op(LocationCounter, span.clone());
                 builder.finish()
             });

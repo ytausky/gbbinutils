@@ -5,18 +5,18 @@ use crate::analysis::session::Finish;
 use crate::diag::DelegateDiagnostics;
 use crate::model::{BinOp, ParamId};
 
-pub struct ParamsAdapter<P, R, S> {
+pub struct ParamsAdapter<'a, P, R, S> {
     parent: P,
-    params: Params<R, S>,
+    params: &'a Params<R, S>,
 }
 
-impl<P, R, S> ParamsAdapter<P, R, S> {
-    pub fn new(parent: P, params: Params<R, S>) -> Self {
+impl<'a, P, R, S> ParamsAdapter<'a, P, R, S> {
+    pub fn new(parent: P, params: &'a Params<R, S>) -> Self {
         Self { parent, params }
     }
 }
 
-impl<P, R, S> PushOp<Ident<R>, S> for ParamsAdapter<P, R, S>
+impl<'a, P, R, S> PushOp<Ident<R>, S> for ParamsAdapter<'a, P, R, S>
 where
     P: PushOp<Ident<R>, S> + PushOp<ParamId, S>,
     R: Eq,
@@ -39,7 +39,7 @@ where
 
 macro_rules! impl_push_op_for_params_adapter {
     ($t:ty) => {
-        impl<P, R, S> PushOp<$t, S> for ParamsAdapter<P, R, S>
+        impl<'a, P, R, S> PushOp<$t, S> for ParamsAdapter<'a, P, R, S>
         where
             P: PushOp<$t, S>,
             S: Clone,
@@ -55,7 +55,7 @@ impl_push_op_for_params_adapter! {LocationCounter}
 impl_push_op_for_params_adapter! {i32}
 impl_push_op_for_params_adapter! {BinOp}
 
-impl<P, R, S> Finish<S> for ParamsAdapter<P, R, S>
+impl<'a, P, R, S> Finish<S> for ParamsAdapter<'a, P, R, S>
 where
     P: Finish<S>,
     S: Clone,
@@ -68,7 +68,7 @@ where
     }
 }
 
-impl<P, R, S> DelegateDiagnostics<S> for ParamsAdapter<P, R, S>
+impl<'a, P, R, S> DelegateDiagnostics<S> for ParamsAdapter<'a, P, R, S>
 where
     P: DelegateDiagnostics<S>,
     S: Clone,
@@ -90,7 +90,8 @@ mod tests {
     fn translate_param() {
         let name: Ident<_> = "param".into();
         let builder: Expr<_, _> = Default::default();
-        let mut adapter = ParamsAdapter::new(builder, (vec![name.clone()], vec![()]));
+        let params = (vec![name.clone()], vec![()]);
+        let mut adapter = ParamsAdapter::new(builder, &params);
         adapter.push_op(name, ());
         let mut expected: Expr<_, _> = Default::default();
         expected.push_op(ParamId(0), ());
@@ -101,7 +102,8 @@ mod tests {
     fn pass_through_non_param() {
         let param: Ident<_> = "param".into();
         let builder: Expr<_, _> = Default::default();
-        let mut adapter = ParamsAdapter::new(builder, (vec![param.clone()], vec![()]));
+        let params = (vec![param.clone()], vec![()]);
+        let mut adapter = ParamsAdapter::new(builder, &params);
         let unrelated: Ident<_> = "ident".into();
         adapter.push_op(unrelated.clone(), ());
         let mut expected: Expr<_, _> = Default::default();

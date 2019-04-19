@@ -53,7 +53,7 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
 
     fn analyze_data(self, width: Width) {
         for arg in self.args {
-            let expr = match self.actions.analyze_expr(Default::default(), arg) {
+            let expr = match self.actions.analyze_expr(&Default::default(), arg) {
                 Ok(expr) => expr,
                 Err(()) => return,
             };
@@ -64,7 +64,7 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
     fn analyze_ds(mut self) {
         let actions = &mut self.actions;
         single_arg(self.span, self.args, actions.diagnostics())
-            .and_then(|arg| actions.analyze_expr(Default::default(), arg))
+            .and_then(|arg| actions.analyze_expr(&Default::default(), arg))
             .map(|bytes| actions.session().reserve(bytes))
             .ok();
     }
@@ -73,7 +73,7 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
         let actions = &mut self.actions;
         let (symbol, params) = self.label.take().unwrap();
         single_arg(self.span, self.args, actions.diagnostics())
-            .and_then(|arg| actions.analyze_expr(params, arg))
+            .and_then(|arg| actions.analyze_expr(&params, arg))
             .map(|value| actions.session().define_symbol(symbol, value))
             .ok();
     }
@@ -98,7 +98,7 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
     fn analyze_org(mut self) {
         let actions = &mut self.actions;
         single_arg(self.span, self.args, actions.diagnostics())
-            .and_then(|arg| actions.analyze_expr(Default::default(), arg))
+            .and_then(|arg| actions.analyze_expr(&Default::default(), arg))
             .map(|expr| actions.session().set_origin(expr))
             .ok();
     }

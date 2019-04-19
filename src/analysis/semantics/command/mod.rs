@@ -212,7 +212,7 @@ fn analyze_mnemonic<S: Session>(
     let operands: Vec<_> = args
         .into_iter()
         .map(|arg| {
-            actions.build_value(Default::default(), |builder| {
+            actions.build_value(&Default::default(), |builder| {
                 operand::analyze_operand(arg, name.0.context(), builder)
             })
         })
@@ -225,7 +225,7 @@ fn analyze_mnemonic<S: Session>(
 impl<S: Session> SemanticActions<S> {
     fn analyze_expr(
         &mut self,
-        params: Params<S::StringRef, S::Span>,
+        params: &Params<S::StringRef, S::Span>,
         expr: Arg<S::StringRef, S::Span>,
     ) -> Result<S::Value, ()> {
         self.build_value(params, |mut builder| {
