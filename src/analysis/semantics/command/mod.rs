@@ -1,6 +1,6 @@
 use self::args::*;
 
-use super::{Ident, Literal, SemanticActions};
+use super::{Ident, Literal, SemanticActions, StmtActions};
 
 use crate::analysis::backend::{LocationCounter, ValueBuilder};
 use crate::analysis::session::{Finish, Session};
@@ -15,18 +15,18 @@ mod mnemonic;
 mod operand;
 
 pub(crate) struct CommandActions<S: Session> {
+    parent: StmtActions<S>,
     name: (Command, S::Span),
     args: CommandArgs<S::StringRef, S::Span>,
-    parent: SemanticActions<S>,
     has_errors: bool,
 }
 
 impl<S: Session> CommandActions<S> {
-    pub(super) fn new(name: (Command, S::Span), parent: SemanticActions<S>) -> CommandActions<S> {
+    pub(super) fn new(parent: StmtActions<S>, name: (Command, S::Span)) -> CommandActions<S> {
         CommandActions {
+            parent,
             name,
             args: Vec::new(),
-            parent,
             has_errors: false,
         }
     }
@@ -71,7 +71,7 @@ impl<S: Session> CommandContext<S::Span> for CommandActions<S> {
     type Command = Command;
     type Literal = Literal<S::StringRef>;
     type ArgContext = ExprBuilder<S::StringRef, S::Span, Self>;
-    type Parent = SemanticActions<S>;
+    type Parent = StmtActions<S>;
 
     fn add_argument(self) -> Self::ArgContext {
         ExprBuilder {
@@ -87,11 +87,16 @@ impl<S: Session> CommandContext<S::Span> for CommandActions<S> {
                     if !directive.requires_symbol() {
                         self.parent.define_label_if_present()
                     }
-                    directive::analyze_directive((directive, span), self.args, &mut self.parent)
+                    directive::analyze_directive(
+                        (directive, span),
+                        self.parent.label.take(),
+                        self.args,
+                        &mut self.parent.parent,
+                    )
                 }
                 (Command::Mnemonic(mnemonic), range) => {
                     self.parent.define_label_if_present();
-                    analyze_mnemonic((mnemonic, range), self.args, &mut self.parent)
+                    analyze_mnemonic((mnemonic, range), self.args, &mut self.parent.parent)
                 }
             };
         }

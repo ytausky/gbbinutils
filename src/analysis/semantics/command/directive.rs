@@ -1,3 +1,4 @@
+use super::super::Label;
 use super::{Arg, ArgAtom, ArgVariant, CommandArgs, Directive, SemanticActions};
 
 use crate::analysis::session::Session;
@@ -7,20 +8,23 @@ use crate::model::{Item, Width};
 
 pub(super) fn analyze_directive<'a, S: Session>(
     directive: (Directive, S::Span),
+    label: Option<Label<S::StringRef, S::Span>>,
     args: CommandArgs<S::StringRef, S::Span>,
     actions: &'a mut SemanticActions<S>,
 ) {
     let context = DirectiveContext {
         span: directive.1,
+        label,
         args,
         actions,
     };
     context.analyze(directive.0)
 }
 
-struct DirectiveContext<'a, A, I, S> {
+struct DirectiveContext<'a, A, R, S> {
     span: S,
-    args: CommandArgs<I, S>,
+    label: Option<Label<R, S>>,
+    args: CommandArgs<R, S>,
     actions: &'a mut A,
 }
 
@@ -67,15 +71,15 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
 
     fn analyze_equ(mut self) {
         let actions = &mut self.actions;
-        let symbol = actions.label.take().unwrap().0;
+        let symbol = self.label.take().unwrap().0;
         single_arg(self.span, self.args, actions.diagnostics())
             .and_then(|arg| actions.analyze_expr(arg))
             .map(|value| actions.session().define_symbol(symbol, value))
             .ok();
     }
 
-    fn analyze_section(self) {
-        let name = self.actions.label.take().unwrap().0;
+    fn analyze_section(mut self) {
+        let name = self.label.take().unwrap().0;
         self.actions.session().start_section(name)
     }
 

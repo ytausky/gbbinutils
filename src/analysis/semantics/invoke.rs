@@ -1,4 +1,4 @@
-use super::SemanticActions;
+use super::StmtActions;
 
 use crate::analysis::session::Session;
 use crate::analysis::{Ident, SemanticToken, TokenSeq};
@@ -6,20 +6,20 @@ use crate::diag::DelegateDiagnostics;
 use crate::syntax::{MacroCallContext, TokenSeqContext};
 
 pub(crate) struct MacroCallActions<S: Session> {
+    parent: StmtActions<S>,
     name: (Ident<S::StringRef>, S::Span),
     args: Vec<TokenSeq<S::StringRef, S::Span>>,
-    parent: SemanticActions<S>,
 }
 
 impl<S: Session> MacroCallActions<S> {
     pub fn new(
+        parent: StmtActions<S>,
         name: (Ident<S::StringRef>, S::Span),
-        parent: SemanticActions<S>,
     ) -> MacroCallActions<S> {
         MacroCallActions {
+            parent,
             name,
             args: Vec::new(),
-            parent,
         }
     }
 
@@ -38,7 +38,7 @@ impl<S: Session> DelegateDiagnostics<S::Span> for MacroCallActions<S> {
 
 impl<S: Session> MacroCallContext<S::Span> for MacroCallActions<S> {
     type Token = SemanticToken<S::StringRef>;
-    type Parent = SemanticActions<S>;
+    type Parent = StmtActions<S>;
     type MacroArgContext = MacroArgContext<S>;
 
     fn enter_macro_arg(self) -> Self::MacroArgContext {
@@ -47,9 +47,8 @@ impl<S: Session> MacroCallContext<S::Span> for MacroCallActions<S> {
 
     fn exit(mut self) -> Self::Parent {
         self.parent
-            .session
-            .as_mut()
-            .unwrap()
+            .parent
+            .session()
             .call_macro(self.name, self.args);
         self.parent
     }
