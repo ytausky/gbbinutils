@@ -16,16 +16,16 @@ mod operand;
 
 pub(crate) struct CommandActions<S: Session> {
     parent: StmtActions<S>,
-    name: (Command, S::Span),
+    command: (Command, S::Span),
     args: CommandArgs<S::StringRef, S::Span>,
     has_errors: bool,
 }
 
 impl<S: Session> CommandActions<S> {
-    pub(super) fn new(parent: StmtActions<S>, name: (Command, S::Span)) -> CommandActions<S> {
+    pub(super) fn new(parent: StmtActions<S>, command: (Command, S::Span)) -> CommandActions<S> {
         CommandActions {
             parent,
-            name,
+            command,
             args: Vec::new(),
             has_errors: false,
         }
@@ -82,7 +82,7 @@ impl<S: Session> CommandContext<S::Span> for CommandActions<S> {
 
     fn exit(mut self) -> Self::Parent {
         if !self.has_errors {
-            let prepared = PreparedCommand::new(self.name, &mut self.parent);
+            let prepared = PreparedCommand::new(self.command, &mut self.parent);
             self.parent.define_label_if_present();
             prepared.exec(self.args, &mut self.parent.parent)
         }

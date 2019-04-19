@@ -67,7 +67,7 @@ pub(crate) trait StmtContext<I, L, C, S: Clone>: DelegateDiagnostics<S> + Sized 
     type MacroCallContext: MacroCallContext<S, Token = Token<I, L, C>, Parent = Self>;
     type Parent;
 
-    fn enter_command(self, name: (C, S)) -> Self::CommandContext;
+    fn enter_command(self, command: (C, S)) -> Self::CommandContext;
     fn enter_macro_def(self, keyword: S) -> Self::MacroDefContext;
     fn enter_macro_call(self, name: (I, S)) -> Self::MacroCallContext;
     fn exit(self) -> Self::Parent;

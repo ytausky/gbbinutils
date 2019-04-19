@@ -178,8 +178,8 @@ impl<S: Session> StmtContext<Ident<S::StringRef>, Literal<S::StringRef>, Command
     type MacroCallContext = MacroCallActions<S>;
     type Parent = SemanticActions<S>;
 
-    fn enter_command(self, name: (Command, S::Span)) -> Self::CommandContext {
-        CommandActions::new(self, name)
+    fn enter_command(self, command: (Command, S::Span)) -> Self::CommandContext {
+        CommandActions::new(self, command)
     }
 
     fn enter_macro_def(mut self, keyword: S::Span) -> Self::MacroDefContext {
