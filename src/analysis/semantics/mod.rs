@@ -159,7 +159,7 @@ impl<S: Session> StmtActions<S> {
     fn define_label_if_present(&mut self) {
         if let Some(((label, span), params)) = self.label.take() {
             let value = self.parent.build_value(params, |mut builder| {
-                PushOp::<LocationCounter, _>::push_op(&mut builder, LocationCounter, span.clone());
+                builder.push_op(LocationCounter, span.clone());
                 builder.finish()
             });
             self.session().define_symbol((label, span), value)
