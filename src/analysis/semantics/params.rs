@@ -1,6 +1,9 @@
 use super::{Ident, Params, PushOp};
 
-use crate::model::ParamId;
+use crate::analysis::backend::LocationCounter;
+use crate::analysis::session::Finish;
+use crate::diag::DelegateDiagnostics;
+use crate::model::{BinOp, ParamId};
 
 pub struct ParamsAdapter<P, R, S> {
     parent: P,
@@ -31,6 +34,49 @@ where
         } else {
             self.parent.push_op(ident, span)
         }
+    }
+}
+
+macro_rules! impl_push_op_for_params_adapter {
+    ($t:ty) => {
+        impl<P, R, S> PushOp<$t, S> for ParamsAdapter<P, R, S>
+        where
+            P: PushOp<$t, S>,
+            S: Clone,
+        {
+            fn push_op(&mut self, op: $t, span: S) {
+                self.parent.push_op(op, span)
+            }
+        }
+    };
+}
+
+impl_push_op_for_params_adapter! {LocationCounter}
+impl_push_op_for_params_adapter! {i32}
+impl_push_op_for_params_adapter! {BinOp}
+
+impl<P, R, S> Finish<S> for ParamsAdapter<P, R, S>
+where
+    P: Finish<S>,
+    S: Clone,
+{
+    type Parent = P::Parent;
+    type Value = P::Value;
+
+    fn finish(self) -> (Self::Parent, Self::Value) {
+        self.parent.finish()
+    }
+}
+
+impl<P, R, S> DelegateDiagnostics<S> for ParamsAdapter<P, R, S>
+where
+    P: DelegateDiagnostics<S>,
+    S: Clone,
+{
+    type Delegate = P::Delegate;
+
+    fn diagnostics(&mut self) -> &mut Self::Delegate {
+        self.parent.diagnostics()
     }
 }
 

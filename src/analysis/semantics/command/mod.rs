@@ -1,6 +1,6 @@
 use self::args::*;
 
-use super::{Ident, Label, Literal, SemanticActions, StmtActions};
+use super::{Ident, Label, Literal, Params, SemanticActions, StmtActions};
 
 use crate::analysis::backend::{LocationCounter, ValueBuilder};
 use crate::analysis::session::{Finish, Session};
@@ -212,7 +212,9 @@ fn analyze_mnemonic<S: Session>(
     let operands: Vec<_> = args
         .into_iter()
         .map(|arg| {
-            actions.build_value(|builder| operand::analyze_operand(arg, name.0.context(), builder))
+            actions.build_value(Default::default(), |builder| {
+                operand::analyze_operand(arg, name.0.context(), builder)
+            })
         })
         .collect();
     if let Ok(instruction) = mnemonic::analyze_instruction(name, operands, actions.diagnostics()) {
@@ -221,8 +223,12 @@ fn analyze_mnemonic<S: Session>(
 }
 
 impl<S: Session> SemanticActions<S> {
-    fn analyze_expr(&mut self, expr: Arg<S::StringRef, S::Span>) -> Result<S::Value, ()> {
-        self.build_value(|mut builder| {
+    fn analyze_expr(
+        &mut self,
+        params: Params<S::StringRef, S::Span>,
+        expr: Arg<S::StringRef, S::Span>,
+    ) -> Result<S::Value, ()> {
+        self.build_value(params, |mut builder| {
             let result = builder.analyze_expr(expr);
             let (session, value) = builder.finish();
             (session, result.map(|()| value))
@@ -234,12 +240,13 @@ trait AnalyzeExpr<I, S: Clone> {
     fn analyze_expr(&mut self, expr: Arg<I, S>) -> Result<(), ()>;
 }
 
-impl<'a, T, I, S> AnalyzeExpr<I, S> for T
+impl<'a, T, R, S> AnalyzeExpr<R, S> for T
 where
-    T: ValueBuilder<Ident<I>, S> + DelegateDiagnostics<S>,
+    T: ValueBuilder<Ident<R>, S> + DelegateDiagnostics<S>,
+    R: Eq,
     S: Clone,
 {
-    fn analyze_expr(&mut self, expr: Arg<I, S>) -> Result<(), ()> {
+    fn analyze_expr(&mut self, expr: Arg<R, S>) -> Result<(), ()> {
         match expr.variant {
             ArgVariant::Atom(ArgAtom::Ident(ident)) => {
                 self.push_op(ident, expr.span);

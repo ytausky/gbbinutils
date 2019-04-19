@@ -8,7 +8,7 @@ use super::{Lex, SemanticToken, StringRef};
 use crate::codebase::CodebaseError;
 use crate::diag::span::{Source, Span};
 use crate::diag::*;
-use crate::model::{BinOp, Item};
+use crate::model::{BinOp, Item, ParamId};
 use crate::name::{Ident, Name, NameTable, StartScope};
 
 #[cfg(test)]
@@ -26,6 +26,7 @@ where
         + FinishFnDef<Return = Self>
         + DelegateDiagnostics<Self::Span>;
     type GeneralBuilder: ValueBuilder<Ident<Self::StringRef>, Self::Span>
+        + PushOp<ParamId, Self::Span>
         + Finish<Self::Span, Parent = Self, Value = Self::Value>
         + DelegateDiagnostics<Self::Span>;
 
@@ -153,7 +154,7 @@ where
     B: Backend<D::Span> + ?Sized,
     N: NameTable<Ident<C::StringRef>, MacroEntry = MacroEntry<C::StringRef, D>>,
     D: Diagnostics,
-    B::Value: Default + ValueBuilder<B::Name, D::Span>,
+    B::Value: Default + ValueBuilder<B::Name, D::Span> + PushOp<ParamId, D::Span>,
 {
     type Value = B::Value;
 
@@ -250,6 +251,7 @@ macro_rules! impl_push_op_for_reloc_context {
 impl_push_op_for_reloc_context! {LocationCounter}
 impl_push_op_for_reloc_context! {i32}
 impl_push_op_for_reloc_context! {BinOp}
+impl_push_op_for_reloc_context! {ParamId}
 
 impl<'a, C, A, B, N, D, R> PushOp<Ident<C::StringRef>, D::Span>
     for RelocContext<CompositeSession<'a, C, A, B, N, D>, R, B::Value>
@@ -259,7 +261,7 @@ where
     N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name>,
     D: Diagnostics,
     R: ResolveName<CompositeSession<'a, C, A, B, N, D>, Name = B::Name>,
-    B::Value: Default + ValueBuilder<B::Name, D::Span>,
+    B::Value: Default + ValueBuilder<B::Name, D::Span> + PushOp<ParamId, D::Span>,
 {
     fn push_op(&mut self, ident: Ident<C::StringRef>, span: D::Span) {
         let symbol_id = self.resolver.resolve_name((ident, &span), &mut self.parent);
@@ -286,7 +288,7 @@ where
     C: Lex<D>,
     B: Backend<D::Span> + ?Sized,
     D: Diagnostics,
-    B::Value: Default + ValueBuilder<B::Name, D::Span>,
+    B::Value: Default + ValueBuilder<B::Name, D::Span> + PushOp<ParamId, D::Span>,
 {
     type Return = CompositeSession<'a, C, A, B, N, D>;
 
@@ -301,7 +303,7 @@ where
     C: Lex<D>,
     B: Backend<D::Span> + ?Sized,
     D: Diagnostics,
-    B::Value: Default + ValueBuilder<B::Name, D::Span>,
+    B::Value: Default + ValueBuilder<B::Name, D::Span> + PushOp<ParamId, D::Span>,
 {
     type Delegate = D;
 
@@ -321,7 +323,7 @@ where
             MacroEntry = MacroEntry<C::StringRef, D>,
         > + StartScope<Ident<C::StringRef>>,
     D: Diagnostics,
-    B::Value: Default + ValueBuilder<B::Name, D::Span>,
+    B::Value: Default + ValueBuilder<B::Name, D::Span> + PushOp<ParamId, D::Span>,
 {
     type FnBuilder = RelocContext<Self, WithParams<Self::StringRef, Self::Span>, B::Value>;
     type GeneralBuilder = RelocContext<Self, WithoutParams, B::Value>;
@@ -401,7 +403,7 @@ where
     B: Backend<D::Span> + ?Sized,
     N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name>,
     D: Diagnostics,
-    B::Value: Default + ValueBuilder<B::Name, D::Span>,
+    B::Value: Default + ValueBuilder<B::Name, D::Span> + PushOp<ParamId, D::Span>,
 {
     fn start_section(&mut self, (ident, span): (Ident<C::StringRef>, D::Span)) {
         let name = self.look_up_symbol(ident, &span);

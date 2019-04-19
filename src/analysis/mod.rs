@@ -5,6 +5,7 @@ use self::session::*;
 
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diag::*;
+use crate::model::ParamId;
 use crate::name::{BiLevelNameTable, Ident};
 use crate::span::BufContext;
 use crate::syntax::lexer::{LexError, Lexer};
@@ -24,7 +25,7 @@ pub(crate) trait Assemble<D>
 where
     D: Diagnostics,
     Self: Backend<D::Span>,
-    Self::Value: Default + ValueBuilder<Self::Name, D::Span>,
+    Self::Value: Default + ValueBuilder<Self::Name, D::Span> + PushOp<ParamId, D::Span>,
 {
     fn assemble<C: Codebase>(
         &mut self,
@@ -50,7 +51,7 @@ impl<B, D> Assemble<D> for B
 where
     D: Diagnostics,
     B: Backend<D::Span>,
-    B::Value: Default + ValueBuilder<B::Name, D::Span>,
+    B::Value: Default + ValueBuilder<B::Name, D::Span> + PushOp<ParamId, D::Span>,
 {
 }
 

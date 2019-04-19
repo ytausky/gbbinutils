@@ -1,4 +1,4 @@
-use crate::model::{Atom, BinOp, Expr, ExprItem, ExprOp, Item};
+use crate::model::{Atom, BinOp, Expr, ExprItem, ExprOp, Item, ParamId};
 use crate::span::Source;
 
 #[cfg(test)]
@@ -71,7 +71,8 @@ where
     Self: AllocName<S>,
     Self: PartialBackend<S>,
     Self: StartSection<<Self as AllocName<S>>::Name, S>,
-    <Self as PartialBackend<S>>::Value: Default + ValueBuilder<<Self as AllocName<S>>::Name, S>,
+    <Self as PartialBackend<S>>::Value:
+        Default + ValueBuilder<<Self as AllocName<S>>::Name, S> + PushOp<ParamId, S>,
 {
     fn define_fn(&mut self, name: (Self::Name, S), value: Self::Value);
 }

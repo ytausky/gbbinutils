@@ -53,7 +53,7 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
 
     fn analyze_data(self, width: Width) {
         for arg in self.args {
-            let expr = match self.actions.analyze_expr(arg) {
+            let expr = match self.actions.analyze_expr(Default::default(), arg) {
                 Ok(expr) => expr,
                 Err(()) => return,
             };
@@ -64,16 +64,16 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
     fn analyze_ds(mut self) {
         let actions = &mut self.actions;
         single_arg(self.span, self.args, actions.diagnostics())
-            .and_then(|arg| actions.analyze_expr(arg))
+            .and_then(|arg| actions.analyze_expr(Default::default(), arg))
             .map(|bytes| actions.session().reserve(bytes))
             .ok();
     }
 
     fn analyze_equ(mut self) {
         let actions = &mut self.actions;
-        let symbol = self.label.take().unwrap().0;
+        let (symbol, params) = self.label.take().unwrap();
         single_arg(self.span, self.args, actions.diagnostics())
-            .and_then(|arg| actions.analyze_expr(arg))
+            .and_then(|arg| actions.analyze_expr(params, arg))
             .map(|value| actions.session().define_symbol(symbol, value))
             .ok();
     }
@@ -98,7 +98,7 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
     fn analyze_org(mut self) {
         let actions = &mut self.actions;
         single_arg(self.span, self.args, actions.diagnostics())
-            .and_then(|arg| actions.analyze_expr(arg))
+            .and_then(|arg| actions.analyze_expr(Default::default(), arg))
             .map(|expr| actions.session().set_origin(expr))
             .ok();
     }
@@ -149,7 +149,7 @@ mod tests {
     use crate::analysis::session::SessionEvent;
     use crate::analysis::Ident;
     use crate::codebase::CodebaseError;
-    use crate::model::Expr;
+    use crate::model::{Atom, Expr, ParamId};
     use crate::syntax::keyword::{Command, Operand};
     use crate::syntax::*;
 
@@ -347,6 +347,26 @@ mod tests {
         assert_eq!(
             actions,
             [SessionEvent::DefineSymbol((symbol.into(), ()), value.into()).into()]
+        )
+    }
+
+    #[test]
+    fn define_fn_with_param() {
+        let name = "my_fn";
+        let param = "param";
+        let actions = collect_semantic_actions(|builder| {
+            let mut label_actions = builder.enter_labeled_stmt((name.into(), ()));
+            label_actions.add_parameter((param.into(), ()));
+            let mut arg_actions = label_actions
+                .next()
+                .enter_command((Directive::Equ.into(), ()))
+                .add_argument();
+            arg_actions.push_atom((ExprAtom::Ident(param.into()), ()));
+            arg_actions.exit().exit().exit()
+        });
+        assert_eq!(
+            actions,
+            [SessionEvent::DefineSymbol((name.into(), ()), Atom::from(ParamId(0)).into()).into()]
         )
     }
 

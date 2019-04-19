@@ -42,13 +42,14 @@ pub enum Context {
     Other,
 }
 
-pub(super) fn analyze_operand<C, I, S>(
-    expr: Arg<I, S>,
+pub(super) fn analyze_operand<C, R, S>(
+    expr: Arg<R, S>,
     context: Context,
     mut value_context: C,
 ) -> (C::Parent, Result<Operand<C::Value>, ()>)
 where
-    C: ValueBuilder<Ident<I>, S> + DelegateDiagnostics<S> + Finish<S>,
+    C: ValueBuilder<Ident<R>, S> + DelegateDiagnostics<S> + Finish<S>,
+    R: Eq,
     S: Clone,
 {
     match expr.variant {
@@ -70,13 +71,14 @@ where
     }
 }
 
-fn analyze_deref_operand<C, I, S>(
-    expr: Arg<I, S>,
+fn analyze_deref_operand<C, R, S>(
+    expr: Arg<R, S>,
     deref_span: S,
     mut value_context: C,
 ) -> (C::Parent, Result<Operand<C::Value>, ()>)
 where
-    C: ValueBuilder<Ident<I>, S> + DelegateDiagnostics<S> + Finish<S>,
+    C: ValueBuilder<Ident<R>, S> + DelegateDiagnostics<S> + Finish<S>,
+    R: Eq,
     S: Clone,
 {
     match expr.variant {
