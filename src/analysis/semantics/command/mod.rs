@@ -1,6 +1,6 @@
 use self::args::*;
 
-use super::{Ident, Literal, SemanticActions, StmtActions};
+use super::{Ident, Label, Literal, SemanticActions, StmtActions};
 
 use crate::analysis::backend::{LocationCounter, ValueBuilder};
 use crate::analysis::session::{Finish, Session};
@@ -82,25 +82,41 @@ impl<S: Session> CommandContext<S::Span> for CommandActions<S> {
 
     fn exit(mut self) -> Self::Parent {
         if !self.has_errors {
-            match self.name {
-                (Command::Directive(directive), span) => {
-                    if !directive.requires_symbol() {
-                        self.parent.define_label_if_present()
-                    }
-                    directive::analyze_directive(
-                        (directive, span),
-                        self.parent.label.take(),
-                        self.args,
-                        &mut self.parent.parent,
-                    )
-                }
-                (Command::Mnemonic(mnemonic), range) => {
-                    self.parent.define_label_if_present();
-                    analyze_mnemonic((mnemonic, range), self.args, &mut self.parent.parent)
-                }
-            };
+            let prepared = PreparedCommand::new(self.name, &mut self.parent);
+            self.parent.define_label_if_present();
+            prepared.exec(self.args, &mut self.parent.parent)
         }
         self.parent
+    }
+}
+
+enum PreparedCommand<S: Session> {
+    Binding((Directive, S::Span), Option<Label<S::StringRef, S::Span>>),
+    Directive((Directive, S::Span)),
+    Mnemonic((Mnemonic, S::Span)),
+}
+
+impl<S: Session> PreparedCommand<S> {
+    fn new((command, span): (Command, S::Span), stmt: &mut StmtActions<S>) -> Self {
+        match command {
+            Command::Directive(directive) if directive.requires_symbol() => {
+                PreparedCommand::Binding((directive, span), stmt.label.take())
+            }
+            Command::Directive(directive) => PreparedCommand::Directive((directive, span)),
+            Command::Mnemonic(mnemonic) => PreparedCommand::Mnemonic((mnemonic, span)),
+        }
+    }
+
+    fn exec(self, args: CommandArgs<S::StringRef, S::Span>, actions: &mut SemanticActions<S>) {
+        match self {
+            PreparedCommand::Binding(binding, label) => {
+                directive::analyze_directive(binding, label, args, actions)
+            }
+            PreparedCommand::Directive(directive) => {
+                directive::analyze_directive(directive, None, args, actions)
+            }
+            PreparedCommand::Mnemonic(mnemonic) => analyze_mnemonic(mnemonic, args, actions),
+        }
     }
 }
 
