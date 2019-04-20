@@ -49,7 +49,7 @@ impl<S> LoweredItem<S> {
 
     fn and_expr(self, expr: Immediate<S>, width: Width) -> Self {
         match self {
-            LoweredItem::One(item) => LoweredItem::Two(item, Node::Expr(expr, width)),
+            LoweredItem::One(item) => LoweredItem::Two(item, Node::Immediate(expr, width)),
             LoweredItem::None | LoweredItem::Two(..) => panic!(),
         }
     }
@@ -64,7 +64,7 @@ impl<S> From<u8> for Node<S> {
 impl<S: Clone> Lower<S> for Item<Immediate<S>> {
     fn lower(self) -> LoweredItem<S> {
         match self {
-            Item::Data(expr, width) => LoweredItem::One(Node::Expr(expr, width)),
+            Item::Data(expr, width) => LoweredItem::One(Node::Immediate(expr, width)),
             Item::Instruction(instruction) => instruction.lower(),
         }
     }
@@ -489,7 +489,7 @@ mod tests {
                 Ld(Immediate8(dest, immediate.clone())),
                 [
                     Node::Byte(opcode),
-                    Node::Expr(immediate.clone(), Width::Byte),
+                    Node::Immediate(immediate.clone(), Width::Byte),
                 ],
             )
         })
@@ -505,7 +505,7 @@ mod tests {
                 Ld(Immediate16(reg16, immediate.clone())),
                 [
                     Node::Byte(opcode),
-                    Node::Expr(immediate.clone(), Width::Word),
+                    Node::Immediate(immediate.clone(), Width::Word),
                 ],
             )
         }
@@ -570,7 +570,7 @@ mod tests {
         let expr: Immediate<_> = 0x42.into();
         test_instruction(
             Ldhl(expr.clone()),
-            [Node::Byte(0xf8), Node::Expr(expr, Width::Byte)],
+            [Node::Byte(0xf8), Node::Immediate(expr, Width::Byte)],
         )
     }
 
@@ -592,7 +592,10 @@ mod tests {
         .for_each(|(alu_operation, opcode)| {
             test_instruction(
                 Instruction::Alu(*alu_operation, AluSource::Immediate(expr.clone())),
-                [Node::Byte(*opcode), Node::Expr(expr.clone(), Width::Byte)],
+                [
+                    Node::Byte(*opcode),
+                    Node::Immediate(expr.clone(), Width::Byte),
+                ],
             )
         })
     }
@@ -747,7 +750,7 @@ mod tests {
                 Branch(Call(target_expr.clone()), condition),
                 [
                     Node::Byte(opcode),
-                    Node::Expr(target_expr.clone(), Width::Word),
+                    Node::Immediate(target_expr.clone(), Width::Word),
                 ],
             )
         }
@@ -769,7 +772,7 @@ mod tests {
                 Branch(Jp(target_expr.clone()), condition),
                 [
                     Node::Byte(opcode),
-                    Node::Expr(target_expr.clone(), Width::Word),
+                    Node::Immediate(target_expr.clone(), Width::Word),
                 ],
             )
         }
@@ -796,7 +799,7 @@ mod tests {
                 Branch(Jr(target_expr.clone()), condition),
                 [
                     Node::Byte(opcode),
-                    Node::Expr(mk_relative_expr(target_expr.clone()), Width::Byte),
+                    Node::Immediate(mk_relative_expr(target_expr.clone()), Width::Byte),
                 ],
             )
         }

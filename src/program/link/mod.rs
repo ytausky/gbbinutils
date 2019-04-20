@@ -137,7 +137,7 @@ impl<S: Clone> Node<S> {
     fn size<R: Borrow<RelocTable>>(&self, context: &EvalContext<R, S>) -> Value {
         match self {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),
-            Node::Expr(_, width) => width.len().into(),
+            Node::Immediate(_, width) => width.len().into(),
             Node::LdInlineAddr(_, expr) => match expr.eval(context, &mut ignore_undefined) {
                 Value::Range { min, .. } if min >= 0xff00 => 2.into(),
                 Value::Range { max, .. } if max < 0xff00 => 3.into(),
@@ -271,7 +271,7 @@ mod tests {
                 },
                 addr: RelocId(0),
                 size: RelocId(1),
-                items: vec![Node::Expr(Atom::Name(NameId(0)).into(), Width::Word)],
+                items: vec![Node::Immediate(Atom::Name(NameId(0)).into(), Width::Word)],
             }],
             names: NameTable(vec![Some(NameDef::Section(SectionId(0)))]),
             relocs: 2,

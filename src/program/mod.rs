@@ -40,7 +40,7 @@ struct Constraints<S> {
 #[derive(Clone, Debug, PartialEq)]
 enum Node<S> {
     Byte(u8),
-    Expr(Immediate<S>, Width),
+    Immediate(Immediate<S>, Width),
     LdInlineAddr(u8, Immediate<S>),
     Embedded(u8, Immediate<S>),
     Reserved(Immediate<S>),

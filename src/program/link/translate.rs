@@ -55,7 +55,7 @@ impl<S: Clone> Node<S> {
                 let n = expr.eval(context, &mut ignore_undefined).exact().unwrap();
                 vec![opcode | ((n as u8) << 3)]
             }
-            Node::Expr(expr, width) => {
+            Node::Immediate(expr, width) => {
                 resolve_expr_item(&expr, *width, context, diagnostics).into_bytes()
             }
             Node::LdInlineAddr(opcode, expr) => {
@@ -206,7 +206,7 @@ mod tests {
 
     #[test]
     fn translate_expr_with_subtraction() {
-        let actual = translate_section_item(Node::Expr(
+        let actual = translate_section_item(Node::Immediate(
             Immediate::from_items(&[4.into(), 3.into(), BinOp::Minus.into()]),
             Width::Byte,
         ));
@@ -261,7 +261,7 @@ mod tests {
                 size: RelocId(1),
                 items: vec![
                     Node::Byte(byte),
-                    Node::Expr(Atom::LocationCounter.into(), Width::Byte),
+                    Node::Immediate(Atom::LocationCounter.into(), Width::Byte),
                 ],
             }],
             names: NameTable(vec![]),
@@ -286,7 +286,7 @@ mod tests {
                 },
                 addr: RelocId(0),
                 size: RelocId(1),
-                items: vec![Node::Expr(Atom::LocationCounter.into(), Width::Word)],
+                items: vec![Node::Immediate(Atom::LocationCounter.into(), Width::Word)],
             }],
             names: NameTable(vec![]),
             relocs: 2,
