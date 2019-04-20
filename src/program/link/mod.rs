@@ -209,13 +209,13 @@ mod tests {
     #[test]
     fn label_defined_as_section_origin_plus_offset() {
         let addr = 0xffe1;
-        let mut builder = ProgramBuilder::new();
+        let mut program = Program::new();
+        let mut builder = ProgramBuilder::new(&mut program);
         builder.set_origin(addr.into());
         let symbol_id = builder.alloc_name(());
         builder.define_fn((symbol_id, ()), Atom::LocationCounter.into());
-        let object = builder.into_object();
-        let relocs = object.resolve_relocs();
-        let reloc = match object.names.get(symbol_id).unwrap() {
+        let relocs = program.resolve_relocs();
+        let reloc = match program.names.get(symbol_id).unwrap() {
             NameDef::Reloc(id) => *id,
             NameDef::Section(_) => unimplemented!(),
         };

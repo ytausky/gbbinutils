@@ -3,9 +3,9 @@ use super::{Expr, NameDef, NameId, Node, Program, Section};
 use crate::analysis::backend::*;
 use crate::model::Item;
 
-pub struct ProgramBuilder<SR> {
-    program: Program<SR>,
-    state: Option<BuilderState<SR>>,
+pub struct ProgramBuilder<'a, S> {
+    program: &'a mut Program<S>,
+    state: Option<BuilderState<S>>,
 }
 
 enum BuilderState<S> {
@@ -14,23 +14,19 @@ enum BuilderState<S> {
     SectionPrelude(usize),
 }
 
-impl<SR> ProgramBuilder<SR> {
-    pub fn new() -> ProgramBuilder<SR> {
-        ProgramBuilder {
-            program: Program::new(),
+impl<'a, S> ProgramBuilder<'a, S> {
+    pub fn new(program: &'a mut Program<S>) -> Self {
+        Self {
+            program,
             state: Some(BuilderState::AnonSectionPrelude { addr: None }),
         }
     }
 
-    pub fn into_object(self) -> Program<SR> {
-        self.program
-    }
-
-    fn push(&mut self, node: Node<SR>) {
+    fn push(&mut self, node: Node<S>) {
         self.current_section().items.push(node)
     }
 
-    fn current_section(&mut self) -> &mut Section<SR> {
+    fn current_section(&mut self) -> &mut Section<S> {
         match self.state.take().unwrap() {
             BuilderState::AnonSectionPrelude { addr } => {
                 self.program.add_section(None);
@@ -48,7 +44,7 @@ impl<SR> ProgramBuilder<SR> {
     }
 }
 
-impl<S: Clone> PartialBackend<S> for ProgramBuilder<S> {
+impl<'a, S: Clone> PartialBackend<S> for ProgramBuilder<'a, S> {
     type Value = Expr<S>;
 
     fn emit_item(&mut self, item: Item<Self::Value>) {
@@ -71,7 +67,7 @@ impl<S: Clone> PartialBackend<S> for ProgramBuilder<S> {
     }
 }
 
-impl<S: Clone> Backend<S> for ProgramBuilder<S> {
+impl<'a, S: Clone> Backend<S> for ProgramBuilder<'a, S> {
     fn define_fn(&mut self, (name, span): (Self::Name, S), value: Self::Value) {
         let reloc = self.program.alloc_reloc();
         self.program.names.define(name, NameDef::Reloc(reloc));
@@ -79,7 +75,7 @@ impl<S: Clone> Backend<S> for ProgramBuilder<S> {
     }
 }
 
-impl<S: Clone> AllocName<S> for ProgramBuilder<S> {
+impl<'a, S: Clone> AllocName<S> for ProgramBuilder<'a, S> {
     type Name = NameId;
 
     fn alloc_name(&mut self, _span: S) -> Self::Name {
@@ -87,7 +83,7 @@ impl<S: Clone> AllocName<S> for ProgramBuilder<S> {
     }
 }
 
-impl<S: Clone> StartSection<NameId, S> for ProgramBuilder<S> {
+impl<'a, S: Clone> StartSection<NameId, S> for ProgramBuilder<'a, S> {
     fn start_section(&mut self, name: (NameId, S)) {
         let index = self.program.sections.len();
         self.state = Some(BuilderState::SectionPrelude(index));
@@ -106,13 +102,13 @@ mod tests {
 
     #[test]
     fn new_object_has_no_sections() {
-        let object = build_object(|_| ());
+        let object = build_object::<_, ()>(|_| ());
         assert_eq!(object.sections.len(), 0)
     }
 
     #[test]
     fn no_origin_by_default() {
-        let object = build_object(|builder| builder.push(Node::Byte(0xcd)));
+        let object = build_object::<_, ()>(|builder| builder.push(Node::Byte(0xcd)));
         assert_eq!(object.sections[0].constraints.addr, None)
     }
 
@@ -162,10 +158,11 @@ mod tests {
         assert_eq!(object.sections[0].items, [node])
     }
 
-    fn build_object(f: impl FnOnce(&mut ProgramBuilder<()>)) -> Program<()> {
-        let mut builder = ProgramBuilder::new();
+    fn build_object<F: FnOnce(&mut ProgramBuilder<S>), S>(f: F) -> Program<S> {
+        let mut program = Program::new();
+        let mut builder = ProgramBuilder::new(&mut program);
         f(&mut builder);
-        builder.into_object()
+        program
     }
 
     #[test]
@@ -283,21 +280,17 @@ mod tests {
     #[test]
     fn reserve_bytes_in_section() {
         let bytes = 3;
-        let mut builder = ProgramBuilder::new();
-        builder.reserve(bytes.into());
-        let program = builder.into_object();
+        let program = build_object(|builder| builder.reserve(bytes.into()));
         assert_eq!(program.sections[0].items, [Node::Reserved(bytes.into())])
     }
 
-    fn with_object_builder<S: Clone + 'static, F: FnOnce(&mut ProgramBuilder<S>)>(
-        f: F,
-    ) -> (BinaryObject, Box<[CompactDiagnostic<S, S>]>) {
+    fn with_object_builder<S, F>(f: F) -> (BinaryObject, Box<[CompactDiagnostic<S, S>]>)
+    where
+        S: Clone + 'static,
+        F: FnOnce(&mut ProgramBuilder<S>),
+    {
         let mut diagnostics = TestDiagnosticsListener::new();
-        let object = {
-            let mut builder = ProgramBuilder::new();
-            f(&mut builder);
-            builder.into_object().link(&mut diagnostics)
-        };
+        let object = build_object(f).link(&mut diagnostics);
         let diagnostics = diagnostics.diagnostics.into_inner().into_boxed_slice();
         (object, diagnostics)
     }
