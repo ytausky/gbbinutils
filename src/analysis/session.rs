@@ -31,11 +31,6 @@ where
 
     fn analyze_file(self, path: Self::StringRef) -> (Result<(), CodebaseError>, Self);
     fn build_value(self) -> Self::GeneralBuilder;
-    fn define_fn(
-        self,
-        name: (Ident<Self::StringRef>, Self::Span),
-        params: Params<Self::StringRef, Self::Span>,
-    ) -> Self::FnBuilder;
     fn define_macro(
         &mut self,
         name: (Ident<Self::StringRef>, Self::Span),
@@ -176,72 +171,14 @@ where
     }
 }
 
-pub(crate) trait ResolveName<S: Span + StringRef> {
-    type Name;
-
-    fn resolve_name(&self, name: (Ident<S::StringRef>, &S::Span), session: &mut S) -> Self::Name;
-}
-
-pub(crate) struct WithoutParams;
-
-impl<'a, 'b, C, A, B, N, D> ResolveName<CompositeSession<'a, 'b, C, A, B, N, D>> for WithoutParams
-where
-    C: Lex<D>,
-    B: AllocName<D::Span>,
-    N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name>,
-    D: Diagnostics,
-{
-    type Name = B::Name;
-
-    fn resolve_name(
-        &self,
-        (ident, span): (Ident<C::StringRef>, &D::Span),
-        session: &mut CompositeSession<'a, 'b, C, A, B, N, D>,
-    ) -> Self::Name {
-        session.look_up_symbol(ident, span)
-    }
-}
-
-pub(crate) struct WithParams<R, S>(Params<R, S>);
-
-impl<'a, 'b, C, A, B, N, D> ResolveName<CompositeSession<'a, 'b, C, A, B, N, D>>
-    for WithParams<C::StringRef, D::Span>
-where
-    C: Lex<D>,
-    B: AllocName<D::Span>,
-    N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name>,
-    D: Diagnostics,
-{
-    type Name = B::Name;
-
-    fn resolve_name(
-        &self,
-        name: (Ident<C::StringRef>, &D::Span),
-        session: &mut CompositeSession<'a, 'b, C, A, B, N, D>,
-    ) -> Self::Name {
-        WithoutParams.resolve_name(name, session)
-    }
-}
-
-pub(crate) struct RelocContext<P, N, B> {
+pub(crate) struct RelocContext<P, B> {
     parent: P,
-    resolver: N,
     builder: B,
-}
-
-impl<S: Session, R, B: Default> RelocContext<S, R, B> {
-    pub fn new(session: S, resolver: R) -> Self {
-        RelocContext {
-            parent: session,
-            resolver,
-            builder: Default::default(),
-        }
-    }
 }
 
 macro_rules! impl_push_op_for_reloc_context {
     ($t:ty) => {
-        impl<P, N, B, S> PushOp<$t, S> for RelocContext<P, N, B>
+        impl<P, B, S> PushOp<$t, S> for RelocContext<P, B>
         where
             B: PushOp<$t, S>,
             S: Clone,
@@ -258,23 +195,22 @@ impl_push_op_for_reloc_context! {i32}
 impl_push_op_for_reloc_context! {BinOp}
 impl_push_op_for_reloc_context! {ParamId}
 
-impl<'a, 'b, C, A, B, N, D, R> PushOp<Ident<C::StringRef>, D::Span>
-    for RelocContext<CompositeSession<'a, 'b, C, A, B, N, D>, R, B::Value>
+impl<'a, 'b, C, A, B, N, D> PushOp<Ident<C::StringRef>, D::Span>
+    for RelocContext<CompositeSession<'a, 'b, C, A, B, N, D>, B::Value>
 where
     C: Lex<D>,
     B: Backend<D::Span>,
     N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name>,
     D: Diagnostics,
-    R: ResolveName<CompositeSession<'a, 'b, C, A, B, N, D>, Name = B::Name>,
     B::Value: Default + ValueBuilder<B::Name, D::Span>,
 {
     fn push_op(&mut self, ident: Ident<C::StringRef>, span: D::Span) {
-        let symbol_id = self.resolver.resolve_name((ident, &span), &mut self.parent);
+        let symbol_id = self.parent.look_up_symbol(ident, &span);
         self.builder.push_op(symbol_id, span)
     }
 }
 
-impl<P, R, B, S> Finish<S> for RelocContext<P, R, B>
+impl<P, B, S> Finish<S> for RelocContext<P, B>
 where
     B: Source<Span = S>,
     S: Clone,
@@ -287,8 +223,8 @@ where
     }
 }
 
-impl<'a, 'b, C, A, B, N, D, R> FinishFnDef
-    for RelocContext<CompositeSession<'a, 'b, C, A, B, N, D>, R, B::Value>
+impl<'a, 'b, C, A, B, N, D> FinishFnDef
+    for RelocContext<CompositeSession<'a, 'b, C, A, B, N, D>, B::Value>
 where
     C: Lex<D>,
     B: Backend<D::Span>,
@@ -302,8 +238,8 @@ where
     }
 }
 
-impl<'a, 'b, C, A, B, N, D, R> DelegateDiagnostics<D::Span>
-    for RelocContext<CompositeSession<'a, 'b, C, A, B, N, D>, R, B::Value>
+impl<'a, 'b, C, A, B, N, D> DelegateDiagnostics<D::Span>
+    for RelocContext<CompositeSession<'a, 'b, C, A, B, N, D>, B::Value>
 where
     C: Lex<D>,
     B: Backend<D::Span>,
@@ -330,8 +266,8 @@ where
     D: Diagnostics,
     B::Value: Default + ValueBuilder<B::Name, D::Span>,
 {
-    type FnBuilder = RelocContext<Self, WithParams<Self::StringRef, Self::Span>, B::Value>;
-    type GeneralBuilder = RelocContext<Self, WithoutParams, B::Value>;
+    type FnBuilder = RelocContext<Self, B::Value>;
+    type GeneralBuilder = RelocContext<Self, B::Value>;
 
     fn analyze_file(mut self, path: Self::StringRef) -> (Result<(), CodebaseError>, Self) {
         let tokens = match self.codebase.lex_file(path, self.diagnostics) {
@@ -345,15 +281,10 @@ where
     }
 
     fn build_value(self) -> Self::GeneralBuilder {
-        RelocContext::new(self, WithoutParams)
-    }
-
-    fn define_fn(
-        self,
-        _name: (Ident<Self::StringRef>, Self::Span),
-        _params: Params<Self::StringRef, Self::Span>,
-    ) -> Self::FnBuilder {
-        unimplemented!()
+        RelocContext {
+            parent: self,
+            builder: Default::default(),
+        }
     }
 
     fn define_macro(
@@ -436,11 +367,6 @@ mod mock {
     #[derive(Debug, PartialEq)]
     pub(crate) enum SessionEvent<S> {
         AnalyzeFile(String),
-        DefineFn(
-            Ident<String>,
-            Vec<Ident<String>>,
-            Expr<Atom<Ident<String>>, S>,
-        ),
         DefineMacro(
             Ident<String>,
             Vec<Ident<String>>,
@@ -454,7 +380,7 @@ mod mock {
         log: &'a RefCell<Vec<T>>,
         error: Option<CodebaseError>,
         diagnostics: MockDiagnostics<'a, T, S>,
-        name: Option<Ident<String>>,
+        name: Option<(Ident<String>, S)>,
     }
 
     impl<'a, T, S> MockSession<'a, T, S> {
@@ -492,11 +418,7 @@ mod mock {
         type StringRef = String;
     }
 
-    type FnBuilder<S> = RelocContext<
-        S,
-        Vec<Ident<<S as StringRef>::StringRef>>,
-        Expr<Atom<Ident<String>>, <S as Span>::Span>,
-    >;
+    type FnBuilder<S> = RelocContext<S, Expr<Atom<Ident<String>>, <S as Span>::Span>>;
 
     impl<'a, T, S> Session for MockSession<'a, T, S>
     where
@@ -506,7 +428,7 @@ mod mock {
         S: Clone + MockSpan,
     {
         type FnBuilder = FnBuilder<Self>;
-        type GeneralBuilder = RelocContext<Self, (), Expr<Atom<Ident<String>>, S>>;
+        type GeneralBuilder = RelocContext<Self, Expr<Atom<Ident<String>>, S>>;
 
         fn analyze_file(mut self, path: String) -> (Result<(), CodebaseError>, Self) {
             self.log
@@ -516,17 +438,10 @@ mod mock {
         }
 
         fn build_value(self) -> Self::GeneralBuilder {
-            RelocContext::new(self, ())
-        }
-
-        fn define_fn(
-            mut self,
-            (name, _): (Ident<Self::StringRef>, Self::Span),
-            (params, _): Params<Self::StringRef, Self::Span>,
-        ) -> Self::FnBuilder {
-            assert_eq!(self.name, None);
-            self.name = Some(name);
-            RelocContext::new(self, params)
+            RelocContext {
+                parent: self,
+                builder: Default::default(),
+            }
         }
 
         fn define_macro(
@@ -568,8 +483,8 @@ mod mock {
         }
     }
 
-    impl<'a, T, R, S> PushOp<Ident<String>, S>
-        for RelocContext<MockSession<'a, T, S>, R, Expr<Atom<Ident<String>>, S>>
+    impl<'a, T, S> PushOp<Ident<String>, S>
+        for RelocContext<MockSession<'a, T, S>, Expr<Atom<Ident<String>>, S>>
     where
         T: From<DiagnosticsEvent<S>>,
         S: Clone,
@@ -584,8 +499,8 @@ mod mock {
         }
     }
 
-    impl<'a, T, R, S> PushOp<Ident<String>, S>
-        for RelocContext<MockDiagnostics<'a, T, S>, R, Expr<Atom<Ident<String>>, S>>
+    impl<'a, T, S> PushOp<Ident<String>, S>
+        for RelocContext<MockDiagnostics<'a, T, S>, Expr<Atom<Ident<String>>, S>>
     where
         T: From<DiagnosticsEvent<S>>,
         S: Clone,
@@ -600,8 +515,8 @@ mod mock {
         }
     }
 
-    impl<'a, T, R, S> DelegateDiagnostics<S>
-        for RelocContext<MockSession<'a, T, S>, R, Expr<Atom<Ident<String>>, S>>
+    impl<'a, T, S> DelegateDiagnostics<S>
+        for RelocContext<MockSession<'a, T, S>, Expr<Atom<Ident<String>>, S>>
     where
         T: From<DiagnosticsEvent<S>>,
         S: Clone + MockSpan,
@@ -613,8 +528,7 @@ mod mock {
         }
     }
 
-    impl<'a, T, S> FinishFnDef
-        for RelocContext<MockSession<'a, T, S>, Vec<Ident<String>>, Expr<Atom<Ident<String>>, S>>
+    impl<'a, T, S> FinishFnDef for RelocContext<MockSession<'a, T, S>, Expr<Atom<Ident<String>>, S>>
     where
         T: From<SessionEvent<S>>,
         S: Clone,
@@ -624,8 +538,7 @@ mod mock {
         fn finish_fn_def(self) -> Self::Return {
             let mut session = self.parent;
             session.log.borrow_mut().push(
-                SessionEvent::DefineFn(session.name.take().unwrap(), self.resolver, self.builder)
-                    .into(),
+                SessionEvent::DefineSymbol(session.name.take().unwrap(), self.builder).into(),
             );
             session
         }
@@ -670,13 +583,12 @@ mod mock {
     }
 
     pub(crate) type MockBuilder<'a, T, S> =
-        RelocContext<MockDiagnostics<'a, T, S>, (), Expr<Atom<Ident<String>>, S>>;
+        RelocContext<MockDiagnostics<'a, T, S>, Expr<Atom<Ident<String>>, S>>;
 
     impl<'a, T, S> MockBuilder<'a, T, S> {
         pub fn with_log(log: &'a RefCell<Vec<T>>) -> Self {
             Self {
                 parent: MockDiagnostics::new(log),
-                resolver: (),
                 builder: Default::default(),
             }
         }
