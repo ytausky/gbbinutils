@@ -23,11 +23,11 @@ mod session;
 pub(crate) trait Assemble<D>
 where
     D: Diagnostics,
-    Self: Backend<D::Span>,
+    Self: Backend<D::Span> + Sized,
     Self::Value: Default + ValueBuilder<Self::Name, D::Span>,
 {
     fn assemble<C: Codebase>(
-        &mut self,
+        self,
         name: &str,
         codebase: &C,
         diagnostics: &mut D,
@@ -35,14 +35,14 @@ where
         let mut file_parser = CodebaseAnalyzer::new(codebase);
         let mut analyzer = semantics::SemanticAnalyzer;
         let mut names = BiLevelNameTable::new();
-        let mut session = CompositeSession::new(
+        let session = CompositeSession::new(
             &mut file_parser,
             &mut analyzer,
             self,
             &mut names,
             diagnostics,
         );
-        session.analyze_file(name.into())
+        session.analyze_file(name.into()).0
     }
 }
 

@@ -29,7 +29,7 @@ where
         + Finish<Self::Span, Parent = Self, Value = Self::Value>
         + DelegateDiagnostics<Self::Span>;
 
-    fn analyze_file(&mut self, path: Self::StringRef) -> Result<(), CodebaseError>;
+    fn analyze_file(self, path: Self::StringRef) -> (Result<(), CodebaseError>, Self);
     fn build_value(self) -> Self::GeneralBuilder;
     fn define_fn(
         self,
@@ -43,10 +43,10 @@ where
         body: (Vec<SemanticToken<Self::StringRef>>, Vec<Self::Span>),
     );
     fn call_macro(
-        &mut self,
+        self,
         name: (Ident<Self::StringRef>, Self::Span),
         args: MacroArgs<Self::StringRef, Self::Span>,
-    );
+    ) -> Self;
     fn define_symbol(&mut self, symbol: (Ident<Self::StringRef>, Self::Span), value: Self::Value);
 }
 
@@ -66,22 +66,22 @@ pub trait FinishFnDef {
 pub(super) type MacroArgs<I, S> = Vec<Vec<(SemanticToken<I>, S)>>;
 pub(super) type Params<R, S> = (Vec<Ident<R>>, Vec<S>);
 
-pub(crate) struct CompositeSession<'a, C, A, B: ?Sized, N, D> {
-    codebase: &'a mut C,
+pub(crate) struct CompositeSession<'a, 'b, C, A, B, N, D> {
+    codebase: &'b mut C,
     analyzer: &'a mut A,
-    backend: &'a mut B,
-    names: &'a mut N,
-    diagnostics: &'a mut D,
+    backend: B,
+    names: &'b mut N,
+    diagnostics: &'b mut D,
 }
 
-impl<'a, C, A, B: ?Sized, N, D> CompositeSession<'a, C, A, B, N, D> {
+impl<'a, 'b, C, A, B, N, D> CompositeSession<'a, 'b, C, A, B, N, D> {
     pub fn new(
-        codebase: &'a mut C,
+        codebase: &'b mut C,
         analyzer: &'a mut A,
-        backend: &'a mut B,
-        names: &'a mut N,
-        diagnostics: &'a mut D,
-    ) -> CompositeSession<'a, C, A, B, N, D> {
+        backend: B,
+        names: &'b mut N,
+        diagnostics: &'b mut D,
+    ) -> Self {
         CompositeSession {
             codebase,
             analyzer,
@@ -92,10 +92,10 @@ impl<'a, C, A, B: ?Sized, N, D> CompositeSession<'a, C, A, B, N, D> {
     }
 }
 
-impl<'a, C, A, B, N, D> CompositeSession<'a, C, A, B, N, D>
+impl<'a, 'b, C, A, B, N, D> CompositeSession<'a, 'b, C, A, B, N, D>
 where
     C: Lex<D>,
-    B: AllocName<D::Span> + ?Sized,
+    B: AllocName<D::Span>,
     N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name>,
     D: Diagnostics,
 {
@@ -112,11 +112,11 @@ where
     }
 }
 
-pub struct PartialSession<'a, C: 'a, B: ?Sized + 'a, N: 'a, D: 'a> {
-    pub codebase: &'a mut C,
-    pub backend: &'a mut B,
-    pub names: &'a mut N,
-    pub diagnostics: &'a mut D,
+pub struct PartialSession<'b, C: 'b, B, N: 'b, D: 'b> {
+    pub codebase: &'b mut C,
+    pub backend: B,
+    pub names: &'b mut N,
+    pub diagnostics: &'b mut D,
 }
 
 macro_rules! partial {
@@ -130,27 +130,33 @@ macro_rules! partial {
     };
 }
 
-impl<'a, F, A, B, N, D> Span for CompositeSession<'a, F, A, B, N, D>
+impl<'a, 'b, C, A, B, N, D> From<CompositeSession<'a, 'b, C, A, B, N, D>>
+    for PartialSession<'b, C, B, N, D>
+{
+    fn from(session: CompositeSession<'a, 'b, C, A, B, N, D>) -> Self {
+        partial!(session)
+    }
+}
+
+impl<'a, 'b, F, A, B, N, D> Span for CompositeSession<'a, 'b, F, A, B, N, D>
 where
-    B: ?Sized,
     D: Span,
 {
     type Span = D::Span;
 }
 
-impl<'a, C, A, B, N, D> StringRef for CompositeSession<'a, C, A, B, N, D>
+impl<'a, 'b, C, A, B, N, D> StringRef for CompositeSession<'a, 'b, C, A, B, N, D>
 where
     C: Lex<D>,
-    B: ?Sized,
     D: Diagnostics,
 {
     type StringRef = C::StringRef;
 }
 
-impl<'a, C, A, B, N, D> PartialBackend<D::Span> for CompositeSession<'a, C, A, B, N, D>
+impl<'a, 'b, C, A, B, N, D> PartialBackend<D::Span> for CompositeSession<'a, 'b, C, A, B, N, D>
 where
     C: Lex<D>,
-    B: Backend<D::Span> + ?Sized,
+    B: Backend<D::Span>,
     N: NameTable<Ident<C::StringRef>, MacroEntry = MacroEntry<C::StringRef, D>>,
     D: Diagnostics,
     B::Value: Default + ValueBuilder<B::Name, D::Span>,
@@ -178,10 +184,10 @@ pub(crate) trait ResolveName<S: Span + StringRef> {
 
 pub(crate) struct WithoutParams;
 
-impl<'a, C, A, B, N, D> ResolveName<CompositeSession<'a, C, A, B, N, D>> for WithoutParams
+impl<'a, 'b, C, A, B, N, D> ResolveName<CompositeSession<'a, 'b, C, A, B, N, D>> for WithoutParams
 where
     C: Lex<D>,
-    B: AllocName<D::Span> + ?Sized,
+    B: AllocName<D::Span>,
     N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name>,
     D: Diagnostics,
 {
@@ -190,7 +196,7 @@ where
     fn resolve_name(
         &self,
         (ident, span): (Ident<C::StringRef>, &D::Span),
-        session: &mut CompositeSession<'a, C, A, B, N, D>,
+        session: &mut CompositeSession<'a, 'b, C, A, B, N, D>,
     ) -> Self::Name {
         session.look_up_symbol(ident, span)
     }
@@ -198,11 +204,11 @@ where
 
 pub(crate) struct WithParams<R, S>(Params<R, S>);
 
-impl<'a, C, A, B, N, D> ResolveName<CompositeSession<'a, C, A, B, N, D>>
+impl<'a, 'b, C, A, B, N, D> ResolveName<CompositeSession<'a, 'b, C, A, B, N, D>>
     for WithParams<C::StringRef, D::Span>
 where
     C: Lex<D>,
-    B: AllocName<D::Span> + ?Sized,
+    B: AllocName<D::Span>,
     N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name>,
     D: Diagnostics,
 {
@@ -211,7 +217,7 @@ where
     fn resolve_name(
         &self,
         name: (Ident<C::StringRef>, &D::Span),
-        session: &mut CompositeSession<'a, C, A, B, N, D>,
+        session: &mut CompositeSession<'a, 'b, C, A, B, N, D>,
     ) -> Self::Name {
         WithoutParams.resolve_name(name, session)
     }
@@ -252,14 +258,14 @@ impl_push_op_for_reloc_context! {i32}
 impl_push_op_for_reloc_context! {BinOp}
 impl_push_op_for_reloc_context! {ParamId}
 
-impl<'a, C, A, B, N, D, R> PushOp<Ident<C::StringRef>, D::Span>
-    for RelocContext<CompositeSession<'a, C, A, B, N, D>, R, B::Value>
+impl<'a, 'b, C, A, B, N, D, R> PushOp<Ident<C::StringRef>, D::Span>
+    for RelocContext<CompositeSession<'a, 'b, C, A, B, N, D>, R, B::Value>
 where
     C: Lex<D>,
-    B: Backend<D::Span> + ?Sized,
+    B: Backend<D::Span>,
     N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name>,
     D: Diagnostics,
-    R: ResolveName<CompositeSession<'a, C, A, B, N, D>, Name = B::Name>,
+    R: ResolveName<CompositeSession<'a, 'b, C, A, B, N, D>, Name = B::Name>,
     B::Value: Default + ValueBuilder<B::Name, D::Span>,
 {
     fn push_op(&mut self, ident: Ident<C::StringRef>, span: D::Span) {
@@ -281,26 +287,26 @@ where
     }
 }
 
-impl<'a, C, A, B, N, D, R> FinishFnDef
-    for RelocContext<CompositeSession<'a, C, A, B, N, D>, R, B::Value>
+impl<'a, 'b, C, A, B, N, D, R> FinishFnDef
+    for RelocContext<CompositeSession<'a, 'b, C, A, B, N, D>, R, B::Value>
 where
     C: Lex<D>,
-    B: Backend<D::Span> + ?Sized,
+    B: Backend<D::Span>,
     D: Diagnostics,
     B::Value: Default + ValueBuilder<B::Name, D::Span>,
 {
-    type Return = CompositeSession<'a, C, A, B, N, D>;
+    type Return = CompositeSession<'a, 'b, C, A, B, N, D>;
 
     fn finish_fn_def(self) -> Self::Return {
         unimplemented!()
     }
 }
 
-impl<'a, C, A, B, N, D, R> DelegateDiagnostics<D::Span>
-    for RelocContext<CompositeSession<'a, C, A, B, N, D>, R, B::Value>
+impl<'a, 'b, C, A, B, N, D, R> DelegateDiagnostics<D::Span>
+    for RelocContext<CompositeSession<'a, 'b, C, A, B, N, D>, R, B::Value>
 where
     C: Lex<D>,
-    B: Backend<D::Span> + ?Sized,
+    B: Backend<D::Span>,
     D: Diagnostics,
     B::Value: Default + ValueBuilder<B::Name, D::Span>,
 {
@@ -311,11 +317,11 @@ where
     }
 }
 
-impl<'a, C, A, B, N, D> Session for CompositeSession<'a, C, A, B, N, D>
+impl<'a, 'b, C, A, B, N, D> Session for CompositeSession<'a, 'b, C, A, B, N, D>
 where
     C: Lex<D>,
     A: Analyze<C::StringRef, D>,
-    B: Backend<D::Span> + ?Sized,
+    B: Backend<D::Span>,
     N: NameTable<
             Ident<C::StringRef>,
             BackendEntry = B::Name,
@@ -327,10 +333,15 @@ where
     type FnBuilder = RelocContext<Self, WithParams<Self::StringRef, Self::Span>, B::Value>;
     type GeneralBuilder = RelocContext<Self, WithoutParams, B::Value>;
 
-    fn analyze_file(&mut self, path: Self::StringRef) -> Result<(), CodebaseError> {
-        let tokens = self.codebase.lex_file(path, self.diagnostics)?;
-        self.analyzer.analyze_token_seq(tokens, &mut partial!(self));
-        Ok(())
+    fn analyze_file(mut self, path: Self::StringRef) -> (Result<(), CodebaseError>, Self) {
+        let tokens = match self.codebase.lex_file(path, self.diagnostics) {
+            Ok(tokens) => tokens,
+            Err(error) => return (Err(error), self),
+        };
+        let PartialSession { backend, .. } =
+            self.analyzer.analyze_token_seq(tokens, partial!(self));
+        self.backend = backend;
+        (Ok(()), self)
     }
 
     fn build_value(self) -> Self::GeneralBuilder {
@@ -356,10 +367,10 @@ where
     }
 
     fn call_macro(
-        &mut self,
+        mut self,
         name: (Ident<Self::StringRef>, Self::Span),
         args: MacroArgs<Self::StringRef, Self::Span>,
-    ) {
+    ) -> Self {
         let expansion = match self.names.get(&name.0) {
             Some(Name::Macro(entry)) => Some(entry.expand(name.1, args, self.diagnostics)),
             Some(_) => unimplemented!(),
@@ -371,9 +382,12 @@ where
             }
         };
         if let Some(expansion) = expansion {
-            self.analyzer
-                .analyze_token_seq(expansion.map(|(t, s)| (Ok(t), s)), &mut partial!(self))
+            let PartialSession { backend, .. } = self
+                .analyzer
+                .analyze_token_seq(expansion.map(|(t, s)| (Ok(t), s)), partial!(self));
+            self.backend = backend
         }
+        self
     }
 
     fn define_symbol(&mut self, symbol: (Ident<Self::StringRef>, Self::Span), value: Self::Value) {
@@ -383,9 +397,8 @@ where
     }
 }
 
-impl<'a, F, A, B, N, D, S> DelegateDiagnostics<S> for CompositeSession<'a, F, A, B, N, D>
+impl<'a, 'b, F, A, B, N, D, S> DelegateDiagnostics<S> for CompositeSession<'a, 'b, F, A, B, N, D>
 where
-    B: ?Sized,
     D: DownstreamDiagnostics<S>,
 {
     type Delegate = D;
@@ -395,11 +408,11 @@ where
     }
 }
 
-impl<'a, C, A, B, N, D> StartSection<Ident<C::StringRef>, D::Span>
-    for CompositeSession<'a, C, A, B, N, D>
+impl<'a, 'b, C, A, B, N, D> StartSection<Ident<C::StringRef>, D::Span>
+    for CompositeSession<'a, 'b, C, A, B, N, D>
 where
     C: Lex<D>,
-    B: Backend<D::Span> + ?Sized,
+    B: Backend<D::Span>,
     N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name>,
     D: Diagnostics,
     B::Value: Default + ValueBuilder<B::Name, D::Span>,
@@ -491,11 +504,11 @@ mod mock {
         type FnBuilder = FnBuilder<Self>;
         type GeneralBuilder = RelocContext<Self, (), Expr<Ident<String>, S>>;
 
-        fn analyze_file(&mut self, path: String) -> Result<(), CodebaseError> {
+        fn analyze_file(mut self, path: String) -> (Result<(), CodebaseError>, Self) {
             self.log
                 .borrow_mut()
                 .push(SessionEvent::AnalyzeFile(path).into());
-            self.error.take().map_or(Ok(()), Err)
+            (self.error.take().map_or(Ok(()), Err), self)
         }
 
         fn build_value(self) -> Self::GeneralBuilder {
@@ -524,10 +537,10 @@ mod mock {
         }
 
         fn call_macro(
-            &mut self,
+            self,
             name: (Ident<Self::StringRef>, Self::Span),
             args: MacroArgs<Self::StringRef, Self::Span>,
-        ) {
+        ) -> Self {
             self.log.borrow_mut().push(
                 SessionEvent::InvokeMacro(
                     name.0,
@@ -536,7 +549,8 @@ mod mock {
                         .collect(),
                 )
                 .into(),
-            )
+            );
+            self
         }
 
         fn define_symbol(
@@ -760,8 +774,8 @@ mod tests {
         let log = RefCell::new(Vec::new());
         let mut fixture = Fixture::new(&log);
         fixture.codebase.set_file(path, tokens.clone());
-        let mut session = fixture.session();
-        session.analyze_file(path.into()).unwrap();
+        let session = fixture.session();
+        session.analyze_file(path.into()).0.unwrap();
         assert_eq!(
             log.into_inner(),
             [AnalyzerEvent::AnalyzeTokenSeq(tokens).into()]
@@ -870,7 +884,7 @@ mod tests {
         let name = "my_macro";
         let log = RefCell::new(Vec::new());
         let mut fixture = Fixture::new(&log);
-        let mut session = fixture.session();
+        let session = fixture.session();
         session.call_macro((name.into(), name), vec![]);
         assert_eq!(
             log.into_inner(),
@@ -922,6 +936,7 @@ mod tests {
     >;
     type TestSession<'a, 'b, S> = CompositeSession<
         'b,
+        'b,
         MockCodebase<S>,
         MockAnalyzer<'a, S>,
         MockBackend<'a, S>,
@@ -964,7 +979,7 @@ mod tests {
     struct Fixture<'a, S: Clone + MockSpan> {
         codebase: MockCodebase<S>,
         analyzer: MockAnalyzer<'a, S>,
-        backend: MockBackend<'a, S>,
+        backend: Option<MockBackend<'a, S>>,
         names: MockNameTable<'a, S>,
         diagnostics: MockDiagnostics<'a, S>,
     }
@@ -974,7 +989,7 @@ mod tests {
             Self {
                 codebase: MockCodebase::new(),
                 analyzer: MockAnalyzer::new(log),
-                backend: MockBackend::new(log),
+                backend: Some(MockBackend::new(log)),
                 names: MockNameTable::new(BasicNameTable::new(), log),
                 diagnostics: MockDiagnostics::new(log),
             }
@@ -984,7 +999,7 @@ mod tests {
             CompositeSession::new(
                 &mut self.codebase,
                 &mut self.analyzer,
-                &mut self.backend,
+                self.backend.take().unwrap(),
                 &mut self.names,
                 &mut self.diagnostics,
             )

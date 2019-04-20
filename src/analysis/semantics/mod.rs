@@ -20,14 +20,15 @@ mod invoke;
 mod params;
 
 pub(crate) trait Analyze<R: Clone + Eq, D: Diagnostics> {
-    fn analyze_token_seq<I, C, B, N>(
+    fn analyze_token_seq<'a, I, C, B, N>(
         &mut self,
         tokens: I,
-        partial: &mut PartialSession<C, B, N, D>,
-    ) where
+        partial: PartialSession<'a, C, B, N, D>,
+    ) -> PartialSession<'a, C, B, N, D>
+    where
         I: IntoIterator<Item = LexItem<R, D::Span>>,
         C: Lex<D, StringRef = R>,
-        B: Backend<D::Span> + ?Sized,
+        B: Backend<D::Span>,
         N: NameTable<Ident<R>, BackendEntry = B::Name, MacroEntry = MacroEntry<R, D>>
             + StartScope<Ident<R>>,
         B::Value: Default + ValueBuilder<B::Name, D::Span>;
@@ -36,11 +37,15 @@ pub(crate) trait Analyze<R: Clone + Eq, D: Diagnostics> {
 pub struct SemanticAnalyzer;
 
 impl<R: Clone + Eq, D: Diagnostics> Analyze<R, D> for SemanticAnalyzer {
-    fn analyze_token_seq<I, C, B, N>(&mut self, tokens: I, partial: &mut PartialSession<C, B, N, D>)
+    fn analyze_token_seq<'a, I, C, B, N>(
+        &mut self,
+        tokens: I,
+        partial: PartialSession<'a, C, B, N, D>,
+    ) -> PartialSession<'a, C, B, N, D>
     where
         I: IntoIterator<Item = LexItem<R, D::Span>>,
         C: Lex<D, StringRef = R>,
-        B: Backend<D::Span> + ?Sized,
+        B: Backend<D::Span>,
         N: NameTable<Ident<R>, BackendEntry = B::Name, MacroEntry = MacroEntry<R, D>>
             + StartScope<Ident<R>>,
         B::Value: Default + ValueBuilder<B::Name, D::Span>,
@@ -52,8 +57,9 @@ impl<R: Clone + Eq, D: Diagnostics> Analyze<R, D> for SemanticAnalyzer {
             partial.names,
             partial.diagnostics,
         );
-        let actions = SemanticActions::new(session);
-        crate::syntax::parse_token_seq(tokens.into_iter(), actions);
+        let mut actions =
+            crate::syntax::parse_token_seq(tokens.into_iter(), SemanticActions::new(session));
+        actions.session.take().unwrap().into()
     }
 }
 
@@ -296,20 +302,22 @@ mod mock {
         T: From<AnalyzerEvent<D::Span>>,
         D: Diagnostics,
     {
-        fn analyze_token_seq<I, C, B, N>(
+        fn analyze_token_seq<'b, I, C, B, N>(
             &mut self,
             tokens: I,
-            _downstream: &mut PartialSession<C, B, N, D>,
-        ) where
+            downstream: PartialSession<'b, C, B, N, D>,
+        ) -> PartialSession<'b, C, B, N, D>
+        where
             I: IntoIterator<Item = LexItem<String, D::Span>>,
             C: Lex<D, StringRef = String>,
-            B: Backend<D::Span> + ?Sized,
+            B: Backend<D::Span>,
             N: NameTable<Ident<String>, MacroEntry = MacroEntry<String, D>>,
             B::Value: Default + ValueBuilder<B::Name, D::Span>,
         {
             self.log
                 .borrow_mut()
-                .push(AnalyzerEvent::AnalyzeTokenSeq(tokens.into_iter().collect()).into())
+                .push(AnalyzerEvent::AnalyzeTokenSeq(tokens.into_iter().collect()).into());
+            downstream
         }
     }
 

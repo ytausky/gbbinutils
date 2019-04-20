@@ -46,10 +46,14 @@ impl<S: Session> MacroCallContext<S::Span> for MacroCallActions<S> {
     }
 
     fn exit(mut self) -> Self::Parent {
-        self.parent
-            .parent
-            .session()
-            .call_macro(self.name, self.args);
+        self.parent.parent.session = Some(
+            self.parent
+                .parent
+                .session
+                .take()
+                .unwrap()
+                .call_macro(self.name, self.args),
+        );
         self.parent
     }
 }

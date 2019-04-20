@@ -78,7 +78,7 @@ fn try_assemble(
     let codebase = codebase::FileCodebase::new(input);
     let diagnostics = &mut DiagnosticsSystem::new(&codebase.cache, output);
     let mut program = program::Program::new();
-    let mut builder = program::ProgramBuilder::new(&mut program);
+    let builder = program::ProgramBuilder::new(&mut program);
     builder.assemble(name, &codebase, diagnostics)?;
     Ok(program.link(diagnostics))
 }

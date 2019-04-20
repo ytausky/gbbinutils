@@ -88,7 +88,9 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
             Ok(result) => result,
             Err(()) => return,
         };
-        if let Err(err) = self.actions.session().analyze_file(path) {
+        let (result, session) = self.actions.session.take().unwrap().analyze_file(path);
+        self.actions.session = Some(session);
+        if let Err(err) = result {
             self.actions
                 .diagnostics()
                 .emit_diagnostic(Message::from(err).at(span))
