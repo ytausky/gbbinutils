@@ -185,7 +185,7 @@ mod tests {
                 },
                 Section {
                     constraints: Constraints {
-                        addr: Some(Expr::from_items(&[
+                        addr: Some(Immediate::from_items(&[
                             Atom::LocationCounter.into(),
                             skipped_bytes.into(),
                             BinOp::Plus.into(),

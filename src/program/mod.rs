@@ -6,7 +6,7 @@ mod builder;
 mod link;
 mod lowering;
 
-type Expr<S> = crate::model::Expr<Atom<NameId>, S>;
+type Immediate<S> = crate::model::Expr<Atom<NameId>, S>;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct RelocId(usize);
@@ -34,17 +34,17 @@ struct Section<S> {
 }
 
 struct Constraints<S> {
-    addr: Option<Expr<S>>,
+    addr: Option<Immediate<S>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 enum Node<S> {
     Byte(u8),
-    Expr(Expr<S>, Width),
-    LdInlineAddr(u8, Expr<S>),
-    Embedded(u8, Expr<S>),
-    Reserved(Expr<S>),
-    Symbol((NameId, S), Expr<S>),
+    Expr(Immediate<S>, Width),
+    LdInlineAddr(u8, Immediate<S>),
+    Embedded(u8, Immediate<S>),
+    Reserved(Immediate<S>),
+    Symbol((NameId, S), Immediate<S>),
 }
 
 #[derive(Debug, PartialEq)]

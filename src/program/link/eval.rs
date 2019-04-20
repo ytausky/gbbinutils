@@ -1,11 +1,11 @@
 use super::{EvalContext, RelocTable, Value};
 
 use crate::model::{Atom, BinOp, ExprOp};
-use crate::program::{Expr, NameDef, NameId, SectionId};
+use crate::program::{Immediate, NameDef, NameId, SectionId};
 
 use std::borrow::Borrow;
 
-impl<S: Clone> Expr<S> {
+impl<S: Clone> Immediate<S> {
     pub(super) fn eval<R, F>(&self, context: &EvalContext<R, S>, on_undefined: &mut F) -> Value
     where
         R: Borrow<RelocTable>,

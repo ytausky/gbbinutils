@@ -1,4 +1,4 @@
-use super::{Expr, NameDef, NameId, Node, Program, Section};
+use super::{Immediate, NameDef, NameId, Node, Program, Section};
 
 use crate::analysis::backend::*;
 use crate::model::Item;
@@ -9,7 +9,7 @@ pub struct ProgramBuilder<'a, S> {
 }
 
 enum BuilderState<S> {
-    AnonSectionPrelude { addr: Option<Expr<S>> },
+    AnonSectionPrelude { addr: Option<Immediate<S>> },
     Section(usize),
     SectionPrelude(usize),
 }
@@ -45,7 +45,7 @@ impl<'a, S> ProgramBuilder<'a, S> {
 }
 
 impl<'a, S: Clone> PartialBackend<S> for ProgramBuilder<'a, S> {
-    type Value = Expr<S>;
+    type Value = Immediate<S>;
 
     fn emit_item(&mut self, item: Item<Self::Value>) {
         use super::lowering::Lower;
@@ -114,7 +114,7 @@ mod tests {
 
     #[test]
     fn constrain_origin_determines_origin_of_new_section() {
-        let origin: Expr<_> = 0x3000.into();
+        let origin: Immediate<_> = 0x3000.into();
         let object = build_object(|builder| {
             builder.set_origin(origin.clone());
             builder.push(Node::Byte(0xcd))
@@ -138,7 +138,7 @@ mod tests {
 
     #[test]
     fn set_origin_in_section_prelude_sets_origin() {
-        let origin: Expr<_> = 0x0150.into();
+        let origin: Immediate<_> = 0x0150.into();
         let object = build_object(|builder| {
             let name = builder.alloc_name(());
             builder.start_section((name, ()));
@@ -175,7 +175,7 @@ mod tests {
 
     fn emit_items_and_compare<I, B>(items: I, bytes: B)
     where
-        I: Borrow<[Item<Expr<()>>]>,
+        I: Borrow<[Item<Immediate<()>>]>,
         B: Borrow<[u8]>,
     {
         let (object, _) = with_object_builder(|builder| {
@@ -196,7 +196,7 @@ mod tests {
         emit_items_and_compare([byte_literal(0x12), byte_literal(0x34)], [0x12, 0x34])
     }
 
-    fn byte_literal(value: i32) -> Item<Expr<()>> {
+    fn byte_literal(value: i32) -> Item<Immediate<()>> {
         Item::Data(value.into(), Width::Byte)
     }
 
@@ -225,7 +225,7 @@ mod tests {
         let name = "ident";
         let (_, diagnostics) = with_object_builder(|builder| {
             let symbol_id = builder.alloc_name(name.into());
-            let mut value: Expr<_> = Default::default();
+            let mut value: Immediate<_> = Default::default();
             value.push_op(symbol_id, name.into());
             builder.emit_item(word_item(value))
         });
@@ -239,7 +239,7 @@ mod tests {
         let (_, diagnostics) = with_object_builder(|builder| {
             let value = {
                 let id1 = builder.alloc_name(name1.into());
-                let mut value: Expr<_> = Default::default();
+                let mut value: Immediate<_> = Default::default();
                 value.push_op(id1, name1.into());
                 let id2 = builder.alloc_name(name2.into());
                 value.push_op(id2, name2.into());
@@ -256,7 +256,7 @@ mod tests {
         let (object, diagnostics) = with_object_builder(|builder| {
             let symbol_id = builder.alloc_name(());
             builder.define_fn((symbol_id, ()), Atom::LocationCounter.into());
-            let mut value: Expr<_> = Default::default();
+            let mut value: Immediate<_> = Default::default();
             value.push_op(symbol_id, ());
             builder.emit_item(word_item(value));
         });
@@ -268,7 +268,7 @@ mod tests {
     fn emit_symbol_defined_after_use() {
         let (object, diagnostics) = with_object_builder(|builder| {
             let symbol_id = builder.alloc_name(());
-            let mut value: Expr<_> = Default::default();
+            let mut value: Immediate<_> = Default::default();
             value.push_op(symbol_id, ());
             builder.emit_item(word_item(value));
             builder.define_fn((symbol_id, ()), Atom::LocationCounter.into());
@@ -295,7 +295,7 @@ mod tests {
         (object, diagnostics)
     }
 
-    fn word_item<S: Clone>(value: Expr<S>) -> Item<Expr<S>> {
+    fn word_item<S: Clone>(value: Immediate<S>) -> Item<Immediate<S>> {
         Item::Data(value, Width::Word)
     }
 
