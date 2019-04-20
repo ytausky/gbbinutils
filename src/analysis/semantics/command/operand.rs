@@ -270,7 +270,7 @@ mod tests {
         )
     }
 
-    type OperandResult<S> = Result<Operand<Expr<Ident<String>, S>>, Vec<DiagnosticsEvent<S>>>;
+    type OperandResult<S> = Result<Operand<Expr<Atom<Ident<String>>, S>>, Vec<DiagnosticsEvent<S>>>;
 
     fn analyze_operand<S: Clone + MockSpan + PartialEq>(
         expr: Arg<String, S>,

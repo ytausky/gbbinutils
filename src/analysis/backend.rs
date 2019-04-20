@@ -48,7 +48,7 @@ impl<T, N, S: Clone> ValueBuilder<N, S> for T where
 {
 }
 
-impl<T: Into<Atom<N>>, N: Clone, S: Clone> PushOp<T, S> for Expr<N, S> {
+impl<T: Into<Atom<N>>, N: Clone, S: Clone> PushOp<T, S> for Expr<Atom<N>, S> {
     fn push_op(&mut self, atom: T, span: S) {
         let atom = atom.into();
         self.0.push(ExprItem {
@@ -113,7 +113,7 @@ mod mock {
 
     impl<'a, T, S> Backend<S> for MockBackend<'a, T>
     where
-        T: From<BackendEvent<Expr<usize, S>>>,
+        T: From<BackendEvent<Expr<Atom<usize>, S>>>,
         S: Clone,
     {
         fn define_fn(&mut self, name: (Self::Name, S), value: Self::Value) {
@@ -141,10 +141,10 @@ mod mock {
 
     impl<'a, T, S> PartialBackend<S> for MockBackend<'a, T>
     where
-        T: From<BackendEvent<Expr<usize, S>>>,
+        T: From<BackendEvent<Expr<Atom<usize>, S>>>,
         S: Clone,
     {
-        type Value = Expr<usize, S>;
+        type Value = Expr<Atom<usize>, S>;
 
         fn emit_item(&mut self, item: Item<Self::Value>) {
             self.log
@@ -167,7 +167,7 @@ mod mock {
 
     impl<'a, T, S> StartSection<usize, S> for MockBackend<'a, T>
     where
-        T: From<BackendEvent<Expr<usize, S>>>,
+        T: From<BackendEvent<Expr<Atom<usize>, S>>>,
         S: Clone,
     {
         fn start_section(&mut self, name: (usize, S)) {

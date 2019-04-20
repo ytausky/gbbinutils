@@ -6,7 +6,7 @@ mod builder;
 mod link;
 mod lowering;
 
-type Expr<S> = crate::model::Expr<NameId, S>;
+type Expr<S> = crate::model::Expr<Atom<NameId>, S>;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct RelocId(usize);

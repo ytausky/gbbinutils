@@ -446,11 +446,11 @@ mod tests {
         Literal::Operand(keyword).into()
     }
 
-    pub fn number(n: i32, span: impl Into<TokenSpan>) -> Expr<Ident<String>, TokenSpan> {
+    pub fn number(n: i32, span: impl Into<TokenSpan>) -> Expr<Atom<Ident<String>>, TokenSpan> {
         Expr::from_atom(n.into(), span.into())
     }
 
-    pub fn name(ident: &str, span: impl Into<TokenSpan>) -> Expr<Ident<String>, TokenSpan> {
+    pub fn name(ident: &str, span: impl Into<TokenSpan>) -> Expr<Atom<Ident<String>>, TokenSpan> {
         Expr::from_atom(Atom::Name(ident.into()), span.into())
     }
 
@@ -602,7 +602,7 @@ mod tests {
         test_cp_const_analysis(n.into(), number(n, TokenId::Operand(0, 0)))
     }
 
-    fn test_cp_const_analysis(parsed: Input, expr: Expr<Ident<String>, TokenSpan>) {
+    fn test_cp_const_analysis(parsed: Input, expr: Expr<Atom<Ident<String>>, TokenSpan>) {
         analyze(kw::Mnemonic::Cp, Some(parsed)).expect_instruction(Instruction::Alu(
             AluOperation::Cp,
             AluSource::Immediate(expr),
@@ -623,7 +623,7 @@ mod tests {
 
     pub(super) type InstructionDescriptor = (
         (kw::Mnemonic, Vec<Input>),
-        Instruction<Expr<Ident<String>, TokenSpan>>,
+        Instruction<Expr<Atom<Ident<String>>, TokenSpan>>,
     );
 
     fn describe_legal_instructions() -> Vec<InstructionDescriptor> {
@@ -829,10 +829,13 @@ mod tests {
     pub struct AnalysisResult(InnerAnalysisResult);
 
     type InnerAnalysisResult =
-        Result<Instruction<Expr<Ident<String>, TokenSpan>>, Vec<DiagnosticsEvent<TokenSpan>>>;
+        Result<Instruction<Expr<Atom<Ident<String>>, TokenSpan>>, Vec<DiagnosticsEvent<TokenSpan>>>;
 
     impl AnalysisResult {
-        pub fn expect_instruction(self, expected: Instruction<Expr<Ident<String>, TokenSpan>>) {
+        pub fn expect_instruction(
+            self,
+            expected: Instruction<Expr<Atom<Ident<String>>, TokenSpan>>,
+        ) {
             assert_eq!(self.0, Ok(expected))
         }
 

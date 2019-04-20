@@ -188,17 +188,17 @@ mod tests {
         test_data_items_emission(Directive::Dw, mk_word, [0x4332, 0x780f])
     }
 
-    fn mk_byte(byte: i32) -> Item<Expr<Ident<String>, ()>> {
+    fn mk_byte(byte: i32) -> Item<Expr<Atom<Ident<String>>, ()>> {
         Item::Data((byte).into(), Width::Byte)
     }
 
-    fn mk_word(word: i32) -> Item<Expr<Ident<String>, ()>> {
+    fn mk_word(word: i32) -> Item<Expr<Atom<Ident<String>>, ()>> {
         Item::Data((word).into(), Width::Word)
     }
 
     fn test_data_items_emission(
         directive: Directive,
-        mk_item: impl Fn(i32) -> Item<Expr<Ident<String>, ()>>,
+        mk_item: impl Fn(i32) -> Item<Expr<Atom<Ident<String>>, ()>>,
         data: impl Borrow<[i32]>,
     ) {
         let actions = with_directive(directive, |mut command| {
