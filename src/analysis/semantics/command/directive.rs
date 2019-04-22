@@ -73,8 +73,7 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
         let actions = &mut self.actions;
         let (symbol, params) = self.label.take().unwrap();
         single_arg(self.span, self.args, actions.diagnostics())
-            .and_then(|arg| actions.analyze_expr(&params, arg))
-            .map(|value| actions.session().define_symbol(symbol, value))
+            .and_then(|arg| actions.define_symbol(symbol, &params, arg))
             .ok();
     }
 

@@ -68,10 +68,80 @@ impl<'a, S: Clone> PartialBackend<S> for ProgramBuilder<'a, S> {
 }
 
 impl<'a, S: Clone> Backend<S> for ProgramBuilder<'a, S> {
-    fn define_fn(&mut self, (name, span): (Self::Name, S), value: Self::Value) {
-        let reloc = self.program.alloc_reloc();
-        self.program.names.define(name, NameDef::Reloc(reloc));
-        self.push(Node::Symbol((name, span), value))
+    type ImmediateBuilder = RelocContext<Self, Immediate<S>>;
+    type SymbolBuilder = SymbolBuilder<'a, S>;
+
+    fn build_immediate(self) -> Self::ImmediateBuilder {
+        RelocContext::new(self)
+    }
+
+    fn define_fn(self, name: Self::Name, span: S) -> Self::SymbolBuilder {
+        SymbolBuilder {
+            parent: self,
+            name: (name, span),
+            expr: Default::default(),
+        }
+    }
+}
+
+impl<'a, S: Clone> AllocName<S> for RelocContext<ProgramBuilder<'a, S>, Immediate<S>> {
+    type Name = NameId;
+
+    fn alloc_name(&mut self, span: S) -> Self::Name {
+        self.parent.alloc_name(span)
+    }
+}
+
+impl<'a, S: Clone> PushOp<NameId, S> for RelocContext<ProgramBuilder<'a, S>, Immediate<S>> {
+    fn push_op(&mut self, name: NameId, span: S) {
+        self.builder.push_op(name, span)
+    }
+}
+
+impl<'a, S: Clone> Finish<S> for RelocContext<ProgramBuilder<'a, S>, Immediate<S>> {
+    type Parent = ProgramBuilder<'a, S>;
+    type Value = Immediate<S>;
+
+    fn finish(self) -> (Self::Parent, Self::Value) {
+        (self.parent, self.builder)
+    }
+}
+
+pub struct SymbolBuilder<'a, S> {
+    parent: ProgramBuilder<'a, S>,
+    name: (NameId, S),
+    expr: Immediate<S>,
+}
+
+impl<'a, S: Clone> AllocName<S> for SymbolBuilder<'a, S> {
+    type Name = NameId;
+
+    fn alloc_name(&mut self, span: S) -> Self::Name {
+        self.parent.alloc_name(span)
+    }
+}
+
+impl<'a, T, S: Clone> PushOp<T, S> for SymbolBuilder<'a, S>
+where
+    Immediate<S>: PushOp<T, S>,
+{
+    fn push_op(&mut self, op: T, span: S) {
+        self.expr.push_op(op, span)
+    }
+}
+
+impl<'a, S> FinishFnDef for SymbolBuilder<'a, S> {
+    type Return = ProgramBuilder<'a, S>;
+
+    fn finish_fn_def(self) -> Self::Return {
+        let mut parent = self.parent;
+        let reloc = parent.program.alloc_reloc();
+        parent
+            .program
+            .names
+            .define(self.name.0, NameDef::Reloc(reloc));
+        parent.push(Node::Symbol(self.name, self.expr));
+        parent
     }
 }
 
@@ -96,7 +166,7 @@ mod tests {
     use super::*;
 
     use crate::diag::{CompactDiagnostic, Message, TestDiagnosticsListener};
-    use crate::model::{Atom, BinOp, Instruction, Nullary, Width};
+    use crate::model::{BinOp, Instruction, Nullary, Width};
     use crate::program::{BinaryObject, SectionId};
     use std::borrow::Borrow;
 
@@ -108,14 +178,14 @@ mod tests {
 
     #[test]
     fn no_origin_by_default() {
-        let object = build_object::<_, ()>(|builder| builder.push(Node::Byte(0xcd)));
+        let object = build_object::<_, ()>(|mut builder| builder.push(Node::Byte(0xcd)));
         assert_eq!(object.sections[0].constraints.addr, None)
     }
 
     #[test]
     fn constrain_origin_determines_origin_of_new_section() {
         let origin: Immediate<_> = 0x3000.into();
-        let object = build_object(|builder| {
+        let object = build_object(|mut builder| {
             builder.set_origin(origin.clone());
             builder.push(Node::Byte(0xcd))
         });
@@ -125,7 +195,7 @@ mod tests {
     #[test]
     fn start_section_adds_named_section() {
         let mut wrapped_name = None;
-        let object = build_object(|builder| {
+        let object = build_object(|mut builder| {
             let name = builder.alloc_name(());
             builder.start_section((name, ()));
             wrapped_name = Some(name);
@@ -139,7 +209,7 @@ mod tests {
     #[test]
     fn set_origin_in_section_prelude_sets_origin() {
         let origin: Immediate<_> = 0x0150.into();
-        let object = build_object(|builder| {
+        let object = build_object(|mut builder| {
             let name = builder.alloc_name(());
             builder.start_section((name, ()));
             builder.set_origin(origin.clone())
@@ -150,7 +220,7 @@ mod tests {
     #[test]
     fn push_node_into_named_section() {
         let node = Node::Byte(0x42);
-        let object = build_object(|builder| {
+        let object = build_object(|mut builder| {
             let name = builder.alloc_name(());
             builder.start_section((name, ()));
             builder.push(node.clone())
@@ -158,10 +228,10 @@ mod tests {
         assert_eq!(object.sections[0].items, [node])
     }
 
-    fn build_object<F: FnOnce(&mut ProgramBuilder<S>), S>(f: F) -> Program<S> {
+    fn build_object<F: FnOnce(ProgramBuilder<S>), S>(f: F) -> Program<S> {
         let mut program = Program::new();
-        let mut builder = ProgramBuilder::new(&mut program);
-        f(&mut builder);
+        let builder = ProgramBuilder::new(&mut program);
+        f(builder);
         program
     }
 
@@ -178,7 +248,7 @@ mod tests {
         I: Borrow<[Item<Immediate<()>>]>,
         B: Borrow<[u8]>,
     {
-        let (object, _) = with_object_builder(|builder| {
+        let (object, _) = with_object_builder(|mut builder| {
             for item in items.borrow() {
                 builder.emit_item(item.clone())
             }
@@ -208,7 +278,7 @@ mod tests {
 
     fn test_diagnostic_for_out_of_range_byte(value: i32) {
         let (_, diagnostics) =
-            with_object_builder(|builder| builder.emit_item(byte_literal(value)));
+            with_object_builder(|mut builder| builder.emit_item(byte_literal(value)));
         assert_eq!(
             *diagnostics,
             [Message::ValueOutOfRange {
@@ -223,7 +293,7 @@ mod tests {
     #[test]
     fn diagnose_unresolved_symbol() {
         let name = "ident";
-        let (_, diagnostics) = with_object_builder(|builder| {
+        let (_, diagnostics) = with_object_builder(|mut builder| {
             let symbol_id = builder.alloc_name(name.into());
             let mut value: Immediate<_> = Default::default();
             value.push_op(symbol_id, name.into());
@@ -236,7 +306,7 @@ mod tests {
     fn diagnose_two_unresolved_symbols_in_one_expr() {
         let name1 = "ident1";
         let name2 = "ident2";
-        let (_, diagnostics) = with_object_builder(|builder| {
+        let (_, diagnostics) = with_object_builder(|mut builder| {
             let value = {
                 let id1 = builder.alloc_name(name1.into());
                 let mut value: Immediate<_> = Default::default();
@@ -253,9 +323,11 @@ mod tests {
 
     #[test]
     fn emit_defined_symbol() {
-        let (object, diagnostics) = with_object_builder(|builder| {
+        let (object, diagnostics) = with_object_builder(|mut builder| {
             let symbol_id = builder.alloc_name(());
-            builder.define_fn((symbol_id, ()), Atom::LocationCounter.into());
+            let mut builder = builder.define_fn(symbol_id, ());
+            builder.push_op(LocationCounter, ());
+            let mut builder = builder.finish_fn_def();
             let mut value: Immediate<_> = Default::default();
             value.push_op(symbol_id, ());
             builder.emit_item(word_item(value));
@@ -266,12 +338,14 @@ mod tests {
 
     #[test]
     fn emit_symbol_defined_after_use() {
-        let (object, diagnostics) = with_object_builder(|builder| {
+        let (object, diagnostics) = with_object_builder(|mut builder| {
             let symbol_id = builder.alloc_name(());
             let mut value: Immediate<_> = Default::default();
             value.push_op(symbol_id, ());
             builder.emit_item(word_item(value));
-            builder.define_fn((symbol_id, ()), Atom::LocationCounter.into());
+            let mut builder = builder.define_fn(symbol_id, ());
+            builder.push_op(LocationCounter, ());
+            builder.finish_fn_def();
         });
         assert_eq!(*diagnostics, []);
         assert_eq!(object.sections.last().unwrap().data, [0x02, 0x00])
@@ -280,14 +354,14 @@ mod tests {
     #[test]
     fn reserve_bytes_in_section() {
         let bytes = 3;
-        let program = build_object(|builder| builder.reserve(bytes.into()));
+        let program = build_object(|mut builder| builder.reserve(bytes.into()));
         assert_eq!(program.sections[0].items, [Node::Reserved(bytes.into())])
     }
 
     fn with_object_builder<S, F>(f: F) -> (BinaryObject, Box<[CompactDiagnostic<S, S>]>)
     where
         S: Clone + 'static,
-        F: FnOnce(&mut ProgramBuilder<S>),
+        F: FnOnce(ProgramBuilder<S>),
     {
         let mut diagnostics = TestDiagnosticsListener::new();
         let object = build_object(f).link(&mut diagnostics);

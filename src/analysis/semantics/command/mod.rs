@@ -1,9 +1,9 @@
 use self::args::*;
 
-use super::{Ident, Label, Literal, Params, SemanticActions, StmtActions};
+use super::{Ident, Label, Literal, Params, ParamsAdapter, SemanticActions, StmtActions};
 
-use crate::analysis::backend::{LocationCounter, PushOp};
-use crate::analysis::session::{Finish, Session};
+use crate::analysis::backend::{Finish, FinishFnDef, LocationCounter, PushOp};
+use crate::analysis::session::Session;
 use crate::diag::span::{MergeSpans, StripSpan};
 use crate::diag::{CompactDiagnostic, DelegateDiagnostics, EmitDiagnostic, Message};
 use crate::model::{BinOp, Item};
@@ -233,6 +233,22 @@ impl<S: Session> SemanticActions<S> {
             let (session, value) = builder.finish();
             (session, result.map(|()| value))
         })
+    }
+
+    fn define_symbol(
+        &mut self,
+        (name, span): (Ident<S::StringRef>, S::Span),
+        params: &Params<S::StringRef, S::Span>,
+        expr: Arg<S::StringRef, S::Span>,
+    ) -> Result<(), ()> {
+        let mut result = Ok(());
+        self.with_session(|session| {
+            let builder = session.define_symbol(name, span);
+            let mut adapter = ParamsAdapter::new(builder, params);
+            result = adapter.eval_arg(expr);
+            adapter.finish_fn_def()
+        });
+        result
     }
 }
 

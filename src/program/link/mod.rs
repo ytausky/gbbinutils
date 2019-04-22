@@ -164,7 +164,7 @@ fn ignore_undefined<S>(_: &S) {}
 mod tests {
     use super::*;
 
-    use crate::analysis::backend::{AllocName, Backend, PartialBackend};
+    use crate::analysis::backend::*;
     use crate::diag::IgnoreDiagnostics;
     use crate::model::{Atom, BinOp, Width};
     use crate::program::*;
@@ -213,7 +213,9 @@ mod tests {
         let mut builder = ProgramBuilder::new(&mut program);
         builder.set_origin(addr.into());
         let symbol_id = builder.alloc_name(());
-        builder.define_fn((symbol_id, ()), Atom::LocationCounter.into());
+        let mut builder = builder.define_fn(symbol_id, ());
+        builder.push_op(LocationCounter, ());
+        builder.finish_fn_def();
         let relocs = program.resolve_relocs();
         let reloc = match program.names.get(symbol_id).unwrap() {
             NameDef::Reloc(id) => *id,

@@ -1,6 +1,6 @@
 use super::{Arg, ArgAtom, ArgEvaluator, ArgUnaryOp, ArgVariant, EvalArg};
 
-use crate::analysis::session::Finish;
+use crate::analysis::backend::Finish;
 use crate::analysis::{Ident, Literal};
 use crate::diag::*;
 use crate::model::{Condition, PtrReg, Reg16, RegPair, SimpleOperand};

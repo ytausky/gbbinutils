@@ -69,16 +69,71 @@ impl<N, S: Clone> PushOp<BinOp, S> for Expr<N, S> {
     }
 }
 
+pub trait Finish<S: Clone> {
+    type Parent;
+    type Value: Source<Span = S>;
+
+    fn finish(self) -> (Self::Parent, Self::Value);
+}
+
+pub trait FinishFnDef {
+    type Return;
+
+    fn finish_fn_def(self) -> Self::Return;
+}
+
 pub trait Backend<S>
 where
     S: Clone,
+    Self: Sized,
     Self: AllocName<S>,
     Self: PartialBackend<S>,
     Self: StartSection<<Self as AllocName<S>>::Name, S>,
-    <Self as PartialBackend<S>>::Value: Default + ValueBuilder<<Self as AllocName<S>>::Name, S>,
 {
-    fn define_fn(&mut self, name: (Self::Name, S), value: Self::Value);
+    type ImmediateBuilder: AllocName<S, Name = Self::Name>
+        + ValueBuilder<Self::Name, S>
+        + Finish<S, Parent = Self, Value = Self::Value>;
+
+    type SymbolBuilder: AllocName<S, Name = Self::Name>
+        + ValueBuilder<Self::Name, S>
+        + FinishFnDef<Return = Self>;
+
+    fn build_immediate(self) -> Self::ImmediateBuilder;
+    fn define_fn(self, name: Self::Name, span: S) -> Self::SymbolBuilder;
 }
+
+pub struct RelocContext<P, B> {
+    pub parent: P,
+    pub builder: B,
+}
+
+impl<P, B: Default> RelocContext<P, B> {
+    pub fn new(parent: P) -> Self {
+        Self {
+            parent,
+            builder: Default::default(),
+        }
+    }
+}
+
+macro_rules! impl_push_op_for_reloc_context {
+    ($t:ty) => {
+        impl<P, B, S> PushOp<$t, S> for RelocContext<P, B>
+        where
+            B: PushOp<$t, S>,
+            S: Clone,
+        {
+            fn push_op(&mut self, op: $t, span: S) {
+                self.builder.push_op(op, span)
+            }
+        }
+    };
+}
+
+impl_push_op_for_reloc_context! {LocationCounter}
+impl_push_op_for_reloc_context! {i32}
+impl_push_op_for_reloc_context! {BinOp}
+impl_push_op_for_reloc_context! {ParamId}
 
 #[cfg(test)]
 mod mock {
@@ -116,10 +171,82 @@ mod mock {
         T: From<BackendEvent<Expr<Atom<usize>, S>>>,
         S: Clone,
     {
-        fn define_fn(&mut self, name: (Self::Name, S), value: Self::Value) {
-            self.log
+        type ImmediateBuilder = RelocContext<Self, Expr<Atom<usize>, S>>;
+        type SymbolBuilder = MockSymbolBuilder<Self, usize, S>;
+
+        fn build_immediate(self) -> Self::ImmediateBuilder {
+            RelocContext::new(self)
+        }
+
+        fn define_fn(self, name: Self::Name, span: S) -> Self::SymbolBuilder {
+            MockSymbolBuilder {
+                parent: self,
+                name: (name, span),
+                expr: Default::default(),
+            }
+        }
+    }
+
+    impl<'a, T, S: Clone> PushOp<usize, S> for RelocContext<MockBackend<'a, T>, Expr<Atom<usize>, S>> {
+        fn push_op(&mut self, op: usize, span: S) {
+            self.builder.push_op(op, span)
+        }
+    }
+
+    impl<'a, T, S: Clone> AllocName<S> for RelocContext<MockBackend<'a, T>, Expr<Atom<usize>, S>> {
+        type Name = usize;
+
+        fn alloc_name(&mut self, span: S) -> Self::Name {
+            self.parent.alloc_name(span)
+        }
+    }
+
+    impl<'a, T, S: Clone> Finish<S> for RelocContext<MockBackend<'a, T>, Expr<Atom<usize>, S>> {
+        type Parent = MockBackend<'a, T>;
+        type Value = Expr<Atom<usize>, S>;
+
+        fn finish(self) -> (Self::Parent, Self::Value) {
+            (self.parent, self.builder)
+        }
+    }
+
+    pub struct MockSymbolBuilder<P, N, S> {
+        pub parent: P,
+        pub name: (N, S),
+        pub expr: Expr<Atom<N>, S>,
+    }
+
+    impl<T, P, N, S: Clone> PushOp<T, S> for MockSymbolBuilder<P, N, S>
+    where
+        Expr<Atom<N>, S>: PushOp<T, S>,
+    {
+        fn push_op(&mut self, op: T, span: S) {
+            self.expr.push_op(op, span)
+        }
+    }
+
+    impl<'a, T, S> FinishFnDef for MockSymbolBuilder<MockBackend<'a, T>, usize, S>
+    where
+        T: From<BackendEvent<Expr<Atom<usize>, S>>>,
+        S: Clone,
+    {
+        type Return = MockBackend<'a, T>;
+
+        fn finish_fn_def(self) -> Self::Return {
+            let parent = self.parent;
+            parent
+                .log
                 .borrow_mut()
-                .push(BackendEvent::DefineSymbol(name, value).into())
+                .push(BackendEvent::DefineSymbol(self.name, self.expr).into());
+            parent
+        }
+    }
+
+    impl<'a, T, S: Clone> AllocName<S> for MockSymbolBuilder<MockBackend<'a, T>, usize, S> {
+        type Name = usize;
+
+        fn alloc_name(&mut self, span: S) -> Self::Name {
+            self.parent.alloc_name(span)
         }
     }
 

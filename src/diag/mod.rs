@@ -483,6 +483,18 @@ mod mock {
     {
     }
 
+    impl<'a, T, S> DelegateDiagnostics<S> for MockDiagnostics<'a, T, S>
+    where
+        T: From<DiagnosticsEvent<S>>,
+        S: Clone + MockSpan,
+    {
+        type Delegate = Self;
+
+        fn diagnostics(&mut self) -> &mut Self::Delegate {
+            self
+        }
+    }
+
     impl<'a, T, S> ContextFactory for MockDiagnostics<'a, T, S>
     where
         S: Clone + MockSpan,

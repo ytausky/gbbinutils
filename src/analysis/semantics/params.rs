@@ -1,7 +1,6 @@
 use super::{Ident, Params, PushOp};
 
-use crate::analysis::backend::LocationCounter;
-use crate::analysis::session::Finish;
+use crate::analysis::backend::{Finish, FinishFnDef, LocationCounter};
 use crate::diag::DelegateDiagnostics;
 use crate::model::{BinOp, ParamId};
 
@@ -65,6 +64,18 @@ where
 
     fn finish(self) -> (Self::Parent, Self::Value) {
         self.parent.finish()
+    }
+}
+
+impl<'a, P, R, S> FinishFnDef for ParamsAdapter<'a, P, R, S>
+where
+    P: FinishFnDef,
+    S: Clone,
+{
+    type Return = P::Return;
+
+    fn finish_fn_def(self) -> Self::Return {
+        self.parent.finish_fn_def()
     }
 }
 

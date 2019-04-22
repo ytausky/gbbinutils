@@ -2,7 +2,7 @@ use self::command::CommandActions;
 use self::invoke::MacroCallActions;
 use self::params::ParamsAdapter;
 
-use super::backend::{Backend, LocationCounter, PushOp};
+use super::backend::{Backend, FinishFnDef, LocationCounter, PushOp};
 use super::macros::MacroEntry;
 use super::session::*;
 use super::{Ident, Lex, LexItem, Literal, SemanticToken};
@@ -30,8 +30,7 @@ pub(crate) trait Analyze<R: Clone + Eq, D: Diagnostics> {
         C: Lex<D, StringRef = R>,
         B: Backend<D::Span>,
         N: NameTable<Ident<R>, BackendEntry = B::Name, MacroEntry = MacroEntry<R, D>>
-            + StartScope<Ident<R>>,
-        B::Value: Default + ValueBuilder<B::Name, D::Span>;
+            + StartScope<Ident<R>>;
 }
 
 pub struct SemanticAnalyzer;
@@ -48,7 +47,6 @@ impl<R: Clone + Eq, D: Diagnostics> Analyze<R, D> for SemanticAnalyzer {
         B: Backend<D::Span>,
         N: NameTable<Ident<R>, BackendEntry = B::Name, MacroEntry = MacroEntry<R, D>>
             + StartScope<Ident<R>>,
-        B::Value: Default + ValueBuilder<B::Name, D::Span>,
     {
         let session = CompositeSession::new(
             partial.codebase,
@@ -87,6 +85,13 @@ impl<S: Session> SemanticActions<S> {
         let result = f(adapter);
         self.session = Some(result.0);
         result.1
+    }
+
+    fn with_session<F>(&mut self, f: F)
+    where
+        F: FnOnce(S) -> S,
+    {
+        self.session = Some(f(self.session.take().unwrap()))
     }
 }
 
@@ -163,12 +168,12 @@ impl<S: Session> StmtActions<S> {
     }
 
     fn define_label_if_present(&mut self) {
-        if let Some(((label, span), params)) = self.label.take() {
-            let value = self.parent.build_value(&params, |mut builder| {
-                builder.push_op(LocationCounter, span.clone());
-                builder.finish()
-            });
-            self.session().define_symbol((label, span), value)
+        if let Some(((label, span), _params)) = self.label.take() {
+            self.parent.with_session(|session| {
+                let mut builder = session.define_symbol(label, span.clone());
+                PushOp::<LocationCounter, _>::push_op(&mut builder, LocationCounter, span);
+                builder.finish_fn_def()
+            })
         }
     }
 
@@ -312,7 +317,6 @@ mod mock {
             C: Lex<D, StringRef = String>,
             B: Backend<D::Span>,
             N: NameTable<Ident<String>, MacroEntry = MacroEntry<String, D>>,
-            B::Value: Default + ValueBuilder<B::Name, D::Span>,
         {
             self.log
                 .borrow_mut()
