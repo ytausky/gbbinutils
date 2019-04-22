@@ -1,7 +1,7 @@
-use super::{Immediate, NameDef, NameId, Node, Program, Section};
+use super::{Atom, Expr, Immediate, NameDef, NameId, Node, Program, RelocId, Section};
 
 use crate::analysis::backend::*;
-use crate::model::Item;
+use crate::model::{BinOp, ExprItem, ExprOp, Item, ParamId};
 
 pub struct ProgramBuilder<'a, S> {
     program: &'a mut Program<S>,
@@ -76,8 +76,10 @@ impl<'a, S: Clone> Backend<S> for ProgramBuilder<'a, S> {
     }
 
     fn define_fn(self, name: Self::Name, span: S) -> Self::SymbolBuilder {
+        let location = self.program.alloc_reloc();
         SymbolBuilder {
             parent: self,
+            location,
             name: (name, span),
             expr: Default::default(),
         }
@@ -109,8 +111,9 @@ impl<'a, S: Clone> Finish<S> for RelocContext<ProgramBuilder<'a, S>, Immediate<S
 
 pub struct SymbolBuilder<'a, S> {
     parent: ProgramBuilder<'a, S>,
+    location: RelocId,
     name: (NameId, S),
-    expr: Immediate<S>,
+    expr: Expr<S>,
 }
 
 impl<'a, S: Clone> AllocName<S> for SymbolBuilder<'a, S> {
@@ -121,12 +124,37 @@ impl<'a, S: Clone> AllocName<S> for SymbolBuilder<'a, S> {
     }
 }
 
-impl<'a, T, S: Clone> PushOp<T, S> for SymbolBuilder<'a, S>
-where
-    Immediate<S>: PushOp<T, S>,
-{
-    fn push_op(&mut self, op: T, span: S) {
+macro_rules! impl_push_op_for_symbol_builder {
+    ($t:ty) => {
+        impl<'a, S: Clone> PushOp<$t, S> for SymbolBuilder<'a, S> {
+            fn push_op(&mut self, op: $t, span: S) {
+                self.expr.0.push(ExprItem {
+                    op: ExprOp::Atom(op.into()),
+                    op_span: span.clone(),
+                    expr_span: span,
+                })
+            }
+        }
+    };
+}
+
+impl_push_op_for_symbol_builder! {i32}
+impl_push_op_for_symbol_builder! {NameId}
+impl_push_op_for_symbol_builder! {ParamId}
+
+impl<'a, S: Clone> PushOp<BinOp, S> for SymbolBuilder<'a, S> {
+    fn push_op(&mut self, op: BinOp, span: S) {
         self.expr.push_op(op, span)
+    }
+}
+
+impl<'a, S: Clone> PushOp<LocationCounter, S> for SymbolBuilder<'a, S> {
+    fn push_op(&mut self, _: LocationCounter, span: S) {
+        self.expr.0.push(ExprItem {
+            op: ExprOp::Atom(Atom::Reloc(self.location)),
+            op_span: span.clone(),
+            expr_span: span,
+        })
     }
 }
 
@@ -135,12 +163,11 @@ impl<'a, S> FinishFnDef for SymbolBuilder<'a, S> {
 
     fn finish_fn_def(self) -> Self::Return {
         let mut parent = self.parent;
-        let reloc = parent.program.alloc_reloc();
+        parent.push(Node::Reloc(self.location));
         parent
             .program
             .names
-            .define(self.name.0, NameDef::Reloc(reloc));
-        parent.push(Node::Symbol(self.name, self.expr));
+            .define(self.name.0, NameDef::Symbol(self.expr));
         parent
     }
 }

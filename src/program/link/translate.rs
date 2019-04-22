@@ -78,8 +78,8 @@ impl<S: Clone> Node<S> {
                 bytes.extend(addr_repr.into_bytes());
                 bytes
             }
+            Node::Reloc(_) => vec![],
             Node::Reserved(_) => unimplemented!(),
-            Node::Symbol(..) => vec![],
         }
         .into_iter()
     }

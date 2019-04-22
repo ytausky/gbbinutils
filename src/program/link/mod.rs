@@ -1,6 +1,6 @@
 use self::value::Value;
 
-use super::{BinaryObject, NameDef, Node, Program, RelocId, Section};
+use super::{BinaryObject, Node, Program, RelocId, Section};
 
 use crate::diag::BackendDiagnostics;
 use crate::model::Width;
@@ -93,13 +93,8 @@ impl RelocTable {
                 .relocs
                 .refine(section.addr, context.location.clone());
             let size = section.traverse(context, |item, context| {
-                if let Node::Symbol((name, _), expr) = item {
-                    let id = match context.program.names.get(*name).unwrap() {
-                        NameDef::Reloc(id) => *id,
-                        NameDef::Section(_) => unimplemented!(),
-                    };
-                    let value = expr.eval(context, &mut ignore_undefined);
-                    refinements += context.relocs.refine(id, value) as i32
+                if let Node::Reloc(id) = item {
+                    refinements += context.relocs.refine(*id, context.location.clone()) as i32
                 }
             });
             refinements += context.relocs.refine(section.size, size) as i32
@@ -143,8 +138,8 @@ impl<S: Clone> Node<S> {
                 Value::Range { max, .. } if max < 0xff00 => 3.into(),
                 _ => Value::Range { min: 2, max: 3 },
             },
+            Node::Reloc(_) => 0.into(),
             Node::Reserved(bytes) => bytes.eval(context, &mut ignore_undefined),
-            Node::Symbol(..) => 0.into(),
         }
     }
 }
@@ -166,7 +161,8 @@ mod tests {
 
     use crate::analysis::backend::*;
     use crate::diag::IgnoreDiagnostics;
-    use crate::model::{Atom, BinOp, Width};
+    use crate::model;
+    use crate::model::{BinOp, ExprOp, Width};
     use crate::program::*;
 
     #[test]
@@ -186,7 +182,7 @@ mod tests {
                 Section {
                     constraints: Constraints {
                         addr: Some(Immediate::from_items(&[
-                            Atom::LocationCounter.into(),
+                            model::Atom::LocationCounter.into(),
                             skipped_bytes.into(),
                             BinOp::Plus.into(),
                         ])),
@@ -217,11 +213,7 @@ mod tests {
         builder.push_op(LocationCounter, ());
         builder.finish_fn_def();
         let relocs = program.resolve_relocs();
-        let reloc = match program.names.get(symbol_id).unwrap() {
-            NameDef::Reloc(id) => *id,
-            NameDef::Section(_) => unimplemented!(),
-        };
-        assert_eq!(relocs.get(reloc), addr.into());
+        assert_eq!(relocs.get(RelocId(0)), addr.into());
     }
 
     #[test]
@@ -258,9 +250,12 @@ mod tests {
             let name = object.names.alloc();
             let reloc = object.alloc_reloc();
             let items = &mut object.sections[0].items;
-            items.push(Node::LdInlineAddr(0, Atom::Name(name).into()));
-            object.names.define(name, NameDef::Reloc(reloc));
-            items.push(Node::Symbol((name, ()), Atom::LocationCounter.into()))
+            items.push(Node::LdInlineAddr(0, model::Atom::Name(name).into()));
+            items.push(Node::Reloc(reloc));
+            object.names.define(
+                name,
+                NameDef::Symbol(Expr::from_items(&[ExprOp::Atom(Atom::Reloc(reloc)).into()])),
+            )
         })
     }
 
@@ -273,7 +268,10 @@ mod tests {
                 },
                 addr: RelocId(0),
                 size: RelocId(1),
-                items: vec![Node::Immediate(Atom::Name(NameId(0)).into(), Width::Word)],
+                items: vec![Node::Immediate(
+                    model::Atom::Name(NameId(0)).into(),
+                    Width::Word,
+                )],
             }],
             names: NameTable(vec![Some(NameDef::Section(SectionId(0)))]),
             relocs: 2,
@@ -296,10 +294,11 @@ mod tests {
                 size: RelocId(1),
                 items: vec![
                     Node::Reserved(bytes.into()),
-                    Node::Symbol((NameId(0), ()), Atom::LocationCounter.into()),
+                    Node::Reloc(symbol),
+                    Node::Immediate(model::Atom::Name(NameId(0)).into(), Width::Word),
                 ],
             }],
-            names: NameTable(vec![Some(NameDef::Reloc(symbol))]),
+            names: NameTable(vec![Some(NameDef::Symbol(Atom::Reloc(symbol).into()))]),
             relocs: 3,
         };
         let relocs = program.resolve_relocs();

@@ -1,12 +1,49 @@
 pub use self::builder::ProgramBuilder;
 
-use crate::model::{Atom, Width};
+use crate::model;
+use crate::model::{ParamId, Width};
 
 mod builder;
 mod link;
 mod lowering;
 
-type Immediate<S> = crate::model::Expr<Atom<NameId>, S>;
+type Expr<S> = model::Expr<Atom, S>;
+
+#[cfg(test)]
+impl From<Atom> for Expr<()> {
+    fn from(atom: Atom) -> Self {
+        use model::ExprOp;
+        Expr::from_items(&[ExprOp::Atom(atom).into()])
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum Atom {
+    Const(i32),
+    Name(NameId),
+    Param(ParamId),
+    Reloc(RelocId),
+}
+
+impl From<i32> for Atom {
+    fn from(n: i32) -> Self {
+        Atom::Const(n)
+    }
+}
+
+impl From<NameId> for Atom {
+    fn from(id: NameId) -> Self {
+        Atom::Name(id)
+    }
+}
+
+impl From<ParamId> for Atom {
+    fn from(id: ParamId) -> Self {
+        Atom::Param(id)
+    }
+}
+
+type Immediate<S> = model::Expr<model::Atom<NameId>, S>;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct RelocId(usize);
@@ -14,15 +51,15 @@ struct RelocId(usize);
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NameId(usize);
 
-impl From<NameId> for Atom<NameId> {
+impl From<NameId> for model::Atom<NameId> {
     fn from(id: NameId) -> Self {
-        Atom::Name(id)
+        model::Atom::Name(id)
     }
 }
 
 pub struct Program<S> {
     sections: Vec<Section<S>>,
-    names: NameTable,
+    names: NameTable<S>,
     relocs: usize,
 }
 
@@ -43,14 +80,14 @@ enum Node<S> {
     Immediate(Immediate<S>, Width),
     LdInlineAddr(u8, Immediate<S>),
     Embedded(u8, Immediate<S>),
+    Reloc(RelocId),
     Reserved(Immediate<S>),
-    Symbol((NameId, S), Immediate<S>),
 }
 
 #[derive(Debug, PartialEq)]
-enum NameDef {
-    Reloc(RelocId),
+enum NameDef<S> {
     Section(SectionId),
+    Symbol(Expr<S>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -93,9 +130,9 @@ impl<S> Section<S> {
     }
 }
 
-struct NameTable(Vec<Option<NameDef>>);
+struct NameTable<S>(Vec<Option<NameDef<S>>>);
 
-impl NameTable {
+impl<S> NameTable<S> {
     pub fn new() -> Self {
         Self(Vec::new())
     }
@@ -106,12 +143,12 @@ impl NameTable {
         id
     }
 
-    fn define(&mut self, NameId(id): NameId, def: NameDef) {
+    fn define(&mut self, NameId(id): NameId, def: NameDef<S>) {
         assert!(self.0[id].is_none());
         self.0[id] = Some(def);
     }
 
-    fn get(&self, NameId(id): NameId) -> Option<&NameDef> {
+    fn get(&self, NameId(id): NameId) -> Option<&NameDef<S>> {
         self.0[id].as_ref()
     }
 }

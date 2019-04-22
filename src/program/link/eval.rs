@@ -1,7 +1,8 @@
 use super::{EvalContext, RelocTable, Value};
 
-use crate::model::{Atom, BinOp, ExprOp};
-use crate::program::{Immediate, NameDef, NameId, SectionId};
+use crate::model;
+use crate::model::{BinOp, ExprOp};
+use crate::program::{Atom, Expr, Immediate, NameDef, NameId, SectionId};
 
 use std::borrow::Borrow;
 
@@ -15,7 +16,7 @@ impl<S: Clone> Immediate<S> {
         for item in &self.0 {
             match &item.op {
                 ExprOp::Atom(atom) => stack.push((
-                    atom.eval(context).unwrap_or_else(|()| {
+                    atom.eval(context, on_undefined).unwrap_or_else(|()| {
                         on_undefined(&item.op_span);
                         Value::Unknown
                     }),
@@ -32,8 +33,14 @@ impl<S: Clone> Immediate<S> {
     }
 }
 
-impl Atom<NameId> {
-    fn eval<R: Borrow<RelocTable>, S>(&self, context: &EvalContext<R, S>) -> Result<Value, ()> {
+impl model::Atom<NameId> {
+    fn eval<R, F, S>(&self, context: &EvalContext<R, S>, on_undefined: &mut F) -> Result<Value, ()>
+    where
+        R: Borrow<RelocTable>,
+        F: FnMut(&S),
+        S: Clone,
+    {
+        use model::Atom;
         match self {
             Atom::Literal(value) => Ok((*value).into()),
             Atom::LocationCounter => Ok(context.location.clone()),
@@ -41,15 +48,69 @@ impl Atom<NameId> {
                 let name_def = context.program.names.get(id);
                 name_def
                     .map(|def| match def {
-                        NameDef::Reloc(id) => context.relocs.borrow().get(*id),
                         NameDef::Section(SectionId(section)) => {
                             let reloc = context.program.sections[*section].addr;
                             context.relocs.borrow().get(reloc)
                         }
+                        NameDef::Symbol(expr) => expr.eval(context, on_undefined),
                     })
                     .ok_or(())
             }
             Atom::Param(_) => unimplemented!(),
+        }
+    }
+}
+
+impl<S: Clone> Expr<S> {
+    fn eval<R, F>(&self, context: &EvalContext<R, S>, on_undefined: &mut F) -> Value
+    where
+        R: Borrow<RelocTable>,
+        F: FnMut(&S),
+    {
+        let mut stack = Vec::new();
+        for item in &self.0 {
+            match &item.op {
+                ExprOp::Atom(atom) => stack.push((
+                    atom.eval(context, on_undefined).unwrap_or_else(|()| {
+                        on_undefined(&item.op_span);
+                        Value::Unknown
+                    }),
+                    item.expr_span.clone(),
+                )),
+                ExprOp::Binary(operator) => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap();
+                    stack.push((operator.apply(&lhs.0, &rhs.0), item.expr_span.clone()))
+                }
+            }
+        }
+        stack.pop().unwrap().0
+    }
+}
+
+impl Atom {
+    fn eval<R, F, S>(&self, context: &EvalContext<R, S>, on_undefined: &mut F) -> Result<Value, ()>
+    where
+        R: Borrow<RelocTable>,
+        F: FnMut(&S),
+        S: Clone,
+    {
+        match self {
+            Atom::Const(value) => Ok((*value).into()),
+            &Atom::Name(id) => {
+                let name_def = context.program.names.get(id);
+                name_def
+                    .map(|def| match def {
+                        NameDef::Section(SectionId(section)) => {
+                            let reloc = context.program.sections[*section].addr;
+                            context.relocs.borrow().get(reloc)
+                        }
+                        NameDef::Symbol(expr) => expr.eval(context, on_undefined),
+                    })
+                    .ok_or(())
+            }
+            Atom::Param(_) => unimplemented!(),
+            Atom::Reloc(id) => Ok(context.relocs.borrow().get(*id)),
         }
     }
 }
@@ -90,6 +151,9 @@ mod tests {
             relocs: &relocs,
             location: Value::Unknown,
         };
-        assert_eq!(Atom::Name(NameId(0)).eval(&context), Ok(addr.into()))
+        assert_eq!(
+            Atom::Name(NameId(0)).eval(&context, &mut crate::program::link::ignore_undefined),
+            Ok(addr.into())
+        )
     }
 }
