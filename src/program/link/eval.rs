@@ -44,18 +44,7 @@ impl model::Atom<NameId> {
         match self {
             Atom::Literal(value) => Ok((*value).into()),
             Atom::LocationCounter => Ok(context.location.clone()),
-            &Atom::Name(id) => {
-                let name_def = context.program.names.get(id);
-                name_def
-                    .map(|def| match def {
-                        NameDef::Section(SectionId(section)) => {
-                            let reloc = context.program.sections[*section].addr;
-                            context.relocs.borrow().get(reloc)
-                        }
-                        NameDef::Symbol(expr) => expr.eval(context, on_undefined),
-                    })
-                    .ok_or(())
-            }
+            Atom::Name(id) => id.eval(context, on_undefined),
             Atom::Param(_) => unimplemented!(),
         }
     }
@@ -97,21 +86,30 @@ impl Atom {
     {
         match self {
             Atom::Const(value) => Ok((*value).into()),
-            &Atom::Name(id) => {
-                let name_def = context.program.names.get(id);
-                name_def
-                    .map(|def| match def {
-                        NameDef::Section(SectionId(section)) => {
-                            let reloc = context.program.sections[*section].addr;
-                            context.relocs.borrow().get(reloc)
-                        }
-                        NameDef::Symbol(expr) => expr.eval(context, on_undefined),
-                    })
-                    .ok_or(())
-            }
+            Atom::Name(id) => id.eval(context, on_undefined),
             Atom::Param(_) => unimplemented!(),
             Atom::Reloc(id) => Ok(context.relocs.borrow().get(*id)),
         }
+    }
+}
+
+impl NameId {
+    fn eval<R, F, S>(self, context: &EvalContext<R, S>, on_undefined: &mut F) -> Result<Value, ()>
+    where
+        R: Borrow<RelocTable>,
+        F: FnMut(&S),
+        S: Clone,
+    {
+        let name_def = context.program.names.get(self);
+        name_def
+            .map(|def| match def {
+                NameDef::Section(SectionId(section)) => {
+                    let reloc = context.program.sections[*section].addr;
+                    context.relocs.borrow().get(reloc)
+                }
+                NameDef::Symbol(expr) => expr.eval(context, on_undefined),
+            })
+            .ok_or(())
     }
 }
 
