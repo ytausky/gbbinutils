@@ -1,61 +1,25 @@
 pub use self::builder::ProgramBuilder;
 
-use crate::model;
-use crate::model::{LocationCounter, ParamId, Width};
+use crate::model::{Atom, LocationCounter, Width};
 
 mod builder;
 mod link;
 mod lowering;
 
-type Expr<S> = model::Expr<Atom, S>;
+type Expr<S> = crate::model::Expr<Atom<RelocId, NameId>, S>;
+type Immediate<S> = crate::model::Expr<Atom<LocationCounter, NameId>, S>;
 
-#[cfg(test)]
-impl From<Atom> for Expr<()> {
-    fn from(atom: Atom) -> Self {
-        use model::ExprOp;
-        Expr::from_items(&[ExprOp::Atom(atom).into()])
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-enum Atom {
-    Const(i32),
-    Name(NameId),
-    Param(ParamId),
-    Reloc(RelocId),
-}
-
-impl From<i32> for Atom {
-    fn from(n: i32) -> Self {
-        Atom::Const(n)
-    }
-}
-
-impl From<NameId> for Atom {
+impl<L> From<NameId> for Atom<L, NameId> {
     fn from(id: NameId) -> Self {
         Atom::Name(id)
     }
 }
-
-impl From<ParamId> for Atom {
-    fn from(id: ParamId) -> Self {
-        Atom::Param(id)
-    }
-}
-
-type Immediate<S> = model::Expr<model::Atom<LocationCounter, NameId>, S>;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct RelocId(usize);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NameId(usize);
-
-impl<L> From<NameId> for model::Atom<L, NameId> {
-    fn from(id: NameId) -> Self {
-        model::Atom::Name(id)
-    }
-}
 
 pub struct Program<S> {
     sections: Vec<Section<S>>,

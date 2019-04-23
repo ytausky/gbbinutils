@@ -1,16 +1,16 @@
 use super::{EvalContext, RelocTable, Value};
 
-use crate::model;
-use crate::model::{BinOp, ExprOp, LocationCounter};
-use crate::program::{Atom, Expr, Immediate, NameDef, NameId, SectionId};
+use crate::model::{Atom, BinOp, Expr, ExprOp, LocationCounter};
+use crate::program::{NameDef, NameId, RelocId, SectionId};
 
 use std::borrow::Borrow;
 
-impl<S: Clone> Immediate<S> {
+impl<L, S: Clone> Expr<Atom<L, NameId>, S> {
     pub(super) fn eval<R, F>(&self, context: &EvalContext<R, S>, on_undefined: &mut F) -> Value
     where
         R: Borrow<RelocTable>,
         F: FnMut(&S),
+        Atom<L, NameId>: Eval,
     {
         let mut stack = Vec::new();
         for item in &self.0 {
@@ -33,14 +33,21 @@ impl<S: Clone> Immediate<S> {
     }
 }
 
-impl model::Atom<LocationCounter, NameId> {
+pub(super) trait Eval {
+    fn eval<R, F, S>(&self, context: &EvalContext<R, S>, on_undefined: &mut F) -> Result<Value, ()>
+    where
+        R: Borrow<RelocTable>,
+        F: FnMut(&S),
+        S: Clone;
+}
+
+impl Eval for Atom<LocationCounter, NameId> {
     fn eval<R, F, S>(&self, context: &EvalContext<R, S>, on_undefined: &mut F) -> Result<Value, ()>
     where
         R: Borrow<RelocTable>,
         F: FnMut(&S),
         S: Clone,
     {
-        use model::Atom;
         match self {
             Atom::Const(value) => Ok((*value).into()),
             Atom::Location(LocationCounter) => Ok(context.location.clone()),
@@ -50,34 +57,7 @@ impl model::Atom<LocationCounter, NameId> {
     }
 }
 
-impl<S: Clone> Expr<S> {
-    fn eval<R, F>(&self, context: &EvalContext<R, S>, on_undefined: &mut F) -> Value
-    where
-        R: Borrow<RelocTable>,
-        F: FnMut(&S),
-    {
-        let mut stack = Vec::new();
-        for item in &self.0 {
-            match &item.op {
-                ExprOp::Atom(atom) => stack.push((
-                    atom.eval(context, on_undefined).unwrap_or_else(|()| {
-                        on_undefined(&item.op_span);
-                        Value::Unknown
-                    }),
-                    item.expr_span.clone(),
-                )),
-                ExprOp::Binary(operator) => {
-                    let rhs = stack.pop().unwrap();
-                    let lhs = stack.pop().unwrap();
-                    stack.push((operator.apply(&lhs.0, &rhs.0), item.expr_span.clone()))
-                }
-            }
-        }
-        stack.pop().unwrap().0
-    }
-}
-
-impl Atom {
+impl Eval for Atom<RelocId, NameId> {
     fn eval<R, F, S>(&self, context: &EvalContext<R, S>, on_undefined: &mut F) -> Result<Value, ()>
     where
         R: Borrow<RelocTable>,
@@ -86,9 +66,9 @@ impl Atom {
     {
         match self {
             Atom::Const(value) => Ok((*value).into()),
+            Atom::Location(id) => Ok(context.relocs.borrow().get(*id)),
             Atom::Name(id) => id.eval(context, on_undefined),
             Atom::Param(_) => unimplemented!(),
-            Atom::Reloc(id) => Ok(context.relocs.borrow().get(*id)),
         }
     }
 }
@@ -126,6 +106,8 @@ impl BinOp {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     use crate::model::Atom;
     use crate::program::link::{EvalContext, RelocTable, Value};
     use crate::program::*;
@@ -150,7 +132,8 @@ mod tests {
             location: Value::Unknown,
         };
         assert_eq!(
-            Atom::Name(NameId(0)).eval(&context, &mut crate::program::link::ignore_undefined),
+            Atom::<RelocId, _>::Name(NameId(0))
+                .eval(&context, &mut crate::program::link::ignore_undefined),
             Ok(addr.into())
         )
     }

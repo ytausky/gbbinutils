@@ -151,7 +151,7 @@ impl<'a, S: Clone> PushOp<BinOp, S> for SymbolBuilder<'a, S> {
 impl<'a, S: Clone> PushOp<LocationCounter, S> for SymbolBuilder<'a, S> {
     fn push_op(&mut self, _: LocationCounter, span: S) {
         self.expr.0.push(ExprItem {
-            op: ExprOp::Atom(Atom::Reloc(self.location)),
+            op: ExprOp::Atom(Atom::Location(self.location)),
             op_span: span.clone(),
             expr_span: span,
         })

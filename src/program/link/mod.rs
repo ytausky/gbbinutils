@@ -161,8 +161,7 @@ mod tests {
 
     use crate::analysis::backend::*;
     use crate::diag::IgnoreDiagnostics;
-    use crate::model;
-    use crate::model::{BinOp, ExprOp, Width};
+    use crate::model::{BinOp, Width};
     use crate::program::*;
 
     #[test]
@@ -250,12 +249,11 @@ mod tests {
             let name = object.names.alloc();
             let reloc = object.alloc_reloc();
             let items = &mut object.sections[0].items;
-            items.push(Node::LdInlineAddr(0, model::Atom::Name(name).into()));
+            items.push(Node::LdInlineAddr(0, Atom::Name(name).into()));
             items.push(Node::Reloc(reloc));
-            object.names.define(
-                name,
-                NameDef::Symbol(Expr::from_items(&[ExprOp::Atom(Atom::Reloc(reloc)).into()])),
-            )
+            object
+                .names
+                .define(name, NameDef::Symbol(Atom::Location(reloc).into()))
         })
     }
 
@@ -268,10 +266,7 @@ mod tests {
                 },
                 addr: RelocId(0),
                 size: RelocId(1),
-                items: vec![Node::Immediate(
-                    model::Atom::Name(NameId(0)).into(),
-                    Width::Word,
-                )],
+                items: vec![Node::Immediate(Atom::Name(NameId(0)).into(), Width::Word)],
             }],
             names: NameTable(vec![Some(NameDef::Section(SectionId(0)))]),
             relocs: 2,
@@ -295,10 +290,10 @@ mod tests {
                 items: vec![
                     Node::Reserved(bytes.into()),
                     Node::Reloc(symbol),
-                    Node::Immediate(model::Atom::Name(NameId(0)).into(), Width::Word),
+                    Node::Immediate(Atom::Name(NameId(0)).into(), Width::Word),
                 ],
             }],
-            names: NameTable(vec![Some(NameDef::Symbol(Atom::Reloc(symbol).into()))]),
+            names: NameTable(vec![Some(NameDef::Symbol(Atom::Location(symbol).into()))]),
             relocs: 3,
         };
         let relocs = program.resolve_relocs();
