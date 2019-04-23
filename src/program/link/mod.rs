@@ -182,7 +182,7 @@ mod tests {
                 Section {
                     constraints: Constraints {
                         addr: Some(Immediate::from_items(&[
-                            model::Atom::LocationCounter.into(),
+                            LocationCounter.into(),
                             skipped_bytes.into(),
                             BinOp::Plus.into(),
                         ])),

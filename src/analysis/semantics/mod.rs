@@ -460,7 +460,7 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [SessionEvent::DefineSymbol((label.into(), ()), Atom::LocationCounter.into()).into()]
+            [SessionEvent::DefineSymbol((label.into(), ()), LocationCounter.into()).into()]
         )
     }
 
@@ -476,7 +476,7 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [BackendEvent::SetOrigin(Atom::LocationCounter.into()).into()]
+            [BackendEvent::SetOrigin(LocationCounter.into()).into()]
         );
     }
 

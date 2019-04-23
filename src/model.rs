@@ -124,7 +124,7 @@ pub enum Item<V: Source> {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Atom<N> {
     Const(i32),
-    LocationCounter,
+    Location,
     Name(N),
     Param(ParamId),
 }
@@ -134,7 +134,19 @@ pub struct LocationCounter;
 
 impl<N> From<LocationCounter> for Atom<N> {
     fn from(_: LocationCounter) -> Self {
-        Atom::LocationCounter
+        Atom::Location
+    }
+}
+
+impl<N> From<LocationCounter> for ExprOp<Atom<N>> {
+    fn from(_: LocationCounter) -> Self {
+        Atom::from(LocationCounter).into()
+    }
+}
+
+impl<N> From<LocationCounter> for Expr<Atom<N>, ()> {
+    fn from(_: LocationCounter) -> Self {
+        Expr(vec![LocationCounter.into()])
     }
 }
 

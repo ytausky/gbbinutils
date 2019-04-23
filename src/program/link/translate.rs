@@ -165,7 +165,7 @@ mod tests {
     use super::*;
 
     use crate::diag::IgnoreDiagnostics;
-    use crate::model::{Atom, BinOp};
+    use crate::model::{Atom, BinOp, LocationCounter};
     use crate::program::{Constraints, NameTable, Program, RelocId};
 
     use std::borrow::Borrow;
@@ -259,7 +259,7 @@ mod tests {
                 size: RelocId(1),
                 items: vec![
                     Node::Byte(byte),
-                    Node::Immediate(Atom::LocationCounter.into(), Width::Byte),
+                    Node::Immediate(LocationCounter.into(), Width::Byte),
                 ],
             }],
             names: NameTable(vec![]),
@@ -284,7 +284,7 @@ mod tests {
                 },
                 addr: RelocId(0),
                 size: RelocId(1),
-                items: vec![Node::Immediate(Atom::LocationCounter.into(), Width::Word)],
+                items: vec![Node::Immediate(LocationCounter.into(), Width::Word)],
             }],
             names: NameTable(vec![]),
             relocs: 2,

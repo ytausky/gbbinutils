@@ -217,7 +217,7 @@ fn encode_branch<S: Clone>(
 fn mk_relative_expr<S: Clone>(mut expr: Immediate<S>) -> Immediate<S> {
     let span = expr.span();
     expr.0.push(ExprItem {
-        op: Atom::LocationCounter.into(),
+        op: LocationCounter.into(),
         op_span: span.clone(),
         expr_span: span.clone(),
     });

@@ -646,7 +646,7 @@ mod tests {
             log.into_inner(),
             [
                 NameTableEvent::StartScope(label.into()).into(),
-                BackendEvent::DefineSymbol((0, ()), Atom::LocationCounter.into()).into()
+                BackendEvent::DefineSymbol((0, ()), LocationCounter.into()).into()
             ]
         );
     }
