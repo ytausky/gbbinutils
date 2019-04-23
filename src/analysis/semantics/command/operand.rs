@@ -329,7 +329,7 @@ mod tests {
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Ok(Operand::Deref(Expr::from_atom(Atom::Literal(n), span)))
+            Ok(Operand::Deref(Expr::from_atom(Atom::Const(n), span)))
         )
     }
 

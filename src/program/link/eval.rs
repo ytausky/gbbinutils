@@ -42,7 +42,7 @@ impl model::Atom<NameId> {
     {
         use model::Atom;
         match self {
-            Atom::Literal(value) => Ok((*value).into()),
+            Atom::Const(value) => Ok((*value).into()),
             Atom::LocationCounter => Ok(context.location.clone()),
             Atom::Name(id) => id.eval(context, on_undefined),
             Atom::Param(_) => unimplemented!(),

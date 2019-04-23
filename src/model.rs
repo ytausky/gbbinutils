@@ -62,7 +62,7 @@ impl<N, S: Clone> ExprItem<Atom<N>, S> {
 
 impl<N> From<i32> for Expr<Atom<N>, ()> {
     fn from(n: i32) -> Self {
-        Atom::Literal(n).into()
+        Atom::Const(n).into()
     }
 }
 
@@ -90,7 +90,7 @@ impl<N> From<Atom<N>> for ExprOp<Atom<N>> {
 
 impl<N> From<i32> for ExprOp<Atom<N>> {
     fn from(n: i32) -> Self {
-        ExprOp::Atom(Atom::Literal(n))
+        ExprOp::Atom(Atom::Const(n))
     }
 }
 
@@ -123,7 +123,7 @@ pub enum Item<V: Source> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Atom<N> {
-    Literal(i32),
+    Const(i32),
     LocationCounter,
     Name(N),
     Param(ParamId),
@@ -143,7 +143,7 @@ pub struct ParamId(pub usize);
 
 impl<N> From<i32> for Atom<N> {
     fn from(n: i32) -> Self {
-        Atom::Literal(n)
+        Atom::Const(n)
     }
 }
 

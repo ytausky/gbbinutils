@@ -191,10 +191,8 @@ mod tests {
     }
 
     fn test_translation_of_ld_inline_addr(opcode: u8, addr: u16, expected: impl Borrow<[u8]>) {
-        let actual = translate_section_item(Node::LdInlineAddr(
-            opcode,
-            Atom::Literal(addr.into()).into(),
-        ));
+        let actual =
+            translate_section_item(Node::LdInlineAddr(opcode, Atom::Const(addr.into()).into()));
         assert_eq!(actual, expected.borrow())
     }
 
