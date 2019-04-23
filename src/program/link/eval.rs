@@ -5,7 +5,7 @@ use crate::program::{NameDef, NameId, RelocId, SectionId};
 
 use std::borrow::Borrow;
 
-impl<L, S: Clone> Expr<Atom<L, NameId>, S> {
+impl<L, S: Clone> Expr<L, NameId, S> {
     pub(super) fn eval<R, F>(&self, context: &EvalContext<R, S>, on_undefined: &mut F) -> Value
     where
         R: Borrow<RelocTable>,

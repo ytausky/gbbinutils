@@ -6,8 +6,8 @@ mod builder;
 mod link;
 mod lowering;
 
-type Expr<S> = crate::model::Expr<Atom<RelocId, NameId>, S>;
-type Immediate<S> = crate::model::Expr<Atom<LocationCounter, NameId>, S>;
+type Expr<S> = crate::model::Expr<RelocId, NameId, S>;
+type Immediate<S> = crate::model::Expr<LocationCounter, NameId, S>;
 
 impl<L> From<NameId> for Atom<L, NameId> {
     fn from(id: NameId) -> Self {

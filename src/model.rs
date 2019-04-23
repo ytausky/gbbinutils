@@ -1,28 +1,28 @@
 use crate::span::Source;
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Expr<T, S>(pub Vec<ExprItem<T, S>>);
+pub struct Expr<L, N, S>(pub Vec<ExprItem<L, N, S>>);
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct ExprItem<T, S> {
-    pub op: ExprOp<T>,
+pub struct ExprItem<L, N, S> {
+    pub op: ExprOp<L, N>,
     pub op_span: S,
     pub expr_span: S,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ExprOp<T> {
-    Atom(T),
+pub enum ExprOp<L, N> {
+    Atom(Atom<L, N>),
     Binary(BinOp),
 }
 
-impl<T, S> Default for Expr<T, S> {
+impl<L, N, S> Default for Expr<L, N, S> {
     fn default() -> Self {
         Self(Vec::new())
     }
 }
 
-impl<T, S: Clone> Source for Expr<T, S> {
+impl<L, N, S: Clone> Source for Expr<L, N, S> {
     type Span = S;
 
     fn span(&self) -> Self::Span {
@@ -31,7 +31,7 @@ impl<T, S: Clone> Source for Expr<T, S> {
 }
 
 #[cfg(test)]
-impl<L, N, S: Clone> Expr<Atom<L, N>, S> {
+impl<L, N, S: Clone> Expr<L, N, S> {
     pub fn from_atom(atom: Atom<L, N>, span: S) -> Self {
         Self(vec![ExprItem {
             op: ExprOp::Atom(atom),
@@ -42,30 +42,31 @@ impl<L, N, S: Clone> Expr<Atom<L, N>, S> {
 }
 
 #[cfg(test)]
-impl<N: Clone, S: Clone> Expr<N, S> {
+impl<L: Clone, N: Clone, S: Clone> Expr<L, N, S> {
     pub fn from_items<'a, I>(items: I) -> Self
     where
+        L: 'a,
         N: 'a,
         S: 'a,
-        I: IntoIterator<Item = &'a ExprItem<N, S>>,
+        I: IntoIterator<Item = &'a ExprItem<L, N, S>>,
     {
         Expr(items.into_iter().map(Clone::clone).collect())
     }
 }
 
-impl<L, N> From<i32> for Expr<Atom<L, N>, ()> {
+impl<L, N> From<i32> for Expr<L, N, ()> {
     fn from(n: i32) -> Self {
         Atom::Const(n).into()
     }
 }
 
-impl<L, N> From<Atom<L, N>> for Expr<Atom<L, N>, ()> {
+impl<L, N> From<Atom<L, N>> for Expr<L, N, ()> {
     fn from(atom: Atom<L, N>) -> Self {
         Self(vec![atom.into()])
     }
 }
 
-impl<N, T: Into<ExprOp<N>>> From<T> for ExprItem<N, ()> {
+impl<L, N, T: Into<ExprOp<L, N>>> From<T> for ExprItem<L, N, ()> {
     fn from(x: T) -> Self {
         Self {
             op: x.into(),
@@ -75,19 +76,19 @@ impl<N, T: Into<ExprOp<N>>> From<T> for ExprItem<N, ()> {
     }
 }
 
-impl<L, N> From<Atom<L, N>> for ExprOp<Atom<L, N>> {
+impl<L, N> From<Atom<L, N>> for ExprOp<L, N> {
     fn from(atom: Atom<L, N>) -> Self {
         ExprOp::Atom(atom)
     }
 }
 
-impl<L, N> From<i32> for ExprOp<Atom<L, N>> {
+impl<L, N> From<i32> for ExprOp<L, N> {
     fn from(n: i32) -> Self {
         ExprOp::Atom(Atom::Const(n))
     }
 }
 
-impl<T> From<BinOp> for ExprOp<T> {
+impl<L, N> From<BinOp> for ExprOp<L, N> {
     fn from(op: BinOp) -> Self {
         ExprOp::Binary(op)
     }
@@ -131,13 +132,13 @@ impl<N> From<LocationCounter> for Atom<LocationCounter, N> {
     }
 }
 
-impl<N> From<LocationCounter> for ExprOp<Atom<LocationCounter, N>> {
+impl<N> From<LocationCounter> for ExprOp<LocationCounter, N> {
     fn from(_: LocationCounter) -> Self {
         Atom::from(LocationCounter).into()
     }
 }
 
-impl<N> From<LocationCounter> for Expr<Atom<LocationCounter, N>, ()> {
+impl<N> From<LocationCounter> for Expr<LocationCounter, N, ()> {
     fn from(_: LocationCounter) -> Self {
         Expr(vec![LocationCounter.into()])
     }

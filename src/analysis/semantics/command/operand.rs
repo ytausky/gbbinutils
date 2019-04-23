@@ -271,7 +271,7 @@ mod tests {
     }
 
     type OperandResult<S> =
-        Result<Operand<Expr<Atom<LocationCounter, Ident<String>>, S>>, Vec<DiagnosticsEvent<S>>>;
+        Result<Operand<Expr<LocationCounter, Ident<String>, S>>, Vec<DiagnosticsEvent<S>>>;
 
     fn analyze_operand<S: Clone + MockSpan + PartialEq>(
         expr: Arg<String, S>,

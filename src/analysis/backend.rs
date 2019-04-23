@@ -42,7 +42,7 @@ impl<T, N, S: Clone> ValueBuilder<N, S> for T where
 {
 }
 
-impl<T: Into<Atom<L, N>>, L, N: Clone, S: Clone> PushOp<T, S> for Expr<Atom<L, N>, S> {
+impl<T: Into<Atom<L, N>>, L, N: Clone, S: Clone> PushOp<T, S> for Expr<L, N, S> {
     fn push_op(&mut self, atom: T, span: S) {
         self.0.push(ExprItem {
             op: ExprOp::Atom(atom.into()),
@@ -52,7 +52,7 @@ impl<T: Into<Atom<L, N>>, L, N: Clone, S: Clone> PushOp<T, S> for Expr<Atom<L, N
     }
 }
 
-impl<N, S: Clone> PushOp<BinOp, S> for Expr<N, S> {
+impl<L, N, S: Clone> PushOp<BinOp, S> for Expr<L, N, S> {
     fn push_op(&mut self, op: BinOp, span: S) {
         self.0.push(ExprItem {
             op: ExprOp::Binary(op),
@@ -136,7 +136,7 @@ mod mock {
 
     use std::cell::RefCell;
 
-    type Expr<S> = crate::model::Expr<Atom<LocationCounter, usize>, S>;
+    type Expr<S> = crate::model::Expr<LocationCounter, usize, S>;
 
     pub struct MockBackend<'a, T> {
         pub log: &'a RefCell<Vec<T>>,
@@ -208,12 +208,12 @@ mod mock {
     pub struct MockSymbolBuilder<P, N, S> {
         pub parent: P,
         pub name: (N, S),
-        pub expr: crate::model::Expr<Atom<LocationCounter, N>, S>,
+        pub expr: crate::model::Expr<LocationCounter, N, S>,
     }
 
     impl<T, P, N, S: Clone> PushOp<T, S> for MockSymbolBuilder<P, N, S>
     where
-        crate::model::Expr<Atom<LocationCounter, N>, S>: PushOp<T, S>,
+        crate::model::Expr<LocationCounter, N, S>: PushOp<T, S>,
     {
         fn push_op(&mut self, op: T, span: S) {
             self.expr.push_op(op, span)

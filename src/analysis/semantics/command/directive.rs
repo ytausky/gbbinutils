@@ -158,7 +158,7 @@ mod tests {
     use std::cell::RefCell;
     use std::io;
 
-    type Expr = crate::model::Expr<Atom<LocationCounter, Ident<String>>, ()>;
+    type Expr = crate::model::Expr<LocationCounter, Ident<String>, ()>;
 
     #[test]
     fn build_include_item() {

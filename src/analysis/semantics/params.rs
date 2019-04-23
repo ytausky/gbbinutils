@@ -95,9 +95,9 @@ where
 mod tests {
     use super::*;
 
-    use crate::model::{Atom, ParamId};
+    use crate::model::ParamId;
 
-    type Expr<N, S> = crate::model::Expr<Atom<LocationCounter, N>, S>;
+    type Expr<N, S> = crate::model::Expr<LocationCounter, N, S>;
 
     #[test]
     fn translate_param() {
