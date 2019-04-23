@@ -31,8 +31,8 @@ impl<T, S: Clone> Source for Expr<T, S> {
 }
 
 #[cfg(test)]
-impl<N, S: Clone> Expr<Atom<N>, S> {
-    pub fn from_atom(atom: Atom<N>, span: S) -> Self {
+impl<L, N, S: Clone> Expr<Atom<L, N>, S> {
+    pub fn from_atom(atom: Atom<L, N>, span: S) -> Self {
         Self(vec![ExprItem::from_atom(atom, span)])
     }
 }
@@ -50,8 +50,8 @@ impl<N: Clone, S: Clone> Expr<N, S> {
 }
 
 #[cfg(test)]
-impl<N, S: Clone> ExprItem<Atom<N>, S> {
-    pub fn from_atom(atom: Atom<N>, span: S) -> Self {
+impl<L, N, S: Clone> ExprItem<Atom<L, N>, S> {
+    pub fn from_atom(atom: Atom<L, N>, span: S) -> Self {
         Self {
             op: ExprOp::Atom(atom),
             op_span: span.clone(),
@@ -60,14 +60,14 @@ impl<N, S: Clone> ExprItem<Atom<N>, S> {
     }
 }
 
-impl<N> From<i32> for Expr<Atom<N>, ()> {
+impl<L, N> From<i32> for Expr<Atom<L, N>, ()> {
     fn from(n: i32) -> Self {
         Atom::Const(n).into()
     }
 }
 
-impl<N> From<Atom<N>> for Expr<Atom<N>, ()> {
-    fn from(atom: Atom<N>) -> Self {
+impl<L, N> From<Atom<L, N>> for Expr<Atom<L, N>, ()> {
+    fn from(atom: Atom<L, N>) -> Self {
         Self(vec![atom.into()])
     }
 }
@@ -82,13 +82,13 @@ impl<N, T: Into<ExprOp<N>>> From<T> for ExprItem<N, ()> {
     }
 }
 
-impl<N> From<Atom<N>> for ExprOp<Atom<N>> {
-    fn from(atom: Atom<N>) -> Self {
+impl<L, N> From<Atom<L, N>> for ExprOp<Atom<L, N>> {
+    fn from(atom: Atom<L, N>) -> Self {
         ExprOp::Atom(atom)
     }
 }
 
-impl<N> From<i32> for ExprOp<Atom<N>> {
+impl<L, N> From<i32> for ExprOp<Atom<L, N>> {
     fn from(n: i32) -> Self {
         ExprOp::Atom(Atom::Const(n))
     }
@@ -122,9 +122,9 @@ pub enum Item<V: Source> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Atom<N> {
+pub enum Atom<L, N> {
     Const(i32),
-    Location,
+    Location(L),
     Name(N),
     Param(ParamId),
 }
@@ -132,19 +132,19 @@ pub enum Atom<N> {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LocationCounter;
 
-impl<N> From<LocationCounter> for Atom<N> {
+impl<N> From<LocationCounter> for Atom<LocationCounter, N> {
     fn from(_: LocationCounter) -> Self {
-        Atom::Location
+        Atom::Location(LocationCounter)
     }
 }
 
-impl<N> From<LocationCounter> for ExprOp<Atom<N>> {
+impl<N> From<LocationCounter> for ExprOp<Atom<LocationCounter, N>> {
     fn from(_: LocationCounter) -> Self {
         Atom::from(LocationCounter).into()
     }
 }
 
-impl<N> From<LocationCounter> for Expr<Atom<N>, ()> {
+impl<N> From<LocationCounter> for Expr<Atom<LocationCounter, N>, ()> {
     fn from(_: LocationCounter) -> Self {
         Expr(vec![LocationCounter.into()])
     }
@@ -153,13 +153,13 @@ impl<N> From<LocationCounter> for Expr<Atom<N>, ()> {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ParamId(pub usize);
 
-impl<N> From<i32> for Atom<N> {
+impl<L, N> From<i32> for Atom<L, N> {
     fn from(n: i32) -> Self {
         Atom::Const(n)
     }
 }
 
-impl<N> From<ParamId> for Atom<N> {
+impl<L, N> From<ParamId> for Atom<L, N> {
     fn from(id: ParamId) -> Self {
         Atom::Param(id)
     }

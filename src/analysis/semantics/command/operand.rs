@@ -221,7 +221,7 @@ mod tests {
     use super::*;
 
     use crate::diag::MockSpan;
-    use crate::model::{Atom, Expr};
+    use crate::model::{Atom, Expr, LocationCounter};
 
     impl MockSpan for i32 {
         fn default() -> Self {
@@ -270,7 +270,8 @@ mod tests {
         )
     }
 
-    type OperandResult<S> = Result<Operand<Expr<Atom<Ident<String>>, S>>, Vec<DiagnosticsEvent<S>>>;
+    type OperandResult<S> =
+        Result<Operand<Expr<Atom<LocationCounter, Ident<String>>, S>>, Vec<DiagnosticsEvent<S>>>;
 
     fn analyze_operand<S: Clone + MockSpan + PartialEq>(
         expr: Arg<String, S>,

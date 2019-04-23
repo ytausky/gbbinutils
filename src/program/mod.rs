@@ -1,7 +1,7 @@
 pub use self::builder::ProgramBuilder;
 
 use crate::model;
-use crate::model::{ParamId, Width};
+use crate::model::{LocationCounter, ParamId, Width};
 
 mod builder;
 mod link;
@@ -43,7 +43,7 @@ impl From<ParamId> for Atom {
     }
 }
 
-type Immediate<S> = model::Expr<model::Atom<NameId>, S>;
+type Immediate<S> = model::Expr<model::Atom<LocationCounter, NameId>, S>;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct RelocId(usize);
@@ -51,7 +51,7 @@ struct RelocId(usize);
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NameId(usize);
 
-impl From<NameId> for model::Atom<NameId> {
+impl<L> From<NameId> for model::Atom<L, NameId> {
     fn from(id: NameId) -> Self {
         model::Atom::Name(id)
     }

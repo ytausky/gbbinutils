@@ -1,7 +1,7 @@
 use super::{EvalContext, RelocTable, Value};
 
 use crate::model;
-use crate::model::{BinOp, ExprOp};
+use crate::model::{BinOp, ExprOp, LocationCounter};
 use crate::program::{Atom, Expr, Immediate, NameDef, NameId, SectionId};
 
 use std::borrow::Borrow;
@@ -33,7 +33,7 @@ impl<S: Clone> Immediate<S> {
     }
 }
 
-impl model::Atom<NameId> {
+impl model::Atom<LocationCounter, NameId> {
     fn eval<R, F, S>(&self, context: &EvalContext<R, S>, on_undefined: &mut F) -> Result<Value, ()>
     where
         R: Borrow<RelocTable>,
@@ -43,7 +43,7 @@ impl model::Atom<NameId> {
         use model::Atom;
         match self {
             Atom::Const(value) => Ok((*value).into()),
-            Atom::Location => Ok(context.location.clone()),
+            Atom::Location(LocationCounter) => Ok(context.location.clone()),
             Atom::Name(id) => id.eval(context, on_undefined),
             Atom::Param(_) => unimplemented!(),
         }

@@ -424,10 +424,11 @@ mod tests {
 
     use crate::analysis::semantics::command::*;
     use crate::analysis::{Ident, Literal};
-    use crate::model::{Atom, Expr};
+    use crate::model::{Atom, LocationCounter};
 
     use std::cmp;
 
+    type Expr = crate::model::Expr<Atom<LocationCounter, Ident<String>>, TokenSpan>;
     type Input = Arg<String, ()>;
 
     impl From<ArgVariant<String, ()>> for Input {
@@ -446,11 +447,11 @@ mod tests {
         Literal::Operand(keyword).into()
     }
 
-    pub fn number(n: i32, span: impl Into<TokenSpan>) -> Expr<Atom<Ident<String>>, TokenSpan> {
+    pub fn number(n: i32, span: impl Into<TokenSpan>) -> Expr {
         Expr::from_atom(n.into(), span.into())
     }
 
-    pub fn name(ident: &str, span: impl Into<TokenSpan>) -> Expr<Atom<Ident<String>>, TokenSpan> {
+    pub fn name(ident: &str, span: impl Into<TokenSpan>) -> Expr {
         Expr::from_atom(Atom::Name(ident.into()), span.into())
     }
 
@@ -602,7 +603,7 @@ mod tests {
         test_cp_const_analysis(n.into(), number(n, TokenId::Operand(0, 0)))
     }
 
-    fn test_cp_const_analysis(parsed: Input, expr: Expr<Atom<Ident<String>>, TokenSpan>) {
+    fn test_cp_const_analysis(parsed: Input, expr: Expr) {
         analyze(kw::Mnemonic::Cp, Some(parsed)).expect_instruction(Instruction::Alu(
             AluOperation::Cp,
             AluSource::Immediate(expr),
@@ -621,10 +622,7 @@ mod tests {
         test_instruction_analysis(describe_legal_instructions());
     }
 
-    pub(super) type InstructionDescriptor = (
-        (kw::Mnemonic, Vec<Input>),
-        Instruction<Expr<Atom<Ident<String>>, TokenSpan>>,
-    );
+    pub(super) type InstructionDescriptor = ((kw::Mnemonic, Vec<Input>), Instruction<Expr>);
 
     fn describe_legal_instructions() -> Vec<InstructionDescriptor> {
         let mut descriptors: Vec<InstructionDescriptor> = Vec::new();
@@ -828,14 +826,10 @@ mod tests {
 
     pub struct AnalysisResult(InnerAnalysisResult);
 
-    type InnerAnalysisResult =
-        Result<Instruction<Expr<Atom<Ident<String>>, TokenSpan>>, Vec<DiagnosticsEvent<TokenSpan>>>;
+    type InnerAnalysisResult = Result<Instruction<Expr>, Vec<DiagnosticsEvent<TokenSpan>>>;
 
     impl AnalysisResult {
-        pub fn expect_instruction(
-            self,
-            expected: Instruction<Expr<Atom<Ident<String>>, TokenSpan>>,
-        ) {
+        pub fn expect_instruction(self, expected: Instruction<Expr>) {
             assert_eq!(self.0, Ok(expected))
         }
 

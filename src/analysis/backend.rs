@@ -42,13 +42,12 @@ impl<T, N, S: Clone> ValueBuilder<N, S> for T where
 {
 }
 
-impl<T: Into<Atom<N>>, N: Clone, S: Clone> PushOp<T, S> for Expr<Atom<N>, S> {
+impl<T: Into<Atom<L, N>>, L, N: Clone, S: Clone> PushOp<T, S> for Expr<Atom<L, N>, S> {
     fn push_op(&mut self, atom: T, span: S) {
-        let atom = atom.into();
         self.0.push(ExprItem {
-            op: ExprOp::Atom(atom.clone()),
+            op: ExprOp::Atom(atom.into()),
             op_span: span.clone(),
-            expr_span: span.clone(),
+            expr_span: span,
         })
     }
 }
@@ -133,9 +132,11 @@ impl_push_op_for_reloc_context! {ParamId}
 mod mock {
     use super::*;
 
-    use crate::model::{Atom, Expr};
+    use crate::model::Atom;
 
     use std::cell::RefCell;
+
+    type Expr<S> = crate::model::Expr<Atom<LocationCounter, usize>, S>;
 
     pub struct MockBackend<'a, T> {
         pub log: &'a RefCell<Vec<T>>,
@@ -162,10 +163,10 @@ mod mock {
 
     impl<'a, T, S> Backend<S> for MockBackend<'a, T>
     where
-        T: From<BackendEvent<Expr<Atom<usize>, S>>>,
+        T: From<BackendEvent<Expr<S>>>,
         S: Clone,
     {
-        type ImmediateBuilder = RelocContext<Self, Expr<Atom<usize>, S>>;
+        type ImmediateBuilder = RelocContext<Self, Expr<S>>;
         type SymbolBuilder = MockSymbolBuilder<Self, usize, S>;
 
         fn build_immediate(self) -> Self::ImmediateBuilder {
@@ -181,13 +182,13 @@ mod mock {
         }
     }
 
-    impl<'a, T, S: Clone> PushOp<usize, S> for RelocContext<MockBackend<'a, T>, Expr<Atom<usize>, S>> {
+    impl<'a, T, S: Clone> PushOp<usize, S> for RelocContext<MockBackend<'a, T>, Expr<S>> {
         fn push_op(&mut self, op: usize, span: S) {
             self.builder.push_op(op, span)
         }
     }
 
-    impl<'a, T, S: Clone> AllocName<S> for RelocContext<MockBackend<'a, T>, Expr<Atom<usize>, S>> {
+    impl<'a, T, S: Clone> AllocName<S> for RelocContext<MockBackend<'a, T>, Expr<S>> {
         type Name = usize;
 
         fn alloc_name(&mut self, span: S) -> Self::Name {
@@ -195,9 +196,9 @@ mod mock {
         }
     }
 
-    impl<'a, T, S: Clone> Finish<S> for RelocContext<MockBackend<'a, T>, Expr<Atom<usize>, S>> {
+    impl<'a, T, S: Clone> Finish<S> for RelocContext<MockBackend<'a, T>, Expr<S>> {
         type Parent = MockBackend<'a, T>;
-        type Value = Expr<Atom<usize>, S>;
+        type Value = Expr<S>;
 
         fn finish(self) -> (Self::Parent, Self::Value) {
             (self.parent, self.builder)
@@ -207,12 +208,12 @@ mod mock {
     pub struct MockSymbolBuilder<P, N, S> {
         pub parent: P,
         pub name: (N, S),
-        pub expr: Expr<Atom<N>, S>,
+        pub expr: crate::model::Expr<Atom<LocationCounter, N>, S>,
     }
 
     impl<T, P, N, S: Clone> PushOp<T, S> for MockSymbolBuilder<P, N, S>
     where
-        Expr<Atom<N>, S>: PushOp<T, S>,
+        crate::model::Expr<Atom<LocationCounter, N>, S>: PushOp<T, S>,
     {
         fn push_op(&mut self, op: T, span: S) {
             self.expr.push_op(op, span)
@@ -221,7 +222,7 @@ mod mock {
 
     impl<'a, T, S> FinishFnDef for MockSymbolBuilder<MockBackend<'a, T>, usize, S>
     where
-        T: From<BackendEvent<Expr<Atom<usize>, S>>>,
+        T: From<BackendEvent<Expr<S>>>,
         S: Clone,
     {
         type Return = MockBackend<'a, T>;
@@ -244,7 +245,7 @@ mod mock {
         }
     }
 
-    impl From<usize> for Atom<usize> {
+    impl<L> From<usize> for Atom<L, usize> {
         fn from(n: usize) -> Self {
             Atom::Name(n)
         }
@@ -262,10 +263,10 @@ mod mock {
 
     impl<'a, T, S> PartialBackend<S> for MockBackend<'a, T>
     where
-        T: From<BackendEvent<Expr<Atom<usize>, S>>>,
+        T: From<BackendEvent<Expr<S>>>,
         S: Clone,
     {
-        type Value = Expr<Atom<usize>, S>;
+        type Value = Expr<S>;
 
         fn emit_item(&mut self, item: Item<Self::Value>) {
             self.log
@@ -288,7 +289,7 @@ mod mock {
 
     impl<'a, T, S> StartSection<usize, S> for MockBackend<'a, T>
     where
-        T: From<BackendEvent<Expr<Atom<usize>, S>>>,
+        T: From<BackendEvent<Expr<S>>>,
         S: Clone,
     {
         fn start_section(&mut self, name: (usize, S)) {

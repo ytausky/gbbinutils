@@ -31,7 +31,7 @@ pub struct Ident<T> {
 }
 
 #[cfg(test)]
-impl<T> From<Ident<T>> for Atom<Ident<T>> {
+impl<L, T> From<Ident<T>> for Atom<L, Ident<T>> {
     fn from(ident: Ident<T>) -> Self {
         Atom::Name(ident)
     }

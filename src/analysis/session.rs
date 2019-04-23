@@ -363,9 +363,11 @@ mod mock {
 
     use crate::analysis::backend::{BackendEvent, MockSymbolBuilder};
     use crate::diag::{DiagnosticsEvent, MockDiagnostics, MockSpan};
-    use crate::model::{Atom, Expr};
+    use crate::model::Atom;
 
     use std::cell::RefCell;
+
+    type Expr<S> = crate::model::Expr<Atom<LocationCounter, Ident<String>>, S>;
 
     #[derive(Debug, PartialEq)]
     pub(crate) enum SessionEvent<S> {
@@ -376,7 +378,7 @@ mod mock {
             Vec<SemanticToken<String>>,
         ),
         InvokeMacro(Ident<String>, Vec<Vec<SemanticToken<String>>>),
-        DefineSymbol((Ident<String>, S), Expr<Atom<Ident<String>>, S>),
+        DefineSymbol((Ident<String>, S), Expr<S>),
     }
 
     pub(crate) struct MockSession<'a, T, S> {
@@ -422,12 +424,12 @@ mod mock {
     impl<'a, T, S> Session for MockSession<'a, T, S>
     where
         T: From<SessionEvent<S>>,
-        T: From<BackendEvent<Expr<Atom<Ident<String>>, S>>>,
+        T: From<BackendEvent<Expr<S>>>,
         T: From<DiagnosticsEvent<S>>,
         S: Clone + MockSpan,
     {
         type FnBuilder = MockSymbolBuilder<Self, Ident<String>, S>;
-        type GeneralBuilder = RelocContext<Self, Expr<Atom<Ident<String>>, S>>;
+        type GeneralBuilder = RelocContext<Self, Expr<S>>;
 
         fn analyze_file(mut self, path: String) -> (Result<(), CodebaseError>, Self) {
             self.log
@@ -477,11 +479,9 @@ mod mock {
         }
     }
 
-    impl<'a, T, S: Clone> Finish<S>
-        for RelocContext<MockSession<'a, T, S>, Expr<Atom<Ident<String>>, S>>
-    {
+    impl<'a, T, S: Clone> Finish<S> for RelocContext<MockSession<'a, T, S>, Expr<S>> {
         type Parent = MockSession<'a, T, S>;
-        type Value = Expr<Atom<Ident<String>>, S>;
+        type Value = Expr<S>;
 
         fn finish(self) -> (Self::Parent, Self::Value) {
             (self.parent, self.builder)
@@ -516,8 +516,7 @@ mod mock {
         }
     }
 
-    impl<'a, T, S> PushOp<Ident<String>, S>
-        for RelocContext<MockSession<'a, T, S>, Expr<Atom<Ident<String>>, S>>
+    impl<'a, T, S> PushOp<Ident<String>, S> for RelocContext<MockSession<'a, T, S>, Expr<S>>
     where
         T: From<DiagnosticsEvent<S>>,
         S: Clone,
@@ -532,8 +531,7 @@ mod mock {
         }
     }
 
-    impl<'a, T, S> PushOp<Ident<String>, S>
-        for RelocContext<MockDiagnostics<'a, T, S>, Expr<Atom<Ident<String>>, S>>
+    impl<'a, T, S> PushOp<Ident<String>, S> for RelocContext<MockDiagnostics<'a, T, S>, Expr<S>>
     where
         T: From<DiagnosticsEvent<S>>,
         S: Clone,
@@ -550,10 +548,10 @@ mod mock {
 
     impl<'a, T, S> PartialBackend<S> for MockSession<'a, T, S>
     where
-        T: From<BackendEvent<Expr<Atom<Ident<String>>, S>>>,
+        T: From<BackendEvent<Expr<S>>>,
         S: Clone + MockSpan,
     {
-        type Value = Expr<Atom<Ident<String>>, S>;
+        type Value = Expr<S>;
 
         fn emit_item(&mut self, item: Item<Self::Value>) {
             self.log
@@ -576,7 +574,7 @@ mod mock {
 
     impl<'a, T, S> StartSection<Ident<String>, S> for MockSession<'a, T, S>
     where
-        T: From<BackendEvent<Expr<Atom<Ident<String>>, S>>>,
+        T: From<BackendEvent<Expr<S>>>,
         S: Clone + MockSpan,
     {
         fn start_section(&mut self, name: (Ident<String>, S)) {
@@ -586,8 +584,7 @@ mod mock {
         }
     }
 
-    pub(crate) type MockBuilder<'a, T, S> =
-        RelocContext<MockDiagnostics<'a, T, S>, Expr<Atom<Ident<String>>, S>>;
+    pub(crate) type MockBuilder<'a, T, S> = RelocContext<MockDiagnostics<'a, T, S>, Expr<S>>;
 
     impl<'a, T, S> MockBuilder<'a, T, S> {
         pub fn with_log(log: &'a RefCell<Vec<T>>) -> Self {
@@ -600,7 +597,7 @@ mod mock {
 
     impl<'a, T, S: Clone> Finish<S> for MockBuilder<'a, T, S> {
         type Parent = MockDiagnostics<'a, T, S>;
-        type Value = Expr<Atom<Ident<String>>, S>;
+        type Value = Expr<S>;
 
         fn finish(self) -> (Self::Parent, Self::Value) {
             (self.parent, self.builder)
@@ -616,12 +613,14 @@ mod tests {
     use crate::analysis::semantics::AnalyzerEvent;
     use crate::analysis::{Literal, MockCodebase};
     use crate::diag::{DiagnosticsEvent, MockSpan};
-    use crate::model::{Atom, BinOp, Expr, Instruction, Nullary, Width};
+    use crate::model::{Atom, BinOp, Instruction, Nullary, Width};
     use crate::name::{BasicNameTable, NameTableEvent};
     use crate::syntax::{Command, Directive, Mnemonic, Token};
 
     use std::cell::RefCell;
     use std::iter;
+
+    type Expr<S> = crate::model::Expr<Atom<LocationCounter, usize>, S>;
 
     #[test]
     fn emit_instruction_item() {
@@ -866,7 +865,7 @@ mod tests {
     #[derive(Debug, PartialEq)]
     enum Event<S: Clone> {
         Frontend(AnalyzerEvent<S>),
-        Backend(BackendEvent<Expr<Atom<usize>, S>>),
+        Backend(BackendEvent<Expr<S>>),
         NameTable(NameTableEvent),
         Diagnostics(DiagnosticsEvent<S>),
     }
@@ -877,8 +876,8 @@ mod tests {
         }
     }
 
-    impl<S: Clone> From<BackendEvent<Expr<Atom<usize>, S>>> for Event<S> {
-        fn from(event: BackendEvent<Expr<Atom<usize>, S>>) -> Self {
+    impl<S: Clone> From<BackendEvent<Expr<S>>> for Event<S> {
+        fn from(event: BackendEvent<Expr<S>>) -> Self {
             Event::Backend(event)
         }
     }

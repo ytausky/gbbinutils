@@ -150,13 +150,15 @@ mod tests {
     use crate::analysis::session::SessionEvent;
     use crate::analysis::Ident;
     use crate::codebase::CodebaseError;
-    use crate::model::{Atom, Expr, ParamId};
+    use crate::model::{Atom, LocationCounter, ParamId};
     use crate::syntax::keyword::{Command, Operand};
     use crate::syntax::*;
 
     use std::borrow::Borrow;
     use std::cell::RefCell;
     use std::io;
+
+    type Expr = crate::model::Expr<Atom<LocationCounter, Ident<String>>, ()>;
 
     #[test]
     fn build_include_item() {
@@ -187,17 +189,17 @@ mod tests {
         test_data_items_emission(Directive::Dw, mk_word, [0x4332, 0x780f])
     }
 
-    fn mk_byte(byte: i32) -> Item<Expr<Atom<Ident<String>>, ()>> {
+    fn mk_byte(byte: i32) -> Item<Expr> {
         Item::Data((byte).into(), Width::Byte)
     }
 
-    fn mk_word(word: i32) -> Item<Expr<Atom<Ident<String>>, ()>> {
+    fn mk_word(word: i32) -> Item<Expr> {
         Item::Data((word).into(), Width::Word)
     }
 
     fn test_data_items_emission(
         directive: Directive,
-        mk_item: impl Fn(i32) -> Item<Expr<Atom<Ident<String>>, ()>>,
+        mk_item: impl Fn(i32) -> Item<Expr>,
         data: impl Borrow<[i32]>,
     ) {
         let actions = with_directive(directive, |mut command| {
