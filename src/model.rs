@@ -33,7 +33,11 @@ impl<T, S: Clone> Source for Expr<T, S> {
 #[cfg(test)]
 impl<L, N, S: Clone> Expr<Atom<L, N>, S> {
     pub fn from_atom(atom: Atom<L, N>, span: S) -> Self {
-        Self(vec![ExprItem::from_atom(atom, span)])
+        Self(vec![ExprItem {
+            op: ExprOp::Atom(atom),
+            op_span: span.clone(),
+            expr_span: span,
+        }])
     }
 }
 
@@ -46,17 +50,6 @@ impl<N: Clone, S: Clone> Expr<N, S> {
         I: IntoIterator<Item = &'a ExprItem<N, S>>,
     {
         Expr(items.into_iter().map(Clone::clone).collect())
-    }
-}
-
-#[cfg(test)]
-impl<L, N, S: Clone> ExprItem<Atom<L, N>, S> {
-    pub fn from_atom(atom: Atom<L, N>, span: S) -> Self {
-        Self {
-            op: ExprOp::Atom(atom),
-            op_span: span.clone(),
-            expr_span: span,
-        }
     }
 }
 
