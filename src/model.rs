@@ -130,6 +130,15 @@ pub enum Atom<N> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LocationCounter;
+
+impl<N> From<LocationCounter> for Atom<N> {
+    fn from(_: LocationCounter) -> Self {
+        Atom::LocationCounter
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ParamId(pub usize);
 
 impl<N> From<i32> for Atom<N> {

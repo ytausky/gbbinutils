@@ -1,3 +1,5 @@
+pub use crate::model::LocationCounter;
+
 use crate::model::{Atom, BinOp, Expr, ExprItem, ExprOp, Item, ParamId};
 use crate::span::Source;
 
@@ -24,14 +26,6 @@ pub trait PartialBackend<S: Clone> {
 
 pub trait StartSection<N, S> {
     fn start_section(&mut self, name: (N, S));
-}
-
-pub struct LocationCounter;
-
-impl<N> From<LocationCounter> for Atom<N> {
-    fn from(_: LocationCounter) -> Self {
-        Atom::LocationCounter
-    }
 }
 
 pub trait ValueBuilder<N, S: Clone>:
