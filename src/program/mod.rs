@@ -1,6 +1,6 @@
 pub use self::builder::ProgramBuilder;
 
-use crate::model::{Atom, LocationCounter, Width};
+use crate::model::{Atom, ExprOp, LocationCounter, Width};
 
 mod builder;
 mod link;
@@ -12,6 +12,12 @@ type Immediate<S> = crate::model::Expr<LocationCounter, NameId, S>;
 impl<L> From<NameId> for Atom<L, NameId> {
     fn from(id: NameId) -> Self {
         Atom::Name(id)
+    }
+}
+
+impl<L> From<NameId> for ExprOp<L, NameId> {
+    fn from(id: NameId) -> Self {
+        Atom::from(id).into()
     }
 }
 

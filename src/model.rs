@@ -14,6 +14,7 @@ pub struct ExprItem<L, N, S> {
 pub enum ExprOp<L, N> {
     Atom(Atom<L, N>),
     Binary(BinOp),
+    FnCall(usize),
 }
 
 impl<L, N, S> Default for Expr<L, N, S> {
@@ -85,6 +86,12 @@ impl<L, N> From<Atom<L, N>> for ExprOp<L, N> {
 impl<L, N> From<i32> for ExprOp<L, N> {
     fn from(n: i32) -> Self {
         ExprOp::Atom(Atom::Const(n))
+    }
+}
+
+impl<L, N> From<ParamId> for ExprOp<L, N> {
+    fn from(id: ParamId) -> Self {
+        ExprOp::Atom(Atom::Param(id))
     }
 }
 

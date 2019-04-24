@@ -123,7 +123,7 @@ impl<S: Clone> Section<S> {
         self.constraints
             .addr
             .as_ref()
-            .map(|expr| expr.eval(context, &mut ignore_undefined))
+            .map(|expr| expr.eval(context, &[], &mut ignore_undefined))
             .unwrap_or_else(|| 0.into())
     }
 }
@@ -133,13 +133,13 @@ impl<S: Clone> Node<S> {
         match self {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),
             Node::Immediate(_, width) => width.len().into(),
-            Node::LdInlineAddr(_, expr) => match expr.eval(context, &mut ignore_undefined) {
+            Node::LdInlineAddr(_, expr) => match expr.eval(context, &[], &mut ignore_undefined) {
                 Value::Range { min, .. } if min >= 0xff00 => 2.into(),
                 Value::Range { max, .. } if max < 0xff00 => 3.into(),
                 _ => Value::Range { min: 2, max: 3 },
             },
             Node::Reloc(_) => 0.into(),
-            Node::Reserved(bytes) => bytes.eval(context, &mut ignore_undefined),
+            Node::Reserved(bytes) => bytes.eval(context, &[], &mut ignore_undefined),
         }
     }
 }

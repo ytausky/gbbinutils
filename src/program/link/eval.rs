@@ -1,12 +1,17 @@
 use super::{EvalContext, RelocTable, Value};
 
-use crate::model::{Atom, BinOp, Expr, ExprOp, LocationCounter};
+use crate::model::{Atom, BinOp, Expr, ExprOp, LocationCounter, ParamId};
 use crate::program::{NameDef, NameId, RelocId, SectionId};
 
 use std::borrow::Borrow;
 
 impl<L, S: Clone> Expr<L, NameId, S> {
-    pub(super) fn eval<R, F>(&self, context: &EvalContext<R, S>, on_undefined: &mut F) -> Value
+    pub(super) fn eval<R, F>(
+        &self,
+        context: &EvalContext<R, S>,
+        args: &[Value],
+        on_undefined: &mut F,
+    ) -> Value
     where
         R: Borrow<RelocTable>,
         F: FnMut(&S),
@@ -15,81 +20,115 @@ impl<L, S: Clone> Expr<L, NameId, S> {
         let mut stack = Vec::new();
         for item in &self.0 {
             match &item.op {
-                ExprOp::Atom(atom) => stack.push((
-                    atom.eval(context, on_undefined).unwrap_or_else(|()| {
-                        on_undefined(&item.op_span);
-                        Value::Unknown
-                    }),
-                    item.expr_span.clone(),
-                )),
+                ExprOp::Atom(atom) => stack.push(StackItem {
+                    variant: atom.eval(context, args),
+                    span: item.expr_span.clone(),
+                }),
                 ExprOp::Binary(operator) => {
                     let rhs = stack.pop().unwrap();
-                    let lhs = stack.pop().unwrap();
-                    stack.push((operator.apply(&lhs.0, &rhs.0), item.expr_span.clone()))
+                    let lhs = stack.pop().unwrap().into_value(context, on_undefined);
+                    let rhs = rhs.into_value(context, on_undefined);
+                    stack.push(StackItem {
+                        variant: StackVariant::Value(operator.apply(&lhs, &rhs)),
+                        span: item.expr_span.clone(),
+                    })
+                }
+                ExprOp::FnCall(n) => {
+                    let args: Vec<_> = stack
+                        .split_off(stack.len() - n)
+                        .into_iter()
+                        .map(|arg| arg.into_value(context, on_undefined))
+                        .collect();
+                    let name = stack.pop().unwrap();
+                    match name.variant {
+                        StackVariant::Name(id) => match context.program.names.get(id) {
+                            Some(NameDef::Section(_)) => unimplemented!(),
+                            Some(NameDef::Symbol(expr)) => stack.push(StackItem {
+                                variant: StackVariant::Value(expr.eval(
+                                    context,
+                                    &args,
+                                    on_undefined,
+                                )),
+                                span: item.expr_span.clone(),
+                            }),
+                            None => unimplemented!(),
+                        },
+                        StackVariant::Value(_) => unimplemented!(),
+                    }
                 }
             }
         }
-        stack.pop().unwrap().0
+        stack.pop().unwrap().into_value(context, on_undefined)
+    }
+}
+
+pub(super) struct StackItem<S> {
+    variant: StackVariant,
+    span: S,
+}
+
+pub(super) enum StackVariant {
+    Name(NameId),
+    Value(Value),
+}
+
+impl<S: Clone> StackItem<S> {
+    fn into_value<R, F>(self, context: &EvalContext<R, S>, on_undefined: &mut F) -> Value
+    where
+        R: Borrow<RelocTable>,
+        F: FnMut(&S),
+    {
+        match self.variant {
+            StackVariant::Name(id) => match context.program.names.get(id) {
+                Some(NameDef::Section(SectionId(section))) => {
+                    let reloc = context.program.sections[*section].addr;
+                    context.relocs.borrow().get(reloc)
+                }
+                Some(NameDef::Symbol(expr)) => expr.eval(context, &[], on_undefined),
+                None => {
+                    on_undefined(&self.span);
+                    Value::Unknown
+                }
+            },
+            StackVariant::Value(value) => value,
+        }
     }
 }
 
 pub(super) trait Eval {
-    fn eval<R, F, S>(&self, context: &EvalContext<R, S>, on_undefined: &mut F) -> Result<Value, ()>
+    fn eval<R, S>(&self, context: &EvalContext<R, S>, args: &[Value]) -> StackVariant
     where
         R: Borrow<RelocTable>,
-        F: FnMut(&S),
         S: Clone;
 }
 
 impl Eval for Atom<LocationCounter, NameId> {
-    fn eval<R, F, S>(&self, context: &EvalContext<R, S>, on_undefined: &mut F) -> Result<Value, ()>
+    fn eval<R, S>(&self, context: &EvalContext<R, S>, _: &[Value]) -> StackVariant
     where
         R: Borrow<RelocTable>,
-        F: FnMut(&S),
         S: Clone,
     {
         match self {
-            Atom::Const(value) => Ok((*value).into()),
-            Atom::Location(LocationCounter) => Ok(context.location.clone()),
-            Atom::Name(id) => id.eval(context, on_undefined),
+            Atom::Const(value) => StackVariant::Value((*value).into()),
+            Atom::Location(LocationCounter) => StackVariant::Value(context.location.clone()),
+            Atom::Name(id) => StackVariant::Name(*id),
             Atom::Param(_) => unimplemented!(),
         }
     }
 }
 
 impl Eval for Atom<RelocId, NameId> {
-    fn eval<R, F, S>(&self, context: &EvalContext<R, S>, on_undefined: &mut F) -> Result<Value, ()>
+    fn eval<R, S>(&self, context: &EvalContext<R, S>, args: &[Value]) -> StackVariant
     where
         R: Borrow<RelocTable>,
-        F: FnMut(&S),
         S: Clone,
     {
         match self {
-            Atom::Const(value) => Ok((*value).into()),
-            Atom::Location(id) => Ok(context.relocs.borrow().get(*id)),
-            Atom::Name(id) => id.eval(context, on_undefined),
-            Atom::Param(_) => unimplemented!(),
+            Atom::Const(value) => StackVariant::Value((*value).into()),
+            Atom::Location(id) => StackVariant::Value(context.relocs.borrow().get(*id)),
+            Atom::Name(id) => StackVariant::Name(*id),
+            Atom::Param(ParamId(id)) => StackVariant::Value(args[*id].clone()),
         }
-    }
-}
-
-impl NameId {
-    fn eval<R, F, S>(self, context: &EvalContext<R, S>, on_undefined: &mut F) -> Result<Value, ()>
-    where
-        R: Borrow<RelocTable>,
-        F: FnMut(&S),
-        S: Clone,
-    {
-        let name_def = context.program.names.get(self);
-        name_def
-            .map(|def| match def {
-                NameDef::Section(SectionId(section)) => {
-                    let reloc = context.program.sections[*section].addr;
-                    context.relocs.borrow().get(reloc)
-                }
-                NameDef::Symbol(expr) => expr.eval(context, on_undefined),
-            })
-            .ok_or(())
     }
 }
 
@@ -106,10 +145,8 @@ impl BinOp {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    use crate::model::Atom;
-    use crate::program::link::{EvalContext, RelocTable, Value};
+    use crate::model::{BinOp, ParamId};
+    use crate::program::link::{ignore_undefined, EvalContext, RelocTable, Value};
     use crate::program::*;
 
     #[test]
@@ -132,9 +169,33 @@ mod tests {
             location: Value::Unknown,
         };
         assert_eq!(
-            Atom::<RelocId, _>::Name(NameId(0))
-                .eval(&context, &mut crate::program::link::ignore_undefined),
-            Ok(addr.into())
+            Immediate::from_atom(NameId(0).into(), ()).eval(&context, &[], &mut ignore_undefined),
+            addr.into()
+        )
+    }
+
+    #[test]
+    fn eval_fn_call_in_immediate() {
+        let immediate =
+            Immediate::from_items(&[NameId(0).into(), 42.into(), ExprOp::FnCall(1).into()]);
+        let program = &Program::<()> {
+            sections: vec![],
+            names: NameTable(vec![Some(NameDef::Symbol(Expr::from_items(&[
+                ParamId(0).into(),
+                1.into(),
+                BinOp::Plus.into(),
+            ])))]),
+            relocs: 0,
+        };
+        let relocs = &RelocTable(Vec::new());
+        let context = &EvalContext {
+            program,
+            relocs,
+            location: Value::Unknown,
+        };
+        assert_eq!(
+            immediate.eval(context, &[], &mut ignore_undefined),
+            43.into()
         )
     }
 }
