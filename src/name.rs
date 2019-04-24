@@ -4,7 +4,7 @@ use std::collections::HashMap;
 pub use self::mock::*;
 
 #[cfg(test)]
-use crate::model::Atom;
+use crate::model::{Atom, ExprOp};
 
 pub trait NameTable<I> {
     type BackendEntry;
@@ -34,6 +34,13 @@ pub struct Ident<T> {
 impl<L, T> From<Ident<T>> for Atom<L, Ident<T>> {
     fn from(ident: Ident<T>) -> Self {
         Atom::Name(ident)
+    }
+}
+
+#[cfg(test)]
+impl<L, T> From<Ident<T>> for ExprOp<L, Ident<T>> {
+    fn from(ident: Ident<T>) -> Self {
+        Atom::from(ident).into()
     }
 }
 

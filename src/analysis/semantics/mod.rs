@@ -338,7 +338,7 @@ mod tests {
     use crate::analysis::backend::BackendEvent;
     use crate::analysis::session::SessionEvent;
     use crate::diag::Message;
-    use crate::model::{Atom, BinOp, Item, Width};
+    use crate::model::{Atom, BinOp, ExprOp, Instruction, Item, Width};
 
     use std::borrow::Borrow;
     use std::cell::RefCell;
@@ -426,6 +426,32 @@ mod tests {
                     1.into(),
                     1.into(),
                     op.into()
+                ]))))
+                .into()
+            ]
+        )
+    }
+
+    #[test]
+    fn emit_rst_f_of_1() {
+        let ident = Ident::from("f");
+        let actions = collect_semantic_actions(|actions| {
+            let command = actions
+                .enter_unlabeled_stmt()
+                .enter_command((Command::Mnemonic(Mnemonic::Rst), ()));
+            let mut expr = command.add_argument();
+            expr.push_atom((ExprAtom::Ident(ident.clone()), ()));
+            expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
+            expr.apply_operator((Operator::FnCall(1), ()));
+            expr.exit().exit().exit()
+        });
+        assert_eq!(
+            actions,
+            [
+                BackendEvent::EmitItem(Item::Instruction(Instruction::Rst(Expr::from_items(&[
+                    ident.into(),
+                    1.into(),
+                    ExprOp::FnCall(1).into()
                 ]))))
                 .into()
             ]

@@ -888,6 +888,7 @@ mod tests {
             }
             ArgVariant::Binary(_, _, _) => panic!(),
             ArgVariant::Atom(atom) => ArgVariant::Atom(atom),
+            ArgVariant::FnCall(..) => panic!(),
         };
         (j + 1, Arg { variant, span })
     }

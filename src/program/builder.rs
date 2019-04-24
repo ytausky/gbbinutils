@@ -1,7 +1,7 @@
 use super::{Atom, Expr, Immediate, NameDef, NameId, Node, Program, RelocId, Section};
 
 use crate::analysis::backend::*;
-use crate::model::{BinOp, ExprItem, ExprOp, Item, ParamId};
+use crate::model::{BinOp, ExprItem, ExprOp, FnCall, Item, ParamId};
 
 pub struct ProgramBuilder<'a, S> {
     program: &'a mut Program<S>,
@@ -144,6 +144,12 @@ impl_push_op_for_symbol_builder! {ParamId}
 
 impl<'a, S: Clone> PushOp<BinOp, S> for SymbolBuilder<'a, S> {
     fn push_op(&mut self, op: BinOp, span: S) {
+        self.expr.push_op(op, span)
+    }
+}
+
+impl<'a, S: Clone> PushOp<FnCall, S> for SymbolBuilder<'a, S> {
+    fn push_op(&mut self, op: FnCall, span: S) {
         self.expr.push_op(op, span)
     }
 }

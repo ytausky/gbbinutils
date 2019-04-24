@@ -110,6 +110,8 @@ pub enum BinOp {
     Plus,
 }
 
+pub struct FnCall(pub usize);
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Width {
     Byte,

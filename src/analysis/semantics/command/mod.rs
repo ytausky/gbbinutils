@@ -6,7 +6,7 @@ use crate::analysis::backend::{Finish, FinishFnDef, LocationCounter, PushOp};
 use crate::analysis::session::Session;
 use crate::diag::span::{MergeSpans, StripSpan};
 use crate::diag::{CompactDiagnostic, DelegateDiagnostics, EmitDiagnostic, Message};
-use crate::model::{BinOp, Item};
+use crate::model::{BinOp, FnCall, Item};
 use crate::syntax::*;
 
 mod args;
@@ -199,7 +199,21 @@ where
                     span: operator.1,
                 })
             }
-            Operator::FnCall(_) => unimplemented!(),
+            Operator::FnCall(n) => {
+                let args = self.stack.split_off(self.stack.len() - n);
+                let name = self.pop();
+                let name = (
+                    match name.variant {
+                        ArgVariant::Atom(ArgAtom::Ident(ident)) => ident,
+                        _ => unimplemented!(),
+                    },
+                    name.span,
+                );
+                self.stack.push(Arg {
+                    variant: ArgVariant::FnCall(name, args),
+                    span: operator.1,
+                })
+            }
         }
     }
 }
@@ -261,6 +275,7 @@ trait ArgEvaluator<N, S: Clone>:
     + PushOp<i32, S>
     + PushOp<N, S>
     + PushOp<BinOp, S>
+    + PushOp<FnCall, S>
     + DelegateDiagnostics<S>
 {
 }
@@ -270,6 +285,7 @@ impl<T, N, S: Clone> ArgEvaluator<N, S> for T where
         + PushOp<i32, S>
         + PushOp<N, S>
         + PushOp<BinOp, S>
+        + PushOp<FnCall, S>
         + DelegateDiagnostics<S>
 {
 }
@@ -308,6 +324,15 @@ where
                 self.eval_arg(*left)?;
                 self.eval_arg(*right)?;
                 self.push_op(binary, arg.span);
+                Ok(())
+            }
+            ArgVariant::FnCall((name, span), args) => {
+                self.push_op(name, span.clone());
+                let n = args.len();
+                for arg in args {
+                    self.eval_arg(arg)?;
+                }
+                self.push_op(FnCall(n), span);
                 Ok(())
             }
         }

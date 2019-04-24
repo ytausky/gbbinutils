@@ -2,7 +2,7 @@ use super::{Ident, Params, PushOp};
 
 use crate::analysis::backend::{Finish, FinishFnDef, LocationCounter};
 use crate::diag::DelegateDiagnostics;
-use crate::model::{BinOp, ParamId};
+use crate::model::{BinOp, FnCall, ParamId};
 
 pub struct ParamsAdapter<'a, P, R, S> {
     parent: P,
@@ -53,6 +53,7 @@ macro_rules! impl_push_op_for_params_adapter {
 impl_push_op_for_params_adapter! {LocationCounter}
 impl_push_op_for_params_adapter! {i32}
 impl_push_op_for_params_adapter! {BinOp}
+impl_push_op_for_params_adapter! {FnCall}
 
 impl<'a, P, R, S> Finish<S> for ParamsAdapter<'a, P, R, S>
 where

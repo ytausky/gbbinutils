@@ -1,6 +1,6 @@
 pub use crate::model::LocationCounter;
 
-use crate::model::{Atom, BinOp, Expr, ExprItem, ExprOp, Item, ParamId};
+use crate::model::{Atom, BinOp, Expr, ExprItem, ExprOp, FnCall, Item, ParamId};
 use crate::span::Source;
 
 #[cfg(test)]
@@ -29,7 +29,12 @@ pub trait StartSection<N, S> {
 }
 
 pub trait ValueBuilder<N, S: Clone>:
-    PushOp<LocationCounter, S> + PushOp<i32, S> + PushOp<N, S> + PushOp<BinOp, S> + PushOp<ParamId, S>
+    PushOp<LocationCounter, S>
+    + PushOp<i32, S>
+    + PushOp<N, S>
+    + PushOp<BinOp, S>
+    + PushOp<ParamId, S>
+    + PushOp<FnCall, S>
 {
 }
 
@@ -39,6 +44,7 @@ impl<T, N, S: Clone> ValueBuilder<N, S> for T where
         + PushOp<N, S>
         + PushOp<BinOp, S>
         + PushOp<ParamId, S>
+        + PushOp<FnCall, S>
 {
 }
 
@@ -56,6 +62,16 @@ impl<L, N, S: Clone> PushOp<BinOp, S> for Expr<L, N, S> {
     fn push_op(&mut self, op: BinOp, span: S) {
         self.0.push(ExprItem {
             op: ExprOp::Binary(op),
+            op_span: span.clone(),
+            expr_span: span,
+        })
+    }
+}
+
+impl<L, N, S: Clone> PushOp<FnCall, S> for Expr<L, N, S> {
+    fn push_op(&mut self, FnCall(n): FnCall, span: S) {
+        self.0.push(ExprItem {
+            op: ExprOp::FnCall(n),
             op_span: span.clone(),
             expr_span: span,
         })
@@ -127,6 +143,7 @@ impl_push_op_for_reloc_context! {LocationCounter}
 impl_push_op_for_reloc_context! {i32}
 impl_push_op_for_reloc_context! {BinOp}
 impl_push_op_for_reloc_context! {ParamId}
+impl_push_op_for_reloc_context! {FnCall}
 
 #[cfg(test)]
 mod mock {

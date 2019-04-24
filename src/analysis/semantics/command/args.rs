@@ -15,6 +15,7 @@ pub(super) enum ArgVariant<I, S> {
     Atom(ArgAtom<I>),
     Unary(ArgUnaryOp, Box<Arg<I, S>>),
     Binary(BinOp, Box<Arg<I, S>>, Box<Arg<I, S>>),
+    FnCall((Ident<I>, S), Vec<Arg<I, S>>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
