@@ -223,7 +223,7 @@ mod tests {
     use super::*;
     use super::{SimpleToken::*, Token::*};
 
-    use crate::syntax::ast::{expr, ExprAction, InputTokens, SymExpr, SymSpan, TokenRef};
+    use crate::syntax::parser::mock::{expr, ExprAction, InputTokens, SymExpr, SymSpan, TokenRef};
     use crate::syntax::parser::tests::{with_spans, ExprActionCollector};
     use crate::syntax::FinalContext;
 

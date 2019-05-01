@@ -2,9 +2,6 @@ use crate::diag::DelegateDiagnostics;
 use crate::model::BinOp;
 use std::borrow::Borrow;
 
-#[cfg(test)]
-#[macro_use]
-mod ast;
 pub mod keyword;
 pub mod lexer;
 mod parser;

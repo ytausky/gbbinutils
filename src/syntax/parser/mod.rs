@@ -9,6 +9,9 @@ macro_rules! bump {
     };
 }
 
+#[macro_use]
+#[cfg(test)]
+mod mock;
 mod expr;
 
 type TokenKind = Token<(), (), ()>;
@@ -360,7 +363,7 @@ where
 
 #[cfg(test)]
 pub(self) mod tests {
-    use super::ast::*;
+    use super::mock::*;
     use super::Token::*;
     use super::*;
     use crate::diag::span::{MergeSpans, StripSpan};
@@ -483,7 +486,7 @@ pub(self) mod tests {
     }
 
     struct StmtActionCollector {
-        label: Option<ast::Label<SymSpan>>,
+        label: Option<mock::Label<SymSpan>>,
         actions: Vec<StmtAction<SymSpan>>,
         parent: FileActionCollector,
     }

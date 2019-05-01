@@ -1,8 +1,10 @@
 use super::SimpleToken::*;
 use super::Token::*;
 use super::{ExprAtom, Operator, Token, UnaryOperator};
+
 use crate::diag::{CompactDiagnostic, Message};
 use crate::model::BinOp;
+
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::iter;
