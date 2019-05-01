@@ -341,3 +341,25 @@ where
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::analysis::semantics::tests::collect_semantic_actions;
+    use crate::analysis::Literal::*;
+    use crate::syntax::*;
+    use crate::syntax::{Command::*, Directive::*, ExprAtom::*, Operator::*};
+
+    #[ignore]
+    #[test]
+    fn diagnose_literal_as_fn_name() {
+        collect_semantic_actions(|actions| {
+            let mut actions = actions
+                .enter_unlabeled_stmt()
+                .enter_command((Directive(Db), ()))
+                .add_argument();
+            actions.push_atom((Literal(Number(7)), ()));
+            actions.apply_operator((FnCall(0), ()));
+            actions.exit().exit().exit()
+        });
+    }
+}
