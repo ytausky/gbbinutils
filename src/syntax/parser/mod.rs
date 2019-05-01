@@ -570,7 +570,7 @@ pub(self) mod tests {
         }
     }
 
-    pub struct ExprActionCollector<P> {
+    pub(super) struct ExprActionCollector<P> {
         actions: Vec<ExprAction<SymSpan>>,
         parent: P,
     }
