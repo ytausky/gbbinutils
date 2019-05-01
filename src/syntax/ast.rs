@@ -193,7 +193,7 @@ macro_rules! input_tokens {
     ($($tokens:tt)*) => {{
         let mut input = InputTokens {
             tokens: Vec::new(),
-            names: HashMap::new(),
+            names: std::collections::HashMap::new(),
         };
         input_tokens_impl!(input, $($tokens)*);
         if input
