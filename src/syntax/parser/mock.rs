@@ -11,6 +11,12 @@ use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::iter;
 
+pub fn with_spans<'a>(
+    tokens: impl IntoIterator<Item = &'a (SymToken, TokenRef)>,
+) -> impl Iterator<Item = (Result<SymToken, ()>, SymSpan)> {
+    tokens.into_iter().cloned().map(|(t, r)| (Ok(t), r.into()))
+}
+
 macro_rules! impl_diag_traits {
     ($($t:ty),* $(,)?) => {
         $(

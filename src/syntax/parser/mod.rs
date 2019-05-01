@@ -362,7 +362,7 @@ where
 }
 
 #[cfg(test)]
-pub(self) mod tests {
+mod tests {
     use super::mock::*;
     use super::Token::*;
     use super::*;
@@ -385,12 +385,6 @@ pub(self) mod tests {
         let mut parsing_context = FileActionCollector::new();
         parsing_context = parse_src(with_spans(&input.tokens), parsing_context);
         assert_eq!(parsing_context.actions, expected.borrow())
-    }
-
-    pub fn with_spans<'a>(
-        tokens: impl IntoIterator<Item = &'a (SymToken, TokenRef)>,
-    ) -> impl Iterator<Item = (Result<SymToken, ()>, SymSpan)> {
-        tokens.into_iter().cloned().map(|(t, r)| (Ok(t), r.into()))
     }
 
     #[test]
