@@ -1,11 +1,11 @@
 use super::{EvalContext, RelocTable, Value};
 
 use crate::model::{Atom, BinOp, Expr, ExprOp, LocationCounter, ParamId};
-use crate::program::{NameDef, NameId, RelocId, SectionId};
+use crate::program::{NameDef, NameDefId, RelocId, SectionId};
 
 use std::borrow::Borrow;
 
-impl<L, S: Clone> Expr<L, NameId, S> {
+impl<L, S: Clone> Expr<L, NameDefId, S> {
     pub(super) fn eval<R, F>(
         &self,
         context: &EvalContext<R, S>,
@@ -15,7 +15,7 @@ impl<L, S: Clone> Expr<L, NameId, S> {
     where
         R: Borrow<RelocTable>,
         F: FnMut(&S),
-        Atom<L, NameId>: Eval,
+        Atom<L, NameDefId>: Eval,
     {
         let mut stack = Vec::new();
         for item in &self.0 {
@@ -68,7 +68,7 @@ pub(super) struct StackItem<S> {
 }
 
 pub(super) enum StackVariant {
-    Name(NameId),
+    Name(NameDefId),
     Value(Value),
 }
 
@@ -102,7 +102,7 @@ pub(super) trait Eval {
         S: Clone;
 }
 
-impl Eval for Atom<LocationCounter, NameId> {
+impl Eval for Atom<LocationCounter, NameDefId> {
     fn eval<R, S>(&self, context: &EvalContext<R, S>, _: &[Value]) -> StackVariant
     where
         R: Borrow<RelocTable>,
@@ -117,7 +117,7 @@ impl Eval for Atom<LocationCounter, NameId> {
     }
 }
 
-impl Eval for Atom<RelocId, NameId> {
+impl Eval for Atom<RelocId, NameDefId> {
     fn eval<R, S>(&self, context: &EvalContext<R, S>, args: &[Value]) -> StackVariant
     where
         R: Borrow<RelocTable>,
@@ -169,7 +169,11 @@ mod tests {
             location: Value::Unknown,
         };
         assert_eq!(
-            Immediate::from_atom(NameId(0).into(), ()).eval(&context, &[], &mut ignore_undefined),
+            Immediate::from_atom(NameDefId(0).into(), ()).eval(
+                &context,
+                &[],
+                &mut ignore_undefined
+            ),
             addr.into()
         )
     }
@@ -177,7 +181,7 @@ mod tests {
     #[test]
     fn eval_fn_call_in_immediate() {
         let immediate =
-            Immediate::from_items(&[NameId(0).into(), 42.into(), ExprOp::FnCall(1).into()]);
+            Immediate::from_items(&[NameDefId(0).into(), 42.into(), ExprOp::FnCall(1).into()]);
         let program = &Program::<()> {
             sections: vec![],
             names: NameTable(vec![Some(NameDef::Symbol(Expr::from_items(&[

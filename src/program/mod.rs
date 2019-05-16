@@ -6,17 +6,17 @@ mod builder;
 mod link;
 mod lowering;
 
-type Expr<S> = crate::model::Expr<RelocId, NameId, S>;
-type Immediate<S> = crate::model::Expr<LocationCounter, NameId, S>;
+type Expr<S> = crate::model::Expr<RelocId, NameDefId, S>;
+type Immediate<S> = crate::model::Expr<LocationCounter, NameDefId, S>;
 
-impl<L> From<NameId> for Atom<L, NameId> {
-    fn from(id: NameId) -> Self {
+impl<L> From<NameDefId> for Atom<L, NameDefId> {
+    fn from(id: NameDefId) -> Self {
         Atom::Name(id)
     }
 }
 
-impl<L> From<NameId> for ExprOp<L, NameId> {
-    fn from(id: NameId) -> Self {
+impl<L> From<NameDefId> for ExprOp<L, NameDefId> {
+    fn from(id: NameDefId) -> Self {
         Atom::from(id).into()
     }
 }
@@ -25,7 +25,7 @@ impl<L> From<NameId> for ExprOp<L, NameId> {
 struct RelocId(usize);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct NameId(usize);
+pub struct NameDefId(usize);
 
 pub struct Program<S> {
     sections: Vec<Section<S>>,
@@ -72,7 +72,7 @@ impl<S> Program<S> {
         }
     }
 
-    fn add_section(&mut self, name: Option<NameId>) {
+    fn add_section(&mut self, name: Option<NameDefId>) {
         let section = SectionId(self.sections.len());
         let addr = self.alloc_reloc();
         let size = self.alloc_reloc();
@@ -107,18 +107,18 @@ impl<S> NameTable<S> {
         Self(Vec::new())
     }
 
-    fn alloc(&mut self) -> NameId {
-        let id = NameId(self.0.len());
+    fn alloc(&mut self) -> NameDefId {
+        let id = NameDefId(self.0.len());
         self.0.push(None);
         id
     }
 
-    fn define(&mut self, NameId(id): NameId, def: NameDef<S>) {
+    fn define(&mut self, NameDefId(id): NameDefId, def: NameDef<S>) {
         assert!(self.0[id].is_none());
         self.0[id] = Some(def);
     }
 
-    fn get(&self, NameId(id): NameId) -> Option<&NameDef<S>> {
+    fn get(&self, NameDefId(id): NameDefId) -> Option<&NameDef<S>> {
         self.0[id].as_ref()
     }
 }

@@ -1,4 +1,4 @@
-use super::{Atom, Expr, Immediate, NameDef, NameId, Node, Program, RelocId, Section};
+use super::{Atom, Expr, Immediate, NameDef, NameDefId, Node, Program, RelocId, Section};
 
 use crate::analysis::backend::*;
 use crate::model::{BinOp, ExprItem, ExprOp, FnCall, Item, ParamId};
@@ -87,15 +87,15 @@ impl<'a, S: Clone> Backend<S> for ProgramBuilder<'a, S> {
 }
 
 impl<'a, S: Clone> AllocName<S> for RelocContext<ProgramBuilder<'a, S>, Immediate<S>> {
-    type Name = NameId;
+    type Name = NameDefId;
 
     fn alloc_name(&mut self, span: S) -> Self::Name {
         self.parent.alloc_name(span)
     }
 }
 
-impl<'a, S: Clone> PushOp<NameId, S> for RelocContext<ProgramBuilder<'a, S>, Immediate<S>> {
-    fn push_op(&mut self, name: NameId, span: S) {
+impl<'a, S: Clone> PushOp<NameDefId, S> for RelocContext<ProgramBuilder<'a, S>, Immediate<S>> {
+    fn push_op(&mut self, name: NameDefId, span: S) {
         self.builder.push_op(name, span)
     }
 }
@@ -112,12 +112,12 @@ impl<'a, S: Clone> Finish<S> for RelocContext<ProgramBuilder<'a, S>, Immediate<S
 pub struct SymbolBuilder<'a, S> {
     parent: ProgramBuilder<'a, S>,
     location: RelocId,
-    name: (NameId, S),
+    name: (NameDefId, S),
     expr: Expr<S>,
 }
 
 impl<'a, S: Clone> AllocName<S> for SymbolBuilder<'a, S> {
-    type Name = NameId;
+    type Name = NameDefId;
 
     fn alloc_name(&mut self, span: S) -> Self::Name {
         self.parent.alloc_name(span)
@@ -139,7 +139,7 @@ macro_rules! impl_push_op_for_symbol_builder {
 }
 
 impl_push_op_for_symbol_builder! {i32}
-impl_push_op_for_symbol_builder! {NameId}
+impl_push_op_for_symbol_builder! {NameDefId}
 impl_push_op_for_symbol_builder! {ParamId}
 
 impl<'a, S: Clone> PushOp<BinOp, S> for SymbolBuilder<'a, S> {
@@ -179,15 +179,15 @@ impl<'a, S> FinishFnDef for SymbolBuilder<'a, S> {
 }
 
 impl<'a, S: Clone> AllocName<S> for ProgramBuilder<'a, S> {
-    type Name = NameId;
+    type Name = NameDefId;
 
     fn alloc_name(&mut self, _span: S) -> Self::Name {
         self.program.names.alloc()
     }
 }
 
-impl<'a, S: Clone> StartSection<NameId, S> for ProgramBuilder<'a, S> {
-    fn start_section(&mut self, name: (NameId, S)) {
+impl<'a, S: Clone> StartSection<NameDefId, S> for ProgramBuilder<'a, S> {
+    fn start_section(&mut self, name: (NameDefId, S)) {
         let index = self.program.sections.len();
         self.state = Some(BuilderState::SectionPrelude(index));
         self.program.add_section(Some(name.0))

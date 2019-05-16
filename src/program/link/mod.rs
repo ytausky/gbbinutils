@@ -266,7 +266,10 @@ mod tests {
                 },
                 addr: RelocId(0),
                 size: RelocId(1),
-                items: vec![Node::Immediate(Atom::Name(NameId(0)).into(), Width::Word)],
+                items: vec![Node::Immediate(
+                    Atom::Name(NameDefId(0)).into(),
+                    Width::Word,
+                )],
             }],
             names: NameTable(vec![Some(NameDef::Section(SectionId(0)))]),
             relocs: 2,
@@ -290,7 +293,7 @@ mod tests {
                 items: vec![
                     Node::Reserved(bytes.into()),
                     Node::Reloc(symbol),
-                    Node::Immediate(Atom::Name(NameId(0)).into(), Width::Word),
+                    Node::Immediate(Atom::Name(NameDefId(0)).into(), Width::Word),
                 ],
             }],
             names: NameTable(vec![Some(NameDef::Symbol(Atom::Location(symbol).into()))]),
