@@ -29,6 +29,13 @@ impl<L> From<NameId> for ExprOp<L, NameId> {
 }
 
 #[cfg(test)]
+impl<L> From<BuiltinName> for ExprOp<L, NameId> {
+    fn from(builtin: BuiltinName) -> Self {
+        Atom::from(NameId::from(builtin)).into()
+    }
+}
+
+#[cfg(test)]
 impl<L> From<NameDefId> for ExprOp<L, NameId> {
     fn from(id: NameDefId) -> Self {
         Atom::from(id).into()
@@ -40,15 +47,27 @@ struct RelocId(usize);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum NameId {
+    Builtin(BuiltinName),
     Def(NameDefId),
 }
 
-#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum BuiltinName {
+    Sizeof,
+}
+
 impl NameId {
     fn def(self) -> Option<NameDefId> {
         match self {
+            NameId::Builtin(_) => None,
             NameId::Def(id) => Some(id),
         }
+    }
+}
+
+impl From<BuiltinName> for NameId {
+    fn from(builtin: BuiltinName) -> Self {
+        NameId::Builtin(builtin)
     }
 }
 

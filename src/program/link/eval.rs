@@ -1,7 +1,7 @@
 use super::{EvalContext, RelocTable, Value};
 
 use crate::model::{Atom, BinOp, Expr, ExprOp, LocationCounter, ParamId};
-use crate::program::{NameDef, NameId, RelocId, SectionId};
+use crate::program::{BuiltinName, NameDef, NameId, RelocId, SectionId};
 
 use std::borrow::Borrow;
 
@@ -34,14 +34,35 @@ impl<L, S: Clone> Expr<L, NameId, S> {
                     })
                 }
                 ExprOp::FnCall(n) => {
-                    let args: Vec<_> = stack
-                        .split_off(stack.len() - n)
-                        .into_iter()
-                        .map(|arg| arg.into_value(context, on_undefined))
-                        .collect();
+                    let mut args = stack.split_off(stack.len() - n).into_iter();
                     let name = stack.pop().unwrap();
                     match name.variant {
+                        StackVariant::Name(NameId::Builtin(BuiltinName::Sizeof)) => {
+                            match args.next() {
+                                Some(StackItem {
+                                    variant: StackVariant::Name(NameId::Def(id)),
+                                    ..
+                                }) => match context.program.names.get(id) {
+                                    Some(NameDef::Section(SectionId(section))) => {
+                                        stack.push(StackItem {
+                                            variant: StackVariant::Value(
+                                                context
+                                                    .relocs
+                                                    .borrow()
+                                                    .get(context.program.sections[*section].size),
+                                            ),
+                                            span: item.expr_span.clone(),
+                                        })
+                                    }
+                                    _ => unimplemented!(),
+                                },
+                                _ => unimplemented!(),
+                            }
+                        }
                         StackVariant::Name(NameId::Def(id)) => {
+                            let args: Vec<_> = args
+                                .map(|arg| arg.into_value(context, on_undefined))
+                                .collect();
                             match context.program.names.get(id) {
                                 Some(NameDef::Section(_)) => unimplemented!(),
                                 Some(NameDef::Symbol(expr)) => stack.push(StackItem {
@@ -81,6 +102,7 @@ impl<S: Clone> StackItem<S> {
         F: FnMut(&S),
     {
         match self.variant {
+            StackVariant::Name(NameId::Builtin(_)) => unimplemented!(),
             StackVariant::Name(NameId::Def(id)) => match context.program.names.get(id) {
                 Some(NameDef::Section(SectionId(section))) => {
                     let reloc = context.program.sections[*section].addr;
@@ -177,6 +199,36 @@ mod tests {
                 &mut ignore_undefined
             ),
             addr.into()
+        )
+    }
+
+    #[test]
+    fn eval_section_size() {
+        let program = &Program::<()> {
+            sections: vec![Section {
+                constraints: Constraints { addr: None },
+                addr: RelocId(0),
+                size: RelocId(1),
+                items: vec![],
+            }],
+            names: NameTable(vec![Some(NameDef::Section(SectionId(0)))]),
+            relocs: 2,
+        };
+        let size = 42;
+        let relocs = &RelocTable(vec![0.into(), size.into()]);
+        let context = &EvalContext {
+            program,
+            relocs,
+            location: Value::Unknown,
+        };
+        assert_eq!(
+            Immediate::from_items(&[
+                BuiltinName::Sizeof.into(),
+                NameDefId(0).into(),
+                ExprOp::FnCall(1).into()
+            ])
+            .eval(context, &[], &mut ignore_undefined),
+            size.into()
         )
     }
 

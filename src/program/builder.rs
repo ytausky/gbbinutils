@@ -75,12 +75,12 @@ impl<'a, S: Clone> Backend<S> for ProgramBuilder<'a, S> {
         RelocContext::new(self)
     }
 
-    fn define_fn(self, NameId::Def(name): Self::Name, span: S) -> Self::SymbolBuilder {
+    fn define_fn(self, name: Self::Name, span: S) -> Self::SymbolBuilder {
         let location = self.program.alloc_reloc();
         SymbolBuilder {
             parent: self,
             location,
-            name: (name, span),
+            name: (name.def().unwrap(), span),
             expr: Default::default(),
         }
     }
@@ -187,10 +187,10 @@ impl<'a, S: Clone> AllocName<S> for ProgramBuilder<'a, S> {
 }
 
 impl<'a, S: Clone> StartSection<NameId, S> for ProgramBuilder<'a, S> {
-    fn start_section(&mut self, (NameId::Def(name), _): (NameId, S)) {
+    fn start_section(&mut self, (name, _): (NameId, S)) {
         let index = self.program.sections.len();
         self.state = Some(BuilderState::SectionPrelude(index));
-        self.program.add_section(Some(name))
+        self.program.add_section(Some(name.def().unwrap()))
     }
 }
 
