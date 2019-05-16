@@ -249,7 +249,7 @@ mod tests {
             let name = object.names.alloc();
             let reloc = object.alloc_reloc();
             let items = &mut object.sections[0].items;
-            items.push(Node::LdInlineAddr(0, Atom::Name(name).into()));
+            items.push(Node::LdInlineAddr(0, Atom::Name(name.into()).into()));
             items.push(Node::Reloc(reloc));
             object
                 .names
@@ -267,7 +267,7 @@ mod tests {
                 addr: RelocId(0),
                 size: RelocId(1),
                 items: vec![Node::Immediate(
-                    Atom::Name(NameDefId(0)).into(),
+                    Atom::Name(NameDefId(0).into()).into(),
                     Width::Word,
                 )],
             }],
@@ -293,7 +293,7 @@ mod tests {
                 items: vec![
                     Node::Reserved(bytes.into()),
                     Node::Reloc(symbol),
-                    Node::Immediate(Atom::Name(NameDefId(0)).into(), Width::Word),
+                    Node::Immediate(Atom::Name(NameDefId(0).into()).into(), Width::Word),
                 ],
             }],
             names: NameTable(vec![Some(NameDef::Symbol(Atom::Location(symbol).into()))]),

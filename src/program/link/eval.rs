@@ -1,11 +1,11 @@
 use super::{EvalContext, RelocTable, Value};
 
 use crate::model::{Atom, BinOp, Expr, ExprOp, LocationCounter, ParamId};
-use crate::program::{NameDef, NameDefId, RelocId, SectionId};
+use crate::program::{NameDef, NameId, RelocId, SectionId};
 
 use std::borrow::Borrow;
 
-impl<L, S: Clone> Expr<L, NameDefId, S> {
+impl<L, S: Clone> Expr<L, NameId, S> {
     pub(super) fn eval<R, F>(
         &self,
         context: &EvalContext<R, S>,
@@ -15,7 +15,7 @@ impl<L, S: Clone> Expr<L, NameDefId, S> {
     where
         R: Borrow<RelocTable>,
         F: FnMut(&S),
-        Atom<L, NameDefId>: Eval,
+        Atom<L, NameId>: Eval,
     {
         let mut stack = Vec::new();
         for item in &self.0 {
@@ -41,18 +41,20 @@ impl<L, S: Clone> Expr<L, NameDefId, S> {
                         .collect();
                     let name = stack.pop().unwrap();
                     match name.variant {
-                        StackVariant::Name(id) => match context.program.names.get(id) {
-                            Some(NameDef::Section(_)) => unimplemented!(),
-                            Some(NameDef::Symbol(expr)) => stack.push(StackItem {
-                                variant: StackVariant::Value(expr.eval(
-                                    context,
-                                    &args,
-                                    on_undefined,
-                                )),
-                                span: item.expr_span.clone(),
-                            }),
-                            None => unimplemented!(),
-                        },
+                        StackVariant::Name(NameId::Def(id)) => {
+                            match context.program.names.get(id) {
+                                Some(NameDef::Section(_)) => unimplemented!(),
+                                Some(NameDef::Symbol(expr)) => stack.push(StackItem {
+                                    variant: StackVariant::Value(expr.eval(
+                                        context,
+                                        &args,
+                                        on_undefined,
+                                    )),
+                                    span: item.expr_span.clone(),
+                                }),
+                                None => unimplemented!(),
+                            }
+                        }
                         StackVariant::Value(_) => unimplemented!(),
                     }
                 }
@@ -68,7 +70,7 @@ pub(super) struct StackItem<S> {
 }
 
 pub(super) enum StackVariant {
-    Name(NameDefId),
+    Name(NameId),
     Value(Value),
 }
 
@@ -79,7 +81,7 @@ impl<S: Clone> StackItem<S> {
         F: FnMut(&S),
     {
         match self.variant {
-            StackVariant::Name(id) => match context.program.names.get(id) {
+            StackVariant::Name(NameId::Def(id)) => match context.program.names.get(id) {
                 Some(NameDef::Section(SectionId(section))) => {
                     let reloc = context.program.sections[*section].addr;
                     context.relocs.borrow().get(reloc)
@@ -102,7 +104,7 @@ pub(super) trait Eval {
         S: Clone;
 }
 
-impl Eval for Atom<LocationCounter, NameDefId> {
+impl Eval for Atom<LocationCounter, NameId> {
     fn eval<R, S>(&self, context: &EvalContext<R, S>, _: &[Value]) -> StackVariant
     where
         R: Borrow<RelocTable>,
@@ -117,7 +119,7 @@ impl Eval for Atom<LocationCounter, NameDefId> {
     }
 }
 
-impl Eval for Atom<RelocId, NameDefId> {
+impl Eval for Atom<RelocId, NameId> {
     fn eval<R, S>(&self, context: &EvalContext<R, S>, args: &[Value]) -> StackVariant
     where
         R: Borrow<RelocTable>,

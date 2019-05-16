@@ -6,16 +6,30 @@ mod builder;
 mod link;
 mod lowering;
 
-type Expr<S> = crate::model::Expr<RelocId, NameDefId, S>;
-type Immediate<S> = crate::model::Expr<LocationCounter, NameDefId, S>;
+type Expr<S> = crate::model::Expr<RelocId, NameId, S>;
+type Immediate<S> = crate::model::Expr<LocationCounter, NameId, S>;
 
-impl<L> From<NameDefId> for Atom<L, NameDefId> {
-    fn from(id: NameDefId) -> Self {
+impl<L> From<NameId> for Atom<L, NameId> {
+    fn from(id: NameId) -> Self {
         Atom::Name(id)
     }
 }
 
-impl<L> From<NameDefId> for ExprOp<L, NameDefId> {
+#[cfg(test)]
+impl<L> From<NameDefId> for Atom<L, NameId> {
+    fn from(id: NameDefId) -> Self {
+        Atom::Name(id.into())
+    }
+}
+
+impl<L> From<NameId> for ExprOp<L, NameId> {
+    fn from(id: NameId) -> Self {
+        Atom::from(id).into()
+    }
+}
+
+#[cfg(test)]
+impl<L> From<NameDefId> for ExprOp<L, NameId> {
     fn from(id: NameDefId) -> Self {
         Atom::from(id).into()
     }
@@ -23,6 +37,26 @@ impl<L> From<NameDefId> for ExprOp<L, NameDefId> {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct RelocId(usize);
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum NameId {
+    Def(NameDefId),
+}
+
+#[cfg(test)]
+impl NameId {
+    fn def(self) -> Option<NameDefId> {
+        match self {
+            NameId::Def(id) => Some(id),
+        }
+    }
+}
+
+impl From<NameDefId> for NameId {
+    fn from(id: NameDefId) -> Self {
+        NameId::Def(id)
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NameDefId(usize);
