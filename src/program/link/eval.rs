@@ -17,21 +17,15 @@ impl<L, S: Clone> Expr<L, NameId, S> {
         F: FnMut(&S),
         Atom<L, NameId>: Eval,
     {
-        let mut stack = Vec::new();
+        let mut stack = Vec::<StackItem<S>>::new();
         for item in &self.0 {
-            match &item.op {
-                ExprOp::Atom(atom) => stack.push(StackItem {
-                    variant: atom.eval(context, args),
-                    span: item.expr_span.clone(),
-                }),
+            let variant = match &item.op {
+                ExprOp::Atom(atom) => atom.eval(context, args),
                 ExprOp::Binary(operator) => {
                     let rhs = stack.pop().unwrap();
                     let lhs = stack.pop().unwrap().into_value(context, on_undefined);
                     let rhs = rhs.into_value(context, on_undefined);
-                    stack.push(StackItem {
-                        variant: StackVariant::Value(operator.apply(&lhs, &rhs)),
-                        span: item.expr_span.clone(),
-                    })
+                    StackVariant::Value(operator.apply(&lhs, &rhs))
                 }
                 ExprOp::FnCall(n) => {
                     let mut args = stack.split_off(stack.len() - n).into_iter();
@@ -44,15 +38,12 @@ impl<L, S: Clone> Expr<L, NameId, S> {
                                     ..
                                 }) => match context.program.names.get(id) {
                                     Some(NameDef::Section(SectionId(section))) => {
-                                        stack.push(StackItem {
-                                            variant: StackVariant::Value(
-                                                context
-                                                    .relocs
-                                                    .borrow()
-                                                    .get(context.program.sections[*section].size),
-                                            ),
-                                            span: item.expr_span.clone(),
-                                        })
+                                        StackVariant::Value(
+                                            context
+                                                .relocs
+                                                .borrow()
+                                                .get(context.program.sections[*section].size),
+                                        )
                                     }
                                     _ => unimplemented!(),
                                 },
@@ -65,21 +56,20 @@ impl<L, S: Clone> Expr<L, NameId, S> {
                                 .collect();
                             match context.program.names.get(id) {
                                 Some(NameDef::Section(_)) => unimplemented!(),
-                                Some(NameDef::Symbol(expr)) => stack.push(StackItem {
-                                    variant: StackVariant::Value(expr.eval(
-                                        context,
-                                        &args,
-                                        on_undefined,
-                                    )),
-                                    span: item.expr_span.clone(),
-                                }),
+                                Some(NameDef::Symbol(expr)) => {
+                                    StackVariant::Value(expr.eval(context, &args, on_undefined))
+                                }
                                 None => unimplemented!(),
                             }
                         }
                         StackVariant::Value(_) => unimplemented!(),
                     }
                 }
-            }
+            };
+            stack.push(StackItem {
+                variant,
+                span: item.expr_span.clone(),
+            })
         }
         stack.pop().unwrap().into_value(context, on_undefined)
     }
