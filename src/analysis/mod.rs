@@ -1,5 +1,3 @@
-pub use self::syntax::Token;
-
 use self::backend::*;
 use self::resolve::{BiLevelNameTable, Ident};
 use self::session::*;
@@ -40,10 +38,7 @@ where
         let mut analyzer = semantics::SemanticAnalyzer;
         let mut names = BiLevelNameTable::new();
         for (string, name) in self.builtin_names() {
-            names.insert(
-                self::resolve::mk_ident(string),
-                Name::Backend((*name).clone()),
-            )
+            names.insert(resolve::mk_ident(string), Name::Backend((*name).clone()))
         }
         let session = CompositeSession::new(
             &mut file_parser,
@@ -64,8 +59,7 @@ where
 }
 
 type LexItem<T, S> = (Result<SemanticToken<T>, LexError>, S);
-
-pub(crate) type SemanticToken<T> = Token<Ident<T>, Literal<T>, Command>;
+type SemanticToken<T> = syntax::Token<Ident<T>, Literal<T>, Command>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum Literal<S> {
@@ -74,7 +68,7 @@ pub(super) enum Literal<S> {
     String(S),
 }
 
-pub(crate) trait Lex<D: Diagnostics> {
+trait Lex<D: Diagnostics> {
     type StringRef: Clone + Eq;
     type TokenIter: Iterator<Item = LexItem<Self::StringRef, D::Span>>;
 
@@ -164,7 +158,7 @@ type MkIdent = for<'a> fn(&'a str) -> Ident<String>;
 impl<C: BufContext> TokenizedSrc<C> {
     fn new(src: Rc<str>, context: C) -> TokenizedSrc<C> {
         TokenizedSrc {
-            tokens: self::syntax::tokenize(src, self::resolve::mk_ident),
+            tokens: syntax::tokenize(src, resolve::mk_ident),
             context,
         }
     }

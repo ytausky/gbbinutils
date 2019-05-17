@@ -14,7 +14,7 @@ use crate::model::Item;
 #[cfg(test)]
 pub(crate) use self::mock::*;
 
-pub(crate) trait Session
+pub(super) trait Session
 where
     Self: Sized,
     Self: Span + StringRef,
@@ -48,7 +48,7 @@ where
 pub(super) type MacroArgs<I, S> = Vec<Vec<(SemanticToken<I>, S)>>;
 pub(super) type Params<R, S> = (Vec<Ident<R>>, Vec<S>);
 
-pub(crate) struct CompositeSession<'a, 'b, C, A, B, N, D> {
+pub(super) struct CompositeSession<'a, 'b, C, A, B, N, D> {
     codebase: &'b mut C,
     analyzer: &'a mut A,
     backend: B,

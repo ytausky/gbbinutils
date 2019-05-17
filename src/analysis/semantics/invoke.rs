@@ -5,7 +5,7 @@ use crate::analysis::syntax::{MacroCallContext, TokenSeqContext};
 use crate::analysis::{Ident, SemanticToken, TokenSeq};
 use crate::diag::DelegateDiagnostics;
 
-pub(crate) struct MacroCallActions<S: Session> {
+pub(in crate::analysis) struct MacroCallActions<S: Session> {
     parent: StmtActions<S>,
     name: (Ident<S::StringRef>, S::Span),
     args: Vec<TokenSeq<S::StringRef, S::Span>>,
@@ -58,7 +58,7 @@ impl<S: Session> MacroCallContext<S::Span> for MacroCallActions<S> {
     }
 }
 
-pub(crate) struct MacroArgContext<S: Session> {
+pub(in crate::analysis) struct MacroArgContext<S: Session> {
     tokens: Vec<(SemanticToken<S::StringRef>, S::Span)>,
     parent: MacroCallActions<S>,
 }

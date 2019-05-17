@@ -33,7 +33,7 @@ impl<I, L, C> Token<I, L, C> {
 
 const LINE_FOLLOW_SET: &[TokenKind] = &[Token::Simple(Eol), Token::Simple(Eof)];
 
-pub(crate) fn parse_src<Id, L, C, E, I, F, S>(mut tokens: I, context: F) -> F
+pub(in crate::analysis) fn parse_src<Id, L, C, E, I, F, S>(mut tokens: I, context: F) -> F
 where
     I: Iterator<Item = (Result<Token<Id, L, C>, E>, S)>,
     F: FileContext<Id, L, C, S>,

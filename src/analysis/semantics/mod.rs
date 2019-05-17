@@ -19,7 +19,7 @@ mod command;
 mod invoke;
 mod params;
 
-pub(crate) trait Analyze<R: Clone + Eq, D: Diagnostics> {
+pub(super) trait Analyze<R: Clone + Eq, D: Diagnostics> {
     fn analyze_token_seq<'a, I, C, B, N>(
         &mut self,
         tokens: I,
@@ -61,7 +61,7 @@ impl<R: Clone + Eq, D: Diagnostics> Analyze<R, D> for SemanticAnalyzer {
     }
 }
 
-pub(crate) struct SemanticActions<S: Session> {
+pub(super) struct SemanticActions<S: Session> {
     session: Option<S>,
 }
 
@@ -118,7 +118,7 @@ impl<S: Session> FileContext<Ident<S::StringRef>, Literal<S::StringRef>, Command
     }
 }
 
-pub(crate) struct LabelActions<S: Session> {
+pub(super) struct LabelActions<S: Session> {
     parent: SemanticActions<S>,
     label: (Ident<S::StringRef>, S::Span),
     params: Params<S::StringRef, S::Span>,
@@ -155,7 +155,7 @@ impl<S: Session> ParamsContext<Ident<S::StringRef>, S::Span> for LabelActions<S>
     }
 }
 
-pub(crate) struct StmtActions<S: Session> {
+pub(super) struct StmtActions<S: Session> {
     parent: SemanticActions<S>,
     label: Option<Label<S::StringRef, S::Span>>,
 }
@@ -221,7 +221,7 @@ impl<S: Session> DelegateDiagnostics<S::Span> for StmtActions<S> {
     }
 }
 
-pub(crate) struct MacroDefActions<S: Session> {
+pub(super) struct MacroDefActions<S: Session> {
     parent: StmtActions<S>,
     tokens: (Vec<SemanticToken<S::StringRef>>, Vec<S::Span>),
 }
@@ -667,7 +667,7 @@ mod tests {
 
     pub(super) type MockSession<'a> = crate::analysis::session::MockSession<'a, TestOperation, ()>;
 
-    pub(crate) fn collect_semantic_actions<F>(f: F) -> Vec<TestOperation>
+    pub(super) fn collect_semantic_actions<F>(f: F) -> Vec<TestOperation>
     where
         F: for<'a> FnOnce(TestSemanticActions<'a>) -> TestSemanticActions<'a>,
     {

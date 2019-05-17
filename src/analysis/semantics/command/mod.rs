@@ -14,7 +14,7 @@ mod directive;
 mod mnemonic;
 mod operand;
 
-pub(crate) struct CommandActions<S: Session> {
+pub(in crate::analysis) struct CommandActions<S: Session> {
     parent: StmtActions<S>,
     command: (Command, S::Span),
     args: CommandArgs<S::StringRef, S::Span>,
