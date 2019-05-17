@@ -32,28 +32,28 @@ where
                 self.analyze_16_bit_ld(dest, LdOperand::Const(src))
             }
             (LdDest::Byte(dest), LdOperand::Other(LdDest::Word(src))) => {
-                let diagnostics = &mut self.diagnostics;
-                let diagnostic = Message::LdWidthMismatch {
-                    src_width: Width::Word,
-                    src: diagnostics.strip_span(&src.span()),
-                    dest: diagnostics.strip_span(&dest.span()),
-                }
-                .at(diagnostics.merge_spans(&dest.span(), &src.span()));
-                diagnostics.emit_diagnostic(diagnostic);
-                Err(())
+                self.diagnose_ld_width_mismatch(&dest, &src)
             }
             (LdDest::Word(dest), LdOperand::Other(LdDest::Byte(src))) => {
-                let diagnostics = &mut self.diagnostics;
-                let diagnostic = Message::LdWidthMismatch {
-                    src_width: Width::Byte,
-                    src: diagnostics.strip_span(&src.span()),
-                    dest: diagnostics.strip_span(&dest.span()),
-                }
-                .at(diagnostics.merge_spans(&dest.span(), &src.span()));
-                diagnostics.emit_diagnostic(diagnostic);
-                Err(())
+                self.diagnose_ld_width_mismatch(&dest, &src)
             }
         }
+    }
+
+    fn diagnose_ld_width_mismatch(
+        &mut self,
+        dest: &impl Source<Span = S>,
+        src: &(impl Source<Span = S> + DataWidth),
+    ) -> Result<Instruction<V>, ()> {
+        let diagnostics = &mut self.diagnostics;
+        let diagnostic = Message::LdWidthMismatch {
+            src_width: src.width(),
+            src: diagnostics.strip_span(&src.span()),
+            dest: diagnostics.strip_span(&dest.span()),
+        }
+        .at(diagnostics.merge_spans(&dest.span(), &src.span()));
+        diagnostics.emit_diagnostic(diagnostic);
+        Err(())
     }
 
     fn analyze_8_bit_ld(
@@ -203,6 +203,22 @@ enum LdSpecial<V: Source> {
 
 enum LdDest16<S> {
     Reg16(Reg16, S),
+}
+
+trait DataWidth {
+    fn width(&self) -> Width;
+}
+
+impl<V: Source> DataWidth for LdDest8<V> {
+    fn width(&self) -> Width {
+        Width::Byte
+    }
+}
+
+impl<S> DataWidth for LdDest16<S> {
+    fn width(&self) -> Width {
+        Width::Word
+    }
 }
 
 impl<V: Source> LdOperand<V, LdDest8<V>> {
