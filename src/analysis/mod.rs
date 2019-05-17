@@ -1,13 +1,13 @@
 pub use self::syntax::Token;
 
 use self::backend::*;
+use self::resolve::{BiLevelNameTable, Ident};
 use self::session::*;
 use self::syntax::lexer::{LexError, Lexer};
 use self::syntax::*;
 
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diag::*;
-use crate::name::{BiLevelNameTable, Ident};
 use crate::span::BufContext;
 use crate::BuiltinNames;
 
@@ -18,6 +18,7 @@ pub use self::mock::*;
 
 pub mod backend;
 mod macros;
+mod resolve;
 mod semantics;
 mod session;
 mod syntax;
@@ -33,14 +34,14 @@ where
         codebase: &C,
         diagnostics: &mut D,
     ) -> Result<(), CodebaseError> {
-        use crate::name::{Name, NameTable};
+        use self::resolve::{Name, NameTable};
 
         let mut file_parser = CodebaseAnalyzer::new(codebase);
         let mut analyzer = semantics::SemanticAnalyzer;
         let mut names = BiLevelNameTable::new();
         for (string, name) in self.builtin_names() {
             names.insert(
-                crate::name::mk_ident(string),
+                self::resolve::mk_ident(string),
                 Name::Backend((*name).clone()),
             )
         }
@@ -163,7 +164,7 @@ type MkIdent = for<'a> fn(&'a str) -> Ident<String>;
 impl<C: BufContext> TokenizedSrc<C> {
     fn new(src: Rc<str>, context: C) -> TokenizedSrc<C> {
         TokenizedSrc {
-            tokens: self::syntax::tokenize(src, crate::name::mk_ident),
+            tokens: self::syntax::tokenize(src, self::resolve::mk_ident),
             context,
         }
     }

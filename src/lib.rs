@@ -14,7 +14,6 @@ mod analysis;
 mod codebase;
 pub mod diag;
 mod model;
-mod name;
 mod program;
 
 #[derive(Default)]

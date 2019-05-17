@@ -4,13 +4,13 @@ use self::params::ParamsAdapter;
 
 use super::backend::{Backend, FinishFnDef, LocationCounter, PushOp};
 use super::macros::MacroEntry;
+use super::resolve::{NameTable, StartScope};
 use super::session::*;
 use super::syntax::keyword::*;
 use super::syntax::*;
 use super::{Ident, Lex, LexItem, Literal, SemanticToken};
 
 use crate::diag::*;
-use crate::name::{NameTable, StartScope};
 
 #[cfg(test)]
 pub use self::mock::*;

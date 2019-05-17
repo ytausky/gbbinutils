@@ -2,6 +2,7 @@ pub use super::backend::ValueBuilder;
 
 use super::backend::*;
 use super::macros::{DefineMacro, Expand, MacroEntry};
+use super::resolve::{Ident, Name, NameTable, StartScope};
 use super::semantics::Analyze;
 use super::{Lex, SemanticToken, StringRef};
 
@@ -9,7 +10,6 @@ use crate::codebase::CodebaseError;
 use crate::diag::span::Span;
 use crate::diag::*;
 use crate::model::Item;
-use crate::name::{Ident, Name, NameTable, StartScope};
 
 #[cfg(test)]
 pub(crate) use self::mock::*;
@@ -609,12 +609,12 @@ mod tests {
     use super::*;
 
     use crate::analysis::backend::BackendEvent;
+    use crate::analysis::resolve::{BasicNameTable, NameTableEvent};
     use crate::analysis::semantics::AnalyzerEvent;
     use crate::analysis::syntax::{Command, Directive, Mnemonic, Token};
     use crate::analysis::{Literal, MockCodebase};
     use crate::diag::{DiagnosticsEvent, MockSpan};
     use crate::model::{Atom, BinOp, Instruction, Nullary, Width};
-    use crate::name::{BasicNameTable, NameTableEvent};
 
     use std::cell::RefCell;
     use std::iter;
@@ -846,7 +846,7 @@ mod tests {
     type MockAnalyzer<'a, S> = crate::analysis::semantics::MockAnalyzer<'a, Event<S>>;
     type MockBackend<'a, S> = crate::analysis::backend::MockBackend<'a, Event<S>>;
     type MockDiagnostics<'a, S> = crate::diag::MockDiagnostics<'a, Event<S>, S>;
-    type MockNameTable<'a, S> = crate::name::MockNameTable<
+    type MockNameTable<'a, S> = crate::analysis::resolve::MockNameTable<
         'a,
         BasicNameTable<usize, MacroEntry<String, MockDiagnostics<'a, S>>>,
         Event<S>,
