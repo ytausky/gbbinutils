@@ -43,14 +43,14 @@ impl<I, L, C> From<SimpleToken> for Token<I, L, C> {
 pub(super) trait IdentFactory {
     type Ident;
 
-    fn mk_ident(&self, spelling: &str) -> Self::Ident;
+    fn mk_ident(&mut self, spelling: &str) -> Self::Ident;
 }
 
 #[cfg(test)]
 impl<I, F: for<'a> Fn(&'a str) -> I> IdentFactory for F {
     type Ident = I;
 
-    fn mk_ident(&self, spelling: &str) -> Self::Ident {
+    fn mk_ident(&mut self, spelling: &str) -> Self::Ident {
         self(spelling)
     }
 }

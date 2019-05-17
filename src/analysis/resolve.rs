@@ -57,7 +57,7 @@ pub struct DefaultIdentFactory;
 impl IdentFactory for DefaultIdentFactory {
     type Ident = Ident<String>;
 
-    fn mk_ident(&self, spelling: &str) -> Self::Ident {
+    fn mk_ident(&mut self, spelling: &str) -> Self::Ident {
         Self::Ident {
             name: spelling.to_string(),
             visibility: if spelling.starts_with('_') {

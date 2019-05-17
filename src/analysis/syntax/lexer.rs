@@ -175,23 +175,20 @@ fn is_hex_digit(character: char) -> bool {
 
 pub(in crate::analysis) struct Lexer<B, F> {
     scanner: Scanner<B>,
-    mk_ident: F,
+    factory: TokenFactory<F>,
 }
 
-impl<B, F> Lexer<B, F>
-where
-    B: Borrow<str>,
-    F: IdentFactory,
-{
-    pub fn new(src: B, mk_ident: F) -> Lexer<B, F> {
-        Lexer {
-            scanner: Scanner::new(src),
-            mk_ident,
-        }
+struct TokenFactory<F> {
+    ident_factory: F,
+}
+
+impl<F: IdentFactory> TokenFactory<F> {
+    fn new(ident_factory: F) -> Self {
+        Self { ident_factory }
     }
 
     fn mk_token(
-        &self,
+        &mut self,
         kind: TokenKind,
         lexeme: &str,
     ) -> Result<Token<F::Ident, Literal<String>, Command>, LexError> {
@@ -212,11 +209,20 @@ where
         }
     }
 
-    fn mk_keyword_or<G>(&self, g: G, lexeme: &str) -> Token<F::Ident, Literal<String>, Command>
+    fn mk_keyword_or<G>(&mut self, g: G, lexeme: &str) -> Token<F::Ident, Literal<String>, Command>
     where
         G: FnOnce(F::Ident) -> Token<F::Ident, Literal<String>, Command>,
     {
-        identify_keyword(lexeme).map_or_else(|| g(self.mk_ident.mk_ident(lexeme)), Into::into)
+        identify_keyword(lexeme).map_or_else(|| g(self.ident_factory.mk_ident(lexeme)), Into::into)
+    }
+}
+
+impl<B: Borrow<str>, F: IdentFactory> Lexer<B, F> {
+    pub fn new(src: B, ident_factory: F) -> Lexer<B, F> {
+        Lexer {
+            scanner: Scanner::new(src),
+            factory: TokenFactory::new(ident_factory),
+        }
     }
 }
 
@@ -229,7 +235,8 @@ impl<B: Borrow<str>, F: IdentFactory> Iterator for Lexer<B, F> {
         self.scanner.next().map(|(result, range)| {
             (
                 result.and_then(|kind| {
-                    self.mk_token(kind, &self.scanner.src.borrow()[range.clone()])
+                    self.factory
+                        .mk_token(kind, &self.scanner.src.borrow()[range.clone()])
                 }),
                 range,
             )
