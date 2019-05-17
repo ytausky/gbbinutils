@@ -181,7 +181,7 @@ mod tests {
     use super::*;
 
     use crate::analysis::semantics::command::mnemonic::tests::*;
-    use crate::syntax::keyword::Mnemonic;
+    use crate::analysis::syntax::keyword::Mnemonic;
 
     #[test]
     fn analyze_legal_branch_instructions() {

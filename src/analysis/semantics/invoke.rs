@@ -1,9 +1,9 @@
 use super::StmtActions;
 
 use crate::analysis::session::Session;
+use crate::analysis::syntax::{MacroCallContext, TokenSeqContext};
 use crate::analysis::{Ident, SemanticToken, TokenSeq};
 use crate::diag::DelegateDiagnostics;
-use crate::syntax::{MacroCallContext, TokenSeqContext};
 
 pub(crate) struct MacroCallActions<S: Session> {
     parent: StmtActions<S>,

@@ -16,7 +16,6 @@ pub mod diag;
 mod model;
 mod name;
 mod program;
-mod syntax;
 
 #[derive(Default)]
 pub struct Config<'a> {

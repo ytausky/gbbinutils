@@ -2,10 +2,10 @@ use self::branch::*;
 
 use super::operand::{AtomKind, Context, Operand, OperandCounter};
 
+use crate::analysis::syntax::keyword as kw;
 use crate::diag::span::Source;
 use crate::diag::*;
 use crate::model::*;
-use crate::syntax::keyword as kw;
 
 mod branch;
 mod ld;

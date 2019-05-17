@@ -5,12 +5,12 @@ use self::params::ParamsAdapter;
 use super::backend::{Backend, FinishFnDef, LocationCounter, PushOp};
 use super::macros::MacroEntry;
 use super::session::*;
+use super::syntax::keyword::*;
+use super::syntax::*;
 use super::{Ident, Lex, LexItem, Literal, SemanticToken};
 
 use crate::diag::*;
 use crate::name::{NameTable, StartScope};
-use crate::syntax::keyword::*;
-use crate::syntax::*;
 
 #[cfg(test)]
 pub use self::mock::*;
@@ -56,7 +56,7 @@ impl<R: Clone + Eq, D: Diagnostics> Analyze<R, D> for SemanticAnalyzer {
             partial.diagnostics,
         );
         let mut actions =
-            crate::syntax::parse_token_seq(tokens.into_iter(), SemanticActions::new(session));
+            super::syntax::parse_token_seq(tokens.into_iter(), SemanticActions::new(session));
         actions.session.take().unwrap().into()
     }
 }

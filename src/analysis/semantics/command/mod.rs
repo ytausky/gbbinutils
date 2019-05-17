@@ -4,10 +4,10 @@ use super::{Ident, Label, Literal, Params, ParamsAdapter, SemanticActions, StmtA
 
 use crate::analysis::backend::{Finish, FinishFnDef, LocationCounter, PushOp};
 use crate::analysis::session::Session;
+use crate::analysis::syntax::*;
 use crate::diag::span::{MergeSpans, StripSpan};
 use crate::diag::{CompactDiagnostic, DelegateDiagnostics, EmitDiagnostic, Message};
 use crate::model::{BinOp, FnCall, Item};
-use crate::syntax::*;
 
 mod args;
 mod directive;
@@ -345,9 +345,9 @@ where
 #[cfg(test)]
 mod tests {
     use crate::analysis::semantics::tests::collect_semantic_actions;
+    use crate::analysis::syntax::*;
+    use crate::analysis::syntax::{Command::*, Directive::*, ExprAtom::*, Operator::*};
     use crate::analysis::Literal::*;
-    use crate::syntax::*;
-    use crate::syntax::{Command::*, Directive::*, ExprAtom::*, Operator::*};
 
     #[ignore]
     #[test]

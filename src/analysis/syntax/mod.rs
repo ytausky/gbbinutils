@@ -48,7 +48,7 @@ where
     self::lexer::Lexer::new(src, mk_ident)
 }
 
-pub(crate) use self::parser::parse_src as parse_token_seq;
+pub(super) use self::parser::parse_src as parse_token_seq;
 
 pub(crate) trait FileContext<I, L, C, S: Clone>: DelegateDiagnostics<S> + Sized {
     type LabelContext: ParamsContext<I, S, Next = Self::StmtContext>;

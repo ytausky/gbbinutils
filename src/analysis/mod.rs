@@ -1,14 +1,14 @@
-pub use crate::syntax::Token;
+pub use self::syntax::Token;
 
 use self::backend::*;
 use self::session::*;
+use self::syntax::lexer::{LexError, Lexer};
+use self::syntax::*;
 
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diag::*;
 use crate::name::{BiLevelNameTable, Ident};
 use crate::span::BufContext;
-use crate::syntax::lexer::{LexError, Lexer};
-use crate::syntax::*;
 use crate::BuiltinNames;
 
 use std::rc::Rc;
@@ -20,6 +20,7 @@ pub mod backend;
 mod macros;
 mod semantics;
 mod session;
+mod syntax;
 
 pub(crate) trait Assemble<D>
 where
@@ -162,7 +163,7 @@ type MkIdent = for<'a> fn(&'a str) -> Ident<String>;
 impl<C: BufContext> TokenizedSrc<C> {
     fn new(src: Rc<str>, context: C) -> TokenizedSrc<C> {
         TokenizedSrc {
-            tokens: crate::syntax::tokenize(src, crate::name::mk_ident),
+            tokens: self::syntax::tokenize(src, crate::name::mk_ident),
             context,
         }
     }

@@ -610,11 +610,11 @@ mod tests {
 
     use crate::analysis::backend::BackendEvent;
     use crate::analysis::semantics::AnalyzerEvent;
+    use crate::analysis::syntax::{Command, Directive, Mnemonic, Token};
     use crate::analysis::{Literal, MockCodebase};
     use crate::diag::{DiagnosticsEvent, MockSpan};
     use crate::model::{Atom, BinOp, Instruction, Nullary, Width};
     use crate::name::{BasicNameTable, NameTableEvent};
-    use crate::syntax::{Command, Directive, Mnemonic, Token};
 
     use std::cell::RefCell;
     use std::iter;

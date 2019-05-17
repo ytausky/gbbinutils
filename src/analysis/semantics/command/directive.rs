@@ -148,11 +148,11 @@ mod tests {
     use crate::analysis::backend::BackendEvent;
     use crate::analysis::semantics::tests::*;
     use crate::analysis::session::SessionEvent;
+    use crate::analysis::syntax::keyword::{Command, Operand};
+    use crate::analysis::syntax::*;
     use crate::analysis::Ident;
     use crate::codebase::CodebaseError;
     use crate::model::{Atom, LocationCounter, ParamId};
-    use crate::syntax::keyword::{Command, Operand};
-    use crate::syntax::*;
 
     use std::borrow::Borrow;
     use std::cell::RefCell;

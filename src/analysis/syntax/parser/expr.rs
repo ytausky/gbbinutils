@@ -1,11 +1,12 @@
+use self::syntax::{ExprAtom, ExprContext, Operator, SimpleToken, Token, UnaryOperator};
 use self::SimpleToken::*;
 
 use super::{Parser, LINE_FOLLOW_SET};
 
+use crate::analysis::syntax;
 use crate::diag::span::{MergeSpans, StripSpan};
 use crate::diag::{CompactDiagnostic, DelegateDiagnostics, EmitDiagnostic, Message};
 use crate::model::BinOp;
-use crate::syntax::{ExprAtom, ExprContext, Operator, SimpleToken, Token, UnaryOperator};
 
 type ParserResult<P, C, S> = Result<
     P,
@@ -220,11 +221,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use super::{SimpleToken::*, Token::*};
+    use self::syntax::parser::mock::*;
+    use self::syntax::FinalContext;
 
-    use crate::syntax::parser::mock::*;
-    use crate::syntax::FinalContext;
+    use super::Token::*;
+    use super::*;
 
     #[test]
     fn parse_long_sum_arg() {

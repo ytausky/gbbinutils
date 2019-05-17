@@ -1,11 +1,11 @@
 use super::{Arg, ArgAtom, ArgEvaluator, ArgUnaryOp, ArgVariant, EvalArg};
 
 use crate::analysis::backend::Finish;
+use crate::analysis::syntax::keyword as kw;
 use crate::analysis::{Ident, Literal};
 use crate::diag::*;
 use crate::model::{Condition, PtrReg, Reg16, RegPair, SimpleOperand};
 use crate::span::Source;
-use crate::syntax::keyword as kw;
 
 #[derive(Debug, PartialEq)]
 pub enum Operand<V: Source> {

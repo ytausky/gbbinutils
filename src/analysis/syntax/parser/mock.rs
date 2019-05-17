@@ -2,10 +2,10 @@ use super::SimpleToken::*;
 use super::Token::*;
 use super::{ExprAtom, Operator, Token, UnaryOperator};
 
+use crate::analysis::syntax::*;
 use crate::diag::span::{MergeSpans, StripSpan};
 use crate::diag::{CompactDiagnostic, EmitDiagnostic, Message};
 use crate::model::BinOp;
-use crate::syntax::*;
 
 use std::borrow::Borrow;
 use std::collections::HashMap;
