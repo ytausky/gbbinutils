@@ -13,8 +13,8 @@ where
     S: Clone,
 {
     pub fn analyze_ld(&mut self) -> Result<Instruction<V>, ()> {
-        let dest = self.next_operand_out_of(2)?;
-        let src = self.next_operand_out_of(2)?;
+        let dest = self.next_operand_of(2)?;
+        let src = self.next_operand_of(2)?;
         match (
             dest.into_ld_dest(self.diagnostics)?,
             src.into_ld_src(self.diagnostics)?,

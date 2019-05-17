@@ -77,7 +77,7 @@ where
         match self.mnemonic.0 {
             Alu(AluOperation::Add) => self.analyze_add_instruction(),
             Alu(operation) => {
-                let first_operand = self.next_operand_out_of(operation.expected_operands())?;
+                let first_operand = self.next_operand_of(operation.expected_operands())?;
                 self.analyze_alu_instruction(operation, first_operand)
             }
             Bit(operation) => self.analyze_bit_operation(operation),
@@ -93,7 +93,7 @@ where
     }
 
     fn analyze_add_instruction(&mut self) -> Result<Instruction<V>, ()> {
-        match self.next_operand_out_of(2)? {
+        match self.next_operand_of(2)? {
             Operand::Atom(AtomKind::Reg16(reg16), range) => {
                 self.analyze_add_reg16_instruction((reg16, range))
             }
@@ -112,7 +112,7 @@ where
     }
 
     fn analyze_add_hl_instruction(&mut self) -> Result<Instruction<V>, ()> {
-        match self.next_operand_out_of(2)? {
+        match self.next_operand_of(2)? {
             Operand::Atom(AtomKind::Reg16(src), _) => Ok(Instruction::AddHl(src)),
             operand => {
                 self.emit_diagnostic(Message::IncompatibleOperand.at(operand.span()));
@@ -129,7 +129,7 @@ where
         let src = if operation.implicit_dest() {
             first_operand
         } else {
-            let second_operand = self.next_operand_out_of(2)?;
+            let second_operand = self.next_operand_of(2)?;
             first_operand.expect_specific_atom(
                 AtomKind::Simple(SimpleOperand::A),
                 Message::DestMustBeA,
@@ -150,8 +150,8 @@ where
     }
 
     fn analyze_bit_operation(&mut self, operation: BitOperation) -> Result<Instruction<V>, ()> {
-        let bit_number = self.next_operand_out_of(2)?;
-        let operand = self.next_operand_out_of(2)?;
+        let bit_number = self.next_operand_of(2)?;
+        let operand = self.next_operand_of(2)?;
         let expr = if let Operand::Const(expr) = bit_number {
             expr
         } else {
@@ -167,8 +167,8 @@ where
     }
 
     fn analyze_ldhl(&mut self) -> Result<Instruction<V>, ()> {
-        let src = self.next_operand_out_of(2)?;
-        let offset = self.next_operand_out_of(2)?;
+        let src = self.next_operand_of(2)?;
+        let offset = self.next_operand_of(2)?;
         src.expect_specific_atom(
             AtomKind::Reg16(Reg16::Sp),
             Message::SrcMustBeSp,
@@ -178,7 +178,7 @@ where
     }
 
     fn analyze_misc(&mut self, operation: MiscOperation) -> Result<Instruction<V>, ()> {
-        let operand = self.next_operand_out_of(1)?;
+        let operand = self.next_operand_of(1)?;
         Ok(Instruction::Misc(
             operation,
             operand.expect_simple(self.diagnostics)?,
@@ -186,9 +186,7 @@ where
     }
 
     fn analyze_stack_operation(&mut self, operation: StackOperation) -> Result<Instruction<V>, ()> {
-        let reg_pair = self
-            .next_operand_out_of(1)?
-            .expect_reg_pair(self.diagnostics)?;
+        let reg_pair = self.next_operand_of(1)?.expect_reg_pair(self.diagnostics)?;
         let instruction_ctor = match operation {
             StackOperation::Push => Instruction::Push,
             StackOperation::Pop => Instruction::Pop,
@@ -197,7 +195,7 @@ where
     }
 
     fn analyze_inc_dec(&mut self, mode: IncDec) -> Result<Instruction<V>, ()> {
-        match self.next_operand_out_of(1)? {
+        match self.next_operand_of(1)? {
             Operand::Atom(AtomKind::Simple(operand), _) => Ok(Instruction::IncDec8(mode, operand)),
             Operand::Atom(AtomKind::Reg16(operand), _) => Ok(Instruction::IncDec16(mode, operand)),
             operand => {
@@ -209,12 +207,11 @@ where
 
     fn analyze_rst(&mut self) -> Result<Instruction<V>, ()> {
         Ok(Instruction::Rst(
-            self.next_operand_out_of(1)?
-                .expect_const(self.diagnostics)?,
+            self.next_operand_of(1)?.expect_const(self.diagnostics)?,
         ))
     }
 
-    fn next_operand_out_of(&mut self, out_of: usize) -> Result<Operand<V>, ()> {
+    fn next_operand_of(&mut self, out_of: usize) -> Result<Operand<V>, ()> {
         let actual = self.operands.seen();
         self.next_operand()?.ok_or_else(|| {
             self.emit_diagnostic(
