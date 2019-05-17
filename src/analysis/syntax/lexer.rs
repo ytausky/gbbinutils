@@ -1,6 +1,6 @@
 use super::keyword::*;
 use super::{Command::*, Directive::*, Mnemonic::*, Operand::*, SimpleToken::*};
-use super::{SimpleToken, Token};
+use super::{IdentFactory, SimpleToken, Token};
 use crate::analysis::Literal;
 
 use std::borrow::Borrow;
@@ -173,15 +173,15 @@ fn is_hex_digit(character: char) -> bool {
     character.is_digit(16)
 }
 
-pub(crate) struct Lexer<B, F> {
+pub(in crate::analysis) struct Lexer<B, F> {
     scanner: Scanner<B>,
     mk_ident: F,
 }
 
-impl<B, F, I> Lexer<B, F>
+impl<B, F> Lexer<B, F>
 where
     B: Borrow<str>,
-    F: for<'a> Fn(&'a str) -> I,
+    F: IdentFactory,
 {
     pub fn new(src: B, mk_ident: F) -> Lexer<B, F> {
         Lexer {
@@ -194,7 +194,7 @@ where
         &self,
         kind: TokenKind,
         lexeme: &str,
-    ) -> Result<Token<I, Literal<String>, Command>, LexError> {
+    ) -> Result<Token<F::Ident, Literal<String>, Command>, LexError> {
         match kind {
             TokenKind::Ident => Ok(self.mk_keyword_or(Token::Ident, lexeme)),
             TokenKind::Label => Ok(self.mk_keyword_or(Token::Label, lexeme)),
@@ -212,22 +212,18 @@ where
         }
     }
 
-    fn mk_keyword_or<G>(&self, g: G, lexeme: &str) -> Token<I, Literal<String>, Command>
+    fn mk_keyword_or<G>(&self, g: G, lexeme: &str) -> Token<F::Ident, Literal<String>, Command>
     where
-        G: FnOnce(I) -> Token<I, Literal<String>, Command>,
+        G: FnOnce(F::Ident) -> Token<F::Ident, Literal<String>, Command>,
     {
-        identify_keyword(lexeme).map_or_else(|| g((self.mk_ident)(lexeme)), Into::into)
+        identify_keyword(lexeme).map_or_else(|| g(self.mk_ident.mk_ident(lexeme)), Into::into)
     }
 }
 
 type LexResult<I> = Result<Token<I, Literal<String>, Command>, LexError>;
 
-impl<B, F, I> Iterator for Lexer<B, F>
-where
-    B: Borrow<str>,
-    F: for<'a> Fn(&'a str) -> I,
-{
-    type Item = (LexResult<I>, Range<usize>);
+impl<B: Borrow<str>, F: IdentFactory> Iterator for Lexer<B, F> {
+    type Item = (LexResult<F::Ident>, Range<usize>);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.scanner.next().map(|(result, range)| {

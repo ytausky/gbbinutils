@@ -1,12 +1,12 @@
+pub use self::keyword::{Command, Directive, Mnemonic, Operand};
+pub(super) use self::lexer::{LexError, Lexer};
+
 use crate::diag::DelegateDiagnostics;
 use crate::model::BinOp;
-use std::borrow::Borrow;
 
 pub mod keyword;
-pub mod lexer;
+mod lexer;
 mod parser;
-
-pub use self::keyword::{Command, Directive, Mnemonic, Operand};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token<I, L, C> {
@@ -40,12 +40,19 @@ impl<I, L, C> From<SimpleToken> for Token<I, L, C> {
     }
 }
 
-pub(super) fn tokenize<B, F, I>(src: B, mk_ident: F) -> self::lexer::Lexer<B, F>
-where
-    B: Borrow<str>,
-    F: for<'a> Fn(&'a str) -> I,
-{
-    self::lexer::Lexer::new(src, mk_ident)
+pub(super) trait IdentFactory {
+    type Ident;
+
+    fn mk_ident(&self, spelling: &str) -> Self::Ident;
+}
+
+#[cfg(test)]
+impl<I, F: for<'a> Fn(&'a str) -> I> IdentFactory for F {
+    type Ident = I;
+
+    fn mk_ident(&self, spelling: &str) -> Self::Ident {
+        self(spelling)
+    }
 }
 
 pub(super) use self::parser::parse_src as parse_token_seq;

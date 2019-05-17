@@ -1,3 +1,5 @@
+use super::syntax::IdentFactory;
+
 use std::collections::HashMap;
 
 #[cfg(test)]
@@ -50,21 +52,27 @@ enum Visibility {
     Local,
 }
 
-pub fn mk_ident(spelling: &str) -> Ident<String> {
-    Ident {
-        name: spelling.to_string(),
-        visibility: if spelling.starts_with('_') {
-            Visibility::Local
-        } else {
-            Visibility::Global
-        },
+pub struct DefaultIdentFactory;
+
+impl IdentFactory for DefaultIdentFactory {
+    type Ident = Ident<String>;
+
+    fn mk_ident(&self, spelling: &str) -> Self::Ident {
+        Self::Ident {
+            name: spelling.to_string(),
+            visibility: if spelling.starts_with('_') {
+                Visibility::Local
+            } else {
+                Visibility::Global
+            },
+        }
     }
 }
 
 #[cfg(test)]
 impl From<&str> for Ident<String> {
     fn from(name: &str) -> Ident<String> {
-        mk_ident(name)
+        DefaultIdentFactory.mk_ident(name)
     }
 }
 
@@ -199,12 +207,18 @@ mod tests {
 
     #[test]
     fn ident_with_underscore_prefix_is_local() {
-        assert_eq!(mk_ident("_loop").visibility, Visibility::Local)
+        assert_eq!(
+            DefaultIdentFactory.mk_ident("_loop").visibility,
+            Visibility::Local
+        )
     }
 
     #[test]
     fn ident_without_underscore_prefix_is_global() {
-        assert_eq!(mk_ident("start").visibility, Visibility::Global)
+        assert_eq!(
+            DefaultIdentFactory.mk_ident("start").visibility,
+            Visibility::Global
+        )
     }
 
     #[test]

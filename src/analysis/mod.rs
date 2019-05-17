@@ -1,7 +1,6 @@
 use self::backend::*;
-use self::resolve::{BiLevelNameTable, Ident};
+use self::resolve::{BiLevelNameTable, DefaultIdentFactory, Ident};
 use self::session::*;
-use self::syntax::lexer::{LexError, Lexer};
 use self::syntax::*;
 
 use crate::codebase::{BufId, Codebase, CodebaseError};
@@ -38,7 +37,10 @@ where
         let mut analyzer = semantics::SemanticAnalyzer;
         let mut names = BiLevelNameTable::new();
         for (string, name) in self.builtin_names() {
-            names.insert(resolve::mk_ident(string), Name::Backend((*name).clone()))
+            names.insert(
+                DefaultIdentFactory.mk_ident(string),
+                Name::Backend((*name).clone()),
+            )
         }
         let session = CompositeSession::new(
             &mut file_parser,
@@ -135,7 +137,7 @@ impl<C: Codebase> StringRef for C {
 }
 
 impl<C: Codebase, B: BufContext> Tokenize<B> for C {
-    type Tokenized = TokenizedSrc<B>;
+    type Tokenized = TokenizedSrc<DefaultIdentFactory, B>;
 
     fn tokenize_file<F: FnOnce(BufId) -> B>(
         &self,
@@ -148,23 +150,21 @@ impl<C: Codebase, B: BufContext> Tokenize<B> for C {
     }
 }
 
-struct TokenizedSrc<C> {
-    tokens: Lexer<Rc<str>, MkIdent>,
+struct TokenizedSrc<F, C> {
+    tokens: Lexer<Rc<str>, F>,
     context: C,
 }
 
-type MkIdent = for<'a> fn(&'a str) -> Ident<String>;
-
-impl<C: BufContext> TokenizedSrc<C> {
-    fn new(src: Rc<str>, context: C) -> TokenizedSrc<C> {
+impl<C: BufContext> TokenizedSrc<DefaultIdentFactory, C> {
+    fn new(src: Rc<str>, context: C) -> Self {
         TokenizedSrc {
-            tokens: syntax::tokenize(src, resolve::mk_ident),
+            tokens: Lexer::new(src, DefaultIdentFactory),
             context,
         }
     }
 }
 
-impl<'a, C: BufContext> Iterator for TokenizedSrc<C> {
+impl<'a, F: IdentFactory<Ident = Ident<String>>, C: BufContext> Iterator for TokenizedSrc<F, C> {
     type Item = LexItem<String, C::Span>;
 
     fn next(&mut self) -> Option<Self::Item> {
