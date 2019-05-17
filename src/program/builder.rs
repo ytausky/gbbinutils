@@ -2,6 +2,7 @@ use super::{Atom, Expr, Immediate, NameDef, NameDefId, NameId, Node, Program, Re
 
 use crate::analysis::backend::*;
 use crate::model::{BinOp, ExprItem, ExprOp, FnCall, Item, ParamId};
+use crate::BuiltinNames;
 
 pub struct ProgramBuilder<'a, S> {
     program: &'a mut Program<S>,
@@ -191,6 +192,14 @@ impl<'a, S: Clone> StartSection<NameId, S> for ProgramBuilder<'a, S> {
         let index = self.program.sections.len();
         self.state = Some(BuilderState::SectionPrelude(index));
         self.program.add_section(Some(name.def().unwrap()))
+    }
+}
+
+impl<'a, S: Clone> BuiltinNames for ProgramBuilder<'a, S> {
+    type Name = NameId;
+
+    fn builtin_names(&self) -> &[(&str, Self::Name)] {
+        super::link::BUILTIN_NAMES
     }
 }
 

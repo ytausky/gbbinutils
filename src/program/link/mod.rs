@@ -1,3 +1,5 @@
+pub use self::eval::BUILTIN_NAMES;
+
 use self::value::Value;
 
 use super::{BinaryObject, Node, Program, RelocId, Section};

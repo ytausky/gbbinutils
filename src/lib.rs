@@ -83,6 +83,12 @@ fn try_assemble(
     Ok(program.link(diagnostics))
 }
 
+trait BuiltinNames {
+    type Name;
+
+    fn builtin_names(&self) -> &[(&str, Self::Name)];
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

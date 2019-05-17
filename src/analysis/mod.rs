@@ -9,6 +9,7 @@ use crate::name::{BiLevelNameTable, Ident};
 use crate::span::BufContext;
 use crate::syntax::lexer::{LexError, Lexer};
 use crate::syntax::*;
+use crate::BuiltinNames;
 
 use std::rc::Rc;
 
@@ -23,7 +24,7 @@ mod session;
 pub(crate) trait Assemble<D>
 where
     D: Diagnostics,
-    Self: Backend<D::Span> + Sized,
+    Self: Backend<D::Span> + BuiltinNames<Name = <Self as AllocName<D::Span>>::Name> + Sized,
 {
     fn assemble<C: Codebase>(
         self,
@@ -31,9 +32,17 @@ where
         codebase: &C,
         diagnostics: &mut D,
     ) -> Result<(), CodebaseError> {
+        use crate::name::{Name, NameTable};
+
         let mut file_parser = CodebaseAnalyzer::new(codebase);
         let mut analyzer = semantics::SemanticAnalyzer;
         let mut names = BiLevelNameTable::new();
+        for (string, name) in self.builtin_names() {
+            names.insert(
+                crate::name::mk_ident(string),
+                Name::Backend((*name).clone()),
+            )
+        }
         let session = CompositeSession::new(
             &mut file_parser,
             &mut analyzer,
@@ -48,7 +57,7 @@ where
 impl<B, D> Assemble<D> for B
 where
     D: Diagnostics,
-    B: Backend<D::Span>,
+    B: Backend<D::Span> + BuiltinNames<Name = <Self as AllocName<D::Span>>::Name>,
 {
 }
 

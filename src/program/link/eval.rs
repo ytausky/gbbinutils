@@ -157,6 +157,8 @@ impl BinOp {
     }
 }
 
+pub const BUILTIN_NAMES: &[(&str, NameId)] = &[("sizeof", NameId::Builtin(BuiltinName::Sizeof))];
+
 #[cfg(test)]
 mod tests {
     use crate::model::{BinOp, ParamId};
