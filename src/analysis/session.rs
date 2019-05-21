@@ -165,15 +165,14 @@ where
     }
 }
 
-impl<'a, 'b, C, A, B, N, D> PushOp<Ident<C::StringRef>, D::Span>
+impl<'a, 'b, C, A, B, N, D, R, S> PushOp<Ident<R>, S>
     for RelocContext<CompositeSession<'a, 'b, C, A, (), N, D>, B>
 where
-    C: Lex<D>,
-    B: AllocName<D::Span> + PushOp<<B as AllocName<D::Span>>::Name, D::Span>,
-    N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name>,
-    D: Diagnostics,
+    B: AllocName<S> + PushOp<<B as AllocName<S>>::Name, S>,
+    N: NameTable<Ident<R>, BackendEntry = B::Name>,
+    S: Clone,
 {
-    fn push_op(&mut self, ident: Ident<C::StringRef>, span: D::Span) {
+    fn push_op(&mut self, ident: Ident<R>, span: S) {
         let id = look_up_symbol(&mut self.builder, self.parent.names, ident, &span);
         self.builder.push_op(id, span)
     }
@@ -204,9 +203,7 @@ where
 impl<'a, 'b, C, A, B, N, D> FinishFnDef
     for RelocContext<CompositeSession<'a, 'b, C, A, (), N, D>, B>
 where
-    C: Lex<D>,
     B: FinishFnDef,
-    D: Diagnostics,
 {
     type Return = CompositeSession<'a, 'b, C, A, B::Return, N, D>;
 
@@ -334,15 +331,14 @@ where
     }
 }
 
-impl<'a, 'b, C, A, B, N, D> StartSection<Ident<C::StringRef>, D::Span>
+impl<'a, 'b, C, A, B, N, D, R, S> StartSection<Ident<R>, S>
     for CompositeSession<'a, 'b, C, A, B, N, D>
 where
-    C: Lex<D>,
-    B: Backend<D::Span>,
-    N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name>,
-    D: Diagnostics,
+    B: Backend<S>,
+    N: NameTable<Ident<R>, BackendEntry = B::Name>,
+    S: Clone,
 {
-    fn start_section(&mut self, (ident, span): (Ident<C::StringRef>, D::Span)) {
+    fn start_section(&mut self, (ident, span): (Ident<R>, S)) {
         let name = self.look_up_symbol(ident, &span);
         self.backend.start_section((name, span))
     }
