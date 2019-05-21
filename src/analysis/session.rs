@@ -16,21 +16,11 @@ pub(crate) use self::mock::*;
 
 pub(super) trait Session
 where
-    Self: Sized,
     Self: Span + StringRef,
-    Self: DelegateDiagnostics<<Self as Span>::Span>,
-    Self: PartialBackend<<Self as Span>::Span>,
-    Self: StartSection<Ident<<Self as StringRef>::StringRef>, <Self as Span>::Span>,
+    Self: BasicSession<<Self as StringRef>::StringRef, <Self as Span>::Span>,
 {
-    type FnBuilder: ValueBuilder<Ident<Self::StringRef>, Self::Span>
-        + FinishFnDef<Return = Self>
-        + DelegateDiagnostics<Self::Span>;
-    type GeneralBuilder: ValueBuilder<Ident<Self::StringRef>, Self::Span>
-        + Finish<Self::Span, Parent = Self, Value = Self::Value>
-        + DelegateDiagnostics<Self::Span>;
-
     fn analyze_file(self, path: Self::StringRef) -> (Result<(), CodebaseError>, Self);
-    fn build_value(self) -> Self::GeneralBuilder;
+
     fn define_macro(
         &mut self,
         name: (Ident<Self::StringRef>, Self::Span),
@@ -42,7 +32,22 @@ where
         name: (Ident<Self::StringRef>, Self::Span),
         args: MacroArgs<Self::StringRef, Self::Span>,
     ) -> Self;
-    fn define_symbol(self, name: Ident<Self::StringRef>, span: Self::Span) -> Self::FnBuilder;
+}
+
+pub(super) trait BasicSession<R, S: Clone>
+where
+    Self: Sized,
+    Self: PartialBackend<S>,
+    Self: StartSection<Ident<R>, S>,
+    Self: DelegateDiagnostics<S>,
+{
+    type FnBuilder: ValueBuilder<Ident<R>, S> + FinishFnDef<Return = Self> + DelegateDiagnostics<S>;
+    type GeneralBuilder: ValueBuilder<Ident<R>, S>
+        + Finish<S, Parent = Self, Value = Self::Value>
+        + DelegateDiagnostics<S>;
+
+    fn build_value(self) -> Self::GeneralBuilder;
+    fn define_symbol(self, name: Ident<R>, span: S) -> Self::FnBuilder;
 }
 
 pub(super) type MacroArgs<I, S> = Vec<Vec<(SemanticToken<I>, S)>>;
@@ -143,12 +148,10 @@ where
     type StringRef = C::StringRef;
 }
 
-impl<'a, 'b, C, A, B, N, D> PartialBackend<D::Span> for CompositeSession<'a, 'b, C, A, B, N, D>
+impl<'a, 'b, C, A, B, N, D, S> PartialBackend<S> for CompositeSession<'a, 'b, C, A, B, N, D>
 where
-    C: Lex<D>,
-    B: Backend<D::Span>,
-    N: NameTable<Ident<C::StringRef>, MacroEntry = MacroEntry<C::StringRef, D>>,
-    D: Diagnostics,
+    B: Backend<S>,
+    S: Clone,
 {
     type Value = B::Value;
 
@@ -178,11 +181,11 @@ where
     }
 }
 
-impl<'a, 'b, C, A, B, N, D> Finish<D::Span>
+impl<'a, 'b, C, A, B, N, D, S> Finish<S>
     for RelocContext<CompositeSession<'a, 'b, C, A, (), N, D>, B>
 where
-    B: Finish<D::Span>,
-    D: Span,
+    B: Finish<S>,
+    S: Clone,
 {
     type Parent = CompositeSession<'a, 'b, C, A, B::Parent, N, D>;
     type Value = B::Value;
@@ -241,10 +244,6 @@ where
         > + StartScope<Ident<C::StringRef>>,
     D: Diagnostics,
 {
-    type FnBuilder = RelocContext<CompositeSession<'a, 'b, C, A, (), N, D>, B::SymbolBuilder>;
-    type GeneralBuilder =
-        RelocContext<CompositeSession<'a, 'b, C, A, (), N, D>, B::ImmediateBuilder>;
-
     fn analyze_file(mut self, path: Self::StringRef) -> (Result<(), CodebaseError>, Self) {
         let tokens = match self.codebase.lex_file(path, self.diagnostics) {
             Ok(tokens) => tokens,
@@ -254,19 +253,6 @@ where
             self.analyzer.analyze_token_seq(tokens, partial!(self));
         self.backend = backend;
         (Ok(()), self)
-    }
-
-    fn build_value(self) -> Self::GeneralBuilder {
-        RelocContext {
-            parent: CompositeSession {
-                codebase: self.codebase,
-                analyzer: self.analyzer,
-                backend: (),
-                names: self.names,
-                diagnostics: self.diagnostics,
-            },
-            builder: self.backend.build_immediate(),
-        }
     }
 
     fn define_macro(
@@ -302,8 +288,33 @@ where
         }
         self
     }
+}
 
-    fn define_symbol(mut self, name: Ident<Self::StringRef>, span: Self::Span) -> Self::FnBuilder {
+impl<'a, 'b, C, A, B, N, D, R, S> BasicSession<R, S> for CompositeSession<'a, 'b, C, A, B, N, D>
+where
+    B: Backend<S>,
+    N: NameTable<Ident<R>, BackendEntry = B::Name> + StartScope<Ident<R>>,
+    D: DownstreamDiagnostics<S>,
+    S: Clone,
+{
+    type FnBuilder = RelocContext<CompositeSession<'a, 'b, C, A, (), N, D>, B::SymbolBuilder>;
+    type GeneralBuilder =
+        RelocContext<CompositeSession<'a, 'b, C, A, (), N, D>, B::ImmediateBuilder>;
+
+    fn build_value(self) -> Self::GeneralBuilder {
+        RelocContext {
+            parent: CompositeSession {
+                codebase: self.codebase,
+                analyzer: self.analyzer,
+                backend: (),
+                names: self.names,
+                diagnostics: self.diagnostics,
+            },
+            builder: self.backend.build_immediate(),
+        }
+    }
+
+    fn define_symbol(mut self, name: Ident<R>, span: S) -> Self::FnBuilder {
         self.names.start_scope(&name);
         let id = self.look_up_symbol(name, &span);
         let session = CompositeSession {
@@ -414,18 +425,11 @@ mod mock {
         T: From<DiagnosticsEvent<S>>,
         S: Clone + MockSpan,
     {
-        type FnBuilder = MockSymbolBuilder<Self, Ident<String>, S>;
-        type GeneralBuilder = RelocContext<Self, Expr<S>>;
-
         fn analyze_file(mut self, path: String) -> (Result<(), CodebaseError>, Self) {
             self.log
                 .borrow_mut()
                 .push(SessionEvent::AnalyzeFile(path).into());
             (self.error.take().map_or(Ok(()), Err), self)
-        }
-
-        fn build_value(self) -> Self::GeneralBuilder {
-            RelocContext::new(self)
         }
 
         fn define_macro(
@@ -455,8 +459,23 @@ mod mock {
             );
             self
         }
+    }
 
-        fn define_symbol(self, name: Ident<Self::StringRef>, span: Self::Span) -> Self::FnBuilder {
+    impl<'a, T, S> BasicSession<String, S> for MockSession<'a, T, S>
+    where
+        T: From<SessionEvent<S>>,
+        T: From<BackendEvent<Expr<S>>>,
+        T: From<DiagnosticsEvent<S>>,
+        S: Clone + MockSpan,
+    {
+        type FnBuilder = MockSymbolBuilder<Self, Ident<String>, S>;
+        type GeneralBuilder = RelocContext<Self, Expr<S>>;
+
+        fn build_value(self) -> Self::GeneralBuilder {
+            RelocContext::new(self)
+        }
+
+        fn define_symbol(self, name: Ident<String>, span: S) -> Self::FnBuilder {
             MockSymbolBuilder {
                 parent: self,
                 name: (name, span),
