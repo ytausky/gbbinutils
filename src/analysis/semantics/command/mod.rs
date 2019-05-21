@@ -183,21 +183,15 @@ where
     }
 
     fn apply_operator(&mut self, operator: (Operator, S)) {
-        match operator.0 {
+        let variant = match operator.0 {
             Operator::Unary(UnaryOperator::Parentheses) => {
                 let inner = self.pop();
-                self.stack.push(Arg {
-                    variant: ArgVariant::Unary(ArgUnaryOp::Parentheses, Box::new(inner)),
-                    span: operator.1,
-                })
+                ArgVariant::Unary(ArgUnaryOp::Parentheses, Box::new(inner))
             }
             Operator::Binary(binary) => {
                 let rhs = self.pop();
                 let lhs = self.pop();
-                self.stack.push(Arg {
-                    variant: ArgVariant::Binary(binary, Box::new(lhs), Box::new(rhs)),
-                    span: operator.1,
-                })
+                ArgVariant::Binary(binary, Box::new(lhs), Box::new(rhs))
             }
             Operator::FnCall(n) => {
                 let args = self.stack.split_off(self.stack.len() - n);
@@ -209,12 +203,13 @@ where
                     },
                     name.span,
                 );
-                self.stack.push(Arg {
-                    variant: ArgVariant::FnCall(name, args),
-                    span: operator.1,
-                })
+                ArgVariant::FnCall(name, args)
             }
-        }
+        };
+        self.stack.push(Arg {
+            variant,
+            span: operator.1,
+        })
     }
 }
 
