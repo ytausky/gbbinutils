@@ -2,7 +2,6 @@ use super::resolve::{Ident, Name, NameTable};
 use super::{SemanticToken, Token};
 
 use crate::diag::span::{MacroContextFactory, MacroExpansionContext, Span};
-use crate::diag::Diagnostics;
 
 use std::rc::Rc;
 
@@ -13,28 +12,33 @@ pub(super) trait Expand<I, F: MacroContextFactory<S>, S> {
         -> Self::Iter;
 }
 
-pub(super) trait DefineMacro<R, D: Diagnostics> {
-    fn define_macro(
+pub(super) trait DefineMacro<R, I: Clone> {
+    fn define_macro<D, S>(
         &mut self,
-        name: (Ident<R>, D::Span),
-        params: (Vec<Ident<R>>, Vec<D::Span>),
-        body: (Vec<SemanticToken<R>>, Vec<D::Span>),
+        name: (Ident<R>, S),
+        params: (Vec<Ident<R>>, Vec<S>),
+        body: (Vec<SemanticToken<R>>, Vec<S>),
         diagnostics: &mut D,
-    );
+    ) where
+        D: MacroContextFactory<S, MacroDefId = I>,
+        S: Clone;
 }
 
-impl<R, N, D> DefineMacro<R, D> for N
+impl<R, N, I> DefineMacro<R, I> for N
 where
-    N: NameTable<Ident<R>, MacroEntry = MacroTableEntry<D::MacroDefId, Rc<MacroDefData<R>>>>,
-    D: Diagnostics,
+    N: NameTable<Ident<R>, MacroEntry = MacroTableEntry<I, Rc<MacroDefData<R>>>>,
+    I: Clone,
 {
-    fn define_macro(
+    fn define_macro<D, S>(
         &mut self,
-        name: (Ident<R>, D::Span),
-        params: (Vec<Ident<R>>, Vec<D::Span>),
-        body: (Vec<SemanticToken<R>>, Vec<D::Span>),
+        name: (Ident<R>, S),
+        params: (Vec<Ident<R>>, Vec<S>),
+        body: (Vec<SemanticToken<R>>, Vec<S>),
         diagnostics: &mut D,
-    ) {
+    ) where
+        D: MacroContextFactory<S, MacroDefId = I>,
+        S: Clone,
+    {
         let context = diagnostics.add_macro_def(name.1.clone(), params.1.clone(), body.1.clone());
         self.insert(
             name.0,
