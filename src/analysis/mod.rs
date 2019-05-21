@@ -5,7 +5,7 @@ use self::syntax::*;
 
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diag::*;
-use crate::span::BufContext;
+use crate::span::{BufContext, BufContextFactory};
 use crate::BuiltinNames;
 
 use std::rc::Rc;
@@ -70,7 +70,7 @@ pub(super) enum Literal<S> {
     String(S),
 }
 
-trait Lex<D: Diagnostics> {
+trait Lex<D: BufContextFactory> {
     type StringRef: Clone + Eq;
     type TokenIter: Iterator<Item = LexItem<Self::StringRef, D::Span>>;
 
@@ -100,7 +100,7 @@ impl<'a, T, D> Lex<D> for CodebaseAnalyzer<'a, T>
 where
     T: Tokenize<D::BufContext> + 'a,
     T::StringRef: AsRef<str>,
-    D: Diagnostics,
+    D: BufContextFactory,
 {
     type StringRef = T::StringRef;
     type TokenIter = T::Tokenized;
@@ -202,7 +202,7 @@ mod mock {
 
     impl<'a, D> Lex<D> for MockCodebase<D::Span>
     where
-        D: Diagnostics,
+        D: BufContextFactory,
     {
         type StringRef = String;
         type TokenIter = IntoIter<LexItem<Self::StringRef, D::Span>>;

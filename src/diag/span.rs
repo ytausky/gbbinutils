@@ -48,9 +48,16 @@ pub trait MacroContextFactory<S> {
 pub trait ContextFactory
 where
     Self: Span,
+    Self: BufContextFactory,
     Self: MacroContextFactory<<Self as Span>::Span>,
     Self: MergeSpans<<Self as Span>::Span>,
     Self: StripSpan<<Self as Span>::Span>,
+{
+}
+
+pub trait BufContextFactory
+where
+    Self: Span,
 {
     type BufContext: BufContext<Span = Self::Span>;
 
@@ -290,7 +297,9 @@ impl StripSpan<SpanData<BufSpan>> for RcContextFactory<BufId, BufRange> {
     }
 }
 
-impl ContextFactory for RcContextFactory<BufId, BufRange> {
+impl ContextFactory for RcContextFactory<BufId, BufRange> {}
+
+impl BufContextFactory for RcContextFactory<BufId, BufRange> {
     type BufContext = RcBufContext<BufId, BufRange>;
 
     fn mk_buf_context(

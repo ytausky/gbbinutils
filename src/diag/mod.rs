@@ -152,6 +152,13 @@ where
     C: ContextFactory,
     O: EmitDiagnostic<C::Span, C::Stripped>,
 {
+}
+
+impl<C, O> BufContextFactory for DiagnosticsSystem<C, O>
+where
+    C: ContextFactory,
+    O: EmitDiagnostic<C::Span, C::Stripped>,
+{
     type BufContext = C::BufContext;
 
     fn mk_buf_context(
@@ -497,7 +504,9 @@ mod mock {
         }
     }
 
-    impl<'a, T, S> ContextFactory for MockDiagnostics<'a, T, S>
+    impl<'a, T, S> ContextFactory for MockDiagnostics<'a, T, S> where S: Clone + MockSpan {}
+
+    impl<'a, T, S> BufContextFactory for MockDiagnostics<'a, T, S>
     where
         S: Clone + MockSpan,
     {
