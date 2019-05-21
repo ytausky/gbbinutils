@@ -74,23 +74,14 @@ impl<'a, 'b, C, A, B, N, D> CompositeSession<'a, 'b, C, A, B, N, D> {
     }
 }
 
-impl<'a, 'b, C, A, B, N, D> CompositeSession<'a, 'b, C, A, B, N, D>
-where
-    C: Lex<D>,
-    B: AllocName<D::Span>,
-    N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name>,
-    D: Diagnostics,
-{
-    fn look_up_symbol(&mut self, ident: Ident<C::StringRef>, span: &D::Span) -> B::Name {
-        match self.names.get(&ident) {
-            Some(Name::Backend(id)) => id.clone(),
-            Some(Name::Macro(_)) => unimplemented!(),
-            None => {
-                let id = self.backend.alloc_name(span.clone());
-                self.names.insert(ident, Name::Backend(id.clone()));
-                id
-            }
-        }
+impl<'a, 'b, C, A, B, N, D> CompositeSession<'a, 'b, C, A, B, N, D> {
+    fn look_up_symbol<R, S>(&mut self, ident: Ident<R>, span: &S) -> B::Name
+    where
+        B: AllocName<S>,
+        N: NameTable<Ident<R>, BackendEntry = B::Name>,
+        S: Clone,
+    {
+        look_up_symbol(&mut self.backend, self.names, ident, span)
     }
 }
 
