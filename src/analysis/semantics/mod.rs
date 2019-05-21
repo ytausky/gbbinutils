@@ -344,28 +344,28 @@ mod tests {
     use std::cell::RefCell;
 
     #[derive(Debug, PartialEq)]
-    pub(crate) enum TestOperation {
-        Backend(BackendEvent<Expr>),
-        Diagnostics(DiagnosticsEvent<()>),
-        Session(SessionEvent<()>),
+    pub(crate) enum TestOperation<S: Clone> {
+        Backend(BackendEvent<Expr<S>>),
+        Diagnostics(DiagnosticsEvent<S>),
+        Session(SessionEvent<S>),
     }
 
-    type Expr = crate::model::Expr<LocationCounter, Ident<String>, ()>;
+    pub type Expr<S> = crate::model::Expr<LocationCounter, Ident<String>, S>;
 
-    impl<'a> From<BackendEvent<Expr>> for TestOperation {
-        fn from(event: BackendEvent<Expr>) -> Self {
+    impl<'a, S: Clone> From<BackendEvent<Expr<S>>> for TestOperation<S> {
+        fn from(event: BackendEvent<Expr<S>>) -> Self {
             TestOperation::Backend(event)
         }
     }
 
-    impl<'a> From<DiagnosticsEvent<()>> for TestOperation {
-        fn from(event: DiagnosticsEvent<()>) -> Self {
+    impl<'a, S: Clone> From<DiagnosticsEvent<S>> for TestOperation<S> {
+        fn from(event: DiagnosticsEvent<S>) -> Self {
             TestOperation::Diagnostics(event)
         }
     }
 
-    impl<'a> From<SessionEvent<()>> for TestOperation {
-        fn from(event: SessionEvent<()>) -> Self {
+    impl<'a, S: Clone> From<SessionEvent<S>> for TestOperation<S> {
+        fn from(event: SessionEvent<S>) -> Self {
             TestOperation::Session(event)
         }
     }
@@ -665,11 +665,13 @@ mod tests {
         )
     }
 
-    pub(super) type MockSession<'a> = crate::analysis::session::MockSession<'a, TestOperation, ()>;
+    pub(super) type MockSession<'a, S> =
+        crate::analysis::session::MockSession<'a, TestOperation<S>, S>;
 
-    pub(super) fn collect_semantic_actions<F>(f: F) -> Vec<TestOperation>
+    pub(super) fn collect_semantic_actions<F, S>(f: F) -> Vec<TestOperation<S>>
     where
-        F: for<'a> FnOnce(TestSemanticActions<'a>) -> TestSemanticActions<'a>,
+        F: for<'a> FnOnce(TestSemanticActions<'a, S>) -> TestSemanticActions<'a, S>,
+        S: Clone + MockSpan,
     {
         let operations = RefCell::new(Vec::new());
         let session = MockSession::new(&operations);
@@ -677,5 +679,5 @@ mod tests {
         operations.into_inner()
     }
 
-    type TestSemanticActions<'a> = SemanticActions<MockSession<'a>>;
+    type TestSemanticActions<'a, S> = SemanticActions<MockSession<'a, S>>;
 }

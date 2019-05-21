@@ -146,19 +146,18 @@ mod tests {
     use super::*;
 
     use crate::analysis::backend::BackendEvent;
+    use crate::analysis::semantics::command;
     use crate::analysis::semantics::tests::*;
     use crate::analysis::session::SessionEvent;
     use crate::analysis::syntax::keyword::{Command, Operand};
     use crate::analysis::syntax::*;
     use crate::analysis::Ident;
     use crate::codebase::CodebaseError;
-    use crate::model::{Atom, LocationCounter, ParamId};
+    use crate::model::{Atom, ParamId};
 
     use std::borrow::Borrow;
     use std::cell::RefCell;
     use std::io;
-
-    type Expr = crate::model::Expr<LocationCounter, Ident<String>, ()>;
 
     #[test]
     fn build_include_item() {
@@ -189,17 +188,17 @@ mod tests {
         test_data_items_emission(Directive::Dw, mk_word, [0x4332, 0x780f])
     }
 
-    fn mk_byte(byte: i32) -> Item<Expr> {
+    fn mk_byte(byte: i32) -> Item<Expr<()>> {
         Item::Data((byte).into(), Width::Byte)
     }
 
-    fn mk_word(word: i32) -> Item<Expr> {
+    fn mk_word(word: i32) -> Item<Expr<()>> {
         Item::Data((word).into(), Width::Word)
     }
 
     fn test_data_items_emission(
         directive: Directive,
-        mk_item: impl Fn(i32) -> Item<Expr>,
+        mk_item: impl Fn(i32) -> Item<Expr<()>>,
         data: impl Borrow<[i32]>,
     ) {
         let actions = with_directive(directive, |mut command| {
@@ -387,16 +386,15 @@ mod tests {
         assert_eq!(actions, [BackendEvent::StartSection((0, ())).into()])
     }
 
-    fn ds(f: impl for<'a> FnOnce(&mut TestExprContext<'a>)) -> Vec<TestOperation> {
+    fn ds(f: impl for<'a> FnOnce(&mut TestExprContext<'a, ()>)) -> Vec<TestOperation<()>> {
         unary_directive(Directive::Ds, f)
     }
 
-    type TestExprContext<'a> =
-        crate::analysis::semantics::command::ExprBuilder<String, (), TestCommandActions<'a>>;
+    type TestExprContext<'a, S> = command::ExprBuilder<String, (), TestCommandActions<'a, S>>;
 
-    fn unary_directive<F>(directive: Directive, f: F) -> Vec<TestOperation>
+    fn unary_directive<F>(directive: Directive, f: F) -> Vec<TestOperation<()>>
     where
-        F: for<'a> FnOnce(&mut TestExprContext<'a>),
+        F: for<'a> FnOnce(&mut TestExprContext<'a, ()>),
     {
         with_directive(directive, |command| {
             let mut arg = command.add_argument();
@@ -421,11 +419,11 @@ mod tests {
         )
     }
 
-    type TestCommandActions<'a> = crate::analysis::semantics::CommandActions<MockSession<'a>>;
+    type TestCommandActions<'a, S> = command::CommandActions<MockSession<'a, S>>;
 
-    fn with_directive<F>(directive: Directive, f: F) -> Vec<TestOperation>
+    fn with_directive<F>(directive: Directive, f: F) -> Vec<TestOperation<()>>
     where
-        F: for<'a> FnOnce(TestCommandActions<'a>) -> TestCommandActions<'a>,
+        F: for<'a> FnOnce(TestCommandActions<'a, ()>) -> TestCommandActions<'a, ()>,
     {
         collect_semantic_actions(|actions| {
             let command = actions
@@ -435,9 +433,9 @@ mod tests {
         })
     }
 
-    fn with_labeled_directive<F>(label: &str, directive: Directive, f: F) -> Vec<TestOperation>
+    fn with_labeled_directive<F>(label: &str, directive: Directive, f: F) -> Vec<TestOperation<()>>
     where
-        F: for<'a> FnOnce(&mut TestExprContext<'a>),
+        F: for<'a> FnOnce(&mut TestExprContext<'a, ()>),
     {
         collect_semantic_actions(|actions| {
             let mut arg = actions
