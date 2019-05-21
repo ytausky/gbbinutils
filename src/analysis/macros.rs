@@ -205,9 +205,11 @@ mod tests {
             buf_id: (),
             included_from: None,
         });
-        let mk_span = |n| SpanData::Buf {
-            range: n,
-            context: Rc::clone(&buf),
+        let mk_span = |n| {
+            SpanData::Buf(BufSpan {
+                range: n,
+                context: Rc::clone(&buf),
+            })
         };
         let body = Token::Ident("a".into());
         let def_id = Rc::new(crate::span::MacroDef {
@@ -253,9 +255,11 @@ mod tests {
             buf_id: (),
             included_from: None,
         });
-        let mk_span = |n| SpanData::Buf {
-            range: n,
-            context: Rc::clone(&buf),
+        let mk_span = |n| {
+            SpanData::Buf(BufSpan {
+                range: n,
+                context: Rc::clone(&buf),
+            })
         };
         let body = vec![
             Token::Ident("a".into()),
@@ -276,19 +280,19 @@ mod tests {
             }),
         };
         let data = Rc::new(MacroExpansionData {
-            name: SpanData::Buf {
+            name: SpanData::Buf(BufSpan {
                 range: 7,
                 context: buf.clone(),
-            },
+            }),
             args: vec![vec![
-                SpanData::Buf {
+                SpanData::Buf(BufSpan {
                     range: 8,
                     context: buf.clone(),
-                },
-                SpanData::Buf {
+                }),
+                SpanData::Buf(BufSpan {
                     range: 9,
                     context: buf.clone(),
-                },
+                }),
             ]],
             def: def_id,
         });

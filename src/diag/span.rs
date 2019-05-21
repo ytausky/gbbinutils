@@ -78,15 +78,18 @@ pub struct TokenExpansion {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum SpanData<B = BufId, R = BufRange> {
-    Buf {
-        range: R,
-        context: Rc<BufContextData<B, R>>,
-    },
+pub enum SpanData<B = BufSpan> {
+    Buf(B),
     Macro {
         range: RangeInclusive<MacroExpansionPosition>,
-        context: Rc<MacroExpansionData<SpanData<B, R>>>,
+        context: Rc<MacroExpansionData<SpanData<B>>>,
     },
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct BufSpan<B = BufId, R = BufRange> {
+    pub range: R,
+    pub context: Rc<BufContextData<B, R>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -95,10 +98,10 @@ pub struct StrippedBufSpan<B = BufId, R = BufRange> {
     pub range: R,
 }
 
-impl<B: Clone, T: Clone> SpanData<B, Range<T>> {
+impl<B: Clone, T: Clone> SpanData<BufSpan<B, Range<T>>> {
     pub fn to_stripped(&self) -> StrippedBufSpan<B, Range<T>> {
         match self {
-            SpanData::Buf { range, context } => StrippedBufSpan {
+            SpanData::Buf(BufSpan { range, context }) => StrippedBufSpan {
                 buf_id: context.buf_id.clone(),
                 range: range.clone(),
             },
@@ -107,14 +110,14 @@ impl<B: Clone, T: Clone> SpanData<B, Range<T>> {
                 let end = &context.def.body[range.end().token];
                 let (buf_id, range) = match (start, end) {
                     (
-                        SpanData::Buf {
+                        SpanData::Buf(BufSpan {
                             ref range,
                             ref context,
-                        },
-                        SpanData::Buf {
+                        }),
+                        SpanData::Buf(BufSpan {
                             range: ref other_range,
                             context: ref other_context,
-                        },
+                        }),
                     ) if Rc::ptr_eq(context, other_context) => (
                         context.buf_id.clone(),
                         range.start.clone()..other_range.end.clone(),
@@ -168,7 +171,7 @@ fn merge_macro_expansion_ranges(
 #[derive(Debug, PartialEq)]
 pub struct BufContextData<B, R> {
     pub buf_id: B,
-    pub included_from: Option<SpanData<B, R>>,
+    pub included_from: Option<SpanData<BufSpan<B, R>>>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -195,22 +198,27 @@ impl<B, R> RcContextFactory<B, R> {
 
 impl<B, R> Span for RcContextFactory<B, R>
 where
-    SpanData<B, R>: Clone,
+    SpanData<BufSpan<B, R>>: Clone,
 {
-    type Span = SpanData<B, R>;
+    type Span = SpanData<BufSpan<B, R>>;
 }
 
-impl<B, R> MacroContextFactory<SpanData<B, R>> for RcContextFactory<B, R>
+impl<B, R> MacroContextFactory<SpanData<BufSpan<B, R>>> for RcContextFactory<B, R>
 where
-    SpanData<B, R>: Clone,
+    SpanData<BufSpan<B, R>>: Clone,
 {
-    type MacroDefId = Rc<MacroDef<SpanData<B, R>>>;
-    type MacroExpansionContext = Rc<MacroExpansionData<SpanData<B, R>>>;
+    type MacroDefId = Rc<MacroDef<SpanData<BufSpan<B, R>>>>;
+    type MacroExpansionContext = Rc<MacroExpansionData<SpanData<BufSpan<B, R>>>>;
 
-    fn add_macro_def<P, C>(&mut self, name: SpanData<B, R>, params: P, body: C) -> Self::MacroDefId
+    fn add_macro_def<P, C>(
+        &mut self,
+        name: SpanData<BufSpan<B, R>>,
+        params: P,
+        body: C,
+    ) -> Self::MacroDefId
     where
-        P: IntoIterator<Item = SpanData<B, R>>,
-        C: IntoIterator<Item = SpanData<B, R>>,
+        P: IntoIterator<Item = SpanData<BufSpan<B, R>>>,
+        C: IntoIterator<Item = SpanData<BufSpan<B, R>>>,
     {
         Rc::new(MacroDef {
             name,
@@ -221,13 +229,13 @@ where
 
     fn mk_macro_expansion_context<I, J>(
         &mut self,
-        name: SpanData<B, R>,
+        name: SpanData<BufSpan<B, R>>,
         args: I,
         def: &Self::MacroDefId,
     ) -> Self::MacroExpansionContext
     where
         I: IntoIterator<Item = J>,
-        J: IntoIterator<Item = SpanData<B, R>>,
+        J: IntoIterator<Item = SpanData<BufSpan<B, R>>>,
     {
         Rc::new(MacroExpansionData {
             name,
@@ -241,24 +249,24 @@ where
     }
 }
 
-impl MergeSpans<SpanData<BufId, BufRange>> for RcContextFactory<BufId, BufRange> {
+impl MergeSpans<SpanData<BufSpan>> for RcContextFactory<BufId, BufRange> {
     fn merge_spans(
         &mut self,
-        left: &SpanData<BufId, BufRange>,
-        right: &SpanData<BufId, BufRange>,
-    ) -> SpanData<BufId, BufRange> {
+        left: &SpanData<BufSpan>,
+        right: &SpanData<BufSpan>,
+    ) -> SpanData<BufSpan> {
         use self::SpanData::*;
         match (left, right) {
             (
-                Buf { range, context },
-                Buf {
+                Buf(BufSpan { range, context }),
+                Buf(BufSpan {
                     range: other_range,
                     context: other_context,
-                },
-            ) if Rc::ptr_eq(context, other_context) => Buf {
+                }),
+            ) if Rc::ptr_eq(context, other_context) => Buf(BufSpan {
                 range: range.start..other_range.end,
                 context: Rc::clone(context),
-            },
+            }),
             (
                 Macro { range, context },
                 Macro {
@@ -274,10 +282,10 @@ impl MergeSpans<SpanData<BufId, BufRange>> for RcContextFactory<BufId, BufRange>
     }
 }
 
-impl StripSpan<SpanData<BufId, BufRange>> for RcContextFactory<BufId, BufRange> {
+impl StripSpan<SpanData<BufSpan>> for RcContextFactory<BufId, BufRange> {
     type Stripped = StrippedBufSpan<BufId, BufRange>;
 
-    fn strip_span(&mut self, span: &SpanData<BufId, BufRange>) -> Self::Stripped {
+    fn strip_span(&mut self, span: &SpanData<BufSpan>) -> Self::Stripped {
         span.to_stripped()
     }
 }
@@ -304,17 +312,17 @@ pub struct RcBufContext<B, R> {
 }
 
 impl BufContext for RcBufContext<BufId, BufRange> {
-    type Span = SpanData<BufId, BufRange>;
+    type Span = SpanData<BufSpan>;
     fn mk_span(&self, range: BufRange) -> Self::Span {
-        SpanData::Buf {
+        SpanData::Buf(BufSpan {
             range,
             context: self.context.clone(),
-        }
+        })
     }
 }
 
-impl<B, R> MacroExpansionContext for Rc<MacroExpansionData<SpanData<B, R>>> {
-    type Span = SpanData<B, R>;
+impl<B, R> MacroExpansionContext for Rc<MacroExpansionData<SpanData<BufSpan<B, R>>>> {
+    type Span = SpanData<BufSpan<B, R>>;
 
     fn mk_span(&self, token: usize, expansion: Option<TokenExpansion>) -> Self::Span {
         let position = MacroExpansionPosition { token, expansion };
@@ -339,21 +347,21 @@ mod tests {
             buf_id,
             included_from: None,
         });
-        let left = SpanData::Buf {
+        let left = SpanData::Buf(BufSpan {
             range: 0..4,
             context: context.clone(),
-        };
-        let right = SpanData::Buf {
+        });
+        let right = SpanData::Buf(BufSpan {
             range: 5..10,
             context: context.clone(),
-        };
+        });
         let combined = RcContextFactory::new().merge_spans(&left, &right);
         assert_eq!(
             combined,
-            SpanData::Buf {
+            SpanData::Buf(BufSpan {
                 range: 0..10,
                 context
-            }
+            })
         )
     }
 
@@ -383,10 +391,10 @@ mod tests {
             buf_id,
             included_from: None,
         });
-        let span = SpanData::Buf {
+        let span = SpanData::Buf(BufSpan {
             range: range.clone(),
             context,
-        };
+        });
         assert_eq!(span.to_stripped(), StrippedBufSpan { buf_id, range })
     }
 
@@ -403,10 +411,10 @@ mod tests {
         };
         let macro_base = 0;
         let expansion = MacroExpansionData {
-            name: SpanData::Buf {
+            name: SpanData::Buf(BufSpan {
                 range: 40..50,
                 context: Rc::clone(&buf_context),
-            },
+            }),
             args: vec![],
             def: mk_macro_def(&buf_context, macro_base),
         };
@@ -424,17 +432,17 @@ mod tests {
     fn mk_macro_def<B>(
         buf_context: &Rc<BufContextData<B, Range<usize>>>,
         base: usize,
-    ) -> Rc<MacroDef<SpanData<B, Range<usize>>>> {
+    ) -> Rc<MacroDef<SpanData<BufSpan<B, Range<usize>>>>> {
         Rc::new(MacroDef {
-            name: SpanData::Buf {
+            name: SpanData::Buf(BufSpan {
                 range: macro_name_range(base),
                 context: Rc::clone(buf_context),
-            },
+            }),
             params: vec![],
-            body: vec![SpanData::Buf {
+            body: vec![SpanData::Buf(BufSpan {
                 range: macro_body_range(base),
                 context: Rc::clone(buf_context),
-            }],
+            })],
         })
     }
 

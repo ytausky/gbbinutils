@@ -299,7 +299,9 @@ struct ExpandedDiagnosticClause<S, B, R> {
     location: Option<R>,
 }
 
-impl<B: Clone, T: Clone> CompactDiagnostic<SpanData<B, Range<T>>, StrippedBufSpan<B, Range<T>>> {
+impl<B: Clone, T: Clone>
+    CompactDiagnostic<SpanData<BufSpan<B, Range<T>>>, StrippedBufSpan<B, Range<T>>>
+{
     fn expand(self) -> ExpandedDiagnostic<StrippedBufSpan<B, Range<T>>, B, Range<T>> {
         let StrippedBufSpan { buf_id, range } = self.main.highlight.to_stripped();
         let main_clause = ExpandedDiagnosticClause {
@@ -319,7 +321,7 @@ impl<B: Clone, T: Clone> CompactDiagnostic<SpanData<B, Range<T>>, StrippedBufSpa
 type BufSnippetClause<B, T> = ExpandedDiagnosticClause<StrippedBufSpan<B, Range<T>>, B, Range<T>>;
 
 fn mk_called_here_clause<B: Clone, T: Clone>(
-    span: &SpanData<B, Range<T>>,
+    span: &SpanData<BufSpan<B, Range<T>>>,
 ) -> Option<BufSnippetClause<B, T>> {
     let call = if let SpanData::Macro { context, .. } = span {
         context.name.clone()
@@ -597,13 +599,13 @@ mod tests {
         let src = "    nop\n    my_macro a, $12\n\n";
         let buf_id = codebase.add_src_buf(DUMMY_FILE, src);
         let range = 12..20;
-        let token_ref = SpanData::Buf {
+        let token_ref = SpanData::Buf(BufSpan {
             range: range.clone(),
             context: Rc::new(BufContextData {
                 buf_id,
                 included_from: None,
             }),
-        };
+        });
         let diagnostic = CompactDiagnostic::from(
             Message::UndefinedMacro {
                 name: StrippedBufSpan { buf_id, range },
@@ -646,22 +648,22 @@ mod tests {
             included_from: None,
         });
         let macro_def = Rc::new(MacroDef {
-            name: SpanData::Buf {
+            name: SpanData::Buf(BufSpan {
                 range: 0..1,
                 context: Rc::clone(buf_context),
-            },
+            }),
             params: vec![],
-            body: vec![SpanData::Buf {
+            body: vec![SpanData::Buf(BufSpan {
                 range: 2..3,
                 context: Rc::clone(buf_context),
-            }],
+            })],
         });
         let call_range = 10..11;
         let context = Rc::new(MacroExpansionData {
-            name: SpanData::Buf {
+            name: SpanData::Buf(BufSpan {
                 range: call_range.clone(),
                 context: Rc::clone(buf_context),
-            },
+            }),
             args: vec![],
             def: macro_def,
         });
