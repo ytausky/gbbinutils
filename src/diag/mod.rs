@@ -56,10 +56,45 @@ where
 {
 }
 
-pub(crate) trait DelegateDiagnostics<S> {
-    type Delegate: Diagnostics<S>;
+macro_rules! delegate_diagnostics {
+    ({$($params:tt)*}, $t:ty, {$($delegate:tt)*}, $dt:ty, $span:ty) => {
+        impl<$($params)*> $crate::diag::span::MergeSpans<$span> for $t
+        where
+            $span: Clone,
+        {
+            fn merge_spans(&mut self, left: &$span, right: &$span) -> $span {
+                self.$($delegate)*.merge_spans(left, right)
+            }
+        }
 
-    fn diagnostics(&mut self) -> &mut Self::Delegate;
+        impl<$($params)*> $crate::diag::span::StripSpan<$span> for $t
+        where
+            $span: Clone,
+        {
+            type Stripped = <$dt as $crate::diag::span::StripSpan<$span>>::Stripped;
+
+            fn strip_span(&mut self, span: &$span) -> Self::Stripped {
+                self.$($delegate)*.strip_span(span)
+            }
+        }
+
+        impl<$($params)*> $crate::diag::EmitDiagnostic<
+            $span,
+            <$dt as $crate::diag::span::StripSpan<$span>>::Stripped
+        > for $t
+        where
+            $span: Clone,
+        {
+            fn emit_diagnostic(
+                &mut self,
+                diagnostic: impl Into<$crate::diag::CompactDiagnostic<
+                    $span,
+                    <$dt as $crate::diag::span::StripSpan<$span>>::Stripped
+                >>) {
+                self.$($delegate)*.emit_diagnostic(diagnostic)
+            }
+        }
+    };
 }
 
 pub(crate) struct CompositeDiagnosticsSystem<C, O> {
@@ -489,18 +524,6 @@ mod mock {
         T: From<DiagnosticsEvent<S>>,
         S: Clone + FakeSpan,
     {
-    }
-
-    impl<'a, T, S> DelegateDiagnostics<S> for MockDiagnostics<'a, T, S>
-    where
-        T: From<DiagnosticsEvent<S>>,
-        S: Clone + FakeSpan,
-    {
-        type Delegate = Self;
-
-        fn diagnostics(&mut self) -> &mut Self::Delegate {
-            self
-        }
     }
 
     impl<'a, T, S> SpanSystem for MockDiagnostics<'a, T, S> where S: Clone + FakeSpan {}

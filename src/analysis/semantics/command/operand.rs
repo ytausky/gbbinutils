@@ -56,8 +56,7 @@ where
 {
     match expr.variant {
         ArgVariant::Atom(ArgAtom::Literal(Literal::Operand(keyword))) => {
-            let result =
-                analyze_keyword_operand((keyword, expr.span), context, value_context.diagnostics());
+            let result = analyze_keyword_operand((keyword, expr.span), context, &mut value_context);
             (value_context.finish().0, result)
         }
         ArgVariant::Unary(ArgUnaryOp::Parentheses, inner) => {
@@ -88,7 +87,7 @@ where
             let result = analyze_deref_operand_keyword(
                 (keyword, &expr.span),
                 deref_span,
-                value_context.diagnostics(),
+                &mut value_context,
             );
             (value_context.finish().0, result)
         }

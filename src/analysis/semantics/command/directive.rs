@@ -28,14 +28,12 @@ struct DirectiveContext<'a, A, R, S> {
     actions: &'a mut A,
 }
 
-impl<'a, S: Session> DelegateDiagnostics<S::Span>
-    for DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::Span>
-{
-    type Delegate = S::Delegate;
-
-    fn diagnostics(&mut self) -> &mut Self::Delegate {
-        self.actions.diagnostics()
-    }
+delegate_diagnostics! {
+    {'a, S: Session},
+    DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::Span>,
+    {actions},
+    SemanticActions<S>,
+    S::Span
 }
 
 impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::Span> {
@@ -63,7 +61,7 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
 
     fn analyze_ds(mut self) {
         let actions = &mut self.actions;
-        single_arg(self.span, self.args, actions.diagnostics())
+        single_arg(self.span, self.args, *actions)
             .and_then(|arg| actions.analyze_expr(&Default::default(), arg))
             .map(|bytes| actions.session().reserve(bytes))
             .ok();
@@ -72,7 +70,7 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
     fn analyze_equ(mut self) {
         let actions = &mut self.actions;
         let (symbol, params) = self.label.take().unwrap();
-        single_arg(self.span, self.args, actions.diagnostics())
+        single_arg(self.span, self.args, *actions)
             .and_then(|arg| actions.define_symbol(symbol, &params, arg))
             .ok();
     }
@@ -83,22 +81,20 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
     }
 
     fn analyze_include(self) {
-        let (path, span) = match reduce_include(self.span, self.args, self.actions.diagnostics()) {
+        let (path, span) = match reduce_include(self.span, self.args, self.actions) {
             Ok(result) => result,
             Err(()) => return,
         };
         let (result, session) = self.actions.session.take().unwrap().analyze_file(path);
         self.actions.session = Some(session);
         if let Err(err) = result {
-            self.actions
-                .diagnostics()
-                .emit_diagnostic(Message::from(err).at(span))
+            self.actions.emit_diagnostic(Message::from(err).at(span))
         }
     }
 
     fn analyze_org(mut self) {
         let actions = &mut self.actions;
-        single_arg(self.span, self.args, actions.diagnostics())
+        single_arg(self.span, self.args, *actions)
             .and_then(|arg| actions.analyze_expr(&Default::default(), arg))
             .map(|expr| actions.session().set_origin(expr))
             .ok();

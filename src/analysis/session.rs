@@ -39,12 +39,12 @@ where
     Self: Sized,
     Self: PartialBackend<S>,
     Self: StartSection<Ident<R>, S>,
-    Self: DelegateDiagnostics<S>,
+    Self: Diagnostics<S>,
 {
-    type FnBuilder: ValueBuilder<Ident<R>, S> + FinishFnDef<Return = Self> + DelegateDiagnostics<S>;
+    type FnBuilder: ValueBuilder<Ident<R>, S> + FinishFnDef<Return = Self> + Diagnostics<S>;
     type GeneralBuilder: ValueBuilder<Ident<R>, S>
         + Finish<S, Parent = Self, Value = Self::Value>
-        + DelegateDiagnostics<S>;
+        + Diagnostics<S>;
 
     fn build_value(self) -> Self::GeneralBuilder;
     fn define_symbol(self, name: Ident<R>, span: S) -> Self::FnBuilder;
@@ -217,15 +217,8 @@ where
     }
 }
 
-impl<P, B, S> DelegateDiagnostics<S> for RelocContext<P, B>
-where
-    P: DelegateDiagnostics<S>,
-{
-    type Delegate = P::Delegate;
-
-    fn diagnostics(&mut self) -> &mut Self::Delegate {
-        self.parent.diagnostics()
-    }
+delegate_diagnostics! {
+    {P: Diagnostics<S>, B, S}, RelocContext<P, B>, {parent}, P, S
 }
 
 impl<'a, 'b, C, A, B, N, D> Session for CompositeSession<'a, 'b, C, A, B, N, D>
@@ -327,15 +320,12 @@ where
     }
 }
 
-impl<'a, 'b, F, A, B, N, D, S> DelegateDiagnostics<S> for CompositeSession<'a, 'b, F, A, B, N, D>
-where
-    D: Diagnostics<S>,
-{
-    type Delegate = D;
-
-    fn diagnostics(&mut self) -> &mut Self::Delegate {
-        self.diagnostics
-    }
+delegate_diagnostics! {
+    {'a, 'b, F, A, B, N, D: Diagnostics<S>, S},
+    CompositeSession<'a, 'b, F, A, B, N, D>,
+    {diagnostics},
+    D,
+    S
 }
 
 impl<'a, 'b, C, A, B, N, D, R, S> StartSection<Ident<R>, S>
@@ -394,16 +384,12 @@ mod mock {
         }
     }
 
-    impl<'a, T, S> DelegateDiagnostics<S> for MockSession<'a, T, S>
-    where
-        T: From<DiagnosticsEvent<S>>,
-        S: Clone + FakeSpan,
-    {
-        type Delegate = MockDiagnostics<'a, T, S>;
-
-        fn diagnostics(&mut self) -> &mut Self::Delegate {
-            &mut self.diagnostics
-        }
+    delegate_diagnostics! {
+        {'a, T: From<DiagnosticsEvent<S>>, S: FakeSpan},
+        MockSession<'a, T, S>,
+        {diagnostics},
+        MockDiagnostics<'a, T, S>,
+        S
     }
 
     impl<'a, T, S: Clone + FakeSpan> SpanSource for MockSession<'a, T, S> {
@@ -505,16 +491,12 @@ mod mock {
         }
     }
 
-    impl<'a, T, S> DelegateDiagnostics<S> for MockSymbolBuilder<MockSession<'a, T, S>, Ident<String>, S>
-    where
-        T: From<DiagnosticsEvent<S>>,
-        S: Clone + FakeSpan,
-    {
-        type Delegate = MockDiagnostics<'a, T, S>;
-
-        fn diagnostics(&mut self) -> &mut Self::Delegate {
-            self.parent.diagnostics()
-        }
+    delegate_diagnostics! {
+        {'a, T: From<DiagnosticsEvent<S>>, S: FakeSpan},
+        MockSymbolBuilder<MockSession<'a, T, S>, Ident<String>, S>,
+        {parent.diagnostics},
+        MockDiagnostics<'a, T, S>,
+        S
     }
 
     impl<'a, T, S> PushOp<Ident<String>, S> for RelocContext<MockSession<'a, T, S>, Expr<S>>

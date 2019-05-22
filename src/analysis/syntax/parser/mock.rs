@@ -33,14 +33,6 @@ macro_rules! impl_diag_traits {
                     span.clone()
                 }
             }
-
-            impl DelegateDiagnostics<SymSpan> for $t {
-                type Delegate = Self;
-
-                fn diagnostics(&mut self) -> &mut Self::Delegate {
-                    self
-                }
-            }
         )*
     };
 }
@@ -253,7 +245,7 @@ impl FinalContext for ExprActionCollector<()> {
 
 impl<P> ExprContext<SymSpan> for ExprActionCollector<P>
 where
-    Self: DelegateDiagnostics<SymSpan>,
+    Self: Diagnostics<SymSpan>,
 {
     type Ident = SymIdent;
     type Literal = SymLiteral;

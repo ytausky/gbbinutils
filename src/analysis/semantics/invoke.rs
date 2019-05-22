@@ -3,7 +3,6 @@ use super::StmtActions;
 use crate::analysis::session::Session;
 use crate::analysis::syntax::{MacroCallContext, TokenSeqContext};
 use crate::analysis::{Ident, SemanticToken, TokenSeq};
-use crate::diag::DelegateDiagnostics;
 
 pub(in crate::analysis) struct MacroCallActions<S: Session> {
     parent: StmtActions<S>,
@@ -28,12 +27,8 @@ impl<S: Session> MacroCallActions<S> {
     }
 }
 
-impl<S: Session> DelegateDiagnostics<S::Span> for MacroCallActions<S> {
-    type Delegate = S::Delegate;
-
-    fn diagnostics(&mut self) -> &mut Self::Delegate {
-        self.parent.diagnostics()
-    }
+delegate_diagnostics! {
+    {S: Session}, MacroCallActions<S>, {parent}, StmtActions<S>, S::Span
 }
 
 impl<S: Session> MacroCallContext<S::Span> for MacroCallActions<S> {
@@ -72,12 +67,8 @@ impl<S: Session> MacroArgContext<S> {
     }
 }
 
-impl<S: Session> DelegateDiagnostics<S::Span> for MacroArgContext<S> {
-    type Delegate = S::Delegate;
-
-    fn diagnostics(&mut self) -> &mut Self::Delegate {
-        self.parent.parent.diagnostics()
-    }
+delegate_diagnostics! {
+    {S: Session}, MacroArgContext<S>, {parent}, MacroCallActions<S>, S::Span
 }
 
 impl<S: Session> TokenSeqContext<S::Span> for MacroArgContext<S> {

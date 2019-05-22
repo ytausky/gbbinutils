@@ -1,4 +1,4 @@
-pub use self::builder::ProgramBuilder;
+pub(crate) use self::builder::ProgramBuilder;
 
 use crate::model::{Atom, ExprOp, LocationCounter, Width};
 

@@ -95,12 +95,8 @@ impl<S: Session> SemanticActions<S> {
     }
 }
 
-impl<S: Session> DelegateDiagnostics<S::Span> for SemanticActions<S> {
-    type Delegate = S::Delegate;
-
-    fn diagnostics(&mut self) -> &mut Self::Delegate {
-        self.session().diagnostics()
-    }
+delegate_diagnostics! {
+    {S: Session}, SemanticActions<S>, {session()}, S, S::Span
 }
 
 impl<S: Session> FileContext<Ident<S::StringRef>, Literal<S::StringRef>, Command, S::Span>
@@ -134,12 +130,8 @@ impl<S: Session> LabelActions<S> {
     }
 }
 
-impl<S: Session> DelegateDiagnostics<S::Span> for LabelActions<S> {
-    type Delegate = S::Delegate;
-
-    fn diagnostics(&mut self) -> &mut Self::Delegate {
-        self.parent.diagnostics()
-    }
+delegate_diagnostics! {
+    {S: Session}, LabelActions<S>, {parent}, S, S::Span
 }
 
 impl<S: Session> ParamsContext<Ident<S::StringRef>, S::Span> for LabelActions<S> {
@@ -196,8 +188,7 @@ impl<S: Session> StmtContext<Ident<S::StringRef>, Literal<S::StringRef>, Command
 
     fn enter_macro_def(mut self, keyword: S::Span) -> Self::MacroDefContext {
         if self.label.is_none() {
-            self.diagnostics()
-                .emit_diagnostic(Message::MacroRequiresName.at(keyword))
+            self.emit_diagnostic(Message::MacroRequiresName.at(keyword))
         }
         MacroDefActions::new(self)
     }
@@ -213,12 +204,8 @@ impl<S: Session> StmtContext<Ident<S::StringRef>, Literal<S::StringRef>, Command
     }
 }
 
-impl<S: Session> DelegateDiagnostics<S::Span> for StmtActions<S> {
-    type Delegate = S::Delegate;
-
-    fn diagnostics(&mut self) -> &mut Self::Delegate {
-        self.parent.diagnostics()
-    }
+delegate_diagnostics! {
+    {S: Session}, StmtActions<S>, {parent}, S, S::Span
 }
 
 pub(super) struct MacroDefActions<S: Session> {
@@ -235,12 +222,8 @@ impl<S: Session> MacroDefActions<S> {
     }
 }
 
-impl<S: Session> DelegateDiagnostics<S::Span> for MacroDefActions<S> {
-    type Delegate = S::Delegate;
-
-    fn diagnostics(&mut self) -> &mut Self::Delegate {
-        self.parent.diagnostics()
-    }
+delegate_diagnostics! {
+    {S: Session}, MacroDefActions<S>, {parent}, S, S::Span
 }
 
 impl<S: Session> TokenSeqContext<S::Span> for MacroDefActions<S> {
@@ -639,7 +622,7 @@ mod tests {
         let diagnostic = Message::UnexpectedToken { token: () }.at(());
         let actions = collect_semantic_actions(|actions| {
             let mut stmt = actions.enter_unlabeled_stmt();
-            stmt.diagnostics().emit_diagnostic(diagnostic.clone());
+            stmt.emit_diagnostic(diagnostic.clone());
             stmt.exit()
         });
         assert_eq!(
@@ -656,7 +639,7 @@ mod tests {
                 .enter_unlabeled_stmt()
                 .enter_command((Command::Mnemonic(Mnemonic::Add), ()))
                 .add_argument();
-            expr.diagnostics().emit_diagnostic(diagnostic.clone());
+            expr.emit_diagnostic(diagnostic.clone());
             expr.exit().exit().exit()
         });
         assert_eq!(

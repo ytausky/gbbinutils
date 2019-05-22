@@ -111,7 +111,7 @@ where
     fn define_fn(self, name: Self::Name, span: S) -> Self::SymbolBuilder;
 }
 
-pub struct RelocContext<P, B> {
+pub(crate) struct RelocContext<P, B> {
     pub parent: P,
     pub builder: B,
 }
@@ -155,7 +155,7 @@ mod mock {
 
     type Expr<S> = crate::model::Expr<LocationCounter, usize, S>;
 
-    pub struct MockBackend<'a, T> {
+    pub(crate) struct MockBackend<'a, T> {
         pub log: &'a RefCell<Vec<T>>,
         next_symbol_id: usize,
     }

@@ -6,7 +6,7 @@ use crate::analysis::backend::{Finish, FinishFnDef, LocationCounter, PushOp};
 use crate::analysis::session::Session;
 use crate::analysis::syntax::*;
 use crate::diag::span::{MergeSpans, StripSpan};
-use crate::diag::{CompactDiagnostic, DelegateDiagnostics, EmitDiagnostic, Message};
+use crate::diag::{CompactDiagnostic, Diagnostics, EmitDiagnostic, Message};
 use crate::model::{BinOp, FnCall, Item};
 
 mod args;
@@ -34,35 +34,22 @@ impl<S: Session> CommandActions<S> {
 
 impl<S: Session> MergeSpans<S::Span> for CommandActions<S> {
     fn merge_spans(&mut self, left: &S::Span, right: &S::Span) -> S::Span {
-        self.parent.diagnostics().merge_spans(left, right)
+        self.parent.merge_spans(left, right)
     }
 }
 
 impl<S: Session> StripSpan<S::Span> for CommandActions<S> {
-    type Stripped = <S::Delegate as StripSpan<S::Span>>::Stripped;
+    type Stripped = S::Stripped;
 
     fn strip_span(&mut self, span: &S::Span) -> Self::Stripped {
-        self.parent.diagnostics().strip_span(span)
+        self.parent.strip_span(span)
     }
 }
 
-impl<S: Session> EmitDiagnostic<S::Span, <S::Delegate as StripSpan<S::Span>>::Stripped>
-    for CommandActions<S>
-{
-    fn emit_diagnostic(
-        &mut self,
-        diagnostic: impl Into<CompactDiagnostic<S::Span, <S::Delegate as StripSpan<S::Span>>::Stripped>>,
-    ) {
+impl<S: Session> EmitDiagnostic<S::Span, S::Stripped> for CommandActions<S> {
+    fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<S::Span, S::Stripped>>) {
         self.has_errors = true;
-        self.parent.diagnostics().emit_diagnostic(diagnostic)
-    }
-}
-
-impl<S: Session> DelegateDiagnostics<S::Span> for CommandActions<S> {
-    type Delegate = Self;
-
-    fn diagnostics(&mut self) -> &mut Self::Delegate {
-        self
+        self.parent.emit_diagnostic(diagnostic)
     }
 }
 
@@ -140,15 +127,8 @@ impl<R, S, P> ExprBuilder<R, S, P> {
     }
 }
 
-impl<R, S, P> DelegateDiagnostics<S> for ExprBuilder<R, S, P>
-where
-    P: DelegateDiagnostics<S>,
-{
-    type Delegate = P::Delegate;
-
-    fn diagnostics(&mut self) -> &mut Self::Delegate {
-        self.parent.diagnostics()
-    }
+delegate_diagnostics! {
+    {R, S, P: Diagnostics<S>}, ExprBuilder<R, S, P>, {parent}, P, S
 }
 
 impl<S: Session> FinalContext for ExprBuilder<S::StringRef, S::Span, CommandActions<S>> {
@@ -166,7 +146,7 @@ impl<S: Session> FinalContext for ExprBuilder<S::StringRef, S::Span, CommandActi
 impl<R, S, P> ExprContext<S> for ExprBuilder<R, S, P>
 where
     S: Clone,
-    Self: DelegateDiagnostics<S>,
+    Self: Diagnostics<S>,
 {
     type Ident = Ident<R>;
     type Literal = Literal<R>;
@@ -226,7 +206,7 @@ fn analyze_mnemonic<S: Session>(
             })
         })
         .collect();
-    if let Ok(instruction) = mnemonic::analyze_instruction(name, operands, actions.diagnostics()) {
+    if let Ok(instruction) = mnemonic::analyze_instruction(name, operands, actions) {
         actions.session().emit_item(Item::Instruction(instruction))
     }
 }
@@ -271,7 +251,7 @@ trait ArgEvaluator<N, S: Clone>:
     + PushOp<N, S>
     + PushOp<BinOp, S>
     + PushOp<FnCall, S>
-    + DelegateDiagnostics<S>
+    + Diagnostics<S>
 {
 }
 
@@ -281,7 +261,7 @@ impl<T, N, S: Clone> ArgEvaluator<N, S> for T where
         + PushOp<N, S>
         + PushOp<BinOp, S>
         + PushOp<FnCall, S>
-        + DelegateDiagnostics<S>
+        + Diagnostics<S>
 {
 }
 
@@ -303,7 +283,7 @@ where
             }
             ArgVariant::Atom(ArgAtom::Literal(Literal::Operand(_))) => {
                 Err(Message::KeywordInExpr {
-                    keyword: self.diagnostics().strip_span(&arg.span),
+                    keyword: self.strip_span(&arg.span),
                 }
                 .at(arg.span))
             }
@@ -332,7 +312,7 @@ where
             }
         }
         .map_err(|diagnostic| {
-            self.diagnostics().emit_diagnostic(diagnostic);
+            self.emit_diagnostic(diagnostic);
         })
     }
 }

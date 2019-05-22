@@ -1,10 +1,10 @@
 use super::{Ident, Params, PushOp};
 
 use crate::analysis::backend::{Finish, FinishFnDef, LocationCounter};
-use crate::diag::DelegateDiagnostics;
+use crate::diag::Diagnostics;
 use crate::model::{BinOp, FnCall, ParamId};
 
-pub struct ParamsAdapter<'a, P, R, S> {
+pub(super) struct ParamsAdapter<'a, P, R, S> {
     parent: P,
     params: &'a Params<R, S>,
 }
@@ -80,16 +80,8 @@ where
     }
 }
 
-impl<'a, P, R, S> DelegateDiagnostics<S> for ParamsAdapter<'a, P, R, S>
-where
-    P: DelegateDiagnostics<S>,
-    S: Clone,
-{
-    type Delegate = P::Delegate;
-
-    fn diagnostics(&mut self) -> &mut Self::Delegate {
-        self.parent.diagnostics()
-    }
+delegate_diagnostics! {
+    {'a, P: Diagnostics<S>, R, S}, ParamsAdapter<'a, P, R, S>, {parent}, P, S
 }
 
 #[cfg(test)]

@@ -10,9 +10,11 @@ use crate::analysis::Assemble;
 use crate::codebase::{CodebaseError, StdFileSystem};
 use crate::diag::*;
 
+#[macro_use]
+pub mod diag;
+
 mod analysis;
 mod codebase;
-pub mod diag;
 mod model;
 mod program;
 

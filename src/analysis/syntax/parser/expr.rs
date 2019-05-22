@@ -5,17 +5,10 @@ use super::{Parser, LINE_FOLLOW_SET};
 
 use crate::analysis::syntax;
 use crate::diag::span::{MergeSpans, StripSpan};
-use crate::diag::{CompactDiagnostic, DelegateDiagnostics, EmitDiagnostic, Message};
+use crate::diag::{CompactDiagnostic, EmitDiagnostic, Message};
 use crate::model::BinOp;
 
-type ParserResult<P, C, S> = Result<
-    P,
-    (
-        P,
-        ExpandedExprParsingError<<C as DelegateDiagnostics<S>>::Delegate, S>,
-    ),
->;
-
+type ParserResult<P, C, S> = Result<P, (P, ExpandedExprParsingError<C, S>)>;
 type ExpandedExprParsingError<D, S> = ExprParsingError<S, <D as StripSpan<S>>::Stripped>;
 
 enum ExprParsingError<S, R> {
@@ -107,7 +100,7 @@ where
         match self.token {
             (Ok(Token::Simple(RParen)), right) => {
                 bump!(self);
-                let span = self.context.diagnostics().merge_spans(&left, &right);
+                let span = self.merge_spans(&left, &right);
                 self.context
                     .apply_operator((Operator::Unary(UnaryOperator::Parentheses), span));
                 Ok(self)
@@ -159,7 +152,7 @@ where
                 _ => self = self.parse_fn_arg(&mut args)?,
             }
         }
-        let span = self.context.diagnostics().merge_spans(&left, &self.token.1);
+        let span = self.context.merge_spans(&left, &self.token.1);
         self.context.apply_operator((Operator::FnCall(args), span));
         bump!(self);
         Ok(self)
@@ -206,7 +199,7 @@ where
             }
             _ => {
                 let span = self.token.1;
-                let stripped = self.context.diagnostics().strip_span(&span);
+                let stripped = self.context.strip_span(&span);
                 bump!(self);
                 Err((
                     self,

@@ -1,7 +1,7 @@
 use super::SimpleToken::*;
 use super::*;
 use crate::diag::span::StripSpan;
-use crate::diag::{CompactDiagnostic, EmitDiagnostic, Message};
+use crate::diag::{EmitDiagnostic, Message};
 
 macro_rules! bump {
     ($parser:expr) => {
@@ -163,7 +163,7 @@ where
                 }
                 (_, span) => {
                     bump!(self);
-                    let stripped = self.context.diagnostics().strip_span(&span);
+                    let stripped = self.strip_span(&span);
                     self.emit_diagnostic(Message::UnexpectedToken { token: stripped }.at(span));
                     self
                 }
@@ -285,7 +285,7 @@ where
 impl<'a, Id, L, C, E, I, Ctx, S> Parser<'a, (Result<Token<Id, L, C>, E>, S), I, Ctx>
 where
     I: Iterator<Item = (Result<Token<Id, L, C>, E>, S)>,
-    Ctx: DelegateDiagnostics<S>,
+    Ctx: Diagnostics<S>,
     S: Clone,
 {
     fn parse_terminated_list<P>(
@@ -339,26 +339,15 @@ where
         } else {
             let token = self.token.1;
             bump!(self);
-            let stripped = self.context.diagnostics().strip_span(&token);
+            let stripped = self.strip_span(&token);
             self.emit_diagnostic(Message::UnexpectedToken { token: stripped }.at(token))
         }
         self
     }
 }
 
-impl<'a, Id, L, C, E, I, Ctx, S> EmitDiagnostic<S, <Ctx::Delegate as StripSpan<S>>::Stripped>
-    for Parser<'a, (Result<Token<Id, L, C>, E>, S), I, Ctx>
-where
-    I: Iterator<Item = (Result<Token<Id, L, C>, E>, S)>,
-    Ctx: DelegateDiagnostics<S>,
-    S: Clone,
-{
-    fn emit_diagnostic(
-        &mut self,
-        diagnostic: impl Into<CompactDiagnostic<S, <Ctx::Delegate as StripSpan<S>>::Stripped>>,
-    ) {
-        self.context.diagnostics().emit_diagnostic(diagnostic)
-    }
+delegate_diagnostics! {
+    {'a, T, I, C: Diagnostics<S>, S}, Parser<'a, T, I, C>, {context}, C, S
 }
 
 #[cfg(test)]

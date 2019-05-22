@@ -1,7 +1,7 @@
 pub use self::keyword::{Command, Directive, Mnemonic, Operand};
 pub(super) use self::lexer::{LexError, Lexer};
 
-use crate::diag::DelegateDiagnostics;
+use crate::diag::Diagnostics;
 use crate::model::BinOp;
 
 pub mod keyword;
@@ -57,7 +57,7 @@ impl<I, F: for<'a> Fn(&'a str) -> I> IdentFactory for F {
 
 pub(super) use self::parser::parse_src as parse_token_seq;
 
-pub(super) trait FileContext<I, L, C, S: Clone>: DelegateDiagnostics<S> + Sized {
+pub(super) trait FileContext<I, L, C, S: Clone>: Diagnostics<S> + Sized {
     type LabelContext: ParamsContext<I, S, Next = Self::StmtContext>;
     type StmtContext: StmtContext<I, L, C, S, Parent = Self>;
 
@@ -65,7 +65,7 @@ pub(super) trait FileContext<I, L, C, S: Clone>: DelegateDiagnostics<S> + Sized 
     fn enter_unlabeled_stmt(self) -> Self::StmtContext;
 }
 
-pub(super) trait StmtContext<I, L, C, S: Clone>: DelegateDiagnostics<S> + Sized {
+pub(super) trait StmtContext<I, L, C, S: Clone>: Diagnostics<S> + Sized {
     type CommandContext: CommandContext<S, Ident = I, Command = C, Literal = L, Parent = Self>;
     type MacroDefContext: TokenSeqContext<S, Token = Token<I, L, C>, Parent = Self>;
     type MacroCallContext: MacroCallContext<S, Token = Token<I, L, C>, Parent = Self>;
@@ -77,7 +77,7 @@ pub(super) trait StmtContext<I, L, C, S: Clone>: DelegateDiagnostics<S> + Sized 
     fn exit(self) -> Self::Parent;
 }
 
-pub(super) trait CommandContext<S: Clone>: DelegateDiagnostics<S> + Sized {
+pub(super) trait CommandContext<S: Clone>: Diagnostics<S> + Sized {
     type Ident;
     type Command;
     type Literal;
@@ -94,7 +94,7 @@ pub(super) trait FinalContext {
     fn exit(self) -> Self::ReturnTo;
 }
 
-pub(super) trait ExprContext<S: Clone>: DelegateDiagnostics<S> {
+pub(super) trait ExprContext<S: Clone>: Diagnostics<S> {
     type Ident;
     type Literal;
 
@@ -121,14 +121,14 @@ pub enum UnaryOperator {
     Parentheses,
 }
 
-pub(super) trait ParamsContext<I, S: Clone>: DelegateDiagnostics<S> {
+pub(super) trait ParamsContext<I, S: Clone>: Diagnostics<S> {
     type Next;
 
     fn add_parameter(&mut self, param: (I, S));
     fn next(self) -> Self::Next;
 }
 
-pub(super) trait MacroCallContext<S: Clone>: DelegateDiagnostics<S> + Sized {
+pub(super) trait MacroCallContext<S: Clone>: Diagnostics<S> + Sized {
     type Token;
     type Parent;
     type MacroArgContext: TokenSeqContext<S, Token = Self::Token, Parent = Self>;
@@ -136,7 +136,7 @@ pub(super) trait MacroCallContext<S: Clone>: DelegateDiagnostics<S> + Sized {
     fn exit(self) -> Self::Parent;
 }
 
-pub(super) trait TokenSeqContext<S: Clone>: DelegateDiagnostics<S> {
+pub(super) trait TokenSeqContext<S: Clone>: Diagnostics<S> {
     type Token;
     type Parent;
     fn push_token(&mut self, token: (Self::Token, S));

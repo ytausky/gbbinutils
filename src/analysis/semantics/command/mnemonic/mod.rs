@@ -31,17 +31,6 @@ struct Analysis<'a, I, D: 'a, S> {
     diagnostics: &'a mut D,
 }
 
-impl<'a, I, D, S> DelegateDiagnostics<S> for Analysis<'a, I, D, S>
-where
-    D: Diagnostics<S> + 'a,
-{
-    type Delegate = D;
-
-    fn diagnostics(&mut self) -> &mut Self::Delegate {
-        self.diagnostics
-    }
-}
-
 impl<'a, I, D, S> EmitDiagnostic<S, D::Stripped> for Analysis<'a, I, D, S>
 where
     D: Diagnostics<S> + 'a,
@@ -858,11 +847,8 @@ mod tests {
             .map(add_token_spans)
             .map(|op| analyze_operand(op, mnemonic.context(), MockBuilder::with_log(&log)).1)
             .collect();
-        let result = analyze_instruction(
-            (mnemonic, TokenId::Mnemonic.into()),
-            operands,
-            session.diagnostics(),
-        );
+        let result =
+            analyze_instruction((mnemonic, TokenId::Mnemonic.into()), operands, &mut session);
         AnalysisResult(result.map_err(|_| log.into_inner()))
     }
 

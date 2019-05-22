@@ -4,7 +4,7 @@ use crate::analysis::backend::*;
 use crate::model::{BinOp, ExprItem, ExprOp, FnCall, Item, ParamId};
 use crate::BuiltinNames;
 
-pub struct ProgramBuilder<'a, S> {
+pub(crate) struct ProgramBuilder<'a, S> {
     program: &'a mut Program<S>,
     state: Option<BuilderState<S>>,
 }
@@ -110,7 +110,7 @@ impl<'a, S: Clone> Finish<S> for RelocContext<ProgramBuilder<'a, S>, Immediate<S
     }
 }
 
-pub struct SymbolBuilder<'a, S> {
+pub(crate) struct SymbolBuilder<'a, S> {
     parent: ProgramBuilder<'a, S>,
     location: RelocId,
     name: (NameDefId, S),
