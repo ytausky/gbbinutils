@@ -142,8 +142,7 @@ where
 
 impl<'a, 'b, C, A, B, N, D> StringRef for CompositeSession<'a, 'b, C, A, B, N, D>
 where
-    C: Lex<D>,
-    D: DiagnosticsSystem,
+    C: StringRef,
 {
     type StringRef = C::StringRef;
 }

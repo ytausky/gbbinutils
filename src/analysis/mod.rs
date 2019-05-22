@@ -5,7 +5,7 @@ use self::syntax::*;
 
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diag::*;
-use crate::span::{BufContext, BufContextFactory};
+use crate::span::{BufContext, BufContextFactory, SpanSource};
 use crate::BuiltinNames;
 
 use std::rc::Rc;
@@ -70,8 +70,7 @@ pub(super) enum Literal<S> {
     String(S),
 }
 
-trait Lex<D: BufContextFactory> {
-    type StringRef: Clone + Eq;
+trait Lex<D: SpanSource>: StringRef {
     type TokenIter: Iterator<Item = LexItem<Self::StringRef, D::Span>>;
 
     fn lex_file(
@@ -102,7 +101,6 @@ where
     T::StringRef: AsRef<str>,
     D: BufContextFactory,
 {
-    type StringRef = T::StringRef;
     type TokenIter = T::Tokenized;
 
     fn lex_file(
@@ -114,6 +112,10 @@ where
             diagnostics.mk_buf_context(buf_id, None)
         })
     }
+}
+
+impl<'a, T: StringRef> StringRef for CodebaseAnalyzer<'a, T> {
+    type StringRef = T::StringRef;
 }
 
 pub(crate) trait StringRef {
@@ -200,11 +202,7 @@ mod mock {
         }
     }
 
-    impl<'a, D> Lex<D> for MockCodebase<D::Span>
-    where
-        D: BufContextFactory,
-    {
-        type StringRef = String;
+    impl<D: BufContextFactory> Lex<D> for MockCodebase<D::Span> {
         type TokenIter = IntoIter<LexItem<Self::StringRef, D::Span>>;
 
         fn lex_file(
@@ -214,5 +212,9 @@ mod mock {
         ) -> Result<Self::TokenIter, CodebaseError> {
             Ok(self.files[&path].clone().into_iter())
         }
+    }
+
+    impl<S> StringRef for MockCodebase<S> {
+        type StringRef = String;
     }
 }

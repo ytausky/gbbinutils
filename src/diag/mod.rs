@@ -23,7 +23,6 @@ pub(crate) use self::mock::*;
 
 pub(crate) trait DiagnosticsSystem
 where
-    Self: SpanSource,
     Self: ContextFactory,
     Self: Diagnostics<<Self as SpanSource>::Span>,
 {
