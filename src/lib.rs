@@ -74,7 +74,7 @@ fn try_assemble(
     output: &mut dyn FnMut(diag::Diagnostic),
 ) -> Result<BinaryObject, CodebaseError> {
     let codebase = codebase::FileCodebase::new(input);
-    let diagnostics = &mut DiagnosticsSystem::new(&codebase.cache, output);
+    let diagnostics = &mut CompositeDiagnosticsSystem::new(&codebase.cache, output);
     let mut program = program::Program::new();
     let builder = program::ProgramBuilder::new(&mut program);
     builder.assemble(name, &codebase, diagnostics)?;

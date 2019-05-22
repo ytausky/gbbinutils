@@ -63,21 +63,21 @@ pub(crate) trait DelegateDiagnostics<S> {
     fn diagnostics(&mut self) -> &mut Self::Delegate;
 }
 
-pub(crate) struct DiagnosticsSystem<C, O> {
+pub(crate) struct CompositeDiagnosticsSystem<C, O> {
     pub context: C,
     pub output: O,
 }
 
-impl<'a> DiagnosticsSystem<RcContextFactory, OutputForwarder<'a>> {
+impl<'a> CompositeDiagnosticsSystem<RcContextFactory, OutputForwarder<'a>> {
     pub fn new(codebase: &'a RefCell<TextCache>, output: &'a mut dyn FnMut(Diagnostic)) -> Self {
-        DiagnosticsSystem {
+        CompositeDiagnosticsSystem {
             context: RcContextFactory::new(),
             output: OutputForwarder { output, codebase },
         }
     }
 }
 
-impl<C, O> Span for DiagnosticsSystem<C, O>
+impl<C, O> Span for CompositeDiagnosticsSystem<C, O>
 where
     C: ContextFactory,
     O: EmitDiagnostic<C::Span, C::Stripped>,
@@ -85,7 +85,7 @@ where
     type Span = C::Span;
 }
 
-impl<C, O> MergeSpans<C::Span> for DiagnosticsSystem<C, O>
+impl<C, O> MergeSpans<C::Span> for CompositeDiagnosticsSystem<C, O>
 where
     C: ContextFactory,
     O: EmitDiagnostic<C::Span, C::Stripped>,
@@ -95,7 +95,7 @@ where
     }
 }
 
-impl<C, O> StripSpan<C::Span> for DiagnosticsSystem<C, O>
+impl<C, O> StripSpan<C::Span> for CompositeDiagnosticsSystem<C, O>
 where
     C: ContextFactory,
     O: EmitDiagnostic<C::Span, C::Stripped>,
@@ -107,7 +107,7 @@ where
     }
 }
 
-impl<C, O> EmitDiagnostic<C::Span, C::Stripped> for DiagnosticsSystem<C, O>
+impl<C, O> EmitDiagnostic<C::Span, C::Stripped> for CompositeDiagnosticsSystem<C, O>
 where
     C: ContextFactory,
     O: EmitDiagnostic<C::Span, C::Stripped>,
@@ -117,7 +117,7 @@ where
     }
 }
 
-impl<C, O> MacroContextFactory<C::Span> for DiagnosticsSystem<C, O>
+impl<C, O> MacroContextFactory<C::Span> for CompositeDiagnosticsSystem<C, O>
 where
     C: ContextFactory,
     O: EmitDiagnostic<C::Span, C::Stripped>,
@@ -147,14 +147,14 @@ where
     }
 }
 
-impl<C, O> ContextFactory for DiagnosticsSystem<C, O>
+impl<C, O> ContextFactory for CompositeDiagnosticsSystem<C, O>
 where
     C: ContextFactory,
     O: EmitDiagnostic<C::Span, C::Stripped>,
 {
 }
 
-impl<C, O> BufContextFactory for DiagnosticsSystem<C, O>
+impl<C, O> BufContextFactory for CompositeDiagnosticsSystem<C, O>
 where
     C: ContextFactory,
     O: EmitDiagnostic<C::Span, C::Stripped>,
@@ -170,7 +170,7 @@ where
     }
 }
 
-impl<C, O> Diagnostics for DiagnosticsSystem<C, O>
+impl<C, O> Diagnostics for CompositeDiagnosticsSystem<C, O>
 where
     C: ContextFactory,
     O: EmitDiagnostic<C::Span, C::Stripped>,
