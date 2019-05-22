@@ -441,12 +441,12 @@ impl ExpandedDiagnosticClause<StrippedBufSpan, BufId, BufRange> {
 mod mock {
     use super::*;
 
-    pub(crate) trait MockSpan {
+    pub(crate) trait FakeSpan {
         fn default() -> Self;
         fn merge(&self, other: &Self) -> Self;
     }
 
-    impl MockSpan for () {
+    impl FakeSpan for () {
         fn default() {}
         fn merge(&self, _: &Self) {}
     }
@@ -488,14 +488,14 @@ mod mock {
     impl<'a, T, S> Diagnostics for MockDiagnostics<'a, T, S>
     where
         T: From<DiagnosticsEvent<S>>,
-        S: Clone + MockSpan,
+        S: Clone + FakeSpan,
     {
     }
 
     impl<'a, T, S> DelegateDiagnostics<S> for MockDiagnostics<'a, T, S>
     where
         T: From<DiagnosticsEvent<S>>,
-        S: Clone + MockSpan,
+        S: Clone + FakeSpan,
     {
         type Delegate = Self;
 
@@ -504,11 +504,11 @@ mod mock {
         }
     }
 
-    impl<'a, T, S> ContextFactory for MockDiagnostics<'a, T, S> where S: Clone + MockSpan {}
+    impl<'a, T, S> ContextFactory for MockDiagnostics<'a, T, S> where S: Clone + FakeSpan {}
 
     impl<'a, T, S> BufContextFactory for MockDiagnostics<'a, T, S>
     where
-        S: Clone + MockSpan,
+        S: Clone + FakeSpan,
     {
         type BufContext = Self;
 
@@ -517,7 +517,7 @@ mod mock {
         }
     }
 
-    impl<'a, T, S: Clone + MockSpan> BufContext for MockDiagnostics<'a, T, S> {
+    impl<'a, T, S: Clone + FakeSpan> BufContext for MockDiagnostics<'a, T, S> {
         type Span = S;
 
         fn mk_span(&self, _: BufRange) -> Self::Span {
@@ -527,7 +527,7 @@ mod mock {
 
     impl<'a, T, S> MacroContextFactory<S> for MockDiagnostics<'a, T, S>
     where
-        S: Clone + MockSpan,
+        S: Clone + FakeSpan,
     {
         type MacroDefId = usize;
         type MacroExpansionContext = Self;
@@ -554,7 +554,7 @@ mod mock {
         }
     }
 
-    impl<'a, T, S: Clone + MockSpan> MacroExpansionContext for MockDiagnostics<'a, T, S> {
+    impl<'a, T, S: Clone + FakeSpan> MacroExpansionContext for MockDiagnostics<'a, T, S> {
         type Span = S;
 
         fn mk_span(&self, _: usize, _: Option<TokenExpansion>) -> Self::Span {
@@ -574,7 +574,7 @@ mod mock {
         }
     }
 
-    impl<'a, T, S: Clone + MockSpan> MergeSpans<S> for MockDiagnostics<'a, T, S> {
+    impl<'a, T, S: Clone + FakeSpan> MergeSpans<S> for MockDiagnostics<'a, T, S> {
         fn merge_spans(&mut self, left: &S, right: &S) -> S {
             left.merge(right)
         }

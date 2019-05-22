@@ -276,7 +276,7 @@ pub struct TokenSpan {
 }
 
 #[cfg(test)]
-impl MockSpan for TokenSpan {
+impl FakeSpan for TokenSpan {
     fn default() -> Self {
         unimplemented!()
     }
@@ -671,7 +671,7 @@ mod tests {
     pub(super) fn collect_semantic_actions<F, S>(f: F) -> Vec<TestOperation<S>>
     where
         F: for<'a> FnOnce(TestSemanticActions<'a, S>) -> TestSemanticActions<'a, S>,
-        S: Clone + MockSpan,
+        S: Clone + FakeSpan,
     {
         let operations = RefCell::new(Vec::new());
         let session = MockSession::new(&operations);
