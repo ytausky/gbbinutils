@@ -517,8 +517,6 @@ mod mock {
     }
 
     impl<'a, T, S: Clone + FakeSpan> BufContext for MockDiagnostics<'a, T, S> {
-        type Span = S;
-
         fn mk_span(&self, _: BufRange) -> Self::Span {
             S::default()
         }
@@ -554,8 +552,6 @@ mod mock {
     }
 
     impl<'a, T, S: Clone + FakeSpan> MacroExpansionContext for MockDiagnostics<'a, T, S> {
-        type Span = S;
-
         fn mk_span(&self, _: usize, _: Option<TokenExpansion>) -> Self::Span {
             S::default()
         }

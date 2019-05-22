@@ -23,7 +23,7 @@ pub trait StripSpan<S> {
     fn strip_span(&mut self, span: &S) -> Self::Stripped;
 }
 
-pub trait MacroContextFactory<S> {
+pub trait MacroContextFactory<S: Clone> {
     type MacroDefId: Clone;
     type MacroExpansionContext: MacroExpansionContext<Span = S>;
 
@@ -45,7 +45,6 @@ pub trait MacroContextFactory<S> {
 
 pub trait ContextFactory
 where
-    Self: SpanSource,
     Self: BufContextFactory,
     Self: MacroContextFactory<<Self as SpanSource>::Span>,
     Self: MergeSpans<<Self as SpanSource>::Span>,
@@ -53,10 +52,7 @@ where
 {
 }
 
-pub trait BufContextFactory
-where
-    Self: SpanSource,
-{
+pub trait BufContextFactory: SpanSource {
     type BufContext: BufContext<Span = Self::Span>;
 
     fn mk_buf_context(
@@ -66,13 +62,11 @@ where
     ) -> Self::BufContext;
 }
 
-pub trait BufContext {
-    type Span;
+pub trait BufContext: SpanSource {
     fn mk_span(&self, range: BufRange) -> Self::Span;
 }
 
-pub trait MacroExpansionContext {
-    type Span;
+pub trait MacroExpansionContext: SpanSource {
     fn mk_span(&self, token: usize, expansion: Option<TokenExpansion>) -> Self::Span;
 }
 
@@ -318,8 +312,11 @@ pub struct RcBufContext<B, R> {
     context: Rc<BufContextData<B, R>>,
 }
 
-impl BufContext for RcBufContext<BufId, BufRange> {
+impl SpanSource for RcBufContext<BufId, BufRange> {
     type Span = SpanData<BufSpan>;
+}
+
+impl BufContext for RcBufContext<BufId, BufRange> {
     fn mk_span(&self, range: BufRange) -> Self::Span {
         SpanData::Buf(BufSpan {
             range,
@@ -328,9 +325,17 @@ impl BufContext for RcBufContext<BufId, BufRange> {
     }
 }
 
-impl<B, R> MacroExpansionContext for Rc<MacroExpansionData<SpanData<BufSpan<B, R>>>> {
+impl<B, R> SpanSource for Rc<MacroExpansionData<SpanData<BufSpan<B, R>>>>
+where
+    SpanData<BufSpan<B, R>>: Clone,
+{
     type Span = SpanData<BufSpan<B, R>>;
+}
 
+impl<B, R> MacroExpansionContext for Rc<MacroExpansionData<SpanData<BufSpan<B, R>>>>
+where
+    SpanData<BufSpan<B, R>>: Clone,
+{
     fn mk_span(&self, token: usize, expansion: Option<TokenExpansion>) -> Self::Span {
         let position = MacroExpansionPosition { token, expansion };
         SpanData::Macro {

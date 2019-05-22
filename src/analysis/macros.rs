@@ -1,15 +1,15 @@
 use super::resolve::{Ident, Name, NameTable};
+use super::session::MacroArgs;
 use super::{SemanticToken, Token};
 
 use crate::diag::span::{MacroContextFactory, MacroExpansionContext, SpanSource};
 
 use std::rc::Rc;
 
-pub(super) trait Expand<I, F: MacroContextFactory<S>, S> {
+pub(super) trait Expand<I, F: MacroContextFactory<S>, S: Clone> {
     type Iter: Iterator<Item = (SemanticToken<I>, S)>;
 
-    fn expand(&self, name: S, args: Vec<Vec<(SemanticToken<I>, S)>>, factory: &mut F)
-        -> Self::Iter;
+    fn expand(&self, name: S, args: MacroArgs<I, S>, factory: &mut F) -> Self::Iter;
 }
 
 pub(super) trait DefineMacro<R, I: Clone> {
@@ -72,15 +72,11 @@ impl<I, F, S> Expand<I, F, S> for MacroTableEntry<F::MacroDefId, Rc<MacroDefData
 where
     I: Clone + Eq,
     F: MacroContextFactory<S>,
+    S: Clone,
 {
     type Iter = ExpandedMacro<I, F::MacroExpansionContext>;
 
-    fn expand(
-        &self,
-        name: S,
-        args: Vec<Vec<(SemanticToken<I>, S)>>,
-        factory: &mut F,
-    ) -> Self::Iter {
+    fn expand(&self, name: S, args: MacroArgs<I, S>, factory: &mut F) -> Self::Iter {
         let mut arg_tokens = Vec::new();
         let mut arg_spans = Vec::new();
         for arg in args {
