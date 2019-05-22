@@ -21,7 +21,7 @@ pub(crate) mod span;
 #[cfg(test)]
 pub(crate) use self::mock::*;
 
-pub(crate) trait Diagnostics
+pub(crate) trait DiagnosticsSystem
 where
     Self: Span,
     Self: ContextFactory,
@@ -170,7 +170,7 @@ where
     }
 }
 
-impl<C, O> Diagnostics for CompositeDiagnosticsSystem<C, O>
+impl<C, O> DiagnosticsSystem for CompositeDiagnosticsSystem<C, O>
 where
     C: ContextFactory,
     O: EmitDiagnostic<C::Span, C::Stripped>,
@@ -485,7 +485,7 @@ mod mock {
         }
     }
 
-    impl<'a, T, S> Diagnostics for MockDiagnostics<'a, T, S>
+    impl<'a, T, S> DiagnosticsSystem for MockDiagnostics<'a, T, S>
     where
         T: From<DiagnosticsEvent<S>>,
         S: Clone + FakeSpan,

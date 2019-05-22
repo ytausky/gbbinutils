@@ -143,7 +143,7 @@ where
 impl<'a, 'b, C, A, B, N, D> StringRef for CompositeSession<'a, 'b, C, A, B, N, D>
 where
     C: Lex<D>,
-    D: Diagnostics,
+    D: DiagnosticsSystem,
 {
     type StringRef = C::StringRef;
 }
@@ -242,7 +242,7 @@ where
             BackendEntry = B::Name,
             MacroEntry = MacroEntry<C::StringRef, D>,
         > + StartScope<Ident<C::StringRef>>,
-    D: Diagnostics,
+    D: DiagnosticsSystem,
 {
     fn analyze_file(mut self, path: Self::StringRef) -> (Result<(), CodebaseError>, Self) {
         let tokens = match self.codebase.lex_file(path, self.diagnostics) {

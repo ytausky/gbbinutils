@@ -22,7 +22,7 @@ mod syntax;
 
 pub(crate) trait Assemble<D>
 where
-    D: Diagnostics,
+    D: DiagnosticsSystem,
     Self: Backend<D::Span> + BuiltinNames<Name = <Self as AllocName<D::Span>>::Name> + Sized,
 {
     fn assemble<C: Codebase>(
@@ -55,7 +55,7 @@ where
 
 impl<B, D> Assemble<D> for B
 where
-    D: Diagnostics,
+    D: DiagnosticsSystem,
     B: Backend<D::Span> + BuiltinNames<Name = <Self as AllocName<D::Span>>::Name>,
 {
 }

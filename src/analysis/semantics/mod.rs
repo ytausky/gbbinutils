@@ -19,7 +19,7 @@ mod command;
 mod invoke;
 mod params;
 
-pub(super) trait Analyze<R: Clone + Eq, D: Diagnostics> {
+pub(super) trait Analyze<R: Clone + Eq, D: DiagnosticsSystem> {
     fn analyze_token_seq<'a, I, C, B, N>(
         &mut self,
         tokens: I,
@@ -35,7 +35,7 @@ pub(super) trait Analyze<R: Clone + Eq, D: Diagnostics> {
 
 pub struct SemanticAnalyzer;
 
-impl<R: Clone + Eq, D: Diagnostics> Analyze<R, D> for SemanticAnalyzer {
+impl<R: Clone + Eq, D: DiagnosticsSystem> Analyze<R, D> for SemanticAnalyzer {
     fn analyze_token_seq<'a, I, C, B, N>(
         &mut self,
         tokens: I,
@@ -305,7 +305,7 @@ mod mock {
     impl<'a, T, D> Analyze<String, D> for MockAnalyzer<'a, T>
     where
         T: From<AnalyzerEvent<D::Span>>,
-        D: Diagnostics,
+        D: DiagnosticsSystem,
     {
         fn analyze_token_seq<'b, I, C, B, N>(
             &mut self,
