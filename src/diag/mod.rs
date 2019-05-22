@@ -23,7 +23,7 @@ pub(crate) use self::mock::*;
 
 pub(crate) trait DiagnosticsSystem
 where
-    Self: ContextFactory,
+    Self: SpanSystem,
     Self: Diagnostics<<Self as SpanSource>::Span>,
 {
 }
@@ -78,7 +78,7 @@ impl<'a> CompositeDiagnosticsSystem<RcContextFactory, OutputForwarder<'a>> {
 
 impl<C, O> SpanSource for CompositeDiagnosticsSystem<C, O>
 where
-    C: ContextFactory,
+    C: SpanSystem,
     O: EmitDiagnostic<C::Span, C::Stripped>,
 {
     type Span = C::Span;
@@ -86,7 +86,7 @@ where
 
 impl<C, O> MergeSpans<C::Span> for CompositeDiagnosticsSystem<C, O>
 where
-    C: ContextFactory,
+    C: SpanSystem,
     O: EmitDiagnostic<C::Span, C::Stripped>,
 {
     fn merge_spans(&mut self, left: &C::Span, right: &C::Span) -> C::Span {
@@ -96,7 +96,7 @@ where
 
 impl<C, O> StripSpan<C::Span> for CompositeDiagnosticsSystem<C, O>
 where
-    C: ContextFactory,
+    C: SpanSystem,
     O: EmitDiagnostic<C::Span, C::Stripped>,
 {
     type Stripped = C::Stripped;
@@ -108,7 +108,7 @@ where
 
 impl<C, O> EmitDiagnostic<C::Span, C::Stripped> for CompositeDiagnosticsSystem<C, O>
 where
-    C: ContextFactory,
+    C: SpanSystem,
     O: EmitDiagnostic<C::Span, C::Stripped>,
 {
     fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<C::Span, C::Stripped>>) {
@@ -118,7 +118,7 @@ where
 
 impl<C, O> MacroContextFactory<C::Span> for CompositeDiagnosticsSystem<C, O>
 where
-    C: ContextFactory,
+    C: SpanSystem,
     O: EmitDiagnostic<C::Span, C::Stripped>,
 {
     type MacroDefId = C::MacroDefId;
@@ -146,16 +146,16 @@ where
     }
 }
 
-impl<C, O> ContextFactory for CompositeDiagnosticsSystem<C, O>
+impl<C, O> SpanSystem for CompositeDiagnosticsSystem<C, O>
 where
-    C: ContextFactory,
+    C: SpanSystem,
     O: EmitDiagnostic<C::Span, C::Stripped>,
 {
 }
 
 impl<C, O> BufContextFactory for CompositeDiagnosticsSystem<C, O>
 where
-    C: ContextFactory,
+    C: SpanSystem,
     O: EmitDiagnostic<C::Span, C::Stripped>,
 {
     type BufContext = C::BufContext;
@@ -171,7 +171,7 @@ where
 
 impl<C, O> DiagnosticsSystem for CompositeDiagnosticsSystem<C, O>
 where
-    C: ContextFactory,
+    C: SpanSystem,
     O: EmitDiagnostic<C::Span, C::Stripped>,
 {
 }
@@ -503,7 +503,7 @@ mod mock {
         }
     }
 
-    impl<'a, T, S> ContextFactory for MockDiagnostics<'a, T, S> where S: Clone + FakeSpan {}
+    impl<'a, T, S> SpanSystem for MockDiagnostics<'a, T, S> where S: Clone + FakeSpan {}
 
     impl<'a, T, S> BufContextFactory for MockDiagnostics<'a, T, S>
     where
