@@ -23,9 +23,9 @@ pub(crate) use self::mock::*;
 
 pub(crate) trait DiagnosticsSystem
 where
-    Self: Span,
+    Self: SpanSource,
     Self: ContextFactory,
-    Self: DownstreamDiagnostics<<Self as Span>::Span>,
+    Self: DownstreamDiagnostics<<Self as SpanSource>::Span>,
 {
 }
 
@@ -77,7 +77,7 @@ impl<'a> CompositeDiagnosticsSystem<RcContextFactory, OutputForwarder<'a>> {
     }
 }
 
-impl<C, O> Span for CompositeDiagnosticsSystem<C, O>
+impl<C, O> SpanSource for CompositeDiagnosticsSystem<C, O>
 where
     C: ContextFactory,
     O: EmitDiagnostic<C::Span, C::Stripped>,
@@ -190,7 +190,7 @@ pub(crate) struct OutputForwarder<'a> {
     pub codebase: &'a RefCell<TextCache>,
 }
 
-impl<'a> Span for OutputForwarder<'a> {
+impl<'a> SpanSource for OutputForwarder<'a> {
     type Span = SpanData;
 }
 
@@ -214,7 +214,7 @@ impl<S> IgnoreDiagnostics<S> {
 }
 
 #[cfg(test)]
-impl<S: Clone> Span for IgnoreDiagnostics<S> {
+impl<S: Clone> SpanSource for IgnoreDiagnostics<S> {
     type Span = S;
 }
 
@@ -247,7 +247,7 @@ impl<S> TestDiagnosticsListener<S> {
 }
 
 #[cfg(test)]
-impl<S: Clone> Span for TestDiagnosticsListener<S> {
+impl<S: Clone> SpanSource for TestDiagnosticsListener<S> {
     type Span = S;
 }
 
@@ -562,7 +562,7 @@ mod mock {
         }
     }
 
-    impl<'a, T, S: Clone> Span for MockDiagnostics<'a, T, S> {
+    impl<'a, T, S: Clone> SpanSource for MockDiagnostics<'a, T, S> {
         type Span = S;
     }
 

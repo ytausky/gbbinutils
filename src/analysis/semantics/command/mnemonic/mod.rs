@@ -415,7 +415,7 @@ mod tests {
 
     pub(super) use crate::analysis::semantics::{TokenId, TokenSpan};
     pub(crate) use crate::diag::Message;
-    pub use crate::span::{MergeSpans, Span};
+    pub use crate::span::{MergeSpans, SpanSource};
 
     use super::*;
 

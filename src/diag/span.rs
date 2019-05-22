@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use std::ops::{Range, RangeInclusive};
 use std::rc::Rc;
 
-pub trait Span {
+pub trait SpanSource {
     type Span: Clone;
 }
 
@@ -47,17 +47,17 @@ pub trait MacroContextFactory<S> {
 
 pub trait ContextFactory
 where
-    Self: Span,
+    Self: SpanSource,
     Self: BufContextFactory,
-    Self: MacroContextFactory<<Self as Span>::Span>,
-    Self: MergeSpans<<Self as Span>::Span>,
-    Self: StripSpan<<Self as Span>::Span>,
+    Self: MacroContextFactory<<Self as SpanSource>::Span>,
+    Self: MergeSpans<<Self as SpanSource>::Span>,
+    Self: StripSpan<<Self as SpanSource>::Span>,
 {
 }
 
 pub trait BufContextFactory
 where
-    Self: Span,
+    Self: SpanSource,
 {
     type BufContext: BufContext<Span = Self::Span>;
 
@@ -203,7 +203,7 @@ impl<B, R> RcContextFactory<B, R> {
     }
 }
 
-impl<B, R> Span for RcContextFactory<B, R>
+impl<B, R> SpanSource for RcContextFactory<B, R>
 where
     SpanData<BufSpan<B, R>>: Clone,
 {

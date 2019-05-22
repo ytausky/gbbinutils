@@ -7,7 +7,7 @@ use super::semantics::Analyze;
 use super::{Lex, SemanticToken, StringRef};
 
 use crate::codebase::CodebaseError;
-use crate::diag::span::Span;
+use crate::diag::span::SpanSource;
 use crate::diag::*;
 use crate::model::Item;
 
@@ -16,8 +16,8 @@ pub(crate) use self::mock::*;
 
 pub(super) trait Session
 where
-    Self: Span + StringRef,
-    Self: BasicSession<<Self as StringRef>::StringRef, <Self as Span>::Span>,
+    Self: SpanSource + StringRef,
+    Self: BasicSession<<Self as StringRef>::StringRef, <Self as SpanSource>::Span>,
 {
     fn analyze_file(self, path: Self::StringRef) -> (Result<(), CodebaseError>, Self);
 
@@ -133,9 +133,9 @@ impl<'a, 'b, C, A, B, N, D> From<CompositeSession<'a, 'b, C, A, B, N, D>>
     }
 }
 
-impl<'a, 'b, F, A, B, N, D> Span for CompositeSession<'a, 'b, F, A, B, N, D>
+impl<'a, 'b, F, A, B, N, D> SpanSource for CompositeSession<'a, 'b, F, A, B, N, D>
 where
-    D: Span,
+    D: SpanSource,
 {
     type Span = D::Span;
 }
@@ -410,7 +410,7 @@ mod mock {
         }
     }
 
-    impl<'a, T, S: Clone + FakeSpan> Span for MockSession<'a, T, S> {
+    impl<'a, T, S: Clone + FakeSpan> SpanSource for MockSession<'a, T, S> {
         type Span = S;
     }
 
