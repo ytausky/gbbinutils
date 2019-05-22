@@ -67,7 +67,13 @@ pub trait BufContext: SpanSource {
 }
 
 pub trait MacroExpansionContext: SpanSource {
-    fn mk_span(&self, token: usize, expansion: Option<ArgExpansionPos>) -> Self::Span;
+    fn mk_span(&self, position: MacroExpansionPos) -> Self::Span;
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct MacroExpansionPos {
+    pub token: usize,
+    pub expansion: Option<ArgExpansionPos>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -133,12 +139,6 @@ impl TextCache {
     pub fn snippet(&self, stripped: &StrippedBufSpan) -> &str {
         &self.buf(stripped.buf_id).as_str()[stripped.range.clone()]
     }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct MacroExpansionPos {
-    pub token: usize,
-    pub expansion: Option<ArgExpansionPos>,
 }
 
 impl PartialOrd for MacroExpansionPos {
@@ -336,8 +336,7 @@ impl<B, R> MacroExpansionContext for Rc<MacroExpansionData<SpanData<BufSpan<B, R
 where
     SpanData<BufSpan<B, R>>: Clone,
 {
-    fn mk_span(&self, token: usize, expansion: Option<ArgExpansionPos>) -> Self::Span {
-        let position = MacroExpansionPos { token, expansion };
+    fn mk_span(&self, position: MacroExpansionPos) -> Self::Span {
         SpanData::Macro {
             range: position.clone()..=position,
             context: Rc::clone(self),

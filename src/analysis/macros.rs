@@ -2,7 +2,7 @@ use super::resolve::{Ident, Name, NameTable};
 use super::session::MacroArgs;
 use super::{SemanticToken, Token};
 
-use crate::diag::span::{MacroContextFactory, MacroExpansionContext, SpanSource};
+use crate::diag::span::*;
 
 use std::rc::Rc;
 
@@ -176,9 +176,12 @@ where
                 },
                 None => (self.def.body[self.body_index].clone(), None),
             };
-            let item = (token, self.context.mk_span(self.body_index, expansion));
+            let span = self.context.mk_span(MacroExpansionPos {
+                token: self.body_index,
+                expansion,
+            });
             self.advance();
-            Some(item)
+            Some((token, span))
         } else {
             None
         }
@@ -198,8 +201,6 @@ fn split<I: IntoIterator<Item = (L, R)>, L, R>(iter: I) -> (Vec<L>, Vec<R>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use crate::span::*;
 
     #[test]
     fn expand_macro_with_one_token() {

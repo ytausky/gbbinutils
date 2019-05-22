@@ -552,7 +552,7 @@ mod mock {
     }
 
     impl<'a, T, S: Clone + FakeSpan> MacroExpansionContext for MockDiagnostics<'a, T, S> {
-        fn mk_span(&self, _: usize, _: Option<ArgExpansionPos>) -> Self::Span {
+        fn mk_span(&self, _: MacroExpansionPos) -> Self::Span {
             S::default()
         }
     }
