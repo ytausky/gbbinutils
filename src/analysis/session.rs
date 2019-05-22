@@ -4,7 +4,7 @@ use super::backend::*;
 use super::macros::{DefineMacro, Expand, MacroEntry};
 use super::resolve::{Ident, Name, NameTable, StartScope};
 use super::semantics::Analyze;
-use super::{Lex, SemanticToken, StringRef};
+use super::{Lex, SemanticToken, StringSource};
 
 use crate::codebase::CodebaseError;
 use crate::diag::span::SpanSource;
@@ -16,8 +16,8 @@ pub(crate) use self::mock::*;
 
 pub(super) trait Session
 where
-    Self: SpanSource + StringRef,
-    Self: BasicSession<<Self as StringRef>::StringRef, <Self as SpanSource>::Span>,
+    Self: SpanSource + StringSource,
+    Self: BasicSession<<Self as StringSource>::StringRef, <Self as SpanSource>::Span>,
 {
     fn analyze_file(self, path: Self::StringRef) -> (Result<(), CodebaseError>, Self);
 
@@ -140,10 +140,7 @@ where
     type Span = D::Span;
 }
 
-impl<'a, 'b, C, A, B, N, D> StringRef for CompositeSession<'a, 'b, C, A, B, N, D>
-where
-    C: StringRef,
-{
+impl<'a, 'b, C: StringSource, A, B, N, D> StringSource for CompositeSession<'a, 'b, C, A, B, N, D> {
     type StringRef = C::StringRef;
 }
 
@@ -413,7 +410,7 @@ mod mock {
         type Span = S;
     }
 
-    impl<'a, T, S> StringRef for MockSession<'a, T, S> {
+    impl<'a, T, S> StringSource for MockSession<'a, T, S> {
         type StringRef = String;
     }
 

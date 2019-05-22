@@ -70,7 +70,7 @@ pub(super) enum Literal<S> {
     String(S),
 }
 
-trait Lex<D: SpanSource>: StringRef {
+trait Lex<D: SpanSource>: StringSource {
     type TokenIter: Iterator<Item = LexItem<Self::StringRef, D::Span>>;
 
     fn lex_file(
@@ -84,10 +84,7 @@ struct CodebaseAnalyzer<'a, T: 'a> {
     codebase: &'a T,
 }
 
-impl<'a, T: 'a> CodebaseAnalyzer<'a, T>
-where
-    T: StringRef,
-{
+impl<'a, T: StringSource + 'a> CodebaseAnalyzer<'a, T> {
     fn new(codebase: &T) -> CodebaseAnalyzer<T> {
         CodebaseAnalyzer { codebase }
     }
@@ -114,19 +111,17 @@ where
     }
 }
 
-impl<'a, T: StringRef> StringRef for CodebaseAnalyzer<'a, T> {
+impl<'a, T: StringSource> StringSource for CodebaseAnalyzer<'a, T> {
     type StringRef = T::StringRef;
 }
 
-pub(crate) trait StringRef {
+pub(crate) trait StringSource {
     type StringRef: Clone + Eq;
 }
 
-trait Tokenize<C: BufContext>
-where
-    Self: StringRef,
-{
+trait Tokenize<C: BufContext>: StringSource {
     type Tokenized: Iterator<Item = LexItem<Self::StringRef, C::Span>>;
+
     fn tokenize_file<F: FnOnce(BufId) -> C>(
         &self,
         filename: &str,
@@ -134,7 +129,7 @@ where
     ) -> Result<Self::Tokenized, CodebaseError>;
 }
 
-impl<C: Codebase> StringRef for C {
+impl<C: Codebase> StringSource for C {
     type StringRef = String;
 }
 
@@ -214,7 +209,7 @@ mod mock {
         }
     }
 
-    impl<S> StringRef for MockCodebase<S> {
+    impl<S> StringSource for MockCodebase<S> {
         type StringRef = String;
     }
 }
