@@ -234,7 +234,7 @@ mod tests {
             def: def_id,
         });
         let expanded: Vec<_> = entry.expand(call_name.1, vec![], &mut factory).collect();
-        let macro_expansion_position = MacroExpansionPosition {
+        let macro_expansion_position = MacroExpansionPos {
             token: 0,
             expansion: None,
         };
@@ -310,7 +310,7 @@ mod tests {
             )
             .collect();
         let mk_span_data = |token, expansion| {
-            let position = MacroExpansionPosition { token, expansion };
+            let position = MacroExpansionPos { token, expansion };
             SpanData::Macro {
                 range: position.clone()..=position,
                 context: data.clone(),
@@ -322,11 +322,11 @@ mod tests {
                 (Token::Ident("a".into()), mk_span_data(0, None)),
                 (
                     Token::Ident("y".into()),
-                    mk_span_data(1, Some(TokenExpansion { arg: 0, index: 0 })),
+                    mk_span_data(1, Some(ArgExpansionPos { arg: 0, token: 0 })),
                 ),
                 (
                     Token::Ident("z".into()),
-                    mk_span_data(1, Some(TokenExpansion { arg: 0, index: 1 })),
+                    mk_span_data(1, Some(ArgExpansionPos { arg: 0, token: 1 })),
                 ),
                 (Token::Ident("b".into()), mk_span_data(2, None)),
             ]

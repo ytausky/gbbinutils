@@ -67,20 +67,20 @@ pub trait BufContext: SpanSource {
 }
 
 pub trait MacroExpansionContext: SpanSource {
-    fn mk_span(&self, token: usize, expansion: Option<TokenExpansion>) -> Self::Span;
+    fn mk_span(&self, token: usize, expansion: Option<ArgExpansionPos>) -> Self::Span;
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct TokenExpansion {
+pub struct ArgExpansionPos {
     pub arg: usize,
-    pub index: usize,
+    pub token: usize,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SpanData<B = BufSpan> {
     Buf(B),
     Macro {
-        range: RangeInclusive<MacroExpansionPosition>,
+        range: RangeInclusive<MacroExpansionPos>,
         context: Rc<MacroExpansionData<SpanData<B>>>,
     },
 }
@@ -136,12 +136,12 @@ impl TextCache {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct MacroExpansionPosition {
+pub struct MacroExpansionPos {
     pub token: usize,
-    pub expansion: Option<TokenExpansion>,
+    pub expansion: Option<ArgExpansionPos>,
 }
 
-impl PartialOrd for MacroExpansionPosition {
+impl PartialOrd for MacroExpansionPos {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         if self.token != other.token {
             self.token.partial_cmp(&other.token)
@@ -150,7 +150,7 @@ impl PartialOrd for MacroExpansionPosition {
                 (Some(expansion), Some(other_expansion))
                     if expansion.arg == other_expansion.arg =>
                 {
-                    expansion.index.partial_cmp(&other_expansion.index)
+                    expansion.token.partial_cmp(&other_expansion.token)
                 }
                 (None, None) => Some(Ordering::Equal),
                 _ => None,
@@ -160,9 +160,9 @@ impl PartialOrd for MacroExpansionPosition {
 }
 
 fn merge_macro_expansion_ranges(
-    left: &RangeInclusive<MacroExpansionPosition>,
-    right: &RangeInclusive<MacroExpansionPosition>,
-) -> RangeInclusive<MacroExpansionPosition> {
+    left: &RangeInclusive<MacroExpansionPos>,
+    right: &RangeInclusive<MacroExpansionPos>,
+) -> RangeInclusive<MacroExpansionPos> {
     assert!(left.start() <= right.end());
     left.start().clone()..=right.end().clone()
 }
@@ -336,8 +336,8 @@ impl<B, R> MacroExpansionContext for Rc<MacroExpansionData<SpanData<BufSpan<B, R
 where
     SpanData<BufSpan<B, R>>: Clone,
 {
-    fn mk_span(&self, token: usize, expansion: Option<TokenExpansion>) -> Self::Span {
-        let position = MacroExpansionPosition { token, expansion };
+    fn mk_span(&self, token: usize, expansion: Option<ArgExpansionPos>) -> Self::Span {
+        let position = MacroExpansionPos { token, expansion };
         SpanData::Macro {
             range: position.clone()..=position,
             context: Rc::clone(self),
@@ -379,12 +379,12 @@ mod tests {
 
     #[test]
     fn merge_simple_macro_expansion_positions() {
-        let start_pos = MacroExpansionPosition {
+        let start_pos = MacroExpansionPos {
             token: 2,
             expansion: None,
         };
         let start = start_pos.clone()..=start_pos.clone();
-        let end_pos = MacroExpansionPosition {
+        let end_pos = MacroExpansionPos {
             token: 7,
             expansion: None,
         };
@@ -417,7 +417,7 @@ mod tests {
             buf_id,
             included_from: None,
         });
-        let position = MacroExpansionPosition {
+        let position = MacroExpansionPos {
             token: 0,
             expansion: None,
         };

@@ -552,7 +552,7 @@ mod mock {
     }
 
     impl<'a, T, S: Clone + FakeSpan> MacroExpansionContext for MockDiagnostics<'a, T, S> {
-        fn mk_span(&self, _: usize, _: Option<TokenExpansion>) -> Self::Span {
+        fn mk_span(&self, _: usize, _: Option<ArgExpansionPos>) -> Self::Span {
             S::default()
         }
     }
@@ -671,7 +671,7 @@ mod tests {
             args: vec![],
             def: macro_def,
         });
-        let position = MacroExpansionPosition {
+        let position = MacroExpansionPos {
             token: 0,
             expansion: None,
         };
