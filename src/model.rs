@@ -1,4 +1,4 @@
-use crate::span::Source;
+use crate::span::{Source, SpanSource};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Expr<L, N, S>(pub Vec<ExprItem<L, N, S>>);
@@ -23,9 +23,11 @@ impl<L, N, S> Default for Expr<L, N, S> {
     }
 }
 
-impl<L, N, S: Clone> Source for Expr<L, N, S> {
+impl<L, N, S: Clone> SpanSource for Expr<L, N, S> {
     type Span = S;
+}
 
+impl<L, N, S: Clone> Source for Expr<L, N, S> {
     fn span(&self) -> Self::Span {
         self.0.first().unwrap().expr_span.clone()
     }

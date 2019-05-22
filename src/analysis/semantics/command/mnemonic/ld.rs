@@ -1,7 +1,7 @@
 use super::{Analysis, Operand};
 
 use crate::analysis::semantics::command::operand::AtomKind;
-use crate::diag::span::Source;
+use crate::diag::span::{Source, SpanSource};
 use crate::diag::{Diagnostics, EmitDiagnostic, Message};
 use crate::model::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd, Width};
 
@@ -185,17 +185,17 @@ impl<V, S> From<LdDest16<S>> for LdOperand<V, LdDest16<S>> {
     }
 }
 
-enum LdDest<V: Source> {
+enum LdDest<V: SpanSource> {
     Byte(LdDest8<V>),
     Word(LdDest16<V::Span>),
 }
 
-enum LdDest8<V: Source> {
+enum LdDest8<V: SpanSource> {
     Simple(SimpleOperand, V::Span),
     Special(LdSpecial<V>),
 }
 
-enum LdSpecial<V: Source> {
+enum LdSpecial<V: SpanSource> {
     Deref(V),
     DerefC(V::Span),
     DerefPtrReg(PtrReg, V::Span),
@@ -250,9 +250,11 @@ fn diagnose_not_a<T, D: EmitDiagnostic<S, T>, S>(span: S, diagnostics: &mut D) -
     Err(())
 }
 
-impl<V: Source, T: Source<Span = V::Span>> Source for LdOperand<V, T> {
+impl<V: Source, T: Source<Span = V::Span>> SpanSource for LdOperand<V, T> {
     type Span = V::Span;
+}
 
+impl<V: Source, T: Source<Span = V::Span>> Source for LdOperand<V, T> {
     fn span(&self) -> Self::Span {
         match self {
             LdOperand::Const(expr) => expr.span(),
@@ -261,9 +263,11 @@ impl<V: Source, T: Source<Span = V::Span>> Source for LdOperand<V, T> {
     }
 }
 
-impl<V: Source> Source for LdDest8<V> {
+impl<V: SpanSource> SpanSource for LdDest8<V> {
     type Span = V::Span;
+}
 
+impl<V: Source> Source for LdDest8<V> {
     fn span(&self) -> Self::Span {
         use self::LdDest8::*;
         match self {
@@ -273,9 +277,11 @@ impl<V: Source> Source for LdDest8<V> {
     }
 }
 
-impl<V: Source> Source for LdSpecial<V> {
+impl<V: SpanSource> SpanSource for LdSpecial<V> {
     type Span = V::Span;
+}
 
+impl<V: Source> Source for LdSpecial<V> {
     fn span(&self) -> Self::Span {
         use self::LdSpecial::*;
         match self {
@@ -285,9 +291,11 @@ impl<V: Source> Source for LdSpecial<V> {
     }
 }
 
-impl<S: Clone> Source for LdDest16<S> {
+impl<S: Clone> SpanSource for LdDest16<S> {
     type Span = S;
+}
 
+impl<S: Clone> Source for LdDest16<S> {
     fn span(&self) -> Self::Span {
         match self {
             LdDest16::Reg16(_, span) => span.clone(),

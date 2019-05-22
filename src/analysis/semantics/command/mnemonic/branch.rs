@@ -2,7 +2,7 @@ use super::{Analysis, AtomKind, Operand, SimpleOperand};
 
 use crate::diag::{Diagnostics, EmitDiagnostic, Message};
 use crate::model::{Branch, Condition, Instruction, Nullary};
-use crate::span::Source;
+use crate::span::{Source, SpanSource};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BranchKind {
@@ -67,18 +67,20 @@ where
 }
 
 type BranchOperands<V> = (
-    Option<(Condition, <V as Source>::Span)>,
+    Option<(Condition, <V as SpanSource>::Span)>,
     Option<BranchTarget<V>>,
 );
 
-enum BranchTarget<V: Source> {
+enum BranchTarget<V: SpanSource> {
     DerefHl(V::Span),
     Expr(V),
 }
 
-impl<V: Source> Source for BranchTarget<V> {
+impl<V: SpanSource> SpanSource for BranchTarget<V> {
     type Span = V::Span;
+}
 
+impl<V: Source> Source for BranchTarget<V> {
     fn span(&self) -> Self::Span {
         match self {
             BranchTarget::DerefHl(span) => span.clone(),

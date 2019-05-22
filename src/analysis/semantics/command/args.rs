@@ -1,5 +1,5 @@
 use crate::analysis::{Ident, Literal};
-use crate::diag::span::Source;
+use crate::diag::span::{Source, SpanSource};
 use crate::model::BinOp;
 
 pub(super) type CommandArgs<I, S> = Vec<Arg<I, S>>;
@@ -52,9 +52,11 @@ impl<I, S> From<ArgAtom<I>> for ArgVariant<I, S> {
     }
 }
 
-impl<I, S: Clone> Source for Arg<I, S> {
+impl<I, S: Clone> SpanSource for Arg<I, S> {
     type Span = S;
+}
 
+impl<I, S: Clone> Source for Arg<I, S> {
     fn span(&self) -> Self::Span {
         self.span.clone()
     }
