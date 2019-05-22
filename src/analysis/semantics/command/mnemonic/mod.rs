@@ -18,7 +18,7 @@ pub(super) fn analyze_instruction<I, V, D, S>(
 where
     I: IntoIterator<Item = Result<Operand<V>, ()>>,
     V: Source<Span = S>,
-    D: DownstreamDiagnostics<S>,
+    D: Diagnostics<S>,
     S: Clone,
 {
     let mnemonic: (Mnemonic, _) = (mnemonic.0.into(), mnemonic.1);
@@ -33,7 +33,7 @@ struct Analysis<'a, I, D: 'a, S> {
 
 impl<'a, I, D, S> DelegateDiagnostics<S> for Analysis<'a, I, D, S>
 where
-    D: DownstreamDiagnostics<S> + 'a,
+    D: Diagnostics<S> + 'a,
 {
     type Delegate = D;
 
@@ -44,7 +44,7 @@ where
 
 impl<'a, I, D, S> EmitDiagnostic<S, D::Stripped> for Analysis<'a, I, D, S>
 where
-    D: DownstreamDiagnostics<S> + 'a,
+    D: Diagnostics<S> + 'a,
 {
     fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<S, D::Stripped>>) {
         self.diagnostics.emit_diagnostic(diagnostic)
@@ -55,7 +55,7 @@ impl<'a, I, V, D, S> Analysis<'a, I, D, S>
 where
     I: Iterator<Item = Result<Operand<V>, ()>>,
     V: Source<Span = S>,
-    D: DownstreamDiagnostics<S>,
+    D: Diagnostics<S>,
     S: Clone,
 {
     fn new(mnemonic: (Mnemonic, S), operands: I, diagnostics: &'a mut D) -> Analysis<'a, I, D, S> {
@@ -252,7 +252,7 @@ impl<V: Source> Operand<V> {
         diagnostics: &mut D,
     ) -> Result<(), ()>
     where
-        D: DownstreamDiagnostics<V::Span>,
+        D: Diagnostics<V::Span>,
     {
         match self {
             Operand::Atom(ref actual, _) if *actual == expected => Ok(()),
@@ -262,7 +262,7 @@ impl<V: Source> Operand<V> {
 
     fn expect_simple<D>(self, diagnostics: &mut D) -> Result<SimpleOperand, ()>
     where
-        D: DownstreamDiagnostics<V::Span>,
+        D: Diagnostics<V::Span>,
     {
         match self {
             Operand::Atom(AtomKind::Simple(simple), _) => Ok(simple),
@@ -272,7 +272,7 @@ impl<V: Source> Operand<V> {
 
     fn expect_const<D>(self, diagnostics: &mut D) -> Result<V, ()>
     where
-        D: DownstreamDiagnostics<V::Span>,
+        D: Diagnostics<V::Span>,
     {
         match self {
             Operand::Const(expr) => Ok(expr),
@@ -282,7 +282,7 @@ impl<V: Source> Operand<V> {
 
     fn expect_reg_pair<D>(self, diagnostics: &mut D) -> Result<RegPair, ()>
     where
-        D: DownstreamDiagnostics<V::Span>,
+        D: Diagnostics<V::Span>,
     {
         match self {
             Operand::Atom(AtomKind::RegPair(reg_pair), _) => Ok(reg_pair),
@@ -292,7 +292,7 @@ impl<V: Source> Operand<V> {
 
     fn error<T, D>(self, message: Message<D::Stripped>, diagnostics: &mut D) -> Result<T, ()>
     where
-        D: DownstreamDiagnostics<V::Span>,
+        D: Diagnostics<V::Span>,
     {
         diagnostics.emit_diagnostic(message.at(self.span()));
         Err(())

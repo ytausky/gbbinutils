@@ -25,11 +25,11 @@ pub(crate) trait DiagnosticsSystem
 where
     Self: SpanSource,
     Self: ContextFactory,
-    Self: DownstreamDiagnostics<<Self as SpanSource>::Span>,
+    Self: Diagnostics<<Self as SpanSource>::Span>,
 {
 }
 
-pub(crate) trait DownstreamDiagnostics<S>
+pub(crate) trait Diagnostics<S>
 where
     Self: MergeSpans<S>,
     Self: BackendDiagnostics<S>,
@@ -50,7 +50,7 @@ where
 {
 }
 
-impl<T, S> DownstreamDiagnostics<S> for T
+impl<T, S> Diagnostics<S> for T
 where
     T: MergeSpans<S>,
     T: BackendDiagnostics<S>,
@@ -58,7 +58,7 @@ where
 }
 
 pub(crate) trait DelegateDiagnostics<S> {
-    type Delegate: DownstreamDiagnostics<S>;
+    type Delegate: Diagnostics<S>;
 
     fn diagnostics(&mut self) -> &mut Self::Delegate;
 }

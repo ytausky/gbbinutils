@@ -2,14 +2,14 @@ use super::{Analysis, Operand};
 
 use crate::analysis::semantics::command::operand::AtomKind;
 use crate::diag::span::Source;
-use crate::diag::{DownstreamDiagnostics, EmitDiagnostic, Message};
+use crate::diag::{Diagnostics, EmitDiagnostic, Message};
 use crate::model::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd, Width};
 
 impl<'a, I, V, D, S> Analysis<'a, I, D, S>
 where
     I: Iterator<Item = Result<Operand<V>, ()>>,
     V: Source<Span = S>,
-    D: DownstreamDiagnostics<S>,
+    D: Diagnostics<S>,
     S: Clone,
 {
     pub fn analyze_ld(&mut self) -> Result<Instruction<V>, ()> {
@@ -132,7 +132,7 @@ fn analyze_special_ld<V: Source>(
 impl<V: Source> Operand<V> {
     fn into_ld_dest<D>(self, diagnostics: &mut D) -> Result<LdDest<V>, ()>
     where
-        D: DownstreamDiagnostics<V::Span>,
+        D: Diagnostics<V::Span>,
     {
         match self {
             Operand::Deref(expr) => Ok(LdDest::Byte(LdDest8::Special(LdSpecial::Deref(expr)))),
@@ -159,7 +159,7 @@ impl<V: Source> Operand<V> {
 
     fn into_ld_src<D>(self, diagnostics: &mut D) -> Result<LdOperand<V, LdDest<V>>, ()>
     where
-        D: DownstreamDiagnostics<V::Span>,
+        D: Diagnostics<V::Span>,
     {
         match self {
             Operand::Const(expr) => Ok(LdOperand::Const(expr)),
@@ -224,7 +224,7 @@ impl<S> DataWidth for LdDest16<S> {
 impl<V: Source> LdOperand<V, LdDest8<V>> {
     fn expect_a<D>(self, diagnostics: &mut D) -> Result<(), ()>
     where
-        D: DownstreamDiagnostics<V::Span>,
+        D: Diagnostics<V::Span>,
     {
         match self {
             LdOperand::Const(expr) => diagnose_not_a(expr.span(), diagnostics),
@@ -236,7 +236,7 @@ impl<V: Source> LdOperand<V, LdDest8<V>> {
 impl<V: Source> LdDest8<V> {
     fn expect_a<D>(self, diagnostics: &mut D) -> Result<(), ()>
     where
-        D: DownstreamDiagnostics<V::Span>,
+        D: Diagnostics<V::Span>,
     {
         match self {
             LdDest8::Simple(SimpleOperand::A, _) => Ok(()),

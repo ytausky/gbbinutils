@@ -294,7 +294,7 @@ impl<'a, 'b, C, A, B, N, D, R, S> BasicSession<R, S> for CompositeSession<'a, 'b
 where
     B: Backend<S>,
     N: NameTable<Ident<R>, BackendEntry = B::Name> + StartScope<Ident<R>>,
-    D: DownstreamDiagnostics<S>,
+    D: Diagnostics<S>,
     S: Clone,
 {
     type FnBuilder = RelocContext<CompositeSession<'a, 'b, C, A, (), N, D>, B::SymbolBuilder>;
@@ -333,7 +333,7 @@ where
 
 impl<'a, 'b, F, A, B, N, D, S> DelegateDiagnostics<S> for CompositeSession<'a, 'b, F, A, B, N, D>
 where
-    D: DownstreamDiagnostics<S>,
+    D: Diagnostics<S>,
 {
     type Delegate = D;
 

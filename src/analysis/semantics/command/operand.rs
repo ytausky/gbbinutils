@@ -107,7 +107,7 @@ fn analyze_deref_operand_keyword<V: Source, D>(
 ) -> Result<Operand<V>, ()>
 where
     V: Source,
-    D: DownstreamDiagnostics<V::Span>,
+    D: Diagnostics<V::Span>,
 {
     match try_deref_operand_keyword(keyword.0) {
         Ok(atom) => Ok(Operand::Atom(atom, deref)),
@@ -147,7 +147,7 @@ fn analyze_keyword_operand<V: Source, D>(
 ) -> Result<Operand<V>, ()>
 where
     V: Source,
-    D: DownstreamDiagnostics<V::Span>,
+    D: Diagnostics<V::Span>,
 {
     use self::kw::Operand::*;
     use self::Context::*;

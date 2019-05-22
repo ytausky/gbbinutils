@@ -1,6 +1,6 @@
 use super::{Analysis, AtomKind, Operand, SimpleOperand};
 
-use crate::diag::{DownstreamDiagnostics, EmitDiagnostic, Message};
+use crate::diag::{Diagnostics, EmitDiagnostic, Message};
 use crate::model::{Branch, Condition, Instruction, Nullary};
 use crate::span::Source;
 
@@ -27,7 +27,7 @@ impl<'a, I, V, D, S> Analysis<'a, I, D, S>
 where
     I: Iterator<Item = Result<Operand<V>, ()>>,
     V: Source<Span = S>,
-    D: DownstreamDiagnostics<S>,
+    D: Diagnostics<S>,
     S: Clone,
 {
     pub fn analyze_branch(&mut self, branch: BranchKind) -> Result<Instruction<V>, ()> {
@@ -93,7 +93,7 @@ fn analyze_branch_target<V, D>(
 ) -> Result<Option<BranchTarget<V>>, ()>
 where
     V: Source,
-    D: DownstreamDiagnostics<V::Span>,
+    D: Diagnostics<V::Span>,
 {
     let target = match target {
         Some(target) => target,
@@ -137,7 +137,7 @@ fn analyze_branch_variant<V, D>(
 ) -> Result<BranchVariant<V>, ()>
 where
     V: Source,
-    D: DownstreamDiagnostics<V::Span>,
+    D: Diagnostics<V::Span>,
 {
     match (kind.0, target) {
         (BranchKind::Explicit(ExplicitBranch::Jp), Some(BranchTarget::DerefHl(_))) => {

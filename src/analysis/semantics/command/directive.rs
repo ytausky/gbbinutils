@@ -105,7 +105,7 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
     }
 }
 
-fn reduce_include<I: PartialEq, D: DownstreamDiagnostics<S>, S>(
+fn reduce_include<I: PartialEq, D: Diagnostics<S>, S>(
     span: S,
     args: Vec<Arg<I, S>>,
     diagnostics: &mut D,
@@ -120,7 +120,7 @@ fn reduce_include<I: PartialEq, D: DownstreamDiagnostics<S>, S>(
     }
 }
 
-fn single_arg<T, D: DownstreamDiagnostics<S>, S>(
+fn single_arg<T, D: Diagnostics<S>, S>(
     span: S,
     args: impl IntoIterator<Item = T>,
     diagnostics: &mut D,
