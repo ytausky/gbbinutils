@@ -220,6 +220,8 @@ mod tests {
     use super::Token::*;
     use super::*;
 
+    use crate::diag::Merge;
+
     #[test]
     fn parse_long_sum_arg() {
         let tokens = input_tokens![

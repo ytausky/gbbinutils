@@ -184,6 +184,7 @@ mod tests {
 
     use crate::analysis::semantics::command::mnemonic::tests::*;
     use crate::analysis::syntax::keyword::Mnemonic;
+    use crate::diag::Merge;
 
     #[test]
     fn analyze_legal_branch_instructions() {
@@ -312,8 +313,8 @@ mod tests {
                 mnemonic: TokenId::Mnemonic.into(),
             })
             .with_highlight(TokenSpan::merge(
-                &TokenId::Operand(0, 0).into(),
-                &TokenId::Operand(0, 2).into(),
+                TokenId::Operand(0, 0),
+                TokenId::Operand(0, 2),
             )),
         )
     }

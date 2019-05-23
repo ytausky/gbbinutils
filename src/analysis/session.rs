@@ -346,7 +346,7 @@ mod mock {
     use super::*;
 
     use crate::analysis::backend::{BackendEvent, MockSymbolBuilder};
-    use crate::diag::{DiagnosticsEvent, FakeSpan, MockDiagnostics};
+    use crate::diag::{DiagnosticsEvent, MockDiagnostics};
 
     use std::cell::RefCell;
 
@@ -385,14 +385,14 @@ mod mock {
     }
 
     delegate_diagnostics! {
-        {'a, T: From<DiagnosticsEvent<S>>, S: FakeSpan},
+        {'a, T: From<DiagnosticsEvent<S>>, S: Merge},
         MockSession<'a, T, S>,
         {diagnostics},
         MockDiagnostics<'a, T, S>,
         S
     }
 
-    impl<'a, T, S: Clone + FakeSpan> SpanSource for MockSession<'a, T, S> {
+    impl<'a, T, S: Clone + Merge> SpanSource for MockSession<'a, T, S> {
         type Span = S;
     }
 
@@ -405,7 +405,7 @@ mod mock {
         T: From<SessionEvent<S>>,
         T: From<BackendEvent<Expr<S>>>,
         T: From<DiagnosticsEvent<S>>,
-        S: Clone + FakeSpan,
+        S: Clone + Merge,
     {
         fn analyze_file(mut self, path: String) -> (Result<(), CodebaseError>, Self) {
             self.log
@@ -448,7 +448,7 @@ mod mock {
         T: From<SessionEvent<S>>,
         T: From<BackendEvent<Expr<S>>>,
         T: From<DiagnosticsEvent<S>>,
-        S: Clone + FakeSpan,
+        S: Clone + Merge,
     {
         type FnBuilder = MockSymbolBuilder<Self, Ident<String>, S>;
         type GeneralBuilder = RelocContext<Self, Expr<S>>;
@@ -492,7 +492,7 @@ mod mock {
     }
 
     delegate_diagnostics! {
-        {'a, T: From<DiagnosticsEvent<S>>, S: FakeSpan},
+        {'a, T: From<DiagnosticsEvent<S>>, S: Merge},
         MockSymbolBuilder<MockSession<'a, T, S>, Ident<String>, S>,
         {parent.diagnostics},
         MockDiagnostics<'a, T, S>,
@@ -532,7 +532,7 @@ mod mock {
     impl<'a, T, S> PartialBackend<S> for MockSession<'a, T, S>
     where
         T: From<BackendEvent<Expr<S>>>,
-        S: Clone + FakeSpan,
+        S: Clone + Merge,
     {
         type Value = Expr<S>;
 
@@ -558,7 +558,7 @@ mod mock {
     impl<'a, T, S> StartSection<Ident<String>, S> for MockSession<'a, T, S>
     where
         T: From<BackendEvent<Expr<S>>>,
-        S: Clone + FakeSpan,
+        S: Clone + Merge,
     {
         fn start_section(&mut self, name: (Ident<String>, S)) {
             self.log
@@ -597,7 +597,7 @@ mod tests {
     use crate::analysis::semantics::AnalyzerEvent;
     use crate::analysis::syntax::{Command, Directive, Mnemonic, Token};
     use crate::analysis::{Literal, MockCodebase};
-    use crate::diag::{DiagnosticsEvent, FakeSpan};
+    use crate::diag::DiagnosticsEvent;
     use crate::model::{Atom, BinOp, Instruction, Nullary, Width};
 
     use std::cell::RefCell;
@@ -783,17 +783,26 @@ mod tests {
     #[test]
     fn diagnose_undefined_macro() {
         let name = "my_macro";
+        let span = name;
         let log = RefCell::new(Vec::new());
-        let mut fixture = Fixture::new(&log);
+        let mut fixture = Fixture::<MockSpan<_>>::new(&log);
         let session = fixture.session();
-        session.call_macro((name.into(), name), vec![]);
+        session.call_macro((name.into(), span.into()), vec![]);
         assert_eq!(
             log.into_inner(),
-            [
-                DiagnosticsEvent::EmitDiagnostic(Message::UndefinedMacro { name }.at(name).into())
+            [DiagnosticsEvent::EmitDiagnostic(
+                Message::UndefinedMacro { name: span.into() }
+                    .at(span.into())
                     .into()
-            ]
+            )
+            .into()]
         );
+    }
+
+    impl Default for MockSpan<&'static str> {
+        fn default() -> Self {
+            unreachable!()
+        }
     }
 
     #[test]
@@ -829,10 +838,10 @@ mod tests {
 
     type MockAnalyzer<'a, S> = crate::analysis::semantics::MockAnalyzer<'a, Event<S>>;
     type MockBackend<'a, S> = crate::analysis::backend::MockBackend<'a, Event<S>>;
-    type MockDiagnostics<'a, S> = crate::diag::MockDiagnostics<'a, Event<S>, S>;
+    type MockDiagnosticsSystem<'a, S> = crate::diag::MockDiagnosticsSystem<'a, Event<S>, S>;
     type MockNameTable<'a, S> = crate::analysis::resolve::MockNameTable<
         'a,
-        BasicNameTable<usize, MacroEntry<String, MockDiagnostics<'a, S>>>,
+        BasicNameTable<usize, MacroEntry<String, MockDiagnosticsSystem<'a, S>>>,
         Event<S>,
     >;
     type TestSession<'a, 'b, S> = CompositeSession<
@@ -842,7 +851,7 @@ mod tests {
         MockAnalyzer<'a, S>,
         MockBackend<'a, S>,
         MockNameTable<'a, S>,
-        MockDiagnostics<'a, S>,
+        MockDiagnosticsSystem<'a, S>,
     >;
 
     #[derive(Debug, PartialEq)]
@@ -877,22 +886,22 @@ mod tests {
         }
     }
 
-    struct Fixture<'a, S: Clone + FakeSpan> {
+    struct Fixture<'a, S: Clone + Default + Merge> {
         codebase: MockCodebase<S>,
         analyzer: MockAnalyzer<'a, S>,
         backend: Option<MockBackend<'a, S>>,
         names: MockNameTable<'a, S>,
-        diagnostics: MockDiagnostics<'a, S>,
+        diagnostics: MockDiagnosticsSystem<'a, S>,
     }
 
-    impl<'a, S: Clone + FakeSpan> Fixture<'a, S> {
+    impl<'a, S: Clone + Default + Merge> Fixture<'a, S> {
         fn new(log: &'a RefCell<Vec<Event<S>>>) -> Self {
             Self {
                 codebase: MockCodebase::new(),
                 analyzer: MockAnalyzer::new(log),
                 backend: Some(MockBackend::new(log)),
                 names: MockNameTable::new(BasicNameTable::new(), log),
-                diagnostics: MockDiagnostics::new(log),
+                diagnostics: MockDiagnosticsSystem::new(log),
             }
         }
 
@@ -904,16 +913,6 @@ mod tests {
                 &mut self.names,
                 &mut self.diagnostics,
             )
-        }
-    }
-
-    impl FakeSpan for &'static str {
-        fn default() -> Self {
-            unimplemented!()
-        }
-
-        fn merge(&self, _: &Self) -> Self {
-            unimplemented!()
         }
     }
 }

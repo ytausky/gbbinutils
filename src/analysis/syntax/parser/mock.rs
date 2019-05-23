@@ -4,7 +4,7 @@ use super::{ExprAtom, Operator, Token, UnaryOperator};
 
 use crate::analysis::syntax::*;
 use crate::diag::span::{MergeSpans, StripSpan};
-use crate::diag::{CompactDiagnostic, EmitDiagnostic, Message};
+use crate::diag::{CompactDiagnostic, EmitDiagnostic, Merge, Message};
 use crate::model::BinOp;
 
 use std::borrow::Borrow;
@@ -23,11 +23,7 @@ macro_rules! impl_diag_traits {
     ($($t:ty),* $(,)?) => {
         $(
             impl MergeSpans<MockSpan> for $t {
-                fn merge_spans(
-                    &mut self,
-                    left: &MockSpan,
-                    right: &MockSpan
-                ) -> MockSpan {
+                fn merge_spans(&mut self, left: &MockSpan, right: &MockSpan) -> MockSpan {
                     MockSpan::merge(left.clone(), right.clone())
                 }
             }
@@ -68,10 +64,7 @@ impl FileActionCollector {
 }
 
 impl EmitDiagnostic<MockSpan, MockSpan> for FileActionCollector {
-    fn emit_diagnostic(
-        &mut self,
-        diagnostic: impl Into<CompactDiagnostic<MockSpan, MockSpan>>,
-    ) {
+    fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<MockSpan, MockSpan>>) {
         self.actions
             .push(FileAction::EmitDiagnostic(diagnostic.into()))
     }
@@ -105,10 +98,7 @@ pub(super) struct LabelActionCollector {
 }
 
 impl EmitDiagnostic<MockSpan, MockSpan> for LabelActionCollector {
-    fn emit_diagnostic(
-        &mut self,
-        diagnostic: impl Into<CompactDiagnostic<MockSpan, MockSpan>>,
-    ) {
+    fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<MockSpan, MockSpan>>) {
         self.actions
             .push(ParamsAction::EmitDiagnostic(diagnostic.into()))
     }
@@ -137,10 +127,7 @@ pub(super) struct StmtActionCollector {
 }
 
 impl EmitDiagnostic<MockSpan, MockSpan> for StmtActionCollector {
-    fn emit_diagnostic(
-        &mut self,
-        diagnostic: impl Into<CompactDiagnostic<MockSpan, MockSpan>>,
-    ) {
+    fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<MockSpan, MockSpan>>) {
         self.actions
             .push(StmtAction::EmitDiagnostic(diagnostic.into()))
     }
@@ -192,10 +179,7 @@ pub(super) struct CommandActionCollector {
 }
 
 impl EmitDiagnostic<MockSpan, MockSpan> for CommandActionCollector {
-    fn emit_diagnostic(
-        &mut self,
-        diagnostic: impl Into<CompactDiagnostic<MockSpan, MockSpan>>,
-    ) {
+    fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<MockSpan, MockSpan>>) {
         self.actions
             .push(CommandAction::EmitDiagnostic(diagnostic.into()))
     }
@@ -236,10 +220,7 @@ impl<P> ExprActionCollector<P> {
 }
 
 impl<P> EmitDiagnostic<MockSpan, MockSpan> for ExprActionCollector<P> {
-    fn emit_diagnostic(
-        &mut self,
-        diagnostic: impl Into<CompactDiagnostic<MockSpan, MockSpan>>,
-    ) {
+    fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<MockSpan, MockSpan>>) {
         self.actions
             .push(ExprAction::EmitDiagnostic(diagnostic.into()))
     }
@@ -287,10 +268,7 @@ pub(super) struct MacroBodyActionCollector {
 }
 
 impl EmitDiagnostic<MockSpan, MockSpan> for MacroBodyActionCollector {
-    fn emit_diagnostic(
-        &mut self,
-        diagnostic: impl Into<CompactDiagnostic<MockSpan, MockSpan>>,
-    ) {
+    fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<MockSpan, MockSpan>>) {
         self.actions
             .push(TokenSeqAction::EmitDiagnostic(diagnostic.into()))
     }
@@ -320,10 +298,7 @@ pub(super) struct MacroCallActionCollector {
 }
 
 impl EmitDiagnostic<MockSpan, MockSpan> for MacroCallActionCollector {
-    fn emit_diagnostic(
-        &mut self,
-        diagnostic: impl Into<CompactDiagnostic<MockSpan, MockSpan>>,
-    ) {
+    fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<MockSpan, MockSpan>>) {
         self.actions
             .push(MacroCallAction::EmitDiagnostic(diagnostic.into()))
     }
@@ -356,10 +331,7 @@ pub(super) struct MacroArgActionCollector {
 }
 
 impl EmitDiagnostic<MockSpan, MockSpan> for MacroArgActionCollector {
-    fn emit_diagnostic(
-        &mut self,
-        diagnostic: impl Into<CompactDiagnostic<MockSpan, MockSpan>>,
-    ) {
+    fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<MockSpan, MockSpan>>) {
         self.actions
             .push(TokenSeqAction::EmitDiagnostic(diagnostic.into()))
     }
@@ -468,11 +440,7 @@ impl SymExpr {
         self
     }
 
-    pub fn error(
-        mut self,
-        message: Message<MockSpan>,
-        highlight: impl Into<MockSpan>,
-    ) -> Self {
+    pub fn error(mut self, message: Message<MockSpan>, highlight: impl Into<MockSpan>) -> Self {
         self.0.push(ExprAction::EmitDiagnostic(
             message.at(highlight.into()).into(),
         ));
@@ -682,9 +650,7 @@ pub(super) fn labeled(
     }
 }
 
-pub(super) fn unlabeled(
-    actions: Vec<StmtAction<MockSpan>>,
-) -> FileAction<MockSpan> {
+pub(super) fn unlabeled(actions: Vec<StmtAction<MockSpan>>) -> FileAction<MockSpan> {
     FileAction::Stmt {
         label: None,
         actions,

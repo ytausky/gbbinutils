@@ -475,16 +475,14 @@ impl ExpandedDiagnosticClause<StrippedBufSpan, BufId, BufRange> {
 mod mock {
     use super::*;
 
+    pub(crate) trait Merge: Sized {
+        fn merge(left: impl Into<Self>, right: impl Into<Self>) -> Self;
+    }
+
     #[derive(Clone, Debug, PartialEq)]
     pub(crate) enum MockSpan<T> {
         Basic(T),
         Merge(Box<Self>, Box<Self>),
-    }
-
-    impl<T> MockSpan<T> {
-        pub fn merge(left: impl Into<Self>, right: impl Into<Self>) -> Self {
-            MockSpan::Merge(Box::new(left.into()), Box::new(right.into()))
-        }
     }
 
     impl<T> From<T> for MockSpan<T> {
@@ -493,14 +491,14 @@ mod mock {
         }
     }
 
-    pub(crate) trait FakeSpan {
-        fn default() -> Self;
-        fn merge(&self, other: &Self) -> Self;
+    impl Merge for () {
+        fn merge(_: impl Into<Self>, _: impl Into<Self>) -> Self {}
     }
 
-    impl FakeSpan for () {
-        fn default() {}
-        fn merge(&self, _: &Self) {}
+    impl<T> Merge for MockSpan<T> {
+        fn merge(left: impl Into<Self>, right: impl Into<Self>) -> Self {
+            MockSpan::Merge(Box::new(left.into()), Box::new(right.into()))
+        }
     }
 
     pub(crate) struct MockDiagnostics<'a, T, S> {
@@ -537,18 +535,79 @@ mod mock {
         }
     }
 
-    impl<'a, T, S> DiagnosticsSystem for MockDiagnostics<'a, T, S>
+    impl<'a, T, S: Clone> SpanSource for MockDiagnostics<'a, T, S> {
+        type Span = S;
+    }
+
+    impl<'a, T, S: Clone> StripSpan<S> for MockDiagnostics<'a, T, S> {
+        type Stripped = S;
+
+        fn strip_span(&mut self, span: &S) -> Self::Stripped {
+            span.clone()
+        }
+    }
+
+    impl<'a, T, S: Clone + Merge> MergeSpans<S> for MockDiagnostics<'a, T, S> {
+        fn merge_spans(&mut self, left: &S, right: &S) -> S {
+            S::merge(left.clone(), right.clone())
+        }
+    }
+
+    impl<'a, T, S> EmitDiagnostic<S, S> for MockDiagnostics<'a, T, S>
     where
         T: From<DiagnosticsEvent<S>>,
-        S: Clone + FakeSpan,
+        S: Clone,
+    {
+        fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<S, S>>) {
+            self.log
+                .borrow_mut()
+                .push(DiagnosticsEvent::EmitDiagnostic(diagnostic.into()).into())
+        }
+    }
+
+    pub(crate) struct MockDiagnosticsSystem<'a, T, S>(MockDiagnostics<'a, T, S>);
+
+    impl<'a, T, S> MockDiagnosticsSystem<'a, T, S> {
+        pub fn new(log: &'a RefCell<Vec<T>>) -> Self {
+            Self(MockDiagnostics::new(log))
+        }
+    }
+
+    impl<'a, T, S> Clone for MockDiagnosticsSystem<'a, T, S> {
+        fn clone(&self) -> Self {
+            Self(self.0.clone())
+        }
+    }
+
+    impl<'a, T, S> DiagnosticsSystem for MockDiagnosticsSystem<'a, T, S>
+    where
+        T: From<DiagnosticsEvent<S>>,
+        S: Clone + Default + Merge,
     {
     }
 
-    impl<'a, T, S> SpanSystem for MockDiagnostics<'a, T, S> where S: Clone + FakeSpan {}
-
-    impl<'a, T, S> BufContextFactory for MockDiagnostics<'a, T, S>
+    impl<'a, T, S> SpanSystem for MockDiagnosticsSystem<'a, T, S>
     where
-        S: Clone + FakeSpan,
+        T: From<DiagnosticsEvent<S>>,
+        S: Clone + Default + Merge,
+    {
+    }
+
+    impl<'a, T, S: Clone> SpanSource for MockDiagnosticsSystem<'a, T, S> {
+        type Span = S;
+    }
+
+    delegate_diagnostics! {
+        {'a, T: From<DiagnosticsEvent<S>>, S: Default + Merge},
+        MockDiagnosticsSystem<'a, T, S>,
+        {0},
+        MockDiagnostics<'a, T, S>,
+        S
+    }
+
+    impl<'a, T, S> BufContextFactory for MockDiagnosticsSystem<'a, T, S>
+    where
+        S: Clone + Default + Merge,
     {
         type BufContext = Self;
 
@@ -557,15 +616,15 @@ mod mock {
         }
     }
 
-    impl<'a, T, S: Clone + FakeSpan> BufContext for MockDiagnostics<'a, T, S> {
+    impl<'a, T, S: Clone + Default + Merge> BufContext for MockDiagnosticsSystem<'a, T, S> {
         fn mk_span(&self, _: BufRange) -> Self::Span {
             S::default()
         }
     }
 
-    impl<'a, T, S> MacroContextFactory<S> for MockDiagnostics<'a, T, S>
+    impl<'a, T, S> MacroContextFactory<S> for MockDiagnosticsSystem<'a, T, S>
     where
-        S: Clone + FakeSpan,
+        S: Clone + Default + Merge,
     {
         type MacroDefId = usize;
         type MacroExpansionContext = Self;
@@ -592,39 +651,9 @@ mod mock {
         }
     }
 
-    impl<'a, T, S: Clone + FakeSpan> MacroExpansionContext for MockDiagnostics<'a, T, S> {
+    impl<'a, T, S: Clone + Default + Merge> MacroExpansionContext for MockDiagnosticsSystem<'a, T, S> {
         fn mk_span(&self, _: MacroExpansionPos) -> Self::Span {
             S::default()
-        }
-    }
-
-    impl<'a, T, S: Clone> SpanSource for MockDiagnostics<'a, T, S> {
-        type Span = S;
-    }
-
-    impl<'a, T, S: Clone> StripSpan<S> for MockDiagnostics<'a, T, S> {
-        type Stripped = S;
-
-        fn strip_span(&mut self, span: &S) -> Self::Stripped {
-            span.clone()
-        }
-    }
-
-    impl<'a, T, S: Clone + FakeSpan> MergeSpans<S> for MockDiagnostics<'a, T, S> {
-        fn merge_spans(&mut self, left: &S, right: &S) -> S {
-            left.merge(right)
-        }
-    }
-
-    impl<'a, T, S> EmitDiagnostic<S, S> for MockDiagnostics<'a, T, S>
-    where
-        T: From<DiagnosticsEvent<S>>,
-        S: Clone,
-    {
-        fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<S, S>>) {
-            self.log
-                .borrow_mut()
-                .push(DiagnosticsEvent::EmitDiagnostic(diagnostic.into()).into())
         }
     }
 }

@@ -412,8 +412,6 @@ mod tests {
     use crate::analysis::{Ident, Literal};
     use crate::model::{Atom, LocationCounter};
 
-    use std::cmp;
-
     type Expr = crate::model::Expr<LocationCounter, Ident<String>, TokenSpan>;
     type Input = Arg<String, ()>;
 
@@ -433,11 +431,11 @@ mod tests {
         Literal::Operand(keyword).into()
     }
 
-    pub fn number(n: i32, span: impl Into<TokenSpan>) -> Expr {
+    pub(super) fn number(n: i32, span: impl Into<TokenSpan>) -> Expr {
         Expr::from_atom(n.into(), span.into())
     }
 
-    pub fn name(ident: &str, span: impl Into<TokenSpan>) -> Expr {
+    pub(super) fn name(ident: &str, span: impl Into<TokenSpan>) -> Expr {
         Expr::from_atom(Atom::Name(ident.into()), span.into())
     }
 
@@ -810,7 +808,7 @@ mod tests {
         }
     }
 
-    pub struct AnalysisResult(InnerAnalysisResult);
+    pub(super) struct AnalysisResult(InnerAnalysisResult);
 
     type InnerAnalysisResult = Result<Instruction<Expr>, Vec<DiagnosticsEvent<TokenSpan>>>;
 
@@ -866,7 +864,7 @@ mod tests {
             ArgVariant::Unary(ArgUnaryOp::Parentheses, expr) => {
                 let (new_j, inner) = add_token_spans_recursive(i, j + 1, *expr);
                 j = new_j;
-                span = TokenSpan::merge(&span, &TokenId::Operand(i, j).into());
+                span = TokenSpan::merge(span.clone(), TokenId::Operand(i, j));
                 ArgVariant::Unary(ArgUnaryOp::Parentheses, Box::new(inner))
             }
             ArgVariant::Binary(_, _, _) => panic!(),
@@ -876,7 +874,7 @@ mod tests {
         (j + 1, Arg { variant, span })
     }
 
-    pub struct ExpectedDiagnostic {
+    pub(super) struct ExpectedDiagnostic {
         message: Message<TokenSpan>,
         highlight: Option<TokenSpan>,
     }
@@ -1011,10 +1009,10 @@ mod tests {
     #[test]
     fn analyze_add_a_bc_deref() {
         analyze(kw::Mnemonic::Add, vec![literal(A), deref(literal(Bc))]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::IncompatibleOperand).with_highlight(TokenSpan {
-                first: TokenId::Operand(1, 0),
-                last: TokenId::Operand(1, 2),
-            }),
+            ExpectedDiagnostic::new(Message::IncompatibleOperand).with_highlight(TokenSpan::merge(
+                TokenId::Operand(1, 0),
+                TokenId::Operand(1, 2),
+            )),
         )
     }
 
@@ -1079,23 +1077,5 @@ mod tests {
             ExpectedDiagnostic::new(Message::OperandCannotBeIncDec(IncDec::Inc))
                 .with_highlight(TokenId::Operand(0, 0)),
         )
-    }
-
-    impl From<TokenId> for TokenSpan {
-        fn from(id: TokenId) -> Self {
-            TokenSpan {
-                first: id,
-                last: id,
-            }
-        }
-    }
-
-    impl TokenSpan {
-        pub fn merge(left: &TokenSpan, right: &TokenSpan) -> TokenSpan {
-            TokenSpan {
-                first: cmp::min(left.first, right.first),
-                last: cmp::max(left.last, right.last),
-            }
-        }
     }
 }

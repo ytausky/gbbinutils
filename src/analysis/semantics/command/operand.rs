@@ -221,18 +221,7 @@ impl<I: Iterator> Iterator for OperandCounter<I> {
 mod tests {
     use super::*;
 
-    use crate::diag::FakeSpan;
     use crate::model::{Atom, Expr, LocationCounter};
-
-    impl FakeSpan for i32 {
-        fn default() -> Self {
-            unimplemented!()
-        }
-
-        fn merge(&self, _: &Self) -> Self {
-            unimplemented!()
-        }
-    }
 
     #[test]
     fn analyze_deref_bc() {
@@ -260,24 +249,24 @@ mod tests {
                 ArgUnaryOp::Parentheses,
                 Box::new(Arg::from_atom(
                     ArgAtom::Literal(Literal::Operand(ptr_reg.into())),
-                    0,
+                    0.into(),
                 )),
             ),
-            span: 1,
+            span: 1.into(),
         };
         assert_eq!(
             analyze_operand(expr, Context::Other),
-            Ok(Operand::Atom(AtomKind::DerefPtrReg(ptr_reg), 1))
+            Ok(Operand::Atom(AtomKind::DerefPtrReg(ptr_reg), 1.into()))
         )
     }
 
     type OperandResult<S> =
         Result<Operand<Expr<LocationCounter, Ident<String>, S>>, Vec<DiagnosticsEvent<S>>>;
 
-    fn analyze_operand<S: Clone + FakeSpan + PartialEq>(
-        expr: Arg<String, S>,
+    fn analyze_operand<S: Clone>(
+        expr: Arg<String, MockSpan<S>>,
         context: Context,
-    ) -> OperandResult<S> {
+    ) -> OperandResult<MockSpan<S>> {
         use crate::analysis::session::MockBuilder;
         use std::cell::RefCell;
 
@@ -294,19 +283,19 @@ mod tests {
                 ArgUnaryOp::Parentheses,
                 Box::new(Arg::from_atom(
                     ArgAtom::Literal(Literal::Operand(kw::Operand::Af)),
-                    0,
+                    0.into(),
                 )),
             ),
-            span: 1,
+            span: 1.into(),
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
             Err(vec![CompactDiagnostic::from(
                 Message::CannotDereference {
                     category: KeywordOperandCategory::RegPair,
-                    operand: 0,
+                    operand: 0.into(),
                 }
-                .at(1)
+                .at(1.into())
             )
             .into()])
         )
@@ -322,16 +311,19 @@ mod tests {
                 Box::new(Arg {
                     variant: ArgVariant::Unary(
                         ArgUnaryOp::Parentheses,
-                        Box::new(Arg::from_atom(ArgAtom::Literal(Literal::Number(n)), span)),
+                        Box::new(Arg::from_atom(
+                            ArgAtom::Literal(Literal::Number(n)),
+                            span.into(),
+                        )),
                     ),
-                    span: 1,
+                    span: 1.into(),
                 }),
             ),
-            span: 2,
+            span: 2.into(),
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Ok(Operand::Deref(Expr::from_atom(Atom::Const(n), span)))
+            Ok(Operand::Deref(Expr::from_atom(Atom::Const(n), span.into())))
         )
     }
 
@@ -346,18 +338,21 @@ mod tests {
                         ArgUnaryOp::Parentheses,
                         Box::new(Arg::from_atom(
                             ArgAtom::Literal(Literal::Operand(kw::Operand::Z)),
-                            span,
+                            span.into(),
                         )),
                     ),
-                    span: 1,
+                    span: 1.into(),
                 }),
             ),
-            span: 2,
+            span: 2.into(),
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
             Err(vec![CompactDiagnostic::from(
-                Message::KeywordInExpr { keyword: span }.at(span)
+                Message::KeywordInExpr {
+                    keyword: span.into()
+                }
+                .at(span.into())
             )
             .into()])
         )
@@ -368,12 +363,12 @@ mod tests {
         let span = 0;
         let parsed_expr = Arg::<String, _>::from_atom(
             ArgAtom::Literal(Literal::String("some_string".into())),
-            span,
+            span.into(),
         );
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
             Err(vec![CompactDiagnostic::from(
-                Message::StringInInstruction.at(span)
+                Message::StringInInstruction.at(span.into())
             )
             .into()])
         )
@@ -390,12 +385,15 @@ mod tests {
     }
 
     fn test_bare_ptr_reg(keyword: kw::Operand) {
-        let span = 0;
-        let expr = Arg::<String, _>::from_atom(ArgAtom::Literal(Literal::Operand(keyword)), span);
+        let span = MockSpan::from(0);
+        let expr = Arg::from_atom(ArgAtom::Literal(Literal::Operand(keyword)), span.clone());
         assert_eq!(
             analyze_operand(expr, Context::Other),
             Err(vec![CompactDiagnostic::from(
-                Message::MustBeDeref { operand: span }.at(span)
+                Message::MustBeDeref {
+                    operand: span.clone()
+                }
+                .at(span)
             )
             .into()])
         )

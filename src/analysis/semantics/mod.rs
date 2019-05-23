@@ -252,20 +252,12 @@ pub enum TokenId {
 }
 
 #[cfg(test)]
-#[derive(Clone, Debug, PartialEq)]
-pub struct TokenSpan {
-    first: TokenId,
-    last: TokenId,
-}
+pub(crate) type TokenSpan = MockSpan<TokenId>;
 
 #[cfg(test)]
-impl FakeSpan for TokenSpan {
+impl Default for TokenSpan {
     fn default() -> Self {
-        unimplemented!()
-    }
-
-    fn merge(&self, other: &Self) -> Self {
-        TokenSpan::merge(self, other)
+        unreachable!()
     }
 }
 
@@ -654,7 +646,7 @@ mod tests {
     pub(super) fn collect_semantic_actions<F, S>(f: F) -> Vec<TestOperation<S>>
     where
         F: for<'a> FnOnce(TestSemanticActions<'a, S>) -> TestSemanticActions<'a, S>,
-        S: Clone + FakeSpan,
+        S: Clone + Merge,
     {
         let operations = RefCell::new(Vec::new());
         let session = MockSession::new(&operations);

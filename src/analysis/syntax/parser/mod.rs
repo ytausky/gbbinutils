@@ -370,10 +370,7 @@ mod tests {
         assert_eq_actions(input_tokens![Eol], [unlabeled(empty())])
     }
 
-    fn assert_eq_actions(
-        input: InputTokens,
-        expected: impl Borrow<[FileAction<MockSpan>]>,
-    ) {
+    fn assert_eq_actions(input: InputTokens, expected: impl Borrow<[FileAction<MockSpan>]>) {
         let mut parsing_context = FileActionCollector::new();
         parsing_context = parse_src(with_spans(&input.tokens), parsing_context);
         assert_eq!(parsing_context.actions, expected.borrow())
