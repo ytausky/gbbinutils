@@ -4,7 +4,7 @@ use super::{ExprAtom, Operator, Token, UnaryOperator};
 
 use crate::analysis::syntax::*;
 use crate::diag::span::{MergeSpans, StripSpan};
-use crate::diag::{CompactDiagnostic, EmitDiag, Merge, Message};
+use crate::diag::{CompactDiag, EmitDiag, Merge, Message};
 use crate::model::BinOp;
 
 use std::borrow::Borrow;
@@ -64,7 +64,7 @@ impl FileActionCollector {
 }
 
 impl EmitDiag<MockSpan, MockSpan> for FileActionCollector {
-    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiagnostic<MockSpan, MockSpan>>) {
+    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiag<MockSpan, MockSpan>>) {
         self.actions
             .push(FileAction::EmitDiagnostic(diagnostic.into()))
     }
@@ -98,7 +98,7 @@ pub(super) struct LabelActionCollector {
 }
 
 impl EmitDiag<MockSpan, MockSpan> for LabelActionCollector {
-    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiagnostic<MockSpan, MockSpan>>) {
+    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiag<MockSpan, MockSpan>>) {
         self.actions
             .push(ParamsAction::EmitDiagnostic(diagnostic.into()))
     }
@@ -127,7 +127,7 @@ pub(super) struct StmtActionCollector {
 }
 
 impl EmitDiag<MockSpan, MockSpan> for StmtActionCollector {
-    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiagnostic<MockSpan, MockSpan>>) {
+    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiag<MockSpan, MockSpan>>) {
         self.actions
             .push(StmtAction::EmitDiagnostic(diagnostic.into()))
     }
@@ -179,7 +179,7 @@ pub(super) struct CommandActionCollector {
 }
 
 impl EmitDiag<MockSpan, MockSpan> for CommandActionCollector {
-    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiagnostic<MockSpan, MockSpan>>) {
+    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiag<MockSpan, MockSpan>>) {
         self.actions
             .push(CommandAction::EmitDiagnostic(diagnostic.into()))
     }
@@ -220,7 +220,7 @@ impl<P> ExprActionCollector<P> {
 }
 
 impl<P> EmitDiag<MockSpan, MockSpan> for ExprActionCollector<P> {
-    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiagnostic<MockSpan, MockSpan>>) {
+    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiag<MockSpan, MockSpan>>) {
         self.actions
             .push(ExprAction::EmitDiagnostic(diagnostic.into()))
     }
@@ -268,7 +268,7 @@ pub(super) struct MacroBodyActionCollector {
 }
 
 impl EmitDiag<MockSpan, MockSpan> for MacroBodyActionCollector {
-    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiagnostic<MockSpan, MockSpan>>) {
+    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiag<MockSpan, MockSpan>>) {
         self.actions
             .push(TokenSeqAction::EmitDiagnostic(diagnostic.into()))
     }
@@ -298,7 +298,7 @@ pub(super) struct MacroCallActionCollector {
 }
 
 impl EmitDiag<MockSpan, MockSpan> for MacroCallActionCollector {
-    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiagnostic<MockSpan, MockSpan>>) {
+    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiag<MockSpan, MockSpan>>) {
         self.actions
             .push(MacroCallAction::EmitDiagnostic(diagnostic.into()))
     }
@@ -331,7 +331,7 @@ pub(super) struct MacroArgActionCollector {
 }
 
 impl EmitDiag<MockSpan, MockSpan> for MacroArgActionCollector {
-    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiagnostic<MockSpan, MockSpan>>) {
+    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiag<MockSpan, MockSpan>>) {
         self.actions
             .push(TokenSeqAction::EmitDiagnostic(diagnostic.into()))
     }
@@ -579,7 +579,7 @@ pub(super) enum FileAction<S> {
         label: Option<Label<S>>,
         actions: Vec<StmtAction<S>>,
     },
-    EmitDiagnostic(CompactDiagnostic<S, S>),
+    EmitDiagnostic(CompactDiag<S, S>),
 }
 
 pub(super) type Label<S> = ((SymIdent, S), Vec<ParamsAction<S>>);
@@ -598,38 +598,38 @@ pub(super) enum StmtAction<S> {
         name: (SymIdent, S),
         actions: Vec<MacroCallAction<S>>,
     },
-    EmitDiagnostic(CompactDiagnostic<S, S>),
+    EmitDiagnostic(CompactDiag<S, S>),
 }
 
 #[derive(Debug, PartialEq)]
 pub(super) enum CommandAction<S> {
     AddArgument { actions: Vec<ExprAction<S>> },
-    EmitDiagnostic(CompactDiagnostic<S, S>),
+    EmitDiagnostic(CompactDiag<S, S>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub(super) enum ExprAction<S> {
     PushAtom((ExprAtom<SymIdent, SymLiteral>, S)),
     ApplyOperator((Operator, S)),
-    EmitDiagnostic(CompactDiagnostic<S, S>),
+    EmitDiagnostic(CompactDiag<S, S>),
 }
 
 #[derive(Debug, PartialEq)]
 pub(super) enum ParamsAction<S> {
     AddParameter((SymIdent, S)),
-    EmitDiagnostic(CompactDiagnostic<S, S>),
+    EmitDiagnostic(CompactDiag<S, S>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum TokenSeqAction<S> {
     PushToken((Token<SymIdent, SymLiteral, SymCommand>, S)),
-    EmitDiagnostic(CompactDiagnostic<S, S>),
+    EmitDiagnostic(CompactDiag<S, S>),
 }
 
 #[derive(Debug, PartialEq)]
 pub(super) enum MacroCallAction<S> {
     MacroArg(Vec<TokenSeqAction<S>>),
-    EmitDiagnostic(CompactDiagnostic<S, S>),
+    EmitDiagnostic(CompactDiag<S, S>),
 }
 
 #[derive(Clone)]
@@ -680,7 +680,7 @@ pub(super) fn command(
 pub(super) fn malformed_command(
     id: impl Into<TokenRef>,
     args: impl Borrow<[SymExpr]>,
-    diagnostic: CompactDiagnostic<MockSpan, MockSpan>,
+    diagnostic: CompactDiag<MockSpan, MockSpan>,
 ) -> Vec<StmtAction<MockSpan>> {
     let id = id.into();
     vec![StmtAction::Command {
@@ -742,7 +742,7 @@ pub(super) fn push_token(
 pub(super) fn malformed_macro_def(
     keyword: impl Into<TokenRef>,
     mut body: Vec<TokenSeqAction<MockSpan>>,
-    diagnostic: CompactDiagnostic<MockSpan, MockSpan>,
+    diagnostic: CompactDiag<MockSpan, MockSpan>,
 ) -> Vec<StmtAction<MockSpan>> {
     body.push(TokenSeqAction::EmitDiagnostic(diagnostic));
     vec![StmtAction::MacroDef {
@@ -761,7 +761,7 @@ pub(super) fn stmt_error(
 pub(super) fn arg_error(
     message: Message<MockSpan>,
     highlight: impl Into<TokenRef>,
-) -> CompactDiagnostic<MockSpan, MockSpan> {
+) -> CompactDiag<MockSpan, MockSpan> {
     message.at(highlight.into().into()).into()
 }
 

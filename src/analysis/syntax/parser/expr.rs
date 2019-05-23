@@ -5,7 +5,7 @@ use super::{Parser, LINE_FOLLOW_SET};
 
 use crate::analysis::syntax;
 use crate::diag::span::{MergeSpans, StripSpan};
-use crate::diag::{CompactDiagnostic, EmitDiag, Message};
+use crate::diag::{CompactDiag, EmitDiag, Message};
 use crate::model::BinOp;
 
 type ParserResult<P, C, S> = Result<P, (P, ExpandedExprParsingError<C, S>)>;
@@ -13,7 +13,7 @@ type ExpandedExprParsingError<D, S> = ExprParsingError<S, <D as StripSpan<S>>::S
 
 enum ExprParsingError<S, R> {
     NothingParsed,
-    Other(CompactDiagnostic<S, R>),
+    Other(CompactDiag<S, R>),
 }
 
 enum SuffixOperator {
@@ -466,7 +466,7 @@ mod tests {
 
     fn assert_eq_expr_diagnostics(
         mut input: InputTokens,
-        expected: CompactDiagnostic<MockSpan, MockSpan>,
+        expected: CompactDiag<MockSpan, MockSpan>,
     ) {
         let expr_actions = parse_sym_expr(&mut input);
         assert_eq!(expr_actions, [ExprAction::EmitDiagnostic(expected)])

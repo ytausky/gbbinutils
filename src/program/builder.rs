@@ -207,7 +207,7 @@ impl<'a, S: Clone> BuiltinNames for ProgramBuilder<'a, S> {
 mod tests {
     use super::*;
 
-    use crate::diag::{CompactDiagnostic, Message, TestDiagnosticsListener};
+    use crate::diag::{CompactDiag, Message, TestDiagnosticsListener};
     use crate::model::{BinOp, Instruction, Nullary, Width};
     use crate::program::{BinaryObject, SectionId};
     use std::borrow::Borrow;
@@ -400,7 +400,7 @@ mod tests {
         assert_eq!(program.sections[0].items, [Node::Reserved(bytes.into())])
     }
 
-    fn with_object_builder<S, F>(f: F) -> (BinaryObject, Box<[CompactDiagnostic<S, S>]>)
+    fn with_object_builder<S, F>(f: F) -> (BinaryObject, Box<[CompactDiag<S, S>]>)
     where
         S: Clone + 'static,
         F: FnOnce(ProgramBuilder<S>),
@@ -415,7 +415,7 @@ mod tests {
         Item::Data(value, Width::Word)
     }
 
-    fn unresolved(symbol: impl Into<String>) -> CompactDiagnostic<String, String> {
+    fn unresolved(symbol: impl Into<String>) -> CompactDiag<String, String> {
         let symbol = symbol.into();
         Message::UnresolvedSymbol {
             symbol: symbol.clone(),

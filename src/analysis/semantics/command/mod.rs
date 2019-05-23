@@ -6,7 +6,7 @@ use crate::analysis::backend::{Finish, FinishFnDef, LocationCounter, PushOp};
 use crate::analysis::session::Session;
 use crate::analysis::syntax::*;
 use crate::diag::span::{MergeSpans, StripSpan};
-use crate::diag::{CompactDiagnostic, Diagnostics, EmitDiag, Message};
+use crate::diag::{CompactDiag, Diagnostics, EmitDiag, Message};
 use crate::model::{BinOp, FnCall, Item};
 
 mod args;
@@ -47,7 +47,7 @@ impl<S: Session> StripSpan<S::Span> for CommandActions<S> {
 }
 
 impl<S: Session> EmitDiag<S::Span, S::Stripped> for CommandActions<S> {
-    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiagnostic<S::Span, S::Stripped>>) {
+    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiag<S::Span, S::Stripped>>) {
         self.has_errors = true;
         self.parent.emit_diag(diagnostic)
     }

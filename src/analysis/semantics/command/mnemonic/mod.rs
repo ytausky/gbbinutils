@@ -35,7 +35,7 @@ impl<'a, I, D, S> EmitDiag<S, D::Stripped> for Analysis<'a, I, D, S>
 where
     D: Diagnostics<S> + 'a,
 {
-    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiagnostic<S, D::Stripped>>) {
+    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiag<S, D::Stripped>>) {
         self.diagnostics.emit_diag(diagnostic)
     }
 }

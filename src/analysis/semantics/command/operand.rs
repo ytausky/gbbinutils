@@ -289,7 +289,7 @@ mod tests {
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Err(vec![CompactDiagnostic::from(
+            Err(vec![CompactDiag::from(
                 Message::CannotDereference {
                     category: KeywordOperandCategory::RegPair,
                     operand: 0.into(),
@@ -347,7 +347,7 @@ mod tests {
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Err(vec![CompactDiagnostic::from(
+            Err(vec![CompactDiag::from(
                 Message::KeywordInExpr {
                     keyword: span.into()
                 }
@@ -366,7 +366,7 @@ mod tests {
         );
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Err(vec![CompactDiagnostic::from(
+            Err(vec![CompactDiag::from(
                 Message::StringInInstruction.at(span.into())
             )
             .into()])
@@ -388,7 +388,7 @@ mod tests {
         let expr = Arg::from_atom(ArgAtom::Literal(Literal::Operand(keyword)), span.clone());
         assert_eq!(
             analyze_operand(expr, Context::Other),
-            Err(vec![CompactDiagnostic::from(
+            Err(vec![CompactDiag::from(
                 Message::MustBeDeref {
                     operand: span.clone()
                 }

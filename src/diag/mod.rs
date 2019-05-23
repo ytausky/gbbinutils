@@ -87,7 +87,7 @@ macro_rules! delegate_diagnostics {
         {
             fn emit_diag(
                 &mut self,
-                diagnostic: impl Into<$crate::diag::CompactDiagnostic<
+                diagnostic: impl Into<$crate::diag::CompactDiag<
                     $span,
                     <$dt as $crate::diag::span::StripSpan<$span>>::Stripped
                 >>
@@ -147,7 +147,7 @@ where
     C: SpanSystem,
     O: EmitDiag<C::Span, C::Stripped>,
 {
-    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiagnostic<C::Span, C::Stripped>>) {
+    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiag<C::Span, C::Stripped>>) {
         self.output.emit_diag(diagnostic)
     }
 }
@@ -217,7 +217,7 @@ pub trait DiagnosticsOutput {
 }
 
 pub(crate) trait EmitDiag<S, T> {
-    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiagnostic<S, T>>);
+    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiag<S, T>>);
 }
 
 pub(crate) struct OutputForwarder<'a> {
@@ -230,7 +230,7 @@ impl<'a> SpanSource for OutputForwarder<'a> {
 }
 
 impl<'a> EmitDiag<SpanData, StrippedBufSpan> for OutputForwarder<'a> {
-    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiagnostic<SpanData, StrippedBufSpan>>) {
+    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiag<SpanData, StrippedBufSpan>>) {
         (self.output)(diagnostic.into().expand().render(&self.codebase.borrow()))
     }
 }
@@ -261,12 +261,12 @@ impl<S: Clone> StripSpan<S> for IgnoreDiagnostics<S> {
 
 #[cfg(test)]
 impl<S: Clone> EmitDiag<S, S> for IgnoreDiagnostics<S> {
-    fn emit_diag(&mut self, _: impl Into<CompactDiagnostic<S, S>>) {}
+    fn emit_diag(&mut self, _: impl Into<CompactDiag<S, S>>) {}
 }
 
 #[cfg(test)]
 pub(crate) struct TestDiagnosticsListener<S> {
-    pub diagnostics: RefCell<Vec<CompactDiagnostic<S, S>>>,
+    pub diagnostics: RefCell<Vec<CompactDiag<S, S>>>,
 }
 
 #[cfg(test)]
@@ -294,13 +294,13 @@ impl<S: Clone> StripSpan<S> for TestDiagnosticsListener<S> {
 
 #[cfg(test)]
 impl<S> EmitDiag<S, S> for TestDiagnosticsListener<S> {
-    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiagnostic<S, S>>) {
+    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiag<S, S>>) {
         self.diagnostics.borrow_mut().push(diagnostic.into())
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct CompactDiagnostic<S, R> {
+pub(crate) struct CompactDiag<S, R> {
     main: CompactClause<S, R>,
 }
 
@@ -310,9 +310,9 @@ pub(crate) struct CompactClause<S, R> {
     pub highlight: S,
 }
 
-impl<S, R> From<CompactClause<S, R>> for CompactDiagnostic<S, R> {
+impl<S, R> From<CompactClause<S, R>> for CompactDiag<S, R> {
     fn from(clause: CompactClause<S, R>) -> Self {
-        Self { main: clause }
+        CompactDiag { main: clause }
     }
 }
 
@@ -338,9 +338,7 @@ struct ExpandedDiagnosticClause<S, B, R> {
     location: Option<R>,
 }
 
-impl<B: Clone, T: Clone>
-    CompactDiagnostic<SpanData<BufSpan<B, Range<T>>>, StrippedBufSpan<B, Range<T>>>
-{
+impl<B: Clone, T: Clone> CompactDiag<SpanData<BufSpan<B, Range<T>>>, StrippedBufSpan<B, Range<T>>> {
     fn expand(self) -> ExpandedDiagnostic<StrippedBufSpan<B, Range<T>>, B, Range<T>> {
         let StrippedBufSpan { buf_id, range } = self.main.highlight.to_stripped();
         let main_clause = ExpandedDiagnosticClause {
@@ -524,11 +522,11 @@ mod mock {
 
     #[derive(Debug, PartialEq)]
     pub(crate) enum DiagnosticsEvent<S> {
-        EmitDiagnostic(CompactDiagnostic<S, S>),
+        EmitDiagnostic(CompactDiag<S, S>),
     }
 
-    impl<S> From<CompactDiagnostic<S, S>> for DiagnosticsEvent<S> {
-        fn from(diagnostic: CompactDiagnostic<S, S>) -> Self {
+    impl<S> From<CompactDiag<S, S>> for DiagnosticsEvent<S> {
+        fn from(diagnostic: CompactDiag<S, S>) -> Self {
             DiagnosticsEvent::EmitDiagnostic(diagnostic)
         }
     }
@@ -556,7 +554,7 @@ mod mock {
         T: From<DiagnosticsEvent<S>>,
         S: Clone,
     {
-        fn emit_diag(&mut self, diagnostic: impl Into<CompactDiagnostic<S, S>>) {
+        fn emit_diag(&mut self, diagnostic: impl Into<CompactDiag<S, S>>) {
             self.log
                 .borrow_mut()
                 .push(DiagnosticsEvent::EmitDiagnostic(diagnostic.into()).into())
@@ -678,7 +676,7 @@ mod tests {
                 included_from: None,
             }),
         });
-        let diagnostic = CompactDiagnostic::from(
+        let diagnostic = CompactDiag::from(
             Message::UndefinedMacro {
                 name: StrippedBufSpan { buf_id, range },
             }
@@ -748,7 +746,7 @@ mod tests {
             context,
         };
         let message = Message::AfOutsideStackOperation;
-        let compact = CompactDiagnostic::from(message.clone().at(span));
+        let compact = CompactDiag::from(message.clone().at(span));
         let expected = ExpandedDiagnostic {
             clauses: vec![
                 ExpandedDiagnosticClause {
