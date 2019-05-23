@@ -634,7 +634,7 @@ mod tests {
             [FileAction::Stmt {
                 label: Some((
                     (SymIdent("label".into()), TokenRef::from("label").into()),
-                    vec![ParamsAction::EmitDiagnostic(arg_error(
+                    vec![ParamsAction::EmitDiag(arg_error(
                         Message::UnexpectedEof,
                         "eof",
                     ))],
@@ -726,7 +726,7 @@ mod tests {
             [FileAction::Stmt {
                 label: Some((
                     (SymIdent("label".into()), TokenRef::from("label").into()),
-                    vec![ParamsAction::EmitDiagnostic(
+                    vec![ParamsAction::EmitDiag(
                         Message::UnexpectedToken {
                             token: span.clone(),
                         }
@@ -757,7 +757,7 @@ mod tests {
             t3 @ Endm,
         ];
         let unexpected = TokenRef::from("unexpected");
-        let mut body = vec![TokenSeqAction::EmitDiagnostic(arg_error(
+        let mut body = vec![TokenSeqAction::EmitDiag(arg_error(
             Message::UnexpectedToken {
                 token: unexpected.clone().into(),
             },

@@ -469,7 +469,7 @@ mod tests {
         expected: CompactDiag<MockSpan, MockSpan>,
     ) {
         let expr_actions = parse_sym_expr(&mut input);
-        assert_eq!(expr_actions, [ExprAction::EmitDiagnostic(expected)])
+        assert_eq!(expr_actions, [ExprAction::EmitDiag(expected)])
     }
 
     fn parse_sym_expr(input: &mut InputTokens) -> Vec<ExprAction<MockSpan>> {

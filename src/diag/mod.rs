@@ -87,12 +87,12 @@ macro_rules! delegate_diagnostics {
         {
             fn emit_diag(
                 &mut self,
-                diagnostic: impl Into<$crate::diag::CompactDiag<
+                diag: impl Into<$crate::diag::CompactDiag<
                     $span,
                     <$dt as $crate::diag::span::StripSpan<$span>>::Stripped
                 >>
             ) {
-                self.$($delegate)*.emit_diag(diagnostic)
+                self.$($delegate)*.emit_diag(diag)
             }
         }
     };
@@ -147,8 +147,8 @@ where
     C: SpanSystem,
     O: EmitDiag<C::Span, C::Stripped>,
 {
-    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiag<C::Span, C::Stripped>>) {
-        self.output.emit_diag(diagnostic)
+    fn emit_diag(&mut self, diag: impl Into<CompactDiag<C::Span, C::Stripped>>) {
+        self.output.emit_diag(diag)
     }
 }
 
@@ -217,7 +217,7 @@ pub trait DiagnosticsOutput {
 }
 
 pub(crate) trait EmitDiag<S, T> {
-    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiag<S, T>>);
+    fn emit_diag(&mut self, diag: impl Into<CompactDiag<S, T>>);
 }
 
 pub(crate) struct OutputForwarder<'a> {
@@ -230,8 +230,8 @@ impl<'a> SpanSource for OutputForwarder<'a> {
 }
 
 impl<'a> EmitDiag<SpanData, StrippedBufSpan> for OutputForwarder<'a> {
-    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiag<SpanData, StrippedBufSpan>>) {
-        (self.output)(diagnostic.into().expand().render(&self.codebase.borrow()))
+    fn emit_diag(&mut self, diag: impl Into<CompactDiag<SpanData, StrippedBufSpan>>) {
+        (self.output)(diag.into().expand().render(&self.codebase.borrow()))
     }
 }
 
@@ -294,8 +294,8 @@ impl<S: Clone> StripSpan<S> for TestDiagnosticsListener<S> {
 
 #[cfg(test)]
 impl<S> EmitDiag<S, S> for TestDiagnosticsListener<S> {
-    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiag<S, S>>) {
-        self.diagnostics.borrow_mut().push(diagnostic.into())
+    fn emit_diag(&mut self, diag: impl Into<CompactDiag<S, S>>) {
+        self.diagnostics.borrow_mut().push(diag.into())
     }
 }
 
@@ -522,12 +522,12 @@ mod mock {
 
     #[derive(Debug, PartialEq)]
     pub(crate) enum DiagnosticsEvent<S> {
-        EmitDiagnostic(CompactDiag<S, S>),
+        EmitDiag(CompactDiag<S, S>),
     }
 
     impl<S> From<CompactDiag<S, S>> for DiagnosticsEvent<S> {
-        fn from(diagnostic: CompactDiag<S, S>) -> Self {
-            DiagnosticsEvent::EmitDiagnostic(diagnostic)
+        fn from(diag: CompactDiag<S, S>) -> Self {
+            DiagnosticsEvent::EmitDiag(diag)
         }
     }
 
@@ -554,10 +554,10 @@ mod mock {
         T: From<DiagnosticsEvent<S>>,
         S: Clone,
     {
-        fn emit_diag(&mut self, diagnostic: impl Into<CompactDiag<S, S>>) {
+        fn emit_diag(&mut self, diag: impl Into<CompactDiag<S, S>>) {
             self.log
                 .borrow_mut()
-                .push(DiagnosticsEvent::EmitDiagnostic(diagnostic.into()).into())
+                .push(DiagnosticsEvent::EmitDiag(diag.into()).into())
         }
     }
 

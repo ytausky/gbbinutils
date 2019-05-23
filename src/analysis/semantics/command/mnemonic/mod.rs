@@ -35,8 +35,8 @@ impl<'a, I, D, S> EmitDiag<S, D::Stripped> for Analysis<'a, I, D, S>
 where
     D: Diagnostics<S> + 'a,
 {
-    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiag<S, D::Stripped>>) {
-        self.diagnostics.emit_diag(diagnostic)
+    fn emit_diag(&mut self, diag: impl Into<CompactDiag<S, D::Stripped>>) {
+        self.diagnostics.emit_diag(diag)
     }
 }
 
@@ -817,11 +817,11 @@ mod tests {
             assert_eq!(self.0, Ok(expected))
         }
 
-        pub fn expect_diagnostic(self, diagnostic: impl Into<ExpectedDiagnostic>) {
-            let expected = diagnostic.into();
+        pub fn expect_diag(self, diag: impl Into<ExpectedDiag>) {
+            let expected = diag.into();
             assert_eq!(
                 self.0,
-                Err(vec![DiagnosticsEvent::EmitDiagnostic(
+                Err(vec![DiagnosticsEvent::EmitDiag(
                     expected.message.at(expected.highlight.unwrap()).into()
                 )])
             )
@@ -874,14 +874,14 @@ mod tests {
         (j + 1, Arg { variant, span })
     }
 
-    pub(super) struct ExpectedDiagnostic {
+    pub(super) struct ExpectedDiag {
         message: Message<TokenSpan>,
         highlight: Option<TokenSpan>,
     }
 
-    impl ExpectedDiagnostic {
+    impl ExpectedDiag {
         pub fn new(message: Message<TokenSpan>) -> Self {
-            ExpectedDiagnostic {
+            ExpectedDiag {
                 message,
                 highlight: None,
             }
@@ -893,16 +893,16 @@ mod tests {
         }
     }
 
-    impl From<Message<TokenSpan>> for ExpectedDiagnostic {
+    impl From<Message<TokenSpan>> for ExpectedDiag {
         fn from(message: Message<TokenSpan>) -> Self {
-            ExpectedDiagnostic::new(message).with_highlight(TokenId::Mnemonic)
+            ExpectedDiag::new(message).with_highlight(TokenId::Mnemonic)
         }
     }
 
     #[test]
     fn analyze_nop_a() {
-        analyze(kw::Mnemonic::Nop, vec![literal(A)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::OperandCount {
+        analyze(kw::Mnemonic::Nop, vec![literal(A)]).expect_diag(
+            ExpectedDiag::new(Message::OperandCount {
                 actual: 1,
                 expected: 0,
             })
@@ -912,8 +912,8 @@ mod tests {
 
     #[test]
     fn analyze_add_a_a_a() {
-        analyze(kw::Mnemonic::Add, vec![A, A, A].into_iter().map(literal)).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::OperandCount {
+        analyze(kw::Mnemonic::Add, vec![A, A, A].into_iter().map(literal)).expect_diag(
+            ExpectedDiag::new(Message::OperandCount {
                 actual: 3,
                 expected: 2,
             })
@@ -923,8 +923,8 @@ mod tests {
 
     #[test]
     fn analyze_add() {
-        analyze(kw::Mnemonic::Add, Vec::new()).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::OperandCount {
+        analyze(kw::Mnemonic::Add, Vec::new()).expect_diag(
+            ExpectedDiag::new(Message::OperandCount {
                 actual: 0,
                 expected: 2,
             })
@@ -934,8 +934,8 @@ mod tests {
 
     #[test]
     fn analyze_add_a() {
-        analyze(kw::Mnemonic::Add, vec![literal(A)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::OperandCount {
+        analyze(kw::Mnemonic::Add, vec![literal(A)]).expect_diag(
+            ExpectedDiag::new(Message::OperandCount {
                 actual: 1,
                 expected: 2,
             })
@@ -945,30 +945,29 @@ mod tests {
 
     #[test]
     fn analyze_add_b_a() {
-        analyze(kw::Mnemonic::Add, vec![literal(B), literal(A)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::DestMustBeA).with_highlight(TokenId::Operand(0, 0)),
+        analyze(kw::Mnemonic::Add, vec![literal(B), literal(A)]).expect_diag(
+            ExpectedDiag::new(Message::DestMustBeA).with_highlight(TokenId::Operand(0, 0)),
         )
     }
 
     #[test]
     fn analyze_add_bc_de() {
-        analyze(kw::Mnemonic::Add, vec![literal(Bc), literal(De)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::DestMustBeHl).with_highlight(TokenId::Operand(0, 0)),
+        analyze(kw::Mnemonic::Add, vec![literal(Bc), literal(De)]).expect_diag(
+            ExpectedDiag::new(Message::DestMustBeHl).with_highlight(TokenId::Operand(0, 0)),
         )
     }
 
     #[test]
     fn analyze_add_hl_af() {
-        analyze(kw::Mnemonic::Add, vec![literal(Hl), literal(Af)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::IncompatibleOperand)
-                .with_highlight(TokenId::Operand(1, 0)),
+        analyze(kw::Mnemonic::Add, vec![literal(Hl), literal(Af)]).expect_diag(
+            ExpectedDiag::new(Message::IncompatibleOperand).with_highlight(TokenId::Operand(1, 0)),
         )
     }
 
     #[test]
     fn analyze_add_hl() {
-        analyze(kw::Mnemonic::Add, vec![literal(Hl)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::OperandCount {
+        analyze(kw::Mnemonic::Add, vec![literal(Hl)]).expect_diag(
+            ExpectedDiag::new(Message::OperandCount {
                 actual: 1,
                 expected: 2,
             })
@@ -978,8 +977,8 @@ mod tests {
 
     #[test]
     fn analyze_push() {
-        analyze(kw::Mnemonic::Push, vec![]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::OperandCount {
+        analyze(kw::Mnemonic::Push, vec![]).expect_diag(
+            ExpectedDiag::new(Message::OperandCount {
                 actual: 0,
                 expected: 1,
             })
@@ -989,8 +988,8 @@ mod tests {
 
     #[test]
     fn analyze_inc() {
-        analyze(kw::Mnemonic::Inc, vec![]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::OperandCount {
+        analyze(kw::Mnemonic::Inc, vec![]).expect_diag(
+            ExpectedDiag::new(Message::OperandCount {
                 actual: 0,
                 expected: 1,
             })
@@ -1000,16 +999,15 @@ mod tests {
 
     #[test]
     fn analyze_add_hl_const() {
-        analyze(kw::Mnemonic::Add, vec![literal(Hl), 2.into()]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::IncompatibleOperand)
-                .with_highlight(TokenId::Operand(1, 0)),
+        analyze(kw::Mnemonic::Add, vec![literal(Hl), 2.into()]).expect_diag(
+            ExpectedDiag::new(Message::IncompatibleOperand).with_highlight(TokenId::Operand(1, 0)),
         )
     }
 
     #[test]
     fn analyze_add_a_bc_deref() {
-        analyze(kw::Mnemonic::Add, vec![literal(A), deref(literal(Bc))]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::IncompatibleOperand).with_highlight(TokenSpan::merge(
+        analyze(kw::Mnemonic::Add, vec![literal(A), deref(literal(Bc))]).expect_diag(
+            ExpectedDiag::new(Message::IncompatibleOperand).with_highlight(TokenSpan::merge(
                 TokenId::Operand(1, 0),
                 TokenId::Operand(1, 2),
             )),
@@ -1018,8 +1016,8 @@ mod tests {
 
     #[test]
     fn analyze_bit_a_b() {
-        analyze(kw::Mnemonic::Bit, vec![literal(A), literal(B)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::MustBeBit {
+        analyze(kw::Mnemonic::Bit, vec![literal(A), literal(B)]).expect_diag(
+            ExpectedDiag::new(Message::MustBeBit {
                 mnemonic: TokenId::Mnemonic.into(),
             })
             .with_highlight(TokenId::Operand(0, 0)),
@@ -1028,53 +1026,52 @@ mod tests {
 
     #[test]
     fn analyze_bit_7_bc() {
-        analyze(kw::Mnemonic::Bit, vec![7.into(), literal(Bc)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::RequiresSimpleOperand)
+        analyze(kw::Mnemonic::Bit, vec![7.into(), literal(Bc)]).expect_diag(
+            ExpectedDiag::new(Message::RequiresSimpleOperand)
                 .with_highlight(TokenId::Operand(1, 0)),
         )
     }
 
     #[test]
     fn analyze_ldhl_bc_7() {
-        analyze(kw::Mnemonic::Ldhl, vec![literal(Bc), 7.into()]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::SrcMustBeSp).with_highlight(TokenId::Operand(0, 0)),
+        analyze(kw::Mnemonic::Ldhl, vec![literal(Bc), 7.into()]).expect_diag(
+            ExpectedDiag::new(Message::SrcMustBeSp).with_highlight(TokenId::Operand(0, 0)),
         )
     }
 
     #[test]
     fn analyze_ldhl_sp_a() {
-        analyze(kw::Mnemonic::Ldhl, vec![literal(Sp), literal(A)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::MustBeConst).with_highlight(TokenId::Operand(1, 0)),
+        analyze(kw::Mnemonic::Ldhl, vec![literal(Sp), literal(A)]).expect_diag(
+            ExpectedDiag::new(Message::MustBeConst).with_highlight(TokenId::Operand(1, 0)),
         )
     }
 
     #[test]
     fn analyze_swap_bc() {
-        analyze(kw::Mnemonic::Swap, vec![literal(Bc)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::RequiresSimpleOperand)
+        analyze(kw::Mnemonic::Swap, vec![literal(Bc)]).expect_diag(
+            ExpectedDiag::new(Message::RequiresSimpleOperand)
                 .with_highlight(TokenId::Operand(0, 0)),
         )
     }
 
     #[test]
     fn analyze_push_a() {
-        analyze(kw::Mnemonic::Push, vec![literal(A)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::RequiresRegPair)
-                .with_highlight(TokenId::Operand(0, 0)),
+        analyze(kw::Mnemonic::Push, vec![literal(A)]).expect_diag(
+            ExpectedDiag::new(Message::RequiresRegPair).with_highlight(TokenId::Operand(0, 0)),
         )
     }
 
     #[test]
     fn analyze_rst_a() {
-        analyze(kw::Mnemonic::Rst, vec![literal(A)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::MustBeConst).with_highlight(TokenId::Operand(0, 0)),
+        analyze(kw::Mnemonic::Rst, vec![literal(A)]).expect_diag(
+            ExpectedDiag::new(Message::MustBeConst).with_highlight(TokenId::Operand(0, 0)),
         )
     }
 
     #[test]
     fn analyze_inc_7() {
-        analyze(kw::Mnemonic::Inc, vec![7.into()]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::OperandCannotBeIncDec(IncDec::Inc))
+        analyze(kw::Mnemonic::Inc, vec![7.into()]).expect_diag(
+            ExpectedDiag::new(Message::OperandCannotBeIncDec(IncDec::Inc))
                 .with_highlight(TokenId::Operand(0, 0)),
         )
     }

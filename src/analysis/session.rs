@@ -790,7 +790,7 @@ mod tests {
         session.call_macro((name.into(), span.into()), vec![]);
         assert_eq!(
             log.into_inner(),
-            [DiagnosticsEvent::EmitDiagnostic(
+            [DiagnosticsEvent::EmitDiag(
                 Message::UndefinedMacro { name: span.into() }
                     .at(span.into())
                     .into()

@@ -517,7 +517,7 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [DiagnosticsEvent::EmitDiagnostic(Message::MacroRequiresName.at(()).into()).into()]
+            [DiagnosticsEvent::EmitDiag(Message::MacroRequiresName.at(()).into()).into()]
         )
     }
 
@@ -597,7 +597,7 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [DiagnosticsEvent::EmitDiagnostic(
+            [DiagnosticsEvent::EmitDiag(
                 Message::OperandCount {
                     actual: 1,
                     expected: 0
@@ -619,7 +619,7 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [DiagnosticsEvent::EmitDiagnostic(diagnostic.into()).into()]
+            [DiagnosticsEvent::EmitDiag(diagnostic.into()).into()]
         )
     }
 
@@ -636,7 +636,7 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [DiagnosticsEvent::EmitDiagnostic(diagnostic.into()).into()]
+            [DiagnosticsEvent::EmitDiag(diagnostic.into()).into()]
         )
     }
 

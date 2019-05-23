@@ -269,47 +269,43 @@ mod tests {
             Mnemonic::Jp,
             vec![literal(C), SimpleOperand::DerefHl.into()],
         )
-        .expect_diagnostic(
-            ExpectedDiagnostic::new(Message::AlwaysUnconditional)
-                .with_highlight(TokenId::Operand(0, 0)),
+        .expect_diag(
+            ExpectedDiag::new(Message::AlwaysUnconditional).with_highlight(TokenId::Operand(0, 0)),
         )
     }
 
     #[test]
     fn analyze_jp_z() {
-        analyze(Mnemonic::Jp, vec![literal(Z)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::MissingTarget).with_highlight(TokenId::Mnemonic),
+        analyze(Mnemonic::Jp, vec![literal(Z)]).expect_diag(
+            ExpectedDiag::new(Message::MissingTarget).with_highlight(TokenId::Mnemonic),
         )
     }
 
     #[test]
     fn analyze_ret_a() {
-        analyze(Mnemonic::Ret, vec![literal(A)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::CannotBeUsedAsTarget)
-                .with_highlight(TokenId::Operand(0, 0)),
+        analyze(Mnemonic::Ret, vec![literal(A)]).expect_diag(
+            ExpectedDiag::new(Message::CannotBeUsedAsTarget).with_highlight(TokenId::Operand(0, 0)),
         )
     }
 
     #[test]
     fn analyze_reti_z() {
-        analyze(Mnemonic::Reti, vec![literal(Z)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::AlwaysUnconditional)
-                .with_highlight(TokenId::Operand(0, 0)),
+        analyze(Mnemonic::Reti, vec![literal(Z)]).expect_diag(
+            ExpectedDiag::new(Message::AlwaysUnconditional).with_highlight(TokenId::Operand(0, 0)),
         )
     }
 
     #[test]
     fn analyze_ret_z_ident() {
-        analyze(Mnemonic::Ret, vec![literal(Z), "target".into()]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::CannotSpecifyTarget)
-                .with_highlight(TokenId::Operand(1, 0)),
+        analyze(Mnemonic::Ret, vec![literal(Z), "target".into()]).expect_diag(
+            ExpectedDiag::new(Message::CannotSpecifyTarget).with_highlight(TokenId::Operand(1, 0)),
         )
     }
 
     #[test]
     fn analyze_call_deref_hl() {
-        analyze(Mnemonic::Call, vec![deref(literal(Hl))]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::RequiresConstantTarget {
+        analyze(Mnemonic::Call, vec![deref(literal(Hl))]).expect_diag(
+            ExpectedDiag::new(Message::RequiresConstantTarget {
                 mnemonic: TokenId::Mnemonic.into(),
             })
             .with_highlight(TokenSpan::merge(

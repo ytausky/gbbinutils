@@ -47,9 +47,9 @@ impl<S: Session> StripSpan<S::Span> for CommandActions<S> {
 }
 
 impl<S: Session> EmitDiag<S::Span, S::Stripped> for CommandActions<S> {
-    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiag<S::Span, S::Stripped>>) {
+    fn emit_diag(&mut self, diag: impl Into<CompactDiag<S::Span, S::Stripped>>) {
         self.has_errors = true;
-        self.parent.emit_diag(diagnostic)
+        self.parent.emit_diag(diag)
     }
 }
 
@@ -337,7 +337,7 @@ mod tests {
                 actions.apply_operator((FnCall(0), "call".into()));
                 actions.exit().exit().exit()
             }),
-            [DiagnosticsEvent::EmitDiagnostic(
+            [DiagnosticsEvent::EmitDiag(
                 Message::OnlyIdentsCanBeCalled.at("literal".into()).into()
             )
             .into()]

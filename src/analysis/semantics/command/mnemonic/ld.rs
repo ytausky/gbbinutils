@@ -443,8 +443,8 @@ mod tests {
 
     #[test]
     fn analyze_ld() {
-        analyze(Mnemonic::Ld, vec![]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::OperandCount {
+        analyze(Mnemonic::Ld, vec![]).expect_diag(
+            ExpectedDiag::new(Message::OperandCount {
                 actual: 0,
                 expected: 2,
             })
@@ -454,8 +454,8 @@ mod tests {
 
     #[test]
     fn analyze_ld_a() {
-        analyze(Mnemonic::Ld, vec![literal(A)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::OperandCount {
+        analyze(Mnemonic::Ld, vec![literal(A)]).expect_diag(
+            ExpectedDiag::new(Message::OperandCount {
                 actual: 1,
                 expected: 2,
             })
@@ -465,16 +465,15 @@ mod tests {
 
     #[test]
     fn analyze_ld_const_const() {
-        analyze(Mnemonic::Ld, vec![2.into(), 4.into()]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::DestCannotBeConst)
-                .with_highlight(TokenId::Operand(0, 0)),
+        analyze(Mnemonic::Ld, vec![2.into(), 4.into()]).expect_diag(
+            ExpectedDiag::new(Message::DestCannotBeConst).with_highlight(TokenId::Operand(0, 0)),
         )
     }
 
     #[test]
     fn analyze_ld_a_bc() {
-        analyze(Mnemonic::Ld, vec![literal(A), literal(Bc)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::LdWidthMismatch {
+        analyze(Mnemonic::Ld, vec![literal(A), literal(Bc)]).expect_diag(
+            ExpectedDiag::new(Message::LdWidthMismatch {
                 src_width: Width::Word,
                 src: TokenId::Operand(1, 0).into(),
                 dest: TokenId::Operand(0, 0).into(),
@@ -488,8 +487,8 @@ mod tests {
 
     #[test]
     fn analyze_ld_bc_a() {
-        analyze(Mnemonic::Ld, vec![literal(Bc), literal(A)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::LdWidthMismatch {
+        analyze(Mnemonic::Ld, vec![literal(Bc), literal(A)]).expect_diag(
+            ExpectedDiag::new(Message::LdWidthMismatch {
                 src_width: Width::Byte,
                 src: TokenId::Operand(1, 0).into(),
                 dest: TokenId::Operand(0, 0).into(),
@@ -503,24 +502,22 @@ mod tests {
 
     #[test]
     fn analyze_ld_deref_c_b() {
-        analyze(Mnemonic::Ld, vec![deref(literal(C)), literal(B)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::OnlySupportedByA)
-                .with_highlight(TokenId::Operand(1, 0)),
+        analyze(Mnemonic::Ld, vec![deref(literal(C)), literal(B)]).expect_diag(
+            ExpectedDiag::new(Message::OnlySupportedByA).with_highlight(TokenId::Operand(1, 0)),
         )
     }
 
     #[test]
     fn analyze_ld_deref_c_4() {
-        analyze(Mnemonic::Ld, vec![deref(literal(C)), 4.into()]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::OnlySupportedByA)
-                .with_highlight(TokenId::Operand(1, 0)),
+        analyze(Mnemonic::Ld, vec![deref(literal(C)), 4.into()]).expect_diag(
+            ExpectedDiag::new(Message::OnlySupportedByA).with_highlight(TokenId::Operand(1, 0)),
         )
     }
 
     #[test]
     fn analyze_ld_hl_sp() {
-        analyze(Mnemonic::Ld, vec![literal(Hl), literal(Sp)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::LdSpHlOperands).with_highlight(TokenSpan::merge(
+        analyze(Mnemonic::Ld, vec![literal(Hl), literal(Sp)]).expect_diag(
+            ExpectedDiag::new(Message::LdSpHlOperands).with_highlight(TokenSpan::merge(
                 TokenId::Operand(0, 0),
                 TokenId::Operand(1, 0),
             )),
@@ -529,16 +526,16 @@ mod tests {
 
     #[test]
     fn analyze_ld_a_z() {
-        analyze(Mnemonic::Ld, vec![literal(A), literal(Z)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::ConditionOutsideBranch)
+        analyze(Mnemonic::Ld, vec![literal(A), literal(Z)]).expect_diag(
+            ExpectedDiag::new(Message::ConditionOutsideBranch)
                 .with_highlight(TokenId::Operand(1, 0)),
         )
     }
 
     #[test]
     fn analyze_ld_sp_af() {
-        analyze(Mnemonic::Ld, vec![literal(Sp), literal(Af)]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::AfOutsideStackOperation)
+        analyze(Mnemonic::Ld, vec![literal(Sp), literal(Af)]).expect_diag(
+            ExpectedDiag::new(Message::AfOutsideStackOperation)
                 .with_highlight(TokenId::Operand(1, 0)),
         )
     }
@@ -546,8 +543,8 @@ mod tests {
     #[test]
     fn analyze_ld_deref_hl_deref_hl() {
         let src = TokenSpan::merge(TokenId::Operand(1, 0), TokenId::Operand(1, 2));
-        analyze(Mnemonic::Ld, vec![deref(literal(Hl)), deref(literal(Hl))]).expect_diagnostic(
-            ExpectedDiagnostic::new(Message::LdDerefHlDerefHl {
+        analyze(Mnemonic::Ld, vec![deref(literal(Hl)), deref(literal(Hl))]).expect_diag(
+            ExpectedDiag::new(Message::LdDerefHlDerefHl {
                 mnemonic: TokenId::Mnemonic.into(),
                 dest: TokenSpan::merge(TokenId::Operand(0, 0), TokenId::Operand(0, 2)),
                 src: src.clone(),
