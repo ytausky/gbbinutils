@@ -162,8 +162,8 @@ where
         })
     }
 
-    fn apply_operator(&mut self, operator: (Operator, S)) {
-        let variant = match operator.0 {
+    fn apply_operator(&mut self, (op, span): (Operator, S)) {
+        let variant = match op {
             Operator::Unary(UnaryOperator::Parentheses) => {
                 let inner = self.pop();
                 ArgVariant::Unary(ArgUnaryOp::Parentheses, Box::new(inner))
@@ -179,17 +179,17 @@ where
                 let name = (
                     match name.variant {
                         ArgVariant::Atom(ArgAtom::Ident(ident)) => ident,
-                        _ => unimplemented!(),
+                        _ => {
+                            self.emit_diagnostic(Message::OnlyIdentsCanBeCalled.at(name.span));
+                            return;
+                        }
                     },
                     name.span,
                 );
                 ArgVariant::FnCall(name, args)
             }
         };
-        self.stack.push(Arg {
-            variant,
-            span: operator.1,
-        })
+        self.stack.push(Arg { variant, span })
     }
 }
 
@@ -323,18 +323,24 @@ mod tests {
     use crate::analysis::syntax::*;
     use crate::analysis::syntax::{Command::*, Directive::*, ExprAtom::*, Operator::*};
     use crate::analysis::Literal::*;
+    use crate::diag::{DiagnosticsEvent, Message, MockSpan};
 
-    #[ignore]
     #[test]
     fn diagnose_literal_as_fn_name() {
-        collect_semantic_actions(|actions| {
-            let mut actions = actions
-                .enter_unlabeled_stmt()
-                .enter_command((Directive(Db), ()))
-                .add_argument();
-            actions.push_atom((Literal(Number(7)), ()));
-            actions.apply_operator((FnCall(0), ()));
-            actions.exit().exit().exit()
-        });
+        assert_eq!(
+            collect_semantic_actions::<_, MockSpan<_>>(|actions| {
+                let mut actions = actions
+                    .enter_unlabeled_stmt()
+                    .enter_command((Directive(Db), "db".into()))
+                    .add_argument();
+                actions.push_atom((Literal(Number(7)), "literal".into()));
+                actions.apply_operator((FnCall(0), "call".into()));
+                actions.exit().exit().exit()
+            }),
+            [DiagnosticsEvent::EmitDiagnostic(
+                Message::OnlyIdentsCanBeCalled.at("literal".into()).into()
+            )
+            .into()]
+        );
     }
 }

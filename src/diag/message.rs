@@ -50,6 +50,7 @@ pub enum Message<S> {
     MustBeDeref {
         operand: S,
     },
+    OnlyIdentsCanBeCalled,
     OnlySupportedByA,
     OperandCannotBeIncDec(IncDec),
     OperandCount {
@@ -171,6 +172,7 @@ impl Message<StrippedBufSpan> {
                 "operand `{}` must be dereferenced",
                 codebase.snippet(operand),
             ),
+            OnlyIdentsCanBeCalled => "only identifiers can be called".into(),
             OnlySupportedByA => "only `a` can be used for this operand".into(),
             OperandCannotBeIncDec(operation) => format!(
                 "operand cannot be {}",
