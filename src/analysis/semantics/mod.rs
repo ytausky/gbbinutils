@@ -188,7 +188,7 @@ impl<S: Session> StmtContext<Ident<S::StringRef>, Literal<S::StringRef>, Command
 
     fn enter_macro_def(mut self, keyword: S::Span) -> Self::MacroDefContext {
         if self.label.is_none() {
-            self.emit_diagnostic(Message::MacroRequiresName.at(keyword))
+            self.emit_diag(Message::MacroRequiresName.at(keyword))
         }
         MacroDefActions::new(self)
     }
@@ -614,7 +614,7 @@ mod tests {
         let diagnostic = Message::UnexpectedToken { token: () }.at(());
         let actions = collect_semantic_actions(|actions| {
             let mut stmt = actions.enter_unlabeled_stmt();
-            stmt.emit_diagnostic(diagnostic.clone());
+            stmt.emit_diag(diagnostic.clone());
             stmt.exit()
         });
         assert_eq!(
@@ -631,7 +631,7 @@ mod tests {
                 .enter_unlabeled_stmt()
                 .enter_command((Command::Mnemonic(Mnemonic::Add), ()))
                 .add_argument();
-            expr.emit_diagnostic(diagnostic.clone());
+            expr.emit_diag(diagnostic.clone());
             expr.exit().exit().exit()
         });
         assert_eq!(

@@ -2,7 +2,7 @@ use super::{Analysis, Operand};
 
 use crate::analysis::semantics::command::operand::AtomKind;
 use crate::diag::span::{Source, SpanSource};
-use crate::diag::{Diagnostics, EmitDiagnostic, Message};
+use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::model::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd, Width};
 
 impl<'a, I, V, D, S> Analysis<'a, I, D, S>
@@ -52,7 +52,7 @@ where
             dest: diagnostics.strip_span(&dest.span()),
         }
         .at(diagnostics.merge_spans(&dest.span(), &src.span()));
-        diagnostics.emit_diagnostic(diagnostic);
+        diagnostics.emit_diag(diagnostic);
         Err(())
     }
 
@@ -73,7 +73,7 @@ where
                     src: diagnostics.strip_span(&src),
                 }
                 .at(diagnostics.merge_spans(&self.mnemonic.1, &src));
-                self.emit_diagnostic(diagnostic);
+                self.emit_diag(diagnostic);
                 Err(())
             }
             (LdDest8::Simple(dest, _), LdOperand::Other(LdDest8::Simple(src, _))) => {
@@ -105,7 +105,7 @@ where
             (LdDest16::Reg16(_, dest_span), LdOperand::Other(LdDest16::Reg16(_, src_span))) => {
                 let diagnostics = &mut self.diagnostics;
                 let merged_span = diagnostics.merge_spans(&dest_span, &src_span);
-                diagnostics.emit_diagnostic(Message::LdSpHlOperands.at(merged_span));
+                diagnostics.emit_diag(Message::LdSpHlOperands.at(merged_span));
                 Err(())
             }
             (LdDest16::Reg16(dest, _), LdOperand::Const(expr)) => {
@@ -153,7 +153,7 @@ impl<V: Source> Operand<V> {
             Operand::Const(expr) => Err(Message::DestCannotBeConst.at(expr.span())),
         }
         .map_err(|diagnostic| {
-            diagnostics.emit_diagnostic(diagnostic);
+            diagnostics.emit_diag(diagnostic);
         })
     }
 
@@ -245,8 +245,8 @@ impl<V: Source> LdDest8<V> {
     }
 }
 
-fn diagnose_not_a<T, D: EmitDiagnostic<S, T>, S>(span: S, diagnostics: &mut D) -> Result<(), ()> {
-    diagnostics.emit_diagnostic(Message::OnlySupportedByA.at(span));
+fn diagnose_not_a<T, D: EmitDiag<S, T>, S>(span: S, diagnostics: &mut D) -> Result<(), ()> {
+    diagnostics.emit_diag(Message::OnlySupportedByA.at(span));
     Err(())
 }
 

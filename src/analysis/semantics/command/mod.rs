@@ -6,7 +6,7 @@ use crate::analysis::backend::{Finish, FinishFnDef, LocationCounter, PushOp};
 use crate::analysis::session::Session;
 use crate::analysis::syntax::*;
 use crate::diag::span::{MergeSpans, StripSpan};
-use crate::diag::{CompactDiagnostic, Diagnostics, EmitDiagnostic, Message};
+use crate::diag::{CompactDiagnostic, Diagnostics, EmitDiag, Message};
 use crate::model::{BinOp, FnCall, Item};
 
 mod args;
@@ -46,10 +46,10 @@ impl<S: Session> StripSpan<S::Span> for CommandActions<S> {
     }
 }
 
-impl<S: Session> EmitDiagnostic<S::Span, S::Stripped> for CommandActions<S> {
-    fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<S::Span, S::Stripped>>) {
+impl<S: Session> EmitDiag<S::Span, S::Stripped> for CommandActions<S> {
+    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiagnostic<S::Span, S::Stripped>>) {
         self.has_errors = true;
-        self.parent.emit_diagnostic(diagnostic)
+        self.parent.emit_diag(diagnostic)
     }
 }
 
@@ -180,7 +180,7 @@ where
                     match name.variant {
                         ArgVariant::Atom(ArgAtom::Ident(ident)) => ident,
                         _ => {
-                            self.emit_diagnostic(Message::OnlyIdentsCanBeCalled.at(name.span));
+                            self.emit_diag(Message::OnlyIdentsCanBeCalled.at(name.span));
                             return;
                         }
                     },
@@ -312,7 +312,7 @@ where
             }
         }
         .map_err(|diagnostic| {
-            self.emit_diagnostic(diagnostic);
+            self.emit_diag(diagnostic);
         })
     }
 }

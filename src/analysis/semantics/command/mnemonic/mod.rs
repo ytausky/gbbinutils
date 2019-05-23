@@ -31,12 +31,12 @@ struct Analysis<'a, I, D: 'a, S> {
     diagnostics: &'a mut D,
 }
 
-impl<'a, I, D, S> EmitDiagnostic<S, D::Stripped> for Analysis<'a, I, D, S>
+impl<'a, I, D, S> EmitDiag<S, D::Stripped> for Analysis<'a, I, D, S>
 where
     D: Diagnostics<S> + 'a,
 {
-    fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<S, D::Stripped>>) {
-        self.diagnostics.emit_diagnostic(diagnostic)
+    fn emit_diag(&mut self, diagnostic: impl Into<CompactDiagnostic<S, D::Stripped>>) {
+        self.diagnostics.emit_diag(diagnostic)
     }
 }
 
@@ -94,7 +94,7 @@ where
         match target.0 {
             Reg16::Hl => self.analyze_add_hl_instruction(),
             _ => {
-                self.emit_diagnostic(Message::DestMustBeHl.at(target.1));
+                self.emit_diag(Message::DestMustBeHl.at(target.1));
                 Err(())
             }
         }
@@ -104,7 +104,7 @@ where
         match self.next_operand_of(2)? {
             Operand::Atom(AtomKind::Reg16(src), _) => Ok(Instruction::AddHl(src)),
             operand => {
-                self.emit_diagnostic(Message::IncompatibleOperand.at(operand.span()));
+                self.emit_diag(Message::IncompatibleOperand.at(operand.span()));
                 Err(())
             }
         }
@@ -132,7 +132,7 @@ where
             }
             Operand::Const(expr) => Ok(Instruction::Alu(operation, AluSource::Immediate(expr))),
             src => {
-                self.emit_diagnostic(Message::IncompatibleOperand.at(src.span()));
+                self.emit_diag(Message::IncompatibleOperand.at(src.span()));
                 Err(())
             }
         }
@@ -145,7 +145,7 @@ where
             expr
         } else {
             let stripped = self.diagnostics.strip_span(&self.mnemonic.1);
-            self.emit_diagnostic(Message::MustBeBit { mnemonic: stripped }.at(bit_number.span()));
+            self.emit_diag(Message::MustBeBit { mnemonic: stripped }.at(bit_number.span()));
             return Err(());
         };
         Ok(Instruction::Bit(
@@ -188,7 +188,7 @@ where
             Operand::Atom(AtomKind::Simple(operand), _) => Ok(Instruction::IncDec8(mode, operand)),
             Operand::Atom(AtomKind::Reg16(operand), _) => Ok(Instruction::IncDec16(mode, operand)),
             operand => {
-                self.emit_diagnostic(Message::OperandCannotBeIncDec(mode).at(operand.span()));
+                self.emit_diag(Message::OperandCannotBeIncDec(mode).at(operand.span()));
                 Err(())
             }
         }
@@ -203,7 +203,7 @@ where
     fn next_operand_of(&mut self, out_of: usize) -> Result<Operand<V>, ()> {
         let actual = self.operands.seen();
         self.next_operand()?.ok_or_else(|| {
-            self.emit_diagnostic(
+            self.emit_diag(
                 Message::OperandCount {
                     actual,
                     expected: out_of,
@@ -227,7 +227,7 @@ where
             Ok(())
         } else {
             self.diagnostics
-                .emit_diagnostic(Message::OperandCount { actual, expected }.at(self.mnemonic.1));
+                .emit_diag(Message::OperandCount { actual, expected }.at(self.mnemonic.1));
             Err(())
         }
     }
@@ -283,7 +283,7 @@ impl<V: Source> Operand<V> {
     where
         D: Diagnostics<V::Span>,
     {
-        diagnostics.emit_diagnostic(message.at(self.span()));
+        diagnostics.emit_diag(message.at(self.span()));
         Err(())
     }
 }

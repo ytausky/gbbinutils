@@ -5,7 +5,7 @@ use super::{Parser, LINE_FOLLOW_SET};
 
 use crate::analysis::syntax;
 use crate::diag::span::{MergeSpans, StripSpan};
-use crate::diag::{CompactDiagnostic, EmitDiagnostic, Message};
+use crate::diag::{CompactDiagnostic, EmitDiag, Message};
 use crate::model::BinOp;
 
 type ParserResult<P, C, S> = Result<P, (P, ExpandedExprParsingError<C, S>)>;
@@ -68,7 +68,7 @@ where
             .unwrap_or_else(|(mut parser, error)| {
                 match error {
                     ExprParsingError::NothingParsed => parser = parser.diagnose_unexpected_token(),
-                    ExprParsingError::Other(diagnostic) => parser.emit_diagnostic(diagnostic),
+                    ExprParsingError::Other(diagnostic) => parser.emit_diag(diagnostic),
                 }
                 while !parser.token_is_in(LINE_FOLLOW_SET) {
                     bump!(parser);

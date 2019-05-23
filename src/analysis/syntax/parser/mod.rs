@@ -1,7 +1,7 @@
 use super::SimpleToken::*;
 use super::*;
 use crate::diag::span::StripSpan;
-use crate::diag::{EmitDiagnostic, Message};
+use crate::diag::{EmitDiag, Message};
 
 macro_rules! bump {
     ($parser:expr) => {
@@ -164,7 +164,7 @@ where
                 (_, span) => {
                     bump!(self);
                     let stripped = self.strip_span(&span);
-                    self.emit_diagnostic(Message::UnexpectedToken { token: stripped }.at(span));
+                    self.emit_diag(Message::UnexpectedToken { token: stripped }.at(span));
                     self
                 }
             };
@@ -333,14 +333,14 @@ where
     fn diagnose_unexpected_token(mut self) -> Self {
         if self.token_kind() == Some(Token::Simple(Eof)) {
             if self.recovery.is_none() {
-                self.emit_diagnostic(Message::UnexpectedEof.at(self.token.1.clone()));
+                self.emit_diag(Message::UnexpectedEof.at(self.token.1.clone()));
                 self.recovery = Some(RecoveryState::DiagnosedEof)
             }
         } else {
             let token = self.token.1;
             bump!(self);
             let stripped = self.strip_span(&token);
-            self.emit_diagnostic(Message::UnexpectedToken { token: stripped }.at(token))
+            self.emit_diag(Message::UnexpectedToken { token: stripped }.at(token))
         }
         self
     }

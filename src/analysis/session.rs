@@ -265,7 +265,7 @@ where
             None => {
                 let stripped = self.diagnostics.strip_span(&name.1);
                 self.diagnostics
-                    .emit_diagnostic(Message::UndefinedMacro { name: stripped }.at(name.1));
+                    .emit_diag(Message::UndefinedMacro { name: stripped }.at(name.1));
                 None
             }
         };

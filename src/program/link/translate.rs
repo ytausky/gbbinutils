@@ -126,7 +126,7 @@ fn resolve_expr_item<S: Clone>(
     let value = expr
         .eval(context, &[], &mut |span| {
             let symbol = diagnostics.strip_span(span);
-            diagnostics.emit_diagnostic(Message::UnresolvedSymbol { symbol }.at(span.clone()))
+            diagnostics.emit_diag(Message::UnresolvedSymbol { symbol }.at(span.clone()))
         })
         .exact()
         .unwrap_or(0);
@@ -139,7 +139,7 @@ fn fit_to_width<S: Clone>(
     diagnostics: &mut impl BackendDiagnostics<S>,
 ) -> Data {
     if !is_in_range(value, width) {
-        diagnostics.emit_diagnostic(Message::ValueOutOfRange { value, width }.at(value_ref))
+        diagnostics.emit_diag(Message::ValueOutOfRange { value, width }.at(value_ref))
     }
     match width {
         Width::Byte => Data::Byte(value as u8),

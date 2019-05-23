@@ -88,7 +88,7 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
         let (result, session) = self.actions.session.take().unwrap().analyze_file(path);
         self.actions.session = Some(session);
         if let Err(err) = result {
-            self.actions.emit_diagnostic(Message::from(err).at(span))
+            self.actions.emit_diag(Message::from(err).at(span))
         }
     }
 
@@ -110,7 +110,7 @@ fn reduce_include<I: PartialEq, D: Diagnostics<S>, S>(
     match arg.variant {
         ArgVariant::Atom(ArgAtom::Literal(Literal::String(path))) => Ok((path, arg.span)),
         _ => {
-            diagnostics.emit_diagnostic(Message::ExpectedString.at(arg.span));
+            diagnostics.emit_diag(Message::ExpectedString.at(arg.span));
             Err(())
         }
     }
@@ -126,7 +126,7 @@ fn single_arg<T, D: Diagnostics<S>, S>(
         assert!(args.next().is_none());
         Ok(arg)
     } else {
-        diagnostics.emit_diagnostic(
+        diagnostics.emit_diag(
             Message::OperandCount {
                 actual: 0,
                 expected: 1,

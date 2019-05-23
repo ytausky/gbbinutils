@@ -114,7 +114,7 @@ where
         Ok(atom) => Ok(Operand::Atom(atom, deref)),
         Err(category) => {
             let stripped = diagnostics.strip_span(keyword.1);
-            diagnostics.emit_diagnostic(
+            diagnostics.emit_diag(
                 Message::CannotDereference {
                     category,
                     operand: stripped,
@@ -177,8 +177,7 @@ where
         },
         Hld | Hli => {
             let stripped = diagnostics.strip_span(&span);
-            diagnostics
-                .emit_diagnostic(Message::MustBeDeref { operand: stripped }.at(span.clone()));
+            diagnostics.emit_diag(Message::MustBeDeref { operand: stripped }.at(span.clone()));
             Err(())?
         }
         L => AtomKind::Simple(SimpleOperand::L),

@@ -1,6 +1,6 @@
 use super::{Analysis, AtomKind, Operand, SimpleOperand};
 
-use crate::diag::{Diagnostics, EmitDiagnostic, Message};
+use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::model::{Branch, Condition, Instruction, Nullary};
 use crate::span::{Source, SpanSource};
 
@@ -37,7 +37,7 @@ where
             BranchVariant::Unconditional(branch) => match condition {
                 None => Ok(branch.into()),
                 Some((_, condition_span)) => {
-                    self.emit_diagnostic(Message::AlwaysUnconditional.at(condition_span));
+                    self.emit_diag(Message::AlwaysUnconditional.at(condition_span));
                     Err(())
                 }
             },
@@ -107,7 +107,7 @@ where
             Ok(Some(BranchTarget::DerefHl(span)))
         }
         operand => {
-            diagnostics.emit_diagnostic(Message::CannotBeUsedAsTarget.at(operand.span()));
+            diagnostics.emit_diag(Message::CannotBeUsedAsTarget.at(operand.span()));
             Err(())
         }
     }
@@ -166,7 +166,7 @@ where
         }
     }
     .map_err(|diagnostic| {
-        diagnostics.emit_diagnostic(diagnostic);
+        diagnostics.emit_diag(diagnostic);
     })
 }
 
