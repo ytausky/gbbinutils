@@ -1,3 +1,5 @@
+pub(super) use crate::diag::MockSpan;
+
 use super::SimpleToken::*;
 use super::Token::*;
 use super::{ExprAtom, Operator, Token, UnaryOperator};
@@ -11,7 +13,7 @@ use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::iter;
 
-pub fn with_spans<'a>(
+pub(super) fn with_spans<'a>(
     tokens: impl IntoIterator<Item = &'a (SymToken, TokenRef)>,
 ) -> impl Iterator<Item = (Result<SymToken, ()>, MockSpan<TokenRef>)> {
     tokens.into_iter().cloned().map(|(t, r)| (Ok(t), r.into()))
@@ -583,24 +585,6 @@ macro_rules! input_tokens {
         }
         input
     }};
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum MockSpan<T> {
-    Basic(T),
-    Merge(Box<Self>, Box<Self>),
-}
-
-impl<T> From<T> for MockSpan<T> {
-    fn from(token: T) -> Self {
-        MockSpan::Basic(token)
-    }
-}
-
-impl<T> MockSpan<T> {
-    pub fn merge(left: impl Into<Self>, right: impl Into<Self>) -> Self {
-        MockSpan::Merge(Box::new(left.into()), Box::new(right.into()))
-    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

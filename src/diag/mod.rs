@@ -475,6 +475,24 @@ impl ExpandedDiagnosticClause<StrippedBufSpan, BufId, BufRange> {
 mod mock {
     use super::*;
 
+    #[derive(Clone, Debug, PartialEq)]
+    pub(crate) enum MockSpan<T> {
+        Basic(T),
+        Merge(Box<Self>, Box<Self>),
+    }
+
+    impl<T> MockSpan<T> {
+        pub fn merge(left: impl Into<Self>, right: impl Into<Self>) -> Self {
+            MockSpan::Merge(Box::new(left.into()), Box::new(right.into()))
+        }
+    }
+
+    impl<T> From<T> for MockSpan<T> {
+        fn from(token: T) -> Self {
+            MockSpan::Basic(token)
+        }
+    }
+
     pub(crate) trait FakeSpan {
         fn default() -> Self;
         fn merge(&self, other: &Self) -> Self;
