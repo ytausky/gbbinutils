@@ -446,7 +446,7 @@ mod tests {
     #[test]
     fn diagnose_unexpected_token_in_expr() {
         let input = input_tokens![plus @ Plus];
-        let span: SymSpan = TokenRef::from("plus").into();
+        let span: SymSpan<_> = TokenRef::from("plus").into();
         assert_eq_expr_diagnostics(
             input,
             Message::UnexpectedToken {
@@ -464,13 +464,13 @@ mod tests {
 
     fn assert_eq_expr_diagnostics(
         mut input: InputTokens,
-        expected: CompactDiagnostic<SymSpan, SymSpan>,
+        expected: CompactDiagnostic<SymSpan<TokenRef>, SymSpan<TokenRef>>,
     ) {
         let expr_actions = parse_sym_expr(&mut input);
         assert_eq!(expr_actions, [ExprAction::EmitDiagnostic(expected)])
     }
 
-    fn parse_sym_expr(input: &mut InputTokens) -> Vec<ExprAction<SymSpan>> {
+    fn parse_sym_expr(input: &mut InputTokens) -> Vec<ExprAction<SymSpan<TokenRef>>> {
         let tokens = &mut with_spans(&input.tokens);
         Parser::new(tokens, ExprActionCollector::new(()))
             .parse()

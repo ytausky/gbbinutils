@@ -13,23 +13,23 @@ use std::iter;
 
 pub fn with_spans<'a>(
     tokens: impl IntoIterator<Item = &'a (SymToken, TokenRef)>,
-) -> impl Iterator<Item = (Result<SymToken, ()>, SymSpan)> {
+) -> impl Iterator<Item = (Result<SymToken, ()>, SymSpan<TokenRef>)> {
     tokens.into_iter().cloned().map(|(t, r)| (Ok(t), r.into()))
 }
 
 macro_rules! impl_diag_traits {
     ($($t:ty),* $(,)?) => {
         $(
-            impl MergeSpans<SymSpan> for $t {
-                fn merge_spans(&mut self, left: &SymSpan, right: &SymSpan) -> SymSpan {
+            impl MergeSpans<SymSpan<TokenRef>> for $t {
+                fn merge_spans(&mut self, left: &SymSpan<TokenRef>, right: &SymSpan<TokenRef>) -> SymSpan<TokenRef> {
                     SymSpan::merge(left.clone(), right.clone())
                 }
             }
 
-            impl StripSpan<SymSpan> for $t {
-                type Stripped = SymSpan;
+            impl StripSpan<SymSpan<TokenRef>> for $t {
+                type Stripped = SymSpan<TokenRef>;
 
-                fn strip_span(&mut self, span: &SymSpan) -> Self::Stripped {
+                fn strip_span(&mut self, span: &SymSpan<TokenRef>) -> Self::Stripped {
                     span.clone()
                 }
             }
@@ -50,7 +50,7 @@ impl_diag_traits! {
 }
 
 pub(super) struct FileActionCollector {
-    pub actions: Vec<FileAction<SymSpan>>,
+    pub actions: Vec<FileAction<SymSpan<TokenRef>>>,
 }
 
 impl FileActionCollector {
@@ -61,14 +61,17 @@ impl FileActionCollector {
     }
 }
 
-impl EmitDiagnostic<SymSpan, SymSpan> for FileActionCollector {
-    fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
+impl EmitDiagnostic<SymSpan<TokenRef>, SymSpan<TokenRef>> for FileActionCollector {
+    fn emit_diagnostic(
+        &mut self,
+        diagnostic: impl Into<CompactDiagnostic<SymSpan<TokenRef>, SymSpan<TokenRef>>>,
+    ) {
         self.actions
             .push(FileAction::EmitDiagnostic(diagnostic.into()))
     }
 }
 
-impl FileContext<SymIdent, SymLiteral, SymCommand, SymSpan> for FileActionCollector {
+impl FileContext<SymIdent, SymLiteral, SymCommand, SymSpan<TokenRef>> for FileActionCollector {
     type StmtContext = StmtActionCollector;
     type LabelContext = LabelActionCollector;
 
@@ -80,7 +83,7 @@ impl FileContext<SymIdent, SymLiteral, SymCommand, SymSpan> for FileActionCollec
         }
     }
 
-    fn enter_labeled_stmt(self, label: (SymIdent, SymSpan)) -> Self::LabelContext {
+    fn enter_labeled_stmt(self, label: (SymIdent, SymSpan<TokenRef>)) -> Self::LabelContext {
         LabelActionCollector {
             label,
             actions: Vec::new(),
@@ -90,22 +93,25 @@ impl FileContext<SymIdent, SymLiteral, SymCommand, SymSpan> for FileActionCollec
 }
 
 pub(super) struct LabelActionCollector {
-    label: (SymIdent, SymSpan),
-    actions: Vec<ParamsAction<SymSpan>>,
+    label: (SymIdent, SymSpan<TokenRef>),
+    actions: Vec<ParamsAction<SymSpan<TokenRef>>>,
     parent: FileActionCollector,
 }
 
-impl EmitDiagnostic<SymSpan, SymSpan> for LabelActionCollector {
-    fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
+impl EmitDiagnostic<SymSpan<TokenRef>, SymSpan<TokenRef>> for LabelActionCollector {
+    fn emit_diagnostic(
+        &mut self,
+        diagnostic: impl Into<CompactDiagnostic<SymSpan<TokenRef>, SymSpan<TokenRef>>>,
+    ) {
         self.actions
             .push(ParamsAction::EmitDiagnostic(diagnostic.into()))
     }
 }
 
-impl ParamsContext<SymIdent, SymSpan> for LabelActionCollector {
+impl ParamsContext<SymIdent, SymSpan<TokenRef>> for LabelActionCollector {
     type Next = StmtActionCollector;
 
-    fn add_parameter(&mut self, param: (SymIdent, SymSpan)) {
+    fn add_parameter(&mut self, param: (SymIdent, SymSpan<TokenRef>)) {
         self.actions.push(ParamsAction::AddParameter(param))
     }
 
@@ -119,25 +125,28 @@ impl ParamsContext<SymIdent, SymSpan> for LabelActionCollector {
 }
 
 pub(super) struct StmtActionCollector {
-    label: Option<Label<SymSpan>>,
-    actions: Vec<StmtAction<SymSpan>>,
+    label: Option<Label<SymSpan<TokenRef>>>,
+    actions: Vec<StmtAction<SymSpan<TokenRef>>>,
     parent: FileActionCollector,
 }
 
-impl EmitDiagnostic<SymSpan, SymSpan> for StmtActionCollector {
-    fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
+impl EmitDiagnostic<SymSpan<TokenRef>, SymSpan<TokenRef>> for StmtActionCollector {
+    fn emit_diagnostic(
+        &mut self,
+        diagnostic: impl Into<CompactDiagnostic<SymSpan<TokenRef>, SymSpan<TokenRef>>>,
+    ) {
         self.actions
             .push(StmtAction::EmitDiagnostic(diagnostic.into()))
     }
 }
 
-impl StmtContext<SymIdent, SymLiteral, SymCommand, SymSpan> for StmtActionCollector {
+impl StmtContext<SymIdent, SymLiteral, SymCommand, SymSpan<TokenRef>> for StmtActionCollector {
     type CommandContext = CommandActionCollector;
     type MacroDefContext = MacroBodyActionCollector;
     type MacroCallContext = MacroCallActionCollector;
     type Parent = FileActionCollector;
 
-    fn enter_command(self, command: (SymCommand, SymSpan)) -> CommandActionCollector {
+    fn enter_command(self, command: (SymCommand, SymSpan<TokenRef>)) -> CommandActionCollector {
         CommandActionCollector {
             command,
             actions: Vec::new(),
@@ -145,7 +154,7 @@ impl StmtContext<SymIdent, SymLiteral, SymCommand, SymSpan> for StmtActionCollec
         }
     }
 
-    fn enter_macro_def(self, keyword: SymSpan) -> Self::MacroDefContext {
+    fn enter_macro_def(self, keyword: SymSpan<TokenRef>) -> Self::MacroDefContext {
         Self::MacroDefContext {
             keyword,
             actions: Vec::new(),
@@ -153,7 +162,7 @@ impl StmtContext<SymIdent, SymLiteral, SymCommand, SymSpan> for StmtActionCollec
         }
     }
 
-    fn enter_macro_call(self, name: (SymIdent, SymSpan)) -> MacroCallActionCollector {
+    fn enter_macro_call(self, name: (SymIdent, SymSpan<TokenRef>)) -> MacroCallActionCollector {
         MacroCallActionCollector {
             name,
             actions: Vec::new(),
@@ -171,19 +180,22 @@ impl StmtContext<SymIdent, SymLiteral, SymCommand, SymSpan> for StmtActionCollec
 }
 
 pub(super) struct CommandActionCollector {
-    command: (SymCommand, SymSpan),
-    actions: Vec<CommandAction<SymSpan>>,
+    command: (SymCommand, SymSpan<TokenRef>),
+    actions: Vec<CommandAction<SymSpan<TokenRef>>>,
     parent: StmtActionCollector,
 }
 
-impl EmitDiagnostic<SymSpan, SymSpan> for CommandActionCollector {
-    fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
+impl EmitDiagnostic<SymSpan<TokenRef>, SymSpan<TokenRef>> for CommandActionCollector {
+    fn emit_diagnostic(
+        &mut self,
+        diagnostic: impl Into<CompactDiagnostic<SymSpan<TokenRef>, SymSpan<TokenRef>>>,
+    ) {
         self.actions
             .push(CommandAction::EmitDiagnostic(diagnostic.into()))
     }
 }
 
-impl CommandContext<SymSpan> for CommandActionCollector {
+impl CommandContext<SymSpan<TokenRef>> for CommandActionCollector {
     type Command = SymCommand;
     type Ident = SymIdent;
     type Literal = SymLiteral;
@@ -204,7 +216,7 @@ impl CommandContext<SymSpan> for CommandActionCollector {
 }
 
 pub(super) struct ExprActionCollector<P> {
-    actions: Vec<ExprAction<SymSpan>>,
+    actions: Vec<ExprAction<SymSpan<TokenRef>>>,
     parent: P,
 }
 
@@ -217,8 +229,11 @@ impl<P> ExprActionCollector<P> {
     }
 }
 
-impl<P> EmitDiagnostic<SymSpan, SymSpan> for ExprActionCollector<P> {
-    fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
+impl<P> EmitDiagnostic<SymSpan<TokenRef>, SymSpan<TokenRef>> for ExprActionCollector<P> {
+    fn emit_diagnostic(
+        &mut self,
+        diagnostic: impl Into<CompactDiagnostic<SymSpan<TokenRef>, SymSpan<TokenRef>>>,
+    ) {
         self.actions
             .push(ExprAction::EmitDiagnostic(diagnostic.into()))
     }
@@ -236,47 +251,50 @@ impl FinalContext for ExprActionCollector<CommandActionCollector> {
 }
 
 impl FinalContext for ExprActionCollector<()> {
-    type ReturnTo = Vec<ExprAction<SymSpan>>;
+    type ReturnTo = Vec<ExprAction<SymSpan<TokenRef>>>;
 
     fn exit(self) -> Self::ReturnTo {
         self.actions
     }
 }
 
-impl<P> ExprContext<SymSpan> for ExprActionCollector<P>
+impl<P> ExprContext<SymSpan<TokenRef>> for ExprActionCollector<P>
 where
-    Self: Diagnostics<SymSpan>,
+    Self: Diagnostics<SymSpan<TokenRef>>,
 {
     type Ident = SymIdent;
     type Literal = SymLiteral;
 
-    fn push_atom(&mut self, atom: (ExprAtom<SymIdent, SymLiteral>, SymSpan)) {
+    fn push_atom(&mut self, atom: (ExprAtom<SymIdent, SymLiteral>, SymSpan<TokenRef>)) {
         self.actions.push(ExprAction::PushAtom(atom))
     }
 
-    fn apply_operator(&mut self, operator: (Operator, SymSpan)) {
+    fn apply_operator(&mut self, operator: (Operator, SymSpan<TokenRef>)) {
         self.actions.push(ExprAction::ApplyOperator(operator))
     }
 }
 
 pub(super) struct MacroBodyActionCollector {
-    keyword: SymSpan,
-    actions: Vec<TokenSeqAction<SymSpan>>,
+    keyword: SymSpan<TokenRef>,
+    actions: Vec<TokenSeqAction<SymSpan<TokenRef>>>,
     parent: StmtActionCollector,
 }
 
-impl EmitDiagnostic<SymSpan, SymSpan> for MacroBodyActionCollector {
-    fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
+impl EmitDiagnostic<SymSpan<TokenRef>, SymSpan<TokenRef>> for MacroBodyActionCollector {
+    fn emit_diagnostic(
+        &mut self,
+        diagnostic: impl Into<CompactDiagnostic<SymSpan<TokenRef>, SymSpan<TokenRef>>>,
+    ) {
         self.actions
             .push(TokenSeqAction::EmitDiagnostic(diagnostic.into()))
     }
 }
 
-impl TokenSeqContext<SymSpan> for MacroBodyActionCollector {
+impl TokenSeqContext<SymSpan<TokenRef>> for MacroBodyActionCollector {
     type Token = Token<SymIdent, SymLiteral, SymCommand>;
     type Parent = StmtActionCollector;
 
-    fn push_token(&mut self, token: (Self::Token, SymSpan)) {
+    fn push_token(&mut self, token: (Self::Token, SymSpan<TokenRef>)) {
         self.actions.push(TokenSeqAction::PushToken(token))
     }
 
@@ -290,19 +308,22 @@ impl TokenSeqContext<SymSpan> for MacroBodyActionCollector {
 }
 
 pub(super) struct MacroCallActionCollector {
-    name: (SymIdent, SymSpan),
-    actions: Vec<MacroCallAction<SymSpan>>,
+    name: (SymIdent, SymSpan<TokenRef>),
+    actions: Vec<MacroCallAction<SymSpan<TokenRef>>>,
     parent: StmtActionCollector,
 }
 
-impl EmitDiagnostic<SymSpan, SymSpan> for MacroCallActionCollector {
-    fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
+impl EmitDiagnostic<SymSpan<TokenRef>, SymSpan<TokenRef>> for MacroCallActionCollector {
+    fn emit_diagnostic(
+        &mut self,
+        diagnostic: impl Into<CompactDiagnostic<SymSpan<TokenRef>, SymSpan<TokenRef>>>,
+    ) {
         self.actions
             .push(MacroCallAction::EmitDiagnostic(diagnostic.into()))
     }
 }
 
-impl MacroCallContext<SymSpan> for MacroCallActionCollector {
+impl MacroCallContext<SymSpan<TokenRef>> for MacroCallActionCollector {
     type Token = Token<SymIdent, SymLiteral, SymCommand>;
     type MacroArgContext = MacroArgActionCollector;
     type Parent = StmtActionCollector;
@@ -324,22 +345,25 @@ impl MacroCallContext<SymSpan> for MacroCallActionCollector {
 }
 
 pub(super) struct MacroArgActionCollector {
-    actions: Vec<TokenSeqAction<SymSpan>>,
+    actions: Vec<TokenSeqAction<SymSpan<TokenRef>>>,
     parent: MacroCallActionCollector,
 }
 
-impl EmitDiagnostic<SymSpan, SymSpan> for MacroArgActionCollector {
-    fn emit_diagnostic(&mut self, diagnostic: impl Into<CompactDiagnostic<SymSpan, SymSpan>>) {
+impl EmitDiagnostic<SymSpan<TokenRef>, SymSpan<TokenRef>> for MacroArgActionCollector {
+    fn emit_diagnostic(
+        &mut self,
+        diagnostic: impl Into<CompactDiagnostic<SymSpan<TokenRef>, SymSpan<TokenRef>>>,
+    ) {
         self.actions
             .push(TokenSeqAction::EmitDiagnostic(diagnostic.into()))
     }
 }
 
-impl TokenSeqContext<SymSpan> for MacroArgActionCollector {
+impl TokenSeqContext<SymSpan<TokenRef>> for MacroArgActionCollector {
     type Token = Token<SymIdent, SymLiteral, SymCommand>;
     type Parent = MacroCallActionCollector;
 
-    fn push_token(&mut self, token: (Self::Token, SymSpan)) {
+    fn push_token(&mut self, token: (Self::Token, SymSpan<TokenRef>)) {
         self.actions.push(TokenSeqAction::PushToken(token))
     }
 
@@ -430,7 +454,7 @@ impl SymExpr {
         self
     }
 
-    pub fn fn_call(mut self, args: usize, span: impl Into<SymSpan>) -> Self {
+    pub fn fn_call(mut self, args: usize, span: impl Into<SymSpan<TokenRef>>) -> Self {
         self.0.push(ExprAction::ApplyOperator((
             Operator::FnCall(args),
             span.into(),
@@ -438,7 +462,11 @@ impl SymExpr {
         self
     }
 
-    pub fn error(mut self, message: Message<SymSpan>, highlight: impl Into<SymSpan>) -> Self {
+    pub fn error(
+        mut self,
+        message: Message<SymSpan<TokenRef>>,
+        highlight: impl Into<SymSpan<TokenRef>>,
+    ) -> Self {
         self.0.push(ExprAction::EmitDiagnostic(
             message.at(highlight.into()).into(),
         ));
@@ -481,7 +509,7 @@ impl InputTokens {
         self.tokens.push(mk_sym_token(id, token))
     }
 
-    pub fn token_seq<T>(&self, tokens: impl Borrow<[T]>) -> Vec<TokenSeqAction<SymSpan>>
+    pub fn token_seq<T>(&self, tokens: impl Borrow<[T]>) -> Vec<TokenSeqAction<SymSpan<TokenRef>>>
     where
         T: Clone + Into<TokenRef>,
     {
@@ -554,26 +582,20 @@ macro_rules! input_tokens {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct SymSpan {
-    pub start: TokenRef,
-    pub end: TokenRef,
+pub enum SymSpan<T> {
+    Basic(T),
+    Merge(Box<Self>, Box<Self>),
 }
 
-impl From<TokenRef> for SymSpan {
-    fn from(token_ref: TokenRef) -> SymSpan {
-        SymSpan {
-            start: token_ref.clone(),
-            end: token_ref,
-        }
+impl<T> From<T> for SymSpan<T> {
+    fn from(token: T) -> Self {
+        SymSpan::Basic(token)
     }
 }
 
-impl SymSpan {
-    pub fn merge(left: impl Into<SymSpan>, right: impl Into<SymSpan>) -> SymSpan {
-        SymSpan {
-            start: left.into().start.clone(),
-            end: right.into().end.clone(),
-        }
+impl<T> SymSpan<T> {
+    pub fn merge(left: impl Into<Self>, right: impl Into<Self>) -> Self {
+        SymSpan::Merge(Box::new(left.into()), Box::new(right.into()))
     }
 }
 
@@ -655,13 +677,13 @@ pub(super) enum MacroCallAction<S> {
 }
 
 #[derive(Clone)]
-pub(super) struct SymExpr(pub Vec<ExprAction<SymSpan>>);
+pub(super) struct SymExpr(pub Vec<ExprAction<SymSpan<TokenRef>>>);
 
 pub(super) fn labeled(
     label: impl Into<TokenRef>,
     params: impl Borrow<[TokenRef]>,
-    actions: Vec<StmtAction<SymSpan>>,
-) -> FileAction<SymSpan> {
+    actions: Vec<StmtAction<SymSpan<TokenRef>>>,
+) -> FileAction<SymSpan<TokenRef>> {
     let label = label.into();
     FileAction::Stmt {
         label: Some((
@@ -672,21 +694,23 @@ pub(super) fn labeled(
     }
 }
 
-pub(super) fn unlabeled(actions: Vec<StmtAction<SymSpan>>) -> FileAction<SymSpan> {
+pub(super) fn unlabeled(
+    actions: Vec<StmtAction<SymSpan<TokenRef>>>,
+) -> FileAction<SymSpan<TokenRef>> {
     FileAction::Stmt {
         label: None,
         actions,
     }
 }
 
-pub(super) fn empty() -> Vec<StmtAction<SymSpan>> {
+pub(super) fn empty() -> Vec<StmtAction<SymSpan<TokenRef>>> {
     Vec::new()
 }
 
 pub(super) fn command(
     id: impl Into<TokenRef>,
     args: impl Borrow<[SymExpr]>,
-) -> Vec<StmtAction<SymSpan>> {
+) -> Vec<StmtAction<SymSpan<TokenRef>>> {
     let id = id.into();
     vec![StmtAction::Command {
         command: (SymCommand(id.clone()), id.into()),
@@ -702,8 +726,8 @@ pub(super) fn command(
 pub(super) fn malformed_command(
     id: impl Into<TokenRef>,
     args: impl Borrow<[SymExpr]>,
-    diagnostic: CompactDiagnostic<SymSpan, SymSpan>,
-) -> Vec<StmtAction<SymSpan>> {
+    diagnostic: CompactDiagnostic<SymSpan<TokenRef>, SymSpan<TokenRef>>,
+) -> Vec<StmtAction<SymSpan<TokenRef>>> {
     let id = id.into();
     vec![StmtAction::Command {
         command: (SymCommand(id.clone()), id.into()),
@@ -719,8 +743,8 @@ pub(super) fn malformed_command(
 
 pub(super) fn call_macro(
     id: impl Into<TokenRef>,
-    args: impl Borrow<[Vec<TokenSeqAction<SymSpan>>]>,
-) -> Vec<StmtAction<SymSpan>> {
+    args: impl Borrow<[Vec<TokenSeqAction<SymSpan<TokenRef>>>]>,
+) -> Vec<StmtAction<SymSpan<TokenRef>>> {
     let id = id.into();
     vec![StmtAction::MacroCall {
         name: (SymIdent(id.clone()), id.into()),
@@ -735,9 +759,9 @@ pub(super) fn call_macro(
 
 pub(super) fn macro_def(
     keyword: impl Into<TokenRef>,
-    mut body: Vec<TokenSeqAction<SymSpan>>,
+    mut body: Vec<TokenSeqAction<SymSpan<TokenRef>>>,
     endm: impl Into<TokenRef>,
-) -> Vec<StmtAction<SymSpan>> {
+) -> Vec<StmtAction<SymSpan<TokenRef>>> {
     body.push(TokenSeqAction::PushToken((Eof.into(), endm.into().into())));
     vec![StmtAction::MacroDef {
         keyword: keyword.into().into(),
@@ -745,7 +769,7 @@ pub(super) fn macro_def(
     }]
 }
 
-fn convert_params(params: impl Borrow<[TokenRef]>) -> Vec<ParamsAction<SymSpan>> {
+fn convert_params(params: impl Borrow<[TokenRef]>) -> Vec<ParamsAction<SymSpan<TokenRef>>> {
     params
         .borrow()
         .iter()
@@ -757,15 +781,15 @@ fn convert_params(params: impl Borrow<[TokenRef]>) -> Vec<ParamsAction<SymSpan>>
 pub(super) fn push_token(
     token: impl Into<SymToken>,
     span: impl Into<TokenRef>,
-) -> TokenSeqAction<SymSpan> {
+) -> TokenSeqAction<SymSpan<TokenRef>> {
     TokenSeqAction::PushToken((token.into(), span.into().into()))
 }
 
 pub(super) fn malformed_macro_def(
     keyword: impl Into<TokenRef>,
-    mut body: Vec<TokenSeqAction<SymSpan>>,
-    diagnostic: CompactDiagnostic<SymSpan, SymSpan>,
-) -> Vec<StmtAction<SymSpan>> {
+    mut body: Vec<TokenSeqAction<SymSpan<TokenRef>>>,
+    diagnostic: CompactDiagnostic<SymSpan<TokenRef>, SymSpan<TokenRef>>,
+) -> Vec<StmtAction<SymSpan<TokenRef>>> {
     body.push(TokenSeqAction::EmitDiagnostic(diagnostic));
     vec![StmtAction::MacroDef {
         keyword: keyword.into().into(),
@@ -774,16 +798,16 @@ pub(super) fn malformed_macro_def(
 }
 
 pub(super) fn stmt_error(
-    message: Message<SymSpan>,
+    message: Message<SymSpan<TokenRef>>,
     highlight: impl Into<TokenRef>,
-) -> Vec<StmtAction<SymSpan>> {
+) -> Vec<StmtAction<SymSpan<TokenRef>>> {
     vec![StmtAction::EmitDiagnostic(arg_error(message, highlight))]
 }
 
 pub(super) fn arg_error(
-    message: Message<SymSpan>,
+    message: Message<SymSpan<TokenRef>>,
     highlight: impl Into<TokenRef>,
-) -> CompactDiagnostic<SymSpan, SymSpan> {
+) -> CompactDiagnostic<SymSpan<TokenRef>, SymSpan<TokenRef>> {
     message.at(highlight.into().into()).into()
 }
 
