@@ -349,6 +349,7 @@ mod mock {
     use crate::diag::{DiagnosticsEvent, MockDiagnostics};
 
     use std::cell::RefCell;
+    use std::marker::PhantomData;
 
     type Expr<S> = crate::model::Expr<LocationCounter, Ident<String>, S>;
 
@@ -367,7 +368,8 @@ mod mock {
     pub(crate) struct MockSession<'a, T, S> {
         log: &'a RefCell<Vec<T>>,
         error: Option<CodebaseError>,
-        diagnostics: MockDiagnostics<'a, T, S>,
+        diagnostics: MockDiagnostics<'a, T>,
+        _span: PhantomData<S>,
     }
 
     impl<'a, T, S> MockSession<'a, T, S> {
@@ -376,6 +378,7 @@ mod mock {
                 log,
                 error: None,
                 diagnostics: MockDiagnostics::new(log),
+                _span: PhantomData,
             }
         }
 
@@ -388,7 +391,7 @@ mod mock {
         {'a, T: From<DiagnosticsEvent<S>>, S: Merge},
         MockSession<'a, T, S>,
         {diagnostics},
-        MockDiagnostics<'a, T, S>,
+        MockDiagnostics<'a, T>,
         S
     }
 
@@ -495,7 +498,7 @@ mod mock {
         {'a, T: From<DiagnosticsEvent<S>>, S: Merge},
         MockSymbolBuilder<MockSession<'a, T, S>, Ident<String>, S>,
         {parent.diagnostics},
-        MockDiagnostics<'a, T, S>,
+        MockDiagnostics<'a, T>,
         S
     }
 
@@ -514,7 +517,7 @@ mod mock {
         }
     }
 
-    impl<'a, T, S> PushOp<Ident<String>, S> for RelocContext<MockDiagnostics<'a, T, S>, Expr<S>>
+    impl<'a, T, S> PushOp<Ident<String>, S> for RelocContext<MockDiagnostics<'a, T>, Expr<S>>
     where
         T: From<DiagnosticsEvent<S>>,
         S: Clone,
@@ -567,7 +570,7 @@ mod mock {
         }
     }
 
-    pub(crate) type MockBuilder<'a, T, S> = RelocContext<MockDiagnostics<'a, T, S>, Expr<S>>;
+    pub(crate) type MockBuilder<'a, T, S> = RelocContext<MockDiagnostics<'a, T>, Expr<S>>;
 
     impl<'a, T, S> MockBuilder<'a, T, S> {
         pub fn with_log(log: &'a RefCell<Vec<T>>) -> Self {
@@ -579,7 +582,7 @@ mod mock {
     }
 
     impl<'a, T, S: Clone> Finish<S> for MockBuilder<'a, T, S> {
-        type Parent = MockDiagnostics<'a, T, S>;
+        type Parent = MockDiagnostics<'a, T>;
         type Value = Expr<S>;
 
         fn finish(self) -> (Self::Parent, Self::Value) {

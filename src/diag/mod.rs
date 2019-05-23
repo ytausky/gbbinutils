@@ -485,26 +485,19 @@ mod mock {
         }
     }
 
-    pub(crate) struct MockDiagnostics<'a, T, S> {
+    pub(crate) struct MockDiagnostics<'a, T> {
         log: &'a RefCell<Vec<T>>,
-        _span: PhantomData<S>,
     }
 
-    impl<'a, T, S> MockDiagnostics<'a, T, S> {
+    impl<'a, T> MockDiagnostics<'a, T> {
         pub fn new(log: &'a RefCell<Vec<T>>) -> Self {
-            MockDiagnostics {
-                log,
-                _span: PhantomData,
-            }
+            MockDiagnostics { log }
         }
     }
 
-    impl<'a, T, S> Clone for MockDiagnostics<'a, T, S> {
+    impl<'a, T> Clone for MockDiagnostics<'a, T> {
         fn clone(&self) -> Self {
-            MockDiagnostics {
-                log: self.log,
-                _span: PhantomData,
-            }
+            MockDiagnostics { log: self.log }
         }
     }
 
@@ -519,11 +512,7 @@ mod mock {
         }
     }
 
-    impl<'a, T, S: Clone> SpanSource for MockDiagnostics<'a, T, S> {
-        type Span = S;
-    }
-
-    impl<'a, T, S: Clone> StripSpan<S> for MockDiagnostics<'a, T, S> {
+    impl<'a, T, S: Clone> StripSpan<S> for MockDiagnostics<'a, T> {
         type Stripped = S;
 
         fn strip_span(&mut self, span: &S) -> Self::Stripped {
@@ -531,13 +520,13 @@ mod mock {
         }
     }
 
-    impl<'a, T, S: Clone + Merge> MergeSpans<S> for MockDiagnostics<'a, T, S> {
+    impl<'a, T, S: Clone + Merge> MergeSpans<S> for MockDiagnostics<'a, T> {
         fn merge_spans(&mut self, left: &S, right: &S) -> S {
             S::merge(left.clone(), right.clone())
         }
     }
 
-    impl<'a, T, S> EmitDiag<S, S> for MockDiagnostics<'a, T, S>
+    impl<'a, T, S> EmitDiag<S, S> for MockDiagnostics<'a, T>
     where
         T: From<DiagnosticsEvent<S>>,
         S: Clone,
@@ -549,17 +538,17 @@ mod mock {
         }
     }
 
-    pub(crate) struct MockDiagnosticsSystem<'a, T, S>(MockDiagnostics<'a, T, S>);
+    pub(crate) struct MockDiagnosticsSystem<'a, T, S>(MockDiagnostics<'a, T>, PhantomData<S>);
 
     impl<'a, T, S> MockDiagnosticsSystem<'a, T, S> {
         pub fn new(log: &'a RefCell<Vec<T>>) -> Self {
-            Self(MockDiagnostics::new(log))
+            Self(MockDiagnostics::new(log), PhantomData)
         }
     }
 
     impl<'a, T, S> Clone for MockDiagnosticsSystem<'a, T, S> {
         fn clone(&self) -> Self {
-            Self(self.0.clone())
+            Self(self.0.clone(), PhantomData)
         }
     }
 
@@ -585,7 +574,7 @@ mod mock {
         {'a, T: From<DiagnosticsEvent<S>>, S: Default + Merge},
         MockDiagnosticsSystem<'a, T, S>,
         {0},
-        MockDiagnostics<'a, T, S>,
+        MockDiagnostics<'a, T>,
         S
     }
 
