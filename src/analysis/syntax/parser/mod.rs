@@ -372,7 +372,7 @@ mod tests {
 
     fn assert_eq_actions(
         input: InputTokens,
-        expected: impl Borrow<[FileAction<SymSpan<TokenRef>>]>,
+        expected: impl Borrow<[FileAction<MockSpan<TokenRef>>]>,
     ) {
         let mut parsing_context = FileActionCollector::new();
         parsing_context = parse_src(with_spans(&input.tokens), parsing_context);
@@ -603,7 +603,7 @@ mod tests {
 
     #[test]
     fn diagnose_stmt_starting_with_literal() {
-        let token: SymSpan<_> = TokenRef::from("a").into();
+        let token: MockSpan<_> = TokenRef::from("a").into();
         assert_eq_actions(
             input_tokens![a @ Literal(())],
             [unlabeled(stmt_error(
@@ -615,7 +615,7 @@ mod tests {
 
     #[test]
     fn diagnose_missing_comma_in_arg_list() {
-        let span: SymSpan<_> = TokenRef::from("unexpected").into();
+        let span: MockSpan<_> = TokenRef::from("unexpected").into();
         assert_eq_actions(
             input_tokens![Command(()), Literal(()), unexpected @ Literal(())],
             [unlabeled(malformed_command(
@@ -674,7 +674,7 @@ mod tests {
 
     #[test]
     fn recover_from_unexpected_token_in_expr() {
-        let paren_span: SymSpan<_> = TokenRef::from("paren").into();
+        let paren_span: MockSpan<_> = TokenRef::from("paren").into();
         assert_eq_actions(
             input_tokens![
                 Command(()),
@@ -715,7 +715,7 @@ mod tests {
 
     #[test]
     fn diagnose_unexpected_token_param_list() {
-        let span: SymSpan<_> = TokenRef::from("lit").into();
+        let span: MockSpan<_> = TokenRef::from("lit").into();
         assert_eq_actions(
             input_tokens![
                 label @ Label(()),

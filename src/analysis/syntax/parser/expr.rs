@@ -328,7 +328,7 @@ mod tests {
         let tokens = input_tokens![name @ Ident(()), left @ LParen, right @ RParen];
         let expected = expr().ident("name").fn_call(
             0,
-            SymSpan::merge(TokenRef::from("left"), TokenRef::from("right")),
+            MockSpan::merge(TokenRef::from("left"), TokenRef::from("right")),
         );
         assert_eq_rpn_expr(tokens, expected)
     }
@@ -343,7 +343,7 @@ mod tests {
         ];
         let expected = expr().ident("name").ident("arg").fn_call(
             1,
-            SymSpan::merge(TokenRef::from("left"), TokenRef::from("right")),
+            MockSpan::merge(TokenRef::from("left"), TokenRef::from("right")),
         );
         assert_eq_rpn_expr(tokens, expected)
     }
@@ -360,7 +360,7 @@ mod tests {
         ];
         let expected = expr().ident("name").ident("arg1").ident("arg2").fn_call(
             2,
-            SymSpan::merge(TokenRef::from("left"), TokenRef::from("right")),
+            MockSpan::merge(TokenRef::from("left"), TokenRef::from("right")),
         );
         assert_eq_rpn_expr(tokens, expected)
     }
@@ -378,7 +378,7 @@ mod tests {
             .ident("name")
             .fn_call(
                 0,
-                SymSpan::merge(TokenRef::from("left"), TokenRef::from("right")),
+                MockSpan::merge(TokenRef::from("left"), TokenRef::from("right")),
             )
             .literal("literal")
             .plus("plus");
@@ -399,7 +399,7 @@ mod tests {
             .ident("name")
             .fn_call(
                 0,
-                SymSpan::merge(TokenRef::from("left"), TokenRef::from("right")),
+                MockSpan::merge(TokenRef::from("left"), TokenRef::from("right")),
             )
             .multiply("star");
         assert_eq_rpn_expr(tokens, expected)
@@ -446,7 +446,7 @@ mod tests {
     #[test]
     fn diagnose_unexpected_token_in_expr() {
         let input = input_tokens![plus @ Plus];
-        let span: SymSpan<_> = TokenRef::from("plus").into();
+        let span: MockSpan<_> = TokenRef::from("plus").into();
         assert_eq_expr_diagnostics(
             input,
             Message::UnexpectedToken {
@@ -464,13 +464,13 @@ mod tests {
 
     fn assert_eq_expr_diagnostics(
         mut input: InputTokens,
-        expected: CompactDiagnostic<SymSpan<TokenRef>, SymSpan<TokenRef>>,
+        expected: CompactDiagnostic<MockSpan<TokenRef>, MockSpan<TokenRef>>,
     ) {
         let expr_actions = parse_sym_expr(&mut input);
         assert_eq!(expr_actions, [ExprAction::EmitDiagnostic(expected)])
     }
 
-    fn parse_sym_expr(input: &mut InputTokens) -> Vec<ExprAction<SymSpan<TokenRef>>> {
+    fn parse_sym_expr(input: &mut InputTokens) -> Vec<ExprAction<MockSpan<TokenRef>>> {
         let tokens = &mut with_spans(&input.tokens);
         Parser::new(tokens, ExprActionCollector::new(()))
             .parse()
