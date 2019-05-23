@@ -464,10 +464,7 @@ mod tests {
         assert_eq!(parsed_rpn_expr, expected);
     }
 
-    fn assert_eq_expr_diagnostics(
-        mut input: InputTokens,
-        expected: CompactDiag<MockSpan, MockSpan>,
-    ) {
+    fn assert_eq_expr_diagnostics(mut input: InputTokens, expected: CompactDiag<MockSpan>) {
         let expr_actions = parse_sym_expr(&mut input);
         assert_eq!(expr_actions, [ExprAction::EmitDiag(expected)])
     }

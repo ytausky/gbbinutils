@@ -261,12 +261,12 @@ impl<S: Clone> StripSpan<S> for IgnoreDiagnostics<S> {
 
 #[cfg(test)]
 impl<S: Clone> EmitDiag<S, S> for IgnoreDiagnostics<S> {
-    fn emit_diag(&mut self, _: impl Into<CompactDiag<S, S>>) {}
+    fn emit_diag(&mut self, _: impl Into<CompactDiag<S>>) {}
 }
 
 #[cfg(test)]
 pub(crate) struct TestDiagnosticsListener<S> {
-    pub diagnostics: RefCell<Vec<CompactDiag<S, S>>>,
+    pub diagnostics: RefCell<Vec<CompactDiag<S>>>,
 }
 
 #[cfg(test)]
@@ -294,13 +294,13 @@ impl<S: Clone> StripSpan<S> for TestDiagnosticsListener<S> {
 
 #[cfg(test)]
 impl<S> EmitDiag<S, S> for TestDiagnosticsListener<S> {
-    fn emit_diag(&mut self, diag: impl Into<CompactDiag<S, S>>) {
+    fn emit_diag(&mut self, diag: impl Into<CompactDiag<S>>) {
         self.diagnostics.borrow_mut().push(diag.into())
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct CompactDiag<S, R> {
+pub(crate) struct CompactDiag<S, R = S> {
     main: CompactClause<S, R>,
 }
 
@@ -522,11 +522,11 @@ mod mock {
 
     #[derive(Debug, PartialEq)]
     pub(crate) enum DiagnosticsEvent<S> {
-        EmitDiag(CompactDiag<S, S>),
+        EmitDiag(CompactDiag<S>),
     }
 
-    impl<S> From<CompactDiag<S, S>> for DiagnosticsEvent<S> {
-        fn from(diag: CompactDiag<S, S>) -> Self {
+    impl<S> From<CompactDiag<S>> for DiagnosticsEvent<S> {
+        fn from(diag: CompactDiag<S>) -> Self {
             DiagnosticsEvent::EmitDiag(diag)
         }
     }
@@ -554,7 +554,7 @@ mod mock {
         T: From<DiagnosticsEvent<S>>,
         S: Clone,
     {
-        fn emit_diag(&mut self, diag: impl Into<CompactDiag<S, S>>) {
+        fn emit_diag(&mut self, diag: impl Into<CompactDiag<S>>) {
             self.log
                 .borrow_mut()
                 .push(DiagnosticsEvent::EmitDiag(diag.into()).into())
