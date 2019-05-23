@@ -226,7 +226,7 @@ mod tests {
                 relocs: &RelocTable::new(0),
                 location: Value::Unknown,
             },
-            &mut IgnoreDiagnostics::new(),
+            &mut IgnoreDiagnostics,
         )
         .collect()
     }
@@ -251,7 +251,7 @@ mod tests {
             relocs: &RelocTable(vec![addr.into(), 0.into()]),
             location: 0.into(),
         };
-        let translated = program.sections[0].translate(context, &mut IgnoreDiagnostics::new());
+        let translated = program.sections[0].translate(context, &mut IgnoreDiagnostics);
         assert_eq!(translated[0].addr, addr as usize)
     }
 
@@ -276,7 +276,7 @@ mod tests {
             relocs: &RelocTable(vec![0.into(), 2.into()]),
             location: 0.into(),
         };
-        let binary = program.sections[0].translate(context, &mut IgnoreDiagnostics::new());
+        let binary = program.sections[0].translate(context, &mut IgnoreDiagnostics);
         assert_eq!(binary[0].data, [byte, 0x02])
     }
 
@@ -300,7 +300,7 @@ mod tests {
             relocs: &RelocTable(vec![addr.into(), 2.into()]),
             location: 0.into(),
         };
-        let binary = program.sections[0].translate(context, &mut IgnoreDiagnostics::new());
+        let binary = program.sections[0].translate(context, &mut IgnoreDiagnostics);
         assert_eq!(binary[0].data, [0xe3, 0xff])
     }
 }

@@ -196,7 +196,7 @@ mod tests {
             names: NameTable::new(),
             relocs: 4,
         };
-        let binary = object.link(&mut IgnoreDiagnostics::new());
+        let binary = object.link(&mut IgnoreDiagnostics);
         assert_eq!(
             binary.sections[1].addr,
             (origin1 + 1 + skipped_bytes) as usize
@@ -276,7 +276,7 @@ mod tests {
             names: NameTable(vec![Some(NameDef::Section(SectionId(0)))]),
             relocs: 2,
         };
-        let binary = program.link(&mut IgnoreDiagnostics::new());
+        let binary = program.link(&mut IgnoreDiagnostics);
         assert_eq!(binary.sections[0].data, [0x37, 0x13])
     }
 

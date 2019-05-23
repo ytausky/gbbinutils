@@ -11,8 +11,6 @@ use crate::codebase::{BufId, BufRange, TextBuf, TextCache};
 use crate::span::*;
 
 use std::cell::RefCell;
-#[cfg(test)]
-use std::marker::PhantomData;
 use std::ops::Range;
 
 mod message;
@@ -236,22 +234,10 @@ impl<'a> EmitDiag<SpanData, StrippedBufSpan> for OutputForwarder<'a> {
 }
 
 #[cfg(test)]
-pub(crate) struct IgnoreDiagnostics<S>(PhantomData<S>);
+pub(crate) struct IgnoreDiagnostics;
 
 #[cfg(test)]
-impl<S> IgnoreDiagnostics<S> {
-    pub fn new() -> Self {
-        IgnoreDiagnostics(PhantomData)
-    }
-}
-
-#[cfg(test)]
-impl<S: Clone> SpanSource for IgnoreDiagnostics<S> {
-    type Span = S;
-}
-
-#[cfg(test)]
-impl<S: Clone> StripSpan<S> for IgnoreDiagnostics<S> {
+impl<S: Clone> StripSpan<S> for IgnoreDiagnostics {
     type Stripped = S;
 
     fn strip_span(&mut self, span: &S) -> Self::Stripped {
@@ -260,7 +246,7 @@ impl<S: Clone> StripSpan<S> for IgnoreDiagnostics<S> {
 }
 
 #[cfg(test)]
-impl<S: Clone> EmitDiag<S, S> for IgnoreDiagnostics<S> {
+impl<S: Clone> EmitDiag<S, S> for IgnoreDiagnostics {
     fn emit_diag(&mut self, _: impl Into<CompactDiag<S>>) {}
 }
 
@@ -470,6 +456,8 @@ impl ExpandedDiagnosticClause<StrippedBufSpan, BufId, BufRange> {
 #[cfg(test)]
 mod mock {
     use super::*;
+
+    use std::marker::PhantomData;
 
     pub(crate) trait Merge: Sized {
         fn merge(left: impl Into<Self>, right: impl Into<Self>) -> Self;
