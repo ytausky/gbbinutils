@@ -440,10 +440,12 @@ mod tests {
         assert_eq!(span.to_stripped(), stripped)
     }
 
+    type BufSpan<B> = super::BufSpan<B, Range<usize>>;
+
     fn mk_macro_def<B>(
         buf_context: &Rc<BufContextData<B, Range<usize>>>,
         base: usize,
-    ) -> Rc<MacroDef<SpanData<BufSpan<B, Range<usize>>>>> {
+    ) -> Rc<MacroDef<SpanData<BufSpan<B>>>> {
         Rc::new(MacroDef {
             name: SpanData::Buf(BufSpan {
                 range: macro_name_range(base),
