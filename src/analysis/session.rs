@@ -839,6 +839,24 @@ mod tests {
         )
     }
 
+    #[test]
+    fn diagnose_macro_name_in_expr() {
+        let log = RefCell::new(Vec::new());
+        let mut fixture = Fixture::<MockSpan<_>>::new(&log);
+        let mut session = fixture.session();
+        let ident = "my_macro";
+        session.define_macro(
+            (ident.into(), "m".into()),
+            (vec![], vec![]),
+            (vec![], vec![]),
+        );
+        let mut builder = session.build_value();
+        builder.push_op(Ident::from(ident), "ident".into());
+        let (mut session, value) = builder.finish();
+        session.emit_item(Item::Data(value, Width::Byte));
+        assert_eq!(log.into_inner(), [])
+    }
+
     type MockAnalyzer<'a, S> = crate::analysis::semantics::MockAnalyzer<'a, Event<S>>;
     type MockBackend<'a, S> = crate::analysis::backend::MockBackend<'a, Event<S>>;
     type MockDiagnosticsSystem<'a, S> = crate::diag::MockDiagnosticsSystem<'a, Event<S>, S>;
