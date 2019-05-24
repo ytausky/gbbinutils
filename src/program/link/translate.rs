@@ -218,8 +218,8 @@ mod tests {
     }
 
     fn translate_section_item<S: Clone + PartialEq>(item: Node<S>) -> Vec<u8> {
-        use crate::diag::IgnoreDiagnostics;
         use crate::program::link::Value;
+
         item.translate(
             &EvalContext {
                 program: &Program::new(),
