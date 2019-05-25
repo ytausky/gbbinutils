@@ -222,6 +222,8 @@ mod tests {
 
     use crate::model::{Atom, Expr, LocationCounter};
 
+    use std::fmt::Debug;
+
     #[test]
     fn analyze_deref_bc() {
         analyze_deref_ptr_reg(PtrReg::Bc)
@@ -262,17 +264,17 @@ mod tests {
     type OperandResult<S> =
         Result<Operand<Expr<LocationCounter, Ident<String>, S>>, Vec<DiagnosticsEvent<S>>>;
 
-    fn analyze_operand<S: Clone>(
+    fn analyze_operand<S: Clone + Debug>(
         expr: Arg<String, MockSpan<S>>,
         context: Context,
     ) -> OperandResult<MockSpan<S>> {
         use crate::analysis::session::MockBuilder;
-        use std::cell::RefCell;
 
-        let log = RefCell::new(Vec::new());
-        let builder = MockBuilder::with_log(&log);
-        let (_, result) = super::analyze_operand(expr, context, builder);
-        result.map_err(|_| log.into_inner())
+        let mut result = None;
+        let log = crate::log::with_log(|log| {
+            result = Some(super::analyze_operand(expr, context, MockBuilder::with_log(log)).1)
+        });
+        result.unwrap().map_err(|_| log)
     }
 
     #[test]

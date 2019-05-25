@@ -265,28 +265,28 @@ impl Default for TokenSpan {
 mod mock {
     use super::*;
 
-    use std::cell::RefCell;
+    use crate::log::Log;
 
-    pub struct MockAnalyzer<'a, T> {
-        log: &'a RefCell<Vec<T>>,
+    pub struct MockAnalyzer<T> {
+        log: Log<T>,
     }
 
-    impl<'a, T> MockAnalyzer<'a, T> {
-        pub fn new(log: &'a RefCell<Vec<T>>) -> Self {
+    impl<T> MockAnalyzer<T> {
+        pub fn new(log: Log<T>) -> Self {
             Self { log }
         }
     }
 
-    impl<'a, T, D> Analyze<String, D> for MockAnalyzer<'a, T>
+    impl<T, D> Analyze<String, D> for MockAnalyzer<T>
     where
         T: From<AnalyzerEvent<D::Span>>,
         D: DiagnosticsSystem,
     {
-        fn analyze_token_seq<'b, I, C, B, N>(
+        fn analyze_token_seq<'a, I, C, B, N>(
             &mut self,
             tokens: I,
-            downstream: PartialSession<'b, C, B, N, D>,
-        ) -> PartialSession<'b, C, B, N, D>
+            downstream: PartialSession<'a, C, B, N, D>,
+        ) -> PartialSession<'a, C, B, N, D>
         where
             I: IntoIterator<Item = LexItem<String, D::Span>>,
             C: Lex<D, StringRef = String>,
@@ -294,8 +294,7 @@ mod mock {
             N: NameTable<Ident<String>, MacroEntry = MacroEntry<String, D>>,
         {
             self.log
-                .borrow_mut()
-                .push(AnalyzerEvent::AnalyzeTokenSeq(tokens.into_iter().collect()).into());
+                .push(AnalyzerEvent::AnalyzeTokenSeq(tokens.into_iter().collect()));
             downstream
         }
     }
@@ -316,7 +315,7 @@ mod tests {
     use crate::model::{Atom, BinOp, ExprOp, Instruction, Item, Width};
 
     use std::borrow::Borrow;
-    use std::cell::RefCell;
+    use std::fmt::Debug;
 
     #[derive(Debug, PartialEq)]
     pub(crate) enum TestOperation<S: Clone> {
@@ -640,19 +639,17 @@ mod tests {
         )
     }
 
-    pub(super) type MockSession<'a, S> =
-        crate::analysis::session::MockSession<'a, TestOperation<S>, S>;
+    pub(super) type MockSession<S> = crate::analysis::session::MockSession<TestOperation<S>, S>;
 
     pub(super) fn collect_semantic_actions<F, S>(f: F) -> Vec<TestOperation<S>>
     where
-        F: for<'a> FnOnce(TestSemanticActions<'a, S>) -> TestSemanticActions<'a, S>,
-        S: Clone + Merge,
+        F: FnOnce(TestSemanticActions<S>) -> TestSemanticActions<S>,
+        S: Clone + Debug + Merge,
     {
-        let operations = RefCell::new(Vec::new());
-        let session = MockSession::new(&operations);
-        f(SemanticActions::new(session));
-        operations.into_inner()
+        crate::log::with_log(|log| {
+            f(SemanticActions::new(MockSession::new(log)));
+        })
     }
 
-    type TestSemanticActions<'a, S> = SemanticActions<MockSession<'a, S>>;
+    type TestSemanticActions<S> = SemanticActions<MockSession<S>>;
 }

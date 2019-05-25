@@ -347,8 +347,8 @@ mod mock {
 
     use crate::analysis::backend::{BackendEvent, MockSymbolBuilder};
     use crate::diag::{DiagnosticsEvent, MockDiagnostics};
+    use crate::log::Log;
 
-    use std::cell::RefCell;
     use std::marker::PhantomData;
 
     type Expr<S> = crate::model::Expr<LocationCounter, Ident<String>, S>;
@@ -365,17 +365,17 @@ mod mock {
         DefineSymbol((Ident<String>, S), Expr<S>),
     }
 
-    pub(crate) struct MockSession<'a, T, S> {
-        log: &'a RefCell<Vec<T>>,
+    pub(crate) struct MockSession<T, S> {
+        log: Log<T>,
         error: Option<CodebaseError>,
-        diagnostics: MockDiagnostics<'a, T>,
+        diagnostics: MockDiagnostics<T>,
         _span: PhantomData<S>,
     }
 
-    impl<'a, T, S> MockSession<'a, T, S> {
-        pub fn new(log: &'a RefCell<Vec<T>>) -> Self {
+    impl<T, S> MockSession<T, S> {
+        pub fn new(log: Log<T>) -> Self {
             Self {
-                log,
+                log: log.clone(),
                 error: None,
                 diagnostics: MockDiagnostics::new(log),
                 _span: PhantomData,
@@ -388,22 +388,22 @@ mod mock {
     }
 
     delegate_diagnostics! {
-        {'a, T: From<DiagnosticsEvent<S>>, S: Merge},
-        MockSession<'a, T, S>,
+        {T: From<DiagnosticsEvent<S>>, S: Merge},
+        MockSession<T, S>,
         {diagnostics},
-        MockDiagnostics<'a, T>,
+        MockDiagnostics<T>,
         S
     }
 
-    impl<'a, T, S: Clone + Merge> SpanSource for MockSession<'a, T, S> {
+    impl<T, S: Clone + Merge> SpanSource for MockSession<T, S> {
         type Span = S;
     }
 
-    impl<'a, T, S> StringSource for MockSession<'a, T, S> {
+    impl<T, S> StringSource for MockSession<T, S> {
         type StringRef = String;
     }
 
-    impl<'a, T, S> Session for MockSession<'a, T, S>
+    impl<T, S> Session for MockSession<T, S>
     where
         T: From<SessionEvent<S>>,
         T: From<BackendEvent<Expr<S>>>,
@@ -411,9 +411,7 @@ mod mock {
         S: Clone + Merge,
     {
         fn analyze_file(mut self, path: String) -> (Result<(), CodebaseError>, Self) {
-            self.log
-                .borrow_mut()
-                .push(SessionEvent::AnalyzeFile(path).into());
+            self.log.push(SessionEvent::AnalyzeFile(path));
             (self.error.take().map_or(Ok(()), Err), self)
         }
 
@@ -424,8 +422,7 @@ mod mock {
             body: (Vec<SemanticToken<Self::StringRef>>, Vec<Self::Span>),
         ) {
             self.log
-                .borrow_mut()
-                .push(SessionEvent::DefineMacro(name.0, params.0, body.0).into())
+                .push(SessionEvent::DefineMacro(name.0, params.0, body.0))
         }
 
         fn call_macro(
@@ -433,20 +430,17 @@ mod mock {
             name: (Ident<Self::StringRef>, Self::Span),
             args: MacroArgs<Self::StringRef, Self::Span>,
         ) -> Self {
-            self.log.borrow_mut().push(
-                SessionEvent::InvokeMacro(
-                    name.0,
-                    args.into_iter()
-                        .map(|arg| arg.into_iter().map(|(token, _)| token).collect())
-                        .collect(),
-                )
-                .into(),
-            );
+            self.log.push(SessionEvent::InvokeMacro(
+                name.0,
+                args.into_iter()
+                    .map(|arg| arg.into_iter().map(|(token, _)| token).collect())
+                    .collect(),
+            ));
             self
         }
     }
 
-    impl<'a, T, S> BasicSession<String, S> for MockSession<'a, T, S>
+    impl<T, S> BasicSession<String, S> for MockSession<T, S>
     where
         T: From<SessionEvent<S>>,
         T: From<BackendEvent<Expr<S>>>,
@@ -469,8 +463,8 @@ mod mock {
         }
     }
 
-    impl<'a, T, S: Clone> Finish<S> for RelocContext<MockSession<'a, T, S>, Expr<S>> {
-        type Parent = MockSession<'a, T, S>;
+    impl<T, S: Clone> Finish<S> for RelocContext<MockSession<T, S>, Expr<S>> {
+        type Parent = MockSession<T, S>;
         type Value = Expr<S>;
 
         fn finish(self) -> (Self::Parent, Self::Value) {
@@ -478,31 +472,30 @@ mod mock {
         }
     }
 
-    impl<'a, T, S> FinishFnDef for MockSymbolBuilder<MockSession<'a, T, S>, Ident<String>, S>
+    impl<T, S> FinishFnDef for MockSymbolBuilder<MockSession<T, S>, Ident<String>, S>
     where
         T: From<SessionEvent<S>>,
     {
-        type Return = MockSession<'a, T, S>;
+        type Return = MockSession<T, S>;
 
         fn finish_fn_def(self) -> Self::Return {
             let parent = self.parent;
             parent
                 .log
-                .borrow_mut()
-                .push(SessionEvent::DefineSymbol(self.name, self.expr).into());
+                .push(SessionEvent::DefineSymbol(self.name, self.expr));
             parent
         }
     }
 
     delegate_diagnostics! {
-        {'a, T: From<DiagnosticsEvent<S>>, S: Merge},
-        MockSymbolBuilder<MockSession<'a, T, S>, Ident<String>, S>,
+        {T: From<DiagnosticsEvent<S>>, S: Merge},
+        MockSymbolBuilder<MockSession<T, S>, Ident<String>, S>,
         {parent.diagnostics},
-        MockDiagnostics<'a, T>,
+        MockDiagnostics<T>,
         S
     }
 
-    impl<'a, T, S> PushOp<Ident<String>, S> for RelocContext<MockSession<'a, T, S>, Expr<S>>
+    impl<T, S> PushOp<Ident<String>, S> for RelocContext<MockSession<T, S>, Expr<S>>
     where
         T: From<DiagnosticsEvent<S>>,
         S: Clone,
@@ -517,7 +510,7 @@ mod mock {
         }
     }
 
-    impl<'a, T, S> PushOp<Ident<String>, S> for RelocContext<MockDiagnostics<'a, T>, Expr<S>>
+    impl<T, S> PushOp<Ident<String>, S> for RelocContext<MockDiagnostics<T>, Expr<S>>
     where
         T: From<DiagnosticsEvent<S>>,
         S: Clone,
@@ -532,7 +525,7 @@ mod mock {
         }
     }
 
-    impl<'a, T, S> PartialBackend<S> for MockSession<'a, T, S>
+    impl<T, S> PartialBackend<S> for MockSession<T, S>
     where
         T: From<BackendEvent<Expr<S>>>,
         S: Clone + Merge,
@@ -540,40 +533,32 @@ mod mock {
         type Value = Expr<S>;
 
         fn emit_item(&mut self, item: Item<Self::Value>) {
-            self.log
-                .borrow_mut()
-                .push(BackendEvent::EmitItem(item).into())
+            self.log.push(BackendEvent::EmitItem(item))
         }
 
         fn reserve(&mut self, bytes: Self::Value) {
-            self.log
-                .borrow_mut()
-                .push(BackendEvent::Reserve(bytes).into())
+            self.log.push(BackendEvent::Reserve(bytes))
         }
 
         fn set_origin(&mut self, origin: Self::Value) {
-            self.log
-                .borrow_mut()
-                .push(BackendEvent::SetOrigin(origin).into())
+            self.log.push(BackendEvent::SetOrigin(origin))
         }
     }
 
-    impl<'a, T, S> StartSection<Ident<String>, S> for MockSession<'a, T, S>
+    impl<T, S> StartSection<Ident<String>, S> for MockSession<T, S>
     where
         T: From<BackendEvent<Expr<S>>>,
         S: Clone + Merge,
     {
         fn start_section(&mut self, name: (Ident<String>, S)) {
-            self.log
-                .borrow_mut()
-                .push(BackendEvent::StartSection((0, name.1)).into())
+            self.log.push(BackendEvent::StartSection((0, name.1)))
         }
     }
 
-    pub(crate) type MockBuilder<'a, T, S> = RelocContext<MockDiagnostics<'a, T>, Expr<S>>;
+    pub(crate) type MockBuilder<T, S> = RelocContext<MockDiagnostics<T>, Expr<S>>;
 
-    impl<'a, T, S> MockBuilder<'a, T, S> {
-        pub fn with_log(log: &'a RefCell<Vec<T>>) -> Self {
+    impl<T, S> MockBuilder<T, S> {
+        pub fn with_log(log: Log<T>) -> Self {
             Self {
                 parent: MockDiagnostics::new(log),
                 builder: Default::default(),
@@ -581,8 +566,8 @@ mod mock {
         }
     }
 
-    impl<'a, T, S: Clone> Finish<S> for MockBuilder<'a, T, S> {
-        type Parent = MockDiagnostics<'a, T>;
+    impl<T, S: Clone> Finish<S> for MockBuilder<T, S> {
+        type Parent = MockDiagnostics<T>;
         type Value = Expr<S>;
 
         fn finish(self) -> (Self::Parent, Self::Value) {
@@ -601,9 +586,10 @@ mod tests {
     use crate::analysis::syntax::{Command, Directive, Mnemonic, Token};
     use crate::analysis::{Literal, MockCodebase};
     use crate::diag::DiagnosticsEvent;
+    use crate::log::*;
     use crate::model::{Atom, BinOp, Instruction, Nullary, Width};
 
-    use std::cell::RefCell;
+    use std::fmt::Debug;
     use std::iter;
 
     type Expr<S> = crate::model::Expr<LocationCounter, usize, S>;
@@ -611,24 +597,21 @@ mod tests {
     #[test]
     fn emit_instruction_item() {
         let item = Item::Instruction(Instruction::Nullary(Nullary::Nop));
-        let log = RefCell::new(Vec::new());
-        let mut fixture = Fixture::<()>::new(&log);
-        let mut session = fixture.session();
-        session.emit_item(item.clone());
-        assert_eq!(log.into_inner(), [BackendEvent::EmitItem(item).into()]);
+        let log =
+            Fixture::<()>::default().log_session(|mut session| session.emit_item(item.clone()));
+        assert_eq!(log, [BackendEvent::EmitItem(item).into()]);
     }
 
     #[test]
     fn define_label() {
         let label = "label";
-        let log = RefCell::new(Vec::new());
-        let mut fixture = Fixture::new(&log);
-        let session = fixture.session();
-        let mut builder = session.define_symbol(label.into(), ());
-        builder.push_op(LocationCounter, ());
-        builder.finish_fn_def();
+        let log = Fixture::default().log_session(|session| {
+            let mut builder = session.define_symbol(label.into(), ());
+            builder.push_op(LocationCounter, ());
+            builder.finish_fn_def();
+        });
         assert_eq!(
-            log.into_inner(),
+            log,
             [
                 NameTableEvent::StartScope(label.into()).into(),
                 BackendEvent::DefineSymbol((0, ()), LocationCounter.into()).into()
@@ -639,31 +622,25 @@ mod tests {
     #[test]
     fn start_section() {
         let name: Ident<_> = "my_section".into();
-        let log = RefCell::new(Vec::new());
-        let mut fixture = Fixture::new(&log);
-        let mut session = fixture.session();
-        session.start_section((name.clone(), ()));
-        assert_eq!(
-            log.into_inner(),
-            [BackendEvent::StartSection((0, ())).into()]
-        )
+        let log =
+            Fixture::default().log_session(|mut session| session.start_section((name.clone(), ())));
+        assert_eq!(log, [BackendEvent::StartSection((0, ())).into()])
     }
 
     #[test]
     fn look_up_section_name_after_definition() {
         let ident: Ident<_> = "my_section".into();
-        let log = RefCell::new(Vec::new());
-        let mut fixture = Fixture::new(&log);
-        let mut session = fixture.session();
-        session.start_section((ident.clone(), ()));
-        let mut builder = session.build_value();
-        builder.push_op(ident, ());
-        let (s, value) = Finish::finish(builder);
-        let item = Item::Data(value, Width::Word);
-        session = s;
-        session.emit_item(item);
+        let log = Fixture::default().log_session(|mut session| {
+            session.start_section((ident.clone(), ()));
+            let mut builder = session.build_value();
+            builder.push_op(ident, ());
+            let (s, value) = Finish::finish(builder);
+            let item = Item::Data(value, Width::Word);
+            session = s;
+            session.emit_item(item)
+        });
         assert_eq!(
-            log.into_inner(),
+            log,
             [
                 BackendEvent::StartSection((0, ())).into(),
                 BackendEvent::EmitItem(Item::Data(Atom::Name(0).into(), Width::Word)).into()
@@ -675,15 +652,9 @@ mod tests {
     fn include_source_file() {
         let path = "my_file.s";
         let tokens = vec![(Ok(Token::Command(Command::Mnemonic(Mnemonic::Nop))), ())];
-        let log = RefCell::new(Vec::new());
-        let mut fixture = Fixture::new(&log);
-        fixture.codebase.set_file(path, tokens.clone());
-        let session = fixture.session();
-        session.analyze_file(path.into()).0.unwrap();
-        assert_eq!(
-            log.into_inner(),
-            [AnalyzerEvent::AnalyzeTokenSeq(tokens).into()]
-        );
+        let log = Fixture::new(|fixture| fixture.codebase.set_file(path, tokens.clone()))
+            .log_session(|session| session.analyze_file(path.into()).0.unwrap());
+        assert_eq!(log, [AnalyzerEvent::AnalyzeTokenSeq(tokens).into()]);
     }
 
     #[test]
@@ -691,17 +662,16 @@ mod tests {
         let name = "my_macro";
         let tokens = vec![Token::Command(Command::Mnemonic(Mnemonic::Nop))];
         let spans: Vec<_> = iter::repeat(()).take(tokens.len()).collect();
-        let log = RefCell::new(Vec::new());
-        let mut fixture = Fixture::new(&log);
-        let mut session = fixture.session();
-        session.define_macro(
-            (name.into(), ()),
-            (vec![], vec![]),
-            (tokens.clone(), spans.clone()),
-        );
-        session.call_macro((name.into(), ()), vec![]);
+        let log = Fixture::default().log_session(|mut session| {
+            session.define_macro(
+                (name.into(), ()),
+                (vec![], vec![]),
+                (tokens.clone(), spans.clone()),
+            );
+            session.call_macro((name.into(), ()), vec![]);
+        });
         assert_eq!(
-            log.into_inner(),
+            log,
             [AnalyzerEvent::AnalyzeTokenSeq(
                 tokens.into_iter().map(|token| (Ok(token), ())).collect()
             )
@@ -714,22 +684,21 @@ mod tests {
         let db = Token::Command(Command::Directive(Directive::Db));
         let arg = Token::Literal(Literal::Number(0x42));
         let literal0 = Token::Literal(Literal::Number(0));
-        let log = RefCell::new(Vec::new());
-        let mut fixture = Fixture::new(&log);
-        let mut session = fixture.session();
         let name = "my_db";
         let param = "x";
-        session.define_macro(
-            (name.into(), ()),
-            (vec![param.into()], vec![()]),
-            (
-                vec![db.clone(), Token::Ident(param.into()), literal0.clone()],
-                vec![(), (), ()],
-            ),
-        );
-        session.call_macro((name.into(), ()), vec![vec![(arg.clone(), ())]]);
+        let log = Fixture::default().log_session(|mut session| {
+            session.define_macro(
+                (name.into(), ()),
+                (vec![param.into()], vec![()]),
+                (
+                    vec![db.clone(), Token::Ident(param.into()), literal0.clone()],
+                    vec![(), (), ()],
+                ),
+            );
+            session.call_macro((name.into(), ()), vec![vec![(arg.clone(), ())]]);
+        });
         assert_eq!(
-            log.into_inner(),
+            log,
             [AnalyzerEvent::AnalyzeTokenSeq(
                 vec![db, arg, literal0]
                     .into_iter()
@@ -744,22 +713,21 @@ mod tests {
     fn define_and_call_macro_with_label() {
         let nop = Token::Command(Command::Mnemonic(Mnemonic::Nop));
         let label = "label";
-        let log = RefCell::new(Vec::new());
-        let mut fixture = Fixture::new(&log);
-        let mut session = fixture.session();
         let name = "my_macro";
         let param = "x";
-        session.define_macro(
-            (name.into(), ()),
-            (vec![param.into()], vec![()]),
-            (vec![Token::Label(param.into()), nop.clone()], vec![(), ()]),
-        );
-        session.call_macro(
-            (name.into(), ()),
-            vec![vec![(Token::Ident(label.into()), ())]],
-        );
+        let log = Fixture::default().log_session(|mut session| {
+            session.define_macro(
+                (name.into(), ()),
+                (vec![param.into()], vec![()]),
+                (vec![Token::Label(param.into()), nop.clone()], vec![(), ()]),
+            );
+            session.call_macro(
+                (name.into(), ()),
+                vec![vec![(Token::Ident(label.into()), ())]],
+            );
+        });
         assert_eq!(
-            log.into_inner(),
+            log,
             [AnalyzerEvent::AnalyzeTokenSeq(
                 vec![Token::Label(label.into()), nop]
                     .into_iter()
@@ -773,26 +741,19 @@ mod tests {
     #[test]
     fn reserve_bytes() {
         let bytes = 10;
-        let log = RefCell::new(Vec::new());
-        let mut fixture = Fixture::new(&log);
-        let mut session = fixture.session();
-        session.reserve(bytes.into());
-        assert_eq!(
-            log.into_inner(),
-            [BackendEvent::Reserve(bytes.into()).into()]
-        )
+        let log = Fixture::default().log_session(|mut session| session.reserve(bytes.into()));
+        assert_eq!(log, [BackendEvent::Reserve(bytes.into()).into()])
     }
 
     #[test]
     fn diagnose_undefined_macro() {
         let name = "my_macro";
         let span = name;
-        let log = RefCell::new(Vec::new());
-        let mut fixture = Fixture::<MockSpan<_>>::new(&log);
-        let session = fixture.session();
-        session.call_macro((name.into(), span.into()), vec![]);
+        let log = Fixture::<MockSpan<_>>::default().log_session(|session| {
+            session.call_macro((name.into(), span.into()), vec![]);
+        });
         assert_eq!(
-            log.into_inner(),
+            log,
             [DiagnosticsEvent::EmitDiag(
                 Message::UndefinedMacro { name: span.into() }
                     .at(span.into())
@@ -810,69 +771,66 @@ mod tests {
 
     #[test]
     fn build_value_from_number() {
-        let log = RefCell::new(Vec::new());
-        let mut fixture = Fixture::new(&log);
-        let session = fixture.session();
-        let mut builder = session.build_value();
-        builder.push_op(42, ());
-        let (_, value) = builder.finish();
-        assert_eq!(value, 42.into())
+        Fixture::default().log_session(|session| {
+            let mut builder = session.build_value();
+            builder.push_op(42, ());
+            let (_, value) = builder.finish();
+            assert_eq!(value, 42.into())
+        });
     }
 
     #[test]
     fn apply_operator_on_two_values() {
-        let log = RefCell::new(Vec::new());
-        let mut fixture = Fixture::new(&log);
-        let session = fixture.session();
-        let mut builder = session.build_value();
-        builder.push_op(42, ());
-        builder.push_op(Ident::from("ident"), ());
-        builder.push_op(BinOp::Multiplication, ());
-        let (_, value) = builder.finish();
-        assert_eq!(
-            value,
-            Expr::from_items(&[
-                42.into(),
-                Atom::Name(0).into(),
-                BinOp::Multiplication.into()
-            ])
-        )
+        Fixture::default().log_session(|session| {
+            let mut builder = session.build_value();
+            builder.push_op(42, ());
+            builder.push_op(Ident::from("ident"), ());
+            builder.push_op(BinOp::Multiplication, ());
+            let (_, value) = builder.finish();
+            assert_eq!(
+                value,
+                Expr::from_items(&[
+                    42.into(),
+                    Atom::Name(0).into(),
+                    BinOp::Multiplication.into()
+                ])
+            )
+        });
     }
 
     #[test]
+    #[ignore]
     fn diagnose_macro_name_in_expr() {
-        let log = RefCell::new(Vec::new());
-        let mut fixture = Fixture::<MockSpan<_>>::new(&log);
-        let mut session = fixture.session();
         let ident = "my_macro";
-        session.define_macro(
-            (ident.into(), "m".into()),
-            (vec![], vec![]),
-            (vec![], vec![]),
-        );
-        let mut builder = session.build_value();
-        builder.push_op(Ident::from(ident), "ident".into());
-        let (mut session, value) = builder.finish();
-        session.emit_item(Item::Data(value, Width::Byte));
-        assert_eq!(log.into_inner(), [])
+        let log = Fixture::<MockSpan<_>>::default().log_session(|mut session| {
+            session.define_macro(
+                (ident.into(), "m".into()),
+                (vec![], vec![]),
+                (vec![], vec![]),
+            );
+            let mut builder = session.build_value();
+            builder.push_op(Ident::from(ident), "ident".into());
+            let (mut session, value) = builder.finish();
+            session.emit_item(Item::Data(value, Width::Byte))
+        });
+        assert_eq!(log, [])
     }
 
-    type MockAnalyzer<'a, S> = crate::analysis::semantics::MockAnalyzer<'a, Event<S>>;
-    type MockBackend<'a, S> = crate::analysis::backend::MockBackend<'a, Event<S>>;
-    type MockDiagnosticsSystem<'a, S> = crate::diag::MockDiagnosticsSystem<'a, Event<S>, S>;
-    type MockNameTable<'a, S> = crate::analysis::resolve::MockNameTable<
-        'a,
-        BasicNameTable<usize, MacroEntry<String, MockDiagnosticsSystem<'a, S>>>,
+    type MockAnalyzer<S> = crate::analysis::semantics::MockAnalyzer<Event<S>>;
+    type MockBackend<S> = crate::analysis::backend::MockBackend<Event<S>>;
+    type MockDiagnosticsSystem<S> = crate::diag::MockDiagnosticsSystem<Event<S>, S>;
+    type MockNameTable<S> = crate::analysis::resolve::MockNameTable<
+        BasicNameTable<usize, MacroEntry<String, MockDiagnosticsSystem<S>>>,
         Event<S>,
     >;
-    type TestSession<'a, 'b, S> = CompositeSession<
-        'b,
-        'b,
+    type TestSession<'a, S> = CompositeSession<
+        'a,
+        'a,
         MockCodebase<S>,
-        MockAnalyzer<'a, S>,
-        MockBackend<'a, S>,
-        MockNameTable<'a, S>,
-        MockDiagnosticsSystem<'a, S>,
+        MockAnalyzer<S>,
+        MockBackend<S>,
+        MockNameTable<S>,
+        MockDiagnosticsSystem<S>,
     >;
 
     #[derive(Debug, PartialEq)]
@@ -907,33 +865,55 @@ mod tests {
         }
     }
 
-    struct Fixture<'a, S: Clone + Default + Merge> {
-        codebase: MockCodebase<S>,
-        analyzer: MockAnalyzer<'a, S>,
-        backend: Option<MockBackend<'a, S>>,
-        names: MockNameTable<'a, S>,
-        diagnostics: MockDiagnosticsSystem<'a, S>,
+    struct Fixture<S: Clone + Default + Merge> {
+        inner: InnerFixture<S>,
+        log: Log<Event<S>>,
     }
 
-    impl<'a, S: Clone + Default + Merge> Fixture<'a, S> {
-        fn new(log: &'a RefCell<Vec<Event<S>>>) -> Self {
-            Self {
-                codebase: MockCodebase::new(),
-                analyzer: MockAnalyzer::new(log),
-                backend: Some(MockBackend::new(log)),
-                names: MockNameTable::new(BasicNameTable::new(), log),
-                diagnostics: MockDiagnosticsSystem::new(log),
-            }
+    struct InnerFixture<S: Clone + Default + Merge> {
+        codebase: MockCodebase<S>,
+        analyzer: MockAnalyzer<S>,
+        backend: Option<MockBackend<S>>,
+        names: MockNameTable<S>,
+        diagnostics: MockDiagnosticsSystem<S>,
+    }
+
+    impl<S: Clone + Default + Merge> Fixture<S> {
+        fn new(f: impl FnOnce(&mut InnerFixture<S>)) -> Self {
+            let log = Log::new();
+            let mut fixture = Self {
+                inner: InnerFixture {
+                    codebase: MockCodebase::new(),
+                    analyzer: MockAnalyzer::new(log.clone()),
+                    backend: Some(MockBackend::new(log.clone())),
+                    names: MockNameTable::new(BasicNameTable::new(), log.clone()),
+                    diagnostics: MockDiagnosticsSystem::new(log.clone()),
+                },
+                log,
+            };
+            f(&mut fixture.inner);
+            fixture
         }
 
-        fn session<'b>(&'b mut self) -> TestSession<'a, 'b, S> {
-            CompositeSession::new(
-                &mut self.codebase,
-                &mut self.analyzer,
-                self.backend.take().unwrap(),
-                &mut self.names,
-                &mut self.diagnostics,
-            )
+        fn log_session(mut self, f: impl FnOnce(TestSession<S>)) -> Vec<Event<S>>
+        where
+            Event<S>: Debug,
+        {
+            f(CompositeSession::new(
+                &mut self.inner.codebase,
+                &mut self.inner.analyzer,
+                self.inner.backend.take().unwrap(),
+                &mut self.inner.names,
+                &mut self.inner.diagnostics,
+            ));
+            drop(self.inner);
+            self.log.into_inner()
+        }
+    }
+
+    impl<S: Clone + Default + Merge> Default for Fixture<S> {
+        fn default() -> Self {
+            Self::new(|_| {})
         }
     }
 }

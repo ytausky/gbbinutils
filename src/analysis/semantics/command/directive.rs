@@ -149,10 +149,10 @@ mod tests {
     use crate::analysis::syntax::*;
     use crate::analysis::Ident;
     use crate::codebase::CodebaseError;
+    use crate::log::with_log;
     use crate::model::{Atom, ParamId};
 
     use std::borrow::Borrow;
-    use std::cell::RefCell;
     use std::io;
 
     #[test]
@@ -281,19 +281,18 @@ mod tests {
     #[test]
     fn include_file_with_invalid_utf8() {
         let name = "invalid_utf8.s";
-        let operations = RefCell::new(Vec::new());
-        let mut session = MockSession::new(&operations);
-        session.fail(CodebaseError::Utf8Error);
-        {
+        let log = with_log(|log| {
+            let mut session = MockSession::new(log);
+            session.fail(CodebaseError::Utf8Error);
             let mut context = SemanticActions::new(session)
                 .enter_unlabeled_stmt()
                 .enter_command((Command::Directive(Directive::Include), ()))
                 .add_argument();
             context.push_atom((ExprAtom::Literal(Literal::String(name.into())), ()));
-            context.exit().exit().exit();
-        }
+            drop(context.exit().exit().exit())
+        });
         assert_eq!(
-            operations.into_inner(),
+            log,
             [
                 SessionEvent::AnalyzeFile(name.into()).into(),
                 DiagnosticsEvent::EmitDiag(Message::InvalidUtf8.at(()).into()).into()
@@ -305,22 +304,21 @@ mod tests {
     fn include_nonexistent_file() {
         let name = "nonexistent.s";
         let message = "some message";
-        let operations = RefCell::new(Vec::new());
-        let mut session = MockSession::new(&operations);
-        session.fail(CodebaseError::IoError(io::Error::new(
-            io::ErrorKind::NotFound,
-            message,
-        )));
-        {
+        let log = with_log(|log| {
+            let mut session = MockSession::new(log);
+            session.fail(CodebaseError::IoError(io::Error::new(
+                io::ErrorKind::NotFound,
+                message,
+            )));
             let mut context = SemanticActions::new(session)
                 .enter_unlabeled_stmt()
                 .enter_command((Command::Directive(Directive::Include), ()))
                 .add_argument();
             context.push_atom((ExprAtom::Literal(Literal::String(name.into())), ()));
-            context.exit().exit().exit();
-        }
+            drop(context.exit().exit().exit())
+        });
         assert_eq!(
-            operations.into_inner(),
+            log,
             [
                 SessionEvent::AnalyzeFile(name.into()).into(),
                 DiagnosticsEvent::EmitDiag(
@@ -382,15 +380,15 @@ mod tests {
         assert_eq!(actions, [BackendEvent::StartSection((0, ())).into()])
     }
 
-    fn ds(f: impl for<'a> FnOnce(&mut TestExprContext<'a, ()>)) -> Vec<TestOperation<()>> {
+    fn ds(f: impl FnOnce(&mut TestExprContext<()>)) -> Vec<TestOperation<()>> {
         unary_directive(Directive::Ds, f)
     }
 
-    type TestExprContext<'a, S> = command::ExprBuilder<String, (), TestCommandActions<'a, S>>;
+    type TestExprContext<S> = command::ExprBuilder<String, (), TestCommandActions<S>>;
 
     fn unary_directive<F>(directive: Directive, f: F) -> Vec<TestOperation<()>>
     where
-        F: for<'a> FnOnce(&mut TestExprContext<'a, ()>),
+        F: FnOnce(&mut TestExprContext<()>),
     {
         with_directive(directive, |command| {
             let mut arg = command.add_argument();
@@ -415,11 +413,11 @@ mod tests {
         )
     }
 
-    type TestCommandActions<'a, S> = command::CommandActions<MockSession<'a, S>>;
+    type TestCommandActions<S> = command::CommandActions<MockSession<S>>;
 
     fn with_directive<F>(directive: Directive, f: F) -> Vec<TestOperation<()>>
     where
-        F: for<'a> FnOnce(TestCommandActions<'a, ()>) -> TestCommandActions<'a, ()>,
+        F: FnOnce(TestCommandActions<()>) -> TestCommandActions<()>,
     {
         collect_semantic_actions(|actions| {
             let command = actions
@@ -431,7 +429,7 @@ mod tests {
 
     fn with_labeled_directive<F>(label: &str, directive: Directive, f: F) -> Vec<TestOperation<()>>
     where
-        F: for<'a> FnOnce(&mut TestExprContext<'a, ()>),
+        F: FnOnce(&mut TestExprContext<()>),
     {
         collect_semantic_actions(|actions| {
             let mut arg = actions

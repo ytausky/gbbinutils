@@ -154,20 +154,20 @@ impl<M, S> StartScope<Ident<String>> for BiLevelNameTable<M, S> {
 mod mock {
     use super::*;
 
-    use std::cell::RefCell;
+    use crate::log::Log;
 
-    pub struct MockNameTable<'a, N, T> {
+    pub struct MockNameTable<N, T> {
         names: N,
-        log: &'a RefCell<Vec<T>>,
+        log: Log<T>,
     }
 
-    impl<'a, N, T> MockNameTable<'a, N, T> {
-        pub fn new(names: N, log: &'a RefCell<Vec<T>>) -> Self {
+    impl<N, T> MockNameTable<N, T> {
+        pub fn new(names: N, log: Log<T>) -> Self {
             Self { names, log }
         }
     }
 
-    impl<'a, N: NameTable<Ident<String>>, T> NameTable<Ident<String>> for MockNameTable<'a, N, T> {
+    impl<N: NameTable<Ident<String>>, T> NameTable<Ident<String>> for MockNameTable<N, T> {
         type BackendEntry = N::BackendEntry;
         type MacroEntry = N::MacroEntry;
 
@@ -187,11 +187,9 @@ mod mock {
         }
     }
 
-    impl<'a, N, T: From<NameTableEvent>> StartScope<Ident<String>> for MockNameTable<'a, N, T> {
+    impl<N, T: From<NameTableEvent>> StartScope<Ident<String>> for MockNameTable<N, T> {
         fn start_scope(&mut self, ident: &Ident<String>) {
-            self.log
-                .borrow_mut()
-                .push(NameTableEvent::StartScope(ident.clone()).into())
+            self.log.push(NameTableEvent::StartScope(ident.clone()))
         }
     }
 

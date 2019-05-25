@@ -835,19 +835,24 @@ mod tests {
         use crate::analysis::semantics::command::operand::analyze_operand;
         use crate::analysis::session::{MockBuilder, MockSession};
 
-        use std::cell::RefCell;
-
-        let log = RefCell::new(Vec::new());
-        let mut session = MockSession::new(&log);
-        let operands: Vec<_> = operands
-            .into_iter()
-            .enumerate()
-            .map(add_token_spans)
-            .map(|op| analyze_operand(op, mnemonic.context(), MockBuilder::with_log(&log)).1)
-            .collect();
-        let result =
-            analyze_instruction((mnemonic, TokenId::Mnemonic.into()), operands, &mut session);
-        AnalysisResult(result.map_err(|_| log.into_inner()))
+        let mut result = None;
+        let log = crate::log::with_log(|log| {
+            let operands: Vec<_> = operands
+                .into_iter()
+                .enumerate()
+                .map(add_token_spans)
+                .map(|op| {
+                    analyze_operand(op, mnemonic.context(), MockBuilder::with_log(log.clone())).1
+                })
+                .collect();
+            let mut session = MockSession::new(log);
+            result = Some(analyze_instruction(
+                (mnemonic, TokenId::Mnemonic.into()),
+                operands,
+                &mut session,
+            ));
+        });
+        AnalysisResult(result.unwrap().map_err(|_| log))
     }
 
     fn add_token_spans((i, operand): (usize, Input)) -> Arg<String, TokenSpan> {
