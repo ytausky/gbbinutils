@@ -55,7 +55,7 @@ pub(super) type Params<R, S> = (Vec<Ident<R>>, Vec<S>);
 
 pub(super) struct CompositeSession<'a, 'b, C, A, B, N, D> {
     upstream: Upstream<'a, 'b, C, A>,
-    downstream: Downstream<'a, B, N, D>,
+    downstream: Downstream<B, &'a mut N, Wrapper<'a, D>>,
 }
 
 pub(super) struct Upstream<'a, 'b, C, A> {
@@ -63,11 +63,13 @@ pub(super) struct Upstream<'a, 'b, C, A> {
     analyzer: &'b mut A,
 }
 
-pub(super) struct Downstream<'a, B, N, D> {
+pub(super) struct Downstream<B, N, D> {
     backend: B,
-    names: &'a mut N,
-    diagnostics: &'a mut D,
+    names: N,
+    diagnostics: D,
 }
+
+pub(super) struct Wrapper<'a, D>(&'a mut D);
 
 impl<'a, 'b, C, A, B, N, D> CompositeSession<'a, 'b, C, A, B, N, D> {
     pub fn new(
@@ -82,13 +84,13 @@ impl<'a, 'b, C, A, B, N, D> CompositeSession<'a, 'b, C, A, B, N, D> {
             downstream: Downstream {
                 backend,
                 names,
-                diagnostics,
+                diagnostics: Wrapper(diagnostics),
             },
         }
     }
 }
 
-impl<'a, B, N, D> Downstream<'a, B, N, D> {
+impl<'a, B, N, D> Downstream<B, &'a mut N, Wrapper<'a, D>> {
     fn look_up_symbol<R, S>(&mut self, ident: Ident<R>, span: &S) -> B::Name
     where
         B: AllocName<S>,
@@ -100,6 +102,7 @@ impl<'a, B, N, D> Downstream<'a, B, N, D> {
             Some(Name::Backend(id)) => id.clone(),
             Some(Name::Macro(_)) => {
                 self.diagnostics
+                    .0
                     .emit_diag(Message::MacroNameInExpr.at(span.clone()));
                 self.backend.alloc_name(span.clone())
             }
@@ -111,7 +114,10 @@ impl<'a, B, N, D> Downstream<'a, B, N, D> {
         }
     }
 
-    fn replace_backend<T>(self, f: impl FnOnce(B) -> T) -> Downstream<'a, T, N, D> {
+    fn replace_backend<T>(
+        self,
+        f: impl FnOnce(B) -> T,
+    ) -> Downstream<T, &'a mut N, Wrapper<'a, D>> {
         Downstream {
             backend: f(self.backend),
             names: self.names,
@@ -122,7 +128,7 @@ impl<'a, B, N, D> Downstream<'a, B, N, D> {
 
 pub(super) struct PartialSession<'a, C, B, N, D> {
     codebase: &'a mut C,
-    downstream: Downstream<'a, B, N, D>,
+    downstream: Downstream<B, &'a mut N, Wrapper<'a, D>>,
 }
 
 macro_rules! partial {
@@ -132,7 +138,7 @@ macro_rules! partial {
             downstream: Downstream {
                 backend: $session.downstream.backend,
                 names: $session.downstream.names,
-                diagnostics: $session.downstream.diagnostics,
+                diagnostics: Wrapper(&mut *$session.downstream.diagnostics.0),
             },
         }
     };
@@ -191,7 +197,7 @@ where
 
 macro_rules! impl_push_op_for_downstream {
     ($t:ty) => {
-        impl<'a, B, N, D, S> PushOp<$t, S> for Downstream<'a, B, N, D>
+        impl<B, N, D, S> PushOp<$t, S> for Downstream<B, N, D>
         where
             B: PushOp<$t, S>,
             S: Clone,
@@ -210,7 +216,7 @@ impl_push_op_for_downstream! {ParamId}
 impl_push_op_for_downstream! {FnCall}
 
 impl<'a, 'b, C, A, B, N, D, R, S> PushOp<Ident<R>, S>
-    for RelocContext<Upstream<'a, 'b, C, A>, Downstream<'a, B, N, D>>
+    for RelocContext<Upstream<'a, 'b, C, A>, Downstream<B, &'a mut N, Wrapper<'a, D>>>
 where
     B: AllocName<S> + PushOp<<B as AllocName<S>>::Name, S>,
     N: NameTable<Ident<R>, BackendEntry = B::Name>,
@@ -224,7 +230,7 @@ where
 }
 
 impl<'a, 'b, C, A, B, N, D, S> Finish<S>
-    for RelocContext<Upstream<'a, 'b, C, A>, Downstream<'a, B, N, D>>
+    for RelocContext<Upstream<'a, 'b, C, A>, Downstream<B, &'a mut N, Wrapper<'a, D>>>
 where
     B: Finish<S>,
     S: Clone,
@@ -247,7 +253,7 @@ where
 }
 
 impl<'a, 'b, C, A, B, N, D> FinishFnDef
-    for RelocContext<Upstream<'a, 'b, C, A>, Downstream<'a, B, N, D>>
+    for RelocContext<Upstream<'a, 'b, C, A>, Downstream<B, &'a mut N, Wrapper<'a, D>>>
 where
     B: FinishFnDef,
 {
@@ -262,9 +268,17 @@ where
 }
 
 delegate_diagnostics! {
-    {'a, P, B, N, D: Diagnostics<S>, S},
-    RelocContext<P, Downstream<'a, B, N, D>>,
+    {P, B, N, D: Diagnostics<S>, S},
+    RelocContext<P, Downstream<B, N, D>>,
     {builder.diagnostics},
+    D,
+    S
+}
+
+delegate_diagnostics! {
+    {'a, D: Diagnostics<S>, S},
+    Wrapper<'a, D>,
+    {0},
     D,
     S
 }
@@ -285,7 +299,7 @@ where
         let tokens = match self
             .upstream
             .codebase
-            .lex_file(path, self.downstream.diagnostics)
+            .lex_file(path, &mut *self.downstream.diagnostics.0)
         {
             Ok(tokens) => tokens,
             Err(error) => return (Err(error), self),
@@ -309,7 +323,7 @@ where
     ) {
         self.downstream
             .names
-            .define_macro(name, params, body, self.downstream.diagnostics)
+            .define_macro(name, params, body, self.downstream.diagnostics.0)
     }
 
     fn call_macro(
@@ -319,13 +333,14 @@ where
     ) -> Self {
         let expansion = match self.downstream.names.get(&name.0) {
             Some(Name::Macro(entry)) => {
-                Some(entry.expand(name.1, args, self.downstream.diagnostics))
+                Some(entry.expand(name.1, args, self.downstream.diagnostics.0))
             }
             Some(_) => unimplemented!(),
             None => {
-                let stripped = self.downstream.diagnostics.strip_span(&name.1);
+                let stripped = self.downstream.diagnostics.0.strip_span(&name.1);
                 self.downstream
                     .diagnostics
+                    .0
                     .emit_diag(Message::UndefinedMacro { name: stripped }.at(name.1));
                 None
             }
@@ -351,9 +366,14 @@ where
     D: Diagnostics<S>,
     S: Clone,
 {
-    type FnBuilder = RelocContext<Upstream<'a, 'b, C, A>, Downstream<'a, B::SymbolBuilder, N, D>>;
-    type GeneralBuilder =
-        RelocContext<Upstream<'a, 'b, C, A>, Downstream<'a, B::ImmediateBuilder, N, D>>;
+    type FnBuilder = RelocContext<
+        Upstream<'a, 'b, C, A>,
+        Downstream<B::SymbolBuilder, &'a mut N, Wrapper<'a, D>>,
+    >;
+    type GeneralBuilder = RelocContext<
+        Upstream<'a, 'b, C, A>,
+        Downstream<B::ImmediateBuilder, &'a mut N, Wrapper<'a, D>>,
+    >;
 
     fn build_value(self) -> Self::GeneralBuilder {
         RelocContext {
@@ -420,7 +440,7 @@ mod mock {
         DefineSymbol((Ident<String>, S), Expr<S>),
     }
 
-    pub(crate) struct MockSession<T, S> {
+    pub(in crate::analysis) struct MockSession<T, S> {
         log: Log<T>,
         error: Option<CodebaseError>,
         diagnostics: MockDiagnostics<T>,
@@ -503,13 +523,14 @@ mod mock {
         S: Clone + Merge,
     {
         type FnBuilder = MockSymbolBuilder<Self, Ident<String>, S>;
-        type GeneralBuilder = RelocContext<(), MockDownstream<Expr<S>, Self>>;
+        type GeneralBuilder = RelocContext<(), Downstream<Expr<S>, (), Self>>;
 
         fn build_value(self) -> Self::GeneralBuilder {
             RelocContext {
                 parent: (),
-                builder: MockDownstream {
+                builder: Downstream {
                     backend: Default::default(),
+                    names: (),
                     diagnostics: self,
                 },
             }
@@ -524,40 +545,7 @@ mod mock {
         }
     }
 
-    pub(crate) struct MockDownstream<B, D> {
-        backend: B,
-        diagnostics: D,
-    }
-
-    macro_rules! impl_push_op_for_mock_downstream {
-        ($t:ty) => {
-            impl<B, D, S> PushOp<$t, S> for MockDownstream<B, D>
-            where
-                B: PushOp<$t, S>,
-                S: Clone,
-            {
-                fn push_op(&mut self, op: $t, span: S) {
-                    self.backend.push_op(op, span)
-                }
-            }
-        };
-    }
-
-    impl_push_op_for_mock_downstream! {LocationCounter}
-    impl_push_op_for_mock_downstream! {i32}
-    impl_push_op_for_mock_downstream! {BinOp}
-    impl_push_op_for_mock_downstream! {ParamId}
-    impl_push_op_for_mock_downstream! {FnCall}
-
-    delegate_diagnostics! {
-        {B, D: Diagnostics<S>, S},
-        RelocContext<(), MockDownstream<B, D>>,
-        {builder.diagnostics},
-        D,
-        S
-    }
-
-    impl<T, S: Clone> Finish<S> for RelocContext<(), MockDownstream<Expr<S>, MockSession<T, S>>> {
+    impl<T, S: Clone> Finish<S> for RelocContext<(), Downstream<Expr<S>, (), MockSession<T, S>>> {
         type Parent = MockSession<T, S>;
         type Value = Expr<S>;
 
@@ -589,7 +577,7 @@ mod mock {
         S
     }
 
-    impl<D, S> PushOp<Ident<String>, S> for RelocContext<(), MockDownstream<Expr<S>, D>>
+    impl<D, S> PushOp<Ident<String>, S> for RelocContext<(), Downstream<Expr<S>, (), D>>
     where
         S: Clone,
     {
@@ -648,15 +636,16 @@ mod mock {
         }
     }
 
-    pub(crate) type MockBuilder<T, S> =
-        RelocContext<(), MockDownstream<Expr<S>, MockDiagnostics<T>>>;
+    pub(in crate::analysis) type MockBuilder<T, S> =
+        RelocContext<(), Downstream<Expr<S>, (), MockDiagnostics<T>>>;
 
     impl<T, S> MockBuilder<T, S> {
         pub fn with_log(log: Log<T>) -> Self {
             Self {
                 parent: (),
-                builder: MockDownstream {
+                builder: Downstream {
                     backend: Default::default(),
+                    names: (),
                     diagnostics: MockDiagnostics::new(log),
                 },
             }
