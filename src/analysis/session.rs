@@ -88,7 +88,7 @@ impl<'a, 'b, C, A, B, N, D> CompositeSession<'a, 'b, C, A, B, N, D> {
     }
 }
 
-impl<'a, 'b, C, A, B, N, D> CompositeSession<'a, 'b, C, A, B, N, D> {
+impl<'a, B, N, D> Downstream<'a, B, N, D> {
     fn look_up_symbol<R, S>(&mut self, ident: Ident<R>, span: &S) -> B::Name
     where
         B: AllocName<S>,
@@ -96,39 +96,26 @@ impl<'a, 'b, C, A, B, N, D> CompositeSession<'a, 'b, C, A, B, N, D> {
         D: Diagnostics<S>,
         S: Clone,
     {
-        look_up_symbol(
-            &mut self.downstream.backend,
-            self.downstream.names,
-            ident,
-            span,
-            self.downstream.diagnostics,
-        )
-    }
-}
-
-fn look_up_symbol<B, N, D, R, S>(
-    backend: &mut B,
-    names: &mut N,
-    ident: Ident<R>,
-    span: &S,
-    diagnostics: &mut D,
-) -> B::Name
-where
-    B: AllocName<S>,
-    N: NameTable<Ident<R>, BackendEntry = B::Name>,
-    D: Diagnostics<S>,
-    S: Clone,
-{
-    match names.get(&ident) {
-        Some(Name::Backend(id)) => id.clone(),
-        Some(Name::Macro(_)) => {
-            diagnostics.emit_diag(Message::MacroNameInExpr.at(span.clone()));
-            backend.alloc_name(span.clone())
+        match self.names.get(&ident) {
+            Some(Name::Backend(id)) => id.clone(),
+            Some(Name::Macro(_)) => {
+                self.diagnostics
+                    .emit_diag(Message::MacroNameInExpr.at(span.clone()));
+                self.backend.alloc_name(span.clone())
+            }
+            None => {
+                let id = self.backend.alloc_name(span.clone());
+                self.names.insert(ident, Name::Backend(id.clone()));
+                id
+            }
         }
-        None => {
-            let id = backend.alloc_name(span.clone());
-            names.insert(ident, Name::Backend(id.clone()));
-            id
+    }
+
+    fn replace_backend<T>(self, f: impl FnOnce(B) -> T) -> Downstream<'a, T, N, D> {
+        Downstream {
+            backend: f(self.backend),
+            names: self.names,
+            diagnostics: self.diagnostics,
         }
     }
 }
@@ -219,13 +206,7 @@ where
     S: Clone,
 {
     fn push_op(&mut self, ident: Ident<R>, span: S) {
-        let id = look_up_symbol(
-            &mut self.builder.backend,
-            self.builder.names,
-            ident,
-            &span,
-            self.builder.diagnostics,
-        );
+        let id = self.builder.look_up_symbol(ident, &span);
         self.builder.backend.push_op(id, span)
     }
 }
@@ -263,11 +244,7 @@ where
     fn finish_fn_def(self) -> Self::Return {
         CompositeSession {
             upstream: self.parent,
-            downstream: Downstream {
-                backend: self.builder.backend.finish_fn_def(),
-                names: self.builder.names,
-                diagnostics: self.builder.diagnostics,
-            },
+            downstream: self.builder.replace_backend(FinishFnDef::finish_fn_def),
         }
     }
 }
@@ -369,24 +346,18 @@ where
     fn build_value(self) -> Self::GeneralBuilder {
         RelocContext {
             parent: self.upstream,
-            builder: Downstream {
-                backend: self.downstream.backend.build_immediate(),
-                names: self.downstream.names,
-                diagnostics: self.downstream.diagnostics,
-            },
+            builder: self.downstream.replace_backend(Backend::build_immediate),
         }
     }
 
     fn define_symbol(mut self, name: Ident<R>, span: S) -> Self::FnBuilder {
         self.downstream.names.start_scope(&name);
-        let id = self.look_up_symbol(name, &span);
+        let id = self.downstream.look_up_symbol(name, &span);
         RelocContext {
             parent: self.upstream,
-            builder: Downstream {
-                backend: self.downstream.backend.define_fn(id, span),
-                names: self.downstream.names,
-                diagnostics: self.downstream.diagnostics,
-            },
+            builder: self
+                .downstream
+                .replace_backend(|backend| backend.define_fn(id, span)),
         }
     }
 }
@@ -408,7 +379,7 @@ where
     S: Clone,
 {
     fn start_section(&mut self, (ident, span): (Ident<R>, S)) {
-        let name = self.look_up_symbol(ident, &span);
+        let name = self.downstream.look_up_symbol(ident, &span);
         self.downstream.backend.start_section((name, span))
     }
 }
