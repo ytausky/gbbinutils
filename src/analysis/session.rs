@@ -215,8 +215,10 @@ impl_push_op_for_downstream! {BinOp}
 impl_push_op_for_downstream! {ParamId}
 impl_push_op_for_downstream! {FnCall}
 
-impl<'a, 'b, C, A, B, N, D, R, S> PushOp<Ident<R>, S>
-    for RelocContext<Upstream<'a, 'b, C, A>, Downstream<B, &'a mut N, Wrapper<'a, D>>>
+type Builder<'a, 'b, C, A, B, N, D> =
+    RelocContext<Upstream<'a, 'b, C, A>, Downstream<B, &'a mut N, Wrapper<'a, D>>>;
+
+impl<'a, 'b, C, A, B, N, D, R, S> PushOp<Ident<R>, S> for Builder<'a, 'b, C, A, B, N, D>
 where
     B: AllocName<S> + PushOp<<B as AllocName<S>>::Name, S>,
     N: NameTable<Ident<R>, BackendEntry = B::Name>,
@@ -229,8 +231,7 @@ where
     }
 }
 
-impl<'a, 'b, C, A, B, N, D, S> Finish<S>
-    for RelocContext<Upstream<'a, 'b, C, A>, Downstream<B, &'a mut N, Wrapper<'a, D>>>
+impl<'a, 'b, C, A, B, N, D, S> Finish<S> for Builder<'a, 'b, C, A, B, N, D>
 where
     B: Finish<S>,
     S: Clone,
@@ -252,8 +253,7 @@ where
     }
 }
 
-impl<'a, 'b, C, A, B, N, D> FinishFnDef
-    for RelocContext<Upstream<'a, 'b, C, A>, Downstream<B, &'a mut N, Wrapper<'a, D>>>
+impl<'a, 'b, C, A, B, N, D> FinishFnDef for Builder<'a, 'b, C, A, B, N, D>
 where
     B: FinishFnDef,
 {
@@ -366,14 +366,8 @@ where
     D: Diagnostics<S>,
     S: Clone,
 {
-    type FnBuilder = RelocContext<
-        Upstream<'a, 'b, C, A>,
-        Downstream<B::SymbolBuilder, &'a mut N, Wrapper<'a, D>>,
-    >;
-    type GeneralBuilder = RelocContext<
-        Upstream<'a, 'b, C, A>,
-        Downstream<B::ImmediateBuilder, &'a mut N, Wrapper<'a, D>>,
-    >;
+    type FnBuilder = Builder<'a, 'b, C, A, B::SymbolBuilder, N, D>;
+    type GeneralBuilder = Builder<'a, 'b, C, A, B::ImmediateBuilder, N, D>;
 
     fn build_value(self) -> Self::GeneralBuilder {
         RelocContext {
