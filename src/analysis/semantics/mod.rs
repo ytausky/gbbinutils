@@ -48,13 +48,7 @@ impl<R: Clone + Eq, D: DiagnosticsSystem> Analyze<R, D> for SemanticAnalyzer {
         N: NameTable<Ident<R>, BackendEntry = B::Name, MacroEntry = MacroEntry<R, D>>
             + StartScope<Ident<R>>,
     {
-        let session = CompositeSession::new(
-            partial.codebase,
-            self,
-            partial.downstream.backend,
-            partial.downstream.names,
-            partial.downstream.diagnostics,
-        );
+        let session = partial.into_session(self);
         let mut actions =
             super::syntax::parse_token_seq(tokens.into_iter(), SemanticActions::new(session));
         actions.session.take().unwrap().into()

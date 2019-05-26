@@ -63,10 +63,10 @@ pub(super) struct Upstream<'a, 'b, C, A> {
     analyzer: &'b mut A,
 }
 
-pub(super) struct Downstream<'a, B, N: 'a, D: 'a> {
-    pub backend: B,
-    pub names: &'a mut N,
-    pub diagnostics: &'a mut D,
+pub(super) struct Downstream<'a, B, N, D> {
+    backend: B,
+    names: &'a mut N,
+    diagnostics: &'a mut D,
 }
 
 impl<'a, 'b, C, A, B, N, D> CompositeSession<'a, 'b, C, A, B, N, D> {
@@ -120,9 +120,9 @@ impl<'a, B, N, D> Downstream<'a, B, N, D> {
     }
 }
 
-pub(super) struct PartialSession<'a, C: 'a, B, N: 'a, D: 'a> {
-    pub codebase: &'a mut C,
-    pub downstream: Downstream<'a, B, N, D>,
+pub(super) struct PartialSession<'a, C, B, N, D> {
+    codebase: &'a mut C,
+    downstream: Downstream<'a, B, N, D>,
 }
 
 macro_rules! partial {
@@ -136,6 +136,18 @@ macro_rules! partial {
             },
         }
     };
+}
+
+impl<'a, C, B, N, D> PartialSession<'a, C, B, N, D> {
+    pub fn into_session<A>(self, analyzer: &mut A) -> CompositeSession<'a, '_, C, A, B, N, D> {
+        CompositeSession {
+            upstream: Upstream {
+                codebase: self.codebase,
+                analyzer,
+            },
+            downstream: self.downstream,
+        }
+    }
 }
 
 impl<'a, 'b, C, A, B, N, D> From<CompositeSession<'a, 'b, C, A, B, N, D>>
