@@ -885,7 +885,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn diagnose_macro_name_in_expr() {
         let ident = "my_macro";
         let log = Fixture::<MockSpan<_>>::default().log_session(|mut session| {
@@ -904,6 +903,11 @@ mod tests {
             [
                 DiagnosticsEvent::EmitDiag(Message::MacroNameInExpr.at("ident".into()).into())
                     .into(),
+                BackendEvent::EmitItem(Item::Data(
+                    Expr::from_atom(Atom::Name(0), "ident".into()),
+                    Width::Byte
+                ))
+                .into(),
             ]
         )
     }
