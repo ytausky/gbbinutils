@@ -84,21 +84,32 @@ impl<'a, 'b, C, A, B, N, D> CompositeSession<'a, 'b, C, A, B, N, D> {
     where
         B: AllocName<S>,
         N: NameTable<Ident<R>, BackendEntry = B::Name>,
+        D: Diagnostics<S>,
         S: Clone,
     {
-        look_up_symbol(&mut self.backend, self.names, ident, span)
+        look_up_symbol(&mut self.backend, self.names, ident, span, self.diagnostics)
     }
 }
 
-fn look_up_symbol<B, N, R, S>(backend: &mut B, names: &mut N, ident: Ident<R>, span: &S) -> B::Name
+fn look_up_symbol<B, N, D, R, S>(
+    backend: &mut B,
+    names: &mut N,
+    ident: Ident<R>,
+    span: &S,
+    diagnostics: &mut D,
+) -> B::Name
 where
     B: AllocName<S>,
     N: NameTable<Ident<R>, BackendEntry = B::Name>,
+    D: Diagnostics<S>,
     S: Clone,
 {
     match names.get(&ident) {
         Some(Name::Backend(id)) => id.clone(),
-        Some(Name::Macro(_)) => unimplemented!(),
+        Some(Name::Macro(_)) => {
+            diagnostics.emit_diag(Message::MacroNameInExpr.at(span.clone()));
+            backend.alloc_name(span.clone())
+        }
         None => {
             let id = backend.alloc_name(span.clone());
             names.insert(ident, Name::Backend(id.clone()));
@@ -169,10 +180,17 @@ impl<'a, 'b, C, A, B, N, D, R, S> PushOp<Ident<R>, S>
 where
     B: AllocName<S> + PushOp<<B as AllocName<S>>::Name, S>,
     N: NameTable<Ident<R>, BackendEntry = B::Name>,
+    D: Diagnostics<S>,
     S: Clone,
 {
     fn push_op(&mut self, ident: Ident<R>, span: S) {
-        let id = look_up_symbol(&mut self.builder, self.parent.names, ident, &span);
+        let id = look_up_symbol(
+            &mut self.builder,
+            self.parent.names,
+            ident,
+            &span,
+            self.parent.diagnostics,
+        );
         self.builder.push_op(id, span)
     }
 }
@@ -333,6 +351,7 @@ impl<'a, 'b, C, A, B, N, D, R, S> StartSection<Ident<R>, S>
 where
     B: Backend<S>,
     N: NameTable<Ident<R>, BackendEntry = B::Name>,
+    D: Diagnostics<S>,
     S: Clone,
 {
     fn start_section(&mut self, (ident, span): (Ident<R>, S)) {
@@ -813,7 +832,13 @@ mod tests {
             let (mut session, value) = builder.finish();
             session.emit_item(Item::Data(value, Width::Byte))
         });
-        assert_eq!(log, [])
+        assert_eq!(
+            log,
+            [
+                DiagnosticsEvent::EmitDiag(Message::MacroNameInExpr.at("ident".into()).into())
+                    .into(),
+            ]
+        )
     }
 
     type MockAnalyzer<S> = crate::analysis::semantics::MockAnalyzer<Event<S>>;

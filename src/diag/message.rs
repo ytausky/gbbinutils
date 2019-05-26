@@ -41,6 +41,7 @@ pub enum Message<S> {
         src: S,
         dest: S,
     },
+    MacroNameInExpr,
     MacroRequiresName,
     MissingTarget,
     MustBeBit {
@@ -161,6 +162,7 @@ impl Message<StrippedBufSpan> {
                     codebase.snippet(dest),
                 )
             }
+            MacroNameInExpr => "cannot use macro name in expression".into(),
             MacroRequiresName => "macro definition must be preceded by label".into(),
             MissingTarget => "branch instruction requires target".into(),
             MustBeBit { mnemonic } => format!(
