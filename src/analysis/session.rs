@@ -383,7 +383,7 @@ where
             parent: self.upstream,
             builder: self
                 .downstream
-                .replace_backend(|backend| backend.define_fn(id, span)),
+                .replace_backend(|backend| backend.define_symbol(id, span)),
         }
     }
 }

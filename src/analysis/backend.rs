@@ -108,7 +108,7 @@ where
         + FinishFnDef<Return = Self>;
 
     fn build_immediate(self) -> Self::ImmediateBuilder;
-    fn define_fn(self, name: Self::Name, span: S) -> Self::SymbolBuilder;
+    fn define_symbol(self, name: Self::Name, span: S) -> Self::SymbolBuilder;
 }
 
 pub(crate) struct RelocContext<P, B> {
@@ -189,7 +189,7 @@ mod mock {
             RelocContext::new(self)
         }
 
-        fn define_fn(self, name: Self::Name, span: S) -> Self::SymbolBuilder {
+        fn define_symbol(self, name: Self::Name, span: S) -> Self::SymbolBuilder {
             MockSymbolBuilder {
                 parent: self,
                 name: (name, span),

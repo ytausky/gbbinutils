@@ -210,7 +210,7 @@ mod tests {
         let mut builder = ProgramBuilder::new(&mut program);
         builder.set_origin(addr.into());
         let symbol_id = builder.alloc_name(());
-        let mut builder = builder.define_fn(symbol_id, ());
+        let mut builder = builder.define_symbol(symbol_id, ());
         builder.push_op(LocationCounter, ());
         builder.finish_fn_def();
         let relocs = program.resolve_relocs();

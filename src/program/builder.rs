@@ -76,7 +76,7 @@ impl<'a, S: Clone> Backend<S> for ProgramBuilder<'a, S> {
         RelocContext::new(self)
     }
 
-    fn define_fn(self, name: Self::Name, span: S) -> Self::SymbolBuilder {
+    fn define_symbol(self, name: Self::Name, span: S) -> Self::SymbolBuilder {
         let location = self.program.alloc_reloc();
         SymbolBuilder {
             parent: self,
@@ -367,7 +367,7 @@ mod tests {
     fn emit_defined_symbol() {
         let (object, diagnostics) = with_object_builder(|mut builder| {
             let symbol_id = builder.alloc_name(());
-            let mut builder = builder.define_fn(symbol_id, ());
+            let mut builder = builder.define_symbol(symbol_id, ());
             builder.push_op(LocationCounter, ());
             let mut builder = builder.finish_fn_def();
             let mut value: Immediate<_> = Default::default();
@@ -385,7 +385,7 @@ mod tests {
             let mut value: Immediate<_> = Default::default();
             value.push_op(symbol_id, ());
             builder.emit_item(word_item(value));
-            let mut builder = builder.define_fn(symbol_id, ());
+            let mut builder = builder.define_symbol(symbol_id, ());
             builder.push_op(LocationCounter, ());
             builder.finish_fn_def();
         });
