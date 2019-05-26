@@ -54,9 +54,13 @@ pub(super) type MacroArgs<I, S> = Vec<Vec<(SemanticToken<I>, S)>>;
 pub(super) type Params<R, S> = (Vec<Ident<R>>, Vec<S>);
 
 pub(super) struct CompositeSession<'a, 'b, C, A, B, N, D> {
-    codebase: &'b mut C,
-    analyzer: &'a mut A,
-    downstream: Downstream<'b, B, N, D>,
+    upstream: Upstream<'a, 'b, C, A>,
+    downstream: Downstream<'a, B, N, D>,
+}
+
+pub(super) struct Upstream<'a, 'b, C, A> {
+    codebase: &'a mut C,
+    analyzer: &'b mut A,
 }
 
 pub(super) struct Downstream<'a, B, N: 'a, D: 'a> {
@@ -67,15 +71,14 @@ pub(super) struct Downstream<'a, B, N: 'a, D: 'a> {
 
 impl<'a, 'b, C, A, B, N, D> CompositeSession<'a, 'b, C, A, B, N, D> {
     pub fn new(
-        codebase: &'b mut C,
-        analyzer: &'a mut A,
+        codebase: &'a mut C,
+        analyzer: &'b mut A,
         backend: B,
-        names: &'b mut N,
-        diagnostics: &'b mut D,
+        names: &'a mut N,
+        diagnostics: &'a mut D,
     ) -> Self {
         CompositeSession {
-            codebase,
-            analyzer,
+            upstream: Upstream { codebase, analyzer },
             downstream: Downstream {
                 backend,
                 names,
@@ -138,7 +141,7 @@ pub(super) struct PartialSession<'a, C: 'a, B, N: 'a, D: 'a> {
 macro_rules! partial {
     ($session:expr) => {
         PartialSession {
-            codebase: $session.codebase,
+            codebase: $session.upstream.codebase,
             downstream: Downstream {
                 backend: $session.downstream.backend,
                 names: $session.downstream.names,
@@ -149,7 +152,7 @@ macro_rules! partial {
 }
 
 impl<'a, 'b, C, A, B, N, D> From<CompositeSession<'a, 'b, C, A, B, N, D>>
-    for PartialSession<'b, C, B, N, D>
+    for PartialSession<'a, C, B, N, D>
 {
     fn from(session: CompositeSession<'a, 'b, C, A, B, N, D>) -> Self {
         partial!(session)
@@ -219,8 +222,7 @@ where
     fn finish(self) -> (Self::Parent, Self::Value) {
         let (backend, value) = self.builder.finish();
         let parent = CompositeSession {
-            codebase: self.parent.codebase,
-            analyzer: self.parent.analyzer,
+            upstream: self.parent.upstream,
             downstream: Downstream {
                 backend,
                 names: self.parent.downstream.names,
@@ -240,8 +242,7 @@ where
 
     fn finish_fn_def(self) -> Self::Return {
         CompositeSession {
-            codebase: self.parent.codebase,
-            analyzer: self.parent.analyzer,
+            upstream: self.parent.upstream,
             downstream: Downstream {
                 backend: self.builder.finish_fn_def(),
                 names: self.parent.downstream.names,
@@ -268,14 +269,21 @@ where
     D: DiagnosticsSystem,
 {
     fn analyze_file(mut self, path: Self::StringRef) -> (Result<(), CodebaseError>, Self) {
-        let tokens = match self.codebase.lex_file(path, self.downstream.diagnostics) {
+        let tokens = match self
+            .upstream
+            .codebase
+            .lex_file(path, self.downstream.diagnostics)
+        {
             Ok(tokens) => tokens,
             Err(error) => return (Err(error), self),
         };
         let PartialSession {
             downstream: Downstream { backend, .. },
             ..
-        } = self.analyzer.analyze_token_seq(tokens, partial!(self));
+        } = self
+            .upstream
+            .analyzer
+            .analyze_token_seq(tokens, partial!(self));
         self.downstream.backend = backend;
         (Ok(()), self)
     }
@@ -314,6 +322,7 @@ where
                 downstream: Downstream { backend, .. },
                 ..
             } = self
+                .upstream
                 .analyzer
                 .analyze_token_seq(expansion.map(|(t, s)| (Ok(t), s)), partial!(self));
             self.downstream.backend = backend
@@ -336,8 +345,7 @@ where
     fn build_value(self) -> Self::GeneralBuilder {
         RelocContext {
             parent: CompositeSession {
-                codebase: self.codebase,
-                analyzer: self.analyzer,
+                upstream: self.upstream,
                 downstream: Downstream {
                     backend: (),
                     names: self.downstream.names,
@@ -352,8 +360,7 @@ where
         self.downstream.names.start_scope(&name);
         let id = self.look_up_symbol(name, &span);
         let session = CompositeSession {
-            codebase: self.codebase,
-            analyzer: self.analyzer,
+            upstream: self.upstream,
             downstream: Downstream {
                 backend: (),
                 names: self.downstream.names,
