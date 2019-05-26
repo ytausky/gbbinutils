@@ -56,9 +56,13 @@ pub(super) type Params<R, S> = (Vec<Ident<R>>, Vec<S>);
 pub(super) struct CompositeSession<'a, 'b, C, A, B, N, D> {
     codebase: &'b mut C,
     analyzer: &'a mut A,
-    backend: B,
-    names: &'b mut N,
-    diagnostics: &'b mut D,
+    downstream: Downstream<'b, B, N, D>,
+}
+
+pub(super) struct Downstream<'a, B, N: 'a, D: 'a> {
+    pub backend: B,
+    pub names: &'a mut N,
+    pub diagnostics: &'a mut D,
 }
 
 impl<'a, 'b, C, A, B, N, D> CompositeSession<'a, 'b, C, A, B, N, D> {
@@ -72,9 +76,11 @@ impl<'a, 'b, C, A, B, N, D> CompositeSession<'a, 'b, C, A, B, N, D> {
         CompositeSession {
             codebase,
             analyzer,
-            backend,
-            names,
-            diagnostics,
+            downstream: Downstream {
+                backend,
+                names,
+                diagnostics,
+            },
         }
     }
 }
@@ -87,7 +93,13 @@ impl<'a, 'b, C, A, B, N, D> CompositeSession<'a, 'b, C, A, B, N, D> {
         D: Diagnostics<S>,
         S: Clone,
     {
-        look_up_symbol(&mut self.backend, self.names, ident, span, self.diagnostics)
+        look_up_symbol(
+            &mut self.downstream.backend,
+            self.downstream.names,
+            ident,
+            span,
+            self.downstream.diagnostics,
+        )
     }
 }
 
@@ -118,20 +130,20 @@ where
     }
 }
 
-pub struct PartialSession<'b, C: 'b, B, N: 'b, D: 'b> {
-    pub codebase: &'b mut C,
-    pub backend: B,
-    pub names: &'b mut N,
-    pub diagnostics: &'b mut D,
+pub(super) struct PartialSession<'a, C: 'a, B, N: 'a, D: 'a> {
+    pub codebase: &'a mut C,
+    pub downstream: Downstream<'a, B, N, D>,
 }
 
 macro_rules! partial {
     ($session:expr) => {
         PartialSession {
             codebase: $session.codebase,
-            backend: $session.backend,
-            names: $session.names,
-            diagnostics: $session.diagnostics,
+            downstream: Downstream {
+                backend: $session.downstream.backend,
+                names: $session.downstream.names,
+                diagnostics: $session.downstream.diagnostics,
+            },
         }
     };
 }
@@ -163,15 +175,15 @@ where
     type Value = B::Value;
 
     fn emit_item(&mut self, item: Item<Self::Value>) {
-        self.backend.emit_item(item)
+        self.downstream.backend.emit_item(item)
     }
 
     fn reserve(&mut self, bytes: Self::Value) {
-        self.backend.reserve(bytes)
+        self.downstream.backend.reserve(bytes)
     }
 
     fn set_origin(&mut self, origin: Self::Value) {
-        self.backend.set_origin(origin)
+        self.downstream.backend.set_origin(origin)
     }
 }
 
@@ -186,10 +198,10 @@ where
     fn push_op(&mut self, ident: Ident<R>, span: S) {
         let id = look_up_symbol(
             &mut self.builder,
-            self.parent.names,
+            self.parent.downstream.names,
             ident,
             &span,
-            self.parent.diagnostics,
+            self.parent.downstream.diagnostics,
         );
         self.builder.push_op(id, span)
     }
@@ -209,9 +221,11 @@ where
         let parent = CompositeSession {
             codebase: self.parent.codebase,
             analyzer: self.parent.analyzer,
-            backend,
-            names: self.parent.names,
-            diagnostics: self.parent.diagnostics,
+            downstream: Downstream {
+                backend,
+                names: self.parent.downstream.names,
+                diagnostics: self.parent.downstream.diagnostics,
+            },
         };
         (parent, value)
     }
@@ -228,9 +242,11 @@ where
         CompositeSession {
             codebase: self.parent.codebase,
             analyzer: self.parent.analyzer,
-            backend: self.builder.finish_fn_def(),
-            names: self.parent.names,
-            diagnostics: self.parent.diagnostics,
+            downstream: Downstream {
+                backend: self.builder.finish_fn_def(),
+                names: self.parent.downstream.names,
+                diagnostics: self.parent.downstream.diagnostics,
+            },
         }
     }
 }
@@ -252,13 +268,15 @@ where
     D: DiagnosticsSystem,
 {
     fn analyze_file(mut self, path: Self::StringRef) -> (Result<(), CodebaseError>, Self) {
-        let tokens = match self.codebase.lex_file(path, self.diagnostics) {
+        let tokens = match self.codebase.lex_file(path, self.downstream.diagnostics) {
             Ok(tokens) => tokens,
             Err(error) => return (Err(error), self),
         };
-        let PartialSession { backend, .. } =
-            self.analyzer.analyze_token_seq(tokens, partial!(self));
-        self.backend = backend;
+        let PartialSession {
+            downstream: Downstream { backend, .. },
+            ..
+        } = self.analyzer.analyze_token_seq(tokens, partial!(self));
+        self.downstream.backend = backend;
         (Ok(()), self)
     }
 
@@ -268,8 +286,9 @@ where
         params: (Vec<Ident<Self::StringRef>>, Vec<Self::Span>),
         body: (Vec<SemanticToken<Self::StringRef>>, Vec<Self::Span>),
     ) {
-        self.names
-            .define_macro(name, params, body, self.diagnostics)
+        self.downstream
+            .names
+            .define_macro(name, params, body, self.downstream.diagnostics)
     }
 
     fn call_macro(
@@ -277,21 +296,27 @@ where
         name: (Ident<Self::StringRef>, Self::Span),
         args: MacroArgs<Self::StringRef, Self::Span>,
     ) -> Self {
-        let expansion = match self.names.get(&name.0) {
-            Some(Name::Macro(entry)) => Some(entry.expand(name.1, args, self.diagnostics)),
+        let expansion = match self.downstream.names.get(&name.0) {
+            Some(Name::Macro(entry)) => {
+                Some(entry.expand(name.1, args, self.downstream.diagnostics))
+            }
             Some(_) => unimplemented!(),
             None => {
-                let stripped = self.diagnostics.strip_span(&name.1);
-                self.diagnostics
+                let stripped = self.downstream.diagnostics.strip_span(&name.1);
+                self.downstream
+                    .diagnostics
                     .emit_diag(Message::UndefinedMacro { name: stripped }.at(name.1));
                 None
             }
         };
         if let Some(expansion) = expansion {
-            let PartialSession { backend, .. } = self
+            let PartialSession {
+                downstream: Downstream { backend, .. },
+                ..
+            } = self
                 .analyzer
                 .analyze_token_seq(expansion.map(|(t, s)| (Ok(t), s)), partial!(self));
-            self.backend = backend
+            self.downstream.backend = backend
         }
         self
     }
@@ -313,27 +338,31 @@ where
             parent: CompositeSession {
                 codebase: self.codebase,
                 analyzer: self.analyzer,
-                backend: (),
-                names: self.names,
-                diagnostics: self.diagnostics,
+                downstream: Downstream {
+                    backend: (),
+                    names: self.downstream.names,
+                    diagnostics: self.downstream.diagnostics,
+                },
             },
-            builder: self.backend.build_immediate(),
+            builder: self.downstream.backend.build_immediate(),
         }
     }
 
     fn define_symbol(mut self, name: Ident<R>, span: S) -> Self::FnBuilder {
-        self.names.start_scope(&name);
+        self.downstream.names.start_scope(&name);
         let id = self.look_up_symbol(name, &span);
         let session = CompositeSession {
             codebase: self.codebase,
             analyzer: self.analyzer,
-            backend: (),
-            names: self.names,
-            diagnostics: self.diagnostics,
+            downstream: Downstream {
+                backend: (),
+                names: self.downstream.names,
+                diagnostics: self.downstream.diagnostics,
+            },
         };
         RelocContext {
             parent: session,
-            builder: self.backend.define_fn(id, span),
+            builder: self.downstream.backend.define_fn(id, span),
         }
     }
 }
@@ -341,7 +370,7 @@ where
 delegate_diagnostics! {
     {'a, 'b, F, A, B, N, D: Diagnostics<S>, S},
     CompositeSession<'a, 'b, F, A, B, N, D>,
-    {diagnostics},
+    {downstream.diagnostics},
     D,
     S
 }
@@ -356,7 +385,7 @@ where
 {
     fn start_section(&mut self, (ident, span): (Ident<R>, S)) {
         let name = self.look_up_symbol(ident, &span);
-        self.backend.start_section((name, span))
+        self.downstream.backend.start_section((name, span))
     }
 }
 

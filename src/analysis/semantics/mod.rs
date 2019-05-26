@@ -51,9 +51,9 @@ impl<R: Clone + Eq, D: DiagnosticsSystem> Analyze<R, D> for SemanticAnalyzer {
         let session = CompositeSession::new(
             partial.codebase,
             self,
-            partial.backend,
-            partial.names,
-            partial.diagnostics,
+            partial.downstream.backend,
+            partial.downstream.names,
+            partial.downstream.diagnostics,
         );
         let mut actions =
             super::syntax::parse_token_seq(tokens.into_iter(), SemanticActions::new(session));
