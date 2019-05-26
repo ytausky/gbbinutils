@@ -9,7 +9,7 @@ use super::{Lex, SemanticToken, StringSource};
 use crate::codebase::CodebaseError;
 use crate::diag::span::SpanSource;
 use crate::diag::*;
-use crate::model::Item;
+use crate::model::{BinOp, FnCall, Item, ParamId};
 
 #[cfg(test)]
 pub(crate) use self::mock::*;
@@ -190,8 +190,28 @@ where
     }
 }
 
+macro_rules! impl_push_op_for_downstream {
+    ($t:ty) => {
+        impl<'a, B, N, D, S> PushOp<$t, S> for Downstream<'a, B, N, D>
+        where
+            B: PushOp<$t, S>,
+            S: Clone,
+        {
+            fn push_op(&mut self, op: $t, span: S) {
+                self.backend.push_op(op, span)
+            }
+        }
+    };
+}
+
+impl_push_op_for_downstream! {LocationCounter}
+impl_push_op_for_downstream! {i32}
+impl_push_op_for_downstream! {BinOp}
+impl_push_op_for_downstream! {ParamId}
+impl_push_op_for_downstream! {FnCall}
+
 impl<'a, 'b, C, A, B, N, D, R, S> PushOp<Ident<R>, S>
-    for RelocContext<CompositeSession<'a, 'b, C, A, (), N, D>, B>
+    for RelocContext<Upstream<'a, 'b, C, A>, Downstream<'a, B, N, D>>
 where
     B: AllocName<S> + PushOp<<B as AllocName<S>>::Name, S>,
     N: NameTable<Ident<R>, BackendEntry = B::Name>,
@@ -200,18 +220,18 @@ where
 {
     fn push_op(&mut self, ident: Ident<R>, span: S) {
         let id = look_up_symbol(
-            &mut self.builder,
-            self.parent.downstream.names,
+            &mut self.builder.backend,
+            self.builder.names,
             ident,
             &span,
-            self.parent.downstream.diagnostics,
+            self.builder.diagnostics,
         );
-        self.builder.push_op(id, span)
+        self.builder.backend.push_op(id, span)
     }
 }
 
 impl<'a, 'b, C, A, B, N, D, S> Finish<S>
-    for RelocContext<CompositeSession<'a, 'b, C, A, (), N, D>, B>
+    for RelocContext<Upstream<'a, 'b, C, A>, Downstream<'a, B, N, D>>
 where
     B: Finish<S>,
     S: Clone,
@@ -220,13 +240,13 @@ where
     type Value = B::Value;
 
     fn finish(self) -> (Self::Parent, Self::Value) {
-        let (backend, value) = self.builder.finish();
+        let (backend, value) = self.builder.backend.finish();
         let parent = CompositeSession {
-            upstream: self.parent.upstream,
+            upstream: self.parent,
             downstream: Downstream {
                 backend,
-                names: self.parent.downstream.names,
-                diagnostics: self.parent.downstream.diagnostics,
+                names: self.builder.names,
+                diagnostics: self.builder.diagnostics,
             },
         };
         (parent, value)
@@ -234,7 +254,7 @@ where
 }
 
 impl<'a, 'b, C, A, B, N, D> FinishFnDef
-    for RelocContext<CompositeSession<'a, 'b, C, A, (), N, D>, B>
+    for RelocContext<Upstream<'a, 'b, C, A>, Downstream<'a, B, N, D>>
 where
     B: FinishFnDef,
 {
@@ -242,18 +262,22 @@ where
 
     fn finish_fn_def(self) -> Self::Return {
         CompositeSession {
-            upstream: self.parent.upstream,
+            upstream: self.parent,
             downstream: Downstream {
-                backend: self.builder.finish_fn_def(),
-                names: self.parent.downstream.names,
-                diagnostics: self.parent.downstream.diagnostics,
+                backend: self.builder.backend.finish_fn_def(),
+                names: self.builder.names,
+                diagnostics: self.builder.diagnostics,
             },
         }
     }
 }
 
 delegate_diagnostics! {
-    {P: Diagnostics<S>, B, S}, RelocContext<P, B>, {parent}, P, S
+    {'a, P, B, N, D: Diagnostics<S>, S},
+    RelocContext<P, Downstream<'a, B, N, D>>,
+    {builder.diagnostics},
+    D,
+    S
 }
 
 impl<'a, 'b, C, A, B, N, D> Session for CompositeSession<'a, 'b, C, A, B, N, D>
@@ -338,38 +362,31 @@ where
     D: Diagnostics<S>,
     S: Clone,
 {
-    type FnBuilder = RelocContext<CompositeSession<'a, 'b, C, A, (), N, D>, B::SymbolBuilder>;
+    type FnBuilder = RelocContext<Upstream<'a, 'b, C, A>, Downstream<'a, B::SymbolBuilder, N, D>>;
     type GeneralBuilder =
-        RelocContext<CompositeSession<'a, 'b, C, A, (), N, D>, B::ImmediateBuilder>;
+        RelocContext<Upstream<'a, 'b, C, A>, Downstream<'a, B::ImmediateBuilder, N, D>>;
 
     fn build_value(self) -> Self::GeneralBuilder {
         RelocContext {
-            parent: CompositeSession {
-                upstream: self.upstream,
-                downstream: Downstream {
-                    backend: (),
-                    names: self.downstream.names,
-                    diagnostics: self.downstream.diagnostics,
-                },
+            parent: self.upstream,
+            builder: Downstream {
+                backend: self.downstream.backend.build_immediate(),
+                names: self.downstream.names,
+                diagnostics: self.downstream.diagnostics,
             },
-            builder: self.downstream.backend.build_immediate(),
         }
     }
 
     fn define_symbol(mut self, name: Ident<R>, span: S) -> Self::FnBuilder {
         self.downstream.names.start_scope(&name);
         let id = self.look_up_symbol(name, &span);
-        let session = CompositeSession {
-            upstream: self.upstream,
-            downstream: Downstream {
-                backend: (),
+        RelocContext {
+            parent: self.upstream,
+            builder: Downstream {
+                backend: self.downstream.backend.define_fn(id, span),
                 names: self.downstream.names,
                 diagnostics: self.downstream.diagnostics,
             },
-        };
-        RelocContext {
-            parent: session,
-            builder: self.downstream.backend.define_fn(id, span),
         }
     }
 }
@@ -503,10 +520,16 @@ mod mock {
         S: Clone + Merge,
     {
         type FnBuilder = MockSymbolBuilder<Self, Ident<String>, S>;
-        type GeneralBuilder = RelocContext<Self, Expr<S>>;
+        type GeneralBuilder = RelocContext<(), MockDownstream<Expr<S>, Self>>;
 
         fn build_value(self) -> Self::GeneralBuilder {
-            RelocContext::new(self)
+            RelocContext {
+                parent: (),
+                builder: MockDownstream {
+                    backend: Default::default(),
+                    diagnostics: self,
+                },
+            }
         }
 
         fn define_symbol(self, name: Ident<String>, span: S) -> Self::FnBuilder {
@@ -518,12 +541,45 @@ mod mock {
         }
     }
 
-    impl<T, S: Clone> Finish<S> for RelocContext<MockSession<T, S>, Expr<S>> {
+    pub(crate) struct MockDownstream<B, D> {
+        backend: B,
+        diagnostics: D,
+    }
+
+    macro_rules! impl_push_op_for_mock_downstream {
+        ($t:ty) => {
+            impl<B, D, S> PushOp<$t, S> for MockDownstream<B, D>
+            where
+                B: PushOp<$t, S>,
+                S: Clone,
+            {
+                fn push_op(&mut self, op: $t, span: S) {
+                    self.backend.push_op(op, span)
+                }
+            }
+        };
+    }
+
+    impl_push_op_for_mock_downstream! {LocationCounter}
+    impl_push_op_for_mock_downstream! {i32}
+    impl_push_op_for_mock_downstream! {BinOp}
+    impl_push_op_for_mock_downstream! {ParamId}
+    impl_push_op_for_mock_downstream! {FnCall}
+
+    delegate_diagnostics! {
+        {B, D: Diagnostics<S>, S},
+        RelocContext<(), MockDownstream<B, D>>,
+        {builder.diagnostics},
+        D,
+        S
+    }
+
+    impl<T, S: Clone> Finish<S> for RelocContext<(), MockDownstream<Expr<S>, MockSession<T, S>>> {
         type Parent = MockSession<T, S>;
         type Value = Expr<S>;
 
         fn finish(self) -> (Self::Parent, Self::Value) {
-            (self.parent, self.builder)
+            (self.builder.diagnostics, self.builder.backend)
         }
     }
 
@@ -550,14 +606,13 @@ mod mock {
         S
     }
 
-    impl<T, S> PushOp<Ident<String>, S> for RelocContext<MockSession<T, S>, Expr<S>>
+    impl<D, S> PushOp<Ident<String>, S> for RelocContext<(), MockDownstream<Expr<S>, D>>
     where
-        T: From<DiagnosticsEvent<S>>,
         S: Clone,
     {
         fn push_op(&mut self, ident: Ident<String>, span: S) {
             use crate::model::{Atom, ExprItem};
-            self.builder.0.push(ExprItem {
+            self.builder.backend.0.push(ExprItem {
                 op: Atom::Name(ident).into(),
                 op_span: span.clone(),
                 expr_span: span,
@@ -610,13 +665,17 @@ mod mock {
         }
     }
 
-    pub(crate) type MockBuilder<T, S> = RelocContext<MockDiagnostics<T>, Expr<S>>;
+    pub(crate) type MockBuilder<T, S> =
+        RelocContext<(), MockDownstream<Expr<S>, MockDiagnostics<T>>>;
 
     impl<T, S> MockBuilder<T, S> {
         pub fn with_log(log: Log<T>) -> Self {
             Self {
-                parent: MockDiagnostics::new(log),
-                builder: Default::default(),
+                parent: (),
+                builder: MockDownstream {
+                    backend: Default::default(),
+                    diagnostics: MockDiagnostics::new(log),
+                },
             }
         }
     }
@@ -626,7 +685,7 @@ mod mock {
         type Value = Expr<S>;
 
         fn finish(self) -> (Self::Parent, Self::Value) {
-            (self.parent, self.builder)
+            (self.builder.diagnostics, self.builder.backend)
         }
     }
 }
