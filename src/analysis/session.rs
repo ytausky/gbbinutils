@@ -3,8 +3,7 @@ pub use super::backend::ValueBuilder;
 use super::backend::*;
 use super::macros::{DefineMacro, Expand, MacroDefData, MacroTableEntry};
 use super::resolve::{Ident, Name, NameTable, StartScope};
-use super::semantics::Analyze;
-use super::{Lex, SemanticToken, StringSource};
+use super::{Lex, LexItem, SemanticToken, StringSource};
 
 use crate::codebase::CodebaseError;
 use crate::diag::span::SpanSource;
@@ -298,6 +297,14 @@ delegate_diagnostics! {
     {0},
     D,
     S
+}
+
+pub(super) trait Analyze<R: Clone + Eq, S: Clone> {
+    fn analyze_token_seq<'b, I, P>(&'b mut self, tokens: I, partial: P) -> P
+    where
+        I: IntoIterator<Item = LexItem<R, S>>,
+        P: IntoSession<'b, Self>,
+        P::Session: StringSource<StringRef = R> + SpanSource<Span = S>;
 }
 
 impl<'a, 'b, C, A, B, N, D> Session for CompositeSession<'a, 'b, C, A, B, N, D>

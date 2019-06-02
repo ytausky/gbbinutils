@@ -18,14 +18,6 @@ mod command;
 mod invoke;
 mod params;
 
-pub(super) trait Analyze<R: Clone + Eq, S: Clone> {
-    fn analyze_token_seq<'b, I, P>(&'b mut self, tokens: I, partial: P) -> P
-    where
-        I: IntoIterator<Item = LexItem<R, S>>,
-        P: IntoSession<'b, Self>,
-        P::Session: StringSource<StringRef = R> + SpanSource<Span = S>;
-}
-
 pub struct SemanticAnalyzer;
 
 impl<R: Clone + Eq, S: Clone> Analyze<R, S> for SemanticAnalyzer {
