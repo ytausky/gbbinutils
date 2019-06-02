@@ -1,15 +1,17 @@
 pub use super::backend::ValueBuilder;
 
 use super::backend::*;
-use super::macros::{DefineMacro, Expand};
+use super::macros::{DefineMacro, Expand, MacroDefData, MacroTableEntry};
 use super::resolve::{Ident, Name, NameTable, StartScope};
 use super::semantics::Analyze;
-use super::{Lex, MacroEntry, SemanticToken, StringSource};
+use super::{Lex, SemanticToken, StringSource};
 
 use crate::codebase::CodebaseError;
 use crate::diag::span::SpanSource;
 use crate::diag::*;
 use crate::model::{BinOp, FnCall, Item, ParamId};
+
+use std::rc::Rc;
 
 #[cfg(test)]
 pub(crate) use self::mock::*;
@@ -144,8 +146,23 @@ macro_rules! partial {
     };
 }
 
-impl<'a, C, B, N, D> PartialSession<'a, C, B, N, D> {
-    pub fn into_session<A>(self, analyzer: &mut A) -> CompositeSession<'a, '_, C, A, B, N, D> {
+pub(super) trait IntoSession<'b, A>
+where
+    Self: Sized,
+    A: ?Sized,
+{
+    type Session: Session + Into<Self>;
+
+    fn into_session(self, analyzer: &'b mut A) -> Self::Session;
+}
+
+impl<'a, 'b, C, A: 'b, B, N, D> IntoSession<'b, A> for PartialSession<'a, C, B, N, D>
+where
+    CompositeSession<'a, 'b, C, A, B, N, D>: Session + Into<Self>,
+{
+    type Session = CompositeSession<'a, 'b, C, A, B, N, D>;
+
+    fn into_session(self, analyzer: &'b mut A) -> Self::Session {
         CompositeSession {
             upstream: Upstream {
                 codebase: self.codebase,
@@ -286,12 +303,15 @@ delegate_diagnostics! {
 impl<'a, 'b, C, A, B, N, D> Session for CompositeSession<'a, 'b, C, A, B, N, D>
 where
     C: Lex<D>,
-    A: Analyze<C::StringRef, D>,
+    A: Analyze<C::StringRef, D::Span>,
     B: Backend<D::Span>,
     N: NameTable<
             Ident<C::StringRef>,
             BackendEntry = B::Name,
-            MacroEntry = MacroEntry<C::StringRef, D>,
+            MacroEntry = MacroTableEntry<
+                D::MacroDefId,
+                Rc<MacroDefData<Ident<C::StringRef>, SemanticToken<C::StringRef>>>,
+            >,
         > + StartScope<Ident<C::StringRef>>,
     D: DiagnosticsSystem,
 {
@@ -665,6 +685,7 @@ mod tests {
     use crate::analysis::semantics::AnalyzerEvent;
     use crate::analysis::syntax::{Command, Directive, Mnemonic, Token};
     use crate::analysis::{Literal, MockCodebase};
+    use crate::diag::span::MacroContextFactory;
     use crate::diag::DiagnosticsEvent;
     use crate::log::*;
     use crate::model::{Atom, BinOp, Instruction, Nullary, Width};
@@ -905,6 +926,11 @@ mod tests {
             ]
         )
     }
+
+    type MacroEntry<R, D> = MacroTableEntry<
+        <D as MacroContextFactory<<D as SpanSource>::Span>>::MacroDefId,
+        Rc<MacroDefData<Ident<R>, SemanticToken<R>>>,
+    >;
 
     type MockAnalyzer<S> = crate::analysis::semantics::MockAnalyzer<Event<S>>;
     type MockBackend<S> = crate::analysis::backend::MockBackend<Event<S>>;

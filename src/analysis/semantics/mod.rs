@@ -2,13 +2,13 @@ use self::command::CommandActions;
 use self::invoke::MacroCallActions;
 use self::params::ParamsAdapter;
 
-use super::backend::{Backend, FinishFnDef, LocationCounter, PushOp};
-use super::resolve::{NameTable, StartScope};
+use super::backend::{FinishFnDef, LocationCounter, PushOp};
 use super::session::*;
 use super::syntax::keyword::*;
 use super::syntax::*;
-use super::{Ident, Lex, LexItem, Literal, MacroEntry, SemanticToken};
+use super::{Ident, LexItem, Literal, SemanticToken, StringSource};
 
+use crate::diag::span::SpanSource;
 use crate::diag::*;
 
 #[cfg(test)]
@@ -18,34 +18,22 @@ mod command;
 mod invoke;
 mod params;
 
-pub(super) trait Analyze<R: Clone + Eq, D: DiagnosticsSystem> {
-    fn analyze_token_seq<'a, I, C, B, N>(
-        &mut self,
-        tokens: I,
-        partial: PartialSession<'a, C, B, N, D>,
-    ) -> PartialSession<'a, C, B, N, D>
+pub(super) trait Analyze<R: Clone + Eq, S: Clone> {
+    fn analyze_token_seq<'b, I, P>(&'b mut self, tokens: I, partial: P) -> P
     where
-        I: IntoIterator<Item = LexItem<R, D::Span>>,
-        C: Lex<D, StringRef = R>,
-        B: Backend<D::Span>,
-        N: NameTable<Ident<R>, BackendEntry = B::Name, MacroEntry = MacroEntry<R, D>>
-            + StartScope<Ident<R>>;
+        I: IntoIterator<Item = LexItem<R, S>>,
+        P: IntoSession<'b, Self>,
+        P::Session: StringSource<StringRef = R> + SpanSource<Span = S>;
 }
 
 pub struct SemanticAnalyzer;
 
-impl<R: Clone + Eq, D: DiagnosticsSystem> Analyze<R, D> for SemanticAnalyzer {
-    fn analyze_token_seq<'a, I, C, B, N>(
-        &mut self,
-        tokens: I,
-        partial: PartialSession<'a, C, B, N, D>,
-    ) -> PartialSession<'a, C, B, N, D>
+impl<R: Clone + Eq, S: Clone> Analyze<R, S> for SemanticAnalyzer {
+    fn analyze_token_seq<'b, I, P>(&'b mut self, tokens: I, partial: P) -> P
     where
-        I: IntoIterator<Item = LexItem<R, D::Span>>,
-        C: Lex<D, StringRef = R>,
-        B: Backend<D::Span>,
-        N: NameTable<Ident<R>, BackendEntry = B::Name, MacroEntry = MacroEntry<R, D>>
-            + StartScope<Ident<R>>,
+        I: IntoIterator<Item = LexItem<R, S>>,
+        P: IntoSession<'b, Self>,
+        P::Session: StringSource<StringRef = R> + SpanSource<Span = S>,
     {
         let session = partial.into_session(self);
         let mut actions =
@@ -270,25 +258,19 @@ mod mock {
         }
     }
 
-    impl<T, D> Analyze<String, D> for MockAnalyzer<T>
+    impl<T, S> Analyze<String, S> for MockAnalyzer<T>
     where
-        T: From<AnalyzerEvent<D::Span>>,
-        D: DiagnosticsSystem,
+        T: From<AnalyzerEvent<S>>,
+        S: Clone,
     {
-        fn analyze_token_seq<'a, I, C, B, N>(
-            &mut self,
-            tokens: I,
-            downstream: PartialSession<'a, C, B, N, D>,
-        ) -> PartialSession<'a, C, B, N, D>
+        fn analyze_token_seq<'b, I, P>(&'b mut self, tokens: I, partial: P) -> P
         where
-            I: IntoIterator<Item = LexItem<String, D::Span>>,
-            C: Lex<D, StringRef = String>,
-            B: Backend<D::Span>,
-            N: NameTable<Ident<String>, MacroEntry = MacroEntry<String, D>>,
+            I: IntoIterator<Item = LexItem<String, S>>,
+            P: IntoSession<'b, Self>,
         {
             self.log
                 .push(AnalyzerEvent::AnalyzeTokenSeq(tokens.into_iter().collect()));
-            downstream
+            partial
         }
     }
 
