@@ -26,7 +26,7 @@ pub trait StartScope<I> {
     fn start_scope(&mut self, ident: &I);
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Ident<T> {
     pub name: T,
     visibility: Visibility,
@@ -46,7 +46,7 @@ impl<L, T> From<Ident<T>> for ExprOp<L, Ident<T>> {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Visibility {
     Global,
     Local,

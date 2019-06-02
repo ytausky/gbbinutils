@@ -1,8 +1,9 @@
 use super::resolve::{Ident, Name, NameTable};
-use super::{Command, Literal, SemanticToken, Token};
+use super::{Command, Literal, Token};
 
 use crate::diag::span::*;
 
+use std::ops::Deref;
 use std::rc::Rc;
 
 pub(super) trait Expand<T, F: MacroContextFactory<S>, S: Clone> {
@@ -25,22 +26,22 @@ pub(super) trait DefineMacro<I, T, K: Clone> {
         S: Clone;
 }
 
-impl<R, N, K> DefineMacro<Ident<R>, Token<Ident<R>, Literal<R>, Command>, K> for N
+impl<I, L, C, N, K> DefineMacro<I, Token<I, L, C>, K> for N
 where
-    N: NameTable<Ident<R>, MacroEntry = MacroTableEntry<K, Rc<MacroDefData<R>>>>,
+    N: NameTable<I, MacroEntry = MacroTableEntry<K, Rc<MacroDefData<I, Token<I, L, C>>>>>,
     K: Clone,
 {
     fn define_macro<D, S>(
         &mut self,
-        name: (Ident<R>, S),
-        params: (Vec<Ident<R>>, Vec<S>),
-        body: (Vec<SemanticToken<R>>, Vec<S>),
+        name: (I, S),
+        params: (Vec<I>, Vec<S>),
+        body: (Vec<Token<I, L, C>>, Vec<S>),
         diagnostics: &mut D,
     ) where
         D: MacroContextFactory<S, MacroDefId = K>,
         S: Clone,
     {
-        let context = diagnostics.add_macro_def(name.1.clone(), params.1.clone(), body.1.clone());
+        let context = diagnostics.add_macro_def(name.1, params.1, body.1);
         self.insert(
             name.0,
             Name::Macro(MacroTableEntry {
@@ -59,31 +60,27 @@ pub struct MacroTableEntry<I, D> {
     pub def: D,
 }
 
-pub(crate) struct MacroDefData<I> {
-    pub params: Vec<Ident<I>>,
-    pub body: Vec<SemanticToken<I>>,
+pub(crate) struct MacroDefData<I, T> {
+    pub params: Vec<I>,
+    pub body: Vec<T>,
 }
 
 pub(crate) type MacroEntry<R, D> = MacroTableEntry<
     <D as MacroContextFactory<<D as SpanSource>::Span>>::MacroDefId,
-    Rc<MacroDefData<R>>,
+    Rc<MacroDefData<Ident<R>, Token<Ident<R>, Literal<R>, Command>>>,
 >;
 
-impl<R, F, S> Expand<Token<Ident<R>, Literal<R>, Command>, F, S>
-    for MacroTableEntry<F::MacroDefId, Rc<MacroDefData<R>>>
+impl<I, L, C, M, F, S> Expand<Token<I, L, C>, F, S> for MacroTableEntry<F::MacroDefId, M>
 where
-    R: Clone + Eq,
+    I: Clone + Eq,
+    M: Clone + Deref<Target = MacroDefData<I, Token<I, L, C>>>,
     F: MacroContextFactory<S>,
     S: Clone,
+    Token<I, L, C>: Clone,
 {
-    type Iter = ExpandedMacro<R, F::MacroExpansionContext>;
+    type Iter = ExpandedMacro<M, Token<I, L, C>, F::MacroExpansionContext>;
 
-    fn expand(
-        &self,
-        name: S,
-        args: MacroArgs<Token<Ident<R>, Literal<R>, Command>, S>,
-        factory: &mut F,
-    ) -> Self::Iter {
+    fn expand(&self, name: S, args: MacroArgs<Token<I, L, C>, S>, factory: &mut F) -> Self::Iter {
         let mut arg_tokens = Vec::new();
         let mut arg_spans = Vec::new();
         for arg in args {
@@ -92,13 +89,13 @@ where
             arg_spans.push(spans);
         }
         let context = factory.mk_macro_expansion_context(name, arg_spans, &self.id);
-        ExpandedMacro::new(Rc::clone(&self.def), arg_tokens, context)
+        ExpandedMacro::new(self.def.clone(), arg_tokens, context)
     }
 }
 
-pub(super) struct ExpandedMacro<I, C> {
-    def: Rc<MacroDefData<I>>,
-    args: Vec<Vec<SemanticToken<I>>>,
+pub(super) struct ExpandedMacro<M, T, C> {
+    def: M,
+    args: Vec<Vec<T>>,
     context: C,
     body_index: usize,
     expansion_state: Option<ExpansionState>,
@@ -110,12 +107,12 @@ enum ExpansionState {
     Label(usize),
 }
 
-impl<I: PartialEq, C> ExpandedMacro<I, C> {
-    fn new(
-        def: Rc<MacroDefData<I>>,
-        args: Vec<Vec<SemanticToken<I>>>,
-        context: C,
-    ) -> ExpandedMacro<I, C> {
+impl<M, I, L, C, F> ExpandedMacro<M, Token<I, L, C>, F>
+where
+    M: Deref<Target = MacroDefData<I, Token<I, L, C>>>,
+    I: PartialEq,
+{
+    fn new(def: M, args: Vec<Vec<Token<I, L, C>>>, context: F) -> Self {
         let mut expanded_macro = ExpandedMacro {
             def,
             args,
@@ -128,7 +125,7 @@ impl<I: PartialEq, C> ExpandedMacro<I, C> {
     }
 
     fn param_position(&self, name: &I) -> Option<usize> {
-        self.def.params.iter().position(|x| x.name == *name)
+        self.def.params.iter().position(|param| *param == *name)
     }
 
     fn advance(&mut self) {
@@ -153,23 +150,25 @@ impl<I: PartialEq, C> ExpandedMacro<I, C> {
         }
     }
 
-    fn expand_token(&self, token: &SemanticToken<I>) -> Option<ExpansionState> {
+    fn expand_token(&self, token: &Token<I, L, C>) -> Option<ExpansionState> {
         match token {
             Token::Ident(ident) => self
-                .param_position(&ident.name)
+                .param_position(&ident)
                 .map(|position| ExpansionState::Ident(position, 0)),
-            Token::Label(label) => self.param_position(&label.name).map(ExpansionState::Label),
+            Token::Label(label) => self.param_position(&label).map(ExpansionState::Label),
             _ => None,
         }
     }
 }
 
-impl<I, C> Iterator for ExpandedMacro<I, C>
+impl<M, I, L, C, F> Iterator for ExpandedMacro<M, Token<I, L, C>, F>
 where
+    M: Deref<Target = MacroDefData<I, Token<I, L, C>>>,
     I: Clone + Eq,
-    C: MacroExpansionContext,
+    F: MacroExpansionContext,
+    Token<I, L, C>: Clone,
 {
-    type Item = (SemanticToken<I>, C::Span);
+    type Item = (Token<I, L, C>, F::Span);
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.body_index < self.def.body.len() {
@@ -221,7 +220,7 @@ mod tests {
                 context: Rc::clone(&buf),
             })
         };
-        let body = Token::Ident("a".into());
+        let body = Token::<_, (), ()>::Ident("a");
         let def_id = Rc::new(crate::span::MacroDef {
             name: mk_span(0),
             params: vec![],
@@ -271,11 +270,8 @@ mod tests {
                 context: Rc::clone(&buf),
             })
         };
-        let body = vec![
-            Token::Ident("a".into()),
-            Token::Ident("x".into()),
-            Token::Ident("b".into()),
-        ];
+        let body: Vec<Token<_, (), ()>> =
+            vec![Token::Ident("a"), Token::Ident("x"), Token::Ident("b")];
         let def_id = Rc::new(crate::span::MacroDef {
             name: mk_span(0),
             params: vec![mk_span(1)],
