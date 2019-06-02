@@ -276,7 +276,7 @@ mod tests {
         let entry = MacroTableEntry {
             id: Rc::clone(&def_id),
             def: Rc::new(MacroDefData {
-                params: vec!["x".into()],
+                params: vec!["x"],
                 body,
             }),
         };
@@ -301,7 +301,7 @@ mod tests {
         let expanded: Vec<_> = entry
             .expand(
                 call_name.1,
-                vec![vec![Token::Ident("y".into()), Token::Ident("z".into())]
+                vec![vec![Token::Ident("y"), Token::Ident("z")]
                     .into_iter()
                     .zip((8..=9).map(mk_span))
                     .collect()],
@@ -318,16 +318,16 @@ mod tests {
         assert_eq!(
             expanded,
             [
-                (Token::Ident("a".into()), mk_span_data(0, None)),
+                (Token::Ident("a"), mk_span_data(0, None)),
                 (
-                    Token::Ident("y".into()),
+                    Token::Ident("y"),
                     mk_span_data(1, Some(ArgExpansionPos { arg: 0, token: 0 })),
                 ),
                 (
-                    Token::Ident("z".into()),
+                    Token::Ident("z"),
                     mk_span_data(1, Some(ArgExpansionPos { arg: 0, token: 1 })),
                 ),
-                (Token::Ident("b".into()), mk_span_data(2, None)),
+                (Token::Ident("b"), mk_span_data(2, None)),
             ]
         )
     }
