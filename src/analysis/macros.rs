@@ -1,33 +1,34 @@
 use super::resolve::{Ident, Name, NameTable};
-use super::session::MacroArgs;
-use super::{SemanticToken, Token};
+use super::{Command, Literal, SemanticToken, Token};
 
 use crate::diag::span::*;
 
 use std::rc::Rc;
 
-pub(super) trait Expand<I, F: MacroContextFactory<S>, S: Clone> {
-    type Iter: Iterator<Item = (SemanticToken<I>, S)>;
+pub(super) trait Expand<T, F: MacroContextFactory<S>, S: Clone> {
+    type Iter: Iterator<Item = (T, S)>;
 
-    fn expand(&self, name: S, args: MacroArgs<I, S>, factory: &mut F) -> Self::Iter;
+    fn expand(&self, name: S, args: MacroArgs<T, S>, factory: &mut F) -> Self::Iter;
 }
 
-pub(super) trait DefineMacro<R, I: Clone> {
+type MacroArgs<T, S> = Vec<Vec<(T, S)>>;
+
+pub(super) trait DefineMacro<I, T, K: Clone> {
     fn define_macro<D, S>(
         &mut self,
-        name: (Ident<R>, S),
-        params: (Vec<Ident<R>>, Vec<S>),
-        body: (Vec<SemanticToken<R>>, Vec<S>),
+        name: (I, S),
+        params: (Vec<I>, Vec<S>),
+        body: (Vec<T>, Vec<S>),
         diagnostics: &mut D,
     ) where
-        D: MacroContextFactory<S, MacroDefId = I>,
+        D: MacroContextFactory<S, MacroDefId = K>,
         S: Clone;
 }
 
-impl<R, N, I> DefineMacro<R, I> for N
+impl<R, N, K> DefineMacro<Ident<R>, Token<Ident<R>, Literal<R>, Command>, K> for N
 where
-    N: NameTable<Ident<R>, MacroEntry = MacroTableEntry<I, Rc<MacroDefData<R>>>>,
-    I: Clone,
+    N: NameTable<Ident<R>, MacroEntry = MacroTableEntry<K, Rc<MacroDefData<R>>>>,
+    K: Clone,
 {
     fn define_macro<D, S>(
         &mut self,
@@ -36,7 +37,7 @@ where
         body: (Vec<SemanticToken<R>>, Vec<S>),
         diagnostics: &mut D,
     ) where
-        D: MacroContextFactory<S, MacroDefId = I>,
+        D: MacroContextFactory<S, MacroDefId = K>,
         S: Clone,
     {
         let context = diagnostics.add_macro_def(name.1.clone(), params.1.clone(), body.1.clone());
@@ -68,15 +69,21 @@ pub(crate) type MacroEntry<R, D> = MacroTableEntry<
     Rc<MacroDefData<R>>,
 >;
 
-impl<I, F, S> Expand<I, F, S> for MacroTableEntry<F::MacroDefId, Rc<MacroDefData<I>>>
+impl<R, F, S> Expand<Token<Ident<R>, Literal<R>, Command>, F, S>
+    for MacroTableEntry<F::MacroDefId, Rc<MacroDefData<R>>>
 where
-    I: Clone + Eq,
+    R: Clone + Eq,
     F: MacroContextFactory<S>,
     S: Clone,
 {
-    type Iter = ExpandedMacro<I, F::MacroExpansionContext>;
+    type Iter = ExpandedMacro<R, F::MacroExpansionContext>;
 
-    fn expand(&self, name: S, args: MacroArgs<I, S>, factory: &mut F) -> Self::Iter {
+    fn expand(
+        &self,
+        name: S,
+        args: MacroArgs<Token<Ident<R>, Literal<R>, Command>, S>,
+        factory: &mut F,
+    ) -> Self::Iter {
         let mut arg_tokens = Vec::new();
         let mut arg_spans = Vec::new();
         for arg in args {
