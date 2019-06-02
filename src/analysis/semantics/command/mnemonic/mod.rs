@@ -402,7 +402,6 @@ impl From<kw::Mnemonic> for Mnemonic {
 mod tests {
     pub use self::kw::Operand::*;
 
-    pub(super) use crate::analysis::semantics::{TokenId, TokenSpan};
     pub(crate) use crate::diag::Message;
     pub use crate::span::{MergeSpans, SpanSource};
 
@@ -411,6 +410,14 @@ mod tests {
     use crate::analysis::semantics::command::*;
     use crate::analysis::{Ident, Literal};
     use crate::model::{Atom, LocationCounter};
+
+    #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+    pub(super) enum TokenId {
+        Mnemonic,
+        Operand(usize, usize),
+    }
+
+    pub(super) type TokenSpan = MockSpan<TokenId>;
 
     type Expr = crate::model::Expr<LocationCounter, Ident<String>, TokenSpan>;
     type Input = Arg<String, ()>;

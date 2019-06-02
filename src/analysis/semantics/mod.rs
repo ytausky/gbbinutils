@@ -14,9 +14,6 @@ use crate::diag::{EmitDiag, Message};
 #[cfg(test)]
 pub use self::mock::*;
 
-#[cfg(test)]
-use crate::diag::MockSpan;
-
 mod command;
 mod invoke;
 mod params;
@@ -217,23 +214,6 @@ impl<S: Session> TokenSeqContext<S::Span> for MacroDefActions<S> {
             parent.session().define_macro(name, params, self.tokens)
         }
         parent
-    }
-}
-
-#[cfg(test)]
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub enum TokenId {
-    Mnemonic,
-    Operand(usize, usize),
-}
-
-#[cfg(test)]
-pub(crate) type TokenSpan = MockSpan<TokenId>;
-
-#[cfg(test)]
-impl Default for TokenSpan {
-    fn default() -> Self {
-        unreachable!()
     }
 }
 
