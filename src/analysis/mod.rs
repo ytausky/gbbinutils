@@ -1,11 +1,12 @@
 use self::backend::*;
+use self::macros::{MacroDefData, MacroTableEntry};
 use self::resolve::{BiLevelNameTable, DefaultIdentFactory, Ident};
 use self::session::*;
 use self::syntax::*;
 
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diag::*;
-use crate::span::{BufContext, BufContextFactory, SpanSource};
+use crate::span::{BufContext, BufContextFactory, MacroContextFactory, SpanSource};
 use crate::BuiltinNames;
 
 use std::rc::Rc;
@@ -69,6 +70,11 @@ pub(super) enum Literal<S> {
     Number(i32),
     String(S),
 }
+
+type MacroEntry<R, D> = MacroTableEntry<
+    <D as MacroContextFactory<<D as SpanSource>::Span>>::MacroDefId,
+    Rc<MacroDefData<Ident<R>, Token<Ident<R>, Literal<R>, Command>>>,
+>;
 
 trait Lex<D: SpanSource>: StringSource {
     type TokenIter: Iterator<Item = LexItem<Self::StringRef, D::Span>>;

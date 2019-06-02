@@ -3,12 +3,11 @@ use self::invoke::MacroCallActions;
 use self::params::ParamsAdapter;
 
 use super::backend::{Backend, FinishFnDef, LocationCounter, PushOp};
-use super::macros::MacroEntry;
 use super::resolve::{NameTable, StartScope};
 use super::session::*;
 use super::syntax::keyword::*;
 use super::syntax::*;
-use super::{Ident, Lex, LexItem, Literal, SemanticToken};
+use super::{Ident, Lex, LexItem, Literal, MacroEntry, SemanticToken};
 
 use crate::diag::*;
 

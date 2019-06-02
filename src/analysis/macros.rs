@@ -1,5 +1,5 @@
-use super::resolve::{Ident, Name, NameTable};
-use super::{Command, Literal, Token};
+use super::resolve::{Name, NameTable};
+use super::Token;
 
 use crate::diag::span::*;
 
@@ -64,11 +64,6 @@ pub(crate) struct MacroDefData<I, T> {
     pub params: Vec<I>,
     pub body: Vec<T>,
 }
-
-pub(crate) type MacroEntry<R, D> = MacroTableEntry<
-    <D as MacroContextFactory<<D as SpanSource>::Span>>::MacroDefId,
-    Rc<MacroDefData<Ident<R>, Token<Ident<R>, Literal<R>, Command>>>,
->;
 
 impl<I, L, C, M, F, S> Expand<Token<I, L, C>, F, S> for MacroTableEntry<F::MacroDefId, M>
 where

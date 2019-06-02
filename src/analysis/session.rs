@@ -1,10 +1,10 @@
 pub use super::backend::ValueBuilder;
 
 use super::backend::*;
-use super::macros::{DefineMacro, Expand, MacroEntry};
+use super::macros::{DefineMacro, Expand};
 use super::resolve::{Ident, Name, NameTable, StartScope};
 use super::semantics::Analyze;
-use super::{Lex, SemanticToken, StringSource};
+use super::{Lex, MacroEntry, SemanticToken, StringSource};
 
 use crate::codebase::CodebaseError;
 use crate::diag::span::SpanSource;
