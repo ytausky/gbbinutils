@@ -3,16 +3,19 @@ use self::invoke::MacroCallActions;
 use self::params::ParamsAdapter;
 
 use super::backend::{FinishFnDef, LocationCounter, PushOp};
-use super::session::*;
-use super::syntax::keyword::*;
+use super::session::{Analyze, IntoSession, Params, Session};
+use super::syntax::keyword::Command;
 use super::syntax::*;
 use super::{Ident, LexItem, Literal, SemanticToken, StringSource};
 
 use crate::diag::span::SpanSource;
-use crate::diag::*;
+use crate::diag::{EmitDiag, Message};
 
 #[cfg(test)]
 pub use self::mock::*;
+
+#[cfg(test)]
+use crate::diag::MockSpan;
 
 mod command;
 mod invoke;
@@ -278,7 +281,7 @@ mod tests {
 
     use crate::analysis::backend::BackendEvent;
     use crate::analysis::session::SessionEvent;
-    use crate::diag::Message;
+    use crate::diag::{DiagnosticsEvent, Merge, Message};
     use crate::model::{Atom, BinOp, ExprOp, Instruction, Item, Width};
 
     use std::borrow::Borrow;
