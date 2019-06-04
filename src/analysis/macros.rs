@@ -73,7 +73,7 @@ where
     S: Clone,
     Token<I, L, C>: Clone,
 {
-    type Iter = ExpandedMacro<M, Token<I, L, C>, F::MacroExpansionContext>;
+    type Iter = ExpandedMacro<M, Token<I, L, C>, F::MacroCallCtx>;
 
     fn expand(&self, name: S, args: MacroArgs<Token<I, L, C>, S>, factory: &mut F) -> Self::Iter {
         let mut arg_tokens = Vec::new();
@@ -83,7 +83,7 @@ where
             arg_tokens.push(tokens);
             arg_spans.push(spans);
         }
-        let context = factory.mk_macro_expansion_context(name, arg_spans, &self.spans);
+        let context = factory.mk_macro_call_ctx(name, arg_spans, &self.spans);
         ExpandedMacro::new(self.tokens.clone(), arg_tokens, context)
     }
 }
@@ -160,7 +160,7 @@ impl<M, I, L, C, F> Iterator for ExpandedMacro<M, Token<I, L, C>, F>
 where
     M: Deref<Target = MacroDefTokens<I, Token<I, L, C>>>,
     I: Clone + Eq,
-    F: MacroExpansionContext,
+    F: MacroCallCtx,
     Token<I, L, C>: Clone,
 {
     type Item = (Token<I, L, C>, F::Span);

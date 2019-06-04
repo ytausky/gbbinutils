@@ -25,19 +25,19 @@ pub trait StripSpan<S> {
 
 pub trait MacroContextFactory<S: Clone> {
     type MacroDefHandle: Clone;
-    type MacroExpansionContext: MacroExpansionContext<Span = S>;
+    type MacroCallCtx: MacroCallCtx<Span = S>;
 
     fn add_macro_def<P, B>(&mut self, name: S, params: P, body: B) -> Self::MacroDefHandle
     where
         P: IntoIterator<Item = S>,
         B: IntoIterator<Item = S>;
 
-    fn mk_macro_expansion_context<A, J>(
+    fn mk_macro_call_ctx<A, J>(
         &mut self,
         name: S,
         args: A,
         def: &Self::MacroDefHandle,
-    ) -> Self::MacroExpansionContext
+    ) -> Self::MacroCallCtx
     where
         A: IntoIterator<Item = J>,
         J: IntoIterator<Item = S>;
@@ -66,7 +66,7 @@ pub trait BufContext: SpanSource {
     fn mk_span(&self, range: BufRange) -> Self::Span;
 }
 
-pub trait MacroExpansionContext: SpanSource {
+pub trait MacroCallCtx: SpanSource {
     fn mk_span(&self, position: MacroExpansionPos) -> Self::Span;
 }
 
@@ -207,7 +207,7 @@ where
     SpanData<BufSpan<B, R>>: Clone,
 {
     type MacroDefHandle = Rc<MacroDefSpans<SpanData<BufSpan<B, R>>>>;
-    type MacroExpansionContext = Rc<MacroExpansionData<SpanData<BufSpan<B, R>>>>;
+    type MacroCallCtx = Rc<MacroExpansionData<SpanData<BufSpan<B, R>>>>;
 
     fn add_macro_def<P, C>(
         &mut self,
@@ -226,12 +226,12 @@ where
         })
     }
 
-    fn mk_macro_expansion_context<I, J>(
+    fn mk_macro_call_ctx<I, J>(
         &mut self,
         name: SpanData<BufSpan<B, R>>,
         args: I,
         def: &Self::MacroDefHandle,
-    ) -> Self::MacroExpansionContext
+    ) -> Self::MacroCallCtx
     where
         I: IntoIterator<Item = J>,
         J: IntoIterator<Item = SpanData<BufSpan<B, R>>>,
@@ -332,7 +332,7 @@ where
     type Span = SpanData<BufSpan<B, R>>;
 }
 
-impl<B, R> MacroExpansionContext for Rc<MacroExpansionData<SpanData<BufSpan<B, R>>>>
+impl<B, R> MacroCallCtx for Rc<MacroExpansionData<SpanData<BufSpan<B, R>>>>
 where
     SpanData<BufSpan<B, R>>: Clone,
 {

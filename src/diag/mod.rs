@@ -156,7 +156,7 @@ where
     O: EmitDiag<C::Span, C::Stripped>,
 {
     type MacroDefHandle = C::MacroDefHandle;
-    type MacroExpansionContext = C::MacroExpansionContext;
+    type MacroCallCtx = C::MacroCallCtx;
 
     fn add_macro_def<P, B>(&mut self, name: C::Span, params: P, body: B) -> Self::MacroDefHandle
     where
@@ -166,17 +166,17 @@ where
         self.context.add_macro_def(name, params, body)
     }
 
-    fn mk_macro_expansion_context<A, J>(
+    fn mk_macro_call_ctx<A, J>(
         &mut self,
         name: C::Span,
         args: A,
         def: &Self::MacroDefHandle,
-    ) -> Self::MacroExpansionContext
+    ) -> Self::MacroCallCtx
     where
         A: IntoIterator<Item = J>,
         J: IntoIterator<Item = C::Span>,
     {
-        self.context.mk_macro_expansion_context(name, args, def)
+        self.context.mk_macro_call_ctx(name, args, def)
     }
 }
 
@@ -602,7 +602,7 @@ mod mock {
         S: Clone + Default + Merge,
     {
         type MacroDefHandle = usize;
-        type MacroExpansionContext = Self;
+        type MacroCallCtx = Self;
 
         fn add_macro_def<P, B>(&mut self, _: S, _: P, _: B) -> Self::MacroDefHandle
         where
@@ -612,12 +612,12 @@ mod mock {
             0
         }
 
-        fn mk_macro_expansion_context<A, J>(
+        fn mk_macro_call_ctx<A, J>(
             &mut self,
             _: S,
             _: A,
             _: &Self::MacroDefHandle,
-        ) -> Self::MacroExpansionContext
+        ) -> Self::MacroCallCtx
         where
             A: IntoIterator<Item = J>,
             J: IntoIterator<Item = S>,
@@ -626,7 +626,7 @@ mod mock {
         }
     }
 
-    impl<T, S: Clone + Default + Merge> MacroExpansionContext for MockDiagnosticsSystem<T, S> {
+    impl<T, S: Clone + Default + Merge> MacroCallCtx for MockDiagnosticsSystem<T, S> {
         fn mk_span(&self, _: MacroExpansionPos) -> Self::Span {
             S::default()
         }
