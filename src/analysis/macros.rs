@@ -3,7 +3,6 @@ use super::Token;
 
 use crate::diag::span::*;
 
-use std::ops::Deref;
 use std::rc::Rc;
 
 pub(super) trait Expand<T, F: MacroContextFactory<S>, S: Clone> {
@@ -28,7 +27,7 @@ pub(super) trait DefineMacro<I, T, H: Clone> {
 
 impl<I, L, C, N, H> DefineMacro<I, Token<I, L, C>, H> for N
 where
-    N: NameTable<I, MacroEntry = MacroDef<Rc<MacroDefTokens<I, Token<I, L, C>>>, H>>,
+    N: NameTable<I, MacroEntry = MacroDef<I, Token<I, L, C>, H>>,
     H: Clone,
 {
     fn define_macro<D, S>(
@@ -55,25 +54,24 @@ where
     }
 }
 
-pub struct MacroDef<T, S> {
-    pub tokens: T,
+pub(super) struct MacroDef<I, T, S> {
+    pub tokens: Rc<MacroDefTokens<I, T>>,
     pub spans: S,
 }
 
-pub(crate) struct MacroDefTokens<I, T> {
+pub(super) struct MacroDefTokens<I, T> {
     pub params: Vec<I>,
     pub body: Vec<T>,
 }
 
-impl<I, L, C, M, F, S> Expand<Token<I, L, C>, F, S> for MacroDef<M, F::MacroDefHandle>
+impl<I, L, C, F, S> Expand<Token<I, L, C>, F, S> for MacroDef<I, Token<I, L, C>, F::MacroDefHandle>
 where
     I: Clone + Eq,
-    M: Clone + Deref<Target = MacroDefTokens<I, Token<I, L, C>>>,
     F: MacroContextFactory<S>,
     S: Clone,
     Token<I, L, C>: Clone,
 {
-    type Iter = ExpandedMacro<M, Token<I, L, C>, F::MacroCallCtx>;
+    type Iter = ExpandedMacro<I, Token<I, L, C>, F::MacroCallCtx>;
 
     fn expand(&self, name: S, args: MacroArgs<Token<I, L, C>, S>, factory: &mut F) -> Self::Iter {
         let mut arg_tokens = Vec::new();
@@ -88,8 +86,8 @@ where
     }
 }
 
-pub(super) struct ExpandedMacro<M, T, C> {
-    def: M,
+pub(super) struct ExpandedMacro<I, T, C> {
+    def: Rc<MacroDefTokens<I, T>>,
     args: Vec<Vec<T>>,
     context: C,
     body_index: usize,
@@ -102,12 +100,15 @@ enum ExpansionState {
     Label(usize),
 }
 
-impl<M, I, L, C, F> ExpandedMacro<M, Token<I, L, C>, F>
+impl<I, L, C, F> ExpandedMacro<I, Token<I, L, C>, F>
 where
-    M: Deref<Target = MacroDefTokens<I, Token<I, L, C>>>,
     I: PartialEq,
 {
-    fn new(def: M, args: Vec<Vec<Token<I, L, C>>>, context: F) -> Self {
+    fn new(
+        def: Rc<MacroDefTokens<I, Token<I, L, C>>>,
+        args: Vec<Vec<Token<I, L, C>>>,
+        context: F,
+    ) -> Self {
         let mut expanded_macro = ExpandedMacro {
             def,
             args,
@@ -156,9 +157,8 @@ where
     }
 }
 
-impl<M, I, L, C, F> Iterator for ExpandedMacro<M, Token<I, L, C>, F>
+impl<I, L, C, F> Iterator for ExpandedMacro<I, Token<I, L, C>, F>
 where
-    M: Deref<Target = MacroDefTokens<I, Token<I, L, C>>>,
     I: Clone + Eq,
     F: MacroCallCtx,
     Token<I, L, C>: Clone,

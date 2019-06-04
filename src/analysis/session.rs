@@ -1,7 +1,7 @@
 pub use super::backend::ValueBuilder;
 
 use super::backend::*;
-use super::macros::{DefineMacro, Expand, MacroDef, MacroDefTokens};
+use super::macros::{DefineMacro, Expand, MacroDef};
 use super::resolve::{Ident, Name, NameTable, StartScope};
 use super::{Lex, LexItem, SemanticToken, StringSource};
 
@@ -9,8 +9,6 @@ use crate::codebase::CodebaseError;
 use crate::diag::span::SpanSource;
 use crate::diag::*;
 use crate::model::{BinOp, FnCall, Item, ParamId};
-
-use std::rc::Rc;
 
 #[cfg(test)]
 pub(crate) use self::mock::*;
@@ -316,7 +314,8 @@ where
             Ident<C::StringRef>,
             BackendEntry = B::Name,
             MacroEntry = MacroDef<
-                Rc<MacroDefTokens<Ident<C::StringRef>, SemanticToken<C::StringRef>>>,
+                Ident<C::StringRef>,
+                SemanticToken<C::StringRef>,
                 D::MacroDefHandle,
             >,
         > + StartScope<Ident<C::StringRef>>,
@@ -935,7 +934,8 @@ mod tests {
     }
 
     type MacroEntry<R, D> = MacroDef<
-        Rc<MacroDefTokens<Ident<R>, SemanticToken<R>>>,
+        Ident<R>,
+        SemanticToken<R>,
         <D as MacroContextFactory<<D as SpanSource>::Span>>::MacroDefHandle,
     >;
 
