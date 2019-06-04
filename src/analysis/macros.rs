@@ -203,6 +203,8 @@ fn split<I: IntoIterator<Item = (L, R)>, L, R>(iter: I) -> (Vec<L>, Vec<R>) {
 mod tests {
     use super::*;
 
+    use crate::diag::span::MacroDefSpans;
+
     #[test]
     fn expand_macro_with_one_token() {
         let buf = Rc::new(BufContextData {
@@ -216,7 +218,7 @@ mod tests {
             })
         };
         let body = Token::<_, (), ()>::Ident("a");
-        let def_id = Rc::new(crate::span::MacroDef {
+        let def_id = Rc::new(MacroDefSpans {
             name: mk_span(0),
             params: vec![],
             body: vec![mk_span(1)],
@@ -267,7 +269,7 @@ mod tests {
         };
         let body: Vec<Token<_, (), ()>> =
             vec![Token::Ident("a"), Token::Ident("x"), Token::Ident("b")];
-        let def_id = Rc::new(crate::span::MacroDef {
+        let def_id = Rc::new(MacroDefSpans {
             name: mk_span(0),
             params: vec![mk_span(1)],
             body: (2..=4).map(mk_span).collect(),

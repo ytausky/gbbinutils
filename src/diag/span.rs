@@ -177,11 +177,11 @@ pub struct BufContextData<B, R> {
 pub struct MacroExpansionData<S> {
     pub name: S,
     pub args: Vec<Vec<S>>,
-    pub def: Rc<MacroDef<S>>,
+    pub def: Rc<MacroDefSpans<S>>,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct MacroDef<S> {
+pub struct MacroDefSpans<S> {
     pub name: S,
     pub params: Vec<S>,
     pub body: Vec<S>,
@@ -206,7 +206,7 @@ impl<B, R> MacroContextFactory<SpanData<BufSpan<B, R>>> for RcContextFactory<B, 
 where
     SpanData<BufSpan<B, R>>: Clone,
 {
-    type MacroDefId = Rc<MacroDef<SpanData<BufSpan<B, R>>>>;
+    type MacroDefId = Rc<MacroDefSpans<SpanData<BufSpan<B, R>>>>;
     type MacroExpansionContext = Rc<MacroExpansionData<SpanData<BufSpan<B, R>>>>;
 
     fn add_macro_def<P, C>(
@@ -219,7 +219,7 @@ where
         P: IntoIterator<Item = SpanData<BufSpan<B, R>>>,
         C: IntoIterator<Item = SpanData<BufSpan<B, R>>>,
     {
-        Rc::new(MacroDef {
+        Rc::new(MacroDefSpans {
             name,
             params: params.into_iter().collect(),
             body: body.into_iter().collect(),
@@ -445,8 +445,8 @@ mod tests {
     fn mk_macro_def<B>(
         buf_context: &Rc<BufContextData<B, Range<usize>>>,
         base: usize,
-    ) -> Rc<MacroDef<SpanData<BufSpan<B>>>> {
-        Rc::new(MacroDef {
+    ) -> Rc<MacroDefSpans<SpanData<BufSpan<B>>>> {
+        Rc::new(MacroDefSpans {
             name: SpanData::Buf(BufSpan {
                 range: macro_name_range(base),
                 context: Rc::clone(buf_context),

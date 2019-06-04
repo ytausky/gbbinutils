@@ -696,7 +696,7 @@ mod tests {
             buf_id: (),
             included_from: None,
         });
-        let macro_def = Rc::new(MacroDef {
+        let macro_def = Rc::new(MacroDefSpans {
             name: SpanData::Buf(BufSpan {
                 range: 0..1,
                 context: Rc::clone(buf_context),
