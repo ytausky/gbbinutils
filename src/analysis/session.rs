@@ -1,7 +1,7 @@
 pub use super::backend::ValueBuilder;
 
 use super::backend::*;
-use super::macros::{DefineMacro, Expand, MacroDefData, MacroTableEntry};
+use super::macros::{DefineMacro, Expand, MacroDefTokens, MacroTableEntry};
 use super::resolve::{Ident, Name, NameTable, StartScope};
 use super::{Lex, LexItem, SemanticToken, StringSource};
 
@@ -317,7 +317,7 @@ where
             BackendEntry = B::Name,
             MacroEntry = MacroTableEntry<
                 D::MacroDefId,
-                Rc<MacroDefData<Ident<C::StringRef>, SemanticToken<C::StringRef>>>,
+                Rc<MacroDefTokens<Ident<C::StringRef>, SemanticToken<C::StringRef>>>,
             >,
         > + StartScope<Ident<C::StringRef>>,
     D: DiagnosticsSystem,
@@ -936,7 +936,7 @@ mod tests {
 
     type MacroEntry<R, D> = MacroTableEntry<
         <D as MacroContextFactory<<D as SpanSource>::Span>>::MacroDefId,
-        Rc<MacroDefData<Ident<R>, SemanticToken<R>>>,
+        Rc<MacroDefTokens<Ident<R>, SemanticToken<R>>>,
     >;
 
     type MockAnalyzer<S> = crate::analysis::semantics::MockAnalyzer<Event<S>>;
