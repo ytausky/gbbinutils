@@ -317,7 +317,7 @@ where
             BackendEntry = B::Name,
             MacroEntry = MacroDef<
                 Rc<MacroDefTokens<Ident<C::StringRef>, SemanticToken<C::StringRef>>>,
-                D::MacroDefId,
+                D::MacroDefHandle,
             >,
         > + StartScope<Ident<C::StringRef>>,
     D: DiagnosticsSystem,
@@ -936,7 +936,7 @@ mod tests {
 
     type MacroEntry<R, D> = MacroDef<
         Rc<MacroDefTokens<Ident<R>, SemanticToken<R>>>,
-        <D as MacroContextFactory<<D as SpanSource>::Span>>::MacroDefId,
+        <D as MacroContextFactory<<D as SpanSource>::Span>>::MacroDefHandle,
     >;
 
     type MockAnalyzer<S> = crate::analysis::semantics::MockAnalyzer<Event<S>>;

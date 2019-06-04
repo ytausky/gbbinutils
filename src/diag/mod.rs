@@ -155,10 +155,10 @@ where
     C: SpanSystem,
     O: EmitDiag<C::Span, C::Stripped>,
 {
-    type MacroDefId = C::MacroDefId;
+    type MacroDefHandle = C::MacroDefHandle;
     type MacroExpansionContext = C::MacroExpansionContext;
 
-    fn add_macro_def<P, B>(&mut self, name: C::Span, params: P, body: B) -> Self::MacroDefId
+    fn add_macro_def<P, B>(&mut self, name: C::Span, params: P, body: B) -> Self::MacroDefHandle
     where
         P: IntoIterator<Item = C::Span>,
         B: IntoIterator<Item = C::Span>,
@@ -170,7 +170,7 @@ where
         &mut self,
         name: C::Span,
         args: A,
-        def: &Self::MacroDefId,
+        def: &Self::MacroDefHandle,
     ) -> Self::MacroExpansionContext
     where
         A: IntoIterator<Item = J>,
@@ -601,10 +601,10 @@ mod mock {
     where
         S: Clone + Default + Merge,
     {
-        type MacroDefId = usize;
+        type MacroDefHandle = usize;
         type MacroExpansionContext = Self;
 
-        fn add_macro_def<P, B>(&mut self, _: S, _: P, _: B) -> Self::MacroDefId
+        fn add_macro_def<P, B>(&mut self, _: S, _: P, _: B) -> Self::MacroDefHandle
         where
             P: IntoIterator<Item = S>,
             B: IntoIterator<Item = S>,
@@ -616,7 +616,7 @@ mod mock {
             &mut self,
             _: S,
             _: A,
-            _: &Self::MacroDefId,
+            _: &Self::MacroDefHandle,
         ) -> Self::MacroExpansionContext
         where
             A: IntoIterator<Item = J>,

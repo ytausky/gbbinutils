@@ -14,7 +14,7 @@ pub(super) trait Expand<T, F: MacroContextFactory<S>, S: Clone> {
 
 type MacroArgs<T, S> = Vec<Vec<(T, S)>>;
 
-pub(super) trait DefineMacro<I, T, K: Clone> {
+pub(super) trait DefineMacro<I, T, H: Clone> {
     fn define_macro<D, S>(
         &mut self,
         name: (I, S),
@@ -22,14 +22,14 @@ pub(super) trait DefineMacro<I, T, K: Clone> {
         body: (Vec<T>, Vec<S>),
         diagnostics: &mut D,
     ) where
-        D: MacroContextFactory<S, MacroDefId = K>,
+        D: MacroContextFactory<S, MacroDefHandle = H>,
         S: Clone;
 }
 
-impl<I, L, C, N, K> DefineMacro<I, Token<I, L, C>, K> for N
+impl<I, L, C, N, H> DefineMacro<I, Token<I, L, C>, H> for N
 where
-    N: NameTable<I, MacroEntry = MacroDef<Rc<MacroDefTokens<I, Token<I, L, C>>>, K>>,
-    K: Clone,
+    N: NameTable<I, MacroEntry = MacroDef<Rc<MacroDefTokens<I, Token<I, L, C>>>, H>>,
+    H: Clone,
 {
     fn define_macro<D, S>(
         &mut self,
@@ -38,7 +38,7 @@ where
         body: (Vec<Token<I, L, C>>, Vec<S>),
         diagnostics: &mut D,
     ) where
-        D: MacroContextFactory<S, MacroDefId = K>,
+        D: MacroContextFactory<S, MacroDefHandle = H>,
         S: Clone,
     {
         let context = diagnostics.add_macro_def(name.1, params.1, body.1);
@@ -65,7 +65,7 @@ pub(crate) struct MacroDefTokens<I, T> {
     pub body: Vec<T>,
 }
 
-impl<I, L, C, M, F, S> Expand<Token<I, L, C>, F, S> for MacroDef<M, F::MacroDefId>
+impl<I, L, C, M, F, S> Expand<Token<I, L, C>, F, S> for MacroDef<M, F::MacroDefHandle>
 where
     I: Clone + Eq,
     M: Clone + Deref<Target = MacroDefTokens<I, Token<I, L, C>>>,
