@@ -1,7 +1,8 @@
 pub use super::backend::ValueBuilder;
 
+use self::expand::{DefineMacro, Expand, MacroDef};
+
 use super::backend::*;
-use super::macros::{DefineMacro, Expand, MacroDef};
 use super::resolve::{Ident, Name, NameTable, StartScope};
 use super::{Lex, LexItem, SemanticToken, StringSource};
 
@@ -12,6 +13,8 @@ use crate::model::{BinOp, FnCall, Item, ParamId};
 
 #[cfg(test)]
 pub(crate) use self::mock::*;
+
+mod expand;
 
 pub(super) trait Session
 where
@@ -49,7 +52,7 @@ where
     fn define_symbol(self, name: Ident<R>, span: S) -> Self::FnBuilder;
 }
 
-pub(super) type MacroArgs<I, S> = super::macros::MacroArgs<SemanticToken<I>, S>;
+pub(super) type MacroArgs<I, S> = expand::MacroArgs<SemanticToken<I>, S>;
 pub(super) type Params<R, S> = (Vec<Ident<R>>, Vec<S>);
 
 pub(super) struct CompositeSession<'a, 'b, C, A, B, N, D> {

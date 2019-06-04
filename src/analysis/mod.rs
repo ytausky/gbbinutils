@@ -14,7 +14,6 @@ use std::rc::Rc;
 pub use self::mock::*;
 
 pub mod backend;
-mod macros;
 mod resolve;
 mod semantics;
 mod session;

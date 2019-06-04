@@ -1,6 +1,5 @@
-use super::resolve::{Name, NameTable};
-use super::Token;
-
+use crate::analysis::resolve::{Name, NameTable};
+use crate::analysis::Token;
 use crate::diag::span::*;
 
 use std::rc::Rc;
@@ -54,12 +53,12 @@ where
     }
 }
 
-pub(super) struct MacroDef<I, T, S> {
+pub(in crate::analysis) struct MacroDef<I, T, S> {
     pub tokens: Rc<MacroDefTokens<I, T>>,
     pub spans: S,
 }
 
-pub(super) struct MacroDefTokens<I, T> {
+pub(in crate::analysis) struct MacroDefTokens<I, T> {
     pub params: Vec<I>,
     pub body: Vec<T>,
 }
