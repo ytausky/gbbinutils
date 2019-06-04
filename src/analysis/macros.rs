@@ -28,7 +28,7 @@ pub(super) trait DefineMacro<I, T, K: Clone> {
 
 impl<I, L, C, N, K> DefineMacro<I, Token<I, L, C>, K> for N
 where
-    N: NameTable<I, MacroEntry = MacroTableEntry<K, Rc<MacroDefTokens<I, Token<I, L, C>>>>>,
+    N: NameTable<I, MacroEntry = MacroDef<Rc<MacroDefTokens<I, Token<I, L, C>>>, K>>,
     K: Clone,
 {
     fn define_macro<D, S>(
@@ -44,20 +44,20 @@ where
         let context = diagnostics.add_macro_def(name.1, params.1, body.1);
         self.insert(
             name.0,
-            Name::Macro(MacroTableEntry {
-                id: context,
-                def: Rc::new(MacroDefTokens {
+            Name::Macro(MacroDef {
+                tokens: Rc::new(MacroDefTokens {
                     params: params.0,
                     body: body.0,
                 }),
+                spans: context,
             }),
         )
     }
 }
 
-pub struct MacroTableEntry<I, D> {
-    pub id: I,
-    pub def: D,
+pub struct MacroDef<T, S> {
+    pub tokens: T,
+    pub spans: S,
 }
 
 pub(crate) struct MacroDefTokens<I, T> {
@@ -65,7 +65,7 @@ pub(crate) struct MacroDefTokens<I, T> {
     pub body: Vec<T>,
 }
 
-impl<I, L, C, M, F, S> Expand<Token<I, L, C>, F, S> for MacroTableEntry<F::MacroDefId, M>
+impl<I, L, C, M, F, S> Expand<Token<I, L, C>, F, S> for MacroDef<M, F::MacroDefId>
 where
     I: Clone + Eq,
     M: Clone + Deref<Target = MacroDefTokens<I, Token<I, L, C>>>,
@@ -83,8 +83,8 @@ where
             arg_tokens.push(tokens);
             arg_spans.push(spans);
         }
-        let context = factory.mk_macro_expansion_context(name, arg_spans, &self.id);
-        ExpandedMacro::new(self.def.clone(), arg_tokens, context)
+        let context = factory.mk_macro_expansion_context(name, arg_spans, &self.spans);
+        ExpandedMacro::new(self.tokens.clone(), arg_tokens, context)
     }
 }
 
@@ -224,12 +224,12 @@ mod tests {
             body: vec![mk_span(1)],
         });
         let mut factory = RcContextFactory::new();
-        let entry = MacroTableEntry {
-            id: Rc::clone(&def_id),
-            def: Rc::new(MacroDefTokens {
+        let entry = MacroDef {
+            tokens: Rc::new(MacroDefTokens {
                 params: vec![],
                 body: vec![body.clone()],
             }),
+            spans: Rc::clone(&def_id),
         };
         let call_name = ("my_macro", mk_span(2));
         let data = Rc::new(MacroExpansionData {
@@ -275,12 +275,12 @@ mod tests {
             body: (2..=4).map(mk_span).collect(),
         });
         let factory = &mut RcContextFactory::new();
-        let entry = MacroTableEntry {
-            id: Rc::clone(&def_id),
-            def: Rc::new(MacroDefTokens {
+        let entry = MacroDef {
+            tokens: Rc::new(MacroDefTokens {
                 params: vec!["x"],
                 body,
             }),
+            spans: Rc::clone(&def_id),
         };
         let data = Rc::new(MacroExpansionData {
             name: SpanData::Buf(BufSpan {
