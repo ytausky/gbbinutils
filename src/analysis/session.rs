@@ -49,7 +49,7 @@ where
     fn define_symbol(self, name: Ident<R>, span: S) -> Self::FnBuilder;
 }
 
-pub(super) type MacroArgs<I, S> = Vec<Vec<(SemanticToken<I>, S)>>;
+pub(super) type MacroArgs<I, S> = super::macros::MacroArgs<SemanticToken<I>, S>;
 pub(super) type Params<R, S> = (Vec<Ident<R>>, Vec<S>);
 
 pub(super) struct CompositeSession<'a, 'b, C, A, B, N, D> {
@@ -523,14 +523,9 @@ mod mock {
         fn call_macro(
             self,
             name: (Ident<Self::StringRef>, Self::Span),
-            args: MacroArgs<Self::StringRef, Self::Span>,
+            (args, _): MacroArgs<Self::StringRef, Self::Span>,
         ) -> Self {
-            self.log.push(SessionEvent::InvokeMacro(
-                name.0,
-                args.into_iter()
-                    .map(|arg| arg.into_iter().map(|(token, _)| token).collect())
-                    .collect(),
-            ));
+            self.log.push(SessionEvent::InvokeMacro(name.0, args));
             self
         }
     }
@@ -775,7 +770,7 @@ mod tests {
                 (vec![], vec![]),
                 (tokens.clone(), spans.clone()),
             );
-            session.call_macro((name.into(), ()), vec![]);
+            session.call_macro((name.into(), ()), (vec![], vec![]));
         });
         assert_eq!(
             log,
@@ -802,7 +797,7 @@ mod tests {
                     vec![(), (), ()],
                 ),
             );
-            session.call_macro((name.into(), ()), vec![vec![(arg.clone(), ())]]);
+            session.call_macro((name.into(), ()), (vec![vec![arg.clone()]], vec![vec![()]]));
         });
         assert_eq!(
             log,
@@ -830,7 +825,7 @@ mod tests {
             );
             session.call_macro(
                 (name.into(), ()),
-                vec![vec![(Token::Ident(label.into()), ())]],
+                (vec![vec![Token::Ident(label.into())]], vec![vec![()]]),
             );
         });
         assert_eq!(
@@ -857,7 +852,7 @@ mod tests {
         let name = "my_macro";
         let span = name;
         let log = Fixture::<MockSpan<_>>::default().log_session(|session| {
-            session.call_macro((name.into(), span.into()), vec![]);
+            session.call_macro((name.into(), span.into()), (vec![], vec![]));
         });
         assert_eq!(
             log,

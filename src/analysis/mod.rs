@@ -90,7 +90,7 @@ impl<'a, T: StringSource + 'a> CodebaseAnalyzer<'a, T> {
     }
 }
 
-type TokenSeq<I, S> = Vec<(SemanticToken<I>, S)>;
+type TokenSeq<I, S> = (Vec<SemanticToken<I>>, Vec<S>);
 
 impl<'a, T, D> Lex<D> for CodebaseAnalyzer<'a, T>
 where

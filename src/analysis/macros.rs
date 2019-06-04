@@ -11,7 +11,7 @@ pub(super) trait Expand<T, F: MacroContextFactory<S>, S: Clone> {
     fn expand(&self, name: S, args: MacroArgs<T, S>, factory: &mut F) -> Self::Iter;
 }
 
-type MacroArgs<T, S> = Vec<Vec<(T, S)>>;
+pub(super) type MacroArgs<T, S> = (Vec<Vec<T>>, Vec<Vec<S>>);
 
 pub(super) trait DefineMacro<I, T, H: Clone> {
     fn define_macro<D, S>(
@@ -73,16 +73,14 @@ where
 {
     type Iter = ExpandedMacro<I, Token<I, L, C>, F::MacroCallCtx>;
 
-    fn expand(&self, name: S, args: MacroArgs<Token<I, L, C>, S>, factory: &mut F) -> Self::Iter {
-        let mut arg_tokens = Vec::new();
-        let mut arg_spans = Vec::new();
-        for arg in args {
-            let (tokens, spans) = split(arg);
-            arg_tokens.push(tokens);
-            arg_spans.push(spans);
-        }
+    fn expand(
+        &self,
+        name: S,
+        (args, arg_spans): MacroArgs<Token<I, L, C>, S>,
+        factory: &mut F,
+    ) -> Self::Iter {
         let context = factory.mk_macro_call_ctx(name, arg_spans, &self.spans);
-        ExpandedMacro::new(self.tokens.clone(), arg_tokens, context)
+        ExpandedMacro::new(self.tokens.clone(), args, context)
     }
 }
 
@@ -189,16 +187,6 @@ where
     }
 }
 
-fn split<I: IntoIterator<Item = (L, R)>, L, R>(iter: I) -> (Vec<L>, Vec<R>) {
-    let mut left = Vec::new();
-    let mut right = Vec::new();
-    for (l, r) in iter {
-        left.push(l);
-        right.push(r);
-    }
-    (left, right)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -237,7 +225,9 @@ mod tests {
             args: vec![],
             def: def_id,
         });
-        let expanded: Vec<_> = entry.expand(call_name.1, vec![], &mut factory).collect();
+        let expanded: Vec<_> = entry
+            .expand(call_name.1, (vec![], vec![]), &mut factory)
+            .collect();
         let macro_expansion_position = MacroCallPos {
             token: 0,
             expansion: None,
@@ -303,10 +293,10 @@ mod tests {
         let expanded: Vec<_> = entry
             .expand(
                 call_name.1,
-                vec![vec![Token::Ident("y"), Token::Ident("z")]
-                    .into_iter()
-                    .zip((8..=9).map(mk_span))
-                    .collect()],
+                (
+                    vec![vec![Token::Ident("y"), Token::Ident("z")]],
+                    vec![(8..=9).map(mk_span).collect()],
+                ),
                 factory,
             )
             .collect();
