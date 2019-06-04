@@ -177,7 +177,7 @@ where
                 },
                 None => (self.def.body[self.body_index].clone(), None),
             };
-            let span = self.context.mk_span(MacroExpansionPos {
+            let span = self.context.mk_span(MacroCallPos {
                 token: self.body_index,
                 expansion,
             });
@@ -238,7 +238,7 @@ mod tests {
             def: def_id,
         });
         let expanded: Vec<_> = entry.expand(call_name.1, vec![], &mut factory).collect();
-        let macro_expansion_position = MacroExpansionPos {
+        let macro_expansion_position = MacroCallPos {
             token: 0,
             expansion: None,
         };
@@ -311,7 +311,7 @@ mod tests {
             )
             .collect();
         let mk_span_data = |token, expansion| {
-            let position = MacroExpansionPos { token, expansion };
+            let position = MacroCallPos { token, expansion };
             SpanData::Macro {
                 range: position.clone()..=position,
                 context: data.clone(),
