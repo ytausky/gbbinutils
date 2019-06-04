@@ -4,7 +4,7 @@ use self::expand::{DefineMacro, Expand, MacroDef};
 
 use super::backend::*;
 use super::resolve::{Ident, Name, NameTable, StartScope};
-use super::{Lex, LexItem, SemanticToken, StringSource};
+use super::{Lex, LexItem, SemanticToken, StringSource, TokenSeq};
 
 use crate::codebase::CodebaseError;
 use crate::diag::span::SpanSource;
@@ -27,7 +27,7 @@ where
         &mut self,
         name: (Ident<Self::StringRef>, Self::Span),
         params: Params<Self::StringRef, Self::Span>,
-        body: (Vec<SemanticToken<Self::StringRef>>, Vec<Self::Span>),
+        body: TokenSeq<Self::StringRef, Self::Span>,
     );
     fn call_macro(
         self,
@@ -347,8 +347,8 @@ where
     fn define_macro(
         &mut self,
         name: (Ident<Self::StringRef>, Self::Span),
-        params: (Vec<Ident<Self::StringRef>>, Vec<Self::Span>),
-        body: (Vec<SemanticToken<Self::StringRef>>, Vec<Self::Span>),
+        params: Params<Self::StringRef, Self::Span>,
+        body: TokenSeq<Self::StringRef, Self::Span>,
     ) {
         self.downstream
             .names
