@@ -223,7 +223,7 @@ pub(crate) struct OutputForwarder<'a> {
     pub codebase: &'a RefCell<TextCache>,
 }
 
-type Span = ModularSpan<BufSpan<BufId, BufRange>>;
+type Span = RcSpan<BufId, BufRange>;
 
 impl<'a> SpanSource for OutputForwarder<'a> {
     type Span = Span;
@@ -326,9 +326,7 @@ struct ExpandedDiagnosticClause<S, B, R> {
     location: Option<R>,
 }
 
-impl<B: Clone, T: Clone>
-    CompactDiag<ModularSpan<BufSpan<B, Range<T>>>, StrippedBufSpan<B, Range<T>>>
-{
+impl<B: Clone, T: Clone> CompactDiag<RcSpan<B, Range<T>>, StrippedBufSpan<B, Range<T>>> {
     fn expand(self) -> ExpandedDiagnostic<StrippedBufSpan<B, Range<T>>, B, Range<T>> {
         let StrippedBufSpan { buf_id, range } = self.main.highlight.to_stripped();
         let main_clause = ExpandedDiagnosticClause {
@@ -348,7 +346,7 @@ impl<B: Clone, T: Clone>
 type BufSnippetClause<B, T> = ExpandedDiagnosticClause<StrippedBufSpan<B, Range<T>>, B, Range<T>>;
 
 fn mk_called_here_clause<B: Clone, T: Clone>(
-    span: &ModularSpan<BufSpan<B, Range<T>>>,
+    span: &RcSpan<B, Range<T>>,
 ) -> Option<BufSnippetClause<B, T>> {
     let call = if let ModularSpan::Macro(MacroSpan { context, .. }) = span {
         context.name.clone()
@@ -712,7 +710,7 @@ mod tests {
             })],
         });
         let call_range = 10..11;
-        let context = Rc::new(ModularMacroCall {
+        let context = RcMacroCall::new(ModularMacroCall {
             name: ModularSpan::Buf(BufSpan {
                 range: call_range.clone(),
                 context: Rc::clone(buf_context),

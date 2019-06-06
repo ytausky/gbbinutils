@@ -2,7 +2,7 @@ use crate::codebase::{BufId, BufRange, TextCache};
 
 use std::cmp::Ordering;
 use std::marker::PhantomData;
-use std::ops::{Range, RangeInclusive};
+use std::ops::{Deref, Range, RangeInclusive};
 use std::rc::Rc;
 
 pub trait SpanSource {
@@ -82,10 +82,12 @@ pub struct ArgExpansionPos {
     pub token: usize,
 }
 
+pub type RcSpan<B, R> = ModularSpan<BufSpan<B, R>, MacroSpan<RcMacroCall<BufSpan<B, R>>>>;
+
 #[derive(Clone, Debug, PartialEq)]
-pub enum ModularSpan<B> {
+pub enum ModularSpan<B, M> {
     Buf(B),
-    Macro(MacroSpan<RcMacroCall<B>>),
+    Macro(M),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -106,7 +108,7 @@ pub struct StrippedBufSpan<B, R> {
     pub range: R,
 }
 
-impl<B: Clone, T: Clone> ModularSpan<BufSpan<B, Range<T>>> {
+impl<B: Clone, T: Clone> RcSpan<B, Range<T>> {
     pub fn to_stripped(&self) -> StrippedBufSpan<B, Range<T>> {
         match self {
             ModularSpan::Buf(BufSpan { range, context }) => StrippedBufSpan {
@@ -173,10 +175,36 @@ fn merge_macro_expansion_ranges(
 #[derive(Debug, PartialEq)]
 pub struct BufContextData<B, R> {
     pub buf_id: B,
-    pub included_from: Option<ModularSpan<BufSpan<B, R>>>,
+    pub included_from: Option<RcSpan<B, R>>,
 }
 
-pub type RcMacroCall<B> = Rc<ModularMacroCall<Rc<MacroDefSpans<ModularSpan<B>>>, ModularSpan<B>>>;
+#[derive(Debug, PartialEq)]
+pub struct RcMacroCall<B>(Rc<RcMacroCallInner<B>>);
+
+type RcMacroCallInner<B> = ModularMacroCall<
+    Rc<MacroDefSpans<ModularSpan<B, MacroSpan<RcMacroCall<B>>>>>,
+    ModularSpan<B, MacroSpan<RcMacroCall<B>>>,
+>;
+
+impl<B> RcMacroCall<B> {
+    pub fn new(inner: RcMacroCallInner<B>) -> Self {
+        Self(Rc::new(inner))
+    }
+}
+
+impl<B> Clone for RcMacroCall<B> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<B> Deref for RcMacroCall<B> {
+    type Target = RcMacroCallInner<B>;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.deref()
+    }
+}
 
 #[derive(Debug, PartialEq)]
 pub struct ModularMacroCall<D, S> {
@@ -202,27 +230,27 @@ impl<B, R> RcContextFactory<B, R> {
 
 impl<B, R> SpanSource for RcContextFactory<B, R>
 where
-    ModularSpan<BufSpan<B, R>>: Clone,
+    RcSpan<B, R>: Clone,
 {
-    type Span = ModularSpan<BufSpan<B, R>>;
+    type Span = RcSpan<B, R>;
 }
 
-impl<B, R> MacroContextFactory<ModularSpan<BufSpan<B, R>>> for RcContextFactory<B, R>
+impl<B, R> MacroContextFactory<RcSpan<B, R>> for RcContextFactory<B, R>
 where
-    ModularSpan<BufSpan<B, R>>: Clone,
+    RcSpan<B, R>: Clone,
 {
-    type MacroDefHandle = Rc<MacroDefSpans<ModularSpan<BufSpan<B, R>>>>;
+    type MacroDefHandle = Rc<MacroDefSpans<RcSpan<B, R>>>;
     type MacroCallCtx = RcMacroCall<BufSpan<B, R>>;
 
     fn add_macro_def<P, C>(
         &mut self,
-        name: ModularSpan<BufSpan<B, R>>,
+        name: RcSpan<B, R>,
         params: P,
         body: C,
     ) -> Self::MacroDefHandle
     where
-        P: IntoIterator<Item = ModularSpan<BufSpan<B, R>>>,
-        C: IntoIterator<Item = ModularSpan<BufSpan<B, R>>>,
+        P: IntoIterator<Item = RcSpan<B, R>>,
+        C: IntoIterator<Item = RcSpan<B, R>>,
     {
         Rc::new(MacroDefSpans {
             name,
@@ -233,15 +261,15 @@ where
 
     fn mk_macro_call_ctx<I, J>(
         &mut self,
-        name: ModularSpan<BufSpan<B, R>>,
+        name: RcSpan<B, R>,
         args: I,
         def: &Self::MacroDefHandle,
     ) -> Self::MacroCallCtx
     where
         I: IntoIterator<Item = J>,
-        J: IntoIterator<Item = ModularSpan<BufSpan<B, R>>>,
+        J: IntoIterator<Item = RcSpan<B, R>>,
     {
-        Rc::new(ModularMacroCall {
+        RcMacroCall::new(ModularMacroCall {
             name,
             args: args
                 .into_iter()
@@ -253,12 +281,12 @@ where
     }
 }
 
-impl MergeSpans<ModularSpan<BufSpan<BufId, BufRange>>> for RcContextFactory<BufId, BufRange> {
+impl MergeSpans<RcSpan<BufId, BufRange>> for RcContextFactory<BufId, BufRange> {
     fn merge_spans(
         &mut self,
-        left: &ModularSpan<BufSpan<BufId, BufRange>>,
-        right: &ModularSpan<BufSpan<BufId, BufRange>>,
-    ) -> ModularSpan<BufSpan<BufId, BufRange>> {
+        left: &RcSpan<BufId, BufRange>,
+        right: &RcSpan<BufId, BufRange>,
+    ) -> RcSpan<BufId, BufRange> {
         use self::ModularSpan::*;
         match (left, right) {
             (
@@ -277,19 +305,19 @@ impl MergeSpans<ModularSpan<BufSpan<BufId, BufRange>>> for RcContextFactory<BufI
                     range: other_range,
                     context: other_context,
                 }),
-            ) if Rc::ptr_eq(context, other_context) => Macro(MacroSpan {
+            ) if Rc::ptr_eq(&context.0, &other_context.0) => Macro(MacroSpan {
                 range: merge_macro_expansion_ranges(range, other_range),
-                context: Rc::clone(context),
+                context: context.clone(),
             }),
             _ => unreachable!(),
         }
     }
 }
 
-impl StripSpan<ModularSpan<BufSpan<BufId, BufRange>>> for RcContextFactory<BufId, BufRange> {
+impl StripSpan<RcSpan<BufId, BufRange>> for RcContextFactory<BufId, BufRange> {
     type Stripped = StrippedBufSpan<BufId, BufRange>;
 
-    fn strip_span(&mut self, span: &ModularSpan<BufSpan<BufId, BufRange>>) -> Self::Stripped {
+    fn strip_span(&mut self, span: &RcSpan<BufId, BufRange>) -> Self::Stripped {
         span.to_stripped()
     }
 }
@@ -318,7 +346,7 @@ pub struct RcBufContext<B, R> {
 }
 
 impl SpanSource for RcBufContext<BufId, BufRange> {
-    type Span = ModularSpan<BufSpan<BufId, BufRange>>;
+    type Span = RcSpan<BufId, BufRange>;
 }
 
 impl BufContext for RcBufContext<BufId, BufRange> {
@@ -332,19 +360,19 @@ impl BufContext for RcBufContext<BufId, BufRange> {
 
 impl<B, R> SpanSource for RcMacroCall<BufSpan<B, R>>
 where
-    ModularSpan<BufSpan<B, R>>: Clone,
+    RcSpan<B, R>: Clone,
 {
-    type Span = ModularSpan<BufSpan<B, R>>;
+    type Span = RcSpan<B, R>;
 }
 
 impl<B, R> MacroCallCtx for RcMacroCall<BufSpan<B, R>>
 where
-    ModularSpan<BufSpan<B, R>>: Clone,
+    RcSpan<B, R>: Clone,
 {
     fn mk_span(&self, position: MacroCallPos) -> Self::Span {
         ModularSpan::Macro(MacroSpan {
             range: position.clone()..=position,
-            context: Rc::clone(self),
+            context: self.clone(),
         })
     }
 }
@@ -436,7 +464,7 @@ mod tests {
         };
         let span = ModularSpan::Macro(MacroSpan {
             range: position.clone()..=position,
-            context: Rc::new(expansion),
+            context: RcMacroCall(Rc::new(expansion)),
         });
         let stripped = StrippedBufSpan {
             buf_id,
@@ -450,7 +478,7 @@ mod tests {
     fn mk_macro_def<B>(
         buf_context: &Rc<BufContextData<B, Range<usize>>>,
         base: usize,
-    ) -> Rc<MacroDefSpans<ModularSpan<BufSpan<B>>>> {
+    ) -> Rc<MacroDefSpans<RcSpan<B, BufRange>>> {
         Rc::new(MacroDefSpans {
             name: ModularSpan::Buf(BufSpan {
                 range: macro_name_range(base),
