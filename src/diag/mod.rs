@@ -224,11 +224,11 @@ pub(crate) struct OutputForwarder<'a> {
 }
 
 impl<'a> SpanSource for OutputForwarder<'a> {
-    type Span = SpanData;
+    type Span = ModularSpan;
 }
 
-impl<'a> EmitDiag<SpanData, StrippedBufSpan> for OutputForwarder<'a> {
-    fn emit_diag(&mut self, diag: impl Into<CompactDiag<SpanData, StrippedBufSpan>>) {
+impl<'a> EmitDiag<ModularSpan, StrippedBufSpan> for OutputForwarder<'a> {
+    fn emit_diag(&mut self, diag: impl Into<CompactDiag<ModularSpan, StrippedBufSpan>>) {
         (self.output)(diag.into().expand().render(&self.codebase.borrow()))
     }
 }
@@ -324,7 +324,9 @@ struct ExpandedDiagnosticClause<S, B, R> {
     location: Option<R>,
 }
 
-impl<B: Clone, T: Clone> CompactDiag<SpanData<BufSpan<B, Range<T>>>, StrippedBufSpan<B, Range<T>>> {
+impl<B: Clone, T: Clone>
+    CompactDiag<ModularSpan<BufSpan<B, Range<T>>>, StrippedBufSpan<B, Range<T>>>
+{
     fn expand(self) -> ExpandedDiagnostic<StrippedBufSpan<B, Range<T>>, B, Range<T>> {
         let StrippedBufSpan { buf_id, range } = self.main.highlight.to_stripped();
         let main_clause = ExpandedDiagnosticClause {
@@ -344,9 +346,9 @@ impl<B: Clone, T: Clone> CompactDiag<SpanData<BufSpan<B, Range<T>>>, StrippedBuf
 type BufSnippetClause<B, T> = ExpandedDiagnosticClause<StrippedBufSpan<B, Range<T>>, B, Range<T>>;
 
 fn mk_called_here_clause<B: Clone, T: Clone>(
-    span: &SpanData<BufSpan<B, Range<T>>>,
+    span: &ModularSpan<BufSpan<B, Range<T>>>,
 ) -> Option<BufSnippetClause<B, T>> {
-    let call = if let SpanData::Macro { context, .. } = span {
+    let call = if let ModularSpan::Macro { context, .. } = span {
         context.name.clone()
     } else {
         return None;
@@ -648,7 +650,7 @@ mod tests {
         let src = "    nop\n    my_macro a, $12\n\n";
         let buf_id = codebase.add_src_buf(DUMMY_FILE, src);
         let range = 12..20;
-        let token_ref = SpanData::Buf(BufSpan {
+        let token_ref = ModularSpan::Buf(BufSpan {
             range: range.clone(),
             context: Rc::new(BufContextData {
                 buf_id,
@@ -697,19 +699,19 @@ mod tests {
             included_from: None,
         });
         let macro_def = Rc::new(MacroDefSpans {
-            name: SpanData::Buf(BufSpan {
+            name: ModularSpan::Buf(BufSpan {
                 range: 0..1,
                 context: Rc::clone(buf_context),
             }),
             params: vec![],
-            body: vec![SpanData::Buf(BufSpan {
+            body: vec![ModularSpan::Buf(BufSpan {
                 range: 2..3,
                 context: Rc::clone(buf_context),
             })],
         });
         let call_range = 10..11;
         let context = Rc::new(MacroExpansionData {
-            name: SpanData::Buf(BufSpan {
+            name: ModularSpan::Buf(BufSpan {
                 range: call_range.clone(),
                 context: Rc::clone(buf_context),
             }),
@@ -720,7 +722,7 @@ mod tests {
             token: 0,
             expansion: None,
         };
-        let span = SpanData::Macro {
+        let span = ModularSpan::Macro {
             range: position.clone()..=position,
             context,
         };

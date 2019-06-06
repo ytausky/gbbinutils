@@ -199,7 +199,7 @@ mod tests {
             included_from: None,
         });
         let mk_span = |n| {
-            SpanData::Buf(BufSpan {
+            ModularSpan::Buf(BufSpan {
                 range: n,
                 context: Rc::clone(&buf),
             })
@@ -235,7 +235,7 @@ mod tests {
             expanded,
             [(
                 body,
-                SpanData::Macro {
+                ModularSpan::Macro {
                     range: macro_expansion_position.clone()..=macro_expansion_position,
                     context: data,
                 }
@@ -251,7 +251,7 @@ mod tests {
             included_from: None,
         });
         let mk_span = |n| {
-            SpanData::Buf(BufSpan {
+            ModularSpan::Buf(BufSpan {
                 range: n,
                 context: Rc::clone(&buf),
             })
@@ -272,16 +272,16 @@ mod tests {
             spans: Rc::clone(&def_id),
         };
         let data = Rc::new(MacroExpansionData {
-            name: SpanData::Buf(BufSpan {
+            name: ModularSpan::Buf(BufSpan {
                 range: 7,
                 context: buf.clone(),
             }),
             args: vec![vec![
-                SpanData::Buf(BufSpan {
+                ModularSpan::Buf(BufSpan {
                     range: 8,
                     context: buf.clone(),
                 }),
-                SpanData::Buf(BufSpan {
+                ModularSpan::Buf(BufSpan {
                     range: 9,
                     context: buf.clone(),
                 }),
@@ -301,7 +301,7 @@ mod tests {
             .collect();
         let mk_span_data = |token, expansion| {
             let position = MacroCallPos { token, expansion };
-            SpanData::Macro {
+            ModularSpan::Macro {
                 range: position.clone()..=position,
                 context: data.clone(),
             }
