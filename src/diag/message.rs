@@ -1,4 +1,4 @@
-use crate::codebase::{CodebaseError, TextCache};
+use crate::codebase::{BufId, BufRange, CodebaseError, TextCache};
 use crate::diag::span::StrippedBufSpan;
 use crate::model::{IncDec, Width};
 
@@ -100,7 +100,7 @@ impl<S> From<CodebaseError> for Message<S> {
     }
 }
 
-impl Message<StrippedBufSpan> {
+impl Message<StrippedBufSpan<BufId, BufRange>> {
     pub fn render<'a>(&self, codebase: &'a TextCache) -> String {
         use self::Message::*;
         match self {

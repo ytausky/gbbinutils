@@ -83,7 +83,7 @@ pub struct ArgExpansionPos {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ModularSpan<B = BufSpan> {
+pub enum ModularSpan<B> {
     Buf(B),
     Macro {
         range: RangeInclusive<MacroCallPos>,
@@ -92,13 +92,13 @@ pub enum ModularSpan<B = BufSpan> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct BufSpan<B = BufId, R = BufRange> {
+pub struct BufSpan<B, R> {
     pub range: R,
     pub context: Rc<BufContextData<B, R>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct StrippedBufSpan<B = BufId, R = BufRange> {
+pub struct StrippedBufSpan<B, R> {
     pub buf_id: B,
     pub range: R,
 }
@@ -136,7 +136,7 @@ impl<B: Clone, T: Clone> ModularSpan<BufSpan<B, Range<T>>> {
 }
 
 impl TextCache {
-    pub fn snippet(&self, stripped: &StrippedBufSpan) -> &str {
+    pub fn snippet(&self, stripped: &StrippedBufSpan<BufId, BufRange>) -> &str {
         &self.buf(stripped.buf_id).as_str()[stripped.range.clone()]
     }
 }
@@ -248,12 +248,12 @@ where
     }
 }
 
-impl MergeSpans<ModularSpan<BufSpan>> for RcContextFactory<BufId, BufRange> {
+impl MergeSpans<ModularSpan<BufSpan<BufId, BufRange>>> for RcContextFactory<BufId, BufRange> {
     fn merge_spans(
         &mut self,
-        left: &ModularSpan<BufSpan>,
-        right: &ModularSpan<BufSpan>,
-    ) -> ModularSpan<BufSpan> {
+        left: &ModularSpan<BufSpan<BufId, BufRange>>,
+        right: &ModularSpan<BufSpan<BufId, BufRange>>,
+    ) -> ModularSpan<BufSpan<BufId, BufRange>> {
         use self::ModularSpan::*;
         match (left, right) {
             (
@@ -281,10 +281,10 @@ impl MergeSpans<ModularSpan<BufSpan>> for RcContextFactory<BufId, BufRange> {
     }
 }
 
-impl StripSpan<ModularSpan<BufSpan>> for RcContextFactory<BufId, BufRange> {
+impl StripSpan<ModularSpan<BufSpan<BufId, BufRange>>> for RcContextFactory<BufId, BufRange> {
     type Stripped = StrippedBufSpan<BufId, BufRange>;
 
-    fn strip_span(&mut self, span: &ModularSpan<BufSpan>) -> Self::Stripped {
+    fn strip_span(&mut self, span: &ModularSpan<BufSpan<BufId, BufRange>>) -> Self::Stripped {
         span.to_stripped()
     }
 }
@@ -313,7 +313,7 @@ pub struct RcBufContext<B, R> {
 }
 
 impl SpanSource for RcBufContext<BufId, BufRange> {
-    type Span = ModularSpan<BufSpan>;
+    type Span = ModularSpan<BufSpan<BufId, BufRange>>;
 }
 
 impl BufContext for RcBufContext<BufId, BufRange> {

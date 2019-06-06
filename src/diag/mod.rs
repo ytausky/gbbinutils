@@ -223,12 +223,14 @@ pub(crate) struct OutputForwarder<'a> {
     pub codebase: &'a RefCell<TextCache>,
 }
 
+type Span = ModularSpan<BufSpan<BufId, BufRange>>;
+
 impl<'a> SpanSource for OutputForwarder<'a> {
-    type Span = ModularSpan;
+    type Span = Span;
 }
 
-impl<'a> EmitDiag<ModularSpan, StrippedBufSpan> for OutputForwarder<'a> {
-    fn emit_diag(&mut self, diag: impl Into<CompactDiag<ModularSpan, StrippedBufSpan>>) {
+impl<'a> EmitDiag<Span, StrippedBufSpan<BufId, BufRange>> for OutputForwarder<'a> {
+    fn emit_diag(&mut self, diag: impl Into<CompactDiag<Span, StrippedBufSpan<BufId, BufRange>>>) {
         (self.output)(diag.into().expand().render(&self.codebase.borrow()))
     }
 }
@@ -405,7 +407,7 @@ pub struct Excerpt {
 
 pub(crate) fn mk_diagnostic(
     file: impl Into<String>,
-    message: &Message<StrippedBufSpan>,
+    message: &Message<StrippedBufSpan<BufId, BufRange>>,
 ) -> Diagnostic {
     Diagnostic {
         clauses: vec![Clause {
@@ -417,7 +419,7 @@ pub(crate) fn mk_diagnostic(
     }
 }
 
-impl ExpandedDiagnostic<StrippedBufSpan, BufId, BufRange> {
+impl ExpandedDiagnostic<StrippedBufSpan<BufId, BufRange>, BufId, BufRange> {
     fn render(&self, codebase: &TextCache) -> Diagnostic {
         Diagnostic {
             clauses: self
@@ -429,7 +431,7 @@ impl ExpandedDiagnostic<StrippedBufSpan, BufId, BufRange> {
     }
 }
 
-impl ExpandedDiagnosticClause<StrippedBufSpan, BufId, BufRange> {
+impl ExpandedDiagnosticClause<StrippedBufSpan<BufId, BufRange>, BufId, BufRange> {
     fn render(&self, codebase: &TextCache) -> Clause {
         let buf = codebase.buf(self.buf_id);
         let excerpt = self.location.as_ref().map(|range| {
