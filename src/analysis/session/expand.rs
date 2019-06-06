@@ -235,10 +235,10 @@ mod tests {
             expanded,
             [(
                 body,
-                ModularSpan::Macro {
+                ModularSpan::Macro(MacroSpan {
                     range: macro_expansion_position.clone()..=macro_expansion_position,
                     context: data,
-                }
+                })
             )]
         )
     }
@@ -301,10 +301,10 @@ mod tests {
             .collect();
         let mk_span_data = |token, expansion| {
             let position = MacroCallPos { token, expansion };
-            ModularSpan::Macro {
+            ModularSpan::Macro(MacroSpan {
                 range: position.clone()..=position,
                 context: data.clone(),
-            }
+            })
         };
         assert_eq!(
             expanded,

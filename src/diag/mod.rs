@@ -350,7 +350,7 @@ type BufSnippetClause<B, T> = ExpandedDiagnosticClause<StrippedBufSpan<B, Range<
 fn mk_called_here_clause<B: Clone, T: Clone>(
     span: &ModularSpan<BufSpan<B, Range<T>>>,
 ) -> Option<BufSnippetClause<B, T>> {
-    let call = if let ModularSpan::Macro { context, .. } = span {
+    let call = if let ModularSpan::Macro(MacroSpan { context, .. }) = span {
         context.name.clone()
     } else {
         return None;
@@ -724,10 +724,10 @@ mod tests {
             token: 0,
             expansion: None,
         };
-        let span = ModularSpan::Macro {
+        let span = ModularSpan::Macro(MacroSpan {
             range: position.clone()..=position,
             context,
-        };
+        });
         let message = Message::AfOutsideStackOperation;
         let compact = CompactDiag::from(message.clone().at(span));
         let expected = ExpandedDiagnostic {
