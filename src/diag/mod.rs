@@ -712,7 +712,7 @@ mod tests {
             })],
         });
         let call_range = 10..11;
-        let context = Rc::new(MacroExpansionData {
+        let context = Rc::new(ModularMacroCall {
             name: ModularSpan::Buf(BufSpan {
                 range: call_range.clone(),
                 context: Rc::clone(buf_context),

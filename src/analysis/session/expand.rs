@@ -219,7 +219,7 @@ mod tests {
             spans: Rc::clone(&def_id),
         };
         let call_name = ("my_macro", mk_span(2));
-        let data = Rc::new(MacroExpansionData {
+        let data = Rc::new(ModularMacroCall {
             name: call_name.1.clone(),
             args: vec![],
             def: def_id,
@@ -271,7 +271,7 @@ mod tests {
             }),
             spans: Rc::clone(&def_id),
         };
-        let data = Rc::new(MacroExpansionData {
+        let data = Rc::new(ModularMacroCall {
             name: ModularSpan::Buf(BufSpan {
                 range: 7,
                 context: buf.clone(),

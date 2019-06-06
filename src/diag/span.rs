@@ -87,7 +87,7 @@ pub enum ModularSpan<B> {
     Buf(B),
     Macro {
         range: RangeInclusive<MacroCallPos>,
-        context: Rc<MacroExpansionData<ModularSpan<B>>>,
+        context: Rc<ModularMacroCall<ModularSpan<B>>>,
     },
 }
 
@@ -174,7 +174,7 @@ pub struct BufContextData<B, R> {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct MacroExpansionData<S> {
+pub struct ModularMacroCall<S> {
     pub name: S,
     pub args: Vec<Vec<S>>,
     pub def: Rc<MacroDefSpans<S>>,
@@ -207,7 +207,7 @@ where
     ModularSpan<BufSpan<B, R>>: Clone,
 {
     type MacroDefHandle = Rc<MacroDefSpans<ModularSpan<BufSpan<B, R>>>>;
-    type MacroCallCtx = Rc<MacroExpansionData<ModularSpan<BufSpan<B, R>>>>;
+    type MacroCallCtx = Rc<ModularMacroCall<ModularSpan<BufSpan<B, R>>>>;
 
     fn add_macro_def<P, C>(
         &mut self,
@@ -236,7 +236,7 @@ where
         I: IntoIterator<Item = J>,
         J: IntoIterator<Item = ModularSpan<BufSpan<B, R>>>,
     {
-        Rc::new(MacroExpansionData {
+        Rc::new(ModularMacroCall {
             name,
             args: args
                 .into_iter()
@@ -325,14 +325,14 @@ impl BufContext for RcBufContext<BufId, BufRange> {
     }
 }
 
-impl<B, R> SpanSource for Rc<MacroExpansionData<ModularSpan<BufSpan<B, R>>>>
+impl<B, R> SpanSource for Rc<ModularMacroCall<ModularSpan<BufSpan<B, R>>>>
 where
     ModularSpan<BufSpan<B, R>>: Clone,
 {
     type Span = ModularSpan<BufSpan<B, R>>;
 }
 
-impl<B, R> MacroCallCtx for Rc<MacroExpansionData<ModularSpan<BufSpan<B, R>>>>
+impl<B, R> MacroCallCtx for Rc<ModularMacroCall<ModularSpan<BufSpan<B, R>>>>
 where
     ModularSpan<BufSpan<B, R>>: Clone,
 {
@@ -421,7 +421,7 @@ mod tests {
             expansion: None,
         };
         let macro_base = 0;
-        let expansion = MacroExpansionData {
+        let expansion = ModularMacroCall {
             name: ModularSpan::Buf(BufSpan {
                 range: 40..50,
                 context: Rc::clone(&buf_context),
