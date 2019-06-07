@@ -94,7 +94,7 @@ pub(super) struct ExpandedMacro<I, T, C> {
 #[derive(Debug, PartialEq)]
 enum ExpansionState {
     Ident(usize, usize),
-    Label(usize),
+    Label(usize, usize),
 }
 
 impl<I, L, C, F> ExpandedMacro<I, Token<I, L, C>, F>
@@ -128,6 +128,11 @@ where
             {
                 Some(ExpansionState::Ident(position, index + 1))
             }
+            Some(ExpansionState::Label(position, index))
+                if index + 1 < self.args[position].len() =>
+            {
+                Some(ExpansionState::Label(position, index + 1))
+            }
             _ => None,
         };
         if self.expansion_state.is_none() {
@@ -148,7 +153,9 @@ where
             Token::Ident(ident) => self
                 .param_position(&ident)
                 .map(|position| ExpansionState::Ident(position, 0)),
-            Token::Label(label) => self.param_position(&label).map(ExpansionState::Label),
+            Token::Label(label) => self
+                .param_position(&label)
+                .map(|position| ExpansionState::Label(position, 0)),
             _ => None,
         }
     }
@@ -165,13 +172,14 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         if self.body_index < self.def.body.len() {
             let (token, expansion) = match self.expansion_state {
-                Some(ExpansionState::Ident(position, index)) => {
-                    (self.args[position][index].clone(), None)
-                }
-                Some(ExpansionState::Label(position)) => match self.args[position][0] {
-                    Token::Ident(ref ident) => (Token::Label(ident.clone()), None),
-                    _ => unimplemented!(),
-                },
+                Some(ExpansionState::Ident(arg, token)) => (self.args[arg][token].clone(), None),
+                Some(ExpansionState::Label(arg, token)) => (
+                    match &self.args[arg][token] {
+                        Token::Ident(ref ident) if token == 0 => Token::Label(ident.clone()),
+                        arg_token => arg_token.clone(),
+                    },
+                    Some(ArgExpansionPos { arg, token }),
+                ),
                 None => (self.def.body[self.body_index].clone(), None),
             };
             let span = self.context.mk_span(MacroCallPos {
@@ -222,6 +230,62 @@ mod tests {
                     context: data,
                 })
             )]
+        )
+    }
+
+    #[test]
+    fn expand_label_using_two_idents() {
+        let label = Token::<_, (), ()>::Label("label");
+        let def = MacroDef {
+            tokens: Rc::new(MacroDefTokens {
+                params: vec!["label"],
+                body: vec![label],
+            }),
+            spans: (),
+        };
+        let name = ModularSpan::Buf(());
+        let arg = vec![Token::Ident("tok1"), Token::Ident("tok2")];
+        let expanded: Vec<_> = def
+            .expand(
+                name.clone(),
+                (
+                    vec![arg],
+                    vec![vec![ModularSpan::Buf(()), ModularSpan::Buf(())]],
+                ),
+                &mut Factory,
+            )
+            .collect();
+        let context = MacroCall(Rc::new(ModularMacroCall {
+            name,
+            args: vec![vec![ModularSpan::Buf(()), ModularSpan::Buf(())]],
+            def: (),
+        }));
+        let tok1_pos = MacroCallPos {
+            token: 0,
+            expansion: Some(ArgExpansionPos { arg: 0, token: 0 }),
+        };
+        let tok2_pos = MacroCallPos {
+            token: 0,
+            expansion: Some(ArgExpansionPos { arg: 0, token: 1 }),
+        };
+        assert_eq!(
+            expanded,
+            [
+                (
+                    Token::Label("tok1"),
+                    ModularSpan::Macro(MacroSpan {
+                        range: tok1_pos.clone()..=tok1_pos,
+                        context: context.clone()
+                    })
+                ),
+                (
+                    Token::Ident("tok2"),
+                    ModularSpan::Macro(MacroSpan {
+                        range: tok2_pos.clone()..=tok2_pos,
+                        context,
+                    })
+                )
+            ]
         )
     }
 
