@@ -190,43 +190,25 @@ where
 mod tests {
     use super::*;
 
-    use crate::diag::span::MacroDefSpans;
-
     #[test]
     fn expand_macro_with_one_token() {
-        let buf = Rc::new(BufContextData {
-            buf_id: (),
-            included_from: None,
-        });
-        let mk_span = |n| {
-            ModularSpan::Buf(BufSpan {
-                range: n,
-                context: Rc::clone(&buf),
-            })
-        };
         let body = Token::<_, (), ()>::Ident("a");
-        let def_id = Rc::new(MacroDefSpans {
-            name: mk_span(0),
-            params: vec![],
-            body: vec![mk_span(1)],
-        });
-        let mut factory = RcContextFactory::new();
         let entry = MacroDef {
             tokens: Rc::new(MacroDefTokens {
                 params: vec![],
                 body: vec![body.clone()],
             }),
-            spans: Rc::clone(&def_id),
+            spans: (),
         };
-        let call_name = ("my_macro", mk_span(2));
-        let data = RcMacroCall::new(ModularMacroCall {
-            name: call_name.1.clone(),
-            args: vec![],
-            def: def_id,
-        });
+        let name = ModularSpan::Buf(());
         let expanded: Vec<_> = entry
-            .expand(call_name.1, (vec![], vec![]), &mut factory)
+            .expand(name.clone(), (vec![], vec![]), &mut Factory)
             .collect();
+        let data = MacroCall(Rc::new(ModularMacroCall {
+            name,
+            args: vec![],
+            def: (),
+        }));
         let macro_expansion_position = MacroCallPos {
             token: 0,
             expansion: None,
@@ -321,5 +303,45 @@ mod tests {
                 (Token::Ident("b"), mk_span_data(2, None)),
             ]
         )
+    }
+
+    #[derive(Clone, Debug, PartialEq)]
+    struct MacroCall(Rc<ModularMacroCall<(), Span>>);
+
+    type Span = ModularSpan<(), MacroSpan<MacroCall>>;
+
+    struct Factory;
+
+    impl MacroContextFactory<(), Span> for Factory {
+        type MacroCallCtx = MacroCall;
+
+        fn mk_macro_call_ctx<A, J>(&mut self, name: Span, args: A, _: &()) -> Self::MacroCallCtx
+        where
+            A: IntoIterator<Item = J>,
+            J: IntoIterator<Item = Span>,
+        {
+            MacroCall(Rc::new(ModularMacroCall {
+                name,
+                args: args
+                    .into_iter()
+                    .map(IntoIterator::into_iter)
+                    .map(Iterator::collect)
+                    .collect(),
+                def: (),
+            }))
+        }
+    }
+
+    impl SpanSource for MacroCall {
+        type Span = Span;
+    }
+
+    impl MacroCallCtx for MacroCall {
+        fn mk_span(&self, position: MacroCallPos) -> Self::Span {
+            ModularSpan::Macro(MacroSpan {
+                range: position.clone()..=position,
+                context: self.clone(),
+            })
+        }
     }
 }
