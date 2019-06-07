@@ -23,21 +23,19 @@ pub trait StripSpan<S> {
     fn strip_span(&mut self, span: &S) -> Self::Stripped;
 }
 
-pub trait MacroContextFactory<S: Clone> {
+pub trait AddMacroDef<S: Clone> {
     type MacroDefHandle: Clone;
-    type MacroCallCtx: MacroCallCtx<Span = S>;
 
     fn add_macro_def<P, B>(&mut self, name: S, params: P, body: B) -> Self::MacroDefHandle
     where
         P: IntoIterator<Item = S>,
         B: IntoIterator<Item = S>;
+}
 
-    fn mk_macro_call_ctx<A, J>(
-        &mut self,
-        name: S,
-        args: A,
-        def: &Self::MacroDefHandle,
-    ) -> Self::MacroCallCtx
+pub trait MacroContextFactory<H, S: Clone> {
+    type MacroCallCtx: MacroCallCtx<Span = S>;
+
+    fn mk_macro_call_ctx<A, J>(&mut self, name: S, args: A, def: &H) -> Self::MacroCallCtx
     where
         A: IntoIterator<Item = J>,
         J: IntoIterator<Item = S>;
@@ -46,7 +44,11 @@ pub trait MacroContextFactory<S: Clone> {
 pub trait SpanSystem
 where
     Self: BufContextFactory,
-    Self: MacroContextFactory<<Self as SpanSource>::Span>,
+    Self: AddMacroDef<<Self as SpanSource>::Span>,
+    Self: MacroContextFactory<
+        <Self as AddMacroDef<<Self as SpanSource>::Span>>::MacroDefHandle,
+        <Self as SpanSource>::Span,
+    >,
     Self: MergeSpans<<Self as SpanSource>::Span>,
     Self: StripSpan<<Self as SpanSource>::Span>,
 {
@@ -235,12 +237,11 @@ where
     type Span = RcSpan<B, R>;
 }
 
-impl<B, R> MacroContextFactory<RcSpan<B, R>> for RcContextFactory<B, R>
+impl<B, R> AddMacroDef<RcSpan<B, R>> for RcContextFactory<B, R>
 where
     RcSpan<B, R>: Clone,
 {
     type MacroDefHandle = Rc<MacroDefSpans<RcSpan<B, R>>>;
-    type MacroCallCtx = RcMacroCall<BufSpan<B, R>>;
 
     fn add_macro_def<P, C>(
         &mut self,
@@ -258,12 +259,20 @@ where
             body: body.into_iter().collect(),
         })
     }
+}
+
+impl<B, R> MacroContextFactory<Rc<MacroDefSpans<RcSpan<B, R>>>, RcSpan<B, R>>
+    for RcContextFactory<B, R>
+where
+    RcSpan<B, R>: Clone,
+{
+    type MacroCallCtx = RcMacroCall<BufSpan<B, R>>;
 
     fn mk_macro_call_ctx<I, J>(
         &mut self,
         name: RcSpan<B, R>,
         args: I,
-        def: &Self::MacroDefHandle,
+        def: &Rc<MacroDefSpans<RcSpan<B, R>>>,
     ) -> Self::MacroCallCtx
     where
         I: IntoIterator<Item = J>,

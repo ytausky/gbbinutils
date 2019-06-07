@@ -4,7 +4,7 @@ use crate::diag::span::*;
 
 use std::rc::Rc;
 
-pub(super) trait Expand<T, F: MacroContextFactory<S>, S: Clone> {
+pub(super) trait Expand<T, H, F: MacroContextFactory<H, S>, S: Clone> {
     type Iter: Iterator<Item = (T, S)>;
 
     fn expand(&self, name: S, args: MacroArgs<T, S>, factory: &mut F) -> Self::Iter;
@@ -20,7 +20,7 @@ pub(super) trait DefineMacro<I, T, H: Clone> {
         body: (Vec<T>, Vec<S>),
         diagnostics: &mut D,
     ) where
-        D: MacroContextFactory<S, MacroDefHandle = H>,
+        D: AddMacroDef<S, MacroDefHandle = H> + MacroContextFactory<H, S>,
         S: Clone;
 }
 
@@ -36,7 +36,7 @@ where
         body: (Vec<Token<I, L, C>>, Vec<S>),
         diagnostics: &mut D,
     ) where
-        D: MacroContextFactory<S, MacroDefHandle = H>,
+        D: AddMacroDef<S, MacroDefHandle = H> + MacroContextFactory<H, S>,
         S: Clone,
     {
         let context = diagnostics.add_macro_def(name.1, params.1, body.1);
@@ -63,10 +63,10 @@ pub(in crate::analysis) struct MacroDefTokens<I, T> {
     pub body: Vec<T>,
 }
 
-impl<I, L, C, F, S> Expand<Token<I, L, C>, F, S> for MacroDef<I, Token<I, L, C>, F::MacroDefHandle>
+impl<I, L, C, H, F, S> Expand<Token<I, L, C>, H, F, S> for MacroDef<I, Token<I, L, C>, H>
 where
     I: Clone + Eq,
-    F: MacroContextFactory<S>,
+    F: MacroContextFactory<H, S>,
     S: Clone,
     Token<I, L, C>: Clone,
 {

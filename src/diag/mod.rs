@@ -113,7 +113,6 @@ impl<'a> CompositeDiagnosticsSystem<RcContextFactory, OutputForwarder<'a>> {
 impl<C, O> SpanSource for CompositeDiagnosticsSystem<C, O>
 where
     C: SpanSystem,
-    O: EmitDiag<C::Span, C::Stripped>,
 {
     type Span = C::Span;
 }
@@ -121,7 +120,6 @@ where
 impl<C, O> MergeSpans<C::Span> for CompositeDiagnosticsSystem<C, O>
 where
     C: SpanSystem,
-    O: EmitDiag<C::Span, C::Stripped>,
 {
     fn merge_spans(&mut self, left: &C::Span, right: &C::Span) -> C::Span {
         self.context.merge_spans(left, right)
@@ -131,7 +129,6 @@ where
 impl<C, O> StripSpan<C::Span> for CompositeDiagnosticsSystem<C, O>
 where
     C: SpanSystem,
-    O: EmitDiag<C::Span, C::Stripped>,
 {
     type Stripped = C::Stripped;
 
@@ -150,13 +147,11 @@ where
     }
 }
 
-impl<C, O> MacroContextFactory<C::Span> for CompositeDiagnosticsSystem<C, O>
+impl<C, O> AddMacroDef<C::Span> for CompositeDiagnosticsSystem<C, O>
 where
     C: SpanSystem,
-    O: EmitDiag<C::Span, C::Stripped>,
 {
     type MacroDefHandle = C::MacroDefHandle;
-    type MacroCallCtx = C::MacroCallCtx;
 
     fn add_macro_def<P, B>(&mut self, name: C::Span, params: P, body: B) -> Self::MacroDefHandle
     where
@@ -165,12 +160,19 @@ where
     {
         self.context.add_macro_def(name, params, body)
     }
+}
+
+impl<C, O> MacroContextFactory<C::MacroDefHandle, C::Span> for CompositeDiagnosticsSystem<C, O>
+where
+    C: SpanSystem,
+{
+    type MacroCallCtx = C::MacroCallCtx;
 
     fn mk_macro_call_ctx<A, J>(
         &mut self,
         name: C::Span,
         args: A,
-        def: &Self::MacroDefHandle,
+        def: &C::MacroDefHandle,
     ) -> Self::MacroCallCtx
     where
         A: IntoIterator<Item = J>,
@@ -599,12 +601,11 @@ mod mock {
         }
     }
 
-    impl<T, S> MacroContextFactory<S> for MockDiagnosticsSystem<T, S>
+    impl<T, S> AddMacroDef<S> for MockDiagnosticsSystem<T, S>
     where
         S: Clone + Default + Merge,
     {
         type MacroDefHandle = usize;
-        type MacroCallCtx = Self;
 
         fn add_macro_def<P, B>(&mut self, _: S, _: P, _: B) -> Self::MacroDefHandle
         where
@@ -613,13 +614,15 @@ mod mock {
         {
             0
         }
+    }
 
-        fn mk_macro_call_ctx<A, J>(
-            &mut self,
-            _: S,
-            _: A,
-            _: &Self::MacroDefHandle,
-        ) -> Self::MacroCallCtx
+    impl<T, S> MacroContextFactory<usize, S> for MockDiagnosticsSystem<T, S>
+    where
+        S: Clone + Default + Merge,
+    {
+        type MacroCallCtx = Self;
+
+        fn mk_macro_call_ctx<A, J>(&mut self, _: S, _: A, _: &usize) -> Self::MacroCallCtx
         where
             A: IntoIterator<Item = J>,
             J: IntoIterator<Item = S>,

@@ -603,7 +603,7 @@ mod tests {
     use crate::analysis::semantics::AnalyzerEvent;
     use crate::analysis::syntax::{Command, Directive, Mnemonic, Token};
     use crate::analysis::{Literal, MockCodebase};
-    use crate::diag::span::MacroContextFactory;
+    use crate::diag::span::AddMacroDef;
     use crate::diag::DiagnosticsEvent;
     use crate::log::*;
     use crate::model::{Atom, BinOp, Instruction, Nullary, Width};
@@ -848,7 +848,7 @@ mod tests {
     type MacroEntry<R, D> = MacroDef<
         Ident<R>,
         SemanticToken<R>,
-        <D as MacroContextFactory<<D as SpanSource>::Span>>::MacroDefHandle,
+        <D as AddMacroDef<<D as SpanSource>::Span>>::MacroDefHandle,
     >;
 
     type MockAnalyzer<S> = crate::analysis::semantics::MockAnalyzer<Event<S>>;
