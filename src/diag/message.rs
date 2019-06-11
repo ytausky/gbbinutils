@@ -14,6 +14,9 @@ pub enum Message<S> {
         operand: S,
     },
     CannotSpecifyTarget,
+    CannotUseSymbolNameAsMacroName {
+        name: S,
+    },
     ConditionOutsideBranch,
     DestCannotBeConst,
     DestMustBeA,
@@ -118,6 +121,10 @@ impl Message<StrippedBufSpan<BufId, BufRange>> {
                 codebase.snippet(operand),
             ),
             CannotSpecifyTarget => "branch target cannot be specified explicitly".into(),
+            CannotUseSymbolNameAsMacroName { name } => format!(
+                "cannot use symbol name `{}` as macro name",
+                codebase.snippet(name)
+            ),
             ConditionOutsideBranch => {
                 "condition codes can only be used as operands for branching instructions".into()
             }

@@ -274,20 +274,18 @@ where
         name: (Ident<Self::StringRef>, Self::Span),
         args: MacroArgs<Self::StringRef, Self::Span>,
     ) -> Self {
+        let stripped = self.downstream.diagnostics.0.strip_span(&name.1);
         let expansion = match self.downstream.names.get(&name.0) {
             Some(Name::Macro(entry)) => {
-                Some(entry.expand(name.1, args, self.downstream.diagnostics.0))
+                Ok(entry.expand(name.1, args, self.downstream.diagnostics.0))
             }
-            Some(_) => unimplemented!(),
-            None => {
-                let stripped = self.downstream.diagnostics.0.strip_span(&name.1);
-                self.downstream
-                    .diagnostics
-                    .0
-                    .emit_diag(Message::UndefinedMacro { name: stripped }.at(name.1));
-                None
+            Some(Name::Backend(_)) => {
+                Err(Message::CannotUseSymbolNameAsMacroName { name: stripped }.at(name.1))
             }
-        };
+            None => Err(Message::UndefinedMacro { name: stripped }.at(name.1)),
+        }
+        .map_err(|diag| self.downstream.diagnostics.0.emit_diag(diag))
+        .ok();
         if let Some(expansion) = expansion {
             let PartialSession {
                 downstream: Downstream { backend, .. },
@@ -842,6 +840,29 @@ mod tests {
                 ))
                 .into(),
             ]
+        )
+    }
+
+    #[test]
+    fn diagnose_symbol_name_in_macro_call() {
+        let name = "symbol";
+        let as_macro = MockSpan::from("as_macro");
+        let log = Fixture::<MockSpan<_>>::default().log_session(|session| {
+            let mut builder = session.build_value();
+            builder.push_op(Ident::from(name), "as_symbol".into());
+            let (session, _) = builder.finish();
+            session.call_macro((name.into(), as_macro.clone()), (vec![], vec![]));
+        });
+        assert_eq!(
+            log,
+            [DiagnosticsEvent::EmitDiag(
+                Message::CannotUseSymbolNameAsMacroName {
+                    name: as_macro.clone()
+                }
+                .at(as_macro)
+                .into()
+            )
+            .into()]
         )
     }
 
