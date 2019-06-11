@@ -157,20 +157,18 @@ impl<I: PartialEq, L, C, F> MacroExpansion<I, Token<I, L, C>, F> {
         Token<I, L, C>: Clone,
     {
         let body_token = &self.def.body[pos.token];
-        pos.param_expansion
-            .as_ref()
-            .map(|param_expansion| {
-                match (
-                    body_token,
-                    &self.args[param_expansion.param][param_expansion.arg_token],
-                ) {
-                    (Token::Label(_), Token::Ident(ident)) if param_expansion.arg_token == 0 => {
-                        Token::Label(ident.clone())
-                    }
-                    (_, arg_token) => arg_token.clone(),
+        pos.param_expansion.as_ref().map_or_else(
+            || body_token.clone(),
+            |param_expansion| match (
+                body_token,
+                &self.args[param_expansion.param][param_expansion.arg_token],
+            ) {
+                (Token::Label(_), Token::Ident(ident)) if param_expansion.arg_token == 0 => {
+                    Token::Label(ident.clone())
                 }
-            })
-            .unwrap_or_else(|| body_token.clone())
+                (_, arg_token) => arg_token.clone(),
+            },
+        )
     }
 }
 
