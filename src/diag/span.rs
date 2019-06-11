@@ -75,13 +75,13 @@ pub trait MacroCallCtx: SpanSource {
 #[derive(Clone, Debug, PartialEq)]
 pub struct MacroCallPos {
     pub token: usize,
-    pub expansion: Option<ArgExpansionPos>,
+    pub expansion: Option<ParamExpansionPos>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct ArgExpansionPos {
-    pub arg: usize,
-    pub token: usize,
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ParamExpansionPos {
+    pub param: usize,
+    pub arg_token: usize,
 }
 
 pub type RcSpan<B, R> = ModularSpan<BufSpan<B, R>, MacroSpan<RcMacroCall<BufSpan<B, R>>>>;
@@ -155,9 +155,9 @@ impl PartialOrd for MacroCallPos {
         } else {
             match (&self.expansion, &other.expansion) {
                 (Some(expansion), Some(other_expansion))
-                    if expansion.arg == other_expansion.arg =>
+                    if expansion.param == other_expansion.param =>
                 {
-                    expansion.token.partial_cmp(&other_expansion.token)
+                    expansion.arg_token.partial_cmp(&other_expansion.arg_token)
                 }
                 (None, None) => Some(Ordering::Equal),
                 _ => None,

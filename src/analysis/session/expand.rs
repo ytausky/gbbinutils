@@ -95,12 +95,6 @@ struct MacroExpansion<I, T, C> {
     context: C,
 }
 
-#[derive(Debug, PartialEq)]
-struct ParamExpansionPos {
-    param: usize,
-    pos: usize,
-}
-
 impl<I: PartialEq, L, C, F> MacroExpansion<I, Token<I, L, C>, F> {
     fn expand_token(&self, token: usize) -> Option<usize> {
         let name = match &self.def.body[token] {
@@ -135,12 +129,12 @@ where
 
     fn advance(&mut self) {
         self.param_expansion_pos = match self.param_expansion_pos {
-            Some(ParamExpansionPos { param, pos })
-                if pos + 1 < self.expansion.args[param].len() =>
+            Some(ParamExpansionPos { param, arg_token })
+                if arg_token + 1 < self.expansion.args[param].len() =>
             {
                 Some(ParamExpansionPos {
                     param,
-                    pos: pos + 1,
+                    arg_token: arg_token + 1,
                 })
             }
             _ => None,
@@ -154,10 +148,13 @@ where
     fn try_expand(&mut self) {
         assert_eq!(self.param_expansion_pos, None);
         if self.body_index < self.expansion.def.body.len() {
-            self.param_expansion_pos = self
-                .expansion
-                .expand_token(self.body_index)
-                .map(|param| ParamExpansionPos { param, pos: 0 })
+            self.param_expansion_pos =
+                self.expansion
+                    .expand_token(self.body_index)
+                    .map(|param| ParamExpansionPos {
+                        param,
+                        arg_token: 0,
+                    })
         }
     }
 }
@@ -172,21 +169,18 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.body_index < self.expansion.def.body.len() {
-            let (token, pos) = match &self.param_expansion_pos {
-                Some(ParamExpansionPos { param, pos }) => (
+            let (token, pos) = match self.param_expansion_pos {
+                Some(pos) => (
                     match (
                         &self.expansion.def.body[self.body_index],
-                        &self.expansion.args[*param][*pos],
+                        &self.expansion.args[pos.param][pos.arg_token],
                     ) {
-                        (Token::Label(_), Token::Ident(ident)) if *pos == 0 => {
+                        (Token::Label(_), Token::Ident(ident)) if pos.arg_token == 0 => {
                             Token::Label(ident.clone())
                         }
                         (_, arg_token) => arg_token.clone(),
                     },
-                    Some(ArgExpansionPos {
-                        arg: *param,
-                        token: *pos,
-                    }),
+                    Some(pos),
                 ),
                 None => (self.expansion.def.body[self.body_index].clone(), None),
             };
@@ -270,11 +264,17 @@ mod tests {
         }));
         let tok1_pos = MacroCallPos {
             token: 0,
-            expansion: Some(ArgExpansionPos { arg: 0, token: 0 }),
+            expansion: Some(ParamExpansionPos {
+                param: 0,
+                arg_token: 0,
+            }),
         };
         let tok2_pos = MacroCallPos {
             token: 0,
-            expansion: Some(ArgExpansionPos { arg: 0, token: 1 }),
+            expansion: Some(ParamExpansionPos {
+                param: 0,
+                arg_token: 1,
+            }),
         };
         assert_eq!(
             expanded,
@@ -366,11 +366,23 @@ mod tests {
                 (Token::Ident("a"), mk_span_data(0, None)),
                 (
                     Token::Ident("y"),
-                    mk_span_data(1, Some(ArgExpansionPos { arg: 0, token: 0 })),
+                    mk_span_data(
+                        1,
+                        Some(ParamExpansionPos {
+                            param: 0,
+                            arg_token: 0
+                        })
+                    ),
                 ),
                 (
                     Token::Ident("z"),
-                    mk_span_data(1, Some(ArgExpansionPos { arg: 0, token: 1 })),
+                    mk_span_data(
+                        1,
+                        Some(ParamExpansionPos {
+                            param: 0,
+                            arg_token: 1
+                        })
+                    ),
                 ),
                 (Token::Ident("b"), mk_span_data(2, None)),
             ]
