@@ -632,7 +632,7 @@ mod mock {
     }
 
     impl<T, S: Clone + Default + Merge> MacroCallCtx for MockDiagnosticsSystem<T, S> {
-        fn mk_span(&self, _: MacroCallPos) -> Self::Span {
+        fn mk_span(&self, _: MacroExpansionPos) -> Self::Span {
             S::default()
         }
     }
@@ -721,7 +721,7 @@ mod tests {
             args: vec![],
             def: macro_def,
         });
-        let position = MacroCallPos {
+        let position = MacroExpansionPos {
             token: 0,
             param_expansion: None,
         };

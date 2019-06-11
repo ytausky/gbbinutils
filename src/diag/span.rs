@@ -69,11 +69,11 @@ pub trait BufContext: SpanSource {
 }
 
 pub trait MacroCallCtx: SpanSource {
-    fn mk_span(&self, position: MacroCallPos) -> Self::Span;
+    fn mk_span(&self, position: MacroExpansionPos) -> Self::Span;
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct MacroCallPos {
+pub struct MacroExpansionPos {
     pub token: usize,
     pub param_expansion: Option<ParamExpansionPos>,
 }
@@ -100,7 +100,7 @@ pub struct BufSpan<B, R> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct MacroSpan<C> {
-    pub range: RangeInclusive<MacroCallPos>,
+    pub range: RangeInclusive<MacroExpansionPos>,
     pub context: C,
 }
 
@@ -148,7 +148,7 @@ impl TextCache {
     }
 }
 
-impl PartialOrd for MacroCallPos {
+impl PartialOrd for MacroExpansionPos {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         if self.token != other.token {
             self.token.partial_cmp(&other.token)
@@ -167,9 +167,9 @@ impl PartialOrd for MacroCallPos {
 }
 
 fn merge_macro_expansion_ranges(
-    left: &RangeInclusive<MacroCallPos>,
-    right: &RangeInclusive<MacroCallPos>,
-) -> RangeInclusive<MacroCallPos> {
+    left: &RangeInclusive<MacroExpansionPos>,
+    right: &RangeInclusive<MacroExpansionPos>,
+) -> RangeInclusive<MacroExpansionPos> {
     assert!(left.start() <= right.end());
     left.start().clone()..=right.end().clone()
 }
@@ -378,7 +378,7 @@ impl<B, R> MacroCallCtx for RcMacroCall<BufSpan<B, R>>
 where
     RcSpan<B, R>: Clone,
 {
-    fn mk_span(&self, position: MacroCallPos) -> Self::Span {
+    fn mk_span(&self, position: MacroExpansionPos) -> Self::Span {
         ModularSpan::Macro(MacroSpan {
             range: position.clone()..=position,
             context: self.clone(),
@@ -420,12 +420,12 @@ mod tests {
 
     #[test]
     fn merge_simple_macro_expansion_positions() {
-        let start_pos = MacroCallPos {
+        let start_pos = MacroExpansionPos {
             token: 2,
             param_expansion: None,
         };
         let start = start_pos.clone()..=start_pos.clone();
-        let end_pos = MacroCallPos {
+        let end_pos = MacroExpansionPos {
             token: 7,
             param_expansion: None,
         };
@@ -458,7 +458,7 @@ mod tests {
             buf_id,
             included_from: None,
         });
-        let position = MacroCallPos {
+        let position = MacroExpansionPos {
             token: 0,
             param_expansion: None,
         };
