@@ -70,7 +70,7 @@ where
     S: Clone,
     Token<I, L, C>: Clone,
 {
-    type Iter = ExpandedMacro<I, Token<I, L, C>, F::MacroCallCtx>;
+    type Iter = MacroExpansionIter<I, Token<I, L, C>, F::MacroCallCtx>;
 
     fn expand(
         &self,
@@ -79,11 +79,11 @@ where
         factory: &mut F,
     ) -> Self::Iter {
         let context = factory.mk_macro_call_ctx(name, arg_spans, &self.spans);
-        ExpandedMacro::new(self.tokens.clone(), args, context)
+        MacroExpansionIter::new(self.tokens.clone(), args, context)
     }
 }
 
-pub(super) struct ExpandedMacro<I, T, C> {
+pub(super) struct MacroExpansionIter<I, T, C> {
     expansion: MacroExpansion<I, T, C>,
     body_index: usize,
     param_expansion_pos: Option<ParamExpansionPos>,
@@ -109,7 +109,7 @@ impl<I: PartialEq, L, C, F> MacroExpansion<I, Token<I, L, C>, F> {
     }
 }
 
-impl<I, L, C, F> ExpandedMacro<I, Token<I, L, C>, F>
+impl<I, L, C, F> MacroExpansionIter<I, Token<I, L, C>, F>
 where
     I: PartialEq,
 {
@@ -118,7 +118,7 @@ where
         args: Vec<Vec<Token<I, L, C>>>,
         context: F,
     ) -> Self {
-        let mut expanded_macro = ExpandedMacro {
+        let mut expanded_macro = MacroExpansionIter {
             expansion: MacroExpansion { def, args, context },
             body_index: 0,
             param_expansion_pos: None,
@@ -159,7 +159,7 @@ where
     }
 }
 
-impl<I, L, C, F> Iterator for ExpandedMacro<I, Token<I, L, C>, F>
+impl<I, L, C, F> Iterator for MacroExpansionIter<I, Token<I, L, C>, F>
 where
     I: Clone + Eq,
     F: MacroCallCtx,
