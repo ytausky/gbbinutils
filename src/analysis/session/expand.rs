@@ -85,7 +85,7 @@ where
 
 pub(super) struct MacroExpansionIter<I, T, C> {
     expansion: MacroExpansion<I, T, C>,
-    pos: MacroCallPos,
+    pos: Option<MacroCallPos>,
 }
 
 struct MacroExpansion<I, T, C> {
@@ -95,16 +95,91 @@ struct MacroExpansion<I, T, C> {
 }
 
 impl<I: PartialEq, L, C, F> MacroExpansion<I, Token<I, L, C>, F> {
-    fn expand_token(&self, token: usize) -> Option<usize> {
-        let name = match &self.def.body[token] {
-            Token::Ident(name) | Token::Label(name) => Some(name),
-            _ => None,
-        };
-        name.and_then(|name| self.param_position(name))
+    fn mk_macro_expansion_pos(&self, token: usize) -> Option<MacroCallPos> {
+        if token >= self.def.body.len() {
+            return None;
+        }
+
+        let param_expansion = self.def.body[token].name().and_then(|name| {
+            self.param_position(name).map(|param| ParamExpansionPos {
+                param,
+                arg_token: 0,
+            })
+        });
+        Some(MacroCallPos {
+            token,
+            param_expansion,
+        })
     }
 
     fn param_position(&self, name: &I) -> Option<usize> {
         self.def.params.iter().position(|param| *param == *name)
+    }
+
+    fn next_pos(&self, pos: &MacroCallPos) -> Option<MacroCallPos> {
+        let param_expansion = pos
+            .param_expansion
+            .as_ref()
+            .and_then(|param_expansion| self.next_param_expansion_pos(&param_expansion));
+        if param_expansion.is_some() {
+            Some(MacroCallPos {
+                param_expansion,
+                ..*pos
+            })
+        } else {
+            self.mk_macro_expansion_pos(pos.token + 1)
+        }
+    }
+
+    fn next_param_expansion_pos(&self, pos: &ParamExpansionPos) -> Option<ParamExpansionPos> {
+        if pos.arg_token + 1 < self.args[pos.param].len() {
+            Some(ParamExpansionPos {
+                arg_token: pos.arg_token + 1,
+                ..*pos
+            })
+        } else {
+            None
+        }
+    }
+
+    fn token_and_span(&self, pos: MacroCallPos) -> (Token<I, L, C>, F::Span)
+    where
+        I: Clone,
+        F: MacroCallCtx,
+        Token<I, L, C>: Clone,
+    {
+        (self.token(&pos), self.context.mk_span(pos))
+    }
+
+    fn token(&self, pos: &MacroCallPos) -> Token<I, L, C>
+    where
+        I: Clone,
+        Token<I, L, C>: Clone,
+    {
+        let body_token = &self.def.body[pos.token];
+        pos.param_expansion
+            .as_ref()
+            .map(|param_expansion| {
+                match (
+                    body_token,
+                    &self.args[param_expansion.param][param_expansion.arg_token],
+                ) {
+                    (Token::Label(_), Token::Ident(ident)) if param_expansion.arg_token == 0 => {
+                        Token::Label(ident.clone())
+                    }
+                    (_, arg_token) => arg_token.clone(),
+                }
+            })
+            .unwrap_or_else(|| body_token.clone())
+    }
+}
+
+impl<I, L, C> Token<I, L, C> {
+    fn name(&self) -> Option<&I> {
+        match &self {
+            Token::Ident(name) | Token::Label(name) => Some(name),
+            _ => None,
+        }
     }
 }
 
@@ -117,45 +192,10 @@ where
         args: Vec<Vec<Token<I, L, C>>>,
         context: F,
     ) -> Self {
-        let mut expanded_macro = MacroExpansionIter {
-            expansion: MacroExpansion { def, args, context },
-            pos: MacroCallPos {
-                token: 0,
-                expansion: None,
-            },
-        };
-        expanded_macro.try_expand();
-        expanded_macro
-    }
-
-    fn advance(&mut self) {
-        self.pos.expansion = match self.pos.expansion {
-            Some(ParamExpansionPos { param, arg_token })
-                if arg_token + 1 < self.expansion.args[param].len() =>
-            {
-                Some(ParamExpansionPos {
-                    param,
-                    arg_token: arg_token + 1,
-                })
-            }
-            _ => None,
-        };
-        if self.pos.expansion.is_none() {
-            self.pos.token += 1;
-            self.try_expand()
-        }
-    }
-
-    fn try_expand(&mut self) {
-        assert_eq!(self.pos.expansion, None);
-        if self.pos.token < self.expansion.def.body.len() {
-            self.pos.expansion =
-                self.expansion
-                    .expand_token(self.pos.token)
-                    .map(|param| ParamExpansionPos {
-                        param,
-                        arg_token: 0,
-                    })
+        let expansion = MacroExpansion { def, args, context };
+        MacroExpansionIter {
+            pos: expansion.mk_macro_expansion_pos(0),
+            expansion,
         }
     }
 }
@@ -169,25 +209,10 @@ where
     type Item = (Token<I, L, C>, F::Span);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.pos.token < self.expansion.def.body.len() {
-            let token = match self.pos.expansion {
-                Some(pos) => match (
-                    &self.expansion.def.body[self.pos.token],
-                    &self.expansion.args[pos.param][pos.arg_token],
-                ) {
-                    (Token::Label(_), Token::Ident(ident)) if pos.arg_token == 0 => {
-                        Token::Label(ident.clone())
-                    }
-                    (_, arg_token) => arg_token.clone(),
-                },
-                None => self.expansion.def.body[self.pos.token].clone(),
-            };
-            let span = self.expansion.context.mk_span(self.pos.clone());
-            self.advance();
-            Some((token, span))
-        } else {
-            None
-        }
+        self.pos.take().map(|pos| {
+            self.pos = self.expansion.next_pos(&pos);
+            self.expansion.token_and_span(pos)
+        })
     }
 }
 
@@ -216,7 +241,7 @@ mod tests {
         }));
         let macro_expansion_position = MacroCallPos {
             token: 0,
-            expansion: None,
+            param_expansion: None,
         };
         assert_eq!(
             expanded,
@@ -259,14 +284,14 @@ mod tests {
         }));
         let tok1_pos = MacroCallPos {
             token: 0,
-            expansion: Some(ParamExpansionPos {
+            param_expansion: Some(ParamExpansionPos {
                 param: 0,
                 arg_token: 0,
             }),
         };
         let tok2_pos = MacroCallPos {
             token: 0,
-            expansion: Some(ParamExpansionPos {
+            param_expansion: Some(ParamExpansionPos {
                 param: 0,
                 arg_token: 1,
             }),
@@ -348,8 +373,11 @@ mod tests {
                 factory,
             )
             .collect();
-        let mk_span_data = |token, expansion| {
-            let position = MacroCallPos { token, expansion };
+        let mk_span_data = |token, param_expansion| {
+            let position = MacroCallPos {
+                token,
+                param_expansion,
+            };
             ModularSpan::Macro(MacroSpan {
                 range: position.clone()..=position,
                 context: data.clone(),

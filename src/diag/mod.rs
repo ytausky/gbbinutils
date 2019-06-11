@@ -723,7 +723,7 @@ mod tests {
         });
         let position = MacroCallPos {
             token: 0,
-            expansion: None,
+            param_expansion: None,
         };
         let span = ModularSpan::Macro(MacroSpan {
             range: position.clone()..=position,

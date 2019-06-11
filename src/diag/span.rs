@@ -75,10 +75,10 @@ pub trait MacroCallCtx: SpanSource {
 #[derive(Clone, Debug, PartialEq)]
 pub struct MacroCallPos {
     pub token: usize,
-    pub expansion: Option<ParamExpansionPos>,
+    pub param_expansion: Option<ParamExpansionPos>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ParamExpansionPos {
     pub param: usize,
     pub arg_token: usize,
@@ -153,7 +153,7 @@ impl PartialOrd for MacroCallPos {
         if self.token != other.token {
             self.token.partial_cmp(&other.token)
         } else {
-            match (&self.expansion, &other.expansion) {
+            match (&self.param_expansion, &other.param_expansion) {
                 (Some(expansion), Some(other_expansion))
                     if expansion.param == other_expansion.param =>
                 {
@@ -422,12 +422,12 @@ mod tests {
     fn merge_simple_macro_expansion_positions() {
         let start_pos = MacroCallPos {
             token: 2,
-            expansion: None,
+            param_expansion: None,
         };
         let start = start_pos.clone()..=start_pos.clone();
         let end_pos = MacroCallPos {
             token: 7,
-            expansion: None,
+            param_expansion: None,
         };
         let end = end_pos.clone()..=end_pos.clone();
         assert_eq!(
@@ -460,7 +460,7 @@ mod tests {
         });
         let position = MacroCallPos {
             token: 0,
-            expansion: None,
+            param_expansion: None,
         };
         let macro_base = 0;
         let expansion = ModularMacroCall {
