@@ -9,7 +9,7 @@ impl<L, S: Clone> Expr<L, NameId, S> {
     pub(super) fn eval<R, F>(
         &self,
         context: &EvalContext<R, S>,
-        args: &[Num],
+        args: &[SpannedValue<S>],
         on_undefined: &mut F,
     ) -> Num
     where
@@ -28,14 +28,14 @@ impl<L, S: Clone> Expr<L, NameId, S> {
                     Value::Num(operator.apply(&lhs, &rhs))
                 }
                 ExprOp::FnCall(n) => {
-                    let mut args = stack.split_off(stack.len() - n).into_iter();
+                    let args = stack.split_off(stack.len() - n);
                     let name = stack.pop().unwrap();
                     match name.value {
-                        Value::Name(NameId::Builtin(BuiltinName::Sizeof)) => match args.next() {
+                        Value::Name(NameId::Builtin(BuiltinName::Sizeof)) => match args.get(0) {
                             Some(SpannedValue {
                                 value: Value::Name(NameId::Def(id)),
                                 ..
-                            }) => match context.program.names.get(id) {
+                            }) => match context.program.names.get(*id) {
                                 Some(NameDef::Section(SectionId(section))) => Value::Num(
                                     context
                                         .relocs
@@ -46,18 +46,13 @@ impl<L, S: Clone> Expr<L, NameId, S> {
                             },
                             _ => unimplemented!(),
                         },
-                        Value::Name(NameId::Def(id)) => {
-                            let args: Vec<_> = args
-                                .map(|arg| arg.into_num(context, on_undefined))
-                                .collect();
-                            match context.program.names.get(id) {
-                                Some(NameDef::Section(_)) => unimplemented!(),
-                                Some(NameDef::Symbol(expr)) => {
-                                    Value::Num(expr.eval(context, &args, on_undefined))
-                                }
-                                None => unimplemented!(),
+                        Value::Name(NameId::Def(id)) => match context.program.names.get(id) {
+                            Some(NameDef::Section(_)) => unimplemented!(),
+                            Some(NameDef::Symbol(expr)) => {
+                                Value::Num(expr.eval(context, &args, on_undefined))
                             }
-                        }
+                            None => unimplemented!(),
+                        },
                         Value::Num(_) => unimplemented!(),
                     }
                 }
@@ -71,11 +66,13 @@ impl<L, S: Clone> Expr<L, NameId, S> {
     }
 }
 
+#[derive(Clone)]
 pub(super) struct SpannedValue<S> {
     value: Value,
     span: S,
 }
 
+#[derive(Clone)]
 pub(super) enum Value {
     Name(NameId),
     Num(Num),
@@ -106,14 +103,14 @@ impl<S: Clone> SpannedValue<S> {
 }
 
 pub(super) trait Eval {
-    fn eval<R, S>(&self, context: &EvalContext<R, S>, args: &[Num]) -> Value
+    fn eval<R, S>(&self, context: &EvalContext<R, S>, args: &[SpannedValue<S>]) -> Value
     where
         R: Borrow<RelocTable>,
         S: Clone;
 }
 
 impl Eval for Atom<LocationCounter, NameId> {
-    fn eval<R, S>(&self, context: &EvalContext<R, S>, _: &[Num]) -> Value
+    fn eval<R, S>(&self, context: &EvalContext<R, S>, _: &[SpannedValue<S>]) -> Value
     where
         R: Borrow<RelocTable>,
         S: Clone,
@@ -128,7 +125,7 @@ impl Eval for Atom<LocationCounter, NameId> {
 }
 
 impl Eval for Atom<RelocId, NameId> {
-    fn eval<R, S>(&self, context: &EvalContext<R, S>, args: &[Num]) -> Value
+    fn eval<R, S>(&self, context: &EvalContext<R, S>, args: &[SpannedValue<S>]) -> Value
     where
         R: Borrow<RelocTable>,
         S: Clone,
@@ -137,7 +134,7 @@ impl Eval for Atom<RelocId, NameId> {
             Atom::Const(value) => Value::Num((*value).into()),
             Atom::Location(id) => Value::Num(context.relocs.borrow().get(*id)),
             Atom::Name(id) => Value::Name(*id),
-            Atom::Param(ParamId(id)) => Value::Num(args[*id].clone()),
+            Atom::Param(ParamId(id)) => args[*id].value.clone(),
         }
     }
 }
