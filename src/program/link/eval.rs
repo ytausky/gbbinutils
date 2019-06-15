@@ -1,12 +1,22 @@
 use super::{EvalContext, Num, RelocTable};
 
 use crate::model::{Atom, BinOp, Expr, ExprOp, LocationCounter, ParamId};
-use crate::program::{BuiltinName, NameDef, NameId, RelocId, SectionId};
+use crate::program::{BuiltinName, Immediate, NameDef, NameId, RelocId, SectionId};
 
 use std::borrow::Borrow;
 
+impl<S: Clone> Immediate<S> {
+    pub(super) fn eval<R, F>(&self, context: &EvalContext<R, S>, on_undefined: &mut F) -> Num
+    where
+        R: Borrow<RelocTable>,
+        F: FnMut(&S),
+    {
+        self.eval_with_args(context, &[], on_undefined)
+    }
+}
+
 impl<L, S: Clone> Expr<L, NameId, S> {
-    pub(super) fn eval<R, F>(
+    fn eval_with_args<R, F>(
         &self,
         context: &EvalContext<R, S>,
         args: &[SpannedValue<S>],
@@ -49,7 +59,7 @@ impl<L, S: Clone> Expr<L, NameId, S> {
                         Value::Name(NameId::Def(id)) => match context.program.names.get(id) {
                             Some(NameDef::Section(_)) => unimplemented!(),
                             Some(NameDef::Symbol(expr)) => {
-                                Value::Num(expr.eval(context, &args, on_undefined))
+                                Value::Num(expr.eval_with_args(context, &args, on_undefined))
                             }
                             None => unimplemented!(),
                         },
@@ -67,13 +77,13 @@ impl<L, S: Clone> Expr<L, NameId, S> {
 }
 
 #[derive(Clone)]
-pub(super) struct SpannedValue<S> {
+struct SpannedValue<S> {
     value: Value,
     span: S,
 }
 
 #[derive(Clone)]
-pub(super) enum Value {
+enum Value {
     Name(NameId),
     Num(Num),
 }
@@ -91,7 +101,7 @@ impl<S: Clone> SpannedValue<S> {
                     let reloc = context.program.sections[*section].addr;
                     context.relocs.borrow().get(reloc)
                 }
-                Some(NameDef::Symbol(expr)) => expr.eval(context, &[], on_undefined),
+                Some(NameDef::Symbol(expr)) => expr.eval_with_args(context, &[], on_undefined),
                 None => {
                     on_undefined(&self.span);
                     Num::Unknown
@@ -102,7 +112,7 @@ impl<S: Clone> SpannedValue<S> {
     }
 }
 
-pub(super) trait Eval {
+trait Eval {
     fn eval<R, S>(&self, context: &EvalContext<R, S>, args: &[SpannedValue<S>]) -> Value
     where
         R: Borrow<RelocTable>,
@@ -178,11 +188,7 @@ mod tests {
             location: Num::Unknown,
         };
         assert_eq!(
-            Immediate::from_atom(NameDefId(0).into(), ()).eval(
-                &context,
-                &[],
-                &mut ignore_undefined
-            ),
+            Immediate::from_atom(NameDefId(0).into(), ()).eval(&context, &mut ignore_undefined),
             addr.into()
         )
     }
@@ -212,7 +218,7 @@ mod tests {
                 NameDefId(0).into(),
                 ExprOp::FnCall(1).into()
             ])
-            .eval(context, &[], &mut ignore_undefined),
+            .eval(context, &mut ignore_undefined),
             size.into()
         )
     }
@@ -236,9 +242,6 @@ mod tests {
             relocs,
             location: Num::Unknown,
         };
-        assert_eq!(
-            immediate.eval(context, &[], &mut ignore_undefined),
-            43.into()
-        )
+        assert_eq!(immediate.eval(context, &mut ignore_undefined), 43.into())
     }
 }
