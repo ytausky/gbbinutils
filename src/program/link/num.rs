@@ -1,41 +1,41 @@
 use std::ops::{Add, AddAssign, Mul, RangeInclusive, Sub};
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Value {
+pub enum Num {
     Range { min: i32, max: i32 },
     Unknown,
 }
 
-impl Value {
+impl Num {
     pub fn exact(&self) -> Option<i32> {
         match *self {
-            Value::Range { min, max } if min == max => Some(min),
+            Num::Range { min, max } if min == max => Some(min),
             _ => None,
         }
     }
 }
 
-impl From<i32> for Value {
+impl From<i32> for Num {
     fn from(n: i32) -> Self {
-        Value::Range { min: n, max: n }
+        Num::Range { min: n, max: n }
     }
 }
 
-impl From<RangeInclusive<i32>> for Value {
+impl From<RangeInclusive<i32>> for Num {
     fn from(range: RangeInclusive<i32>) -> Self {
-        Value::Range {
+        Num::Range {
             min: *range.start(),
             max: *range.end(),
         }
     }
 }
 
-impl AddAssign<&Value> for Value {
-    fn add_assign(&mut self, rhs: &Value) {
+impl AddAssign<&Num> for Num {
+    fn add_assign(&mut self, rhs: &Num) {
         match (self, rhs) {
             (
-                Value::Range { min, max },
-                Value::Range {
+                Num::Range { min, max },
+                Num::Range {
                     min: rhs_min,
                     max: rhs_max,
                 },
@@ -43,50 +43,50 @@ impl AddAssign<&Value> for Value {
                 *min += rhs_min;
                 *max += rhs_max;
             }
-            (this, _) => *this = Value::Unknown,
+            (this, _) => *this = Num::Unknown,
         }
     }
 }
 
-impl Add for &Value {
-    type Output = Value;
-    fn add(self, rhs: &Value) -> Self::Output {
+impl Add for &Num {
+    type Output = Num;
+    fn add(self, rhs: &Num) -> Self::Output {
         let mut result = self.clone();
         result += rhs;
         result
     }
 }
 
-impl Sub for &Value {
-    type Output = Value;
-    fn sub(self, rhs: &Value) -> Self::Output {
+impl Sub for &Num {
+    type Output = Num;
+    fn sub(self, rhs: &Num) -> Self::Output {
         match (self, rhs) {
             (
-                Value::Range { min, max },
-                Value::Range {
+                Num::Range { min, max },
+                Num::Range {
                     min: rhs_min,
                     max: rhs_max,
                 },
-            ) => Value::Range {
+            ) => Num::Range {
                 min: min - rhs_max,
                 max: max - rhs_min,
             },
-            _ => Value::Unknown,
+            _ => Num::Unknown,
         }
     }
 }
 
-impl Mul for &Value {
-    type Output = Value;
+impl Mul for &Num {
+    type Output = Num;
 
-    fn mul(self, rhs: &Value) -> Self::Output {
+    fn mul(self, rhs: &Num) -> Self::Output {
         match (self, rhs) {
             (
-                Value::Range {
+                Num::Range {
                     min: lhs_min,
                     max: lhs_max,
                 },
-                Value::Range {
+                Num::Range {
                     min: rhs_min,
                     max: rhs_max,
                 },
@@ -97,12 +97,12 @@ impl Mul for &Value {
                     .iter()
                     .cloned()
                     .flat_map(|n| rhs_endpoints.iter().map(move |&m| m * n));
-                Value::Range {
+                Num::Range {
                     min: products.clone().min().unwrap(),
                     max: products.max().unwrap(),
                 }
             }
-            _ => Value::Unknown,
+            _ => Num::Unknown,
         }
     }
 }
@@ -119,7 +119,7 @@ mod tests {
 
     #[test]
     fn multiply_ranges() {
-        let cases: &[(Value, Value, Value)] = &triples![
+        let cases: &[(Num, Num, Num)] = &triples![
             (2, 3, 6),
             (-1..=1, -1..=1, -1..=1),
             (1..=6, -1, -6..=-1),

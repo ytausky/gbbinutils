@@ -1,4 +1,4 @@
-use super::{EvalContext, RelocTable, Value};
+use super::{EvalContext, Num, RelocTable};
 
 use crate::model::{Atom, BinOp, Expr, ExprOp, LocationCounter, ParamId};
 use crate::program::{BuiltinName, NameDef, NameId, RelocId, SectionId};
@@ -9,9 +9,9 @@ impl<L, S: Clone> Expr<L, NameId, S> {
     pub(super) fn eval<R, F>(
         &self,
         context: &EvalContext<R, S>,
-        args: &[Value],
+        args: &[Num],
         on_undefined: &mut F,
-    ) -> Value
+    ) -> Num
     where
         R: Borrow<RelocTable>,
         F: FnMut(&S),
@@ -25,7 +25,7 @@ impl<L, S: Clone> Expr<L, NameId, S> {
                     let rhs = stack.pop().unwrap();
                     let lhs = stack.pop().unwrap().into_value(context, on_undefined);
                     let rhs = rhs.into_value(context, on_undefined);
-                    StackVariant::Value(operator.apply(&lhs, &rhs))
+                    StackVariant::Num(operator.apply(&lhs, &rhs))
                 }
                 ExprOp::FnCall(n) => {
                     let mut args = stack.split_off(stack.len() - n).into_iter();
@@ -38,7 +38,7 @@ impl<L, S: Clone> Expr<L, NameId, S> {
                                     ..
                                 }) => match context.program.names.get(id) {
                                     Some(NameDef::Section(SectionId(section))) => {
-                                        StackVariant::Value(
+                                        StackVariant::Num(
                                             context
                                                 .relocs
                                                 .borrow()
@@ -57,12 +57,12 @@ impl<L, S: Clone> Expr<L, NameId, S> {
                             match context.program.names.get(id) {
                                 Some(NameDef::Section(_)) => unimplemented!(),
                                 Some(NameDef::Symbol(expr)) => {
-                                    StackVariant::Value(expr.eval(context, &args, on_undefined))
+                                    StackVariant::Num(expr.eval(context, &args, on_undefined))
                                 }
                                 None => unimplemented!(),
                             }
                         }
-                        StackVariant::Value(_) => unimplemented!(),
+                        StackVariant::Num(_) => unimplemented!(),
                     }
                 }
             };
@@ -82,11 +82,11 @@ pub(super) struct StackItem<S> {
 
 pub(super) enum StackVariant {
     Name(NameId),
-    Value(Value),
+    Num(Num),
 }
 
 impl<S: Clone> StackItem<S> {
-    fn into_value<R, F>(self, context: &EvalContext<R, S>, on_undefined: &mut F) -> Value
+    fn into_value<R, F>(self, context: &EvalContext<R, S>, on_undefined: &mut F) -> Num
     where
         R: Borrow<RelocTable>,
         F: FnMut(&S),
@@ -101,30 +101,30 @@ impl<S: Clone> StackItem<S> {
                 Some(NameDef::Symbol(expr)) => expr.eval(context, &[], on_undefined),
                 None => {
                     on_undefined(&self.span);
-                    Value::Unknown
+                    Num::Unknown
                 }
             },
-            StackVariant::Value(value) => value,
+            StackVariant::Num(value) => value,
         }
     }
 }
 
 pub(super) trait Eval {
-    fn eval<R, S>(&self, context: &EvalContext<R, S>, args: &[Value]) -> StackVariant
+    fn eval<R, S>(&self, context: &EvalContext<R, S>, args: &[Num]) -> StackVariant
     where
         R: Borrow<RelocTable>,
         S: Clone;
 }
 
 impl Eval for Atom<LocationCounter, NameId> {
-    fn eval<R, S>(&self, context: &EvalContext<R, S>, _: &[Value]) -> StackVariant
+    fn eval<R, S>(&self, context: &EvalContext<R, S>, _: &[Num]) -> StackVariant
     where
         R: Borrow<RelocTable>,
         S: Clone,
     {
         match self {
-            Atom::Const(value) => StackVariant::Value((*value).into()),
-            Atom::Location(LocationCounter) => StackVariant::Value(context.location.clone()),
+            Atom::Const(value) => StackVariant::Num((*value).into()),
+            Atom::Location(LocationCounter) => StackVariant::Num(context.location.clone()),
             Atom::Name(id) => StackVariant::Name(*id),
             Atom::Param(_) => unimplemented!(),
         }
@@ -132,22 +132,22 @@ impl Eval for Atom<LocationCounter, NameId> {
 }
 
 impl Eval for Atom<RelocId, NameId> {
-    fn eval<R, S>(&self, context: &EvalContext<R, S>, args: &[Value]) -> StackVariant
+    fn eval<R, S>(&self, context: &EvalContext<R, S>, args: &[Num]) -> StackVariant
     where
         R: Borrow<RelocTable>,
         S: Clone,
     {
         match self {
-            Atom::Const(value) => StackVariant::Value((*value).into()),
-            Atom::Location(id) => StackVariant::Value(context.relocs.borrow().get(*id)),
+            Atom::Const(value) => StackVariant::Num((*value).into()),
+            Atom::Location(id) => StackVariant::Num(context.relocs.borrow().get(*id)),
             Atom::Name(id) => StackVariant::Name(*id),
-            Atom::Param(ParamId(id)) => StackVariant::Value(args[*id].clone()),
+            Atom::Param(ParamId(id)) => StackVariant::Num(args[*id].clone()),
         }
     }
 }
 
 impl BinOp {
-    fn apply(self, lhs: &Value, rhs: &Value) -> Value {
+    fn apply(self, lhs: &Num, rhs: &Num) -> Num {
         match self {
             BinOp::Minus => lhs - rhs,
             BinOp::Multiplication => lhs * rhs,
@@ -162,7 +162,7 @@ pub const BUILTIN_NAMES: &[(&str, NameId)] = &[("sizeof", NameId::Builtin(Builti
 #[cfg(test)]
 mod tests {
     use crate::model::{BinOp, ParamId};
-    use crate::program::link::{ignore_undefined, EvalContext, RelocTable, Value};
+    use crate::program::link::{ignore_undefined, EvalContext, Num, RelocTable};
     use crate::program::*;
 
     #[test]
@@ -182,7 +182,7 @@ mod tests {
         let context = EvalContext {
             program: &program,
             relocs: &relocs,
-            location: Value::Unknown,
+            location: Num::Unknown,
         };
         assert_eq!(
             Immediate::from_atom(NameDefId(0).into(), ()).eval(
@@ -211,7 +211,7 @@ mod tests {
         let context = &EvalContext {
             program,
             relocs,
-            location: Value::Unknown,
+            location: Num::Unknown,
         };
         assert_eq!(
             Immediate::from_items(&[
@@ -241,7 +241,7 @@ mod tests {
         let context = &EvalContext {
             program,
             relocs,
-            location: Value::Unknown,
+            location: Num::Unknown,
         };
         assert_eq!(
             immediate.eval(context, &[], &mut ignore_undefined),

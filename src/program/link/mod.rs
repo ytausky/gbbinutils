@@ -1,6 +1,6 @@
 pub use self::eval::BUILTIN_NAMES;
 
-use self::value::Value;
+use self::num::Num;
 
 use super::{BinaryObject, Node, Program, RelocId, Section};
 
@@ -10,8 +10,8 @@ use crate::model::Width;
 use std::borrow::Borrow;
 
 mod eval;
+mod num;
 mod translate;
-mod value;
 
 impl<S: Clone> Program<S> {
     pub(crate) fn link(&self, diagnostics: &mut impl BackendDiagnostics<S>) -> BinaryObject {
@@ -41,31 +41,31 @@ impl<S: Clone> Program<S> {
 struct EvalContext<'a, R, S> {
     program: &'a Program<S>,
     relocs: R,
-    location: Value,
+    location: Num,
 }
 
-struct RelocTable(Vec<Value>);
+struct RelocTable(Vec<Num>);
 
 impl RelocTable {
     fn new(relocs: usize) -> Self {
-        Self(vec![Value::Unknown; relocs])
+        Self(vec![Num::Unknown; relocs])
     }
 
-    fn get(&self, RelocId(id): RelocId) -> Value {
+    fn get(&self, RelocId(id): RelocId) -> Num {
         self.0[id].clone()
     }
 
-    fn refine(&mut self, RelocId(id): RelocId, value: Value) -> bool {
+    fn refine(&mut self, RelocId(id): RelocId, value: Num) -> bool {
         let stored_value = &mut self.0[id];
         let old_value = stored_value.clone();
         let was_refined = match (old_value, &value) {
-            (Value::Unknown, new_value) => *new_value != Value::Unknown,
+            (Num::Unknown, new_value) => *new_value != Num::Unknown,
             (
-                Value::Range {
+                Num::Range {
                     min: old_min,
                     max: old_max,
                 },
-                Value::Range {
+                Num::Range {
                     min: new_min,
                     max: new_max,
                 },
@@ -74,7 +74,7 @@ impl RelocTable {
                 assert!(*new_max <= old_max);
                 *new_min > old_min || *new_max < old_max
             }
-            (Value::Range { .. }, Value::Unknown) => {
+            (Num::Range { .. }, Num::Unknown) => {
                 panic!("a symbol previously approximated is now unknown")
             }
         };
@@ -87,7 +87,7 @@ impl RelocTable {
         let context = &mut EvalContext {
             program,
             relocs: self,
-            location: Value::Unknown,
+            location: Num::Unknown,
         };
         for section in &program.sections {
             context.location = section.eval_addr(&context);
@@ -106,13 +106,13 @@ impl RelocTable {
 }
 
 impl<S: Clone> Section<S> {
-    fn traverse<R, F>(&self, context: &mut EvalContext<R, S>, mut f: F) -> Value
+    fn traverse<R, F>(&self, context: &mut EvalContext<R, S>, mut f: F) -> Num
     where
         R: Borrow<RelocTable>,
         F: FnMut(&Node<S>, &mut EvalContext<R, S>),
     {
         let addr = context.location.clone();
-        let mut offset = Value::from(0);
+        let mut offset = Num::from(0);
         for item in &self.items {
             offset += &item.size(&context);
             context.location = &addr + &offset;
@@ -121,7 +121,7 @@ impl<S: Clone> Section<S> {
         offset
     }
 
-    fn eval_addr<R: Borrow<RelocTable>>(&self, context: &EvalContext<R, S>) -> Value {
+    fn eval_addr<R: Borrow<RelocTable>>(&self, context: &EvalContext<R, S>) -> Num {
         self.constraints
             .addr
             .as_ref()
@@ -131,14 +131,14 @@ impl<S: Clone> Section<S> {
 }
 
 impl<S: Clone> Node<S> {
-    fn size<R: Borrow<RelocTable>>(&self, context: &EvalContext<R, S>) -> Value {
+    fn size<R: Borrow<RelocTable>>(&self, context: &EvalContext<R, S>) -> Num {
         match self {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),
             Node::Immediate(_, width) => width.len().into(),
             Node::LdInlineAddr(_, expr) => match expr.eval(context, &[], &mut ignore_undefined) {
-                Value::Range { min, .. } if min >= 0xff00 => 2.into(),
-                Value::Range { max, .. } if max < 0xff00 => 3.into(),
-                _ => Value::Range { min: 2, max: 3 },
+                Num::Range { min, .. } if min >= 0xff00 => 2.into(),
+                Num::Range { max, .. } if max < 0xff00 => 3.into(),
+                _ => Num::Range { min: 2, max: 3 },
             },
             Node::Reloc(_) => 0.into(),
             Node::Reserved(bytes) => bytes.eval(context, &[], &mut ignore_undefined),
@@ -305,7 +305,7 @@ mod tests {
         assert_eq!(relocs.get(symbol), (addr + bytes).into())
     }
 
-    fn assert_section_size(expected: impl Into<Value>, f: impl FnOnce(&mut Program<()>)) {
+    fn assert_section_size(expected: impl Into<Num>, f: impl FnOnce(&mut Program<()>)) {
         let mut program = Program::new();
         program.add_section(None);
         f(&mut program);
