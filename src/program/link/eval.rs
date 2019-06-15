@@ -17,83 +17,79 @@ impl<L, S: Clone> Expr<L, NameId, S> {
         F: FnMut(&S),
         Atom<L, NameId>: Eval,
     {
-        let mut stack = Vec::<StackItem<S>>::new();
+        let mut stack = Vec::<SpannedValue<S>>::new();
         for item in &self.0 {
-            let variant = match &item.op {
+            let value = match &item.op {
                 ExprOp::Atom(atom) => atom.eval(context, args),
                 ExprOp::Binary(operator) => {
                     let rhs = stack.pop().unwrap();
-                    let lhs = stack.pop().unwrap().into_value(context, on_undefined);
-                    let rhs = rhs.into_value(context, on_undefined);
-                    StackVariant::Num(operator.apply(&lhs, &rhs))
+                    let lhs = stack.pop().unwrap().into_num(context, on_undefined);
+                    let rhs = rhs.into_num(context, on_undefined);
+                    Value::Num(operator.apply(&lhs, &rhs))
                 }
                 ExprOp::FnCall(n) => {
                     let mut args = stack.split_off(stack.len() - n).into_iter();
                     let name = stack.pop().unwrap();
-                    match name.variant {
-                        StackVariant::Name(NameId::Builtin(BuiltinName::Sizeof)) => {
-                            match args.next() {
-                                Some(StackItem {
-                                    variant: StackVariant::Name(NameId::Def(id)),
-                                    ..
-                                }) => match context.program.names.get(id) {
-                                    Some(NameDef::Section(SectionId(section))) => {
-                                        StackVariant::Num(
-                                            context
-                                                .relocs
-                                                .borrow()
-                                                .get(context.program.sections[*section].size),
-                                        )
-                                    }
-                                    _ => unimplemented!(),
-                                },
+                    match name.value {
+                        Value::Name(NameId::Builtin(BuiltinName::Sizeof)) => match args.next() {
+                            Some(SpannedValue {
+                                value: Value::Name(NameId::Def(id)),
+                                ..
+                            }) => match context.program.names.get(id) {
+                                Some(NameDef::Section(SectionId(section))) => Value::Num(
+                                    context
+                                        .relocs
+                                        .borrow()
+                                        .get(context.program.sections[*section].size),
+                                ),
                                 _ => unimplemented!(),
-                            }
-                        }
-                        StackVariant::Name(NameId::Def(id)) => {
+                            },
+                            _ => unimplemented!(),
+                        },
+                        Value::Name(NameId::Def(id)) => {
                             let args: Vec<_> = args
-                                .map(|arg| arg.into_value(context, on_undefined))
+                                .map(|arg| arg.into_num(context, on_undefined))
                                 .collect();
                             match context.program.names.get(id) {
                                 Some(NameDef::Section(_)) => unimplemented!(),
                                 Some(NameDef::Symbol(expr)) => {
-                                    StackVariant::Num(expr.eval(context, &args, on_undefined))
+                                    Value::Num(expr.eval(context, &args, on_undefined))
                                 }
                                 None => unimplemented!(),
                             }
                         }
-                        StackVariant::Num(_) => unimplemented!(),
+                        Value::Num(_) => unimplemented!(),
                     }
                 }
             };
-            stack.push(StackItem {
-                variant,
+            stack.push(SpannedValue {
+                value,
                 span: item.expr_span.clone(),
             })
         }
-        stack.pop().unwrap().into_value(context, on_undefined)
+        stack.pop().unwrap().into_num(context, on_undefined)
     }
 }
 
-pub(super) struct StackItem<S> {
-    variant: StackVariant,
+pub(super) struct SpannedValue<S> {
+    value: Value,
     span: S,
 }
 
-pub(super) enum StackVariant {
+pub(super) enum Value {
     Name(NameId),
     Num(Num),
 }
 
-impl<S: Clone> StackItem<S> {
-    fn into_value<R, F>(self, context: &EvalContext<R, S>, on_undefined: &mut F) -> Num
+impl<S: Clone> SpannedValue<S> {
+    fn into_num<R, F>(self, context: &EvalContext<R, S>, on_undefined: &mut F) -> Num
     where
         R: Borrow<RelocTable>,
         F: FnMut(&S),
     {
-        match self.variant {
-            StackVariant::Name(NameId::Builtin(_)) => unimplemented!(),
-            StackVariant::Name(NameId::Def(id)) => match context.program.names.get(id) {
+        match self.value {
+            Value::Name(NameId::Builtin(_)) => unimplemented!(),
+            Value::Name(NameId::Def(id)) => match context.program.names.get(id) {
                 Some(NameDef::Section(SectionId(section))) => {
                     let reloc = context.program.sections[*section].addr;
                     context.relocs.borrow().get(reloc)
@@ -104,44 +100,44 @@ impl<S: Clone> StackItem<S> {
                     Num::Unknown
                 }
             },
-            StackVariant::Num(value) => value,
+            Value::Num(value) => value,
         }
     }
 }
 
 pub(super) trait Eval {
-    fn eval<R, S>(&self, context: &EvalContext<R, S>, args: &[Num]) -> StackVariant
+    fn eval<R, S>(&self, context: &EvalContext<R, S>, args: &[Num]) -> Value
     where
         R: Borrow<RelocTable>,
         S: Clone;
 }
 
 impl Eval for Atom<LocationCounter, NameId> {
-    fn eval<R, S>(&self, context: &EvalContext<R, S>, _: &[Num]) -> StackVariant
+    fn eval<R, S>(&self, context: &EvalContext<R, S>, _: &[Num]) -> Value
     where
         R: Borrow<RelocTable>,
         S: Clone,
     {
         match self {
-            Atom::Const(value) => StackVariant::Num((*value).into()),
-            Atom::Location(LocationCounter) => StackVariant::Num(context.location.clone()),
-            Atom::Name(id) => StackVariant::Name(*id),
+            Atom::Const(value) => Value::Num((*value).into()),
+            Atom::Location(LocationCounter) => Value::Num(context.location.clone()),
+            Atom::Name(id) => Value::Name(*id),
             Atom::Param(_) => unimplemented!(),
         }
     }
 }
 
 impl Eval for Atom<RelocId, NameId> {
-    fn eval<R, S>(&self, context: &EvalContext<R, S>, args: &[Num]) -> StackVariant
+    fn eval<R, S>(&self, context: &EvalContext<R, S>, args: &[Num]) -> Value
     where
         R: Borrow<RelocTable>,
         S: Clone,
     {
         match self {
-            Atom::Const(value) => StackVariant::Num((*value).into()),
-            Atom::Location(id) => StackVariant::Num(context.relocs.borrow().get(*id)),
-            Atom::Name(id) => StackVariant::Name(*id),
-            Atom::Param(ParamId(id)) => StackVariant::Num(args[*id].clone()),
+            Atom::Const(value) => Value::Num((*value).into()),
+            Atom::Location(id) => Value::Num(context.relocs.borrow().get(*id)),
+            Atom::Name(id) => Value::Name(*id),
+            Atom::Param(ParamId(id)) => Value::Num(args[*id].clone()),
         }
     }
 }
