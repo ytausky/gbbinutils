@@ -4,7 +4,7 @@ use self::num::Num;
 
 use super::{BinaryObject, Node, Program, RelocId, Section};
 
-use crate::diag::BackendDiagnostics;
+use crate::diag::{BackendDiagnostics, IgnoreDiagnostics};
 use crate::model::Width;
 
 use std::borrow::Borrow;
@@ -125,7 +125,7 @@ impl<S: Clone> Section<S> {
         self.constraints
             .addr
             .as_ref()
-            .map(|expr| expr.eval(context, &mut ignore_undefined))
+            .map(|expr| expr.eval(context, &mut IgnoreDiagnostics))
             .unwrap_or_else(|| 0.into())
     }
 }
@@ -135,13 +135,13 @@ impl<S: Clone> Node<S> {
         match self {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),
             Node::Immediate(_, width) => width.len().into(),
-            Node::LdInlineAddr(_, expr) => match expr.eval(context, &mut ignore_undefined) {
+            Node::LdInlineAddr(_, expr) => match expr.eval(context, &mut IgnoreDiagnostics) {
                 Num::Range { min, .. } if min >= 0xff00 => 2.into(),
                 Num::Range { max, .. } if max < 0xff00 => 3.into(),
                 _ => Num::Range { min: 2, max: 3 },
             },
             Node::Reloc(_) => 0.into(),
-            Node::Reserved(bytes) => bytes.eval(context, &mut ignore_undefined),
+            Node::Reserved(bytes) => bytes.eval(context, &mut IgnoreDiagnostics),
         }
     }
 }
@@ -154,8 +154,6 @@ impl Width {
         }
     }
 }
-
-fn ignore_undefined<S>(_: &S) {}
 
 #[cfg(test)]
 mod tests {

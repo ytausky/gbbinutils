@@ -237,10 +237,8 @@ impl<'a> EmitDiag<Span, StrippedBufSpan<BufId, BufRange>> for OutputForwarder<'a
     }
 }
 
-#[cfg(test)]
 pub(crate) struct IgnoreDiagnostics;
 
-#[cfg(test)]
 impl<S: Clone> StripSpan<S> for IgnoreDiagnostics {
     type Stripped = S;
 
@@ -249,7 +247,6 @@ impl<S: Clone> StripSpan<S> for IgnoreDiagnostics {
     }
 }
 
-#[cfg(test)]
 impl<S: Clone> EmitDiag<S, S> for IgnoreDiagnostics {
     fn emit_diag(&mut self, _: impl Into<CompactDiag<S>>) {}
 }
@@ -463,6 +460,7 @@ mod mock {
 
     use crate::log::Log;
 
+    use std::fmt::Debug;
     use std::marker::PhantomData;
 
     pub(crate) trait Merge: Sized {
@@ -498,6 +496,13 @@ mod mock {
     impl<T> MockDiagnostics<T> {
         pub fn new(log: Log<T>) -> Self {
             Self { log }
+        }
+
+        pub fn into_log(self) -> Vec<T>
+        where
+            T: Debug,
+        {
+            self.log.into_inner()
         }
     }
 

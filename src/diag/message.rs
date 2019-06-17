@@ -9,6 +9,9 @@ pub enum Message<S> {
     AfOutsideStackOperation,
     AlwaysUnconditional,
     CannotBeUsedAsTarget,
+    CannotCoerceBuiltinNameIntoNum {
+        name: S,
+    },
     CannotDereference {
         category: KeywordOperandCategory,
         operand: S,
@@ -115,6 +118,10 @@ impl Message<StrippedBufSpan<BufId, BufRange>> {
             CannotBeUsedAsTarget => {
                 "operand cannot be used as target for branching instructions".into()
             }
+            CannotCoerceBuiltinNameIntoNum { name } => format!(
+                "cannot coerce builtin name `{}` into number",
+                codebase.snippet(name)
+            ),
             CannotDereference { category, operand } => format!(
                 "{} `{}` cannot be dereferenced",
                 category,

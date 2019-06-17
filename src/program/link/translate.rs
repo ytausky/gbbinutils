@@ -1,4 +1,4 @@
-use super::{ignore_undefined, EvalContext, RelocTable};
+use super::{EvalContext, RelocTable};
 
 use crate::diag::{BackendDiagnostics, Message};
 use crate::model::Width;
@@ -20,7 +20,7 @@ impl<S: Clone> Section<S> {
         context.location = addr.clone();
         self.traverse(context, |item, context| {
             if let Node::Reserved(expr) = item {
-                let bytes = expr.eval(context, &mut ignore_undefined);
+                let bytes = expr.eval(context, diagnostics);
                 if !data.is_empty() {
                     chunks.push(BinarySection {
                         addr: addr.exact().unwrap() as usize,
@@ -52,14 +52,14 @@ impl<S: Clone> Node<S> {
         match self {
             Node::Byte(value) => vec![*value],
             Node::Embedded(opcode, expr) => {
-                let n = expr.eval(context, &mut ignore_undefined).exact().unwrap();
+                let n = expr.eval(context, diagnostics).exact().unwrap();
                 vec![opcode | ((n as u8) << 3)]
             }
             Node::Immediate(expr, width) => {
                 resolve_expr_item(&expr, *width, context, diagnostics).into_bytes()
             }
             Node::LdInlineAddr(opcode, expr) => {
-                let addr = expr.eval(context, &mut ignore_undefined).exact().unwrap();
+                let addr = expr.eval(context, diagnostics).exact().unwrap();
                 let kind = if addr < 0xff00 {
                     AddrKind::Low
                 } else {
@@ -117,13 +117,7 @@ fn resolve_expr_item<S: Clone>(
     diagnostics: &mut impl BackendDiagnostics<S>,
 ) -> Data {
     let span = expr.span();
-    let value = expr
-        .eval(context, &mut |span| {
-            let symbol = diagnostics.strip_span(span);
-            diagnostics.emit_diag(Message::UnresolvedSymbol { symbol }.at(span.clone()))
-        })
-        .exact()
-        .unwrap_or(0);
+    let value = expr.eval(context, diagnostics).exact().unwrap_or(0);
     fit_to_width((value, span), width, diagnostics)
 }
 

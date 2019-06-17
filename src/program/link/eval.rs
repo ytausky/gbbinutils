@@ -1,30 +1,46 @@
 use super::{EvalContext, Num, RelocTable};
 
+use crate::diag::span::StripSpan;
+use crate::diag::{BackendDiagnostics, EmitDiag, Message};
 use crate::model::{Atom, BinOp, Expr, ExprOp, LocationCounter, ParamId};
 use crate::program::{BuiltinName, Immediate, NameDef, NameId, RelocId, SectionId};
 
 use std::borrow::Borrow;
 
 impl<S: Clone> Immediate<S> {
-    pub(super) fn eval<R, F>(&self, context: &EvalContext<R, S>, on_undefined: &mut F) -> Num
+    pub(super) fn eval<R, D>(&self, context: &EvalContext<R, S>, diagnostics: &mut D) -> Num
     where
         R: Borrow<RelocTable>,
-        F: FnMut(&S),
+        D: EvalDiagnostics<S>,
     {
-        self.eval_with_args(context, &[], on_undefined)
+        self.eval_with_args(context, &[], diagnostics)
+    }
+}
+
+pub(super) trait EvalDiagnostics<S> {
+    type Diagnostics: BackendDiagnostics<S>;
+
+    fn with_diag(&mut self, f: impl FnOnce(&mut Self::Diagnostics));
+}
+
+impl<D: BackendDiagnostics<S>, S: Clone> EvalDiagnostics<S> for D {
+    type Diagnostics = Self;
+
+    fn with_diag(&mut self, f: impl FnOnce(&mut Self::Diagnostics)) {
+        f(self)
     }
 }
 
 impl<L, S: Clone> Expr<L, NameId, S> {
-    fn eval_with_args<R, F>(
+    fn eval_with_args<R, D>(
         &self,
         context: &EvalContext<R, S>,
         args: &[SpannedValue<S>],
-        on_undefined: &mut F,
+        diagnostics: &mut D,
     ) -> Num
     where
         R: Borrow<RelocTable>,
-        F: FnMut(&S),
+        D: EvalDiagnostics<S>,
         Atom<L, NameId>: Eval,
     {
         let mut stack = Vec::<SpannedValue<S>>::new();
@@ -33,15 +49,15 @@ impl<L, S: Clone> Expr<L, NameId, S> {
                 ExprOp::Atom(atom) => atom.eval(context, args),
                 ExprOp::Binary(operator) => {
                     let rhs = stack.pop().unwrap();
-                    let lhs = stack.pop().unwrap().into_num(context, on_undefined);
-                    let rhs = rhs.into_num(context, on_undefined);
+                    let lhs = stack.pop().unwrap().into_num(context, diagnostics);
+                    let rhs = rhs.into_num(context, diagnostics);
                     Value::Num(operator.apply(&lhs, &rhs))
                 }
                 ExprOp::FnCall(n) => {
                     let args = stack.split_off(stack.len() - n);
                     let name = stack.pop().unwrap();
                     let callable = name.value.to_callable(context);
-                    callable.call(context, args, on_undefined)
+                    callable.call(context, args, diagnostics)
                 }
             };
             stack.push(SpannedValue {
@@ -49,7 +65,7 @@ impl<L, S: Clone> Expr<L, NameId, S> {
                 span: item.expr_span.clone(),
             })
         }
-        stack.pop().unwrap().into_num(context, on_undefined)
+        stack.pop().unwrap().into_num(context, diagnostics)
     }
 }
 
@@ -66,21 +82,31 @@ enum Value {
 }
 
 impl<S: Clone> SpannedValue<S> {
-    fn into_num<R, F>(self, context: &EvalContext<R, S>, on_undefined: &mut F) -> Num
+    fn into_num<R, D>(self, context: &EvalContext<R, S>, diagnostics: &mut D) -> Num
     where
         R: Borrow<RelocTable>,
-        F: FnMut(&S),
+        D: EvalDiagnostics<S>,
     {
         match self.value {
-            Value::Name(NameId::Builtin(_)) => unimplemented!(),
+            Value::Name(NameId::Builtin(_)) => {
+                diagnostics.with_diag(|diagnostics| {
+                    let name = diagnostics.strip_span(&self.span);
+                    diagnostics
+                        .emit_diag(Message::CannotCoerceBuiltinNameIntoNum { name }.at(self.span));
+                });
+                Num::Unknown
+            }
             Value::Name(NameId::Def(id)) => match context.program.names.get(id) {
                 Some(NameDef::Section(SectionId(section))) => {
                     let reloc = context.program.sections[*section].addr;
                     context.relocs.borrow().get(reloc)
                 }
-                Some(NameDef::Symbol(expr)) => expr.eval_with_args(context, &[], on_undefined),
+                Some(NameDef::Symbol(expr)) => expr.eval_with_args(context, &[], diagnostics),
                 None => {
-                    on_undefined(&self.span);
+                    diagnostics.with_diag(|diagnostics| {
+                        let symbol = diagnostics.strip_span(&self.span);
+                        diagnostics.emit_diag(Message::UnresolvedSymbol { symbol }.at(self.span))
+                    });
                     Num::Unknown
                 }
             },
@@ -109,15 +135,15 @@ enum Callable<'a, S> {
 }
 
 impl<'a, S: Clone> Callable<'a, S> {
-    fn call<R, F>(
+    fn call<R, D>(
         &self,
         context: &'a EvalContext<R, S>,
         args: Vec<SpannedValue<S>>,
-        on_undefined: &mut F,
+        diagnostics: &mut D,
     ) -> Value
     where
         R: Borrow<RelocTable>,
-        F: FnMut(&S),
+        D: EvalDiagnostics<S>,
     {
         match self {
             Callable::Sizeof => match args.get(0) {
@@ -135,7 +161,7 @@ impl<'a, S: Clone> Callable<'a, S> {
                 },
                 _ => unimplemented!(),
             },
-            Callable::Symbol(expr) => Value::Num(expr.eval_with_args(context, &args, on_undefined)),
+            Callable::Symbol(expr) => Value::Num(expr.eval_with_args(context, &args, diagnostics)),
         }
     }
 }
@@ -192,8 +218,10 @@ pub const BUILTIN_NAMES: &[(&str, NameId)] = &[("sizeof", NameId::Builtin(Builti
 
 #[cfg(test)]
 mod tests {
-    use crate::model::{BinOp, ParamId};
-    use crate::program::link::{ignore_undefined, EvalContext, Num, RelocTable};
+    use super::{BinOp, EvalContext, Immediate, Message, Num, ParamId, RelocTable};
+
+    use crate::diag::{DiagnosticsEvent, IgnoreDiagnostics, MockDiagnostics, MockSpan};
+    use crate::log::Log;
     use crate::program::*;
 
     #[test]
@@ -216,7 +244,7 @@ mod tests {
             location: Num::Unknown,
         };
         assert_eq!(
-            Immediate::from_atom(NameDefId(0).into(), ()).eval(&context, &mut ignore_undefined),
+            Immediate::from_atom(NameDefId(0).into(), ()).eval(&context, &mut IgnoreDiagnostics),
             addr.into()
         )
     }
@@ -246,7 +274,7 @@ mod tests {
                 NameDefId(0).into(),
                 ExprOp::FnCall(1).into()
             ])
-            .eval(context, &mut ignore_undefined),
+            .eval(context, &mut IgnoreDiagnostics),
             size.into()
         )
     }
@@ -270,6 +298,37 @@ mod tests {
             relocs,
             location: Num::Unknown,
         };
-        assert_eq!(immediate.eval(context, &mut ignore_undefined), 43.into())
+        assert_eq!(immediate.eval(context, &mut IgnoreDiagnostics), 43.into())
+    }
+
+    #[test]
+    fn diagnose_using_sizeof_as_immediate() {
+        let program = &Program {
+            sections: vec![],
+            names: NameTable(vec![]),
+            relocs: 0,
+        };
+        let relocs = &RelocTable(vec![]);
+        let context = &EvalContext {
+            program,
+            relocs,
+            location: Num::Unknown,
+        };
+        let mut diagnostics = MockDiagnostics::<DiagnosticsEvent<MockSpan<_>>>::new(Log::new());
+        let immediate = Immediate::from_atom(
+            Atom::Name(NameId::Builtin(BuiltinName::Sizeof)),
+            MockSpan::from(0),
+        );
+        let value = immediate.eval(context, &mut diagnostics);
+        let log = diagnostics.into_log();
+        assert_eq!(value, Num::Unknown);
+        assert_eq!(
+            log,
+            [DiagnosticsEvent::EmitDiag(
+                Message::CannotCoerceBuiltinNameIntoNum { name: 0.into() }
+                    .at(0.into())
+                    .into()
+            )]
+        )
     }
 }
