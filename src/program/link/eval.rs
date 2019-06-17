@@ -40,31 +40,8 @@ impl<L, S: Clone> Expr<L, NameId, S> {
                 ExprOp::FnCall(n) => {
                     let args = stack.split_off(stack.len() - n);
                     let name = stack.pop().unwrap();
-                    match name.value {
-                        Value::Name(NameId::Builtin(BuiltinName::Sizeof)) => match args.get(0) {
-                            Some(SpannedValue {
-                                value: Value::Name(NameId::Def(id)),
-                                ..
-                            }) => match context.program.names.get(*id) {
-                                Some(NameDef::Section(SectionId(section))) => Value::Num(
-                                    context
-                                        .relocs
-                                        .borrow()
-                                        .get(context.program.sections[*section].size),
-                                ),
-                                _ => unimplemented!(),
-                            },
-                            _ => unimplemented!(),
-                        },
-                        Value::Name(NameId::Def(id)) => match context.program.names.get(id) {
-                            Some(NameDef::Section(_)) => unimplemented!(),
-                            Some(NameDef::Symbol(expr)) => {
-                                Value::Num(expr.eval_with_args(context, &args, on_undefined))
-                            }
-                            None => unimplemented!(),
-                        },
-                        Value::Num(_) => unimplemented!(),
-                    }
+                    let callable = name.value.to_callable(context);
+                    callable.call(context, args, on_undefined)
                 }
             };
             stack.push(SpannedValue {
@@ -108,6 +85,57 @@ impl<S: Clone> SpannedValue<S> {
                 }
             },
             Value::Num(value) => value,
+        }
+    }
+}
+
+impl Value {
+    fn to_callable<'a, R, S>(&self, context: &'a EvalContext<R, S>) -> Callable<'a, S> {
+        match self {
+            Value::Name(NameId::Builtin(BuiltinName::Sizeof)) => Callable::Sizeof,
+            Value::Name(NameId::Def(id)) => match context.program.names.get(*id) {
+                Some(NameDef::Section(_)) => unimplemented!(),
+                Some(NameDef::Symbol(expr)) => Callable::Symbol(expr),
+                None => unimplemented!(),
+            },
+            Value::Num(_) => unimplemented!(),
+        }
+    }
+}
+
+enum Callable<'a, S> {
+    Sizeof,
+    Symbol(&'a Expr<RelocId, NameId, S>),
+}
+
+impl<'a, S: Clone> Callable<'a, S> {
+    fn call<R, F>(
+        &self,
+        context: &'a EvalContext<R, S>,
+        args: Vec<SpannedValue<S>>,
+        on_undefined: &mut F,
+    ) -> Value
+    where
+        R: Borrow<RelocTable>,
+        F: FnMut(&S),
+    {
+        match self {
+            Callable::Sizeof => match args.get(0) {
+                Some(SpannedValue {
+                    value: Value::Name(NameId::Def(id)),
+                    ..
+                }) => match context.program.names.get(*id) {
+                    Some(NameDef::Section(SectionId(section))) => Value::Num(
+                        context
+                            .relocs
+                            .borrow()
+                            .get(context.program.sections[*section].size),
+                    ),
+                    _ => unimplemented!(),
+                },
+                _ => unimplemented!(),
+            },
+            Callable::Symbol(expr) => Value::Num(expr.eval_with_args(context, &args, on_undefined)),
         }
     }
 }
