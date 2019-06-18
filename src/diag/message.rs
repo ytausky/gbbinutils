@@ -101,6 +101,7 @@ pub enum KeywordOperandCategory {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ValueKind {
+    Builtin,
     Section,
     Symbol,
 }
@@ -254,6 +255,7 @@ impl fmt::Display for KeywordOperandCategory {
 impl fmt::Display for ValueKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            ValueKind::Builtin => f.write_str("built-in name"),
             ValueKind::Section => f.write_str("section name"),
             ValueKind::Symbol => f.write_str("symbol"),
         }

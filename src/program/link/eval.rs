@@ -225,16 +225,28 @@ impl<'a, S: Clone> Spanned<Value<'a, S>, &S> {
             Value::Name(ResolvedName::Section(section)) => {
                 context.relocs.borrow().get(section.size)
             }
-            Value::Name(ResolvedName::Symbol(_)) => {
-                diagnostics.emit_diag(
-                    Message::ExpectedFound {
-                        expected: ValueKind::Section,
-                        found: ValueKind::Symbol,
-                    }
-                    .at(self.span.clone()),
-                );
+            ref other => {
+                if let Some(found) = other.kind() {
+                    diagnostics.emit_diag(
+                        Message::ExpectedFound {
+                            expected: ValueKind::Section,
+                            found,
+                        }
+                        .at(self.span.clone()),
+                    )
+                }
                 Num::Unknown
             }
+        }
+    }
+}
+
+impl<'a, S: Clone> Value<'a, S> {
+    fn kind(&self) -> Option<ValueKind> {
+        match self {
+            Value::Name(ResolvedName::Section(_)) => Some(ValueKind::Section),
+            Value::Name(ResolvedName::Sizeof) => Some(ValueKind::Builtin),
+            Value::Name(ResolvedName::Symbol(_)) => Some(ValueKind::Symbol),
             _ => unimplemented!(),
         }
     }
@@ -403,6 +415,18 @@ mod tests {
 
     #[test]
     fn diagnose_sizeof_of_symbol() {
+        test_diagnosis_of_wrong_sizeof_arg(Atom::Name(NameId::Def(NameDefId(0))), ValueKind::Symbol)
+    }
+
+    #[test]
+    fn diagnose_sizeof_of_sizeof() {
+        test_diagnosis_of_wrong_sizeof_arg(
+            Atom::Name(NameId::Builtin(BuiltinName::Sizeof)),
+            ValueKind::Builtin,
+        )
+    }
+
+    fn test_diagnosis_of_wrong_sizeof_arg(inner: Atom<LocationCounter, NameId>, found: ValueKind) {
         let program = &Program {
             sections: vec![],
             names: NameTable(vec![Some(NameDef::Symbol(Expr::from_atom(
@@ -418,13 +442,13 @@ mod tests {
             location: Num::Unknown,
         };
         let mut diagnostics = MockDiagnostics::new(Log::new());
-        let name_span = MockSpan::from("name");
+        let inner_span = MockSpan::from("inner");
         let sizeof_span = MockSpan::from("sizeof");
         let immediate = Expr(vec![
             ExprItem {
-                op: ExprOp::Atom(Atom::Name(NameId::Def(NameDefId(0)))),
-                op_span: name_span.clone(),
-                expr_span: name_span.clone(),
+                op: ExprOp::Atom(inner),
+                op_span: inner_span.clone(),
+                expr_span: inner_span.clone(),
             },
             ExprItem {
                 op: ExprOp::Atom(Atom::Name(NameId::Builtin(BuiltinName::Sizeof))),
@@ -444,9 +468,9 @@ mod tests {
             [DiagnosticsEvent::EmitDiag(
                 Message::ExpectedFound {
                     expected: ValueKind::Section,
-                    found: ValueKind::Symbol
+                    found,
                 }
-                .at(name_span)
+                .at(inner_span)
                 .into()
             )]
         )
