@@ -68,9 +68,11 @@ where
                     Value::Num(operator.apply(&lhs, &rhs))
                 }
                 ExprOp::FnCall(n) => {
-                    let args = stack.split_off(stack.len() - n);
                     let name = stack.pop().unwrap();
-                    Value::Num(name.eval(context, &args, diagnostics))
+                    let arg_index = stack.len() - n;
+                    let value = Value::Num(name.eval(context, &stack[arg_index..], diagnostics));
+                    stack.truncate(arg_index);
+                    value
                 }
             };
             stack.push(value.with_span(&item.expr_span))
@@ -255,8 +257,8 @@ mod tests {
         };
         assert_eq!(
             Immediate::from_items(&[
-                BuiltinName::Sizeof.into(),
                 NameDefId(0).into(),
+                BuiltinName::Sizeof.into(),
                 ExprOp::FnCall(1).into()
             ])
             .to_num(context, &mut IgnoreDiagnostics),
@@ -267,7 +269,7 @@ mod tests {
     #[test]
     fn eval_fn_call_in_immediate() {
         let immediate =
-            Immediate::from_items(&[NameDefId(0).into(), 42.into(), ExprOp::FnCall(1).into()]);
+            Immediate::from_items(&[42.into(), NameDefId(0).into(), ExprOp::FnCall(1).into()]);
         let program = &Program::<()> {
             sections: vec![],
             names: NameTable(vec![Some(NameDef::Symbol(Expr::from_items(&[

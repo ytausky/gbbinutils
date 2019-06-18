@@ -302,11 +302,11 @@ where
                 Ok(())
             }
             ArgVariant::FnCall((name, span), args) => {
-                self.push_op(name, span.clone());
                 let n = args.len();
                 for arg in args {
                     self.eval_arg(arg)?;
                 }
+                self.push_op(name, span.clone());
                 self.push_op(FnCall(n), span);
                 Ok(())
             }

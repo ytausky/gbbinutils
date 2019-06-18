@@ -373,8 +373,8 @@ mod tests {
             actions,
             [
                 BackendEvent::EmitItem(Item::Instruction(Instruction::Rst(Expr::from_items(&[
-                    ident.into(),
                     1.into(),
+                    ident.into(),
                     ExprOp::FnCall(1).into()
                 ]))))
                 .into()
