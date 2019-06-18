@@ -1,7 +1,7 @@
 use super::{EvalContext, Num, RelocTable};
 
 use crate::diag::span::{Spanned, WithSpan};
-use crate::diag::{BackendDiagnostics, Message};
+use crate::diag::{BackendDiagnostics, Message, ValueKind};
 use crate::model::{Atom, BinOp, Expr, ExprOp, LocationCounter, ParamId};
 use crate::program::*;
 
@@ -111,7 +111,7 @@ impl<'a, S: Clone> Eval<'a, S> for Spanned<ResolvedName<'a, S>, &S> {
             ResolvedName::Section(section) => context.relocs.borrow().get(section.addr),
             ResolvedName::Sizeof => args
                 .get(0)
-                .map(|value| value.sizeof(context))
+                .map(|value| value.sizeof(context, diagnostics))
                 .unwrap_or_else(|| {
                     let name = diagnostics.strip_span(self.span);
                     diagnostics.emit_diag(
@@ -216,10 +216,24 @@ impl BinOp {
 }
 
 impl<'a, S: Clone> Spanned<Value<'a, S>, &S> {
-    fn sizeof<R: Borrow<RelocTable>>(&self, context: &'a EvalContext<R, S>) -> Num {
+    fn sizeof<R, D>(&self, context: &'a EvalContext<R, S>, diagnostics: &mut D) -> Num
+    where
+        R: Borrow<RelocTable>,
+        D: BackendDiagnostics<S>,
+    {
         match self.item {
             Value::Name(ResolvedName::Section(section)) => {
                 context.relocs.borrow().get(section.size)
+            }
+            Value::Name(ResolvedName::Symbol(_)) => {
+                diagnostics.emit_diag(
+                    Message::ExpectedFound {
+                        expected: ValueKind::Section,
+                        found: ValueKind::Symbol,
+                    }
+                    .at(self.span.clone()),
+                );
+                Num::Unknown
             }
             _ => unimplemented!(),
         }
@@ -232,9 +246,11 @@ pub const BUILTIN_NAMES: &[(&str, NameId)] = &[("sizeof", NameId::Builtin(Builti
 mod tests {
     use super::*;
 
-    use crate::diag::{DiagnosticsEvent, IgnoreDiagnostics, Merge, MockDiagnostics, MockSpan};
+    use crate::diag::{DiagnosticsEvent, IgnoreDiagnostics, Merge, MockSpan, ValueKind};
     use crate::log::Log;
     use crate::model::ExprItem;
+
+    type MockDiagnostics<S> = crate::diag::MockDiagnostics<DiagnosticsEvent<S>>;
 
     #[test]
     fn eval_section_addr() {
@@ -325,7 +341,7 @@ mod tests {
             relocs,
             location: Num::Unknown,
         };
-        let mut diagnostics = MockDiagnostics::<DiagnosticsEvent<MockSpan<_>>>::new(Log::new());
+        let mut diagnostics = MockDiagnostics::new(Log::new());
         let immediate = Immediate::from_atom(
             Atom::Name(NameId::Builtin(BuiltinName::Sizeof)),
             MockSpan::from(0),
@@ -356,7 +372,7 @@ mod tests {
             relocs,
             location: Num::Unknown,
         };
-        let mut diagnostics = MockDiagnostics::<DiagnosticsEvent<_>>::new(Log::new());
+        let mut diagnostics = MockDiagnostics::new(Log::new());
         let name_span = MockSpan::from("name");
         let call_span = MockSpan::from("call");
         let immediate = Expr(vec![
@@ -378,6 +394,57 @@ mod tests {
             [DiagnosticsEvent::EmitDiag(
                 Message::UnresolvedSymbol {
                     symbol: name_span.clone()
+                }
+                .at(name_span)
+                .into()
+            )]
+        )
+    }
+
+    #[test]
+    fn diagnose_sizeof_of_symbol() {
+        let program = &Program {
+            sections: vec![],
+            names: NameTable(vec![Some(NameDef::Symbol(Expr::from_atom(
+                42.into(),
+                MockSpan::from("42"),
+            )))]),
+            relocs: 0,
+        };
+        let relocs = &RelocTable::new(0);
+        let context = EvalContext {
+            program,
+            relocs,
+            location: Num::Unknown,
+        };
+        let mut diagnostics = MockDiagnostics::new(Log::new());
+        let name_span = MockSpan::from("name");
+        let sizeof_span = MockSpan::from("sizeof");
+        let immediate = Expr(vec![
+            ExprItem {
+                op: ExprOp::Atom(Atom::Name(NameId::Def(NameDefId(0)))),
+                op_span: name_span.clone(),
+                expr_span: name_span.clone(),
+            },
+            ExprItem {
+                op: ExprOp::Atom(Atom::Name(NameId::Builtin(BuiltinName::Sizeof))),
+                op_span: sizeof_span.clone(),
+                expr_span: sizeof_span.clone(),
+            },
+            ExprItem {
+                op: ExprOp::FnCall(1),
+                op_span: MockSpan::from("call"),
+                expr_span: MockSpan::merge(sizeof_span, MockSpan::from("paren_r")),
+            },
+        ]);
+        let num = immediate.to_num(&context, &mut diagnostics);
+        assert_eq!(num, Num::Unknown);
+        assert_eq!(
+            diagnostics.into_log(),
+            [DiagnosticsEvent::EmitDiag(
+                Message::ExpectedFound {
+                    expected: ValueKind::Section,
+                    found: ValueKind::Symbol
                 }
                 .at(name_span)
                 .into()

@@ -4,7 +4,7 @@
 //! encoded in a [`Diagnostic`](struct.Diagnostic.html) along with all the information necessary to
 //! present it to the end user.
 
-pub(crate) use self::message::{KeywordOperandCategory, Message};
+pub(crate) use self::message::{KeywordOperandCategory, Message, ValueKind};
 pub use crate::codebase::{LineNumber, TextPosition, TextRange};
 
 use crate::codebase::{BufId, BufRange, TextBuf, TextCache};

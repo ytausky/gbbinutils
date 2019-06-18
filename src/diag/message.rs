@@ -24,6 +24,10 @@ pub enum Message<S> {
     DestCannotBeConst,
     DestMustBeA,
     DestMustBeHl,
+    ExpectedFound {
+        expected: ValueKind,
+        found: ValueKind,
+    },
     ExpectedString,
     IncompatibleOperand,
     InvalidUtf8,
@@ -95,6 +99,12 @@ pub enum KeywordOperandCategory {
     ConditionCode,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum ValueKind {
+    Section,
+    Symbol,
+}
+
 impl<S> From<CodebaseError> for Message<S> {
     fn from(error: CodebaseError) -> Message<S> {
         match error {
@@ -138,6 +148,7 @@ impl Message<StrippedBufSpan<BufId, BufRange>> {
             DestCannotBeConst => "destination operand cannot be a constant".into(),
             DestMustBeA => "destination of ALU operation must be `a`".into(),
             DestMustBeHl => "destination operand must be `hl`".into(),
+            ExpectedFound { expected, found } => format!("expected {}, found {}", expected, found),
             ExpectedString => "expected string argument".into(),
             IncompatibleOperand => "operand cannot be used with this instruction".into(),
             InvalidUtf8 => "file contains invalid UTF-8".into(),
@@ -236,6 +247,15 @@ impl fmt::Display for KeywordOperandCategory {
             KeywordOperandCategory::Reg => f.write_str("register"),
             KeywordOperandCategory::RegPair => f.write_str("register pair"),
             KeywordOperandCategory::ConditionCode => f.write_str("condition code"),
+        }
+    }
+}
+
+impl fmt::Display for ValueKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ValueKind::Section => f.write_str("section name"),
+            ValueKind::Symbol => f.write_str("symbol"),
         }
     }
 }
