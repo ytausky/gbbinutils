@@ -109,20 +109,16 @@ impl<'a, S: Clone> Eval<'a, S> for Spanned<ResolvedName<'a, S>, &S> {
     ) -> Self::Output {
         match self.item {
             ResolvedName::Section(section) => context.relocs.borrow().get(section.addr),
-            ResolvedName::Sizeof => match args.get(0) {
-                Some(Spanned {
-                    item: Value::Name(ResolvedName::Section(section)),
-                    ..
-                }) => context.relocs.borrow().get(section.size),
-                None => {
+            ResolvedName::Sizeof => args
+                .get(0)
+                .map(|value| value.sizeof(context))
+                .unwrap_or_else(|| {
                     let name = diagnostics.strip_span(self.span);
                     diagnostics.emit_diag(
                         Message::CannotCoerceBuiltinNameIntoNum { name }.at(self.span.clone()),
                     );
                     Num::Unknown
-                }
-                _ => unimplemented!(),
-            },
+                }),
             ResolvedName::Symbol(expr) => expr.eval(context, args, diagnostics),
         }
     }
@@ -214,6 +210,17 @@ impl BinOp {
             BinOp::Minus => lhs - rhs,
             BinOp::Multiplication => lhs * rhs,
             BinOp::Plus => lhs + rhs,
+            _ => unimplemented!(),
+        }
+    }
+}
+
+impl<'a, S: Clone> Spanned<Value<'a, S>, &S> {
+    fn sizeof<R: Borrow<RelocTable>>(&self, context: &'a EvalContext<R, S>) -> Num {
+        match self.item {
+            Value::Name(ResolvedName::Section(section)) => {
+                context.relocs.borrow().get(section.size)
+            }
             _ => unimplemented!(),
         }
     }
