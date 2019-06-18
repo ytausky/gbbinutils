@@ -1,5 +1,6 @@
 use super::{EvalContext, Num, RelocTable};
 
+use crate::diag::span::{Spanned, WithSpan};
 use crate::diag::{BackendDiagnostics, Message};
 use crate::model::{Atom, BinOp, Expr, ExprOp, LocationCounter, ParamId};
 use crate::program::{BuiltinName, Immediate, NameDef, NameDefId, NameId, RelocId, SectionId};
@@ -7,55 +8,27 @@ use crate::program::{BuiltinName, Immediate, NameDef, NameDefId, NameId, RelocId
 use std::borrow::Borrow;
 
 impl<S: Clone> Immediate<S> {
-    pub(super) fn eval<R, D>(&self, context: &EvalContext<R, S>, diagnostics: &mut D) -> Num
+    pub(super) fn to_num<R, D>(&self, context: &EvalContext<R, S>, diagnostics: &mut D) -> Num
     where
         R: Borrow<RelocTable>,
         D: BackendDiagnostics<S>,
     {
-        self.eval_with_args(context, &[], diagnostics)
+        self.eval(context, &[], diagnostics)
     }
 }
 
-impl<L, S: Clone> Expr<L, NameId, S> {
-    fn eval_with_args<R, D>(
-        &self,
-        context: &EvalContext<R, S>,
-        args: &[SpannedValue<S>],
+trait Eval<'a, S: Clone> {
+    type Output;
+
+    fn eval<R, D>(
+        self,
+        context: &'a EvalContext<R, S>,
+        args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
-    ) -> Num
+    ) -> Self::Output
     where
         R: Borrow<RelocTable>,
-        D: BackendDiagnostics<S>,
-        Atom<L, NameId>: Eval<S>,
-    {
-        let mut stack = Vec::<SpannedValue<S>>::new();
-        for item in &self.0 {
-            let value = match &item.op {
-                ExprOp::Atom(atom) => atom.eval(item.expr_span.clone(), context, args, diagnostics),
-                ExprOp::Binary(operator) => {
-                    let rhs = stack.pop().unwrap();
-                    let lhs = stack.pop().unwrap().eval(context, vec![], diagnostics);
-                    let rhs = rhs.eval(context, vec![], diagnostics);
-                    Value::Num(operator.apply(&lhs, &rhs))
-                }
-                ExprOp::FnCall(n) => {
-                    let args = stack.split_off(stack.len() - n);
-                    let name = stack.pop().unwrap();
-                    Value::Num(name.eval(context, args, diagnostics))
-                }
-            };
-            stack.push(SpannedValue {
-                value,
-                span: item.expr_span.clone(),
-            })
-        }
-        stack.pop().unwrap().eval(context, vec![], diagnostics)
-    }
-}
-
-struct SpannedValue<'a, S: Clone> {
-    value: Value<'a, S>,
-    span: S,
+        D: BackendDiagnostics<S>;
 }
 
 #[derive(Clone)]
@@ -65,19 +38,62 @@ enum Value<'a, S: Clone> {
     Unresolved,
 }
 
-impl<'a, S: Clone> SpannedValue<'a, S> {
+impl<'a, L, S: Clone> Eval<'a, S> for &'a Expr<L, NameId, S>
+where
+    for<'r> Spanned<&'r Atom<L, NameId>, &'r S>: Eval<'a, S, Output = Value<'a, S>>,
+{
+    type Output = Num;
+
     fn eval<R, D>(
         self,
-        context: &EvalContext<R, S>,
-        args: Vec<SpannedValue<S>>,
+        context: &'a EvalContext<R, S>,
+        args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
     ) -> Num
     where
         R: Borrow<RelocTable>,
         D: BackendDiagnostics<S>,
     {
-        match self.value {
-            Value::Name(name) => name.eval(self.span, context, args, diagnostics),
+        let mut stack = Vec::<Spanned<Value<_>, _>>::new();
+        for item in &self.0 {
+            let value = match &item.op {
+                ExprOp::Atom(atom) => {
+                    atom.with_span(&item.expr_span)
+                        .eval(context, args, diagnostics)
+                }
+                ExprOp::Binary(operator) => {
+                    let rhs = stack.pop().unwrap();
+                    let lhs = stack.pop().unwrap().eval(context, &[], diagnostics);
+                    let rhs = rhs.eval(context, &[], diagnostics);
+                    Value::Num(operator.apply(&lhs, &rhs))
+                }
+                ExprOp::FnCall(n) => {
+                    let args = stack.split_off(stack.len() - n);
+                    let name = stack.pop().unwrap();
+                    Value::Num(name.eval(context, &args, diagnostics))
+                }
+            };
+            stack.push(value.with_span(&item.expr_span))
+        }
+        stack.pop().unwrap().eval(context, &[], diagnostics)
+    }
+}
+
+impl<'a, S: Clone> Eval<'a, S> for Spanned<Value<'a, S>, &S> {
+    type Output = Num;
+
+    fn eval<R, D>(
+        self,
+        context: &'a EvalContext<R, S>,
+        args: &'a [Spanned<Value<'a, S>, &S>],
+        diagnostics: &mut D,
+    ) -> Self::Output
+    where
+        R: Borrow<RelocTable>,
+        D: BackendDiagnostics<S>,
+    {
+        match self.item {
+            Value::Name(name) => name.with_span(self.span).eval(context, args, diagnostics),
             Value::Num(value) => value,
             Value::Unresolved => Num::Unknown,
         }
@@ -87,12 +103,13 @@ impl<'a, S: Clone> SpannedValue<'a, S> {
 impl NameId {
     fn resolve<'a, R, D, S>(
         &self,
-        span: S,
+        span: &S,
         context: &'a EvalContext<R, S>,
         diagnostics: &mut D,
     ) -> Option<ResolvedName<'a, S>>
     where
         D: BackendDiagnostics<S>,
+        S: Clone,
     {
         match self {
             NameId::Builtin(BuiltinName::Sizeof) => Some(ResolvedName::Sizeof),
@@ -104,17 +121,18 @@ impl NameId {
 impl NameDefId {
     fn resolve<'a, R, D, S>(
         self,
-        span: S,
+        span: &S,
         context: &'a EvalContext<R, S>,
         diagnostics: &mut D,
     ) -> Option<ResolvedName<'a, S>>
     where
         D: BackendDiagnostics<S>,
+        S: Clone,
     {
         let resolved = context.program.names.get(self).map(ResolvedName::NameDef);
         if resolved.is_none() {
-            let symbol = diagnostics.strip_span(&span);
-            diagnostics.emit_diag(Message::UnresolvedSymbol { symbol }.at(span))
+            let symbol = diagnostics.strip_span(span);
+            diagnostics.emit_diag(Message::UnresolvedSymbol { symbol }.at(span.clone()))
         }
         resolved
     }
@@ -126,32 +144,34 @@ enum ResolvedName<'a, S> {
     Sizeof,
 }
 
-impl<'a, S: Clone> ResolvedName<'a, S> {
+impl<'a, S: Clone> Eval<'a, S> for Spanned<ResolvedName<'a, S>, &S> {
+    type Output = Num;
+
     fn eval<R, D>(
-        &self,
-        span: S,
+        self,
         context: &'a EvalContext<R, S>,
-        args: Vec<SpannedValue<S>>,
+        args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
-    ) -> Num
+    ) -> Self::Output
     where
         R: Borrow<RelocTable>,
         D: BackendDiagnostics<S>,
     {
-        match self {
+        match self.item {
             ResolvedName::NameDef(def) => def.eval(context, args, diagnostics),
             ResolvedName::Sizeof => match args.get(0) {
-                Some(SpannedValue {
-                    value: Value::Name(ResolvedName::NameDef(NameDef::Section(SectionId(section)))),
+                Some(Spanned {
+                    item: Value::Name(ResolvedName::NameDef(NameDef::Section(SectionId(section)))),
                     ..
                 }) => context
                     .relocs
                     .borrow()
                     .get(context.program.sections[*section].size),
                 None => {
-                    let name = diagnostics.strip_span(&span);
-                    diagnostics
-                        .emit_diag(Message::CannotCoerceBuiltinNameIntoNum { name }.at(span));
+                    let name = diagnostics.strip_span(self.span);
+                    diagnostics.emit_diag(
+                        Message::CannotCoerceBuiltinNameIntoNum { name }.at(self.span.clone()),
+                    );
                     Num::Unknown
                 }
                 _ => unimplemented!(),
@@ -160,13 +180,15 @@ impl<'a, S: Clone> ResolvedName<'a, S> {
     }
 }
 
-impl<S: Clone> NameDef<S> {
+impl<'a, S: Clone> Eval<'a, S> for &'a NameDef<S> {
+    type Output = Num;
+
     fn eval<R, D>(
-        &self,
-        context: &EvalContext<R, S>,
-        args: Vec<SpannedValue<S>>,
+        self,
+        context: &'a EvalContext<R, S>,
+        args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
-    ) -> Num
+    ) -> Self::Output
     where
         R: Borrow<RelocTable>,
         D: BackendDiagnostics<S>,
@@ -176,41 +198,29 @@ impl<S: Clone> NameDef<S> {
                 .relocs
                 .borrow()
                 .get(context.program.sections[*section].addr),
-            NameDef::Symbol(expr) => expr.eval_with_args(context, &args, diagnostics),
+            NameDef::Symbol(expr) => expr.eval(context, args, diagnostics),
         }
     }
 }
 
-trait Eval<S: Clone> {
-    fn eval<'a, R, D>(
-        &self,
-        span: S,
-        context: &'a EvalContext<R, S>,
-        args: &'a [SpannedValue<S>],
-        diagnostics: &mut D,
-    ) -> Value<'a, S>
-    where
-        R: Borrow<RelocTable>,
-        D: BackendDiagnostics<S>;
-}
+impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<LocationCounter, NameId>, &S> {
+    type Output = Value<'a, S>;
 
-impl<S: Clone> Eval<S> for Atom<LocationCounter, NameId> {
-    fn eval<'a, R, D>(
-        &self,
-        span: S,
+    fn eval<R, D>(
+        self,
         context: &'a EvalContext<R, S>,
-        _: &'a [SpannedValue<S>],
+        _: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
-    ) -> Value<'a, S>
+    ) -> Self::Output
     where
         R: Borrow<RelocTable>,
         D: BackendDiagnostics<S>,
     {
-        match self {
+        match self.item {
             Atom::Const(value) => Value::Num((*value).into()),
             Atom::Location(LocationCounter) => Value::Num(context.location.clone()),
             Atom::Name(id) => id
-                .resolve(span, context, diagnostics)
+                .resolve(self.span, context, diagnostics)
                 .map(Value::Name)
                 .unwrap_or(Value::Unresolved),
             Atom::Param(_) => unimplemented!(),
@@ -218,26 +228,27 @@ impl<S: Clone> Eval<S> for Atom<LocationCounter, NameId> {
     }
 }
 
-impl<S: Clone> Eval<S> for Atom<RelocId, NameId> {
-    fn eval<'a, R, D>(
-        &self,
-        span: S,
+impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<RelocId, NameId>, &S> {
+    type Output = Value<'a, S>;
+
+    fn eval<R, D>(
+        self,
         context: &'a EvalContext<R, S>,
-        args: &'a [SpannedValue<S>],
+        args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
-    ) -> Value<'a, S>
+    ) -> Self::Output
     where
         R: Borrow<RelocTable>,
         D: BackendDiagnostics<S>,
     {
-        match self {
+        match self.item {
             Atom::Const(value) => Value::Num((*value).into()),
             Atom::Location(id) => Value::Num(context.relocs.borrow().get(*id)),
             Atom::Name(id) => id
-                .resolve(span, context, diagnostics)
+                .resolve(self.span, context, diagnostics)
                 .map(Value::Name)
                 .unwrap_or(Value::Unresolved),
-            Atom::Param(ParamId(id)) => args[*id].value.clone(),
+            Atom::Param(ParamId(id)) => args[*id].item.clone(),
         }
     }
 }
@@ -275,7 +286,7 @@ mod tests {
             location: Num::Unknown,
         };
         assert_eq!(
-            Immediate::from_atom(NameDefId(0).into(), ()).eval(&context, &mut IgnoreDiagnostics),
+            Immediate::from_atom(NameDefId(0).into(), ()).to_num(&context, &mut IgnoreDiagnostics),
             addr.into()
         )
     }
@@ -296,7 +307,7 @@ mod tests {
                 NameDefId(0).into(),
                 ExprOp::FnCall(1).into()
             ])
-            .eval(context, &mut IgnoreDiagnostics),
+            .to_num(context, &mut IgnoreDiagnostics),
             size.into()
         )
     }
@@ -320,7 +331,7 @@ mod tests {
             relocs,
             location: Num::Unknown,
         };
-        assert_eq!(immediate.eval(context, &mut IgnoreDiagnostics), 43.into())
+        assert_eq!(immediate.to_num(context, &mut IgnoreDiagnostics), 43.into())
     }
 
     #[test]
@@ -335,7 +346,7 @@ mod tests {
         };
         let immediate = Immediate::from_items(&[NameDefId(0).into(), ExprOp::FnCall(0).into()]);
         assert_eq!(
-            immediate.eval(&context, &mut IgnoreDiagnostics),
+            immediate.to_num(&context, &mut IgnoreDiagnostics),
             addr.into()
         )
     }
@@ -358,7 +369,7 @@ mod tests {
             Atom::Name(NameId::Builtin(BuiltinName::Sizeof)),
             MockSpan::from(0),
         );
-        let value = immediate.eval(context, &mut diagnostics);
+        let value = immediate.to_num(context, &mut diagnostics);
         let log = diagnostics.into_log();
         assert_eq!(value, Num::Unknown);
         assert_eq!(
@@ -399,7 +410,7 @@ mod tests {
                 expr_span: MockSpan::merge(name_span.clone(), call_span),
             },
         ]);
-        let value = immediate.eval(&context, &mut diagnostics);
+        let value = immediate.to_num(&context, &mut diagnostics);
         assert_eq!(value, Num::Unknown);
         assert_eq!(
             diagnostics.into_log(),

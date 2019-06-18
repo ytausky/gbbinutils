@@ -5,6 +5,19 @@ use std::marker::PhantomData;
 use std::ops::{Deref, Range, RangeInclusive};
 use std::rc::Rc;
 
+pub struct Spanned<T, S> {
+    pub item: T,
+    pub span: S,
+}
+
+pub trait WithSpan: Sized {
+    fn with_span<S>(self, span: S) -> Spanned<Self, S> {
+        Spanned { item: self, span }
+    }
+}
+
+impl<T> WithSpan for T {}
+
 pub trait SpanSource {
     type Span: Clone;
 }
