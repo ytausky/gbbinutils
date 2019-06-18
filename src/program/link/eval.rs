@@ -35,6 +35,13 @@ enum Value<'a, S: Clone> {
     Unresolved,
 }
 
+#[derive(Clone)]
+enum ResolvedName<'a, S> {
+    Section(&'a Section<S>),
+    Sizeof,
+    Symbol(&'a Expr<RelocId, NameId, S>),
+}
+
 impl<'a, L, S: Clone> Eval<'a, S> for &'a Expr<L, NameId, S>
 where
     for<'r> Spanned<&'r Atom<L, NameId>, &'r S>: Eval<'a, S, Output = Value<'a, S>>,
@@ -87,57 +94,6 @@ impl<'a, S: Clone> Eval<'a, S> for Spanned<Value<'a, S>, &S> {
             Value::Unresolved => Num::Unknown,
         }
     }
-}
-
-impl<S: Clone> Spanned<NameId, &S> {
-    fn to_value<'a, R, D: BackendDiagnostics<S>>(
-        &self,
-        context: &'a EvalContext<R, S>,
-        diagnostics: &mut D,
-    ) -> Value<'a, S> {
-        self.resolve(context, diagnostics)
-            .map(Value::Name)
-            .unwrap_or(Value::Unresolved)
-    }
-
-    fn resolve<'a, R, D: BackendDiagnostics<S>>(
-        &self,
-        context: &'a EvalContext<R, S>,
-        diagnostics: &mut D,
-    ) -> Option<ResolvedName<'a, S>> {
-        match self.item {
-            NameId::Builtin(BuiltinName::Sizeof) => Some(ResolvedName::Sizeof),
-            NameId::Def(id) => id.with_span(self.span).resolve(context, diagnostics),
-        }
-    }
-}
-
-impl<S: Clone> Spanned<NameDefId, &S> {
-    fn resolve<'a, R, D: BackendDiagnostics<S>>(
-        &self,
-        context: &'a EvalContext<R, S>,
-        diagnostics: &mut D,
-    ) -> Option<ResolvedName<'a, S>> {
-        let id = self.item;
-        let resolved = context.program.names.get(id).map(|def| match def {
-            NameDef::Section(SectionId(id)) => {
-                ResolvedName::Section(&context.program.sections[*id])
-            }
-            NameDef::Symbol(expr) => ResolvedName::Symbol(expr),
-        });
-        if resolved.is_none() {
-            let symbol = diagnostics.strip_span(self.span);
-            diagnostics.emit_diag(Message::UnresolvedSymbol { symbol }.at(self.span.clone()))
-        }
-        resolved
-    }
-}
-
-#[derive(Clone)]
-enum ResolvedName<'a, S> {
-    Section(&'a Section<S>),
-    Sizeof,
-    Symbol(&'a Expr<RelocId, NameId, S>),
 }
 
 impl<'a, S: Clone> Eval<'a, S> for Spanned<ResolvedName<'a, S>, &S> {
@@ -203,6 +159,50 @@ impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<RelocId, NameId>, &S> {
             Atom::Name(id) => (*id).with_span(self.span).to_value(context, diagnostics),
             Atom::Param(ParamId(id)) => args[*id].item.clone(),
         }
+    }
+}
+
+impl<S: Clone> Spanned<NameId, &S> {
+    fn to_value<'a, R, D: BackendDiagnostics<S>>(
+        &self,
+        context: &'a EvalContext<R, S>,
+        diagnostics: &mut D,
+    ) -> Value<'a, S> {
+        self.resolve(context, diagnostics)
+            .map(Value::Name)
+            .unwrap_or(Value::Unresolved)
+    }
+
+    fn resolve<'a, R, D: BackendDiagnostics<S>>(
+        &self,
+        context: &'a EvalContext<R, S>,
+        diagnostics: &mut D,
+    ) -> Option<ResolvedName<'a, S>> {
+        match self.item {
+            NameId::Builtin(BuiltinName::Sizeof) => Some(ResolvedName::Sizeof),
+            NameId::Def(id) => id.with_span(self.span).resolve(context, diagnostics),
+        }
+    }
+}
+
+impl<S: Clone> Spanned<NameDefId, &S> {
+    fn resolve<'a, R, D: BackendDiagnostics<S>>(
+        &self,
+        context: &'a EvalContext<R, S>,
+        diagnostics: &mut D,
+    ) -> Option<ResolvedName<'a, S>> {
+        let id = self.item;
+        let resolved = context.program.names.get(id).map(|def| match def {
+            NameDef::Section(SectionId(id)) => {
+                ResolvedName::Section(&context.program.sections[*id])
+            }
+            NameDef::Symbol(expr) => ResolvedName::Symbol(expr),
+        });
+        if resolved.is_none() {
+            let symbol = diagnostics.strip_span(self.span);
+            diagnostics.emit_diag(Message::UnresolvedSymbol { symbol }.at(self.span.clone()))
+        }
+        resolved
     }
 }
 
