@@ -1,7 +1,7 @@
 pub use crate::model::LocationCounter;
 
-use crate::model::{Atom, BinOp, Expr, ExprItem, ExprOp, FnCall, Item, ParamId};
-use crate::span::Source;
+use crate::model::{Atom, BinOp, Expr, ExprOp, FnCall, Item, ParamId};
+use crate::span::{Source, WithSpan};
 
 #[cfg(test)]
 pub use mock::*;
@@ -50,31 +50,19 @@ impl<T, N, S: Clone> ValueBuilder<N, S> for T where
 
 impl<T: Into<Atom<L, N>>, L, N: Clone, S: Clone> PushOp<T, S> for Expr<L, N, S> {
     fn push_op(&mut self, atom: T, span: S) {
-        self.0.push(ExprItem {
-            op: ExprOp::Atom(atom.into()),
-            op_span: span.clone(),
-            expr_span: span,
-        })
+        self.0.push(ExprOp::Atom(atom.into()).with_span(span))
     }
 }
 
 impl<L, N, S: Clone> PushOp<BinOp, S> for Expr<L, N, S> {
     fn push_op(&mut self, op: BinOp, span: S) {
-        self.0.push(ExprItem {
-            op: ExprOp::Binary(op),
-            op_span: span.clone(),
-            expr_span: span,
-        })
+        self.0.push(ExprOp::Binary(op).with_span(span))
     }
 }
 
 impl<L, N, S: Clone> PushOp<FnCall, S> for Expr<L, N, S> {
     fn push_op(&mut self, FnCall(n): FnCall, span: S) {
-        self.0.push(ExprItem {
-            op: ExprOp::FnCall(n),
-            op_span: span.clone(),
-            expr_span: span,
-        })
+        self.0.push(ExprOp::FnCall(n).with_span(span))
     }
 }
 

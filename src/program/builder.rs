@@ -1,7 +1,8 @@
 use super::{Atom, Expr, Immediate, NameDef, NameDefId, NameId, Node, Program, RelocId, Section};
 
 use crate::analysis::backend::*;
-use crate::model::{BinOp, ExprItem, ExprOp, FnCall, Item, ParamId};
+use crate::diag::span::WithSpan;
+use crate::model::{BinOp, ExprOp, FnCall, Item, ParamId};
 use crate::BuiltinNames;
 
 pub(crate) struct ProgramBuilder<'a, S> {
@@ -129,11 +130,7 @@ macro_rules! impl_push_op_for_symbol_builder {
     ($t:ty) => {
         impl<'a, S: Clone> PushOp<$t, S> for SymbolBuilder<'a, S> {
             fn push_op(&mut self, op: $t, span: S) {
-                self.expr.0.push(ExprItem {
-                    op: ExprOp::Atom(op.into()),
-                    op_span: span.clone(),
-                    expr_span: span,
-                })
+                self.expr.0.push(ExprOp::Atom(op.into()).with_span(span))
             }
         }
     };
@@ -157,11 +154,9 @@ impl<'a, S: Clone> PushOp<FnCall, S> for SymbolBuilder<'a, S> {
 
 impl<'a, S: Clone> PushOp<LocationCounter, S> for SymbolBuilder<'a, S> {
     fn push_op(&mut self, _: LocationCounter, span: S) {
-        self.expr.0.push(ExprItem {
-            op: ExprOp::Atom(Atom::Location(self.location)),
-            op_span: span.clone(),
-            expr_span: span,
-        })
+        self.expr
+            .0
+            .push(ExprOp::Atom(Atom::Location(self.location)).with_span(span))
     }
 }
 

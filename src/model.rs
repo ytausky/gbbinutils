@@ -1,14 +1,7 @@
-use crate::span::{Source, SpanSource};
+use crate::span::{Source, SpanSource, Spanned, WithSpan};
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Expr<L, N, S>(pub Vec<ExprItem<L, N, S>>);
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct ExprItem<L, N, S> {
-    pub op: ExprOp<L, N>,
-    pub op_span: S,
-    pub expr_span: S,
-}
+pub struct Expr<L, N, S>(pub Vec<Spanned<ExprOp<L, N>, S>>);
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExprOp<L, N> {
@@ -29,18 +22,14 @@ impl<L, N, S: Clone> SpanSource for Expr<L, N, S> {
 
 impl<L, N, S: Clone> Source for Expr<L, N, S> {
     fn span(&self) -> Self::Span {
-        self.0.first().unwrap().expr_span.clone()
+        self.0.last().unwrap().span.clone()
     }
 }
 
 #[cfg(test)]
 impl<L, N, S: Clone> Expr<L, N, S> {
     pub fn from_atom(atom: Atom<L, N>, span: S) -> Self {
-        Self(vec![ExprItem {
-            op: ExprOp::Atom(atom),
-            op_span: span.clone(),
-            expr_span: span,
-        }])
+        Self(vec![ExprOp::Atom(atom).with_span(span)])
     }
 }
 
@@ -51,7 +40,7 @@ impl<L: Clone, N: Clone, S: Clone> Expr<L, N, S> {
         L: 'a,
         N: 'a,
         S: 'a,
-        I: IntoIterator<Item = &'a ExprItem<L, N, S>>,
+        I: IntoIterator<Item = &'a Spanned<ExprOp<L, N>, S>>,
     {
         Expr(items.into_iter().map(Clone::clone).collect())
     }
@@ -69,13 +58,9 @@ impl<L, N> From<Atom<L, N>> for Expr<L, N, ()> {
     }
 }
 
-impl<L, N, T: Into<ExprOp<L, N>>> From<T> for ExprItem<L, N, ()> {
+impl<L, N, T: Into<ExprOp<L, N>>> From<T> for Spanned<ExprOp<L, N>, ()> {
     fn from(x: T) -> Self {
-        Self {
-            op: x.into(),
-            op_span: (),
-            expr_span: (),
-        }
+        x.into().with_span(())
     }
 }
 

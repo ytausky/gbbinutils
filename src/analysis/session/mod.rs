@@ -356,8 +356,10 @@ mod mock {
     use super::*;
 
     use crate::analysis::backend::{BackendEvent, MockSymbolBuilder};
+    use crate::diag::span::WithSpan;
     use crate::diag::{DiagnosticsEvent, MockDiagnostics};
     use crate::log::Log;
+    use crate::model::{Atom, ExprOp};
 
     use std::marker::PhantomData;
 
@@ -512,12 +514,10 @@ mod mock {
         S: Clone,
     {
         fn push_op(&mut self, ident: Ident<String>, span: S) {
-            use crate::model::{Atom, ExprItem};
-            self.builder.backend.0.push(ExprItem {
-                op: Atom::Name(ident).into(),
-                op_span: span.clone(),
-                expr_span: span,
-            })
+            self.builder
+                .backend
+                .0
+                .push(ExprOp::Atom(Atom::Name(ident)).with_span(span))
         }
     }
 
@@ -527,12 +527,9 @@ mod mock {
         S: Clone,
     {
         fn push_op(&mut self, ident: Ident<String>, span: S) {
-            use crate::model::{Atom, ExprItem};
-            self.builder.0.push(ExprItem {
-                op: Atom::Name(ident).into(),
-                op_span: span.clone(),
-                expr_span: span,
-            })
+            self.builder
+                .0
+                .push(ExprOp::Atom(Atom::Name(ident)).with_span(span))
         }
     }
 

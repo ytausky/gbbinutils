@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use std::ops::{Deref, Range, RangeInclusive};
 use std::rc::Rc;
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct Spanned<T, S> {
     pub item: T,
     pub span: S,

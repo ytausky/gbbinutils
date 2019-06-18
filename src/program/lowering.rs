@@ -1,7 +1,7 @@
 use super::{Immediate, Node};
 
 use crate::model::*;
-use crate::span::Source;
+use crate::span::{Source, WithSpan};
 
 use std::mem;
 
@@ -216,16 +216,9 @@ fn encode_branch<S: Clone>(
 
 fn mk_relative_expr<S: Clone>(mut expr: Immediate<S>) -> Immediate<S> {
     let span = expr.span();
-    expr.0.push(ExprItem {
-        op: LocationCounter.into(),
-        op_span: span.clone(),
-        expr_span: span.clone(),
-    });
-    expr.0.push(ExprItem {
-        op: BinOp::Minus.into(),
-        op_span: span.clone(),
-        expr_span: span,
-    });
+    expr.0
+        .push(ExprOp::Atom(Atom::Location(LocationCounter)).with_span(span.clone()));
+    expr.0.push(ExprOp::Binary(BinOp::Minus).with_span(span));
     expr
 }
 

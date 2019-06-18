@@ -55,12 +55,9 @@ where
         diagnostics: &mut D,
     ) -> Self::Output {
         let mut stack = Vec::<Spanned<Value<_>, _>>::new();
-        for item in &self.0 {
-            let value = match &item.op {
-                ExprOp::Atom(atom) => {
-                    atom.with_span(&item.expr_span)
-                        .eval(context, args, diagnostics)
-                }
+        for Spanned { item, span } in &self.0 {
+            let value = match item {
+                ExprOp::Atom(atom) => atom.with_span(span).eval(context, args, diagnostics),
                 ExprOp::Binary(operator) => {
                     let rhs = stack.pop().unwrap();
                     let lhs = stack.pop().unwrap().eval(context, &[], diagnostics);
@@ -75,7 +72,7 @@ where
                     value
                 }
             };
-            stack.push(value.with_span(&item.expr_span))
+            stack.push(value.with_span(span))
         }
         stack.pop().unwrap().eval(context, &[], diagnostics)
     }
@@ -261,7 +258,6 @@ mod tests {
 
     use crate::diag::{DiagnosticsEvent, IgnoreDiagnostics, Merge, MockSpan, ValueKind};
     use crate::log::Log;
-    use crate::model::ExprItem;
 
     type MockDiagnostics<S> = crate::diag::MockDiagnostics<DiagnosticsEvent<S>>;
 
@@ -389,16 +385,8 @@ mod tests {
         let name_span = MockSpan::from("name");
         let call_span = MockSpan::from("call");
         let immediate = Expr(vec![
-            ExprItem {
-                op: ExprOp::Atom(Atom::Name(NameId::Def(NameDefId(0)))),
-                op_span: name_span.clone(),
-                expr_span: name_span.clone(),
-            },
-            ExprItem {
-                op: ExprOp::FnCall(0),
-                op_span: call_span.clone(),
-                expr_span: MockSpan::merge(name_span.clone(), call_span),
-            },
+            ExprOp::Atom(Atom::Name(NameId::Def(NameDefId(0)))).with_span(name_span.clone()),
+            ExprOp::FnCall(0).with_span(MockSpan::merge(name_span.clone(), call_span)),
         ]);
         let value = immediate.to_num(&context, &mut diagnostics);
         assert_eq!(value, Num::Unknown);
@@ -451,21 +439,10 @@ mod tests {
         let inner_span = MockSpan::from("inner");
         let sizeof_span = MockSpan::from("sizeof");
         let immediate = Expr(vec![
-            ExprItem {
-                op: ExprOp::Atom(inner),
-                op_span: inner_span.clone(),
-                expr_span: inner_span.clone(),
-            },
-            ExprItem {
-                op: ExprOp::Atom(Atom::Name(NameId::Builtin(BuiltinName::Sizeof))),
-                op_span: sizeof_span.clone(),
-                expr_span: sizeof_span.clone(),
-            },
-            ExprItem {
-                op: ExprOp::FnCall(1),
-                op_span: MockSpan::from("call"),
-                expr_span: MockSpan::merge(sizeof_span, MockSpan::from("paren_r")),
-            },
+            ExprOp::Atom(inner).with_span(inner_span.clone()),
+            ExprOp::Atom(Atom::Name(NameId::Builtin(BuiltinName::Sizeof)))
+                .with_span(sizeof_span.clone()),
+            ExprOp::FnCall(1).with_span(MockSpan::merge(sizeof_span, MockSpan::from("paren_r"))),
         ]);
         let num = immediate.to_num(&context, &mut diagnostics);
         assert_eq!(num, Num::Unknown);
