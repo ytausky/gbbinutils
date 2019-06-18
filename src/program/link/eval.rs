@@ -100,39 +100,40 @@ impl<'a, S: Clone> Eval<'a, S> for Spanned<Value<'a, S>, &S> {
     }
 }
 
-impl NameId {
-    fn resolve<'a, R, D, S>(
+impl<S: Clone> Spanned<NameId, &S> {
+    fn to_value<'a, R, D: BackendDiagnostics<S>>(
         &self,
-        span: &S,
         context: &'a EvalContext<R, S>,
         diagnostics: &mut D,
-    ) -> Option<ResolvedName<'a, S>>
-    where
-        D: BackendDiagnostics<S>,
-        S: Clone,
-    {
-        match self {
+    ) -> Value<'a, S> {
+        self.resolve(context, diagnostics)
+            .map(Value::Name)
+            .unwrap_or(Value::Unresolved)
+    }
+
+    fn resolve<'a, R, D: BackendDiagnostics<S>>(
+        &self,
+        context: &'a EvalContext<R, S>,
+        diagnostics: &mut D,
+    ) -> Option<ResolvedName<'a, S>> {
+        match self.item {
             NameId::Builtin(BuiltinName::Sizeof) => Some(ResolvedName::Sizeof),
-            NameId::Def(id) => id.resolve(span, context, diagnostics),
+            NameId::Def(id) => id.with_span(self.span).resolve(context, diagnostics),
         }
     }
 }
 
-impl NameDefId {
-    fn resolve<'a, R, D, S>(
-        self,
-        span: &S,
+impl<S: Clone> Spanned<NameDefId, &S> {
+    fn resolve<'a, R, D: BackendDiagnostics<S>>(
+        &self,
         context: &'a EvalContext<R, S>,
         diagnostics: &mut D,
-    ) -> Option<ResolvedName<'a, S>>
-    where
-        D: BackendDiagnostics<S>,
-        S: Clone,
-    {
-        let resolved = context.program.names.get(self).map(ResolvedName::NameDef);
+    ) -> Option<ResolvedName<'a, S>> {
+        let id = self.item;
+        let resolved = context.program.names.get(id).map(ResolvedName::NameDef);
         if resolved.is_none() {
-            let symbol = diagnostics.strip_span(span);
-            diagnostics.emit_diag(Message::UnresolvedSymbol { symbol }.at(span.clone()))
+            let symbol = diagnostics.strip_span(self.span);
+            diagnostics.emit_diag(Message::UnresolvedSymbol { symbol }.at(self.span.clone()))
         }
         resolved
     }
@@ -219,10 +220,7 @@ impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<LocationCounter, NameId>, 
         match self.item {
             Atom::Const(value) => Value::Num((*value).into()),
             Atom::Location(LocationCounter) => Value::Num(context.location.clone()),
-            Atom::Name(id) => id
-                .resolve(self.span, context, diagnostics)
-                .map(Value::Name)
-                .unwrap_or(Value::Unresolved),
+            Atom::Name(id) => (*id).with_span(self.span).to_value(context, diagnostics),
             Atom::Param(_) => unimplemented!(),
         }
     }
@@ -244,10 +242,7 @@ impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<RelocId, NameId>, &S> {
         match self.item {
             Atom::Const(value) => Value::Num((*value).into()),
             Atom::Location(id) => Value::Num(context.relocs.borrow().get(*id)),
-            Atom::Name(id) => id
-                .resolve(self.span, context, diagnostics)
-                .map(Value::Name)
-                .unwrap_or(Value::Unresolved),
+            Atom::Name(id) => (*id).with_span(self.span).to_value(context, diagnostics),
             Atom::Param(ParamId(id)) => args[*id].item.clone(),
         }
     }
