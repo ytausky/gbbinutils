@@ -1,7 +1,6 @@
 use super::{EvalContext, Num, RelocTable};
 
-use crate::diag::span::StripSpan;
-use crate::diag::{BackendDiagnostics, EmitDiag, Message};
+use crate::diag::{BackendDiagnostics, Message};
 use crate::model::{Atom, BinOp, Expr, ExprOp, LocationCounter, ParamId};
 use crate::program::{BuiltinName, Immediate, NameDef, NameDefId, NameId, RelocId, SectionId};
 
@@ -11,23 +10,9 @@ impl<S: Clone> Immediate<S> {
     pub(super) fn eval<R, D>(&self, context: &EvalContext<R, S>, diagnostics: &mut D) -> Num
     where
         R: Borrow<RelocTable>,
-        D: EvalDiagnostics<S>,
+        D: BackendDiagnostics<S>,
     {
         self.eval_with_args(context, &[], diagnostics)
-    }
-}
-
-pub(super) trait EvalDiagnostics<S> {
-    type Diagnostics: BackendDiagnostics<S>;
-
-    fn with_diag(&mut self, f: impl FnOnce(&mut Self::Diagnostics));
-}
-
-impl<D: BackendDiagnostics<S>, S: Clone> EvalDiagnostics<S> for D {
-    type Diagnostics = Self;
-
-    fn with_diag(&mut self, f: impl FnOnce(&mut Self::Diagnostics)) {
-        f(self)
     }
 }
 
@@ -40,7 +25,7 @@ impl<L, S: Clone> Expr<L, NameId, S> {
     ) -> Num
     where
         R: Borrow<RelocTable>,
-        D: EvalDiagnostics<S>,
+        D: BackendDiagnostics<S>,
         Atom<L, NameId>: Eval<S>,
     {
         let mut stack = Vec::<SpannedValue<S>>::new();
@@ -89,7 +74,7 @@ impl<'a, S: Clone> SpannedValue<'a, S> {
     ) -> Num
     where
         R: Borrow<RelocTable>,
-        D: EvalDiagnostics<S>,
+        D: BackendDiagnostics<S>,
     {
         match self.value {
             Value::Name(name) => name.eval(self.span, context, args, diagnostics),
@@ -107,7 +92,7 @@ impl NameId {
         diagnostics: &mut D,
     ) -> Option<ResolvedName<'a, S>>
     where
-        D: EvalDiagnostics<S>,
+        D: BackendDiagnostics<S>,
     {
         match self {
             NameId::Builtin(BuiltinName::Sizeof) => Some(ResolvedName::Sizeof),
@@ -124,14 +109,12 @@ impl NameDefId {
         diagnostics: &mut D,
     ) -> Option<ResolvedName<'a, S>>
     where
-        D: EvalDiagnostics<S>,
+        D: BackendDiagnostics<S>,
     {
         let resolved = context.program.names.get(self).map(ResolvedName::NameDef);
         if resolved.is_none() {
-            diagnostics.with_diag(|diagnostics| {
-                let symbol = diagnostics.strip_span(&span);
-                diagnostics.emit_diag(Message::UnresolvedSymbol { symbol }.at(span))
-            });
+            let symbol = diagnostics.strip_span(&span);
+            diagnostics.emit_diag(Message::UnresolvedSymbol { symbol }.at(span))
         }
         resolved
     }
@@ -153,7 +136,7 @@ impl<'a, S: Clone> ResolvedName<'a, S> {
     ) -> Num
     where
         R: Borrow<RelocTable>,
-        D: EvalDiagnostics<S>,
+        D: BackendDiagnostics<S>,
     {
         match self {
             ResolvedName::NameDef(def) => def.eval(context, args, diagnostics),
@@ -166,11 +149,9 @@ impl<'a, S: Clone> ResolvedName<'a, S> {
                     .borrow()
                     .get(context.program.sections[*section].size),
                 None => {
-                    diagnostics.with_diag(|diagnostics| {
-                        let name = diagnostics.strip_span(&span);
-                        diagnostics
-                            .emit_diag(Message::CannotCoerceBuiltinNameIntoNum { name }.at(span));
-                    });
+                    let name = diagnostics.strip_span(&span);
+                    diagnostics
+                        .emit_diag(Message::CannotCoerceBuiltinNameIntoNum { name }.at(span));
                     Num::Unknown
                 }
                 _ => unimplemented!(),
@@ -188,7 +169,7 @@ impl<S: Clone> NameDef<S> {
     ) -> Num
     where
         R: Borrow<RelocTable>,
-        D: EvalDiagnostics<S>,
+        D: BackendDiagnostics<S>,
     {
         match self {
             NameDef::Section(SectionId(section)) => context
@@ -210,7 +191,7 @@ trait Eval<S: Clone> {
     ) -> Value<'a, S>
     where
         R: Borrow<RelocTable>,
-        D: EvalDiagnostics<S>;
+        D: BackendDiagnostics<S>;
 }
 
 impl<S: Clone> Eval<S> for Atom<LocationCounter, NameId> {
@@ -223,7 +204,7 @@ impl<S: Clone> Eval<S> for Atom<LocationCounter, NameId> {
     ) -> Value<'a, S>
     where
         R: Borrow<RelocTable>,
-        D: EvalDiagnostics<S>,
+        D: BackendDiagnostics<S>,
     {
         match self {
             Atom::Const(value) => Value::Num((*value).into()),
@@ -247,7 +228,7 @@ impl<S: Clone> Eval<S> for Atom<RelocId, NameId> {
     ) -> Value<'a, S>
     where
         R: Borrow<RelocTable>,
-        D: EvalDiagnostics<S>,
+        D: BackendDiagnostics<S>,
     {
         match self {
             Atom::Const(value) => Value::Num((*value).into()),
