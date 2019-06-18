@@ -245,22 +245,22 @@ impl Message<StrippedBufSpan<BufId, BufRange>> {
 
 impl fmt::Display for KeywordOperandCategory {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            KeywordOperandCategory::Reg => f.write_str("register"),
-            KeywordOperandCategory::RegPair => f.write_str("register pair"),
-            KeywordOperandCategory::ConditionCode => f.write_str("condition code"),
-        }
+        f.write_str(match self {
+            KeywordOperandCategory::Reg => "register",
+            KeywordOperandCategory::RegPair => "register pair",
+            KeywordOperandCategory::ConditionCode => "condition code",
+        })
     }
 }
 
 impl fmt::Display for ValueKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            ValueKind::Builtin => f.write_str("built-in name"),
-            ValueKind::Num => f.write_str("numeric value"),
-            ValueKind::Section => f.write_str("section name"),
-            ValueKind::Symbol => f.write_str("symbol"),
-        }
+        f.write_str(match self {
+            ValueKind::Builtin => "built-in name",
+            ValueKind::Num => "numeric value",
+            ValueKind::Section => "section name",
+            ValueKind::Symbol => "symbol",
+        })
     }
 }
 
@@ -274,9 +274,9 @@ fn pluralize(n: usize) -> &'static str {
 
 impl fmt::Display for Width {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Width::Byte => f.write_str("byte"),
-            Width::Word => f.write_str("word"),
-        }
+        f.write_str(match self {
+            Width::Byte => "byte",
+            Width::Word => "word",
+        })
     }
 }
