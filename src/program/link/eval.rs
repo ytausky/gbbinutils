@@ -20,15 +20,12 @@ impl<S: Clone> Immediate<S> {
 trait Eval<'a, S: Clone> {
     type Output;
 
-    fn eval<R, D>(
+    fn eval<R: Borrow<RelocTable>, D: BackendDiagnostics<S>>(
         self,
         context: &'a EvalContext<R, S>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
-    ) -> Self::Output
-    where
-        R: Borrow<RelocTable>,
-        D: BackendDiagnostics<S>;
+    ) -> Self::Output;
 }
 
 #[derive(Clone)]
@@ -44,16 +41,12 @@ where
 {
     type Output = Num;
 
-    fn eval<R, D>(
+    fn eval<R: Borrow<RelocTable>, D: BackendDiagnostics<S>>(
         self,
         context: &'a EvalContext<R, S>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
-    ) -> Num
-    where
-        R: Borrow<RelocTable>,
-        D: BackendDiagnostics<S>,
-    {
+    ) -> Self::Output {
         let mut stack = Vec::<Spanned<Value<_>, _>>::new();
         for item in &self.0 {
             let value = match &item.op {
@@ -82,16 +75,12 @@ where
 impl<'a, S: Clone> Eval<'a, S> for Spanned<Value<'a, S>, &S> {
     type Output = Num;
 
-    fn eval<R, D>(
+    fn eval<R: Borrow<RelocTable>, D: BackendDiagnostics<S>>(
         self,
         context: &'a EvalContext<R, S>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
-    ) -> Self::Output
-    where
-        R: Borrow<RelocTable>,
-        D: BackendDiagnostics<S>,
-    {
+    ) -> Self::Output {
         match self.item {
             Value::Name(name) => name.with_span(self.span).eval(context, args, diagnostics),
             Value::Num(value) => value,
@@ -148,16 +137,12 @@ enum ResolvedName<'a, S> {
 impl<'a, S: Clone> Eval<'a, S> for Spanned<ResolvedName<'a, S>, &S> {
     type Output = Num;
 
-    fn eval<R, D>(
+    fn eval<R: Borrow<RelocTable>, D: BackendDiagnostics<S>>(
         self,
         context: &'a EvalContext<R, S>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
-    ) -> Self::Output
-    where
-        R: Borrow<RelocTable>,
-        D: BackendDiagnostics<S>,
-    {
+    ) -> Self::Output {
         match self.item {
             ResolvedName::NameDef(def) => def.eval(context, args, diagnostics),
             ResolvedName::Sizeof => match args.get(0) {
@@ -184,16 +169,12 @@ impl<'a, S: Clone> Eval<'a, S> for Spanned<ResolvedName<'a, S>, &S> {
 impl<'a, S: Clone> Eval<'a, S> for &'a NameDef<S> {
     type Output = Num;
 
-    fn eval<R, D>(
+    fn eval<R: Borrow<RelocTable>, D: BackendDiagnostics<S>>(
         self,
         context: &'a EvalContext<R, S>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
-    ) -> Self::Output
-    where
-        R: Borrow<RelocTable>,
-        D: BackendDiagnostics<S>,
-    {
+    ) -> Self::Output {
         match self {
             NameDef::Section(SectionId(section)) => context
                 .relocs
@@ -207,16 +188,12 @@ impl<'a, S: Clone> Eval<'a, S> for &'a NameDef<S> {
 impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<LocationCounter, NameId>, &S> {
     type Output = Value<'a, S>;
 
-    fn eval<R, D>(
+    fn eval<R: Borrow<RelocTable>, D: BackendDiagnostics<S>>(
         self,
         context: &'a EvalContext<R, S>,
         _: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
-    ) -> Self::Output
-    where
-        R: Borrow<RelocTable>,
-        D: BackendDiagnostics<S>,
-    {
+    ) -> Self::Output {
         match self.item {
             Atom::Const(value) => Value::Num((*value).into()),
             Atom::Location(LocationCounter) => Value::Num(context.location.clone()),
@@ -229,16 +206,12 @@ impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<LocationCounter, NameId>, 
 impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<RelocId, NameId>, &S> {
     type Output = Value<'a, S>;
 
-    fn eval<R, D>(
+    fn eval<R: Borrow<RelocTable>, D: BackendDiagnostics<S>>(
         self,
         context: &'a EvalContext<R, S>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
-    ) -> Self::Output
-    where
-        R: Borrow<RelocTable>,
-        D: BackendDiagnostics<S>,
-    {
+    ) -> Self::Output {
         match self.item {
             Atom::Const(value) => Value::Num((*value).into()),
             Atom::Location(id) => Value::Num(context.relocs.borrow().get(*id)),
