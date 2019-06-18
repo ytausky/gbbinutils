@@ -3,7 +3,7 @@ use super::{EvalContext, Num, RelocTable};
 use crate::diag::span::{Spanned, WithSpan};
 use crate::diag::{BackendDiagnostics, Message};
 use crate::model::{Atom, BinOp, Expr, ExprOp, LocationCounter, ParamId};
-use crate::program::{BuiltinName, Immediate, NameDef, NameDefId, NameId, RelocId, SectionId};
+use crate::program::*;
 
 use std::borrow::Borrow;
 
@@ -119,7 +119,12 @@ impl<S: Clone> Spanned<NameDefId, &S> {
         diagnostics: &mut D,
     ) -> Option<ResolvedName<'a, S>> {
         let id = self.item;
-        let resolved = context.program.names.get(id).map(ResolvedName::NameDef);
+        let resolved = context.program.names.get(id).map(|def| match def {
+            NameDef::Section(SectionId(id)) => {
+                ResolvedName::Section(&context.program.sections[*id])
+            }
+            NameDef::Symbol(expr) => ResolvedName::Symbol(expr),
+        });
         if resolved.is_none() {
             let symbol = diagnostics.strip_span(self.span);
             diagnostics.emit_diag(Message::UnresolvedSymbol { symbol }.at(self.span.clone()))
@@ -130,8 +135,9 @@ impl<S: Clone> Spanned<NameDefId, &S> {
 
 #[derive(Clone)]
 enum ResolvedName<'a, S> {
-    NameDef(&'a NameDef<S>),
+    Section(&'a Section<S>),
     Sizeof,
+    Symbol(&'a Expr<RelocId, NameId, S>),
 }
 
 impl<'a, S: Clone> Eval<'a, S> for Spanned<ResolvedName<'a, S>, &S> {
@@ -144,15 +150,12 @@ impl<'a, S: Clone> Eval<'a, S> for Spanned<ResolvedName<'a, S>, &S> {
         diagnostics: &mut D,
     ) -> Self::Output {
         match self.item {
-            ResolvedName::NameDef(def) => def.eval(context, args, diagnostics),
+            ResolvedName::Section(section) => context.relocs.borrow().get(section.addr),
             ResolvedName::Sizeof => match args.get(0) {
                 Some(Spanned {
-                    item: Value::Name(ResolvedName::NameDef(NameDef::Section(SectionId(section)))),
+                    item: Value::Name(ResolvedName::Section(section)),
                     ..
-                }) => context
-                    .relocs
-                    .borrow()
-                    .get(context.program.sections[*section].size),
+                }) => context.relocs.borrow().get(section.size),
                 None => {
                     let name = diagnostics.strip_span(self.span);
                     diagnostics.emit_diag(
@@ -162,25 +165,7 @@ impl<'a, S: Clone> Eval<'a, S> for Spanned<ResolvedName<'a, S>, &S> {
                 }
                 _ => unimplemented!(),
             },
-        }
-    }
-}
-
-impl<'a, S: Clone> Eval<'a, S> for &'a NameDef<S> {
-    type Output = Num;
-
-    fn eval<R: Borrow<RelocTable>, D: BackendDiagnostics<S>>(
-        self,
-        context: &'a EvalContext<R, S>,
-        args: &'a [Spanned<Value<'a, S>, &S>],
-        diagnostics: &mut D,
-    ) -> Self::Output {
-        match self {
-            NameDef::Section(SectionId(section)) => context
-                .relocs
-                .borrow()
-                .get(context.program.sections[*section].addr),
-            NameDef::Symbol(expr) => expr.eval(context, args, diagnostics),
+            ResolvedName::Symbol(expr) => expr.eval(context, args, diagnostics),
         }
     }
 }
@@ -236,12 +221,11 @@ pub const BUILTIN_NAMES: &[(&str, NameId)] = &[("sizeof", NameId::Builtin(Builti
 
 #[cfg(test)]
 mod tests {
-    use super::{BinOp, EvalContext, Expr, Immediate, Message, Num, ParamId, RelocTable};
+    use super::*;
 
     use crate::diag::{DiagnosticsEvent, IgnoreDiagnostics, Merge, MockDiagnostics, MockSpan};
     use crate::log::Log;
     use crate::model::ExprItem;
-    use crate::program::*;
 
     #[test]
     fn eval_section_addr() {
