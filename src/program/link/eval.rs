@@ -247,7 +247,8 @@ impl<'a, S: Clone> Value<'a, S> {
             Value::Name(ResolvedName::Section(_)) => Some(ValueKind::Section),
             Value::Name(ResolvedName::Sizeof) => Some(ValueKind::Builtin),
             Value::Name(ResolvedName::Symbol(_)) => Some(ValueKind::Symbol),
-            _ => unimplemented!(),
+            Value::Num(_) => Some(ValueKind::Num),
+            Value::Unresolved => None,
         }
     }
 }
@@ -424,6 +425,11 @@ mod tests {
             Atom::Name(NameId::Builtin(BuiltinName::Sizeof)),
             ValueKind::Builtin,
         )
+    }
+
+    #[test]
+    fn diagnose_sizeof_of_num() {
+        test_diagnosis_of_wrong_sizeof_arg(Atom::Const(42), ValueKind::Num)
     }
 
     fn test_diagnosis_of_wrong_sizeof_arg(inner: Atom<LocationCounter, NameId>, found: ValueKind) {
