@@ -120,8 +120,7 @@ impl Value {
         match self {
             Value::Name(NameId::Builtin(BuiltinName::Sizeof)) => Callable::Sizeof,
             Value::Name(NameId::Def(id)) => match context.program.names.get(*id) {
-                Some(NameDef::Section(_)) => unimplemented!(),
-                Some(NameDef::Symbol(expr)) => Callable::Symbol(expr),
+                Some(def) => Callable::NameDef(def),
                 None => unimplemented!(),
             },
             Value::Num(_) => unimplemented!(),
@@ -130,8 +129,8 @@ impl Value {
 }
 
 enum Callable<'a, S> {
+    NameDef(&'a NameDef<S>),
     Sizeof,
-    Symbol(&'a Expr<RelocId, NameId, S>),
 }
 
 impl<'a, S: Clone> Callable<'a, S> {
@@ -146,6 +145,7 @@ impl<'a, S: Clone> Callable<'a, S> {
         D: EvalDiagnostics<S>,
     {
         match self {
+            Callable::NameDef(def) => def.call(context, args, diagnostics),
             Callable::Sizeof => match args.get(0) {
                 Some(SpannedValue {
                     value: Value::Name(NameId::Def(id)),
@@ -161,7 +161,29 @@ impl<'a, S: Clone> Callable<'a, S> {
                 },
                 _ => unimplemented!(),
             },
-            Callable::Symbol(expr) => Value::Num(expr.eval_with_args(context, &args, diagnostics)),
+        }
+    }
+}
+
+impl<S: Clone> NameDef<S> {
+    fn call<R, D>(
+        &self,
+        context: &EvalContext<R, S>,
+        args: Vec<SpannedValue<S>>,
+        diagnostics: &mut D,
+    ) -> Value
+    where
+        R: Borrow<RelocTable>,
+        D: EvalDiagnostics<S>,
+    {
+        match self {
+            NameDef::Section(SectionId(section)) => Value::Num(
+                context
+                    .relocs
+                    .borrow()
+                    .get(context.program.sections[*section].addr),
+            ),
+            NameDef::Symbol(expr) => Value::Num(expr.eval_with_args(context, &args, diagnostics)),
         }
     }
 }
@@ -227,20 +249,11 @@ mod tests {
     #[test]
     fn eval_section_addr() {
         let addr = 0x0100;
-        let program = Program::<()> {
-            sections: vec![Section {
-                constraints: Constraints { addr: None },
-                addr: RelocId(0),
-                size: RelocId(1),
-                items: vec![],
-            }],
-            names: NameTable(vec![Some(NameDef::Section(SectionId(0)))]),
-            relocs: 2,
-        };
-        let relocs = RelocTable(vec![addr.into(), 0.into()]);
+        let program = &mk_program_with_empty_section();
+        let relocs = &RelocTable(vec![addr.into(), 0.into()]);
         let context = EvalContext {
-            program: &program,
-            relocs: &relocs,
+            program,
+            relocs,
             location: Num::Unknown,
         };
         assert_eq!(
@@ -251,16 +264,7 @@ mod tests {
 
     #[test]
     fn eval_section_size() {
-        let program = &Program::<()> {
-            sections: vec![Section {
-                constraints: Constraints { addr: None },
-                addr: RelocId(0),
-                size: RelocId(1),
-                items: vec![],
-            }],
-            names: NameTable(vec![Some(NameDef::Section(SectionId(0)))]),
-            relocs: 2,
-        };
+        let program = &mk_program_with_empty_section();
         let size = 42;
         let relocs = &RelocTable(vec![0.into(), size.into()]);
         let context = &EvalContext {
@@ -302,6 +306,23 @@ mod tests {
     }
 
     #[test]
+    fn eval_section_name_call() {
+        let addr = 0x1337;
+        let program = &mk_program_with_empty_section();
+        let relocs = &RelocTable(vec![addr.into(), 0.into()]);
+        let context = EvalContext {
+            program,
+            relocs,
+            location: Num::Unknown,
+        };
+        let immediate = Immediate::from_items(&[NameDefId(0).into(), ExprOp::FnCall(0).into()]);
+        assert_eq!(
+            immediate.eval(&context, &mut IgnoreDiagnostics),
+            addr.into()
+        )
+    }
+
+    #[test]
     fn diagnose_using_sizeof_as_immediate() {
         let program = &Program {
             sections: vec![],
@@ -330,5 +351,18 @@ mod tests {
                     .into()
             )]
         )
+    }
+
+    fn mk_program_with_empty_section<S>() -> Program<S> {
+        Program {
+            sections: vec![Section {
+                constraints: Constraints { addr: None },
+                addr: RelocId(0),
+                size: RelocId(1),
+                items: vec![],
+            }],
+            names: NameTable(vec![Some(NameDef::Section(SectionId(0)))]),
+            relocs: 2,
+        }
     }
 }
