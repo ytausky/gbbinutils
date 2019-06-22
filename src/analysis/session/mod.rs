@@ -363,7 +363,7 @@ mod mock {
 
     use std::marker::PhantomData;
 
-    type Expr<S> = crate::model::Expr<LocationCounter, Ident<String>, S>;
+    type Expr<S> = crate::model::Expr<Atom<LocationCounter, Ident<String>>, S>;
 
     #[derive(Debug, PartialEq)]
     pub(crate) enum SessionEvent<S> {
@@ -606,7 +606,7 @@ mod tests {
     use std::fmt::Debug;
     use std::iter;
 
-    type Expr<S> = crate::model::Expr<LocationCounter, usize, S>;
+    type Expr<S> = crate::model::Expr<Atom<LocationCounter, usize>, S>;
 
     #[test]
     fn emit_instruction_item() {

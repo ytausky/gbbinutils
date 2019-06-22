@@ -274,7 +274,7 @@ mod tests {
         Session(SessionEvent<S>),
     }
 
-    pub type Expr<S> = crate::model::Expr<LocationCounter, Ident<String>, S>;
+    pub type Expr<S> = crate::model::Expr<Atom<LocationCounter, Ident<String>>, S>;
 
     impl<'a, S: Clone> From<BackendEvent<Expr<S>>> for TestOperation<S> {
         fn from(event: BackendEvent<Expr<S>>) -> Self {

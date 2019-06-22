@@ -48,19 +48,19 @@ impl<T, N, S: Clone> ValueBuilder<N, S> for T where
 {
 }
 
-impl<T: Into<Atom<L, N>>, L, N: Clone, S: Clone> PushOp<T, S> for Expr<L, N, S> {
+impl<T: Into<Atom<L, N>>, L, N: Clone, S: Clone> PushOp<T, S> for Expr<Atom<L, N>, S> {
     fn push_op(&mut self, atom: T, span: S) {
         self.0.push(ExprOp::Atom(atom.into()).with_span(span))
     }
 }
 
-impl<L, N, S: Clone> PushOp<BinOp, S> for Expr<L, N, S> {
+impl<L, N, S: Clone> PushOp<BinOp, S> for Expr<Atom<L, N>, S> {
     fn push_op(&mut self, op: BinOp, span: S) {
         self.0.push(ExprOp::Binary(op).with_span(span))
     }
 }
 
-impl<L, N, S: Clone> PushOp<FnCall, S> for Expr<L, N, S> {
+impl<L, N, S: Clone> PushOp<FnCall, S> for Expr<Atom<L, N>, S> {
     fn push_op(&mut self, FnCall(n): FnCall, span: S) {
         self.0.push(ExprOp::FnCall(n).with_span(span))
     }
@@ -140,7 +140,7 @@ mod mock {
     use crate::log::Log;
     use crate::model::Atom;
 
-    type Expr<S> = crate::model::Expr<LocationCounter, usize, S>;
+    type Expr<S> = crate::model::Expr<Atom<LocationCounter, usize>, S>;
 
     pub(crate) struct MockBackend<T> {
         pub log: Log<T>,
@@ -212,12 +212,12 @@ mod mock {
     pub struct MockSymbolBuilder<P, N, S> {
         pub parent: P,
         pub name: (N, S),
-        pub expr: crate::model::Expr<LocationCounter, N, S>,
+        pub expr: crate::model::Expr<Atom<LocationCounter, N>, S>,
     }
 
     impl<T, P, N, S: Clone> PushOp<T, S> for MockSymbolBuilder<P, N, S>
     where
-        crate::model::Expr<LocationCounter, N, S>: PushOp<T, S>,
+        crate::model::Expr<Atom<LocationCounter, N>, S>: PushOp<T, S>,
     {
         fn push_op(&mut self, op: T, span: S) {
             self.expr.push_op(op, span)

@@ -6,8 +6,8 @@ mod builder;
 mod link;
 mod lowering;
 
-type Expr<S> = crate::model::Expr<RelocId, NameId, S>;
-type Immediate<S> = crate::model::Expr<LocationCounter, NameId, S>;
+type Expr<S> = crate::model::Expr<Atom<RelocId, NameId>, S>;
+type Immediate<S> = crate::model::Expr<Atom<LocationCounter, NameId>, S>;
 
 impl<L> From<NameId> for Atom<L, NameId> {
     fn from(id: NameId) -> Self {
@@ -22,21 +22,21 @@ impl<L> From<NameDefId> for Atom<L, NameId> {
     }
 }
 
-impl<L> From<NameId> for ExprOp<L, NameId> {
+impl<L> From<NameId> for ExprOp<Atom<L, NameId>> {
     fn from(id: NameId) -> Self {
         Atom::from(id).into()
     }
 }
 
 #[cfg(test)]
-impl<L> From<BuiltinName> for ExprOp<L, NameId> {
+impl<L> From<BuiltinName> for ExprOp<Atom<L, NameId>> {
     fn from(builtin: BuiltinName) -> Self {
         Atom::from(NameId::from(builtin)).into()
     }
 }
 
 #[cfg(test)]
-impl<L> From<NameDefId> for ExprOp<L, NameId> {
+impl<L> From<NameDefId> for ExprOp<Atom<L, NameId>> {
     fn from(id: NameDefId) -> Self {
         Atom::from(id).into()
     }

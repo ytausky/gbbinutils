@@ -88,9 +88,9 @@ delegate_diagnostics! {
 mod tests {
     use super::*;
 
-    use crate::model::ParamId;
+    use crate::model::{Atom, ParamId};
 
-    type Expr<N, S> = crate::model::Expr<LocationCounter, N, S>;
+    type Expr<N, S> = crate::model::Expr<Atom<LocationCounter, N>, S>;
 
     #[test]
     fn translate_param() {

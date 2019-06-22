@@ -419,7 +419,7 @@ mod tests {
 
     pub(super) type TokenSpan = MockSpan<TokenId>;
 
-    type Expr = crate::model::Expr<LocationCounter, Ident<String>, TokenSpan>;
+    type Expr = crate::model::Expr<Atom<LocationCounter, Ident<String>>, TokenSpan>;
     type Input = Arg<String, ()>;
 
     impl From<ArgVariant<String, ()>> for Input {

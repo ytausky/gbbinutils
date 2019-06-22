@@ -40,7 +40,7 @@ impl<L, T> From<Ident<T>> for Atom<L, Ident<T>> {
 }
 
 #[cfg(test)]
-impl<L, T> From<Ident<T>> for ExprOp<L, Ident<T>> {
+impl<L, T> From<Ident<T>> for ExprOp<Atom<L, Ident<T>>> {
     fn from(ident: Ident<T>) -> Self {
         Atom::from(ident).into()
     }

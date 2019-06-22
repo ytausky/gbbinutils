@@ -39,10 +39,10 @@ enum Value<'a, S: Clone> {
 enum ResolvedName<'a, S> {
     Section(&'a Section<S>),
     Sizeof,
-    Symbol(&'a Expr<RelocId, NameId, S>),
+    Symbol(&'a Expr<Atom<RelocId, NameId>, S>),
 }
 
-impl<'a, L, S: Clone> Eval<'a, S> for &'a Expr<L, NameId, S>
+impl<'a, L, S: Clone> Eval<'a, S> for &'a Expr<Atom<L, NameId>, S>
 where
     for<'r> Spanned<&'r Atom<L, NameId>, &'r S>: Eval<'a, S, Output = Value<'a, S>>,
 {
