@@ -4,7 +4,7 @@ use self::builder::Builder;
 use self::expand::{DefineMacro, Expand, MacroDef};
 
 use super::backend::*;
-use super::resolve::{Ident, Name, NameTable, StartScope};
+use super::resolve::{Ident, NameEntry, NameTable, StartScope};
 use super::{Lex, LexItem, SemanticToken, StringSource, TokenSeq};
 
 use crate::codebase::CodebaseError;
@@ -103,8 +103,8 @@ impl<'a, B, N, D> Downstream<B, &'a mut N, Wrapper<'a, D>> {
         S: Clone,
     {
         match self.names.get(&ident) {
-            Some(Name::Backend(id)) => id.clone(),
-            Some(Name::Macro(_)) => {
+            Some(NameEntry::Backend(id)) => id.clone(),
+            Some(NameEntry::Macro(_)) => {
                 self.diagnostics
                     .0
                     .emit_diag(Message::MacroNameInExpr.at(span.clone()));
@@ -112,7 +112,7 @@ impl<'a, B, N, D> Downstream<B, &'a mut N, Wrapper<'a, D>> {
             }
             None => {
                 let id = self.backend.alloc_name(span.clone());
-                self.names.insert(ident, Name::Backend(id.clone()));
+                self.names.insert(ident, NameEntry::Backend(id.clone()));
                 id
             }
         }
@@ -276,10 +276,10 @@ where
     ) -> Self {
         let stripped = self.downstream.diagnostics.0.strip_span(&name.1);
         let expansion = match self.downstream.names.get(&name.0) {
-            Some(Name::Macro(entry)) => {
+            Some(NameEntry::Macro(entry)) => {
                 Ok(entry.expand(name.1, args, self.downstream.diagnostics.0))
             }
-            Some(Name::Backend(_)) => {
+            Some(NameEntry::Backend(_)) => {
                 Err(Message::CannotUseSymbolNameAsMacroName { name: stripped }.at(name.1))
             }
             None => Err(Message::UndefinedMacro { name: stripped }.at(name.1)),
@@ -509,12 +509,11 @@ mod mock {
         S
     }
 
-    impl<D, S> PushOp<crate::analysis::backend::Name<Ident<String>>, S>
-        for RelocContext<(), Downstream<Expr<S>, (), D>>
+    impl<D, S> PushOp<Name<Ident<String>>, S> for RelocContext<(), Downstream<Expr<S>, (), D>>
     where
         S: Clone,
     {
-        fn push_op(&mut self, Name(ident): crate::analysis::backend::Name<Ident<String>>, span: S) {
+        fn push_op(&mut self, Name(ident): Name<Ident<String>>, span: S) {
             self.builder
                 .backend
                 .0
@@ -522,13 +521,12 @@ mod mock {
         }
     }
 
-    impl<T, S> PushOp<crate::analysis::backend::Name<Ident<String>>, S>
-        for RelocContext<MockDiagnostics<T>, Expr<S>>
+    impl<T, S> PushOp<Name<Ident<String>>, S> for RelocContext<MockDiagnostics<T>, Expr<S>>
     where
         T: From<DiagnosticsEvent<S>>,
         S: Clone,
     {
-        fn push_op(&mut self, Name(ident): crate::analysis::backend::Name<Ident<String>>, span: S) {
+        fn push_op(&mut self, Name(ident): Name<Ident<String>>, span: S) {
             self.builder
                 .0
                 .push(ExprOp::Atom(Atom::Name(ident)).with_span(span))
@@ -649,7 +647,7 @@ mod tests {
         let log = Fixture::default().log_session(|mut session| {
             session.start_section((ident.clone(), ()));
             let mut builder = session.build_value();
-            builder.push_op(crate::analysis::backend::Name(ident), ());
+            builder.push_op(Name(ident), ());
             let (s, value) = Finish::finish(builder);
             let item = Item::Data(value, Width::Word);
             session = s;
@@ -800,7 +798,7 @@ mod tests {
         Fixture::default().log_session(|session| {
             let mut builder = session.build_value();
             builder.push_op(42, ());
-            builder.push_op(crate::analysis::backend::Name(Ident::from("ident")), ());
+            builder.push_op(Name(Ident::from("ident")), ());
             builder.push_op(BinOp::Multiplication, ());
             let (_, value) = builder.finish();
             assert_eq!(
@@ -824,7 +822,7 @@ mod tests {
                 (vec![], vec![]),
             );
             let mut builder = session.build_value();
-            builder.push_op(crate::analysis::backend::Name(ident), "ident".into());
+            builder.push_op(Name(ident), "ident".into());
             let (mut session, value) = builder.finish();
             session.emit_item(Item::Data(value, Width::Byte))
         });
@@ -848,10 +846,7 @@ mod tests {
         let as_macro = MockSpan::from("as_macro");
         let log = Fixture::<MockSpan<_>>::default().log_session(|session| {
             let mut builder = session.build_value();
-            builder.push_op(
-                crate::analysis::backend::Name(Ident::from(name)),
-                "as_symbol".into(),
-            );
+            builder.push_op(Name(Ident::from(name)), "as_symbol".into());
             let (session, _) = builder.finish();
             session.call_macro((name.into(), as_macro.clone()), (vec![], vec![]));
         });

@@ -12,12 +12,12 @@ pub trait NameTable<I> {
     type BackendEntry;
     type MacroEntry;
 
-    fn get(&self, ident: &I) -> Option<&Name<Self::BackendEntry, Self::MacroEntry>>;
-    fn insert(&mut self, ident: I, entry: Name<Self::BackendEntry, Self::MacroEntry>);
+    fn get(&self, ident: &I) -> Option<&NameEntry<Self::BackendEntry, Self::MacroEntry>>;
+    fn insert(&mut self, ident: I, entry: NameEntry<Self::BackendEntry, Self::MacroEntry>);
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Name<B, M> {
+pub enum NameEntry<B, M> {
     Backend(B),
     Macro(M),
 }
@@ -77,7 +77,7 @@ impl From<&str> for Ident<String> {
 }
 
 pub struct BasicNameTable<B, M> {
-    table: HashMap<String, Name<B, M>>,
+    table: HashMap<String, NameEntry<B, M>>,
 }
 
 impl<B, M> BasicNameTable<B, M> {
@@ -92,11 +92,18 @@ impl<B, M> NameTable<Ident<String>> for BasicNameTable<B, M> {
     type BackendEntry = B;
     type MacroEntry = M;
 
-    fn get(&self, ident: &Ident<String>) -> Option<&Name<Self::BackendEntry, Self::MacroEntry>> {
+    fn get(
+        &self,
+        ident: &Ident<String>,
+    ) -> Option<&NameEntry<Self::BackendEntry, Self::MacroEntry>> {
         self.table.get(&ident.name)
     }
 
-    fn insert(&mut self, ident: Ident<String>, entry: Name<Self::BackendEntry, Self::MacroEntry>) {
+    fn insert(
+        &mut self,
+        ident: Ident<String>,
+        entry: NameEntry<Self::BackendEntry, Self::MacroEntry>,
+    ) {
         self.table.insert(ident.name, entry);
     }
 }
@@ -133,11 +140,18 @@ impl<B, M> NameTable<Ident<String>> for BiLevelNameTable<B, M> {
     type BackendEntry = B;
     type MacroEntry = M;
 
-    fn get(&self, ident: &Ident<String>) -> Option<&Name<Self::BackendEntry, Self::MacroEntry>> {
+    fn get(
+        &self,
+        ident: &Ident<String>,
+    ) -> Option<&NameEntry<Self::BackendEntry, Self::MacroEntry>> {
         self.select_table(ident).get(ident)
     }
 
-    fn insert(&mut self, ident: Ident<String>, entry: Name<Self::BackendEntry, Self::MacroEntry>) {
+    fn insert(
+        &mut self,
+        ident: Ident<String>,
+        entry: NameEntry<Self::BackendEntry, Self::MacroEntry>,
+    ) {
         self.select_table_mut(&ident).insert(ident, entry)
     }
 }
@@ -174,14 +188,14 @@ mod mock {
         fn get(
             &self,
             ident: &Ident<String>,
-        ) -> Option<&Name<Self::BackendEntry, Self::MacroEntry>> {
+        ) -> Option<&NameEntry<Self::BackendEntry, Self::MacroEntry>> {
             self.names.get(ident)
         }
 
         fn insert(
             &mut self,
             ident: Ident<String>,
-            entry: Name<Self::BackendEntry, Self::MacroEntry>,
+            entry: NameEntry<Self::BackendEntry, Self::MacroEntry>,
         ) {
             self.names.insert(ident, entry)
         }
@@ -223,14 +237,14 @@ mod tests {
     #[should_panic]
     fn panic_when_first_definition_is_local() {
         let mut table = BiLevelNameTable::<_, ()>::new();
-        table.insert("_loop".into(), Name::Backend(()));
+        table.insert("_loop".into(), NameEntry::Backend(()));
     }
 
     #[test]
     fn retrieve_global_name() {
         let name = "start";
         let mut table = BiLevelNameTable::<_, ()>::new();
-        let entry = Name::Backend(42);
+        let entry = NameEntry::Backend(42);
         table.insert(name.into(), entry.clone());
         assert_eq!(table.get(&name.into()), Some(&entry))
     }
@@ -238,7 +252,7 @@ mod tests {
     #[test]
     fn retrieve_local_name() {
         let mut table = BiLevelNameTable::<_, ()>::new();
-        let entry = Name::Backend(42);
+        let entry = NameEntry::Backend(42);
         table.start_scope(&"global".into());
         table.insert("_local".into(), entry.clone());
         assert_eq!(table.get(&"_local".into()), Some(&entry))
@@ -248,7 +262,7 @@ mod tests {
     fn local_name_not_accessible_after_new_global_name() {
         let mut table = BiLevelNameTable::<_, ()>::new();
         table.start_scope(&"global1".into());
-        table.insert("_local".into(), Name::Backend(42));
+        table.insert("_local".into(), NameEntry::Backend(42));
         table.start_scope(&"global2".into());
         assert_eq!(table.get(&"_local".into()), None)
     }
