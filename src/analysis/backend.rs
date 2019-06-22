@@ -31,7 +31,7 @@ pub trait StartSection<N, S> {
 pub trait ValueBuilder<N, S: Clone>:
     PushOp<LocationCounter, S>
     + PushOp<i32, S>
-    + PushOp<N, S>
+    + PushOp<Name<N>, S>
     + PushOp<BinOp, S>
     + PushOp<ParamId, S>
     + PushOp<FnCall, S>
@@ -41,11 +41,20 @@ pub trait ValueBuilder<N, S: Clone>:
 impl<T, N, S: Clone> ValueBuilder<N, S> for T where
     Self: PushOp<LocationCounter, S>
         + PushOp<i32, S>
-        + PushOp<N, S>
+        + PushOp<Name<N>, S>
         + PushOp<BinOp, S>
         + PushOp<ParamId, S>
         + PushOp<FnCall, S>
 {
+}
+
+#[derive(Clone)]
+pub struct Name<T>(pub T);
+
+impl<L, N> From<Name<N>> for Atom<L, N> {
+    fn from(Name(name): Name<N>) -> Self {
+        Atom::Name(name)
+    }
 }
 
 impl<T: Into<Atom<L, N>>, L, N: Clone, S: Clone> PushOp<T, S> for Expr<Atom<L, N>, S> {
@@ -186,8 +195,8 @@ mod mock {
         }
     }
 
-    impl<T, S: Clone> PushOp<usize, S> for RelocContext<MockBackend<T>, Expr<S>> {
-        fn push_op(&mut self, op: usize, span: S) {
+    impl<T, S: Clone> PushOp<Name<usize>, S> for RelocContext<MockBackend<T>, Expr<S>> {
+        fn push_op(&mut self, op: Name<usize>, span: S) {
             self.builder.push_op(op, span)
         }
     }

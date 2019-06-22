@@ -1,6 +1,6 @@
 use super::{Ident, Params, PushOp};
 
-use crate::analysis::backend::{Finish, FinishFnDef, LocationCounter};
+use crate::analysis::backend::{Finish, FinishFnDef, LocationCounter, Name};
 use crate::diag::Diagnostics;
 use crate::model::{BinOp, FnCall, ParamId};
 
@@ -15,13 +15,13 @@ impl<'a, P, R, S> ParamsAdapter<'a, P, R, S> {
     }
 }
 
-impl<'a, P, R, S> PushOp<Ident<R>, S> for ParamsAdapter<'a, P, R, S>
+impl<'a, P, R, S> PushOp<Name<Ident<R>>, S> for ParamsAdapter<'a, P, R, S>
 where
-    P: PushOp<Ident<R>, S> + PushOp<ParamId, S>,
+    P: PushOp<Name<Ident<R>>, S> + PushOp<ParamId, S>,
     R: Eq,
     S: Clone,
 {
-    fn push_op(&mut self, ident: Ident<R>, span: S) {
+    fn push_op(&mut self, Name(ident): Name<Ident<R>>, span: S) {
         let param = self
             .params
             .0
@@ -31,7 +31,7 @@ where
         if let Some(id) = param {
             self.parent.push_op(id, span)
         } else {
-            self.parent.push_op(ident, span)
+            self.parent.push_op(Name(ident), span)
         }
     }
 }
@@ -98,7 +98,7 @@ mod tests {
         let builder: Expr<_, _> = Default::default();
         let params = (vec![name.clone()], vec![()]);
         let mut adapter = ParamsAdapter::new(builder, &params);
-        adapter.push_op(name, ());
+        adapter.push_op(Name(name), ());
         let mut expected: Expr<_, _> = Default::default();
         expected.push_op(ParamId(0), ());
         assert_eq!(adapter.parent, expected)
@@ -110,7 +110,7 @@ mod tests {
         let builder: Expr<_, _> = Default::default();
         let params = (vec![param.clone()], vec![()]);
         let mut adapter = ParamsAdapter::new(builder, &params);
-        let unrelated: Ident<_> = "ident".into();
+        let unrelated = Name(Ident::from("ident"));
         adapter.push_op(unrelated.clone(), ());
         let mut expected: Expr<_, _> = Default::default();
         expected.push_op(unrelated, ());

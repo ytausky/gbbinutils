@@ -1,6 +1,6 @@
 use super::{CompositeSession, Downstream, Upstream, Wrapper};
 
-use crate::analysis::backend::{AllocName, Finish, FinishFnDef, PushOp, RelocContext};
+use crate::analysis::backend::{AllocName, Finish, FinishFnDef, Name, PushOp, RelocContext};
 use crate::analysis::resolve::{Ident, NameTable};
 use crate::diag::Diagnostics;
 use crate::model::{BinOp, FnCall, LocationCounter, ParamId};
@@ -8,16 +8,16 @@ use crate::model::{BinOp, FnCall, LocationCounter, ParamId};
 pub(super) type Builder<'a, 'b, C, A, B, N, D> =
     RelocContext<Upstream<'a, 'b, C, A>, Downstream<B, &'a mut N, Wrapper<'a, D>>>;
 
-impl<'a, 'b, C, A, B, N, D, R, S> PushOp<Ident<R>, S> for Builder<'a, 'b, C, A, B, N, D>
+impl<'a, 'b, C, A, B, N, D, R, S> PushOp<Name<Ident<R>>, S> for Builder<'a, 'b, C, A, B, N, D>
 where
-    B: AllocName<S> + PushOp<<B as AllocName<S>>::Name, S>,
+    B: AllocName<S> + PushOp<Name<<B as AllocName<S>>::Name>, S>,
     N: NameTable<Ident<R>, BackendEntry = B::Name>,
     D: Diagnostics<S>,
     S: Clone,
 {
-    fn push_op(&mut self, ident: Ident<R>, span: S) {
+    fn push_op(&mut self, Name(ident): Name<Ident<R>>, span: S) {
         let id = self.builder.look_up_symbol(ident, &span);
-        self.builder.backend.push_op(id, span)
+        self.builder.backend.push_op(Name(id), span)
     }
 }
 

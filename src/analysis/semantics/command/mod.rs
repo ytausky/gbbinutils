@@ -2,7 +2,7 @@ use self::args::*;
 
 use super::{Ident, Label, Literal, Params, ParamsAdapter, SemanticActions, StmtActions};
 
-use crate::analysis::backend::{Finish, FinishFnDef, LocationCounter, PushOp};
+use crate::analysis::backend::{Finish, FinishFnDef, LocationCounter, Name, PushOp};
 use crate::analysis::session::Session;
 use crate::analysis::syntax::*;
 use crate::diag::span::{MergeSpans, StripSpan};
@@ -248,7 +248,7 @@ trait EvalArg<I, S: Clone> {
 trait ArgEvaluator<N, S: Clone>:
     PushOp<LocationCounter, S>
     + PushOp<i32, S>
-    + PushOp<N, S>
+    + PushOp<Name<N>, S>
     + PushOp<BinOp, S>
     + PushOp<FnCall, S>
     + Diagnostics<S>
@@ -258,7 +258,7 @@ trait ArgEvaluator<N, S: Clone>:
 impl<T, N, S: Clone> ArgEvaluator<N, S> for T where
     Self: PushOp<LocationCounter, S>
         + PushOp<i32, S>
-        + PushOp<N, S>
+        + PushOp<Name<N>, S>
         + PushOp<BinOp, S>
         + PushOp<FnCall, S>
         + Diagnostics<S>
@@ -274,7 +274,7 @@ where
     fn eval_arg(&mut self, arg: Arg<R, S>) -> Result<(), ()> {
         match arg.variant {
             ArgVariant::Atom(ArgAtom::Ident(ident)) => {
-                self.push_op(ident, arg.span);
+                self.push_op(Name(ident), arg.span);
                 Ok(())
             }
             ArgVariant::Atom(ArgAtom::Literal(Literal::Number(n))) => {
@@ -306,7 +306,7 @@ where
                 for arg in args {
                     self.eval_arg(arg)?;
                 }
-                self.push_op(name, span.clone());
+                self.push_op(Name(name), span.clone());
                 self.push_op(FnCall(n), span);
                 Ok(())
             }

@@ -96,8 +96,8 @@ impl<'a, S: Clone> AllocName<S> for RelocContext<ProgramBuilder<'a, S>, Immediat
     }
 }
 
-impl<'a, S: Clone> PushOp<NameId, S> for RelocContext<ProgramBuilder<'a, S>, Immediate<S>> {
-    fn push_op(&mut self, name: NameId, span: S) {
+impl<'a, S: Clone> PushOp<Name<NameId>, S> for RelocContext<ProgramBuilder<'a, S>, Immediate<S>> {
+    fn push_op(&mut self, name: Name<NameId>, span: S) {
         self.builder.push_op(name, span)
     }
 }
@@ -137,7 +137,7 @@ macro_rules! impl_push_op_for_symbol_builder {
 }
 
 impl_push_op_for_symbol_builder! {i32}
-impl_push_op_for_symbol_builder! {NameId}
+impl_push_op_for_symbol_builder! {Name<NameId>}
 impl_push_op_for_symbol_builder! {ParamId}
 
 impl<'a, S: Clone> PushOp<BinOp, S> for SymbolBuilder<'a, S> {
