@@ -88,6 +88,12 @@ impl<L, N> From<BinOp> for ExprOp<Atom<L, N>> {
     }
 }
 
+impl<A> From<FnCall> for ExprOp<A> {
+    fn from(FnCall(n): FnCall) -> Self {
+        ExprOp::FnCall(n)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BinOp {
     BitwiseOr,

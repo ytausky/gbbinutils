@@ -130,7 +130,7 @@ macro_rules! impl_push_op_for_symbol_builder {
     ($t:ty) => {
         impl<'a, S: Clone> PushOp<$t, S> for SymbolBuilder<'a, S> {
             fn push_op(&mut self, op: $t, span: S) {
-                self.expr.0.push(ExprOp::Atom(op.into()).with_span(span))
+                self.expr.push_op(op, span)
             }
         }
     };
@@ -139,18 +139,8 @@ macro_rules! impl_push_op_for_symbol_builder {
 impl_push_op_for_symbol_builder! {i32}
 impl_push_op_for_symbol_builder! {Name<NameId>}
 impl_push_op_for_symbol_builder! {ParamId}
-
-impl<'a, S: Clone> PushOp<BinOp, S> for SymbolBuilder<'a, S> {
-    fn push_op(&mut self, op: BinOp, span: S) {
-        self.expr.push_op(op, span)
-    }
-}
-
-impl<'a, S: Clone> PushOp<FnCall, S> for SymbolBuilder<'a, S> {
-    fn push_op(&mut self, op: FnCall, span: S) {
-        self.expr.push_op(op, span)
-    }
-}
+impl_push_op_for_symbol_builder! {BinOp}
+impl_push_op_for_symbol_builder! {FnCall}
 
 impl<'a, S: Clone> PushOp<LocationCounter, S> for SymbolBuilder<'a, S> {
     fn push_op(&mut self, _: LocationCounter, span: S) {

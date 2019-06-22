@@ -57,21 +57,15 @@ impl<L, N> From<Name<N>> for Atom<L, N> {
     }
 }
 
-impl<T: Into<Atom<L, N>>, L, N: Clone, S: Clone> PushOp<T, S> for Expr<Atom<L, N>, S> {
-    fn push_op(&mut self, atom: T, span: S) {
-        self.0.push(ExprOp::Atom(atom.into()).with_span(span))
+impl<T: Into<ExprOp<A>>, A, S: Clone> PushOp<T, S> for Expr<A, S> {
+    fn push_op(&mut self, op: T, span: S) {
+        self.0.push(op.into().with_span(span))
     }
 }
 
-impl<L, N, S: Clone> PushOp<BinOp, S> for Expr<Atom<L, N>, S> {
-    fn push_op(&mut self, op: BinOp, span: S) {
-        self.0.push(ExprOp::Binary(op).with_span(span))
-    }
-}
-
-impl<L, N, S: Clone> PushOp<FnCall, S> for Expr<Atom<L, N>, S> {
-    fn push_op(&mut self, FnCall(n): FnCall, span: S) {
-        self.0.push(ExprOp::FnCall(n).with_span(span))
+impl<N, A: From<Name<N>>> From<Name<N>> for ExprOp<A> {
+    fn from(name: Name<N>) -> Self {
+        ExprOp::Atom(name.into())
     }
 }
 
