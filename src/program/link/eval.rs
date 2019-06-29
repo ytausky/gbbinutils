@@ -205,7 +205,7 @@ impl BinOp {
     fn apply(self, lhs: &Num, rhs: &Num) -> Num {
         match self {
             BinOp::BitwiseOr => lhs | rhs,
-            BinOp::Division => unimplemented!(),
+            BinOp::Division => lhs / rhs,
             BinOp::Minus => lhs - rhs,
             BinOp::Multiplication => lhs * rhs,
             BinOp::Plus => lhs + rhs,
@@ -350,6 +350,21 @@ mod tests {
                 &mut IgnoreDiagnostics
             ),
             0x97.into()
+        )
+    }
+
+    #[test]
+    fn eval_division() {
+        assert_eq!(
+            eval_in_empty_program(
+                Immediate::from_items(&[
+                    100.into(),
+                    4.into(),
+                    ExprOp::Binary(BinOp::Division).into()
+                ]),
+                &mut IgnoreDiagnostics
+            ),
+            25.into()
         )
     }
 

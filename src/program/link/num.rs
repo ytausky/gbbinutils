@@ -1,4 +1,4 @@
-use std::ops::{Add, AddAssign, BitOr, Mul, RangeInclusive, Sub};
+use std::ops::{Add, AddAssign, BitOr, Div, Mul, RangeInclusive, Sub};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Num {
@@ -124,6 +124,16 @@ impl BitOr for &Num {
     }
 }
 
+impl Div for &Num {
+    type Output = Num;
+
+    fn div(self, rhs: &Num) -> Self::Output {
+        self.exact()
+            .and_then(|lhs| rhs.exact().map(|rhs| lhs / rhs))
+            .map_or(Num::Unknown, Into::into)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -150,5 +160,10 @@ mod tests {
     #[test]
     fn bitwise_or_exact_nums() {
         assert_eq!(&Num::from(0x12) | &Num::from(0x34), Num::from(0x36))
+    }
+
+    #[test]
+    fn div_exact_nums() {
+        assert_eq!(&Num::from(72) / &Num::from(5), Num::from(14))
     }
 }
