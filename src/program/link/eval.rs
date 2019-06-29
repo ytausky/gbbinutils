@@ -257,7 +257,7 @@ pub const BUILTIN_NAMES: &[(&str, NameId)] = &[("sizeof", NameId::Builtin(Builti
 mod tests {
     use super::*;
 
-    use crate::diag::{DiagnosticsEvent, IgnoreDiagnostics, Merge, MockSpan, ValueKind};
+    use crate::diag::*;
     use crate::log::Log;
 
     type MockDiagnostics<S> = crate::diag::MockDiagnostics<DiagnosticsEvent<S>>;
@@ -340,43 +340,27 @@ mod tests {
 
     #[test]
     fn eval_bitwise_or() {
-        let program = &Program::new();
-        let relocs = RelocTable::new(0);
-        let context = EvalContext {
-            program,
-            relocs,
-            location: Num::Unknown,
-        };
-        let immediate = Immediate::from_items(&[
-            0x17.into(),
-            0x86.into(),
-            ExprOp::Binary(BinOp::BitwiseOr).into(),
-        ]);
         assert_eq!(
-            immediate.to_num(&context, &mut IgnoreDiagnostics),
+            eval_in_empty_program(
+                Immediate::from_items(&[
+                    0x17.into(),
+                    0x86.into(),
+                    ExprOp::Binary(BinOp::BitwiseOr).into(),
+                ]),
+                &mut IgnoreDiagnostics
+            ),
             0x97.into()
         )
     }
 
     #[test]
     fn diagnose_using_sizeof_as_immediate() {
-        let program = &Program {
-            sections: vec![],
-            names: NameTable(vec![]),
-            relocs: 0,
-        };
-        let relocs = &RelocTable(vec![]);
-        let context = &EvalContext {
-            program,
-            relocs,
-            location: Num::Unknown,
-        };
         let mut diagnostics = MockDiagnostics::new(Log::new());
         let immediate = Immediate::from_atom(
             Atom::Name(NameId::Builtin(BuiltinName::Sizeof)),
             MockSpan::from(0),
         );
-        let value = immediate.to_num(context, &mut diagnostics);
+        let value = eval_in_empty_program(immediate, &mut diagnostics);
         let log = diagnostics.into_log();
         assert_eq!(value, Num::Unknown);
         assert_eq!(
@@ -491,5 +475,23 @@ mod tests {
             names: NameTable(vec![Some(NameDef::Section(SectionId(0)))]),
             relocs: 2,
         }
+    }
+
+    fn eval_in_empty_program<S: Clone>(
+        immediate: Immediate<S>,
+        diagnostics: &mut impl BackendDiagnostics<S>,
+    ) -> Num {
+        let program = &Program {
+            sections: vec![],
+            names: NameTable(vec![]),
+            relocs: 0,
+        };
+        let relocs = &RelocTable(vec![]);
+        let context = &EvalContext {
+            program,
+            relocs,
+            location: Num::Unknown,
+        };
+        immediate.to_num(context, diagnostics)
     }
 }
