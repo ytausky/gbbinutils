@@ -204,10 +204,11 @@ impl<S: Clone> Spanned<NameDefId, &S> {
 impl BinOp {
     fn apply(self, lhs: &Num, rhs: &Num) -> Num {
         match self {
+            BinOp::BitwiseOr => lhs | rhs,
+            BinOp::Division => unimplemented!(),
             BinOp::Minus => lhs - rhs,
             BinOp::Multiplication => lhs * rhs,
             BinOp::Plus => lhs + rhs,
-            _ => unimplemented!(),
         }
     }
 }
@@ -334,6 +335,26 @@ mod tests {
         assert_eq!(
             immediate.to_num(&context, &mut IgnoreDiagnostics),
             addr.into()
+        )
+    }
+
+    #[test]
+    fn eval_bitwise_or() {
+        let program = &Program::new();
+        let relocs = RelocTable::new(0);
+        let context = EvalContext {
+            program,
+            relocs,
+            location: Num::Unknown,
+        };
+        let immediate = Immediate::from_items(&[
+            0x17.into(),
+            0x86.into(),
+            ExprOp::Binary(BinOp::BitwiseOr).into(),
+        ]);
+        assert_eq!(
+            immediate.to_num(&context, &mut IgnoreDiagnostics),
+            0x97.into()
         )
     }
 

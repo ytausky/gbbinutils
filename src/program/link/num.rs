@@ -1,4 +1,4 @@
-use std::ops::{Add, AddAssign, Mul, RangeInclusive, Sub};
+use std::ops::{Add, AddAssign, BitOr, Mul, RangeInclusive, Sub};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Num {
@@ -107,6 +107,23 @@ impl Mul for &Num {
     }
 }
 
+impl BitOr for &Num {
+    type Output = Num;
+
+    fn bitor(self, rhs: &Num) -> Self::Output {
+        match (self, rhs) {
+            (
+                Num::Range { min, max },
+                Num::Range {
+                    min: rhs_min,
+                    max: rhs_max,
+                },
+            ) if min == max && rhs_min == rhs_max => (min | rhs_min).into(),
+            _ => Num::Unknown,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -128,5 +145,10 @@ mod tests {
         for (lhs, rhs, product) in cases {
             assert_eq!(lhs * rhs, *product)
         }
+    }
+
+    #[test]
+    fn bitwise_or_exact_nums() {
+        assert_eq!(&Num::from(0x12) | &Num::from(0x34), Num::from(0x36))
     }
 }
