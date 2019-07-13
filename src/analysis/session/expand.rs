@@ -54,13 +54,13 @@ where
 }
 
 pub(in crate::analysis) struct MacroDef<I, T, S> {
-    pub tokens: Rc<MacroDefTokens<I, T>>,
-    pub spans: S,
+    tokens: Rc<MacroDefTokens<I, T>>,
+    spans: S,
 }
 
-pub(in crate::analysis) struct MacroDefTokens<I, T> {
-    pub params: Vec<I>,
-    pub body: Vec<T>,
+struct MacroDefTokens<I, T> {
+    params: Vec<I>,
+    body: Vec<T>,
 }
 
 impl<I, L, C, H, F, S> Expand<Token<I, L, C>, H, F, S> for MacroDef<I, Token<I, L, C>, H>
