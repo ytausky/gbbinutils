@@ -182,7 +182,6 @@ impl EmitDiag<MockSpan, MockSpan> for CommandActionCollector {
 }
 
 impl CommandContext<MockSpan> for CommandActionCollector {
-    type Command = SymCommand;
     type Ident = SymIdent;
     type Literal = SymLiteral;
     type ArgContext = ExprActionCollector<Self>;

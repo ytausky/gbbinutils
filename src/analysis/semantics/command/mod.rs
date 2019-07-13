@@ -55,7 +55,6 @@ impl<S: Session> EmitDiag<S::Span, S::Stripped> for CommandActions<S> {
 
 impl<S: Session> CommandContext<S::Span> for CommandActions<S> {
     type Ident = Ident<S::StringRef>;
-    type Command = Command;
     type Literal = Literal<S::StringRef>;
     type ArgContext = ExprBuilder<S::StringRef, S::Span, Self>;
     type Parent = StmtActions<S>;

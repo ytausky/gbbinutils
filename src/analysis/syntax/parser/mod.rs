@@ -224,7 +224,7 @@ where
 impl<'a, Id, L, C, E, I, Ctx, S> Parser<'a, (Result<Token<Id, L, C>, E>, S), I, Ctx>
 where
     I: Iterator<Item = (Result<Token<Id, L, C>, E>, S)>,
-    Ctx: CommandContext<S, Command = C, Ident = Id, Literal = L>,
+    Ctx: CommandContext<S, Ident = Id, Literal = L>,
     S: Clone,
 {
     fn parse_argument_list(self) -> Self {

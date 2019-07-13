@@ -66,7 +66,7 @@ pub(super) trait FileContext<I, L, C, S: Clone>: Diagnostics<S> + Sized {
 }
 
 pub(super) trait StmtContext<I, L, C, S: Clone>: Diagnostics<S> + Sized {
-    type CommandContext: CommandContext<S, Ident = I, Command = C, Literal = L, Parent = Self>;
+    type CommandContext: CommandContext<S, Ident = I, Literal = L, Parent = Self>;
     type MacroDefContext: TokenSeqContext<S, Token = Token<I, L, C>, Parent = Self>;
     type MacroCallContext: MacroCallContext<S, Token = Token<I, L, C>, Parent = Self>;
     type Parent;
@@ -79,7 +79,6 @@ pub(super) trait StmtContext<I, L, C, S: Clone>: Diagnostics<S> + Sized {
 
 pub(super) trait CommandContext<S: Clone>: Diagnostics<S> + Sized {
     type Ident;
-    type Command;
     type Literal;
     type ArgContext: ExprContext<S, Ident = Self::Ident, Literal = Self::Literal>
         + FinalContext<ReturnTo = Self>;
