@@ -4,7 +4,7 @@ use self::builder::Builder;
 use self::expand::{DefineMacro, Expand, MacroDef};
 
 use super::backend::*;
-use super::resolve::{Ident, NameEntry, NameTable, StartScope};
+use super::resolve::{Ident, NameTable, ResolvedIdent, StartScope};
 use super::{Lex, LexItem, SemanticToken, StringSource, TokenSeq};
 
 use crate::codebase::CodebaseError;
@@ -103,8 +103,8 @@ impl<'a, B, N, D> Downstream<B, &'a mut N, Wrapper<'a, D>> {
         S: Clone,
     {
         match self.names.get(&ident) {
-            Some(NameEntry::Backend(id)) => id.clone(),
-            Some(NameEntry::Macro(_)) => {
+            Some(ResolvedIdent::Backend(id)) => id.clone(),
+            Some(ResolvedIdent::Macro(_)) => {
                 self.diagnostics
                     .0
                     .emit_diag(Message::MacroNameInExpr.at(span.clone()));
@@ -112,7 +112,7 @@ impl<'a, B, N, D> Downstream<B, &'a mut N, Wrapper<'a, D>> {
             }
             None => {
                 let id = self.backend.alloc_name(span.clone());
-                self.names.insert(ident, NameEntry::Backend(id.clone()));
+                self.names.insert(ident, ResolvedIdent::Backend(id.clone()));
                 id
             }
         }
@@ -276,10 +276,10 @@ where
     ) -> Self {
         let stripped = self.downstream.diagnostics.0.strip_span(&name.1);
         let expansion = match self.downstream.names.get(&name.0) {
-            Some(NameEntry::Macro(entry)) => {
+            Some(ResolvedIdent::Macro(entry)) => {
                 Ok(entry.expand(name.1, args, self.downstream.diagnostics.0))
             }
-            Some(NameEntry::Backend(_)) => {
+            Some(ResolvedIdent::Backend(_)) => {
                 Err(Message::CannotUseSymbolNameAsMacroName { name: stripped }.at(name.1))
             }
             None => Err(Message::UndefinedMacro { name: stripped }.at(name.1)),

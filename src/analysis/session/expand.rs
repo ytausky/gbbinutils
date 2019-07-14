@@ -1,4 +1,4 @@
-use crate::analysis::resolve::{NameEntry, NameTable};
+use crate::analysis::resolve::{NameTable, ResolvedIdent};
 use crate::analysis::Token;
 use crate::diag::span::*;
 
@@ -42,7 +42,7 @@ where
         let context = diagnostics.add_macro_def(name.1, params.1, body.1);
         self.insert(
             name.0,
-            NameEntry::Macro(MacroDef {
+            ResolvedIdent::Macro(MacroDef {
                 tokens: Rc::new(MacroDefTokens {
                     params: params.0,
                     body: body.0,

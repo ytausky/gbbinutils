@@ -30,7 +30,7 @@ where
         codebase: &C,
         diagnostics: &mut D,
     ) -> Result<(), CodebaseError> {
-        use self::resolve::{NameEntry, NameTable};
+        use self::resolve::{NameTable, ResolvedIdent};
 
         let mut file_parser = CodebaseAnalyzer::new(codebase);
         let mut analyzer = semantics::SemanticAnalyzer;
@@ -38,7 +38,7 @@ where
         for (string, name) in self.builtin_names() {
             names.insert(
                 DefaultIdentFactory.mk_ident(string),
-                NameEntry::Backend((*name).clone()),
+                ResolvedIdent::Backend((*name).clone()),
             )
         }
         let session = CompositeSession::new(
