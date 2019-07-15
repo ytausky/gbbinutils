@@ -9,10 +9,10 @@ pub use self::mock::*;
 use crate::model::{Atom, ExprOp};
 
 pub trait NameTable<I> {
-    type BackendEntry;
-    type MacroEntry;
+    type BackendEntry: Clone;
+    type MacroEntry: Clone;
 
-    fn get(&self, ident: &I) -> Option<&ResolvedIdent<Self::BackendEntry, Self::MacroEntry>>;
+    fn get(&self, ident: &I) -> Option<ResolvedIdent<Self::BackendEntry, Self::MacroEntry>>;
     fn insert(&mut self, ident: I, entry: ResolvedIdent<Self::BackendEntry, Self::MacroEntry>);
 }
 
@@ -88,15 +88,15 @@ impl<B, M> BasicNameTable<B, M> {
     }
 }
 
-impl<B, M> NameTable<Ident<String>> for BasicNameTable<B, M> {
+impl<B: Clone, M: Clone> NameTable<Ident<String>> for BasicNameTable<B, M> {
     type BackendEntry = B;
     type MacroEntry = M;
 
     fn get(
         &self,
         ident: &Ident<String>,
-    ) -> Option<&ResolvedIdent<Self::BackendEntry, Self::MacroEntry>> {
-        self.table.get(&ident.name)
+    ) -> Option<ResolvedIdent<Self::BackendEntry, Self::MacroEntry>> {
+        self.table.get(&ident.name).cloned()
     }
 
     fn insert(
@@ -136,14 +136,14 @@ impl<M, S> BiLevelNameTable<M, S> {
     }
 }
 
-impl<B, M> NameTable<Ident<String>> for BiLevelNameTable<B, M> {
+impl<B: Clone, M: Clone> NameTable<Ident<String>> for BiLevelNameTable<B, M> {
     type BackendEntry = B;
     type MacroEntry = M;
 
     fn get(
         &self,
         ident: &Ident<String>,
-    ) -> Option<&ResolvedIdent<Self::BackendEntry, Self::MacroEntry>> {
+    ) -> Option<ResolvedIdent<Self::BackendEntry, Self::MacroEntry>> {
         self.select_table(ident).get(ident)
     }
 
@@ -181,14 +181,18 @@ mod mock {
         }
     }
 
-    impl<N: NameTable<Ident<String>>, T> NameTable<Ident<String>> for MockNameTable<N, T> {
+    impl<N, T> NameTable<Ident<String>> for MockNameTable<N, T>
+    where
+        N: NameTable<Ident<String>>,
+        T: From<NameTableEvent<N::BackendEntry, N::MacroEntry>>,
+    {
         type BackendEntry = N::BackendEntry;
         type MacroEntry = N::MacroEntry;
 
         fn get(
             &self,
             ident: &Ident<String>,
-        ) -> Option<&ResolvedIdent<Self::BackendEntry, Self::MacroEntry>> {
+        ) -> Option<ResolvedIdent<Self::BackendEntry, Self::MacroEntry>> {
             self.names.get(ident)
         }
 
@@ -197,19 +201,40 @@ mod mock {
             ident: Ident<String>,
             entry: ResolvedIdent<Self::BackendEntry, Self::MacroEntry>,
         ) {
-            self.names.insert(ident, entry)
+            self.names.insert(ident.clone(), entry.clone());
+            self.log.push(NameTableEvent::Insert(ident, entry))
         }
     }
 
-    impl<N, T: From<NameTableEvent>> StartScope<Ident<String>> for MockNameTable<N, T> {
+    impl<N, T> StartScope<Ident<String>> for MockNameTable<N, T>
+    where
+        N: NameTable<Ident<String>>,
+        T: From<NameTableEvent<N::BackendEntry, N::MacroEntry>>,
+    {
         fn start_scope(&mut self, ident: &Ident<String>) {
             self.log.push(NameTableEvent::StartScope(ident.clone()))
         }
     }
 
     #[derive(Debug, PartialEq)]
-    pub enum NameTableEvent {
+    pub enum NameTableEvent<B, M> {
+        Insert(Ident<String>, ResolvedIdent<B, M>),
         StartScope(Ident<String>),
+    }
+
+    pub struct FakeNameTable;
+
+    impl<I: Clone> NameTable<I> for FakeNameTable {
+        type BackendEntry = I;
+        type MacroEntry = ();
+
+        fn get(&self, ident: &I) -> Option<ResolvedIdent<Self::BackendEntry, Self::MacroEntry>> {
+            Some(ResolvedIdent::Backend(ident.clone()))
+        }
+
+        fn insert(&mut self, _: I, _: ResolvedIdent<Self::BackendEntry, Self::MacroEntry>) {
+            panic!("tried to define a name")
+        }
     }
 }
 
@@ -246,7 +271,7 @@ mod tests {
         let mut table = BiLevelNameTable::<_, ()>::new();
         let entry = ResolvedIdent::Backend(42);
         table.insert(name.into(), entry.clone());
-        assert_eq!(table.get(&name.into()), Some(&entry))
+        assert_eq!(table.get(&name.into()), Some(entry))
     }
 
     #[test]
@@ -255,7 +280,7 @@ mod tests {
         let entry = ResolvedIdent::Backend(42);
         table.start_scope(&"global".into());
         table.insert("_local".into(), entry.clone());
-        assert_eq!(table.get(&"_local".into()), Some(&entry))
+        assert_eq!(table.get(&"_local".into()), Some(entry))
     }
 
     #[test]

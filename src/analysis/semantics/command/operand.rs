@@ -217,12 +217,16 @@ impl<I: Iterator> Iterator for OperandCounter<I> {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
 
-    use crate::model::{Atom, Expr, LocationCounter};
+    use crate::analysis::backend::{BackendEvent, PanickingIdAllocator};
+    use crate::analysis::resolve::BasicNameTable;
+    use crate::model::{Atom, LocationCounter};
 
     use std::fmt::Debug;
+
+    type Expr<S> = crate::model::Expr<Atom<LocationCounter, Ident<String>>, S>;
 
     #[test]
     fn analyze_deref_bc() {
@@ -261,8 +265,25 @@ mod tests {
         )
     }
 
-    type OperandResult<S> =
-        Result<Operand<Expr<Atom<LocationCounter, Ident<String>>, S>>, Vec<DiagnosticsEvent<S>>>;
+    type OperandResult<S> = Result<Operand<Expr<S>>, Vec<Event<S>>>;
+
+    #[derive(Debug, PartialEq)]
+    pub(crate) enum Event<S: Clone> {
+        Backend(BackendEvent<Ident<String>, Expr<S>>),
+        Diagnostics(DiagnosticsEvent<S>),
+    }
+
+    impl<S: Clone> From<BackendEvent<Ident<String>, Expr<S>>> for Event<S> {
+        fn from(event: BackendEvent<Ident<String>, Expr<S>>) -> Self {
+            Event::Backend(event)
+        }
+    }
+
+    impl<S: Clone> From<DiagnosticsEvent<S>> for Event<S> {
+        fn from(event: DiagnosticsEvent<S>) -> Self {
+            Event::Diagnostics(event)
+        }
+    }
 
     fn analyze_operand<S: Clone + Debug>(
         expr: Arg<String, MockSpan<S>>,
@@ -272,7 +293,18 @@ mod tests {
 
         let mut result = None;
         let log = crate::log::with_log(|log| {
-            result = Some(super::analyze_operand(expr, context, MockBuilder::with_log(log)).1)
+            result = Some(
+                super::analyze_operand(
+                    expr,
+                    context,
+                    MockBuilder::from_components(
+                        PanickingIdAllocator::<Ident<String>>::new(),
+                        BasicNameTable::<Ident<String>, ()>::new(),
+                        log,
+                    ),
+                )
+                .1,
+            )
         });
         result.unwrap().map_err(|_| log)
     }
@@ -291,14 +323,16 @@ mod tests {
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Err(vec![CompactDiag::from(
-                Message::CannotDereference {
-                    category: KeywordOperandCategory::RegPair,
-                    operand: 0.into(),
-                }
-                .at(1.into())
-            )
-            .into()])
+            Err(vec![Event::Diagnostics(
+                CompactDiag::from(
+                    Message::CannotDereference {
+                        category: KeywordOperandCategory::RegPair,
+                        operand: 0.into(),
+                    }
+                    .at(1.into())
+                )
+                .into()
+            )])
         )
     }
 
@@ -349,13 +383,15 @@ mod tests {
         };
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Err(vec![CompactDiag::from(
-                Message::KeywordInExpr {
-                    keyword: span.into()
-                }
-                .at(span.into())
-            )
-            .into()])
+            Err(vec![Event::Diagnostics(
+                CompactDiag::from(
+                    Message::KeywordInExpr {
+                        keyword: span.into()
+                    }
+                    .at(span.into())
+                )
+                .into()
+            )])
         )
     }
 
@@ -368,10 +404,9 @@ mod tests {
         );
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Err(vec![CompactDiag::from(
-                Message::StringInInstruction.at(span.into())
-            )
-            .into()])
+            Err(vec![Event::Diagnostics(
+                CompactDiag::from(Message::StringInInstruction.at(span.into())).into()
+            )])
         )
     }
 
@@ -390,13 +425,15 @@ mod tests {
         let expr = Arg::from_atom(ArgAtom::Literal(Literal::Operand(keyword)), span.clone());
         assert_eq!(
             analyze_operand(expr, Context::Other),
-            Err(vec![CompactDiag::from(
-                Message::MustBeDeref {
-                    operand: span.clone()
-                }
-                .at(span)
-            )
-            .into()])
+            Err(vec![Event::Diagnostics(
+                CompactDiag::from(
+                    Message::MustBeDeref {
+                        operand: span.clone()
+                    }
+                    .at(span)
+                )
+                .into()
+            )])
         )
     }
 }

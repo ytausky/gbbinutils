@@ -143,38 +143,38 @@ mod mock {
     use crate::log::Log;
     use crate::model::Atom;
 
-    type Expr<S> = crate::model::Expr<Atom<LocationCounter, usize>, S>;
+    use std::marker::PhantomData;
 
-    pub(crate) struct MockBackend<T> {
+    type Expr<N, S> = crate::model::Expr<Atom<LocationCounter, N>, S>;
+
+    pub(crate) struct MockBackend<A, T> {
+        alloc: A,
         pub log: Log<T>,
-        next_symbol_id: usize,
     }
 
     #[derive(Debug, PartialEq)]
-    pub enum BackendEvent<V: Source> {
+    pub enum BackendEvent<N, V: Source> {
         EmitItem(Item<V>),
         Reserve(V),
         SetOrigin(V),
-        DefineSymbol((usize, V::Span), V),
-        StartSection((usize, V::Span)),
+        DefineSymbol((N, V::Span), V),
+        StartSection((N, V::Span)),
     }
 
-    impl<T> MockBackend<T> {
-        pub fn new(log: Log<T>) -> Self {
-            MockBackend {
-                log,
-                next_symbol_id: 0,
-            }
+    impl<A, T> MockBackend<A, T> {
+        pub fn new(alloc: A, log: Log<T>) -> Self {
+            MockBackend { alloc, log }
         }
     }
 
-    impl<T, S> Backend<S> for MockBackend<T>
+    impl<A, T, S> Backend<S> for MockBackend<A, T>
     where
-        T: From<BackendEvent<Expr<S>>>,
+        A: AllocName<S>,
+        T: From<BackendEvent<A::Name, Expr<A::Name, S>>>,
         S: Clone,
     {
-        type ImmediateBuilder = RelocContext<Self, Expr<S>>;
-        type SymbolBuilder = MockSymbolBuilder<Self, usize, S>;
+        type ImmediateBuilder = RelocContext<Self, Expr<A::Name, S>>;
+        type SymbolBuilder = MockSymbolBuilder<Self, A::Name, S>;
 
         fn build_immediate(self) -> Self::ImmediateBuilder {
             RelocContext::new(self)
@@ -189,23 +189,35 @@ mod mock {
         }
     }
 
-    impl<T, S: Clone> PushOp<Name<usize>, S> for RelocContext<MockBackend<T>, Expr<S>> {
-        fn push_op(&mut self, op: Name<usize>, span: S) {
+    impl<A, T, S> PushOp<Name<A::Name>, S> for RelocContext<MockBackend<A, T>, Expr<A::Name, S>>
+    where
+        A: AllocName<S>,
+        S: Clone,
+    {
+        fn push_op(&mut self, op: Name<A::Name>, span: S) {
             self.builder.push_op(op, span)
         }
     }
 
-    impl<T, S: Clone> AllocName<S> for RelocContext<MockBackend<T>, Expr<S>> {
-        type Name = usize;
+    impl<A, T, S> AllocName<S> for RelocContext<MockBackend<A, T>, Expr<A::Name, S>>
+    where
+        A: AllocName<S>,
+        S: Clone,
+    {
+        type Name = A::Name;
 
         fn alloc_name(&mut self, span: S) -> Self::Name {
             self.parent.alloc_name(span)
         }
     }
 
-    impl<T, S: Clone> Finish<S> for RelocContext<MockBackend<T>, Expr<S>> {
-        type Parent = MockBackend<T>;
-        type Value = Expr<S>;
+    impl<A, T, S> Finish<S> for RelocContext<MockBackend<A, T>, Expr<A::Name, S>>
+    where
+        A: AllocName<S>,
+        S: Clone,
+    {
+        type Parent = MockBackend<A, T>;
+        type Value = Expr<A::Name, S>;
 
         fn finish(self) -> (Self::Parent, Self::Value) {
             (self.parent, self.builder)
@@ -227,12 +239,13 @@ mod mock {
         }
     }
 
-    impl<T, S> FinishFnDef for MockSymbolBuilder<MockBackend<T>, usize, S>
+    impl<A, T, S> FinishFnDef for MockSymbolBuilder<MockBackend<A, T>, A::Name, S>
     where
-        T: From<BackendEvent<Expr<S>>>,
+        A: AllocName<S>,
+        T: From<BackendEvent<A::Name, Expr<A::Name, S>>>,
         S: Clone,
     {
-        type Return = MockBackend<T>;
+        type Return = MockBackend<A, T>;
 
         fn finish_fn_def(self) -> Self::Return {
             let parent = self.parent;
@@ -243,8 +256,12 @@ mod mock {
         }
     }
 
-    impl<T, S: Clone> AllocName<S> for MockSymbolBuilder<MockBackend<T>, usize, S> {
-        type Name = usize;
+    impl<A, T, S> AllocName<S> for MockSymbolBuilder<MockBackend<A, T>, A::Name, S>
+    where
+        A: AllocName<S>,
+        S: Clone,
+    {
+        type Name = A::Name;
 
         fn alloc_name(&mut self, span: S) -> Self::Name {
             self.parent.alloc_name(span)
@@ -257,22 +274,21 @@ mod mock {
         }
     }
 
-    impl<T, S: Clone> AllocName<S> for MockBackend<T> {
-        type Name = usize;
+    impl<A: AllocName<S>, T, S: Clone> AllocName<S> for MockBackend<A, T> {
+        type Name = A::Name;
 
-        fn alloc_name(&mut self, _span: S) -> Self::Name {
-            let id = self.next_symbol_id;
-            self.next_symbol_id += 1;
-            id
+        fn alloc_name(&mut self, span: S) -> Self::Name {
+            self.alloc.alloc_name(span)
         }
     }
 
-    impl<T, S> PartialBackend<S> for MockBackend<T>
+    impl<A, T, S> PartialBackend<S> for MockBackend<A, T>
     where
-        T: From<BackendEvent<Expr<S>>>,
+        A: AllocName<S>,
+        T: From<BackendEvent<A::Name, Expr<A::Name, S>>>,
         S: Clone,
     {
-        type Value = Expr<S>;
+        type Value = Expr<A::Name, S>;
 
         fn emit_item(&mut self, item: Item<Self::Value>) {
             self.log.push(BackendEvent::EmitItem(item))
@@ -287,13 +303,48 @@ mod mock {
         }
     }
 
-    impl<T, S> StartSection<usize, S> for MockBackend<T>
+    impl<A, T, S> StartSection<A::Name, S> for MockBackend<A, T>
     where
-        T: From<BackendEvent<Expr<S>>>,
+        A: AllocName<S>,
+        T: From<BackendEvent<A::Name, Expr<A::Name, S>>>,
         S: Clone,
     {
-        fn start_section(&mut self, name: (usize, S)) {
+        fn start_section(&mut self, name: (A::Name, S)) {
             self.log.push(BackendEvent::StartSection(name))
+        }
+    }
+
+    pub struct SerialIdAllocator(usize);
+
+    impl SerialIdAllocator {
+        pub fn new() -> Self {
+            Self(0)
+        }
+    }
+
+    impl<S: Clone> AllocName<S> for SerialIdAllocator {
+        type Name = usize;
+
+        fn alloc_name(&mut self, _: S) -> Self::Name {
+            let id = self.0;
+            self.0 += 1;
+            id
+        }
+    }
+
+    pub struct PanickingIdAllocator<I>(PhantomData<I>);
+
+    impl<I> PanickingIdAllocator<I> {
+        pub fn new() -> Self {
+            Self(PhantomData)
+        }
+    }
+
+    impl<I: Clone, S: Clone> AllocName<S> for PanickingIdAllocator<I> {
+        type Name = I;
+
+        fn alloc_name(&mut self, _: S) -> Self::Name {
+            panic!("tried to allocate an ID")
         }
     }
 }

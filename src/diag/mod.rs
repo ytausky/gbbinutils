@@ -489,13 +489,17 @@ mod mock {
         }
     }
 
-    pub(crate) struct MockDiagnostics<T> {
+    pub(crate) struct MockDiagnostics<T, S> {
         log: Log<T>,
+        _span: PhantomData<S>,
     }
 
-    impl<T> MockDiagnostics<T> {
+    impl<T, S> MockDiagnostics<T, S> {
         pub fn new(log: Log<T>) -> Self {
-            Self { log }
+            Self {
+                log,
+                _span: PhantomData,
+            }
         }
 
         pub fn into_log(self) -> Vec<T>
@@ -506,11 +510,9 @@ mod mock {
         }
     }
 
-    impl<T> Clone for MockDiagnostics<T> {
+    impl<T, S> Clone for MockDiagnostics<T, S> {
         fn clone(&self) -> Self {
-            Self {
-                log: self.log.clone(),
-            }
+            Self::new(self.log.clone())
         }
     }
 
@@ -525,7 +527,11 @@ mod mock {
         }
     }
 
-    impl<T, S: Clone> StripSpan<S> for MockDiagnostics<T> {
+    impl<T, S: Clone> SpanSource for MockDiagnostics<T, S> {
+        type Span = S;
+    }
+
+    impl<T, S: Clone> StripSpan<S> for MockDiagnostics<T, S> {
         type Stripped = S;
 
         fn strip_span(&mut self, span: &S) -> Self::Stripped {
@@ -533,13 +539,13 @@ mod mock {
         }
     }
 
-    impl<T, S: Clone + Merge> MergeSpans<S> for MockDiagnostics<T> {
+    impl<T, S: Clone + Merge> MergeSpans<S> for MockDiagnostics<T, S> {
         fn merge_spans(&mut self, left: &S, right: &S) -> S {
             S::merge(left.clone(), right.clone())
         }
     }
 
-    impl<T, S> EmitDiag<S, S> for MockDiagnostics<T>
+    impl<T, S> EmitDiag<S, S> for MockDiagnostics<T, S>
     where
         T: From<DiagnosticsEvent<S>>,
         S: Clone,
@@ -549,7 +555,7 @@ mod mock {
         }
     }
 
-    pub(crate) struct MockDiagnosticsSystem<T, S>(MockDiagnostics<T>, PhantomData<S>);
+    pub(crate) struct MockDiagnosticsSystem<T, S>(MockDiagnostics<T, S>, PhantomData<S>);
 
     impl<T, S> MockDiagnosticsSystem<T, S> {
         pub fn new(log: Log<T>) -> Self {
@@ -585,7 +591,7 @@ mod mock {
         {T: From<DiagnosticsEvent<S>>, S: Default + Merge},
         MockDiagnosticsSystem<T, S>,
         {0},
-        MockDiagnostics<T>,
+        MockDiagnostics<T, S>,
         S
     }
 

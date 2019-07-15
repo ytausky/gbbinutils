@@ -8,9 +8,11 @@ use super::resolve::{Ident, NameTable, ResolvedIdent, StartScope};
 use super::{Command, Lex, LexItem, Literal, SemanticToken, StringSource, TokenSeq};
 
 use crate::codebase::CodebaseError;
-use crate::diag::span::SpanSource;
+use crate::diag::span::{AddMacroDef, SpanSource};
 use crate::diag::*;
 use crate::model::Item;
+
+use std::ops::DerefMut;
 
 #[cfg(test)]
 pub(crate) use self::mock::*;
@@ -42,29 +44,46 @@ where
 pub(super) trait BasicSession<R, S: Clone>
 where
     Self: Sized,
+    Self: AllocName<S>,
     Self: PartialBackend<S>,
-    Self: StartSection<Ident<R>, S>,
+    Self: StartSection<<Self as AllocName<S>>::Name, S>,
+    Self: StartScope<Ident<R>>,
+    Self: NameTable<Ident<R>, BackendEntry = <Self as AllocName<S>>::Name>,
     Self: Diagnostics<S>,
 {
-    type FnBuilder: ValueBuilder<Ident<R>, S> + FinishFnDef<Return = Self> + Diagnostics<S>;
-    type GeneralBuilder: ValueBuilder<Ident<R>, S>
+    type FnBuilder: ValueBuilder<Self::Name, S>
+        + AllocName<S, Name = Self::Name>
+        + NameTable<Ident<R>, BackendEntry = Self::Name>
+        + FinishFnDef<Return = Self>
+        + Diagnostics<S>;
+    type GeneralBuilder: ValueBuilder<Self::Name, S>
+        + AllocName<S, Name = Self::Name>
+        + NameTable<Ident<R>, BackendEntry = Self::Name>
         + Finish<S, Parent = Self, Value = Self::Value>
         + Diagnostics<S>;
 
     fn build_value(self) -> Self::GeneralBuilder;
-    fn define_symbol(self, name: Ident<R>, span: S) -> Self::FnBuilder;
+    fn define_symbol(self, name: Self::Name, span: S) -> Self::FnBuilder;
 }
 
 pub(super) type MacroArgs<I, S> = expand::MacroArgs<SemanticToken<I>, S>;
 pub(super) type Params<R, S> = (Vec<Ident<R>>, Vec<S>);
 
-pub(super) struct CompositeSession<'a, 'b, C, A, B, N, D>
-where
-    C: StringSource,
-    D: DiagnosticsSystem,
-{
-    upstream: Upstream<'a, 'b, C, A, C::StringRef, D::MacroDefHandle>,
-    downstream: Downstream<B, &'a mut N, Wrapper<'a, D>>,
+type FullSession<'a, 'b, C, A, B, N, D> =
+    CompositeSession<FullUpstream<'a, 'b, C, A, D>, B, &'a mut N, &'a mut D>;
+
+type FullUpstream<'a, 'b, C, A, D> = Upstream<
+    'a,
+    'b,
+    C,
+    A,
+    <C as StringSource>::StringRef,
+    <D as AddMacroDef<<D as SpanSource>::Span>>::MacroDefHandle,
+>;
+
+pub(super) struct CompositeSession<U, B, N, D> {
+    upstream: U,
+    downstream: Downstream<B, N, D>,
 }
 
 pub(super) struct Upstream<'a, 'b, C, A, R, H> {
@@ -81,9 +100,38 @@ pub(super) struct Downstream<B, N, D> {
     diagnostics: D,
 }
 
-pub(super) struct Wrapper<'a, D>(&'a mut D);
+impl<B: AllocName<S>, N, D, S: Clone> AllocName<S> for Downstream<B, N, D> {
+    type Name = B::Name;
 
-impl<'a, 'b, C, A, B, N, D> CompositeSession<'a, 'b, C, A, B, N, D>
+    fn alloc_name(&mut self, span: S) -> Self::Name {
+        self.backend.alloc_name(span)
+    }
+}
+
+impl<B, N, D, I> NameTable<I> for Downstream<B, N, D>
+where
+    N: DerefMut,
+    N::Target: NameTable<I>,
+{
+    type BackendEntry = <N::Target as NameTable<I>>::BackendEntry;
+    type MacroEntry = <N::Target as NameTable<I>>::MacroEntry;
+
+    fn get(&self, ident: &I) -> Option<ResolvedIdent<Self::BackendEntry, Self::MacroEntry>> {
+        self.names.get(ident)
+    }
+
+    fn insert(&mut self, ident: I, entry: ResolvedIdent<Self::BackendEntry, Self::MacroEntry>) {
+        self.names.insert(ident, entry)
+    }
+}
+
+impl<B: PushOp<T, S>, N, D, T, S: Clone> PushOp<T, S> for Downstream<B, N, D> {
+    fn push_op(&mut self, op: T, span: S) {
+        self.backend.push_op(op, span)
+    }
+}
+
+impl<'a, 'b, C, A, B, N, D> FullSession<'a, 'b, C, A, B, N, D>
 where
     C: StringSource,
     D: DiagnosticsSystem,
@@ -104,40 +152,14 @@ where
             downstream: Downstream {
                 backend,
                 names,
-                diagnostics: Wrapper(diagnostics),
+                diagnostics,
             },
         }
     }
 }
 
-impl<'a, B, N, D> Downstream<B, &'a mut N, Wrapper<'a, D>> {
-    fn look_up_symbol<R, S>(&mut self, ident: Ident<R>, span: &S) -> B::Name
-    where
-        B: AllocName<S>,
-        N: NameTable<Ident<R>, BackendEntry = B::Name>,
-        D: Diagnostics<S>,
-        S: Clone,
-    {
-        match self.names.get(&ident) {
-            Some(ResolvedIdent::Backend(id)) => id.clone(),
-            Some(ResolvedIdent::Macro(_)) => {
-                self.diagnostics
-                    .0
-                    .emit_diag(Message::MacroNameInExpr.at(span.clone()));
-                self.backend.alloc_name(span.clone())
-            }
-            None => {
-                let id = self.backend.alloc_name(span.clone());
-                self.names.insert(ident, ResolvedIdent::Backend(id.clone()));
-                id
-            }
-        }
-    }
-
-    fn replace_backend<T>(
-        self,
-        f: impl FnOnce(B) -> T,
-    ) -> Downstream<T, &'a mut N, Wrapper<'a, D>> {
+impl<B, N, D> Downstream<B, N, D> {
+    fn replace_backend<T>(self, f: impl FnOnce(B) -> T) -> Downstream<T, N, D> {
         Downstream {
             backend: f(self.backend),
             names: self.names,
@@ -153,7 +175,7 @@ where
 {
     codebase: &'a mut C,
     macros: MacroTable<C::StringRef, D::MacroDefHandle>,
-    downstream: Downstream<B, &'a mut N, Wrapper<'a, D>>,
+    downstream: Downstream<B, &'a mut N, &'a mut D>,
 }
 
 macro_rules! partial {
@@ -164,7 +186,7 @@ macro_rules! partial {
             downstream: Downstream {
                 backend: $session.downstream.backend,
                 names: $session.downstream.names,
-                diagnostics: Wrapper(&mut *$session.downstream.diagnostics.0),
+                diagnostics: $session.downstream.diagnostics,
             },
         }
     };
@@ -184,9 +206,9 @@ impl<'a, 'b, C, A: 'b, B, N, D> IntoSession<'b, A> for PartialSession<'a, C, B, 
 where
     C: StringSource,
     D: DiagnosticsSystem,
-    CompositeSession<'a, 'b, C, A, B, N, D>: Session + Into<Self>,
+    FullSession<'a, 'b, C, A, B, N, D>: Session + Into<Self>,
 {
-    type Session = CompositeSession<'a, 'b, C, A, B, N, D>;
+    type Session = FullSession<'a, 'b, C, A, B, N, D>;
 
     fn into_session(self, analyzer: &'b mut A) -> Self::Session {
         CompositeSession {
@@ -200,26 +222,26 @@ where
     }
 }
 
-impl<'a, 'b, C, A, B, N, D> From<CompositeSession<'a, 'b, C, A, B, N, D>>
+impl<'a, 'b, C, A, B, N, D> From<FullSession<'a, 'b, C, A, B, N, D>>
     for PartialSession<'a, C, B, N, D>
 where
     C: StringSource,
     D: DiagnosticsSystem,
 {
-    fn from(session: CompositeSession<'a, 'b, C, A, B, N, D>) -> Self {
+    fn from(session: FullSession<'a, 'b, C, A, B, N, D>) -> Self {
         partial!(session)
     }
 }
 
-impl<'a, 'b, C, A, B, N, D> SpanSource for CompositeSession<'a, 'b, C, A, B, N, D>
+impl<U, B, N, D> SpanSource for CompositeSession<U, B, N, D>
 where
-    C: StringSource,
-    D: DiagnosticsSystem,
+    D: DerefMut,
+    D::Target: SpanSource,
 {
-    type Span = D::Span;
+    type Span = <D::Target as SpanSource>::Span;
 }
 
-impl<'a, 'b, C, A, B, N, D> StringSource for CompositeSession<'a, 'b, C, A, B, N, D>
+impl<'a, 'b, C, A, B, N, D> StringSource for FullSession<'a, 'b, C, A, B, N, D>
 where
     C: StringSource,
     D: DiagnosticsSystem,
@@ -227,12 +249,7 @@ where
     type StringRef = C::StringRef;
 }
 
-impl<'a, 'b, C, A, B, N, D> PartialBackend<D::Span> for CompositeSession<'a, 'b, C, A, B, N, D>
-where
-    C: StringSource,
-    B: Backend<D::Span>,
-    D: DiagnosticsSystem,
-{
+impl<U, B: Backend<S>, N, D, S: Clone> PartialBackend<S> for CompositeSession<U, B, N, D> {
     type Value = B::Value;
 
     fn emit_item(&mut self, item: Item<Self::Value>) {
@@ -256,7 +273,7 @@ pub(super) trait Analyze<R: Clone + Eq, S: Clone> {
         P::Session: StringSource<StringRef = R> + SpanSource<Span = S>;
 }
 
-impl<'a, 'b, C, A, B, N, D> Session for CompositeSession<'a, 'b, C, A, B, N, D>
+impl<'a, 'b, C, A, B, N, D> Session for FullSession<'a, 'b, C, A, B, N, D>
 where
     C: Lex<D>,
     A: Analyze<C::StringRef, D::Span>,
@@ -269,7 +286,7 @@ where
         let tokens = match self
             .upstream
             .codebase
-            .lex_file(path, &mut *self.downstream.diagnostics.0)
+            .lex_file(path, self.downstream.diagnostics)
         {
             Ok(tokens) => tokens,
             Err(error) => return (Err(error), self),
@@ -297,7 +314,7 @@ where
             name.clone(),
             params,
             body,
-            self.downstream.diagnostics.0,
+            self.downstream.diagnostics,
         );
         self.downstream
             .names
@@ -309,18 +326,18 @@ where
         name: (Ident<Self::StringRef>, Self::Span),
         args: MacroArgs<Self::StringRef, Self::Span>,
     ) -> Self {
-        let stripped = self.downstream.diagnostics.0.strip_span(&name.1);
+        let stripped = self.downstream.diagnostics.strip_span(&name.1);
         let expansion = match self.downstream.names.get(&name.0) {
             Some(ResolvedIdent::Macro(MacroId(id))) => {
-                let def = &self.upstream.macros[*id];
-                Ok(def.expand(name.1, args, self.downstream.diagnostics.0))
+                let def = &self.upstream.macros[id];
+                Ok(def.expand(name.1, args, self.downstream.diagnostics))
             }
             Some(ResolvedIdent::Backend(_)) => {
                 Err(Message::CannotUseSymbolNameAsMacroName { name: stripped }.at(name.1))
             }
             None => Err(Message::UndefinedMacro { name: stripped }.at(name.1)),
         }
-        .map_err(|diag| self.downstream.diagnostics.0.emit_diag(diag))
+        .map_err(|diag| self.downstream.diagnostics.emit_diag(diag))
         .ok();
         if let Some(expansion) = expansion {
             let PartialSession {
@@ -338,16 +355,20 @@ where
     }
 }
 
-impl<'a, 'b, C, A, B, N, D> BasicSession<C::StringRef, D::Span>
-    for CompositeSession<'a, 'b, C, A, B, N, D>
+impl<U, B, N, D, R, S> BasicSession<R, S> for CompositeSession<U, B, N, D>
 where
-    C: StringSource,
-    B: Backend<D::Span>,
-    N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name> + StartScope<Ident<C::StringRef>>,
-    D: DiagnosticsSystem,
+    B: Backend<S>,
+    N: DerefMut,
+    N::Target: NameTable<Ident<R>, BackendEntry = B::Name> + StartScope<Ident<R>>,
+    D: DerefMut,
+    D::Target: Diagnostics<S>,
+    S: Clone,
+    Self: Diagnostics<S>,
+    Builder<U, B::SymbolBuilder, N, D>: Diagnostics<S>,
+    Builder<U, B::ImmediateBuilder, N, D>: Diagnostics<S>,
 {
-    type FnBuilder = Builder<'a, 'b, C, A, B::SymbolBuilder, N, D>;
-    type GeneralBuilder = Builder<'a, 'b, C, A, B::ImmediateBuilder, N, D>;
+    type FnBuilder = Builder<U, B::SymbolBuilder, N, D>;
+    type GeneralBuilder = Builder<U, B::ImmediateBuilder, N, D>;
 
     fn build_value(self) -> Self::GeneralBuilder {
         RelocContext {
@@ -356,37 +377,70 @@ where
         }
     }
 
-    fn define_symbol(mut self, name: Ident<C::StringRef>, span: D::Span) -> Self::FnBuilder {
-        self.downstream.names.start_scope(&name);
-        let id = self.downstream.look_up_symbol(name, &span);
+    fn define_symbol(self, name: B::Name, span: S) -> Self::FnBuilder {
         RelocContext {
             parent: self.upstream,
             builder: self
                 .downstream
-                .replace_backend(|backend| backend.define_symbol(id, span)),
+                .replace_backend(|backend| backend.define_symbol(name, span)),
         }
     }
 }
 
-delegate_diagnostics! {
-    {'a, 'b, C: StringSource, A, B, N, D: DiagnosticsSystem},
-    CompositeSession<'a, 'b, C, A, B, N, D>,
-    {downstream.diagnostics},
-    D,
-    D::Span
+impl<U, B: AllocName<S>, N, D, S: Clone> AllocName<S> for CompositeSession<U, B, N, D> {
+    type Name = B::Name;
+
+    fn alloc_name(&mut self, span: S) -> Self::Name {
+        self.downstream.backend.alloc_name(span)
+    }
 }
 
-impl<'a, 'b, C, A, B, N, D> StartSection<Ident<C::StringRef>, D::Span>
-    for CompositeSession<'a, 'b, C, A, B, N, D>
+impl<U, B, N, D, R> NameTable<Ident<R>> for CompositeSession<U, B, N, D>
 where
-    C: StringSource,
-    B: Backend<D::Span>,
-    N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name>,
-    D: DiagnosticsSystem,
+    N: DerefMut,
+    N::Target: NameTable<Ident<R>>,
 {
-    fn start_section(&mut self, (ident, span): (Ident<C::StringRef>, D::Span)) {
-        let name = self.downstream.look_up_symbol(ident, &span);
-        self.downstream.backend.start_section((name, span))
+    type BackendEntry = <N::Target as NameTable<Ident<R>>>::BackendEntry;
+    type MacroEntry = <N::Target as NameTable<Ident<R>>>::MacroEntry;
+
+    fn get(&self, ident: &Ident<R>) -> Option<ResolvedIdent<Self::BackendEntry, Self::MacroEntry>> {
+        self.downstream.get(ident)
+    }
+
+    fn insert(
+        &mut self,
+        ident: Ident<R>,
+        entry: ResolvedIdent<Self::BackendEntry, Self::MacroEntry>,
+    ) {
+        self.downstream.insert(ident, entry)
+    }
+}
+
+delegate_diagnostics! {
+    {'a, U, B, N, D: Diagnostics<S>, S: Clone},
+    CompositeSession<U, B, N, &'a mut D>,
+    {downstream.diagnostics},
+    D,
+    S
+}
+
+impl<U, B, N, D, R> StartScope<Ident<R>> for CompositeSession<U, B, N, D>
+where
+    N: DerefMut,
+    N::Target: StartScope<Ident<R>>,
+{
+    fn start_scope(&mut self, ident: &Ident<R>) {
+        self.downstream.names.start_scope(ident)
+    }
+}
+
+impl<U, B, N, D, S> StartSection<B::Name, S> for CompositeSession<U, B, N, D>
+where
+    B: Backend<S>,
+    S: Clone,
+{
+    fn start_section(&mut self, id: (B::Name, S)) {
+        self.downstream.backend.start_section(id)
     }
 }
 
@@ -394,18 +448,18 @@ where
 mod mock {
     use super::*;
 
-    use crate::analysis::backend::{BackendEvent, MockSymbolBuilder};
-    use crate::diag::span::WithSpan;
+    use crate::analysis::backend::BackendEvent;
+    use crate::analysis::resolve::{MockNameTable, NameTableEvent};
     use crate::diag::{DiagnosticsEvent, MockDiagnostics};
     use crate::log::Log;
-    use crate::model::{Atom, ExprOp};
+    use crate::model::Atom;
 
     use std::marker::PhantomData;
 
-    type Expr<S> = crate::model::Expr<Atom<LocationCounter, Ident<String>>, S>;
+    type Expr<N, S> = crate::model::Expr<Atom<LocationCounter, N>, S>;
 
     #[derive(Debug, PartialEq)]
-    pub(crate) enum SessionEvent<S> {
+    pub(crate) enum SessionEvent {
         AnalyzeFile(String),
         DefineMacro(
             Ident<String>,
@@ -413,57 +467,67 @@ mod mock {
             Vec<SemanticToken<String>>,
         ),
         InvokeMacro(Ident<String>, Vec<Vec<SemanticToken<String>>>),
-        DefineSymbol((Ident<String>, S), Expr<S>),
     }
 
-    pub(in crate::analysis) struct MockSession<T, S> {
+    pub(in crate::analysis) type MockSession<A, N, T, S> = CompositeSession<
+        MockUpstream<T, S>,
+        MockBackend<A, T>,
+        Box<MockNameTable<N, T>>,
+        Box<MockDiagnostics<T, S>>,
+    >;
+
+    pub(in crate::analysis) struct MockUpstream<T, S> {
         log: Log<T>,
         error: Option<CodebaseError>,
-        diagnostics: MockDiagnostics<T>,
         _span: PhantomData<S>,
     }
 
-    impl<T, S> MockSession<T, S> {
-        pub fn new(log: Log<T>) -> Self {
+    impl<A, N, T, S> MockSession<A, N, T, S> {
+        pub fn with_name_table(alloc: A, names: N, log: Log<T>) -> Self {
             Self {
-                log: log.clone(),
-                error: None,
-                diagnostics: MockDiagnostics::new(log),
-                _span: PhantomData,
+                downstream: Downstream {
+                    backend: MockBackend::new(alloc, log.clone()),
+                    names: Box::new(MockNameTable::new(names, log.clone())),
+                    diagnostics: Box::new(MockDiagnostics::new(log.clone())),
+                },
+                upstream: MockUpstream {
+                    log,
+                    error: None,
+                    _span: PhantomData,
+                },
             }
         }
 
         pub fn fail(&mut self, error: CodebaseError) {
-            self.error = Some(error)
+            self.upstream.error = Some(error)
         }
     }
 
     delegate_diagnostics! {
-        {T: From<DiagnosticsEvent<S>>, S: Merge},
-        MockSession<T, S>,
-        {diagnostics},
-        MockDiagnostics<T>,
+        {A, N, T: From<DiagnosticsEvent<S>>, S: Merge},
+        MockSession<A, N, T, S>,
+        {downstream.diagnostics},
+        MockDiagnostics<T, S>,
         S
     }
 
-    impl<T, S: Clone + Merge> SpanSource for MockSession<T, S> {
-        type Span = S;
-    }
-
-    impl<T, S> StringSource for MockSession<T, S> {
+    impl<A, N, T, S> StringSource for MockSession<A, N, T, S> {
         type StringRef = String;
     }
 
-    impl<T, S> Session for MockSession<T, S>
+    impl<A, N, T, S> Session for MockSession<A, N, T, S>
     where
-        T: From<SessionEvent<S>>,
-        T: From<BackendEvent<Expr<S>>>,
+        A: AllocName<S>,
+        N: NameTable<Ident<String>, BackendEntry = A::Name>,
+        T: From<SessionEvent>,
+        T: From<BackendEvent<A::Name, Expr<A::Name, S>>>,
         T: From<DiagnosticsEvent<S>>,
+        T: From<NameTableEvent<N::BackendEntry, N::MacroEntry>>,
         S: Clone + Merge,
     {
         fn analyze_file(mut self, path: String) -> (Result<(), CodebaseError>, Self) {
-            self.log.push(SessionEvent::AnalyzeFile(path));
-            (self.error.take().map_or(Ok(()), Err), self)
+            self.upstream.log.push(SessionEvent::AnalyzeFile(path));
+            (self.upstream.error.take().map_or(Ok(()), Err), self)
         }
 
         fn define_macro(
@@ -472,7 +536,8 @@ mod mock {
             params: (Vec<Ident<Self::StringRef>>, Vec<Self::Span>),
             body: (Vec<SemanticToken<Self::StringRef>>, Vec<Self::Span>),
         ) {
-            self.log
+            self.upstream
+                .log
                 .push(SessionEvent::DefineMacro(name.0, params.0, body.0))
         }
 
@@ -481,149 +546,38 @@ mod mock {
             name: (Ident<Self::StringRef>, Self::Span),
             (args, _): MacroArgs<Self::StringRef, Self::Span>,
         ) -> Self {
-            self.log.push(SessionEvent::InvokeMacro(name.0, args));
+            self.upstream
+                .log
+                .push(SessionEvent::InvokeMacro(name.0, args));
             self
         }
     }
 
-    impl<T, S> BasicSession<String, S> for MockSession<T, S>
+    pub(in crate::analysis) type MockBuilder<U, A, N, T, S> = RelocContext<
+        U,
+        Downstream<
+            RelocContext<MockBackend<A, T>, Expr<<A as AllocName<S>>::Name, S>>,
+            Box<MockNameTable<N, T>>,
+            Box<MockDiagnostics<T, S>>,
+        >,
+    >;
+
+    impl<A, N, T, S> MockBuilder<(), A, N, T, S>
     where
-        T: From<SessionEvent<S>>,
-        T: From<BackendEvent<Expr<S>>>,
-        T: From<DiagnosticsEvent<S>>,
-        S: Clone + Merge,
-    {
-        type FnBuilder = MockSymbolBuilder<Self, Ident<String>, S>;
-        type GeneralBuilder = RelocContext<(), Downstream<Expr<S>, (), Self>>;
-
-        fn build_value(self) -> Self::GeneralBuilder {
-            RelocContext {
-                parent: (),
-                builder: Downstream {
-                    backend: Default::default(),
-                    names: (),
-                    diagnostics: self,
-                },
-            }
-        }
-
-        fn define_symbol(self, name: Ident<String>, span: S) -> Self::FnBuilder {
-            MockSymbolBuilder {
-                parent: self,
-                name: (name, span),
-                expr: Default::default(),
-            }
-        }
-    }
-
-    impl<T, S: Clone> Finish<S> for RelocContext<(), Downstream<Expr<S>, (), MockSession<T, S>>> {
-        type Parent = MockSession<T, S>;
-        type Value = Expr<S>;
-
-        fn finish(self) -> (Self::Parent, Self::Value) {
-            (self.builder.diagnostics, self.builder.backend)
-        }
-    }
-
-    impl<T, S> FinishFnDef for MockSymbolBuilder<MockSession<T, S>, Ident<String>, S>
-    where
-        T: From<SessionEvent<S>>,
-    {
-        type Return = MockSession<T, S>;
-
-        fn finish_fn_def(self) -> Self::Return {
-            let parent = self.parent;
-            parent
-                .log
-                .push(SessionEvent::DefineSymbol(self.name, self.expr));
-            parent
-        }
-    }
-
-    delegate_diagnostics! {
-        {T: From<DiagnosticsEvent<S>>, S: Merge},
-        MockSymbolBuilder<MockSession<T, S>, Ident<String>, S>,
-        {parent.diagnostics},
-        MockDiagnostics<T>,
-        S
-    }
-
-    impl<D, S> PushOp<Name<Ident<String>>, S> for RelocContext<(), Downstream<Expr<S>, (), D>>
-    where
+        A: AllocName<S>,
+        N: NameTable<Ident<String>>,
+        T: From<BackendEvent<A::Name, Expr<A::Name, S>>>,
         S: Clone,
     {
-        fn push_op(&mut self, Name(ident): Name<Ident<String>>, span: S) {
-            self.builder
-                .backend
-                .0
-                .push(ExprOp::Atom(Atom::Name(ident)).with_span(span))
-        }
-    }
-
-    impl<T, S> PushOp<Name<Ident<String>>, S> for RelocContext<MockDiagnostics<T>, Expr<S>>
-    where
-        T: From<DiagnosticsEvent<S>>,
-        S: Clone,
-    {
-        fn push_op(&mut self, Name(ident): Name<Ident<String>>, span: S) {
-            self.builder
-                .0
-                .push(ExprOp::Atom(Atom::Name(ident)).with_span(span))
-        }
-    }
-
-    impl<T, S> PartialBackend<S> for MockSession<T, S>
-    where
-        T: From<BackendEvent<Expr<S>>>,
-        S: Clone + Merge,
-    {
-        type Value = Expr<S>;
-
-        fn emit_item(&mut self, item: Item<Self::Value>) {
-            self.log.push(BackendEvent::EmitItem(item))
-        }
-
-        fn reserve(&mut self, bytes: Self::Value) {
-            self.log.push(BackendEvent::Reserve(bytes))
-        }
-
-        fn set_origin(&mut self, origin: Self::Value) {
-            self.log.push(BackendEvent::SetOrigin(origin))
-        }
-    }
-
-    impl<T, S> StartSection<Ident<String>, S> for MockSession<T, S>
-    where
-        T: From<BackendEvent<Expr<S>>>,
-        S: Clone + Merge,
-    {
-        fn start_section(&mut self, name: (Ident<String>, S)) {
-            self.log.push(BackendEvent::StartSection((0, name.1)))
-        }
-    }
-
-    pub(in crate::analysis) type MockBuilder<T, S> =
-        RelocContext<(), Downstream<Expr<S>, (), MockDiagnostics<T>>>;
-
-    impl<T, S> MockBuilder<T, S> {
-        pub fn with_log(log: Log<T>) -> Self {
+        pub fn from_components(alloc: A, names: N, log: Log<T>) -> Self {
             Self {
                 parent: (),
                 builder: Downstream {
-                    backend: Default::default(),
-                    names: (),
-                    diagnostics: MockDiagnostics::new(log),
+                    backend: MockBackend::new(alloc, log.clone()).build_immediate(),
+                    names: Box::new(MockNameTable::new(names, log.clone())),
+                    diagnostics: Box::new(MockDiagnostics::new(log)),
                 },
             }
-        }
-    }
-
-    impl<T, S: Clone> Finish<S> for MockBuilder<T, S> {
-        type Parent = MockDiagnostics<T>;
-        type Value = Expr<S>;
-
-        fn finish(self) -> (Self::Parent, Self::Value) {
-            (self.builder.diagnostics, self.builder.backend)
         }
     }
 }
@@ -632,14 +586,14 @@ mod mock {
 mod tests {
     use super::*;
 
-    use crate::analysis::backend::BackendEvent;
+    use crate::analysis::backend::{BackendEvent, SerialIdAllocator};
     use crate::analysis::resolve::{BasicNameTable, NameTableEvent};
     use crate::analysis::semantics::AnalyzerEvent;
     use crate::analysis::syntax::{Command, Directive, Mnemonic, Token};
     use crate::analysis::{Literal, MockCodebase};
     use crate::diag::DiagnosticsEvent;
     use crate::log::*;
-    use crate::model::{Atom, BinOp, Instruction, Nullary, Width};
+    use crate::model::{Atom, BinOp, Instruction, Nullary};
 
     use std::fmt::Debug;
     use std::iter;
@@ -657,16 +611,19 @@ mod tests {
     #[test]
     fn define_label() {
         let label = "label";
-        let log = Fixture::default().log_session(|session| {
-            let mut builder = session.define_symbol(label.into(), ());
+        let log = Fixture::default().log_session(|mut session| {
+            let id = session.alloc_name(());
+            session.insert(label.into(), ResolvedIdent::Backend(id.clone()));
+            let mut builder = session.define_symbol(id, ());
             builder.push_op(LocationCounter, ());
             builder.finish_fn_def();
         });
+        let id = 0;
         assert_eq!(
             log,
             [
-                NameTableEvent::StartScope(label.into()).into(),
-                BackendEvent::DefineSymbol((0, ()), LocationCounter.into()).into()
+                NameTableEvent::Insert(label.into(), ResolvedIdent::Backend(id)).into(),
+                BackendEvent::DefineSymbol((id, ()), LocationCounter.into()).into()
             ]
         );
     }
@@ -674,28 +631,17 @@ mod tests {
     #[test]
     fn start_section() {
         let name: Ident<_> = "my_section".into();
-        let log =
-            Fixture::default().log_session(|mut session| session.start_section((name.clone(), ())));
-        assert_eq!(log, [BackendEvent::StartSection((0, ())).into()])
-    }
-
-    #[test]
-    fn look_up_section_name_after_definition() {
-        let ident: Ident<_> = "my_section".into();
         let log = Fixture::default().log_session(|mut session| {
-            session.start_section((ident.clone(), ()));
-            let mut builder = session.build_value();
-            builder.push_op(Name(ident), ());
-            let (s, value) = Finish::finish(builder);
-            let item = Item::Data(value, Width::Word);
-            session = s;
-            session.emit_item(item)
+            let id = session.alloc_name(());
+            session.insert(name.clone(), ResolvedIdent::Backend(id));
+            session.start_section((id, ()))
         });
+        let id = 0;
         assert_eq!(
             log,
             [
-                BackendEvent::StartSection((0, ())).into(),
-                BackendEvent::EmitItem(Item::Data(Atom::Name(0).into(), Width::Word)).into()
+                NameTableEvent::Insert(name, ResolvedIdent::Backend(id)).into(),
+                BackendEvent::StartSection((id, ())).into()
             ]
         )
     }
@@ -724,10 +670,13 @@ mod tests {
         });
         assert_eq!(
             log,
-            [AnalyzerEvent::AnalyzeTokenSeq(
-                tokens.into_iter().map(|token| (Ok(token), ())).collect()
-            )
-            .into()]
+            [
+                NameTableEvent::Insert(name.into(), ResolvedIdent::Macro(MacroId(0))).into(),
+                AnalyzerEvent::AnalyzeTokenSeq(
+                    tokens.into_iter().map(|token| (Ok(token), ())).collect()
+                )
+                .into()
+            ]
         );
     }
 
@@ -751,13 +700,16 @@ mod tests {
         });
         assert_eq!(
             log,
-            [AnalyzerEvent::AnalyzeTokenSeq(
-                vec![db, arg, literal0]
-                    .into_iter()
-                    .map(|token| (Ok(token), ()))
-                    .collect()
-            )
-            .into()]
+            [
+                NameTableEvent::Insert(name.into(), ResolvedIdent::Macro(MacroId(0))).into(),
+                AnalyzerEvent::AnalyzeTokenSeq(
+                    vec![db, arg, literal0]
+                        .into_iter()
+                        .map(|token| (Ok(token), ()))
+                        .collect()
+                )
+                .into()
+            ]
         );
     }
 
@@ -780,13 +732,16 @@ mod tests {
         });
         assert_eq!(
             log,
-            [AnalyzerEvent::AnalyzeTokenSeq(
-                vec![Token::Label(label.into()), nop]
-                    .into_iter()
-                    .map(|token| (Ok(token), ()))
-                    .collect()
-            )
-            .into()]
+            [
+                NameTableEvent::Insert(name.into(), ResolvedIdent::Macro(MacroId(0))).into(),
+                AnalyzerEvent::AnalyzeTokenSeq(
+                    vec![Token::Label(label.into()), nop]
+                        .into_iter()
+                        .map(|token| (Ok(token), ()))
+                        .collect()
+                )
+                .into()
+            ]
         );
     }
 
@@ -836,7 +791,7 @@ mod tests {
         Fixture::default().log_session(|session| {
             let mut builder = session.build_value();
             builder.push_op(42, ());
-            builder.push_op(Name(Ident::from("ident")), ());
+            builder.push_op(Name(0), ());
             builder.push_op(BinOp::Multiplication, ());
             let (_, value) = builder.finish();
             assert_eq!(
@@ -851,62 +806,36 @@ mod tests {
     }
 
     #[test]
-    fn diagnose_macro_name_in_expr() {
-        let ident = Ident::from("my_macro");
-        let log = Fixture::<MockSpan<_>>::default().log_session(|mut session| {
-            session.define_macro(
-                (ident.clone(), "m".into()),
-                (vec![], vec![]),
-                (vec![], vec![]),
-            );
-            let mut builder = session.build_value();
-            builder.push_op(Name(ident), "ident".into());
-            let (mut session, value) = builder.finish();
-            session.emit_item(Item::Data(value, Width::Byte))
-        });
-        assert_eq!(
-            log,
-            [
-                DiagnosticsEvent::EmitDiag(Message::MacroNameInExpr.at("ident".into()).into())
-                    .into(),
-                BackendEvent::EmitItem(Item::Data(
-                    Expr::from_atom(Atom::Name(0), "ident".into()),
-                    Width::Byte
-                ))
-                .into(),
-            ]
-        )
-    }
-
-    #[test]
     fn diagnose_symbol_name_in_macro_call() {
         let name = "symbol";
         let as_macro = MockSpan::from("as_macro");
-        let log = Fixture::<MockSpan<_>>::default().log_session(|session| {
-            let mut builder = session.build_value();
-            builder.push_op(Name(Ident::from(name)), "as_symbol".into());
-            let (session, _) = builder.finish();
+        let log = Fixture::<MockSpan<_>>::default().log_session(|mut session| {
+            let id = session.alloc_name(MockSpan::from("as_symbol"));
+            session.insert(Ident::from(name), ResolvedIdent::Backend(id));
             session.call_macro((name.into(), as_macro.clone()), (vec![], vec![]));
         });
         assert_eq!(
             log,
-            [DiagnosticsEvent::EmitDiag(
-                Message::CannotUseSymbolNameAsMacroName {
-                    name: as_macro.clone()
-                }
-                .at(as_macro)
+            [
+                NameTableEvent::Insert(name.into(), ResolvedIdent::Backend(0)).into(),
+                DiagnosticsEvent::EmitDiag(
+                    Message::CannotUseSymbolNameAsMacroName {
+                        name: as_macro.clone()
+                    }
+                    .at(as_macro)
+                    .into()
+                )
                 .into()
-            )
-            .into()]
+            ]
         )
     }
 
     type MockAnalyzer<S> = crate::analysis::semantics::MockAnalyzer<Event<S>>;
-    type MockBackend<S> = crate::analysis::backend::MockBackend<Event<S>>;
+    type MockBackend<S> = crate::analysis::backend::MockBackend<SerialIdAllocator, Event<S>>;
     type MockDiagnosticsSystem<S> = crate::diag::MockDiagnosticsSystem<Event<S>, S>;
     type MockNameTable<S> =
         crate::analysis::resolve::MockNameTable<BasicNameTable<usize, MacroId>, Event<S>>;
-    type TestSession<'a, S> = CompositeSession<
+    type TestSession<'a, S> = FullSession<
         'a,
         'a,
         MockCodebase<S>,
@@ -919,8 +848,8 @@ mod tests {
     #[derive(Debug, PartialEq)]
     enum Event<S: Clone> {
         Frontend(AnalyzerEvent<S>),
-        Backend(BackendEvent<Expr<S>>),
-        NameTable(NameTableEvent),
+        Backend(BackendEvent<usize, Expr<S>>),
+        NameTable(NameTableEvent<usize, MacroId>),
         Diagnostics(DiagnosticsEvent<S>),
     }
 
@@ -930,14 +859,14 @@ mod tests {
         }
     }
 
-    impl<S: Clone> From<BackendEvent<Expr<S>>> for Event<S> {
-        fn from(event: BackendEvent<Expr<S>>) -> Self {
+    impl<S: Clone> From<BackendEvent<usize, Expr<S>>> for Event<S> {
+        fn from(event: BackendEvent<usize, Expr<S>>) -> Self {
             Event::Backend(event)
         }
     }
 
-    impl<S: Clone> From<NameTableEvent> for Event<S> {
-        fn from(event: NameTableEvent) -> Self {
+    impl<S: Clone> From<NameTableEvent<usize, MacroId>> for Event<S> {
+        fn from(event: NameTableEvent<usize, MacroId>) -> Self {
             Event::NameTable(event)
         }
     }
@@ -968,7 +897,7 @@ mod tests {
                 inner: InnerFixture {
                     codebase: MockCodebase::new(),
                     analyzer: MockAnalyzer::new(log.clone()),
-                    backend: Some(MockBackend::new(log.clone())),
+                    backend: Some(MockBackend::new(SerialIdAllocator::new(), log.clone())),
                     names: MockNameTable::new(BasicNameTable::new(), log.clone()),
                     diagnostics: MockDiagnosticsSystem::new(log.clone()),
                 },

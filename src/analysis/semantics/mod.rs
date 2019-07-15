@@ -1,6 +1,8 @@
 use self::command::CommandActions;
 use self::invoke::MacroCallActions;
-use self::params::ParamsAdapter;
+use self::params::{
+    BuilderAdapter, ConvertParams, NameResolver, RelocLookup, ResolveNames, WithParams,
+};
 
 use super::backend::{FinishFnDef, LocationCounter, PushOp};
 use super::session::{Analyze, IntoSession, Params, Session};
@@ -51,11 +53,21 @@ impl<S: Session> SemanticActions<S> {
 
     fn build_value<F, T>(&mut self, params: &Params<S::StringRef, S::Span>, f: F) -> T
     where
-        F: FnOnce(ParamsAdapter<S::GeneralBuilder, S::StringRef, S::Span>) -> (S, T),
+        F: FnOnce(
+            BuilderAdapter<
+                BuilderAdapter<S::GeneralBuilder, NameResolver>,
+                ConvertParams<S::StringRef, S::Span>,
+            >,
+        ) -> (S, T),
     {
-        let builder = self.session.take().unwrap().build_value();
-        let adapter = ParamsAdapter::new(builder, params);
-        let result = f(adapter);
+        let builder = self
+            .session
+            .take()
+            .unwrap()
+            .build_value()
+            .resolve_names()
+            .with_params(params);
+        let result = f(builder);
         self.session = Some(result.0);
         result.1
     }
@@ -134,8 +146,10 @@ impl<S: Session> StmtActions<S> {
 
     fn define_label_if_present(&mut self) {
         if let Some(((label, span), _params)) = self.label.take() {
-            self.parent.with_session(|session| {
-                let mut builder = session.define_symbol(label, span.clone());
+            self.parent.with_session(|mut session| {
+                session.start_scope(&label);
+                let id = session.reloc_lookup(label, span.clone());
+                let mut builder = session.define_symbol(id, span.clone());
                 PushOp::<LocationCounter, _>::push_op(&mut builder, LocationCounter, span);
                 builder.finish_fn_def()
             })
@@ -259,7 +273,10 @@ mod mock {
 mod tests {
     use super::*;
 
-    use crate::analysis::backend::BackendEvent;
+    pub use crate::analysis::resolve::BasicNameTable;
+
+    use crate::analysis::backend::{BackendEvent, Name, SerialIdAllocator};
+    use crate::analysis::resolve::{NameTableEvent, ResolvedIdent};
     use crate::analysis::session::SessionEvent;
     use crate::diag::{DiagnosticsEvent, Merge, Message};
     use crate::model::{Atom, BinOp, ExprOp, Instruction, Item, Width};
@@ -269,27 +286,34 @@ mod tests {
 
     #[derive(Debug, PartialEq)]
     pub(crate) enum TestOperation<S: Clone> {
-        Backend(BackendEvent<Expr<S>>),
+        Backend(BackendEvent<usize, Expr<S>>),
         Diagnostics(DiagnosticsEvent<S>),
-        Session(SessionEvent<S>),
+        NameTable(NameTableEvent<usize, usize>),
+        Session(SessionEvent),
     }
 
-    pub type Expr<S> = crate::model::Expr<Atom<LocationCounter, Ident<String>>, S>;
+    pub type Expr<S> = crate::model::Expr<Atom<LocationCounter, usize>, S>;
 
-    impl<'a, S: Clone> From<BackendEvent<Expr<S>>> for TestOperation<S> {
-        fn from(event: BackendEvent<Expr<S>>) -> Self {
+    impl<S: Clone> From<BackendEvent<usize, Expr<S>>> for TestOperation<S> {
+        fn from(event: BackendEvent<usize, Expr<S>>) -> Self {
             TestOperation::Backend(event)
         }
     }
 
-    impl<'a, S: Clone> From<DiagnosticsEvent<S>> for TestOperation<S> {
+    impl<S: Clone> From<DiagnosticsEvent<S>> for TestOperation<S> {
         fn from(event: DiagnosticsEvent<S>) -> Self {
             TestOperation::Diagnostics(event)
         }
     }
 
-    impl<'a, S: Clone> From<SessionEvent<S>> for TestOperation<S> {
-        fn from(event: SessionEvent<S>) -> Self {
+    impl<S: Clone> From<NameTableEvent<usize, usize>> for TestOperation<S> {
+        fn from(event: NameTableEvent<usize, usize>) -> Self {
+            TestOperation::NameTable(event)
+        }
+    }
+
+    impl<S: Clone> From<SessionEvent> for TestOperation<S> {
+        fn from(event: SessionEvent) -> Self {
             TestOperation::Session(event)
         }
     }
@@ -372,9 +396,10 @@ mod tests {
         assert_eq!(
             actions,
             [
+                NameTableEvent::Insert(ident, ResolvedIdent::Backend(0)).into(),
                 BackendEvent::EmitItem(Item::Instruction(Instruction::Rst(Expr::from_items(&[
                     1.into(),
-                    ident.into(),
+                    Name(0).into(),
                     ExprOp::FnCall(1).into()
                 ]))))
                 .into()
@@ -396,8 +421,8 @@ mod tests {
         assert_eq!(
             actions,
             [
-                BackendEvent::EmitItem(Item::Data(Atom::Name(label.into()).into(), Width::Word))
-                    .into()
+                NameTableEvent::Insert(label.into(), ResolvedIdent::Backend(0)).into(),
+                BackendEvent::EmitItem(Item::Data(Atom::Name(0).into(), Width::Word)).into()
             ]
         );
     }
@@ -410,7 +435,11 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [SessionEvent::DefineSymbol((label.into(), ()), LocationCounter.into()).into()]
+            [
+                NameTableEvent::StartScope(label.into()).into(),
+                NameTableEvent::Insert(label.into(), ResolvedIdent::Backend(0)).into(),
+                BackendEvent::DefineSymbol((0, ()), LocationCounter.into()).into()
+            ]
         )
     }
 
@@ -589,7 +618,12 @@ mod tests {
         )
     }
 
-    pub(super) type MockSession<S> = crate::analysis::session::MockSession<TestOperation<S>, S>;
+    pub(super) type MockSession<S> = crate::analysis::session::MockSession<
+        SerialIdAllocator,
+        BasicNameTable<usize, usize>,
+        TestOperation<S>,
+        S,
+    >;
 
     pub(super) fn collect_semantic_actions<F, S>(f: F) -> Vec<TestOperation<S>>
     where
@@ -597,7 +631,11 @@ mod tests {
         S: Clone + Debug + Merge,
     {
         crate::log::with_log(|log| {
-            f(SemanticActions::new(MockSession::new(log)));
+            f(SemanticActions::new(MockSession::with_name_table(
+                SerialIdAllocator::new(),
+                BasicNameTable::new(),
+                log,
+            )));
         })
     }
 

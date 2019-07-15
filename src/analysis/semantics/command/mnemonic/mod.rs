@@ -405,8 +405,12 @@ mod tests {
     pub(crate) use crate::diag::Message;
     pub use crate::span::{MergeSpans, SpanSource};
 
+    use self::operand::tests::Event;
+
     use super::*;
 
+    use crate::analysis::backend::PanickingIdAllocator;
+    use crate::analysis::resolve::FakeNameTable;
     use crate::analysis::semantics::command::*;
     use crate::analysis::{Ident, Literal};
     use crate::model::{Atom, LocationCounter};
@@ -817,7 +821,7 @@ mod tests {
 
     pub(super) struct AnalysisResult(InnerAnalysisResult);
 
-    type InnerAnalysisResult = Result<Instruction<Expr>, Vec<DiagnosticsEvent<TokenSpan>>>;
+    type InnerAnalysisResult = Result<Instruction<Expr>, Vec<Event<TokenSpan>>>;
 
     impl AnalysisResult {
         pub fn expect_instruction(self, expected: Instruction<Expr>) {
@@ -830,7 +834,8 @@ mod tests {
                 self.0,
                 Err(vec![DiagnosticsEvent::EmitDiag(
                     expected.message.at(expected.highlight.unwrap()).into()
-                )])
+                )
+                .into()])
             )
         }
     }
@@ -849,10 +854,23 @@ mod tests {
                 .enumerate()
                 .map(add_token_spans)
                 .map(|op| {
-                    analyze_operand(op, mnemonic.context(), MockBuilder::with_log(log.clone())).1
+                    analyze_operand(
+                        op,
+                        mnemonic.context(),
+                        MockBuilder::from_components(
+                            PanickingIdAllocator::new(),
+                            FakeNameTable,
+                            log.clone(),
+                        ),
+                    )
+                    .1
                 })
                 .collect();
-            let mut session = MockSession::new(log);
+            let mut session = MockSession::with_name_table(
+                PanickingIdAllocator::<Ident<String>>::new(),
+                FakeNameTable,
+                log,
+            );
             result = Some(analyze_instruction(
                 (mnemonic, TokenId::Mnemonic.into()),
                 operands,

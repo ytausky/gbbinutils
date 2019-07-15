@@ -13,6 +13,7 @@ pub(super) type MacroTable<I, L, C, H> = Vec<MacroDef<I, Token<I, L, C>, H>>;
 
 pub(super) type MacroArgs<T, S> = (Vec<Vec<T>>, Vec<Vec<S>>);
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct MacroId(pub(super) usize);
 
 pub(super) trait DefineMacro<I, T, H: Clone> {

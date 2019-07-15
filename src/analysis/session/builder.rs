@@ -1,44 +1,54 @@
-use super::{CompositeSession, Downstream, StringSource, Upstream, Wrapper};
+use super::{CompositeSession, Downstream};
 
 use crate::analysis::backend::{AllocName, Finish, FinishFnDef, Name, PushOp, RelocContext};
-use crate::analysis::resolve::{Ident, NameTable};
-use crate::diag::span::{AddMacroDef, SpanSource};
-use crate::diag::{Diagnostics, DiagnosticsSystem};
-use crate::model::{BinOp, FnCall, LocationCounter, ParamId};
+use crate::analysis::resolve::{Ident, NameTable, ResolvedIdent};
+use crate::diag::Diagnostics;
 
-pub(super) type Builder<'a, 'b, C, A, B, N, D> = RelocContext<
-    Upstream<
-        'a,
-        'b,
-        C,
-        A,
-        <C as StringSource>::StringRef,
-        <D as AddMacroDef<<D as SpanSource>::Span>>::MacroDefHandle,
-    >,
-    Downstream<B, &'a mut N, Wrapper<'a, D>>,
->;
+use std::ops::DerefMut;
 
-impl<'a, 'b, C, A, B, N, D> PushOp<Name<Ident<C::StringRef>>, D::Span>
-    for Builder<'a, 'b, C, A, B, N, D>
-where
-    C: StringSource,
-    B: AllocName<D::Span> + PushOp<Name<<B as AllocName<D::Span>>::Name>, D::Span>,
-    N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name>,
-    D: DiagnosticsSystem,
-{
-    fn push_op(&mut self, Name(ident): Name<Ident<C::StringRef>>, span: D::Span) {
-        let id = self.builder.look_up_symbol(ident, &span);
-        self.builder.backend.push_op(Name(id), span)
+pub(super) type Builder<U, B, N, D> = RelocContext<U, Downstream<B, N, D>>;
+
+impl<U, B: AllocName<S>, N, D, S: Clone> AllocName<S> for Builder<U, B, N, D> {
+    type Name = B::Name;
+
+    fn alloc_name(&mut self, span: S) -> Self::Name {
+        self.builder.backend.alloc_name(span)
     }
 }
 
-impl<'a, 'b, C, A, B, N, D> Finish<D::Span> for Builder<'a, 'b, C, A, B, N, D>
+impl<U, B, N, D, R> NameTable<Ident<R>> for Builder<U, B, N, D>
 where
-    C: StringSource,
-    B: Finish<D::Span>,
-    D: DiagnosticsSystem,
+    N: DerefMut,
+    N::Target: NameTable<Ident<R>>,
 {
-    type Parent = CompositeSession<'a, 'b, C, A, B::Parent, N, D>;
+    type BackendEntry = <N::Target as NameTable<Ident<R>>>::BackendEntry;
+    type MacroEntry = <N::Target as NameTable<Ident<R>>>::MacroEntry;
+
+    fn get(&self, ident: &Ident<R>) -> Option<ResolvedIdent<Self::BackendEntry, Self::MacroEntry>> {
+        self.builder.names.get(ident)
+    }
+
+    fn insert(
+        &mut self,
+        ident: Ident<R>,
+        entry: ResolvedIdent<Self::BackendEntry, Self::MacroEntry>,
+    ) {
+        self.builder.names.insert(ident, entry)
+    }
+}
+
+impl<U, B, N, D, S> PushOp<Name<B::Name>, S> for Builder<U, B, N, D>
+where
+    B: AllocName<S> + PushOp<Name<<B as AllocName<S>>::Name>, S>,
+    S: Clone,
+{
+    fn push_op(&mut self, name: Name<B::Name>, span: S) {
+        self.builder.backend.push_op(name, span)
+    }
+}
+
+impl<U, B: Finish<S>, N, D, S: Clone> Finish<S> for Builder<U, B, N, D> {
+    type Parent = CompositeSession<U, B::Parent, N, D>;
     type Value = B::Value;
 
     fn finish(self) -> (Self::Parent, Self::Value) {
@@ -55,13 +65,8 @@ where
     }
 }
 
-impl<'a, 'b, C, A, B, N, D> FinishFnDef for Builder<'a, 'b, C, A, B, N, D>
-where
-    C: StringSource,
-    B: FinishFnDef,
-    D: DiagnosticsSystem,
-{
-    type Return = CompositeSession<'a, 'b, C, A, B::Return, N, D>;
+impl<U, B: FinishFnDef, N, D> FinishFnDef for Builder<U, B, N, D> {
+    type Return = CompositeSession<U, B::Return, N, D>;
 
     fn finish_fn_def(self) -> Self::Return {
         CompositeSession {
@@ -71,38 +76,23 @@ where
     }
 }
 
-macro_rules! impl_push_op_for_downstream {
-    ($t:ty) => {
-        impl<B, N, D, S> PushOp<$t, S> for Downstream<B, N, D>
-        where
-            B: PushOp<$t, S>,
-            S: Clone,
-        {
-            fn push_op(&mut self, op: $t, span: S) {
-                self.backend.push_op(op, span)
-            }
-        }
-    };
-}
-
-impl_push_op_for_downstream! {LocationCounter}
-impl_push_op_for_downstream! {i32}
-impl_push_op_for_downstream! {BinOp}
-impl_push_op_for_downstream! {ParamId}
-impl_push_op_for_downstream! {FnCall}
-
 delegate_diagnostics! {
-    {P, B, N, D: Diagnostics<S>, S},
-    RelocContext<P, Downstream<B, N, D>>,
+    {'a, P, B, N, D: Diagnostics<S>, S},
+    RelocContext<P, Downstream<B, N, &'a mut D>>,
     {builder.diagnostics},
     D,
     S
 }
 
-delegate_diagnostics! {
-    {'a, D: Diagnostics<S>, S},
-    Wrapper<'a, D>,
-    {0},
-    D,
-    S
+#[cfg(test)]
+mod mock {
+    use super::{Diagnostics, Downstream, RelocContext};
+
+    delegate_diagnostics! {
+        {P, B, N, D: Diagnostics<S>, S},
+        RelocContext<P, Downstream<B, N, Box<D>>>,
+        {builder.diagnostics},
+        D,
+        S
+    }
 }

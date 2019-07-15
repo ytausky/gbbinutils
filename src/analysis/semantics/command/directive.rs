@@ -1,5 +1,5 @@
 use super::super::Label;
-use super::{Arg, ArgAtom, ArgVariant, CommandArgs, Directive, SemanticActions};
+use super::{Arg, ArgAtom, ArgVariant, CommandArgs, Directive, RelocLookup, SemanticActions};
 
 use crate::analysis::session::Session;
 use crate::analysis::Literal;
@@ -76,8 +76,10 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
     }
 
     fn analyze_section(mut self) {
-        let name = self.label.take().unwrap().0;
-        self.actions.session().start_section(name)
+        let (name, span) = self.label.take().unwrap().0;
+        let session = self.actions.session();
+        let id = session.reloc_lookup(name, span.clone());
+        session.start_section((id, span))
     }
 
     fn analyze_include(self) {
@@ -141,7 +143,8 @@ fn single_arg<T, D: Diagnostics<S>, S>(
 mod tests {
     use super::*;
 
-    use crate::analysis::backend::BackendEvent;
+    use crate::analysis::backend::{BackendEvent, SerialIdAllocator};
+    use crate::analysis::resolve::{NameTableEvent, ResolvedIdent};
     use crate::analysis::semantics::command;
     use crate::analysis::semantics::tests::*;
     use crate::analysis::session::SessionEvent;
@@ -282,7 +285,8 @@ mod tests {
     fn include_file_with_invalid_utf8() {
         let name = "invalid_utf8.s";
         let log = with_log(|log| {
-            let mut session = MockSession::new(log);
+            let mut session =
+                MockSession::with_name_table(SerialIdAllocator::new(), BasicNameTable::new(), log);
             session.fail(CodebaseError::Utf8Error);
             let mut context = SemanticActions::new(session)
                 .enter_unlabeled_stmt()
@@ -305,7 +309,8 @@ mod tests {
         let name = "nonexistent.s";
         let message = "some message";
         let log = with_log(|log| {
-            let mut session = MockSession::new(log);
+            let mut session =
+                MockSession::with_name_table(SerialIdAllocator::new(), BasicNameTable::new(), log);
             session.fail(CodebaseError::IoError(io::Error::new(
                 io::ErrorKind::NotFound,
                 message,
@@ -342,7 +347,10 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [SessionEvent::DefineSymbol((symbol.into(), ()), value.into()).into()]
+            [
+                NameTableEvent::Insert(symbol.into(), ResolvedIdent::Backend(0)).into(),
+                BackendEvent::DefineSymbol((0, ()), value.into()).into()
+            ]
         )
     }
 
@@ -362,7 +370,10 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [SessionEvent::DefineSymbol((name.into(), ()), Atom::from(ParamId(0)).into()).into()]
+            [
+                NameTableEvent::Insert(name.into(), ResolvedIdent::Backend(0)).into(),
+                BackendEvent::DefineSymbol((0, ()), Atom::from(ParamId(0)).into()).into()
+            ]
         )
     }
 
@@ -377,7 +388,13 @@ mod tests {
                 .exit()
                 .exit()
         });
-        assert_eq!(actions, [BackendEvent::StartSection((0, ())).into()])
+        assert_eq!(
+            actions,
+            [
+                NameTableEvent::Insert(name.into(), ResolvedIdent::Backend(0)).into(),
+                BackendEvent::StartSection((0, ())).into()
+            ]
+        )
     }
 
     fn ds(f: impl FnOnce(&mut TestExprContext<()>)) -> Vec<TestOperation<()>> {

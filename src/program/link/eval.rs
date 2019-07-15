@@ -260,7 +260,7 @@ mod tests {
     use crate::diag::*;
     use crate::log::Log;
 
-    type MockDiagnostics<S> = crate::diag::MockDiagnostics<DiagnosticsEvent<S>>;
+    type MockDiagnostics<S> = crate::diag::MockDiagnostics<DiagnosticsEvent<S>, S>;
 
     #[test]
     fn eval_section_addr() {
