@@ -1,4 +1,3 @@
-use crate::analysis::resolve::{NameTable, ResolvedIdent};
 use crate::analysis::Token;
 use crate::diag::span::*;
 
@@ -10,7 +9,11 @@ pub(super) trait Expand<T, H, F: MacroContextFactory<H, S>, S: Clone> {
     fn expand(&self, name: S, args: MacroArgs<T, S>, factory: &mut F) -> Self::Iter;
 }
 
+pub(super) type MacroTable<I, L, C, H> = Vec<MacroDef<I, Token<I, L, C>, H>>;
+
 pub(super) type MacroArgs<T, S> = (Vec<Vec<T>>, Vec<Vec<S>>);
+
+pub struct MacroId(pub(super) usize);
 
 pub(super) trait DefineMacro<I, T, H: Clone> {
     fn define_macro<D, S>(
@@ -19,37 +22,34 @@ pub(super) trait DefineMacro<I, T, H: Clone> {
         params: (Vec<I>, Vec<S>),
         body: (Vec<T>, Vec<S>),
         diagnostics: &mut D,
-    ) where
+    ) -> MacroId
+    where
         D: AddMacroDef<S, MacroDefHandle = H> + MacroContextFactory<H, S>,
         S: Clone;
 }
 
-impl<I, L, C, N, H> DefineMacro<I, Token<I, L, C>, H> for N
-where
-    N: NameTable<I, MacroEntry = MacroDef<I, Token<I, L, C>, H>>,
-    H: Clone,
-{
+impl<I, L, C, H: Clone> DefineMacro<I, Token<I, L, C>, H> for MacroTable<I, L, C, H> {
     fn define_macro<D, S>(
         &mut self,
         name: (I, S),
         params: (Vec<I>, Vec<S>),
         body: (Vec<Token<I, L, C>>, Vec<S>),
         diagnostics: &mut D,
-    ) where
+    ) -> MacroId
+    where
         D: AddMacroDef<S, MacroDefHandle = H> + MacroContextFactory<H, S>,
         S: Clone,
     {
         let context = diagnostics.add_macro_def(name.1, params.1, body.1);
-        self.insert(
-            name.0,
-            ResolvedIdent::Macro(MacroDef {
-                tokens: Rc::new(MacroDefTokens {
-                    params: params.0,
-                    body: body.0,
-                }),
-                spans: context,
+        let id = MacroId(self.len());
+        self.push(MacroDef {
+            tokens: Rc::new(MacroDefTokens {
+                params: params.0,
+                body: body.0,
             }),
-        )
+            spans: context,
+        });
+        id
     }
 }
 

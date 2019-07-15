@@ -1,11 +1,11 @@
 pub use super::backend::ValueBuilder;
 
 use self::builder::Builder;
-use self::expand::{DefineMacro, Expand, MacroDef};
+use self::expand::{DefineMacro, Expand, MacroId};
 
 use super::backend::*;
 use super::resolve::{Ident, NameTable, ResolvedIdent, StartScope};
-use super::{Lex, LexItem, SemanticToken, StringSource, TokenSeq};
+use super::{Command, Lex, LexItem, Literal, SemanticToken, StringSource, TokenSeq};
 
 use crate::codebase::CodebaseError;
 use crate::diag::span::SpanSource;
@@ -31,6 +31,7 @@ where
         params: Params<Self::StringRef, Self::Span>,
         body: TokenSeq<Self::StringRef, Self::Span>,
     );
+
     fn call_macro(
         self,
         name: (Ident<Self::StringRef>, Self::Span),
@@ -72,7 +73,7 @@ pub(super) struct Upstream<'a, 'b, C, A, R, H> {
     macros: MacroTable<R, H>,
 }
 
-type MacroTable<R, H> = Vec<MacroDef<Ident<R>, SemanticToken<R>, H>>;
+type MacroTable<R, H> = self::expand::MacroTable<Ident<R>, Literal<R>, Command, H>;
 
 pub(super) struct Downstream<B, N, D> {
     backend: B,
@@ -260,15 +261,8 @@ where
     C: Lex<D>,
     A: Analyze<C::StringRef, D::Span>,
     B: Backend<D::Span>,
-    N: NameTable<
-            Ident<C::StringRef>,
-            BackendEntry = B::Name,
-            MacroEntry = MacroDef<
-                Ident<C::StringRef>,
-                SemanticToken<C::StringRef>,
-                D::MacroDefHandle,
-            >,
-        > + StartScope<Ident<C::StringRef>>,
+    N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name, MacroEntry = MacroId>
+        + StartScope<Ident<C::StringRef>>,
     D: DiagnosticsSystem,
 {
     fn analyze_file(mut self, path: Self::StringRef) -> (Result<(), CodebaseError>, Self) {
@@ -299,9 +293,15 @@ where
         params: Params<Self::StringRef, Self::Span>,
         body: TokenSeq<Self::StringRef, Self::Span>,
     ) {
+        let id = self.upstream.macros.define_macro(
+            name.clone(),
+            params,
+            body,
+            self.downstream.diagnostics.0,
+        );
         self.downstream
             .names
-            .define_macro(name, params, body, self.downstream.diagnostics.0)
+            .insert(name.0, ResolvedIdent::Macro(id))
     }
 
     fn call_macro(
@@ -311,8 +311,9 @@ where
     ) -> Self {
         let stripped = self.downstream.diagnostics.0.strip_span(&name.1);
         let expansion = match self.downstream.names.get(&name.0) {
-            Some(ResolvedIdent::Macro(entry)) => {
-                Ok(entry.expand(name.1, args, self.downstream.diagnostics.0))
+            Some(ResolvedIdent::Macro(MacroId(id))) => {
+                let def = &self.upstream.macros[*id];
+                Ok(def.expand(name.1, args, self.downstream.diagnostics.0))
             }
             Some(ResolvedIdent::Backend(_)) => {
                 Err(Message::CannotUseSymbolNameAsMacroName { name: stripped }.at(name.1))
@@ -636,7 +637,6 @@ mod tests {
     use crate::analysis::semantics::AnalyzerEvent;
     use crate::analysis::syntax::{Command, Directive, Mnemonic, Token};
     use crate::analysis::{Literal, MockCodebase};
-    use crate::diag::span::AddMacroDef;
     use crate::diag::DiagnosticsEvent;
     use crate::log::*;
     use crate::model::{Atom, BinOp, Instruction, Nullary, Width};
@@ -901,19 +901,11 @@ mod tests {
         )
     }
 
-    type MacroEntry<R, D> = MacroDef<
-        Ident<R>,
-        SemanticToken<R>,
-        <D as AddMacroDef<<D as SpanSource>::Span>>::MacroDefHandle,
-    >;
-
     type MockAnalyzer<S> = crate::analysis::semantics::MockAnalyzer<Event<S>>;
     type MockBackend<S> = crate::analysis::backend::MockBackend<Event<S>>;
     type MockDiagnosticsSystem<S> = crate::diag::MockDiagnosticsSystem<Event<S>, S>;
-    type MockNameTable<S> = crate::analysis::resolve::MockNameTable<
-        BasicNameTable<usize, MacroEntry<String, MockDiagnosticsSystem<S>>>,
-        Event<S>,
-    >;
+    type MockNameTable<S> =
+        crate::analysis::resolve::MockNameTable<BasicNameTable<usize, MacroId>, Event<S>>;
     type TestSession<'a, S> = CompositeSession<
         'a,
         'a,
