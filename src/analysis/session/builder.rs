@@ -1,4 +1,4 @@
-use super::{CompositeSession, Downstream, Lex, StringSource, Upstream, Wrapper};
+use super::{CompositeSession, Downstream, StringSource, Upstream, Wrapper};
 
 use crate::analysis::backend::{AllocName, Finish, FinishFnDef, Name, PushOp, RelocContext};
 use crate::analysis::resolve::{Ident, NameTable};
@@ -21,7 +21,7 @@ pub(super) type Builder<'a, 'b, C, A, B, N, D> = RelocContext<
 impl<'a, 'b, C, A, B, N, D> PushOp<Name<Ident<C::StringRef>>, D::Span>
     for Builder<'a, 'b, C, A, B, N, D>
 where
-    C: Lex<D>,
+    C: StringSource,
     B: AllocName<D::Span> + PushOp<Name<<B as AllocName<D::Span>>::Name>, D::Span>,
     N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name>,
     D: DiagnosticsSystem,
@@ -34,7 +34,7 @@ where
 
 impl<'a, 'b, C, A, B, N, D> Finish<D::Span> for Builder<'a, 'b, C, A, B, N, D>
 where
-    C: Lex<D>,
+    C: StringSource,
     B: Finish<D::Span>,
     D: DiagnosticsSystem,
 {
@@ -57,7 +57,7 @@ where
 
 impl<'a, 'b, C, A, B, N, D> FinishFnDef for Builder<'a, 'b, C, A, B, N, D>
 where
-    C: Lex<D>,
+    C: StringSource,
     B: FinishFnDef,
     D: DiagnosticsSystem,
 {

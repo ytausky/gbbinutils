@@ -60,7 +60,7 @@ pub(super) type Params<R, S> = (Vec<Ident<R>>, Vec<S>);
 
 pub(super) struct CompositeSession<'a, 'b, C, A, B, N, D>
 where
-    C: Lex<D>,
+    C: StringSource,
     D: DiagnosticsSystem,
 {
     upstream: Upstream<'a, 'b, C, A, C::StringRef, D::MacroDefHandle>,
@@ -85,7 +85,7 @@ pub(super) struct Wrapper<'a, D>(&'a mut D);
 
 impl<'a, 'b, C, A, B, N, D> CompositeSession<'a, 'b, C, A, B, N, D>
 where
-    C: Lex<D>,
+    C: StringSource,
     D: DiagnosticsSystem,
 {
     pub fn new(
@@ -148,7 +148,7 @@ impl<'a, B, N, D> Downstream<B, &'a mut N, Wrapper<'a, D>> {
 
 pub(super) struct PartialSession<'a, C, B, N, D>
 where
-    C: Lex<D>,
+    C: StringSource,
     D: DiagnosticsSystem,
 {
     codebase: &'a mut C,
@@ -182,7 +182,7 @@ where
 
 impl<'a, 'b, C, A: 'b, B, N, D> IntoSession<'b, A> for PartialSession<'a, C, B, N, D>
 where
-    C: Lex<D>,
+    C: StringSource,
     D: DiagnosticsSystem,
     CompositeSession<'a, 'b, C, A, B, N, D>: Session + Into<Self>,
 {
@@ -203,7 +203,7 @@ where
 impl<'a, 'b, C, A, B, N, D> From<CompositeSession<'a, 'b, C, A, B, N, D>>
     for PartialSession<'a, C, B, N, D>
 where
-    C: Lex<D>,
+    C: StringSource,
     D: DiagnosticsSystem,
 {
     fn from(session: CompositeSession<'a, 'b, C, A, B, N, D>) -> Self {
@@ -213,7 +213,7 @@ where
 
 impl<'a, 'b, C, A, B, N, D> SpanSource for CompositeSession<'a, 'b, C, A, B, N, D>
 where
-    C: Lex<D>,
+    C: StringSource,
     D: DiagnosticsSystem,
 {
     type Span = D::Span;
@@ -221,7 +221,7 @@ where
 
 impl<'a, 'b, C, A, B, N, D> StringSource for CompositeSession<'a, 'b, C, A, B, N, D>
 where
-    C: Lex<D>,
+    C: StringSource,
     D: DiagnosticsSystem,
 {
     type StringRef = C::StringRef;
@@ -229,7 +229,7 @@ where
 
 impl<'a, 'b, C, A, B, N, D> PartialBackend<D::Span> for CompositeSession<'a, 'b, C, A, B, N, D>
 where
-    C: Lex<D>,
+    C: StringSource,
     B: Backend<D::Span>,
     D: DiagnosticsSystem,
 {
@@ -341,7 +341,7 @@ where
 impl<'a, 'b, C, A, B, N, D> BasicSession<C::StringRef, D::Span>
     for CompositeSession<'a, 'b, C, A, B, N, D>
 where
-    C: Lex<D>,
+    C: StringSource,
     B: Backend<D::Span>,
     N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name> + StartScope<Ident<C::StringRef>>,
     D: DiagnosticsSystem,
@@ -369,7 +369,7 @@ where
 }
 
 delegate_diagnostics! {
-    {'a, 'b, C: Lex<D>, A, B, N, D: DiagnosticsSystem},
+    {'a, 'b, C: StringSource, A, B, N, D: DiagnosticsSystem},
     CompositeSession<'a, 'b, C, A, B, N, D>,
     {downstream.diagnostics},
     D,
@@ -379,7 +379,7 @@ delegate_diagnostics! {
 impl<'a, 'b, C, A, B, N, D> StartSection<Ident<C::StringRef>, D::Span>
     for CompositeSession<'a, 'b, C, A, B, N, D>
 where
-    C: Lex<D>,
+    C: StringSource,
     B: Backend<D::Span>,
     N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name>,
     D: DiagnosticsSystem,
