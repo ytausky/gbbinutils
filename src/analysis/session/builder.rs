@@ -1,30 +1,42 @@
-use super::{CompositeSession, Downstream, Upstream, Wrapper};
+use super::{CompositeSession, Downstream, Lex, StringSource, Upstream, Wrapper};
 
 use crate::analysis::backend::{AllocName, Finish, FinishFnDef, Name, PushOp, RelocContext};
 use crate::analysis::resolve::{Ident, NameTable};
-use crate::diag::Diagnostics;
+use crate::diag::span::{AddMacroDef, SpanSource};
+use crate::diag::{Diagnostics, DiagnosticsSystem};
 use crate::model::{BinOp, FnCall, LocationCounter, ParamId};
 
-pub(super) type Builder<'a, 'b, C, A, B, N, D> =
-    RelocContext<Upstream<'a, 'b, C, A>, Downstream<B, &'a mut N, Wrapper<'a, D>>>;
+pub(super) type Builder<'a, 'b, C, A, B, N, D> = RelocContext<
+    Upstream<
+        'a,
+        'b,
+        C,
+        A,
+        <C as StringSource>::StringRef,
+        <D as AddMacroDef<<D as SpanSource>::Span>>::MacroDefHandle,
+    >,
+    Downstream<B, &'a mut N, Wrapper<'a, D>>,
+>;
 
-impl<'a, 'b, C, A, B, N, D, R, S> PushOp<Name<Ident<R>>, S> for Builder<'a, 'b, C, A, B, N, D>
+impl<'a, 'b, C, A, B, N, D> PushOp<Name<Ident<C::StringRef>>, D::Span>
+    for Builder<'a, 'b, C, A, B, N, D>
 where
-    B: AllocName<S> + PushOp<Name<<B as AllocName<S>>::Name>, S>,
-    N: NameTable<Ident<R>, BackendEntry = B::Name>,
-    D: Diagnostics<S>,
-    S: Clone,
+    C: Lex<D>,
+    B: AllocName<D::Span> + PushOp<Name<<B as AllocName<D::Span>>::Name>, D::Span>,
+    N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name>,
+    D: DiagnosticsSystem,
 {
-    fn push_op(&mut self, Name(ident): Name<Ident<R>>, span: S) {
+    fn push_op(&mut self, Name(ident): Name<Ident<C::StringRef>>, span: D::Span) {
         let id = self.builder.look_up_symbol(ident, &span);
         self.builder.backend.push_op(Name(id), span)
     }
 }
 
-impl<'a, 'b, C, A, B, N, D, S> Finish<S> for Builder<'a, 'b, C, A, B, N, D>
+impl<'a, 'b, C, A, B, N, D> Finish<D::Span> for Builder<'a, 'b, C, A, B, N, D>
 where
-    B: Finish<S>,
-    S: Clone,
+    C: Lex<D>,
+    B: Finish<D::Span>,
+    D: DiagnosticsSystem,
 {
     type Parent = CompositeSession<'a, 'b, C, A, B::Parent, N, D>;
     type Value = B::Value;
@@ -45,7 +57,9 @@ where
 
 impl<'a, 'b, C, A, B, N, D> FinishFnDef for Builder<'a, 'b, C, A, B, N, D>
 where
+    C: Lex<D>,
     B: FinishFnDef,
+    D: DiagnosticsSystem,
 {
     type Return = CompositeSession<'a, 'b, C, A, B::Return, N, D>;
 

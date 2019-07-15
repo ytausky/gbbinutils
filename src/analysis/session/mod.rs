@@ -57,15 +57,22 @@ where
 pub(super) type MacroArgs<I, S> = expand::MacroArgs<SemanticToken<I>, S>;
 pub(super) type Params<R, S> = (Vec<Ident<R>>, Vec<S>);
 
-pub(super) struct CompositeSession<'a, 'b, C, A, B, N, D> {
-    upstream: Upstream<'a, 'b, C, A>,
+pub(super) struct CompositeSession<'a, 'b, C, A, B, N, D>
+where
+    C: Lex<D>,
+    D: DiagnosticsSystem,
+{
+    upstream: Upstream<'a, 'b, C, A, C::StringRef, D::MacroDefHandle>,
     downstream: Downstream<B, &'a mut N, Wrapper<'a, D>>,
 }
 
-pub(super) struct Upstream<'a, 'b, C, A> {
+pub(super) struct Upstream<'a, 'b, C, A, R, H> {
     codebase: &'a mut C,
     analyzer: &'b mut A,
+    macros: MacroTable<R, H>,
 }
+
+type MacroTable<R, H> = Vec<MacroDef<Ident<R>, SemanticToken<R>, H>>;
 
 pub(super) struct Downstream<B, N, D> {
     backend: B,
@@ -75,7 +82,11 @@ pub(super) struct Downstream<B, N, D> {
 
 pub(super) struct Wrapper<'a, D>(&'a mut D);
 
-impl<'a, 'b, C, A, B, N, D> CompositeSession<'a, 'b, C, A, B, N, D> {
+impl<'a, 'b, C, A, B, N, D> CompositeSession<'a, 'b, C, A, B, N, D>
+where
+    C: Lex<D>,
+    D: DiagnosticsSystem,
+{
     pub fn new(
         codebase: &'a mut C,
         analyzer: &'b mut A,
@@ -84,7 +95,11 @@ impl<'a, 'b, C, A, B, N, D> CompositeSession<'a, 'b, C, A, B, N, D> {
         diagnostics: &'a mut D,
     ) -> Self {
         CompositeSession {
-            upstream: Upstream { codebase, analyzer },
+            upstream: Upstream {
+                codebase,
+                analyzer,
+                macros: Vec::new(),
+            },
             downstream: Downstream {
                 backend,
                 names,
@@ -130,8 +145,13 @@ impl<'a, B, N, D> Downstream<B, &'a mut N, Wrapper<'a, D>> {
     }
 }
 
-pub(super) struct PartialSession<'a, C, B, N, D> {
+pub(super) struct PartialSession<'a, C, B, N, D>
+where
+    C: Lex<D>,
+    D: DiagnosticsSystem,
+{
     codebase: &'a mut C,
+    macros: MacroTable<C::StringRef, D::MacroDefHandle>,
     downstream: Downstream<B, &'a mut N, Wrapper<'a, D>>,
 }
 
@@ -139,6 +159,7 @@ macro_rules! partial {
     ($session:expr) => {
         PartialSession {
             codebase: $session.upstream.codebase,
+            macros: $session.upstream.macros,
             downstream: Downstream {
                 backend: $session.downstream.backend,
                 names: $session.downstream.names,
@@ -160,6 +181,8 @@ where
 
 impl<'a, 'b, C, A: 'b, B, N, D> IntoSession<'b, A> for PartialSession<'a, C, B, N, D>
 where
+    C: Lex<D>,
+    D: DiagnosticsSystem,
     CompositeSession<'a, 'b, C, A, B, N, D>: Session + Into<Self>,
 {
     type Session = CompositeSession<'a, 'b, C, A, B, N, D>;
@@ -169,6 +192,7 @@ where
             upstream: Upstream {
                 codebase: self.codebase,
                 analyzer,
+                macros: self.macros,
             },
             downstream: self.downstream,
         }
@@ -177,27 +201,36 @@ where
 
 impl<'a, 'b, C, A, B, N, D> From<CompositeSession<'a, 'b, C, A, B, N, D>>
     for PartialSession<'a, C, B, N, D>
+where
+    C: Lex<D>,
+    D: DiagnosticsSystem,
 {
     fn from(session: CompositeSession<'a, 'b, C, A, B, N, D>) -> Self {
         partial!(session)
     }
 }
 
-impl<'a, 'b, F, A, B, N, D> SpanSource for CompositeSession<'a, 'b, F, A, B, N, D>
+impl<'a, 'b, C, A, B, N, D> SpanSource for CompositeSession<'a, 'b, C, A, B, N, D>
 where
-    D: SpanSource,
+    C: Lex<D>,
+    D: DiagnosticsSystem,
 {
     type Span = D::Span;
 }
 
-impl<'a, 'b, C: StringSource, A, B, N, D> StringSource for CompositeSession<'a, 'b, C, A, B, N, D> {
+impl<'a, 'b, C, A, B, N, D> StringSource for CompositeSession<'a, 'b, C, A, B, N, D>
+where
+    C: Lex<D>,
+    D: DiagnosticsSystem,
+{
     type StringRef = C::StringRef;
 }
 
-impl<'a, 'b, C, A, B, N, D, S> PartialBackend<S> for CompositeSession<'a, 'b, C, A, B, N, D>
+impl<'a, 'b, C, A, B, N, D> PartialBackend<D::Span> for CompositeSession<'a, 'b, C, A, B, N, D>
 where
-    B: Backend<S>,
-    S: Clone,
+    C: Lex<D>,
+    B: Backend<D::Span>,
+    D: DiagnosticsSystem,
 {
     type Value = B::Value;
 
@@ -248,12 +281,14 @@ where
             Err(error) => return (Err(error), self),
         };
         let PartialSession {
+            macros,
             downstream: Downstream { backend, .. },
             ..
         } = self
             .upstream
             .analyzer
             .analyze_token_seq(tokens, partial!(self));
+        self.upstream.macros = macros;
         self.downstream.backend = backend;
         (Ok(()), self)
     }
@@ -288,24 +323,27 @@ where
         .ok();
         if let Some(expansion) = expansion {
             let PartialSession {
+                macros,
                 downstream: Downstream { backend, .. },
                 ..
             } = self
                 .upstream
                 .analyzer
                 .analyze_token_seq(expansion.map(|(t, s)| (Ok(t), s)), partial!(self));
+            self.upstream.macros = macros;
             self.downstream.backend = backend
         }
         self
     }
 }
 
-impl<'a, 'b, C, A, B, N, D, R, S> BasicSession<R, S> for CompositeSession<'a, 'b, C, A, B, N, D>
+impl<'a, 'b, C, A, B, N, D> BasicSession<C::StringRef, D::Span>
+    for CompositeSession<'a, 'b, C, A, B, N, D>
 where
-    B: Backend<S>,
-    N: NameTable<Ident<R>, BackendEntry = B::Name> + StartScope<Ident<R>>,
-    D: Diagnostics<S>,
-    S: Clone,
+    C: Lex<D>,
+    B: Backend<D::Span>,
+    N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name> + StartScope<Ident<C::StringRef>>,
+    D: DiagnosticsSystem,
 {
     type FnBuilder = Builder<'a, 'b, C, A, B::SymbolBuilder, N, D>;
     type GeneralBuilder = Builder<'a, 'b, C, A, B::ImmediateBuilder, N, D>;
@@ -317,7 +355,7 @@ where
         }
     }
 
-    fn define_symbol(mut self, name: Ident<R>, span: S) -> Self::FnBuilder {
+    fn define_symbol(mut self, name: Ident<C::StringRef>, span: D::Span) -> Self::FnBuilder {
         self.downstream.names.start_scope(&name);
         let id = self.downstream.look_up_symbol(name, &span);
         RelocContext {
@@ -330,22 +368,22 @@ where
 }
 
 delegate_diagnostics! {
-    {'a, 'b, F, A, B, N, D: Diagnostics<S>, S},
-    CompositeSession<'a, 'b, F, A, B, N, D>,
+    {'a, 'b, C: Lex<D>, A, B, N, D: DiagnosticsSystem},
+    CompositeSession<'a, 'b, C, A, B, N, D>,
     {downstream.diagnostics},
     D,
-    S
+    D::Span
 }
 
-impl<'a, 'b, C, A, B, N, D, R, S> StartSection<Ident<R>, S>
+impl<'a, 'b, C, A, B, N, D> StartSection<Ident<C::StringRef>, D::Span>
     for CompositeSession<'a, 'b, C, A, B, N, D>
 where
-    B: Backend<S>,
-    N: NameTable<Ident<R>, BackendEntry = B::Name>,
-    D: Diagnostics<S>,
-    S: Clone,
+    C: Lex<D>,
+    B: Backend<D::Span>,
+    N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name>,
+    D: DiagnosticsSystem,
 {
-    fn start_section(&mut self, (ident, span): (Ident<R>, S)) {
+    fn start_section(&mut self, (ident, span): (Ident<C::StringRef>, D::Span)) {
         let name = self.downstream.look_up_symbol(ident, &span);
         self.downstream.backend.start_section((name, span))
     }
