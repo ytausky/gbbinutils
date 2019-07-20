@@ -409,8 +409,6 @@ mod tests {
 
     use super::*;
 
-    use crate::analysis::backend::PanickingIdAllocator;
-    use crate::analysis::resolve::FakeNameTable;
     use crate::analysis::semantics::command::*;
     use crate::analysis::{Ident, Literal};
     use crate::model::{Atom, LocationCounter};
@@ -857,20 +855,12 @@ mod tests {
                     analyze_operand(
                         op,
                         mnemonic.context(),
-                        MockBuilder::from_components(
-                            PanickingIdAllocator::new(),
-                            FakeNameTable,
-                            log.clone(),
-                        ),
+                        MockBuilder::without_name_resolution(log.clone()),
                     )
                     .1
                 })
                 .collect();
-            let mut session = MockSession::with_name_table(
-                PanickingIdAllocator::<Ident<String>>::new(),
-                FakeNameTable,
-                log,
-            );
+            let mut session = MockSession::without_name_resolution(log);
             result = Some(analyze_instruction(
                 (mnemonic, TokenId::Mnemonic.into()),
                 operands,

@@ -448,8 +448,8 @@ where
 mod mock {
     use super::*;
 
-    use crate::analysis::backend::BackendEvent;
-    use crate::analysis::resolve::{MockNameTable, NameTableEvent};
+    use crate::analysis::backend::{BackendEvent, PanickingIdAllocator};
+    use crate::analysis::resolve::{BasicNameTable, FakeNameTable, MockNameTable, NameTableEvent};
     use crate::diag::{DiagnosticsEvent, MockDiagnostics};
     use crate::log::Log;
     use crate::model::Atom;
@@ -483,7 +483,7 @@ mod mock {
     }
 
     impl<A, N, T, S> MockSession<A, N, T, S> {
-        pub fn with_name_table(alloc: A, names: N, log: Log<T>) -> Self {
+        fn with_name_table(alloc: A, names: N, log: Log<T>) -> Self {
             Self {
                 downstream: Downstream {
                     backend: MockBackend::new(alloc, log.clone()),
@@ -500,6 +500,18 @@ mod mock {
 
         pub fn fail(&mut self, error: CodebaseError) {
             self.upstream.error = Some(error)
+        }
+    }
+
+    impl<T, S> MockSession<SerialIdAllocator, BasicNameTable<usize, usize>, T, S> {
+        pub fn with_log(log: Log<T>) -> Self {
+            Self::with_name_table(SerialIdAllocator::new(), BasicNameTable::new(), log)
+        }
+    }
+
+    impl<T, S> MockSession<PanickingIdAllocator<Ident<String>>, FakeNameTable, T, S> {
+        pub fn without_name_resolution(log: Log<T>) -> Self {
+            Self::with_name_table(PanickingIdAllocator::new(), FakeNameTable, log)
         }
     }
 
@@ -553,8 +565,8 @@ mod mock {
         }
     }
 
-    pub(in crate::analysis) type MockBuilder<U, A, N, T, S> = RelocContext<
-        U,
+    pub(in crate::analysis) type MockBuilder<A, N, T, S> = RelocContext<
+        (),
         Downstream<
             RelocContext<MockBackend<A, T>, Expr<<A as AllocName<S>>::Name, S>>,
             Box<MockNameTable<N, T>>,
@@ -562,14 +574,14 @@ mod mock {
         >,
     >;
 
-    impl<A, N, T, S> MockBuilder<(), A, N, T, S>
+    impl<A, N, T, S> MockBuilder<A, N, T, S>
     where
         A: AllocName<S>,
         N: NameTable<Ident<String>>,
         T: From<BackendEvent<A::Name, Expr<A::Name, S>>>,
         S: Clone,
     {
-        pub fn from_components(alloc: A, names: N, log: Log<T>) -> Self {
+        fn from_components(alloc: A, names: N, log: Log<T>) -> Self {
             Self {
                 parent: (),
                 builder: Downstream {
@@ -578,6 +590,37 @@ mod mock {
                     diagnostics: Box::new(MockDiagnostics::new(log)),
                 },
             }
+        }
+    }
+
+    impl<T, S> MockBuilder<SerialIdAllocator, BasicNameTable<usize, usize>, T, S>
+    where
+        T: From<BackendEvent<usize, Expr<usize, S>>>,
+        S: Clone,
+    {
+        pub fn with_name_resolution(log: Log<T>) -> Self {
+            Self::with_predefined_names(log, std::iter::empty())
+        }
+
+        pub fn with_predefined_names<I>(log: Log<T>, entries: I) -> Self
+        where
+            I: IntoIterator<Item = (Ident<String>, ResolvedIdent<usize, usize>)>,
+        {
+            let mut table = BasicNameTable::new();
+            for (name, value) in entries {
+                table.insert(name, value)
+            }
+            Self::from_components(SerialIdAllocator::new(), table, log)
+        }
+    }
+
+    impl<T, S> MockBuilder<PanickingIdAllocator<Ident<String>>, FakeNameTable, T, S>
+    where
+        T: From<BackendEvent<Ident<String>, Expr<Ident<String>, S>>>,
+        S: Clone,
+    {
+        pub fn without_name_resolution(log: Log<T>) -> Self {
+            Self::from_components(PanickingIdAllocator::new(), FakeNameTable, log)
         }
     }
 }

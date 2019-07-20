@@ -143,7 +143,7 @@ fn single_arg<T, D: Diagnostics<S>, S>(
 mod tests {
     use super::*;
 
-    use crate::analysis::backend::{BackendEvent, SerialIdAllocator};
+    use crate::analysis::backend::BackendEvent;
     use crate::analysis::resolve::{NameTableEvent, ResolvedIdent};
     use crate::analysis::semantics::command;
     use crate::analysis::semantics::tests::*;
@@ -285,8 +285,7 @@ mod tests {
     fn include_file_with_invalid_utf8() {
         let name = "invalid_utf8.s";
         let log = with_log(|log| {
-            let mut session =
-                MockSession::with_name_table(SerialIdAllocator::new(), BasicNameTable::new(), log);
+            let mut session = MockSession::with_log(log);
             session.fail(CodebaseError::Utf8Error);
             let mut context = SemanticActions::new(session)
                 .enter_unlabeled_stmt()
@@ -309,8 +308,7 @@ mod tests {
         let name = "nonexistent.s";
         let message = "some message";
         let log = with_log(|log| {
-            let mut session =
-                MockSession::with_name_table(SerialIdAllocator::new(), BasicNameTable::new(), log);
+            let mut session = MockSession::with_log(log);
             session.fail(CodebaseError::IoError(io::Error::new(
                 io::ErrorKind::NotFound,
                 message,

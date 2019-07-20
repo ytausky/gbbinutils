@@ -220,8 +220,7 @@ impl<I: Iterator> Iterator for OperandCounter<I> {
 pub mod tests {
     use super::*;
 
-    use crate::analysis::backend::{BackendEvent, PanickingIdAllocator};
-    use crate::analysis::resolve::BasicNameTable;
+    use crate::analysis::backend::BackendEvent;
     use crate::model::{Atom, LocationCounter};
 
     use std::fmt::Debug;
@@ -294,16 +293,7 @@ pub mod tests {
         let mut result = None;
         let log = crate::log::with_log(|log| {
             result = Some(
-                super::analyze_operand(
-                    expr,
-                    context,
-                    MockBuilder::from_components(
-                        PanickingIdAllocator::<Ident<String>>::new(),
-                        BasicNameTable::<Ident<String>, ()>::new(),
-                        log,
-                    ),
-                )
-                .1,
+                super::analyze_operand(expr, context, MockBuilder::without_name_resolution(log)).1,
             )
         });
         result.unwrap().map_err(|_| log)

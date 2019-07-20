@@ -631,11 +631,7 @@ mod tests {
         S: Clone + Debug + Merge,
     {
         crate::log::with_log(|log| {
-            f(SemanticActions::new(MockSession::with_name_table(
-                SerialIdAllocator::new(),
-                BasicNameTable::new(),
-                log,
-            )));
+            f(SemanticActions::new(MockSession::with_log(log)));
         })
     }
 

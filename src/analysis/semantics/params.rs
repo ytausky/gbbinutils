@@ -183,8 +183,8 @@ delegate_diagnostics! {
 mod tests {
     use super::*;
 
-    use crate::analysis::backend::{BackendEvent, SerialIdAllocator};
-    use crate::analysis::resolve::{BasicNameTable, NameTableEvent};
+    use crate::analysis::backend::BackendEvent;
+    use crate::analysis::resolve::NameTableEvent;
     use crate::analysis::session::MockBuilder;
     use crate::diag::{DiagnosticsEvent, MockSpan};
     use crate::log::Log;
@@ -247,10 +247,11 @@ mod tests {
         let ident = Ident::from("ident");
         let reloc = 42;
         let log = Log::<Event<usize, ()>>::new();
-        let mut idents = BasicNameTable::new();
-        idents.insert(ident.clone(), ResolvedIdent::Backend(reloc));
-        let mut builder =
-            MockBuilder::from_components(SerialIdAllocator::new(), idents, log).resolve_names();
+        let mut builder = MockBuilder::with_predefined_names(
+            log,
+            vec![(ident.clone(), ResolvedIdent::Backend(reloc))],
+        )
+        .resolve_names();
         builder.push_op(Name(ident), ());
         assert_eq!(builder.finish().1, Expr::from_atom(Atom::Name(reloc), ()))
     }
@@ -261,12 +262,7 @@ mod tests {
         let id = 0;
         let log = Log::<Event<usize, ()>>::new();
         {
-            let mut builder = MockBuilder::from_components(
-                SerialIdAllocator::new(),
-                BasicNameTable::new(),
-                log.clone(),
-            )
-            .resolve_names();
+            let mut builder = MockBuilder::with_name_resolution(log.clone()).resolve_names();
             builder.push_op(Name(ident.clone()), ());
             assert_eq!(builder.finish().1, Expr::from_atom(Atom::Name(id), ()));
         }
@@ -280,13 +276,13 @@ mod tests {
     fn diagnose_macro_name_in_expr() {
         let ident = Ident::from("my_macro");
         let span = MockSpan::from("ident");
-        let mut table = BasicNameTable::new();
-        table.insert(ident.clone(), ResolvedIdent::Macro(0));
         let log = Log::<Event<usize, MockSpan<_>>>::new();
         {
-            let mut builder =
-                MockBuilder::from_components(SerialIdAllocator::new(), table, log.clone())
-                    .resolve_names();
+            let mut builder = MockBuilder::with_predefined_names(
+                log.clone(),
+                vec![(ident.clone(), ResolvedIdent::Macro(0))],
+            )
+            .resolve_names();
             builder.push_op(Name(ident), span.clone());
             assert_eq!(
                 builder.finish().1,
