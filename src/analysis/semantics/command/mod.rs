@@ -16,7 +16,7 @@ mod operand;
 pub(in crate::analysis) struct CommandActions<S: Session> {
     parent: StmtActions<S>,
     command: (Command, S::Span),
-    args: CommandArgs<S::StringRef, S::Span>,
+    args: CommandArgs<S::Ident, S::StringRef, S::Span>,
     has_errors: bool,
 }
 
@@ -53,9 +53,9 @@ impl<S: Session> EmitDiag<S::Span, S::Stripped> for CommandActions<S> {
 }
 
 impl<S: Session> CommandContext<S::Span> for CommandActions<S> {
-    type Ident = Ident<S::StringRef>;
+    type Ident = S::Ident;
     type Literal = Literal<S::StringRef>;
-    type ArgContext = ExprBuilder<S::StringRef, S::Span, Self>;
+    type ArgContext = ExprBuilder<S::Ident, S::StringRef, S::Span, Self>;
     type Parent = StmtActions<S>;
 
     fn add_argument(self) -> Self::ArgContext {
@@ -76,7 +76,7 @@ impl<S: Session> CommandContext<S::Span> for CommandActions<S> {
 }
 
 enum PreparedCommand<S: Session> {
-    Binding((Directive, S::Span), Option<Label<S::StringRef, S::Span>>),
+    Binding((Directive, S::Span), Option<Label<S::Ident, S::Span>>),
     Directive((Directive, S::Span)),
     Mnemonic((Mnemonic, S::Span)),
 }
@@ -92,7 +92,11 @@ impl<S: Session> PreparedCommand<S> {
         }
     }
 
-    fn exec(self, args: CommandArgs<S::StringRef, S::Span>, actions: &mut SemanticActions<S>) {
+    fn exec(
+        self,
+        args: CommandArgs<S::Ident, S::StringRef, S::Span>,
+        actions: &mut SemanticActions<S>,
+    ) {
         match self {
             PreparedCommand::Binding(binding, label) => {
                 directive::analyze_directive(binding, label, args, actions)
@@ -114,22 +118,22 @@ impl Directive {
     }
 }
 
-pub(crate) struct ExprBuilder<R, S, P> {
-    stack: Vec<Arg<R, S>>,
+pub(crate) struct ExprBuilder<I, R, S, P> {
+    stack: Vec<Arg<I, R, S>>,
     parent: P,
 }
 
-impl<R, S, P> ExprBuilder<R, S, P> {
-    fn pop(&mut self) -> Arg<R, S> {
+impl<I, R, S, P> ExprBuilder<I, R, S, P> {
+    fn pop(&mut self) -> Arg<I, R, S> {
         self.stack.pop().unwrap_or_else(|| unreachable!())
     }
 }
 
 delegate_diagnostics! {
-    {R, S, P: Diagnostics<S>}, ExprBuilder<R, S, P>, {parent}, P, S
+    {I, R, S, P: Diagnostics<S>}, ExprBuilder<I, R, S, P>, {parent}, P, S
 }
 
-impl<S: Session> FinalContext for ExprBuilder<S::StringRef, S::Span, CommandActions<S>> {
+impl<S: Session> FinalContext for ExprBuilder<S::Ident, S::StringRef, S::Span, CommandActions<S>> {
     type ReturnTo = CommandActions<S>;
 
     fn exit(mut self) -> Self::ReturnTo {
@@ -141,12 +145,12 @@ impl<S: Session> FinalContext for ExprBuilder<S::StringRef, S::Span, CommandActi
     }
 }
 
-impl<R, S, P> ExprContext<S> for ExprBuilder<R, S, P>
+impl<I, R, S, P> ExprContext<S> for ExprBuilder<I, R, S, P>
 where
     S: Clone,
     Self: Diagnostics<S>,
 {
-    type Ident = Ident<R>;
+    type Ident = I;
     type Literal = Literal<R>;
 
     fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, S)) {
@@ -193,7 +197,7 @@ where
 
 fn analyze_mnemonic<S: Session>(
     name: (Mnemonic, S::Span),
-    args: CommandArgs<S::StringRef, S::Span>,
+    args: CommandArgs<S::Ident, S::StringRef, S::Span>,
     actions: &mut SemanticActions<S>,
 ) {
     let operands: Vec<_> = args
@@ -212,8 +216,8 @@ fn analyze_mnemonic<S: Session>(
 impl<S: Session> SemanticActions<S> {
     fn analyze_expr(
         &mut self,
-        params: &Params<S::StringRef, S::Span>,
-        expr: Arg<S::StringRef, S::Span>,
+        params: &Params<S::Ident, S::Span>,
+        expr: Arg<S::Ident, S::StringRef, S::Span>,
     ) -> Result<S::Value, ()> {
         self.build_value(params, |mut builder| {
             let result = builder.eval_arg(expr);
@@ -224,9 +228,9 @@ impl<S: Session> SemanticActions<S> {
 
     fn define_symbol(
         &mut self,
-        (name, span): (Ident<S::StringRef>, S::Span),
-        params: &Params<S::StringRef, S::Span>,
-        expr: Arg<S::StringRef, S::Span>,
+        (name, span): (S::Ident, S::Span),
+        params: &Params<S::Ident, S::Span>,
+        expr: Arg<S::Ident, S::StringRef, S::Span>,
     ) -> Result<(), ()> {
         let mut result = Ok(());
         self.with_session(|mut session| {
@@ -242,8 +246,8 @@ impl<S: Session> SemanticActions<S> {
     }
 }
 
-trait EvalArg<I, S: Clone> {
-    fn eval_arg(&mut self, arg: Arg<I, S>) -> Result<(), ()>;
+trait EvalArg<I, R, S: Clone> {
+    fn eval_arg(&mut self, arg: Arg<I, R, S>) -> Result<(), ()>;
 }
 
 trait ArgEvaluator<N, S: Clone>:
@@ -266,13 +270,13 @@ impl<T, N, S: Clone> ArgEvaluator<N, S> for T where
 {
 }
 
-impl<'a, T, R, S> EvalArg<R, S> for T
+impl<'a, T, I, R, S> EvalArg<I, R, S> for T
 where
-    T: ArgEvaluator<Ident<R>, S>,
+    T: ArgEvaluator<I, S>,
     R: Eq,
     S: Clone,
 {
-    fn eval_arg(&mut self, arg: Arg<R, S>) -> Result<(), ()> {
+    fn eval_arg(&mut self, arg: Arg<I, R, S>) -> Result<(), ()> {
         match arg.variant {
             ArgVariant::Atom(ArgAtom::Ident(ident)) => {
                 self.push_op(Name(ident), arg.span);

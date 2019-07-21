@@ -4,8 +4,8 @@ use self::builder::Builder;
 use self::expand::{DefineMacro, Expand, MacroId};
 
 use super::backend::*;
-use super::resolve::{Ident, NameTable, ResolvedIdent, StartScope};
-use super::{Command, Lex, LexItem, Literal, SemanticToken, StringSource, TokenSeq};
+use super::resolve::{NameTable, ResolvedIdent, StartScope};
+use super::{Command, IdentSource, Lex, LexItem, Literal, SemanticToken, StringSource, TokenSeq};
 
 use crate::codebase::CodebaseError;
 use crate::diag::span::{AddMacroDef, SpanSource};
@@ -22,43 +22,43 @@ mod expand;
 
 pub(super) trait Session
 where
-    Self: SpanSource + StringSource,
-    Self: BasicSession<<Self as StringSource>::StringRef, <Self as SpanSource>::Span>,
+    Self: IdentSource + SpanSource + StringSource,
+    Self: BasicSession<<Self as IdentSource>::Ident, <Self as SpanSource>::Span>,
 {
     fn analyze_file(self, path: Self::StringRef) -> (Result<(), CodebaseError>, Self);
 
     fn define_macro(
         &mut self,
-        name: (Ident<Self::StringRef>, Self::Span),
-        params: Params<Self::StringRef, Self::Span>,
-        body: TokenSeq<Self::StringRef, Self::Span>,
+        name: (Self::Ident, Self::Span),
+        params: Params<Self::Ident, Self::Span>,
+        body: TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
     );
 
     fn call_macro(
         self,
-        name: (Ident<Self::StringRef>, Self::Span),
-        args: MacroArgs<Self::StringRef, Self::Span>,
+        name: (Self::Ident, Self::Span),
+        args: MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
     ) -> Self;
 }
 
-pub(super) trait BasicSession<R, S: Clone>
+pub(super) trait BasicSession<I, S: Clone>
 where
     Self: Sized,
     Self: AllocName<S>,
     Self: PartialBackend<S>,
     Self: StartSection<<Self as AllocName<S>>::Name, S>,
-    Self: StartScope<Ident<R>>,
-    Self: NameTable<Ident<R>, BackendEntry = <Self as AllocName<S>>::Name>,
+    Self: StartScope<I>,
+    Self: NameTable<I, BackendEntry = <Self as AllocName<S>>::Name>,
     Self: Diagnostics<S>,
 {
     type FnBuilder: ValueBuilder<Self::Name, S>
         + AllocName<S, Name = Self::Name>
-        + NameTable<Ident<R>, BackendEntry = Self::Name>
+        + NameTable<I, BackendEntry = Self::Name>
         + FinishFnDef<Return = Self>
         + Diagnostics<S>;
     type GeneralBuilder: ValueBuilder<Self::Name, S>
         + AllocName<S, Name = Self::Name>
-        + NameTable<Ident<R>, BackendEntry = Self::Name>
+        + NameTable<I, BackendEntry = Self::Name>
         + Finish<S, Parent = Self, Value = Self::Value>
         + Diagnostics<S>;
 
@@ -66,8 +66,8 @@ where
     fn define_symbol(self, name: Self::Name, span: S) -> Self::FnBuilder;
 }
 
-pub(super) type MacroArgs<I, S> = expand::MacroArgs<SemanticToken<I>, S>;
-pub(super) type Params<R, S> = (Vec<Ident<R>>, Vec<S>);
+pub(super) type MacroArgs<I, R, S> = expand::MacroArgs<SemanticToken<I, R>, S>;
+pub(super) type Params<I, S> = (Vec<I>, Vec<S>);
 
 type FullSession<'a, 'b, C, A, B, N, D> =
     CompositeSession<FullUpstream<'a, 'b, C, A, D>, B, &'a mut N, &'a mut D>;
@@ -77,6 +77,7 @@ type FullUpstream<'a, 'b, C, A, D> = Upstream<
     'b,
     C,
     A,
+    <C as IdentSource>::Ident,
     <C as StringSource>::StringRef,
     <D as AddMacroDef<<D as SpanSource>::Span>>::MacroDefHandle,
 >;
@@ -86,13 +87,13 @@ pub(super) struct CompositeSession<U, B, N, D> {
     downstream: Downstream<B, N, D>,
 }
 
-pub(super) struct Upstream<'a, 'b, C, A, R, H> {
+pub(super) struct Upstream<'a, 'b, C, A, I, R, H> {
     codebase: &'a mut C,
     analyzer: &'b mut A,
-    macros: MacroTable<R, H>,
+    macros: MacroTable<I, R, H>,
 }
 
-type MacroTable<R, H> = self::expand::MacroTable<Ident<R>, Literal<R>, Command, H>;
+type MacroTable<I, R, H> = self::expand::MacroTable<I, Literal<R>, Command, H>;
 
 pub(super) struct Downstream<B, N, D> {
     backend: B,
@@ -133,7 +134,7 @@ impl<B: PushOp<T, S>, N, D, T, S: Clone> PushOp<T, S> for Downstream<B, N, D> {
 
 impl<'a, 'b, C, A, B, N, D> FullSession<'a, 'b, C, A, B, N, D>
 where
-    C: StringSource,
+    C: IdentSource + StringSource,
     D: DiagnosticsSystem,
 {
     pub fn new(
@@ -170,11 +171,11 @@ impl<B, N, D> Downstream<B, N, D> {
 
 pub(super) struct PartialSession<'a, C, B, N, D>
 where
-    C: StringSource,
+    C: IdentSource + StringSource,
     D: DiagnosticsSystem,
 {
     codebase: &'a mut C,
-    macros: MacroTable<C::StringRef, D::MacroDefHandle>,
+    macros: MacroTable<C::Ident, C::StringRef, D::MacroDefHandle>,
     downstream: Downstream<B, &'a mut N, &'a mut D>,
 }
 
@@ -204,7 +205,7 @@ where
 
 impl<'a, 'b, C, A: 'b, B, N, D> IntoSession<'b, A> for PartialSession<'a, C, B, N, D>
 where
-    C: StringSource,
+    C: IdentSource + StringSource,
     D: DiagnosticsSystem,
     FullSession<'a, 'b, C, A, B, N, D>: Session + Into<Self>,
 {
@@ -225,12 +226,20 @@ where
 impl<'a, 'b, C, A, B, N, D> From<FullSession<'a, 'b, C, A, B, N, D>>
     for PartialSession<'a, C, B, N, D>
 where
-    C: StringSource,
+    C: IdentSource + StringSource,
     D: DiagnosticsSystem,
 {
     fn from(session: FullSession<'a, 'b, C, A, B, N, D>) -> Self {
         partial!(session)
     }
+}
+
+impl<'a, 'b, C, A, B, N, D> IdentSource for FullSession<'a, 'b, C, A, B, N, D>
+where
+    C: IdentSource + StringSource,
+    D: DiagnosticsSystem,
+{
+    type Ident = C::Ident;
 }
 
 impl<U, B, N, D> SpanSource for CompositeSession<U, B, N, D>
@@ -243,7 +252,7 @@ where
 
 impl<'a, 'b, C, A, B, N, D> StringSource for FullSession<'a, 'b, C, A, B, N, D>
 where
-    C: StringSource,
+    C: IdentSource + StringSource,
     D: DiagnosticsSystem,
 {
     type StringRef = C::StringRef;
@@ -265,21 +274,20 @@ impl<U, B: Backend<S>, N, D, S: Clone> PartialBackend<S> for CompositeSession<U,
     }
 }
 
-pub(super) trait Analyze<R: Clone + Eq, S: Clone> {
-    fn analyze_token_seq<'b, I, P>(&'b mut self, tokens: I, partial: P) -> P
+pub(super) trait Analyze<I: Clone + PartialEq, R: Clone + Eq, S: Clone> {
+    fn analyze_token_seq<'b, T, P>(&'b mut self, tokens: T, partial: P) -> P
     where
-        I: IntoIterator<Item = LexItem<R, S>>,
+        T: IntoIterator<Item = LexItem<I, R, S>>,
         P: IntoSession<'b, Self>,
-        P::Session: StringSource<StringRef = R> + SpanSource<Span = S>;
+        P::Session: IdentSource<Ident = I> + StringSource<StringRef = R> + SpanSource<Span = S>;
 }
 
 impl<'a, 'b, C, A, B, N, D> Session for FullSession<'a, 'b, C, A, B, N, D>
 where
     C: Lex<D>,
-    A: Analyze<C::StringRef, D::Span>,
+    A: Analyze<C::Ident, C::StringRef, D::Span>,
     B: Backend<D::Span>,
-    N: NameTable<Ident<C::StringRef>, BackendEntry = B::Name, MacroEntry = MacroId>
-        + StartScope<Ident<C::StringRef>>,
+    N: NameTable<C::Ident, BackendEntry = B::Name, MacroEntry = MacroId> + StartScope<C::Ident>,
     D: DiagnosticsSystem,
 {
     fn analyze_file(mut self, path: Self::StringRef) -> (Result<(), CodebaseError>, Self) {
@@ -306,9 +314,9 @@ where
 
     fn define_macro(
         &mut self,
-        name: (Ident<Self::StringRef>, Self::Span),
-        params: Params<Self::StringRef, Self::Span>,
-        body: TokenSeq<Self::StringRef, Self::Span>,
+        name: (Self::Ident, Self::Span),
+        params: Params<Self::Ident, Self::Span>,
+        body: TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
     ) {
         let id = self.upstream.macros.define_macro(
             name.clone(),
@@ -323,14 +331,19 @@ where
 
     fn call_macro(
         mut self,
-        name: (Ident<Self::StringRef>, Self::Span),
-        args: MacroArgs<Self::StringRef, Self::Span>,
+        name: (Self::Ident, Self::Span),
+        args: MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
     ) -> Self {
         let stripped = self.downstream.diagnostics.strip_span(&name.1);
         let expansion = match self.downstream.names.get(&name.0) {
             Some(ResolvedIdent::Macro(MacroId(id))) => {
                 let def = &self.upstream.macros[id];
-                Ok(def.expand(name.1, args, self.downstream.diagnostics))
+                Ok(Expand::expand(
+                    def,
+                    name.1,
+                    args,
+                    self.downstream.diagnostics,
+                ))
             }
             Some(ResolvedIdent::Backend(_)) => {
                 Err(Message::CannotUseSymbolNameAsMacroName { name: stripped }.at(name.1))
@@ -355,11 +368,11 @@ where
     }
 }
 
-impl<U, B, N, D, R, S> BasicSession<R, S> for CompositeSession<U, B, N, D>
+impl<U, B, N, D, I, S> BasicSession<I, S> for CompositeSession<U, B, N, D>
 where
     B: Backend<S>,
     N: DerefMut,
-    N::Target: NameTable<Ident<R>, BackendEntry = B::Name> + StartScope<Ident<R>>,
+    N::Target: NameTable<I, BackendEntry = B::Name> + StartScope<I>,
     D: DerefMut,
     D::Target: Diagnostics<S>,
     S: Clone,
@@ -395,23 +408,19 @@ impl<U, B: AllocName<S>, N, D, S: Clone> AllocName<S> for CompositeSession<U, B,
     }
 }
 
-impl<U, B, N, D, R> NameTable<Ident<R>> for CompositeSession<U, B, N, D>
+impl<U, B, N, D, I> NameTable<I> for CompositeSession<U, B, N, D>
 where
     N: DerefMut,
-    N::Target: NameTable<Ident<R>>,
+    N::Target: NameTable<I>,
 {
-    type BackendEntry = <N::Target as NameTable<Ident<R>>>::BackendEntry;
-    type MacroEntry = <N::Target as NameTable<Ident<R>>>::MacroEntry;
+    type BackendEntry = <N::Target as NameTable<I>>::BackendEntry;
+    type MacroEntry = <N::Target as NameTable<I>>::MacroEntry;
 
-    fn get(&self, ident: &Ident<R>) -> Option<ResolvedIdent<Self::BackendEntry, Self::MacroEntry>> {
+    fn get(&self, ident: &I) -> Option<ResolvedIdent<Self::BackendEntry, Self::MacroEntry>> {
         self.downstream.get(ident)
     }
 
-    fn insert(
-        &mut self,
-        ident: Ident<R>,
-        entry: ResolvedIdent<Self::BackendEntry, Self::MacroEntry>,
-    ) {
+    fn insert(&mut self, ident: I, entry: ResolvedIdent<Self::BackendEntry, Self::MacroEntry>) {
         self.downstream.insert(ident, entry)
     }
 }
@@ -424,12 +433,12 @@ delegate_diagnostics! {
     S
 }
 
-impl<U, B, N, D, R> StartScope<Ident<R>> for CompositeSession<U, B, N, D>
+impl<U, B, N, D, I> StartScope<I> for CompositeSession<U, B, N, D>
 where
     N: DerefMut,
-    N::Target: StartScope<Ident<R>>,
+    N::Target: StartScope<I>,
 {
-    fn start_scope(&mut self, ident: &Ident<R>) {
+    fn start_scope(&mut self, ident: &I) {
         self.downstream.names.start_scope(ident)
     }
 }
@@ -461,12 +470,8 @@ mod mock {
     #[derive(Debug, PartialEq)]
     pub(crate) enum SessionEvent {
         AnalyzeFile(String),
-        DefineMacro(
-            Ident<String>,
-            Vec<Ident<String>>,
-            Vec<SemanticToken<String>>,
-        ),
-        InvokeMacro(Ident<String>, Vec<Vec<SemanticToken<String>>>),
+        DefineMacro(String, Vec<String>, Vec<SemanticToken<String, String>>),
+        InvokeMacro(String, Vec<Vec<SemanticToken<String, String>>>),
     }
 
     pub(in crate::analysis) type MockSession<A, N, T, S> = CompositeSession<
@@ -509,7 +514,7 @@ mod mock {
         }
     }
 
-    impl<T, S> MockSession<PanickingIdAllocator<Ident<String>>, FakeNameTable, T, S> {
+    impl<T, S> MockSession<PanickingIdAllocator<String>, FakeNameTable, T, S> {
         pub fn without_name_resolution(log: Log<T>) -> Self {
             Self::with_name_table(PanickingIdAllocator::new(), FakeNameTable, log)
         }
@@ -523,6 +528,10 @@ mod mock {
         S
     }
 
+    impl<A, N, T, S> IdentSource for MockSession<A, N, T, S> {
+        type Ident = String;
+    }
+
     impl<A, N, T, S> StringSource for MockSession<A, N, T, S> {
         type StringRef = String;
     }
@@ -530,7 +539,7 @@ mod mock {
     impl<A, N, T, S> Session for MockSession<A, N, T, S>
     where
         A: AllocName<S>,
-        N: NameTable<Ident<String>, BackendEntry = A::Name>,
+        N: NameTable<String, BackendEntry = A::Name>,
         T: From<SessionEvent>,
         T: From<BackendEvent<A::Name, Expr<A::Name, S>>>,
         T: From<DiagnosticsEvent<S>>,
@@ -544,9 +553,9 @@ mod mock {
 
         fn define_macro(
             &mut self,
-            name: (Ident<Self::StringRef>, Self::Span),
-            params: (Vec<Ident<Self::StringRef>>, Vec<Self::Span>),
-            body: (Vec<SemanticToken<Self::StringRef>>, Vec<Self::Span>),
+            name: (Self::Ident, Self::Span),
+            params: (Vec<Self::Ident>, Vec<Self::Span>),
+            body: TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
         ) {
             self.upstream
                 .log
@@ -555,8 +564,8 @@ mod mock {
 
         fn call_macro(
             self,
-            name: (Ident<Self::StringRef>, Self::Span),
-            (args, _): MacroArgs<Self::StringRef, Self::Span>,
+            name: (Self::Ident, Self::Span),
+            (args, _): MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
         ) -> Self {
             self.upstream
                 .log
@@ -577,7 +586,7 @@ mod mock {
     impl<A, N, T, S> MockBuilder<A, N, T, S>
     where
         A: AllocName<S>,
-        N: NameTable<Ident<String>>,
+        N: NameTable<String>,
         T: From<BackendEvent<A::Name, Expr<A::Name, S>>>,
         S: Clone,
     {
@@ -604,7 +613,7 @@ mod mock {
 
         pub fn with_predefined_names<I>(log: Log<T>, entries: I) -> Self
         where
-            I: IntoIterator<Item = (Ident<String>, ResolvedIdent<usize, usize>)>,
+            I: IntoIterator<Item = (String, ResolvedIdent<usize, usize>)>,
         {
             let mut table = BasicNameTable::new();
             for (name, value) in entries {
@@ -614,9 +623,9 @@ mod mock {
         }
     }
 
-    impl<T, S> MockBuilder<PanickingIdAllocator<Ident<String>>, FakeNameTable, T, S>
+    impl<T, S> MockBuilder<PanickingIdAllocator<String>, FakeNameTable, T, S>
     where
-        T: From<BackendEvent<Ident<String>, Expr<Ident<String>, S>>>,
+        T: From<BackendEvent<String, Expr<String, S>>>,
         S: Clone,
     {
         pub fn without_name_resolution(log: Log<T>) -> Self {
@@ -656,7 +665,7 @@ mod tests {
         let label = "label";
         let log = Fixture::default().log_session(|mut session| {
             let id = session.alloc_name(());
-            session.insert(label.into(), ResolvedIdent::Backend(id.clone()));
+            session.insert(label.into(), ResolvedIdent::Backend(id));
             let mut builder = session.define_symbol(id, ());
             builder.push_op(LocationCounter, ());
             builder.finish_fn_def();
@@ -673,7 +682,7 @@ mod tests {
 
     #[test]
     fn start_section() {
-        let name: Ident<_> = "my_section".into();
+        let name: String = "my_section".into();
         let log = Fixture::default().log_session(|mut session| {
             let id = session.alloc_name(());
             session.insert(name.clone(), ResolvedIdent::Backend(id));
@@ -854,7 +863,7 @@ mod tests {
         let as_macro = MockSpan::from("as_macro");
         let log = Fixture::<MockSpan<_>>::default().log_session(|mut session| {
             let id = session.alloc_name(MockSpan::from("as_symbol"));
-            session.insert(Ident::from(name), ResolvedIdent::Backend(id));
+            session.insert(String::from(name), ResolvedIdent::Backend(id));
             session.call_macro((name.into(), as_macro.clone()), (vec![], vec![]));
         });
         assert_eq!(

@@ -1,4 +1,4 @@
-use super::{Ident, Params, PushOp};
+use super::{Params, PushOp};
 
 use crate::analysis::backend::{AllocName, Finish, FinishFnDef, LocationCounter, Name};
 use crate::analysis::resolve::{NameTable, ResolvedIdent};
@@ -53,23 +53,23 @@ where
     }
 }
 
-pub(super) trait WithParams<R, S>: Sized {
+pub(super) trait WithParams<I, S>: Sized {
     fn with_params<'a>(
         self,
-        params: &'a Params<R, S>,
-    ) -> BuilderAdapter<Self, ConvertParams<'a, R, S>>;
+        params: &'a Params<I, S>,
+    ) -> BuilderAdapter<Self, ConvertParams<'a, I, S>>;
 }
 
-impl<B, R, S> WithParams<R, S> for B
+impl<B, I, S> WithParams<I, S> for B
 where
-    B: PushOp<Name<Ident<R>>, S> + PushOp<ParamId, S>,
-    R: PartialEq,
+    B: PushOp<Name<I>, S> + PushOp<ParamId, S>,
+    I: PartialEq,
     S: Clone,
 {
     fn with_params<'a>(
         self,
-        params: &'a Params<R, S>,
-    ) -> BuilderAdapter<Self, ConvertParams<'a, R, S>> {
+        params: &'a Params<I, S>,
+    ) -> BuilderAdapter<Self, ConvertParams<'a, I, S>> {
         BuilderAdapter {
             builder: self,
             handler: ConvertParams { params },
@@ -77,22 +77,22 @@ where
     }
 }
 
-pub(super) struct ConvertParams<'a, R, S> {
-    params: &'a Params<R, S>,
+pub(super) struct ConvertParams<'a, I, S> {
+    params: &'a Params<I, S>,
 }
 
-impl<'a, B, R, S> NameHandler<B, Ident<R>, S> for ConvertParams<'a, R, S>
+impl<'a, B, I, S> NameHandler<B, I, S> for ConvertParams<'a, I, S>
 where
-    B: PushOp<Name<Ident<R>>, S> + PushOp<ParamId, S>,
-    R: PartialEq,
+    B: PushOp<Name<I>, S> + PushOp<ParamId, S>,
+    I: PartialEq,
     S: Clone,
 {
-    fn handle(&mut self, ident: Ident<R>, span: S, builder: &mut B) {
+    fn handle(&mut self, ident: I, span: S, builder: &mut B) {
         let param = self
             .params
             .0
             .iter()
-            .position(|param| param.name == ident.name)
+            .position(|param| *param == ident)
             .map(ParamId);
         if let Some(id) = param {
             builder.push_op(id, span)
@@ -219,7 +219,7 @@ mod tests {
 
     #[test]
     fn translate_param() {
-        let name: Ident<_> = "param".into();
+        let name: String = "param".into();
         let builder: Expr<_, _> = Default::default();
         let params = (vec![name.clone()], vec![()]);
         let mut adapter = builder.with_params(&params);
@@ -231,11 +231,11 @@ mod tests {
 
     #[test]
     fn pass_through_non_param() {
-        let param: Ident<_> = "param".into();
+        let param: String = "param".into();
         let builder: Expr<_, _> = Default::default();
         let params = (vec![param.clone()], vec![()]);
         let mut adapter = builder.with_params(&params);
-        let unrelated = Name(Ident::from("ident"));
+        let unrelated = Name(String::from("ident"));
         adapter.push_op(unrelated.clone(), ());
         let mut expected: Expr<_, _> = Default::default();
         expected.push_op(unrelated, ());
@@ -244,7 +244,7 @@ mod tests {
 
     #[test]
     fn resolve_known_ident() {
-        let ident = Ident::from("ident");
+        let ident = String::from("ident");
         let reloc = 42;
         let log = Log::<Event<usize, ()>>::new();
         let mut builder = MockBuilder::with_predefined_names(
@@ -258,7 +258,7 @@ mod tests {
 
     #[test]
     fn resolve_unknown_ident() {
-        let ident = Ident::from("ident");
+        let ident = String::from("ident");
         let id = 0;
         let log = Log::<Event<usize, ()>>::new();
         {
@@ -274,7 +274,7 @@ mod tests {
 
     #[test]
     fn diagnose_macro_name_in_expr() {
-        let ident = Ident::from("my_macro");
+        let ident = String::from("my_macro");
         let span = MockSpan::from("ident");
         let log = Log::<Event<usize, MockSpan<_>>>::new();
         {

@@ -1,5 +1,5 @@
 use self::backend::*;
-use self::resolve::{BiLevelNameTable, DefaultIdentFactory, Ident};
+use self::resolve::{BiLevelNameTable, DefaultIdentFactory};
 use self::session::*;
 use self::syntax::*;
 
@@ -32,7 +32,8 @@ where
     ) -> Result<(), CodebaseError> {
         use self::resolve::{NameTable, ResolvedIdent};
 
-        let mut file_parser = CodebaseAnalyzer::new(codebase);
+        let tokenizer = Tokenizer(codebase);
+        let mut file_parser = CodebaseAnalyzer::new(&tokenizer);
         let mut analyzer = semantics::SemanticAnalyzer;
         let mut names = BiLevelNameTable::new();
         for (string, name) in self.builtin_names() {
@@ -59,18 +60,18 @@ where
 {
 }
 
-type LexItem<T, S> = (Result<SemanticToken<T>, LexError>, S);
-type SemanticToken<T> = syntax::Token<Ident<T>, Literal<T>, Command>;
+type LexItem<I, R, S> = (Result<SemanticToken<I, R>, LexError>, S);
+type SemanticToken<I, R> = syntax::Token<I, Literal<R>, Command>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub(super) enum Literal<S> {
+pub(super) enum Literal<R> {
     Operand(Operand),
     Number(i32),
-    String(S),
+    String(R),
 }
 
-trait Lex<D: SpanSource>: StringSource {
-    type TokenIter: Iterator<Item = LexItem<Self::StringRef, D::Span>>;
+trait Lex<D: SpanSource>: IdentSource + StringSource {
+    type TokenIter: Iterator<Item = LexItem<Self::Ident, Self::StringRef, D::Span>>;
 
     fn lex_file(
         &mut self,
@@ -89,7 +90,7 @@ impl<'a, T: StringSource + 'a> CodebaseAnalyzer<'a, T> {
     }
 }
 
-type TokenSeq<I, S> = (Vec<SemanticToken<I>>, Vec<S>);
+type TokenSeq<I, R, S> = (Vec<SemanticToken<I, R>>, Vec<S>);
 
 impl<'a, T, D> Lex<D> for CodebaseAnalyzer<'a, T>
 where
@@ -110,6 +111,10 @@ where
     }
 }
 
+impl<'a, T: IdentSource> IdentSource for CodebaseAnalyzer<'a, T> {
+    type Ident = T::Ident;
+}
+
 impl<'a, T: StringSource> StringSource for CodebaseAnalyzer<'a, T> {
     type StringRef = T::StringRef;
 }
@@ -118,8 +123,8 @@ pub(crate) trait StringSource {
     type StringRef: Clone + Eq;
 }
 
-trait Tokenize<C: BufContext>: StringSource {
-    type Tokenized: Iterator<Item = LexItem<Self::StringRef, C::Span>>;
+trait Tokenize<C: BufContext>: IdentSource + StringSource {
+    type Tokenized: Iterator<Item = LexItem<Self::Ident, Self::StringRef, C::Span>>;
 
     fn tokenize_file<F: FnOnce(BufId) -> C>(
         &self,
@@ -128,11 +133,17 @@ trait Tokenize<C: BufContext>: StringSource {
     ) -> Result<Self::Tokenized, CodebaseError>;
 }
 
-impl<C: Codebase> StringSource for C {
+struct Tokenizer<T>(T);
+
+impl<T> IdentSource for Tokenizer<T> {
+    type Ident = <DefaultIdentFactory as IdentSource>::Ident;
+}
+
+impl<T> StringSource for Tokenizer<T> {
     type StringRef = String;
 }
 
-impl<C: Codebase, B: BufContext> Tokenize<B> for C {
+impl<C: Codebase, B: BufContext> Tokenize<B> for Tokenizer<&C> {
     type Tokenized = TokenizedSrc<DefaultIdentFactory, B>;
 
     fn tokenize_file<F: FnOnce(BufId) -> B>(
@@ -140,8 +151,8 @@ impl<C: Codebase, B: BufContext> Tokenize<B> for C {
         filename: &str,
         mk_context: F,
     ) -> Result<Self::Tokenized, CodebaseError> {
-        let buf_id = self.open(filename)?;
-        let rc_src = self.buf(buf_id);
+        let buf_id = self.0.open(filename)?;
+        let rc_src = self.0.buf(buf_id);
         Ok(TokenizedSrc::new(rc_src, mk_context(buf_id)))
     }
 }
@@ -160,8 +171,8 @@ impl<C: BufContext> TokenizedSrc<DefaultIdentFactory, C> {
     }
 }
 
-impl<'a, F: IdentFactory<Ident = Ident<String>>, C: BufContext> Iterator for TokenizedSrc<F, C> {
-    type Item = LexItem<String, C::Span>;
+impl<'a, F: IdentFactory, C: BufContext> Iterator for TokenizedSrc<F, C> {
+    type Item = LexItem<F::Ident, String, C::Span>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.tokens
@@ -178,7 +189,7 @@ mod mock {
     use std::vec::IntoIter;
 
     pub struct MockCodebase<S> {
-        files: HashMap<String, Vec<LexItem<String, S>>>,
+        files: HashMap<String, Vec<LexItem<String, String, S>>>,
     }
 
     impl<S> MockCodebase<S> {
@@ -190,14 +201,14 @@ mod mock {
 
         pub(crate) fn set_file<I>(&mut self, path: &str, tokens: I)
         where
-            I: IntoIterator<Item = LexItem<String, S>>,
+            I: IntoIterator<Item = LexItem<String, String, S>>,
         {
             self.files.insert(path.into(), tokens.into_iter().collect());
         }
     }
 
     impl<D: BufContextFactory> Lex<D> for MockCodebase<D::Span> {
-        type TokenIter = IntoIter<LexItem<Self::StringRef, D::Span>>;
+        type TokenIter = IntoIter<LexItem<Self::Ident, Self::StringRef, D::Span>>;
 
         fn lex_file(
             &mut self,
@@ -206,6 +217,10 @@ mod mock {
         ) -> Result<Self::TokenIter, CodebaseError> {
             Ok(self.files[&path].clone().into_iter())
         }
+    }
+
+    impl<S> IdentSource for MockCodebase<S> {
+        type Ident = String;
     }
 
     impl<S> StringSource for MockCodebase<S> {

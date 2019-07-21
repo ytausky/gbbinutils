@@ -8,8 +8,8 @@ use crate::model::{Item, Width};
 
 pub(super) fn analyze_directive<'a, S: Session>(
     directive: (Directive, S::Span),
-    label: Option<Label<S::StringRef, S::Span>>,
-    args: CommandArgs<S::StringRef, S::Span>,
+    label: Option<Label<S::Ident, S::Span>>,
+    args: CommandArgs<S::Ident, S::StringRef, S::Span>,
     actions: &'a mut SemanticActions<S>,
 ) {
     let context = DirectiveContext {
@@ -21,22 +21,22 @@ pub(super) fn analyze_directive<'a, S: Session>(
     context.analyze(directive.0)
 }
 
-struct DirectiveContext<'a, A, R, S> {
+struct DirectiveContext<'a, A, I, R, S> {
     span: S,
-    label: Option<Label<R, S>>,
-    args: CommandArgs<R, S>,
+    label: Option<Label<I, S>>,
+    args: CommandArgs<I, R, S>,
     actions: &'a mut A,
 }
 
 delegate_diagnostics! {
     {'a, S: Session},
-    DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::Span>,
+    DirectiveContext<'a, SemanticActions<S>, S::Ident, S::StringRef, S::Span>,
     {actions},
     SemanticActions<S>,
     S::Span
 }
 
-impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::Span> {
+impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::Ident, S::StringRef, S::Span> {
     fn analyze(self, directive: Directive) {
         match directive {
             Directive::Db => self.analyze_data(Width::Byte),
@@ -103,11 +103,11 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::StringRef, S::S
     }
 }
 
-fn reduce_include<I: PartialEq, D: Diagnostics<S>, S>(
+fn reduce_include<I: PartialEq, R, D: Diagnostics<S>, S>(
     span: S,
-    args: Vec<Arg<I, S>>,
+    args: Vec<Arg<I, R, S>>,
     diagnostics: &mut D,
-) -> Result<(I, S), ()> {
+) -> Result<(R, S), ()> {
     let arg = single_arg(span, args, diagnostics)?;
     match arg.variant {
         ArgVariant::Atom(ArgAtom::Literal(Literal::String(path))) => Ok((path, arg.span)),
@@ -150,7 +150,6 @@ mod tests {
     use crate::analysis::session::SessionEvent;
     use crate::analysis::syntax::keyword::{Command, Operand};
     use crate::analysis::syntax::*;
-    use crate::analysis::Ident;
     use crate::codebase::CodebaseError;
     use crate::log::with_log;
     use crate::model::{Atom, ParamId};
@@ -226,7 +225,7 @@ mod tests {
         assert_eq!(actions, [BackendEvent::Reserve(3.into()).into()])
     }
 
-    fn mk_literal(n: i32) -> (ExprAtom<Ident<String>, Literal<String>>, ()) {
+    fn mk_literal(n: i32) -> (ExprAtom<String, Literal<String>>, ()) {
         (ExprAtom::Literal(Literal::Number(n)), ())
     }
 
@@ -399,7 +398,7 @@ mod tests {
         unary_directive(Directive::Ds, f)
     }
 
-    type TestExprContext<S> = command::ExprBuilder<String, (), TestCommandActions<S>>;
+    type TestExprContext<S> = command::ExprBuilder<String, String, (), TestCommandActions<S>>;
 
     fn unary_directive<F>(directive: Directive, f: F) -> Vec<TestOperation<()>>
     where

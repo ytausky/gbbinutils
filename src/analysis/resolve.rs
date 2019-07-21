@@ -1,4 +1,4 @@
-use super::syntax::IdentFactory;
+use super::syntax::{IdentFactory, IdentSource};
 
 use std::collections::HashMap;
 
@@ -54,9 +54,11 @@ enum Visibility {
 
 pub struct DefaultIdentFactory;
 
-impl IdentFactory for DefaultIdentFactory {
+impl IdentSource for DefaultIdentFactory {
     type Ident = Ident<String>;
+}
 
+impl IdentFactory for DefaultIdentFactory {
     fn mk_ident(&mut self, spelling: &str) -> Self::Ident {
         Self::Ident {
             name: spelling.to_string(),
@@ -88,23 +90,20 @@ impl<B, M> BasicNameTable<B, M> {
     }
 }
 
-impl<B: Clone, M: Clone> NameTable<Ident<String>> for BasicNameTable<B, M> {
+impl<B: Clone, M: Clone> NameTable<String> for BasicNameTable<B, M> {
     type BackendEntry = B;
     type MacroEntry = M;
 
-    fn get(
-        &self,
-        ident: &Ident<String>,
-    ) -> Option<ResolvedIdent<Self::BackendEntry, Self::MacroEntry>> {
-        self.table.get(&ident.name).cloned()
+    fn get(&self, ident: &String) -> Option<ResolvedIdent<Self::BackendEntry, Self::MacroEntry>> {
+        self.table.get(ident).cloned()
     }
 
     fn insert(
         &mut self,
-        ident: Ident<String>,
+        ident: String,
         entry: ResolvedIdent<Self::BackendEntry, Self::MacroEntry>,
     ) {
-        self.table.insert(ident.name, entry);
+        self.table.insert(ident, entry);
     }
 }
 
@@ -144,7 +143,7 @@ impl<B: Clone, M: Clone> NameTable<Ident<String>> for BiLevelNameTable<B, M> {
         &self,
         ident: &Ident<String>,
     ) -> Option<ResolvedIdent<Self::BackendEntry, Self::MacroEntry>> {
-        self.select_table(ident).get(ident)
+        self.select_table(ident).get(&ident.name)
     }
 
     fn insert(
@@ -152,7 +151,7 @@ impl<B: Clone, M: Clone> NameTable<Ident<String>> for BiLevelNameTable<B, M> {
         ident: Ident<String>,
         entry: ResolvedIdent<Self::BackendEntry, Self::MacroEntry>,
     ) {
-        self.select_table_mut(&ident).insert(ident, entry)
+        self.select_table_mut(&ident).insert(ident.name, entry)
     }
 }
 
@@ -181,9 +180,9 @@ mod mock {
         }
     }
 
-    impl<N, T> NameTable<Ident<String>> for MockNameTable<N, T>
+    impl<N, T> NameTable<String> for MockNameTable<N, T>
     where
-        N: NameTable<Ident<String>>,
+        N: NameTable<String>,
         T: From<NameTableEvent<N::BackendEntry, N::MacroEntry>>,
     {
         type BackendEntry = N::BackendEntry;
@@ -191,14 +190,14 @@ mod mock {
 
         fn get(
             &self,
-            ident: &Ident<String>,
+            ident: &String,
         ) -> Option<ResolvedIdent<Self::BackendEntry, Self::MacroEntry>> {
             self.names.get(ident)
         }
 
         fn insert(
             &mut self,
-            ident: Ident<String>,
+            ident: String,
             entry: ResolvedIdent<Self::BackendEntry, Self::MacroEntry>,
         ) {
             self.names.insert(ident.clone(), entry.clone());
@@ -206,20 +205,20 @@ mod mock {
         }
     }
 
-    impl<N, T> StartScope<Ident<String>> for MockNameTable<N, T>
+    impl<N, T> StartScope<String> for MockNameTable<N, T>
     where
-        N: NameTable<Ident<String>>,
+        N: NameTable<String>,
         T: From<NameTableEvent<N::BackendEntry, N::MacroEntry>>,
     {
-        fn start_scope(&mut self, ident: &Ident<String>) {
+        fn start_scope(&mut self, ident: &String) {
             self.log.push(NameTableEvent::StartScope(ident.clone()))
         }
     }
 
     #[derive(Debug, PartialEq)]
     pub enum NameTableEvent<B, M> {
-        Insert(Ident<String>, ResolvedIdent<B, M>),
-        StartScope(Ident<String>),
+        Insert(String, ResolvedIdent<B, M>),
+        StartScope(String),
     }
 
     pub struct FakeNameTable;

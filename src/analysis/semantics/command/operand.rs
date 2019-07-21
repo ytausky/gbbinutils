@@ -2,7 +2,7 @@ use super::{Arg, ArgAtom, ArgEvaluator, ArgUnaryOp, ArgVariant, EvalArg};
 
 use crate::analysis::backend::Finish;
 use crate::analysis::syntax::keyword as kw;
-use crate::analysis::{Ident, Literal};
+use crate::analysis::Literal;
 use crate::diag::*;
 use crate::model::{Condition, PtrReg, Reg16, RegPair, SimpleOperand};
 use crate::span::{Source, SpanSource};
@@ -44,13 +44,13 @@ pub enum Context {
     Other,
 }
 
-pub(super) fn analyze_operand<C, R, S>(
-    expr: Arg<R, S>,
+pub(super) fn analyze_operand<C, I, R, S>(
+    expr: Arg<I, R, S>,
     context: Context,
     mut value_context: C,
 ) -> (C::Parent, Result<Operand<C::Value>, ()>)
 where
-    C: ArgEvaluator<Ident<R>, S> + Finish<S>,
+    C: ArgEvaluator<I, S> + Finish<S>,
     R: Eq,
     S: Clone,
 {
@@ -72,13 +72,13 @@ where
     }
 }
 
-fn analyze_deref_operand<C, R, S>(
-    expr: Arg<R, S>,
+fn analyze_deref_operand<C, I, R, S>(
+    expr: Arg<I, R, S>,
     deref_span: S,
     mut value_context: C,
 ) -> (C::Parent, Result<Operand<C::Value>, ()>)
 where
-    C: ArgEvaluator<Ident<R>, S> + Finish<S>,
+    C: ArgEvaluator<I, S> + Finish<S>,
     R: Eq,
     S: Clone,
 {
@@ -225,7 +225,7 @@ pub mod tests {
 
     use std::fmt::Debug;
 
-    type Expr<S> = crate::model::Expr<Atom<LocationCounter, Ident<String>>, S>;
+    type Expr<S> = crate::model::Expr<Atom<LocationCounter, String>, S>;
 
     #[test]
     fn analyze_deref_bc() {
@@ -248,7 +248,7 @@ pub mod tests {
     }
 
     fn analyze_deref_ptr_reg(ptr_reg: PtrReg) {
-        let expr = Arg::<String, _> {
+        let expr = Arg::<_, String, _> {
             variant: ArgVariant::Unary(
                 ArgUnaryOp::Parentheses,
                 Box::new(Arg::from_atom(
@@ -268,12 +268,12 @@ pub mod tests {
 
     #[derive(Debug, PartialEq)]
     pub(crate) enum Event<S: Clone> {
-        Backend(BackendEvent<Ident<String>, Expr<S>>),
+        Backend(BackendEvent<String, Expr<S>>),
         Diagnostics(DiagnosticsEvent<S>),
     }
 
-    impl<S: Clone> From<BackendEvent<Ident<String>, Expr<S>>> for Event<S> {
-        fn from(event: BackendEvent<Ident<String>, Expr<S>>) -> Self {
+    impl<S: Clone> From<BackendEvent<String, Expr<S>>> for Event<S> {
+        fn from(event: BackendEvent<String, Expr<S>>) -> Self {
             Event::Backend(event)
         }
     }
@@ -285,7 +285,7 @@ pub mod tests {
     }
 
     fn analyze_operand<S: Clone + Debug>(
-        expr: Arg<String, MockSpan<S>>,
+        expr: Arg<String, String, MockSpan<S>>,
         context: Context,
     ) -> OperandResult<MockSpan<S>> {
         use crate::analysis::session::MockBuilder;
@@ -301,7 +301,7 @@ pub mod tests {
 
     #[test]
     fn analyze_deref_af() {
-        let parsed_expr = Arg::<String, _> {
+        let parsed_expr = Arg::<_, String, _> {
             variant: ArgVariant::Unary(
                 ArgUnaryOp::Parentheses,
                 Box::new(Arg::from_atom(
@@ -330,7 +330,7 @@ pub mod tests {
     fn analyze_repeated_parentheses() {
         let n = 0x42;
         let span = 0;
-        let parsed_expr = Arg::<String, _> {
+        let parsed_expr = Arg::<_, String, _> {
             variant: ArgVariant::Unary(
                 ArgUnaryOp::Parentheses,
                 Box::new(Arg {
@@ -355,7 +355,7 @@ pub mod tests {
     #[test]
     fn analyze_reg_in_expr() {
         let span = 0;
-        let parsed_expr = Arg::<String, _> {
+        let parsed_expr = Arg::<_, String, _> {
             variant: ArgVariant::Unary(
                 ArgUnaryOp::Parentheses,
                 Box::new(Arg {
@@ -388,7 +388,7 @@ pub mod tests {
     #[test]
     fn analyze_string_in_instruction() {
         let span = 0;
-        let parsed_expr = Arg::<String, _>::from_atom(
+        let parsed_expr = Arg::<_, String, _>::from_atom(
             ArgAtom::Literal(Literal::String("some_string".into())),
             span.into(),
         );

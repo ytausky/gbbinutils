@@ -1,14 +1,12 @@
 use self::command::CommandActions;
 use self::invoke::MacroCallActions;
-use self::params::{
-    BuilderAdapter, ConvertParams, NameResolver, RelocLookup, ResolveNames, WithParams,
-};
+use self::params::*;
 
 use super::backend::{FinishFnDef, LocationCounter, PushOp};
 use super::session::{Analyze, IntoSession, Params, Session};
 use super::syntax::keyword::Command;
 use super::syntax::*;
-use super::{Ident, LexItem, Literal, SemanticToken, StringSource};
+use super::{LexItem, Literal, SemanticToken, StringSource, TokenSeq};
 
 use crate::diag::span::SpanSource;
 use crate::diag::{EmitDiag, Message};
@@ -22,12 +20,12 @@ mod params;
 
 pub struct SemanticAnalyzer;
 
-impl<R: Clone + Eq, S: Clone> Analyze<R, S> for SemanticAnalyzer {
-    fn analyze_token_seq<'b, I, P>(&'b mut self, tokens: I, partial: P) -> P
+impl<I: Clone + PartialEq, R: Clone + Eq, S: Clone> Analyze<I, R, S> for SemanticAnalyzer {
+    fn analyze_token_seq<'b, T, P>(&'b mut self, tokens: T, partial: P) -> P
     where
-        I: IntoIterator<Item = LexItem<R, S>>,
+        T: IntoIterator<Item = LexItem<I, R, S>>,
         P: IntoSession<'b, Self>,
-        P::Session: StringSource<StringRef = R> + SpanSource<Span = S>,
+        P::Session: IdentSource<Ident = I> + StringSource<StringRef = R> + SpanSource<Span = S>,
     {
         let session = partial.into_session(self);
         let mut actions =
@@ -51,12 +49,12 @@ impl<S: Session> SemanticActions<S> {
         self.session.as_mut().unwrap()
     }
 
-    fn build_value<F, T>(&mut self, params: &Params<S::StringRef, S::Span>, f: F) -> T
+    fn build_value<F, T>(&mut self, params: &Params<S::Ident, S::Span>, f: F) -> T
     where
         F: FnOnce(
             BuilderAdapter<
                 BuilderAdapter<S::GeneralBuilder, NameResolver>,
-                ConvertParams<S::StringRef, S::Span>,
+                ConvertParams<S::Ident, S::Span>,
             >,
         ) -> (S, T),
     {
@@ -84,13 +82,13 @@ delegate_diagnostics! {
     {S: Session}, SemanticActions<S>, {session()}, S, S::Span
 }
 
-impl<S: Session> FileContext<Ident<S::StringRef>, Literal<S::StringRef>, Command, S::Span>
+impl<S: Session> FileContext<S::Ident, Literal<S::StringRef>, Command, S::Span>
     for SemanticActions<S>
 {
     type LabelContext = LabelActions<S>;
     type StmtContext = StmtActions<S>;
 
-    fn enter_labeled_stmt(self, label: (Ident<S::StringRef>, S::Span)) -> Self::LabelContext {
+    fn enter_labeled_stmt(self, label: (S::Ident, S::Span)) -> Self::LabelContext {
         LabelActions::new(self, label)
     }
 
@@ -101,12 +99,12 @@ impl<S: Session> FileContext<Ident<S::StringRef>, Literal<S::StringRef>, Command
 
 pub(super) struct LabelActions<S: Session> {
     parent: SemanticActions<S>,
-    label: (Ident<S::StringRef>, S::Span),
-    params: Params<S::StringRef, S::Span>,
+    label: (S::Ident, S::Span),
+    params: Params<S::Ident, S::Span>,
 }
 
 impl<S: Session> LabelActions<S> {
-    fn new(parent: SemanticActions<S>, label: (Ident<S::StringRef>, S::Span)) -> Self {
+    fn new(parent: SemanticActions<S>, label: (S::Ident, S::Span)) -> Self {
         Self {
             parent,
             label,
@@ -119,10 +117,10 @@ delegate_diagnostics! {
     {S: Session}, LabelActions<S>, {parent}, S, S::Span
 }
 
-impl<S: Session> ParamsContext<Ident<S::StringRef>, S::Span> for LabelActions<S> {
+impl<S: Session> ParamsContext<S::Ident, S::Span> for LabelActions<S> {
     type Next = StmtActions<S>;
 
-    fn add_parameter(&mut self, (ident, span): (Ident<S::StringRef>, S::Span)) {
+    fn add_parameter(&mut self, (ident, span): (S::Ident, S::Span)) {
         self.params.0.push(ident);
         self.params.1.push(span)
     }
@@ -134,13 +132,13 @@ impl<S: Session> ParamsContext<Ident<S::StringRef>, S::Span> for LabelActions<S>
 
 pub(super) struct StmtActions<S: Session> {
     parent: SemanticActions<S>,
-    label: Option<Label<S::StringRef, S::Span>>,
+    label: Option<Label<S::Ident, S::Span>>,
 }
 
-type Label<R, S> = ((Ident<R>, S), Params<R, S>);
+type Label<I, S> = ((I, S), Params<I, S>);
 
 impl<S: Session> StmtActions<S> {
-    fn new(parent: SemanticActions<S>, label: Option<Label<S::StringRef, S::Span>>) -> Self {
+    fn new(parent: SemanticActions<S>, label: Option<Label<S::Ident, S::Span>>) -> Self {
         Self { parent, label }
     }
 
@@ -161,9 +159,7 @@ impl<S: Session> StmtActions<S> {
     }
 }
 
-impl<S: Session> StmtContext<Ident<S::StringRef>, Literal<S::StringRef>, Command, S::Span>
-    for StmtActions<S>
-{
+impl<S: Session> StmtContext<S::Ident, Literal<S::StringRef>, Command, S::Span> for StmtActions<S> {
     type CommandContext = CommandActions<S>;
     type MacroDefContext = MacroDefActions<S>;
     type MacroCallContext = MacroCallActions<S>;
@@ -180,7 +176,7 @@ impl<S: Session> StmtContext<Ident<S::StringRef>, Literal<S::StringRef>, Command
         MacroDefActions::new(self)
     }
 
-    fn enter_macro_call(mut self, name: (Ident<S::StringRef>, S::Span)) -> Self::MacroCallContext {
+    fn enter_macro_call(mut self, name: (S::Ident, S::Span)) -> Self::MacroCallContext {
         self.define_label_if_present();
         MacroCallActions::new(self, name)
     }
@@ -197,7 +193,7 @@ delegate_diagnostics! {
 
 pub(super) struct MacroDefActions<S: Session> {
     parent: StmtActions<S>,
-    tokens: (Vec<SemanticToken<S::StringRef>>, Vec<S::Span>),
+    tokens: TokenSeq<S::Ident, S::StringRef, S::Span>,
 }
 
 impl<S: Session> MacroDefActions<S> {
@@ -214,7 +210,7 @@ delegate_diagnostics! {
 }
 
 impl<S: Session> TokenSeqContext<S::Span> for MacroDefActions<S> {
-    type Token = SemanticToken<S::StringRef>;
+    type Token = SemanticToken<S::Ident, S::StringRef>;
     type Parent = StmtActions<S>;
 
     fn push_token(&mut self, (token, span): (Self::Token, S::Span)) {
@@ -247,14 +243,14 @@ mod mock {
         }
     }
 
-    impl<T, S> Analyze<String, S> for MockAnalyzer<T>
+    impl<T, S> Analyze<String, String, S> for MockAnalyzer<T>
     where
         T: From<AnalyzerEvent<S>>,
         S: Clone,
     {
         fn analyze_token_seq<'b, I, P>(&'b mut self, tokens: I, partial: P) -> P
         where
-            I: IntoIterator<Item = LexItem<String, S>>,
+            I: IntoIterator<Item = LexItem<String, String, S>>,
             P: IntoSession<'b, Self>,
         {
             self.log
@@ -265,7 +261,7 @@ mod mock {
 
     #[derive(Debug, PartialEq)]
     pub(crate) enum AnalyzerEvent<S> {
-        AnalyzeTokenSeq(Vec<LexItem<String, S>>),
+        AnalyzeTokenSeq(Vec<LexItem<String, String, S>>),
     }
 }
 
@@ -382,7 +378,7 @@ mod tests {
 
     #[test]
     fn emit_rst_f_of_1() {
-        let ident = Ident::from("f");
+        let ident = String::from("f");
         let actions = collect_semantic_actions(|actions| {
             let command = actions
                 .enter_unlabeled_stmt()
@@ -502,7 +498,7 @@ mod tests {
     fn test_macro_definition(
         name: &str,
         params: impl Borrow<[&'static str]>,
-        body: impl Borrow<[SemanticToken<String>]>,
+        body: impl Borrow<[SemanticToken<String, String>]>,
     ) {
         let actions = collect_semantic_actions(|actions| {
             let mut params_actions = actions.enter_labeled_stmt((name.into(), ()));

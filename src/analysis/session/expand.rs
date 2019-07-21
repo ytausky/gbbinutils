@@ -66,7 +66,7 @@ struct MacroDefTokens<I, T> {
 
 impl<I, L, C, H, F, S> Expand<Token<I, L, C>, H, F, S> for MacroDef<I, Token<I, L, C>, H>
 where
-    I: Clone + Eq,
+    I: Clone + PartialEq,
     F: MacroContextFactory<H, S>,
     S: Clone,
     Token<I, L, C>: Clone,
@@ -201,7 +201,7 @@ where
 
 impl<I, L, C, F> Iterator for MacroExpansionIter<I, Token<I, L, C>, F>
 where
-    I: Clone + Eq,
+    I: Clone + PartialEq,
     F: MacroCallCtx,
     Token<I, L, C>: Clone,
 {

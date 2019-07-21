@@ -382,7 +382,7 @@ mod tests {
         )
     }
 
-    fn test_byte_range_at_eof(src: &str, tokens: impl Borrow<[(TestToken, Range<usize>)]>) {
+    fn test_byte_range_at_eof(src: &'static str, tokens: impl Borrow<[(TestToken, Range<usize>)]>) {
         let expected: Vec<_> = tokens
             .borrow()
             .iter()

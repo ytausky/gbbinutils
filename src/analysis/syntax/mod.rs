@@ -40,16 +40,21 @@ impl<I, L, C> From<SimpleToken> for Token<I, L, C> {
     }
 }
 
-pub(super) trait IdentFactory {
-    type Ident;
+pub(super) trait IdentSource {
+    type Ident: Clone + PartialEq;
+}
 
+pub(super) trait IdentFactory: IdentSource {
     fn mk_ident(&mut self, spelling: &str) -> Self::Ident;
 }
 
 #[cfg(test)]
-impl<I, F: for<'a> Fn(&'a str) -> I> IdentFactory for F {
+impl<I: Clone + PartialEq, F: for<'a> Fn(&'a str) -> I> IdentSource for F {
     type Ident = I;
+}
 
+#[cfg(test)]
+impl<I: Clone + PartialEq, F: for<'a> Fn(&'a str) -> I> IdentFactory for F {
     fn mk_ident(&mut self, spelling: &str) -> Self::Ident {
         self(spelling)
     }

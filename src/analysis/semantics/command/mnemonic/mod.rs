@@ -410,7 +410,7 @@ mod tests {
     use super::*;
 
     use crate::analysis::semantics::command::*;
-    use crate::analysis::{Ident, Literal};
+    use crate::analysis::Literal;
     use crate::model::{Atom, LocationCounter};
 
     #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -421,11 +421,11 @@ mod tests {
 
     pub(super) type TokenSpan = MockSpan<TokenId>;
 
-    type Expr = crate::model::Expr<Atom<LocationCounter, Ident<String>>, TokenSpan>;
-    type Input = Arg<String, ()>;
+    type Expr = crate::model::Expr<Atom<LocationCounter, String>, TokenSpan>;
+    type Input = Arg<String, String, ()>;
 
-    impl From<ArgVariant<String, ()>> for Input {
-        fn from(variant: ArgVariant<String, ()>) -> Self {
+    impl From<ArgVariant<String, String, ()>> for Input {
+        fn from(variant: ArgVariant<String, String, ()>) -> Self {
             Arg { variant, span: () }
         }
     }
@@ -870,15 +870,15 @@ mod tests {
         AnalysisResult(result.unwrap().map_err(|_| log))
     }
 
-    fn add_token_spans((i, operand): (usize, Input)) -> Arg<String, TokenSpan> {
+    fn add_token_spans((i, operand): (usize, Input)) -> Arg<String, String, TokenSpan> {
         add_token_spans_recursive(i, 0, operand).1
     }
 
     fn add_token_spans_recursive(
         i: usize,
         mut j: usize,
-        expr: Arg<String, ()>,
-    ) -> (usize, Arg<String, TokenSpan>) {
+        expr: Arg<String, String, ()>,
+    ) -> (usize, Arg<String, String, TokenSpan>) {
         let mut span: TokenSpan = TokenId::Operand(i, j).into();
         let variant = match expr.variant {
             ArgVariant::Unary(ArgUnaryOp::Parentheses, expr) => {

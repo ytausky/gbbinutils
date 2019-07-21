@@ -1,7 +1,7 @@
 use super::{CompositeSession, Downstream};
 
 use crate::analysis::backend::{AllocName, Finish, FinishFnDef, Name, PushOp, RelocContext};
-use crate::analysis::resolve::{Ident, NameTable, ResolvedIdent};
+use crate::analysis::resolve::{NameTable, ResolvedIdent};
 use crate::diag::Diagnostics;
 
 use std::ops::DerefMut;
@@ -16,23 +16,19 @@ impl<U, B: AllocName<S>, N, D, S: Clone> AllocName<S> for Builder<U, B, N, D> {
     }
 }
 
-impl<U, B, N, D, R> NameTable<Ident<R>> for Builder<U, B, N, D>
+impl<U, B, N, D, I> NameTable<I> for Builder<U, B, N, D>
 where
     N: DerefMut,
-    N::Target: NameTable<Ident<R>>,
+    N::Target: NameTable<I>,
 {
-    type BackendEntry = <N::Target as NameTable<Ident<R>>>::BackendEntry;
-    type MacroEntry = <N::Target as NameTable<Ident<R>>>::MacroEntry;
+    type BackendEntry = <N::Target as NameTable<I>>::BackendEntry;
+    type MacroEntry = <N::Target as NameTable<I>>::MacroEntry;
 
-    fn get(&self, ident: &Ident<R>) -> Option<ResolvedIdent<Self::BackendEntry, Self::MacroEntry>> {
+    fn get(&self, ident: &I) -> Option<ResolvedIdent<Self::BackendEntry, Self::MacroEntry>> {
         self.builder.names.get(ident)
     }
 
-    fn insert(
-        &mut self,
-        ident: Ident<R>,
-        entry: ResolvedIdent<Self::BackendEntry, Self::MacroEntry>,
-    ) {
+    fn insert(&mut self, ident: I, entry: ResolvedIdent<Self::BackendEntry, Self::MacroEntry>) {
         self.builder.names.insert(ident, entry)
     }
 }

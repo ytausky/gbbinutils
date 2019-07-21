@@ -2,19 +2,16 @@ use super::StmtActions;
 
 use crate::analysis::session::{MacroArgs, Session};
 use crate::analysis::syntax::{MacroCallContext, TokenSeqContext};
-use crate::analysis::{Ident, SemanticToken, TokenSeq};
+use crate::analysis::{SemanticToken, TokenSeq};
 
 pub(in crate::analysis) struct MacroCallActions<S: Session> {
     parent: StmtActions<S>,
-    name: (Ident<S::StringRef>, S::Span),
-    args: MacroArgs<S::StringRef, S::Span>,
+    name: (S::Ident, S::Span),
+    args: MacroArgs<S::Ident, S::StringRef, S::Span>,
 }
 
 impl<S: Session> MacroCallActions<S> {
-    pub fn new(
-        parent: StmtActions<S>,
-        name: (Ident<S::StringRef>, S::Span),
-    ) -> MacroCallActions<S> {
+    pub fn new(parent: StmtActions<S>, name: (S::Ident, S::Span)) -> MacroCallActions<S> {
         MacroCallActions {
             parent,
             name,
@@ -22,7 +19,7 @@ impl<S: Session> MacroCallActions<S> {
         }
     }
 
-    fn push_arg(&mut self, arg: TokenSeq<S::StringRef, S::Span>) {
+    fn push_arg(&mut self, arg: TokenSeq<S::Ident, S::StringRef, S::Span>) {
         self.args.0.push(arg.0);
         self.args.1.push(arg.1);
     }
@@ -33,7 +30,7 @@ delegate_diagnostics! {
 }
 
 impl<S: Session> MacroCallContext<S::Span> for MacroCallActions<S> {
-    type Token = SemanticToken<S::StringRef>;
+    type Token = SemanticToken<S::Ident, S::StringRef>;
     type Parent = StmtActions<S>;
     type MacroArgContext = MacroArgContext<S>;
 
@@ -55,7 +52,7 @@ impl<S: Session> MacroCallContext<S::Span> for MacroCallActions<S> {
 }
 
 pub(in crate::analysis) struct MacroArgContext<S: Session> {
-    tokens: TokenSeq<S::StringRef, S::Span>,
+    tokens: TokenSeq<S::Ident, S::StringRef, S::Span>,
     parent: MacroCallActions<S>,
 }
 
@@ -73,7 +70,7 @@ delegate_diagnostics! {
 }
 
 impl<S: Session> TokenSeqContext<S::Span> for MacroArgContext<S> {
-    type Token = SemanticToken<S::StringRef>;
+    type Token = SemanticToken<S::Ident, S::StringRef>;
     type Parent = MacroCallActions<S>;
 
     fn push_token(&mut self, token: (Self::Token, S::Span)) {
