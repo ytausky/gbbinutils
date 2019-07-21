@@ -130,6 +130,12 @@ impl_push_op_for_reloc_context! {BinOp}
 impl_push_op_for_reloc_context! {ParamId}
 impl_push_op_for_reloc_context! {FnCall}
 
+impl<P, N, S: Clone> PushOp<Name<N>, S> for RelocContext<P, Expr<Atom<LocationCounter, N>, S>> {
+    fn push_op(&mut self, name: Name<N>, span: S) {
+        self.builder.push_op(name, span)
+    }
+}
+
 #[cfg(test)]
 mod mock {
     use super::*;
@@ -168,28 +174,14 @@ mod mock {
         S: Clone,
     {
         type ImmediateBuilder = RelocContext<Self, Expr<A::Name, S>>;
-        type SymbolBuilder = MockSymbolBuilder<Self, A::Name, S>;
+        type SymbolBuilder = RelocContext<(Self, (A::Name, S)), Expr<A::Name, S>>;
 
         fn build_immediate(self) -> Self::ImmediateBuilder {
             RelocContext::new(self)
         }
 
         fn define_symbol(self, name: Self::Name, span: S) -> Self::SymbolBuilder {
-            MockSymbolBuilder {
-                parent: self,
-                name: (name, span),
-                expr: Default::default(),
-            }
-        }
-    }
-
-    impl<A, T, S> PushOp<Name<A::Name>, S> for RelocContext<MockBackend<A, T>, Expr<A::Name, S>>
-    where
-        A: AllocName<S>,
-        S: Clone,
-    {
-        fn push_op(&mut self, op: Name<A::Name>, span: S) {
-            self.builder.push_op(op, span)
+            RelocContext::new((self, (name, span)))
         }
     }
 
@@ -202,6 +194,18 @@ mod mock {
 
         fn alloc_name(&mut self, span: S) -> Self::Name {
             self.parent.alloc_name(span)
+        }
+    }
+
+    impl<A, T, S> AllocName<S> for RelocContext<(MockBackend<A, T>, (A::Name, S)), Expr<A::Name, S>>
+    where
+        A: AllocName<S>,
+        S: Clone,
+    {
+        type Name = A::Name;
+
+        fn alloc_name(&mut self, span: S) -> Self::Name {
+            self.parent.0.alloc_name(span)
         }
     }
 
@@ -218,22 +222,7 @@ mod mock {
         }
     }
 
-    pub struct MockSymbolBuilder<P, N, S> {
-        pub parent: P,
-        pub name: (N, S),
-        pub expr: crate::model::Expr<Atom<LocationCounter, N>, S>,
-    }
-
-    impl<T, P, N, S: Clone> PushOp<T, S> for MockSymbolBuilder<P, N, S>
-    where
-        crate::model::Expr<Atom<LocationCounter, N>, S>: PushOp<T, S>,
-    {
-        fn push_op(&mut self, op: T, span: S) {
-            self.expr.push_op(op, span)
-        }
-    }
-
-    impl<A, T, S> Finish for MockSymbolBuilder<MockBackend<A, T>, A::Name, S>
+    impl<A, T, S> Finish for RelocContext<(MockBackend<A, T>, (A::Name, S)), Expr<A::Name, S>>
     where
         A: AllocName<S>,
         T: From<BackendEvent<A::Name, Expr<A::Name, S>>>,
@@ -243,23 +232,11 @@ mod mock {
         type Value = ();
 
         fn finish(self) -> (Self::Parent, Self::Value) {
-            let parent = self.parent;
+            let (parent, name) = self.parent;
             parent
                 .log
-                .push(BackendEvent::DefineSymbol(self.name, self.expr));
+                .push(BackendEvent::DefineSymbol(name, self.builder));
             (parent, ())
-        }
-    }
-
-    impl<A, T, S> AllocName<S> for MockSymbolBuilder<MockBackend<A, T>, A::Name, S>
-    where
-        A: AllocName<S>,
-        S: Clone,
-    {
-        type Name = A::Name;
-
-        fn alloc_name(&mut self, span: S) -> Self::Name {
-            self.parent.alloc_name(span)
         }
     }
 

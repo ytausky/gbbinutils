@@ -96,12 +96,6 @@ impl<'a, S: Clone> AllocName<S> for RelocContext<ProgramBuilder<'a, S>, Immediat
     }
 }
 
-impl<'a, S: Clone> PushOp<Name<NameId>, S> for RelocContext<ProgramBuilder<'a, S>, Immediate<S>> {
-    fn push_op(&mut self, name: Name<NameId>, span: S) {
-        self.builder.push_op(name, span)
-    }
-}
-
 impl<'a, S: Clone> Finish for RelocContext<ProgramBuilder<'a, S>, Immediate<S>> {
     type Parent = ProgramBuilder<'a, S>;
     type Value = Immediate<S>;
