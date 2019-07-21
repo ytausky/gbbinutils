@@ -174,7 +174,7 @@ mod mock {
         S: Clone,
     {
         type ImmediateBuilder = RelocContext<Self, Expr<A::Name, S>>;
-        type SymbolBuilder = RelocContext<(Self, (A::Name, S)), Expr<A::Name, S>>;
+        type SymbolBuilder = SymbolBuilder<A, T, S>;
 
         fn build_immediate(self) -> Self::ImmediateBuilder {
             RelocContext::new(self)
@@ -184,6 +184,11 @@ mod mock {
             RelocContext::new((self, (name, span)))
         }
     }
+
+    type SymbolBuilder<A, T, S> = RelocContext<
+        (MockBackend<A, T>, (<A as AllocName<S>>::Name, S)),
+        Expr<<A as AllocName<S>>::Name, S>,
+    >;
 
     impl<A, T, S> AllocName<S> for RelocContext<MockBackend<A, T>, Expr<A::Name, S>>
     where
@@ -197,11 +202,7 @@ mod mock {
         }
     }
 
-    impl<A, T, S> AllocName<S> for RelocContext<(MockBackend<A, T>, (A::Name, S)), Expr<A::Name, S>>
-    where
-        A: AllocName<S>,
-        S: Clone,
-    {
+    impl<A: AllocName<S>, T, S: Clone> AllocName<S> for SymbolBuilder<A, T, S> {
         type Name = A::Name;
 
         fn alloc_name(&mut self, span: S) -> Self::Name {
@@ -222,7 +223,7 @@ mod mock {
         }
     }
 
-    impl<A, T, S> Finish for RelocContext<(MockBackend<A, T>, (A::Name, S)), Expr<A::Name, S>>
+    impl<A, T, S> Finish for SymbolBuilder<A, T, S>
     where
         A: AllocName<S>,
         T: From<BackendEvent<A::Name, Expr<A::Name, S>>>,
