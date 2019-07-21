@@ -293,15 +293,19 @@ mod mock {
         pub fn new() -> Self {
             Self(0)
         }
+
+        pub fn gen(&mut self) -> usize {
+            let id = self.0;
+            self.0 += 1;
+            id
+        }
     }
 
     impl<S: Clone> AllocName<S> for SerialIdAllocator {
         type Name = usize;
 
         fn alloc_name(&mut self, _: S) -> Self::Name {
-            let id = self.0;
-            self.0 += 1;
-            id
+            self.gen()
         }
     }
 

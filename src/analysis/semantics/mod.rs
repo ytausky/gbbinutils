@@ -3,6 +3,7 @@ use self::invoke::MacroCallActions;
 use self::params::*;
 
 use super::backend::{Finish, LocationCounter, PushOp};
+use super::resolve::ResolvedIdent;
 use super::session::{Analyze, IntoSession, Params, Session};
 use super::syntax::keyword::Command;
 use super::syntax::*;
@@ -146,10 +147,6 @@ impl<S: Session> StmtActions<S> {
             })
         }
     }
-
-    fn session(&mut self) -> &mut S {
-        self.parent.session()
-    }
 }
 
 impl<S: Session> StmtContext<S::Ident, Literal<S::StringRef>, Command, S::Span> for StmtActions<S> {
@@ -212,9 +209,13 @@ impl<S: Session> TokenSeqContext<S::Span> for MacroDefActions<S> {
     }
 
     fn exit(self) -> Self::Parent {
-        let mut parent = self.parent;
-        if let Some((name, params)) = parent.label.take() {
-            parent.session().define_macro(name, params, self.tokens)
+        let Self { mut parent, tokens } = self;
+        if let Some(((name, span), params)) = parent.label.take() {
+            parent.parent.with_session(|mut session| {
+                let id = session.define_macro(span, params, tokens);
+                session.insert(name, ResolvedIdent::Macro(id));
+                (session, ())
+            })
         }
         parent
     }
@@ -266,8 +267,9 @@ mod tests {
 
     use crate::analysis::backend::{BackendEvent, Name, SerialIdAllocator};
     use crate::analysis::resolve::{NameTableEvent, ResolvedIdent};
-    use crate::analysis::session::SessionEvent;
+    use crate::analysis::session::{MockMacroId, SessionEvent};
     use crate::diag::{DiagnosticsEvent, Merge, Message};
+    use crate::log::with_log;
     use crate::model::{Atom, BinOp, ExprOp, Instruction, Item, Width};
 
     use std::borrow::Borrow;
@@ -277,7 +279,7 @@ mod tests {
     pub(crate) enum TestOperation<S: Clone> {
         Backend(BackendEvent<usize, Expr<S>>),
         Diagnostics(DiagnosticsEvent<S>),
-        NameTable(NameTableEvent<usize, usize>),
+        NameTable(NameTableEvent<usize, MockMacroId>),
         Session(SessionEvent),
     }
 
@@ -295,8 +297,8 @@ mod tests {
         }
     }
 
-    impl<S: Clone> From<NameTableEvent<usize, usize>> for TestOperation<S> {
-        fn from(event: NameTableEvent<usize, usize>) -> Self {
+    impl<S: Clone> From<NameTableEvent<usize, MockMacroId>> for TestOperation<S> {
+        fn from(event: NameTableEvent<usize, MockMacroId>) -> Self {
             TestOperation::NameTable(event)
         }
     }
@@ -506,48 +508,14 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [SessionEvent::DefineMacro(
-                name.into(),
-                params.borrow().iter().cloned().map(Into::into).collect(),
-                body.borrow().to_vec()
-            )
-            .into()]
-        )
-    }
-
-    #[test]
-    fn call_nullary_macro() {
-        let name = "my_macro";
-        let actions = collect_semantic_actions(|actions| {
-            let call = actions
-                .enter_unlabeled_stmt()
-                .enter_macro_call((name.into(), ()));
-            call.exit().exit()
-        });
-        assert_eq!(
-            actions,
-            [SessionEvent::InvokeMacro(name.into(), Vec::new()).into()]
-        )
-    }
-
-    #[test]
-    fn call_unary_macro() {
-        let name = "my_macro";
-        let arg_token = Token::Literal(Literal::Operand(Operand::A));
-        let actions = collect_semantic_actions(|actions| {
-            let mut call = actions
-                .enter_unlabeled_stmt()
-                .enter_macro_call((name.into(), ()));
-            call = {
-                let mut arg = call.enter_macro_arg();
-                arg.push_token((arg_token.clone(), ()));
-                arg.exit()
-            };
-            call.exit().exit()
-        });
-        assert_eq!(
-            actions,
-            [SessionEvent::InvokeMacro(name.into(), vec![vec![arg_token]]).into()]
+            [
+                SessionEvent::DefineMacro(
+                    params.borrow().iter().cloned().map(Into::into).collect(),
+                    body.borrow().to_vec()
+                )
+                .into(),
+                NameTableEvent::Insert(name.into(), ResolvedIdent::Macro(MockMacroId(0))).into(),
+            ]
         )
     }
 
@@ -609,7 +577,7 @@ mod tests {
 
     pub(super) type MockSession<S> = crate::analysis::session::MockSession<
         SerialIdAllocator,
-        BasicNameTable<usize, usize>,
+        BasicNameTable<usize, MockMacroId>,
         TestOperation<S>,
         S,
     >;
@@ -619,10 +587,10 @@ mod tests {
         F: FnOnce(TestSemanticActions<S>) -> TestSemanticActions<S>,
         S: Clone + Debug + Merge,
     {
-        crate::log::with_log(|log| {
+        with_log(|log| {
             f(SemanticActions::new(MockSession::with_log(log)));
         })
     }
 
-    type TestSemanticActions<S> = SemanticActions<MockSession<S>>;
+    pub(super) type TestSemanticActions<S> = SemanticActions<MockSession<S>>;
 }

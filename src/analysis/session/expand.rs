@@ -13,13 +13,13 @@ pub(super) type MacroTable<I, L, C, H> = Vec<MacroDef<I, Token<I, L, C>, H>>;
 
 pub(super) type MacroArgs<T, S> = (Vec<Vec<T>>, Vec<Vec<S>>);
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MacroId(pub(super) usize);
 
 pub(super) trait DefineMacro<I, T, H: Clone> {
     fn define_macro<D, S>(
         &mut self,
-        name: (I, S),
+        name_span: S,
         params: (Vec<I>, Vec<S>),
         body: (Vec<T>, Vec<S>),
         diagnostics: &mut D,
@@ -32,7 +32,7 @@ pub(super) trait DefineMacro<I, T, H: Clone> {
 impl<I, L, C, H: Clone> DefineMacro<I, Token<I, L, C>, H> for MacroTable<I, L, C, H> {
     fn define_macro<D, S>(
         &mut self,
-        name: (I, S),
+        name_span: S,
         params: (Vec<I>, Vec<S>),
         body: (Vec<Token<I, L, C>>, Vec<S>),
         diagnostics: &mut D,
@@ -41,7 +41,7 @@ impl<I, L, C, H: Clone> DefineMacro<I, Token<I, L, C>, H> for MacroTable<I, L, C
         D: AddMacroDef<S, MacroDefHandle = H> + MacroContextFactory<H, S>,
         S: Clone,
     {
-        let context = diagnostics.add_macro_def(name.1, params.1, body.1);
+        let context = diagnostics.add_macro_def(name_span, params.1, body.1);
         let id = MacroId(self.len());
         self.push(MacroDef {
             tokens: Rc::new(MacroDefTokens {

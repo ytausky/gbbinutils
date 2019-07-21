@@ -29,14 +29,14 @@ where
 
     fn define_macro(
         &mut self,
-        name: (Self::Ident, Self::Span),
+        name_span: Self::Span,
         params: Params<Self::Ident, Self::Span>,
         body: TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
-    );
+    ) -> Self::MacroEntry;
 
     fn call_macro(
         self,
-        name: (Self::Ident, Self::Span),
+        name: (Self::MacroEntry, Self::Span),
         args: MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
     ) -> Self;
 }
@@ -314,56 +314,31 @@ where
 
     fn define_macro(
         &mut self,
-        name: (Self::Ident, Self::Span),
+        name_span: Self::Span,
         params: Params<Self::Ident, Self::Span>,
         body: TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
-    ) {
-        let id = self.upstream.macros.define_macro(
-            name.clone(),
-            params,
-            body,
-            self.downstream.diagnostics,
-        );
-        self.downstream
-            .names
-            .insert(name.0, ResolvedIdent::Macro(id))
+    ) -> Self::MacroEntry {
+        self.upstream
+            .macros
+            .define_macro(name_span, params, body, self.downstream.diagnostics)
     }
 
     fn call_macro(
         mut self,
-        name: (Self::Ident, Self::Span),
+        (MacroId(id), span): (Self::MacroEntry, Self::Span),
         args: MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
     ) -> Self {
-        let stripped = self.downstream.diagnostics.strip_span(&name.1);
-        let expansion = match self.downstream.names.get(&name.0) {
-            Some(ResolvedIdent::Macro(MacroId(id))) => {
-                let def = &self.upstream.macros[id];
-                Ok(Expand::expand(
-                    def,
-                    name.1,
-                    args,
-                    self.downstream.diagnostics,
-                ))
-            }
-            Some(ResolvedIdent::Backend(_)) => {
-                Err(Message::CannotUseSymbolNameAsMacroName { name: stripped }.at(name.1))
-            }
-            None => Err(Message::UndefinedMacro { name: stripped }.at(name.1)),
-        }
-        .map_err(|diag| self.downstream.diagnostics.emit_diag(diag))
-        .ok();
-        if let Some(expansion) = expansion {
-            let PartialSession {
-                macros,
-                downstream: Downstream { backend, .. },
-                ..
-            } = self
-                .upstream
-                .analyzer
-                .analyze_token_seq(expansion.map(|(t, s)| (Ok(t), s)), partial!(self));
-            self.upstream.macros = macros;
-            self.downstream.backend = backend
-        }
+        let expansion = self.upstream.macros[id].expand(span, args, self.downstream.diagnostics);
+        let PartialSession {
+            macros,
+            downstream: Downstream { backend, .. },
+            ..
+        } = self
+            .upstream
+            .analyzer
+            .analyze_token_seq(expansion.map(|(t, s)| (Ok(t), s)), partial!(self));
+        self.upstream.macros = macros;
+        self.downstream.backend = backend;
         self
     }
 }
@@ -470,8 +445,8 @@ mod mock {
     #[derive(Debug, PartialEq)]
     pub(crate) enum SessionEvent {
         AnalyzeFile(String),
-        DefineMacro(String, Vec<String>, Vec<SemanticToken<String, String>>),
-        InvokeMacro(String, Vec<Vec<SemanticToken<String, String>>>),
+        DefineMacro(Vec<String>, Vec<SemanticToken<String, String>>),
+        InvokeMacro(MockMacroId, Vec<Vec<SemanticToken<String, String>>>),
     }
 
     pub(in crate::analysis) type MockSession<A, N, T, S> = CompositeSession<
@@ -482,6 +457,7 @@ mod mock {
     >;
 
     pub(in crate::analysis) struct MockUpstream<T, S> {
+        id_gen: SerialIdAllocator,
         log: Log<T>,
         error: Option<CodebaseError>,
         _span: PhantomData<S>,
@@ -496,6 +472,7 @@ mod mock {
                     diagnostics: Box::new(MockDiagnostics::new(log.clone())),
                 },
                 upstream: MockUpstream {
+                    id_gen: SerialIdAllocator::new(),
                     log,
                     error: None,
                     _span: PhantomData,
@@ -508,9 +485,20 @@ mod mock {
         }
     }
 
-    impl<T, S> MockSession<SerialIdAllocator, BasicNameTable<usize, usize>, T, S> {
+    impl<T, S> MockSession<SerialIdAllocator, BasicNameTable<usize, MockMacroId>, T, S> {
         pub fn with_log(log: Log<T>) -> Self {
             Self::with_name_table(SerialIdAllocator::new(), BasicNameTable::new(), log)
+        }
+
+        pub fn with_predefined_names<I>(log: Log<T>, entries: I) -> Self
+        where
+            I: IntoIterator<Item = (String, ResolvedIdent<usize, MockMacroId>)>,
+        {
+            let mut table = BasicNameTable::new();
+            for (name, value) in entries {
+                table.insert(name, value)
+            }
+            Self::with_name_table(SerialIdAllocator::new(), table, log)
         }
     }
 
@@ -536,10 +524,13 @@ mod mock {
         type StringRef = String;
     }
 
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    pub struct MockMacroId(pub usize);
+
     impl<A, N, T, S> Session for MockSession<A, N, T, S>
     where
         A: AllocName<S>,
-        N: NameTable<String, BackendEntry = A::Name>,
+        N: NameTable<String, BackendEntry = A::Name, MacroEntry = MockMacroId>,
         T: From<SessionEvent>,
         T: From<BackendEvent<A::Name, Expr<A::Name, S>>>,
         T: From<DiagnosticsEvent<S>>,
@@ -553,23 +544,22 @@ mod mock {
 
         fn define_macro(
             &mut self,
-            name: (Self::Ident, Self::Span),
-            params: (Vec<Self::Ident>, Vec<Self::Span>),
-            body: TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
-        ) {
+            _: Self::Span,
+            (params, _): (Vec<Self::Ident>, Vec<Self::Span>),
+            (body, _): TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
+        ) -> Self::MacroEntry {
             self.upstream
                 .log
-                .push(SessionEvent::DefineMacro(name.0, params.0, body.0))
+                .push(SessionEvent::DefineMacro(params, body));
+            MockMacroId(self.upstream.id_gen.gen())
         }
 
         fn call_macro(
             self,
-            name: (Self::Ident, Self::Span),
+            (id, _): (Self::MacroEntry, Self::Span),
             (args, _): MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
         ) -> Self {
-            self.upstream
-                .log
-                .push(SessionEvent::InvokeMacro(name.0, args));
+            self.upstream.log.push(SessionEvent::InvokeMacro(id, args));
             self
         }
     }
@@ -709,26 +699,18 @@ mod tests {
 
     #[test]
     fn define_and_call_macro() {
-        let name = "my_macro";
         let tokens = vec![Token::Command(Command::Mnemonic(Mnemonic::Nop))];
         let spans: Vec<_> = iter::repeat(()).take(tokens.len()).collect();
         let log = Fixture::default().log_session(|mut session| {
-            session.define_macro(
-                (name.into(), ()),
-                (vec![], vec![]),
-                (tokens.clone(), spans.clone()),
-            );
-            session.call_macro((name.into(), ()), (vec![], vec![]));
+            let id = session.define_macro((), (vec![], vec![]), (tokens.clone(), spans.clone()));
+            session.call_macro((id, ()), (vec![], vec![]));
         });
         assert_eq!(
             log,
-            [
-                NameTableEvent::Insert(name.into(), ResolvedIdent::Macro(MacroId(0))).into(),
-                AnalyzerEvent::AnalyzeTokenSeq(
-                    tokens.into_iter().map(|token| (Ok(token), ())).collect()
-                )
-                .into()
-            ]
+            [AnalyzerEvent::AnalyzeTokenSeq(
+                tokens.into_iter().map(|token| (Ok(token), ())).collect()
+            )
+            .into()]
         );
     }
 
@@ -737,31 +719,27 @@ mod tests {
         let db = Token::Command(Command::Directive(Directive::Db));
         let arg = Token::Literal(Literal::Number(0x42));
         let literal0 = Token::Literal(Literal::Number(0));
-        let name = "my_db";
         let param = "x";
         let log = Fixture::default().log_session(|mut session| {
-            session.define_macro(
-                (name.into(), ()),
+            let id = session.define_macro(
+                (),
                 (vec![param.into()], vec![()]),
                 (
                     vec![db.clone(), Token::Ident(param.into()), literal0.clone()],
                     vec![(), (), ()],
                 ),
             );
-            session.call_macro((name.into(), ()), (vec![vec![arg.clone()]], vec![vec![()]]));
+            session.call_macro((id, ()), (vec![vec![arg.clone()]], vec![vec![()]]));
         });
         assert_eq!(
             log,
-            [
-                NameTableEvent::Insert(name.into(), ResolvedIdent::Macro(MacroId(0))).into(),
-                AnalyzerEvent::AnalyzeTokenSeq(
-                    vec![db, arg, literal0]
-                        .into_iter()
-                        .map(|token| (Ok(token), ()))
-                        .collect()
-                )
-                .into()
-            ]
+            [AnalyzerEvent::AnalyzeTokenSeq(
+                vec![db, arg, literal0]
+                    .into_iter()
+                    .map(|token| (Ok(token), ()))
+                    .collect()
+            )
+            .into()]
         );
     }
 
@@ -769,31 +747,27 @@ mod tests {
     fn define_and_call_macro_with_label() {
         let nop = Token::Command(Command::Mnemonic(Mnemonic::Nop));
         let label = "label";
-        let name = "my_macro";
         let param = "x";
         let log = Fixture::default().log_session(|mut session| {
-            session.define_macro(
-                (name.into(), ()),
+            let id = session.define_macro(
+                (),
                 (vec![param.into()], vec![()]),
                 (vec![Token::Label(param.into()), nop.clone()], vec![(), ()]),
             );
             session.call_macro(
-                (name.into(), ()),
+                (id, ()),
                 (vec![vec![Token::Ident(label.into())]], vec![vec![()]]),
             );
         });
         assert_eq!(
             log,
-            [
-                NameTableEvent::Insert(name.into(), ResolvedIdent::Macro(MacroId(0))).into(),
-                AnalyzerEvent::AnalyzeTokenSeq(
-                    vec![Token::Label(label.into()), nop]
-                        .into_iter()
-                        .map(|token| (Ok(token), ()))
-                        .collect()
-                )
-                .into()
-            ]
+            [AnalyzerEvent::AnalyzeTokenSeq(
+                vec![Token::Label(label.into()), nop]
+                    .into_iter()
+                    .map(|token| (Ok(token), ()))
+                    .collect()
+            )
+            .into()]
         );
     }
 
@@ -802,24 +776,6 @@ mod tests {
         let bytes = 10;
         let log = Fixture::default().log_session(|mut session| session.reserve(bytes.into()));
         assert_eq!(log, [BackendEvent::Reserve(bytes.into()).into()])
-    }
-
-    #[test]
-    fn diagnose_undefined_macro() {
-        let name = "my_macro";
-        let span = name;
-        let log = Fixture::<MockSpan<_>>::default().log_session(|session| {
-            session.call_macro((name.into(), span.into()), (vec![], vec![]));
-        });
-        assert_eq!(
-            log,
-            [DiagnosticsEvent::EmitDiag(
-                Message::UndefinedMacro { name: span.into() }
-                    .at(span.into())
-                    .into()
-            )
-            .into()]
-        );
     }
 
     impl Default for MockSpan<&'static str> {
@@ -855,31 +811,6 @@ mod tests {
                 ])
             )
         });
-    }
-
-    #[test]
-    fn diagnose_symbol_name_in_macro_call() {
-        let name = "symbol";
-        let as_macro = MockSpan::from("as_macro");
-        let log = Fixture::<MockSpan<_>>::default().log_session(|mut session| {
-            let id = session.alloc_name(MockSpan::from("as_symbol"));
-            session.insert(String::from(name), ResolvedIdent::Backend(id));
-            session.call_macro((name.into(), as_macro.clone()), (vec![], vec![]));
-        });
-        assert_eq!(
-            log,
-            [
-                NameTableEvent::Insert(name.into(), ResolvedIdent::Backend(0)).into(),
-                DiagnosticsEvent::EmitDiag(
-                    Message::CannotUseSymbolNameAsMacroName {
-                        name: as_macro.clone()
-                    }
-                    .at(as_macro)
-                    .into()
-                )
-                .into()
-            ]
-        )
     }
 
     type MockAnalyzer<S> = crate::analysis::semantics::MockAnalyzer<Event<S>>;
