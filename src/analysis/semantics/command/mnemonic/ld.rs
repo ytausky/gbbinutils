@@ -7,7 +7,7 @@ use crate::model::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, Spe
 
 impl<'a, I, V, D, S> Analysis<'a, I, D, S>
 where
-    I: Iterator<Item = Result<Operand<V>, ()>>,
+    I: Iterator<Item = Result<Operand<V, S>, ()>>,
     V: Source<Span = S>,
     D: Diagnostics<S>,
     S: Clone,
@@ -129,7 +129,7 @@ fn analyze_special_ld<V: Source>(
     )))
 }
 
-impl<V: Source> Operand<V> {
+impl<V: Source> Operand<V, V::Span> {
     fn into_ld_dest<D>(self, diagnostics: &mut D) -> Result<LdDest<V>, ()>
     where
         D: Diagnostics<V::Span>,

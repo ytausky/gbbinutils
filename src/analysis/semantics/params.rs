@@ -1,6 +1,6 @@
 use super::{Params, PushOp};
 
-use crate::analysis::backend::{AllocName, Finish, FinishFnDef, LocationCounter, Name};
+use crate::analysis::backend::{AllocName, Finish, LocationCounter, Name};
 use crate::analysis::resolve::{NameTable, ResolvedIdent};
 use crate::diag::{Diagnostics, Message};
 use crate::model::{BinOp, FnCall, ParamId};
@@ -151,27 +151,12 @@ impl_push_op_for_builder_adapter! {BinOp}
 impl_push_op_for_builder_adapter! {FnCall}
 impl_push_op_for_builder_adapter! {ParamId}
 
-impl<B, H, S> Finish<S> for BuilderAdapter<B, H>
-where
-    B: Finish<S>,
-    S: Clone,
-{
+impl<B: Finish, H> Finish for BuilderAdapter<B, H> {
     type Parent = B::Parent;
     type Value = B::Value;
 
     fn finish(self) -> (Self::Parent, Self::Value) {
         self.builder.finish()
-    }
-}
-
-impl<B, H> FinishFnDef for BuilderAdapter<B, H>
-where
-    B: FinishFnDef,
-{
-    type Return = B::Return;
-
-    fn finish_fn_def(self) -> Self::Return {
-        self.builder.finish_fn_def()
     }
 }
 

@@ -69,17 +69,11 @@ impl<N, A: From<Name<N>>> From<Name<N>> for ExprOp<A> {
     }
 }
 
-pub trait Finish<S: Clone> {
+pub trait Finish {
     type Parent;
-    type Value: Source<Span = S>;
+    type Value;
 
     fn finish(self) -> (Self::Parent, Self::Value);
-}
-
-pub trait FinishFnDef {
-    type Return;
-
-    fn finish_fn_def(self) -> Self::Return;
 }
 
 pub trait Backend<S>
@@ -92,11 +86,11 @@ where
 {
     type ImmediateBuilder: AllocName<S, Name = Self::Name>
         + ValueBuilder<Self::Name, S>
-        + Finish<S, Parent = Self, Value = Self::Value>;
+        + Finish<Parent = Self, Value = Self::Value>;
 
     type SymbolBuilder: AllocName<S, Name = Self::Name>
         + ValueBuilder<Self::Name, S>
-        + FinishFnDef<Return = Self>;
+        + Finish<Parent = Self, Value = ()>;
 
     fn build_immediate(self) -> Self::ImmediateBuilder;
     fn define_symbol(self, name: Self::Name, span: S) -> Self::SymbolBuilder;
@@ -211,7 +205,7 @@ mod mock {
         }
     }
 
-    impl<A, T, S> Finish<S> for RelocContext<MockBackend<A, T>, Expr<A::Name, S>>
+    impl<A, T, S> Finish for RelocContext<MockBackend<A, T>, Expr<A::Name, S>>
     where
         A: AllocName<S>,
         S: Clone,
@@ -239,20 +233,21 @@ mod mock {
         }
     }
 
-    impl<A, T, S> FinishFnDef for MockSymbolBuilder<MockBackend<A, T>, A::Name, S>
+    impl<A, T, S> Finish for MockSymbolBuilder<MockBackend<A, T>, A::Name, S>
     where
         A: AllocName<S>,
         T: From<BackendEvent<A::Name, Expr<A::Name, S>>>,
         S: Clone,
     {
-        type Return = MockBackend<A, T>;
+        type Parent = MockBackend<A, T>;
+        type Value = ();
 
-        fn finish_fn_def(self) -> Self::Return {
+        fn finish(self) -> (Self::Parent, Self::Value) {
             let parent = self.parent;
             parent
                 .log
                 .push(BackendEvent::DefineSymbol(self.name, self.expr));
-            parent
+            (parent, ())
         }
     }
 

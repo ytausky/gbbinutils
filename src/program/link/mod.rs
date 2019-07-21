@@ -210,7 +210,7 @@ mod tests {
         let symbol_id = builder.alloc_name(());
         let mut builder = builder.define_symbol(symbol_id, ());
         builder.push_op(LocationCounter, ());
-        builder.finish_fn_def();
+        builder.finish();
         let relocs = program.resolve_relocs();
         assert_eq!(relocs.get(RelocId(0)), addr.into());
     }

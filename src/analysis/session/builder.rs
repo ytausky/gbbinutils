@@ -1,6 +1,6 @@
 use super::{CompositeSession, Downstream};
 
-use crate::analysis::backend::{AllocName, Finish, FinishFnDef, Name, PushOp, RelocContext};
+use crate::analysis::backend::{AllocName, Finish, Name, PushOp, RelocContext};
 use crate::analysis::resolve::{NameTable, ResolvedIdent};
 use crate::diag::Diagnostics;
 
@@ -43,7 +43,7 @@ where
     }
 }
 
-impl<U, B: Finish<S>, N, D, S: Clone> Finish<S> for Builder<U, B, N, D> {
+impl<U, B: Finish, N, D> Finish for Builder<U, B, N, D> {
     type Parent = CompositeSession<U, B::Parent, N, D>;
     type Value = B::Value;
 
@@ -58,17 +58,6 @@ impl<U, B: Finish<S>, N, D, S: Clone> Finish<S> for Builder<U, B, N, D> {
             },
         };
         (parent, value)
-    }
-}
-
-impl<U, B: FinishFnDef, N, D> FinishFnDef for Builder<U, B, N, D> {
-    type Return = CompositeSession<U, B::Return, N, D>;
-
-    fn finish_fn_def(self) -> Self::Return {
-        CompositeSession {
-            upstream: self.parent,
-            downstream: self.builder.replace_backend(FinishFnDef::finish_fn_def),
-        }
     }
 }
 

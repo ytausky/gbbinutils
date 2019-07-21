@@ -8,17 +8,17 @@ use crate::model::{Condition, PtrReg, Reg16, RegPair, SimpleOperand};
 use crate::span::{Source, SpanSource};
 
 #[derive(Debug, PartialEq)]
-pub enum Operand<V: Source> {
-    Atom(AtomKind, V::Span),
-    Const(V),
-    Deref(V),
+pub enum Operand<E, S> {
+    Atom(AtomKind, S),
+    Const(E),
+    Deref(E),
 }
 
-impl<V: Source> SpanSource for Operand<V> {
-    type Span = V::Span;
+impl<E, S: Clone> SpanSource for Operand<E, S> {
+    type Span = S;
 }
 
-impl<V: Source> Source for Operand<V> {
+impl<E: Source> Source for Operand<E, E::Span> {
     fn span(&self) -> Self::Span {
         match self {
             Operand::Atom(_, span) => (*span).clone(),
@@ -44,13 +44,18 @@ pub enum Context {
     Other,
 }
 
+type OperandResult<C, S> = (
+    <C as Finish>::Parent,
+    Result<Operand<<C as Finish>::Value, S>, ()>,
+);
+
 pub(super) fn analyze_operand<C, I, R, S>(
     expr: Arg<I, R, S>,
     context: Context,
     mut value_context: C,
-) -> (C::Parent, Result<Operand<C::Value>, ()>)
+) -> OperandResult<C, S>
 where
-    C: ArgEvaluator<I, S> + Finish<S>,
+    C: ArgEvaluator<I, S> + Finish,
     R: Eq,
     S: Clone,
 {
@@ -76,9 +81,9 @@ fn analyze_deref_operand<C, I, R, S>(
     expr: Arg<I, R, S>,
     deref_span: S,
     mut value_context: C,
-) -> (C::Parent, Result<Operand<C::Value>, ()>)
+) -> OperandResult<C, S>
 where
-    C: ArgEvaluator<I, S> + Finish<S>,
+    C: ArgEvaluator<I, S> + Finish,
     R: Eq,
     S: Clone,
 {
@@ -101,14 +106,13 @@ where
     }
 }
 
-fn analyze_deref_operand_keyword<V: Source, D>(
-    keyword: (kw::Operand, &V::Span),
-    deref: V::Span,
+fn analyze_deref_operand_keyword<D, E, S>(
+    keyword: (kw::Operand, &S),
+    deref: S,
     diagnostics: &mut D,
-) -> Result<Operand<V>, ()>
+) -> Result<Operand<E, S>, ()>
 where
-    V: Source,
-    D: Diagnostics<V::Span>,
+    D: Diagnostics<S>,
 {
     match try_deref_operand_keyword(keyword.0) {
         Ok(atom) => Ok(Operand::Atom(atom, deref)),
@@ -141,14 +145,14 @@ fn try_deref_operand_keyword(keyword: kw::Operand) -> Result<AtomKind, KeywordOp
     }
 }
 
-fn analyze_keyword_operand<V: Source, D>(
-    (keyword, span): (kw::Operand, V::Span),
+fn analyze_keyword_operand<D, E, S>(
+    (keyword, span): (kw::Operand, S),
     context: Context,
     diagnostics: &mut D,
-) -> Result<Operand<V>, ()>
+) -> Result<Operand<E, S>, ()>
 where
-    V: Source,
-    D: Diagnostics<V::Span>,
+    D: Diagnostics<S>,
+    S: Clone,
 {
     use self::kw::Operand::*;
     use self::Context::*;
@@ -264,7 +268,7 @@ pub mod tests {
         )
     }
 
-    type OperandResult<S> = Result<Operand<Expr<S>>, Vec<Event<S>>>;
+    type OperandResult<S> = Result<Operand<Expr<S>, S>, Vec<Event<S>>>;
 
     #[derive(Debug, PartialEq)]
     pub(crate) enum Event<S: Clone> {

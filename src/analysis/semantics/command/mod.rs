@@ -2,7 +2,7 @@ use self::args::*;
 
 use super::*;
 
-use crate::analysis::backend::{Finish, FinishFnDef, LocationCounter, Name, PushOp};
+use crate::analysis::backend::{Finish, LocationCounter, Name, PushOp};
 use crate::analysis::session::Session;
 use crate::diag::span::{MergeSpans, StripSpan};
 use crate::diag::{CompactDiag, Diagnostics, EmitDiag, Message};
@@ -240,7 +240,7 @@ impl<S: Session> SemanticActions<S> {
                 .resolve_names()
                 .with_params(params);
             result = builder.eval_arg(expr);
-            builder.finish_fn_def()
+            builder.finish()
         });
         result
     }

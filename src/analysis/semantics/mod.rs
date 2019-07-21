@@ -2,7 +2,7 @@ use self::command::CommandActions;
 use self::invoke::MacroCallActions;
 use self::params::*;
 
-use super::backend::{FinishFnDef, LocationCounter, PushOp};
+use super::backend::{Finish, LocationCounter, PushOp};
 use super::session::{Analyze, IntoSession, Params, Session};
 use super::syntax::keyword::Command;
 use super::syntax::*;
@@ -58,23 +58,16 @@ impl<S: Session> SemanticActions<S> {
             >,
         ) -> (S, T),
     {
-        let builder = self
-            .session
-            .take()
-            .unwrap()
-            .build_value()
-            .resolve_names()
-            .with_params(params);
-        let result = f(builder);
-        self.session = Some(result.0);
-        result.1
+        self.with_session(|session| f(session.build_value().resolve_names().with_params(params)))
     }
 
-    fn with_session<F>(&mut self, f: F)
+    fn with_session<F, T>(&mut self, f: F) -> T
     where
-        F: FnOnce(S) -> S,
+        F: FnOnce(S) -> (S, T),
     {
-        self.session = Some(f(self.session.take().unwrap()))
+        let (session, output) = f(self.session.take().unwrap());
+        self.session = Some(session);
+        output
     }
 }
 
@@ -149,7 +142,7 @@ impl<S: Session> StmtActions<S> {
                 let id = session.reloc_lookup(label, span.clone());
                 let mut builder = session.define_symbol(id, span.clone());
                 PushOp::<LocationCounter, _>::push_op(&mut builder, LocationCounter, span);
-                builder.finish_fn_def()
+                builder.finish()
             })
         }
     }

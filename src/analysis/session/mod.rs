@@ -54,12 +54,12 @@ where
     type FnBuilder: ValueBuilder<Self::Name, S>
         + AllocName<S, Name = Self::Name>
         + NameTable<I, BackendEntry = Self::Name>
-        + FinishFnDef<Return = Self>
+        + Finish<Parent = Self, Value = ()>
         + Diagnostics<S>;
     type GeneralBuilder: ValueBuilder<Self::Name, S>
         + AllocName<S, Name = Self::Name>
         + NameTable<I, BackendEntry = Self::Name>
-        + Finish<S, Parent = Self, Value = Self::Value>
+        + Finish<Parent = Self, Value = Self::Value>
         + Diagnostics<S>;
 
     fn build_value(self) -> Self::GeneralBuilder;
@@ -668,7 +668,7 @@ mod tests {
             session.insert(label.into(), ResolvedIdent::Backend(id));
             let mut builder = session.define_symbol(id, ());
             builder.push_op(LocationCounter, ());
-            builder.finish_fn_def();
+            builder.finish();
         });
         let id = 0;
         assert_eq!(

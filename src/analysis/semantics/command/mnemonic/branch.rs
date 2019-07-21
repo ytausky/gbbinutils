@@ -25,7 +25,7 @@ pub enum ImplicitBranch {
 
 impl<'a, I, V, D, S> Analysis<'a, I, D, S>
 where
-    I: Iterator<Item = Result<Operand<V>, ()>>,
+    I: Iterator<Item = Result<Operand<V, S>, ()>>,
     V: Source<Span = S>,
     D: Diagnostics<S>,
     S: Clone,
@@ -90,7 +90,7 @@ impl<V: Source> Source for BranchTarget<V> {
 }
 
 fn analyze_branch_target<V, D>(
-    target: Option<Operand<V>>,
+    target: Option<Operand<V, V::Span>>,
     diagnostics: &mut D,
 ) -> Result<Option<BranchTarget<V>>, ()>
 where

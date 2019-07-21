@@ -16,7 +16,7 @@ pub(super) fn analyze_instruction<I, V, D, S>(
     diagnostics: &mut D,
 ) -> Result<Instruction<V>, ()>
 where
-    I: IntoIterator<Item = Result<Operand<V>, ()>>,
+    I: IntoIterator<Item = Result<Operand<V, S>, ()>>,
     V: Source<Span = S>,
     D: Diagnostics<S>,
     S: Clone,
@@ -42,7 +42,7 @@ where
 
 impl<'a, I, V, D, S> Analysis<'a, I, D, S>
 where
-    I: Iterator<Item = Result<Operand<V>, ()>>,
+    I: Iterator<Item = Result<Operand<V, S>, ()>>,
     V: Source<Span = S>,
     D: Diagnostics<S>,
     S: Clone,
@@ -113,7 +113,7 @@ where
     fn analyze_alu_instruction(
         &mut self,
         operation: AluOperation,
-        first_operand: Operand<V>,
+        first_operand: Operand<V, S>,
     ) -> Result<Instruction<V>, ()> {
         let src = if operation.implicit_dest() {
             first_operand
@@ -200,7 +200,7 @@ where
         ))
     }
 
-    fn next_operand_of(&mut self, out_of: usize) -> Result<Operand<V>, ()> {
+    fn next_operand_of(&mut self, out_of: usize) -> Result<Operand<V, S>, ()> {
         let actual = self.operands.seen();
         self.next_operand()?.ok_or_else(|| {
             self.emit_diag(
@@ -213,7 +213,7 @@ where
         })
     }
 
-    fn next_operand(&mut self) -> Result<Option<Operand<V>>, ()> {
+    fn next_operand(&mut self) -> Result<Option<Operand<V, S>>, ()> {
         self.operands
             .next()
             .map_or(Ok(None), |result| result.map(Some))
@@ -233,7 +233,7 @@ where
     }
 }
 
-impl<V: Source> Operand<V> {
+impl<V: Source> Operand<V, V::Span> {
     fn expect_specific_atom<D>(
         self,
         expected: AtomKind,

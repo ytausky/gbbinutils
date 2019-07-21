@@ -102,7 +102,7 @@ impl<'a, S: Clone> PushOp<Name<NameId>, S> for RelocContext<ProgramBuilder<'a, S
     }
 }
 
-impl<'a, S: Clone> Finish<S> for RelocContext<ProgramBuilder<'a, S>, Immediate<S>> {
+impl<'a, S: Clone> Finish for RelocContext<ProgramBuilder<'a, S>, Immediate<S>> {
     type Parent = ProgramBuilder<'a, S>;
     type Value = Immediate<S>;
 
@@ -150,17 +150,18 @@ impl<'a, S: Clone> PushOp<LocationCounter, S> for SymbolBuilder<'a, S> {
     }
 }
 
-impl<'a, S> FinishFnDef for SymbolBuilder<'a, S> {
-    type Return = ProgramBuilder<'a, S>;
+impl<'a, S> Finish for SymbolBuilder<'a, S> {
+    type Parent = ProgramBuilder<'a, S>;
+    type Value = ();
 
-    fn finish_fn_def(self) -> Self::Return {
+    fn finish(self) -> (Self::Parent, Self::Value) {
         let mut parent = self.parent;
         parent.push(Node::Reloc(self.location));
         parent
             .program
             .names
             .define(self.name.0, NameDef::Symbol(self.expr));
-        parent
+        (parent, ())
     }
 }
 
@@ -354,7 +355,7 @@ mod tests {
             let symbol_id = builder.alloc_name(());
             let mut builder = builder.define_symbol(symbol_id, ());
             builder.push_op(LocationCounter, ());
-            let mut builder = builder.finish_fn_def();
+            let (mut builder, _) = builder.finish();
             let mut value: Immediate<_> = Default::default();
             value.push_op(symbol_id, ());
             builder.emit_item(word_item(value));
@@ -372,7 +373,7 @@ mod tests {
             builder.emit_item(word_item(value));
             let mut builder = builder.define_symbol(symbol_id, ());
             builder.push_op(LocationCounter, ());
-            builder.finish_fn_def();
+            builder.finish();
         });
         assert_eq!(*diagnostics, []);
         assert_eq!(object.sections.last().unwrap().data, [0x02, 0x00])
