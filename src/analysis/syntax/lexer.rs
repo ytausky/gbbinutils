@@ -490,12 +490,12 @@ mod tests {
 
     #[test]
     fn ignore_comment_at_end_of_line() {
-        assert_eq_tokens("a ; comment\n", [Literal(Operand(A)).into(), Eol.into()])
+        assert_eq_tokens("a ; comment\n", [Literal(Operand(A)), Eol.into()])
     }
 
     #[test]
     fn ignore_comment_at_end_of_input() {
-        assert_eq_tokens("a ; comment", [Literal(Operand(A)).into()])
+        assert_eq_tokens("a ; comment", [Literal(Operand(A))])
     }
 
     #[test]
