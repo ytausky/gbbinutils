@@ -391,7 +391,7 @@ impl<V: Source> From<Nullary> for Instruction<V> {
 
 #[cfg(test)]
 mod tests {
-    pub use crate::analysis::syntax::Operand::*;
+    pub use crate::analysis::semantics::command::OperandSymbol::*;
     pub(crate) use crate::diag::Message;
     pub use crate::span::{MergeSpans, SpanSource};
 
@@ -400,7 +400,6 @@ mod tests {
     use super::*;
 
     use crate::analysis::semantics::command::*;
-    use crate::analysis::syntax::keyword as kw;
     use crate::analysis::Literal;
     use crate::model::{Atom, LocationCounter};
 
@@ -427,8 +426,8 @@ mod tests {
         }
     }
 
-    pub(super) fn literal(keyword: kw::Operand) -> Input {
-        Literal::Operand(keyword).into()
+    pub(super) fn literal(symbol: OperandSymbol) -> Input {
+        Arg::from_atom(ArgAtom::OperandSymbol(symbol), ())
     }
 
     pub(super) fn number(n: i32, span: impl Into<TokenSpan>) -> Expr {
@@ -510,7 +509,7 @@ mod tests {
         }
     }
 
-    impl From<PtrReg> for kw::Operand {
+    impl From<PtrReg> for OperandSymbol {
         fn from(ptr_reg: PtrReg) -> Self {
             match ptr_reg {
                 PtrReg::Bc => Bc,
@@ -521,7 +520,7 @@ mod tests {
         }
     }
 
-    impl From<Reg16> for kw::Operand {
+    impl From<Reg16> for OperandSymbol {
         fn from(reg16: Reg16) -> Self {
             match reg16 {
                 Reg16::Bc => Bc,
@@ -534,7 +533,7 @@ mod tests {
 
     impl<T> From<T> for Input
     where
-        kw::Operand: From<T>,
+        OperandSymbol: From<T>,
     {
         fn from(src: T) -> Self {
             literal(src.into())

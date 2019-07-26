@@ -1,10 +1,8 @@
-pub use self::keyword::Operand;
 pub(super) use self::lexer::{LexError, Lexer};
 
 use crate::diag::Diagnostics;
 use crate::model::BinOp;
 
-pub mod keyword;
 mod lexer;
 mod parser;
 

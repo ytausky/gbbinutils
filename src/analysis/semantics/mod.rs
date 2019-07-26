@@ -416,10 +416,10 @@ mod tests {
                 .enter_unlabeled_stmt()
                 .enter_command((Command::Mnemonic(Mnemonic::Ld), ()));
             let mut arg1 = command.add_argument();
-            arg1.push_atom((ExprAtom::Literal(Literal::Operand(Operand::B)), ()));
+            arg1.push_atom((ExprAtom::Ident("B".into()), ()));
             command = arg1.exit();
             let mut arg2 = command.add_argument();
-            arg2.push_atom((ExprAtom::Literal(Literal::Operand(Operand::Hl)), ()));
+            arg2.push_atom((ExprAtom::Ident("HL".into()), ()));
             arg2.apply_operator((Operator::Unary(UnaryOperator::Parentheses), ()));
             arg2.exit().exit().exit()
         });
@@ -554,10 +554,7 @@ mod tests {
         test_macro_definition(
             "my_macro",
             [],
-            [
-                Token::Ident("XOR".into()),
-                Token::Literal(Literal::Operand(Operand::A)),
-            ],
+            [Token::Ident("XOR".into()), Token::Ident("A".into())],
         )
     }
 
@@ -622,8 +619,7 @@ mod tests {
                 .enter_unlabeled_stmt()
                 .enter_command((Command::Mnemonic(NOP), ()))
                 .add_argument();
-            let literal_a = Literal::Operand(Operand::A);
-            arg.push_atom((ExprAtom::Literal(literal_a), ()));
+            arg.push_atom((ExprAtom::Ident("A".into()), ()));
             arg.exit().exit().exit()
         });
         assert_eq!(

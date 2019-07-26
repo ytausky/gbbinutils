@@ -2,6 +2,7 @@ pub(super) use self::directive::Directive;
 pub(super) use self::mnemonic::{Mnemonic, *};
 
 use self::args::*;
+use self::operand::OperandSymbol;
 
 use super::*;
 
@@ -73,7 +74,10 @@ impl<S: Session> EmitDiag<S::Span, S::Stripped> for CommandActions<S> {
     }
 }
 
-impl<S: Session> CommandContext<S::Span> for CommandActions<S> {
+impl<S: Session> CommandContext<S::Span> for CommandActions<S>
+where
+    S::Ident: AsRef<str>,
+{
     type Ident = S::Ident;
     type Literal = Literal<S::StringRef>;
     type ArgContext = ExprBuilder<S::Ident, S::StringRef, S::Span, Self>;
@@ -168,6 +172,7 @@ impl<S: Session> FinalContext for ExprBuilder<S::Ident, S::StringRef, S::Span, C
 
 impl<I, R, S, P> ExprContext<S> for ExprBuilder<I, R, S, P>
 where
+    I: AsRef<str>,
     S: Clone,
     Self: Diagnostics<S>,
 {
@@ -177,7 +182,11 @@ where
     fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, S)) {
         self.stack.push(Arg {
             variant: ArgVariant::Atom(match atom.0 {
-                ExprAtom::Ident(ident) => ArgAtom::Ident(ident),
+                ExprAtom::Ident(ident) => OPERAND_SYMBOLS
+                    .iter()
+                    .find(|(spelling, _)| spelling.eq_ignore_ascii_case(ident.as_ref()))
+                    .map(|(_, symbol)| ArgAtom::OperandSymbol(*symbol))
+                    .unwrap_or_else(|| ArgAtom::Ident(ident)),
                 ExprAtom::Literal(literal) => ArgAtom::Literal(literal),
                 ExprAtom::LocationCounter => ArgAtom::LocationCounter,
             }),
@@ -215,6 +224,26 @@ where
         self.stack.push(Arg { variant, span })
     }
 }
+
+const OPERAND_SYMBOLS: &[(&str, OperandSymbol)] = &[
+    ("a", OperandSymbol::A),
+    ("af", OperandSymbol::Af),
+    ("b", OperandSymbol::B),
+    ("bc", OperandSymbol::Bc),
+    ("c", OperandSymbol::C),
+    ("d", OperandSymbol::D),
+    ("de", OperandSymbol::De),
+    ("e", OperandSymbol::E),
+    ("h", OperandSymbol::H),
+    ("hl", OperandSymbol::Hl),
+    ("hld", OperandSymbol::Hld),
+    ("hli", OperandSymbol::Hli),
+    ("l", OperandSymbol::L),
+    ("nc", OperandSymbol::Nc),
+    ("nz", OperandSymbol::Nz),
+    ("sp", OperandSymbol::Sp),
+    ("z", OperandSymbol::Z),
+];
 
 fn analyze_mnemonic<S: Session>(
     name: (Mnemonic, S::Span),
@@ -307,12 +336,10 @@ where
                 self.push_op(n, arg.span);
                 Ok(())
             }
-            ArgVariant::Atom(ArgAtom::Literal(Literal::Operand(_))) => {
-                Err(Message::KeywordInExpr {
-                    keyword: self.strip_span(&arg.span),
-                }
-                .at(arg.span))
+            ArgVariant::Atom(ArgAtom::OperandSymbol(_)) => Err(Message::KeywordInExpr {
+                keyword: self.strip_span(&arg.span),
             }
+            .at(arg.span)),
             ArgVariant::Atom(ArgAtom::Literal(Literal::String(_))) => {
                 Err(Message::StringInInstruction.at(arg.span))
             }

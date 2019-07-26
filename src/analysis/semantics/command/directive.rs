@@ -159,7 +159,6 @@ mod tests {
     use crate::analysis::semantics::command;
     use crate::analysis::semantics::tests::*;
     use crate::analysis::session::SessionEvent;
-    use crate::analysis::syntax::keyword::Operand;
     use crate::analysis::syntax::*;
     use crate::codebase::CodebaseError;
     use crate::log::with_log;
@@ -242,8 +241,7 @@ mod tests {
 
     #[test]
     fn ds_with_malformed_expr() {
-        let actions =
-            ds(|arg| arg.push_atom((ExprAtom::Literal(Literal::Operand(Operand::A)), ())));
+        let actions = ds(|arg| arg.push_atom((ExprAtom::Ident("A".into()), ())));
         assert_eq!(
             actions,
             [
@@ -280,7 +278,7 @@ mod tests {
     #[test]
     fn data_with_malformed_expr() {
         let actions = unary_directive(Directive::Db, |arg| {
-            arg.push_atom((ExprAtom::Literal(Literal::Operand(Operand::A)), ()))
+            arg.push_atom((ExprAtom::Ident("A".into()), ()))
         });
         assert_eq!(
             actions,

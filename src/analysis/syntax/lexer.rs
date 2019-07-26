@@ -1,6 +1,5 @@
-use super::keyword::*;
+use super::SimpleToken::*;
 use super::{IdentFactory, SimpleToken, Token};
-use super::{Operand::*, SimpleToken::*};
 use crate::analysis::Literal;
 
 use std::borrow::Borrow;
@@ -254,50 +253,23 @@ fn identify_keyword(word: &str) -> Option<Keyword> {
 #[derive(Clone, Copy)]
 enum Keyword {
     Endm,
-    Operand(Operand),
 }
 
 impl<I, R> From<Keyword> for Token<I, Literal<R>> {
     fn from(keyword: Keyword) -> Self {
         match keyword {
             Keyword::Endm => Endm.into(),
-            Keyword::Operand(operand) => Token::Literal(Literal::Operand(operand)),
         }
     }
 }
 
-impl From<Operand> for Keyword {
-    fn from(operand: Operand) -> Self {
-        Keyword::Operand(operand)
-    }
-}
-
-const KEYWORDS: &[(&str, Keyword)] = &[
-    ("a", Keyword::Operand(A)),
-    ("af", Keyword::Operand(Af)),
-    ("b", Keyword::Operand(B)),
-    ("bc", Keyword::Operand(Bc)),
-    ("c", Keyword::Operand(C)),
-    ("d", Keyword::Operand(D)),
-    ("de", Keyword::Operand(De)),
-    ("e", Keyword::Operand(E)),
-    ("endm", Keyword::Endm),
-    ("h", Keyword::Operand(H)),
-    ("hl", Keyword::Operand(Hl)),
-    ("hld", Keyword::Operand(Hld)),
-    ("hli", Keyword::Operand(Hli)),
-    ("l", Keyword::Operand(L)),
-    ("nc", Keyword::Operand(Nc)),
-    ("nz", Keyword::Operand(Nz)),
-    ("sp", Keyword::Operand(Sp)),
-    ("z", Keyword::Operand(Z)),
-];
+const KEYWORDS: &[(&str, Keyword)] = &[("endm", Keyword::Endm)];
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use super::Literal::{Number, Operand};
+    use super::Literal::Number;
     use super::Token::*;
     use std::borrow::Borrow;
 
@@ -384,11 +356,6 @@ mod tests {
     }
 
     #[test]
-    fn lex_two_keywords() {
-        assert_eq_tokens("a bc", [Literal(Operand(A)), Literal(Operand(Bc))])
-    }
-
-    #[test]
     fn lex_comma() {
         assert_eq_tokens(",", [Comma.into()])
     }
@@ -438,7 +405,6 @@ mod tests {
         for &(spelling, keyword) in KEYWORDS.iter() {
             let token = match keyword {
                 Keyword::Endm => Endm.into(),
-                Keyword::Operand(operand) => Literal(Operand(operand)),
             };
             assert_eq_tokens(&f(spelling), [token])
         }
@@ -486,12 +452,12 @@ mod tests {
 
     #[test]
     fn ignore_comment_at_end_of_line() {
-        assert_eq_tokens("a ; comment\n", [Literal(Operand(A)), Eol.into()])
+        assert_eq_tokens("+ ; comment\n", [Plus.into(), Eol.into()])
     }
 
     #[test]
     fn ignore_comment_at_end_of_input() {
-        assert_eq_tokens("a ; comment", [Literal(Operand(A))])
+        assert_eq_tokens("+ ; comment", [Plus.into()])
     }
 
     #[test]

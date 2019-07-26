@@ -1,3 +1,5 @@
+use super::OperandSymbol;
+
 use crate::analysis::Literal;
 use crate::diag::span::{Source, SpanSource};
 use crate::model::BinOp;
@@ -23,6 +25,7 @@ pub(super) enum ArgAtom<I, R> {
     Ident(I),
     Literal(Literal<R>),
     LocationCounter,
+    OperandSymbol(OperandSymbol),
 }
 
 #[derive(Clone, Debug, PartialEq)]

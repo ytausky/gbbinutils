@@ -1,11 +1,30 @@
 use super::{Arg, ArgAtom, ArgEvaluator, ArgUnaryOp, ArgVariant, EvalArg};
 
 use crate::analysis::backend::Finish;
-use crate::analysis::syntax::keyword as kw;
-use crate::analysis::Literal;
 use crate::diag::*;
 use crate::model::{Condition, PtrReg, Reg16, RegPair, SimpleOperand};
 use crate::span::{Source, SpanSource};
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum OperandSymbol {
+    A,
+    Af,
+    B,
+    Bc,
+    C,
+    D,
+    De,
+    E,
+    H,
+    Hl,
+    Hld,
+    Hli,
+    L,
+    Nc,
+    Nz,
+    Sp,
+    Z,
+}
 
 #[derive(Debug, PartialEq)]
 pub enum Operand<E, S> {
@@ -60,8 +79,8 @@ where
     S: Clone,
 {
     match expr.variant {
-        ArgVariant::Atom(ArgAtom::Literal(Literal::Operand(keyword))) => {
-            let result = analyze_keyword_operand((keyword, expr.span), context, &mut value_context);
+        ArgVariant::Atom(ArgAtom::OperandSymbol(symbol)) => {
+            let result = analyze_keyword_operand((symbol, expr.span), context, &mut value_context);
             (value_context.finish().0, result)
         }
         ArgVariant::Unary(ArgUnaryOp::Parentheses, inner) => {
@@ -88,12 +107,9 @@ where
     S: Clone,
 {
     match expr.variant {
-        ArgVariant::Atom(ArgAtom::Literal(Literal::Operand(keyword))) => {
-            let result = analyze_deref_operand_keyword(
-                (keyword, &expr.span),
-                deref_span,
-                &mut value_context,
-            );
+        ArgVariant::Atom(ArgAtom::OperandSymbol(symbol)) => {
+            let result =
+                analyze_deref_operand_keyword((symbol, &expr.span), deref_span, &mut value_context);
             (value_context.finish().0, result)
         }
         _ => match value_context.eval_arg(expr) {
@@ -107,7 +123,7 @@ where
 }
 
 fn analyze_deref_operand_keyword<D, E, S>(
-    keyword: (kw::Operand, &S),
+    keyword: (OperandSymbol, &S),
     deref: S,
     diagnostics: &mut D,
 ) -> Result<Operand<E, S>, ()>
@@ -130,9 +146,10 @@ where
     }
 }
 
-fn try_deref_operand_keyword(keyword: kw::Operand) -> Result<AtomKind, KeywordOperandCategory> {
-    use self::kw::Operand::*;
-    match keyword {
+fn try_deref_operand_keyword(symbol: OperandSymbol) -> Result<AtomKind, KeywordOperandCategory> {
+    use self::OperandSymbol::*;
+
+    match symbol {
         Bc => Ok(AtomKind::DerefPtrReg(PtrReg::Bc)),
         C => Ok(AtomKind::DerefC),
         De => Ok(AtomKind::DerefPtrReg(PtrReg::De)),
@@ -146,7 +163,7 @@ fn try_deref_operand_keyword(keyword: kw::Operand) -> Result<AtomKind, KeywordOp
 }
 
 fn analyze_keyword_operand<D, E, S>(
-    (keyword, span): (kw::Operand, S),
+    (symbol, span): (OperandSymbol, S),
     context: Context,
     diagnostics: &mut D,
 ) -> Result<Operand<E, S>, ()>
@@ -154,9 +171,10 @@ where
     D: Diagnostics<S>,
     S: Clone,
 {
-    use self::kw::Operand::*;
     use self::Context::*;
-    let kind = match keyword {
+    use self::OperandSymbol::*;
+
+    let kind = match symbol {
         A => AtomKind::Simple(SimpleOperand::A),
         Af => AtomKind::RegPair(RegPair::Af),
         B => AtomKind::Simple(SimpleOperand::B),
@@ -225,6 +243,7 @@ pub mod tests {
     use super::*;
 
     use crate::analysis::backend::BackendEvent;
+    use crate::analysis::Literal;
     use crate::model::{Atom, LocationCounter};
 
     use std::fmt::Debug;
@@ -256,7 +275,7 @@ pub mod tests {
             variant: ArgVariant::Unary(
                 ArgUnaryOp::Parentheses,
                 Box::new(Arg::from_atom(
-                    ArgAtom::Literal(Literal::Operand(ptr_reg.into())),
+                    ArgAtom::OperandSymbol(ptr_reg.into()),
                     0.into(),
                 )),
             ),
@@ -309,7 +328,7 @@ pub mod tests {
             variant: ArgVariant::Unary(
                 ArgUnaryOp::Parentheses,
                 Box::new(Arg::from_atom(
-                    ArgAtom::Literal(Literal::Operand(kw::Operand::Af)),
+                    ArgAtom::OperandSymbol(OperandSymbol::Af),
                     0.into(),
                 )),
             ),
@@ -366,7 +385,7 @@ pub mod tests {
                     variant: ArgVariant::Unary(
                         ArgUnaryOp::Parentheses,
                         Box::new(Arg::from_atom(
-                            ArgAtom::Literal(Literal::Operand(kw::Operand::Z)),
+                            ArgAtom::OperandSymbol(OperandSymbol::Z),
                             span.into(),
                         )),
                     ),
@@ -406,17 +425,17 @@ pub mod tests {
 
     #[test]
     fn analyze_bare_hld() {
-        test_bare_ptr_reg(kw::Operand::Hld)
+        test_bare_ptr_reg(OperandSymbol::Hld)
     }
 
     #[test]
     fn analyze_bare_hli() {
-        test_bare_ptr_reg(kw::Operand::Hli)
+        test_bare_ptr_reg(OperandSymbol::Hli)
     }
 
-    fn test_bare_ptr_reg(keyword: kw::Operand) {
+    fn test_bare_ptr_reg(symbol: OperandSymbol) {
         let span = MockSpan::from(0);
-        let expr = Arg::from_atom(ArgAtom::Literal(Literal::Operand(keyword)), span.clone());
+        let expr = Arg::from_atom(ArgAtom::OperandSymbol(symbol), span.clone());
         assert_eq!(
             analyze_operand(expr, Context::Other),
             Err(vec![Event::Diagnostics(

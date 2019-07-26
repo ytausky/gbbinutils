@@ -65,7 +65,6 @@ type SemanticToken<I, R> = syntax::Token<I, Literal<R>>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum Literal<R> {
-    Operand(Operand),
     Number(i32),
     String(R),
 }

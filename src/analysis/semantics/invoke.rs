@@ -90,10 +90,8 @@ mod tests {
 
     use crate::analysis::resolve::ResolvedIdent;
     use crate::analysis::semantics::tests::*;
-    use crate::analysis::semantics::Operand;
     use crate::analysis::session::{MockMacroId, SessionEvent};
     use crate::analysis::syntax::{FileContext, Key, StmtContext, Token};
-    use crate::analysis::Literal;
 
     #[test]
     fn call_nullary_macro() {
@@ -120,7 +118,7 @@ mod tests {
     #[test]
     fn call_unary_macro() {
         let name = "my_macro";
-        let arg_token = Token::Literal(Literal::Operand(Operand::A));
+        let arg_token = Token::Ident("A".into());
         let macro_id = MockMacroId(0);
         let log = log_with_predefined_names(
             vec![(name.into(), ResolvedIdent::Macro(macro_id))],
