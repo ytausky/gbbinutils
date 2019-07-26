@@ -1,3 +1,6 @@
+pub(super) use self::directive::Directive;
+pub(super) use self::mnemonic::{Mnemonic, *};
+
 use self::args::*;
 
 use super::*;
@@ -12,6 +15,24 @@ mod args;
 mod directive;
 mod mnemonic;
 mod operand;
+
+#[derive(Clone, Debug, PartialEq)]
+pub(in crate::analysis) enum Command {
+    Directive(Directive),
+    Mnemonic(Mnemonic),
+}
+
+impl From<Directive> for Command {
+    fn from(directive: Directive) -> Self {
+        Command::Directive(directive)
+    }
+}
+
+impl From<Mnemonic> for Command {
+    fn from(mnemonic: Mnemonic) -> Self {
+        Command::Mnemonic(mnemonic)
+    }
+}
 
 pub(in crate::analysis) struct CommandActions<S: Session> {
     parent: StmtActions<S>,
@@ -324,9 +345,11 @@ where
 
 #[cfg(test)]
 mod tests {
+    use super::Directive;
+
     use crate::analysis::semantics::tests::collect_semantic_actions;
     use crate::analysis::syntax::*;
-    use crate::analysis::syntax::{Command::*, Directive::*, ExprAtom::*, Operator::*};
+    use crate::analysis::syntax::{ExprAtom::*, Operator::*};
     use crate::analysis::Literal::*;
     use crate::diag::{DiagnosticsEvent, Message, MockSpan};
 
@@ -336,7 +359,7 @@ mod tests {
             collect_semantic_actions::<_, MockSpan<_>>(|actions| {
                 let mut actions = actions
                     .enter_unlabeled_stmt()
-                    .enter_command((Directive(Db), "db".into()))
+                    .enter_command((Directive::Db.into(), "db".into()))
                     .add_argument();
                 actions.push_atom((Literal(Number(7)), "literal".into()));
                 actions.apply_operator((FnCall(0), "call".into()));

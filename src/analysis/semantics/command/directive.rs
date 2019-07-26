@@ -1,10 +1,21 @@
 use super::super::Label;
-use super::{Arg, ArgAtom, ArgVariant, CommandArgs, Directive, RelocLookup, SemanticActions};
+use super::{Arg, ArgAtom, ArgVariant, CommandArgs, RelocLookup, SemanticActions};
 
 use crate::analysis::session::Session;
 use crate::analysis::Literal;
 use crate::diag::*;
 use crate::model::{Item, Width};
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(in crate::analysis) enum Directive {
+    Db,
+    Ds,
+    Dw,
+    Equ,
+    Include,
+    Org,
+    Section,
+}
 
 pub(super) fn analyze_directive<'a, S: Session>(
     directive: (Directive, S::Span),
@@ -148,7 +159,7 @@ mod tests {
     use crate::analysis::semantics::command;
     use crate::analysis::semantics::tests::*;
     use crate::analysis::session::SessionEvent;
-    use crate::analysis::syntax::keyword::{Command, Operand};
+    use crate::analysis::syntax::keyword::Operand;
     use crate::analysis::syntax::*;
     use crate::codebase::CodebaseError;
     use crate::log::with_log;
@@ -288,7 +299,7 @@ mod tests {
             session.fail(CodebaseError::Utf8Error);
             let mut context = SemanticActions::new(session)
                 .enter_unlabeled_stmt()
-                .enter_command((Command::Directive(Directive::Include), ()))
+                .enter_command((Directive::Include.into(), ()))
                 .add_argument();
             context.push_atom((ExprAtom::Literal(Literal::String(name.into())), ()));
             drop(context.exit().exit().exit())
@@ -314,7 +325,7 @@ mod tests {
             )));
             let mut context = SemanticActions::new(session)
                 .enter_unlabeled_stmt()
-                .enter_command((Command::Directive(Directive::Include), ()))
+                .enter_command((Directive::Include.into(), ()))
                 .add_argument();
             context.push_atom((ExprAtom::Literal(Literal::String(name.into())), ()));
             drop(context.exit().exit().exit())
@@ -381,7 +392,7 @@ mod tests {
             actions
                 .enter_labeled_stmt((name.into(), ()))
                 .next()
-                .enter_command((Command::Directive(Directive::Section), ()))
+                .enter_command((Directive::Section.into(), ()))
                 .exit()
                 .exit()
         });
@@ -436,7 +447,7 @@ mod tests {
         collect_semantic_actions(|actions| {
             let command = actions
                 .enter_unlabeled_stmt()
-                .enter_command((Command::Directive(directive), ()));
+                .enter_command((directive.into(), ()));
             f(command).exit().exit()
         })
     }
@@ -449,7 +460,7 @@ mod tests {
             let mut arg = actions
                 .enter_labeled_stmt((label.into(), ()))
                 .next()
-                .enter_command((Command::Directive(directive), ()))
+                .enter_command((directive.into(), ()))
                 .add_argument();
             f(&mut arg);
             arg.exit().exit().exit()

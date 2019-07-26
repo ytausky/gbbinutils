@@ -306,14 +306,14 @@ impl<S: Clone> Source for LdDest16<S> {
 #[cfg(test)]
 mod tests {
     use crate::analysis::semantics::command::mnemonic::tests::*;
-    use crate::analysis::syntax::keyword::Mnemonic;
+    use crate::analysis::semantics::command::mnemonic::LD;
     use crate::diag::Merge;
     use crate::model::*;
 
     #[test]
     fn analyze_ld_deref_symbol_a() {
         let ident = "ident";
-        analyze(Mnemonic::Ld, vec![deref(ident), literal(A)]).expect_instruction(Instruction::Ld(
+        analyze(LD, vec![deref(ident), literal(A)]).expect_instruction(Instruction::Ld(
             Ld::Special(
                 SpecialLd::InlineAddr(name(ident, TokenId::Operand(0, 1))),
                 Direction::FromA,
@@ -324,7 +324,7 @@ mod tests {
     #[test]
     fn analyze_ld_a_deref_symbol() {
         let ident = "ident";
-        analyze(Mnemonic::Ld, vec![literal(A), deref(ident)]).expect_instruction(Instruction::Ld(
+        analyze(LD, vec![literal(A), deref(ident)]).expect_instruction(Instruction::Ld(
             Ld::Special(
                 SpecialLd::InlineAddr(name(ident, TokenId::Operand(1, 1))),
                 Direction::IntoA,
@@ -334,16 +334,16 @@ mod tests {
 
     #[test]
     fn analyze_ld_deref_c_a() {
-        analyze(Mnemonic::Ld, vec![deref(literal(C)), literal(A)]).expect_instruction(
-            Instruction::Ld(Ld::Special(SpecialLd::RegIndex, Direction::FromA)),
-        )
+        analyze(LD, vec![deref(literal(C)), literal(A)]).expect_instruction(Instruction::Ld(
+            Ld::Special(SpecialLd::RegIndex, Direction::FromA),
+        ))
     }
 
     #[test]
     fn analyze_ld_a_deref_c() {
-        analyze(Mnemonic::Ld, vec![literal(A), deref(literal(C))]).expect_instruction(
-            Instruction::Ld(Ld::Special(SpecialLd::RegIndex, Direction::IntoA)),
-        )
+        analyze(LD, vec![literal(A), deref(literal(C))]).expect_instruction(Instruction::Ld(
+            Ld::Special(SpecialLd::RegIndex, Direction::IntoA),
+        ))
     }
 
     #[test]
@@ -358,7 +358,7 @@ mod tests {
         descriptors.extend(describe_ld_reg16_immediate_instructions());
         descriptors.extend(describe_ld_deref_reg16_instructions());
         descriptors.push((
-            (Mnemonic::Ld, vec![Reg16::Sp.into(), Reg16::Hl.into()]),
+            (LD, vec![Reg16::Sp.into(), Reg16::Hl.into()]),
             Instruction::Ld(Ld::SpHl),
         ));
         descriptors
@@ -379,7 +379,7 @@ mod tests {
         match (dest, src) {
             (SimpleOperand::DerefHl, SimpleOperand::DerefHl) => None,
             _ => Some((
-                (Mnemonic::Ld, vec![dest.into(), src.into()]),
+                (LD, vec![dest.into(), src.into()]),
                 Instruction::Ld(Ld::Simple(dest, src)),
             )),
         }
@@ -394,7 +394,7 @@ mod tests {
     fn describe_ld_simple_immediate(dest: SimpleOperand) -> InstructionDescriptor {
         let n = 0x12;
         (
-            (Mnemonic::Ld, vec![dest.into(), n.into()]),
+            (LD, vec![dest.into(), n.into()]),
             Instruction::Ld(Ld::Immediate8(dest, number(n, TokenId::Operand(1, 0)))),
         )
     }
@@ -406,7 +406,7 @@ mod tests {
     fn describe_ld_reg16_immediate(dest: Reg16) -> InstructionDescriptor {
         let value = "value";
         (
-            (Mnemonic::Ld, vec![dest.into(), value.into()]),
+            (LD, vec![dest.into(), value.into()]),
             Instruction::Ld(Ld::Immediate16(dest, name(value, TokenId::Operand(1, 0)))),
         )
     }
@@ -420,14 +420,14 @@ mod tests {
     fn describe_ld_deref_ptr_reg(ptr_reg: PtrReg) -> impl Iterator<Item = InstructionDescriptor> {
         vec![
             (
-                (Mnemonic::Ld, vec![deref(ptr_reg), literal(A)]),
+                (LD, vec![deref(ptr_reg), literal(A)]),
                 Instruction::Ld(Ld::Special(
                     SpecialLd::DerefPtrReg(ptr_reg),
                     Direction::FromA,
                 )),
             ),
             (
-                (Mnemonic::Ld, vec![literal(A), deref(ptr_reg)]),
+                (LD, vec![literal(A), deref(ptr_reg)]),
                 Instruction::Ld(Ld::Special(
                     SpecialLd::DerefPtrReg(ptr_reg),
                     Direction::IntoA,
@@ -443,7 +443,7 @@ mod tests {
 
     #[test]
     fn analyze_ld() {
-        analyze(Mnemonic::Ld, vec![]).expect_diag(
+        analyze(LD, vec![]).expect_diag(
             ExpectedDiag::new(Message::OperandCount {
                 actual: 0,
                 expected: 2,
@@ -454,7 +454,7 @@ mod tests {
 
     #[test]
     fn analyze_ld_a() {
-        analyze(Mnemonic::Ld, vec![literal(A)]).expect_diag(
+        analyze(LD, vec![literal(A)]).expect_diag(
             ExpectedDiag::new(Message::OperandCount {
                 actual: 1,
                 expected: 2,
@@ -465,14 +465,14 @@ mod tests {
 
     #[test]
     fn analyze_ld_const_const() {
-        analyze(Mnemonic::Ld, vec![2.into(), 4.into()]).expect_diag(
+        analyze(LD, vec![2.into(), 4.into()]).expect_diag(
             ExpectedDiag::new(Message::DestCannotBeConst).with_highlight(TokenId::Operand(0, 0)),
         )
     }
 
     #[test]
     fn analyze_ld_a_bc() {
-        analyze(Mnemonic::Ld, vec![literal(A), literal(Bc)]).expect_diag(
+        analyze(LD, vec![literal(A), literal(Bc)]).expect_diag(
             ExpectedDiag::new(Message::LdWidthMismatch {
                 src_width: Width::Word,
                 src: TokenId::Operand(1, 0).into(),
@@ -487,7 +487,7 @@ mod tests {
 
     #[test]
     fn analyze_ld_bc_a() {
-        analyze(Mnemonic::Ld, vec![literal(Bc), literal(A)]).expect_diag(
+        analyze(LD, vec![literal(Bc), literal(A)]).expect_diag(
             ExpectedDiag::new(Message::LdWidthMismatch {
                 src_width: Width::Byte,
                 src: TokenId::Operand(1, 0).into(),
@@ -502,21 +502,21 @@ mod tests {
 
     #[test]
     fn analyze_ld_deref_c_b() {
-        analyze(Mnemonic::Ld, vec![deref(literal(C)), literal(B)]).expect_diag(
+        analyze(LD, vec![deref(literal(C)), literal(B)]).expect_diag(
             ExpectedDiag::new(Message::OnlySupportedByA).with_highlight(TokenId::Operand(1, 0)),
         )
     }
 
     #[test]
     fn analyze_ld_deref_c_4() {
-        analyze(Mnemonic::Ld, vec![deref(literal(C)), 4.into()]).expect_diag(
+        analyze(LD, vec![deref(literal(C)), 4.into()]).expect_diag(
             ExpectedDiag::new(Message::OnlySupportedByA).with_highlight(TokenId::Operand(1, 0)),
         )
     }
 
     #[test]
     fn analyze_ld_hl_sp() {
-        analyze(Mnemonic::Ld, vec![literal(Hl), literal(Sp)]).expect_diag(
+        analyze(LD, vec![literal(Hl), literal(Sp)]).expect_diag(
             ExpectedDiag::new(Message::LdSpHlOperands).with_highlight(TokenSpan::merge(
                 TokenId::Operand(0, 0),
                 TokenId::Operand(1, 0),
@@ -526,7 +526,7 @@ mod tests {
 
     #[test]
     fn analyze_ld_a_z() {
-        analyze(Mnemonic::Ld, vec![literal(A), literal(Z)]).expect_diag(
+        analyze(LD, vec![literal(A), literal(Z)]).expect_diag(
             ExpectedDiag::new(Message::ConditionOutsideBranch)
                 .with_highlight(TokenId::Operand(1, 0)),
         )
@@ -534,7 +534,7 @@ mod tests {
 
     #[test]
     fn analyze_ld_sp_af() {
-        analyze(Mnemonic::Ld, vec![literal(Sp), literal(Af)]).expect_diag(
+        analyze(LD, vec![literal(Sp), literal(Af)]).expect_diag(
             ExpectedDiag::new(Message::AfOutsideStackOperation)
                 .with_highlight(TokenId::Operand(1, 0)),
         )
@@ -543,7 +543,7 @@ mod tests {
     #[test]
     fn analyze_ld_deref_hl_deref_hl() {
         let src = TokenSpan::merge(TokenId::Operand(1, 0), TokenId::Operand(1, 2));
-        analyze(Mnemonic::Ld, vec![deref(literal(Hl)), deref(literal(Hl))]).expect_diag(
+        analyze(LD, vec![deref(literal(Hl)), deref(literal(Hl))]).expect_diag(
             ExpectedDiag::new(Message::LdDerefHlDerefHl {
                 mnemonic: TokenId::Mnemonic.into(),
                 dest: TokenSpan::merge(TokenId::Operand(0, 0), TokenId::Operand(0, 2)),

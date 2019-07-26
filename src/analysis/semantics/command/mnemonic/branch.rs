@@ -183,7 +183,7 @@ mod tests {
     use super::*;
 
     use crate::analysis::semantics::command::mnemonic::tests::*;
-    use crate::analysis::syntax::keyword::Mnemonic;
+    use crate::analysis::semantics::command::mnemonic::{Mnemonic, CALL, JP, JR, RET, RETI};
     use crate::diag::Merge;
 
     #[test]
@@ -201,10 +201,10 @@ mod tests {
         fn from(branch: PotentiallyConditionalBranch) -> Self {
             use self::{ExplicitBranch::*, PotentiallyConditionalBranch::*};
             match branch {
-                Explicit(Call) => Mnemonic::Call,
-                Explicit(Jp) => Mnemonic::Jp,
-                Explicit(Jr) => Mnemonic::Jr,
-                Ret => Mnemonic::Ret,
+                Explicit(Call) => CALL,
+                Explicit(Jp) => JP,
+                Explicit(Jr) => JR,
+                Ret => RET,
             }
         }
     }
@@ -212,14 +212,8 @@ mod tests {
     fn describe_branch_instuctions() -> Vec<InstructionDescriptor> {
         use self::{ExplicitBranch::*, PotentiallyConditionalBranch::*};
         let mut descriptors = vec![
-            (
-                (Mnemonic::Jp, vec![deref(literal(Hl))]),
-                Instruction::JpDerefHl,
-            ),
-            (
-                (Mnemonic::Reti, vec![]),
-                Instruction::Nullary(Nullary::Reti),
-            ),
+            ((JP, vec![deref(literal(Hl))]), Instruction::JpDerefHl),
+            ((RETI, vec![]), Instruction::Nullary(Nullary::Reti)),
         ];
         for &kind in [Explicit(Call), Explicit(Jp), Explicit(Jr), Ret].iter() {
             descriptors.push(describe_branch(kind, None));
@@ -265,46 +259,42 @@ mod tests {
 
     #[test]
     fn analyze_jp_c_deref_hl() {
-        analyze(
-            Mnemonic::Jp,
-            vec![literal(C), SimpleOperand::DerefHl.into()],
-        )
-        .expect_diag(
+        analyze(JP, vec![literal(C), SimpleOperand::DerefHl.into()]).expect_diag(
             ExpectedDiag::new(Message::AlwaysUnconditional).with_highlight(TokenId::Operand(0, 0)),
         )
     }
 
     #[test]
     fn analyze_jp_z() {
-        analyze(Mnemonic::Jp, vec![literal(Z)]).expect_diag(
+        analyze(JP, vec![literal(Z)]).expect_diag(
             ExpectedDiag::new(Message::MissingTarget).with_highlight(TokenId::Mnemonic),
         )
     }
 
     #[test]
     fn analyze_ret_a() {
-        analyze(Mnemonic::Ret, vec![literal(A)]).expect_diag(
+        analyze(RET, vec![literal(A)]).expect_diag(
             ExpectedDiag::new(Message::CannotBeUsedAsTarget).with_highlight(TokenId::Operand(0, 0)),
         )
     }
 
     #[test]
     fn analyze_reti_z() {
-        analyze(Mnemonic::Reti, vec![literal(Z)]).expect_diag(
+        analyze(RETI, vec![literal(Z)]).expect_diag(
             ExpectedDiag::new(Message::AlwaysUnconditional).with_highlight(TokenId::Operand(0, 0)),
         )
     }
 
     #[test]
     fn analyze_ret_z_ident() {
-        analyze(Mnemonic::Ret, vec![literal(Z), "target".into()]).expect_diag(
+        analyze(RET, vec![literal(Z), "target".into()]).expect_diag(
             ExpectedDiag::new(Message::CannotSpecifyTarget).with_highlight(TokenId::Operand(1, 0)),
         )
     }
 
     #[test]
     fn analyze_call_deref_hl() {
-        analyze(Mnemonic::Call, vec![deref(literal(Hl))]).expect_diag(
+        analyze(CALL, vec![deref(literal(Hl))]).expect_diag(
             ExpectedDiag::new(Message::RequiresConstantTarget {
                 mnemonic: TokenId::Mnemonic.into(),
             })

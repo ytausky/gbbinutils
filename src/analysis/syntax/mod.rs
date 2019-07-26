@@ -1,4 +1,4 @@
-pub use self::keyword::{Command, Directive, Mnemonic, Operand};
+pub use self::keyword::Operand;
 pub(super) use self::lexer::{LexError, Lexer};
 
 use crate::diag::Diagnostics;

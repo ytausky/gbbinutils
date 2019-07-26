@@ -2,7 +2,6 @@ use self::branch::*;
 
 use super::operand::{AtomKind, Context, Operand, OperandCounter};
 
-use crate::analysis::syntax::keyword as kw;
 use crate::diag::span::Source;
 use crate::diag::*;
 use crate::model::*;
@@ -11,7 +10,7 @@ mod branch;
 mod ld;
 
 pub(super) fn analyze_instruction<I, V, D, S>(
-    mnemonic: (kw::Mnemonic, S),
+    mnemonic: (Mnemonic, S),
     operands: I,
     diagnostics: &mut D,
 ) -> Result<Instruction<V>, ()>
@@ -21,7 +20,7 @@ where
     D: Diagnostics<S>,
     S: Clone,
 {
-    let mnemonic: (Mnemonic, _) = (mnemonic.0.into(), mnemonic.1);
+    let mnemonic: (Mnemonic, _) = (mnemonic.0, mnemonic.1);
     Analysis::new(mnemonic, operands.into_iter(), diagnostics).run()
 }
 
@@ -288,8 +287,8 @@ impl<V: Source> Operand<V, V::Span> {
     }
 }
 
-#[derive(Debug, PartialEq)]
-enum Mnemonic {
+#[derive(Clone, Debug, PartialEq)]
+pub(in crate::analysis) enum Mnemonic {
     Alu(AluOperation),
     Bit(BitOperation),
     Branch(BranchKind),
@@ -302,19 +301,61 @@ enum Mnemonic {
     Stack(StackOperation),
 }
 
+pub(in crate::analysis::semantics) const ADC: Mnemonic = Mnemonic::Alu(AluOperation::Adc);
+pub(in crate::analysis::semantics) const ADD: Mnemonic = Mnemonic::Alu(AluOperation::Add);
+pub(in crate::analysis::semantics) const AND: Mnemonic = Mnemonic::Alu(AluOperation::And);
+pub(in crate::analysis::semantics) const BIT: Mnemonic = Mnemonic::Bit(BitOperation::Bit);
+pub(in crate::analysis::semantics) const CALL: Mnemonic =
+    Mnemonic::Branch(BranchKind::Explicit(ExplicitBranch::Call));
+pub(in crate::analysis::semantics) const CP: Mnemonic = Mnemonic::Alu(AluOperation::Cp);
+pub(in crate::analysis::semantics) const CPL: Mnemonic = Mnemonic::Nullary(Nullary::Cpl);
+pub(in crate::analysis::semantics) const DAA: Mnemonic = Mnemonic::Nullary(Nullary::Daa);
+pub(in crate::analysis::semantics) const DEC: Mnemonic = Mnemonic::IncDec(IncDec::Dec);
+pub(in crate::analysis::semantics) const DI: Mnemonic = Mnemonic::Nullary(Nullary::Di);
+pub(in crate::analysis::semantics) const EI: Mnemonic = Mnemonic::Nullary(Nullary::Ei);
+pub(in crate::analysis::semantics) const HALT: Mnemonic = Mnemonic::Nullary(Nullary::Halt);
+pub(in crate::analysis::semantics) const INC: Mnemonic = Mnemonic::IncDec(IncDec::Inc);
+pub(in crate::analysis::semantics) const JP: Mnemonic =
+    Mnemonic::Branch(BranchKind::Explicit(ExplicitBranch::Jp));
+pub(in crate::analysis::semantics) const JR: Mnemonic =
+    Mnemonic::Branch(BranchKind::Explicit(ExplicitBranch::Jr));
+pub(in crate::analysis::semantics) const LD: Mnemonic = Mnemonic::Ld;
+pub(in crate::analysis::semantics) const LDHL: Mnemonic = Mnemonic::Ldhl;
+pub(in crate::analysis::semantics) const NOP: Mnemonic = Mnemonic::Nullary(Nullary::Nop);
+pub(in crate::analysis::semantics) const OR: Mnemonic = Mnemonic::Alu(AluOperation::Or);
+pub(in crate::analysis::semantics) const POP: Mnemonic = Mnemonic::Stack(StackOperation::Pop);
+pub(in crate::analysis::semantics) const PUSH: Mnemonic = Mnemonic::Stack(StackOperation::Push);
+pub(in crate::analysis::semantics) const RES: Mnemonic = Mnemonic::Bit(BitOperation::Res);
+pub(in crate::analysis::semantics) const RET: Mnemonic =
+    Mnemonic::Branch(BranchKind::Implicit(ImplicitBranch::Ret));
+pub(in crate::analysis::semantics) const RETI: Mnemonic =
+    Mnemonic::Branch(BranchKind::Implicit(ImplicitBranch::Reti));
+pub(in crate::analysis::semantics) const RL: Mnemonic = Mnemonic::Misc(MiscOperation::Rl);
+pub(in crate::analysis::semantics) const RLA: Mnemonic = Mnemonic::Nullary(Nullary::Rla);
+pub(in crate::analysis::semantics) const RLC: Mnemonic = Mnemonic::Misc(MiscOperation::Rlc);
+pub(in crate::analysis::semantics) const RLCA: Mnemonic = Mnemonic::Nullary(Nullary::Rlca);
+pub(in crate::analysis::semantics) const RR: Mnemonic = Mnemonic::Misc(MiscOperation::Rr);
+pub(in crate::analysis::semantics) const RRA: Mnemonic = Mnemonic::Nullary(Nullary::Rra);
+pub(in crate::analysis::semantics) const RRC: Mnemonic = Mnemonic::Misc(MiscOperation::Rrc);
+pub(in crate::analysis::semantics) const RRCA: Mnemonic = Mnemonic::Nullary(Nullary::Rrca);
+pub(in crate::analysis::semantics) const RST: Mnemonic = Mnemonic::Rst;
+pub(in crate::analysis::semantics) const SBC: Mnemonic = Mnemonic::Alu(AluOperation::Sbc);
+pub(in crate::analysis::semantics) const SET: Mnemonic = Mnemonic::Bit(BitOperation::Set);
+pub(in crate::analysis::semantics) const SLA: Mnemonic = Mnemonic::Misc(MiscOperation::Sla);
+pub(in crate::analysis::semantics) const SRA: Mnemonic = Mnemonic::Misc(MiscOperation::Sra);
+pub(in crate::analysis::semantics) const SRL: Mnemonic = Mnemonic::Misc(MiscOperation::Srl);
+pub(in crate::analysis::semantics) const STOP: Mnemonic = Mnemonic::Nullary(Nullary::Stop);
+pub(in crate::analysis::semantics) const SUB: Mnemonic = Mnemonic::Alu(AluOperation::Sub);
+pub(in crate::analysis::semantics) const SWAP: Mnemonic = Mnemonic::Misc(MiscOperation::Swap);
+pub(in crate::analysis::semantics) const XOR: Mnemonic = Mnemonic::Alu(AluOperation::Xor);
+
 impl Mnemonic {
-    fn context(&self) -> Context {
+    pub fn context(&self) -> Context {
         match *self {
             Mnemonic::Branch(_) => Context::Branch,
             Mnemonic::Stack(_) => Context::Stack,
             _ => Context::Other,
         }
-    }
-}
-
-impl kw::Mnemonic {
-    pub fn context(self) -> Context {
-        Mnemonic::from(self).context()
     }
 }
 
@@ -337,7 +378,7 @@ impl AluOperation {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum StackOperation {
+pub(in crate::analysis) enum StackOperation {
     Push,
     Pop,
 }
@@ -348,60 +389,9 @@ impl<V: Source> From<Nullary> for Instruction<V> {
     }
 }
 
-impl From<kw::Mnemonic> for Mnemonic {
-    fn from(keyword: kw::Mnemonic) -> Self {
-        use self::kw::Mnemonic::*;
-        match keyword {
-            Adc => Mnemonic::Alu(AluOperation::Adc),
-            Add => Mnemonic::Alu(AluOperation::Add),
-            And => Mnemonic::Alu(AluOperation::And),
-            Bit => Mnemonic::Bit(BitOperation::Bit),
-            Call => Mnemonic::Branch(BranchKind::Explicit(ExplicitBranch::Call)),
-            Cp => Mnemonic::Alu(AluOperation::Cp),
-            Cpl => Mnemonic::Nullary(Nullary::Cpl),
-            Daa => Mnemonic::Nullary(Nullary::Daa),
-            Dec => Mnemonic::IncDec(IncDec::Dec),
-            Di => Mnemonic::Nullary(Nullary::Di),
-            Ei => Mnemonic::Nullary(Nullary::Ei),
-            Halt => Mnemonic::Nullary(Nullary::Halt),
-            Inc => Mnemonic::IncDec(IncDec::Inc),
-            Jp => Mnemonic::Branch(BranchKind::Explicit(ExplicitBranch::Jp)),
-            Jr => Mnemonic::Branch(BranchKind::Explicit(ExplicitBranch::Jr)),
-            Ld => Mnemonic::Ld,
-            Ldhl => Mnemonic::Ldhl,
-            Nop => Mnemonic::Nullary(Nullary::Nop),
-            Or => Mnemonic::Alu(AluOperation::Or),
-            Pop => Mnemonic::Stack(StackOperation::Pop),
-            Push => Mnemonic::Stack(StackOperation::Push),
-            Res => Mnemonic::Bit(BitOperation::Res),
-            Ret => Mnemonic::Branch(BranchKind::Implicit(ImplicitBranch::Ret)),
-            Reti => Mnemonic::Branch(BranchKind::Implicit(ImplicitBranch::Reti)),
-            Rl => Mnemonic::Misc(MiscOperation::Rl),
-            Rla => Mnemonic::Nullary(Nullary::Rla),
-            Rlc => Mnemonic::Misc(MiscOperation::Rlc),
-            Rlca => Mnemonic::Nullary(Nullary::Rlca),
-            Rr => Mnemonic::Misc(MiscOperation::Rr),
-            Rra => Mnemonic::Nullary(Nullary::Rra),
-            Rrc => Mnemonic::Misc(MiscOperation::Rrc),
-            Rrca => Mnemonic::Nullary(Nullary::Rrca),
-            Rst => Mnemonic::Rst,
-            Sbc => Mnemonic::Alu(AluOperation::Sbc),
-            Set => Mnemonic::Bit(BitOperation::Set),
-            Sla => Mnemonic::Misc(MiscOperation::Sla),
-            Sra => Mnemonic::Misc(MiscOperation::Sra),
-            Srl => Mnemonic::Misc(MiscOperation::Srl),
-            Stop => Mnemonic::Nullary(Nullary::Stop),
-            Sub => Mnemonic::Alu(AluOperation::Sub),
-            Swap => Mnemonic::Misc(MiscOperation::Swap),
-            Xor => Mnemonic::Alu(AluOperation::Xor),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    pub use self::kw::Operand::*;
-
+    pub use crate::analysis::syntax::Operand::*;
     pub(crate) use crate::diag::Message;
     pub use crate::span::{MergeSpans, SpanSource};
 
@@ -410,6 +400,7 @@ mod tests {
     use super::*;
 
     use crate::analysis::semantics::command::*;
+    use crate::analysis::syntax::keyword as kw;
     use crate::analysis::Literal;
     use crate::model::{Atom, LocationCounter};
 
@@ -455,51 +446,51 @@ mod tests {
         }
     }
 
-    impl From<AluOperation> for kw::Mnemonic {
+    impl From<AluOperation> for Mnemonic {
         fn from(alu_operation: AluOperation) -> Self {
             match alu_operation {
-                AluOperation::Add => kw::Mnemonic::Add,
-                AluOperation::Adc => kw::Mnemonic::Adc,
-                AluOperation::Sub => kw::Mnemonic::Sub,
-                AluOperation::Sbc => kw::Mnemonic::Sbc,
-                AluOperation::And => kw::Mnemonic::And,
-                AluOperation::Xor => kw::Mnemonic::Xor,
-                AluOperation::Or => kw::Mnemonic::Or,
-                AluOperation::Cp => kw::Mnemonic::Cp,
+                AluOperation::Add => ADD,
+                AluOperation::Adc => ADC,
+                AluOperation::Sub => SUB,
+                AluOperation::Sbc => SBC,
+                AluOperation::And => AND,
+                AluOperation::Xor => XOR,
+                AluOperation::Or => OR,
+                AluOperation::Cp => CP,
             }
         }
     }
 
-    impl From<BitOperation> for kw::Mnemonic {
+    impl From<BitOperation> for Mnemonic {
         fn from(operation: BitOperation) -> Self {
             match operation {
-                BitOperation::Bit => kw::Mnemonic::Bit,
-                BitOperation::Set => kw::Mnemonic::Set,
-                BitOperation::Res => kw::Mnemonic::Res,
+                BitOperation::Bit => BIT,
+                BitOperation::Set => SET,
+                BitOperation::Res => RES,
             }
         }
     }
 
-    impl From<MiscOperation> for kw::Mnemonic {
+    impl From<MiscOperation> for Mnemonic {
         fn from(operation: MiscOperation) -> Self {
             match operation {
-                MiscOperation::Rlc => kw::Mnemonic::Rlc,
-                MiscOperation::Rrc => kw::Mnemonic::Rrc,
-                MiscOperation::Rl => kw::Mnemonic::Rl,
-                MiscOperation::Rr => kw::Mnemonic::Rr,
-                MiscOperation::Sla => kw::Mnemonic::Sla,
-                MiscOperation::Sra => kw::Mnemonic::Sra,
-                MiscOperation::Swap => kw::Mnemonic::Swap,
-                MiscOperation::Srl => kw::Mnemonic::Srl,
+                MiscOperation::Rlc => RLC,
+                MiscOperation::Rrc => RRC,
+                MiscOperation::Rl => RL,
+                MiscOperation::Rr => RR,
+                MiscOperation::Sla => SLA,
+                MiscOperation::Sra => SRA,
+                MiscOperation::Swap => SWAP,
+                MiscOperation::Srl => SRL,
             }
         }
     }
 
-    impl From<IncDec> for kw::Mnemonic {
+    impl From<IncDec> for Mnemonic {
         fn from(mode: IncDec) -> Self {
             match mode {
-                IncDec::Inc => kw::Mnemonic::Inc,
-                IncDec::Dec => kw::Mnemonic::Dec,
+                IncDec::Inc => INC,
+                IncDec::Dec => DEC,
             }
         }
     }
@@ -597,7 +588,7 @@ mod tests {
     }
 
     fn test_cp_const_analysis(parsed: Input, expr: Expr) {
-        analyze(kw::Mnemonic::Cp, Some(parsed)).expect_instruction(Instruction::Alu(
+        analyze(CP, Some(parsed)).expect_instruction(Instruction::Alu(
             AluOperation::Cp,
             AluSource::Immediate(expr),
         ))
@@ -606,7 +597,7 @@ mod tests {
     #[test]
     fn analyze_rst() {
         let n = 3;
-        analyze(kw::Mnemonic::Rst, vec![n.into()])
+        analyze(RST, vec![n.into()])
             .expect_instruction(Instruction::Rst(number(n, TokenId::Operand(0, 0))))
     }
 
@@ -615,7 +606,7 @@ mod tests {
         test_instruction_analysis(describe_legal_instructions());
     }
 
-    pub(super) type InstructionDescriptor = ((kw::Mnemonic, Vec<Input>), Instruction<Expr>);
+    pub(super) type InstructionDescriptor = ((Mnemonic, Vec<Input>), Instruction<Expr>);
 
     fn describe_legal_instructions() -> Vec<InstructionDescriptor> {
         let mut descriptors: Vec<InstructionDescriptor> = Vec::new();
@@ -628,7 +619,7 @@ mod tests {
         descriptors.extend(describe_push_pop_instructions());
         descriptors.extend(describe_misc_operation_instructions());
         descriptors.push((
-            (kw::Mnemonic::Ldhl, vec![Reg16::Sp.into(), 0x42.into()]),
+            (LDHL, vec![Reg16::Sp.into(), 0x42.into()]),
             Instruction::Ldhl(number(0x42, TokenId::Operand(1, 0))),
         ));
         descriptors
@@ -637,34 +628,34 @@ mod tests {
     fn describe_push_pop_instructions() -> impl Iterator<Item = InstructionDescriptor> {
         REG_PAIRS.iter().flat_map(|&reg_pair| {
             vec![
-                (
-                    (kw::Mnemonic::Push, vec![reg_pair.into()]),
-                    Instruction::Push(reg_pair),
-                ),
-                (
-                    (kw::Mnemonic::Pop, vec![reg_pair.into()]),
-                    Instruction::Pop(reg_pair),
-                ),
+                ((PUSH, vec![reg_pair.into()]), Instruction::Push(reg_pair)),
+                ((POP, vec![reg_pair.into()]), Instruction::Pop(reg_pair)),
             ]
         })
     }
 
     fn describe_nullary_instructions() -> impl Iterator<Item = InstructionDescriptor> {
         [
-            (kw::Mnemonic::Cpl, Nullary::Cpl),
-            (kw::Mnemonic::Daa, Nullary::Daa),
-            (kw::Mnemonic::Di, Nullary::Di),
-            (kw::Mnemonic::Ei, Nullary::Ei),
-            (kw::Mnemonic::Halt, Nullary::Halt),
-            (kw::Mnemonic::Nop, Nullary::Nop),
-            (kw::Mnemonic::Rla, Nullary::Rla),
-            (kw::Mnemonic::Rlca, Nullary::Rlca),
-            (kw::Mnemonic::Rra, Nullary::Rra),
-            (kw::Mnemonic::Rrca, Nullary::Rrca),
-            (kw::Mnemonic::Stop, Nullary::Stop),
+            Nullary::Cpl,
+            Nullary::Daa,
+            Nullary::Di,
+            Nullary::Ei,
+            Nullary::Halt,
+            Nullary::Nop,
+            Nullary::Rla,
+            Nullary::Rlca,
+            Nullary::Rra,
+            Nullary::Rrca,
+            Nullary::Stop,
         ]
         .iter()
-        .map(|(mnemonic, nullary)| ((*mnemonic, vec![]), Instruction::Nullary(*nullary)))
+        .map(|&nullary| ((nullary.into(), vec![]), nullary.into()))
+    }
+
+    impl From<Nullary> for Mnemonic {
+        fn from(nullary: Nullary) -> Self {
+            Mnemonic::Nullary(nullary)
+        }
     }
 
     fn describe_alu_simple_instructions() -> impl Iterator<Item = InstructionDescriptor> {
@@ -708,7 +699,7 @@ mod tests {
 
     fn describe_add_hl_reg16(reg16: Reg16) -> InstructionDescriptor {
         (
-            (kw::Mnemonic::Add, vec![Reg16::Hl.into(), reg16.into()]),
+            (ADD, vec![Reg16::Hl.into(), reg16.into()]),
             Instruction::AddHl(reg16),
         )
     }
@@ -838,7 +829,7 @@ mod tests {
         }
     }
 
-    pub(super) fn analyze<I>(mnemonic: kw::Mnemonic, operands: I) -> AnalysisResult
+    pub(super) fn analyze<I>(mnemonic: Mnemonic, operands: I) -> AnalysisResult
     where
         I: IntoIterator<Item = Input>,
     {
@@ -921,7 +912,7 @@ mod tests {
 
     #[test]
     fn analyze_nop_a() {
-        analyze(kw::Mnemonic::Nop, vec![literal(A)]).expect_diag(
+        analyze(NOP, vec![literal(A)]).expect_diag(
             ExpectedDiag::new(Message::OperandCount {
                 actual: 1,
                 expected: 0,
@@ -932,7 +923,7 @@ mod tests {
 
     #[test]
     fn analyze_add_a_a_a() {
-        analyze(kw::Mnemonic::Add, vec![A, A, A].into_iter().map(literal)).expect_diag(
+        analyze(ADD, vec![A, A, A].into_iter().map(literal)).expect_diag(
             ExpectedDiag::new(Message::OperandCount {
                 actual: 3,
                 expected: 2,
@@ -943,7 +934,7 @@ mod tests {
 
     #[test]
     fn analyze_add() {
-        analyze(kw::Mnemonic::Add, Vec::new()).expect_diag(
+        analyze(ADD, Vec::new()).expect_diag(
             ExpectedDiag::new(Message::OperandCount {
                 actual: 0,
                 expected: 2,
@@ -954,7 +945,7 @@ mod tests {
 
     #[test]
     fn analyze_add_a() {
-        analyze(kw::Mnemonic::Add, vec![literal(A)]).expect_diag(
+        analyze(ADD, vec![literal(A)]).expect_diag(
             ExpectedDiag::new(Message::OperandCount {
                 actual: 1,
                 expected: 2,
@@ -965,28 +956,28 @@ mod tests {
 
     #[test]
     fn analyze_add_b_a() {
-        analyze(kw::Mnemonic::Add, vec![literal(B), literal(A)]).expect_diag(
+        analyze(ADD, vec![literal(B), literal(A)]).expect_diag(
             ExpectedDiag::new(Message::DestMustBeA).with_highlight(TokenId::Operand(0, 0)),
         )
     }
 
     #[test]
     fn analyze_add_bc_de() {
-        analyze(kw::Mnemonic::Add, vec![literal(Bc), literal(De)]).expect_diag(
+        analyze(ADD, vec![literal(Bc), literal(De)]).expect_diag(
             ExpectedDiag::new(Message::DestMustBeHl).with_highlight(TokenId::Operand(0, 0)),
         )
     }
 
     #[test]
     fn analyze_add_hl_af() {
-        analyze(kw::Mnemonic::Add, vec![literal(Hl), literal(Af)]).expect_diag(
+        analyze(ADD, vec![literal(Hl), literal(Af)]).expect_diag(
             ExpectedDiag::new(Message::IncompatibleOperand).with_highlight(TokenId::Operand(1, 0)),
         )
     }
 
     #[test]
     fn analyze_add_hl() {
-        analyze(kw::Mnemonic::Add, vec![literal(Hl)]).expect_diag(
+        analyze(ADD, vec![literal(Hl)]).expect_diag(
             ExpectedDiag::new(Message::OperandCount {
                 actual: 1,
                 expected: 2,
@@ -997,7 +988,7 @@ mod tests {
 
     #[test]
     fn analyze_push() {
-        analyze(kw::Mnemonic::Push, vec![]).expect_diag(
+        analyze(PUSH, vec![]).expect_diag(
             ExpectedDiag::new(Message::OperandCount {
                 actual: 0,
                 expected: 1,
@@ -1008,7 +999,7 @@ mod tests {
 
     #[test]
     fn analyze_inc() {
-        analyze(kw::Mnemonic::Inc, vec![]).expect_diag(
+        analyze(INC, vec![]).expect_diag(
             ExpectedDiag::new(Message::OperandCount {
                 actual: 0,
                 expected: 1,
@@ -1019,14 +1010,14 @@ mod tests {
 
     #[test]
     fn analyze_add_hl_const() {
-        analyze(kw::Mnemonic::Add, vec![literal(Hl), 2.into()]).expect_diag(
+        analyze(ADD, vec![literal(Hl), 2.into()]).expect_diag(
             ExpectedDiag::new(Message::IncompatibleOperand).with_highlight(TokenId::Operand(1, 0)),
         )
     }
 
     #[test]
     fn analyze_add_a_bc_deref() {
-        analyze(kw::Mnemonic::Add, vec![literal(A), deref(literal(Bc))]).expect_diag(
+        analyze(ADD, vec![literal(A), deref(literal(Bc))]).expect_diag(
             ExpectedDiag::new(Message::IncompatibleOperand).with_highlight(TokenSpan::merge(
                 TokenId::Operand(1, 0),
                 TokenId::Operand(1, 2),
@@ -1036,7 +1027,7 @@ mod tests {
 
     #[test]
     fn analyze_bit_a_b() {
-        analyze(kw::Mnemonic::Bit, vec![literal(A), literal(B)]).expect_diag(
+        analyze(BIT, vec![literal(A), literal(B)]).expect_diag(
             ExpectedDiag::new(Message::MustBeBit {
                 mnemonic: TokenId::Mnemonic.into(),
             })
@@ -1046,7 +1037,7 @@ mod tests {
 
     #[test]
     fn analyze_bit_7_bc() {
-        analyze(kw::Mnemonic::Bit, vec![7.into(), literal(Bc)]).expect_diag(
+        analyze(BIT, vec![7.into(), literal(Bc)]).expect_diag(
             ExpectedDiag::new(Message::RequiresSimpleOperand)
                 .with_highlight(TokenId::Operand(1, 0)),
         )
@@ -1054,21 +1045,21 @@ mod tests {
 
     #[test]
     fn analyze_ldhl_bc_7() {
-        analyze(kw::Mnemonic::Ldhl, vec![literal(Bc), 7.into()]).expect_diag(
+        analyze(LDHL, vec![literal(Bc), 7.into()]).expect_diag(
             ExpectedDiag::new(Message::SrcMustBeSp).with_highlight(TokenId::Operand(0, 0)),
         )
     }
 
     #[test]
     fn analyze_ldhl_sp_a() {
-        analyze(kw::Mnemonic::Ldhl, vec![literal(Sp), literal(A)]).expect_diag(
+        analyze(LDHL, vec![literal(Sp), literal(A)]).expect_diag(
             ExpectedDiag::new(Message::MustBeConst).with_highlight(TokenId::Operand(1, 0)),
         )
     }
 
     #[test]
     fn analyze_swap_bc() {
-        analyze(kw::Mnemonic::Swap, vec![literal(Bc)]).expect_diag(
+        analyze(SWAP, vec![literal(Bc)]).expect_diag(
             ExpectedDiag::new(Message::RequiresSimpleOperand)
                 .with_highlight(TokenId::Operand(0, 0)),
         )
@@ -1076,21 +1067,21 @@ mod tests {
 
     #[test]
     fn analyze_push_a() {
-        analyze(kw::Mnemonic::Push, vec![literal(A)]).expect_diag(
+        analyze(PUSH, vec![literal(A)]).expect_diag(
             ExpectedDiag::new(Message::RequiresRegPair).with_highlight(TokenId::Operand(0, 0)),
         )
     }
 
     #[test]
     fn analyze_rst_a() {
-        analyze(kw::Mnemonic::Rst, vec![literal(A)]).expect_diag(
+        analyze(RST, vec![literal(A)]).expect_diag(
             ExpectedDiag::new(Message::MustBeConst).with_highlight(TokenId::Operand(0, 0)),
         )
     }
 
     #[test]
     fn analyze_inc_7() {
-        analyze(kw::Mnemonic::Inc, vec![7.into()]).expect_diag(
+        analyze(INC, vec![7.into()]).expect_diag(
             ExpectedDiag::new(Message::OperandCannotBeIncDec(IncDec::Inc))
                 .with_highlight(TokenId::Operand(0, 0)),
         )
