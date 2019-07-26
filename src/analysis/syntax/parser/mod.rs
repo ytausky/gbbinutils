@@ -14,15 +14,14 @@ macro_rules! bump {
 mod mock;
 mod expr;
 
-type TokenKind = Token<(), (), ()>;
+type TokenKind = Token<(), ()>;
 
 impl Copy for TokenKind {}
 
-impl<I, L, C> Token<I, L, C> {
+impl<I, L> Token<I, L> {
     fn kind(&self) -> TokenKind {
         use self::Token::*;
         match *self {
-            Command(_) => Command(()),
             Ident(_) => Ident(()),
             Label(_) => Label(()),
             Literal(_) => Literal(()),
@@ -33,10 +32,10 @@ impl<I, L, C> Token<I, L, C> {
 
 const LINE_FOLLOW_SET: &[TokenKind] = &[Token::Simple(Eol), Token::Simple(Eof)];
 
-pub(in crate::analysis) fn parse_src<Id, L, C, E, I, F, S>(mut tokens: I, context: F) -> F
+pub(in crate::analysis) fn parse_src<Id, L, E, I, F, S>(mut tokens: I, context: F) -> F
 where
-    I: Iterator<Item = (Result<Token<Id, L, C>, E>, S)>,
-    F: FileContext<Id, L, C, S>,
+    I: Iterator<Item = (Result<Token<Id, L>, E>, S)>,
+    F: FileContext<Id, L, S>,
     S: Clone,
 {
     let Parser { token, context, .. } = Parser::new(&mut tokens, context).parse_file();
@@ -80,7 +79,7 @@ impl<'a, T, I, C> Parser<'a, T, I, C> {
     }
 }
 
-impl<'a, Id, L, C, E, S, I, A> Parser<'a, (Result<Token<Id, L, C>, E>, S), I, A> {
+impl<'a, Id, L, E, S, I, A> Parser<'a, (Result<Token<Id, L>, E>, S), I, A> {
     fn token_kind(&self) -> Option<TokenKind> {
         self.token.0.as_ref().ok().map(Token::kind)
     }
@@ -93,10 +92,10 @@ impl<'a, Id, L, C, E, S, I, A> Parser<'a, (Result<Token<Id, L, C>, E>, S), I, A>
     }
 }
 
-impl<'a, Id, L, C, E, I, Ctx, S> Parser<'a, (Result<Token<Id, L, C>, E>, S), I, Ctx>
+impl<'a, Id, L, E, I, C, S> Parser<'a, (Result<Token<Id, L>, E>, S), I, C>
 where
-    I: Iterator<Item = (Result<Token<Id, L, C>, E>, S)>,
-    Ctx: FileContext<Id, L, C, S>,
+    I: Iterator<Item = (Result<Token<Id, L>, E>, S)>,
+    C: FileContext<Id, L, S>,
     S: Clone,
 {
     fn parse_file(mut self) -> Self {
@@ -135,10 +134,10 @@ where
     }
 }
 
-impl<'a, Id, L, C, E, I, Ctx, S> Parser<'a, (Result<Token<Id, L, C>, E>, S), I, Ctx>
+impl<'a, Id, L, E, I, C, S> Parser<'a, (Result<Token<Id, L>, E>, S), I, C>
 where
-    I: Iterator<Item = (Result<Token<Id, L, C>, E>, S)>,
-    Ctx: StmtContext<Id, L, C, S>,
+    I: Iterator<Item = (Result<Token<Id, L>, E>, S)>,
+    C: StmtContext<Id, L, S>,
     S: Clone,
 {
     fn parse_unlabeled_stmt(mut self) -> Self {
@@ -188,7 +187,7 @@ where
         }
     }
 
-    fn parse_command(self, command: (Ctx::Command, S)) -> Self {
+    fn parse_command(self, command: (C::Command, S)) -> Self {
         self.change_context(|c| c.enter_command(command))
             .parse_argument_list()
             .change_context(CommandContext::exit)
@@ -231,17 +230,17 @@ where
         state.change_context(TokenSeqContext::exit)
     }
 
-    fn parse_macro_call(self, name: (Ctx::MacroId, S)) -> Self {
+    fn parse_macro_call(self, name: (C::MacroId, S)) -> Self {
         self.change_context(|c| c.enter_macro_call(name))
             .parse_macro_arg_list()
             .change_context(MacroCallContext::exit)
     }
 }
 
-impl<'a, Id, L, C, E, I, Ctx, S> Parser<'a, (Result<Token<Id, L, C>, E>, S), I, Ctx>
+impl<'a, Id, L, E, I, C, S> Parser<'a, (Result<Token<Id, L>, E>, S), I, C>
 where
-    I: Iterator<Item = (Result<Token<Id, L, C>, E>, S)>,
-    Ctx: CommandContext<S, Ident = Id, Literal = L>,
+    I: Iterator<Item = (Result<Token<Id, L>, E>, S)>,
+    C: CommandContext<S, Ident = Id, Literal = L>,
     S: Clone,
 {
     fn parse_argument_list(self) -> Self {
@@ -255,10 +254,10 @@ where
     }
 }
 
-impl<'a, Id, L, C, E, I, Ctx, S> Parser<'a, (Result<Token<Id, L, C>, E>, S), I, Ctx>
+impl<'a, Id, L, E, I, C, S> Parser<'a, (Result<Token<Id, L>, E>, S), I, C>
 where
-    I: Iterator<Item = (Result<Token<Id, L, C>, E>, S)>,
-    Ctx: ParamsContext<Id, S>,
+    I: Iterator<Item = (Result<Token<Id, L>, E>, S)>,
+    C: ParamsContext<Id, S>,
     S: Clone,
 {
     fn parse_param(mut self) -> Self {
@@ -273,10 +272,10 @@ where
     }
 }
 
-impl<'a, Id, L, C, E, I, Ctx, S> Parser<'a, (Result<Token<Id, L, C>, E>, S), I, Ctx>
+impl<'a, Id, L, E, I, C, S> Parser<'a, (Result<Token<Id, L>, E>, S), I, C>
 where
-    I: Iterator<Item = (Result<Token<Id, L, C>, E>, S)>,
-    Ctx: MacroCallContext<S, Token = Token<Id, L, C>>,
+    I: Iterator<Item = (Result<Token<Id, L>, E>, S)>,
+    C: MacroCallContext<S, Token = Token<Id, L>>,
     S: Clone,
 {
     fn parse_macro_arg_list(self) -> Self {
@@ -299,10 +298,10 @@ where
     }
 }
 
-impl<'a, Id, L, C, E, I, Ctx, S> Parser<'a, (Result<Token<Id, L, C>, E>, S), I, Ctx>
+impl<'a, Id, L, E, I, C, S> Parser<'a, (Result<Token<Id, L>, E>, S), I, C>
 where
-    I: Iterator<Item = (Result<Token<Id, L, C>, E>, S)>,
-    Ctx: Diagnostics<S>,
+    I: Iterator<Item = (Result<Token<Id, L>, E>, S)>,
+    C: Diagnostics<S>,
     S: Clone,
 {
     fn parse_terminated_list<P>(

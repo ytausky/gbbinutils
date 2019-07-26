@@ -191,7 +191,7 @@ impl<F: IdentFactory> TokenFactory<F> {
         &mut self,
         kind: TokenKind,
         lexeme: &str,
-    ) -> Result<Token<F::Ident, Literal<String>, Command>, LexError> {
+    ) -> Result<Token<F::Ident, Literal<String>>, LexError> {
         match kind {
             TokenKind::Ident => Ok(self.mk_keyword_or(Token::Ident, lexeme)),
             TokenKind::Label => Ok(self.mk_keyword_or(Token::Label, lexeme)),
@@ -209,9 +209,9 @@ impl<F: IdentFactory> TokenFactory<F> {
         }
     }
 
-    fn mk_keyword_or<G>(&mut self, g: G, lexeme: &str) -> Token<F::Ident, Literal<String>, Command>
+    fn mk_keyword_or<G>(&mut self, g: G, lexeme: &str) -> Token<F::Ident, Literal<String>>
     where
-        G: FnOnce(F::Ident) -> Token<F::Ident, Literal<String>, Command>,
+        G: FnOnce(F::Ident) -> Token<F::Ident, Literal<String>>,
     {
         identify_keyword(lexeme).map_or_else(|| g(self.ident_factory.mk_ident(lexeme)), Into::into)
     }
@@ -226,7 +226,7 @@ impl<B: Borrow<str>, F: IdentFactory> Lexer<B, F> {
     }
 }
 
-type LexResult<I> = Result<Token<I, Literal<String>, Command>, LexError>;
+type LexResult<I> = Result<Token<I, Literal<String>>, LexError>;
 
 impl<B: Borrow<str>, F: IdentFactory> Iterator for Lexer<B, F> {
     type Item = (LexResult<F::Ident>, Range<usize>);
@@ -253,26 +253,18 @@ fn identify_keyword(word: &str) -> Option<Keyword> {
 
 #[derive(Clone, Copy)]
 enum Keyword {
-    Command(Command),
     Endm,
     Macro,
     Operand(Operand),
 }
 
-impl<I, R> From<Keyword> for Token<I, Literal<R>, Command> {
+impl<I, R> From<Keyword> for Token<I, Literal<R>> {
     fn from(keyword: Keyword) -> Self {
         match keyword {
-            Keyword::Command(command) => Token::Command(command),
             Keyword::Endm => Endm.into(),
             Keyword::Macro => Macro.into(),
             Keyword::Operand(operand) => Token::Literal(Literal::Operand(operand)),
         }
-    }
-}
-
-impl From<Command> for Keyword {
-    fn from(command: Command) -> Self {
-        Keyword::Command(command)
     }
 }
 
@@ -364,7 +356,7 @@ mod tests {
         )
     }
 
-    type TestToken = Token<String, crate::analysis::Literal<String>, super::Command>;
+    type TestToken = Token<String, crate::analysis::Literal<String>>;
 
     #[test]
     fn lex_empty_str() {
@@ -448,7 +440,6 @@ mod tests {
     fn lex_transformed_keywords<F: Fn(&str) -> String>(f: F) {
         for &(spelling, keyword) in KEYWORDS.iter() {
             let token = match keyword {
-                Keyword::Command(command) => Command(command),
                 Keyword::Endm => Endm.into(),
                 Keyword::Macro => Macro.into(),
                 Keyword::Operand(operand) => Literal(Operand(operand)),
@@ -515,12 +506,6 @@ mod tests {
     #[test]
     fn lex_number_without_digits() {
         assert_eq_lex_results("$", vec![Err(LexError::NoDigits)])
-    }
-
-    impl<T: Into<super::Command>> From<T> for TestToken {
-        fn from(t: T) -> Self {
-            Command(t.into())
-        }
     }
 
 }

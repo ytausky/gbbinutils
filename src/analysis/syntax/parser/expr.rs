@@ -21,7 +21,7 @@ enum SuffixOperator {
     FnCall,
 }
 
-impl<I, C, L> Token<I, C, L> {
+impl<I, L> Token<I, L> {
     fn as_suffix_operator(&self) -> Option<SuffixOperator> {
         use SuffixOperator::*;
         match self {
@@ -57,10 +57,10 @@ impl SuffixOperator {
     }
 }
 
-impl<'a, Id, L, C, E, I, Ctx, S> Parser<'a, (Result<Token<Id, L, C>, E>, S), I, Ctx>
+impl<'a, Id, L, E, I, C, S> Parser<'a, (Result<Token<Id, L>, E>, S), I, C>
 where
-    I: Iterator<Item = (Result<Token<Id, L, C>, E>, S)>,
-    Ctx: ExprContext<S, Ident = Id, Literal = L>,
+    I: Iterator<Item = (Result<Token<Id, L>, E>, S)>,
+    C: ExprContext<S, Ident = Id, Literal = L>,
     S: Clone,
 {
     pub(super) fn parse(self) -> Self {
@@ -77,11 +77,11 @@ where
             })
     }
 
-    fn parse_expression(self) -> ParserResult<Self, Ctx, S> {
+    fn parse_expression(self) -> ParserResult<Self, C, S> {
         self.parse_infix_expr(Precedence::None)
     }
 
-    fn parse_parenthesized_expression(mut self, left: S) -> ParserResult<Self, Ctx, S> {
+    fn parse_parenthesized_expression(mut self, left: S) -> ParserResult<Self, C, S> {
         self = match self.parse_expression() {
             Ok(parser) => parser,
             Err((parser, error)) => {
@@ -112,7 +112,7 @@ where
         }
     }
 
-    fn parse_infix_expr(mut self, lowest: Precedence) -> ParserResult<Self, Ctx, S> {
+    fn parse_infix_expr(mut self, lowest: Precedence) -> ParserResult<Self, C, S> {
         self = self.parse_primary_expr()?;
         while let Some(suffix_operator) = self
             .token
@@ -140,7 +140,7 @@ where
         Ok(self)
     }
 
-    fn parse_fn_call(mut self, left: S) -> ParserResult<Self, Ctx, S> {
+    fn parse_fn_call(mut self, left: S) -> ParserResult<Self, C, S> {
         let mut args = 0;
         while let Ok(token) = &self.token.0 {
             match token {
@@ -158,13 +158,13 @@ where
         Ok(self)
     }
 
-    fn parse_fn_arg(mut self, args: &mut usize) -> ParserResult<Self, Ctx, S> {
+    fn parse_fn_arg(mut self, args: &mut usize) -> ParserResult<Self, C, S> {
         self = self.parse_expression()?;
         *args += 1;
         Ok(self)
     }
 
-    fn parse_primary_expr(mut self) -> ParserResult<Self, Ctx, S> {
+    fn parse_primary_expr(mut self) -> ParserResult<Self, C, S> {
         match self.token {
             (Ok(Token::Simple(LParen)), span) => {
                 bump!(self);
@@ -174,7 +174,7 @@ where
         }
     }
 
-    fn parse_atomic_expr(mut self) -> ParserResult<Self, Ctx, S> {
+    fn parse_atomic_expr(mut self) -> ParserResult<Self, C, S> {
         match self.token.0 {
             Ok(Token::Simple(Eof)) | Ok(Token::Simple(Eol)) => {
                 Err((self, ExprParsingError::NothingParsed))

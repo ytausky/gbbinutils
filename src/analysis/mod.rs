@@ -61,7 +61,7 @@ where
 }
 
 type LexItem<I, R, S> = (Result<SemanticToken<I, R>, LexError>, S);
-type SemanticToken<I, R> = syntax::Token<I, Literal<R>, Command>;
+type SemanticToken<I, R> = syntax::Token<I, Literal<R>>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum Literal<R> {

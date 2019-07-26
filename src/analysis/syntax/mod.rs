@@ -9,8 +9,7 @@ mod lexer;
 mod parser;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Token<I, L, C> {
-    Command(C),
+pub enum Token<I, L> {
     Ident(I),
     Label(I),
     Literal(L),
@@ -34,7 +33,7 @@ pub enum SimpleToken {
     Star,
 }
 
-impl<I, L, C> From<SimpleToken> for Token<I, L, C> {
+impl<I, L> From<SimpleToken> for Token<I, L> {
     fn from(simple: SimpleToken) -> Self {
         Token::Simple(simple)
     }
@@ -62,21 +61,21 @@ impl<I: Clone + PartialEq, F: for<'a> Fn(&'a str) -> I> IdentFactory for F {
 
 pub(super) use self::parser::parse_src as parse_token_seq;
 
-pub(super) trait FileContext<I, L, C, S: Clone>: Diagnostics<S> + Sized {
+pub(super) trait FileContext<I, L, S: Clone>: Diagnostics<S> + Sized {
     type LabelContext: ParamsContext<I, S, Next = Self::StmtContext>;
-    type StmtContext: StmtContext<I, L, C, S, Parent = Self>;
+    type StmtContext: StmtContext<I, L, S, Parent = Self>;
 
     fn enter_labeled_stmt(self, label: (I, S)) -> Self::LabelContext;
     fn enter_unlabeled_stmt(self) -> Self::StmtContext;
 }
 
-pub(super) trait StmtContext<I, L, C, S: Clone>: Diagnostics<S> + Sized {
+pub(super) trait StmtContext<I, L, S: Clone>: Diagnostics<S> + Sized {
     type Command;
     type MacroId;
 
     type CommandContext: CommandContext<S, Ident = I, Literal = L, Parent = Self>;
-    type MacroDefContext: TokenSeqContext<S, Token = Token<I, L, C>, Parent = Self>;
-    type MacroCallContext: MacroCallContext<S, Token = Token<I, L, C>, Parent = Self>;
+    type MacroDefContext: TokenSeqContext<S, Token = Token<I, L>, Parent = Self>;
+    type MacroCallContext: MacroCallContext<S, Token = Token<I, L>, Parent = Self>;
     type Parent;
 
     fn key_lookup(&mut self, ident: I) -> KeyLookupResult<Self::Command, Self::MacroId>;

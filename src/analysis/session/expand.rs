@@ -9,7 +9,7 @@ pub(super) trait Expand<T, H, F: MacroContextFactory<H, S>, S: Clone> {
     fn expand(&self, name: S, args: MacroArgs<T, S>, factory: &mut F) -> Self::Iter;
 }
 
-pub(super) type MacroTable<I, L, C, H> = Vec<MacroDef<I, Token<I, L, C>, H>>;
+pub(super) type MacroTable<I, L, H> = Vec<MacroDef<I, Token<I, L>, H>>;
 
 pub(super) type MacroArgs<T, S> = (Vec<Vec<T>>, Vec<Vec<S>>);
 
@@ -29,12 +29,12 @@ pub(super) trait DefineMacro<I, T, H: Clone> {
         S: Clone;
 }
 
-impl<I, L, C, H: Clone> DefineMacro<I, Token<I, L, C>, H> for MacroTable<I, L, C, H> {
+impl<I, L, H: Clone> DefineMacro<I, Token<I, L>, H> for MacroTable<I, L, H> {
     fn define_macro<D, S>(
         &mut self,
         name_span: S,
         params: (Vec<I>, Vec<S>),
-        body: (Vec<Token<I, L, C>>, Vec<S>),
+        body: (Vec<Token<I, L>>, Vec<S>),
         diagnostics: &mut D,
     ) -> MacroId
     where
@@ -64,19 +64,19 @@ struct MacroDefTokens<I, T> {
     body: Vec<T>,
 }
 
-impl<I, L, C, H, F, S> Expand<Token<I, L, C>, H, F, S> for MacroDef<I, Token<I, L, C>, H>
+impl<I, L, H, F, S> Expand<Token<I, L>, H, F, S> for MacroDef<I, Token<I, L>, H>
 where
     I: Clone + PartialEq,
     F: MacroContextFactory<H, S>,
     S: Clone,
-    Token<I, L, C>: Clone,
+    Token<I, L>: Clone,
 {
-    type Iter = MacroExpansionIter<I, Token<I, L, C>, F::MacroCallCtx>;
+    type Iter = MacroExpansionIter<I, Token<I, L>, F::MacroCallCtx>;
 
     fn expand(
         &self,
         name: S,
-        (args, arg_spans): MacroArgs<Token<I, L, C>, S>,
+        (args, arg_spans): MacroArgs<Token<I, L>, S>,
         factory: &mut F,
     ) -> Self::Iter {
         let context = factory.mk_macro_call_ctx(name, arg_spans, &self.spans);
@@ -95,7 +95,7 @@ struct MacroExpansion<I, T, C> {
     context: C,
 }
 
-impl<I: PartialEq, L, C, F> MacroExpansion<I, Token<I, L, C>, F> {
+impl<I: PartialEq, L, F> MacroExpansion<I, Token<I, L>, F> {
     fn mk_macro_expansion_pos(&self, token: usize) -> Option<MacroExpansionPos> {
         if token >= self.def.body.len() {
             return None;
@@ -143,19 +143,19 @@ impl<I: PartialEq, L, C, F> MacroExpansion<I, Token<I, L, C>, F> {
         }
     }
 
-    fn token_and_span(&self, pos: MacroExpansionPos) -> (Token<I, L, C>, F::Span)
+    fn token_and_span(&self, pos: MacroExpansionPos) -> (Token<I, L>, F::Span)
     where
         I: Clone,
         F: MacroCallCtx,
-        Token<I, L, C>: Clone,
+        Token<I, L>: Clone,
     {
         (self.token(&pos), self.context.mk_span(pos))
     }
 
-    fn token(&self, pos: &MacroExpansionPos) -> Token<I, L, C>
+    fn token(&self, pos: &MacroExpansionPos) -> Token<I, L>
     where
         I: Clone,
-        Token<I, L, C>: Clone,
+        Token<I, L>: Clone,
     {
         let body_token = &self.def.body[pos.token];
         pos.param_expansion.as_ref().map_or_else(
@@ -173,7 +173,7 @@ impl<I: PartialEq, L, C, F> MacroExpansion<I, Token<I, L, C>, F> {
     }
 }
 
-impl<I, L, C> Token<I, L, C> {
+impl<I, L> Token<I, L> {
     fn name(&self) -> Option<&I> {
         match &self {
             Token::Ident(name) | Token::Label(name) => Some(name),
@@ -182,13 +182,13 @@ impl<I, L, C> Token<I, L, C> {
     }
 }
 
-impl<I, L, C, F> MacroExpansionIter<I, Token<I, L, C>, F>
+impl<I, L, F> MacroExpansionIter<I, Token<I, L>, F>
 where
     I: PartialEq,
 {
     fn new(
-        def: Rc<MacroDefTokens<I, Token<I, L, C>>>,
-        args: Vec<Vec<Token<I, L, C>>>,
+        def: Rc<MacroDefTokens<I, Token<I, L>>>,
+        args: Vec<Vec<Token<I, L>>>,
         context: F,
     ) -> Self {
         let expansion = MacroExpansion { def, args, context };
@@ -199,13 +199,13 @@ where
     }
 }
 
-impl<I, L, C, F> Iterator for MacroExpansionIter<I, Token<I, L, C>, F>
+impl<I, L, F> Iterator for MacroExpansionIter<I, Token<I, L>, F>
 where
     I: Clone + PartialEq,
     F: MacroCallCtx,
-    Token<I, L, C>: Clone,
+    Token<I, L>: Clone,
 {
-    type Item = (Token<I, L, C>, F::Span);
+    type Item = (Token<I, L>, F::Span);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.pos.take().map(|pos| {
@@ -221,7 +221,7 @@ mod tests {
 
     #[test]
     fn expand_macro_with_one_token() {
-        let body = Token::<_, (), ()>::Ident("a");
+        let body = Token::<_, ()>::Ident("a");
         let entry = MacroDef {
             tokens: Rc::new(MacroDefTokens {
                 params: vec![],
@@ -256,7 +256,7 @@ mod tests {
 
     #[test]
     fn expand_label_using_two_idents() {
-        let label = Token::<_, (), ()>::Label("label");
+        let label = Token::<_, ()>::Label("label");
         let def = MacroDef {
             tokens: Rc::new(MacroDefTokens {
                 params: vec!["label"],
@@ -329,8 +329,7 @@ mod tests {
                 context: Rc::clone(&buf),
             })
         };
-        let body: Vec<Token<_, (), ()>> =
-            vec![Token::Ident("a"), Token::Ident("x"), Token::Ident("b")];
+        let body: Vec<Token<_, ()>> = vec![Token::Ident("a"), Token::Ident("x"), Token::Ident("b")];
         let def_id = Rc::new(MacroDefSpans {
             name: mk_span(0),
             params: vec![mk_span(1)],

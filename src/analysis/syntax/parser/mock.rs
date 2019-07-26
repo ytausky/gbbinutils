@@ -69,7 +69,7 @@ impl EmitDiag<MockSpan, MockSpan> for FileActionCollector {
     }
 }
 
-impl FileContext<SymIdent, SymLiteral, SymCommand, MockSpan> for FileActionCollector {
+impl FileContext<SymIdent, SymLiteral, MockSpan> for FileActionCollector {
     type StmtContext = StmtActionCollector;
     type LabelContext = LabelActionCollector;
 
@@ -133,7 +133,7 @@ impl EmitDiag<MockSpan, MockSpan> for StmtActionCollector {
 #[derive(Debug, PartialEq)]
 pub struct MacroId(pub TokenRef);
 
-impl StmtContext<SymIdent, SymLiteral, SymCommand, MockSpan> for StmtActionCollector {
+impl StmtContext<SymIdent, SymLiteral, MockSpan> for StmtActionCollector {
     type Command = SymCommand;
     type MacroId = MacroId;
 
@@ -283,7 +283,7 @@ impl EmitDiag<MockSpan, MockSpan> for MacroBodyActionCollector {
 }
 
 impl TokenSeqContext<MockSpan> for MacroBodyActionCollector {
-    type Token = Token<SymIdent, SymLiteral, SymCommand>;
+    type Token = Token<SymIdent, SymLiteral>;
     type Parent = StmtActionCollector;
 
     fn push_token(&mut self, token: (Self::Token, MockSpan)) {
@@ -312,7 +312,7 @@ impl EmitDiag<MockSpan, MockSpan> for MacroCallActionCollector {
 }
 
 impl MacroCallContext<MockSpan> for MacroCallActionCollector {
-    type Token = Token<SymIdent, SymLiteral, SymCommand>;
+    type Token = Token<SymIdent, SymLiteral>;
     type MacroArgContext = MacroArgActionCollector;
     type Parent = StmtActionCollector;
 
@@ -344,7 +344,7 @@ impl EmitDiag<MockSpan, MockSpan> for MacroArgActionCollector {
 }
 
 impl TokenSeqContext<MockSpan> for MacroArgActionCollector {
-    type Token = Token<SymIdent, SymLiteral, SymCommand>;
+    type Token = Token<SymIdent, SymLiteral>;
     type Parent = MacroCallActionCollector;
 
     fn push_token(&mut self, token: (Self::Token, MockSpan)) {
@@ -470,16 +470,12 @@ pub enum IdentKind {
 #[derive(Clone, Debug, PartialEq)]
 pub struct SymLiteral(pub TokenRef);
 
-pub type SymToken = Token<SymIdent, SymLiteral, SymCommand>;
+pub type SymToken = Token<SymIdent, SymLiteral>;
 
-pub fn mk_sym_token(
-    id: impl Into<TokenRef>,
-    token: Token<IdentKind, (), ()>,
-) -> (SymToken, TokenRef) {
+pub fn mk_sym_token(id: impl Into<TokenRef>, token: Token<IdentKind, ()>) -> (SymToken, TokenRef) {
     let token_ref = id.into();
     (
         match token {
-            Command(()) => Command(SymCommand(token_ref.clone())),
             Ident(kind) => Ident(SymIdent(kind, token_ref.clone())),
             Label(kind) => Label(SymIdent(kind, token_ref.clone())),
             Literal(()) => Literal(SymLiteral(token_ref.clone())),
@@ -495,7 +491,7 @@ pub(super) struct InputTokens {
 }
 
 impl InputTokens {
-    pub fn insert_token(&mut self, id: impl Into<TokenRef>, token: Token<IdentKind, (), ()>) {
+    pub fn insert_token(&mut self, id: impl Into<TokenRef>, token: Token<IdentKind, ()>) {
         self.tokens.push(mk_sym_token(id, token))
     }
 
@@ -638,7 +634,7 @@ pub(super) enum ParamsAction<S> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum TokenSeqAction<S> {
-    PushToken((Token<SymIdent, SymLiteral, SymCommand>, S)),
+    PushToken((Token<SymIdent, SymLiteral>, S)),
     EmitDiag(CompactDiag<S>),
 }
 
@@ -787,14 +783,14 @@ mod tests {
     #[test]
     fn test_token_macro() {
         let tokens = input_tokens![
-            my_tok @ Command(()),
+            my_tok @ Plus,
             Literal(()),
             next_one @ Macro,
         ];
         assert_eq!(
             tokens.tokens,
             [
-                (Command(SymCommand("my_tok".into())), "my_tok".into()),
+                (Simple(Plus), "my_tok".into()),
                 (Literal(SymLiteral(1.into())), 1.into()),
                 (Macro.into(), "next_one".into()),
                 (Eof.into(), 3.into()),

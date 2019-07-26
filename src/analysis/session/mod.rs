@@ -5,7 +5,7 @@ use self::expand::{DefineMacro, Expand, MacroId};
 
 use super::backend::*;
 use super::resolve::{NameTable, ResolvedIdent, StartScope};
-use super::{Command, IdentSource, Lex, LexItem, Literal, SemanticToken, StringSource, TokenSeq};
+use super::{IdentSource, Lex, LexItem, Literal, SemanticToken, StringSource, TokenSeq};
 
 use crate::codebase::CodebaseError;
 use crate::diag::span::{AddMacroDef, SpanSource};
@@ -93,7 +93,7 @@ pub(super) struct Upstream<'a, 'b, C, A, I, R, H> {
     macros: MacroTable<I, R, H>,
 }
 
-type MacroTable<I, R, H> = self::expand::MacroTable<I, Literal<R>, Command, H>;
+type MacroTable<I, R, H> = self::expand::MacroTable<I, Literal<R>, H>;
 
 pub(super) struct Downstream<B, N, D> {
     backend: B,
@@ -631,7 +631,7 @@ mod tests {
     use crate::analysis::backend::{BackendEvent, SerialIdAllocator};
     use crate::analysis::resolve::{BasicNameTable, NameTableEvent};
     use crate::analysis::semantics::AnalyzerEvent;
-    use crate::analysis::syntax::{Command, Directive, Mnemonic, Token};
+    use crate::analysis::syntax::Token;
     use crate::analysis::{Literal, MockCodebase};
     use crate::diag::DiagnosticsEvent;
     use crate::log::*;
@@ -691,7 +691,7 @@ mod tests {
     #[test]
     fn include_source_file() {
         let path = "my_file.s";
-        let tokens = vec![(Ok(Token::Command(Command::Mnemonic(Mnemonic::Nop))), ())];
+        let tokens = vec![(Ok(Token::Ident("NOP".into())), ())];
         let log = Fixture::new(|fixture| fixture.codebase.set_file(path, tokens.clone()))
             .log_session(|session| session.analyze_file(path.into()).0.unwrap());
         assert_eq!(log, [AnalyzerEvent::AnalyzeTokenSeq(tokens).into()]);
@@ -699,7 +699,7 @@ mod tests {
 
     #[test]
     fn define_and_call_macro() {
-        let tokens = vec![Token::Command(Command::Mnemonic(Mnemonic::Nop))];
+        let tokens = vec![Token::Ident("NOP".into())];
         let spans: Vec<_> = iter::repeat(()).take(tokens.len()).collect();
         let log = Fixture::default().log_session(|mut session| {
             let id = session.define_macro((), (vec![], vec![]), (tokens.clone(), spans.clone()));
@@ -716,7 +716,7 @@ mod tests {
 
     #[test]
     fn define_and_call_macro_with_param() {
-        let db = Token::Command(Command::Directive(Directive::Db));
+        let db = Token::Ident("DB".into());
         let arg = Token::Literal(Literal::Number(0x42));
         let literal0 = Token::Literal(Literal::Number(0));
         let param = "x";
@@ -745,7 +745,7 @@ mod tests {
 
     #[test]
     fn define_and_call_macro_with_label() {
-        let nop = Token::Command(Command::Mnemonic(Mnemonic::Nop));
+        let nop = Token::Ident("NOP".into());
         let label = "label";
         let param = "x";
         let log = Fixture::default().log_session(|mut session| {

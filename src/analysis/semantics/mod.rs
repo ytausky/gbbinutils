@@ -79,8 +79,7 @@ delegate_diagnostics! {
     {S: Session}, SemanticActions<S>, {session()}, S, S::Span
 }
 
-impl<S: Session> FileContext<S::Ident, Literal<S::StringRef>, Command, S::Span>
-    for SemanticActions<S>
+impl<S: Session> FileContext<S::Ident, Literal<S::StringRef>, S::Span> for SemanticActions<S>
 where
     S::Ident: AsRef<str>,
 {
@@ -154,7 +153,7 @@ impl<S: Session> StmtActions<S> {
     }
 }
 
-impl<S: Session> StmtContext<S::Ident, Literal<S::StringRef>, Command, S::Span> for StmtActions<S>
+impl<S: Session> StmtContext<S::Ident, Literal<S::StringRef>, S::Span> for StmtActions<S>
 where
     S::Ident: AsRef<str>,
 {
@@ -536,7 +535,7 @@ mod tests {
             "my_macro",
             [],
             [
-                Token::Command(Command::Mnemonic(Mnemonic::Xor)),
+                Token::Ident("XOR".into()),
                 Token::Literal(Literal::Operand(Operand::A)),
             ],
         )
@@ -548,10 +547,7 @@ mod tests {
         test_macro_definition(
             "my_xor",
             [param],
-            [
-                Token::Command(Command::Mnemonic(Mnemonic::Xor)),
-                Token::Ident(param.into()),
-            ],
+            [Token::Ident("XOR".into()), Token::Ident(param.into())],
         )
     }
 
