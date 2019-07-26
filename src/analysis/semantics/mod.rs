@@ -166,10 +166,9 @@ where
     type Parent = SemanticActions<S>;
 
     fn key_lookup(&mut self, ident: S::Ident) -> KeyLookupResult<Self::Command, Self::MacroId> {
-        COMMANDS
-            .iter()
+        KEYS.iter()
             .find(|(spelling, _)| spelling.eq_ignore_ascii_case(ident.as_ref()))
-            .map(|(_, command)| Ok(Key::Command(*command)))
+            .map(|(_, entry)| Ok((*entry).into()))
             .unwrap_or_else(|| {
                 self.parent.with_session(|session| {
                     let result = match session.get(&ident) {
@@ -204,56 +203,78 @@ where
     }
 }
 
-const COMMANDS: &[(&str, Command)] = &[
-    ("adc", Command::Mnemonic(Mnemonic::Adc)),
-    ("add", Command::Mnemonic(Mnemonic::Add)),
-    ("and", Command::Mnemonic(Mnemonic::And)),
-    ("bit", Command::Mnemonic(Mnemonic::Bit)),
-    ("call", Command::Mnemonic(Mnemonic::Call)),
-    ("cp", Command::Mnemonic(Mnemonic::Cp)),
-    ("cpl", Command::Mnemonic(Mnemonic::Cpl)),
-    ("daa", Command::Mnemonic(Mnemonic::Daa)),
-    ("db", Command::Directive(Directive::Db)),
-    ("dec", Command::Mnemonic(Mnemonic::Dec)),
-    ("di", Command::Mnemonic(Mnemonic::Di)),
-    ("ds", Command::Directive(Directive::Ds)),
-    ("dw", Command::Directive(Directive::Dw)),
-    ("ei", Command::Mnemonic(Mnemonic::Ei)),
-    ("equ", Command::Directive(Directive::Equ)),
-    ("halt", Command::Mnemonic(Mnemonic::Halt)),
-    ("inc", Command::Mnemonic(Mnemonic::Inc)),
-    ("include", Command::Directive(Directive::Include)),
-    ("jp", Command::Mnemonic(Mnemonic::Jp)),
-    ("jr", Command::Mnemonic(Mnemonic::Jr)),
-    ("ld", Command::Mnemonic(Mnemonic::Ld)),
-    ("ldhl", Command::Mnemonic(Mnemonic::Ldhl)),
-    ("nop", Command::Mnemonic(Mnemonic::Nop)),
-    ("or", Command::Mnemonic(Mnemonic::Or)),
-    ("org", Command::Directive(Directive::Org)),
-    ("pop", Command::Mnemonic(Mnemonic::Pop)),
-    ("push", Command::Mnemonic(Mnemonic::Push)),
-    ("res", Command::Mnemonic(Mnemonic::Res)),
-    ("ret", Command::Mnemonic(Mnemonic::Ret)),
-    ("reti", Command::Mnemonic(Mnemonic::Reti)),
-    ("rl", Command::Mnemonic(Mnemonic::Rl)),
-    ("rla", Command::Mnemonic(Mnemonic::Rla)),
-    ("rlc", Command::Mnemonic(Mnemonic::Rlc)),
-    ("rlca", Command::Mnemonic(Mnemonic::Rlca)),
-    ("rr", Command::Mnemonic(Mnemonic::Rr)),
-    ("rra", Command::Mnemonic(Mnemonic::Rra)),
-    ("rrc", Command::Mnemonic(Mnemonic::Rrc)),
-    ("rrca", Command::Mnemonic(Mnemonic::Rrca)),
-    ("rst", Command::Mnemonic(Mnemonic::Rst)),
-    ("sbc", Command::Mnemonic(Mnemonic::Sbc)),
-    ("section", Command::Directive(Directive::Section)),
-    ("set", Command::Mnemonic(Mnemonic::Set)),
-    ("sla", Command::Mnemonic(Mnemonic::Sla)),
-    ("sra", Command::Mnemonic(Mnemonic::Sra)),
-    ("srl", Command::Mnemonic(Mnemonic::Srl)),
-    ("stop", Command::Mnemonic(Mnemonic::Stop)),
-    ("sub", Command::Mnemonic(Mnemonic::Sub)),
-    ("swap", Command::Mnemonic(Mnemonic::Swap)),
-    ("xor", Command::Mnemonic(Mnemonic::Xor)),
+#[derive(Clone, Copy)]
+enum KeyEntry {
+    Command(Command),
+    Keyword(Keyword),
+}
+
+impl<M> From<KeyEntry> for Key<Command, M> {
+    fn from(entry: KeyEntry) -> Self {
+        match entry {
+            KeyEntry::Command(command) => Key::Command(command),
+            KeyEntry::Keyword(keyword) => Key::Keyword(keyword),
+        }
+    }
+}
+
+const KEYS: &[(&str, KeyEntry)] = &[
+    ("adc", KeyEntry::Command(Command::Mnemonic(Mnemonic::Adc))),
+    ("add", KeyEntry::Command(Command::Mnemonic(Mnemonic::Add))),
+    ("and", KeyEntry::Command(Command::Mnemonic(Mnemonic::And))),
+    ("bit", KeyEntry::Command(Command::Mnemonic(Mnemonic::Bit))),
+    ("call", KeyEntry::Command(Command::Mnemonic(Mnemonic::Call))),
+    ("cp", KeyEntry::Command(Command::Mnemonic(Mnemonic::Cp))),
+    ("cpl", KeyEntry::Command(Command::Mnemonic(Mnemonic::Cpl))),
+    ("daa", KeyEntry::Command(Command::Mnemonic(Mnemonic::Daa))),
+    ("db", KeyEntry::Command(Command::Directive(Directive::Db))),
+    ("dec", KeyEntry::Command(Command::Mnemonic(Mnemonic::Dec))),
+    ("di", KeyEntry::Command(Command::Mnemonic(Mnemonic::Di))),
+    ("ds", KeyEntry::Command(Command::Directive(Directive::Ds))),
+    ("dw", KeyEntry::Command(Command::Directive(Directive::Dw))),
+    ("ei", KeyEntry::Command(Command::Mnemonic(Mnemonic::Ei))),
+    ("equ", KeyEntry::Command(Command::Directive(Directive::Equ))),
+    ("halt", KeyEntry::Command(Command::Mnemonic(Mnemonic::Halt))),
+    ("inc", KeyEntry::Command(Command::Mnemonic(Mnemonic::Inc))),
+    (
+        "include",
+        KeyEntry::Command(Command::Directive(Directive::Include)),
+    ),
+    ("jp", KeyEntry::Command(Command::Mnemonic(Mnemonic::Jp))),
+    ("jr", KeyEntry::Command(Command::Mnemonic(Mnemonic::Jr))),
+    ("ld", KeyEntry::Command(Command::Mnemonic(Mnemonic::Ld))),
+    ("ldhl", KeyEntry::Command(Command::Mnemonic(Mnemonic::Ldhl))),
+    ("macro", KeyEntry::Keyword(Keyword::Macro)),
+    ("nop", KeyEntry::Command(Command::Mnemonic(Mnemonic::Nop))),
+    ("or", KeyEntry::Command(Command::Mnemonic(Mnemonic::Or))),
+    ("org", KeyEntry::Command(Command::Directive(Directive::Org))),
+    ("pop", KeyEntry::Command(Command::Mnemonic(Mnemonic::Pop))),
+    ("push", KeyEntry::Command(Command::Mnemonic(Mnemonic::Push))),
+    ("res", KeyEntry::Command(Command::Mnemonic(Mnemonic::Res))),
+    ("ret", KeyEntry::Command(Command::Mnemonic(Mnemonic::Ret))),
+    ("reti", KeyEntry::Command(Command::Mnemonic(Mnemonic::Reti))),
+    ("rl", KeyEntry::Command(Command::Mnemonic(Mnemonic::Rl))),
+    ("rla", KeyEntry::Command(Command::Mnemonic(Mnemonic::Rla))),
+    ("rlc", KeyEntry::Command(Command::Mnemonic(Mnemonic::Rlc))),
+    ("rlca", KeyEntry::Command(Command::Mnemonic(Mnemonic::Rlca))),
+    ("rr", KeyEntry::Command(Command::Mnemonic(Mnemonic::Rr))),
+    ("rra", KeyEntry::Command(Command::Mnemonic(Mnemonic::Rra))),
+    ("rrc", KeyEntry::Command(Command::Mnemonic(Mnemonic::Rrc))),
+    ("rrca", KeyEntry::Command(Command::Mnemonic(Mnemonic::Rrca))),
+    ("rst", KeyEntry::Command(Command::Mnemonic(Mnemonic::Rst))),
+    ("sbc", KeyEntry::Command(Command::Mnemonic(Mnemonic::Sbc))),
+    (
+        "section",
+        KeyEntry::Command(Command::Directive(Directive::Section)),
+    ),
+    ("set", KeyEntry::Command(Command::Mnemonic(Mnemonic::Set))),
+    ("sla", KeyEntry::Command(Command::Mnemonic(Mnemonic::Sla))),
+    ("sra", KeyEntry::Command(Command::Mnemonic(Mnemonic::Sra))),
+    ("srl", KeyEntry::Command(Command::Mnemonic(Mnemonic::Srl))),
+    ("stop", KeyEntry::Command(Command::Mnemonic(Mnemonic::Stop))),
+    ("sub", KeyEntry::Command(Command::Mnemonic(Mnemonic::Sub))),
+    ("swap", KeyEntry::Command(Command::Mnemonic(Mnemonic::Swap))),
+    ("xor", KeyEntry::Command(Command::Mnemonic(Mnemonic::Xor))),
 ];
 
 delegate_diagnostics! {
@@ -653,16 +674,26 @@ mod tests {
 
     #[test]
     fn look_up_command() {
-        for (spelling, command) in COMMANDS {
-            collect_semantic_actions::<_, ()>(|session| {
-                let mut stmt = session.enter_unlabeled_stmt();
-                assert_eq!(
-                    stmt.key_lookup((*spelling).into()),
-                    Ok(Key::Command(*command))
-                );
-                stmt.exit()
-            });
-        }
+        collect_semantic_actions::<_, ()>(|session| {
+            let mut stmt = session.enter_unlabeled_stmt();
+            assert_eq!(
+                stmt.key_lookup("ADD".into()),
+                Ok(Key::Command(Mnemonic::Add.into()))
+            );
+            stmt.exit()
+        });
+    }
+
+    #[test]
+    fn look_up_macro_keyword() {
+        collect_semantic_actions::<_, ()>(|session| {
+            let mut stmt = session.enter_unlabeled_stmt();
+            assert_eq!(
+                stmt.key_lookup("MACRO".into()),
+                Ok(Key::Keyword(Keyword::Macro))
+            );
+            stmt.exit()
+        });
     }
 
     #[test]

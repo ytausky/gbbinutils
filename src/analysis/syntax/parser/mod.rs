@@ -150,32 +150,7 @@ where
                 (Ok(Token::Label(_)), _) | (Ok(Token::Simple(SimpleToken::Eof)), _) => self,
                 (Ok(Token::Ident(ident)), span) => {
                     bump!(self);
-                    match self.context.key_lookup(ident) {
-                        Ok(key) => match key {
-                            Key::Command(command) => self.parse_command((command, span)),
-                            Key::Macro(id) => self.parse_macro_call((id, span)),
-                        },
-                        Err(error) => {
-                            let name = self.strip_span(&span);
-                            self.emit_diag(
-                                match error {
-                                    KeyError::Reloc => {
-                                        Message::CannotUseSymbolNameAsMacroName { name }
-                                    }
-                                    KeyError::Unknown => Message::UndefinedMacro { name },
-                                }
-                                .at(span),
-                            );
-                            while !self.token_is_in(LINE_FOLLOW_SET) {
-                                bump!(self)
-                            }
-                            self
-                        }
-                    }
-                }
-                (Ok(Token::Simple(SimpleToken::Macro)), span) => {
-                    bump!(self);
-                    self.parse_macro_def(span)
+                    self.parse_key(ident, span)
                 }
                 (_, span) => {
                     bump!(self);
@@ -184,6 +159,30 @@ where
                     self
                 }
             };
+        }
+    }
+
+    fn parse_key(mut self, key: Id, span: S) -> Self {
+        match self.context.key_lookup(key) {
+            Ok(key) => match key {
+                Key::Command(command) => self.parse_command((command, span)),
+                Key::Macro(id) => self.parse_macro_call((id, span)),
+                Key::Keyword(Keyword::Macro) => self.parse_macro_def(span),
+            },
+            Err(error) => {
+                let name = self.strip_span(&span);
+                self.emit_diag(
+                    match error {
+                        KeyError::Reloc => Message::CannotUseSymbolNameAsMacroName { name },
+                        KeyError::Unknown => Message::UndefinedMacro { name },
+                    }
+                    .at(span),
+                );
+                while !self.token_is_in(LINE_FOLLOW_SET) {
+                    bump!(self)
+                }
+                self
+            }
         }
     }
 
@@ -483,7 +482,12 @@ mod tests {
 
     #[test]
     fn parse_empty_macro_definition() {
-        let tokens = input_tokens![Label(IdentKind::Unknown), Macro, Eol, Endm];
+        let tokens = input_tokens![
+            Label(IdentKind::Unknown),
+            Ident(IdentKind::MacroKeyword),
+            Eol,
+            Endm,
+        ];
         let expected_actions = [labeled(0, vec![], macro_def(1, Vec::new(), 3))];
         assert_eq_actions(tokens, expected_actions);
     }
@@ -492,11 +496,11 @@ mod tests {
     fn parse_macro_definition_with_instruction() {
         let tokens = input_tokens![
             Label(IdentKind::Unknown),
-            Macro,
+            Ident(IdentKind::MacroKeyword),
             Eol,
             Ident(IdentKind::Command),
             Eol,
-            Endm
+            Endm,
         ];
         let expected_actions = [labeled(
             0,
@@ -515,7 +519,7 @@ mod tests {
             Comma,
             p2 @ Ident(IdentKind::Unknown),
             RParen,
-            key @ Macro,
+            key @ Ident(IdentKind::MacroKeyword),
             Eol,
             t1 @ Ident(IdentKind::Command),
             t2 @ Eol,
@@ -688,7 +692,7 @@ mod tests {
     #[test]
     fn diagnose_eof_in_macro_body() {
         assert_eq_actions(
-            input_tokens![Macro, Eol, eof @ Eof],
+            input_tokens![Ident(IdentKind::MacroKeyword), Eol, eof @ Eof],
             [unlabeled(malformed_macro_def(
                 0,
                 Vec::new(),
@@ -760,7 +764,7 @@ mod tests {
                 LParen,
                 lit @ Literal(()),
                 RParen,
-                key @ Macro,
+                key @ Ident(IdentKind::MacroKeyword),
                 Eol,
                 endm @ Endm
             ],
@@ -793,7 +797,7 @@ mod tests {
     fn diagnose_unexpected_token_after_macro_keyword() {
         let tokens = input_tokens![
             label @ Label(IdentKind::Unknown),
-            key @ Macro,
+            key @ Ident(IdentKind::MacroKeyword),
             unexpected @ Ident(IdentKind::Unknown),
             Eol,
             t1 @ Ident(IdentKind::Command),

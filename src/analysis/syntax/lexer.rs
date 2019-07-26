@@ -254,7 +254,6 @@ fn identify_keyword(word: &str) -> Option<Keyword> {
 #[derive(Clone, Copy)]
 enum Keyword {
     Endm,
-    Macro,
     Operand(Operand),
 }
 
@@ -262,7 +261,6 @@ impl<I, R> From<Keyword> for Token<I, Literal<R>> {
     fn from(keyword: Keyword) -> Self {
         match keyword {
             Keyword::Endm => Endm.into(),
-            Keyword::Macro => Macro.into(),
             Keyword::Operand(operand) => Token::Literal(Literal::Operand(operand)),
         }
     }
@@ -289,7 +287,6 @@ const KEYWORDS: &[(&str, Keyword)] = &[
     ("hld", Keyword::Operand(Hld)),
     ("hli", Keyword::Operand(Hli)),
     ("l", Keyword::Operand(L)),
-    ("macro", Keyword::Macro),
     ("nc", Keyword::Operand(Nc)),
     ("nz", Keyword::Operand(Nz)),
     ("sp", Keyword::Operand(Sp)),
@@ -441,7 +438,6 @@ mod tests {
         for &(spelling, keyword) in KEYWORDS.iter() {
             let token = match keyword {
                 Keyword::Endm => Endm.into(),
-                Keyword::Macro => Macro.into(),
                 Keyword::Operand(operand) => Literal(Operand(operand)),
             };
             assert_eq_tokens(&f(spelling), [token])

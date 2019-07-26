@@ -24,7 +24,6 @@ pub enum SimpleToken {
     Eof,
     Eol,
     LParen,
-    Macro,
     Minus,
     Pipe,
     Plus,
@@ -92,6 +91,12 @@ pub(super) type KeyLookupResult<C, M> = Result<Key<C, M>, KeyError>;
 pub(super) enum Key<C, M> {
     Command(C),
     Macro(M),
+    Keyword(Keyword),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) enum Keyword {
+    Macro,
 }
 
 #[derive(Clone, Debug, PartialEq)]

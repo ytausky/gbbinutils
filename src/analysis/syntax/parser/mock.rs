@@ -145,6 +145,7 @@ impl StmtContext<SymIdent, SymLiteral, MockSpan> for StmtActionCollector {
     fn key_lookup(&mut self, ident: SymIdent) -> KeyLookupResult<Self::Command, Self::MacroId> {
         match ident.0 {
             IdentKind::Command => Ok(Key::Command(SymCommand(ident.1))),
+            IdentKind::MacroKeyword => Ok(Key::Keyword(Keyword::Macro)),
             IdentKind::MacroName => Ok(Key::Macro(MacroId(ident.1))),
             IdentKind::RelocName => Err(KeyError::Reloc),
             IdentKind::Unknown => Err(KeyError::Unknown),
@@ -462,6 +463,7 @@ pub struct SymIdent(pub IdentKind, pub TokenRef);
 #[derive(Clone, Debug, PartialEq)]
 pub enum IdentKind {
     Command,
+    MacroKeyword,
     MacroName,
     RelocName,
     Unknown,
@@ -785,14 +787,14 @@ mod tests {
         let tokens = input_tokens![
             my_tok @ Plus,
             Literal(()),
-            next_one @ Macro,
+            next_one @ Star,
         ];
         assert_eq!(
             tokens.tokens,
             [
-                (Simple(Plus), "my_tok".into()),
+                (Plus.into(), "my_tok".into()),
                 (Literal(SymLiteral(1.into())), 1.into()),
-                (Macro.into(), "next_one".into()),
+                (Star.into(), "next_one".into()),
                 (Eof.into(), 3.into()),
             ]
         );
