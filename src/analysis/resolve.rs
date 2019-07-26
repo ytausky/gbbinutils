@@ -32,6 +32,12 @@ pub struct Ident<T> {
     visibility: Visibility,
 }
 
+impl<T: AsRef<str>> AsRef<str> for Ident<T> {
+    fn as_ref(&self) -> &str {
+        self.name.as_ref()
+    }
+}
+
 #[cfg(test)]
 impl<L, T> From<Ident<T>> for Atom<L, Ident<T>> {
     fn from(ident: Ident<T>) -> Self {

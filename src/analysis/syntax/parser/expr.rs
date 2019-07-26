@@ -225,13 +225,13 @@ mod tests {
     #[test]
     fn parse_long_sum_arg() {
         let tokens = input_tokens![
-            w @ Ident(()),
+            w @ Ident(IdentKind::Unknown),
             plus1 @ Plus,
-            x @ Ident(()),
+            x @ Ident(IdentKind::Unknown),
             plus2 @ Plus,
             y @ Literal(()),
             plus3 @ Plus,
-            z @ Ident(()),
+            z @ Ident(IdentKind::Unknown),
         ];
         let expected = expr()
             .ident("w")
@@ -246,14 +246,14 @@ mod tests {
 
     #[test]
     fn parse_subtraction() {
-        let tokens = input_tokens![x @ Ident(()), minus @ Minus, y @ Literal(())];
+        let tokens = input_tokens![x @ Ident(IdentKind::Unknown), minus @ Minus, y @ Literal(())];
         let expected = expr().ident("x").literal("y").minus("minus");
         assert_eq_rpn_expr(tokens, expected)
     }
 
     #[test]
     fn parse_division() {
-        let tokens = input_tokens![x @ Ident(()), slash @ Slash, y @ Literal(())];
+        let tokens = input_tokens![x @ Ident(IdentKind::Unknown), slash @ Slash, y @ Literal(())];
         let expected = expr().ident("x").literal("y").divide("slash");
         assert_eq_rpn_expr(tokens, expected)
     }
@@ -285,7 +285,7 @@ mod tests {
             plus @ Plus,
             c @ Literal(()),
             star @ Star,
-            d @ Ident(()),
+            d @ Ident(IdentKind::Unknown),
         ];
         let expected = expr()
             .literal("a")
@@ -300,22 +300,27 @@ mod tests {
 
     #[test]
     fn parse_multiplication() {
-        let tokens = input_tokens![x @ Ident(()), star @ Star, y @ Literal(())];
+        let tokens = input_tokens![x @ Ident(IdentKind::Unknown), star @ Star, y @ Literal(())];
         let expected = expr().ident("x").literal("y").multiply("star");
         assert_eq_rpn_expr(tokens, expected)
     }
 
     #[test]
     fn parse_bitwise_or() {
-        let tokens = input_tokens![x @ Ident(()), pipe @ Pipe, y @ Literal(())];
+        let tokens = input_tokens![x @ Ident(IdentKind::Unknown), pipe @ Pipe, y @ Literal(())];
         let expected = expr().ident("x").literal("y").bitwise_or("pipe");
         assert_eq_rpn_expr(tokens, expected)
     }
 
     #[test]
     fn addition_precedes_bitwise_or() {
-        let tokens =
-            input_tokens![x @ Ident(()), pipe @ Pipe, y @ Ident(()), plus @ Plus, z @ Ident(())];
+        let tokens = input_tokens![
+            x @ Ident(IdentKind::Unknown),
+            pipe @ Pipe,
+            y @ Ident(IdentKind::Unknown),
+            plus @ Plus,
+            z @ Ident(IdentKind::Unknown),
+        ];
         let expected = expr()
             .ident("x")
             .ident("y")
@@ -327,7 +332,7 @@ mod tests {
 
     #[test]
     fn parse_nullary_fn_call() {
-        let tokens = input_tokens![name @ Ident(()), left @ LParen, right @ RParen];
+        let tokens = input_tokens![name @ Ident(IdentKind::Unknown), left @ LParen, right @ RParen];
         let expected = expr().ident("name").fn_call(
             0,
             MockSpan::merge(TokenRef::from("left"), TokenRef::from("right")),
@@ -338,9 +343,9 @@ mod tests {
     #[test]
     fn parse_unary_fn_call() {
         let tokens = input_tokens![
-            name @ Ident(()),
+            name @ Ident(IdentKind::Unknown),
             left @ LParen,
-            arg @ Ident(()),
+            arg @ Ident(IdentKind::Unknown),
             right @ RParen
         ];
         let expected = expr().ident("name").ident("arg").fn_call(
@@ -353,11 +358,11 @@ mod tests {
     #[test]
     fn parse_binary_fn_call() {
         let tokens = input_tokens![
-            name @ Ident(()),
+            name @ Ident(IdentKind::Unknown),
             left @ LParen,
-            arg1 @ Ident(()),
+            arg1 @ Ident(IdentKind::Unknown),
             Simple(Comma),
-            arg2 @ Ident(()),
+            arg2 @ Ident(IdentKind::Unknown),
             right @ RParen
         ];
         let expected = expr().ident("name").ident("arg1").ident("arg2").fn_call(
@@ -370,7 +375,7 @@ mod tests {
     #[test]
     fn parse_fn_call_plus_literal() {
         let tokens = input_tokens![
-            name @ Ident(()),
+            name @ Ident(IdentKind::Unknown),
             left @ LParen,
             right @ RParen,
             plus @ Simple(Plus),
@@ -392,7 +397,7 @@ mod tests {
         let tokens = input_tokens![
             literal @ Literal(()),
             star @ Simple(Star),
-            name @ Ident(()),
+            name @ Ident(IdentKind::Unknown),
             left @ LParen,
             right @ RParen,
         ];
@@ -417,12 +422,12 @@ mod tests {
     #[test]
     fn parse_sum_with_parentheses() {
         let tokens = input_tokens![
-            a @ Ident(()),
+            a @ Ident(IdentKind::Unknown),
             plus1 @ Plus,
             left @ LParen,
-            b @ Ident(()),
+            b @ Ident(IdentKind::Unknown),
             plus2 @ Plus,
-            c @ Ident(()),
+            c @ Ident(IdentKind::Unknown),
             right @ RParen,
         ];
         let expected = expr()
@@ -438,7 +443,7 @@ mod tests {
     #[test]
     fn diagnose_eof_for_rhs_operand() {
         assert_eq_rpn_expr(
-            input_tokens![Ident(()), Plus],
+            input_tokens![Ident(IdentKind::Unknown), Plus],
             expr()
                 .ident(0)
                 .error(Message::UnexpectedEof, TokenRef::from(2)),

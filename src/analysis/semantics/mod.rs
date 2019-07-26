@@ -21,7 +21,10 @@ mod params;
 
 pub struct SemanticAnalyzer;
 
-impl<I: Clone + PartialEq, R: Clone + Eq, S: Clone> Analyze<I, R, S> for SemanticAnalyzer {
+impl<I: Clone + PartialEq, R: Clone + Eq, S: Clone> Analyze<I, R, S> for SemanticAnalyzer
+where
+    I: AsRef<str>,
+{
     fn analyze_token_seq<'b, T, P>(&'b mut self, tokens: T, partial: P) -> P
     where
         T: IntoIterator<Item = LexItem<I, R, S>>,
@@ -78,6 +81,8 @@ delegate_diagnostics! {
 
 impl<S: Session> FileContext<S::Ident, Literal<S::StringRef>, Command, S::Span>
     for SemanticActions<S>
+where
+    S::Ident: AsRef<str>,
 {
     type LabelContext = LabelActions<S>;
     type StmtContext = StmtActions<S>;
@@ -149,11 +154,34 @@ impl<S: Session> StmtActions<S> {
     }
 }
 
-impl<S: Session> StmtContext<S::Ident, Literal<S::StringRef>, Command, S::Span> for StmtActions<S> {
+impl<S: Session> StmtContext<S::Ident, Literal<S::StringRef>, Command, S::Span> for StmtActions<S>
+where
+    S::Ident: AsRef<str>,
+{
+    type Command = Command;
+    type MacroId = S::MacroEntry;
+
     type CommandContext = CommandActions<S>;
     type MacroDefContext = MacroDefActions<S>;
     type MacroCallContext = MacroCallActions<S>;
     type Parent = SemanticActions<S>;
+
+    fn key_lookup(&mut self, ident: S::Ident) -> KeyLookupResult<Self::Command, Self::MacroId> {
+        COMMANDS
+            .iter()
+            .find(|(spelling, _)| spelling.eq_ignore_ascii_case(ident.as_ref()))
+            .map(|(_, command)| Ok(Key::Command(*command)))
+            .unwrap_or_else(|| {
+                self.parent.with_session(|session| {
+                    let result = match session.get(&ident) {
+                        Some(ResolvedIdent::Macro(id)) => Ok(Key::Macro(id)),
+                        Some(ResolvedIdent::Backend(_)) => Err(KeyError::Reloc),
+                        None => Err(KeyError::Unknown),
+                    };
+                    (session, result)
+                })
+            })
+    }
 
     fn enter_command(self, command: (Command, S::Span)) -> Self::CommandContext {
         CommandActions::new(self, command)
@@ -166,7 +194,7 @@ impl<S: Session> StmtContext<S::Ident, Literal<S::StringRef>, Command, S::Span> 
         MacroDefActions::new(self)
     }
 
-    fn enter_macro_call(mut self, name: (S::Ident, S::Span)) -> Self::MacroCallContext {
+    fn enter_macro_call(mut self, name: (Self::MacroId, S::Span)) -> Self::MacroCallContext {
         self.define_label_if_present();
         MacroCallActions::new(self, name)
     }
@@ -176,6 +204,58 @@ impl<S: Session> StmtContext<S::Ident, Literal<S::StringRef>, Command, S::Span> 
         self.parent
     }
 }
+
+const COMMANDS: &[(&str, Command)] = &[
+    ("adc", Command::Mnemonic(Mnemonic::Adc)),
+    ("add", Command::Mnemonic(Mnemonic::Add)),
+    ("and", Command::Mnemonic(Mnemonic::And)),
+    ("bit", Command::Mnemonic(Mnemonic::Bit)),
+    ("call", Command::Mnemonic(Mnemonic::Call)),
+    ("cp", Command::Mnemonic(Mnemonic::Cp)),
+    ("cpl", Command::Mnemonic(Mnemonic::Cpl)),
+    ("daa", Command::Mnemonic(Mnemonic::Daa)),
+    ("db", Command::Directive(Directive::Db)),
+    ("dec", Command::Mnemonic(Mnemonic::Dec)),
+    ("di", Command::Mnemonic(Mnemonic::Di)),
+    ("ds", Command::Directive(Directive::Ds)),
+    ("dw", Command::Directive(Directive::Dw)),
+    ("ei", Command::Mnemonic(Mnemonic::Ei)),
+    ("equ", Command::Directive(Directive::Equ)),
+    ("halt", Command::Mnemonic(Mnemonic::Halt)),
+    ("inc", Command::Mnemonic(Mnemonic::Inc)),
+    ("include", Command::Directive(Directive::Include)),
+    ("jp", Command::Mnemonic(Mnemonic::Jp)),
+    ("jr", Command::Mnemonic(Mnemonic::Jr)),
+    ("ld", Command::Mnemonic(Mnemonic::Ld)),
+    ("ldhl", Command::Mnemonic(Mnemonic::Ldhl)),
+    ("nop", Command::Mnemonic(Mnemonic::Nop)),
+    ("or", Command::Mnemonic(Mnemonic::Or)),
+    ("org", Command::Directive(Directive::Org)),
+    ("pop", Command::Mnemonic(Mnemonic::Pop)),
+    ("push", Command::Mnemonic(Mnemonic::Push)),
+    ("res", Command::Mnemonic(Mnemonic::Res)),
+    ("ret", Command::Mnemonic(Mnemonic::Ret)),
+    ("reti", Command::Mnemonic(Mnemonic::Reti)),
+    ("rl", Command::Mnemonic(Mnemonic::Rl)),
+    ("rla", Command::Mnemonic(Mnemonic::Rla)),
+    ("rlc", Command::Mnemonic(Mnemonic::Rlc)),
+    ("rlca", Command::Mnemonic(Mnemonic::Rlca)),
+    ("rr", Command::Mnemonic(Mnemonic::Rr)),
+    ("rra", Command::Mnemonic(Mnemonic::Rra)),
+    ("rrc", Command::Mnemonic(Mnemonic::Rrc)),
+    ("rrca", Command::Mnemonic(Mnemonic::Rrca)),
+    ("rst", Command::Mnemonic(Mnemonic::Rst)),
+    ("sbc", Command::Mnemonic(Mnemonic::Sbc)),
+    ("section", Command::Directive(Directive::Section)),
+    ("set", Command::Mnemonic(Mnemonic::Set)),
+    ("sla", Command::Mnemonic(Mnemonic::Sla)),
+    ("sra", Command::Mnemonic(Mnemonic::Sra)),
+    ("srl", Command::Mnemonic(Mnemonic::Srl)),
+    ("stop", Command::Mnemonic(Mnemonic::Stop)),
+    ("sub", Command::Mnemonic(Mnemonic::Sub)),
+    ("swap", Command::Mnemonic(Mnemonic::Swap)),
+    ("xor", Command::Mnemonic(Mnemonic::Xor)),
+];
 
 delegate_diagnostics! {
     {S: Session}, StmtActions<S>, {parent}, S, S::Span
@@ -575,6 +655,56 @@ mod tests {
         )
     }
 
+    #[test]
+    fn look_up_command() {
+        for (spelling, command) in COMMANDS {
+            collect_semantic_actions::<_, ()>(|session| {
+                let mut stmt = session.enter_unlabeled_stmt();
+                assert_eq!(
+                    stmt.key_lookup((*spelling).into()),
+                    Ok(Key::Command(*command))
+                );
+                stmt.exit()
+            });
+        }
+    }
+
+    #[test]
+    fn look_up_unknown_ident() {
+        collect_semantic_actions::<_, ()>(|session| {
+            let mut stmt = session.enter_unlabeled_stmt();
+            assert_eq!(stmt.key_lookup("unknown".into()), Err(KeyError::Unknown));
+            stmt.exit()
+        });
+    }
+
+    #[test]
+    fn look_up_macro_name() {
+        let macro_name = "my_macro";
+        let macro_id = MockMacroId(42);
+        log_with_predefined_names::<_, _, ()>(
+            vec![(macro_name.into(), ResolvedIdent::Macro(macro_id))],
+            |session| {
+                let mut stmt = session.enter_unlabeled_stmt();
+                assert_eq!(stmt.key_lookup(macro_name.into()), Ok(Key::Macro(macro_id)));
+                stmt.exit()
+            },
+        );
+    }
+
+    #[test]
+    fn look_up_reloc_name() {
+        let name = "symbol";
+        log_with_predefined_names::<_, _, ()>(
+            vec![(name.into(), ResolvedIdent::Backend(42))],
+            |session| {
+                let mut stmt = session.enter_unlabeled_stmt();
+                assert_eq!(stmt.key_lookup(name.into()), Err(KeyError::Reloc));
+                stmt.exit()
+            },
+        );
+    }
+
     pub(super) type MockSession<S> = crate::analysis::session::MockSession<
         SerialIdAllocator,
         BasicNameTable<usize, MockMacroId>,
@@ -589,6 +719,19 @@ mod tests {
     {
         with_log(|log| {
             f(SemanticActions::new(MockSession::with_log(log)));
+        })
+    }
+
+    pub(super) fn log_with_predefined_names<I, F, S>(entries: I, f: F) -> Vec<TestOperation<S>>
+    where
+        I: IntoIterator<Item = (String, ResolvedIdent<usize, MockMacroId>)>,
+        F: FnOnce(TestSemanticActions<S>) -> TestSemanticActions<S>,
+        S: Clone + Debug + Merge,
+    {
+        with_log(|log| {
+            f(SemanticActions::new(MockSession::with_predefined_names(
+                log, entries,
+            )));
         })
     }
 

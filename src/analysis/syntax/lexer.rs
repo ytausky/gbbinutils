@@ -1,6 +1,6 @@
 use super::keyword::*;
-use super::{Command::*, Directive::*, Mnemonic::*, Operand::*, SimpleToken::*};
 use super::{IdentFactory, SimpleToken, Token};
+use super::{Operand::*, SimpleToken::*};
 use crate::analysis::Literal;
 
 use std::borrow::Borrow;
@@ -284,72 +284,23 @@ impl From<Operand> for Keyword {
 
 const KEYWORDS: &[(&str, Keyword)] = &[
     ("a", Keyword::Operand(A)),
-    ("adc", Keyword::Command(Mnemonic(Adc))),
-    ("add", Keyword::Command(Mnemonic(Add))),
     ("af", Keyword::Operand(Af)),
-    ("and", Keyword::Command(Mnemonic(And))),
     ("b", Keyword::Operand(B)),
     ("bc", Keyword::Operand(Bc)),
-    ("bit", Keyword::Command(Mnemonic(Bit))),
     ("c", Keyword::Operand(C)),
-    ("call", Keyword::Command(Mnemonic(Call))),
-    ("cp", Keyword::Command(Mnemonic(Cp))),
-    ("cpl", Keyword::Command(Mnemonic(Cpl))),
     ("d", Keyword::Operand(D)),
-    ("daa", Keyword::Command(Mnemonic(Daa))),
-    ("db", Keyword::Command(Directive(Db))),
     ("de", Keyword::Operand(De)),
-    ("dec", Keyword::Command(Mnemonic(Dec))),
-    ("di", Keyword::Command(Mnemonic(Di))),
-    ("ds", Keyword::Command(Directive(Ds))),
-    ("dw", Keyword::Command(Directive(Dw))),
     ("e", Keyword::Operand(E)),
-    ("ei", Keyword::Command(Mnemonic(Ei))),
     ("endm", Keyword::Endm),
-    ("equ", Keyword::Command(Directive(Equ))),
     ("h", Keyword::Operand(H)),
-    ("halt", Keyword::Command(Mnemonic(Halt))),
     ("hl", Keyword::Operand(Hl)),
     ("hld", Keyword::Operand(Hld)),
     ("hli", Keyword::Operand(Hli)),
-    ("inc", Keyword::Command(Mnemonic(Inc))),
-    ("include", Keyword::Command(Directive(Include))),
-    ("jp", Keyword::Command(Mnemonic(Jp))),
-    ("jr", Keyword::Command(Mnemonic(Jr))),
     ("l", Keyword::Operand(L)),
-    ("ld", Keyword::Command(Mnemonic(Ld))),
-    ("ldhl", Keyword::Command(Mnemonic(Ldhl))),
     ("macro", Keyword::Macro),
     ("nc", Keyword::Operand(Nc)),
-    ("nop", Keyword::Command(Mnemonic(Nop))),
     ("nz", Keyword::Operand(Nz)),
-    ("or", Keyword::Command(Mnemonic(Or))),
-    ("org", Keyword::Command(Directive(Org))),
-    ("pop", Keyword::Command(Mnemonic(Pop))),
-    ("push", Keyword::Command(Mnemonic(Push))),
-    ("res", Keyword::Command(Mnemonic(Res))),
-    ("ret", Keyword::Command(Mnemonic(Ret))),
-    ("reti", Keyword::Command(Mnemonic(Reti))),
-    ("rl", Keyword::Command(Mnemonic(Rl))),
-    ("rla", Keyword::Command(Mnemonic(Rla))),
-    ("rlc", Keyword::Command(Mnemonic(Rlc))),
-    ("rlca", Keyword::Command(Mnemonic(Rlca))),
-    ("rr", Keyword::Command(Mnemonic(Rr))),
-    ("rra", Keyword::Command(Mnemonic(Rra))),
-    ("rrc", Keyword::Command(Mnemonic(Rrc))),
-    ("rrca", Keyword::Command(Mnemonic(Rrca))),
-    ("rst", Keyword::Command(Mnemonic(Rst))),
-    ("sbc", Keyword::Command(Mnemonic(Sbc))),
-    ("section", Keyword::Command(Directive(Section))),
-    ("set", Keyword::Command(Mnemonic(Set))),
-    ("sla", Keyword::Command(Mnemonic(Sla))),
     ("sp", Keyword::Operand(Sp)),
-    ("sra", Keyword::Command(Mnemonic(Sra))),
-    ("srl", Keyword::Command(Mnemonic(Srl))),
-    ("stop", Keyword::Command(Mnemonic(Stop))),
-    ("sub", Keyword::Command(Mnemonic(Sub))),
-    ("swap", Keyword::Command(Mnemonic(Swap))),
-    ("xor", Keyword::Command(Mnemonic(Xor))),
     ("z", Keyword::Operand(Z)),
 ];
 
@@ -445,7 +396,7 @@ mod tests {
 
     #[test]
     fn lex_two_keywords() {
-        assert_eq_tokens("push bc", [Push.into(), Literal(Operand(Bc))])
+        assert_eq_tokens("a bc", [Literal(Operand(A)), Literal(Operand(Bc))])
     }
 
     #[test]
@@ -475,7 +426,7 @@ mod tests {
     fn lex_label() {
         assert_eq_tokens(
             "label nop\n",
-            [Label("label".into()), Nop.into(), Eol.into()],
+            [Label("label".into()), Ident("nop".into()), Eol.into()],
         )
     }
 
@@ -548,12 +499,12 @@ mod tests {
 
     #[test]
     fn ignore_comment_at_end_of_line() {
-        assert_eq_tokens("nop ; comment\n", [Nop.into(), Eol.into()])
+        assert_eq_tokens("a ; comment\n", [Literal(Operand(A)).into(), Eol.into()])
     }
 
     #[test]
     fn ignore_comment_at_end_of_input() {
-        assert_eq_tokens("nop ; comment", [Nop.into()])
+        assert_eq_tokens("a ; comment", [Literal(Operand(A)).into()])
     }
 
     #[test]
@@ -571,4 +522,5 @@ mod tests {
             Command(t.into())
         }
     }
+
 }

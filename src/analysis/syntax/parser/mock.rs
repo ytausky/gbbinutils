@@ -130,11 +130,26 @@ impl EmitDiag<MockSpan, MockSpan> for StmtActionCollector {
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub struct MacroId(pub TokenRef);
+
 impl StmtContext<SymIdent, SymLiteral, SymCommand, MockSpan> for StmtActionCollector {
+    type Command = SymCommand;
+    type MacroId = MacroId;
+
     type CommandContext = CommandActionCollector;
     type MacroDefContext = MacroBodyActionCollector;
     type MacroCallContext = MacroCallActionCollector;
     type Parent = FileActionCollector;
+
+    fn key_lookup(&mut self, ident: SymIdent) -> KeyLookupResult<Self::Command, Self::MacroId> {
+        match ident.0 {
+            IdentKind::Command => Ok(Key::Command(SymCommand(ident.1))),
+            IdentKind::MacroName => Ok(Key::Macro(MacroId(ident.1))),
+            IdentKind::RelocName => Err(KeyError::Reloc),
+            IdentKind::Unknown => Err(KeyError::Unknown),
+        }
+    }
 
     fn enter_command(self, command: (SymCommand, MockSpan)) -> CommandActionCollector {
         CommandActionCollector {
@@ -152,7 +167,7 @@ impl StmtContext<SymIdent, SymLiteral, SymCommand, MockSpan> for StmtActionColle
         }
     }
 
-    fn enter_macro_call(self, name: (SymIdent, MockSpan)) -> MacroCallActionCollector {
+    fn enter_macro_call(self, name: (Self::MacroId, MockSpan)) -> MacroCallActionCollector {
         MacroCallActionCollector {
             name,
             actions: Vec::new(),
@@ -285,7 +300,7 @@ impl TokenSeqContext<MockSpan> for MacroBodyActionCollector {
 }
 
 pub(super) struct MacroCallActionCollector {
-    name: (SymIdent, MockSpan),
+    name: (MacroId, MockSpan),
     actions: Vec<MacroCallAction<MockSpan>>,
     parent: StmtActionCollector,
 }
@@ -350,7 +365,7 @@ pub(super) fn expr() -> SymExpr {
 
 impl SymExpr {
     pub fn ident(self, token: impl Into<TokenRef>) -> Self {
-        self.push(token, |t| ExprAtom::Ident(SymIdent(t)))
+        self.push(token, |t| ExprAtom::Ident(SymIdent(IdentKind::Unknown, t)))
     }
 
     pub fn literal(self, token: impl Into<TokenRef>) -> Self {
@@ -442,20 +457,31 @@ impl SymExpr {
 pub struct SymCommand(pub TokenRef);
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct SymIdent(pub TokenRef);
+pub struct SymIdent(pub IdentKind, pub TokenRef);
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum IdentKind {
+    Command,
+    MacroName,
+    RelocName,
+    Unknown,
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SymLiteral(pub TokenRef);
 
 pub type SymToken = Token<SymIdent, SymLiteral, SymCommand>;
 
-pub fn mk_sym_token(id: impl Into<TokenRef>, token: Token<(), (), ()>) -> (SymToken, TokenRef) {
+pub fn mk_sym_token(
+    id: impl Into<TokenRef>,
+    token: Token<IdentKind, (), ()>,
+) -> (SymToken, TokenRef) {
     let token_ref = id.into();
     (
         match token {
             Command(()) => Command(SymCommand(token_ref.clone())),
-            Ident(()) => Ident(SymIdent(token_ref.clone())),
-            Label(()) => Label(SymIdent(token_ref.clone())),
+            Ident(kind) => Ident(SymIdent(kind, token_ref.clone())),
+            Label(kind) => Label(SymIdent(kind, token_ref.clone())),
             Literal(()) => Literal(SymLiteral(token_ref.clone())),
             Simple(simple) => Simple(simple),
         },
@@ -469,7 +495,7 @@ pub(super) struct InputTokens {
 }
 
 impl InputTokens {
-    pub fn insert_token(&mut self, id: impl Into<TokenRef>, token: Token<(), (), ()>) {
+    pub fn insert_token(&mut self, id: impl Into<TokenRef>, token: Token<IdentKind, (), ()>) {
         self.tokens.push(mk_sym_token(id, token))
     }
 
@@ -585,7 +611,7 @@ pub(super) enum StmtAction<S> {
         body: Vec<TokenSeqAction<S>>,
     },
     MacroCall {
-        name: (SymIdent, S),
+        name: (MacroId, S),
         actions: Vec<MacroCallAction<S>>,
     },
     EmitDiag(CompactDiag<S>),
@@ -633,7 +659,7 @@ pub(super) fn labeled(
     let label = label.into();
     FileAction::Stmt {
         label: Some((
-            (SymIdent(label.clone()), label.into()),
+            (SymIdent(IdentKind::Unknown, label.clone()), label.into()),
             convert_params(params),
         )),
         actions,
@@ -691,7 +717,7 @@ pub(super) fn call_macro(
 ) -> Vec<StmtAction<MockSpan>> {
     let id = id.into();
     vec![StmtAction::MacroCall {
-        name: (SymIdent(id.clone()), id.into()),
+        name: (MacroId(id.clone()), id.into()),
         actions: args
             .borrow()
             .iter()
@@ -718,7 +744,7 @@ fn convert_params(params: impl Borrow<[TokenRef]>) -> Vec<ParamsAction<MockSpan>
         .borrow()
         .iter()
         .cloned()
-        .map(|t| ParamsAction::AddParameter((SymIdent(t.clone()), t.into())))
+        .map(|t| ParamsAction::AddParameter((SymIdent(IdentKind::Unknown, t.clone()), t.into())))
         .collect()
 }
 

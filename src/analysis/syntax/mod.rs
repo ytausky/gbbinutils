@@ -71,15 +71,44 @@ pub(super) trait FileContext<I, L, C, S: Clone>: Diagnostics<S> + Sized {
 }
 
 pub(super) trait StmtContext<I, L, C, S: Clone>: Diagnostics<S> + Sized {
+    type Command;
+    type MacroId;
+
     type CommandContext: CommandContext<S, Ident = I, Literal = L, Parent = Self>;
     type MacroDefContext: TokenSeqContext<S, Token = Token<I, L, C>, Parent = Self>;
     type MacroCallContext: MacroCallContext<S, Token = Token<I, L, C>, Parent = Self>;
     type Parent;
 
-    fn enter_command(self, command: (C, S)) -> Self::CommandContext;
+    fn key_lookup(&mut self, ident: I) -> KeyLookupResult<Self::Command, Self::MacroId>;
+
+    fn enter_command(self, command: (Self::Command, S)) -> Self::CommandContext;
     fn enter_macro_def(self, keyword: S) -> Self::MacroDefContext;
-    fn enter_macro_call(self, name: (I, S)) -> Self::MacroCallContext;
+    fn enter_macro_call(self, id: (Self::MacroId, S)) -> Self::MacroCallContext;
     fn exit(self) -> Self::Parent;
+}
+
+pub(super) type KeyLookupResult<C, M> = Result<Key<C, M>, KeyError>;
+
+#[derive(Clone, Debug, PartialEq)]
+pub(super) enum Key<C, M> {
+    Command(C),
+    Macro(M),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(super) enum KeyError {
+    Reloc,
+    Unknown,
+}
+
+#[cfg(test)]
+impl<C, M> Key<C, M> {
+    pub fn macro_call(self) -> Option<M> {
+        match self {
+            Key::Macro(id) => Some(id),
+            _ => None,
+        }
+    }
 }
 
 pub(super) trait CommandContext<S: Clone>: Diagnostics<S> + Sized {

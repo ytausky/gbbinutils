@@ -149,13 +149,30 @@ where
                     continue;
                 }
                 (Ok(Token::Label(_)), _) | (Ok(Token::Simple(SimpleToken::Eof)), _) => self,
-                (Ok(Token::Command(command)), span) => {
-                    bump!(self);
-                    self.parse_command((command, span))
-                }
                 (Ok(Token::Ident(ident)), span) => {
                     bump!(self);
-                    self.parse_macro_call((ident, span))
+                    match self.context.key_lookup(ident) {
+                        Ok(key) => match key {
+                            Key::Command(command) => self.parse_command((command, span)),
+                            Key::Macro(id) => self.parse_macro_call((id, span)),
+                        },
+                        Err(error) => {
+                            let name = self.strip_span(&span);
+                            self.emit_diag(
+                                match error {
+                                    KeyError::Reloc => {
+                                        Message::CannotUseSymbolNameAsMacroName { name }
+                                    }
+                                    KeyError::Unknown => Message::UndefinedMacro { name },
+                                }
+                                .at(span),
+                            );
+                            while !self.token_is_in(LINE_FOLLOW_SET) {
+                                bump!(self)
+                            }
+                            self
+                        }
+                    }
                 }
                 (Ok(Token::Simple(SimpleToken::Macro)), span) => {
                     bump!(self);
@@ -171,7 +188,7 @@ where
         }
     }
 
-    fn parse_command(self, command: (C, S)) -> Self {
+    fn parse_command(self, command: (Ctx::Command, S)) -> Self {
         self.change_context(|c| c.enter_command(command))
             .parse_argument_list()
             .change_context(CommandContext::exit)
@@ -214,7 +231,7 @@ where
         state.change_context(TokenSeqContext::exit)
     }
 
-    fn parse_macro_call(self, name: (Id, S)) -> Self {
+    fn parse_macro_call(self, name: (Ctx::MacroId, S)) -> Self {
         self.change_context(|c| c.enter_macro_call(name))
             .parse_macro_arg_list()
             .change_context(MacroCallContext::exit)
@@ -379,7 +396,7 @@ mod tests {
     #[test]
     fn parse_nullary_instruction() {
         assert_eq_actions(
-            input_tokens![nop @ Command(())],
+            input_tokens![nop @ Ident(IdentKind::Command)],
             [unlabeled(command("nop", []))],
         )
     }
@@ -387,7 +404,7 @@ mod tests {
     #[test]
     fn parse_nullary_instruction_after_eol() {
         assert_eq_actions(
-            input_tokens![Eol, nop @ Command(())],
+            input_tokens![Eol, nop @ Ident(IdentKind::Command)],
             [unlabeled(command("nop", []))],
         )
     }
@@ -395,7 +412,7 @@ mod tests {
     #[test]
     fn parse_nullary_instruction_followed_by_eol() {
         assert_eq_actions(
-            input_tokens![daa @ Command(()), Eol],
+            input_tokens![daa @ Ident(IdentKind::Command), Eol],
             [unlabeled(command("daa", [])), unlabeled(empty())],
         )
     }
@@ -403,7 +420,7 @@ mod tests {
     #[test]
     fn parse_unary_instruction() {
         assert_eq_actions(
-            input_tokens![db @ Command(()), my_ptr @ Ident(())],
+            input_tokens![db @ Ident(IdentKind::Command), my_ptr @ Ident(IdentKind::Unknown)],
             [unlabeled(command("db", [expr().ident("my_ptr")]))],
         )
     }
@@ -411,7 +428,12 @@ mod tests {
     #[test]
     fn parse_binary_instruction() {
         assert_eq_actions(
-            input_tokens![Command(()), Ident(()), Comma, Literal(())],
+            input_tokens![
+                Ident(IdentKind::Command),
+                Ident(IdentKind::Unknown),
+                Comma,
+                Literal(())
+            ],
             [unlabeled(command(0, [expr().ident(1), expr().literal(3)]))],
         );
     }
@@ -419,15 +441,15 @@ mod tests {
     #[test]
     fn parse_two_instructions() {
         let tokens = input_tokens![
-            Command(()),
-            Ident(()),
+            Ident(IdentKind::Command),
+            Ident(IdentKind::Unknown),
             Comma,
             Literal(()),
             Eol,
-            ld @ Command(()),
+            ld @ Ident(IdentKind::Command),
             a @ Literal(()),
             Comma,
-            some_const @ Ident(()),
+            some_const @ Ident(IdentKind::Unknown),
         ];
         let expected = [
             unlabeled(command(0, [expr().ident(1), expr().literal(3)])),
@@ -442,14 +464,14 @@ mod tests {
     #[test]
     fn parse_two_instructions_separated_by_blank_line() {
         let tokens = input_tokens![
-            Command(()),
+            Ident(IdentKind::Command),
             Literal(()),
             Comma,
-            Ident(()),
+            Ident(IdentKind::Unknown),
             Eol,
             Eol,
-            Command(()),
-            Ident(()),
+            Ident(IdentKind::Command),
+            Ident(IdentKind::Unknown),
             Comma,
             Literal(()),
         ];
@@ -462,14 +484,21 @@ mod tests {
 
     #[test]
     fn parse_empty_macro_definition() {
-        let tokens = input_tokens![Label(()), Macro, Eol, Endm];
+        let tokens = input_tokens![Label(IdentKind::Unknown), Macro, Eol, Endm];
         let expected_actions = [labeled(0, vec![], macro_def(1, Vec::new(), 3))];
         assert_eq_actions(tokens, expected_actions);
     }
 
     #[test]
     fn parse_macro_definition_with_instruction() {
-        let tokens = input_tokens![Label(()), Macro, Eol, Command(()), Eol, Endm];
+        let tokens = input_tokens![
+            Label(IdentKind::Unknown),
+            Macro,
+            Eol,
+            Ident(IdentKind::Command),
+            Eol,
+            Endm
+        ];
         let expected_actions = [labeled(
             0,
             vec![],
@@ -481,15 +510,15 @@ mod tests {
     #[test]
     fn parse_nonempty_macro_def_with_two_params() {
         let tokens = input_tokens![
-            l @ Label(()),
+            l @ Label(IdentKind::Unknown),
             LParen,
-            p1 @ Ident(()),
+            p1 @ Ident(IdentKind::Unknown),
             Comma,
-            p2 @ Ident(()),
+            p2 @ Ident(IdentKind::Unknown),
             RParen,
             key @ Macro,
             Eol,
-            t1 @ Command(()),
+            t1 @ Ident(IdentKind::Command),
             t2 @ Eol,
             endm @ Endm,
         ];
@@ -503,28 +532,33 @@ mod tests {
 
     #[test]
     fn parse_label() {
-        let tokens = input_tokens![Label(()), Eol];
+        let tokens = input_tokens![Label(IdentKind::Unknown), Eol];
         let expected_actions = [labeled(0, vec![], empty())];
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_two_consecutive_labels() {
-        let tokens = input_tokens![Label(()), Eol, Label(())];
+        let tokens = input_tokens![Label(IdentKind::Unknown), Eol, Label(IdentKind::Unknown)];
         let expected = [labeled(0, vec![], empty()), labeled(2, vec![], empty())];
         assert_eq_actions(tokens, expected)
     }
 
     #[test]
     fn parse_labeled_instruction() {
-        let tokens = input_tokens![Label(()), Command(()), Eol];
+        let tokens = input_tokens![Label(IdentKind::Unknown), Ident(IdentKind::Command), Eol];
         let expected = [labeled(0, vec![], command(1, [])), unlabeled(empty())];
         assert_eq_actions(tokens, expected)
     }
 
     #[test]
     fn parse_labeled_command_with_eol_separators() {
-        let tokens = input_tokens![Label(()), Eol, Eol, Command(())];
+        let tokens = input_tokens![
+            Label(IdentKind::Unknown),
+            Eol,
+            Eol,
+            Ident(IdentKind::Command)
+        ];
         let expected = [labeled(0, vec![], command(3, []))];
         assert_eq_actions(tokens, expected)
     }
@@ -532,7 +566,7 @@ mod tests {
     #[test]
     fn parse_deref_operand() {
         let tokens = input_tokens![
-            jp @ Command(()),
+            jp @ Ident(IdentKind::Command),
             open @ LParen,
             hl @ Literal(()),
             close @ RParen,
@@ -546,21 +580,26 @@ mod tests {
 
     #[test]
     fn parse_nullary_macro_call() {
-        let tokens = input_tokens![Ident(())];
+        let tokens = input_tokens![Ident(IdentKind::MacroName)];
         let expected_actions = [unlabeled(call_macro(0, []))];
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_unary_macro_call() {
-        let tokens = input_tokens![Ident(()), Literal(())];
+        let tokens = input_tokens![Ident(IdentKind::MacroName), Literal(())];
         let expected_actions = [unlabeled(call_macro(0, [tokens.token_seq([1])]))];
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_unary_macro_call_with_multiple_terminals() {
-        let tokens = input_tokens![Ident(()), Literal(()), Literal(()), Literal(())];
+        let tokens = input_tokens![
+            Ident(IdentKind::MacroName),
+            Literal(()),
+            Literal(()),
+            Literal(())
+        ];
         let expected_actions = [unlabeled(call_macro(0, [tokens.token_seq([1, 2, 3])]))];
         assert_eq_actions(tokens, expected_actions)
     }
@@ -568,7 +607,7 @@ mod tests {
     #[test]
     fn parse_binary_macro_call_with_multiple_terminals() {
         let tokens = input_tokens![
-            Ident(()),
+            Ident(IdentKind::MacroName),
             Literal(()),
             Literal(()),
             Comma,
@@ -586,8 +625,8 @@ mod tests {
     #[test]
     fn parse_sum_arg() {
         let tokens = input_tokens![
-            Command(()),
-            x @ Ident(()),
+            Ident(IdentKind::Command),
+            x @ Ident(IdentKind::Unknown),
             plus @ Plus,
             y @ Literal(()),
         ];
@@ -614,7 +653,7 @@ mod tests {
     fn diagnose_missing_comma_in_arg_list() {
         let span: MockSpan = TokenRef::from("unexpected").into();
         assert_eq_actions(
-            input_tokens![Command(()), Literal(()), unexpected @ Literal(())],
+            input_tokens![Ident(IdentKind::Command), Literal(()), unexpected @ Literal(())],
             [unlabeled(malformed_command(
                 0,
                 [expr().literal(1)],
@@ -630,10 +669,13 @@ mod tests {
     #[test]
     fn diagnose_eof_in_param_list() {
         assert_eq_actions(
-            input_tokens![label @ Label(()), LParen, eof @ Eof],
+            input_tokens![label @ Label(IdentKind::Unknown), LParen, eof @ Eof],
             [FileAction::Stmt {
                 label: Some((
-                    (SymIdent("label".into()), TokenRef::from("label").into()),
+                    (
+                        SymIdent(IdentKind::Unknown, "label".into()),
+                        TokenRef::from("label").into(),
+                    ),
                     vec![ParamsAction::EmitDiag(arg_error(
                         Message::UnexpectedEof,
                         "eof",
@@ -659,7 +701,7 @@ mod tests {
     #[test]
     fn diagnose_unmatched_parentheses() {
         assert_eq_actions(
-            input_tokens![Command(()), paren @ LParen, Literal(())],
+            input_tokens![Ident(IdentKind::Command), paren @ LParen, Literal(())],
             [unlabeled(command(
                 0,
                 [expr()
@@ -674,12 +716,12 @@ mod tests {
         let paren_span: MockSpan = TokenRef::from("paren").into();
         assert_eq_actions(
             input_tokens![
-                Command(()),
+                Ident(IdentKind::Command),
                 paren @ RParen,
                 Plus,
-                Ident(()),
+                Ident(IdentKind::Unknown),
                 Eol,
-                nop @ Command(())
+                nop @ Ident(IdentKind::Command)
             ],
             [
                 unlabeled(command(
@@ -699,7 +741,7 @@ mod tests {
     #[test]
     fn diagnose_unmatched_parenthesis_at_eol() {
         assert_eq_actions(
-            input_tokens![Command(()), LParen, Eol],
+            input_tokens![Ident(IdentKind::Command), LParen, Eol],
             [
                 unlabeled(command(
                     0,
@@ -715,7 +757,7 @@ mod tests {
         let span: MockSpan = TokenRef::from("lit").into();
         assert_eq_actions(
             input_tokens![
-                label @ Label(()),
+                label @ Label(IdentKind::Unknown),
                 LParen,
                 lit @ Literal(()),
                 RParen,
@@ -725,7 +767,10 @@ mod tests {
             ],
             [FileAction::Stmt {
                 label: Some((
-                    (SymIdent("label".into()), TokenRef::from("label").into()),
+                    (
+                        SymIdent(IdentKind::Unknown, "label".into()),
+                        TokenRef::from("label").into(),
+                    ),
                     vec![ParamsAction::EmitDiag(
                         Message::UnexpectedToken {
                             token: span.clone(),
@@ -748,11 +793,11 @@ mod tests {
     #[test]
     fn diagnose_unexpected_token_after_macro_keyword() {
         let tokens = input_tokens![
-            label @ Label(()),
+            label @ Label(IdentKind::Unknown),
             key @ Macro,
-            unexpected @ Ident(()),
+            unexpected @ Ident(IdentKind::Unknown),
             Eol,
-            t1 @ Command(()),
+            t1 @ Ident(IdentKind::Command),
             t2 @ Eol,
             t3 @ Endm,
         ];
@@ -773,6 +818,48 @@ mod tests {
                 body,
             }],
         )];
+        assert_eq_actions(tokens, expected)
+    }
+
+    #[test]
+    fn diagnose_and_recover_from_unknown_ident_as_key() {
+        let tokens = input_tokens![
+            span @ Ident(IdentKind::Unknown),
+            Ident(IdentKind::Unknown),
+            Eol,
+            nop @ Ident(IdentKind::Command),
+        ];
+        let span = MockSpan::from(TokenRef::from("span"));
+        let expected = [
+            unlabeled(vec![StmtAction::EmitDiag(
+                Message::UndefinedMacro { name: span.clone() }
+                    .at(span)
+                    .into(),
+            )]),
+            unlabeled(command("nop", [])),
+        ];
+        assert_eq_actions(tokens, expected)
+    }
+
+    #[test]
+    fn diagnose_and_recover_from_reloc_name_as_key() {
+        let tokens = input_tokens![
+            as_macro @ Ident(IdentKind::RelocName),
+            Ident(IdentKind::Unknown),
+            Eol,
+            nop @ Ident(IdentKind::Command),
+        ];
+        let as_macro = MockSpan::from(TokenRef::from("as_macro"));
+        let expected = [
+            unlabeled(vec![StmtAction::EmitDiag(
+                Message::CannotUseSymbolNameAsMacroName {
+                    name: as_macro.clone(),
+                }
+                .at(as_macro)
+                .into(),
+            )]),
+            unlabeled(command("nop", [])),
+        ];
         assert_eq_actions(tokens, expected)
     }
 }
