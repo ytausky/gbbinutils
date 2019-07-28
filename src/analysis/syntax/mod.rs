@@ -58,32 +58,76 @@ impl<I: Clone + PartialEq, F: for<'a> Fn(&'a str) -> I> IdentFactory for F {
 
 pub(super) use self::parser::parse_src as parse_token_seq;
 
-pub(super) trait FileContext<I, L, S: Clone>: Diagnostics<S> + Sized {
-    type LabelContext: ParamsContext<I, S, Next = Self::StmtContext>;
-    type StmtContext: StmtContext<I, L, S, Parent = Self>;
+pub(super) trait TokenStreamContext<I, L, S: Clone>: Sized {
+    type InstrLineContext: InstrLineContext<I, L, S, ParentContext = Self>;
 
-    fn enter_labeled_stmt(self, label: (I, S)) -> Self::LabelContext;
-    fn enter_unlabeled_stmt(self) -> Self::StmtContext;
+    fn will_parse_line(self) -> LineRule<Self::InstrLineContext>;
 }
 
-pub(super) trait StmtContext<I, L, S: Clone>: Diagnostics<S> + Sized {
-    type BuiltinInstrContext: BuiltinInstrContext<S, Ident = I, Literal = L, Parent = Self>;
-    type MacroDefContext: TokenSeqContext<S, Token = Token<I, L>, Parent = Self>;
-    type MacroCallContext: MacroCallContext<S, Token = Token<I, L>, Parent = Self>;
-    type Parent;
+pub(super) enum LineRule<I> {
+    InstrLine(I),
+}
 
-    fn key_lookup(
+#[cfg(test)]
+impl<I> LineRule<I> {
+    pub fn into_instr_line(self) -> I {
+        match self {
+            LineRule::InstrLine(context) => context,
+        }
+    }
+}
+
+pub(super) trait InstrLineContext<I, L, S: Clone>: InstrContext<I, L, S> {
+    type LabelContext: LabelContext<I, S, ParentContext = Self::InstrContext>;
+    type InstrContext: InstrContext<I, L, S, ParentContext = Self::ParentContext>;
+
+    fn will_parse_label(self, label: (I, S)) -> Self::LabelContext;
+}
+
+pub(super) trait InstrContext<I, L, S: Clone>: LineEndContext<S> {
+    type BuiltinInstrContext: BuiltinInstrContext<
+        S,
+        Ident = I,
+        Literal = L,
+        ParentContext = Self::LineEndContext,
+    >;
+    type MacroDefContext: TokenSeqContext<S, Token = Token<I, L>, Parent = Self::LineEndContext>;
+    type MacroCallContext: MacroCallContext<
+        S,
+        Token = Token<I, L>,
+        ParentContext = Self::LineEndContext,
+    >;
+    type ErrorContext: InstrEndContext<S, ParentContext = Self::LineEndContext>;
+    type LineEndContext: LineEndContext<S, ParentContext = Self::ParentContext>;
+
+    fn will_parse_instr(
         self,
         ident: I,
         span: S,
-    ) -> Production<Self::BuiltinInstrContext, Self::MacroCallContext, Self::MacroDefContext, Self>;
-    fn exit(self) -> Self::Parent;
+    ) -> InstrRule<
+        Self::BuiltinInstrContext,
+        Self::MacroCallContext,
+        Self::MacroDefContext,
+        Self::ErrorContext,
+    >;
+}
+
+pub(super) trait LineEndContext<S: Clone>: Diagnostics<S> + Sized {
+    type ParentContext;
+
+    fn did_parse_line(self) -> Self::ParentContext;
+}
+
+pub(super) trait InstrEndContext<S: Clone>: Diagnostics<S> + Sized {
+    type ParentContext;
+
+    fn did_parse_instr(self) -> Self::ParentContext;
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(super) enum Production<C, M, D, E> {
+pub(super) enum InstrRule<C, M, D, E> {
     BuiltinInstr(C),
-    MacroCall(M),
+    MacroInstr(M),
     MacroDef(D),
     Error(E),
 }
@@ -94,44 +138,43 @@ pub(super) enum Keyword {
 }
 
 #[cfg(test)]
-impl<C, M, D, E> Production<C, M, D, E> {
-    pub fn command(self) -> Option<C> {
+impl<C, M, D, E> InstrRule<C, M, D, E> {
+    pub fn into_builtin_instr(self) -> C {
         match self {
-            Production::BuiltinInstr(context) => Some(context),
-            _ => None,
+            InstrRule::BuiltinInstr(context) => context,
+            _ => panic!("expected builtin instruction context"),
         }
     }
 
-    pub fn macro_call(self) -> Option<M> {
+    pub fn into_macro_instr(self) -> M {
         match self {
-            Production::MacroCall(context) => Some(context),
-            _ => None,
+            InstrRule::MacroInstr(context) => context,
+            _ => panic!("expected macro instruction"),
         }
     }
 
     pub fn macro_def(self) -> Option<D> {
         match self {
-            Production::MacroDef(context) => Some(context),
+            InstrRule::MacroDef(context) => Some(context),
             _ => None,
         }
     }
 
     pub fn error(self) -> Option<E> {
         match self {
-            Production::Error(context) => Some(context),
+            InstrRule::Error(context) => Some(context),
             _ => None,
         }
     }
 }
 
-pub(super) trait BuiltinInstrContext<S: Clone>: Diagnostics<S> + Sized {
+pub(super) trait BuiltinInstrContext<S: Clone>: InstrEndContext<S> {
     type Ident;
     type Literal;
     type ArgContext: ExprContext<S, Ident = Self::Ident, Literal = Self::Literal>
         + FinalContext<ReturnTo = Self>;
-    type Parent;
+
     fn add_argument(self) -> Self::ArgContext;
-    fn exit(self) -> Self::Parent;
 }
 
 pub(super) trait FinalContext {
@@ -167,19 +210,18 @@ pub enum UnaryOperator {
     Parentheses,
 }
 
-pub(super) trait ParamsContext<I, S: Clone>: Diagnostics<S> {
-    type Next;
+pub(super) trait LabelContext<I, S: Clone>: Diagnostics<S> {
+    type ParentContext;
 
-    fn add_parameter(&mut self, param: (I, S));
-    fn next(self) -> Self::Next;
+    fn act_on_param(&mut self, param: (I, S));
+    fn did_parse_label(self) -> Self::ParentContext;
 }
 
-pub(super) trait MacroCallContext<S: Clone>: Diagnostics<S> + Sized {
+pub(super) trait MacroCallContext<S: Clone>: InstrEndContext<S> {
     type Token;
-    type Parent;
     type MacroArgContext: TokenSeqContext<S, Token = Self::Token, Parent = Self>;
+
     fn enter_macro_arg(self) -> Self::MacroArgContext;
-    fn exit(self) -> Self::Parent;
 }
 
 pub(super) trait TokenSeqContext<S: Clone>: Diagnostics<S> {

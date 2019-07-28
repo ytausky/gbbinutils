@@ -32,17 +32,17 @@ impl<I, L> Token<I, L> {
 
 const LINE_FOLLOW_SET: &[TokenKind] = &[Token::Simple(Eol), Token::Simple(Eof)];
 
-pub(in crate::analysis) fn parse_src<Id, L, E, I, F, S>(mut tokens: I, context: F) -> F
+pub(in crate::analysis) fn parse_src<I, L, E, T, C, S>(mut tokens: T, context: C) -> C
 where
-    I: Iterator<Item = (Result<Token<Id, L>, E>, S)>,
-    F: FileContext<Id, L, S>,
+    T: Iterator<Item = (Result<Token<I, L>, E>, S)>,
+    C: TokenStreamContext<I, L, S>,
     S: Clone,
 {
     let Parser {
         state: ParserState { token, .. },
         context,
         ..
-    } = Parser::new(&mut tokens, context).parse_file();
+    } = Parser::new(&mut tokens, context).parse_token_stream();
     assert_eq!(
         token.0.ok().as_ref().map(Token::kind),
         Some(Token::Simple(SimpleToken::Eof))
@@ -101,23 +101,34 @@ impl<'a, Id, L, E, S, I, A> Parser<'a, (Result<Token<Id, L>, E>, S), I, A> {
     }
 }
 
-impl<'a, Id, L, E, I, C, S> Parser<'a, (Result<Token<Id, L>, E>, S), I, C>
+impl<'a, I, L, E, T, C, S> Parser<'a, (Result<Token<I, L>, E>, S), T, C>
 where
-    I: Iterator<Item = (Result<Token<Id, L>, E>, S)>,
-    C: FileContext<Id, L, S>,
+    T: Iterator<Item = (Result<Token<I, L>, E>, S)>,
+    C: TokenStreamContext<I, L, S>,
     S: Clone,
 {
-    fn parse_file(mut self) -> Self {
-        while self.token_kind() != Some(Token::Simple(SimpleToken::Eof)) {
-            self = self.parse_stmt()
+    fn parse_token_stream(mut self) -> Self {
+        while self.token_kind() != Some(SimpleToken::Eof.into()) {
+            self = match self.context.will_parse_line() {
+                LineRule::InstrLine(context) => {
+                    Parser::from_state(self.state, context).parse_instr_line()
+                }
+            }
         }
         self
     }
+}
 
-    fn parse_stmt(mut self) -> Self {
+impl<'a, Id, L, E, I, C, S> Parser<'a, (Result<Token<Id, L>, E>, S), I, C>
+where
+    I: Iterator<Item = (Result<Token<Id, L>, E>, S)>,
+    C: InstrLineContext<Id, L, S>,
+    S: Clone,
+{
+    fn parse_instr_line(mut self) -> Parser<'a, (Result<Token<Id, L>, E>, S), I, C::ParentContext> {
         if let (Ok(Token::Label(label)), span) = self.state.token {
             bump!(self);
-            let mut parser = self.change_context(|c| c.enter_labeled_stmt((label, span)));
+            let mut parser = self.change_context(|c| c.will_parse_label((label, span)));
             if parser.token_kind() == Some(LParen.into()) {
                 bump!(parser);
                 parser = parser.parse_terminated_list(
@@ -130,33 +141,37 @@ where
                 } else {
                     parser = parser.diagnose_unexpected_token();
                     return parser
-                        .change_context(ParamsContext::next)
-                        .change_context(StmtContext::exit);
+                        .change_context(LabelContext::did_parse_label)
+                        .change_context(LineEndContext::did_parse_line);
                 }
             }
-            parser.change_context(ParamsContext::next)
+            parser
+                .change_context(LabelContext::did_parse_label)
+                .parse_unlabeled_stmt()
         } else {
-            self.change_context(FileContext::enter_unlabeled_stmt)
+            self.parse_unlabeled_stmt()
         }
-        .parse_unlabeled_stmt()
-        .change_context(StmtContext::exit)
     }
 }
 
 impl<'a, Id, L, E, I, C, S> Parser<'a, (Result<Token<Id, L>, E>, S), I, C>
 where
     I: Iterator<Item = (Result<Token<Id, L>, E>, S)>,
-    C: StmtContext<Id, L, S>,
+    C: InstrContext<Id, L, S>,
     S: Clone,
 {
-    fn parse_unlabeled_stmt(mut self) -> Self {
+    fn parse_unlabeled_stmt(
+        mut self,
+    ) -> Parser<'a, (Result<Token<Id, L>, E>, S), I, C::ParentContext> {
         loop {
             return match self.state.token {
                 (Ok(Token::Simple(SimpleToken::Eol)), _) => {
                     bump!(self);
                     continue;
                 }
-                (Ok(Token::Label(_)), _) | (Ok(Token::Simple(SimpleToken::Eof)), _) => self,
+                (Ok(Token::Label(_)), _) | (Ok(Token::Simple(SimpleToken::Eof)), _) => {
+                    self.change_context(LineEndContext::did_parse_line)
+                }
                 (Ok(Token::Ident(ident)), span) => {
                     bump!(self);
                     self.parse_key(ident, span)
@@ -165,29 +180,36 @@ where
                     bump!(self);
                     let stripped = self.strip_span(&span);
                     self.emit_diag(Message::UnexpectedToken { token: stripped }.at(span));
-                    self
+                    self.change_context(LineEndContext::did_parse_line)
                 }
             };
         }
     }
 
-    fn parse_key(mut self, key: Id, span: S) -> Self {
-        match self.context.key_lookup(key, span) {
-            Production::BuiltinInstr(context) => Parser::from_state(self.state, context)
+    fn parse_key(
+        self,
+        key: Id,
+        span: S,
+    ) -> Parser<'a, (Result<Token<Id, L>, E>, S), I, C::ParentContext> {
+        match self.context.will_parse_instr(key, span) {
+            InstrRule::BuiltinInstr(context) => Parser::from_state(self.state, context)
                 .parse_argument_list()
-                .change_context(BuiltinInstrContext::exit),
-            Production::MacroCall(context) => Parser::from_state(self.state, context)
+                .change_context(InstrEndContext::did_parse_instr)
+                .change_context(LineEndContext::did_parse_line),
+            InstrRule::MacroInstr(context) => Parser::from_state(self.state, context)
                 .parse_macro_call()
-                .change_context(MacroCallContext::exit),
-            Production::MacroDef(context) => Parser::from_state(self.state, context)
+                .change_context(InstrEndContext::did_parse_instr)
+                .change_context(LineEndContext::did_parse_line),
+            InstrRule::MacroDef(context) => Parser::from_state(self.state, context)
                 .parse_macro_def()
-                .change_context(TokenSeqContext::exit),
-            Production::Error(context) => {
-                self.context = context;
-                while !self.token_is_in(LINE_FOLLOW_SET) {
-                    bump!(self)
+                .change_context(TokenSeqContext::exit)
+                .change_context(LineEndContext::did_parse_line),
+            InstrRule::Error(context) => {
+                let mut parser = Parser::from_state(self.state, context.did_parse_instr());
+                while !parser.token_is_in(LINE_FOLLOW_SET) {
+                    bump!(parser)
                 }
-                self
+                parser.change_context(LineEndContext::did_parse_line)
             }
         }
     }
@@ -213,13 +235,13 @@ where
 impl<'a, Id, L, E, I, C, S> Parser<'a, (Result<Token<Id, L>, E>, S), I, C>
 where
     I: Iterator<Item = (Result<Token<Id, L>, E>, S)>,
-    C: ParamsContext<Id, S>,
+    C: LabelContext<Id, S>,
     S: Clone,
 {
     fn parse_param(mut self) -> Self {
         match self.state.token.0 {
             Ok(Token::Ident(ident)) => {
-                self.context.add_parameter((ident, self.state.token.1));
+                self.context.act_on_param((ident, self.state.token.1));
                 bump!(self)
             }
             _ => self = self.diagnose_unexpected_token(),
@@ -385,11 +407,11 @@ mod tests {
 
     #[test]
     fn parse_empty_stmt() {
-        assert_eq_actions(input_tokens![Eol], [unlabeled(empty())])
+        assert_eq_actions(input_tokens![Eol], [TokenStreamAction::InstrLine(vec![])])
     }
 
-    fn assert_eq_actions(input: InputTokens, expected: impl Borrow<[FileAction<MockSpan>]>) {
-        let mut parsing_context = FileActionCollector::new();
+    fn assert_eq_actions(input: InputTokens, expected: impl Borrow<[TokenStreamAction<MockSpan>]>) {
+        let mut parsing_context = TokenStreamActionCollector::new();
         parsing_context = parse_src(with_spans(&input.tokens), parsing_context);
         assert_eq!(parsing_context.actions, expected.borrow())
     }
@@ -414,7 +436,10 @@ mod tests {
     fn parse_nullary_instruction_followed_by_eol() {
         assert_eq_actions(
             input_tokens![daa @ Ident(IdentKind::BuiltinInstr), Eol],
-            [unlabeled(builtin_instr("daa", [])), unlabeled(empty())],
+            [
+                unlabeled(builtin_instr("daa", [])),
+                TokenStreamAction::InstrLine(vec![]),
+            ],
         )
     }
 
@@ -494,7 +519,7 @@ mod tests {
             Eol,
             Endm,
         ];
-        let expected_actions = [labeled(0, vec![], macro_def(1, Vec::new(), 3))];
+        let expected_actions = [labeled(0, vec![], Some(macro_def(1, Vec::new(), 3)))];
         assert_eq_actions(tokens, expected_actions);
     }
 
@@ -511,7 +536,7 @@ mod tests {
         let expected_actions = [labeled(
             0,
             vec![],
-            macro_def(1, tokens.token_seq([3, 4]), 5),
+            Some(macro_def(1, tokens.token_seq([3, 4]), 5)),
         )];
         assert_eq_actions(tokens, expected_actions)
     }
@@ -534,7 +559,7 @@ mod tests {
         let expected = [labeled(
             "l",
             ["p1".into(), "p2".into()],
-            macro_def("key", tokens.token_seq(["t1", "t2"]), "endm"),
+            Some(macro_def("key", tokens.token_seq(["t1", "t2"]), "endm")),
         )];
         assert_eq_actions(tokens, expected)
     }
@@ -542,21 +567,24 @@ mod tests {
     #[test]
     fn parse_label() {
         let tokens = input_tokens![Label(IdentKind::Other), Eol];
-        let expected_actions = [labeled(0, vec![], empty())];
+        let expected_actions = [labeled(0, vec![], None)];
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_two_consecutive_labels() {
         let tokens = input_tokens![Label(IdentKind::Other), Eol, Label(IdentKind::Other)];
-        let expected = [labeled(0, vec![], empty()), labeled(2, vec![], empty())];
+        let expected = [labeled(0, vec![], None), labeled(2, vec![], None)];
         assert_eq_actions(tokens, expected)
     }
 
     #[test]
     fn parse_labeled_instruction() {
         let tokens = input_tokens![Label(IdentKind::Other), Ident(IdentKind::BuiltinInstr), Eol];
-        let expected = [labeled(0, vec![], builtin_instr(1, [])), unlabeled(empty())];
+        let expected = [
+            labeled(0, vec![], Some(builtin_instr(1, []))),
+            TokenStreamAction::InstrLine(vec![]),
+        ];
         assert_eq_actions(tokens, expected)
     }
 
@@ -568,7 +596,7 @@ mod tests {
             Eol,
             Ident(IdentKind::BuiltinInstr)
         ];
-        let expected = [labeled(0, vec![], builtin_instr(3, []))];
+        let expected = [labeled(0, vec![], Some(builtin_instr(3, [])))];
         assert_eq_actions(tokens, expected)
     }
 
@@ -651,10 +679,15 @@ mod tests {
         let token: MockSpan = TokenRef::from("a").into();
         assert_eq_actions(
             input_tokens![a @ Literal(())],
-            [unlabeled(stmt_error(
-                Message::UnexpectedToken { token },
-                "a",
-            ))],
+            [TokenStreamAction::InstrLine(vec![
+                InstrLineAction::EmitDiag(
+                    Message::UnexpectedToken {
+                        token: token.clone(),
+                    }
+                    .at(token)
+                    .into(),
+                ),
+            ])],
         )
     }
 
@@ -679,8 +712,8 @@ mod tests {
     fn diagnose_eof_in_param_list() {
         assert_eq_actions(
             input_tokens![label @ Label(IdentKind::Other), LParen, eof @ Eof],
-            [FileAction::Stmt {
-                label: Some((
+            [TokenStreamAction::InstrLine(vec![InstrLineAction::Label(
+                (
                     (
                         SymIdent(IdentKind::Other, "label".into()),
                         TokenRef::from("label").into(),
@@ -689,9 +722,8 @@ mod tests {
                         Message::UnexpectedEof,
                         "eof",
                     ))],
-                )),
-                actions: vec![],
-            }],
+                ),
+            )])],
         )
     }
 
@@ -756,7 +788,7 @@ mod tests {
                     0,
                     [expr().error(Message::UnmatchedParenthesis, TokenRef::from(1))],
                 )),
-                unlabeled(empty()),
+                TokenStreamAction::InstrLine(vec![]),
             ],
         )
     }
@@ -774,8 +806,8 @@ mod tests {
                 Eol,
                 endm @ Endm
             ],
-            [FileAction::Stmt {
-                label: Some((
+            [TokenStreamAction::InstrLine(vec![
+                InstrLineAction::Label((
                     (
                         SymIdent(IdentKind::Other, "label".into()),
                         TokenRef::from("label").into(),
@@ -788,7 +820,7 @@ mod tests {
                         .into(),
                     )],
                 )),
-                actions: vec![StmtAction::MacroDef {
+                InstrLineAction::Instr(vec![InstrAction::MacroDef {
                     keyword: (
                         SymIdent(IdentKind::MacroKeyword, "key".into()),
                         TokenRef::from("key").into(),
@@ -797,8 +829,8 @@ mod tests {
                         Eof.into(),
                         TokenRef::from("endm").into(),
                     ))],
-                }],
-            }],
+                }]),
+            ])],
         )
     }
 
@@ -825,13 +857,13 @@ mod tests {
         let expected = [labeled(
             "label",
             vec![],
-            vec![StmtAction::MacroDef {
+            Some(vec![InstrAction::MacroDef {
                 keyword: (
                     SymIdent(IdentKind::MacroKeyword, "key".into()),
                     TokenRef::from("key").into(),
                 ),
                 body,
-            }],
+            }]),
         )];
         assert_eq_actions(tokens, expected)
     }
@@ -844,7 +876,10 @@ mod tests {
             Eol,
             nop @ Ident(IdentKind::BuiltinInstr),
         ];
-        let expected = [unlabeled(vec![]), unlabeled(builtin_instr("nop", []))];
+        let expected = [
+            unlabeled(vec![InstrAction::Error(vec![])]),
+            unlabeled(builtin_instr("nop", [])),
+        ];
         assert_eq_actions(tokens, expected)
     }
 }

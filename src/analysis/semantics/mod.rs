@@ -92,19 +92,26 @@ delegate_diagnostics! {
     {S: Session}, SemanticActions<S>, {session()}, S, S::Span
 }
 
-impl<S: Session> FileContext<S::Ident, Literal<S::StringRef>, S::Span> for SemanticActions<S>
+impl<S: Session> TokenStreamContext<S::Ident, Literal<S::StringRef>, S::Span> for SemanticActions<S>
+where
+    S::Ident: AsRef<str>,
+{
+    type InstrLineContext = Self;
+
+    fn will_parse_line(self) -> LineRule<Self::InstrLineContext> {
+        LineRule::InstrLine(self)
+    }
+}
+
+impl<S: Session> InstrLineContext<S::Ident, Literal<S::StringRef>, S::Span> for SemanticActions<S>
 where
     S::Ident: AsRef<str>,
 {
     type LabelContext = LabelActions<S>;
-    type StmtContext = Self;
+    type InstrContext = Self;
 
-    fn enter_labeled_stmt(self, label: (S::Ident, S::Span)) -> Self::LabelContext {
+    fn will_parse_label(self, label: (S::Ident, S::Span)) -> Self::LabelContext {
         LabelActions::new(self, label)
-    }
-
-    fn enter_unlabeled_stmt(self) -> Self::StmtContext {
-        self
     }
 }
 
@@ -128,15 +135,15 @@ delegate_diagnostics! {
     {S: Session}, LabelActions<S>, {parent}, S, S::Span
 }
 
-impl<S: Session> ParamsContext<S::Ident, S::Span> for LabelActions<S> {
-    type Next = SemanticActions<S>;
+impl<S: Session> LabelContext<S::Ident, S::Span> for LabelActions<S> {
+    type ParentContext = SemanticActions<S>;
 
-    fn add_parameter(&mut self, (ident, span): (S::Ident, S::Span)) {
+    fn act_on_param(&mut self, (ident, span): (S::Ident, S::Span)) {
         self.params.0.push(ident);
         self.params.1.push(span)
     }
 
-    fn next(mut self) -> Self::Next {
+    fn did_parse_label(mut self) -> Self::ParentContext {
         self.parent.label = Some((self.label, self.params));
         self.parent
     }
@@ -144,20 +151,21 @@ impl<S: Session> ParamsContext<S::Ident, S::Span> for LabelActions<S> {
 
 type Label<I, S> = ((I, S), Params<I, S>);
 
-impl<S: Session> StmtContext<S::Ident, Literal<S::StringRef>, S::Span> for SemanticActions<S>
+impl<S: Session> InstrContext<S::Ident, Literal<S::StringRef>, S::Span> for SemanticActions<S>
 where
     S::Ident: AsRef<str>,
 {
     type BuiltinInstrContext = BuiltinInstrActions<S>;
     type MacroDefContext = MacroDefActions<S>;
     type MacroCallContext = MacroCallActions<S>;
-    type Parent = SemanticActions<S>;
+    type ErrorContext = Self;
+    type LineEndContext = Self;
 
-    fn key_lookup(
+    fn will_parse_instr(
         mut self,
         ident: S::Ident,
         span: S::Span,
-    ) -> Production<Self::BuiltinInstrContext, Self::MacroCallContext, Self::MacroDefContext, Self>
+    ) -> InstrRule<Self::BuiltinInstrContext, Self::MacroCallContext, Self::MacroDefContext, Self>
     {
         match KEYS
             .iter()
@@ -165,13 +173,13 @@ where
             .map(|(_, entry)| entry)
         {
             Some(KeyEntry::BuiltinInstr(command)) => {
-                Production::BuiltinInstr(BuiltinInstrActions::new(self, (command.clone(), span)))
+                InstrRule::BuiltinInstr(BuiltinInstrActions::new(self, (command.clone(), span)))
             }
             Some(KeyEntry::Keyword(Keyword::Macro)) => {
                 if self.label.is_none() {
                     self.emit_diag(Message::MacroRequiresName.at(span))
                 }
-                Production::MacroDef(MacroDefActions::new(self))
+                InstrRule::MacroDef(MacroDefActions::new(self))
             }
             None => {
                 let result = self.with_session(|session| {
@@ -181,24 +189,42 @@ where
                 match result {
                     Some(ResolvedIdent::Macro(id)) => {
                         self.define_label_if_present();
-                        Production::MacroCall(MacroCallActions::new(self, (id, span)))
+                        InstrRule::MacroInstr(MacroCallActions::new(self, (id, span)))
                     }
                     Some(ResolvedIdent::Backend(_)) => {
                         let name = self.strip_span(&span);
                         self.emit_diag(Message::CannotUseSymbolNameAsMacroName { name }.at(span));
-                        Production::Error(self)
+                        InstrRule::Error(self)
                     }
                     None => {
                         let name = self.strip_span(&span);
                         self.emit_diag(Message::UndefinedMacro { name }.at(span));
-                        Production::Error(self)
+                        InstrRule::Error(self)
                     }
                 }
             }
         }
     }
+}
 
-    fn exit(mut self) -> Self::Parent {
+impl<S: Session> InstrEndContext<S::Span> for SemanticActions<S>
+where
+    S::Ident: AsRef<str>,
+{
+    type ParentContext = Self;
+
+    fn did_parse_instr(self) -> Self::ParentContext {
+        self
+    }
+}
+
+impl<S: Session> LineEndContext<S::Span> for SemanticActions<S>
+where
+    S::Ident: AsRef<str>,
+{
+    type ParentContext = Self;
+
+    fn did_parse_line(mut self) -> Self::ParentContext {
         self.define_label_if_present();
         self
     }
@@ -416,14 +442,18 @@ mod tests {
     fn emit_ld_b_deref_hl() {
         use crate::model::*;
         let actions = collect_semantic_actions(|actions| {
-            let mut command = actions.key_lookup("LD".into(), ()).command().unwrap();
+            let mut command = actions
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("LD".into(), ())
+                .into_builtin_instr();
             let mut arg1 = command.add_argument();
             arg1.push_atom((ExprAtom::Ident("B".into()), ()));
             command = arg1.exit();
             let mut arg2 = command.add_argument();
             arg2.push_atom((ExprAtom::Ident("HL".into()), ()));
             arg2.apply_operator((Operator::Unary(UnaryOperator::Parentheses), ()));
-            arg2.exit().exit().exit()
+            arg2.exit().did_parse_instr().did_parse_line()
         });
         assert_eq!(
             actions,
@@ -450,12 +480,16 @@ mod tests {
     fn test_rst_1_op_1(op: BinOp) {
         use crate::model::*;
         let actions = collect_semantic_actions(|actions| {
-            let command = actions.key_lookup("RST".into(), ()).command().unwrap();
+            let command = actions
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("RST".into(), ())
+                .into_builtin_instr();
             let mut expr = command.add_argument();
             expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
             expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
             expr.apply_operator((Operator::Binary(op), ()));
-            expr.exit().exit().exit()
+            expr.exit().did_parse_instr().did_parse_line()
         });
         assert_eq!(
             actions,
@@ -474,12 +508,16 @@ mod tests {
     fn emit_rst_f_of_1() {
         let ident = String::from("f");
         let actions = collect_semantic_actions(|actions| {
-            let command = actions.key_lookup("RST".into(), ()).command().unwrap();
+            let command = actions
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("RST".into(), ())
+                .into_builtin_instr();
             let mut expr = command.add_argument();
             expr.push_atom((ExprAtom::Ident(ident.clone()), ()));
             expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
             expr.apply_operator((Operator::FnCall(1), ()));
-            expr.exit().exit().exit()
+            expr.exit().did_parse_instr().did_parse_line()
         });
         assert_eq!(
             actions,
@@ -500,12 +538,13 @@ mod tests {
         let label = "my_label";
         let actions = collect_semantic_actions(|actions| {
             let mut arg = actions
-                .key_lookup("DW".into(), ())
-                .command()
-                .unwrap()
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("DW".into(), ())
+                .into_builtin_instr()
                 .add_argument();
             arg.push_atom((ExprAtom::Ident(label.into()), ()));
-            arg.exit().exit().exit()
+            arg.exit().did_parse_instr().did_parse_line()
         });
         assert_eq!(
             actions,
@@ -520,7 +559,12 @@ mod tests {
     fn analyze_label() {
         let label = "label";
         let actions = collect_semantic_actions(|actions| {
-            actions.enter_labeled_stmt((label.into(), ())).next().exit()
+            actions
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_label((label.into(), ()))
+                .did_parse_label()
+                .did_parse_line()
         });
         assert_eq!(
             actions,
@@ -536,12 +580,13 @@ mod tests {
     fn analyze_org_dot() {
         let actions = collect_semantic_actions(|actions| {
             let mut actions = actions
-                .key_lookup("ORG".into(), ())
-                .command()
-                .unwrap()
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("ORG".into(), ())
+                .into_builtin_instr()
                 .add_argument();
             actions.push_atom((ExprAtom::LocationCounter, ()));
-            actions.exit().exit().exit()
+            actions.exit().did_parse_instr().did_parse_line()
         });
         assert_eq!(
             actions,
@@ -572,11 +617,13 @@ mod tests {
     fn define_nameless_macro() {
         let actions = collect_semantic_actions(|actions| {
             actions
-                .key_lookup("MACRO".into(), ())
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("MACRO".into(), ())
                 .macro_def()
                 .unwrap()
                 .exit()
-                .exit()
+                .did_parse_line()
         });
         assert_eq!(
             actions,
@@ -590,19 +637,22 @@ mod tests {
         body: impl Borrow<[SemanticToken<String, String>]>,
     ) {
         let actions = collect_semantic_actions(|actions| {
-            let mut params_actions = actions.enter_labeled_stmt((name.into(), ()));
+            let mut params_actions = actions
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_label((name.into(), ()));
             for param in params.borrow().iter().map(|&t| (t.into(), ())) {
-                params_actions.add_parameter(param)
+                params_actions.act_on_param(param)
             }
             let mut token_seq_actions = params_actions
-                .next()
-                .key_lookup("MACRO".into(), ())
+                .did_parse_label()
+                .will_parse_instr("MACRO".into(), ())
                 .macro_def()
                 .unwrap();
             for token in body.borrow().iter().cloned().map(|t| (t, ())) {
                 token_seq_actions.push_token(token)
             }
-            token_seq_actions.exit().exit()
+            token_seq_actions.exit().did_parse_line()
         });
         assert_eq!(
             actions,
@@ -621,12 +671,13 @@ mod tests {
     fn diagnose_wrong_operand_count() {
         let actions = collect_semantic_actions(|actions| {
             let mut arg = actions
-                .key_lookup("NOP".into(), ())
-                .command()
-                .unwrap()
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("NOP".into(), ())
+                .into_builtin_instr()
                 .add_argument();
             arg.push_atom((ExprAtom::Ident("A".into()), ()));
-            arg.exit().exit().exit()
+            arg.exit().did_parse_instr().did_parse_line()
         });
         assert_eq!(
             actions,
@@ -647,7 +698,7 @@ mod tests {
         let diagnostic = Message::UnexpectedToken { token: () }.at(());
         let actions = collect_semantic_actions(|mut actions| {
             actions.emit_diag(diagnostic.clone());
-            actions.exit()
+            actions.did_parse_line()
         });
         assert_eq!(
             actions,
@@ -660,12 +711,13 @@ mod tests {
         let diagnostic = Message::UnexpectedToken { token: () }.at(());
         let actions = collect_semantic_actions(|file| {
             let mut expr = file
-                .key_lookup("ADD".into(), ())
-                .command()
-                .unwrap()
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("ADD".into(), ())
+                .into_builtin_instr()
                 .add_argument();
             expr.emit_diag(diagnostic.clone());
-            expr.exit().exit().exit()
+            expr.exit().did_parse_instr().did_parse_line()
         });
         assert_eq!(
             actions,
@@ -678,10 +730,13 @@ mod tests {
         let name = "unknown";
         let log = collect_semantic_actions::<_, MockSpan<_>>(|session| {
             session
-                .key_lookup(name.into(), name.into())
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr(name.into(), name.into())
                 .error()
                 .unwrap()
-                .exit()
+                .did_parse_instr()
+                .did_parse_line()
         });
         assert_eq!(
             log,
@@ -701,10 +756,12 @@ mod tests {
             vec![(name.into(), ResolvedIdent::Backend(42))],
             |session| {
                 session
-                    .key_lookup(name.into(), name.into())
+                    .will_parse_line()
+                    .into_instr_line()
+                    .will_parse_instr(name.into(), name.into())
                     .error()
                     .unwrap()
-                    .exit()
+                    .did_parse_line()
             },
         );
         assert_eq!(

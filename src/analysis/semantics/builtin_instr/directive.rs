@@ -294,12 +294,13 @@ mod tests {
             let mut session = MockSession::with_log(log);
             session.fail(CodebaseError::Utf8Error);
             let mut context = SemanticActions::new(session)
-                .key_lookup("INCLUDE".into(), ())
-                .command()
-                .unwrap()
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("INCLUDE".into(), ())
+                .into_builtin_instr()
                 .add_argument();
             context.push_atom((ExprAtom::Literal(Literal::String(name.into())), ()));
-            drop(context.exit().exit().exit())
+            context.exit().did_parse_instr().did_parse_line();
         });
         assert_eq!(
             log,
@@ -321,12 +322,13 @@ mod tests {
                 message,
             )));
             let mut context = SemanticActions::new(session)
-                .key_lookup("INCLUDE".into(), ())
-                .command()
-                .unwrap()
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("INCLUDE".into(), ())
+                .into_builtin_instr()
                 .add_argument();
             context.push_atom((ExprAtom::Literal(Literal::String(name.into())), ()));
-            drop(context.exit().exit().exit())
+            context.exit().did_parse_instr().did_parse_line();
         });
         assert_eq!(
             log,
@@ -365,16 +367,18 @@ mod tests {
         let name = "my_fn";
         let param = "param";
         let actions = collect_semantic_actions(|builder| {
-            let mut label_actions = builder.enter_labeled_stmt((name.into(), ()));
-            label_actions.add_parameter((param.into(), ()));
+            let mut label_actions = builder
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_label((name.into(), ()));
+            label_actions.act_on_param((param.into(), ()));
             let mut arg_actions = label_actions
-                .next()
-                .key_lookup("EQU".into(), ())
-                .command()
-                .unwrap()
+                .did_parse_label()
+                .will_parse_instr("EQU".into(), ())
+                .into_builtin_instr()
                 .add_argument();
             arg_actions.push_atom((ExprAtom::Ident(param.into()), ()));
-            arg_actions.exit().exit().exit()
+            arg_actions.exit().did_parse_instr().did_parse_line()
         });
         assert_eq!(
             actions,
@@ -390,13 +394,14 @@ mod tests {
         let name = "hot_stuff";
         let actions = collect_semantic_actions(|actions| {
             actions
-                .enter_labeled_stmt((name.into(), ()))
-                .next()
-                .key_lookup("SECTION".into(), ())
-                .command()
-                .unwrap()
-                .exit()
-                .exit()
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_label((name.into(), ()))
+                .did_parse_label()
+                .will_parse_instr("SECTION".into(), ())
+                .into_builtin_instr()
+                .did_parse_instr()
+                .did_parse_line()
         });
         assert_eq!(
             actions,
@@ -448,8 +453,12 @@ mod tests {
         F: FnOnce(TestBuiltinInstrActions<()>) -> TestBuiltinInstrActions<()>,
     {
         collect_semantic_actions(|actions| {
-            let command = actions.key_lookup(directive.into(), ()).command().unwrap();
-            f(command).exit().exit()
+            let command = actions
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr(directive.into(), ())
+                .into_builtin_instr();
+            f(command).did_parse_instr().did_parse_line()
         })
     }
 
@@ -459,14 +468,15 @@ mod tests {
     {
         collect_semantic_actions(|actions| {
             let mut arg = actions
-                .enter_labeled_stmt((label.into(), ()))
-                .next()
-                .key_lookup(directive.into(), ())
-                .command()
-                .unwrap()
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_label((label.into(), ()))
+                .did_parse_label()
+                .will_parse_instr(directive.into(), ())
+                .into_builtin_instr()
                 .add_argument();
             f(&mut arg);
-            arg.exit().exit().exit()
+            arg.exit().did_parse_instr().did_parse_line()
         })
     }
 }

@@ -84,7 +84,6 @@ where
     type Ident = S::Ident;
     type Literal = Literal<S::StringRef>;
     type ArgContext = ExprBuilder<S::Ident, S::StringRef, S::Span, Self>;
-    type Parent = SemanticActions<S>;
 
     fn add_argument(self) -> Self::ArgContext {
         ExprBuilder {
@@ -92,8 +91,15 @@ where
             parent: self,
         }
     }
+}
 
-    fn exit(mut self) -> Self::Parent {
+impl<S: Session> InstrEndContext<S::Span> for BuiltinInstrActions<S>
+where
+    S::Ident: AsRef<str>,
+{
+    type ParentContext = SemanticActions<S>;
+
+    fn did_parse_instr(mut self) -> Self::ParentContext {
         if !self.has_errors {
             let prepared = PreparedBuiltinInstr::new(self.command, &mut self.parent);
             self.parent.define_label_if_present();
@@ -390,13 +396,14 @@ mod tests {
         assert_eq!(
             collect_semantic_actions::<_, MockSpan<_>>(|actions| {
                 let mut actions = actions
-                    .key_lookup("DB".into(), "db".into())
-                    .command()
-                    .unwrap()
+                    .will_parse_line()
+                    .into_instr_line()
+                    .will_parse_instr("DB".into(), "db".into())
+                    .into_builtin_instr()
                     .add_argument();
                 actions.push_atom((Literal(Number(7)), "literal".into()));
                 actions.apply_operator((FnCall(0), "call".into()));
-                actions.exit().exit().exit()
+                actions.exit().did_parse_instr().did_parse_line()
             }),
             [DiagnosticsEvent::EmitDiag(
                 Message::OnlyIdentsCanBeCalled.at("literal".into()).into()

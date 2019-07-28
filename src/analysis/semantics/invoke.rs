@@ -1,7 +1,7 @@
 use super::SemanticActions;
 
 use crate::analysis::session::{MacroArgs, Session};
-use crate::analysis::syntax::{MacroCallContext, TokenSeqContext};
+use crate::analysis::syntax::{InstrEndContext, MacroCallContext, TokenSeqContext};
 use crate::analysis::{SemanticToken, TokenSeq};
 
 pub(in crate::analysis) struct MacroCallActions<S: Session> {
@@ -31,14 +31,17 @@ delegate_diagnostics! {
 
 impl<S: Session> MacroCallContext<S::Span> for MacroCallActions<S> {
     type Token = SemanticToken<S::Ident, S::StringRef>;
-    type Parent = SemanticActions<S>;
     type MacroArgContext = MacroArgContext<S>;
 
     fn enter_macro_arg(self) -> Self::MacroArgContext {
         MacroArgContext::new(self)
     }
+}
 
-    fn exit(self) -> Self::Parent {
+impl<S: Session> InstrEndContext<S::Span> for MacroCallActions<S> {
+    type ParentContext = SemanticActions<S>;
+
+    fn did_parse_instr(self) -> Self::ParentContext {
         let Self {
             mut parent,
             name,
@@ -89,7 +92,7 @@ mod tests {
     use crate::analysis::resolve::ResolvedIdent;
     use crate::analysis::semantics::tests::*;
     use crate::analysis::session::{MockMacroId, SessionEvent};
-    use crate::analysis::syntax::{StmtContext, Token};
+    use crate::analysis::syntax::{InstrContext, LineEndContext, Token, TokenStreamContext};
 
     #[test]
     fn call_nullary_macro() {
@@ -99,11 +102,12 @@ mod tests {
             vec![(name.into(), ResolvedIdent::Macro(macro_id))],
             |actions| {
                 actions
-                    .key_lookup(name.into(), ())
-                    .macro_call()
-                    .unwrap()
-                    .exit()
-                    .exit()
+                    .will_parse_line()
+                    .into_instr_line()
+                    .will_parse_instr(name.into(), ())
+                    .into_macro_instr()
+                    .did_parse_instr()
+                    .did_parse_line()
             },
         );
         assert_eq!(
@@ -120,13 +124,17 @@ mod tests {
         let log = log_with_predefined_names(
             vec![(name.into(), ResolvedIdent::Macro(macro_id))],
             |actions| {
-                let mut call = actions.key_lookup(name.into(), ()).macro_call().unwrap();
+                let mut call = actions
+                    .will_parse_line()
+                    .into_instr_line()
+                    .will_parse_instr(name.into(), ())
+                    .into_macro_instr();
                 call = {
                     let mut arg = call.enter_macro_arg();
                     arg.push_token((arg_token.clone(), ()));
                     arg.exit()
                 };
-                call.exit().exit()
+                call.did_parse_instr().did_parse_line()
             },
         );
         assert_eq!(
