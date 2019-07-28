@@ -305,8 +305,8 @@ impl<S: Clone> Source for LdDest16<S> {
 
 #[cfg(test)]
 mod tests {
-    use crate::analysis::semantics::builtin_instr::mnemonic::tests::*;
-    use crate::analysis::semantics::builtin_instr::mnemonic::LD;
+    use crate::analysis::semantics::builtin_instr::cpu_instr::tests::*;
+    use crate::analysis::semantics::builtin_instr::cpu_instr::LD;
     use crate::diag::Merge;
     use crate::model::*;
 

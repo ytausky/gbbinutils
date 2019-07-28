@@ -182,8 +182,8 @@ fn mk_explicit_branch<V>(branch: ExplicitBranch, target: V) -> Branch<V> {
 mod tests {
     use super::*;
 
-    use crate::analysis::semantics::builtin_instr::mnemonic::tests::*;
-    use crate::analysis::semantics::builtin_instr::mnemonic::{Mnemonic, CALL, JP, JR, RET, RETI};
+    use crate::analysis::semantics::builtin_instr::cpu_instr::tests::*;
+    use crate::analysis::semantics::builtin_instr::cpu_instr::{Mnemonic, CALL, JP, JR, RET, RETI};
     use crate::diag::Merge;
 
     #[test]

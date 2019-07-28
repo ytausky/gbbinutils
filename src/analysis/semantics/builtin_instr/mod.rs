@@ -1,5 +1,5 @@
+pub(super) use self::cpu_instr::{Mnemonic, *};
 pub(super) use self::directive::Directive;
-pub(super) use self::mnemonic::{Mnemonic, *};
 
 use self::args::*;
 use self::operand::OperandSymbol;
@@ -13,8 +13,8 @@ use crate::diag::{CompactDiag, Diagnostics, EmitDiag, Message};
 use crate::model::{BinOp, FnCall, Item};
 
 mod args;
+mod cpu_instr;
 mod directive;
-mod mnemonic;
 mod operand;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -265,7 +265,7 @@ fn analyze_mnemonic<S: Session>(
             })
         })
         .collect();
-    if let Ok(instruction) = mnemonic::analyze_instruction(name, operands, actions) {
+    if let Ok(instruction) = cpu_instr::analyze_instruction(name, operands, actions) {
         actions.session().emit_item(Item::Instruction(instruction))
     }
 }
