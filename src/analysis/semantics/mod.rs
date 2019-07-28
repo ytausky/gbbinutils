@@ -1,4 +1,4 @@
-use self::command::{Command, Directive, *};
+use self::builtin_instr::{BuiltinInstr, Directive, *};
 use self::invoke::MacroCallActions;
 use self::params::*;
 
@@ -14,7 +14,7 @@ use crate::diag::{EmitDiag, Message};
 #[cfg(test)]
 pub use self::mock::*;
 
-mod command;
+mod builtin_instr;
 mod invoke;
 mod params;
 
@@ -148,7 +148,7 @@ impl<S: Session> StmtContext<S::Ident, Literal<S::StringRef>, S::Span> for Seman
 where
     S::Ident: AsRef<str>,
 {
-    type CommandContext = CommandActions<S>;
+    type BuiltinInstrContext = BuiltinInstrActions<S>;
     type MacroDefContext = MacroDefActions<S>;
     type MacroCallContext = MacroCallActions<S>;
     type Parent = SemanticActions<S>;
@@ -157,14 +157,15 @@ where
         mut self,
         ident: S::Ident,
         span: S::Span,
-    ) -> Production<Self::CommandContext, Self::MacroCallContext, Self::MacroDefContext, Self> {
+    ) -> Production<Self::BuiltinInstrContext, Self::MacroCallContext, Self::MacroDefContext, Self>
+    {
         match KEYS
             .iter()
             .find(|(spelling, _)| spelling.eq_ignore_ascii_case(ident.as_ref()))
             .map(|(_, entry)| entry)
         {
-            Some(KeyEntry::Command(command)) => {
-                Production::Command(CommandActions::new(self, (command.clone(), span)))
+            Some(KeyEntry::BuiltinInstr(command)) => {
+                Production::BuiltinInstr(BuiltinInstrActions::new(self, (command.clone(), span)))
             }
             Some(KeyEntry::Keyword(Keyword::Macro)) => {
                 if self.label.is_none() {
@@ -205,67 +206,82 @@ where
 
 #[derive(Clone)]
 enum KeyEntry {
-    Command(Command),
+    BuiltinInstr(BuiltinInstr),
     Keyword(Keyword),
 }
 
 const KEYS: &[(&str, KeyEntry)] = &[
-    ("adc", KeyEntry::Command(Command::Mnemonic(ADC))),
-    ("add", KeyEntry::Command(Command::Mnemonic(ADD))),
-    ("and", KeyEntry::Command(Command::Mnemonic(AND))),
-    ("bit", KeyEntry::Command(Command::Mnemonic(BIT))),
-    ("call", KeyEntry::Command(Command::Mnemonic(CALL))),
-    ("cp", KeyEntry::Command(Command::Mnemonic(CP))),
-    ("cpl", KeyEntry::Command(Command::Mnemonic(CPL))),
-    ("daa", KeyEntry::Command(Command::Mnemonic(DAA))),
-    ("db", KeyEntry::Command(Command::Directive(Directive::Db))),
-    ("dec", KeyEntry::Command(Command::Mnemonic(DEC))),
-    ("di", KeyEntry::Command(Command::Mnemonic(DI))),
-    ("ds", KeyEntry::Command(Command::Directive(Directive::Ds))),
-    ("dw", KeyEntry::Command(Command::Directive(Directive::Dw))),
-    ("ei", KeyEntry::Command(Command::Mnemonic(EI))),
-    ("equ", KeyEntry::Command(Command::Directive(Directive::Equ))),
-    ("halt", KeyEntry::Command(Command::Mnemonic(HALT))),
-    ("inc", KeyEntry::Command(Command::Mnemonic(INC))),
+    ("adc", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(ADC))),
+    ("add", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(ADD))),
+    ("and", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(AND))),
+    ("bit", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(BIT))),
+    ("call", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(CALL))),
+    ("cp", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(CP))),
+    ("cpl", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(CPL))),
+    ("daa", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(DAA))),
+    (
+        "db",
+        KeyEntry::BuiltinInstr(BuiltinInstr::Directive(Directive::Db)),
+    ),
+    ("dec", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(DEC))),
+    ("di", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(DI))),
+    (
+        "ds",
+        KeyEntry::BuiltinInstr(BuiltinInstr::Directive(Directive::Ds)),
+    ),
+    (
+        "dw",
+        KeyEntry::BuiltinInstr(BuiltinInstr::Directive(Directive::Dw)),
+    ),
+    ("ei", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(EI))),
+    (
+        "equ",
+        KeyEntry::BuiltinInstr(BuiltinInstr::Directive(Directive::Equ)),
+    ),
+    ("halt", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(HALT))),
+    ("inc", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(INC))),
     (
         "include",
-        KeyEntry::Command(Command::Directive(Directive::Include)),
+        KeyEntry::BuiltinInstr(BuiltinInstr::Directive(Directive::Include)),
     ),
-    ("jp", KeyEntry::Command(Command::Mnemonic(JP))),
-    ("jr", KeyEntry::Command(Command::Mnemonic(JR))),
-    ("ld", KeyEntry::Command(Command::Mnemonic(LD))),
-    ("ldhl", KeyEntry::Command(Command::Mnemonic(LDHL))),
+    ("jp", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(JP))),
+    ("jr", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(JR))),
+    ("ld", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(LD))),
+    ("ldhl", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(LDHL))),
     ("macro", KeyEntry::Keyword(Keyword::Macro)),
-    ("nop", KeyEntry::Command(Command::Mnemonic(NOP))),
-    ("or", KeyEntry::Command(Command::Mnemonic(OR))),
-    ("org", KeyEntry::Command(Command::Directive(Directive::Org))),
-    ("pop", KeyEntry::Command(Command::Mnemonic(POP))),
-    ("push", KeyEntry::Command(Command::Mnemonic(PUSH))),
-    ("res", KeyEntry::Command(Command::Mnemonic(RES))),
-    ("ret", KeyEntry::Command(Command::Mnemonic(RET))),
-    ("reti", KeyEntry::Command(Command::Mnemonic(RETI))),
-    ("rl", KeyEntry::Command(Command::Mnemonic(RL))),
-    ("rla", KeyEntry::Command(Command::Mnemonic(RLA))),
-    ("rlc", KeyEntry::Command(Command::Mnemonic(RLC))),
-    ("rlca", KeyEntry::Command(Command::Mnemonic(RLCA))),
-    ("rr", KeyEntry::Command(Command::Mnemonic(RR))),
-    ("rra", KeyEntry::Command(Command::Mnemonic(RRA))),
-    ("rrc", KeyEntry::Command(Command::Mnemonic(RRC))),
-    ("rrca", KeyEntry::Command(Command::Mnemonic(RRCA))),
-    ("rst", KeyEntry::Command(Command::Mnemonic(RST))),
-    ("sbc", KeyEntry::Command(Command::Mnemonic(SBC))),
+    ("nop", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(NOP))),
+    ("or", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(OR))),
+    (
+        "org",
+        KeyEntry::BuiltinInstr(BuiltinInstr::Directive(Directive::Org)),
+    ),
+    ("pop", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(POP))),
+    ("push", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(PUSH))),
+    ("res", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(RES))),
+    ("ret", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(RET))),
+    ("reti", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(RETI))),
+    ("rl", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(RL))),
+    ("rla", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(RLA))),
+    ("rlc", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(RLC))),
+    ("rlca", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(RLCA))),
+    ("rr", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(RR))),
+    ("rra", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(RRA))),
+    ("rrc", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(RRC))),
+    ("rrca", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(RRCA))),
+    ("rst", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(RST))),
+    ("sbc", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(SBC))),
     (
         "section",
-        KeyEntry::Command(Command::Directive(Directive::Section)),
+        KeyEntry::BuiltinInstr(BuiltinInstr::Directive(Directive::Section)),
     ),
-    ("set", KeyEntry::Command(Command::Mnemonic(SET))),
-    ("sla", KeyEntry::Command(Command::Mnemonic(SLA))),
-    ("sra", KeyEntry::Command(Command::Mnemonic(SRA))),
-    ("srl", KeyEntry::Command(Command::Mnemonic(SRL))),
-    ("stop", KeyEntry::Command(Command::Mnemonic(STOP))),
-    ("sub", KeyEntry::Command(Command::Mnemonic(SUB))),
-    ("swap", KeyEntry::Command(Command::Mnemonic(SWAP))),
-    ("xor", KeyEntry::Command(Command::Mnemonic(XOR))),
+    ("set", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(SET))),
+    ("sla", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(SLA))),
+    ("sra", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(SRA))),
+    ("srl", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(SRL))),
+    ("stop", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(STOP))),
+    ("sub", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(SUB))),
+    ("swap", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(SWAP))),
+    ("xor", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(XOR))),
 ];
 
 pub(super) struct MacroDefActions<S: Session> {

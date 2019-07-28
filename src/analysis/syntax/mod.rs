@@ -67,7 +67,7 @@ pub(super) trait FileContext<I, L, S: Clone>: Diagnostics<S> + Sized {
 }
 
 pub(super) trait StmtContext<I, L, S: Clone>: Diagnostics<S> + Sized {
-    type CommandContext: CommandContext<S, Ident = I, Literal = L, Parent = Self>;
+    type BuiltinInstrContext: BuiltinInstrContext<S, Ident = I, Literal = L, Parent = Self>;
     type MacroDefContext: TokenSeqContext<S, Token = Token<I, L>, Parent = Self>;
     type MacroCallContext: MacroCallContext<S, Token = Token<I, L>, Parent = Self>;
     type Parent;
@@ -76,13 +76,13 @@ pub(super) trait StmtContext<I, L, S: Clone>: Diagnostics<S> + Sized {
         self,
         ident: I,
         span: S,
-    ) -> Production<Self::CommandContext, Self::MacroCallContext, Self::MacroDefContext, Self>;
+    ) -> Production<Self::BuiltinInstrContext, Self::MacroCallContext, Self::MacroDefContext, Self>;
     fn exit(self) -> Self::Parent;
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum Production<C, M, D, E> {
-    Command(C),
+    BuiltinInstr(C),
     MacroCall(M),
     MacroDef(D),
     Error(E),
@@ -97,7 +97,7 @@ pub(super) enum Keyword {
 impl<C, M, D, E> Production<C, M, D, E> {
     pub fn command(self) -> Option<C> {
         match self {
-            Production::Command(context) => Some(context),
+            Production::BuiltinInstr(context) => Some(context),
             _ => None,
         }
     }
@@ -124,7 +124,7 @@ impl<C, M, D, E> Production<C, M, D, E> {
     }
 }
 
-pub(super) trait CommandContext<S: Clone>: Diagnostics<S> + Sized {
+pub(super) trait BuiltinInstrContext<S: Clone>: Diagnostics<S> + Sized {
     type Ident;
     type Literal;
     type ArgContext: ExprContext<S, Ident = Self::Ident, Literal = Self::Literal>

@@ -18,36 +18,36 @@ mod mnemonic;
 mod operand;
 
 #[derive(Clone, Debug, PartialEq)]
-pub(in crate::analysis) enum Command {
+pub(in crate::analysis) enum BuiltinInstr {
     Directive(Directive),
     Mnemonic(Mnemonic),
 }
 
-impl From<Directive> for Command {
+impl From<Directive> for BuiltinInstr {
     fn from(directive: Directive) -> Self {
-        Command::Directive(directive)
+        BuiltinInstr::Directive(directive)
     }
 }
 
-impl From<Mnemonic> for Command {
+impl From<Mnemonic> for BuiltinInstr {
     fn from(mnemonic: Mnemonic) -> Self {
-        Command::Mnemonic(mnemonic)
+        BuiltinInstr::Mnemonic(mnemonic)
     }
 }
 
-pub(in crate::analysis) struct CommandActions<S: Session> {
+pub(in crate::analysis) struct BuiltinInstrActions<S: Session> {
     parent: SemanticActions<S>,
-    command: (Command, S::Span),
-    args: CommandArgs<S::Ident, S::StringRef, S::Span>,
+    command: (BuiltinInstr, S::Span),
+    args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
     has_errors: bool,
 }
 
-impl<S: Session> CommandActions<S> {
+impl<S: Session> BuiltinInstrActions<S> {
     pub(super) fn new(
         parent: SemanticActions<S>,
-        command: (Command, S::Span),
-    ) -> CommandActions<S> {
-        CommandActions {
+        command: (BuiltinInstr, S::Span),
+    ) -> BuiltinInstrActions<S> {
+        BuiltinInstrActions {
             parent,
             command,
             args: Vec::new(),
@@ -56,13 +56,13 @@ impl<S: Session> CommandActions<S> {
     }
 }
 
-impl<S: Session> MergeSpans<S::Span> for CommandActions<S> {
+impl<S: Session> MergeSpans<S::Span> for BuiltinInstrActions<S> {
     fn merge_spans(&mut self, left: &S::Span, right: &S::Span) -> S::Span {
         self.parent.merge_spans(left, right)
     }
 }
 
-impl<S: Session> StripSpan<S::Span> for CommandActions<S> {
+impl<S: Session> StripSpan<S::Span> for BuiltinInstrActions<S> {
     type Stripped = S::Stripped;
 
     fn strip_span(&mut self, span: &S::Span) -> Self::Stripped {
@@ -70,14 +70,14 @@ impl<S: Session> StripSpan<S::Span> for CommandActions<S> {
     }
 }
 
-impl<S: Session> EmitDiag<S::Span, S::Stripped> for CommandActions<S> {
+impl<S: Session> EmitDiag<S::Span, S::Stripped> for BuiltinInstrActions<S> {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<S::Span, S::Stripped>>) {
         self.has_errors = true;
         self.parent.emit_diag(diag)
     }
 }
 
-impl<S: Session> CommandContext<S::Span> for CommandActions<S>
+impl<S: Session> BuiltinInstrContext<S::Span> for BuiltinInstrActions<S>
 where
     S::Ident: AsRef<str>,
 {
@@ -95,7 +95,7 @@ where
 
     fn exit(mut self) -> Self::Parent {
         if !self.has_errors {
-            let prepared = PreparedCommand::new(self.command, &mut self.parent);
+            let prepared = PreparedBuiltinInstr::new(self.command, &mut self.parent);
             self.parent.define_label_if_present();
             prepared.exec(self.args, &mut self.parent)
         }
@@ -103,36 +103,38 @@ where
     }
 }
 
-enum PreparedCommand<S: Session> {
+enum PreparedBuiltinInstr<S: Session> {
     Binding((Directive, S::Span), Option<Label<S::Ident, S::Span>>),
     Directive((Directive, S::Span)),
     Mnemonic((Mnemonic, S::Span)),
 }
 
-impl<S: Session> PreparedCommand<S> {
-    fn new((command, span): (Command, S::Span), stmt: &mut SemanticActions<S>) -> Self {
+impl<S: Session> PreparedBuiltinInstr<S> {
+    fn new((command, span): (BuiltinInstr, S::Span), stmt: &mut SemanticActions<S>) -> Self {
         match command {
-            Command::Directive(directive) if directive.requires_symbol() => {
-                PreparedCommand::Binding((directive, span), stmt.label.take())
+            BuiltinInstr::Directive(directive) if directive.requires_symbol() => {
+                PreparedBuiltinInstr::Binding((directive, span), stmt.label.take())
             }
-            Command::Directive(directive) => PreparedCommand::Directive((directive, span)),
-            Command::Mnemonic(mnemonic) => PreparedCommand::Mnemonic((mnemonic, span)),
+            BuiltinInstr::Directive(directive) => {
+                PreparedBuiltinInstr::Directive((directive, span))
+            }
+            BuiltinInstr::Mnemonic(mnemonic) => PreparedBuiltinInstr::Mnemonic((mnemonic, span)),
         }
     }
 
     fn exec(
         self,
-        args: CommandArgs<S::Ident, S::StringRef, S::Span>,
+        args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
         actions: &mut SemanticActions<S>,
     ) {
         match self {
-            PreparedCommand::Binding(binding, label) => {
+            PreparedBuiltinInstr::Binding(binding, label) => {
                 directive::analyze_directive(binding, label, args, actions)
             }
-            PreparedCommand::Directive(directive) => {
+            PreparedBuiltinInstr::Directive(directive) => {
                 directive::analyze_directive(directive, None, args, actions)
             }
-            PreparedCommand::Mnemonic(mnemonic) => analyze_mnemonic(mnemonic, args, actions),
+            PreparedBuiltinInstr::Mnemonic(mnemonic) => analyze_mnemonic(mnemonic, args, actions),
         }
     }
 }
@@ -161,8 +163,10 @@ delegate_diagnostics! {
     {I, R, S, P: Diagnostics<S>}, ExprBuilder<I, R, S, P>, {parent}, P, S
 }
 
-impl<S: Session> FinalContext for ExprBuilder<S::Ident, S::StringRef, S::Span, CommandActions<S>> {
-    type ReturnTo = CommandActions<S>;
+impl<S: Session> FinalContext
+    for ExprBuilder<S::Ident, S::StringRef, S::Span, BuiltinInstrActions<S>>
+{
+    type ReturnTo = BuiltinInstrActions<S>;
 
     fn exit(mut self) -> Self::ReturnTo {
         if !self.parent.has_errors {
@@ -250,7 +254,7 @@ const OPERAND_SYMBOLS: &[(&str, OperandSymbol)] = &[
 
 fn analyze_mnemonic<S: Session>(
     name: (Mnemonic, S::Span),
-    args: CommandArgs<S::Ident, S::StringRef, S::Span>,
+    args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
     actions: &mut SemanticActions<S>,
 ) {
     let operands: Vec<_> = args

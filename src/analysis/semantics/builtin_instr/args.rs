@@ -4,7 +4,7 @@ use crate::analysis::Literal;
 use crate::diag::span::{Source, SpanSource};
 use crate::model::BinOp;
 
-pub(super) type CommandArgs<I, R, S> = Vec<Arg<I, R, S>>;
+pub(super) type BuiltinInstrArgs<I, R, S> = Vec<Arg<I, R, S>>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Arg<I, R, S> {

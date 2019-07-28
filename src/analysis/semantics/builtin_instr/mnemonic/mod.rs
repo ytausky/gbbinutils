@@ -391,7 +391,7 @@ impl<V: Source> From<Nullary> for Instruction<V> {
 
 #[cfg(test)]
 mod tests {
-    pub use crate::analysis::semantics::command::OperandSymbol::*;
+    pub use crate::analysis::semantics::builtin_instr::OperandSymbol::*;
     pub(crate) use crate::diag::Message;
     pub use crate::span::{MergeSpans, SpanSource};
 
@@ -399,7 +399,7 @@ mod tests {
 
     use super::*;
 
-    use crate::analysis::semantics::command::*;
+    use crate::analysis::semantics::builtin_instr::*;
     use crate::analysis::Literal;
     use crate::model::{Atom, LocationCounter};
 
@@ -832,7 +832,7 @@ mod tests {
     where
         I: IntoIterator<Item = Input>,
     {
-        use crate::analysis::semantics::command::operand::analyze_operand;
+        use crate::analysis::semantics::builtin_instr::operand::analyze_operand;
         use crate::analysis::session::{MockBuilder, MockSession};
 
         let mut result = None;

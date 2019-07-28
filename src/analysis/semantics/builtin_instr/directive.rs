@@ -1,5 +1,5 @@
 use super::super::Label;
-use super::{Arg, ArgAtom, ArgVariant, CommandArgs, RelocLookup, SemanticActions};
+use super::{Arg, ArgAtom, ArgVariant, BuiltinInstrArgs, RelocLookup, SemanticActions};
 
 use crate::analysis::session::Session;
 use crate::analysis::Literal;
@@ -20,7 +20,7 @@ pub(in crate::analysis) enum Directive {
 pub(super) fn analyze_directive<'a, S: Session>(
     directive: (Directive, S::Span),
     label: Option<Label<S::Ident, S::Span>>,
-    args: CommandArgs<S::Ident, S::StringRef, S::Span>,
+    args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
     actions: &'a mut SemanticActions<S>,
 ) {
     let context = DirectiveContext {
@@ -35,7 +35,7 @@ pub(super) fn analyze_directive<'a, S: Session>(
 struct DirectiveContext<'a, A, I, R, S> {
     span: S,
     label: Option<Label<I, S>>,
-    args: CommandArgs<I, R, S>,
+    args: BuiltinInstrArgs<I, R, S>,
     actions: &'a mut A,
 }
 
@@ -156,7 +156,7 @@ mod tests {
 
     use crate::analysis::backend::BackendEvent;
     use crate::analysis::resolve::{NameTableEvent, ResolvedIdent};
-    use crate::analysis::semantics::command;
+    use crate::analysis::semantics::builtin_instr;
     use crate::analysis::semantics::tests::*;
     use crate::analysis::session::SessionEvent;
     use crate::analysis::syntax::*;
@@ -411,7 +411,8 @@ mod tests {
         unary_directive("DS", f)
     }
 
-    type TestExprContext<S> = command::ExprBuilder<String, String, (), TestCommandActions<S>>;
+    type TestExprContext<S> =
+        builtin_instr::ExprBuilder<String, String, (), TestBuiltinInstrActions<S>>;
 
     fn unary_directive<F>(directive: &str, f: F) -> Vec<TestOperation<()>>
     where
@@ -440,11 +441,11 @@ mod tests {
         )
     }
 
-    type TestCommandActions<S> = command::CommandActions<MockSession<S>>;
+    type TestBuiltinInstrActions<S> = builtin_instr::BuiltinInstrActions<MockSession<S>>;
 
     fn with_directive<F>(directive: &str, f: F) -> Vec<TestOperation<()>>
     where
-        F: FnOnce(TestCommandActions<()>) -> TestCommandActions<()>,
+        F: FnOnce(TestBuiltinInstrActions<()>) -> TestBuiltinInstrActions<()>,
     {
         collect_semantic_actions(|actions| {
             let command = actions.key_lookup(directive.into(), ()).command().unwrap();

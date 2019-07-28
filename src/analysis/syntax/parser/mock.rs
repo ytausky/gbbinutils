@@ -43,8 +43,8 @@ impl_diag_traits! {
     FileActionCollector,
     LabelActionCollector,
     StmtActionCollector,
-    CommandActionCollector,
-    ExprActionCollector<CommandActionCollector>,
+    BuiltinInstrActionCollector,
+    ExprActionCollector<BuiltinInstrActionCollector>,
     ExprActionCollector<()>,
     MacroBodyActionCollector,
     MacroCallActionCollector,
@@ -134,7 +134,7 @@ impl EmitDiag<MockSpan, MockSpan> for StmtActionCollector {
 pub struct MacroId(pub TokenRef);
 
 impl StmtContext<SymIdent, SymLiteral, MockSpan> for StmtActionCollector {
-    type CommandContext = CommandActionCollector;
+    type BuiltinInstrContext = BuiltinInstrActionCollector;
     type MacroDefContext = MacroBodyActionCollector;
     type MacroCallContext = MacroCallActionCollector;
     type Parent = FileActionCollector;
@@ -143,10 +143,11 @@ impl StmtContext<SymIdent, SymLiteral, MockSpan> for StmtActionCollector {
         self,
         ident: SymIdent,
         span: MockSpan,
-    ) -> Production<Self::CommandContext, Self::MacroCallContext, Self::MacroDefContext, Self> {
+    ) -> Production<Self::BuiltinInstrContext, Self::MacroCallContext, Self::MacroDefContext, Self>
+    {
         match ident.0 {
-            IdentKind::Command => Production::Command(CommandActionCollector {
-                command: (ident, span),
+            IdentKind::BuiltinInstr => Production::BuiltinInstr(BuiltinInstrActionCollector {
+                builtin_instr: (ident, span),
                 actions: Vec::new(),
                 parent: self,
             }),
@@ -173,19 +174,19 @@ impl StmtContext<SymIdent, SymLiteral, MockSpan> for StmtActionCollector {
     }
 }
 
-pub(super) struct CommandActionCollector {
-    command: (SymIdent, MockSpan),
-    actions: Vec<CommandAction<MockSpan>>,
+pub(super) struct BuiltinInstrActionCollector {
+    builtin_instr: (SymIdent, MockSpan),
+    actions: Vec<BuiltinInstrAction<MockSpan>>,
     parent: StmtActionCollector,
 }
 
-impl EmitDiag<MockSpan, MockSpan> for CommandActionCollector {
+impl EmitDiag<MockSpan, MockSpan> for BuiltinInstrActionCollector {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<MockSpan>>) {
-        self.actions.push(CommandAction::EmitDiag(diag.into()))
+        self.actions.push(BuiltinInstrAction::EmitDiag(diag.into()))
     }
 }
 
-impl CommandContext<MockSpan> for CommandActionCollector {
+impl BuiltinInstrContext<MockSpan> for BuiltinInstrActionCollector {
     type Ident = SymIdent;
     type Literal = SymLiteral;
     type ArgContext = ExprActionCollector<Self>;
@@ -196,8 +197,8 @@ impl CommandContext<MockSpan> for CommandActionCollector {
     }
 
     fn exit(mut self) -> StmtActionCollector {
-        self.parent.actions.push(StmtAction::Command {
-            command: self.command,
+        self.parent.actions.push(StmtAction::BuiltinInstr {
+            builtin_instr: self.builtin_instr,
             actions: self.actions,
         });
         self.parent
@@ -224,11 +225,11 @@ impl<P> EmitDiag<MockSpan, MockSpan> for ExprActionCollector<P> {
     }
 }
 
-impl FinalContext for ExprActionCollector<CommandActionCollector> {
-    type ReturnTo = CommandActionCollector;
+impl FinalContext for ExprActionCollector<BuiltinInstrActionCollector> {
+    type ReturnTo = BuiltinInstrActionCollector;
 
     fn exit(mut self) -> Self::ReturnTo {
-        self.parent.actions.push(CommandAction::AddArgument {
+        self.parent.actions.push(BuiltinInstrAction::AddArgument {
             actions: self.actions,
         });
         self.parent
@@ -450,7 +451,7 @@ pub struct SymIdent(pub IdentKind, pub TokenRef);
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum IdentKind {
-    Command,
+    BuiltinInstr,
     MacroKeyword,
     MacroName,
     Other,
@@ -587,9 +588,9 @@ pub(super) type Label<S> = ((SymIdent, S), Vec<ParamsAction<S>>);
 
 #[derive(Debug, PartialEq)]
 pub(super) enum StmtAction<S> {
-    Command {
-        command: (SymIdent, S),
-        actions: Vec<CommandAction<S>>,
+    BuiltinInstr {
+        builtin_instr: (SymIdent, S),
+        actions: Vec<BuiltinInstrAction<S>>,
     },
     MacroDef {
         keyword: (SymIdent, S),
@@ -603,7 +604,7 @@ pub(super) enum StmtAction<S> {
 }
 
 #[derive(Debug, PartialEq)]
-pub(super) enum CommandAction<S> {
+pub(super) enum BuiltinInstrAction<S> {
     AddArgument { actions: Vec<ExprAction<S>> },
     EmitDiag(CompactDiag<S>),
 }
@@ -662,36 +663,36 @@ pub(super) fn empty() -> Vec<StmtAction<MockSpan>> {
     Vec::new()
 }
 
-pub(super) fn command(
+pub(super) fn builtin_instr(
     id: impl Into<TokenRef>,
     args: impl Borrow<[SymExpr]>,
 ) -> Vec<StmtAction<MockSpan>> {
     let id = id.into();
-    vec![StmtAction::Command {
-        command: (SymIdent(IdentKind::Command, id.clone()), id.into()),
+    vec![StmtAction::BuiltinInstr {
+        builtin_instr: (SymIdent(IdentKind::BuiltinInstr, id.clone()), id.into()),
         actions: args
             .borrow()
             .iter()
             .cloned()
-            .map(|SymExpr(expr)| CommandAction::AddArgument { actions: expr })
+            .map(|SymExpr(expr)| BuiltinInstrAction::AddArgument { actions: expr })
             .collect(),
     }]
 }
 
-pub(super) fn malformed_command(
+pub(super) fn malformed_builtin_instr(
     id: impl Into<TokenRef>,
     args: impl Borrow<[SymExpr]>,
     diag: CompactDiag<MockSpan>,
 ) -> Vec<StmtAction<MockSpan>> {
     let id = id.into();
-    vec![StmtAction::Command {
-        command: (SymIdent(IdentKind::Command, id.clone()), id.into()),
+    vec![StmtAction::BuiltinInstr {
+        builtin_instr: (SymIdent(IdentKind::BuiltinInstr, id.clone()), id.into()),
         actions: args
             .borrow()
             .iter()
             .cloned()
-            .map(|SymExpr(expr)| CommandAction::AddArgument { actions: expr })
-            .chain(iter::once(CommandAction::EmitDiag(diag)))
+            .map(|SymExpr(expr)| BuiltinInstrAction::AddArgument { actions: expr })
+            .chain(iter::once(BuiltinInstrAction::EmitDiag(diag)))
             .collect(),
     }]
 }
