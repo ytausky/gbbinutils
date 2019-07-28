@@ -58,6 +58,23 @@ impl<I: Clone + PartialEq, F: for<'a> Fn(&'a str) -> I> IdentFactory for F {
 
 pub(super) use self::parser::parse_src as parse_token_seq;
 
+// The following traits represent different positions within the grammar's production rules.
+
+// A token stream represents either a tokenized source file or a macro expansion. It is logically
+// devided into lines (separated by <Eol> tokens) and ends with an <Eos> token. It has a single
+// production rule:
+//
+//     1. tokem-stream → (line (<Eol> line)*)? <Eos>
+//
+// A line can be either an instruction line (e.g. a CPU instruction) or a token line (e.g. a line of
+// tokens inside a macro definition). Correspondingly, it has two production rules:
+//
+//     1. line → instr-line
+//     2. line → token-line
+//
+// This parsing ambiguity is resolved according to the semantics of the program so far, thus the
+// rule used by the parser is determined by the value returned from
+// TokenStreamContext::will_parse_line.
 pub(super) trait TokenStreamContext<I, L, S: Clone>: Sized {
     type InstrLineContext: InstrLineContext<I, L, S, ParentContext = Self>;
     type TokenLineContext;
@@ -80,6 +97,20 @@ impl<I, T> LineRule<I, T> {
     }
 }
 
+// An instruction line begins with an optional label and continues with an optional instruction,
+// thus having a single production rule:
+//
+//     1. instr-line → label? instr?
+//
+// InstrLineContext::will_parse_label is called by the parser in the following state:
+//
+//     instr-line → . label? instr?, <Label>
+//
+// InstrContext as a supertrait handles the states where the label is missing (either parsing an
+// instruction or terminating the empty line) whereas InstrLineContext::InstrContext handles the two
+// possible states after a label has been successfully parsed. Note that by using two distinct types
+// bound by InstrContext we can preven the parser from calling InstrLineContext::will_parse_label
+// more than once.
 pub(super) trait InstrLineContext<I, L, S: Clone>: InstrContext<I, L, S> {
     type LabelContext: LabelContext<I, S, ParentContext = Self::InstrContext>;
     type InstrContext: InstrContext<I, L, S, ParentContext = Self::ParentContext>;
@@ -87,6 +118,21 @@ pub(super) trait InstrLineContext<I, L, S: Clone>: InstrContext<I, L, S> {
     fn will_parse_label(self, label: (I, S)) -> Self::LabelContext;
 }
 
+// An instruction can be either a builtin instruction (i.e. a CPU instruction or an assembler
+// directive) or a macro instruction, previously defined by the program. These two options
+// correspond to two production rules:
+//
+//     1. instr → <Ident> arg-list
+//     2. instr → <Ident> macro-arg-list
+//
+// The ambiguity between these rules gets resolved by InstrContext::will_parse_instr, which performs
+// a name lookup to determine whether the identifier is a builtin instruction or a previously
+// defined macro. If neither of these cases applies, a third production rule is used:
+//
+//     3. instr → <Ident> token-seq
+//
+// The parser uses this rule to recover from an invalid instruction name by throwing away all the
+// remaining tokens in the line.
 pub(super) trait InstrContext<I, L, S: Clone>: LineEndContext<S> {
     type BuiltinInstrContext: BuiltinInstrContext<
         S,
