@@ -134,45 +134,33 @@ impl EmitDiag<MockSpan, MockSpan> for StmtActionCollector {
 pub struct MacroId(pub TokenRef);
 
 impl StmtContext<SymIdent, SymLiteral, MockSpan> for StmtActionCollector {
-    type Command = SymCommand;
-    type MacroId = MacroId;
-
     type CommandContext = CommandActionCollector;
     type MacroDefContext = MacroBodyActionCollector;
     type MacroCallContext = MacroCallActionCollector;
     type Parent = FileActionCollector;
 
-    fn key_lookup(&mut self, ident: SymIdent) -> KeyLookupResult<Self::Command, Self::MacroId> {
+    fn key_lookup(
+        self,
+        ident: SymIdent,
+        span: MockSpan,
+    ) -> Production<Self::CommandContext, Self::MacroCallContext, Self::MacroDefContext, Self> {
         match ident.0 {
-            IdentKind::Command => Ok(Key::Command(SymCommand(ident.1))),
-            IdentKind::MacroKeyword => Ok(Key::Keyword(Keyword::Macro)),
-            IdentKind::MacroName => Ok(Key::Macro(MacroId(ident.1))),
-            IdentKind::RelocName => Err(KeyError::Reloc),
-            IdentKind::Unknown => Err(KeyError::Unknown),
-        }
-    }
-
-    fn enter_command(self, command: (SymCommand, MockSpan)) -> CommandActionCollector {
-        CommandActionCollector {
-            command,
-            actions: Vec::new(),
-            parent: self,
-        }
-    }
-
-    fn enter_macro_def(self, keyword: MockSpan) -> Self::MacroDefContext {
-        Self::MacroDefContext {
-            keyword,
-            actions: Vec::new(),
-            parent: self,
-        }
-    }
-
-    fn enter_macro_call(self, name: (Self::MacroId, MockSpan)) -> MacroCallActionCollector {
-        MacroCallActionCollector {
-            name,
-            actions: Vec::new(),
-            parent: self,
+            IdentKind::Command => Production::Command(CommandActionCollector {
+                command: (ident, span),
+                actions: Vec::new(),
+                parent: self,
+            }),
+            IdentKind::MacroKeyword => Production::MacroDef(Self::MacroDefContext {
+                keyword: (ident, span),
+                actions: Vec::new(),
+                parent: self,
+            }),
+            IdentKind::MacroName => Production::MacroCall(MacroCallActionCollector {
+                name: (ident, span),
+                actions: Vec::new(),
+                parent: self,
+            }),
+            IdentKind::Other => Production::Error(self),
         }
     }
 
@@ -186,7 +174,7 @@ impl StmtContext<SymIdent, SymLiteral, MockSpan> for StmtActionCollector {
 }
 
 pub(super) struct CommandActionCollector {
-    command: (SymCommand, MockSpan),
+    command: (SymIdent, MockSpan),
     actions: Vec<CommandAction<MockSpan>>,
     parent: StmtActionCollector,
 }
@@ -272,7 +260,7 @@ where
 }
 
 pub(super) struct MacroBodyActionCollector {
-    keyword: MockSpan,
+    keyword: (SymIdent, MockSpan),
     actions: Vec<TokenSeqAction<MockSpan>>,
     parent: StmtActionCollector,
 }
@@ -301,7 +289,7 @@ impl TokenSeqContext<MockSpan> for MacroBodyActionCollector {
 }
 
 pub(super) struct MacroCallActionCollector {
-    name: (MacroId, MockSpan),
+    name: (SymIdent, MockSpan),
     actions: Vec<MacroCallAction<MockSpan>>,
     parent: StmtActionCollector,
 }
@@ -366,7 +354,7 @@ pub(super) fn expr() -> SymExpr {
 
 impl SymExpr {
     pub fn ident(self, token: impl Into<TokenRef>) -> Self {
-        self.push(token, |t| ExprAtom::Ident(SymIdent(IdentKind::Unknown, t)))
+        self.push(token, |t| ExprAtom::Ident(SymIdent(IdentKind::Other, t)))
     }
 
     pub fn literal(self, token: impl Into<TokenRef>) -> Self {
@@ -465,8 +453,7 @@ pub enum IdentKind {
     Command,
     MacroKeyword,
     MacroName,
-    RelocName,
-    Unknown,
+    Other,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -601,15 +588,15 @@ pub(super) type Label<S> = ((SymIdent, S), Vec<ParamsAction<S>>);
 #[derive(Debug, PartialEq)]
 pub(super) enum StmtAction<S> {
     Command {
-        command: (SymCommand, S),
+        command: (SymIdent, S),
         actions: Vec<CommandAction<S>>,
     },
     MacroDef {
-        keyword: S,
+        keyword: (SymIdent, S),
         body: Vec<TokenSeqAction<S>>,
     },
     MacroCall {
-        name: (MacroId, S),
+        name: (SymIdent, S),
         actions: Vec<MacroCallAction<S>>,
     },
     EmitDiag(CompactDiag<S>),
@@ -657,7 +644,7 @@ pub(super) fn labeled(
     let label = label.into();
     FileAction::Stmt {
         label: Some((
-            (SymIdent(IdentKind::Unknown, label.clone()), label.into()),
+            (SymIdent(IdentKind::Other, label.clone()), label.into()),
             convert_params(params),
         )),
         actions,
@@ -681,7 +668,7 @@ pub(super) fn command(
 ) -> Vec<StmtAction<MockSpan>> {
     let id = id.into();
     vec![StmtAction::Command {
-        command: (SymCommand(id.clone()), id.into()),
+        command: (SymIdent(IdentKind::Command, id.clone()), id.into()),
         actions: args
             .borrow()
             .iter()
@@ -698,7 +685,7 @@ pub(super) fn malformed_command(
 ) -> Vec<StmtAction<MockSpan>> {
     let id = id.into();
     vec![StmtAction::Command {
-        command: (SymCommand(id.clone()), id.into()),
+        command: (SymIdent(IdentKind::Command, id.clone()), id.into()),
         actions: args
             .borrow()
             .iter()
@@ -715,7 +702,7 @@ pub(super) fn call_macro(
 ) -> Vec<StmtAction<MockSpan>> {
     let id = id.into();
     vec![StmtAction::MacroCall {
-        name: (MacroId(id.clone()), id.into()),
+        name: (SymIdent(IdentKind::MacroName, id.clone()), id.into()),
         actions: args
             .borrow()
             .iter()
@@ -730,9 +717,13 @@ pub(super) fn macro_def(
     mut body: Vec<TokenSeqAction<MockSpan>>,
     endm: impl Into<TokenRef>,
 ) -> Vec<StmtAction<MockSpan>> {
+    let keyword = keyword.into();
     body.push(TokenSeqAction::PushToken((Eof.into(), endm.into().into())));
     vec![StmtAction::MacroDef {
-        keyword: keyword.into().into(),
+        keyword: (
+            SymIdent(IdentKind::MacroKeyword, keyword.clone()),
+            keyword.into(),
+        ),
         body,
     }]
 }
@@ -742,7 +733,7 @@ fn convert_params(params: impl Borrow<[TokenRef]>) -> Vec<ParamsAction<MockSpan>
         .borrow()
         .iter()
         .cloned()
-        .map(|t| ParamsAction::AddParameter((SymIdent(IdentKind::Unknown, t.clone()), t.into())))
+        .map(|t| ParamsAction::AddParameter((SymIdent(IdentKind::Other, t.clone()), t.into())))
         .collect()
 }
 
@@ -759,8 +750,12 @@ pub(super) fn malformed_macro_def(
     diag: CompactDiag<MockSpan>,
 ) -> Vec<StmtAction<MockSpan>> {
     body.push(TokenSeqAction::EmitDiag(diag));
+    let keyword = keyword.into();
     vec![StmtAction::MacroDef {
-        keyword: keyword.into().into(),
+        keyword: (
+            SymIdent(IdentKind::MacroKeyword, keyword.clone()),
+            keyword.into(),
+        ),
         body,
     }]
 }

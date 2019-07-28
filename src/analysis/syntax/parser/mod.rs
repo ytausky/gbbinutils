@@ -5,7 +5,7 @@ use crate::diag::{EmitDiag, Message};
 
 macro_rules! bump {
     ($parser:expr) => {
-        $parser.token = $parser.remaining.next().unwrap()
+        $parser.state.token = $parser.state.remaining.next().unwrap()
     };
 }
 
@@ -38,7 +38,11 @@ where
     F: FileContext<Id, L, S>,
     S: Clone,
 {
-    let Parser { token, context, .. } = Parser::new(&mut tokens, context).parse_file();
+    let Parser {
+        state: ParserState { token, .. },
+        context,
+        ..
+    } = Parser::new(&mut tokens, context).parse_file();
     assert_eq!(
         token.0.ok().as_ref().map(Token::kind),
         Some(Token::Simple(SimpleToken::Eof))
@@ -47,10 +51,14 @@ where
 }
 
 struct Parser<'a, T, I: 'a, C> {
+    state: ParserState<'a, T, I>,
+    context: C,
+}
+
+struct ParserState<'a, T, I> {
     token: T,
     remaining: &'a mut I,
     recovery: Option<RecoveryState>,
-    context: C,
 }
 
 enum RecoveryState {
@@ -59,33 +67,34 @@ enum RecoveryState {
 
 impl<'a, T, I: Iterator<Item = T>, C> Parser<'a, T, I, C> {
     fn new(tokens: &'a mut I, context: C) -> Self {
-        Parser {
-            token: tokens.next().unwrap(),
-            remaining: tokens,
-            recovery: None,
+        Self::from_state(
+            ParserState {
+                token: tokens.next().unwrap(),
+                remaining: tokens,
+                recovery: None,
+            },
             context,
-        }
+        )
     }
 }
 
 impl<'a, T, I, C> Parser<'a, T, I, C> {
+    fn from_state(state: ParserState<'a, T, I>, context: C) -> Self {
+        Parser { state, context }
+    }
+
     fn change_context<D, F: FnOnce(C) -> D>(self, f: F) -> Parser<'a, T, I, D> {
-        Parser {
-            token: self.token,
-            remaining: self.remaining,
-            recovery: self.recovery,
-            context: f(self.context),
-        }
+        Parser::from_state(self.state, f(self.context))
     }
 }
 
 impl<'a, Id, L, E, S, I, A> Parser<'a, (Result<Token<Id, L>, E>, S), I, A> {
     fn token_kind(&self) -> Option<TokenKind> {
-        self.token.0.as_ref().ok().map(Token::kind)
+        self.state.token.0.as_ref().ok().map(Token::kind)
     }
 
     fn token_is_in(&self, kinds: &[TokenKind]) -> bool {
-        match &self.token.0 {
+        match &self.state.token.0 {
             Ok(token) => kinds.iter().any(|x| *x == token.kind()),
             Err(_) => false,
         }
@@ -106,7 +115,7 @@ where
     }
 
     fn parse_stmt(mut self) -> Self {
-        if let (Ok(Token::Label(label)), span) = self.token {
+        if let (Ok(Token::Label(label)), span) = self.state.token {
             bump!(self);
             let mut parser = self.change_context(|c| c.enter_labeled_stmt((label, span)));
             if parser.token_kind() == Some(LParen.into()) {
@@ -142,7 +151,7 @@ where
 {
     fn parse_unlabeled_stmt(mut self) -> Self {
         loop {
-            return match self.token {
+            return match self.state.token {
                 (Ok(Token::Simple(SimpleToken::Eol)), _) => {
                     bump!(self);
                     continue;
@@ -163,76 +172,24 @@ where
     }
 
     fn parse_key(mut self, key: Id, span: S) -> Self {
-        match self.context.key_lookup(key) {
-            Ok(key) => match key {
-                Key::Command(command) => self.parse_command((command, span)),
-                Key::Macro(id) => self.parse_macro_call((id, span)),
-                Key::Keyword(Keyword::Macro) => self.parse_macro_def(span),
-            },
-            Err(error) => {
-                let name = self.strip_span(&span);
-                self.emit_diag(
-                    match error {
-                        KeyError::Reloc => Message::CannotUseSymbolNameAsMacroName { name },
-                        KeyError::Unknown => Message::UndefinedMacro { name },
-                    }
-                    .at(span),
-                );
+        match self.context.key_lookup(key, span) {
+            Production::Command(context) => Parser::from_state(self.state, context)
+                .parse_argument_list()
+                .change_context(CommandContext::exit),
+            Production::MacroCall(context) => Parser::from_state(self.state, context)
+                .parse_macro_call()
+                .change_context(MacroCallContext::exit),
+            Production::MacroDef(context) => Parser::from_state(self.state, context)
+                .parse_macro_def()
+                .change_context(TokenSeqContext::exit),
+            Production::Error(context) => {
+                self.context = context;
                 while !self.token_is_in(LINE_FOLLOW_SET) {
                     bump!(self)
                 }
                 self
             }
         }
-    }
-
-    fn parse_command(self, command: (C::Command, S)) -> Self {
-        self.change_context(|c| c.enter_command(command))
-            .parse_argument_list()
-            .change_context(CommandContext::exit)
-    }
-
-    fn parse_macro_def(self, span: S) -> Self {
-        let mut state = self.change_context(|c| c.enter_macro_def(span));
-        if !state.token_is_in(LINE_FOLLOW_SET) {
-            state = state.diagnose_unexpected_token();
-            while !state.token_is_in(LINE_FOLLOW_SET) {
-                bump!(state)
-            }
-        }
-        if state.token_kind() == Some(Eol.into()) {
-            bump!(state);
-            loop {
-                match state.token {
-                    (Ok(Token::Simple(Endm)), _) => {
-                        state
-                            .context
-                            .push_token((Eof.into(), state.token.1.clone()));
-                        bump!(state);
-                        break;
-                    }
-                    (Ok(Token::Simple(Eof)), _) => {
-                        state = state.diagnose_unexpected_token();
-                        break;
-                    }
-                    (Ok(other), span) => {
-                        state.context.push_token((other, span));
-                        bump!(state);
-                    }
-                    (Err(_), _) => unimplemented!(),
-                }
-            }
-        } else {
-            assert_eq!(state.token_kind(), Some(Eof.into()));
-            state = state.diagnose_unexpected_token();
-        }
-        state.change_context(TokenSeqContext::exit)
-    }
-
-    fn parse_macro_call(self, name: (C::MacroId, S)) -> Self {
-        self.change_context(|c| c.enter_macro_call(name))
-            .parse_macro_arg_list()
-            .change_context(MacroCallContext::exit)
     }
 }
 
@@ -260,9 +217,9 @@ where
     S: Clone,
 {
     fn parse_param(mut self) -> Self {
-        match self.token.0 {
+        match self.state.token.0 {
             Ok(Token::Ident(ident)) => {
-                self.context.add_parameter((ident, self.token.1));
+                self.context.add_parameter((ident, self.state.token.1));
                 bump!(self)
             }
             _ => self = self.diagnose_unexpected_token(),
@@ -277,23 +234,69 @@ where
     C: MacroCallContext<S, Token = Token<Id, L>>,
     S: Clone,
 {
+    fn parse_macro_call(self) -> Self {
+        self.parse_macro_arg_list()
+    }
+
     fn parse_macro_arg_list(self) -> Self {
         self.parse_terminated_list(Comma.into(), LINE_FOLLOW_SET, |p| {
-            let mut state = p.change_context(MacroCallContext::enter_macro_arg);
+            let mut parser = p.change_context(MacroCallContext::enter_macro_arg);
             loop {
-                match state.token {
+                match parser.state.token {
                     (Ok(Token::Simple(Comma)), _)
                     | (Ok(Token::Simple(Eol)), _)
                     | (Ok(Token::Simple(Eof)), _) => break,
                     (Ok(other), span) => {
-                        bump!(state);
-                        state.context.push_token((other, span))
+                        bump!(parser);
+                        parser.context.push_token((other, span))
                     }
                     (Err(_), _) => unimplemented!(),
                 }
             }
-            state.change_context(TokenSeqContext::exit)
+            parser.change_context(TokenSeqContext::exit)
         })
+    }
+}
+
+impl<'a, Id, L, E, I, C, S> Parser<'a, (Result<Token<Id, L>, E>, S), I, C>
+where
+    I: Iterator<Item = (Result<Token<Id, L>, E>, S)>,
+    C: TokenSeqContext<S, Token = Token<Id, L>>,
+    S: Clone,
+{
+    fn parse_macro_def(mut self) -> Self {
+        if !self.token_is_in(LINE_FOLLOW_SET) {
+            self = self.diagnose_unexpected_token();
+            while !self.token_is_in(LINE_FOLLOW_SET) {
+                bump!(self)
+            }
+        }
+        if self.token_kind() == Some(Eol.into()) {
+            bump!(self);
+            loop {
+                match self.state.token {
+                    (Ok(Token::Simple(Endm)), _) => {
+                        self.context
+                            .push_token((Eof.into(), self.state.token.1.clone()));
+                        bump!(self);
+                        break;
+                    }
+                    (Ok(Token::Simple(Eof)), _) => {
+                        self = self.diagnose_unexpected_token();
+                        break;
+                    }
+                    (Ok(other), span) => {
+                        self.context.push_token((other, span));
+                        bump!(self);
+                    }
+                    (Err(_), _) => unimplemented!(),
+                }
+            }
+        } else {
+            assert_eq!(self.token_kind(), Some(Eof.into()));
+            self = self.diagnose_unexpected_token();
+        }
+        self
     }
 }
 
@@ -347,12 +350,12 @@ where
 
     fn diagnose_unexpected_token(mut self) -> Self {
         if self.token_kind() == Some(Token::Simple(Eof)) {
-            if self.recovery.is_none() {
-                self.emit_diag(Message::UnexpectedEof.at(self.token.1.clone()));
-                self.recovery = Some(RecoveryState::DiagnosedEof)
+            if self.state.recovery.is_none() {
+                self.emit_diag(Message::UnexpectedEof.at(self.state.token.1.clone()));
+                self.state.recovery = Some(RecoveryState::DiagnosedEof)
             }
         } else {
-            let token = self.token.1;
+            let token = self.state.token.1;
             bump!(self);
             let stripped = self.strip_span(&token);
             self.emit_diag(Message::UnexpectedToken { token: stripped }.at(token))
@@ -418,7 +421,7 @@ mod tests {
     #[test]
     fn parse_unary_instruction() {
         assert_eq_actions(
-            input_tokens![db @ Ident(IdentKind::Command), my_ptr @ Ident(IdentKind::Unknown)],
+            input_tokens![db @ Ident(IdentKind::Command), my_ptr @ Ident(IdentKind::Other)],
             [unlabeled(command("db", [expr().ident("my_ptr")]))],
         )
     }
@@ -428,7 +431,7 @@ mod tests {
         assert_eq_actions(
             input_tokens![
                 Ident(IdentKind::Command),
-                Ident(IdentKind::Unknown),
+                Ident(IdentKind::Other),
                 Comma,
                 Literal(())
             ],
@@ -440,14 +443,14 @@ mod tests {
     fn parse_two_instructions() {
         let tokens = input_tokens![
             Ident(IdentKind::Command),
-            Ident(IdentKind::Unknown),
+            Ident(IdentKind::Other),
             Comma,
             Literal(()),
             Eol,
             ld @ Ident(IdentKind::Command),
             a @ Literal(()),
             Comma,
-            some_const @ Ident(IdentKind::Unknown),
+            some_const @ Ident(IdentKind::Other),
         ];
         let expected = [
             unlabeled(command(0, [expr().ident(1), expr().literal(3)])),
@@ -465,11 +468,11 @@ mod tests {
             Ident(IdentKind::Command),
             Literal(()),
             Comma,
-            Ident(IdentKind::Unknown),
+            Ident(IdentKind::Other),
             Eol,
             Eol,
             Ident(IdentKind::Command),
-            Ident(IdentKind::Unknown),
+            Ident(IdentKind::Other),
             Comma,
             Literal(()),
         ];
@@ -483,7 +486,7 @@ mod tests {
     #[test]
     fn parse_empty_macro_definition() {
         let tokens = input_tokens![
-            Label(IdentKind::Unknown),
+            Label(IdentKind::Other),
             Ident(IdentKind::MacroKeyword),
             Eol,
             Endm,
@@ -495,7 +498,7 @@ mod tests {
     #[test]
     fn parse_macro_definition_with_instruction() {
         let tokens = input_tokens![
-            Label(IdentKind::Unknown),
+            Label(IdentKind::Other),
             Ident(IdentKind::MacroKeyword),
             Eol,
             Ident(IdentKind::Command),
@@ -513,11 +516,11 @@ mod tests {
     #[test]
     fn parse_nonempty_macro_def_with_two_params() {
         let tokens = input_tokens![
-            l @ Label(IdentKind::Unknown),
+            l @ Label(IdentKind::Other),
             LParen,
-            p1 @ Ident(IdentKind::Unknown),
+            p1 @ Ident(IdentKind::Other),
             Comma,
-            p2 @ Ident(IdentKind::Unknown),
+            p2 @ Ident(IdentKind::Other),
             RParen,
             key @ Ident(IdentKind::MacroKeyword),
             Eol,
@@ -535,33 +538,28 @@ mod tests {
 
     #[test]
     fn parse_label() {
-        let tokens = input_tokens![Label(IdentKind::Unknown), Eol];
+        let tokens = input_tokens![Label(IdentKind::Other), Eol];
         let expected_actions = [labeled(0, vec![], empty())];
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_two_consecutive_labels() {
-        let tokens = input_tokens![Label(IdentKind::Unknown), Eol, Label(IdentKind::Unknown)];
+        let tokens = input_tokens![Label(IdentKind::Other), Eol, Label(IdentKind::Other)];
         let expected = [labeled(0, vec![], empty()), labeled(2, vec![], empty())];
         assert_eq_actions(tokens, expected)
     }
 
     #[test]
     fn parse_labeled_instruction() {
-        let tokens = input_tokens![Label(IdentKind::Unknown), Ident(IdentKind::Command), Eol];
+        let tokens = input_tokens![Label(IdentKind::Other), Ident(IdentKind::Command), Eol];
         let expected = [labeled(0, vec![], command(1, [])), unlabeled(empty())];
         assert_eq_actions(tokens, expected)
     }
 
     #[test]
     fn parse_labeled_command_with_eol_separators() {
-        let tokens = input_tokens![
-            Label(IdentKind::Unknown),
-            Eol,
-            Eol,
-            Ident(IdentKind::Command)
-        ];
+        let tokens = input_tokens![Label(IdentKind::Other), Eol, Eol, Ident(IdentKind::Command)];
         let expected = [labeled(0, vec![], command(3, []))];
         assert_eq_actions(tokens, expected)
     }
@@ -629,7 +627,7 @@ mod tests {
     fn parse_sum_arg() {
         let tokens = input_tokens![
             Ident(IdentKind::Command),
-            x @ Ident(IdentKind::Unknown),
+            x @ Ident(IdentKind::Other),
             plus @ Plus,
             y @ Literal(()),
         ];
@@ -672,11 +670,11 @@ mod tests {
     #[test]
     fn diagnose_eof_in_param_list() {
         assert_eq_actions(
-            input_tokens![label @ Label(IdentKind::Unknown), LParen, eof @ Eof],
+            input_tokens![label @ Label(IdentKind::Other), LParen, eof @ Eof],
             [FileAction::Stmt {
                 label: Some((
                     (
-                        SymIdent(IdentKind::Unknown, "label".into()),
+                        SymIdent(IdentKind::Other, "label".into()),
                         TokenRef::from("label").into(),
                     ),
                     vec![ParamsAction::EmitDiag(arg_error(
@@ -722,7 +720,7 @@ mod tests {
                 Ident(IdentKind::Command),
                 paren @ RParen,
                 Plus,
-                Ident(IdentKind::Unknown),
+                Ident(IdentKind::Other),
                 Eol,
                 nop @ Ident(IdentKind::Command)
             ],
@@ -760,7 +758,7 @@ mod tests {
         let span: MockSpan = TokenRef::from("lit").into();
         assert_eq_actions(
             input_tokens![
-                label @ Label(IdentKind::Unknown),
+                label @ Label(IdentKind::Other),
                 LParen,
                 lit @ Literal(()),
                 RParen,
@@ -771,7 +769,7 @@ mod tests {
             [FileAction::Stmt {
                 label: Some((
                     (
-                        SymIdent(IdentKind::Unknown, "label".into()),
+                        SymIdent(IdentKind::Other, "label".into()),
                         TokenRef::from("label").into(),
                     ),
                     vec![ParamsAction::EmitDiag(
@@ -783,7 +781,10 @@ mod tests {
                     )],
                 )),
                 actions: vec![StmtAction::MacroDef {
-                    keyword: TokenRef::from("key").into(),
+                    keyword: (
+                        SymIdent(IdentKind::MacroKeyword, "key".into()),
+                        TokenRef::from("key").into(),
+                    ),
                     body: vec![TokenSeqAction::PushToken((
                         Eof.into(),
                         TokenRef::from("endm").into(),
@@ -796,9 +797,9 @@ mod tests {
     #[test]
     fn diagnose_unexpected_token_after_macro_keyword() {
         let tokens = input_tokens![
-            label @ Label(IdentKind::Unknown),
+            label @ Label(IdentKind::Other),
             key @ Ident(IdentKind::MacroKeyword),
-            unexpected @ Ident(IdentKind::Unknown),
+            unexpected @ Ident(IdentKind::Other),
             Eol,
             t1 @ Ident(IdentKind::Command),
             t2 @ Eol,
@@ -817,7 +818,10 @@ mod tests {
             "label",
             vec![],
             vec![StmtAction::MacroDef {
-                keyword: TokenRef::from("key").into(),
+                keyword: (
+                    SymIdent(IdentKind::MacroKeyword, "key".into()),
+                    TokenRef::from("key").into(),
+                ),
                 body,
             }],
         )];
@@ -825,44 +829,14 @@ mod tests {
     }
 
     #[test]
-    fn diagnose_and_recover_from_unknown_ident_as_key() {
+    fn recover_from_other_ident_as_key() {
         let tokens = input_tokens![
-            span @ Ident(IdentKind::Unknown),
-            Ident(IdentKind::Unknown),
+            Ident(IdentKind::Other),
+            Ident(IdentKind::Other),
             Eol,
             nop @ Ident(IdentKind::Command),
         ];
-        let span = MockSpan::from(TokenRef::from("span"));
-        let expected = [
-            unlabeled(vec![StmtAction::EmitDiag(
-                Message::UndefinedMacro { name: span.clone() }
-                    .at(span)
-                    .into(),
-            )]),
-            unlabeled(command("nop", [])),
-        ];
-        assert_eq_actions(tokens, expected)
-    }
-
-    #[test]
-    fn diagnose_and_recover_from_reloc_name_as_key() {
-        let tokens = input_tokens![
-            as_macro @ Ident(IdentKind::RelocName),
-            Ident(IdentKind::Unknown),
-            Eol,
-            nop @ Ident(IdentKind::Command),
-        ];
-        let as_macro = MockSpan::from(TokenRef::from("as_macro"));
-        let expected = [
-            unlabeled(vec![StmtAction::EmitDiag(
-                Message::CannotUseSymbolNameAsMacroName {
-                    name: as_macro.clone(),
-                }
-                .at(as_macro)
-                .into(),
-            )]),
-            unlabeled(command("nop", [])),
-        ];
+        let expected = [unlabeled(vec![]), unlabeled(command("nop", []))];
         assert_eq_actions(tokens, expected)
     }
 }

@@ -67,29 +67,25 @@ pub(super) trait FileContext<I, L, S: Clone>: Diagnostics<S> + Sized {
 }
 
 pub(super) trait StmtContext<I, L, S: Clone>: Diagnostics<S> + Sized {
-    type Command;
-    type MacroId;
-
     type CommandContext: CommandContext<S, Ident = I, Literal = L, Parent = Self>;
     type MacroDefContext: TokenSeqContext<S, Token = Token<I, L>, Parent = Self>;
     type MacroCallContext: MacroCallContext<S, Token = Token<I, L>, Parent = Self>;
     type Parent;
 
-    fn key_lookup(&mut self, ident: I) -> KeyLookupResult<Self::Command, Self::MacroId>;
-
-    fn enter_command(self, command: (Self::Command, S)) -> Self::CommandContext;
-    fn enter_macro_def(self, keyword: S) -> Self::MacroDefContext;
-    fn enter_macro_call(self, id: (Self::MacroId, S)) -> Self::MacroCallContext;
+    fn key_lookup(
+        self,
+        ident: I,
+        span: S,
+    ) -> Production<Self::CommandContext, Self::MacroCallContext, Self::MacroDefContext, Self>;
     fn exit(self) -> Self::Parent;
 }
 
-pub(super) type KeyLookupResult<C, M> = Result<Key<C, M>, KeyError>;
-
 #[derive(Clone, Debug, PartialEq)]
-pub(super) enum Key<C, M> {
+pub(super) enum Production<C, M, D, E> {
     Command(C),
-    Macro(M),
-    Keyword(Keyword),
+    MacroCall(M),
+    MacroDef(D),
+    Error(E),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -97,17 +93,32 @@ pub(super) enum Keyword {
     Macro,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub(super) enum KeyError {
-    Reloc,
-    Unknown,
-}
-
 #[cfg(test)]
-impl<C, M> Key<C, M> {
+impl<C, M, D, E> Production<C, M, D, E> {
+    pub fn command(self) -> Option<C> {
+        match self {
+            Production::Command(context) => Some(context),
+            _ => None,
+        }
+    }
+
     pub fn macro_call(self) -> Option<M> {
         match self {
-            Key::Macro(id) => Some(id),
+            Production::MacroCall(context) => Some(context),
+            _ => None,
+        }
+    }
+
+    pub fn macro_def(self) -> Option<D> {
+        match self {
+            Production::MacroDef(context) => Some(context),
+            _ => None,
+        }
+    }
+
+    pub fn error(self) -> Option<E> {
+        match self {
+            Production::Error(context) => Some(context),
             _ => None,
         }
     }

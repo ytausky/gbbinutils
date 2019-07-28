@@ -170,7 +170,7 @@ mod tests {
     #[test]
     fn build_include_item() {
         let filename = "file.asm";
-        let actions = unary_directive(Directive::Include, |arg| {
+        let actions = unary_directive("INCLUDE", |arg| {
             arg.push_atom((ExprAtom::Literal(Literal::String(filename.to_string())), ()));
         });
         assert_eq!(
@@ -182,18 +182,18 @@ mod tests {
     #[test]
     fn set_origin() {
         let origin = 0x3000;
-        let actions = unary_directive(Directive::Org, |arg| arg.push_atom(mk_literal(origin)));
+        let actions = unary_directive("ORG", |arg| arg.push_atom(mk_literal(origin)));
         assert_eq!(actions, [BackendEvent::SetOrigin(origin.into()).into()])
     }
 
     #[test]
     fn emit_byte_items() {
-        test_data_items_emission(Directive::Db, mk_byte, [0x42, 0x78])
+        test_data_items_emission("DB", mk_byte, [0x42, 0x78])
     }
 
     #[test]
     fn emit_word_items() {
-        test_data_items_emission(Directive::Dw, mk_word, [0x4332, 0x780f])
+        test_data_items_emission("DW", mk_word, [0x4332, 0x780f])
     }
 
     fn mk_byte(byte: i32) -> Item<Expr<()>> {
@@ -205,7 +205,7 @@ mod tests {
     }
 
     fn test_data_items_emission(
-        directive: Directive,
+        directive: &str,
         mk_item: impl Fn(i32) -> Item<Expr<()>>,
         data: impl Borrow<[i32]>,
     ) {
@@ -253,22 +253,22 @@ mod tests {
 
     #[test]
     fn ds_without_args() {
-        test_unary_directive_without_args(Directive::Ds)
+        test_unary_directive_without_args("DS")
     }
 
     #[test]
     fn org_without_args() {
-        test_unary_directive_without_args(Directive::Org)
+        test_unary_directive_without_args("ORG")
     }
 
     #[test]
     fn include_without_args() {
-        test_unary_directive_without_args(Directive::Include)
+        test_unary_directive_without_args("INCLUDE")
     }
 
     #[test]
     fn include_with_number() {
-        let actions = unary_directive(Directive::Include, |arg| arg.push_atom(mk_literal(7)));
+        let actions = unary_directive("INCLUDE", |arg| arg.push_atom(mk_literal(7)));
         assert_eq!(
             actions,
             [DiagnosticsEvent::EmitDiag(Message::ExpectedString.at(()).into()).into()]
@@ -277,9 +277,7 @@ mod tests {
 
     #[test]
     fn data_with_malformed_expr() {
-        let actions = unary_directive(Directive::Db, |arg| {
-            arg.push_atom((ExprAtom::Ident("A".into()), ()))
-        });
+        let actions = unary_directive("DB", |arg| arg.push_atom((ExprAtom::Ident("A".into()), ())));
         assert_eq!(
             actions,
             [
@@ -297,7 +295,9 @@ mod tests {
             session.fail(CodebaseError::Utf8Error);
             let mut context = SemanticActions::new(session)
                 .enter_unlabeled_stmt()
-                .enter_command((Directive::Include.into(), ()))
+                .key_lookup("INCLUDE".into(), ())
+                .command()
+                .unwrap()
                 .add_argument();
             context.push_atom((ExprAtom::Literal(Literal::String(name.into())), ()));
             drop(context.exit().exit().exit())
@@ -323,7 +323,9 @@ mod tests {
             )));
             let mut context = SemanticActions::new(session)
                 .enter_unlabeled_stmt()
-                .enter_command((Directive::Include.into(), ()))
+                .key_lookup("INCLUDE".into(), ())
+                .command()
+                .unwrap()
                 .add_argument();
             context.push_atom((ExprAtom::Literal(Literal::String(name.into())), ()));
             drop(context.exit().exit().exit())
@@ -348,7 +350,7 @@ mod tests {
     fn define_symbol() {
         let symbol = "sym";
         let value = 3;
-        let actions = with_labeled_directive(symbol, Directive::Equ, |arg| {
+        let actions = with_labeled_directive(symbol, "EQU", |arg| {
             arg.push_atom((ExprAtom::Literal(Literal::Number(value)), ()))
         });
         assert_eq!(
@@ -369,7 +371,9 @@ mod tests {
             label_actions.add_parameter((param.into(), ()));
             let mut arg_actions = label_actions
                 .next()
-                .enter_command((Directive::Equ.into(), ()))
+                .key_lookup("EQU".into(), ())
+                .command()
+                .unwrap()
                 .add_argument();
             arg_actions.push_atom((ExprAtom::Ident(param.into()), ()));
             arg_actions.exit().exit().exit()
@@ -390,7 +394,9 @@ mod tests {
             actions
                 .enter_labeled_stmt((name.into(), ()))
                 .next()
-                .enter_command((Directive::Section.into(), ()))
+                .key_lookup("SECTION".into(), ())
+                .command()
+                .unwrap()
                 .exit()
                 .exit()
         });
@@ -404,12 +410,12 @@ mod tests {
     }
 
     fn ds(f: impl FnOnce(&mut TestExprContext<()>)) -> Vec<TestOperation<()>> {
-        unary_directive(Directive::Ds, f)
+        unary_directive("DS", f)
     }
 
     type TestExprContext<S> = command::ExprBuilder<String, String, (), TestCommandActions<S>>;
 
-    fn unary_directive<F>(directive: Directive, f: F) -> Vec<TestOperation<()>>
+    fn unary_directive<F>(directive: &str, f: F) -> Vec<TestOperation<()>>
     where
         F: FnOnce(&mut TestExprContext<()>),
     {
@@ -420,7 +426,7 @@ mod tests {
         })
     }
 
-    fn test_unary_directive_without_args(directive: Directive) {
+    fn test_unary_directive_without_args(directive: &str) {
         let actions = with_directive(directive, |command| command);
         assert_eq!(
             actions,
@@ -438,19 +444,21 @@ mod tests {
 
     type TestCommandActions<S> = command::CommandActions<MockSession<S>>;
 
-    fn with_directive<F>(directive: Directive, f: F) -> Vec<TestOperation<()>>
+    fn with_directive<F>(directive: &str, f: F) -> Vec<TestOperation<()>>
     where
         F: FnOnce(TestCommandActions<()>) -> TestCommandActions<()>,
     {
         collect_semantic_actions(|actions| {
             let command = actions
                 .enter_unlabeled_stmt()
-                .enter_command((directive.into(), ()));
+                .key_lookup(directive.into(), ())
+                .command()
+                .unwrap();
             f(command).exit().exit()
         })
     }
 
-    fn with_labeled_directive<F>(label: &str, directive: Directive, f: F) -> Vec<TestOperation<()>>
+    fn with_labeled_directive<F>(label: &str, directive: &str, f: F) -> Vec<TestOperation<()>>
     where
         F: FnOnce(&mut TestExprContext<()>),
     {
@@ -458,7 +466,9 @@ mod tests {
             let mut arg = actions
                 .enter_labeled_stmt((label.into(), ()))
                 .next()
-                .enter_command((directive.into(), ()))
+                .key_lookup(directive.into(), ())
+                .command()
+                .unwrap()
                 .add_argument();
             f(&mut arg);
             arg.exit().exit().exit()

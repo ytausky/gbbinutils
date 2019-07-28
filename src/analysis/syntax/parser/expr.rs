@@ -86,7 +86,7 @@ where
             Ok(parser) => parser,
             Err((parser, error)) => {
                 let error = match error {
-                    error @ ExprParsingError::NothingParsed => match parser.token.0 {
+                    error @ ExprParsingError::NothingParsed => match parser.state.token.0 {
                         Ok(Token::Simple(Eof)) | Ok(Token::Simple(Eol)) => {
                             ExprParsingError::Other(Message::UnmatchedParenthesis.at(left).into())
                         }
@@ -97,7 +97,7 @@ where
                 return Err((parser, error));
             }
         };
-        match self.token {
+        match self.state.token {
             (Ok(Token::Simple(RParen)), right) => {
                 bump!(self);
                 let span = self.merge_spans(&left, &right);
@@ -115,6 +115,7 @@ where
     fn parse_infix_expr(mut self, lowest: Precedence) -> ParserResult<Self, C, S> {
         self = self.parse_primary_expr()?;
         while let Some(suffix_operator) = self
+            .state
             .token
             .0
             .as_ref()
@@ -126,7 +127,7 @@ where
             if precedence <= lowest {
                 break;
             }
-            let span = self.token.1;
+            let span = self.state.token.1;
             bump!(self);
             match suffix_operator {
                 SuffixOperator::Binary(binary_operator) => {
@@ -142,7 +143,7 @@ where
 
     fn parse_fn_call(mut self, left: S) -> ParserResult<Self, C, S> {
         let mut args = 0;
-        while let Ok(token) = &self.token.0 {
+        while let Ok(token) = &self.state.token.0 {
             match token {
                 Token::Simple(SimpleToken::RParen) => break,
                 Token::Simple(SimpleToken::Comma) => {
@@ -152,7 +153,7 @@ where
                 _ => self = self.parse_fn_arg(&mut args)?,
             }
         }
-        let span = self.context.merge_spans(&left, &self.token.1);
+        let span = self.context.merge_spans(&left, &self.state.token.1);
         self.context.apply_operator((Operator::FnCall(args), span));
         bump!(self);
         Ok(self)
@@ -165,7 +166,7 @@ where
     }
 
     fn parse_primary_expr(mut self) -> ParserResult<Self, C, S> {
-        match self.token {
+        match self.state.token {
             (Ok(Token::Simple(LParen)), span) => {
                 bump!(self);
                 self.parse_parenthesized_expression(span)
@@ -175,30 +176,30 @@ where
     }
 
     fn parse_atomic_expr(mut self) -> ParserResult<Self, C, S> {
-        match self.token.0 {
+        match self.state.token.0 {
             Ok(Token::Simple(Eof)) | Ok(Token::Simple(Eol)) => {
                 Err((self, ExprParsingError::NothingParsed))
             }
             Ok(Token::Ident(ident)) => {
                 self.context
-                    .push_atom((ExprAtom::Ident(ident), self.token.1));
+                    .push_atom((ExprAtom::Ident(ident), self.state.token.1));
                 bump!(self);
                 Ok(self)
             }
             Ok(Token::Literal(literal)) => {
                 self.context
-                    .push_atom((ExprAtom::Literal(literal), self.token.1));
+                    .push_atom((ExprAtom::Literal(literal), self.state.token.1));
                 bump!(self);
                 Ok(self)
             }
             Ok(Token::Simple(SimpleToken::Dot)) => {
                 self.context
-                    .push_atom((ExprAtom::LocationCounter, self.token.1));
+                    .push_atom((ExprAtom::LocationCounter, self.state.token.1));
                 bump!(self);
                 Ok(self)
             }
             _ => {
-                let span = self.token.1;
+                let span = self.state.token.1;
                 let stripped = self.context.strip_span(&span);
                 bump!(self);
                 Err((
@@ -225,13 +226,13 @@ mod tests {
     #[test]
     fn parse_long_sum_arg() {
         let tokens = input_tokens![
-            w @ Ident(IdentKind::Unknown),
+            w @ Ident(IdentKind::Other),
             plus1 @ Plus,
-            x @ Ident(IdentKind::Unknown),
+            x @ Ident(IdentKind::Other),
             plus2 @ Plus,
             y @ Literal(()),
             plus3 @ Plus,
-            z @ Ident(IdentKind::Unknown),
+            z @ Ident(IdentKind::Other),
         ];
         let expected = expr()
             .ident("w")
@@ -246,14 +247,14 @@ mod tests {
 
     #[test]
     fn parse_subtraction() {
-        let tokens = input_tokens![x @ Ident(IdentKind::Unknown), minus @ Minus, y @ Literal(())];
+        let tokens = input_tokens![x @ Ident(IdentKind::Other), minus @ Minus, y @ Literal(())];
         let expected = expr().ident("x").literal("y").minus("minus");
         assert_eq_rpn_expr(tokens, expected)
     }
 
     #[test]
     fn parse_division() {
-        let tokens = input_tokens![x @ Ident(IdentKind::Unknown), slash @ Slash, y @ Literal(())];
+        let tokens = input_tokens![x @ Ident(IdentKind::Other), slash @ Slash, y @ Literal(())];
         let expected = expr().ident("x").literal("y").divide("slash");
         assert_eq_rpn_expr(tokens, expected)
     }
@@ -285,7 +286,7 @@ mod tests {
             plus @ Plus,
             c @ Literal(()),
             star @ Star,
-            d @ Ident(IdentKind::Unknown),
+            d @ Ident(IdentKind::Other),
         ];
         let expected = expr()
             .literal("a")
@@ -300,14 +301,14 @@ mod tests {
 
     #[test]
     fn parse_multiplication() {
-        let tokens = input_tokens![x @ Ident(IdentKind::Unknown), star @ Star, y @ Literal(())];
+        let tokens = input_tokens![x @ Ident(IdentKind::Other), star @ Star, y @ Literal(())];
         let expected = expr().ident("x").literal("y").multiply("star");
         assert_eq_rpn_expr(tokens, expected)
     }
 
     #[test]
     fn parse_bitwise_or() {
-        let tokens = input_tokens![x @ Ident(IdentKind::Unknown), pipe @ Pipe, y @ Literal(())];
+        let tokens = input_tokens![x @ Ident(IdentKind::Other), pipe @ Pipe, y @ Literal(())];
         let expected = expr().ident("x").literal("y").bitwise_or("pipe");
         assert_eq_rpn_expr(tokens, expected)
     }
@@ -315,11 +316,11 @@ mod tests {
     #[test]
     fn addition_precedes_bitwise_or() {
         let tokens = input_tokens![
-            x @ Ident(IdentKind::Unknown),
+            x @ Ident(IdentKind::Other),
             pipe @ Pipe,
-            y @ Ident(IdentKind::Unknown),
+            y @ Ident(IdentKind::Other),
             plus @ Plus,
-            z @ Ident(IdentKind::Unknown),
+            z @ Ident(IdentKind::Other),
         ];
         let expected = expr()
             .ident("x")
@@ -332,7 +333,7 @@ mod tests {
 
     #[test]
     fn parse_nullary_fn_call() {
-        let tokens = input_tokens![name @ Ident(IdentKind::Unknown), left @ LParen, right @ RParen];
+        let tokens = input_tokens![name @ Ident(IdentKind::Other), left @ LParen, right @ RParen];
         let expected = expr().ident("name").fn_call(
             0,
             MockSpan::merge(TokenRef::from("left"), TokenRef::from("right")),
@@ -343,9 +344,9 @@ mod tests {
     #[test]
     fn parse_unary_fn_call() {
         let tokens = input_tokens![
-            name @ Ident(IdentKind::Unknown),
+            name @ Ident(IdentKind::Other),
             left @ LParen,
-            arg @ Ident(IdentKind::Unknown),
+            arg @ Ident(IdentKind::Other),
             right @ RParen
         ];
         let expected = expr().ident("name").ident("arg").fn_call(
@@ -358,11 +359,11 @@ mod tests {
     #[test]
     fn parse_binary_fn_call() {
         let tokens = input_tokens![
-            name @ Ident(IdentKind::Unknown),
+            name @ Ident(IdentKind::Other),
             left @ LParen,
-            arg1 @ Ident(IdentKind::Unknown),
+            arg1 @ Ident(IdentKind::Other),
             Simple(Comma),
-            arg2 @ Ident(IdentKind::Unknown),
+            arg2 @ Ident(IdentKind::Other),
             right @ RParen
         ];
         let expected = expr().ident("name").ident("arg1").ident("arg2").fn_call(
@@ -375,7 +376,7 @@ mod tests {
     #[test]
     fn parse_fn_call_plus_literal() {
         let tokens = input_tokens![
-            name @ Ident(IdentKind::Unknown),
+            name @ Ident(IdentKind::Other),
             left @ LParen,
             right @ RParen,
             plus @ Simple(Plus),
@@ -397,7 +398,7 @@ mod tests {
         let tokens = input_tokens![
             literal @ Literal(()),
             star @ Simple(Star),
-            name @ Ident(IdentKind::Unknown),
+            name @ Ident(IdentKind::Other),
             left @ LParen,
             right @ RParen,
         ];
@@ -422,12 +423,12 @@ mod tests {
     #[test]
     fn parse_sum_with_parentheses() {
         let tokens = input_tokens![
-            a @ Ident(IdentKind::Unknown),
+            a @ Ident(IdentKind::Other),
             plus1 @ Plus,
             left @ LParen,
-            b @ Ident(IdentKind::Unknown),
+            b @ Ident(IdentKind::Other),
             plus2 @ Plus,
-            c @ Ident(IdentKind::Unknown),
+            c @ Ident(IdentKind::Other),
             right @ RParen,
         ];
         let expected = expr()
@@ -443,7 +444,7 @@ mod tests {
     #[test]
     fn diagnose_eof_for_rhs_operand() {
         assert_eq_rpn_expr(
-            input_tokens![Ident(IdentKind::Unknown), Plus],
+            input_tokens![Ident(IdentKind::Other), Plus],
             expr()
                 .ident(0)
                 .error(Message::UnexpectedEof, TokenRef::from(2)),

@@ -372,8 +372,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::Directive;
-
     use crate::analysis::semantics::tests::collect_semantic_actions;
     use crate::analysis::syntax::*;
     use crate::analysis::syntax::{ExprAtom::*, Operator::*};
@@ -386,7 +384,9 @@ mod tests {
             collect_semantic_actions::<_, MockSpan<_>>(|actions| {
                 let mut actions = actions
                     .enter_unlabeled_stmt()
-                    .enter_command((Directive::Db.into(), "db".into()))
+                    .key_lookup("DB".into(), "db".into())
+                    .command()
+                    .unwrap()
                     .add_argument();
                 actions.push_atom((Literal(Number(7)), "literal".into()));
                 actions.apply_operator((FnCall(0), "call".into()));

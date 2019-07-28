@@ -91,7 +91,7 @@ mod tests {
     use crate::analysis::resolve::ResolvedIdent;
     use crate::analysis::semantics::tests::*;
     use crate::analysis::session::{MockMacroId, SessionEvent};
-    use crate::analysis::syntax::{FileContext, Key, StmtContext, Token};
+    use crate::analysis::syntax::{FileContext, StmtContext, Token};
 
     #[test]
     fn call_nullary_macro() {
@@ -100,13 +100,13 @@ mod tests {
         let log = log_with_predefined_names(
             vec![(name.into(), ResolvedIdent::Macro(macro_id))],
             |actions| {
-                let mut stmt = actions.enter_unlabeled_stmt();
-                let id = stmt
-                    .key_lookup(name.into())
-                    .map(Key::macro_call)
+                actions
+                    .enter_unlabeled_stmt()
+                    .key_lookup(name.into(), ())
+                    .macro_call()
                     .unwrap()
-                    .unwrap();
-                stmt.enter_macro_call((id, ())).exit().exit()
+                    .exit()
+                    .exit()
             },
         );
         assert_eq!(
@@ -123,13 +123,11 @@ mod tests {
         let log = log_with_predefined_names(
             vec![(name.into(), ResolvedIdent::Macro(macro_id))],
             |actions| {
-                let mut stmt = actions.enter_unlabeled_stmt();
-                let id = stmt
-                    .key_lookup(name.into())
-                    .map(Key::macro_call)
-                    .unwrap()
+                let mut call = actions
+                    .enter_unlabeled_stmt()
+                    .key_lookup(name.into(), ())
+                    .macro_call()
                     .unwrap();
-                let mut call = stmt.enter_macro_call((id, ()));
                 call = {
                     let mut arg = call.enter_macro_arg();
                     arg.push_token((arg_token.clone(), ()));

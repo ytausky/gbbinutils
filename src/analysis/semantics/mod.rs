@@ -8,7 +8,7 @@ use super::session::{Analyze, IntoSession, Params, Session};
 use super::syntax::*;
 use super::{LexItem, Literal, SemanticToken, StringSource, TokenSeq};
 
-use crate::diag::span::SpanSource;
+use crate::diag::span::{SpanSource, StripSpan};
 use crate::diag::{EmitDiag, Message};
 
 #[cfg(test)]
@@ -156,44 +156,53 @@ impl<S: Session> StmtContext<S::Ident, Literal<S::StringRef>, S::Span> for StmtA
 where
     S::Ident: AsRef<str>,
 {
-    type Command = Command;
-    type MacroId = S::MacroEntry;
-
     type CommandContext = CommandActions<S>;
     type MacroDefContext = MacroDefActions<S>;
     type MacroCallContext = MacroCallActions<S>;
     type Parent = SemanticActions<S>;
 
-    fn key_lookup(&mut self, ident: S::Ident) -> KeyLookupResult<Self::Command, Self::MacroId> {
-        KEYS.iter()
+    fn key_lookup(
+        mut self,
+        ident: S::Ident,
+        span: S::Span,
+    ) -> Production<Self::CommandContext, Self::MacroCallContext, Self::MacroDefContext, Self> {
+        match KEYS
+            .iter()
             .find(|(spelling, _)| spelling.eq_ignore_ascii_case(ident.as_ref()))
-            .map(|(_, entry)| Ok(entry.clone().into()))
-            .unwrap_or_else(|| {
-                self.parent.with_session(|session| {
-                    let result = match session.get(&ident) {
-                        Some(ResolvedIdent::Macro(id)) => Ok(Key::Macro(id)),
-                        Some(ResolvedIdent::Backend(_)) => Err(KeyError::Reloc),
-                        None => Err(KeyError::Unknown),
-                    };
+            .map(|(_, entry)| entry)
+        {
+            Some(KeyEntry::Command(command)) => {
+                Production::Command(CommandActions::new(self, (command.clone(), span)))
+            }
+            Some(KeyEntry::Keyword(Keyword::Macro)) => {
+                if self.label.is_none() {
+                    self.emit_diag(Message::MacroRequiresName.at(span))
+                }
+                Production::MacroDef(MacroDefActions::new(self))
+            }
+            None => {
+                let result = self.parent.with_session(|session| {
+                    let result = session.get(&ident);
                     (session, result)
-                })
-            })
-    }
-
-    fn enter_command(self, command: (Command, S::Span)) -> Self::CommandContext {
-        CommandActions::new(self, command)
-    }
-
-    fn enter_macro_def(mut self, keyword: S::Span) -> Self::MacroDefContext {
-        if self.label.is_none() {
-            self.emit_diag(Message::MacroRequiresName.at(keyword))
+                });
+                match result {
+                    Some(ResolvedIdent::Macro(id)) => {
+                        self.define_label_if_present();
+                        Production::MacroCall(MacroCallActions::new(self, (id, span)))
+                    }
+                    Some(ResolvedIdent::Backend(_)) => {
+                        let name = self.strip_span(&span);
+                        self.emit_diag(Message::CannotUseSymbolNameAsMacroName { name }.at(span));
+                        Production::Error(self)
+                    }
+                    None => {
+                        let name = self.strip_span(&span);
+                        self.emit_diag(Message::UndefinedMacro { name }.at(span));
+                        Production::Error(self)
+                    }
+                }
+            }
         }
-        MacroDefActions::new(self)
-    }
-
-    fn enter_macro_call(mut self, name: (Self::MacroId, S::Span)) -> Self::MacroCallContext {
-        self.define_label_if_present();
-        MacroCallActions::new(self, name)
     }
 
     fn exit(mut self) -> Self::Parent {
@@ -206,15 +215,6 @@ where
 enum KeyEntry {
     Command(Command),
     Keyword(Keyword),
-}
-
-impl<M> From<KeyEntry> for Key<Command, M> {
-    fn from(entry: KeyEntry) -> Self {
-        match entry {
-            KeyEntry::Command(command) => Key::Command(command),
-            KeyEntry::Keyword(keyword) => Key::Keyword(keyword),
-        }
-    }
 }
 
 const KEYS: &[(&str, KeyEntry)] = &[
@@ -367,7 +367,7 @@ mod tests {
     use crate::analysis::backend::{BackendEvent, Name, SerialIdAllocator};
     use crate::analysis::resolve::{NameTableEvent, ResolvedIdent};
     use crate::analysis::session::{MockMacroId, SessionEvent};
-    use crate::diag::{DiagnosticsEvent, Merge, Message};
+    use crate::diag::{DiagnosticsEvent, Merge, Message, MockSpan};
     use crate::log::with_log;
     use crate::model::{Atom, BinOp, ExprOp, Instruction, Item, Width};
 
@@ -414,7 +414,9 @@ mod tests {
         let actions = collect_semantic_actions(|actions| {
             let mut command = actions
                 .enter_unlabeled_stmt()
-                .enter_command((Command::Mnemonic(Mnemonic::Ld), ()));
+                .key_lookup("LD".into(), ())
+                .command()
+                .unwrap();
             let mut arg1 = command.add_argument();
             arg1.push_atom((ExprAtom::Ident("B".into()), ()));
             command = arg1.exit();
@@ -450,7 +452,9 @@ mod tests {
         let actions = collect_semantic_actions(|actions| {
             let command = actions
                 .enter_unlabeled_stmt()
-                .enter_command((Command::Mnemonic(Mnemonic::Rst), ()));
+                .key_lookup("RST".into(), ())
+                .command()
+                .unwrap();
             let mut expr = command.add_argument();
             expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
             expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
@@ -476,7 +480,9 @@ mod tests {
         let actions = collect_semantic_actions(|actions| {
             let command = actions
                 .enter_unlabeled_stmt()
-                .enter_command((Command::Mnemonic(Mnemonic::Rst), ()));
+                .key_lookup("RST".into(), ())
+                .command()
+                .unwrap();
             let mut expr = command.add_argument();
             expr.push_atom((ExprAtom::Ident(ident.clone()), ()));
             expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
@@ -503,7 +509,9 @@ mod tests {
         let actions = collect_semantic_actions(|actions| {
             let mut arg = actions
                 .enter_unlabeled_stmt()
-                .enter_command((Command::Directive(Directive::Dw), ()))
+                .key_lookup("DW".into(), ())
+                .command()
+                .unwrap()
                 .add_argument();
             arg.push_atom((ExprAtom::Ident(label.into()), ()));
             arg.exit().exit().exit()
@@ -538,7 +546,9 @@ mod tests {
         let actions = collect_semantic_actions(|actions| {
             let mut actions = actions
                 .enter_unlabeled_stmt()
-                .enter_command((Directive::Org.into(), ()))
+                .key_lookup("ORG".into(), ())
+                .command()
+                .unwrap()
                 .add_argument();
             actions.push_atom((ExprAtom::LocationCounter, ()));
             actions.exit().exit().exit()
@@ -573,7 +583,9 @@ mod tests {
         let actions = collect_semantic_actions(|actions| {
             actions
                 .enter_unlabeled_stmt()
-                .enter_macro_def(())
+                .key_lookup("MACRO".into(), ())
+                .macro_def()
+                .unwrap()
                 .exit()
                 .exit()
         });
@@ -593,7 +605,11 @@ mod tests {
             for param in params.borrow().iter().map(|&t| (t.into(), ())) {
                 params_actions.add_parameter(param)
             }
-            let mut token_seq_actions = params_actions.next().enter_macro_def(());
+            let mut token_seq_actions = params_actions
+                .next()
+                .key_lookup("MACRO".into(), ())
+                .macro_def()
+                .unwrap();
             for token in body.borrow().iter().cloned().map(|t| (t, ())) {
                 token_seq_actions.push_token(token)
             }
@@ -617,7 +633,9 @@ mod tests {
         let actions = collect_semantic_actions(|actions| {
             let mut arg = actions
                 .enter_unlabeled_stmt()
-                .enter_command((Command::Mnemonic(NOP), ()))
+                .key_lookup("NOP".into(), ())
+                .command()
+                .unwrap()
                 .add_argument();
             arg.push_atom((ExprAtom::Ident("A".into()), ()));
             arg.exit().exit().exit()
@@ -656,7 +674,9 @@ mod tests {
         let actions = collect_semantic_actions(|file| {
             let mut expr = file
                 .enter_unlabeled_stmt()
-                .enter_command((Command::Mnemonic(ADD), ()))
+                .key_lookup("ADD".into(), ())
+                .command()
+                .unwrap()
                 .add_argument();
             expr.emit_diag(diagnostic.clone());
             expr.exit().exit().exit()
@@ -668,60 +688,50 @@ mod tests {
     }
 
     #[test]
-    fn look_up_command() {
-        collect_semantic_actions::<_, ()>(|session| {
-            let mut stmt = session.enter_unlabeled_stmt();
-            assert_eq!(stmt.key_lookup("ADD".into()), Ok(Key::Command(ADD.into())));
-            stmt.exit()
+    fn diagnose_unknown_key() {
+        let name = "unknown";
+        let log = collect_semantic_actions::<_, MockSpan<_>>(|session| {
+            session
+                .enter_unlabeled_stmt()
+                .key_lookup(name.into(), name.into())
+                .error()
+                .unwrap()
+                .exit()
         });
+        assert_eq!(
+            log,
+            [DiagnosticsEvent::EmitDiag(
+                Message::UndefinedMacro { name: name.into() }
+                    .at(name.into())
+                    .into()
+            )
+            .into()]
+        )
     }
 
     #[test]
-    fn look_up_macro_keyword() {
-        collect_semantic_actions::<_, ()>(|session| {
-            let mut stmt = session.enter_unlabeled_stmt();
-            assert_eq!(
-                stmt.key_lookup("MACRO".into()),
-                Ok(Key::Keyword(Keyword::Macro))
-            );
-            stmt.exit()
-        });
-    }
-
-    #[test]
-    fn look_up_unknown_ident() {
-        collect_semantic_actions::<_, ()>(|session| {
-            let mut stmt = session.enter_unlabeled_stmt();
-            assert_eq!(stmt.key_lookup("unknown".into()), Err(KeyError::Unknown));
-            stmt.exit()
-        });
-    }
-
-    #[test]
-    fn look_up_macro_name() {
-        let macro_name = "my_macro";
-        let macro_id = MockMacroId(42);
-        log_with_predefined_names::<_, _, ()>(
-            vec![(macro_name.into(), ResolvedIdent::Macro(macro_id))],
-            |session| {
-                let mut stmt = session.enter_unlabeled_stmt();
-                assert_eq!(stmt.key_lookup(macro_name.into()), Ok(Key::Macro(macro_id)));
-                stmt.exit()
-            },
-        );
-    }
-
-    #[test]
-    fn look_up_reloc_name() {
+    fn diagnose_reloc_name_as_key() {
         let name = "symbol";
-        log_with_predefined_names::<_, _, ()>(
+        let log = log_with_predefined_names::<_, _, MockSpan<_>>(
             vec![(name.into(), ResolvedIdent::Backend(42))],
             |session| {
-                let mut stmt = session.enter_unlabeled_stmt();
-                assert_eq!(stmt.key_lookup(name.into()), Err(KeyError::Reloc));
-                stmt.exit()
+                session
+                    .enter_unlabeled_stmt()
+                    .key_lookup(name.into(), name.into())
+                    .error()
+                    .unwrap()
+                    .exit()
             },
         );
+        assert_eq!(
+            log,
+            [DiagnosticsEvent::EmitDiag(
+                Message::CannotUseSymbolNameAsMacroName { name: name.into() }
+                    .at(name.into())
+                    .into()
+            )
+            .into()]
+        )
     }
 
     pub(super) type MockSession<S> = crate::analysis::session::MockSession<
