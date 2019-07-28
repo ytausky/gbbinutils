@@ -97,8 +97,9 @@ where
     S::Ident: AsRef<str>,
 {
     type InstrLineContext = Self;
+    type TokenLineContext = MacroDefActions<S>;
 
-    fn will_parse_line(self) -> LineRule<Self::InstrLineContext> {
+    fn will_parse_line(self) -> LineRule<Self::InstrLineContext, Self::TokenLineContext> {
         LineRule::InstrLine(self)
     }
 }

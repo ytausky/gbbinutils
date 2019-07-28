@@ -113,6 +113,7 @@ where
                 LineRule::InstrLine(context) => {
                     Parser::from_state(self.state, context).parse_instr_line()
                 }
+                LineRule::TokenLine(_) => unimplemented!(),
             }
         }
         self

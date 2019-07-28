@@ -66,8 +66,9 @@ impl TokenStreamActionCollector {
 
 impl TokenStreamContext<SymIdent, SymLiteral, MockSpan> for TokenStreamActionCollector {
     type InstrLineContext = InstrLineActionCollector;
+    type TokenLineContext = MacroBodyActionCollector;
 
-    fn will_parse_line(self) -> LineRule<Self::InstrLineContext> {
+    fn will_parse_line(self) -> LineRule<Self::InstrLineContext, Self::TokenLineContext> {
         LineRule::InstrLine(InstrLineActionCollector::new(self))
     }
 }

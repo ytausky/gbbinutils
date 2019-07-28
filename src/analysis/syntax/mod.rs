@@ -60,19 +60,22 @@ pub(super) use self::parser::parse_src as parse_token_seq;
 
 pub(super) trait TokenStreamContext<I, L, S: Clone>: Sized {
     type InstrLineContext: InstrLineContext<I, L, S, ParentContext = Self>;
+    type TokenLineContext;
 
-    fn will_parse_line(self) -> LineRule<Self::InstrLineContext>;
+    fn will_parse_line(self) -> LineRule<Self::InstrLineContext, Self::TokenLineContext>;
 }
 
-pub(super) enum LineRule<I> {
+pub(super) enum LineRule<I, T> {
     InstrLine(I),
+    TokenLine(T),
 }
 
 #[cfg(test)]
-impl<I> LineRule<I> {
+impl<I, T> LineRule<I, T> {
     pub fn into_instr_line(self) -> I {
         match self {
             LineRule::InstrLine(context) => context,
+            _ => panic!("expected instruction line"),
         }
     }
 }
