@@ -39,12 +39,14 @@ where
 
 pub(super) struct SemanticActions<S: Session> {
     session: Option<S>,
+    label: Option<Label<S::Ident, S::Span>>,
 }
 
 impl<S: Session> SemanticActions<S> {
     pub fn new(session: S) -> SemanticActions<S> {
         SemanticActions {
             session: Some(session),
+            label: None,
         }
     }
 
@@ -72,6 +74,18 @@ impl<S: Session> SemanticActions<S> {
         self.session = Some(session);
         output
     }
+
+    fn define_label_if_present(&mut self) {
+        if let Some(((label, span), _params)) = self.label.take() {
+            self.with_session(|mut session| {
+                session.start_scope(&label);
+                let id = session.reloc_lookup(label, span.clone());
+                let mut builder = session.define_symbol(id, span.clone());
+                PushOp::<LocationCounter, _>::push_op(&mut builder, LocationCounter, span);
+                builder.finish()
+            })
+        }
+    }
 }
 
 delegate_diagnostics! {
@@ -83,14 +97,14 @@ where
     S::Ident: AsRef<str>,
 {
     type LabelContext = LabelActions<S>;
-    type StmtContext = StmtActions<S>;
+    type StmtContext = Self;
 
     fn enter_labeled_stmt(self, label: (S::Ident, S::Span)) -> Self::LabelContext {
         LabelActions::new(self, label)
     }
 
     fn enter_unlabeled_stmt(self) -> Self::StmtContext {
-        StmtActions::new(self, None)
+        self
     }
 }
 
@@ -115,44 +129,22 @@ delegate_diagnostics! {
 }
 
 impl<S: Session> ParamsContext<S::Ident, S::Span> for LabelActions<S> {
-    type Next = StmtActions<S>;
+    type Next = SemanticActions<S>;
 
     fn add_parameter(&mut self, (ident, span): (S::Ident, S::Span)) {
         self.params.0.push(ident);
         self.params.1.push(span)
     }
 
-    fn next(self) -> Self::Next {
-        StmtActions::new(self.parent, Some((self.label, self.params)))
+    fn next(mut self) -> Self::Next {
+        self.parent.label = Some((self.label, self.params));
+        self.parent
     }
-}
-
-pub(super) struct StmtActions<S: Session> {
-    parent: SemanticActions<S>,
-    label: Option<Label<S::Ident, S::Span>>,
 }
 
 type Label<I, S> = ((I, S), Params<I, S>);
 
-impl<S: Session> StmtActions<S> {
-    fn new(parent: SemanticActions<S>, label: Option<Label<S::Ident, S::Span>>) -> Self {
-        Self { parent, label }
-    }
-
-    fn define_label_if_present(&mut self) {
-        if let Some(((label, span), _params)) = self.label.take() {
-            self.parent.with_session(|mut session| {
-                session.start_scope(&label);
-                let id = session.reloc_lookup(label, span.clone());
-                let mut builder = session.define_symbol(id, span.clone());
-                PushOp::<LocationCounter, _>::push_op(&mut builder, LocationCounter, span);
-                builder.finish()
-            })
-        }
-    }
-}
-
-impl<S: Session> StmtContext<S::Ident, Literal<S::StringRef>, S::Span> for StmtActions<S>
+impl<S: Session> StmtContext<S::Ident, Literal<S::StringRef>, S::Span> for SemanticActions<S>
 where
     S::Ident: AsRef<str>,
 {
@@ -181,7 +173,7 @@ where
                 Production::MacroDef(MacroDefActions::new(self))
             }
             None => {
-                let result = self.parent.with_session(|session| {
+                let result = self.with_session(|session| {
                     let result = session.get(&ident);
                     (session, result)
                 });
@@ -207,7 +199,7 @@ where
 
     fn exit(mut self) -> Self::Parent {
         self.define_label_if_present();
-        self.parent
+        self
     }
 }
 
@@ -276,17 +268,13 @@ const KEYS: &[(&str, KeyEntry)] = &[
     ("xor", KeyEntry::Command(Command::Mnemonic(XOR))),
 ];
 
-delegate_diagnostics! {
-    {S: Session}, StmtActions<S>, {parent}, S, S::Span
-}
-
 pub(super) struct MacroDefActions<S: Session> {
-    parent: StmtActions<S>,
+    parent: SemanticActions<S>,
     tokens: TokenSeq<S::Ident, S::StringRef, S::Span>,
 }
 
 impl<S: Session> MacroDefActions<S> {
-    fn new(parent: StmtActions<S>) -> Self {
+    fn new(parent: SemanticActions<S>) -> Self {
         Self {
             parent,
             tokens: (Vec::new(), Vec::new()),
@@ -300,7 +288,7 @@ delegate_diagnostics! {
 
 impl<S: Session> TokenSeqContext<S::Span> for MacroDefActions<S> {
     type Token = SemanticToken<S::Ident, S::StringRef>;
-    type Parent = StmtActions<S>;
+    type Parent = SemanticActions<S>;
 
     fn push_token(&mut self, (token, span): (Self::Token, S::Span)) {
         self.tokens.0.push(token);
@@ -310,7 +298,7 @@ impl<S: Session> TokenSeqContext<S::Span> for MacroDefActions<S> {
     fn exit(self) -> Self::Parent {
         let Self { mut parent, tokens } = self;
         if let Some(((name, span), params)) = parent.label.take() {
-            parent.parent.with_session(|mut session| {
+            parent.with_session(|mut session| {
                 let id = session.define_macro(span, params, tokens);
                 session.insert(name, ResolvedIdent::Macro(id));
                 (session, ())
@@ -412,11 +400,7 @@ mod tests {
     fn emit_ld_b_deref_hl() {
         use crate::model::*;
         let actions = collect_semantic_actions(|actions| {
-            let mut command = actions
-                .enter_unlabeled_stmt()
-                .key_lookup("LD".into(), ())
-                .command()
-                .unwrap();
+            let mut command = actions.key_lookup("LD".into(), ()).command().unwrap();
             let mut arg1 = command.add_argument();
             arg1.push_atom((ExprAtom::Ident("B".into()), ()));
             command = arg1.exit();
@@ -450,11 +434,7 @@ mod tests {
     fn test_rst_1_op_1(op: BinOp) {
         use crate::model::*;
         let actions = collect_semantic_actions(|actions| {
-            let command = actions
-                .enter_unlabeled_stmt()
-                .key_lookup("RST".into(), ())
-                .command()
-                .unwrap();
+            let command = actions.key_lookup("RST".into(), ()).command().unwrap();
             let mut expr = command.add_argument();
             expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
             expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
@@ -478,11 +458,7 @@ mod tests {
     fn emit_rst_f_of_1() {
         let ident = String::from("f");
         let actions = collect_semantic_actions(|actions| {
-            let command = actions
-                .enter_unlabeled_stmt()
-                .key_lookup("RST".into(), ())
-                .command()
-                .unwrap();
+            let command = actions.key_lookup("RST".into(), ()).command().unwrap();
             let mut expr = command.add_argument();
             expr.push_atom((ExprAtom::Ident(ident.clone()), ()));
             expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
@@ -508,7 +484,6 @@ mod tests {
         let label = "my_label";
         let actions = collect_semantic_actions(|actions| {
             let mut arg = actions
-                .enter_unlabeled_stmt()
                 .key_lookup("DW".into(), ())
                 .command()
                 .unwrap()
@@ -545,7 +520,6 @@ mod tests {
     fn analyze_org_dot() {
         let actions = collect_semantic_actions(|actions| {
             let mut actions = actions
-                .enter_unlabeled_stmt()
                 .key_lookup("ORG".into(), ())
                 .command()
                 .unwrap()
@@ -582,7 +556,6 @@ mod tests {
     fn define_nameless_macro() {
         let actions = collect_semantic_actions(|actions| {
             actions
-                .enter_unlabeled_stmt()
                 .key_lookup("MACRO".into(), ())
                 .macro_def()
                 .unwrap()
@@ -632,7 +605,6 @@ mod tests {
     fn diagnose_wrong_operand_count() {
         let actions = collect_semantic_actions(|actions| {
             let mut arg = actions
-                .enter_unlabeled_stmt()
                 .key_lookup("NOP".into(), ())
                 .command()
                 .unwrap()
@@ -657,10 +629,9 @@ mod tests {
     #[test]
     fn diagnose_parsing_error() {
         let diagnostic = Message::UnexpectedToken { token: () }.at(());
-        let actions = collect_semantic_actions(|actions| {
-            let mut stmt = actions.enter_unlabeled_stmt();
-            stmt.emit_diag(diagnostic.clone());
-            stmt.exit()
+        let actions = collect_semantic_actions(|mut actions| {
+            actions.emit_diag(diagnostic.clone());
+            actions.exit()
         });
         assert_eq!(
             actions,
@@ -673,7 +644,6 @@ mod tests {
         let diagnostic = Message::UnexpectedToken { token: () }.at(());
         let actions = collect_semantic_actions(|file| {
             let mut expr = file
-                .enter_unlabeled_stmt()
                 .key_lookup("ADD".into(), ())
                 .command()
                 .unwrap()
@@ -692,7 +662,6 @@ mod tests {
         let name = "unknown";
         let log = collect_semantic_actions::<_, MockSpan<_>>(|session| {
             session
-                .enter_unlabeled_stmt()
                 .key_lookup(name.into(), name.into())
                 .error()
                 .unwrap()
@@ -716,7 +685,6 @@ mod tests {
             vec![(name.into(), ResolvedIdent::Backend(42))],
             |session| {
                 session
-                    .enter_unlabeled_stmt()
                     .key_lookup(name.into(), name.into())
                     .error()
                     .unwrap()

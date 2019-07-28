@@ -1,17 +1,17 @@
-use super::StmtActions;
+use super::SemanticActions;
 
 use crate::analysis::session::{MacroArgs, Session};
 use crate::analysis::syntax::{MacroCallContext, TokenSeqContext};
 use crate::analysis::{SemanticToken, TokenSeq};
 
 pub(in crate::analysis) struct MacroCallActions<S: Session> {
-    parent: StmtActions<S>,
+    parent: SemanticActions<S>,
     name: (S::MacroEntry, S::Span),
     args: MacroArgs<S::Ident, S::StringRef, S::Span>,
 }
 
 impl<S: Session> MacroCallActions<S> {
-    pub fn new(parent: StmtActions<S>, name: (S::MacroEntry, S::Span)) -> MacroCallActions<S> {
+    pub fn new(parent: SemanticActions<S>, name: (S::MacroEntry, S::Span)) -> MacroCallActions<S> {
         MacroCallActions {
             parent,
             name,
@@ -26,12 +26,12 @@ impl<S: Session> MacroCallActions<S> {
 }
 
 delegate_diagnostics! {
-    {S: Session}, MacroCallActions<S>, {parent}, StmtActions<S>, S::Span
+    {S: Session}, MacroCallActions<S>, {parent}, SemanticActions<S>, S::Span
 }
 
 impl<S: Session> MacroCallContext<S::Span> for MacroCallActions<S> {
     type Token = SemanticToken<S::Ident, S::StringRef>;
-    type Parent = StmtActions<S>;
+    type Parent = SemanticActions<S>;
     type MacroArgContext = MacroArgContext<S>;
 
     fn enter_macro_arg(self) -> Self::MacroArgContext {
@@ -44,9 +44,7 @@ impl<S: Session> MacroCallContext<S::Span> for MacroCallActions<S> {
             name,
             args,
         } = self;
-        parent
-            .parent
-            .with_session(|session| (session.call_macro(name, args), ()));
+        parent.with_session(|session| (session.call_macro(name, args), ()));
         parent
     }
 }
@@ -91,7 +89,7 @@ mod tests {
     use crate::analysis::resolve::ResolvedIdent;
     use crate::analysis::semantics::tests::*;
     use crate::analysis::session::{MockMacroId, SessionEvent};
-    use crate::analysis::syntax::{FileContext, StmtContext, Token};
+    use crate::analysis::syntax::{StmtContext, Token};
 
     #[test]
     fn call_nullary_macro() {
@@ -101,7 +99,6 @@ mod tests {
             vec![(name.into(), ResolvedIdent::Macro(macro_id))],
             |actions| {
                 actions
-                    .enter_unlabeled_stmt()
                     .key_lookup(name.into(), ())
                     .macro_call()
                     .unwrap()
@@ -123,11 +120,7 @@ mod tests {
         let log = log_with_predefined_names(
             vec![(name.into(), ResolvedIdent::Macro(macro_id))],
             |actions| {
-                let mut call = actions
-                    .enter_unlabeled_stmt()
-                    .key_lookup(name.into(), ())
-                    .macro_call()
-                    .unwrap();
+                let mut call = actions.key_lookup(name.into(), ()).macro_call().unwrap();
                 call = {
                     let mut arg = call.enter_macro_arg();
                     arg.push_token((arg_token.clone(), ()));

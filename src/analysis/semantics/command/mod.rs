@@ -36,14 +36,17 @@ impl From<Mnemonic> for Command {
 }
 
 pub(in crate::analysis) struct CommandActions<S: Session> {
-    parent: StmtActions<S>,
+    parent: SemanticActions<S>,
     command: (Command, S::Span),
     args: CommandArgs<S::Ident, S::StringRef, S::Span>,
     has_errors: bool,
 }
 
 impl<S: Session> CommandActions<S> {
-    pub(super) fn new(parent: StmtActions<S>, command: (Command, S::Span)) -> CommandActions<S> {
+    pub(super) fn new(
+        parent: SemanticActions<S>,
+        command: (Command, S::Span),
+    ) -> CommandActions<S> {
         CommandActions {
             parent,
             command,
@@ -81,7 +84,7 @@ where
     type Ident = S::Ident;
     type Literal = Literal<S::StringRef>;
     type ArgContext = ExprBuilder<S::Ident, S::StringRef, S::Span, Self>;
-    type Parent = StmtActions<S>;
+    type Parent = SemanticActions<S>;
 
     fn add_argument(self) -> Self::ArgContext {
         ExprBuilder {
@@ -94,7 +97,7 @@ where
         if !self.has_errors {
             let prepared = PreparedCommand::new(self.command, &mut self.parent);
             self.parent.define_label_if_present();
-            prepared.exec(self.args, &mut self.parent.parent)
+            prepared.exec(self.args, &mut self.parent)
         }
         self.parent
     }
@@ -107,7 +110,7 @@ enum PreparedCommand<S: Session> {
 }
 
 impl<S: Session> PreparedCommand<S> {
-    fn new((command, span): (Command, S::Span), stmt: &mut StmtActions<S>) -> Self {
+    fn new((command, span): (Command, S::Span), stmt: &mut SemanticActions<S>) -> Self {
         match command {
             Command::Directive(directive) if directive.requires_symbol() => {
                 PreparedCommand::Binding((directive, span), stmt.label.take())
@@ -383,7 +386,6 @@ mod tests {
         assert_eq!(
             collect_semantic_actions::<_, MockSpan<_>>(|actions| {
                 let mut actions = actions
-                    .enter_unlabeled_stmt()
                     .key_lookup("DB".into(), "db".into())
                     .command()
                     .unwrap()

@@ -294,7 +294,6 @@ mod tests {
             let mut session = MockSession::with_log(log);
             session.fail(CodebaseError::Utf8Error);
             let mut context = SemanticActions::new(session)
-                .enter_unlabeled_stmt()
                 .key_lookup("INCLUDE".into(), ())
                 .command()
                 .unwrap()
@@ -322,7 +321,6 @@ mod tests {
                 message,
             )));
             let mut context = SemanticActions::new(session)
-                .enter_unlabeled_stmt()
                 .key_lookup("INCLUDE".into(), ())
                 .command()
                 .unwrap()
@@ -449,11 +447,7 @@ mod tests {
         F: FnOnce(TestCommandActions<()>) -> TestCommandActions<()>,
     {
         collect_semantic_actions(|actions| {
-            let command = actions
-                .enter_unlabeled_stmt()
-                .key_lookup(directive.into(), ())
-                .command()
-                .unwrap();
+            let command = actions.key_lookup(directive.into(), ()).command().unwrap();
             f(command).exit().exit()
         })
     }
