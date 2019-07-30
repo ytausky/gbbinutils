@@ -134,10 +134,10 @@ impl InstrContext<SymIdent, SymLiteral, MockSpan> for InstrLineActionCollector {
 impl LineEndContext<MockSpan> for InstrLineActionCollector {
     type ParentContext = TokenStreamActionCollector;
 
-    fn did_parse_line(mut self) -> Self::ParentContext {
+    fn did_parse_line(mut self, span: MockSpan) -> Self::ParentContext {
         self.parent
             .actions
-            .push(TokenStreamAction::InstrLine(self.actions));
+            .push(TokenStreamAction::InstrLine(self.actions, span));
         self.parent
     }
 }
@@ -230,13 +230,13 @@ impl InstrContext<SymIdent, SymLiteral, MockSpan> for InstrActionCollector {
 impl LineEndContext<MockSpan> for InstrActionCollector {
     type ParentContext = TokenStreamActionCollector;
 
-    fn did_parse_line(mut self) -> Self::ParentContext {
+    fn did_parse_line(mut self, span: MockSpan) -> Self::ParentContext {
         if !self.actions.is_empty() {
             self.parent
                 .actions
                 .push(InstrLineAction::Instr(self.actions));
         }
-        self.parent.did_parse_line()
+        self.parent.did_parse_line(span)
     }
 }
 
@@ -669,7 +669,7 @@ impl From<&'static str> for TokenRef {
 
 #[derive(Debug, PartialEq)]
 pub(super) enum TokenStreamAction<S> {
-    InstrLine(Vec<InstrLineAction<S>>),
+    InstrLine(Vec<InstrLineAction<S>>, S),
 }
 
 #[derive(Debug, PartialEq)]
@@ -738,10 +738,18 @@ pub(super) enum MacroCallAction<S> {
 #[derive(Clone)]
 pub(super) struct SymExpr(pub Vec<ExprAction<MockSpan>>);
 
+pub(super) fn instr_line(
+    actions: Vec<InstrLineAction<MockSpan>>,
+    terminator: impl Into<TokenRef>,
+) -> TokenStreamAction<MockSpan> {
+    TokenStreamAction::InstrLine(actions, terminator.into().into())
+}
+
 pub(super) fn labeled(
     label: impl Into<TokenRef>,
     params: impl Borrow<[TokenRef]>,
     actions: Option<Vec<InstrAction<MockSpan>>>,
+    terminator: impl Into<TokenRef>,
 ) -> TokenStreamAction<MockSpan> {
     let label = label.into();
     let mut instr_line_actions = vec![InstrLineAction::Label((
@@ -751,11 +759,17 @@ pub(super) fn labeled(
     if let Some(actions) = actions {
         instr_line_actions.push(InstrLineAction::Instr(actions))
     }
-    TokenStreamAction::InstrLine(instr_line_actions)
+    TokenStreamAction::InstrLine(instr_line_actions, terminator.into().into())
 }
 
-pub(super) fn unlabeled(actions: Vec<InstrAction<MockSpan>>) -> TokenStreamAction<MockSpan> {
-    TokenStreamAction::InstrLine(vec![InstrLineAction::Instr(actions)])
+pub(super) fn unlabeled(
+    actions: Vec<InstrAction<MockSpan>>,
+    terminator: impl Into<TokenRef>,
+) -> TokenStreamAction<MockSpan> {
+    TokenStreamAction::InstrLine(
+        vec![InstrLineAction::Instr(actions)],
+        terminator.into().into(),
+    )
 }
 
 pub(super) fn builtin_instr(

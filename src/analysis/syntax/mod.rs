@@ -164,7 +164,7 @@ pub(super) trait InstrContext<I, L, S: Clone>: LineEndContext<S> {
 pub(super) trait LineEndContext<S: Clone>: Diagnostics<S> + Sized {
     type ParentContext;
 
-    fn did_parse_line(self) -> Self::ParentContext;
+    fn did_parse_line(self, span: S) -> Self::ParentContext;
 }
 
 pub(super) trait InstrEndContext<S: Clone>: Diagnostics<S> + Sized {

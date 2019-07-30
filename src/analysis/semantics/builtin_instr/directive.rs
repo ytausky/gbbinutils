@@ -300,7 +300,7 @@ mod tests {
                 .into_builtin_instr()
                 .add_argument();
             context.push_atom((ExprAtom::Literal(Literal::String(name.into())), ()));
-            context.exit().did_parse_instr().did_parse_line();
+            context.exit().did_parse_instr().did_parse_line(());
         });
         assert_eq!(
             log,
@@ -328,7 +328,7 @@ mod tests {
                 .into_builtin_instr()
                 .add_argument();
             context.push_atom((ExprAtom::Literal(Literal::String(name.into())), ()));
-            context.exit().did_parse_instr().did_parse_line();
+            context.exit().did_parse_instr().did_parse_line(());
         });
         assert_eq!(
             log,
@@ -378,7 +378,7 @@ mod tests {
                 .into_builtin_instr()
                 .add_argument();
             arg_actions.push_atom((ExprAtom::Ident(param.into()), ()));
-            arg_actions.exit().did_parse_instr().did_parse_line()
+            arg_actions.exit().did_parse_instr().did_parse_line(())
         });
         assert_eq!(
             actions,
@@ -401,7 +401,7 @@ mod tests {
                 .will_parse_instr("SECTION".into(), ())
                 .into_builtin_instr()
                 .did_parse_instr()
-                .did_parse_line()
+                .did_parse_line(())
         });
         assert_eq!(
             actions,
@@ -458,7 +458,7 @@ mod tests {
                 .into_instr_line()
                 .will_parse_instr(directive.into(), ())
                 .into_builtin_instr();
-            f(command).did_parse_instr().did_parse_line()
+            f(command).did_parse_instr().did_parse_line(())
         })
     }
 
@@ -476,7 +476,7 @@ mod tests {
                 .into_builtin_instr()
                 .add_argument();
             f(&mut arg);
-            arg.exit().did_parse_instr().did_parse_line()
+            arg.exit().did_parse_instr().did_parse_line(())
         })
     }
 }

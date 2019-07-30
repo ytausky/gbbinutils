@@ -225,7 +225,7 @@ where
 {
     type ParentContext = Self;
 
-    fn did_parse_line(mut self) -> Self::ParentContext {
+    fn did_parse_line(mut self, _: S::Span) -> Self::ParentContext {
         self.define_label_if_present();
         self
     }
@@ -454,7 +454,7 @@ mod tests {
             let mut arg2 = command.add_argument();
             arg2.push_atom((ExprAtom::Ident("HL".into()), ()));
             arg2.apply_operator((Operator::Unary(UnaryOperator::Parentheses), ()));
-            arg2.exit().did_parse_instr().did_parse_line()
+            arg2.exit().did_parse_instr().did_parse_line(())
         });
         assert_eq!(
             actions,
@@ -490,7 +490,7 @@ mod tests {
             expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
             expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
             expr.apply_operator((Operator::Binary(op), ()));
-            expr.exit().did_parse_instr().did_parse_line()
+            expr.exit().did_parse_instr().did_parse_line(())
         });
         assert_eq!(
             actions,
@@ -518,7 +518,7 @@ mod tests {
             expr.push_atom((ExprAtom::Ident(ident.clone()), ()));
             expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
             expr.apply_operator((Operator::FnCall(1), ()));
-            expr.exit().did_parse_instr().did_parse_line()
+            expr.exit().did_parse_instr().did_parse_line(())
         });
         assert_eq!(
             actions,
@@ -545,7 +545,7 @@ mod tests {
                 .into_builtin_instr()
                 .add_argument();
             arg.push_atom((ExprAtom::Ident(label.into()), ()));
-            arg.exit().did_parse_instr().did_parse_line()
+            arg.exit().did_parse_instr().did_parse_line(())
         });
         assert_eq!(
             actions,
@@ -565,7 +565,7 @@ mod tests {
                 .into_instr_line()
                 .will_parse_label((label.into(), ()))
                 .did_parse_label()
-                .did_parse_line()
+                .did_parse_line(())
         });
         assert_eq!(
             actions,
@@ -587,7 +587,7 @@ mod tests {
                 .into_builtin_instr()
                 .add_argument();
             actions.push_atom((ExprAtom::LocationCounter, ()));
-            actions.exit().did_parse_instr().did_parse_line()
+            actions.exit().did_parse_instr().did_parse_line(())
         });
         assert_eq!(
             actions,
@@ -624,7 +624,7 @@ mod tests {
                 .macro_def()
                 .unwrap()
                 .exit()
-                .did_parse_line()
+                .did_parse_line(())
         });
         assert_eq!(
             actions,
@@ -653,7 +653,7 @@ mod tests {
             for token in body.borrow().iter().cloned().map(|t| (t, ())) {
                 token_seq_actions.push_token(token)
             }
-            token_seq_actions.exit().did_parse_line()
+            token_seq_actions.exit().did_parse_line(())
         });
         assert_eq!(
             actions,
@@ -678,7 +678,7 @@ mod tests {
                 .into_builtin_instr()
                 .add_argument();
             arg.push_atom((ExprAtom::Ident("A".into()), ()));
-            arg.exit().did_parse_instr().did_parse_line()
+            arg.exit().did_parse_instr().did_parse_line(())
         });
         assert_eq!(
             actions,
@@ -699,7 +699,7 @@ mod tests {
         let diagnostic = Message::UnexpectedToken { token: () }.at(());
         let actions = collect_semantic_actions(|mut actions| {
             actions.emit_diag(diagnostic.clone());
-            actions.did_parse_line()
+            actions.did_parse_line(())
         });
         assert_eq!(
             actions,
@@ -718,7 +718,7 @@ mod tests {
                 .into_builtin_instr()
                 .add_argument();
             expr.emit_diag(diagnostic.clone());
-            expr.exit().did_parse_instr().did_parse_line()
+            expr.exit().did_parse_instr().did_parse_line(())
         });
         assert_eq!(
             actions,
@@ -737,7 +737,7 @@ mod tests {
                 .error()
                 .unwrap()
                 .did_parse_instr()
-                .did_parse_line()
+                .did_parse_line("eol".into())
         });
         assert_eq!(
             log,
@@ -762,7 +762,7 @@ mod tests {
                     .will_parse_instr(name.into(), name.into())
                     .error()
                     .unwrap()
-                    .did_parse_line()
+                    .did_parse_line("eol".into())
             },
         );
         assert_eq!(

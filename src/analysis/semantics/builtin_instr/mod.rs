@@ -403,7 +403,10 @@ mod tests {
                     .add_argument();
                 actions.push_atom((Literal(Number(7)), "literal".into()));
                 actions.apply_operator((FnCall(0), "call".into()));
-                actions.exit().did_parse_instr().did_parse_line()
+                actions
+                    .exit()
+                    .did_parse_instr()
+                    .did_parse_line("eol".into())
             }),
             [DiagnosticsEvent::EmitDiag(
                 Message::OnlyIdentsCanBeCalled.at("literal".into()).into()
