@@ -18,7 +18,6 @@ pub enum Token<I, L> {
 pub enum SimpleToken {
     Comma,
     Dot,
-    Endm,
     Eof,
     Eol,
     LParen,
@@ -77,9 +76,18 @@ pub(super) use self::parser::parse_src as parse_token_seq;
 // TokenStreamContext::will_parse_line.
 pub(super) trait TokenStreamContext<I, L, S: Clone>: Sized {
     type InstrLineContext: InstrLineContext<I, L, S, ParentContext = Self>;
-    type TokenLineContext;
+    type TokenLineContext: TokenLineContext<
+        I,
+        L,
+        S,
+        SemanticContextTerminationContext = Self::TokenLineEndContext,
+        ParentContext = Self,
+    >;
+    type TokenLineEndContext: LineEndContext<S, ParentContext = Self>;
+    type FinalContext;
 
     fn will_parse_line(self) -> LineRule<Self::InstrLineContext, Self::TokenLineContext>;
+    fn act_on_eos(self, span: S) -> Self::FinalContext;
 }
 
 pub(super) enum LineRule<I, T> {
@@ -93,6 +101,13 @@ impl<I, T> LineRule<I, T> {
         match self {
             LineRule::InstrLine(context) => context,
             _ => panic!("expected instruction line"),
+        }
+    }
+
+    pub fn into_token_line(self) -> T {
+        match self {
+            LineRule::TokenLine(context) => context,
+            _ => panic!("expected token line"),
         }
     }
 }
@@ -140,7 +155,6 @@ pub(super) trait InstrContext<I, L, S: Clone>: LineEndContext<S> {
         Literal = L,
         ParentContext = Self::LineEndContext,
     >;
-    type MacroDefContext: TokenSeqContext<S, Token = Token<I, L>, Parent = Self::LineEndContext>;
     type MacroCallContext: MacroCallContext<
         S,
         Token = Token<I, L>,
@@ -153,12 +167,7 @@ pub(super) trait InstrContext<I, L, S: Clone>: LineEndContext<S> {
         self,
         ident: I,
         span: S,
-    ) -> InstrRule<
-        Self::BuiltinInstrContext,
-        Self::MacroCallContext,
-        Self::MacroDefContext,
-        Self::ErrorContext,
-    >;
+    ) -> InstrRule<Self::BuiltinInstrContext, Self::MacroCallContext, Self::ErrorContext>;
 }
 
 pub(super) trait LineEndContext<S: Clone>: Diagnostics<S> + Sized {
@@ -174,20 +183,17 @@ pub(super) trait InstrEndContext<S: Clone>: Diagnostics<S> + Sized {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(super) enum InstrRule<C, M, D, E> {
+pub(super) enum InstrRule<C, M, E> {
     BuiltinInstr(C),
     MacroInstr(M),
-    MacroDef(D),
     Error(E),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(super) enum Keyword {
-    Macro,
-}
+pub(super) enum Keyword {}
 
 #[cfg(test)]
-impl<C, M, D, E> InstrRule<C, M, D, E> {
+impl<C, M, E> InstrRule<C, M, E> {
     pub fn into_builtin_instr(self) -> C {
         match self {
             InstrRule::BuiltinInstr(context) => context,
@@ -199,13 +205,6 @@ impl<C, M, D, E> InstrRule<C, M, D, E> {
         match self {
             InstrRule::MacroInstr(context) => context,
             _ => panic!("expected macro instruction"),
-        }
-    }
-
-    pub fn macro_def(self) -> Option<D> {
-        match self {
-            InstrRule::MacroDef(context) => Some(context),
-            _ => None,
         }
     }
 
@@ -278,4 +277,30 @@ pub(super) trait TokenSeqContext<S: Clone>: Diagnostics<S> {
     type Parent;
     fn push_token(&mut self, token: (Self::Token, S));
     fn exit(self) -> Self::Parent;
+}
+
+pub(super) trait TokenLineContext<I, L, S: Clone>: LineEndContext<S> {
+    type SemanticContextTerminationContext: LineEndContext<S, ParentContext = Self::ParentContext>;
+
+    fn act_on_token(&mut self, token: Token<I, L>, span: S);
+    fn act_on_ident(
+        self,
+        ident: I,
+        span: S,
+    ) -> TokenLineRule<Self, Self::SemanticContextTerminationContext>;
+}
+
+pub(super) enum TokenLineRule<T, E> {
+    TokenSeq(T),
+    LineEnd(E),
+}
+
+#[cfg(test)]
+impl<T, E> TokenLineRule<T, E> {
+    pub fn into_line_end(self) -> E {
+        match self {
+            TokenLineRule::LineEnd(context) => context,
+            _ => panic!("expected token sequence"),
+        }
+    }
 }

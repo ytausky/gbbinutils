@@ -148,7 +148,7 @@ impl<S: Session> PreparedBuiltinInstr<S> {
 impl Directive {
     fn requires_symbol(self) -> bool {
         match self {
-            Directive::Equ | Directive::Section => true,
+            Directive::Equ | Directive::Macro | Directive::Section => true,
             _ => false,
         }
     }
@@ -407,6 +407,7 @@ mod tests {
                     .exit()
                     .did_parse_instr()
                     .did_parse_line("eol".into())
+                    .act_on_eos("eos".into())
             }),
             [DiagnosticsEvent::EmitDiag(
                 Message::OnlyIdentsCanBeCalled.at("literal".into()).into()

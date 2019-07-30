@@ -115,12 +115,17 @@ where
                 LineRule::InstrLine(context) => {
                     Parser::from_state(self.state, context).parse_instr_line()
                 }
-                LineRule::TokenLine(_) => unimplemented!(),
+                LineRule::TokenLine(context) => {
+                    Parser::from_state(self.state, context).parse_token_line()
+                }
             }
         }
         self
     }
 }
+
+type ParentContextParser<'a, Id, L, E, I, C, S> =
+    Parser<'a, (Result<Token<Id, L>, E>, S), I, <C as LineEndContext<S>>::ParentContext>;
 
 impl<'a, Id, L, E, I, C, S> Parser<'a, (Result<Token<Id, L>, E>, S), I, C>
 where
@@ -128,7 +133,7 @@ where
     C: InstrLineContext<Id, L, S>,
     S: Clone,
 {
-    fn parse_instr_line(mut self) -> Parser<'a, (Result<Token<Id, L>, E>, S), I, C::ParentContext> {
+    fn parse_instr_line(mut self) -> ParentContextParser<'a, Id, L, E, I, C, S> {
         if let (Ok(Token::Label(label)), span) = self.state.token {
             bump!(self);
             let mut parser = self.change_context(|c| c.will_parse_label((label, span)));
@@ -163,37 +168,25 @@ where
     C: InstrContext<Id, L, S>,
     S: Clone,
 {
-    fn parse_unlabeled_stmt(
-        mut self,
-    ) -> Parser<'a, (Result<Token<Id, L>, E>, S), I, C::ParentContext> {
-        loop {
-            return match self.state.token {
-                (Ok(Token::Simple(SimpleToken::Eol)), _) => {
-                    bump!(self);
-                    continue;
-                }
-                (Ok(Token::Label(_)), _) | (Ok(Token::Simple(SimpleToken::Eof)), _) => {
-                    self.parse_line_terminator()
-                }
-                (Ok(Token::Ident(ident)), span) => {
-                    bump!(self);
-                    self.parse_key(ident, span)
-                }
-                (_, span) => {
-                    bump!(self);
-                    let stripped = self.strip_span(&span);
-                    self.emit_diag(Message::UnexpectedToken { token: stripped }.at(span));
-                    self.parse_line_terminator()
-                }
-            };
+    fn parse_unlabeled_stmt(mut self) -> ParentContextParser<'a, Id, L, E, I, C, S> {
+        match self.state.token {
+            (Ok(Token::Simple(SimpleToken::Eol)), _) | (Ok(Token::Simple(SimpleToken::Eof)), _) => {
+                self.parse_line_terminator()
+            }
+            (Ok(Token::Ident(ident)), span) => {
+                bump!(self);
+                self.parse_key(ident, span)
+            }
+            (_, span) => {
+                bump!(self);
+                let stripped = self.strip_span(&span);
+                self.emit_diag(Message::UnexpectedToken { token: stripped }.at(span));
+                self.parse_line_terminator()
+            }
         }
     }
 
-    fn parse_key(
-        self,
-        key: Id,
-        span: S,
-    ) -> Parser<'a, (Result<Token<Id, L>, E>, S), I, C::ParentContext> {
+    fn parse_key(self, key: Id, span: S) -> ParentContextParser<'a, Id, L, E, I, C, S> {
         match self.context.will_parse_instr(key, span) {
             InstrRule::BuiltinInstr(context) => Parser::from_state(self.state, context)
                 .parse_argument_list()
@@ -202,10 +195,6 @@ where
             InstrRule::MacroInstr(context) => Parser::from_state(self.state, context)
                 .parse_macro_call()
                 .change_context(InstrEndContext::did_parse_instr)
-                .parse_line_terminator(),
-            InstrRule::MacroDef(context) => Parser::from_state(self.state, context)
-                .parse_macro_def()
-                .change_context(TokenSeqContext::exit)
                 .parse_line_terminator(),
             InstrRule::Error(context) => {
                 let mut parser = Parser::from_state(self.state, context.did_parse_instr());
@@ -224,9 +213,7 @@ where
     C: LineEndContext<S>,
     S: Clone,
 {
-    fn parse_line_terminator(
-        mut self,
-    ) -> Parser<'a, (Result<Token<Id, L>, E>, S), I, C::ParentContext> {
+    fn parse_line_terminator(mut self) -> ParentContextParser<'a, Id, L, E, I, C, S> {
         let span = match &self.state.token {
             (Ok(Token::Simple(SimpleToken::Eol)), _) => {
                 let span = self.state.token.1;
@@ -312,42 +299,32 @@ where
 impl<'a, Id, L, E, I, C, S> Parser<'a, (Result<Token<Id, L>, E>, S), I, C>
 where
     I: Iterator<Item = (Result<Token<Id, L>, E>, S)>,
-    C: TokenSeqContext<S, Token = Token<Id, L>>,
+    C: TokenLineContext<Id, L, S>,
     S: Clone,
 {
-    fn parse_macro_def(mut self) -> Self {
-        if !self.token_is_in(LINE_FOLLOW_SET) {
-            self = self.diagnose_unexpected_token();
-            while !self.token_is_in(LINE_FOLLOW_SET) {
-                bump!(self)
-            }
-        }
-        if self.token_kind() == Some(Eol.into()) {
-            bump!(self);
-            loop {
-                match self.state.token {
-                    (Ok(Token::Simple(Endm)), _) => {
-                        self.context
-                            .push_token((Eof.into(), self.state.token.1.clone()));
-                        bump!(self);
-                        break;
+    fn parse_token_line(mut self) -> ParentContextParser<'a, Id, L, E, I, C, S> {
+        loop {
+            match self.state.token {
+                (Ok(Token::Ident(ident)), span) => {
+                    bump!(self);
+                    match self.context.act_on_ident(ident, span) {
+                        TokenLineRule::TokenSeq(context) => {
+                            self = Parser::from_state(self.state, context)
+                        }
+                        TokenLineRule::LineEnd(context) => {
+                            return Parser::from_state(self.state, context).parse_line_terminator()
+                        }
                     }
-                    (Ok(Token::Simple(Eof)), _) => {
-                        self = self.diagnose_unexpected_token();
-                        break;
-                    }
-                    (Ok(other), span) => {
-                        self.context.push_token((other, span));
-                        bump!(self);
-                    }
-                    (Err(_), _) => unimplemented!(),
                 }
+                (Ok(Token::Simple(SimpleToken::Eol)), _)
+                | (Ok(Token::Simple(SimpleToken::Eof)), _) => return self.parse_line_terminator(),
+                (Ok(token), span) => {
+                    bump!(self);
+                    self.context.act_on_token(token, span)
+                }
+                (Err(_), _) => unimplemented!(),
             }
-        } else {
-            assert_eq!(self.token_kind(), Some(Eof.into()));
-            self = self.diagnose_unexpected_token();
         }
-        self
     }
 }
 
@@ -436,7 +413,10 @@ mod tests {
 
     #[test]
     fn parse_empty_stmt() {
-        assert_eq_actions(input_tokens![Eol], [instr_line(vec![], 1)])
+        assert_eq_actions(
+            input_tokens![Eol],
+            [instr_line(vec![], 0), instr_line(vec![], 1)],
+        )
     }
 
     fn assert_eq_actions(input: InputTokens, expected: impl Borrow<[TokenStreamAction<MockSpan>]>) {
@@ -449,7 +429,10 @@ mod tests {
     fn parse_nullary_instruction() {
         assert_eq_actions(
             input_tokens![nop @ Ident(IdentKind::BuiltinInstr)],
-            [unlabeled(builtin_instr("nop", []), 1)],
+            [unlabeled(
+                builtin_instr(IdentKind::BuiltinInstr, "nop", []),
+                1,
+            )],
         )
     }
 
@@ -457,7 +440,10 @@ mod tests {
     fn parse_nullary_instruction_after_eol() {
         assert_eq_actions(
             input_tokens![Eol, nop @ Ident(IdentKind::BuiltinInstr)],
-            [unlabeled(builtin_instr("nop", []), 2)],
+            [
+                instr_line(vec![], 0),
+                unlabeled(builtin_instr(IdentKind::BuiltinInstr, "nop", []), 2),
+            ],
         )
     }
 
@@ -466,7 +452,7 @@ mod tests {
         assert_eq_actions(
             input_tokens![daa @ Ident(IdentKind::BuiltinInstr), Eol],
             [
-                unlabeled(builtin_instr("daa", []), 1),
+                unlabeled(builtin_instr(IdentKind::BuiltinInstr, "daa", []), 1),
                 instr_line(vec![], 2),
             ],
         )
@@ -476,7 +462,10 @@ mod tests {
     fn parse_unary_instruction() {
         assert_eq_actions(
             input_tokens![db @ Ident(IdentKind::BuiltinInstr), my_ptr @ Ident(IdentKind::Other)],
-            [unlabeled(builtin_instr("db", [expr().ident("my_ptr")]), 2)],
+            [unlabeled(
+                builtin_instr(IdentKind::BuiltinInstr, "db", [expr().ident("my_ptr")]),
+                2,
+            )],
         )
     }
 
@@ -490,7 +479,11 @@ mod tests {
                 Literal(())
             ],
             [unlabeled(
-                builtin_instr(0, [expr().ident(1), expr().literal(3)]),
+                builtin_instr(
+                    IdentKind::BuiltinInstr,
+                    0,
+                    [expr().ident(1), expr().literal(3)],
+                ),
                 4,
             )],
         );
@@ -510,9 +503,20 @@ mod tests {
             some_const @ Ident(IdentKind::Other),
         ];
         let expected = [
-            unlabeled(builtin_instr(0, [expr().ident(1), expr().literal(3)]), 4),
             unlabeled(
-                builtin_instr("ld", [expr().literal("a"), expr().ident("some_const")]),
+                builtin_instr(
+                    IdentKind::BuiltinInstr,
+                    0,
+                    [expr().ident(1), expr().literal(3)],
+                ),
+                4,
+            ),
+            unlabeled(
+                builtin_instr(
+                    IdentKind::BuiltinInstr,
+                    "ld",
+                    [expr().literal("a"), expr().ident("some_const")],
+                ),
                 9,
             ),
         ];
@@ -534,8 +538,23 @@ mod tests {
             Literal(()),
         ];
         let expected = [
-            unlabeled(builtin_instr(0, [expr().literal(1), expr().ident(3)]), 4),
-            unlabeled(builtin_instr(6, [expr().ident(7), expr().literal(9)]), 10),
+            unlabeled(
+                builtin_instr(
+                    IdentKind::BuiltinInstr,
+                    0,
+                    [expr().literal(1), expr().ident(3)],
+                ),
+                4,
+            ),
+            instr_line(vec![], 5),
+            unlabeled(
+                builtin_instr(
+                    IdentKind::BuiltinInstr,
+                    6,
+                    [expr().ident(7), expr().literal(9)],
+                ),
+                10,
+            ),
         ];
         assert_eq_actions(tokens, expected)
     }
@@ -546,9 +565,17 @@ mod tests {
             Label(IdentKind::Other),
             Ident(IdentKind::MacroKeyword),
             Eol,
-            Endm,
+            Ident(IdentKind::Endm),
         ];
-        let expected_actions = [labeled(0, vec![], Some(macro_def(1, Vec::new(), 3)), 4)];
+        let expected_actions = [
+            labeled(
+                0,
+                vec![],
+                Some(builtin_instr(IdentKind::MacroKeyword, 1, [])),
+                2,
+            ),
+            token_line(vec![tokens.ident(3)], 4),
+        ];
         assert_eq_actions(tokens, expected_actions);
     }
 
@@ -560,14 +587,18 @@ mod tests {
             Eol,
             Ident(IdentKind::BuiltinInstr),
             Eol,
-            Endm,
+            Ident(IdentKind::Endm),
         ];
-        let expected_actions = [labeled(
-            0,
-            vec![],
-            Some(macro_def(1, tokens.token_seq([3, 4]), 5)),
-            6,
-        )];
+        let expected_actions = [
+            labeled(
+                0,
+                vec![],
+                Some(builtin_instr(IdentKind::MacroKeyword, 1, vec![])),
+                2,
+            ),
+            token_line(vec![tokens.ident(3)], 4),
+            token_line(vec![tokens.ident(5)], 6),
+        ];
         assert_eq_actions(tokens, expected_actions)
     }
 
@@ -581,24 +612,28 @@ mod tests {
             p2 @ Ident(IdentKind::Other),
             RParen,
             key @ Ident(IdentKind::MacroKeyword),
-            Eol,
+            eol @ Eol,
             t1 @ Ident(IdentKind::BuiltinInstr),
             t2 @ Eol,
-            endm @ Endm,
+            endm @ Ident(IdentKind::Endm),
         ];
-        let expected = [labeled(
-            "l",
-            ["p1".into(), "p2".into()],
-            Some(macro_def("key", tokens.token_seq(["t1", "t2"]), "endm")),
-            11,
-        )];
+        let expected = [
+            labeled(
+                "l",
+                ["p1".into(), "p2".into()],
+                Some(builtin_instr(IdentKind::MacroKeyword, "key", [])),
+                "eol",
+            ),
+            token_line(vec![tokens.ident("t1")], "t2"),
+            token_line(vec![tokens.ident("endm")], 11),
+        ];
         assert_eq_actions(tokens, expected)
     }
 
     #[test]
     fn parse_label() {
         let tokens = input_tokens![Label(IdentKind::Other), Eol];
-        let expected_actions = [labeled(0, vec![], None, 2)];
+        let expected_actions = [labeled(0, vec![], None, 1), instr_line(vec![], 2)];
         assert_eq_actions(tokens, expected_actions)
     }
 
@@ -613,7 +648,12 @@ mod tests {
     fn parse_labeled_instruction() {
         let tokens = input_tokens![Label(IdentKind::Other), Ident(IdentKind::BuiltinInstr), Eol];
         let expected = [
-            labeled(0, vec![], Some(builtin_instr(1, [])), 2),
+            labeled(
+                0,
+                vec![],
+                Some(builtin_instr(IdentKind::BuiltinInstr, 1, [])),
+                2,
+            ),
             instr_line(vec![], 3),
         ];
         assert_eq_actions(tokens, expected)
@@ -627,7 +667,11 @@ mod tests {
             Eol,
             Ident(IdentKind::BuiltinInstr)
         ];
-        let expected = [labeled(0, vec![], Some(builtin_instr(3, [])), 4)];
+        let expected = [
+            labeled(0, vec![], None, 1),
+            instr_line(vec![], 2),
+            unlabeled(builtin_instr(IdentKind::BuiltinInstr, 3, []), 4),
+        ];
         assert_eq_actions(tokens, expected)
     }
 
@@ -640,7 +684,11 @@ mod tests {
             close @ RParen,
         ];
         let expected = [unlabeled(
-            builtin_instr("jp", [expr().literal("hl").parentheses("open", "close")]),
+            builtin_instr(
+                IdentKind::BuiltinInstr,
+                "jp",
+                [expr().literal("hl").parentheses("open", "close")],
+            ),
             4,
         )];
         assert_eq_actions(tokens, expected)
@@ -699,7 +747,11 @@ mod tests {
             y @ Literal(()),
         ];
         let expected_actions = [unlabeled(
-            builtin_instr(0, [expr().ident("x").literal("y").plus("plus")]),
+            builtin_instr(
+                IdentKind::BuiltinInstr,
+                0,
+                [expr().ident("x").literal("y").plus("plus")],
+            ),
             4,
         )];
         assert_eq_actions(tokens, expected_actions)
@@ -764,22 +816,12 @@ mod tests {
     }
 
     #[test]
-    fn diagnose_eof_in_macro_body() {
-        assert_eq_actions(
-            input_tokens![Ident(IdentKind::MacroKeyword), Eol, eof @ Eof],
-            [unlabeled(
-                malformed_macro_def(0, Vec::new(), arg_error(Message::UnexpectedEof, "eof")),
-                "eof",
-            )],
-        )
-    }
-
-    #[test]
     fn diagnose_unmatched_parentheses() {
         assert_eq_actions(
             input_tokens![Ident(IdentKind::BuiltinInstr), paren @ LParen, Literal(())],
             [unlabeled(
                 builtin_instr(
+                    IdentKind::BuiltinInstr,
                     0,
                     [expr()
                         .literal(2)
@@ -805,6 +847,7 @@ mod tests {
             [
                 unlabeled(
                     builtin_instr(
+                        IdentKind::BuiltinInstr,
                         0,
                         [expr().error(
                             Message::UnexpectedToken {
@@ -815,7 +858,7 @@ mod tests {
                     ),
                     4,
                 ),
-                unlabeled(builtin_instr("nop", []), 6),
+                unlabeled(builtin_instr(IdentKind::BuiltinInstr, "nop", []), 6),
             ],
         )
     }
@@ -827,6 +870,7 @@ mod tests {
             [
                 unlabeled(
                     builtin_instr(
+                        IdentKind::BuiltinInstr,
                         0,
                         [expr().error(Message::UnmatchedParenthesis, TokenRef::from(1))],
                     ),
@@ -838,7 +882,7 @@ mod tests {
     }
 
     #[test]
-    fn diagnose_unexpected_token_param_list() {
+    fn diagnose_unexpected_token_in_param_list() {
         let span: MockSpan = TokenRef::from("lit").into();
         assert_eq_actions(
             input_tokens![
@@ -846,9 +890,7 @@ mod tests {
                 LParen,
                 lit @ Literal(()),
                 RParen,
-                key @ Ident(IdentKind::MacroKeyword),
-                Eol,
-                endm @ Endm
+                key @ Ident(IdentKind::BuiltinInstr),
             ],
             [instr_line(
                 vec![
@@ -865,55 +907,11 @@ mod tests {
                             .into(),
                         )],
                     )),
-                    InstrLineAction::Instr(vec![InstrAction::MacroDef {
-                        keyword: (
-                            SymIdent(IdentKind::MacroKeyword, "key".into()),
-                            TokenRef::from("key").into(),
-                        ),
-                        body: vec![TokenSeqAction::PushToken((
-                            Eof.into(),
-                            TokenRef::from("endm").into(),
-                        ))],
-                    }]),
+                    InstrLineAction::Instr(builtin_instr(IdentKind::BuiltinInstr, "key", [])),
                 ],
-                7,
+                5,
             )],
         )
-    }
-
-    #[test]
-    fn diagnose_unexpected_token_after_macro_keyword() {
-        let tokens = input_tokens![
-            label @ Label(IdentKind::Other),
-            key @ Ident(IdentKind::MacroKeyword),
-            unexpected @ Ident(IdentKind::Other),
-            Eol,
-            t1 @ Ident(IdentKind::BuiltinInstr),
-            t2 @ Eol,
-            t3 @ Endm,
-        ];
-        let unexpected = TokenRef::from("unexpected");
-        let mut body = vec![TokenSeqAction::EmitDiag(arg_error(
-            Message::UnexpectedToken {
-                token: unexpected.clone().into(),
-            },
-            unexpected,
-        ))];
-        body.extend(tokens.token_seq(["t1", "t2"]));
-        body.push(push_token(Eof, "t3"));
-        let expected = [labeled(
-            "label",
-            vec![],
-            Some(vec![InstrAction::MacroDef {
-                keyword: (
-                    SymIdent(IdentKind::MacroKeyword, "key".into()),
-                    TokenRef::from("key").into(),
-                ),
-                body,
-            }]),
-            7,
-        )];
-        assert_eq_actions(tokens, expected)
     }
 
     #[test]
@@ -926,7 +924,7 @@ mod tests {
         ];
         let expected = [
             unlabeled(vec![InstrAction::Error(vec![])], 2),
-            unlabeled(builtin_instr("nop", []), 4),
+            unlabeled(builtin_instr(IdentKind::BuiltinInstr, "nop", []), 4),
         ];
         assert_eq_actions(tokens, expected)
     }

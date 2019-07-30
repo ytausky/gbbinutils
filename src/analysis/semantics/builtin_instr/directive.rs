@@ -1,5 +1,5 @@
 use super::super::Label;
-use super::{Arg, ArgAtom, ArgVariant, BuiltinInstrArgs, RelocLookup, SemanticActions};
+use super::*;
 
 use crate::analysis::session::Session;
 use crate::analysis::Literal;
@@ -13,6 +13,7 @@ pub(in crate::analysis) enum Directive {
     Dw,
     Equ,
     Include,
+    Macro,
     Org,
     Section,
 }
@@ -55,6 +56,7 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::Ident, S::Strin
             Directive::Dw => self.analyze_data(Width::Word),
             Directive::Equ => self.analyze_equ(),
             Directive::Include => self.analyze_include(),
+            Directive::Macro => self.analyze_macro(),
             Directive::Org => self.analyze_org(),
             Directive::Section => self.analyze_section(),
         }
@@ -103,6 +105,16 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::Ident, S::Strin
         if let Err(err) = result {
             self.actions.emit_diag(Message::from(err).at(span))
         }
+    }
+
+    fn analyze_macro(mut self) {
+        if self.label.is_none() {
+            let span = self.span;
+            self.actions.emit_diag(Message::MacroRequiresName.at(span))
+        }
+        self.actions.mode = Some(LineRule::TokenLine(TokenFrame::MacroDef(
+            MacroDefState::new(self.label),
+        )));
     }
 
     fn analyze_org(mut self) {
@@ -159,7 +171,6 @@ mod tests {
     use crate::analysis::semantics::builtin_instr;
     use crate::analysis::semantics::tests::*;
     use crate::analysis::session::SessionEvent;
-    use crate::analysis::syntax::*;
     use crate::codebase::CodebaseError;
     use crate::log::with_log;
     use crate::model::{Atom, ParamId};
@@ -378,7 +389,11 @@ mod tests {
                 .into_builtin_instr()
                 .add_argument();
             arg_actions.push_atom((ExprAtom::Ident(param.into()), ()));
-            arg_actions.exit().did_parse_instr().did_parse_line(())
+            arg_actions
+                .exit()
+                .did_parse_instr()
+                .did_parse_line(())
+                .act_on_eos(())
         });
         assert_eq!(
             actions,
@@ -402,6 +417,7 @@ mod tests {
                 .into_builtin_instr()
                 .did_parse_instr()
                 .did_parse_line(())
+                .act_on_eos(())
         });
         assert_eq!(
             actions,
@@ -458,7 +474,10 @@ mod tests {
                 .into_instr_line()
                 .will_parse_instr(directive.into(), ())
                 .into_builtin_instr();
-            f(command).did_parse_instr().did_parse_line(())
+            f(command)
+                .did_parse_instr()
+                .did_parse_line(())
+                .act_on_eos(())
         })
     }
 
@@ -476,7 +495,10 @@ mod tests {
                 .into_builtin_instr()
                 .add_argument();
             f(&mut arg);
-            arg.exit().did_parse_instr().did_parse_line(())
+            arg.exit()
+                .did_parse_instr()
+                .did_parse_line(())
+                .act_on_eos(())
         })
     }
 }

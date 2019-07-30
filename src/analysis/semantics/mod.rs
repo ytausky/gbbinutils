@@ -39,13 +39,33 @@ where
 
 pub(super) struct SemanticActions<S: Session> {
     session: Option<S>,
+    mode: Option<LineRule<(), TokenFrame<S>>>,
     label: Option<Label<S::Ident, S::Span>>,
+}
+
+enum TokenFrame<S: Session> {
+    MacroDef(MacroDefState<S>),
+}
+
+struct MacroDefState<S: Session> {
+    label: Option<Label<S::Ident, S::Span>>,
+    tokens: TokenSeq<S::Ident, S::StringRef, S::Span>,
+}
+
+impl<S: Session> MacroDefState<S> {
+    fn new(label: Option<Label<S::Ident, S::Span>>) -> Self {
+        Self {
+            label,
+            tokens: (Vec::new(), Vec::new()),
+        }
+    }
 }
 
 impl<S: Session> SemanticActions<S> {
     pub fn new(session: S) -> SemanticActions<S> {
         SemanticActions {
             session: Some(session),
+            mode: Some(LineRule::InstrLine(())),
             label: None,
         }
     }
@@ -97,12 +117,30 @@ where
     S::Ident: AsRef<str>,
 {
     type InstrLineContext = Self;
-    type TokenLineContext = MacroDefActions<S>;
+    type TokenLineContext = TokenLineActions<S>;
+    type TokenLineEndContext = TokenFrameEndActions<S>;
+    type FinalContext = Done;
 
-    fn will_parse_line(self) -> LineRule<Self::InstrLineContext, Self::TokenLineContext> {
-        LineRule::InstrLine(self)
+    fn will_parse_line(mut self) -> LineRule<Self::InstrLineContext, Self::TokenLineContext> {
+        match self.mode.take().unwrap() {
+            LineRule::InstrLine(()) => LineRule::InstrLine(self),
+            LineRule::TokenLine(frame) => LineRule::TokenLine(TokenLineActions {
+                parent: self,
+                frame,
+            }),
+        }
+    }
+
+    fn act_on_eos(mut self, span: S::Span) -> Self::FinalContext {
+        self.define_label_if_present();
+        if let Some(LineRule::TokenLine(TokenFrame::MacroDef(_))) = &self.mode {
+            self.emit_diag(Message::UnexpectedEof.at(span))
+        }
+        Done
     }
 }
+
+pub(super) struct Done;
 
 impl<S: Session> InstrLineContext<S::Ident, Literal<S::StringRef>, S::Span> for SemanticActions<S>
 where
@@ -111,7 +149,8 @@ where
     type LabelContext = LabelActions<S>;
     type InstrContext = Self;
 
-    fn will_parse_label(self, label: (S::Ident, S::Span)) -> Self::LabelContext {
+    fn will_parse_label(mut self, label: (S::Ident, S::Span)) -> Self::LabelContext {
+        self.define_label_if_present();
         LabelActions::new(self, label)
     }
 }
@@ -157,7 +196,6 @@ where
     S::Ident: AsRef<str>,
 {
     type BuiltinInstrContext = BuiltinInstrActions<S>;
-    type MacroDefContext = MacroDefActions<S>;
     type MacroCallContext = MacroCallActions<S>;
     type ErrorContext = Self;
     type LineEndContext = Self;
@@ -166,8 +204,7 @@ where
         mut self,
         ident: S::Ident,
         span: S::Span,
-    ) -> InstrRule<Self::BuiltinInstrContext, Self::MacroCallContext, Self::MacroDefContext, Self>
-    {
+    ) -> InstrRule<Self::BuiltinInstrContext, Self::MacroCallContext, Self> {
         match KEYS
             .iter()
             .find(|(spelling, _)| spelling.eq_ignore_ascii_case(ident.as_ref()))
@@ -175,12 +212,6 @@ where
         {
             Some(KeyEntry::BuiltinInstr(command)) => {
                 InstrRule::BuiltinInstr(BuiltinInstrActions::new(self, (command.clone(), span)))
-            }
-            Some(KeyEntry::Keyword(Keyword::Macro)) => {
-                if self.label.is_none() {
-                    self.emit_diag(Message::MacroRequiresName.at(span))
-                }
-                InstrRule::MacroDef(MacroDefActions::new(self))
             }
             None => {
                 let result = self.with_session(|session| {
@@ -226,7 +257,9 @@ where
     type ParentContext = Self;
 
     fn did_parse_line(mut self, _: S::Span) -> Self::ParentContext {
-        self.define_label_if_present();
+        if self.mode.is_none() {
+            self.mode = Some(LineRule::InstrLine(()))
+        }
         self
     }
 }
@@ -234,7 +267,6 @@ where
 #[derive(Clone)]
 enum KeyEntry {
     BuiltinInstr(BuiltinInstr),
-    Keyword(Keyword),
 }
 
 const KEYS: &[(&str, KeyEntry)] = &[
@@ -275,7 +307,10 @@ const KEYS: &[(&str, KeyEntry)] = &[
     ("jr", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(JR))),
     ("ld", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(LD))),
     ("ldhl", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(LDHL))),
-    ("macro", KeyEntry::Keyword(Keyword::Macro)),
+    (
+        "macro",
+        KeyEntry::BuiltinInstr(BuiltinInstr::Directive(Directive::Macro)),
+    ),
     ("nop", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(NOP))),
     ("or", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(OR))),
     (
@@ -311,43 +346,96 @@ const KEYS: &[(&str, KeyEntry)] = &[
     ("xor", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(XOR))),
 ];
 
-pub(super) struct MacroDefActions<S: Session> {
+pub(super) struct TokenLineActions<S: Session> {
     parent: SemanticActions<S>,
-    tokens: TokenSeq<S::Ident, S::StringRef, S::Span>,
-}
-
-impl<S: Session> MacroDefActions<S> {
-    fn new(parent: SemanticActions<S>) -> Self {
-        Self {
-            parent,
-            tokens: (Vec::new(), Vec::new()),
-        }
-    }
+    frame: TokenFrame<S>,
 }
 
 delegate_diagnostics! {
-    {S: Session}, MacroDefActions<S>, {parent}, S, S::Span
+    {S: Session}, TokenLineActions<S>, {parent}, S, S::Span
 }
 
-impl<S: Session> TokenSeqContext<S::Span> for MacroDefActions<S> {
-    type Token = SemanticToken<S::Ident, S::StringRef>;
-    type Parent = SemanticActions<S>;
+impl<S: Session> TokenLineContext<S::Ident, Literal<S::StringRef>, S::Span> for TokenLineActions<S>
+where
+    S::Ident: AsRef<str>,
+{
+    type SemanticContextTerminationContext = TokenFrameEndActions<S>;
 
-    fn push_token(&mut self, (token, span): (Self::Token, S::Span)) {
-        self.tokens.0.push(token);
-        self.tokens.1.push(span)
+    fn act_on_token(&mut self, token: SemanticToken<S::Ident, S::StringRef>, span: S::Span) {
+        match &mut self.frame {
+            TokenFrame::MacroDef(state) => {
+                state.tokens.0.push(token);
+                state.tokens.1.push(span);
+            }
+        }
     }
 
-    fn exit(self) -> Self::Parent {
-        let Self { mut parent, tokens } = self;
-        if let Some(((name, span), params)) = parent.label.take() {
-            parent.with_session(|mut session| {
-                let id = session.define_macro(span, params, tokens);
-                session.insert(name, ResolvedIdent::Macro(id));
-                (session, ())
-            })
+    fn act_on_ident(
+        mut self,
+        ident: S::Ident,
+        span: S::Span,
+    ) -> TokenLineRule<Self, Self::SemanticContextTerminationContext> {
+        match &mut self.frame {
+            TokenFrame::MacroDef(state) => {
+                if ident.as_ref().eq_ignore_ascii_case("ENDM") {
+                    state.tokens.0.push(SimpleToken::Eof.into());
+                    state.tokens.1.push(span);
+                    TokenLineRule::LineEnd(TokenFrameEndActions {
+                        parent: self.parent,
+                        frame: self.frame,
+                    })
+                } else {
+                    state.tokens.0.push(Token::Ident(ident));
+                    state.tokens.1.push(span);
+                    TokenLineRule::TokenSeq(self)
+                }
+            }
         }
-        parent
+    }
+}
+
+impl<S: Session> LineEndContext<S::Span> for TokenLineActions<S> {
+    type ParentContext = SemanticActions<S>;
+
+    fn did_parse_line(mut self, span: S::Span) -> Self::ParentContext {
+        match &mut self.frame {
+            TokenFrame::MacroDef(state) => {
+                state.tokens.0.push(SimpleToken::Eol.into());
+                state.tokens.1.push(span);
+                self.parent.mode = Some(LineRule::TokenLine(self.frame));
+            }
+        }
+        self.parent
+    }
+}
+
+pub(super) struct TokenFrameEndActions<S: Session> {
+    parent: SemanticActions<S>,
+    frame: TokenFrame<S>,
+}
+
+delegate_diagnostics! {
+    {S: Session}, TokenFrameEndActions<S>, {parent}, S, S::Span
+}
+
+impl<S: Session> LineEndContext<S::Span> for TokenFrameEndActions<S> {
+    type ParentContext = SemanticActions<S>;
+
+    fn did_parse_line(mut self, _: S::Span) -> Self::ParentContext {
+        match self.frame {
+            TokenFrame::MacroDef(state) => {
+                if let Some((name, params)) = state.label {
+                    let tokens = state.tokens;
+                    self.parent.with_session(|mut session| {
+                        let id = session.define_macro(name.1, params, tokens);
+                        session.insert(name.0, ResolvedIdent::Macro(id));
+                        (session, ())
+                    });
+                }
+                self.parent.mode = Some(LineRule::InstrLine(()))
+            }
+        }
+        self.parent
     }
 }
 
@@ -454,7 +542,10 @@ mod tests {
             let mut arg2 = command.add_argument();
             arg2.push_atom((ExprAtom::Ident("HL".into()), ()));
             arg2.apply_operator((Operator::Unary(UnaryOperator::Parentheses), ()));
-            arg2.exit().did_parse_instr().did_parse_line(())
+            arg2.exit()
+                .did_parse_instr()
+                .did_parse_line(())
+                .act_on_eos(())
         });
         assert_eq!(
             actions,
@@ -490,7 +581,10 @@ mod tests {
             expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
             expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
             expr.apply_operator((Operator::Binary(op), ()));
-            expr.exit().did_parse_instr().did_parse_line(())
+            expr.exit()
+                .did_parse_instr()
+                .did_parse_line(())
+                .act_on_eos(())
         });
         assert_eq!(
             actions,
@@ -518,7 +612,10 @@ mod tests {
             expr.push_atom((ExprAtom::Ident(ident.clone()), ()));
             expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
             expr.apply_operator((Operator::FnCall(1), ()));
-            expr.exit().did_parse_instr().did_parse_line(())
+            expr.exit()
+                .did_parse_instr()
+                .did_parse_line(())
+                .act_on_eos(())
         });
         assert_eq!(
             actions,
@@ -545,7 +642,10 @@ mod tests {
                 .into_builtin_instr()
                 .add_argument();
             arg.push_atom((ExprAtom::Ident(label.into()), ()));
-            arg.exit().did_parse_instr().did_parse_line(())
+            arg.exit()
+                .did_parse_instr()
+                .did_parse_line(())
+                .act_on_eos(())
         });
         assert_eq!(
             actions,
@@ -566,6 +666,7 @@ mod tests {
                 .will_parse_label((label.into(), ()))
                 .did_parse_label()
                 .did_parse_line(())
+                .act_on_eos(())
         });
         assert_eq!(
             actions,
@@ -587,7 +688,11 @@ mod tests {
                 .into_builtin_instr()
                 .add_argument();
             actions.push_atom((ExprAtom::LocationCounter, ()));
-            actions.exit().did_parse_instr().did_parse_line(())
+            actions
+                .exit()
+                .did_parse_instr()
+                .did_parse_line(())
+                .act_on_eos(())
         });
         assert_eq!(
             actions,
@@ -621,10 +726,15 @@ mod tests {
                 .will_parse_line()
                 .into_instr_line()
                 .will_parse_instr("MACRO".into(), ())
-                .macro_def()
-                .unwrap()
-                .exit()
+                .into_builtin_instr()
+                .did_parse_instr()
                 .did_parse_line(())
+                .will_parse_line()
+                .into_token_line()
+                .act_on_ident("ENDM".into(), ())
+                .into_line_end()
+                .did_parse_line(())
+                .act_on_eos(())
         });
         assert_eq!(
             actions,
@@ -648,19 +758,28 @@ mod tests {
             let mut token_seq_actions = params_actions
                 .did_parse_label()
                 .will_parse_instr("MACRO".into(), ())
-                .macro_def()
-                .unwrap();
-            for token in body.borrow().iter().cloned().map(|t| (t, ())) {
-                token_seq_actions.push_token(token)
+                .into_builtin_instr()
+                .did_parse_instr()
+                .did_parse_line(())
+                .will_parse_line()
+                .into_token_line();
+            for token in body.borrow().iter().cloned() {
+                token_seq_actions.act_on_token(token, ())
             }
-            token_seq_actions.exit().did_parse_line(())
+            token_seq_actions
+                .act_on_ident("ENDM".into(), ())
+                .into_line_end()
+                .did_parse_line(())
+                .act_on_eos(())
         });
+        let mut body = body.borrow().to_vec();
+        body.push(SimpleToken::Eof.into());
         assert_eq!(
             actions,
             [
                 SessionEvent::DefineMacro(
                     params.borrow().iter().cloned().map(Into::into).collect(),
-                    body.borrow().to_vec()
+                    body
                 )
                 .into(),
                 NameTableEvent::Insert(name.into(), ResolvedIdent::Macro(MockMacroId(0))).into(),
@@ -678,7 +797,10 @@ mod tests {
                 .into_builtin_instr()
                 .add_argument();
             arg.push_atom((ExprAtom::Ident("A".into()), ()));
-            arg.exit().did_parse_instr().did_parse_line(())
+            arg.exit()
+                .did_parse_instr()
+                .did_parse_line(())
+                .act_on_eos(())
         });
         assert_eq!(
             actions,
@@ -699,7 +821,7 @@ mod tests {
         let diagnostic = Message::UnexpectedToken { token: () }.at(());
         let actions = collect_semantic_actions(|mut actions| {
             actions.emit_diag(diagnostic.clone());
-            actions.did_parse_line(())
+            actions.did_parse_line(()).act_on_eos(())
         });
         assert_eq!(
             actions,
@@ -718,7 +840,10 @@ mod tests {
                 .into_builtin_instr()
                 .add_argument();
             expr.emit_diag(diagnostic.clone());
-            expr.exit().did_parse_instr().did_parse_line(())
+            expr.exit()
+                .did_parse_instr()
+                .did_parse_line(())
+                .act_on_eos(())
         });
         assert_eq!(
             actions,
@@ -738,6 +863,7 @@ mod tests {
                 .unwrap()
                 .did_parse_instr()
                 .did_parse_line("eol".into())
+                .act_on_eos("eos".into())
         });
         assert_eq!(
             log,
@@ -763,6 +889,7 @@ mod tests {
                     .error()
                     .unwrap()
                     .did_parse_line("eol".into())
+                    .act_on_eos("eos".into())
             },
         );
         assert_eq!(
@@ -776,6 +903,29 @@ mod tests {
         )
     }
 
+    #[test]
+    fn diagnose_eof_in_macro_body() {
+        let log = collect_semantic_actions::<_, MockSpan<_>>(|actions| {
+            actions
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_label(("my_macro".into(), "label".into()))
+                .did_parse_label()
+                .will_parse_instr("MACRO".into(), "key".into())
+                .into_builtin_instr()
+                .did_parse_instr()
+                .did_parse_line("eol".into())
+                .will_parse_line()
+                .into_token_line()
+                .did_parse_line("eos".into())
+                .act_on_eos("eos".into())
+        });
+        assert_eq!(
+            log,
+            [DiagnosticsEvent::EmitDiag(Message::UnexpectedEof.at("eos".into()).into()).into()]
+        )
+    }
+
     pub(super) type MockSession<S> = crate::analysis::session::MockSession<
         SerialIdAllocator,
         BasicNameTable<usize, MockMacroId>,
@@ -785,7 +935,7 @@ mod tests {
 
     pub(super) fn collect_semantic_actions<F, S>(f: F) -> Vec<TestOperation<S>>
     where
-        F: FnOnce(TestSemanticActions<S>) -> TestSemanticActions<S>,
+        F: FnOnce(TestSemanticActions<S>) -> Done,
         S: Clone + Debug + Merge,
     {
         with_log(|log| {
@@ -796,7 +946,7 @@ mod tests {
     pub(super) fn log_with_predefined_names<I, F, S>(entries: I, f: F) -> Vec<TestOperation<S>>
     where
         I: IntoIterator<Item = (String, ResolvedIdent<usize, MockMacroId>)>,
-        F: FnOnce(TestSemanticActions<S>) -> TestSemanticActions<S>,
+        F: FnOnce(TestSemanticActions<S>) -> Done,
         S: Clone + Debug + Merge,
     {
         with_log(|log| {

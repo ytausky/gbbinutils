@@ -192,8 +192,8 @@ impl<F: IdentFactory> TokenFactory<F> {
         lexeme: &str,
     ) -> Result<Token<F::Ident, Literal<String>>, LexError> {
         match kind {
-            TokenKind::Ident => Ok(self.mk_keyword_or(Token::Ident, lexeme)),
-            TokenKind::Label => Ok(self.mk_keyword_or(Token::Label, lexeme)),
+            TokenKind::Ident => Ok(Token::Ident(self.ident_factory.mk_ident(lexeme))),
+            TokenKind::Label => Ok(Token::Label(self.ident_factory.mk_ident(lexeme))),
             TokenKind::Number(Radix::Decimal) => Ok(Token::Literal(Literal::Number(
                 i32::from_str_radix(lexeme, 10).unwrap(),
             ))),
@@ -206,13 +206,6 @@ impl<F: IdentFactory> TokenFactory<F> {
                 lexeme[1..(lexeme.len() - 1)].to_string(),
             ))),
         }
-    }
-
-    fn mk_keyword_or<G>(&mut self, g: G, lexeme: &str) -> Token<F::Ident, Literal<String>>
-    where
-        G: FnOnce(F::Ident) -> Token<F::Ident, Literal<String>>,
-    {
-        identify_keyword(lexeme).map_or_else(|| g(self.ident_factory.mk_ident(lexeme)), Into::into)
     }
 }
 
@@ -242,28 +235,6 @@ impl<B: Borrow<str>, F: IdentFactory> Iterator for Lexer<B, F> {
         })
     }
 }
-
-fn identify_keyword(word: &str) -> Option<Keyword> {
-    KEYWORDS
-        .iter()
-        .find(|(spelling, _)| spelling.eq_ignore_ascii_case(word))
-        .map(|(_, keyword)| *keyword)
-}
-
-#[derive(Clone, Copy)]
-enum Keyword {
-    Endm,
-}
-
-impl<I, R> From<Keyword> for Token<I, Literal<R>> {
-    fn from(keyword: Keyword) -> Self {
-        match keyword {
-            Keyword::Endm => Endm.into(),
-        }
-    }
-}
-
-const KEYWORDS: &[(&str, Keyword)] = &[("endm", Keyword::Endm)];
 
 #[cfg(test)]
 mod tests {
@@ -389,25 +360,6 @@ mod tests {
     #[test]
     fn lex_label_after_eol() {
         assert_eq_tokens("    \nlabel", [Eol.into(), Label("label".into())])
-    }
-
-    #[test]
-    fn lex_keywords_lowercase() {
-        lex_transformed_keywords(str::to_lowercase)
-    }
-
-    #[test]
-    fn lex_keywords_uppercase() {
-        lex_transformed_keywords(str::to_uppercase)
-    }
-
-    fn lex_transformed_keywords<F: Fn(&str) -> String>(f: F) {
-        for &(spelling, keyword) in KEYWORDS.iter() {
-            let token = match keyword {
-                Keyword::Endm => Endm.into(),
-            };
-            assert_eq_tokens(&f(spelling), [token])
-        }
     }
 
     #[test]

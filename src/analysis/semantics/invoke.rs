@@ -108,6 +108,7 @@ mod tests {
                     .into_macro_instr()
                     .did_parse_instr()
                     .did_parse_line(())
+                    .act_on_eos(())
             },
         );
         assert_eq!(
@@ -134,7 +135,7 @@ mod tests {
                     arg.push_token((arg_token.clone(), ()));
                     arg.exit()
                 };
-                call.did_parse_instr().did_parse_line(())
+                call.did_parse_instr().did_parse_line(()).act_on_eos(())
             },
         );
         assert_eq!(
