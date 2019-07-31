@@ -378,7 +378,7 @@ where
         match &mut self.frame {
             TokenFrame::MacroDef(state) => {
                 if ident.as_ref().eq_ignore_ascii_case("ENDM") {
-                    state.tokens.0.push(SimpleToken::Eof.into());
+                    state.tokens.0.push(SimpleToken::Eos.into());
                     state.tokens.1.push(span);
                     TokenLineRule::LineEnd(TokenFrameEndActions {
                         parent: self.parent,
@@ -773,7 +773,7 @@ mod tests {
                 .act_on_eos(())
         });
         let mut body = body.borrow().to_vec();
-        body.push(SimpleToken::Eof.into());
+        body.push(SimpleToken::Eos.into());
         assert_eq!(
             actions,
             [
@@ -904,7 +904,7 @@ mod tests {
     }
 
     #[test]
-    fn diagnose_eof_in_macro_body() {
+    fn diagnose_eos_in_macro_body() {
         let log = collect_semantic_actions::<_, MockSpan<_>>(|actions| {
             actions
                 .will_parse_line()

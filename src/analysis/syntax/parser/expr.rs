@@ -87,7 +87,7 @@ where
             Err((parser, error)) => {
                 let error = match error {
                     error @ ExprParsingError::NothingParsed => match parser.state.token.0 {
-                        Ok(Token::Simple(Eof)) | Ok(Token::Simple(Eol)) => {
+                        Ok(Token::Simple(Eos)) | Ok(Token::Simple(Eol)) => {
                             ExprParsingError::Other(Message::UnmatchedParenthesis.at(left).into())
                         }
                         _ => error,
@@ -177,7 +177,7 @@ where
 
     fn parse_atomic_expr(mut self) -> ParserResult<Self, C, S> {
         match self.state.token.0 {
-            Ok(Token::Simple(Eof)) | Ok(Token::Simple(Eol)) => {
+            Ok(Token::Simple(Eos)) | Ok(Token::Simple(Eol)) => {
                 Err((self, ExprParsingError::NothingParsed))
             }
             Ok(Token::Ident(ident)) => {
@@ -442,7 +442,7 @@ mod tests {
     }
 
     #[test]
-    fn diagnose_eof_for_rhs_operand() {
+    fn diagnose_eos_for_rhs_operand() {
         assert_eq_rpn_expr(
             input_tokens![Ident(IdentKind::Other), Plus],
             expr()

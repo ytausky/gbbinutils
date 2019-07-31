@@ -30,7 +30,7 @@ impl<I, L> Token<I, L> {
     }
 }
 
-const LINE_FOLLOW_SET: &[TokenKind] = &[Token::Simple(Eol), Token::Simple(Eof)];
+const LINE_FOLLOW_SET: &[TokenKind] = &[Token::Simple(Eol), Token::Simple(Eos)];
 
 pub(in crate::analysis) fn parse_src<I, L, E, T, C, S>(mut tokens: T, context: C) -> C
 where
@@ -45,7 +45,7 @@ where
     } = Parser::new(&mut tokens, context).parse_token_stream();
     assert_eq!(
         token.0.ok().as_ref().map(Token::kind),
-        Some(Token::Simple(SimpleToken::Eof))
+        Some(Token::Simple(SimpleToken::Eos))
     );
     context
 }
@@ -170,7 +170,7 @@ where
 {
     fn parse_unlabeled_stmt(mut self) -> ParentContextParser<'a, Id, L, E, I, C, S> {
         match self.state.token {
-            (Ok(Token::Simple(SimpleToken::Eol)), _) | (Ok(Token::Simple(SimpleToken::Eof)), _) => {
+            (Ok(Token::Simple(SimpleToken::Eol)), _) | (Ok(Token::Simple(SimpleToken::Eos)), _) => {
                 self.parse_line_terminator()
             }
             (Ok(Token::Ident(ident)), span) => {
@@ -220,7 +220,7 @@ where
                 bump!(self);
                 span
             }
-            (Ok(Token::Simple(SimpleToken::Eof)), span) => {
+            (Ok(Token::Simple(SimpleToken::Eos)), span) => {
                 self.state.parsed_eos = true;
                 span.clone()
             }
@@ -283,7 +283,7 @@ where
                 match parser.state.token {
                     (Ok(Token::Simple(Comma)), _)
                     | (Ok(Token::Simple(Eol)), _)
-                    | (Ok(Token::Simple(Eof)), _) => break,
+                    | (Ok(Token::Simple(Eos)), _) => break,
                     (Ok(other), span) => {
                         bump!(parser);
                         parser.context.push_token((other, span))
@@ -317,7 +317,7 @@ where
                     }
                 }
                 (Ok(Token::Simple(SimpleToken::Eol)), _)
-                | (Ok(Token::Simple(SimpleToken::Eof)), _) => return self.parse_line_terminator(),
+                | (Ok(Token::Simple(SimpleToken::Eos)), _) => return self.parse_line_terminator(),
                 (Ok(token), span) => {
                     bump!(self);
                     self.context.act_on_token(token, span)
@@ -346,7 +346,7 @@ where
         self = self.parse_list(delimiter, terminators, parser);
         if !self.token_is_in(terminators) {
             self = self.diagnose_unexpected_token();
-            while !self.token_is_in(terminators) && self.token_kind() != Some(Token::Simple(Eof)) {
+            while !self.token_is_in(terminators) && self.token_kind() != Some(Token::Simple(Eos)) {
                 bump!(self);
             }
         }
@@ -377,7 +377,7 @@ where
     }
 
     fn diagnose_unexpected_token(mut self) -> Self {
-        if self.token_kind() == Some(Token::Simple(Eof)) {
+        if self.token_kind() == Some(Token::Simple(Eos)) {
             if self.state.recovery.is_none() {
                 self.emit_diag(Message::UnexpectedEof.at(self.state.token.1.clone()));
                 self.state.recovery = Some(RecoveryState::DiagnosedEof)
@@ -796,9 +796,9 @@ mod tests {
     }
 
     #[test]
-    fn diagnose_eof_in_param_list() {
+    fn diagnose_eos_in_param_list() {
         assert_eq_actions(
-            input_tokens![label @ Label(IdentKind::Other), LParen, eof @ Eof],
+            input_tokens![label @ Label(IdentKind::Other), LParen, eos @ Eos],
             [instr_line(
                 vec![InstrLineAction::Label((
                     (
@@ -807,10 +807,10 @@ mod tests {
                     ),
                     vec![ParamsAction::EmitDiag(arg_error(
                         Message::UnexpectedEof,
-                        "eof",
+                        "eos",
                     ))],
                 ))],
-                "eof",
+                "eos",
             )],
         )
     }

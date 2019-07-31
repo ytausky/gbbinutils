@@ -18,7 +18,7 @@ pub enum Token<I, L> {
 pub enum SimpleToken {
     Comma,
     Dot,
-    Eof,
+    Eos,
     Eol,
     LParen,
     Minus,

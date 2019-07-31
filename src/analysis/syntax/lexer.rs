@@ -50,7 +50,7 @@ impl<B: Borrow<str>> Iterator for Scanner<B> {
             Some(self.lex_token())
         } else if !self.is_at_file_end {
             self.is_at_file_end = true;
-            Some((Ok(Eof.into()), self.range.end..self.range.end))
+            Some((Ok(Eos.into()), self.range.end..self.range.end))
         } else {
             None
         }
@@ -245,27 +245,27 @@ mod tests {
     use std::borrow::Borrow;
 
     #[test]
-    fn range_of_eof_in_empty_str() {
-        test_byte_range_at_eof("", [(Eof.into(), 0..0)])
+    fn range_of_eos_in_empty_str() {
+        test_byte_range_at_eos("", [(Eos.into(), 0..0)])
     }
 
     #[test]
-    fn range_of_eof_after_ident() {
-        test_byte_range_at_eof(
+    fn range_of_eos_after_ident() {
+        test_byte_range_at_eos(
             "    ident",
-            [(Ident("ident".into()), 4..9), (Eof.into(), 9..9)],
+            [(Ident("ident".into()), 4..9), (Eos.into(), 9..9)],
         )
     }
 
     #[test]
-    fn range_of_eof_after_trailing_whitespace() {
-        test_byte_range_at_eof(
+    fn range_of_eos_after_trailing_whitespace() {
+        test_byte_range_at_eos(
             "    ident ",
-            [(Ident("ident".into()), 4..9), (Eof.into(), 10..10)],
+            [(Ident("ident".into()), 4..9), (Eos.into(), 10..10)],
         )
     }
 
-    fn test_byte_range_at_eof(src: &'static str, tokens: impl Borrow<[(TestToken, Range<usize>)]>) {
+    fn test_byte_range_at_eos(src: &'static str, tokens: impl Borrow<[(TestToken, Range<usize>)]>) {
         let expected: Vec<_> = tokens
             .borrow()
             .iter()
@@ -278,16 +278,16 @@ mod tests {
         )
     }
 
-    fn assert_eq_tokens(src: &str, expected_without_eof: impl Borrow<[TestToken]>) {
-        assert_eq_lex_results(src, expected_without_eof.borrow().iter().cloned().map(Ok))
+    fn assert_eq_tokens(src: &str, expected_without_eos: impl Borrow<[TestToken]>) {
+        assert_eq_lex_results(src, expected_without_eos.borrow().iter().cloned().map(Ok))
     }
 
-    fn assert_eq_lex_results<I>(src: &str, expected_without_eof: I)
+    fn assert_eq_lex_results<I>(src: &str, expected_without_eos: I)
     where
         I: IntoIterator<Item = Result<TestToken, LexError>>,
     {
-        let mut expected: Vec<_> = expected_without_eof.into_iter().collect();
-        expected.push(Ok(Eof.into()));
+        let mut expected: Vec<_> = expected_without_eos.into_iter().collect();
+        expected.push(Ok(Eos.into()));
         assert_eq!(
             Lexer::new(src, ToString::to_string)
                 .map(|(t, _)| t)
