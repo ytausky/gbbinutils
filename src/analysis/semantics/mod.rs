@@ -378,7 +378,7 @@ where
         match &mut self.frame {
             TokenFrame::MacroDef(state) => {
                 if ident.as_ref().eq_ignore_ascii_case("ENDM") {
-                    state.tokens.0.push(SimpleToken::Eos.into());
+                    state.tokens.0.push(Sigil::Eos.into());
                     state.tokens.1.push(span);
                     TokenLineRule::LineEnd(TokenFrameEndActions {
                         parent: self.parent,
@@ -400,7 +400,7 @@ impl<S: Session> LineEndContext<S::Span> for TokenLineActions<S> {
     fn did_parse_line(mut self, span: S::Span) -> Self::ParentContext {
         match &mut self.frame {
             TokenFrame::MacroDef(state) => {
-                state.tokens.0.push(SimpleToken::Eol.into());
+                state.tokens.0.push(Sigil::Eol.into());
                 state.tokens.1.push(span);
                 self.parent.mode = Some(LineRule::TokenLine(self.frame));
             }
@@ -773,7 +773,7 @@ mod tests {
                 .act_on_eos(())
         });
         let mut body = body.borrow().to_vec();
-        body.push(SimpleToken::Eos.into());
+        body.push(Sigil::Eos.into());
         assert_eq!(
             actions,
             [

@@ -1,5 +1,5 @@
-use self::syntax::{ExprAtom, ExprContext, Operator, SimpleToken, Token, UnaryOperator};
-use self::SimpleToken::*;
+use self::syntax::{ExprAtom, ExprContext, Operator, Sigil, Token, UnaryOperator};
+use self::Sigil::*;
 
 use super::{Parser, LINE_FOLLOW_SET};
 
@@ -25,12 +25,12 @@ impl<I, L> Token<I, L> {
     fn as_suffix_operator(&self) -> Option<SuffixOperator> {
         use SuffixOperator::*;
         match self {
-            Token::Simple(Minus) => Some(Binary(BinOp::Minus)),
-            Token::Simple(LParen) => Some(FnCall),
-            Token::Simple(Pipe) => Some(Binary(BinOp::BitwiseOr)),
-            Token::Simple(Plus) => Some(Binary(BinOp::Plus)),
-            Token::Simple(Slash) => Some(Binary(BinOp::Division)),
-            Token::Simple(Star) => Some(Binary(BinOp::Multiplication)),
+            Token::Sigil(Minus) => Some(Binary(BinOp::Minus)),
+            Token::Sigil(LParen) => Some(FnCall),
+            Token::Sigil(Pipe) => Some(Binary(BinOp::BitwiseOr)),
+            Token::Sigil(Plus) => Some(Binary(BinOp::Plus)),
+            Token::Sigil(Slash) => Some(Binary(BinOp::Division)),
+            Token::Sigil(Star) => Some(Binary(BinOp::Multiplication)),
             _ => None,
         }
     }
@@ -87,7 +87,7 @@ where
             Err((parser, error)) => {
                 let error = match error {
                     error @ ExprParsingError::NothingParsed => match parser.state.token.0 {
-                        Ok(Token::Simple(Eos)) | Ok(Token::Simple(Eol)) => {
+                        Ok(Token::Sigil(Eos)) | Ok(Token::Sigil(Eol)) => {
                             ExprParsingError::Other(Message::UnmatchedParenthesis.at(left).into())
                         }
                         _ => error,
@@ -98,7 +98,7 @@ where
             }
         };
         match self.state.token {
-            (Ok(Token::Simple(RParen)), right) => {
+            (Ok(Token::Sigil(RParen)), right) => {
                 bump!(self);
                 let span = self.merge_spans(&left, &right);
                 self.context
@@ -145,8 +145,8 @@ where
         let mut args = 0;
         while let Ok(token) = &self.state.token.0 {
             match token {
-                Token::Simple(SimpleToken::RParen) => break,
-                Token::Simple(SimpleToken::Comma) => {
+                Token::Sigil(Sigil::RParen) => break,
+                Token::Sigil(Sigil::Comma) => {
                     bump!(self);
                     self = self.parse_fn_arg(&mut args)?;
                 }
@@ -167,7 +167,7 @@ where
 
     fn parse_primary_expr(mut self) -> ParserResult<Self, C, S> {
         match self.state.token {
-            (Ok(Token::Simple(LParen)), span) => {
+            (Ok(Token::Sigil(LParen)), span) => {
                 bump!(self);
                 self.parse_parenthesized_expression(span)
             }
@@ -177,7 +177,7 @@ where
 
     fn parse_atomic_expr(mut self) -> ParserResult<Self, C, S> {
         match self.state.token.0 {
-            Ok(Token::Simple(Eos)) | Ok(Token::Simple(Eol)) => {
+            Ok(Token::Sigil(Eos)) | Ok(Token::Sigil(Eol)) => {
                 Err((self, ExprParsingError::NothingParsed))
             }
             Ok(Token::Ident(ident)) => {
@@ -192,7 +192,7 @@ where
                 bump!(self);
                 Ok(self)
             }
-            Ok(Token::Simple(SimpleToken::Dot)) => {
+            Ok(Token::Sigil(Sigil::Dot)) => {
                 self.context
                     .push_atom((ExprAtom::LocationCounter, self.state.token.1));
                 bump!(self);
@@ -362,7 +362,7 @@ mod tests {
             name @ Ident(IdentKind::Other),
             left @ LParen,
             arg1 @ Ident(IdentKind::Other),
-            Simple(Comma),
+            Sigil(Comma),
             arg2 @ Ident(IdentKind::Other),
             right @ RParen
         ];
@@ -379,7 +379,7 @@ mod tests {
             name @ Ident(IdentKind::Other),
             left @ LParen,
             right @ RParen,
-            plus @ Simple(Plus),
+            plus @ Sigil(Plus),
             literal @ Literal(())
         ];
         let expected = expr()
@@ -397,7 +397,7 @@ mod tests {
     fn fn_call_precedes_multiplication() {
         let tokens = input_tokens![
             literal @ Literal(()),
-            star @ Simple(Star),
+            star @ Sigil(Star),
             name @ Ident(IdentKind::Other),
             left @ LParen,
             right @ RParen,
@@ -415,7 +415,7 @@ mod tests {
 
     #[test]
     fn parse_location_counter() {
-        let tokens = input_tokens![dot @ Simple(Dot)];
+        let tokens = input_tokens![dot @ Sigil(Dot)];
         let expected = expr().location_counter("dot");
         assert_eq_rpn_expr(tokens, expected)
     }

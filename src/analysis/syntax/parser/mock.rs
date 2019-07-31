@@ -1,4 +1,4 @@
-use super::SimpleToken::*;
+use super::Sigil::*;
 use super::Token::*;
 use super::{ExprAtom, Operator, Token, UnaryOperator};
 
@@ -588,7 +588,7 @@ pub fn mk_sym_token(id: impl Into<TokenRef>, token: Token<IdentKind, ()>) -> (Sy
             Ident(kind) => Ident(SymIdent(kind, token_ref.clone())),
             Label(kind) => Label(SymIdent(kind, token_ref.clone())),
             Literal(()) => Literal(SymLiteral(token_ref.clone())),
-            Simple(simple) => Simple(simple),
+            Sigil(sigil) => Sigil(sigil),
         },
         token_ref,
     )

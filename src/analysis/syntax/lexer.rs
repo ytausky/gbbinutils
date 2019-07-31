@@ -1,5 +1,5 @@
-use super::SimpleToken::*;
-use super::{IdentFactory, SimpleToken, Token};
+use super::Sigil::*;
+use super::{IdentFactory, Sigil, Token};
 use crate::analysis::Literal;
 
 use std::borrow::Borrow;
@@ -11,13 +11,13 @@ enum TokenKind {
     Ident,
     Label,
     Number(Radix),
-    Simple(SimpleToken),
+    Sigil(Sigil),
     String,
 }
 
-impl From<SimpleToken> for TokenKind {
-    fn from(simple: SimpleToken) -> Self {
-        TokenKind::Simple(simple)
+impl From<Sigil> for TokenKind {
+    fn from(sigil: Sigil) -> Self {
+        TokenKind::Sigil(sigil)
     }
 }
 
@@ -201,7 +201,7 @@ impl<F: IdentFactory> TokenFactory<F> {
                 Ok(n) => Ok(Token::Literal(Literal::Number(n))),
                 Err(_) => Err(LexError::NoDigits),
             },
-            TokenKind::Simple(simple) => Ok(Token::Simple(simple)),
+            TokenKind::Sigil(sigil) => Ok(Token::Sigil(sigil)),
             TokenKind::String => Ok(Token::Literal(Literal::String(
                 lexeme[1..(lexeme.len() - 1)].to_string(),
             ))),

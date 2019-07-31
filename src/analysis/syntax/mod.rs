@@ -11,11 +11,11 @@ pub enum Token<I, L> {
     Ident(I),
     Label(I),
     Literal(L),
-    Simple(SimpleToken),
+    Sigil(Sigil),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum SimpleToken {
+pub enum Sigil {
     Comma,
     Dot,
     Eos,
@@ -29,9 +29,9 @@ pub enum SimpleToken {
     Star,
 }
 
-impl<I, L> From<SimpleToken> for Token<I, L> {
-    fn from(simple: SimpleToken) -> Self {
-        Token::Simple(simple)
+impl<I, L> From<Sigil> for Token<I, L> {
+    fn from(sigil: Sigil) -> Self {
+        Token::Sigil(sigil)
     }
 }
 

@@ -1,4 +1,4 @@
-use super::SimpleToken::*;
+use super::Sigil::*;
 use super::*;
 use crate::diag::span::StripSpan;
 use crate::diag::{EmitDiag, Message};
@@ -25,12 +25,12 @@ impl<I, L> Token<I, L> {
             Ident(_) => Ident(()),
             Label(_) => Label(()),
             Literal(_) => Literal(()),
-            Simple(simple) => Simple(simple),
+            Sigil(sigil) => Sigil(sigil),
         }
     }
 }
 
-const LINE_FOLLOW_SET: &[TokenKind] = &[Token::Simple(Eol), Token::Simple(Eos)];
+const LINE_FOLLOW_SET: &[TokenKind] = &[Token::Sigil(Eol), Token::Sigil(Eos)];
 
 pub(in crate::analysis) fn parse_src<I, L, E, T, C, S>(mut tokens: T, context: C) -> C
 where
@@ -45,7 +45,7 @@ where
     } = Parser::new(&mut tokens, context).parse_token_stream();
     assert_eq!(
         token.0.ok().as_ref().map(Token::kind),
-        Some(Token::Simple(SimpleToken::Eos))
+        Some(Token::Sigil(Sigil::Eos))
     );
     context
 }
@@ -170,7 +170,7 @@ where
 {
     fn parse_unlabeled_stmt(mut self) -> ParentContextParser<'a, Id, L, E, I, C, S> {
         match self.state.token {
-            (Ok(Token::Simple(SimpleToken::Eol)), _) | (Ok(Token::Simple(SimpleToken::Eos)), _) => {
+            (Ok(Token::Sigil(Sigil::Eol)), _) | (Ok(Token::Sigil(Sigil::Eos)), _) => {
                 self.parse_line_terminator()
             }
             (Ok(Token::Ident(ident)), span) => {
@@ -215,12 +215,12 @@ where
 {
     fn parse_line_terminator(mut self) -> ParentContextParser<'a, Id, L, E, I, C, S> {
         let span = match &self.state.token {
-            (Ok(Token::Simple(SimpleToken::Eol)), _) => {
+            (Ok(Token::Sigil(Sigil::Eol)), _) => {
                 let span = self.state.token.1;
                 bump!(self);
                 span
             }
-            (Ok(Token::Simple(SimpleToken::Eos)), span) => {
+            (Ok(Token::Sigil(Sigil::Eos)), span) => {
                 self.state.parsed_eos = true;
                 span.clone()
             }
@@ -281,9 +281,9 @@ where
             let mut parser = p.change_context(MacroCallContext::enter_macro_arg);
             loop {
                 match parser.state.token {
-                    (Ok(Token::Simple(Comma)), _)
-                    | (Ok(Token::Simple(Eol)), _)
-                    | (Ok(Token::Simple(Eos)), _) => break,
+                    (Ok(Token::Sigil(Comma)), _)
+                    | (Ok(Token::Sigil(Eol)), _)
+                    | (Ok(Token::Sigil(Eos)), _) => break,
                     (Ok(other), span) => {
                         bump!(parser);
                         parser.context.push_token((other, span))
@@ -316,8 +316,9 @@ where
                         }
                     }
                 }
-                (Ok(Token::Simple(SimpleToken::Eol)), _)
-                | (Ok(Token::Simple(SimpleToken::Eos)), _) => return self.parse_line_terminator(),
+                (Ok(Token::Sigil(Sigil::Eol)), _) | (Ok(Token::Sigil(Sigil::Eos)), _) => {
+                    return self.parse_line_terminator()
+                }
                 (Ok(token), span) => {
                     bump!(self);
                     self.context.act_on_token(token, span)
@@ -346,7 +347,7 @@ where
         self = self.parse_list(delimiter, terminators, parser);
         if !self.token_is_in(terminators) {
             self = self.diagnose_unexpected_token();
-            while !self.token_is_in(terminators) && self.token_kind() != Some(Token::Simple(Eos)) {
+            while !self.token_is_in(terminators) && self.token_kind() != Some(Token::Sigil(Eos)) {
                 bump!(self);
             }
         }
@@ -377,7 +378,7 @@ where
     }
 
     fn diagnose_unexpected_token(mut self) -> Self {
-        if self.token_kind() == Some(Token::Simple(Eos)) {
+        if self.token_kind() == Some(Token::Sigil(Eos)) {
             if self.state.recovery.is_none() {
                 self.emit_diag(Message::UnexpectedEof.at(self.state.token.1.clone()));
                 self.state.recovery = Some(RecoveryState::DiagnosedEof)
