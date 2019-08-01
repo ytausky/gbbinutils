@@ -1,18 +1,21 @@
-use super::{InstrLineActions, SemanticActions};
+use super::{InstrLineSemantics, TokenStreamSemantics};
 
 use crate::analysis::session::{MacroArgs, Session};
-use crate::analysis::syntax::{InstrEndContext, MacroCallContext, TokenSeqContext};
+use crate::analysis::syntax::{InstrFinalizer, MacroArgActions, MacroInstrActions};
 use crate::analysis::{SemanticToken, TokenSeq};
 
-pub(in crate::analysis) struct MacroCallActions<S: Session> {
-    parent: InstrLineActions<S>,
+pub(in crate::analysis) struct MacroInstrSemantics<S: Session> {
+    parent: InstrLineSemantics<S>,
     name: (S::MacroEntry, S::Span),
     args: MacroArgs<S::Ident, S::StringRef, S::Span>,
 }
 
-impl<S: Session> MacroCallActions<S> {
-    pub fn new(parent: InstrLineActions<S>, name: (S::MacroEntry, S::Span)) -> MacroCallActions<S> {
-        MacroCallActions {
+impl<S: Session> MacroInstrSemantics<S> {
+    pub fn new(
+        parent: InstrLineSemantics<S>,
+        name: (S::MacroEntry, S::Span),
+    ) -> MacroInstrSemantics<S> {
+        MacroInstrSemantics {
             parent,
             name,
             args: (Vec::new(), Vec::new()),
@@ -26,22 +29,22 @@ impl<S: Session> MacroCallActions<S> {
 }
 
 delegate_diagnostics! {
-    {S: Session}, MacroCallActions<S>, {parent}, InstrLineActions<S>, S::Span
+    {S: Session}, MacroInstrSemantics<S>, {parent}, InstrLineSemantics<S>, S::Span
 }
 
-impl<S: Session> MacroCallContext<S::Span> for MacroCallActions<S> {
+impl<S: Session> MacroInstrActions<S::Span> for MacroInstrSemantics<S> {
     type Token = SemanticToken<S::Ident, S::StringRef>;
-    type MacroArgContext = MacroArgContext<S>;
+    type MacroArgActions = MacroArgSemantics<S>;
 
-    fn enter_macro_arg(self) -> Self::MacroArgContext {
-        MacroArgContext::new(self)
+    fn will_parse_macro_arg(self) -> Self::MacroArgActions {
+        MacroArgSemantics::new(self)
     }
 }
 
-impl<S: Session> InstrEndContext<S::Span> for MacroCallActions<S> {
-    type ParentContext = SemanticActions<S>;
+impl<S: Session> InstrFinalizer<S::Span> for MacroInstrSemantics<S> {
+    type Next = TokenStreamSemantics<S>;
 
-    fn did_parse_instr(self) -> Self::ParentContext {
+    fn did_parse_instr(self) -> Self::Next {
         let Self {
             mut parent,
             name,
@@ -52,14 +55,14 @@ impl<S: Session> InstrEndContext<S::Span> for MacroCallActions<S> {
     }
 }
 
-pub(in crate::analysis) struct MacroArgContext<S: Session> {
+pub(in crate::analysis) struct MacroArgSemantics<S: Session> {
     tokens: TokenSeq<S::Ident, S::StringRef, S::Span>,
-    parent: MacroCallActions<S>,
+    parent: MacroInstrSemantics<S>,
 }
 
-impl<S: Session> MacroArgContext<S> {
-    fn new(parent: MacroCallActions<S>) -> MacroArgContext<S> {
-        MacroArgContext {
+impl<S: Session> MacroArgSemantics<S> {
+    fn new(parent: MacroInstrSemantics<S>) -> MacroArgSemantics<S> {
+        Self {
             tokens: (Vec::new(), Vec::new()),
             parent,
         }
@@ -67,19 +70,19 @@ impl<S: Session> MacroArgContext<S> {
 }
 
 delegate_diagnostics! {
-    {S: Session}, MacroArgContext<S>, {parent}, MacroCallActions<S>, S::Span
+    {S: Session}, MacroArgSemantics<S>, {parent}, MacroInstrSemantics<S>, S::Span
 }
 
-impl<S: Session> TokenSeqContext<S::Span> for MacroArgContext<S> {
+impl<S: Session> MacroArgActions<S::Span> for MacroArgSemantics<S> {
     type Token = SemanticToken<S::Ident, S::StringRef>;
-    type Parent = MacroCallActions<S>;
+    type Next = MacroInstrSemantics<S>;
 
-    fn push_token(&mut self, token: (Self::Token, S::Span)) {
+    fn act_on_token(&mut self, token: (Self::Token, S::Span)) {
         self.tokens.0.push(token.0);
         self.tokens.1.push(token.1);
     }
 
-    fn exit(mut self) -> Self::Parent {
+    fn did_parse_macro_arg(mut self) -> Self::Next {
         self.parent.push_arg(self.tokens);
         self.parent
     }
@@ -92,7 +95,7 @@ mod tests {
     use crate::analysis::resolve::ResolvedIdent;
     use crate::analysis::semantics::tests::*;
     use crate::analysis::session::{MockMacroId, SessionEvent};
-    use crate::analysis::syntax::{InstrContext, LineEndContext, Token, TokenStreamContext};
+    use crate::analysis::syntax::{InstrActions, LineFinalizer, Token, TokenStreamActions};
 
     #[test]
     fn call_nullary_macro() {
@@ -131,9 +134,9 @@ mod tests {
                     .will_parse_instr(name.into(), ())
                     .into_macro_instr();
                 call = {
-                    let mut arg = call.enter_macro_arg();
-                    arg.push_token((arg_token.clone(), ()));
-                    arg.exit()
+                    let mut arg = call.will_parse_macro_arg();
+                    arg.act_on_token((arg_token.clone(), ()));
+                    arg.did_parse_macro_arg()
                 };
                 call.did_parse_instr().did_parse_line(()).act_on_eos(())
             },

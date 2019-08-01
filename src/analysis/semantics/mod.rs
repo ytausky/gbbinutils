@@ -1,5 +1,5 @@
 use self::builtin_instr::{BuiltinInstr, Directive, *};
-use self::invoke::MacroCallActions;
+use self::macro_instr::MacroInstrSemantics;
 use self::params::*;
 
 use super::backend::{Finish, LocationCounter, PushOp};
@@ -15,7 +15,7 @@ use crate::diag::{EmitDiag, Message};
 pub use self::mock::*;
 
 mod builtin_instr;
-mod invoke;
+mod macro_instr;
 mod params;
 
 pub struct SemanticAnalyzer;
@@ -32,17 +32,17 @@ where
     {
         let session = partial.into_session(self);
         let Done(session) =
-            super::syntax::parse_token_seq(tokens.into_iter(), SemanticActions::new(session));
+            super::syntax::parse_token_seq(tokens.into_iter(), TokenStreamSemantics::new(session));
         session.into()
     }
 }
 
-pub(super) struct SemanticActions<S: Session> {
-    mode: LineRule<InstrLineActions<S>, TokenLineActions<S>>,
+pub(super) struct TokenStreamSemantics<S: Session> {
+    mode: LineRule<InstrLineSemantics<S>, TokenLineSemantics<S>>,
 }
 
-type InstrLineActions<S> = SemanticState<InstrLineState<S>, S>;
-type TokenLineActions<S> = SemanticState<TokenFrame<S>, S>;
+type InstrLineSemantics<S> = SemanticState<InstrLineState<S>, S>;
+type TokenLineSemantics<S> = SemanticState<TokenContext<S>, S>;
 
 pub(super) struct SemanticState<L, S: Session> {
     line: L,
@@ -77,7 +77,7 @@ pub(super) struct InstrLineState<S: Session> {
     label: Option<Label<S::Ident, S::Span>>,
 }
 
-impl<S: Session> InstrLineActions<S> {
+impl<S: Session> InstrLineSemantics<S> {
     fn new(session: S) -> Self {
         Self {
             line: InstrLineState { label: None },
@@ -98,7 +98,7 @@ impl<S: Session> InstrLineActions<S> {
     }
 }
 
-pub(super) enum TokenFrame<S: Session> {
+pub(super) enum TokenContext<S: Session> {
     MacroDef(MacroDefState<S>),
 }
 
@@ -116,10 +116,10 @@ impl<S: Session> MacroDefState<S> {
     }
 }
 
-impl<S: Session> SemanticActions<S> {
-    pub fn new(session: S) -> SemanticActions<S> {
-        SemanticActions {
-            mode: LineRule::InstrLine(InstrLineActions::new(session)),
+impl<S: Session> TokenStreamSemantics<S> {
+    pub fn new(session: S) -> TokenStreamSemantics<S> {
+        TokenStreamSemantics {
+            mode: LineRule::InstrLine(InstrLineSemantics::new(session)),
         }
     }
 
@@ -132,44 +132,45 @@ impl<S: Session> SemanticActions<S> {
 }
 
 delegate_diagnostics! {
-    {S: Session}, SemanticActions<S>, {session()}, S, S::Span
+    {S: Session}, TokenStreamSemantics<S>, {session()}, S, S::Span
 }
 
-impl<S: Session> From<InstrLineActions<S>> for SemanticActions<S> {
-    fn from(actions: InstrLineActions<S>) -> Self {
+impl<S: Session> From<InstrLineSemantics<S>> for TokenStreamSemantics<S> {
+    fn from(actions: InstrLineSemantics<S>) -> Self {
         Self {
             mode: LineRule::InstrLine(actions),
         }
     }
 }
 
-impl<S: Session> From<TokenLineActions<S>> for SemanticActions<S> {
-    fn from(actions: TokenLineActions<S>) -> Self {
+impl<S: Session> From<TokenLineSemantics<S>> for TokenStreamSemantics<S> {
+    fn from(actions: TokenLineSemantics<S>) -> Self {
         Self {
             mode: LineRule::TokenLine(actions),
         }
     }
 }
 
-impl<S: Session> TokenStreamContext<S::Ident, Literal<S::StringRef>, S::Span> for SemanticActions<S>
+impl<S: Session> TokenStreamActions<S::Ident, Literal<S::StringRef>, S::Span>
+    for TokenStreamSemantics<S>
 where
     S::Ident: AsRef<str>,
 {
-    type InstrLineContext = InstrLineActions<S>;
-    type TokenLineContext = TokenLineActions<S>;
-    type TokenLineEndContext = TokenFrameEndActions<S>;
-    type FinalContext = Done<S>;
+    type InstrLineActions = InstrLineSemantics<S>;
+    type TokenLineActions = TokenLineSemantics<S>;
+    type TokenLineFinalizer = TokenContextFinalizationSemantics<S>;
+    type Next = Done<S>;
 
-    fn will_parse_line(self) -> LineRule<Self::InstrLineContext, Self::TokenLineContext> {
+    fn will_parse_line(self) -> LineRule<Self::InstrLineActions, Self::TokenLineActions> {
         self.mode
     }
 
-    fn act_on_eos(self, span: S::Span) -> Self::FinalContext {
+    fn act_on_eos(self, span: S::Span) -> Self::Next {
         match self.mode {
             LineRule::InstrLine(actions) => Done(actions.define_label_if_present().session),
             LineRule::TokenLine(mut actions) => {
                 match actions.line {
-                    TokenFrame::MacroDef(_) => actions.emit_diag(Message::UnexpectedEof.at(span)),
+                    TokenContext::MacroDef(_) => actions.emit_diag(Message::UnexpectedEof.at(span)),
                 }
                 Done(actions.session)
             }
@@ -179,27 +180,28 @@ where
 
 pub(super) struct Done<S>(S);
 
-impl<S: Session> InstrLineContext<S::Ident, Literal<S::StringRef>, S::Span> for InstrLineActions<S>
+impl<S: Session> InstrLineActions<S::Ident, Literal<S::StringRef>, S::Span>
+    for InstrLineSemantics<S>
 where
     S::Ident: AsRef<str>,
 {
-    type LabelContext = LabelActions<S>;
-    type InstrContext = Self;
+    type LabelActions = LabelSemantics<S>;
+    type InstrActions = Self;
 
-    fn will_parse_label(mut self, label: (S::Ident, S::Span)) -> Self::LabelContext {
+    fn will_parse_label(mut self, label: (S::Ident, S::Span)) -> Self::LabelActions {
         self = self.define_label_if_present();
-        LabelActions::new(self, label)
+        LabelSemantics::new(self, label)
     }
 }
 
-pub(super) struct LabelActions<S: Session> {
-    parent: InstrLineActions<S>,
+pub(super) struct LabelSemantics<S: Session> {
+    parent: InstrLineSemantics<S>,
     label: (S::Ident, S::Span),
     params: Params<S::Ident, S::Span>,
 }
 
-impl<S: Session> LabelActions<S> {
-    fn new(parent: InstrLineActions<S>, label: (S::Ident, S::Span)) -> Self {
+impl<S: Session> LabelSemantics<S> {
+    fn new(parent: InstrLineSemantics<S>, label: (S::Ident, S::Span)) -> Self {
         Self {
             parent,
             label,
@@ -209,18 +211,18 @@ impl<S: Session> LabelActions<S> {
 }
 
 delegate_diagnostics! {
-    {S: Session}, LabelActions<S>, {parent}, S, S::Span
+    {S: Session}, LabelSemantics<S>, {parent}, S, S::Span
 }
 
-impl<S: Session> LabelContext<S::Ident, S::Span> for LabelActions<S> {
-    type ParentContext = InstrLineActions<S>;
+impl<S: Session> LabelActions<S::Ident, S::Span> for LabelSemantics<S> {
+    type Next = InstrLineSemantics<S>;
 
     fn act_on_param(&mut self, (ident, span): (S::Ident, S::Span)) {
         self.params.0.push(ident);
         self.params.1.push(span)
     }
 
-    fn did_parse_label(mut self) -> Self::ParentContext {
+    fn did_parse_label(mut self) -> Self::Next {
         self.parent.line.label = Some((self.label, self.params));
         self.parent
     }
@@ -228,32 +230,32 @@ impl<S: Session> LabelContext<S::Ident, S::Span> for LabelActions<S> {
 
 type Label<I, S> = ((I, S), Params<I, S>);
 
-impl<S: Session> InstrContext<S::Ident, Literal<S::StringRef>, S::Span> for InstrLineActions<S>
+impl<S: Session> InstrActions<S::Ident, Literal<S::StringRef>, S::Span> for InstrLineSemantics<S>
 where
     S::Ident: AsRef<str>,
 {
-    type BuiltinInstrContext = BuiltinInstrActions<S>;
-    type MacroCallContext = MacroCallActions<S>;
-    type ErrorContext = Self;
-    type LineEndContext = SemanticActions<S>;
+    type BuiltinInstrActions = BuiltinInstrSemantics<S>;
+    type MacroInstrActions = MacroInstrSemantics<S>;
+    type ErrorActions = Self;
+    type LineFinalizer = TokenStreamSemantics<S>;
 
     fn will_parse_instr(
         mut self,
         ident: S::Ident,
         span: S::Span,
-    ) -> InstrRule<Self::BuiltinInstrContext, Self::MacroCallContext, Self> {
+    ) -> InstrRule<Self::BuiltinInstrActions, Self::MacroInstrActions, Self> {
         match KEYS
             .iter()
             .find(|(spelling, _)| spelling.eq_ignore_ascii_case(ident.as_ref()))
             .map(|(_, entry)| entry)
         {
             Some(KeyEntry::BuiltinInstr(command)) => {
-                InstrRule::BuiltinInstr(BuiltinInstrActions::new(self, (command.clone(), span)))
+                InstrRule::BuiltinInstr(BuiltinInstrSemantics::new(self, (command.clone(), span)))
             }
             None => match self.session.get(&ident) {
                 Some(ResolvedIdent::Macro(id)) => {
                     self = self.define_label_if_present();
-                    InstrRule::MacroInstr(MacroCallActions::new(self, (id, span)))
+                    InstrRule::MacroInstr(MacroInstrSemantics::new(self, (id, span)))
                 }
                 Some(ResolvedIdent::Backend(_)) => {
                     let name = self.strip_span(&span);
@@ -270,26 +272,26 @@ where
     }
 }
 
-impl<S: Session> InstrEndContext<S::Span> for InstrLineActions<S> {
-    type ParentContext = SemanticActions<S>;
+impl<S: Session> InstrFinalizer<S::Span> for InstrLineSemantics<S> {
+    type Next = TokenStreamSemantics<S>;
 
-    fn did_parse_instr(self) -> Self::ParentContext {
+    fn did_parse_instr(self) -> Self::Next {
         self.into()
     }
 }
 
-impl<S: Session> LineEndContext<S::Span> for InstrLineActions<S> {
-    type ParentContext = SemanticActions<S>;
+impl<S: Session> LineFinalizer<S::Span> for InstrLineSemantics<S> {
+    type Next = TokenStreamSemantics<S>;
 
-    fn did_parse_line(self, _: S::Span) -> Self::ParentContext {
+    fn did_parse_line(self, _: S::Span) -> Self::Next {
         self.into()
     }
 }
 
-impl<S: Session> LineEndContext<S::Span> for SemanticActions<S> {
-    type ParentContext = Self;
+impl<S: Session> LineFinalizer<S::Span> for TokenStreamSemantics<S> {
+    type Next = Self;
 
-    fn did_parse_line(self, _: S::Span) -> Self::ParentContext {
+    fn did_parse_line(self, _: S::Span) -> Self::Next {
         self
     }
 }
@@ -376,15 +378,16 @@ const KEYS: &[(&str, KeyEntry)] = &[
     ("xor", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(XOR))),
 ];
 
-impl<S: Session> TokenLineContext<S::Ident, Literal<S::StringRef>, S::Span> for TokenLineActions<S>
+impl<S: Session> TokenLineActions<S::Ident, Literal<S::StringRef>, S::Span>
+    for TokenLineSemantics<S>
 where
     S::Ident: AsRef<str>,
 {
-    type SemanticContextTerminationContext = TokenFrameEndActions<S>;
+    type ContextFinalizer = TokenContextFinalizationSemantics<S>;
 
     fn act_on_token(&mut self, token: SemanticToken<S::Ident, S::StringRef>, span: S::Span) {
         match &mut self.line {
-            TokenFrame::MacroDef(state) => {
+            TokenContext::MacroDef(state) => {
                 state.tokens.0.push(token);
                 state.tokens.1.push(span);
             }
@@ -395,13 +398,13 @@ where
         mut self,
         ident: S::Ident,
         span: S::Span,
-    ) -> TokenLineRule<Self, Self::SemanticContextTerminationContext> {
+    ) -> TokenLineRule<Self, Self::ContextFinalizer> {
         match &mut self.line {
-            TokenFrame::MacroDef(state) => {
+            TokenContext::MacroDef(state) => {
                 if ident.as_ref().eq_ignore_ascii_case("ENDM") {
                     state.tokens.0.push(Sigil::Eos.into());
                     state.tokens.1.push(span);
-                    TokenLineRule::LineEnd(TokenFrameEndActions { parent: self })
+                    TokenLineRule::LineEnd(TokenContextFinalizationSemantics { parent: self })
                 } else {
                     state.tokens.0.push(Token::Ident(ident));
                     state.tokens.1.push(span);
@@ -412,12 +415,12 @@ where
     }
 }
 
-impl<S: Session> LineEndContext<S::Span> for TokenLineActions<S> {
-    type ParentContext = SemanticActions<S>;
+impl<S: Session> LineFinalizer<S::Span> for TokenLineSemantics<S> {
+    type Next = TokenStreamSemantics<S>;
 
-    fn did_parse_line(mut self, span: S::Span) -> Self::ParentContext {
+    fn did_parse_line(mut self, span: S::Span) -> Self::Next {
         match &mut self.line {
-            TokenFrame::MacroDef(state) => {
+            TokenContext::MacroDef(state) => {
                 state.tokens.0.push(Sigil::Eol.into());
                 state.tokens.1.push(span);
             }
@@ -426,20 +429,20 @@ impl<S: Session> LineEndContext<S::Span> for TokenLineActions<S> {
     }
 }
 
-pub(super) struct TokenFrameEndActions<S: Session> {
-    parent: TokenLineActions<S>,
+pub(super) struct TokenContextFinalizationSemantics<S: Session> {
+    parent: TokenLineSemantics<S>,
 }
 
 delegate_diagnostics! {
-    {S: Session}, TokenFrameEndActions<S>, {parent}, S, S::Span
+    {S: Session}, TokenContextFinalizationSemantics<S>, {parent}, S, S::Span
 }
 
-impl<S: Session> LineEndContext<S::Span> for TokenFrameEndActions<S> {
-    type ParentContext = SemanticActions<S>;
+impl<S: Session> LineFinalizer<S::Span> for TokenContextFinalizationSemantics<S> {
+    type Next = TokenStreamSemantics<S>;
 
-    fn did_parse_line(mut self, _: S::Span) -> Self::ParentContext {
+    fn did_parse_line(mut self, _: S::Span) -> Self::Next {
         match self.parent.line {
-            TokenFrame::MacroDef(state) => {
+            TokenContext::MacroDef(state) => {
                 if let Some((name, params)) = state.label {
                     let tokens = state.tokens;
                     let id = self.parent.session.define_macro(name.1, params, tokens);
@@ -447,7 +450,7 @@ impl<S: Session> LineEndContext<S::Span> for TokenFrameEndActions<S> {
                 }
             }
         }
-        SemanticActions::new(self.parent.session)
+        TokenStreamSemantics::new(self.parent.session)
     }
 }
 
@@ -548,13 +551,13 @@ mod tests {
                 .into_instr_line()
                 .will_parse_instr("LD".into(), ())
                 .into_builtin_instr();
-            let mut arg1 = command.add_argument();
-            arg1.push_atom((ExprAtom::Ident("B".into()), ()));
-            command = arg1.exit();
-            let mut arg2 = command.add_argument();
-            arg2.push_atom((ExprAtom::Ident("HL".into()), ()));
-            arg2.apply_operator((Operator::Unary(UnaryOperator::Parentheses), ()));
-            arg2.exit()
+            let mut arg1 = command.will_parse_arg();
+            arg1.act_on_atom((ExprAtom::Ident("B".into()), ()));
+            command = arg1.did_parse_arg();
+            let mut arg2 = command.will_parse_arg();
+            arg2.act_on_atom((ExprAtom::Ident("HL".into()), ()));
+            arg2.act_on_operator((Operator::Unary(UnaryOperator::Parentheses), ()));
+            arg2.did_parse_arg()
                 .did_parse_instr()
                 .did_parse_line(())
                 .act_on_eos(())
@@ -589,11 +592,11 @@ mod tests {
                 .into_instr_line()
                 .will_parse_instr("RST".into(), ())
                 .into_builtin_instr();
-            let mut expr = command.add_argument();
-            expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
-            expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
-            expr.apply_operator((Operator::Binary(op), ()));
-            expr.exit()
+            let mut expr = command.will_parse_arg();
+            expr.act_on_atom((ExprAtom::Literal(Literal::Number(1)), ()));
+            expr.act_on_atom((ExprAtom::Literal(Literal::Number(1)), ()));
+            expr.act_on_operator((Operator::Binary(op), ()));
+            expr.did_parse_arg()
                 .did_parse_instr()
                 .did_parse_line(())
                 .act_on_eos(())
@@ -620,11 +623,11 @@ mod tests {
                 .into_instr_line()
                 .will_parse_instr("RST".into(), ())
                 .into_builtin_instr();
-            let mut expr = command.add_argument();
-            expr.push_atom((ExprAtom::Ident(ident.clone()), ()));
-            expr.push_atom((ExprAtom::Literal(Literal::Number(1)), ()));
-            expr.apply_operator((Operator::FnCall(1), ()));
-            expr.exit()
+            let mut expr = command.will_parse_arg();
+            expr.act_on_atom((ExprAtom::Ident(ident.clone()), ()));
+            expr.act_on_atom((ExprAtom::Literal(Literal::Number(1)), ()));
+            expr.act_on_operator((Operator::FnCall(1), ()));
+            expr.did_parse_arg()
                 .did_parse_instr()
                 .did_parse_line(())
                 .act_on_eos(())
@@ -652,9 +655,9 @@ mod tests {
                 .into_instr_line()
                 .will_parse_instr("DW".into(), ())
                 .into_builtin_instr()
-                .add_argument();
-            arg.push_atom((ExprAtom::Ident(label.into()), ()));
-            arg.exit()
+                .will_parse_arg();
+            arg.act_on_atom((ExprAtom::Ident(label.into()), ()));
+            arg.did_parse_arg()
                 .did_parse_instr()
                 .did_parse_line(())
                 .act_on_eos(())
@@ -698,10 +701,10 @@ mod tests {
                 .into_instr_line()
                 .will_parse_instr("ORG".into(), ())
                 .into_builtin_instr()
-                .add_argument();
-            actions.push_atom((ExprAtom::LocationCounter, ()));
+                .will_parse_arg();
+            actions.act_on_atom((ExprAtom::LocationCounter, ()));
             actions
-                .exit()
+                .did_parse_arg()
                 .did_parse_instr()
                 .did_parse_line(())
                 .act_on_eos(())
@@ -807,9 +810,9 @@ mod tests {
                 .into_instr_line()
                 .will_parse_instr("NOP".into(), ())
                 .into_builtin_instr()
-                .add_argument();
-            arg.push_atom((ExprAtom::Ident("A".into()), ()));
-            arg.exit()
+                .will_parse_arg();
+            arg.act_on_atom((ExprAtom::Ident("A".into()), ()));
+            arg.did_parse_arg()
                 .did_parse_instr()
                 .did_parse_line(())
                 .act_on_eos(())
@@ -850,9 +853,9 @@ mod tests {
                 .into_instr_line()
                 .will_parse_instr("ADD".into(), ())
                 .into_builtin_instr()
-                .add_argument();
+                .will_parse_arg();
             expr.emit_diag(diagnostic.clone());
-            expr.exit()
+            expr.did_parse_arg()
                 .did_parse_instr()
                 .did_parse_line(())
                 .act_on_eos(())
@@ -947,26 +950,26 @@ mod tests {
 
     pub(super) fn collect_semantic_actions<F, S>(f: F) -> Vec<TestOperation<S>>
     where
-        F: FnOnce(TestSemanticActions<S>) -> Done<MockSession<S>>,
+        F: FnOnce(TestTokenStreamSemantics<S>) -> Done<MockSession<S>>,
         S: Clone + Debug + Merge,
     {
         with_log(|log| {
-            f(SemanticActions::new(MockSession::with_log(log)));
+            f(TokenStreamSemantics::new(MockSession::with_log(log)));
         })
     }
 
     pub(super) fn log_with_predefined_names<I, F, S>(entries: I, f: F) -> Vec<TestOperation<S>>
     where
         I: IntoIterator<Item = (String, ResolvedIdent<usize, MockMacroId>)>,
-        F: FnOnce(TestSemanticActions<S>) -> Done<MockSession<S>>,
+        F: FnOnce(TestTokenStreamSemantics<S>) -> Done<MockSession<S>>,
         S: Clone + Debug + Merge,
     {
         with_log(|log| {
-            f(SemanticActions::new(MockSession::with_predefined_names(
-                log, entries,
-            )));
+            f(TokenStreamSemantics::new(
+                MockSession::with_predefined_names(log, entries),
+            ));
         })
     }
 
-    pub(super) type TestSemanticActions<S> = SemanticActions<MockSession<S>>;
+    pub(super) type TestTokenStreamSemantics<S> = TokenStreamSemantics<MockSession<S>>;
 }

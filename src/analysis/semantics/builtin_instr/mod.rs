@@ -35,19 +35,19 @@ impl From<Mnemonic> for BuiltinInstr {
     }
 }
 
-pub(in crate::analysis) struct BuiltinInstrActions<S: Session> {
-    parent: InstrLineActions<S>,
+pub(in crate::analysis) struct BuiltinInstrSemantics<S: Session> {
+    parent: InstrLineSemantics<S>,
     command: (BuiltinInstr, S::Span),
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
     has_errors: bool,
 }
 
-impl<S: Session> BuiltinInstrActions<S> {
+impl<S: Session> BuiltinInstrSemantics<S> {
     pub(super) fn new(
-        parent: InstrLineActions<S>,
+        parent: InstrLineSemantics<S>,
         command: (BuiltinInstr, S::Span),
-    ) -> BuiltinInstrActions<S> {
-        BuiltinInstrActions {
+    ) -> BuiltinInstrSemantics<S> {
+        BuiltinInstrSemantics {
             parent,
             command,
             args: Vec::new(),
@@ -56,13 +56,13 @@ impl<S: Session> BuiltinInstrActions<S> {
     }
 }
 
-impl<S: Session> MergeSpans<S::Span> for BuiltinInstrActions<S> {
+impl<S: Session> MergeSpans<S::Span> for BuiltinInstrSemantics<S> {
     fn merge_spans(&mut self, left: &S::Span, right: &S::Span) -> S::Span {
         self.parent.merge_spans(left, right)
     }
 }
 
-impl<S: Session> StripSpan<S::Span> for BuiltinInstrActions<S> {
+impl<S: Session> StripSpan<S::Span> for BuiltinInstrSemantics<S> {
     type Stripped = S::Stripped;
 
     fn strip_span(&mut self, span: &S::Span) -> Self::Stripped {
@@ -70,22 +70,22 @@ impl<S: Session> StripSpan<S::Span> for BuiltinInstrActions<S> {
     }
 }
 
-impl<S: Session> EmitDiag<S::Span, S::Stripped> for BuiltinInstrActions<S> {
+impl<S: Session> EmitDiag<S::Span, S::Stripped> for BuiltinInstrSemantics<S> {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<S::Span, S::Stripped>>) {
         self.has_errors = true;
         self.parent.emit_diag(diag)
     }
 }
 
-impl<S: Session> BuiltinInstrContext<S::Span> for BuiltinInstrActions<S>
+impl<S: Session> BuiltinInstrActions<S::Span> for BuiltinInstrSemantics<S>
 where
     S::Ident: AsRef<str>,
 {
     type Ident = S::Ident;
     type Literal = Literal<S::StringRef>;
-    type ArgContext = ExprBuilder<S::Ident, S::StringRef, S::Span, Self>;
+    type ArgActions = ExprBuilder<S::Ident, S::StringRef, S::Span, Self>;
 
-    fn add_argument(self) -> Self::ArgContext {
+    fn will_parse_arg(self) -> Self::ArgActions {
         ExprBuilder {
             stack: Vec::new(),
             parent: self,
@@ -93,13 +93,13 @@ where
     }
 }
 
-impl<S: Session> InstrEndContext<S::Span> for BuiltinInstrActions<S>
+impl<S: Session> InstrFinalizer<S::Span> for BuiltinInstrSemantics<S>
 where
     S::Ident: AsRef<str>,
 {
-    type ParentContext = SemanticActions<S>;
+    type Next = TokenStreamSemantics<S>;
 
-    fn did_parse_instr(mut self) -> Self::ParentContext {
+    fn did_parse_instr(mut self) -> Self::Next {
         if !self.has_errors {
             let prepared = PreparedBuiltinInstr::new(self.command, &mut self.parent);
             self.parent = self.parent.define_label_if_present();
@@ -117,7 +117,7 @@ enum PreparedBuiltinInstr<S: Session> {
 }
 
 impl<S: Session> PreparedBuiltinInstr<S> {
-    fn new((command, span): (BuiltinInstr, S::Span), stmt: &mut InstrLineActions<S>) -> Self {
+    fn new((command, span): (BuiltinInstr, S::Span), stmt: &mut InstrLineSemantics<S>) -> Self {
         match command {
             BuiltinInstr::Directive(directive) if directive.requires_symbol() => {
                 PreparedBuiltinInstr::Binding((directive, span), stmt.line.label.take())
@@ -132,8 +132,8 @@ impl<S: Session> PreparedBuiltinInstr<S> {
     fn exec(
         self,
         args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
-        actions: InstrLineActions<S>,
-    ) -> SemanticActions<S> {
+        actions: InstrLineSemantics<S>,
+    ) -> TokenStreamSemantics<S> {
         match self {
             PreparedBuiltinInstr::Binding(binding, label) => {
                 directive::analyze_directive(binding, label, args, actions)
@@ -172,12 +172,12 @@ delegate_diagnostics! {
     {I, R, S, P: Diagnostics<S>}, ExprBuilder<I, R, S, P>, {parent}, P, S
 }
 
-impl<S: Session> FinalContext
-    for ExprBuilder<S::Ident, S::StringRef, S::Span, BuiltinInstrActions<S>>
+impl<S: Session> ArgFinalizer
+    for ExprBuilder<S::Ident, S::StringRef, S::Span, BuiltinInstrSemantics<S>>
 {
-    type ReturnTo = BuiltinInstrActions<S>;
+    type Next = BuiltinInstrSemantics<S>;
 
-    fn exit(mut self) -> Self::ReturnTo {
+    fn did_parse_arg(mut self) -> Self::Next {
         if !self.parent.has_errors {
             assert_eq!(self.stack.len(), 1);
             self.parent.args.push(self.stack.pop().unwrap());
@@ -186,7 +186,7 @@ impl<S: Session> FinalContext
     }
 }
 
-impl<I, R, S, P> ExprContext<S> for ExprBuilder<I, R, S, P>
+impl<I, R, S, P> ArgActions<S> for ExprBuilder<I, R, S, P>
 where
     I: AsRef<str>,
     S: Clone,
@@ -195,7 +195,7 @@ where
     type Ident = I;
     type Literal = Literal<R>;
 
-    fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, S)) {
+    fn act_on_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, S)) {
         self.stack.push(Arg {
             variant: ArgVariant::Atom(match atom.0 {
                 ExprAtom::Ident(ident) => OPERAND_SYMBOLS
@@ -210,7 +210,7 @@ where
         })
     }
 
-    fn apply_operator(&mut self, (op, span): (Operator, S)) {
+    fn act_on_operator(&mut self, (op, span): (Operator, S)) {
         let variant = match op {
             Operator::Unary(UnaryOperator::Parentheses) => {
                 let inner = self.pop();
@@ -264,8 +264,8 @@ const OPERAND_SYMBOLS: &[(&str, OperandSymbol)] = &[
 fn analyze_mnemonic<S: Session>(
     name: (Mnemonic, S::Span),
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
-    mut actions: InstrLineActions<S>,
-) -> InstrLineActions<S> {
+    mut actions: InstrLineSemantics<S>,
+) -> InstrLineSemantics<S> {
     let mut operands = Vec::new();
     for arg in args {
         let (operand, returned_actions) = actions.build_value(&Default::default(), |builder| {
@@ -280,7 +280,7 @@ fn analyze_mnemonic<S: Session>(
     actions
 }
 
-impl<S: Session> InstrLineActions<S> {
+impl<S: Session> InstrLineSemantics<S> {
     fn analyze_expr(
         self,
         params: &Params<S::Ident, S::Span>,
@@ -404,11 +404,11 @@ mod tests {
                     .into_instr_line()
                     .will_parse_instr("DB".into(), "db".into())
                     .into_builtin_instr()
-                    .add_argument();
-                actions.push_atom((Literal(Number(7)), "literal".into()));
-                actions.apply_operator((FnCall(0), "call".into()));
+                    .will_parse_arg();
+                actions.act_on_atom((Literal(Number(7)), "literal".into()));
+                actions.act_on_operator((FnCall(0), "call".into()));
                 actions
-                    .exit()
+                    .did_parse_arg()
                     .did_parse_instr()
                     .did_parse_line("eol".into())
                     .act_on_eos("eos".into())

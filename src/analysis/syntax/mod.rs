@@ -63,7 +63,7 @@ pub(super) use self::parser::parse_src as parse_token_seq;
 // devided into lines (separated by <Eol> tokens) and ends with an <Eos> token. It has a single
 // production rule:
 //
-//     1. tokem-stream → (line (<Eol> line)*)? <Eos>
+//     1. token-stream → (line (<Eol> line)*)? <Eos>
 //
 // A line can be either an instruction line (e.g. a CPU instruction) or a token line (e.g. a line of
 // tokens inside a macro definition). Correspondingly, it has two production rules:
@@ -73,21 +73,21 @@ pub(super) use self::parser::parse_src as parse_token_seq;
 //
 // This parsing ambiguity is resolved according to the semantics of the program so far, thus the
 // rule used by the parser is determined by the value returned from
-// TokenStreamContext::will_parse_line.
-pub(super) trait TokenStreamContext<I, L, S: Clone>: Sized {
-    type InstrLineContext: InstrLineContext<I, L, S, ParentContext = Self>;
-    type TokenLineContext: TokenLineContext<
+// TokenStreamActions::will_parse_line.
+pub(super) trait TokenStreamActions<I, L, S: Clone>: Sized {
+    type InstrLineActions: InstrLineActions<I, L, S, Next = Self>;
+    type TokenLineActions: TokenLineActions<
         I,
         L,
         S,
-        SemanticContextTerminationContext = Self::TokenLineEndContext,
-        ParentContext = Self,
+        ContextFinalizer = Self::TokenLineFinalizer,
+        Next = Self,
     >;
-    type TokenLineEndContext: LineEndContext<S, ParentContext = Self>;
-    type FinalContext;
+    type TokenLineFinalizer: LineFinalizer<S, Next = Self>;
+    type Next;
 
-    fn will_parse_line(self) -> LineRule<Self::InstrLineContext, Self::TokenLineContext>;
-    fn act_on_eos(self, span: S) -> Self::FinalContext;
+    fn will_parse_line(self) -> LineRule<Self::InstrLineActions, Self::TokenLineActions>;
+    fn act_on_eos(self, span: S) -> Self::Next;
 }
 
 pub(super) enum LineRule<I, T> {
@@ -117,20 +117,20 @@ impl<I, T> LineRule<I, T> {
 //
 //     1. instr-line → label? instr?
 //
-// InstrLineContext::will_parse_label is called by the parser in the following state:
+// InstrLineActions::will_parse_label is called by the parser in the following state:
 //
 //     instr-line → . label? instr?, <Label>
 //
-// InstrContext as a supertrait handles the states where the label is missing (either parsing an
-// instruction or terminating the empty line) whereas InstrLineContext::InstrContext handles the two
+// InstrActions as a supertrait handles the states where the label is missing (either parsing an
+// instruction or terminating the empty line) whereas InstrLineActions::InstrActions handles the two
 // possible states after a label has been successfully parsed. Note that by using two distinct types
-// bound by InstrContext we can preven the parser from calling InstrLineContext::will_parse_label
+// bound by InstrActions we can preven the parser from calling InstrLineActions::will_parse_label
 // more than once.
-pub(super) trait InstrLineContext<I, L, S: Clone>: InstrContext<I, L, S> {
-    type LabelContext: LabelContext<I, S, ParentContext = Self::InstrContext>;
-    type InstrContext: InstrContext<I, L, S, ParentContext = Self::ParentContext>;
+pub(super) trait InstrLineActions<I, L, S: Clone>: InstrActions<I, L, S> {
+    type LabelActions: LabelActions<I, S, Next = Self::InstrActions>;
+    type InstrActions: InstrActions<I, L, S, Next = Self::Next>;
 
-    fn will_parse_label(self, label: (I, S)) -> Self::LabelContext;
+    fn will_parse_label(self, label: (I, S)) -> Self::LabelActions;
 }
 
 // An instruction can be either a builtin instruction (i.e. a CPU instruction or an assembler
@@ -140,7 +140,7 @@ pub(super) trait InstrLineContext<I, L, S: Clone>: InstrContext<I, L, S> {
 //     1. instr → <Ident> arg-list
 //     2. instr → <Ident> macro-arg-list
 //
-// The ambiguity between these rules gets resolved by InstrContext::will_parse_instr, which performs
+// The ambiguity between these rules gets resolved by InstrActions::will_parse_instr, which performs
 // a name lookup to determine whether the identifier is a builtin instruction or a previously
 // defined macro. If neither of these cases applies, a third production rule is used:
 //
@@ -148,38 +148,34 @@ pub(super) trait InstrLineContext<I, L, S: Clone>: InstrContext<I, L, S> {
 //
 // The parser uses this rule to recover from an invalid instruction name by throwing away all the
 // remaining tokens in the line.
-pub(super) trait InstrContext<I, L, S: Clone>: LineEndContext<S> {
-    type BuiltinInstrContext: BuiltinInstrContext<
+pub(super) trait InstrActions<I, L, S: Clone>: LineFinalizer<S> {
+    type BuiltinInstrActions: BuiltinInstrActions<
         S,
         Ident = I,
         Literal = L,
-        ParentContext = Self::LineEndContext,
+        Next = Self::LineFinalizer,
     >;
-    type MacroCallContext: MacroCallContext<
-        S,
-        Token = Token<I, L>,
-        ParentContext = Self::LineEndContext,
-    >;
-    type ErrorContext: InstrEndContext<S, ParentContext = Self::LineEndContext>;
-    type LineEndContext: LineEndContext<S, ParentContext = Self::ParentContext>;
+    type MacroInstrActions: MacroInstrActions<S, Token = Token<I, L>, Next = Self::LineFinalizer>;
+    type ErrorActions: InstrFinalizer<S, Next = Self::LineFinalizer>;
+    type LineFinalizer: LineFinalizer<S, Next = Self::Next>;
 
     fn will_parse_instr(
         self,
         ident: I,
         span: S,
-    ) -> InstrRule<Self::BuiltinInstrContext, Self::MacroCallContext, Self::ErrorContext>;
+    ) -> InstrRule<Self::BuiltinInstrActions, Self::MacroInstrActions, Self::ErrorActions>;
 }
 
-pub(super) trait LineEndContext<S: Clone>: Diagnostics<S> + Sized {
-    type ParentContext;
+pub(super) trait LineFinalizer<S: Clone>: Diagnostics<S> + Sized {
+    type Next;
 
-    fn did_parse_line(self, span: S) -> Self::ParentContext;
+    fn did_parse_line(self, span: S) -> Self::Next;
 }
 
-pub(super) trait InstrEndContext<S: Clone>: Diagnostics<S> + Sized {
-    type ParentContext;
+pub(super) trait InstrFinalizer<S: Clone>: Diagnostics<S> + Sized {
+    type Next;
 
-    fn did_parse_instr(self) -> Self::ParentContext;
+    fn did_parse_instr(self) -> Self::Next;
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -216,27 +212,28 @@ impl<C, M, E> InstrRule<C, M, E> {
     }
 }
 
-pub(super) trait BuiltinInstrContext<S: Clone>: InstrEndContext<S> {
-    type Ident;
-    type Literal;
-    type ArgContext: ExprContext<S, Ident = Self::Ident, Literal = Self::Literal>
-        + FinalContext<ReturnTo = Self>;
-
-    fn add_argument(self) -> Self::ArgContext;
-}
-
-pub(super) trait FinalContext {
-    type ReturnTo;
-
-    fn exit(self) -> Self::ReturnTo;
-}
-
-pub(super) trait ExprContext<S: Clone>: Diagnostics<S> {
+pub(super) trait BuiltinInstrActions<S: Clone>: InstrFinalizer<S> {
     type Ident;
     type Literal;
 
-    fn push_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, S));
-    fn apply_operator(&mut self, operator: (Operator, S));
+    type ArgActions: ArgActions<S, Ident = Self::Ident, Literal = Self::Literal>
+        + ArgFinalizer<Next = Self>;
+
+    fn will_parse_arg(self) -> Self::ArgActions;
+}
+
+pub(super) trait ArgFinalizer {
+    type Next;
+
+    fn did_parse_arg(self) -> Self::Next;
+}
+
+pub(super) trait ArgActions<S: Clone>: Diagnostics<S> {
+    type Ident;
+    type Literal;
+
+    fn act_on_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, S));
+    fn act_on_operator(&mut self, operator: (Operator, S));
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -258,36 +255,33 @@ pub enum UnaryOperator {
     Parentheses,
 }
 
-pub(super) trait LabelContext<I, S: Clone>: Diagnostics<S> {
-    type ParentContext;
+pub(super) trait LabelActions<I, S: Clone>: Diagnostics<S> {
+    type Next;
 
     fn act_on_param(&mut self, param: (I, S));
-    fn did_parse_label(self) -> Self::ParentContext;
+    fn did_parse_label(self) -> Self::Next;
 }
 
-pub(super) trait MacroCallContext<S: Clone>: InstrEndContext<S> {
+pub(super) trait MacroInstrActions<S: Clone>: InstrFinalizer<S> {
     type Token;
-    type MacroArgContext: TokenSeqContext<S, Token = Self::Token, Parent = Self>;
+    type MacroArgActions: MacroArgActions<S, Token = Self::Token, Next = Self>;
 
-    fn enter_macro_arg(self) -> Self::MacroArgContext;
+    fn will_parse_macro_arg(self) -> Self::MacroArgActions;
 }
 
-pub(super) trait TokenSeqContext<S: Clone>: Diagnostics<S> {
+pub(super) trait MacroArgActions<S: Clone>: Diagnostics<S> {
     type Token;
-    type Parent;
-    fn push_token(&mut self, token: (Self::Token, S));
-    fn exit(self) -> Self::Parent;
+    type Next;
+
+    fn act_on_token(&mut self, token: (Self::Token, S));
+    fn did_parse_macro_arg(self) -> Self::Next;
 }
 
-pub(super) trait TokenLineContext<I, L, S: Clone>: LineEndContext<S> {
-    type SemanticContextTerminationContext: LineEndContext<S, ParentContext = Self::ParentContext>;
+pub(super) trait TokenLineActions<I, L, S: Clone>: LineFinalizer<S> {
+    type ContextFinalizer: LineFinalizer<S, Next = Self::Next>;
 
     fn act_on_token(&mut self, token: Token<I, L>, span: S);
-    fn act_on_ident(
-        self,
-        ident: I,
-        span: S,
-    ) -> TokenLineRule<Self, Self::SemanticContextTerminationContext>;
+    fn act_on_ident(self, ident: I, span: S) -> TokenLineRule<Self, Self::ContextFinalizer>;
 }
 
 pub(super) enum TokenLineRule<T, E> {

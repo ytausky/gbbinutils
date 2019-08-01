@@ -32,10 +32,10 @@ impl<I, L> Token<I, L> {
 
 const LINE_FOLLOW_SET: &[TokenKind] = &[Token::Sigil(Eol), Token::Sigil(Eos)];
 
-pub(in crate::analysis) fn parse_src<I, L, E, T, C, S>(mut tokens: T, context: C) -> C::FinalContext
+pub(in crate::analysis) fn parse_src<I, L, E, T, C, S>(mut tokens: T, context: C) -> C::Next
 where
     T: Iterator<Item = (Result<Token<I, L>, E>, S)>,
-    C: TokenStreamContext<I, L, S>,
+    C: TokenStreamActions<I, L, S>,
     S: Clone,
 {
     let Parser {
@@ -106,7 +106,7 @@ impl<'a, Id, L, E, S, I, A> Parser<'a, (Result<Token<Id, L>, E>, S), I, A> {
 impl<'a, I, L, E, T, C, S> Parser<'a, (Result<Token<I, L>, E>, S), T, C>
 where
     T: Iterator<Item = (Result<Token<I, L>, E>, S)>,
-    C: TokenStreamContext<I, L, S>,
+    C: TokenStreamActions<I, L, S>,
     S: Clone,
 {
     fn parse_token_stream(mut self) -> Self {
@@ -124,16 +124,16 @@ where
     }
 }
 
-type ParentContextParser<'a, Id, L, E, I, C, S> =
-    Parser<'a, (Result<Token<Id, L>, E>, S), I, <C as LineEndContext<S>>::ParentContext>;
+type NextParser<'a, Id, L, E, I, C, S> =
+    Parser<'a, (Result<Token<Id, L>, E>, S), I, <C as LineFinalizer<S>>::Next>;
 
 impl<'a, Id, L, E, I, C, S> Parser<'a, (Result<Token<Id, L>, E>, S), I, C>
 where
     I: Iterator<Item = (Result<Token<Id, L>, E>, S)>,
-    C: InstrLineContext<Id, L, S>,
+    C: InstrLineActions<Id, L, S>,
     S: Clone,
 {
-    fn parse_instr_line(mut self) -> ParentContextParser<'a, Id, L, E, I, C, S> {
+    fn parse_instr_line(mut self) -> NextParser<'a, Id, L, E, I, C, S> {
         if let (Ok(Token::Label(label)), span) = self.state.token {
             bump!(self);
             let mut parser = self.change_context(|c| c.will_parse_label((label, span)));
@@ -149,12 +149,12 @@ where
                 } else {
                     parser = parser.diagnose_unexpected_token();
                     return parser
-                        .change_context(LabelContext::did_parse_label)
+                        .change_context(LabelActions::did_parse_label)
                         .parse_line_terminator();
                 }
             }
             parser
-                .change_context(LabelContext::did_parse_label)
+                .change_context(LabelActions::did_parse_label)
                 .parse_unlabeled_stmt()
         } else {
             self.parse_unlabeled_stmt()
@@ -165,10 +165,10 @@ where
 impl<'a, Id, L, E, I, C, S> Parser<'a, (Result<Token<Id, L>, E>, S), I, C>
 where
     I: Iterator<Item = (Result<Token<Id, L>, E>, S)>,
-    C: InstrContext<Id, L, S>,
+    C: InstrActions<Id, L, S>,
     S: Clone,
 {
-    fn parse_unlabeled_stmt(mut self) -> ParentContextParser<'a, Id, L, E, I, C, S> {
+    fn parse_unlabeled_stmt(mut self) -> NextParser<'a, Id, L, E, I, C, S> {
         match self.state.token {
             (Ok(Token::Sigil(Sigil::Eol)), _) | (Ok(Token::Sigil(Sigil::Eos)), _) => {
                 self.parse_line_terminator()
@@ -186,15 +186,15 @@ where
         }
     }
 
-    fn parse_key(self, key: Id, span: S) -> ParentContextParser<'a, Id, L, E, I, C, S> {
+    fn parse_key(self, key: Id, span: S) -> NextParser<'a, Id, L, E, I, C, S> {
         match self.context.will_parse_instr(key, span) {
             InstrRule::BuiltinInstr(context) => Parser::from_state(self.state, context)
                 .parse_argument_list()
-                .change_context(InstrEndContext::did_parse_instr)
+                .change_context(InstrFinalizer::did_parse_instr)
                 .parse_line_terminator(),
             InstrRule::MacroInstr(context) => Parser::from_state(self.state, context)
                 .parse_macro_call()
-                .change_context(InstrEndContext::did_parse_instr)
+                .change_context(InstrFinalizer::did_parse_instr)
                 .parse_line_terminator(),
             InstrRule::Error(context) => {
                 let mut parser = Parser::from_state(self.state, context.did_parse_instr());
@@ -210,10 +210,10 @@ where
 impl<'a, Id, L, E, I, C, S> Parser<'a, (Result<Token<Id, L>, E>, S), I, C>
 where
     I: Iterator<Item = (Result<Token<Id, L>, E>, S)>,
-    C: LineEndContext<S>,
+    C: LineFinalizer<S>,
     S: Clone,
 {
-    fn parse_line_terminator(mut self) -> ParentContextParser<'a, Id, L, E, I, C, S> {
+    fn parse_line_terminator(mut self) -> NextParser<'a, Id, L, E, I, C, S> {
         let span = match &self.state.token {
             (Ok(Token::Sigil(Sigil::Eol)), _) => {
                 let span = self.state.token.1;
@@ -234,7 +234,7 @@ where
 impl<'a, Id, L, E, I, C, S> Parser<'a, (Result<Token<Id, L>, E>, S), I, C>
 where
     I: Iterator<Item = (Result<Token<Id, L>, E>, S)>,
-    C: BuiltinInstrContext<S, Ident = Id, Literal = L>,
+    C: BuiltinInstrActions<S, Ident = Id, Literal = L>,
     S: Clone,
 {
     fn parse_argument_list(self) -> Self {
@@ -242,16 +242,16 @@ where
     }
 
     fn parse_argument(self) -> Self {
-        self.change_context(BuiltinInstrContext::add_argument)
+        self.change_context(BuiltinInstrActions::will_parse_arg)
             .parse()
-            .change_context(FinalContext::exit)
+            .change_context(ArgFinalizer::did_parse_arg)
     }
 }
 
 impl<'a, Id, L, E, I, C, S> Parser<'a, (Result<Token<Id, L>, E>, S), I, C>
 where
     I: Iterator<Item = (Result<Token<Id, L>, E>, S)>,
-    C: LabelContext<Id, S>,
+    C: LabelActions<Id, S>,
     S: Clone,
 {
     fn parse_param(mut self) -> Self {
@@ -269,7 +269,7 @@ where
 impl<'a, Id, L, E, I, C, S> Parser<'a, (Result<Token<Id, L>, E>, S), I, C>
 where
     I: Iterator<Item = (Result<Token<Id, L>, E>, S)>,
-    C: MacroCallContext<S, Token = Token<Id, L>>,
+    C: MacroInstrActions<S, Token = Token<Id, L>>,
     S: Clone,
 {
     fn parse_macro_call(self) -> Self {
@@ -278,7 +278,7 @@ where
 
     fn parse_macro_arg_list(self) -> Self {
         self.parse_terminated_list(Comma.into(), LINE_FOLLOW_SET, |p| {
-            let mut parser = p.change_context(MacroCallContext::enter_macro_arg);
+            let mut parser = p.change_context(MacroInstrActions::will_parse_macro_arg);
             loop {
                 match parser.state.token {
                     (Ok(Token::Sigil(Comma)), _)
@@ -286,12 +286,12 @@ where
                     | (Ok(Token::Sigil(Eos)), _) => break,
                     (Ok(other), span) => {
                         bump!(parser);
-                        parser.context.push_token((other, span))
+                        parser.context.act_on_token((other, span))
                     }
                     (Err(_), _) => unimplemented!(),
                 }
             }
-            parser.change_context(TokenSeqContext::exit)
+            parser.change_context(MacroArgActions::did_parse_macro_arg)
         })
     }
 }
@@ -299,10 +299,10 @@ where
 impl<'a, Id, L, E, I, C, S> Parser<'a, (Result<Token<Id, L>, E>, S), I, C>
 where
     I: Iterator<Item = (Result<Token<Id, L>, E>, S)>,
-    C: TokenLineContext<Id, L, S>,
+    C: TokenLineActions<Id, L, S>,
     S: Clone,
 {
-    fn parse_token_line(mut self) -> ParentContextParser<'a, Id, L, E, I, C, S> {
+    fn parse_token_line(mut self) -> NextParser<'a, Id, L, E, I, C, S> {
         loop {
             match self.state.token {
                 (Ok(Token::Ident(ident)), span) => {
@@ -700,14 +700,14 @@ mod tests {
     #[test]
     fn parse_nullary_macro_call() {
         let tokens = input_tokens![Ident(IdentKind::MacroName)];
-        let expected_actions = [unlabeled(call_macro(0, []), 1)];
+        let expected_actions = [unlabeled(macro_instr(0, []), 1)];
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_unary_macro_call() {
         let tokens = input_tokens![Ident(IdentKind::MacroName), Literal(())];
-        let expected_actions = [unlabeled(call_macro(0, [tokens.token_seq([1])]), 2)];
+        let expected_actions = [unlabeled(macro_instr(0, [tokens.token_seq([1])]), 2)];
         assert_eq_actions(tokens, expected_actions)
     }
 
@@ -719,7 +719,7 @@ mod tests {
             Literal(()),
             Literal(()),
         ];
-        let expected_actions = [unlabeled(call_macro(0, [tokens.token_seq([1, 2, 3])]), 4)];
+        let expected_actions = [unlabeled(macro_instr(0, [tokens.token_seq([1, 2, 3])]), 4)];
         assert_eq_actions(tokens, expected_actions)
     }
 
@@ -735,7 +735,7 @@ mod tests {
             Literal(()),
         ];
         let expected_actions = [unlabeled(
-            call_macro(0, [tokens.token_seq([1, 2]), tokens.token_seq([4, 5, 6])]),
+            macro_instr(0, [tokens.token_seq([1, 2]), tokens.token_seq([4, 5, 6])]),
             7,
         )];
         assert_eq_actions(tokens, expected_actions)
@@ -805,7 +805,7 @@ mod tests {
             [instr_line(
                 vec![InstrLineAction::Label((
                     (
-                        SymIdent(IdentKind::Other, "label".into()),
+                        MockIdent(IdentKind::Other, "label".into()),
                         TokenRef::from("label").into(),
                     ),
                     vec![ParamsAction::EmitDiag(arg_error(
@@ -899,7 +899,7 @@ mod tests {
                 vec![
                     InstrLineAction::Label((
                         (
-                            SymIdent(IdentKind::Other, "label".into()),
+                            MockIdent(IdentKind::Other, "label".into()),
                             TokenRef::from("label").into(),
                         ),
                         vec![ParamsAction::EmitDiag(

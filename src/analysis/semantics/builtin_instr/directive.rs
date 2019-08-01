@@ -22,8 +22,8 @@ pub(super) fn analyze_directive<S: Session>(
     directive: (Directive, S::Span),
     label: Option<Label<S::Ident, S::Span>>,
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
-    actions: InstrLineActions<S>,
-) -> SemanticActions<S> {
+    actions: InstrLineSemantics<S>,
+) -> TokenStreamSemantics<S> {
     let context = DirectiveContext {
         span: directive.1,
         label,
@@ -42,14 +42,14 @@ struct DirectiveContext<A, I, R, S> {
 
 delegate_diagnostics! {
     {S: Session},
-    DirectiveContext<InstrLineActions<S>, S::Ident, S::StringRef, S::Span>,
+    DirectiveContext<InstrLineSemantics<S>, S::Ident, S::StringRef, S::Span>,
     {actions},
-    InstrLineActions<S>,
+    InstrLineSemantics<S>,
     S::Span
 }
 
-impl<'a, S: Session> DirectiveContext<InstrLineActions<S>, S::Ident, S::StringRef, S::Span> {
-    fn analyze(self, directive: Directive) -> SemanticActions<S> {
+impl<'a, S: Session> DirectiveContext<InstrLineSemantics<S>, S::Ident, S::StringRef, S::Span> {
+    fn analyze(self, directive: Directive) -> TokenStreamSemantics<S> {
         match directive {
             Directive::Db => self.analyze_data(Width::Byte),
             Directive::Ds => self.analyze_ds(),
@@ -62,7 +62,7 @@ impl<'a, S: Session> DirectiveContext<InstrLineActions<S>, S::Ident, S::StringRe
         }
     }
 
-    fn analyze_data(mut self, width: Width) -> SemanticActions<S> {
+    fn analyze_data(mut self, width: Width) -> TokenStreamSemantics<S> {
         for arg in self.args {
             let expr = match self.actions.analyze_expr(&Default::default(), arg) {
                 (Ok(expr), actions) => {
@@ -76,7 +76,7 @@ impl<'a, S: Session> DirectiveContext<InstrLineActions<S>, S::Ident, S::StringRe
         self.actions.into()
     }
 
-    fn analyze_ds(self) -> SemanticActions<S> {
+    fn analyze_ds(self) -> TokenStreamSemantics<S> {
         let mut actions = self.actions;
         match single_arg(self.span, self.args, &mut actions) {
             Ok(arg) => {
@@ -91,7 +91,7 @@ impl<'a, S: Session> DirectiveContext<InstrLineActions<S>, S::Ident, S::StringRe
         actions.into()
     }
 
-    fn analyze_equ(mut self) -> SemanticActions<S> {
+    fn analyze_equ(mut self) -> TokenStreamSemantics<S> {
         let (symbol, params) = self.label.take().unwrap();
         match single_arg(self.span, self.args, &mut self.actions) {
             Ok(arg) => {
@@ -103,7 +103,7 @@ impl<'a, S: Session> DirectiveContext<InstrLineActions<S>, S::Ident, S::StringRe
         self.actions.into()
     }
 
-    fn analyze_section(mut self) -> SemanticActions<S> {
+    fn analyze_section(mut self) -> TokenStreamSemantics<S> {
         let (name, span) = self.label.take().unwrap().0;
         let session = &mut self.actions.session;
         let id = session.reloc_lookup(name, span.clone());
@@ -111,7 +111,7 @@ impl<'a, S: Session> DirectiveContext<InstrLineActions<S>, S::Ident, S::StringRe
         self.actions.into()
     }
 
-    fn analyze_include(mut self) -> SemanticActions<S> {
+    fn analyze_include(mut self) -> TokenStreamSemantics<S> {
         let (path, span) = match reduce_include(self.span, self.args, &mut self.actions) {
             Ok(result) => result,
             Err(()) => return self.actions.into(),
@@ -124,20 +124,20 @@ impl<'a, S: Session> DirectiveContext<InstrLineActions<S>, S::Ident, S::StringRe
         self.actions.into()
     }
 
-    fn analyze_macro(mut self) -> SemanticActions<S> {
+    fn analyze_macro(mut self) -> TokenStreamSemantics<S> {
         if self.label.is_none() {
             let span = self.span;
             self.actions.emit_diag(Message::MacroRequiresName.at(span))
         }
-        SemanticActions {
-            mode: LineRule::TokenLine(TokenLineActions {
-                line: TokenFrame::MacroDef(MacroDefState::new(self.label)),
+        TokenStreamSemantics {
+            mode: LineRule::TokenLine(TokenLineSemantics {
+                line: TokenContext::MacroDef(MacroDefState::new(self.label)),
                 session: self.actions.session,
             }),
         }
     }
 
-    fn analyze_org(self) -> SemanticActions<S> {
+    fn analyze_org(self) -> TokenStreamSemantics<S> {
         let mut actions = self.actions;
         match single_arg(self.span, self.args, &mut actions) {
             Ok(arg) => {
@@ -209,7 +209,7 @@ mod tests {
     fn build_include_item() {
         let filename = "file.asm";
         let actions = unary_directive("INCLUDE", |arg| {
-            arg.push_atom((ExprAtom::Literal(Literal::String(filename.to_string())), ()));
+            arg.act_on_atom((ExprAtom::Literal(Literal::String(filename.to_string())), ()));
         });
         assert_eq!(
             actions,
@@ -220,7 +220,7 @@ mod tests {
     #[test]
     fn set_origin() {
         let origin = 0x3000;
-        let actions = unary_directive("ORG", |arg| arg.push_atom(mk_literal(origin)));
+        let actions = unary_directive("ORG", |arg| arg.act_on_atom(mk_literal(origin)));
         assert_eq!(actions, [BackendEvent::SetOrigin(origin.into()).into()])
     }
 
@@ -249,9 +249,9 @@ mod tests {
     ) {
         let actions = with_directive(directive, |mut command| {
             for datum in data.borrow().iter() {
-                let mut arg = command.add_argument();
-                arg.push_atom(mk_literal(*datum));
-                command = arg.exit();
+                let mut arg = command.will_parse_arg();
+                arg.act_on_atom(mk_literal(*datum));
+                command = arg.did_parse_arg();
             }
             command
         });
@@ -269,7 +269,7 @@ mod tests {
 
     #[test]
     fn reserve_3_bytes() {
-        let actions = ds(|arg| arg.push_atom(mk_literal(3)));
+        let actions = ds(|arg| arg.act_on_atom(mk_literal(3)));
         assert_eq!(actions, [BackendEvent::Reserve(3.into()).into()])
     }
 
@@ -279,7 +279,7 @@ mod tests {
 
     #[test]
     fn ds_with_malformed_expr() {
-        let actions = ds(|arg| arg.push_atom((ExprAtom::Ident("A".into()), ())));
+        let actions = ds(|arg| arg.act_on_atom((ExprAtom::Ident("A".into()), ())));
         assert_eq!(
             actions,
             [
@@ -306,7 +306,7 @@ mod tests {
 
     #[test]
     fn include_with_number() {
-        let actions = unary_directive("INCLUDE", |arg| arg.push_atom(mk_literal(7)));
+        let actions = unary_directive("INCLUDE", |arg| arg.act_on_atom(mk_literal(7)));
         assert_eq!(
             actions,
             [DiagnosticsEvent::EmitDiag(Message::ExpectedString.at(()).into()).into()]
@@ -315,7 +315,9 @@ mod tests {
 
     #[test]
     fn data_with_malformed_expr() {
-        let actions = unary_directive("DB", |arg| arg.push_atom((ExprAtom::Ident("A".into()), ())));
+        let actions = unary_directive("DB", |arg| {
+            arg.act_on_atom((ExprAtom::Ident("A".into()), ()))
+        });
         assert_eq!(
             actions,
             [
@@ -331,14 +333,14 @@ mod tests {
         let log = with_log(|log| {
             let mut session = MockSession::with_log(log);
             session.fail(CodebaseError::Utf8Error);
-            let mut context = SemanticActions::new(session)
+            let mut context = TokenStreamSemantics::new(session)
                 .will_parse_line()
                 .into_instr_line()
                 .will_parse_instr("INCLUDE".into(), ())
                 .into_builtin_instr()
-                .add_argument();
-            context.push_atom((ExprAtom::Literal(Literal::String(name.into())), ()));
-            context.exit().did_parse_instr().did_parse_line(());
+                .will_parse_arg();
+            context.act_on_atom((ExprAtom::Literal(Literal::String(name.into())), ()));
+            context.did_parse_arg().did_parse_instr().did_parse_line(());
         });
         assert_eq!(
             log,
@@ -359,14 +361,14 @@ mod tests {
                 io::ErrorKind::NotFound,
                 message,
             )));
-            let mut context = SemanticActions::new(session)
+            let mut context = TokenStreamSemantics::new(session)
                 .will_parse_line()
                 .into_instr_line()
                 .will_parse_instr("INCLUDE".into(), ())
                 .into_builtin_instr()
-                .add_argument();
-            context.push_atom((ExprAtom::Literal(Literal::String(name.into())), ()));
-            context.exit().did_parse_instr().did_parse_line(());
+                .will_parse_arg();
+            context.act_on_atom((ExprAtom::Literal(Literal::String(name.into())), ()));
+            context.did_parse_arg().did_parse_instr().did_parse_line(());
         });
         assert_eq!(
             log,
@@ -389,7 +391,7 @@ mod tests {
         let symbol = "sym";
         let value = 3;
         let actions = with_labeled_directive(symbol, "EQU", |arg| {
-            arg.push_atom((ExprAtom::Literal(Literal::Number(value)), ()))
+            arg.act_on_atom((ExprAtom::Literal(Literal::Number(value)), ()))
         });
         assert_eq!(
             actions,
@@ -414,10 +416,10 @@ mod tests {
                 .did_parse_label()
                 .will_parse_instr("EQU".into(), ())
                 .into_builtin_instr()
-                .add_argument();
-            arg_actions.push_atom((ExprAtom::Ident(param.into()), ()));
+                .will_parse_arg();
+            arg_actions.act_on_atom((ExprAtom::Ident(param.into()), ()));
             arg_actions
-                .exit()
+                .did_parse_arg()
                 .did_parse_instr()
                 .did_parse_line(())
                 .act_on_eos(())
@@ -460,16 +462,16 @@ mod tests {
     }
 
     type TestExprContext<S> =
-        builtin_instr::ExprBuilder<String, String, (), TestBuiltinInstrActions<S>>;
+        builtin_instr::ExprBuilder<String, String, (), TestBuiltinInstrSemantics<S>>;
 
     fn unary_directive<F>(directive: &str, f: F) -> Vec<TestOperation<()>>
     where
         F: FnOnce(&mut TestExprContext<()>),
     {
         with_directive(directive, |command| {
-            let mut arg = command.add_argument();
+            let mut arg = command.will_parse_arg();
             f(&mut arg);
-            arg.exit()
+            arg.did_parse_arg()
         })
     }
 
@@ -489,11 +491,11 @@ mod tests {
         )
     }
 
-    type TestBuiltinInstrActions<S> = builtin_instr::BuiltinInstrActions<MockSession<S>>;
+    type TestBuiltinInstrSemantics<S> = builtin_instr::BuiltinInstrSemantics<MockSession<S>>;
 
     fn with_directive<F>(directive: &str, f: F) -> Vec<TestOperation<()>>
     where
-        F: FnOnce(TestBuiltinInstrActions<()>) -> TestBuiltinInstrActions<()>,
+        F: FnOnce(TestBuiltinInstrSemantics<()>) -> TestBuiltinInstrSemantics<()>,
     {
         collect_semantic_actions(|actions| {
             let command = actions
@@ -520,9 +522,9 @@ mod tests {
                 .did_parse_label()
                 .will_parse_instr(directive.into(), ())
                 .into_builtin_instr()
-                .add_argument();
+                .will_parse_arg();
             f(&mut arg);
-            arg.exit()
+            arg.did_parse_arg()
                 .did_parse_instr()
                 .did_parse_line(())
                 .act_on_eos(())

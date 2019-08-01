@@ -14,8 +14,8 @@ use std::iter;
 pub(super) type MockSpan = crate::diag::MockSpan<TokenRef>;
 
 pub(super) fn with_spans<'a>(
-    tokens: impl IntoIterator<Item = &'a (SymToken, TokenRef)>,
-) -> impl Iterator<Item = (Result<SymToken, ()>, MockSpan)> {
+    tokens: impl IntoIterator<Item = &'a (MockToken, TokenRef)>,
+) -> impl Iterator<Item = (Result<MockToken, ()>, MockSpan)> {
     tokens.into_iter().cloned().map(|(t, r)| (Ok(t), r.into()))
 }
 
@@ -47,7 +47,7 @@ impl_diag_traits! {
     ExprActionCollector<BuiltinInstrActionCollector>,
     ExprActionCollector<()>,
     TokenLineActionCollector,
-    MacroCallActionCollector,
+    MacroInstrActionCollector,
     MacroArgActionCollector,
     ErrorActionCollector,
 }
@@ -66,20 +66,20 @@ impl TokenStreamActionCollector {
     }
 }
 
-impl TokenStreamContext<SymIdent, SymLiteral, MockSpan> for TokenStreamActionCollector {
-    type InstrLineContext = InstrLineActionCollector;
-    type TokenLineContext = TokenLineActionCollector;
-    type TokenLineEndContext = TokenLineActionCollector;
-    type FinalContext = Self;
+impl TokenStreamActions<MockIdent, MockLiteral, MockSpan> for TokenStreamActionCollector {
+    type InstrLineActions = InstrLineActionCollector;
+    type TokenLineActions = TokenLineActionCollector;
+    type TokenLineFinalizer = TokenLineActionCollector;
+    type Next = Self;
 
-    fn will_parse_line(self) -> LineRule<Self::InstrLineContext, Self::TokenLineContext> {
+    fn will_parse_line(self) -> LineRule<Self::InstrLineActions, Self::TokenLineActions> {
         match self.mode {
             LineRule::InstrLine(()) => LineRule::InstrLine(InstrLineActionCollector::new(self)),
             LineRule::TokenLine(()) => LineRule::TokenLine(TokenLineActionCollector::new(self)),
         }
     }
 
-    fn act_on_eos(mut self, span: MockSpan) -> Self::FinalContext {
+    fn act_on_eos(mut self, span: MockSpan) -> Self::Next {
         self.actions.push(TokenStreamAction::Eos(span));
         self
     }
@@ -105,11 +105,11 @@ impl EmitDiag<MockSpan, MockSpan> for InstrLineActionCollector {
     }
 }
 
-impl InstrLineContext<SymIdent, SymLiteral, MockSpan> for InstrLineActionCollector {
-    type InstrContext = InstrActionCollector;
-    type LabelContext = LabelActionCollector;
+impl InstrLineActions<MockIdent, MockLiteral, MockSpan> for InstrLineActionCollector {
+    type InstrActions = InstrActionCollector;
+    type LabelActions = LabelActionCollector;
 
-    fn will_parse_label(self, label: (SymIdent, MockSpan)) -> Self::LabelContext {
+    fn will_parse_label(self, label: (MockIdent, MockSpan)) -> Self::LabelActions {
         LabelActionCollector {
             label,
             actions: Vec::new(),
@@ -118,17 +118,17 @@ impl InstrLineContext<SymIdent, SymLiteral, MockSpan> for InstrLineActionCollect
     }
 }
 
-impl InstrContext<SymIdent, SymLiteral, MockSpan> for InstrLineActionCollector {
-    type BuiltinInstrContext = BuiltinInstrActionCollector;
-    type MacroCallContext = MacroCallActionCollector;
-    type ErrorContext = ErrorActionCollector;
-    type LineEndContext = InstrActionCollector;
+impl InstrActions<MockIdent, MockLiteral, MockSpan> for InstrLineActionCollector {
+    type BuiltinInstrActions = BuiltinInstrActionCollector;
+    type MacroInstrActions = MacroInstrActionCollector;
+    type ErrorActions = ErrorActionCollector;
+    type LineFinalizer = InstrActionCollector;
 
     fn will_parse_instr(
         self,
-        ident: SymIdent,
+        ident: MockIdent,
         span: MockSpan,
-    ) -> InstrRule<Self::BuiltinInstrContext, Self::MacroCallContext, Self::ErrorContext> {
+    ) -> InstrRule<Self::BuiltinInstrActions, Self::MacroInstrActions, Self::ErrorActions> {
         InstrActionCollector {
             actions: Vec::new(),
             parent: self,
@@ -137,10 +137,10 @@ impl InstrContext<SymIdent, SymLiteral, MockSpan> for InstrLineActionCollector {
     }
 }
 
-impl LineEndContext<MockSpan> for InstrLineActionCollector {
-    type ParentContext = TokenStreamActionCollector;
+impl LineFinalizer<MockSpan> for InstrLineActionCollector {
+    type Next = TokenStreamActionCollector;
 
-    fn did_parse_line(mut self, span: MockSpan) -> Self::ParentContext {
+    fn did_parse_line(mut self, span: MockSpan) -> Self::Next {
         self.parent
             .actions
             .push(TokenStreamAction::InstrLine(self.actions, span));
@@ -149,7 +149,7 @@ impl LineEndContext<MockSpan> for InstrLineActionCollector {
 }
 
 pub(super) struct LabelActionCollector {
-    label: (SymIdent, MockSpan),
+    label: (MockIdent, MockSpan),
     actions: Vec<ParamsAction<MockSpan>>,
     parent: InstrLineActionCollector,
 }
@@ -160,14 +160,14 @@ impl EmitDiag<MockSpan, MockSpan> for LabelActionCollector {
     }
 }
 
-impl LabelContext<SymIdent, MockSpan> for LabelActionCollector {
-    type ParentContext = InstrActionCollector;
+impl LabelActions<MockIdent, MockSpan> for LabelActionCollector {
+    type Next = InstrActionCollector;
 
-    fn act_on_param(&mut self, param: (SymIdent, MockSpan)) {
+    fn act_on_param(&mut self, param: (MockIdent, MockSpan)) {
         self.actions.push(ParamsAction::AddParameter(param))
     }
 
-    fn did_parse_label(mut self) -> Self::ParentContext {
+    fn did_parse_label(mut self) -> Self::Next {
         self.parent
             .actions
             .push(InstrLineAction::Label((self.label, self.actions)));
@@ -192,17 +192,17 @@ impl EmitDiag<MockSpan, MockSpan> for InstrActionCollector {
 #[derive(Debug, PartialEq)]
 pub struct MacroId(pub TokenRef);
 
-impl InstrContext<SymIdent, SymLiteral, MockSpan> for InstrActionCollector {
-    type BuiltinInstrContext = BuiltinInstrActionCollector;
-    type MacroCallContext = MacroCallActionCollector;
-    type ErrorContext = ErrorActionCollector;
-    type LineEndContext = Self;
+impl InstrActions<MockIdent, MockLiteral, MockSpan> for InstrActionCollector {
+    type BuiltinInstrActions = BuiltinInstrActionCollector;
+    type MacroInstrActions = MacroInstrActionCollector;
+    type ErrorActions = ErrorActionCollector;
+    type LineFinalizer = Self;
 
     fn will_parse_instr(
         self,
-        ident: SymIdent,
+        ident: MockIdent,
         span: MockSpan,
-    ) -> InstrRule<Self::BuiltinInstrContext, Self::MacroCallContext, Self::ErrorContext> {
+    ) -> InstrRule<Self::BuiltinInstrActions, Self::MacroInstrActions, Self::ErrorActions> {
         match ident.0 {
             IdentKind::BuiltinInstr | IdentKind::MacroKeyword | IdentKind::Endm => {
                 InstrRule::BuiltinInstr(BuiltinInstrActionCollector {
@@ -211,7 +211,7 @@ impl InstrContext<SymIdent, SymLiteral, MockSpan> for InstrActionCollector {
                     parent: self,
                 })
             }
-            IdentKind::MacroName => InstrRule::MacroInstr(MacroCallActionCollector {
+            IdentKind::MacroName => InstrRule::MacroInstr(MacroInstrActionCollector {
                 name: (ident, span),
                 actions: Vec::new(),
                 parent: self,
@@ -224,10 +224,10 @@ impl InstrContext<SymIdent, SymLiteral, MockSpan> for InstrActionCollector {
     }
 }
 
-impl LineEndContext<MockSpan> for InstrActionCollector {
-    type ParentContext = TokenStreamActionCollector;
+impl LineFinalizer<MockSpan> for InstrActionCollector {
+    type Next = TokenStreamActionCollector;
 
-    fn did_parse_line(mut self, span: MockSpan) -> Self::ParentContext {
+    fn did_parse_line(mut self, span: MockSpan) -> Self::Next {
         if !self.actions.is_empty() {
             self.parent
                 .actions
@@ -248,17 +248,17 @@ impl EmitDiag<MockSpan, MockSpan> for ErrorActionCollector {
     }
 }
 
-impl InstrEndContext<MockSpan> for ErrorActionCollector {
-    type ParentContext = InstrActionCollector;
+impl InstrFinalizer<MockSpan> for ErrorActionCollector {
+    type Next = InstrActionCollector;
 
-    fn did_parse_instr(mut self) -> Self::ParentContext {
+    fn did_parse_instr(mut self) -> Self::Next {
         self.parent.actions.push(InstrAction::Error(self.actions));
         self.parent
     }
 }
 
 pub(super) struct BuiltinInstrActionCollector {
-    builtin_instr: (SymIdent, MockSpan),
+    builtin_instr: (MockIdent, MockSpan),
     actions: Vec<BuiltinInstrAction<MockSpan>>,
     parent: InstrActionCollector,
 }
@@ -269,20 +269,20 @@ impl EmitDiag<MockSpan, MockSpan> for BuiltinInstrActionCollector {
     }
 }
 
-impl BuiltinInstrContext<MockSpan> for BuiltinInstrActionCollector {
-    type Ident = SymIdent;
-    type Literal = SymLiteral;
-    type ArgContext = ExprActionCollector<Self>;
+impl BuiltinInstrActions<MockSpan> for BuiltinInstrActionCollector {
+    type Ident = MockIdent;
+    type Literal = MockLiteral;
+    type ArgActions = ExprActionCollector<Self>;
 
-    fn add_argument(self) -> Self::ArgContext {
+    fn will_parse_arg(self) -> Self::ArgActions {
         ExprActionCollector::new(self)
     }
 }
 
-impl InstrEndContext<MockSpan> for BuiltinInstrActionCollector {
-    type ParentContext = InstrActionCollector;
+impl InstrFinalizer<MockSpan> for BuiltinInstrActionCollector {
+    type Next = InstrActionCollector;
 
-    fn did_parse_instr(mut self) -> Self::ParentContext {
+    fn did_parse_instr(mut self) -> Self::Next {
         if (self.builtin_instr.0).0 == IdentKind::MacroKeyword {
             self.parent.parent.parent.mode = LineRule::TokenLine(())
         }
@@ -314,10 +314,10 @@ impl<P> EmitDiag<MockSpan, MockSpan> for ExprActionCollector<P> {
     }
 }
 
-impl FinalContext for ExprActionCollector<BuiltinInstrActionCollector> {
-    type ReturnTo = BuiltinInstrActionCollector;
+impl ArgFinalizer for ExprActionCollector<BuiltinInstrActionCollector> {
+    type Next = BuiltinInstrActionCollector;
 
-    fn exit(mut self) -> Self::ReturnTo {
+    fn did_parse_arg(mut self) -> Self::Next {
         self.parent.actions.push(BuiltinInstrAction::AddArgument {
             actions: self.actions,
         });
@@ -325,26 +325,26 @@ impl FinalContext for ExprActionCollector<BuiltinInstrActionCollector> {
     }
 }
 
-impl FinalContext for ExprActionCollector<()> {
-    type ReturnTo = Vec<ExprAction<MockSpan>>;
+impl ArgFinalizer for ExprActionCollector<()> {
+    type Next = Vec<ExprAction<MockSpan>>;
 
-    fn exit(self) -> Self::ReturnTo {
+    fn did_parse_arg(self) -> Self::Next {
         self.actions
     }
 }
 
-impl<P> ExprContext<MockSpan> for ExprActionCollector<P>
+impl<P> ArgActions<MockSpan> for ExprActionCollector<P>
 where
     Self: Diagnostics<MockSpan>,
 {
-    type Ident = SymIdent;
-    type Literal = SymLiteral;
+    type Ident = MockIdent;
+    type Literal = MockLiteral;
 
-    fn push_atom(&mut self, atom: (ExprAtom<SymIdent, SymLiteral>, MockSpan)) {
+    fn act_on_atom(&mut self, atom: (ExprAtom<MockIdent, MockLiteral>, MockSpan)) {
         self.actions.push(ExprAction::PushAtom(atom))
     }
 
-    fn apply_operator(&mut self, operator: (Operator, MockSpan)) {
+    fn act_on_operator(&mut self, operator: (Operator, MockSpan)) {
         self.actions.push(ExprAction::ApplyOperator(operator))
     }
 }
@@ -369,18 +369,18 @@ impl EmitDiag<MockSpan, MockSpan> for TokenLineActionCollector {
     }
 }
 
-impl TokenLineContext<SymIdent, SymLiteral, MockSpan> for TokenLineActionCollector {
-    type SemanticContextTerminationContext = Self;
+impl TokenLineActions<MockIdent, MockLiteral, MockSpan> for TokenLineActionCollector {
+    type ContextFinalizer = Self;
 
-    fn act_on_token(&mut self, token: SymToken, span: MockSpan) {
+    fn act_on_token(&mut self, token: MockToken, span: MockSpan) {
         self.actions.push(TokenLineAction::Token((token, span)))
     }
 
     fn act_on_ident(
         mut self,
-        ident: SymIdent,
+        ident: MockIdent,
         span: MockSpan,
-    ) -> TokenLineRule<Self, Self::SemanticContextTerminationContext> {
+    ) -> TokenLineRule<Self, Self::ContextFinalizer> {
         let kind = ident.0;
         self.actions.push(TokenLineAction::Ident((ident, span)));
         match kind {
@@ -393,10 +393,10 @@ impl TokenLineContext<SymIdent, SymLiteral, MockSpan> for TokenLineActionCollect
     }
 }
 
-impl LineEndContext<MockSpan> for TokenLineActionCollector {
-    type ParentContext = TokenStreamActionCollector;
+impl LineFinalizer<MockSpan> for TokenLineActionCollector {
+    type Next = TokenStreamActionCollector;
 
-    fn did_parse_line(mut self, span: MockSpan) -> Self::ParentContext {
+    fn did_parse_line(mut self, span: MockSpan) -> Self::Next {
         self.parent
             .actions
             .push(TokenStreamAction::TokenLine(self.actions, span));
@@ -404,23 +404,23 @@ impl LineEndContext<MockSpan> for TokenLineActionCollector {
     }
 }
 
-pub(super) struct MacroCallActionCollector {
-    name: (SymIdent, MockSpan),
-    actions: Vec<MacroCallAction<MockSpan>>,
+pub(super) struct MacroInstrActionCollector {
+    name: (MockIdent, MockSpan),
+    actions: Vec<MacroInstrAction<MockSpan>>,
     parent: InstrActionCollector,
 }
 
-impl EmitDiag<MockSpan, MockSpan> for MacroCallActionCollector {
+impl EmitDiag<MockSpan, MockSpan> for MacroInstrActionCollector {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<MockSpan>>) {
-        self.actions.push(MacroCallAction::EmitDiag(diag.into()))
+        self.actions.push(MacroInstrAction::EmitDiag(diag.into()))
     }
 }
 
-impl MacroCallContext<MockSpan> for MacroCallActionCollector {
-    type Token = Token<SymIdent, SymLiteral>;
-    type MacroArgContext = MacroArgActionCollector;
+impl MacroInstrActions<MockSpan> for MacroInstrActionCollector {
+    type Token = MockToken;
+    type MacroArgActions = MacroArgActionCollector;
 
-    fn enter_macro_arg(self) -> MacroArgActionCollector {
+    fn will_parse_macro_arg(self) -> MacroArgActionCollector {
         MacroArgActionCollector {
             actions: Vec::new(),
             parent: self,
@@ -428,11 +428,11 @@ impl MacroCallContext<MockSpan> for MacroCallActionCollector {
     }
 }
 
-impl InstrEndContext<MockSpan> for MacroCallActionCollector {
-    type ParentContext = InstrActionCollector;
+impl InstrFinalizer<MockSpan> for MacroInstrActionCollector {
+    type Next = InstrActionCollector;
 
-    fn did_parse_instr(mut self) -> Self::ParentContext {
-        self.parent.actions.push(InstrAction::MacroCall {
+    fn did_parse_instr(mut self) -> Self::Next {
+        self.parent.actions.push(InstrAction::MacroInstr {
             name: self.name,
             actions: self.actions,
         });
@@ -442,7 +442,7 @@ impl InstrEndContext<MockSpan> for MacroCallActionCollector {
 
 pub(super) struct MacroArgActionCollector {
     actions: Vec<TokenSeqAction<MockSpan>>,
-    parent: MacroCallActionCollector,
+    parent: MacroInstrActionCollector,
 }
 
 impl EmitDiag<MockSpan, MockSpan> for MacroArgActionCollector {
@@ -451,18 +451,18 @@ impl EmitDiag<MockSpan, MockSpan> for MacroArgActionCollector {
     }
 }
 
-impl TokenSeqContext<MockSpan> for MacroArgActionCollector {
-    type Token = Token<SymIdent, SymLiteral>;
-    type Parent = MacroCallActionCollector;
+impl MacroArgActions<MockSpan> for MacroArgActionCollector {
+    type Token = MockToken;
+    type Next = MacroInstrActionCollector;
 
-    fn push_token(&mut self, token: (Self::Token, MockSpan)) {
+    fn act_on_token(&mut self, token: (Self::Token, MockSpan)) {
         self.actions.push(TokenSeqAction::PushToken(token))
     }
 
-    fn exit(mut self) -> MacroCallActionCollector {
+    fn did_parse_macro_arg(mut self) -> MacroInstrActionCollector {
         self.parent
             .actions
-            .push(MacroCallAction::MacroArg(self.actions));
+            .push(MacroInstrAction::MacroArg(self.actions));
         self.parent
     }
 }
@@ -473,11 +473,11 @@ pub(super) fn expr() -> SymExpr {
 
 impl SymExpr {
     pub fn ident(self, token: impl Into<TokenRef>) -> Self {
-        self.push(token, |t| ExprAtom::Ident(SymIdent(IdentKind::Other, t)))
+        self.push(token, |t| ExprAtom::Ident(MockIdent(IdentKind::Other, t)))
     }
 
     pub fn literal(self, token: impl Into<TokenRef>) -> Self {
-        self.push(token, |t| ExprAtom::Literal(SymLiteral(t)))
+        self.push(token, |t| ExprAtom::Literal(MockLiteral(t)))
     }
 
     pub fn location_counter(self, token: impl Into<TokenRef>) -> Self {
@@ -487,7 +487,7 @@ impl SymExpr {
     fn push(
         mut self,
         token: impl Into<TokenRef>,
-        atom_ctor: impl Fn(TokenRef) -> ExprAtom<SymIdent, SymLiteral>,
+        atom_ctor: impl Fn(TokenRef) -> ExprAtom<MockIdent, MockLiteral>,
     ) -> Self {
         let token_ref = token.into();
         self.0.push(ExprAction::PushAtom((
@@ -565,7 +565,7 @@ impl SymExpr {
 pub struct SymCommand(pub TokenRef);
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct SymIdent(pub IdentKind, pub TokenRef);
+pub struct MockIdent(pub IdentKind, pub TokenRef);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum IdentKind {
@@ -577,17 +577,17 @@ pub enum IdentKind {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct SymLiteral(pub TokenRef);
+pub struct MockLiteral(pub TokenRef);
 
-pub type SymToken = Token<SymIdent, SymLiteral>;
+pub type MockToken = Token<MockIdent, MockLiteral>;
 
-pub fn mk_sym_token(id: impl Into<TokenRef>, token: Token<IdentKind, ()>) -> (SymToken, TokenRef) {
+fn mk_mock_token(id: impl Into<TokenRef>, token: Token<IdentKind, ()>) -> (MockToken, TokenRef) {
     let token_ref = id.into();
     (
         match token {
-            Ident(kind) => Ident(SymIdent(kind, token_ref.clone())),
-            Label(kind) => Label(SymIdent(kind, token_ref.clone())),
-            Literal(()) => Literal(SymLiteral(token_ref.clone())),
+            Ident(kind) => Ident(MockIdent(kind, token_ref.clone())),
+            Label(kind) => Label(MockIdent(kind, token_ref.clone())),
+            Literal(()) => Literal(MockLiteral(token_ref.clone())),
             Sigil(sigil) => Sigil(sigil),
         },
         token_ref,
@@ -595,13 +595,13 @@ pub fn mk_sym_token(id: impl Into<TokenRef>, token: Token<IdentKind, ()>) -> (Sy
 }
 
 pub(super) struct InputTokens {
-    pub tokens: Vec<(SymToken, TokenRef)>,
+    pub tokens: Vec<(MockToken, TokenRef)>,
     pub names: HashMap<String, usize>,
 }
 
 impl InputTokens {
     pub fn insert_token(&mut self, id: impl Into<TokenRef>, token: Token<IdentKind, ()>) {
-        self.tokens.push(mk_sym_token(id, token))
+        self.tokens.push(mk_mock_token(id, token))
     }
 
     pub fn token_seq<T>(&self, tokens: impl Borrow<[T]>) -> Vec<TokenSeqAction<MockSpan>>
@@ -617,7 +617,7 @@ impl InputTokens {
             .collect()
     }
 
-    pub fn token(&self, token_ref: impl Into<TokenRef>) -> (SymToken, MockSpan) {
+    pub fn token(&self, token_ref: impl Into<TokenRef>) -> (MockToken, MockSpan) {
         let token_ref = token_ref.into();
         let id = match &token_ref {
             TokenRef::Id(n) => *n,
@@ -720,17 +720,17 @@ pub(super) enum InstrLineAction<S> {
     EmitDiag(CompactDiag<S>),
 }
 
-pub(super) type Label<S> = ((SymIdent, S), Vec<ParamsAction<S>>);
+pub(super) type Label<S> = ((MockIdent, S), Vec<ParamsAction<S>>);
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum InstrAction<S> {
     BuiltinInstr {
-        builtin_instr: (SymIdent, S),
+        builtin_instr: (MockIdent, S),
         actions: Vec<BuiltinInstrAction<S>>,
     },
-    MacroCall {
-        name: (SymIdent, S),
-        actions: Vec<MacroCallAction<S>>,
+    MacroInstr {
+        name: (MockIdent, S),
+        actions: Vec<MacroInstrAction<S>>,
     },
     Error(Vec<ErrorAction<S>>),
     EmitDiag(CompactDiag<S>),
@@ -744,27 +744,27 @@ pub(super) enum BuiltinInstrAction<S> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum ExprAction<S> {
-    PushAtom((ExprAtom<SymIdent, SymLiteral>, S)),
+    PushAtom((ExprAtom<MockIdent, MockLiteral>, S)),
     ApplyOperator((Operator, S)),
     EmitDiag(CompactDiag<S>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum ParamsAction<S> {
-    AddParameter((SymIdent, S)),
+    AddParameter((MockIdent, S)),
     EmitDiag(CompactDiag<S>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum TokenLineAction<S> {
-    Token((Token<SymIdent, SymLiteral>, S)),
-    Ident((SymIdent, S)),
+    Token((MockToken, S)),
+    Ident((MockIdent, S)),
     EmitDiag(CompactDiag<S>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum TokenSeqAction<S> {
-    PushToken((Token<SymIdent, SymLiteral>, S)),
+    PushToken((MockToken, S)),
     EmitDiag(CompactDiag<S>),
 }
 
@@ -774,7 +774,7 @@ pub(super) enum ErrorAction<S> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(super) enum MacroCallAction<S> {
+pub(super) enum MacroInstrAction<S> {
     MacroArg(Vec<TokenSeqAction<S>>),
     EmitDiag(CompactDiag<S>),
 }
@@ -804,7 +804,7 @@ pub(super) fn labeled(
 ) -> TokenStreamAction<MockSpan> {
     let label = label.into();
     let mut instr_line_actions = vec![InstrLineAction::Label((
-        (SymIdent(IdentKind::Other, label.clone()), label.into()),
+        (MockIdent(IdentKind::Other, label.clone()), label.into()),
         convert_params(params),
     ))];
     if let Some(actions) = actions {
@@ -830,7 +830,7 @@ pub(super) fn builtin_instr(
 ) -> Vec<InstrAction<MockSpan>> {
     let id = id.into();
     vec![InstrAction::BuiltinInstr {
-        builtin_instr: (SymIdent(kind, id.clone()), id.into()),
+        builtin_instr: (MockIdent(kind, id.clone()), id.into()),
         actions: args
             .borrow()
             .iter()
@@ -847,7 +847,7 @@ pub(super) fn malformed_builtin_instr(
 ) -> Vec<InstrAction<MockSpan>> {
     let id = id.into();
     vec![InstrAction::BuiltinInstr {
-        builtin_instr: (SymIdent(IdentKind::BuiltinInstr, id.clone()), id.into()),
+        builtin_instr: (MockIdent(IdentKind::BuiltinInstr, id.clone()), id.into()),
         actions: args
             .borrow()
             .iter()
@@ -858,18 +858,18 @@ pub(super) fn malformed_builtin_instr(
     }]
 }
 
-pub(super) fn call_macro(
+pub(super) fn macro_instr(
     id: impl Into<TokenRef>,
     args: impl Borrow<[Vec<TokenSeqAction<MockSpan>>]>,
 ) -> Vec<InstrAction<MockSpan>> {
     let id = id.into();
-    vec![InstrAction::MacroCall {
-        name: (SymIdent(IdentKind::MacroName, id.clone()), id.into()),
+    vec![InstrAction::MacroInstr {
+        name: (MockIdent(IdentKind::MacroName, id.clone()), id.into()),
         actions: args
             .borrow()
             .iter()
             .cloned()
-            .map(MacroCallAction::MacroArg)
+            .map(MacroInstrAction::MacroArg)
             .collect(),
     }]
 }
@@ -879,7 +879,7 @@ fn convert_params(params: impl Borrow<[TokenRef]>) -> Vec<ParamsAction<MockSpan>
         .borrow()
         .iter()
         .cloned()
-        .map(|t| ParamsAction::AddParameter((SymIdent(IdentKind::Other, t.clone()), t.into())))
+        .map(|t| ParamsAction::AddParameter((MockIdent(IdentKind::Other, t.clone()), t.into())))
         .collect()
 }
 
@@ -904,7 +904,7 @@ mod tests {
             tokens.tokens,
             [
                 (Plus.into(), "my_tok".into()),
-                (Literal(SymLiteral(1.into())), 1.into()),
+                (Literal(MockLiteral(1.into())), 1.into()),
                 (Star.into(), "next_one".into()),
                 (Eos.into(), 3.into()),
             ]

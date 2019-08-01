@@ -1,4 +1,4 @@
-use self::syntax::{ExprAtom, ExprContext, Operator, Sigil, Token, UnaryOperator};
+use self::syntax::{ArgActions, ExprAtom, Operator, Sigil, Token, UnaryOperator};
 use self::Sigil::*;
 
 use super::{Parser, LINE_FOLLOW_SET};
@@ -60,7 +60,7 @@ impl SuffixOperator {
 impl<'a, Id, L, E, I, C, S> Parser<'a, (Result<Token<Id, L>, E>, S), I, C>
 where
     I: Iterator<Item = (Result<Token<Id, L>, E>, S)>,
-    C: ExprContext<S, Ident = Id, Literal = L>,
+    C: ArgActions<S, Ident = Id, Literal = L>,
     S: Clone,
 {
     pub(super) fn parse(self) -> Self {
@@ -102,7 +102,7 @@ where
                 bump!(self);
                 let span = self.merge_spans(&left, &right);
                 self.context
-                    .apply_operator((Operator::Unary(UnaryOperator::Parentheses), span));
+                    .act_on_operator((Operator::Unary(UnaryOperator::Parentheses), span));
                 Ok(self)
             }
             _ => Err((
@@ -133,7 +133,7 @@ where
                 SuffixOperator::Binary(binary_operator) => {
                     self = self.parse_infix_expr(precedence)?;
                     self.context
-                        .apply_operator((Operator::Binary(binary_operator), span))
+                        .act_on_operator((Operator::Binary(binary_operator), span))
                 }
                 SuffixOperator::FnCall => self = self.parse_fn_call(span)?,
             }
@@ -154,7 +154,7 @@ where
             }
         }
         let span = self.context.merge_spans(&left, &self.state.token.1);
-        self.context.apply_operator((Operator::FnCall(args), span));
+        self.context.act_on_operator((Operator::FnCall(args), span));
         bump!(self);
         Ok(self)
     }
@@ -182,19 +182,19 @@ where
             }
             Ok(Token::Ident(ident)) => {
                 self.context
-                    .push_atom((ExprAtom::Ident(ident), self.state.token.1));
+                    .act_on_atom((ExprAtom::Ident(ident), self.state.token.1));
                 bump!(self);
                 Ok(self)
             }
             Ok(Token::Literal(literal)) => {
                 self.context
-                    .push_atom((ExprAtom::Literal(literal), self.state.token.1));
+                    .act_on_atom((ExprAtom::Literal(literal), self.state.token.1));
                 bump!(self);
                 Ok(self)
             }
             Ok(Token::Sigil(Sigil::Dot)) => {
                 self.context
-                    .push_atom((ExprAtom::LocationCounter, self.state.token.1));
+                    .act_on_atom((ExprAtom::LocationCounter, self.state.token.1));
                 bump!(self);
                 Ok(self)
             }
@@ -216,7 +216,7 @@ where
 #[cfg(test)]
 mod tests {
     use self::syntax::parser::mock::*;
-    use self::syntax::FinalContext;
+    use self::syntax::ArgFinalizer;
 
     use super::Token::*;
     use super::*;
@@ -479,7 +479,7 @@ mod tests {
         let tokens = &mut with_spans(&input.tokens);
         Parser::new(tokens, ExprActionCollector::new(()))
             .parse()
-            .change_context(FinalContext::exit)
+            .change_context(ArgFinalizer::did_parse_arg)
             .context
     }
 }
