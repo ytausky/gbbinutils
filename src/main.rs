@@ -136,7 +136,7 @@ mod tests {
     }
 
     #[test]
-    fn highlight_eof_with_one_tilde() {
+    fn highlight_eos_with_one_tilde() {
         let elaborated = Diagnostic {
             clauses: vec![Clause {
                 file: DUMMY_FILE.to_string(),

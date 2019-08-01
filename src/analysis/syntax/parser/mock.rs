@@ -1,4 +1,4 @@
-use super::SimpleToken::*;
+use super::Sigil::*;
 use super::Token::*;
 use super::{ExprAtom, Operator, Token, UnaryOperator};
 
@@ -588,7 +588,7 @@ pub fn mk_sym_token(id: impl Into<TokenRef>, token: Token<IdentKind, ()>) -> (Sy
             Ident(kind) => Ident(SymIdent(kind, token_ref.clone())),
             Label(kind) => Label(SymIdent(kind, token_ref.clone())),
             Literal(()) => Literal(SymLiteral(token_ref.clone())),
-            Simple(simple) => Simple(simple),
+            Sigil(sigil) => Sigil(sigil),
         },
         token_ref,
     )
@@ -674,11 +674,11 @@ macro_rules! input_tokens {
         if input
             .tokens
             .last()
-            .map(|(token, _)| *token != Eof.into())
+            .map(|(token, _)| *token != Eos.into())
             .unwrap_or(true)
         {
-            let eof_id = input.tokens.len().into();
-            input.tokens.push((Eof.into(), eof_id))
+            let eos_id = input.tokens.len().into();
+            input.tokens.push((Eos.into(), eos_id))
         }
         input
     }};
@@ -902,7 +902,7 @@ mod tests {
                 (Plus.into(), "my_tok".into()),
                 (Literal(SymLiteral(1.into())), 1.into()),
                 (Star.into(), "next_one".into()),
-                (Eof.into(), 3.into()),
+                (Eos.into(), 3.into()),
             ]
         );
         assert_eq!(tokens.names.get("my_tok"), Some(&0));
