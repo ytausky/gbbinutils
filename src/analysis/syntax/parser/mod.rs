@@ -399,6 +399,7 @@ delegate_diagnostics! {
 
 #[cfg(test)]
 mod tests {
+    use super::mock::IdentKind::*;
     use super::mock::*;
     use super::Token::*;
     use super::*;
@@ -431,21 +432,18 @@ mod tests {
     #[test]
     fn parse_nullary_instruction() {
         assert_eq_actions(
-            input_tokens![nop @ Ident(IdentKind::BuiltinInstr)],
-            [unlabeled(
-                builtin_instr(IdentKind::BuiltinInstr, "nop", []),
-                1,
-            )],
+            input_tokens![nop @ Ident(BuiltinInstr)],
+            [unlabeled(builtin_instr(BuiltinInstr, "nop", []), 1)],
         )
     }
 
     #[test]
     fn parse_nullary_instruction_after_eol() {
         assert_eq_actions(
-            input_tokens![Eol, nop @ Ident(IdentKind::BuiltinInstr)],
+            input_tokens![Eol, nop @ Ident(BuiltinInstr)],
             [
                 instr_line(vec![], 0),
-                unlabeled(builtin_instr(IdentKind::BuiltinInstr, "nop", []), 2),
+                unlabeled(builtin_instr(BuiltinInstr, "nop", []), 2),
             ],
         )
     }
@@ -453,9 +451,9 @@ mod tests {
     #[test]
     fn parse_nullary_instruction_followed_by_eol() {
         assert_eq_actions(
-            input_tokens![daa @ Ident(IdentKind::BuiltinInstr), Eol],
+            input_tokens![daa @ Ident(BuiltinInstr), Eol],
             [
-                unlabeled(builtin_instr(IdentKind::BuiltinInstr, "daa", []), 1),
+                unlabeled(builtin_instr(BuiltinInstr, "daa", []), 1),
                 instr_line(vec![], 2),
             ],
         )
@@ -464,9 +462,9 @@ mod tests {
     #[test]
     fn parse_unary_instruction() {
         assert_eq_actions(
-            input_tokens![db @ Ident(IdentKind::BuiltinInstr), my_ptr @ Ident(IdentKind::Other)],
+            input_tokens![db @ Ident(BuiltinInstr), my_ptr @ Ident(Other)],
             [unlabeled(
-                builtin_instr(IdentKind::BuiltinInstr, "db", [expr().ident("my_ptr")]),
+                builtin_instr(BuiltinInstr, "db", [expr().ident("my_ptr")]),
                 2,
             )],
         )
@@ -475,18 +473,9 @@ mod tests {
     #[test]
     fn parse_binary_instruction() {
         assert_eq_actions(
-            input_tokens![
-                Ident(IdentKind::BuiltinInstr),
-                Ident(IdentKind::Other),
-                Comma,
-                Literal(())
-            ],
+            input_tokens![Ident(BuiltinInstr), Ident(Other), Comma, Literal(())],
             [unlabeled(
-                builtin_instr(
-                    IdentKind::BuiltinInstr,
-                    0,
-                    [expr().ident(1), expr().literal(3)],
-                ),
+                builtin_instr(BuiltinInstr, 0, [expr().ident(1), expr().literal(3)]),
                 4,
             )],
         );
@@ -495,28 +484,24 @@ mod tests {
     #[test]
     fn parse_two_instructions() {
         let tokens = input_tokens![
-            Ident(IdentKind::BuiltinInstr),
-            Ident(IdentKind::Other),
+            Ident(BuiltinInstr),
+            Ident(Other),
             Comma,
             Literal(()),
             Eol,
-            ld @ Ident(IdentKind::BuiltinInstr),
+            ld @ Ident(BuiltinInstr),
             a @ Literal(()),
             Comma,
-            some_const @ Ident(IdentKind::Other),
+            some_const @ Ident(Other),
         ];
         let expected = [
             unlabeled(
-                builtin_instr(
-                    IdentKind::BuiltinInstr,
-                    0,
-                    [expr().ident(1), expr().literal(3)],
-                ),
+                builtin_instr(BuiltinInstr, 0, [expr().ident(1), expr().literal(3)]),
                 4,
             ),
             unlabeled(
                 builtin_instr(
-                    IdentKind::BuiltinInstr,
+                    BuiltinInstr,
                     "ld",
                     [expr().literal("a"), expr().ident("some_const")],
                 ),
@@ -529,33 +514,25 @@ mod tests {
     #[test]
     fn parse_two_instructions_separated_by_blank_line() {
         let tokens = input_tokens![
-            Ident(IdentKind::BuiltinInstr),
+            Ident(BuiltinInstr),
             Literal(()),
             Comma,
-            Ident(IdentKind::Other),
+            Ident(Other),
             Eol,
             Eol,
-            Ident(IdentKind::BuiltinInstr),
-            Ident(IdentKind::Other),
+            Ident(BuiltinInstr),
+            Ident(Other),
             Comma,
             Literal(()),
         ];
         let expected = [
             unlabeled(
-                builtin_instr(
-                    IdentKind::BuiltinInstr,
-                    0,
-                    [expr().literal(1), expr().ident(3)],
-                ),
+                builtin_instr(BuiltinInstr, 0, [expr().literal(1), expr().ident(3)]),
                 4,
             ),
             instr_line(vec![], 5),
             unlabeled(
-                builtin_instr(
-                    IdentKind::BuiltinInstr,
-                    6,
-                    [expr().ident(7), expr().literal(9)],
-                ),
+                builtin_instr(BuiltinInstr, 6, [expr().ident(7), expr().literal(9)]),
                 10,
             ),
         ];
@@ -564,19 +541,9 @@ mod tests {
 
     #[test]
     fn parse_empty_macro_definition() {
-        let tokens = input_tokens![
-            Label(IdentKind::Other),
-            Ident(IdentKind::MacroKeyword),
-            Eol,
-            Ident(IdentKind::Endm),
-        ];
+        let tokens = input_tokens![Label(Other), Ident(MacroKeyword), Eol, Ident(Endm),];
         let expected_actions = [
-            labeled(
-                0,
-                vec![],
-                Some(builtin_instr(IdentKind::MacroKeyword, 1, [])),
-                2,
-            ),
+            labeled(0, vec![], Some(builtin_instr(MacroKeyword, 1, [])), 2),
             token_line(vec![tokens.ident(3)], 4),
         ];
         assert_eq_actions(tokens, expected_actions);
@@ -585,20 +552,15 @@ mod tests {
     #[test]
     fn parse_macro_definition_with_instruction() {
         let tokens = input_tokens![
-            Label(IdentKind::Other),
-            Ident(IdentKind::MacroKeyword),
+            Label(Other),
+            Ident(MacroKeyword),
             Eol,
-            Ident(IdentKind::BuiltinInstr),
+            Ident(BuiltinInstr),
             Eol,
-            Ident(IdentKind::Endm),
+            Ident(Endm),
         ];
         let expected_actions = [
-            labeled(
-                0,
-                vec![],
-                Some(builtin_instr(IdentKind::MacroKeyword, 1, vec![])),
-                2,
-            ),
+            labeled(0, vec![], Some(builtin_instr(MacroKeyword, 1, vec![])), 2),
             token_line(vec![tokens.ident(3)], 4),
             token_line(vec![tokens.ident(5)], 6),
         ];
@@ -608,23 +570,23 @@ mod tests {
     #[test]
     fn parse_nonempty_macro_def_with_two_params() {
         let tokens = input_tokens![
-            l @ Label(IdentKind::Other),
+            l @ Label(Other),
             LParen,
-            p1 @ Ident(IdentKind::Other),
+            p1 @ Ident(Other),
             Comma,
-            p2 @ Ident(IdentKind::Other),
+            p2 @ Ident(Other),
             RParen,
-            key @ Ident(IdentKind::MacroKeyword),
+            key @ Ident(MacroKeyword),
             eol @ Eol,
-            t1 @ Ident(IdentKind::BuiltinInstr),
+            t1 @ Ident(BuiltinInstr),
             t2 @ Eol,
-            endm @ Ident(IdentKind::Endm),
+            endm @ Ident(Endm),
         ];
         let expected = [
             labeled(
                 "l",
                 ["p1".into(), "p2".into()],
-                Some(builtin_instr(IdentKind::MacroKeyword, "key", [])),
+                Some(builtin_instr(MacroKeyword, "key", [])),
                 "eol",
             ),
             token_line(vec![tokens.ident("t1")], "t2"),
@@ -635,28 +597,23 @@ mod tests {
 
     #[test]
     fn parse_label() {
-        let tokens = input_tokens![Label(IdentKind::Other), Eol];
+        let tokens = input_tokens![Label(Other), Eol];
         let expected_actions = [labeled(0, vec![], None, 1), instr_line(vec![], 2)];
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_two_consecutive_labels() {
-        let tokens = input_tokens![Label(IdentKind::Other), Eol, Label(IdentKind::Other)];
+        let tokens = input_tokens![Label(Other), Eol, Label(Other)];
         let expected = [labeled(0, vec![], None, 1), labeled(2, vec![], None, 3)];
         assert_eq_actions(tokens, expected)
     }
 
     #[test]
     fn parse_labeled_instruction() {
-        let tokens = input_tokens![Label(IdentKind::Other), Ident(IdentKind::BuiltinInstr), Eol];
+        let tokens = input_tokens![Label(Other), Ident(BuiltinInstr), Eol];
         let expected = [
-            labeled(
-                0,
-                vec![],
-                Some(builtin_instr(IdentKind::BuiltinInstr, 1, [])),
-                2,
-            ),
+            labeled(0, vec![], Some(builtin_instr(BuiltinInstr, 1, [])), 2),
             instr_line(vec![], 3),
         ];
         assert_eq_actions(tokens, expected)
@@ -664,16 +621,11 @@ mod tests {
 
     #[test]
     fn parse_labeled_command_with_eol_separators() {
-        let tokens = input_tokens![
-            Label(IdentKind::Other),
-            Eol,
-            Eol,
-            Ident(IdentKind::BuiltinInstr)
-        ];
+        let tokens = input_tokens![Label(Other), Eol, Eol, Ident(BuiltinInstr)];
         let expected = [
             labeled(0, vec![], None, 1),
             instr_line(vec![], 2),
-            unlabeled(builtin_instr(IdentKind::BuiltinInstr, 3, []), 4),
+            unlabeled(builtin_instr(BuiltinInstr, 3, []), 4),
         ];
         assert_eq_actions(tokens, expected)
     }
@@ -681,14 +633,14 @@ mod tests {
     #[test]
     fn parse_deref_operand() {
         let tokens = input_tokens![
-            jp @ Ident(IdentKind::BuiltinInstr),
+            jp @ Ident(BuiltinInstr),
             open @ LParen,
             hl @ Literal(()),
             close @ RParen,
         ];
         let expected = [unlabeled(
             builtin_instr(
-                IdentKind::BuiltinInstr,
+                BuiltinInstr,
                 "jp",
                 [expr().literal("hl").parentheses("open", "close")],
             ),
@@ -699,26 +651,21 @@ mod tests {
 
     #[test]
     fn parse_nullary_macro_call() {
-        let tokens = input_tokens![Ident(IdentKind::MacroName)];
+        let tokens = input_tokens![Ident(MacroName)];
         let expected_actions = [unlabeled(macro_instr(0, []), 1)];
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_unary_macro_call() {
-        let tokens = input_tokens![Ident(IdentKind::MacroName), Literal(())];
+        let tokens = input_tokens![Ident(MacroName), Literal(())];
         let expected_actions = [unlabeled(macro_instr(0, [tokens.token_seq([1])]), 2)];
         assert_eq_actions(tokens, expected_actions)
     }
 
     #[test]
     fn parse_unary_macro_call_with_multiple_terminals() {
-        let tokens = input_tokens![
-            Ident(IdentKind::MacroName),
-            Literal(()),
-            Literal(()),
-            Literal(()),
-        ];
+        let tokens = input_tokens![Ident(MacroName), Literal(()), Literal(()), Literal(()),];
         let expected_actions = [unlabeled(macro_instr(0, [tokens.token_seq([1, 2, 3])]), 4)];
         assert_eq_actions(tokens, expected_actions)
     }
@@ -726,7 +673,7 @@ mod tests {
     #[test]
     fn parse_binary_macro_call_with_multiple_terminals() {
         let tokens = input_tokens![
-            Ident(IdentKind::MacroName),
+            Ident(MacroName),
             Literal(()),
             Literal(()),
             Comma,
@@ -744,14 +691,14 @@ mod tests {
     #[test]
     fn parse_sum_arg() {
         let tokens = input_tokens![
-            Ident(IdentKind::BuiltinInstr),
-            x @ Ident(IdentKind::Other),
+            Ident(BuiltinInstr),
+            x @ Ident(Other),
             plus @ Plus,
             y @ Literal(()),
         ];
         let expected_actions = [unlabeled(
             builtin_instr(
-                IdentKind::BuiltinInstr,
+                BuiltinInstr,
                 0,
                 [expr().ident("x").literal("y").plus("plus")],
             ),
@@ -782,7 +729,7 @@ mod tests {
     fn diagnose_missing_comma_in_arg_list() {
         let span: MockSpan = TokenRef::from("unexpected").into();
         assert_eq_actions(
-            input_tokens![Ident(IdentKind::BuiltinInstr), Literal(()), unexpected @ Literal(())],
+            input_tokens![Ident(BuiltinInstr), Literal(()), unexpected @ Literal(())],
             [unlabeled(
                 malformed_builtin_instr(
                     0,
@@ -801,11 +748,11 @@ mod tests {
     #[test]
     fn diagnose_eos_in_param_list() {
         assert_eq_actions(
-            input_tokens![label @ Label(IdentKind::Other), LParen, eos @ Eos],
+            input_tokens![label @ Label(Other), LParen, eos @ Eos],
             [instr_line(
                 vec![InstrLineAction::Label((
                     (
-                        MockIdent(IdentKind::Other, "label".into()),
+                        MockIdent(Other, "label".into()),
                         TokenRef::from("label").into(),
                     ),
                     vec![ParamsAction::EmitDiag(arg_error(
@@ -821,10 +768,10 @@ mod tests {
     #[test]
     fn diagnose_unmatched_parentheses() {
         assert_eq_actions(
-            input_tokens![Ident(IdentKind::BuiltinInstr), paren @ LParen, Literal(())],
+            input_tokens![Ident(BuiltinInstr), paren @ LParen, Literal(())],
             [unlabeled(
                 builtin_instr(
-                    IdentKind::BuiltinInstr,
+                    BuiltinInstr,
                     0,
                     [expr()
                         .literal(2)
@@ -840,17 +787,17 @@ mod tests {
         let paren_span: MockSpan = TokenRef::from("paren").into();
         assert_eq_actions(
             input_tokens![
-                Ident(IdentKind::BuiltinInstr),
+                Ident(BuiltinInstr),
                 paren @ RParen,
                 Plus,
-                Ident(IdentKind::Other),
+                Ident(Other),
                 Eol,
-                nop @ Ident(IdentKind::BuiltinInstr)
+                nop @ Ident(BuiltinInstr)
             ],
             [
                 unlabeled(
                     builtin_instr(
-                        IdentKind::BuiltinInstr,
+                        BuiltinInstr,
                         0,
                         [expr().error(
                             Message::UnexpectedToken {
@@ -861,7 +808,7 @@ mod tests {
                     ),
                     4,
                 ),
-                unlabeled(builtin_instr(IdentKind::BuiltinInstr, "nop", []), 6),
+                unlabeled(builtin_instr(BuiltinInstr, "nop", []), 6),
             ],
         )
     }
@@ -869,11 +816,11 @@ mod tests {
     #[test]
     fn diagnose_unmatched_parenthesis_at_eol() {
         assert_eq_actions(
-            input_tokens![Ident(IdentKind::BuiltinInstr), LParen, Eol],
+            input_tokens![Ident(BuiltinInstr), LParen, Eol],
             [
                 unlabeled(
                     builtin_instr(
-                        IdentKind::BuiltinInstr,
+                        BuiltinInstr,
                         0,
                         [expr().error(Message::UnmatchedParenthesis, TokenRef::from(1))],
                     ),
@@ -889,17 +836,17 @@ mod tests {
         let span: MockSpan = TokenRef::from("lit").into();
         assert_eq_actions(
             input_tokens![
-                label @ Label(IdentKind::Other),
+                label @ Label(Other),
                 LParen,
                 lit @ Literal(()),
                 RParen,
-                key @ Ident(IdentKind::BuiltinInstr),
+                key @ Ident(BuiltinInstr),
             ],
             [instr_line(
                 vec![
                     InstrLineAction::Label((
                         (
-                            MockIdent(IdentKind::Other, "label".into()),
+                            MockIdent(Other, "label".into()),
                             TokenRef::from("label").into(),
                         ),
                         vec![ParamsAction::EmitDiag(
@@ -910,7 +857,7 @@ mod tests {
                             .into(),
                         )],
                     )),
-                    InstrLineAction::Instr(builtin_instr(IdentKind::BuiltinInstr, "key", [])),
+                    InstrLineAction::Instr(builtin_instr(BuiltinInstr, "key", [])),
                 ],
                 5,
             )],
@@ -920,14 +867,14 @@ mod tests {
     #[test]
     fn recover_from_other_ident_as_key() {
         let tokens = input_tokens![
-            Ident(IdentKind::Other),
-            Ident(IdentKind::Other),
+            Ident(Other),
+            Ident(Other),
             Eol,
-            nop @ Ident(IdentKind::BuiltinInstr),
+            nop @ Ident(BuiltinInstr),
         ];
         let expected = [
             unlabeled(vec![InstrAction::Error(vec![])], 2),
-            unlabeled(builtin_instr(IdentKind::BuiltinInstr, "nop", []), 4),
+            unlabeled(builtin_instr(BuiltinInstr, "nop", []), 4),
         ];
         assert_eq_actions(tokens, expected)
     }
