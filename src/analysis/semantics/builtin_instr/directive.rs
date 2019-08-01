@@ -18,11 +18,11 @@ pub(in crate::analysis) enum Directive {
     Section,
 }
 
-pub(super) fn analyze_directive<'a, S: Session>(
+pub(super) fn analyze_directive<S: Session>(
     directive: (Directive, S::Span),
     label: Option<Label<S::Ident, S::Span>>,
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
-    actions: SemanticActions<S>,
+    actions: InstrLineActions<S>,
 ) -> SemanticActions<S> {
     let context = DirectiveContext {
         span: directive.1,
@@ -42,13 +42,13 @@ struct DirectiveContext<A, I, R, S> {
 
 delegate_diagnostics! {
     {S: Session},
-    DirectiveContext<SemanticActions<S>, S::Ident, S::StringRef, S::Span>,
+    DirectiveContext<InstrLineActions<S>, S::Ident, S::StringRef, S::Span>,
     {actions},
-    SemanticActions<S>,
+    InstrLineActions<S>,
     S::Span
 }
 
-impl<'a, S: Session> DirectiveContext<SemanticActions<S>, S::Ident, S::StringRef, S::Span> {
+impl<'a, S: Session> DirectiveContext<InstrLineActions<S>, S::Ident, S::StringRef, S::Span> {
     fn analyze(self, directive: Directive) -> SemanticActions<S> {
         match directive {
             Directive::Db => self.analyze_data(Width::Byte),
@@ -69,11 +69,11 @@ impl<'a, S: Session> DirectiveContext<SemanticActions<S>, S::Ident, S::StringRef
                     self.actions = actions;
                     expr
                 }
-                (Err(()), actions) => return actions,
+                (Err(()), actions) => return actions.into(),
             };
             self.actions.session.emit_item(Item::Data(expr, width))
         }
-        self.actions
+        self.actions.into()
     }
 
     fn analyze_ds(self) -> SemanticActions<S> {
@@ -82,11 +82,13 @@ impl<'a, S: Session> DirectiveContext<SemanticActions<S>, S::Ident, S::StringRef
             Ok(arg) => {
                 let (result, returned_actions) = actions.analyze_expr(&Default::default(), arg);
                 actions = returned_actions;
-                result.ok().map(|bytes| actions.session.reserve(bytes));
+                if let Ok(bytes) = result {
+                    actions.session.reserve(bytes)
+                }
             }
             Err(()) => (),
         }
-        actions
+        actions.into()
     }
 
     fn analyze_equ(mut self) -> SemanticActions<S> {
@@ -98,7 +100,7 @@ impl<'a, S: Session> DirectiveContext<SemanticActions<S>, S::Ident, S::StringRef
             }
             Err(()) => (),
         }
-        self.actions
+        self.actions.into()
     }
 
     fn analyze_section(mut self) -> SemanticActions<S> {
@@ -106,20 +108,20 @@ impl<'a, S: Session> DirectiveContext<SemanticActions<S>, S::Ident, S::StringRef
         let session = &mut self.actions.session;
         let id = session.reloc_lookup(name, span.clone());
         session.start_section((id, span));
-        self.actions
+        self.actions.into()
     }
 
     fn analyze_include(mut self) -> SemanticActions<S> {
         let (path, span) = match reduce_include(self.span, self.args, &mut self.actions) {
             Ok(result) => result,
-            Err(()) => return self.actions,
+            Err(()) => return self.actions.into(),
         };
         let (result, session) = self.actions.session.analyze_file(path);
         self.actions.session = session;
         if let Err(err) = result {
             self.actions.emit_diag(Message::from(err).at(span))
         }
-        self.actions
+        self.actions.into()
     }
 
     fn analyze_macro(mut self) -> SemanticActions<S> {
@@ -127,10 +129,12 @@ impl<'a, S: Session> DirectiveContext<SemanticActions<S>, S::Ident, S::StringRef
             let span = self.span;
             self.actions.emit_diag(Message::MacroRequiresName.at(span))
         }
-        self.actions.mode = Some(LineRule::TokenLine(TokenFrame::MacroDef(
-            MacroDefState::new(self.label),
-        )));
-        self.actions
+        SemanticActions {
+            mode: LineRule::TokenLine(TokenLineActions {
+                line: TokenFrame::MacroDef(MacroDefState::new(self.label)),
+                session: self.actions.session,
+            }),
+        }
     }
 
     fn analyze_org(self) -> SemanticActions<S> {
@@ -139,11 +143,13 @@ impl<'a, S: Session> DirectiveContext<SemanticActions<S>, S::Ident, S::StringRef
             Ok(arg) => {
                 let (result, returned_actions) = actions.analyze_expr(&Default::default(), arg);
                 actions = returned_actions;
-                result.ok().map(|value| actions.session.set_origin(value));
+                if let Ok(value) = result {
+                    actions.session.set_origin(value)
+                }
             }
             Err(()) => (),
         }
-        actions
+        actions.into()
     }
 }
 

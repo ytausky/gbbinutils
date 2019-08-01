@@ -36,7 +36,7 @@ impl From<Mnemonic> for BuiltinInstr {
 }
 
 pub(in crate::analysis) struct BuiltinInstrActions<S: Session> {
-    parent: SemanticActions<S>,
+    parent: InstrLineActions<S>,
     command: (BuiltinInstr, S::Span),
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
     has_errors: bool,
@@ -44,7 +44,7 @@ pub(in crate::analysis) struct BuiltinInstrActions<S: Session> {
 
 impl<S: Session> BuiltinInstrActions<S> {
     pub(super) fn new(
-        parent: SemanticActions<S>,
+        parent: InstrLineActions<S>,
         command: (BuiltinInstr, S::Span),
     ) -> BuiltinInstrActions<S> {
         BuiltinInstrActions {
@@ -103,9 +103,10 @@ where
         if !self.has_errors {
             let prepared = PreparedBuiltinInstr::new(self.command, &mut self.parent);
             self.parent = self.parent.define_label_if_present();
-            self.parent = prepared.exec(self.args, self.parent)
+            prepared.exec(self.args, self.parent)
+        } else {
+            self.parent.into()
         }
-        self.parent
     }
 }
 
@@ -116,10 +117,10 @@ enum PreparedBuiltinInstr<S: Session> {
 }
 
 impl<S: Session> PreparedBuiltinInstr<S> {
-    fn new((command, span): (BuiltinInstr, S::Span), stmt: &mut SemanticActions<S>) -> Self {
+    fn new((command, span): (BuiltinInstr, S::Span), stmt: &mut InstrLineActions<S>) -> Self {
         match command {
             BuiltinInstr::Directive(directive) if directive.requires_symbol() => {
-                PreparedBuiltinInstr::Binding((directive, span), stmt.label.take())
+                PreparedBuiltinInstr::Binding((directive, span), stmt.line.label.take())
             }
             BuiltinInstr::Directive(directive) => {
                 PreparedBuiltinInstr::Directive((directive, span))
@@ -131,7 +132,7 @@ impl<S: Session> PreparedBuiltinInstr<S> {
     fn exec(
         self,
         args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
-        actions: SemanticActions<S>,
+        actions: InstrLineActions<S>,
     ) -> SemanticActions<S> {
         match self {
             PreparedBuiltinInstr::Binding(binding, label) => {
@@ -140,7 +141,9 @@ impl<S: Session> PreparedBuiltinInstr<S> {
             PreparedBuiltinInstr::Directive(directive) => {
                 directive::analyze_directive(directive, None, args, actions)
             }
-            PreparedBuiltinInstr::Mnemonic(mnemonic) => analyze_mnemonic(mnemonic, args, actions),
+            PreparedBuiltinInstr::Mnemonic(mnemonic) => {
+                analyze_mnemonic(mnemonic, args, actions).into()
+            }
         }
     }
 }
@@ -261,8 +264,8 @@ const OPERAND_SYMBOLS: &[(&str, OperandSymbol)] = &[
 fn analyze_mnemonic<S: Session>(
     name: (Mnemonic, S::Span),
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
-    mut actions: SemanticActions<S>,
-) -> SemanticActions<S> {
+    mut actions: InstrLineActions<S>,
+) -> InstrLineActions<S> {
     let mut operands = Vec::new();
     for arg in args {
         let (operand, returned_actions) = actions.build_value(&Default::default(), |builder| {
@@ -277,7 +280,7 @@ fn analyze_mnemonic<S: Session>(
     actions
 }
 
-impl<S: Session> SemanticActions<S> {
+impl<S: Session> InstrLineActions<S> {
     fn analyze_expr(
         self,
         params: &Params<S::Ident, S::Span>,

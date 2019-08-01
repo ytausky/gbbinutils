@@ -32,7 +32,7 @@ impl<I, L> Token<I, L> {
 
 const LINE_FOLLOW_SET: &[TokenKind] = &[Token::Sigil(Eol), Token::Sigil(Eos)];
 
-pub(in crate::analysis) fn parse_src<I, L, E, T, C, S>(mut tokens: T, context: C) -> C
+pub(in crate::analysis) fn parse_src<I, L, E, T, C, S>(mut tokens: T, context: C) -> C::FinalContext
 where
     T: Iterator<Item = (Result<Token<I, L>, E>, S)>,
     C: TokenStreamContext<I, L, S>,
@@ -47,7 +47,7 @@ where
         token.0.ok().as_ref().map(Token::kind),
         Some(Token::Sigil(Sigil::Eos))
     );
-    context
+    context.act_on_eos(token.1)
 }
 
 struct Parser<'a, T, I: 'a, C> {
@@ -423,7 +423,9 @@ mod tests {
     fn assert_eq_actions(input: InputTokens, expected: impl Borrow<[TokenStreamAction<MockSpan>]>) {
         let mut parsing_context = TokenStreamActionCollector::new();
         parsing_context = parse_src(with_spans(&input.tokens), parsing_context);
-        assert_eq!(parsing_context.actions, expected.borrow())
+        let mut expected = expected.borrow().to_vec();
+        expected.push(input.eos());
+        assert_eq!(parsing_context.actions, expected)
     }
 
     #[test]

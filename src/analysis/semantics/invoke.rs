@@ -1,17 +1,17 @@
-use super::SemanticActions;
+use super::{InstrLineActions, SemanticActions};
 
 use crate::analysis::session::{MacroArgs, Session};
 use crate::analysis::syntax::{InstrEndContext, MacroCallContext, TokenSeqContext};
 use crate::analysis::{SemanticToken, TokenSeq};
 
 pub(in crate::analysis) struct MacroCallActions<S: Session> {
-    parent: SemanticActions<S>,
+    parent: InstrLineActions<S>,
     name: (S::MacroEntry, S::Span),
     args: MacroArgs<S::Ident, S::StringRef, S::Span>,
 }
 
 impl<S: Session> MacroCallActions<S> {
-    pub fn new(parent: SemanticActions<S>, name: (S::MacroEntry, S::Span)) -> MacroCallActions<S> {
+    pub fn new(parent: InstrLineActions<S>, name: (S::MacroEntry, S::Span)) -> MacroCallActions<S> {
         MacroCallActions {
             parent,
             name,
@@ -26,7 +26,7 @@ impl<S: Session> MacroCallActions<S> {
 }
 
 delegate_diagnostics! {
-    {S: Session}, MacroCallActions<S>, {parent}, SemanticActions<S>, S::Span
+    {S: Session}, MacroCallActions<S>, {parent}, InstrLineActions<S>, S::Span
 }
 
 impl<S: Session> MacroCallContext<S::Span> for MacroCallActions<S> {
@@ -48,7 +48,7 @@ impl<S: Session> InstrEndContext<S::Span> for MacroCallActions<S> {
             args,
         } = self;
         parent.session = parent.session.call_macro(name, args);
-        parent
+        parent.into()
     }
 }
 

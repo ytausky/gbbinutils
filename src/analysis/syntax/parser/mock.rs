@@ -632,6 +632,10 @@ impl InputTokens {
             _ => panic!("expected identifier"),
         }
     }
+
+    pub fn eos(&self) -> TokenStreamAction<MockSpan> {
+        TokenStreamAction::Eos(self.tokens.last().unwrap().1.clone().into())
+    }
 }
 
 macro_rules! add_token {
@@ -702,14 +706,14 @@ impl From<&'static str> for TokenRef {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(super) enum TokenStreamAction<S> {
     InstrLine(Vec<InstrLineAction<S>>, S),
     TokenLine(Vec<TokenLineAction<S>>, S),
     Eos(S),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(super) enum InstrLineAction<S> {
     Label(Label<S>),
     Instr(Vec<InstrAction<S>>),
@@ -718,7 +722,7 @@ pub(super) enum InstrLineAction<S> {
 
 pub(super) type Label<S> = ((SymIdent, S), Vec<ParamsAction<S>>);
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(super) enum InstrAction<S> {
     BuiltinInstr {
         builtin_instr: (SymIdent, S),
@@ -732,20 +736,20 @@ pub(super) enum InstrAction<S> {
     EmitDiag(CompactDiag<S>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(super) enum BuiltinInstrAction<S> {
     AddArgument { actions: Vec<ExprAction<S>> },
     EmitDiag(CompactDiag<S>),
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub(super) enum ExprAction<S> {
     PushAtom((ExprAtom<SymIdent, SymLiteral>, S)),
     ApplyOperator((Operator, S)),
     EmitDiag(CompactDiag<S>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(super) enum ParamsAction<S> {
     AddParameter((SymIdent, S)),
     EmitDiag(CompactDiag<S>),
@@ -764,12 +768,12 @@ pub(super) enum TokenSeqAction<S> {
     EmitDiag(CompactDiag<S>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(super) enum ErrorAction<S> {
     EmitDiag(CompactDiag<S>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(super) enum MacroCallAction<S> {
     MacroArg(Vec<TokenSeqAction<S>>),
     EmitDiag(CompactDiag<S>),

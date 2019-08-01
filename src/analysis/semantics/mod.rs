@@ -31,45 +31,25 @@ where
         P::Session: IdentSource<Ident = I> + StringSource<StringRef = R> + SpanSource<Span = S>,
     {
         let session = partial.into_session(self);
-        let actions =
+        let Done(session) =
             super::syntax::parse_token_seq(tokens.into_iter(), SemanticActions::new(session));
-        actions.session.into()
+        session.into()
     }
 }
 
 pub(super) struct SemanticActions<S: Session> {
+    mode: LineRule<InstrLineActions<S>, TokenLineActions<S>>,
+}
+
+type InstrLineActions<S> = SemanticState<InstrLineState<S>, S>;
+type TokenLineActions<S> = SemanticState<TokenFrame<S>, S>;
+
+pub(super) struct SemanticState<L, S: Session> {
+    line: L,
     session: S,
-    mode: Option<LineRule<(), TokenFrame<S>>>,
-    label: Option<Label<S::Ident, S::Span>>,
 }
 
-enum TokenFrame<S: Session> {
-    MacroDef(MacroDefState<S>),
-}
-
-struct MacroDefState<S: Session> {
-    label: Option<Label<S::Ident, S::Span>>,
-    tokens: TokenSeq<S::Ident, S::StringRef, S::Span>,
-}
-
-impl<S: Session> MacroDefState<S> {
-    fn new(label: Option<Label<S::Ident, S::Span>>) -> Self {
-        Self {
-            label,
-            tokens: (Vec::new(), Vec::new()),
-        }
-    }
-}
-
-impl<S: Session> SemanticActions<S> {
-    pub fn new(session: S) -> SemanticActions<S> {
-        SemanticActions {
-            session,
-            mode: Some(LineRule::InstrLine(())),
-            label: None,
-        }
-    }
-
+impl<L, S: Session> SemanticState<L, S> {
     fn build_value<F, T>(mut self, params: &Params<S::Ident, S::Span>, f: F) -> (T, Self)
     where
         F: FnOnce(
@@ -87,9 +67,26 @@ impl<S: Session> SemanticActions<S> {
         self.session = session;
         (value, self)
     }
+}
+
+delegate_diagnostics! {
+    {L, S: Session}, SemanticState<L, S>, {session}, S, S::Span
+}
+
+pub(super) struct InstrLineState<S: Session> {
+    label: Option<Label<S::Ident, S::Span>>,
+}
+
+impl<S: Session> InstrLineActions<S> {
+    fn new(session: S) -> Self {
+        Self {
+            line: InstrLineState { label: None },
+            session,
+        }
+    }
 
     fn define_label_if_present(mut self) -> Self {
-        if let Some(((label, span), _params)) = self.label.take() {
+        if let Some(((label, span), _params)) = self.line.label.take() {
             self.session.start_scope(&label);
             let id = self.session.reloc_lookup(label, span.clone());
             let mut builder = self.session.define_symbol(id, span.clone());
@@ -101,41 +98,88 @@ impl<S: Session> SemanticActions<S> {
     }
 }
 
+pub(super) enum TokenFrame<S: Session> {
+    MacroDef(MacroDefState<S>),
+}
+
+pub(super) struct MacroDefState<S: Session> {
+    label: Option<Label<S::Ident, S::Span>>,
+    tokens: TokenSeq<S::Ident, S::StringRef, S::Span>,
+}
+
+impl<S: Session> MacroDefState<S> {
+    fn new(label: Option<Label<S::Ident, S::Span>>) -> Self {
+        Self {
+            label,
+            tokens: (Vec::new(), Vec::new()),
+        }
+    }
+}
+
+impl<S: Session> SemanticActions<S> {
+    pub fn new(session: S) -> SemanticActions<S> {
+        SemanticActions {
+            mode: LineRule::InstrLine(InstrLineActions::new(session)),
+        }
+    }
+
+    fn session(&mut self) -> &mut S {
+        match &mut self.mode {
+            LineRule::InstrLine(actions) => &mut actions.session,
+            LineRule::TokenLine(actions) => &mut actions.session,
+        }
+    }
+}
+
 delegate_diagnostics! {
-    {S: Session}, SemanticActions<S>, {session}, S, S::Span
+    {S: Session}, SemanticActions<S>, {session()}, S, S::Span
+}
+
+impl<S: Session> From<InstrLineActions<S>> for SemanticActions<S> {
+    fn from(actions: InstrLineActions<S>) -> Self {
+        Self {
+            mode: LineRule::InstrLine(actions),
+        }
+    }
+}
+
+impl<S: Session> From<TokenLineActions<S>> for SemanticActions<S> {
+    fn from(actions: TokenLineActions<S>) -> Self {
+        Self {
+            mode: LineRule::TokenLine(actions),
+        }
+    }
 }
 
 impl<S: Session> TokenStreamContext<S::Ident, Literal<S::StringRef>, S::Span> for SemanticActions<S>
 where
     S::Ident: AsRef<str>,
 {
-    type InstrLineContext = Self;
+    type InstrLineContext = InstrLineActions<S>;
     type TokenLineContext = TokenLineActions<S>;
     type TokenLineEndContext = TokenFrameEndActions<S>;
-    type FinalContext = Done;
+    type FinalContext = Done<S>;
 
-    fn will_parse_line(mut self) -> LineRule<Self::InstrLineContext, Self::TokenLineContext> {
-        match self.mode.take().unwrap() {
-            LineRule::InstrLine(()) => LineRule::InstrLine(self),
-            LineRule::TokenLine(frame) => LineRule::TokenLine(TokenLineActions {
-                parent: self,
-                frame,
-            }),
-        }
+    fn will_parse_line(self) -> LineRule<Self::InstrLineContext, Self::TokenLineContext> {
+        self.mode
     }
 
-    fn act_on_eos(mut self, span: S::Span) -> Self::FinalContext {
-        self = self.define_label_if_present();
-        if let Some(LineRule::TokenLine(TokenFrame::MacroDef(_))) = &self.mode {
-            self.emit_diag(Message::UnexpectedEof.at(span))
+    fn act_on_eos(self, span: S::Span) -> Self::FinalContext {
+        match self.mode {
+            LineRule::InstrLine(actions) => Done(actions.define_label_if_present().session),
+            LineRule::TokenLine(mut actions) => {
+                match actions.line {
+                    TokenFrame::MacroDef(_) => actions.emit_diag(Message::UnexpectedEof.at(span)),
+                }
+                Done(actions.session)
+            }
         }
-        Done
     }
 }
 
-pub(super) struct Done;
+pub(super) struct Done<S>(S);
 
-impl<S: Session> InstrLineContext<S::Ident, Literal<S::StringRef>, S::Span> for SemanticActions<S>
+impl<S: Session> InstrLineContext<S::Ident, Literal<S::StringRef>, S::Span> for InstrLineActions<S>
 where
     S::Ident: AsRef<str>,
 {
@@ -149,13 +193,13 @@ where
 }
 
 pub(super) struct LabelActions<S: Session> {
-    parent: SemanticActions<S>,
+    parent: InstrLineActions<S>,
     label: (S::Ident, S::Span),
     params: Params<S::Ident, S::Span>,
 }
 
 impl<S: Session> LabelActions<S> {
-    fn new(parent: SemanticActions<S>, label: (S::Ident, S::Span)) -> Self {
+    fn new(parent: InstrLineActions<S>, label: (S::Ident, S::Span)) -> Self {
         Self {
             parent,
             label,
@@ -169,7 +213,7 @@ delegate_diagnostics! {
 }
 
 impl<S: Session> LabelContext<S::Ident, S::Span> for LabelActions<S> {
-    type ParentContext = SemanticActions<S>;
+    type ParentContext = InstrLineActions<S>;
 
     fn act_on_param(&mut self, (ident, span): (S::Ident, S::Span)) {
         self.params.0.push(ident);
@@ -177,21 +221,21 @@ impl<S: Session> LabelContext<S::Ident, S::Span> for LabelActions<S> {
     }
 
     fn did_parse_label(mut self) -> Self::ParentContext {
-        self.parent.label = Some((self.label, self.params));
+        self.parent.line.label = Some((self.label, self.params));
         self.parent
     }
 }
 
 type Label<I, S> = ((I, S), Params<I, S>);
 
-impl<S: Session> InstrContext<S::Ident, Literal<S::StringRef>, S::Span> for SemanticActions<S>
+impl<S: Session> InstrContext<S::Ident, Literal<S::StringRef>, S::Span> for InstrLineActions<S>
 where
     S::Ident: AsRef<str>,
 {
     type BuiltinInstrContext = BuiltinInstrActions<S>;
     type MacroCallContext = MacroCallActions<S>;
     type ErrorContext = Self;
-    type LineEndContext = Self;
+    type LineEndContext = SemanticActions<S>;
 
     fn will_parse_instr(
         mut self,
@@ -226,27 +270,26 @@ where
     }
 }
 
-impl<S: Session> InstrEndContext<S::Span> for SemanticActions<S>
-where
-    S::Ident: AsRef<str>,
-{
-    type ParentContext = Self;
+impl<S: Session> InstrEndContext<S::Span> for InstrLineActions<S> {
+    type ParentContext = SemanticActions<S>;
 
     fn did_parse_instr(self) -> Self::ParentContext {
-        self
+        self.into()
     }
 }
 
-impl<S: Session> LineEndContext<S::Span> for SemanticActions<S>
-where
-    S::Ident: AsRef<str>,
-{
+impl<S: Session> LineEndContext<S::Span> for InstrLineActions<S> {
+    type ParentContext = SemanticActions<S>;
+
+    fn did_parse_line(self, _: S::Span) -> Self::ParentContext {
+        self.into()
+    }
+}
+
+impl<S: Session> LineEndContext<S::Span> for SemanticActions<S> {
     type ParentContext = Self;
 
-    fn did_parse_line(mut self, _: S::Span) -> Self::ParentContext {
-        if self.mode.is_none() {
-            self.mode = Some(LineRule::InstrLine(()))
-        }
+    fn did_parse_line(self, _: S::Span) -> Self::ParentContext {
         self
     }
 }
@@ -333,15 +376,6 @@ const KEYS: &[(&str, KeyEntry)] = &[
     ("xor", KeyEntry::BuiltinInstr(BuiltinInstr::Mnemonic(XOR))),
 ];
 
-pub(super) struct TokenLineActions<S: Session> {
-    parent: SemanticActions<S>,
-    frame: TokenFrame<S>,
-}
-
-delegate_diagnostics! {
-    {S: Session}, TokenLineActions<S>, {parent}, S, S::Span
-}
-
 impl<S: Session> TokenLineContext<S::Ident, Literal<S::StringRef>, S::Span> for TokenLineActions<S>
 where
     S::Ident: AsRef<str>,
@@ -349,7 +383,7 @@ where
     type SemanticContextTerminationContext = TokenFrameEndActions<S>;
 
     fn act_on_token(&mut self, token: SemanticToken<S::Ident, S::StringRef>, span: S::Span) {
-        match &mut self.frame {
+        match &mut self.line {
             TokenFrame::MacroDef(state) => {
                 state.tokens.0.push(token);
                 state.tokens.1.push(span);
@@ -362,15 +396,12 @@ where
         ident: S::Ident,
         span: S::Span,
     ) -> TokenLineRule<Self, Self::SemanticContextTerminationContext> {
-        match &mut self.frame {
+        match &mut self.line {
             TokenFrame::MacroDef(state) => {
                 if ident.as_ref().eq_ignore_ascii_case("ENDM") {
                     state.tokens.0.push(Sigil::Eos.into());
                     state.tokens.1.push(span);
-                    TokenLineRule::LineEnd(TokenFrameEndActions {
-                        parent: self.parent,
-                        frame: self.frame,
-                    })
+                    TokenLineRule::LineEnd(TokenFrameEndActions { parent: self })
                 } else {
                     state.tokens.0.push(Token::Ident(ident));
                     state.tokens.1.push(span);
@@ -385,20 +416,18 @@ impl<S: Session> LineEndContext<S::Span> for TokenLineActions<S> {
     type ParentContext = SemanticActions<S>;
 
     fn did_parse_line(mut self, span: S::Span) -> Self::ParentContext {
-        match &mut self.frame {
+        match &mut self.line {
             TokenFrame::MacroDef(state) => {
                 state.tokens.0.push(Sigil::Eol.into());
                 state.tokens.1.push(span);
-                self.parent.mode = Some(LineRule::TokenLine(self.frame));
             }
         }
-        self.parent
+        self.into()
     }
 }
 
 pub(super) struct TokenFrameEndActions<S: Session> {
-    parent: SemanticActions<S>,
-    frame: TokenFrame<S>,
+    parent: TokenLineActions<S>,
 }
 
 delegate_diagnostics! {
@@ -409,17 +438,16 @@ impl<S: Session> LineEndContext<S::Span> for TokenFrameEndActions<S> {
     type ParentContext = SemanticActions<S>;
 
     fn did_parse_line(mut self, _: S::Span) -> Self::ParentContext {
-        match self.frame {
+        match self.parent.line {
             TokenFrame::MacroDef(state) => {
                 if let Some((name, params)) = state.label {
                     let tokens = state.tokens;
                     let id = self.parent.session.define_macro(name.1, params, tokens);
                     self.parent.session.insert(name.0, ResolvedIdent::Macro(id));
                 }
-                self.parent.mode = Some(LineRule::InstrLine(()))
             }
         }
-        self.parent
+        SemanticActions::new(self.parent.session)
     }
 }
 
@@ -919,7 +947,7 @@ mod tests {
 
     pub(super) fn collect_semantic_actions<F, S>(f: F) -> Vec<TestOperation<S>>
     where
-        F: FnOnce(TestSemanticActions<S>) -> Done,
+        F: FnOnce(TestSemanticActions<S>) -> Done<MockSession<S>>,
         S: Clone + Debug + Merge,
     {
         with_log(|log| {
@@ -930,7 +958,7 @@ mod tests {
     pub(super) fn log_with_predefined_names<I, F, S>(entries: I, f: F) -> Vec<TestOperation<S>>
     where
         I: IntoIterator<Item = (String, ResolvedIdent<usize, MockMacroId>)>,
-        F: FnOnce(TestSemanticActions<S>) -> Done,
+        F: FnOnce(TestSemanticActions<S>) -> Done<MockSession<S>>,
         S: Clone + Debug + Merge,
     {
         with_log(|log| {
