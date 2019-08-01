@@ -47,7 +47,7 @@ impl<S: Session> InstrEndContext<S::Span> for MacroCallActions<S> {
             name,
             args,
         } = self;
-        parent.with_session(|session| (session.call_macro(name, args), ()));
+        parent.session = parent.session.call_macro(name, args);
         parent
     }
 }

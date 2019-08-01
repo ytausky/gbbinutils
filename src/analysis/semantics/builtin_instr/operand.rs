@@ -64,8 +64,8 @@ pub enum Context {
 }
 
 type OperandResult<C, S> = (
-    <C as Finish>::Parent,
     Result<Operand<<C as Finish>::Value, S>, ()>,
+    <C as Finish>::Parent,
 );
 
 pub(super) fn analyze_operand<C, I, R, S>(
@@ -81,7 +81,7 @@ where
     match expr.variant {
         ArgVariant::Atom(ArgAtom::OperandSymbol(symbol)) => {
             let result = analyze_keyword_operand((symbol, expr.span), context, &mut value_context);
-            (value_context.finish().0, result)
+            (result, value_context.finish().0)
         }
         ArgVariant::Unary(ArgUnaryOp::Parentheses, inner) => {
             analyze_deref_operand(*inner, expr.span, value_context)
@@ -89,9 +89,9 @@ where
         _ => match value_context.eval_arg(expr) {
             Ok(()) => {
                 let (session, expr) = value_context.finish();
-                (session, Ok(Operand::Const(expr)))
+                (Ok(Operand::Const(expr)), session)
             }
-            Err(()) => (value_context.finish().0, Err(())),
+            Err(()) => (Err(()), value_context.finish().0),
         },
     }
 }
@@ -110,14 +110,14 @@ where
         ArgVariant::Atom(ArgAtom::OperandSymbol(symbol)) => {
             let result =
                 analyze_deref_operand_keyword((symbol, &expr.span), deref_span, &mut value_context);
-            (value_context.finish().0, result)
+            (result, value_context.finish().0)
         }
         _ => match value_context.eval_arg(expr) {
             Ok(()) => {
                 let (session, expr) = value_context.finish();
-                (session, Ok(Operand::Deref(expr)))
+                (Ok(Operand::Deref(expr)), session)
             }
-            Err(()) => (value_context.finish().0, Err(())),
+            Err(()) => (Err(()), value_context.finish().0),
         },
     }
 }
@@ -316,7 +316,7 @@ pub mod tests {
         let mut result = None;
         let log = crate::log::with_log(|log| {
             result = Some(
-                super::analyze_operand(expr, context, MockBuilder::without_name_resolution(log)).1,
+                super::analyze_operand(expr, context, MockBuilder::without_name_resolution(log)).0,
             )
         });
         result.unwrap().map_err(|_| log)

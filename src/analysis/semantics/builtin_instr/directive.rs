@@ -22,8 +22,8 @@ pub(super) fn analyze_directive<'a, S: Session>(
     directive: (Directive, S::Span),
     label: Option<Label<S::Ident, S::Span>>,
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
-    actions: &'a mut SemanticActions<S>,
-) {
+    actions: SemanticActions<S>,
+) -> SemanticActions<S> {
     let context = DirectiveContext {
         span: directive.1,
         label,
@@ -33,23 +33,23 @@ pub(super) fn analyze_directive<'a, S: Session>(
     context.analyze(directive.0)
 }
 
-struct DirectiveContext<'a, A, I, R, S> {
+struct DirectiveContext<A, I, R, S> {
     span: S,
     label: Option<Label<I, S>>,
     args: BuiltinInstrArgs<I, R, S>,
-    actions: &'a mut A,
+    actions: A,
 }
 
 delegate_diagnostics! {
-    {'a, S: Session},
-    DirectiveContext<'a, SemanticActions<S>, S::Ident, S::StringRef, S::Span>,
+    {S: Session},
+    DirectiveContext<SemanticActions<S>, S::Ident, S::StringRef, S::Span>,
     {actions},
     SemanticActions<S>,
     S::Span
 }
 
-impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::Ident, S::StringRef, S::Span> {
-    fn analyze(self, directive: Directive) {
+impl<'a, S: Session> DirectiveContext<SemanticActions<S>, S::Ident, S::StringRef, S::Span> {
+    fn analyze(self, directive: Directive) -> SemanticActions<S> {
         match directive {
             Directive::Db => self.analyze_data(Width::Byte),
             Directive::Ds => self.analyze_ds(),
@@ -62,52 +62,67 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::Ident, S::Strin
         }
     }
 
-    fn analyze_data(self, width: Width) {
+    fn analyze_data(mut self, width: Width) -> SemanticActions<S> {
         for arg in self.args {
             let expr = match self.actions.analyze_expr(&Default::default(), arg) {
-                Ok(expr) => expr,
-                Err(()) => return,
+                (Ok(expr), actions) => {
+                    self.actions = actions;
+                    expr
+                }
+                (Err(()), actions) => return actions,
             };
-            self.actions.session().emit_item(Item::Data(expr, width))
+            self.actions.session.emit_item(Item::Data(expr, width))
         }
+        self.actions
     }
 
-    fn analyze_ds(mut self) {
-        let actions = &mut self.actions;
-        single_arg(self.span, self.args, *actions)
-            .and_then(|arg| actions.analyze_expr(&Default::default(), arg))
-            .map(|bytes| actions.session().reserve(bytes))
-            .ok();
+    fn analyze_ds(self) -> SemanticActions<S> {
+        let mut actions = self.actions;
+        match single_arg(self.span, self.args, &mut actions) {
+            Ok(arg) => {
+                let (result, returned_actions) = actions.analyze_expr(&Default::default(), arg);
+                actions = returned_actions;
+                result.ok().map(|bytes| actions.session.reserve(bytes));
+            }
+            Err(()) => (),
+        }
+        actions
     }
 
-    fn analyze_equ(mut self) {
-        let actions = &mut self.actions;
+    fn analyze_equ(mut self) -> SemanticActions<S> {
         let (symbol, params) = self.label.take().unwrap();
-        single_arg(self.span, self.args, *actions)
-            .and_then(|arg| actions.define_symbol(symbol, &params, arg))
-            .ok();
+        match single_arg(self.span, self.args, &mut self.actions) {
+            Ok(arg) => {
+                let (_, actions) = self.actions.define_symbol(symbol, &params, arg);
+                self.actions = actions;
+            }
+            Err(()) => (),
+        }
+        self.actions
     }
 
-    fn analyze_section(mut self) {
+    fn analyze_section(mut self) -> SemanticActions<S> {
         let (name, span) = self.label.take().unwrap().0;
-        let session = self.actions.session();
+        let session = &mut self.actions.session;
         let id = session.reloc_lookup(name, span.clone());
-        session.start_section((id, span))
+        session.start_section((id, span));
+        self.actions
     }
 
-    fn analyze_include(self) {
-        let (path, span) = match reduce_include(self.span, self.args, self.actions) {
+    fn analyze_include(mut self) -> SemanticActions<S> {
+        let (path, span) = match reduce_include(self.span, self.args, &mut self.actions) {
             Ok(result) => result,
-            Err(()) => return,
+            Err(()) => return self.actions,
         };
-        let (result, session) = self.actions.session.take().unwrap().analyze_file(path);
-        self.actions.session = Some(session);
+        let (result, session) = self.actions.session.analyze_file(path);
+        self.actions.session = session;
         if let Err(err) = result {
             self.actions.emit_diag(Message::from(err).at(span))
         }
+        self.actions
     }
 
-    fn analyze_macro(mut self) {
+    fn analyze_macro(mut self) -> SemanticActions<S> {
         if self.label.is_none() {
             let span = self.span;
             self.actions.emit_diag(Message::MacroRequiresName.at(span))
@@ -115,14 +130,20 @@ impl<'a, S: Session> DirectiveContext<'a, SemanticActions<S>, S::Ident, S::Strin
         self.actions.mode = Some(LineRule::TokenLine(TokenFrame::MacroDef(
             MacroDefState::new(self.label),
         )));
+        self.actions
     }
 
-    fn analyze_org(mut self) {
-        let actions = &mut self.actions;
-        single_arg(self.span, self.args, *actions)
-            .and_then(|arg| actions.analyze_expr(&Default::default(), arg))
-            .map(|expr| actions.session().set_origin(expr))
-            .ok();
+    fn analyze_org(self) -> SemanticActions<S> {
+        let mut actions = self.actions;
+        match single_arg(self.span, self.args, &mut actions) {
+            Ok(arg) => {
+                let (result, returned_actions) = actions.analyze_expr(&Default::default(), arg);
+                actions = returned_actions;
+                result.ok().map(|value| actions.session.set_origin(value));
+            }
+            Err(()) => (),
+        }
+        actions
     }
 }
 

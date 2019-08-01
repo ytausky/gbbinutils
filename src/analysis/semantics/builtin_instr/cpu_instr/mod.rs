@@ -847,7 +847,7 @@ mod tests {
                         mnemonic.context(),
                         MockBuilder::without_name_resolution(log.clone()),
                     )
-                    .1
+                    .0
                 })
                 .collect();
             let mut session = MockSession::without_name_resolution(log);

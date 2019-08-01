@@ -102,8 +102,8 @@ where
     fn did_parse_instr(mut self) -> Self::ParentContext {
         if !self.has_errors {
             let prepared = PreparedBuiltinInstr::new(self.command, &mut self.parent);
-            self.parent.define_label_if_present();
-            prepared.exec(self.args, &mut self.parent)
+            self.parent = self.parent.define_label_if_present();
+            self.parent = prepared.exec(self.args, self.parent)
         }
         self.parent
     }
@@ -131,8 +131,8 @@ impl<S: Session> PreparedBuiltinInstr<S> {
     fn exec(
         self,
         args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
-        actions: &mut SemanticActions<S>,
-    ) {
+        actions: SemanticActions<S>,
+    ) -> SemanticActions<S> {
         match self {
             PreparedBuiltinInstr::Binding(binding, label) => {
                 directive::analyze_directive(binding, label, args, actions)
@@ -261,51 +261,52 @@ const OPERAND_SYMBOLS: &[(&str, OperandSymbol)] = &[
 fn analyze_mnemonic<S: Session>(
     name: (Mnemonic, S::Span),
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
-    actions: &mut SemanticActions<S>,
-) {
-    let operands: Vec<_> = args
-        .into_iter()
-        .map(|arg| {
-            actions.build_value(&Default::default(), |builder| {
-                operand::analyze_operand(arg, name.0.context(), builder)
-            })
-        })
-        .collect();
-    if let Ok(instruction) = cpu_instr::analyze_instruction(name, operands, actions) {
-        actions.session().emit_item(Item::Instruction(instruction))
+    mut actions: SemanticActions<S>,
+) -> SemanticActions<S> {
+    let mut operands = Vec::new();
+    for arg in args {
+        let (operand, returned_actions) = actions.build_value(&Default::default(), |builder| {
+            operand::analyze_operand(arg, name.0.context(), builder)
+        });
+        actions = returned_actions;
+        operands.push(operand)
     }
+    if let Ok(instruction) = cpu_instr::analyze_instruction(name, operands, &mut actions) {
+        actions.session.emit_item(Item::Instruction(instruction))
+    }
+    actions
 }
 
 impl<S: Session> SemanticActions<S> {
     fn analyze_expr(
-        &mut self,
+        self,
         params: &Params<S::Ident, S::Span>,
         expr: Arg<S::Ident, S::StringRef, S::Span>,
-    ) -> Result<S::Value, ()> {
-        self.build_value(params, |mut builder| {
+    ) -> (Result<S::Value, ()>, Self) {
+        let (value, actions) = self.build_value(params, |mut builder| {
             let result = builder.eval_arg(expr);
             let (session, value) = builder.finish();
-            (session, result.map(|()| value))
-        })
+            (result.map(|()| value), session)
+        });
+        (value, actions)
     }
 
     fn define_symbol(
-        &mut self,
+        mut self,
         (name, span): (S::Ident, S::Span),
         params: &Params<S::Ident, S::Span>,
         expr: Arg<S::Ident, S::StringRef, S::Span>,
-    ) -> Result<(), ()> {
-        let mut result = Ok(());
-        self.with_session(|mut session| {
-            let id = session.reloc_lookup(name, span.clone());
-            let mut builder = session
-                .define_symbol(id, span)
-                .resolve_names()
-                .with_params(params);
-            result = builder.eval_arg(expr);
-            builder.finish()
-        });
-        result
+    ) -> (Result<(), ()>, Self) {
+        let id = self.session.reloc_lookup(name, span.clone());
+        let mut builder = self
+            .session
+            .define_symbol(id, span)
+            .resolve_names()
+            .with_params(params);
+        let result = builder.eval_arg(expr);
+        let (session, ()) = builder.finish();
+        self.session = session;
+        (result, self)
     }
 }
 

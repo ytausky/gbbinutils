@@ -31,14 +31,14 @@ where
         P::Session: IdentSource<Ident = I> + StringSource<StringRef = R> + SpanSource<Span = S>,
     {
         let session = partial.into_session(self);
-        let mut actions =
+        let actions =
             super::syntax::parse_token_seq(tokens.into_iter(), SemanticActions::new(session));
-        actions.session.take().unwrap().into()
+        actions.session.into()
     }
 }
 
 pub(super) struct SemanticActions<S: Session> {
-    session: Option<S>,
+    session: S,
     mode: Option<LineRule<(), TokenFrame<S>>>,
     label: Option<Label<S::Ident, S::Span>>,
 }
@@ -64,52 +64,45 @@ impl<S: Session> MacroDefState<S> {
 impl<S: Session> SemanticActions<S> {
     pub fn new(session: S) -> SemanticActions<S> {
         SemanticActions {
-            session: Some(session),
+            session,
             mode: Some(LineRule::InstrLine(())),
             label: None,
         }
     }
 
-    fn session(&mut self) -> &mut S {
-        self.session.as_mut().unwrap()
-    }
-
-    fn build_value<F, T>(&mut self, params: &Params<S::Ident, S::Span>, f: F) -> T
+    fn build_value<F, T>(mut self, params: &Params<S::Ident, S::Span>, f: F) -> (T, Self)
     where
         F: FnOnce(
             BuilderAdapter<
                 BuilderAdapter<S::GeneralBuilder, NameResolver>,
                 ConvertParams<S::Ident, S::Span>,
             >,
-        ) -> (S, T),
+        ) -> (T, S),
     {
-        self.with_session(|session| f(session.build_value().resolve_names().with_params(params)))
+        let (value, session) = f(self
+            .session
+            .build_value()
+            .resolve_names()
+            .with_params(params));
+        self.session = session;
+        (value, self)
     }
 
-    fn with_session<F, T>(&mut self, f: F) -> T
-    where
-        F: FnOnce(S) -> (S, T),
-    {
-        let (session, output) = f(self.session.take().unwrap());
-        self.session = Some(session);
-        output
-    }
-
-    fn define_label_if_present(&mut self) {
+    fn define_label_if_present(mut self) -> Self {
         if let Some(((label, span), _params)) = self.label.take() {
-            self.with_session(|mut session| {
-                session.start_scope(&label);
-                let id = session.reloc_lookup(label, span.clone());
-                let mut builder = session.define_symbol(id, span.clone());
-                PushOp::<LocationCounter, _>::push_op(&mut builder, LocationCounter, span);
-                builder.finish()
-            })
+            self.session.start_scope(&label);
+            let id = self.session.reloc_lookup(label, span.clone());
+            let mut builder = self.session.define_symbol(id, span.clone());
+            PushOp::<LocationCounter, _>::push_op(&mut builder, LocationCounter, span);
+            let (session, ()) = builder.finish();
+            self.session = session;
         }
+        self
     }
 }
 
 delegate_diagnostics! {
-    {S: Session}, SemanticActions<S>, {session()}, S, S::Span
+    {S: Session}, SemanticActions<S>, {session}, S, S::Span
 }
 
 impl<S: Session> TokenStreamContext<S::Ident, Literal<S::StringRef>, S::Span> for SemanticActions<S>
@@ -132,7 +125,7 @@ where
     }
 
     fn act_on_eos(mut self, span: S::Span) -> Self::FinalContext {
-        self.define_label_if_present();
+        self = self.define_label_if_present();
         if let Some(LineRule::TokenLine(TokenFrame::MacroDef(_))) = &self.mode {
             self.emit_diag(Message::UnexpectedEof.at(span))
         }
@@ -150,7 +143,7 @@ where
     type InstrContext = Self;
 
     fn will_parse_label(mut self, label: (S::Ident, S::Span)) -> Self::LabelContext {
-        self.define_label_if_present();
+        self = self.define_label_if_present();
         LabelActions::new(self, label)
     }
 }
@@ -213,28 +206,22 @@ where
             Some(KeyEntry::BuiltinInstr(command)) => {
                 InstrRule::BuiltinInstr(BuiltinInstrActions::new(self, (command.clone(), span)))
             }
-            None => {
-                let result = self.with_session(|session| {
-                    let result = session.get(&ident);
-                    (session, result)
-                });
-                match result {
-                    Some(ResolvedIdent::Macro(id)) => {
-                        self.define_label_if_present();
-                        InstrRule::MacroInstr(MacroCallActions::new(self, (id, span)))
-                    }
-                    Some(ResolvedIdent::Backend(_)) => {
-                        let name = self.strip_span(&span);
-                        self.emit_diag(Message::CannotUseSymbolNameAsMacroName { name }.at(span));
-                        InstrRule::Error(self)
-                    }
-                    None => {
-                        let name = self.strip_span(&span);
-                        self.emit_diag(Message::UndefinedMacro { name }.at(span));
-                        InstrRule::Error(self)
-                    }
+            None => match self.session.get(&ident) {
+                Some(ResolvedIdent::Macro(id)) => {
+                    self = self.define_label_if_present();
+                    InstrRule::MacroInstr(MacroCallActions::new(self, (id, span)))
                 }
-            }
+                Some(ResolvedIdent::Backend(_)) => {
+                    let name = self.strip_span(&span);
+                    self.emit_diag(Message::CannotUseSymbolNameAsMacroName { name }.at(span));
+                    InstrRule::Error(self)
+                }
+                None => {
+                    let name = self.strip_span(&span);
+                    self.emit_diag(Message::UndefinedMacro { name }.at(span));
+                    InstrRule::Error(self)
+                }
+            },
         }
     }
 }
@@ -426,11 +413,8 @@ impl<S: Session> LineEndContext<S::Span> for TokenFrameEndActions<S> {
             TokenFrame::MacroDef(state) => {
                 if let Some((name, params)) = state.label {
                     let tokens = state.tokens;
-                    self.parent.with_session(|mut session| {
-                        let id = session.define_macro(name.1, params, tokens);
-                        session.insert(name.0, ResolvedIdent::Macro(id));
-                        (session, ())
-                    });
+                    let id = self.parent.session.define_macro(name.1, params, tokens);
+                    self.parent.session.insert(name.0, ResolvedIdent::Macro(id));
                 }
                 self.parent.mode = Some(LineRule::InstrLine(()))
             }
