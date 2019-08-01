@@ -57,10 +57,10 @@ impl SuffixOperator {
     }
 }
 
-impl<'a, Id, L, E, I, C, S> Parser<'a, (Result<Token<Id, L>, E>, S), I, C>
+impl<'a, I, L, E, R, A, S> Parser<'a, (Result<Token<I, L>, E>, S), R, A>
 where
-    I: Iterator<Item = (Result<Token<Id, L>, E>, S)>,
-    C: ArgActions<S, Ident = Id, Literal = L>,
+    R: Iterator<Item = (Result<Token<I, L>, E>, S)>,
+    A: ArgActions<S, Ident = I, Literal = L>,
     S: Clone,
 {
     pub(super) fn parse(self) -> Self {
@@ -77,11 +77,11 @@ where
             })
     }
 
-    fn parse_expression(self) -> ParserResult<Self, C, S> {
+    fn parse_expression(self) -> ParserResult<Self, A, S> {
         self.parse_infix_expr(Precedence::None)
     }
 
-    fn parse_parenthesized_expression(mut self, left: S) -> ParserResult<Self, C, S> {
+    fn parse_parenthesized_expression(mut self, left: S) -> ParserResult<Self, A, S> {
         self = match self.parse_expression() {
             Ok(parser) => parser,
             Err((parser, error)) => {
@@ -101,7 +101,7 @@ where
             (Ok(Token::Sigil(RParen)), right) => {
                 bump!(self);
                 let span = self.merge_spans(&left, &right);
-                self.context
+                self.actions
                     .act_on_operator((Operator::Unary(UnaryOperator::Parentheses), span));
                 Ok(self)
             }
@@ -112,7 +112,7 @@ where
         }
     }
 
-    fn parse_infix_expr(mut self, lowest: Precedence) -> ParserResult<Self, C, S> {
+    fn parse_infix_expr(mut self, lowest: Precedence) -> ParserResult<Self, A, S> {
         self = self.parse_primary_expr()?;
         while let Some(suffix_operator) = self
             .state
@@ -132,7 +132,7 @@ where
             match suffix_operator {
                 SuffixOperator::Binary(binary_operator) => {
                     self = self.parse_infix_expr(precedence)?;
-                    self.context
+                    self.actions
                         .act_on_operator((Operator::Binary(binary_operator), span))
                 }
                 SuffixOperator::FnCall => self = self.parse_fn_call(span)?,
@@ -141,7 +141,7 @@ where
         Ok(self)
     }
 
-    fn parse_fn_call(mut self, left: S) -> ParserResult<Self, C, S> {
+    fn parse_fn_call(mut self, left: S) -> ParserResult<Self, A, S> {
         let mut args = 0;
         while let Ok(token) = &self.state.token.0 {
             match token {
@@ -153,19 +153,19 @@ where
                 _ => self = self.parse_fn_arg(&mut args)?,
             }
         }
-        let span = self.context.merge_spans(&left, &self.state.token.1);
-        self.context.act_on_operator((Operator::FnCall(args), span));
+        let span = self.actions.merge_spans(&left, &self.state.token.1);
+        self.actions.act_on_operator((Operator::FnCall(args), span));
         bump!(self);
         Ok(self)
     }
 
-    fn parse_fn_arg(mut self, args: &mut usize) -> ParserResult<Self, C, S> {
+    fn parse_fn_arg(mut self, args: &mut usize) -> ParserResult<Self, A, S> {
         self = self.parse_expression()?;
         *args += 1;
         Ok(self)
     }
 
-    fn parse_primary_expr(mut self) -> ParserResult<Self, C, S> {
+    fn parse_primary_expr(mut self) -> ParserResult<Self, A, S> {
         match self.state.token {
             (Ok(Token::Sigil(LParen)), span) => {
                 bump!(self);
@@ -175,32 +175,32 @@ where
         }
     }
 
-    fn parse_atomic_expr(mut self) -> ParserResult<Self, C, S> {
+    fn parse_atomic_expr(mut self) -> ParserResult<Self, A, S> {
         match self.state.token.0 {
             Ok(Token::Sigil(Eos)) | Ok(Token::Sigil(Eol)) => {
                 Err((self, ExprParsingError::NothingParsed))
             }
             Ok(Token::Ident(ident)) => {
-                self.context
+                self.actions
                     .act_on_atom((ExprAtom::Ident(ident), self.state.token.1));
                 bump!(self);
                 Ok(self)
             }
             Ok(Token::Literal(literal)) => {
-                self.context
+                self.actions
                     .act_on_atom((ExprAtom::Literal(literal), self.state.token.1));
                 bump!(self);
                 Ok(self)
             }
             Ok(Token::Sigil(Sigil::Dot)) => {
-                self.context
+                self.actions
                     .act_on_atom((ExprAtom::LocationCounter, self.state.token.1));
                 bump!(self);
                 Ok(self)
             }
             _ => {
                 let span = self.state.token.1;
-                let stripped = self.context.strip_span(&span);
+                let stripped = self.actions.strip_span(&span);
                 bump!(self);
                 Err((
                     self,
@@ -480,6 +480,6 @@ mod tests {
         Parser::new(tokens, ExprActionCollector::new(()))
             .parse()
             .change_context(ArgFinalizer::did_parse_arg)
-            .context
+            .actions
     }
 }
