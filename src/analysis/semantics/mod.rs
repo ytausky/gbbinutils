@@ -38,9 +38,9 @@ where
     }
 }
 
-pub(super) struct TokenStreamSemantics<S: Session> {
-    mode: LineRule<InstrLineSemantics<S>, TokenLineSemantics<S>>,
-}
+pub(super) struct TokenStreamSemantics<S: Session>(
+    LineRule<InstrLineSemantics<S>, TokenLineSemantics<S>>,
+);
 
 type InstrLineSemantics<S> = SemanticState<InstrLineState<S>, S>;
 type TokenLineSemantics<S> = SemanticState<TokenContext<S>, S>;
@@ -119,13 +119,11 @@ impl<S: Session> MacroDefState<S> {
 
 impl<S: Session> TokenStreamSemantics<S> {
     pub fn new(session: S) -> TokenStreamSemantics<S> {
-        TokenStreamSemantics {
-            mode: LineRule::InstrLine(InstrLineSemantics::new(session)),
-        }
+        TokenStreamSemantics(LineRule::InstrLine(InstrLineSemantics::new(session)))
     }
 
     fn session(&mut self) -> &mut S {
-        match &mut self.mode {
+        match &mut self.0 {
             LineRule::InstrLine(actions) => &mut actions.session,
             LineRule::TokenLine(actions) => &mut actions.session,
         }
@@ -138,17 +136,13 @@ delegate_diagnostics! {
 
 impl<S: Session> From<InstrLineSemantics<S>> for TokenStreamSemantics<S> {
     fn from(actions: InstrLineSemantics<S>) -> Self {
-        Self {
-            mode: LineRule::InstrLine(actions),
-        }
+        Self(LineRule::InstrLine(actions))
     }
 }
 
 impl<S: Session> From<TokenLineSemantics<S>> for TokenStreamSemantics<S> {
     fn from(actions: TokenLineSemantics<S>) -> Self {
-        Self {
-            mode: LineRule::TokenLine(actions),
-        }
+        Self(LineRule::TokenLine(actions))
     }
 }
 
@@ -163,11 +157,11 @@ where
     type Next = Done<S>;
 
     fn will_parse_line(self) -> LineRule<Self::InstrLineActions, Self::TokenLineActions> {
-        self.mode
+        self.0
     }
 
     fn act_on_eos(self, span: S::Span) -> Self::Next {
-        match self.mode {
+        match self.0 {
             LineRule::InstrLine(actions) => Done(actions.define_label_if_present().session),
             LineRule::TokenLine(mut actions) => {
                 match actions.line {

@@ -129,12 +129,11 @@ impl<'a, S: Session> DirectiveContext<InstrLineSemantics<S>, S::Ident, S::String
             let span = self.span;
             self.actions.emit_diag(Message::MacroRequiresName.at(span))
         }
-        TokenStreamSemantics {
-            mode: LineRule::TokenLine(TokenLineSemantics {
-                line: TokenContext::MacroDef(MacroDefState::new(self.label)),
-                session: self.actions.session,
-            }),
+        TokenLineSemantics {
+            line: TokenContext::MacroDef(MacroDefState::new(self.label)),
+            session: self.actions.session,
         }
+        .into()
     }
 
     fn analyze_org(self) -> TokenStreamSemantics<S> {
