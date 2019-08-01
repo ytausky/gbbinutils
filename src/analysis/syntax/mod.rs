@@ -60,7 +60,7 @@ pub(super) use self::parser::parse_src as parse_token_seq;
 // The following traits represent different positions within the grammar's production rules.
 
 // A token stream represents either a tokenized source file or a macro expansion. It is logically
-// devided into lines (separated by <Eol> tokens) and ends with an <Eos> token. It has a single
+// divided into lines (separated by <Eol> tokens) and ends with an <Eos> token. It has a single
 // production rule:
 //
 //     1. token-stream → (line (<Eol> line)*)? <Eos>
@@ -124,8 +124,8 @@ impl<I, T> LineRule<I, T> {
 // InstrActions as a supertrait handles the states where the label is missing (either parsing an
 // instruction or terminating the empty line) whereas InstrLineActions::InstrActions handles the two
 // possible states after a label has been successfully parsed. Note that by using two distinct types
-// bound by InstrActions we can preven the parser from calling InstrLineActions::will_parse_label
-// more than once.
+// bound by InstrActions we can prevent the parser from calling InstrLineActions::will_parse_label
+// more than once on the same line.
 pub(super) trait InstrLineActions<I, L, S: Clone>: InstrActions<I, L, S> {
     type LabelActions: LabelActions<I, S, Next = Self::InstrActions>;
     type InstrActions: InstrActions<I, L, S, Next = Self::Next>;
@@ -134,11 +134,11 @@ pub(super) trait InstrLineActions<I, L, S: Clone>: InstrActions<I, L, S> {
 }
 
 // An instruction can be either a builtin instruction (i.e. a CPU instruction or an assembler
-// directive) or a macro instruction, previously defined by the program. These two options
-// correspond to two production rules:
+// directive) or a macro instruction previously defined by the program. These two options correspond
+// to two production rules:
 //
-//     1. instr → <Ident> arg-list
-//     2. instr → <Ident> macro-arg-list
+//     1. instr → builtin-instr
+//     2. instr → macro-instr
 //
 // The ambiguity between these rules gets resolved by InstrActions::will_parse_instr, which performs
 // a name lookup to determine whether the identifier is a builtin instruction or a previously
@@ -212,6 +212,11 @@ impl<C, M, E> InstrRule<C, M, E> {
     }
 }
 
+// Builtin instructions have a single production rule:
+//
+//     1. builtin-instr → <Ident> (arg (<Comma> arg)*)?
+//
+// BuiltinInstrActions represents any position in this rule after the initial <Ident>.
 pub(super) trait BuiltinInstrActions<S: Clone>: InstrFinalizer<S> {
     type Ident;
     type Literal;
@@ -228,6 +233,16 @@ pub(super) trait ArgFinalizer {
     fn did_parse_arg(self) -> Self::Next;
 }
 
+// An argument is a recursive expression with the following production rules:
+//
+//     1. arg → <Ident>
+//     2. arg → <Literal>
+//     3. arg → <Dot>
+//     4. arg → arg <LParen> (arg (<Comma> arg)*)? <RParen>
+//     5. arg → arg <Star> arg
+//     6. ...
+//
+// To handle precedence and associativity, the parser uses a reverse Polish notation protocol.
 pub(super) trait ArgActions<S: Clone>: Diagnostics<S> {
     type Ident;
     type Literal;
