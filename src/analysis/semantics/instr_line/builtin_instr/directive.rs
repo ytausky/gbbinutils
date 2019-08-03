@@ -1,6 +1,8 @@
-use super::super::Label;
 use super::*;
 
+use crate::analysis::semantics::instr_line::Label;
+use crate::analysis::semantics::params::RelocLookup;
+use crate::analysis::semantics::token_line::{MacroDefState, TokenContext, TokenLineSemantics};
 use crate::analysis::session::Session;
 use crate::analysis::Literal;
 use crate::diag::*;
@@ -194,9 +196,10 @@ mod tests {
 
     use crate::analysis::backend::BackendEvent;
     use crate::analysis::resolve::{NameTableEvent, ResolvedIdent};
-    use crate::analysis::semantics::builtin_instr;
+    use crate::analysis::semantics::instr_line::builtin_instr;
     use crate::analysis::semantics::tests::*;
     use crate::analysis::session::SessionEvent;
+    use crate::analysis::syntax::*;
     use crate::codebase::CodebaseError;
     use crate::log::with_log;
     use crate::model::{Atom, ParamId};

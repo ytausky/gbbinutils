@@ -1,23 +1,24 @@
-use self::builtin_instr::*;
-use self::builtin_instr::{BuiltinInstr::*, Directive::*};
-use self::macro_instr::MacroInstrSemantics;
+use self::instr_line::InstrLineSemantics;
 use self::params::*;
+use self::token_line::{TokenContext, TokenContextFinalizationSemantics, TokenLineSemantics};
 
-use super::backend::{Finish, LocationCounter, PushOp};
-use super::resolve::ResolvedIdent;
+use super::backend::PushOp;
+use super::resolve;
 use super::session::{Analyze, IntoSession, Params, Session};
+use super::syntax;
 use super::syntax::*;
-use super::{LexItem, Literal, SemanticToken, StringSource, TokenSeq};
+use super::{LexItem, Literal, StringSource};
 
-use crate::diag::span::{SpanSource, StripSpan};
+use crate::diag;
+use crate::diag::span::SpanSource;
 use crate::diag::{EmitDiag, Message};
 
 #[cfg(test)]
 pub use self::mock::*;
 
-mod builtin_instr;
-mod macro_instr;
+mod instr_line;
 mod params;
+mod token_line;
 
 pub struct SemanticAnalyzer;
 
@@ -41,9 +42,6 @@ where
 pub(super) struct TokenStreamSemantics<S: Session>(
     LineRule<InstrLineSemantics<S>, TokenLineSemantics<S>>,
 );
-
-type InstrLineSemantics<S> = SemanticState<InstrLineState<S>, S>;
-type TokenLineSemantics<S> = SemanticState<TokenContext<S>, S>;
 
 pub(super) struct SemanticState<L, S: Session> {
     line: L,
@@ -72,49 +70,6 @@ impl<L, S: Session> SemanticState<L, S> {
 
 delegate_diagnostics! {
     {L, S: Session}, SemanticState<L, S>, {session}, S, S::Span
-}
-
-pub(super) struct InstrLineState<S: Session> {
-    label: Option<Label<S::Ident, S::Span>>,
-}
-
-impl<S: Session> InstrLineSemantics<S> {
-    fn new(session: S) -> Self {
-        Self {
-            line: InstrLineState { label: None },
-            session,
-        }
-    }
-
-    fn define_label_if_present(mut self) -> Self {
-        if let Some(((label, span), _params)) = self.line.label.take() {
-            self.session.start_scope(&label);
-            let id = self.session.reloc_lookup(label, span.clone());
-            let mut builder = self.session.define_symbol(id, span.clone());
-            PushOp::<LocationCounter, _>::push_op(&mut builder, LocationCounter, span);
-            let (session, ()) = builder.finish();
-            self.session = session;
-        }
-        self
-    }
-}
-
-pub(super) enum TokenContext<S: Session> {
-    MacroDef(MacroDefState<S>),
-}
-
-pub(super) struct MacroDefState<S: Session> {
-    label: Option<Label<S::Ident, S::Span>>,
-    tokens: TokenSeq<S::Ident, S::StringRef, S::Span>,
-}
-
-impl<S: Session> MacroDefState<S> {
-    fn new(label: Option<Label<S::Ident, S::Span>>) -> Self {
-        Self {
-            label,
-            tokens: (Vec::new(), Vec::new()),
-        }
-    }
 }
 
 impl<S: Session> TokenStreamSemantics<S> {
@@ -175,97 +130,7 @@ where
 
 pub(super) struct Done<S>(S);
 
-impl<S: Session> InstrLineActions<S::Ident, Literal<S::StringRef>, S::Span>
-    for InstrLineSemantics<S>
-where
-    S::Ident: AsRef<str>,
-{
-    type LabelActions = LabelSemantics<S>;
-    type InstrActions = Self;
-
-    fn will_parse_label(mut self, label: (S::Ident, S::Span)) -> Self::LabelActions {
-        self = self.define_label_if_present();
-        LabelSemantics::new(self, label)
-    }
-}
-
-pub(super) struct LabelSemantics<S: Session> {
-    parent: InstrLineSemantics<S>,
-    label: (S::Ident, S::Span),
-    params: Params<S::Ident, S::Span>,
-}
-
-impl<S: Session> LabelSemantics<S> {
-    fn new(parent: InstrLineSemantics<S>, label: (S::Ident, S::Span)) -> Self {
-        Self {
-            parent,
-            label,
-            params: (Vec::new(), Vec::new()),
-        }
-    }
-}
-
-delegate_diagnostics! {
-    {S: Session}, LabelSemantics<S>, {parent}, S, S::Span
-}
-
-impl<S: Session> LabelActions<S::Ident, S::Span> for LabelSemantics<S> {
-    type Next = InstrLineSemantics<S>;
-
-    fn act_on_param(&mut self, (ident, span): (S::Ident, S::Span)) {
-        self.params.0.push(ident);
-        self.params.1.push(span)
-    }
-
-    fn did_parse_label(mut self) -> Self::Next {
-        self.parent.line.label = Some((self.label, self.params));
-        self.parent
-    }
-}
-
 type Label<I, S> = ((I, S), Params<I, S>);
-
-impl<S: Session> InstrActions<S::Ident, Literal<S::StringRef>, S::Span> for InstrLineSemantics<S>
-where
-    S::Ident: AsRef<str>,
-{
-    type BuiltinInstrActions = BuiltinInstrSemantics<S>;
-    type MacroInstrActions = MacroInstrSemantics<S>;
-    type ErrorActions = Self;
-    type LineFinalizer = TokenStreamSemantics<S>;
-
-    fn will_parse_instr(
-        mut self,
-        ident: S::Ident,
-        span: S::Span,
-    ) -> InstrRule<Self::BuiltinInstrActions, Self::MacroInstrActions, Self> {
-        match KEYS
-            .iter()
-            .find(|(spelling, _)| spelling.eq_ignore_ascii_case(ident.as_ref()))
-            .map(|(_, entry)| entry)
-        {
-            Some(KeyEntry::BuiltinInstr(command)) => {
-                InstrRule::BuiltinInstr(BuiltinInstrSemantics::new(self, (command.clone(), span)))
-            }
-            None => match self.session.get(&ident) {
-                Some(ResolvedIdent::Macro(id)) => {
-                    self = self.define_label_if_present();
-                    InstrRule::MacroInstr(MacroInstrSemantics::new(self, (id, span)))
-                }
-                Some(ResolvedIdent::Backend(_)) => {
-                    let name = self.strip_span(&span);
-                    self.emit_diag(Message::CannotUseSymbolNameAsMacroName { name }.at(span));
-                    InstrRule::Error(self)
-                }
-                None => {
-                    let name = self.strip_span(&span);
-                    self.emit_diag(Message::UndefinedMacro { name }.at(span));
-                    InstrRule::Error(self)
-                }
-            },
-        }
-    }
-}
 
 impl<S: Session> InstrFinalizer<S::Span> for InstrLineSemantics<S> {
     type Next = TokenStreamSemantics<S>;
@@ -288,140 +153,6 @@ impl<S: Session> LineFinalizer<S::Span> for TokenStreamSemantics<S> {
 
     fn did_parse_line(self, _: S::Span) -> Self::Next {
         self
-    }
-}
-
-#[derive(Clone)]
-enum KeyEntry {
-    BuiltinInstr(BuiltinInstr),
-}
-
-const KEYS: &[(&str, KeyEntry)] = &[
-    ("adc", KeyEntry::BuiltinInstr(Mnemonic(ADC))),
-    ("add", KeyEntry::BuiltinInstr(Mnemonic(ADD))),
-    ("and", KeyEntry::BuiltinInstr(Mnemonic(AND))),
-    ("bit", KeyEntry::BuiltinInstr(Mnemonic(BIT))),
-    ("call", KeyEntry::BuiltinInstr(Mnemonic(CALL))),
-    ("cp", KeyEntry::BuiltinInstr(Mnemonic(CP))),
-    ("cpl", KeyEntry::BuiltinInstr(Mnemonic(CPL))),
-    ("daa", KeyEntry::BuiltinInstr(Mnemonic(DAA))),
-    ("db", KeyEntry::BuiltinInstr(Directive(Db))),
-    ("dec", KeyEntry::BuiltinInstr(Mnemonic(DEC))),
-    ("di", KeyEntry::BuiltinInstr(Mnemonic(DI))),
-    ("ds", KeyEntry::BuiltinInstr(Directive(Ds))),
-    ("dw", KeyEntry::BuiltinInstr(Directive(Dw))),
-    ("ei", KeyEntry::BuiltinInstr(Mnemonic(EI))),
-    ("equ", KeyEntry::BuiltinInstr(Directive(Equ))),
-    ("halt", KeyEntry::BuiltinInstr(Mnemonic(HALT))),
-    ("inc", KeyEntry::BuiltinInstr(Mnemonic(INC))),
-    ("include", KeyEntry::BuiltinInstr(Directive(Include))),
-    ("jp", KeyEntry::BuiltinInstr(Mnemonic(JP))),
-    ("jr", KeyEntry::BuiltinInstr(Mnemonic(JR))),
-    ("ld", KeyEntry::BuiltinInstr(Mnemonic(LD))),
-    ("ldhl", KeyEntry::BuiltinInstr(Mnemonic(LDHL))),
-    ("macro", KeyEntry::BuiltinInstr(Directive(Macro))),
-    ("nop", KeyEntry::BuiltinInstr(Mnemonic(NOP))),
-    ("or", KeyEntry::BuiltinInstr(Mnemonic(OR))),
-    ("org", KeyEntry::BuiltinInstr(Directive(Org))),
-    ("pop", KeyEntry::BuiltinInstr(Mnemonic(POP))),
-    ("push", KeyEntry::BuiltinInstr(Mnemonic(PUSH))),
-    ("res", KeyEntry::BuiltinInstr(Mnemonic(RES))),
-    ("ret", KeyEntry::BuiltinInstr(Mnemonic(RET))),
-    ("reti", KeyEntry::BuiltinInstr(Mnemonic(RETI))),
-    ("rl", KeyEntry::BuiltinInstr(Mnemonic(RL))),
-    ("rla", KeyEntry::BuiltinInstr(Mnemonic(RLA))),
-    ("rlc", KeyEntry::BuiltinInstr(Mnemonic(RLC))),
-    ("rlca", KeyEntry::BuiltinInstr(Mnemonic(RLCA))),
-    ("rr", KeyEntry::BuiltinInstr(Mnemonic(RR))),
-    ("rra", KeyEntry::BuiltinInstr(Mnemonic(RRA))),
-    ("rrc", KeyEntry::BuiltinInstr(Mnemonic(RRC))),
-    ("rrca", KeyEntry::BuiltinInstr(Mnemonic(RRCA))),
-    ("rst", KeyEntry::BuiltinInstr(Mnemonic(RST))),
-    ("sbc", KeyEntry::BuiltinInstr(Mnemonic(SBC))),
-    ("section", KeyEntry::BuiltinInstr(Directive(Section))),
-    ("set", KeyEntry::BuiltinInstr(Mnemonic(SET))),
-    ("sla", KeyEntry::BuiltinInstr(Mnemonic(SLA))),
-    ("sra", KeyEntry::BuiltinInstr(Mnemonic(SRA))),
-    ("srl", KeyEntry::BuiltinInstr(Mnemonic(SRL))),
-    ("stop", KeyEntry::BuiltinInstr(Mnemonic(STOP))),
-    ("sub", KeyEntry::BuiltinInstr(Mnemonic(SUB))),
-    ("swap", KeyEntry::BuiltinInstr(Mnemonic(SWAP))),
-    ("xor", KeyEntry::BuiltinInstr(Mnemonic(XOR))),
-];
-
-impl<S: Session> TokenLineActions<S::Ident, Literal<S::StringRef>, S::Span>
-    for TokenLineSemantics<S>
-where
-    S::Ident: AsRef<str>,
-{
-    type ContextFinalizer = TokenContextFinalizationSemantics<S>;
-
-    fn act_on_token(&mut self, token: SemanticToken<S::Ident, S::StringRef>, span: S::Span) {
-        match &mut self.line {
-            TokenContext::MacroDef(state) => {
-                state.tokens.0.push(token);
-                state.tokens.1.push(span);
-            }
-        }
-    }
-
-    fn act_on_ident(
-        mut self,
-        ident: S::Ident,
-        span: S::Span,
-    ) -> TokenLineRule<Self, Self::ContextFinalizer> {
-        match &mut self.line {
-            TokenContext::MacroDef(state) => {
-                if ident.as_ref().eq_ignore_ascii_case("ENDM") {
-                    state.tokens.0.push(Sigil::Eos.into());
-                    state.tokens.1.push(span);
-                    TokenLineRule::LineEnd(TokenContextFinalizationSemantics { parent: self })
-                } else {
-                    state.tokens.0.push(Token::Ident(ident));
-                    state.tokens.1.push(span);
-                    TokenLineRule::TokenSeq(self)
-                }
-            }
-        }
-    }
-}
-
-impl<S: Session> LineFinalizer<S::Span> for TokenLineSemantics<S> {
-    type Next = TokenStreamSemantics<S>;
-
-    fn did_parse_line(mut self, span: S::Span) -> Self::Next {
-        match &mut self.line {
-            TokenContext::MacroDef(state) => {
-                state.tokens.0.push(Sigil::Eol.into());
-                state.tokens.1.push(span);
-            }
-        }
-        self.into()
-    }
-}
-
-pub(super) struct TokenContextFinalizationSemantics<S: Session> {
-    parent: TokenLineSemantics<S>,
-}
-
-delegate_diagnostics! {
-    {S: Session}, TokenContextFinalizationSemantics<S>, {parent}, S, S::Span
-}
-
-impl<S: Session> LineFinalizer<S::Span> for TokenContextFinalizationSemantics<S> {
-    type Next = TokenStreamSemantics<S>;
-
-    fn did_parse_line(mut self, _: S::Span) -> Self::Next {
-        match self.parent.line {
-            TokenContext::MacroDef(state) => {
-                if let Some((name, params)) = state.label {
-                    let tokens = state.tokens;
-                    let id = self.parent.session.define_macro(name.1, params, tokens);
-                    self.parent.session.insert(name.0, ResolvedIdent::Macro(id));
-                }
-            }
-        }
-        TokenStreamSemantics::new(self.parent.session)
     }
 }
 
@@ -472,9 +203,10 @@ mod tests {
     use crate::analysis::backend::{BackendEvent, Name, SerialIdAllocator};
     use crate::analysis::resolve::{NameTableEvent, ResolvedIdent};
     use crate::analysis::session::{MockMacroId, SessionEvent};
+    use crate::analysis::SemanticToken;
     use crate::diag::{DiagnosticsEvent, Merge, Message, MockSpan};
     use crate::log::with_log;
-    use crate::model::{Atom, BinOp, ExprOp, Instruction, Item, Width};
+    use crate::model::{Atom, BinOp, ExprOp, Instruction, Item, LocationCounter, Width};
 
     use std::borrow::Borrow;
     use std::fmt::Debug;

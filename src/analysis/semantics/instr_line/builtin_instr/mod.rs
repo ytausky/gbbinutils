@@ -1,19 +1,21 @@
-pub(super) use self::cpu_instr::{Mnemonic, *};
 pub(super) use self::directive::Directive;
 
-use self::args::*;
+use self::arg::*;
 use self::operand::OperandSymbol;
 
 use super::*;
 
 use crate::analysis::backend::{Finish, LocationCounter, Name, PushOp};
+use crate::analysis::semantics::{Params, RelocLookup, ResolveNames, WithParams};
 use crate::analysis::session::Session;
+use crate::analysis::syntax::{BuiltinInstrActions, InstrFinalizer};
 use crate::diag::span::{MergeSpans, StripSpan};
 use crate::diag::{CompactDiag, Diagnostics, EmitDiag, Message};
 use crate::model::{BinOp, FnCall, Item};
 
-mod args;
-mod cpu_instr;
+pub(super) mod cpu_instr;
+
+mod arg;
 mod directive;
 mod operand;
 
@@ -86,10 +88,7 @@ where
     type ArgActions = ExprBuilder<S::Ident, S::StringRef, S::Span, Self>;
 
     fn will_parse_arg(self) -> Self::ArgActions {
-        ExprBuilder {
-            stack: Vec::new(),
-            parent: self,
-        }
+        ExprBuilder::new(self)
     }
 }
 
@@ -156,110 +155,6 @@ impl Directive {
         }
     }
 }
-
-pub(crate) struct ExprBuilder<I, R, S, P> {
-    stack: Vec<Arg<I, R, S>>,
-    parent: P,
-}
-
-impl<I, R, S, P> ExprBuilder<I, R, S, P> {
-    fn pop(&mut self) -> Arg<I, R, S> {
-        self.stack.pop().unwrap_or_else(|| unreachable!())
-    }
-}
-
-delegate_diagnostics! {
-    {I, R, S, P: Diagnostics<S>}, ExprBuilder<I, R, S, P>, {parent}, P, S
-}
-
-impl<S: Session> ArgFinalizer
-    for ExprBuilder<S::Ident, S::StringRef, S::Span, BuiltinInstrSemantics<S>>
-{
-    type Next = BuiltinInstrSemantics<S>;
-
-    fn did_parse_arg(mut self) -> Self::Next {
-        if !self.parent.has_errors {
-            assert_eq!(self.stack.len(), 1);
-            self.parent.args.push(self.stack.pop().unwrap());
-        }
-        self.parent
-    }
-}
-
-impl<I, R, S, P> ArgActions<S> for ExprBuilder<I, R, S, P>
-where
-    I: AsRef<str>,
-    S: Clone,
-    Self: Diagnostics<S>,
-{
-    type Ident = I;
-    type Literal = Literal<R>;
-
-    fn act_on_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, S)) {
-        self.stack.push(Arg {
-            variant: ArgVariant::Atom(match atom.0 {
-                ExprAtom::Ident(ident) => OPERAND_SYMBOLS
-                    .iter()
-                    .find(|(spelling, _)| spelling.eq_ignore_ascii_case(ident.as_ref()))
-                    .map(|(_, symbol)| ArgAtom::OperandSymbol(*symbol))
-                    .unwrap_or_else(|| ArgAtom::Ident(ident)),
-                ExprAtom::Literal(literal) => ArgAtom::Literal(literal),
-                ExprAtom::LocationCounter => ArgAtom::LocationCounter,
-            }),
-            span: atom.1,
-        })
-    }
-
-    fn act_on_operator(&mut self, (op, span): (Operator, S)) {
-        let variant = match op {
-            Operator::Unary(UnaryOperator::Parentheses) => {
-                let inner = self.pop();
-                ArgVariant::Unary(ArgUnaryOp::Parentheses, Box::new(inner))
-            }
-            Operator::Binary(binary) => {
-                let rhs = self.pop();
-                let lhs = self.pop();
-                ArgVariant::Binary(binary, Box::new(lhs), Box::new(rhs))
-            }
-            Operator::FnCall(n) => {
-                let args = self.stack.split_off(self.stack.len() - n);
-                let name = self.pop();
-                let name = (
-                    match name.variant {
-                        ArgVariant::Atom(ArgAtom::Ident(ident)) => ident,
-                        _ => {
-                            self.emit_diag(Message::OnlyIdentsCanBeCalled.at(name.span));
-                            return;
-                        }
-                    },
-                    name.span,
-                );
-                ArgVariant::FnCall(name, args)
-            }
-        };
-        self.stack.push(Arg { variant, span })
-    }
-}
-
-const OPERAND_SYMBOLS: &[(&str, OperandSymbol)] = &[
-    ("a", OperandSymbol::A),
-    ("af", OperandSymbol::Af),
-    ("b", OperandSymbol::B),
-    ("bc", OperandSymbol::Bc),
-    ("c", OperandSymbol::C),
-    ("d", OperandSymbol::D),
-    ("de", OperandSymbol::De),
-    ("e", OperandSymbol::E),
-    ("h", OperandSymbol::H),
-    ("hl", OperandSymbol::Hl),
-    ("hld", OperandSymbol::Hld),
-    ("hli", OperandSymbol::Hli),
-    ("l", OperandSymbol::L),
-    ("nc", OperandSymbol::Nc),
-    ("nz", OperandSymbol::Nz),
-    ("sp", OperandSymbol::Sp),
-    ("z", OperandSymbol::Z),
-];
 
 fn analyze_mnemonic<S: Session>(
     name: (Mnemonic, S::Span),

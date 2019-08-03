@@ -1,6 +1,6 @@
 use super::{Analysis, Operand};
 
-use crate::analysis::semantics::builtin_instr::operand::AtomKind;
+use crate::analysis::semantics::instr_line::builtin_instr::operand::AtomKind;
 use crate::diag::span::{Source, SpanSource};
 use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::model::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd, Width};
@@ -305,8 +305,8 @@ impl<S: Clone> Source for LdDest16<S> {
 
 #[cfg(test)]
 mod tests {
-    use crate::analysis::semantics::builtin_instr::cpu_instr::tests::*;
-    use crate::analysis::semantics::builtin_instr::cpu_instr::LD;
+    use crate::analysis::semantics::instr_line::builtin_instr::cpu_instr::mnemonic::LD;
+    use crate::analysis::semantics::instr_line::builtin_instr::cpu_instr::tests::*;
     use crate::diag::Merge;
     use crate::model::*;
 
