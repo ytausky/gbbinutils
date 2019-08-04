@@ -557,6 +557,7 @@ mod tests {
                 .will_parse_instr("ADD".into(), ())
                 .into_builtin_instr()
                 .will_parse_arg();
+            expr.act_on_atom((ExprAtom::Error, ()));
             expr.emit_diag(diagnostic.clone());
             expr.did_parse_arg()
                 .did_parse_instr()

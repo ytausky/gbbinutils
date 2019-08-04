@@ -9,8 +9,7 @@ use crate::analysis::backend::{Finish, LocationCounter, Name, PushOp};
 use crate::analysis::semantics::{Params, RelocLookup, ResolveNames, WithParams};
 use crate::analysis::session::Session;
 use crate::analysis::syntax::{BuiltinInstrActions, InstrFinalizer};
-use crate::diag::span::{MergeSpans, StripSpan};
-use crate::diag::{CompactDiag, Diagnostics, EmitDiag, Message};
+use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::model::{BinOp, FnCall, Item};
 
 pub(super) mod cpu_instr;
@@ -41,7 +40,6 @@ pub(in crate::analysis) struct BuiltinInstrSemantics<S: Session> {
     parent: InstrLineSemantics<S>,
     command: (BuiltinInstr, S::Span),
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
-    has_errors: bool,
 }
 
 impl<S: Session> BuiltinInstrSemantics<S> {
@@ -53,30 +51,12 @@ impl<S: Session> BuiltinInstrSemantics<S> {
             parent,
             command,
             args: Vec::new(),
-            has_errors: false,
         }
     }
 }
 
-impl<S: Session> MergeSpans<S::Span> for BuiltinInstrSemantics<S> {
-    fn merge_spans(&mut self, left: &S::Span, right: &S::Span) -> S::Span {
-        self.parent.merge_spans(left, right)
-    }
-}
-
-impl<S: Session> StripSpan<S::Span> for BuiltinInstrSemantics<S> {
-    type Stripped = S::Stripped;
-
-    fn strip_span(&mut self, span: &S::Span) -> Self::Stripped {
-        self.parent.strip_span(span)
-    }
-}
-
-impl<S: Session> EmitDiag<S::Span, S::Stripped> for BuiltinInstrSemantics<S> {
-    fn emit_diag(&mut self, diag: impl Into<CompactDiag<S::Span, S::Stripped>>) {
-        self.has_errors = true;
-        self.parent.emit_diag(diag)
-    }
+delegate_diagnostics! {
+    {S: Session}, BuiltinInstrSemantics<S>, {parent}, InstrLineSemantics<S>, S::Span
 }
 
 impl<S: Session> BuiltinInstrActions<S::Span> for BuiltinInstrSemantics<S>
@@ -99,13 +79,9 @@ where
     type Next = TokenStreamSemantics<S>;
 
     fn did_parse_instr(mut self) -> Self::Next {
-        if !self.has_errors {
-            let prepared = PreparedBuiltinInstr::new(self.command, &mut self.parent);
-            self.parent = self.parent.define_label_if_present();
-            prepared.exec(self.args, self.parent)
-        } else {
-            self.parent.into()
-        }
+        let prepared = PreparedBuiltinInstr::new(self.command, &mut self.parent);
+        self.parent = self.parent.define_label_if_present();
+        prepared.exec(self.args, self.parent)
     }
 }
 
@@ -240,7 +216,7 @@ where
 {
     fn eval_arg(&mut self, arg: Arg<I, R, S>) -> Result<(), ()> {
         match arg.variant {
-            ArgVariant::Atom(ArgAtom::Error) => unimplemented!(),
+            ArgVariant::Atom(ArgAtom::Error) => Err(())?,
             ArgVariant::Atom(ArgAtom::Ident(ident)) => {
                 self.push_op(Name(ident), arg.span);
                 Ok(())
@@ -272,7 +248,7 @@ where
                 for arg in args {
                     self.eval_arg(arg)?;
                 }
-                self.push_op(Name(name), span.clone());
+                self.push_op(Name(name.ok_or(())?), span.clone());
                 self.push_op(FnCall(n), span);
                 Ok(())
             }

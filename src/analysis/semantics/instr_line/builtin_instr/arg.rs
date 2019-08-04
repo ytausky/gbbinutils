@@ -35,10 +35,9 @@ impl<S: Session> ArgFinalizer
     type Next = BuiltinInstrSemantics<S>;
 
     fn did_parse_arg(mut self) -> Self::Next {
-        if !self.parent.has_errors {
-            assert_eq!(self.stack.len(), 1);
-            self.parent.args.push(self.stack.pop().unwrap());
-        }
+        let arg = self.pop();
+        self.parent.args.push(arg);
+        assert_eq!(self.stack.len(), 0);
         self.parent
     }
 }
@@ -84,10 +83,10 @@ where
                 let name = self.pop();
                 let name = (
                     match name.variant {
-                        ArgVariant::Atom(ArgAtom::Ident(ident)) => ident,
+                        ArgVariant::Atom(ArgAtom::Ident(ident)) => Some(ident),
                         _ => {
-                            self.emit_diag(Message::OnlyIdentsCanBeCalled.at(name.span));
-                            return;
+                            self.emit_diag(Message::OnlyIdentsCanBeCalled.at(name.span.clone()));
+                            None
                         }
                     },
                     name.span,
@@ -112,7 +111,7 @@ pub(super) enum ArgVariant<I, R, S> {
     Atom(ArgAtom<I, R>),
     Unary(ArgUnaryOp, Box<Arg<I, R, S>>),
     Binary(BinOp, Box<Arg<I, R, S>>, Box<Arg<I, R, S>>),
-    FnCall((I, S), Vec<Arg<I, R, S>>),
+    FnCall((Option<I>, S), Vec<Arg<I, R, S>>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
