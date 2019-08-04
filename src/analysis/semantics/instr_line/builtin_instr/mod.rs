@@ -240,6 +240,7 @@ where
 {
     fn eval_arg(&mut self, arg: Arg<I, R, S>) -> Result<(), ()> {
         match arg.variant {
+            ArgVariant::Atom(ArgAtom::Error) => unimplemented!(),
             ArgVariant::Atom(ArgAtom::Ident(ident)) => {
                 self.push_op(Name(ident), arg.span);
                 Ok(())

@@ -55,6 +55,7 @@ where
     fn act_on_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, S)) {
         self.stack.push(Arg {
             variant: ArgVariant::Atom(match atom.0 {
+                ExprAtom::Error => ArgAtom::Error,
                 ExprAtom::Ident(ident) => OPERAND_SYMBOLS
                     .iter()
                     .find(|(spelling, _)| spelling.eq_ignore_ascii_case(ident.as_ref()))
@@ -116,6 +117,7 @@ pub(super) enum ArgVariant<I, R, S> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum ArgAtom<I, R> {
+    Error,
     Ident(I),
     Literal(Literal<R>),
     LocationCounter,

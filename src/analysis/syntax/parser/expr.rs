@@ -131,9 +131,13 @@ where
             bump!(self);
             match suffix_operator {
                 SuffixOperator::Binary(binary_operator) => {
-                    self = self.parse_infix_expr(precedence)?;
-                    self.actions
-                        .act_on_operator((Operator::Binary(binary_operator), span))
+                    let mut result = self.parse_infix_expr(precedence);
+                    result.with_parser(|parser| {
+                        parser
+                            .actions
+                            .act_on_operator((Operator::Binary(binary_operator), span))
+                    });
+                    self = result?
                 }
                 SuffixOperator::FnCall => self = self.parse_fn_call(span)?,
             }
@@ -176,30 +180,30 @@ where
     }
 
     fn parse_atomic_expr(mut self) -> ParserResult<Self, A, S> {
+        let span = self.state.token.1;
         match self.state.token.0 {
             Ok(Token::Sigil(Eos)) | Ok(Token::Sigil(Eol)) => {
+                self.actions.act_on_atom((ExprAtom::Error, span.clone()));
+                self.state.token.1 = span;
                 Err((self, ExprParsingError::NothingParsed))
             }
             Ok(Token::Ident(ident)) => {
-                self.actions
-                    .act_on_atom((ExprAtom::Ident(ident), self.state.token.1));
+                self.actions.act_on_atom((ExprAtom::Ident(ident), span));
                 bump!(self);
                 Ok(self)
             }
             Ok(Token::Literal(literal)) => {
-                self.actions
-                    .act_on_atom((ExprAtom::Literal(literal), self.state.token.1));
+                self.actions.act_on_atom((ExprAtom::Literal(literal), span));
                 bump!(self);
                 Ok(self)
             }
             Ok(Token::Sigil(Sigil::Dot)) => {
-                self.actions
-                    .act_on_atom((ExprAtom::LocationCounter, self.state.token.1));
+                self.actions.act_on_atom((ExprAtom::LocationCounter, span));
                 bump!(self);
                 Ok(self)
             }
             _ => {
-                let span = self.state.token.1;
+                self.actions.act_on_atom((ExprAtom::Error, span.clone()));
                 let stripped = self.actions.strip_span(&span);
                 bump!(self);
                 Err((
@@ -209,6 +213,19 @@ where
                     ),
                 ))
             }
+        }
+    }
+}
+
+trait WithParser<P> {
+    fn with_parser<U>(&mut self, f: impl FnOnce(&mut P) -> U) -> U;
+}
+
+impl<P, S, T> WithParser<P> for Result<P, (P, ExprParsingError<S, T>)> {
+    fn with_parser<U>(&mut self, f: impl FnOnce(&mut P) -> U) -> U {
+        match self {
+            Ok(parser) => f(parser),
+            Err((parser, _)) => f(parser),
         }
     }
 }
@@ -447,7 +464,9 @@ mod tests {
             input_tokens![Ident(IdentKind::Other), Plus],
             expr()
                 .ident(0)
-                .error(Message::UnexpectedEof, TokenRef::from(2)),
+                .error(2)
+                .plus(1)
+                .diag(Message::UnexpectedEof, TokenRef::from(2)),
         )
     }
 
@@ -455,24 +474,20 @@ mod tests {
     fn diagnose_unexpected_token_in_expr() {
         let input = input_tokens![plus @ Plus];
         let span: MockSpan = TokenRef::from("plus").into();
-        assert_eq_expr_diagnostics(
+        assert_eq_rpn_expr(
             input,
-            Message::UnexpectedToken {
-                token: span.clone(),
-            }
-            .at(span)
-            .into(),
+            expr().error("plus").diag(
+                Message::UnexpectedToken {
+                    token: span.clone(),
+                },
+                span,
+            ),
         )
     }
 
     fn assert_eq_rpn_expr(mut input: InputTokens, SymExpr(expected): SymExpr) {
         let parsed_rpn_expr = parse_sym_expr(&mut input);
         assert_eq!(parsed_rpn_expr, expected);
-    }
-
-    fn assert_eq_expr_diagnostics(mut input: InputTokens, expected: CompactDiag<MockSpan>) {
-        let expr_actions = parse_sym_expr(&mut input);
-        assert_eq!(expr_actions, [ExprAction::EmitDiag(expected)])
     }
 
     fn parse_sym_expr(input: &mut InputTokens) -> Vec<ExprAction<MockSpan>> {

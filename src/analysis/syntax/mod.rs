@@ -253,6 +253,7 @@ pub(super) trait ArgActions<S: Clone>: Diagnostics<S> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExprAtom<I, L> {
+    Error,
     Ident(I),
     Literal(L),
     LocationCounter,

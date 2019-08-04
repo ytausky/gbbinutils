@@ -775,7 +775,7 @@ mod tests {
                     0,
                     [expr()
                         .literal(2)
-                        .error(Message::UnmatchedParenthesis, TokenRef::from("paren"))],
+                        .diag(Message::UnmatchedParenthesis, TokenRef::from("paren"))],
                 ),
                 3,
             )],
@@ -799,7 +799,7 @@ mod tests {
                     builtin_instr(
                         BuiltinInstr,
                         0,
-                        [expr().error(
+                        [expr().error("paren").diag(
                             Message::UnexpectedToken {
                                 token: paren_span.clone(),
                             },
@@ -822,7 +822,9 @@ mod tests {
                     builtin_instr(
                         BuiltinInstr,
                         0,
-                        [expr().error(Message::UnmatchedParenthesis, TokenRef::from(1))],
+                        [expr()
+                            .error(2)
+                            .diag(Message::UnmatchedParenthesis, TokenRef::from(1))],
                     ),
                     2,
                 ),

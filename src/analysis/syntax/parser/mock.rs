@@ -554,7 +554,13 @@ impl SymExpr {
         self
     }
 
-    pub fn error(mut self, message: Message<MockSpan>, highlight: impl Into<MockSpan>) -> Self {
+    pub fn error(mut self, span: impl Into<TokenRef>) -> Self {
+        self.0
+            .push(ExprAction::PushAtom((ExprAtom::Error, span.into().into())));
+        self
+    }
+
+    pub fn diag(mut self, message: Message<MockSpan>, highlight: impl Into<MockSpan>) -> Self {
         self.0
             .push(ExprAction::EmitDiag(message.at(highlight.into()).into()));
         self
