@@ -36,18 +36,17 @@ impl From<Mnemonic> for BuiltinInstr {
     }
 }
 
-pub(in crate::analysis) struct BuiltinInstrSemantics<S: Session> {
-    parent: InstrLineSemantics<S>,
+pub(super) type BuiltinInstrSemantics<S> = SemanticState<BuiltinInstrState<S>, S>;
+
+pub(in crate::analysis) struct BuiltinInstrState<S: Session> {
+    parent: InstrLineState<S>,
     command: (BuiltinInstr, S::Span),
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
 }
 
-impl<S: Session> BuiltinInstrSemantics<S> {
-    pub(super) fn new(
-        parent: InstrLineSemantics<S>,
-        command: (BuiltinInstr, S::Span),
-    ) -> BuiltinInstrSemantics<S> {
-        BuiltinInstrSemantics {
+impl<S: Session> BuiltinInstrState<S> {
+    pub(super) fn new(parent: InstrLineState<S>, command: (BuiltinInstr, S::Span)) -> Self {
+        Self {
             parent,
             command,
             args: Vec::new(),
@@ -55,19 +54,15 @@ impl<S: Session> BuiltinInstrSemantics<S> {
     }
 }
 
-delegate_diagnostics! {
-    {S: Session}, BuiltinInstrSemantics<S>, {parent}, InstrLineSemantics<S>, S::Span
-}
-
 impl<S: Session> BuiltinInstrActions<S::Ident, Literal<S::StringRef>, S::Span>
     for BuiltinInstrSemantics<S>
 where
     S::Ident: AsRef<str>,
 {
-    type ArgActions = ExprBuilder<S::Ident, S::StringRef, S::Span, Self>;
+    type ArgActions = ArgSemantics<S>;
 
     fn will_parse_arg(self) -> Self::ArgActions {
-        ExprBuilder::new(self)
+        self.map_line(ExprBuilder::new)
     }
 }
 
@@ -77,10 +72,12 @@ where
 {
     type Next = TokenStreamSemantics<S>;
 
-    fn did_parse_instr(mut self) -> Self::Next {
-        let prepared = PreparedBuiltinInstr::new(self.command, &mut self.parent);
-        self.parent = self.parent.define_label_if_present();
-        prepared.exec(self.args, self.parent)
+    fn did_parse_instr(self) -> Self::Next {
+        let args = self.line.args;
+        let mut semantics = set_line!(self, self.line.parent);
+        let prepared = PreparedBuiltinInstr::new(self.line.command, &mut semantics);
+        semantics = semantics.define_label_if_present();
+        prepared.exec(args, semantics)
     }
 }
 
@@ -116,7 +113,7 @@ impl<S: Session> PreparedBuiltinInstr<S> {
                 directive::analyze_directive(directive, None, args, actions)
             }
             PreparedBuiltinInstr::Mnemonic(mnemonic) => {
-                analyze_mnemonic(mnemonic, args, actions).into()
+                analyze_mnemonic(mnemonic, args, actions).map_line(Into::into)
             }
         }
     }

@@ -1,8 +1,8 @@
 use self::builtin_instr::cpu_instr::mnemonic::*;
-use self::builtin_instr::{BuiltinInstr, BuiltinInstrSemantics};
+use self::builtin_instr::{BuiltinInstr, BuiltinInstrSemantics, BuiltinInstrState};
 use self::builtin_instr::{BuiltinInstr::*, Directive::*};
-use self::label::LabelSemantics;
-use self::macro_instr::MacroInstrSemantics;
+use self::label::{LabelSemantics, LabelState};
+use self::macro_instr::{MacroInstrSemantics, MacroInstrState};
 use self::syntax::{InstrActions, InstrLineActions, InstrRule};
 
 use super::diag::span::StripSpan;
@@ -35,7 +35,7 @@ where
 
     fn will_parse_label(mut self, label: (S::Ident, S::Span)) -> Self::LabelActions {
         self = self.define_label_if_present();
-        LabelSemantics::new(self, label)
+        self.map_line(|line| LabelState::new(line, label))
     }
 }
 
@@ -58,13 +58,16 @@ where
             .find(|(spelling, _)| spelling.eq_ignore_ascii_case(ident.as_ref()))
             .map(|(_, entry)| entry)
         {
-            Some(KeyEntry::BuiltinInstr(command)) => {
-                InstrRule::BuiltinInstr(BuiltinInstrSemantics::new(self, (command.clone(), span)))
-            }
+            Some(KeyEntry::BuiltinInstr(command)) => InstrRule::BuiltinInstr(
+                self.map_line(|line| BuiltinInstrState::new(line, (command.clone(), span))),
+            ),
             None => match self.session.get(&ident) {
                 Some(ResolvedIdent::Macro(id)) => {
                     self = self.define_label_if_present();
-                    InstrRule::MacroInstr(MacroInstrSemantics::new(self, (id, span)))
+                    InstrRule::MacroInstr(set_line!(
+                        self,
+                        MacroInstrState::new(self.line, (id, span))
+                    ))
                 }
                 Some(ResolvedIdent::Backend(_)) => {
                     let name = self.strip_span(&span);
@@ -81,14 +84,13 @@ where
     }
 }
 
-impl<S: Session> InstrLineSemantics<S> {
-    pub fn new(session: S) -> Self {
-        Self {
-            line: InstrLineState { label: None },
-            session,
-        }
+impl<S: Session> InstrLineState<S> {
+    pub fn new() -> Self {
+        Self { label: None }
     }
+}
 
+impl<S: Session> InstrLineSemantics<S> {
     pub fn define_label_if_present(mut self) -> Self {
         if let Some(((label, span), _params)) = self.line.label.take() {
             self.session.start_scope(&label);

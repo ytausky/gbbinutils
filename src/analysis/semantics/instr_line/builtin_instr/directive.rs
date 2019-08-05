@@ -71,11 +71,11 @@ impl<'a, S: Session> DirectiveContext<InstrLineSemantics<S>, S::Ident, S::String
                     self.actions = actions;
                     expr
                 }
-                (Err(()), actions) => return actions.into(),
+                (Err(()), actions) => return actions.map_line(Into::into),
             };
             self.actions.session.emit_item(Item::Data(expr, width))
         }
-        self.actions.into()
+        self.actions.map_line(Into::into)
     }
 
     fn analyze_ds(self) -> TokenStreamSemantics<S> {
@@ -90,7 +90,7 @@ impl<'a, S: Session> DirectiveContext<InstrLineSemantics<S>, S::Ident, S::String
             }
             Err(()) => (),
         }
-        actions.into()
+        actions.map_line(Into::into)
     }
 
     fn analyze_equ(mut self) -> TokenStreamSemantics<S> {
@@ -102,7 +102,7 @@ impl<'a, S: Session> DirectiveContext<InstrLineSemantics<S>, S::Ident, S::String
             }
             Err(()) => (),
         }
-        self.actions.into()
+        self.actions.map_line(Into::into)
     }
 
     fn analyze_section(mut self) -> TokenStreamSemantics<S> {
@@ -110,20 +110,20 @@ impl<'a, S: Session> DirectiveContext<InstrLineSemantics<S>, S::Ident, S::String
         let session = &mut self.actions.session;
         let id = session.reloc_lookup(name, span.clone());
         session.start_section((id, span));
-        self.actions.into()
+        self.actions.map_line(Into::into)
     }
 
     fn analyze_include(mut self) -> TokenStreamSemantics<S> {
         let (path, span) = match reduce_include(self.span, self.args, &mut self.actions) {
             Ok(result) => result,
-            Err(()) => return self.actions.into(),
+            Err(()) => return self.actions.map_line(Into::into),
         };
         let (result, session) = self.actions.session.analyze_file(path);
         self.actions.session = session;
         if let Err(err) = result {
             self.actions.emit_diag(Message::from(err).at(span))
         }
-        self.actions.into()
+        self.actions.map_line(Into::into)
     }
 
     fn analyze_macro(mut self) -> TokenStreamSemantics<S> {
@@ -135,7 +135,7 @@ impl<'a, S: Session> DirectiveContext<InstrLineSemantics<S>, S::Ident, S::String
             line: TokenContext::MacroDef(MacroDefState::new(self.label)),
             session: self.actions.session,
         }
-        .into()
+        .map_line(Into::into)
     }
 
     fn analyze_org(self) -> TokenStreamSemantics<S> {
@@ -150,7 +150,7 @@ impl<'a, S: Session> DirectiveContext<InstrLineSemantics<S>, S::Ident, S::String
             }
             Err(()) => (),
         }
-        actions.into()
+        actions.map_line(Into::into)
     }
 }
 
@@ -463,8 +463,7 @@ mod tests {
         unary_directive("DS", f)
     }
 
-    type TestExprContext<S> =
-        builtin_instr::ExprBuilder<String, String, (), TestBuiltinInstrSemantics<S>>;
+    type TestExprContext<S> = builtin_instr::ArgSemantics<MockSession<S>>;
 
     fn unary_directive<F>(directive: &str, f: F) -> Vec<TestOperation<()>>
     where

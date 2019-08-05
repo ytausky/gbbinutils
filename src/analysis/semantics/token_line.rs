@@ -72,7 +72,7 @@ impl<S: Session> LineFinalizer<S::Span> for TokenLineSemantics<S> {
                 state.tokens.1.push(span);
             }
         }
-        self.into()
+        set_line!(self, self.line.into())
     }
 }
 

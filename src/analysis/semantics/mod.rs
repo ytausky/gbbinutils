@@ -1,4 +1,4 @@
-use self::instr_line::InstrLineSemantics;
+use self::instr_line::{InstrLineSemantics, InstrLineState};
 use self::params::*;
 use self::token_line::{TokenContext, TokenContextFinalizationSemantics, TokenLineSemantics};
 
@@ -11,10 +11,19 @@ use super::{LexItem, Literal, StringSource};
 
 use crate::diag;
 use crate::diag::span::SpanSource;
-use crate::diag::{EmitDiag, Message};
+use crate::diag::Message;
 
 #[cfg(test)]
 pub use self::mock::*;
+
+macro_rules! set_line {
+    ($state:expr, $line:expr) => {
+        SemanticState {
+            line: $line,
+            session: $state.session,
+        }
+    };
+}
 
 mod instr_line;
 mod params;
@@ -39,9 +48,9 @@ where
     }
 }
 
-pub(super) struct TokenStreamSemantics<S: Session>(
-    LineRule<InstrLineSemantics<S>, TokenLineSemantics<S>>,
-);
+pub(super) type TokenStreamSemantics<S> = SemanticState<TokenStreamState<S>, S>;
+
+pub(super) struct TokenStreamState<S: Session>(LineRule<InstrLineState<S>, TokenContext<S>>);
 
 pub(super) struct SemanticState<L, S: Session> {
     line: L,
@@ -66,6 +75,13 @@ impl<L, S: Session> SemanticState<L, S> {
         self.session = session;
         (value, self)
     }
+
+    fn map_line<F: FnOnce(L) -> T, T>(self, f: F) -> SemanticState<T, S> {
+        SemanticState {
+            line: f(self.line),
+            session: self.session,
+        }
+    }
 }
 
 delegate_diagnostics! {
@@ -74,29 +90,21 @@ delegate_diagnostics! {
 
 impl<S: Session> TokenStreamSemantics<S> {
     pub fn new(session: S) -> TokenStreamSemantics<S> {
-        TokenStreamSemantics(LineRule::InstrLine(InstrLineSemantics::new(session)))
-    }
-
-    fn session(&mut self) -> &mut S {
-        match &mut self.0 {
-            LineRule::InstrLine(actions) => &mut actions.session,
-            LineRule::TokenLine(actions) => &mut actions.session,
+        Self {
+            line: TokenStreamState(LineRule::InstrLine(InstrLineState::new())),
+            session,
         }
     }
 }
 
-delegate_diagnostics! {
-    {S: Session}, TokenStreamSemantics<S>, {session()}, S, S::Span
-}
-
-impl<S: Session> From<InstrLineSemantics<S>> for TokenStreamSemantics<S> {
-    fn from(actions: InstrLineSemantics<S>) -> Self {
+impl<S: Session> From<InstrLineState<S>> for TokenStreamState<S> {
+    fn from(actions: InstrLineState<S>) -> Self {
         Self(LineRule::InstrLine(actions))
     }
 }
 
-impl<S: Session> From<TokenLineSemantics<S>> for TokenStreamSemantics<S> {
-    fn from(actions: TokenLineSemantics<S>) -> Self {
+impl<S: Session> From<TokenContext<S>> for TokenStreamState<S> {
+    fn from(actions: TokenContext<S>) -> Self {
         Self(LineRule::TokenLine(actions))
     }
 }
@@ -112,17 +120,24 @@ where
     type Next = Done<S>;
 
     fn will_parse_line(self) -> LineRule<Self::InstrLineActions, Self::TokenLineActions> {
-        self.0
+        match self.line.0 {
+            LineRule::InstrLine(state) => LineRule::InstrLine(set_line!(self, state)),
+            LineRule::TokenLine(state) => LineRule::TokenLine(set_line!(self, state)),
+        }
     }
 
-    fn act_on_eos(self, span: S::Span) -> Self::Next {
-        match self.0 {
-            LineRule::InstrLine(actions) => Done(actions.define_label_if_present().session),
-            LineRule::TokenLine(mut actions) => {
-                match actions.line {
-                    TokenContext::MacroDef(_) => actions.emit_diag(Message::UnexpectedEof.at(span)),
+    fn act_on_eos(mut self, span: S::Span) -> Self::Next {
+        match self.line.0 {
+            LineRule::InstrLine(state) => {
+                Done(set_line!(self, state).define_label_if_present().session)
+            }
+            LineRule::TokenLine(state) => {
+                match state {
+                    TokenContext::MacroDef(_) => {
+                        self.session.emit_diag(Message::UnexpectedEof.at(span))
+                    }
                 }
-                Done(actions.session)
+                Done(set_line!(self, state).session)
             }
         }
     }
@@ -136,7 +151,7 @@ impl<S: Session> InstrFinalizer<S::Span> for InstrLineSemantics<S> {
     type Next = TokenStreamSemantics<S>;
 
     fn did_parse_instr(self) -> Self::Next {
-        self.into()
+        set_line!(self, self.line.into())
     }
 }
 
@@ -144,7 +159,7 @@ impl<S: Session> LineFinalizer<S::Span> for InstrLineSemantics<S> {
     type Next = TokenStreamSemantics<S>;
 
     fn did_parse_line(self, _: S::Span) -> Self::Next {
-        self.into()
+        set_line!(self, self.line.into())
     }
 }
 
@@ -204,7 +219,7 @@ mod tests {
     use crate::analysis::resolve::{NameTableEvent, ResolvedIdent};
     use crate::analysis::session::{MockMacroId, SessionEvent};
     use crate::analysis::SemanticToken;
-    use crate::diag::{DiagnosticsEvent, Merge, Message, MockSpan};
+    use crate::diag::{DiagnosticsEvent, EmitDiag, Merge, Message, MockSpan};
     use crate::log::with_log;
     use crate::model::{Atom, BinOp, ExprOp, Instruction, Item, LocationCounter, Width};
 

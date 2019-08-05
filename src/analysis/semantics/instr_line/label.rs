@@ -1,17 +1,19 @@
-use super::InstrLineSemantics;
+use super::{InstrLineSemantics, InstrLineState, SemanticState};
 
 use crate::analysis::semantics::Params;
 use crate::analysis::session::Session;
 use crate::analysis::syntax::LabelActions;
 
-pub(in crate::analysis) struct LabelSemantics<S: Session> {
-    parent: InstrLineSemantics<S>,
+pub(super) type LabelSemantics<S> = SemanticState<LabelState<S>, S>;
+
+pub(in crate::analysis) struct LabelState<S: Session> {
+    parent: InstrLineState<S>,
     label: (S::Ident, S::Span),
     params: Params<S::Ident, S::Span>,
 }
 
-impl<S: Session> LabelSemantics<S> {
-    pub fn new(parent: InstrLineSemantics<S>, label: (S::Ident, S::Span)) -> Self {
+impl<S: Session> LabelState<S> {
+    pub fn new(parent: InstrLineState<S>, label: (S::Ident, S::Span)) -> Self {
         Self {
             parent,
             label,
@@ -20,20 +22,17 @@ impl<S: Session> LabelSemantics<S> {
     }
 }
 
-delegate_diagnostics! {
-    {S: Session}, LabelSemantics<S>, {parent}, S, S::Span
-}
-
 impl<S: Session> LabelActions<S::Ident, S::Span> for LabelSemantics<S> {
     type Next = InstrLineSemantics<S>;
 
     fn act_on_param(&mut self, (ident, span): (S::Ident, S::Span)) {
-        self.params.0.push(ident);
-        self.params.1.push(span)
+        let params = &mut self.line.params;
+        params.0.push(ident);
+        params.1.push(span)
     }
 
     fn did_parse_label(mut self) -> Self::Next {
-        self.parent.line.label = Some((self.label, self.params));
-        self.parent
+        self.line.parent.label = Some((self.line.label, self.line.params));
+        set_line!(self, self.line.parent)
     }
 }

@@ -1,21 +1,20 @@
-use super::{InstrLineSemantics, TokenStreamSemantics};
+use super::{InstrLineState, SemanticState, TokenStreamSemantics};
 
 use crate::analysis::session::{MacroArgs, Session};
 use crate::analysis::syntax::{InstrFinalizer, MacroArgActions, MacroInstrActions};
 use crate::analysis::{SemanticToken, TokenSeq};
 
-pub(in crate::analysis) struct MacroInstrSemantics<S: Session> {
-    parent: InstrLineSemantics<S>,
+pub(super) type MacroInstrSemantics<S> = SemanticState<MacroInstrState<S>, S>;
+
+pub(in crate::analysis) struct MacroInstrState<S: Session> {
+    parent: InstrLineState<S>,
     name: (S::MacroEntry, S::Span),
     args: MacroArgs<S::Ident, S::StringRef, S::Span>,
 }
 
-impl<S: Session> MacroInstrSemantics<S> {
-    pub fn new(
-        parent: InstrLineSemantics<S>,
-        name: (S::MacroEntry, S::Span),
-    ) -> MacroInstrSemantics<S> {
-        MacroInstrSemantics {
+impl<S: Session> MacroInstrState<S> {
+    pub fn new(parent: InstrLineState<S>, name: (S::MacroEntry, S::Span)) -> Self {
+        Self {
             parent,
             name,
             args: (Vec::new(), Vec::new()),
@@ -23,13 +22,10 @@ impl<S: Session> MacroInstrSemantics<S> {
     }
 
     fn push_arg(&mut self, arg: TokenSeq<S::Ident, S::StringRef, S::Span>) {
-        self.args.0.push(arg.0);
-        self.args.1.push(arg.1);
+        let args = &mut self.args;
+        args.0.push(arg.0);
+        args.1.push(arg.1);
     }
-}
-
-delegate_diagnostics! {
-    {S: Session}, MacroInstrSemantics<S>, {parent}, InstrLineSemantics<S>, S::Span
 }
 
 impl<S: Session> MacroInstrActions<S::Span> for MacroInstrSemantics<S> {
@@ -37,31 +33,28 @@ impl<S: Session> MacroInstrActions<S::Span> for MacroInstrSemantics<S> {
     type MacroArgActions = MacroArgSemantics<S>;
 
     fn will_parse_macro_arg(self) -> Self::MacroArgActions {
-        MacroArgSemantics::new(self)
+        set_line!(self, MacroArgState::new(self.line))
     }
 }
 
 impl<S: Session> InstrFinalizer<S::Span> for MacroInstrSemantics<S> {
     type Next = TokenStreamSemantics<S>;
 
-    fn did_parse_instr(self) -> Self::Next {
-        let Self {
-            mut parent,
-            name,
-            args,
-        } = self;
-        parent.session = parent.session.call_macro(name, args);
-        parent.into()
+    fn did_parse_instr(mut self) -> Self::Next {
+        self.session = self.session.call_macro(self.line.name, self.line.args);
+        set_line!(self, self.line.parent.into())
     }
 }
 
-pub(in crate::analysis) struct MacroArgSemantics<S: Session> {
+type MacroArgSemantics<S> = SemanticState<MacroArgState<S>, S>;
+
+pub(in crate::analysis) struct MacroArgState<S: Session> {
     tokens: TokenSeq<S::Ident, S::StringRef, S::Span>,
-    parent: MacroInstrSemantics<S>,
+    parent: MacroInstrState<S>,
 }
 
-impl<S: Session> MacroArgSemantics<S> {
-    fn new(parent: MacroInstrSemantics<S>) -> MacroArgSemantics<S> {
+impl<S: Session> MacroArgState<S> {
+    fn new(parent: MacroInstrState<S>) -> Self {
         Self {
             tokens: (Vec::new(), Vec::new()),
             parent,
@@ -69,22 +62,19 @@ impl<S: Session> MacroArgSemantics<S> {
     }
 }
 
-delegate_diagnostics! {
-    {S: Session}, MacroArgSemantics<S>, {parent}, MacroInstrSemantics<S>, S::Span
-}
-
 impl<S: Session> MacroArgActions<S::Span> for MacroArgSemantics<S> {
     type Token = SemanticToken<S::Ident, S::StringRef>;
     type Next = MacroInstrSemantics<S>;
 
     fn act_on_token(&mut self, token: (Self::Token, S::Span)) {
-        self.tokens.0.push(token.0);
-        self.tokens.1.push(token.1);
+        let tokens = &mut self.line.tokens;
+        tokens.0.push(token.0);
+        tokens.1.push(token.1);
     }
 
     fn did_parse_macro_arg(mut self) -> Self::Next {
-        self.parent.push_arg(self.tokens);
-        self.parent
+        self.line.parent.push_arg(self.line.tokens);
+        set_line!(self, self.line.parent)
     }
 }
 

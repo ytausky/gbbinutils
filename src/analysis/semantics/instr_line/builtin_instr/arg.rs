@@ -1,11 +1,21 @@
-use super::{BuiltinInstrSemantics, OperandSymbol};
+use super::{BuiltinInstrSemantics, BuiltinInstrState, OperandSymbol, SemanticState};
 
 use crate::analysis::session::Session;
 use crate::analysis::syntax::{ArgActions, ArgFinalizer, ExprAtom, Operator, UnaryOperator};
-use crate::analysis::Literal;
+use crate::analysis::{IdentSource, Literal, StringSource};
 use crate::diag::span::{Source, SpanSource};
 use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::model::BinOp;
+
+pub(super) type ArgSemantics<S> = SemanticState<
+    ExprBuilder<
+        <S as IdentSource>::Ident,
+        <S as StringSource>::StringRef,
+        <S as SpanSource>::Span,
+        BuiltinInstrState<S>,
+    >,
+    S,
+>;
 
 pub(crate) struct ExprBuilder<I, R, S, P> {
     stack: Vec<Arg<I, R, S>>,
@@ -29,27 +39,23 @@ delegate_diagnostics! {
     {I, R, S, P: Diagnostics<S>}, ExprBuilder<I, R, S, P>, {parent}, P, S
 }
 
-impl<S: Session> ArgFinalizer
-    for ExprBuilder<S::Ident, S::StringRef, S::Span, BuiltinInstrSemantics<S>>
-{
+impl<S: Session> ArgFinalizer for ArgSemantics<S> {
     type Next = BuiltinInstrSemantics<S>;
 
     fn did_parse_arg(mut self) -> Self::Next {
-        let arg = self.pop();
-        self.parent.args.push(arg);
-        assert_eq!(self.stack.len(), 0);
-        self.parent
+        let arg = self.line.pop();
+        self.line.parent.args.push(arg);
+        assert_eq!(self.line.stack.len(), 0);
+        self.map_line(|line| line.parent)
     }
 }
 
-impl<I, R, S, P> ArgActions<I, Literal<R>, S> for ExprBuilder<I, R, S, P>
+impl<S: Session> ArgActions<S::Ident, Literal<S::StringRef>, S::Span> for ArgSemantics<S>
 where
-    I: AsRef<str>,
-    S: Clone,
-    Self: Diagnostics<S>,
+    S::Ident: AsRef<str>,
 {
-    fn act_on_atom(&mut self, atom: (ExprAtom<I, Literal<R>>, S)) {
-        self.stack.push(Arg {
+    fn act_on_atom(&mut self, atom: (ExprAtom<S::Ident, Literal<S::StringRef>>, S::Span)) {
+        self.line.stack.push(Arg {
             variant: ArgVariant::Atom(match atom.0 {
                 ExprAtom::Error => ArgAtom::Error,
                 ExprAtom::Ident(ident) => OPERAND_SYMBOLS
@@ -64,20 +70,20 @@ where
         })
     }
 
-    fn act_on_operator(&mut self, (op, span): (Operator, S)) {
+    fn act_on_operator(&mut self, (op, span): (Operator, S::Span)) {
         let variant = match op {
             Operator::Unary(UnaryOperator::Parentheses) => {
-                let inner = self.pop();
+                let inner = self.line.pop();
                 ArgVariant::Unary(ArgUnaryOp::Parentheses, Box::new(inner))
             }
             Operator::Binary(binary) => {
-                let rhs = self.pop();
-                let lhs = self.pop();
+                let rhs = self.line.pop();
+                let lhs = self.line.pop();
                 ArgVariant::Binary(binary, Box::new(lhs), Box::new(rhs))
             }
             Operator::FnCall(n) => {
-                let args = self.stack.split_off(self.stack.len() - n);
-                let name = self.pop();
+                let args = self.line.stack.split_off(self.line.stack.len() - n);
+                let name = self.line.pop();
                 let name = (
                     match name.variant {
                         ArgVariant::Atom(ArgAtom::Ident(ident)) => Some(ident),
@@ -91,7 +97,7 @@ where
                 ArgVariant::FnCall(name, args)
             }
         };
-        self.stack.push(Arg { variant, span })
+        self.line.stack.push(Arg { variant, span })
     }
 }
 
