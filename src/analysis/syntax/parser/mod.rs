@@ -234,7 +234,7 @@ where
 impl<'a, I, L, E, R, A, S> Parser<'a, (Result<Token<I, L>, E>, S), R, A>
 where
     R: Iterator<Item = (Result<Token<I, L>, E>, S)>,
-    A: BuiltinInstrActions<S, Ident = I, Literal = L>,
+    A: BuiltinInstrActions<I, L, S>,
     S: Clone,
 {
     fn parse_argument_list(self) -> Self {

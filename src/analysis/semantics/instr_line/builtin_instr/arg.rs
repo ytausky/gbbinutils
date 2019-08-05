@@ -42,16 +42,13 @@ impl<S: Session> ArgFinalizer
     }
 }
 
-impl<I, R, S, P> ArgActions<S> for ExprBuilder<I, R, S, P>
+impl<I, R, S, P> ArgActions<I, Literal<R>, S> for ExprBuilder<I, R, S, P>
 where
     I: AsRef<str>,
     S: Clone,
     Self: Diagnostics<S>,
 {
-    type Ident = I;
-    type Literal = Literal<R>;
-
-    fn act_on_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, S)) {
+    fn act_on_atom(&mut self, atom: (ExprAtom<I, Literal<R>>, S)) {
         self.stack.push(Arg {
             variant: ArgVariant::Atom(match atom.0 {
                 ExprAtom::Error => ArgAtom::Error,

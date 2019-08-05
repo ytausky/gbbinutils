@@ -149,12 +149,7 @@ pub(super) trait InstrLineActions<I, L, S: Clone>: InstrActions<I, L, S> {
 // The parser uses this rule to recover from an invalid instruction name by throwing away all the
 // remaining tokens in the line.
 pub(super) trait InstrActions<I, L, S: Clone>: LineFinalizer<S> {
-    type BuiltinInstrActions: BuiltinInstrActions<
-        S,
-        Ident = I,
-        Literal = L,
-        Next = Self::LineFinalizer,
-    >;
+    type BuiltinInstrActions: BuiltinInstrActions<I, L, S, Next = Self::LineFinalizer>;
     type MacroInstrActions: MacroInstrActions<S, Token = Token<I, L>, Next = Self::LineFinalizer>;
     type ErrorActions: InstrFinalizer<S, Next = Self::LineFinalizer>;
     type LineFinalizer: LineFinalizer<S, Next = Self::Next>;
@@ -217,12 +212,8 @@ impl<C, M, E> InstrRule<C, M, E> {
 //     1. builtin-instr → <Ident> (arg (<Comma> arg)*)?
 //
 // BuiltinInstrActions represents any position in this rule after the initial <Ident>.
-pub(super) trait BuiltinInstrActions<S: Clone>: InstrFinalizer<S> {
-    type Ident;
-    type Literal;
-
-    type ArgActions: ArgActions<S, Ident = Self::Ident, Literal = Self::Literal>
-        + ArgFinalizer<Next = Self>;
+pub(super) trait BuiltinInstrActions<I, L, S: Clone>: InstrFinalizer<S> {
+    type ArgActions: ArgActions<I, L, S> + ArgFinalizer<Next = Self>;
 
     fn will_parse_arg(self) -> Self::ArgActions;
 }
@@ -243,11 +234,8 @@ pub(super) trait ArgFinalizer {
 //     6. ...
 //
 // To handle precedence and associativity, the parser uses a reverse Polish notation protocol.
-pub(super) trait ArgActions<S: Clone>: Diagnostics<S> {
-    type Ident;
-    type Literal;
-
-    fn act_on_atom(&mut self, atom: (ExprAtom<Self::Ident, Self::Literal>, S));
+pub(super) trait ArgActions<I, L, S: Clone>: Diagnostics<S> {
+    fn act_on_atom(&mut self, atom: (ExprAtom<I, L>, S));
     fn act_on_operator(&mut self, operator: (Operator, S));
 }
 

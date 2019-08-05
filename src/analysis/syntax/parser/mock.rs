@@ -269,9 +269,7 @@ impl EmitDiag<MockSpan, MockSpan> for BuiltinInstrActionCollector {
     }
 }
 
-impl BuiltinInstrActions<MockSpan> for BuiltinInstrActionCollector {
-    type Ident = MockIdent;
-    type Literal = MockLiteral;
+impl BuiltinInstrActions<MockIdent, MockLiteral, MockSpan> for BuiltinInstrActionCollector {
     type ArgActions = ExprActionCollector<Self>;
 
     fn will_parse_arg(self) -> Self::ArgActions {
@@ -333,13 +331,10 @@ impl ArgFinalizer for ExprActionCollector<()> {
     }
 }
 
-impl<P> ArgActions<MockSpan> for ExprActionCollector<P>
+impl<P> ArgActions<MockIdent, MockLiteral, MockSpan> for ExprActionCollector<P>
 where
     Self: Diagnostics<MockSpan>,
 {
-    type Ident = MockIdent;
-    type Literal = MockLiteral;
-
     fn act_on_atom(&mut self, atom: (ExprAtom<MockIdent, MockLiteral>, MockSpan)) {
         self.actions.push(ExprAction::PushAtom(atom))
     }

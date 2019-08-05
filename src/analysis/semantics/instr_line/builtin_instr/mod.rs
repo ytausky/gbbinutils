@@ -59,12 +59,11 @@ delegate_diagnostics! {
     {S: Session}, BuiltinInstrSemantics<S>, {parent}, InstrLineSemantics<S>, S::Span
 }
 
-impl<S: Session> BuiltinInstrActions<S::Span> for BuiltinInstrSemantics<S>
+impl<S: Session> BuiltinInstrActions<S::Ident, Literal<S::StringRef>, S::Span>
+    for BuiltinInstrSemantics<S>
 where
     S::Ident: AsRef<str>,
 {
-    type Ident = S::Ident;
-    type Literal = Literal<S::StringRef>;
     type ArgActions = ExprBuilder<S::Ident, S::StringRef, S::Span, Self>;
 
     fn will_parse_arg(self) -> Self::ArgActions {
