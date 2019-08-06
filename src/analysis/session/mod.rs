@@ -12,7 +12,7 @@ use crate::diag::span::{AddMacroDef, SpanSource};
 use crate::diag::*;
 use crate::model::Item;
 
-use std::ops::DerefMut;
+use std::ops::{Deref, DerefMut};
 
 #[cfg(test)]
 pub(crate) use self::mock::*;
@@ -69,17 +69,14 @@ where
 pub(super) type MacroArgs<I, R, S> = expand::MacroArgs<SemanticToken<I, R>, S>;
 pub(super) type Params<I, S> = (Vec<I>, Vec<S>);
 
-type FullSession<'a, 'b, C, A, B, N, D> =
-    CompositeSession<FullUpstream<'a, 'b, C, A, D>, B, &'a mut N, &'a mut D>;
+type FullSession<'a, C, A, B, N, D> = CompositeSession<FullUpstream<'a, A, C, D>, B, N, D>;
 
-type FullUpstream<'a, 'b, C, A, D> = Upstream<
-    'a,
-    'b,
+type FullUpstream<'a, A, C, D> = Upstream<
     C,
-    A,
-    <C as IdentSource>::Ident,
-    <C as StringSource>::StringRef,
-    <D as AddMacroDef<<D as SpanSource>::Span>>::MacroDefHandle,
+    &'a mut A,
+    <<C as Deref>::Target as IdentSource>::Ident,
+    <<C as Deref>::Target as StringSource>::StringRef,
+    <<D as Deref>::Target as AddMacroDef<<<D as Deref>::Target as SpanSource>::Span>>::MacroDefHandle,
 >;
 
 pub(super) struct CompositeSession<U, B, N, D> {
@@ -87,13 +84,17 @@ pub(super) struct CompositeSession<U, B, N, D> {
     downstream: Downstream<B, N, D>,
 }
 
-pub(super) struct Upstream<'a, 'b, C, A, I, R, H> {
-    codebase: &'a mut C,
-    analyzer: &'b mut A,
-    macros: MacroTable<I, R, H>,
+pub(super) struct Upstream<C, A, I, R, H> {
+    codebase: C,
+    analyzer: A,
+    macros: expand::MacroTable<I, Literal<R>, H>,
 }
 
-type MacroTable<I, R, H> = self::expand::MacroTable<I, Literal<R>, H>;
+type MacroTable<C, D> = expand::MacroTable<
+    <<C as Deref>::Target as IdentSource>::Ident,
+    Literal<<<C as Deref>::Target as StringSource>::StringRef>,
+    <<D as Deref>::Target as AddMacroDef<<<D as Deref>::Target as SpanSource>::Span>>::MacroDefHandle,
+>;
 
 pub(super) struct Downstream<B, N, D> {
     backend: B,
@@ -132,7 +133,7 @@ impl<B: PushOp<T, S>, N, D, T, S: Clone> PushOp<T, S> for Downstream<B, N, D> {
     }
 }
 
-impl<'a, 'b, C, A, B, N, D> FullSession<'a, 'b, C, A, B, N, D>
+impl<'a, 'b, C, A, B, N, D> FullSession<'b, &'a mut C, A, B, &'a mut N, &'a mut D>
 where
     C: IdentSource + StringSource,
     D: DiagnosticsSystem,
@@ -169,14 +170,16 @@ impl<B, N, D> Downstream<B, N, D> {
     }
 }
 
-pub(super) struct PartialSession<'a, C, B, N, D>
+pub(super) struct PartialSession<C, B, N, D>
 where
-    C: IdentSource + StringSource,
-    D: DiagnosticsSystem,
+    C: DerefMut,
+    C::Target: IdentSource + StringSource,
+    D: DerefMut,
+    D::Target: DiagnosticsSystem,
 {
-    codebase: &'a mut C,
-    macros: MacroTable<C::Ident, C::StringRef, D::MacroDefHandle>,
-    downstream: Downstream<B, &'a mut N, &'a mut D>,
+    codebase: C,
+    macros: MacroTable<C, D>,
+    downstream: Downstream<B, N, D>,
 }
 
 macro_rules! partial {
@@ -203,15 +206,17 @@ where
     fn into_session(self, analyzer: &'b mut A) -> Self::Session;
 }
 
-impl<'a, 'b, C, A: 'b, B, N, D> IntoSession<'b, A> for PartialSession<'a, C, B, N, D>
+impl<'a, C, A: 'a, B, N, D> IntoSession<'a, A> for PartialSession<C, B, N, D>
 where
-    C: IdentSource + StringSource,
-    D: DiagnosticsSystem,
-    FullSession<'a, 'b, C, A, B, N, D>: Session + Into<Self>,
+    C: DerefMut,
+    C::Target: IdentSource + StringSource,
+    D: DerefMut,
+    D::Target: DiagnosticsSystem,
+    FullSession<'a, C, A, B, N, D>: Session + Into<Self>,
 {
-    type Session = FullSession<'a, 'b, C, A, B, N, D>;
+    type Session = FullSession<'a, C, A, B, N, D>;
 
-    fn into_session(self, analyzer: &'b mut A) -> Self::Session {
+    fn into_session(self, analyzer: &'a mut A) -> Self::Session {
         CompositeSession {
             upstream: Upstream {
                 codebase: self.codebase,
@@ -223,23 +228,26 @@ where
     }
 }
 
-impl<'a, 'b, C, A, B, N, D> From<FullSession<'a, 'b, C, A, B, N, D>>
-    for PartialSession<'a, C, B, N, D>
+impl<'a, C, A, B, N, D> From<FullSession<'a, C, A, B, N, D>> for PartialSession<C, B, N, D>
 where
-    C: IdentSource + StringSource,
-    D: DiagnosticsSystem,
+    C: DerefMut,
+    C::Target: IdentSource + StringSource,
+    D: DerefMut,
+    D::Target: DiagnosticsSystem,
 {
-    fn from(session: FullSession<'a, 'b, C, A, B, N, D>) -> Self {
+    fn from(session: FullSession<'a, C, A, B, N, D>) -> Self {
         partial!(session)
     }
 }
 
-impl<'a, 'b, C, A, B, N, D> IdentSource for FullSession<'a, 'b, C, A, B, N, D>
+impl<'a, C, A, B, N, D> IdentSource for FullSession<'a, C, A, B, N, D>
 where
-    C: IdentSource + StringSource,
-    D: DiagnosticsSystem,
+    C: DerefMut,
+    C::Target: IdentSource + StringSource,
+    D: DerefMut,
+    D::Target: DiagnosticsSystem,
 {
-    type Ident = C::Ident;
+    type Ident = <C::Target as IdentSource>::Ident;
 }
 
 impl<U, B, N, D> SpanSource for CompositeSession<U, B, N, D>
@@ -250,12 +258,14 @@ where
     type Span = <D::Target as SpanSource>::Span;
 }
 
-impl<'a, 'b, C, A, B, N, D> StringSource for FullSession<'a, 'b, C, A, B, N, D>
+impl<'a, C, A, B, N, D> StringSource for FullSession<'a, C, A, B, N, D>
 where
-    C: IdentSource + StringSource,
-    D: DiagnosticsSystem,
+    C: DerefMut,
+    C::Target: IdentSource + StringSource,
+    D: DerefMut,
+    D::Target: DiagnosticsSystem,
 {
-    type StringRef = C::StringRef;
+    type StringRef = <C::Target as StringSource>::StringRef;
 }
 
 impl<U, B: Backend<S>, N, D, S: Clone> PartialBackend<S> for CompositeSession<U, B, N, D> {
@@ -275,41 +285,44 @@ impl<U, B: Backend<S>, N, D, S: Clone> PartialBackend<S> for CompositeSession<U,
 }
 
 pub(super) trait Analyze<I: Clone + PartialEq, R: Clone + Eq, S: Clone> {
-    fn analyze_token_seq<'b, T, P>(&'b mut self, tokens: T, partial: P) -> P
+    fn analyze_token_seq<'b, T, P>(&'b mut self, tokens: T, partial: P) -> P::Session
     where
         T: IntoIterator<Item = LexItem<I, R, S>>,
         P: IntoSession<'b, Self>,
         P::Session: IdentSource<Ident = I> + StringSource<StringRef = R> + SpanSource<Span = S>;
 }
 
-impl<'a, 'b, C, A, B, N, D> Session for FullSession<'a, 'b, C, A, B, N, D>
+impl<'a, C, A, B, N, D> Session for FullSession<'a, C, A, B, N, D>
 where
-    C: Lex<D>,
-    A: Analyze<C::Ident, C::StringRef, D::Span>,
-    B: Backend<D::Span>,
-    N: NameTable<C::Ident, BackendEntry = B::Name, MacroEntry = MacroId> + StartScope<C::Ident>,
-    D: DiagnosticsSystem,
+    C: DerefMut,
+    C::Target: Lex<D::Target>,
+    A: Analyze<
+        <C::Target as IdentSource>::Ident,
+        <C::Target as StringSource>::StringRef,
+        <D::Target as SpanSource>::Span,
+    >,
+    B: Backend<<D::Target as SpanSource>::Span>,
+    N: DerefMut,
+    N::Target:
+        NameTable<<C::Target as IdentSource>::Ident, BackendEntry = B::Name, MacroEntry = MacroId>
+            + StartScope<<C::Target as IdentSource>::Ident>,
+    D: DerefMut,
+    D::Target: DiagnosticsSystem,
 {
     fn analyze_file(mut self, path: Self::StringRef) -> (Result<(), CodebaseError>, Self) {
         let tokens = match self
             .upstream
             .codebase
-            .lex_file(path, self.downstream.diagnostics)
+            .lex_file(path, &mut *self.downstream.diagnostics)
         {
             Ok(tokens) => tokens,
             Err(error) => return (Err(error), self),
         };
-        let PartialSession {
-            macros,
-            downstream: Downstream { backend, .. },
-            ..
-        } = self
+        let session = self
             .upstream
             .analyzer
             .analyze_token_seq(tokens, partial!(self));
-        self.upstream.macros = macros;
-        self.downstream.backend = backend;
-        (Ok(()), self)
+        (Ok(()), session)
     }
 
     fn define_macro(
@@ -318,9 +331,12 @@ where
         params: Params<Self::Ident, Self::Span>,
         body: TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
     ) -> Self::MacroEntry {
-        self.upstream
-            .macros
-            .define_macro(name_span, params, body, self.downstream.diagnostics)
+        self.upstream.macros.define_macro(
+            name_span,
+            params,
+            body,
+            &mut *self.downstream.diagnostics,
+        )
     }
 
     fn call_macro(
@@ -328,18 +344,11 @@ where
         (MacroId(id), span): (Self::MacroEntry, Self::Span),
         args: MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
     ) -> Self {
-        let expansion = self.upstream.macros[id].expand(span, args, self.downstream.diagnostics);
-        let PartialSession {
-            macros,
-            downstream: Downstream { backend, .. },
-            ..
-        } = self
-            .upstream
+        let expansion =
+            self.upstream.macros[id].expand(span, args, &mut *self.downstream.diagnostics);
+        self.upstream
             .analyzer
-            .analyze_token_seq(expansion.map(|(t, s)| (Ok(t), s)), partial!(self));
-        self.upstream.macros = macros;
-        self.downstream.backend = backend;
-        self
+            .analyze_token_seq(expansion.map(|(t, s)| (Ok(t), s)), partial!(self))
     }
 }
 
@@ -401,10 +410,11 @@ where
 }
 
 delegate_diagnostics! {
-    {'a, U, B, N, D: Diagnostics<S>, S: Clone},
-    CompositeSession<U, B, N, &'a mut D>,
+    {'a, U, B, N, D: DerefMut, S: Clone},
+    {D::Target: Diagnostics<S>},
+    CompositeSession<U, B, N, D>,
     {downstream.diagnostics},
-    D,
+    D::Target,
     S
 }
 
@@ -506,14 +516,6 @@ mod mock {
         pub fn without_name_resolution(log: Log<T>) -> Self {
             Self::with_name_table(PanickingIdAllocator::new(), FakeNameTable, log)
         }
-    }
-
-    delegate_diagnostics! {
-        {A, N, T: From<DiagnosticsEvent<S>>, S: Merge},
-        MockSession<A, N, T, S>,
-        {downstream.diagnostics},
-        MockDiagnostics<T, S>,
-        S
     }
 
     impl<A, N, T, S> IdentSource for MockSession<A, N, T, S> {
@@ -818,14 +820,17 @@ mod tests {
     type MockDiagnosticsSystem<S> = crate::diag::MockDiagnosticsSystem<Event<S>, S>;
     type MockNameTable<S> =
         crate::analysis::resolve::MockNameTable<BasicNameTable<usize, MacroId>, Event<S>>;
-    type TestSession<'a, S> = FullSession<
-        'a,
-        'a,
-        MockCodebase<S>,
-        MockAnalyzer<S>,
+    type TestSession<'a, S> = CompositeSession<
+        Upstream<
+            &'a mut MockCodebase<S>,
+            &'a mut MockAnalyzer<S>,
+            String,
+            String,
+            <MockDiagnosticsSystem<S> as AddMacroDef<S>>::MacroDefHandle,
+        >,
         MockBackend<S>,
-        MockNameTable<S>,
-        MockDiagnosticsSystem<S>,
+        &'a mut MockNameTable<S>,
+        &'a mut MockDiagnosticsSystem<S>,
     >;
 
     #[derive(Debug, PartialEq)]

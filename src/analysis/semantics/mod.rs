@@ -35,7 +35,7 @@ impl<I: Clone + PartialEq, R: Clone + Eq, S: Clone> Analyze<I, R, S> for Semanti
 where
     I: AsRef<str>,
 {
-    fn analyze_token_seq<'b, T, P>(&'b mut self, tokens: T, partial: P) -> P
+    fn analyze_token_seq<'b, T, P>(&'b mut self, tokens: T, partial: P) -> P::Session
     where
         T: IntoIterator<Item = LexItem<I, R, S>>,
         P: IntoSession<'b, Self>,
@@ -44,7 +44,7 @@ where
         let session = partial.into_session(self);
         let Done(session) =
             super::syntax::parse_token_seq(tokens.into_iter(), TokenStreamSemantics::new(session));
-        session.into()
+        session
     }
 }
 
@@ -192,14 +192,14 @@ mod mock {
         T: From<AnalyzerEvent<S>>,
         S: Clone,
     {
-        fn analyze_token_seq<'b, I, P>(&'b mut self, tokens: I, partial: P) -> P
+        fn analyze_token_seq<'b, I, P>(&'b mut self, tokens: I, partial: P) -> P::Session
         where
             I: IntoIterator<Item = LexItem<String, String, S>>,
             P: IntoSession<'b, Self>,
         {
             self.log
                 .push(AnalyzerEvent::AnalyzeTokenSeq(tokens.into_iter().collect()));
-            partial
+            partial.into_session(self)
         }
     }
 

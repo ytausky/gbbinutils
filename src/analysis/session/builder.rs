@@ -62,22 +62,10 @@ impl<U, B: Finish, N, D> Finish for Builder<U, B, N, D> {
 }
 
 delegate_diagnostics! {
-    {'a, P, B, N, D: Diagnostics<S>, S},
-    RelocContext<P, Downstream<B, N, &'a mut D>>,
+    {'a, P, B, N, D: DerefMut, S},
+    {D::Target: Diagnostics<S>},
+    RelocContext<P, Downstream<B, N, D>>,
     {builder.diagnostics},
-    D,
+    D::Target,
     S
-}
-
-#[cfg(test)]
-mod mock {
-    use super::{Diagnostics, Downstream, RelocContext};
-
-    delegate_diagnostics! {
-        {P, B, N, D: Diagnostics<S>, S},
-        RelocContext<P, Downstream<B, N, Box<D>>>,
-        {builder.diagnostics},
-        D,
-        S
-    }
 }

@@ -69,7 +69,7 @@ pub(super) enum Literal<R> {
     String(R),
 }
 
-trait Lex<D: SpanSource>: IdentSource + StringSource {
+trait Lex<D: SpanSource + ?Sized>: IdentSource + StringSource {
     type TokenIter: Iterator<Item = LexItem<Self::Ident, Self::StringRef, D::Span>>;
 
     fn lex_file(

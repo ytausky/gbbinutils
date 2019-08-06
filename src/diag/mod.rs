@@ -55,10 +55,11 @@ where
 }
 
 macro_rules! delegate_diagnostics {
-    ({$($params:tt)*}, $t:ty, {$($delegate:tt)*}, $dt:ty, $span:ty) => {
+    ({$($params:tt)*}, $({$($preds:tt)*},)? $t:ty, {$($delegate:tt)*}, $dt:ty, $span:ty) => {
         impl<$($params)*> $crate::diag::span::MergeSpans<$span> for $t
         where
             $span: Clone,
+            $($($preds)*)?
         {
             fn merge_spans(&mut self, left: &$span, right: &$span) -> $span {
                 self.$($delegate)*.merge_spans(left, right)
@@ -68,6 +69,7 @@ macro_rules! delegate_diagnostics {
         impl<$($params)*> $crate::diag::span::StripSpan<$span> for $t
         where
             $span: Clone,
+            $($($preds)*)?
         {
             type Stripped = <$dt as $crate::diag::span::StripSpan<$span>>::Stripped;
 
@@ -82,6 +84,7 @@ macro_rules! delegate_diagnostics {
         > for $t
         where
             $span: Clone,
+            $($($preds)*)?
         {
             fn emit_diag(
                 &mut self,

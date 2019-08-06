@@ -3,7 +3,7 @@ use crate::diag::span::*;
 
 use std::rc::Rc;
 
-pub(super) trait Expand<T, H, F: MacroContextFactory<H, S>, S: Clone> {
+pub(super) trait Expand<T, H, F: MacroContextFactory<H, S> + ?Sized, S: Clone> {
     type Iter: Iterator<Item = (T, S)>;
 
     fn expand(&self, name: S, args: MacroArgs<T, S>, factory: &mut F) -> Self::Iter;
@@ -25,7 +25,7 @@ pub(super) trait DefineMacro<I, T, H: Clone> {
         diagnostics: &mut D,
     ) -> MacroId
     where
-        D: AddMacroDef<S, MacroDefHandle = H> + MacroContextFactory<H, S>,
+        D: AddMacroDef<S, MacroDefHandle = H> + MacroContextFactory<H, S> + ?Sized,
         S: Clone;
 }
 
@@ -38,7 +38,7 @@ impl<I, L, H: Clone> DefineMacro<I, Token<I, L>, H> for MacroTable<I, L, H> {
         diagnostics: &mut D,
     ) -> MacroId
     where
-        D: AddMacroDef<S, MacroDefHandle = H> + MacroContextFactory<H, S>,
+        D: AddMacroDef<S, MacroDefHandle = H> + MacroContextFactory<H, S> + ?Sized,
         S: Clone,
     {
         let context = diagnostics.add_macro_def(name_span, params.1, body.1);
@@ -67,7 +67,7 @@ struct MacroDefTokens<I, T> {
 impl<I, L, H, F, S> Expand<Token<I, L>, H, F, S> for MacroDef<I, Token<I, L>, H>
 where
     I: Clone + PartialEq,
-    F: MacroContextFactory<H, S>,
+    F: MacroContextFactory<H, S> + ?Sized,
     S: Clone,
     Token<I, L>: Clone,
 {
