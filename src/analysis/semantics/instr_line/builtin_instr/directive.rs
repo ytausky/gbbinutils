@@ -3,6 +3,7 @@ use super::*;
 use crate::analysis::semantics::instr_line::Label;
 use crate::analysis::semantics::params::RelocLookup;
 use crate::analysis::semantics::token_line::{MacroDefState, TokenContext, TokenLineSemantics};
+use crate::analysis::semantics::TokenStreamState;
 use crate::analysis::session::Session;
 use crate::analysis::Literal;
 use crate::diag::*;
@@ -118,12 +119,14 @@ impl<'a, S: Session> DirectiveContext<InstrLineSemantics<S>, S::Ident, S::String
             Ok(result) => result,
             Err(()) => return self.actions.map_line(Into::into),
         };
-        let (result, session) = self.actions.session.analyze_file(path);
-        self.actions.session = session;
+        let (result, mut semantics): (_, TokenStreamSemantics<_>) = self
+            .actions
+            .session
+            .analyze_file(path, TokenStreamState::from(self.actions.line));
         if let Err(err) = result {
-            self.actions.emit_diag(Message::from(err).at(span))
+            semantics.emit_diag(Message::from(err).at(span))
         }
-        self.actions.map_line(Into::into)
+        semantics
     }
 
     fn analyze_macro(mut self) -> TokenStreamSemantics<S> {

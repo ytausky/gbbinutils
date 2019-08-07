@@ -27,8 +27,6 @@ pub(in crate::analysis) struct InstrLineState<S: Session> {
 
 impl<S: Session> InstrLineActions<S::Ident, Literal<S::StringRef>, S::Span>
     for InstrLineSemantics<S>
-where
-    S::Ident: AsRef<str>,
 {
     type LabelActions = LabelSemantics<S>;
     type InstrActions = Self;
@@ -39,10 +37,7 @@ where
     }
 }
 
-impl<S: Session> InstrActions<S::Ident, Literal<S::StringRef>, S::Span> for InstrLineSemantics<S>
-where
-    S::Ident: AsRef<str>,
-{
+impl<S: Session> InstrActions<S::Ident, Literal<S::StringRef>, S::Span> for InstrLineSemantics<S> {
     type BuiltinInstrActions = BuiltinInstrSemantics<S>;
     type MacroInstrActions = MacroInstrSemantics<S>;
     type ErrorActions = Self;

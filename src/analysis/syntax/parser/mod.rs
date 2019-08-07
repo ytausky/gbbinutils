@@ -14,6 +14,35 @@ macro_rules! bump {
 mod mock;
 mod expr;
 
+pub(in crate::analysis) trait ParseTokenStream<I, L, E, S: Clone> {
+    fn parse_token_stream<T, A>(&mut self, tokens: T, actions: A) -> A
+    where
+        T: IntoIterator<Item = (Result<Token<I, L>, E>, S)>,
+        A: TokenStreamActions<I, L, S>;
+}
+
+pub(in crate::analysis) struct DefaultParser;
+
+impl<I, L, E, S: Clone> ParseTokenStream<I, L, E, S> for DefaultParser {
+    fn parse_token_stream<T, A>(&mut self, tokens: T, actions: A) -> A
+    where
+        T: IntoIterator<Item = (Result<Token<I, L>, E>, S)>,
+        A: TokenStreamActions<I, L, S>,
+        S: Clone,
+    {
+        let Parser {
+            state: ParserState { token, .. },
+            actions,
+            ..
+        } = Parser::new(&mut tokens.into_iter(), actions).parse_token_stream();
+        assert_eq!(
+            token.0.ok().as_ref().map(Token::kind),
+            Some(Token::Sigil(Sigil::Eos))
+        );
+        actions.act_on_eos(token.1)
+    }
+}
+
 type TokenKind = Token<(), ()>;
 
 impl Copy for TokenKind {}
@@ -31,24 +60,6 @@ impl<I, L> Token<I, L> {
 }
 
 const LINE_FOLLOW_SET: &[TokenKind] = &[Token::Sigil(Eol), Token::Sigil(Eos)];
-
-pub(in crate::analysis) fn parse_src<I, L, E, R, A, S>(mut tokens: R, actions: A) -> A::Next
-where
-    R: Iterator<Item = (Result<Token<I, L>, E>, S)>,
-    A: TokenStreamActions<I, L, S>,
-    S: Clone,
-{
-    let Parser {
-        state: ParserState { token, .. },
-        actions,
-        ..
-    } = Parser::new(&mut tokens, actions).parse_token_stream();
-    assert_eq!(
-        token.0.ok().as_ref().map(Token::kind),
-        Some(Token::Sigil(Sigil::Eos))
-    );
-    actions.act_on_eos(token.1)
-}
 
 struct Parser<'a, T, R: 'a, A> {
     state: ParserState<'a, T, R>,
@@ -423,7 +434,8 @@ mod tests {
 
     fn assert_eq_actions(input: InputTokens, expected: impl Borrow<[TokenStreamAction<MockSpan>]>) {
         let mut parsing_context = TokenStreamActionCollector::new();
-        parsing_context = parse_src(with_spans(&input.tokens), parsing_context);
+        parsing_context =
+            DefaultParser.parse_token_stream(with_spans(&input.tokens), parsing_context);
         let mut expected = expected.borrow().to_vec();
         expected.push(input.eos());
         assert_eq!(parsing_context.actions, expected)

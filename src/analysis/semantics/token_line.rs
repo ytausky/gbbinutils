@@ -27,8 +27,6 @@ impl<S: Session> MacroDefState<S> {
 
 impl<S: Session> TokenLineActions<S::Ident, Literal<S::StringRef>, S::Span>
     for TokenLineSemantics<S>
-where
-    S::Ident: AsRef<str>,
 {
     type ContextFinalizer = TokenContextFinalizationSemantics<S>;
 

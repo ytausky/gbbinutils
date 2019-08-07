@@ -1,5 +1,6 @@
 use self::backend::*;
 use self::resolve::{BiLevelNameTable, DefaultIdentFactory};
+use self::semantics::TokenStreamState;
 use self::session::*;
 use self::syntax::*;
 
@@ -34,7 +35,7 @@ where
 
         let tokenizer = Tokenizer(codebase);
         let mut file_parser = CodebaseAnalyzer::new(&tokenizer);
-        let mut analyzer = semantics::SemanticAnalyzer;
+        let mut parser_factory = DefaultParserFactory;
         let mut names = BiLevelNameTable::new();
         for (string, name) in self.builtin_names() {
             names.insert(
@@ -44,12 +45,12 @@ where
         }
         let session = CompositeSession::new(
             &mut file_parser,
-            &mut analyzer,
+            &mut parser_factory,
             self,
             &mut names,
             diagnostics,
         );
-        session.analyze_file(name.into()).0
+        session.analyze_file(name.into(), TokenStreamState::new()).0
     }
 }
 

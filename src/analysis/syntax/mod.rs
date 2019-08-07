@@ -1,10 +1,32 @@
 pub(super) use self::lexer::{LexError, Lexer};
+pub(super) use self::parser::ParseTokenStream;
+
+use self::parser::DefaultParser;
 
 use crate::diag::Diagnostics;
 use crate::model::BinOp;
 
+#[cfg(test)]
+pub(super) use self::mock::*;
+
 mod lexer;
 mod parser;
+
+pub(super) trait ParserFactory<I, L, E, S: Clone> {
+    type Parser: ParseTokenStream<I, L, E, S>;
+
+    fn mk_parser(&mut self) -> Self::Parser;
+}
+
+pub(super) struct DefaultParserFactory;
+
+impl<I, L, E, S: Clone> ParserFactory<I, L, E, S> for DefaultParserFactory {
+    type Parser = DefaultParser;
+
+    fn mk_parser(&mut self) -> Self::Parser {
+        DefaultParser
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token<I, L> {
@@ -36,7 +58,7 @@ impl<I, L> From<Sigil> for Token<I, L> {
 }
 
 pub(super) trait IdentSource {
-    type Ident: Clone + PartialEq;
+    type Ident: Clone + PartialEq + AsRef<str>;
 }
 
 pub(super) trait IdentFactory: IdentSource {
@@ -44,18 +66,16 @@ pub(super) trait IdentFactory: IdentSource {
 }
 
 #[cfg(test)]
-impl<I: Clone + PartialEq, F: for<'a> Fn(&'a str) -> I> IdentSource for F {
+impl<I: Clone + PartialEq + AsRef<str>, F: for<'a> Fn(&'a str) -> I> IdentSource for F {
     type Ident = I;
 }
 
 #[cfg(test)]
-impl<I: Clone + PartialEq, F: for<'a> Fn(&'a str) -> I> IdentFactory for F {
+impl<I: Clone + PartialEq + AsRef<str>, F: for<'a> Fn(&'a str) -> I> IdentFactory for F {
     fn mk_ident(&mut self, spelling: &str) -> Self::Ident {
         self(spelling)
     }
 }
-
-pub(super) use self::parser::parse_src as parse_token_seq;
 
 // The following traits represent different positions within the grammar's production rules.
 
@@ -84,10 +104,9 @@ pub(super) trait TokenStreamActions<I, L, S: Clone>: Sized {
         Next = Self,
     >;
     type TokenLineFinalizer: LineFinalizer<S, Next = Self>;
-    type Next;
 
     fn will_parse_line(self) -> LineRule<Self::InstrLineActions, Self::TokenLineActions>;
-    fn act_on_eos(self, span: S) -> Self::Next;
+    fn act_on_eos(self, span: S) -> Self;
 }
 
 pub(super) enum LineRule<I, T> {
@@ -301,4 +320,60 @@ impl<T, E> TokenLineRule<T, E> {
             _ => panic!("expected token sequence"),
         }
     }
+}
+
+#[cfg(test)]
+mod mock {
+    use super::*;
+
+    use crate::log::Log;
+
+    pub(in crate::analysis) struct MockParserFactory<T> {
+        log: Log<T>,
+    }
+
+    impl<T> MockParserFactory<T> {
+        pub fn new(log: Log<T>) -> Self {
+            Self { log }
+        }
+    }
+
+    impl<I, L, E, T, S: Clone> ParserFactory<I, L, E, S> for MockParserFactory<T>
+    where
+        T: From<ParserEvent<I, L, E, S>>,
+    {
+        type Parser = MockParser<T>;
+
+        fn mk_parser(&mut self) -> Self::Parser {
+            MockParser {
+                log: self.log.clone(),
+            }
+        }
+    }
+
+    pub(in crate::analysis) struct MockParser<T> {
+        log: Log<T>,
+    }
+
+    impl<I, L, E, T, S: Clone> ParseTokenStream<I, L, E, S> for MockParser<T>
+    where
+        T: From<ParserEvent<I, L, E, S>>,
+    {
+        fn parse_token_stream<R, A>(&mut self, tokens: R, actions: A) -> A
+        where
+            R: IntoIterator<Item = (Result<Token<I, L>, E>, S)>,
+            A: TokenStreamActions<I, L, S>,
+        {
+            self.log
+                .push(ParserEvent::ParseTokenStream(tokens.into_iter().collect()));
+            actions
+        }
+    }
+
+    #[derive(Debug, PartialEq)]
+    pub(in crate::analysis) enum ParserEvent<I, L, E, S> {
+        ParseTokenStream(Vec<TokenStreamItem<I, L, E, S>>),
+    }
+
+    type TokenStreamItem<I, L, E, S> = (Result<Token<I, L>, E>, S);
 }

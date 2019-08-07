@@ -1,5 +1,6 @@
 use super::{InstrLineState, SemanticState, TokenStreamSemantics};
 
+use crate::analysis::semantics::TokenStreamState;
 use crate::analysis::session::{MacroArgs, Session};
 use crate::analysis::syntax::{InstrFinalizer, MacroArgActions, MacroInstrActions};
 use crate::analysis::{SemanticToken, TokenSeq};
@@ -40,9 +41,12 @@ impl<S: Session> MacroInstrActions<S::Span> for MacroInstrSemantics<S> {
 impl<S: Session> InstrFinalizer<S::Span> for MacroInstrSemantics<S> {
     type Next = TokenStreamSemantics<S>;
 
-    fn did_parse_instr(mut self) -> Self::Next {
-        self.session = self.session.call_macro(self.line.name, self.line.args);
-        set_line!(self, self.line.parent.into())
+    fn did_parse_instr(self) -> Self::Next {
+        self.session.call_macro(
+            self.line.name,
+            self.line.args,
+            TokenStreamState::from(self.line.parent),
+        )
     }
 }
 

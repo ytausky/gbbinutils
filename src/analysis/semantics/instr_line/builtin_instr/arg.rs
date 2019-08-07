@@ -50,10 +50,7 @@ impl<S: Session> ArgFinalizer for ArgSemantics<S> {
     }
 }
 
-impl<S: Session> ArgActions<S::Ident, Literal<S::StringRef>, S::Span> for ArgSemantics<S>
-where
-    S::Ident: AsRef<str>,
-{
+impl<S: Session> ArgActions<S::Ident, Literal<S::StringRef>, S::Span> for ArgSemantics<S> {
     fn act_on_atom(&mut self, atom: ExprAtom<S::Ident, Literal<S::StringRef>>, span: S::Span) {
         self.line.stack.push(Arg {
             variant: ArgVariant::Atom(match atom {

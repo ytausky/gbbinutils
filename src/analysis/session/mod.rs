@@ -1,18 +1,19 @@
 pub use super::backend::ValueBuilder;
 
 use self::builder::Builder;
-use self::expand::{DefineMacro, Expand, MacroId};
+use self::expand::{DefineMacro, Expand, MacroId, MacroTable};
 
 use super::backend::*;
 use super::resolve::{NameTable, ResolvedIdent, StartScope};
-use super::{IdentSource, Lex, LexItem, Literal, SemanticToken, StringSource, TokenSeq};
+use super::syntax::{LexError, ParseTokenStream, ParserFactory, TokenStreamActions};
+use super::{IdentSource, Lex, Literal, SemanticToken, StringSource, TokenSeq};
 
 use crate::codebase::CodebaseError;
 use crate::diag::span::{AddMacroDef, SpanSource};
 use crate::diag::*;
 use crate::model::Item;
 
-use std::ops::{Deref, DerefMut};
+use std::ops::DerefMut;
 
 #[cfg(test)]
 pub(crate) use self::mock::*;
@@ -25,7 +26,13 @@ where
     Self: IdentSource + SpanSource + StringSource,
     Self: BasicSession<<Self as IdentSource>::Ident, <Self as SpanSource>::Span>,
 {
-    fn analyze_file(self, path: Self::StringRef) -> (Result<(), CodebaseError>, Self);
+    fn analyze_file<A: IntoSemanticActions<Self>>(
+        self,
+        path: Self::StringRef,
+        actions: A,
+    ) -> (Result<(), CodebaseError>, A::SemanticActions)
+    where
+        A::SemanticActions: TokenStreamActions<Self::Ident, Literal<Self::StringRef>, Self::Span>;
 
     fn define_macro(
         &mut self,
@@ -34,11 +41,14 @@ where
         body: TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
     ) -> Self::MacroEntry;
 
-    fn call_macro(
+    fn call_macro<A: IntoSemanticActions<Self>>(
         self,
         name: (Self::MacroEntry, Self::Span),
         args: MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
-    ) -> Self;
+        actions: A,
+    ) -> A::SemanticActions
+    where
+        A::SemanticActions: TokenStreamActions<Self::Ident, Literal<Self::StringRef>, Self::Span>;
 }
 
 pub(super) trait BasicSession<I, S: Clone>
@@ -66,35 +76,25 @@ where
     fn define_symbol(self, name: Self::Name, span: S) -> Self::FnBuilder;
 }
 
+pub(super) trait IntoSemanticActions<S: Session> {
+    type SemanticActions;
+
+    fn into_semantic_actions(self, session: S) -> Self::SemanticActions;
+}
+
 pub(super) type MacroArgs<I, R, S> = expand::MacroArgs<SemanticToken<I, R>, S>;
 pub(super) type Params<I, S> = (Vec<I>, Vec<S>);
-
-type FullSession<'a, C, A, B, N, D> = CompositeSession<FullUpstream<'a, A, C, D>, B, N, D>;
-
-type FullUpstream<'a, A, C, D> = Upstream<
-    C,
-    &'a mut A,
-    <<C as Deref>::Target as IdentSource>::Ident,
-    <<C as Deref>::Target as StringSource>::StringRef,
-    <<D as Deref>::Target as AddMacroDef<<<D as Deref>::Target as SpanSource>::Span>>::MacroDefHandle,
->;
 
 pub(super) struct CompositeSession<U, B, N, D> {
     upstream: U,
     downstream: Downstream<B, N, D>,
 }
 
-pub(super) struct Upstream<C, A, I, R, H> {
+pub(super) struct Upstream<C, P, I, R, H> {
     codebase: C,
-    analyzer: A,
-    macros: expand::MacroTable<I, Literal<R>, H>,
+    parser_factory: P,
+    macros: MacroTable<I, Literal<R>, H>,
 }
-
-type MacroTable<C, D> = expand::MacroTable<
-    <<C as Deref>::Target as IdentSource>::Ident,
-    Literal<<<C as Deref>::Target as StringSource>::StringRef>,
-    <<D as Deref>::Target as AddMacroDef<<<D as Deref>::Target as SpanSource>::Span>>::MacroDefHandle,
->;
 
 pub(super) struct Downstream<B, N, D> {
     backend: B,
@@ -133,14 +133,26 @@ impl<B: PushOp<T, S>, N, D, T, S: Clone> PushOp<T, S> for Downstream<B, N, D> {
     }
 }
 
-impl<'a, 'b, C, A, B, N, D> FullSession<'b, &'a mut C, A, B, &'a mut N, &'a mut D>
+impl<'a, C, P, B, N, D>
+    CompositeSession<
+        Upstream<
+            &'a mut C,
+            &'a mut P,
+            <C as IdentSource>::Ident,
+            <C as StringSource>::StringRef,
+            <D as AddMacroDef<<D as SpanSource>::Span>>::MacroDefHandle,
+        >,
+        B,
+        &'a mut N,
+        &'a mut D,
+    >
 where
     C: IdentSource + StringSource,
     D: DiagnosticsSystem,
 {
     pub fn new(
         codebase: &'a mut C,
-        analyzer: &'b mut A,
+        parser_factory: &'a mut P,
         backend: B,
         names: &'a mut N,
         diagnostics: &'a mut D,
@@ -148,7 +160,7 @@ where
         CompositeSession {
             upstream: Upstream {
                 codebase,
-                analyzer,
+                parser_factory,
                 macros: Vec::new(),
             },
             downstream: Downstream {
@@ -170,77 +182,19 @@ impl<B, N, D> Downstream<B, N, D> {
     }
 }
 
-pub(super) struct PartialSession<C, B, N, D>
-where
-    C: DerefMut,
-    C::Target: IdentSource + StringSource,
-    D: DerefMut,
-    D::Target: DiagnosticsSystem,
-{
-    codebase: C,
-    macros: MacroTable<C, D>,
-    downstream: Downstream<B, N, D>,
-}
-
-macro_rules! partial {
-    ($session:expr) => {
-        PartialSession {
-            codebase: $session.upstream.codebase,
-            macros: $session.upstream.macros,
-            downstream: Downstream {
-                backend: $session.downstream.backend,
-                names: $session.downstream.names,
-                diagnostics: $session.downstream.diagnostics,
-            },
-        }
-    };
-}
-
-pub(super) trait IntoSession<'b, A>
-where
-    Self: Sized,
-    A: ?Sized,
-{
-    type Session: Session + Into<Self>;
-
-    fn into_session(self, analyzer: &'b mut A) -> Self::Session;
-}
-
-impl<'a, C, A: 'a, B, N, D> IntoSession<'a, A> for PartialSession<C, B, N, D>
-where
-    C: DerefMut,
-    C::Target: IdentSource + StringSource,
-    D: DerefMut,
-    D::Target: DiagnosticsSystem,
-    FullSession<'a, C, A, B, N, D>: Session + Into<Self>,
-{
-    type Session = FullSession<'a, C, A, B, N, D>;
-
-    fn into_session(self, analyzer: &'a mut A) -> Self::Session {
-        CompositeSession {
-            upstream: Upstream {
-                codebase: self.codebase,
-                analyzer,
-                macros: self.macros,
-            },
-            downstream: self.downstream,
-        }
-    }
-}
-
-impl<'a, C, A, B, N, D> From<FullSession<'a, C, A, B, N, D>> for PartialSession<C, B, N, D>
-where
-    C: DerefMut,
-    C::Target: IdentSource + StringSource,
-    D: DerefMut,
-    D::Target: DiagnosticsSystem,
-{
-    fn from(session: FullSession<'a, C, A, B, N, D>) -> Self {
-        partial!(session)
-    }
-}
-
-impl<'a, C, A, B, N, D> IdentSource for FullSession<'a, C, A, B, N, D>
+impl<C, P, B, N, D> IdentSource
+    for CompositeSession<
+        Upstream<
+            C,
+            P,
+            <C::Target as IdentSource>::Ident,
+            <C::Target as StringSource>::StringRef,
+            <D::Target as AddMacroDef<<D::Target as SpanSource>::Span>>::MacroDefHandle,
+        >,
+        B,
+        N,
+        D,
+    >
 where
     C: DerefMut,
     C::Target: IdentSource + StringSource,
@@ -258,7 +212,19 @@ where
     type Span = <D::Target as SpanSource>::Span;
 }
 
-impl<'a, C, A, B, N, D> StringSource for FullSession<'a, C, A, B, N, D>
+impl<C, P, B, N, D> StringSource
+    for CompositeSession<
+        Upstream<
+            C,
+            P,
+            <C::Target as IdentSource>::Ident,
+            <C::Target as StringSource>::StringRef,
+            <D::Target as AddMacroDef<<D::Target as SpanSource>::Span>>::MacroDefHandle,
+        >,
+        B,
+        N,
+        D,
+    >
 where
     C: DerefMut,
     C::Target: IdentSource + StringSource,
@@ -284,22 +250,28 @@ impl<U, B: Backend<S>, N, D, S: Clone> PartialBackend<S> for CompositeSession<U,
     }
 }
 
-pub(super) trait Analyze<I: Clone + PartialEq, R: Clone + Eq, S: Clone> {
-    fn analyze_token_seq<'b, T, P>(&'b mut self, tokens: T, partial: P) -> P::Session
-    where
-        T: IntoIterator<Item = LexItem<I, R, S>>,
-        P: IntoSession<'b, Self>,
-        P::Session: IdentSource<Ident = I> + StringSource<StringRef = R> + SpanSource<Span = S>;
-}
-
-impl<'a, C, A, B, N, D> Session for FullSession<'a, C, A, B, N, D>
+impl<C, P, B, N, D> Session
+    for CompositeSession<
+        Upstream<
+            C,
+            P,
+            <C::Target as IdentSource>::Ident,
+            <C::Target as StringSource>::StringRef,
+            <D::Target as AddMacroDef<<D::Target as SpanSource>::Span>>::MacroDefHandle,
+        >,
+        B,
+        N,
+        D,
+    >
 where
     C: DerefMut,
     C::Target: Lex<D::Target>,
-    A: Analyze<
-        <C::Target as IdentSource>::Ident,
-        <C::Target as StringSource>::StringRef,
-        <D::Target as SpanSource>::Span,
+    P: DerefMut,
+    P::Target: ParserFactory<
+        <Self as IdentSource>::Ident,
+        Literal<<Self as StringSource>::StringRef>,
+        LexError,
+        <Self as SpanSource>::Span,
     >,
     B: Backend<<D::Target as SpanSource>::Span>,
     N: DerefMut,
@@ -309,20 +281,25 @@ where
     D: DerefMut,
     D::Target: DiagnosticsSystem,
 {
-    fn analyze_file(mut self, path: Self::StringRef) -> (Result<(), CodebaseError>, Self) {
+    fn analyze_file<A: IntoSemanticActions<Self>>(
+        mut self,
+        path: Self::StringRef,
+        actions: A,
+    ) -> (Result<(), CodebaseError>, A::SemanticActions)
+    where
+        A::SemanticActions: TokenStreamActions<Self::Ident, Literal<Self::StringRef>, Self::Span>,
+    {
         let tokens = match self
             .upstream
             .codebase
             .lex_file(path, &mut *self.downstream.diagnostics)
         {
             Ok(tokens) => tokens,
-            Err(error) => return (Err(error), self),
+            Err(error) => return (Err(error), actions.into_semantic_actions(self)),
         };
-        let session = self
-            .upstream
-            .analyzer
-            .analyze_token_seq(tokens, partial!(self));
-        (Ok(()), session)
+        let mut parser = self.upstream.parser_factory.mk_parser();
+        let actions = actions.into_semantic_actions(self);
+        (Ok(()), parser.parse_token_stream(tokens, actions))
     }
 
     fn define_macro(
@@ -339,16 +316,20 @@ where
         )
     }
 
-    fn call_macro(
+    fn call_macro<A: IntoSemanticActions<Self>>(
         mut self,
         (MacroId(id), span): (Self::MacroEntry, Self::Span),
         args: MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
-    ) -> Self {
+        actions: A,
+    ) -> A::SemanticActions
+    where
+        A::SemanticActions: TokenStreamActions<Self::Ident, Literal<Self::StringRef>, Self::Span>,
+    {
         let expansion =
             self.upstream.macros[id].expand(span, args, &mut *self.downstream.diagnostics);
-        self.upstream
-            .analyzer
-            .analyze_token_seq(expansion.map(|(t, s)| (Ok(t), s)), partial!(self))
+        let mut parser = self.upstream.parser_factory.mk_parser();
+        let actions = actions.into_semantic_actions(self);
+        parser.parse_token_stream(expansion.map(|(t, s)| (Ok(t), s)), actions)
     }
 }
 
@@ -529,19 +510,26 @@ mod mock {
     #[derive(Clone, Copy, Debug, PartialEq)]
     pub struct MockMacroId(pub usize);
 
-    impl<A, N, T, S> Session for MockSession<A, N, T, S>
+    impl<B, N, T, S> Session for MockSession<B, N, T, S>
     where
-        A: AllocName<S>,
-        N: NameTable<String, BackendEntry = A::Name, MacroEntry = MockMacroId>,
+        B: AllocName<S>,
+        N: NameTable<String, BackendEntry = B::Name, MacroEntry = MockMacroId>,
         T: From<SessionEvent>,
-        T: From<BackendEvent<A::Name, Expr<A::Name, S>>>,
+        T: From<BackendEvent<B::Name, Expr<B::Name, S>>>,
         T: From<DiagnosticsEvent<S>>,
         T: From<NameTableEvent<N::BackendEntry, N::MacroEntry>>,
         S: Clone + Merge,
     {
-        fn analyze_file(mut self, path: String) -> (Result<(), CodebaseError>, Self) {
+        fn analyze_file<A: IntoSemanticActions<Self>>(
+            mut self,
+            path: String,
+            actions: A,
+        ) -> (Result<(), CodebaseError>, A::SemanticActions) {
             self.upstream.log.push(SessionEvent::AnalyzeFile(path));
-            (self.upstream.error.take().map_or(Ok(()), Err), self)
+            (
+                self.upstream.error.take().map_or(Ok(()), Err),
+                actions.into_semantic_actions(self),
+            )
         }
 
         fn define_macro(
@@ -556,13 +544,14 @@ mod mock {
             MockMacroId(self.upstream.id_gen.gen())
         }
 
-        fn call_macro(
+        fn call_macro<A: IntoSemanticActions<Self>>(
             self,
             (id, _): (Self::MacroEntry, Self::Span),
             (args, _): MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
-        ) -> Self {
+            actions: A,
+        ) -> A::SemanticActions {
             self.upstream.log.push(SessionEvent::InvokeMacro(id, args));
-            self
+            actions.into_semantic_actions(self)
         }
     }
 
@@ -632,9 +621,9 @@ mod tests {
 
     use crate::analysis::backend::{BackendEvent, SerialIdAllocator};
     use crate::analysis::resolve::{BasicNameTable, NameTableEvent};
-    use crate::analysis::semantics::AnalyzerEvent;
-    use crate::analysis::syntax::Token;
+    use crate::analysis::syntax::*;
     use crate::analysis::{Literal, MockCodebase};
+    use crate::diag::span::{MergeSpans, StripSpan};
     use crate::diag::DiagnosticsEvent;
     use crate::log::*;
     use crate::model::{Atom, BinOp, Instruction, Nullary};
@@ -643,6 +632,163 @@ mod tests {
     use std::iter;
 
     type Expr<S> = crate::model::Expr<Atom<LocationCounter, usize>, S>;
+
+    impl<S: Session> IntoSemanticActions<S> for () {
+        type SemanticActions = MockSemanticActions<S>;
+
+        fn into_semantic_actions(self, session: S) -> Self::SemanticActions {
+            MockSemanticActions(session)
+        }
+    }
+
+    pub struct MockSemanticActions<S>(S);
+
+    impl<A, S: Clone> TokenStreamActions<String, Literal<String>, S> for MockSemanticActions<A> {
+        type InstrLineActions = Self;
+        type TokenLineActions = Self;
+        type TokenLineFinalizer = Self;
+
+        fn will_parse_line(self) -> LineRule<Self::InstrLineActions, Self::TokenLineActions> {
+            unimplemented!()
+        }
+
+        fn act_on_eos(self, _: S) -> Self {
+            unimplemented!()
+        }
+    }
+
+    impl<A, S: Clone> InstrLineActions<String, Literal<String>, S> for MockSemanticActions<A> {
+        type LabelActions = Self;
+        type InstrActions = Self;
+
+        fn will_parse_label(self, _: (String, S)) -> Self::LabelActions {
+            unimplemented!()
+        }
+    }
+
+    impl<A, S: Clone> LabelActions<String, S> for MockSemanticActions<A> {
+        type Next = Self;
+
+        fn act_on_param(&mut self, _: String, _: S) {
+            unimplemented!()
+        }
+
+        fn did_parse_label(self) -> Self::Next {
+            unimplemented!()
+        }
+    }
+
+    impl<A, S: Clone> InstrActions<String, Literal<String>, S> for MockSemanticActions<A> {
+        type BuiltinInstrActions = Self;
+        type MacroInstrActions = Self;
+        type ErrorActions = Self;
+        type LineFinalizer = Self;
+
+        fn will_parse_instr(
+            self,
+            _: String,
+            _: S,
+        ) -> InstrRule<Self::BuiltinInstrActions, Self::MacroInstrActions, Self::ErrorActions>
+        {
+            unimplemented!()
+        }
+    }
+
+    impl<A, S: Clone> LineFinalizer<S> for MockSemanticActions<A> {
+        type Next = Self;
+
+        fn did_parse_line(self, _: S) -> Self::Next {
+            unimplemented!()
+        }
+    }
+
+    impl<A, S: Clone> InstrFinalizer<S> for MockSemanticActions<A> {
+        type Next = Self;
+
+        fn did_parse_instr(self) -> Self::Next {
+            unimplemented!()
+        }
+    }
+
+    impl<A, T, S: Clone> EmitDiag<S, T> for MockSemanticActions<A> {
+        fn emit_diag(&mut self, _: impl Into<CompactDiag<S, T>>) {
+            unimplemented!()
+        }
+    }
+
+    impl<A, S: Clone> StripSpan<S> for MockSemanticActions<A> {
+        type Stripped = ();
+
+        fn strip_span(&mut self, _: &S) -> Self::Stripped {
+            unimplemented!()
+        }
+    }
+
+    impl<A, S: Clone> MergeSpans<S> for MockSemanticActions<A> {
+        fn merge_spans(&mut self, _: &S, _: &S) -> S {
+            unimplemented!()
+        }
+    }
+
+    impl<A, S: Clone> BuiltinInstrActions<String, Literal<String>, S> for MockSemanticActions<A> {
+        type ArgActions = Self;
+
+        fn will_parse_arg(self) -> Self::ArgActions {
+            unimplemented!()
+        }
+    }
+
+    impl<A, S: Clone> ArgActions<String, Literal<String>, S> for MockSemanticActions<A> {
+        fn act_on_atom(&mut self, _: ExprAtom<String, Literal<String>>, _: S) {
+            unimplemented!()
+        }
+
+        fn act_on_operator(&mut self, _: Operator, _: S) {
+            unimplemented!()
+        }
+    }
+
+    impl<A> ArgFinalizer for MockSemanticActions<A> {
+        type Next = Self;
+
+        fn did_parse_arg(self) -> Self::Next {
+            unimplemented!()
+        }
+    }
+
+    impl<A, S: Clone> MacroInstrActions<S> for MockSemanticActions<A> {
+        type Token = Token<String, Literal<String>>;
+        type MacroArgActions = Self;
+
+        fn will_parse_macro_arg(self) -> Self::MacroArgActions {
+            unimplemented!()
+        }
+    }
+
+    impl<A, S: Clone> MacroArgActions<S> for MockSemanticActions<A> {
+        type Token = Token<String, Literal<String>>;
+        type Next = Self;
+
+        fn act_on_token(&mut self, _: (Self::Token, S)) {
+            unimplemented!()
+        }
+
+        fn did_parse_macro_arg(self) -> Self::Next {
+            unimplemented!()
+        }
+    }
+
+    impl<A, S: Clone> TokenLineActions<String, Literal<String>, S> for MockSemanticActions<A> {
+        type ContextFinalizer = Self;
+
+        fn act_on_token(&mut self, _: Token<String, Literal<String>>, _: S) {
+            unimplemented!()
+        }
+
+        fn act_on_ident(self, _: String, _: S) -> TokenLineRule<Self, Self::ContextFinalizer> {
+            unimplemented!()
+        }
+    }
 
     #[test]
     fn emit_instruction_item() {
@@ -695,8 +841,8 @@ mod tests {
         let path = "my_file.s";
         let tokens = vec![(Ok(Token::Ident("NOP".into())), ())];
         let log = Fixture::new(|fixture| fixture.codebase.set_file(path, tokens.clone()))
-            .log_session(|session| session.analyze_file(path.into()).0.unwrap());
-        assert_eq!(log, [AnalyzerEvent::AnalyzeTokenSeq(tokens).into()]);
+            .log_session(|session| session.analyze_file(path.into(), ()).0.unwrap());
+        assert_eq!(log, [ParserEvent::ParseTokenStream(tokens).into()]);
     }
 
     #[test]
@@ -705,11 +851,11 @@ mod tests {
         let spans: Vec<_> = iter::repeat(()).take(tokens.len()).collect();
         let log = Fixture::default().log_session(|mut session| {
             let id = session.define_macro((), (vec![], vec![]), (tokens.clone(), spans.clone()));
-            session.call_macro((id, ()), (vec![], vec![]));
+            session.call_macro((id, ()), (vec![], vec![]), ());
         });
         assert_eq!(
             log,
-            [AnalyzerEvent::AnalyzeTokenSeq(
+            [ParserEvent::ParseTokenStream(
                 tokens.into_iter().map(|token| (Ok(token), ())).collect()
             )
             .into()]
@@ -731,11 +877,11 @@ mod tests {
                     vec![(), (), ()],
                 ),
             );
-            session.call_macro((id, ()), (vec![vec![arg.clone()]], vec![vec![()]]));
+            session.call_macro((id, ()), (vec![vec![arg.clone()]], vec![vec![()]]), ());
         });
         assert_eq!(
             log,
-            [AnalyzerEvent::AnalyzeTokenSeq(
+            [ParserEvent::ParseTokenStream(
                 vec![db, arg, literal0]
                     .into_iter()
                     .map(|token| (Ok(token), ()))
@@ -759,11 +905,12 @@ mod tests {
             session.call_macro(
                 (id, ()),
                 (vec![vec![Token::Ident(label.into())]], vec![vec![()]]),
+                (),
             );
         });
         assert_eq!(
             log,
-            [AnalyzerEvent::AnalyzeTokenSeq(
+            [ParserEvent::ParseTokenStream(
                 vec![Token::Label(label.into()), nop]
                     .into_iter()
                     .map(|token| (Ok(token), ()))
@@ -815,7 +962,7 @@ mod tests {
         });
     }
 
-    type MockAnalyzer<S> = crate::analysis::semantics::MockAnalyzer<Event<S>>;
+    type MockParserFactory<S> = crate::analysis::syntax::MockParserFactory<Event<S>>;
     type MockBackend<S> = crate::analysis::backend::MockBackend<SerialIdAllocator, Event<S>>;
     type MockDiagnosticsSystem<S> = crate::diag::MockDiagnosticsSystem<Event<S>, S>;
     type MockNameTable<S> =
@@ -823,7 +970,7 @@ mod tests {
     type TestSession<'a, S> = CompositeSession<
         Upstream<
             &'a mut MockCodebase<S>,
-            &'a mut MockAnalyzer<S>,
+            &'a mut MockParserFactory<S>,
             String,
             String,
             <MockDiagnosticsSystem<S> as AddMacroDef<S>>::MacroDefHandle,
@@ -835,15 +982,15 @@ mod tests {
 
     #[derive(Debug, PartialEq)]
     enum Event<S: Clone> {
-        Frontend(AnalyzerEvent<S>),
+        Parser(ParserEvent<String, Literal<String>, LexError, S>),
         Backend(BackendEvent<usize, Expr<S>>),
         NameTable(NameTableEvent<usize, MacroId>),
         Diagnostics(DiagnosticsEvent<S>),
     }
 
-    impl<S: Clone> From<AnalyzerEvent<S>> for Event<S> {
-        fn from(event: AnalyzerEvent<S>) -> Self {
-            Event::Frontend(event)
+    impl<S: Clone> From<ParserEvent<String, Literal<String>, LexError, S>> for Event<S> {
+        fn from(event: ParserEvent<String, Literal<String>, LexError, S>) -> Self {
+            Event::Parser(event)
         }
     }
 
@@ -872,7 +1019,7 @@ mod tests {
 
     struct InnerFixture<S: Clone + Default + Merge> {
         codebase: MockCodebase<S>,
-        analyzer: MockAnalyzer<S>,
+        analyzer: MockParserFactory<S>,
         backend: Option<MockBackend<S>>,
         names: MockNameTable<S>,
         diagnostics: MockDiagnosticsSystem<S>,
@@ -884,7 +1031,7 @@ mod tests {
             let mut fixture = Self {
                 inner: InnerFixture {
                     codebase: MockCodebase::new(),
-                    analyzer: MockAnalyzer::new(log.clone()),
+                    analyzer: MockParserFactory::new(log.clone()),
                     backend: Some(MockBackend::new(SerialIdAllocator::new(), log.clone())),
                     names: MockNameTable::new(BasicNameTable::new(), log.clone()),
                     diagnostics: MockDiagnosticsSystem::new(log.clone()),

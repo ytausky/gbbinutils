@@ -4,17 +4,13 @@ use self::token_line::{TokenContext, TokenContextFinalizationSemantics, TokenLin
 
 use super::backend::PushOp;
 use super::resolve;
-use super::session::{Analyze, IntoSession, Params, Session};
+use super::session::{IntoSemanticActions, Params, Session};
 use super::syntax;
 use super::syntax::*;
-use super::{LexItem, Literal, StringSource};
+use super::Literal;
 
 use crate::diag;
-use crate::diag::span::SpanSource;
 use crate::diag::Message;
-
-#[cfg(test)]
-pub use self::mock::*;
 
 macro_rules! set_line {
     ($state:expr, $line:expr) => {
@@ -29,28 +25,26 @@ mod instr_line;
 mod params;
 mod token_line;
 
-pub struct SemanticAnalyzer;
-
-impl<I: Clone + PartialEq, R: Clone + Eq, S: Clone> Analyze<I, R, S> for SemanticAnalyzer
-where
-    I: AsRef<str>,
-{
-    fn analyze_token_seq<'b, T, P>(&'b mut self, tokens: T, partial: P) -> P::Session
-    where
-        T: IntoIterator<Item = LexItem<I, R, S>>,
-        P: IntoSession<'b, Self>,
-        P::Session: IdentSource<Ident = I> + StringSource<StringRef = R> + SpanSource<Span = S>,
-    {
-        let session = partial.into_session(self);
-        let Done(session) =
-            super::syntax::parse_token_seq(tokens.into_iter(), TokenStreamSemantics::new(session));
-        session
-    }
-}
-
 pub(super) type TokenStreamSemantics<S> = SemanticState<TokenStreamState<S>, S>;
 
 pub(super) struct TokenStreamState<S: Session>(LineRule<InstrLineState<S>, TokenContext<S>>);
+
+impl<S: Session> TokenStreamState<S> {
+    pub fn new() -> Self {
+        Self(LineRule::InstrLine(InstrLineState::new()))
+    }
+}
+
+impl<S: Session> IntoSemanticActions<S> for TokenStreamState<S> {
+    type SemanticActions = TokenStreamSemantics<S>;
+
+    fn into_semantic_actions(self, session: S) -> Self::SemanticActions {
+        SemanticState {
+            line: self,
+            session,
+        }
+    }
+}
 
 pub(super) struct SemanticState<L, S: Session> {
     line: L,
@@ -91,7 +85,7 @@ delegate_diagnostics! {
 impl<S: Session> TokenStreamSemantics<S> {
     pub fn new(session: S) -> TokenStreamSemantics<S> {
         Self {
-            line: TokenStreamState(LineRule::InstrLine(InstrLineState::new())),
+            line: TokenStreamState::new(),
             session,
         }
     }
@@ -111,13 +105,10 @@ impl<S: Session> From<TokenContext<S>> for TokenStreamState<S> {
 
 impl<S: Session> TokenStreamActions<S::Ident, Literal<S::StringRef>, S::Span>
     for TokenStreamSemantics<S>
-where
-    S::Ident: AsRef<str>,
 {
     type InstrLineActions = InstrLineSemantics<S>;
     type TokenLineActions = TokenLineSemantics<S>;
     type TokenLineFinalizer = TokenContextFinalizationSemantics<S>;
-    type Next = Done<S>;
 
     fn will_parse_line(self) -> LineRule<Self::InstrLineActions, Self::TokenLineActions> {
         match self.line.0 {
@@ -126,24 +117,23 @@ where
         }
     }
 
-    fn act_on_eos(mut self, span: S::Span) -> Self::Next {
+    fn act_on_eos(mut self, span: S::Span) -> Self {
         match self.line.0 {
             LineRule::InstrLine(state) => {
-                Done(set_line!(self, state).define_label_if_present().session)
+                let semantics = set_line!(self, state).define_label_if_present();
+                set_line!(semantics, semantics.line.into())
             }
-            LineRule::TokenLine(state) => {
+            LineRule::TokenLine(ref state) => {
                 match state {
                     TokenContext::MacroDef(_) => {
                         self.session.emit_diag(Message::UnexpectedEof.at(span))
                     }
                 }
-                Done(set_line!(self, state).session)
+                self
             }
         }
     }
 }
-
-pub(super) struct Done<S>(S);
 
 type Label<I, S> = ((I, S), Params<I, S>);
 
@@ -168,44 +158,6 @@ impl<S: Session> LineFinalizer<S::Span> for TokenStreamSemantics<S> {
 
     fn did_parse_line(self, _: S::Span) -> Self::Next {
         self
-    }
-}
-
-#[cfg(test)]
-mod mock {
-    use super::*;
-
-    use crate::log::Log;
-
-    pub struct MockAnalyzer<T> {
-        log: Log<T>,
-    }
-
-    impl<T> MockAnalyzer<T> {
-        pub fn new(log: Log<T>) -> Self {
-            Self { log }
-        }
-    }
-
-    impl<T, S> Analyze<String, String, S> for MockAnalyzer<T>
-    where
-        T: From<AnalyzerEvent<S>>,
-        S: Clone,
-    {
-        fn analyze_token_seq<'b, I, P>(&'b mut self, tokens: I, partial: P) -> P::Session
-        where
-            I: IntoIterator<Item = LexItem<String, String, S>>,
-            P: IntoSession<'b, Self>,
-        {
-            self.log
-                .push(AnalyzerEvent::AnalyzeTokenSeq(tokens.into_iter().collect()));
-            partial.into_session(self)
-        }
-    }
-
-    #[derive(Debug, PartialEq)]
-    pub(crate) enum AnalyzerEvent<S> {
-        AnalyzeTokenSeq(Vec<LexItem<String, String, S>>),
     }
 }
 
@@ -669,7 +621,7 @@ mod tests {
 
     pub(super) fn collect_semantic_actions<F, S>(f: F) -> Vec<TestOperation<S>>
     where
-        F: FnOnce(TestTokenStreamSemantics<S>) -> Done<MockSession<S>>,
+        F: FnOnce(TestTokenStreamSemantics<S>) -> TestTokenStreamSemantics<S>,
         S: Clone + Debug + Merge,
     {
         with_log(|log| {
@@ -680,7 +632,7 @@ mod tests {
     pub(super) fn log_with_predefined_names<I, F, S>(entries: I, f: F) -> Vec<TestOperation<S>>
     where
         I: IntoIterator<Item = (String, ResolvedIdent<usize, MockMacroId>)>,
-        F: FnOnce(TestTokenStreamSemantics<S>) -> Done<MockSession<S>>,
+        F: FnOnce(TestTokenStreamSemantics<S>) -> TestTokenStreamSemantics<S>,
         S: Clone + Debug + Merge,
     {
         with_log(|log| {

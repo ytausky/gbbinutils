@@ -56,8 +56,6 @@ impl<S: Session> BuiltinInstrState<S> {
 
 impl<S: Session> BuiltinInstrActions<S::Ident, Literal<S::StringRef>, S::Span>
     for BuiltinInstrSemantics<S>
-where
-    S::Ident: AsRef<str>,
 {
     type ArgActions = ArgSemantics<S>;
 
@@ -66,10 +64,7 @@ where
     }
 }
 
-impl<S: Session> InstrFinalizer<S::Span> for BuiltinInstrSemantics<S>
-where
-    S::Ident: AsRef<str>,
-{
+impl<S: Session> InstrFinalizer<S::Span> for BuiltinInstrSemantics<S> {
     type Next = TokenStreamSemantics<S>;
 
     fn did_parse_instr(self) -> Self::Next {

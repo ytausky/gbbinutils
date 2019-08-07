@@ -70,7 +70,6 @@ impl TokenStreamActions<MockIdent, MockLiteral, MockSpan> for TokenStreamActionC
     type InstrLineActions = InstrLineActionCollector;
     type TokenLineActions = TokenLineActionCollector;
     type TokenLineFinalizer = TokenLineActionCollector;
-    type Next = Self;
 
     fn will_parse_line(self) -> LineRule<Self::InstrLineActions, Self::TokenLineActions> {
         match self.mode {
@@ -79,7 +78,7 @@ impl TokenStreamActions<MockIdent, MockLiteral, MockSpan> for TokenStreamActionC
         }
     }
 
-    fn act_on_eos(mut self, span: MockSpan) -> Self::Next {
+    fn act_on_eos(mut self, span: MockSpan) -> Self {
         self.actions.push(TokenStreamAction::Eos(span));
         self
     }
