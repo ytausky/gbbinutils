@@ -211,7 +211,7 @@ mod tests {
     fn build_include_item() {
         let filename = "file.asm";
         let actions = unary_directive("INCLUDE", |arg| {
-            arg.act_on_atom((ExprAtom::Literal(Literal::String(filename.to_string())), ()));
+            arg.act_on_atom(ExprAtom::Literal(Literal::String(filename.to_string())), ());
         });
         assert_eq!(
             actions,
@@ -222,7 +222,7 @@ mod tests {
     #[test]
     fn set_origin() {
         let origin = 0x3000;
-        let actions = unary_directive("ORG", |arg| arg.act_on_atom(mk_literal(origin)));
+        let actions = unary_directive("ORG", |arg| arg.act_on_atom(mk_literal(origin), ()));
         assert_eq!(actions, [BackendEvent::SetOrigin(origin.into()).into()])
     }
 
@@ -252,7 +252,7 @@ mod tests {
         let actions = with_directive(directive, |mut command| {
             for datum in data.borrow().iter() {
                 let mut arg = command.will_parse_arg();
-                arg.act_on_atom(mk_literal(*datum));
+                arg.act_on_atom(mk_literal(*datum), ());
                 command = arg.did_parse_arg();
             }
             command
@@ -271,17 +271,17 @@ mod tests {
 
     #[test]
     fn reserve_3_bytes() {
-        let actions = ds(|arg| arg.act_on_atom(mk_literal(3)));
+        let actions = ds(|arg| arg.act_on_atom(mk_literal(3), ()));
         assert_eq!(actions, [BackendEvent::Reserve(3.into()).into()])
     }
 
-    fn mk_literal(n: i32) -> (ExprAtom<String, Literal<String>>, ()) {
-        (ExprAtom::Literal(Literal::Number(n)), ())
+    fn mk_literal(n: i32) -> ExprAtom<String, Literal<String>> {
+        ExprAtom::Literal(Literal::Number(n))
     }
 
     #[test]
     fn ds_with_malformed_expr() {
-        let actions = ds(|arg| arg.act_on_atom((ExprAtom::Ident("A".into()), ())));
+        let actions = ds(|arg| arg.act_on_atom(ExprAtom::Ident("A".into()), ()));
         assert_eq!(
             actions,
             [
@@ -308,7 +308,7 @@ mod tests {
 
     #[test]
     fn include_with_number() {
-        let actions = unary_directive("INCLUDE", |arg| arg.act_on_atom(mk_literal(7)));
+        let actions = unary_directive("INCLUDE", |arg| arg.act_on_atom(mk_literal(7), ()));
         assert_eq!(
             actions,
             [DiagnosticsEvent::EmitDiag(Message::ExpectedString.at(()).into()).into()]
@@ -317,9 +317,7 @@ mod tests {
 
     #[test]
     fn data_with_malformed_expr() {
-        let actions = unary_directive("DB", |arg| {
-            arg.act_on_atom((ExprAtom::Ident("A".into()), ()))
-        });
+        let actions = unary_directive("DB", |arg| arg.act_on_atom(ExprAtom::Ident("A".into()), ()));
         assert_eq!(
             actions,
             [
@@ -341,7 +339,7 @@ mod tests {
                 .will_parse_instr("INCLUDE".into(), ())
                 .into_builtin_instr()
                 .will_parse_arg();
-            context.act_on_atom((ExprAtom::Literal(Literal::String(name.into())), ()));
+            context.act_on_atom(ExprAtom::Literal(Literal::String(name.into())), ());
             context.did_parse_arg().did_parse_instr().did_parse_line(());
         });
         assert_eq!(
@@ -369,7 +367,7 @@ mod tests {
                 .will_parse_instr("INCLUDE".into(), ())
                 .into_builtin_instr()
                 .will_parse_arg();
-            context.act_on_atom((ExprAtom::Literal(Literal::String(name.into())), ()));
+            context.act_on_atom(ExprAtom::Literal(Literal::String(name.into())), ());
             context.did_parse_arg().did_parse_instr().did_parse_line(());
         });
         assert_eq!(
@@ -393,7 +391,7 @@ mod tests {
         let symbol = "sym";
         let value = 3;
         let actions = with_labeled_directive(symbol, "EQU", |arg| {
-            arg.act_on_atom((ExprAtom::Literal(Literal::Number(value)), ()))
+            arg.act_on_atom(ExprAtom::Literal(Literal::Number(value)), ())
         });
         assert_eq!(
             actions,
@@ -413,13 +411,13 @@ mod tests {
                 .will_parse_line()
                 .into_instr_line()
                 .will_parse_label((name.into(), ()));
-            label_actions.act_on_param((param.into(), ()));
+            label_actions.act_on_param(param.into(), ());
             let mut arg_actions = label_actions
                 .did_parse_label()
                 .will_parse_instr("EQU".into(), ())
                 .into_builtin_instr()
                 .will_parse_arg();
-            arg_actions.act_on_atom((ExprAtom::Ident(param.into()), ()));
+            arg_actions.act_on_atom(ExprAtom::Ident(param.into()), ());
             arg_actions
                 .did_parse_arg()
                 .did_parse_instr()

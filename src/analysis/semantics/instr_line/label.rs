@@ -25,7 +25,7 @@ impl<S: Session> LabelState<S> {
 impl<S: Session> LabelActions<S::Ident, S::Span> for LabelSemantics<S> {
     type Next = InstrLineSemantics<S>;
 
-    fn act_on_param(&mut self, (ident, span): (S::Ident, S::Span)) {
+    fn act_on_param(&mut self, ident: S::Ident, span: S::Span) {
         let params = &mut self.line.params;
         params.0.push(ident);
         params.1.push(span)

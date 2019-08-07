@@ -102,7 +102,7 @@ where
                 bump!(self);
                 let span = self.merge_spans(&left, &right);
                 self.actions
-                    .act_on_operator((Operator::Unary(UnaryOperator::Parentheses), span));
+                    .act_on_operator(Operator::Unary(UnaryOperator::Parentheses), span);
                 Ok(self)
             }
             _ => Err((
@@ -135,7 +135,7 @@ where
                     result.with_parser(|parser| {
                         parser
                             .actions
-                            .act_on_operator((Operator::Binary(binary_operator), span))
+                            .act_on_operator(Operator::Binary(binary_operator), span)
                     });
                     self = result?
                 }
@@ -158,7 +158,7 @@ where
             }
         }
         let span = self.actions.merge_spans(&left, &self.state.token.1);
-        self.actions.act_on_operator((Operator::FnCall(args), span));
+        self.actions.act_on_operator(Operator::FnCall(args), span);
         bump!(self);
         Ok(self)
     }
@@ -183,27 +183,27 @@ where
         let span = self.state.token.1;
         match self.state.token.0 {
             Ok(Token::Sigil(Eos)) | Ok(Token::Sigil(Eol)) => {
-                self.actions.act_on_atom((ExprAtom::Error, span.clone()));
+                self.actions.act_on_atom(ExprAtom::Error, span.clone());
                 self.state.token.1 = span;
                 Err((self, ExprParsingError::NothingParsed))
             }
             Ok(Token::Ident(ident)) => {
-                self.actions.act_on_atom((ExprAtom::Ident(ident), span));
+                self.actions.act_on_atom(ExprAtom::Ident(ident), span);
                 bump!(self);
                 Ok(self)
             }
             Ok(Token::Literal(literal)) => {
-                self.actions.act_on_atom((ExprAtom::Literal(literal), span));
+                self.actions.act_on_atom(ExprAtom::Literal(literal), span);
                 bump!(self);
                 Ok(self)
             }
             Ok(Token::Sigil(Sigil::Dot)) => {
-                self.actions.act_on_atom((ExprAtom::LocationCounter, span));
+                self.actions.act_on_atom(ExprAtom::LocationCounter, span);
                 bump!(self);
                 Ok(self)
             }
             _ => {
-                self.actions.act_on_atom((ExprAtom::Error, span.clone()));
+                self.actions.act_on_atom(ExprAtom::Error, span.clone());
                 let stripped = self.actions.strip_span(&span);
                 bump!(self);
                 Err((

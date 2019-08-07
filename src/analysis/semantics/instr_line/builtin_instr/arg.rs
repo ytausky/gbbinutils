@@ -54,9 +54,9 @@ impl<S: Session> ArgActions<S::Ident, Literal<S::StringRef>, S::Span> for ArgSem
 where
     S::Ident: AsRef<str>,
 {
-    fn act_on_atom(&mut self, atom: (ExprAtom<S::Ident, Literal<S::StringRef>>, S::Span)) {
+    fn act_on_atom(&mut self, atom: ExprAtom<S::Ident, Literal<S::StringRef>>, span: S::Span) {
         self.line.stack.push(Arg {
-            variant: ArgVariant::Atom(match atom.0 {
+            variant: ArgVariant::Atom(match atom {
                 ExprAtom::Error => ArgAtom::Error,
                 ExprAtom::Ident(ident) => OPERAND_SYMBOLS
                     .iter()
@@ -66,11 +66,11 @@ where
                 ExprAtom::Literal(literal) => ArgAtom::Literal(literal),
                 ExprAtom::LocationCounter => ArgAtom::LocationCounter,
             }),
-            span: atom.1,
+            span,
         })
     }
 
-    fn act_on_operator(&mut self, (op, span): (Operator, S::Span)) {
+    fn act_on_operator(&mut self, op: Operator, span: S::Span) {
         let variant = match op {
             Operator::Unary(UnaryOperator::Parentheses) => {
                 let inner = self.line.pop();

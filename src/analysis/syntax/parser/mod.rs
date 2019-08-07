@@ -257,7 +257,7 @@ where
     fn parse_param(mut self) -> Self {
         match self.state.token.0 {
             Ok(Token::Ident(ident)) => {
-                self.actions.act_on_param((ident, self.state.token.1));
+                self.actions.act_on_param(ident, self.state.token.1);
                 bump!(self)
             }
             _ => self = self.diagnose_unexpected_token(),

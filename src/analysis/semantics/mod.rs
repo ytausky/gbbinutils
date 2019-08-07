@@ -270,11 +270,11 @@ mod tests {
                 .will_parse_instr("LD".into(), ())
                 .into_builtin_instr();
             let mut arg1 = command.will_parse_arg();
-            arg1.act_on_atom((ExprAtom::Ident("B".into()), ()));
+            arg1.act_on_atom(ExprAtom::Ident("B".into()), ());
             command = arg1.did_parse_arg();
             let mut arg2 = command.will_parse_arg();
-            arg2.act_on_atom((ExprAtom::Ident("HL".into()), ()));
-            arg2.act_on_operator((Operator::Unary(UnaryOperator::Parentheses), ()));
+            arg2.act_on_atom(ExprAtom::Ident("HL".into()), ());
+            arg2.act_on_operator(Operator::Unary(UnaryOperator::Parentheses), ());
             arg2.did_parse_arg()
                 .did_parse_instr()
                 .did_parse_line(())
@@ -311,9 +311,9 @@ mod tests {
                 .will_parse_instr("RST".into(), ())
                 .into_builtin_instr();
             let mut expr = command.will_parse_arg();
-            expr.act_on_atom((ExprAtom::Literal(Literal::Number(1)), ()));
-            expr.act_on_atom((ExprAtom::Literal(Literal::Number(1)), ()));
-            expr.act_on_operator((Operator::Binary(op), ()));
+            expr.act_on_atom(ExprAtom::Literal(Literal::Number(1)), ());
+            expr.act_on_atom(ExprAtom::Literal(Literal::Number(1)), ());
+            expr.act_on_operator(Operator::Binary(op), ());
             expr.did_parse_arg()
                 .did_parse_instr()
                 .did_parse_line(())
@@ -342,9 +342,9 @@ mod tests {
                 .will_parse_instr("RST".into(), ())
                 .into_builtin_instr();
             let mut expr = command.will_parse_arg();
-            expr.act_on_atom((ExprAtom::Ident(ident.clone()), ()));
-            expr.act_on_atom((ExprAtom::Literal(Literal::Number(1)), ()));
-            expr.act_on_operator((Operator::FnCall(1), ()));
+            expr.act_on_atom(ExprAtom::Ident(ident.clone()), ());
+            expr.act_on_atom(ExprAtom::Literal(Literal::Number(1)), ());
+            expr.act_on_operator(Operator::FnCall(1), ());
             expr.did_parse_arg()
                 .did_parse_instr()
                 .did_parse_line(())
@@ -374,7 +374,7 @@ mod tests {
                 .will_parse_instr("DW".into(), ())
                 .into_builtin_instr()
                 .will_parse_arg();
-            arg.act_on_atom((ExprAtom::Ident(label.into()), ()));
+            arg.act_on_atom(ExprAtom::Ident(label.into()), ());
             arg.did_parse_arg()
                 .did_parse_instr()
                 .did_parse_line(())
@@ -420,7 +420,7 @@ mod tests {
                 .will_parse_instr("ORG".into(), ())
                 .into_builtin_instr()
                 .will_parse_arg();
-            actions.act_on_atom((ExprAtom::LocationCounter, ()));
+            actions.act_on_atom(ExprAtom::LocationCounter, ());
             actions
                 .did_parse_arg()
                 .did_parse_instr()
@@ -485,8 +485,8 @@ mod tests {
                 .will_parse_line()
                 .into_instr_line()
                 .will_parse_label((name.into(), ()));
-            for param in params.borrow().iter().map(|&t| (t.into(), ())) {
-                params_actions.act_on_param(param)
+            for param in params.borrow().iter().cloned().map(Into::into) {
+                params_actions.act_on_param(param, ())
             }
             let mut token_seq_actions = params_actions
                 .did_parse_label()
@@ -529,7 +529,7 @@ mod tests {
                 .will_parse_instr("NOP".into(), ())
                 .into_builtin_instr()
                 .will_parse_arg();
-            arg.act_on_atom((ExprAtom::Ident("A".into()), ()));
+            arg.act_on_atom(ExprAtom::Ident("A".into()), ());
             arg.did_parse_arg()
                 .did_parse_instr()
                 .did_parse_line(())
@@ -572,7 +572,7 @@ mod tests {
                 .will_parse_instr("ADD".into(), ())
                 .into_builtin_instr()
                 .will_parse_arg();
-            expr.act_on_atom((ExprAtom::Error, ()));
+            expr.act_on_atom(ExprAtom::Error, ());
             expr.emit_diag(diagnostic.clone());
             expr.did_parse_arg()
                 .did_parse_instr()

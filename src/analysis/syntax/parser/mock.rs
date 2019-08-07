@@ -163,8 +163,8 @@ impl EmitDiag<MockSpan, MockSpan> for LabelActionCollector {
 impl LabelActions<MockIdent, MockSpan> for LabelActionCollector {
     type Next = InstrActionCollector;
 
-    fn act_on_param(&mut self, param: (MockIdent, MockSpan)) {
-        self.actions.push(ParamsAction::AddParameter(param))
+    fn act_on_param(&mut self, param: MockIdent, span: MockSpan) {
+        self.actions.push(ParamsAction::AddParameter(param, span))
     }
 
     fn did_parse_label(mut self) -> Self::Next {
@@ -335,12 +335,12 @@ impl<P> ArgActions<MockIdent, MockLiteral, MockSpan> for ExprActionCollector<P>
 where
     Self: Diagnostics<MockSpan>,
 {
-    fn act_on_atom(&mut self, atom: (ExprAtom<MockIdent, MockLiteral>, MockSpan)) {
-        self.actions.push(ExprAction::PushAtom(atom))
+    fn act_on_atom(&mut self, atom: ExprAtom<MockIdent, MockLiteral>, span: MockSpan) {
+        self.actions.push(ExprAction::PushAtom(atom, span))
     }
 
-    fn act_on_operator(&mut self, operator: (Operator, MockSpan)) {
-        self.actions.push(ExprAction::ApplyOperator(operator))
+    fn act_on_operator(&mut self, operator: Operator, span: MockSpan) {
+        self.actions.push(ExprAction::ApplyOperator(operator, span))
     }
 }
 
@@ -485,73 +485,73 @@ impl SymExpr {
         atom_ctor: impl Fn(TokenRef) -> ExprAtom<MockIdent, MockLiteral>,
     ) -> Self {
         let token_ref = token.into();
-        self.0.push(ExprAction::PushAtom((
+        self.0.push(ExprAction::PushAtom(
             atom_ctor(token_ref.clone()),
             token_ref.into(),
-        )));
+        ));
         self
     }
 
     pub fn divide(mut self, token: impl Into<TokenRef>) -> Self {
-        self.0.push(ExprAction::ApplyOperator((
+        self.0.push(ExprAction::ApplyOperator(
             Operator::Binary(BinOp::Division),
             token.into().into(),
-        )));
+        ));
         self
     }
 
     pub fn multiply(mut self, token: impl Into<TokenRef>) -> Self {
-        self.0.push(ExprAction::ApplyOperator((
+        self.0.push(ExprAction::ApplyOperator(
             Operator::Binary(BinOp::Multiplication),
             token.into().into(),
-        )));
+        ));
         self
     }
 
     pub fn parentheses(mut self, left: impl Into<TokenRef>, right: impl Into<TokenRef>) -> Self {
         let span = MockSpan::merge(left.into(), right.into());
-        self.0.push(ExprAction::ApplyOperator((
+        self.0.push(ExprAction::ApplyOperator(
             Operator::Unary(UnaryOperator::Parentheses),
             span,
-        )));
+        ));
         self
     }
 
     pub fn plus(mut self, token: impl Into<TokenRef>) -> Self {
-        self.0.push(ExprAction::ApplyOperator((
+        self.0.push(ExprAction::ApplyOperator(
             Operator::Binary(BinOp::Plus),
             token.into().into(),
-        )));
+        ));
         self
     }
 
     pub fn minus(mut self, token: impl Into<TokenRef>) -> Self {
-        self.0.push(ExprAction::ApplyOperator((
+        self.0.push(ExprAction::ApplyOperator(
             Operator::Binary(BinOp::Minus),
             token.into().into(),
-        )));
+        ));
         self
     }
 
     pub fn bitwise_or(mut self, token: impl Into<TokenRef>) -> Self {
-        self.0.push(ExprAction::ApplyOperator((
+        self.0.push(ExprAction::ApplyOperator(
             Operator::Binary(BinOp::BitwiseOr),
             token.into().into(),
-        )));
+        ));
         self
     }
 
     pub fn fn_call(mut self, args: usize, span: impl Into<MockSpan>) -> Self {
-        self.0.push(ExprAction::ApplyOperator((
+        self.0.push(ExprAction::ApplyOperator(
             Operator::FnCall(args),
             span.into(),
-        )));
+        ));
         self
     }
 
     pub fn error(mut self, span: impl Into<TokenRef>) -> Self {
         self.0
-            .push(ExprAction::PushAtom((ExprAtom::Error, span.into().into())));
+            .push(ExprAction::PushAtom(ExprAtom::Error, span.into().into()));
         self
     }
 
@@ -745,14 +745,14 @@ pub(super) enum BuiltinInstrAction<S> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum ExprAction<S> {
-    PushAtom((ExprAtom<MockIdent, MockLiteral>, S)),
-    ApplyOperator((Operator, S)),
+    PushAtom(ExprAtom<MockIdent, MockLiteral>, S),
+    ApplyOperator(Operator, S),
     EmitDiag(CompactDiag<S>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum ParamsAction<S> {
-    AddParameter((MockIdent, S)),
+    AddParameter(MockIdent, S),
     EmitDiag(CompactDiag<S>),
 }
 
@@ -880,7 +880,7 @@ fn convert_params(params: impl Borrow<[TokenRef]>) -> Vec<ParamsAction<MockSpan>
         .borrow()
         .iter()
         .cloned()
-        .map(|t| ParamsAction::AddParameter((MockIdent(IdentKind::Other, t.clone()), t.into())))
+        .map(|t| ParamsAction::AddParameter(MockIdent(IdentKind::Other, t.clone()), t.into()))
         .collect()
 }
 

@@ -235,8 +235,8 @@ pub(super) trait ArgFinalizer {
 //
 // To handle precedence and associativity, the parser uses a reverse Polish notation protocol.
 pub(super) trait ArgActions<I, L, S: Clone>: Diagnostics<S> {
-    fn act_on_atom(&mut self, atom: (ExprAtom<I, L>, S));
-    fn act_on_operator(&mut self, operator: (Operator, S));
+    fn act_on_atom(&mut self, atom: ExprAtom<I, L>, span: S);
+    fn act_on_operator(&mut self, operator: Operator, span: S);
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -262,7 +262,7 @@ pub enum UnaryOperator {
 pub(super) trait LabelActions<I, S: Clone>: Diagnostics<S> {
     type Next;
 
-    fn act_on_param(&mut self, param: (I, S));
+    fn act_on_param(&mut self, param: I, span: S);
     fn did_parse_label(self) -> Self::Next;
 }
 

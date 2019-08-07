@@ -273,8 +273,8 @@ mod tests {
                     .will_parse_instr("DB".into(), "db".into())
                     .into_builtin_instr()
                     .will_parse_arg();
-                actions.act_on_atom((Literal(Number(7)), "literal".into()));
-                actions.act_on_operator((FnCall(0), "call".into()));
+                actions.act_on_atom(Literal(Number(7)), "literal".into());
+                actions.act_on_operator(FnCall(0), "call".into());
                 actions
                     .did_parse_arg()
                     .did_parse_instr()
