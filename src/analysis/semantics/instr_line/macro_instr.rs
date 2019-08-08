@@ -34,7 +34,7 @@ impl<S: Session> MacroInstrActions<S::Span> for MacroInstrSemantics<S> {
     type MacroArgActions = MacroArgSemantics<S>;
 
     fn will_parse_macro_arg(self) -> Self::MacroArgActions {
-        set_line!(self, MacroArgState::new(self.line))
+        set_state!(self, MacroArgState::new(self.state))
     }
 }
 
@@ -43,9 +43,9 @@ impl<S: Session> InstrFinalizer<S::Span> for MacroInstrSemantics<S> {
 
     fn did_parse_instr(self) -> Self::Next {
         self.session.call_macro(
-            self.line.name,
-            self.line.args,
-            TokenStreamState::from(self.line.parent),
+            self.state.name,
+            self.state.args,
+            TokenStreamState::from(self.state.parent),
         )
     }
 }
@@ -71,14 +71,14 @@ impl<S: Session> MacroArgActions<S::Span> for MacroArgSemantics<S> {
     type Next = MacroInstrSemantics<S>;
 
     fn act_on_token(&mut self, token: (Self::Token, S::Span)) {
-        let tokens = &mut self.line.tokens;
+        let tokens = &mut self.state.tokens;
         tokens.0.push(token.0);
         tokens.1.push(token.1);
     }
 
     fn did_parse_macro_arg(mut self) -> Self::Next {
-        self.line.parent.push_arg(self.line.tokens);
-        set_line!(self, self.line.parent)
+        self.state.parent.push_arg(self.state.tokens);
+        set_state!(self, self.state.parent)
     }
 }
 

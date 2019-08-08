@@ -122,7 +122,7 @@ impl<'a, S: Session> DirectiveContext<InstrLineSemantics<S>, S::Ident, S::String
         let (result, mut semantics): (_, TokenStreamSemantics<_>) = self
             .actions
             .session
-            .analyze_file(path, TokenStreamState::from(self.actions.line));
+            .analyze_file(path, TokenStreamState::from(self.actions.state));
         if let Err(err) = result {
             semantics.emit_diag(Message::from(err).at(span))
         }
@@ -135,7 +135,7 @@ impl<'a, S: Session> DirectiveContext<InstrLineSemantics<S>, S::Ident, S::String
             self.actions.emit_diag(Message::MacroRequiresName.at(span))
         }
         TokenLineSemantics {
-            line: TokenContext::MacroDef(MacroDefState::new(self.label)),
+            state: TokenContext::MacroDef(MacroDefState::new(self.label)),
             session: self.actions.session,
         }
         .map_line(Into::into)

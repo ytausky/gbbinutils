@@ -68,9 +68,9 @@ impl<S: Session> InstrFinalizer<S::Span> for BuiltinInstrSemantics<S> {
     type Next = TokenStreamSemantics<S>;
 
     fn did_parse_instr(self) -> Self::Next {
-        let args = self.line.args;
-        let mut semantics = set_line!(self, self.line.parent);
-        let prepared = PreparedBuiltinInstr::new(self.line.command, &mut semantics);
+        let args = self.state.args;
+        let mut semantics = set_state!(self, self.state.parent);
+        let prepared = PreparedBuiltinInstr::new(self.state.command, &mut semantics);
         semantics = semantics.define_label_if_present();
         prepared.exec(args, semantics)
     }
@@ -86,7 +86,7 @@ impl<S: Session> PreparedBuiltinInstr<S> {
     fn new((command, span): (BuiltinInstr, S::Span), stmt: &mut InstrLineSemantics<S>) -> Self {
         match command {
             BuiltinInstr::Directive(directive) if directive.requires_symbol() => {
-                PreparedBuiltinInstr::Binding((directive, span), stmt.line.label.take())
+                PreparedBuiltinInstr::Binding((directive, span), stmt.state.label.take())
             }
             BuiltinInstr::Directive(directive) => {
                 PreparedBuiltinInstr::Directive((directive, span))

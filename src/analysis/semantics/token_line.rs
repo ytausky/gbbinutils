@@ -31,7 +31,7 @@ impl<S: Session> TokenLineActions<S::Ident, Literal<S::StringRef>, S::Span>
     type ContextFinalizer = TokenContextFinalizationSemantics<S>;
 
     fn act_on_token(&mut self, token: SemanticToken<S::Ident, S::StringRef>, span: S::Span) {
-        match &mut self.line {
+        match &mut self.state {
             TokenContext::MacroDef(state) => {
                 state.tokens.0.push(token);
                 state.tokens.1.push(span);
@@ -44,7 +44,7 @@ impl<S: Session> TokenLineActions<S::Ident, Literal<S::StringRef>, S::Span>
         ident: S::Ident,
         span: S::Span,
     ) -> TokenLineRule<Self, Self::ContextFinalizer> {
-        match &mut self.line {
+        match &mut self.state {
             TokenContext::MacroDef(state) => {
                 if ident.as_ref().eq_ignore_ascii_case("ENDM") {
                     state.tokens.0.push(Sigil::Eos.into());
@@ -64,13 +64,13 @@ impl<S: Session> LineFinalizer<S::Span> for TokenLineSemantics<S> {
     type Next = TokenStreamSemantics<S>;
 
     fn did_parse_line(mut self, span: S::Span) -> Self::Next {
-        match &mut self.line {
+        match &mut self.state {
             TokenContext::MacroDef(state) => {
                 state.tokens.0.push(Sigil::Eol.into());
                 state.tokens.1.push(span);
             }
         }
-        set_line!(self, self.line.into())
+        set_state!(self, self.state.into())
     }
 }
 
@@ -86,7 +86,7 @@ impl<S: Session> LineFinalizer<S::Span> for TokenContextFinalizationSemantics<S>
     type Next = TokenStreamSemantics<S>;
 
     fn did_parse_line(mut self, _: S::Span) -> Self::Next {
-        match self.parent.line {
+        match self.parent.state {
             TokenContext::MacroDef(state) => {
                 if let Some((name, params)) = state.label {
                     let tokens = state.tokens;

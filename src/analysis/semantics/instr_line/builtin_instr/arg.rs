@@ -43,16 +43,16 @@ impl<S: Session> ArgFinalizer for ArgSemantics<S> {
     type Next = BuiltinInstrSemantics<S>;
 
     fn did_parse_arg(mut self) -> Self::Next {
-        let arg = self.line.pop();
-        self.line.parent.args.push(arg);
-        assert_eq!(self.line.stack.len(), 0);
+        let arg = self.state.pop();
+        self.state.parent.args.push(arg);
+        assert_eq!(self.state.stack.len(), 0);
         self.map_line(|line| line.parent)
     }
 }
 
 impl<S: Session> ArgActions<S::Ident, Literal<S::StringRef>, S::Span> for ArgSemantics<S> {
     fn act_on_atom(&mut self, atom: ExprAtom<S::Ident, Literal<S::StringRef>>, span: S::Span) {
-        self.line.stack.push(Arg {
+        self.state.stack.push(Arg {
             variant: ArgVariant::Atom(match atom {
                 ExprAtom::Error => ArgAtom::Error,
                 ExprAtom::Ident(ident) => OPERAND_SYMBOLS
@@ -70,17 +70,17 @@ impl<S: Session> ArgActions<S::Ident, Literal<S::StringRef>, S::Span> for ArgSem
     fn act_on_operator(&mut self, op: Operator, span: S::Span) {
         let variant = match op {
             Operator::Unary(UnaryOperator::Parentheses) => {
-                let inner = self.line.pop();
+                let inner = self.state.pop();
                 ArgVariant::Unary(ArgUnaryOp::Parentheses, Box::new(inner))
             }
             Operator::Binary(binary) => {
-                let rhs = self.line.pop();
-                let lhs = self.line.pop();
+                let rhs = self.state.pop();
+                let lhs = self.state.pop();
                 ArgVariant::Binary(binary, Box::new(lhs), Box::new(rhs))
             }
             Operator::FnCall(n) => {
-                let args = self.line.stack.split_off(self.line.stack.len() - n);
-                let name = self.line.pop();
+                let args = self.state.stack.split_off(self.state.stack.len() - n);
+                let name = self.state.pop();
                 let name = (
                     match name.variant {
                         ArgVariant::Atom(ArgAtom::Ident(ident)) => Some(ident),
@@ -94,7 +94,7 @@ impl<S: Session> ArgActions<S::Ident, Literal<S::StringRef>, S::Span> for ArgSem
                 ArgVariant::FnCall(name, args)
             }
         };
-        self.line.stack.push(Arg { variant, span })
+        self.state.stack.push(Arg { variant, span })
     }
 }
 

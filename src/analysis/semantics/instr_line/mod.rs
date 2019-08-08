@@ -59,9 +59,9 @@ impl<S: Session> InstrActions<S::Ident, Literal<S::StringRef>, S::Span> for Inst
             None => match self.session.get(&ident) {
                 Some(ResolvedIdent::Macro(id)) => {
                     self = self.define_label_if_present();
-                    InstrRule::MacroInstr(set_line!(
+                    InstrRule::MacroInstr(set_state!(
                         self,
-                        MacroInstrState::new(self.line, (id, span))
+                        MacroInstrState::new(self.state, (id, span))
                     ))
                 }
                 Some(ResolvedIdent::Backend(_)) => {
@@ -87,7 +87,7 @@ impl<S: Session> InstrLineState<S> {
 
 impl<S: Session> InstrLineSemantics<S> {
     pub fn define_label_if_present(mut self) -> Self {
-        if let Some(((label, span), _params)) = self.line.label.take() {
+        if let Some(((label, span), _params)) = self.state.label.take() {
             self.session.start_scope(&label);
             let id = self.session.reloc_lookup(label, span.clone());
             let mut builder = self.session.define_symbol(id, span.clone());

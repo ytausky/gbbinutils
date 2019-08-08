@@ -12,11 +12,11 @@ use super::Literal;
 use crate::diag;
 use crate::diag::Message;
 
-macro_rules! set_line {
-    ($state:expr, $line:expr) => {
+macro_rules! set_state {
+    ($actions:expr, $state:expr) => {
         SemanticActions {
-            line: $line,
-            session: $state.session,
+            session: $actions.session,
+            state: $state,
         }
     };
 }
@@ -40,14 +40,14 @@ impl<S: Session> IntoSemanticActions<S> for TokenStreamState<S> {
 
     fn into_semantic_actions(self, session: S) -> Self::SemanticActions {
         SemanticActions {
-            line: self,
             session,
+            state: self,
         }
     }
 }
 
 pub(super) struct SemanticActions<L, S: Session> {
-    line: L,
+    state: L,
     session: S,
 }
 
@@ -72,7 +72,7 @@ impl<L, S: Session> SemanticActions<L, S> {
 
     fn map_line<F: FnOnce(L) -> T, T>(self, f: F) -> SemanticActions<T, S> {
         SemanticActions {
-            line: f(self.line),
+            state: f(self.state),
             session: self.session,
         }
     }
@@ -85,7 +85,7 @@ delegate_diagnostics! {
 impl<S: Session> TokenStreamSemantics<S> {
     pub fn new(session: S) -> TokenStreamSemantics<S> {
         Self {
-            line: TokenStreamState::new(),
+            state: TokenStreamState::new(),
             session,
         }
     }
@@ -111,17 +111,17 @@ impl<S: Session> TokenStreamActions<S::Ident, Literal<S::StringRef>, S::Span>
     type TokenLineFinalizer = TokenContextFinalizationSemantics<S>;
 
     fn will_parse_line(self) -> LineRule<Self::InstrLineActions, Self::TokenLineActions> {
-        match self.line.0 {
-            LineRule::InstrLine(state) => LineRule::InstrLine(set_line!(self, state)),
-            LineRule::TokenLine(state) => LineRule::TokenLine(set_line!(self, state)),
+        match self.state.0 {
+            LineRule::InstrLine(state) => LineRule::InstrLine(set_state!(self, state)),
+            LineRule::TokenLine(state) => LineRule::TokenLine(set_state!(self, state)),
         }
     }
 
     fn act_on_eos(mut self, span: S::Span) -> Self {
-        match self.line.0 {
+        match self.state.0 {
             LineRule::InstrLine(state) => {
-                let semantics = set_line!(self, state).define_label_if_present();
-                set_line!(semantics, semantics.line.into())
+                let semantics = set_state!(self, state).define_label_if_present();
+                set_state!(semantics, semantics.state.into())
             }
             LineRule::TokenLine(ref state) => {
                 match state {
@@ -141,7 +141,7 @@ impl<S: Session> InstrFinalizer<S::Span> for InstrLineSemantics<S> {
     type Next = TokenStreamSemantics<S>;
 
     fn did_parse_instr(self) -> Self::Next {
-        set_line!(self, self.line.into())
+        set_state!(self, self.state.into())
     }
 }
 
@@ -149,7 +149,7 @@ impl<S: Session> LineFinalizer<S::Span> for InstrLineSemantics<S> {
     type Next = TokenStreamSemantics<S>;
 
     fn did_parse_line(self, _: S::Span) -> Self::Next {
-        set_line!(self, self.line.into())
+        set_state!(self, self.state.into())
     }
 }
 
