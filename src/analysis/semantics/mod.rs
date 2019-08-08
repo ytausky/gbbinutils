@@ -14,7 +14,7 @@ use crate::diag::Message;
 
 macro_rules! set_line {
     ($state:expr, $line:expr) => {
-        SemanticState {
+        SemanticActions {
             line: $line,
             session: $state.session,
         }
@@ -25,7 +25,7 @@ mod instr_line;
 mod params;
 mod token_line;
 
-pub(super) type TokenStreamSemantics<S> = SemanticState<TokenStreamState<S>, S>;
+pub(super) type TokenStreamSemantics<S> = SemanticActions<TokenStreamState<S>, S>;
 
 pub(super) struct TokenStreamState<S: Session>(LineRule<InstrLineState<S>, TokenContext<S>>);
 
@@ -39,19 +39,19 @@ impl<S: Session> IntoSemanticActions<S> for TokenStreamState<S> {
     type SemanticActions = TokenStreamSemantics<S>;
 
     fn into_semantic_actions(self, session: S) -> Self::SemanticActions {
-        SemanticState {
+        SemanticActions {
             line: self,
             session,
         }
     }
 }
 
-pub(super) struct SemanticState<L, S: Session> {
+pub(super) struct SemanticActions<L, S: Session> {
     line: L,
     session: S,
 }
 
-impl<L, S: Session> SemanticState<L, S> {
+impl<L, S: Session> SemanticActions<L, S> {
     fn build_value<F, T>(mut self, params: &Params<S::Ident, S::Span>, f: F) -> (T, Self)
     where
         F: FnOnce(
@@ -70,8 +70,8 @@ impl<L, S: Session> SemanticState<L, S> {
         (value, self)
     }
 
-    fn map_line<F: FnOnce(L) -> T, T>(self, f: F) -> SemanticState<T, S> {
-        SemanticState {
+    fn map_line<F: FnOnce(L) -> T, T>(self, f: F) -> SemanticActions<T, S> {
+        SemanticActions {
             line: f(self.line),
             session: self.session,
         }
@@ -79,7 +79,7 @@ impl<L, S: Session> SemanticState<L, S> {
 }
 
 delegate_diagnostics! {
-    {L, S: Session}, SemanticState<L, S>, {session}, S, S::Span
+    {L, S: Session}, SemanticActions<L, S>, {session}, S, S::Span
 }
 
 impl<S: Session> TokenStreamSemantics<S> {
