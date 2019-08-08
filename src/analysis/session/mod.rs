@@ -23,7 +23,7 @@ mod expand;
 pub(super) trait Session
 where
     Self: IdentSource + SpanSource + StringSource,
-    Self: BasicSession<<Self as IdentSource>::Ident, <Self as SpanSource>::Span>,
+    Self: PartialSession<<Self as IdentSource>::Ident, <Self as SpanSource>::Span>,
 {
     fn analyze_file<A: IntoSemanticActions<Self>>(
         self,
@@ -50,7 +50,7 @@ where
         A::SemanticActions: TokenStreamActions<Self::Ident, Literal<Self::StringRef>, Self::Span>;
 }
 
-pub(super) trait BasicSession<I, S: Clone>
+pub(super) trait PartialSession<I, S: Clone>
 where
     Self: Sized,
     Self: AllocName<S>,
@@ -292,7 +292,7 @@ where
     }
 }
 
-impl<U, B, N, D, I, S> BasicSession<I, S> for SessionComponents<U, B, N, D>
+impl<U, B, N, D, I, S> PartialSession<I, S> for SessionComponents<U, B, N, D>
 where
     B: Backend<S>,
     N: DerefMut,
