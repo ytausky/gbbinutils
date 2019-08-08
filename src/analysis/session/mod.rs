@@ -86,50 +86,15 @@ pub(super) type Params<I, S> = (Vec<I>, Vec<S>);
 
 pub(super) struct SessionComponents<U, B, N, D> {
     upstream: U,
-    downstream: Downstream<B, N, D>,
+    backend: B,
+    names: N,
+    diagnostics: D,
 }
 
 pub(super) struct Upstream<C, P, I, R, H> {
     codebase: C,
     parser_factory: P,
     macros: MacroTable<I, Literal<R>, H>,
-}
-
-pub(super) struct Downstream<B, N, D> {
-    backend: B,
-    names: N,
-    diagnostics: D,
-}
-
-impl<B: AllocName<S>, N, D, S: Clone> AllocName<S> for Downstream<B, N, D> {
-    type Name = B::Name;
-
-    fn alloc_name(&mut self, span: S) -> Self::Name {
-        self.backend.alloc_name(span)
-    }
-}
-
-impl<B, N, D, I> NameTable<I> for Downstream<B, N, D>
-where
-    N: DerefMut,
-    N::Target: NameTable<I>,
-{
-    type BackendEntry = <N::Target as NameTable<I>>::BackendEntry;
-    type MacroEntry = <N::Target as NameTable<I>>::MacroEntry;
-
-    fn get(&self, ident: &I) -> Option<ResolvedIdent<Self::BackendEntry, Self::MacroEntry>> {
-        self.names.get(ident)
-    }
-
-    fn insert(&mut self, ident: I, entry: ResolvedIdent<Self::BackendEntry, Self::MacroEntry>) {
-        self.names.insert(ident, entry)
-    }
-}
-
-impl<B: PushOp<T, S>, N, D, T, S: Clone> PushOp<T, S> for Downstream<B, N, D> {
-    fn push_op(&mut self, op: T, span: S) {
-        self.backend.push_op(op, span)
-    }
 }
 
 impl<'a, C, P, B, N, D>
@@ -162,18 +127,17 @@ where
                 parser_factory,
                 macros: Vec::new(),
             },
-            downstream: Downstream {
-                backend,
-                names,
-                diagnostics,
-            },
+            backend,
+            names,
+            diagnostics,
         }
     }
 }
 
-impl<B, N, D> Downstream<B, N, D> {
-    fn replace_backend<T>(self, f: impl FnOnce(B) -> T) -> Downstream<T, N, D> {
-        Downstream {
+impl<U, B, N, D> SessionComponents<U, B, N, D> {
+    fn replace_backend<T>(self, f: impl FnOnce(B) -> T) -> SessionComponents<U, T, N, D> {
+        SessionComponents {
+            upstream: self.upstream,
             backend: f(self.backend),
             names: self.names,
             diagnostics: self.diagnostics,
@@ -237,15 +201,15 @@ impl<U, B: Backend<S>, N, D, S: Clone> PartialBackend<S> for SessionComponents<U
     type Value = B::Value;
 
     fn emit_item(&mut self, item: Item<Self::Value>) {
-        self.downstream.backend.emit_item(item)
+        self.backend.emit_item(item)
     }
 
     fn reserve(&mut self, bytes: Self::Value) {
-        self.downstream.backend.reserve(bytes)
+        self.backend.reserve(bytes)
     }
 
     fn set_origin(&mut self, origin: Self::Value) {
-        self.downstream.backend.set_origin(origin)
+        self.backend.set_origin(origin)
     }
 }
 
@@ -291,7 +255,7 @@ where
         let tokens = match self
             .upstream
             .codebase
-            .lex_file(path, &mut *self.downstream.diagnostics)
+            .lex_file(path, &mut *self.diagnostics)
         {
             Ok(tokens) => tokens,
             Err(error) => return (Err(error), actions.into_semantic_actions(self)),
@@ -307,12 +271,9 @@ where
         params: Params<Self::Ident, Self::Span>,
         body: TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
     ) -> Self::MacroEntry {
-        self.upstream.macros.define_macro(
-            name_span,
-            params,
-            body,
-            &mut *self.downstream.diagnostics,
-        )
+        self.upstream
+            .macros
+            .define_macro(name_span, params, body, &mut *self.diagnostics)
     }
 
     fn call_macro<A: IntoSemanticActions<Self>>(
@@ -324,8 +285,7 @@ where
     where
         A::SemanticActions: TokenStreamActions<Self::Ident, Literal<Self::StringRef>, Self::Span>,
     {
-        let expansion =
-            self.upstream.macros[id].expand(span, args, &mut *self.downstream.diagnostics);
+        let expansion = self.upstream.macros[id].expand(span, args, &mut *self.diagnostics);
         let mut parser = self.upstream.parser_factory.mk_parser();
         let actions = actions.into_semantic_actions(self);
         parser.parse_token_stream(expansion.map(|(t, s)| (Ok(t), s)), actions)
@@ -346,19 +306,11 @@ where
     type GeneralBuilder = SessionComponents<U, B::ImmediateBuilder, N, D>;
 
     fn build_value(self) -> Self::GeneralBuilder {
-        SessionComponents {
-            upstream: self.upstream,
-            downstream: self.downstream.replace_backend(Backend::build_immediate),
-        }
+        self.replace_backend(Backend::build_immediate)
     }
 
     fn define_symbol(self, name: B::Name, span: S) -> Self::FnBuilder {
-        SessionComponents {
-            upstream: self.upstream,
-            downstream: self
-                .downstream
-                .replace_backend(|backend| backend.define_symbol(name, span)),
-        }
+        self.replace_backend(|backend| backend.define_symbol(name, span))
     }
 }
 
@@ -366,7 +318,7 @@ impl<U, B: AllocName<S>, N, D, S: Clone> AllocName<S> for SessionComponents<U, B
     type Name = B::Name;
 
     fn alloc_name(&mut self, span: S) -> Self::Name {
-        self.downstream.backend.alloc_name(span)
+        self.backend.alloc_name(span)
     }
 }
 
@@ -379,11 +331,11 @@ where
     type MacroEntry = <N::Target as NameTable<I>>::MacroEntry;
 
     fn get(&self, ident: &I) -> Option<ResolvedIdent<Self::BackendEntry, Self::MacroEntry>> {
-        self.downstream.get(ident)
+        self.names.get(ident)
     }
 
     fn insert(&mut self, ident: I, entry: ResolvedIdent<Self::BackendEntry, Self::MacroEntry>) {
-        self.downstream.insert(ident, entry)
+        self.names.insert(ident, entry)
     }
 }
 
@@ -391,7 +343,7 @@ delegate_diagnostics! {
     {'a, U, B, N, D: DerefMut, S: Clone},
     {D::Target: Diagnostics<S>},
     SessionComponents<U, B, N, D>,
-    {downstream.diagnostics},
+    {diagnostics},
     D::Target,
     S
 }
@@ -402,7 +354,7 @@ where
     N::Target: StartScope<I>,
 {
     fn start_scope(&mut self, ident: &I) {
-        self.downstream.names.start_scope(ident)
+        self.names.start_scope(ident)
     }
 }
 
@@ -412,7 +364,7 @@ where
     S: Clone,
 {
     fn start_section(&mut self, id: (B::Name, S)) {
-        self.downstream.backend.start_section(id)
+        self.backend.start_section(id)
     }
 }
 
@@ -454,11 +406,9 @@ mod mock {
     impl<A, N, T, S> MockSession<A, N, T, S> {
         fn with_name_table(alloc: A, names: N, log: Log<T>) -> Self {
             Self {
-                downstream: Downstream {
-                    backend: MockBackend::new(alloc, log.clone()),
-                    names: Box::new(MockNameTable::new(names, log.clone())),
-                    diagnostics: Box::new(MockDiagnostics::new(log.clone())),
-                },
+                backend: MockBackend::new(alloc, log.clone()),
+                names: Box::new(MockNameTable::new(names, log.clone())),
+                diagnostics: Box::new(MockDiagnostics::new(log.clone())),
                 upstream: MockUpstream {
                     id_gen: SerialIdAllocator::new(),
                     log,
@@ -569,11 +519,9 @@ mod mock {
         fn from_components(alloc: A, names: N, log: Log<T>) -> Self {
             Self {
                 upstream: (),
-                downstream: Downstream {
-                    backend: MockBackend::new(alloc, log.clone()).build_immediate(),
-                    names: Box::new(MockNameTable::new(names, log.clone())),
-                    diagnostics: Box::new(MockDiagnostics::new(log)),
-                },
+                backend: MockBackend::new(alloc, log.clone()).build_immediate(),
+                names: Box::new(MockNameTable::new(names, log.clone())),
+                diagnostics: Box::new(MockDiagnostics::new(log)),
             }
         }
     }

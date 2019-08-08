@@ -1,10 +1,7 @@
-use super::{Downstream, SessionComponents};
+use super::SessionComponents;
 
-use crate::analysis::backend::{AllocName, Finish, Name, PushOp, RelocContext};
-use crate::diag::Diagnostics;
+use crate::analysis::backend::{AllocName, Finish, Name, PushOp};
 use crate::model::{BinOp, FnCall, LocationCounter, ParamId};
-
-use std::ops::DerefMut;
 
 impl<U, B, N, D, S> PushOp<Name<B::Name>, S> for SessionComponents<U, B, N, D>
 where
@@ -12,7 +9,7 @@ where
     S: Clone,
 {
     fn push_op(&mut self, name: Name<B::Name>, span: S) {
-        self.downstream.backend.push_op(name, span)
+        self.backend.push_op(name, span)
     }
 }
 
@@ -21,26 +18,15 @@ impl<U, B: Finish, N, D> Finish for SessionComponents<U, B, N, D> {
     type Value = B::Value;
 
     fn finish(self) -> (Self::Parent, Self::Value) {
-        let (backend, value) = self.downstream.backend.finish();
+        let (backend, value) = self.backend.finish();
         let parent = SessionComponents {
             upstream: self.upstream,
-            downstream: Downstream {
-                backend,
-                names: self.downstream.names,
-                diagnostics: self.downstream.diagnostics,
-            },
+            backend,
+            names: self.names,
+            diagnostics: self.diagnostics,
         };
         (parent, value)
     }
-}
-
-delegate_diagnostics! {
-    {'a, P, B, N, D: DerefMut, S},
-    {D::Target: Diagnostics<S>},
-    RelocContext<P, Downstream<B, N, D>>,
-    {builder.diagnostics},
-    D::Target,
-    S
 }
 
 macro_rules! impl_push_op_for_session_components {
@@ -51,7 +37,7 @@ macro_rules! impl_push_op_for_session_components {
             S: Clone,
         {
             fn push_op(&mut self, op: $t, span: S) {
-                self.downstream.push_op(op, span)
+                self.backend.push_op(op, span)
             }
         }
     };
