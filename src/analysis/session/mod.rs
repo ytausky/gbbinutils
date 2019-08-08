@@ -1,6 +1,5 @@
 pub use super::backend::ValueBuilder;
 
-use self::builder::Builder;
 use self::expand::{DefineMacro, Expand, MacroId, MacroTable};
 
 use super::backend::*;
@@ -342,23 +341,21 @@ where
     D::Target: Diagnostics<S>,
     S: Clone,
     Self: Diagnostics<S>,
-    Builder<U, B::SymbolBuilder, N, D>: Diagnostics<S>,
-    Builder<U, B::ImmediateBuilder, N, D>: Diagnostics<S>,
 {
-    type FnBuilder = Builder<U, B::SymbolBuilder, N, D>;
-    type GeneralBuilder = Builder<U, B::ImmediateBuilder, N, D>;
+    type FnBuilder = SessionComponents<U, B::SymbolBuilder, N, D>;
+    type GeneralBuilder = SessionComponents<U, B::ImmediateBuilder, N, D>;
 
     fn build_value(self) -> Self::GeneralBuilder {
-        RelocContext {
-            parent: self.upstream,
-            builder: self.downstream.replace_backend(Backend::build_immediate),
+        SessionComponents {
+            upstream: self.upstream,
+            downstream: self.downstream.replace_backend(Backend::build_immediate),
         }
     }
 
     fn define_symbol(self, name: B::Name, span: S) -> Self::FnBuilder {
-        RelocContext {
-            parent: self.upstream,
-            builder: self
+        SessionComponents {
+            upstream: self.upstream,
+            downstream: self
                 .downstream
                 .replace_backend(|backend| backend.define_symbol(name, span)),
         }
@@ -555,13 +552,11 @@ mod mock {
         }
     }
 
-    pub(in crate::analysis) type MockBuilder<A, N, T, S> = RelocContext<
+    pub(in crate::analysis) type MockBuilder<A, N, T, S> = SessionComponents<
         (),
-        Downstream<
-            RelocContext<MockBackend<A, T>, Expr<<A as AllocName<S>>::Name, S>>,
-            Box<MockNameTable<N, T>>,
-            Box<MockDiagnostics<T, S>>,
-        >,
+        RelocContext<MockBackend<A, T>, Expr<<A as AllocName<S>>::Name, S>>,
+        Box<MockNameTable<N, T>>,
+        Box<MockDiagnostics<T, S>>,
     >;
 
     impl<A, N, T, S> MockBuilder<A, N, T, S>
@@ -573,8 +568,8 @@ mod mock {
     {
         fn from_components(alloc: A, names: N, log: Log<T>) -> Self {
             Self {
-                parent: (),
-                builder: Downstream {
+                upstream: (),
+                downstream: Downstream {
                     backend: MockBackend::new(alloc, log.clone()).build_immediate(),
                     names: Box::new(MockNameTable::new(names, log.clone())),
                     diagnostics: Box::new(MockDiagnostics::new(log)),
