@@ -85,7 +85,7 @@ pub(super) trait IntoSemanticActions<S: Session> {
 pub(super) type MacroArgs<I, R, S> = expand::MacroArgs<SemanticToken<I, R>, S>;
 pub(super) type Params<I, S> = (Vec<I>, Vec<S>);
 
-pub(super) struct CompositeSession<U, B, N, D> {
+pub(super) struct SessionComponents<U, B, N, D> {
     upstream: U,
     downstream: Downstream<B, N, D>,
 }
@@ -134,7 +134,7 @@ impl<B: PushOp<T, S>, N, D, T, S: Clone> PushOp<T, S> for Downstream<B, N, D> {
 }
 
 impl<'a, C, P, B, N, D>
-    CompositeSession<
+    SessionComponents<
         Upstream<
             &'a mut C,
             &'a mut P,
@@ -157,7 +157,7 @@ where
         names: &'a mut N,
         diagnostics: &'a mut D,
     ) -> Self {
-        CompositeSession {
+        SessionComponents {
             upstream: Upstream {
                 codebase,
                 parser_factory,
@@ -183,7 +183,7 @@ impl<B, N, D> Downstream<B, N, D> {
 }
 
 impl<C, P, B, N, D> IdentSource
-    for CompositeSession<
+    for SessionComponents<
         Upstream<
             C,
             P,
@@ -204,7 +204,7 @@ where
     type Ident = <C::Target as IdentSource>::Ident;
 }
 
-impl<U, B, N, D> SpanSource for CompositeSession<U, B, N, D>
+impl<U, B, N, D> SpanSource for SessionComponents<U, B, N, D>
 where
     D: DerefMut,
     D::Target: SpanSource,
@@ -213,7 +213,7 @@ where
 }
 
 impl<C, P, B, N, D> StringSource
-    for CompositeSession<
+    for SessionComponents<
         Upstream<
             C,
             P,
@@ -234,7 +234,7 @@ where
     type StringRef = <C::Target as StringSource>::StringRef;
 }
 
-impl<U, B: Backend<S>, N, D, S: Clone> PartialBackend<S> for CompositeSession<U, B, N, D> {
+impl<U, B: Backend<S>, N, D, S: Clone> PartialBackend<S> for SessionComponents<U, B, N, D> {
     type Value = B::Value;
 
     fn emit_item(&mut self, item: Item<Self::Value>) {
@@ -251,7 +251,7 @@ impl<U, B: Backend<S>, N, D, S: Clone> PartialBackend<S> for CompositeSession<U,
 }
 
 impl<C, P, B, N, D> Session
-    for CompositeSession<
+    for SessionComponents<
         Upstream<
             C,
             P,
@@ -333,7 +333,7 @@ where
     }
 }
 
-impl<U, B, N, D, I, S> BasicSession<I, S> for CompositeSession<U, B, N, D>
+impl<U, B, N, D, I, S> BasicSession<I, S> for SessionComponents<U, B, N, D>
 where
     B: Backend<S>,
     N: DerefMut,
@@ -365,7 +365,7 @@ where
     }
 }
 
-impl<U, B: AllocName<S>, N, D, S: Clone> AllocName<S> for CompositeSession<U, B, N, D> {
+impl<U, B: AllocName<S>, N, D, S: Clone> AllocName<S> for SessionComponents<U, B, N, D> {
     type Name = B::Name;
 
     fn alloc_name(&mut self, span: S) -> Self::Name {
@@ -373,7 +373,7 @@ impl<U, B: AllocName<S>, N, D, S: Clone> AllocName<S> for CompositeSession<U, B,
     }
 }
 
-impl<U, B, N, D, I> NameTable<I> for CompositeSession<U, B, N, D>
+impl<U, B, N, D, I> NameTable<I> for SessionComponents<U, B, N, D>
 where
     N: DerefMut,
     N::Target: NameTable<I>,
@@ -393,13 +393,13 @@ where
 delegate_diagnostics! {
     {'a, U, B, N, D: DerefMut, S: Clone},
     {D::Target: Diagnostics<S>},
-    CompositeSession<U, B, N, D>,
+    SessionComponents<U, B, N, D>,
     {downstream.diagnostics},
     D::Target,
     S
 }
 
-impl<U, B, N, D, I> StartScope<I> for CompositeSession<U, B, N, D>
+impl<U, B, N, D, I> StartScope<I> for SessionComponents<U, B, N, D>
 where
     N: DerefMut,
     N::Target: StartScope<I>,
@@ -409,7 +409,7 @@ where
     }
 }
 
-impl<U, B, N, D, S> StartSection<B::Name, S> for CompositeSession<U, B, N, D>
+impl<U, B, N, D, S> StartSection<B::Name, S> for SessionComponents<U, B, N, D>
 where
     B: Backend<S>,
     S: Clone,
@@ -440,7 +440,7 @@ mod mock {
         InvokeMacro(MockMacroId, Vec<Vec<SemanticToken<String, String>>>),
     }
 
-    pub(in crate::analysis) type MockSession<A, N, T, S> = CompositeSession<
+    pub(in crate::analysis) type MockSession<A, N, T, S> = SessionComponents<
         MockUpstream<T, S>,
         MockBackend<A, T>,
         Box<MockNameTable<N, T>>,
@@ -967,7 +967,7 @@ mod tests {
     type MockDiagnosticsSystem<S> = crate::diag::MockDiagnosticsSystem<Event<S>, S>;
     type MockNameTable<S> =
         crate::analysis::resolve::MockNameTable<BasicNameTable<usize, MacroId>, Event<S>>;
-    type TestSession<'a, S> = CompositeSession<
+    type TestSession<'a, S> = SessionComponents<
         Upstream<
             &'a mut MockCodebase<S>,
             &'a mut MockParserFactory<S>,
@@ -1046,7 +1046,7 @@ mod tests {
         where
             Event<S>: Debug,
         {
-            f(CompositeSession::new(
+            f(SessionComponents::new(
                 &mut self.inner.codebase,
                 &mut self.inner.analyzer,
                 self.inner.backend.take().unwrap(),

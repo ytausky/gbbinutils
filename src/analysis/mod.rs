@@ -43,7 +43,7 @@ where
                 ResolvedIdent::Backend((*name).clone()),
             )
         }
-        let session = CompositeSession::new(
+        let session = SessionComponents::new(
             &mut file_parser,
             &mut parser_factory,
             self,

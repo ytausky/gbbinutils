@@ -1,4 +1,4 @@
-use super::{CompositeSession, Downstream};
+use super::{Downstream, SessionComponents};
 
 use crate::analysis::backend::{AllocName, Finish, Name, PushOp, RelocContext};
 use crate::analysis::resolve::{NameTable, ResolvedIdent};
@@ -44,12 +44,12 @@ where
 }
 
 impl<U, B: Finish, N, D> Finish for Builder<U, B, N, D> {
-    type Parent = CompositeSession<U, B::Parent, N, D>;
+    type Parent = SessionComponents<U, B::Parent, N, D>;
     type Value = B::Value;
 
     fn finish(self) -> (Self::Parent, Self::Value) {
         let (backend, value) = self.builder.backend.finish();
-        let parent = CompositeSession {
+        let parent = SessionComponents {
             upstream: self.parent,
             downstream: Downstream {
                 backend,
