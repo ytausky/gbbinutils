@@ -490,9 +490,11 @@ mod tests {
         assert_eq!(parsed_rpn_expr, expected);
     }
 
-    fn parse_sym_expr(input: &mut InputTokens) -> Vec<ExprAction<MockSpan>> {
+    fn parse_sym_expr(
+        input: &mut InputTokens,
+    ) -> Vec<ExprAction<MockIdent, MockLiteral, MockSpan>> {
         let tokens = &mut with_spans(&input.tokens);
-        Parser::new(tokens, ExprActionCollector::new(()))
+        Parser::new(tokens, ExprActionCollector::new())
             .parse()
             .change_context(ArgFinalizer::did_parse_arg)
             .actions

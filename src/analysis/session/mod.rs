@@ -562,11 +562,12 @@ mod mock {
 mod tests {
     use super::*;
 
+    use super::MacroId;
+
     use crate::analysis::backend::{BackendEvent, SerialIdAllocator};
     use crate::analysis::resolve::{BasicNameTable, NameTableEvent};
     use crate::analysis::syntax::*;
     use crate::analysis::{Literal, MockCodebase};
-    use crate::diag::span::{MergeSpans, StripSpan};
     use crate::diag::DiagnosticsEvent;
     use crate::log::*;
     use crate::model::{Atom, BinOp, Instruction, Nullary};
@@ -577,160 +578,16 @@ mod tests {
     type Expr<S> = crate::model::Expr<Atom<LocationCounter, usize>, S>;
 
     impl<S: Session> IntoSemanticActions<S> for () {
-        type SemanticActions = MockSemanticActions<S>;
+        type SemanticActions =
+            TokenStreamActionCollector<S, S::Ident, Literal<S::StringRef>, S::Span>;
 
         fn into_semantic_actions(self, session: S) -> Self::SemanticActions {
-            MockSemanticActions(session)
+            TokenStreamActionCollector::new(session, panic)
         }
     }
 
-    pub struct MockSemanticActions<S>(S);
-
-    impl<A, S: Clone> TokenStreamActions<String, Literal<String>, S> for MockSemanticActions<A> {
-        type InstrLineActions = Self;
-        type TokenLineActions = Self;
-        type TokenLineFinalizer = Self;
-
-        fn will_parse_line(self) -> LineRule<Self::InstrLineActions, Self::TokenLineActions> {
-            unimplemented!()
-        }
-
-        fn act_on_eos(self, _: S) -> Self {
-            unimplemented!()
-        }
-    }
-
-    impl<A, S: Clone> InstrLineActions<String, Literal<String>, S> for MockSemanticActions<A> {
-        type LabelActions = Self;
-        type InstrActions = Self;
-
-        fn will_parse_label(self, _: (String, S)) -> Self::LabelActions {
-            unimplemented!()
-        }
-    }
-
-    impl<A, S: Clone> LabelActions<String, S> for MockSemanticActions<A> {
-        type Next = Self;
-
-        fn act_on_param(&mut self, _: String, _: S) {
-            unimplemented!()
-        }
-
-        fn did_parse_label(self) -> Self::Next {
-            unimplemented!()
-        }
-    }
-
-    impl<A, S: Clone> InstrActions<String, Literal<String>, S> for MockSemanticActions<A> {
-        type BuiltinInstrActions = Self;
-        type MacroInstrActions = Self;
-        type ErrorActions = Self;
-        type LineFinalizer = Self;
-
-        fn will_parse_instr(
-            self,
-            _: String,
-            _: S,
-        ) -> InstrRule<Self::BuiltinInstrActions, Self::MacroInstrActions, Self::ErrorActions>
-        {
-            unimplemented!()
-        }
-    }
-
-    impl<A, S: Clone> LineFinalizer<S> for MockSemanticActions<A> {
-        type Next = Self;
-
-        fn did_parse_line(self, _: S) -> Self::Next {
-            unimplemented!()
-        }
-    }
-
-    impl<A, S: Clone> InstrFinalizer<S> for MockSemanticActions<A> {
-        type Next = Self;
-
-        fn did_parse_instr(self) -> Self::Next {
-            unimplemented!()
-        }
-    }
-
-    impl<A, T, S: Clone> EmitDiag<S, T> for MockSemanticActions<A> {
-        fn emit_diag(&mut self, _: impl Into<CompactDiag<S, T>>) {
-            unimplemented!()
-        }
-    }
-
-    impl<A, S: Clone> StripSpan<S> for MockSemanticActions<A> {
-        type Stripped = ();
-
-        fn strip_span(&mut self, _: &S) -> Self::Stripped {
-            unimplemented!()
-        }
-    }
-
-    impl<A, S: Clone> MergeSpans<S> for MockSemanticActions<A> {
-        fn merge_spans(&mut self, _: &S, _: &S) -> S {
-            unimplemented!()
-        }
-    }
-
-    impl<A, S: Clone> BuiltinInstrActions<String, Literal<String>, S> for MockSemanticActions<A> {
-        type ArgActions = Self;
-
-        fn will_parse_arg(self) -> Self::ArgActions {
-            unimplemented!()
-        }
-    }
-
-    impl<A, S: Clone> ArgActions<String, Literal<String>, S> for MockSemanticActions<A> {
-        fn act_on_atom(&mut self, _: ExprAtom<String, Literal<String>>, _: S) {
-            unimplemented!()
-        }
-
-        fn act_on_operator(&mut self, _: Operator, _: S) {
-            unimplemented!()
-        }
-    }
-
-    impl<A> ArgFinalizer for MockSemanticActions<A> {
-        type Next = Self;
-
-        fn did_parse_arg(self) -> Self::Next {
-            unimplemented!()
-        }
-    }
-
-    impl<A, S: Clone> MacroInstrActions<S> for MockSemanticActions<A> {
-        type Token = Token<String, Literal<String>>;
-        type MacroArgActions = Self;
-
-        fn will_parse_macro_arg(self) -> Self::MacroArgActions {
-            unimplemented!()
-        }
-    }
-
-    impl<A, S: Clone> MacroArgActions<S> for MockSemanticActions<A> {
-        type Token = Token<String, Literal<String>>;
-        type Next = Self;
-
-        fn act_on_token(&mut self, _: (Self::Token, S)) {
-            unimplemented!()
-        }
-
-        fn did_parse_macro_arg(self) -> Self::Next {
-            unimplemented!()
-        }
-    }
-
-    impl<A, S: Clone> TokenLineActions<String, Literal<String>, S> for MockSemanticActions<A> {
-        type ContextFinalizer = Self;
-
-        fn act_on_token(&mut self, _: Token<String, Literal<String>>, _: S) {
-            unimplemented!()
-        }
-
-        fn act_on_ident(self, _: String, _: S) -> TokenLineRule<Self, Self::ContextFinalizer> {
-            unimplemented!()
-        }
+    fn panic<I>(_: &I) -> IdentKind {
+        panic!("tried annotating an identifier instead of skipping parsing")
     }
 
     #[test]

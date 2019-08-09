@@ -9,6 +9,9 @@ use crate::model::BinOp;
 #[cfg(test)]
 pub(super) use self::mock::*;
 
+#[cfg(test)]
+pub(super) use self::parser::mock::*;
+
 mod lexer;
 mod parser;
 

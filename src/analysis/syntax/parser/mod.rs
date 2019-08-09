@@ -11,7 +11,7 @@ macro_rules! bump {
 
 #[macro_use]
 #[cfg(test)]
-mod mock;
+pub mod mock;
 mod expr;
 
 pub(in crate::analysis) trait ParseTokenStream<I, L, E, S: Clone> {
@@ -432,13 +432,16 @@ mod tests {
         )
     }
 
-    fn assert_eq_actions(input: InputTokens, expected: impl Borrow<[TokenStreamAction<MockSpan>]>) {
-        let mut parsing_context = TokenStreamActionCollector::new();
+    fn assert_eq_actions(
+        input: InputTokens,
+        expected: impl Borrow<[TokenStreamAction<MockIdent, MockLiteral, MockSpan>]>,
+    ) {
+        let mut parsing_context = TokenStreamActionCollector::new((), annotate);
         parsing_context =
             DefaultParser.parse_token_stream(with_spans(&input.tokens), parsing_context);
         let mut expected = expected.borrow().to_vec();
         expected.push(input.eos());
-        assert_eq!(parsing_context.actions, expected)
+        assert_eq!(parsing_context.into_actions(), expected)
     }
 
     #[test]
