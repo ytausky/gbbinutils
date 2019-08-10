@@ -30,7 +30,7 @@ impl<A1, T1, P, I> ActionCollector<CollectedData<A1, T1, P>, I> {
     fn push_layer<A2, T2>(
         self,
         state: T2,
-    ) -> ActionCollector<CollectedData<A2, T2, CollectedData<A1, T1, P>>, I> {
+    ) -> ActionCollector<NestedCollectedData<A1, A2, T1, T2, P>, I> {
         ActionCollector {
             data: CollectedData {
                 actions: Vec::new(),
@@ -41,6 +41,8 @@ impl<A1, T1, P, I> ActionCollector<CollectedData<A1, T1, P>, I> {
         }
     }
 }
+
+type NestedCollectedData<A1, A2, T1, T2, P> = CollectedData<A2, T2, CollectedData<A1, T1, P>>;
 
 macro_rules! pop_layer {
     ($collector:expr) => {
