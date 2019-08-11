@@ -496,7 +496,7 @@ mod tests {
         input: &mut InputTokens,
     ) -> Vec<ExprAction<MockIdent, MockLiteral, MockSpan>> {
         let tokens = &mut with_spans(&input.tokens);
-        Parser::new(tokens, ExprActionCollector::new(annotate))
+        Parser::new(tokens, ExprActionCollector::new(MockIdent::annotate))
             .parse()
             .change_context(ArgFinalizer::did_parse_arg)
             .actions

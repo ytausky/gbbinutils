@@ -439,7 +439,7 @@ mod tests {
         input: InputTokens,
         expected: impl Borrow<[TokenStreamAction<MockIdent, MockLiteral, MockSpan>]>,
     ) {
-        let mut parsing_context = TokenStreamActionCollector::new((), annotate);
+        let mut parsing_context = TokenStreamActionCollector::new((), MockIdent::annotate);
         parsing_context =
             DefaultParser.parse_token_stream(with_spans(&input.tokens), parsing_context);
         let mut expected = expected.borrow().to_vec();

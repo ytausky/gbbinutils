@@ -10,8 +10,10 @@ use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::iter;
 
-pub(in crate::analysis) fn annotate(&MockIdent(kind, _): &MockIdent) -> IdentKind {
-    kind
+impl MockIdent {
+    pub fn annotate(&self) -> IdentKind {
+        self.0
+    }
 }
 
 pub(super) type MockSpan = crate::diag::MockSpan<TokenRef>;
