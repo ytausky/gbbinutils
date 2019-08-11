@@ -567,6 +567,7 @@ mod tests {
 
     use crate::analysis::backend::{BackendEvent, SerialIdAllocator};
     use crate::analysis::resolve::{BasicNameTable, NameTableEvent};
+    use crate::analysis::syntax::actions::mock::{IdentKind, TokenStreamActionCollector};
     use crate::analysis::syntax::*;
     use crate::analysis::{Literal, MockCodebase};
     use crate::diag::DiagnosticsEvent;

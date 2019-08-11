@@ -412,11 +412,12 @@ delegate_diagnostics! {
 
 #[cfg(test)]
 mod tests {
-    use super::mock::IdentKind::*;
     use super::mock::*;
     use super::Token::*;
     use super::*;
 
+    use crate::analysis::syntax::actions::mock::IdentKind::*;
+    use crate::analysis::syntax::actions::mock::*;
     use crate::diag::Message;
 
     use std::borrow::Borrow;

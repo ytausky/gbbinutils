@@ -239,6 +239,7 @@ mod tests {
     use super::Token::*;
     use super::*;
 
+    use crate::analysis::syntax::actions::mock::{ExprAction, ExprActionCollector, IdentKind};
     use crate::diag::Merge;
 
     #[test]
@@ -495,7 +496,7 @@ mod tests {
         input: &mut InputTokens,
     ) -> Vec<ExprAction<MockIdent, MockLiteral, MockSpan>> {
         let tokens = &mut with_spans(&input.tokens);
-        Parser::new(tokens, ExprActionCollector::new())
+        Parser::new(tokens, ExprActionCollector::new(annotate))
             .parse()
             .change_context(ArgFinalizer::did_parse_arg)
             .actions

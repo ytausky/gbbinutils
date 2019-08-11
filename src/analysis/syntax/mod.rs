@@ -6,9 +6,6 @@ use self::parser::DefaultParser;
 #[cfg(test)]
 pub(super) use self::mock::*;
 
-#[cfg(test)]
-pub(super) use self::parser::mock::*;
-
 pub mod actions;
 mod lexer;
 mod parser;
