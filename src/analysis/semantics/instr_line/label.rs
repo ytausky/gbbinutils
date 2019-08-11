@@ -2,7 +2,7 @@ use super::{InstrLineSemantics, InstrLineState, SemanticActions};
 
 use crate::analysis::semantics::Params;
 use crate::analysis::session::Session;
-use crate::analysis::syntax::LabelActions;
+use crate::analysis::syntax::actions::LabelActions;
 
 pub(super) type LabelSemantics<S> = SemanticActions<LabelState<S>, S>;
 

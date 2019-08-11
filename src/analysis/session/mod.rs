@@ -4,7 +4,8 @@ use self::expand::{DefineMacro, Expand, MacroId, MacroTable};
 
 use super::backend::*;
 use super::resolve::{NameTable, ResolvedIdent, StartScope};
-use super::syntax::{LexError, ParseTokenStream, ParserFactory, TokenStreamActions};
+use super::syntax::actions::TokenStreamActions;
+use super::syntax::{LexError, ParseTokenStream, ParserFactory};
 use super::{IdentSource, Lex, Literal, SemanticToken, StringSource, TokenSeq};
 
 use crate::codebase::CodebaseError;

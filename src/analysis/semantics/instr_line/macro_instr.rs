@@ -2,7 +2,7 @@ use super::{InstrLineState, SemanticActions, TokenStreamSemantics};
 
 use crate::analysis::semantics::TokenStreamState;
 use crate::analysis::session::{MacroArgs, Session};
-use crate::analysis::syntax::{InstrFinalizer, MacroArgActions, MacroInstrActions};
+use crate::analysis::syntax::actions::{InstrFinalizer, MacroArgActions, MacroInstrActions};
 use crate::analysis::{SemanticToken, TokenSeq};
 
 pub(super) type MacroInstrSemantics<S> = SemanticActions<MacroInstrState<S>, S>;
@@ -89,7 +89,8 @@ mod tests {
     use crate::analysis::resolve::ResolvedIdent;
     use crate::analysis::semantics::tests::*;
     use crate::analysis::session::{MockMacroId, SessionEvent};
-    use crate::analysis::syntax::{InstrActions, LineFinalizer, Token, TokenStreamActions};
+    use crate::analysis::syntax::actions::{InstrActions, LineFinalizer, TokenStreamActions};
+    use crate::analysis::syntax::Token;
 
     #[test]
     fn call_nullary_macro() {

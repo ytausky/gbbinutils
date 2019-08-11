@@ -6,7 +6,7 @@ use super::backend::PushOp;
 use super::resolve;
 use super::session::{IntoSemanticActions, Params, Session};
 use super::syntax;
-use super::syntax::*;
+use super::syntax::actions::*;
 use super::Literal;
 
 use crate::diag;
@@ -166,6 +166,8 @@ mod tests {
     use super::*;
 
     pub use crate::analysis::resolve::BasicNameTable;
+
+    use super::syntax::{Sigil, Token};
 
     use crate::analysis::backend::{BackendEvent, Name, SerialIdAllocator};
     use crate::analysis::resolve::{NameTableEvent, ResolvedIdent};

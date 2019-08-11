@@ -2,7 +2,8 @@ use super::{Label, SemanticActions, TokenStreamSemantics};
 
 use crate::analysis::resolve::ResolvedIdent;
 use crate::analysis::session::Session;
-use crate::analysis::syntax::{LineFinalizer, Sigil, Token, TokenLineActions, TokenLineRule};
+use crate::analysis::syntax::actions::{LineFinalizer, TokenLineActions, TokenLineRule};
+use crate::analysis::syntax::{Sigil, Token};
 use crate::analysis::{Literal, SemanticToken, TokenSeq};
 
 pub(in crate::analysis) type TokenLineSemantics<S> = SemanticActions<TokenContext<S>, S>;

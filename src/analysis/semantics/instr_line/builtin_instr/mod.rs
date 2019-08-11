@@ -8,7 +8,7 @@ use super::*;
 use crate::analysis::backend::{Finish, LocationCounter, Name, PushOp};
 use crate::analysis::semantics::{Params, RelocLookup, ResolveNames, WithParams};
 use crate::analysis::session::Session;
-use crate::analysis::syntax::{BuiltinInstrActions, InstrFinalizer};
+use crate::analysis::syntax::actions::{BuiltinInstrActions, InstrFinalizer};
 use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::model::{BinOp, FnCall, Item};
 
@@ -253,8 +253,8 @@ where
 #[cfg(test)]
 mod tests {
     use crate::analysis::semantics::tests::collect_semantic_actions;
-    use crate::analysis::syntax::*;
-    use crate::analysis::syntax::{ExprAtom::*, Operator::*};
+    use crate::analysis::syntax::actions::*;
+    use crate::analysis::syntax::actions::{ExprAtom::*, Operator::*};
     use crate::analysis::Literal::*;
     use crate::diag::{DiagnosticsEvent, Message, MockSpan};
 

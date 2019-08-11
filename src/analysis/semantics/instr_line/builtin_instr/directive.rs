@@ -202,7 +202,7 @@ mod tests {
     use crate::analysis::semantics::instr_line::builtin_instr;
     use crate::analysis::semantics::tests::*;
     use crate::analysis::session::SessionEvent;
-    use crate::analysis::syntax::*;
+    use crate::analysis::syntax::actions::*;
     use crate::codebase::CodebaseError;
     use crate::log::with_log;
     use crate::model::{Atom, ParamId};

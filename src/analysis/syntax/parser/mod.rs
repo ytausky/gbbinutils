@@ -1,7 +1,9 @@
+use super::actions::*;
 use super::Sigil::*;
-use super::*;
+use super::{Sigil, Token};
+
 use crate::diag::span::StripSpan;
-use crate::diag::{EmitDiag, Message};
+use crate::diag::{Diagnostics, EmitDiag, Message};
 
 macro_rules! bump {
     ($parser:expr) => {

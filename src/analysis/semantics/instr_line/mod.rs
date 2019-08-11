@@ -3,7 +3,7 @@ use self::builtin_instr::{BuiltinInstr, BuiltinInstrSemantics, BuiltinInstrState
 use self::builtin_instr::{BuiltinInstr::*, Directive::*};
 use self::label::{LabelSemantics, LabelState};
 use self::macro_instr::{MacroInstrSemantics, MacroInstrState};
-use self::syntax::{InstrActions, InstrLineActions, InstrRule};
+use self::syntax::actions::{InstrActions, InstrLineActions, InstrRule};
 
 use super::diag::span::StripSpan;
 use super::diag::{EmitDiag, Message};

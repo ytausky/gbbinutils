@@ -2,9 +2,9 @@ use super::Sigil::*;
 use super::Token::*;
 use super::{ExprAtom, Operator, Token, UnaryOperator};
 
-use crate::analysis::syntax::*;
+use crate::analysis::syntax::actions::*;
 use crate::diag::span::{MergeSpans, StripSpan};
-use crate::diag::{CompactDiag, DiagnosticsEvent, EmitDiag, Merge, Message};
+use crate::diag::{CompactDiag, Diagnostics, DiagnosticsEvent, EmitDiag, Merge, Message};
 use crate::model::BinOp;
 
 use std::borrow::Borrow;

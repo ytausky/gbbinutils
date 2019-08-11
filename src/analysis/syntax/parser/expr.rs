@@ -1,4 +1,5 @@
-use self::syntax::{ArgActions, ExprAtom, Operator, Sigil, Token, UnaryOperator};
+use self::syntax::actions::{ArgActions, ExprAtom, Operator, UnaryOperator};
+use self::syntax::{Sigil, Token};
 use self::Sigil::*;
 
 use super::{Parser, LINE_FOLLOW_SET};
@@ -232,8 +233,8 @@ impl<P, S, T> WithParser<P> for Result<P, (P, ExprParsingError<S, T>)> {
 
 #[cfg(test)]
 mod tests {
+    use self::syntax::actions::ArgFinalizer;
     use self::syntax::parser::mock::*;
-    use self::syntax::ArgFinalizer;
 
     use super::Token::*;
     use super::*;
