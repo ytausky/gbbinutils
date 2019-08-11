@@ -84,7 +84,7 @@ where
     Self: PartialBackend<S>,
     Self: StartSection<<Self as AllocName<S>>::Name, S>,
 {
-    type ImmediateBuilder: AllocName<S, Name = Self::Name>
+    type ConstBuilder: AllocName<S, Name = Self::Name>
         + ValueBuilder<Self::Name, S>
         + Finish<Parent = Self, Value = Self::Value>;
 
@@ -92,7 +92,7 @@ where
         + ValueBuilder<Self::Name, S>
         + Finish<Parent = Self, Value = ()>;
 
-    fn build_immediate(self) -> Self::ImmediateBuilder;
+    fn build_const(self) -> Self::ConstBuilder;
     fn define_symbol(self, name: Self::Name, span: S) -> Self::SymbolBuilder;
 }
 
@@ -173,10 +173,10 @@ mod mock {
         T: From<BackendEvent<A::Name, Expr<A::Name, S>>>,
         S: Clone,
     {
-        type ImmediateBuilder = RelocContext<Self, Expr<A::Name, S>>;
+        type ConstBuilder = RelocContext<Self, Expr<A::Name, S>>;
         type SymbolBuilder = SymbolBuilder<A, T, S>;
 
-        fn build_immediate(self) -> Self::ImmediateBuilder {
+        fn build_const(self) -> Self::ConstBuilder {
             RelocContext::new(self)
         }
 

@@ -62,19 +62,19 @@ where
     Self: NameTable<I, BackendEntry = <Self as AllocName<S>>::Name>,
     Self: Diagnostics<S>,
 {
-    type FnBuilder: ValueBuilder<Self::Name, S>
-        + AllocName<S, Name = Self::Name>
-        + NameTable<I, BackendEntry = Self::Name>
-        + Finish<Parent = Self, Value = ()>
-        + Diagnostics<S>;
-    type GeneralBuilder: ValueBuilder<Self::Name, S>
+    type ConstBuilder: ValueBuilder<Self::Name, S>
         + AllocName<S, Name = Self::Name>
         + NameTable<I, BackendEntry = Self::Name>
         + Finish<Parent = Self, Value = Self::Value>
         + Diagnostics<S>;
+    type SymbolBuilder: ValueBuilder<Self::Name, S>
+        + AllocName<S, Name = Self::Name>
+        + NameTable<I, BackendEntry = Self::Name>
+        + Finish<Parent = Self, Value = ()>
+        + Diagnostics<S>;
 
-    fn build_value(self) -> Self::GeneralBuilder;
-    fn define_symbol(self, name: Self::Name, span: S) -> Self::FnBuilder;
+    fn build_const(self) -> Self::ConstBuilder;
+    fn define_symbol(self, name: Self::Name, span: S) -> Self::SymbolBuilder;
 }
 
 pub(super) trait IntoSemanticActions<S: Session> {
@@ -304,14 +304,14 @@ where
     S: Clone,
     Self: Diagnostics<S>,
 {
-    type FnBuilder = SessionComponents<U, B::SymbolBuilder, N, D>;
-    type GeneralBuilder = SessionComponents<U, B::ImmediateBuilder, N, D>;
+    type ConstBuilder = SessionComponents<U, B::ConstBuilder, N, D>;
+    type SymbolBuilder = SessionComponents<U, B::SymbolBuilder, N, D>;
 
-    fn build_value(self) -> Self::GeneralBuilder {
-        self.replace_backend(Backend::build_immediate)
+    fn build_const(self) -> Self::ConstBuilder {
+        self.replace_backend(Backend::build_const)
     }
 
-    fn define_symbol(self, name: B::Name, span: S) -> Self::FnBuilder {
+    fn define_symbol(self, name: B::Name, span: S) -> Self::SymbolBuilder {
         self.replace_backend(|backend| backend.define_symbol(name, span))
     }
 }
@@ -521,7 +521,7 @@ mod mock {
         fn from_components(alloc: A, names: N, log: Log<T>) -> Self {
             Self {
                 upstream: (),
-                backend: MockBackend::new(alloc, log.clone()).build_immediate(),
+                backend: MockBackend::new(alloc, log.clone()).build_const(),
                 names: Box::new(MockNameTable::new(names, log.clone())),
                 diagnostics: Box::new(MockDiagnostics::new(log)),
             }
@@ -740,7 +740,7 @@ mod tests {
     #[test]
     fn build_value_from_number() {
         Fixture::default().log_session(|session| {
-            let mut builder = session.build_value();
+            let mut builder = session.build_const();
             builder.push_op(42, ());
             let (_, value) = builder.finish();
             assert_eq!(value, 42.into())
@@ -750,7 +750,7 @@ mod tests {
     #[test]
     fn apply_operator_on_two_values() {
         Fixture::default().log_session(|session| {
-            let mut builder = session.build_value();
+            let mut builder = session.build_const();
             builder.push_op(42, ());
             builder.push_op(Name(0), ());
             builder.push_op(BinOp::Multiplication, ());

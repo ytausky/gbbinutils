@@ -56,14 +56,14 @@ impl<L, S: Session> SemanticActions<L, S> {
     where
         F: FnOnce(
             BuilderAdapter<
-                BuilderAdapter<S::GeneralBuilder, NameResolver>,
+                BuilderAdapter<S::ConstBuilder, NameResolver>,
                 ConvertParams<S::Ident, S::Span>,
             >,
         ) -> (T, S),
     {
         let (value, session) = f(self
             .session
-            .build_value()
+            .build_const()
             .resolve_names()
             .with_params(params));
         self.session = session;

@@ -70,10 +70,10 @@ impl<'a, S: Clone> PartialBackend<S> for ProgramBuilder<'a, S> {
 }
 
 impl<'a, S: Clone> Backend<S> for ProgramBuilder<'a, S> {
-    type ImmediateBuilder = RelocContext<Self, Immediate<S>>;
+    type ConstBuilder = RelocContext<Self, Immediate<S>>;
     type SymbolBuilder = SymbolBuilder<'a, S>;
 
-    fn build_immediate(self) -> Self::ImmediateBuilder {
+    fn build_const(self) -> Self::ConstBuilder {
         RelocContext::new(self)
     }
 
