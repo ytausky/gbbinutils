@@ -2,6 +2,7 @@ use self::backend::*;
 use self::resolve::{BiLevelNameTable, DefaultIdentFactory};
 use self::semantics::TokenStreamState;
 use self::session::*;
+use self::syntax::parser::DefaultParserFactory;
 use self::syntax::*;
 
 use crate::codebase::{BufId, Codebase, CodebaseError};

@@ -5,7 +5,8 @@ use self::expand::{DefineMacro, Expand, MacroId, MacroTable};
 use super::backend::*;
 use super::resolve::{NameTable, ResolvedIdent, StartScope};
 use super::syntax::actions::TokenStreamActions;
-use super::syntax::{LexError, ParseTokenStream, ParserFactory};
+use super::syntax::parser::ParserFactory;
+use super::syntax::{LexError, ParseTokenStream};
 use super::{IdentSource, Lex, Literal, SemanticToken, StringSource, TokenSeq};
 
 use crate::codebase::CodebaseError;
@@ -568,6 +569,7 @@ mod tests {
     use crate::analysis::backend::{BackendEvent, SerialIdAllocator};
     use crate::analysis::resolve::{BasicNameTable, NameTableEvent};
     use crate::analysis::syntax::actions::mock::{IdentKind, TokenStreamActionCollector};
+    use crate::analysis::syntax::parser::mock::*;
     use crate::analysis::syntax::*;
     use crate::analysis::{Literal, MockCodebase};
     use crate::diag::DiagnosticsEvent;
@@ -764,7 +766,7 @@ mod tests {
         });
     }
 
-    type MockParserFactory<S> = crate::analysis::syntax::MockParserFactory<Event<S>>;
+    type MockParserFactory<S> = crate::analysis::syntax::parser::mock::MockParserFactory<Event<S>>;
     type MockBackend<S> = crate::analysis::backend::MockBackend<SerialIdAllocator, Event<S>>;
     type MockDiagnosticsSystem<S> = crate::diag::MockDiagnosticsSystem<Event<S>, S>;
     type MockNameTable<S> =

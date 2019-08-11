@@ -234,7 +234,7 @@ impl<P, S, T> WithParser<P> for Result<P, (P, ExprParsingError<S, T>)> {
 #[cfg(test)]
 mod tests {
     use self::syntax::actions::ArgFinalizer;
-    use self::syntax::parser::mock::*;
+    use self::syntax::parser::tests::*;
 
     use super::Token::*;
     use super::*;
