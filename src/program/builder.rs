@@ -1,9 +1,9 @@
-use super::{Atom, Expr, Immediate, NameDef, NameDefId, NameId, Node, Program, RelocId, Section};
+use super::*;
 
 use crate::analysis::backend::*;
 use crate::diag::span::WithSpan;
 use crate::model::{BinOp, ExprOp, FnCall, Item, ParamId};
-use crate::BuiltinNames;
+use crate::BuiltinSymbols;
 
 pub(crate) struct ProgramBuilder<'a, S> {
     program: &'a mut Program<S>,
@@ -11,7 +11,7 @@ pub(crate) struct ProgramBuilder<'a, S> {
 }
 
 enum BuilderState<S> {
-    AnonSectionPrelude { addr: Option<Immediate<S>> },
+    AnonSectionPrelude { addr: Option<Const<S>> },
     Section(usize),
     SectionPrelude(usize),
 }
@@ -47,7 +47,7 @@ impl<'a, S> ProgramBuilder<'a, S> {
 }
 
 impl<'a, S: Clone> PartialBackend<S> for ProgramBuilder<'a, S> {
-    type Value = Immediate<S>;
+    type Value = Const<S>;
 
     fn emit_item(&mut self, item: Item<Self::Value>) {
         use super::lowering::Lower;
@@ -70,7 +70,7 @@ impl<'a, S: Clone> PartialBackend<S> for ProgramBuilder<'a, S> {
 }
 
 impl<'a, S: Clone> Backend<S> for ProgramBuilder<'a, S> {
-    type ConstBuilder = RelocContext<Self, Immediate<S>>;
+    type ConstBuilder = RelocContext<Self, Const<S>>;
     type SymbolBuilder = SymbolBuilder<'a, S>;
 
     fn build_const(self) -> Self::ConstBuilder {
@@ -78,27 +78,27 @@ impl<'a, S: Clone> Backend<S> for ProgramBuilder<'a, S> {
     }
 
     fn define_symbol(self, name: Self::Name, span: S) -> Self::SymbolBuilder {
-        let location = self.program.alloc_reloc();
+        let location = self.program.alloc_linkage_var();
         SymbolBuilder {
             parent: self,
             location,
-            name: (name.def().unwrap(), span),
+            name: (name.program().unwrap(), span),
             expr: Default::default(),
         }
     }
 }
 
-impl<'a, S: Clone> AllocName<S> for RelocContext<ProgramBuilder<'a, S>, Immediate<S>> {
-    type Name = NameId;
+impl<'a, S: Clone> AllocName<S> for RelocContext<ProgramBuilder<'a, S>, Const<S>> {
+    type Name = Symbol;
 
     fn alloc_name(&mut self, span: S) -> Self::Name {
         self.parent.alloc_name(span)
     }
 }
 
-impl<'a, S: Clone> Finish for RelocContext<ProgramBuilder<'a, S>, Immediate<S>> {
+impl<'a, S: Clone> Finish for RelocContext<ProgramBuilder<'a, S>, Const<S>> {
     type Parent = ProgramBuilder<'a, S>;
-    type Value = Immediate<S>;
+    type Value = Const<S>;
 
     fn finish(self) -> (Self::Parent, Self::Value) {
         (self.parent, self.builder)
@@ -107,13 +107,13 @@ impl<'a, S: Clone> Finish for RelocContext<ProgramBuilder<'a, S>, Immediate<S>> 
 
 pub(crate) struct SymbolBuilder<'a, S> {
     parent: ProgramBuilder<'a, S>,
-    location: RelocId,
-    name: (NameDefId, S),
+    location: LinkVar,
+    name: (ProgramSymbol, S),
     expr: Expr<S>,
 }
 
 impl<'a, S: Clone> AllocName<S> for SymbolBuilder<'a, S> {
-    type Name = NameId;
+    type Name = Symbol;
 
     fn alloc_name(&mut self, span: S) -> Self::Name {
         self.parent.alloc_name(span)
@@ -131,7 +131,7 @@ macro_rules! impl_push_op_for_symbol_builder {
 }
 
 impl_push_op_for_symbol_builder! {i32}
-impl_push_op_for_symbol_builder! {Name<NameId>}
+impl_push_op_for_symbol_builder! {Name<Symbol>}
 impl_push_op_for_symbol_builder! {ParamId}
 impl_push_op_for_symbol_builder! {BinOp}
 impl_push_op_for_symbol_builder! {FnCall}
@@ -153,33 +153,33 @@ impl<'a, S> Finish for SymbolBuilder<'a, S> {
         parent.push(Node::Reloc(self.location));
         parent
             .program
-            .names
-            .define(self.name.0, NameDef::Symbol(self.expr));
+            .symbols
+            .define(self.name.0, ProgramDef::Expr(self.expr));
         (parent, ())
     }
 }
 
 impl<'a, S: Clone> AllocName<S> for ProgramBuilder<'a, S> {
-    type Name = NameId;
+    type Name = Symbol;
 
     fn alloc_name(&mut self, _span: S) -> Self::Name {
-        self.program.names.alloc().into()
+        self.program.symbols.alloc().into()
     }
 }
 
-impl<'a, S: Clone> StartSection<NameId, S> for ProgramBuilder<'a, S> {
-    fn start_section(&mut self, (name, _): (NameId, S)) {
+impl<'a, S: Clone> StartSection<Symbol, S> for ProgramBuilder<'a, S> {
+    fn start_section(&mut self, (name, _): (Symbol, S)) {
         let index = self.program.sections.len();
         self.state = Some(BuilderState::SectionPrelude(index));
-        self.program.add_section(Some(name.def().unwrap()))
+        self.program.add_section(Some(name.program().unwrap()))
     }
 }
 
-impl<'a, S: Clone> BuiltinNames for ProgramBuilder<'a, S> {
-    type Name = NameId;
+impl<'a, S: Clone> BuiltinSymbols for ProgramBuilder<'a, S> {
+    type Name = Symbol;
 
-    fn builtin_names(&self) -> &[(&str, Self::Name)] {
-        super::link::BUILTIN_NAMES
+    fn builtin_symbols(&self) -> &[(&str, Self::Name)] {
+        super::link::BUILTIN_SYMBOLS
     }
 }
 
@@ -206,7 +206,7 @@ mod tests {
 
     #[test]
     fn constrain_origin_determines_origin_of_new_section() {
-        let origin: Immediate<_> = 0x3000.into();
+        let origin: Const<_> = 0x3000.into();
         let object = build_object(|mut builder| {
             builder.set_origin(origin.clone());
             builder.push(Node::Byte(0xcd))
@@ -223,14 +223,14 @@ mod tests {
             wrapped_name = Some(name);
         });
         assert_eq!(
-            object.names.get(wrapped_name.unwrap().def().unwrap()),
-            Some(&NameDef::Section(SectionId(0)))
+            object.symbols.get(wrapped_name.unwrap().program().unwrap()),
+            Some(&ProgramDef::Section(SectionId(0)))
         )
     }
 
     #[test]
     fn set_origin_in_section_prelude_sets_origin() {
-        let origin: Immediate<_> = 0x0150.into();
+        let origin: Const<_> = 0x0150.into();
         let object = build_object(|mut builder| {
             let name = builder.alloc_name(());
             builder.start_section((name, ()));
@@ -267,7 +267,7 @@ mod tests {
 
     fn emit_items_and_compare<I, B>(items: I, bytes: B)
     where
-        I: Borrow<[Item<Immediate<()>>]>,
+        I: Borrow<[Item<Const<()>>]>,
         B: Borrow<[u8]>,
     {
         let (object, _) = with_object_builder(|mut builder| {
@@ -288,7 +288,7 @@ mod tests {
         emit_items_and_compare([byte_literal(0x12), byte_literal(0x34)], [0x12, 0x34])
     }
 
-    fn byte_literal(value: i32) -> Item<Immediate<()>> {
+    fn byte_literal(value: i32) -> Item<Const<()>> {
         Item::Data(value.into(), Width::Byte)
     }
 
@@ -317,7 +317,7 @@ mod tests {
         let name = "ident";
         let (_, diagnostics) = with_object_builder(|mut builder| {
             let symbol_id = builder.alloc_name(name.into());
-            let mut value: Immediate<_> = Default::default();
+            let mut value: Const<_> = Default::default();
             value.push_op(symbol_id, name.into());
             builder.emit_item(word_item(value))
         });
@@ -331,7 +331,7 @@ mod tests {
         let (_, diagnostics) = with_object_builder(|mut builder| {
             let value = {
                 let id1 = builder.alloc_name(name1.into());
-                let mut value: Immediate<_> = Default::default();
+                let mut value: Const<_> = Default::default();
                 value.push_op(id1, name1.into());
                 let id2 = builder.alloc_name(name2.into());
                 value.push_op(id2, name2.into());
@@ -350,7 +350,7 @@ mod tests {
             let mut builder = builder.define_symbol(symbol_id, ());
             builder.push_op(LocationCounter, ());
             let (mut builder, _) = builder.finish();
-            let mut value: Immediate<_> = Default::default();
+            let mut value: Const<_> = Default::default();
             value.push_op(symbol_id, ());
             builder.emit_item(word_item(value));
         });
@@ -362,7 +362,7 @@ mod tests {
     fn emit_symbol_defined_after_use() {
         let (object, diagnostics) = with_object_builder(|mut builder| {
             let symbol_id = builder.alloc_name(());
-            let mut value: Immediate<_> = Default::default();
+            let mut value: Const<_> = Default::default();
             value.push_op(symbol_id, ());
             builder.emit_item(word_item(value));
             let mut builder = builder.define_symbol(symbol_id, ());
@@ -391,7 +391,7 @@ mod tests {
         (object, diagnostics)
     }
 
-    fn word_item<S: Clone>(value: Immediate<S>) -> Item<Immediate<S>> {
+    fn word_item<S: Clone>(value: Const<S>) -> Item<Const<S>> {
         Item::Data(value, Width::Word)
     }
 

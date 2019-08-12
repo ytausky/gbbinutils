@@ -83,10 +83,10 @@ fn try_assemble(
     Ok(program.link(diagnostics))
 }
 
-trait BuiltinNames {
+trait BuiltinSymbols {
     type Name;
 
-    fn builtin_names(&self) -> &[(&str, Self::Name)];
+    fn builtin_symbols(&self) -> &[(&str, Self::Name)];
 }
 
 #[cfg(test)]

@@ -1,8 +1,8 @@
-use super::{EvalContext, RelocTable};
+use super::{LinkageContext, RelocTable};
 
 use crate::diag::{BackendDiagnostics, Message};
 use crate::model::Width;
-use crate::program::{BinarySection, Immediate, Node, Section};
+use crate::program::{BinarySection, Const, Node, Section};
 use crate::span::Source;
 
 use std::mem::replace;
@@ -11,7 +11,7 @@ use std::vec::IntoIter;
 impl<S: Clone> Section<S> {
     pub(super) fn translate(
         &self,
-        context: &mut EvalContext<&RelocTable, S>,
+        context: &mut LinkageContext<&RelocTable, S>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> Vec<BinarySection> {
         let mut chunks = Vec::new();
@@ -46,7 +46,7 @@ impl<S: Clone> Section<S> {
 impl<S: Clone> Node<S> {
     fn translate(
         &self,
-        context: &EvalContext<&RelocTable, S>,
+        context: &LinkageContext<&RelocTable, S>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> IntoIter<u8> {
         match self {
@@ -111,9 +111,9 @@ impl Data {
 }
 
 fn resolve_expr_item<S: Clone>(
-    expr: &Immediate<S>,
+    expr: &Const<S>,
     width: Width,
-    context: &EvalContext<&RelocTable, S>,
+    context: &LinkageContext<&RelocTable, S>,
     diagnostics: &mut impl BackendDiagnostics<S>,
 ) -> Data {
     let span = expr.span();
@@ -160,7 +160,7 @@ mod tests {
 
     use crate::diag::IgnoreDiagnostics;
     use crate::model::{Atom, BinOp, LocationCounter};
-    use crate::program::{Constraints, NameTable, Program, RelocId};
+    use crate::program::{Constraints, LinkVar, Program, SymbolTable};
 
     use std::borrow::Borrow;
 
@@ -199,7 +199,7 @@ mod tests {
     #[test]
     fn translate_expr_with_subtraction() {
         let actual = translate_section_item(Node::Immediate(
-            Immediate::from_items(&[4.into(), 3.into(), BinOp::Minus.into()]),
+            Const::from_items(&[4.into(), 3.into(), BinOp::Minus.into()]),
             Width::Byte,
         ));
         assert_eq!(actual, [0x01])
@@ -209,7 +209,7 @@ mod tests {
         use crate::program::link::Num;
 
         item.translate(
-            &EvalContext {
+            &LinkageContext {
                 program: &Program::new(),
                 relocs: &RelocTable::new(0),
                 location: Num::Unknown,
@@ -227,14 +227,14 @@ mod tests {
                 constraints: Constraints {
                     addr: Some(addr.into()),
                 },
-                addr: RelocId(0),
-                size: RelocId(1),
+                addr: LinkVar(0),
+                size: LinkVar(1),
                 items: vec![Node::Byte(0x00)],
             }],
-            names: NameTable(vec![]),
-            relocs: 2,
+            symbols: SymbolTable(vec![]),
+            link_vars: 2,
         };
-        let context = &mut EvalContext {
+        let context = &mut LinkageContext {
             program,
             relocs: &RelocTable(vec![addr.into(), 0.into()]),
             location: 0.into(),
@@ -249,17 +249,17 @@ mod tests {
         let program = &Program {
             sections: vec![Section {
                 constraints: Constraints { addr: None },
-                addr: RelocId(0),
-                size: RelocId(1),
+                addr: LinkVar(0),
+                size: LinkVar(1),
                 items: vec![
                     Node::Byte(byte),
                     Node::Immediate(LocationCounter.into(), Width::Byte),
                 ],
             }],
-            names: NameTable(vec![]),
-            relocs: 2,
+            symbols: SymbolTable(vec![]),
+            link_vars: 2,
         };
-        let context = &mut EvalContext {
+        let context = &mut LinkageContext {
             program,
             relocs: &RelocTable(vec![0.into(), 2.into()]),
             location: 0.into(),
@@ -276,14 +276,14 @@ mod tests {
                 constraints: Constraints {
                     addr: Some(addr.into()),
                 },
-                addr: RelocId(0),
-                size: RelocId(1),
+                addr: LinkVar(0),
+                size: LinkVar(1),
                 items: vec![Node::Immediate(LocationCounter.into(), Width::Word)],
             }],
-            names: NameTable(vec![]),
-            relocs: 2,
+            symbols: SymbolTable(vec![]),
+            link_vars: 2,
         };
-        let context = &mut EvalContext {
+        let context = &mut LinkageContext {
             program,
             relocs: &RelocTable(vec![addr.into(), 2.into()]),
             location: 0.into(),

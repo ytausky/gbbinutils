@@ -1,8 +1,8 @@
-pub use self::eval::BUILTIN_NAMES;
+pub use self::eval::BUILTIN_SYMBOLS;
 
 use self::num::Num;
 
-use super::{BinaryObject, Node, Program, RelocId, Section};
+use super::{BinaryObject, LinkVar, Node, Program, Section};
 
 use crate::diag::{BackendDiagnostics, IgnoreDiagnostics};
 use crate::model::Width;
@@ -16,7 +16,7 @@ mod translate;
 impl<S: Clone> Program<S> {
     pub(crate) fn link(&self, diagnostics: &mut impl BackendDiagnostics<S>) -> BinaryObject {
         let relocs = self.resolve_relocs();
-        let mut context = EvalContext {
+        let mut context = LinkageContext {
             program: self,
             relocs: &relocs,
             location: 0.into(),
@@ -31,14 +31,14 @@ impl<S: Clone> Program<S> {
     }
 
     fn resolve_relocs(&self) -> RelocTable {
-        let mut relocs = RelocTable::new(self.relocs);
+        let mut relocs = RelocTable::new(self.link_vars);
         relocs.refine_all(self);
         relocs.refine_all(self);
         relocs
     }
 }
 
-struct EvalContext<'a, R, S> {
+struct LinkageContext<'a, R, S> {
     program: &'a Program<S>,
     relocs: R,
     location: Num,
@@ -51,11 +51,11 @@ impl RelocTable {
         Self(vec![Num::Unknown; relocs])
     }
 
-    fn get(&self, RelocId(id): RelocId) -> Num {
+    fn get(&self, LinkVar(id): LinkVar) -> Num {
         self.0[id].clone()
     }
 
-    fn refine(&mut self, RelocId(id): RelocId, value: Num) -> bool {
+    fn refine(&mut self, LinkVar(id): LinkVar, value: Num) -> bool {
         let stored_value = &mut self.0[id];
         let old_value = stored_value.clone();
         let was_refined = match (old_value, &value) {
@@ -84,7 +84,7 @@ impl RelocTable {
 
     fn refine_all<S: Clone>(&mut self, program: &Program<S>) -> i32 {
         let mut refinements = 0;
-        let context = &mut EvalContext {
+        let context = &mut LinkageContext {
             program,
             relocs: self,
             location: Num::Unknown,
@@ -106,10 +106,10 @@ impl RelocTable {
 }
 
 impl<S: Clone> Section<S> {
-    fn traverse<R, F>(&self, context: &mut EvalContext<R, S>, mut f: F) -> Num
+    fn traverse<R, F>(&self, context: &mut LinkageContext<R, S>, mut f: F) -> Num
     where
         R: Borrow<RelocTable>,
-        F: FnMut(&Node<S>, &mut EvalContext<R, S>),
+        F: FnMut(&Node<S>, &mut LinkageContext<R, S>),
     {
         let addr = context.location.clone();
         let mut offset = Num::from(0);
@@ -121,7 +121,7 @@ impl<S: Clone> Section<S> {
         offset
     }
 
-    fn eval_addr<R: Borrow<RelocTable>>(&self, context: &EvalContext<R, S>) -> Num {
+    fn eval_addr<R: Borrow<RelocTable>>(&self, context: &LinkageContext<R, S>) -> Num {
         self.constraints
             .addr
             .as_ref()
@@ -131,7 +131,7 @@ impl<S: Clone> Section<S> {
 }
 
 impl<S: Clone> Node<S> {
-    fn size<R: Borrow<RelocTable>>(&self, context: &EvalContext<R, S>) -> Num {
+    fn size<R: Borrow<RelocTable>>(&self, context: &LinkageContext<R, S>) -> Num {
         match self {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),
             Node::Immediate(_, width) => width.len().into(),
@@ -174,25 +174,25 @@ mod tests {
                     constraints: Constraints {
                         addr: Some(origin1.into()),
                     },
-                    addr: RelocId(0),
-                    size: RelocId(1),
+                    addr: LinkVar(0),
+                    size: LinkVar(1),
                     items: vec![Node::Byte(0x42)],
                 },
                 Section {
                     constraints: Constraints {
-                        addr: Some(Immediate::from_items(&[
+                        addr: Some(Const::from_items(&[
                             LocationCounter.into(),
                             skipped_bytes.into(),
                             BinOp::Plus.into(),
                         ])),
                     },
-                    addr: RelocId(2),
-                    size: RelocId(3),
+                    addr: LinkVar(2),
+                    size: LinkVar(3),
                     items: vec![Node::Byte(0x43)],
                 },
             ],
-            names: NameTable::new(),
-            relocs: 4,
+            symbols: SymbolTable::new(),
+            link_vars: 4,
         };
         let binary = object.link(&mut IgnoreDiagnostics);
         assert_eq!(
@@ -212,7 +212,7 @@ mod tests {
         builder.push_op(LocationCounter, ());
         builder.finish();
         let relocs = program.resolve_relocs();
-        assert_eq!(relocs.get(RelocId(0)), addr.into());
+        assert_eq!(relocs.get(LinkVar(0)), addr.into());
     }
 
     #[test]
@@ -246,14 +246,14 @@ mod tests {
     #[test]
     fn ld_inline_addr_with_symbol_after_instruction_has_size_three() {
         assert_section_size(3, |object| {
-            let name = object.names.alloc();
-            let reloc = object.alloc_reloc();
+            let name = object.symbols.alloc();
+            let reloc = object.alloc_linkage_var();
             let items = &mut object.sections[0].items;
             items.push(Node::LdInlineAddr(0, Atom::Name(name.into()).into()));
             items.push(Node::Reloc(reloc));
             object
-                .names
-                .define(name, NameDef::Symbol(Atom::Location(reloc).into()))
+                .symbols
+                .define(name, ProgramDef::Expr(Atom::Location(reloc).into()))
         })
     }
 
@@ -264,15 +264,15 @@ mod tests {
                 constraints: Constraints {
                     addr: Some(0x1337.into()),
                 },
-                addr: RelocId(0),
-                size: RelocId(1),
+                addr: LinkVar(0),
+                size: LinkVar(1),
                 items: vec![Node::Immediate(
-                    Atom::Name(NameDefId(0).into()).into(),
+                    Atom::Name(ProgramSymbol(0).into()).into(),
                     Width::Word,
                 )],
             }],
-            names: NameTable(vec![Some(NameDef::Section(SectionId(0)))]),
-            relocs: 2,
+            symbols: SymbolTable(vec![Some(ProgramDef::Section(SectionId(0)))]),
+            link_vars: 2,
         };
         let binary = program.link(&mut IgnoreDiagnostics);
         assert_eq!(binary.sections[0].data, [0x37, 0x13])
@@ -282,22 +282,22 @@ mod tests {
     fn traverse_reserved_bytes() {
         let addr = 0x0100;
         let bytes = 10;
-        let symbol = RelocId(2);
+        let symbol = LinkVar(2);
         let program = Program::<()> {
             sections: vec![Section {
                 constraints: Constraints {
                     addr: Some(addr.into()),
                 },
-                addr: RelocId(0),
-                size: RelocId(1),
+                addr: LinkVar(0),
+                size: LinkVar(1),
                 items: vec![
                     Node::Reserved(bytes.into()),
                     Node::Reloc(symbol),
-                    Node::Immediate(Atom::Name(NameDefId(0).into()).into(), Width::Word),
+                    Node::Immediate(Atom::Name(ProgramSymbol(0).into()).into(), Width::Word),
                 ],
             }],
-            names: NameTable(vec![Some(NameDef::Symbol(Atom::Location(symbol).into()))]),
-            relocs: 3,
+            symbols: SymbolTable(vec![Some(ProgramDef::Expr(Atom::Location(symbol).into()))]),
+            link_vars: 3,
         };
         let relocs = program.resolve_relocs();
         assert_eq!(relocs.get(symbol), (addr + bytes).into())

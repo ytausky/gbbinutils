@@ -1,4 +1,4 @@
-use super::{EvalContext, Num, RelocTable};
+use super::{LinkageContext, Num, RelocTable};
 
 use crate::diag::span::{Spanned, WithSpan};
 use crate::diag::{BackendDiagnostics, Message, ValueKind};
@@ -7,8 +7,8 @@ use crate::program::*;
 
 use std::borrow::Borrow;
 
-impl<S: Clone> Immediate<S> {
-    pub(super) fn to_num<R, D>(&self, context: &EvalContext<R, S>, diagnostics: &mut D) -> Num
+impl<S: Clone> Const<S> {
+    pub(super) fn to_num<R, D>(&self, context: &LinkageContext<R, S>, diagnostics: &mut D) -> Num
     where
         R: Borrow<RelocTable>,
         D: BackendDiagnostics<S>,
@@ -22,7 +22,7 @@ trait Eval<'a, S: Clone> {
 
     fn eval<R: Borrow<RelocTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a EvalContext<R, S>,
+        context: &'a LinkageContext<R, S>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
     ) -> Self::Output;
@@ -30,27 +30,27 @@ trait Eval<'a, S: Clone> {
 
 #[derive(Clone)]
 enum Value<'a, S: Clone> {
-    Name(ResolvedName<'a, S>),
+    Symbol(ResolvedSymbol<'a, S>),
     Num(Num),
     Unresolved,
 }
 
 #[derive(Clone)]
-enum ResolvedName<'a, S> {
+enum ResolvedSymbol<'a, S> {
     Section(&'a Section<S>),
     Sizeof,
-    Symbol(&'a Expr<Atom<RelocId, NameId>, S>),
+    Expr(&'a Expr<Atom<LinkVar, Symbol>, S>),
 }
 
-impl<'a, L, S: Clone> Eval<'a, S> for &'a Expr<Atom<L, NameId>, S>
+impl<'a, L, S: Clone> Eval<'a, S> for &'a Expr<Atom<L, Symbol>, S>
 where
-    for<'r> Spanned<&'r Atom<L, NameId>, &'r S>: Eval<'a, S, Output = Value<'a, S>>,
+    for<'r> Spanned<&'r Atom<L, Symbol>, &'r S>: Eval<'a, S, Output = Value<'a, S>>,
 {
     type Output = Num;
 
     fn eval<R: Borrow<RelocTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a EvalContext<R, S>,
+        context: &'a LinkageContext<R, S>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
     ) -> Self::Output {
@@ -83,30 +83,30 @@ impl<'a, S: Clone> Eval<'a, S> for Spanned<Value<'a, S>, &S> {
 
     fn eval<R: Borrow<RelocTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a EvalContext<R, S>,
+        context: &'a LinkageContext<R, S>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
     ) -> Self::Output {
         match self.item {
-            Value::Name(name) => name.with_span(self.span).eval(context, args, diagnostics),
+            Value::Symbol(name) => name.with_span(self.span).eval(context, args, diagnostics),
             Value::Num(value) => value,
             Value::Unresolved => Num::Unknown,
         }
     }
 }
 
-impl<'a, S: Clone> Eval<'a, S> for Spanned<ResolvedName<'a, S>, &S> {
+impl<'a, S: Clone> Eval<'a, S> for Spanned<ResolvedSymbol<'a, S>, &S> {
     type Output = Num;
 
     fn eval<R: Borrow<RelocTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a EvalContext<R, S>,
+        context: &'a LinkageContext<R, S>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
     ) -> Self::Output {
         match self.item {
-            ResolvedName::Section(section) => context.relocs.borrow().get(section.addr),
-            ResolvedName::Sizeof => args
+            ResolvedSymbol::Section(section) => context.relocs.borrow().get(section.addr),
+            ResolvedSymbol::Sizeof => args
                 .get(0)
                 .map(|value| value.sizeof(context, diagnostics))
                 .unwrap_or_else(|| {
@@ -116,17 +116,17 @@ impl<'a, S: Clone> Eval<'a, S> for Spanned<ResolvedName<'a, S>, &S> {
                     );
                     Num::Unknown
                 }),
-            ResolvedName::Symbol(expr) => expr.eval(context, args, diagnostics),
+            ResolvedSymbol::Expr(expr) => expr.eval(context, args, diagnostics),
         }
     }
 }
 
-impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<LocationCounter, NameId>, &S> {
+impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<LocationCounter, Symbol>, &S> {
     type Output = Value<'a, S>;
 
     fn eval<R: Borrow<RelocTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a EvalContext<R, S>,
+        context: &'a LinkageContext<R, S>,
         _: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
     ) -> Self::Output {
@@ -139,12 +139,12 @@ impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<LocationCounter, NameId>, 
     }
 }
 
-impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<RelocId, NameId>, &S> {
+impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<LinkVar, Symbol>, &S> {
     type Output = Value<'a, S>;
 
     fn eval<R: Borrow<RelocTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a EvalContext<R, S>,
+        context: &'a LinkageContext<R, S>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
     ) -> Self::Output {
@@ -157,41 +157,41 @@ impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<RelocId, NameId>, &S> {
     }
 }
 
-impl<S: Clone> Spanned<NameId, &S> {
+impl<S: Clone> Spanned<Symbol, &S> {
     fn to_value<'a, R, D: BackendDiagnostics<S>>(
         &self,
-        context: &'a EvalContext<R, S>,
+        context: &'a LinkageContext<R, S>,
         diagnostics: &mut D,
     ) -> Value<'a, S> {
         self.resolve(context, diagnostics)
-            .map(Value::Name)
+            .map(Value::Symbol)
             .unwrap_or(Value::Unresolved)
     }
 
     fn resolve<'a, R, D: BackendDiagnostics<S>>(
         &self,
-        context: &'a EvalContext<R, S>,
+        context: &'a LinkageContext<R, S>,
         diagnostics: &mut D,
-    ) -> Option<ResolvedName<'a, S>> {
+    ) -> Option<ResolvedSymbol<'a, S>> {
         match self.item {
-            NameId::Builtin(BuiltinName::Sizeof) => Some(ResolvedName::Sizeof),
-            NameId::Def(id) => id.with_span(self.span).resolve(context, diagnostics),
+            Symbol::Builtin(BuiltinSymbol::Sizeof) => Some(ResolvedSymbol::Sizeof),
+            Symbol::Program(id) => id.with_span(self.span).resolve(context, diagnostics),
         }
     }
 }
 
-impl<S: Clone> Spanned<NameDefId, &S> {
+impl<S: Clone> Spanned<ProgramSymbol, &S> {
     fn resolve<'a, R, D: BackendDiagnostics<S>>(
         &self,
-        context: &'a EvalContext<R, S>,
+        context: &'a LinkageContext<R, S>,
         diagnostics: &mut D,
-    ) -> Option<ResolvedName<'a, S>> {
+    ) -> Option<ResolvedSymbol<'a, S>> {
         let id = self.item;
-        let resolved = context.program.names.get(id).map(|def| match def {
-            NameDef::Section(SectionId(id)) => {
-                ResolvedName::Section(&context.program.sections[*id])
+        let resolved = context.program.symbols.get(id).map(|def| match def {
+            ProgramDef::Section(SectionId(id)) => {
+                ResolvedSymbol::Section(&context.program.sections[*id])
             }
-            NameDef::Symbol(expr) => ResolvedName::Symbol(expr),
+            ProgramDef::Expr(expr) => ResolvedSymbol::Expr(expr),
         });
         if resolved.is_none() {
             let symbol = diagnostics.strip_span(self.span);
@@ -214,13 +214,13 @@ impl BinOp {
 }
 
 impl<'a, S: Clone> Spanned<Value<'a, S>, &S> {
-    fn sizeof<R, D>(&self, context: &'a EvalContext<R, S>, diagnostics: &mut D) -> Num
+    fn sizeof<R, D>(&self, context: &'a LinkageContext<R, S>, diagnostics: &mut D) -> Num
     where
         R: Borrow<RelocTable>,
         D: BackendDiagnostics<S>,
     {
         match self.item {
-            Value::Name(ResolvedName::Section(section)) => {
+            Value::Symbol(ResolvedSymbol::Section(section)) => {
                 context.relocs.borrow().get(section.size)
             }
             ref other => {
@@ -242,16 +242,17 @@ impl<'a, S: Clone> Spanned<Value<'a, S>, &S> {
 impl<'a, S: Clone> Value<'a, S> {
     fn kind(&self) -> Option<ValueKind> {
         match self {
-            Value::Name(ResolvedName::Section(_)) => Some(ValueKind::Section),
-            Value::Name(ResolvedName::Sizeof) => Some(ValueKind::Builtin),
-            Value::Name(ResolvedName::Symbol(_)) => Some(ValueKind::Symbol),
+            Value::Symbol(ResolvedSymbol::Section(_)) => Some(ValueKind::Section),
+            Value::Symbol(ResolvedSymbol::Sizeof) => Some(ValueKind::Builtin),
+            Value::Symbol(ResolvedSymbol::Expr(_)) => Some(ValueKind::Symbol),
             Value::Num(_) => Some(ValueKind::Num),
             Value::Unresolved => None,
         }
     }
 }
 
-pub const BUILTIN_NAMES: &[(&str, NameId)] = &[("sizeof", NameId::Builtin(BuiltinName::Sizeof))];
+pub const BUILTIN_SYMBOLS: &[(&str, Symbol)] =
+    &[("sizeof", Symbol::Builtin(BuiltinSymbol::Sizeof))];
 
 #[cfg(test)]
 mod tests {
@@ -267,13 +268,13 @@ mod tests {
         let addr = 0x0100;
         let program = &mk_program_with_empty_section();
         let relocs = &RelocTable(vec![addr.into(), 0.into()]);
-        let context = EvalContext {
+        let context = LinkageContext {
             program,
             relocs,
             location: Num::Unknown,
         };
         assert_eq!(
-            Immediate::from_atom(NameDefId(0).into(), ()).to_num(&context, &mut IgnoreDiagnostics),
+            Const::from_atom(ProgramSymbol(0).into(), ()).to_num(&context, &mut IgnoreDiagnostics),
             addr.into()
         )
     }
@@ -283,15 +284,15 @@ mod tests {
         let program = &mk_program_with_empty_section();
         let size = 42;
         let relocs = &RelocTable(vec![0.into(), size.into()]);
-        let context = &EvalContext {
+        let context = &LinkageContext {
             program,
             relocs,
             location: Num::Unknown,
         };
         assert_eq!(
-            Immediate::from_items(&[
-                NameDefId(0).into(),
-                BuiltinName::Sizeof.into(),
+            Const::from_items(&[
+                ProgramSymbol(0).into(),
+                BuiltinSymbol::Sizeof.into(),
                 ExprOp::FnCall(1).into()
             ])
             .to_num(context, &mut IgnoreDiagnostics),
@@ -302,18 +303,18 @@ mod tests {
     #[test]
     fn eval_fn_call_in_immediate() {
         let immediate =
-            Immediate::from_items(&[42.into(), NameDefId(0).into(), ExprOp::FnCall(1).into()]);
+            Const::from_items(&[42.into(), ProgramSymbol(0).into(), ExprOp::FnCall(1).into()]);
         let program = &Program::<()> {
             sections: vec![],
-            names: NameTable(vec![Some(NameDef::Symbol(Expr::from_items(&[
+            symbols: SymbolTable(vec![Some(ProgramDef::Expr(Expr::from_items(&[
                 ParamId(0).into(),
                 1.into(),
                 BinOp::Plus.into(),
             ])))]),
-            relocs: 0,
+            link_vars: 0,
         };
         let relocs = &RelocTable(Vec::new());
-        let context = &EvalContext {
+        let context = &LinkageContext {
             program,
             relocs,
             location: Num::Unknown,
@@ -326,12 +327,12 @@ mod tests {
         let addr = 0x1337;
         let program = &mk_program_with_empty_section();
         let relocs = &RelocTable(vec![addr.into(), 0.into()]);
-        let context = EvalContext {
+        let context = LinkageContext {
             program,
             relocs,
             location: Num::Unknown,
         };
-        let immediate = Immediate::from_items(&[NameDefId(0).into(), ExprOp::FnCall(0).into()]);
+        let immediate = Const::from_items(&[ProgramSymbol(0).into(), ExprOp::FnCall(0).into()]);
         assert_eq!(
             immediate.to_num(&context, &mut IgnoreDiagnostics),
             addr.into()
@@ -342,7 +343,7 @@ mod tests {
     fn eval_bitwise_or() {
         assert_eq!(
             eval_in_empty_program(
-                Immediate::from_items(&[
+                Const::from_items(&[
                     0x17.into(),
                     0x86.into(),
                     ExprOp::Binary(BinOp::BitwiseOr).into(),
@@ -357,11 +358,7 @@ mod tests {
     fn eval_division() {
         assert_eq!(
             eval_in_empty_program(
-                Immediate::from_items(&[
-                    100.into(),
-                    4.into(),
-                    ExprOp::Binary(BinOp::Division).into()
-                ]),
+                Const::from_items(&[100.into(), 4.into(), ExprOp::Binary(BinOp::Division).into()]),
                 &mut IgnoreDiagnostics
             ),
             25.into()
@@ -371,8 +368,8 @@ mod tests {
     #[test]
     fn diagnose_using_sizeof_as_immediate() {
         let mut diagnostics = MockDiagnostics::new(Log::new());
-        let immediate = Immediate::from_atom(
-            Atom::Name(NameId::Builtin(BuiltinName::Sizeof)),
+        let immediate = Const::from_atom(
+            Atom::Name(Symbol::Builtin(BuiltinSymbol::Sizeof)),
             MockSpan::from(0),
         );
         let value = eval_in_empty_program(immediate, &mut diagnostics);
@@ -392,11 +389,11 @@ mod tests {
     fn diagnose_calling_undefined_symbol() {
         let program = &Program {
             sections: vec![],
-            names: NameTable(vec![None]),
-            relocs: 0,
+            symbols: SymbolTable(vec![None]),
+            link_vars: 0,
         };
         let relocs = &RelocTable::new(0);
-        let context = EvalContext {
+        let context = LinkageContext {
             program,
             relocs,
             location: Num::Unknown,
@@ -405,7 +402,8 @@ mod tests {
         let name_span = MockSpan::from("name");
         let call_span = MockSpan::from("call");
         let immediate = Expr(vec![
-            ExprOp::Atom(Atom::Name(NameId::Def(NameDefId(0)))).with_span(name_span.clone()),
+            ExprOp::Atom(Atom::Name(Symbol::Program(ProgramSymbol(0))))
+                .with_span(name_span.clone()),
             ExprOp::FnCall(0).with_span(MockSpan::merge(name_span.clone(), call_span)),
         ]);
         let value = immediate.to_num(&context, &mut diagnostics);
@@ -424,13 +422,16 @@ mod tests {
 
     #[test]
     fn diagnose_sizeof_of_symbol() {
-        test_diagnosis_of_wrong_sizeof_arg(Atom::Name(NameId::Def(NameDefId(0))), ValueKind::Symbol)
+        test_diagnosis_of_wrong_sizeof_arg(
+            Atom::Name(Symbol::Program(ProgramSymbol(0))),
+            ValueKind::Symbol,
+        )
     }
 
     #[test]
     fn diagnose_sizeof_of_sizeof() {
         test_diagnosis_of_wrong_sizeof_arg(
-            Atom::Name(NameId::Builtin(BuiltinName::Sizeof)),
+            Atom::Name(Symbol::Builtin(BuiltinSymbol::Sizeof)),
             ValueKind::Builtin,
         )
     }
@@ -440,17 +441,17 @@ mod tests {
         test_diagnosis_of_wrong_sizeof_arg(Atom::Const(42), ValueKind::Num)
     }
 
-    fn test_diagnosis_of_wrong_sizeof_arg(inner: Atom<LocationCounter, NameId>, found: ValueKind) {
+    fn test_diagnosis_of_wrong_sizeof_arg(inner: Atom<LocationCounter, Symbol>, found: ValueKind) {
         let program = &Program {
             sections: vec![],
-            names: NameTable(vec![Some(NameDef::Symbol(Expr::from_atom(
+            symbols: SymbolTable(vec![Some(ProgramDef::Expr(Expr::from_atom(
                 42.into(),
                 MockSpan::from("42"),
             )))]),
-            relocs: 0,
+            link_vars: 0,
         };
         let relocs = &RelocTable::new(0);
-        let context = EvalContext {
+        let context = LinkageContext {
             program,
             relocs,
             location: Num::Unknown,
@@ -460,7 +461,7 @@ mod tests {
         let sizeof_span = MockSpan::from("sizeof");
         let immediate = Expr(vec![
             ExprOp::Atom(inner).with_span(inner_span.clone()),
-            ExprOp::Atom(Atom::Name(NameId::Builtin(BuiltinName::Sizeof)))
+            ExprOp::Atom(Atom::Name(Symbol::Builtin(BuiltinSymbol::Sizeof)))
                 .with_span(sizeof_span.clone()),
             ExprOp::FnCall(1).with_span(MockSpan::merge(sizeof_span, MockSpan::from("paren_r"))),
         ]);
@@ -483,26 +484,26 @@ mod tests {
         Program {
             sections: vec![Section {
                 constraints: Constraints { addr: None },
-                addr: RelocId(0),
-                size: RelocId(1),
+                addr: LinkVar(0),
+                size: LinkVar(1),
                 items: vec![],
             }],
-            names: NameTable(vec![Some(NameDef::Section(SectionId(0)))]),
-            relocs: 2,
+            symbols: SymbolTable(vec![Some(ProgramDef::Section(SectionId(0)))]),
+            link_vars: 2,
         }
     }
 
     fn eval_in_empty_program<S: Clone>(
-        immediate: Immediate<S>,
+        immediate: Const<S>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> Num {
         let program = &Program {
             sections: vec![],
-            names: NameTable(vec![]),
-            relocs: 0,
+            symbols: SymbolTable(vec![]),
+            link_vars: 0,
         };
         let relocs = &RelocTable(vec![]);
-        let context = &EvalContext {
+        let context = &LinkageContext {
             program,
             relocs,
             location: Num::Unknown,

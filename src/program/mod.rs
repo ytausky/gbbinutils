@@ -6,111 +6,111 @@ mod builder;
 mod link;
 mod lowering;
 
-type Expr<S> = crate::model::Expr<Atom<RelocId, NameId>, S>;
-type Immediate<S> = crate::model::Expr<Atom<LocationCounter, NameId>, S>;
+type Expr<S> = crate::model::Expr<Atom<LinkVar, Symbol>, S>;
+type Const<S> = crate::model::Expr<Atom<LocationCounter, Symbol>, S>;
 
-impl<L> From<NameId> for Atom<L, NameId> {
-    fn from(id: NameId) -> Self {
+impl<L> From<Symbol> for Atom<L, Symbol> {
+    fn from(id: Symbol) -> Self {
         Atom::Name(id)
     }
 }
 
 #[cfg(test)]
-impl<L> From<NameDefId> for Atom<L, NameId> {
-    fn from(id: NameDefId) -> Self {
+impl<L> From<ProgramSymbol> for Atom<L, Symbol> {
+    fn from(id: ProgramSymbol) -> Self {
         Atom::Name(id.into())
     }
 }
 
-impl<L> From<NameId> for ExprOp<Atom<L, NameId>> {
-    fn from(id: NameId) -> Self {
+impl<L> From<Symbol> for ExprOp<Atom<L, Symbol>> {
+    fn from(id: Symbol) -> Self {
         Atom::from(id).into()
     }
 }
 
 #[cfg(test)]
-impl<L> From<BuiltinName> for ExprOp<Atom<L, NameId>> {
-    fn from(builtin: BuiltinName) -> Self {
-        Atom::from(NameId::from(builtin)).into()
+impl<L> From<BuiltinSymbol> for ExprOp<Atom<L, Symbol>> {
+    fn from(builtin: BuiltinSymbol) -> Self {
+        Atom::from(Symbol::from(builtin)).into()
     }
 }
 
 #[cfg(test)]
-impl<L> From<NameDefId> for ExprOp<Atom<L, NameId>> {
-    fn from(id: NameDefId) -> Self {
+impl<L> From<ProgramSymbol> for ExprOp<Atom<L, Symbol>> {
+    fn from(id: ProgramSymbol) -> Self {
         Atom::from(id).into()
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct RelocId(usize);
+struct LinkVar(usize);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum NameId {
-    Builtin(BuiltinName),
-    Def(NameDefId),
+pub enum Symbol {
+    Builtin(BuiltinSymbol),
+    Program(ProgramSymbol),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum BuiltinName {
+pub enum BuiltinSymbol {
     Sizeof,
 }
 
-impl NameId {
-    fn def(self) -> Option<NameDefId> {
+impl Symbol {
+    fn program(self) -> Option<ProgramSymbol> {
         match self {
-            NameId::Builtin(_) => None,
-            NameId::Def(id) => Some(id),
+            Symbol::Builtin(_) => None,
+            Symbol::Program(id) => Some(id),
         }
     }
 }
 
-impl From<BuiltinName> for NameId {
-    fn from(builtin: BuiltinName) -> Self {
-        NameId::Builtin(builtin)
+impl From<BuiltinSymbol> for Symbol {
+    fn from(builtin: BuiltinSymbol) -> Self {
+        Symbol::Builtin(builtin)
     }
 }
 
-impl From<NameDefId> for NameId {
-    fn from(id: NameDefId) -> Self {
-        NameId::Def(id)
+impl From<ProgramSymbol> for Symbol {
+    fn from(id: ProgramSymbol) -> Self {
+        Symbol::Program(id)
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct NameDefId(usize);
+pub struct ProgramSymbol(usize);
 
 pub struct Program<S> {
     sections: Vec<Section<S>>,
-    names: NameTable<S>,
-    relocs: usize,
+    symbols: SymbolTable<S>,
+    link_vars: usize,
 }
 
 struct Section<S> {
     constraints: Constraints<S>,
-    addr: RelocId,
-    size: RelocId,
+    addr: LinkVar,
+    size: LinkVar,
     items: Vec<Node<S>>,
 }
 
 struct Constraints<S> {
-    addr: Option<Immediate<S>>,
+    addr: Option<Const<S>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 enum Node<S> {
     Byte(u8),
-    Immediate(Immediate<S>, Width),
-    LdInlineAddr(u8, Immediate<S>),
-    Embedded(u8, Immediate<S>),
-    Reloc(RelocId),
-    Reserved(Immediate<S>),
+    Immediate(Const<S>, Width),
+    LdInlineAddr(u8, Const<S>),
+    Embedded(u8, Const<S>),
+    Reloc(LinkVar),
+    Reserved(Const<S>),
 }
 
 #[derive(Debug, PartialEq)]
-enum NameDef<S> {
+enum ProgramDef<S> {
     Section(SectionId),
-    Symbol(Expr<S>),
+    Expr(Expr<S>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -120,30 +120,30 @@ impl<S> Program<S> {
     pub fn new() -> Program<S> {
         Program {
             sections: Vec::new(),
-            names: NameTable::new(),
-            relocs: 0,
+            symbols: SymbolTable::new(),
+            link_vars: 0,
         }
     }
 
-    fn add_section(&mut self, name: Option<NameDefId>) {
+    fn add_section(&mut self, name: Option<ProgramSymbol>) {
         let section = SectionId(self.sections.len());
-        let addr = self.alloc_reloc();
-        let size = self.alloc_reloc();
+        let addr = self.alloc_linkage_var();
+        let size = self.alloc_linkage_var();
         self.sections.push(Section::new(addr, size));
         if let Some(name) = name {
-            self.names.define(name, NameDef::Section(section))
+            self.symbols.define(name, ProgramDef::Section(section))
         }
     }
 
-    fn alloc_reloc(&mut self) -> RelocId {
-        let id = self.relocs;
-        self.relocs += 1;
-        RelocId(id)
+    fn alloc_linkage_var(&mut self) -> LinkVar {
+        let id = self.link_vars;
+        self.link_vars += 1;
+        LinkVar(id)
     }
 }
 
 impl<S> Section<S> {
-    pub fn new(addr: RelocId, size: RelocId) -> Section<S> {
+    pub fn new(addr: LinkVar, size: LinkVar) -> Section<S> {
         Section {
             constraints: Constraints { addr: None },
             addr,
@@ -153,25 +153,25 @@ impl<S> Section<S> {
     }
 }
 
-struct NameTable<S>(Vec<Option<NameDef<S>>>);
+struct SymbolTable<S>(Vec<Option<ProgramDef<S>>>);
 
-impl<S> NameTable<S> {
+impl<S> SymbolTable<S> {
     pub fn new() -> Self {
         Self(Vec::new())
     }
 
-    fn alloc(&mut self) -> NameDefId {
-        let id = NameDefId(self.0.len());
+    fn alloc(&mut self) -> ProgramSymbol {
+        let id = ProgramSymbol(self.0.len());
         self.0.push(None);
         id
     }
 
-    fn define(&mut self, NameDefId(id): NameDefId, def: NameDef<S>) {
+    fn define(&mut self, ProgramSymbol(id): ProgramSymbol, def: ProgramDef<S>) {
         assert!(self.0[id].is_none());
         self.0[id] = Some(def);
     }
 
-    fn get(&self, NameDefId(id): NameDefId) -> Option<&NameDef<S>> {
+    fn get(&self, ProgramSymbol(id): ProgramSymbol) -> Option<&ProgramDef<S>> {
         self.0[id].as_ref()
     }
 }
@@ -258,11 +258,11 @@ mod tests {
     #[test]
     fn add_section_defines_name() {
         let mut program = Program::<()>::new();
-        let name = program.names.alloc();
+        let name = program.symbols.alloc();
         program.add_section(Some(name));
         assert_eq!(
-            program.names.get(name),
-            Some(&NameDef::Section(SectionId(0)))
+            program.symbols.get(name),
+            Some(&ProgramDef::Section(SectionId(0)))
         )
     }
 }

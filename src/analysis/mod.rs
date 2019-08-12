@@ -8,7 +8,7 @@ use self::syntax::*;
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diag::*;
 use crate::span::{BufContext, BufContextFactory, SpanSource};
-use crate::BuiltinNames;
+use crate::BuiltinSymbols;
 
 use std::rc::Rc;
 
@@ -24,7 +24,7 @@ mod syntax;
 pub(crate) trait Assemble<D>
 where
     D: DiagnosticsSystem,
-    Self: Backend<D::Span> + BuiltinNames<Name = <Self as AllocName<D::Span>>::Name> + Sized,
+    Self: Backend<D::Span> + BuiltinSymbols<Name = <Self as AllocName<D::Span>>::Name> + Sized,
 {
     fn assemble<C: Codebase>(
         self,
@@ -38,7 +38,7 @@ where
         let mut file_parser = CodebaseAnalyzer::new(&tokenizer);
         let mut parser_factory = DefaultParserFactory;
         let mut names = BiLevelNameTable::new();
-        for (string, name) in self.builtin_names() {
+        for (string, name) in self.builtin_symbols() {
             names.insert(
                 DefaultIdentFactory.mk_ident(string),
                 ResolvedIdent::Backend((*name).clone()),
@@ -58,7 +58,7 @@ where
 impl<B, D> Assemble<D> for B
 where
     D: DiagnosticsSystem,
-    B: Backend<D::Span> + BuiltinNames<Name = <Self as AllocName<D::Span>>::Name>,
+    B: Backend<D::Span> + BuiltinSymbols<Name = <Self as AllocName<D::Span>>::Name>,
 {
 }
 
