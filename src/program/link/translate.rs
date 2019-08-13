@@ -160,7 +160,7 @@ mod tests {
 
     use crate::diag::IgnoreDiagnostics;
     use crate::model::{Atom, BinOp, LocationCounter};
-    use crate::program::{Constraints, LinkVar, Program, SymbolTable};
+    use crate::program::{Constraints, Program, SymbolTable, VarId};
 
     use std::borrow::Borrow;
 
@@ -227,8 +227,8 @@ mod tests {
                 constraints: Constraints {
                     addr: Some(addr.into()),
                 },
-                addr: LinkVar(0),
-                size: LinkVar(1),
+                addr: VarId(0),
+                size: VarId(1),
                 items: vec![Node::Byte(0x00)],
             }],
             symbols: SymbolTable(vec![]),
@@ -249,8 +249,8 @@ mod tests {
         let program = &Program {
             sections: vec![Section {
                 constraints: Constraints { addr: None },
-                addr: LinkVar(0),
-                size: LinkVar(1),
+                addr: VarId(0),
+                size: VarId(1),
                 items: vec![
                     Node::Byte(byte),
                     Node::Immediate(LocationCounter.into(), Width::Byte),
@@ -276,8 +276,8 @@ mod tests {
                 constraints: Constraints {
                     addr: Some(addr.into()),
                 },
-                addr: LinkVar(0),
-                size: LinkVar(1),
+                addr: VarId(0),
+                size: VarId(1),
                 items: vec![Node::Immediate(LocationCounter.into(), Width::Word)],
             }],
             symbols: SymbolTable(vec![]),

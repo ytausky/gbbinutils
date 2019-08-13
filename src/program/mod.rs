@@ -6,7 +6,7 @@ mod builder;
 mod link;
 mod lowering;
 
-type Expr<S> = crate::model::Expr<Atom<LinkVar, Symbol>, S>;
+type Expr<S> = crate::model::Expr<Atom<VarId, Symbol>, S>;
 type Const<S> = crate::model::Expr<Atom<LocationCounter, Symbol>, S>;
 
 impl<L> From<Symbol> for Atom<L, Symbol> {
@@ -43,7 +43,7 @@ impl<L> From<ProgramSymbol> for ExprOp<Atom<L, Symbol>> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct LinkVar(usize);
+struct VarId(usize);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Symbol {
@@ -88,8 +88,8 @@ pub struct Program<S> {
 
 struct Section<S> {
     constraints: Constraints<S>,
-    addr: LinkVar,
-    size: LinkVar,
+    addr: VarId,
+    size: VarId,
     items: Vec<Node<S>>,
 }
 
@@ -103,7 +103,7 @@ enum Node<S> {
     Immediate(Const<S>, Width),
     LdInlineAddr(u8, Const<S>),
     Embedded(u8, Const<S>),
-    Reloc(LinkVar),
+    Reloc(VarId),
     Reserved(Const<S>),
 }
 
@@ -135,15 +135,15 @@ impl<S> Program<S> {
         }
     }
 
-    fn alloc_linkage_var(&mut self) -> LinkVar {
+    fn alloc_linkage_var(&mut self) -> VarId {
         let id = self.link_vars;
         self.link_vars += 1;
-        LinkVar(id)
+        VarId(id)
     }
 }
 
 impl<S> Section<S> {
-    pub fn new(addr: LinkVar, size: LinkVar) -> Section<S> {
+    pub fn new(addr: VarId, size: VarId) -> Section<S> {
         Section {
             constraints: Constraints { addr: None },
             addr,

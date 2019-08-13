@@ -107,7 +107,7 @@ impl<'a, S: Clone> Finish for RelocContext<ProgramBuilder<'a, S>, Const<S>> {
 
 pub(crate) struct SymbolBuilder<'a, S> {
     parent: ProgramBuilder<'a, S>,
-    location: LinkVar,
+    location: VarId,
     name: (ProgramSymbol, S),
     expr: Expr<S>,
 }

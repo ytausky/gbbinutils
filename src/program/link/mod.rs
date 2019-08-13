@@ -2,7 +2,7 @@ pub use self::eval::BUILTIN_SYMBOLS;
 
 use self::num::Num;
 
-use super::{BinaryObject, LinkVar, Node, Program, Section};
+use super::{BinaryObject, Node, Program, Section, VarId};
 
 use crate::diag::{BackendDiagnostics, IgnoreDiagnostics};
 use crate::model::Width;
@@ -51,11 +51,11 @@ impl RelocTable {
         Self(vec![Num::Unknown; relocs])
     }
 
-    fn get(&self, LinkVar(id): LinkVar) -> Num {
+    fn get(&self, VarId(id): VarId) -> Num {
         self.0[id].clone()
     }
 
-    fn refine(&mut self, LinkVar(id): LinkVar, value: Num) -> bool {
+    fn refine(&mut self, VarId(id): VarId, value: Num) -> bool {
         let stored_value = &mut self.0[id];
         let old_value = stored_value.clone();
         let was_refined = match (old_value, &value) {
@@ -174,8 +174,8 @@ mod tests {
                     constraints: Constraints {
                         addr: Some(origin1.into()),
                     },
-                    addr: LinkVar(0),
-                    size: LinkVar(1),
+                    addr: VarId(0),
+                    size: VarId(1),
                     items: vec![Node::Byte(0x42)],
                 },
                 Section {
@@ -186,8 +186,8 @@ mod tests {
                             BinOp::Plus.into(),
                         ])),
                     },
-                    addr: LinkVar(2),
-                    size: LinkVar(3),
+                    addr: VarId(2),
+                    size: VarId(3),
                     items: vec![Node::Byte(0x43)],
                 },
             ],
@@ -212,7 +212,7 @@ mod tests {
         builder.push_op(LocationCounter, ());
         builder.finish();
         let relocs = program.resolve_relocs();
-        assert_eq!(relocs.get(LinkVar(0)), addr.into());
+        assert_eq!(relocs.get(VarId(0)), addr.into());
     }
 
     #[test]
@@ -264,8 +264,8 @@ mod tests {
                 constraints: Constraints {
                     addr: Some(0x1337.into()),
                 },
-                addr: LinkVar(0),
-                size: LinkVar(1),
+                addr: VarId(0),
+                size: VarId(1),
                 items: vec![Node::Immediate(
                     Atom::Name(ProgramSymbol(0).into()).into(),
                     Width::Word,
@@ -282,14 +282,14 @@ mod tests {
     fn traverse_reserved_bytes() {
         let addr = 0x0100;
         let bytes = 10;
-        let symbol = LinkVar(2);
+        let symbol = VarId(2);
         let program = Program::<()> {
             sections: vec![Section {
                 constraints: Constraints {
                     addr: Some(addr.into()),
                 },
-                addr: LinkVar(0),
-                size: LinkVar(1),
+                addr: VarId(0),
+                size: VarId(1),
                 items: vec![
                     Node::Reserved(bytes.into()),
                     Node::Reloc(symbol),

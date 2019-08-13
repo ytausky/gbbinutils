@@ -39,7 +39,7 @@ enum Value<'a, S: Clone> {
 enum ResolvedSymbol<'a, S> {
     Section(&'a Section<S>),
     Sizeof,
-    Expr(&'a Expr<Atom<LinkVar, Symbol>, S>),
+    Expr(&'a Expr<Atom<VarId, Symbol>, S>),
 }
 
 impl<'a, L, S: Clone> Eval<'a, S> for &'a Expr<Atom<L, Symbol>, S>
@@ -139,7 +139,7 @@ impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<LocationCounter, Symbol>, 
     }
 }
 
-impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<LinkVar, Symbol>, &S> {
+impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<VarId, Symbol>, &S> {
     type Output = Value<'a, S>;
 
     fn eval<R: Borrow<RelocTable>, D: BackendDiagnostics<S>>(
@@ -484,8 +484,8 @@ mod tests {
         Program {
             sections: vec![Section {
                 constraints: Constraints { addr: None },
-                addr: LinkVar(0),
-                size: LinkVar(1),
+                addr: VarId(0),
+                size: VarId(1),
                 items: vec![],
             }],
             symbols: SymbolTable(vec![Some(ProgramDef::Section(SectionId(0)))]),
