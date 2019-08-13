@@ -1,10 +1,26 @@
 pub(crate) use self::builder::ProgramBuilder;
 
+use self::link::VarTable;
+
 use crate::model::{Atom, ExprOp, LocationCounter, Width};
 
 mod builder;
 mod link;
 mod lowering;
+
+pub struct LinkableProgram<S> {
+    program: Program<S>,
+    vars: VarTable,
+}
+
+impl<S> LinkableProgram<S> {
+    pub fn new() -> Self {
+        Self {
+            program: Program::new(),
+            vars: VarTable::new(),
+        }
+    }
+}
 
 type Expr<S> = crate::model::Expr<Atom<VarId, Symbol>, S>;
 type Const<S> = crate::model::Expr<Atom<LocationCounter, Symbol>, S>;
@@ -83,7 +99,6 @@ pub struct ProgramSymbol(usize);
 pub struct Program<S> {
     sections: Vec<Section<S>>,
     symbols: SymbolTable<S>,
-    link_vars: usize,
 }
 
 struct Section<S> {
@@ -117,28 +132,19 @@ enum ProgramDef<S> {
 struct SectionId(usize);
 
 impl<S> Program<S> {
-    pub fn new() -> Program<S> {
+    fn new() -> Program<S> {
         Program {
             sections: Vec::new(),
             symbols: SymbolTable::new(),
-            link_vars: 0,
         }
     }
 
-    fn add_section(&mut self, name: Option<ProgramSymbol>) {
+    fn add_section(&mut self, name: Option<ProgramSymbol>, addr: VarId, size: VarId) {
         let section = SectionId(self.sections.len());
-        let addr = self.alloc_linkage_var();
-        let size = self.alloc_linkage_var();
         self.sections.push(Section::new(addr, size));
         if let Some(name) = name {
             self.symbols.define(name, ProgramDef::Section(section))
         }
-    }
-
-    fn alloc_linkage_var(&mut self) -> VarId {
-        let id = self.link_vars;
-        self.link_vars += 1;
-        VarId(id)
     }
 }
 
@@ -259,7 +265,7 @@ mod tests {
     fn add_section_defines_name() {
         let mut program = Program::<()>::new();
         let name = program.symbols.alloc();
-        program.add_section(Some(name));
+        program.add_section(Some(name), VarId(0), VarId(1));
         assert_eq!(
             program.symbols.get(name),
             Some(&ProgramDef::Section(SectionId(0)))

@@ -7,7 +7,7 @@ use crate::model::{BinOp, ExprOp, FnCall, Item, ParamId};
 use crate::BuiltinSymbols;
 
 pub(crate) struct ProgramBuilder<'a, S> {
-    context: LinkageContext<&'a mut Program<S>, VarTable>,
+    context: LinkageContext<&'a mut Program<S>, &'a mut VarTable>,
     state: Option<BuilderState<S>>,
 }
 
@@ -18,11 +18,11 @@ enum BuilderState<S> {
 }
 
 impl<'a, S> ProgramBuilder<'a, S> {
-    pub fn new(program: &'a mut Program<S>) -> Self {
+    pub fn new(LinkableProgram { program, vars }: &'a mut LinkableProgram<S>) -> Self {
         Self {
             context: LinkageContext {
                 program,
-                vars: VarTable::new(),
+                vars,
                 location: 0.into(),
             },
             state: Some(BuilderState::AnonSectionPrelude { addr: None }),
@@ -36,7 +36,7 @@ impl<'a, S> ProgramBuilder<'a, S> {
     fn current_section(&mut self) -> &mut Section<S> {
         match self.state.take().unwrap() {
             BuilderState::AnonSectionPrelude { addr } => {
-                self.context.program.add_section(None);
+                self.add_section(None);
                 let index = self.context.program.sections.len() - 1;
                 self.state = Some(BuilderState::Section(index));
                 let section = &mut self.context.program.sections[index];
@@ -48,6 +48,14 @@ impl<'a, S> ProgramBuilder<'a, S> {
                 &mut self.context.program.sections[index]
             }
         }
+    }
+
+    fn add_section(&mut self, symbol: Option<ProgramSymbol>) {
+        self.context.program.add_section(
+            symbol,
+            self.context.vars.alloc(),
+            self.context.vars.alloc(),
+        )
     }
 }
 
@@ -83,7 +91,7 @@ impl<'a, S: Clone> Backend<S> for ProgramBuilder<'a, S> {
     }
 
     fn define_symbol(self, name: Self::Name, span: S) -> Self::SymbolBuilder {
-        let location = self.context.program.alloc_linkage_var();
+        let location = self.context.vars.alloc();
         SymbolBuilder {
             parent: self,
             location,
@@ -177,9 +185,7 @@ impl<'a, S: Clone> StartSection<Symbol, S> for ProgramBuilder<'a, S> {
     fn start_section(&mut self, (name, _): (Symbol, S)) {
         let index = self.context.program.sections.len();
         self.state = Some(BuilderState::SectionPrelude(index));
-        self.context
-            .program
-            .add_section(Some(name.program().unwrap()))
+        self.add_section(Some(name.program().unwrap()))
     }
 }
 
@@ -203,13 +209,13 @@ mod tests {
     #[test]
     fn new_object_has_no_sections() {
         let object = build_object::<_, ()>(|_| ());
-        assert_eq!(object.sections.len(), 0)
+        assert_eq!(object.program.sections.len(), 0)
     }
 
     #[test]
     fn no_origin_by_default() {
         let object = build_object::<_, ()>(|mut builder| builder.push(Node::Byte(0xcd)));
-        assert_eq!(object.sections[0].constraints.addr, None)
+        assert_eq!(object.program.sections[0].constraints.addr, None)
     }
 
     #[test]
@@ -219,7 +225,7 @@ mod tests {
             builder.set_origin(origin.clone());
             builder.push(Node::Byte(0xcd))
         });
-        assert_eq!(object.sections[0].constraints.addr, Some(origin))
+        assert_eq!(object.program.sections[0].constraints.addr, Some(origin))
     }
 
     #[test]
@@ -231,7 +237,10 @@ mod tests {
             wrapped_name = Some(name);
         });
         assert_eq!(
-            object.symbols.get(wrapped_name.unwrap().program().unwrap()),
+            object
+                .program
+                .symbols
+                .get(wrapped_name.unwrap().program().unwrap()),
             Some(&ProgramDef::Section(SectionId(0)))
         )
     }
@@ -244,7 +253,7 @@ mod tests {
             builder.start_section((name, ()));
             builder.set_origin(origin.clone())
         });
-        assert_eq!(object.sections[0].constraints.addr, Some(origin))
+        assert_eq!(object.program.sections[0].constraints.addr, Some(origin))
     }
 
     #[test]
@@ -255,14 +264,14 @@ mod tests {
             builder.start_section((name, ()));
             builder.push(node.clone())
         });
-        assert_eq!(object.sections[0].items, [node])
+        assert_eq!(object.program.sections[0].items, [node])
     }
 
-    fn build_object<F: FnOnce(ProgramBuilder<S>), S>(f: F) -> Program<S> {
-        let mut program = Program::new();
-        let builder = ProgramBuilder::new(&mut program);
+    fn build_object<F: FnOnce(ProgramBuilder<S>), S>(f: F) -> LinkableProgram<S> {
+        let mut linkable = LinkableProgram::new();
+        let builder = ProgramBuilder::new(&mut linkable);
         f(builder);
-        program
+        linkable
     }
 
     #[test]
@@ -385,7 +394,10 @@ mod tests {
     fn reserve_bytes_in_section() {
         let bytes = 3;
         let program = build_object(|mut builder| builder.reserve(bytes.into()));
-        assert_eq!(program.sections[0].items, [Node::Reserved(bytes.into())])
+        assert_eq!(
+            program.program.sections[0].items,
+            [Node::Reserved(bytes.into())]
+        )
     }
 
     fn with_object_builder<S, F>(f: F) -> (BinaryObject, Box<[CompactDiag<S, S>]>)

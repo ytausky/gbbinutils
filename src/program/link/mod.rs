@@ -2,7 +2,7 @@ pub use self::eval::BUILTIN_SYMBOLS;
 
 use self::num::Num;
 
-use super::{BinaryObject, Node, Program, Section, VarId};
+use super::{BinaryObject, LinkableProgram, Node, Program, Section, VarId};
 
 use crate::diag::{BackendDiagnostics, IgnoreDiagnostics};
 use crate::model::Width;
@@ -14,28 +14,29 @@ mod eval;
 mod num;
 mod translate;
 
-impl<S: Clone> Program<S> {
-    pub(crate) fn link(&self, diagnostics: &mut impl BackendDiagnostics<S>) -> BinaryObject {
-        let vars = &self.resolve_relocs();
+impl<S: Clone> LinkableProgram<S> {
+    pub(crate) fn link(&mut self, diagnostics: &mut impl BackendDiagnostics<S>) -> BinaryObject {
+        self.vars.resolve(&self.program);
         let mut context = LinkageContext {
-            program: self,
-            vars,
+            program: &self.program,
+            vars: &self.vars,
             location: 0.into(),
         };
         BinaryObject {
             sections: self
+                .program
                 .sections
                 .iter()
                 .flat_map(|section| section.translate(&mut context, diagnostics))
                 .collect(),
         }
     }
+}
 
-    fn resolve_relocs(&self) -> VarTable {
-        let mut relocs = VarTable(vec![Default::default(); self.link_vars]);
-        relocs.refine_all(self);
-        relocs.refine_all(self);
-        relocs
+impl VarTable {
+    fn resolve<S: Clone>(&mut self, program: &Program<S>) {
+        self.refine_all(program);
+        self.refine_all(program);
     }
 }
 
@@ -83,6 +84,12 @@ impl Var {
 impl VarTable {
     pub fn new() -> Self {
         Self(Vec::new())
+    }
+
+    pub fn alloc(&mut self) -> VarId {
+        let id = VarId(self.0.len());
+        self.0.push(Default::default());
+        id
     }
 
     fn refine_all<S: Clone>(&mut self, program: &Program<S>) -> i32 {
@@ -186,33 +193,35 @@ mod tests {
     fn resolve_origin_relative_to_previous_section() {
         let origin1 = 0x150;
         let skipped_bytes = 0x10;
-        let object = Program {
-            sections: vec![
-                Section {
-                    constraints: Constraints {
-                        addr: Some(origin1.into()),
+        let mut linkable = LinkableProgram {
+            program: Program {
+                sections: vec![
+                    Section {
+                        constraints: Constraints {
+                            addr: Some(origin1.into()),
+                        },
+                        addr: VarId(0),
+                        size: VarId(1),
+                        items: vec![Node::Byte(0x42)],
                     },
-                    addr: VarId(0),
-                    size: VarId(1),
-                    items: vec![Node::Byte(0x42)],
-                },
-                Section {
-                    constraints: Constraints {
-                        addr: Some(Const::from_items(&[
-                            LocationCounter.into(),
-                            skipped_bytes.into(),
-                            BinOp::Plus.into(),
-                        ])),
+                    Section {
+                        constraints: Constraints {
+                            addr: Some(Const::from_items(&[
+                                LocationCounter.into(),
+                                skipped_bytes.into(),
+                                BinOp::Plus.into(),
+                            ])),
+                        },
+                        addr: VarId(2),
+                        size: VarId(3),
+                        items: vec![Node::Byte(0x43)],
                     },
-                    addr: VarId(2),
-                    size: VarId(3),
-                    items: vec![Node::Byte(0x43)],
-                },
-            ],
-            symbols: SymbolTable::new(),
-            link_vars: 4,
+                ],
+                symbols: SymbolTable::new(),
+            },
+            vars: VarTable(vec![Default::default(); 4]),
         };
-        let binary = object.link(&mut IgnoreDiagnostics);
+        let binary = linkable.link(&mut IgnoreDiagnostics);
         assert_eq!(
             binary.sections[1].addr,
             (origin1 + 1 + skipped_bytes) as usize
@@ -222,15 +231,15 @@ mod tests {
     #[test]
     fn label_defined_as_section_origin_plus_offset() {
         let addr = 0xffe1;
-        let mut program = Program::new();
-        let mut builder = ProgramBuilder::new(&mut program);
+        let mut linkable = LinkableProgram::new();
+        let mut builder = ProgramBuilder::new(&mut linkable);
         builder.set_origin(addr.into());
         let symbol_id = builder.alloc_name(());
         let mut builder = builder.define_symbol(symbol_id, ());
         builder.push_op(LocationCounter, ());
         builder.finish();
-        let relocs = program.resolve_relocs();
-        assert_eq!(relocs[VarId(0)].value, addr.into());
+        linkable.vars.resolve(&linkable.program);
+        assert_eq!(linkable.vars[VarId(0)].value, addr.into());
     }
 
     #[test]
@@ -240,7 +249,9 @@ mod tests {
 
     #[test]
     fn section_with_one_byte_has_size_one() {
-        assert_section_size(1, |object| object.sections[0].items.push(Node::Byte(0x42)));
+        assert_section_size(1, |linkable| {
+            linkable.program.sections[0].items.push(Node::Byte(0x42))
+        });
     }
 
     #[test]
@@ -254,8 +265,8 @@ mod tests {
     }
 
     fn test_section_size_with_literal_ld_inline_addr(addr: i32, expected: i32) {
-        assert_section_size(expected, |object| {
-            object.sections[0]
+        assert_section_size(expected, |linkable| {
+            linkable.program.sections[0]
                 .items
                 .push(Node::LdInlineAddr(0, addr.into()))
         });
@@ -263,13 +274,14 @@ mod tests {
 
     #[test]
     fn ld_inline_addr_with_symbol_after_instruction_has_size_three() {
-        assert_section_size(3, |object| {
-            let name = object.symbols.alloc();
-            let reloc = object.alloc_linkage_var();
-            let items = &mut object.sections[0].items;
+        assert_section_size(3, |linkable| {
+            let name = linkable.program.symbols.alloc();
+            let reloc = linkable.vars.alloc();
+            let items = &mut linkable.program.sections[0].items;
             items.push(Node::LdInlineAddr(0, Atom::Name(name.into()).into()));
             items.push(Node::Reloc(reloc));
-            object
+            linkable
+                .program
                 .symbols
                 .define(name, ProgramDef::Expr(Atom::Location(reloc).into()))
         })
@@ -277,22 +289,24 @@ mod tests {
 
     #[test]
     fn resolve_expr_with_section_addr() {
-        let program = Program {
-            sections: vec![Section {
-                constraints: Constraints {
-                    addr: Some(0x1337.into()),
-                },
-                addr: VarId(0),
-                size: VarId(1),
-                items: vec![Node::Immediate(
-                    Atom::Name(ProgramSymbol(0).into()).into(),
-                    Width::Word,
-                )],
-            }],
-            symbols: SymbolTable(vec![Some(ProgramDef::Section(SectionId(0)))]),
-            link_vars: 2,
+        let mut linkable = LinkableProgram {
+            program: Program {
+                sections: vec![Section {
+                    constraints: Constraints {
+                        addr: Some(0x1337.into()),
+                    },
+                    addr: VarId(0),
+                    size: VarId(1),
+                    items: vec![Node::Immediate(
+                        Atom::Name(ProgramSymbol(0).into()).into(),
+                        Width::Word,
+                    )],
+                }],
+                symbols: SymbolTable(vec![Some(ProgramDef::Section(SectionId(0)))]),
+            },
+            vars: VarTable(vec![Default::default(); 2]),
         };
-        let binary = program.link(&mut IgnoreDiagnostics);
+        let binary = linkable.link(&mut IgnoreDiagnostics);
         assert_eq!(binary.sections[0].data, [0x37, 0x13])
     }
 
@@ -315,17 +329,22 @@ mod tests {
                 ],
             }],
             symbols: SymbolTable(vec![Some(ProgramDef::Expr(Atom::Location(symbol).into()))]),
-            link_vars: 3,
         };
-        let relocs = program.resolve_relocs();
-        assert_eq!(relocs[symbol].value, (addr + bytes).into())
+        let mut vars = VarTable(vec![Default::default(); 3]);
+        vars.resolve(&program);
+        assert_eq!(vars[symbol].value, (addr + bytes).into())
     }
 
-    fn assert_section_size(expected: impl Into<Num>, f: impl FnOnce(&mut Program<()>)) {
-        let mut program = Program::new();
-        program.add_section(None);
-        f(&mut program);
-        let relocs = program.resolve_relocs();
-        assert_eq!(relocs[program.sections[0].size].value, expected.into())
+    fn assert_section_size(expected: impl Into<Num>, f: impl FnOnce(&mut LinkableProgram<()>)) {
+        let mut linkable = LinkableProgram::new();
+        linkable
+            .program
+            .add_section(None, linkable.vars.alloc(), linkable.vars.alloc());
+        f(&mut linkable);
+        linkable.vars.resolve(&linkable.program);
+        assert_eq!(
+            linkable.vars[linkable.program.sections[0].size].value,
+            expected.into()
+        )
     }
 }

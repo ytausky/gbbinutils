@@ -320,7 +320,6 @@ mod tests {
                 1.into(),
                 BinOp::Plus.into(),
             ])))]),
-            link_vars: 0,
         };
         let vars = &VarTable(Vec::new());
         let context = &LinkageContext {
@@ -399,7 +398,6 @@ mod tests {
         let program = &Program {
             sections: vec![],
             symbols: SymbolTable(vec![None]),
-            link_vars: 0,
         };
         let vars = &VarTable(vec![]);
         let context = LinkageContext {
@@ -457,7 +455,6 @@ mod tests {
                 42.into(),
                 MockSpan::from("42"),
             )))]),
-            link_vars: 0,
         };
         let vars = &VarTable(vec![]);
         let context = LinkageContext {
@@ -498,7 +495,6 @@ mod tests {
                 items: vec![],
             }],
             symbols: SymbolTable(vec![Some(ProgramDef::Section(SectionId(0)))]),
-            link_vars: 2,
         }
     }
 
@@ -509,7 +505,6 @@ mod tests {
         let program = &Program {
             sections: vec![],
             symbols: SymbolTable(vec![]),
-            link_vars: 0,
         };
         let vars = &VarTable(vec![]);
         let context = &LinkageContext {

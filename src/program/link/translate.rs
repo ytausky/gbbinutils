@@ -233,7 +233,6 @@ mod tests {
                 items: vec![Node::Byte(0x00)],
             }],
             symbols: SymbolTable(vec![]),
-            link_vars: 2,
         };
         let context = &mut LinkageContext {
             program,
@@ -258,7 +257,6 @@ mod tests {
                 ],
             }],
             symbols: SymbolTable(vec![]),
-            link_vars: 2,
         };
         let context = &mut LinkageContext {
             program,
@@ -282,7 +280,6 @@ mod tests {
                 items: vec![Node::Immediate(LocationCounter.into(), Width::Word)],
             }],
             symbols: SymbolTable(vec![]),
-            link_vars: 2,
         };
         let context = &mut LinkageContext {
             program,

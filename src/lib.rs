@@ -77,10 +77,10 @@ fn try_assemble(
 ) -> Result<BinaryObject, CodebaseError> {
     let codebase = codebase::FileCodebase::new(input);
     let diagnostics = &mut CompositeDiagnosticsSystem::new(&codebase.cache, output);
-    let mut program = program::Program::new();
-    let builder = program::ProgramBuilder::new(&mut program);
+    let mut linkable = program::LinkableProgram::new();
+    let builder = program::ProgramBuilder::new(&mut linkable);
     builder.assemble(name, &codebase, diagnostics)?;
-    Ok(program.link(diagnostics))
+    Ok(linkable.link(diagnostics))
 }
 
 trait BuiltinSymbols {
