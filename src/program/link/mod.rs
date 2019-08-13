@@ -44,19 +44,24 @@ struct LinkageContext<'a, R, S> {
     location: Num,
 }
 
-struct RelocTable(Vec<Num>);
+struct RelocTable(Vec<Var>);
+
+#[derive(Clone, Default)]
+struct Var {
+    value: Num,
+}
 
 impl RelocTable {
     fn new(relocs: usize) -> Self {
-        Self(vec![Num::Unknown; relocs])
+        Self(vec![Default::default(); relocs])
     }
 
     fn get(&self, VarId(id): VarId) -> Num {
-        self.0[id].clone()
+        self.0[id].value.clone()
     }
 
     fn refine(&mut self, VarId(id): VarId, value: Num) -> bool {
-        let stored_value = &mut self.0[id];
+        let stored_value = &mut self.0[id].value;
         let old_value = stored_value.clone();
         let was_refined = match (old_value, &value) {
             (Num::Unknown, new_value) => *new_value != Num::Unknown,

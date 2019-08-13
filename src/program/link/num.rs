@@ -15,6 +15,12 @@ impl Num {
     }
 }
 
+impl Default for Num {
+    fn default() -> Self {
+        Num::Unknown
+    }
+}
+
 impl From<i32> for Num {
     fn from(n: i32) -> Self {
         Num::Range { min: n, max: n }

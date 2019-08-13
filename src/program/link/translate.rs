@@ -160,6 +160,7 @@ mod tests {
 
     use crate::diag::IgnoreDiagnostics;
     use crate::model::{Atom, BinOp, LocationCounter};
+    use crate::program::link::Var;
     use crate::program::{Constraints, Program, SymbolTable, VarId};
 
     use std::borrow::Borrow;
@@ -236,7 +237,7 @@ mod tests {
         };
         let context = &mut LinkageContext {
             program,
-            relocs: &RelocTable(vec![addr.into(), 0.into()]),
+            relocs: &RelocTable(vec![Var { value: addr.into() }, Var { value: 0.into() }]),
             location: 0.into(),
         };
         let translated = program.sections[0].translate(context, &mut IgnoreDiagnostics);
@@ -261,7 +262,7 @@ mod tests {
         };
         let context = &mut LinkageContext {
             program,
-            relocs: &RelocTable(vec![0.into(), 2.into()]),
+            relocs: &RelocTable(vec![Var { value: 0.into() }, Var { value: 2.into() }]),
             location: 0.into(),
         };
         let binary = program.sections[0].translate(context, &mut IgnoreDiagnostics);
@@ -285,7 +286,7 @@ mod tests {
         };
         let context = &mut LinkageContext {
             program,
-            relocs: &RelocTable(vec![addr.into(), 2.into()]),
+            relocs: &RelocTable(vec![Var { value: addr.into() }, Var { value: 2.into() }]),
             location: 0.into(),
         };
         let binary = program.sections[0].translate(context, &mut IgnoreDiagnostics);

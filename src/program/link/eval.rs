@@ -260,6 +260,7 @@ mod tests {
 
     use crate::diag::*;
     use crate::log::Log;
+    use crate::program::link::Var;
 
     type MockDiagnostics<S> = crate::diag::MockDiagnostics<DiagnosticsEvent<S>, S>;
 
@@ -267,7 +268,7 @@ mod tests {
     fn eval_section_addr() {
         let addr = 0x0100;
         let program = &mk_program_with_empty_section();
-        let relocs = &RelocTable(vec![addr.into(), 0.into()]);
+        let relocs = &RelocTable(vec![Var { value: addr.into() }, Var { value: 0.into() }]);
         let context = LinkageContext {
             program,
             relocs,
@@ -283,7 +284,7 @@ mod tests {
     fn eval_section_size() {
         let program = &mk_program_with_empty_section();
         let size = 42;
-        let relocs = &RelocTable(vec![0.into(), size.into()]);
+        let relocs = &RelocTable(vec![Var { value: 0.into() }, Var { value: size.into() }]);
         let context = &LinkageContext {
             program,
             relocs,
@@ -326,7 +327,7 @@ mod tests {
     fn eval_section_name_call() {
         let addr = 0x1337;
         let program = &mk_program_with_empty_section();
-        let relocs = &RelocTable(vec![addr.into(), 0.into()]);
+        let relocs = &RelocTable(vec![Var { value: addr.into() }, Var { value: 0.into() }]);
         let context = LinkageContext {
             program,
             relocs,
