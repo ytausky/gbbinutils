@@ -8,6 +8,7 @@ use crate::diag::{BackendDiagnostics, IgnoreDiagnostics};
 use crate::model::Width;
 
 use std::borrow::Borrow;
+use std::ops::{Index, IndexMut};
 
 mod eval;
 mod num;
@@ -51,18 +52,9 @@ struct Var {
     value: Num,
 }
 
-impl VarTable {
-    fn new(relocs: usize) -> Self {
-        Self(vec![Default::default(); relocs])
-    }
-
-    fn get(&self, VarId(id): VarId) -> Num {
-        self.0[id].value.clone()
-    }
-
-    fn refine(&mut self, VarId(id): VarId, value: Num) -> bool {
-        let stored_value = &mut self.0[id].value;
-        let old_value = stored_value.clone();
+impl Var {
+    fn refine(&mut self, value: Num) -> bool {
+        let old_value = self.value.clone();
         let was_refined = match (old_value, &value) {
             (Num::Unknown, new_value) => *new_value != Num::Unknown,
             (
@@ -83,8 +75,14 @@ impl VarTable {
                 panic!("a symbol previously approximated is now unknown")
             }
         };
-        *stored_value = value;
+        self.value = value;
         was_refined
+    }
+}
+
+impl VarTable {
+    fn new(relocs: usize) -> Self {
+        Self(vec![Default::default(); relocs])
     }
 
     fn refine_all<S: Clone>(&mut self, program: &Program<S>) -> i32 {
@@ -96,15 +94,29 @@ impl VarTable {
         };
         for section in &program.sections {
             context.location = section.eval_addr(&context);
-            context.vars.refine(section.addr, context.location.clone());
+            context.vars[section.addr].refine(context.location.clone());
             let size = section.traverse(context, |item, context| {
                 if let Node::Reloc(id) = item {
-                    refinements += context.vars.refine(*id, context.location.clone()) as i32
+                    refinements += context.vars[*id].refine(context.location.clone()) as i32
                 }
             });
-            refinements += context.vars.refine(section.size, size) as i32
+            refinements += context.vars[section.size].refine(size) as i32
         }
         refinements
+    }
+}
+
+impl Index<VarId> for VarTable {
+    type Output = Var;
+
+    fn index(&self, VarId(id): VarId) -> &Self::Output {
+        &self.0[id]
+    }
+}
+
+impl IndexMut<VarId> for VarTable {
+    fn index_mut(&mut self, VarId(id): VarId) -> &mut Self::Output {
+        &mut self.0[id]
     }
 }
 
@@ -215,7 +227,7 @@ mod tests {
         builder.push_op(LocationCounter, ());
         builder.finish();
         let relocs = program.resolve_relocs();
-        assert_eq!(relocs.get(VarId(0)), addr.into());
+        assert_eq!(relocs[VarId(0)].value, addr.into());
     }
 
     #[test]
@@ -303,7 +315,7 @@ mod tests {
             link_vars: 3,
         };
         let relocs = program.resolve_relocs();
-        assert_eq!(relocs.get(symbol), (addr + bytes).into())
+        assert_eq!(relocs[symbol].value, (addr + bytes).into())
     }
 
     fn assert_section_size(expected: impl Into<Num>, f: impl FnOnce(&mut Program<()>)) {
@@ -311,6 +323,6 @@ mod tests {
         program.add_section(None);
         f(&mut program);
         let relocs = program.resolve_relocs();
-        assert_eq!(relocs.get(program.sections[0].size), expected.into())
+        assert_eq!(relocs[program.sections[0].size].value, expected.into())
     }
 }

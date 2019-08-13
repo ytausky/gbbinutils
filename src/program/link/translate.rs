@@ -16,7 +16,7 @@ impl<S: Clone> Section<S> {
     ) -> Vec<BinarySection> {
         let mut chunks = Vec::new();
         let mut data = Vec::new();
-        let mut addr = context.vars.get(self.addr);
+        let mut addr = context.vars[self.addr].value.clone();
         context.location = addr.clone();
         self.traverse(context, |item, context| {
             if let Node::Reserved(expr) = item {

@@ -105,7 +105,7 @@ impl<'a, S: Clone> Eval<'a, S> for Spanned<ResolvedSymbol<'a, S>, &S> {
         diagnostics: &mut D,
     ) -> Self::Output {
         match self.item {
-            ResolvedSymbol::Section(section) => context.vars.borrow().get(section.addr),
+            ResolvedSymbol::Section(section) => context.vars.borrow()[section.addr].value.clone(),
             ResolvedSymbol::Sizeof => args
                 .get(0)
                 .map(|value| value.sizeof(context, diagnostics))
@@ -150,7 +150,7 @@ impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<VarId, Symbol>, &S> {
     ) -> Self::Output {
         match self.item {
             Atom::Const(value) => Value::Num((*value).into()),
-            Atom::Location(id) => Value::Num(context.vars.borrow().get(*id)),
+            Atom::Location(id) => Value::Num(context.vars.borrow()[*id].value.clone()),
             Atom::Name(id) => (*id).with_span(self.span).to_value(context, diagnostics),
             Atom::Param(ParamId(id)) => args[*id].item.clone(),
         }
@@ -221,7 +221,7 @@ impl<'a, S: Clone> Spanned<Value<'a, S>, &S> {
     {
         match self.item {
             Value::Symbol(ResolvedSymbol::Section(section)) => {
-                context.vars.borrow().get(section.size)
+                context.vars.borrow()[section.size].value.clone()
             }
             ref other => {
                 if let Some(found) = other.kind() {
