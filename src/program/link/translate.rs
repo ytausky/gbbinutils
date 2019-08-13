@@ -2,7 +2,7 @@ use super::{LinkageContext, VarTable};
 
 use crate::diag::{BackendDiagnostics, Message};
 use crate::model::Width;
-use crate::program::{BinarySection, Const, Node, Section};
+use crate::program::{BinarySection, Const, Node, Program, Section};
 use crate::span::Source;
 
 use std::mem::replace;
@@ -11,7 +11,7 @@ use std::vec::IntoIter;
 impl<S: Clone> Section<S> {
     pub(super) fn translate(
         &self,
-        context: &mut LinkageContext<&VarTable, S>,
+        context: &mut LinkageContext<&Program<S>, &VarTable>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> Vec<BinarySection> {
         let mut chunks = Vec::new();
@@ -46,7 +46,7 @@ impl<S: Clone> Section<S> {
 impl<S: Clone> Node<S> {
     fn translate(
         &self,
-        context: &LinkageContext<&VarTable, S>,
+        context: &LinkageContext<&Program<S>, &VarTable>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> IntoIter<u8> {
         match self {
@@ -113,7 +113,7 @@ impl Data {
 fn resolve_expr_item<S: Clone>(
     expr: &Const<S>,
     width: Width,
-    context: &LinkageContext<&VarTable, S>,
+    context: &LinkageContext<&Program<S>, &VarTable>,
     diagnostics: &mut impl BackendDiagnostics<S>,
 ) -> Data {
     let span = expr.span();
@@ -212,7 +212,7 @@ mod tests {
         item.translate(
             &LinkageContext {
                 program: &Program::new(),
-                vars: &VarTable::new(0),
+                vars: &VarTable(vec![]),
                 location: Num::Unknown,
             },
             &mut IgnoreDiagnostics,

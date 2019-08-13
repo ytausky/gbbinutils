@@ -32,23 +32,23 @@ impl<S: Clone> Program<S> {
     }
 
     fn resolve_relocs(&self) -> VarTable {
-        let mut relocs = VarTable::new(self.link_vars);
+        let mut relocs = VarTable(vec![Default::default(); self.link_vars]);
         relocs.refine_all(self);
         relocs.refine_all(self);
         relocs
     }
 }
 
-struct LinkageContext<'a, V, S> {
-    program: &'a Program<S>,
-    vars: V,
-    location: Num,
+pub(super) struct LinkageContext<P, V> {
+    pub program: P,
+    pub vars: V,
+    pub location: Num,
 }
 
-struct VarTable(Vec<Var>);
+pub(super) struct VarTable(Vec<Var>);
 
 #[derive(Clone, Default)]
-struct Var {
+pub(super) struct Var {
     value: Num,
 }
 
@@ -81,8 +81,8 @@ impl Var {
 }
 
 impl VarTable {
-    fn new(relocs: usize) -> Self {
-        Self(vec![Default::default(); relocs])
+    pub fn new() -> Self {
+        Self(Vec::new())
     }
 
     fn refine_all<S: Clone>(&mut self, program: &Program<S>) -> i32 {
@@ -93,7 +93,7 @@ impl VarTable {
             location: Num::Unknown,
         };
         for section in &program.sections {
-            context.location = section.eval_addr(&context);
+            context.location = section.eval_addr(context);
             context.vars[section.addr].refine(context.location.clone());
             let size = section.traverse(context, |item, context| {
                 if let Node::Reloc(id) = item {
@@ -121,10 +121,10 @@ impl IndexMut<VarId> for VarTable {
 }
 
 impl<S: Clone> Section<S> {
-    fn traverse<V, F>(&self, context: &mut LinkageContext<V, S>, mut f: F) -> Num
+    fn traverse<V, F>(&self, context: &mut LinkageContext<&Program<S>, V>, mut f: F) -> Num
     where
         V: Borrow<VarTable>,
-        F: FnMut(&Node<S>, &mut LinkageContext<V, S>),
+        F: FnMut(&Node<S>, &mut LinkageContext<&Program<S>, V>),
     {
         let addr = context.location.clone();
         let mut offset = Num::from(0);
@@ -136,7 +136,10 @@ impl<S: Clone> Section<S> {
         offset
     }
 
-    fn eval_addr<V: Borrow<VarTable>>(&self, context: &LinkageContext<V, S>) -> Num {
+    fn eval_addr<'a, V: Borrow<VarTable>>(
+        &self,
+        context: &LinkageContext<&'a Program<S>, V>,
+    ) -> Num {
         self.constraints
             .addr
             .as_ref()
@@ -146,7 +149,7 @@ impl<S: Clone> Section<S> {
 }
 
 impl<S: Clone> Node<S> {
-    fn size<V: Borrow<VarTable>>(&self, context: &LinkageContext<V, S>) -> Num {
+    fn size<'a, V: Borrow<VarTable>>(&self, context: &LinkageContext<&'a Program<S>, V>) -> Num {
         match self {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),
             Node::Immediate(_, width) => width.len().into(),

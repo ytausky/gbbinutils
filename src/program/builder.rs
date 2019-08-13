@@ -1,3 +1,4 @@
+use super::link::{LinkageContext, VarTable};
 use super::*;
 
 use crate::analysis::backend::*;
@@ -6,7 +7,7 @@ use crate::model::{BinOp, ExprOp, FnCall, Item, ParamId};
 use crate::BuiltinSymbols;
 
 pub(crate) struct ProgramBuilder<'a, S> {
-    program: &'a mut Program<S>,
+    context: LinkageContext<&'a mut Program<S>, VarTable>,
     state: Option<BuilderState<S>>,
 }
 
@@ -19,7 +20,11 @@ enum BuilderState<S> {
 impl<'a, S> ProgramBuilder<'a, S> {
     pub fn new(program: &'a mut Program<S>) -> Self {
         Self {
-            program,
+            context: LinkageContext {
+                program,
+                vars: VarTable::new(),
+                location: 0.into(),
+            },
             state: Some(BuilderState::AnonSectionPrelude { addr: None }),
         }
     }
@@ -31,16 +36,16 @@ impl<'a, S> ProgramBuilder<'a, S> {
     fn current_section(&mut self) -> &mut Section<S> {
         match self.state.take().unwrap() {
             BuilderState::AnonSectionPrelude { addr } => {
-                self.program.add_section(None);
-                let index = self.program.sections.len() - 1;
+                self.context.program.add_section(None);
+                let index = self.context.program.sections.len() - 1;
                 self.state = Some(BuilderState::Section(index));
-                let section = &mut self.program.sections[index];
+                let section = &mut self.context.program.sections[index];
                 section.constraints.addr = addr;
                 section
             }
             BuilderState::SectionPrelude(index) | BuilderState::Section(index) => {
                 self.state = Some(BuilderState::Section(index));
-                &mut self.program.sections[index]
+                &mut self.context.program.sections[index]
             }
         }
     }
@@ -61,7 +66,7 @@ impl<'a, S: Clone> PartialBackend<S> for ProgramBuilder<'a, S> {
     fn set_origin(&mut self, addr: Self::Value) {
         match self.state.take().unwrap() {
             BuilderState::SectionPrelude(index) => {
-                self.program.sections[index].constraints.addr = Some(addr);
+                self.context.program.sections[index].constraints.addr = Some(addr);
                 self.state = Some(BuilderState::SectionPrelude(index))
             }
             _ => self.state = Some(BuilderState::AnonSectionPrelude { addr: Some(addr) }),
@@ -78,7 +83,7 @@ impl<'a, S: Clone> Backend<S> for ProgramBuilder<'a, S> {
     }
 
     fn define_symbol(self, name: Self::Name, span: S) -> Self::SymbolBuilder {
-        let location = self.program.alloc_linkage_var();
+        let location = self.context.program.alloc_linkage_var();
         SymbolBuilder {
             parent: self,
             location,
@@ -152,6 +157,7 @@ impl<'a, S> Finish for SymbolBuilder<'a, S> {
         let mut parent = self.parent;
         parent.push(Node::Reloc(self.location));
         parent
+            .context
             .program
             .symbols
             .define(self.name.0, ProgramDef::Expr(self.expr));
@@ -163,15 +169,17 @@ impl<'a, S: Clone> AllocName<S> for ProgramBuilder<'a, S> {
     type Name = Symbol;
 
     fn alloc_name(&mut self, _span: S) -> Self::Name {
-        self.program.symbols.alloc().into()
+        self.context.program.symbols.alloc().into()
     }
 }
 
 impl<'a, S: Clone> StartSection<Symbol, S> for ProgramBuilder<'a, S> {
     fn start_section(&mut self, (name, _): (Symbol, S)) {
-        let index = self.program.sections.len();
+        let index = self.context.program.sections.len();
         self.state = Some(BuilderState::SectionPrelude(index));
-        self.program.add_section(Some(name.program().unwrap()))
+        self.context
+            .program
+            .add_section(Some(name.program().unwrap()))
     }
 }
 

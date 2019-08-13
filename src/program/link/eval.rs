@@ -8,7 +8,11 @@ use crate::program::*;
 use std::borrow::Borrow;
 
 impl<S: Clone> Const<S> {
-    pub(super) fn to_num<V, D>(&self, context: &LinkageContext<V, S>, diagnostics: &mut D) -> Num
+    pub(super) fn to_num<'a, V, D>(
+        &self,
+        context: &LinkageContext<&'a Program<S>, V>,
+        diagnostics: &mut D,
+    ) -> Num
     where
         V: Borrow<VarTable>,
         D: BackendDiagnostics<S>,
@@ -22,7 +26,7 @@ trait Eval<'a, S: Clone> {
 
     fn eval<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<V, S>,
+        context: &'a LinkageContext<&'a Program<S>, V>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
     ) -> Self::Output;
@@ -50,7 +54,7 @@ where
 
     fn eval<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<V, S>,
+        context: &'a LinkageContext<&'a Program<S>, V>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
     ) -> Self::Output {
@@ -83,7 +87,7 @@ impl<'a, S: Clone> Eval<'a, S> for Spanned<Value<'a, S>, &S> {
 
     fn eval<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<V, S>,
+        context: &'a LinkageContext<&'a Program<S>, V>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
     ) -> Self::Output {
@@ -100,7 +104,7 @@ impl<'a, S: Clone> Eval<'a, S> for Spanned<ResolvedSymbol<'a, S>, &S> {
 
     fn eval<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<V, S>,
+        context: &'a LinkageContext<&'a Program<S>, V>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
     ) -> Self::Output {
@@ -126,7 +130,7 @@ impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<LocationCounter, Symbol>, 
 
     fn eval<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<V, S>,
+        context: &'a LinkageContext<&'a Program<S>, V>,
         _: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
     ) -> Self::Output {
@@ -144,7 +148,7 @@ impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<VarId, Symbol>, &S> {
 
     fn eval<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<V, S>,
+        context: &'a LinkageContext<&'a Program<S>, V>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
     ) -> Self::Output {
@@ -158,9 +162,9 @@ impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<VarId, Symbol>, &S> {
 }
 
 impl<S: Clone> Spanned<Symbol, &S> {
-    fn to_value<'a, R, D: BackendDiagnostics<S>>(
+    fn to_value<'a, V, D: BackendDiagnostics<S>>(
         &self,
-        context: &'a LinkageContext<R, S>,
+        context: &'a LinkageContext<&'a Program<S>, V>,
         diagnostics: &mut D,
     ) -> Value<'a, S> {
         self.resolve(context, diagnostics)
@@ -168,9 +172,9 @@ impl<S: Clone> Spanned<Symbol, &S> {
             .unwrap_or(Value::Unresolved)
     }
 
-    fn resolve<'a, R, D: BackendDiagnostics<S>>(
+    fn resolve<'a, V, D: BackendDiagnostics<S>>(
         &self,
-        context: &'a LinkageContext<R, S>,
+        context: &'a LinkageContext<&'a Program<S>, V>,
         diagnostics: &mut D,
     ) -> Option<ResolvedSymbol<'a, S>> {
         match self.item {
@@ -181,9 +185,9 @@ impl<S: Clone> Spanned<Symbol, &S> {
 }
 
 impl<S: Clone> Spanned<ProgramSymbol, &S> {
-    fn resolve<'a, R, D: BackendDiagnostics<S>>(
+    fn resolve<'a, V, D: BackendDiagnostics<S>>(
         &self,
-        context: &'a LinkageContext<R, S>,
+        context: &'a LinkageContext<&'a Program<S>, V>,
         diagnostics: &mut D,
     ) -> Option<ResolvedSymbol<'a, S>> {
         let id = self.item;
@@ -214,7 +218,11 @@ impl BinOp {
 }
 
 impl<'a, S: Clone> Spanned<Value<'a, S>, &S> {
-    fn sizeof<V, D>(&self, context: &'a LinkageContext<V, S>, diagnostics: &mut D) -> Num
+    fn sizeof<V, D>(
+        &self,
+        context: &'a LinkageContext<&'a Program<S>, V>,
+        diagnostics: &mut D,
+    ) -> Num
     where
         V: Borrow<VarTable>,
         D: BackendDiagnostics<S>,
@@ -393,7 +401,7 @@ mod tests {
             symbols: SymbolTable(vec![None]),
             link_vars: 0,
         };
-        let vars = &VarTable::new(0);
+        let vars = &VarTable(vec![]);
         let context = LinkageContext {
             program,
             vars,
@@ -451,7 +459,7 @@ mod tests {
             )))]),
             link_vars: 0,
         };
-        let vars = &VarTable::new(0);
+        let vars = &VarTable(vec![]);
         let context = LinkageContext {
             program,
             vars,
