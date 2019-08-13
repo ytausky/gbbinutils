@@ -15,10 +15,10 @@ mod translate;
 
 impl<S: Clone> Program<S> {
     pub(crate) fn link(&self, diagnostics: &mut impl BackendDiagnostics<S>) -> BinaryObject {
-        let relocs = self.resolve_relocs();
+        let vars = &self.resolve_relocs();
         let mut context = LinkageContext {
             program: self,
-            relocs: &relocs,
+            vars,
             location: 0.into(),
         };
         BinaryObject {
@@ -30,28 +30,28 @@ impl<S: Clone> Program<S> {
         }
     }
 
-    fn resolve_relocs(&self) -> RelocTable {
-        let mut relocs = RelocTable::new(self.link_vars);
+    fn resolve_relocs(&self) -> VarTable {
+        let mut relocs = VarTable::new(self.link_vars);
         relocs.refine_all(self);
         relocs.refine_all(self);
         relocs
     }
 }
 
-struct LinkageContext<'a, R, S> {
+struct LinkageContext<'a, V, S> {
     program: &'a Program<S>,
-    relocs: R,
+    vars: V,
     location: Num,
 }
 
-struct RelocTable(Vec<Var>);
+struct VarTable(Vec<Var>);
 
 #[derive(Clone, Default)]
 struct Var {
     value: Num,
 }
 
-impl RelocTable {
+impl VarTable {
     fn new(relocs: usize) -> Self {
         Self(vec![Default::default(); relocs])
     }
@@ -91,30 +91,28 @@ impl RelocTable {
         let mut refinements = 0;
         let context = &mut LinkageContext {
             program,
-            relocs: self,
+            vars: self,
             location: Num::Unknown,
         };
         for section in &program.sections {
             context.location = section.eval_addr(&context);
-            context
-                .relocs
-                .refine(section.addr, context.location.clone());
+            context.vars.refine(section.addr, context.location.clone());
             let size = section.traverse(context, |item, context| {
                 if let Node::Reloc(id) = item {
-                    refinements += context.relocs.refine(*id, context.location.clone()) as i32
+                    refinements += context.vars.refine(*id, context.location.clone()) as i32
                 }
             });
-            refinements += context.relocs.refine(section.size, size) as i32
+            refinements += context.vars.refine(section.size, size) as i32
         }
         refinements
     }
 }
 
 impl<S: Clone> Section<S> {
-    fn traverse<R, F>(&self, context: &mut LinkageContext<R, S>, mut f: F) -> Num
+    fn traverse<V, F>(&self, context: &mut LinkageContext<V, S>, mut f: F) -> Num
     where
-        R: Borrow<RelocTable>,
-        F: FnMut(&Node<S>, &mut LinkageContext<R, S>),
+        V: Borrow<VarTable>,
+        F: FnMut(&Node<S>, &mut LinkageContext<V, S>),
     {
         let addr = context.location.clone();
         let mut offset = Num::from(0);
@@ -126,7 +124,7 @@ impl<S: Clone> Section<S> {
         offset
     }
 
-    fn eval_addr<R: Borrow<RelocTable>>(&self, context: &LinkageContext<R, S>) -> Num {
+    fn eval_addr<V: Borrow<VarTable>>(&self, context: &LinkageContext<V, S>) -> Num {
         self.constraints
             .addr
             .as_ref()
@@ -136,7 +134,7 @@ impl<S: Clone> Section<S> {
 }
 
 impl<S: Clone> Node<S> {
-    fn size<R: Borrow<RelocTable>>(&self, context: &LinkageContext<R, S>) -> Num {
+    fn size<V: Borrow<VarTable>>(&self, context: &LinkageContext<V, S>) -> Num {
         match self {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),
             Node::Immediate(_, width) => width.len().into(),

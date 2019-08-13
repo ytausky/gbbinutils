@@ -1,4 +1,4 @@
-use super::{LinkageContext, Num, RelocTable};
+use super::{LinkageContext, Num, VarTable};
 
 use crate::diag::span::{Spanned, WithSpan};
 use crate::diag::{BackendDiagnostics, Message, ValueKind};
@@ -8,9 +8,9 @@ use crate::program::*;
 use std::borrow::Borrow;
 
 impl<S: Clone> Const<S> {
-    pub(super) fn to_num<R, D>(&self, context: &LinkageContext<R, S>, diagnostics: &mut D) -> Num
+    pub(super) fn to_num<V, D>(&self, context: &LinkageContext<V, S>, diagnostics: &mut D) -> Num
     where
-        R: Borrow<RelocTable>,
+        V: Borrow<VarTable>,
         D: BackendDiagnostics<S>,
     {
         self.eval(context, &[], diagnostics)
@@ -20,9 +20,9 @@ impl<S: Clone> Const<S> {
 trait Eval<'a, S: Clone> {
     type Output;
 
-    fn eval<R: Borrow<RelocTable>, D: BackendDiagnostics<S>>(
+    fn eval<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<R, S>,
+        context: &'a LinkageContext<V, S>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
     ) -> Self::Output;
@@ -48,9 +48,9 @@ where
 {
     type Output = Num;
 
-    fn eval<R: Borrow<RelocTable>, D: BackendDiagnostics<S>>(
+    fn eval<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<R, S>,
+        context: &'a LinkageContext<V, S>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
     ) -> Self::Output {
@@ -81,9 +81,9 @@ where
 impl<'a, S: Clone> Eval<'a, S> for Spanned<Value<'a, S>, &S> {
     type Output = Num;
 
-    fn eval<R: Borrow<RelocTable>, D: BackendDiagnostics<S>>(
+    fn eval<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<R, S>,
+        context: &'a LinkageContext<V, S>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
     ) -> Self::Output {
@@ -98,14 +98,14 @@ impl<'a, S: Clone> Eval<'a, S> for Spanned<Value<'a, S>, &S> {
 impl<'a, S: Clone> Eval<'a, S> for Spanned<ResolvedSymbol<'a, S>, &S> {
     type Output = Num;
 
-    fn eval<R: Borrow<RelocTable>, D: BackendDiagnostics<S>>(
+    fn eval<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<R, S>,
+        context: &'a LinkageContext<V, S>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
     ) -> Self::Output {
         match self.item {
-            ResolvedSymbol::Section(section) => context.relocs.borrow().get(section.addr),
+            ResolvedSymbol::Section(section) => context.vars.borrow().get(section.addr),
             ResolvedSymbol::Sizeof => args
                 .get(0)
                 .map(|value| value.sizeof(context, diagnostics))
@@ -124,9 +124,9 @@ impl<'a, S: Clone> Eval<'a, S> for Spanned<ResolvedSymbol<'a, S>, &S> {
 impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<LocationCounter, Symbol>, &S> {
     type Output = Value<'a, S>;
 
-    fn eval<R: Borrow<RelocTable>, D: BackendDiagnostics<S>>(
+    fn eval<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<R, S>,
+        context: &'a LinkageContext<V, S>,
         _: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
     ) -> Self::Output {
@@ -142,15 +142,15 @@ impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<LocationCounter, Symbol>, 
 impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<VarId, Symbol>, &S> {
     type Output = Value<'a, S>;
 
-    fn eval<R: Borrow<RelocTable>, D: BackendDiagnostics<S>>(
+    fn eval<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<R, S>,
+        context: &'a LinkageContext<V, S>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
     ) -> Self::Output {
         match self.item {
             Atom::Const(value) => Value::Num((*value).into()),
-            Atom::Location(id) => Value::Num(context.relocs.borrow().get(*id)),
+            Atom::Location(id) => Value::Num(context.vars.borrow().get(*id)),
             Atom::Name(id) => (*id).with_span(self.span).to_value(context, diagnostics),
             Atom::Param(ParamId(id)) => args[*id].item.clone(),
         }
@@ -214,14 +214,14 @@ impl BinOp {
 }
 
 impl<'a, S: Clone> Spanned<Value<'a, S>, &S> {
-    fn sizeof<R, D>(&self, context: &'a LinkageContext<R, S>, diagnostics: &mut D) -> Num
+    fn sizeof<V, D>(&self, context: &'a LinkageContext<V, S>, diagnostics: &mut D) -> Num
     where
-        R: Borrow<RelocTable>,
+        V: Borrow<VarTable>,
         D: BackendDiagnostics<S>,
     {
         match self.item {
             Value::Symbol(ResolvedSymbol::Section(section)) => {
-                context.relocs.borrow().get(section.size)
+                context.vars.borrow().get(section.size)
             }
             ref other => {
                 if let Some(found) = other.kind() {
@@ -268,10 +268,10 @@ mod tests {
     fn eval_section_addr() {
         let addr = 0x0100;
         let program = &mk_program_with_empty_section();
-        let relocs = &RelocTable(vec![Var { value: addr.into() }, Var { value: 0.into() }]);
+        let vars = &VarTable(vec![Var { value: addr.into() }, Var { value: 0.into() }]);
         let context = LinkageContext {
             program,
-            relocs,
+            vars,
             location: Num::Unknown,
         };
         assert_eq!(
@@ -284,10 +284,10 @@ mod tests {
     fn eval_section_size() {
         let program = &mk_program_with_empty_section();
         let size = 42;
-        let relocs = &RelocTable(vec![Var { value: 0.into() }, Var { value: size.into() }]);
+        let vars = &VarTable(vec![Var { value: 0.into() }, Var { value: size.into() }]);
         let context = &LinkageContext {
             program,
-            relocs,
+            vars,
             location: Num::Unknown,
         };
         assert_eq!(
@@ -314,10 +314,10 @@ mod tests {
             ])))]),
             link_vars: 0,
         };
-        let relocs = &RelocTable(Vec::new());
+        let vars = &VarTable(Vec::new());
         let context = &LinkageContext {
             program,
-            relocs,
+            vars,
             location: Num::Unknown,
         };
         assert_eq!(immediate.to_num(context, &mut IgnoreDiagnostics), 43.into())
@@ -327,10 +327,10 @@ mod tests {
     fn eval_section_name_call() {
         let addr = 0x1337;
         let program = &mk_program_with_empty_section();
-        let relocs = &RelocTable(vec![Var { value: addr.into() }, Var { value: 0.into() }]);
+        let vars = &VarTable(vec![Var { value: addr.into() }, Var { value: 0.into() }]);
         let context = LinkageContext {
             program,
-            relocs,
+            vars,
             location: Num::Unknown,
         };
         let immediate = Const::from_items(&[ProgramSymbol(0).into(), ExprOp::FnCall(0).into()]);
@@ -393,10 +393,10 @@ mod tests {
             symbols: SymbolTable(vec![None]),
             link_vars: 0,
         };
-        let relocs = &RelocTable::new(0);
+        let vars = &VarTable::new(0);
         let context = LinkageContext {
             program,
-            relocs,
+            vars,
             location: Num::Unknown,
         };
         let mut diagnostics = MockDiagnostics::new(Log::new());
@@ -451,10 +451,10 @@ mod tests {
             )))]),
             link_vars: 0,
         };
-        let relocs = &RelocTable::new(0);
+        let vars = &VarTable::new(0);
         let context = LinkageContext {
             program,
-            relocs,
+            vars,
             location: Num::Unknown,
         };
         let mut diagnostics = MockDiagnostics::new(Log::new());
@@ -503,10 +503,10 @@ mod tests {
             symbols: SymbolTable(vec![]),
             link_vars: 0,
         };
-        let relocs = &RelocTable(vec![]);
+        let vars = &VarTable(vec![]);
         let context = &LinkageContext {
             program,
-            relocs,
+            vars,
             location: Num::Unknown,
         };
         immediate.to_num(context, diagnostics)

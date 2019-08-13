@@ -1,4 +1,4 @@
-use super::{LinkageContext, RelocTable};
+use super::{LinkageContext, VarTable};
 
 use crate::diag::{BackendDiagnostics, Message};
 use crate::model::Width;
@@ -11,12 +11,12 @@ use std::vec::IntoIter;
 impl<S: Clone> Section<S> {
     pub(super) fn translate(
         &self,
-        context: &mut LinkageContext<&RelocTable, S>,
+        context: &mut LinkageContext<&VarTable, S>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> Vec<BinarySection> {
         let mut chunks = Vec::new();
         let mut data = Vec::new();
-        let mut addr = context.relocs.get(self.addr);
+        let mut addr = context.vars.get(self.addr);
         context.location = addr.clone();
         self.traverse(context, |item, context| {
             if let Node::Reserved(expr) = item {
@@ -46,7 +46,7 @@ impl<S: Clone> Section<S> {
 impl<S: Clone> Node<S> {
     fn translate(
         &self,
-        context: &LinkageContext<&RelocTable, S>,
+        context: &LinkageContext<&VarTable, S>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> IntoIter<u8> {
         match self {
@@ -113,7 +113,7 @@ impl Data {
 fn resolve_expr_item<S: Clone>(
     expr: &Const<S>,
     width: Width,
-    context: &LinkageContext<&RelocTable, S>,
+    context: &LinkageContext<&VarTable, S>,
     diagnostics: &mut impl BackendDiagnostics<S>,
 ) -> Data {
     let span = expr.span();
@@ -212,7 +212,7 @@ mod tests {
         item.translate(
             &LinkageContext {
                 program: &Program::new(),
-                relocs: &RelocTable::new(0),
+                vars: &VarTable::new(0),
                 location: Num::Unknown,
             },
             &mut IgnoreDiagnostics,
@@ -237,7 +237,7 @@ mod tests {
         };
         let context = &mut LinkageContext {
             program,
-            relocs: &RelocTable(vec![Var { value: addr.into() }, Var { value: 0.into() }]),
+            vars: &VarTable(vec![Var { value: addr.into() }, Var { value: 0.into() }]),
             location: 0.into(),
         };
         let translated = program.sections[0].translate(context, &mut IgnoreDiagnostics);
@@ -262,7 +262,7 @@ mod tests {
         };
         let context = &mut LinkageContext {
             program,
-            relocs: &RelocTable(vec![Var { value: 0.into() }, Var { value: 2.into() }]),
+            vars: &VarTable(vec![Var { value: 0.into() }, Var { value: 2.into() }]),
             location: 0.into(),
         };
         let binary = program.sections[0].translate(context, &mut IgnoreDiagnostics);
@@ -286,7 +286,7 @@ mod tests {
         };
         let context = &mut LinkageContext {
             program,
-            relocs: &RelocTable(vec![Var { value: addr.into() }, Var { value: 2.into() }]),
+            vars: &VarTable(vec![Var { value: addr.into() }, Var { value: 2.into() }]),
             location: 0.into(),
         };
         let binary = program.sections[0].translate(context, &mut IgnoreDiagnostics);
