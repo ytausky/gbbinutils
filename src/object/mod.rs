@@ -1,12 +1,10 @@
-pub(crate) use self::builder::ObjectBuilder;
-
 use self::num::Num;
 
 use crate::model::{Atom, ExprOp, LocationCounter, Width};
 
+pub mod builder;
 pub mod num;
 
-mod builder;
 mod eval;
 mod lowering;
 

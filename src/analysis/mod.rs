@@ -1,4 +1,3 @@
-use self::backend::*;
 use self::resolve::{BiLevelNameTable, DefaultIdentFactory};
 use self::semantics::TokenStreamState;
 use self::session::*;
@@ -7,6 +6,7 @@ use self::syntax::*;
 
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diag::*;
+use crate::object::builder::{AllocName, Backend};
 use crate::span::{BufContext, BufContextFactory, SpanSource};
 use crate::BuiltinSymbols;
 
@@ -15,7 +15,6 @@ use std::rc::Rc;
 #[cfg(test)]
 pub use self::mock::*;
 
-pub mod backend;
 mod resolve;
 mod semantics;
 mod session;

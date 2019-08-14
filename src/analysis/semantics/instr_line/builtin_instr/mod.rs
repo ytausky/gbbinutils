@@ -5,12 +5,12 @@ use self::operand::OperandSymbol;
 
 use super::*;
 
-use crate::analysis::backend::{Finish, LocationCounter, Name, PushOp};
 use crate::analysis::semantics::{Params, RelocLookup, ResolveNames, WithParams};
 use crate::analysis::session::Session;
 use crate::analysis::syntax::actions::{BuiltinInstrActions, InstrFinalizer};
 use crate::diag::{Diagnostics, EmitDiag, Message};
-use crate::model::{BinOp, FnCall, Item};
+use crate::model::{BinOp, FnCall, Item, LocationCounter};
+use crate::object::builder::{Finish, Name, PushOp};
 
 pub(super) mod cpu_instr;
 

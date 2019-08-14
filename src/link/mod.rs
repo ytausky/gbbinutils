@@ -163,9 +163,9 @@ impl Width {
 mod tests {
     use super::*;
 
-    use crate::analysis::backend::*;
     use crate::diag::IgnoreDiagnostics;
-    use crate::model::{Atom, BinOp, Direction, Instruction, Item, Ld, Nullary, SpecialLd, Width};
+    use crate::model::*;
+    use crate::object::builder::*;
 
     #[test]
     fn empty_object_converted_to_all_0xff_rom() {

@@ -197,7 +197,6 @@ fn single_arg<T, D: Diagnostics<S>, S>(
 mod tests {
     use super::*;
 
-    use crate::analysis::backend::BackendEvent;
     use crate::analysis::resolve::{NameTableEvent, ResolvedIdent};
     use crate::analysis::semantics::instr_line::builtin_instr;
     use crate::analysis::semantics::tests::*;
@@ -206,6 +205,7 @@ mod tests {
     use crate::codebase::CodebaseError;
     use crate::log::with_log;
     use crate::model::{Atom, ParamId};
+    use crate::object::builder::mock::BackendEvent;
 
     use std::borrow::Borrow;
     use std::io;

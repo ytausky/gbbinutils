@@ -9,6 +9,7 @@ pub use crate::link::{Program, Rom};
 use crate::analysis::Assemble;
 use crate::codebase::{CodebaseError, StdFileSystem};
 use crate::diag::*;
+use crate::object::builder::ObjectBuilder;
 
 #[macro_use]
 pub mod diag;
@@ -79,7 +80,7 @@ fn try_assemble(
     let codebase = codebase::FileCodebase::new(input);
     let diagnostics = &mut CompositeDiagnosticsSystem::new(&codebase.cache, output);
     let mut linkable = object::Object::new();
-    let builder = object::ObjectBuilder::new(&mut linkable);
+    let builder = ObjectBuilder::new(&mut linkable);
     builder.assemble(name, &codebase, diagnostics)?;
     Ok(Program::link(linkable, diagnostics))
 }

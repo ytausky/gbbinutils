@@ -1,8 +1,8 @@
 use super::{Arg, ArgAtom, ArgEvaluator, ArgUnaryOp, ArgVariant, EvalArg};
 
-use crate::analysis::backend::Finish;
 use crate::diag::*;
 use crate::model::{Condition, PtrReg, Reg16, RegPair, SimpleOperand};
+use crate::object::builder::Finish;
 use crate::span::{Source, SpanSource};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -242,9 +242,9 @@ impl<I: Iterator> Iterator for OperandCounter<I> {
 pub mod tests {
     use super::*;
 
-    use crate::analysis::backend::BackendEvent;
     use crate::analysis::Literal;
     use crate::model::{Atom, LocationCounter};
+    use crate::object::builder::mock::BackendEvent;
 
     use std::fmt::Debug;
 

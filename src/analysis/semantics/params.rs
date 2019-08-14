@@ -1,9 +1,9 @@
 use super::{Params, PushOp};
 
-use crate::analysis::backend::{AllocName, Finish, LocationCounter, Name};
 use crate::analysis::resolve::{NameTable, ResolvedIdent};
 use crate::diag::{Diagnostics, Message};
-use crate::model::{BinOp, FnCall, ParamId};
+use crate::model::{BinOp, FnCall, LocationCounter, ParamId};
+use crate::object::builder::{AllocName, Finish, Name};
 
 pub(super) trait RelocLookup<I, S> {
     type RelocId;
@@ -168,12 +168,13 @@ delegate_diagnostics! {
 mod tests {
     use super::*;
 
-    use crate::analysis::backend::BackendEvent;
     use crate::analysis::resolve::NameTableEvent;
     use crate::analysis::session::MockBuilder;
     use crate::diag::{DiagnosticsEvent, MockSpan};
     use crate::log::Log;
     use crate::model::{Atom, ParamId};
+    use crate::object::builder::mock::BackendEvent;
+    use crate::object::builder::PushOp;
 
     type Expr<N, S> = crate::model::Expr<Atom<LocationCounter, N>, S>;
 

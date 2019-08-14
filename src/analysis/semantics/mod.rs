@@ -2,7 +2,6 @@ use self::instr_line::{InstrLineSemantics, InstrLineState};
 use self::params::*;
 use self::token_line::{TokenContext, TokenContextFinalizationSemantics, TokenLineSemantics};
 
-use super::backend::PushOp;
 use super::resolve;
 use super::session::{IntoSemanticActions, Params, Session};
 use super::syntax;
@@ -11,6 +10,7 @@ use super::Literal;
 
 use crate::diag;
 use crate::diag::Message;
+use crate::object::builder::PushOp;
 
 macro_rules! set_state {
     ($actions:expr, $state:expr) => {
@@ -169,13 +169,14 @@ mod tests {
 
     use super::syntax::{Sigil, Token};
 
-    use crate::analysis::backend::{BackendEvent, Name, SerialIdAllocator};
     use crate::analysis::resolve::{NameTableEvent, ResolvedIdent};
     use crate::analysis::session::{MockMacroId, SessionEvent};
     use crate::analysis::SemanticToken;
     use crate::diag::{DiagnosticsEvent, EmitDiag, Merge, Message, MockSpan};
     use crate::log::with_log;
     use crate::model::{Atom, BinOp, ExprOp, Instruction, Item, LocationCounter, Width};
+    use crate::object::builder::mock::{BackendEvent, SerialIdAllocator};
+    use crate::object::builder::Name;
 
     use std::borrow::Borrow;
     use std::fmt::Debug;

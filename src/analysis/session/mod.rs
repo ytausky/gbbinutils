@@ -1,8 +1,5 @@
-pub use super::backend::ValueBuilder;
-
 use self::expand::{DefineMacro, Expand, MacroId, MacroTable};
 
-use super::backend::*;
 use super::resolve::{NameTable, ResolvedIdent, StartScope};
 use super::syntax::actions::TokenStreamActions;
 use super::syntax::parser::ParserFactory;
@@ -13,6 +10,7 @@ use crate::codebase::CodebaseError;
 use crate::diag::span::{AddMacroDef, SpanSource};
 use crate::diag::*;
 use crate::model::Item;
+use crate::object::builder::*;
 
 use std::ops::DerefMut;
 
@@ -374,11 +372,11 @@ where
 mod mock {
     use super::*;
 
-    use crate::analysis::backend::{BackendEvent, PanickingIdAllocator};
     use crate::analysis::resolve::{BasicNameTable, FakeNameTable, MockNameTable, NameTableEvent};
     use crate::diag::{DiagnosticsEvent, MockDiagnostics};
     use crate::log::Log;
-    use crate::model::Atom;
+    use crate::model::{Atom, LocationCounter};
+    use crate::object::builder::mock::*;
 
     use std::marker::PhantomData;
 
@@ -566,7 +564,6 @@ mod tests {
 
     use super::MacroId;
 
-    use crate::analysis::backend::{BackendEvent, SerialIdAllocator};
     use crate::analysis::resolve::{BasicNameTable, NameTableEvent};
     use crate::analysis::syntax::actions::mock::{IdentKind, TokenStreamActionCollector};
     use crate::analysis::syntax::parser::mock::*;
@@ -574,7 +571,8 @@ mod tests {
     use crate::analysis::{Literal, MockCodebase};
     use crate::diag::DiagnosticsEvent;
     use crate::log::*;
-    use crate::model::{Atom, BinOp, Instruction, Nullary};
+    use crate::model::{Atom, BinOp, Instruction, LocationCounter, Nullary};
+    use crate::object::builder::mock::{BackendEvent, SerialIdAllocator};
 
     use std::fmt::Debug;
     use std::iter;
@@ -767,7 +765,7 @@ mod tests {
     }
 
     type MockParserFactory<S> = crate::analysis::syntax::parser::mock::MockParserFactory<Event<S>>;
-    type MockBackend<S> = crate::analysis::backend::MockBackend<SerialIdAllocator, Event<S>>;
+    type MockBackend<S> = crate::object::builder::mock::MockBackend<SerialIdAllocator, Event<S>>;
     type MockDiagnosticsSystem<S> = crate::diag::MockDiagnosticsSystem<Event<S>, S>;
     type MockNameTable<S> =
         crate::analysis::resolve::MockNameTable<BasicNameTable<usize, MacroId>, Event<S>>;
