@@ -4,7 +4,7 @@
 //! Its customizable IO functions make it suitable for embedding in other tools, in unit tests, etc.
 
 pub use crate::codebase::FileSystem;
-pub use crate::object::{BinaryObject, Rom};
+pub use crate::link::{BinaryObject, Rom};
 
 use crate::analysis::Assemble;
 use crate::codebase::{CodebaseError, StdFileSystem};

@@ -9,6 +9,43 @@ use std::ops::{Index, IndexMut};
 
 mod translate;
 
+pub struct BinaryObject {
+    pub sections: Vec<BinarySection>,
+}
+
+impl BinaryObject {
+    pub fn into_rom(self) -> Rom {
+        let default = 0xffu8;
+        let mut data: Vec<u8> = Vec::new();
+        for section in self.sections {
+            if !section.data.is_empty() {
+                let end = section.addr + section.data.len();
+                if data.len() < end {
+                    data.resize(end, default)
+                }
+                data[section.addr..end].copy_from_slice(&section.data)
+            }
+        }
+        if data.len() < MIN_ROM_LEN {
+            data.resize(MIN_ROM_LEN, default)
+        }
+        Rom {
+            data: data.into_boxed_slice(),
+        }
+    }
+}
+
+const MIN_ROM_LEN: usize = 0x8000;
+
+pub struct Rom {
+    pub data: Box<[u8]>,
+}
+
+pub struct BinarySection {
+    pub addr: usize,
+    pub data: Vec<u8>,
+}
+
 impl<S: Clone> Object<S> {
     pub(crate) fn link(&mut self, diagnostics: &mut impl BackendDiagnostics<S>) -> BinaryObject {
         self.vars.resolve(&self.program);
@@ -129,6 +166,44 @@ mod tests {
     use crate::analysis::backend::*;
     use crate::diag::IgnoreDiagnostics;
     use crate::model::{Atom, BinOp, Width};
+
+    #[test]
+    fn empty_object_converted_to_all_0xff_rom() {
+        let object = BinaryObject {
+            sections: Vec::new(),
+        };
+        let rom = object.into_rom();
+        assert_eq!(*rom.data, [0xffu8; MIN_ROM_LEN][..])
+    }
+
+    #[test]
+    fn section_placed_in_rom_starting_at_origin() {
+        let byte = 0x42;
+        let addr = 0x150;
+        let object = BinaryObject {
+            sections: vec![BinarySection {
+                addr,
+                data: vec![byte],
+            }],
+        };
+        let rom = object.into_rom();
+        let mut expected = [0xffu8; MIN_ROM_LEN];
+        expected[addr] = byte;
+        assert_eq!(*rom.data, expected[..])
+    }
+
+    #[test]
+    fn empty_section_does_not_extend_rom() {
+        let addr = MIN_ROM_LEN + 1;
+        let object = BinaryObject {
+            sections: vec![BinarySection {
+                addr,
+                data: Vec::new(),
+            }],
+        };
+        let rom = object.into_rom();
+        assert_eq!(rom.data.len(), MIN_ROM_LEN)
+    }
 
     #[test]
     fn resolve_origin_relative_to_previous_section() {

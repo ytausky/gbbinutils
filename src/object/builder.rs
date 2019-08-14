@@ -201,8 +201,9 @@ mod tests {
     use super::*;
 
     use crate::diag::{CompactDiag, Message, TestDiagnosticsListener};
+    use crate::link::BinaryObject;
     use crate::model::{BinOp, Instruction, Nullary, Width};
-    use crate::object::{BinaryObject, SectionId};
+    use crate::object::SectionId;
     use std::borrow::Borrow;
 
     #[test]
