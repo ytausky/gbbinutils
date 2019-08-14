@@ -78,7 +78,7 @@ fn try_assemble(
 ) -> Result<BinaryObject, CodebaseError> {
     let codebase = codebase::FileCodebase::new(input);
     let diagnostics = &mut CompositeDiagnosticsSystem::new(&codebase.cache, output);
-    let mut linkable = object::LinkableProgram::new();
+    let mut linkable = object::Object::new();
     let builder = object::ProgramBuilder::new(&mut linkable);
     builder.assemble(name, &codebase, diagnostics)?;
     Ok(linkable.link(diagnostics))

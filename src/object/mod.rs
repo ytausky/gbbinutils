@@ -10,14 +10,14 @@ mod builder;
 mod eval;
 mod lowering;
 
-pub struct LinkableProgram<S> {
+pub struct Object<S> {
     pub program: Content<S>,
     pub vars: VarTable,
 }
 
-impl<S> LinkableProgram<S> {
+impl<S> Object<S> {
     pub fn new() -> Self {
-        Self {
+        Object {
             program: Content::new(),
             vars: VarTable::new(),
         }

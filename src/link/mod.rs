@@ -9,7 +9,7 @@ use std::ops::{Index, IndexMut};
 
 mod translate;
 
-impl<S: Clone> LinkableProgram<S> {
+impl<S: Clone> Object<S> {
     pub(crate) fn link(&mut self, diagnostics: &mut impl BackendDiagnostics<S>) -> BinaryObject {
         self.vars.resolve(&self.program);
         let mut context = LinkageContext {
@@ -134,7 +134,7 @@ mod tests {
     fn resolve_origin_relative_to_previous_section() {
         let origin1 = 0x150;
         let skipped_bytes = 0x10;
-        let mut linkable = LinkableProgram {
+        let mut linkable = Object {
             program: Content {
                 sections: vec![
                     Section {
@@ -172,7 +172,7 @@ mod tests {
     #[test]
     fn label_defined_as_section_origin_plus_offset() {
         let addr = 0xffe1;
-        let mut linkable = LinkableProgram::new();
+        let mut linkable = Object::new();
         let mut builder = ProgramBuilder::new(&mut linkable);
         builder.set_origin(addr.into());
         let symbol_id = builder.alloc_name(());
@@ -230,7 +230,7 @@ mod tests {
 
     #[test]
     fn resolve_expr_with_section_addr() {
-        let mut linkable = LinkableProgram {
+        let mut linkable = Object {
             program: Content {
                 sections: vec![Section {
                     constraints: Constraints {
@@ -276,8 +276,8 @@ mod tests {
         assert_eq!(vars[symbol].value, (addr + bytes).into())
     }
 
-    fn assert_section_size(expected: impl Into<Num>, f: impl FnOnce(&mut LinkableProgram<()>)) {
-        let mut linkable = LinkableProgram::new();
+    fn assert_section_size(expected: impl Into<Num>, f: impl FnOnce(&mut Object<()>)) {
+        let mut linkable = Object::new();
         linkable
             .program
             .add_section(None, linkable.vars.alloc(), linkable.vars.alloc());

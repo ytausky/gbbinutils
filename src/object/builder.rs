@@ -17,7 +17,7 @@ enum BuilderState<S> {
 }
 
 impl<'a, S> ProgramBuilder<'a, S> {
-    pub fn new(LinkableProgram { program, vars }: &'a mut LinkableProgram<S>) -> Self {
+    pub fn new(Object { program, vars }: &'a mut Object<S>) -> Self {
         Self {
             context: LinkageContext {
                 program,
@@ -266,8 +266,8 @@ mod tests {
         assert_eq!(object.program.sections[0].items, [node])
     }
 
-    fn build_object<F: FnOnce(ProgramBuilder<S>), S>(f: F) -> LinkableProgram<S> {
-        let mut linkable = LinkableProgram::new();
+    fn build_object<F: FnOnce(ProgramBuilder<S>), S>(f: F) -> Object<S> {
+        let mut linkable = Object::new();
         let builder = ProgramBuilder::new(&mut linkable);
         f(builder);
         linkable
