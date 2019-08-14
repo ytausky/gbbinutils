@@ -1349,27 +1349,23 @@ mod tests {
         message.at(highlight.into().into()).into()
     }
 
-    mod tests {
-        use super::*;
-
-        #[test]
-        fn test_token_macro() {
-            let tokens = input_tokens![
-                my_tok @ Plus,
-                Literal(()),
-                next_one @ Star,
-            ];
-            assert_eq!(
-                tokens.tokens,
-                [
-                    (Plus.into(), "my_tok".into()),
-                    (Literal(MockLiteral(1.into())), 1.into()),
-                    (Star.into(), "next_one".into()),
-                    (Eos.into(), 3.into()),
-                ]
-            );
-            assert_eq!(tokens.names.get("my_tok"), Some(&0));
-            assert_eq!(tokens.names.get("next_one"), Some(&2))
-        }
+    #[test]
+    fn test_token_macro() {
+        let tokens = input_tokens![
+            my_tok @ Plus,
+            Literal(()),
+            next_one @ Star,
+        ];
+        assert_eq!(
+            tokens.tokens,
+            [
+                (Plus.into(), "my_tok".into()),
+                (Literal(MockLiteral(1.into())), 1.into()),
+                (Star.into(), "next_one".into()),
+                (Eos.into(), 3.into()),
+            ]
+        );
+        assert_eq!(tokens.names.get("my_tok"), Some(&0));
+        assert_eq!(tokens.names.get("next_one"), Some(&2))
     }
 }
