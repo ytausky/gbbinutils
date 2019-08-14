@@ -1,7 +1,7 @@
 use super::{Analysis, AtomKind, Operand, SimpleOperand};
 
 use crate::diag::{Diagnostics, EmitDiag, Message};
-use crate::object::builder::{Branch, Condition, Instruction, Nullary};
+use crate::object::builder::{Branch, Condition, CpuInstr, Nullary};
 use crate::span::{Source, SpanSource};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -30,7 +30,7 @@ where
     D: Diagnostics<S>,
     S: Clone,
 {
-    pub fn analyze_branch(&mut self, branch: BranchKind) -> Result<Instruction<V>, ()> {
+    pub fn analyze_branch(&mut self, branch: BranchKind) -> Result<CpuInstr<V>, ()> {
         let (condition, target) = self.collect_branch_operands()?;
         let variant = analyze_branch_variant((branch, &self.mnemonic.1), target, self.diagnostics)?;
         match variant {
@@ -41,7 +41,7 @@ where
                     Err(())
                 }
             },
-            BranchVariant::PotentiallyConditional(branch) => Ok(Instruction::Branch(
+            BranchVariant::PotentiallyConditional(branch) => Ok(CpuInstr::Branch(
                 branch,
                 condition.map(|(condition, _)| condition),
             )),
@@ -123,11 +123,11 @@ enum UnconditionalBranch {
     Reti,
 }
 
-impl<V: Source> From<UnconditionalBranch> for Instruction<V> {
+impl<V: Source> From<UnconditionalBranch> for CpuInstr<V> {
     fn from(branch: UnconditionalBranch) -> Self {
         match branch {
-            UnconditionalBranch::JpDerefHl => Instruction::JpDerefHl,
-            UnconditionalBranch::Reti => Instruction::Nullary(Nullary::Reti),
+            UnconditionalBranch::JpDerefHl => CpuInstr::JpDerefHl,
+            UnconditionalBranch::Reti => CpuInstr::Nullary(Nullary::Reti),
         }
     }
 }
@@ -212,8 +212,8 @@ mod tests {
     fn describe_branch_instuctions() -> Vec<InstructionDescriptor> {
         use self::{ExplicitBranch::*, PotentiallyConditionalBranch::*};
         let mut descriptors = vec![
-            ((JP, vec![deref(literal(Hl))]), Instruction::JpDerefHl),
-            ((RETI, vec![]), Instruction::Nullary(Nullary::Reti)),
+            ((JP, vec![deref(literal(Hl))]), CpuInstr::JpDerefHl),
+            ((RETI, vec![]), CpuInstr::Nullary(Nullary::Reti)),
         ];
         for &kind in [Explicit(Call), Explicit(Jp), Explicit(Jr), Ret].iter() {
             descriptors.push(describe_branch(kind, None));
@@ -241,7 +241,7 @@ mod tests {
         };
         (
             (branch.into(), operands),
-            Instruction::Branch(
+            CpuInstr::Branch(
                 match branch {
                     Ret => Branch::Ret,
                     Explicit(explicit) => mk_explicit_branch(

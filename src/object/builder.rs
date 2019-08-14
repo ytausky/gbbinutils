@@ -78,8 +78,8 @@ pub trait Finish {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Item<V: Source> {
+    CpuInstr(CpuInstr<V>),
     Data(V, Width),
-    Instruction(Instruction<V>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -89,7 +89,7 @@ pub enum Width {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Instruction<V: Source> {
+pub enum CpuInstr<V: Source> {
     AddHl(Reg16),
     Alu(AluOperation, AluSource<V>),
     Bit(BitOperation, V, SimpleOperand),
@@ -759,7 +759,7 @@ mod tests {
     #[test]
     fn emit_stop() {
         emit_items_and_compare(
-            [Item::Instruction(Instruction::Nullary(Nullary::Stop))],
+            [Item::CpuInstr(CpuInstr::Nullary(Nullary::Stop))],
             [0x10, 0x00],
         )
     }

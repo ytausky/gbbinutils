@@ -218,7 +218,7 @@ mod tests {
         object_builder.set_origin(origin1_const);
 
         // nop
-        object_builder.emit_item(Item::Instruction(Instruction::Nullary(Nullary::Nop)));
+        object_builder.emit_item(Item::CpuInstr(CpuInstr::Nullary(Nullary::Nop)));
 
         // org . + $10
         let mut const_builder = object_builder.build_const();
@@ -229,7 +229,7 @@ mod tests {
         object_builder.set_origin(origin2_const);
 
         // halt
-        object_builder.emit_item(Item::Instruction(Instruction::Nullary(Nullary::Halt)));
+        object_builder.emit_item(Item::CpuInstr(CpuInstr::Nullary(Nullary::Halt)));
 
         let binary = Program::link(object, &mut IgnoreDiagnostics);
         assert_eq!(
@@ -260,7 +260,7 @@ mod tests {
     #[test]
     fn section_with_one_byte_has_size_one() {
         assert_section_size(1, |mut builder| {
-            builder.emit_item(Item::Instruction(Instruction::Nullary(Nullary::Nop)));
+            builder.emit_item(Item::CpuInstr(CpuInstr::Nullary(Nullary::Nop)));
         });
     }
 
@@ -276,7 +276,7 @@ mod tests {
 
     fn test_section_size_with_literal_ld_inline_addr(addr: i32, expected: i32) {
         assert_section_size(expected, |mut builder| {
-            builder.emit_item(Item::Instruction(Instruction::Ld(Ld::Special(
+            builder.emit_item(Item::CpuInstr(CpuInstr::Ld(Ld::Special(
                 SpecialLd::InlineAddr(addr.into()),
                 Direction::IntoA,
             ))))
@@ -287,7 +287,7 @@ mod tests {
     fn ld_inline_addr_with_symbol_after_instruction_has_size_three() {
         assert_section_size(3, |mut builder| {
             let name = builder.alloc_name(());
-            builder.emit_item(Item::Instruction(Instruction::Ld(Ld::Special(
+            builder.emit_item(Item::CpuInstr(CpuInstr::Ld(Ld::Special(
                 SpecialLd::InlineAddr(Atom::Name(name).into()),
                 Direction::IntoA,
             ))));

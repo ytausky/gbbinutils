@@ -233,7 +233,7 @@ mod tests {
         object_builder.set_origin(origin);
 
         // nop
-        object_builder.emit_item(Item::Instruction(Instruction::Nullary(Nullary::Nop)));
+        object_builder.emit_item(Item::CpuInstr(CpuInstr::Nullary(Nullary::Nop)));
 
         object.vars.resolve(&object.content);
         let context = &mut LinkageContext {
@@ -256,7 +256,7 @@ mod tests {
         let mut object_builder = ObjectBuilder::new(&mut object);
 
         // nop
-        object_builder.emit_item(Item::Instruction(Instruction::Nullary(Nullary::Nop)));
+        object_builder.emit_item(Item::CpuInstr(CpuInstr::Nullary(Nullary::Nop)));
 
         // db .
         let mut const_builder = object_builder.build_const();

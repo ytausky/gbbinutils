@@ -66,14 +66,15 @@ impl<S: Clone> Lower<S> for Item<Const<S>> {
     fn lower(self) -> LoweredItem<S> {
         match self {
             Item::Data(expr, width) => LoweredItem::One(Node::Immediate(expr, width)),
-            Item::Instruction(instruction) => instruction.lower(),
+            Item::CpuInstr(instr) => instr.lower(),
         }
     }
 }
 
-impl<S: Clone> Lower<S> for Instruction<Const<S>> {
+impl<S: Clone> Lower<S> for CpuInstr<Const<S>> {
     fn lower(self) -> LoweredItem<S> {
-        use self::Instruction::*;
+        use self::CpuInstr::*;
+
         match self {
             AddHl(reg16) => LoweredItem::with_opcode(0x09 | encode_reg16(reg16)),
             Alu(operation, AluSource::Simple(src)) => encode_simple_alu_operation(operation, src),
@@ -330,11 +331,11 @@ fn encode_inc_dec(mode: IncDec) -> u8 {
 mod tests {
     use super::*;
 
-    use crate::object::builder::{Branch::*, Instruction::*, Ld::*, Nullary::*};
+    use crate::object::builder::{Branch::*, CpuInstr::*, Ld::*, Nullary::*};
 
     use std::borrow::Borrow;
 
-    fn test_instruction(instruction: Instruction<Const<()>>, data_items: impl Borrow<[Node<()>]>) {
+    fn test_instruction(instruction: CpuInstr<Const<()>>, data_items: impl Borrow<[Node<()>]>) {
         let code: Vec<_> = instruction.lower().collect();
         assert_eq!(code, data_items.borrow())
     }
@@ -579,7 +580,7 @@ mod tests {
         .iter()
         .for_each(|(alu_operation, opcode)| {
             test_instruction(
-                Instruction::Alu(*alu_operation, AluSource::Immediate(expr.clone())),
+                CpuInstr::Alu(*alu_operation, AluSource::Immediate(expr.clone())),
                 [
                     Node::Byte(*opcode),
                     Node::Immediate(expr.clone(), Width::Byte),
@@ -813,9 +814,7 @@ mod tests {
         use self::Reg16::*;
         [(Bc, 0x09), (De, 0x19), (Hl, 0x29), (Sp, 0x39)]
             .iter()
-            .for_each(|(reg16, opcode)| {
-                test_instruction(Instruction::AddHl(*reg16), bytes([*opcode]))
-            })
+            .for_each(|(reg16, opcode)| test_instruction(CpuInstr::AddHl(*reg16), bytes([*opcode])))
     }
 
     #[test]
@@ -840,7 +839,7 @@ mod tests {
             (Dec, A, 0x3d),
         ];
         for (mode, operand, opcode) in test_cases {
-            test_instruction(Instruction::IncDec8(*mode, *operand), bytes([*opcode]))
+            test_instruction(CpuInstr::IncDec8(*mode, *operand), bytes([*opcode]))
         }
     }
 
@@ -858,7 +857,7 @@ mod tests {
             (Dec, Sp, 0x3b),
         ];
         for (mode, operand, opcode) in test_cases {
-            test_instruction(Instruction::IncDec16(*mode, *operand), bytes([*opcode]))
+            test_instruction(CpuInstr::IncDec16(*mode, *operand), bytes([*opcode]))
         }
     }
 
@@ -868,7 +867,7 @@ mod tests {
         [(Bc, 0xc1), (De, 0xd1), (Hl, 0xe1), (Af, 0xf1)]
             .iter()
             .for_each(|(reg_pair, opcode)| {
-                test_instruction(Instruction::Pop(*reg_pair), bytes([*opcode]))
+                test_instruction(CpuInstr::Pop(*reg_pair), bytes([*opcode]))
             })
     }
 
@@ -878,7 +877,7 @@ mod tests {
         [(Bc, 0xc5), (De, 0xd5), (Hl, 0xe5), (Af, 0xf5)]
             .iter()
             .for_each(|(reg_pair, opcode)| {
-                test_instruction(Instruction::Push(*reg_pair), bytes([*opcode]))
+                test_instruction(CpuInstr::Push(*reg_pair), bytes([*opcode]))
             })
     }
 
@@ -890,10 +889,7 @@ mod tests {
     #[test]
     fn lower_rst() {
         let n: Const<_> = 3.into();
-        test_instruction(
-            Instruction::Rst(n.clone()),
-            [Node::Embedded(0b11_000_111, n)],
-        )
+        test_instruction(CpuInstr::Rst(n.clone()), [Node::Embedded(0b11_000_111, n)])
     }
 
     #[test]
@@ -928,7 +924,7 @@ mod tests {
         ];
         for &(operation, operand, opcode) in test_cases {
             test_instruction(
-                Instruction::Bit(operation, n.clone(), operand),
+                CpuInstr::Bit(operation, n.clone(), operand),
                 extended(Node::Embedded(opcode, n.clone())),
             )
         }
@@ -948,7 +944,7 @@ mod tests {
             (Srl, L, 0x3d),
         ];
         for &(operation, operand, opcode) in test_cases {
-            test_instruction(Instruction::Misc(operation, operand), extended(opcode))
+            test_instruction(CpuInstr::Misc(operation, operand), extended(opcode))
         }
     }
 

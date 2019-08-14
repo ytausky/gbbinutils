@@ -12,7 +12,7 @@ where
     D: Diagnostics<S>,
     S: Clone,
 {
-    pub fn analyze_ld(&mut self) -> Result<Instruction<V>, ()> {
+    pub fn analyze_ld(&mut self) -> Result<CpuInstr<V>, ()> {
         let dest = self.next_operand_of(2)?;
         let src = self.next_operand_of(2)?;
         match (
@@ -44,7 +44,7 @@ where
         &mut self,
         dest: &impl Source<Span = S>,
         src: &(impl Source<Span = S> + DataWidth),
-    ) -> Result<Instruction<V>, ()> {
+    ) -> Result<CpuInstr<V>, ()> {
         let diagnostics = &mut self.diagnostics;
         let diagnostic = Message::LdWidthMismatch {
             src_width: src.width(),
@@ -60,7 +60,7 @@ where
         &mut self,
         dest: LdDest8<V>,
         src: impl Into<LdOperand<V, LdDest8<V>>>,
-    ) -> Result<Instruction<V>, ()> {
+    ) -> Result<CpuInstr<V>, ()> {
         match (dest, src.into()) {
             (
                 LdDest8::Simple(SimpleOperand::DerefHl, dest),
@@ -77,10 +77,10 @@ where
                 Err(())
             }
             (LdDest8::Simple(dest, _), LdOperand::Other(LdDest8::Simple(src, _))) => {
-                Ok(Instruction::Ld(Ld::Simple(dest, src)))
+                Ok(CpuInstr::Ld(Ld::Simple(dest, src)))
             }
             (LdDest8::Simple(dest, _), LdOperand::Const(expr)) => {
-                Ok(Instruction::Ld(Ld::Immediate8(dest, expr)))
+                Ok(CpuInstr::Ld(Ld::Immediate8(dest, expr)))
             }
             (LdDest8::Special(dest), src) => {
                 src.expect_a(self.diagnostics)?;
@@ -97,10 +97,10 @@ where
         &mut self,
         dest: LdDest16<S>,
         src: impl Into<LdOperand<V, LdDest16<S>>>,
-    ) -> Result<Instruction<V>, ()> {
+    ) -> Result<CpuInstr<V>, ()> {
         match (dest, src.into()) {
             (LdDest16::Reg16(Reg16::Sp, _), LdOperand::Other(LdDest16::Reg16(Reg16::Hl, _))) => {
-                Ok(Instruction::Ld(Ld::SpHl))
+                Ok(CpuInstr::Ld(Ld::SpHl))
             }
             (LdDest16::Reg16(_, dest_span), LdOperand::Other(LdDest16::Reg16(_, src_span))) => {
                 let diagnostics = &mut self.diagnostics;
@@ -109,7 +109,7 @@ where
                 Err(())
             }
             (LdDest16::Reg16(dest, _), LdOperand::Const(expr)) => {
-                Ok(Instruction::Ld(Ld::Immediate16(dest, expr)))
+                Ok(CpuInstr::Ld(Ld::Immediate16(dest, expr)))
             }
         }
     }
@@ -118,8 +118,8 @@ where
 fn analyze_special_ld<V: Source>(
     other: LdSpecial<V>,
     direction: Direction,
-) -> Result<Instruction<V>, ()> {
-    Ok(Instruction::Ld(Ld::Special(
+) -> Result<CpuInstr<V>, ()> {
+    Ok(CpuInstr::Ld(Ld::Special(
         match other {
             LdSpecial::Deref(expr) => SpecialLd::InlineAddr(expr),
             LdSpecial::DerefC(_) => SpecialLd::RegIndex,
@@ -313,35 +313,31 @@ mod tests {
     #[test]
     fn analyze_ld_deref_symbol_a() {
         let ident = "ident";
-        analyze(LD, vec![deref(ident), literal(A)]).expect_instruction(Instruction::Ld(
-            Ld::Special(
-                SpecialLd::InlineAddr(name(ident, TokenId::Operand(0, 1))),
-                Direction::FromA,
-            ),
-        ))
+        analyze(LD, vec![deref(ident), literal(A)]).expect_instruction(CpuInstr::Ld(Ld::Special(
+            SpecialLd::InlineAddr(name(ident, TokenId::Operand(0, 1))),
+            Direction::FromA,
+        )))
     }
 
     #[test]
     fn analyze_ld_a_deref_symbol() {
         let ident = "ident";
-        analyze(LD, vec![literal(A), deref(ident)]).expect_instruction(Instruction::Ld(
-            Ld::Special(
-                SpecialLd::InlineAddr(name(ident, TokenId::Operand(1, 1))),
-                Direction::IntoA,
-            ),
-        ))
+        analyze(LD, vec![literal(A), deref(ident)]).expect_instruction(CpuInstr::Ld(Ld::Special(
+            SpecialLd::InlineAddr(name(ident, TokenId::Operand(1, 1))),
+            Direction::IntoA,
+        )))
     }
 
     #[test]
     fn analyze_ld_deref_c_a() {
-        analyze(LD, vec![deref(literal(C)), literal(A)]).expect_instruction(Instruction::Ld(
+        analyze(LD, vec![deref(literal(C)), literal(A)]).expect_instruction(CpuInstr::Ld(
             Ld::Special(SpecialLd::RegIndex, Direction::FromA),
         ))
     }
 
     #[test]
     fn analyze_ld_a_deref_c() {
-        analyze(LD, vec![literal(A), deref(literal(C))]).expect_instruction(Instruction::Ld(
+        analyze(LD, vec![literal(A), deref(literal(C))]).expect_instruction(CpuInstr::Ld(
             Ld::Special(SpecialLd::RegIndex, Direction::IntoA),
         ))
     }
@@ -359,7 +355,7 @@ mod tests {
         descriptors.extend(describe_ld_deref_reg16_instructions());
         descriptors.push((
             (LD, vec![Reg16::Sp.into(), Reg16::Hl.into()]),
-            Instruction::Ld(Ld::SpHl),
+            CpuInstr::Ld(Ld::SpHl),
         ));
         descriptors
     }
@@ -380,7 +376,7 @@ mod tests {
             (SimpleOperand::DerefHl, SimpleOperand::DerefHl) => None,
             _ => Some((
                 (LD, vec![dest.into(), src.into()]),
-                Instruction::Ld(Ld::Simple(dest, src)),
+                CpuInstr::Ld(Ld::Simple(dest, src)),
             )),
         }
     }
@@ -395,7 +391,7 @@ mod tests {
         let n = 0x12;
         (
             (LD, vec![dest.into(), n.into()]),
-            Instruction::Ld(Ld::Immediate8(dest, number(n, TokenId::Operand(1, 0)))),
+            CpuInstr::Ld(Ld::Immediate8(dest, number(n, TokenId::Operand(1, 0)))),
         )
     }
 
@@ -407,7 +403,7 @@ mod tests {
         let value = "value";
         (
             (LD, vec![dest.into(), value.into()]),
-            Instruction::Ld(Ld::Immediate16(dest, name(value, TokenId::Operand(1, 0)))),
+            CpuInstr::Ld(Ld::Immediate16(dest, name(value, TokenId::Operand(1, 0)))),
         )
     }
 
@@ -421,14 +417,14 @@ mod tests {
         vec![
             (
                 (LD, vec![deref(ptr_reg), literal(A)]),
-                Instruction::Ld(Ld::Special(
+                CpuInstr::Ld(Ld::Special(
                     SpecialLd::DerefPtrReg(ptr_reg),
                     Direction::FromA,
                 )),
             ),
             (
                 (LD, vec![literal(A), deref(ptr_reg)]),
-                Instruction::Ld(Ld::Special(
+                CpuInstr::Ld(Ld::Special(
                     SpecialLd::DerefPtrReg(ptr_reg),
                     Direction::IntoA,
                 )),

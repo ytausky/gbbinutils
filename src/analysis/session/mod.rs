@@ -572,7 +572,7 @@ mod tests {
     use crate::log::*;
     use crate::model::{Atom, BinOp, LocationCounter};
     use crate::object::builder::mock::{BackendEvent, SerialIdAllocator};
-    use crate::object::builder::{Instruction, Nullary};
+    use crate::object::builder::{CpuInstr, Nullary};
 
     use std::fmt::Debug;
     use std::iter;
@@ -594,7 +594,7 @@ mod tests {
 
     #[test]
     fn emit_instruction_item() {
-        let item = Item::Instruction(Instruction::Nullary(Nullary::Nop));
+        let item = Item::CpuInstr(CpuInstr::Nullary(Nullary::Nop));
         let log =
             Fixture::<()>::default().log_session(|mut session| session.emit_item(item.clone()));
         assert_eq!(log, [BackendEvent::EmitItem(item).into()]);

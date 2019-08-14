@@ -137,7 +137,7 @@ fn analyze_mnemonic<S: Session>(
         operands.push(operand)
     }
     if let Ok(instruction) = cpu_instr::analyze_instruction(name, operands, &mut actions) {
-        actions.session.emit_item(Item::Instruction(instruction))
+        actions.session.emit_item(Item::CpuInstr(instruction))
     }
     actions
 }

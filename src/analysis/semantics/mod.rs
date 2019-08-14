@@ -176,7 +176,7 @@ mod tests {
     use crate::log::with_log;
     use crate::model::{Atom, BinOp, ExprOp, LocationCounter};
     use crate::object::builder::mock::{BackendEvent, SerialIdAllocator};
-    use crate::object::builder::{Instruction, Item, Ld, Name, SimpleOperand, Width};
+    use crate::object::builder::{CpuInstr, Item, Ld, Name, SimpleOperand, Width};
 
     use std::borrow::Borrow;
     use std::fmt::Debug;
@@ -237,7 +237,7 @@ mod tests {
         assert_eq!(
             actions,
             [
-                BackendEvent::EmitItem(Item::Instruction(Instruction::Ld(Ld::Simple(
+                BackendEvent::EmitItem(Item::CpuInstr(CpuInstr::Ld(Ld::Simple(
                     SimpleOperand::B,
                     SimpleOperand::DerefHl
                 ))))
@@ -276,7 +276,7 @@ mod tests {
         assert_eq!(
             actions,
             [
-                BackendEvent::EmitItem(Item::Instruction(Instruction::Rst(Expr::from_items(&[
+                BackendEvent::EmitItem(Item::CpuInstr(CpuInstr::Rst(Expr::from_items(&[
                     1.into(),
                     1.into(),
                     op.into()
@@ -308,7 +308,7 @@ mod tests {
             actions,
             [
                 NameTableEvent::Insert(ident, ResolvedIdent::Backend(0)).into(),
-                BackendEvent::EmitItem(Item::Instruction(Instruction::Rst(Expr::from_items(&[
+                BackendEvent::EmitItem(Item::CpuInstr(CpuInstr::Rst(Expr::from_items(&[
                     1.into(),
                     Name(0).into(),
                     ExprOp::FnCall(1).into()

@@ -15,7 +15,7 @@ pub(super) fn analyze_instruction<I, V, D, S>(
     mnemonic: (Mnemonic, S),
     operands: I,
     diagnostics: &mut D,
-) -> Result<Instruction<V>, ()>
+) -> Result<CpuInstr<V>, ()>
 where
     I: IntoIterator<Item = Result<Operand<V, S>, ()>>,
     V: Source<Span = S>,
@@ -56,13 +56,13 @@ where
         }
     }
 
-    fn run(mut self) -> Result<Instruction<V>, ()> {
+    fn run(mut self) -> Result<CpuInstr<V>, ()> {
         let instruction = self.analyze_mnemonic()?;
         self.check_for_unexpected_operands()?;
         Ok(instruction)
     }
 
-    fn analyze_mnemonic(&mut self) -> Result<Instruction<V>, ()> {
+    fn analyze_mnemonic(&mut self) -> Result<CpuInstr<V>, ()> {
         use self::Mnemonic::*;
         match self.mnemonic.0 {
             Alu(AluOperation::Add) => self.analyze_add_instruction(),
@@ -82,7 +82,7 @@ where
         }
     }
 
-    fn analyze_add_instruction(&mut self) -> Result<Instruction<V>, ()> {
+    fn analyze_add_instruction(&mut self) -> Result<CpuInstr<V>, ()> {
         match self.next_operand_of(2)? {
             Operand::Atom(AtomKind::Reg16(reg16), range) => {
                 self.analyze_add_reg16_instruction((reg16, range))
@@ -91,7 +91,7 @@ where
         }
     }
 
-    fn analyze_add_reg16_instruction(&mut self, target: (Reg16, S)) -> Result<Instruction<V>, ()> {
+    fn analyze_add_reg16_instruction(&mut self, target: (Reg16, S)) -> Result<CpuInstr<V>, ()> {
         match target.0 {
             Reg16::Hl => self.analyze_add_hl_instruction(),
             _ => {
@@ -101,9 +101,9 @@ where
         }
     }
 
-    fn analyze_add_hl_instruction(&mut self) -> Result<Instruction<V>, ()> {
+    fn analyze_add_hl_instruction(&mut self) -> Result<CpuInstr<V>, ()> {
         match self.next_operand_of(2)? {
-            Operand::Atom(AtomKind::Reg16(src), _) => Ok(Instruction::AddHl(src)),
+            Operand::Atom(AtomKind::Reg16(src), _) => Ok(CpuInstr::AddHl(src)),
             operand => {
                 self.emit_diag(Message::IncompatibleOperand.at(operand.span()));
                 Err(())
@@ -115,7 +115,7 @@ where
         &mut self,
         operation: AluOperation,
         first_operand: Operand<V, S>,
-    ) -> Result<Instruction<V>, ()> {
+    ) -> Result<CpuInstr<V>, ()> {
         let src = if operation.implicit_dest() {
             first_operand
         } else {
@@ -129,9 +129,9 @@ where
         };
         match src {
             Operand::Atom(AtomKind::Simple(src), _) => {
-                Ok(Instruction::Alu(operation, AluSource::Simple(src)))
+                Ok(CpuInstr::Alu(operation, AluSource::Simple(src)))
             }
-            Operand::Const(expr) => Ok(Instruction::Alu(operation, AluSource::Immediate(expr))),
+            Operand::Const(expr) => Ok(CpuInstr::Alu(operation, AluSource::Immediate(expr))),
             src => {
                 self.emit_diag(Message::IncompatibleOperand.at(src.span()));
                 Err(())
@@ -139,7 +139,7 @@ where
         }
     }
 
-    fn analyze_bit_operation(&mut self, operation: BitOperation) -> Result<Instruction<V>, ()> {
+    fn analyze_bit_operation(&mut self, operation: BitOperation) -> Result<CpuInstr<V>, ()> {
         let bit_number = self.next_operand_of(2)?;
         let operand = self.next_operand_of(2)?;
         let expr = if let Operand::Const(expr) = bit_number {
@@ -149,14 +149,14 @@ where
             self.emit_diag(Message::MustBeBit { mnemonic: stripped }.at(bit_number.span()));
             return Err(());
         };
-        Ok(Instruction::Bit(
+        Ok(CpuInstr::Bit(
             operation,
             expr,
             operand.expect_simple(self.diagnostics)?,
         ))
     }
 
-    fn analyze_ldhl(&mut self) -> Result<Instruction<V>, ()> {
+    fn analyze_ldhl(&mut self) -> Result<CpuInstr<V>, ()> {
         let src = self.next_operand_of(2)?;
         let offset = self.next_operand_of(2)?;
         src.expect_specific_atom(
@@ -164,30 +164,30 @@ where
             Message::SrcMustBeSp,
             self.diagnostics,
         )?;
-        Ok(Instruction::Ldhl(offset.expect_const(self.diagnostics)?))
+        Ok(CpuInstr::Ldhl(offset.expect_const(self.diagnostics)?))
     }
 
-    fn analyze_misc(&mut self, operation: MiscOperation) -> Result<Instruction<V>, ()> {
+    fn analyze_misc(&mut self, operation: MiscOperation) -> Result<CpuInstr<V>, ()> {
         let operand = self.next_operand_of(1)?;
-        Ok(Instruction::Misc(
+        Ok(CpuInstr::Misc(
             operation,
             operand.expect_simple(self.diagnostics)?,
         ))
     }
 
-    fn analyze_stack_operation(&mut self, operation: StackOperation) -> Result<Instruction<V>, ()> {
+    fn analyze_stack_operation(&mut self, operation: StackOperation) -> Result<CpuInstr<V>, ()> {
         let reg_pair = self.next_operand_of(1)?.expect_reg_pair(self.diagnostics)?;
         let instruction_ctor = match operation {
-            StackOperation::Push => Instruction::Push,
-            StackOperation::Pop => Instruction::Pop,
+            StackOperation::Push => CpuInstr::Push,
+            StackOperation::Pop => CpuInstr::Pop,
         };
         Ok(instruction_ctor(reg_pair))
     }
 
-    fn analyze_inc_dec(&mut self, mode: IncDec) -> Result<Instruction<V>, ()> {
+    fn analyze_inc_dec(&mut self, mode: IncDec) -> Result<CpuInstr<V>, ()> {
         match self.next_operand_of(1)? {
-            Operand::Atom(AtomKind::Simple(operand), _) => Ok(Instruction::IncDec8(mode, operand)),
-            Operand::Atom(AtomKind::Reg16(operand), _) => Ok(Instruction::IncDec16(mode, operand)),
+            Operand::Atom(AtomKind::Simple(operand), _) => Ok(CpuInstr::IncDec8(mode, operand)),
+            Operand::Atom(AtomKind::Reg16(operand), _) => Ok(CpuInstr::IncDec16(mode, operand)),
             operand => {
                 self.emit_diag(Message::OperandCannotBeIncDec(mode).at(operand.span()));
                 Err(())
@@ -195,8 +195,8 @@ where
         }
     }
 
-    fn analyze_rst(&mut self) -> Result<Instruction<V>, ()> {
-        Ok(Instruction::Rst(
+    fn analyze_rst(&mut self) -> Result<CpuInstr<V>, ()> {
+        Ok(CpuInstr::Rst(
             self.next_operand_of(1)?.expect_const(self.diagnostics)?,
         ))
     }
@@ -317,9 +317,9 @@ impl AluOperation {
     }
 }
 
-impl<V: Source> From<Nullary> for Instruction<V> {
-    fn from(nullary: Nullary) -> Instruction<V> {
-        Instruction::Nullary(nullary)
+impl<V: Source> From<Nullary> for CpuInstr<V> {
+    fn from(nullary: Nullary) -> CpuInstr<V> {
+        CpuInstr::Nullary(nullary)
     }
 }
 
@@ -522,17 +522,15 @@ mod tests {
     }
 
     fn test_cp_const_analysis(parsed: Input, expr: Expr) {
-        analyze(CP, Some(parsed)).expect_instruction(Instruction::Alu(
-            AluOperation::Cp,
-            AluSource::Immediate(expr),
-        ))
+        analyze(CP, Some(parsed))
+            .expect_instruction(CpuInstr::Alu(AluOperation::Cp, AluSource::Immediate(expr)))
     }
 
     #[test]
     fn analyze_rst() {
         let n = 3;
         analyze(RST, vec![n.into()])
-            .expect_instruction(Instruction::Rst(number(n, TokenId::Operand(0, 0))))
+            .expect_instruction(CpuInstr::Rst(number(n, TokenId::Operand(0, 0))))
     }
 
     #[test]
@@ -540,7 +538,7 @@ mod tests {
         test_instruction_analysis(describe_legal_instructions());
     }
 
-    pub(super) type InstructionDescriptor = ((Mnemonic, Vec<Input>), Instruction<Expr>);
+    pub(super) type InstructionDescriptor = ((Mnemonic, Vec<Input>), CpuInstr<Expr>);
 
     fn describe_legal_instructions() -> Vec<InstructionDescriptor> {
         let mut descriptors: Vec<InstructionDescriptor> = Vec::new();
@@ -554,7 +552,7 @@ mod tests {
         descriptors.extend(describe_misc_operation_instructions());
         descriptors.push((
             (LDHL, vec![Reg16::Sp.into(), 0x42.into()]),
-            Instruction::Ldhl(number(0x42, TokenId::Operand(1, 0))),
+            CpuInstr::Ldhl(number(0x42, TokenId::Operand(1, 0))),
         ));
         descriptors
     }
@@ -562,8 +560,8 @@ mod tests {
     fn describe_push_pop_instructions() -> impl Iterator<Item = InstructionDescriptor> {
         REG_PAIRS.iter().flat_map(|&reg_pair| {
             vec![
-                ((PUSH, vec![reg_pair.into()]), Instruction::Push(reg_pair)),
-                ((POP, vec![reg_pair.into()]), Instruction::Pop(reg_pair)),
+                ((PUSH, vec![reg_pair.into()]), CpuInstr::Push(reg_pair)),
+                ((POP, vec![reg_pair.into()]), CpuInstr::Pop(reg_pair)),
             ]
         })
     }
@@ -613,7 +611,7 @@ mod tests {
                 operation.into(),
                 vec![SimpleOperand::A.into(), operand.into()],
             ),
-            Instruction::Alu(operation, AluSource::Simple(operand)),
+            CpuInstr::Alu(operation, AluSource::Simple(operand)),
         )
     }
 
@@ -623,7 +621,7 @@ mod tests {
     ) -> InstructionDescriptor {
         (
             (operation.into(), vec![operand.into()]),
-            Instruction::Alu(operation, AluSource::Simple(operand)),
+            CpuInstr::Alu(operation, AluSource::Simple(operand)),
         )
     }
 
@@ -634,7 +632,7 @@ mod tests {
     fn describe_add_hl_reg16(reg16: Reg16) -> InstructionDescriptor {
         (
             (ADD, vec![Reg16::Hl.into(), reg16.into()]),
-            Instruction::AddHl(reg16),
+            CpuInstr::AddHl(reg16),
         )
     }
 
@@ -653,7 +651,7 @@ mod tests {
         let bit_number = 4;
         (
             (operation.into(), vec![bit_number.into(), operand.into()]),
-            Instruction::Bit(
+            CpuInstr::Bit(
                 operation,
                 number(bit_number, TokenId::Operand(0, 0)),
                 operand,
@@ -666,7 +664,7 @@ mod tests {
             SIMPLE_OPERANDS.iter().map(move |&operand| {
                 (
                     (mode.into(), vec![operand.into()]),
-                    Instruction::IncDec8(mode, operand),
+                    CpuInstr::IncDec8(mode, operand),
                 )
             })
         })
@@ -677,7 +675,7 @@ mod tests {
             REG16.iter().map(move |&reg16| {
                 (
                     (mode.into(), vec![reg16.into()]),
-                    Instruction::IncDec16(mode, reg16),
+                    CpuInstr::IncDec16(mode, reg16),
                 )
             })
         })
@@ -688,7 +686,7 @@ mod tests {
             SIMPLE_OPERANDS.iter().map(move |&operand| {
                 (
                     (operation.into(), vec![operand.into()]),
-                    Instruction::Misc(operation, operand),
+                    CpuInstr::Misc(operation, operand),
                 )
             })
         })
@@ -744,10 +742,10 @@ mod tests {
 
     pub(super) struct AnalysisResult(InnerAnalysisResult);
 
-    type InnerAnalysisResult = Result<Instruction<Expr>, Vec<Event<TokenSpan>>>;
+    type InnerAnalysisResult = Result<CpuInstr<Expr>, Vec<Event<TokenSpan>>>;
 
     impl AnalysisResult {
-        pub fn expect_instruction(self, expected: Instruction<Expr>) {
+        pub fn expect_instruction(self, expected: CpuInstr<Expr>) {
             assert_eq!(self.0, Ok(expected))
         }
 
