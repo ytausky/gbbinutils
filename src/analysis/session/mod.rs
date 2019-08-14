@@ -9,7 +9,6 @@ use super::{IdentSource, Lex, Literal, SemanticToken, StringSource, TokenSeq};
 use crate::codebase::CodebaseError;
 use crate::diag::span::{AddMacroDef, SpanSource};
 use crate::diag::*;
-use crate::model::Item;
 use crate::object::builder::*;
 
 use std::ops::DerefMut;
@@ -571,8 +570,9 @@ mod tests {
     use crate::analysis::{Literal, MockCodebase};
     use crate::diag::DiagnosticsEvent;
     use crate::log::*;
-    use crate::model::{Atom, BinOp, Instruction, LocationCounter, Nullary};
+    use crate::model::{Atom, BinOp, LocationCounter};
     use crate::object::builder::mock::{BackendEvent, SerialIdAllocator};
+    use crate::object::builder::{Instruction, Nullary};
 
     use std::fmt::Debug;
     use std::iter;

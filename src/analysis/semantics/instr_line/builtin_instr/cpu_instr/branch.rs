@@ -1,7 +1,7 @@
 use super::{Analysis, AtomKind, Operand, SimpleOperand};
 
 use crate::diag::{Diagnostics, EmitDiag, Message};
-use crate::model::{Branch, Condition, Instruction, Nullary};
+use crate::object::builder::{Branch, Condition, Instruction, Nullary};
 use crate::span::{Source, SpanSource};
 
 #[derive(Clone, Copy, Debug, PartialEq)]

@@ -1,8 +1,7 @@
 use super::{Arg, ArgAtom, ArgEvaluator, ArgUnaryOp, ArgVariant, EvalArg};
 
 use crate::diag::*;
-use crate::model::{Condition, PtrReg, Reg16, RegPair, SimpleOperand};
-use crate::object::builder::Finish;
+use crate::object::builder::{Condition, Finish, PtrReg, Reg16, RegPair, SimpleOperand};
 use crate::span::{Source, SpanSource};
 
 #[derive(Clone, Copy, Debug, PartialEq)]

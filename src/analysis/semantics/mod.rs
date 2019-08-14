@@ -174,9 +174,9 @@ mod tests {
     use crate::analysis::SemanticToken;
     use crate::diag::{DiagnosticsEvent, EmitDiag, Merge, Message, MockSpan};
     use crate::log::with_log;
-    use crate::model::{Atom, BinOp, ExprOp, Instruction, Item, LocationCounter, Width};
+    use crate::model::{Atom, BinOp, ExprOp, LocationCounter};
     use crate::object::builder::mock::{BackendEvent, SerialIdAllocator};
-    use crate::object::builder::Name;
+    use crate::object::builder::{Instruction, Item, Ld, Name, SimpleOperand, Width};
 
     use std::borrow::Borrow;
     use std::fmt::Debug;
@@ -217,7 +217,6 @@ mod tests {
 
     #[test]
     fn emit_ld_b_deref_hl() {
-        use crate::model::*;
         let actions = collect_semantic_actions(|actions| {
             let mut command = actions
                 .will_parse_line()

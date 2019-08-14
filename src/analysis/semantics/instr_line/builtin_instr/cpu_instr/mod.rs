@@ -4,7 +4,7 @@ use super::operand::{AtomKind, Context, Operand, OperandCounter};
 
 use crate::diag::span::Source;
 use crate::diag::*;
-use crate::model::*;
+use crate::object::builder::*;
 
 pub(in super::super) mod mnemonic;
 

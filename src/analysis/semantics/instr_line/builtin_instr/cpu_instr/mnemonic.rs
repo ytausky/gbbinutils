@@ -1,6 +1,6 @@
 use super::branch::*;
 
-use crate::model::*;
+use crate::object::builder::*;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(in crate::analysis) enum Mnemonic {

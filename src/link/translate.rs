@@ -1,7 +1,7 @@
 use super::{BinarySection, LinkageContext, VarTable};
 
 use crate::diag::{BackendDiagnostics, Message};
-use crate::model::Width;
+use crate::object::builder::Width;
 use crate::object::{Const, Content, Node, Section};
 use crate::span::Source;
 
@@ -159,8 +159,8 @@ mod tests {
     use super::*;
 
     use crate::diag::IgnoreDiagnostics;
-    use crate::model::{Atom, BinOp, Instruction, Item, LocationCounter, Nullary};
-    use crate::object::builder::{Backend, Finish, ObjectBuilder, PartialBackend, PushOp};
+    use crate::model::{Atom, BinOp, LocationCounter};
+    use crate::object::builder::*;
     use crate::object::num::Num;
     use crate::object::{Content, Object};
 

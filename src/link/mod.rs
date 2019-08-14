@@ -1,8 +1,7 @@
+use crate::diag::{BackendDiagnostics, IgnoreDiagnostics};
+use crate::object::builder::Width;
 use crate::object::num::Num;
 use crate::object::*;
-
-use crate::diag::{BackendDiagnostics, IgnoreDiagnostics};
-use crate::model::Width;
 
 use std::borrow::Borrow;
 use std::ops::{Index, IndexMut};

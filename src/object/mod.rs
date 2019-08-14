@@ -1,6 +1,7 @@
+use self::builder::Width;
 use self::num::Num;
 
-use crate::model::{Atom, Expr, ExprOp, LocationCounter, Width};
+use crate::model::{Atom, Expr, ExprOp, LocationCounter};
 
 pub mod builder;
 pub mod num;

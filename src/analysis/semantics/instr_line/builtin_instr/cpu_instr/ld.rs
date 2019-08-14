@@ -3,7 +3,7 @@ use super::{Analysis, Operand};
 use crate::analysis::semantics::instr_line::builtin_instr::operand::AtomKind;
 use crate::diag::span::{Source, SpanSource};
 use crate::diag::{Diagnostics, EmitDiag, Message};
-use crate::model::{Direction, Instruction, Ld, PtrReg, Reg16, SimpleOperand, SpecialLd, Width};
+use crate::object::builder::*;
 
 impl<'a, I, V, D, S> Analysis<'a, I, D, S>
 where
@@ -145,7 +145,6 @@ impl<V: Source> Operand<V, V::Span> {
                 ))),
                 AtomKind::Reg16(reg16) => Ok(LdDest::Word(LdDest16::Reg16(reg16, span))),
                 AtomKind::RegPair(reg_pair) => {
-                    use crate::model::RegPair;
                     assert_eq!(reg_pair, RegPair::Af);
                     Err(Message::AfOutsideStackOperation.at(span))
                 }
@@ -305,10 +304,11 @@ impl<S: Clone> Source for LdDest16<S> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     use crate::analysis::semantics::instr_line::builtin_instr::cpu_instr::mnemonic::LD;
     use crate::analysis::semantics::instr_line::builtin_instr::cpu_instr::tests::*;
     use crate::diag::Merge;
-    use crate::model::*;
 
     #[test]
     fn analyze_ld_deref_symbol_a() {

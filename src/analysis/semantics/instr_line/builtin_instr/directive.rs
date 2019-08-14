@@ -7,7 +7,7 @@ use crate::analysis::semantics::TokenStreamState;
 use crate::analysis::session::Session;
 use crate::analysis::Literal;
 use crate::diag::*;
-use crate::model::{Item, Width};
+use crate::object::builder::{Item, Width};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(in crate::analysis) enum Directive {

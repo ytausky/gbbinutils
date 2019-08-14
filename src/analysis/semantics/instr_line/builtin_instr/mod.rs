@@ -9,8 +9,8 @@ use crate::analysis::semantics::{Params, RelocLookup, ResolveNames, WithParams};
 use crate::analysis::session::Session;
 use crate::analysis::syntax::actions::{BuiltinInstrActions, InstrFinalizer};
 use crate::diag::{Diagnostics, EmitDiag, Message};
-use crate::model::{BinOp, FnCall, Item, LocationCounter};
-use crate::object::builder::{Finish, Name, PushOp};
+use crate::model::{BinOp, FnCall, LocationCounter};
+use crate::object::builder::{Finish, Item, Name, PushOp};
 
 pub(super) mod cpu_instr;
 
