@@ -1,4 +1,3 @@
-use super::link::{LinkageContext, VarTable};
 use super::*;
 
 use crate::analysis::backend::*;
@@ -193,7 +192,7 @@ impl<'a, S: Clone> BuiltinSymbols for ProgramBuilder<'a, S> {
     type Name = Symbol;
 
     fn builtin_symbols(&self) -> &[(&str, Self::Name)] {
-        super::link::BUILTIN_SYMBOLS
+        super::eval::BUILTIN_SYMBOLS
     }
 }
 
@@ -203,7 +202,7 @@ mod tests {
 
     use crate::diag::{CompactDiag, Message, TestDiagnosticsListener};
     use crate::model::{BinOp, Instruction, Nullary, Width};
-    use crate::program::{BinaryObject, SectionId};
+    use crate::object::{BinaryObject, SectionId};
     use std::borrow::Borrow;
 
     #[test]

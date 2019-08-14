@@ -4,7 +4,7 @@
 //! Its customizable IO functions make it suitable for embedding in other tools, in unit tests, etc.
 
 pub use crate::codebase::FileSystem;
-pub use crate::program::{BinaryObject, Rom};
+pub use crate::object::{BinaryObject, Rom};
 
 use crate::analysis::Assemble;
 use crate::codebase::{CodebaseError, StdFileSystem};
@@ -15,8 +15,9 @@ pub mod diag;
 
 mod analysis;
 mod codebase;
+mod link;
 mod model;
-mod program;
+mod object;
 
 #[derive(Default)]
 pub struct Config<'a> {
@@ -77,8 +78,8 @@ fn try_assemble(
 ) -> Result<BinaryObject, CodebaseError> {
     let codebase = codebase::FileCodebase::new(input);
     let diagnostics = &mut CompositeDiagnosticsSystem::new(&codebase.cache, output);
-    let mut linkable = program::LinkableProgram::new();
-    let builder = program::ProgramBuilder::new(&mut linkable);
+    let mut linkable = object::LinkableProgram::new();
+    let builder = object::ProgramBuilder::new(&mut linkable);
     builder.assemble(name, &codebase, diagnostics)?;
     Ok(linkable.link(diagnostics))
 }

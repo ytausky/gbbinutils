@@ -1,16 +1,18 @@
 pub(crate) use self::builder::ProgramBuilder;
 
-use self::link::VarTable;
+use self::num::Num;
 
 use crate::model::{Atom, ExprOp, LocationCounter, Width};
 
+pub mod num;
+
 mod builder;
-mod link;
+mod eval;
 mod lowering;
 
 pub struct LinkableProgram<S> {
-    program: Program<S>,
-    vars: VarTable,
+    pub program: Program<S>,
+    pub vars: VarTable,
 }
 
 impl<S> LinkableProgram<S> {
@@ -22,8 +24,61 @@ impl<S> LinkableProgram<S> {
     }
 }
 
+pub(super) struct LinkageContext<P, V> {
+    pub program: P,
+    pub vars: V,
+    pub location: Num,
+}
+
+pub struct VarTable(pub Vec<Var>);
+
+#[derive(Clone, Default)]
+pub struct Var {
+    pub value: Num,
+}
+
+impl Var {
+    pub fn refine(&mut self, value: Num) -> bool {
+        let old_value = self.value.clone();
+        let was_refined = match (old_value, &value) {
+            (Num::Unknown, new_value) => *new_value != Num::Unknown,
+            (
+                Num::Range {
+                    min: old_min,
+                    max: old_max,
+                },
+                Num::Range {
+                    min: new_min,
+                    max: new_max,
+                },
+            ) => {
+                assert!(*new_min >= old_min);
+                assert!(*new_max <= old_max);
+                *new_min > old_min || *new_max < old_max
+            }
+            (Num::Range { .. }, Num::Unknown) => {
+                panic!("a symbol previously approximated is now unknown")
+            }
+        };
+        self.value = value;
+        was_refined
+    }
+}
+
+impl VarTable {
+    pub fn new() -> Self {
+        Self(Vec::new())
+    }
+
+    pub fn alloc(&mut self) -> VarId {
+        let id = VarId(self.0.len());
+        self.0.push(Default::default());
+        id
+    }
+}
+
 type Expr<S> = crate::model::Expr<Atom<VarId, Symbol>, S>;
-type Const<S> = crate::model::Expr<Atom<LocationCounter, Symbol>, S>;
+pub type Const<S> = crate::model::Expr<Atom<LocationCounter, Symbol>, S>;
 
 impl<L> From<Symbol> for Atom<L, Symbol> {
     fn from(id: Symbol) -> Self {
@@ -59,7 +114,7 @@ impl<L> From<ProgramSymbol> for ExprOp<Atom<L, Symbol>> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct VarId(usize);
+pub struct VarId(pub usize);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Symbol {
@@ -94,26 +149,26 @@ impl From<ProgramSymbol> for Symbol {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ProgramSymbol(usize);
+pub struct ProgramSymbol(pub usize);
 
 pub struct Program<S> {
-    sections: Vec<Section<S>>,
-    symbols: SymbolTable<S>,
+    pub sections: Vec<Section<S>>,
+    pub symbols: SymbolTable<S>,
 }
 
-struct Section<S> {
-    constraints: Constraints<S>,
-    addr: VarId,
-    size: VarId,
-    items: Vec<Node<S>>,
+pub struct Section<S> {
+    pub constraints: Constraints<S>,
+    pub addr: VarId,
+    pub size: VarId,
+    pub items: Vec<Node<S>>,
 }
 
-struct Constraints<S> {
-    addr: Option<Const<S>>,
+pub struct Constraints<S> {
+    pub addr: Option<Const<S>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-enum Node<S> {
+pub enum Node<S> {
     Byte(u8),
     Immediate(Const<S>, Width),
     LdInlineAddr(u8, Const<S>),
@@ -123,23 +178,23 @@ enum Node<S> {
 }
 
 #[derive(Debug, PartialEq)]
-enum ProgramDef<S> {
+pub enum ProgramDef<S> {
     Section(SectionId),
     Expr(Expr<S>),
 }
 
 #[derive(Debug, PartialEq)]
-struct SectionId(usize);
+pub struct SectionId(pub usize);
 
 impl<S> Program<S> {
-    fn new() -> Program<S> {
+    pub fn new() -> Program<S> {
         Program {
             sections: Vec::new(),
             symbols: SymbolTable::new(),
         }
     }
 
-    fn add_section(&mut self, name: Option<ProgramSymbol>, addr: VarId, size: VarId) {
+    pub fn add_section(&mut self, name: Option<ProgramSymbol>, addr: VarId, size: VarId) {
         let section = SectionId(self.sections.len());
         self.sections.push(Section::new(addr, size));
         if let Some(name) = name {
@@ -159,20 +214,20 @@ impl<S> Section<S> {
     }
 }
 
-struct SymbolTable<S>(Vec<Option<ProgramDef<S>>>);
+pub struct SymbolTable<S>(pub Vec<Option<ProgramDef<S>>>);
 
 impl<S> SymbolTable<S> {
     pub fn new() -> Self {
         Self(Vec::new())
     }
 
-    fn alloc(&mut self) -> ProgramSymbol {
+    pub fn alloc(&mut self) -> ProgramSymbol {
         let id = ProgramSymbol(self.0.len());
         self.0.push(None);
         id
     }
 
-    fn define(&mut self, ProgramSymbol(id): ProgramSymbol, def: ProgramDef<S>) {
+    pub fn define(&mut self, ProgramSymbol(id): ProgramSymbol, def: ProgramDef<S>) {
         assert!(self.0[id].is_none());
         self.0[id] = Some(def);
     }

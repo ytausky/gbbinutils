@@ -1,14 +1,15 @@
-use super::{LinkageContext, Num, VarTable};
+use super::{LinkageContext, VarTable};
 
 use crate::diag::span::{Spanned, WithSpan};
 use crate::diag::{BackendDiagnostics, Message, ValueKind};
 use crate::model::{Atom, BinOp, Expr, ExprOp, LocationCounter, ParamId};
-use crate::program::*;
+use crate::object::num::Num;
+use crate::object::*;
 
 use std::borrow::Borrow;
 
 impl<S: Clone> Const<S> {
-    pub(super) fn to_num<'a, V, D>(
+    pub(crate) fn to_num<'a, V, D>(
         &self,
         context: &LinkageContext<&'a Program<S>, V>,
         diagnostics: &mut D,
@@ -268,7 +269,7 @@ mod tests {
 
     use crate::diag::*;
     use crate::log::Log;
-    use crate::program::link::Var;
+    use crate::object::Var;
 
     type MockDiagnostics<S> = crate::diag::MockDiagnostics<DiagnosticsEvent<S>, S>;
 

@@ -2,7 +2,7 @@ use super::{LinkageContext, VarTable};
 
 use crate::diag::{BackendDiagnostics, Message};
 use crate::model::Width;
-use crate::program::{BinarySection, Const, Node, Program, Section};
+use crate::object::{BinarySection, Const, Node, Program, Section};
 use crate::span::Source;
 
 use std::mem::replace;
@@ -160,8 +160,8 @@ mod tests {
 
     use crate::diag::IgnoreDiagnostics;
     use crate::model::{Atom, BinOp, LocationCounter};
-    use crate::program::link::Var;
-    use crate::program::{Constraints, Program, SymbolTable, VarId};
+    use crate::object::num::Num;
+    use crate::object::{Constraints, Program, SymbolTable, Var, VarId};
 
     use std::borrow::Borrow;
 
@@ -207,8 +207,6 @@ mod tests {
     }
 
     fn translate_section_item<S: Clone + PartialEq>(item: Node<S>) -> Vec<u8> {
-        use crate::program::link::Num;
-
         item.translate(
             &LinkageContext {
                 program: &Program::new(),

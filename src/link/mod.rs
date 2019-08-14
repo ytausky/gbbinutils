@@ -1,8 +1,5 @@
-pub use self::eval::BUILTIN_SYMBOLS;
-
-use self::num::Num;
-
-use super::{BinaryObject, LinkableProgram, Node, Program, Section, VarId};
+use crate::object::num::Num;
+use crate::object::*;
 
 use crate::diag::{BackendDiagnostics, IgnoreDiagnostics};
 use crate::model::Width;
@@ -10,8 +7,6 @@ use crate::model::Width;
 use std::borrow::Borrow;
 use std::ops::{Index, IndexMut};
 
-mod eval;
-mod num;
 mod translate;
 
 impl<S: Clone> LinkableProgram<S> {
@@ -37,59 +32,6 @@ impl VarTable {
     fn resolve<S: Clone>(&mut self, program: &Program<S>) {
         self.refine_all(program);
         self.refine_all(program);
-    }
-}
-
-pub(super) struct LinkageContext<P, V> {
-    pub program: P,
-    pub vars: V,
-    pub location: Num,
-}
-
-pub(super) struct VarTable(Vec<Var>);
-
-#[derive(Clone, Default)]
-pub(super) struct Var {
-    value: Num,
-}
-
-impl Var {
-    fn refine(&mut self, value: Num) -> bool {
-        let old_value = self.value.clone();
-        let was_refined = match (old_value, &value) {
-            (Num::Unknown, new_value) => *new_value != Num::Unknown,
-            (
-                Num::Range {
-                    min: old_min,
-                    max: old_max,
-                },
-                Num::Range {
-                    min: new_min,
-                    max: new_max,
-                },
-            ) => {
-                assert!(*new_min >= old_min);
-                assert!(*new_max <= old_max);
-                *new_min > old_min || *new_max < old_max
-            }
-            (Num::Range { .. }, Num::Unknown) => {
-                panic!("a symbol previously approximated is now unknown")
-            }
-        };
-        self.value = value;
-        was_refined
-    }
-}
-
-impl VarTable {
-    pub fn new() -> Self {
-        Self(Vec::new())
-    }
-
-    pub fn alloc(&mut self) -> VarId {
-        let id = VarId(self.0.len());
-        self.0.push(Default::default());
-        id
     }
 
     fn refine_all<S: Clone>(&mut self, program: &Program<S>) -> i32 {
@@ -186,8 +128,7 @@ mod tests {
 
     use crate::analysis::backend::*;
     use crate::diag::IgnoreDiagnostics;
-    use crate::model::{BinOp, Width};
-    use crate::program::*;
+    use crate::model::{Atom, BinOp, Width};
 
     #[test]
     fn resolve_origin_relative_to_previous_section() {
