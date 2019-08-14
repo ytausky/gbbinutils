@@ -87,8 +87,8 @@ impl<L> From<Symbol> for Atom<L, Symbol> {
 }
 
 #[cfg(test)]
-impl<L> From<ProgramSymbol> for Atom<L, Symbol> {
-    fn from(id: ProgramSymbol) -> Self {
+impl<L> From<ContentSymbol> for Atom<L, Symbol> {
+    fn from(id: ContentSymbol) -> Self {
         Atom::Name(id.into())
     }
 }
@@ -107,8 +107,8 @@ impl<L> From<BuiltinSymbol> for ExprOp<Atom<L, Symbol>> {
 }
 
 #[cfg(test)]
-impl<L> From<ProgramSymbol> for ExprOp<Atom<L, Symbol>> {
-    fn from(id: ProgramSymbol) -> Self {
+impl<L> From<ContentSymbol> for ExprOp<Atom<L, Symbol>> {
+    fn from(id: ContentSymbol) -> Self {
         Atom::from(id).into()
     }
 }
@@ -119,7 +119,7 @@ pub struct VarId(pub usize);
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Symbol {
     Builtin(BuiltinSymbol),
-    Program(ProgramSymbol),
+    Content(ContentSymbol),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -128,10 +128,10 @@ pub enum BuiltinSymbol {
 }
 
 impl Symbol {
-    fn program(self) -> Option<ProgramSymbol> {
+    fn content(self) -> Option<ContentSymbol> {
         match self {
             Symbol::Builtin(_) => None,
-            Symbol::Program(id) => Some(id),
+            Symbol::Content(id) => Some(id),
         }
     }
 }
@@ -142,14 +142,14 @@ impl From<BuiltinSymbol> for Symbol {
     }
 }
 
-impl From<ProgramSymbol> for Symbol {
-    fn from(id: ProgramSymbol) -> Self {
-        Symbol::Program(id)
+impl From<ContentSymbol> for Symbol {
+    fn from(id: ContentSymbol) -> Self {
+        Symbol::Content(id)
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ProgramSymbol(pub usize);
+pub struct ContentSymbol(pub usize);
 
 pub struct Content<S> {
     pub sections: Vec<Section<S>>,
@@ -194,7 +194,7 @@ impl<S> Content<S> {
         }
     }
 
-    pub fn add_section(&mut self, name: Option<ProgramSymbol>, addr: VarId, size: VarId) {
+    pub fn add_section(&mut self, name: Option<ContentSymbol>, addr: VarId, size: VarId) {
         let section = SectionId(self.sections.len());
         self.sections.push(Section::new(addr, size));
         if let Some(name) = name {
@@ -221,18 +221,18 @@ impl<S> SymbolTable<S> {
         Self(Vec::new())
     }
 
-    pub fn alloc(&mut self) -> ProgramSymbol {
-        let id = ProgramSymbol(self.0.len());
+    pub fn alloc(&mut self) -> ContentSymbol {
+        let id = ContentSymbol(self.0.len());
         self.0.push(None);
         id
     }
 
-    pub fn define(&mut self, ProgramSymbol(id): ProgramSymbol, def: ProgramDef<S>) {
+    pub fn define(&mut self, ContentSymbol(id): ContentSymbol, def: ProgramDef<S>) {
         assert!(self.0[id].is_none());
         self.0[id] = Some(def);
     }
 
-    fn get(&self, ProgramSymbol(id): ProgramSymbol) -> Option<&ProgramDef<S>> {
+    fn get(&self, ContentSymbol(id): ContentSymbol) -> Option<&ProgramDef<S>> {
         self.0[id].as_ref()
     }
 }

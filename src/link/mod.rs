@@ -239,7 +239,7 @@ mod tests {
                     addr: VarId(0),
                     size: VarId(1),
                     items: vec![Node::Immediate(
-                        Atom::Name(ProgramSymbol(0).into()).into(),
+                        Atom::Name(ContentSymbol(0).into()).into(),
                         Width::Word,
                     )],
                 }],
@@ -266,7 +266,7 @@ mod tests {
                 items: vec![
                     Node::Reserved(bytes.into()),
                     Node::Reloc(symbol),
-                    Node::Immediate(Atom::Name(ProgramSymbol(0).into()).into(), Width::Word),
+                    Node::Immediate(Atom::Name(ContentSymbol(0).into()).into(), Width::Word),
                 ],
             }],
             symbols: SymbolTable(vec![Some(ProgramDef::Expr(Atom::Location(symbol).into()))]),

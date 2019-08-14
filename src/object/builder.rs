@@ -49,7 +49,7 @@ impl<'a, S> ProgramBuilder<'a, S> {
         }
     }
 
-    fn add_section(&mut self, symbol: Option<ProgramSymbol>) {
+    fn add_section(&mut self, symbol: Option<ContentSymbol>) {
         self.context.program.add_section(
             symbol,
             self.context.vars.alloc(),
@@ -94,7 +94,7 @@ impl<'a, S: Clone> Backend<S> for ProgramBuilder<'a, S> {
         SymbolBuilder {
             parent: self,
             location,
-            name: (name.program().unwrap(), span),
+            name: (name.content().unwrap(), span),
             expr: Default::default(),
         }
     }
@@ -120,7 +120,7 @@ impl<'a, S: Clone> Finish for RelocContext<ProgramBuilder<'a, S>, Const<S>> {
 pub(crate) struct SymbolBuilder<'a, S> {
     parent: ProgramBuilder<'a, S>,
     location: VarId,
-    name: (ProgramSymbol, S),
+    name: (ContentSymbol, S),
     expr: Expr<S>,
 }
 
@@ -184,7 +184,7 @@ impl<'a, S: Clone> StartSection<Symbol, S> for ProgramBuilder<'a, S> {
     fn start_section(&mut self, (name, _): (Symbol, S)) {
         let index = self.context.program.sections.len();
         self.state = Some(BuilderState::SectionPrelude(index));
-        self.add_section(Some(name.program().unwrap()))
+        self.add_section(Some(name.content().unwrap()))
     }
 }
 
@@ -239,7 +239,7 @@ mod tests {
             object
                 .program
                 .symbols
-                .get(wrapped_name.unwrap().program().unwrap()),
+                .get(wrapped_name.unwrap().content().unwrap()),
             Some(&ProgramDef::Section(SectionId(0)))
         )
     }

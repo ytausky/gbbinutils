@@ -180,12 +180,12 @@ impl<S: Clone> Spanned<Symbol, &S> {
     ) -> Option<ResolvedSymbol<'a, S>> {
         match self.item {
             Symbol::Builtin(BuiltinSymbol::Sizeof) => Some(ResolvedSymbol::Sizeof),
-            Symbol::Program(id) => id.with_span(self.span).resolve(context, diagnostics),
+            Symbol::Content(id) => id.with_span(self.span).resolve(context, diagnostics),
         }
     }
 }
 
-impl<S: Clone> Spanned<ProgramSymbol, &S> {
+impl<S: Clone> Spanned<ContentSymbol, &S> {
     fn resolve<'a, V, D: BackendDiagnostics<S>>(
         &self,
         context: &'a LinkageContext<&'a Content<S>, V>,
@@ -284,7 +284,7 @@ mod tests {
             location: Num::Unknown,
         };
         assert_eq!(
-            Const::from_atom(ProgramSymbol(0).into(), ()).to_num(&context, &mut IgnoreDiagnostics),
+            Const::from_atom(ContentSymbol(0).into(), ()).to_num(&context, &mut IgnoreDiagnostics),
             addr.into()
         )
     }
@@ -301,7 +301,7 @@ mod tests {
         };
         assert_eq!(
             Const::from_items(&[
-                ProgramSymbol(0).into(),
+                ContentSymbol(0).into(),
                 BuiltinSymbol::Sizeof.into(),
                 ExprOp::FnCall(1).into()
             ])
@@ -313,7 +313,7 @@ mod tests {
     #[test]
     fn eval_fn_call_in_immediate() {
         let immediate =
-            Const::from_items(&[42.into(), ProgramSymbol(0).into(), ExprOp::FnCall(1).into()]);
+            Const::from_items(&[42.into(), ContentSymbol(0).into(), ExprOp::FnCall(1).into()]);
         let program = &Content::<()> {
             sections: vec![],
             symbols: SymbolTable(vec![Some(ProgramDef::Expr(Expr::from_items(&[
@@ -341,7 +341,7 @@ mod tests {
             vars,
             location: Num::Unknown,
         };
-        let immediate = Const::from_items(&[ProgramSymbol(0).into(), ExprOp::FnCall(0).into()]);
+        let immediate = Const::from_items(&[ContentSymbol(0).into(), ExprOp::FnCall(0).into()]);
         assert_eq!(
             immediate.to_num(&context, &mut IgnoreDiagnostics),
             addr.into()
@@ -410,7 +410,7 @@ mod tests {
         let name_span = MockSpan::from("name");
         let call_span = MockSpan::from("call");
         let immediate = Expr(vec![
-            ExprOp::Atom(Atom::Name(Symbol::Program(ProgramSymbol(0))))
+            ExprOp::Atom(Atom::Name(Symbol::Content(ContentSymbol(0))))
                 .with_span(name_span.clone()),
             ExprOp::FnCall(0).with_span(MockSpan::merge(name_span.clone(), call_span)),
         ]);
@@ -431,7 +431,7 @@ mod tests {
     #[test]
     fn diagnose_sizeof_of_symbol() {
         test_diagnosis_of_wrong_sizeof_arg(
-            Atom::Name(Symbol::Program(ProgramSymbol(0))),
+            Atom::Name(Symbol::Content(ContentSymbol(0))),
             ValueKind::Symbol,
         )
     }
