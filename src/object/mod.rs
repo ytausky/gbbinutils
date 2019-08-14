@@ -11,21 +11,21 @@ mod eval;
 mod lowering;
 
 pub struct Object<S> {
-    pub program: Content<S>,
+    pub content: Content<S>,
     pub vars: VarTable,
 }
 
 impl<S> Object<S> {
     pub fn new() -> Self {
         Object {
-            program: Content::new(),
+            content: Content::new(),
             vars: VarTable::new(),
         }
     }
 }
 
-pub(super) struct LinkageContext<P, V> {
-    pub program: P,
+pub(super) struct LinkageContext<C, V> {
+    pub content: C,
     pub vars: V,
     pub location: Num,
 }

@@ -210,7 +210,7 @@ mod tests {
     fn translate_section_item<S: Clone + PartialEq>(item: Node<S>) -> Vec<u8> {
         item.translate(
             &LinkageContext {
-                program: &Content::new(),
+                content: &Content::new(),
                 vars: &VarTable(vec![]),
                 location: Num::Unknown,
             },
@@ -235,14 +235,14 @@ mod tests {
         // nop
         object_builder.emit_item(Item::Instruction(Instruction::Nullary(Nullary::Nop)));
 
-        object.vars.resolve(&object.program);
+        object.vars.resolve(&object.content);
         let context = &mut LinkageContext {
-            program: &object.program,
+            content: &object.content,
             vars: &object.vars,
             location: 0.into(),
         };
         let translated = object
-            .program
+            .content
             .sections()
             .next()
             .unwrap()
@@ -264,14 +264,14 @@ mod tests {
         let (mut object_builder, location) = const_builder.finish();
         object_builder.emit_item(Item::Data(location, Width::Byte));
 
-        object.vars.resolve(&object.program);
+        object.vars.resolve(&object.content);
         let context = &mut LinkageContext {
-            program: &object.program,
+            content: &object.content,
             vars: &object.vars,
             location: 0.into(),
         };
         let binary = object
-            .program
+            .content
             .sections()
             .next()
             .unwrap()
@@ -298,14 +298,14 @@ mod tests {
         let (mut object_builder, location) = const_builder.finish();
         object_builder.emit_item(Item::Data(location, Width::Word));
 
-        object.vars.resolve(&object.program);
+        object.vars.resolve(&object.content);
         let context = &mut LinkageContext {
-            program: &object.program,
+            content: &object.content,
             vars: &object.vars,
             location: 0.into(),
         };
         let binary = object
-            .program
+            .content
             .sections()
             .next()
             .unwrap()

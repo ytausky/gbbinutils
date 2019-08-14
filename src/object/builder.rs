@@ -17,10 +17,10 @@ enum BuilderState<S> {
 }
 
 impl<'a, S> ObjectBuilder<'a, S> {
-    pub fn new(Object { program, vars }: &'a mut Object<S>) -> Self {
+    pub fn new(Object { content, vars }: &'a mut Object<S>) -> Self {
         ObjectBuilder {
             context: LinkageContext {
-                program,
+                content,
                 vars,
                 location: 0.into(),
             },
@@ -36,21 +36,21 @@ impl<'a, S> ObjectBuilder<'a, S> {
         match self.state.take().unwrap() {
             BuilderState::AnonSectionPrelude { addr } => {
                 self.add_section(None);
-                let index = self.context.program.sections.len() - 1;
+                let index = self.context.content.sections.len() - 1;
                 self.state = Some(BuilderState::Section(index));
-                let section = &mut self.context.program.sections[index];
+                let section = &mut self.context.content.sections[index];
                 section.constraints.addr = addr;
                 section
             }
             BuilderState::SectionPrelude(index) | BuilderState::Section(index) => {
                 self.state = Some(BuilderState::Section(index));
-                &mut self.context.program.sections[index]
+                &mut self.context.content.sections[index]
             }
         }
     }
 
     fn add_section(&mut self, symbol: Option<ContentSymbol>) {
-        self.context.program.add_section(
+        self.context.content.add_section(
             symbol,
             self.context.vars.alloc(),
             self.context.vars.alloc(),
@@ -73,7 +73,7 @@ impl<'a, S: Clone> PartialBackend<S> for ObjectBuilder<'a, S> {
     fn set_origin(&mut self, addr: Self::Value) {
         match self.state.take().unwrap() {
             BuilderState::SectionPrelude(index) => {
-                self.context.program.sections[index].constraints.addr = Some(addr);
+                self.context.content.sections[index].constraints.addr = Some(addr);
                 self.state = Some(BuilderState::SectionPrelude(index))
             }
             _ => self.state = Some(BuilderState::AnonSectionPrelude { addr: Some(addr) }),
@@ -165,7 +165,7 @@ impl<'a, S> Finish for SymbolBuilder<'a, S> {
         parent.push(Node::Reloc(self.location));
         parent
             .context
-            .program
+            .content
             .symbols
             .define(self.name.0, ContentDef::Expr(self.expr));
         (parent, ())
@@ -176,13 +176,13 @@ impl<'a, S: Clone> AllocName<S> for ObjectBuilder<'a, S> {
     type Name = Symbol;
 
     fn alloc_name(&mut self, _span: S) -> Self::Name {
-        self.context.program.symbols.alloc().into()
+        self.context.content.symbols.alloc().into()
     }
 }
 
 impl<'a, S: Clone> StartSection<Symbol, S> for ObjectBuilder<'a, S> {
     fn start_section(&mut self, (name, _): (Symbol, S)) {
-        let index = self.context.program.sections.len();
+        let index = self.context.content.sections.len();
         self.state = Some(BuilderState::SectionPrelude(index));
         self.add_section(Some(name.content().unwrap()))
     }
@@ -209,13 +209,13 @@ mod tests {
     #[test]
     fn new_object_has_no_sections() {
         let object = build_object::<_, ()>(|_| ());
-        assert_eq!(object.program.sections.len(), 0)
+        assert_eq!(object.content.sections.len(), 0)
     }
 
     #[test]
     fn no_origin_by_default() {
         let object = build_object::<_, ()>(|mut builder| builder.push(Node::Byte(0xcd)));
-        assert_eq!(object.program.sections[0].constraints.addr, None)
+        assert_eq!(object.content.sections[0].constraints.addr, None)
     }
 
     #[test]
@@ -225,7 +225,7 @@ mod tests {
             builder.set_origin(origin.clone());
             builder.push(Node::Byte(0xcd))
         });
-        assert_eq!(object.program.sections[0].constraints.addr, Some(origin))
+        assert_eq!(object.content.sections[0].constraints.addr, Some(origin))
     }
 
     #[test]
@@ -238,7 +238,7 @@ mod tests {
         });
         assert_eq!(
             object
-                .program
+                .content
                 .symbols
                 .get(wrapped_name.unwrap().content().unwrap()),
             Some(&ContentDef::Section(SectionId(0)))
@@ -253,7 +253,7 @@ mod tests {
             builder.start_section((name, ()));
             builder.set_origin(origin.clone())
         });
-        assert_eq!(object.program.sections[0].constraints.addr, Some(origin))
+        assert_eq!(object.content.sections[0].constraints.addr, Some(origin))
     }
 
     #[test]
@@ -264,7 +264,7 @@ mod tests {
             builder.start_section((name, ()));
             builder.push(node.clone())
         });
-        assert_eq!(object.program.sections[0].items, [node])
+        assert_eq!(object.content.sections[0].items, [node])
     }
 
     fn build_object<F: FnOnce(ObjectBuilder<S>), S>(f: F) -> Object<S> {
@@ -395,7 +395,7 @@ mod tests {
         let bytes = 3;
         let program = build_object(|mut builder| builder.reserve(bytes.into()));
         assert_eq!(
-            program.program.sections[0].items,
+            program.content.sections[0].items,
             [Node::Reserved(bytes.into())]
         )
     }

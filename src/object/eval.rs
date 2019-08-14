@@ -192,9 +192,9 @@ impl<S: Clone> Spanned<ContentSymbol, &S> {
         diagnostics: &mut D,
     ) -> Option<ResolvedSymbol<'a, S>> {
         let id = self.item;
-        let resolved = context.program.symbols.get(id).map(|def| match def {
+        let resolved = context.content.symbols.get(id).map(|def| match def {
             ContentDef::Section(SectionId(id)) => {
-                ResolvedSymbol::Section(&context.program.sections[*id])
+                ResolvedSymbol::Section(&context.content.sections[*id])
             }
             ContentDef::Expr(expr) => ResolvedSymbol::Expr(expr),
         });
@@ -276,10 +276,10 @@ mod tests {
     #[test]
     fn eval_section_addr() {
         let addr = 0x0100;
-        let program = &mk_program_with_empty_section();
+        let content = &mk_program_with_empty_section();
         let vars = &VarTable(vec![Var { value: addr.into() }, Var { value: 0.into() }]);
         let context = LinkageContext {
-            program,
+            content,
             vars,
             location: Num::Unknown,
         };
@@ -291,11 +291,11 @@ mod tests {
 
     #[test]
     fn eval_section_size() {
-        let program = &mk_program_with_empty_section();
+        let content = &mk_program_with_empty_section();
         let size = 42;
         let vars = &VarTable(vec![Var { value: 0.into() }, Var { value: size.into() }]);
         let context = &LinkageContext {
-            program,
+            content,
             vars,
             location: Num::Unknown,
         };
@@ -314,7 +314,7 @@ mod tests {
     fn eval_fn_call_in_immediate() {
         let immediate =
             Const::from_items(&[42.into(), ContentSymbol(0).into(), ExprOp::FnCall(1).into()]);
-        let program = &Content::<()> {
+        let content = &Content::<()> {
             sections: vec![],
             symbols: SymbolTable(vec![Some(ContentDef::Expr(Expr::from_items(&[
                 ParamId(0).into(),
@@ -324,7 +324,7 @@ mod tests {
         };
         let vars = &VarTable(Vec::new());
         let context = &LinkageContext {
-            program,
+            content,
             vars,
             location: Num::Unknown,
         };
@@ -334,10 +334,10 @@ mod tests {
     #[test]
     fn eval_section_name_call() {
         let addr = 0x1337;
-        let program = &mk_program_with_empty_section();
+        let content = &mk_program_with_empty_section();
         let vars = &VarTable(vec![Var { value: addr.into() }, Var { value: 0.into() }]);
         let context = LinkageContext {
-            program,
+            content,
             vars,
             location: Num::Unknown,
         };
@@ -396,13 +396,13 @@ mod tests {
 
     #[test]
     fn diagnose_calling_undefined_symbol() {
-        let program = &Content {
+        let content = &Content {
             sections: vec![],
             symbols: SymbolTable(vec![None]),
         };
         let vars = &VarTable(vec![]);
         let context = LinkageContext {
-            program,
+            content,
             vars,
             location: Num::Unknown,
         };
@@ -450,7 +450,7 @@ mod tests {
     }
 
     fn test_diagnosis_of_wrong_sizeof_arg(inner: Atom<LocationCounter, Symbol>, found: ValueKind) {
-        let program = &Content {
+        let content = &Content {
             sections: vec![],
             symbols: SymbolTable(vec![Some(ContentDef::Expr(Expr::from_atom(
                 42.into(),
@@ -459,7 +459,7 @@ mod tests {
         };
         let vars = &VarTable(vec![]);
         let context = LinkageContext {
-            program,
+            content,
             vars,
             location: Num::Unknown,
         };
@@ -503,13 +503,13 @@ mod tests {
         immediate: Const<S>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> Num {
-        let program = &Content {
+        let content = &Content {
             sections: vec![],
             symbols: SymbolTable(vec![]),
         };
         let vars = &VarTable(vec![]);
         let context = &LinkageContext {
-            program,
+            content,
             vars,
             location: Num::Unknown,
         };

@@ -18,15 +18,15 @@ impl Program {
         mut object: Object<S>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> Self {
-        object.vars.resolve(&object.program);
+        object.vars.resolve(&object.content);
         let mut context = LinkageContext {
-            program: &object.program,
+            content: &object.content,
             vars: &object.vars,
             location: 0.into(),
         };
         Self {
             sections: object
-                .program
+                .content
                 .sections()
                 .flat_map(|section| section.translate(&mut context, diagnostics))
                 .collect(),
@@ -66,19 +66,19 @@ pub struct BinarySection {
 }
 
 impl VarTable {
-    fn resolve<S: Clone>(&mut self, program: &Content<S>) {
-        self.refine_all(program);
-        self.refine_all(program);
+    fn resolve<S: Clone>(&mut self, content: &Content<S>) {
+        self.refine_all(content);
+        self.refine_all(content);
     }
 
-    fn refine_all<S: Clone>(&mut self, program: &Content<S>) -> i32 {
+    fn refine_all<S: Clone>(&mut self, content: &Content<S>) -> i32 {
         let mut refinements = 0;
         let context = &mut LinkageContext {
-            program,
+            content,
             vars: self,
             location: Num::Unknown,
         };
-        for section in program.sections() {
+        for section in content.sections() {
             context.location = section.eval_addr(context);
             context.vars[section.addr].refine(context.location.clone());
             let size = section.traverse(context, |item, context| {
@@ -249,7 +249,7 @@ mod tests {
         let mut builder = builder.define_symbol(symbol_id, ());
         builder.push_op(LocationCounter, ());
         builder.finish();
-        linkable.vars.resolve(&linkable.program);
+        linkable.vars.resolve(&linkable.content);
         assert_eq!(linkable.vars[VarId(0)].value, addr.into());
     }
 
@@ -354,7 +354,7 @@ mod tests {
         let (mut object_builder, label_const) = const_builder.finish();
         object_builder.emit_item(Item::Data(label_const, Width::Word));
 
-        object.vars.resolve(&object.program);
+        object.vars.resolve(&object.content);
         assert_eq!(object.vars[symbol].value, (addr + bytes).into())
     }
 
@@ -364,9 +364,9 @@ mod tests {
         let name = builder.alloc_name(());
         builder.start_section((name, ()));
         f(builder);
-        object.vars.resolve(&object.program);
+        object.vars.resolve(&object.content);
         assert_eq!(
-            object.vars[object.program.sections().next().unwrap().size].value,
+            object.vars[object.content.sections().next().unwrap().size].value,
             expected.into()
         );
     }
