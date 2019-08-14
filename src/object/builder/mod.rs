@@ -1,8 +1,12 @@
+use self::lowering::Lower;
+
 use super::*;
 
 use crate::diag::span::{Source, WithSpan};
 use crate::expr::{BinOp, Expr, ExprOp, FnCall, LocationCounter, ParamId};
 use crate::BuiltinSymbols;
+
+mod lowering;
 
 pub trait Backend<S>
 where
@@ -315,7 +319,6 @@ impl<'a, S: Clone> PartialBackend<S> for ObjectBuilder<'a, S> {
     type Value = Const<S>;
 
     fn emit_item(&mut self, item: Item<Self::Value>) {
-        use super::lowering::Lower;
         item.lower().for_each(|data_item| self.push(data_item))
     }
 

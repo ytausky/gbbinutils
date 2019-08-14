@@ -7,7 +7,6 @@ pub mod builder;
 pub mod num;
 
 mod eval;
-mod lowering;
 
 pub struct Object<S> {
     pub content: Content<S>,
