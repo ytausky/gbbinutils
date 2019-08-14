@@ -201,7 +201,7 @@ mod tests {
     use super::*;
 
     use crate::diag::{CompactDiag, Message, TestDiagnosticsListener};
-    use crate::link::BinaryObject;
+    use crate::link::Program;
     use crate::model::{BinOp, Instruction, Nullary, Width};
     use crate::object::SectionId;
     use std::borrow::Borrow;
@@ -400,7 +400,7 @@ mod tests {
         )
     }
 
-    fn with_object_builder<S, F>(f: F) -> (BinaryObject, Box<[CompactDiag<S, S>]>)
+    fn with_object_builder<S, F>(f: F) -> (Program, Box<[CompactDiag<S, S>]>)
     where
         S: Clone + 'static,
         F: FnOnce(ProgramBuilder<S>),

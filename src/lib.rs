@@ -4,7 +4,7 @@
 //! Its customizable IO functions make it suitable for embedding in other tools, in unit tests, etc.
 
 pub use crate::codebase::FileSystem;
-pub use crate::link::{BinaryObject, Rom};
+pub use crate::link::{Program, Rom};
 
 use crate::analysis::Assemble;
 use crate::codebase::{CodebaseError, StdFileSystem};
@@ -55,7 +55,7 @@ impl<'a> Default for DiagnosticsConfig<'a> {
 /// let rom = gbas::assemble("game.s", &mut gbas::Config::default());
 /// assert!(rom.is_none())
 /// ```
-pub fn assemble(name: &str, config: &mut Config) -> Option<BinaryObject> {
+pub fn assemble(name: &str, config: &mut Config) -> Option<Program> {
     let mut input_holder = None;
     let mut diagnostics_holder = None;
     let input: &mut dyn codebase::FileSystem = match config.input {
@@ -75,7 +75,7 @@ fn try_assemble(
     name: &str,
     input: &mut dyn codebase::FileSystem,
     output: &mut dyn FnMut(diag::Diagnostic),
-) -> Result<BinaryObject, CodebaseError> {
+) -> Result<Program, CodebaseError> {
     let codebase = codebase::FileCodebase::new(input);
     let diagnostics = &mut CompositeDiagnosticsSystem::new(&codebase.cache, output);
     let mut linkable = object::Object::new();

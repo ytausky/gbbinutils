@@ -9,11 +9,11 @@ use std::ops::{Index, IndexMut};
 
 mod translate;
 
-pub struct BinaryObject {
+pub struct Program {
     pub sections: Vec<BinarySection>,
 }
 
-impl BinaryObject {
+impl Program {
     pub fn into_rom(self) -> Rom {
         let default = 0xffu8;
         let mut data: Vec<u8> = Vec::new();
@@ -47,14 +47,14 @@ pub struct BinarySection {
 }
 
 impl<S: Clone> Object<S> {
-    pub(crate) fn link(&mut self, diagnostics: &mut impl BackendDiagnostics<S>) -> BinaryObject {
+    pub(crate) fn link(&mut self, diagnostics: &mut impl BackendDiagnostics<S>) -> Program {
         self.vars.resolve(&self.program);
         let mut context = LinkageContext {
             program: &self.program,
             vars: &self.vars,
             location: 0.into(),
         };
-        BinaryObject {
+        Program {
             sections: self
                 .program
                 .sections
@@ -169,7 +169,7 @@ mod tests {
 
     #[test]
     fn empty_object_converted_to_all_0xff_rom() {
-        let object = BinaryObject {
+        let object = Program {
             sections: Vec::new(),
         };
         let rom = object.into_rom();
@@ -180,7 +180,7 @@ mod tests {
     fn section_placed_in_rom_starting_at_origin() {
         let byte = 0x42;
         let addr = 0x150;
-        let object = BinaryObject {
+        let object = Program {
             sections: vec![BinarySection {
                 addr,
                 data: vec![byte],
@@ -195,7 +195,7 @@ mod tests {
     #[test]
     fn empty_section_does_not_extend_rom() {
         let addr = MIN_ROM_LEN + 1;
-        let object = BinaryObject {
+        let object = Program {
             sections: vec![BinarySection {
                 addr,
                 data: Vec::new(),
