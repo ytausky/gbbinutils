@@ -29,12 +29,12 @@ impl<S: Clone> LinkableProgram<S> {
 }
 
 impl VarTable {
-    fn resolve<S: Clone>(&mut self, program: &Program<S>) {
+    fn resolve<S: Clone>(&mut self, program: &Content<S>) {
         self.refine_all(program);
         self.refine_all(program);
     }
 
-    fn refine_all<S: Clone>(&mut self, program: &Program<S>) -> i32 {
+    fn refine_all<S: Clone>(&mut self, program: &Content<S>) -> i32 {
         let mut refinements = 0;
         let context = &mut LinkageContext {
             program,
@@ -70,10 +70,10 @@ impl IndexMut<VarId> for VarTable {
 }
 
 impl<S: Clone> Section<S> {
-    fn traverse<V, F>(&self, context: &mut LinkageContext<&Program<S>, V>, mut f: F) -> Num
+    fn traverse<V, F>(&self, context: &mut LinkageContext<&Content<S>, V>, mut f: F) -> Num
     where
         V: Borrow<VarTable>,
-        F: FnMut(&Node<S>, &mut LinkageContext<&Program<S>, V>),
+        F: FnMut(&Node<S>, &mut LinkageContext<&Content<S>, V>),
     {
         let addr = context.location.clone();
         let mut offset = Num::from(0);
@@ -87,7 +87,7 @@ impl<S: Clone> Section<S> {
 
     fn eval_addr<'a, V: Borrow<VarTable>>(
         &self,
-        context: &LinkageContext<&'a Program<S>, V>,
+        context: &LinkageContext<&'a Content<S>, V>,
     ) -> Num {
         self.constraints
             .addr
@@ -98,7 +98,7 @@ impl<S: Clone> Section<S> {
 }
 
 impl<S: Clone> Node<S> {
-    fn size<'a, V: Borrow<VarTable>>(&self, context: &LinkageContext<&'a Program<S>, V>) -> Num {
+    fn size<'a, V: Borrow<VarTable>>(&self, context: &LinkageContext<&'a Content<S>, V>) -> Num {
         match self {
             Node::Byte(_) | Node::Embedded(..) => 1.into(),
             Node::Immediate(_, width) => width.len().into(),
@@ -135,7 +135,7 @@ mod tests {
         let origin1 = 0x150;
         let skipped_bytes = 0x10;
         let mut linkable = LinkableProgram {
-            program: Program {
+            program: Content {
                 sections: vec![
                     Section {
                         constraints: Constraints {
@@ -231,7 +231,7 @@ mod tests {
     #[test]
     fn resolve_expr_with_section_addr() {
         let mut linkable = LinkableProgram {
-            program: Program {
+            program: Content {
                 sections: vec![Section {
                     constraints: Constraints {
                         addr: Some(0x1337.into()),
@@ -256,7 +256,7 @@ mod tests {
         let addr = 0x0100;
         let bytes = 10;
         let symbol = VarId(2);
-        let program = Program::<()> {
+        let program = Content::<()> {
             sections: vec![Section {
                 constraints: Constraints {
                     addr: Some(addr.into()),

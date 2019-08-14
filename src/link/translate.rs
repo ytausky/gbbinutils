@@ -2,7 +2,7 @@ use super::{LinkageContext, VarTable};
 
 use crate::diag::{BackendDiagnostics, Message};
 use crate::model::Width;
-use crate::object::{BinarySection, Const, Node, Program, Section};
+use crate::object::{BinarySection, Const, Content, Node, Section};
 use crate::span::Source;
 
 use std::mem::replace;
@@ -11,7 +11,7 @@ use std::vec::IntoIter;
 impl<S: Clone> Section<S> {
     pub(super) fn translate(
         &self,
-        context: &mut LinkageContext<&Program<S>, &VarTable>,
+        context: &mut LinkageContext<&Content<S>, &VarTable>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> Vec<BinarySection> {
         let mut chunks = Vec::new();
@@ -46,7 +46,7 @@ impl<S: Clone> Section<S> {
 impl<S: Clone> Node<S> {
     fn translate(
         &self,
-        context: &LinkageContext<&Program<S>, &VarTable>,
+        context: &LinkageContext<&Content<S>, &VarTable>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> IntoIter<u8> {
         match self {
@@ -113,7 +113,7 @@ impl Data {
 fn resolve_expr_item<S: Clone>(
     expr: &Const<S>,
     width: Width,
-    context: &LinkageContext<&Program<S>, &VarTable>,
+    context: &LinkageContext<&Content<S>, &VarTable>,
     diagnostics: &mut impl BackendDiagnostics<S>,
 ) -> Data {
     let span = expr.span();
@@ -161,7 +161,7 @@ mod tests {
     use crate::diag::IgnoreDiagnostics;
     use crate::model::{Atom, BinOp, LocationCounter};
     use crate::object::num::Num;
-    use crate::object::{Constraints, Program, SymbolTable, Var, VarId};
+    use crate::object::{Constraints, Content, SymbolTable, Var, VarId};
 
     use std::borrow::Borrow;
 
@@ -209,7 +209,7 @@ mod tests {
     fn translate_section_item<S: Clone + PartialEq>(item: Node<S>) -> Vec<u8> {
         item.translate(
             &LinkageContext {
-                program: &Program::new(),
+                program: &Content::new(),
                 vars: &VarTable(vec![]),
                 location: Num::Unknown,
             },
@@ -221,7 +221,7 @@ mod tests {
     #[test]
     fn set_addr_of_translated_section() {
         let addr = 0x7ff0;
-        let program = &Program {
+        let program = &Content {
             sections: vec![Section {
                 constraints: Constraints {
                     addr: Some(addr.into()),
@@ -244,7 +244,7 @@ mod tests {
     #[test]
     fn translate_expr_with_location_counter() {
         let byte = 0x42;
-        let program = &Program {
+        let program = &Content {
             sections: vec![Section {
                 constraints: Constraints { addr: None },
                 addr: VarId(0),
@@ -268,7 +268,7 @@ mod tests {
     #[test]
     fn location_counter_starts_from_section_origin() {
         let addr = 0xffe1;
-        let program = &Program {
+        let program = &Content {
             sections: vec![Section {
                 constraints: Constraints {
                     addr: Some(addr.into()),

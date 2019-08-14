@@ -11,14 +11,14 @@ mod eval;
 mod lowering;
 
 pub struct LinkableProgram<S> {
-    pub program: Program<S>,
+    pub program: Content<S>,
     pub vars: VarTable,
 }
 
 impl<S> LinkableProgram<S> {
     pub fn new() -> Self {
         Self {
-            program: Program::new(),
+            program: Content::new(),
             vars: VarTable::new(),
         }
     }
@@ -151,7 +151,7 @@ impl From<ProgramSymbol> for Symbol {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ProgramSymbol(pub usize);
 
-pub struct Program<S> {
+pub struct Content<S> {
     pub sections: Vec<Section<S>>,
     pub symbols: SymbolTable<S>,
 }
@@ -186,9 +186,9 @@ pub enum ProgramDef<S> {
 #[derive(Debug, PartialEq)]
 pub struct SectionId(pub usize);
 
-impl<S> Program<S> {
-    pub fn new() -> Program<S> {
-        Program {
+impl<S> Content<S> {
+    pub fn new() -> Content<S> {
+        Content {
             sections: Vec::new(),
             symbols: SymbolTable::new(),
         }
@@ -318,7 +318,7 @@ mod tests {
 
     #[test]
     fn add_section_defines_name() {
-        let mut program = Program::<()>::new();
+        let mut program = Content::<()>::new();
         let name = program.symbols.alloc();
         program.add_section(Some(name), VarId(0), VarId(1));
         assert_eq!(

@@ -11,7 +11,7 @@ use std::borrow::Borrow;
 impl<S: Clone> Const<S> {
     pub(crate) fn to_num<'a, V, D>(
         &self,
-        context: &LinkageContext<&'a Program<S>, V>,
+        context: &LinkageContext<&'a Content<S>, V>,
         diagnostics: &mut D,
     ) -> Num
     where
@@ -27,7 +27,7 @@ trait Eval<'a, S: Clone> {
 
     fn eval<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<&'a Program<S>, V>,
+        context: &'a LinkageContext<&'a Content<S>, V>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
     ) -> Self::Output;
@@ -55,7 +55,7 @@ where
 
     fn eval<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<&'a Program<S>, V>,
+        context: &'a LinkageContext<&'a Content<S>, V>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
     ) -> Self::Output {
@@ -88,7 +88,7 @@ impl<'a, S: Clone> Eval<'a, S> for Spanned<Value<'a, S>, &S> {
 
     fn eval<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<&'a Program<S>, V>,
+        context: &'a LinkageContext<&'a Content<S>, V>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
     ) -> Self::Output {
@@ -105,7 +105,7 @@ impl<'a, S: Clone> Eval<'a, S> for Spanned<ResolvedSymbol<'a, S>, &S> {
 
     fn eval<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<&'a Program<S>, V>,
+        context: &'a LinkageContext<&'a Content<S>, V>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
     ) -> Self::Output {
@@ -131,7 +131,7 @@ impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<LocationCounter, Symbol>, 
 
     fn eval<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<&'a Program<S>, V>,
+        context: &'a LinkageContext<&'a Content<S>, V>,
         _: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
     ) -> Self::Output {
@@ -149,7 +149,7 @@ impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<VarId, Symbol>, &S> {
 
     fn eval<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<&'a Program<S>, V>,
+        context: &'a LinkageContext<&'a Content<S>, V>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
     ) -> Self::Output {
@@ -165,7 +165,7 @@ impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<VarId, Symbol>, &S> {
 impl<S: Clone> Spanned<Symbol, &S> {
     fn to_value<'a, V, D: BackendDiagnostics<S>>(
         &self,
-        context: &'a LinkageContext<&'a Program<S>, V>,
+        context: &'a LinkageContext<&'a Content<S>, V>,
         diagnostics: &mut D,
     ) -> Value<'a, S> {
         self.resolve(context, diagnostics)
@@ -175,7 +175,7 @@ impl<S: Clone> Spanned<Symbol, &S> {
 
     fn resolve<'a, V, D: BackendDiagnostics<S>>(
         &self,
-        context: &'a LinkageContext<&'a Program<S>, V>,
+        context: &'a LinkageContext<&'a Content<S>, V>,
         diagnostics: &mut D,
     ) -> Option<ResolvedSymbol<'a, S>> {
         match self.item {
@@ -188,7 +188,7 @@ impl<S: Clone> Spanned<Symbol, &S> {
 impl<S: Clone> Spanned<ProgramSymbol, &S> {
     fn resolve<'a, V, D: BackendDiagnostics<S>>(
         &self,
-        context: &'a LinkageContext<&'a Program<S>, V>,
+        context: &'a LinkageContext<&'a Content<S>, V>,
         diagnostics: &mut D,
     ) -> Option<ResolvedSymbol<'a, S>> {
         let id = self.item;
@@ -221,7 +221,7 @@ impl BinOp {
 impl<'a, S: Clone> Spanned<Value<'a, S>, &S> {
     fn sizeof<V, D>(
         &self,
-        context: &'a LinkageContext<&'a Program<S>, V>,
+        context: &'a LinkageContext<&'a Content<S>, V>,
         diagnostics: &mut D,
     ) -> Num
     where
@@ -314,7 +314,7 @@ mod tests {
     fn eval_fn_call_in_immediate() {
         let immediate =
             Const::from_items(&[42.into(), ProgramSymbol(0).into(), ExprOp::FnCall(1).into()]);
-        let program = &Program::<()> {
+        let program = &Content::<()> {
             sections: vec![],
             symbols: SymbolTable(vec![Some(ProgramDef::Expr(Expr::from_items(&[
                 ParamId(0).into(),
@@ -396,7 +396,7 @@ mod tests {
 
     #[test]
     fn diagnose_calling_undefined_symbol() {
-        let program = &Program {
+        let program = &Content {
             sections: vec![],
             symbols: SymbolTable(vec![None]),
         };
@@ -450,7 +450,7 @@ mod tests {
     }
 
     fn test_diagnosis_of_wrong_sizeof_arg(inner: Atom<LocationCounter, Symbol>, found: ValueKind) {
-        let program = &Program {
+        let program = &Content {
             sections: vec![],
             symbols: SymbolTable(vec![Some(ProgramDef::Expr(Expr::from_atom(
                 42.into(),
@@ -487,8 +487,8 @@ mod tests {
         )
     }
 
-    fn mk_program_with_empty_section<S>() -> Program<S> {
-        Program {
+    fn mk_program_with_empty_section<S>() -> Content<S> {
+        Content {
             sections: vec![Section {
                 constraints: Constraints { addr: None },
                 addr: VarId(0),
@@ -503,7 +503,7 @@ mod tests {
         immediate: Const<S>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> Num {
-        let program = &Program {
+        let program = &Content {
             sections: vec![],
             symbols: SymbolTable(vec![]),
         };

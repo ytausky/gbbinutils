@@ -6,7 +6,7 @@ use crate::model::{BinOp, ExprOp, FnCall, Item, ParamId};
 use crate::BuiltinSymbols;
 
 pub(crate) struct ProgramBuilder<'a, S> {
-    context: LinkageContext<&'a mut Program<S>, &'a mut VarTable>,
+    context: LinkageContext<&'a mut Content<S>, &'a mut VarTable>,
     state: Option<BuilderState<S>>,
 }
 
