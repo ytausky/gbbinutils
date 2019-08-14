@@ -143,7 +143,7 @@ impl<'a, S: Clone> Backend<S> for ObjectBuilder<'a, S> {
             parent: self,
             location,
             name: (name.content().unwrap(), span),
-            expr: Default::default(),
+            formula: Default::default(),
         }
     }
 }
@@ -232,7 +232,7 @@ pub(crate) struct SymbolBuilder<'a, S> {
     parent: ObjectBuilder<'a, S>,
     location: VarId,
     name: (ContentSymbol, S),
-    expr: super::Expr<S>,
+    formula: Formula<S>,
 }
 
 impl<'a, S: Clone> AllocName<S> for SymbolBuilder<'a, S> {
@@ -247,7 +247,7 @@ macro_rules! impl_push_op_for_symbol_builder {
     ($t:ty) => {
         impl<'a, S: Clone> PushOp<$t, S> for SymbolBuilder<'a, S> {
             fn push_op(&mut self, op: $t, span: S) {
-                self.expr.push_op(op, span)
+                self.formula.push_op(op, span)
             }
         }
     };
@@ -261,7 +261,7 @@ impl_push_op_for_symbol_builder! {FnCall}
 
 impl<'a, S: Clone> PushOp<LocationCounter, S> for SymbolBuilder<'a, S> {
     fn push_op(&mut self, _: LocationCounter, span: S) {
-        self.expr
+        self.formula
             .0
             .push(ExprOp::Atom(Atom::Location(self.location)).with_span(span))
     }
@@ -278,7 +278,7 @@ impl<'a, S> Finish for SymbolBuilder<'a, S> {
             .context
             .content
             .symbols
-            .define(self.name.0, ContentDef::Expr(self.expr));
+            .define(self.name.0, ContentDef::Formula(self.formula));
         (parent, ())
     }
 }

@@ -193,10 +193,10 @@ impl<S: Clone> Spanned<ContentSymbol, &S> {
     ) -> Option<ResolvedSymbol<'a, S>> {
         let id = self.item;
         let resolved = context.content.symbols.get(id).map(|def| match def {
+            ContentDef::Formula(expr) => ResolvedSymbol::Expr(expr),
             ContentDef::Section(SectionId(id)) => {
                 ResolvedSymbol::Section(&context.content.sections[*id])
             }
-            ContentDef::Expr(expr) => ResolvedSymbol::Expr(expr),
         });
         if resolved.is_none() {
             let symbol = diagnostics.strip_span(self.span);
@@ -316,7 +316,7 @@ mod tests {
             Const::from_items(&[42.into(), ContentSymbol(0).into(), ExprOp::FnCall(1).into()]);
         let content = &Content::<()> {
             sections: vec![],
-            symbols: SymbolTable(vec![Some(ContentDef::Expr(Expr::from_items(&[
+            symbols: SymbolTable(vec![Some(ContentDef::Formula(Formula::from_items(&[
                 ParamId(0).into(),
                 1.into(),
                 BinOp::Plus.into(),
@@ -452,7 +452,7 @@ mod tests {
     fn test_diagnosis_of_wrong_sizeof_arg(inner: Atom<LocationCounter, Symbol>, found: ValueKind) {
         let content = &Content {
             sections: vec![],
-            symbols: SymbolTable(vec![Some(ContentDef::Expr(Expr::from_atom(
+            symbols: SymbolTable(vec![Some(ContentDef::Formula(Formula::from_atom(
                 42.into(),
                 MockSpan::from("42"),
             )))]),

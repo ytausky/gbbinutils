@@ -1,6 +1,6 @@
 use self::num::Num;
 
-use crate::model::{Atom, ExprOp, LocationCounter, Width};
+use crate::model::{Atom, Expr, ExprOp, LocationCounter, Width};
 
 pub mod builder;
 pub mod num;
@@ -29,7 +29,7 @@ pub struct Constraints<S> {
     pub addr: Option<Const<S>>,
 }
 
-pub type Const<S> = crate::model::Expr<Atom<LocationCounter, Symbol>, S>;
+pub type Const<S> = Expr<Atom<LocationCounter, Symbol>, S>;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Symbol {
@@ -62,14 +62,14 @@ pub struct SymbolTable<S>(pub Vec<Option<ContentDef<S>>>);
 
 #[derive(Debug, PartialEq)]
 pub enum ContentDef<S> {
+    Formula(Formula<S>),
     Section(SectionId),
-    Expr(Expr<S>),
 }
 
 #[derive(Debug, PartialEq)]
 pub struct SectionId(pub usize);
 
-type Expr<S> = crate::model::Expr<Atom<VarId, Symbol>, S>;
+type Formula<S> = Expr<Atom<VarId, Symbol>, S>;
 
 pub struct VarTable(pub Vec<Var>);
 
