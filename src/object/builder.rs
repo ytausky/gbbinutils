@@ -1,7 +1,7 @@
 use super::*;
 
 use crate::diag::span::{Source, WithSpan};
-use crate::model::{BinOp, Expr, ExprOp, FnCall, LocationCounter, ParamId};
+use crate::expr::{BinOp, Expr, ExprOp, FnCall, LocationCounter, ParamId};
 use crate::BuiltinSymbols;
 
 pub trait Backend<S>
@@ -492,12 +492,12 @@ impl<N, A: From<Name<N>>> From<Name<N>> for ExprOp<A> {
 pub mod mock {
     use super::*;
 
+    use crate::expr::Atom;
     use crate::log::Log;
-    use crate::model::Atom;
 
     use std::marker::PhantomData;
 
-    type Expr<N, S> = crate::model::Expr<Atom<LocationCounter, N>, S>;
+    type Expr<N, S> = crate::expr::Expr<Atom<LocationCounter, N>, S>;
 
     pub(crate) struct MockBackend<A, T> {
         alloc: A,
@@ -683,8 +683,8 @@ mod tests {
     use super::*;
 
     use crate::diag::{CompactDiag, Message, TestDiagnosticsListener};
+    use crate::expr::BinOp;
     use crate::link::Program;
-    use crate::model::BinOp;
     use crate::object::SectionId;
     use std::borrow::Borrow;
 

@@ -6,7 +6,7 @@ use std::collections::HashMap;
 pub use self::mock::*;
 
 #[cfg(test)]
-use crate::model::{Atom, ExprOp};
+use crate::expr::{Atom, ExprOp};
 
 pub trait NameTable<I> {
     type BackendEntry: Clone;

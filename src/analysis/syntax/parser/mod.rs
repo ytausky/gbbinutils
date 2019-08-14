@@ -540,7 +540,7 @@ mod tests {
     use crate::analysis::syntax::actions::mock::IdentKind::*;
     use crate::analysis::syntax::actions::mock::*;
     use crate::diag::{CompactDiag, Merge, Message};
-    use crate::model::BinOp;
+    use crate::expr::BinOp;
 
     use std::borrow::Borrow;
     use std::collections::HashMap;

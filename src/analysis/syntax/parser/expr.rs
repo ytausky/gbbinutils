@@ -7,7 +7,7 @@ use super::{Parser, LINE_FOLLOW_SET};
 use crate::analysis::syntax;
 use crate::diag::span::{MergeSpans, StripSpan};
 use crate::diag::{CompactDiag, EmitDiag, Message};
-use crate::model::BinOp;
+use crate::expr::BinOp;
 
 type ParserResult<P, C, S> = Result<P, (P, ExpandedExprParsingError<C, S>)>;
 type ExpandedExprParsingError<D, S> = ExprParsingError<S, <D as StripSpan<S>>::Stripped>;

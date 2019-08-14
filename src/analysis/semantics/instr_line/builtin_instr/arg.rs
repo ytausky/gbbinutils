@@ -5,7 +5,7 @@ use crate::analysis::syntax::actions::*;
 use crate::analysis::{IdentSource, Literal, StringSource};
 use crate::diag::span::{Source, SpanSource};
 use crate::diag::{Diagnostics, EmitDiag, Message};
-use crate::model::BinOp;
+use crate::expr::BinOp;
 
 pub(super) type ArgSemantics<S> = SemanticActions<
     ExprBuilder<

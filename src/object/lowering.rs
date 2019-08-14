@@ -1,7 +1,7 @@
 use super::builder::*;
 use super::{Const, Node};
 
-use crate::model::*;
+use crate::expr::*;
 use crate::span::{Source, WithSpan};
 
 use std::mem;

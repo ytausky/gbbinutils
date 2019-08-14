@@ -373,13 +373,13 @@ mod mock {
 
     use crate::analysis::resolve::{BasicNameTable, FakeNameTable, MockNameTable, NameTableEvent};
     use crate::diag::{DiagnosticsEvent, MockDiagnostics};
+    use crate::expr::{Atom, LocationCounter};
     use crate::log::Log;
-    use crate::model::{Atom, LocationCounter};
     use crate::object::builder::mock::*;
 
     use std::marker::PhantomData;
 
-    type Expr<N, S> = crate::model::Expr<Atom<LocationCounter, N>, S>;
+    type Expr<N, S> = crate::expr::Expr<Atom<LocationCounter, N>, S>;
 
     #[derive(Debug, PartialEq)]
     pub(crate) enum SessionEvent {
@@ -569,15 +569,15 @@ mod tests {
     use crate::analysis::syntax::*;
     use crate::analysis::{Literal, MockCodebase};
     use crate::diag::DiagnosticsEvent;
+    use crate::expr::{Atom, BinOp, LocationCounter};
     use crate::log::*;
-    use crate::model::{Atom, BinOp, LocationCounter};
     use crate::object::builder::mock::{BackendEvent, SerialIdAllocator};
     use crate::object::builder::{CpuInstr, Nullary};
 
     use std::fmt::Debug;
     use std::iter;
 
-    type Expr<S> = crate::model::Expr<Atom<LocationCounter, usize>, S>;
+    type Expr<S> = crate::expr::Expr<Atom<LocationCounter, usize>, S>;
 
     impl<S: Session> IntoSemanticActions<S> for () {
         type SemanticActions =

@@ -1,7 +1,7 @@
 use super::Token;
 
 use crate::diag::Diagnostics;
-use crate::model::BinOp;
+use crate::expr::BinOp;
 
 // A token stream represents either a tokenized source file or a macro expansion. It is logically
 // divided into lines (separated by <Eol> tokens) and ends with an <Eos> token. It has a single

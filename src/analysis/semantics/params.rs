@@ -2,7 +2,7 @@ use super::{Params, PushOp};
 
 use crate::analysis::resolve::{NameTable, ResolvedIdent};
 use crate::diag::{Diagnostics, Message};
-use crate::model::{BinOp, FnCall, LocationCounter, ParamId};
+use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
 use crate::object::builder::{AllocName, Finish, Name};
 
 pub(super) trait RelocLookup<I, S> {
@@ -171,12 +171,12 @@ mod tests {
     use crate::analysis::resolve::NameTableEvent;
     use crate::analysis::session::MockBuilder;
     use crate::diag::{DiagnosticsEvent, MockSpan};
+    use crate::expr::{Atom, ParamId};
     use crate::log::Log;
-    use crate::model::{Atom, ParamId};
     use crate::object::builder::mock::BackendEvent;
     use crate::object::builder::PushOp;
 
-    type Expr<N, S> = crate::model::Expr<Atom<LocationCounter, N>, S>;
+    type Expr<N, S> = crate::expr::Expr<Atom<LocationCounter, N>, S>;
 
     #[derive(Debug, PartialEq)]
     enum Event<N, S: Clone> {

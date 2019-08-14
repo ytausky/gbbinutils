@@ -203,8 +203,8 @@ mod tests {
     use crate::analysis::session::SessionEvent;
     use crate::analysis::syntax::actions::*;
     use crate::codebase::CodebaseError;
+    use crate::expr::{Atom, ParamId};
     use crate::log::with_log;
-    use crate::model::{Atom, ParamId};
     use crate::object::builder::mock::BackendEvent;
 
     use std::borrow::Borrow;

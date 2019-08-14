@@ -12,7 +12,7 @@ use super::resolve::ResolvedIdent;
 use super::syntax;
 use super::{Label, Literal, SemanticActions, Session, TokenStreamSemantics};
 
-use crate::model::LocationCounter;
+use crate::expr::LocationCounter;
 use crate::object::builder::{Finish, PushOp};
 
 mod builtin_instr;

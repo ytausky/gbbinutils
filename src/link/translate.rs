@@ -159,7 +159,7 @@ mod tests {
     use super::*;
 
     use crate::diag::IgnoreDiagnostics;
-    use crate::model::{Atom, BinOp, LocationCounter};
+    use crate::expr::{Atom, BinOp, LocationCounter};
     use crate::object::builder::*;
     use crate::object::num::Num;
     use crate::object::{Content, Object};

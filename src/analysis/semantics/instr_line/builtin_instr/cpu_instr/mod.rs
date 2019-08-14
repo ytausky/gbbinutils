@@ -336,7 +336,7 @@ mod tests {
 
     use crate::analysis::semantics::instr_line::builtin_instr::*;
     use crate::analysis::Literal;
-    use crate::model::{Atom, LocationCounter};
+    use crate::expr::{Atom, LocationCounter};
 
     #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
     pub(super) enum TokenId {
@@ -346,7 +346,7 @@ mod tests {
 
     pub(super) type TokenSpan = MockSpan<TokenId>;
 
-    type Expr = crate::model::Expr<Atom<LocationCounter, String>, TokenSpan>;
+    type Expr = crate::expr::Expr<Atom<LocationCounter, String>, TokenSpan>;
     type Input = Arg<String, String, ()>;
 
     impl From<ArgVariant<String, String, ()>> for Input {

@@ -1,6 +1,6 @@
 use super::SessionComponents;
 
-use crate::model::{BinOp, FnCall, LocationCounter, ParamId};
+use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
 use crate::object::builder::{AllocName, Finish, Name, PushOp};
 
 impl<U, B, N, D, S> PushOp<Name<B::Name>, S> for SessionComponents<U, B, N, D>

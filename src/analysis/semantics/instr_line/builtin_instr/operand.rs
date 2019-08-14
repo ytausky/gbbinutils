@@ -242,12 +242,12 @@ pub mod tests {
     use super::*;
 
     use crate::analysis::Literal;
-    use crate::model::{Atom, LocationCounter};
+    use crate::expr::{Atom, LocationCounter};
     use crate::object::builder::mock::BackendEvent;
 
     use std::fmt::Debug;
 
-    type Expr<S> = crate::model::Expr<Atom<LocationCounter, String>, S>;
+    type Expr<S> = crate::expr::Expr<Atom<LocationCounter, String>, S>;
 
     #[test]
     fn analyze_deref_bc() {

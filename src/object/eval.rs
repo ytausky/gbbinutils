@@ -2,7 +2,7 @@ use super::{LinkageContext, VarTable};
 
 use crate::diag::span::{Spanned, WithSpan};
 use crate::diag::{BackendDiagnostics, Message, ValueKind};
-use crate::model::{Atom, BinOp, Expr, ExprOp, LocationCounter, ParamId};
+use crate::expr::{Atom, BinOp, Expr, ExprOp, LocationCounter, ParamId};
 use crate::object::num::Num;
 use crate::object::*;
 

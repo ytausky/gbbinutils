@@ -163,7 +163,7 @@ mod tests {
     use super::*;
 
     use crate::diag::IgnoreDiagnostics;
-    use crate::model::*;
+    use crate::expr::*;
     use crate::object::builder::*;
 
     #[test]

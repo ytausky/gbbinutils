@@ -16,8 +16,8 @@ pub mod diag;
 
 mod analysis;
 mod codebase;
+mod expr;
 mod link;
-mod model;
 mod object;
 
 #[derive(Default)]

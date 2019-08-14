@@ -173,8 +173,8 @@ mod tests {
     use crate::analysis::session::{MockMacroId, SessionEvent};
     use crate::analysis::SemanticToken;
     use crate::diag::{DiagnosticsEvent, EmitDiag, Merge, Message, MockSpan};
+    use crate::expr::{Atom, BinOp, ExprOp, LocationCounter};
     use crate::log::with_log;
-    use crate::model::{Atom, BinOp, ExprOp, LocationCounter};
     use crate::object::builder::mock::{BackendEvent, SerialIdAllocator};
     use crate::object::builder::{CpuInstr, Item, Ld, Name, SimpleOperand, Width};
 
@@ -189,7 +189,7 @@ mod tests {
         Session(SessionEvent),
     }
 
-    pub type Expr<S> = crate::model::Expr<Atom<LocationCounter, usize>, S>;
+    pub type Expr<S> = crate::expr::Expr<Atom<LocationCounter, usize>, S>;
 
     impl<S: Clone> From<BackendEvent<usize, Expr<S>>> for TestOperation<S> {
         fn from(event: BackendEvent<usize, Expr<S>>) -> Self {
@@ -257,7 +257,8 @@ mod tests {
     }
 
     fn test_rst_1_op_1(op: BinOp) {
-        use crate::model::*;
+        use crate::expr::*;
+
         let actions = collect_semantic_actions(|actions| {
             let command = actions
                 .will_parse_line()
