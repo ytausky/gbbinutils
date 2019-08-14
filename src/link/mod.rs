@@ -27,8 +27,7 @@ impl Program {
         Self {
             sections: object
                 .program
-                .sections
-                .iter()
+                .sections()
                 .flat_map(|section| section.translate(&mut context, diagnostics))
                 .collect(),
         }
@@ -79,7 +78,7 @@ impl VarTable {
             vars: self,
             location: Num::Unknown,
         };
-        for section in &program.sections {
+        for section in program.sections() {
             context.location = section.eval_addr(context);
             context.vars[section.addr].refine(context.location.clone());
             let size = section.traverse(context, |item, context| {
@@ -166,7 +165,7 @@ mod tests {
 
     use crate::analysis::backend::*;
     use crate::diag::IgnoreDiagnostics;
-    use crate::model::{Atom, BinOp, Width};
+    use crate::model::{Atom, BinOp, Direction, Instruction, Item, Ld, Nullary, SpecialLd, Width};
 
     #[test]
     fn empty_object_converted_to_all_0xff_rom() {
@@ -210,35 +209,30 @@ mod tests {
     fn resolve_origin_relative_to_previous_section() {
         let origin1 = 0x150;
         let skipped_bytes = 0x10;
-        let linkable = Object {
-            program: Content {
-                sections: vec![
-                    Section {
-                        constraints: Constraints {
-                            addr: Some(origin1.into()),
-                        },
-                        addr: VarId(0),
-                        size: VarId(1),
-                        items: vec![Node::Byte(0x42)],
-                    },
-                    Section {
-                        constraints: Constraints {
-                            addr: Some(Const::from_items(&[
-                                LocationCounter.into(),
-                                skipped_bytes.into(),
-                                BinOp::Plus.into(),
-                            ])),
-                        },
-                        addr: VarId(2),
-                        size: VarId(3),
-                        items: vec![Node::Byte(0x43)],
-                    },
-                ],
-                symbols: SymbolTable::new(),
-            },
-            vars: VarTable(vec![Default::default(); 4]),
-        };
-        let binary = Program::link(linkable, &mut IgnoreDiagnostics);
+        let mut object = Object::new();
+        let object_builder = ObjectBuilder::new(&mut object);
+
+        // org $0150
+        let mut const_builder = object_builder.build_const();
+        const_builder.push_op(origin1, ());
+        let (mut object_builder, origin1_const) = const_builder.finish();
+        object_builder.set_origin(origin1_const);
+
+        // nop
+        object_builder.emit_item(Item::Instruction(Instruction::Nullary(Nullary::Nop)));
+
+        // org . + $10
+        let mut const_builder = object_builder.build_const();
+        const_builder.push_op(LocationCounter, ());
+        const_builder.push_op(skipped_bytes, ());
+        const_builder.push_op(BinOp::Plus, ());
+        let (mut object_builder, origin2_const) = const_builder.finish();
+        object_builder.set_origin(origin2_const);
+
+        // halt
+        object_builder.emit_item(Item::Instruction(Instruction::Nullary(Nullary::Halt)));
+
+        let binary = Program::link(object, &mut IgnoreDiagnostics);
         assert_eq!(
             binary.sections[1].addr,
             (origin1 + 1 + skipped_bytes) as usize
@@ -266,8 +260,8 @@ mod tests {
 
     #[test]
     fn section_with_one_byte_has_size_one() {
-        assert_section_size(1, |linkable| {
-            linkable.program.sections[0].items.push(Node::Byte(0x42))
+        assert_section_size(1, |mut builder| {
+            builder.emit_item(Item::Instruction(Instruction::Nullary(Nullary::Nop)));
         });
     }
 
@@ -282,48 +276,50 @@ mod tests {
     }
 
     fn test_section_size_with_literal_ld_inline_addr(addr: i32, expected: i32) {
-        assert_section_size(expected, |linkable| {
-            linkable.program.sections[0]
-                .items
-                .push(Node::LdInlineAddr(0, addr.into()))
+        assert_section_size(expected, |mut builder| {
+            builder.emit_item(Item::Instruction(Instruction::Ld(Ld::Special(
+                SpecialLd::InlineAddr(addr.into()),
+                Direction::IntoA,
+            ))))
         });
     }
 
     #[test]
     fn ld_inline_addr_with_symbol_after_instruction_has_size_three() {
-        assert_section_size(3, |linkable| {
-            let name = linkable.program.symbols.alloc();
-            let reloc = linkable.vars.alloc();
-            let items = &mut linkable.program.sections[0].items;
-            items.push(Node::LdInlineAddr(0, Atom::Name(name.into()).into()));
-            items.push(Node::Reloc(reloc));
-            linkable
-                .program
-                .symbols
-                .define(name, ContentDef::Expr(Atom::Location(reloc).into()))
+        assert_section_size(3, |mut builder| {
+            let name = builder.alloc_name(());
+            builder.emit_item(Item::Instruction(Instruction::Ld(Ld::Special(
+                SpecialLd::InlineAddr(Atom::Name(name).into()),
+                Direction::IntoA,
+            ))));
+            let mut symbol_builder = builder.define_symbol(name, ());
+            symbol_builder.push_op(LocationCounter, ());
+            symbol_builder.finish();
         })
     }
 
     #[test]
     fn resolve_expr_with_section_addr() {
-        let linkable = Object {
-            program: Content {
-                sections: vec![Section {
-                    constraints: Constraints {
-                        addr: Some(0x1337.into()),
-                    },
-                    addr: VarId(0),
-                    size: VarId(1),
-                    items: vec![Node::Immediate(
-                        Atom::Name(ContentSymbol(0).into()).into(),
-                        Width::Word,
-                    )],
-                }],
-                symbols: SymbolTable(vec![Some(ContentDef::Section(SectionId(0)))]),
-            },
-            vars: VarTable(vec![Default::default(); 2]),
-        };
-        let binary = Program::link(linkable, &mut IgnoreDiagnostics);
+        let mut object = Object::new();
+        let mut object_builder = ObjectBuilder::new(&mut object);
+
+        // section my_section
+        let name = object_builder.alloc_name(());
+        object_builder.start_section((name, ()));
+
+        // org $1337
+        let mut const_builder = object_builder.build_const();
+        const_builder.push_op(0x1337, ());
+        let (mut object_builder, origin) = const_builder.finish();
+        object_builder.set_origin(origin);
+
+        // dw my_section
+        let mut const_builder = object_builder.build_const();
+        const_builder.push_op(Name(name), ());
+        let (mut object_builder, my_section) = const_builder.finish();
+        object_builder.emit_item(Item::Data(my_section, Width::Word));
+
+        let binary = Program::link(object, &mut IgnoreDiagnostics);
         assert_eq!(binary.sections[0].data, [0x37, 0x13])
     }
 
@@ -332,36 +328,46 @@ mod tests {
         let addr = 0x0100;
         let bytes = 10;
         let symbol = VarId(2);
-        let program = Content::<()> {
-            sections: vec![Section {
-                constraints: Constraints {
-                    addr: Some(addr.into()),
-                },
-                addr: VarId(0),
-                size: VarId(1),
-                items: vec![
-                    Node::Reserved(bytes.into()),
-                    Node::Reloc(symbol),
-                    Node::Immediate(Atom::Name(ContentSymbol(0).into()).into(), Width::Word),
-                ],
-            }],
-            symbols: SymbolTable(vec![Some(ContentDef::Expr(Atom::Location(symbol).into()))]),
-        };
-        let mut vars = VarTable(vec![Default::default(); 3]);
-        vars.resolve(&program);
-        assert_eq!(vars[symbol].value, (addr + bytes).into())
+
+        let mut object = Object::new();
+        let object_builder = ObjectBuilder::new(&mut object);
+
+        // org $0100
+        let mut const_builder = object_builder.build_const();
+        const_builder.push_op(addr, ());
+        let (mut object_builder, origin) = const_builder.finish();
+        object_builder.set_origin(origin);
+
+        // ds 10
+        let mut const_builder = object_builder.build_const();
+        const_builder.push_op(bytes, ());
+        let (mut object_builder, bytes_const) = const_builder.finish();
+        object_builder.reserve(bytes_const);
+
+        // label dw label
+        let label = object_builder.alloc_name(());
+        let mut symbol_builder = object_builder.define_symbol(label, ());
+        symbol_builder.push_op(LocationCounter, ());
+        let (object_builder, ()) = symbol_builder.finish();
+        let mut const_builder = object_builder.build_const();
+        const_builder.push_op(Name(label), ());
+        let (mut object_builder, label_const) = const_builder.finish();
+        object_builder.emit_item(Item::Data(label_const, Width::Word));
+
+        object.vars.resolve(&object.program);
+        assert_eq!(object.vars[symbol].value, (addr + bytes).into())
     }
 
-    fn assert_section_size(expected: impl Into<Num>, f: impl FnOnce(&mut Object<()>)) {
-        let mut linkable = Object::new();
-        linkable
-            .program
-            .add_section(None, linkable.vars.alloc(), linkable.vars.alloc());
-        f(&mut linkable);
-        linkable.vars.resolve(&linkable.program);
+    fn assert_section_size(expected: impl Into<Num>, f: impl FnOnce(ObjectBuilder<()>)) {
+        let mut object = Object::new();
+        let mut builder = ObjectBuilder::new(&mut object);
+        let name = builder.alloc_name(());
+        builder.start_section((name, ()));
+        f(builder);
+        object.vars.resolve(&object.program);
         assert_eq!(
-            linkable.vars[linkable.program.sections[0].size].value,
+            object.vars[object.program.sections().next().unwrap().size].value,
             expected.into()
-        )
+        );
     }
 }

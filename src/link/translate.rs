@@ -158,10 +158,11 @@ fn is_in_u8_range(n: i32) -> bool {
 mod tests {
     use super::*;
 
+    use crate::analysis::backend::{Backend, Finish, PartialBackend, PushOp};
     use crate::diag::IgnoreDiagnostics;
-    use crate::model::{Atom, BinOp, LocationCounter};
+    use crate::model::{Atom, BinOp, Instruction, Item, LocationCounter, Nullary};
     use crate::object::num::Num;
-    use crate::object::{Constraints, Content, SymbolTable, Var, VarId};
+    use crate::object::{Content, Object, ObjectBuilder};
 
     use std::borrow::Borrow;
 
@@ -221,70 +222,94 @@ mod tests {
     #[test]
     fn set_addr_of_translated_section() {
         let addr = 0x7ff0;
-        let program = &Content {
-            sections: vec![Section {
-                constraints: Constraints {
-                    addr: Some(addr.into()),
-                },
-                addr: VarId(0),
-                size: VarId(1),
-                items: vec![Node::Byte(0x00)],
-            }],
-            symbols: SymbolTable(vec![]),
-        };
+
+        let mut object = Object::new();
+        let object_builder = ObjectBuilder::new(&mut object);
+
+        // org $7ff0
+        let mut const_builder = object_builder.build_const();
+        const_builder.push_op(addr, ());
+        let (mut object_builder, origin) = const_builder.finish();
+        object_builder.set_origin(origin);
+
+        // nop
+        object_builder.emit_item(Item::Instruction(Instruction::Nullary(Nullary::Nop)));
+
+        object.vars.resolve(&object.program);
         let context = &mut LinkageContext {
-            program,
-            vars: &VarTable(vec![Var { value: addr.into() }, Var { value: 0.into() }]),
+            program: &object.program,
+            vars: &object.vars,
             location: 0.into(),
         };
-        let translated = program.sections[0].translate(context, &mut IgnoreDiagnostics);
+        let translated = object
+            .program
+            .sections()
+            .next()
+            .unwrap()
+            .translate(context, &mut IgnoreDiagnostics);
         assert_eq!(translated[0].addr, addr as usize)
     }
 
     #[test]
     fn translate_expr_with_location_counter() {
-        let byte = 0x42;
-        let program = &Content {
-            sections: vec![Section {
-                constraints: Constraints { addr: None },
-                addr: VarId(0),
-                size: VarId(1),
-                items: vec![
-                    Node::Byte(byte),
-                    Node::Immediate(LocationCounter.into(), Width::Byte),
-                ],
-            }],
-            symbols: SymbolTable(vec![]),
-        };
+        let mut object = Object::new();
+        let mut object_builder = ObjectBuilder::new(&mut object);
+
+        // nop
+        object_builder.emit_item(Item::Instruction(Instruction::Nullary(Nullary::Nop)));
+
+        // db .
+        let mut const_builder = object_builder.build_const();
+        const_builder.push_op(LocationCounter, ());
+        let (mut object_builder, location) = const_builder.finish();
+        object_builder.emit_item(Item::Data(location, Width::Byte));
+
+        object.vars.resolve(&object.program);
         let context = &mut LinkageContext {
-            program,
-            vars: &VarTable(vec![Var { value: 0.into() }, Var { value: 2.into() }]),
+            program: &object.program,
+            vars: &object.vars,
             location: 0.into(),
         };
-        let binary = program.sections[0].translate(context, &mut IgnoreDiagnostics);
-        assert_eq!(binary[0].data, [byte, 0x02])
+        let binary = object
+            .program
+            .sections()
+            .next()
+            .unwrap()
+            .translate(context, &mut IgnoreDiagnostics);
+        assert_eq!(binary[0].data, [0x00, 0x02])
     }
 
     #[test]
     fn location_counter_starts_from_section_origin() {
         let addr = 0xffe1;
-        let program = &Content {
-            sections: vec![Section {
-                constraints: Constraints {
-                    addr: Some(addr.into()),
-                },
-                addr: VarId(0),
-                size: VarId(1),
-                items: vec![Node::Immediate(LocationCounter.into(), Width::Word)],
-            }],
-            symbols: SymbolTable(vec![]),
-        };
+
+        let mut object = Object::new();
+        let object_builder = ObjectBuilder::new(&mut object);
+
+        // org $ffe1
+        let mut const_builder = object_builder.build_const();
+        const_builder.push_op(addr, ());
+        let (mut object_builder, origin) = const_builder.finish();
+        object_builder.set_origin(origin);
+
+        // dw .
+        let mut const_builder = object_builder.build_const();
+        const_builder.push_op(LocationCounter, ());
+        let (mut object_builder, location) = const_builder.finish();
+        object_builder.emit_item(Item::Data(location, Width::Word));
+
+        object.vars.resolve(&object.program);
         let context = &mut LinkageContext {
-            program,
-            vars: &VarTable(vec![Var { value: addr.into() }, Var { value: 2.into() }]),
+            program: &object.program,
+            vars: &object.vars,
             location: 0.into(),
         };
-        let binary = program.sections[0].translate(context, &mut IgnoreDiagnostics);
+        let binary = object
+            .program
+            .sections()
+            .next()
+            .unwrap()
+            .translate(context, &mut IgnoreDiagnostics);
         assert_eq!(binary[0].data, [0xe3, 0xff])
     }
 }

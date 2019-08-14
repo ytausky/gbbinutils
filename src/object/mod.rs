@@ -152,8 +152,8 @@ impl From<ContentSymbol> for Symbol {
 pub struct ContentSymbol(pub usize);
 
 pub struct Content<S> {
-    pub sections: Vec<Section<S>>,
-    pub symbols: SymbolTable<S>,
+    sections: Vec<Section<S>>,
+    symbols: SymbolTable<S>,
 }
 
 pub struct Section<S> {
@@ -192,6 +192,10 @@ impl<S> Content<S> {
             sections: Vec::new(),
             symbols: SymbolTable::new(),
         }
+    }
+
+    pub fn sections(&self) -> impl Iterator<Item = &Section<S>> {
+        self.sections.iter()
     }
 
     pub fn add_section(&mut self, name: Option<ContentSymbol>, addr: VarId, size: VarId) {
