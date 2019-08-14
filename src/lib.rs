@@ -81,7 +81,7 @@ fn try_assemble(
     let mut linkable = object::Object::new();
     let builder = object::ObjectBuilder::new(&mut linkable);
     builder.assemble(name, &codebase, diagnostics)?;
-    Ok(linkable.link(diagnostics))
+    Ok(Program::link(linkable, diagnostics))
 }
 
 trait BuiltinSymbols {

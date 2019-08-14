@@ -406,7 +406,7 @@ mod tests {
         F: FnOnce(ObjectBuilder<S>),
     {
         let mut diagnostics = TestDiagnosticsListener::new();
-        let object = build_object(f).link(&mut diagnostics);
+        let object = Program::link(build_object(f), &mut diagnostics);
         let diagnostics = diagnostics.diagnostics.into_inner().into_boxed_slice();
         (object, diagnostics)
     }

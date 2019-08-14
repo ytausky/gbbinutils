@@ -14,6 +14,26 @@ pub struct Program {
 }
 
 impl Program {
+    pub(crate) fn link<S: Clone>(
+        mut object: Object<S>,
+        diagnostics: &mut impl BackendDiagnostics<S>,
+    ) -> Self {
+        object.vars.resolve(&object.program);
+        let mut context = LinkageContext {
+            program: &object.program,
+            vars: &object.vars,
+            location: 0.into(),
+        };
+        Self {
+            sections: object
+                .program
+                .sections
+                .iter()
+                .flat_map(|section| section.translate(&mut context, diagnostics))
+                .collect(),
+        }
+    }
+
     pub fn into_rom(self) -> Rom {
         let default = 0xffu8;
         let mut data: Vec<u8> = Vec::new();
@@ -44,25 +64,6 @@ pub struct Rom {
 pub struct BinarySection {
     pub addr: usize,
     pub data: Vec<u8>,
-}
-
-impl<S: Clone> Object<S> {
-    pub(crate) fn link(&mut self, diagnostics: &mut impl BackendDiagnostics<S>) -> Program {
-        self.vars.resolve(&self.program);
-        let mut context = LinkageContext {
-            program: &self.program,
-            vars: &self.vars,
-            location: 0.into(),
-        };
-        Program {
-            sections: self
-                .program
-                .sections
-                .iter()
-                .flat_map(|section| section.translate(&mut context, diagnostics))
-                .collect(),
-        }
-    }
 }
 
 impl VarTable {
@@ -209,7 +210,7 @@ mod tests {
     fn resolve_origin_relative_to_previous_section() {
         let origin1 = 0x150;
         let skipped_bytes = 0x10;
-        let mut linkable = Object {
+        let linkable = Object {
             program: Content {
                 sections: vec![
                     Section {
@@ -237,7 +238,7 @@ mod tests {
             },
             vars: VarTable(vec![Default::default(); 4]),
         };
-        let binary = linkable.link(&mut IgnoreDiagnostics);
+        let binary = Program::link(linkable, &mut IgnoreDiagnostics);
         assert_eq!(
             binary.sections[1].addr,
             (origin1 + 1 + skipped_bytes) as usize
@@ -305,7 +306,7 @@ mod tests {
 
     #[test]
     fn resolve_expr_with_section_addr() {
-        let mut linkable = Object {
+        let linkable = Object {
             program: Content {
                 sections: vec![Section {
                     constraints: Constraints {
@@ -322,7 +323,7 @@ mod tests {
             },
             vars: VarTable(vec![Default::default(); 2]),
         };
-        let binary = linkable.link(&mut IgnoreDiagnostics);
+        let binary = Program::link(linkable, &mut IgnoreDiagnostics);
         assert_eq!(binary.sections[0].data, [0x37, 0x13])
     }
 
