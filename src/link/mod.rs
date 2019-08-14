@@ -299,7 +299,7 @@ mod tests {
             linkable
                 .program
                 .symbols
-                .define(name, ProgramDef::Expr(Atom::Location(reloc).into()))
+                .define(name, ContentDef::Expr(Atom::Location(reloc).into()))
         })
     }
 
@@ -318,7 +318,7 @@ mod tests {
                         Width::Word,
                     )],
                 }],
-                symbols: SymbolTable(vec![Some(ProgramDef::Section(SectionId(0)))]),
+                symbols: SymbolTable(vec![Some(ContentDef::Section(SectionId(0)))]),
             },
             vars: VarTable(vec![Default::default(); 2]),
         };
@@ -344,7 +344,7 @@ mod tests {
                     Node::Immediate(Atom::Name(ContentSymbol(0).into()).into(), Width::Word),
                 ],
             }],
-            symbols: SymbolTable(vec![Some(ProgramDef::Expr(Atom::Location(symbol).into()))]),
+            symbols: SymbolTable(vec![Some(ContentDef::Expr(Atom::Location(symbol).into()))]),
         };
         let mut vars = VarTable(vec![Default::default(); 3]);
         vars.resolve(&program);

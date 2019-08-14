@@ -178,7 +178,7 @@ pub enum Node<S> {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum ProgramDef<S> {
+pub enum ContentDef<S> {
     Section(SectionId),
     Expr(Expr<S>),
 }
@@ -198,7 +198,7 @@ impl<S> Content<S> {
         let section = SectionId(self.sections.len());
         self.sections.push(Section::new(addr, size));
         if let Some(name) = name {
-            self.symbols.define(name, ProgramDef::Section(section))
+            self.symbols.define(name, ContentDef::Section(section))
         }
     }
 }
@@ -214,7 +214,7 @@ impl<S> Section<S> {
     }
 }
 
-pub struct SymbolTable<S>(pub Vec<Option<ProgramDef<S>>>);
+pub struct SymbolTable<S>(pub Vec<Option<ContentDef<S>>>);
 
 impl<S> SymbolTable<S> {
     pub fn new() -> Self {
@@ -227,12 +227,12 @@ impl<S> SymbolTable<S> {
         id
     }
 
-    pub fn define(&mut self, ContentSymbol(id): ContentSymbol, def: ProgramDef<S>) {
+    pub fn define(&mut self, ContentSymbol(id): ContentSymbol, def: ContentDef<S>) {
         assert!(self.0[id].is_none());
         self.0[id] = Some(def);
     }
 
-    fn get(&self, ContentSymbol(id): ContentSymbol) -> Option<&ProgramDef<S>> {
+    fn get(&self, ContentSymbol(id): ContentSymbol) -> Option<&ContentDef<S>> {
         self.0[id].as_ref()
     }
 }
@@ -248,7 +248,7 @@ mod tests {
         program.add_section(Some(name), VarId(0), VarId(1));
         assert_eq!(
             program.symbols.get(name),
-            Some(&ProgramDef::Section(SectionId(0)))
+            Some(&ContentDef::Section(SectionId(0)))
         )
     }
 }

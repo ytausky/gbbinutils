@@ -167,7 +167,7 @@ impl<'a, S> Finish for SymbolBuilder<'a, S> {
             .context
             .program
             .symbols
-            .define(self.name.0, ProgramDef::Expr(self.expr));
+            .define(self.name.0, ContentDef::Expr(self.expr));
         (parent, ())
     }
 }
@@ -241,7 +241,7 @@ mod tests {
                 .program
                 .symbols
                 .get(wrapped_name.unwrap().content().unwrap()),
-            Some(&ProgramDef::Section(SectionId(0)))
+            Some(&ContentDef::Section(SectionId(0)))
         )
     }
 
