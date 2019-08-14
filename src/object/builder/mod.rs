@@ -338,12 +338,12 @@ impl<'a, S: Clone> PartialBackend<S> for ObjectBuilder<'a, S> {
 }
 
 pub(crate) struct RelocContext<P, B> {
-    pub parent: P,
-    pub builder: B,
+    parent: P,
+    builder: B,
 }
 
 impl<P, B: Default> RelocContext<P, B> {
-    pub fn new(parent: P) -> Self {
+    fn new(parent: P) -> Self {
         Self {
             parent,
             builder: Default::default(),
