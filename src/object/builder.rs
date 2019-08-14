@@ -5,7 +5,7 @@ use crate::diag::span::WithSpan;
 use crate::model::{BinOp, ExprOp, FnCall, Item, ParamId};
 use crate::BuiltinSymbols;
 
-pub(crate) struct ProgramBuilder<'a, S> {
+pub(crate) struct ObjectBuilder<'a, S> {
     context: LinkageContext<&'a mut Content<S>, &'a mut VarTable>,
     state: Option<BuilderState<S>>,
 }
@@ -16,9 +16,9 @@ enum BuilderState<S> {
     SectionPrelude(usize),
 }
 
-impl<'a, S> ProgramBuilder<'a, S> {
+impl<'a, S> ObjectBuilder<'a, S> {
     pub fn new(Object { program, vars }: &'a mut Object<S>) -> Self {
-        Self {
+        ObjectBuilder {
             context: LinkageContext {
                 program,
                 vars,
@@ -58,7 +58,7 @@ impl<'a, S> ProgramBuilder<'a, S> {
     }
 }
 
-impl<'a, S: Clone> PartialBackend<S> for ProgramBuilder<'a, S> {
+impl<'a, S: Clone> PartialBackend<S> for ObjectBuilder<'a, S> {
     type Value = Const<S>;
 
     fn emit_item(&mut self, item: Item<Self::Value>) {
@@ -81,7 +81,7 @@ impl<'a, S: Clone> PartialBackend<S> for ProgramBuilder<'a, S> {
     }
 }
 
-impl<'a, S: Clone> Backend<S> for ProgramBuilder<'a, S> {
+impl<'a, S: Clone> Backend<S> for ObjectBuilder<'a, S> {
     type ConstBuilder = RelocContext<Self, Const<S>>;
     type SymbolBuilder = SymbolBuilder<'a, S>;
 
@@ -100,7 +100,7 @@ impl<'a, S: Clone> Backend<S> for ProgramBuilder<'a, S> {
     }
 }
 
-impl<'a, S: Clone> AllocName<S> for RelocContext<ProgramBuilder<'a, S>, Const<S>> {
+impl<'a, S: Clone> AllocName<S> for RelocContext<ObjectBuilder<'a, S>, Const<S>> {
     type Name = Symbol;
 
     fn alloc_name(&mut self, span: S) -> Self::Name {
@@ -108,8 +108,8 @@ impl<'a, S: Clone> AllocName<S> for RelocContext<ProgramBuilder<'a, S>, Const<S>
     }
 }
 
-impl<'a, S: Clone> Finish for RelocContext<ProgramBuilder<'a, S>, Const<S>> {
-    type Parent = ProgramBuilder<'a, S>;
+impl<'a, S: Clone> Finish for RelocContext<ObjectBuilder<'a, S>, Const<S>> {
+    type Parent = ObjectBuilder<'a, S>;
     type Value = Const<S>;
 
     fn finish(self) -> (Self::Parent, Self::Value) {
@@ -118,7 +118,7 @@ impl<'a, S: Clone> Finish for RelocContext<ProgramBuilder<'a, S>, Const<S>> {
 }
 
 pub(crate) struct SymbolBuilder<'a, S> {
-    parent: ProgramBuilder<'a, S>,
+    parent: ObjectBuilder<'a, S>,
     location: VarId,
     name: (ContentSymbol, S),
     expr: Expr<S>,
@@ -157,7 +157,7 @@ impl<'a, S: Clone> PushOp<LocationCounter, S> for SymbolBuilder<'a, S> {
 }
 
 impl<'a, S> Finish for SymbolBuilder<'a, S> {
-    type Parent = ProgramBuilder<'a, S>;
+    type Parent = ObjectBuilder<'a, S>;
     type Value = ();
 
     fn finish(self) -> (Self::Parent, Self::Value) {
@@ -172,7 +172,7 @@ impl<'a, S> Finish for SymbolBuilder<'a, S> {
     }
 }
 
-impl<'a, S: Clone> AllocName<S> for ProgramBuilder<'a, S> {
+impl<'a, S: Clone> AllocName<S> for ObjectBuilder<'a, S> {
     type Name = Symbol;
 
     fn alloc_name(&mut self, _span: S) -> Self::Name {
@@ -180,7 +180,7 @@ impl<'a, S: Clone> AllocName<S> for ProgramBuilder<'a, S> {
     }
 }
 
-impl<'a, S: Clone> StartSection<Symbol, S> for ProgramBuilder<'a, S> {
+impl<'a, S: Clone> StartSection<Symbol, S> for ObjectBuilder<'a, S> {
     fn start_section(&mut self, (name, _): (Symbol, S)) {
         let index = self.context.program.sections.len();
         self.state = Some(BuilderState::SectionPrelude(index));
@@ -188,7 +188,7 @@ impl<'a, S: Clone> StartSection<Symbol, S> for ProgramBuilder<'a, S> {
     }
 }
 
-impl<'a, S: Clone> BuiltinSymbols for ProgramBuilder<'a, S> {
+impl<'a, S: Clone> BuiltinSymbols for ObjectBuilder<'a, S> {
     type Name = Symbol;
 
     fn builtin_symbols(&self) -> &[(&str, Self::Name)] {
@@ -267,9 +267,9 @@ mod tests {
         assert_eq!(object.program.sections[0].items, [node])
     }
 
-    fn build_object<F: FnOnce(ProgramBuilder<S>), S>(f: F) -> Object<S> {
+    fn build_object<F: FnOnce(ObjectBuilder<S>), S>(f: F) -> Object<S> {
         let mut linkable = Object::new();
-        let builder = ProgramBuilder::new(&mut linkable);
+        let builder = ObjectBuilder::new(&mut linkable);
         f(builder);
         linkable
     }
@@ -403,7 +403,7 @@ mod tests {
     fn with_object_builder<S, F>(f: F) -> (Program, Box<[CompactDiag<S, S>]>)
     where
         S: Clone + 'static,
-        F: FnOnce(ProgramBuilder<S>),
+        F: FnOnce(ObjectBuilder<S>),
     {
         let mut diagnostics = TestDiagnosticsListener::new();
         let object = build_object(f).link(&mut diagnostics);

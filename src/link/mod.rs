@@ -248,7 +248,7 @@ mod tests {
     fn label_defined_as_section_origin_plus_offset() {
         let addr = 0xffe1;
         let mut linkable = Object::new();
-        let mut builder = ProgramBuilder::new(&mut linkable);
+        let mut builder = ObjectBuilder::new(&mut linkable);
         builder.set_origin(addr.into());
         let symbol_id = builder.alloc_name(());
         let mut builder = builder.define_symbol(symbol_id, ());

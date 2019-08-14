@@ -1,4 +1,4 @@
-pub(crate) use self::builder::ProgramBuilder;
+pub(crate) use self::builder::ObjectBuilder;
 
 use self::num::Num;
 

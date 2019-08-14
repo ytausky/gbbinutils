@@ -79,7 +79,7 @@ fn try_assemble(
     let codebase = codebase::FileCodebase::new(input);
     let diagnostics = &mut CompositeDiagnosticsSystem::new(&codebase.cache, output);
     let mut linkable = object::Object::new();
-    let builder = object::ProgramBuilder::new(&mut linkable);
+    let builder = object::ObjectBuilder::new(&mut linkable);
     builder.assemble(name, &codebase, diagnostics)?;
     Ok(linkable.link(diagnostics))
 }
