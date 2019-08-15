@@ -58,11 +58,9 @@ where
     Self: Diagnostics<S>,
 {
     type ConstBuilder: ValueBuilder<Self::Name, S, Parent = Self, Value = Self::Value>
-        + AllocName<S, Name = Self::Name>
         + NameTable<I, BackendEntry = Self::Name>
         + Diagnostics<S>;
     type SymbolBuilder: ValueBuilder<Self::Name, S, Parent = Self, Value = ()>
-        + AllocName<S, Name = Self::Name>
         + NameTable<I, BackendEntry = Self::Name>
         + Diagnostics<S>;
 
