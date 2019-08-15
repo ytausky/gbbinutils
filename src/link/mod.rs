@@ -4,7 +4,6 @@ use crate::object::num::Num;
 use crate::object::*;
 
 use std::borrow::Borrow;
-use std::ops::{Index, IndexMut};
 
 mod translate;
 
@@ -88,20 +87,6 @@ impl VarTable {
             refinements += context.vars[section.size].refine(size) as i32
         }
         refinements
-    }
-}
-
-impl Index<VarId> for VarTable {
-    type Output = Var;
-
-    fn index(&self, VarId(id): VarId) -> &Self::Output {
-        &self.0[id]
-    }
-}
-
-impl IndexMut<VarId> for VarTable {
-    fn index_mut(&mut self, VarId(id): VarId) -> &mut Self::Output {
-        &mut self.0[id]
     }
 }
 

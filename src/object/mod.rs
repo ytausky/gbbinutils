@@ -3,6 +3,8 @@ use self::num::Num;
 
 use crate::expr::{Atom, Expr, ExprOp, LocationCounter};
 
+use std::ops::{Index, IndexMut};
+
 pub mod builder;
 pub mod num;
 
@@ -45,7 +47,7 @@ pub enum BuiltinId {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ContentId(pub usize);
+pub struct ContentId(usize);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct VarId(pub usize);
@@ -60,20 +62,20 @@ pub enum Node<S> {
     Reserved(Const<S>),
 }
 
-pub struct SymbolTable<S>(pub Vec<Option<ContentDef<Formula<S>, SectionId>>>);
+struct SymbolTable<S>(Vec<Option<ContentDef<Formula<S>, SectionId>>>);
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ContentDef<F, S> {
+enum ContentDef<F, S> {
     Formula(F),
     Section(S),
 }
 
 #[derive(Debug, PartialEq)]
-pub struct SectionId(pub usize);
+pub struct SectionId(usize);
 
 type Formula<S> = Expr<Atom<VarId, SymbolId>, S>;
 
-pub struct VarTable(pub Vec<Var>);
+pub struct VarTable(Vec<Var>);
 
 #[derive(Clone, Default)]
 pub struct Var {
@@ -185,6 +187,20 @@ impl VarTable {
         let id = VarId(self.0.len());
         self.0.push(Default::default());
         id
+    }
+}
+
+impl Index<VarId> for VarTable {
+    type Output = Var;
+
+    fn index(&self, VarId(id): VarId) -> &Self::Output {
+        &self.0[id]
+    }
+}
+
+impl IndexMut<VarId> for VarTable {
+    fn index_mut(&mut self, VarId(id): VarId) -> &mut Self::Output {
+        &mut self.0[id]
     }
 }
 

@@ -211,7 +211,7 @@ mod tests {
         item.translate(
             &LinkageContext {
                 content: &Content::new(),
-                vars: &VarTable(vec![]),
+                vars: &VarTable::new(),
                 location: Num::Unknown,
             },
             &mut IgnoreDiagnostics,
