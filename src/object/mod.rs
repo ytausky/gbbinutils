@@ -29,21 +29,23 @@ pub struct Constraints<S> {
     pub addr: Option<Const<S>>,
 }
 
-pub type Const<S> = Expr<Atom<LocationCounter, Symbol>, S>;
+pub type Const<S> = Expr<Atom<LocationCounter, SymbolId>, S>;
+
+type SymbolId = Symbol<BuiltinId, ContentId>;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Symbol {
-    Builtin(BuiltinSymbol),
-    Content(ContentSymbol),
+pub enum Symbol<B, C> {
+    Builtin(B),
+    Content(C),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum BuiltinSymbol {
+pub enum BuiltinId {
     Sizeof,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ContentSymbol(pub usize);
+pub struct ContentId(pub usize);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct VarId(pub usize);
@@ -58,18 +60,18 @@ pub enum Node<S> {
     Reserved(Const<S>),
 }
 
-pub struct SymbolTable<S>(pub Vec<Option<ContentDef<S>>>);
+pub struct SymbolTable<S>(pub Vec<Option<ContentDef<Formula<S>, SectionId>>>);
 
-#[derive(Debug, PartialEq)]
-pub enum ContentDef<S> {
-    Formula(Formula<S>),
-    Section(SectionId),
+#[derive(Clone, Debug, PartialEq)]
+pub enum ContentDef<F, S> {
+    Formula(F),
+    Section(S),
 }
 
 #[derive(Debug, PartialEq)]
 pub struct SectionId(pub usize);
 
-type Formula<S> = Expr<Atom<VarId, Symbol>, S>;
+type Formula<S> = Expr<Atom<VarId, SymbolId>, S>;
 
 pub struct VarTable(pub Vec<Var>);
 
@@ -99,7 +101,7 @@ impl<S> Content<S> {
         self.sections.iter()
     }
 
-    pub fn add_section(&mut self, name: Option<ContentSymbol>, addr: VarId, size: VarId) {
+    pub fn add_section(&mut self, name: Option<ContentId>, addr: VarId, size: VarId) {
         let section = SectionId(self.sections.len());
         self.sections.push(Section::new(addr, size));
         if let Some(name) = name {
@@ -124,18 +126,18 @@ impl<S> SymbolTable<S> {
         Self(Vec::new())
     }
 
-    pub fn alloc(&mut self) -> ContentSymbol {
-        let id = ContentSymbol(self.0.len());
+    pub fn alloc(&mut self) -> ContentId {
+        let id = ContentId(self.0.len());
         self.0.push(None);
         id
     }
 
-    pub fn define(&mut self, ContentSymbol(id): ContentSymbol, def: ContentDef<S>) {
+    pub fn define(&mut self, ContentId(id): ContentId, def: ContentDef<Formula<S>, SectionId>) {
         assert!(self.0[id].is_none());
         self.0[id] = Some(def);
     }
 
-    fn get(&self, ContentSymbol(id): ContentSymbol) -> Option<&ContentDef<S>> {
+    fn get(&self, ContentId(id): ContentId) -> Option<&ContentDef<Formula<S>, SectionId>> {
         self.0[id].as_ref()
     }
 }
@@ -186,41 +188,41 @@ impl VarTable {
     }
 }
 
-impl<L> From<Symbol> for Atom<L, Symbol> {
-    fn from(id: Symbol) -> Self {
+impl<L> From<SymbolId> for Atom<L, SymbolId> {
+    fn from(id: SymbolId) -> Self {
         Atom::Name(id)
     }
 }
 
 #[cfg(test)]
-impl<L> From<ContentSymbol> for Atom<L, Symbol> {
-    fn from(id: ContentSymbol) -> Self {
+impl<L> From<ContentId> for Atom<L, SymbolId> {
+    fn from(id: ContentId) -> Self {
         Atom::Name(id.into())
     }
 }
 
-impl<L> From<Symbol> for ExprOp<Atom<L, Symbol>> {
-    fn from(id: Symbol) -> Self {
+impl<L> From<SymbolId> for ExprOp<Atom<L, SymbolId>> {
+    fn from(id: SymbolId) -> Self {
         Atom::from(id).into()
     }
 }
 
 #[cfg(test)]
-impl<L> From<BuiltinSymbol> for ExprOp<Atom<L, Symbol>> {
-    fn from(builtin: BuiltinSymbol) -> Self {
+impl<L> From<BuiltinId> for ExprOp<Atom<L, SymbolId>> {
+    fn from(builtin: BuiltinId) -> Self {
         Atom::from(Symbol::from(builtin)).into()
     }
 }
 
 #[cfg(test)]
-impl<L> From<ContentSymbol> for ExprOp<Atom<L, Symbol>> {
-    fn from(id: ContentSymbol) -> Self {
+impl<L> From<ContentId> for ExprOp<Atom<L, SymbolId>> {
+    fn from(id: ContentId) -> Self {
         Atom::from(id).into()
     }
 }
 
-impl Symbol {
-    fn content(self) -> Option<ContentSymbol> {
+impl<B, C> Symbol<B, C> {
+    fn content(self) -> Option<C> {
         match self {
             Symbol::Builtin(_) => None,
             Symbol::Content(id) => Some(id),
@@ -228,14 +230,14 @@ impl Symbol {
     }
 }
 
-impl From<BuiltinSymbol> for Symbol {
-    fn from(builtin: BuiltinSymbol) -> Self {
+impl From<BuiltinId> for SymbolId {
+    fn from(builtin: BuiltinId) -> Self {
         Symbol::Builtin(builtin)
     }
 }
 
-impl From<ContentSymbol> for Symbol {
-    fn from(id: ContentSymbol) -> Self {
+impl From<ContentId> for SymbolId {
+    fn from(id: ContentId) -> Self {
         Symbol::Content(id)
     }
 }

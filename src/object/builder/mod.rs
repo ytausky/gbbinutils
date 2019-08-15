@@ -276,7 +276,7 @@ impl<'a, S> ObjectBuilder<'a, S> {
         }
     }
 
-    fn add_section(&mut self, symbol: Option<ContentSymbol>) {
+    fn add_section(&mut self, symbol: Option<ContentId>) {
         self.context.content.add_section(
             symbol,
             self.context.vars.alloc(),
@@ -325,7 +325,7 @@ impl<'a, S: Clone> PartialBackend<S> for ObjectBuilder<'a, S> {
         }
     }
 
-    fn start_section(&mut self, name: Symbol, _: S) {
+    fn start_section(&mut self, name: SymbolId, _: S) {
         let index = self.context.content.sections.len();
         self.state = Some(BuilderState::SectionPrelude(index));
         self.add_section(Some(name.content().unwrap()))
@@ -373,7 +373,7 @@ impl<P, N, S: Clone> PushOp<Name<N>, S> for RelocContext<P, Expr<Atom<LocationCo
 }
 
 impl<'a, S: Clone> AllocName<S> for RelocContext<ObjectBuilder<'a, S>, Const<S>> {
-    type Name = Symbol;
+    type Name = SymbolId;
 
     fn alloc_name(&mut self, span: S) -> Self::Name {
         self.parent.alloc_name(span)
@@ -392,12 +392,12 @@ impl<'a, S: Clone> Finish for RelocContext<ObjectBuilder<'a, S>, Const<S>> {
 pub(crate) struct SymbolBuilder<'a, S> {
     parent: ObjectBuilder<'a, S>,
     location: VarId,
-    name: (ContentSymbol, S),
+    name: (ContentId, S),
     formula: Formula<S>,
 }
 
 impl<'a, S: Clone> AllocName<S> for SymbolBuilder<'a, S> {
-    type Name = Symbol;
+    type Name = SymbolId;
 
     fn alloc_name(&mut self, span: S) -> Self::Name {
         self.parent.alloc_name(span)
@@ -415,7 +415,7 @@ macro_rules! impl_push_op_for_symbol_builder {
 }
 
 impl_push_op_for_symbol_builder! {i32}
-impl_push_op_for_symbol_builder! {Name<Symbol>}
+impl_push_op_for_symbol_builder! {Name<SymbolId>}
 impl_push_op_for_symbol_builder! {ParamId}
 impl_push_op_for_symbol_builder! {BinOp}
 impl_push_op_for_symbol_builder! {FnCall}
@@ -445,7 +445,7 @@ impl<'a, S> Finish for SymbolBuilder<'a, S> {
 }
 
 impl<'a, S: Clone> AllocName<S> for ObjectBuilder<'a, S> {
-    type Name = Symbol;
+    type Name = SymbolId;
 
     fn alloc_name(&mut self, _span: S) -> Self::Name {
         self.context.content.symbols.alloc().into()
@@ -453,7 +453,7 @@ impl<'a, S: Clone> AllocName<S> for ObjectBuilder<'a, S> {
 }
 
 impl<'a, S: Clone> BuiltinSymbols for ObjectBuilder<'a, S> {
-    type Name = Symbol;
+    type Name = SymbolId;
 
     fn builtin_symbols(&self) -> &[(&str, Self::Name)] {
         super::eval::BUILTIN_SYMBOLS
