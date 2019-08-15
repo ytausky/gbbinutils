@@ -18,14 +18,14 @@ impl<S: Clone> Const<S> {
         V: Borrow<VarTable>,
         D: BackendDiagnostics<S>,
     {
-        self.eval(context, &[], diagnostics)
+        self.eval_subst(context, &[], diagnostics)
     }
 }
 
-trait Eval<'a, S: Clone> {
+trait EvalSubst<'a, S: Clone> {
     type Output;
 
-    fn eval<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
+    fn eval_subst<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
         context: &'a LinkageContext<&'a Content<S>, V>,
         args: &'a [Spanned<Value<'a, S>, &S>],
@@ -47,13 +47,13 @@ enum ResolvedSymbol<'a, S> {
     Expr(&'a Expr<Atom<VarId, Symbol>, S>),
 }
 
-impl<'a, L, S: Clone> Eval<'a, S> for &'a Expr<Atom<L, Symbol>, S>
+impl<'a, L, S: Clone> EvalSubst<'a, S> for &'a Expr<Atom<L, Symbol>, S>
 where
-    for<'r> Spanned<&'r Atom<L, Symbol>, &'r S>: Eval<'a, S, Output = Value<'a, S>>,
+    for<'r> Spanned<&'r Atom<L, Symbol>, &'r S>: EvalSubst<'a, S, Output = Value<'a, S>>,
 {
     type Output = Num;
 
-    fn eval<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
+    fn eval_subst<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
         context: &'a LinkageContext<&'a Content<S>, V>,
         args: &'a [Spanned<Value<'a, S>, &S>],
@@ -62,48 +62,51 @@ where
         let mut stack = Vec::<Spanned<Value<_>, _>>::new();
         for Spanned { item, span } in &self.0 {
             let value = match item {
-                ExprOp::Atom(atom) => atom.with_span(span).eval(context, args, diagnostics),
+                ExprOp::Atom(atom) => atom.with_span(span).eval_subst(context, args, diagnostics),
                 ExprOp::Binary(operator) => {
                     let rhs = stack.pop().unwrap();
-                    let lhs = stack.pop().unwrap().eval(context, &[], diagnostics);
-                    let rhs = rhs.eval(context, &[], diagnostics);
+                    let lhs = stack.pop().unwrap().eval_subst(context, &[], diagnostics);
+                    let rhs = rhs.eval_subst(context, &[], diagnostics);
                     Value::Num(operator.apply(&lhs, &rhs))
                 }
                 ExprOp::FnCall(n) => {
                     let name = stack.pop().unwrap();
                     let arg_index = stack.len() - n;
-                    let value = Value::Num(name.eval(context, &stack[arg_index..], diagnostics));
+                    let value =
+                        Value::Num(name.eval_subst(context, &stack[arg_index..], diagnostics));
                     stack.truncate(arg_index);
                     value
                 }
             };
             stack.push(value.with_span(span))
         }
-        stack.pop().unwrap().eval(context, &[], diagnostics)
+        stack.pop().unwrap().eval_subst(context, &[], diagnostics)
     }
 }
 
-impl<'a, S: Clone> Eval<'a, S> for Spanned<Value<'a, S>, &S> {
+impl<'a, S: Clone> EvalSubst<'a, S> for Spanned<Value<'a, S>, &S> {
     type Output = Num;
 
-    fn eval<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
+    fn eval_subst<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
         context: &'a LinkageContext<&'a Content<S>, V>,
         args: &'a [Spanned<Value<'a, S>, &S>],
         diagnostics: &mut D,
     ) -> Self::Output {
         match self.item {
-            Value::Symbol(name) => name.with_span(self.span).eval(context, args, diagnostics),
+            Value::Symbol(name) => name
+                .with_span(self.span)
+                .eval_subst(context, args, diagnostics),
             Value::Num(value) => value,
             Value::Unresolved => Num::Unknown,
         }
     }
 }
 
-impl<'a, S: Clone> Eval<'a, S> for Spanned<ResolvedSymbol<'a, S>, &S> {
+impl<'a, S: Clone> EvalSubst<'a, S> for Spanned<ResolvedSymbol<'a, S>, &S> {
     type Output = Num;
 
-    fn eval<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
+    fn eval_subst<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
         context: &'a LinkageContext<&'a Content<S>, V>,
         args: &'a [Spanned<Value<'a, S>, &S>],
@@ -121,15 +124,15 @@ impl<'a, S: Clone> Eval<'a, S> for Spanned<ResolvedSymbol<'a, S>, &S> {
                     );
                     Num::Unknown
                 }),
-            ResolvedSymbol::Expr(expr) => expr.eval(context, args, diagnostics),
+            ResolvedSymbol::Expr(expr) => expr.eval_subst(context, args, diagnostics),
         }
     }
 }
 
-impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<LocationCounter, Symbol>, &S> {
+impl<'a, S: Clone + 'a> EvalSubst<'a, S> for Spanned<&Atom<LocationCounter, Symbol>, &S> {
     type Output = Value<'a, S>;
 
-    fn eval<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
+    fn eval_subst<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
         context: &'a LinkageContext<&'a Content<S>, V>,
         _: &'a [Spanned<Value<'a, S>, &S>],
@@ -144,10 +147,10 @@ impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<LocationCounter, Symbol>, 
     }
 }
 
-impl<'a, S: Clone + 'a> Eval<'a, S> for Spanned<&Atom<VarId, Symbol>, &S> {
+impl<'a, S: Clone + 'a> EvalSubst<'a, S> for Spanned<&Atom<VarId, Symbol>, &S> {
     type Output = Value<'a, S>;
 
-    fn eval<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
+    fn eval_subst<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
         context: &'a LinkageContext<&'a Content<S>, V>,
         args: &'a [Spanned<Value<'a, S>, &S>],
