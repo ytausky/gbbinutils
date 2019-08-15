@@ -18,17 +18,17 @@ impl<S: Clone> Const<S> {
         V: Borrow<VarTable>,
         D: BackendDiagnostics<S>,
     {
-        self.eval_subst(context, &[], diagnostics)
+        self.eval_subst(context, (), diagnostics)
     }
 }
 
-trait EvalSubst<'a, S: Clone> {
+trait EvalSubst<'a, P, S: Clone> {
     type Output;
 
     fn eval_subst<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
         context: &'a LinkageContext<&'a Content<S>, V>,
-        args: &'a [Spanned<Value<'a, S>, &S>],
+        args: P,
         diagnostics: &mut D,
     ) -> Self::Output;
 }
@@ -41,16 +41,16 @@ enum Value<'a, S: Clone> {
 
 type DefRef<'a, S> = Symbol<BuiltinId, ContentDef<&'a Formula<S>, &'a Section<S>>>;
 
-impl<'a, L, S: Clone> EvalSubst<'a, S> for &'a Expr<Atom<L, SymbolId>, S>
+impl<'a, A, P: Copy, S: Clone> EvalSubst<'a, P, S> for &'a Expr<A, S>
 where
-    for<'r> Spanned<&'r Atom<L, SymbolId>, &'r S>: EvalSubst<'a, S, Output = Value<'a, S>>,
+    for<'r> Spanned<&'r A, &'r S>: EvalSubst<'a, P, S, Output = Value<'a, S>>,
 {
     type Output = Num;
 
     fn eval_subst<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
         context: &'a LinkageContext<&'a Content<S>, V>,
-        args: &'a [Spanned<Value<'a, S>, &S>],
+        args: P,
         diagnostics: &mut D,
     ) -> Self::Output {
         let mut stack = Vec::<Spanned<Value<_>, _>>::new();
@@ -78,13 +78,15 @@ where
     }
 }
 
-impl<'a, S: Clone> EvalSubst<'a, S> for Spanned<Value<'a, S>, &S> {
+type Args<'a, S> = &'a [Spanned<Value<'a, S>, &'a S>];
+
+impl<'a, S: Clone> EvalSubst<'a, Args<'a, S>, S> for Spanned<Value<'a, S>, &S> {
     type Output = Num;
 
     fn eval_subst<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
         context: &'a LinkageContext<&'a Content<S>, V>,
-        args: &'a [Spanned<Value<'a, S>, &S>],
+        args: Args<'a, S>,
         diagnostics: &mut D,
     ) -> Self::Output {
         match self.item {
@@ -98,13 +100,13 @@ impl<'a, S: Clone> EvalSubst<'a, S> for Spanned<Value<'a, S>, &S> {
     }
 }
 
-impl<'a, S: Clone> EvalSubst<'a, S> for Spanned<DefRef<'a, S>, &S> {
+impl<'a, S: Clone> EvalSubst<'a, Args<'a, S>, S> for Spanned<DefRef<'a, S>, &S> {
     type Output = Num;
 
     fn eval_subst<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
         context: &'a LinkageContext<&'a Content<S>, V>,
-        args: &'a [Spanned<Value<'a, S>, &S>],
+        args: Args<'a, S>,
         diagnostics: &mut D,
     ) -> Self::Output {
         match self.item {
@@ -128,13 +130,13 @@ impl<'a, S: Clone> EvalSubst<'a, S> for Spanned<DefRef<'a, S>, &S> {
     }
 }
 
-impl<'a, S: Clone + 'a> EvalSubst<'a, S> for Spanned<&Atom<LocationCounter, SymbolId>, &S> {
+impl<'a, S: Clone + 'a> EvalSubst<'a, (), S> for Spanned<&Atom<LocationCounter, SymbolId>, &S> {
     type Output = Value<'a, S>;
 
     fn eval_subst<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
         context: &'a LinkageContext<&'a Content<S>, V>,
-        _: &'a [Spanned<Value<'a, S>, &S>],
+        (): (),
         diagnostics: &mut D,
     ) -> Self::Output {
         match self.item {
@@ -146,13 +148,13 @@ impl<'a, S: Clone + 'a> EvalSubst<'a, S> for Spanned<&Atom<LocationCounter, Symb
     }
 }
 
-impl<'a, S: Clone + 'a> EvalSubst<'a, S> for Spanned<&Atom<VarId, SymbolId>, &S> {
+impl<'a, S: Clone + 'a> EvalSubst<'a, Args<'a, S>, S> for Spanned<&Atom<VarId, SymbolId>, &S> {
     type Output = Value<'a, S>;
 
     fn eval_subst<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
         context: &'a LinkageContext<&'a Content<S>, V>,
-        args: &'a [Spanned<Value<'a, S>, &S>],
+        args: Args<'a, S>,
         diagnostics: &mut D,
     ) -> Self::Output {
         match self.item {
