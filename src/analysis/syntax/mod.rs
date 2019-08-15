@@ -19,6 +19,7 @@ pub enum Sigil {
     Dot,
     Eos,
     Eol,
+    EqEq,
     LParen,
     Minus,
     Pipe,

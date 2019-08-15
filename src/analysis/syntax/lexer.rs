@@ -97,6 +97,7 @@ impl<B: Borrow<str>> Scanner<B> {
             ',' => self.take(Comma),
             '.' => self.take(Dot),
             '\n' => self.take(Eol),
+            '=' => self.lex_eq_or_eq_eq(),
             '(' => self.take(LParen),
             '-' => self.take(Minus),
             '|' => self.take(Pipe),
@@ -115,6 +116,14 @@ impl<B: Borrow<str>> Scanner<B> {
     fn take(&mut self, token: impl Into<TokenKind>) -> Result<TokenKind, LexError> {
         self.advance();
         Ok(token.into())
+    }
+
+    fn lex_eq_or_eq_eq(&mut self) -> Result<TokenKind, LexError> {
+        self.advance();
+        match self.current_char() {
+            Some('=') => self.take(EqEq),
+            _ => Ok(TokenKind::Ident),
+        }
     }
 
     fn lex_decimal_number(&mut self) -> Result<TokenKind, LexError> {
@@ -395,6 +404,16 @@ mod tests {
     #[test]
     fn lex_dot() {
         assert_eq_tokens(".", [Dot.into()])
+    }
+
+    #[test]
+    fn lex_eq() {
+        assert_eq_tokens("=", [Ident("=".into())])
+    }
+
+    #[test]
+    fn lex_eq_eq() {
+        assert_eq_tokens("==", [EqEq.into()])
     }
 
     #[test]
