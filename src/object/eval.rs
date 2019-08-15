@@ -35,9 +35,8 @@ trait EvalSubst<'a, S: Clone> {
 
 #[derive(Clone)]
 enum Value<'a, S: Clone> {
-    Symbol(ResolvedSymbol<'a, S>),
+    Symbol(Option<ResolvedSymbol<'a, S>>),
     Num(Num),
-    Unresolved,
 }
 
 #[derive(Clone)]
@@ -94,11 +93,12 @@ impl<'a, S: Clone> EvalSubst<'a, S> for Spanned<Value<'a, S>, &S> {
         diagnostics: &mut D,
     ) -> Self::Output {
         match self.item {
-            Value::Symbol(name) => name
-                .with_span(self.span)
-                .eval_subst(context, args, diagnostics),
+            Value::Symbol(Some(name)) => {
+                name.with_span(self.span)
+                    .eval_subst(context, args, diagnostics)
+            }
+            Value::Symbol(None) => Num::Unknown,
             Value::Num(value) => value,
-            Value::Unresolved => Num::Unknown,
         }
     }
 }
@@ -171,9 +171,7 @@ impl<S: Clone> Spanned<Symbol, &S> {
         context: &'a LinkageContext<&'a Content<S>, V>,
         diagnostics: &mut D,
     ) -> Value<'a, S> {
-        self.resolve(context, diagnostics)
-            .map(Value::Symbol)
-            .unwrap_or(Value::Unresolved)
+        Value::Symbol(self.resolve(context, diagnostics))
     }
 
     fn resolve<'a, V, D: BackendDiagnostics<S>>(
@@ -233,7 +231,7 @@ impl<'a, S: Clone> Spanned<Value<'a, S>, &S> {
         D: BackendDiagnostics<S>,
     {
         match self.item {
-            Value::Symbol(ResolvedSymbol::Section(section)) => {
+            Value::Symbol(Some(ResolvedSymbol::Section(section))) => {
                 context.vars.borrow()[section.size].value.clone()
             }
             ref other => {
@@ -255,11 +253,11 @@ impl<'a, S: Clone> Spanned<Value<'a, S>, &S> {
 impl<'a, S: Clone> Value<'a, S> {
     fn kind(&self) -> Option<ValueKind> {
         match self {
-            Value::Symbol(ResolvedSymbol::Section(_)) => Some(ValueKind::Section),
-            Value::Symbol(ResolvedSymbol::Sizeof) => Some(ValueKind::Builtin),
-            Value::Symbol(ResolvedSymbol::Expr(_)) => Some(ValueKind::Symbol),
+            Value::Symbol(Some(ResolvedSymbol::Section(_))) => Some(ValueKind::Section),
+            Value::Symbol(Some(ResolvedSymbol::Sizeof)) => Some(ValueKind::Builtin),
+            Value::Symbol(Some(ResolvedSymbol::Expr(_))) => Some(ValueKind::Symbol),
+            Value::Symbol(None) => None,
             Value::Num(_) => Some(ValueKind::Num),
-            Value::Unresolved => None,
         }
     }
 }
