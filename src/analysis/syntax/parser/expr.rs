@@ -26,6 +26,7 @@ impl<I, L> Token<I, L> {
     fn as_suffix_operator(&self) -> Option<SuffixOperator> {
         use SuffixOperator::*;
         match self {
+            Token::Sigil(EqEq) => Some(Binary(BinOp::Equality)),
             Token::Sigil(Minus) => Some(Binary(BinOp::Minus)),
             Token::Sigil(LParen) => Some(FnCall),
             Token::Sigil(Pipe) => Some(Binary(BinOp::BitwiseOr)),
@@ -40,6 +41,7 @@ impl<I, L> Token<I, L> {
 #[derive(Clone, Copy, PartialEq, PartialOrd)]
 enum Precedence {
     None,
+    Comparison,
     BitwiseOr,
     Addition,
     Multiplication,
@@ -50,6 +52,7 @@ impl SuffixOperator {
     fn precedence(&self) -> Precedence {
         use SuffixOperator::*;
         match self {
+            Binary(BinOp::Equality) => Precedence::Comparison,
             Binary(BinOp::BitwiseOr) => Precedence::BitwiseOr,
             Binary(BinOp::Plus) | Binary(BinOp::Minus) => Precedence::Addition,
             Binary(BinOp::Multiplication) | Binary(BinOp::Division) => Precedence::Multiplication,
@@ -429,6 +432,28 @@ mod tests {
                 MockSpan::merge(TokenRef::from("left"), TokenRef::from("right")),
             )
             .multiply("star");
+        assert_eq_rpn_expr(tokens, expected)
+    }
+
+    #[test]
+    fn bit_or_precedes_equality() {
+        let tokens = input_tokens![
+            a @ Literal(()),
+            lpipe @ Sigil(Pipe),
+            b @ Literal(()),
+            eq @ Sigil(EqEq),
+            c @ Literal(()),
+            rpipe @ Sigil(Pipe),
+            d @ Literal(()),
+        ];
+        let expected = expr()
+            .literal("a")
+            .literal("b")
+            .bitwise_or("lpipe")
+            .literal("c")
+            .literal("d")
+            .bitwise_or("rpipe")
+            .equals("eq");
         assert_eq_rpn_expr(tokens, expected)
     }
 

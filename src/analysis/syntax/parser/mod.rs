@@ -1069,6 +1069,14 @@ mod tests {
             self
         }
 
+        pub fn equals(mut self, token: impl Into<TokenRef>) -> Self {
+            self.0.push(ExprAction::ApplyOperator(
+                Operator::Binary(BinOp::Equality),
+                token.into().into(),
+            ));
+            self
+        }
+
         pub fn divide(mut self, token: impl Into<TokenRef>) -> Self {
             self.0.push(ExprAction::ApplyOperator(
                 Operator::Binary(BinOp::Division),

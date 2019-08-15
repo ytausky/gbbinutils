@@ -98,6 +98,7 @@ impl<A> From<FnCall> for ExprOp<A> {
 pub enum BinOp {
     BitwiseOr,
     Division,
+    Equality,
     Minus,
     Multiplication,
     Plus,

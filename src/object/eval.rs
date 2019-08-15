@@ -211,6 +211,7 @@ impl BinOp {
         match self {
             BinOp::BitwiseOr => lhs | rhs,
             BinOp::Division => lhs / rhs,
+            BinOp::Equality => unimplemented!(),
             BinOp::Minus => lhs - rhs,
             BinOp::Multiplication => lhs * rhs,
             BinOp::Plus => lhs + rhs,
