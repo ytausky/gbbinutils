@@ -9,12 +9,9 @@ use crate::object::*;
 use std::borrow::Borrow;
 
 impl<S: Clone> Const<S> {
-    pub(crate) fn to_num<'a, V, D>(
-        &self,
-        context: &LinkageContext<&'a Content<S>, V>,
-        diagnostics: &mut D,
-    ) -> Num
+    pub(crate) fn to_num<C, V, D>(&self, context: &LinkageContext<C, V>, diagnostics: &mut D) -> Num
     where
+        C: Borrow<Content<S>>,
         V: Borrow<VarTable>,
         D: BackendDiagnostics<S>,
     {
@@ -25,9 +22,9 @@ impl<S: Clone> Const<S> {
 trait EvalSubst<'a, P, S: Clone> {
     type Output;
 
-    fn eval_subst<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
+    fn eval_subst<C: Borrow<Content<S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<&'a Content<S>, V>,
+        context: &'a LinkageContext<C, V>,
         args: P,
         diagnostics: &mut D,
     ) -> Self::Output;
@@ -47,9 +44,9 @@ where
 {
     type Output = Num;
 
-    fn eval_subst<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
+    fn eval_subst<C: Borrow<Content<S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<&'a Content<S>, V>,
+        context: &'a LinkageContext<C, V>,
         args: P,
         diagnostics: &mut D,
     ) -> Self::Output {
@@ -83,9 +80,9 @@ type Args<'a, S> = &'a [Spanned<Value<'a, S>, &'a S>];
 impl<'a, S: Clone> EvalSubst<'a, Args<'a, S>, S> for Spanned<Value<'a, S>, &S> {
     type Output = Num;
 
-    fn eval_subst<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
+    fn eval_subst<C: Borrow<Content<S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<&'a Content<S>, V>,
+        context: &'a LinkageContext<C, V>,
         args: Args<'a, S>,
         diagnostics: &mut D,
     ) -> Self::Output {
@@ -103,9 +100,9 @@ impl<'a, S: Clone> EvalSubst<'a, Args<'a, S>, S> for Spanned<Value<'a, S>, &S> {
 impl<'a, S: Clone> EvalSubst<'a, Args<'a, S>, S> for Spanned<DefRef<'a, S>, &S> {
     type Output = Num;
 
-    fn eval_subst<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
+    fn eval_subst<C: Borrow<Content<S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<&'a Content<S>, V>,
+        context: &'a LinkageContext<C, V>,
         args: Args<'a, S>,
         diagnostics: &mut D,
     ) -> Self::Output {
@@ -133,9 +130,9 @@ impl<'a, S: Clone> EvalSubst<'a, Args<'a, S>, S> for Spanned<DefRef<'a, S>, &S> 
 impl<'a, S: Clone + 'a> EvalSubst<'a, (), S> for Spanned<&Atom<LocationCounter, SymbolId>, &S> {
     type Output = Value<'a, S>;
 
-    fn eval_subst<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
+    fn eval_subst<C: Borrow<Content<S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<&'a Content<S>, V>,
+        context: &'a LinkageContext<C, V>,
         (): (),
         diagnostics: &mut D,
     ) -> Self::Output {
@@ -151,9 +148,9 @@ impl<'a, S: Clone + 'a> EvalSubst<'a, (), S> for Spanned<&Atom<LocationCounter, 
 impl<'a, S: Clone + 'a> EvalSubst<'a, Args<'a, S>, S> for Spanned<&Atom<VarId, SymbolId>, &S> {
     type Output = Value<'a, S>;
 
-    fn eval_subst<V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
+    fn eval_subst<C: Borrow<Content<S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<&'a Content<S>, V>,
+        context: &'a LinkageContext<C, V>,
         args: Args<'a, S>,
         diagnostics: &mut D,
     ) -> Self::Output {
@@ -167,17 +164,17 @@ impl<'a, S: Clone + 'a> EvalSubst<'a, Args<'a, S>, S> for Spanned<&Atom<VarId, S
 }
 
 impl<S: Clone> Spanned<SymbolId, &S> {
-    fn to_value<'a, V, D: BackendDiagnostics<S>>(
+    fn to_value<'a, C: Borrow<Content<S>>, V, D: BackendDiagnostics<S>>(
         &self,
-        context: &'a LinkageContext<&'a Content<S>, V>,
+        context: &'a LinkageContext<C, V>,
         diagnostics: &mut D,
     ) -> Value<'a, S> {
         Value::Symbol(self.resolve(context, diagnostics))
     }
 
-    fn resolve<'a, V, D: BackendDiagnostics<S>>(
+    fn resolve<'a, C: Borrow<Content<S>>, V, D: BackendDiagnostics<S>>(
         &self,
-        context: &'a LinkageContext<&'a Content<S>, V>,
+        context: &'a LinkageContext<C, V>,
         diagnostics: &mut D,
     ) -> Option<DefRef<'a, S>> {
         match self.item {
@@ -188,18 +185,23 @@ impl<S: Clone> Spanned<SymbolId, &S> {
 }
 
 impl<S: Clone> Spanned<ContentId, &S> {
-    fn resolve<'a, V, D: BackendDiagnostics<S>>(
+    fn resolve<'a, C: Borrow<Content<S>>, V, D: BackendDiagnostics<S>>(
         &self,
-        context: &'a LinkageContext<&'a Content<S>, V>,
+        context: &'a LinkageContext<C, V>,
         diagnostics: &mut D,
     ) -> Option<DefRef<'a, S>> {
         let id = self.item;
-        let resolved = context.content.symbols.get(id).map(|def| match def {
-            ContentDef::Formula(formula) => ContentDef::Formula(formula),
-            ContentDef::Section(SectionId(id)) => {
-                ContentDef::Section(&context.content.sections[*id])
-            }
-        });
+        let resolved = context
+            .content
+            .borrow()
+            .symbols
+            .get(id)
+            .map(|def| match def {
+                ContentDef::Formula(formula) => ContentDef::Formula(formula),
+                ContentDef::Section(SectionId(id)) => {
+                    ContentDef::Section(&context.content.borrow().sections[*id])
+                }
+            });
         if resolved.is_none() {
             let symbol = diagnostics.strip_span(self.span);
             diagnostics.emit_diag(Message::UnresolvedSymbol { symbol }.at(self.span.clone()))
@@ -225,12 +227,9 @@ impl BinOp {
 }
 
 impl<'a, S: Clone> Spanned<Value<'a, S>, &S> {
-    fn sizeof<V, D>(
-        &self,
-        context: &'a LinkageContext<&'a Content<S>, V>,
-        diagnostics: &mut D,
-    ) -> Num
+    fn sizeof<C, V, D>(&self, context: &'a LinkageContext<C, V>, diagnostics: &mut D) -> Num
     where
+        C: Borrow<Content<S>>,
         V: Borrow<VarTable>,
         D: BackendDiagnostics<S>,
     {

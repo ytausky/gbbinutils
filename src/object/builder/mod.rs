@@ -3,12 +3,13 @@ use self::lowering::Lower;
 use super::*;
 
 use crate::diag::span::{Source, WithSpan};
+use crate::diag::Diagnostics;
 use crate::expr::{BinOp, Expr, ExprOp, FnCall, LocationCounter, ParamId};
 use crate::BuiltinSymbols;
 
 mod lowering;
 
-pub trait Backend<S: Clone>: PartialBackend<S> + Sized {
+pub(crate) trait Backend<S: Clone>: PartialBackend<S> + Sized {
     type ConstBuilder: ValueBuilder<Self::Name, S, Parent = Self, Value = Self::Value>;
     type SymbolBuilder: ValueBuilder<Self::Name, S, Parent = Self, Value = ()>;
 
@@ -16,10 +17,15 @@ pub trait Backend<S: Clone>: PartialBackend<S> + Sized {
     fn define_symbol(self, name: Self::Name, span: S) -> Self::SymbolBuilder;
 }
 
-pub trait PartialBackend<S: Clone>: AllocName<S> {
+pub(crate) trait PartialBackend<S: Clone>: AllocName<S> {
     type Value: Source<Span = S>;
 
     fn emit_item(&mut self, item: Item<Self::Value>);
+    fn is_non_zero(
+        &mut self,
+        value: Self::Value,
+        diagnostics: &mut impl Diagnostics<S>,
+    ) -> Option<bool>;
     fn reserve(&mut self, bytes: Self::Value);
     fn set_origin(&mut self, origin: Self::Value);
     fn start_section(&mut self, name: Self::Name, span: S);
@@ -309,6 +315,17 @@ impl<'a, S: Clone> PartialBackend<S> for ObjectBuilder<'a, S> {
 
     fn emit_item(&mut self, item: Item<Self::Value>) {
         item.lower().for_each(|data_item| self.push(data_item))
+    }
+
+    fn is_non_zero(
+        &mut self,
+        value: Self::Value,
+        diagnostics: &mut impl Diagnostics<S>,
+    ) -> Option<bool> {
+        value
+            .to_num(&self.context, diagnostics)
+            .exact()
+            .map(|n| n != 0)
     }
 
     fn reserve(&mut self, bytes: Self::Value) {
@@ -609,6 +626,14 @@ pub mod mock {
             self.log.push(BackendEvent::EmitItem(item))
         }
 
+        fn is_non_zero(
+            &mut self,
+            _value: Self::Value,
+            _diagnostics: &mut impl Diagnostics<S>,
+        ) -> Option<bool> {
+            unimplemented!()
+        }
+
         fn reserve(&mut self, bytes: Self::Value) {
             self.log.push(BackendEvent::Reserve(bytes))
         }
@@ -665,10 +690,12 @@ pub mod mock {
 mod tests {
     use super::*;
 
-    use crate::diag::{CompactDiag, Message, TestDiagnosticsListener};
+    use crate::diag::*;
     use crate::expr::BinOp;
     use crate::link::Program;
+    use crate::log::Log;
     use crate::object::SectionId;
+    
     use std::borrow::Borrow;
 
     #[test]
@@ -863,6 +890,38 @@ mod tests {
             program.content.sections[0].items,
             [Node::Reserved(bytes.into())]
         )
+    }
+
+    #[test]
+    fn eval_zero() {
+        build_object(|object_builder| {
+            let mut const_builder = object_builder.build_const();
+            const_builder.push_op(0, ());
+            let (mut object_builder, zero) = const_builder.finish();
+            assert_eq!(
+                object_builder.is_non_zero(
+                    zero,
+                    &mut MockDiagnostics::<DiagnosticsEvent<_>, _>::new(Log::new())
+                ),
+                Some(false)
+            )
+        });
+    }
+
+    #[test]
+    fn eval_42() {
+        build_object(|object_builder| {
+            let mut const_builder = object_builder.build_const();
+            const_builder.push_op(42, ());
+            let (mut object_builder, forty_two) = const_builder.finish();
+            assert_eq!(
+                object_builder.is_non_zero(
+                    forty_two,
+                    &mut MockDiagnostics::<DiagnosticsEvent<_>, _>::new(Log::new())
+                ),
+                Some(true)
+            )
+        });
     }
 
     fn with_object_builder<S, F>(f: F) -> (Program, Box<[CompactDiag<S, S>]>)

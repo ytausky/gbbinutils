@@ -197,6 +197,14 @@ impl<U, B: Backend<S>, N, D, S: Clone> PartialBackend<S> for SessionComponents<U
         self.backend.emit_item(item)
     }
 
+    fn is_non_zero(
+        &mut self,
+        value: Self::Value,
+        diagnostics: &mut impl Diagnostics<S>,
+    ) -> Option<bool> {
+        self.backend.is_non_zero(value, diagnostics)
+    }
+
     fn reserve(&mut self, bytes: Self::Value) {
         self.backend.reserve(bytes)
     }
