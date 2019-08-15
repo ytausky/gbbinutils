@@ -96,7 +96,7 @@ impl<A> From<FnCall> for ExprOp<A> {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BinOp {
-    BitwiseOr,
+    BitOr,
     Division,
     Equality,
     Minus,

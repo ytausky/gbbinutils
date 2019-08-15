@@ -209,7 +209,7 @@ impl<S: Clone> Spanned<ContentId, &S> {
 impl BinOp {
     fn apply(self, lhs: &Num, rhs: &Num) -> Num {
         match self {
-            BinOp::BitwiseOr => lhs | rhs,
+            BinOp::BitOr => lhs | rhs,
             BinOp::Division => lhs / rhs,
             BinOp::Equality => unimplemented!(),
             BinOp::Minus => lhs - rhs,
@@ -357,7 +357,7 @@ mod tests {
                 Const::from_items(&[
                     0x17.into(),
                     0x86.into(),
-                    ExprOp::Binary(BinOp::BitwiseOr).into(),
+                    ExprOp::Binary(BinOp::BitOr).into(),
                 ]),
                 &mut IgnoreDiagnostics
             ),

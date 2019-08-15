@@ -1122,9 +1122,9 @@ mod tests {
             self
         }
 
-        pub fn bitwise_or(mut self, token: impl Into<TokenRef>) -> Self {
+        pub fn bit_or(mut self, token: impl Into<TokenRef>) -> Self {
             self.0.push(ExprAction::ApplyOperator(
-                Operator::Binary(BinOp::BitwiseOr),
+                Operator::Binary(BinOp::BitOr),
                 token.into().into(),
             ));
             self

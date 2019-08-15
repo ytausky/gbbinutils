@@ -29,7 +29,7 @@ impl<I, L> Token<I, L> {
             Token::Sigil(EqEq) => Some(Binary(BinOp::Equality)),
             Token::Sigil(Minus) => Some(Binary(BinOp::Minus)),
             Token::Sigil(LParen) => Some(FnCall),
-            Token::Sigil(Pipe) => Some(Binary(BinOp::BitwiseOr)),
+            Token::Sigil(Pipe) => Some(Binary(BinOp::BitOr)),
             Token::Sigil(Plus) => Some(Binary(BinOp::Plus)),
             Token::Sigil(Slash) => Some(Binary(BinOp::Division)),
             Token::Sigil(Star) => Some(Binary(BinOp::Multiplication)),
@@ -42,7 +42,7 @@ impl<I, L> Token<I, L> {
 enum Precedence {
     None,
     Comparison,
-    BitwiseOr,
+    BitOr,
     Addition,
     Multiplication,
     FnCall,
@@ -53,7 +53,7 @@ impl SuffixOperator {
         use SuffixOperator::*;
         match self {
             Binary(BinOp::Equality) => Precedence::Comparison,
-            Binary(BinOp::BitwiseOr) => Precedence::BitwiseOr,
+            Binary(BinOp::BitOr) => Precedence::BitOr,
             Binary(BinOp::Plus) | Binary(BinOp::Minus) => Precedence::Addition,
             Binary(BinOp::Multiplication) | Binary(BinOp::Division) => Precedence::Multiplication,
             FnCall => Precedence::FnCall,
@@ -331,7 +331,7 @@ mod tests {
     #[test]
     fn parse_bitwise_or() {
         let tokens = input_tokens![x @ Ident(IdentKind::Other), pipe @ Pipe, y @ Literal(())];
-        let expected = expr().ident("x").literal("y").bitwise_or("pipe");
+        let expected = expr().ident("x").literal("y").bit_or("pipe");
         assert_eq_rpn_expr(tokens, expected)
     }
 
@@ -349,7 +349,7 @@ mod tests {
             .ident("y")
             .ident("z")
             .plus("plus")
-            .bitwise_or("pipe");
+            .bit_or("pipe");
         assert_eq_rpn_expr(tokens, expected)
     }
 
@@ -449,10 +449,10 @@ mod tests {
         let expected = expr()
             .literal("a")
             .literal("b")
-            .bitwise_or("lpipe")
+            .bit_or("lpipe")
             .literal("c")
             .literal("d")
-            .bitwise_or("rpipe")
+            .bit_or("rpipe")
             .equals("eq");
         assert_eq_rpn_expr(tokens, expected)
     }
