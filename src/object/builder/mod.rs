@@ -17,12 +17,9 @@ where
     Self: StartSection<<Self as AllocName<S>>::Name, S>,
 {
     type ConstBuilder: AllocName<S, Name = Self::Name>
-        + ValueBuilder<Self::Name, S>
-        + Finish<Parent = Self, Value = Self::Value>;
-
+        + ValueBuilder<Self::Name, S, Parent = Self, Value = Self::Value>;
     type SymbolBuilder: AllocName<S, Name = Self::Name>
-        + ValueBuilder<Self::Name, S>
-        + Finish<Parent = Self, Value = ()>;
+        + ValueBuilder<Self::Name, S, Parent = Self, Value = ()>;
 
     fn build_const(self) -> Self::ConstBuilder;
     fn define_symbol(self, name: Self::Name, span: S) -> Self::SymbolBuilder;
@@ -53,6 +50,7 @@ pub trait ValueBuilder<N, S: Clone>:
     + PushOp<BinOp, S>
     + PushOp<ParamId, S>
     + PushOp<FnCall, S>
+    + Finish
 {
 }
 
@@ -63,6 +61,7 @@ impl<T, N, S: Clone> ValueBuilder<N, S> for T where
         + PushOp<BinOp, S>
         + PushOp<ParamId, S>
         + PushOp<FnCall, S>
+        + Finish
 {
 }
 

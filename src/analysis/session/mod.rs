@@ -59,15 +59,13 @@ where
     Self: NameTable<I, BackendEntry = <Self as AllocName<S>>::Name>,
     Self: Diagnostics<S>,
 {
-    type ConstBuilder: ValueBuilder<Self::Name, S>
+    type ConstBuilder: ValueBuilder<Self::Name, S, Parent = Self, Value = Self::Value>
         + AllocName<S, Name = Self::Name>
         + NameTable<I, BackendEntry = Self::Name>
-        + Finish<Parent = Self, Value = Self::Value>
         + Diagnostics<S>;
-    type SymbolBuilder: ValueBuilder<Self::Name, S>
+    type SymbolBuilder: ValueBuilder<Self::Name, S, Parent = Self, Value = ()>
         + AllocName<S, Name = Self::Name>
         + NameTable<I, BackendEntry = Self::Name>
-        + Finish<Parent = Self, Value = ()>
         + Diagnostics<S>;
 
     fn build_const(self) -> Self::ConstBuilder;
