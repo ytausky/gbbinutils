@@ -213,7 +213,10 @@ impl BinOp {
         match self {
             BinOp::BitOr => lhs | rhs,
             BinOp::Division => lhs / rhs,
-            BinOp::Equality => unimplemented!(),
+            BinOp::Equality => match (lhs.exact(), rhs.exact()) {
+                (Some(lhs), Some(rhs)) => (if lhs == rhs { 1 } else { 0 }).into(),
+                _ => Num::Unknown,
+            },
             BinOp::Minus => lhs - rhs,
             BinOp::Multiplication => lhs * rhs,
             BinOp::Plus => lhs + rhs,
@@ -375,6 +378,28 @@ mod tests {
                 &mut IgnoreDiagnostics
             ),
             25.into()
+        )
+    }
+
+    #[test]
+    fn eval_known_false_equality() {
+        assert_eq!(
+            eval_in_empty_program(
+                Const::from_items(&[12.into(), 34.into(), ExprOp::Binary(BinOp::Equality).into()]),
+                &mut IgnoreDiagnostics
+            ),
+            0.into()
+        )
+    }
+
+    #[test]
+    fn eval_known_true_equality() {
+        assert_eq!(
+            eval_in_empty_program(
+                Const::from_items(&[42.into(), 42.into(), ExprOp::Binary(BinOp::Equality).into()]),
+                &mut IgnoreDiagnostics
+            ),
+            1.into()
         )
     }
 
