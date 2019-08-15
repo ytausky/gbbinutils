@@ -8,14 +8,7 @@ use crate::BuiltinSymbols;
 
 mod lowering;
 
-pub trait Backend<S>
-where
-    S: Clone,
-    Self: Sized,
-    Self: AllocName<S>,
-    Self: PartialBackend<S>,
-    Self: StartSection<<Self as AllocName<S>>::Name, S>,
-{
+pub trait Backend<S: Clone>: PartialBackend<S> + Sized {
     type ConstBuilder: AllocName<S, Name = Self::Name>
         + ValueBuilder<Self::Name, S, Parent = Self, Value = Self::Value>;
     type SymbolBuilder: AllocName<S, Name = Self::Name>
@@ -25,22 +18,19 @@ where
     fn define_symbol(self, name: Self::Name, span: S) -> Self::SymbolBuilder;
 }
 
-pub trait PartialBackend<S: Clone> {
+pub trait PartialBackend<S: Clone>: AllocName<S> {
     type Value: Source<Span = S>;
 
     fn emit_item(&mut self, item: Item<Self::Value>);
     fn reserve(&mut self, bytes: Self::Value);
     fn set_origin(&mut self, origin: Self::Value);
+    fn start_section(&mut self, name: Self::Name, span: S);
 }
 
 pub trait AllocName<S: Clone> {
     type Name: Clone;
 
     fn alloc_name(&mut self, span: S) -> Self::Name;
-}
-
-pub trait StartSection<N, S> {
-    fn start_section(&mut self, name: (N, S));
 }
 
 pub trait ValueBuilder<N, S: Clone>:
@@ -334,6 +324,12 @@ impl<'a, S: Clone> PartialBackend<S> for ObjectBuilder<'a, S> {
             _ => self.state = Some(BuilderState::AnonSectionPrelude { addr: Some(addr) }),
         }
     }
+
+    fn start_section(&mut self, name: Symbol, _: S) {
+        let index = self.context.content.sections.len();
+        self.state = Some(BuilderState::SectionPrelude(index));
+        self.add_section(Some(name.content().unwrap()))
+    }
 }
 
 pub(crate) struct RelocContext<P, B> {
@@ -456,14 +452,6 @@ impl<'a, S: Clone> AllocName<S> for ObjectBuilder<'a, S> {
     }
 }
 
-impl<'a, S: Clone> StartSection<Symbol, S> for ObjectBuilder<'a, S> {
-    fn start_section(&mut self, (name, _): (Symbol, S)) {
-        let index = self.context.content.sections.len();
-        self.state = Some(BuilderState::SectionPrelude(index));
-        self.add_section(Some(name.content().unwrap()))
-    }
-}
-
 impl<'a, S: Clone> BuiltinSymbols for ObjectBuilder<'a, S> {
     type Name = Symbol;
 
@@ -512,7 +500,7 @@ pub mod mock {
         Reserve(V),
         SetOrigin(V),
         DefineSymbol((N, V::Span), V),
-        StartSection((N, V::Span)),
+        StartSection(N, V::Span),
     }
 
     impl<A, T> MockBackend<A, T> {
@@ -628,16 +616,9 @@ pub mod mock {
         fn set_origin(&mut self, origin: Self::Value) {
             self.log.push(BackendEvent::SetOrigin(origin))
         }
-    }
 
-    impl<A, T, S> StartSection<A::Name, S> for MockBackend<A, T>
-    where
-        A: AllocName<S>,
-        T: From<BackendEvent<A::Name, Expr<A::Name, S>>>,
-        S: Clone,
-    {
-        fn start_section(&mut self, name: (A::Name, S)) {
-            self.log.push(BackendEvent::StartSection(name))
+        fn start_section(&mut self, name: A::Name, span: S) {
+            self.log.push(BackendEvent::StartSection(name, span))
         }
     }
 
@@ -717,7 +698,7 @@ mod tests {
         let mut wrapped_name = None;
         let object = build_object(|mut builder| {
             let name = builder.alloc_name(());
-            builder.start_section((name, ()));
+            builder.start_section(name, ());
             wrapped_name = Some(name);
         });
         assert_eq!(
@@ -734,7 +715,7 @@ mod tests {
         let origin: Const<_> = 0x0150.into();
         let object = build_object(|mut builder| {
             let name = builder.alloc_name(());
-            builder.start_section((name, ()));
+            builder.start_section(name, ());
             builder.set_origin(origin.clone())
         });
         assert_eq!(object.content.sections[0].constraints.addr, Some(origin))
@@ -745,7 +726,7 @@ mod tests {
         let node = Node::Byte(0x42);
         let object = build_object(|mut builder| {
             let name = builder.alloc_name(());
-            builder.start_section((name, ()));
+            builder.start_section(name, ());
             builder.push(node.clone())
         });
         assert_eq!(object.content.sections[0].items, [node])

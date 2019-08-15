@@ -304,7 +304,7 @@ mod tests {
 
         // section my_section
         let name = object_builder.alloc_name(());
-        object_builder.start_section((name, ()));
+        object_builder.start_section(name, ());
 
         // org $1337
         let mut const_builder = object_builder.build_const();
@@ -361,7 +361,7 @@ mod tests {
         let mut object = Object::new();
         let mut builder = ObjectBuilder::new(&mut object);
         let name = builder.alloc_name(());
-        builder.start_section((name, ()));
+        builder.start_section(name, ());
         f(builder);
         object.vars.resolve(&object.content);
         assert_eq!(

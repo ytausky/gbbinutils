@@ -110,7 +110,7 @@ impl<'a, S: Session> DirectiveContext<InstrLineSemantics<S>, S::Ident, S::String
         let (name, span) = self.label.take().unwrap().0;
         let session = &mut self.actions.session;
         let id = session.reloc_lookup(name, span.clone());
-        session.start_section((id, span));
+        session.start_section(id, span);
         self.actions.map_line(Into::into)
     }
 
@@ -455,7 +455,7 @@ mod tests {
             actions,
             [
                 NameTableEvent::Insert(name.into(), ResolvedIdent::Backend(0)).into(),
-                BackendEvent::StartSection((0, ())).into()
+                BackendEvent::StartSection(0, ()).into()
             ]
         )
     }

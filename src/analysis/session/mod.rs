@@ -52,9 +52,7 @@ where
 pub(super) trait PartialSession<I, S: Clone>
 where
     Self: Sized,
-    Self: AllocName<S>,
     Self: PartialBackend<S>,
-    Self: StartSection<<Self as AllocName<S>>::Name, S>,
     Self: StartScope<I>,
     Self: NameTable<I, BackendEntry = <Self as AllocName<S>>::Name>,
     Self: Diagnostics<S>,
@@ -208,6 +206,10 @@ impl<U, B: Backend<S>, N, D, S: Clone> PartialBackend<S> for SessionComponents<U
     fn set_origin(&mut self, origin: Self::Value) {
         self.backend.set_origin(origin)
     }
+
+    fn start_section(&mut self, name: B::Name, span: S) {
+        self.backend.start_section(name, span)
+    }
 }
 
 impl<C, P, B, N, D> Session
@@ -352,16 +354,6 @@ where
 {
     fn start_scope(&mut self, ident: &I) {
         self.names.start_scope(ident)
-    }
-}
-
-impl<U, B, N, D, S> StartSection<B::Name, S> for SessionComponents<U, B, N, D>
-where
-    B: Backend<S>,
-    S: Clone,
-{
-    fn start_section(&mut self, id: (B::Name, S)) {
-        self.backend.start_section(id)
     }
 }
 
@@ -624,14 +616,14 @@ mod tests {
         let log = Fixture::default().log_session(|mut session| {
             let id = session.alloc_name(());
             session.insert(name.clone(), ResolvedIdent::Backend(id));
-            session.start_section((id, ()))
+            session.start_section(id, ())
         });
         let id = 0;
         assert_eq!(
             log,
             [
                 NameTableEvent::Insert(name, ResolvedIdent::Backend(id)).into(),
-                BackendEvent::StartSection((id, ())).into()
+                BackendEvent::StartSection(id, ()).into()
             ]
         )
     }
