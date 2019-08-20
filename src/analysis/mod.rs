@@ -15,6 +15,7 @@ use std::rc::Rc;
 #[cfg(test)]
 pub use self::mock::*;
 
+mod macros;
 mod resolve;
 mod semantics;
 mod session;

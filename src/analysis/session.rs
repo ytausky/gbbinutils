@@ -1,5 +1,4 @@
-use self::expand::{DefineMacro, Expand, MacroId, MacroTable};
-
+use super::macros::{DefineMacro, Expand, MacroId, MacroTable};
 use super::resolve::{NameTable, ResolvedIdent, StartScope};
 use super::syntax::actions::TokenStreamActions;
 use super::syntax::parser::ParserFactory;
@@ -9,15 +8,13 @@ use super::{IdentSource, Lex, Literal, SemanticToken, StringSource, TokenSeq};
 use crate::codebase::CodebaseError;
 use crate::diag::span::{AddMacroDef, SpanSource};
 use crate::diag::*;
+use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
 use crate::object::builder::*;
 
 use std::ops::DerefMut;
 
 #[cfg(test)]
 pub(crate) use self::mock::*;
-
-mod builder;
-mod expand;
 
 pub(super) trait Session
 where
@@ -74,7 +71,7 @@ pub(super) trait IntoSemanticActions<S: Session> {
     fn into_semantic_actions(self, session: S) -> Self::SemanticActions;
 }
 
-pub(super) type MacroArgs<I, R, S> = expand::MacroArgs<SemanticToken<I, R>, S>;
+pub(super) type MacroArgs<I, R, S> = super::macros::MacroArgs<SemanticToken<I, R>, S>;
 pub(super) type Params<I, S> = (Vec<I>, Vec<S>);
 
 pub(super) struct SessionComponents<U, B, N, D> {
@@ -362,6 +359,52 @@ where
         self.names.start_scope(ident)
     }
 }
+
+impl<U, B, N, D, S> PushOp<Name<B::Name>, S> for SessionComponents<U, B, N, D>
+where
+    B: AllocName<S> + PushOp<Name<<B as AllocName<S>>::Name>, S>,
+    S: Clone,
+{
+    fn push_op(&mut self, name: Name<B::Name>, span: S) {
+        self.backend.push_op(name, span)
+    }
+}
+
+impl<U, B: Finish, N, D> Finish for SessionComponents<U, B, N, D> {
+    type Parent = SessionComponents<U, B::Parent, N, D>;
+    type Value = B::Value;
+
+    fn finish(self) -> (Self::Parent, Self::Value) {
+        let (backend, value) = self.backend.finish();
+        let parent = SessionComponents {
+            upstream: self.upstream,
+            backend,
+            names: self.names,
+            diagnostics: self.diagnostics,
+        };
+        (parent, value)
+    }
+}
+
+macro_rules! impl_push_op_for_session_components {
+    ($t:ty) => {
+        impl<U, B, N, D, S> PushOp<$t, S> for SessionComponents<U, B, N, D>
+        where
+            B: PushOp<$t, S>,
+            S: Clone,
+        {
+            fn push_op(&mut self, op: $t, span: S) {
+                self.backend.push_op(op, span)
+            }
+        }
+    };
+}
+
+impl_push_op_for_session_components! {LocationCounter}
+impl_push_op_for_session_components! {i32}
+impl_push_op_for_session_components! {BinOp}
+impl_push_op_for_session_components! {ParamId}
+impl_push_op_for_session_components! {FnCall}
 
 #[cfg(test)]
 mod mock {

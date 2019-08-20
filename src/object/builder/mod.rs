@@ -695,7 +695,7 @@ mod tests {
     use crate::link::Program;
     use crate::log::Log;
     use crate::object::SectionId;
-    
+
     use std::borrow::Borrow;
 
     #[test]
