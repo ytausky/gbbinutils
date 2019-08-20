@@ -1,6 +1,6 @@
 use super::{Label, SemanticActions, TokenStreamSemantics};
 
-use crate::analysis::resolve::ResolvedIdent;
+use crate::analysis::resolve::ResolvedName;
 use crate::analysis::session::Session;
 use crate::analysis::syntax::actions::{LineFinalizer, TokenLineActions, TokenLineRule};
 use crate::analysis::syntax::{Sigil, Token};
@@ -92,7 +92,7 @@ impl<S: Session> LineFinalizer<S::Span> for TokenContextFinalizationSemantics<S>
                 if let Some((name, params)) = state.label {
                     let tokens = state.tokens;
                     let id = self.parent.session.define_macro(name.1, params, tokens);
-                    self.parent.session.insert(name.0, ResolvedIdent::Macro(id));
+                    self.parent.session.insert(name.0, ResolvedName::Macro(id));
                 }
             }
         }

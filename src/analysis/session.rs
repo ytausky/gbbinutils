@@ -1,5 +1,5 @@
 use super::macros::{DefineMacro, Expand, MacroId, MacroTable};
-use super::resolve::{NameTable, ResolvedIdent, StartScope};
+use super::resolve::{NameTable, ResolvedName, StartScope};
 use super::syntax::actions::TokenStreamActions;
 use super::syntax::parser::ParserFactory;
 use super::syntax::{LexError, ParseTokenStream};
@@ -34,11 +34,11 @@ where
         name_span: Self::Span,
         params: Params<Self::Ident, Self::Span>,
         body: TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
-    ) -> Self::MacroEntry;
+    ) -> Self::MacroId;
 
     fn call_macro<A: IntoSemanticActions<Self>>(
         self,
-        name: (Self::MacroEntry, Self::Span),
+        name: (Self::MacroId, Self::Span),
         args: MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
         actions: A,
     ) -> A::SemanticActions
@@ -51,14 +51,14 @@ where
     Self: Sized,
     Self: PartialBackend<S>,
     Self: StartScope<I>,
-    Self: NameTable<I, BackendEntry = <Self as AllocName<S>>::Name>,
+    Self: NameTable<I, SymbolId = <Self as AllocName<S>>::Name>,
     Self: Diagnostics<S>,
 {
     type ConstBuilder: ValueBuilder<Self::Name, S, Parent = Self, Value = Self::Value>
-        + NameTable<I, BackendEntry = Self::Name>
+        + NameTable<I, SymbolId = Self::Name>
         + Diagnostics<S>;
     type SymbolBuilder: ValueBuilder<Self::Name, S, Parent = Self, Value = ()>
-        + NameTable<I, BackendEntry = Self::Name>
+        + NameTable<I, SymbolId = Self::Name>
         + Diagnostics<S>;
 
     fn build_const(self) -> Self::ConstBuilder;
@@ -240,9 +240,8 @@ where
     >,
     B: Backend<<D::Target as SpanSource>::Span>,
     N: DerefMut,
-    N::Target:
-        NameTable<<C::Target as IdentSource>::Ident, BackendEntry = B::Name, MacroEntry = MacroId>
-            + StartScope<<C::Target as IdentSource>::Ident>,
+    N::Target: NameTable<<C::Target as IdentSource>::Ident, MacroId = MacroId, SymbolId = B::Name>
+        + StartScope<<C::Target as IdentSource>::Ident>,
     D: DerefMut,
     D::Target: DiagnosticsSystem,
 {
@@ -272,7 +271,7 @@ where
         name_span: Self::Span,
         params: Params<Self::Ident, Self::Span>,
         body: TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
-    ) -> Self::MacroEntry {
+    ) -> Self::MacroId {
         self.upstream
             .macros
             .define_macro(name_span, params, body, &mut *self.diagnostics)
@@ -280,7 +279,7 @@ where
 
     fn call_macro<A: IntoSemanticActions<Self>>(
         mut self,
-        (MacroId(id), span): (Self::MacroEntry, Self::Span),
+        (MacroId(id), span): (Self::MacroId, Self::Span),
         args: MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
         actions: A,
     ) -> A::SemanticActions
@@ -298,7 +297,7 @@ impl<U, B, N, D, I, S> PartialSession<I, S> for SessionComponents<U, B, N, D>
 where
     B: Backend<S>,
     N: DerefMut,
-    N::Target: NameTable<I, BackendEntry = B::Name> + StartScope<I>,
+    N::Target: NameTable<I, SymbolId = B::Name> + StartScope<I>,
     D: DerefMut,
     D::Target: Diagnostics<S>,
     S: Clone,
@@ -329,14 +328,14 @@ where
     N: DerefMut,
     N::Target: NameTable<I>,
 {
-    type BackendEntry = <N::Target as NameTable<I>>::BackendEntry;
-    type MacroEntry = <N::Target as NameTable<I>>::MacroEntry;
+    type MacroId = <N::Target as NameTable<I>>::MacroId;
+    type SymbolId = <N::Target as NameTable<I>>::SymbolId;
 
-    fn get(&self, ident: &I) -> Option<ResolvedIdent<Self::BackendEntry, Self::MacroEntry>> {
+    fn get(&self, ident: &I) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
         self.names.get(ident)
     }
 
-    fn insert(&mut self, ident: I, entry: ResolvedIdent<Self::BackendEntry, Self::MacroEntry>) {
+    fn insert(&mut self, ident: I, entry: ResolvedName<Self::MacroId, Self::SymbolId>) {
         self.names.insert(ident, entry)
     }
 }
@@ -461,14 +460,14 @@ mod mock {
         }
     }
 
-    impl<T, S> MockSession<SerialIdAllocator, BasicNameTable<usize, MockMacroId>, T, S> {
+    impl<T, S> MockSession<SerialIdAllocator, BasicNameTable<MockMacroId, usize>, T, S> {
         pub fn with_log(log: Log<T>) -> Self {
             Self::with_name_table(SerialIdAllocator::new(), BasicNameTable::new(), log)
         }
 
         pub fn with_predefined_names<I>(log: Log<T>, entries: I) -> Self
         where
-            I: IntoIterator<Item = (String, ResolvedIdent<usize, MockMacroId>)>,
+            I: IntoIterator<Item = (String, ResolvedName<MockMacroId, usize>)>,
         {
             let mut table = BasicNameTable::new();
             for (name, value) in entries {
@@ -498,11 +497,11 @@ mod mock {
     impl<B, N, T, S> Session for MockSession<B, N, T, S>
     where
         B: AllocName<S>,
-        N: NameTable<String, BackendEntry = B::Name, MacroEntry = MockMacroId>,
+        N: NameTable<String, SymbolId = B::Name, MacroId = MockMacroId>,
         T: From<SessionEvent>,
         T: From<BackendEvent<B::Name, Expr<B::Name, S>>>,
         T: From<DiagnosticsEvent<S>>,
-        T: From<NameTableEvent<N::BackendEntry, N::MacroEntry>>,
+        T: From<NameTableEvent<N::MacroId, N::SymbolId>>,
         S: Clone + Merge,
     {
         fn analyze_file<A: IntoSemanticActions<Self>>(
@@ -522,7 +521,7 @@ mod mock {
             _: Self::Span,
             (params, _): (Vec<Self::Ident>, Vec<Self::Span>),
             (body, _): TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
-        ) -> Self::MacroEntry {
+        ) -> Self::MacroId {
             self.upstream
                 .log
                 .push(SessionEvent::DefineMacro(params, body));
@@ -531,7 +530,7 @@ mod mock {
 
         fn call_macro<A: IntoSemanticActions<Self>>(
             self,
-            (id, _): (Self::MacroEntry, Self::Span),
+            (id, _): (Self::MacroId, Self::Span),
             (args, _): MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
             actions: A,
         ) -> A::SemanticActions {
@@ -575,7 +574,7 @@ mod mock {
 
         pub fn with_predefined_names<I>(log: Log<T>, entries: I) -> Self
         where
-            I: IntoIterator<Item = (String, ResolvedIdent<usize, usize>)>,
+            I: IntoIterator<Item = (String, ResolvedName<usize, usize>)>,
         {
             let mut table = BasicNameTable::new();
             for (name, value) in entries {
@@ -644,7 +643,7 @@ mod tests {
         let label = "label";
         let log = Fixture::default().log_session(|mut session| {
             let id = session.alloc_name(());
-            session.insert(label.into(), ResolvedIdent::Backend(id));
+            session.insert(label.into(), ResolvedName::Symbol(id));
             let mut builder = session.define_symbol(id, ());
             builder.push_op(LocationCounter, ());
             builder.finish();
@@ -653,7 +652,7 @@ mod tests {
         assert_eq!(
             log,
             [
-                NameTableEvent::Insert(label.into(), ResolvedIdent::Backend(id)).into(),
+                NameTableEvent::Insert(label.into(), ResolvedName::Symbol(id)).into(),
                 BackendEvent::DefineSymbol((id, ()), LocationCounter.into()).into()
             ]
         );
@@ -664,14 +663,14 @@ mod tests {
         let name: String = "my_section".into();
         let log = Fixture::default().log_session(|mut session| {
             let id = session.alloc_name(());
-            session.insert(name.clone(), ResolvedIdent::Backend(id));
+            session.insert(name.clone(), ResolvedName::Symbol(id));
             session.start_section(id, ())
         });
         let id = 0;
         assert_eq!(
             log,
             [
-                NameTableEvent::Insert(name, ResolvedIdent::Backend(id)).into(),
+                NameTableEvent::Insert(name, ResolvedName::Symbol(id)).into(),
                 BackendEvent::StartSection(id, ()).into()
             ]
         )
@@ -807,7 +806,7 @@ mod tests {
     type MockBackend<S> = crate::object::builder::mock::MockBackend<SerialIdAllocator, Event<S>>;
     type MockDiagnosticsSystem<S> = crate::diag::MockDiagnosticsSystem<Event<S>, S>;
     type MockNameTable<S> =
-        crate::analysis::resolve::MockNameTable<BasicNameTable<usize, MacroId>, Event<S>>;
+        crate::analysis::resolve::MockNameTable<BasicNameTable<MacroId, usize>, Event<S>>;
     type TestSession<'a, S> = SessionComponents<
         Upstream<
             &'a mut MockCodebase<S>,
@@ -825,7 +824,7 @@ mod tests {
     enum Event<S: Clone> {
         Parser(ParserEvent<String, Literal<String>, LexError, S>),
         Backend(BackendEvent<usize, Expr<S>>),
-        NameTable(NameTableEvent<usize, MacroId>),
+        NameTable(NameTableEvent<MacroId, usize>),
         Diagnostics(DiagnosticsEvent<S>),
     }
 
@@ -841,8 +840,8 @@ mod tests {
         }
     }
 
-    impl<S: Clone> From<NameTableEvent<usize, MacroId>> for Event<S> {
-        fn from(event: NameTableEvent<usize, MacroId>) -> Self {
+    impl<S: Clone> From<NameTableEvent<MacroId, usize>> for Event<S> {
+        fn from(event: NameTableEvent<MacroId, usize>) -> Self {
             Event::NameTable(event)
         }
     }

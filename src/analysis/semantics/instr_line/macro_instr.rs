@@ -9,12 +9,12 @@ pub(super) type MacroInstrSemantics<S> = SemanticActions<MacroInstrState<S>, S>;
 
 pub(in crate::analysis) struct MacroInstrState<S: Session> {
     parent: InstrLineState<S>,
-    name: (S::MacroEntry, S::Span),
+    name: (S::MacroId, S::Span),
     args: MacroArgs<S::Ident, S::StringRef, S::Span>,
 }
 
 impl<S: Session> MacroInstrState<S> {
-    pub fn new(parent: InstrLineState<S>, name: (S::MacroEntry, S::Span)) -> Self {
+    pub fn new(parent: InstrLineState<S>, name: (S::MacroId, S::Span)) -> Self {
         Self {
             parent,
             name,
@@ -86,7 +86,7 @@ impl<S: Session> MacroArgActions<S::Span> for MacroArgSemantics<S> {
 mod tests {
     use super::*;
 
-    use crate::analysis::resolve::ResolvedIdent;
+    use crate::analysis::resolve::ResolvedName;
     use crate::analysis::semantics::tests::*;
     use crate::analysis::session::{MockMacroId, SessionEvent};
     use crate::analysis::syntax::actions::{InstrActions, LineFinalizer, TokenStreamActions};
@@ -97,7 +97,7 @@ mod tests {
         let name = "my_macro";
         let macro_id = MockMacroId(0);
         let log = log_with_predefined_names(
-            vec![(name.into(), ResolvedIdent::Macro(macro_id))],
+            vec![(name.into(), ResolvedName::Macro(macro_id))],
             |actions| {
                 actions
                     .will_parse_line()
@@ -121,7 +121,7 @@ mod tests {
         let arg_token = Token::Ident("A".into());
         let macro_id = MockMacroId(0);
         let log = log_with_predefined_names(
-            vec![(name.into(), ResolvedIdent::Macro(macro_id))],
+            vec![(name.into(), ResolvedName::Macro(macro_id))],
             |actions| {
                 let mut call = actions
                     .will_parse_line()

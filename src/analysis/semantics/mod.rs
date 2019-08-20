@@ -169,7 +169,7 @@ mod tests {
 
     use super::syntax::{Sigil, Token};
 
-    use crate::analysis::resolve::{NameTableEvent, ResolvedIdent};
+    use crate::analysis::resolve::{NameTableEvent, ResolvedName};
     use crate::analysis::session::{MockMacroId, SessionEvent};
     use crate::analysis::SemanticToken;
     use crate::diag::{DiagnosticsEvent, EmitDiag, Merge, Message, MockSpan};
@@ -185,7 +185,7 @@ mod tests {
     pub(crate) enum TestOperation<S: Clone> {
         Backend(BackendEvent<usize, Expr<S>>),
         Diagnostics(DiagnosticsEvent<S>),
-        NameTable(NameTableEvent<usize, MockMacroId>),
+        NameTable(NameTableEvent<MockMacroId, usize>),
         Session(SessionEvent),
     }
 
@@ -203,8 +203,8 @@ mod tests {
         }
     }
 
-    impl<S: Clone> From<NameTableEvent<usize, MockMacroId>> for TestOperation<S> {
-        fn from(event: NameTableEvent<usize, MockMacroId>) -> Self {
+    impl<S: Clone> From<NameTableEvent<MockMacroId, usize>> for TestOperation<S> {
+        fn from(event: NameTableEvent<MockMacroId, usize>) -> Self {
             TestOperation::NameTable(event)
         }
     }
@@ -308,7 +308,7 @@ mod tests {
         assert_eq!(
             actions,
             [
-                NameTableEvent::Insert(ident, ResolvedIdent::Backend(0)).into(),
+                NameTableEvent::Insert(ident, ResolvedName::Symbol(0)).into(),
                 BackendEvent::EmitItem(Item::CpuInstr(CpuInstr::Rst(Expr::from_items(&[
                     1.into(),
                     Name(0).into(),
@@ -338,7 +338,7 @@ mod tests {
         assert_eq!(
             actions,
             [
-                NameTableEvent::Insert(label.into(), ResolvedIdent::Backend(0)).into(),
+                NameTableEvent::Insert(label.into(), ResolvedName::Symbol(0)).into(),
                 BackendEvent::EmitItem(Item::Data(Atom::Name(0).into(), Width::Word)).into()
             ]
         );
@@ -360,7 +360,7 @@ mod tests {
             actions,
             [
                 NameTableEvent::StartScope(label.into()).into(),
-                NameTableEvent::Insert(label.into(), ResolvedIdent::Backend(0)).into(),
+                NameTableEvent::Insert(label.into(), ResolvedName::Symbol(0)).into(),
                 BackendEvent::DefineSymbol((0, ()), LocationCounter.into()).into()
             ]
         )
@@ -470,7 +470,7 @@ mod tests {
                     body
                 )
                 .into(),
-                NameTableEvent::Insert(name.into(), ResolvedIdent::Macro(MockMacroId(0))).into(),
+                NameTableEvent::Insert(name.into(), ResolvedName::Macro(MockMacroId(0))).into(),
             ]
         )
     }
@@ -569,7 +569,7 @@ mod tests {
     fn diagnose_reloc_name_as_key() {
         let name = "symbol";
         let log = log_with_predefined_names::<_, _, MockSpan<_>>(
-            vec![(name.into(), ResolvedIdent::Backend(42))],
+            vec![(name.into(), ResolvedName::Symbol(42))],
             |session| {
                 session
                     .will_parse_line()
@@ -617,7 +617,7 @@ mod tests {
 
     pub(super) type MockSession<S> = crate::analysis::session::MockSession<
         SerialIdAllocator,
-        BasicNameTable<usize, MockMacroId>,
+        BasicNameTable<MockMacroId, usize>,
         TestOperation<S>,
         S,
     >;
@@ -634,7 +634,7 @@ mod tests {
 
     pub(super) fn log_with_predefined_names<I, F, S>(entries: I, f: F) -> Vec<TestOperation<S>>
     where
-        I: IntoIterator<Item = (String, ResolvedIdent<usize, MockMacroId>)>,
+        I: IntoIterator<Item = (String, ResolvedName<MockMacroId, usize>)>,
         F: FnOnce(TestTokenStreamSemantics<S>) -> TestTokenStreamSemantics<S>,
         S: Clone + Debug + Merge,
     {

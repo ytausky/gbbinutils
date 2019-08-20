@@ -1,6 +1,6 @@
 use super::{Params, PushOp};
 
-use crate::analysis::resolve::{NameTable, ResolvedIdent};
+use crate::analysis::resolve::{NameTable, ResolvedName};
 use crate::diag::{Diagnostics, Message};
 use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
 use crate::object::builder::{AllocName, Finish, Name};
@@ -13,20 +13,20 @@ pub(super) trait RelocLookup<I, S> {
 
 impl<T, I, S> RelocLookup<I, S> for T
 where
-    T: AllocName<S> + NameTable<I, BackendEntry = <T as AllocName<S>>::Name> + Diagnostics<S>,
+    T: AllocName<S> + NameTable<I, SymbolId = <T as AllocName<S>>::Name> + Diagnostics<S>,
     S: Clone,
 {
     type RelocId = T::Name;
 
     fn reloc_lookup(&mut self, name: I, span: S) -> Self::RelocId {
         match self.get(&name) {
-            Some(ResolvedIdent::Backend(id)) => id.clone(),
+            Some(ResolvedName::Symbol(id)) => id.clone(),
             None => {
                 let id = self.alloc_name(span.clone());
-                self.insert(name, ResolvedIdent::Backend(id.clone()));
+                self.insert(name, ResolvedName::Symbol(id.clone()));
                 id
             }
-            Some(ResolvedIdent::Macro(_)) => {
+            Some(ResolvedName::Macro(_)) => {
                 self.emit_diag(Message::MacroNameInExpr.at(span.clone()));
                 self.alloc_name(span)
             }
@@ -120,7 +120,7 @@ pub(super) struct NameResolver;
 impl<B, I, S> NameHandler<B, I, S> for NameResolver
 where
     B: AllocName<S>
-        + NameTable<I, BackendEntry = <B as AllocName<S>>::Name>
+        + NameTable<I, SymbolId = <B as AllocName<S>>::Name>
         + PushOp<Name<<B as AllocName<S>>::Name>, S>
         + Diagnostics<S>,
     S: Clone,
@@ -235,7 +235,7 @@ mod tests {
         let log = Log::<Event<usize, ()>>::new();
         let mut builder = MockBuilder::with_predefined_names(
             log,
-            vec![(ident.clone(), ResolvedIdent::Backend(reloc))],
+            vec![(ident.clone(), ResolvedName::Symbol(reloc))],
         )
         .resolve_names();
         builder.push_op(Name(ident), ());
@@ -254,7 +254,7 @@ mod tests {
         }
         assert_eq!(
             log.into_inner(),
-            [NameTableEvent::Insert(ident, ResolvedIdent::Backend(id)).into()]
+            [NameTableEvent::Insert(ident, ResolvedName::Symbol(id)).into()]
         )
     }
 
@@ -266,7 +266,7 @@ mod tests {
         {
             let mut builder = MockBuilder::with_predefined_names(
                 log.clone(),
-                vec![(ident.clone(), ResolvedIdent::Macro(0))],
+                vec![(ident.clone(), ResolvedName::Macro(0))],
             )
             .resolve_names();
             builder.push_op(Name(ident), span.clone());

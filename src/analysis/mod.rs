@@ -32,7 +32,7 @@ where
         codebase: &C,
         diagnostics: &mut D,
     ) -> Result<(), CodebaseError> {
-        use self::resolve::{NameTable, ResolvedIdent};
+        use self::resolve::{NameTable, ResolvedName};
 
         let tokenizer = Tokenizer(codebase);
         let mut file_parser = CodebaseAnalyzer::new(&tokenizer);
@@ -41,7 +41,7 @@ where
         for (string, name) in self.builtin_symbols() {
             names.insert(
                 DefaultIdentFactory.mk_ident(string),
-                ResolvedIdent::Backend((*name).clone()),
+                ResolvedName::Symbol((*name).clone()),
             )
         }
         let session = SessionComponents::new(

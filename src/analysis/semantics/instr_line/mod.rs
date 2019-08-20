@@ -8,7 +8,7 @@ use self::syntax::actions::{InstrActions, InstrLineActions, InstrRule};
 use super::diag::span::StripSpan;
 use super::diag::{EmitDiag, Message};
 use super::params::RelocLookup;
-use super::resolve::ResolvedIdent;
+use super::resolve::ResolvedName;
 use super::syntax;
 use super::{Label, Literal, SemanticActions, Session, TokenStreamSemantics};
 
@@ -57,14 +57,14 @@ impl<S: Session> InstrActions<S::Ident, Literal<S::StringRef>, S::Span> for Inst
                 self.map_line(|line| BuiltinInstrState::new(line, (command.clone(), span))),
             ),
             None => match self.session.get(&ident) {
-                Some(ResolvedIdent::Macro(id)) => {
+                Some(ResolvedName::Macro(id)) => {
                     self = self.define_label_if_present();
                     InstrRule::MacroInstr(set_state!(
                         self,
                         MacroInstrState::new(self.state, (id, span))
                     ))
                 }
-                Some(ResolvedIdent::Backend(_)) => {
+                Some(ResolvedName::Symbol(_)) => {
                     let name = self.strip_span(&span);
                     self.emit_diag(Message::CannotUseSymbolNameAsMacroName { name }.at(span));
                     InstrRule::Error(self)

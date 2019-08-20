@@ -197,7 +197,7 @@ fn single_arg<T, D: Diagnostics<S>, S>(
 mod tests {
     use super::*;
 
-    use crate::analysis::resolve::{NameTableEvent, ResolvedIdent};
+    use crate::analysis::resolve::{NameTableEvent, ResolvedName};
     use crate::analysis::semantics::instr_line::builtin_instr;
     use crate::analysis::semantics::tests::*;
     use crate::analysis::session::SessionEvent;
@@ -399,7 +399,7 @@ mod tests {
         assert_eq!(
             actions,
             [
-                NameTableEvent::Insert(symbol.into(), ResolvedIdent::Backend(0)).into(),
+                NameTableEvent::Insert(symbol.into(), ResolvedName::Symbol(0)).into(),
                 BackendEvent::DefineSymbol((0, ()), value.into()).into()
             ]
         )
@@ -430,7 +430,7 @@ mod tests {
         assert_eq!(
             actions,
             [
-                NameTableEvent::Insert(name.into(), ResolvedIdent::Backend(0)).into(),
+                NameTableEvent::Insert(name.into(), ResolvedName::Symbol(0)).into(),
                 BackendEvent::DefineSymbol((0, ()), Atom::from(ParamId(0)).into()).into()
             ]
         )
@@ -454,7 +454,7 @@ mod tests {
         assert_eq!(
             actions,
             [
-                NameTableEvent::Insert(name.into(), ResolvedIdent::Backend(0)).into(),
+                NameTableEvent::Insert(name.into(), ResolvedName::Symbol(0)).into(),
                 BackendEvent::StartSection(0, ()).into()
             ]
         )
