@@ -1,6 +1,6 @@
 use super::{InstrLineState, SemanticActions, TokenStreamSemantics};
 
-use crate::analyze::semantics::TokenStreamState;
+use crate::analyze::semantics::{Keyword, TokenStreamState};
 use crate::analyze::session::{MacroArgs, Session};
 use crate::analyze::syntax::actions::{InstrFinalizer, MacroArgActions, MacroInstrActions};
 use crate::analyze::{SemanticToken, TokenSeq};
@@ -29,7 +29,7 @@ impl<S: Session> MacroInstrState<S> {
     }
 }
 
-impl<S: Session> MacroInstrActions<S::Span> for MacroInstrSemantics<S> {
+impl<S: Session<Keyword = &'static Keyword>> MacroInstrActions<S::Span> for MacroInstrSemantics<S> {
     type Token = SemanticToken<S::Ident, S::StringRef>;
     type MacroArgActions = MacroArgSemantics<S>;
 
@@ -38,7 +38,7 @@ impl<S: Session> MacroInstrActions<S::Span> for MacroInstrSemantics<S> {
     }
 }
 
-impl<S: Session> InstrFinalizer<S::Span> for MacroInstrSemantics<S> {
+impl<S: Session<Keyword = &'static Keyword>> InstrFinalizer<S::Span> for MacroInstrSemantics<S> {
     type Next = TokenStreamSemantics<S>;
 
     fn did_parse_instr(self) -> Self::Next {

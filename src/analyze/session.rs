@@ -354,13 +354,18 @@ where
     N: DerefMut,
     N::Target: NameTable<I, SymbolId = B::SymbolId>,
 {
+    type Keyword = <N::Target as NameTable<I>>::Keyword;
     type MacroId = <N::Target as NameTable<I>>::MacroId;
 
-    fn get(&self, ident: &I) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
+    fn get(&self, ident: &I) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
         self.names.get(ident)
     }
 
-    fn insert(&mut self, ident: I, entry: ResolvedName<Self::MacroId, Self::SymbolId>) {
+    fn insert(
+        &mut self,
+        ident: I,
+        entry: ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>,
+    ) {
         self.names.insert(ident, entry)
     }
 }
@@ -436,6 +441,7 @@ mod mock {
     use super::*;
 
     use crate::analyze::resolve::{BasicNameTable, FakeNameTable, MockNameTable, NameTableEvent};
+    use crate::analyze::semantics::Keyword;
     use crate::analyze::strings::FakeStringInterner;
     use crate::diag::{DiagnosticsEvent, MockDiagnostics};
     use crate::expr::{Atom, LocationCounter};
@@ -489,14 +495,16 @@ mod mock {
         }
     }
 
-    impl<T, S> MockSession<SerialIdAllocator, BasicNameTable<MockMacroId, usize>, T, S> {
+    impl<T, S>
+        MockSession<SerialIdAllocator, BasicNameTable<&'static Keyword, MockMacroId, usize>, T, S>
+    {
         pub fn with_log(log: Log<T>) -> Self {
             Self::with_name_table(SerialIdAllocator::new(), BasicNameTable::new(), log)
         }
 
         pub fn with_predefined_names<I>(log: Log<T>, entries: I) -> Self
         where
-            I: IntoIterator<Item = (String, ResolvedName<MockMacroId, usize>)>,
+            I: IntoIterator<Item = (String, ResolvedName<&'static Keyword, MockMacroId, usize>)>,
         {
             let mut table = BasicNameTable::new();
             for (name, value) in entries {
@@ -530,7 +538,7 @@ mod mock {
         T: From<SessionEvent>,
         T: From<BackendEvent<B::SymbolId, Expr<B::SymbolId, S>>>,
         T: From<DiagnosticsEvent<S>>,
-        T: From<NameTableEvent<N::MacroId, N::SymbolId>>,
+        T: From<NameTableEvent<N::Keyword, N::MacroId, N::SymbolId>>,
         S: Clone + Merge,
     {
         fn analyze_file<A: IntoSemanticActions<Self>>(
@@ -594,7 +602,7 @@ mod mock {
         }
     }
 
-    impl<T, S> MockBuilder<SerialIdAllocator, BasicNameTable<usize, usize>, T, S>
+    impl<T, S> MockBuilder<SerialIdAllocator, BasicNameTable<Keyword, usize, usize>, T, S>
     where
         T: From<BackendEvent<usize, Expr<usize, S>>>,
         S: Clone,
@@ -605,7 +613,7 @@ mod mock {
 
         pub fn with_predefined_names<I>(log: Log<T>, entries: I) -> Self
         where
-            I: IntoIterator<Item = (String, ResolvedName<usize, usize>)>,
+            I: IntoIterator<Item = (String, ResolvedName<Keyword, usize, usize>)>,
         {
             let mut table = BasicNameTable::new();
             for (name, value) in entries {
@@ -633,6 +641,7 @@ mod tests {
     use super::MacroId;
 
     use crate::analyze::resolve::{BasicNameTable, NameTableEvent};
+    use crate::analyze::semantics::Keyword;
     use crate::analyze::strings::FakeStringInterner;
     use crate::analyze::syntax::actions::mock::{IdentKind, TokenStreamActionCollector};
     use crate::analyze::syntax::parser::mock::*;
@@ -838,7 +847,7 @@ mod tests {
     type MockBackend<S> = crate::object::builder::mock::MockBackend<SerialIdAllocator, Event<S>>;
     type MockDiagnosticsSystem<S> = crate::diag::MockDiagnosticsSystem<Event<S>, S>;
     type MockNameTable<S> =
-        crate::analyze::resolve::MockNameTable<BasicNameTable<MacroId, usize>, Event<S>>;
+        crate::analyze::resolve::MockNameTable<BasicNameTable<Keyword, MacroId, usize>, Event<S>>;
     type TestSession<'a, S> = SessionComponents<
         Upstream<
             &'a mut MockCodebase<S>,
@@ -857,7 +866,7 @@ mod tests {
     enum Event<S: Clone> {
         Parser(ParserEvent<String, Literal<String>, LexError, S>),
         Backend(BackendEvent<usize, Expr<S>>),
-        NameTable(NameTableEvent<MacroId, usize>),
+        NameTable(NameTableEvent<Keyword, MacroId, usize>),
         Diagnostics(DiagnosticsEvent<S>),
     }
 
@@ -873,8 +882,8 @@ mod tests {
         }
     }
 
-    impl<S: Clone> From<NameTableEvent<MacroId, usize>> for Event<S> {
-        fn from(event: NameTableEvent<MacroId, usize>) -> Self {
+    impl<S: Clone> From<NameTableEvent<Keyword, MacroId, usize>> for Event<S> {
+        fn from(event: NameTableEvent<Keyword, MacroId, usize>) -> Self {
             Event::NameTable(event)
         }
     }

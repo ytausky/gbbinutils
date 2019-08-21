@@ -1,4 +1,4 @@
-use super::{Label, SemanticActions, TokenStreamSemantics};
+use super::{Keyword, Label, SemanticActions, TokenStreamSemantics};
 
 use crate::analyze::resolve::ResolvedName;
 use crate::analyze::session::Session;
@@ -26,8 +26,9 @@ impl<S: Session> MacroDefState<S> {
     }
 }
 
-impl<S: Session> TokenLineActions<S::Ident, Literal<S::StringRef>, S::Span>
-    for TokenLineSemantics<S>
+impl<S> TokenLineActions<S::Ident, Literal<S::StringRef>, S::Span> for TokenLineSemantics<S>
+where
+    S: Session<Keyword = &'static Keyword>,
 {
     type ContextFinalizer = TokenContextFinalizationSemantics<S>;
 
@@ -83,7 +84,9 @@ delegate_diagnostics! {
     {S: Session}, TokenContextFinalizationSemantics<S>, {parent}, S, S::Span
 }
 
-impl<S: Session> LineFinalizer<S::Span> for TokenContextFinalizationSemantics<S> {
+impl<S: Session<Keyword = &'static Keyword>> LineFinalizer<S::Span>
+    for TokenContextFinalizationSemantics<S>
+{
     type Next = TokenStreamSemantics<S>;
 
     fn did_parse_line(mut self, _: S::Span) -> Self::Next {

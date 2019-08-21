@@ -3,7 +3,7 @@ use super::*;
 use crate::analyze::semantics::instr_line::Label;
 use crate::analyze::semantics::params::RelocLookup;
 use crate::analyze::semantics::token_line::{MacroDefState, TokenContext, TokenLineSemantics};
-use crate::analyze::semantics::TokenStreamState;
+use crate::analyze::semantics::{Keyword, TokenStreamState};
 use crate::analyze::session::Session;
 use crate::analyze::Literal;
 use crate::diag::*;
@@ -21,7 +21,7 @@ pub(in crate::analyze) enum Directive {
     Section,
 }
 
-pub(super) fn analyze_directive<S: Session>(
+pub(super) fn analyze_directive<S: Session<Keyword = &'static Keyword>>(
     directive: (Directive, S::Span),
     label: Option<Label<S::Ident, S::Span>>,
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
@@ -51,7 +51,10 @@ delegate_diagnostics! {
     S::Span
 }
 
-impl<'a, S: Session> DirectiveContext<InstrLineSemantics<S>, S::Ident, S::StringRef, S::Span> {
+impl<'a, S> DirectiveContext<InstrLineSemantics<S>, S::Ident, S::StringRef, S::Span>
+where
+    S: Session<Keyword = &'static Keyword>,
+{
     fn analyze(self, directive: Directive) -> TokenStreamSemantics<S> {
         match directive {
             Directive::Db => self.analyze_data(Width::Byte),

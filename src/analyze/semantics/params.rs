@@ -20,6 +20,7 @@ where
 
     fn reloc_lookup(&mut self, name: I, span: S) -> Self::RelocId {
         match self.get(&name) {
+            Some(ResolvedName::Keyword(_)) => unimplemented!(),
             Some(ResolvedName::Symbol(id)) => id.clone(),
             None => {
                 let id = self.alloc_symbol(span.clone());
@@ -169,6 +170,7 @@ mod tests {
     use super::*;
 
     use crate::analyze::resolve::NameTableEvent;
+    use crate::analyze::semantics::Keyword;
     use crate::analyze::session::MockBuilder;
     use crate::diag::{DiagnosticsEvent, MockSpan};
     use crate::expr::{Atom, ParamId};
@@ -182,7 +184,7 @@ mod tests {
     enum Event<N, S: Clone> {
         Backend(BackendEvent<N, Expr<N, S>>),
         Diagnostics(DiagnosticsEvent<S>),
-        NameTable(NameTableEvent<usize, usize>),
+        NameTable(NameTableEvent<Keyword, usize, usize>),
     }
 
     impl<N, S: Clone> From<BackendEvent<N, Expr<N, S>>> for Event<N, S> {
@@ -197,8 +199,8 @@ mod tests {
         }
     }
 
-    impl<N, S: Clone> From<NameTableEvent<usize, usize>> for Event<N, S> {
-        fn from(event: NameTableEvent<usize, usize>) -> Self {
+    impl<N, S: Clone> From<NameTableEvent<Keyword, usize, usize>> for Event<N, S> {
+        fn from(event: NameTableEvent<Keyword, usize, usize>) -> Self {
             Event::NameTable(event)
         }
     }

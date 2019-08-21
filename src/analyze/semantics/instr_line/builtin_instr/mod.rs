@@ -1,11 +1,11 @@
 pub(super) use self::directive::Directive;
+pub(in crate::analyze) use self::operand::OperandSymbol;
 
 use self::arg::*;
-use self::operand::OperandSymbol;
 
 use super::*;
 
-use crate::analyze::semantics::{Params, RelocLookup, ResolveNames, WithParams};
+use crate::analyze::semantics::{Keyword, Params, RelocLookup, ResolveNames, WithParams};
 use crate::analyze::session::Session;
 use crate::analyze::syntax::actions::{BuiltinInstrActions, InstrFinalizer};
 use crate::diag::{Diagnostics, EmitDiag, Message};
@@ -54,8 +54,9 @@ impl<S: Session> BuiltinInstrState<S> {
     }
 }
 
-impl<S: Session> BuiltinInstrActions<S::Ident, Literal<S::StringRef>, S::Span>
-    for BuiltinInstrSemantics<S>
+impl<S> BuiltinInstrActions<S::Ident, Literal<S::StringRef>, S::Span> for BuiltinInstrSemantics<S>
+where
+    S: Session<Keyword = &'static Keyword>,
 {
     type ArgActions = ArgSemantics<S>;
 
@@ -64,7 +65,7 @@ impl<S: Session> BuiltinInstrActions<S::Ident, Literal<S::StringRef>, S::Span>
     }
 }
 
-impl<S: Session> InstrFinalizer<S::Span> for BuiltinInstrSemantics<S> {
+impl<S: Session<Keyword = &'static Keyword>> InstrFinalizer<S::Span> for BuiltinInstrSemantics<S> {
     type Next = TokenStreamSemantics<S>;
 
     fn did_parse_instr(self) -> Self::Next {
@@ -82,7 +83,7 @@ enum PreparedBuiltinInstr<S: Session> {
     Mnemonic((Mnemonic, S::Span)),
 }
 
-impl<S: Session> PreparedBuiltinInstr<S> {
+impl<S: Session<Keyword = &'static Keyword>> PreparedBuiltinInstr<S> {
     fn new((command, span): (BuiltinInstr, S::Span), stmt: &mut InstrLineSemantics<S>) -> Self {
         match command {
             BuiltinInstr::Directive(directive) if directive.requires_symbol() => {

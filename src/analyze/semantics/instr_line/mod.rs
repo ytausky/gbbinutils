@@ -1,6 +1,8 @@
+pub(super) use self::builtin_instr::{BuiltinInstr, OperandSymbol};
+
 use self::builtin_instr::cpu_instr::mnemonic::*;
-use self::builtin_instr::{BuiltinInstr, BuiltinInstrSemantics, BuiltinInstrState};
 use self::builtin_instr::{BuiltinInstr::*, Directive::*};
+use self::builtin_instr::{BuiltinInstrSemantics, BuiltinInstrState};
 use self::label::{LabelSemantics, LabelState};
 use self::macro_instr::{MacroInstrSemantics, MacroInstrState};
 use self::syntax::actions::{InstrActions, InstrLineActions, InstrRule};
@@ -10,7 +12,7 @@ use super::diag::{EmitDiag, Message};
 use super::params::RelocLookup;
 use super::resolve::ResolvedName;
 use super::syntax;
-use super::{Label, Literal, SemanticActions, Session, TokenStreamSemantics};
+use super::{Keyword, Label, Literal, SemanticActions, Session, TokenStreamSemantics};
 
 use crate::expr::LocationCounter;
 use crate::object::builder::{Finish, PushOp};
@@ -25,8 +27,9 @@ pub(in crate::analyze) struct InstrLineState<S: Session> {
     pub label: Option<Label<S::Ident, S::Span>>,
 }
 
-impl<S: Session> InstrLineActions<S::Ident, Literal<S::StringRef>, S::Span>
-    for InstrLineSemantics<S>
+impl<S> InstrLineActions<S::Ident, Literal<S::StringRef>, S::Span> for InstrLineSemantics<S>
+where
+    S: Session<Keyword = &'static Keyword>,
 {
     type LabelActions = LabelSemantics<S>;
     type InstrActions = Self;
@@ -37,7 +40,10 @@ impl<S: Session> InstrLineActions<S::Ident, Literal<S::StringRef>, S::Span>
     }
 }
 
-impl<S: Session> InstrActions<S::Ident, Literal<S::StringRef>, S::Span> for InstrLineSemantics<S> {
+impl<S> InstrActions<S::Ident, Literal<S::StringRef>, S::Span> for InstrLineSemantics<S>
+where
+    S: Session<Keyword = &'static Keyword>,
+{
     type BuiltinInstrActions = BuiltinInstrSemantics<S>;
     type MacroInstrActions = MacroInstrSemantics<S>;
     type ErrorActions = Self;
@@ -57,6 +63,7 @@ impl<S: Session> InstrActions<S::Ident, Literal<S::StringRef>, S::Span> for Inst
                 self.map_line(|line| BuiltinInstrState::new(line, (command.clone(), span))),
             ),
             None => match self.session.get(&ident) {
+                Some(ResolvedName::Keyword(_)) => unimplemented!(),
                 Some(ResolvedName::Macro(id)) => {
                     self = self.define_label_if_present();
                     InstrRule::MacroInstr(set_state!(

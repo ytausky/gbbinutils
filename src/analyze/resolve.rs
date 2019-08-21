@@ -11,14 +11,20 @@ pub use self::mock::*;
 use crate::expr::{Atom, ExprOp};
 
 pub trait NameTable<I>: SymbolSource {
+    type Keyword: Clone;
     type MacroId: Clone;
 
-    fn get(&self, ident: &I) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>>;
-    fn insert(&mut self, ident: I, entry: ResolvedName<Self::MacroId, Self::SymbolId>);
+    fn get(&self, ident: &I) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>>;
+    fn insert(
+        &mut self,
+        ident: I,
+        entry: ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>,
+    );
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ResolvedName<MacroId, SymbolId> {
+pub enum ResolvedName<Keyword, MacroId, SymbolId> {
+    Keyword(Keyword),
     Macro(MacroId),
     Symbol(SymbolId),
 }
@@ -85,11 +91,11 @@ impl From<&str> for Ident<String> {
     }
 }
 
-pub struct BasicNameTable<MacroId, SymbolId> {
-    table: HashMap<String, ResolvedName<MacroId, SymbolId>>,
+pub struct BasicNameTable<Keyword, MacroId, SymbolId> {
+    table: HashMap<String, ResolvedName<Keyword, MacroId, SymbolId>>,
 }
 
-impl<MacroId, SymbolId> BasicNameTable<MacroId, SymbolId> {
+impl<Keyword, MacroId, SymbolId> BasicNameTable<Keyword, MacroId, SymbolId> {
     pub fn new() -> Self {
         BasicNameTable {
             table: HashMap::new(),
@@ -97,28 +103,46 @@ impl<MacroId, SymbolId> BasicNameTable<MacroId, SymbolId> {
     }
 }
 
-impl<MacroId: Clone, SymbolId: Clone> SymbolSource for BasicNameTable<MacroId, SymbolId> {
+impl<Keyword, MacroId, SymbolId> SymbolSource for BasicNameTable<Keyword, MacroId, SymbolId>
+where
+    Keyword: Clone,
+    MacroId: Clone,
+    SymbolId: Clone,
+{
     type SymbolId = SymbolId;
 }
 
-impl<MacroId: Clone, SymbolId: Clone> NameTable<String> for BasicNameTable<MacroId, SymbolId> {
+impl<Keyword, MacroId, SymbolId> NameTable<String> for BasicNameTable<Keyword, MacroId, SymbolId>
+where
+    Keyword: Clone,
+    MacroId: Clone,
+    SymbolId: Clone,
+{
+    type Keyword = Keyword;
     type MacroId = MacroId;
 
-    fn get(&self, ident: &String) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
+    fn get(
+        &self,
+        ident: &String,
+    ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
         self.table.get(ident).cloned()
     }
 
-    fn insert(&mut self, ident: String, entry: ResolvedName<Self::MacroId, Self::SymbolId>) {
+    fn insert(
+        &mut self,
+        ident: String,
+        entry: ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>,
+    ) {
         self.table.insert(ident, entry);
     }
 }
 
-pub struct BiLevelNameTable<MacroId, SymbolId> {
-    global: BasicNameTable<MacroId, SymbolId>,
-    local: Option<BasicNameTable<MacroId, SymbolId>>,
+pub struct BiLevelNameTable<Keyword, MacroId, SymbolId> {
+    global: BasicNameTable<Keyword, MacroId, SymbolId>,
+    local: Option<BasicNameTable<Keyword, MacroId, SymbolId>>,
 }
 
-impl<MacroId, SymbolId> BiLevelNameTable<MacroId, SymbolId> {
+impl<Keyword, MacroId, SymbolId> BiLevelNameTable<Keyword, MacroId, SymbolId> {
     pub fn new() -> Self {
         BiLevelNameTable {
             global: BasicNameTable::new(),
@@ -126,7 +150,7 @@ impl<MacroId, SymbolId> BiLevelNameTable<MacroId, SymbolId> {
         }
     }
 
-    fn select_table(&self, ident: &Ident<String>) -> &BasicNameTable<MacroId, SymbolId> {
+    fn select_table(&self, ident: &Ident<String>) -> &BasicNameTable<Keyword, MacroId, SymbolId> {
         match ident.visibility {
             Visibility::Global => &self.global,
             Visibility::Local => self.local.as_ref().unwrap(),
@@ -136,7 +160,7 @@ impl<MacroId, SymbolId> BiLevelNameTable<MacroId, SymbolId> {
     fn select_table_mut(
         &mut self,
         ident: &Ident<String>,
-    ) -> &mut BasicNameTable<MacroId, SymbolId> {
+    ) -> &mut BasicNameTable<Keyword, MacroId, SymbolId> {
         match ident.visibility {
             Visibility::Global => &mut self.global,
             Visibility::Local => self.local.as_mut().unwrap(),
@@ -144,25 +168,42 @@ impl<MacroId, SymbolId> BiLevelNameTable<MacroId, SymbolId> {
     }
 }
 
-impl<MacroId: Clone, SymbolId: Clone> SymbolSource for BiLevelNameTable<MacroId, SymbolId> {
+impl<Keyword, MacroId, SymbolId> SymbolSource for BiLevelNameTable<Keyword, MacroId, SymbolId>
+where
+    SymbolId: Clone,
+{
     type SymbolId = SymbolId;
 }
 
-impl<MacroId: Clone, SymbolId: Clone> NameTable<Ident<String>>
-    for BiLevelNameTable<MacroId, SymbolId>
+impl<Keyword, MacroId, SymbolId> NameTable<Ident<String>>
+    for BiLevelNameTable<Keyword, MacroId, SymbolId>
+where
+    Keyword: Clone,
+    MacroId: Clone,
+    SymbolId: Clone,
 {
+    type Keyword = Keyword;
     type MacroId = MacroId;
 
-    fn get(&self, ident: &Ident<String>) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
+    fn get(
+        &self,
+        ident: &Ident<String>,
+    ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
         self.select_table(ident).get(&ident.name)
     }
 
-    fn insert(&mut self, ident: Ident<String>, entry: ResolvedName<Self::MacroId, Self::SymbolId>) {
+    fn insert(
+        &mut self,
+        ident: Ident<String>,
+        entry: ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>,
+    ) {
         self.select_table_mut(&ident).insert(ident.name, entry)
     }
 }
 
-impl<M, S> StartScope<Ident<String>> for BiLevelNameTable<M, S> {
+impl<Keyword, MacroId, SymbolId> StartScope<Ident<String>>
+    for BiLevelNameTable<Keyword, MacroId, SymbolId>
+{
     fn start_scope(&mut self, ident: &Ident<String>) {
         if ident.visibility == Visibility::Global {
             self.local.replace(BasicNameTable::new());
@@ -174,6 +215,7 @@ impl<M, S> StartScope<Ident<String>> for BiLevelNameTable<M, S> {
 mod mock {
     use super::*;
 
+    use crate::analyze::semantics::Keyword;
     use crate::log::Log;
 
     use std::marker::PhantomData;
@@ -196,15 +238,23 @@ mod mock {
     impl<N, T> NameTable<String> for MockNameTable<N, T>
     where
         N: NameTable<String>,
-        T: From<NameTableEvent<N::MacroId, N::SymbolId>>,
+        T: From<NameTableEvent<N::Keyword, N::MacroId, N::SymbolId>>,
     {
+        type Keyword = N::Keyword;
         type MacroId = N::MacroId;
 
-        fn get(&self, ident: &String) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
+        fn get(
+            &self,
+            ident: &String,
+        ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
             self.names.get(ident)
         }
 
-        fn insert(&mut self, ident: String, entry: ResolvedName<Self::MacroId, Self::SymbolId>) {
+        fn insert(
+            &mut self,
+            ident: String,
+            entry: ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>,
+        ) {
             self.names.insert(ident.clone(), entry.clone());
             self.log.push(NameTableEvent::Insert(ident, entry))
         }
@@ -213,7 +263,7 @@ mod mock {
     impl<N, T> StartScope<String> for MockNameTable<N, T>
     where
         N: NameTable<String>,
-        T: From<NameTableEvent<N::MacroId, N::SymbolId>>,
+        T: From<NameTableEvent<N::Keyword, N::MacroId, N::SymbolId>>,
     {
         fn start_scope(&mut self, ident: &String) {
             self.log.push(NameTableEvent::StartScope(ident.clone()))
@@ -221,12 +271,12 @@ mod mock {
     }
 
     #[derive(Debug, PartialEq)]
-    pub enum NameTableEvent<MacroId, SymbolId> {
-        Insert(String, ResolvedName<MacroId, SymbolId>),
+    pub enum NameTableEvent<Keyword, MacroId, SymbolId> {
+        Insert(String, ResolvedName<Keyword, MacroId, SymbolId>),
         StartScope(String),
     }
 
-    pub struct FakeNameTable<I>(PhantomData<I>);
+    pub(in crate::analyze) struct FakeNameTable<I>(PhantomData<I>);
 
     impl<I> FakeNameTable<I> {
         pub fn new() -> Self {
@@ -239,13 +289,17 @@ mod mock {
     }
 
     impl<I: Clone> NameTable<I> for FakeNameTable<I> {
+        type Keyword = Keyword;
         type MacroId = ();
 
-        fn get(&self, ident: &I) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
+        fn get(
+            &self,
+            ident: &I,
+        ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
             Some(ResolvedName::Symbol(ident.clone()))
         }
 
-        fn insert(&mut self, _: I, _: ResolvedName<Self::MacroId, Self::SymbolId>) {
+        fn insert(&mut self, _: I, _: ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>) {
             panic!("tried to define a name")
         }
     }
@@ -274,31 +328,29 @@ mod tests {
     #[test]
     #[should_panic]
     fn panic_when_first_definition_is_local() {
-        let mut table = BiLevelNameTable::<(), _>::new();
+        let mut table = BiLevelNameTable::<(), (), _>::new();
         table.insert("_loop".into(), ResolvedName::Symbol(()));
     }
 
     #[test]
     fn retrieve_global_name() {
         let name = "start";
-        let mut table = BiLevelNameTable::<(), _>::new();
-        let entry = ResolvedName::Symbol(42);
-        table.insert(name.into(), entry.clone());
-        assert_eq!(table.get(&name.into()), Some(entry))
+        let mut table = BiLevelNameTable::<(), (), _>::new();
+        table.insert(name.into(), ResolvedName::Symbol(42));
+        assert_eq!(table.get(&name.into()), Some(ResolvedName::Symbol(42)))
     }
 
     #[test]
     fn retrieve_local_name() {
-        let mut table = BiLevelNameTable::<(), _>::new();
-        let entry = ResolvedName::Symbol(42);
+        let mut table = BiLevelNameTable::<(), (), _>::new();
         table.start_scope(&"global".into());
-        table.insert("_local".into(), entry.clone());
-        assert_eq!(table.get(&"_local".into()), Some(entry))
+        table.insert("_local".into(), ResolvedName::Symbol(42));
+        assert_eq!(table.get(&"_local".into()), Some(ResolvedName::Symbol(42)))
     }
 
     #[test]
     fn local_name_not_accessible_after_new_global_name() {
-        let mut table = BiLevelNameTable::<(), _>::new();
+        let mut table = BiLevelNameTable::<(), (), _>::new();
         table.start_scope(&"global1".into());
         table.insert("_local".into(), ResolvedName::Symbol(42));
         table.start_scope(&"global2".into());

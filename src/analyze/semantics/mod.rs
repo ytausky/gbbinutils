@@ -1,4 +1,4 @@
-use self::instr_line::{InstrLineSemantics, InstrLineState};
+use self::instr_line::{BuiltinInstr, InstrLineSemantics, InstrLineState, OperandSymbol};
 use self::params::*;
 use self::token_line::{TokenContext, TokenContextFinalizationSemantics, TokenLineSemantics};
 
@@ -25,11 +25,17 @@ mod instr_line;
 mod params;
 mod token_line;
 
+#[derive(Clone, Debug, PartialEq)]
+pub(super) enum Keyword {
+    BuiltinInstr(BuiltinInstr),
+    Operand(OperandSymbol),
+}
+
 pub(super) type TokenStreamSemantics<S> = SemanticActions<TokenStreamState<S>, S>;
 
 pub(super) struct TokenStreamState<S: Session>(LineRule<InstrLineState<S>, TokenContext<S>>);
 
-impl<S: Session> TokenStreamState<S> {
+impl<S: Session<Keyword = &'static Keyword>> TokenStreamState<S> {
     pub fn new() -> Self {
         Self(LineRule::InstrLine(InstrLineState::new()))
     }
@@ -82,7 +88,7 @@ delegate_diagnostics! {
     {L, S: Session}, SemanticActions<L, S>, {session}, S, S::Span
 }
 
-impl<S: Session> TokenStreamSemantics<S> {
+impl<S: Session<Keyword = &'static Keyword>> TokenStreamSemantics<S> {
     pub fn new(session: S) -> TokenStreamSemantics<S> {
         Self {
             state: TokenStreamState::new(),
@@ -103,8 +109,9 @@ impl<S: Session> From<TokenContext<S>> for TokenStreamState<S> {
     }
 }
 
-impl<S: Session> TokenStreamActions<S::Ident, Literal<S::StringRef>, S::Span>
-    for TokenStreamSemantics<S>
+impl<S> TokenStreamActions<S::Ident, Literal<S::StringRef>, S::Span> for TokenStreamSemantics<S>
+where
+    S: Session<Keyword = &'static Keyword>,
 {
     type InstrLineActions = InstrLineSemantics<S>;
     type TokenLineActions = TokenLineSemantics<S>;
@@ -182,10 +189,10 @@ mod tests {
     use std::fmt::Debug;
 
     #[derive(Debug, PartialEq)]
-    pub(crate) enum TestOperation<S: Clone> {
+    pub(in crate::analyze) enum TestOperation<S: Clone> {
         Backend(BackendEvent<usize, Expr<S>>),
         Diagnostics(DiagnosticsEvent<S>),
-        NameTable(NameTableEvent<MockMacroId, usize>),
+        NameTable(NameTableEvent<&'static Keyword, MockMacroId, usize>),
         Session(SessionEvent),
     }
 
@@ -203,8 +210,8 @@ mod tests {
         }
     }
 
-    impl<S: Clone> From<NameTableEvent<MockMacroId, usize>> for TestOperation<S> {
-        fn from(event: NameTableEvent<MockMacroId, usize>) -> Self {
+    impl<S: Clone> From<NameTableEvent<&'static Keyword, MockMacroId, usize>> for TestOperation<S> {
+        fn from(event: NameTableEvent<&'static Keyword, MockMacroId, usize>) -> Self {
             TestOperation::NameTable(event)
         }
     }
@@ -617,7 +624,7 @@ mod tests {
 
     pub(super) type MockSession<S> = crate::analyze::session::MockSession<
         SerialIdAllocator,
-        BasicNameTable<MockMacroId, usize>,
+        BasicNameTable<&'static Keyword, MockMacroId, usize>,
         TestOperation<S>,
         S,
     >;
@@ -634,7 +641,7 @@ mod tests {
 
     pub(super) fn log_with_predefined_names<I, F, S>(entries: I, f: F) -> Vec<TestOperation<S>>
     where
-        I: IntoIterator<Item = (String, ResolvedName<MockMacroId, usize>)>,
+        I: IntoIterator<Item = (String, ResolvedName<&'static Keyword, MockMacroId, usize>)>,
         F: FnOnce(TestTokenStreamSemantics<S>) -> TestTokenStreamSemantics<S>,
         S: Clone + Debug + Merge,
     {
