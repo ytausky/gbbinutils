@@ -51,18 +51,18 @@ where
     Self: Sized,
     Self: PartialBackend<S>,
     Self: StartScope<I>,
-    Self: NameTable<I, SymbolId = <Self as AllocName<S>>::Name>,
+    Self: NameTable<I>,
     Self: Diagnostics<S>,
 {
-    type ConstBuilder: ValueBuilder<Self::Name, S, Parent = Self, Value = Self::Value>
-        + NameTable<I, SymbolId = Self::Name>
+    type ConstBuilder: ValueBuilder<Self::SymbolId, S, Parent = Self, Value = Self::Value>
+        + NameTable<I, SymbolId = Self::SymbolId>
         + Diagnostics<S>;
-    type SymbolBuilder: ValueBuilder<Self::Name, S, Parent = Self, Value = ()>
-        + NameTable<I, SymbolId = Self::Name>
+    type SymbolBuilder: ValueBuilder<Self::SymbolId, S, Parent = Self, Value = ()>
+        + NameTable<I, SymbolId = Self::SymbolId>
         + Diagnostics<S>;
 
     fn build_const(self) -> Self::ConstBuilder;
-    fn define_symbol(self, name: Self::Name, span: S) -> Self::SymbolBuilder;
+    fn define_symbol(self, name: Self::SymbolId, span: S) -> Self::SymbolBuilder;
 }
 
 pub(super) trait IntoSemanticActions<S: Session> {
@@ -210,7 +210,7 @@ impl<U, B: Backend<S>, N, D, S: Clone> PartialBackend<S> for SessionComponents<U
         self.backend.set_origin(origin)
     }
 
-    fn start_section(&mut self, name: B::Name, span: S) {
+    fn start_section(&mut self, name: B::SymbolId, span: S) {
         self.backend.start_section(name, span)
     }
 }
@@ -240,8 +240,9 @@ where
     >,
     B: Backend<<D::Target as SpanSource>::Span>,
     N: DerefMut,
-    N::Target: NameTable<<C::Target as IdentSource>::Ident, MacroId = MacroId, SymbolId = B::Name>
-        + StartScope<<C::Target as IdentSource>::Ident>,
+    N::Target:
+        NameTable<<C::Target as IdentSource>::Ident, MacroId = MacroId, SymbolId = B::SymbolId>
+            + StartScope<<C::Target as IdentSource>::Ident>,
     D: DerefMut,
     D::Target: DiagnosticsSystem,
 {
@@ -297,7 +298,7 @@ impl<U, B, N, D, I, S> PartialSession<I, S> for SessionComponents<U, B, N, D>
 where
     B: Backend<S>,
     N: DerefMut,
-    N::Target: NameTable<I, SymbolId = B::Name> + StartScope<I>,
+    N::Target: NameTable<I, SymbolId = B::SymbolId> + StartScope<I>,
     D: DerefMut,
     D::Target: Diagnostics<S>,
     S: Clone,
@@ -310,26 +311,28 @@ where
         self.replace_backend(Backend::build_const)
     }
 
-    fn define_symbol(self, name: B::Name, span: S) -> Self::SymbolBuilder {
+    fn define_symbol(self, name: B::SymbolId, span: S) -> Self::SymbolBuilder {
         self.replace_backend(|backend| backend.define_symbol(name, span))
     }
 }
 
-impl<U, B: AllocName<S>, N, D, S: Clone> AllocName<S> for SessionComponents<U, B, N, D> {
-    type Name = B::Name;
+impl<U, B: SymbolSource, N, D> SymbolSource for SessionComponents<U, B, N, D> {
+    type SymbolId = B::SymbolId;
+}
 
-    fn alloc_name(&mut self, span: S) -> Self::Name {
+impl<U, B: AllocName<S>, N, D, S: Clone> AllocName<S> for SessionComponents<U, B, N, D> {
+    fn alloc_name(&mut self, span: S) -> Self::SymbolId {
         self.backend.alloc_name(span)
     }
 }
 
 impl<U, B, N, D, I> NameTable<I> for SessionComponents<U, B, N, D>
 where
+    B: SymbolSource,
     N: DerefMut,
-    N::Target: NameTable<I>,
+    N::Target: NameTable<I, SymbolId = B::SymbolId>,
 {
     type MacroId = <N::Target as NameTable<I>>::MacroId;
-    type SymbolId = <N::Target as NameTable<I>>::SymbolId;
 
     fn get(&self, ident: &I) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
         self.names.get(ident)
@@ -359,12 +362,12 @@ where
     }
 }
 
-impl<U, B, N, D, S> PushOp<Name<B::Name>, S> for SessionComponents<U, B, N, D>
+impl<U, B, N, D, S> PushOp<Name<B::SymbolId>, S> for SessionComponents<U, B, N, D>
 where
-    B: AllocName<S> + PushOp<Name<<B as AllocName<S>>::Name>, S>,
+    B: AllocName<S> + PushOp<Name<<B as SymbolSource>::SymbolId>, S>,
     S: Clone,
 {
-    fn push_op(&mut self, name: Name<B::Name>, span: S) {
+    fn push_op(&mut self, name: Name<B::SymbolId>, span: S) {
         self.backend.push_op(name, span)
     }
 }
@@ -477,9 +480,9 @@ mod mock {
         }
     }
 
-    impl<T, S> MockSession<PanickingIdAllocator<String>, FakeNameTable, T, S> {
+    impl<T, S> MockSession<PanickingIdAllocator<String>, FakeNameTable<String>, T, S> {
         pub fn without_name_resolution(log: Log<T>) -> Self {
-            Self::with_name_table(PanickingIdAllocator::new(), FakeNameTable, log)
+            Self::with_name_table(PanickingIdAllocator::new(), FakeNameTable::new(), log)
         }
     }
 
@@ -497,9 +500,9 @@ mod mock {
     impl<B, N, T, S> Session for MockSession<B, N, T, S>
     where
         B: AllocName<S>,
-        N: NameTable<String, SymbolId = B::Name, MacroId = MockMacroId>,
+        N: NameTable<String, SymbolId = B::SymbolId, MacroId = MockMacroId>,
         T: From<SessionEvent>,
-        T: From<BackendEvent<B::Name, Expr<B::Name, S>>>,
+        T: From<BackendEvent<B::SymbolId, Expr<B::SymbolId, S>>>,
         T: From<DiagnosticsEvent<S>>,
         T: From<NameTableEvent<N::MacroId, N::SymbolId>>,
         S: Clone + Merge,
@@ -541,7 +544,7 @@ mod mock {
 
     pub(in crate::analyze) type MockBuilder<A, N, T, S> = SessionComponents<
         (),
-        RelocContext<MockBackend<A, T>, Expr<<A as AllocName<S>>::Name, S>>,
+        RelocContext<MockBackend<A, T>, Expr<<A as SymbolSource>::SymbolId, S>>,
         Box<MockNameTable<N, T>>,
         Box<MockDiagnostics<T, S>>,
     >;
@@ -550,7 +553,7 @@ mod mock {
     where
         A: AllocName<S>,
         N: NameTable<String>,
-        T: From<BackendEvent<A::Name, Expr<A::Name, S>>>,
+        T: From<BackendEvent<A::SymbolId, Expr<A::SymbolId, S>>>,
         S: Clone,
     {
         fn from_components(alloc: A, names: N, log: Log<T>) -> Self {
@@ -584,13 +587,13 @@ mod mock {
         }
     }
 
-    impl<T, S> MockBuilder<PanickingIdAllocator<String>, FakeNameTable, T, S>
+    impl<T, S> MockBuilder<PanickingIdAllocator<String>, FakeNameTable<String>, T, S>
     where
         T: From<BackendEvent<String, Expr<String, S>>>,
         S: Clone,
     {
         pub fn without_name_resolution(log: Log<T>) -> Self {
-            Self::from_components(PanickingIdAllocator::new(), FakeNameTable, log)
+            Self::from_components(PanickingIdAllocator::new(), FakeNameTable::new(), log)
         }
     }
 }

@@ -3,7 +3,7 @@ use super::{Params, PushOp};
 use crate::analyze::resolve::{NameTable, ResolvedName};
 use crate::diag::{Diagnostics, Message};
 use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
-use crate::object::builder::{AllocName, Finish, Name};
+use crate::object::builder::{AllocName, Finish, Name, SymbolSource};
 
 pub(super) trait RelocLookup<I, S> {
     type RelocId;
@@ -13,10 +13,10 @@ pub(super) trait RelocLookup<I, S> {
 
 impl<T, I, S> RelocLookup<I, S> for T
 where
-    T: AllocName<S> + NameTable<I, SymbolId = <T as AllocName<S>>::Name> + Diagnostics<S>,
+    T: AllocName<S> + NameTable<I> + Diagnostics<S>,
     S: Clone,
 {
-    type RelocId = T::Name;
+    type RelocId = T::SymbolId;
 
     fn reloc_lookup(&mut self, name: I, span: S) -> Self::RelocId {
         match self.get(&name) {
@@ -120,8 +120,8 @@ pub(super) struct NameResolver;
 impl<B, I, S> NameHandler<B, I, S> for NameResolver
 where
     B: AllocName<S>
-        + NameTable<I, SymbolId = <B as AllocName<S>>::Name>
-        + PushOp<Name<<B as AllocName<S>>::Name>, S>
+        + NameTable<I>
+        + PushOp<Name<<B as SymbolSource>::SymbolId>, S>
         + Diagnostics<S>,
     S: Clone,
 {

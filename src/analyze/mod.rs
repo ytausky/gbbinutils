@@ -6,7 +6,7 @@ use self::syntax::*;
 
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diag::*;
-use crate::object::builder::{AllocName, Backend};
+use crate::object::builder::{Backend, SymbolSource};
 use crate::span::{BufContext, BufContextFactory, SpanSource};
 use crate::BuiltinSymbols;
 
@@ -24,7 +24,7 @@ mod syntax;
 pub(crate) trait Assemble<D>
 where
     D: DiagnosticsSystem,
-    Self: Backend<D::Span> + BuiltinSymbols<Name = <Self as AllocName<D::Span>>::Name> + Sized,
+    Self: Backend<D::Span> + BuiltinSymbols<Name = <Self as SymbolSource>::SymbolId> + Sized,
 {
     fn assemble<C: Codebase>(
         self,
@@ -58,7 +58,7 @@ where
 impl<B, D> Assemble<D> for B
 where
     D: DiagnosticsSystem,
-    B: Backend<D::Span> + BuiltinSymbols<Name = <Self as AllocName<D::Span>>::Name>,
+    B: Backend<D::Span> + BuiltinSymbols<Name = <Self as SymbolSource>::SymbolId>,
 {
 }
 

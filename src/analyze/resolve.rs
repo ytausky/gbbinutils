@@ -1,5 +1,7 @@
 use super::syntax::{IdentFactory, IdentSource};
 
+use crate::object::builder::SymbolSource;
+
 use std::collections::HashMap;
 
 #[cfg(test)]
@@ -8,9 +10,8 @@ pub use self::mock::*;
 #[cfg(test)]
 use crate::expr::{Atom, ExprOp};
 
-pub trait NameTable<I> {
+pub trait NameTable<I>: SymbolSource {
     type MacroId: Clone;
-    type SymbolId: Clone;
 
     fn get(&self, ident: &I) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>>;
     fn insert(&mut self, ident: I, entry: ResolvedName<Self::MacroId, Self::SymbolId>);
@@ -96,9 +97,12 @@ impl<MacroId, SymbolId> BasicNameTable<MacroId, SymbolId> {
     }
 }
 
+impl<MacroId: Clone, SymbolId: Clone> SymbolSource for BasicNameTable<MacroId, SymbolId> {
+    type SymbolId = SymbolId;
+}
+
 impl<MacroId: Clone, SymbolId: Clone> NameTable<String> for BasicNameTable<MacroId, SymbolId> {
     type MacroId = MacroId;
-    type SymbolId = SymbolId;
 
     fn get(&self, ident: &String) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
         self.table.get(ident).cloned()
@@ -140,11 +144,14 @@ impl<MacroId, SymbolId> BiLevelNameTable<MacroId, SymbolId> {
     }
 }
 
+impl<MacroId: Clone, SymbolId: Clone> SymbolSource for BiLevelNameTable<MacroId, SymbolId> {
+    type SymbolId = SymbolId;
+}
+
 impl<MacroId: Clone, SymbolId: Clone> NameTable<Ident<String>>
     for BiLevelNameTable<MacroId, SymbolId>
 {
     type MacroId = MacroId;
-    type SymbolId = SymbolId;
 
     fn get(&self, ident: &Ident<String>) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
         self.select_table(ident).get(&ident.name)
@@ -169,6 +176,8 @@ mod mock {
 
     use crate::log::Log;
 
+    use std::marker::PhantomData;
+
     pub struct MockNameTable<N, T> {
         names: N,
         log: Log<T>,
@@ -180,13 +189,16 @@ mod mock {
         }
     }
 
+    impl<N: SymbolSource, T> SymbolSource for MockNameTable<N, T> {
+        type SymbolId = N::SymbolId;
+    }
+
     impl<N, T> NameTable<String> for MockNameTable<N, T>
     where
         N: NameTable<String>,
         T: From<NameTableEvent<N::MacroId, N::SymbolId>>,
     {
         type MacroId = N::MacroId;
-        type SymbolId = N::SymbolId;
 
         fn get(&self, ident: &String) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
             self.names.get(ident)
@@ -214,11 +226,20 @@ mod mock {
         StartScope(String),
     }
 
-    pub struct FakeNameTable;
+    pub struct FakeNameTable<I>(PhantomData<I>);
 
-    impl<I: Clone> NameTable<I> for FakeNameTable {
-        type MacroId = ();
+    impl<I> FakeNameTable<I> {
+        pub fn new() -> Self {
+            Self(PhantomData)
+        }
+    }
+
+    impl<I: Clone> SymbolSource for FakeNameTable<I> {
         type SymbolId = I;
+    }
+
+    impl<I: Clone> NameTable<I> for FakeNameTable<I> {
+        type MacroId = ();
 
         fn get(&self, ident: &I) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
             Some(ResolvedName::Symbol(ident.clone()))

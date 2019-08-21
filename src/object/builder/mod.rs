@@ -10,11 +10,11 @@ use crate::BuiltinSymbols;
 mod lowering;
 
 pub(crate) trait Backend<S: Clone>: PartialBackend<S> + Sized {
-    type ConstBuilder: ValueBuilder<Self::Name, S, Parent = Self, Value = Self::Value>;
-    type SymbolBuilder: ValueBuilder<Self::Name, S, Parent = Self, Value = ()>;
+    type ConstBuilder: ValueBuilder<Self::SymbolId, S, Parent = Self, Value = Self::Value>;
+    type SymbolBuilder: ValueBuilder<Self::SymbolId, S, Parent = Self, Value = ()>;
 
     fn build_const(self) -> Self::ConstBuilder;
-    fn define_symbol(self, name: Self::Name, span: S) -> Self::SymbolBuilder;
+    fn define_symbol(self, name: Self::SymbolId, span: S) -> Self::SymbolBuilder;
 }
 
 pub(crate) trait PartialBackend<S: Clone>: AllocName<S> {
@@ -28,17 +28,19 @@ pub(crate) trait PartialBackend<S: Clone>: AllocName<S> {
     ) -> Option<bool>;
     fn reserve(&mut self, bytes: Self::Value);
     fn set_origin(&mut self, origin: Self::Value);
-    fn start_section(&mut self, name: Self::Name, span: S);
+    fn start_section(&mut self, name: Self::SymbolId, span: S);
 }
 
-pub trait AllocName<S: Clone> {
-    type Name: Clone;
+pub trait AllocName<S: Clone>: SymbolSource {
+    fn alloc_name(&mut self, span: S) -> Self::SymbolId;
+}
 
-    fn alloc_name(&mut self, span: S) -> Self::Name;
+pub trait SymbolSource {
+    type SymbolId: Clone;
 }
 
 pub trait ValueBuilder<N: Clone, S: Clone>:
-    AllocName<S, Name = N>
+    AllocName<S, SymbolId = N>
     + PushOp<LocationCounter, S>
     + PushOp<i32, S>
     + PushOp<Name<N>, S>
@@ -50,7 +52,7 @@ pub trait ValueBuilder<N: Clone, S: Clone>:
 }
 
 impl<T, N: Clone, S: Clone> ValueBuilder<N, S> for T where
-    Self: AllocName<S, Name = N>
+    Self: AllocName<S, SymbolId = N>
         + PushOp<LocationCounter, S>
         + PushOp<i32, S>
         + PushOp<Name<N>, S>
@@ -299,7 +301,7 @@ impl<'a, S: Clone> Backend<S> for ObjectBuilder<'a, S> {
         RelocContext::new(self)
     }
 
-    fn define_symbol(self, name: Self::Name, span: S) -> Self::SymbolBuilder {
+    fn define_symbol(self, name: Self::SymbolId, span: S) -> Self::SymbolBuilder {
         let location = self.context.vars.alloc();
         SymbolBuilder {
             parent: self,
@@ -389,10 +391,12 @@ impl<P, N, S: Clone> PushOp<Name<N>, S> for RelocContext<P, Expr<Atom<LocationCo
     }
 }
 
-impl<'a, S: Clone> AllocName<S> for RelocContext<ObjectBuilder<'a, S>, Const<S>> {
-    type Name = SymbolId;
+impl<'a, S: Clone> SymbolSource for RelocContext<ObjectBuilder<'a, S>, Const<S>> {
+    type SymbolId = SymbolId;
+}
 
-    fn alloc_name(&mut self, span: S) -> Self::Name {
+impl<'a, S: Clone> AllocName<S> for RelocContext<ObjectBuilder<'a, S>, Const<S>> {
+    fn alloc_name(&mut self, span: S) -> Self::SymbolId {
         self.parent.alloc_name(span)
     }
 }
@@ -413,10 +417,12 @@ pub(crate) struct SymbolBuilder<'a, S> {
     formula: Formula<S>,
 }
 
-impl<'a, S: Clone> AllocName<S> for SymbolBuilder<'a, S> {
-    type Name = SymbolId;
+impl<'a, S: Clone> SymbolSource for SymbolBuilder<'a, S> {
+    type SymbolId = SymbolId;
+}
 
-    fn alloc_name(&mut self, span: S) -> Self::Name {
+impl<'a, S: Clone> AllocName<S> for SymbolBuilder<'a, S> {
+    fn alloc_name(&mut self, span: S) -> Self::SymbolId {
         self.parent.alloc_name(span)
     }
 }
@@ -461,10 +467,12 @@ impl<'a, S> Finish for SymbolBuilder<'a, S> {
     }
 }
 
-impl<'a, S: Clone> AllocName<S> for ObjectBuilder<'a, S> {
-    type Name = SymbolId;
+impl<'a, S: Clone> SymbolSource for ObjectBuilder<'a, S> {
+    type SymbolId = SymbolId;
+}
 
-    fn alloc_name(&mut self, _span: S) -> Self::Name {
+impl<'a, S: Clone> AllocName<S> for ObjectBuilder<'a, S> {
+    fn alloc_name(&mut self, _span: S) -> Self::SymbolId {
         self.context.content.symbols.alloc().into()
     }
 }
@@ -529,53 +537,61 @@ pub mod mock {
     impl<A, T, S> Backend<S> for MockBackend<A, T>
     where
         A: AllocName<S>,
-        T: From<BackendEvent<A::Name, Expr<A::Name, S>>>,
+        T: From<BackendEvent<A::SymbolId, Expr<A::SymbolId, S>>>,
         S: Clone,
     {
-        type ConstBuilder = RelocContext<Self, Expr<A::Name, S>>;
+        type ConstBuilder = RelocContext<Self, Expr<A::SymbolId, S>>;
         type SymbolBuilder = SymbolBuilder<A, T, S>;
 
         fn build_const(self) -> Self::ConstBuilder {
             RelocContext::new(self)
         }
 
-        fn define_symbol(self, name: Self::Name, span: S) -> Self::SymbolBuilder {
+        fn define_symbol(self, name: Self::SymbolId, span: S) -> Self::SymbolBuilder {
             RelocContext::new((self, (name, span)))
         }
     }
 
     type SymbolBuilder<A, T, S> = RelocContext<
-        (MockBackend<A, T>, (<A as AllocName<S>>::Name, S)),
-        Expr<<A as AllocName<S>>::Name, S>,
+        (MockBackend<A, T>, (<A as SymbolSource>::SymbolId, S)),
+        Expr<<A as SymbolSource>::SymbolId, S>,
     >;
 
-    impl<A, T, S> AllocName<S> for RelocContext<MockBackend<A, T>, Expr<A::Name, S>>
+    impl<A, T, S> SymbolSource for RelocContext<MockBackend<A, T>, Expr<A::SymbolId, S>>
+    where
+        A: SymbolSource,
+        S: Clone,
+    {
+        type SymbolId = A::SymbolId;
+    }
+
+    impl<A, T, S> AllocName<S> for RelocContext<MockBackend<A, T>, Expr<A::SymbolId, S>>
     where
         A: AllocName<S>,
         S: Clone,
     {
-        type Name = A::Name;
-
-        fn alloc_name(&mut self, span: S) -> Self::Name {
+        fn alloc_name(&mut self, span: S) -> Self::SymbolId {
             self.parent.alloc_name(span)
         }
     }
 
-    impl<A: AllocName<S>, T, S: Clone> AllocName<S> for SymbolBuilder<A, T, S> {
-        type Name = A::Name;
+    impl<A: SymbolSource, T, S: Clone> SymbolSource for SymbolBuilder<A, T, S> {
+        type SymbolId = A::SymbolId;
+    }
 
-        fn alloc_name(&mut self, span: S) -> Self::Name {
+    impl<A: AllocName<S>, T, S: Clone> AllocName<S> for SymbolBuilder<A, T, S> {
+        fn alloc_name(&mut self, span: S) -> Self::SymbolId {
             self.parent.0.alloc_name(span)
         }
     }
 
-    impl<A, T, S> Finish for RelocContext<MockBackend<A, T>, Expr<A::Name, S>>
+    impl<A, T, S> Finish for RelocContext<MockBackend<A, T>, Expr<A::SymbolId, S>>
     where
         A: AllocName<S>,
         S: Clone,
     {
         type Parent = MockBackend<A, T>;
-        type Value = Expr<A::Name, S>;
+        type Value = Expr<A::SymbolId, S>;
 
         fn finish(self) -> (Self::Parent, Self::Value) {
             (self.parent, self.builder)
@@ -585,7 +601,7 @@ pub mod mock {
     impl<A, T, S> Finish for SymbolBuilder<A, T, S>
     where
         A: AllocName<S>,
-        T: From<BackendEvent<A::Name, Expr<A::Name, S>>>,
+        T: From<BackendEvent<A::SymbolId, Expr<A::SymbolId, S>>>,
         S: Clone,
     {
         type Parent = MockBackend<A, T>;
@@ -606,10 +622,12 @@ pub mod mock {
         }
     }
 
-    impl<A: AllocName<S>, T, S: Clone> AllocName<S> for MockBackend<A, T> {
-        type Name = A::Name;
+    impl<A: SymbolSource, T> SymbolSource for MockBackend<A, T> {
+        type SymbolId = A::SymbolId;
+    }
 
-        fn alloc_name(&mut self, span: S) -> Self::Name {
+    impl<A: AllocName<S>, T, S: Clone> AllocName<S> for MockBackend<A, T> {
+        fn alloc_name(&mut self, span: S) -> Self::SymbolId {
             self.alloc.alloc_name(span)
         }
     }
@@ -617,10 +635,10 @@ pub mod mock {
     impl<A, T, S> PartialBackend<S> for MockBackend<A, T>
     where
         A: AllocName<S>,
-        T: From<BackendEvent<A::Name, Expr<A::Name, S>>>,
+        T: From<BackendEvent<A::SymbolId, Expr<A::SymbolId, S>>>,
         S: Clone,
     {
-        type Value = Expr<A::Name, S>;
+        type Value = Expr<A::SymbolId, S>;
 
         fn emit_item(&mut self, item: Item<Self::Value>) {
             self.log.push(BackendEvent::EmitItem(item))
@@ -642,7 +660,7 @@ pub mod mock {
             self.log.push(BackendEvent::SetOrigin(origin))
         }
 
-        fn start_section(&mut self, name: A::Name, span: S) {
+        fn start_section(&mut self, name: A::SymbolId, span: S) {
             self.log.push(BackendEvent::StartSection(name, span))
         }
     }
@@ -661,10 +679,12 @@ pub mod mock {
         }
     }
 
-    impl<S: Clone> AllocName<S> for SerialIdAllocator {
-        type Name = usize;
+    impl SymbolSource for SerialIdAllocator {
+        type SymbolId = usize;
+    }
 
-        fn alloc_name(&mut self, _: S) -> Self::Name {
+    impl<S: Clone> AllocName<S> for SerialIdAllocator {
+        fn alloc_name(&mut self, _: S) -> Self::SymbolId {
             self.gen()
         }
     }
@@ -677,10 +697,12 @@ pub mod mock {
         }
     }
 
-    impl<I: Clone, S: Clone> AllocName<S> for PanickingIdAllocator<I> {
-        type Name = I;
+    impl<I: Clone> SymbolSource for PanickingIdAllocator<I> {
+        type SymbolId = I;
+    }
 
-        fn alloc_name(&mut self, _: S) -> Self::Name {
+    impl<I: Clone, S: Clone> AllocName<S> for PanickingIdAllocator<I> {
+        fn alloc_name(&mut self, _: S) -> Self::SymbolId {
             panic!("tried to allocate an ID")
         }
     }
