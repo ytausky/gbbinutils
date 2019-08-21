@@ -320,9 +320,9 @@ impl<U, B: SymbolSource, N, D> SymbolSource for SessionComponents<U, B, N, D> {
     type SymbolId = B::SymbolId;
 }
 
-impl<U, B: AllocName<S>, N, D, S: Clone> AllocName<S> for SessionComponents<U, B, N, D> {
-    fn alloc_name(&mut self, span: S) -> Self::SymbolId {
-        self.backend.alloc_name(span)
+impl<U, B: AllocSymbol<S>, N, D, S: Clone> AllocSymbol<S> for SessionComponents<U, B, N, D> {
+    fn alloc_symbol(&mut self, span: S) -> Self::SymbolId {
+        self.backend.alloc_symbol(span)
     }
 }
 
@@ -364,7 +364,7 @@ where
 
 impl<U, B, N, D, S> PushOp<Name<B::SymbolId>, S> for SessionComponents<U, B, N, D>
 where
-    B: AllocName<S> + PushOp<Name<<B as SymbolSource>::SymbolId>, S>,
+    B: AllocSymbol<S> + PushOp<Name<<B as SymbolSource>::SymbolId>, S>,
     S: Clone,
 {
     fn push_op(&mut self, name: Name<B::SymbolId>, span: S) {
@@ -499,7 +499,7 @@ mod mock {
 
     impl<B, N, T, S> Session for MockSession<B, N, T, S>
     where
-        B: AllocName<S>,
+        B: AllocSymbol<S>,
         N: NameTable<String, SymbolId = B::SymbolId, MacroId = MockMacroId>,
         T: From<SessionEvent>,
         T: From<BackendEvent<B::SymbolId, Expr<B::SymbolId, S>>>,
@@ -551,7 +551,7 @@ mod mock {
 
     impl<A, N, T, S> MockBuilder<A, N, T, S>
     where
-        A: AllocName<S>,
+        A: AllocSymbol<S>,
         N: NameTable<String>,
         T: From<BackendEvent<A::SymbolId, Expr<A::SymbolId, S>>>,
         S: Clone,
@@ -645,7 +645,7 @@ mod tests {
     fn define_label() {
         let label = "label";
         let log = Fixture::default().log_session(|mut session| {
-            let id = session.alloc_name(());
+            let id = session.alloc_symbol(());
             session.insert(label.into(), ResolvedName::Symbol(id));
             let mut builder = session.define_symbol(id, ());
             builder.push_op(LocationCounter, ());
@@ -665,7 +665,7 @@ mod tests {
     fn start_section() {
         let name: String = "my_section".into();
         let log = Fixture::default().log_session(|mut session| {
-            let id = session.alloc_name(());
+            let id = session.alloc_symbol(());
             session.insert(name.clone(), ResolvedName::Symbol(id));
             session.start_section(id, ())
         });

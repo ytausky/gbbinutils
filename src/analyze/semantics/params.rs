@@ -3,7 +3,7 @@ use super::{Params, PushOp};
 use crate::analyze::resolve::{NameTable, ResolvedName};
 use crate::diag::{Diagnostics, Message};
 use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
-use crate::object::builder::{AllocName, Finish, Name, SymbolSource};
+use crate::object::builder::{AllocSymbol, Finish, Name, SymbolSource};
 
 pub(super) trait RelocLookup<I, S> {
     type RelocId;
@@ -13,7 +13,7 @@ pub(super) trait RelocLookup<I, S> {
 
 impl<T, I, S> RelocLookup<I, S> for T
 where
-    T: AllocName<S> + NameTable<I> + Diagnostics<S>,
+    T: AllocSymbol<S> + NameTable<I> + Diagnostics<S>,
     S: Clone,
 {
     type RelocId = T::SymbolId;
@@ -22,13 +22,13 @@ where
         match self.get(&name) {
             Some(ResolvedName::Symbol(id)) => id.clone(),
             None => {
-                let id = self.alloc_name(span.clone());
+                let id = self.alloc_symbol(span.clone());
                 self.insert(name, ResolvedName::Symbol(id.clone()));
                 id
             }
             Some(ResolvedName::Macro(_)) => {
                 self.emit_diag(Message::MacroNameInExpr.at(span.clone()));
-                self.alloc_name(span)
+                self.alloc_symbol(span)
             }
         }
     }
@@ -119,7 +119,7 @@ pub(super) struct NameResolver;
 
 impl<B, I, S> NameHandler<B, I, S> for NameResolver
 where
-    B: AllocName<S>
+    B: AllocSymbol<S>
         + NameTable<I>
         + PushOp<Name<<B as SymbolSource>::SymbolId>, S>
         + Diagnostics<S>,

@@ -229,7 +229,7 @@ mod tests {
         let mut linkable = Object::new();
         let mut builder = ObjectBuilder::new(&mut linkable);
         builder.set_origin(addr.into());
-        let symbol_id = builder.alloc_name(());
+        let symbol_id = builder.alloc_symbol(());
         let mut builder = builder.define_symbol(symbol_id, ());
         builder.push_op(LocationCounter, ());
         builder.finish();
@@ -271,7 +271,7 @@ mod tests {
     #[test]
     fn ld_inline_addr_with_symbol_after_instruction_has_size_three() {
         assert_section_size(3, |mut builder| {
-            let name = builder.alloc_name(());
+            let name = builder.alloc_symbol(());
             builder.emit_item(Item::CpuInstr(CpuInstr::Ld(Ld::Special(
                 SpecialLd::InlineAddr(Atom::Name(name).into()),
                 Direction::IntoA,
@@ -288,7 +288,7 @@ mod tests {
         let mut object_builder = ObjectBuilder::new(&mut object);
 
         // section my_section
-        let name = object_builder.alloc_name(());
+        let name = object_builder.alloc_symbol(());
         object_builder.start_section(name, ());
 
         // org $1337
@@ -329,7 +329,7 @@ mod tests {
         object_builder.reserve(bytes_const);
 
         // label dw label
-        let label = object_builder.alloc_name(());
+        let label = object_builder.alloc_symbol(());
         let mut symbol_builder = object_builder.define_symbol(label, ());
         symbol_builder.push_op(LocationCounter, ());
         let (object_builder, ()) = symbol_builder.finish();
@@ -345,7 +345,7 @@ mod tests {
     fn assert_section_size(expected: impl Into<Num>, f: impl FnOnce(ObjectBuilder<()>)) {
         let mut object = Object::new();
         let mut builder = ObjectBuilder::new(&mut object);
-        let name = builder.alloc_name(());
+        let name = builder.alloc_symbol(());
         builder.start_section(name, ());
         f(builder);
         object.vars.resolve(&object.content);

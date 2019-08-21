@@ -17,7 +17,7 @@ pub(crate) trait Backend<S: Clone>: PartialBackend<S> + Sized {
     fn define_symbol(self, name: Self::SymbolId, span: S) -> Self::SymbolBuilder;
 }
 
-pub(crate) trait PartialBackend<S: Clone>: AllocName<S> {
+pub(crate) trait PartialBackend<S: Clone>: AllocSymbol<S> {
     type Value: Source<Span = S>;
 
     fn emit_item(&mut self, item: Item<Self::Value>);
@@ -31,8 +31,8 @@ pub(crate) trait PartialBackend<S: Clone>: AllocName<S> {
     fn start_section(&mut self, name: Self::SymbolId, span: S);
 }
 
-pub trait AllocName<S: Clone>: SymbolSource {
-    fn alloc_name(&mut self, span: S) -> Self::SymbolId;
+pub trait AllocSymbol<S: Clone>: SymbolSource {
+    fn alloc_symbol(&mut self, span: S) -> Self::SymbolId;
 }
 
 pub trait SymbolSource {
@@ -40,7 +40,7 @@ pub trait SymbolSource {
 }
 
 pub trait ValueBuilder<N: Clone, S: Clone>:
-    AllocName<S, SymbolId = N>
+    AllocSymbol<S, SymbolId = N>
     + PushOp<LocationCounter, S>
     + PushOp<i32, S>
     + PushOp<Name<N>, S>
@@ -52,7 +52,7 @@ pub trait ValueBuilder<N: Clone, S: Clone>:
 }
 
 impl<T, N: Clone, S: Clone> ValueBuilder<N, S> for T where
-    Self: AllocName<S, SymbolId = N>
+    Self: AllocSymbol<S, SymbolId = N>
         + PushOp<LocationCounter, S>
         + PushOp<i32, S>
         + PushOp<Name<N>, S>
@@ -395,9 +395,9 @@ impl<'a, S: Clone> SymbolSource for RelocContext<ObjectBuilder<'a, S>, Const<S>>
     type SymbolId = SymbolId;
 }
 
-impl<'a, S: Clone> AllocName<S> for RelocContext<ObjectBuilder<'a, S>, Const<S>> {
-    fn alloc_name(&mut self, span: S) -> Self::SymbolId {
-        self.parent.alloc_name(span)
+impl<'a, S: Clone> AllocSymbol<S> for RelocContext<ObjectBuilder<'a, S>, Const<S>> {
+    fn alloc_symbol(&mut self, span: S) -> Self::SymbolId {
+        self.parent.alloc_symbol(span)
     }
 }
 
@@ -421,9 +421,9 @@ impl<'a, S: Clone> SymbolSource for SymbolBuilder<'a, S> {
     type SymbolId = SymbolId;
 }
 
-impl<'a, S: Clone> AllocName<S> for SymbolBuilder<'a, S> {
-    fn alloc_name(&mut self, span: S) -> Self::SymbolId {
-        self.parent.alloc_name(span)
+impl<'a, S: Clone> AllocSymbol<S> for SymbolBuilder<'a, S> {
+    fn alloc_symbol(&mut self, span: S) -> Self::SymbolId {
+        self.parent.alloc_symbol(span)
     }
 }
 
@@ -471,8 +471,8 @@ impl<'a, S: Clone> SymbolSource for ObjectBuilder<'a, S> {
     type SymbolId = SymbolId;
 }
 
-impl<'a, S: Clone> AllocName<S> for ObjectBuilder<'a, S> {
-    fn alloc_name(&mut self, _span: S) -> Self::SymbolId {
+impl<'a, S: Clone> AllocSymbol<S> for ObjectBuilder<'a, S> {
+    fn alloc_symbol(&mut self, _span: S) -> Self::SymbolId {
         self.context.content.symbols.alloc().into()
     }
 }
@@ -536,7 +536,7 @@ pub mod mock {
 
     impl<A, T, S> Backend<S> for MockBackend<A, T>
     where
-        A: AllocName<S>,
+        A: AllocSymbol<S>,
         T: From<BackendEvent<A::SymbolId, Expr<A::SymbolId, S>>>,
         S: Clone,
     {
@@ -565,13 +565,13 @@ pub mod mock {
         type SymbolId = A::SymbolId;
     }
 
-    impl<A, T, S> AllocName<S> for RelocContext<MockBackend<A, T>, Expr<A::SymbolId, S>>
+    impl<A, T, S> AllocSymbol<S> for RelocContext<MockBackend<A, T>, Expr<A::SymbolId, S>>
     where
-        A: AllocName<S>,
+        A: AllocSymbol<S>,
         S: Clone,
     {
-        fn alloc_name(&mut self, span: S) -> Self::SymbolId {
-            self.parent.alloc_name(span)
+        fn alloc_symbol(&mut self, span: S) -> Self::SymbolId {
+            self.parent.alloc_symbol(span)
         }
     }
 
@@ -579,15 +579,15 @@ pub mod mock {
         type SymbolId = A::SymbolId;
     }
 
-    impl<A: AllocName<S>, T, S: Clone> AllocName<S> for SymbolBuilder<A, T, S> {
-        fn alloc_name(&mut self, span: S) -> Self::SymbolId {
-            self.parent.0.alloc_name(span)
+    impl<A: AllocSymbol<S>, T, S: Clone> AllocSymbol<S> for SymbolBuilder<A, T, S> {
+        fn alloc_symbol(&mut self, span: S) -> Self::SymbolId {
+            self.parent.0.alloc_symbol(span)
         }
     }
 
     impl<A, T, S> Finish for RelocContext<MockBackend<A, T>, Expr<A::SymbolId, S>>
     where
-        A: AllocName<S>,
+        A: AllocSymbol<S>,
         S: Clone,
     {
         type Parent = MockBackend<A, T>;
@@ -600,7 +600,7 @@ pub mod mock {
 
     impl<A, T, S> Finish for SymbolBuilder<A, T, S>
     where
-        A: AllocName<S>,
+        A: AllocSymbol<S>,
         T: From<BackendEvent<A::SymbolId, Expr<A::SymbolId, S>>>,
         S: Clone,
     {
@@ -626,15 +626,15 @@ pub mod mock {
         type SymbolId = A::SymbolId;
     }
 
-    impl<A: AllocName<S>, T, S: Clone> AllocName<S> for MockBackend<A, T> {
-        fn alloc_name(&mut self, span: S) -> Self::SymbolId {
-            self.alloc.alloc_name(span)
+    impl<A: AllocSymbol<S>, T, S: Clone> AllocSymbol<S> for MockBackend<A, T> {
+        fn alloc_symbol(&mut self, span: S) -> Self::SymbolId {
+            self.alloc.alloc_symbol(span)
         }
     }
 
     impl<A, T, S> PartialBackend<S> for MockBackend<A, T>
     where
-        A: AllocName<S>,
+        A: AllocSymbol<S>,
         T: From<BackendEvent<A::SymbolId, Expr<A::SymbolId, S>>>,
         S: Clone,
     {
@@ -683,8 +683,8 @@ pub mod mock {
         type SymbolId = usize;
     }
 
-    impl<S: Clone> AllocName<S> for SerialIdAllocator {
-        fn alloc_name(&mut self, _: S) -> Self::SymbolId {
+    impl<S: Clone> AllocSymbol<S> for SerialIdAllocator {
+        fn alloc_symbol(&mut self, _: S) -> Self::SymbolId {
             self.gen()
         }
     }
@@ -701,8 +701,8 @@ pub mod mock {
         type SymbolId = I;
     }
 
-    impl<I: Clone, S: Clone> AllocName<S> for PanickingIdAllocator<I> {
-        fn alloc_name(&mut self, _: S) -> Self::SymbolId {
+    impl<I: Clone, S: Clone> AllocSymbol<S> for PanickingIdAllocator<I> {
+        fn alloc_symbol(&mut self, _: S) -> Self::SymbolId {
             panic!("tried to allocate an ID")
         }
     }
@@ -746,7 +746,7 @@ mod tests {
     fn start_section_adds_named_section() {
         let mut wrapped_name = None;
         let object = build_object(|mut builder| {
-            let name = builder.alloc_name(());
+            let name = builder.alloc_symbol(());
             builder.start_section(name, ());
             wrapped_name = Some(name);
         });
@@ -763,7 +763,7 @@ mod tests {
     fn set_origin_in_section_prelude_sets_origin() {
         let origin: Const<_> = 0x0150.into();
         let object = build_object(|mut builder| {
-            let name = builder.alloc_name(());
+            let name = builder.alloc_symbol(());
             builder.start_section(name, ());
             builder.set_origin(origin.clone())
         });
@@ -774,7 +774,7 @@ mod tests {
     fn push_node_into_named_section() {
         let node = Node::Byte(0x42);
         let object = build_object(|mut builder| {
-            let name = builder.alloc_name(());
+            let name = builder.alloc_symbol(());
             builder.start_section(name, ());
             builder.push(node.clone())
         });
@@ -847,7 +847,7 @@ mod tests {
     fn diagnose_unresolved_symbol() {
         let name = "ident";
         let (_, diagnostics) = with_object_builder(|mut builder| {
-            let symbol_id = builder.alloc_name(name.into());
+            let symbol_id = builder.alloc_symbol(name.into());
             let mut value: Const<_> = Default::default();
             value.push_op(symbol_id, name.into());
             builder.emit_item(word_item(value))
@@ -861,10 +861,10 @@ mod tests {
         let name2 = "ident2";
         let (_, diagnostics) = with_object_builder(|mut builder| {
             let value = {
-                let id1 = builder.alloc_name(name1.into());
+                let id1 = builder.alloc_symbol(name1.into());
                 let mut value: Const<_> = Default::default();
                 value.push_op(id1, name1.into());
-                let id2 = builder.alloc_name(name2.into());
+                let id2 = builder.alloc_symbol(name2.into());
                 value.push_op(id2, name2.into());
                 value.push_op(BinOp::Minus, "diff".into());
                 value
@@ -877,7 +877,7 @@ mod tests {
     #[test]
     fn emit_defined_symbol() {
         let (object, diagnostics) = with_object_builder(|mut builder| {
-            let symbol_id = builder.alloc_name(());
+            let symbol_id = builder.alloc_symbol(());
             let mut builder = builder.define_symbol(symbol_id, ());
             builder.push_op(LocationCounter, ());
             let (mut builder, _) = builder.finish();
@@ -892,7 +892,7 @@ mod tests {
     #[test]
     fn emit_symbol_defined_after_use() {
         let (object, diagnostics) = with_object_builder(|mut builder| {
-            let symbol_id = builder.alloc_name(());
+            let symbol_id = builder.alloc_symbol(());
             let mut value: Const<_> = Default::default();
             value.push_op(symbol_id, ());
             builder.emit_item(word_item(value));
