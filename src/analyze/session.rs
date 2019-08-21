@@ -498,10 +498,6 @@ mod mock {
     impl<T, S>
         MockSession<SerialIdAllocator, BasicNameTable<&'static Keyword, MockMacroId, usize>, T, S>
     {
-        pub fn with_log(log: Log<T>) -> Self {
-            Self::with_name_table(SerialIdAllocator::new(), BasicNameTable::new(), log)
-        }
-
         pub fn with_predefined_names<I>(log: Log<T>, entries: I) -> Self
         where
             I: IntoIterator<Item = (String, ResolvedName<&'static Keyword, MockMacroId, usize>)>,

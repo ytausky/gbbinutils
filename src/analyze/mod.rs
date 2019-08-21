@@ -1,5 +1,5 @@
 use self::resolve::{BiLevelNameTable, DefaultIdentFactory};
-use self::semantics::TokenStreamState;
+use self::semantics::{TokenStreamState, KEYWORDS};
 use self::session::*;
 use self::strings::FakeStringInterner;
 use self::syntax::parser::DefaultParserFactory;
@@ -41,6 +41,12 @@ where
         let mut parser_factory = DefaultParserFactory;
         let mut interner = FakeStringInterner;
         let mut names = BiLevelNameTable::new();
+        for (ident, keyword) in KEYWORDS {
+            names.insert(
+                DefaultIdentFactory.mk_ident(ident),
+                ResolvedName::Keyword(keyword),
+            )
+        }
         for (string, name) in self.builtin_symbols() {
             names.insert(
                 DefaultIdentFactory.mk_ident(string),

@@ -5,18 +5,18 @@ use std::io;
 #[test]
 fn undefined_global_names_do_not_interfere_with_local_names() {
     let src = r"
-global  and     a
-        jr      z, _skip
-        call    other
-_skip   nop
+GLOBAL  AND     A
+        JR      Z, _SKIP
+        CALL    OTHER
+_SKIP   NOP
 
-other   ret";
+OTHER   RET";
     let binary = [
-        0xa7, // and a
-        0x28, 0x03, // jr z, _skip
-        0xcd, 0x07, 0x00, // call other
-        0x00, // nop
-        0xc9, // ret
+        0xa7, // AND A
+        0x28, 0x03, // JR Z, _SKIP
+        0xcd, 0x07, 0x00, // CALL OTHER
+        0x00, // NOP
+        0xc9, // RET
     ];
     let (assembled, diagnostics) = assemble_snippet(src);
     assert_eq!(diagnostics, []);

@@ -12,11 +12,11 @@ use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::expr::{BinOp, FnCall, LocationCounter};
 use crate::object::builder::{Finish, Item, Name, PushOp};
 
-pub(super) mod cpu_instr;
+pub(in crate::analyze::semantics) mod cpu_instr;
+pub(in crate::analyze::semantics) mod directive;
+pub(in crate::analyze::semantics) mod operand;
 
 mod arg;
-mod directive;
-mod operand;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(in crate::analyze) enum BuiltinInstr {

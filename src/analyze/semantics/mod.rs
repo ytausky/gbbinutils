@@ -1,3 +1,5 @@
+pub(super) use self::keywords::KEYWORDS;
+
 use self::instr_line::{BuiltinInstr, InstrLineSemantics, InstrLineState, OperandSymbol};
 use self::params::*;
 use self::token_line::{TokenContext, TokenContextFinalizationSemantics, TokenLineSemantics};
@@ -22,6 +24,7 @@ macro_rules! set_state {
 }
 
 mod instr_line;
+mod keywords;
 mod params;
 mod token_line;
 
@@ -634,9 +637,7 @@ mod tests {
         F: FnOnce(TestTokenStreamSemantics<S>) -> TestTokenStreamSemantics<S>,
         S: Clone + Debug + Merge,
     {
-        with_log(|log| {
-            f(TokenStreamSemantics::new(MockSession::with_log(log)));
-        })
+        log_with_predefined_names(std::iter::empty(), f)
     }
 
     pub(super) fn log_with_predefined_names<I, F, S>(entries: I, f: F) -> Vec<TestOperation<S>>
@@ -647,7 +648,13 @@ mod tests {
     {
         with_log(|log| {
             f(TokenStreamSemantics::new(
-                MockSession::with_predefined_names(log, entries),
+                MockSession::with_predefined_names(
+                    log,
+                    KEYWORDS
+                        .iter()
+                        .map(|(ident, keyword)| (ident.to_string(), ResolvedName::Keyword(keyword)))
+                        .chain(entries),
+                ),
             ));
         })
     }

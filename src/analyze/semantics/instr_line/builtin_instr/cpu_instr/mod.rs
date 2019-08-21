@@ -6,7 +6,7 @@ use crate::diag::span::Source;
 use crate::diag::*;
 use crate::object::builder::*;
 
-pub(in super::super) mod mnemonic;
+pub(in crate::analyze::semantics) mod mnemonic;
 
 mod branch;
 mod ld;

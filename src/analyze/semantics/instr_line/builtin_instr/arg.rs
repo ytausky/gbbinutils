@@ -1,5 +1,7 @@
 use super::{BuiltinInstrSemantics, BuiltinInstrState, OperandSymbol, SemanticActions};
 
+use crate::analyze::resolve::ResolvedName;
+use crate::analyze::semantics::Keyword;
 use crate::analyze::session::Session;
 use crate::analyze::syntax::actions::*;
 use crate::analyze::{IdentSource, Literal, StringSource};
@@ -50,16 +52,21 @@ impl<S: Session> ArgFinalizer for ArgSemantics<S> {
     }
 }
 
-impl<S: Session> ArgActions<S::Ident, Literal<S::StringRef>, S::Span> for ArgSemantics<S> {
+impl<S> ArgActions<S::Ident, Literal<S::StringRef>, S::Span> for ArgSemantics<S>
+where
+    S: Session<Keyword = &'static Keyword>,
+{
     fn act_on_atom(&mut self, atom: ExprAtom<S::Ident, Literal<S::StringRef>>, span: S::Span) {
         self.state.stack.push(Arg {
             variant: ArgVariant::Atom(match atom {
                 ExprAtom::Error => ArgAtom::Error,
-                ExprAtom::Ident(ident) => OPERAND_SYMBOLS
-                    .iter()
-                    .find(|(spelling, _)| spelling.eq_ignore_ascii_case(ident.as_ref()))
-                    .map(|(_, symbol)| ArgAtom::OperandSymbol(*symbol))
-                    .unwrap_or_else(|| ArgAtom::Ident(ident)),
+                ExprAtom::Ident(ident) => match self.session.get(&ident) {
+                    Some(ResolvedName::Keyword(Keyword::Operand(operand))) => {
+                        ArgAtom::OperandSymbol(*operand)
+                    }
+                    Some(ResolvedName::Keyword(_)) => unimplemented!(),
+                    _ => ArgAtom::Ident(ident),
+                },
                 ExprAtom::Literal(literal) => ArgAtom::Literal(literal),
                 ExprAtom::LocationCounter => ArgAtom::LocationCounter,
             }),
@@ -159,23 +166,3 @@ impl<I, R, S: Clone> Source for Arg<I, R, S> {
         self.span.clone()
     }
 }
-
-const OPERAND_SYMBOLS: &[(&str, OperandSymbol)] = &[
-    ("a", OperandSymbol::A),
-    ("af", OperandSymbol::Af),
-    ("b", OperandSymbol::B),
-    ("bc", OperandSymbol::Bc),
-    ("c", OperandSymbol::C),
-    ("d", OperandSymbol::D),
-    ("de", OperandSymbol::De),
-    ("e", OperandSymbol::E),
-    ("h", OperandSymbol::H),
-    ("hl", OperandSymbol::Hl),
-    ("hld", OperandSymbol::Hld),
-    ("hli", OperandSymbol::Hli),
-    ("l", OperandSymbol::L),
-    ("nc", OperandSymbol::Nc),
-    ("nz", OperandSymbol::Nz),
-    ("sp", OperandSymbol::Sp),
-    ("z", OperandSymbol::Z),
-];

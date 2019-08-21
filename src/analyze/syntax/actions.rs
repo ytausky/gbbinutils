@@ -131,9 +131,6 @@ pub(in crate::analyze) enum InstrRule<C, M, E> {
     Error(E),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(in crate::analyze) enum Keyword {}
-
 #[cfg(test)]
 impl<C, M, E> InstrRule<C, M, E> {
     pub fn into_builtin_instr(self) -> C {

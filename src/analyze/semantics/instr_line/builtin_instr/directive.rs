@@ -207,7 +207,6 @@ mod tests {
     use crate::analyze::syntax::actions::*;
     use crate::codebase::CodebaseError;
     use crate::expr::{Atom, ParamId};
-    use crate::log::with_log;
     use crate::object::builder::mock::BackendEvent;
 
     use std::borrow::Borrow;
@@ -336,17 +335,16 @@ mod tests {
     #[test]
     fn include_file_with_invalid_utf8() {
         let name = "invalid_utf8.s";
-        let log = with_log(|log| {
-            let mut session = MockSession::with_log(log);
-            session.fail(CodebaseError::Utf8Error);
-            let mut context = TokenStreamSemantics::new(session)
+        let log = collect_semantic_actions(|mut actions| {
+            actions.session.fail(CodebaseError::Utf8Error);
+            let mut context = actions
                 .will_parse_line()
                 .into_instr_line()
                 .will_parse_instr("INCLUDE".into(), ())
                 .into_builtin_instr()
                 .will_parse_arg();
             context.act_on_atom(ExprAtom::Literal(Literal::String(name.into())), ());
-            context.did_parse_arg().did_parse_instr().did_parse_line(());
+            context.did_parse_arg().did_parse_instr().did_parse_line(())
         });
         assert_eq!(
             log,
@@ -361,20 +359,19 @@ mod tests {
     fn include_nonexistent_file() {
         let name = "nonexistent.s";
         let message = "some message";
-        let log = with_log(|log| {
-            let mut session = MockSession::with_log(log);
-            session.fail(CodebaseError::IoError(io::Error::new(
+        let log = collect_semantic_actions(|mut actions| {
+            actions.session.fail(CodebaseError::IoError(io::Error::new(
                 io::ErrorKind::NotFound,
                 message,
             )));
-            let mut context = TokenStreamSemantics::new(session)
+            let mut context = actions
                 .will_parse_line()
                 .into_instr_line()
                 .will_parse_instr("INCLUDE".into(), ())
                 .into_builtin_instr()
                 .will_parse_arg();
             context.act_on_atom(ExprAtom::Literal(Literal::String(name.into())), ());
-            context.did_parse_arg().did_parse_instr().did_parse_line(());
+            context.did_parse_arg().did_parse_instr().did_parse_line(())
         });
         assert_eq!(
             log,
