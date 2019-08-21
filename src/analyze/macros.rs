@@ -1,4 +1,4 @@
-use crate::analysis::Token;
+use crate::analyze::Token;
 use crate::diag::span::*;
 
 use std::rc::Rc;
@@ -54,7 +54,7 @@ impl<I, L, H: Clone> DefineMacro<I, Token<I, L>, H> for MacroTable<I, L, H> {
     }
 }
 
-pub(in crate::analysis) struct MacroDef<I, T, S> {
+pub(in crate::analyze) struct MacroDef<I, T, S> {
     tokens: Rc<MacroDefTokens<I, T>>,
     spans: S,
 }

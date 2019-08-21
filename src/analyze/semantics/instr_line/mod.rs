@@ -19,9 +19,9 @@ mod builtin_instr;
 mod label;
 mod macro_instr;
 
-pub(in crate::analysis) type InstrLineSemantics<S> = SemanticActions<InstrLineState<S>, S>;
+pub(in crate::analyze) type InstrLineSemantics<S> = SemanticActions<InstrLineState<S>, S>;
 
-pub(in crate::analysis) struct InstrLineState<S: Session> {
+pub(in crate::analyze) struct InstrLineState<S: Session> {
     pub label: Option<Label<S::Ident, S::Span>>,
 }
 

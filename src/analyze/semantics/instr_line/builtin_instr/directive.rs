@@ -1,16 +1,16 @@
 use super::*;
 
-use crate::analysis::semantics::instr_line::Label;
-use crate::analysis::semantics::params::RelocLookup;
-use crate::analysis::semantics::token_line::{MacroDefState, TokenContext, TokenLineSemantics};
-use crate::analysis::semantics::TokenStreamState;
-use crate::analysis::session::Session;
-use crate::analysis::Literal;
+use crate::analyze::semantics::instr_line::Label;
+use crate::analyze::semantics::params::RelocLookup;
+use crate::analyze::semantics::token_line::{MacroDefState, TokenContext, TokenLineSemantics};
+use crate::analyze::semantics::TokenStreamState;
+use crate::analyze::session::Session;
+use crate::analyze::Literal;
 use crate::diag::*;
 use crate::object::builder::{Item, Width};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(in crate::analysis) enum Directive {
+pub(in crate::analyze) enum Directive {
     Db,
     Ds,
     Dw,
@@ -197,11 +197,11 @@ fn single_arg<T, D: Diagnostics<S>, S>(
 mod tests {
     use super::*;
 
-    use crate::analysis::resolve::{NameTableEvent, ResolvedName};
-    use crate::analysis::semantics::instr_line::builtin_instr;
-    use crate::analysis::semantics::tests::*;
-    use crate::analysis::session::SessionEvent;
-    use crate::analysis::syntax::actions::*;
+    use crate::analyze::resolve::{NameTableEvent, ResolvedName};
+    use crate::analyze::semantics::instr_line::builtin_instr;
+    use crate::analyze::semantics::tests::*;
+    use crate::analyze::session::SessionEvent;
+    use crate::analyze::syntax::actions::*;
     use crate::codebase::CodebaseError;
     use crate::expr::{Atom, ParamId};
     use crate::log::with_log;

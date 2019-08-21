@@ -325,7 +325,7 @@ impl<V: Source> From<Nullary> for CpuInstr<V> {
 
 #[cfg(test)]
 mod tests {
-    pub use crate::analysis::semantics::instr_line::builtin_instr::OperandSymbol::*;
+    pub use crate::analyze::semantics::instr_line::builtin_instr::OperandSymbol::*;
     pub(crate) use crate::diag::Message;
     pub use crate::span::{MergeSpans, SpanSource};
 
@@ -334,8 +334,8 @@ mod tests {
     use super::mnemonic::*;
     use super::*;
 
-    use crate::analysis::semantics::instr_line::builtin_instr::*;
-    use crate::analysis::Literal;
+    use crate::analyze::semantics::instr_line::builtin_instr::*;
+    use crate::analyze::Literal;
     use crate::expr::{Atom, LocationCounter};
 
     #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -765,8 +765,8 @@ mod tests {
     where
         I: IntoIterator<Item = Input>,
     {
-        use crate::analysis::semantics::instr_line::builtin_instr::operand::analyze_operand;
-        use crate::analysis::session::{MockBuilder, MockSession};
+        use crate::analyze::semantics::instr_line::builtin_instr::operand::analyze_operand;
+        use crate::analyze::session::{MockBuilder, MockSession};
 
         let mut result = None;
         let log = crate::log::with_log(|log| {

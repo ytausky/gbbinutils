@@ -1,6 +1,6 @@
 use super::{Params, PushOp};
 
-use crate::analysis::resolve::{NameTable, ResolvedName};
+use crate::analyze::resolve::{NameTable, ResolvedName};
 use crate::diag::{Diagnostics, Message};
 use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
 use crate::object::builder::{AllocName, Finish, Name};
@@ -168,8 +168,8 @@ delegate_diagnostics! {
 mod tests {
     use super::*;
 
-    use crate::analysis::resolve::NameTableEvent;
-    use crate::analysis::session::MockBuilder;
+    use crate::analyze::resolve::NameTableEvent;
+    use crate::analyze::session::MockBuilder;
     use crate::diag::{DiagnosticsEvent, MockSpan};
     use crate::expr::{Atom, ParamId};
     use crate::log::Log;

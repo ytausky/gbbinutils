@@ -409,7 +409,7 @@ impl_push_op_for_session_components! {FnCall}
 mod mock {
     use super::*;
 
-    use crate::analysis::resolve::{BasicNameTable, FakeNameTable, MockNameTable, NameTableEvent};
+    use crate::analyze::resolve::{BasicNameTable, FakeNameTable, MockNameTable, NameTableEvent};
     use crate::diag::{DiagnosticsEvent, MockDiagnostics};
     use crate::expr::{Atom, LocationCounter};
     use crate::log::Log;
@@ -426,14 +426,14 @@ mod mock {
         InvokeMacro(MockMacroId, Vec<Vec<SemanticToken<String, String>>>),
     }
 
-    pub(in crate::analysis) type MockSession<A, N, T, S> = SessionComponents<
+    pub(in crate::analyze) type MockSession<A, N, T, S> = SessionComponents<
         MockUpstream<T, S>,
         MockBackend<A, T>,
         Box<MockNameTable<N, T>>,
         Box<MockDiagnostics<T, S>>,
     >;
 
-    pub(in crate::analysis) struct MockUpstream<T, S> {
+    pub(in crate::analyze) struct MockUpstream<T, S> {
         id_gen: SerialIdAllocator,
         log: Log<T>,
         error: Option<CodebaseError>,
@@ -539,7 +539,7 @@ mod mock {
         }
     }
 
-    pub(in crate::analysis) type MockBuilder<A, N, T, S> = SessionComponents<
+    pub(in crate::analyze) type MockBuilder<A, N, T, S> = SessionComponents<
         (),
         RelocContext<MockBackend<A, T>, Expr<<A as AllocName<S>>::Name, S>>,
         Box<MockNameTable<N, T>>,
@@ -601,11 +601,11 @@ mod tests {
 
     use super::MacroId;
 
-    use crate::analysis::resolve::{BasicNameTable, NameTableEvent};
-    use crate::analysis::syntax::actions::mock::{IdentKind, TokenStreamActionCollector};
-    use crate::analysis::syntax::parser::mock::*;
-    use crate::analysis::syntax::*;
-    use crate::analysis::{Literal, MockCodebase};
+    use crate::analyze::resolve::{BasicNameTable, NameTableEvent};
+    use crate::analyze::syntax::actions::mock::{IdentKind, TokenStreamActionCollector};
+    use crate::analyze::syntax::parser::mock::*;
+    use crate::analyze::syntax::*;
+    use crate::analyze::{Literal, MockCodebase};
     use crate::diag::DiagnosticsEvent;
     use crate::expr::{Atom, BinOp, LocationCounter};
     use crate::log::*;
@@ -802,11 +802,11 @@ mod tests {
         });
     }
 
-    type MockParserFactory<S> = crate::analysis::syntax::parser::mock::MockParserFactory<Event<S>>;
+    type MockParserFactory<S> = crate::analyze::syntax::parser::mock::MockParserFactory<Event<S>>;
     type MockBackend<S> = crate::object::builder::mock::MockBackend<SerialIdAllocator, Event<S>>;
     type MockDiagnosticsSystem<S> = crate::diag::MockDiagnosticsSystem<Event<S>, S>;
     type MockNameTable<S> =
-        crate::analysis::resolve::MockNameTable<BasicNameTable<MacroId, usize>, Event<S>>;
+        crate::analyze::resolve::MockNameTable<BasicNameTable<MacroId, usize>, Event<S>>;
     type TestSession<'a, S> = SessionComponents<
         Upstream<
             &'a mut MockCodebase<S>,

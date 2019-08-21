@@ -165,13 +165,13 @@ impl<S: Session> LineFinalizer<S::Span> for TokenStreamSemantics<S> {
 mod tests {
     use super::*;
 
-    pub use crate::analysis::resolve::BasicNameTable;
+    pub use crate::analyze::resolve::BasicNameTable;
 
     use super::syntax::{Sigil, Token};
 
-    use crate::analysis::resolve::{NameTableEvent, ResolvedName};
-    use crate::analysis::session::{MockMacroId, SessionEvent};
-    use crate::analysis::SemanticToken;
+    use crate::analyze::resolve::{NameTableEvent, ResolvedName};
+    use crate::analyze::session::{MockMacroId, SessionEvent};
+    use crate::analyze::SemanticToken;
     use crate::diag::{DiagnosticsEvent, EmitDiag, Merge, Message, MockSpan};
     use crate::expr::{Atom, BinOp, ExprOp, LocationCounter};
     use crate::log::with_log;
@@ -615,7 +615,7 @@ mod tests {
         )
     }
 
-    pub(super) type MockSession<S> = crate::analysis::session::MockSession<
+    pub(super) type MockSession<S> = crate::analyze::session::MockSession<
         SerialIdAllocator,
         BasicNameTable<MockMacroId, usize>,
         TestOperation<S>,

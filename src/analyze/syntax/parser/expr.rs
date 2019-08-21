@@ -4,7 +4,7 @@ use self::Sigil::*;
 
 use super::{Parser, LINE_FOLLOW_SET};
 
-use crate::analysis::syntax;
+use crate::analyze::syntax;
 use crate::diag::span::{MergeSpans, StripSpan};
 use crate::diag::{CompactDiag, EmitDiag, Message};
 use crate::expr::BinOp;
@@ -242,7 +242,7 @@ mod tests {
     use super::Token::*;
     use super::*;
 
-    use crate::analysis::syntax::actions::mock::{ExprAction, ExprActionCollector, IdentKind};
+    use crate::analyze::syntax::actions::mock::{ExprAction, ExprActionCollector, IdentKind};
     use crate::diag::Merge;
 
     #[test]

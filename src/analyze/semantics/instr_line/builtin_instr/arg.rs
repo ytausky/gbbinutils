@@ -1,8 +1,8 @@
 use super::{BuiltinInstrSemantics, BuiltinInstrState, OperandSymbol, SemanticActions};
 
-use crate::analysis::session::Session;
-use crate::analysis::syntax::actions::*;
-use crate::analysis::{IdentSource, Literal, StringSource};
+use crate::analyze::session::Session;
+use crate::analyze::syntax::actions::*;
+use crate::analyze::{IdentSource, Literal, StringSource};
 use crate::diag::span::{Source, SpanSource};
 use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::expr::BinOp;

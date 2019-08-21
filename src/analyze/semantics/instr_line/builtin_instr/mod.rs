@@ -5,9 +5,9 @@ use self::operand::OperandSymbol;
 
 use super::*;
 
-use crate::analysis::semantics::{Params, RelocLookup, ResolveNames, WithParams};
-use crate::analysis::session::Session;
-use crate::analysis::syntax::actions::{BuiltinInstrActions, InstrFinalizer};
+use crate::analyze::semantics::{Params, RelocLookup, ResolveNames, WithParams};
+use crate::analyze::session::Session;
+use crate::analyze::syntax::actions::{BuiltinInstrActions, InstrFinalizer};
 use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::expr::{BinOp, FnCall, LocationCounter};
 use crate::object::builder::{Finish, Item, Name, PushOp};
@@ -19,7 +19,7 @@ mod directive;
 mod operand;
 
 #[derive(Clone, Debug, PartialEq)]
-pub(in crate::analysis) enum BuiltinInstr {
+pub(in crate::analyze) enum BuiltinInstr {
     Directive(Directive),
     Mnemonic(Mnemonic),
 }
@@ -38,7 +38,7 @@ impl From<Mnemonic> for BuiltinInstr {
 
 pub(super) type BuiltinInstrSemantics<S> = SemanticActions<BuiltinInstrState<S>, S>;
 
-pub(in crate::analysis) struct BuiltinInstrState<S: Session> {
+pub(in crate::analyze) struct BuiltinInstrState<S: Session> {
     parent: InstrLineState<S>,
     command: (BuiltinInstr, S::Span),
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
@@ -252,10 +252,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::analysis::semantics::tests::collect_semantic_actions;
-    use crate::analysis::syntax::actions::*;
-    use crate::analysis::syntax::actions::{ExprAtom::*, Operator::*};
-    use crate::analysis::Literal::*;
+    use crate::analyze::semantics::tests::collect_semantic_actions;
+    use crate::analyze::syntax::actions::*;
+    use crate::analyze::syntax::actions::{ExprAtom::*, Operator::*};
+    use crate::analyze::Literal::*;
     use crate::diag::{DiagnosticsEvent, Message, MockSpan};
 
     #[test]

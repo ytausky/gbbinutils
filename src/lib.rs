@@ -6,7 +6,7 @@
 pub use crate::codebase::FileSystem;
 pub use crate::link::{Program, Rom};
 
-use crate::analysis::Assemble;
+use crate::analyze::Assemble;
 use crate::codebase::{CodebaseError, StdFileSystem};
 use crate::diag::*;
 use crate::object::builder::ObjectBuilder;
@@ -14,7 +14,7 @@ use crate::object::builder::ObjectBuilder;
 #[macro_use]
 pub mod diag;
 
-mod analysis;
+mod analyze;
 mod codebase;
 mod expr;
 mod link;

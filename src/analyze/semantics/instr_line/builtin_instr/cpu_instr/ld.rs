@@ -1,6 +1,6 @@
 use super::{Analysis, Operand};
 
-use crate::analysis::semantics::instr_line::builtin_instr::operand::AtomKind;
+use crate::analyze::semantics::instr_line::builtin_instr::operand::AtomKind;
 use crate::diag::span::{Source, SpanSource};
 use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::object::builder::*;
@@ -306,8 +306,8 @@ impl<S: Clone> Source for LdDest16<S> {
 mod tests {
     use super::*;
 
-    use crate::analysis::semantics::instr_line::builtin_instr::cpu_instr::mnemonic::LD;
-    use crate::analysis::semantics::instr_line::builtin_instr::cpu_instr::tests::*;
+    use crate::analyze::semantics::instr_line::builtin_instr::cpu_instr::mnemonic::LD;
+    use crate::analyze::semantics::instr_line::builtin_instr::cpu_instr::tests::*;
     use crate::diag::Merge;
 
     #[test]

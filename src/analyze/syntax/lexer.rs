@@ -1,6 +1,6 @@
 use super::Sigil::*;
 use super::{IdentFactory, Sigil, Token};
-use crate::analysis::Literal;
+use crate::analyze::Literal;
 
 use std::borrow::Borrow;
 use std::ops::Range;
@@ -181,7 +181,7 @@ fn is_hex_digit(character: char) -> bool {
     character.is_digit(16)
 }
 
-pub(in crate::analysis) struct Lexer<B, F> {
+pub(in crate::analyze) struct Lexer<B, F> {
     scanner: Scanner<B>,
     factory: TokenFactory<F>,
 }
@@ -305,7 +305,7 @@ mod tests {
         )
     }
 
-    type TestToken = Token<String, crate::analysis::Literal<String>>;
+    type TestToken = Token<String, crate::analyze::Literal<String>>;
 
     #[test]
     fn lex_empty_str() {

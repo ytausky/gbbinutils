@@ -241,7 +241,7 @@ impl<I: Iterator> Iterator for OperandCounter<I> {
 pub mod tests {
     use super::*;
 
-    use crate::analysis::Literal;
+    use crate::analyze::Literal;
     use crate::expr::{Atom, LocationCounter};
     use crate::object::builder::mock::BackendEvent;
 
@@ -310,7 +310,7 @@ pub mod tests {
         expr: Arg<String, String, MockSpan<S>>,
         context: Context,
     ) -> OperandResult<MockSpan<S>> {
-        use crate::analysis::session::MockBuilder;
+        use crate::analyze::session::MockBuilder;
 
         let mut result = None;
         let log = crate::log::with_log(|log| {

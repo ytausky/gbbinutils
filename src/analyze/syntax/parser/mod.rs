@@ -66,20 +66,20 @@ macro_rules! input_tokens_impl {
 
 mod expr;
 
-pub(in crate::analysis) trait ParserFactory<I, L, E, S: Clone> {
+pub(in crate::analyze) trait ParserFactory<I, L, E, S: Clone> {
     type Parser: ParseTokenStream<I, L, E, S>;
 
     fn mk_parser(&mut self) -> Self::Parser;
 }
 
-pub(in crate::analysis) trait ParseTokenStream<I, L, E, S: Clone> {
+pub(in crate::analyze) trait ParseTokenStream<I, L, E, S: Clone> {
     fn parse_token_stream<T, A>(&mut self, tokens: T, actions: A) -> A
     where
         T: IntoIterator<Item = (Result<Token<I, L>, E>, S)>,
         A: TokenStreamActions<I, L, S>;
 }
 
-pub(in crate::analysis) struct DefaultParserFactory;
+pub(in crate::analyze) struct DefaultParserFactory;
 
 impl<I, L, E, S: Clone> ParserFactory<I, L, E, S> for DefaultParserFactory {
     type Parser = DefaultParser;
@@ -89,7 +89,7 @@ impl<I, L, E, S: Clone> ParserFactory<I, L, E, S> for DefaultParserFactory {
     }
 }
 
-pub(in crate::analysis) struct DefaultParser;
+pub(in crate::analyze) struct DefaultParser;
 
 impl<I, L, E, S: Clone> ParseTokenStream<I, L, E, S> for DefaultParser {
     fn parse_token_stream<T, A>(&mut self, tokens: T, actions: A) -> A
@@ -482,7 +482,7 @@ pub mod mock {
 
     use crate::log::Log;
 
-    pub(in crate::analysis) struct MockParserFactory<T> {
+    pub(in crate::analyze) struct MockParserFactory<T> {
         log: Log<T>,
     }
 
@@ -505,7 +505,7 @@ pub mod mock {
         }
     }
 
-    pub(in crate::analysis) struct MockParser<T> {
+    pub(in crate::analyze) struct MockParser<T> {
         log: Log<T>,
     }
 
@@ -525,7 +525,7 @@ pub mod mock {
     }
 
     #[derive(Debug, PartialEq)]
-    pub(in crate::analysis) enum ParserEvent<I, L, E, S> {
+    pub(in crate::analyze) enum ParserEvent<I, L, E, S> {
         ParseTokenStream(Vec<TokenStreamItem<I, L, E, S>>),
     }
 
@@ -537,8 +537,8 @@ mod tests {
     use super::Token::*;
     use super::*;
 
-    use crate::analysis::syntax::actions::mock::IdentKind::*;
-    use crate::analysis::syntax::actions::mock::*;
+    use crate::analyze::syntax::actions::mock::IdentKind::*;
+    use crate::analyze::syntax::actions::mock::*;
     use crate::diag::{CompactDiag, Merge, Message};
     use crate::expr::BinOp;
 

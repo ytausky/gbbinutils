@@ -1,18 +1,18 @@
 use super::{Label, SemanticActions, TokenStreamSemantics};
 
-use crate::analysis::resolve::ResolvedName;
-use crate::analysis::session::Session;
-use crate::analysis::syntax::actions::{LineFinalizer, TokenLineActions, TokenLineRule};
-use crate::analysis::syntax::{Sigil, Token};
-use crate::analysis::{Literal, SemanticToken, TokenSeq};
+use crate::analyze::resolve::ResolvedName;
+use crate::analyze::session::Session;
+use crate::analyze::syntax::actions::{LineFinalizer, TokenLineActions, TokenLineRule};
+use crate::analyze::syntax::{Sigil, Token};
+use crate::analyze::{Literal, SemanticToken, TokenSeq};
 
-pub(in crate::analysis) type TokenLineSemantics<S> = SemanticActions<TokenContext<S>, S>;
+pub(in crate::analyze) type TokenLineSemantics<S> = SemanticActions<TokenContext<S>, S>;
 
-pub(in crate::analysis) enum TokenContext<S: Session> {
+pub(in crate::analyze) enum TokenContext<S: Session> {
     MacroDef(MacroDefState<S>),
 }
 
-pub(in crate::analysis) struct MacroDefState<S: Session> {
+pub(in crate::analyze) struct MacroDefState<S: Session> {
     label: Option<Label<S::Ident, S::Span>>,
     tokens: TokenSeq<S::Ident, S::StringRef, S::Span>,
 }
@@ -75,7 +75,7 @@ impl<S: Session> LineFinalizer<S::Span> for TokenLineSemantics<S> {
     }
 }
 
-pub(in crate::analysis) struct TokenContextFinalizationSemantics<S: Session> {
+pub(in crate::analyze) struct TokenContextFinalizationSemantics<S: Session> {
     parent: TokenLineSemantics<S>,
 }
 
