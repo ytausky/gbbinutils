@@ -1,6 +1,7 @@
 use self::resolve::{BiLevelNameTable, DefaultIdentFactory};
 use self::semantics::TokenStreamState;
 use self::session::*;
+use self::strings::FakeStringInterner;
 use self::syntax::parser::DefaultParserFactory;
 use self::syntax::*;
 
@@ -19,6 +20,7 @@ mod macros;
 mod resolve;
 mod semantics;
 mod session;
+mod strings;
 mod syntax;
 
 pub(crate) trait Assemble<D>
@@ -37,6 +39,7 @@ where
         let tokenizer = Tokenizer(codebase);
         let mut file_parser = CodebaseAnalyzer::new(&tokenizer);
         let mut parser_factory = DefaultParserFactory;
+        let mut interner = FakeStringInterner;
         let mut names = BiLevelNameTable::new();
         for (string, name) in self.builtin_symbols() {
             names.insert(
@@ -47,6 +50,7 @@ where
         let session = SessionComponents::new(
             &mut file_parser,
             &mut parser_factory,
+            &mut interner,
             self,
             &mut names,
             diagnostics,
