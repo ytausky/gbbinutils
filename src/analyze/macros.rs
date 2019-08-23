@@ -223,6 +223,78 @@ where
 }
 
 #[cfg(test)]
+pub mod mock {
+    use super::*;
+
+    use crate::analyze::syntax::Token;
+    use crate::analyze::Literal;
+    use crate::log::Log;
+
+    #[derive(Debug, PartialEq)]
+    pub(in crate::analyze) enum MacroTableEvent {
+        DefineMacro(Vec<String>, Vec<Token<String, Literal<String>>>),
+    }
+
+    pub struct MockMacroTable<H, T> {
+        macros: VecMacroTable<String, Literal<String>, H>,
+        log: Log<T>,
+    }
+
+    impl<H, T> MockMacroTable<H, T> {
+        pub fn new(log: Log<T>) -> Self {
+            Self {
+                macros: VecMacroTable::new(),
+                log,
+            }
+        }
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    pub struct MockMacroId(pub usize);
+
+    impl<H, T> MacroSource for MockMacroTable<H, T> {
+        type MacroId = MockMacroId;
+    }
+
+    impl<D, T, S> MacroTable<D, String, Literal<String>, S> for MockMacroTable<D::MacroDefHandle, T>
+    where
+        D: AddMacroDef<S> + MacroContextFactory<<D as AddMacroDef<S>>::MacroDefHandle, S> + ?Sized,
+        T: From<MacroTableEvent>,
+        S: Clone,
+    {
+        type Iter = MacroExpansionIter<String, Token<String, Literal<String>>, D::MacroCallCtx>;
+
+        fn define_macro(
+            &mut self,
+            name_span: S,
+            params: (Vec<String>, Vec<S>),
+            body: (Vec<Token<String, Literal<String>>>, Vec<S>),
+            diagnostics: &mut D,
+        ) -> Self::MacroId {
+            self.log.push(MacroTableEvent::DefineMacro(
+                params.0.clone(),
+                body.0.clone(),
+            ));
+            MockMacroId(
+                self.macros
+                    .define_macro(name_span, params, body, diagnostics)
+                    .0,
+            )
+        }
+
+        fn expand_macro(
+            &self,
+            name: (Self::MacroId, S),
+            args: MacroArgs<Token<String, Literal<String>>, S>,
+            diagnostics: &mut D,
+        ) -> Self::Iter {
+            self.macros
+                .expand_macro((MacroId((name.0).0), name.1), args, diagnostics)
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

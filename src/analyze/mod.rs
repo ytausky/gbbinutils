@@ -1,3 +1,4 @@
+use self::macros::VecMacroTable;
 use self::resolve::{BiLevelNameTable, DefaultIdentFactory};
 use self::semantics::{TokenStreamState, KEYWORDS};
 use self::session::*;
@@ -39,6 +40,7 @@ where
         let tokenizer = Tokenizer(codebase);
         let mut file_parser = CodebaseAnalyzer::new(&tokenizer);
         let mut parser_factory = DefaultParserFactory;
+        let mut macros = VecMacroTable::new();
         let mut interner = FakeStringInterner;
         let mut names = BiLevelNameTable::new();
         for (ident, keyword) in KEYWORDS {
@@ -56,6 +58,7 @@ where
         let session = SessionComponents::new(
             &mut file_parser,
             &mut parser_factory,
+            &mut macros,
             &mut interner,
             self,
             &mut names,

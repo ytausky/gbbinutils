@@ -179,8 +179,9 @@ mod tests {
 
     use super::syntax::{Sigil, Token};
 
+    use crate::analyze::macros::mock::MockMacroId;
     use crate::analyze::resolve::{NameTableEvent, ResolvedName};
-    use crate::analyze::session::{MockMacroId, SessionEvent};
+    use crate::analyze::session::SessionEvent;
     use crate::analyze::SemanticToken;
     use crate::diag::{DiagnosticsEvent, EmitDiag, Merge, Message, MockSpan};
     use crate::expr::{Atom, BinOp, ExprOp, LocationCounter};

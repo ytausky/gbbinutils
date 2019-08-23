@@ -1,4 +1,4 @@
-use super::macros::{MacroId, MacroTable, VecMacroTable};
+use super::macros::{MacroSource, MacroTable};
 use super::resolve::{NameTable, ResolvedName, StartScope};
 use super::strings::GetString;
 use super::syntax::actions::TokenStreamActions;
@@ -7,7 +7,7 @@ use super::syntax::{LexError, ParseTokenStream};
 use super::{IdentSource, Lex, Literal, SemanticToken, StringSource, TokenSeq};
 
 use crate::codebase::CodebaseError;
-use crate::diag::span::{AddMacroDef, SpanSource};
+use crate::diag::span::SpanSource;
 use crate::diag::*;
 use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
 use crate::object::builder::*;
@@ -84,26 +84,14 @@ pub(super) struct SessionComponents<U, I, B, N, D> {
     diagnostics: D,
 }
 
-pub(super) struct Upstream<C, P, I, R, H> {
+pub(super) struct Upstream<C, P, M> {
     codebase: C,
     parser_factory: P,
-    macros: VecMacroTable<I, Literal<R>, H>,
+    macros: M,
 }
 
-impl<'a, C, P, I, B, N, D>
-    SessionComponents<
-        Upstream<
-            &'a mut C,
-            &'a mut P,
-            <C as IdentSource>::Ident,
-            <C as StringSource>::StringRef,
-            <D as AddMacroDef<<D as SpanSource>::Span>>::MacroDefHandle,
-        >,
-        &'a mut I,
-        B,
-        &'a mut N,
-        &'a mut D,
-    >
+impl<'a, C, P, M, I, B, N, D>
+    SessionComponents<Upstream<&'a mut C, &'a mut P, &'a mut M>, &'a mut I, B, &'a mut N, &'a mut D>
 where
     C: IdentSource + StringSource,
     D: DiagnosticsSystem,
@@ -111,6 +99,7 @@ where
     pub fn new(
         codebase: &'a mut C,
         parser_factory: &'a mut P,
+        macros: &'a mut M,
         interner: &'a mut I,
         backend: B,
         names: &'a mut N,
@@ -120,7 +109,7 @@ where
             upstream: Upstream {
                 codebase,
                 parser_factory,
-                macros: Vec::new(),
+                macros,
             },
             interner,
             backend,
@@ -142,20 +131,7 @@ impl<U, I, B, N, D> SessionComponents<U, I, B, N, D> {
     }
 }
 
-impl<C, P, I, B, N, D> IdentSource
-    for SessionComponents<
-        Upstream<
-            C,
-            P,
-            <C::Target as IdentSource>::Ident,
-            <C::Target as StringSource>::StringRef,
-            <D::Target as AddMacroDef<<D::Target as SpanSource>::Span>>::MacroDefHandle,
-        >,
-        I,
-        B,
-        N,
-        D,
-    >
+impl<C, P, M, I, B, N, D> IdentSource for SessionComponents<Upstream<C, P, M>, I, B, N, D>
 where
     C: DerefMut,
     C::Target: IdentSource + StringSource,
@@ -173,20 +149,7 @@ where
     type Span = <D::Target as SpanSource>::Span;
 }
 
-impl<C, P, I, B, N, D> StringSource
-    for SessionComponents<
-        Upstream<
-            C,
-            P,
-            <C::Target as IdentSource>::Ident,
-            <C::Target as StringSource>::StringRef,
-            <D::Target as AddMacroDef<<D::Target as SpanSource>::Span>>::MacroDefHandle,
-        >,
-        I,
-        B,
-        N,
-        D,
-    >
+impl<C, P, M, I, B, N, D> StringSource for SessionComponents<Upstream<C, P, M>, I, B, N, D>
 where
     C: DerefMut,
     C::Target: IdentSource + StringSource,
@@ -224,20 +187,7 @@ impl<U, I, B: Backend<S>, N, D, S: Clone> PartialBackend<S> for SessionComponent
     }
 }
 
-impl<C, P, I, B, N, D> Session
-    for SessionComponents<
-        Upstream<
-            C,
-            P,
-            <C::Target as IdentSource>::Ident,
-            <C::Target as StringSource>::StringRef,
-            <D::Target as AddMacroDef<<D::Target as SpanSource>::Span>>::MacroDefHandle,
-        >,
-        I,
-        B,
-        N,
-        D,
-    >
+impl<C, P, M, I, B, N, D> Session for SessionComponents<Upstream<C, P, M>, I, B, N, D>
 where
     C: DerefMut,
     C::Target: Lex<D::Target>,
@@ -248,13 +198,22 @@ where
         LexError,
         <Self as SpanSource>::Span,
     >,
+    M: DerefMut,
+    M::Target: MacroTable<
+        D::Target,
+        <Self as IdentSource>::Ident,
+        Literal<<Self as StringSource>::StringRef>,
+        <Self as SpanSource>::Span,
+    >,
     I: Deref,
     I::Target: GetString<<Self as StringSource>::StringRef>,
     B: Backend<<D::Target as SpanSource>::Span>,
     N: DerefMut,
-    N::Target:
-        NameTable<<C::Target as IdentSource>::Ident, MacroId = MacroId, SymbolId = B::SymbolId>
-            + StartScope<<C::Target as IdentSource>::Ident>,
+    N::Target: NameTable<
+            <C::Target as IdentSource>::Ident,
+            MacroId = <M::Target as MacroSource>::MacroId,
+            SymbolId = B::SymbolId,
+        > + StartScope<<C::Target as IdentSource>::Ident>,
     D: DerefMut,
     D::Target: DiagnosticsSystem,
 {
@@ -443,6 +402,7 @@ impl_push_op_for_session_components! {FnCall}
 mod mock {
     use super::*;
 
+    use crate::analyze::macros::mock::MockMacroId;
     use crate::analyze::resolve::{BasicNameTable, FakeNameTable, MockNameTable, NameTableEvent};
     use crate::analyze::semantics::Keyword;
     use crate::analyze::strings::FakeStringInterner;
@@ -526,9 +486,6 @@ mod mock {
     impl<A, N, T, S> StringSource for MockSession<A, N, T, S> {
         type StringRef = String;
     }
-
-    #[derive(Clone, Copy, Debug, PartialEq)]
-    pub struct MockMacroId(pub usize);
 
     impl<B, N, T, S> Session for MockSession<B, N, T, S>
     where
@@ -637,8 +594,7 @@ mod mock {
 mod tests {
     use super::*;
 
-    use super::MacroId;
-
+    use crate::analyze::macros::mock::{MacroTableEvent, MockMacroId};
     use crate::analyze::resolve::{BasicNameTable, NameTableEvent};
     use crate::analyze::semantics::Keyword;
     use crate::analyze::strings::FakeStringInterner;
@@ -735,10 +691,13 @@ mod tests {
         });
         assert_eq!(
             log,
-            [ParserEvent::ParseTokenStream(
-                tokens.into_iter().map(|token| (Ok(token), ())).collect()
-            )
-            .into()]
+            [
+                MacroTableEvent::DefineMacro(vec![], tokens.clone()).into(),
+                ParserEvent::ParseTokenStream(
+                    tokens.into_iter().map(|token| (Ok(token), ())).collect()
+                )
+                .into()
+            ]
         );
     }
 
@@ -748,26 +707,27 @@ mod tests {
         let arg = Token::Literal(Literal::Number(0x42));
         let literal0 = Token::Literal(Literal::Number(0));
         let param = "x";
+        let tokens = vec![db.clone(), Token::Ident(param.into()), literal0.clone()];
         let log = Fixture::default().log_session(|mut session| {
             let id = session.define_macro(
                 (),
                 (vec![param.into()], vec![()]),
-                (
-                    vec![db.clone(), Token::Ident(param.into()), literal0.clone()],
-                    vec![(), (), ()],
-                ),
+                (tokens.clone(), vec![(), (), ()]),
             );
             session.call_macro((id, ()), (vec![vec![arg.clone()]], vec![vec![()]]), ());
         });
         assert_eq!(
             log,
-            [ParserEvent::ParseTokenStream(
-                vec![db, arg, literal0]
-                    .into_iter()
-                    .map(|token| (Ok(token), ()))
-                    .collect()
-            )
-            .into()]
+            [
+                MacroTableEvent::DefineMacro(vec![param.into()], tokens).into(),
+                ParserEvent::ParseTokenStream(
+                    vec![db, arg, literal0]
+                        .into_iter()
+                        .map(|token| (Ok(token), ()))
+                        .collect()
+                )
+                .into()
+            ]
         );
     }
 
@@ -776,11 +736,13 @@ mod tests {
         let nop = Token::Ident("NOP".into());
         let label = "label";
         let param = "x";
+        let tokens = vec![Token::Label(param.into()), nop.clone()];
         let log = Fixture::default().log_session(|mut session| {
-            let id = session.define_macro(
+            let id = Session::define_macro(
+                &mut session,
                 (),
                 (vec![param.into()], vec![()]),
-                (vec![Token::Label(param.into()), nop.clone()], vec![(), ()]),
+                (tokens.clone(), vec![(), ()]),
             );
             session.call_macro(
                 (id, ()),
@@ -790,13 +752,16 @@ mod tests {
         });
         assert_eq!(
             log,
-            [ParserEvent::ParseTokenStream(
-                vec![Token::Label(label.into()), nop]
-                    .into_iter()
-                    .map(|token| (Ok(token), ()))
-                    .collect()
-            )
-            .into()]
+            [
+                MacroTableEvent::DefineMacro(vec![param.into()], tokens).into(),
+                ParserEvent::ParseTokenStream(
+                    vec![Token::Label(label.into()), nop]
+                        .into_iter()
+                        .map(|token| (Ok(token), ()))
+                        .collect()
+                )
+                .into()
+            ]
         );
     }
 
@@ -843,18 +808,15 @@ mod tests {
     }
 
     type MockParserFactory<S> = crate::analyze::syntax::parser::mock::MockParserFactory<Event<S>>;
+    type MockMacroTable<S> = crate::analyze::macros::mock::MockMacroTable<usize, Event<S>>;
     type MockBackend<S> = crate::object::builder::mock::MockBackend<SerialIdAllocator, Event<S>>;
     type MockDiagnosticsSystem<S> = crate::diag::MockDiagnosticsSystem<Event<S>, S>;
-    type MockNameTable<S> =
-        crate::analyze::resolve::MockNameTable<BasicNameTable<Keyword, MacroId, usize>, Event<S>>;
+    type MockNameTable<S> = crate::analyze::resolve::MockNameTable<
+        BasicNameTable<Keyword, MockMacroId, usize>,
+        Event<S>,
+    >;
     type TestSession<'a, S> = SessionComponents<
-        Upstream<
-            &'a mut MockCodebase<S>,
-            &'a mut MockParserFactory<S>,
-            String,
-            String,
-            <MockDiagnosticsSystem<S> as AddMacroDef<S>>::MacroDefHandle,
-        >,
+        Upstream<&'a mut MockCodebase<S>, &'a mut MockParserFactory<S>, &'a mut MockMacroTable<S>>,
         &'a mut FakeStringInterner,
         MockBackend<S>,
         &'a mut MockNameTable<S>,
@@ -864,8 +826,9 @@ mod tests {
     #[derive(Debug, PartialEq)]
     enum Event<S: Clone> {
         Parser(ParserEvent<String, Literal<String>, LexError, S>),
+        MacroTable(MacroTableEvent),
         Backend(BackendEvent<usize, Expr<S>>),
-        NameTable(NameTableEvent<Keyword, MacroId, usize>),
+        NameTable(NameTableEvent<Keyword, MockMacroId, usize>),
         Diagnostics(DiagnosticsEvent<S>),
     }
 
@@ -875,14 +838,20 @@ mod tests {
         }
     }
 
+    impl<S: Clone> From<MacroTableEvent> for Event<S> {
+        fn from(event: MacroTableEvent) -> Self {
+            Self::MacroTable(event)
+        }
+    }
+
     impl<S: Clone> From<BackendEvent<usize, Expr<S>>> for Event<S> {
         fn from(event: BackendEvent<usize, Expr<S>>) -> Self {
             Event::Backend(event)
         }
     }
 
-    impl<S: Clone> From<NameTableEvent<Keyword, MacroId, usize>> for Event<S> {
-        fn from(event: NameTableEvent<Keyword, MacroId, usize>) -> Self {
+    impl<S: Clone> From<NameTableEvent<Keyword, MockMacroId, usize>> for Event<S> {
+        fn from(event: NameTableEvent<Keyword, MockMacroId, usize>) -> Self {
             Event::NameTable(event)
         }
     }
@@ -901,6 +870,7 @@ mod tests {
     struct InnerFixture<S: Clone + Default + Merge> {
         codebase: MockCodebase<S>,
         analyzer: MockParserFactory<S>,
+        macros: MockMacroTable<S>,
         interner: FakeStringInterner,
         backend: Option<MockBackend<S>>,
         names: MockNameTable<S>,
@@ -914,6 +884,7 @@ mod tests {
                 inner: InnerFixture {
                     codebase: MockCodebase::new(),
                     analyzer: MockParserFactory::new(log.clone()),
+                    macros: MockMacroTable::new(log.clone()),
                     interner: FakeStringInterner,
                     backend: Some(MockBackend::new(SerialIdAllocator::new(), log.clone())),
                     names: MockNameTable::new(BasicNameTable::new(), log.clone()),
@@ -932,6 +903,7 @@ mod tests {
             f(SessionComponents::new(
                 &mut self.inner.codebase,
                 &mut self.inner.analyzer,
+                &mut self.inner.macros,
                 &mut self.inner.interner,
                 self.inner.backend.take().unwrap(),
                 &mut self.inner.names,

@@ -86,9 +86,10 @@ impl<S: Session> MacroArgActions<S::Span> for MacroArgSemantics<S> {
 mod tests {
     use super::*;
 
+    use crate::analyze::macros::mock::MockMacroId;
     use crate::analyze::resolve::ResolvedName;
     use crate::analyze::semantics::tests::*;
-    use crate::analyze::session::{MockMacroId, SessionEvent};
+    use crate::analyze::session::SessionEvent;
     use crate::analyze::syntax::actions::{InstrActions, LineFinalizer, TokenStreamActions};
     use crate::analyze::syntax::Token;
 
