@@ -25,36 +25,25 @@ pub(super) fn analyze_directive<S: Session<Keyword = &'static Keyword>>(
     directive: (Directive, S::Span),
     label: Option<Label<S::Ident, S::Span>>,
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
-    actions: InstrLineSemantics<S>,
+    session: S,
 ) -> TokenStreamSemantics<S> {
     let context = DirectiveContext {
         span: directive.1,
         label,
         args,
-        actions,
+        session,
     };
     context.analyze(directive.0)
 }
 
-struct DirectiveContext<A, I, R, S> {
-    span: S,
-    label: Option<Label<I, S>>,
-    args: BuiltinInstrArgs<I, R, S>,
-    actions: A,
+struct DirectiveContext<S: Session> {
+    span: S::Span,
+    label: Option<Label<S::Ident, S::Span>>,
+    args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
+    session: S,
 }
 
-delegate_diagnostics! {
-    {S: Session},
-    DirectiveContext<InstrLineSemantics<S>, S::Ident, S::StringRef, S::Span>,
-    {actions},
-    InstrLineSemantics<S>,
-    S::Span
-}
-
-impl<'a, S> DirectiveContext<InstrLineSemantics<S>, S::Ident, S::StringRef, S::Span>
-where
-    S: Session<Keyword = &'static Keyword>,
-{
+impl<S: Session<Keyword = &'static Keyword>> DirectiveContext<S> {
     fn analyze(self, directive: Directive) -> TokenStreamSemantics<S> {
         match directive {
             Directive::Db => self.analyze_data(Width::Byte),
@@ -70,62 +59,58 @@ where
 
     fn analyze_data(mut self, width: Width) -> TokenStreamSemantics<S> {
         for arg in self.args {
-            let expr = match self.actions.analyze_expr(arg) {
-                (Ok(expr), actions) => {
-                    self.actions = actions;
+            let expr = match self.session.analyze_expr(arg) {
+                (Ok(expr), session) => {
+                    self.session = session;
                     expr
                 }
-                (Err(()), actions) => return actions.map_line(Into::into),
+                (Err(()), session) => return TokenStreamSemantics::new(session),
             };
-            self.actions.session.emit_item(Item::Data(expr, width))
+            self.session.emit_item(Item::Data(expr, width))
         }
-        self.actions.map_line(Into::into)
+        TokenStreamSemantics::new(self.session)
     }
 
-    fn analyze_ds(self) -> TokenStreamSemantics<S> {
-        let mut actions = self.actions;
-        match single_arg(self.span, self.args, &mut actions) {
+    fn analyze_ds(mut self) -> TokenStreamSemantics<S> {
+        match single_arg(self.span, self.args, &mut self.session) {
             Ok(arg) => {
-                let (result, returned_actions) = actions.analyze_expr(arg);
-                actions = returned_actions;
+                let (result, session) = self.session.analyze_expr(arg);
+                self.session = session;
                 if let Ok(bytes) = result {
-                    actions.session.reserve(bytes)
+                    self.session.reserve(bytes)
                 }
             }
             Err(()) => (),
         }
-        actions.map_line(Into::into)
+        TokenStreamSemantics::new(self.session)
     }
 
     fn analyze_equ(mut self) -> TokenStreamSemantics<S> {
         let (symbol, params) = self.label.take().unwrap();
-        match single_arg(self.span, self.args, &mut self.actions) {
+        match single_arg(self.span, self.args, &mut self.session) {
             Ok(arg) => {
-                let (_, actions) = self.actions.define_symbol(symbol, &params, arg);
-                self.actions = actions;
+                let (_, session) = self.session.define_symbol_with_params(symbol, &params, arg);
+                self.session = session;
             }
             Err(()) => (),
         }
-        self.actions.map_line(Into::into)
+        TokenStreamSemantics::new(self.session)
     }
 
     fn analyze_section(mut self) -> TokenStreamSemantics<S> {
         let (name, span) = self.label.take().unwrap().0;
-        let session = &mut self.actions.session;
-        let id = session.reloc_lookup(name, span.clone());
-        session.start_section(id, span);
-        self.actions.map_line(Into::into)
+        let id = self.session.reloc_lookup(name, span.clone());
+        self.session.start_section(id, span);
+        TokenStreamSemantics::new(self.session)
     }
 
     fn analyze_include(mut self) -> TokenStreamSemantics<S> {
-        let (path, span) = match reduce_include(self.span, self.args, &mut self.actions) {
+        let (path, span) = match reduce_include(self.span, self.args, &mut self.session) {
             Ok(result) => result,
-            Err(()) => return self.actions.map_line(Into::into),
+            Err(()) => return TokenStreamSemantics::new(self.session),
         };
-        let (result, mut semantics): (_, TokenStreamSemantics<_>) = self
-            .actions
-            .session
-            .analyze_file(path, TokenStreamState::from(self.actions.state));
+        let (result, mut semantics): (_, TokenStreamSemantics<_>) =
+            self.session.analyze_file(path, TokenStreamState::new());
         if let Err(err) = result {
             semantics.emit_diag(Message::from(err).at(span))
         }
@@ -135,28 +120,27 @@ where
     fn analyze_macro(mut self) -> TokenStreamSemantics<S> {
         if self.label.is_none() {
             let span = self.span;
-            self.actions.emit_diag(Message::MacroRequiresName.at(span))
+            self.session.emit_diag(Message::MacroRequiresName.at(span))
         }
         TokenLineSemantics {
             state: TokenContext::MacroDef(MacroDefState::new(self.label)),
-            session: self.actions.session,
+            session: self.session,
         }
         .map_line(Into::into)
     }
 
-    fn analyze_org(self) -> TokenStreamSemantics<S> {
-        let mut actions = self.actions;
-        match single_arg(self.span, self.args, &mut actions) {
+    fn analyze_org(mut self) -> TokenStreamSemantics<S> {
+        match single_arg(self.span, self.args, &mut self.session) {
             Ok(arg) => {
-                let (result, returned_actions) = actions.analyze_expr(arg);
-                actions = returned_actions;
+                let (result, session) = self.session.analyze_expr(arg);
+                self.session = session;
                 if let Ok(value) = result {
-                    actions.session.set_origin(value)
+                    self.session.set_origin(value)
                 }
             }
             Err(()) => (),
         }
-        actions.map_line(Into::into)
+        TokenStreamSemantics::new(self.session)
     }
 }
 

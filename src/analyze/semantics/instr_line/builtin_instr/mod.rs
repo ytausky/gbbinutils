@@ -103,10 +103,10 @@ impl<S: Session<Keyword = &'static Keyword>> PreparedBuiltinInstr<S> {
     ) -> TokenStreamSemantics<S> {
         match self {
             PreparedBuiltinInstr::Binding(binding, label) => {
-                directive::analyze_directive(binding, label, args, actions)
+                directive::analyze_directive(binding, label, args, actions.session)
             }
             PreparedBuiltinInstr::Directive(directive) => {
-                directive::analyze_directive(directive, None, args, actions)
+                directive::analyze_directive(directive, None, args, actions.session)
             }
             PreparedBuiltinInstr::Mnemonic(mnemonic) => {
                 analyze_mnemonic(mnemonic, args, actions).map_line(Into::into)
@@ -142,36 +142,35 @@ fn analyze_mnemonic<S: Session>(
     actions
 }
 
-impl<S: Session> InstrLineSemantics<S> {
+trait SessionExt: Session {
     fn analyze_expr(
-        mut self,
-        expr: Arg<S::Ident, S::StringRef, S::Span>,
-    ) -> (Result<S::Value, ()>, Self) {
-        let mut builder = self.session.build_const().resolve_names();
+        self,
+        expr: Arg<Self::Ident, Self::StringRef, Self::Span>,
+    ) -> (Result<Self::Value, ()>, Self) {
+        let mut builder = self.build_const().resolve_names();
         let result = builder.eval_arg(expr);
         let (session, value) = builder.finish();
-        self.session = session;
-        (result.map(|()| value), self)
+        (result.map(|()| value), session)
     }
 
-    fn define_symbol(
+    fn define_symbol_with_params(
         mut self,
-        (name, span): (S::Ident, S::Span),
-        params: &Params<S::Ident, S::Span>,
-        expr: Arg<S::Ident, S::StringRef, S::Span>,
+        (name, span): (Self::Ident, Self::Span),
+        params: &Params<Self::Ident, Self::Span>,
+        expr: Arg<Self::Ident, Self::StringRef, Self::Span>,
     ) -> (Result<(), ()>, Self) {
-        let id = self.session.reloc_lookup(name, span.clone());
+        let id = self.reloc_lookup(name, span.clone());
         let mut builder = self
-            .session
             .define_symbol(id, span)
             .resolve_names()
             .with_params(params);
         let result = builder.eval_arg(expr);
         let (session, ()) = builder.finish();
-        self.session = session;
-        (result, self)
+        (result, session)
     }
 }
+
+impl<S: Session> SessionExt for S {}
 
 trait EvalArg<I, R, S: Clone> {
     fn eval_arg(&mut self, arg: Arg<I, R, S>) -> Result<(), ()>;
