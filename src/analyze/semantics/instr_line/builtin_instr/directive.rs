@@ -70,7 +70,7 @@ where
 
     fn analyze_data(mut self, width: Width) -> TokenStreamSemantics<S> {
         for arg in self.args {
-            let expr = match self.actions.analyze_expr(&Default::default(), arg) {
+            let expr = match self.actions.analyze_expr(arg) {
                 (Ok(expr), actions) => {
                     self.actions = actions;
                     expr
@@ -86,7 +86,7 @@ where
         let mut actions = self.actions;
         match single_arg(self.span, self.args, &mut actions) {
             Ok(arg) => {
-                let (result, returned_actions) = actions.analyze_expr(&Default::default(), arg);
+                let (result, returned_actions) = actions.analyze_expr(arg);
                 actions = returned_actions;
                 if let Ok(bytes) = result {
                     actions.session.reserve(bytes)
@@ -148,7 +148,7 @@ where
         let mut actions = self.actions;
         match single_arg(self.span, self.args, &mut actions) {
             Ok(arg) => {
-                let (result, returned_actions) = actions.analyze_expr(&Default::default(), arg);
+                let (result, returned_actions) = actions.analyze_expr(arg);
                 actions = returned_actions;
                 if let Ok(value) = result {
                     actions.session.set_origin(value)

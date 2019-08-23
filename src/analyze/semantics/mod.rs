@@ -61,20 +61,11 @@ pub(super) struct SemanticActions<L, S: Session> {
 }
 
 impl<L, S: Session> SemanticActions<L, S> {
-    fn build_value<F, T>(mut self, params: &Params<S::Ident, S::Span>, f: F) -> (T, Self)
+    fn build_value<F, T>(mut self, f: F) -> (T, Self)
     where
-        F: FnOnce(
-            BuilderAdapter<
-                BuilderAdapter<S::ConstBuilder, NameResolver>,
-                ConvertParams<S::Ident, S::Span>,
-            >,
-        ) -> (T, S),
+        F: FnOnce(BuilderAdapter<S::ConstBuilder, NameResolver>) -> (T, S),
     {
-        let (value, session) = f(self
-            .session
-            .build_const()
-            .resolve_names()
-            .with_params(params));
+        let (value, session) = f(self.session.build_const().resolve_names());
         self.session = session;
         (value, self)
     }

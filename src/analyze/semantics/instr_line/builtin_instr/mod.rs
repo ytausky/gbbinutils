@@ -131,9 +131,8 @@ fn analyze_mnemonic<S: Session>(
 ) -> InstrLineSemantics<S> {
     let mut operands = Vec::new();
     for arg in args {
-        let (operand, returned_actions) = actions.build_value(&Default::default(), |builder| {
-            operand::analyze_operand(arg, name.0.context(), builder)
-        });
+        let (operand, returned_actions) =
+            actions.build_value(|builder| operand::analyze_operand(arg, name.0.context(), builder));
         actions = returned_actions;
         operands.push(operand)
     }
@@ -146,10 +145,9 @@ fn analyze_mnemonic<S: Session>(
 impl<S: Session> InstrLineSemantics<S> {
     fn analyze_expr(
         self,
-        params: &Params<S::Ident, S::Span>,
         expr: Arg<S::Ident, S::StringRef, S::Span>,
     ) -> (Result<S::Value, ()>, Self) {
-        let (value, actions) = self.build_value(params, |mut builder| {
+        let (value, actions) = self.build_value(|mut builder| {
             let result = builder.eval_arg(expr);
             let (session, value) = builder.finish();
             (result.map(|()| value), session)
