@@ -3,10 +3,31 @@ use crate::diag::span::*;
 
 use std::rc::Rc;
 
-pub(super) trait Expand<T, H, F: MacroContextFactory<H, S> + ?Sized, S: Clone> {
-    type Iter: Iterator<Item = (T, S)>;
+pub(super) trait MacroSource {
+    type MacroId: Clone;
+}
 
-    fn expand(&self, name: S, args: MacroArgs<T, S>, factory: &mut F) -> Self::Iter;
+pub(super) trait MacroTable<D, I, L, S>: MacroSource
+where
+    D: AddMacroDef<S> + MacroContextFactory<<D as AddMacroDef<S>>::MacroDefHandle, S> + ?Sized,
+    S: Clone,
+{
+    type Iter: Iterator<Item = (Token<I, L>, S)>;
+
+    fn define_macro(
+        &mut self,
+        name_span: S,
+        params: (Vec<I>, Vec<S>),
+        body: (Vec<Token<I, L>>, Vec<S>),
+        diagnostics: &mut D,
+    ) -> Self::MacroId;
+
+    fn expand_macro(
+        &self,
+        name: (Self::MacroId, S),
+        args: MacroArgs<Token<I, L>, S>,
+        diagnostics: &mut D,
+    ) -> Self::Iter;
 }
 
 pub(super) type VecMacroTable<I, L, H> = Vec<MacroDef<I, Token<I, L>, H>>;
@@ -14,33 +35,28 @@ pub(super) type VecMacroTable<I, L, H> = Vec<MacroDef<I, Token<I, L>, H>>;
 pub(super) type MacroArgs<T, S> = (Vec<Vec<T>>, Vec<Vec<S>>);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct MacroId(pub(super) usize);
+pub struct MacroId(usize);
 
-pub(super) trait DefineMacro<I, T, H: Clone> {
-    fn define_macro<D, S>(
-        &mut self,
-        name_span: S,
-        params: (Vec<I>, Vec<S>),
-        body: (Vec<T>, Vec<S>),
-        diagnostics: &mut D,
-    ) -> MacroId
-    where
-        D: AddMacroDef<S, MacroDefHandle = H> + MacroContextFactory<H, S> + ?Sized,
-        S: Clone;
+impl<I, L, H> MacroSource for VecMacroTable<I, L, H> {
+    type MacroId = MacroId;
 }
 
-impl<I, L, H: Clone> DefineMacro<I, Token<I, L>, H> for VecMacroTable<I, L, H> {
-    fn define_macro<D, S>(
+impl<D, I, L, S> MacroTable<D, I, L, S> for VecMacroTable<I, L, D::MacroDefHandle>
+where
+    D: AddMacroDef<S> + MacroContextFactory<<D as AddMacroDef<S>>::MacroDefHandle, S> + ?Sized,
+    I: Clone + PartialEq,
+    L: Clone,
+    S: Clone,
+{
+    type Iter = MacroExpansionIter<I, Token<I, L>, D::MacroCallCtx>;
+
+    fn define_macro(
         &mut self,
         name_span: S,
         params: (Vec<I>, Vec<S>),
         body: (Vec<Token<I, L>>, Vec<S>),
         diagnostics: &mut D,
-    ) -> MacroId
-    where
-        D: AddMacroDef<S, MacroDefHandle = H> + MacroContextFactory<H, S> + ?Sized,
-        S: Clone,
-    {
+    ) -> Self::MacroId {
         let context = diagnostics.add_macro_def(name_span, params.1, body.1);
         let id = MacroId(self.len());
         self.push(MacroDef {
@@ -52,6 +68,17 @@ impl<I, L, H: Clone> DefineMacro<I, Token<I, L>, H> for VecMacroTable<I, L, H> {
         });
         id
     }
+
+    fn expand_macro(
+        &self,
+        (MacroId(id), name_span): (Self::MacroId, S),
+        (args, arg_spans): MacroArgs<Token<I, L>, S>,
+        diagnostics: &mut D,
+    ) -> Self::Iter {
+        let def = &self[id];
+        let context = diagnostics.mk_macro_call_ctx(name_span, arg_spans, &def.spans);
+        MacroExpansionIter::new(def.tokens.clone(), args, context)
+    }
 }
 
 pub(in crate::analyze) struct MacroDef<I, T, S> {
@@ -62,26 +89,6 @@ pub(in crate::analyze) struct MacroDef<I, T, S> {
 struct MacroDefTokens<I, T> {
     params: Vec<I>,
     body: Vec<T>,
-}
-
-impl<I, L, H, F, S> Expand<Token<I, L>, H, F, S> for MacroDef<I, Token<I, L>, H>
-where
-    I: Clone + PartialEq,
-    F: MacroContextFactory<H, S> + ?Sized,
-    S: Clone,
-    Token<I, L>: Clone,
-{
-    type Iter = MacroExpansionIter<I, Token<I, L>, F::MacroCallCtx>;
-
-    fn expand(
-        &self,
-        name: S,
-        (args, arg_spans): MacroArgs<Token<I, L>, S>,
-        factory: &mut F,
-    ) -> Self::Iter {
-        let context = factory.mk_macro_call_ctx(name, arg_spans, &self.spans);
-        MacroExpansionIter::new(self.tokens.clone(), args, context)
-    }
 }
 
 pub(super) struct MacroExpansionIter<I, T, C> {
@@ -222,16 +229,16 @@ mod tests {
     #[test]
     fn expand_macro_with_one_token() {
         let body = Token::<_, ()>::Ident("a");
-        let entry = MacroDef {
+        let entry = vec![MacroDef {
             tokens: Rc::new(MacroDefTokens {
                 params: vec![],
                 body: vec![body.clone()],
             }),
             spans: (),
-        };
+        }];
         let name = ModularSpan::Buf(());
         let expanded: Vec<_> = entry
-            .expand(name.clone(), (vec![], vec![]), &mut Factory)
+            .expand_macro((MacroId(0), name.clone()), (vec![], vec![]), &mut Factory)
             .collect();
         let data = MacroCall(Rc::new(ModularMacroCall {
             name,
@@ -257,18 +264,18 @@ mod tests {
     #[test]
     fn expand_label_using_two_idents() {
         let label = Token::<_, ()>::Label("label");
-        let def = MacroDef {
+        let def = vec![MacroDef {
             tokens: Rc::new(MacroDefTokens {
                 params: vec!["label"],
                 body: vec![label],
             }),
             spans: (),
-        };
+        }];
         let name = ModularSpan::Buf(());
         let arg = vec![Token::Ident("tok1"), Token::Ident("tok2")];
         let expanded: Vec<_> = def
-            .expand(
-                name.clone(),
+            .expand_macro(
+                (MacroId(0), name.clone()),
                 (
                     vec![arg],
                     vec![vec![ModularSpan::Buf(()), ModularSpan::Buf(())]],
@@ -336,13 +343,13 @@ mod tests {
             body: (2..=4).map(mk_span).collect(),
         });
         let factory = &mut RcContextFactory::new();
-        let entry = MacroDef {
+        let entry = vec![MacroDef {
             tokens: Rc::new(MacroDefTokens {
                 params: vec!["x"],
                 body,
             }),
             spans: Rc::clone(&def_id),
-        };
+        }];
         let data = RcMacroCall::new(ModularMacroCall {
             name: ModularSpan::Buf(BufSpan {
                 range: 7,
@@ -362,8 +369,8 @@ mod tests {
         });
         let call_name = ("my_macro", mk_span(7));
         let expanded: Vec<_> = entry
-            .expand(
-                call_name.1,
+            .expand_macro(
+                (MacroId(0), call_name.1),
                 (
                     vec![vec![Token::Ident("y"), Token::Ident("z")]],
                     vec![(8..=9).map(mk_span).collect()],
@@ -416,6 +423,17 @@ mod tests {
     type Span = ModularSpan<(), MacroSpan<MacroCall>>;
 
     struct Factory;
+
+    impl AddMacroDef<Span> for Factory {
+        type MacroDefHandle = ();
+
+        fn add_macro_def<P, B>(&mut self, _: Span, _: P, _: B) -> Self::MacroDefHandle
+        where
+            P: IntoIterator<Item = Span>,
+            B: IntoIterator<Item = Span>,
+        {
+        }
+    }
 
     impl MacroContextFactory<(), Span> for Factory {
         type MacroCallCtx = MacroCall;

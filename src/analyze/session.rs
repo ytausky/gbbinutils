@@ -1,4 +1,4 @@
-use super::macros::{DefineMacro, Expand, MacroId, VecMacroTable};
+use super::macros::{MacroId, MacroTable, VecMacroTable};
 use super::resolve::{NameTable, ResolvedName, StartScope};
 use super::strings::GetString;
 use super::syntax::actions::TokenStreamActions;
@@ -292,14 +292,17 @@ where
 
     fn call_macro<A: IntoSemanticActions<Self>>(
         mut self,
-        (MacroId(id), span): (Self::MacroId, Self::Span),
+        id: (Self::MacroId, Self::Span),
         args: MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
         actions: A,
     ) -> A::SemanticActions
     where
         A::SemanticActions: TokenStreamActions<Self::Ident, Literal<Self::StringRef>, Self::Span>,
     {
-        let expansion = self.upstream.macros[id].expand(span, args, &mut *self.diagnostics);
+        let expansion = self
+            .upstream
+            .macros
+            .expand_macro(id, args, &mut *self.diagnostics);
         let mut parser = self.upstream.parser_factory.mk_parser();
         let actions = actions.into_semantic_actions(self);
         parser.parse_token_stream(expansion.map(|(t, s)| (Ok(t), s)), actions)
