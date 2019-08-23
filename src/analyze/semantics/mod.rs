@@ -61,15 +61,6 @@ pub(super) struct SemanticActions<L, S: Session> {
 }
 
 impl<L, S: Session> SemanticActions<L, S> {
-    fn build_value<F, T>(mut self, f: F) -> (T, Self)
-    where
-        F: FnOnce(BuilderAdapter<S::ConstBuilder, NameResolver>) -> (T, S),
-    {
-        let (value, session) = f(self.session.build_const().resolve_names());
-        self.session = session;
-        (value, self)
-    }
-
     fn map_line<F: FnOnce(L) -> T, T>(self, f: F) -> SemanticActions<T, S> {
         SemanticActions {
             state: f(self.state),

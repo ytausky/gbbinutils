@@ -131,9 +131,9 @@ fn analyze_mnemonic<S: Session>(
 ) -> InstrLineSemantics<S> {
     let mut operands = Vec::new();
     for arg in args {
-        let (operand, returned_actions) =
-            actions.build_value(|builder| operand::analyze_operand(arg, name.0.context(), builder));
-        actions = returned_actions;
+        let builder = actions.session.build_const().resolve_names();
+        let (operand, session) = operand::analyze_operand(arg, name.0.context(), builder);
+        actions.session = session;
         operands.push(operand)
     }
     if let Ok(instruction) = cpu_instr::analyze_instruction(name, operands, &mut actions) {
@@ -144,15 +144,14 @@ fn analyze_mnemonic<S: Session>(
 
 impl<S: Session> InstrLineSemantics<S> {
     fn analyze_expr(
-        self,
+        mut self,
         expr: Arg<S::Ident, S::StringRef, S::Span>,
     ) -> (Result<S::Value, ()>, Self) {
-        let (value, actions) = self.build_value(|mut builder| {
-            let result = builder.eval_arg(expr);
-            let (session, value) = builder.finish();
-            (result.map(|()| value), session)
-        });
-        (value, actions)
+        let mut builder = self.session.build_const().resolve_names();
+        let result = builder.eval_arg(expr);
+        let (session, value) = builder.finish();
+        self.session = session;
+        (result.map(|()| value), self)
     }
 
     fn define_symbol(
@@ -178,29 +177,14 @@ trait EvalArg<I, R, S: Clone> {
     fn eval_arg(&mut self, arg: Arg<I, R, S>) -> Result<(), ()>;
 }
 
-trait ArgEvaluator<N, S: Clone>:
-    PushOp<LocationCounter, S>
-    + PushOp<i32, S>
-    + PushOp<Name<N>, S>
-    + PushOp<BinOp, S>
-    + PushOp<FnCall, S>
-    + Diagnostics<S>
-{
-}
-
-impl<T, N, S: Clone> ArgEvaluator<N, S> for T where
-    Self: PushOp<LocationCounter, S>
-        + PushOp<i32, S>
-        + PushOp<Name<N>, S>
-        + PushOp<BinOp, S>
-        + PushOp<FnCall, S>
-        + Diagnostics<S>
-{
-}
-
 impl<'a, T, I, R, S> EvalArg<I, R, S> for T
 where
-    T: ArgEvaluator<I, S>,
+    T: PushOp<LocationCounter, S>
+        + PushOp<i32, S>
+        + PushOp<Name<I>, S>
+        + PushOp<BinOp, S>
+        + PushOp<FnCall, S>
+        + Diagnostics<S>,
     R: Eq,
     S: Clone,
 {

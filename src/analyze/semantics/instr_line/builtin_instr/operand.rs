@@ -1,4 +1,4 @@
-use super::{Arg, ArgAtom, ArgEvaluator, ArgUnaryOp, ArgVariant, EvalArg};
+use super::{Arg, ArgAtom, ArgUnaryOp, ArgVariant, EvalArg};
 
 use crate::diag::*;
 use crate::object::builder::{Condition, Finish, PtrReg, Reg16, RegPair, SimpleOperand};
@@ -73,7 +73,7 @@ pub(super) fn analyze_operand<C, I, R, S>(
     mut value_context: C,
 ) -> OperandResult<C, S>
 where
-    C: ArgEvaluator<I, S> + Finish,
+    C: EvalArg<I, R, S> + Diagnostics<S> + Finish,
     R: Eq,
     S: Clone,
 {
@@ -101,7 +101,7 @@ fn analyze_deref_operand<C, I, R, S>(
     mut value_context: C,
 ) -> OperandResult<C, S>
 where
-    C: ArgEvaluator<I, S> + Finish,
+    C: EvalArg<I, R, S> + Diagnostics<S> + Finish,
     R: Eq,
     S: Clone,
 {
