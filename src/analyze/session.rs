@@ -1,4 +1,4 @@
-use super::macros::{DefineMacro, Expand, MacroId, MacroTable};
+use super::macros::{DefineMacro, Expand, MacroId, VecMacroTable};
 use super::resolve::{NameTable, ResolvedName, StartScope};
 use super::strings::GetString;
 use super::syntax::actions::TokenStreamActions;
@@ -87,7 +87,7 @@ pub(super) struct SessionComponents<U, I, B, N, D> {
 pub(super) struct Upstream<C, P, I, R, H> {
     codebase: C,
     parser_factory: P,
-    macros: MacroTable<I, Literal<R>, H>,
+    macros: VecMacroTable<I, Literal<R>, H>,
 }
 
 impl<'a, C, P, I, B, N, D>

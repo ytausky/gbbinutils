@@ -9,7 +9,7 @@ pub(super) trait Expand<T, H, F: MacroContextFactory<H, S> + ?Sized, S: Clone> {
     fn expand(&self, name: S, args: MacroArgs<T, S>, factory: &mut F) -> Self::Iter;
 }
 
-pub(super) type MacroTable<I, L, H> = Vec<MacroDef<I, Token<I, L>, H>>;
+pub(super) type VecMacroTable<I, L, H> = Vec<MacroDef<I, Token<I, L>, H>>;
 
 pub(super) type MacroArgs<T, S> = (Vec<Vec<T>>, Vec<Vec<S>>);
 
@@ -29,7 +29,7 @@ pub(super) trait DefineMacro<I, T, H: Clone> {
         S: Clone;
 }
 
-impl<I, L, H: Clone> DefineMacro<I, Token<I, L>, H> for MacroTable<I, L, H> {
+impl<I, L, H: Clone> DefineMacro<I, Token<I, L>, H> for VecMacroTable<I, L, H> {
     fn define_macro<D, S>(
         &mut self,
         name_span: S,
