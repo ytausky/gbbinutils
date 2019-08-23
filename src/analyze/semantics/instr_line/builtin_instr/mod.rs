@@ -73,7 +73,7 @@ impl<S: Session<Keyword = &'static Keyword>> InstrFinalizer<S::Span> for Builtin
         let mut semantics = set_state!(self, self.state.parent);
         let prepared = PreparedBuiltinInstr::new(self.state.command, &mut semantics);
         semantics = semantics.define_label_if_present();
-        prepared.exec(args, semantics)
+        prepared.exec(args, semantics.session)
     }
 }
 
@@ -99,17 +99,17 @@ impl<S: Session<Keyword = &'static Keyword>> PreparedBuiltinInstr<S> {
     fn exec(
         self,
         args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
-        actions: InstrLineSemantics<S>,
+        session: S,
     ) -> TokenStreamSemantics<S> {
         match self {
             PreparedBuiltinInstr::Binding(binding, label) => {
-                directive::analyze_directive(binding, label, args, actions.session)
+                directive::analyze_directive(binding, label, args, session)
             }
             PreparedBuiltinInstr::Directive(directive) => {
-                directive::analyze_directive(directive, None, args, actions.session)
+                directive::analyze_directive(directive, None, args, session)
             }
             PreparedBuiltinInstr::Mnemonic(mnemonic) => {
-                analyze_mnemonic(mnemonic, args, actions).map_line(Into::into)
+                TokenStreamSemantics::new(analyze_mnemonic(mnemonic, args, session))
             }
         }
     }
@@ -127,19 +127,19 @@ impl Directive {
 fn analyze_mnemonic<S: Session>(
     name: (Mnemonic, S::Span),
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
-    mut actions: InstrLineSemantics<S>,
-) -> InstrLineSemantics<S> {
+    mut session: S,
+) -> S {
     let mut operands = Vec::new();
     for arg in args {
-        let builder = actions.session.build_const().resolve_names();
-        let (operand, session) = operand::analyze_operand(arg, name.0.context(), builder);
-        actions.session = session;
+        let builder = session.build_const().resolve_names();
+        let (operand, returned_session) = operand::analyze_operand(arg, name.0.context(), builder);
+        session = returned_session;
         operands.push(operand)
     }
-    if let Ok(instruction) = cpu_instr::analyze_instruction(name, operands, &mut actions) {
-        actions.session.emit_item(Item::CpuInstr(instruction))
+    if let Ok(instruction) = cpu_instr::analyze_instruction(name, operands, &mut session) {
+        session.emit_item(Item::CpuInstr(instruction))
     }
-    actions
+    session
 }
 
 trait SessionExt: Session {
