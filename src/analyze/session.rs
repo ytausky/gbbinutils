@@ -23,13 +23,15 @@ where
     Self: SynthActions<<Self as IdentSource>::Ident, <Self as SpanSource>::Span>,
     Self: GetString<<Self as StringSource>::StringRef>,
 {
-    fn analyze_file<A: IntoSemanticActions<Self>>(
+    fn analyze_file<A>(
         self,
         path: Self::StringRef,
         actions: A,
-    ) -> (Result<(), CodebaseError>, A::SemanticActions)
+    ) -> (Result<(), CodebaseError>, Self::SemanticActions)
     where
-        A::SemanticActions: TokenStreamActions<Self::Ident, Literal<Self::StringRef>, Self::Span>;
+        Self: IntoSemanticActions<A>,
+        Self::SemanticActions:
+            TokenStreamActions<Self::Ident, Literal<Self::StringRef>, Self::Span>;
 
     fn define_macro(
         &mut self,
@@ -38,14 +40,16 @@ where
         body: TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
     ) -> Self::MacroId;
 
-    fn call_macro<A: IntoSemanticActions<Self>>(
+    fn call_macro<A>(
         self,
         name: (Self::MacroId, Self::Span),
         args: MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
         actions: A,
-    ) -> A::SemanticActions
+    ) -> Self::SemanticActions
     where
-        A::SemanticActions: TokenStreamActions<Self::Ident, Literal<Self::StringRef>, Self::Span>;
+        Self: IntoSemanticActions<A>,
+        Self::SemanticActions:
+            TokenStreamActions<Self::Ident, Literal<Self::StringRef>, Self::Span>;
 }
 
 pub(super) trait SynthActions<I, S: Clone>
@@ -67,10 +71,10 @@ where
     fn define_symbol(self, name: Self::SymbolId, span: S) -> Self::SymbolBuilder;
 }
 
-pub(super) trait IntoSemanticActions<S: ReentrancyActions> {
+pub(super) trait IntoSemanticActions<S> {
     type SemanticActions;
 
-    fn into_semantic_actions(self, session: S) -> Self::SemanticActions;
+    fn into_semantic_actions(self, semantics: S) -> Self::SemanticActions;
 }
 
 pub(super) type MacroArgs<I, R, S> = super::macros::MacroArgs<SemanticToken<I, R>, S>;
@@ -255,13 +259,18 @@ where
     D: DerefMut,
     D::Target: DiagnosticsSystem,
 {
-    fn analyze_file<A: IntoSemanticActions<Self>>(
+    fn analyze_file<A>(
         mut self,
         path: Self::StringRef,
         actions: A,
-    ) -> (Result<(), CodebaseError>, A::SemanticActions)
+    ) -> (
+        Result<(), CodebaseError>,
+        <Self as IntoSemanticActions<A>>::SemanticActions,
+    )
     where
-        A::SemanticActions: TokenStreamActions<Self::Ident, Literal<Self::StringRef>, Self::Span>,
+        Self: IntoSemanticActions<A>,
+        <Self as IntoSemanticActions<A>>::SemanticActions:
+            TokenStreamActions<Self::Ident, Literal<Self::StringRef>, Self::Span>,
     {
         let tokens = match self
             .source
@@ -269,10 +278,10 @@ where
             .lex_file(path, &mut *self.source.diagnostics)
         {
             Ok(tokens) => tokens,
-            Err(error) => return (Err(error), actions.into_semantic_actions(self)),
+            Err(error) => return (Err(error), self.into_semantic_actions(actions)),
         };
         let mut parser = self.source.parser_factory.mk_parser();
-        let actions = actions.into_semantic_actions(self);
+        let actions = self.into_semantic_actions(actions);
         (Ok(()), parser.parse_token_stream(tokens, actions))
     }
 
@@ -287,21 +296,23 @@ where
             .define_macro(name_span, params, body, &mut *self.source.diagnostics)
     }
 
-    fn call_macro<A: IntoSemanticActions<Self>>(
+    fn call_macro<A>(
         mut self,
         id: (Self::MacroId, Self::Span),
         args: MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
         actions: A,
-    ) -> A::SemanticActions
+    ) -> <Self as IntoSemanticActions<A>>::SemanticActions
     where
-        A::SemanticActions: TokenStreamActions<Self::Ident, Literal<Self::StringRef>, Self::Span>,
+        Self: IntoSemanticActions<A>,
+        <Self as IntoSemanticActions<A>>::SemanticActions:
+            TokenStreamActions<Self::Ident, Literal<Self::StringRef>, Self::Span>,
     {
         let expansion = self
             .source
             .macros
             .expand_macro(id, args, &mut *self.source.diagnostics);
         let mut parser = self.source.parser_factory.mk_parser();
-        let actions = actions.into_semantic_actions(self);
+        let actions = self.into_semantic_actions(actions);
         parser.parse_token_stream(expansion.map(|(t, s)| (Ok(t), s)), actions)
     }
 }
@@ -561,15 +572,21 @@ mod mock {
         T: From<NameTableEvent<N::Keyword, N::MacroId, N::SymbolId>>,
         S: Clone + Merge,
     {
-        fn analyze_file<A: IntoSemanticActions<Self>>(
+        fn analyze_file<A>(
             mut self,
             path: String,
             actions: A,
-        ) -> (Result<(), CodebaseError>, A::SemanticActions) {
+        ) -> (
+            Result<(), CodebaseError>,
+            <Self as IntoSemanticActions<A>>::SemanticActions,
+        )
+        where
+            Self: IntoSemanticActions<A>,
+        {
             self.source.log.push(SessionEvent::AnalyzeFile(path));
             (
                 self.source.error.take().map_or(Ok(()), Err),
-                actions.into_semantic_actions(self),
+                self.into_semantic_actions(actions),
             )
         }
 
@@ -585,14 +602,17 @@ mod mock {
             MockMacroId(self.source.id_gen.gen())
         }
 
-        fn call_macro<A: IntoSemanticActions<Self>>(
+        fn call_macro<A>(
             self,
             (id, _): (Self::MacroId, Self::Span),
             (args, _): MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
             actions: A,
-        ) -> A::SemanticActions {
+        ) -> <Self as IntoSemanticActions<A>>::SemanticActions
+        where
+            Self: IntoSemanticActions<A>,
+        {
             self.source.log.push(SessionEvent::InvokeMacro(id, args));
-            actions.into_semantic_actions(self)
+            self.into_semantic_actions(actions)
         }
     }
 
@@ -679,12 +699,12 @@ mod tests {
 
     type Expr<S> = crate::expr::Expr<Atom<LocationCounter, usize>, S>;
 
-    impl<S: ReentrancyActions> IntoSemanticActions<S> for () {
+    impl<S: ReentrancyActions> IntoSemanticActions<()> for S {
         type SemanticActions =
             TokenStreamActionCollector<S, S::Ident, Literal<S::StringRef>, S::Span>;
 
-        fn into_semantic_actions(self, session: S) -> Self::SemanticActions {
-            TokenStreamActionCollector::new(session, panic)
+        fn into_semantic_actions(self, _: ()) -> Self::SemanticActions {
+            TokenStreamActionCollector::new(self, panic)
         }
     }
 

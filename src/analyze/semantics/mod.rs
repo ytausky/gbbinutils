@@ -46,13 +46,13 @@ impl<S: ReentrancyActions<Keyword = &'static Keyword>> TokenStreamState<S> {
     }
 }
 
-impl<S: ReentrancyActions> IntoSemanticActions<S> for TokenStreamState<S> {
+impl<S: ReentrancyActions> IntoSemanticActions<TokenStreamState<S>> for S {
     type SemanticActions = TokenStreamSemantics<S>;
 
-    fn into_semantic_actions(self, session: S) -> Self::SemanticActions {
+    fn into_semantic_actions(self, state: TokenStreamState<S>) -> Self::SemanticActions {
         Session {
-            session,
-            state: self,
+            session: self,
+            state,
         }
     }
 }
