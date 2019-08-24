@@ -1,4 +1,4 @@
-pub(super) use self::directive::Directive;
+pub(super) use self::directive::{BindingDirective, Directive, SimpleDirective};
 pub(in crate::analyze) use self::operand::OperandSymbol;
 
 use self::arg::*;
@@ -78,19 +78,22 @@ impl<S: Session<Keyword = &'static Keyword>> InstrFinalizer<S::Span> for Builtin
 }
 
 enum PreparedBuiltinInstr<S: Session> {
-    Binding((Directive, S::Span), Option<Label<S::Ident, S::Span>>),
-    Directive((Directive, S::Span)),
+    Binding(
+        (BindingDirective, S::Span),
+        Option<Label<S::Ident, S::Span>>,
+    ),
+    Directive((SimpleDirective, S::Span)),
     Mnemonic((Mnemonic, S::Span)),
 }
 
 impl<S: Session<Keyword = &'static Keyword>> PreparedBuiltinInstr<S> {
     fn new((command, span): (BuiltinInstr, S::Span), stmt: &mut InstrLineSemantics<S>) -> Self {
         match command {
-            BuiltinInstr::Directive(directive) if directive.requires_symbol() => {
-                PreparedBuiltinInstr::Binding((directive, span), stmt.state.label.take())
+            BuiltinInstr::Directive(Directive::Binding(binding)) => {
+                PreparedBuiltinInstr::Binding((binding, span), stmt.state.label.take())
             }
-            BuiltinInstr::Directive(directive) => {
-                PreparedBuiltinInstr::Directive((directive, span))
+            BuiltinInstr::Directive(Directive::Simple(simple)) => {
+                PreparedBuiltinInstr::Directive((simple, span))
             }
             BuiltinInstr::Mnemonic(mnemonic) => PreparedBuiltinInstr::Mnemonic((mnemonic, span)),
         }
@@ -102,24 +105,18 @@ impl<S: Session<Keyword = &'static Keyword>> PreparedBuiltinInstr<S> {
         session: S,
     ) -> TokenStreamSemantics<S> {
         match self {
-            PreparedBuiltinInstr::Binding(binding, label) => {
-                directive::analyze_directive(binding, label, args, session)
-            }
-            PreparedBuiltinInstr::Directive(directive) => {
-                directive::analyze_directive(directive, None, args, session)
+            PreparedBuiltinInstr::Binding((binding, span), label) => directive::analyze_directive(
+                (Directive::Binding(binding), span),
+                label,
+                args,
+                session,
+            ),
+            PreparedBuiltinInstr::Directive((simple, span)) => {
+                directive::analyze_directive((Directive::Simple(simple), span), None, args, session)
             }
             PreparedBuiltinInstr::Mnemonic(mnemonic) => {
                 TokenStreamSemantics::new(analyze_mnemonic(mnemonic, args, session))
             }
-        }
-    }
-}
-
-impl Directive {
-    fn requires_symbol(self) -> bool {
-        match self {
-            Directive::Equ | Directive::Macro | Directive::Section => true,
-            _ => false,
         }
     }
 }

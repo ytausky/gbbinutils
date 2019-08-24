@@ -9,16 +9,26 @@ use crate::analyze::Literal;
 use crate::diag::*;
 use crate::object::builder::{Item, Width};
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(in crate::analyze) enum Directive {
+    Binding(BindingDirective),
+    Simple(SimpleDirective),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(in crate::analyze) enum BindingDirective {
+    Equ,
+    Macro,
+    Section,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(in crate::analyze) enum SimpleDirective {
     Db,
     Ds,
     Dw,
-    Equ,
     Include,
-    Macro,
     Org,
-    Section,
 }
 
 pub(super) fn analyze_directive<S: Session<Keyword = &'static Keyword>>(
@@ -45,15 +55,17 @@ struct DirectiveContext<S: Session> {
 
 impl<S: Session<Keyword = &'static Keyword>> DirectiveContext<S> {
     fn analyze(self, directive: Directive) -> TokenStreamSemantics<S> {
+        use self::BindingDirective::*;
+        use self::SimpleDirective::*;
         match directive {
-            Directive::Db => self.analyze_data(Width::Byte),
-            Directive::Ds => self.analyze_ds(),
-            Directive::Dw => self.analyze_data(Width::Word),
-            Directive::Equ => self.analyze_equ(),
-            Directive::Include => self.analyze_include(),
-            Directive::Macro => self.analyze_macro(),
-            Directive::Org => self.analyze_org(),
-            Directive::Section => self.analyze_section(),
+            Directive::Binding(Equ) => self.analyze_equ(),
+            Directive::Binding(Macro) => self.analyze_macro(),
+            Directive::Binding(Section) => self.analyze_section(),
+            Directive::Simple(Db) => self.analyze_data(Width::Byte),
+            Directive::Simple(Ds) => self.analyze_ds(),
+            Directive::Simple(Dw) => self.analyze_data(Width::Word),
+            Directive::Simple(Include) => self.analyze_include(),
+            Directive::Simple(Org) => self.analyze_org(),
         }
     }
 
