@@ -14,7 +14,10 @@ pub trait NameTable<I>: SymbolSource {
     type Keyword: Clone;
     type MacroId: Clone;
 
-    fn get(&self, ident: &I) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>>;
+    fn get(
+        &mut self,
+        ident: &I,
+    ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>>;
     fn insert(
         &mut self,
         ident: I,
@@ -122,10 +125,21 @@ where
     type MacroId = MacroId;
 
     fn get(
-        &self,
+        &mut self,
         ident: &String,
     ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
-        self.table.get(ident).cloned()
+        self.table.get(ident).cloned().map_or_else(
+            || {
+                let repr = ident.to_ascii_uppercase();
+                if let Some(keyword @ ResolvedName::Keyword(_)) = self.table.get(&repr).cloned() {
+                    self.table.insert(repr, keyword.clone());
+                    Some(keyword)
+                } else {
+                    None
+                }
+            },
+            Some,
+        )
     }
 
     fn insert(
@@ -150,13 +164,6 @@ impl<T: Default> BiLevelNameTable<T> {
         }
     }
 
-    fn select_table(&self, ident: &Ident<String>) -> &T {
-        match ident.visibility {
-            Visibility::Global => &self.global,
-            Visibility::Local => self.local.as_ref().unwrap(),
-        }
-    }
-
     fn select_table_mut(&mut self, ident: &Ident<String>) -> &mut T {
         match ident.visibility {
             Visibility::Global => &mut self.global,
@@ -174,10 +181,10 @@ impl<T: Default + NameTable<String>> NameTable<Ident<String>> for BiLevelNameTab
     type MacroId = T::MacroId;
 
     fn get(
-        &self,
+        &mut self,
         ident: &Ident<String>,
     ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
-        self.select_table(ident).get(&ident.name)
+        self.select_table_mut(ident).get(&ident.name)
     }
 
     fn insert(
@@ -230,7 +237,7 @@ mod mock {
         type MacroId = N::MacroId;
 
         fn get(
-            &self,
+            &mut self,
             ident: &String,
         ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
             self.names.get(ident)
@@ -279,7 +286,7 @@ mod mock {
         type MacroId = ();
 
         fn get(
-            &self,
+            &mut self,
             ident: &I,
         ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
             Some(ResolvedName::Symbol(ident.clone()))

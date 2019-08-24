@@ -319,7 +319,10 @@ where
     type Keyword = <N::Target as NameTable<I>>::Keyword;
     type MacroId = <N::Target as NameTable<I>>::MacroId;
 
-    fn get(&self, ident: &I) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
+    fn get(
+        &mut self,
+        ident: &I,
+    ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
         self.names.get(ident)
     }
 
