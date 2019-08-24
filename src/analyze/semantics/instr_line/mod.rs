@@ -11,7 +11,7 @@ use super::diag::{EmitDiag, Message};
 use super::params::RelocLookup;
 use super::resolve::ResolvedName;
 use super::syntax;
-use super::{Keyword, Label, Literal, ReentrancyActions, SemanticActions, TokenStreamSemantics};
+use super::{Keyword, Label, Literal, ReentrancyActions, Session, TokenStreamSemantics};
 
 use crate::expr::LocationCounter;
 use crate::object::builder::{Finish, PushOp};
@@ -20,7 +20,7 @@ pub(super) mod builtin_instr;
 mod label;
 mod macro_instr;
 
-pub(in crate::analyze) type InstrLineSemantics<S> = SemanticActions<InstrLineState<S>, S>;
+pub(in crate::analyze) type InstrLineSemantics<S> = Session<InstrLineState<S>, S>;
 
 pub(in crate::analyze) struct InstrLineState<S: ReentrancyActions> {
     pub label: Option<Label<S::Ident, S::Span>>,

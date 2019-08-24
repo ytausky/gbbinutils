@@ -36,7 +36,7 @@ impl From<Mnemonic> for BuiltinInstr {
     }
 }
 
-pub(super) type BuiltinInstrSemantics<S> = SemanticActions<BuiltinInstrState<S>, S>;
+pub(super) type BuiltinInstrSemantics<S> = Session<BuiltinInstrState<S>, S>;
 
 pub(in crate::analyze) struct BuiltinInstrState<S: ReentrancyActions> {
     parent: InstrLineState<S>,

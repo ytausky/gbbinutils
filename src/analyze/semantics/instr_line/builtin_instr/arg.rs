@@ -1,4 +1,4 @@
-use super::{BuiltinInstrSemantics, BuiltinInstrState, OperandSymbol, SemanticActions};
+use super::{BuiltinInstrSemantics, BuiltinInstrState, OperandSymbol, Session};
 
 use crate::analyze::resolve::ResolvedName;
 use crate::analyze::semantics::Keyword;
@@ -9,7 +9,7 @@ use crate::diag::span::{Source, SpanSource};
 use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::expr::BinOp;
 
-pub(super) type ArgSemantics<S> = SemanticActions<
+pub(super) type ArgSemantics<S> = Session<
     ExprBuilder<
         <S as IdentSource>::Ident,
         <S as StringSource>::StringRef,

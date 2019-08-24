@@ -1,11 +1,11 @@
-use super::{InstrLineState, SemanticActions, TokenStreamSemantics};
+use super::{InstrLineState, Session, TokenStreamSemantics};
 
 use crate::analyze::semantics::{Keyword, TokenStreamState};
 use crate::analyze::session::{MacroArgs, ReentrancyActions};
 use crate::analyze::syntax::actions::{InstrFinalizer, MacroArgActions, MacroInstrActions};
 use crate::analyze::{SemanticToken, TokenSeq};
 
-pub(super) type MacroInstrSemantics<S> = SemanticActions<MacroInstrState<S>, S>;
+pub(super) type MacroInstrSemantics<S> = Session<MacroInstrState<S>, S>;
 
 pub(in crate::analyze) struct MacroInstrState<S: ReentrancyActions> {
     parent: InstrLineState<S>,
@@ -54,7 +54,7 @@ impl<S: ReentrancyActions<Keyword = &'static Keyword>> InstrFinalizer<S::Span>
     }
 }
 
-type MacroArgSemantics<S> = SemanticActions<MacroArgState<S>, S>;
+type MacroArgSemantics<S> = Session<MacroArgState<S>, S>;
 
 pub(in crate::analyze) struct MacroArgState<S: ReentrancyActions> {
     tokens: TokenSeq<S::Ident, S::StringRef, S::Span>,

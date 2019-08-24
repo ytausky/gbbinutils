@@ -1,10 +1,10 @@
-use super::{InstrLineSemantics, InstrLineState, SemanticActions};
+use super::{InstrLineSemantics, InstrLineState, Session};
 
 use crate::analyze::semantics::Params;
 use crate::analyze::session::ReentrancyActions;
 use crate::analyze::syntax::actions::LabelActions;
 
-pub(super) type LabelSemantics<S> = SemanticActions<LabelState<S>, S>;
+pub(super) type LabelSemantics<S> = Session<LabelState<S>, S>;
 
 pub(in crate::analyze) struct LabelState<S: ReentrancyActions> {
     parent: InstrLineState<S>,

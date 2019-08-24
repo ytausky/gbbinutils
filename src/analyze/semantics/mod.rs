@@ -16,7 +16,7 @@ use crate::object::builder::PushOp;
 
 macro_rules! set_state {
     ($actions:expr, $state:expr) => {
-        SemanticActions {
+        $crate::analyze::semantics::Session {
             session: $actions.session,
             state: $state,
         }
@@ -34,7 +34,7 @@ pub(super) enum Keyword {
     Operand(OperandSymbol),
 }
 
-pub(super) type TokenStreamSemantics<S> = SemanticActions<TokenStreamState<S>, S>;
+pub(super) type TokenStreamSemantics<S> = Session<TokenStreamState<S>, S>;
 
 pub(super) struct TokenStreamState<S: ReentrancyActions>(
     LineRule<InstrLineState<S>, TokenContext<S>>,
@@ -50,21 +50,21 @@ impl<S: ReentrancyActions> IntoSemanticActions<S> for TokenStreamState<S> {
     type SemanticActions = TokenStreamSemantics<S>;
 
     fn into_semantic_actions(self, session: S) -> Self::SemanticActions {
-        SemanticActions {
+        Session {
             session,
             state: self,
         }
     }
 }
 
-pub(super) struct SemanticActions<L, S: ReentrancyActions> {
+pub(super) struct Session<L, S: ReentrancyActions> {
     state: L,
     session: S,
 }
 
-impl<L, S: ReentrancyActions> SemanticActions<L, S> {
-    fn map_line<F: FnOnce(L) -> T, T>(self, f: F) -> SemanticActions<T, S> {
-        SemanticActions {
+impl<L, S: ReentrancyActions> Session<L, S> {
+    fn map_line<F: FnOnce(L) -> T, T>(self, f: F) -> Session<T, S> {
+        Session {
             state: f(self.state),
             session: self.session,
         }
@@ -72,7 +72,7 @@ impl<L, S: ReentrancyActions> SemanticActions<L, S> {
 }
 
 delegate_diagnostics! {
-    {L, S: ReentrancyActions}, SemanticActions<L, S>, {session}, S, S::Span
+    {L, S: ReentrancyActions}, Session<L, S>, {session}, S, S::Span
 }
 
 impl<S: ReentrancyActions<Keyword = &'static Keyword>> TokenStreamSemantics<S> {
