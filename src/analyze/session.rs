@@ -76,22 +76,39 @@ pub(super) trait IntoSemanticActions<S: Session> {
 pub(super) type MacroArgs<I, R, S> = super::macros::MacroArgs<SemanticToken<I, R>, S>;
 pub(super) type Params<I, S> = (Vec<I>, Vec<S>);
 
-pub(super) struct SessionComponents<U, I, B, N, D> {
+pub(super) struct SessionComponents<U, I, B, N> {
     upstream: U,
     interner: I,
     backend: B,
     names: N,
-    diagnostics: D,
 }
 
-pub(super) struct Upstream<C, P, M> {
+pub(super) struct Upstream<C, P, M, D> {
     codebase: C,
     parser_factory: P,
     macros: M,
+    diagnostics: D,
+}
+
+impl<C, P, M, D> SpanSource for Upstream<C, P, M, D>
+where
+    D: Deref,
+    D::Target: SpanSource,
+{
+    type Span = <D::Target as SpanSource>::Span;
+}
+
+delegate_diagnostics! {
+    {C, P, M, D: DerefMut, S: Clone},
+    {D::Target: Diagnostics<S>},
+    Upstream<C, P, M, D>,
+    {diagnostics},
+    D::Target,
+    S
 }
 
 impl<'a, C, P, M, I, B, N, D>
-    SessionComponents<Upstream<&'a mut C, &'a mut P, &'a mut M>, &'a mut I, B, &'a mut N, &'a mut D>
+    SessionComponents<Upstream<&'a mut C, &'a mut P, &'a mut M, &'a mut D>, &'a mut I, B, &'a mut N>
 where
     C: IdentSource + StringSource,
     D: DiagnosticsSystem,
@@ -110,28 +127,27 @@ where
                 codebase,
                 parser_factory,
                 macros,
+                diagnostics,
             },
             interner,
             backend,
             names,
-            diagnostics,
         }
     }
 }
 
-impl<U, I, B, N, D> SessionComponents<U, I, B, N, D> {
-    fn replace_backend<T>(self, f: impl FnOnce(B) -> T) -> SessionComponents<U, I, T, N, D> {
+impl<U, I, B, N> SessionComponents<U, I, B, N> {
+    fn replace_backend<T>(self, f: impl FnOnce(B) -> T) -> SessionComponents<U, I, T, N> {
         SessionComponents {
             upstream: self.upstream,
             interner: self.interner,
             backend: f(self.backend),
             names: self.names,
-            diagnostics: self.diagnostics,
         }
     }
 }
 
-impl<C, P, M, I, B, N, D> IdentSource for SessionComponents<Upstream<C, P, M>, I, B, N, D>
+impl<C, P, M, I, B, N, D> IdentSource for SessionComponents<Upstream<C, P, M, D>, I, B, N>
 where
     C: DerefMut,
     C::Target: IdentSource + StringSource,
@@ -139,7 +155,7 @@ where
     type Ident = <C::Target as IdentSource>::Ident;
 }
 
-impl<U, I, B, N, D> MacroSource for SessionComponents<U, I, B, N, D>
+impl<U, I, B, N> MacroSource for SessionComponents<U, I, B, N>
 where
     N: Deref,
     N::Target: MacroSource,
@@ -147,15 +163,14 @@ where
     type MacroId = <N::Target as MacroSource>::MacroId;
 }
 
-impl<U, I, B, N, D> SpanSource for SessionComponents<U, I, B, N, D>
+impl<U, I, B, N> SpanSource for SessionComponents<U, I, B, N>
 where
-    D: DerefMut,
-    D::Target: SpanSource,
+    U: SpanSource,
 {
-    type Span = <D::Target as SpanSource>::Span;
+    type Span = U::Span;
 }
 
-impl<C, P, M, I, B, N, D> StringSource for SessionComponents<Upstream<C, P, M>, I, B, N, D>
+impl<C, P, M, I, B, N, D> StringSource for SessionComponents<Upstream<C, P, M, D>, I, B, N>
 where
     C: DerefMut,
     C::Target: IdentSource + StringSource,
@@ -163,7 +178,7 @@ where
     type StringRef = <C::Target as StringSource>::StringRef;
 }
 
-impl<U, I, B: Backend<S>, N, D, S: Clone> PartialBackend<S> for SessionComponents<U, I, B, N, D> {
+impl<U, I, B: Backend<S>, N, S: Clone> PartialBackend<S> for SessionComponents<U, I, B, N> {
     type Value = B::Value;
 
     fn emit_item(&mut self, item: Item<Self::Value>) {
@@ -191,7 +206,7 @@ impl<U, I, B: Backend<S>, N, D, S: Clone> PartialBackend<S> for SessionComponent
     }
 }
 
-impl<C, P, M, I, B, N, D> Session for SessionComponents<Upstream<C, P, M>, I, B, N, D>
+impl<C, P, M, I, B, N, D> Session for SessionComponents<Upstream<C, P, M, D>, I, B, N>
 where
     C: DerefMut,
     C::Target: Lex<D::Target>,
@@ -232,7 +247,7 @@ where
         let tokens = match self
             .upstream
             .codebase
-            .lex_file(path, &mut *self.diagnostics)
+            .lex_file(path, &mut *self.upstream.diagnostics)
         {
             Ok(tokens) => tokens,
             Err(error) => return (Err(error), actions.into_semantic_actions(self)),
@@ -250,7 +265,7 @@ where
     ) -> Self::MacroId {
         self.upstream
             .macros
-            .define_macro(name_span, params, body, &mut *self.diagnostics)
+            .define_macro(name_span, params, body, &mut *self.upstream.diagnostics)
     }
 
     fn call_macro<A: IntoSemanticActions<Self>>(
@@ -262,28 +277,27 @@ where
     where
         A::SemanticActions: TokenStreamActions<Self::Ident, Literal<Self::StringRef>, Self::Span>,
     {
-        let expansion = self
-            .upstream
-            .macros
-            .expand_macro(id, args, &mut *self.diagnostics);
+        let expansion =
+            self.upstream
+                .macros
+                .expand_macro(id, args, &mut *self.upstream.diagnostics);
         let mut parser = self.upstream.parser_factory.mk_parser();
         let actions = actions.into_semantic_actions(self);
         parser.parse_token_stream(expansion.map(|(t, s)| (Ok(t), s)), actions)
     }
 }
 
-impl<U, Interner, B, N, D, I, S> PartialSession<I, S> for SessionComponents<U, Interner, B, N, D>
+impl<U, Interner, B, N, I, S> PartialSession<I, S> for SessionComponents<U, Interner, B, N>
 where
+    U: Diagnostics<S>,
     B: Backend<S>,
     N: DerefMut,
     N::Target: NameTable<I, SymbolId = B::SymbolId> + StartScope<I>,
-    D: DerefMut,
-    D::Target: Diagnostics<S>,
     S: Clone,
     Self: Diagnostics<S>,
 {
-    type ConstBuilder = SessionComponents<U, Interner, B::ConstBuilder, N, D>;
-    type SymbolBuilder = SessionComponents<U, Interner, B::SymbolBuilder, N, D>;
+    type ConstBuilder = SessionComponents<U, Interner, B::ConstBuilder, N>;
+    type SymbolBuilder = SessionComponents<U, Interner, B::SymbolBuilder, N>;
 
     fn build_const(self) -> Self::ConstBuilder {
         self.replace_backend(Backend::build_const)
@@ -294,7 +308,7 @@ where
     }
 }
 
-impl<U, I, B, N, D, R> GetString<R> for SessionComponents<U, I, B, N, D>
+impl<U, I, B, N, R> GetString<R> for SessionComponents<U, I, B, N>
 where
     I: Deref,
     I::Target: GetString<R>,
@@ -304,17 +318,17 @@ where
     }
 }
 
-impl<U, I, B: SymbolSource, N, D> SymbolSource for SessionComponents<U, I, B, N, D> {
+impl<U, I, B: SymbolSource, N> SymbolSource for SessionComponents<U, I, B, N> {
     type SymbolId = B::SymbolId;
 }
 
-impl<U, I, B: AllocSymbol<S>, N, D, S: Clone> AllocSymbol<S> for SessionComponents<U, I, B, N, D> {
+impl<U, I, B: AllocSymbol<S>, N, S: Clone> AllocSymbol<S> for SessionComponents<U, I, B, N> {
     fn alloc_symbol(&mut self, span: S) -> Self::SymbolId {
         self.backend.alloc_symbol(span)
     }
 }
 
-impl<U, Interner, B, N, D, I> NameTable<I> for SessionComponents<U, Interner, B, N, D>
+impl<U, Interner, B, N, I> NameTable<I> for SessionComponents<U, Interner, B, N>
 where
     B: SymbolSource,
     N: DerefMut,
@@ -339,15 +353,14 @@ where
 }
 
 delegate_diagnostics! {
-    {'a, U, I, B, N, D: DerefMut, S: Clone},
-    {D::Target: Diagnostics<S>},
-    SessionComponents<U, I, B, N, D>,
-    {diagnostics},
-    D::Target,
+    {'a, U: Diagnostics<S>, I, B, N, S: Clone},
+    SessionComponents<U, I, B, N>,
+    {upstream},
+    U,
     S
 }
 
-impl<U, Interner, B, N, D, I> StartScope<I> for SessionComponents<U, Interner, B, N, D>
+impl<U, Interner, B, N, I> StartScope<I> for SessionComponents<U, Interner, B, N>
 where
     N: DerefMut,
     N::Target: StartScope<I>,
@@ -357,7 +370,7 @@ where
     }
 }
 
-impl<U, I, B, N, D, S> PushOp<Name<B::SymbolId>, S> for SessionComponents<U, I, B, N, D>
+impl<U, I, B, N, S> PushOp<Name<B::SymbolId>, S> for SessionComponents<U, I, B, N>
 where
     B: AllocSymbol<S> + PushOp<Name<<B as SymbolSource>::SymbolId>, S>,
     S: Clone,
@@ -367,8 +380,8 @@ where
     }
 }
 
-impl<U, I, B: Finish, N, D> Finish for SessionComponents<U, I, B, N, D> {
-    type Parent = SessionComponents<U, I, B::Parent, N, D>;
+impl<U, I, B: Finish, N> Finish for SessionComponents<U, I, B, N> {
+    type Parent = SessionComponents<U, I, B::Parent, N>;
     type Value = B::Value;
 
     fn finish(self) -> (Self::Parent, Self::Value) {
@@ -378,7 +391,6 @@ impl<U, I, B: Finish, N, D> Finish for SessionComponents<U, I, B, N, D> {
             interner: self.interner,
             backend,
             names: self.names,
-            diagnostics: self.diagnostics,
         };
         (parent, value)
     }
@@ -386,7 +398,7 @@ impl<U, I, B: Finish, N, D> Finish for SessionComponents<U, I, B, N, D> {
 
 macro_rules! impl_push_op_for_session_components {
     ($t:ty) => {
-        impl<U, I, B, N, D, S> PushOp<$t, S> for SessionComponents<U, I, B, N, D>
+        impl<U, I, B, N, S> PushOp<$t, S> for SessionComponents<U, I, B, N>
         where
             B: PushOp<$t, S>,
             S: Clone,
@@ -433,14 +445,26 @@ mod mock {
         Box<FakeStringInterner>,
         MockBackend<A, T>,
         Box<MockNameTable<N, T>>,
-        Box<MockDiagnostics<T, S>>,
     >;
 
     pub(in crate::analyze) struct MockUpstream<T, S> {
+        diagnostics: Box<MockDiagnostics<T, S>>,
         id_gen: SerialIdAllocator,
         log: Log<T>,
         error: Option<CodebaseError>,
         _span: PhantomData<S>,
+    }
+
+    impl<T, S: Clone> SpanSource for MockUpstream<T, S> {
+        type Span = S;
+    }
+
+    delegate_diagnostics! {
+        {T: From<DiagnosticsEvent<S>>, S: Clone + Merge},
+        MockUpstream<T, S>,
+        {diagnostics},
+        MockDiagnostics<T, S>,
+        S
     }
 
     impl<A, N, T, S> MockSession<A, N, T, S> {
@@ -449,8 +473,8 @@ mod mock {
                 interner: Box::new(FakeStringInterner),
                 backend: MockBackend::new(alloc, log.clone()),
                 names: Box::new(MockNameTable::new(names, log.clone())),
-                diagnostics: Box::new(MockDiagnostics::new(log.clone())),
                 upstream: MockUpstream {
+                    diagnostics: Box::new(MockDiagnostics::new(log.clone())),
                     id_gen: SerialIdAllocator::new(),
                     log,
                     error: None,
@@ -539,11 +563,10 @@ mod mock {
     }
 
     pub(in crate::analyze) type MockBuilder<A, N, T, S> = SessionComponents<
-        (),
+        MockDiagnostics<T, S>,
         FakeStringInterner,
         RelocContext<MockBackend<A, T>, Expr<<A as SymbolSource>::SymbolId, S>>,
         Box<MockNameTable<N, T>>,
-        Box<MockDiagnostics<T, S>>,
     >;
 
     impl<A, N, T, S> MockBuilder<A, N, T, S>
@@ -555,11 +578,10 @@ mod mock {
     {
         fn from_components(alloc: A, names: N, log: Log<T>) -> Self {
             Self {
-                upstream: (),
+                upstream: MockDiagnostics::new(log.clone()),
                 interner: FakeStringInterner,
                 backend: MockBackend::new(alloc, log.clone()).build_const(),
-                names: Box::new(MockNameTable::new(names, log.clone())),
-                diagnostics: Box::new(MockDiagnostics::new(log)),
+                names: Box::new(MockNameTable::new(names, log)),
             }
         }
     }
@@ -822,11 +844,15 @@ mod tests {
         Event<S>,
     >;
     type TestSession<'a, S> = SessionComponents<
-        Upstream<&'a mut MockCodebase<S>, &'a mut MockParserFactory<S>, &'a mut MockMacroTable<S>>,
+        Upstream<
+            &'a mut MockCodebase<S>,
+            &'a mut MockParserFactory<S>,
+            &'a mut MockMacroTable<S>,
+            &'a mut MockDiagnosticsSystem<S>,
+        >,
         &'a mut FakeStringInterner,
         MockBackend<S>,
         &'a mut MockNameTable<S>,
-        &'a mut MockDiagnosticsSystem<S>,
     >;
 
     #[derive(Debug, PartialEq)]
