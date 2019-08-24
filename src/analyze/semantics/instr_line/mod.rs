@@ -53,7 +53,7 @@ where
         ident: S::Ident,
         span: S::Span,
     ) -> InstrRule<Self::BuiltinInstrActions, Self::MacroInstrActions, Self> {
-        match self.session.get(&ident) {
+        match self.reentrancy.get(&ident) {
             Some(ResolvedName::Keyword(Keyword::BuiltinInstr(builtin))) => InstrRule::BuiltinInstr(
                 self.map_line(|line| BuiltinInstrState::new(line, (builtin.clone(), span))),
             ),
@@ -88,12 +88,12 @@ impl<S: ReentrancyActions> InstrLineState<S> {
 impl<S: ReentrancyActions> InstrLineSemantics<S> {
     pub fn flush_label(mut self) -> Self {
         if let Some(((label, span), _params)) = self.state.label.take() {
-            self.session.start_scope(&label);
-            let id = self.session.reloc_lookup(label, span.clone());
-            let mut builder = self.session.define_symbol(id, span.clone());
+            self.reentrancy.start_scope(&label);
+            let id = self.reentrancy.reloc_lookup(label, span.clone());
+            let mut builder = self.reentrancy.define_symbol(id, span.clone());
             PushOp::<LocationCounter, _>::push_op(&mut builder, LocationCounter, span);
-            let (session, ()) = builder.finish();
-            self.session = session;
+            let (reentrancy, ()) = builder.finish();
+            self.reentrancy = reentrancy;
         }
         self
     }

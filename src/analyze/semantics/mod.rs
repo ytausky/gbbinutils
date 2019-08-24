@@ -17,7 +17,7 @@ use crate::object::builder::PushOp;
 macro_rules! set_state {
     ($actions:expr, $state:expr) => {
         $crate::analyze::semantics::Session {
-            session: $actions.session,
+            reentrancy: $actions.reentrancy,
             state: $state,
         }
     };
@@ -46,40 +46,55 @@ impl<S: ReentrancyActions<Keyword = &'static Keyword>> TokenStreamState<S> {
     }
 }
 
-impl<S: ReentrancyActions> IntoSemanticActions<TokenStreamState<S>> for S {
+impl<S: ReentrancyActions> IntoSemanticActions<Session<TokenStreamState<S>, ()>> for S {
     type SemanticActions = TokenStreamSemantics<S>;
 
-    fn into_semantic_actions(self, state: TokenStreamState<S>) -> Self::SemanticActions {
+    fn into_semantic_actions(
+        self,
+        session: Session<TokenStreamState<S>, ()>,
+    ) -> Self::SemanticActions {
         Session {
-            session: self,
-            state,
+            reentrancy: self,
+            state: session.state,
         }
     }
 }
 
-pub(super) struct Session<L, S: ReentrancyActions> {
+pub(super) struct Session<L, S> {
     state: L,
-    session: S,
+    reentrancy: S,
 }
 
 impl<L, S: ReentrancyActions> Session<L, S> {
     fn map_line<F: FnOnce(L) -> T, T>(self, f: F) -> Session<T, S> {
         Session {
             state: f(self.state),
-            session: self.session,
+            reentrancy: self.reentrancy,
+        }
+    }
+}
+
+impl<S> Default for Session<TokenStreamState<S>, ()>
+where
+    S: ReentrancyActions<Keyword = &'static Keyword>,
+{
+    fn default() -> Self {
+        Self {
+            reentrancy: (),
+            state: TokenStreamState::new(),
         }
     }
 }
 
 delegate_diagnostics! {
-    {L, S: ReentrancyActions}, Session<L, S>, {session}, S, S::Span
+    {L, S: ReentrancyActions}, Session<L, S>, {reentrancy}, S, S::Span
 }
 
 impl<S: ReentrancyActions<Keyword = &'static Keyword>> TokenStreamSemantics<S> {
-    pub fn new(session: S) -> TokenStreamSemantics<S> {
+    pub fn new(reentrancy: S) -> TokenStreamSemantics<S> {
         Self {
             state: TokenStreamState::new(),
-            session,
+            reentrancy,
         }
     }
 }
@@ -120,7 +135,7 @@ where
             LineRule::TokenLine(ref state) => {
                 match state {
                     TokenContext::MacroDef(_) => {
-                        self.session.emit_diag(Message::UnexpectedEof.at(span))
+                        self.reentrancy.emit_diag(Message::UnexpectedEof.at(span))
                     }
                 }
                 self

@@ -94,11 +94,13 @@ impl<S: ReentrancyActions<Keyword = &'static Keyword>> LineFinalizer<S::Span>
             TokenContext::MacroDef(state) => {
                 if let Some((name, params)) = state.label {
                     let tokens = state.tokens;
-                    let id = self.parent.session.define_macro(name.1, params, tokens);
-                    self.parent.session.insert(name.0, ResolvedName::Macro(id));
+                    let id = self.parent.reentrancy.define_macro(name.1, params, tokens);
+                    self.parent
+                        .reentrancy
+                        .insert(name.0, ResolvedName::Macro(id));
                 }
             }
         }
-        TokenStreamSemantics::new(self.parent.session)
+        TokenStreamSemantics::new(self.parent.reentrancy)
     }
 }

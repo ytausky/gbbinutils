@@ -1,6 +1,6 @@
 use self::macros::VecMacroTable;
 use self::resolve::{BasicNameTable, BiLevelNameTable, DefaultIdentFactory};
-use self::semantics::{TokenStreamState, KEYWORDS};
+use self::semantics::{Session, KEYWORDS};
 use self::session::*;
 use self::strings::FakeStringInterner;
 use self::syntax::parser::DefaultParserFactory;
@@ -64,7 +64,7 @@ where
             &mut names,
             diagnostics,
         );
-        session.analyze_file(name.into(), TokenStreamState::new()).0
+        session.analyze_file(name.into(), Session::default()).0
     }
 }
 

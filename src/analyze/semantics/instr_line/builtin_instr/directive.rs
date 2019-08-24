@@ -121,8 +121,13 @@ impl<S: ReentrancyActions<Keyword = &'static Keyword>> DirectiveContext<S> {
             Ok(result) => result,
             Err(()) => return TokenStreamSemantics::new(self.session),
         };
-        let (result, mut semantics): (_, TokenStreamSemantics<_>) =
-            self.session.analyze_file(path, TokenStreamState::new());
+        let (result, mut semantics): (_, TokenStreamSemantics<_>) = self.session.analyze_file(
+            path,
+            Session {
+                reentrancy: (),
+                state: TokenStreamState::new(),
+            },
+        );
         if let Err(err) = result {
             semantics.emit_diag(Message::from(err).at(span))
         }
@@ -136,7 +141,7 @@ impl<S: ReentrancyActions<Keyword = &'static Keyword>> DirectiveContext<S> {
         }
         TokenLineSemantics {
             state: TokenContext::MacroDef(MacroDefState::new(self.label)),
-            session: self.session,
+            reentrancy: self.session,
         }
         .map_line(Into::into)
     }
@@ -332,7 +337,7 @@ mod tests {
     fn include_file_with_invalid_utf8() {
         let name = "invalid_utf8.s";
         let log = collect_semantic_actions(|mut actions| {
-            actions.session.fail(CodebaseError::Utf8Error);
+            actions.reentrancy.fail(CodebaseError::Utf8Error);
             let mut context = actions
                 .will_parse_line()
                 .into_instr_line()
@@ -356,10 +361,12 @@ mod tests {
         let name = "nonexistent.s";
         let message = "some message";
         let log = collect_semantic_actions(|mut actions| {
-            actions.session.fail(CodebaseError::IoError(io::Error::new(
-                io::ErrorKind::NotFound,
-                message,
-            )));
+            actions
+                .reentrancy
+                .fail(CodebaseError::IoError(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    message,
+                )));
             let mut context = actions
                 .will_parse_line()
                 .into_instr_line()

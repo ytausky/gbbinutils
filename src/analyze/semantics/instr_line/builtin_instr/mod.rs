@@ -75,7 +75,7 @@ impl<S: ReentrancyActions<Keyword = &'static Keyword>> InstrFinalizer<S::Span>
         let mut semantics = set_state!(self, self.state.parent);
         let prepared = PreparedBuiltinInstr::new(self.state.command, &mut semantics);
         semantics = semantics.flush_label();
-        prepared.exec(args, semantics.session)
+        prepared.exec(args, semantics.reentrancy)
     }
 }
 

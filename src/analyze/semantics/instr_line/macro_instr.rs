@@ -46,10 +46,13 @@ impl<S: ReentrancyActions<Keyword = &'static Keyword>> InstrFinalizer<S::Span>
     type Next = TokenStreamSemantics<S>;
 
     fn did_parse_instr(self) -> Self::Next {
-        self.session.call_macro(
+        self.reentrancy.call_macro(
             self.state.name,
             self.state.args,
-            TokenStreamState::from(self.state.parent),
+            Session {
+                reentrancy: (),
+                state: TokenStreamState::from(self.state.parent),
+            },
         )
     }
 }
