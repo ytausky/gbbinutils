@@ -6,7 +6,7 @@ use self::label::{LabelSemantics, LabelState};
 use self::macro_instr::{MacroInstrSemantics, MacroInstrState};
 use self::syntax::actions::{InstrActions, InstrLineActions, InstrRule};
 
-use super::diag::span::{StripSpan, WithSpan};
+use super::diag::span::StripSpan;
 use super::diag::{EmitDiag, Message};
 use super::params::RelocLookup;
 use super::resolve::ResolvedName;
@@ -55,7 +55,7 @@ where
     ) -> InstrRule<Self::BuiltinInstrActions, Self::MacroInstrActions, Self> {
         match self.session.get(&ident) {
             Some(ResolvedName::Keyword(Keyword::BuiltinInstr(builtin))) => InstrRule::BuiltinInstr(
-                self.map_line(|line| BuiltinInstrState::new(line, builtin.clone().with_span(span))),
+                self.map_line(|line| BuiltinInstrState::new(line, (builtin.clone(), span))),
             ),
             Some(ResolvedName::Keyword(Keyword::Operand(_))) => unimplemented!(),
             Some(ResolvedName::Macro(id)) => {
