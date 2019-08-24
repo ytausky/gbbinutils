@@ -76,11 +76,9 @@ pub(super) trait IntoSemanticActions<S: Session> {
 pub(super) type MacroArgs<I, R, S> = super::macros::MacroArgs<SemanticToken<I, R>, S>;
 pub(super) type Params<I, S> = (Vec<I>, Vec<S>);
 
-pub(super) struct SessionComponents<U, I, B, N> {
-    source: U,
-    interner: I,
-    backend: B,
-    names: N,
+pub(super) struct SessionComponents<Source, Synth> {
+    source: Source,
+    synth: Synth,
 }
 
 pub(super) struct SourceComponents<C, P, M, D> {
@@ -88,6 +86,12 @@ pub(super) struct SourceComponents<C, P, M, D> {
     parser_factory: P,
     macros: M,
     diagnostics: D,
+}
+
+pub(super) struct SynthComponents<I, N, B> {
+    interner: I,
+    names: N,
+    builder: B,
 }
 
 impl<C, P, M, D> SpanSource for SourceComponents<C, P, M, D>
@@ -110,9 +114,7 @@ delegate_diagnostics! {
 impl<'a, C, P, M, I, B, N, D>
     SessionComponents<
         SourceComponents<&'a mut C, &'a mut P, &'a mut M, &'a mut D>,
-        &'a mut I,
-        B,
-        &'a mut N,
+        SynthComponents<&'a mut I, &'a mut N, B>,
     >
 where
     C: IdentSource + StringSource,
@@ -123,7 +125,7 @@ where
         parser_factory: &'a mut P,
         macros: &'a mut M,
         interner: &'a mut I,
-        backend: B,
+        builder: B,
         names: &'a mut N,
         diagnostics: &'a mut D,
     ) -> Self {
@@ -134,25 +136,32 @@ where
                 macros,
                 diagnostics,
             },
-            interner,
-            backend,
-            names,
+            synth: SynthComponents {
+                interner,
+                names,
+                builder,
+            },
         }
     }
 }
 
-impl<U, I, B, N> SessionComponents<U, I, B, N> {
-    fn replace_backend<T>(self, f: impl FnOnce(B) -> T) -> SessionComponents<U, I, T, N> {
+impl<Source, I, N, B> SessionComponents<Source, SynthComponents<I, N, B>> {
+    fn replace_backend<T>(
+        self,
+        f: impl FnOnce(B) -> T,
+    ) -> SessionComponents<Source, SynthComponents<I, N, T>> {
         SessionComponents {
             source: self.source,
-            interner: self.interner,
-            backend: f(self.backend),
-            names: self.names,
+            synth: SynthComponents {
+                interner: self.synth.interner,
+                names: self.synth.names,
+                builder: f(self.synth.builder),
+            },
         }
     }
 }
 
-impl<C, P, M, I, B, N, D> IdentSource for SessionComponents<SourceComponents<C, P, M, D>, I, B, N>
+impl<C, P, M, D, Synth> IdentSource for SessionComponents<SourceComponents<C, P, M, D>, Synth>
 where
     C: DerefMut,
     C::Target: IdentSource + StringSource,
@@ -160,7 +169,7 @@ where
     type Ident = <C::Target as IdentSource>::Ident;
 }
 
-impl<U, I, B, N> MacroSource for SessionComponents<U, I, B, N>
+impl<Source, I, N, B> MacroSource for SessionComponents<Source, SynthComponents<I, N, B>>
 where
     N: Deref,
     N::Target: MacroSource,
@@ -168,14 +177,14 @@ where
     type MacroId = <N::Target as MacroSource>::MacroId;
 }
 
-impl<U, I, B, N> SpanSource for SessionComponents<U, I, B, N>
+impl<Source, I, N, B> SpanSource for SessionComponents<Source, SynthComponents<I, N, B>>
 where
-    U: SpanSource,
+    Source: SpanSource,
 {
-    type Span = U::Span;
+    type Span = Source::Span;
 }
 
-impl<C, P, M, I, B, N, D> StringSource for SessionComponents<SourceComponents<C, P, M, D>, I, B, N>
+impl<C, P, M, D, Synth> StringSource for SessionComponents<SourceComponents<C, P, M, D>, Synth>
 where
     C: DerefMut,
     C::Target: IdentSource + StringSource,
@@ -183,11 +192,15 @@ where
     type StringRef = <C::Target as StringSource>::StringRef;
 }
 
-impl<U, I, B: Backend<S>, N, S: Clone> PartialBackend<S> for SessionComponents<U, I, B, N> {
+impl<Source, I, N, B, S> PartialBackend<S> for SessionComponents<Source, SynthComponents<I, N, B>>
+where
+    B: Backend<S>,
+    S: Clone,
+{
     type Value = B::Value;
 
     fn emit_item(&mut self, item: Item<Self::Value>) {
-        self.backend.emit_item(item)
+        self.synth.builder.emit_item(item)
     }
 
     fn is_non_zero(
@@ -195,23 +208,24 @@ impl<U, I, B: Backend<S>, N, S: Clone> PartialBackend<S> for SessionComponents<U
         value: Self::Value,
         diagnostics: &mut impl Diagnostics<S>,
     ) -> Option<bool> {
-        self.backend.is_non_zero(value, diagnostics)
+        self.synth.builder.is_non_zero(value, diagnostics)
     }
 
     fn reserve(&mut self, bytes: Self::Value) {
-        self.backend.reserve(bytes)
+        self.synth.builder.reserve(bytes)
     }
 
     fn set_origin(&mut self, origin: Self::Value) {
-        self.backend.set_origin(origin)
+        self.synth.builder.set_origin(origin)
     }
 
     fn start_section(&mut self, name: B::SymbolId, span: S) {
-        self.backend.start_section(name, span)
+        self.synth.builder.start_section(name, span)
     }
 }
 
-impl<C, P, M, I, B, N, D> Session for SessionComponents<SourceComponents<C, P, M, D>, I, B, N>
+impl<C, P, M, I, B, N, D> Session
+    for SessionComponents<SourceComponents<C, P, M, D>, SynthComponents<I, N, B>>
 where
     C: DerefMut,
     C::Target: Lex<D::Target>,
@@ -292,17 +306,18 @@ where
     }
 }
 
-impl<U, Interner, B, N, I, S> PartialSession<I, S> for SessionComponents<U, Interner, B, N>
+impl<Source, Interner, B, N, I, S> PartialSession<I, S>
+    for SessionComponents<Source, SynthComponents<Interner, N, B>>
 where
-    U: Diagnostics<S>,
+    Source: Diagnostics<S>,
     B: Backend<S>,
     N: DerefMut,
     N::Target: NameTable<I, SymbolId = B::SymbolId> + StartScope<I>,
     S: Clone,
     Self: Diagnostics<S>,
 {
-    type ConstBuilder = SessionComponents<U, Interner, B::ConstBuilder, N>;
-    type SymbolBuilder = SessionComponents<U, Interner, B::SymbolBuilder, N>;
+    type ConstBuilder = SessionComponents<Source, SynthComponents<Interner, N, B::ConstBuilder>>;
+    type SymbolBuilder = SessionComponents<Source, SynthComponents<Interner, N, B::SymbolBuilder>>;
 
     fn build_const(self) -> Self::ConstBuilder {
         self.replace_backend(Backend::build_const)
@@ -313,27 +328,35 @@ where
     }
 }
 
-impl<U, I, B, N, R> GetString<R> for SessionComponents<U, I, B, N>
+impl<U, I, N, B, R> GetString<R> for SessionComponents<U, SynthComponents<I, N, B>>
 where
     I: Deref,
     I::Target: GetString<R>,
 {
     fn get_string<'a>(&'a self, id: &'a R) -> &str {
-        self.interner.get_string(id)
+        self.synth.interner.get_string(id)
     }
 }
 
-impl<U, I, B: SymbolSource, N> SymbolSource for SessionComponents<U, I, B, N> {
+impl<Source, I, N, B> SymbolSource for SessionComponents<Source, SynthComponents<I, N, B>>
+where
+    B: SymbolSource,
+{
     type SymbolId = B::SymbolId;
 }
 
-impl<U, I, B: AllocSymbol<S>, N, S: Clone> AllocSymbol<S> for SessionComponents<U, I, B, N> {
+impl<Source, I, N, B, S> AllocSymbol<S> for SessionComponents<Source, SynthComponents<I, N, B>>
+where
+    B: AllocSymbol<S>,
+    S: Clone,
+{
     fn alloc_symbol(&mut self, span: S) -> Self::SymbolId {
-        self.backend.alloc_symbol(span)
+        self.synth.builder.alloc_symbol(span)
     }
 }
 
-impl<U, Interner, B, N, I> NameTable<I> for SessionComponents<U, Interner, B, N>
+impl<Source, Interner, B, N, I> NameTable<I>
+    for SessionComponents<Source, SynthComponents<Interner, N, B>>
 where
     B: SymbolSource,
     N: DerefMut,
@@ -345,7 +368,7 @@ where
         &mut self,
         ident: &I,
     ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
-        self.names.get(ident)
+        self.synth.names.get(ident)
     }
 
     fn insert(
@@ -353,49 +376,53 @@ where
         ident: I,
         entry: ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>,
     ) {
-        self.names.insert(ident, entry)
+        self.synth.names.insert(ident, entry)
     }
 }
 
 delegate_diagnostics! {
-    {'a, U: Diagnostics<S>, I, B, N, S: Clone},
-    SessionComponents<U, I, B, N>,
+    {'a, Source: Diagnostics<S>, I, N, B, S: Clone},
+    SessionComponents<Source, SynthComponents<I, N, B>>,
     {source},
-    U,
+    Source,
     S
 }
 
-impl<U, Interner, B, N, I> StartScope<I> for SessionComponents<U, Interner, B, N>
+impl<Source, Interner, B, N, I> StartScope<I>
+    for SessionComponents<Source, SynthComponents<Interner, N, B>>
 where
     N: DerefMut,
     N::Target: StartScope<I>,
 {
     fn start_scope(&mut self, ident: &I) {
-        self.names.start_scope(ident)
+        self.synth.names.start_scope(ident)
     }
 }
 
-impl<U, I, B, N, S> PushOp<Name<B::SymbolId>, S> for SessionComponents<U, I, B, N>
+impl<Source, I, N, B, S> PushOp<Name<B::SymbolId>, S>
+    for SessionComponents<Source, SynthComponents<I, N, B>>
 where
     B: AllocSymbol<S> + PushOp<Name<<B as SymbolSource>::SymbolId>, S>,
     S: Clone,
 {
     fn push_op(&mut self, name: Name<B::SymbolId>, span: S) {
-        self.backend.push_op(name, span)
+        self.synth.builder.push_op(name, span)
     }
 }
 
-impl<U, I, B: Finish, N> Finish for SessionComponents<U, I, B, N> {
-    type Parent = SessionComponents<U, I, B::Parent, N>;
+impl<Source, I, N, B: Finish> Finish for SessionComponents<Source, SynthComponents<I, N, B>> {
+    type Parent = SessionComponents<Source, SynthComponents<I, N, B::Parent>>;
     type Value = B::Value;
 
     fn finish(self) -> (Self::Parent, Self::Value) {
-        let (backend, value) = self.backend.finish();
+        let (builder, value) = self.synth.builder.finish();
         let parent = SessionComponents {
             source: self.source,
-            interner: self.interner,
-            backend,
-            names: self.names,
+            synth: SynthComponents {
+                interner: self.synth.interner,
+                names: self.synth.names,
+                builder,
+            },
         };
         (parent, value)
     }
@@ -403,13 +430,14 @@ impl<U, I, B: Finish, N> Finish for SessionComponents<U, I, B, N> {
 
 macro_rules! impl_push_op_for_session_components {
     ($t:ty) => {
-        impl<U, I, B, N, S> PushOp<$t, S> for SessionComponents<U, I, B, N>
+        impl<Source, I, N, B, S> PushOp<$t, S>
+            for SessionComponents<Source, SynthComponents<I, N, B>>
         where
             B: PushOp<$t, S>,
             S: Clone,
         {
             fn push_op(&mut self, op: $t, span: S) {
-                self.backend.push_op(op, span)
+                self.synth.builder.push_op(op, span)
             }
         }
     };
@@ -445,12 +473,11 @@ mod mock {
         InvokeMacro(MockMacroId, Vec<Vec<SemanticToken<String, String>>>),
     }
 
-    pub(in crate::analyze) type MockSession<A, N, T, S> = SessionComponents<
-        MockSourceComponents<T, S>,
-        Box<FakeStringInterner>,
-        MockBackend<A, T>,
-        Box<MockNameTable<N, T>>,
-    >;
+    pub(in crate::analyze) type MockSession<A, N, T, S> =
+        SessionComponents<MockSourceComponents<T, S>, MockSynthComponents<A, N, T>>;
+
+    type MockSynthComponents<A, N, T> =
+        SynthComponents<Box<FakeStringInterner>, Box<MockNameTable<N, T>>, MockBackend<A, T>>;
 
     pub(in crate::analyze) struct MockSourceComponents<T, S> {
         diagnostics: Box<MockDiagnostics<T, S>>,
@@ -475,9 +502,11 @@ mod mock {
     impl<A, N, T, S> MockSession<A, N, T, S> {
         fn with_name_table(alloc: A, names: N, log: Log<T>) -> Self {
             Self {
-                interner: Box::new(FakeStringInterner),
-                backend: MockBackend::new(alloc, log.clone()),
-                names: Box::new(MockNameTable::new(names, log.clone())),
+                synth: SynthComponents {
+                    interner: Box::new(FakeStringInterner),
+                    names: Box::new(MockNameTable::new(names, log.clone())),
+                    builder: MockBackend::new(alloc, log.clone()),
+                },
                 source: MockSourceComponents {
                     diagnostics: Box::new(MockDiagnostics::new(log.clone())),
                     id_gen: SerialIdAllocator::new(),
@@ -569,9 +598,11 @@ mod mock {
 
     pub(in crate::analyze) type MockBuilder<A, N, T, S> = SessionComponents<
         MockDiagnostics<T, S>,
-        FakeStringInterner,
-        RelocContext<MockBackend<A, T>, Expr<<A as SymbolSource>::SymbolId, S>>,
-        Box<MockNameTable<N, T>>,
+        SynthComponents<
+            FakeStringInterner,
+            Box<MockNameTable<N, T>>,
+            RelocContext<MockBackend<A, T>, Expr<<A as SymbolSource>::SymbolId, S>>,
+        >,
     >;
 
     impl<A, N, T, S> MockBuilder<A, N, T, S>
@@ -584,9 +615,11 @@ mod mock {
         fn from_components(alloc: A, names: N, log: Log<T>) -> Self {
             Self {
                 source: MockDiagnostics::new(log.clone()),
-                interner: FakeStringInterner,
-                backend: MockBackend::new(alloc, log.clone()).build_const(),
-                names: Box::new(MockNameTable::new(names, log)),
+                synth: SynthComponents {
+                    interner: FakeStringInterner,
+                    names: Box::new(MockNameTable::new(names, log.clone())),
+                    builder: MockBackend::new(alloc, log).build_const(),
+                },
             }
         }
     }
@@ -855,9 +888,7 @@ mod tests {
             &'a mut MockMacroTable<S>,
             &'a mut MockDiagnosticsSystem<S>,
         >,
-        &'a mut FakeStringInterner,
-        MockBackend<S>,
-        &'a mut MockNameTable<S>,
+        SynthComponents<&'a mut FakeStringInterner, &'a mut MockNameTable<S>, MockBackend<S>>,
     >;
 
     #[derive(Debug, PartialEq)]
