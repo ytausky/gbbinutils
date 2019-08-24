@@ -1,19 +1,19 @@
 use super::{InstrLineState, SemanticActions, TokenStreamSemantics};
 
 use crate::analyze::semantics::{Keyword, TokenStreamState};
-use crate::analyze::session::{MacroArgs, Session};
+use crate::analyze::session::{MacroArgs, ReentrancyActions};
 use crate::analyze::syntax::actions::{InstrFinalizer, MacroArgActions, MacroInstrActions};
 use crate::analyze::{SemanticToken, TokenSeq};
 
 pub(super) type MacroInstrSemantics<S> = SemanticActions<MacroInstrState<S>, S>;
 
-pub(in crate::analyze) struct MacroInstrState<S: Session> {
+pub(in crate::analyze) struct MacroInstrState<S: ReentrancyActions> {
     parent: InstrLineState<S>,
     name: (S::MacroId, S::Span),
     args: MacroArgs<S::Ident, S::StringRef, S::Span>,
 }
 
-impl<S: Session> MacroInstrState<S> {
+impl<S: ReentrancyActions> MacroInstrState<S> {
     pub fn new(parent: InstrLineState<S>, name: (S::MacroId, S::Span)) -> Self {
         Self {
             parent,
@@ -29,7 +29,9 @@ impl<S: Session> MacroInstrState<S> {
     }
 }
 
-impl<S: Session<Keyword = &'static Keyword>> MacroInstrActions<S::Span> for MacroInstrSemantics<S> {
+impl<S: ReentrancyActions<Keyword = &'static Keyword>> MacroInstrActions<S::Span>
+    for MacroInstrSemantics<S>
+{
     type Token = SemanticToken<S::Ident, S::StringRef>;
     type MacroArgActions = MacroArgSemantics<S>;
 
@@ -38,7 +40,9 @@ impl<S: Session<Keyword = &'static Keyword>> MacroInstrActions<S::Span> for Macr
     }
 }
 
-impl<S: Session<Keyword = &'static Keyword>> InstrFinalizer<S::Span> for MacroInstrSemantics<S> {
+impl<S: ReentrancyActions<Keyword = &'static Keyword>> InstrFinalizer<S::Span>
+    for MacroInstrSemantics<S>
+{
     type Next = TokenStreamSemantics<S>;
 
     fn did_parse_instr(self) -> Self::Next {
@@ -52,12 +56,12 @@ impl<S: Session<Keyword = &'static Keyword>> InstrFinalizer<S::Span> for MacroIn
 
 type MacroArgSemantics<S> = SemanticActions<MacroArgState<S>, S>;
 
-pub(in crate::analyze) struct MacroArgState<S: Session> {
+pub(in crate::analyze) struct MacroArgState<S: ReentrancyActions> {
     tokens: TokenSeq<S::Ident, S::StringRef, S::Span>,
     parent: MacroInstrState<S>,
 }
 
-impl<S: Session> MacroArgState<S> {
+impl<S: ReentrancyActions> MacroArgState<S> {
     fn new(parent: MacroInstrState<S>) -> Self {
         Self {
             tokens: (Vec::new(), Vec::new()),
@@ -66,7 +70,7 @@ impl<S: Session> MacroArgState<S> {
     }
 }
 
-impl<S: Session> MacroArgActions<S::Span> for MacroArgSemantics<S> {
+impl<S: ReentrancyActions> MacroArgActions<S::Span> for MacroArgSemantics<S> {
     type Token = SemanticToken<S::Ident, S::StringRef>;
     type Next = MacroInstrSemantics<S>;
 

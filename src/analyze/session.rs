@@ -17,7 +17,7 @@ use std::ops::{Deref, DerefMut};
 #[cfg(test)]
 pub(crate) use self::mock::*;
 
-pub(super) trait Session
+pub(super) trait ReentrancyActions
 where
     Self: IdentSource + SpanSource + StringSource,
     Self: PartialSession<<Self as IdentSource>::Ident, <Self as SpanSource>::Span>,
@@ -67,7 +67,7 @@ where
     fn define_symbol(self, name: Self::SymbolId, span: S) -> Self::SymbolBuilder;
 }
 
-pub(super) trait IntoSemanticActions<S: Session> {
+pub(super) trait IntoSemanticActions<S: ReentrancyActions> {
     type SemanticActions;
 
     fn into_semantic_actions(self, session: S) -> Self::SemanticActions;
@@ -224,7 +224,7 @@ where
     }
 }
 
-impl<C, P, M, I, B, N, D> Session
+impl<C, P, M, I, B, N, D> ReentrancyActions
     for SessionComponents<SourceComponents<C, P, M, D>, SynthComponents<I, N, B>>
 where
     C: DerefMut,
@@ -551,7 +551,7 @@ mod mock {
         type StringRef = String;
     }
 
-    impl<B, N, T, S> Session for MockSession<B, N, T, S>
+    impl<B, N, T, S> ReentrancyActions for MockSession<B, N, T, S>
     where
         B: AllocSymbol<S>,
         N: NameTable<String, SymbolId = B::SymbolId, MacroId = MockMacroId>,
@@ -679,7 +679,7 @@ mod tests {
 
     type Expr<S> = crate::expr::Expr<Atom<LocationCounter, usize>, S>;
 
-    impl<S: Session> IntoSemanticActions<S> for () {
+    impl<S: ReentrancyActions> IntoSemanticActions<S> for () {
         type SemanticActions =
             TokenStreamActionCollector<S, S::Ident, Literal<S::StringRef>, S::Span>;
 
@@ -804,7 +804,7 @@ mod tests {
         let param = "x";
         let tokens = vec![Token::Label(param.into()), nop.clone()];
         let log = Fixture::default().log_session(|mut session| {
-            let id = Session::define_macro(
+            let id = ReentrancyActions::define_macro(
                 &mut session,
                 (),
                 (vec![param.into()], vec![()]),

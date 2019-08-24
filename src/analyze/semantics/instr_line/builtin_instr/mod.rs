@@ -6,7 +6,7 @@ use self::arg::*;
 use super::*;
 
 use crate::analyze::semantics::{Keyword, Params, RelocLookup, ResolveNames, WithParams};
-use crate::analyze::session::Session;
+use crate::analyze::session::ReentrancyActions;
 use crate::analyze::syntax::actions::{BuiltinInstrActions, InstrFinalizer};
 use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::expr::{BinOp, FnCall, LocationCounter};
@@ -38,13 +38,13 @@ impl From<Mnemonic> for BuiltinInstr {
 
 pub(super) type BuiltinInstrSemantics<S> = SemanticActions<BuiltinInstrState<S>, S>;
 
-pub(in crate::analyze) struct BuiltinInstrState<S: Session> {
+pub(in crate::analyze) struct BuiltinInstrState<S: ReentrancyActions> {
     parent: InstrLineState<S>,
     command: (BuiltinInstr, S::Span),
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
 }
 
-impl<S: Session> BuiltinInstrState<S> {
+impl<S: ReentrancyActions> BuiltinInstrState<S> {
     pub(super) fn new(parent: InstrLineState<S>, command: (BuiltinInstr, S::Span)) -> Self {
         Self {
             parent,
@@ -56,7 +56,7 @@ impl<S: Session> BuiltinInstrState<S> {
 
 impl<S> BuiltinInstrActions<S::Ident, Literal<S::StringRef>, S::Span> for BuiltinInstrSemantics<S>
 where
-    S: Session<Keyword = &'static Keyword>,
+    S: ReentrancyActions<Keyword = &'static Keyword>,
 {
     type ArgActions = ArgSemantics<S>;
 
@@ -65,7 +65,9 @@ where
     }
 }
 
-impl<S: Session<Keyword = &'static Keyword>> InstrFinalizer<S::Span> for BuiltinInstrSemantics<S> {
+impl<S: ReentrancyActions<Keyword = &'static Keyword>> InstrFinalizer<S::Span>
+    for BuiltinInstrSemantics<S>
+{
     type Next = TokenStreamSemantics<S>;
 
     fn did_parse_instr(self) -> Self::Next {
@@ -77,7 +79,7 @@ impl<S: Session<Keyword = &'static Keyword>> InstrFinalizer<S::Span> for Builtin
     }
 }
 
-enum PreparedBuiltinInstr<S: Session> {
+enum PreparedBuiltinInstr<S: ReentrancyActions> {
     Binding(
         (BindingDirective, S::Span),
         Option<Label<S::Ident, S::Span>>,
@@ -86,7 +88,7 @@ enum PreparedBuiltinInstr<S: Session> {
     Mnemonic((Mnemonic, S::Span)),
 }
 
-impl<S: Session<Keyword = &'static Keyword>> PreparedBuiltinInstr<S> {
+impl<S: ReentrancyActions<Keyword = &'static Keyword>> PreparedBuiltinInstr<S> {
     fn new((command, span): (BuiltinInstr, S::Span), stmt: &mut InstrLineSemantics<S>) -> Self {
         match command {
             BuiltinInstr::Directive(Directive::Binding(binding)) => {
@@ -121,7 +123,7 @@ impl<S: Session<Keyword = &'static Keyword>> PreparedBuiltinInstr<S> {
     }
 }
 
-fn analyze_mnemonic<S: Session>(
+fn analyze_mnemonic<S: ReentrancyActions>(
     name: (Mnemonic, S::Span),
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
     mut session: S,
@@ -139,7 +141,7 @@ fn analyze_mnemonic<S: Session>(
     session
 }
 
-trait SessionExt: Session {
+trait SessionExt: ReentrancyActions {
     fn analyze_expr(
         self,
         expr: Arg<Self::Ident, Self::StringRef, Self::Span>,
@@ -167,7 +169,7 @@ trait SessionExt: Session {
     }
 }
 
-impl<S: Session> SessionExt for S {}
+impl<S: ReentrancyActions> SessionExt for S {}
 
 trait EvalArg<I, R, S: Clone> {
     fn eval_arg(&mut self, arg: Arg<I, R, S>) -> Result<(), ()>;

@@ -5,7 +5,7 @@ use self::params::*;
 use self::token_line::{TokenContext, TokenContextFinalizationSemantics, TokenLineSemantics};
 
 use super::resolve;
-use super::session::{IntoSemanticActions, Params, Session};
+use super::session::{IntoSemanticActions, Params, ReentrancyActions};
 use super::syntax;
 use super::syntax::actions::*;
 use super::Literal;
@@ -36,15 +36,17 @@ pub(super) enum Keyword {
 
 pub(super) type TokenStreamSemantics<S> = SemanticActions<TokenStreamState<S>, S>;
 
-pub(super) struct TokenStreamState<S: Session>(LineRule<InstrLineState<S>, TokenContext<S>>);
+pub(super) struct TokenStreamState<S: ReentrancyActions>(
+    LineRule<InstrLineState<S>, TokenContext<S>>,
+);
 
-impl<S: Session<Keyword = &'static Keyword>> TokenStreamState<S> {
+impl<S: ReentrancyActions<Keyword = &'static Keyword>> TokenStreamState<S> {
     pub fn new() -> Self {
         Self(LineRule::InstrLine(InstrLineState::new()))
     }
 }
 
-impl<S: Session> IntoSemanticActions<S> for TokenStreamState<S> {
+impl<S: ReentrancyActions> IntoSemanticActions<S> for TokenStreamState<S> {
     type SemanticActions = TokenStreamSemantics<S>;
 
     fn into_semantic_actions(self, session: S) -> Self::SemanticActions {
@@ -55,12 +57,12 @@ impl<S: Session> IntoSemanticActions<S> for TokenStreamState<S> {
     }
 }
 
-pub(super) struct SemanticActions<L, S: Session> {
+pub(super) struct SemanticActions<L, S: ReentrancyActions> {
     state: L,
     session: S,
 }
 
-impl<L, S: Session> SemanticActions<L, S> {
+impl<L, S: ReentrancyActions> SemanticActions<L, S> {
     fn map_line<F: FnOnce(L) -> T, T>(self, f: F) -> SemanticActions<T, S> {
         SemanticActions {
             state: f(self.state),
@@ -70,10 +72,10 @@ impl<L, S: Session> SemanticActions<L, S> {
 }
 
 delegate_diagnostics! {
-    {L, S: Session}, SemanticActions<L, S>, {session}, S, S::Span
+    {L, S: ReentrancyActions}, SemanticActions<L, S>, {session}, S, S::Span
 }
 
-impl<S: Session<Keyword = &'static Keyword>> TokenStreamSemantics<S> {
+impl<S: ReentrancyActions<Keyword = &'static Keyword>> TokenStreamSemantics<S> {
     pub fn new(session: S) -> TokenStreamSemantics<S> {
         Self {
             state: TokenStreamState::new(),
@@ -82,13 +84,13 @@ impl<S: Session<Keyword = &'static Keyword>> TokenStreamSemantics<S> {
     }
 }
 
-impl<S: Session> From<InstrLineState<S>> for TokenStreamState<S> {
+impl<S: ReentrancyActions> From<InstrLineState<S>> for TokenStreamState<S> {
     fn from(actions: InstrLineState<S>) -> Self {
         Self(LineRule::InstrLine(actions))
     }
 }
 
-impl<S: Session> From<TokenContext<S>> for TokenStreamState<S> {
+impl<S: ReentrancyActions> From<TokenContext<S>> for TokenStreamState<S> {
     fn from(actions: TokenContext<S>) -> Self {
         Self(LineRule::TokenLine(actions))
     }
@@ -96,7 +98,7 @@ impl<S: Session> From<TokenContext<S>> for TokenStreamState<S> {
 
 impl<S> TokenStreamActions<S::Ident, Literal<S::StringRef>, S::Span> for TokenStreamSemantics<S>
 where
-    S: Session<Keyword = &'static Keyword>,
+    S: ReentrancyActions<Keyword = &'static Keyword>,
 {
     type InstrLineActions = InstrLineSemantics<S>;
     type TokenLineActions = TokenLineSemantics<S>;
@@ -129,7 +131,7 @@ where
 
 type Label<I, S> = ((I, S), Params<I, S>);
 
-impl<S: Session> InstrFinalizer<S::Span> for InstrLineSemantics<S> {
+impl<S: ReentrancyActions> InstrFinalizer<S::Span> for InstrLineSemantics<S> {
     type Next = TokenStreamSemantics<S>;
 
     fn did_parse_instr(self) -> Self::Next {
@@ -137,7 +139,7 @@ impl<S: Session> InstrFinalizer<S::Span> for InstrLineSemantics<S> {
     }
 }
 
-impl<S: Session> LineFinalizer<S::Span> for InstrLineSemantics<S> {
+impl<S: ReentrancyActions> LineFinalizer<S::Span> for InstrLineSemantics<S> {
     type Next = TokenStreamSemantics<S>;
 
     fn did_parse_line(self, _: S::Span) -> Self::Next {
@@ -145,7 +147,7 @@ impl<S: Session> LineFinalizer<S::Span> for InstrLineSemantics<S> {
     }
 }
 
-impl<S: Session> LineFinalizer<S::Span> for TokenStreamSemantics<S> {
+impl<S: ReentrancyActions> LineFinalizer<S::Span> for TokenStreamSemantics<S> {
     type Next = Self;
 
     fn did_parse_line(self, _: S::Span) -> Self::Next {

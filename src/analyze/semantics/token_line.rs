@@ -1,23 +1,23 @@
 use super::{Keyword, Label, SemanticActions, TokenStreamSemantics};
 
 use crate::analyze::resolve::ResolvedName;
-use crate::analyze::session::Session;
+use crate::analyze::session::ReentrancyActions;
 use crate::analyze::syntax::actions::{LineFinalizer, TokenLineActions, TokenLineRule};
 use crate::analyze::syntax::{Sigil, Token};
 use crate::analyze::{Literal, SemanticToken, TokenSeq};
 
 pub(in crate::analyze) type TokenLineSemantics<S> = SemanticActions<TokenContext<S>, S>;
 
-pub(in crate::analyze) enum TokenContext<S: Session> {
+pub(in crate::analyze) enum TokenContext<S: ReentrancyActions> {
     MacroDef(MacroDefState<S>),
 }
 
-pub(in crate::analyze) struct MacroDefState<S: Session> {
+pub(in crate::analyze) struct MacroDefState<S: ReentrancyActions> {
     label: Option<Label<S::Ident, S::Span>>,
     tokens: TokenSeq<S::Ident, S::StringRef, S::Span>,
 }
 
-impl<S: Session> MacroDefState<S> {
+impl<S: ReentrancyActions> MacroDefState<S> {
     pub(super) fn new(label: Option<Label<S::Ident, S::Span>>) -> Self {
         Self {
             label,
@@ -28,7 +28,7 @@ impl<S: Session> MacroDefState<S> {
 
 impl<S> TokenLineActions<S::Ident, Literal<S::StringRef>, S::Span> for TokenLineSemantics<S>
 where
-    S: Session<Keyword = &'static Keyword>,
+    S: ReentrancyActions<Keyword = &'static Keyword>,
 {
     type ContextFinalizer = TokenContextFinalizationSemantics<S>;
 
@@ -62,7 +62,7 @@ where
     }
 }
 
-impl<S: Session> LineFinalizer<S::Span> for TokenLineSemantics<S> {
+impl<S: ReentrancyActions> LineFinalizer<S::Span> for TokenLineSemantics<S> {
     type Next = TokenStreamSemantics<S>;
 
     fn did_parse_line(mut self, span: S::Span) -> Self::Next {
@@ -76,15 +76,15 @@ impl<S: Session> LineFinalizer<S::Span> for TokenLineSemantics<S> {
     }
 }
 
-pub(in crate::analyze) struct TokenContextFinalizationSemantics<S: Session> {
+pub(in crate::analyze) struct TokenContextFinalizationSemantics<S: ReentrancyActions> {
     parent: TokenLineSemantics<S>,
 }
 
 delegate_diagnostics! {
-    {S: Session}, TokenContextFinalizationSemantics<S>, {parent}, S, S::Span
+    {S: ReentrancyActions}, TokenContextFinalizationSemantics<S>, {parent}, S, S::Span
 }
 
-impl<S: Session<Keyword = &'static Keyword>> LineFinalizer<S::Span>
+impl<S: ReentrancyActions<Keyword = &'static Keyword>> LineFinalizer<S::Span>
     for TokenContextFinalizationSemantics<S>
 {
     type Next = TokenStreamSemantics<S>;

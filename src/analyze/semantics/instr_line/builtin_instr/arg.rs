@@ -2,7 +2,7 @@ use super::{BuiltinInstrSemantics, BuiltinInstrState, OperandSymbol, SemanticAct
 
 use crate::analyze::resolve::ResolvedName;
 use crate::analyze::semantics::Keyword;
-use crate::analyze::session::Session;
+use crate::analyze::session::ReentrancyActions;
 use crate::analyze::syntax::actions::*;
 use crate::analyze::{IdentSource, Literal, StringSource};
 use crate::diag::span::{Source, SpanSource};
@@ -41,7 +41,7 @@ delegate_diagnostics! {
     {I, R, S, P: Diagnostics<S>}, ExprBuilder<I, R, S, P>, {parent}, P, S
 }
 
-impl<S: Session> ArgFinalizer for ArgSemantics<S> {
+impl<S: ReentrancyActions> ArgFinalizer for ArgSemantics<S> {
     type Next = BuiltinInstrSemantics<S>;
 
     fn did_parse_arg(mut self) -> Self::Next {
@@ -54,7 +54,7 @@ impl<S: Session> ArgFinalizer for ArgSemantics<S> {
 
 impl<S> ArgActions<S::Ident, Literal<S::StringRef>, S::Span> for ArgSemantics<S>
 where
-    S: Session<Keyword = &'static Keyword>,
+    S: ReentrancyActions<Keyword = &'static Keyword>,
 {
     fn act_on_atom(&mut self, atom: ExprAtom<S::Ident, Literal<S::StringRef>>, span: S::Span) {
         self.state.stack.push(Arg {

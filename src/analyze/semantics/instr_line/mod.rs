@@ -11,7 +11,7 @@ use super::diag::{EmitDiag, Message};
 use super::params::RelocLookup;
 use super::resolve::ResolvedName;
 use super::syntax;
-use super::{Keyword, Label, Literal, SemanticActions, Session, TokenStreamSemantics};
+use super::{Keyword, Label, Literal, ReentrancyActions, SemanticActions, TokenStreamSemantics};
 
 use crate::expr::LocationCounter;
 use crate::object::builder::{Finish, PushOp};
@@ -22,13 +22,13 @@ mod macro_instr;
 
 pub(in crate::analyze) type InstrLineSemantics<S> = SemanticActions<InstrLineState<S>, S>;
 
-pub(in crate::analyze) struct InstrLineState<S: Session> {
+pub(in crate::analyze) struct InstrLineState<S: ReentrancyActions> {
     pub label: Option<Label<S::Ident, S::Span>>,
 }
 
 impl<S> InstrLineActions<S::Ident, Literal<S::StringRef>, S::Span> for InstrLineSemantics<S>
 where
-    S: Session<Keyword = &'static Keyword>,
+    S: ReentrancyActions<Keyword = &'static Keyword>,
 {
     type LabelActions = LabelSemantics<S>;
     type InstrActions = Self;
@@ -41,7 +41,7 @@ where
 
 impl<S> InstrActions<S::Ident, Literal<S::StringRef>, S::Span> for InstrLineSemantics<S>
 where
-    S: Session<Keyword = &'static Keyword>,
+    S: ReentrancyActions<Keyword = &'static Keyword>,
 {
     type BuiltinInstrActions = BuiltinInstrSemantics<S>;
     type MacroInstrActions = MacroInstrSemantics<S>;
@@ -79,13 +79,13 @@ where
     }
 }
 
-impl<S: Session> InstrLineState<S> {
+impl<S: ReentrancyActions> InstrLineState<S> {
     pub fn new() -> Self {
         Self { label: None }
     }
 }
 
-impl<S: Session> InstrLineSemantics<S> {
+impl<S: ReentrancyActions> InstrLineSemantics<S> {
     pub fn flush_label(mut self) -> Self {
         if let Some(((label, span), _params)) = self.state.label.take() {
             self.session.start_scope(&label);

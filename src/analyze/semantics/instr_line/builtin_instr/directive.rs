@@ -4,7 +4,7 @@ use crate::analyze::semantics::instr_line::Label;
 use crate::analyze::semantics::params::RelocLookup;
 use crate::analyze::semantics::token_line::{MacroDefState, TokenContext, TokenLineSemantics};
 use crate::analyze::semantics::{Keyword, TokenStreamState};
-use crate::analyze::session::Session;
+use crate::analyze::session::ReentrancyActions;
 use crate::analyze::Literal;
 use crate::diag::*;
 use crate::object::builder::{Item, Width};
@@ -31,7 +31,7 @@ pub(in crate::analyze) enum SimpleDirective {
     Org,
 }
 
-pub(super) fn analyze_directive<S: Session<Keyword = &'static Keyword>>(
+pub(super) fn analyze_directive<S: ReentrancyActions<Keyword = &'static Keyword>>(
     directive: (Directive, S::Span),
     label: Option<Label<S::Ident, S::Span>>,
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
@@ -46,14 +46,14 @@ pub(super) fn analyze_directive<S: Session<Keyword = &'static Keyword>>(
     context.analyze(directive.0)
 }
 
-struct DirectiveContext<S: Session> {
+struct DirectiveContext<S: ReentrancyActions> {
     span: S::Span,
     label: Option<Label<S::Ident, S::Span>>,
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
     session: S,
 }
 
-impl<S: Session<Keyword = &'static Keyword>> DirectiveContext<S> {
+impl<S: ReentrancyActions<Keyword = &'static Keyword>> DirectiveContext<S> {
     fn analyze(self, directive: Directive) -> TokenStreamSemantics<S> {
         use self::BindingDirective::*;
         use self::SimpleDirective::*;
