@@ -112,7 +112,7 @@ where
     fn act_on_eos(mut self, span: S::Span) -> Self {
         match self.state.0 {
             LineRule::InstrLine(state) => {
-                let semantics = set_state!(self, state).define_label_if_present();
+                let semantics = set_state!(self, state).flush_label();
                 set_state!(semantics, semantics.state.into())
             }
             LineRule::TokenLine(ref state) => {

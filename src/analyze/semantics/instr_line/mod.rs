@@ -34,7 +34,7 @@ where
     type InstrActions = Self;
 
     fn will_parse_label(mut self, label: (S::Ident, S::Span)) -> Self::LabelActions {
-        self = self.define_label_if_present();
+        self = self.flush_label();
         self.map_line(|line| LabelState::new(line, label))
     }
 }
@@ -59,7 +59,7 @@ where
             ),
             Some(ResolvedName::Keyword(Keyword::Operand(_))) => unimplemented!(),
             Some(ResolvedName::Macro(id)) => {
-                self = self.define_label_if_present();
+                self = self.flush_label();
                 InstrRule::MacroInstr(set_state!(
                     self,
                     MacroInstrState::new(self.state, (id, span))
@@ -86,7 +86,7 @@ impl<S: Session> InstrLineState<S> {
 }
 
 impl<S: Session> InstrLineSemantics<S> {
-    pub fn define_label_if_present(mut self) -> Self {
+    pub fn flush_label(mut self) -> Self {
         if let Some(((label, span), _params)) = self.state.label.take() {
             self.session.start_scope(&label);
             let id = self.session.reloc_lookup(label, span.clone());
