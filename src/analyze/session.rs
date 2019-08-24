@@ -20,7 +20,7 @@ pub(crate) use self::mock::*;
 pub(super) trait ReentrancyActions
 where
     Self: IdentSource + SpanSource + StringSource,
-    Self: PartialSession<<Self as IdentSource>::Ident, <Self as SpanSource>::Span>,
+    Self: SynthActions<<Self as IdentSource>::Ident, <Self as SpanSource>::Span>,
     Self: GetString<<Self as StringSource>::StringRef>,
 {
     fn analyze_file<A: IntoSemanticActions<Self>>(
@@ -48,7 +48,7 @@ where
         A::SemanticActions: TokenStreamActions<Self::Ident, Literal<Self::StringRef>, Self::Span>;
 }
 
-pub(super) trait PartialSession<I, S: Clone>
+pub(super) trait SynthActions<I, S: Clone>
 where
     Self: Sized,
     Self: PartialBackend<S>,
@@ -306,7 +306,7 @@ where
     }
 }
 
-impl<Source, Interner, B, N, I, S> PartialSession<I, S>
+impl<Source, Interner, B, N, I, S> SynthActions<I, S>
     for SessionComponents<Source, SynthComponents<Interner, N, B>>
 where
     Source: Diagnostics<S>,
