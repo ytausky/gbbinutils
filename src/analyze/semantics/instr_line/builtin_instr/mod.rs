@@ -8,6 +8,7 @@ use super::*;
 use crate::analyze::semantics::{Keyword, Params, RelocLookup, ResolveNames, WithParams};
 use crate::analyze::session::Session;
 use crate::analyze::syntax::actions::{BuiltinInstrActions, InstrFinalizer};
+use crate::diag::span::Spanned;
 use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::expr::{BinOp, FnCall, LocationCounter};
 use crate::object::builder::{Finish, Item, Name, PushOp};
@@ -40,15 +41,15 @@ pub(super) type BuiltinInstrSemantics<S> = SemanticActions<BuiltinInstrState<S>,
 
 pub(in crate::analyze) struct BuiltinInstrState<S: Session> {
     parent: InstrLineState<S>,
-    command: (BuiltinInstr, S::Span),
+    instr: Spanned<BuiltinInstr, S::Span>,
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
 }
 
 impl<S: Session> BuiltinInstrState<S> {
-    pub(super) fn new(parent: InstrLineState<S>, command: (BuiltinInstr, S::Span)) -> Self {
+    pub(super) fn new(parent: InstrLineState<S>, instr: Spanned<BuiltinInstr, S::Span>) -> Self {
         Self {
             parent,
-            command,
+            instr,
             args: Vec::new(),
         }
     }
@@ -69,13 +70,35 @@ impl<S: Session<Keyword = &'static Keyword>> InstrFinalizer<S::Span> for Builtin
     type Next = TokenStreamSemantics<S>;
 
     fn did_parse_instr(self) -> Self::Next {
-        let args = self.state.args;
-        let mut semantics = set_state!(self, self.state.parent);
-        let prepared = PreparedBuiltinInstr::new(self.state.command, &mut semantics);
-        semantics = semantics.flush_label();
-        prepared.exec(args, semantics.session)
+        self.session.exec_builtin_instr_line(BuiltinInstrLine {
+            label: self.state.parent.label,
+            instr: self.state.instr,
+            args: self.state.args,
+        })
     }
 }
+
+struct BuiltinInstrLine<I, R, S> {
+    label: Option<Label<I, S>>,
+    instr: Spanned<BuiltinInstr, S>,
+    args: BuiltinInstrArgs<I, R, S>,
+}
+
+trait ExecBuiltinInstrLine
+where
+    Self: Session<Keyword = &'static Keyword>,
+{
+    fn exec_builtin_instr_line(
+        mut self,
+        mut line: BuiltinInstrLine<Self::Ident, Self::StringRef, Self::Span>,
+    ) -> TokenStreamSemantics<Self> {
+        let prepared = PreparedBuiltinInstr::new(line.instr, &mut line.label);
+        self = self.flush_label(line.label);
+        prepared.exec(line.args, self)
+    }
+}
+
+impl<S: Session<Keyword = &'static Keyword>> ExecBuiltinInstrLine for S {}
 
 enum PreparedBuiltinInstr<S: Session> {
     Binding(
@@ -87,15 +110,20 @@ enum PreparedBuiltinInstr<S: Session> {
 }
 
 impl<S: Session<Keyword = &'static Keyword>> PreparedBuiltinInstr<S> {
-    fn new((command, span): (BuiltinInstr, S::Span), stmt: &mut InstrLineSemantics<S>) -> Self {
-        match command {
+    fn new(
+        instr: Spanned<BuiltinInstr, S::Span>,
+        label: &mut Option<Label<S::Ident, S::Span>>,
+    ) -> Self {
+        match instr.item {
             BuiltinInstr::Directive(Directive::Binding(binding)) => {
-                PreparedBuiltinInstr::Binding((binding, span), stmt.state.label.take())
+                PreparedBuiltinInstr::Binding((binding, instr.span), label.take())
             }
             BuiltinInstr::Directive(Directive::Simple(simple)) => {
-                PreparedBuiltinInstr::Directive((simple, span))
+                PreparedBuiltinInstr::Directive((simple, instr.span))
             }
-            BuiltinInstr::Mnemonic(mnemonic) => PreparedBuiltinInstr::Mnemonic((mnemonic, span)),
+            BuiltinInstr::Mnemonic(mnemonic) => {
+                PreparedBuiltinInstr::Mnemonic((mnemonic, instr.span))
+            }
         }
     }
 
