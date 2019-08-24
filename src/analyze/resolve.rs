@@ -1,3 +1,4 @@
+use super::macros::MacroSource;
 use super::syntax::{IdentFactory, IdentSource};
 
 use crate::object::builder::SymbolSource;
@@ -10,9 +11,8 @@ pub use self::mock::*;
 #[cfg(test)]
 use crate::expr::{Atom, ExprOp};
 
-pub trait NameTable<I>: SymbolSource {
+pub(super) trait NameTable<I>: MacroSource + SymbolSource {
     type Keyword: Clone;
-    type MacroId: Clone;
 
     fn get(
         &mut self,
@@ -106,6 +106,15 @@ impl<Keyword, MacroId, SymbolId> Default for BasicNameTable<Keyword, MacroId, Sy
     }
 }
 
+impl<Keyword, MacroId, SymbolId> MacroSource for BasicNameTable<Keyword, MacroId, SymbolId>
+where
+    Keyword: Clone,
+    MacroId: Clone,
+    SymbolId: Clone,
+{
+    type MacroId = MacroId;
+}
+
 impl<Keyword, MacroId, SymbolId> SymbolSource for BasicNameTable<Keyword, MacroId, SymbolId>
 where
     Keyword: Clone,
@@ -122,7 +131,6 @@ where
     SymbolId: Clone,
 {
     type Keyword = Keyword;
-    type MacroId = MacroId;
 
     fn get(
         &mut self,
@@ -172,13 +180,16 @@ impl<T: Default> BiLevelNameTable<T> {
     }
 }
 
+impl<T: MacroSource> MacroSource for BiLevelNameTable<T> {
+    type MacroId = T::MacroId;
+}
+
 impl<T: SymbolSource> SymbolSource for BiLevelNameTable<T> {
     type SymbolId = T::SymbolId;
 }
 
 impl<T: Default + NameTable<String>> NameTable<Ident<String>> for BiLevelNameTable<T> {
     type Keyword = T::Keyword;
-    type MacroId = T::MacroId;
 
     fn get(
         &mut self,
@@ -213,7 +224,7 @@ mod mock {
 
     use std::marker::PhantomData;
 
-    pub struct MockNameTable<N, T> {
+    pub(in crate::analyze) struct MockNameTable<N, T> {
         names: N,
         log: Log<T>,
     }
@@ -222,6 +233,10 @@ mod mock {
         pub fn new(names: N, log: Log<T>) -> Self {
             Self { names, log }
         }
+    }
+
+    impl<N: MacroSource, T> MacroSource for MockNameTable<N, T> {
+        type MacroId = N::MacroId;
     }
 
     impl<N: SymbolSource, T> SymbolSource for MockNameTable<N, T> {
@@ -234,7 +249,6 @@ mod mock {
         T: From<NameTableEvent<N::Keyword, N::MacroId, N::SymbolId>>,
     {
         type Keyword = N::Keyword;
-        type MacroId = N::MacroId;
 
         fn get(
             &mut self,
@@ -277,13 +291,16 @@ mod mock {
         }
     }
 
+    impl<I> MacroSource for FakeNameTable<I> {
+        type MacroId = ();
+    }
+
     impl<I: Clone> SymbolSource for FakeNameTable<I> {
         type SymbolId = I;
     }
 
     impl<I: Clone> NameTable<I> for FakeNameTable<I> {
         type Keyword = Keyword;
-        type MacroId = ();
 
         fn get(
             &mut self,

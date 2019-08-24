@@ -135,10 +135,16 @@ impl<C, P, M, I, B, N, D> IdentSource for SessionComponents<Upstream<C, P, M>, I
 where
     C: DerefMut,
     C::Target: IdentSource + StringSource,
-    D: DerefMut,
-    D::Target: DiagnosticsSystem,
 {
     type Ident = <C::Target as IdentSource>::Ident;
+}
+
+impl<U, I, B, N, D> MacroSource for SessionComponents<U, I, B, N, D>
+where
+    N: Deref,
+    N::Target: MacroSource,
+{
+    type MacroId = <N::Target as MacroSource>::MacroId;
 }
 
 impl<U, I, B, N, D> SpanSource for SessionComponents<U, I, B, N, D>
@@ -153,8 +159,6 @@ impl<C, P, M, I, B, N, D> StringSource for SessionComponents<Upstream<C, P, M>, 
 where
     C: DerefMut,
     C::Target: IdentSource + StringSource,
-    D: DerefMut,
-    D::Target: DiagnosticsSystem,
 {
     type StringRef = <C::Target as StringSource>::StringRef;
 }
@@ -314,10 +318,9 @@ impl<U, Interner, B, N, D, I> NameTable<I> for SessionComponents<U, Interner, B,
 where
     B: SymbolSource,
     N: DerefMut,
-    N::Target: NameTable<I, SymbolId = B::SymbolId>,
+    N::Target: NameTable<I, SymbolId = B::SymbolId> + MacroSource,
 {
     type Keyword = <N::Target as NameTable<I>>::Keyword;
-    type MacroId = <N::Target as NameTable<I>>::MacroId;
 
     fn get(
         &mut self,
