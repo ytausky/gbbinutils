@@ -77,20 +77,20 @@ pub(super) type MacroArgs<I, R, S> = super::macros::MacroArgs<SemanticToken<I, R
 pub(super) type Params<I, S> = (Vec<I>, Vec<S>);
 
 pub(super) struct SessionComponents<U, I, B, N> {
-    upstream: U,
+    source: U,
     interner: I,
     backend: B,
     names: N,
 }
 
-pub(super) struct Upstream<C, P, M, D> {
+pub(super) struct SourceComponents<C, P, M, D> {
     codebase: C,
     parser_factory: P,
     macros: M,
     diagnostics: D,
 }
 
-impl<C, P, M, D> SpanSource for Upstream<C, P, M, D>
+impl<C, P, M, D> SpanSource for SourceComponents<C, P, M, D>
 where
     D: Deref,
     D::Target: SpanSource,
@@ -101,14 +101,19 @@ where
 delegate_diagnostics! {
     {C, P, M, D: DerefMut, S: Clone},
     {D::Target: Diagnostics<S>},
-    Upstream<C, P, M, D>,
+    SourceComponents<C, P, M, D>,
     {diagnostics},
     D::Target,
     S
 }
 
 impl<'a, C, P, M, I, B, N, D>
-    SessionComponents<Upstream<&'a mut C, &'a mut P, &'a mut M, &'a mut D>, &'a mut I, B, &'a mut N>
+    SessionComponents<
+        SourceComponents<&'a mut C, &'a mut P, &'a mut M, &'a mut D>,
+        &'a mut I,
+        B,
+        &'a mut N,
+    >
 where
     C: IdentSource + StringSource,
     D: DiagnosticsSystem,
@@ -123,7 +128,7 @@ where
         diagnostics: &'a mut D,
     ) -> Self {
         SessionComponents {
-            upstream: Upstream {
+            source: SourceComponents {
                 codebase,
                 parser_factory,
                 macros,
@@ -139,7 +144,7 @@ where
 impl<U, I, B, N> SessionComponents<U, I, B, N> {
     fn replace_backend<T>(self, f: impl FnOnce(B) -> T) -> SessionComponents<U, I, T, N> {
         SessionComponents {
-            upstream: self.upstream,
+            source: self.source,
             interner: self.interner,
             backend: f(self.backend),
             names: self.names,
@@ -147,7 +152,7 @@ impl<U, I, B, N> SessionComponents<U, I, B, N> {
     }
 }
 
-impl<C, P, M, I, B, N, D> IdentSource for SessionComponents<Upstream<C, P, M, D>, I, B, N>
+impl<C, P, M, I, B, N, D> IdentSource for SessionComponents<SourceComponents<C, P, M, D>, I, B, N>
 where
     C: DerefMut,
     C::Target: IdentSource + StringSource,
@@ -170,7 +175,7 @@ where
     type Span = U::Span;
 }
 
-impl<C, P, M, I, B, N, D> StringSource for SessionComponents<Upstream<C, P, M, D>, I, B, N>
+impl<C, P, M, I, B, N, D> StringSource for SessionComponents<SourceComponents<C, P, M, D>, I, B, N>
 where
     C: DerefMut,
     C::Target: IdentSource + StringSource,
@@ -206,7 +211,7 @@ impl<U, I, B: Backend<S>, N, S: Clone> PartialBackend<S> for SessionComponents<U
     }
 }
 
-impl<C, P, M, I, B, N, D> Session for SessionComponents<Upstream<C, P, M, D>, I, B, N>
+impl<C, P, M, I, B, N, D> Session for SessionComponents<SourceComponents<C, P, M, D>, I, B, N>
 where
     C: DerefMut,
     C::Target: Lex<D::Target>,
@@ -245,14 +250,14 @@ where
         A::SemanticActions: TokenStreamActions<Self::Ident, Literal<Self::StringRef>, Self::Span>,
     {
         let tokens = match self
-            .upstream
+            .source
             .codebase
-            .lex_file(path, &mut *self.upstream.diagnostics)
+            .lex_file(path, &mut *self.source.diagnostics)
         {
             Ok(tokens) => tokens,
             Err(error) => return (Err(error), actions.into_semantic_actions(self)),
         };
-        let mut parser = self.upstream.parser_factory.mk_parser();
+        let mut parser = self.source.parser_factory.mk_parser();
         let actions = actions.into_semantic_actions(self);
         (Ok(()), parser.parse_token_stream(tokens, actions))
     }
@@ -263,9 +268,9 @@ where
         params: Params<Self::Ident, Self::Span>,
         body: TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
     ) -> Self::MacroId {
-        self.upstream
+        self.source
             .macros
-            .define_macro(name_span, params, body, &mut *self.upstream.diagnostics)
+            .define_macro(name_span, params, body, &mut *self.source.diagnostics)
     }
 
     fn call_macro<A: IntoSemanticActions<Self>>(
@@ -277,11 +282,11 @@ where
     where
         A::SemanticActions: TokenStreamActions<Self::Ident, Literal<Self::StringRef>, Self::Span>,
     {
-        let expansion =
-            self.upstream
-                .macros
-                .expand_macro(id, args, &mut *self.upstream.diagnostics);
-        let mut parser = self.upstream.parser_factory.mk_parser();
+        let expansion = self
+            .source
+            .macros
+            .expand_macro(id, args, &mut *self.source.diagnostics);
+        let mut parser = self.source.parser_factory.mk_parser();
         let actions = actions.into_semantic_actions(self);
         parser.parse_token_stream(expansion.map(|(t, s)| (Ok(t), s)), actions)
     }
@@ -355,7 +360,7 @@ where
 delegate_diagnostics! {
     {'a, U: Diagnostics<S>, I, B, N, S: Clone},
     SessionComponents<U, I, B, N>,
-    {upstream},
+    {source},
     U,
     S
 }
@@ -387,7 +392,7 @@ impl<U, I, B: Finish, N> Finish for SessionComponents<U, I, B, N> {
     fn finish(self) -> (Self::Parent, Self::Value) {
         let (backend, value) = self.backend.finish();
         let parent = SessionComponents {
-            upstream: self.upstream,
+            source: self.source,
             interner: self.interner,
             backend,
             names: self.names,
@@ -441,13 +446,13 @@ mod mock {
     }
 
     pub(in crate::analyze) type MockSession<A, N, T, S> = SessionComponents<
-        MockUpstream<T, S>,
+        MockSourceComponents<T, S>,
         Box<FakeStringInterner>,
         MockBackend<A, T>,
         Box<MockNameTable<N, T>>,
     >;
 
-    pub(in crate::analyze) struct MockUpstream<T, S> {
+    pub(in crate::analyze) struct MockSourceComponents<T, S> {
         diagnostics: Box<MockDiagnostics<T, S>>,
         id_gen: SerialIdAllocator,
         log: Log<T>,
@@ -455,13 +460,13 @@ mod mock {
         _span: PhantomData<S>,
     }
 
-    impl<T, S: Clone> SpanSource for MockUpstream<T, S> {
+    impl<T, S: Clone> SpanSource for MockSourceComponents<T, S> {
         type Span = S;
     }
 
     delegate_diagnostics! {
         {T: From<DiagnosticsEvent<S>>, S: Clone + Merge},
-        MockUpstream<T, S>,
+        MockSourceComponents<T, S>,
         {diagnostics},
         MockDiagnostics<T, S>,
         S
@@ -473,7 +478,7 @@ mod mock {
                 interner: Box::new(FakeStringInterner),
                 backend: MockBackend::new(alloc, log.clone()),
                 names: Box::new(MockNameTable::new(names, log.clone())),
-                upstream: MockUpstream {
+                source: MockSourceComponents {
                     diagnostics: Box::new(MockDiagnostics::new(log.clone())),
                     id_gen: SerialIdAllocator::new(),
                     log,
@@ -484,7 +489,7 @@ mod mock {
         }
 
         pub fn fail(&mut self, error: CodebaseError) {
-            self.upstream.error = Some(error)
+            self.source.error = Some(error)
         }
     }
 
@@ -532,9 +537,9 @@ mod mock {
             path: String,
             actions: A,
         ) -> (Result<(), CodebaseError>, A::SemanticActions) {
-            self.upstream.log.push(SessionEvent::AnalyzeFile(path));
+            self.source.log.push(SessionEvent::AnalyzeFile(path));
             (
-                self.upstream.error.take().map_or(Ok(()), Err),
+                self.source.error.take().map_or(Ok(()), Err),
                 actions.into_semantic_actions(self),
             )
         }
@@ -545,10 +550,10 @@ mod mock {
             (params, _): (Vec<Self::Ident>, Vec<Self::Span>),
             (body, _): TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
         ) -> Self::MacroId {
-            self.upstream
+            self.source
                 .log
                 .push(SessionEvent::DefineMacro(params, body));
-            MockMacroId(self.upstream.id_gen.gen())
+            MockMacroId(self.source.id_gen.gen())
         }
 
         fn call_macro<A: IntoSemanticActions<Self>>(
@@ -557,7 +562,7 @@ mod mock {
             (args, _): MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
             actions: A,
         ) -> A::SemanticActions {
-            self.upstream.log.push(SessionEvent::InvokeMacro(id, args));
+            self.source.log.push(SessionEvent::InvokeMacro(id, args));
             actions.into_semantic_actions(self)
         }
     }
@@ -578,7 +583,7 @@ mod mock {
     {
         fn from_components(alloc: A, names: N, log: Log<T>) -> Self {
             Self {
-                upstream: MockDiagnostics::new(log.clone()),
+                source: MockDiagnostics::new(log.clone()),
                 interner: FakeStringInterner,
                 backend: MockBackend::new(alloc, log.clone()).build_const(),
                 names: Box::new(MockNameTable::new(names, log)),
@@ -844,7 +849,7 @@ mod tests {
         Event<S>,
     >;
     type TestSession<'a, S> = SessionComponents<
-        Upstream<
+        SourceComponents<
             &'a mut MockCodebase<S>,
             &'a mut MockParserFactory<S>,
             &'a mut MockMacroTable<S>,
