@@ -1,5 +1,5 @@
 use self::macros::VecMacroTable;
-use self::resolve::{BiLevelNameTable, DefaultIdentFactory};
+use self::resolve::{BasicNameTable, BiLevelNameTable, DefaultIdentFactory};
 use self::semantics::{TokenStreamState, KEYWORDS};
 use self::session::*;
 use self::strings::FakeStringInterner;
@@ -42,7 +42,7 @@ where
         let mut parser_factory = DefaultParserFactory;
         let mut macros = VecMacroTable::new();
         let mut interner = FakeStringInterner;
-        let mut names = BiLevelNameTable::new();
+        let mut names = BiLevelNameTable::<BasicNameTable<_, _, _>>::new();
         for (ident, keyword) in KEYWORDS {
             names.insert(
                 DefaultIdentFactory.mk_ident(ident),

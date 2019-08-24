@@ -465,7 +465,7 @@ mod mock {
         where
             I: IntoIterator<Item = (String, ResolvedName<&'static Keyword, MockMacroId, usize>)>,
         {
-            let mut table = BasicNameTable::new();
+            let mut table = BasicNameTable::default();
             for (name, value) in entries {
                 table.insert(name, value)
             }
@@ -571,7 +571,7 @@ mod mock {
         where
             I: IntoIterator<Item = (String, ResolvedName<Keyword, usize, usize>)>,
         {
-            let mut table = BasicNameTable::new();
+            let mut table = BasicNameTable::default();
             for (name, value) in entries {
                 table.insert(name, value)
             }
@@ -887,7 +887,7 @@ mod tests {
                     macros: MockMacroTable::new(log.clone()),
                     interner: FakeStringInterner,
                     backend: Some(MockBackend::new(SerialIdAllocator::new(), log.clone())),
-                    names: MockNameTable::new(BasicNameTable::new(), log.clone()),
+                    names: MockNameTable::new(BasicNameTable::default(), log.clone()),
                     diagnostics: MockDiagnosticsSystem::new(log.clone()),
                 },
                 log,

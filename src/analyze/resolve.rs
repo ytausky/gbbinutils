@@ -95,10 +95,10 @@ pub struct BasicNameTable<Keyword, MacroId, SymbolId> {
     table: HashMap<String, ResolvedName<Keyword, MacroId, SymbolId>>,
 }
 
-impl<Keyword, MacroId, SymbolId> BasicNameTable<Keyword, MacroId, SymbolId> {
-    pub fn new() -> Self {
-        BasicNameTable {
-            table: HashMap::new(),
+impl<Keyword, MacroId, SymbolId> Default for BasicNameTable<Keyword, MacroId, SymbolId> {
+    fn default() -> Self {
+        Self {
+            table: HashMap::default(),
         }
     }
 }
@@ -137,30 +137,27 @@ where
     }
 }
 
-pub struct BiLevelNameTable<Keyword, MacroId, SymbolId> {
-    global: BasicNameTable<Keyword, MacroId, SymbolId>,
-    local: Option<BasicNameTable<Keyword, MacroId, SymbolId>>,
+pub struct BiLevelNameTable<T> {
+    global: T,
+    local: Option<T>,
 }
 
-impl<Keyword, MacroId, SymbolId> BiLevelNameTable<Keyword, MacroId, SymbolId> {
+impl<T: Default> BiLevelNameTable<T> {
     pub fn new() -> Self {
         BiLevelNameTable {
-            global: BasicNameTable::new(),
+            global: Default::default(),
             local: None,
         }
     }
 
-    fn select_table(&self, ident: &Ident<String>) -> &BasicNameTable<Keyword, MacroId, SymbolId> {
+    fn select_table(&self, ident: &Ident<String>) -> &T {
         match ident.visibility {
             Visibility::Global => &self.global,
             Visibility::Local => self.local.as_ref().unwrap(),
         }
     }
 
-    fn select_table_mut(
-        &mut self,
-        ident: &Ident<String>,
-    ) -> &mut BasicNameTable<Keyword, MacroId, SymbolId> {
+    fn select_table_mut(&mut self, ident: &Ident<String>) -> &mut T {
         match ident.visibility {
             Visibility::Global => &mut self.global,
             Visibility::Local => self.local.as_mut().unwrap(),
@@ -168,22 +165,13 @@ impl<Keyword, MacroId, SymbolId> BiLevelNameTable<Keyword, MacroId, SymbolId> {
     }
 }
 
-impl<Keyword, MacroId, SymbolId> SymbolSource for BiLevelNameTable<Keyword, MacroId, SymbolId>
-where
-    SymbolId: Clone,
-{
-    type SymbolId = SymbolId;
+impl<T: SymbolSource> SymbolSource for BiLevelNameTable<T> {
+    type SymbolId = T::SymbolId;
 }
 
-impl<Keyword, MacroId, SymbolId> NameTable<Ident<String>>
-    for BiLevelNameTable<Keyword, MacroId, SymbolId>
-where
-    Keyword: Clone,
-    MacroId: Clone,
-    SymbolId: Clone,
-{
-    type Keyword = Keyword;
-    type MacroId = MacroId;
+impl<T: Default + NameTable<String>> NameTable<Ident<String>> for BiLevelNameTable<T> {
+    type Keyword = T::Keyword;
+    type MacroId = T::MacroId;
 
     fn get(
         &self,
@@ -201,12 +189,10 @@ where
     }
 }
 
-impl<Keyword, MacroId, SymbolId> StartScope<Ident<String>>
-    for BiLevelNameTable<Keyword, MacroId, SymbolId>
-{
+impl<T: Default> StartScope<Ident<String>> for BiLevelNameTable<T> {
     fn start_scope(&mut self, ident: &Ident<String>) {
         if ident.visibility == Visibility::Global {
-            self.local.replace(BasicNameTable::new());
+            self.local.replace(Default::default());
         }
     }
 }
@@ -328,21 +314,21 @@ mod tests {
     #[test]
     #[should_panic]
     fn panic_when_first_definition_is_local() {
-        let mut table = BiLevelNameTable::<(), (), _>::new();
+        let mut table = BiLevelNameTable::<BasicNameTable<(), (), _>>::new();
         table.insert("_loop".into(), ResolvedName::Symbol(()));
     }
 
     #[test]
     fn retrieve_global_name() {
         let name = "start";
-        let mut table = BiLevelNameTable::<(), (), _>::new();
+        let mut table = BiLevelNameTable::<BasicNameTable<(), (), _>>::new();
         table.insert(name.into(), ResolvedName::Symbol(42));
         assert_eq!(table.get(&name.into()), Some(ResolvedName::Symbol(42)))
     }
 
     #[test]
     fn retrieve_local_name() {
-        let mut table = BiLevelNameTable::<(), (), _>::new();
+        let mut table = BiLevelNameTable::<BasicNameTable<(), (), _>>::new();
         table.start_scope(&"global".into());
         table.insert("_local".into(), ResolvedName::Symbol(42));
         assert_eq!(table.get(&"_local".into()), Some(ResolvedName::Symbol(42)))
@@ -350,7 +336,7 @@ mod tests {
 
     #[test]
     fn local_name_not_accessible_after_new_global_name() {
-        let mut table = BiLevelNameTable::<(), (), _>::new();
+        let mut table = BiLevelNameTable::<BasicNameTable<(), (), _>>::new();
         table.start_scope(&"global1".into());
         table.insert("_local".into(), ResolvedName::Symbol(42));
         table.start_scope(&"global2".into());
