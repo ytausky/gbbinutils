@@ -10,13 +10,13 @@ use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::expr::BinOp;
 
 pub(super) type ArgSemantics<S> = Session<
+    S,
     ExprBuilder<
         <S as IdentSource>::Ident,
         <S as StringSource>::StringRef,
         <S as SpanSource>::Span,
         BuiltinInstrState<S>,
     >,
-    S,
 >;
 
 pub(crate) struct ExprBuilder<I, R, S, P> {

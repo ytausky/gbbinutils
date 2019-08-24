@@ -20,7 +20,7 @@ pub(super) mod builtin_instr;
 mod label;
 mod macro_instr;
 
-pub(in crate::analyze) type InstrLineSemantics<S> = Session<InstrLineState<S>, S>;
+pub(in crate::analyze) type InstrLineSemantics<S> = Session<S, InstrLineState<S>>;
 
 pub(in crate::analyze) struct InstrLineState<S: ReentrancyActions> {
     pub label: Option<Label<S::Ident, S::Span>>,

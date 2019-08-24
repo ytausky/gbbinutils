@@ -6,7 +6,7 @@ use crate::analyze::syntax::actions::{LineFinalizer, TokenLineActions, TokenLine
 use crate::analyze::syntax::{Sigil, Token};
 use crate::analyze::{Literal, SemanticToken, TokenSeq};
 
-pub(in crate::analyze) type TokenLineSemantics<S> = Session<TokenContext<S>, S>;
+pub(in crate::analyze) type TokenLineSemantics<S> = Session<S, TokenContext<S>>;
 
 pub(in crate::analyze) enum TokenContext<S: ReentrancyActions> {
     MacroDef(MacroDefState<S>),

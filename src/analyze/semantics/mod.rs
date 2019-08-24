@@ -34,7 +34,7 @@ pub(super) enum Keyword {
     Operand(OperandSymbol),
 }
 
-pub(super) type TokenStreamSemantics<S> = Session<TokenStreamState<S>, S>;
+pub(super) type TokenStreamSemantics<S> = Session<S, TokenStreamState<S>>;
 
 pub(super) struct TokenStreamState<S: ReentrancyActions>(
     LineRule<InstrLineState<S>, TokenContext<S>>,
@@ -46,12 +46,12 @@ impl<S: ReentrancyActions<Keyword = &'static Keyword>> TokenStreamState<S> {
     }
 }
 
-impl<S: ReentrancyActions> IntoSemanticActions<Session<TokenStreamState<S>, ()>> for S {
+impl<S: ReentrancyActions> IntoSemanticActions<Session<(), TokenStreamState<S>>> for S {
     type SemanticActions = TokenStreamSemantics<S>;
 
     fn into_semantic_actions(
         self,
-        session: Session<TokenStreamState<S>, ()>,
+        session: Session<(), TokenStreamState<S>>,
     ) -> Self::SemanticActions {
         Session {
             reentrancy: self,
@@ -60,13 +60,13 @@ impl<S: ReentrancyActions> IntoSemanticActions<Session<TokenStreamState<S>, ()>>
     }
 }
 
-pub(super) struct Session<L, S> {
-    state: L,
-    reentrancy: S,
+pub(super) struct Session<R, S> {
+    reentrancy: R,
+    state: S,
 }
 
-impl<L, S: ReentrancyActions> Session<L, S> {
-    fn map_line<F: FnOnce(L) -> T, T>(self, f: F) -> Session<T, S> {
+impl<R: ReentrancyActions, S> Session<R, S> {
+    fn map_line<F: FnOnce(S) -> T, T>(self, f: F) -> Session<R, T> {
         Session {
             state: f(self.state),
             reentrancy: self.reentrancy,
@@ -74,7 +74,7 @@ impl<L, S: ReentrancyActions> Session<L, S> {
     }
 }
 
-impl<S> Default for Session<TokenStreamState<S>, ()>
+impl<S> Default for Session<(), TokenStreamState<S>>
 where
     S: ReentrancyActions<Keyword = &'static Keyword>,
 {
@@ -87,7 +87,7 @@ where
 }
 
 delegate_diagnostics! {
-    {L, S: ReentrancyActions}, Session<L, S>, {reentrancy}, S, S::Span
+    {R: ReentrancyActions, S}, Session<R, S>, {reentrancy}, R, R::Span
 }
 
 impl<S: ReentrancyActions<Keyword = &'static Keyword>> TokenStreamSemantics<S> {
