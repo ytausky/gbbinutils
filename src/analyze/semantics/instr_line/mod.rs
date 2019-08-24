@@ -87,14 +87,24 @@ impl<S: Session> InstrLineState<S> {
 
 impl<S: Session> InstrLineSemantics<S> {
     pub fn flush_label(mut self) -> Self {
-        if let Some(((label, span), _params)) = self.state.label.take() {
-            self.session.start_scope(&label);
-            let id = self.session.reloc_lookup(label, span.clone());
-            let mut builder = self.session.define_symbol(id, span.clone());
-            PushOp::<LocationCounter, _>::push_op(&mut builder, LocationCounter, span);
-            let (session, ()) = builder.finish();
-            self.session = session;
-        }
+        self.session = self.session.flush_label(self.state.label.take());
         self
     }
 }
+
+trait FlushLabel: Session {
+    fn flush_label(mut self, label: Option<Label<Self::Ident, Self::Span>>) -> Self {
+        if let Some(((label, span), _params)) = label {
+            self.start_scope(&label);
+            let id = self.reloc_lookup(label, span.clone());
+            let mut builder = self.define_symbol(id, span.clone());
+            PushOp::<LocationCounter, _>::push_op(&mut builder, LocationCounter, span);
+            let (session, ()) = builder.finish();
+            session
+        } else {
+            self
+        }
+    }
+}
+
+impl<S: Session> FlushLabel for S {}
