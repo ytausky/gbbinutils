@@ -510,9 +510,10 @@ pub mod mock {
     use crate::expr::Atom;
     use crate::log::Log;
 
-    use std::marker::PhantomData;
-
     type Expr<N, S> = crate::expr::Expr<Atom<LocationCounter, N>, S>;
+
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    pub(crate) struct MockSymbolId(pub usize);
 
     pub(crate) struct MockBackend<A, T> {
         alloc: A,
@@ -665,45 +666,27 @@ pub mod mock {
         }
     }
 
-    pub struct SerialIdAllocator(usize);
+    pub struct SerialIdAllocator<T>(usize, fn(usize) -> T);
 
-    impl SerialIdAllocator {
-        pub fn new() -> Self {
-            Self(0)
+    impl<T> SerialIdAllocator<T> {
+        pub fn new(wrapper: fn(usize) -> T) -> Self {
+            Self(0, wrapper)
         }
 
-        pub fn gen(&mut self) -> usize {
+        pub fn gen(&mut self) -> T {
             let id = self.0;
             self.0 += 1;
-            id
+            (self.1)(id)
         }
     }
 
-    impl SymbolSource for SerialIdAllocator {
-        type SymbolId = usize;
+    impl<T: Clone> SymbolSource for SerialIdAllocator<T> {
+        type SymbolId = T;
     }
 
-    impl<S: Clone> AllocSymbol<S> for SerialIdAllocator {
+    impl<T: Clone, S: Clone> AllocSymbol<S> for SerialIdAllocator<T> {
         fn alloc_symbol(&mut self, _: S) -> Self::SymbolId {
             self.gen()
-        }
-    }
-
-    pub struct PanickingIdAllocator<I>(PhantomData<I>);
-
-    impl<I> PanickingIdAllocator<I> {
-        pub fn new() -> Self {
-            Self(PhantomData)
-        }
-    }
-
-    impl<I: Clone> SymbolSource for PanickingIdAllocator<I> {
-        type SymbolId = I;
-    }
-
-    impl<I: Clone, S: Clone> AllocSymbol<S> for PanickingIdAllocator<I> {
-        fn alloc_symbol(&mut self, _: S) -> Self::SymbolId {
-            panic!("tried to allocate an ID")
         }
     }
 }

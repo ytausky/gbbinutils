@@ -5,12 +5,15 @@ use self::arg::*;
 
 use super::*;
 
-use crate::analyze::semantics::{Keyword, Params, RelocLookup, ResolveNames, WithParams};
-use crate::analyze::session::ReentrancyActions;
+use crate::analyze::resolve::NameTable;
+use crate::analyze::semantics::{Params, RelocLookup, ResolveNames, TokenStreamState, WithParams};
+use crate::analyze::session::{ReentrancyActions, SynthActions};
 use crate::analyze::syntax::actions::{BuiltinInstrActions, InstrFinalizer};
 use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::expr::{BinOp, FnCall, LocationCounter};
 use crate::object::builder::{Finish, Item, Name, PushOp};
+
+use std::ops::DerefMut;
 
 pub(in crate::analyze::semantics) mod cpu_instr;
 pub(in crate::analyze::semantics) mod directive;
@@ -36,7 +39,7 @@ impl From<Mnemonic> for BuiltinInstr {
     }
 }
 
-pub(super) type BuiltinInstrSemantics<S> = Session<S, BuiltinInstrState<S>>;
+pub(super) type BuiltinInstrSemantics<R, N> = Session<R, N, BuiltinInstrState<R>>;
 
 pub(in crate::analyze) struct BuiltinInstrState<S: ReentrancyActions> {
     parent: InstrLineState<S>,
@@ -54,28 +57,52 @@ impl<S: ReentrancyActions> BuiltinInstrState<S> {
     }
 }
 
-impl<S> BuiltinInstrActions<S::Ident, Literal<S::StringRef>, S::Span> for BuiltinInstrSemantics<S>
+impl<R: ReentrancyActions> From<BuiltinInstrState<R>> for TokenStreamState<R> {
+    fn from(state: BuiltinInstrState<R>) -> Self {
+        state.parent.into()
+    }
+}
+
+impl<R, N> BuiltinInstrActions<R::Ident, Literal<R::StringRef>, R::Span>
+    for BuiltinInstrSemantics<R, N>
 where
-    S: ReentrancyActions<Keyword = &'static Keyword>,
+    R: ReentrancyActions,
+    N: DerefMut,
+    N::Target: StartScope<R::Ident>
+        + NameTable<
+            R::Ident,
+            Keyword = &'static Keyword,
+            MacroId = R::MacroId,
+            SymbolId = R::SymbolId,
+        >,
 {
-    type ArgActions = ArgSemantics<S>;
+    type ArgActions = ArgSemantics<R, N>;
 
     fn will_parse_arg(self) -> Self::ArgActions {
         self.map_line(ExprBuilder::new)
     }
 }
 
-impl<S: ReentrancyActions<Keyword = &'static Keyword>> InstrFinalizer<S::Span>
-    for BuiltinInstrSemantics<S>
+impl<R, N> InstrFinalizer<R::Span> for BuiltinInstrSemantics<R, N>
+where
+    R: ReentrancyActions,
+    N: DerefMut,
+    N::Target: StartScope<R::Ident>
+        + NameTable<
+            R::Ident,
+            Keyword = &'static Keyword,
+            MacroId = R::MacroId,
+            SymbolId = R::SymbolId,
+        >,
 {
-    type Next = TokenStreamSemantics<S>;
+    type Next = TokenStreamSemantics<R, N>;
 
     fn did_parse_instr(self) -> Self::Next {
         let args = self.state.args;
         let mut semantics = set_state!(self, self.state.parent);
         let prepared = PreparedBuiltinInstr::new(self.state.command, &mut semantics);
         semantics = semantics.flush_label();
-        prepared.exec(args, semantics.reentrancy)
+        prepared.exec(args, semantics)
     }
 }
 
@@ -88,8 +115,11 @@ enum PreparedBuiltinInstr<S: ReentrancyActions> {
     Mnemonic((Mnemonic, S::Span)),
 }
 
-impl<S: ReentrancyActions<Keyword = &'static Keyword>> PreparedBuiltinInstr<S> {
-    fn new((command, span): (BuiltinInstr, S::Span), stmt: &mut InstrLineSemantics<S>) -> Self {
+impl<R: ReentrancyActions> PreparedBuiltinInstr<R> {
+    fn new<N>(
+        (command, span): (BuiltinInstr, R::Span),
+        stmt: &mut InstrLineSemantics<R, N>,
+    ) -> Self {
         match command {
             BuiltinInstr::Directive(Directive::Binding(binding)) => {
                 PreparedBuiltinInstr::Binding((binding, span), stmt.state.label.take())
@@ -101,11 +131,21 @@ impl<S: ReentrancyActions<Keyword = &'static Keyword>> PreparedBuiltinInstr<S> {
         }
     }
 
-    fn exec(
+    fn exec<N>(
         self,
-        args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
-        session: S,
-    ) -> TokenStreamSemantics<S> {
+        args: BuiltinInstrArgs<R::Ident, R::StringRef, R::Span>,
+        session: InstrLineSemantics<R, N>,
+    ) -> TokenStreamSemantics<R, N>
+    where
+        N: DerefMut,
+        N::Target: StartScope<R::Ident>
+            + NameTable<
+                R::Ident,
+                Keyword = &'static Keyword,
+                MacroId = R::MacroId,
+                SymbolId = R::SymbolId,
+            >,
+    {
         match self {
             PreparedBuiltinInstr::Binding((binding, span), label) => directive::analyze_directive(
                 (Directive::Binding(binding), span),
@@ -117,36 +157,55 @@ impl<S: ReentrancyActions<Keyword = &'static Keyword>> PreparedBuiltinInstr<S> {
                 directive::analyze_directive((Directive::Simple(simple), span), None, args, session)
             }
             PreparedBuiltinInstr::Mnemonic(mnemonic) => {
-                TokenStreamSemantics::new(analyze_mnemonic(mnemonic, args, session))
+                analyze_mnemonic(mnemonic, args, session).map_line(Into::into)
             }
         }
     }
 }
 
-fn analyze_mnemonic<S: ReentrancyActions>(
-    name: (Mnemonic, S::Span),
-    args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
-    mut session: S,
-) -> S {
+fn analyze_mnemonic<R: ReentrancyActions, N>(
+    name: (Mnemonic, R::Span),
+    args: BuiltinInstrArgs<R::Ident, R::StringRef, R::Span>,
+    mut session: InstrLineSemantics<R, N>,
+) -> InstrLineSemantics<R, N>
+where
+    N: DerefMut,
+    N::Target: StartScope<R::Ident>
+        + NameTable<
+            R::Ident,
+            Keyword = &'static Keyword,
+            MacroId = R::MacroId,
+            SymbolId = R::SymbolId,
+        >,
+{
     let mut operands = Vec::new();
     for arg in args {
-        let builder = session.build_const().resolve_names();
+        let builder = session
+            .map_reentrancy(SynthActions::build_const)
+            .resolve_names();
         let (operand, returned_session) = operand::analyze_operand(arg, name.0.context(), builder);
         session = returned_session;
         operands.push(operand)
     }
     if let Ok(instruction) = cpu_instr::analyze_instruction(name, operands, &mut session) {
-        session.emit_item(Item::CpuInstr(instruction))
+        session.reentrancy.emit_item(Item::CpuInstr(instruction))
     }
     session
 }
 
-trait SessionExt: ReentrancyActions {
+impl<R, N, S> Session<R, N, S>
+where
+    R: ReentrancyActions,
+    N: DerefMut,
+    N::Target: NameTable<R::Ident, MacroId = R::MacroId, SymbolId = R::SymbolId>,
+{
     fn analyze_expr(
         self,
-        expr: Arg<Self::Ident, Self::StringRef, Self::Span>,
-    ) -> (Result<Self::Value, ()>, Self) {
-        let mut builder = self.build_const().resolve_names();
+        expr: Arg<R::Ident, R::StringRef, R::Span>,
+    ) -> (Result<R::Value, ()>, Self) {
+        let mut builder = self
+            .map_reentrancy(SynthActions::build_const)
+            .resolve_names();
         let result = builder.eval_arg(expr);
         let (session, value) = builder.finish();
         (result.map(|()| value), session)
@@ -154,13 +213,13 @@ trait SessionExt: ReentrancyActions {
 
     fn define_symbol_with_params(
         mut self,
-        (name, span): (Self::Ident, Self::Span),
-        params: &Params<Self::Ident, Self::Span>,
-        expr: Arg<Self::Ident, Self::StringRef, Self::Span>,
+        (name, span): (R::Ident, R::Span),
+        params: &Params<R::Ident, R::Span>,
+        expr: Arg<R::Ident, R::StringRef, R::Span>,
     ) -> (Result<(), ()>, Self) {
         let id = self.reloc_lookup(name, span.clone());
         let mut builder = self
-            .define_symbol(id, span)
+            .map_reentrancy(|reentrancy| reentrancy.define_symbol(id, span))
             .resolve_names()
             .with_params(params);
         let result = builder.eval_arg(expr);
@@ -168,8 +227,6 @@ trait SessionExt: ReentrancyActions {
         (result, session)
     }
 }
-
-impl<S: ReentrancyActions> SessionExt for S {}
 
 trait EvalArg<I, R, S: Clone> {
     fn eval_arg(&mut self, arg: Arg<I, R, S>) -> Result<(), ()>;

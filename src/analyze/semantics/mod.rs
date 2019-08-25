@@ -4,20 +4,25 @@ use self::instr_line::{BuiltinInstr, InstrLineSemantics, InstrLineState, Operand
 use self::params::*;
 use self::token_line::{TokenContext, TokenContextFinalizationSemantics, TokenLineSemantics};
 
-use super::resolve;
+use super::macros::MacroSource;
+use super::resolve::{NameTable, ResolvedName, StartScope};
 use super::session::{IntoSemanticActions, Params, ReentrancyActions};
 use super::syntax;
 use super::syntax::actions::*;
 use super::Literal;
 
 use crate::diag;
-use crate::diag::Message;
-use crate::object::builder::PushOp;
+use crate::diag::{Diagnostics, Message};
+use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
+use crate::object::builder::{AllocSymbol, Finish, Name, PushOp, SymbolSource};
+
+use std::ops::{Deref, DerefMut};
 
 macro_rules! set_state {
-    ($actions:expr, $state:expr) => {
+    ($session:expr, $state:expr) => {
         $crate::analyze::semantics::Session {
-            reentrancy: $actions.reentrancy,
+            reentrancy: $session.reentrancy,
+            names: $session.names,
             state: $state,
         }
     };
@@ -34,70 +39,171 @@ pub(super) enum Keyword {
     Operand(OperandSymbol),
 }
 
-pub(super) type TokenStreamSemantics<S> = Session<S, TokenStreamState<S>>;
+pub(super) type TokenStreamSemantics<R, N> = Session<R, N, TokenStreamState<R>>;
 
 pub(super) struct TokenStreamState<S: ReentrancyActions>(
     LineRule<InstrLineState<S>, TokenContext<S>>,
 );
 
-impl<S: ReentrancyActions<Keyword = &'static Keyword>> TokenStreamState<S> {
+impl<S: ReentrancyActions> TokenStreamState<S> {
     pub fn new() -> Self {
         Self(LineRule::InstrLine(InstrLineState::new()))
     }
 }
 
-impl<S: ReentrancyActions> IntoSemanticActions<Session<(), TokenStreamState<S>>> for S {
-    type SemanticActions = TokenStreamSemantics<S>;
+impl<R: ReentrancyActions, N> IntoSemanticActions<Session<(), N, TokenStreamState<R>>> for R {
+    type SemanticActions = TokenStreamSemantics<R, N>;
 
     fn into_semantic_actions(
         self,
-        session: Session<(), TokenStreamState<S>>,
+        session: Session<(), N, TokenStreamState<R>>,
     ) -> Self::SemanticActions {
         Session {
             reentrancy: self,
+            names: session.names,
             state: session.state,
         }
     }
 }
 
-pub(super) struct Session<R, S> {
+pub(super) struct Session<R, N, S> {
     reentrancy: R,
+    names: N,
     state: S,
 }
 
-impl<R: ReentrancyActions, S> Session<R, S> {
-    fn map_line<F: FnOnce(S) -> T, T>(self, f: F) -> Session<R, T> {
+impl<R, N, S> Session<R, N, S> {
+    fn map_reentrancy<F: FnOnce(R) -> T, T>(self, f: F) -> Session<T, N, S> {
         Session {
-            state: f(self.state),
+            reentrancy: f(self.reentrancy),
+            names: self.names,
+            state: self.state,
+        }
+    }
+
+    fn map_line<F: FnOnce(S) -> T, T>(self, f: F) -> Session<R, N, T> {
+        Session {
             reentrancy: self.reentrancy,
+            names: self.names,
+            state: f(self.state),
         }
     }
 }
 
-impl<S> Default for Session<(), TokenStreamState<S>>
+impl<R, N> Session<(), N, TokenStreamState<R>>
 where
-    S: ReentrancyActions<Keyword = &'static Keyword>,
+    R: ReentrancyActions,
+    R::Ident: for<'r> From<&'r str>,
+    N: DerefMut,
+    N::Target: NameTable<R::Ident, Keyword = &'static Keyword>,
 {
-    fn default() -> Self {
+    pub fn from_components(mut names: N) -> Self {
+        for (ident, keyword) in KEYWORDS {
+            names.insert((*ident).into(), ResolvedName::Keyword(keyword))
+        }
         Self {
             reentrancy: (),
+            names,
             state: TokenStreamState::new(),
         }
     }
 }
 
-delegate_diagnostics! {
-    {R: ReentrancyActions, S}, Session<R, S>, {reentrancy}, R, R::Span
+delegate_diagnostics! {{R: Diagnostics<Span>, N, S, Span}, Session<R, N, S>, {reentrancy}, R, Span}
+
+impl<R, N, S> MacroSource for Session<R, N, S>
+where
+    N: Deref,
+    N::Target: MacroSource,
+{
+    type MacroId = <N::Target as MacroSource>::MacroId;
 }
 
-impl<S: ReentrancyActions<Keyword = &'static Keyword>> TokenStreamSemantics<S> {
-    pub fn new(reentrancy: S) -> TokenStreamSemantics<S> {
-        Self {
-            state: TokenStreamState::new(),
-            reentrancy,
-        }
+impl<R, N, S> SymbolSource for Session<R, N, S>
+where
+    N: Deref,
+    N::Target: SymbolSource,
+{
+    type SymbolId = <N::Target as SymbolSource>::SymbolId;
+}
+
+impl<R, N, S, Span> AllocSymbol<Span> for Session<R, N, S>
+where
+    R: AllocSymbol<Span>,
+    N: Deref,
+    N::Target: SymbolSource<SymbolId = R::SymbolId>,
+    Span: Clone,
+{
+    fn alloc_symbol(&mut self, span: Span) -> Self::SymbolId {
+        self.reentrancy.alloc_symbol(span)
     }
 }
+
+impl<R, N, S, I> NameTable<I> for Session<R, N, S>
+where
+    N: DerefMut,
+    N::Target: NameTable<I>,
+{
+    type Keyword = <N::Target as NameTable<I>>::Keyword;
+
+    fn get(
+        &mut self,
+        ident: &I,
+    ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
+        self.names.get(ident)
+    }
+
+    fn insert(
+        &mut self,
+        ident: I,
+        entry: ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>,
+    ) {
+        self.names.insert(ident, entry)
+    }
+}
+
+impl<R: Finish, N, S> Finish for Session<R, N, S> {
+    type Value = R::Value;
+    type Parent = Session<R::Parent, N, S>;
+
+    fn finish(self) -> (Self::Parent, Self::Value) {
+        let (reentrancy, value) = self.reentrancy.finish();
+        (
+            Session {
+                reentrancy,
+                names: self.names,
+                state: self.state,
+            },
+            value,
+        )
+    }
+}
+
+impl<R, N, S, Span, SymbolId> PushOp<Name<SymbolId>, Span> for Session<R, N, S>
+where
+    R: PushOp<Name<SymbolId>, Span>,
+    Span: Clone,
+{
+    fn push_op(&mut self, op: Name<SymbolId>, span: Span) {
+        self.reentrancy.push_op(op, span)
+    }
+}
+
+macro_rules! impl_push_op_for_session {
+    ($t:ty) => {
+        impl<R: PushOp<$t, Span>, N, S, Span: Clone> PushOp<$t, Span> for Session<R, N, S> {
+            fn push_op(&mut self, op: $t, span: Span) {
+                self.reentrancy.push_op(op, span)
+            }
+        }
+    };
+}
+
+impl_push_op_for_session! {LocationCounter}
+impl_push_op_for_session! {i32}
+impl_push_op_for_session! {BinOp}
+impl_push_op_for_session! {ParamId}
+impl_push_op_for_session! {FnCall}
 
 impl<S: ReentrancyActions> From<InstrLineState<S>> for TokenStreamState<S> {
     fn from(actions: InstrLineState<S>) -> Self {
@@ -111,13 +217,22 @@ impl<S: ReentrancyActions> From<TokenContext<S>> for TokenStreamState<S> {
     }
 }
 
-impl<S> TokenStreamActions<S::Ident, Literal<S::StringRef>, S::Span> for TokenStreamSemantics<S>
+impl<R, N> TokenStreamActions<R::Ident, Literal<R::StringRef>, R::Span>
+    for TokenStreamSemantics<R, N>
 where
-    S: ReentrancyActions<Keyword = &'static Keyword>,
+    R: ReentrancyActions,
+    N: DerefMut,
+    N::Target: StartScope<R::Ident>
+        + NameTable<
+            R::Ident,
+            Keyword = &'static Keyword,
+            MacroId = R::MacroId,
+            SymbolId = R::SymbolId,
+        >,
 {
-    type InstrLineActions = InstrLineSemantics<S>;
-    type TokenLineActions = TokenLineSemantics<S>;
-    type TokenLineFinalizer = TokenContextFinalizationSemantics<S>;
+    type InstrLineActions = InstrLineSemantics<R, N>;
+    type TokenLineActions = TokenLineSemantics<R, N>;
+    type TokenLineFinalizer = TokenContextFinalizationSemantics<R, N>;
 
     fn will_parse_line(self) -> LineRule<Self::InstrLineActions, Self::TokenLineActions> {
         match self.state.0 {
@@ -126,7 +241,7 @@ where
         }
     }
 
-    fn act_on_eos(mut self, span: S::Span) -> Self {
+    fn act_on_eos(mut self, span: R::Span) -> Self {
         match self.state.0 {
             LineRule::InstrLine(state) => {
                 let semantics = set_state!(self, state).flush_label();
@@ -146,27 +261,90 @@ where
 
 type Label<I, S> = ((I, S), Params<I, S>);
 
-impl<S: ReentrancyActions> InstrFinalizer<S::Span> for InstrLineSemantics<S> {
-    type Next = TokenStreamSemantics<S>;
+impl<R: ReentrancyActions, N> InstrFinalizer<R::Span> for InstrLineSemantics<R, N> {
+    type Next = TokenStreamSemantics<R, N>;
 
     fn did_parse_instr(self) -> Self::Next {
         set_state!(self, self.state.into())
     }
 }
 
-impl<S: ReentrancyActions> LineFinalizer<S::Span> for InstrLineSemantics<S> {
-    type Next = TokenStreamSemantics<S>;
+impl<R: ReentrancyActions, N> LineFinalizer<R::Span> for InstrLineSemantics<R, N> {
+    type Next = TokenStreamSemantics<R, N>;
 
-    fn did_parse_line(self, _: S::Span) -> Self::Next {
+    fn did_parse_line(self, _: R::Span) -> Self::Next {
         set_state!(self, self.state.into())
     }
 }
 
-impl<S: ReentrancyActions> LineFinalizer<S::Span> for TokenStreamSemantics<S> {
+impl<R: ReentrancyActions, N> LineFinalizer<R::Span> for TokenStreamSemantics<R, N> {
     type Next = Self;
 
-    fn did_parse_line(self, _: S::Span) -> Self::Next {
+    fn did_parse_line(self, _: R::Span) -> Self::Next {
         self
+    }
+}
+
+#[cfg(test)]
+mod mock {
+    use super::*;
+
+    use crate::analyze::macros::mock::MockMacroId;
+    use crate::analyze::resolve::{BasicNameTable, MockNameTable};
+    use crate::analyze::session::*;
+    use crate::analyze::strings::FakeStringInterner;
+    use crate::diag::{DiagnosticsEvent, Merge};
+    use crate::expr::{Atom, Expr};
+    use crate::log::Log;
+    use crate::object::builder::mock::{
+        BackendEvent, MockBackend, MockSymbolId, SerialIdAllocator,
+    };
+    use crate::object::builder::RelocContext;
+
+    pub(super) type MockExprBuilder<T, S> = Session<
+        SessionComponents<
+            MockSourceComponents<T, S>,
+            SynthComponents<
+                Box<FakeStringInterner>,
+                RelocContext<
+                    MockBackend<SerialIdAllocator<MockSymbolId>, T>,
+                    Expr<Atom<LocationCounter, MockSymbolId>, S>,
+                >,
+            >,
+        >,
+        Box<MockNameTable<BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>, T>>,
+        (),
+    >;
+
+    impl<T, S> MockExprBuilder<T, S>
+    where
+        T: From<BackendEvent<MockSymbolId, Expr<Atom<LocationCounter, MockSymbolId>, S>>>,
+        T: From<DiagnosticsEvent<S>>,
+        S: Clone + Merge,
+    {
+        pub fn with_log(log: Log<T>) -> Self {
+            Self::with_name_table_entries(log, std::iter::empty())
+        }
+
+        pub fn with_name_table_entries<I>(log: Log<T>, entries: I) -> Self
+        where
+            I: IntoIterator<
+                Item = (
+                    String,
+                    ResolvedName<&'static Keyword, MockMacroId, MockSymbolId>,
+                ),
+            >,
+        {
+            let mut names = BasicNameTable::default();
+            for (ident, resolution) in entries {
+                names.insert(ident, resolution)
+            }
+            Session {
+                reentrancy: MockSession::with_log(log.clone()).build_const(),
+                names: Box::new(MockNameTable::new(names, log)),
+                state: (),
+            }
+        }
     }
 }
 
@@ -179,13 +357,13 @@ mod tests {
     use super::syntax::{Sigil, Token};
 
     use crate::analyze::macros::mock::MockMacroId;
-    use crate::analyze::resolve::{NameTableEvent, ResolvedName};
+    use crate::analyze::resolve::{MockNameTable, NameTableEvent, ResolvedName};
     use crate::analyze::session::SessionEvent;
     use crate::analyze::SemanticToken;
     use crate::diag::{DiagnosticsEvent, EmitDiag, Merge, Message, MockSpan};
     use crate::expr::{Atom, BinOp, ExprOp, LocationCounter};
     use crate::log::with_log;
-    use crate::object::builder::mock::{BackendEvent, SerialIdAllocator};
+    use crate::object::builder::mock::{BackendEvent, MockSymbolId, SerialIdAllocator};
     use crate::object::builder::{CpuInstr, Item, Ld, Name, SimpleOperand, Width};
 
     use std::borrow::Borrow;
@@ -193,16 +371,16 @@ mod tests {
 
     #[derive(Debug, PartialEq)]
     pub(in crate::analyze) enum TestOperation<S: Clone> {
-        Backend(BackendEvent<usize, Expr<S>>),
+        Backend(BackendEvent<MockSymbolId, Expr<S>>),
         Diagnostics(DiagnosticsEvent<S>),
-        NameTable(NameTableEvent<&'static Keyword, MockMacroId, usize>),
+        NameTable(NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>),
         Session(SessionEvent),
     }
 
-    pub type Expr<S> = crate::expr::Expr<Atom<LocationCounter, usize>, S>;
+    pub(super) type Expr<S> = crate::expr::Expr<Atom<LocationCounter, MockSymbolId>, S>;
 
-    impl<S: Clone> From<BackendEvent<usize, Expr<S>>> for TestOperation<S> {
-        fn from(event: BackendEvent<usize, Expr<S>>) -> Self {
+    impl<S: Clone> From<BackendEvent<MockSymbolId, Expr<S>>> for TestOperation<S> {
+        fn from(event: BackendEvent<MockSymbolId, Expr<S>>) -> Self {
             TestOperation::Backend(event)
         }
     }
@@ -213,8 +391,10 @@ mod tests {
         }
     }
 
-    impl<S: Clone> From<NameTableEvent<&'static Keyword, MockMacroId, usize>> for TestOperation<S> {
-        fn from(event: NameTableEvent<&'static Keyword, MockMacroId, usize>) -> Self {
+    impl<S: Clone> From<NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>>
+        for TestOperation<S>
+    {
+        fn from(event: NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>) -> Self {
             TestOperation::NameTable(event)
         }
     }
@@ -318,10 +498,10 @@ mod tests {
         assert_eq!(
             actions,
             [
-                NameTableEvent::Insert(ident, ResolvedName::Symbol(0)).into(),
+                NameTableEvent::Insert(ident, ResolvedName::Symbol(MockSymbolId(0))).into(),
                 BackendEvent::EmitItem(Item::CpuInstr(CpuInstr::Rst(Expr::from_items(&[
                     1.into(),
-                    Name(0).into(),
+                    Name(MockSymbolId(0)).into(),
                     ExprOp::FnCall(1).into()
                 ]))))
                 .into()
@@ -348,8 +528,9 @@ mod tests {
         assert_eq!(
             actions,
             [
-                NameTableEvent::Insert(label.into(), ResolvedName::Symbol(0)).into(),
-                BackendEvent::EmitItem(Item::Data(Atom::Name(0).into(), Width::Word)).into()
+                NameTableEvent::Insert(label.into(), ResolvedName::Symbol(MockSymbolId(0))).into(),
+                BackendEvent::EmitItem(Item::Data(Atom::Name(MockSymbolId(0)).into(), Width::Word))
+                    .into()
             ]
         );
     }
@@ -370,8 +551,8 @@ mod tests {
             actions,
             [
                 NameTableEvent::StartScope(label.into()).into(),
-                NameTableEvent::Insert(label.into(), ResolvedName::Symbol(0)).into(),
-                BackendEvent::DefineSymbol((0, ()), LocationCounter.into()).into()
+                NameTableEvent::Insert(label.into(), ResolvedName::Symbol(MockSymbolId(0))).into(),
+                BackendEvent::DefineSymbol((MockSymbolId(0), ()), LocationCounter.into()).into()
             ]
         )
     }
@@ -579,7 +760,7 @@ mod tests {
     fn diagnose_reloc_name_as_key() {
         let name = "symbol";
         let log = log_with_predefined_names::<_, _, MockSpan<_>>(
-            vec![(name.into(), ResolvedName::Symbol(42))],
+            vec![(name.into(), ResolvedName::Symbol(MockSymbolId(42)))],
             |session| {
                 session
                     .will_parse_line()
@@ -625,12 +806,8 @@ mod tests {
         )
     }
 
-    pub(super) type MockSession<S> = crate::analyze::session::MockSession<
-        SerialIdAllocator,
-        BasicNameTable<&'static Keyword, MockMacroId, usize>,
-        TestOperation<S>,
-        S,
-    >;
+    pub(super) type MockSession<S> =
+        crate::analyze::session::MockSession<SerialIdAllocator<MockSymbolId>, TestOperation<S>, S>;
 
     pub(super) fn collect_semantic_actions<F, S>(f: F) -> Vec<TestOperation<S>>
     where
@@ -642,22 +819,40 @@ mod tests {
 
     pub(super) fn log_with_predefined_names<I, F, S>(entries: I, f: F) -> Vec<TestOperation<S>>
     where
-        I: IntoIterator<Item = (String, ResolvedName<&'static Keyword, MockMacroId, usize>)>,
+        I: IntoIterator<
+            Item = (
+                String,
+                ResolvedName<&'static Keyword, MockMacroId, MockSymbolId>,
+            ),
+        >,
         F: FnOnce(TestTokenStreamSemantics<S>) -> TestTokenStreamSemantics<S>,
         S: Clone + Debug + Merge,
     {
         with_log(|log| {
-            f(TokenStreamSemantics::new(
-                MockSession::with_predefined_names(
-                    log,
-                    KEYWORDS
-                        .iter()
-                        .map(|(ident, keyword)| (ident.to_string(), ResolvedName::Keyword(keyword)))
-                        .chain(entries),
-                ),
-            ));
+            let mut names = *Session::<_, _, TokenStreamState<MockSession<S>>>::from_components(
+                Box::new(BasicNameTable::default()),
+            )
+            .names;
+            for (ident, resolution) in entries {
+                names.insert(ident, resolution)
+            }
+            f(
+                MockSession::with_log(log.clone()).into_semantic_actions(Session {
+                    reentrancy: (),
+                    names: Box::new(MockNameTable::new(names, log)),
+                    state: TokenStreamState::new(),
+                }),
+            );
         })
     }
 
-    pub(super) type TestTokenStreamSemantics<S> = TokenStreamSemantics<MockSession<S>>;
+    pub(super) type TestTokenStreamSemantics<S> = TokenStreamSemantics<
+        MockSession<S>,
+        Box<
+            MockNameTable<
+                BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
+                TestOperation<S>,
+            >,
+        >,
+    >;
 }

@@ -9,51 +9,69 @@ use self::syntax::actions::{InstrActions, InstrLineActions, InstrRule};
 use super::diag::span::StripSpan;
 use super::diag::{EmitDiag, Message};
 use super::params::RelocLookup;
-use super::resolve::ResolvedName;
 use super::syntax;
 use super::{Keyword, Label, Literal, ReentrancyActions, Session, TokenStreamSemantics};
 
+use crate::analyze::resolve::{NameTable, ResolvedName, StartScope};
 use crate::expr::LocationCounter;
 use crate::object::builder::{Finish, PushOp};
+
+use std::ops::DerefMut;
 
 pub(super) mod builtin_instr;
 mod label;
 mod macro_instr;
 
-pub(in crate::analyze) type InstrLineSemantics<S> = Session<S, InstrLineState<S>>;
+pub(in crate::analyze) type InstrLineSemantics<R, N> = Session<R, N, InstrLineState<R>>;
 
 pub(in crate::analyze) struct InstrLineState<S: ReentrancyActions> {
     pub label: Option<Label<S::Ident, S::Span>>,
 }
 
-impl<S> InstrLineActions<S::Ident, Literal<S::StringRef>, S::Span> for InstrLineSemantics<S>
+impl<R, N> InstrLineActions<R::Ident, Literal<R::StringRef>, R::Span> for InstrLineSemantics<R, N>
 where
-    S: ReentrancyActions<Keyword = &'static Keyword>,
+    R: ReentrancyActions,
+    N: DerefMut,
+    N::Target: StartScope<R::Ident>
+        + NameTable<
+            R::Ident,
+            Keyword = &'static Keyword,
+            MacroId = R::MacroId,
+            SymbolId = R::SymbolId,
+        >,
 {
-    type LabelActions = LabelSemantics<S>;
+    type LabelActions = LabelSemantics<R, N>;
     type InstrActions = Self;
 
-    fn will_parse_label(mut self, label: (S::Ident, S::Span)) -> Self::LabelActions {
+    fn will_parse_label(mut self, label: (R::Ident, R::Span)) -> Self::LabelActions {
         self = self.flush_label();
         self.map_line(|line| LabelState::new(line, label))
     }
 }
 
-impl<S> InstrActions<S::Ident, Literal<S::StringRef>, S::Span> for InstrLineSemantics<S>
+impl<R, N> InstrActions<R::Ident, Literal<R::StringRef>, R::Span> for InstrLineSemantics<R, N>
 where
-    S: ReentrancyActions<Keyword = &'static Keyword>,
+    R: ReentrancyActions,
+    N: DerefMut,
+    N::Target: StartScope<R::Ident>
+        + NameTable<
+            R::Ident,
+            Keyword = &'static Keyword,
+            MacroId = R::MacroId,
+            SymbolId = R::SymbolId,
+        >,
 {
-    type BuiltinInstrActions = BuiltinInstrSemantics<S>;
-    type MacroInstrActions = MacroInstrSemantics<S>;
+    type BuiltinInstrActions = BuiltinInstrSemantics<R, N>;
+    type MacroInstrActions = MacroInstrSemantics<R, N>;
     type ErrorActions = Self;
-    type LineFinalizer = TokenStreamSemantics<S>;
+    type LineFinalizer = TokenStreamSemantics<R, N>;
 
     fn will_parse_instr(
         mut self,
-        ident: S::Ident,
-        span: S::Span,
+        ident: R::Ident,
+        span: R::Span,
     ) -> InstrRule<Self::BuiltinInstrActions, Self::MacroInstrActions, Self> {
-        match self.reentrancy.get(&ident) {
+        match self.names.get(&ident) {
             Some(ResolvedName::Keyword(Keyword::BuiltinInstr(builtin))) => InstrRule::BuiltinInstr(
                 self.map_line(|line| BuiltinInstrState::new(line, (builtin.clone(), span))),
             ),
@@ -85,11 +103,22 @@ impl<S: ReentrancyActions> InstrLineState<S> {
     }
 }
 
-impl<S: ReentrancyActions> InstrLineSemantics<S> {
+impl<R, N> InstrLineSemantics<R, N>
+where
+    R: ReentrancyActions,
+    N: DerefMut,
+    N::Target: StartScope<R::Ident>
+        + NameTable<
+            R::Ident,
+            Keyword = &'static Keyword,
+            MacroId = R::MacroId,
+            SymbolId = R::SymbolId,
+        >,
+{
     pub fn flush_label(mut self) -> Self {
         if let Some(((label, span), _params)) = self.state.label.take() {
-            self.reentrancy.start_scope(&label);
-            let id = self.reentrancy.reloc_lookup(label, span.clone());
+            self.names.start_scope(&label);
+            let id = self.reloc_lookup(label, span.clone());
             let mut builder = self.reentrancy.define_symbol(id, span.clone());
             PushOp::<LocationCounter, _>::push_op(&mut builder, LocationCounter, span);
             let (reentrancy, ()) = builder.finish();

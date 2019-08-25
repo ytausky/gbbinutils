@@ -169,13 +169,14 @@ delegate_diagnostics! {
 mod tests {
     use super::*;
 
+    use crate::analyze::macros::mock::MockMacroId;
     use crate::analyze::resolve::NameTableEvent;
+    use crate::analyze::semantics::mock::MockExprBuilder;
     use crate::analyze::semantics::Keyword;
-    use crate::analyze::session::MockBuilder;
     use crate::diag::{DiagnosticsEvent, MockSpan};
     use crate::expr::{Atom, ParamId};
     use crate::log::Log;
-    use crate::object::builder::mock::BackendEvent;
+    use crate::object::builder::mock::{BackendEvent, MockSymbolId};
     use crate::object::builder::PushOp;
 
     type Expr<N, S> = crate::expr::Expr<Atom<LocationCounter, N>, S>;
@@ -184,7 +185,7 @@ mod tests {
     enum Event<N, S: Clone> {
         Backend(BackendEvent<N, Expr<N, S>>),
         Diagnostics(DiagnosticsEvent<S>),
-        NameTable(NameTableEvent<Keyword, usize, usize>),
+        NameTable(NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>),
     }
 
     impl<N, S: Clone> From<BackendEvent<N, Expr<N, S>>> for Event<N, S> {
@@ -199,8 +200,10 @@ mod tests {
         }
     }
 
-    impl<N, S: Clone> From<NameTableEvent<Keyword, usize, usize>> for Event<N, S> {
-        fn from(event: NameTableEvent<Keyword, usize, usize>) -> Self {
+    impl<N, S: Clone> From<NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>>
+        for Event<N, S>
+    {
+        fn from(event: NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>) -> Self {
             Event::NameTable(event)
         }
     }
@@ -233,9 +236,9 @@ mod tests {
     #[test]
     fn resolve_known_ident() {
         let ident = String::from("ident");
-        let reloc = 42;
-        let log = Log::<Event<usize, ()>>::new();
-        let mut builder = MockBuilder::with_predefined_names(
+        let reloc = MockSymbolId(7);
+        let log = Log::<Event<MockSymbolId, ()>>::new();
+        let mut builder = MockExprBuilder::with_name_table_entries(
             log,
             vec![(ident.clone(), ResolvedName::Symbol(reloc))],
         )
@@ -247,10 +250,10 @@ mod tests {
     #[test]
     fn resolve_unknown_ident() {
         let ident = String::from("ident");
-        let id = 0;
-        let log = Log::<Event<usize, ()>>::new();
+        let id = MockSymbolId(0);
+        let log = Log::<Event<MockSymbolId, ()>>::new();
         {
-            let mut builder = MockBuilder::with_name_resolution(log.clone()).resolve_names();
+            let mut builder = MockExprBuilder::with_log(log.clone()).resolve_names();
             builder.push_op(Name(ident.clone()), ());
             assert_eq!(builder.finish().1, Expr::from_atom(Atom::Name(id), ()));
         }
@@ -264,17 +267,17 @@ mod tests {
     fn diagnose_macro_name_in_expr() {
         let ident = String::from("my_macro");
         let span = MockSpan::from("ident");
-        let log = Log::<Event<usize, MockSpan<_>>>::new();
+        let log = Log::<Event<MockSymbolId, MockSpan<_>>>::new();
         {
-            let mut builder = MockBuilder::with_predefined_names(
+            let mut builder = MockExprBuilder::with_name_table_entries(
                 log.clone(),
-                vec![(ident.clone(), ResolvedName::Macro(0))],
+                vec![(ident.clone(), ResolvedName::Macro(MockMacroId(0)))],
             )
             .resolve_names();
             builder.push_op(Name(ident), span.clone());
             assert_eq!(
                 builder.finish().1,
-                Expr::from_atom(Atom::Name(0), span.clone())
+                Expr::from_atom(Atom::Name(MockSymbolId(0)), span.clone())
             );
         }
         assert_eq!(

@@ -1,6 +1,6 @@
 use super::{BuiltinInstrSemantics, BuiltinInstrState, OperandSymbol, Session};
 
-use crate::analyze::resolve::ResolvedName;
+use crate::analyze::resolve::{NameTable, ResolvedName};
 use crate::analyze::semantics::Keyword;
 use crate::analyze::session::ReentrancyActions;
 use crate::analyze::syntax::actions::*;
@@ -9,13 +9,16 @@ use crate::diag::span::{Source, SpanSource};
 use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::expr::BinOp;
 
-pub(super) type ArgSemantics<S> = Session<
-    S,
+use std::ops::DerefMut;
+
+pub(super) type ArgSemantics<R, N> = Session<
+    R,
+    N,
     ExprBuilder<
-        <S as IdentSource>::Ident,
-        <S as StringSource>::StringRef,
-        <S as SpanSource>::Span,
-        BuiltinInstrState<S>,
+        <R as IdentSource>::Ident,
+        <R as StringSource>::StringRef,
+        <R as SpanSource>::Span,
+        BuiltinInstrState<R>,
     >,
 >;
 
@@ -41,8 +44,8 @@ delegate_diagnostics! {
     {I, R, S, P: Diagnostics<S>}, ExprBuilder<I, R, S, P>, {parent}, P, S
 }
 
-impl<S: ReentrancyActions> ArgFinalizer for ArgSemantics<S> {
-    type Next = BuiltinInstrSemantics<S>;
+impl<R: ReentrancyActions, N> ArgFinalizer for ArgSemantics<R, N> {
+    type Next = BuiltinInstrSemantics<R, N>;
 
     fn did_parse_arg(mut self) -> Self::Next {
         let arg = self.state.pop();
@@ -52,15 +55,22 @@ impl<S: ReentrancyActions> ArgFinalizer for ArgSemantics<S> {
     }
 }
 
-impl<S> ArgActions<S::Ident, Literal<S::StringRef>, S::Span> for ArgSemantics<S>
+impl<R, N> ArgActions<R::Ident, Literal<R::StringRef>, R::Span> for ArgSemantics<R, N>
 where
-    S: ReentrancyActions<Keyword = &'static Keyword>,
+    R: ReentrancyActions,
+    N: DerefMut,
+    N::Target: NameTable<
+        R::Ident,
+        Keyword = &'static Keyword,
+        MacroId = R::MacroId,
+        SymbolId = R::SymbolId,
+    >,
 {
-    fn act_on_atom(&mut self, atom: ExprAtom<S::Ident, Literal<S::StringRef>>, span: S::Span) {
+    fn act_on_atom(&mut self, atom: ExprAtom<R::Ident, Literal<R::StringRef>>, span: R::Span) {
         self.state.stack.push(Arg {
             variant: ArgVariant::Atom(match atom {
                 ExprAtom::Error => ArgAtom::Error,
-                ExprAtom::Ident(ident) => match self.reentrancy.get(&ident) {
+                ExprAtom::Ident(ident) => match self.names.get(&ident) {
                     Some(ResolvedName::Keyword(Keyword::Operand(operand))) => {
                         ArgAtom::OperandSymbol(*operand)
                     }
@@ -74,7 +84,7 @@ where
         })
     }
 
-    fn act_on_operator(&mut self, op: Operator, span: S::Span) {
+    fn act_on_operator(&mut self, op: Operator, span: R::Span) {
         let variant = match op {
             Operator::Unary(UnaryOperator::Parentheses) => {
                 let inner = self.state.pop();

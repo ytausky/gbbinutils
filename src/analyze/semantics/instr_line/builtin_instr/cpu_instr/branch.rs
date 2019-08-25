@@ -229,7 +229,7 @@ mod tests {
         condition: Option<Condition>,
     ) -> InstructionDescriptor {
         use self::PotentiallyConditionalBranch::*;
-        let ident = "ident";
+        let ident = MockSymbolId(7);
         let mut operands = Vec::new();
         let mut has_condition = false;
         if let Some(condition) = condition {
@@ -287,7 +287,7 @@ mod tests {
 
     #[test]
     fn analyze_ret_z_ident() {
-        analyze(RET, vec![literal(Z), "target".into()]).expect_diag(
+        analyze(RET, vec![literal(Z), MockSymbolId(7).into()]).expect_diag(
             ExpectedDiag::new(Message::CannotSpecifyTarget).with_highlight(TokenId::Operand(1, 0)),
         )
     }

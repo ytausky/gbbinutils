@@ -1,9 +1,9 @@
 use super::*;
 
+use crate::analyze::resolve::NameTable;
 use crate::analyze::semantics::instr_line::Label;
 use crate::analyze::semantics::params::RelocLookup;
-use crate::analyze::semantics::token_line::{MacroDefState, TokenContext, TokenLineSemantics};
-use crate::analyze::semantics::{Keyword, TokenStreamState};
+use crate::analyze::semantics::token_line::{MacroDefState, TokenContext};
 use crate::analyze::session::ReentrancyActions;
 use crate::analyze::Literal;
 use crate::diag::*;
@@ -31,12 +31,23 @@ pub(in crate::analyze) enum SimpleDirective {
     Org,
 }
 
-pub(super) fn analyze_directive<S: ReentrancyActions<Keyword = &'static Keyword>>(
-    directive: (Directive, S::Span),
-    label: Option<Label<S::Ident, S::Span>>,
-    args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
-    session: S,
-) -> TokenStreamSemantics<S> {
+pub(super) fn analyze_directive<R, N>(
+    directive: (Directive, R::Span),
+    label: Option<Label<R::Ident, R::Span>>,
+    args: BuiltinInstrArgs<R::Ident, R::StringRef, R::Span>,
+    session: InstrLineSemantics<R, N>,
+) -> TokenStreamSemantics<R, N>
+where
+    R: ReentrancyActions,
+    N: DerefMut,
+    N::Target: StartScope<R::Ident>
+        + NameTable<
+            R::Ident,
+            Keyword = &'static Keyword,
+            MacroId = R::MacroId,
+            SymbolId = R::SymbolId,
+        >,
+{
     let context = DirectiveContext {
         span: directive.1,
         label,
@@ -46,15 +57,26 @@ pub(super) fn analyze_directive<S: ReentrancyActions<Keyword = &'static Keyword>
     context.analyze(directive.0)
 }
 
-struct DirectiveContext<S: ReentrancyActions> {
-    span: S::Span,
-    label: Option<Label<S::Ident, S::Span>>,
-    args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
-    session: S,
+struct DirectiveContext<R: ReentrancyActions, N> {
+    span: R::Span,
+    label: Option<Label<R::Ident, R::Span>>,
+    args: BuiltinInstrArgs<R::Ident, R::StringRef, R::Span>,
+    session: InstrLineSemantics<R, N>,
 }
 
-impl<S: ReentrancyActions<Keyword = &'static Keyword>> DirectiveContext<S> {
-    fn analyze(self, directive: Directive) -> TokenStreamSemantics<S> {
+impl<R, N> DirectiveContext<R, N>
+where
+    R: ReentrancyActions,
+    N: DerefMut,
+    N::Target: StartScope<R::Ident>
+        + NameTable<
+            R::Ident,
+            Keyword = &'static Keyword,
+            MacroId = R::MacroId,
+            SymbolId = R::SymbolId,
+        >,
+{
+    fn analyze(self, directive: Directive) -> TokenStreamSemantics<R, N> {
         use self::BindingDirective::*;
         use self::SimpleDirective::*;
         match directive {
@@ -69,35 +91,35 @@ impl<S: ReentrancyActions<Keyword = &'static Keyword>> DirectiveContext<S> {
         }
     }
 
-    fn analyze_data(mut self, width: Width) -> TokenStreamSemantics<S> {
+    fn analyze_data(mut self, width: Width) -> TokenStreamSemantics<R, N> {
         for arg in self.args {
             let expr = match self.session.analyze_expr(arg) {
                 (Ok(expr), session) => {
                     self.session = session;
                     expr
                 }
-                (Err(()), session) => return TokenStreamSemantics::new(session),
+                (Err(()), session) => return set_state!(session, session.state.into()),
             };
-            self.session.emit_item(Item::Data(expr, width))
+            self.session.reentrancy.emit_item(Item::Data(expr, width))
         }
-        TokenStreamSemantics::new(self.session)
+        set_state!(self.session, self.session.state.into())
     }
 
-    fn analyze_ds(mut self) -> TokenStreamSemantics<S> {
+    fn analyze_ds(mut self) -> TokenStreamSemantics<R, N> {
         match single_arg(self.span, self.args, &mut self.session) {
             Ok(arg) => {
                 let (result, session) = self.session.analyze_expr(arg);
                 self.session = session;
                 if let Ok(bytes) = result {
-                    self.session.reserve(bytes)
+                    self.session.reentrancy.reserve(bytes)
                 }
             }
             Err(()) => (),
         }
-        TokenStreamSemantics::new(self.session)
+        set_state!(self.session, self.session.state.into())
     }
 
-    fn analyze_equ(mut self) -> TokenStreamSemantics<S> {
+    fn analyze_equ(mut self) -> TokenStreamSemantics<R, N> {
         let (symbol, params) = self.label.take().unwrap();
         match single_arg(self.span, self.args, &mut self.session) {
             Ok(arg) => {
@@ -106,58 +128,59 @@ impl<S: ReentrancyActions<Keyword = &'static Keyword>> DirectiveContext<S> {
             }
             Err(()) => (),
         }
-        TokenStreamSemantics::new(self.session)
+        set_state!(self.session, self.session.state.into())
     }
 
-    fn analyze_section(mut self) -> TokenStreamSemantics<S> {
+    fn analyze_section(mut self) -> TokenStreamSemantics<R, N> {
         let (name, span) = self.label.take().unwrap().0;
         let id = self.session.reloc_lookup(name, span.clone());
-        self.session.start_section(id, span);
-        TokenStreamSemantics::new(self.session)
+        self.session.reentrancy.start_section(id, span);
+        set_state!(self.session, self.session.state.into())
     }
 
-    fn analyze_include(mut self) -> TokenStreamSemantics<S> {
+    fn analyze_include(mut self) -> TokenStreamSemantics<R, N> {
         let (path, span) = match reduce_include(self.span, self.args, &mut self.session) {
             Ok(result) => result,
-            Err(()) => return TokenStreamSemantics::new(self.session),
+            Err(()) => return set_state!(self.session, self.session.state.into()),
         };
-        let (result, mut semantics): (_, TokenStreamSemantics<_>) = self.session.analyze_file(
-            path,
-            Session {
-                reentrancy: (),
-                state: TokenStreamState::new(),
-            },
-        );
+        let (result, mut semantics): (_, TokenStreamSemantics<_, _>) =
+            self.session.reentrancy.analyze_file(
+                path,
+                Session {
+                    reentrancy: (),
+                    names: self.session.names,
+                    state: self.session.state.into(),
+                },
+            );
         if let Err(err) = result {
             semantics.emit_diag(Message::from(err).at(span))
         }
         semantics
     }
 
-    fn analyze_macro(mut self) -> TokenStreamSemantics<S> {
+    fn analyze_macro(mut self) -> TokenStreamSemantics<R, N> {
         if self.label.is_none() {
             let span = self.span;
             self.session.emit_diag(Message::MacroRequiresName.at(span))
         }
-        TokenLineSemantics {
-            state: TokenContext::MacroDef(MacroDefState::new(self.label)),
-            reentrancy: self.session,
-        }
-        .map_line(Into::into)
+        set_state!(
+            self.session,
+            TokenContext::MacroDef(MacroDefState::new(self.label)).into()
+        )
     }
 
-    fn analyze_org(mut self) -> TokenStreamSemantics<S> {
+    fn analyze_org(mut self) -> TokenStreamSemantics<R, N> {
         match single_arg(self.span, self.args, &mut self.session) {
             Ok(arg) => {
                 let (result, session) = self.session.analyze_expr(arg);
                 self.session = session;
                 if let Ok(value) = result {
-                    self.session.set_origin(value)
+                    self.session.reentrancy.set_origin(value)
                 }
             }
             Err(()) => (),
         }
-        TokenStreamSemantics::new(self.session)
+        set_state!(self.session, self.session.state.into())
     }
 }
 
@@ -201,14 +224,15 @@ fn single_arg<T, D: Diagnostics<S>, S>(
 mod tests {
     use super::*;
 
-    use crate::analyze::resolve::{NameTableEvent, ResolvedName};
+    use crate::analyze::macros::mock::MockMacroId;
+    use crate::analyze::resolve::{MockNameTable, NameTableEvent, ResolvedName};
     use crate::analyze::semantics::instr_line::builtin_instr;
     use crate::analyze::semantics::tests::*;
     use crate::analyze::session::SessionEvent;
     use crate::analyze::syntax::actions::*;
     use crate::codebase::CodebaseError;
     use crate::expr::{Atom, ParamId};
-    use crate::object::builder::mock::BackendEvent;
+    use crate::object::builder::mock::{BackendEvent, MockSymbolId};
 
     use std::borrow::Borrow;
     use std::io;
@@ -402,8 +426,8 @@ mod tests {
         assert_eq!(
             actions,
             [
-                NameTableEvent::Insert(symbol.into(), ResolvedName::Symbol(0)).into(),
-                BackendEvent::DefineSymbol((0, ()), value.into()).into()
+                NameTableEvent::Insert(symbol.into(), ResolvedName::Symbol(MockSymbolId(0))).into(),
+                BackendEvent::DefineSymbol((MockSymbolId(0), ()), value.into()).into()
             ]
         )
     }
@@ -433,8 +457,9 @@ mod tests {
         assert_eq!(
             actions,
             [
-                NameTableEvent::Insert(name.into(), ResolvedName::Symbol(0)).into(),
-                BackendEvent::DefineSymbol((0, ()), Atom::from(ParamId(0)).into()).into()
+                NameTableEvent::Insert(name.into(), ResolvedName::Symbol(MockSymbolId(0))).into(),
+                BackendEvent::DefineSymbol((MockSymbolId(0), ()), Atom::from(ParamId(0)).into())
+                    .into()
             ]
         )
     }
@@ -457,8 +482,8 @@ mod tests {
         assert_eq!(
             actions,
             [
-                NameTableEvent::Insert(name.into(), ResolvedName::Symbol(0)).into(),
-                BackendEvent::StartSection(0, ()).into()
+                NameTableEvent::Insert(name.into(), ResolvedName::Symbol(MockSymbolId(0))).into(),
+                BackendEvent::StartSection(MockSymbolId(0), ()).into()
             ]
         )
     }
@@ -467,7 +492,15 @@ mod tests {
         unary_directive("DS", f)
     }
 
-    type TestExprContext<S> = builtin_instr::ArgSemantics<MockSession<S>>;
+    type TestExprContext<S> = builtin_instr::ArgSemantics<
+        MockSession<S>,
+        Box<
+            MockNameTable<
+                BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
+                TestOperation<S>,
+            >,
+        >,
+    >;
 
     fn unary_directive<F>(directive: &str, f: F) -> Vec<TestOperation<()>>
     where
@@ -496,7 +529,15 @@ mod tests {
         )
     }
 
-    type TestBuiltinInstrSemantics<S> = builtin_instr::BuiltinInstrSemantics<MockSession<S>>;
+    type TestBuiltinInstrSemantics<S> = builtin_instr::BuiltinInstrSemantics<
+        MockSession<S>,
+        Box<
+            MockNameTable<
+                BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
+                TestOperation<S>,
+            >,
+        >,
+    >;
 
     fn with_directive<F>(directive: &str, f: F) -> Vec<TestOperation<()>>
     where

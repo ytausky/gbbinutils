@@ -61,10 +61,11 @@ where
             &mut macros,
             &mut interner,
             self,
-            &mut names,
             diagnostics,
         );
-        session.analyze_file(name.into(), Session::default()).0
+        session
+            .analyze_file(name.into(), Session::from_components(&mut names))
+            .0
     }
 }
 

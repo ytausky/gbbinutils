@@ -87,7 +87,6 @@ impl IdentFactory for DefaultIdentFactory {
     }
 }
 
-#[cfg(test)]
 impl From<&str> for Ident<String> {
     fn from(name: &str) -> Ident<String> {
         DefaultIdentFactory.mk_ident(name)
@@ -219,10 +218,7 @@ impl<T: Default> StartScope<Ident<String>> for BiLevelNameTable<T> {
 mod mock {
     use super::*;
 
-    use crate::analyze::semantics::Keyword;
     use crate::log::Log;
-
-    use std::marker::PhantomData;
 
     pub(in crate::analyze) struct MockNameTable<N, T> {
         names: N,
@@ -281,37 +277,6 @@ mod mock {
     pub enum NameTableEvent<Keyword, MacroId, SymbolId> {
         Insert(String, ResolvedName<Keyword, MacroId, SymbolId>),
         StartScope(String),
-    }
-
-    pub(in crate::analyze) struct FakeNameTable<I>(PhantomData<I>);
-
-    impl<I> FakeNameTable<I> {
-        pub fn new() -> Self {
-            Self(PhantomData)
-        }
-    }
-
-    impl<I> MacroSource for FakeNameTable<I> {
-        type MacroId = ();
-    }
-
-    impl<I: Clone> SymbolSource for FakeNameTable<I> {
-        type SymbolId = I;
-    }
-
-    impl<I: Clone> NameTable<I> for FakeNameTable<I> {
-        type Keyword = Keyword;
-
-        fn get(
-            &mut self,
-            ident: &I,
-        ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
-            Some(ResolvedName::Symbol(ident.clone()))
-        }
-
-        fn insert(&mut self, _: I, _: ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>) {
-            panic!("tried to define a name")
-        }
     }
 }
 

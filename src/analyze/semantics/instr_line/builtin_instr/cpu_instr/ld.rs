@@ -312,7 +312,7 @@ mod tests {
 
     #[test]
     fn analyze_ld_deref_symbol_a() {
-        let ident = "ident";
+        let ident = MockSymbolId(5);
         analyze(LD, vec![deref(ident), literal(A)]).expect_instruction(CpuInstr::Ld(Ld::Special(
             SpecialLd::InlineAddr(name(ident, TokenId::Operand(0, 1))),
             Direction::FromA,
@@ -321,7 +321,7 @@ mod tests {
 
     #[test]
     fn analyze_ld_a_deref_symbol() {
-        let ident = "ident";
+        let ident = MockSymbolId(43);
         analyze(LD, vec![literal(A), deref(ident)]).expect_instruction(CpuInstr::Ld(Ld::Special(
             SpecialLd::InlineAddr(name(ident, TokenId::Operand(1, 1))),
             Direction::IntoA,
@@ -400,7 +400,7 @@ mod tests {
     }
 
     fn describe_ld_reg16_immediate(dest: Reg16) -> InstructionDescriptor {
-        let value = "value";
+        let value = MockSymbolId(9);
         (
             (LD, vec![dest.into(), value.into()]),
             CpuInstr::Ld(Ld::Immediate16(dest, name(value, TokenId::Operand(1, 0)))),

@@ -327,6 +327,7 @@ impl<V: Source> From<Nullary> for CpuInstr<V> {
 mod tests {
     pub use crate::analyze::semantics::instr_line::builtin_instr::OperandSymbol::*;
     pub(crate) use crate::diag::Message;
+    pub(crate) use crate::object::builder::mock::MockSymbolId;
     pub use crate::span::{MergeSpans, SpanSource};
 
     use self::operand::tests::Event;
@@ -335,6 +336,7 @@ mod tests {
     use super::*;
 
     use crate::analyze::semantics::instr_line::builtin_instr::*;
+    use crate::analyze::semantics::mock::MockExprBuilder;
     use crate::analyze::Literal;
     use crate::expr::{Atom, LocationCounter};
 
@@ -346,11 +348,11 @@ mod tests {
 
     pub(super) type TokenSpan = MockSpan<TokenId>;
 
-    type Expr = crate::expr::Expr<Atom<LocationCounter, String>, TokenSpan>;
-    type Input = Arg<String, String, ()>;
+    type Expr = crate::expr::Expr<Atom<LocationCounter, MockSymbolId>, TokenSpan>;
+    type Input = Arg<MockSymbolId, String, ()>;
 
-    impl From<ArgVariant<String, String, ()>> for Input {
-        fn from(variant: ArgVariant<String, String, ()>) -> Self {
+    impl From<ArgVariant<MockSymbolId, String, ()>> for Input {
+        fn from(variant: ArgVariant<MockSymbolId, String, ()>) -> Self {
             Arg { variant, span: () }
         }
     }
@@ -369,8 +371,8 @@ mod tests {
         Expr::from_atom(n.into(), span.into())
     }
 
-    pub(super) fn name(ident: &str, span: impl Into<TokenSpan>) -> Expr {
-        Expr::from_atom(Atom::Name(ident.into()), span.into())
+    pub(super) fn name(symbol: MockSymbolId, span: impl Into<TokenSpan>) -> Expr {
+        Expr::from_atom(Atom::Name(symbol), span.into())
     }
 
     pub(super) fn deref(expr: impl Into<Input>) -> Input {
@@ -497,9 +499,9 @@ mod tests {
         }
     }
 
-    impl<'a> From<&'a str> for Input {
-        fn from(ident: &'a str) -> Self {
-            Arg::from_atom(ArgAtom::Ident(ident.into()), ())
+    impl From<MockSymbolId> for Input {
+        fn from(ident: MockSymbolId) -> Self {
+            Arg::from_atom(ArgAtom::Ident(ident), ())
         }
     }
 
@@ -511,7 +513,7 @@ mod tests {
 
     #[test]
     fn analyze_cp_symbol() {
-        let ident = "ident";
+        let ident = MockSymbolId(42);
         test_cp_const_analysis(ident.into(), name(ident, TokenId::Operand(0, 0)))
     }
 
@@ -766,7 +768,7 @@ mod tests {
         I: IntoIterator<Item = Input>,
     {
         use crate::analyze::semantics::instr_line::builtin_instr::operand::analyze_operand;
-        use crate::analyze::session::{MockBuilder, MockSession};
+        use crate::analyze::session::MockSession;
 
         let mut result = None;
         let log = crate::log::with_log(|log| {
@@ -778,12 +780,12 @@ mod tests {
                     analyze_operand(
                         op,
                         mnemonic.context(),
-                        MockBuilder::without_name_resolution(log.clone()),
+                        MockExprBuilder::with_log(log.clone()),
                     )
                     .0
                 })
                 .collect();
-            let mut session = MockSession::without_name_resolution(log);
+            let mut session = MockSession::with_log(log);
             result = Some(analyze_instruction(
                 (mnemonic, TokenId::Mnemonic.into()),
                 operands,
@@ -793,15 +795,15 @@ mod tests {
         AnalysisResult(result.unwrap().map_err(|_| log))
     }
 
-    fn add_token_spans((i, operand): (usize, Input)) -> Arg<String, String, TokenSpan> {
+    fn add_token_spans((i, operand): (usize, Input)) -> Arg<MockSymbolId, String, TokenSpan> {
         add_token_spans_recursive(i, 0, operand).1
     }
 
     fn add_token_spans_recursive(
         i: usize,
         mut j: usize,
-        expr: Arg<String, String, ()>,
-    ) -> (usize, Arg<String, String, TokenSpan>) {
+        expr: Arg<MockSymbolId, String, ()>,
+    ) -> (usize, Arg<MockSymbolId, String, TokenSpan>) {
         let mut span: TokenSpan = TokenId::Operand(i, j).into();
         let variant = match expr.variant {
             ArgVariant::Unary(ArgUnaryOp::Parentheses, expr) => {

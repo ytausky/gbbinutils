@@ -241,13 +241,14 @@ impl<I: Iterator> Iterator for OperandCounter<I> {
 pub mod tests {
     use super::*;
 
+    use crate::analyze::semantics::mock::MockExprBuilder;
     use crate::analyze::Literal;
     use crate::expr::{Atom, LocationCounter};
-    use crate::object::builder::mock::BackendEvent;
+    use crate::object::builder::mock::{BackendEvent, MockSymbolId};
 
     use std::fmt::Debug;
 
-    type Expr<S> = crate::expr::Expr<Atom<LocationCounter, String>, S>;
+    type Expr<S> = crate::expr::Expr<Atom<LocationCounter, MockSymbolId>, S>;
 
     #[test]
     fn analyze_deref_bc() {
@@ -290,12 +291,12 @@ pub mod tests {
 
     #[derive(Debug, PartialEq)]
     pub(crate) enum Event<S: Clone> {
-        Backend(BackendEvent<String, Expr<S>>),
+        Backend(BackendEvent<MockSymbolId, Expr<S>>),
         Diagnostics(DiagnosticsEvent<S>),
     }
 
-    impl<S: Clone> From<BackendEvent<String, Expr<S>>> for Event<S> {
-        fn from(event: BackendEvent<String, Expr<S>>) -> Self {
+    impl<S: Clone> From<BackendEvent<MockSymbolId, Expr<S>>> for Event<S> {
+        fn from(event: BackendEvent<MockSymbolId, Expr<S>>) -> Self {
             Event::Backend(event)
         }
     }
@@ -307,16 +308,12 @@ pub mod tests {
     }
 
     fn analyze_operand<S: Clone + Debug>(
-        expr: Arg<String, String, MockSpan<S>>,
+        expr: Arg<MockSymbolId, String, MockSpan<S>>,
         context: Context,
     ) -> OperandResult<MockSpan<S>> {
-        use crate::analyze::session::MockBuilder;
-
         let mut result = None;
         let log = crate::log::with_log(|log| {
-            result = Some(
-                super::analyze_operand(expr, context, MockBuilder::without_name_resolution(log)).0,
-            )
+            result = Some(super::analyze_operand(expr, context, MockExprBuilder::with_log(log)).0)
         });
         result.unwrap().map_err(|_| log)
     }

@@ -1,12 +1,14 @@
-use super::{Keyword, Label, Session, TokenStreamSemantics};
+use super::{Keyword, Label, Session, TokenStreamSemantics, TokenStreamState};
 
-use crate::analyze::resolve::ResolvedName;
+use crate::analyze::resolve::{NameTable, ResolvedName, StartScope};
 use crate::analyze::session::ReentrancyActions;
 use crate::analyze::syntax::actions::{LineFinalizer, TokenLineActions, TokenLineRule};
 use crate::analyze::syntax::{Sigil, Token};
 use crate::analyze::{Literal, SemanticToken, TokenSeq};
 
-pub(in crate::analyze) type TokenLineSemantics<S> = Session<S, TokenContext<S>>;
+use std::ops::DerefMut;
+
+pub(in crate::analyze) type TokenLineSemantics<R, N> = Session<R, N, TokenContext<R>>;
 
 pub(in crate::analyze) enum TokenContext<S: ReentrancyActions> {
     MacroDef(MacroDefState<S>),
@@ -26,13 +28,21 @@ impl<S: ReentrancyActions> MacroDefState<S> {
     }
 }
 
-impl<S> TokenLineActions<S::Ident, Literal<S::StringRef>, S::Span> for TokenLineSemantics<S>
+impl<R, N> TokenLineActions<R::Ident, Literal<R::StringRef>, R::Span> for TokenLineSemantics<R, N>
 where
-    S: ReentrancyActions<Keyword = &'static Keyword>,
+    R: ReentrancyActions,
+    N: DerefMut,
+    N::Target: StartScope<R::Ident>
+        + NameTable<
+            R::Ident,
+            Keyword = &'static Keyword,
+            MacroId = R::MacroId,
+            SymbolId = R::SymbolId,
+        >,
 {
-    type ContextFinalizer = TokenContextFinalizationSemantics<S>;
+    type ContextFinalizer = TokenContextFinalizationSemantics<R, N>;
 
-    fn act_on_token(&mut self, token: SemanticToken<S::Ident, S::StringRef>, span: S::Span) {
+    fn act_on_token(&mut self, token: SemanticToken<R::Ident, R::StringRef>, span: R::Span) {
         match &mut self.state {
             TokenContext::MacroDef(state) => {
                 state.tokens.0.push(token);
@@ -43,8 +53,8 @@ where
 
     fn act_on_ident(
         mut self,
-        ident: S::Ident,
-        span: S::Span,
+        ident: R::Ident,
+        span: R::Span,
     ) -> TokenLineRule<Self, Self::ContextFinalizer> {
         match &mut self.state {
             TokenContext::MacroDef(state) => {
@@ -62,10 +72,10 @@ where
     }
 }
 
-impl<S: ReentrancyActions> LineFinalizer<S::Span> for TokenLineSemantics<S> {
-    type Next = TokenStreamSemantics<S>;
+impl<R: ReentrancyActions, N> LineFinalizer<R::Span> for TokenLineSemantics<R, N> {
+    type Next = TokenStreamSemantics<R, N>;
 
-    fn did_parse_line(mut self, span: S::Span) -> Self::Next {
+    fn did_parse_line(mut self, span: R::Span) -> Self::Next {
         match &mut self.state {
             TokenContext::MacroDef(state) => {
                 state.tokens.0.push(Sigil::Eol.into());
@@ -76,31 +86,32 @@ impl<S: ReentrancyActions> LineFinalizer<S::Span> for TokenLineSemantics<S> {
     }
 }
 
-pub(in crate::analyze) struct TokenContextFinalizationSemantics<S: ReentrancyActions> {
-    parent: TokenLineSemantics<S>,
+pub(in crate::analyze) struct TokenContextFinalizationSemantics<R: ReentrancyActions, N> {
+    parent: TokenLineSemantics<R, N>,
 }
 
 delegate_diagnostics! {
-    {S: ReentrancyActions}, TokenContextFinalizationSemantics<S>, {parent}, S, S::Span
+    {R: ReentrancyActions, N}, TokenContextFinalizationSemantics<R, N>, {parent}, R, R::Span
 }
 
-impl<S: ReentrancyActions<Keyword = &'static Keyword>> LineFinalizer<S::Span>
-    for TokenContextFinalizationSemantics<S>
+impl<R, N> LineFinalizer<R::Span> for TokenContextFinalizationSemantics<R, N>
+where
+    R: ReentrancyActions,
+    N: DerefMut,
+    N::Target: NameTable<R::Ident, MacroId = R::MacroId, SymbolId = R::SymbolId>,
 {
-    type Next = TokenStreamSemantics<S>;
+    type Next = TokenStreamSemantics<R, N>;
 
-    fn did_parse_line(mut self, _: S::Span) -> Self::Next {
+    fn did_parse_line(mut self, _: R::Span) -> Self::Next {
         match self.parent.state {
             TokenContext::MacroDef(state) => {
                 if let Some((name, params)) = state.label {
                     let tokens = state.tokens;
                     let id = self.parent.reentrancy.define_macro(name.1, params, tokens);
-                    self.parent
-                        .reentrancy
-                        .insert(name.0, ResolvedName::Macro(id));
+                    self.parent.names.insert(name.0, ResolvedName::Macro(id));
                 }
             }
         }
-        TokenStreamSemantics::new(self.parent.reentrancy)
+        set_state!(self.parent, TokenStreamState::new())
     }
 }
