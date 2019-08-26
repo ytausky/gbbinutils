@@ -1,6 +1,6 @@
 use self::macros::VecMacroTable;
 use self::resolve::{BasicNameTable, BiLevelNameTable, DefaultIdentFactory};
-use self::semantics::{Session, KEYWORDS};
+use self::semantics::Session;
 use self::session::*;
 use self::strings::FakeStringInterner;
 use self::syntax::parser::DefaultParserFactory;
@@ -43,12 +43,6 @@ where
         let mut macros = VecMacroTable::new();
         let mut interner = FakeStringInterner;
         let mut names = BiLevelNameTable::<BasicNameTable<_, _, _>>::new();
-        for (ident, keyword) in KEYWORDS {
-            names.insert(
-                DefaultIdentFactory.mk_ident(ident),
-                ResolvedName::Keyword(keyword),
-            )
-        }
         for (string, name) in self.builtin_symbols() {
             names.insert(
                 DefaultIdentFactory.mk_ident(string),

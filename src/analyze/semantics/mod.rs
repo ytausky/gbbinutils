@@ -1,6 +1,5 @@
-pub(super) use self::keywords::KEYWORDS;
-
 use self::instr_line::{BuiltinInstr, InstrLineSemantics, InstrLineState, OperandSymbol};
+use self::keywords::KEYWORDS;
 use self::params::*;
 use self::token_line::{TokenContext, TokenContextFinalizationSemantics, TokenLineSemantics};
 

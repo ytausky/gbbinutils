@@ -6,7 +6,7 @@ use super::instr_line::builtin_instr::operand::OperandSymbol::*;
 use super::instr_line::BuiltinInstr::*;
 use super::{Keyword, Keyword::*};
 
-pub(in crate::analyze) const KEYWORDS: &[(&str, Keyword)] = &[
+pub(super) const KEYWORDS: &[(&str, Keyword)] = &[
     ("A", Operand(A)),
     ("ADC", BuiltinInstr(Mnemonic(ADC))),
     ("ADD", BuiltinInstr(Mnemonic(ADD))),
