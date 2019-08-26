@@ -31,12 +31,12 @@ pub(in crate::analyze) enum SimpleDirective {
     Org,
 }
 
-pub(super) fn analyze_directive<R, N>(
+pub(super) fn analyze_directive<R, N, B>(
     directive: (Directive, R::Span),
     label: Option<Label<R::Ident, R::Span>>,
     args: BuiltinInstrArgs<R::Ident, R::StringRef, R::Span>,
-    session: InstrLineSemantics<R, N>,
-) -> TokenStreamSemantics<R, N>
+    session: InstrLineSemantics<R, N, B>,
+) -> TokenStreamSemantics<R, N, B>
 where
     R: ReentrancyActions,
     N: DerefMut,
@@ -45,8 +45,9 @@ where
             R::Ident,
             Keyword = &'static Keyword,
             MacroId = R::MacroId,
-            SymbolId = R::SymbolId,
+            SymbolId = B::SymbolId,
         >,
+    B: Backend<R::Span>,
 {
     let context = DirectiveContext {
         span: directive.1,
@@ -57,14 +58,14 @@ where
     context.analyze(directive.0)
 }
 
-struct DirectiveContext<R: ReentrancyActions, N> {
+struct DirectiveContext<R: ReentrancyActions, N, B> {
     span: R::Span,
     label: Option<Label<R::Ident, R::Span>>,
     args: BuiltinInstrArgs<R::Ident, R::StringRef, R::Span>,
-    session: InstrLineSemantics<R, N>,
+    session: InstrLineSemantics<R, N, B>,
 }
 
-impl<R, N> DirectiveContext<R, N>
+impl<R, N, B> DirectiveContext<R, N, B>
 where
     R: ReentrancyActions,
     N: DerefMut,
@@ -73,10 +74,11 @@ where
             R::Ident,
             Keyword = &'static Keyword,
             MacroId = R::MacroId,
-            SymbolId = R::SymbolId,
+            SymbolId = B::SymbolId,
         >,
+    B: Backend<R::Span>,
 {
-    fn analyze(self, directive: Directive) -> TokenStreamSemantics<R, N> {
+    fn analyze(self, directive: Directive) -> TokenStreamSemantics<R, N, B> {
         use self::BindingDirective::*;
         use self::SimpleDirective::*;
         match directive {
@@ -91,7 +93,7 @@ where
         }
     }
 
-    fn analyze_data(mut self, width: Width) -> TokenStreamSemantics<R, N> {
+    fn analyze_data(mut self, width: Width) -> TokenStreamSemantics<R, N, B> {
         for arg in self.args {
             let expr = match self.session.analyze_expr(arg) {
                 (Ok(expr), session) => {
@@ -100,18 +102,18 @@ where
                 }
                 (Err(()), session) => return set_state!(session, session.state.into()),
             };
-            self.session.reentrancy.emit_item(Item::Data(expr, width))
+            self.session.builder.emit_item(Item::Data(expr, width))
         }
         set_state!(self.session, self.session.state.into())
     }
 
-    fn analyze_ds(mut self) -> TokenStreamSemantics<R, N> {
+    fn analyze_ds(mut self) -> TokenStreamSemantics<R, N, B> {
         match single_arg(self.span, self.args, &mut self.session) {
             Ok(arg) => {
                 let (result, session) = self.session.analyze_expr(arg);
                 self.session = session;
                 if let Ok(bytes) = result {
-                    self.session.reentrancy.reserve(bytes)
+                    self.session.builder.reserve(bytes)
                 }
             }
             Err(()) => (),
@@ -119,7 +121,7 @@ where
         set_state!(self.session, self.session.state.into())
     }
 
-    fn analyze_equ(mut self) -> TokenStreamSemantics<R, N> {
+    fn analyze_equ(mut self) -> TokenStreamSemantics<R, N, B> {
         let (symbol, params) = self.label.take().unwrap();
         match single_arg(self.span, self.args, &mut self.session) {
             Ok(arg) => {
@@ -131,24 +133,25 @@ where
         set_state!(self.session, self.session.state.into())
     }
 
-    fn analyze_section(mut self) -> TokenStreamSemantics<R, N> {
+    fn analyze_section(mut self) -> TokenStreamSemantics<R, N, B> {
         let (name, span) = self.label.take().unwrap().0;
         let id = self.session.reloc_lookup(name, span.clone());
-        self.session.reentrancy.start_section(id, span);
+        self.session.builder.start_section(id, span);
         set_state!(self.session, self.session.state.into())
     }
 
-    fn analyze_include(mut self) -> TokenStreamSemantics<R, N> {
+    fn analyze_include(mut self) -> TokenStreamSemantics<R, N, B> {
         let (path, span) = match reduce_include(self.span, self.args, &mut self.session) {
             Ok(result) => result,
             Err(()) => return set_state!(self.session, self.session.state.into()),
         };
-        let (result, mut semantics): (_, TokenStreamSemantics<_, _>) =
+        let (result, mut semantics): (_, TokenStreamSemantics<_, _, _>) =
             self.session.reentrancy.analyze_file(
                 path,
                 Session {
                     reentrancy: (),
                     names: self.session.names,
+                    builder: self.session.builder,
                     state: self.session.state.into(),
                 },
             );
@@ -158,7 +161,7 @@ where
         semantics
     }
 
-    fn analyze_macro(mut self) -> TokenStreamSemantics<R, N> {
+    fn analyze_macro(mut self) -> TokenStreamSemantics<R, N, B> {
         if self.label.is_none() {
             let span = self.span;
             self.session.emit_diag(Message::MacroRequiresName.at(span))
@@ -169,13 +172,13 @@ where
         )
     }
 
-    fn analyze_org(mut self) -> TokenStreamSemantics<R, N> {
+    fn analyze_org(mut self) -> TokenStreamSemantics<R, N, B> {
         match single_arg(self.span, self.args, &mut self.session) {
             Ok(arg) => {
                 let (result, session) = self.session.analyze_expr(arg);
                 self.session = session;
                 if let Ok(value) = result {
-                    self.session.reentrancy.set_origin(value)
+                    self.session.builder.set_origin(value)
                 }
             }
             Err(()) => (),
@@ -232,7 +235,9 @@ mod tests {
     use crate::analyze::syntax::actions::*;
     use crate::codebase::CodebaseError;
     use crate::expr::{Atom, ParamId};
-    use crate::object::builder::mock::{BackendEvent, MockSymbolId};
+    use crate::object::builder::mock::{
+        BackendEvent, MockBackend, MockSymbolId, SerialIdAllocator,
+    };
 
     use std::borrow::Borrow;
     use std::io;
@@ -500,6 +505,7 @@ mod tests {
                 TestOperation<S>,
             >,
         >,
+        MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>,
     >;
 
     fn unary_directive<F>(directive: &str, f: F) -> Vec<TestOperation<()>>
@@ -537,6 +543,7 @@ mod tests {
                 TestOperation<S>,
             >,
         >,
+        MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>,
     >;
 
     fn with_directive<F>(directive: &str, f: F) -> Vec<TestOperation<()>>

@@ -4,7 +4,7 @@ use crate::analyze::semantics::Params;
 use crate::analyze::session::ReentrancyActions;
 use crate::analyze::syntax::actions::LabelActions;
 
-pub(super) type LabelSemantics<R, N> = Session<R, N, LabelState<R>>;
+pub(super) type LabelSemantics<R, N, B> = Session<R, N, B, LabelState<R>>;
 
 pub(in crate::analyze) struct LabelState<S: ReentrancyActions> {
     parent: InstrLineState<S>,
@@ -22,8 +22,8 @@ impl<S: ReentrancyActions> LabelState<S> {
     }
 }
 
-impl<R: ReentrancyActions, N> LabelActions<R::Ident, R::Span> for LabelSemantics<R, N> {
-    type Next = InstrLineSemantics<R, N>;
+impl<R: ReentrancyActions, N, B> LabelActions<R::Ident, R::Span> for LabelSemantics<R, N, B> {
+    type Next = InstrLineSemantics<R, N, B>;
 
     fn act_on_param(&mut self, ident: R::Ident, span: R::Span) {
         let params = &mut self.state.params;

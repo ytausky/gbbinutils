@@ -5,10 +5,11 @@ use crate::analyze::session::ReentrancyActions;
 use crate::analyze::syntax::actions::{LineFinalizer, TokenLineActions, TokenLineRule};
 use crate::analyze::syntax::{Sigil, Token};
 use crate::analyze::{Literal, SemanticToken, TokenSeq};
+use crate::object::builder::SymbolSource;
 
 use std::ops::DerefMut;
 
-pub(in crate::analyze) type TokenLineSemantics<R, N> = Session<R, N, TokenContext<R>>;
+pub(in crate::analyze) type TokenLineSemantics<R, N, B> = Session<R, N, B, TokenContext<R>>;
 
 pub(in crate::analyze) enum TokenContext<S: ReentrancyActions> {
     MacroDef(MacroDefState<S>),
@@ -28,7 +29,8 @@ impl<S: ReentrancyActions> MacroDefState<S> {
     }
 }
 
-impl<R, N> TokenLineActions<R::Ident, Literal<R::StringRef>, R::Span> for TokenLineSemantics<R, N>
+impl<R, N, B> TokenLineActions<R::Ident, Literal<R::StringRef>, R::Span>
+    for TokenLineSemantics<R, N, B>
 where
     R: ReentrancyActions,
     N: DerefMut,
@@ -37,10 +39,11 @@ where
             R::Ident,
             Keyword = &'static Keyword,
             MacroId = R::MacroId,
-            SymbolId = R::SymbolId,
+            SymbolId = B::SymbolId,
         >,
+    B: SymbolSource,
 {
-    type ContextFinalizer = TokenContextFinalizationSemantics<R, N>;
+    type ContextFinalizer = TokenContextFinalizationSemantics<R, N, B>;
 
     fn act_on_token(&mut self, token: SemanticToken<R::Ident, R::StringRef>, span: R::Span) {
         match &mut self.state {
@@ -72,8 +75,8 @@ where
     }
 }
 
-impl<R: ReentrancyActions, N> LineFinalizer<R::Span> for TokenLineSemantics<R, N> {
-    type Next = TokenStreamSemantics<R, N>;
+impl<R: ReentrancyActions, N, B> LineFinalizer<R::Span> for TokenLineSemantics<R, N, B> {
+    type Next = TokenStreamSemantics<R, N, B>;
 
     fn did_parse_line(mut self, span: R::Span) -> Self::Next {
         match &mut self.state {
@@ -86,21 +89,22 @@ impl<R: ReentrancyActions, N> LineFinalizer<R::Span> for TokenLineSemantics<R, N
     }
 }
 
-pub(in crate::analyze) struct TokenContextFinalizationSemantics<R: ReentrancyActions, N> {
-    parent: TokenLineSemantics<R, N>,
+pub(in crate::analyze) struct TokenContextFinalizationSemantics<R: ReentrancyActions, N, B> {
+    parent: TokenLineSemantics<R, N, B>,
 }
 
 delegate_diagnostics! {
-    {R: ReentrancyActions, N}, TokenContextFinalizationSemantics<R, N>, {parent}, R, R::Span
+    {R: ReentrancyActions, N, B}, TokenContextFinalizationSemantics<R, N, B>, {parent}, R, R::Span
 }
 
-impl<R, N> LineFinalizer<R::Span> for TokenContextFinalizationSemantics<R, N>
+impl<R, N, B> LineFinalizer<R::Span> for TokenContextFinalizationSemantics<R, N, B>
 where
     R: ReentrancyActions,
     N: DerefMut,
-    N::Target: NameTable<R::Ident, MacroId = R::MacroId, SymbolId = R::SymbolId>,
+    N::Target: NameTable<R::Ident, MacroId = R::MacroId, SymbolId = B::SymbolId>,
+    B: SymbolSource,
 {
-    type Next = TokenStreamSemantics<R, N>;
+    type Next = TokenStreamSemantics<R, N, B>;
 
     fn did_parse_line(mut self, _: R::Span) -> Self::Next {
         match self.parent.state {

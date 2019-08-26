@@ -8,7 +8,6 @@ use super::{IdentSource, Lex, Literal, SemanticToken, StringSource, TokenSeq};
 use crate::codebase::CodebaseError;
 use crate::diag::span::SpanSource;
 use crate::diag::*;
-use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
 use crate::object::builder::*;
 
 use std::ops::{Deref, DerefMut};
@@ -19,8 +18,8 @@ pub(crate) use self::mock::*;
 pub(super) trait ReentrancyActions
 where
     Self: IdentSource + MacroSource + SpanSource + StringSource,
-    Self: SynthActions<<Self as SpanSource>::Span>,
     Self: GetString<<Self as StringSource>::StringRef>,
+    Self: Diagnostics<<Self as SpanSource>::Span>,
 {
     fn analyze_file<A>(
         self,
@@ -74,21 +73,12 @@ pub(super) trait IntoSemanticActions<S> {
 pub(super) type MacroArgs<I, R, S> = super::macros::MacroArgs<SemanticToken<I, R>, S>;
 pub(super) type Params<I, S> = (Vec<I>, Vec<S>);
 
-pub(super) struct SessionComponents<Source, Synth> {
-    source: Source,
-    synth: Synth,
-}
-
 pub(super) struct SourceComponents<C, P, M, I, D> {
     codebase: C,
     parser_factory: P,
     macros: M,
     interner: I,
     diagnostics: D,
-}
-
-pub(super) struct SynthComponents<B> {
-    builder: B,
 }
 
 impl<C, P, M, I, D> SpanSource for SourceComponents<C, P, M, I, D>
@@ -108,11 +98,7 @@ delegate_diagnostics! {
     S
 }
 
-impl<'a, C, P, M, I, B, D>
-    SessionComponents<
-        SourceComponents<&'a mut C, &'a mut P, &'a mut M, &'a mut I, &'a mut D>,
-        SynthComponents<B>,
-    >
+impl<'a, C, P, M, I, D> SourceComponents<&'a mut C, &'a mut P, &'a mut M, &'a mut I, &'a mut D>
 where
     C: IdentSource + StringSource,
     D: DiagnosticsSystem,
@@ -122,32 +108,14 @@ where
         parser_factory: &'a mut P,
         macros: &'a mut M,
         interner: &'a mut I,
-        builder: B,
         diagnostics: &'a mut D,
     ) -> Self {
-        SessionComponents {
-            source: SourceComponents {
-                codebase,
-                parser_factory,
-                macros,
-                interner,
-                diagnostics,
-            },
-            synth: SynthComponents { builder },
-        }
-    }
-}
-
-impl<Source, B> SessionComponents<Source, SynthComponents<B>> {
-    fn replace_backend<T>(
-        self,
-        f: impl FnOnce(B) -> T,
-    ) -> SessionComponents<Source, SynthComponents<T>> {
-        SessionComponents {
-            source: self.source,
-            synth: SynthComponents {
-                builder: f(self.synth.builder),
-            },
+        SourceComponents {
+            codebase,
+            parser_factory,
+            macros,
+            interner,
+            diagnostics,
         }
     }
 }
@@ -160,7 +128,7 @@ where
     type MacroId = <M::Target as MacroSource>::MacroId;
 }
 
-impl<C, P, M, I, D, Synth> IdentSource for SessionComponents<SourceComponents<C, P, M, I, D>, Synth>
+impl<C, P, M, I, D> IdentSource for SourceComponents<C, P, M, I, D>
 where
     C: DerefMut,
     C::Target: IdentSource + StringSource,
@@ -168,19 +136,7 @@ where
     type Ident = <C::Target as IdentSource>::Ident;
 }
 
-impl<Source: MacroSource, B> MacroSource for SessionComponents<Source, SynthComponents<B>> {
-    type MacroId = Source::MacroId;
-}
-
-impl<Source, B> SpanSource for SessionComponents<Source, SynthComponents<B>>
-where
-    Source: SpanSource,
-{
-    type Span = Source::Span;
-}
-
-impl<C, P, M, I, D, Synth> StringSource
-    for SessionComponents<SourceComponents<C, P, M, I, D>, Synth>
+impl<C, P, M, I, D> StringSource for SourceComponents<C, P, M, I, D>
 where
     C: DerefMut,
     C::Target: IdentSource + StringSource,
@@ -188,40 +144,7 @@ where
     type StringRef = <C::Target as StringSource>::StringRef;
 }
 
-impl<Source, B, S> PartialBackend<S> for SessionComponents<Source, SynthComponents<B>>
-where
-    B: Backend<S>,
-    S: Clone,
-{
-    type Value = B::Value;
-
-    fn emit_item(&mut self, item: Item<Self::Value>) {
-        self.synth.builder.emit_item(item)
-    }
-
-    fn is_non_zero(
-        &mut self,
-        value: Self::Value,
-        diagnostics: &mut impl Diagnostics<S>,
-    ) -> Option<bool> {
-        self.synth.builder.is_non_zero(value, diagnostics)
-    }
-
-    fn reserve(&mut self, bytes: Self::Value) {
-        self.synth.builder.reserve(bytes)
-    }
-
-    fn set_origin(&mut self, origin: Self::Value) {
-        self.synth.builder.set_origin(origin)
-    }
-
-    fn start_section(&mut self, name: B::SymbolId, span: S) {
-        self.synth.builder.start_section(name, span)
-    }
-}
-
-impl<C, P, M, I, B, D> ReentrancyActions
-    for SessionComponents<SourceComponents<C, P, M, I, D>, SynthComponents<B>>
+impl<C, P, M, I, D> ReentrancyActions for SourceComponents<C, P, M, I, D>
 where
     C: DerefMut,
     C::Target: Lex<D::Target>,
@@ -241,7 +164,6 @@ where
     >,
     I: Deref,
     I::Target: GetString<<Self as StringSource>::StringRef>,
-    B: Backend<<D::Target as SpanSource>::Span>,
     D: DerefMut,
     D::Target: DiagnosticsSystem,
 {
@@ -258,15 +180,11 @@ where
         <Self as IntoSemanticActions<A>>::SemanticActions:
             TokenStreamActions<Self::Ident, Literal<Self::StringRef>, Self::Span>,
     {
-        let tokens = match self
-            .source
-            .codebase
-            .lex_file(path, &mut *self.source.diagnostics)
-        {
+        let tokens = match self.codebase.lex_file(path, &mut *self.diagnostics) {
             Ok(tokens) => tokens,
             Err(error) => return (Err(error), self.into_semantic_actions(actions)),
         };
-        let mut parser = self.source.parser_factory.mk_parser();
+        let mut parser = self.parser_factory.mk_parser();
         let actions = self.into_semantic_actions(actions);
         (Ok(()), parser.parse_token_stream(tokens, actions))
     }
@@ -277,9 +195,8 @@ where
         params: Params<Self::Ident, Self::Span>,
         body: TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
     ) -> Self::MacroId {
-        self.source
-            .macros
-            .define_macro(name_span, params, body, &mut *self.source.diagnostics)
+        self.macros
+            .define_macro(name_span, params, body, &mut *self.diagnostics)
     }
 
     fn call_macro<A>(
@@ -293,114 +210,22 @@ where
         <Self as IntoSemanticActions<A>>::SemanticActions:
             TokenStreamActions<Self::Ident, Literal<Self::StringRef>, Self::Span>,
     {
-        let expansion = self
-            .source
-            .macros
-            .expand_macro(id, args, &mut *self.source.diagnostics);
-        let mut parser = self.source.parser_factory.mk_parser();
+        let expansion = self.macros.expand_macro(id, args, &mut *self.diagnostics);
+        let mut parser = self.parser_factory.mk_parser();
         let actions = self.into_semantic_actions(actions);
         parser.parse_token_stream(expansion.map(|(t, s)| (Ok(t), s)), actions)
     }
 }
 
-impl<Source, B, S> SynthActions<S> for SessionComponents<Source, SynthComponents<B>>
-where
-    Source: Diagnostics<S>,
-    B: Backend<S>,
-    S: Clone,
-    Self: Diagnostics<S>,
-{
-    type ConstBuilder = SessionComponents<Source, SynthComponents<B::ConstBuilder>>;
-    type SymbolBuilder = SessionComponents<Source, SynthComponents<B::SymbolBuilder>>;
-
-    fn build_const(self) -> Self::ConstBuilder {
-        self.replace_backend(Backend::build_const)
-    }
-
-    fn define_symbol(self, name: B::SymbolId, span: S) -> Self::SymbolBuilder {
-        self.replace_backend(|backend| backend.define_symbol(name, span))
-    }
-}
-
-impl<C, P, M, I, D, Synth, R> GetString<R>
-    for SessionComponents<SourceComponents<C, P, M, I, D>, Synth>
+impl<C, P, M, I, D, R> GetString<R> for SourceComponents<C, P, M, I, D>
 where
     I: Deref,
     I::Target: GetString<R>,
 {
     fn get_string<'a>(&'a self, id: &'a R) -> &str {
-        self.source.interner.get_string(id)
+        self.interner.get_string(id)
     }
 }
-
-impl<Source, B> SymbolSource for SessionComponents<Source, SynthComponents<B>>
-where
-    B: SymbolSource,
-{
-    type SymbolId = B::SymbolId;
-}
-
-impl<Source, B, S> AllocSymbol<S> for SessionComponents<Source, SynthComponents<B>>
-where
-    B: AllocSymbol<S>,
-    S: Clone,
-{
-    fn alloc_symbol(&mut self, span: S) -> Self::SymbolId {
-        self.synth.builder.alloc_symbol(span)
-    }
-}
-
-delegate_diagnostics! {
-    {'a, Source: Diagnostics<S>, Synth, S: Clone},
-    SessionComponents<Source, Synth>,
-    {source},
-    Source,
-    S
-}
-
-impl<Source, B, S> PushOp<Name<B::SymbolId>, S> for SessionComponents<Source, SynthComponents<B>>
-where
-    B: AllocSymbol<S> + PushOp<Name<<B as SymbolSource>::SymbolId>, S>,
-    S: Clone,
-{
-    fn push_op(&mut self, name: Name<B::SymbolId>, span: S) {
-        self.synth.builder.push_op(name, span)
-    }
-}
-
-impl<Source, B: Finish> Finish for SessionComponents<Source, SynthComponents<B>> {
-    type Parent = SessionComponents<Source, SynthComponents<B::Parent>>;
-    type Value = B::Value;
-
-    fn finish(self) -> (Self::Parent, Self::Value) {
-        let (builder, value) = self.synth.builder.finish();
-        let parent = SessionComponents {
-            source: self.source,
-            synth: SynthComponents { builder },
-        };
-        (parent, value)
-    }
-}
-
-macro_rules! impl_push_op_for_session_components {
-    ($t:ty) => {
-        impl<Source, B, S> PushOp<$t, S> for SessionComponents<Source, SynthComponents<B>>
-        where
-            B: PushOp<$t, S>,
-            S: Clone,
-        {
-            fn push_op(&mut self, op: $t, span: S) {
-                self.synth.builder.push_op(op, span)
-            }
-        }
-    };
-}
-
-impl_push_op_for_session_components! {LocationCounter}
-impl_push_op_for_session_components! {i32}
-impl_push_op_for_session_components! {BinOp}
-impl_push_op_for_session_components! {ParamId}
-impl_push_op_for_session_components! {FnCall}
 
 #[cfg(test)]
 mod mock {
@@ -408,7 +233,6 @@ mod mock {
 
     use crate::analyze::macros::mock::MockMacroId;
     use crate::diag::{DiagnosticsEvent, MockDiagnostics};
-    use crate::expr::{Atom, Expr, LocationCounter};
     use crate::log::Log;
     use crate::object::builder::mock::*;
 
@@ -421,10 +245,7 @@ mod mock {
         InvokeMacro(MockMacroId, Vec<Vec<SemanticToken<String, String>>>),
     }
 
-    pub(in crate::analyze) type MockSession<A, T, S> =
-        SessionComponents<MockSourceComponents<T, S>, MockSynthComponents<A, T>>;
-
-    type MockSynthComponents<A, T> = SynthComponents<MockBackend<A, T>>;
+    pub(in crate::analyze) type MockSession<T, S> = MockSourceComponents<T, S>;
 
     pub(in crate::analyze) struct MockSourceComponents<T, S> {
         diagnostics: Box<MockDiagnostics<T, S>>,
@@ -450,52 +271,45 @@ mod mock {
         S
     }
 
-    impl<A, T, S> MockSession<A, T, S> {
-        fn with_name_table(alloc: A, log: Log<T>) -> Self {
-            Self {
-                synth: SynthComponents {
-                    builder: MockBackend::new(alloc, log.clone()),
-                },
-                source: MockSourceComponents {
-                    diagnostics: Box::new(MockDiagnostics::new(log.clone())),
-                    macro_alloc: SerialIdAllocator::new(MockMacroId),
-                    log,
-                    error: None,
-                    _span: PhantomData,
-                },
+    impl<T, S> MockSession<T, S> {
+        fn with_name_table(log: Log<T>) -> Self {
+            MockSourceComponents {
+                diagnostics: Box::new(MockDiagnostics::new(log.clone())),
+                macro_alloc: SerialIdAllocator::new(MockMacroId),
+                log,
+                error: None,
+                _span: PhantomData,
             }
         }
 
         pub fn fail(&mut self, error: CodebaseError) {
-            self.source.error = Some(error)
+            self.error = Some(error)
         }
     }
 
-    impl<T, S> MockSession<SerialIdAllocator<MockSymbolId>, T, S> {
+    impl<T, S> MockSession<T, S> {
         pub fn with_log(log: Log<T>) -> Self {
-            Self::with_name_table(SerialIdAllocator::new(MockSymbolId), log)
+            Self::with_name_table(log)
         }
     }
 
-    impl<A, T, S> IdentSource for MockSession<A, T, S> {
+    impl<T, S> IdentSource for MockSession<T, S> {
         type Ident = String;
     }
 
-    impl<A, T, S> StringSource for MockSession<A, T, S> {
+    impl<T, S> StringSource for MockSession<T, S> {
         type StringRef = String;
     }
 
-    impl<B, T, S> GetString<String> for MockSession<B, T, S> {
+    impl<T, S> GetString<String> for MockSession<T, S> {
         fn get_string<'a>(&self, id: &'a String) -> &'a str {
             id.as_ref()
         }
     }
 
-    impl<B, T, S> ReentrancyActions for MockSession<B, T, S>
+    impl<T, S> ReentrancyActions for MockSession<T, S>
     where
-        B: AllocSymbol<S>,
         T: From<SessionEvent>,
-        T: From<BackendEvent<B::SymbolId, Expr<Atom<LocationCounter, B::SymbolId>, S>>>,
         T: From<DiagnosticsEvent<S>>,
         S: Clone + Merge,
     {
@@ -510,9 +324,9 @@ mod mock {
         where
             Self: IntoSemanticActions<A>,
         {
-            self.source.log.push(SessionEvent::AnalyzeFile(path));
+            self.log.push(SessionEvent::AnalyzeFile(path));
             (
-                self.source.error.take().map_or(Ok(()), Err),
+                self.error.take().map_or(Ok(()), Err),
                 self.into_semantic_actions(actions),
             )
         }
@@ -523,10 +337,8 @@ mod mock {
             (params, _): (Vec<Self::Ident>, Vec<Self::Span>),
             (body, _): TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
         ) -> Self::MacroId {
-            self.source
-                .log
-                .push(SessionEvent::DefineMacro(params, body));
-            self.source.macro_alloc.gen()
+            self.log.push(SessionEvent::DefineMacro(params, body));
+            self.macro_alloc.gen()
         }
 
         fn call_macro<A>(
@@ -538,7 +350,7 @@ mod mock {
         where
             Self: IntoSemanticActions<A>,
         {
-            self.source.log.push(SessionEvent::InvokeMacro(id, args));
+            self.log.push(SessionEvent::InvokeMacro(id, args));
             self.into_semantic_actions(actions)
         }
     }
@@ -555,10 +367,9 @@ mod tests {
     use crate::analyze::syntax::*;
     use crate::analyze::{Literal, MockCodebase};
     use crate::diag::DiagnosticsEvent;
-    use crate::expr::{Atom, BinOp, LocationCounter};
+    use crate::expr::{Atom, LocationCounter};
     use crate::log::*;
-    use crate::object::builder::mock::{BackendEvent, MockSymbolId, SerialIdAllocator};
-    use crate::object::builder::{CpuInstr, Nullary};
+    use crate::object::builder::mock::{BackendEvent, MockSymbolId};
 
     use std::fmt::Debug;
     use std::iter;
@@ -576,40 +387,6 @@ mod tests {
 
     fn panic<I>(_: &I) -> IdentKind {
         panic!("tried annotating an identifier instead of skipping parsing")
-    }
-
-    #[test]
-    fn emit_instruction_item() {
-        let item = Item::CpuInstr(CpuInstr::Nullary(Nullary::Nop));
-        let log =
-            Fixture::<()>::default().log_session(|mut session| session.emit_item(item.clone()));
-        assert_eq!(log, [BackendEvent::EmitItem(item).into()]);
-    }
-
-    #[test]
-    fn define_label() {
-        let log = Fixture::default().log_session(|mut session| {
-            let id = session.alloc_symbol(());
-            let mut builder = session.define_symbol(id, ());
-            builder.push_op(LocationCounter, ());
-            builder.finish();
-        });
-        assert_eq!(
-            log,
-            [BackendEvent::DefineSymbol((MockSymbolId(0), ()), LocationCounter.into()).into()]
-        );
-    }
-
-    #[test]
-    fn start_section() {
-        let log = Fixture::default().log_session(|mut session| {
-            let id = session.alloc_symbol(());
-            session.start_section(id, ())
-        });
-        assert_eq!(
-            log,
-            [BackendEvent::StartSection(MockSymbolId(0), ()).into()]
-        )
     }
 
     #[test]
@@ -705,62 +482,21 @@ mod tests {
         );
     }
 
-    #[test]
-    fn reserve_bytes() {
-        let bytes = 10;
-        let log = Fixture::default().log_session(|mut session| session.reserve(bytes.into()));
-        assert_eq!(log, [BackendEvent::Reserve(bytes.into()).into()])
-    }
-
     impl Default for MockSpan<&'static str> {
         fn default() -> Self {
             unreachable!()
         }
     }
 
-    #[test]
-    fn build_value_from_number() {
-        Fixture::default().log_session(|session| {
-            let mut builder = session.build_const();
-            builder.push_op(42, ());
-            let (_, value) = builder.finish();
-            assert_eq!(value, 42.into())
-        });
-    }
-
-    #[test]
-    fn apply_operator_on_two_values() {
-        Fixture::default().log_session(|session| {
-            let mut builder = session.build_const();
-            builder.push_op(42, ());
-            builder.push_op(Name(MockSymbolId(0)), ());
-            builder.push_op(BinOp::Multiplication, ());
-            let (_, value) = builder.finish();
-            assert_eq!(
-                value,
-                Expr::from_items(&[
-                    42.into(),
-                    Atom::Name(MockSymbolId(0)).into(),
-                    BinOp::Multiplication.into()
-                ])
-            )
-        });
-    }
-
     type MockParserFactory<S> = crate::analyze::syntax::parser::mock::MockParserFactory<Event<S>>;
     type MockMacroTable<S> = crate::analyze::macros::mock::MockMacroTable<usize, Event<S>>;
-    type MockBackend<S> =
-        crate::object::builder::mock::MockBackend<SerialIdAllocator<MockSymbolId>, Event<S>>;
     type MockDiagnosticsSystem<S> = crate::diag::MockDiagnosticsSystem<Event<S>, S>;
-    type TestSession<'a, S> = SessionComponents<
-        SourceComponents<
-            &'a mut MockCodebase<S>,
-            &'a mut MockParserFactory<S>,
-            &'a mut MockMacroTable<S>,
-            &'a mut FakeStringInterner,
-            &'a mut MockDiagnosticsSystem<S>,
-        >,
-        SynthComponents<MockBackend<S>>,
+    type TestSession<'a, S> = SourceComponents<
+        &'a mut MockCodebase<S>,
+        &'a mut MockParserFactory<S>,
+        &'a mut MockMacroTable<S>,
+        &'a mut FakeStringInterner,
+        &'a mut MockDiagnosticsSystem<S>,
     >;
 
     #[derive(Debug, PartialEq)]
@@ -805,7 +541,6 @@ mod tests {
         analyzer: MockParserFactory<S>,
         macros: MockMacroTable<S>,
         interner: FakeStringInterner,
-        backend: Option<MockBackend<S>>,
         diagnostics: MockDiagnosticsSystem<S>,
     }
 
@@ -818,10 +553,6 @@ mod tests {
                     analyzer: MockParserFactory::new(log.clone()),
                     macros: MockMacroTable::new(log.clone()),
                     interner: FakeStringInterner,
-                    backend: Some(MockBackend::new(
-                        SerialIdAllocator::new(MockSymbolId),
-                        log.clone(),
-                    )),
                     diagnostics: MockDiagnosticsSystem::new(log.clone()),
                 },
                 log,
@@ -834,12 +565,11 @@ mod tests {
         where
             Event<S>: Debug,
         {
-            f(SessionComponents::new(
+            f(SourceComponents::new(
                 &mut self.inner.codebase,
                 &mut self.inner.analyzer,
                 &mut self.inner.macros,
                 &mut self.inner.interner,
-                self.inner.backend.take().unwrap(),
                 &mut self.inner.diagnostics,
             ));
             drop(self.inner);

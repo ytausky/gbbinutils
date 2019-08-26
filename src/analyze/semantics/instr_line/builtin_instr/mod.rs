@@ -7,7 +7,7 @@ use super::*;
 
 use crate::analyze::resolve::NameTable;
 use crate::analyze::semantics::{Params, RelocLookup, ResolveNames, TokenStreamState, WithParams};
-use crate::analyze::session::{ReentrancyActions, SynthActions};
+use crate::analyze::session::ReentrancyActions;
 use crate::analyze::syntax::actions::{BuiltinInstrActions, InstrFinalizer};
 use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::expr::{BinOp, FnCall, LocationCounter};
@@ -39,7 +39,7 @@ impl From<Mnemonic> for BuiltinInstr {
     }
 }
 
-pub(super) type BuiltinInstrSemantics<R, N> = Session<R, N, BuiltinInstrState<R>>;
+pub(super) type BuiltinInstrSemantics<R, N, B> = Session<R, N, B, BuiltinInstrState<R>>;
 
 pub(in crate::analyze) struct BuiltinInstrState<S: ReentrancyActions> {
     parent: InstrLineState<S>,
@@ -63,8 +63,8 @@ impl<R: ReentrancyActions> From<BuiltinInstrState<R>> for TokenStreamState<R> {
     }
 }
 
-impl<R, N> BuiltinInstrActions<R::Ident, Literal<R::StringRef>, R::Span>
-    for BuiltinInstrSemantics<R, N>
+impl<R, N, B> BuiltinInstrActions<R::Ident, Literal<R::StringRef>, R::Span>
+    for BuiltinInstrSemantics<R, N, B>
 where
     R: ReentrancyActions,
     N: DerefMut,
@@ -73,17 +73,18 @@ where
             R::Ident,
             Keyword = &'static Keyword,
             MacroId = R::MacroId,
-            SymbolId = R::SymbolId,
+            SymbolId = B::SymbolId,
         >,
+    B: Backend<R::Span>,
 {
-    type ArgActions = ArgSemantics<R, N>;
+    type ArgActions = ArgSemantics<R, N, B>;
 
     fn will_parse_arg(self) -> Self::ArgActions {
         self.map_state(ExprBuilder::new)
     }
 }
 
-impl<R, N> InstrFinalizer<R::Span> for BuiltinInstrSemantics<R, N>
+impl<R, N, B> InstrFinalizer<R::Span> for BuiltinInstrSemantics<R, N, B>
 where
     R: ReentrancyActions,
     N: DerefMut,
@@ -92,10 +93,11 @@ where
             R::Ident,
             Keyword = &'static Keyword,
             MacroId = R::MacroId,
-            SymbolId = R::SymbolId,
+            SymbolId = B::SymbolId,
         >,
+    B: Backend<R::Span>,
 {
-    type Next = TokenStreamSemantics<R, N>;
+    type Next = TokenStreamSemantics<R, N, B>;
 
     fn did_parse_instr(self) -> Self::Next {
         let args = self.state.args;
@@ -116,9 +118,9 @@ enum PreparedBuiltinInstr<S: ReentrancyActions> {
 }
 
 impl<R: ReentrancyActions> PreparedBuiltinInstr<R> {
-    fn new<N>(
+    fn new<N, B>(
         (command, span): (BuiltinInstr, R::Span),
-        stmt: &mut InstrLineSemantics<R, N>,
+        stmt: &mut InstrLineSemantics<R, N, B>,
     ) -> Self {
         match command {
             BuiltinInstr::Directive(Directive::Binding(binding)) => {
@@ -131,11 +133,11 @@ impl<R: ReentrancyActions> PreparedBuiltinInstr<R> {
         }
     }
 
-    fn exec<N>(
+    fn exec<N, B>(
         self,
         args: BuiltinInstrArgs<R::Ident, R::StringRef, R::Span>,
-        session: InstrLineSemantics<R, N>,
-    ) -> TokenStreamSemantics<R, N>
+        session: InstrLineSemantics<R, N, B>,
+    ) -> TokenStreamSemantics<R, N, B>
     where
         N: DerefMut,
         N::Target: StartScope<R::Ident>
@@ -143,8 +145,9 @@ impl<R: ReentrancyActions> PreparedBuiltinInstr<R> {
                 R::Ident,
                 Keyword = &'static Keyword,
                 MacroId = R::MacroId,
-                SymbolId = R::SymbolId,
+                SymbolId = B::SymbolId,
             >,
+        B: Backend<R::Span>,
     {
         match self {
             PreparedBuiltinInstr::Binding((binding, span), label) => directive::analyze_directive(
@@ -163,11 +166,11 @@ impl<R: ReentrancyActions> PreparedBuiltinInstr<R> {
     }
 }
 
-fn analyze_mnemonic<R: ReentrancyActions, N>(
+fn analyze_mnemonic<R: ReentrancyActions, N, B>(
     name: (Mnemonic, R::Span),
     args: BuiltinInstrArgs<R::Ident, R::StringRef, R::Span>,
-    mut session: InstrLineSemantics<R, N>,
-) -> InstrLineSemantics<R, N>
+    mut session: InstrLineSemantics<R, N, B>,
+) -> InstrLineSemantics<R, N, B>
 where
     N: DerefMut,
     N::Target: StartScope<R::Ident>
@@ -175,37 +178,35 @@ where
             R::Ident,
             Keyword = &'static Keyword,
             MacroId = R::MacroId,
-            SymbolId = R::SymbolId,
+            SymbolId = B::SymbolId,
         >,
+    B: Backend<R::Span>,
 {
     let mut operands = Vec::new();
     for arg in args {
-        let builder = session
-            .map_reentrancy(SynthActions::build_const)
-            .resolve_names();
+        let builder = session.map_builder(Backend::build_const).resolve_names();
         let (operand, returned_session) = operand::analyze_operand(arg, name.0.context(), builder);
         session = returned_session;
         operands.push(operand)
     }
     if let Ok(instruction) = cpu_instr::analyze_instruction(name, operands, &mut session) {
-        session.reentrancy.emit_item(Item::CpuInstr(instruction))
+        session.builder.emit_item(Item::CpuInstr(instruction))
     }
     session
 }
 
-impl<R, N, S> Session<R, N, S>
+impl<R, N, B, S> Session<R, N, B, S>
 where
     R: ReentrancyActions,
     N: DerefMut,
-    N::Target: NameTable<R::Ident, MacroId = R::MacroId, SymbolId = R::SymbolId>,
+    N::Target: NameTable<R::Ident, MacroId = R::MacroId, SymbolId = B::SymbolId>,
+    B: Backend<R::Span>,
 {
     fn analyze_expr(
         self,
         expr: Arg<R::Ident, R::StringRef, R::Span>,
-    ) -> (Result<R::Value, ()>, Self) {
-        let mut builder = self
-            .map_reentrancy(SynthActions::build_const)
-            .resolve_names();
+    ) -> (Result<B::Value, ()>, Self) {
+        let mut builder = self.map_builder(Backend::build_const).resolve_names();
         let result = builder.eval_arg(expr);
         let (session, value) = builder.finish();
         (result.map(|()| value), session)
@@ -219,7 +220,7 @@ where
     ) -> (Result<(), ()>, Self) {
         let id = self.reloc_lookup(name, span.clone());
         let mut builder = self
-            .map_reentrancy(|reentrancy| reentrancy.define_symbol(id, span))
+            .map_builder(|builder| builder.define_symbol(id, span))
             .resolve_names()
             .with_params(params);
         let result = builder.eval_arg(expr);

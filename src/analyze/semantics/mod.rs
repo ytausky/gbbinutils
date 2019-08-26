@@ -14,7 +14,7 @@ use crate::codebase::CodebaseError;
 use crate::diag;
 use crate::diag::{Diagnostics, Message};
 use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
-use crate::object::builder::{AllocSymbol, Finish, Name, PushOp, SymbolSource};
+use crate::object::builder::{AllocSymbol, Backend, Finish, Name, PushOp, SymbolSource};
 
 use std::ops::{Deref, DerefMut};
 
@@ -23,6 +23,7 @@ macro_rules! set_state {
         $crate::analyze::semantics::Session {
             reentrancy: $session.reentrancy,
             names: $session.names,
+            builder: $session.builder,
             state: $state,
         }
     };
@@ -39,7 +40,7 @@ pub(super) enum Keyword {
     Operand(OperandSymbol),
 }
 
-pub(super) type TokenStreamSemantics<R, N> = Session<R, N, TokenStreamState<R>>;
+pub(super) type TokenStreamSemantics<R, N, B> = Session<R, N, B, TokenStreamState<R>>;
 
 pub(super) struct TokenStreamState<S: ReentrancyActions>(
     LineRule<InstrLineState<S>, TokenContext<S>>,
@@ -51,74 +52,80 @@ impl<S: ReentrancyActions> TokenStreamState<S> {
     }
 }
 
-impl<R: ReentrancyActions, N> IntoSemanticActions<Session<(), N, TokenStreamState<R>>> for R {
-    type SemanticActions = TokenStreamSemantics<R, N>;
+impl<R: ReentrancyActions, N, B> IntoSemanticActions<Session<(), N, B, TokenStreamState<R>>> for R {
+    type SemanticActions = TokenStreamSemantics<R, N, B>;
 
     fn into_semantic_actions(
         self,
-        session: Session<(), N, TokenStreamState<R>>,
+        session: Session<(), N, B, TokenStreamState<R>>,
     ) -> Self::SemanticActions {
         Session {
             reentrancy: self,
             names: session.names,
+            builder: session.builder,
             state: session.state,
         }
     }
 }
 
-pub(super) struct Session<R, N, S> {
+pub(super) struct Session<R, N, B, S> {
     reentrancy: R,
     names: N,
+    builder: B,
     state: S,
 }
 
-impl<R, N, S> Session<R, N, S> {
-    fn map_reentrancy<F: FnOnce(R) -> T, T>(self, f: F) -> Session<T, N, S> {
-        Session {
-            reentrancy: f(self.reentrancy),
-            names: self.names,
-            state: self.state,
-        }
-    }
-
+impl<R, N, B, S> Session<R, N, B, S> {
     #[cfg(test)]
-    fn map_names<F: FnOnce(N) -> T, T>(self, f: F) -> Session<R, T, S> {
+    fn map_names<F: FnOnce(N) -> T, T>(self, f: F) -> Session<R, T, B, S> {
         Session {
             reentrancy: self.reentrancy,
             names: f(self.names),
+            builder: self.builder,
             state: self.state,
         }
     }
 
-    fn map_state<F: FnOnce(S) -> T, T>(self, f: F) -> Session<R, N, T> {
+    fn map_builder<F: FnOnce(B) -> T, T>(self, f: F) -> Session<R, N, T, S> {
         Session {
             reentrancy: self.reentrancy,
             names: self.names,
+            builder: f(self.builder),
+            state: self.state,
+        }
+    }
+
+    fn map_state<F: FnOnce(S) -> T, T>(self, f: F) -> Session<R, N, B, T> {
+        Session {
+            reentrancy: self.reentrancy,
+            names: self.names,
+            builder: self.builder,
             state: f(self.state),
         }
     }
 }
 
-impl<R, N> Session<R, N, TokenStreamState<R>>
+impl<R, N, B> Session<R, N, B, TokenStreamState<R>>
 where
     R: ReentrancyActions,
     R::Ident: for<'r> From<&'r str>,
     N: DerefMut,
     N::Target: NameTable<R::Ident, Keyword = &'static Keyword>,
 {
-    pub fn from_components(reentrancy: R, mut names: N) -> Self {
+    pub fn from_components(reentrancy: R, mut names: N, builder: B) -> Self {
         for (ident, keyword) in KEYWORDS {
             names.insert((*ident).into(), ResolvedName::Keyword(keyword))
         }
         Self {
             reentrancy,
             names,
+            builder,
             state: TokenStreamState::new(),
         }
     }
 }
 
-impl<R, N> Session<R, N, TokenStreamState<R>>
+impl<R, N, B> Session<R, N, B, TokenStreamState<R>>
 where
     R: ReentrancyActions,
     N: DerefMut,
@@ -127,29 +134,33 @@ where
             R::Ident,
             Keyword = &'static Keyword,
             MacroId = R::MacroId,
-            SymbolId = R::SymbolId,
+            SymbolId = B::SymbolId,
         >,
+    B: Backend<R::Span>,
 {
     pub fn analyze_file(self, path: R::StringRef) -> Result<(), CodebaseError> {
         let (reentrancy, session) = self.split_reentrancy();
         reentrancy.analyze_file(path, session).0
     }
 
-    fn split_reentrancy(self) -> (R, Session<(), N, TokenStreamState<R>>) {
+    fn split_reentrancy(self) -> (R, Session<(), N, B, TokenStreamState<R>>) {
         (
             self.reentrancy,
             Session {
                 reentrancy: (),
                 names: self.names,
+                builder: self.builder,
                 state: self.state,
             },
         )
     }
 }
 
-delegate_diagnostics! {{R: Diagnostics<Span>, N, S, Span}, Session<R, N, S>, {reentrancy}, R, Span}
+delegate_diagnostics! {
+    {R: Diagnostics<Span>, N, B, S, Span}, Session<R, N, B, S>, {reentrancy}, R, Span
+}
 
-impl<R, N, S> MacroSource for Session<R, N, S>
+impl<R, N, B, S> MacroSource for Session<R, N, B, S>
 where
     N: Deref,
     N::Target: MacroSource,
@@ -157,7 +168,7 @@ where
     type MacroId = <N::Target as MacroSource>::MacroId;
 }
 
-impl<R, N, S> SymbolSource for Session<R, N, S>
+impl<R, N, B, S> SymbolSource for Session<R, N, B, S>
 where
     N: Deref,
     N::Target: SymbolSource,
@@ -165,19 +176,19 @@ where
     type SymbolId = <N::Target as SymbolSource>::SymbolId;
 }
 
-impl<R, N, S, Span> AllocSymbol<Span> for Session<R, N, S>
+impl<R, N, B, S, Span> AllocSymbol<Span> for Session<R, N, B, S>
 where
-    R: AllocSymbol<Span>,
     N: Deref,
-    N::Target: SymbolSource<SymbolId = R::SymbolId>,
+    N::Target: SymbolSource<SymbolId = B::SymbolId>,
+    B: AllocSymbol<Span>,
     Span: Clone,
 {
     fn alloc_symbol(&mut self, span: Span) -> Self::SymbolId {
-        self.reentrancy.alloc_symbol(span)
+        self.builder.alloc_symbol(span)
     }
 }
 
-impl<R, N, S, I> NameTable<I> for Session<R, N, S>
+impl<R, N, B, S, I> NameTable<I> for Session<R, N, B, S>
 where
     N: DerefMut,
     N::Target: NameTable<I>,
@@ -200,16 +211,17 @@ where
     }
 }
 
-impl<R: Finish, N, S> Finish for Session<R, N, S> {
-    type Value = R::Value;
-    type Parent = Session<R::Parent, N, S>;
+impl<R, N, B: Finish, S> Finish for Session<R, N, B, S> {
+    type Value = B::Value;
+    type Parent = Session<R, N, B::Parent, S>;
 
     fn finish(self) -> (Self::Parent, Self::Value) {
-        let (reentrancy, value) = self.reentrancy.finish();
+        let (builder, value) = self.builder.finish();
         (
             Session {
-                reentrancy,
+                reentrancy: self.reentrancy,
                 names: self.names,
+                builder,
                 state: self.state,
             },
             value,
@@ -217,21 +229,21 @@ impl<R: Finish, N, S> Finish for Session<R, N, S> {
     }
 }
 
-impl<R, N, S, Span, SymbolId> PushOp<Name<SymbolId>, Span> for Session<R, N, S>
+impl<R, N, B, S, Span, SymbolId> PushOp<Name<SymbolId>, Span> for Session<R, N, B, S>
 where
-    R: PushOp<Name<SymbolId>, Span>,
+    B: PushOp<Name<SymbolId>, Span>,
     Span: Clone,
 {
     fn push_op(&mut self, op: Name<SymbolId>, span: Span) {
-        self.reentrancy.push_op(op, span)
+        self.builder.push_op(op, span)
     }
 }
 
 macro_rules! impl_push_op_for_session {
     ($t:ty) => {
-        impl<R: PushOp<$t, Span>, N, S, Span: Clone> PushOp<$t, Span> for Session<R, N, S> {
+        impl<R, N, B: PushOp<$t, Span>, S, Span: Clone> PushOp<$t, Span> for Session<R, N, B, S> {
             fn push_op(&mut self, op: $t, span: Span) {
-                self.reentrancy.push_op(op, span)
+                self.builder.push_op(op, span)
             }
         }
     };
@@ -255,8 +267,8 @@ impl<S: ReentrancyActions> From<TokenContext<S>> for TokenStreamState<S> {
     }
 }
 
-impl<R, N> TokenStreamActions<R::Ident, Literal<R::StringRef>, R::Span>
-    for TokenStreamSemantics<R, N>
+impl<R, N, B> TokenStreamActions<R::Ident, Literal<R::StringRef>, R::Span>
+    for TokenStreamSemantics<R, N, B>
 where
     R: ReentrancyActions,
     N: DerefMut,
@@ -265,12 +277,13 @@ where
             R::Ident,
             Keyword = &'static Keyword,
             MacroId = R::MacroId,
-            SymbolId = R::SymbolId,
+            SymbolId = B::SymbolId,
         >,
+    B: Backend<R::Span>,
 {
-    type InstrLineActions = InstrLineSemantics<R, N>;
-    type TokenLineActions = TokenLineSemantics<R, N>;
-    type TokenLineFinalizer = TokenContextFinalizationSemantics<R, N>;
+    type InstrLineActions = InstrLineSemantics<R, N, B>;
+    type TokenLineActions = TokenLineSemantics<R, N, B>;
+    type TokenLineFinalizer = TokenContextFinalizationSemantics<R, N, B>;
 
     fn will_parse_line(self) -> LineRule<Self::InstrLineActions, Self::TokenLineActions> {
         match self.state.0 {
@@ -299,23 +312,23 @@ where
 
 type Label<I, S> = ((I, S), Params<I, S>);
 
-impl<R: ReentrancyActions, N> InstrFinalizer<R::Span> for InstrLineSemantics<R, N> {
-    type Next = TokenStreamSemantics<R, N>;
+impl<R: ReentrancyActions, N, B> InstrFinalizer<R::Span> for InstrLineSemantics<R, N, B> {
+    type Next = TokenStreamSemantics<R, N, B>;
 
     fn did_parse_instr(self) -> Self::Next {
         set_state!(self, self.state.into())
     }
 }
 
-impl<R: ReentrancyActions, N> LineFinalizer<R::Span> for InstrLineSemantics<R, N> {
-    type Next = TokenStreamSemantics<R, N>;
+impl<R: ReentrancyActions, N, B> LineFinalizer<R::Span> for InstrLineSemantics<R, N, B> {
+    type Next = TokenStreamSemantics<R, N, B>;
 
     fn did_parse_line(self, _: R::Span) -> Self::Next {
         set_state!(self, self.state.into())
     }
 }
 
-impl<R: ReentrancyActions, N> LineFinalizer<R::Span> for TokenStreamSemantics<R, N> {
+impl<R: ReentrancyActions, N, B> LineFinalizer<R::Span> for TokenStreamSemantics<R, N, B> {
     type Next = Self;
 
     fn did_parse_line(self, _: R::Span) -> Self::Next {
@@ -329,26 +342,21 @@ mod mock {
 
     use crate::analyze::macros::mock::MockMacroId;
     use crate::analyze::resolve::{BasicNameTable, MockNameTable};
-    use crate::analyze::session::*;
-    use crate::diag::{DiagnosticsEvent, Merge};
+    use crate::diag::{DiagnosticsEvent, Merge, MockDiagnostics};
     use crate::expr::{Atom, Expr};
     use crate::log::Log;
     use crate::object::builder::mock::{
         BackendEvent, MockBackend, MockSymbolId, SerialIdAllocator,
     };
-    use crate::object::builder::RelocContext;
+    use crate::object::builder::{Backend, RelocContext};
 
     pub(super) type MockExprBuilder<T, S> = Session<
-        SessionComponents<
-            MockSourceComponents<T, S>,
-            SynthComponents<
-                RelocContext<
-                    MockBackend<SerialIdAllocator<MockSymbolId>, T>,
-                    Expr<Atom<LocationCounter, MockSymbolId>, S>,
-                >,
-            >,
-        >,
+        MockDiagnostics<T, S>,
         Box<MockNameTable<BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>, T>>,
+        RelocContext<
+            MockBackend<SerialIdAllocator<MockSymbolId>, T>,
+            Expr<Atom<LocationCounter, MockSymbolId>, S>,
+        >,
         (),
     >;
 
@@ -376,8 +384,9 @@ mod mock {
                 names.insert(ident, resolution)
             }
             Session {
-                reentrancy: MockSession::with_log(log.clone()).build_const(),
-                names: Box::new(MockNameTable::new(names, log)),
+                reentrancy: MockDiagnostics::new(log.clone()),
+                names: Box::new(MockNameTable::new(names, log.clone())),
+                builder: MockBackend::new(SerialIdAllocator::new(MockSymbolId), log).build_const(),
                 state: (),
             }
         }
@@ -399,7 +408,9 @@ mod tests {
     use crate::diag::{DiagnosticsEvent, EmitDiag, Merge, Message, MockSpan};
     use crate::expr::{Atom, BinOp, ExprOp, LocationCounter};
     use crate::log::with_log;
-    use crate::object::builder::mock::{BackendEvent, MockSymbolId, SerialIdAllocator};
+    use crate::object::builder::mock::{
+        BackendEvent, MockBackend, MockSymbolId, SerialIdAllocator,
+    };
     use crate::object::builder::{CpuInstr, Item, Ld, Name, SimpleOperand, Width};
 
     use std::borrow::Borrow;
@@ -842,8 +853,7 @@ mod tests {
         )
     }
 
-    pub(super) type MockSession<S> =
-        crate::analyze::session::MockSession<SerialIdAllocator<MockSymbolId>, TestOperation<S>, S>;
+    pub(super) type MockSession<S> = crate::analyze::session::MockSession<TestOperation<S>, S>;
 
     pub(super) fn collect_semantic_actions<F, S>(f: F) -> Vec<TestOperation<S>>
     where
@@ -868,6 +878,7 @@ mod tests {
             let mut session = Session::from_components(
                 MockSession::with_log(log.clone()),
                 Box::new(BasicNameTable::default()),
+                MockBackend::new(SerialIdAllocator::new(MockSymbolId), log.clone()),
             );
             for (ident, resolution) in entries {
                 session.names.insert(ident, resolution)
@@ -884,5 +895,6 @@ mod tests {
                 TestOperation<S>,
             >,
         >,
+        MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>,
     >;
 }

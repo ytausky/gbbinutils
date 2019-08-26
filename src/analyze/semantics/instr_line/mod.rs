@@ -14,7 +14,7 @@ use super::{Keyword, Label, Literal, ReentrancyActions, Session, TokenStreamSema
 
 use crate::analyze::resolve::{NameTable, ResolvedName, StartScope};
 use crate::expr::LocationCounter;
-use crate::object::builder::{Finish, PushOp};
+use crate::object::builder::{Backend, Finish, PushOp};
 
 use std::ops::DerefMut;
 
@@ -22,13 +22,14 @@ pub(super) mod builtin_instr;
 mod label;
 mod macro_instr;
 
-pub(in crate::analyze) type InstrLineSemantics<R, N> = Session<R, N, InstrLineState<R>>;
+pub(in crate::analyze) type InstrLineSemantics<R, N, B> = Session<R, N, B, InstrLineState<R>>;
 
 pub(in crate::analyze) struct InstrLineState<S: ReentrancyActions> {
     pub label: Option<Label<S::Ident, S::Span>>,
 }
 
-impl<R, N> InstrLineActions<R::Ident, Literal<R::StringRef>, R::Span> for InstrLineSemantics<R, N>
+impl<R, N, B> InstrLineActions<R::Ident, Literal<R::StringRef>, R::Span>
+    for InstrLineSemantics<R, N, B>
 where
     R: ReentrancyActions,
     N: DerefMut,
@@ -37,10 +38,11 @@ where
             R::Ident,
             Keyword = &'static Keyword,
             MacroId = R::MacroId,
-            SymbolId = R::SymbolId,
+            SymbolId = B::SymbolId,
         >,
+    B: Backend<R::Span>,
 {
-    type LabelActions = LabelSemantics<R, N>;
+    type LabelActions = LabelSemantics<R, N, B>;
     type InstrActions = Self;
 
     fn will_parse_label(mut self, label: (R::Ident, R::Span)) -> Self::LabelActions {
@@ -49,7 +51,7 @@ where
     }
 }
 
-impl<R, N> InstrActions<R::Ident, Literal<R::StringRef>, R::Span> for InstrLineSemantics<R, N>
+impl<R, N, B> InstrActions<R::Ident, Literal<R::StringRef>, R::Span> for InstrLineSemantics<R, N, B>
 where
     R: ReentrancyActions,
     N: DerefMut,
@@ -58,13 +60,14 @@ where
             R::Ident,
             Keyword = &'static Keyword,
             MacroId = R::MacroId,
-            SymbolId = R::SymbolId,
+            SymbolId = B::SymbolId,
         >,
+    B: Backend<R::Span>,
 {
-    type BuiltinInstrActions = BuiltinInstrSemantics<R, N>;
-    type MacroInstrActions = MacroInstrSemantics<R, N>;
+    type BuiltinInstrActions = BuiltinInstrSemantics<R, N, B>;
+    type MacroInstrActions = MacroInstrSemantics<R, N, B>;
     type ErrorActions = Self;
-    type LineFinalizer = TokenStreamSemantics<R, N>;
+    type LineFinalizer = TokenStreamSemantics<R, N, B>;
 
     fn will_parse_instr(
         mut self,
@@ -103,7 +106,7 @@ impl<S: ReentrancyActions> InstrLineState<S> {
     }
 }
 
-impl<R, N> InstrLineSemantics<R, N>
+impl<R, N, B> InstrLineSemantics<R, N, B>
 where
     R: ReentrancyActions,
     N: DerefMut,
@@ -112,17 +115,18 @@ where
             R::Ident,
             Keyword = &'static Keyword,
             MacroId = R::MacroId,
-            SymbolId = R::SymbolId,
+            SymbolId = B::SymbolId,
         >,
+    B: Backend<R::Span>,
 {
     pub fn flush_label(mut self) -> Self {
         if let Some(((label, span), _params)) = self.state.label.take() {
             self.names.start_scope(&label);
             let id = self.reloc_lookup(label, span.clone());
-            let mut builder = self.reentrancy.define_symbol(id, span.clone());
+            let mut builder = self.builder.define_symbol(id, span.clone());
             PushOp::<LocationCounter, _>::push_op(&mut builder, LocationCounter, span);
-            let (reentrancy, ()) = builder.finish();
-            self.reentrancy = reentrancy;
+            let (builder, ()) = builder.finish();
+            self.builder = builder;
         }
         self
     }

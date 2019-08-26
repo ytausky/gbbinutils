@@ -1,7 +1,7 @@
 use self::macros::VecMacroTable;
 use self::resolve::{BasicNameTable, BiLevelNameTable, DefaultIdentFactory};
 use self::semantics::Session;
-use self::session::*;
+use self::session::SourceComponents;
 use self::strings::FakeStringInterner;
 use self::syntax::parser::DefaultParserFactory;
 use self::syntax::*;
@@ -49,15 +49,14 @@ where
                 ResolvedName::Symbol((*name).clone()),
             )
         }
-        let session = SessionComponents::new(
+        let session = SourceComponents::new(
             &mut file_parser,
             &mut parser_factory,
             &mut macros,
             &mut interner,
-            self,
             diagnostics,
         );
-        Session::from_components(session, &mut names).analyze_file(name.into())
+        Session::from_components(session, &mut names, self).analyze_file(name.into())
     }
 }
 

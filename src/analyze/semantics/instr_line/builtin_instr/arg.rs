@@ -8,12 +8,14 @@ use crate::analyze::{IdentSource, Literal, StringSource};
 use crate::diag::span::{Source, SpanSource};
 use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::expr::BinOp;
+use crate::object::builder::SymbolSource;
 
 use std::ops::DerefMut;
 
-pub(super) type ArgSemantics<R, N> = Session<
+pub(super) type ArgSemantics<R, N, B> = Session<
     R,
     N,
+    B,
     ExprBuilder<
         <R as IdentSource>::Ident,
         <R as StringSource>::StringRef,
@@ -44,8 +46,8 @@ delegate_diagnostics! {
     {I, R, S, P: Diagnostics<S>}, ExprBuilder<I, R, S, P>, {parent}, P, S
 }
 
-impl<R: ReentrancyActions, N> ArgFinalizer for ArgSemantics<R, N> {
-    type Next = BuiltinInstrSemantics<R, N>;
+impl<R: ReentrancyActions, N, B> ArgFinalizer for ArgSemantics<R, N, B> {
+    type Next = BuiltinInstrSemantics<R, N, B>;
 
     fn did_parse_arg(mut self) -> Self::Next {
         let arg = self.state.pop();
@@ -55,7 +57,7 @@ impl<R: ReentrancyActions, N> ArgFinalizer for ArgSemantics<R, N> {
     }
 }
 
-impl<R, N> ArgActions<R::Ident, Literal<R::StringRef>, R::Span> for ArgSemantics<R, N>
+impl<R, N, B> ArgActions<R::Ident, Literal<R::StringRef>, R::Span> for ArgSemantics<R, N, B>
 where
     R: ReentrancyActions,
     N: DerefMut,
@@ -63,8 +65,9 @@ where
         R::Ident,
         Keyword = &'static Keyword,
         MacroId = R::MacroId,
-        SymbolId = R::SymbolId,
+        SymbolId = B::SymbolId,
     >,
+    B: SymbolSource,
 {
     fn act_on_atom(&mut self, atom: ExprAtom<R::Ident, Literal<R::StringRef>>, span: R::Span) {
         self.state.stack.push(Arg {
