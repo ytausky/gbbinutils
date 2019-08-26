@@ -73,7 +73,7 @@ where
         self.state.stack.push(Arg {
             variant: ArgVariant::Atom(match atom {
                 ExprAtom::Error => ArgAtom::Error,
-                ExprAtom::Ident(ident) => match self.names.get(&ident) {
+                ExprAtom::Ident(ident) => match self.names.resolve_name(&ident) {
                     Some(ResolvedName::Keyword(Keyword::Operand(operand))) => {
                         ArgAtom::OperandSymbol(*operand)
                     }

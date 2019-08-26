@@ -112,7 +112,9 @@ where
                 if let Some((name, params)) = state.label {
                     let tokens = state.tokens;
                     let id = self.parent.reentrancy.define_macro(name.1, params, tokens);
-                    self.parent.names.insert(name.0, ResolvedName::Macro(id));
+                    self.parent
+                        .names
+                        .define_name(name.0, ResolvedName::Macro(id));
                 }
             }
         }

@@ -74,7 +74,7 @@ where
         ident: R::Ident,
         span: R::Span,
     ) -> InstrRule<Self::BuiltinInstrActions, Self::MacroInstrActions, Self> {
-        match self.names.get(&ident) {
+        match self.names.resolve_name(&ident) {
             Some(ResolvedName::Keyword(Keyword::BuiltinInstr(builtin))) => InstrRule::BuiltinInstr(
                 self.map_state(|line| BuiltinInstrState::new(line, (builtin.clone(), span))),
             ),

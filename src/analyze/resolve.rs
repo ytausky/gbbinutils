@@ -14,11 +14,12 @@ use crate::expr::{Atom, ExprOp};
 pub(super) trait NameTable<I>: MacroSource + SymbolSource {
     type Keyword: Clone;
 
-    fn get(
+    fn resolve_name(
         &mut self,
         ident: &I,
     ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>>;
-    fn insert(
+
+    fn define_name(
         &mut self,
         ident: I,
         entry: ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>,
@@ -131,7 +132,7 @@ where
 {
     type Keyword = Keyword;
 
-    fn get(
+    fn resolve_name(
         &mut self,
         ident: &String,
     ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
@@ -149,7 +150,7 @@ where
         )
     }
 
-    fn insert(
+    fn define_name(
         &mut self,
         ident: String,
         entry: ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>,
@@ -190,19 +191,19 @@ impl<T: SymbolSource> SymbolSource for BiLevelNameTable<T> {
 impl<T: Default + NameTable<String>> NameTable<Ident<String>> for BiLevelNameTable<T> {
     type Keyword = T::Keyword;
 
-    fn get(
+    fn resolve_name(
         &mut self,
         ident: &Ident<String>,
     ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
-        self.select_table_mut(ident).get(&ident.name)
+        self.select_table_mut(ident).resolve_name(&ident.name)
     }
 
-    fn insert(
+    fn define_name(
         &mut self,
         ident: Ident<String>,
         entry: ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>,
     ) {
-        self.select_table_mut(&ident).insert(ident.name, entry)
+        self.select_table_mut(&ident).define_name(ident.name, entry)
     }
 }
 
@@ -246,19 +247,19 @@ mod mock {
     {
         type Keyword = N::Keyword;
 
-        fn get(
+        fn resolve_name(
             &mut self,
             ident: &String,
         ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
-            self.names.get(ident)
+            self.names.resolve_name(ident)
         }
 
-        fn insert(
+        fn define_name(
             &mut self,
             ident: String,
             entry: ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>,
         ) {
-            self.names.insert(ident.clone(), entry.clone());
+            self.names.define_name(ident.clone(), entry.clone());
             self.log.push(NameTableEvent::Insert(ident, entry))
         }
     }
@@ -304,31 +305,37 @@ mod tests {
     #[should_panic]
     fn panic_when_first_definition_is_local() {
         let mut table = BiLevelNameTable::<BasicNameTable<(), (), _>>::new();
-        table.insert("_loop".into(), ResolvedName::Symbol(()));
+        table.define_name("_loop".into(), ResolvedName::Symbol(()));
     }
 
     #[test]
     fn retrieve_global_name() {
         let name = "start";
         let mut table = BiLevelNameTable::<BasicNameTable<(), (), _>>::new();
-        table.insert(name.into(), ResolvedName::Symbol(42));
-        assert_eq!(table.get(&name.into()), Some(ResolvedName::Symbol(42)))
+        table.define_name(name.into(), ResolvedName::Symbol(42));
+        assert_eq!(
+            table.resolve_name(&name.into()),
+            Some(ResolvedName::Symbol(42))
+        )
     }
 
     #[test]
     fn retrieve_local_name() {
         let mut table = BiLevelNameTable::<BasicNameTable<(), (), _>>::new();
         table.start_scope(&"global".into());
-        table.insert("_local".into(), ResolvedName::Symbol(42));
-        assert_eq!(table.get(&"_local".into()), Some(ResolvedName::Symbol(42)))
+        table.define_name("_local".into(), ResolvedName::Symbol(42));
+        assert_eq!(
+            table.resolve_name(&"_local".into()),
+            Some(ResolvedName::Symbol(42))
+        )
     }
 
     #[test]
     fn local_name_not_accessible_after_new_global_name() {
         let mut table = BiLevelNameTable::<BasicNameTable<(), (), _>>::new();
         table.start_scope(&"global1".into());
-        table.insert("_local".into(), ResolvedName::Symbol(42));
+        table.define_name("_local".into(), ResolvedName::Symbol(42));
         table.start_scope(&"global2".into());
-        assert_eq!(table.get(&"_local".into()), None)
+        assert_eq!(table.resolve_name(&"_local".into()), None)
     }
 }

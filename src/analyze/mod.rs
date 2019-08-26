@@ -44,7 +44,7 @@ where
         let mut interner = FakeStringInterner;
         let mut names = BiLevelNameTable::<BasicNameTable<_, _, _>>::new();
         for (string, name) in self.builtin_symbols() {
-            names.insert(
+            names.define_name(
                 DefaultIdentFactory.mk_ident(string),
                 ResolvedName::Symbol((*name).clone()),
             )

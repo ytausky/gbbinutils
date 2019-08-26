@@ -19,12 +19,12 @@ where
     type RelocId = T::SymbolId;
 
     fn reloc_lookup(&mut self, name: I, span: S) -> Self::RelocId {
-        match self.get(&name) {
+        match self.resolve_name(&name) {
             Some(ResolvedName::Keyword(_)) => unimplemented!(),
             Some(ResolvedName::Symbol(id)) => id.clone(),
             None => {
                 let id = self.alloc_symbol(span.clone());
-                self.insert(name, ResolvedName::Symbol(id.clone()));
+                self.define_name(name, ResolvedName::Symbol(id.clone()));
                 id
             }
             Some(ResolvedName::Macro(_)) => {

@@ -114,7 +114,7 @@ where
 {
     pub fn from_components(reentrancy: R, mut names: N, builder: B) -> Self {
         for (ident, keyword) in KEYWORDS {
-            names.insert((*ident).into(), ResolvedName::Keyword(keyword))
+            names.define_name((*ident).into(), ResolvedName::Keyword(keyword))
         }
         Self {
             reentrancy,
@@ -195,19 +195,19 @@ where
 {
     type Keyword = <N::Target as NameTable<I>>::Keyword;
 
-    fn get(
+    fn resolve_name(
         &mut self,
         ident: &I,
     ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
-        self.names.get(ident)
+        self.names.resolve_name(ident)
     }
 
-    fn insert(
+    fn define_name(
         &mut self,
         ident: I,
         entry: ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>,
     ) {
-        self.names.insert(ident, entry)
+        self.names.define_name(ident, entry)
     }
 }
 
@@ -381,7 +381,7 @@ mod mock {
         {
             let mut names = BasicNameTable::default();
             for (ident, resolution) in entries {
-                names.insert(ident, resolution)
+                names.define_name(ident, resolution)
             }
             Session {
                 reentrancy: MockDiagnostics::new(log.clone()),
@@ -881,7 +881,7 @@ mod tests {
                 MockBackend::new(SerialIdAllocator::new(MockSymbolId), log.clone()),
             );
             for (ident, resolution) in entries {
-                session.names.insert(ident, resolution)
+                session.names.define_name(ident, resolution)
             }
             f(session.map_names(|names| Box::new(MockNameTable::new(*names, log))));
         })
