@@ -8,7 +8,6 @@ use super::{IdentSource, Lex, Literal, SemanticToken, StringSource, TokenSeq};
 use crate::codebase::CodebaseError;
 use crate::diag::span::SpanSource;
 use crate::diag::*;
-use crate::object::builder::*;
 
 use std::ops::{Deref, DerefMut};
 
@@ -48,20 +47,6 @@ where
         Self: IntoSemanticActions<A>,
         Self::SemanticActions:
             TokenStreamActions<Self::Ident, Literal<Self::StringRef>, Self::Span>;
-}
-
-pub(super) trait SynthActions<S: Clone>
-where
-    Self: Sized,
-    Self: PartialBackend<S>,
-    Self: Diagnostics<S>,
-{
-    type ConstBuilder: ValueBuilder<Self::SymbolId, S, Parent = Self, Value = Self::Value>
-        + Diagnostics<S>;
-    type SymbolBuilder: ValueBuilder<Self::SymbolId, S, Parent = Self, Value = ()> + Diagnostics<S>;
-
-    fn build_const(self) -> Self::ConstBuilder;
-    fn define_symbol(self, name: Self::SymbolId, span: S) -> Self::SymbolBuilder;
 }
 
 pub(super) trait IntoSemanticActions<S> {
