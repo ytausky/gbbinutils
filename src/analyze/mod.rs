@@ -63,9 +63,7 @@ where
             self,
             diagnostics,
         );
-        session
-            .analyze_file(name.into(), Session::from_components(&mut names))
-            .0
+        Session::from_components(session, &mut names).analyze_file(name.into())
     }
 }
 

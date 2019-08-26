@@ -11,6 +11,7 @@ use super::syntax;
 use super::syntax::actions::*;
 use super::Literal;
 
+use crate::codebase::CodebaseError;
 use crate::diag;
 use crate::diag::{Diagnostics, Message};
 use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
@@ -81,6 +82,15 @@ impl<R, N, S> Session<R, N, S> {
         }
     }
 
+    #[cfg(test)]
+    fn map_names<F: FnOnce(N) -> T, T>(self, f: F) -> Session<R, T, S> {
+        Session {
+            reentrancy: self.reentrancy,
+            names: f(self.names),
+            state: self.state,
+        }
+    }
+
     fn map_state<F: FnOnce(S) -> T, T>(self, f: F) -> Session<R, N, T> {
         Session {
             reentrancy: self.reentrancy,
@@ -90,22 +100,51 @@ impl<R, N, S> Session<R, N, S> {
     }
 }
 
-impl<R, N> Session<(), N, TokenStreamState<R>>
+impl<R, N> Session<R, N, TokenStreamState<R>>
 where
     R: ReentrancyActions,
     R::Ident: for<'r> From<&'r str>,
     N: DerefMut,
     N::Target: NameTable<R::Ident, Keyword = &'static Keyword>,
 {
-    pub fn from_components(mut names: N) -> Self {
+    pub fn from_components(reentrancy: R, mut names: N) -> Self {
         for (ident, keyword) in KEYWORDS {
             names.insert((*ident).into(), ResolvedName::Keyword(keyword))
         }
         Self {
-            reentrancy: (),
+            reentrancy,
             names,
             state: TokenStreamState::new(),
         }
+    }
+}
+
+impl<R, N> Session<R, N, TokenStreamState<R>>
+where
+    R: ReentrancyActions,
+    N: DerefMut,
+    N::Target: StartScope<R::Ident>
+        + NameTable<
+            R::Ident,
+            Keyword = &'static Keyword,
+            MacroId = R::MacroId,
+            SymbolId = R::SymbolId,
+        >,
+{
+    pub fn analyze_file(self, path: R::StringRef) -> Result<(), CodebaseError> {
+        let (reentrancy, session) = self.split_reentrancy();
+        reentrancy.analyze_file(path, session).0
+    }
+
+    fn split_reentrancy(self) -> (R, Session<(), N, TokenStreamState<R>>) {
+        (
+            self.reentrancy,
+            Session {
+                reentrancy: (),
+                names: self.names,
+                state: self.state,
+            },
+        )
     }
 }
 
@@ -829,20 +868,14 @@ mod tests {
         S: Clone + Debug + Merge,
     {
         with_log(|log| {
-            let mut names = *Session::<_, _, TokenStreamState<MockSession<S>>>::from_components(
+            let mut session = Session::from_components(
+                MockSession::with_log(log.clone()),
                 Box::new(BasicNameTable::default()),
-            )
-            .names;
-            for (ident, resolution) in entries {
-                names.insert(ident, resolution)
-            }
-            f(
-                MockSession::with_log(log.clone()).into_semantic_actions(Session {
-                    reentrancy: (),
-                    names: Box::new(MockNameTable::new(names, log)),
-                    state: TokenStreamState::new(),
-                }),
             );
+            for (ident, resolution) in entries {
+                session.names.insert(ident, resolution)
+            }
+            f(session.map_names(|names| Box::new(MockNameTable::new(*names, log))));
         })
     }
 
