@@ -51,7 +51,7 @@ impl<R: ReentrancyActions, N> ArgFinalizer for ArgSemantics<R, N> {
         let arg = self.state.pop();
         self.state.parent.args.push(arg);
         assert_eq!(self.state.stack.len(), 0);
-        self.map_line(|line| line.parent)
+        self.map_state(|line| line.parent)
     }
 }
 

@@ -45,7 +45,7 @@ where
 
     fn will_parse_label(mut self, label: (R::Ident, R::Span)) -> Self::LabelActions {
         self = self.flush_label();
-        self.map_line(|line| LabelState::new(line, label))
+        self.map_state(|line| LabelState::new(line, label))
     }
 }
 
@@ -73,7 +73,7 @@ where
     ) -> InstrRule<Self::BuiltinInstrActions, Self::MacroInstrActions, Self> {
         match self.names.get(&ident) {
             Some(ResolvedName::Keyword(Keyword::BuiltinInstr(builtin))) => InstrRule::BuiltinInstr(
-                self.map_line(|line| BuiltinInstrState::new(line, (builtin.clone(), span))),
+                self.map_state(|line| BuiltinInstrState::new(line, (builtin.clone(), span))),
             ),
             Some(ResolvedName::Keyword(Keyword::Operand(_))) => unimplemented!(),
             Some(ResolvedName::Macro(id)) => {

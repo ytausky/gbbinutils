@@ -79,7 +79,7 @@ where
     type ArgActions = ArgSemantics<R, N>;
 
     fn will_parse_arg(self) -> Self::ArgActions {
-        self.map_line(ExprBuilder::new)
+        self.map_state(ExprBuilder::new)
     }
 }
 
@@ -157,7 +157,7 @@ impl<R: ReentrancyActions> PreparedBuiltinInstr<R> {
                 directive::analyze_directive((Directive::Simple(simple), span), None, args, session)
             }
             PreparedBuiltinInstr::Mnemonic(mnemonic) => {
-                analyze_mnemonic(mnemonic, args, session).map_line(Into::into)
+                analyze_mnemonic(mnemonic, args, session).map_state(Into::into)
             }
         }
     }

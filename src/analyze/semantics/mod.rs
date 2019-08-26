@@ -81,7 +81,7 @@ impl<R, N, S> Session<R, N, S> {
         }
     }
 
-    fn map_line<F: FnOnce(S) -> T, T>(self, f: F) -> Session<R, N, T> {
+    fn map_state<F: FnOnce(S) -> T, T>(self, f: F) -> Session<R, N, T> {
         Session {
             reentrancy: self.reentrancy,
             names: self.names,
