@@ -330,7 +330,6 @@ mod mock {
     use crate::analyze::macros::mock::MockMacroId;
     use crate::analyze::resolve::{BasicNameTable, MockNameTable};
     use crate::analyze::session::*;
-    use crate::analyze::strings::FakeStringInterner;
     use crate::diag::{DiagnosticsEvent, Merge};
     use crate::expr::{Atom, Expr};
     use crate::log::Log;
@@ -343,7 +342,6 @@ mod mock {
         SessionComponents<
             MockSourceComponents<T, S>,
             SynthComponents<
-                Box<FakeStringInterner>,
                 RelocContext<
                     MockBackend<SerialIdAllocator<MockSymbolId>, T>,
                     Expr<Atom<LocationCounter, MockSymbolId>, S>,

@@ -79,19 +79,19 @@ pub(super) struct SessionComponents<Source, Synth> {
     synth: Synth,
 }
 
-pub(super) struct SourceComponents<C, P, M, D> {
+pub(super) struct SourceComponents<C, P, M, I, D> {
     codebase: C,
     parser_factory: P,
     macros: M,
+    interner: I,
     diagnostics: D,
 }
 
-pub(super) struct SynthComponents<I, B> {
-    interner: I,
+pub(super) struct SynthComponents<B> {
     builder: B,
 }
 
-impl<C, P, M, D> SpanSource for SourceComponents<C, P, M, D>
+impl<C, P, M, I, D> SpanSource for SourceComponents<C, P, M, I, D>
 where
     D: Deref,
     D::Target: SpanSource,
@@ -100,9 +100,9 @@ where
 }
 
 delegate_diagnostics! {
-    {C, P, M, D: DerefMut, S: Clone},
+    {C, P, M, I, D: DerefMut, S: Clone},
     {D::Target: Diagnostics<S>},
-    SourceComponents<C, P, M, D>,
+    SourceComponents<C, P, M, I, D>,
     {diagnostics},
     D::Target,
     S
@@ -110,8 +110,8 @@ delegate_diagnostics! {
 
 impl<'a, C, P, M, I, B, D>
     SessionComponents<
-        SourceComponents<&'a mut C, &'a mut P, &'a mut M, &'a mut D>,
-        SynthComponents<&'a mut I, B>,
+        SourceComponents<&'a mut C, &'a mut P, &'a mut M, &'a mut I, &'a mut D>,
+        SynthComponents<B>,
     >
 where
     C: IdentSource + StringSource,
@@ -130,29 +130,29 @@ where
                 codebase,
                 parser_factory,
                 macros,
+                interner,
                 diagnostics,
             },
-            synth: SynthComponents { interner, builder },
+            synth: SynthComponents { builder },
         }
     }
 }
 
-impl<Source, I, B> SessionComponents<Source, SynthComponents<I, B>> {
+impl<Source, B> SessionComponents<Source, SynthComponents<B>> {
     fn replace_backend<T>(
         self,
         f: impl FnOnce(B) -> T,
-    ) -> SessionComponents<Source, SynthComponents<I, T>> {
+    ) -> SessionComponents<Source, SynthComponents<T>> {
         SessionComponents {
             source: self.source,
             synth: SynthComponents {
-                interner: self.synth.interner,
                 builder: f(self.synth.builder),
             },
         }
     }
 }
 
-impl<C, P, M, D> MacroSource for SourceComponents<C, P, M, D>
+impl<C, P, M, I, D> MacroSource for SourceComponents<C, P, M, I, D>
 where
     M: Deref,
     M::Target: MacroSource,
@@ -160,7 +160,7 @@ where
     type MacroId = <M::Target as MacroSource>::MacroId;
 }
 
-impl<C, P, M, D, Synth> IdentSource for SessionComponents<SourceComponents<C, P, M, D>, Synth>
+impl<C, P, M, I, D, Synth> IdentSource for SessionComponents<SourceComponents<C, P, M, I, D>, Synth>
 where
     C: DerefMut,
     C::Target: IdentSource + StringSource,
@@ -168,18 +168,19 @@ where
     type Ident = <C::Target as IdentSource>::Ident;
 }
 
-impl<Source: MacroSource, I, B> MacroSource for SessionComponents<Source, SynthComponents<I, B>> {
+impl<Source: MacroSource, B> MacroSource for SessionComponents<Source, SynthComponents<B>> {
     type MacroId = Source::MacroId;
 }
 
-impl<Source, I, B> SpanSource for SessionComponents<Source, SynthComponents<I, B>>
+impl<Source, B> SpanSource for SessionComponents<Source, SynthComponents<B>>
 where
     Source: SpanSource,
 {
     type Span = Source::Span;
 }
 
-impl<C, P, M, D, Synth> StringSource for SessionComponents<SourceComponents<C, P, M, D>, Synth>
+impl<C, P, M, I, D, Synth> StringSource
+    for SessionComponents<SourceComponents<C, P, M, I, D>, Synth>
 where
     C: DerefMut,
     C::Target: IdentSource + StringSource,
@@ -187,7 +188,7 @@ where
     type StringRef = <C::Target as StringSource>::StringRef;
 }
 
-impl<Source, I, B, S> PartialBackend<S> for SessionComponents<Source, SynthComponents<I, B>>
+impl<Source, B, S> PartialBackend<S> for SessionComponents<Source, SynthComponents<B>>
 where
     B: Backend<S>,
     S: Clone,
@@ -220,7 +221,7 @@ where
 }
 
 impl<C, P, M, I, B, D> ReentrancyActions
-    for SessionComponents<SourceComponents<C, P, M, D>, SynthComponents<I, B>>
+    for SessionComponents<SourceComponents<C, P, M, I, D>, SynthComponents<B>>
 where
     C: DerefMut,
     C::Target: Lex<D::Target>,
@@ -302,16 +303,15 @@ where
     }
 }
 
-impl<Source, Interner, B, S> SynthActions<S>
-    for SessionComponents<Source, SynthComponents<Interner, B>>
+impl<Source, B, S> SynthActions<S> for SessionComponents<Source, SynthComponents<B>>
 where
     Source: Diagnostics<S>,
     B: Backend<S>,
     S: Clone,
     Self: Diagnostics<S>,
 {
-    type ConstBuilder = SessionComponents<Source, SynthComponents<Interner, B::ConstBuilder>>;
-    type SymbolBuilder = SessionComponents<Source, SynthComponents<Interner, B::SymbolBuilder>>;
+    type ConstBuilder = SessionComponents<Source, SynthComponents<B::ConstBuilder>>;
+    type SymbolBuilder = SessionComponents<Source, SynthComponents<B::SymbolBuilder>>;
 
     fn build_const(self) -> Self::ConstBuilder {
         self.replace_backend(Backend::build_const)
@@ -322,24 +322,25 @@ where
     }
 }
 
-impl<U, I, B, R> GetString<R> for SessionComponents<U, SynthComponents<I, B>>
+impl<C, P, M, I, D, Synth, R> GetString<R>
+    for SessionComponents<SourceComponents<C, P, M, I, D>, Synth>
 where
     I: Deref,
     I::Target: GetString<R>,
 {
     fn get_string<'a>(&'a self, id: &'a R) -> &str {
-        self.synth.interner.get_string(id)
+        self.source.interner.get_string(id)
     }
 }
 
-impl<Source, I, B> SymbolSource for SessionComponents<Source, SynthComponents<I, B>>
+impl<Source, B> SymbolSource for SessionComponents<Source, SynthComponents<B>>
 where
     B: SymbolSource,
 {
     type SymbolId = B::SymbolId;
 }
 
-impl<Source, I, B, S> AllocSymbol<S> for SessionComponents<Source, SynthComponents<I, B>>
+impl<Source, B, S> AllocSymbol<S> for SessionComponents<Source, SynthComponents<B>>
 where
     B: AllocSymbol<S>,
     S: Clone,
@@ -350,15 +351,14 @@ where
 }
 
 delegate_diagnostics! {
-    {'a, Source: Diagnostics<S>, I, B, S: Clone},
-    SessionComponents<Source, SynthComponents<I, B>>,
+    {'a, Source: Diagnostics<S>, Synth, S: Clone},
+    SessionComponents<Source, Synth>,
     {source},
     Source,
     S
 }
 
-impl<Source, I, B, S> PushOp<Name<B::SymbolId>, S>
-    for SessionComponents<Source, SynthComponents<I, B>>
+impl<Source, B, S> PushOp<Name<B::SymbolId>, S> for SessionComponents<Source, SynthComponents<B>>
 where
     B: AllocSymbol<S> + PushOp<Name<<B as SymbolSource>::SymbolId>, S>,
     S: Clone,
@@ -368,18 +368,15 @@ where
     }
 }
 
-impl<Source, I, B: Finish> Finish for SessionComponents<Source, SynthComponents<I, B>> {
-    type Parent = SessionComponents<Source, SynthComponents<I, B::Parent>>;
+impl<Source, B: Finish> Finish for SessionComponents<Source, SynthComponents<B>> {
+    type Parent = SessionComponents<Source, SynthComponents<B::Parent>>;
     type Value = B::Value;
 
     fn finish(self) -> (Self::Parent, Self::Value) {
         let (builder, value) = self.synth.builder.finish();
         let parent = SessionComponents {
             source: self.source,
-            synth: SynthComponents {
-                interner: self.synth.interner,
-                builder,
-            },
+            synth: SynthComponents { builder },
         };
         (parent, value)
     }
@@ -387,7 +384,7 @@ impl<Source, I, B: Finish> Finish for SessionComponents<Source, SynthComponents<
 
 macro_rules! impl_push_op_for_session_components {
     ($t:ty) => {
-        impl<Source, I, B, S> PushOp<$t, S> for SessionComponents<Source, SynthComponents<I, B>>
+        impl<Source, B, S> PushOp<$t, S> for SessionComponents<Source, SynthComponents<B>>
         where
             B: PushOp<$t, S>,
             S: Clone,
@@ -410,7 +407,6 @@ mod mock {
     use super::*;
 
     use crate::analyze::macros::mock::MockMacroId;
-    use crate::analyze::strings::FakeStringInterner;
     use crate::diag::{DiagnosticsEvent, MockDiagnostics};
     use crate::expr::{Atom, Expr, LocationCounter};
     use crate::log::Log;
@@ -428,7 +424,7 @@ mod mock {
     pub(in crate::analyze) type MockSession<A, T, S> =
         SessionComponents<MockSourceComponents<T, S>, MockSynthComponents<A, T>>;
 
-    type MockSynthComponents<A, T> = SynthComponents<Box<FakeStringInterner>, MockBackend<A, T>>;
+    type MockSynthComponents<A, T> = SynthComponents<MockBackend<A, T>>;
 
     pub(in crate::analyze) struct MockSourceComponents<T, S> {
         diagnostics: Box<MockDiagnostics<T, S>>,
@@ -458,7 +454,6 @@ mod mock {
         fn with_name_table(alloc: A, log: Log<T>) -> Self {
             Self {
                 synth: SynthComponents {
-                    interner: Box::new(FakeStringInterner),
                     builder: MockBackend::new(alloc, log.clone()),
                 },
                 source: MockSourceComponents {
@@ -488,6 +483,12 @@ mod mock {
 
     impl<A, T, S> StringSource for MockSession<A, T, S> {
         type StringRef = String;
+    }
+
+    impl<B, T, S> GetString<String> for MockSession<B, T, S> {
+        fn get_string<'a>(&self, id: &'a String) -> &'a str {
+            id.as_ref()
+        }
     }
 
     impl<B, T, S> ReentrancyActions for MockSession<B, T, S>
@@ -756,9 +757,10 @@ mod tests {
             &'a mut MockCodebase<S>,
             &'a mut MockParserFactory<S>,
             &'a mut MockMacroTable<S>,
+            &'a mut FakeStringInterner,
             &'a mut MockDiagnosticsSystem<S>,
         >,
-        SynthComponents<&'a mut FakeStringInterner, MockBackend<S>>,
+        SynthComponents<MockBackend<S>>,
     >;
 
     #[derive(Debug, PartialEq)]
