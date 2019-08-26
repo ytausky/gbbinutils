@@ -352,14 +352,10 @@ mod tests {
     use crate::analyze::syntax::*;
     use crate::analyze::{Literal, MockCodebase};
     use crate::diag::DiagnosticsEvent;
-    use crate::expr::{Atom, LocationCounter};
     use crate::log::*;
-    use crate::object::builder::mock::{BackendEvent, MockSymbolId};
 
     use std::fmt::Debug;
     use std::iter;
-
-    type Expr<S> = crate::expr::Expr<Atom<LocationCounter, MockSymbolId>, S>;
 
     impl<S: ReentrancyActions> IntoSemanticActions<()> for S {
         type SemanticActions =
@@ -488,7 +484,6 @@ mod tests {
     enum Event<S: Clone> {
         Parser(ParserEvent<String, Literal<String>, LexError, S>),
         MacroTable(MacroTableEvent),
-        Backend(BackendEvent<MockSymbolId, Expr<S>>),
         Diagnostics(DiagnosticsEvent<S>),
     }
 
@@ -501,12 +496,6 @@ mod tests {
     impl<S: Clone> From<MacroTableEvent> for Event<S> {
         fn from(event: MacroTableEvent) -> Self {
             Self::MacroTable(event)
-        }
-    }
-
-    impl<S: Clone> From<BackendEvent<MockSymbolId, Expr<S>>> for Event<S> {
-        fn from(event: BackendEvent<MockSymbolId, Expr<S>>) -> Self {
-            Event::Backend(event)
         }
     }
 
