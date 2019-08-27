@@ -1,7 +1,7 @@
 use self::macros::VecMacroTable;
+use self::reentrancy::SourceComponents;
 use self::resolve::{BasicNameTable, BiLevelNameTable, DefaultIdentFactory};
 use self::semantics::Session;
-use self::session::SourceComponents;
 use self::strings::FakeStringInterner;
 use self::syntax::parser::DefaultParserFactory;
 use self::syntax::*;
@@ -18,9 +18,9 @@ use std::rc::Rc;
 pub use self::mock::*;
 
 mod macros;
+mod reentrancy;
 mod resolve;
 mod semantics;
-mod session;
 mod strings;
 mod syntax;
 

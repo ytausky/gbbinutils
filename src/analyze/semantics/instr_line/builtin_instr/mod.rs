@@ -5,9 +5,9 @@ use self::arg::*;
 
 use super::*;
 
+use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::resolve::NameTable;
 use crate::analyze::semantics::{Params, RelocLookup, ResolveNames, TokenStreamState, WithParams};
-use crate::analyze::session::ReentrancyActions;
 use crate::analyze::syntax::actions::{BuiltinInstrActions, InstrFinalizer};
 use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::expr::{BinOp, FnCall, LocationCounter};

@@ -224,13 +224,11 @@ mod mock {
     use std::marker::PhantomData;
 
     #[derive(Debug, PartialEq)]
-    pub(crate) enum SessionEvent {
+    pub(crate) enum ReentrancyEvent {
         AnalyzeFile(String),
         DefineMacro(Vec<String>, Vec<SemanticToken<String, String>>),
         InvokeMacro(MockMacroId, Vec<Vec<SemanticToken<String, String>>>),
     }
-
-    pub(in crate::analyze) type MockSession<T, S> = MockSourceComponents<T, S>;
 
     pub(in crate::analyze) struct MockSourceComponents<T, S> {
         diagnostics: Box<MockDiagnostics<T, S>>,
@@ -256,7 +254,7 @@ mod mock {
         S
     }
 
-    impl<T, S> MockSession<T, S> {
+    impl<T, S> MockSourceComponents<T, S> {
         fn with_name_table(log: Log<T>) -> Self {
             MockSourceComponents {
                 diagnostics: Box::new(MockDiagnostics::new(log.clone())),
@@ -272,29 +270,29 @@ mod mock {
         }
     }
 
-    impl<T, S> MockSession<T, S> {
+    impl<T, S> MockSourceComponents<T, S> {
         pub fn with_log(log: Log<T>) -> Self {
             Self::with_name_table(log)
         }
     }
 
-    impl<T, S> IdentSource for MockSession<T, S> {
+    impl<T, S> IdentSource for MockSourceComponents<T, S> {
         type Ident = String;
     }
 
-    impl<T, S> StringSource for MockSession<T, S> {
+    impl<T, S> StringSource for MockSourceComponents<T, S> {
         type StringRef = String;
     }
 
-    impl<T, S> GetString<String> for MockSession<T, S> {
+    impl<T, S> GetString<String> for MockSourceComponents<T, S> {
         fn get_string<'a>(&self, id: &'a String) -> &'a str {
             id.as_ref()
         }
     }
 
-    impl<T, S> ReentrancyActions for MockSession<T, S>
+    impl<T, S> ReentrancyActions for MockSourceComponents<T, S>
     where
-        T: From<SessionEvent>,
+        T: From<ReentrancyEvent>,
         T: From<DiagnosticsEvent<S>>,
         S: Clone + Merge,
     {
@@ -309,7 +307,7 @@ mod mock {
         where
             Self: IntoSemanticActions<A>,
         {
-            self.log.push(SessionEvent::AnalyzeFile(path));
+            self.log.push(ReentrancyEvent::AnalyzeFile(path));
             (
                 self.error.take().map_or(Ok(()), Err),
                 self.into_semantic_actions(actions),
@@ -322,7 +320,7 @@ mod mock {
             (params, _): (Vec<Self::Ident>, Vec<Self::Span>),
             (body, _): TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
         ) -> Self::MacroId {
-            self.log.push(SessionEvent::DefineMacro(params, body));
+            self.log.push(ReentrancyEvent::DefineMacro(params, body));
             self.macro_alloc.gen()
         }
 
@@ -335,7 +333,7 @@ mod mock {
         where
             Self: IntoSemanticActions<A>,
         {
-            self.log.push(SessionEvent::InvokeMacro(id, args));
+            self.log.push(ReentrancyEvent::InvokeMacro(id, args));
             self.into_semantic_actions(actions)
         }
     }

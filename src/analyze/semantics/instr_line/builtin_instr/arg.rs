@@ -1,8 +1,8 @@
 use super::{BuiltinInstrSemantics, BuiltinInstrState, OperandSymbol, Session};
 
+use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::resolve::{NameTable, ResolvedName};
 use crate::analyze::semantics::Keyword;
-use crate::analyze::session::ReentrancyActions;
 use crate::analyze::syntax::actions::*;
 use crate::analyze::{IdentSource, Literal, StringSource};
 use crate::diag::span::{Source, SpanSource};

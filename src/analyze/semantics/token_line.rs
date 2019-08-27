@@ -1,7 +1,7 @@
 use super::{Keyword, Label, Session, TokenStreamSemantics, TokenStreamState};
 
+use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::resolve::{NameTable, ResolvedName, StartScope};
-use crate::analyze::session::ReentrancyActions;
 use crate::analyze::syntax::actions::{LineFinalizer, TokenLineActions, TokenLineRule};
 use crate::analyze::syntax::{Sigil, Token};
 use crate::analyze::{Literal, SemanticToken, TokenSeq};

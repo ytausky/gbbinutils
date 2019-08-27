@@ -4,8 +4,8 @@ use self::params::*;
 use self::token_line::{TokenContext, TokenContextFinalizationSemantics, TokenLineSemantics};
 
 use super::macros::MacroSource;
+use super::reentrancy::{IntoSemanticActions, Params, ReentrancyActions};
 use super::resolve::{NameTable, ResolvedName, StartScope};
-use super::session::{IntoSemanticActions, Params, ReentrancyActions};
 use super::syntax;
 use super::syntax::actions::*;
 use super::Literal;
@@ -402,8 +402,8 @@ mod tests {
     use super::syntax::{Sigil, Token};
 
     use crate::analyze::macros::mock::MockMacroId;
+    use crate::analyze::reentrancy::ReentrancyEvent;
     use crate::analyze::resolve::{MockNameTable, NameTableEvent, ResolvedName};
-    use crate::analyze::session::SessionEvent;
     use crate::analyze::SemanticToken;
     use crate::diag::{DiagnosticsEvent, EmitDiag, Merge, Message, MockSpan};
     use crate::expr::{Atom, BinOp, ExprOp, LocationCounter};
@@ -421,7 +421,7 @@ mod tests {
         Backend(BackendEvent<MockSymbolId, Expr<S>>),
         Diagnostics(DiagnosticsEvent<S>),
         NameTable(NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>),
-        Session(SessionEvent),
+        Reentrancy(ReentrancyEvent),
     }
 
     pub(super) type Expr<S> = crate::expr::Expr<Atom<LocationCounter, MockSymbolId>, S>;
@@ -446,9 +446,9 @@ mod tests {
         }
     }
 
-    impl<S: Clone> From<SessionEvent> for TestOperation<S> {
-        fn from(event: SessionEvent) -> Self {
-            TestOperation::Session(event)
+    impl<S: Clone> From<ReentrancyEvent> for TestOperation<S> {
+        fn from(event: ReentrancyEvent) -> Self {
+            TestOperation::Reentrancy(event)
         }
     }
 
@@ -703,7 +703,7 @@ mod tests {
         assert_eq!(
             actions,
             [
-                SessionEvent::DefineMacro(
+                ReentrancyEvent::DefineMacro(
                     params.borrow().iter().cloned().map(Into::into).collect(),
                     body
                 )
@@ -853,7 +853,8 @@ mod tests {
         )
     }
 
-    pub(super) type MockSession<S> = crate::analyze::session::MockSession<TestOperation<S>, S>;
+    pub(super) type MockSourceComponents<S> =
+        crate::analyze::reentrancy::MockSourceComponents<TestOperation<S>, S>;
 
     pub(super) fn collect_semantic_actions<F, S>(f: F) -> Vec<TestOperation<S>>
     where
@@ -876,7 +877,7 @@ mod tests {
     {
         with_log(|log| {
             let mut session = Session::from_components(
-                MockSession::with_log(log.clone()),
+                MockSourceComponents::with_log(log.clone()),
                 Box::new(BasicNameTable::default()),
                 MockBackend::new(SerialIdAllocator::new(MockSymbolId), log.clone()),
             );
@@ -888,7 +889,7 @@ mod tests {
     }
 
     pub(super) type TestTokenStreamSemantics<S> = TokenStreamSemantics<
-        MockSession<S>,
+        MockSourceComponents<S>,
         Box<
             MockNameTable<
                 BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,

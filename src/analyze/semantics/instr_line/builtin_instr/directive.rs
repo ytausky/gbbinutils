@@ -1,10 +1,10 @@
 use super::*;
 
+use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::resolve::NameTable;
 use crate::analyze::semantics::instr_line::Label;
 use crate::analyze::semantics::params::RelocLookup;
 use crate::analyze::semantics::token_line::{MacroDefState, TokenContext};
-use crate::analyze::session::ReentrancyActions;
 use crate::analyze::Literal;
 use crate::diag::*;
 use crate::object::builder::{Item, Width};
@@ -228,10 +228,10 @@ mod tests {
     use super::*;
 
     use crate::analyze::macros::mock::MockMacroId;
+    use crate::analyze::reentrancy::ReentrancyEvent;
     use crate::analyze::resolve::{MockNameTable, NameTableEvent, ResolvedName};
     use crate::analyze::semantics::instr_line::builtin_instr;
     use crate::analyze::semantics::tests::*;
-    use crate::analyze::session::SessionEvent;
     use crate::analyze::syntax::actions::*;
     use crate::codebase::CodebaseError;
     use crate::expr::{Atom, ParamId};
@@ -250,7 +250,7 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [SessionEvent::AnalyzeFile(filename.to_string()).into()]
+            [ReentrancyEvent::AnalyzeFile(filename.to_string()).into()]
         )
     }
 
@@ -379,7 +379,7 @@ mod tests {
         assert_eq!(
             log,
             [
-                SessionEvent::AnalyzeFile(name.into()).into(),
+                ReentrancyEvent::AnalyzeFile(name.into()).into(),
                 DiagnosticsEvent::EmitDiag(Message::InvalidUtf8.at(()).into()).into()
             ]
         )
@@ -408,7 +408,7 @@ mod tests {
         assert_eq!(
             log,
             [
-                SessionEvent::AnalyzeFile(name.into()).into(),
+                ReentrancyEvent::AnalyzeFile(name.into()).into(),
                 DiagnosticsEvent::EmitDiag(
                     Message::IoError {
                         string: message.to_string()
@@ -498,7 +498,7 @@ mod tests {
     }
 
     type TestExprContext<S> = builtin_instr::ArgSemantics<
-        MockSession<S>,
+        MockSourceComponents<S>,
         Box<
             MockNameTable<
                 BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
@@ -536,7 +536,7 @@ mod tests {
     }
 
     type TestBuiltinInstrSemantics<S> = builtin_instr::BuiltinInstrSemantics<
-        MockSession<S>,
+        MockSourceComponents<S>,
         Box<
             MockNameTable<
                 BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,

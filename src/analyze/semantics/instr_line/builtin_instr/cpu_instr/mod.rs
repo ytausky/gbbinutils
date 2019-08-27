@@ -767,8 +767,8 @@ mod tests {
     where
         I: IntoIterator<Item = Input>,
     {
+        use crate::analyze::reentrancy::MockSourceComponents;
         use crate::analyze::semantics::instr_line::builtin_instr::operand::analyze_operand;
-        use crate::analyze::session::MockSession;
 
         let mut result = None;
         let log = crate::log::with_log(|log| {
@@ -785,7 +785,7 @@ mod tests {
                     .0
                 })
                 .collect();
-            let mut session = MockSession::with_log(log);
+            let mut session = MockSourceComponents::with_log(log);
             result = Some(analyze_instruction(
                 (mnemonic, TokenId::Mnemonic.into()),
                 operands,

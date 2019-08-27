@@ -1,7 +1,7 @@
 use super::{InstrLineSemantics, InstrLineState, Session};
 
+use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::Params;
-use crate::analyze::session::ReentrancyActions;
 use crate::analyze::syntax::actions::LabelActions;
 
 pub(super) type LabelSemantics<R, N, B> = Session<R, N, B, LabelState<R>>;
