@@ -1,7 +1,7 @@
 use super::{Keyword, Label, Session, TokenStreamSemantics, TokenStreamState};
 
 use crate::analyze::reentrancy::ReentrancyActions;
-use crate::analyze::resolve::{NameTable, ResolvedName, StartScope};
+use crate::analyze::semantics::resolve::{NameTable, ResolvedName, StartScope};
 use crate::analyze::syntax::actions::{LineFinalizer, TokenLineActions, TokenLineRule};
 use crate::analyze::syntax::{Sigil, Token};
 use crate::analyze::{Literal, SemanticToken, TokenSeq};
@@ -21,7 +21,7 @@ pub(in crate::analyze) struct MacroDefState<S: ReentrancyActions> {
 }
 
 impl<S: ReentrancyActions> MacroDefState<S> {
-    pub(super) fn new(label: Option<Label<S::Ident, S::Span>>) -> Self {
+    pub(in crate::analyze::semantics) fn new(label: Option<Label<S::Ident, S::Span>>) -> Self {
         Self {
             label,
             tokens: (Vec::new(), Vec::new()),

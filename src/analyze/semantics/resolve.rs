@@ -1,6 +1,5 @@
-use super::macros::MacroSource;
-use super::syntax::{IdentFactory, IdentSource};
-
+use crate::analyze::macros::MacroSource;
+use crate::analyze::syntax::{IdentFactory, IdentSource};
 use crate::object::builder::SymbolSource;
 
 use std::collections::HashMap;
@@ -11,7 +10,7 @@ pub use self::mock::*;
 #[cfg(test)]
 use crate::expr::{Atom, ExprOp};
 
-pub(super) trait NameTable<I>: MacroSource + SymbolSource {
+pub(in crate::analyze) trait NameTable<I>: MacroSource + SymbolSource {
     type Keyword: Clone;
 
     fn resolve_name(

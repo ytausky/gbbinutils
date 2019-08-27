@@ -1,6 +1,6 @@
+use super::resolve::{NameTable, ResolvedName};
 use super::{Params, PushOp};
 
-use crate::analyze::resolve::{NameTable, ResolvedName};
 use crate::diag::{Diagnostics, Message};
 use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
 use crate::object::builder::{AllocSymbol, Finish, Name, SymbolSource};
@@ -170,9 +170,9 @@ mod tests {
     use super::*;
 
     use crate::analyze::macros::mock::MockMacroId;
-    use crate::analyze::resolve::NameTableEvent;
+    use crate::analyze::semantics::actions::Keyword;
     use crate::analyze::semantics::mock::MockExprBuilder;
-    use crate::analyze::semantics::Keyword;
+    use crate::analyze::semantics::resolve::NameTableEvent;
     use crate::diag::{DiagnosticsEvent, MockSpan};
     use crate::expr::{Atom, ParamId};
     use crate::log::Log;

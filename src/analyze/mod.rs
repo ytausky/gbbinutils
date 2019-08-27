@@ -1,6 +1,6 @@
 use self::macros::VecMacroTable;
 use self::reentrancy::SourceComponents;
-use self::resolve::{BasicNameTable, BiLevelNameTable, DefaultIdentFactory};
+use self::semantics::resolve::*;
 use self::semantics::Session;
 use self::strings::FakeStringInterner;
 use self::syntax::parser::DefaultParserFactory;
@@ -19,7 +19,6 @@ pub use self::mock::*;
 
 mod macros;
 mod reentrancy;
-mod resolve;
 mod semantics;
 mod strings;
 mod syntax;
@@ -35,8 +34,6 @@ where
         codebase: &C,
         diagnostics: &mut D,
     ) -> Result<(), CodebaseError> {
-        use self::resolve::{NameTable, ResolvedName};
-
         let tokenizer = Tokenizer(codebase);
         let mut file_parser = CodebaseAnalyzer::new(&tokenizer);
         let mut parser_factory = DefaultParserFactory;

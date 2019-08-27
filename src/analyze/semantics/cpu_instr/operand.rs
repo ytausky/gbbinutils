@@ -1,29 +1,7 @@
-use super::{Arg, ArgAtom, ArgUnaryOp, ArgVariant, EvalArg};
-
+use crate::analyze::semantics::arg::*;
 use crate::diag::*;
 use crate::object::builder::{Condition, Finish, PtrReg, Reg16, RegPair, SimpleOperand};
 use crate::span::{Source, SpanSource};
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum OperandSymbol {
-    A,
-    Af,
-    B,
-    Bc,
-    C,
-    D,
-    De,
-    E,
-    H,
-    Hl,
-    Hld,
-    Hli,
-    L,
-    Nc,
-    Nz,
-    Sp,
-    Z,
-}
 
 #[derive(Debug, PartialEq)]
 pub enum Operand<E, S> {
@@ -67,7 +45,7 @@ type OperandResult<C, S> = (
     <C as Finish>::Parent,
 );
 
-pub(super) fn analyze_operand<C, I, R, S>(
+pub(in crate::analyze::semantics) fn analyze_operand<C, I, R, S>(
     expr: Arg<I, R, S>,
     context: Context,
     mut value_context: C,

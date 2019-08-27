@@ -1,13 +1,16 @@
+use super::resolve::{NameTable, StartScope};
 use super::*;
 
 use crate::analyze::reentrancy::ReentrancyActions;
-use crate::analyze::resolve::NameTable;
-use crate::analyze::semantics::instr_line::Label;
+use crate::analyze::semantics::actions::instr_line::InstrLineSemantics;
+use crate::analyze::semantics::actions::token_line::{MacroDefState, TokenContext};
+use crate::analyze::semantics::actions::{Keyword, Label, TokenStreamSemantics};
+use crate::analyze::semantics::arg::BuiltinInstrArgs;
+use crate::analyze::semantics::arg::*;
 use crate::analyze::semantics::params::RelocLookup;
-use crate::analyze::semantics::token_line::{MacroDefState, TokenContext};
 use crate::analyze::Literal;
 use crate::diag::*;
-use crate::object::builder::{Item, Width};
+use crate::object::builder::{Backend, Item, Width};
 
 #[derive(Clone, Debug, PartialEq)]
 pub(in crate::analyze) enum Directive {
@@ -229,9 +232,9 @@ mod tests {
 
     use crate::analyze::macros::mock::MockMacroId;
     use crate::analyze::reentrancy::ReentrancyEvent;
-    use crate::analyze::resolve::{MockNameTable, NameTableEvent, ResolvedName};
-    use crate::analyze::semantics::instr_line::builtin_instr;
-    use crate::analyze::semantics::tests::*;
+    use crate::analyze::semantics::actions::instr_line::builtin_instr;
+    use crate::analyze::semantics::actions::tests::*;
+    use crate::analyze::semantics::resolve::{MockNameTable, NameTableEvent, ResolvedName};
     use crate::analyze::syntax::actions::*;
     use crate::codebase::CodebaseError;
     use crate::expr::{Atom, ParamId};
@@ -497,7 +500,7 @@ mod tests {
         unary_directive("DS", f)
     }
 
-    type TestExprContext<S> = builtin_instr::ArgSemantics<
+    type TestExprContext<S> = builtin_instr::arg::ArgSemantics<
         MockSourceComponents<S>,
         Box<
             MockNameTable<

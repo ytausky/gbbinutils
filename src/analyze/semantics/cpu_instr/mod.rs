@@ -1,12 +1,12 @@
 use self::mnemonic::{Mnemonic, StackOperation};
-
-use super::operand::{AtomKind, Context, Operand, OperandCounter};
+use self::operand::{AtomKind, Context, Operand, OperandCounter};
 
 use crate::diag::span::Source;
 use crate::diag::*;
 use crate::object::builder::*;
 
 pub(in crate::analyze::semantics) mod mnemonic;
+pub(in crate::analyze::semantics) mod operand;
 
 mod branch;
 mod ld;
@@ -325,7 +325,7 @@ impl<V: Source> From<Nullary> for CpuInstr<V> {
 
 #[cfg(test)]
 mod tests {
-    pub use crate::analyze::semantics::instr_line::builtin_instr::OperandSymbol::*;
+    pub use crate::analyze::semantics::arg::OperandSymbol::*;
     pub(crate) use crate::diag::Message;
     pub(crate) use crate::object::builder::mock::MockSymbolId;
     pub use crate::span::{MergeSpans, SpanSource};
@@ -335,7 +335,7 @@ mod tests {
     use super::mnemonic::*;
     use super::*;
 
-    use crate::analyze::semantics::instr_line::builtin_instr::*;
+    use crate::analyze::semantics::arg::*;
     use crate::analyze::semantics::mock::MockExprBuilder;
     use crate::analyze::Literal;
     use crate::expr::{Atom, LocationCounter};
@@ -767,8 +767,8 @@ mod tests {
     where
         I: IntoIterator<Item = Input>,
     {
+        use super::operand::analyze_operand;
         use crate::analyze::reentrancy::MockSourceComponents;
-        use crate::analyze::semantics::instr_line::builtin_instr::operand::analyze_operand;
 
         let mut result = None;
         let log = crate::log::with_log(|log| {

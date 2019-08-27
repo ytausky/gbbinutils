@@ -1,25 +1,22 @@
-pub(super) use self::directive::{BindingDirective, Directive, SimpleDirective};
-pub(in crate::analyze) use self::operand::OperandSymbol;
-
 use self::arg::*;
 
 use super::*;
 
 use crate::analyze::reentrancy::ReentrancyActions;
-use crate::analyze::resolve::NameTable;
-use crate::analyze::semantics::{Params, RelocLookup, ResolveNames, TokenStreamState, WithParams};
+use crate::analyze::semantics::actions::TokenStreamState;
+use crate::analyze::semantics::arg::*;
+use crate::analyze::semantics::cpu_instr::analyze_instruction;
+use crate::analyze::semantics::cpu_instr::operand::analyze_operand;
+use crate::analyze::semantics::directive::analyze_directive;
+use crate::analyze::semantics::directive::{BindingDirective, Directive, SimpleDirective};
+use crate::analyze::semantics::resolve::NameTable;
+use crate::analyze::semantics::{Params, RelocLookup, ResolveNames, WithParams};
 use crate::analyze::syntax::actions::{BuiltinInstrActions, InstrFinalizer};
-use crate::diag::{Diagnostics, EmitDiag, Message};
-use crate::expr::{BinOp, FnCall, LocationCounter};
-use crate::object::builder::{Finish, Item, Name, PushOp};
+use crate::object::builder::{Finish, Item};
 
 use std::ops::DerefMut;
 
-pub(in crate::analyze::semantics) mod cpu_instr;
-pub(in crate::analyze::semantics) mod directive;
-pub(in crate::analyze::semantics) mod operand;
-
-mod arg;
+pub(in crate::analyze::semantics) mod arg;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(in crate::analyze) enum BuiltinInstr {
@@ -39,7 +36,8 @@ impl From<Mnemonic> for BuiltinInstr {
     }
 }
 
-pub(super) type BuiltinInstrSemantics<R, N, B> = Session<R, N, B, BuiltinInstrState<R>>;
+pub(in crate::analyze::semantics) type BuiltinInstrSemantics<R, N, B> =
+    Session<R, N, B, BuiltinInstrState<R>>;
 
 pub(in crate::analyze) struct BuiltinInstrState<S: ReentrancyActions> {
     parent: InstrLineState<S>,
@@ -150,14 +148,11 @@ impl<R: ReentrancyActions> PreparedBuiltinInstr<R> {
         B: Backend<R::Span>,
     {
         match self {
-            PreparedBuiltinInstr::Binding((binding, span), label) => directive::analyze_directive(
-                (Directive::Binding(binding), span),
-                label,
-                args,
-                session,
-            ),
+            PreparedBuiltinInstr::Binding((binding, span), label) => {
+                analyze_directive((Directive::Binding(binding), span), label, args, session)
+            }
             PreparedBuiltinInstr::Directive((simple, span)) => {
-                directive::analyze_directive((Directive::Simple(simple), span), None, args, session)
+                analyze_directive((Directive::Simple(simple), span), None, args, session)
             }
             PreparedBuiltinInstr::Mnemonic(mnemonic) => {
                 analyze_mnemonic(mnemonic, args, session).map_state(Into::into)
@@ -185,11 +180,11 @@ where
     let mut operands = Vec::new();
     for arg in args {
         let builder = session.map_builder(Backend::build_const).resolve_names();
-        let (operand, returned_session) = operand::analyze_operand(arg, name.0.context(), builder);
+        let (operand, returned_session) = analyze_operand(arg, name.0.context(), builder);
         session = returned_session;
         operands.push(operand)
     }
-    if let Ok(instruction) = cpu_instr::analyze_instruction(name, operands, &mut session) {
+    if let Ok(instruction) = analyze_instruction(name, operands, &mut session) {
         session.builder.emit_item(Item::CpuInstr(instruction))
     }
     session
@@ -202,7 +197,7 @@ where
     N::Target: NameTable<R::Ident, MacroId = R::MacroId, SymbolId = B::SymbolId>,
     B: Backend<R::Span>,
 {
-    fn analyze_expr(
+    pub(in crate::analyze::semantics) fn analyze_expr(
         self,
         expr: Arg<R::Ident, R::StringRef, R::Span>,
     ) -> (Result<B::Value, ()>, Self) {
@@ -212,7 +207,7 @@ where
         (result.map(|()| value), session)
     }
 
-    fn define_symbol_with_params(
+    pub(in crate::analyze::semantics) fn define_symbol_with_params(
         mut self,
         (name, span): (R::Ident, R::Span),
         params: &Params<R::Ident, R::Span>,
@@ -229,69 +224,9 @@ where
     }
 }
 
-trait EvalArg<I, R, S: Clone> {
-    fn eval_arg(&mut self, arg: Arg<I, R, S>) -> Result<(), ()>;
-}
-
-impl<'a, T, I, R, S> EvalArg<I, R, S> for T
-where
-    T: PushOp<LocationCounter, S>
-        + PushOp<i32, S>
-        + PushOp<Name<I>, S>
-        + PushOp<BinOp, S>
-        + PushOp<FnCall, S>
-        + Diagnostics<S>,
-    R: Eq,
-    S: Clone,
-{
-    fn eval_arg(&mut self, arg: Arg<I, R, S>) -> Result<(), ()> {
-        match arg.variant {
-            ArgVariant::Atom(ArgAtom::Error) => Err(())?,
-            ArgVariant::Atom(ArgAtom::Ident(ident)) => {
-                self.push_op(Name(ident), arg.span);
-                Ok(())
-            }
-            ArgVariant::Atom(ArgAtom::Literal(Literal::Number(n))) => {
-                self.push_op(n, arg.span);
-                Ok(())
-            }
-            ArgVariant::Atom(ArgAtom::OperandSymbol(_)) => Err(Message::KeywordInExpr {
-                keyword: self.strip_span(&arg.span),
-            }
-            .at(arg.span)),
-            ArgVariant::Atom(ArgAtom::Literal(Literal::String(_))) => {
-                Err(Message::StringInInstruction.at(arg.span))
-            }
-            ArgVariant::Atom(ArgAtom::LocationCounter) => {
-                self.push_op(LocationCounter, arg.span);
-                Ok(())
-            }
-            ArgVariant::Unary(ArgUnaryOp::Parentheses, expr) => Ok(self.eval_arg(*expr)?),
-            ArgVariant::Binary(binary, left, right) => {
-                self.eval_arg(*left)?;
-                self.eval_arg(*right)?;
-                self.push_op(binary, arg.span);
-                Ok(())
-            }
-            ArgVariant::FnCall((name, span), args) => {
-                let n = args.len();
-                for arg in args {
-                    self.eval_arg(arg)?;
-                }
-                self.push_op(Name(name.ok_or(())?), span.clone());
-                self.push_op(FnCall(n), span);
-                Ok(())
-            }
-        }
-        .map_err(|diagnostic| {
-            self.emit_diag(diagnostic);
-        })
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use crate::analyze::semantics::tests::collect_semantic_actions;
+    use crate::analyze::semantics::actions::tests::collect_semantic_actions;
     use crate::analyze::syntax::actions::*;
     use crate::analyze::syntax::actions::{ExprAtom::*, Operator::*};
     use crate::analyze::Literal::*;

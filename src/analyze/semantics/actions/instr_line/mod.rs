@@ -1,24 +1,24 @@
-pub(super) use self::builtin_instr::{BuiltinInstr, OperandSymbol};
+pub(super) use self::builtin_instr::BuiltinInstr;
 
-use self::builtin_instr::cpu_instr::mnemonic::Mnemonic;
 use self::builtin_instr::{BuiltinInstrSemantics, BuiltinInstrState};
 use self::label::{LabelSemantics, LabelState};
 use self::macro_instr::{MacroInstrSemantics, MacroInstrState};
-use self::syntax::actions::{InstrActions, InstrLineActions, InstrRule};
 
-use super::diag::span::StripSpan;
-use super::diag::{EmitDiag, Message};
-use super::params::RelocLookup;
-use super::syntax;
-use super::{Keyword, Label, Literal, ReentrancyActions, Session, TokenStreamSemantics};
+use super::{Keyword, Label, ReentrancyActions, Session, TokenStreamSemantics};
 
-use crate::analyze::resolve::{NameTable, ResolvedName, StartScope};
+use crate::analyze::semantics::cpu_instr::mnemonic::Mnemonic;
+use crate::analyze::semantics::params::RelocLookup;
+use crate::analyze::semantics::resolve::{NameTable, ResolvedName, StartScope};
+use crate::analyze::syntax::actions::{InstrActions, InstrLineActions, InstrRule};
+use crate::analyze::Literal;
+use crate::diag::span::StripSpan;
+use crate::diag::{EmitDiag, Message};
 use crate::expr::LocationCounter;
 use crate::object::builder::{Backend, Finish, PushOp};
 
 use std::ops::DerefMut;
 
-pub(super) mod builtin_instr;
+pub(in crate::analyze::semantics) mod builtin_instr;
 mod label;
 mod macro_instr;
 
