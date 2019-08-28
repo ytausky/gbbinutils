@@ -11,7 +11,7 @@ pub(in crate::analyze::semantics) mod operand;
 mod branch;
 mod ld;
 
-pub(super) fn analyze_instruction<I, V, D, S>(
+pub(in crate::analyze::semantics) fn analyze_instruction<I, V, D, S>(
     mnemonic: (Mnemonic, S),
     operands: I,
     diagnostics: &mut D,

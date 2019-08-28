@@ -5,10 +5,10 @@ use super::*;
 use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::actions::TokenStreamState;
 use crate::analyze::semantics::arg::*;
-use crate::analyze::semantics::cpu_instr::analyze_instruction;
-use crate::analyze::semantics::cpu_instr::operand::analyze_operand;
-use crate::analyze::semantics::directive::analyze_directive;
-use crate::analyze::semantics::directive::{BindingDirective, Directive, SimpleDirective};
+use crate::analyze::semantics::builtin_instr::cpu_instr::analyze_instruction;
+use crate::analyze::semantics::builtin_instr::cpu_instr::operand::analyze_operand;
+use crate::analyze::semantics::builtin_instr::directive::analyze_directive;
+use crate::analyze::semantics::builtin_instr::directive::*;
 use crate::analyze::semantics::resolve::NameTable;
 use crate::analyze::semantics::{Params, RelocLookup, ResolveNames, WithParams};
 use crate::analyze::syntax::actions::{BuiltinInstrActions, InstrFinalizer};
@@ -18,42 +18,8 @@ use std::ops::DerefMut;
 
 pub(in crate::analyze::semantics) mod arg;
 
-#[derive(Clone, Debug, PartialEq)]
-pub(in crate::analyze) enum BuiltinInstr {
-    Directive(Directive),
-    Mnemonic(Mnemonic),
-}
-
-impl From<Directive> for BuiltinInstr {
-    fn from(directive: Directive) -> Self {
-        BuiltinInstr::Directive(directive)
-    }
-}
-
-impl From<Mnemonic> for BuiltinInstr {
-    fn from(mnemonic: Mnemonic) -> Self {
-        BuiltinInstr::Mnemonic(mnemonic)
-    }
-}
-
 pub(in crate::analyze::semantics) type BuiltinInstrSemantics<R, N, B> =
     Session<R, N, B, BuiltinInstrState<R>>;
-
-pub(in crate::analyze) struct BuiltinInstrState<S: ReentrancyActions> {
-    parent: InstrLineState<S>,
-    command: (BuiltinInstr, S::Span),
-    args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
-}
-
-impl<S: ReentrancyActions> BuiltinInstrState<S> {
-    pub(super) fn new(parent: InstrLineState<S>, command: (BuiltinInstr, S::Span)) -> Self {
-        Self {
-            parent,
-            command,
-            args: Vec::new(),
-        }
-    }
-}
 
 impl<R: ReentrancyActions> From<BuiltinInstrState<R>> for TokenStreamState<R> {
     fn from(state: BuiltinInstrState<R>) -> Self {

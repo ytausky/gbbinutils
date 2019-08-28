@@ -1,8 +1,12 @@
+use self::arg::Arg;
+use self::builtin_instr::BuiltinInstr;
 use self::params::*;
 use self::resolve::{NameTable, ResolvedName};
 
 use super::macros::MacroSource;
-use super::reentrancy::Params;
+use super::reentrancy::{Params, ReentrancyActions};
+use super::syntax::actions::LineRule;
+use super::TokenSeq;
 
 use crate::diag::Diagnostics;
 use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
@@ -21,11 +25,9 @@ macro_rules! set_state {
     };
 }
 
-pub(in crate::analyze::semantics) mod cpu_instr;
-pub(in crate::analyze::semantics) mod directive;
-
 mod actions;
 mod arg;
+mod builtin_instr;
 mod params;
 pub(super) mod resolve;
 
@@ -164,6 +166,64 @@ impl_push_op_for_session! {i32}
 impl_push_op_for_session! {BinOp}
 impl_push_op_for_session! {ParamId}
 impl_push_op_for_session! {FnCall}
+
+pub(in crate::analyze) struct TokenStreamState<S: ReentrancyActions>(
+    pub(super) LineRule<InstrLineState<S>, TokenContext<S>>,
+);
+
+impl<S: ReentrancyActions> TokenStreamState<S> {
+    fn new() -> Self {
+        Self(LineRule::InstrLine(InstrLineState::new()))
+    }
+}
+
+pub(in crate::analyze) struct InstrLineState<S: ReentrancyActions> {
+    label: Option<Label<S::Ident, S::Span>>,
+}
+
+impl<S: ReentrancyActions> InstrLineState<S> {
+    fn new() -> Self {
+        Self { label: None }
+    }
+}
+
+type Label<I, S> = ((I, S), Params<I, S>);
+
+pub(in crate::analyze) enum TokenContext<S: ReentrancyActions> {
+    MacroDef(MacroDefState<S>),
+}
+
+pub(in crate::analyze) struct MacroDefState<S: ReentrancyActions> {
+    label: Option<Label<S::Ident, S::Span>>,
+    tokens: TokenSeq<S::Ident, S::StringRef, S::Span>,
+}
+
+impl<S: ReentrancyActions> MacroDefState<S> {
+    fn new(label: Option<Label<S::Ident, S::Span>>) -> Self {
+        Self {
+            label,
+            tokens: (Vec::new(), Vec::new()),
+        }
+    }
+}
+
+pub(in crate::analyze) struct BuiltinInstrState<S: ReentrancyActions> {
+    parent: InstrLineState<S>,
+    command: (BuiltinInstr, S::Span),
+    args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
+}
+
+impl<S: ReentrancyActions> BuiltinInstrState<S> {
+    fn new(parent: InstrLineState<S>, command: (BuiltinInstr, S::Span)) -> Self {
+        Self {
+            parent,
+            command,
+            args: Vec::new(),
+        }
+    }
+}
+
+type BuiltinInstrArgs<I, R, S> = Vec<Arg<I, R, S>>;
 
 #[cfg(test)]
 mod mock {

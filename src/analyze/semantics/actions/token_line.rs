@@ -1,33 +1,16 @@
-use super::{Keyword, Label, Session, TokenStreamSemantics, TokenStreamState};
+use super::{Keyword, Session, TokenStreamSemantics};
 
 use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::resolve::{NameTable, ResolvedName, StartScope};
+use crate::analyze::semantics::*;
 use crate::analyze::syntax::actions::{LineFinalizer, TokenLineActions, TokenLineRule};
 use crate::analyze::syntax::{Sigil, Token};
-use crate::analyze::{Literal, SemanticToken, TokenSeq};
+use crate::analyze::{Literal, SemanticToken};
 use crate::object::builder::SymbolSource;
 
 use std::ops::DerefMut;
 
 pub(in crate::analyze) type TokenLineSemantics<R, N, B> = Session<R, N, B, TokenContext<R>>;
-
-pub(in crate::analyze) enum TokenContext<S: ReentrancyActions> {
-    MacroDef(MacroDefState<S>),
-}
-
-pub(in crate::analyze) struct MacroDefState<S: ReentrancyActions> {
-    label: Option<Label<S::Ident, S::Span>>,
-    tokens: TokenSeq<S::Ident, S::StringRef, S::Span>,
-}
-
-impl<S: ReentrancyActions> MacroDefState<S> {
-    pub(in crate::analyze::semantics) fn new(label: Option<Label<S::Ident, S::Span>>) -> Self {
-        Self {
-            label,
-            tokens: (Vec::new(), Vec::new()),
-        }
-    }
-}
 
 impl<R, N, B> TokenLineActions<R::Ident, Literal<R::StringRef>, R::Span>
     for TokenLineSemantics<R, N, B>

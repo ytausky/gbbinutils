@@ -1,9 +1,11 @@
-use super::instr_line::BuiltinInstr::*;
 use super::{Keyword, Keyword::*};
 
 use crate::analyze::semantics::arg::OperandSymbol::*;
-use crate::analyze::semantics::cpu_instr::mnemonic::*;
-use crate::analyze::semantics::directive::{BindingDirective::*, Directive::*, SimpleDirective::*};
+use crate::analyze::semantics::builtin_instr::cpu_instr::mnemonic::*;
+use crate::analyze::semantics::builtin_instr::directive::{
+    BindingDirective::*, Directive::*, SimpleDirective::*,
+};
+use crate::analyze::semantics::builtin_instr::BuiltinInstr::*;
 
 pub(super) const KEYWORDS: &[(&str, Keyword)] = &[
     ("A", Operand(A)),

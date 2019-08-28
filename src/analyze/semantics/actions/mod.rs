@@ -1,10 +1,12 @@
-use self::instr_line::{BuiltinInstr, InstrLineSemantics, InstrLineState};
-use self::token_line::{TokenContext, TokenContextFinalizationSemantics, TokenLineSemantics};
+use self::instr_line::InstrLineSemantics;
+use self::token_line::{TokenContextFinalizationSemantics, TokenLineSemantics};
 
 use super::arg::OperandSymbol;
+use super::builtin_instr::BuiltinInstr;
 use super::Session;
+use super::*;
 
-use crate::analyze::reentrancy::{IntoSemanticActions, Params, ReentrancyActions};
+use crate::analyze::reentrancy::{IntoSemanticActions, ReentrancyActions};
 use crate::analyze::semantics::resolve::{NameTable, ResolvedName, StartScope};
 use crate::analyze::syntax::actions::*;
 use crate::analyze::Literal;
@@ -25,16 +27,6 @@ pub(in crate::analyze) enum Keyword {
 }
 
 pub(in crate::analyze) type TokenStreamSemantics<R, N, B> = Session<R, N, B, TokenStreamState<R>>;
-
-pub(in crate::analyze) struct TokenStreamState<S: ReentrancyActions>(
-    LineRule<InstrLineState<S>, TokenContext<S>>,
-);
-
-impl<S: ReentrancyActions> TokenStreamState<S> {
-    pub fn new() -> Self {
-        Self(LineRule::InstrLine(InstrLineState::new()))
-    }
-}
 
 impl<R, N, B> Session<R, N, B, TokenStreamState<R>>
 where
@@ -157,8 +149,6 @@ where
         }
     }
 }
-
-pub(super) type Label<I, S> = ((I, S), Params<I, S>);
 
 impl<R: ReentrancyActions, N, B> InstrFinalizer<R::Span> for InstrLineSemantics<R, N, B> {
     type Next = TokenStreamSemantics<R, N, B>;

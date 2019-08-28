@@ -4,8 +4,6 @@ use crate::diag::{Diagnostics, Message};
 use crate::expr::{BinOp, FnCall, LocationCounter};
 use crate::object::builder::{Name, PushOp};
 
-pub(super) type BuiltinInstrArgs<I, R, S> = Vec<Arg<I, R, S>>;
-
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Arg<I, R, S> {
     pub variant: ArgVariant<I, R, S>,

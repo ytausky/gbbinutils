@@ -1,16 +1,16 @@
-use super::resolve::{NameTable, StartScope};
-use super::*;
-
 use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::actions::instr_line::InstrLineSemantics;
-use crate::analyze::semantics::actions::token_line::{MacroDefState, TokenContext};
-use crate::analyze::semantics::actions::{Keyword, Label, TokenStreamSemantics};
-use crate::analyze::semantics::arg::BuiltinInstrArgs;
+use crate::analyze::semantics::actions::{Keyword, TokenStreamSemantics};
 use crate::analyze::semantics::arg::*;
 use crate::analyze::semantics::params::RelocLookup;
+use crate::analyze::semantics::resolve::{NameTable, StartScope};
+use crate::analyze::semantics::Session;
+use crate::analyze::semantics::*;
 use crate::analyze::Literal;
 use crate::diag::*;
 use crate::object::builder::{Backend, Item, Width};
+
+use std::ops::DerefMut;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(in crate::analyze) enum Directive {
@@ -34,7 +34,7 @@ pub(in crate::analyze) enum SimpleDirective {
     Org,
 }
 
-pub(super) fn analyze_directive<R, N, B>(
+pub(in crate::analyze::semantics) fn analyze_directive<R, N, B>(
     directive: (Directive, R::Span),
     label: Option<Label<R::Ident, R::Span>>,
     args: BuiltinInstrArgs<R::Ident, R::StringRef, R::Span>,

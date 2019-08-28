@@ -1,14 +1,14 @@
-pub(super) use self::builtin_instr::BuiltinInstr;
-
-use self::builtin_instr::{BuiltinInstrSemantics, BuiltinInstrState};
+use self::builtin_instr::BuiltinInstrSemantics;
 use self::label::{LabelSemantics, LabelState};
 use self::macro_instr::{MacroInstrSemantics, MacroInstrState};
 
 use super::{Keyword, Label, ReentrancyActions, Session, TokenStreamSemantics};
 
-use crate::analyze::semantics::cpu_instr::mnemonic::Mnemonic;
+use crate::analyze::semantics::builtin_instr::cpu_instr::mnemonic::Mnemonic;
+use crate::analyze::semantics::builtin_instr::BuiltinInstr;
 use crate::analyze::semantics::params::RelocLookup;
 use crate::analyze::semantics::resolve::{NameTable, ResolvedName, StartScope};
+use crate::analyze::semantics::*;
 use crate::analyze::syntax::actions::{InstrActions, InstrLineActions, InstrRule};
 use crate::analyze::Literal;
 use crate::diag::span::StripSpan;
@@ -23,10 +23,6 @@ mod label;
 mod macro_instr;
 
 pub(in crate::analyze) type InstrLineSemantics<R, N, B> = Session<R, N, B, InstrLineState<R>>;
-
-pub(in crate::analyze) struct InstrLineState<S: ReentrancyActions> {
-    pub label: Option<Label<S::Ident, S::Span>>,
-}
 
 impl<R, N, B> InstrLineActions<R::Ident, Literal<R::StringRef>, R::Span>
     for InstrLineSemantics<R, N, B>
@@ -97,12 +93,6 @@ where
                 InstrRule::Error(self)
             }
         }
-    }
-}
-
-impl<S: ReentrancyActions> InstrLineState<S> {
-    pub fn new() -> Self {
-        Self { label: None }
     }
 }
 
