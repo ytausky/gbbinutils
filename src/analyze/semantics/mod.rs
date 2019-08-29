@@ -1,5 +1,5 @@
 use self::arg::{Arg, OperandSymbol};
-use self::builtin_instr::BuiltinInstr;
+use self::builtin_instr::BuiltinInstrMnemonic;
 use self::params::*;
 use self::resolve::{NameTable, ResolvedName};
 
@@ -35,7 +35,7 @@ pub(super) mod resolve;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(in crate::analyze) enum Keyword {
-    BuiltinInstr(BuiltinInstr),
+    BuiltinInstr(BuiltinInstrMnemonic),
     Operand(OperandSymbol),
 }
 
@@ -225,15 +225,15 @@ type BuiltinInstrSemantics<R, N, B> = Session<R, N, B, BuiltinInstrState<R>>;
 
 pub(in crate::analyze) struct BuiltinInstrState<S: ReentrancyActions> {
     parent: InstrLineState<S>,
-    command: (BuiltinInstr, S::Span),
+    mnemonic: (BuiltinInstrMnemonic, S::Span),
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
 }
 
 impl<S: ReentrancyActions> BuiltinInstrState<S> {
-    fn new(parent: InstrLineState<S>, command: (BuiltinInstr, S::Span)) -> Self {
+    fn new(parent: InstrLineState<S>, mnemonic: (BuiltinInstrMnemonic, S::Span)) -> Self {
         Self {
             parent,
-            command,
+            mnemonic,
             args: Vec::new(),
         }
     }

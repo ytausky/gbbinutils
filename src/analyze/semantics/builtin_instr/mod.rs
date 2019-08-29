@@ -5,19 +5,19 @@ pub(super) mod cpu_instr;
 pub(super) mod directive;
 
 #[derive(Clone, Debug, PartialEq)]
-pub(in crate::analyze) enum BuiltinInstr {
+pub(in crate::analyze) enum BuiltinInstrMnemonic {
     Directive(Directive),
-    Mnemonic(Mnemonic),
+    CpuInstr(Mnemonic),
 }
 
-impl From<Directive> for BuiltinInstr {
+impl From<Directive> for BuiltinInstrMnemonic {
     fn from(directive: Directive) -> Self {
-        BuiltinInstr::Directive(directive)
+        BuiltinInstrMnemonic::Directive(directive)
     }
 }
 
-impl From<Mnemonic> for BuiltinInstr {
+impl From<Mnemonic> for BuiltinInstrMnemonic {
     fn from(mnemonic: Mnemonic) -> Self {
-        BuiltinInstr::Mnemonic(mnemonic)
+        BuiltinInstrMnemonic::CpuInstr(mnemonic)
     }
 }

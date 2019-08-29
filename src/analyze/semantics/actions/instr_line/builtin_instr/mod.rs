@@ -7,6 +7,7 @@ use crate::analyze::semantics::builtin_instr::cpu_instr::analyze_instruction;
 use crate::analyze::semantics::builtin_instr::cpu_instr::operand::analyze_operand;
 use crate::analyze::semantics::builtin_instr::directive::analyze_directive;
 use crate::analyze::semantics::builtin_instr::directive::*;
+use crate::analyze::semantics::builtin_instr::BuiltinInstrMnemonic;
 use crate::analyze::semantics::resolve::NameTable;
 use crate::analyze::semantics::{Params, RelocLookup, ResolveNames, WithParams};
 use crate::analyze::syntax::actions::{BuiltinInstrActions, InstrFinalizer};
@@ -61,34 +62,34 @@ where
     fn did_parse_instr(self) -> Self::Next {
         let args = self.state.args;
         let mut semantics = set_state!(self, self.state.parent);
-        let prepared = PreparedBuiltinInstr::new(self.state.command, &mut semantics);
+        let instr = BuiltinInstr::new(self.state.mnemonic, &mut semantics);
         semantics = semantics.flush_label();
-        prepared.exec(args, semantics)
+        instr.exec(args, semantics)
     }
 }
 
-enum PreparedBuiltinInstr<S: ReentrancyActions> {
+enum BuiltinInstr<S: ReentrancyActions> {
     Binding(
         (BindingDirective, S::Span),
         Option<Label<S::Ident, S::Span>>,
     ),
     Directive((SimpleDirective, S::Span)),
-    Mnemonic((Mnemonic, S::Span)),
+    CpuInstr((Mnemonic, S::Span)),
 }
 
-impl<R: ReentrancyActions> PreparedBuiltinInstr<R> {
+impl<R: ReentrancyActions> BuiltinInstr<R> {
     fn new<N, B>(
-        (command, span): (BuiltinInstr, R::Span),
+        (mnemonic, span): (BuiltinInstrMnemonic, R::Span),
         stmt: &mut InstrLineSemantics<R, N, B>,
     ) -> Self {
-        match command {
-            BuiltinInstr::Directive(Directive::Binding(binding)) => {
-                PreparedBuiltinInstr::Binding((binding, span), stmt.state.label.take())
+        match mnemonic {
+            BuiltinInstrMnemonic::Directive(Directive::Binding(binding)) => {
+                BuiltinInstr::Binding((binding, span), stmt.state.label.take())
             }
-            BuiltinInstr::Directive(Directive::Simple(simple)) => {
-                PreparedBuiltinInstr::Directive((simple, span))
+            BuiltinInstrMnemonic::Directive(Directive::Simple(simple)) => {
+                BuiltinInstr::Directive((simple, span))
             }
-            BuiltinInstr::Mnemonic(mnemonic) => PreparedBuiltinInstr::Mnemonic((mnemonic, span)),
+            BuiltinInstrMnemonic::CpuInstr(cpu_instr) => BuiltinInstr::CpuInstr((cpu_instr, span)),
         }
     }
 
@@ -109,13 +110,13 @@ impl<R: ReentrancyActions> PreparedBuiltinInstr<R> {
         B: Backend<R::Span>,
     {
         match self {
-            PreparedBuiltinInstr::Binding((binding, span), label) => {
+            BuiltinInstr::Binding((binding, span), label) => {
                 analyze_directive((Directive::Binding(binding), span), label, args, session)
             }
-            PreparedBuiltinInstr::Directive((simple, span)) => {
+            BuiltinInstr::Directive((simple, span)) => {
                 analyze_directive((Directive::Simple(simple), span), None, args, session)
             }
-            PreparedBuiltinInstr::Mnemonic(mnemonic) => {
+            BuiltinInstr::CpuInstr(mnemonic) => {
                 analyze_mnemonic(mnemonic, args, session).map_state(Into::into)
             }
         }
