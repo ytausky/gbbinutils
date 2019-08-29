@@ -1,9 +1,9 @@
 use self::label::{LabelSemantics, LabelState};
 use self::macro_instr::{MacroInstrSemantics, MacroInstrState};
 
-use super::{Keyword, Label, ReentrancyActions, Session, TokenStreamSemantics};
+use super::{Keyword, ReentrancyActions, Session, TokenStreamSemantics};
 
-use crate::analyze::semantics::builtin_instr::cpu_instr::mnemonic::Mnemonic;
+use crate::analyze::semantics::builtin_instr::directive::Directive;
 use crate::analyze::semantics::params::RelocLookup;
 use crate::analyze::semantics::resolve::{NameTable, ResolvedName, StartScope};
 use crate::analyze::semantics::*;
@@ -67,9 +67,16 @@ where
         span: R::Span,
     ) -> InstrRule<Self::BuiltinInstrActions, Self::MacroInstrActions, Self> {
         match self.names.resolve_name(&ident) {
-            Some(ResolvedName::Keyword(Keyword::BuiltinInstr(builtin))) => InstrRule::BuiltinInstr(
-                self.map_state(|line| BuiltinInstrState::new(line, (builtin.clone(), span))),
-            ),
+            Some(ResolvedName::Keyword(Keyword::BuiltinInstr(mnemonic))) => {
+                match mnemonic {
+                    BuiltinInstrMnemonic::Directive(Directive::Binding(_)) => (),
+                    _ => self = self.flush_label(),
+                }
+                let builtin_instr = BuiltinInstr::new((mnemonic.clone(), span), &mut self);
+                InstrRule::BuiltinInstr(
+                    self.map_state(|line| BuiltinInstrState::new(line, builtin_instr)),
+                )
+            }
             Some(ResolvedName::Keyword(Keyword::Operand(_))) => unimplemented!(),
             Some(ResolvedName::Macro(id)) => {
                 self = self.flush_label();

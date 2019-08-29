@@ -1,5 +1,5 @@
 use self::arg::{Arg, OperandSymbol};
-use self::builtin_instr::BuiltinInstrMnemonic;
+use self::builtin_instr::{BuiltinInstr, BuiltinInstrMnemonic};
 use self::params::*;
 use self::resolve::{NameTable, ResolvedName};
 
@@ -225,15 +225,15 @@ type BuiltinInstrSemantics<R, N, B> = Session<R, N, B, BuiltinInstrState<R>>;
 
 pub(in crate::analyze) struct BuiltinInstrState<S: ReentrancyActions> {
     parent: InstrLineState<S>,
-    mnemonic: (BuiltinInstrMnemonic, S::Span),
+    builtin_instr: BuiltinInstr<S>,
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
 }
 
 impl<S: ReentrancyActions> BuiltinInstrState<S> {
-    fn new(parent: InstrLineState<S>, mnemonic: (BuiltinInstrMnemonic, S::Span)) -> Self {
+    fn new(parent: InstrLineState<S>, builtin_instr: BuiltinInstr<S>) -> Self {
         Self {
             parent,
-            mnemonic,
+            builtin_instr,
             args: Vec::new(),
         }
     }

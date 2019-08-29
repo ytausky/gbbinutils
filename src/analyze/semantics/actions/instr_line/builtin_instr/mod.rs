@@ -3,15 +3,10 @@ use super::*;
 use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::actions::TokenStreamState;
 use crate::analyze::semantics::arg::*;
-use crate::analyze::semantics::builtin_instr::cpu_instr::analyze_instruction;
-use crate::analyze::semantics::builtin_instr::cpu_instr::operand::analyze_operand;
-use crate::analyze::semantics::builtin_instr::directive::analyze_directive;
-use crate::analyze::semantics::builtin_instr::directive::*;
-use crate::analyze::semantics::builtin_instr::BuiltinInstrMnemonic;
 use crate::analyze::semantics::resolve::NameTable;
 use crate::analyze::semantics::{Params, RelocLookup, ResolveNames, WithParams};
 use crate::analyze::syntax::actions::{BuiltinInstrActions, InstrFinalizer};
-use crate::object::builder::{Finish, Item};
+use crate::object::builder::Finish;
 
 use std::ops::DerefMut;
 
@@ -61,95 +56,9 @@ where
 
     fn did_parse_instr(self) -> Self::Next {
         let args = self.state.args;
-        let mut semantics = set_state!(self, self.state.parent);
-        let instr = BuiltinInstr::new(self.state.mnemonic, &mut semantics);
-        semantics = semantics.flush_label();
-        instr.exec(args, semantics)
+        let instr = self.state.builtin_instr;
+        instr.exec(args, set_state!(self, self.state.parent))
     }
-}
-
-enum BuiltinInstr<S: ReentrancyActions> {
-    Binding(
-        (BindingDirective, S::Span),
-        Option<Label<S::Ident, S::Span>>,
-    ),
-    Directive((SimpleDirective, S::Span)),
-    CpuInstr((Mnemonic, S::Span)),
-}
-
-impl<R: ReentrancyActions> BuiltinInstr<R> {
-    fn new<N, B>(
-        (mnemonic, span): (BuiltinInstrMnemonic, R::Span),
-        stmt: &mut InstrLineSemantics<R, N, B>,
-    ) -> Self {
-        match mnemonic {
-            BuiltinInstrMnemonic::Directive(Directive::Binding(binding)) => {
-                BuiltinInstr::Binding((binding, span), stmt.state.label.take())
-            }
-            BuiltinInstrMnemonic::Directive(Directive::Simple(simple)) => {
-                BuiltinInstr::Directive((simple, span))
-            }
-            BuiltinInstrMnemonic::CpuInstr(cpu_instr) => BuiltinInstr::CpuInstr((cpu_instr, span)),
-        }
-    }
-
-    fn exec<N, B>(
-        self,
-        args: BuiltinInstrArgs<R::Ident, R::StringRef, R::Span>,
-        session: InstrLineSemantics<R, N, B>,
-    ) -> TokenStreamSemantics<R, N, B>
-    where
-        N: DerefMut,
-        N::Target: StartScope<R::Ident>
-            + NameTable<
-                R::Ident,
-                Keyword = &'static Keyword,
-                MacroId = R::MacroId,
-                SymbolId = B::SymbolId,
-            >,
-        B: Backend<R::Span>,
-    {
-        match self {
-            BuiltinInstr::Binding((binding, span), label) => {
-                analyze_directive((Directive::Binding(binding), span), label, args, session)
-            }
-            BuiltinInstr::Directive((simple, span)) => {
-                analyze_directive((Directive::Simple(simple), span), None, args, session)
-            }
-            BuiltinInstr::CpuInstr(mnemonic) => {
-                analyze_mnemonic(mnemonic, args, session).map_state(Into::into)
-            }
-        }
-    }
-}
-
-fn analyze_mnemonic<R: ReentrancyActions, N, B>(
-    name: (Mnemonic, R::Span),
-    args: BuiltinInstrArgs<R::Ident, R::StringRef, R::Span>,
-    mut session: InstrLineSemantics<R, N, B>,
-) -> InstrLineSemantics<R, N, B>
-where
-    N: DerefMut,
-    N::Target: StartScope<R::Ident>
-        + NameTable<
-            R::Ident,
-            Keyword = &'static Keyword,
-            MacroId = R::MacroId,
-            SymbolId = B::SymbolId,
-        >,
-    B: Backend<R::Span>,
-{
-    let mut operands = Vec::new();
-    for arg in args {
-        let builder = session.map_builder(Backend::build_const).resolve_names();
-        let (operand, returned_session) = analyze_operand(arg, name.0.context(), builder);
-        session = returned_session;
-        operands.push(operand)
-    }
-    if let Ok(instruction) = analyze_instruction(name, operands, &mut session) {
-        session.builder.emit_item(Item::CpuInstr(instruction))
-    }
-    session
 }
 
 impl<R, N, B, S> Session<R, N, B, S>
