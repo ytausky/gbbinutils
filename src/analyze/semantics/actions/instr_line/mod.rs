@@ -72,7 +72,7 @@ where
                     BuiltinInstrMnemonic::Directive(Directive::Binding(_)) => (),
                     _ => self = self.flush_label(),
                 }
-                let builtin_instr = BuiltinInstr::new((mnemonic.clone(), span), &mut self);
+                let builtin_instr = BuiltinInstr::new((mnemonic, span), &mut self);
                 InstrRule::BuiltinInstr(
                     self.map_state(|line| BuiltinInstrState::new(line, builtin_instr)),
                 )

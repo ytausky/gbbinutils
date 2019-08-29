@@ -33,16 +33,16 @@ impl From<Mnemonic> for BuiltinInstrMnemonic {
 
 pub(super) enum BuiltinInstr<S: ReentrancyActions> {
     Binding(
-        (BindingDirective, S::Span),
+        (&'static BindingDirective, S::Span),
         Option<Label<S::Ident, S::Span>>,
     ),
-    Directive((SimpleDirective, S::Span)),
-    CpuInstr((Mnemonic, S::Span)),
+    Directive((&'static SimpleDirective, S::Span)),
+    CpuInstr((&'static Mnemonic, S::Span)),
 }
 
 impl<R: ReentrancyActions> BuiltinInstr<R> {
     pub fn new<N, B>(
-        (mnemonic, span): (BuiltinInstrMnemonic, R::Span),
+        (mnemonic, span): (&'static BuiltinInstrMnemonic, R::Span),
         stmt: &mut InstrLineSemantics<R, N, B>,
     ) -> Self {
         match mnemonic {
@@ -74,14 +74,17 @@ impl<R: ReentrancyActions> BuiltinInstr<R> {
     {
         match self {
             BuiltinInstr::Binding((binding, span), label) => directive::analyze_directive(
-                (Directive::Binding(binding), span),
+                (Directive::Binding(*binding), span),
                 label,
                 args,
                 session,
             ),
-            BuiltinInstr::Directive((simple, span)) => {
-                directive::analyze_directive((Directive::Simple(simple), span), None, args, session)
-            }
+            BuiltinInstr::Directive((simple, span)) => directive::analyze_directive(
+                (Directive::Simple(*simple), span),
+                None,
+                args,
+                session,
+            ),
             BuiltinInstr::CpuInstr(mnemonic) => {
                 analyze_mnemonic(mnemonic, args, session).map_state(Into::into)
             }
@@ -90,7 +93,7 @@ impl<R: ReentrancyActions> BuiltinInstr<R> {
 }
 
 fn analyze_mnemonic<R: ReentrancyActions, N, B>(
-    name: (Mnemonic, R::Span),
+    name: (&Mnemonic, R::Span),
     args: BuiltinInstrArgs<R::Ident, R::StringRef, R::Span>,
     mut session: InstrLineSemantics<R, N, B>,
 ) -> InstrLineSemantics<R, N, B>

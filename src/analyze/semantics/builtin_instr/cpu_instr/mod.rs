@@ -12,7 +12,7 @@ mod branch;
 mod ld;
 
 pub(in crate::analyze::semantics) fn analyze_instruction<I, V, D, S>(
-    mnemonic: (Mnemonic, S),
+    mnemonic: (&Mnemonic, S),
     operands: I,
     diagnostics: &mut D,
 ) -> Result<CpuInstr<V>, ()>
@@ -22,33 +22,33 @@ where
     D: Diagnostics<S>,
     S: Clone,
 {
-    let mnemonic: (Mnemonic, _) = (mnemonic.0, mnemonic.1);
+    let mnemonic: (&Mnemonic, _) = (mnemonic.0, mnemonic.1);
     Analysis::new(mnemonic, operands.into_iter(), diagnostics).run()
 }
 
-struct Analysis<'a, I, D: 'a, S> {
-    mnemonic: (Mnemonic, S),
+struct Analysis<'a, 'b, I, D: 'b, S> {
+    mnemonic: (&'a Mnemonic, S),
     operands: OperandCounter<I>,
-    diagnostics: &'a mut D,
+    diagnostics: &'b mut D,
 }
 
-impl<'a, I, D, S> EmitDiag<S, D::Stripped> for Analysis<'a, I, D, S>
+impl<'a, 'b, I, D, S> EmitDiag<S, D::Stripped> for Analysis<'a, 'b, I, D, S>
 where
-    D: Diagnostics<S> + 'a,
+    D: Diagnostics<S> + 'b,
 {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<S, D::Stripped>>) {
         self.diagnostics.emit_diag(diag)
     }
 }
 
-impl<'a, I, V, D, S> Analysis<'a, I, D, S>
+impl<'a, 'b, I, V, D, S> Analysis<'a, 'b, I, D, S>
 where
     I: Iterator<Item = Result<Operand<V, S>, ()>>,
     V: Source<Span = S>,
     D: Diagnostics<S>,
     S: Clone,
 {
-    fn new(mnemonic: (Mnemonic, S), operands: I, diagnostics: &'a mut D) -> Analysis<'a, I, D, S> {
+    fn new(mnemonic: (&'a Mnemonic, S), operands: I, diagnostics: &'b mut D) -> Self {
         Analysis {
             mnemonic,
             operands: OperandCounter::new(operands),
@@ -68,17 +68,17 @@ where
             Alu(AluOperation::Add) => self.analyze_add_instruction(),
             Alu(operation) => {
                 let first_operand = self.next_operand_of(operation.expected_operands())?;
-                self.analyze_alu_instruction(operation, first_operand)
+                self.analyze_alu_instruction(*operation, first_operand)
             }
-            Bit(operation) => self.analyze_bit_operation(operation),
-            IncDec(mode) => self.analyze_inc_dec(mode),
-            Branch(branch) => self.analyze_branch(branch),
+            Bit(operation) => self.analyze_bit_operation(*operation),
+            IncDec(mode) => self.analyze_inc_dec(*mode),
+            Branch(branch) => self.analyze_branch(*branch),
             Ld => self.analyze_ld(),
             Ldhl => self.analyze_ldhl(),
-            Misc(operation) => self.analyze_misc(operation),
-            Nullary(instruction) => Ok(instruction.into()),
+            Misc(operation) => self.analyze_misc(*operation),
+            Nullary(instruction) => Ok((*instruction).into()),
             Rst => self.analyze_rst(),
-            Stack(operation) => self.analyze_stack_operation(operation),
+            Stack(operation) => self.analyze_stack_operation(*operation),
         }
     }
 
@@ -787,7 +787,7 @@ mod tests {
                 .collect();
             let mut session = MockSourceComponents::with_log(log);
             result = Some(analyze_instruction(
-                (mnemonic, TokenId::Mnemonic.into()),
+                (&mnemonic, TokenId::Mnemonic.into()),
                 operands,
                 &mut session,
             ));

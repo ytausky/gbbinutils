@@ -23,7 +23,7 @@ pub enum ImplicitBranch {
     Reti,
 }
 
-impl<'a, I, V, D, S> Analysis<'a, I, D, S>
+impl<'a, 'b, I, V, D, S> Analysis<'a, 'b, I, D, S>
 where
     I: Iterator<Item = Result<Operand<V, S>, ()>>,
     V: Source<Span = S>,
