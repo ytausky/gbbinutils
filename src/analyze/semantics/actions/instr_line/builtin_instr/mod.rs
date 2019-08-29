@@ -13,8 +13,8 @@ use std::ops::DerefMut;
 mod arg;
 
 impl<R: ReentrancyActions> From<BuiltinInstrState<R>> for TokenStreamState<R> {
-    fn from(state: BuiltinInstrState<R>) -> Self {
-        state.parent.into()
+    fn from(_: BuiltinInstrState<R>) -> Self {
+        InstrLineState::new().into()
     }
 }
 
@@ -57,7 +57,7 @@ where
     fn did_parse_instr(self) -> Self::Next {
         let args = self.state.args;
         let instr = self.state.builtin_instr;
-        instr.exec(args, set_state!(self, self.state.parent))
+        instr.exec(args, set_state!(self, InstrLineState::new()))
     }
 }
 

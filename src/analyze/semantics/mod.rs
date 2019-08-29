@@ -224,15 +224,13 @@ impl<S: ReentrancyActions> MacroDefState<S> {
 type BuiltinInstrSemantics<R, N, B> = Session<R, N, B, BuiltinInstrState<R>>;
 
 pub(in crate::analyze) struct BuiltinInstrState<S: ReentrancyActions> {
-    parent: InstrLineState<S>,
     builtin_instr: BuiltinInstr<S>,
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
 }
 
 impl<S: ReentrancyActions> BuiltinInstrState<S> {
-    fn new(parent: InstrLineState<S>, builtin_instr: BuiltinInstr<S>) -> Self {
+    fn new(builtin_instr: BuiltinInstr<S>) -> Self {
         Self {
-            parent,
             builtin_instr,
             args: Vec::new(),
         }

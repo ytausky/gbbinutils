@@ -6,6 +6,7 @@ use super::resolve::{NameTable, StartScope};
 use super::{BuiltinInstrArgs, InstrLineSemantics, Keyword, Label, TokenStreamSemantics};
 
 use crate::analyze::reentrancy::ReentrancyActions;
+use crate::diag::span::Spanned;
 use crate::object::builder::{Backend, Item};
 
 use std::ops::DerefMut;
@@ -15,47 +16,42 @@ pub(super) mod directive;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(in crate::analyze) enum BuiltinInstrMnemonic {
-    Directive(Directive),
+    LabelBound(BindingDirective),
+    Unbound(UnboundBuiltinInstrMnemonic),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(in crate::analyze) enum UnboundBuiltinInstrMnemonic {
     CpuInstr(Mnemonic),
+    Directive(SimpleDirective),
 }
 
 impl From<Directive> for BuiltinInstrMnemonic {
     fn from(directive: Directive) -> Self {
-        BuiltinInstrMnemonic::Directive(directive)
+        match directive {
+            Directive::Binding(directive) => BuiltinInstrMnemonic::LabelBound(directive),
+            Directive::Simple(directive) => {
+                BuiltinInstrMnemonic::Unbound(UnboundBuiltinInstrMnemonic::Directive(directive))
+            }
+        }
     }
 }
 
 impl From<Mnemonic> for BuiltinInstrMnemonic {
     fn from(mnemonic: Mnemonic) -> Self {
-        BuiltinInstrMnemonic::CpuInstr(mnemonic)
+        BuiltinInstrMnemonic::Unbound(UnboundBuiltinInstrMnemonic::CpuInstr(mnemonic))
     }
 }
 
-pub(super) enum BuiltinInstr<S: ReentrancyActions> {
-    Binding(
-        (&'static BindingDirective, S::Span),
-        Option<Label<S::Ident, S::Span>>,
+pub(super) enum BuiltinInstr<R: ReentrancyActions> {
+    LabelBound(
+        Option<Label<R::Ident, R::Span>>,
+        Spanned<&'static BindingDirective, R::Span>,
     ),
-    Directive((&'static SimpleDirective, S::Span)),
-    CpuInstr((&'static Mnemonic, S::Span)),
+    Unbound(Spanned<&'static UnboundBuiltinInstrMnemonic, R::Span>),
 }
 
 impl<R: ReentrancyActions> BuiltinInstr<R> {
-    pub fn new<N, B>(
-        (mnemonic, span): (&'static BuiltinInstrMnemonic, R::Span),
-        stmt: &mut InstrLineSemantics<R, N, B>,
-    ) -> Self {
-        match mnemonic {
-            BuiltinInstrMnemonic::Directive(Directive::Binding(binding)) => {
-                BuiltinInstr::Binding((binding, span), stmt.state.label.take())
-            }
-            BuiltinInstrMnemonic::Directive(Directive::Simple(simple)) => {
-                BuiltinInstr::Directive((simple, span))
-            }
-            BuiltinInstrMnemonic::CpuInstr(cpu_instr) => BuiltinInstr::CpuInstr((cpu_instr, span)),
-        }
-    }
-
     pub fn exec<N, B>(
         self,
         args: BuiltinInstrArgs<R::Ident, R::StringRef, R::Span>,
@@ -73,21 +69,24 @@ impl<R: ReentrancyActions> BuiltinInstr<R> {
         B: Backend<R::Span>,
     {
         match self {
-            BuiltinInstr::Binding((binding, span), label) => directive::analyze_directive(
-                (Directive::Binding(*binding), span),
+            BuiltinInstr::LabelBound(label, mnemonic) => directive::analyze_directive(
+                (Directive::Binding(*mnemonic.item), mnemonic.span),
                 label,
                 args,
                 session,
             ),
-            BuiltinInstr::Directive((simple, span)) => directive::analyze_directive(
-                (Directive::Simple(*simple), span),
-                None,
-                args,
-                session,
-            ),
-            BuiltinInstr::CpuInstr(mnemonic) => {
-                analyze_mnemonic(mnemonic, args, session).map_state(Into::into)
-            }
+            BuiltinInstr::Unbound(mnemonic) => match mnemonic.item {
+                UnboundBuiltinInstrMnemonic::CpuInstr(cpu_instr) => {
+                    analyze_mnemonic((cpu_instr, mnemonic.span), args, session)
+                        .map_state(Into::into)
+                }
+                UnboundBuiltinInstrMnemonic::Directive(directive) => directive::analyze_directive(
+                    (Directive::Simple(*directive), mnemonic.span),
+                    None,
+                    args,
+                    session,
+                ),
+            },
         }
     }
 }

@@ -3,13 +3,12 @@ use self::macro_instr::{MacroInstrSemantics, MacroInstrState};
 
 use super::{Keyword, ReentrancyActions, Session, TokenStreamSemantics};
 
-use crate::analyze::semantics::builtin_instr::directive::Directive;
 use crate::analyze::semantics::params::RelocLookup;
 use crate::analyze::semantics::resolve::{NameTable, ResolvedName, StartScope};
 use crate::analyze::semantics::*;
 use crate::analyze::syntax::actions::{InstrActions, InstrLineActions, InstrRule};
 use crate::analyze::Literal;
-use crate::diag::span::StripSpan;
+use crate::diag::span::{StripSpan, WithSpan};
 use crate::diag::{EmitDiag, Message};
 use crate::expr::LocationCounter;
 use crate::object::builder::{Backend, Finish, PushOp};
@@ -68,14 +67,16 @@ where
     ) -> InstrRule<Self::BuiltinInstrActions, Self::MacroInstrActions, Self> {
         match self.names.resolve_name(&ident) {
             Some(ResolvedName::Keyword(Keyword::BuiltinInstr(mnemonic))) => {
-                match mnemonic {
-                    BuiltinInstrMnemonic::Directive(Directive::Binding(_)) => (),
-                    _ => self = self.flush_label(),
-                }
-                let builtin_instr = BuiltinInstr::new((mnemonic, span), &mut self);
-                InstrRule::BuiltinInstr(
-                    self.map_state(|line| BuiltinInstrState::new(line, builtin_instr)),
-                )
+                let builtin_instr = match mnemonic {
+                    BuiltinInstrMnemonic::LabelBound(directive) => {
+                        BuiltinInstr::LabelBound(self.state.label, directive.with_span(span))
+                    }
+                    BuiltinInstrMnemonic::Unbound(unbound) => {
+                        self = self.flush_label();
+                        BuiltinInstr::Unbound(unbound.with_span(span))
+                    }
+                };
+                InstrRule::BuiltinInstr(set_state!(self, BuiltinInstrState::new(builtin_instr)))
             }
             Some(ResolvedName::Keyword(Keyword::Operand(_))) => unimplemented!(),
             Some(ResolvedName::Macro(id)) => {
