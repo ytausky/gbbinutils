@@ -1,5 +1,4 @@
-use self::instr_line::InstrLineSemantics;
-use self::token_line::{TokenContextFinalizationSemantics, TokenLineSemantics};
+use self::token_line::TokenContextFinalizationSemantics;
 
 use super::Session;
 use super::*;
@@ -14,12 +13,10 @@ use crate::object::builder::Backend;
 
 use std::ops::DerefMut;
 
-pub(super) mod instr_line;
-pub(super) mod token_line;
+mod instr_line;
+mod token_line;
 
-pub(in crate::analyze) type TokenStreamSemantics<R, N, B> = Session<R, N, B, TokenStreamState<R>>;
-
-impl<R, N, B> Session<R, N, B, TokenStreamState<R>>
+impl<R, N, B> TokenStreamSemantics<R, N, B>
 where
     R: ReentrancyActions,
     R::Ident: for<'r> From<&'r str>,

@@ -1,4 +1,3 @@
-use self::builtin_instr::BuiltinInstrSemantics;
 use self::label::{LabelSemantics, LabelState};
 use self::macro_instr::{MacroInstrSemantics, MacroInstrState};
 
@@ -18,11 +17,9 @@ use crate::object::builder::{Backend, Finish, PushOp};
 
 use std::ops::DerefMut;
 
-pub(in crate::analyze::semantics) mod builtin_instr;
+mod builtin_instr;
 mod label;
 mod macro_instr;
-
-pub(in crate::analyze) type InstrLineSemantics<R, N, B> = Session<R, N, B, InstrLineState<R>>;
 
 impl<R, N, B> InstrLineActions<R::Ident, Literal<R::StringRef>, R::Span>
     for InstrLineSemantics<R, N, B>

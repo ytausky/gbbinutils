@@ -1,4 +1,4 @@
-use super::{Keyword, Session, TokenStreamSemantics};
+use super::{Keyword, TokenStreamSemantics};
 
 use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::resolve::{NameTable, ResolvedName, StartScope};
@@ -9,8 +9,6 @@ use crate::analyze::{Literal, SemanticToken};
 use crate::object::builder::SymbolSource;
 
 use std::ops::DerefMut;
-
-pub(in crate::analyze) type TokenLineSemantics<R, N, B> = Session<R, N, B, TokenContext<R>>;
 
 impl<R, N, B> TokenLineActions<R::Ident, Literal<R::StringRef>, R::Span>
     for TokenLineSemantics<R, N, B>

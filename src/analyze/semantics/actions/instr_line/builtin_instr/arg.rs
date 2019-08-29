@@ -1,46 +1,16 @@
-use super::{BuiltinInstrSemantics, BuiltinInstrState, Session};
+use super::BuiltinInstrSemantics;
 
 use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::actions::Keyword;
 use crate::analyze::semantics::arg::*;
 use crate::analyze::semantics::resolve::{NameTable, ResolvedName};
+use crate::analyze::semantics::{ArgSemantics, ExprBuilder};
 use crate::analyze::syntax::actions::*;
-use crate::analyze::{IdentSource, Literal, StringSource};
-use crate::diag::span::SpanSource;
+use crate::analyze::Literal;
 use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::object::builder::SymbolSource;
 
 use std::ops::DerefMut;
-
-pub(in crate::analyze::semantics) type ArgSemantics<R, N, B> = Session<
-    R,
-    N,
-    B,
-    ExprBuilder<
-        <R as IdentSource>::Ident,
-        <R as StringSource>::StringRef,
-        <R as SpanSource>::Span,
-        BuiltinInstrState<R>,
-    >,
->;
-
-pub(crate) struct ExprBuilder<I, R, S, P> {
-    stack: Vec<Arg<I, R, S>>,
-    parent: P,
-}
-
-impl<I, R, S, P> ExprBuilder<I, R, S, P> {
-    pub fn new(parent: P) -> Self {
-        Self {
-            stack: Vec::new(),
-            parent,
-        }
-    }
-
-    fn pop(&mut self) -> Arg<I, R, S> {
-        self.stack.pop().unwrap_or_else(|| unreachable!())
-    }
-}
 
 delegate_diagnostics! {
     {I, R, S, P: Diagnostics<S>}, ExprBuilder<I, R, S, P>, {parent}, P, S

@@ -6,8 +6,9 @@ use self::resolve::{NameTable, ResolvedName};
 use super::macros::MacroSource;
 use super::reentrancy::{Params, ReentrancyActions};
 use super::syntax::actions::LineRule;
-use super::TokenSeq;
+use super::{IdentSource, StringSource, TokenSeq};
 
+use crate::diag::span::SpanSource;
 use crate::diag::Diagnostics;
 use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
 use crate::object::builder::{AllocSymbol, Finish, Name, PushOp, SymbolSource};
@@ -174,7 +175,9 @@ impl_push_op_for_session! {BinOp}
 impl_push_op_for_session! {ParamId}
 impl_push_op_for_session! {FnCall}
 
-pub(in crate::analyze) struct TokenStreamState<S: ReentrancyActions>(
+type TokenStreamSemantics<R, N, B> = Session<R, N, B, TokenStreamState<R>>;
+
+pub(super) struct TokenStreamState<S: ReentrancyActions>(
     pub(super) LineRule<InstrLineState<S>, TokenContext<S>>,
 );
 
@@ -184,7 +187,9 @@ impl<S: ReentrancyActions> TokenStreamState<S> {
     }
 }
 
-pub(in crate::analyze) struct InstrLineState<S: ReentrancyActions> {
+type InstrLineSemantics<R, N, B> = Session<R, N, B, InstrLineState<R>>;
+
+pub(super) struct InstrLineState<S: ReentrancyActions> {
     label: Option<Label<S::Ident, S::Span>>,
 }
 
@@ -195,6 +200,8 @@ impl<S: ReentrancyActions> InstrLineState<S> {
 }
 
 type Label<I, S> = ((I, S), Params<I, S>);
+
+type TokenLineSemantics<R, N, B> = Session<R, N, B, TokenContext<R>>;
 
 pub(in crate::analyze) enum TokenContext<S: ReentrancyActions> {
     MacroDef(MacroDefState<S>),
@@ -214,6 +221,8 @@ impl<S: ReentrancyActions> MacroDefState<S> {
     }
 }
 
+type BuiltinInstrSemantics<R, N, B> = Session<R, N, B, BuiltinInstrState<R>>;
+
 pub(in crate::analyze) struct BuiltinInstrState<S: ReentrancyActions> {
     parent: InstrLineState<S>,
     command: (BuiltinInstr, S::Span),
@@ -231,6 +240,36 @@ impl<S: ReentrancyActions> BuiltinInstrState<S> {
 }
 
 type BuiltinInstrArgs<I, R, S> = Vec<Arg<I, R, S>>;
+
+pub(in crate::analyze::semantics) type ArgSemantics<R, N, B> = Session<
+    R,
+    N,
+    B,
+    ExprBuilder<
+        <R as IdentSource>::Ident,
+        <R as StringSource>::StringRef,
+        <R as SpanSource>::Span,
+        BuiltinInstrState<R>,
+    >,
+>;
+
+pub(crate) struct ExprBuilder<I, R, S, P> {
+    stack: Vec<Arg<I, R, S>>,
+    parent: P,
+}
+
+impl<I, R, S, P> ExprBuilder<I, R, S, P> {
+    pub fn new(parent: P) -> Self {
+        Self {
+            stack: Vec::new(),
+            parent,
+        }
+    }
+
+    fn pop(&mut self) -> Arg<I, R, S> {
+        self.stack.pop().unwrap_or_else(|| unreachable!())
+    }
+}
 
 #[cfg(test)]
 mod mock {

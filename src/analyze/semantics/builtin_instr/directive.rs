@@ -1,6 +1,4 @@
 use crate::analyze::reentrancy::ReentrancyActions;
-use crate::analyze::semantics::actions::instr_line::InstrLineSemantics;
-use crate::analyze::semantics::actions::TokenStreamSemantics;
 use crate::analyze::semantics::arg::*;
 use crate::analyze::semantics::params::RelocLookup;
 use crate::analyze::semantics::resolve::{NameTable, StartScope};
@@ -232,7 +230,6 @@ mod tests {
 
     use crate::analyze::macros::mock::MockMacroId;
     use crate::analyze::reentrancy::ReentrancyEvent;
-    use crate::analyze::semantics::actions::instr_line::builtin_instr;
     use crate::analyze::semantics::actions::tests::*;
     use crate::analyze::semantics::resolve::{MockNameTable, NameTableEvent, ResolvedName};
     use crate::analyze::syntax::actions::*;
@@ -500,7 +497,7 @@ mod tests {
         unary_directive("DS", f)
     }
 
-    type TestExprContext<S> = builtin_instr::arg::ArgSemantics<
+    type TestExprContext<S> = ArgSemantics<
         MockSourceComponents<S>,
         Box<
             MockNameTable<
@@ -538,7 +535,7 @@ mod tests {
         )
     }
 
-    type TestBuiltinInstrSemantics<S> = builtin_instr::BuiltinInstrSemantics<
+    type TestBuiltinInstrSemantics<S> = BuiltinInstrSemantics<
         MockSourceComponents<S>,
         Box<
             MockNameTable<

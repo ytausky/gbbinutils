@@ -1,5 +1,3 @@
-use self::arg::*;
-
 use super::*;
 
 use crate::analyze::reentrancy::ReentrancyActions;
@@ -16,10 +14,7 @@ use crate::object::builder::{Finish, Item};
 
 use std::ops::DerefMut;
 
-pub(in crate::analyze::semantics) mod arg;
-
-pub(in crate::analyze::semantics) type BuiltinInstrSemantics<R, N, B> =
-    Session<R, N, B, BuiltinInstrState<R>>;
+mod arg;
 
 impl<R: ReentrancyActions> From<BuiltinInstrState<R>> for TokenStreamState<R> {
     fn from(state: BuiltinInstrState<R>) -> Self {
