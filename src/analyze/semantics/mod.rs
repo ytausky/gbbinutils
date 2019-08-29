@@ -1,4 +1,4 @@
-use self::arg::Arg;
+use self::arg::{Arg, OperandSymbol};
 use self::builtin_instr::BuiltinInstr;
 use self::params::*;
 use self::resolve::{NameTable, ResolvedName};
@@ -28,8 +28,15 @@ macro_rules! set_state {
 mod actions;
 mod arg;
 mod builtin_instr;
+mod keywords;
 mod params;
 pub(super) mod resolve;
+
+#[derive(Clone, Debug, PartialEq)]
+pub(in crate::analyze) enum Keyword {
+    BuiltinInstr(BuiltinInstr),
+    Operand(OperandSymbol),
+}
 
 pub(super) struct Session<R, N, B, S> {
     reentrancy: R,
@@ -227,8 +234,8 @@ type BuiltinInstrArgs<I, R, S> = Vec<Arg<I, R, S>>;
 
 #[cfg(test)]
 mod mock {
-    use super::actions::Keyword;
     use super::resolve::{BasicNameTable, MockNameTable};
+    use super::Keyword;
     use super::*;
 
     use crate::analyze::macros::mock::MockMacroId;

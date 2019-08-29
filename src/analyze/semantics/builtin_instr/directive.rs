@@ -1,11 +1,11 @@
 use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::actions::instr_line::InstrLineSemantics;
-use crate::analyze::semantics::actions::{Keyword, TokenStreamSemantics};
+use crate::analyze::semantics::actions::TokenStreamSemantics;
 use crate::analyze::semantics::arg::*;
 use crate::analyze::semantics::params::RelocLookup;
 use crate::analyze::semantics::resolve::{NameTable, StartScope};
-use crate::analyze::semantics::Session;
 use crate::analyze::semantics::*;
+use crate::analyze::semantics::{Keyword, Session};
 use crate::analyze::Literal;
 use crate::diag::*;
 use crate::object::builder::{Backend, Item, Width};

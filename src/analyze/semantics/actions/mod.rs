@@ -1,8 +1,6 @@
 use self::instr_line::InstrLineSemantics;
 use self::token_line::{TokenContextFinalizationSemantics, TokenLineSemantics};
 
-use super::arg::OperandSymbol;
-use super::builtin_instr::BuiltinInstr;
 use super::Session;
 use super::*;
 
@@ -17,14 +15,7 @@ use crate::object::builder::Backend;
 use std::ops::DerefMut;
 
 pub(super) mod instr_line;
-mod keywords;
 pub(super) mod token_line;
-
-#[derive(Clone, Debug, PartialEq)]
-pub(in crate::analyze) enum Keyword {
-    BuiltinInstr(BuiltinInstr),
-    Operand(OperandSymbol),
-}
 
 pub(in crate::analyze) type TokenStreamSemantics<R, N, B> = Session<R, N, B, TokenStreamState<R>>;
 
