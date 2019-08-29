@@ -57,7 +57,7 @@ where
     fn did_parse_instr(self) -> Self::Next {
         let args = self.state.args;
         let instr = self.state.builtin_instr;
-        instr.exec(args, set_state!(self, InstrLineState::new()))
+        instr.exec(args, set_state!(self, InstrLineState::new().into()))
     }
 }
 

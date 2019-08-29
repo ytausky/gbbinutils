@@ -36,7 +36,7 @@ pub(in crate::analyze::semantics) fn analyze_directive<R, N, B>(
     directive: (Directive, R::Span),
     label: Option<Label<R::Ident, R::Span>>,
     args: BuiltinInstrArgs<R::Ident, R::StringRef, R::Span>,
-    session: InstrLineSemantics<R, N, B>,
+    session: TokenStreamSemantics<R, N, B>,
 ) -> TokenStreamSemantics<R, N, B>
 where
     R: ReentrancyActions,
@@ -63,7 +63,7 @@ struct DirectiveContext<R: ReentrancyActions, N, B> {
     span: R::Span,
     label: Option<Label<R::Ident, R::Span>>,
     args: BuiltinInstrArgs<R::Ident, R::StringRef, R::Span>,
-    session: InstrLineSemantics<R, N, B>,
+    session: TokenStreamSemantics<R, N, B>,
 }
 
 impl<R, N, B> DirectiveContext<R, N, B>
@@ -101,11 +101,11 @@ where
                     self.session = session;
                     expr
                 }
-                (Err(()), session) => return set_state!(session, session.state.into()),
+                (Err(()), session) => return session,
             };
             self.session.builder.emit_item(Item::Data(expr, width))
         }
-        set_state!(self.session, self.session.state.into())
+        self.session
     }
 
     fn analyze_ds(mut self) -> TokenStreamSemantics<R, N, B> {
@@ -119,7 +119,7 @@ where
             }
             Err(()) => (),
         }
-        set_state!(self.session, self.session.state.into())
+        self.session
     }
 
     fn analyze_equ(mut self) -> TokenStreamSemantics<R, N, B> {
@@ -131,20 +131,20 @@ where
             }
             Err(()) => (),
         }
-        set_state!(self.session, self.session.state.into())
+        self.session
     }
 
     fn analyze_section(mut self) -> TokenStreamSemantics<R, N, B> {
         let (name, span) = self.label.take().unwrap().0;
         let id = self.session.reloc_lookup(name, span.clone());
         self.session.builder.start_section(id, span);
-        set_state!(self.session, self.session.state.into())
+        self.session
     }
 
     fn analyze_include(mut self) -> TokenStreamSemantics<R, N, B> {
         let (path, span) = match reduce_include(self.span, self.args, &mut self.session) {
             Ok(result) => result,
-            Err(()) => return set_state!(self.session, self.session.state.into()),
+            Err(()) => return self.session,
         };
         let (result, mut semantics): (_, TokenStreamSemantics<_, _, _>) =
             self.session.reentrancy.analyze_file(
@@ -153,7 +153,7 @@ where
                     reentrancy: (),
                     names: self.session.names,
                     builder: self.session.builder,
-                    state: self.session.state.into(),
+                    state: self.session.state,
                 },
             );
         if let Err(err) = result {
@@ -184,7 +184,7 @@ where
             }
             Err(()) => (),
         }
-        set_state!(self.session, self.session.state.into())
+        self.session
     }
 }
 

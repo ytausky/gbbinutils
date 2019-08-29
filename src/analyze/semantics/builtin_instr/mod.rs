@@ -3,7 +3,7 @@ use self::directive::{BindingDirective, Directive, SimpleDirective};
 
 use super::params::ResolveNames;
 use super::resolve::{NameTable, StartScope};
-use super::{BuiltinInstrArgs, InstrLineSemantics, Keyword, Label, TokenStreamSemantics};
+use super::{BuiltinInstrArgs, Keyword, Label, TokenStreamSemantics};
 
 use crate::analyze::reentrancy::ReentrancyActions;
 use crate::diag::span::Spanned;
@@ -55,7 +55,7 @@ impl<R: ReentrancyActions> BuiltinInstr<R> {
     pub fn exec<N, B>(
         self,
         args: BuiltinInstrArgs<R::Ident, R::StringRef, R::Span>,
-        session: InstrLineSemantics<R, N, B>,
+        session: TokenStreamSemantics<R, N, B>,
     ) -> TokenStreamSemantics<R, N, B>
     where
         N: DerefMut,
@@ -94,8 +94,8 @@ impl<R: ReentrancyActions> BuiltinInstr<R> {
 fn analyze_mnemonic<R: ReentrancyActions, N, B>(
     name: (&Mnemonic, R::Span),
     args: BuiltinInstrArgs<R::Ident, R::StringRef, R::Span>,
-    mut session: InstrLineSemantics<R, N, B>,
-) -> InstrLineSemantics<R, N, B>
+    mut session: TokenStreamSemantics<R, N, B>,
+) -> TokenStreamSemantics<R, N, B>
 where
     N: DerefMut,
     N::Target: StartScope<R::Ident>
