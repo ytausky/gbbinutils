@@ -70,13 +70,17 @@ impl<I, R: ReentrancyActions, N, B> IntoSemanticActions<Session<(), N, B, TokenS
 
 impl<I, R: ReentrancyActions> From<InstrLineState<I, R>> for TokenStreamState<I, R> {
     fn from(actions: InstrLineState<I, R>) -> Self {
-        Self(LineRule::InstrLine(actions))
+        Self {
+            current: LineRule::InstrLine(actions),
+        }
     }
 }
 
 impl<I, R: ReentrancyActions> From<TokenContext<I, R>> for TokenStreamState<I, R> {
     fn from(actions: TokenContext<I, R>) -> Self {
-        Self(LineRule::TokenLine(actions))
+        Self {
+            current: LineRule::TokenLine(actions),
+        }
     }
 }
 
@@ -101,14 +105,14 @@ where
     type TokenLineFinalizer = TokenContextFinalizationSemantics<I, R, N, B>;
 
     fn will_parse_line(self) -> LineRule<Self::InstrLineActions, Self::TokenLineActions> {
-        match self.state.0 {
+        match self.state.current {
             LineRule::InstrLine(state) => LineRule::InstrLine(set_state!(self, state)),
             LineRule::TokenLine(state) => LineRule::TokenLine(set_state!(self, state)),
         }
     }
 
     fn act_on_eos(mut self, span: R::Span) -> Self {
-        match self.state.0 {
+        match self.state.current {
             LineRule::InstrLine(state) => {
                 let semantics = set_state!(self, state).flush_label();
                 set_state!(semantics, semantics.state.into())

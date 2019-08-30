@@ -178,13 +178,15 @@ impl_push_op_for_session! {FnCall}
 
 type TokenStreamSemantics<I, R, N, B> = Session<R, N, B, TokenStreamState<I, R>>;
 
-pub(super) struct TokenStreamState<I: ?Sized, R: ReentrancyActions>(
-    pub(super) LineRule<InstrLineState<I, R>, TokenContext<I, R>>,
-);
+pub(super) struct TokenStreamState<I: ?Sized, R: ReentrancyActions> {
+    current: LineRule<InstrLineState<I, R>, TokenContext<I, R>>,
+}
 
 impl<I, R: ReentrancyActions> TokenStreamState<I, R> {
     fn new() -> Self {
-        Self(LineRule::InstrLine(InstrLineState::new()))
+        Self {
+            current: LineRule::InstrLine(InstrLineState::new()),
+        }
     }
 }
 
