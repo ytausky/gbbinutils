@@ -31,6 +31,7 @@ where
 
     fn act_on_token(&mut self, token: SemanticToken<R::Ident, R::StringRef>, span: R::Span) {
         match &mut self.state {
+            TokenContext::FalseIf => (),
             TokenContext::MacroDef(state) => {
                 state.tokens.0.push(token);
                 state.tokens.1.push(span);
@@ -44,6 +45,13 @@ where
         span: R::Span,
     ) -> TokenLineRule<Self, Self::ContextFinalizer> {
         match &mut self.state {
+            TokenContext::FalseIf => {
+                if ident.as_ref().eq_ignore_ascii_case("ENDC") {
+                    TokenLineRule::LineEnd(TokenContextFinalizationSemantics { parent: self })
+                } else {
+                    TokenLineRule::TokenSeq(self)
+                }
+            }
             TokenContext::MacroDef(state) => {
                 if ident.as_ref().eq_ignore_ascii_case("ENDM") {
                     state.tokens.0.push(Sigil::Eos.into());
@@ -64,6 +72,7 @@ impl<I, R: ReentrancyActions, N, B> LineFinalizer<R::Span> for TokenLineSemantic
 
     fn did_parse_line(mut self, span: R::Span) -> Self::Next {
         match &mut self.state {
+            TokenContext::FalseIf => (),
             TokenContext::MacroDef(state) => {
                 state.tokens.0.push(Sigil::Eol.into());
                 state.tokens.1.push(span);
@@ -96,6 +105,7 @@ where
 
     fn did_parse_line(mut self, _: R::Span) -> Self::Next {
         match self.parent.state {
+            TokenContext::FalseIf => (),
             TokenContext::MacroDef(state) => {
                 if let Some((name, params)) = state.label {
                     let tokens = state.tokens;

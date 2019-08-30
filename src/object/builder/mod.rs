@@ -507,6 +507,7 @@ impl<N, A: From<Name<N>>> From<Name<N>> for ExprOp<A> {
 pub mod mock {
     use super::*;
 
+    use crate::diag::span::Spanned;
     use crate::expr::Atom;
     use crate::log::Log;
 
@@ -647,10 +648,16 @@ pub mod mock {
 
         fn is_non_zero(
             &mut self,
-            _value: Self::Value,
+            value: Self::Value,
             _diagnostics: &mut impl Diagnostics<S>,
         ) -> Option<bool> {
-            unimplemented!()
+            match value.0.as_slice() {
+                [Spanned {
+                    item: ExprOp::Atom(Atom::Const(n)),
+                    ..
+                }] => Some(*n != 0),
+                _ => None,
+            }
         }
 
         fn reserve(&mut self, bytes: Self::Value) {

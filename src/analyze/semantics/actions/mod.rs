@@ -121,6 +121,7 @@ where
             }
             LineRule::TokenLine(ref state) => {
                 match state {
+                    TokenContext::FalseIf => unimplemented!(),
                     TokenContext::MacroDef(_) => {
                         self.reentrancy.emit_diag(Message::UnexpectedEof.at(span))
                     }

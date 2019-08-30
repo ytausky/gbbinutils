@@ -249,10 +249,17 @@ pub(in crate::analyze) enum TokenLineRule<T, E> {
 
 #[cfg(test)]
 impl<T, E> TokenLineRule<T, E> {
+    pub fn into_token_seq(self) -> T {
+        match self {
+            TokenLineRule::TokenSeq(context) => context,
+            _ => panic!("expected token sequence"),
+        }
+    }
+
     pub fn into_line_end(self) -> E {
         match self {
             TokenLineRule::LineEnd(context) => context,
-            _ => panic!("expected token sequence"),
+            _ => panic!("expected line end"),
         }
     }
 }

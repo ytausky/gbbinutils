@@ -30,6 +30,8 @@ pub(in crate::analyze) enum SimpleDirective {
     Db,
     Ds,
     Dw,
+    Endc,
+    If,
     Include,
     Org,
 }
@@ -94,6 +96,8 @@ where
             Directive::Simple(Db) => self.analyze_data(Width::Byte),
             Directive::Simple(Ds) => self.analyze_ds(),
             Directive::Simple(Dw) => self.analyze_data(Width::Word),
+            Directive::Simple(Endc) => self.analyze_endc(),
+            Directive::Simple(If) => self.analyze_if(),
             Directive::Simple(Include) => self.analyze_include(),
             Directive::Simple(Org) => self.analyze_org(),
         }
@@ -146,6 +150,32 @@ where
         let (name, span) = self.label.take().unwrap().0;
         let id = self.session.reloc_lookup(name, span.clone());
         self.session.builder.start_section(id, span);
+        self.session
+    }
+
+    fn analyze_endc(self) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
+        self.session
+    }
+
+    fn analyze_if(mut self) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
+        match single_arg(self.span, self.args, &mut self.session) {
+            Ok(arg) => {
+                let (value, session) = self.session.analyze_expr(arg);
+                self.session = session;
+                match self
+                    .session
+                    .builder
+                    .is_non_zero(value.unwrap(), &mut self.session.reentrancy)
+                {
+                    Some(true) => (),
+                    Some(false) => {
+                        self.session.state.current = LineRule::TokenLine(TokenContext::FalseIf)
+                    }
+                    None => unimplemented!(),
+                }
+            }
+            Err(()) => unimplemented!(),
+        }
         self.session
     }
 
@@ -242,11 +272,11 @@ mod tests {
     use crate::analyze::semantics::actions::tests::*;
     use crate::analyze::semantics::resolve::{MockNameTable, NameTableEvent, ResolvedName};
     use crate::analyze::syntax::actions::*;
+    use crate::analyze::syntax::Sigil;
     use crate::codebase::CodebaseError;
     use crate::expr::{Atom, ParamId};
-    use crate::object::builder::mock::{
-        BackendEvent, MockBackend, MockSymbolId, SerialIdAllocator,
-    };
+    use crate::object::builder::mock::*;
+    use crate::object::builder::{CpuInstr, Nullary};
 
     use std::borrow::Borrow;
     use std::io;
@@ -499,6 +529,85 @@ mod tests {
                 NameTableEvent::Insert(name.into(), ResolvedName::Symbol(MockSymbolId(0))).into(),
                 BackendEvent::StartSection(MockSymbolId(0), ()).into()
             ]
+        )
+    }
+
+    #[test]
+    fn dispatch_instrs_in_taken_if() {
+        let actions = collect_semantic_actions(|actions| {
+            let mut condition = actions
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("IF".into(), ())
+                .into_builtin_instr()
+                .will_parse_arg();
+            condition.act_on_atom(ExprAtom::Literal(Literal::Number(1)), ());
+            condition
+                .did_parse_arg()
+                .did_parse_instr()
+                .did_parse_line(())
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("NOP".into(), ())
+                .into_builtin_instr()
+                .did_parse_instr()
+                .did_parse_line(())
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("ENDC".into(), ())
+                .into_builtin_instr()
+                .did_parse_instr()
+                .did_parse_line(())
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("STOP".into(), ())
+                .into_builtin_instr()
+                .did_parse_instr()
+                .did_parse_line(())
+                .act_on_eos(())
+        });
+        assert_eq!(
+            actions,
+            [
+                BackendEvent::EmitItem(Item::CpuInstr(CpuInstr::Nullary(Nullary::Nop))).into(),
+                BackendEvent::EmitItem(Item::CpuInstr(CpuInstr::Nullary(Nullary::Stop))).into()
+            ]
+        )
+    }
+
+    #[test]
+    fn ignore_instrs_in_untaken_if() {
+        let actions = collect_semantic_actions(|actions| {
+            let mut condition = actions
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("IF".into(), ())
+                .into_builtin_instr()
+                .will_parse_arg();
+            condition.act_on_atom(ExprAtom::Literal(Literal::Number(0)), ());
+            let mut then = condition
+                .did_parse_arg()
+                .did_parse_instr()
+                .did_parse_line(())
+                .will_parse_line()
+                .into_token_line()
+                .act_on_ident("NOP".into(), ())
+                .into_token_seq();
+            then.act_on_token(Sigil::Eol.into(), ());
+            then.act_on_ident("ENDC".into(), ())
+                .into_line_end()
+                .did_parse_line(())
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("STOP".into(), ())
+                .into_builtin_instr()
+                .did_parse_instr()
+                .did_parse_line(())
+                .act_on_eos(())
+        });
+        assert_eq!(
+            actions,
+            [BackendEvent::EmitItem(Item::CpuInstr(CpuInstr::Nullary(Nullary::Stop))).into()]
         )
     }
 

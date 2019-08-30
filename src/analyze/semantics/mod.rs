@@ -242,6 +242,7 @@ type Label<I, S> = ((I, S), Params<I, S>);
 type TokenLineSemantics<I, R, N, B> = Session<R, N, B, TokenContext<I, R>>;
 
 pub(in crate::analyze) enum TokenContext<I: ?Sized, R: ReentrancyActions> {
+    FalseIf,
     MacroDef(MacroDefState<I, R>),
 }
 
