@@ -23,6 +23,7 @@ macro_rules! set_state {
             names: $session.names,
             builder: $session.builder,
             state: $state,
+            stack: $session.stack,
         }
     };
 }
@@ -45,7 +46,10 @@ pub(super) struct Session<R, N, B, S> {
     names: N,
     builder: B,
     state: S,
+    stack: Vec<InstrContext>,
 }
+
+enum InstrContext {}
 
 impl<R, N, B, S> Session<R, N, B, S> {
     #[cfg(test)]
@@ -55,6 +59,7 @@ impl<R, N, B, S> Session<R, N, B, S> {
             names: f(self.names),
             builder: self.builder,
             state: self.state,
+            stack: self.stack,
         }
     }
 
@@ -64,6 +69,7 @@ impl<R, N, B, S> Session<R, N, B, S> {
             names: self.names,
             builder: f(self.builder),
             state: self.state,
+            stack: self.stack,
         }
     }
 
@@ -73,6 +79,7 @@ impl<R, N, B, S> Session<R, N, B, S> {
             names: self.names,
             builder: self.builder,
             state: f(self.state),
+            stack: self.stack,
         }
     }
 }
@@ -144,6 +151,7 @@ impl<R, N, B: Finish, S> Finish for Session<R, N, B, S> {
                 names: self.names,
                 builder,
                 state: self.state,
+                stack: self.stack,
             },
             value,
         )
@@ -208,6 +216,7 @@ where
             names,
             builder,
             state: TokenStreamState::new(),
+            stack: Vec::new(),
         }
     }
 }
@@ -382,6 +391,7 @@ mod mock {
                 names: Box::new(MockNameTable::new(names, log.clone())),
                 builder: MockBackend::new(SerialIdAllocator::new(MockSymbolId), log).build_const(),
                 state: (),
+                stack: Vec::new(),
             }
         }
     }
