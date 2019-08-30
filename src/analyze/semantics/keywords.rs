@@ -1,11 +1,13 @@
 use super::arg::OperandSymbol::*;
 use super::builtin_instr::cpu_instr::mnemonic::*;
+use super::builtin_instr::directive::BindingDirective;
 use super::builtin_instr::directive::{BindingDirective::*, SimpleDirective::*};
+use super::builtin_instr::UnboundBuiltinInstrMnemonic;
 use super::builtin_instr::{BuiltinInstrMnemonic::*, UnboundBuiltinInstrMnemonic::*};
 use super::Keyword;
 use super::Keyword::*;
 
-pub(super) const KEYWORDS: &[(&str, Keyword)] = &[
+pub(super) const KEYWORDS: &[(&str, Keyword<BindingDirective, UnboundBuiltinInstrMnemonic>)] = &[
     ("A", Operand(A)),
     ("ADC", BuiltinInstr(Unbound(CpuInstr(ADC)))),
     ("ADD", BuiltinInstr(Unbound(CpuInstr(ADD)))),

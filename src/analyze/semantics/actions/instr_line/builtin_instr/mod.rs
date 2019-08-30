@@ -3,6 +3,7 @@ use super::*;
 use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::actions::TokenStreamState;
 use crate::analyze::semantics::arg::*;
+use crate::analyze::semantics::builtin_instr::Dispatch;
 use crate::analyze::semantics::resolve::NameTable;
 use crate::analyze::semantics::{Params, RelocLookup, ResolveNames, WithParams};
 use crate::analyze::syntax::actions::{BuiltinInstrActions, InstrFinalizer};
@@ -12,52 +13,61 @@ use std::ops::DerefMut;
 
 mod arg;
 
-impl<R: ReentrancyActions> From<BuiltinInstrState<R>> for TokenStreamState<R> {
-    fn from(_: BuiltinInstrState<R>) -> Self {
+impl<I, R> From<BuiltinInstrState<I, R>> for TokenStreamState<I, R>
+where
+    I: BuiltinInstrSet<R>,
+    R: ReentrancyActions,
+    BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>: Dispatch<I, R>,
+{
+    fn from(_: BuiltinInstrState<I, R>) -> Self {
         InstrLineState::new().into()
     }
 }
 
-impl<R, N, B> BuiltinInstrActions<R::Ident, Literal<R::StringRef>, R::Span>
-    for BuiltinInstrSemantics<R, N, B>
+impl<I, R, N, B> BuiltinInstrActions<R::Ident, Literal<R::StringRef>, R::Span>
+    for BuiltinInstrSemantics<I, R, N, B>
 where
+    I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword,
+            Keyword = &'static Keyword<I::Binding, I::NonBinding>,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
     B: Backend<R::Span>,
+    BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>: Dispatch<I, R>,
 {
-    type ArgActions = ArgSemantics<R, N, B>;
+    type ArgActions = ArgSemantics<I, R, N, B>;
 
     fn will_parse_arg(self) -> Self::ArgActions {
         self.map_state(ExprBuilder::new)
     }
 }
 
-impl<R, N, B> InstrFinalizer<R::Span> for BuiltinInstrSemantics<R, N, B>
+impl<I, R, N, B> InstrFinalizer<R::Span> for BuiltinInstrSemantics<I, R, N, B>
 where
+    I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword,
+            Keyword = &'static Keyword<I::Binding, I::NonBinding>,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
     B: Backend<R::Span>,
+    BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>: Dispatch<I, R>,
 {
-    type Next = TokenStreamSemantics<R, N, B>;
+    type Next = TokenStreamSemantics<I, R, N, B>;
 
     fn did_parse_instr(self) -> Self::Next {
         let args = self.state.args;
         let instr = self.state.builtin_instr;
-        instr.exec(args, set_state!(self, InstrLineState::new().into()))
+        instr.dispatch(args, set_state!(self, InstrLineState::new().into()))
     }
 }
 

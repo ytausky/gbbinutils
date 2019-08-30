@@ -3,6 +3,7 @@ use super::BuiltinInstrSemantics;
 use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::actions::Keyword;
 use crate::analyze::semantics::arg::*;
+use crate::analyze::semantics::builtin_instr::{BuiltinInstr, BuiltinInstrSet, Dispatch};
 use crate::analyze::semantics::resolve::{NameTable, ResolvedName};
 use crate::analyze::semantics::{ArgSemantics, ExprBuilder};
 use crate::analyze::syntax::actions::*;
@@ -16,8 +17,13 @@ delegate_diagnostics! {
     {I, R, S, P: Diagnostics<S>}, ExprBuilder<I, R, S, P>, {parent}, P, S
 }
 
-impl<R: ReentrancyActions, N, B> ArgFinalizer for ArgSemantics<R, N, B> {
-    type Next = BuiltinInstrSemantics<R, N, B>;
+impl<I, R, N, B> ArgFinalizer for ArgSemantics<I, R, N, B>
+where
+    I: BuiltinInstrSet<R>,
+    R: ReentrancyActions,
+    BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>: Dispatch<I, R>,
+{
+    type Next = BuiltinInstrSemantics<I, R, N, B>;
 
     fn did_parse_arg(mut self) -> Self::Next {
         let arg = self.state.pop();
@@ -27,17 +33,19 @@ impl<R: ReentrancyActions, N, B> ArgFinalizer for ArgSemantics<R, N, B> {
     }
 }
 
-impl<R, N, B> ArgActions<R::Ident, Literal<R::StringRef>, R::Span> for ArgSemantics<R, N, B>
+impl<I, R, N, B> ArgActions<R::Ident, Literal<R::StringRef>, R::Span> for ArgSemantics<I, R, N, B>
 where
+    I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: NameTable<
         R::Ident,
-        Keyword = &'static Keyword,
+        Keyword = &'static Keyword<I::Binding, I::NonBinding>,
         MacroId = R::MacroId,
         SymbolId = B::SymbolId,
     >,
     B: SymbolSource,
+    BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>: Dispatch<I, R>,
 {
     fn act_on_atom(&mut self, atom: ExprAtom<R::Ident, Literal<R::StringRef>>, span: R::Span) {
         self.state.stack.push(Arg {

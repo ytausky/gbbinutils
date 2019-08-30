@@ -170,7 +170,7 @@ mod tests {
     use super::*;
 
     use crate::analyze::macros::mock::MockMacroId;
-    use crate::analyze::semantics::mock::MockExprBuilder;
+    use crate::analyze::semantics::mock::*;
     use crate::analyze::semantics::resolve::NameTableEvent;
     use crate::analyze::semantics::Keyword;
     use crate::diag::{DiagnosticsEvent, MockSpan};
@@ -185,7 +185,13 @@ mod tests {
     enum Event<N, S: Clone> {
         Backend(BackendEvent<N, Expr<N, S>>),
         Diagnostics(DiagnosticsEvent<S>),
-        NameTable(NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>),
+        NameTable(
+            NameTableEvent<
+                &'static Keyword<MockBindingBuiltinInstr, MockNonBindingBuiltinInstr>,
+                MockMacroId,
+                MockSymbolId,
+            >,
+        ),
     }
 
     impl<N, S: Clone> From<BackendEvent<N, Expr<N, S>>> for Event<N, S> {
@@ -200,10 +206,22 @@ mod tests {
         }
     }
 
-    impl<N, S: Clone> From<NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>>
-        for Event<N, S>
+    impl<N, S: Clone>
+        From<
+            NameTableEvent<
+                &'static Keyword<MockBindingBuiltinInstr, MockNonBindingBuiltinInstr>,
+                MockMacroId,
+                MockSymbolId,
+            >,
+        > for Event<N, S>
     {
-        fn from(event: NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>) -> Self {
+        fn from(
+            event: NameTableEvent<
+                &'static Keyword<MockBindingBuiltinInstr, MockNonBindingBuiltinInstr>,
+                MockMacroId,
+                MockSymbolId,
+            >,
+        ) -> Self {
             Event::NameTable(event)
         }
     }

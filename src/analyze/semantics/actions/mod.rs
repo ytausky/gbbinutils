@@ -1,10 +1,11 @@
 use self::token_line::TokenContextFinalizationSemantics;
 
+use super::builtin_instr::Dispatch;
 use super::Session;
 use super::*;
 
 use crate::analyze::reentrancy::{IntoSemanticActions, ReentrancyActions};
-use crate::analyze::semantics::resolve::{NameTable, ResolvedName, StartScope};
+use crate::analyze::semantics::resolve::{NameTable, StartScope};
 use crate::analyze::syntax::actions::*;
 use crate::analyze::Literal;
 use crate::codebase::CodebaseError;
@@ -16,45 +17,27 @@ use std::ops::DerefMut;
 mod instr_line;
 mod token_line;
 
-impl<R, N, B> TokenStreamSemantics<R, N, B>
+impl<I, R, N, B> Session<R, N, B, TokenStreamState<I, R>>
 where
-    R: ReentrancyActions,
-    R::Ident: for<'r> From<&'r str>,
-    N: DerefMut,
-    N::Target: NameTable<R::Ident, Keyword = &'static Keyword>,
-{
-    pub fn from_components(reentrancy: R, mut names: N, builder: B) -> Self {
-        for (ident, keyword) in keywords::KEYWORDS {
-            names.define_name((*ident).into(), ResolvedName::Keyword(keyword))
-        }
-        Self {
-            reentrancy,
-            names,
-            builder,
-            state: TokenStreamState::new(),
-        }
-    }
-}
-
-impl<R, N, B> Session<R, N, B, TokenStreamState<R>>
-where
+    I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword,
+            Keyword = &'static Keyword<I::Binding, I::NonBinding>,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
     B: Backend<R::Span>,
+    BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>: Dispatch<I, R>,
 {
     pub fn analyze_file(self, path: R::StringRef) -> Result<(), CodebaseError> {
         let (reentrancy, session) = self.split_reentrancy();
         reentrancy.analyze_file(path, session).0
     }
 
-    fn split_reentrancy(self) -> (R, Session<(), N, B, TokenStreamState<R>>) {
+    fn split_reentrancy(self) -> (R, Session<(), N, B, TokenStreamState<I, R>>) {
         (
             self.reentrancy,
             Session {
@@ -67,12 +50,14 @@ where
     }
 }
 
-impl<R: ReentrancyActions, N, B> IntoSemanticActions<Session<(), N, B, TokenStreamState<R>>> for R {
-    type SemanticActions = TokenStreamSemantics<R, N, B>;
+impl<I, R: ReentrancyActions, N, B> IntoSemanticActions<Session<(), N, B, TokenStreamState<I, R>>>
+    for R
+{
+    type SemanticActions = TokenStreamSemantics<I, R, N, B>;
 
     fn into_semantic_actions(
         self,
-        session: Session<(), N, B, TokenStreamState<R>>,
+        session: Session<(), N, B, TokenStreamState<I, R>>,
     ) -> Self::SemanticActions {
         Session {
             reentrancy: self,
@@ -83,35 +68,37 @@ impl<R: ReentrancyActions, N, B> IntoSemanticActions<Session<(), N, B, TokenStre
     }
 }
 
-impl<S: ReentrancyActions> From<InstrLineState<S>> for TokenStreamState<S> {
-    fn from(actions: InstrLineState<S>) -> Self {
+impl<I, R: ReentrancyActions> From<InstrLineState<I, R>> for TokenStreamState<I, R> {
+    fn from(actions: InstrLineState<I, R>) -> Self {
         Self(LineRule::InstrLine(actions))
     }
 }
 
-impl<S: ReentrancyActions> From<TokenContext<S>> for TokenStreamState<S> {
-    fn from(actions: TokenContext<S>) -> Self {
+impl<I, R: ReentrancyActions> From<TokenContext<I, R>> for TokenStreamState<I, R> {
+    fn from(actions: TokenContext<I, R>) -> Self {
         Self(LineRule::TokenLine(actions))
     }
 }
 
-impl<R, N, B> TokenStreamActions<R::Ident, Literal<R::StringRef>, R::Span>
-    for TokenStreamSemantics<R, N, B>
+impl<I, R, N, B> TokenStreamActions<R::Ident, Literal<R::StringRef>, R::Span>
+    for TokenStreamSemantics<I, R, N, B>
 where
+    I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword,
+            Keyword = &'static Keyword<I::Binding, I::NonBinding>,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
     B: Backend<R::Span>,
+    BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>: Dispatch<I, R>,
 {
-    type InstrLineActions = InstrLineSemantics<R, N, B>;
-    type TokenLineActions = TokenLineSemantics<R, N, B>;
-    type TokenLineFinalizer = TokenContextFinalizationSemantics<R, N, B>;
+    type InstrLineActions = InstrLineSemantics<I, R, N, B>;
+    type TokenLineActions = TokenLineSemantics<I, R, N, B>;
+    type TokenLineFinalizer = TokenContextFinalizationSemantics<I, R, N, B>;
 
     fn will_parse_line(self) -> LineRule<Self::InstrLineActions, Self::TokenLineActions> {
         match self.state.0 {
@@ -138,23 +125,23 @@ where
     }
 }
 
-impl<R: ReentrancyActions, N, B> InstrFinalizer<R::Span> for InstrLineSemantics<R, N, B> {
-    type Next = TokenStreamSemantics<R, N, B>;
+impl<I, R: ReentrancyActions, N, B> InstrFinalizer<R::Span> for InstrLineSemantics<I, R, N, B> {
+    type Next = TokenStreamSemantics<I, R, N, B>;
 
     fn did_parse_instr(self) -> Self::Next {
         set_state!(self, self.state.into())
     }
 }
 
-impl<R: ReentrancyActions, N, B> LineFinalizer<R::Span> for InstrLineSemantics<R, N, B> {
-    type Next = TokenStreamSemantics<R, N, B>;
+impl<I, R: ReentrancyActions, N, B> LineFinalizer<R::Span> for InstrLineSemantics<I, R, N, B> {
+    type Next = TokenStreamSemantics<I, R, N, B>;
 
     fn did_parse_line(self, _: R::Span) -> Self::Next {
         set_state!(self, self.state.into())
     }
 }
 
-impl<R: ReentrancyActions, N, B> LineFinalizer<R::Span> for TokenStreamSemantics<R, N, B> {
+impl<I, R: ReentrancyActions, N, B> LineFinalizer<R::Span> for TokenStreamSemantics<I, R, N, B> {
     type Next = Self;
 
     fn did_parse_line(self, _: R::Span) -> Self::Next {
@@ -170,6 +157,8 @@ pub mod tests {
 
     use crate::analyze::macros::mock::MockMacroId;
     use crate::analyze::reentrancy::ReentrancyEvent;
+    use crate::analyze::semantics::builtin_instr::directive::BindingDirective;
+    use crate::analyze::semantics::builtin_instr::*;
     use crate::analyze::semantics::resolve::{MockNameTable, NameTableEvent, ResolvedName};
     use crate::analyze::syntax::{Sigil, Token};
     use crate::analyze::SemanticToken;
@@ -186,7 +175,13 @@ pub mod tests {
     pub(in crate::analyze) enum TestOperation<S: Clone> {
         Backend(BackendEvent<MockSymbolId, Expr<S>>),
         Diagnostics(DiagnosticsEvent<S>),
-        NameTable(NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>),
+        NameTable(
+            NameTableEvent<
+                &'static Keyword<BindingDirective, UnboundBuiltinInstrMnemonic>,
+                MockMacroId,
+                MockSymbolId,
+            >,
+        ),
         Reentrancy(ReentrancyEvent),
     }
 
@@ -205,10 +200,22 @@ pub mod tests {
         }
     }
 
-    impl<S: Clone> From<NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>>
-        for TestOperation<S>
+    impl<S: Clone>
+        From<
+            NameTableEvent<
+                &'static Keyword<BindingDirective, UnboundBuiltinInstrMnemonic>,
+                MockMacroId,
+                MockSymbolId,
+            >,
+        > for TestOperation<S>
     {
-        fn from(event: NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>) -> Self {
+        fn from(
+            event: NameTableEvent<
+                &'static Keyword<BindingDirective, UnboundBuiltinInstrMnemonic>,
+                MockMacroId,
+                MockSymbolId,
+            >,
+        ) -> Self {
             TestOperation::NameTable(event)
         }
     }
@@ -638,7 +645,11 @@ pub mod tests {
         I: IntoIterator<
             Item = (
                 String,
-                ResolvedName<&'static Keyword, MockMacroId, MockSymbolId>,
+                ResolvedName<
+                    &'static Keyword<BindingDirective, UnboundBuiltinInstrMnemonic>,
+                    MockMacroId,
+                    MockSymbolId,
+                >,
             ),
         >,
         F: FnOnce(TestTokenStreamSemantics<S>) -> TestTokenStreamSemantics<S>,
@@ -658,10 +669,15 @@ pub mod tests {
     }
 
     pub(super) type TestTokenStreamSemantics<S> = TokenStreamSemantics<
+        DefaultBuiltinInstrSet,
         MockSourceComponents<S>,
         Box<
             MockNameTable<
-                BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
+                BasicNameTable<
+                    &'static Keyword<BindingDirective, UnboundBuiltinInstrMnemonic>,
+                    MockMacroId,
+                    MockSymbolId,
+                >,
                 TestOperation<S>,
             >,
         >,

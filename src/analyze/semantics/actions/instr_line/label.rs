@@ -4,16 +4,16 @@ use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::Params;
 use crate::analyze::syntax::actions::LabelActions;
 
-pub(super) type LabelSemantics<R, N, B> = Session<R, N, B, LabelState<R>>;
+pub(super) type LabelSemantics<I, R, N, B> = Session<R, N, B, LabelState<I, R>>;
 
-pub(in crate::analyze) struct LabelState<S: ReentrancyActions> {
-    parent: InstrLineState<S>,
-    label: (S::Ident, S::Span),
-    params: Params<S::Ident, S::Span>,
+pub(in crate::analyze) struct LabelState<I, R: ReentrancyActions> {
+    parent: InstrLineState<I, R>,
+    label: (R::Ident, R::Span),
+    params: Params<R::Ident, R::Span>,
 }
 
-impl<S: ReentrancyActions> LabelState<S> {
-    pub fn new(parent: InstrLineState<S>, label: (S::Ident, S::Span)) -> Self {
+impl<I, R: ReentrancyActions> LabelState<I, R> {
+    pub fn new(parent: InstrLineState<I, R>, label: (R::Ident, R::Span)) -> Self {
         Self {
             parent,
             label,
@@ -22,8 +22,8 @@ impl<S: ReentrancyActions> LabelState<S> {
     }
 }
 
-impl<R: ReentrancyActions, N, B> LabelActions<R::Ident, R::Span> for LabelSemantics<R, N, B> {
-    type Next = InstrLineSemantics<R, N, B>;
+impl<I, R: ReentrancyActions, N, B> LabelActions<R::Ident, R::Span> for LabelSemantics<I, R, N, B> {
+    type Next = InstrLineSemantics<I, R, N, B>;
 
     fn act_on_param(&mut self, ident: R::Ident, span: R::Span) {
         let params = &mut self.state.params;

@@ -3,6 +3,7 @@ use self::macro_instr::{MacroInstrSemantics, MacroInstrState};
 
 use super::{Keyword, ReentrancyActions, Session, TokenStreamSemantics};
 
+use crate::analyze::semantics::builtin_instr::Dispatch;
 use crate::analyze::semantics::params::RelocLookup;
 use crate::analyze::semantics::resolve::{NameTable, ResolvedName, StartScope};
 use crate::analyze::semantics::*;
@@ -19,21 +20,23 @@ mod builtin_instr;
 mod label;
 mod macro_instr;
 
-impl<R, N, B> InstrLineActions<R::Ident, Literal<R::StringRef>, R::Span>
-    for InstrLineSemantics<R, N, B>
+impl<I, R, N, B> InstrLineActions<R::Ident, Literal<R::StringRef>, R::Span>
+    for InstrLineSemantics<I, R, N, B>
 where
+    I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword,
+            Keyword = &'static Keyword<I::Binding, I::NonBinding>,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
     B: Backend<R::Span>,
+    BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>: Dispatch<I, R>,
 {
-    type LabelActions = LabelSemantics<R, N, B>;
+    type LabelActions = LabelSemantics<I, R, N, B>;
     type InstrActions = Self;
 
     fn will_parse_label(mut self, label: (R::Ident, R::Span)) -> Self::LabelActions {
@@ -42,23 +45,26 @@ where
     }
 }
 
-impl<R, N, B> InstrActions<R::Ident, Literal<R::StringRef>, R::Span> for InstrLineSemantics<R, N, B>
+impl<I, R, N, B> InstrActions<R::Ident, Literal<R::StringRef>, R::Span>
+    for InstrLineSemantics<I, R, N, B>
 where
+    I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword,
+            Keyword = &'static Keyword<I::Binding, I::NonBinding>,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
     B: Backend<R::Span>,
+    BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>: Dispatch<I, R>,
 {
-    type BuiltinInstrActions = BuiltinInstrSemantics<R, N, B>;
-    type MacroInstrActions = MacroInstrSemantics<R, N, B>;
+    type BuiltinInstrActions = BuiltinInstrSemantics<I, R, N, B>;
+    type MacroInstrActions = MacroInstrSemantics<I, R, N, B>;
     type ErrorActions = Self;
-    type LineFinalizer = TokenStreamSemantics<R, N, B>;
+    type LineFinalizer = TokenStreamSemantics<I, R, N, B>;
 
     fn will_parse_instr(
         mut self,
@@ -100,18 +106,20 @@ where
     }
 }
 
-impl<R, N, B> InstrLineSemantics<R, N, B>
+impl<I, R, N, B> InstrLineSemantics<I, R, N, B>
 where
+    I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword,
+            Keyword = &'static Keyword<I::Binding, I::NonBinding>,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
     B: Backend<R::Span>,
+    BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>: Dispatch<I, R>,
 {
     pub fn flush_label(mut self) -> Self {
         if let Some(((label, span), _params)) = self.state.label.take() {

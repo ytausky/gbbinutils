@@ -1,5 +1,5 @@
 use self::arg::{Arg, OperandSymbol};
-use self::builtin_instr::{BuiltinInstr, BuiltinInstrMnemonic};
+use self::builtin_instr::{BuiltinInstr, BuiltinInstrMnemonic, BuiltinInstrSet, Dispatch};
 use self::params::*;
 use self::resolve::{NameTable, ResolvedName};
 
@@ -13,6 +13,7 @@ use crate::diag::Diagnostics;
 use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
 use crate::object::builder::{AllocSymbol, Finish, Name, PushOp, SymbolSource};
 
+use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
 macro_rules! set_state {
@@ -34,8 +35,8 @@ mod params;
 pub(super) mod resolve;
 
 #[derive(Clone, Debug, PartialEq)]
-pub(in crate::analyze) enum Keyword {
-    BuiltinInstr(BuiltinInstrMnemonic),
+pub(in crate::analyze) enum Keyword<L, U> {
+    BuiltinInstr(BuiltinInstrMnemonic<L, U>),
     Operand(OperandSymbol),
 }
 
@@ -175,61 +176,99 @@ impl_push_op_for_session! {BinOp}
 impl_push_op_for_session! {ParamId}
 impl_push_op_for_session! {FnCall}
 
-type TokenStreamSemantics<R, N, B> = Session<R, N, B, TokenStreamState<R>>;
+type TokenStreamSemantics<I, R, N, B> = Session<R, N, B, TokenStreamState<I, R>>;
 
-pub(super) struct TokenStreamState<S: ReentrancyActions>(
-    pub(super) LineRule<InstrLineState<S>, TokenContext<S>>,
+pub(super) struct TokenStreamState<I: ?Sized, R: ReentrancyActions>(
+    pub(super) LineRule<InstrLineState<I, R>, TokenContext<I, R>>,
 );
 
-impl<S: ReentrancyActions> TokenStreamState<S> {
+impl<I, R: ReentrancyActions> TokenStreamState<I, R> {
     fn new() -> Self {
         Self(LineRule::InstrLine(InstrLineState::new()))
     }
 }
 
-type InstrLineSemantics<R, N, B> = Session<R, N, B, InstrLineState<R>>;
-
-pub(super) struct InstrLineState<S: ReentrancyActions> {
-    label: Option<Label<S::Ident, S::Span>>,
+impl<I, R, N, B> TokenStreamSemantics<I, R, N, B>
+where
+    I: BuiltinInstrSet<R>,
+    R: ReentrancyActions,
+    R::Ident: for<'r> From<&'r str>,
+    N: DerefMut,
+    N::Target: NameTable<R::Ident, Keyword = &'static Keyword<I::Binding, I::NonBinding>>,
+    BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>: Dispatch<I, R>,
+{
+    pub fn from_components(reentrancy: R, mut names: N, builder: B) -> Self {
+        for (ident, keyword) in I::keywords() {
+            names.define_name((*ident).into(), ResolvedName::Keyword(keyword))
+        }
+        Self {
+            reentrancy,
+            names,
+            builder,
+            state: TokenStreamState::new(),
+        }
+    }
 }
 
-impl<S: ReentrancyActions> InstrLineState<S> {
+type InstrLineSemantics<I, R, N, B> = Session<R, N, B, InstrLineState<I, R>>;
+
+pub(super) struct InstrLineState<I: ?Sized, R: ReentrancyActions> {
+    label: Option<Label<R::Ident, R::Span>>,
+    phantom: PhantomData<I>,
+}
+
+impl<I, R: ReentrancyActions> InstrLineState<I, R> {
     fn new() -> Self {
-        Self { label: None }
+        Self {
+            label: None,
+            phantom: PhantomData,
+        }
     }
 }
 
 type Label<I, S> = ((I, S), Params<I, S>);
 
-type TokenLineSemantics<R, N, B> = Session<R, N, B, TokenContext<R>>;
+type TokenLineSemantics<I, R, N, B> = Session<R, N, B, TokenContext<I, R>>;
 
-pub(in crate::analyze) enum TokenContext<S: ReentrancyActions> {
-    MacroDef(MacroDefState<S>),
+pub(in crate::analyze) enum TokenContext<I: ?Sized, R: ReentrancyActions> {
+    MacroDef(MacroDefState<I, R>),
 }
 
-pub(in crate::analyze) struct MacroDefState<S: ReentrancyActions> {
-    label: Option<Label<S::Ident, S::Span>>,
-    tokens: TokenSeq<S::Ident, S::StringRef, S::Span>,
+pub(in crate::analyze) struct MacroDefState<I: ?Sized, R: ReentrancyActions> {
+    label: Option<Label<R::Ident, R::Span>>,
+    tokens: TokenSeq<R::Ident, R::StringRef, R::Span>,
+    phantom: PhantomData<I>,
 }
 
-impl<S: ReentrancyActions> MacroDefState<S> {
-    fn new(label: Option<Label<S::Ident, S::Span>>) -> Self {
+impl<I, R: ReentrancyActions> MacroDefState<I, R> {
+    fn new(label: Option<Label<R::Ident, R::Span>>) -> Self {
         Self {
             label,
             tokens: (Vec::new(), Vec::new()),
+            phantom: PhantomData,
         }
     }
 }
 
-type BuiltinInstrSemantics<R, N, B> = Session<R, N, B, BuiltinInstrState<R>>;
+type BuiltinInstrSemantics<I, R, N, B> = Session<R, N, B, BuiltinInstrState<I, R>>;
 
-pub(in crate::analyze) struct BuiltinInstrState<S: ReentrancyActions> {
-    builtin_instr: BuiltinInstr<S>,
-    args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
+pub(in crate::analyze) struct BuiltinInstrState<I, R>
+where
+    I: BuiltinInstrSet<R>,
+    R: ReentrancyActions,
+    BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>: Dispatch<I, R>,
+{
+    builtin_instr: BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>,
+    args: BuiltinInstrArgs<R::Ident, R::StringRef, R::Span>,
 }
 
-impl<S: ReentrancyActions> BuiltinInstrState<S> {
-    fn new(builtin_instr: BuiltinInstr<S>) -> Self {
+impl<I, R> BuiltinInstrState<I, R>
+where
+    I: BuiltinInstrSet<R>,
+    R: ReentrancyActions,
+    BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>: Dispatch<I, R>,
+{
+    fn new(builtin_instr: BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>) -> Self {
         Self {
             builtin_instr,
             args: Vec::new(),
@@ -239,7 +278,7 @@ impl<S: ReentrancyActions> BuiltinInstrState<S> {
 
 type BuiltinInstrArgs<I, R, S> = Vec<Arg<I, R, S>>;
 
-pub(in crate::analyze::semantics) type ArgSemantics<R, N, B> = Session<
+pub(in crate::analyze::semantics) type ArgSemantics<I, R, N, B> = Session<
     R,
     N,
     B,
@@ -247,7 +286,7 @@ pub(in crate::analyze::semantics) type ArgSemantics<R, N, B> = Session<
         <R as IdentSource>::Ident,
         <R as StringSource>::StringRef,
         <R as SpanSource>::Span,
-        BuiltinInstrState<R>,
+        BuiltinInstrState<I, R>,
     >,
 >;
 
@@ -284,9 +323,24 @@ mod mock {
     };
     use crate::object::builder::{Backend, RelocContext};
 
+    #[derive(Debug, PartialEq)]
+    pub(super) struct MockBindingBuiltinInstr;
+
+    #[derive(Debug, PartialEq)]
+    pub(super) struct MockNonBindingBuiltinInstr;
+
     pub(super) type MockExprBuilder<T, S> = Session<
         MockDiagnostics<T, S>,
-        Box<MockNameTable<BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>, T>>,
+        Box<
+            MockNameTable<
+                BasicNameTable<
+                    &'static Keyword<MockBindingBuiltinInstr, MockNonBindingBuiltinInstr>,
+                    MockMacroId,
+                    MockSymbolId,
+                >,
+                T,
+            >,
+        >,
         RelocContext<
             MockBackend<SerialIdAllocator<MockSymbolId>, T>,
             Expr<Atom<LocationCounter, MockSymbolId>, S>,
@@ -309,7 +363,11 @@ mod mock {
             I: IntoIterator<
                 Item = (
                     String,
-                    ResolvedName<&'static Keyword, MockMacroId, MockSymbolId>,
+                    ResolvedName<
+                        &'static Keyword<MockBindingBuiltinInstr, MockNonBindingBuiltinInstr>,
+                        MockMacroId,
+                        MockSymbolId,
+                    >,
                 ),
             >,
         {

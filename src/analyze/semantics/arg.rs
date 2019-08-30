@@ -5,13 +5,13 @@ use crate::expr::{BinOp, FnCall, LocationCounter};
 use crate::object::builder::{Name, PushOp};
 
 #[derive(Clone, Debug, PartialEq)]
-pub(super) struct Arg<I, R, S> {
+pub(in crate::analyze) struct Arg<I, R, S> {
     pub variant: ArgVariant<I, R, S>,
     pub span: S,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(super) enum ArgVariant<I, R, S> {
+pub(in crate::analyze) enum ArgVariant<I, R, S> {
     Atom(ArgAtom<I, R>),
     Unary(ArgUnaryOp, Box<Arg<I, R, S>>),
     Binary(BinOp, Box<Arg<I, R, S>>, Box<Arg<I, R, S>>),
@@ -19,7 +19,7 @@ pub(super) enum ArgVariant<I, R, S> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(super) enum ArgAtom<I, R> {
+pub(in crate::analyze) enum ArgAtom<I, R> {
     Error,
     Ident(I),
     Literal(Literal<R>),
@@ -49,7 +49,7 @@ pub enum OperandSymbol {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(super) enum ArgUnaryOp {
+pub(in crate::analyze) enum ArgUnaryOp {
     Parentheses,
 }
 
