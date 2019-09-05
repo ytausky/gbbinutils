@@ -1,5 +1,5 @@
 use self::cpu_instr::mnemonic::Mnemonic;
-use self::directive::{BindingDirective, Directive, SimpleDirective};
+use self::directive::{BindingDirective, Directive, FreeDirective};
 
 use super::params::ResolveNames;
 use super::resolve::{NameTable, StartScope};
@@ -16,11 +16,11 @@ pub(super) mod directive;
 
 pub(in crate::analyze) trait BuiltinInstrSet<R: ReentrancyActions>
 where
-    BuiltinInstr<&'static Self::Binding, &'static Self::NonBinding, R>: Dispatch<Self, R>,
+    BuiltinInstr<&'static Self::Binding, &'static Self::Free, R>: Dispatch<Self, R>,
 {
     type Binding: 'static;
-    type NonBinding: 'static;
-    type Iter: Iterator<Item = &'static (&'static str, Keyword<Self::Binding, Self::NonBinding>)>;
+    type Free: 'static;
+    type Iter: Iterator<Item = &'static (&'static str, Keyword<Self::Binding, Self::Free>)>;
 
     fn keywords() -> Self::Iter;
 }
@@ -29,7 +29,7 @@ pub(in crate::analyze) struct DefaultBuiltinInstrSet;
 
 impl<R: ReentrancyActions> BuiltinInstrSet<R> for DefaultBuiltinInstrSet {
     type Binding = BindingDirective;
-    type NonBinding = UnboundBuiltinInstrMnemonic;
+    type Free = FreeBuiltinMnemonic;
     type Iter = DefaultBuiltinInstrSetIter;
 
     fn keywords() -> Self::Iter {
@@ -37,51 +37,46 @@ impl<R: ReentrancyActions> BuiltinInstrSet<R> for DefaultBuiltinInstrSet {
     }
 }
 
-type DefaultBuiltinInstrSetIter = std::slice::Iter<
-    'static,
-    (
-        &'static str,
-        Keyword<BindingDirective, UnboundBuiltinInstrMnemonic>,
-    ),
->;
+type DefaultBuiltinInstrSetIter =
+    std::slice::Iter<'static, (&'static str, Keyword<BindingDirective, FreeBuiltinMnemonic>)>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub(in crate::analyze) enum BuiltinInstrMnemonic<L, U> {
-    LabelBound(L),
-    Unbound(U),
+pub(in crate::analyze) enum BuiltinMnemonic<B, F> {
+    Binding(B),
+    Free(F),
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(in crate::analyze) enum UnboundBuiltinInstrMnemonic {
+pub(in crate::analyze) enum FreeBuiltinMnemonic {
     CpuInstr(Mnemonic),
-    Directive(SimpleDirective),
+    Directive(FreeDirective),
 }
 
-impl From<Directive> for BuiltinInstrMnemonic<BindingDirective, UnboundBuiltinInstrMnemonic> {
+impl From<Directive> for BuiltinMnemonic<BindingDirective, FreeBuiltinMnemonic> {
     fn from(directive: Directive) -> Self {
         match directive {
-            Directive::Binding(directive) => BuiltinInstrMnemonic::LabelBound(directive),
-            Directive::Simple(directive) => {
-                BuiltinInstrMnemonic::Unbound(UnboundBuiltinInstrMnemonic::Directive(directive))
+            Directive::Binding(directive) => BuiltinMnemonic::Binding(directive),
+            Directive::Free(directive) => {
+                BuiltinMnemonic::Free(FreeBuiltinMnemonic::Directive(directive))
             }
         }
     }
 }
 
-impl From<Mnemonic> for BuiltinInstrMnemonic<BindingDirective, UnboundBuiltinInstrMnemonic> {
+impl From<Mnemonic> for BuiltinMnemonic<BindingDirective, FreeBuiltinMnemonic> {
     fn from(mnemonic: Mnemonic) -> Self {
-        BuiltinInstrMnemonic::Unbound(UnboundBuiltinInstrMnemonic::CpuInstr(mnemonic))
+        BuiltinMnemonic::Free(FreeBuiltinMnemonic::CpuInstr(mnemonic))
     }
 }
 
-pub(in crate::analyze) enum BuiltinInstr<L, U, R: ReentrancyActions> {
-    LabelBound(Option<Label<R::Ident, R::Span>>, Spanned<L, R::Span>),
-    Unbound(Spanned<U, R::Span>),
+pub(in crate::analyze) enum BuiltinInstr<B, F, R: ReentrancyActions> {
+    Binding(Option<Label<R::Ident, R::Span>>, Spanned<B, R::Span>),
+    Free(Spanned<F, R::Span>),
 }
 
 pub(in crate::analyze) trait Dispatch<I: BuiltinInstrSet<R> + ?Sized, R: ReentrancyActions>
 where
-    BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>: Dispatch<I, R>,
+    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
 {
     fn dispatch<N, B>(
         self,
@@ -93,7 +88,7 @@ where
         N::Target: StartScope<R::Ident>
             + NameTable<
                 R::Ident,
-                Keyword = &'static Keyword<I::Binding, I::NonBinding>,
+                Keyword = &'static Keyword<I::Binding, I::Free>,
                 MacroId = R::MacroId,
                 SymbolId = B::SymbolId,
             >,
@@ -101,7 +96,7 @@ where
 }
 
 impl<R: ReentrancyActions> Dispatch<DefaultBuiltinInstrSet, R>
-    for BuiltinInstr<&'static BindingDirective, &'static UnboundBuiltinInstrMnemonic, R>
+    for BuiltinInstr<&'static BindingDirective, &'static FreeBuiltinMnemonic, R>
 {
     fn dispatch<N, B>(
         self,
@@ -113,26 +108,26 @@ impl<R: ReentrancyActions> Dispatch<DefaultBuiltinInstrSet, R>
         N::Target: StartScope<R::Ident>
             + NameTable<
                 R::Ident,
-                Keyword = &'static Keyword<BindingDirective, UnboundBuiltinInstrMnemonic>,
+                Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
                 MacroId = R::MacroId,
                 SymbolId = B::SymbolId,
             >,
         B: Backend<R::Span>,
     {
         match self {
-            BuiltinInstr::LabelBound(label, mnemonic) => directive::analyze_directive(
+            BuiltinInstr::Binding(label, mnemonic) => directive::analyze_directive(
                 (Directive::Binding(*mnemonic.item), mnemonic.span),
                 label,
                 args,
                 session,
             ),
-            BuiltinInstr::Unbound(mnemonic) => match mnemonic.item {
-                UnboundBuiltinInstrMnemonic::CpuInstr(cpu_instr) => {
+            BuiltinInstr::Free(mnemonic) => match mnemonic.item {
+                FreeBuiltinMnemonic::CpuInstr(cpu_instr) => {
                     analyze_mnemonic((cpu_instr, mnemonic.span), args, session)
                         .map_state(Into::into)
                 }
-                UnboundBuiltinInstrMnemonic::Directive(directive) => directive::analyze_directive(
-                    (Directive::Simple(*directive), mnemonic.span),
+                FreeBuiltinMnemonic::Directive(directive) => directive::analyze_directive(
+                    (Directive::Free(*directive), mnemonic.span),
                     None,
                     args,
                     session,
@@ -152,7 +147,7 @@ where
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<BindingDirective, UnboundBuiltinInstrMnemonic>,
+            Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,

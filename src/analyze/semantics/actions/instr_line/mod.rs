@@ -29,12 +29,12 @@ where
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<I::Binding, I::NonBinding>,
+            Keyword = &'static Keyword<I::Binding, I::Free>,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
     B: Backend<R::Span>,
-    BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>: Dispatch<I, R>,
+    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
 {
     type LabelActions = LabelSemantics<I, R, N, B>;
     type InstrActions = Self;
@@ -54,12 +54,12 @@ where
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<I::Binding, I::NonBinding>,
+            Keyword = &'static Keyword<I::Binding, I::Free>,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
     B: Backend<R::Span>,
-    BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>: Dispatch<I, R>,
+    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
 {
     type BuiltinInstrActions = BuiltinInstrSemantics<I, R, N, B>;
     type MacroInstrActions = MacroInstrSemantics<I, R, N, B>;
@@ -72,14 +72,14 @@ where
         span: R::Span,
     ) -> InstrRule<Self::BuiltinInstrActions, Self::MacroInstrActions, Self> {
         match self.names.resolve_name(&ident) {
-            Some(ResolvedName::Keyword(Keyword::BuiltinInstr(mnemonic))) => {
+            Some(ResolvedName::Keyword(Keyword::BuiltinMnemonic(mnemonic))) => {
                 let builtin_instr = match mnemonic {
-                    BuiltinInstrMnemonic::LabelBound(directive) => {
-                        BuiltinInstr::LabelBound(self.state.label, directive.with_span(span))
+                    BuiltinMnemonic::Binding(directive) => {
+                        BuiltinInstr::Binding(self.state.label, directive.with_span(span))
                     }
-                    BuiltinInstrMnemonic::Unbound(unbound) => {
+                    BuiltinMnemonic::Free(unbound) => {
                         self = self.flush_label();
-                        BuiltinInstr::Unbound(unbound.with_span(span))
+                        BuiltinInstr::Free(unbound.with_span(span))
                     }
                 };
                 InstrRule::BuiltinInstr(set_state!(self, BuiltinInstrState::new(builtin_instr)))
@@ -114,12 +114,12 @@ where
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<I::Binding, I::NonBinding>,
+            Keyword = &'static Keyword<I::Binding, I::Free>,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
     B: Backend<R::Span>,
-    BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>: Dispatch<I, R>,
+    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
 {
     pub fn flush_label(mut self) -> Self {
         if let Some(((label, span), _params)) = self.state.label.take() {

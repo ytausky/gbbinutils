@@ -37,12 +37,12 @@ where
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<I::Binding, I::NonBinding>,
+            Keyword = &'static Keyword<I::Binding, I::Free>,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
     B: Backend<R::Span>,
-    BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>: Dispatch<I, R>,
+    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
 {
     pub fn analyze_file(self, path: R::StringRef) -> Result<(), CodebaseError> {
         let (reentrancy, session) = self.split_reentrancy();
@@ -110,12 +110,12 @@ where
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<I::Binding, I::NonBinding>,
+            Keyword = &'static Keyword<I::Binding, I::Free>,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
     B: Backend<R::Span>,
-    BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>: Dispatch<I, R>,
+    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
 {
     type InstrLineActions = InstrLineSemantics<I, R, N, B>;
     type TokenLineActions = TokenLineSemantics<I, R, N, B>;
@@ -199,7 +199,7 @@ pub mod tests {
         Diagnostics(DiagnosticsEvent<S>),
         NameTable(
             NameTableEvent<
-                &'static Keyword<BindingDirective, UnboundBuiltinInstrMnemonic>,
+                &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
                 MockMacroId,
                 MockSymbolId,
             >,
@@ -225,7 +225,7 @@ pub mod tests {
     impl<S: Clone>
         From<
             NameTableEvent<
-                &'static Keyword<BindingDirective, UnboundBuiltinInstrMnemonic>,
+                &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
                 MockMacroId,
                 MockSymbolId,
             >,
@@ -233,7 +233,7 @@ pub mod tests {
     {
         fn from(
             event: NameTableEvent<
-                &'static Keyword<BindingDirective, UnboundBuiltinInstrMnemonic>,
+                &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
                 MockMacroId,
                 MockSymbolId,
             >,
@@ -668,7 +668,7 @@ pub mod tests {
             Item = (
                 String,
                 ResolvedName<
-                    &'static Keyword<BindingDirective, UnboundBuiltinInstrMnemonic>,
+                    &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
                     MockMacroId,
                     MockSymbolId,
                 >,
@@ -696,7 +696,7 @@ pub mod tests {
         Box<
             MockNameTable<
                 BasicNameTable<
-                    &'static Keyword<BindingDirective, UnboundBuiltinInstrMnemonic>,
+                    &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
                     MockMacroId,
                     MockSymbolId,
                 >,

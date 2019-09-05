@@ -20,12 +20,12 @@ where
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<I::Binding, I::NonBinding>,
+            Keyword = &'static Keyword<I::Binding, I::Free>,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
     B: SymbolSource,
-    BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>: Dispatch<I, R>,
+    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
 {
     type ContextFinalizer = TokenContextFinalizationSemantics<I, R, N, B>;
 

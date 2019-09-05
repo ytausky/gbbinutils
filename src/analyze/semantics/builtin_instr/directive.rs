@@ -1,4 +1,4 @@
-use super::{DefaultBuiltinInstrSet, UnboundBuiltinInstrMnemonic};
+use super::{DefaultBuiltinInstrSet, FreeBuiltinMnemonic};
 
 use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::arg::*;
@@ -15,7 +15,7 @@ use std::ops::DerefMut;
 #[derive(Clone, Debug, PartialEq)]
 pub(in crate::analyze) enum Directive {
     Binding(BindingDirective),
-    Simple(SimpleDirective),
+    Free(FreeDirective),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -26,7 +26,7 @@ pub(in crate::analyze) enum BindingDirective {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(in crate::analyze) enum SimpleDirective {
+pub(in crate::analyze) enum FreeDirective {
     Db,
     Ds,
     Dw,
@@ -48,7 +48,7 @@ where
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<BindingDirective, UnboundBuiltinInstrMnemonic>,
+            Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
@@ -77,7 +77,7 @@ where
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<BindingDirective, UnboundBuiltinInstrMnemonic>,
+            Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
@@ -88,18 +88,18 @@ where
         directive: Directive,
     ) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
         use self::BindingDirective::*;
-        use self::SimpleDirective::*;
+        use self::FreeDirective::*;
         match directive {
             Directive::Binding(Equ) => self.analyze_equ(),
             Directive::Binding(Macro) => self.analyze_macro(),
             Directive::Binding(Section) => self.analyze_section(),
-            Directive::Simple(Db) => self.analyze_data(Width::Byte),
-            Directive::Simple(Ds) => self.analyze_ds(),
-            Directive::Simple(Dw) => self.analyze_data(Width::Word),
-            Directive::Simple(Endc) => self.analyze_endc(),
-            Directive::Simple(If) => self.analyze_if(),
-            Directive::Simple(Include) => self.analyze_include(),
-            Directive::Simple(Org) => self.analyze_org(),
+            Directive::Free(Db) => self.analyze_data(Width::Byte),
+            Directive::Free(Ds) => self.analyze_ds(),
+            Directive::Free(Dw) => self.analyze_data(Width::Word),
+            Directive::Free(Endc) => self.analyze_endc(),
+            Directive::Free(If) => self.analyze_if(),
+            Directive::Free(Include) => self.analyze_include(),
+            Directive::Free(Org) => self.analyze_org(),
         }
     }
 
@@ -535,7 +535,7 @@ mod tests {
     fn taken_if_remains_in_instr_mode() {
         collect_semantic_actions(|session| {
             let session = analyze_directive(
-                (Directive::Simple(SimpleDirective::If), ()),
+                (Directive::Free(FreeDirective::If), ()),
                 None,
                 vec![Arg {
                     variant: ArgVariant::Atom(ArgAtom::Literal(Literal::Number(1))),
@@ -557,7 +557,7 @@ mod tests {
     fn ignore_instrs_in_untaken_if() {
         collect_semantic_actions(|session| {
             let session = analyze_directive(
-                (Directive::Simple(SimpleDirective::If), ()),
+                (Directive::Free(FreeDirective::If), ()),
                 None,
                 vec![Arg {
                     variant: ArgVariant::Atom(ArgAtom::Literal(Literal::Number(0))),
@@ -585,7 +585,7 @@ mod tests {
         Box<
             MockNameTable<
                 BasicNameTable<
-                    &'static Keyword<BindingDirective, UnboundBuiltinInstrMnemonic>,
+                    &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
                     MockMacroId,
                     MockSymbolId,
                 >,
@@ -628,7 +628,7 @@ mod tests {
         Box<
             MockNameTable<
                 BasicNameTable<
-                    &'static Keyword<BindingDirective, UnboundBuiltinInstrMnemonic>,
+                    &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
                     MockMacroId,
                     MockSymbolId,
                 >,

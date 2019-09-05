@@ -21,7 +21,7 @@ impl<I, R, N, B> ArgFinalizer for ArgSemantics<I, R, N, B>
 where
     I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
-    BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>: Dispatch<I, R>,
+    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
 {
     type Next = BuiltinInstrSemantics<I, R, N, B>;
 
@@ -40,12 +40,12 @@ where
     N: DerefMut,
     N::Target: NameTable<
         R::Ident,
-        Keyword = &'static Keyword<I::Binding, I::NonBinding>,
+        Keyword = &'static Keyword<I::Binding, I::Free>,
         MacroId = R::MacroId,
         SymbolId = B::SymbolId,
     >,
     B: SymbolSource,
-    BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>: Dispatch<I, R>,
+    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
 {
     fn act_on_atom(&mut self, atom: ExprAtom<R::Ident, Literal<R::StringRef>>, span: R::Span) {
         self.state.stack.push(Arg {

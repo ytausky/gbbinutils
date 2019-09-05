@@ -1,5 +1,5 @@
 use self::arg::{Arg, OperandSymbol};
-use self::builtin_instr::{BuiltinInstr, BuiltinInstrMnemonic, BuiltinInstrSet, Dispatch};
+use self::builtin_instr::{BuiltinInstr, BuiltinInstrSet, BuiltinMnemonic, Dispatch};
 use self::params::*;
 use self::resolve::{NameTable, ResolvedName};
 
@@ -37,8 +37,8 @@ mod params;
 pub(super) mod resolve;
 
 #[derive(Clone, Debug, PartialEq)]
-pub(in crate::analyze) enum Keyword<L, U> {
-    BuiltinInstr(BuiltinInstrMnemonic<L, U>),
+pub(in crate::analyze) enum Keyword<B, F> {
+    BuiltinMnemonic(BuiltinMnemonic<B, F>),
     Operand(OperandSymbol),
 }
 
@@ -225,8 +225,8 @@ where
     R: ReentrancyActions,
     R::Ident: for<'r> From<&'r str>,
     N: DerefMut,
-    N::Target: NameTable<R::Ident, Keyword = &'static Keyword<I::Binding, I::NonBinding>>,
-    BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>: Dispatch<I, R>,
+    N::Target: NameTable<R::Ident, Keyword = &'static Keyword<I::Binding, I::Free>>,
+    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
 {
     pub fn from_components(reentrancy: R, mut names: N, builder: B) -> Self {
         for (ident, keyword) in I::keywords() {
@@ -298,9 +298,9 @@ pub(in crate::analyze) struct BuiltinInstrState<I, R>
 where
     I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
-    BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>: Dispatch<I, R>,
+    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
 {
-    builtin_instr: BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>,
+    builtin_instr: BuiltinInstr<&'static I::Binding, &'static I::Free, R>,
     args: BuiltinInstrArgs<R::Ident, R::StringRef, R::Span>,
 }
 
@@ -308,9 +308,9 @@ impl<I, R> BuiltinInstrState<I, R>
 where
     I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
-    BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>: Dispatch<I, R>,
+    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
 {
-    fn new(builtin_instr: BuiltinInstr<&'static I::Binding, &'static I::NonBinding, R>) -> Self {
+    fn new(builtin_instr: BuiltinInstr<&'static I::Binding, &'static I::Free, R>) -> Self {
         Self {
             builtin_instr,
             args: Vec::new(),
