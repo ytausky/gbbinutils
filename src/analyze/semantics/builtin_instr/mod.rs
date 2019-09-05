@@ -30,12 +30,20 @@ pub(in crate::analyze) struct DefaultBuiltinInstrSet;
 impl<R: ReentrancyActions> BuiltinInstrSet<R> for DefaultBuiltinInstrSet {
     type Binding = BindingDirective;
     type NonBinding = UnboundBuiltinInstrMnemonic;
-    type Iter = std::slice::Iter<'static, (&'static str, Keyword<Self::Binding, Self::NonBinding>)>;
+    type Iter = DefaultBuiltinInstrSetIter;
 
     fn keywords() -> Self::Iter {
         super::keywords::KEYWORDS.iter()
     }
 }
+
+type DefaultBuiltinInstrSetIter = std::slice::Iter<
+    'static,
+    (
+        &'static str,
+        Keyword<BindingDirective, UnboundBuiltinInstrMnemonic>,
+    ),
+>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(in crate::analyze) enum BuiltinInstrMnemonic<L, U> {

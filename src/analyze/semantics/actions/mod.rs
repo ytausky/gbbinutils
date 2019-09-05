@@ -17,7 +17,19 @@ use std::ops::DerefMut;
 mod instr_line;
 mod token_line;
 
-impl<I, R, N, B> Session<R, N, B, TokenStreamState<I, R>>
+type WithoutReentrancy<I, R, N, B> = Session<
+    I,
+    (),
+    N,
+    B,
+    TokenStreamState<
+        <R as IdentSource>::Ident,
+        <R as StringSource>::StringRef,
+        <R as SpanSource>::Span,
+    >,
+>;
+
+impl<I, R, N, B> Session<I, R, N, B, TokenStreamState<R::Ident, R::StringRef, R::Span>>
 where
     I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
@@ -37,10 +49,11 @@ where
         reentrancy.analyze_file(path, session).0
     }
 
-    fn split_reentrancy(self) -> (R, Session<(), N, B, TokenStreamState<I, R>>) {
+    fn split_reentrancy(self) -> (R, WithoutReentrancy<I, R, N, B>) {
         (
             self.reentrancy,
             Session {
+                instr_set: self.instr_set,
                 reentrancy: (),
                 names: self.names,
                 builder: self.builder,
@@ -51,16 +64,18 @@ where
     }
 }
 
-impl<I, R: ReentrancyActions, N, B> IntoSemanticActions<Session<(), N, B, TokenStreamState<I, R>>>
+impl<I, R: ReentrancyActions, N, B>
+    IntoSemanticActions<Session<I, (), N, B, TokenStreamState<R::Ident, R::StringRef, R::Span>>>
     for R
 {
     type SemanticActions = TokenStreamSemantics<I, R, N, B>;
 
     fn into_semantic_actions(
         self,
-        session: Session<(), N, B, TokenStreamState<I, R>>,
+        session: WithoutReentrancy<I, R, N, B>,
     ) -> Self::SemanticActions {
         Session {
+            instr_set: session.instr_set,
             reentrancy: self,
             names: session.names,
             builder: session.builder,
@@ -70,16 +85,16 @@ impl<I, R: ReentrancyActions, N, B> IntoSemanticActions<Session<(), N, B, TokenS
     }
 }
 
-impl<I, R: ReentrancyActions> From<InstrLineState<I, R>> for TokenStreamState<I, R> {
-    fn from(actions: InstrLineState<I, R>) -> Self {
+impl<I, R, S> From<InstrLineState<I, S>> for TokenStreamState<I, R, S> {
+    fn from(actions: InstrLineState<I, S>) -> Self {
         Self {
             current: LineRule::InstrLine(actions),
         }
     }
 }
 
-impl<I, R: ReentrancyActions> From<TokenContext<I, R>> for TokenStreamState<I, R> {
-    fn from(actions: TokenContext<I, R>) -> Self {
+impl<I, R, S> From<TokenContext<I, R, S>> for TokenStreamState<I, R, S> {
+    fn from(actions: TokenContext<I, R, S>) -> Self {
         Self {
             current: LineRule::TokenLine(actions),
         }

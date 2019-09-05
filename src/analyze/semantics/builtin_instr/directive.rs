@@ -188,6 +188,7 @@ where
             self.session.reentrancy.analyze_file(
                 path,
                 Session {
+                    instr_set: self.session.instr_set,
                     reentrancy: (),
                     names: self.session.names,
                     builder: self.session.builder,

@@ -10,16 +10,16 @@ use crate::object::builder::Backend;
 
 use std::ops::DerefMut;
 
-pub(super) type MacroInstrSemantics<I, R, N, B> = Session<R, N, B, MacroInstrState<I, R>>;
+pub(super) type MacroInstrSemantics<I, R, N, B> = Session<I, R, N, B, MacroInstrState<R>>;
 
-pub(in crate::analyze) struct MacroInstrState<I, R: ReentrancyActions> {
-    parent: InstrLineState<I, R>,
+pub(in crate::analyze) struct MacroInstrState<R: ReentrancyActions> {
+    parent: InstrLineState<R::Ident, R::Span>,
     name: (R::MacroId, R::Span),
     args: MacroArgs<R::Ident, R::StringRef, R::Span>,
 }
 
-impl<I, R: ReentrancyActions> MacroInstrState<I, R> {
-    pub fn new(parent: InstrLineState<I, R>, name: (R::MacroId, R::Span)) -> Self {
+impl<R: ReentrancyActions> MacroInstrState<R> {
+    pub fn new(parent: InstrLineState<R::Ident, R::Span>, name: (R::MacroId, R::Span)) -> Self {
         Self {
             parent,
             name,
@@ -79,6 +79,7 @@ where
             self.state.name,
             self.state.args,
             Session {
+                instr_set: self.instr_set,
                 reentrancy: (),
                 names: self.names,
                 builder: self.builder,
@@ -89,15 +90,15 @@ where
     }
 }
 
-type MacroArgSemantics<I, R, N, B> = Session<R, N, B, MacroArgState<I, R>>;
+type MacroArgSemantics<I, R, N, B> = Session<I, R, N, B, MacroArgState<R>>;
 
-pub(in crate::analyze) struct MacroArgState<I, R: ReentrancyActions> {
+pub(in crate::analyze) struct MacroArgState<R: ReentrancyActions> {
     tokens: TokenSeq<R::Ident, R::StringRef, R::Span>,
-    parent: MacroInstrState<I, R>,
+    parent: MacroInstrState<R>,
 }
 
-impl<I, R: ReentrancyActions> MacroArgState<I, R> {
-    fn new(parent: MacroInstrState<I, R>) -> Self {
+impl<R: ReentrancyActions> MacroArgState<R> {
+    fn new(parent: MacroInstrState<R>) -> Self {
         Self {
             tokens: (Vec::new(), Vec::new()),
             parent,

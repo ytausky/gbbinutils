@@ -4,16 +4,16 @@ use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::Params;
 use crate::analyze::syntax::actions::LabelActions;
 
-pub(super) type LabelSemantics<I, R, N, B> = Session<R, N, B, LabelState<I, R>>;
+pub(super) type LabelSemantics<I, R, N, B> = Session<I, R, N, B, LabelState<R>>;
 
-pub(in crate::analyze) struct LabelState<I, R: ReentrancyActions> {
-    parent: InstrLineState<I, R>,
+pub(in crate::analyze) struct LabelState<R: ReentrancyActions> {
+    parent: InstrLineState<R::Ident, R::Span>,
     label: (R::Ident, R::Span),
     params: Params<R::Ident, R::Span>,
 }
 
-impl<I, R: ReentrancyActions> LabelState<I, R> {
-    pub fn new(parent: InstrLineState<I, R>, label: (R::Ident, R::Span)) -> Self {
+impl<R: ReentrancyActions> LabelState<R> {
+    pub fn new(parent: InstrLineState<R::Ident, R::Span>, label: (R::Ident, R::Span)) -> Self {
         Self {
             parent,
             label,

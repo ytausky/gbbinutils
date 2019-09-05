@@ -13,7 +13,12 @@ use std::ops::DerefMut;
 
 mod arg;
 
-impl<I, R> From<BuiltinInstrState<I, R>> for TokenStreamState<I, R>
+impl<I, R> From<BuiltinInstrState<I, R>>
+    for TokenStreamState<
+        <R as IdentSource>::Ident,
+        <R as StringSource>::StringRef,
+        <R as SpanSource>::Span,
+    >
 where
     I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
@@ -71,7 +76,7 @@ where
     }
 }
 
-impl<R, N, B, S> Session<R, N, B, S>
+impl<I, R, N, B, S> Session<I, R, N, B, S>
 where
     R: ReentrancyActions,
     N: DerefMut,
