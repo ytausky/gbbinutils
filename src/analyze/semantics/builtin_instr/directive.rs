@@ -169,7 +169,7 @@ where
                 {
                     Some(true) => (),
                     Some(false) => {
-                        self.session.state.current = LineRule::TokenLine(TokenContext::FalseIf)
+                        self.session.state.mode = LineRule::TokenLine(TokenContext::FalseIf)
                     }
                     None => unimplemented!(),
                 }
@@ -546,7 +546,7 @@ mod tests {
             assert_eq!(
                 session.state,
                 TokenStreamState {
-                    current: LineRule::InstrLine(InstrLineState { label: None })
+                    mode: LineRule::InstrLine(InstrLineState { label: None })
                 }
             );
             session
@@ -568,7 +568,7 @@ mod tests {
             assert_eq!(
                 session.state,
                 TokenStreamState {
-                    current: LineRule::TokenLine(TokenContext::FalseIf)
+                    mode: LineRule::TokenLine(TokenContext::FalseIf)
                 }
             );
             session

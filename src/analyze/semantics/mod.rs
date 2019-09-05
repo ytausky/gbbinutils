@@ -208,13 +208,13 @@ type TokenStreamSemantics<I, R, N, B> = Session<
 
 #[derive(Debug, PartialEq)]
 pub(super) struct TokenStreamState<I, R, S> {
-    current: LineRule<InstrLineState<I, S>, TokenContext<I, R, S>>,
+    mode: LineRule<InstrLineState<I, S>, TokenContext<I, R, S>>,
 }
 
 impl<I, R, S> TokenStreamState<I, R, S> {
     fn new() -> Self {
         Self {
-            current: LineRule::InstrLine(InstrLineState::new()),
+            mode: LineRule::InstrLine(InstrLineState::new()),
         }
     }
 }
