@@ -273,11 +273,9 @@ mod tests {
     use crate::analyze::semantics::actions::tests::*;
     use crate::analyze::semantics::resolve::{MockNameTable, NameTableEvent, ResolvedName};
     use crate::analyze::syntax::actions::*;
-    use crate::analyze::syntax::Sigil;
     use crate::codebase::CodebaseError;
     use crate::expr::{Atom, ParamId};
     use crate::object::builder::mock::*;
-    use crate::object::builder::{CpuInstr, Nullary};
 
     use std::borrow::Borrow;
     use std::io;
@@ -534,82 +532,47 @@ mod tests {
     }
 
     #[test]
-    fn dispatch_instrs_in_taken_if() {
-        let actions = collect_semantic_actions(|actions| {
-            let mut condition = actions
-                .will_parse_line()
-                .into_instr_line()
-                .will_parse_instr("IF".into(), ())
-                .into_builtin_instr()
-                .will_parse_arg();
-            condition.act_on_atom(ExprAtom::Literal(Literal::Number(1)), ());
-            condition
-                .did_parse_arg()
-                .did_parse_instr()
-                .did_parse_line(())
-                .will_parse_line()
-                .into_instr_line()
-                .will_parse_instr("NOP".into(), ())
-                .into_builtin_instr()
-                .did_parse_instr()
-                .did_parse_line(())
-                .will_parse_line()
-                .into_instr_line()
-                .will_parse_instr("ENDC".into(), ())
-                .into_builtin_instr()
-                .did_parse_instr()
-                .did_parse_line(())
-                .will_parse_line()
-                .into_instr_line()
-                .will_parse_instr("STOP".into(), ())
-                .into_builtin_instr()
-                .did_parse_instr()
-                .did_parse_line(())
-                .act_on_eos(())
+    fn taken_if_remains_in_instr_mode() {
+        collect_semantic_actions(|session| {
+            let session = analyze_directive(
+                (Directive::Simple(SimpleDirective::If), ()),
+                None,
+                vec![Arg {
+                    variant: ArgVariant::Atom(ArgAtom::Literal(Literal::Number(1))),
+                    span: (),
+                }],
+                session,
+            );
+            assert_eq!(
+                session.state,
+                TokenStreamState {
+                    current: LineRule::InstrLine(InstrLineState { label: None })
+                }
+            );
+            session
         });
-        assert_eq!(
-            actions,
-            [
-                BackendEvent::EmitItem(Item::CpuInstr(CpuInstr::Nullary(Nullary::Nop))).into(),
-                BackendEvent::EmitItem(Item::CpuInstr(CpuInstr::Nullary(Nullary::Stop))).into()
-            ]
-        )
     }
 
     #[test]
     fn ignore_instrs_in_untaken_if() {
-        let actions = collect_semantic_actions(|actions| {
-            let mut condition = actions
-                .will_parse_line()
-                .into_instr_line()
-                .will_parse_instr("IF".into(), ())
-                .into_builtin_instr()
-                .will_parse_arg();
-            condition.act_on_atom(ExprAtom::Literal(Literal::Number(0)), ());
-            let mut then = condition
-                .did_parse_arg()
-                .did_parse_instr()
-                .did_parse_line(())
-                .will_parse_line()
-                .into_token_line()
-                .act_on_ident("NOP".into(), ())
-                .into_token_seq();
-            then.act_on_token(Sigil::Eol.into(), ());
-            then.act_on_ident("ENDC".into(), ())
-                .into_line_end()
-                .did_parse_line(())
-                .will_parse_line()
-                .into_instr_line()
-                .will_parse_instr("STOP".into(), ())
-                .into_builtin_instr()
-                .did_parse_instr()
-                .did_parse_line(())
-                .act_on_eos(())
+        collect_semantic_actions(|session| {
+            let session = analyze_directive(
+                (Directive::Simple(SimpleDirective::If), ()),
+                None,
+                vec![Arg {
+                    variant: ArgVariant::Atom(ArgAtom::Literal(Literal::Number(0))),
+                    span: (),
+                }],
+                session,
+            );
+            assert_eq!(
+                session.state,
+                TokenStreamState {
+                    current: LineRule::TokenLine(TokenContext::FalseIf)
+                }
+            );
+            session
         });
-        assert_eq!(
-            actions,
-            [BackendEvent::EmitItem(Item::CpuInstr(CpuInstr::Nullary(Nullary::Stop))).into()]
-        )
     }
 
     fn ds(f: impl FnOnce(&mut TestExprContext<()>)) -> Vec<TestOperation<()>> {

@@ -23,6 +23,36 @@ OTHER   RET";
     assert_eq!(*assembled.unwrap(), binary)
 }
 
+#[test]
+fn dispatch_instrs_in_taken_if() {
+    assert_eq!(
+        assemble_snippet(
+            r"
+        IF      1
+        NOP
+        ENDC
+        NOP"
+        ),
+        (Some(vec![NOP, NOP].into()), vec![])
+    )
+}
+
+#[test]
+fn ignore_instrs_in_untaken_if() {
+    assert_eq!(
+        assemble_snippet(
+            r"
+        IF      0
+        NOP
+        ENDC
+        NOP"
+        ),
+        (Some(vec![NOP].into()), vec![])
+    )
+}
+
+const NOP: u8 = 0x00;
+
 fn assemble_snippet(src: &str) -> (Option<Box<[u8]>>, Vec<gbas::diag::Diagnostic>) {
     let name = "__buffer";
     let mut fs = SingleBuffer::new(name, src);

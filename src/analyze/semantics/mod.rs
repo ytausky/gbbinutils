@@ -206,6 +206,7 @@ type TokenStreamSemantics<I, R, N, B> = Session<
     >,
 >;
 
+#[derive(Debug, PartialEq)]
 pub(super) struct TokenStreamState<I, R, S> {
     current: LineRule<InstrLineState<I, S>, TokenContext<I, R, S>>,
 }
@@ -245,6 +246,7 @@ where
 type InstrLineSemantics<I, R, N, B> =
     Session<I, R, N, B, InstrLineState<<R as IdentSource>::Ident, <R as SpanSource>::Span>>;
 
+#[derive(Debug, PartialEq)]
 pub(super) struct InstrLineState<I, S> {
     label: Option<Label<I, S>>,
 }
@@ -269,11 +271,13 @@ type TokenLineSemantics<I, R, N, B> = Session<
     >,
 >;
 
+#[derive(Debug, PartialEq)]
 pub(in crate::analyze) enum TokenContext<I, R, S> {
     FalseIf,
     MacroDef(MacroDefState<I, R, S>),
 }
 
+#[derive(Debug, PartialEq)]
 pub(in crate::analyze) struct MacroDefState<I, R, S> {
     label: Option<Label<I, S>>,
     tokens: TokenSeq<I, R, S>,
