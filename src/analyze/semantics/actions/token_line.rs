@@ -32,10 +32,7 @@ where
     fn act_on_token(&mut self, token: SemanticToken<R::Ident, R::StringRef>, span: R::Span) {
         match &mut self.state {
             TokenContext::FalseIf => (),
-            TokenContext::MacroDef(state) => {
-                state.tokens.0.push(token);
-                state.tokens.1.push(span);
-            }
+            TokenContext::MacroDef(state) => state.act_on_token(token, span),
         }
     }
 
@@ -54,16 +51,21 @@ where
             }
             TokenContext::MacroDef(state) => {
                 if ident.as_ref().eq_ignore_ascii_case("ENDM") {
-                    state.tokens.0.push(Sigil::Eos.into());
-                    state.tokens.1.push(span);
+                    state.act_on_token(Sigil::Eos.into(), span);
                     TokenLineRule::LineEnd(TokenContextFinalizationSemantics { parent: self })
                 } else {
-                    state.tokens.0.push(Token::Ident(ident));
-                    state.tokens.1.push(span);
+                    state.act_on_token(Token::Ident(ident), span);
                     TokenLineRule::TokenSeq(self)
                 }
             }
         }
+    }
+}
+
+impl<I, R, S> MacroDefState<I, R, S> {
+    fn act_on_token(&mut self, token: SemanticToken<I, R>, span: S) {
+        self.tokens.0.push(token);
+        self.tokens.1.push(span);
     }
 }
 
