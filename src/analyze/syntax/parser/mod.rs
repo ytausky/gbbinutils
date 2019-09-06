@@ -386,7 +386,7 @@ where
             match self.state.token {
                 (Ok(Token::Ident(ident)), span) => {
                     bump!(self);
-                    match self.actions.act_on_ident(ident, span) {
+                    match self.actions.act_on_mnemonic(ident, span) {
                         TokenLineRule::TokenSeq(actions) => {
                             self = Parser::from_state(self.state, actions)
                         }

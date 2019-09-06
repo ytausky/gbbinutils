@@ -453,7 +453,7 @@ pub mod tests {
                 .did_parse_line(())
                 .will_parse_line()
                 .into_token_line()
-                .act_on_ident("ENDM".into(), ())
+                .act_on_mnemonic("ENDM".into(), ())
                 .into_line_end()
                 .did_parse_line(())
                 .act_on_eos(())
@@ -489,7 +489,7 @@ pub mod tests {
                 token_seq_actions.act_on_token(token, ())
             }
             token_seq_actions
-                .act_on_ident("ENDM".into(), ())
+                .act_on_mnemonic("ENDM".into(), ())
                 .into_line_end()
                 .did_parse_line(())
                 .act_on_eos(())

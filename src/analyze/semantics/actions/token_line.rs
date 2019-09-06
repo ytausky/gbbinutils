@@ -36,7 +36,7 @@ where
         }
     }
 
-    fn act_on_ident(
+    fn act_on_mnemonic(
         mut self,
         ident: R::Ident,
         span: R::Span,

@@ -240,7 +240,7 @@ pub(in crate::analyze) trait TokenLineActions<I, L, S: Clone>:
     type ContextFinalizer: LineFinalizer<S, Next = Self::Next>;
 
     fn act_on_token(&mut self, token: Token<I, L>, span: S);
-    fn act_on_ident(self, ident: I, span: S) -> TokenLineRule<Self, Self::ContextFinalizer>;
+    fn act_on_mnemonic(self, ident: I, span: S) -> TokenLineRule<Self, Self::ContextFinalizer>;
 }
 
 pub(in crate::analyze) enum TokenLineRule<T, E> {
@@ -611,7 +611,7 @@ pub mod mock {
                 .push(TokenLineAction::Token((token, span)))
         }
 
-        fn act_on_ident(
+        fn act_on_mnemonic(
             mut self,
             ident: I,
             span: S,
