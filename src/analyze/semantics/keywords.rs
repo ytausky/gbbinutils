@@ -31,6 +31,7 @@ pub(super) const KEYWORDS: &[(&str, Keyword<BindingDirective, FreeBuiltinMnemoni
     ("E", Operand(E)),
     ("EI", BuiltinMnemonic(Free(CpuInstr(EI)))),
     ("ENDC", BuiltinMnemonic(Free(Directive(Endc)))),
+    ("ENDM", BuiltinMnemonic(Free(Directive(Endm)))),
     ("EQU", BuiltinMnemonic(Binding(Equ))),
     ("H", Operand(H)),
     ("HALT", BuiltinMnemonic(Free(CpuInstr(HALT)))),

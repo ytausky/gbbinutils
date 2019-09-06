@@ -1,7 +1,8 @@
 use super::{Keyword, TokenStreamSemantics};
 
 use crate::analyze::reentrancy::ReentrancyActions;
-use crate::analyze::semantics::builtin_instr::Dispatch;
+use crate::analyze::semantics::builtin_instr::directive::FreeDirective;
+use crate::analyze::semantics::builtin_instr::{Dispatch, FreeBuiltinMnemonic};
 use crate::analyze::semantics::resolve::{NameTable, ResolvedName, StartScope};
 use crate::analyze::semantics::*;
 use crate::analyze::syntax::actions::{LineFinalizer, TokenLineActions, TokenLineRule};
@@ -26,6 +27,7 @@ where
         >,
     B: SymbolSource,
     BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
+    TokenLineContext<R::Ident, R::StringRef, R::Span>: TokenContext<I, R>,
 {
     type ContextFinalizer = TokenContextFinalizationSemantics<I, R, N, B>;
 
@@ -41,23 +43,78 @@ where
         ident: R::Ident,
         span: R::Span,
     ) -> TokenLineRule<Self, Self::ContextFinalizer> {
-        match &mut self.state.context {
-            TokenLineContext::FalseIf => {
-                if ident.as_ref().eq_ignore_ascii_case("ENDC") {
-                    TokenLineRule::LineEnd(TokenContextFinalizationSemantics { parent: self })
-                } else {
-                    TokenLineRule::TokenSeq(self)
-                }
+        if let Some(ResolvedName::Keyword(Keyword::BuiltinMnemonic(mnemonic))) =
+            self.resolve_name(&ident)
+        {
+            if let TokenLineRule::LineEnd(()) =
+                self.state.context.act_on_mnemonic(mnemonic, span.clone())
+            {
+                return TokenLineRule::LineEnd(TokenContextFinalizationSemantics { parent: self });
             }
-            TokenLineContext::MacroDef(state) => {
-                if ident.as_ref().eq_ignore_ascii_case("ENDM") {
-                    state.act_on_token(Sigil::Eos.into(), span);
-                    TokenLineRule::LineEnd(TokenContextFinalizationSemantics { parent: self })
-                } else {
-                    state.act_on_token(Token::Ident(ident), span);
-                    TokenLineRule::TokenSeq(self)
-                }
+        }
+        self.act_on_token(Token::Ident(ident), span);
+        TokenLineRule::TokenSeq(self)
+    }
+}
+
+pub(in crate::analyze) trait TokenContext<I: BuiltinInstrSet<R>, R: ReentrancyActions>:
+    ActOnMnemonic<&'static BuiltinMnemonic<I::Binding, I::Free>, R::Span>
+    + ActOnToken<SemanticToken<R::Ident, R::StringRef>, R::Span>
+where
+    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
+{
+}
+
+impl<T, I, R> TokenContext<I, R> for T
+where
+    T: ActOnMnemonic<&'static BuiltinMnemonic<I::Binding, I::Free>, R::Span>
+        + ActOnToken<SemanticToken<R::Ident, R::StringRef>, R::Span>,
+    I: BuiltinInstrSet<R>,
+    R: ReentrancyActions,
+    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
+{
+}
+
+pub(in crate::analyze) trait ActOnMnemonic<M, S> {
+    fn act_on_mnemonic(&mut self, mnemonic: M, span: S) -> TokenLineRule<(), ()>;
+}
+
+impl<B, I, R, S> ActOnMnemonic<&'static BuiltinMnemonic<B, FreeBuiltinMnemonic>, S>
+    for TokenLineContext<I, R, S>
+where
+    Self: ActOnToken<SemanticToken<I, R>, S>,
+{
+    fn act_on_mnemonic(
+        &mut self,
+        mnemonic: &'static BuiltinMnemonic<B, FreeBuiltinMnemonic>,
+        span: S,
+    ) -> TokenLineRule<(), ()> {
+        match (&*self, mnemonic) {
+            (
+                TokenLineContext::FalseIf,
+                BuiltinMnemonic::Free(FreeBuiltinMnemonic::Directive(FreeDirective::Endc)),
+            ) => TokenLineRule::LineEnd(()),
+            (
+                TokenLineContext::MacroDef(_),
+                BuiltinMnemonic::Free(FreeBuiltinMnemonic::Directive(FreeDirective::Endm)),
+            ) => {
+                self.act_on_token(Sigil::Eos.into(), span);
+                TokenLineRule::LineEnd(())
             }
+            _ => TokenLineRule::TokenSeq(()),
+        }
+    }
+}
+
+pub(in crate::analyze) trait ActOnToken<T, S> {
+    fn act_on_token(&mut self, token: T, span: S);
+}
+
+impl<I, R, S> ActOnToken<SemanticToken<I, R>, S> for TokenLineContext<I, R, S> {
+    fn act_on_token(&mut self, token: SemanticToken<I, R>, span: S) {
+        match self {
+            TokenLineContext::FalseIf => drop((token, span)),
+            TokenLineContext::MacroDef(state) => state.act_on_token(token, span),
         }
     }
 }
@@ -83,6 +140,7 @@ where
         >,
     B: SymbolSource,
     BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
+    TokenLineContext<R::Ident, R::StringRef, R::Span>: TokenContext<I, R>,
 {
     type Next = TokenStreamSemantics<I, R, N, B>;
 

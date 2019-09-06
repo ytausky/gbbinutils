@@ -1,4 +1,4 @@
-use self::token_line::TokenContextFinalizationSemantics;
+use self::token_line::{TokenContext, TokenContextFinalizationSemantics};
 
 use super::builtin_instr::Dispatch;
 use super::Session;
@@ -43,6 +43,7 @@ where
         >,
     B: Backend<R::Span>,
     BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
+    TokenLineContext<R::Ident, R::StringRef, R::Span>: TokenContext<I, R>,
 {
     pub fn analyze_file(self, path: R::StringRef) -> Result<(), CodebaseError> {
         let (reentrancy, session) = self.split_reentrancy();
@@ -116,6 +117,7 @@ where
         >,
     B: Backend<R::Span>,
     BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
+    TokenLineContext<R::Ident, R::StringRef, R::Span>: TokenContext<I, R>,
 {
     type InstrLineActions = InstrLineSemantics<I, R, N, B>;
     type TokenLineActions = TokenLineSemantics<I, R, N, B>;

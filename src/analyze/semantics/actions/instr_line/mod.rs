@@ -1,6 +1,7 @@
 use self::label::{LabelSemantics, LabelState};
 use self::macro_instr::{MacroInstrSemantics, MacroInstrState};
 
+use super::token_line::TokenContext;
 use super::{Keyword, ReentrancyActions, Session, TokenStreamSemantics};
 
 use crate::analyze::semantics::builtin_instr::Dispatch;
@@ -35,6 +36,7 @@ where
         >,
     B: Backend<R::Span>,
     BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
+    TokenLineContext<R::Ident, R::StringRef, R::Span>: TokenContext<I, R>,
 {
     type LabelActions = LabelSemantics<I, R, N, B>;
     type InstrActions = Self;
@@ -60,6 +62,7 @@ where
         >,
     B: Backend<R::Span>,
     BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
+    TokenLineContext<R::Ident, R::StringRef, R::Span>: TokenContext<I, R>,
 {
     type BuiltinInstrActions = BuiltinInstrSemantics<I, R, N, B>;
     type MacroInstrActions = MacroInstrSemantics<I, R, N, B>;

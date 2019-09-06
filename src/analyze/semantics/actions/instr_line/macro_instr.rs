@@ -1,9 +1,11 @@
 use super::{InstrLineState, Keyword, Session, TokenStreamSemantics};
 
 use crate::analyze::reentrancy::{MacroArgs, ReentrancyActions};
+use crate::analyze::semantics::actions::token_line::TokenContext;
 use crate::analyze::semantics::actions::TokenStreamState;
 use crate::analyze::semantics::builtin_instr::{BuiltinInstr, BuiltinInstrSet, Dispatch};
 use crate::analyze::semantics::resolve::{NameTable, StartScope};
+use crate::analyze::semantics::TokenLineContext;
 use crate::analyze::syntax::actions::{InstrFinalizer, MacroArgActions, MacroInstrActions};
 use crate::analyze::{SemanticToken, TokenSeq};
 use crate::object::builder::Backend;
@@ -48,6 +50,7 @@ where
         >,
     B: Backend<R::Span>,
     BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
+    TokenLineContext<R::Ident, R::StringRef, R::Span>: TokenContext<I, R>,
 {
     type Token = SemanticToken<R::Ident, R::StringRef>;
     type MacroArgActions = MacroArgSemantics<I, R, N, B>;
@@ -71,6 +74,7 @@ where
         >,
     B: Backend<R::Span>,
     BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
+    TokenLineContext<R::Ident, R::StringRef, R::Span>: TokenContext<I, R>,
 {
     type Next = TokenStreamSemantics<I, R, N, B>;
 
