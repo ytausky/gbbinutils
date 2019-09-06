@@ -69,14 +69,25 @@ impl<I, R, S> MacroDefState<I, R, S> {
     }
 }
 
-impl<I, R: ReentrancyActions, N, B> LineFinalizer<R::Span> for TokenLineSemantics<I, R, N, B> {
+impl<I, R, N, B> LineFinalizer<R::Span> for TokenLineSemantics<I, R, N, B>
+where
+    I: BuiltinInstrSet<R>,
+    R: ReentrancyActions,
+    N: DerefMut,
+    N::Target: StartScope<R::Ident>
+        + NameTable<
+            R::Ident,
+            Keyword = &'static Keyword<I::Binding, I::Free>,
+            MacroId = R::MacroId,
+            SymbolId = B::SymbolId,
+        >,
+    B: SymbolSource,
+    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
+{
     type Next = TokenStreamSemantics<I, R, N, B>;
 
     fn did_parse_line(mut self, span: R::Span) -> Self::Next {
-        match &mut self.state.context {
-            TokenContext::FalseIf => (),
-            TokenContext::MacroDef(state) => state.act_on_token(Sigil::Eol.into(), span),
-        }
+        self.act_on_token(Sigil::Eol.into(), span);
         set_state!(self, self.state.into())
     }
 }
