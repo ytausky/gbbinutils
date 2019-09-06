@@ -75,10 +75,7 @@ impl<I, R: ReentrancyActions, N, B> LineFinalizer<R::Span> for TokenLineSemantic
     fn did_parse_line(mut self, span: R::Span) -> Self::Next {
         match &mut self.state {
             TokenContext::FalseIf => (),
-            TokenContext::MacroDef(state) => {
-                state.tokens.0.push(Sigil::Eol.into());
-                state.tokens.1.push(span);
-            }
+            TokenContext::MacroDef(state) => state.act_on_token(Sigil::Eol.into(), span),
         }
         set_state!(self, self.state.into())
     }
