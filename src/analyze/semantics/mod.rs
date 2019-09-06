@@ -273,11 +273,11 @@ type TokenLineSemantics<I, R, N, B> = Session<
 
 #[derive(Debug, PartialEq)]
 pub(super) struct TokenLineState<I, R, S> {
-    context: TokenContext<I, R, S>,
+    context: TokenLineContext<I, R, S>,
 }
 
 #[derive(Debug, PartialEq)]
-pub(in crate::analyze) enum TokenContext<I, R, S> {
+pub(in crate::analyze) enum TokenLineContext<I, R, S> {
     FalseIf,
     MacroDef(MacroDefState<I, R, S>),
 }
