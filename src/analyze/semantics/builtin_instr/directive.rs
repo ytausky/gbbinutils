@@ -169,7 +169,9 @@ where
                 {
                     Some(true) => (),
                     Some(false) => {
-                        self.session.state.mode = LineRule::TokenLine(TokenContext::FalseIf)
+                        self.session.state.mode = LineRule::TokenLine(TokenLineState {
+                            context: TokenContext::FalseIf,
+                        })
                     }
                     None => unimplemented!(),
                 }
@@ -209,7 +211,10 @@ where
         }
         set_state!(
             self.session,
-            TokenContext::MacroDef(MacroDefState::new(self.label)).into()
+            TokenLineState {
+                context: TokenContext::MacroDef(MacroDefState::new(self.label))
+            }
+            .into()
         )
     }
 
@@ -568,7 +573,9 @@ mod tests {
             assert_eq!(
                 session.state,
                 TokenStreamState {
-                    mode: LineRule::TokenLine(TokenContext::FalseIf)
+                    mode: LineRule::TokenLine(TokenLineState {
+                        context: TokenContext::FalseIf
+                    })
                 }
             );
             session

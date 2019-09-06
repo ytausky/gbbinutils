@@ -208,7 +208,7 @@ type TokenStreamSemantics<I, R, N, B> = Session<
 
 #[derive(Debug, PartialEq)]
 pub(super) struct TokenStreamState<I, R, S> {
-    mode: LineRule<InstrLineState<I, S>, TokenContext<I, R, S>>,
+    mode: LineRule<InstrLineState<I, S>, TokenLineState<I, R, S>>,
 }
 
 impl<I, R, S> TokenStreamState<I, R, S> {
@@ -264,12 +264,17 @@ type TokenLineSemantics<I, R, N, B> = Session<
     R,
     N,
     B,
-    TokenContext<
+    TokenLineState<
         <R as IdentSource>::Ident,
         <R as StringSource>::StringRef,
         <R as SpanSource>::Span,
     >,
 >;
+
+#[derive(Debug, PartialEq)]
+pub(super) struct TokenLineState<I, R, S> {
+    context: TokenContext<I, R, S>,
+}
 
 #[derive(Debug, PartialEq)]
 pub(in crate::analyze) enum TokenContext<I, R, S> {

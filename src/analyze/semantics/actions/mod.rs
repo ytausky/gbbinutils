@@ -93,8 +93,8 @@ impl<I, R, S> From<InstrLineState<I, S>> for TokenStreamState<I, R, S> {
     }
 }
 
-impl<I, R, S> From<TokenContext<I, R, S>> for TokenStreamState<I, R, S> {
-    fn from(actions: TokenContext<I, R, S>) -> Self {
+impl<I, R, S> From<TokenLineState<I, R, S>> for TokenStreamState<I, R, S> {
+    fn from(actions: TokenLineState<I, R, S>) -> Self {
         Self {
             mode: LineRule::TokenLine(actions),
         }
@@ -135,7 +135,7 @@ where
                 set_state!(semantics, semantics.state.into())
             }
             LineRule::TokenLine(ref state) => {
-                match state {
+                match state.context {
                     TokenContext::FalseIf => unimplemented!(),
                     TokenContext::MacroDef(_) => {
                         self.reentrancy.emit_diag(Message::UnexpectedEof.at(span))

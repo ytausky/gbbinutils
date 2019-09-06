@@ -30,7 +30,7 @@ where
     type ContextFinalizer = TokenContextFinalizationSemantics<I, R, N, B>;
 
     fn act_on_token(&mut self, token: SemanticToken<R::Ident, R::StringRef>, span: R::Span) {
-        match &mut self.state {
+        match &mut self.state.context {
             TokenContext::FalseIf => (),
             TokenContext::MacroDef(state) => state.act_on_token(token, span),
         }
@@ -41,7 +41,7 @@ where
         ident: R::Ident,
         span: R::Span,
     ) -> TokenLineRule<Self, Self::ContextFinalizer> {
-        match &mut self.state {
+        match &mut self.state.context {
             TokenContext::FalseIf => {
                 if ident.as_ref().eq_ignore_ascii_case("ENDC") {
                     TokenLineRule::LineEnd(TokenContextFinalizationSemantics { parent: self })
@@ -73,7 +73,7 @@ impl<I, R: ReentrancyActions, N, B> LineFinalizer<R::Span> for TokenLineSemantic
     type Next = TokenStreamSemantics<I, R, N, B>;
 
     fn did_parse_line(mut self, span: R::Span) -> Self::Next {
-        match &mut self.state {
+        match &mut self.state.context {
             TokenContext::FalseIf => (),
             TokenContext::MacroDef(state) => state.act_on_token(Sigil::Eol.into(), span),
         }
@@ -103,7 +103,7 @@ where
     type Next = TokenStreamSemantics<I, R, N, B>;
 
     fn did_parse_line(mut self, _: R::Span) -> Self::Next {
-        match self.parent.state {
+        match self.parent.state.context {
             TokenContext::FalseIf => (),
             TokenContext::MacroDef(state) => {
                 if let Some((name, params)) = state.label {
