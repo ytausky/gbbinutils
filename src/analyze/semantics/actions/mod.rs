@@ -1,6 +1,6 @@
 use self::token_line::{TokenContext, TokenContextFinalizationSemantics};
 
-use super::builtin_instr::Dispatch;
+use super::builtin_instr::DispatchBuiltinInstrLine;
 use super::Session;
 use super::*;
 
@@ -42,7 +42,7 @@ where
             SymbolId = B::SymbolId,
         >,
     B: Backend<R::Span>,
-    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
+    BuiltinInstrSemantics<I, R, N, B>: DispatchBuiltinInstrLine<I, R, N, B>,
     TokenLineContext<R::Ident, R::StringRef, R::Span>: TokenContext<I, R>,
 {
     pub fn analyze_file(self, path: R::StringRef) -> Result<(), CodebaseError> {
@@ -116,7 +116,7 @@ where
             SymbolId = B::SymbolId,
         >,
     B: Backend<R::Span>,
-    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
+    BuiltinInstrSemantics<I, R, N, B>: DispatchBuiltinInstrLine<I, R, N, B>,
     TokenLineContext<R::Ident, R::StringRef, R::Span>: TokenContext<I, R>,
 {
     type InstrLineActions = InstrLineSemantics<I, R, N, B>;

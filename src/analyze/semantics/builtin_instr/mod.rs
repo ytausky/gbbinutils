@@ -3,7 +3,9 @@ use self::directive::{BindingDirective, Directive, FreeDirective};
 
 use super::params::ResolveNames;
 use super::resolve::{NameTable, StartScope};
-use super::{BuiltinInstrArgs, Keyword, Label, TokenStreamSemantics};
+use super::{
+    BuiltinInstrArgs, BuiltinInstrSemantics, InstrLineState, Keyword, Label, TokenStreamSemantics,
+};
 
 use crate::analyze::reentrancy::ReentrancyActions;
 use crate::diag::span::Spanned;
@@ -14,10 +16,7 @@ use std::ops::DerefMut;
 pub(super) mod cpu_instr;
 pub(super) mod directive;
 
-pub(in crate::analyze) trait BuiltinInstrSet<R: ReentrancyActions>
-where
-    BuiltinInstr<&'static Self::Binding, &'static Self::Free, R>: Dispatch<Self, R>,
-{
+pub(in crate::analyze) trait BuiltinInstrSet<R: ReentrancyActions> {
     type Binding: 'static;
     type Free: 'static;
     type Iter: Iterator<Item = &'static (&'static str, Keyword<Self::Binding, Self::Free>)>;
@@ -74,47 +73,29 @@ pub(in crate::analyze) enum BuiltinInstr<B, F, R: ReentrancyActions> {
     Free(Spanned<F, R::Span>),
 }
 
-pub(in crate::analyze) trait Dispatch<I: BuiltinInstrSet<R> + ?Sized, R: ReentrancyActions>
-where
-    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
-{
-    fn dispatch<N, B>(
-        self,
-        args: BuiltinInstrArgs<R::Ident, R::StringRef, R::Span>,
-        session: TokenStreamSemantics<I, R, N, B>,
-    ) -> TokenStreamSemantics<I, R, N, B>
-    where
-        N: DerefMut,
-        N::Target: StartScope<R::Ident>
-            + NameTable<
-                R::Ident,
-                Keyword = &'static Keyword<I::Binding, I::Free>,
-                MacroId = R::MacroId,
-                SymbolId = B::SymbolId,
-            >,
-        B: Backend<R::Span>;
+pub(in crate::analyze) trait DispatchBuiltinInstrLine<I, R: ReentrancyActions, N, B> {
+    fn dispatch_builtin_instr_line(self) -> TokenStreamSemantics<I, R, N, B>;
 }
 
-impl<R: ReentrancyActions> Dispatch<DefaultBuiltinInstrSet, R>
-    for BuiltinInstr<&'static BindingDirective, &'static FreeBuiltinMnemonic, R>
+impl<R, N, B> DispatchBuiltinInstrLine<DefaultBuiltinInstrSet, R, N, B>
+    for BuiltinInstrSemantics<DefaultBuiltinInstrSet, R, N, B>
+where
+    R: ReentrancyActions,
+    N: DerefMut,
+    N::Target: StartScope<R::Ident>
+        + NameTable<
+            R::Ident,
+            Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
+            MacroId = R::MacroId,
+            SymbolId = B::SymbolId,
+        >,
+    B: Backend<R::Span>,
 {
-    fn dispatch<N, B>(
-        self,
-        args: BuiltinInstrArgs<R::Ident, R::StringRef, R::Span>,
-        session: TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B>,
-    ) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B>
-    where
-        N: DerefMut,
-        N::Target: StartScope<R::Ident>
-            + NameTable<
-                R::Ident,
-                Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
-                MacroId = R::MacroId,
-                SymbolId = B::SymbolId,
-            >,
-        B: Backend<R::Span>,
-    {
-        match self {
+    fn dispatch_builtin_instr_line(self) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
+        let instr = self.state.builtin_instr;
+        let args = self.state.args;
+        let session = set_state!(self, InstrLineState::new().into());
+        match instr {
             BuiltinInstr::Binding(label, mnemonic) => directive::analyze_directive(
                 (Directive::Binding(*mnemonic.item), mnemonic.span),
                 label,

@@ -4,7 +4,7 @@ use self::macro_instr::{MacroInstrSemantics, MacroInstrState};
 use super::token_line::TokenContext;
 use super::{Keyword, ReentrancyActions, Session, TokenStreamSemantics};
 
-use crate::analyze::semantics::builtin_instr::Dispatch;
+use crate::analyze::semantics::builtin_instr::DispatchBuiltinInstrLine;
 use crate::analyze::semantics::params::RelocLookup;
 use crate::analyze::semantics::resolve::{NameTable, ResolvedName, StartScope};
 use crate::analyze::semantics::*;
@@ -35,7 +35,7 @@ where
             SymbolId = B::SymbolId,
         >,
     B: Backend<R::Span>,
-    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
+    BuiltinInstrSemantics<I, R, N, B>: DispatchBuiltinInstrLine<I, R, N, B>,
     TokenLineContext<R::Ident, R::StringRef, R::Span>: TokenContext<I, R>,
 {
     type LabelActions = LabelSemantics<I, R, N, B>;
@@ -61,7 +61,7 @@ where
             SymbolId = B::SymbolId,
         >,
     B: Backend<R::Span>,
-    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
+    BuiltinInstrSemantics<I, R, N, B>: DispatchBuiltinInstrLine<I, R, N, B>,
     TokenLineContext<R::Ident, R::StringRef, R::Span>: TokenContext<I, R>,
 {
     type BuiltinInstrActions = BuiltinInstrSemantics<I, R, N, B>;
@@ -122,7 +122,6 @@ where
             SymbolId = B::SymbolId,
         >,
     B: Backend<R::Span>,
-    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
 {
     pub fn flush_label(mut self) -> Self {
         if let Some(((label, span), _params)) = self.state.label.take() {

@@ -3,7 +3,7 @@ use super::*;
 use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::actions::TokenStreamState;
 use crate::analyze::semantics::arg::*;
-use crate::analyze::semantics::builtin_instr::Dispatch;
+use crate::analyze::semantics::builtin_instr::DispatchBuiltinInstrLine;
 use crate::analyze::semantics::resolve::NameTable;
 use crate::analyze::semantics::{Params, RelocLookup, ResolveNames, WithParams};
 use crate::analyze::syntax::actions::{BuiltinInstrActions, InstrFinalizer};
@@ -22,7 +22,6 @@ impl<I, R> From<BuiltinInstrState<I, R>>
 where
     I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
-    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
 {
     fn from(_: BuiltinInstrState<I, R>) -> Self {
         InstrLineState::new().into()
@@ -43,7 +42,7 @@ where
             SymbolId = B::SymbolId,
         >,
     B: Backend<R::Span>,
-    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
+    Self: DispatchBuiltinInstrLine<I, R, N, B>,
 {
     type ArgActions = ArgSemantics<I, R, N, B>;
 
@@ -65,14 +64,12 @@ where
             SymbolId = B::SymbolId,
         >,
     B: Backend<R::Span>,
-    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
+    Self: DispatchBuiltinInstrLine<I, R, N, B>,
 {
     type Next = TokenStreamSemantics<I, R, N, B>;
 
     fn did_parse_instr(self) -> Self::Next {
-        let args = self.state.args;
-        let instr = self.state.builtin_instr;
-        instr.dispatch(args, set_state!(self, InstrLineState::new().into()))
+        self.dispatch_builtin_instr_line()
     }
 }
 

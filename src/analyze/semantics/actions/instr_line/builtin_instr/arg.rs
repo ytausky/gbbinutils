@@ -3,7 +3,7 @@ use super::BuiltinInstrSemantics;
 use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::actions::Keyword;
 use crate::analyze::semantics::arg::*;
-use crate::analyze::semantics::builtin_instr::{BuiltinInstr, BuiltinInstrSet, Dispatch};
+use crate::analyze::semantics::builtin_instr::BuiltinInstrSet;
 use crate::analyze::semantics::resolve::{NameTable, ResolvedName};
 use crate::analyze::semantics::{ArgSemantics, ExprBuilder};
 use crate::analyze::syntax::actions::*;
@@ -21,7 +21,6 @@ impl<I, R, N, B> ArgFinalizer for ArgSemantics<I, R, N, B>
 where
     I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
-    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
 {
     type Next = BuiltinInstrSemantics<I, R, N, B>;
 
@@ -45,7 +44,6 @@ where
         SymbolId = B::SymbolId,
     >,
     B: SymbolSource,
-    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
 {
     fn act_on_atom(&mut self, atom: ExprAtom<R::Ident, Literal<R::StringRef>>, span: R::Span) {
         self.state.stack.push(Arg {

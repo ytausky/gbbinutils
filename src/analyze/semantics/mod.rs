@@ -1,5 +1,5 @@
 use self::arg::{Arg, OperandSymbol};
-use self::builtin_instr::{BuiltinInstr, BuiltinInstrSet, BuiltinMnemonic, Dispatch};
+use self::builtin_instr::{BuiltinInstr, BuiltinInstrSet, BuiltinMnemonic};
 use self::params::*;
 use self::resolve::{NameTable, ResolvedName};
 
@@ -226,7 +226,6 @@ where
     R::Ident: for<'r> From<&'r str>,
     N: DerefMut,
     N::Target: NameTable<R::Ident, Keyword = &'static Keyword<I::Binding, I::Free>>,
-    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
 {
     pub fn from_components(reentrancy: R, mut names: N, builder: B) -> Self {
         for (ident, keyword) in I::keywords() {
@@ -303,7 +302,6 @@ pub(in crate::analyze) struct BuiltinInstrState<I, R>
 where
     I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
-    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
 {
     builtin_instr: BuiltinInstr<&'static I::Binding, &'static I::Free, R>,
     args: BuiltinInstrArgs<R::Ident, R::StringRef, R::Span>,
@@ -313,7 +311,6 @@ impl<I, R> BuiltinInstrState<I, R>
 where
     I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
-    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
 {
     fn new(builtin_instr: BuiltinInstr<&'static I::Binding, &'static I::Free, R>) -> Self {
         Self {

@@ -2,7 +2,7 @@ use super::{Keyword, TokenStreamSemantics};
 
 use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::builtin_instr::directive::FreeDirective;
-use crate::analyze::semantics::builtin_instr::{Dispatch, FreeBuiltinMnemonic};
+use crate::analyze::semantics::builtin_instr::FreeBuiltinMnemonic;
 use crate::analyze::semantics::resolve::{NameTable, ResolvedName, StartScope};
 use crate::analyze::semantics::*;
 use crate::analyze::syntax::actions::{LineFinalizer, TokenLineActions, TokenLineRule};
@@ -26,7 +26,6 @@ where
             SymbolId = B::SymbolId,
         >,
     B: SymbolSource,
-    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
     TokenLineContext<R::Ident, R::StringRef, R::Span>: TokenContext<I, R>,
 {
     type ContextFinalizer = TokenContextFinalizationSemantics<I, R, N, B>;
@@ -60,8 +59,6 @@ where
 pub(in crate::analyze) trait TokenContext<I: BuiltinInstrSet<R>, R: ReentrancyActions>:
     ActOnMnemonic<&'static BuiltinMnemonic<I::Binding, I::Free>, R::Span>
     + ActOnToken<SemanticToken<R::Ident, R::StringRef>, R::Span>
-where
-    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
 {
 }
 
@@ -71,7 +68,6 @@ where
         + ActOnToken<SemanticToken<R::Ident, R::StringRef>, R::Span>,
     I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
-    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
 {
 }
 
@@ -139,7 +135,6 @@ where
             SymbolId = B::SymbolId,
         >,
     B: SymbolSource,
-    BuiltinInstr<&'static I::Binding, &'static I::Free, R>: Dispatch<I, R>,
     TokenLineContext<R::Ident, R::StringRef, R::Span>: TokenContext<I, R>,
 {
     type Next = TokenStreamSemantics<I, R, N, B>;
