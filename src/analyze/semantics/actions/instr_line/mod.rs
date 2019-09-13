@@ -135,3 +135,65 @@ where
         self
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::analyze::semantics::actions::tests::*;
+    use crate::analyze::syntax::actions::*;
+    use crate::diag::{DiagnosticsEvent, Message, MockSpan};
+    use crate::object::builder::mock::MockSymbolId;
+
+    #[test]
+    fn diagnose_unknown_mnemonic() {
+        let name = "unknown";
+        let log = collect_semantic_actions::<_, MockSpan<_>>(|session| {
+            session
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr(name.into(), name.into())
+                .error()
+                .unwrap()
+                .did_parse_instr()
+                .did_parse_line("eol".into())
+                .act_on_eos("eos".into())
+        });
+        assert_eq!(
+            log,
+            [DiagnosticsEvent::EmitDiag(
+                Message::NotAMnemonic { name: name.into() }
+                    .at(name.into())
+                    .into()
+            )
+            .into()]
+        )
+    }
+
+    #[test]
+    fn diagnose_symbol_as_mnemonic() {
+        let name = "symbol";
+        let log = log_with_predefined_names::<_, _, MockSpan<_>>(
+            vec![(name.into(), ResolvedName::Symbol(MockSymbolId(42)))],
+            |session| {
+                session
+                    .will_parse_line()
+                    .into_instr_line()
+                    .will_parse_instr(name.into(), name.into())
+                    .error()
+                    .unwrap()
+                    .did_parse_line("eol".into())
+                    .act_on_eos("eos".into())
+            },
+        );
+        assert_eq!(
+            log,
+            [DiagnosticsEvent::EmitDiag(
+                Message::CannotUseSymbolNameAsMacroName { name: name.into() }
+                    .at(name.into())
+                    .into()
+            )
+            .into()]
+        )
+    }
+}
