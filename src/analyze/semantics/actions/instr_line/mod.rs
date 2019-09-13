@@ -87,7 +87,6 @@ where
                 };
                 InstrRule::BuiltinInstr(set_state!(self, BuiltinInstrState::new(builtin_instr)))
             }
-            Some(ResolvedName::Keyword(Keyword::Operand(_))) => unimplemented!(),
             Some(ResolvedName::Macro(id)) => {
                 self = self.flush_label();
                 InstrRule::MacroInstr(set_state!(
@@ -100,7 +99,7 @@ where
                 self.emit_diag(Message::CannotUseSymbolNameAsMacroName { name }.at(span));
                 InstrRule::Error(self)
             }
-            None => {
+            Some(ResolvedName::Keyword(Keyword::Operand(_))) | None => {
                 let name = self.strip_span(&span);
                 self.emit_diag(Message::NotAMnemonic { name }.at(span));
                 InstrRule::Error(self)
@@ -148,6 +147,31 @@ mod tests {
     #[test]
     fn diagnose_unknown_mnemonic() {
         let name = "unknown";
+        let log = collect_semantic_actions::<_, MockSpan<_>>(|session| {
+            session
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr(name.into(), name.into())
+                .error()
+                .unwrap()
+                .did_parse_instr()
+                .did_parse_line("eol".into())
+                .act_on_eos("eos".into())
+        });
+        assert_eq!(
+            log,
+            [DiagnosticsEvent::EmitDiag(
+                Message::NotAMnemonic { name: name.into() }
+                    .at(name.into())
+                    .into()
+            )
+            .into()]
+        )
+    }
+
+    #[test]
+    fn diagnose_operand_as_mnemonic() {
+        let name = "HL";
         let log = collect_semantic_actions::<_, MockSpan<_>>(|session| {
             session
                 .will_parse_line()
