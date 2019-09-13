@@ -53,7 +53,12 @@ where
                     Some(ResolvedName::Keyword(Keyword::Operand(operand))) => {
                         ArgAtom::OperandSymbol(*operand)
                     }
-                    Some(ResolvedName::Keyword(_)) => unimplemented!(),
+                    Some(ResolvedName::Keyword(_)) => {
+                        let keyword = self.reentrancy.strip_span(&span);
+                        self.reentrancy
+                            .emit_diag(Message::KeywordInExpr { keyword }.at(span.clone()));
+                        ArgAtom::Error
+                    }
                     _ => ArgAtom::Ident(ident),
                 },
                 ExprAtom::Literal(literal) => ArgAtom::Literal(literal),
@@ -91,5 +96,40 @@ where
             }
         };
         self.state.stack.push(Arg { variant, span })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::analyze::semantics::actions::tests::collect_semantic_actions;
+    use crate::analyze::syntax::actions::*;
+    use crate::diag::{DiagnosticsEvent, Message, MockSpan};
+
+    #[test]
+    fn diagnose_keyword_in_expr() {
+        assert_eq!(
+            collect_semantic_actions::<_, MockSpan<_>>(|actions| {
+                let mut actions = actions
+                    .will_parse_line()
+                    .into_instr_line()
+                    .will_parse_instr("DB".into(), "db".into())
+                    .into_builtin_instr()
+                    .will_parse_arg();
+                actions.act_on_atom(ExprAtom::Ident("DB".into()), "keyword".into());
+                actions
+                    .did_parse_arg()
+                    .did_parse_instr()
+                    .did_parse_line("eol".into())
+                    .act_on_eos("eos".into())
+            }),
+            [DiagnosticsEvent::EmitDiag(
+                Message::KeywordInExpr {
+                    keyword: "keyword".into()
+                }
+                .at("keyword".into())
+                .into()
+            )
+            .into()]
+        )
     }
 }
