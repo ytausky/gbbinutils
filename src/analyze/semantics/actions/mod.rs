@@ -593,7 +593,7 @@ pub mod tests {
         assert_eq!(
             log,
             [DiagnosticsEvent::EmitDiag(
-                Message::UndefinedMacro { name: name.into() }
+                Message::NotAMnemonic { name: name.into() }
                     .at(name.into())
                     .into()
             )

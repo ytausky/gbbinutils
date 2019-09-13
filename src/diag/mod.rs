@@ -662,7 +662,7 @@ mod tests {
     static DUMMY_FILE: &str = "/my/file";
 
     #[test]
-    fn mk_message_for_undefined_macro() {
+    fn mk_message_for_not_a_mnemonic() {
         let mut codebase = TextCache::new();
         let src = "    nop\n    my_macro a, $12\n\n";
         let buf_id = codebase.add_src_buf(DUMMY_FILE, src);
@@ -675,7 +675,7 @@ mod tests {
             }),
         });
         let diagnostic = CompactDiag::from(
-            Message::UndefinedMacro {
+            Message::NotAMnemonic {
                 name: StrippedBufSpan { buf_id, range },
             }
             .at(token_ref),
@@ -686,7 +686,7 @@ mod tests {
                 clauses: vec![Clause {
                     file: DUMMY_FILE.to_string(),
                     tag: Tag::Error,
-                    message: "invocation of undefined macro `my_macro`".to_string(),
+                    message: "`my_macro` is not a mnemonic".to_string(),
                     excerpt: Some(Excerpt {
                         line: LineNumber(2),
                         source: "    my_macro a, $12".to_string(),

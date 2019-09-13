@@ -102,7 +102,7 @@ where
             }
             None => {
                 let name = self.strip_span(&span);
-                self.emit_diag(Message::UndefinedMacro { name }.at(span));
+                self.emit_diag(Message::NotAMnemonic { name }.at(span));
                 InstrRule::Error(self)
             }
         }

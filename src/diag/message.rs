@@ -62,6 +62,9 @@ pub enum Message<S> {
     MustBeDeref {
         operand: S,
     },
+    NotAMnemonic {
+        name: S,
+    },
     OnlyIdentsCanBeCalled,
     OnlySupportedByA,
     OperandCannotBeIncDec(IncDec),
@@ -76,9 +79,6 @@ pub enum Message<S> {
     RequiresSimpleOperand,
     SrcMustBeSp,
     StringInInstruction,
-    UndefinedMacro {
-        name: S,
-    },
     UnexpectedEof,
     UnexpectedToken {
         token: S,
@@ -202,6 +202,7 @@ impl Message<StrippedBufSpan<BufId, BufRange>> {
                 "operand `{}` must be dereferenced",
                 codebase.snippet(operand),
             ),
+            NotAMnemonic { name } => format!("`{}` is not a mnemonic", codebase.snippet(name)),
             OnlyIdentsCanBeCalled => "only identifiers can be called".into(),
             OnlySupportedByA => "only `a` can be used for this operand".into(),
             OperandCannotBeIncDec(operation) => format!(
@@ -225,9 +226,6 @@ impl Message<StrippedBufSpan<BufId, BufRange>> {
             RequiresSimpleOperand => "instruction requires 8-bit register or `(hl)`".into(),
             SrcMustBeSp => "source operand must be `sp`".into(),
             StringInInstruction => "strings cannot appear in instruction operands".into(),
-            UndefinedMacro { name } => {
-                format!("invocation of undefined macro `{}`", codebase.snippet(name))
-            }
             UnexpectedEof => "unexpected end of file".into(),
             UnexpectedToken { token } => {
                 format!("encountered unexpected token `{}`", codebase.snippet(token))
