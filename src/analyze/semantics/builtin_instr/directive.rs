@@ -124,14 +124,14 @@ where
 
     fn analyze_ds(mut self) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
         match single_arg(self.span, self.args, &mut self.session) {
-            Ok(arg) => {
+            Some(arg) => {
                 let (result, session) = self.session.analyze_expr(arg);
                 self.session = session;
                 if let Ok(bytes) = result {
                     self.session.builder.reserve(bytes)
                 }
             }
-            Err(()) => (),
+            None => (),
         }
         self.session
     }
@@ -139,11 +139,11 @@ where
     fn analyze_equ(mut self) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
         let (symbol, params) = self.label.take().unwrap();
         match single_arg(self.span, self.args, &mut self.session) {
-            Ok(arg) => {
+            Some(arg) => {
                 let (_, session) = self.session.define_symbol_with_params(symbol, &params, arg);
                 self.session = session;
             }
-            Err(()) => (),
+            None => (),
         }
         self.session
     }
@@ -161,7 +161,7 @@ where
 
     fn analyze_if(mut self) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
         match single_arg(self.span, self.args, &mut self.session) {
-            Ok(arg) => {
+            Some(arg) => {
                 let (value, session) = self.session.analyze_expr(arg);
                 self.session = session;
                 match self
@@ -178,15 +178,15 @@ where
                     None => unimplemented!(),
                 }
             }
-            Err(()) => unimplemented!(),
+            None => unimplemented!(),
         }
         self.session
     }
 
     fn analyze_include(mut self) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
         let (path, span) = match reduce_include(self.span, self.args, &mut self.session) {
-            Ok(result) => result,
-            Err(()) => return self.session,
+            Some(result) => result,
+            None => return self.session,
         };
         let (result, mut semantics): (_, TokenStreamSemantics<_, _, _, _>) =
             self.session.reentrancy.analyze_file(
@@ -222,14 +222,14 @@ where
 
     fn analyze_org(mut self) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
         match single_arg(self.span, self.args, &mut self.session) {
-            Ok(arg) => {
+            Some(arg) => {
                 let (result, session) = self.session.analyze_expr(arg);
                 self.session = session;
                 if let Ok(value) = result {
                     self.session.builder.set_origin(value)
                 }
             }
-            Err(()) => (),
+            None => (),
         }
         self.session
     }
@@ -239,13 +239,16 @@ fn reduce_include<I: PartialEq, R, D: Diagnostics<S>, S>(
     span: S,
     args: Vec<Arg<I, R, S>>,
     diagnostics: &mut D,
-) -> Result<(R, S), ()> {
-    let arg = single_arg(span, args, diagnostics)?;
+) -> Option<(R, S)> {
+    let arg = match single_arg(span, args, diagnostics) {
+        Some(arg) => arg,
+        None => return None,
+    };
     match arg.variant {
-        ArgVariant::Atom(ArgAtom::Literal(Literal::String(path))) => Ok((path, arg.span)),
+        ArgVariant::Atom(ArgAtom::Literal(Literal::String(path))) => Some((path, arg.span)),
         _ => {
             diagnostics.emit_diag(Message::ExpectedString.at(arg.span));
-            Err(())
+            None
         }
     }
 }
@@ -254,11 +257,11 @@ fn single_arg<T, D: Diagnostics<S>, S>(
     span: S,
     args: impl IntoIterator<Item = T>,
     diagnostics: &mut D,
-) -> Result<T, ()> {
+) -> Option<T> {
     let mut args = args.into_iter();
     if let Some(arg) = args.next() {
         assert!(args.next().is_none());
-        Ok(arg)
+        Some(arg)
     } else {
         diagnostics.emit_diag(
             Message::OperandCount {
@@ -267,7 +270,7 @@ fn single_arg<T, D: Diagnostics<S>, S>(
             }
             .at(span),
         );
-        Err(())
+        None
     }
 }
 
