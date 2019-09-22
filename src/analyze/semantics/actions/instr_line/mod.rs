@@ -126,9 +126,10 @@ where
         if let Some(((label, span), _params)) = self.state.label.take() {
             self.names.start_scope(&label);
             let id = self.reloc_lookup(label, span.clone());
-            let mut builder = self.builder.define_symbol(id, span.clone());
-            PushOp::<LocationCounter, _>::push_op(&mut builder, LocationCounter, span);
-            let (builder, ()) = builder.finish();
+            let mut builder = self.builder.build_const();
+            PushOp::<LocationCounter, _>::push_op(&mut builder, LocationCounter, span.clone());
+            let (mut builder, expr) = builder.finish();
+            builder.define_symbol(id, span, expr);
             self.builder = builder;
         }
         self

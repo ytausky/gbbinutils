@@ -230,9 +230,10 @@ mod tests {
         let mut builder = ObjectBuilder::new(&mut linkable);
         builder.set_origin(addr.into());
         let symbol_id = builder.alloc_symbol(());
-        let mut builder = builder.define_symbol(symbol_id, ());
+        let mut builder = builder.build_const();
         builder.push_op(LocationCounter, ());
-        builder.finish();
+        let (mut builder, expr) = builder.finish();
+        builder.define_symbol(symbol_id, (), expr);
         linkable.vars.resolve(&linkable.content);
         assert_eq!(linkable.vars[VarId(0)].value, addr.into());
     }
@@ -276,9 +277,10 @@ mod tests {
                 SpecialLd::InlineAddr(Atom::Name(name).into()),
                 Direction::IntoA,
             ))));
-            let mut symbol_builder = builder.define_symbol(name, ());
+            let mut symbol_builder = builder.build_const();
             symbol_builder.push_op(LocationCounter, ());
-            symbol_builder.finish();
+            let (mut builder, expr) = symbol_builder.finish();
+            builder.define_symbol(name, (), expr);
         })
     }
 
@@ -330,9 +332,10 @@ mod tests {
 
         // label dw label
         let label = object_builder.alloc_symbol(());
-        let mut symbol_builder = object_builder.define_symbol(label, ());
+        let mut symbol_builder = object_builder.build_const();
         symbol_builder.push_op(LocationCounter, ());
-        let (object_builder, ()) = symbol_builder.finish();
+        let (mut object_builder, expr) = symbol_builder.finish();
+        object_builder.define_symbol(label, (), expr);
         let mut const_builder = object_builder.build_const();
         const_builder.push_op(Name(label), ());
         let (mut object_builder, label_const) = const_builder.finish();

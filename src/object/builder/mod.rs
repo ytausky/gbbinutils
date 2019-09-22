@@ -10,11 +10,10 @@ use crate::BuiltinSymbols;
 mod lowering;
 
 pub(crate) trait Backend<S: Clone>: PartialBackend<S> + Sized {
-    type ConstBuilder: ValueBuilder<Self::SymbolId, S, Parent = Self, Value = Self::Value>;
-    type SymbolBuilder: ValueBuilder<Self::SymbolId, S, Parent = Self, Value = ()>;
+    type ExprBuilder: ValueBuilder<Self::SymbolId, S, Parent = Self, Value = Self::Value>;
 
-    fn build_const(self) -> Self::ConstBuilder;
-    fn define_symbol(self, name: Self::SymbolId, span: S) -> Self::SymbolBuilder;
+    fn build_const(self) -> Self::ExprBuilder;
+    fn define_symbol(&mut self, name: Self::SymbolId, span: S, expr: Self::Value);
 }
 
 pub(crate) trait PartialBackend<S: Clone>: AllocSymbol<S> {
@@ -294,21 +293,19 @@ impl<'a, S> ObjectBuilder<'a, S> {
 }
 
 impl<'a, S: Clone> Backend<S> for ObjectBuilder<'a, S> {
-    type ConstBuilder = RelocContext<Self, Expr<S>>;
-    type SymbolBuilder = SymbolBuilder<'a, S>;
+    type ExprBuilder = RelocContext<Self, Expr<S>>;
 
-    fn build_const(self) -> Self::ConstBuilder {
+    fn build_const(self) -> Self::ExprBuilder {
         RelocContext::new(self)
     }
 
-    fn define_symbol(self, name: Self::SymbolId, span: S) -> Self::SymbolBuilder {
+    fn define_symbol(&mut self, name: Self::SymbolId, _span: S, expr: Self::Value) {
         let location = self.context.vars.alloc();
-        SymbolBuilder {
-            parent: self,
-            location,
-            name: (name.content().unwrap(), span),
-            formula: Default::default(),
-        }
+        self.push(Node::Reloc(location));
+        self.context.content.symbols.define(
+            name.content().unwrap(),
+            ContentDef::Expr(ExprDef { expr, location }),
+        );
     }
 }
 
@@ -410,65 +407,6 @@ impl<'a, S: Clone> Finish for RelocContext<ObjectBuilder<'a, S>, Expr<S>> {
     }
 }
 
-pub(crate) struct SymbolBuilder<'a, S> {
-    parent: ObjectBuilder<'a, S>,
-    location: VarId,
-    name: (ContentId, S),
-    formula: Expr<S>,
-}
-
-impl<'a, S: Clone> SymbolSource for SymbolBuilder<'a, S> {
-    type SymbolId = SymbolId;
-}
-
-impl<'a, S: Clone> AllocSymbol<S> for SymbolBuilder<'a, S> {
-    fn alloc_symbol(&mut self, span: S) -> Self::SymbolId {
-        self.parent.alloc_symbol(span)
-    }
-}
-
-macro_rules! impl_push_op_for_symbol_builder {
-    ($t:ty) => {
-        impl<'a, S: Clone> PushOp<$t, S> for SymbolBuilder<'a, S> {
-            fn push_op(&mut self, op: $t, span: S) {
-                self.formula.push_op(op, span)
-            }
-        }
-    };
-}
-
-impl_push_op_for_symbol_builder! {i32}
-impl_push_op_for_symbol_builder! {Name<SymbolId>}
-impl_push_op_for_symbol_builder! {ParamId}
-impl_push_op_for_symbol_builder! {BinOp}
-impl_push_op_for_symbol_builder! {FnCall}
-
-impl<'a, S: Clone> PushOp<LocationCounter, S> for SymbolBuilder<'a, S> {
-    fn push_op(&mut self, _: LocationCounter, span: S) {
-        self.formula
-            .0
-            .push(ExprOp::Atom(Atom::Location).with_span(span))
-    }
-}
-
-impl<'a, S> Finish for SymbolBuilder<'a, S> {
-    type Parent = ObjectBuilder<'a, S>;
-    type Value = ();
-
-    fn finish(self) -> (Self::Parent, Self::Value) {
-        let mut parent = self.parent;
-        parent.push(Node::Reloc(self.location));
-        parent.context.content.symbols.define(
-            self.name.0,
-            ContentDef::Expr(ExprDef {
-                expr: self.formula,
-                location: self.location,
-            }),
-        );
-        (parent, ())
-    }
-}
-
 impl<'a, S: Clone> SymbolSource for ObjectBuilder<'a, S> {
     type SymbolId = SymbolId;
 }
@@ -542,22 +480,17 @@ pub mod mock {
         T: From<BackendEvent<A::SymbolId, Expr<A::SymbolId, S>>>,
         S: Clone,
     {
-        type ConstBuilder = RelocContext<Self, Expr<A::SymbolId, S>>;
-        type SymbolBuilder = SymbolBuilder<A, T, S>;
+        type ExprBuilder = RelocContext<Self, Expr<A::SymbolId, S>>;
 
-        fn build_const(self) -> Self::ConstBuilder {
+        fn build_const(self) -> Self::ExprBuilder {
             RelocContext::new(self)
         }
 
-        fn define_symbol(self, name: Self::SymbolId, span: S) -> Self::SymbolBuilder {
-            RelocContext::new((self, (name, span)))
+        fn define_symbol(&mut self, name: Self::SymbolId, span: S, expr: Self::Value) {
+            self.log
+                .push(BackendEvent::DefineSymbol((name, span), expr));
         }
     }
-
-    type SymbolBuilder<A, T, S> = RelocContext<
-        (MockBackend<A, T>, (<A as SymbolSource>::SymbolId, S)),
-        Expr<<A as SymbolSource>::SymbolId, S>,
-    >;
 
     impl<A, T, S> SymbolSource for RelocContext<MockBackend<A, T>, Expr<A::SymbolId, S>>
     where
@@ -577,16 +510,6 @@ pub mod mock {
         }
     }
 
-    impl<A: SymbolSource, T, S: Clone> SymbolSource for SymbolBuilder<A, T, S> {
-        type SymbolId = A::SymbolId;
-    }
-
-    impl<A: AllocSymbol<S>, T, S: Clone> AllocSymbol<S> for SymbolBuilder<A, T, S> {
-        fn alloc_symbol(&mut self, span: S) -> Self::SymbolId {
-            self.parent.0.alloc_symbol(span)
-        }
-    }
-
     impl<A, T, S> Finish for RelocContext<MockBackend<A, T>, Expr<A::SymbolId, S>>
     where
         A: AllocSymbol<S>,
@@ -597,24 +520,6 @@ pub mod mock {
 
         fn finish(self) -> (Self::Parent, Self::Value) {
             (self.parent, self.builder)
-        }
-    }
-
-    impl<A, T, S> Finish for SymbolBuilder<A, T, S>
-    where
-        A: AllocSymbol<S>,
-        T: From<BackendEvent<A::SymbolId, Expr<A::SymbolId, S>>>,
-        S: Clone,
-    {
-        type Parent = MockBackend<A, T>;
-        type Value = ();
-
-        fn finish(self) -> (Self::Parent, Self::Value) {
-            let (parent, name) = self.parent;
-            parent
-                .log
-                .push(BackendEvent::DefineSymbol(name, self.builder));
-            (parent, ())
         }
     }
 
@@ -868,9 +773,10 @@ mod tests {
     fn emit_defined_symbol() {
         let (object, diagnostics) = with_object_builder(|mut builder| {
             let symbol_id = builder.alloc_symbol(());
-            let mut builder = builder.define_symbol(symbol_id, ());
+            let mut builder = builder.build_const();
             builder.push_op(LocationCounter, ());
-            let (mut builder, _) = builder.finish();
+            let (mut builder, expr) = builder.finish();
+            builder.define_symbol(symbol_id, (), expr);
             let mut value: Expr<_> = Default::default();
             value.push_op(symbol_id, ());
             builder.emit_item(word_item(value));
@@ -886,9 +792,10 @@ mod tests {
             let mut value: Expr<_> = Default::default();
             value.push_op(symbol_id, ());
             builder.emit_item(word_item(value));
-            let mut builder = builder.define_symbol(symbol_id, ());
+            let mut builder = builder.build_const();
             builder.push_op(LocationCounter, ());
-            builder.finish();
+            let (mut builder, expr) = builder.finish();
+            builder.define_symbol(symbol_id, (), expr);
         });
         assert_eq!(*diagnostics, []);
         assert_eq!(object.sections.last().unwrap().data, [0x02, 0x00])

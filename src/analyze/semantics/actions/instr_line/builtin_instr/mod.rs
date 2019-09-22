@@ -98,11 +98,12 @@ where
     ) -> (Result<(), ()>, Self) {
         let id = self.reloc_lookup(name, span.clone());
         let mut builder = self
-            .map_builder(|builder| builder.define_symbol(id, span))
+            .map_builder(|builder| builder.build_const())
             .resolve_names()
             .with_params(params);
         let result = builder.eval_arg(expr);
-        let (session, ()) = builder.finish();
+        let (mut session, expr) = builder.finish();
+        session.builder.define_symbol(id, span, expr);
         (result, session)
     }
 }
