@@ -174,12 +174,10 @@ mod tests {
     use crate::analyze::semantics::resolve::NameTableEvent;
     use crate::analyze::semantics::Keyword;
     use crate::diag::{DiagnosticsEvent, MockSpan};
-    use crate::expr::{Atom, ParamId};
+    use crate::expr::{Atom, Expr, ParamId};
     use crate::log::Log;
     use crate::object::builder::mock::{BackendEvent, MockSymbolId};
     use crate::object::builder::PushOp;
-
-    type Expr<N, S> = crate::expr::Expr<Atom<LocationCounter, N>, S>;
 
     #[derive(Debug, PartialEq)]
     enum Event<N, S: Clone> {

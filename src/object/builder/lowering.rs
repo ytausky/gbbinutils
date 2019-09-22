@@ -216,7 +216,7 @@ fn encode_branch<S: Clone>(
 fn mk_relative_expr<S: Clone>(mut expr: Const<S>) -> Const<S> {
     let span = expr.span();
     expr.0
-        .push(ExprOp::Atom(Atom::Location(LocationCounter)).with_span(span.clone()));
+        .push(ExprOp::Atom(Atom::Location).with_span(span.clone()));
     expr.0.push(ExprOp::Binary(BinOp::Minus).with_span(span));
     expr
 }

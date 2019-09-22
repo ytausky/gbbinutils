@@ -209,8 +209,7 @@ pub mod tests {
         Reentrancy(ReentrancyEvent),
     }
 
-    pub(in crate::analyze::semantics) type Expr<S> =
-        crate::expr::Expr<Atom<LocationCounter, MockSymbolId>, S>;
+    pub(in crate::analyze::semantics) type Expr<S> = crate::expr::Expr<MockSymbolId, S>;
 
     impl<S: Clone> From<BackendEvent<MockSymbolId, Expr<S>>> for TestOperation<S> {
         fn from(event: BackendEvent<MockSymbolId, Expr<S>>) -> Self {

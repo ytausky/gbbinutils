@@ -338,7 +338,7 @@ mod tests {
     use crate::analyze::semantics::arg::*;
     use crate::analyze::semantics::mock::MockExprBuilder;
     use crate::analyze::Literal;
-    use crate::expr::{Atom, LocationCounter};
+    use crate::expr::Atom;
 
     #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
     pub(super) enum TokenId {
@@ -348,7 +348,7 @@ mod tests {
 
     pub(super) type TokenSpan = MockSpan<TokenId>;
 
-    type Expr = crate::expr::Expr<Atom<LocationCounter, MockSymbolId>, TokenSpan>;
+    type Expr = crate::expr::Expr<MockSymbolId, TokenSpan>;
     type Input = Arg<MockSymbolId, String, ()>;
 
     impl From<ArgVariant<MockSymbolId, String, ()>> for Input {

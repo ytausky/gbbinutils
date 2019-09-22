@@ -221,12 +221,12 @@ pub mod tests {
 
     use crate::analyze::semantics::mock::MockExprBuilder;
     use crate::analyze::Literal;
-    use crate::expr::{Atom, LocationCounter};
+    use crate::expr::Atom;
     use crate::object::builder::mock::{BackendEvent, MockSymbolId};
 
     use std::fmt::Debug;
 
-    type Expr<S> = crate::expr::Expr<Atom<LocationCounter, MockSymbolId>, S>;
+    type Expr<S> = crate::expr::Expr<MockSymbolId, S>;
 
     #[test]
     fn analyze_deref_bc() {

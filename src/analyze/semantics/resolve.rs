@@ -49,14 +49,14 @@ impl<T: AsRef<str>> AsRef<str> for Ident<T> {
 }
 
 #[cfg(test)]
-impl<L, T> From<Ident<T>> for Atom<L, Ident<T>> {
+impl<T> From<Ident<T>> for Atom<Ident<T>> {
     fn from(ident: Ident<T>) -> Self {
         Atom::Name(ident)
     }
 }
 
 #[cfg(test)]
-impl<L, T> From<Ident<T>> for ExprOp<Atom<L, Ident<T>>> {
+impl<T> From<Ident<T>> for ExprOp<Ident<T>> {
     fn from(ident: Ident<T>) -> Self {
         Atom::from(ident).into()
     }

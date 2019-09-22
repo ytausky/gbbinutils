@@ -385,7 +385,7 @@ impl_push_op_for_reloc_context! {BinOp}
 impl_push_op_for_reloc_context! {ParamId}
 impl_push_op_for_reloc_context! {FnCall}
 
-impl<P, N, S: Clone> PushOp<Name<N>, S> for RelocContext<P, Expr<Atom<LocationCounter, N>, S>> {
+impl<P, N, S: Clone> PushOp<Name<N>, S> for RelocContext<P, Expr<N, S>> {
     fn push_op(&mut self, name: Name<N>, span: S) {
         self.builder.push_op(name, span)
     }
@@ -447,7 +447,7 @@ impl<'a, S: Clone> PushOp<LocationCounter, S> for SymbolBuilder<'a, S> {
     fn push_op(&mut self, _: LocationCounter, span: S) {
         self.formula
             .0
-            .push(ExprOp::Atom(Atom::Location(LocationCounter)).with_span(span))
+            .push(ExprOp::Atom(Atom::Location).with_span(span))
     }
 }
 
@@ -487,7 +487,7 @@ impl<'a, S: Clone> BuiltinSymbols for ObjectBuilder<'a, S> {
     }
 }
 
-impl<L, N> From<Name<N>> for Atom<L, N> {
+impl<N> From<Name<N>> for Atom<N> {
     fn from(Name(name): Name<N>) -> Self {
         Atom::Name(name)
     }
@@ -499,7 +499,7 @@ impl<T: Into<ExprOp<A>>, A, S: Clone> PushOp<T, S> for Expr<A, S> {
     }
 }
 
-impl<N, A: From<Name<N>>> From<Name<N>> for ExprOp<A> {
+impl<N> From<Name<N>> for ExprOp<N> {
     fn from(name: Name<N>) -> Self {
         ExprOp::Atom(name.into())
     }
@@ -510,10 +510,8 @@ pub mod mock {
     use super::*;
 
     use crate::diag::span::Spanned;
-    use crate::expr::Atom;
+    use crate::expr::{Atom, Expr};
     use crate::log::Log;
-
-    type Expr<N, S> = crate::expr::Expr<Atom<LocationCounter, N>, S>;
 
     #[derive(Clone, Copy, Debug, PartialEq)]
     pub(crate) struct MockSymbolId(pub usize);
@@ -620,7 +618,7 @@ pub mod mock {
         }
     }
 
-    impl<L> From<usize> for Atom<L, usize> {
+    impl From<usize> for Atom<usize> {
         fn from(n: usize) -> Self {
             Atom::Name(n)
         }

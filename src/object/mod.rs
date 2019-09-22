@@ -1,7 +1,7 @@
 use self::builder::Width;
 use self::num::Num;
 
-use crate::expr::{Atom, Expr, ExprOp, LocationCounter};
+use crate::expr::{Atom, Expr, ExprOp};
 
 use std::ops::{Index, IndexMut};
 
@@ -31,7 +31,7 @@ pub struct Constraints<S> {
     pub addr: Option<Const<S>>,
 }
 
-pub type Const<S> = Expr<Atom<LocationCounter, SymbolId>, S>;
+pub type Const<S> = Expr<SymbolId, S>;
 
 type SymbolId = Symbol<BuiltinId, ContentId>;
 
@@ -79,7 +79,7 @@ struct ExprDef<S> {
 #[derive(Debug, PartialEq)]
 pub struct SectionId(usize);
 
-type Formula<S> = Expr<Atom<LocationCounter, SymbolId>, S>;
+type Formula<S> = Expr<SymbolId, S>;
 
 pub struct VarTable(Vec<Var>);
 
@@ -210,34 +210,34 @@ impl IndexMut<VarId> for VarTable {
     }
 }
 
-impl<L> From<SymbolId> for Atom<L, SymbolId> {
+impl From<SymbolId> for Atom<SymbolId> {
     fn from(id: SymbolId) -> Self {
         Atom::Name(id)
     }
 }
 
 #[cfg(test)]
-impl<L> From<ContentId> for Atom<L, SymbolId> {
+impl From<ContentId> for Atom<SymbolId> {
     fn from(id: ContentId) -> Self {
         Atom::Name(id.into())
     }
 }
 
-impl<L> From<SymbolId> for ExprOp<Atom<L, SymbolId>> {
+impl From<SymbolId> for ExprOp<SymbolId> {
     fn from(id: SymbolId) -> Self {
         Atom::from(id).into()
     }
 }
 
 #[cfg(test)]
-impl<L> From<BuiltinId> for ExprOp<Atom<L, SymbolId>> {
+impl From<BuiltinId> for ExprOp<SymbolId> {
     fn from(builtin: BuiltinId) -> Self {
         Atom::from(Symbol::from(builtin)).into()
     }
 }
 
 #[cfg(test)]
-impl<L> From<ContentId> for ExprOp<Atom<L, SymbolId>> {
+impl From<ContentId> for ExprOp<SymbolId> {
     fn from(id: ContentId) -> Self {
         Atom::from(id).into()
     }

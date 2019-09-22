@@ -361,7 +361,7 @@ mod mock {
 
     use crate::analyze::macros::mock::MockMacroId;
     use crate::diag::{DiagnosticsEvent, Merge, MockDiagnostics};
-    use crate::expr::{Atom, Expr};
+    use crate::expr::Expr;
     use crate::log::Log;
     use crate::object::builder::mock::{
         BackendEvent, MockBackend, MockSymbolId, SerialIdAllocator,
@@ -387,16 +387,13 @@ mod mock {
                 T,
             >,
         >,
-        RelocContext<
-            MockBackend<SerialIdAllocator<MockSymbolId>, T>,
-            Expr<Atom<LocationCounter, MockSymbolId>, S>,
-        >,
+        RelocContext<MockBackend<SerialIdAllocator<MockSymbolId>, T>, Expr<MockSymbolId, S>>,
         (),
     >;
 
     impl<T, S> MockExprBuilder<T, S>
     where
-        T: From<BackendEvent<MockSymbolId, Expr<Atom<LocationCounter, MockSymbolId>, S>>>,
+        T: From<BackendEvent<MockSymbolId, Expr<MockSymbolId, S>>>,
         T: From<DiagnosticsEvent<S>>,
         S: Clone + Merge,
     {

@@ -2,7 +2,7 @@ use super::{LinkageContext, VarTable};
 
 use crate::diag::span::{Spanned, WithSpan};
 use crate::diag::{BackendDiagnostics, Message, ValueKind};
-use crate::expr::{Atom, BinOp, Expr, ExprOp, LocationCounter, ParamId};
+use crate::expr::{Atom, BinOp, Expr, ExprOp, ParamId};
 use crate::object::num::Num;
 use crate::object::*;
 
@@ -59,7 +59,7 @@ enum Value<'a, S: Clone> {
 
 type DefRef<'a, S> = Symbol<BuiltinId, ContentDef<&'a ExprDef<S>, &'a Section<S>>>;
 
-impl<'a, S: Clone> EvalSubst<'a, S> for &'a Expr<Atom<LocationCounter, SymbolId>, S> {
+impl<'a, S: Clone> EvalSubst<'a, S> for &'a Expr<SymbolId, S> {
     type Output = Num;
 
     fn eval_subst<C: Borrow<Content<S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
@@ -150,7 +150,7 @@ impl<'a, S: Clone> EvalSubst<'a, S> for Spanned<DefRef<'a, S>, &S> {
     }
 }
 
-impl<'a, S: Clone + 'a> EvalSubst<'a, S> for Spanned<&Atom<LocationCounter, SymbolId>, &S> {
+impl<'a, S: Clone + 'a> EvalSubst<'a, S> for Spanned<&Atom<SymbolId>, &S> {
     type Output = Value<'a, S>;
 
     fn eval_subst<C: Borrow<Content<S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
@@ -160,7 +160,7 @@ impl<'a, S: Clone + 'a> EvalSubst<'a, S> for Spanned<&Atom<LocationCounter, Symb
     ) -> Self::Output {
         match self.item {
             Atom::Const(value) => Value::Num((*value).into()),
-            Atom::Location(LocationCounter) => Value::Num(context.location()),
+            Atom::Location => Value::Num(context.location()),
             Atom::Name(id) => (*id)
                 .with_span(self.span)
                 .to_value(context.linkage, diagnostics),
@@ -481,10 +481,7 @@ mod tests {
         test_diagnosis_of_wrong_sizeof_arg(Atom::Const(42), ValueKind::Num)
     }
 
-    fn test_diagnosis_of_wrong_sizeof_arg(
-        inner: Atom<LocationCounter, SymbolId>,
-        found: ValueKind,
-    ) {
+    fn test_diagnosis_of_wrong_sizeof_arg(inner: Atom<SymbolId>, found: ValueKind) {
         let content = &Content {
             sections: vec![],
             symbols: SymbolTable(vec![Some(ContentDef::Formula(ExprDef {

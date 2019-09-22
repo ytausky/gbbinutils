@@ -1,88 +1,87 @@
 use crate::span::{Source, SpanSource, Spanned, WithSpan};
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Expr<A, S>(pub Vec<Spanned<ExprOp<A>, S>>);
+pub struct Expr<N, S>(pub Vec<Spanned<ExprOp<N>, S>>);
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ExprOp<A> {
-    Atom(A),
+pub enum ExprOp<N> {
+    Atom(Atom<N>),
     Binary(BinOp),
     FnCall(usize),
 }
 
-impl<L, N, S> Default for Expr<Atom<L, N>, S> {
+impl<N, S> Default for Expr<N, S> {
     fn default() -> Self {
         Self(Vec::new())
     }
 }
 
-impl<L, N, S: Clone> SpanSource for Expr<Atom<L, N>, S> {
+impl<N, S: Clone> SpanSource for Expr<N, S> {
     type Span = S;
 }
 
-impl<L, N, S: Clone> Source for Expr<Atom<L, N>, S> {
+impl<N, S: Clone> Source for Expr<N, S> {
     fn span(&self) -> Self::Span {
         self.0.last().unwrap().span.clone()
     }
 }
 
 #[cfg(test)]
-impl<L, N, S: Clone> Expr<Atom<L, N>, S> {
-    pub fn from_atom(atom: Atom<L, N>, span: S) -> Self {
+impl<N, S: Clone> Expr<N, S> {
+    pub fn from_atom(atom: Atom<N>, span: S) -> Self {
         Self(vec![ExprOp::Atom(atom).with_span(span)])
     }
 }
 
 #[cfg(test)]
-impl<L: Clone, N: Clone, S: Clone> Expr<Atom<L, N>, S> {
+impl<N: Clone, S: Clone> Expr<N, S> {
     pub fn from_items<'a, I>(items: I) -> Self
     where
-        L: 'a,
         N: 'a,
         S: 'a,
-        I: IntoIterator<Item = &'a Spanned<ExprOp<Atom<L, N>>, S>>,
+        I: IntoIterator<Item = &'a Spanned<ExprOp<N>, S>>,
     {
         Expr(items.into_iter().map(Clone::clone).collect())
     }
 }
 
-impl<L, N> From<i32> for Expr<Atom<L, N>, ()> {
+impl<N> From<i32> for Expr<N, ()> {
     fn from(n: i32) -> Self {
         Atom::Const(n).into()
     }
 }
 
-impl<L, N> From<Atom<L, N>> for Expr<Atom<L, N>, ()> {
-    fn from(atom: Atom<L, N>) -> Self {
+impl<N> From<Atom<N>> for Expr<N, ()> {
+    fn from(atom: Atom<N>) -> Self {
         Self(vec![atom.into()])
     }
 }
 
-impl<L, N, T: Into<ExprOp<Atom<L, N>>>> From<T> for Spanned<ExprOp<Atom<L, N>>, ()> {
+impl<N, T: Into<ExprOp<N>>> From<T> for Spanned<ExprOp<N>, ()> {
     fn from(x: T) -> Self {
         x.into().with_span(())
     }
 }
 
-impl<L, N> From<Atom<L, N>> for ExprOp<Atom<L, N>> {
-    fn from(atom: Atom<L, N>) -> Self {
+impl<N> From<Atom<N>> for ExprOp<N> {
+    fn from(atom: Atom<N>) -> Self {
         ExprOp::Atom(atom)
     }
 }
 
-impl<L, N> From<i32> for ExprOp<Atom<L, N>> {
+impl<N> From<i32> for ExprOp<N> {
     fn from(n: i32) -> Self {
         ExprOp::Atom(Atom::Const(n))
     }
 }
 
-impl<L, N> From<ParamId> for ExprOp<Atom<L, N>> {
+impl<N> From<ParamId> for ExprOp<N> {
     fn from(id: ParamId) -> Self {
         ExprOp::Atom(Atom::Param(id))
     }
 }
 
-impl<L, N> From<BinOp> for ExprOp<Atom<L, N>> {
+impl<N> From<BinOp> for ExprOp<N> {
     fn from(op: BinOp) -> Self {
         ExprOp::Binary(op)
     }
@@ -107,9 +106,9 @@ pub enum BinOp {
 pub struct FnCall(pub usize);
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Atom<L, N> {
+pub enum Atom<N> {
     Const(i32),
-    Location(L),
+    Location,
     Name(N),
     Param(ParamId),
 }
@@ -117,19 +116,19 @@ pub enum Atom<L, N> {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LocationCounter;
 
-impl<N> From<LocationCounter> for Atom<LocationCounter, N> {
+impl<N> From<LocationCounter> for Atom<N> {
     fn from(_: LocationCounter) -> Self {
-        Atom::Location(LocationCounter)
+        Atom::Location
     }
 }
 
-impl<N> From<LocationCounter> for ExprOp<Atom<LocationCounter, N>> {
+impl<N> From<LocationCounter> for ExprOp<N> {
     fn from(_: LocationCounter) -> Self {
         Atom::from(LocationCounter).into()
     }
 }
 
-impl<N> From<LocationCounter> for Expr<Atom<LocationCounter, N>, ()> {
+impl<N> From<LocationCounter> for Expr<N, ()> {
     fn from(_: LocationCounter) -> Self {
         Expr(vec![LocationCounter.into()])
     }
@@ -138,13 +137,13 @@ impl<N> From<LocationCounter> for Expr<Atom<LocationCounter, N>, ()> {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ParamId(pub usize);
 
-impl<L, N> From<i32> for Atom<L, N> {
+impl<N> From<i32> for Atom<N> {
     fn from(n: i32) -> Self {
         Atom::Const(n)
     }
 }
 
-impl<L, N> From<ParamId> for Atom<L, N> {
+impl<N> From<ParamId> for Atom<N> {
     fn from(id: ParamId) -> Self {
         Atom::Param(id)
     }
