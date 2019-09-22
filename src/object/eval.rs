@@ -1,4 +1,4 @@
-use super::{Formula, LinkageContext, VarTable};
+use super::{LinkageContext, VarTable};
 
 use crate::diag::span::{Spanned, WithSpan};
 use crate::diag::{BackendDiagnostics, Message, ValueKind};
@@ -15,19 +15,40 @@ impl<S: Clone> Const<S> {
         V: Borrow<VarTable>,
         D: BackendDiagnostics<S>,
     {
-        self.eval_subst(context, (), diagnostics)
+        self.eval_subst(
+            &EvalContext {
+                linkage: context,
+                args: &[],
+                location_var: None,
+            },
+            diagnostics,
+        )
     }
 }
 
-trait EvalSubst<'a, P, S: Clone> {
+trait EvalSubst<'a, S: Clone> {
     type Output;
 
     fn eval_subst<C: Borrow<Content<S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<C, V>,
-        args: P,
+        context: &'a EvalContext<'a, C, V, S>,
         diagnostics: &mut D,
     ) -> Self::Output;
+}
+
+struct EvalContext<'a, C, V, S: Clone> {
+    linkage: &'a LinkageContext<C, V>,
+    args: Args<'a, S>,
+    location_var: Option<VarId>,
+}
+
+impl<'a, C, V: Borrow<VarTable>, S: Clone> EvalContext<'a, C, V, S> {
+    fn location(&self) -> Num {
+        match self.location_var {
+            Some(id) => self.linkage.vars.borrow()[id].value.clone(),
+            None => self.linkage.location.clone(),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -36,80 +57,78 @@ enum Value<'a, S: Clone> {
     Num(Num),
 }
 
-type DefRef<'a, S> = Symbol<BuiltinId, ContentDef<&'a Formula<S>, &'a Section<S>>>;
+type DefRef<'a, S> = Symbol<BuiltinId, ContentDef<&'a ExprDef<S>, &'a Section<S>>>;
 
-impl<'a, A, P: Copy, S: Clone> EvalSubst<'a, P, S> for &'a Expr<A, S>
-where
-    for<'r> Spanned<&'r A, &'r S>: EvalSubst<'a, P, S, Output = Value<'a, S>>,
-{
+impl<'a, S: Clone> EvalSubst<'a, S> for &'a Expr<Atom<LocationCounter, SymbolId>, S> {
     type Output = Num;
 
     fn eval_subst<C: Borrow<Content<S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<C, V>,
-        args: P,
+        context: &'a EvalContext<'a, C, V, S>,
         diagnostics: &mut D,
     ) -> Self::Output {
         let mut stack = Vec::<Spanned<Value<_>, _>>::new();
         for Spanned { item, span } in &self.0 {
             let value = match item {
-                ExprOp::Atom(atom) => atom.with_span(span).eval_subst(context, args, diagnostics),
+                ExprOp::Atom(atom) => atom.with_span(span).eval_subst(context, diagnostics),
                 ExprOp::Binary(operator) => {
                     let rhs = stack.pop().unwrap();
-                    let lhs = stack.pop().unwrap().eval_subst(context, &[], diagnostics);
-                    let rhs = rhs.eval_subst(context, &[], diagnostics);
+                    let lhs = stack.pop().unwrap().eval_subst(context, diagnostics);
+                    let rhs = rhs.eval_subst(context, diagnostics);
                     Value::Num(operator.apply(&lhs, &rhs))
                 }
                 ExprOp::FnCall(n) => {
                     let name = stack.pop().unwrap();
                     let arg_index = stack.len() - n;
-                    let value =
-                        Value::Num(name.eval_subst(context, &stack[arg_index..], diagnostics));
+                    let value = Value::Num(name.eval_subst(
+                        &EvalContext {
+                            linkage: context.linkage,
+                            args: &stack[arg_index..],
+                            location_var: context.location_var.clone(),
+                        },
+                        diagnostics,
+                    ));
                     stack.truncate(arg_index);
                     value
                 }
             };
             stack.push(value.with_span(span))
         }
-        stack.pop().unwrap().eval_subst(context, &[], diagnostics)
+        stack.pop().unwrap().eval_subst(context, diagnostics)
     }
 }
 
 type Args<'a, S> = &'a [Spanned<Value<'a, S>, &'a S>];
 
-impl<'a, S: Clone> EvalSubst<'a, Args<'a, S>, S> for Spanned<Value<'a, S>, &S> {
+impl<'a, S: Clone> EvalSubst<'a, S> for Spanned<Value<'a, S>, &S> {
     type Output = Num;
 
     fn eval_subst<C: Borrow<Content<S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<C, V>,
-        args: Args<'a, S>,
+        context: &'a EvalContext<'a, C, V, S>,
         diagnostics: &mut D,
     ) -> Self::Output {
         match self.item {
-            Value::Symbol(Some(name)) => {
-                name.with_span(self.span)
-                    .eval_subst(context, args, diagnostics)
-            }
+            Value::Symbol(Some(name)) => name.with_span(self.span).eval_subst(context, diagnostics),
             Value::Symbol(None) => Num::Unknown,
             Value::Num(value) => value,
         }
     }
 }
 
-impl<'a, S: Clone> EvalSubst<'a, Args<'a, S>, S> for Spanned<DefRef<'a, S>, &S> {
+impl<'a, S: Clone> EvalSubst<'a, S> for Spanned<DefRef<'a, S>, &S> {
     type Output = Num;
 
     fn eval_subst<C: Borrow<Content<S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<C, V>,
-        args: Args<'a, S>,
+        context: &'a EvalContext<'a, C, V, S>,
         diagnostics: &mut D,
     ) -> Self::Output {
         match self.item {
-            Symbol::Builtin(BuiltinId::Sizeof) => args
+            Symbol::Builtin(BuiltinId::Sizeof) => context
+                .args
                 .get(0)
-                .map(|value| value.sizeof(context, diagnostics))
+                .map(|value| value.sizeof(context.linkage, diagnostics))
                 .unwrap_or_else(|| {
                     let name = diagnostics.strip_span(self.span);
                     diagnostics.emit_diag(
@@ -117,48 +136,35 @@ impl<'a, S: Clone> EvalSubst<'a, Args<'a, S>, S> for Spanned<DefRef<'a, S>, &S> 
                     );
                     Num::Unknown
                 }),
-            Symbol::Content(ContentDef::Formula(formula)) => {
-                formula.eval_subst(context, args, diagnostics)
-            }
+            Symbol::Content(ContentDef::Formula(def)) => def.expr.eval_subst(
+                &EvalContext {
+                    location_var: Some(def.location),
+                    ..*context
+                },
+                diagnostics,
+            ),
             Symbol::Content(ContentDef::Section(section)) => {
-                context.vars.borrow()[section.addr].value.clone()
+                context.linkage.vars.borrow()[section.addr].value.clone()
             }
         }
     }
 }
 
-impl<'a, S: Clone + 'a> EvalSubst<'a, (), S> for Spanned<&Atom<LocationCounter, SymbolId>, &S> {
+impl<'a, S: Clone + 'a> EvalSubst<'a, S> for Spanned<&Atom<LocationCounter, SymbolId>, &S> {
     type Output = Value<'a, S>;
 
     fn eval_subst<C: Borrow<Content<S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
-        context: &'a LinkageContext<C, V>,
-        (): (),
+        context: &'a EvalContext<'a, C, V, S>,
         diagnostics: &mut D,
     ) -> Self::Output {
         match self.item {
             Atom::Const(value) => Value::Num((*value).into()),
-            Atom::Location(LocationCounter) => Value::Num(context.location.clone()),
-            Atom::Name(id) => (*id).with_span(self.span).to_value(context, diagnostics),
-            Atom::Param(_) => unimplemented!(),
-        }
-    }
-}
-
-impl<'a, S: Clone + 'a> EvalSubst<'a, Args<'a, S>, S> for Spanned<&Atom<VarId, SymbolId>, &S> {
-    type Output = Value<'a, S>;
-
-    fn eval_subst<C: Borrow<Content<S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
-        self,
-        context: &'a LinkageContext<C, V>,
-        args: Args<'a, S>,
-        diagnostics: &mut D,
-    ) -> Self::Output {
-        match self.item {
-            Atom::Const(value) => Value::Num((*value).into()),
-            Atom::Location(id) => Value::Num(context.vars.borrow()[*id].value.clone()),
-            Atom::Name(id) => (*id).with_span(self.span).to_value(context, diagnostics),
-            Atom::Param(ParamId(id)) => args[*id].item.clone(),
+            Atom::Location(LocationCounter) => Value::Num(context.location()),
+            Atom::Name(id) => (*id)
+                .with_span(self.span)
+                .to_value(context.linkage, diagnostics),
+            Atom::Param(ParamId(id)) => context.args[*id].item.clone(),
         }
     }
 }
@@ -322,11 +328,10 @@ mod tests {
             Const::from_items(&[42.into(), ContentId(0).into(), ExprOp::FnCall(1).into()]);
         let content = &Content::<()> {
             sections: vec![],
-            symbols: SymbolTable(vec![Some(ContentDef::Formula(Formula::from_items(&[
-                ParamId(0).into(),
-                1.into(),
-                BinOp::Plus.into(),
-            ])))]),
+            symbols: SymbolTable(vec![Some(ContentDef::Formula(ExprDef {
+                expr: Formula::from_items(&[ParamId(0).into(), 1.into(), BinOp::Plus.into()]),
+                location: VarId(0),
+            }))]),
         };
         let vars = &VarTable(Vec::new());
         let context = &LinkageContext {
@@ -482,10 +487,10 @@ mod tests {
     ) {
         let content = &Content {
             sections: vec![],
-            symbols: SymbolTable(vec![Some(ContentDef::Formula(Formula::from_atom(
-                42.into(),
-                MockSpan::from("42"),
-            )))]),
+            symbols: SymbolTable(vec![Some(ContentDef::Formula(ExprDef {
+                expr: Formula::from_atom(42.into(), MockSpan::from("42")),
+                location: VarId(0),
+            }))]),
         };
         let vars = &VarTable(vec![]);
         let context = LinkageContext {

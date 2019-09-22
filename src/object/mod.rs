@@ -62,7 +62,7 @@ pub enum Node<S> {
     Reserved(Const<S>),
 }
 
-struct SymbolTable<S>(Vec<Option<ContentDef<Formula<S>, SectionId>>>);
+struct SymbolTable<S>(Vec<Option<ContentDef<ExprDef<S>, SectionId>>>);
 
 #[derive(Clone, Debug, PartialEq)]
 enum ContentDef<F, S> {
@@ -70,10 +70,16 @@ enum ContentDef<F, S> {
     Section(S),
 }
 
+#[derive(Clone, Debug, PartialEq)]
+struct ExprDef<S> {
+    expr: Formula<S>,
+    location: VarId,
+}
+
 #[derive(Debug, PartialEq)]
 pub struct SectionId(usize);
 
-type Formula<S> = Expr<Atom<VarId, SymbolId>, S>;
+type Formula<S> = Expr<Atom<LocationCounter, SymbolId>, S>;
 
 pub struct VarTable(Vec<Var>);
 
@@ -134,12 +140,12 @@ impl<S> SymbolTable<S> {
         id
     }
 
-    pub fn define(&mut self, ContentId(id): ContentId, def: ContentDef<Formula<S>, SectionId>) {
+    pub fn define(&mut self, ContentId(id): ContentId, def: ContentDef<ExprDef<S>, SectionId>) {
         assert!(self.0[id].is_none());
         self.0[id] = Some(def);
     }
 
-    fn get(&self, ContentId(id): ContentId) -> Option<&ContentDef<Formula<S>, SectionId>> {
+    fn get(&self, ContentId(id): ContentId) -> Option<&ContentDef<ExprDef<S>, SectionId>> {
         self.0[id].as_ref()
     }
 }

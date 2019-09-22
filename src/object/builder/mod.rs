@@ -447,7 +447,7 @@ impl<'a, S: Clone> PushOp<LocationCounter, S> for SymbolBuilder<'a, S> {
     fn push_op(&mut self, _: LocationCounter, span: S) {
         self.formula
             .0
-            .push(ExprOp::Atom(Atom::Location(self.location)).with_span(span))
+            .push(ExprOp::Atom(Atom::Location(LocationCounter)).with_span(span))
     }
 }
 
@@ -458,11 +458,13 @@ impl<'a, S> Finish for SymbolBuilder<'a, S> {
     fn finish(self) -> (Self::Parent, Self::Value) {
         let mut parent = self.parent;
         parent.push(Node::Reloc(self.location));
-        parent
-            .context
-            .content
-            .symbols
-            .define(self.name.0, ContentDef::Formula(self.formula));
+        parent.context.content.symbols.define(
+            self.name.0,
+            ContentDef::Formula(ExprDef {
+                expr: self.formula,
+                location: self.location,
+            }),
+        );
         (parent, ())
     }
 }
