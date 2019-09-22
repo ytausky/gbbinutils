@@ -2,7 +2,7 @@ use super::{BinarySection, LinkageContext, VarTable};
 
 use crate::diag::{BackendDiagnostics, Message};
 use crate::object::builder::Width;
-use crate::object::{Const, Content, Node, Section};
+use crate::object::{Content, Expr, Node, Section};
 use crate::span::Source;
 
 use std::mem::replace;
@@ -111,7 +111,7 @@ impl Data {
 }
 
 fn resolve_expr_item<S: Clone>(
-    expr: &Const<S>,
+    expr: &Expr<S>,
     width: Width,
     context: &LinkageContext<&Content<S>, &VarTable>,
     diagnostics: &mut impl BackendDiagnostics<S>,
@@ -201,7 +201,7 @@ mod tests {
     #[test]
     fn translate_expr_with_subtraction() {
         let actual = translate_section_item(Node::Immediate(
-            Const::from_items(&[4.into(), 3.into(), BinOp::Minus.into()]),
+            Expr::from_items(&[4.into(), 3.into(), BinOp::Minus.into()]),
             Width::Byte,
         ));
         assert_eq!(actual, [0x01])

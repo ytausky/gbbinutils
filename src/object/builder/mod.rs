@@ -4,7 +4,7 @@ use super::*;
 
 use crate::diag::span::{Source, WithSpan};
 use crate::diag::Diagnostics;
-use crate::expr::{BinOp, Expr, ExprOp, FnCall, LocationCounter, ParamId};
+use crate::expr::{BinOp, ExprOp, FnCall, LocationCounter, ParamId};
 use crate::BuiltinSymbols;
 
 mod lowering;
@@ -246,7 +246,7 @@ pub(crate) struct ObjectBuilder<'a, S> {
 }
 
 enum BuilderState<S> {
-    AnonSectionPrelude { addr: Option<Const<S>> },
+    AnonSectionPrelude { addr: Option<Expr<S>> },
     Section(usize),
     SectionPrelude(usize),
 }
@@ -294,7 +294,7 @@ impl<'a, S> ObjectBuilder<'a, S> {
 }
 
 impl<'a, S: Clone> Backend<S> for ObjectBuilder<'a, S> {
-    type ConstBuilder = RelocContext<Self, Const<S>>;
+    type ConstBuilder = RelocContext<Self, Expr<S>>;
     type SymbolBuilder = SymbolBuilder<'a, S>;
 
     fn build_const(self) -> Self::ConstBuilder {
@@ -313,7 +313,7 @@ impl<'a, S: Clone> Backend<S> for ObjectBuilder<'a, S> {
 }
 
 impl<'a, S: Clone> PartialBackend<S> for ObjectBuilder<'a, S> {
-    type Value = Const<S>;
+    type Value = Expr<S>;
 
     fn emit_item(&mut self, item: Item<Self::Value>) {
         item.lower().for_each(|data_item| self.push(data_item))
@@ -385,25 +385,25 @@ impl_push_op_for_reloc_context! {BinOp}
 impl_push_op_for_reloc_context! {ParamId}
 impl_push_op_for_reloc_context! {FnCall}
 
-impl<P, N, S: Clone> PushOp<Name<N>, S> for RelocContext<P, Expr<N, S>> {
+impl<P, N, S: Clone> PushOp<Name<N>, S> for RelocContext<P, crate::expr::Expr<N, S>> {
     fn push_op(&mut self, name: Name<N>, span: S) {
         self.builder.push_op(name, span)
     }
 }
 
-impl<'a, S: Clone> SymbolSource for RelocContext<ObjectBuilder<'a, S>, Const<S>> {
+impl<'a, S: Clone> SymbolSource for RelocContext<ObjectBuilder<'a, S>, Expr<S>> {
     type SymbolId = SymbolId;
 }
 
-impl<'a, S: Clone> AllocSymbol<S> for RelocContext<ObjectBuilder<'a, S>, Const<S>> {
+impl<'a, S: Clone> AllocSymbol<S> for RelocContext<ObjectBuilder<'a, S>, Expr<S>> {
     fn alloc_symbol(&mut self, span: S) -> Self::SymbolId {
         self.parent.alloc_symbol(span)
     }
 }
 
-impl<'a, S: Clone> Finish for RelocContext<ObjectBuilder<'a, S>, Const<S>> {
+impl<'a, S: Clone> Finish for RelocContext<ObjectBuilder<'a, S>, Expr<S>> {
     type Parent = ObjectBuilder<'a, S>;
-    type Value = Const<S>;
+    type Value = Expr<S>;
 
     fn finish(self) -> (Self::Parent, Self::Value) {
         (self.parent, self.builder)
@@ -414,7 +414,7 @@ pub(crate) struct SymbolBuilder<'a, S> {
     parent: ObjectBuilder<'a, S>,
     location: VarId,
     name: (ContentId, S),
-    formula: Formula<S>,
+    formula: Expr<S>,
 }
 
 impl<'a, S: Clone> SymbolSource for SymbolBuilder<'a, S> {
@@ -460,7 +460,7 @@ impl<'a, S> Finish for SymbolBuilder<'a, S> {
         parent.push(Node::Reloc(self.location));
         parent.context.content.symbols.define(
             self.name.0,
-            ContentDef::Formula(ExprDef {
+            ContentDef::Expr(ExprDef {
                 expr: self.formula,
                 location: self.location,
             }),
@@ -493,7 +493,7 @@ impl<N> From<Name<N>> for Atom<N> {
     }
 }
 
-impl<T: Into<ExprOp<A>>, A, S: Clone> PushOp<T, S> for Expr<A, S> {
+impl<T: Into<ExprOp<A>>, A, S: Clone> PushOp<T, S> for crate::expr::Expr<A, S> {
     fn push_op(&mut self, op: T, span: S) {
         self.0.push(op.into().with_span(span))
     }
@@ -724,7 +724,7 @@ mod tests {
 
     #[test]
     fn constrain_origin_determines_origin_of_new_section() {
-        let origin: Const<_> = 0x3000.into();
+        let origin: Expr<_> = 0x3000.into();
         let object = build_object(|mut builder| {
             builder.set_origin(origin.clone());
             builder.push(Node::Byte(0xcd))
@@ -751,7 +751,7 @@ mod tests {
 
     #[test]
     fn set_origin_in_section_prelude_sets_origin() {
-        let origin: Const<_> = 0x0150.into();
+        let origin: Expr<_> = 0x0150.into();
         let object = build_object(|mut builder| {
             let name = builder.alloc_symbol(());
             builder.start_section(name, ());
@@ -788,7 +788,7 @@ mod tests {
 
     fn emit_items_and_compare<I, B>(items: I, bytes: B)
     where
-        I: Borrow<[Item<Const<()>>]>,
+        I: Borrow<[Item<Expr<()>>]>,
         B: Borrow<[u8]>,
     {
         let (object, _) = with_object_builder(|mut builder| {
@@ -809,7 +809,7 @@ mod tests {
         emit_items_and_compare([byte_literal(0x12), byte_literal(0x34)], [0x12, 0x34])
     }
 
-    fn byte_literal(value: i32) -> Item<Const<()>> {
+    fn byte_literal(value: i32) -> Item<Expr<()>> {
         Item::Data(value.into(), Width::Byte)
     }
 
@@ -838,7 +838,7 @@ mod tests {
         let name = "ident";
         let (_, diagnostics) = with_object_builder(|mut builder| {
             let symbol_id = builder.alloc_symbol(name.into());
-            let mut value: Const<_> = Default::default();
+            let mut value: Expr<_> = Default::default();
             value.push_op(symbol_id, name.into());
             builder.emit_item(word_item(value))
         });
@@ -852,7 +852,7 @@ mod tests {
         let (_, diagnostics) = with_object_builder(|mut builder| {
             let value = {
                 let id1 = builder.alloc_symbol(name1.into());
-                let mut value: Const<_> = Default::default();
+                let mut value: Expr<_> = Default::default();
                 value.push_op(id1, name1.into());
                 let id2 = builder.alloc_symbol(name2.into());
                 value.push_op(id2, name2.into());
@@ -871,7 +871,7 @@ mod tests {
             let mut builder = builder.define_symbol(symbol_id, ());
             builder.push_op(LocationCounter, ());
             let (mut builder, _) = builder.finish();
-            let mut value: Const<_> = Default::default();
+            let mut value: Expr<_> = Default::default();
             value.push_op(symbol_id, ());
             builder.emit_item(word_item(value));
         });
@@ -883,7 +883,7 @@ mod tests {
     fn emit_symbol_defined_after_use() {
         let (object, diagnostics) = with_object_builder(|mut builder| {
             let symbol_id = builder.alloc_symbol(());
-            let mut value: Const<_> = Default::default();
+            let mut value: Expr<_> = Default::default();
             value.push_op(symbol_id, ());
             builder.emit_item(word_item(value));
             let mut builder = builder.define_symbol(symbol_id, ());
@@ -947,7 +947,7 @@ mod tests {
         (object, diagnostics)
     }
 
-    fn word_item<S: Clone>(value: Const<S>) -> Item<Const<S>> {
+    fn word_item<S: Clone>(value: Expr<S>) -> Item<Expr<S>> {
         Item::Data(value, Width::Word)
     }
 

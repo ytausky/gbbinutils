@@ -1,7 +1,7 @@
 use self::builder::Width;
 use self::num::Num;
 
-use crate::expr::{Atom, Expr, ExprOp};
+use crate::expr::{Atom, ExprOp};
 
 use std::ops::{Index, IndexMut};
 
@@ -28,10 +28,10 @@ pub struct Section<S> {
 }
 
 pub struct Constraints<S> {
-    pub addr: Option<Const<S>>,
+    pub addr: Option<Expr<S>>,
 }
 
-pub type Const<S> = Expr<SymbolId, S>;
+pub type Expr<S> = crate::expr::Expr<SymbolId, S>;
 
 type SymbolId = Symbol<BuiltinId, ContentId>;
 
@@ -55,31 +55,29 @@ pub struct VarId(pub usize);
 #[derive(Clone, Debug, PartialEq)]
 pub enum Node<S> {
     Byte(u8),
-    Immediate(Const<S>, Width),
-    LdInlineAddr(u8, Const<S>),
-    Embedded(u8, Const<S>),
+    Immediate(Expr<S>, Width),
+    LdInlineAddr(u8, Expr<S>),
+    Embedded(u8, Expr<S>),
     Reloc(VarId),
-    Reserved(Const<S>),
+    Reserved(Expr<S>),
 }
 
 struct SymbolTable<S>(Vec<Option<ContentDef<ExprDef<S>, SectionId>>>);
 
 #[derive(Clone, Debug, PartialEq)]
 enum ContentDef<F, S> {
-    Formula(F),
+    Expr(F),
     Section(S),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 struct ExprDef<S> {
-    expr: Formula<S>,
+    expr: Expr<S>,
     location: VarId,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct SectionId(usize);
-
-type Formula<S> = Expr<SymbolId, S>;
 
 pub struct VarTable(Vec<Var>);
 

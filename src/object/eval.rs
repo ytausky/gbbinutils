@@ -1,14 +1,14 @@
-use super::{LinkageContext, VarTable};
+use super::{Expr, LinkageContext, VarTable};
 
 use crate::diag::span::{Spanned, WithSpan};
 use crate::diag::{BackendDiagnostics, Message, ValueKind};
-use crate::expr::{Atom, BinOp, Expr, ExprOp, ParamId};
+use crate::expr::{Atom, BinOp, ExprOp, ParamId};
 use crate::object::num::Num;
 use crate::object::*;
 
 use std::borrow::Borrow;
 
-impl<S: Clone> Const<S> {
+impl<S: Clone> Expr<S> {
     pub(crate) fn to_num<C, V, D>(&self, context: &LinkageContext<C, V>, diagnostics: &mut D) -> Num
     where
         C: Borrow<Content<S>>,
@@ -59,7 +59,7 @@ enum Value<'a, S: Clone> {
 
 type DefRef<'a, S> = Symbol<BuiltinId, ContentDef<&'a ExprDef<S>, &'a Section<S>>>;
 
-impl<'a, S: Clone> EvalSubst<'a, S> for &'a Expr<SymbolId, S> {
+impl<'a, S: Clone> EvalSubst<'a, S> for &'a Expr<S> {
     type Output = Num;
 
     fn eval_subst<C: Borrow<Content<S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
@@ -136,7 +136,7 @@ impl<'a, S: Clone> EvalSubst<'a, S> for Spanned<DefRef<'a, S>, &S> {
                     );
                     Num::Unknown
                 }),
-            Symbol::Content(ContentDef::Formula(def)) => def.expr.eval_subst(
+            Symbol::Content(ContentDef::Expr(def)) => def.expr.eval_subst(
                 &EvalContext {
                     location_var: Some(def.location),
                     ..*context
@@ -203,7 +203,7 @@ impl<S: Clone> Spanned<ContentId, &S> {
             .symbols
             .get(id)
             .map(|def| match def {
-                ContentDef::Formula(formula) => ContentDef::Formula(formula),
+                ContentDef::Expr(formula) => ContentDef::Expr(formula),
                 ContentDef::Section(SectionId(id)) => {
                     ContentDef::Section(&context.content.borrow().sections[*id])
                 }
@@ -263,7 +263,7 @@ impl<'a, S: Clone> Value<'a, S> {
     fn kind(&self) -> Option<ValueKind> {
         match self {
             Value::Symbol(Some(Symbol::Builtin(_))) => Some(ValueKind::Builtin),
-            Value::Symbol(Some(Symbol::Content(ContentDef::Formula(_)))) => Some(ValueKind::Symbol),
+            Value::Symbol(Some(Symbol::Content(ContentDef::Expr(_)))) => Some(ValueKind::Symbol),
             Value::Symbol(Some(Symbol::Content(ContentDef::Section(_)))) => {
                 Some(ValueKind::Section)
             }
@@ -296,7 +296,7 @@ mod tests {
             location: Num::Unknown,
         };
         assert_eq!(
-            Const::from_atom(ContentId(0).into(), ()).to_num(&context, &mut IgnoreDiagnostics),
+            Expr::from_atom(ContentId(0).into(), ()).to_num(&context, &mut IgnoreDiagnostics),
             addr.into()
         )
     }
@@ -312,7 +312,7 @@ mod tests {
             location: Num::Unknown,
         };
         assert_eq!(
-            Const::from_items(&[
+            Expr::from_items(&[
                 ContentId(0).into(),
                 BuiltinId::Sizeof.into(),
                 ExprOp::FnCall(1).into()
@@ -325,11 +325,11 @@ mod tests {
     #[test]
     fn eval_fn_call_in_immediate() {
         let immediate =
-            Const::from_items(&[42.into(), ContentId(0).into(), ExprOp::FnCall(1).into()]);
+            Expr::from_items(&[42.into(), ContentId(0).into(), ExprOp::FnCall(1).into()]);
         let content = &Content::<()> {
             sections: vec![],
-            symbols: SymbolTable(vec![Some(ContentDef::Formula(ExprDef {
-                expr: Formula::from_items(&[ParamId(0).into(), 1.into(), BinOp::Plus.into()]),
+            symbols: SymbolTable(vec![Some(ContentDef::Expr(ExprDef {
+                expr: Expr::from_items(&[ParamId(0).into(), 1.into(), BinOp::Plus.into()]),
                 location: VarId(0),
             }))]),
         };
@@ -352,7 +352,7 @@ mod tests {
             vars,
             location: Num::Unknown,
         };
-        let immediate = Const::from_items(&[ContentId(0).into(), ExprOp::FnCall(0).into()]);
+        let immediate = Expr::from_items(&[ContentId(0).into(), ExprOp::FnCall(0).into()]);
         assert_eq!(
             immediate.to_num(&context, &mut IgnoreDiagnostics),
             addr.into()
@@ -363,7 +363,7 @@ mod tests {
     fn eval_bitwise_or() {
         assert_eq!(
             eval_in_empty_program(
-                Const::from_items(&[
+                Expr::from_items(&[
                     0x17.into(),
                     0x86.into(),
                     ExprOp::Binary(BinOp::BitOr).into(),
@@ -378,7 +378,7 @@ mod tests {
     fn eval_division() {
         assert_eq!(
             eval_in_empty_program(
-                Const::from_items(&[100.into(), 4.into(), ExprOp::Binary(BinOp::Division).into()]),
+                Expr::from_items(&[100.into(), 4.into(), ExprOp::Binary(BinOp::Division).into()]),
                 &mut IgnoreDiagnostics
             ),
             25.into()
@@ -389,7 +389,7 @@ mod tests {
     fn eval_known_false_equality() {
         assert_eq!(
             eval_in_empty_program(
-                Const::from_items(&[12.into(), 34.into(), ExprOp::Binary(BinOp::Equality).into()]),
+                Expr::from_items(&[12.into(), 34.into(), ExprOp::Binary(BinOp::Equality).into()]),
                 &mut IgnoreDiagnostics
             ),
             0.into()
@@ -400,7 +400,7 @@ mod tests {
     fn eval_known_true_equality() {
         assert_eq!(
             eval_in_empty_program(
-                Const::from_items(&[42.into(), 42.into(), ExprOp::Binary(BinOp::Equality).into()]),
+                Expr::from_items(&[42.into(), 42.into(), ExprOp::Binary(BinOp::Equality).into()]),
                 &mut IgnoreDiagnostics
             ),
             1.into()
@@ -410,7 +410,7 @@ mod tests {
     #[test]
     fn diagnose_using_sizeof_as_immediate() {
         let mut diagnostics = MockDiagnostics::new(Log::new());
-        let immediate = Const::from_atom(
+        let immediate = Expr::from_atom(
             Atom::Name(Symbol::Builtin(BuiltinId::Sizeof)),
             MockSpan::from(0),
         );
@@ -442,7 +442,7 @@ mod tests {
         let mut diagnostics = MockDiagnostics::new(Log::new());
         let name_span = MockSpan::from("name");
         let call_span = MockSpan::from("call");
-        let immediate = Expr(vec![
+        let immediate = crate::expr::Expr(vec![
             ExprOp::Atom(Atom::Name(Symbol::Content(ContentId(0)))).with_span(name_span.clone()),
             ExprOp::FnCall(0).with_span(MockSpan::merge(name_span.clone(), call_span)),
         ]);
@@ -484,8 +484,8 @@ mod tests {
     fn test_diagnosis_of_wrong_sizeof_arg(inner: Atom<SymbolId>, found: ValueKind) {
         let content = &Content {
             sections: vec![],
-            symbols: SymbolTable(vec![Some(ContentDef::Formula(ExprDef {
-                expr: Formula::from_atom(42.into(), MockSpan::from("42")),
+            symbols: SymbolTable(vec![Some(ContentDef::Expr(ExprDef {
+                expr: Expr::from_atom(42.into(), MockSpan::from("42")),
                 location: VarId(0),
             }))]),
         };
@@ -498,7 +498,7 @@ mod tests {
         let mut diagnostics = MockDiagnostics::new(Log::new());
         let inner_span = MockSpan::from("inner");
         let sizeof_span = MockSpan::from("sizeof");
-        let immediate = Expr(vec![
+        let immediate = crate::expr::Expr(vec![
             ExprOp::Atom(inner).with_span(inner_span.clone()),
             ExprOp::Atom(Atom::Name(Symbol::Builtin(BuiltinId::Sizeof)))
                 .with_span(sizeof_span.clone()),
@@ -532,7 +532,7 @@ mod tests {
     }
 
     fn eval_in_empty_program<S: Clone>(
-        immediate: Const<S>,
+        immediate: Expr<S>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> Num {
         let content = &Content {
