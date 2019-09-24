@@ -5,7 +5,7 @@ use crate::analyze::semantics::actions::TokenStreamState;
 use crate::analyze::semantics::arg::*;
 use crate::analyze::semantics::builtin_instr::DispatchBuiltinInstrLine;
 use crate::analyze::semantics::resolve::NameTable;
-use crate::analyze::semantics::{Params, RelocLookup, ResolveNames, WithParams};
+use crate::analyze::semantics::{BuilderAdapter, Params, RelocLookup, ResolveNames, WithParams};
 use crate::analyze::syntax::actions::{BuiltinInstrActions, InstrFinalizer};
 use crate::object::builder::Finish;
 
@@ -44,10 +44,11 @@ where
     B: Backend<R::Span>,
     Self: DispatchBuiltinInstrLine<I, R, N, B>,
 {
-    type ArgActions = ArgSemantics<I, R, N, B>;
+    type ArgActions = ArgSemantics<I, R, N, BuilderAdapter<B::ExprBuilder, NameResolver>>;
 
     fn will_parse_arg(self) -> Self::ArgActions {
-        self.map_state(ExprBuilder::new)
+        self.map_builder(|builder| builder.build_const().resolve_names())
+            .map_state(ExprBuilder::new)
     }
 }
 

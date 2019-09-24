@@ -35,12 +35,12 @@ where
     }
 }
 
-pub(super) struct BuilderAdapter<B, H> {
+pub(in crate::analyze) struct BuilderAdapter<B, H> {
     builder: B,
     handler: H,
 }
 
-pub(super) trait NameHandler<B, T, S> {
+pub(in crate::analyze) trait NameHandler<B, T, S> {
     fn handle(&mut self, name: T, span: S, builder: &mut B);
 }
 
@@ -116,7 +116,7 @@ impl<B> ResolveNames for B {
     }
 }
 
-pub(super) struct NameResolver;
+pub(in crate::analyze) struct NameResolver;
 
 impl<B, I, S> NameHandler<B, I, S> for NameResolver
 where

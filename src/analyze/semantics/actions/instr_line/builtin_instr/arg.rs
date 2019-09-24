@@ -5,11 +5,11 @@ use crate::analyze::semantics::actions::Keyword;
 use crate::analyze::semantics::arg::*;
 use crate::analyze::semantics::builtin_instr::BuiltinInstrSet;
 use crate::analyze::semantics::resolve::{NameTable, ResolvedName};
-use crate::analyze::semantics::{ArgSemantics, ExprBuilder};
+use crate::analyze::semantics::{ArgSemantics, ExprBuilder, Session};
 use crate::analyze::syntax::actions::*;
 use crate::analyze::Literal;
 use crate::diag::{Diagnostics, EmitDiag, Message};
-use crate::object::builder::SymbolSource;
+use crate::object::builder::Finish;
 
 use std::ops::DerefMut;
 
@@ -21,14 +21,23 @@ impl<I, R, N, B> ArgFinalizer for ArgSemantics<I, R, N, B>
 where
     I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
+    B: Finish,
 {
-    type Next = BuiltinInstrSemantics<I, R, N, B>;
+    type Next = BuiltinInstrSemantics<I, R, N, B::Parent>;
 
     fn did_parse_arg(mut self) -> Self::Next {
         let arg = self.state.pop();
         self.state.parent.args.push(arg);
+        let (builder, _expr) = self.builder.finish();
         assert_eq!(self.state.stack.len(), 0);
-        self.map_state(|line| line.parent)
+        Session {
+            instr_set: self.instr_set,
+            reentrancy: self.reentrancy,
+            names: self.names,
+            builder,
+            state: self.state.parent,
+            stack: self.stack,
+        }
     }
 }
 
@@ -37,13 +46,8 @@ where
     I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
     N: DerefMut,
-    N::Target: NameTable<
-        R::Ident,
-        Keyword = &'static Keyword<I::Binding, I::Free>,
-        MacroId = R::MacroId,
-        SymbolId = B::SymbolId,
-    >,
-    B: SymbolSource,
+    N::Target:
+        NameTable<R::Ident, Keyword = &'static Keyword<I::Binding, I::Free>, MacroId = R::MacroId>,
 {
     fn act_on_atom(&mut self, atom: ExprAtom<R::Ident, Literal<R::StringRef>>, span: R::Span) {
         self.state.stack.push(Arg {

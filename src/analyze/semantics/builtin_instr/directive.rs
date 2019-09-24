@@ -604,7 +604,10 @@ mod tests {
                 TestOperation<S>,
             >,
         >,
-        MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>,
+        BuilderAdapter<
+            RelocContext<MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>, Expr<S>>,
+            NameResolver,
+        >,
     >;
 
     fn unary_directive<F>(directive: &str, f: F) -> Vec<TestOperation<()>>

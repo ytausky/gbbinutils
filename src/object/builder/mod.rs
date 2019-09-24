@@ -445,6 +445,8 @@ impl<N> From<Name<N>> for ExprOp<N> {
 
 #[cfg(test)]
 pub mod mock {
+    pub(crate) use super::RelocContext;
+
     use super::*;
 
     use crate::diag::span::Spanned;
