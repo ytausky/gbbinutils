@@ -440,5 +440,4 @@ mod tests {
     fn lex_number_without_digits() {
         assert_eq_lex_results("$", vec![Err(LexError::NoDigits)])
     }
-
 }

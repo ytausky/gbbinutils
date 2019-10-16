@@ -84,7 +84,7 @@ impl<'a, S: Clone> EvalSubst<'a, S> for &'a Expr<S> {
                         &EvalContext {
                             linkage: context.linkage,
                             args: &stack[arg_index..],
-                            location_var: context.location_var.clone(),
+                            location_var: context.location_var,
                         },
                         diagnostics,
                     ));

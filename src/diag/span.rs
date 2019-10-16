@@ -57,14 +57,13 @@ pub trait MacroContextFactory<H, S: Clone> {
 
 pub trait SpanSystem
 where
-    Self: BufContextFactory,
-    Self: AddMacroDef<<Self as SpanSource>::Span>,
-    Self: MacroContextFactory<
-        <Self as AddMacroDef<<Self as SpanSource>::Span>>::MacroDefHandle,
-        <Self as SpanSource>::Span,
-    >,
-    Self: MergeSpans<<Self as SpanSource>::Span>,
-    Self: StripSpan<<Self as SpanSource>::Span>,
+    Self: BufContextFactory
+        + AddMacroDef<<Self as SpanSource>::Span>
+        + MacroContextFactory<
+            <Self as AddMacroDef<<Self as SpanSource>::Span>>::MacroDefHandle,
+            <Self as SpanSource>::Span,
+        > + MergeSpans<<Self as SpanSource>::Span>
+        + StripSpan<<Self as SpanSource>::Span>,
 {
 }
 

@@ -16,9 +16,12 @@ pub(crate) use self::mock::*;
 
 pub(super) trait ReentrancyActions
 where
-    Self: IdentSource + MacroSource + SpanSource + StringSource,
-    Self: GetString<<Self as StringSource>::StringRef>,
-    Self: Diagnostics<<Self as SpanSource>::Span>,
+    Self: IdentSource
+        + MacroSource
+        + SpanSource
+        + StringSource
+        + GetString<<Self as StringSource>::StringRef>
+        + Diagnostics<<Self as SpanSource>::Span>,
 {
     fn analyze_file<A>(
         self,
@@ -292,8 +295,7 @@ mod mock {
 
     impl<T, S> ReentrancyActions for MockSourceComponents<T, S>
     where
-        T: From<ReentrancyEvent>,
-        T: From<DiagnosticsEvent<S>>,
+        T: From<ReentrancyEvent> + From<DiagnosticsEvent<S>>,
         S: Clone + Merge,
     {
         fn analyze_file<A>(

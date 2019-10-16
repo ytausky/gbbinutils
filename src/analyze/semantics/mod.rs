@@ -393,8 +393,7 @@ mod mock {
 
     impl<T, S> MockExprBuilder<T, S>
     where
-        T: From<BackendEvent<MockSymbolId, Expr<MockSymbolId, S>>>,
-        T: From<DiagnosticsEvent<S>>,
+        T: From<BackendEvent<MockSymbolId, Expr<MockSymbolId, S>>> + From<DiagnosticsEvent<S>>,
         S: Clone + Merge,
     {
         pub fn with_log(log: Log<T>) -> Self {

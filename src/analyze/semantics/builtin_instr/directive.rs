@@ -123,27 +123,21 @@ where
     }
 
     fn analyze_ds(mut self) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
-        match single_arg(self.span, self.args, &mut self.session) {
-            Some(arg) => {
-                let (result, session) = self.session.analyze_expr(arg);
-                self.session = session;
-                if let Ok(bytes) = result {
-                    self.session.builder.reserve(bytes)
-                }
+        if let Some(arg) = single_arg(self.span, self.args, &mut self.session) {
+            let (result, session) = self.session.analyze_expr(arg);
+            self.session = session;
+            if let Ok(bytes) = result {
+                self.session.builder.reserve(bytes)
             }
-            None => (),
         }
         self.session
     }
 
     fn analyze_equ(mut self) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
         let (symbol, params) = self.label.take().unwrap();
-        match single_arg(self.span, self.args, &mut self.session) {
-            Some(arg) => {
-                let (_, session) = self.session.define_symbol_with_params(symbol, &params, arg);
-                self.session = session;
-            }
-            None => (),
+        if let Some(arg) = single_arg(self.span, self.args, &mut self.session) {
+            let (_, session) = self.session.define_symbol_with_params(symbol, &params, arg);
+            self.session = session
         }
         self.session
     }
@@ -221,15 +215,12 @@ where
     }
 
     fn analyze_org(mut self) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
-        match single_arg(self.span, self.args, &mut self.session) {
-            Some(arg) => {
-                let (result, session) = self.session.analyze_expr(arg);
-                self.session = session;
-                if let Ok(value) = result {
-                    self.session.builder.set_origin(value)
-                }
+        if let Some(arg) = single_arg(self.span, self.args, &mut self.session) {
+            let (result, session) = self.session.analyze_expr(arg);
+            self.session = session;
+            if let Ok(value) = result {
+                self.session.builder.set_origin(value)
             }
-            None => (),
         }
         self.session
     }

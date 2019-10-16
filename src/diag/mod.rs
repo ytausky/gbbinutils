@@ -21,38 +21,28 @@ pub(crate) use self::mock::*;
 
 pub(crate) trait DiagnosticsSystem
 where
-    Self: SpanSystem,
-    Self: Diagnostics<<Self as SpanSource>::Span>,
+    Self: SpanSystem + Diagnostics<<Self as SpanSource>::Span>,
 {
 }
 
 pub(crate) trait Diagnostics<S>
 where
-    Self: MergeSpans<S>,
-    Self: BackendDiagnostics<S>,
+    Self: MergeSpans<S> + BackendDiagnostics<S>,
 {
 }
 
 pub(crate) trait BackendDiagnostics<S>
 where
-    Self: StripSpan<S>,
-    Self: EmitDiag<S, <Self as StripSpan<S>>::Stripped>,
+    Self: StripSpan<S> + EmitDiag<S, <Self as StripSpan<S>>::Stripped>,
 {
 }
 
-impl<T, S> BackendDiagnostics<S> for T
-where
-    T: StripSpan<S>,
-    T: EmitDiag<S, <T as StripSpan<S>>::Stripped>,
+impl<T, S> BackendDiagnostics<S> for T where
+    T: StripSpan<S> + EmitDiag<S, <T as StripSpan<S>>::Stripped>
 {
 }
 
-impl<T, S> Diagnostics<S> for T
-where
-    T: MergeSpans<S>,
-    T: BackendDiagnostics<S>,
-{
-}
+impl<T, S> Diagnostics<S> for T where T: MergeSpans<S> + BackendDiagnostics<S> {}
 
 macro_rules! delegate_diagnostics {
     ({$($params:tt)*}, $({$($preds:tt)*},)? $t:ty, {$($delegate:tt)*}, $dt:ty, $span:ty) => {

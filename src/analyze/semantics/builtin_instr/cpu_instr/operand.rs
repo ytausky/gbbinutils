@@ -177,7 +177,7 @@ where
         Hld | Hli => {
             let stripped = diagnostics.strip_span(&span);
             diagnostics.emit_diag(Message::MustBeDeref { operand: stripped }.at(span.clone()));
-            Err(())?
+            return Err(());
         }
         L => AtomKind::Simple(SimpleOperand::L),
         Nc => AtomKind::Condition(Condition::Nc),
