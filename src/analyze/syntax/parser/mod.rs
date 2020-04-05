@@ -1200,7 +1200,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .map(Into::into)
-                .map(|t| TokenSeqAction::PushToken(self.token(t.clone())))
+                .map(|t| TokenSeqAction::PushToken(self.token(t)))
                 .collect()
         }
 

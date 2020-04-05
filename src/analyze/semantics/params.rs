@@ -21,9 +21,9 @@ where
     fn reloc_lookup(&mut self, name: I, span: S) -> Self::RelocId {
         match self.resolve_name(&name) {
             Some(ResolvedName::Keyword(_)) => unimplemented!(),
-            Some(ResolvedName::Symbol(id)) => id.clone(),
+            Some(ResolvedName::Symbol(id)) => id,
             None => {
-                let id = self.alloc_symbol(span.clone());
+                let id = self.alloc_symbol(span);
                 self.define_name(name, ResolvedName::Symbol(id.clone()));
                 id
             }
@@ -240,7 +240,7 @@ mod tests {
     fn pass_through_non_param() {
         let param: String = "param".into();
         let builder: Expr<_, _> = Default::default();
-        let params = (vec![param.clone()], vec![()]);
+        let params = (vec![param], vec![()]);
         let mut adapter = builder.with_params(&params);
         let unrelated = Name(String::from("ident"));
         adapter.push_op(unrelated.clone(), ());
