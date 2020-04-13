@@ -73,7 +73,7 @@ pub trait Finish {
     type Parent;
     type Value;
 
-    fn finish(self) -> (Self::Parent, Self::Value);
+    fn finish(self) -> (Self::Parent, Option<Self::Value>);
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -402,8 +402,15 @@ impl<'a, S: Clone> Finish for RelocContext<ObjectBuilder<'a, S>, Expr<S>> {
     type Parent = ObjectBuilder<'a, S>;
     type Value = Expr<S>;
 
-    fn finish(self) -> (Self::Parent, Self::Value) {
-        (self.parent, self.builder)
+    fn finish(self) -> (Self::Parent, Option<Self::Value>) {
+        (
+            self.parent,
+            if self.builder.0.is_empty() {
+                None
+            } else {
+                Some(self.builder)
+            },
+        )
     }
 }
 
@@ -520,8 +527,15 @@ pub mod mock {
         type Parent = MockBackend<A, T>;
         type Value = Expr<A::SymbolId, S>;
 
-        fn finish(self) -> (Self::Parent, Self::Value) {
-            (self.parent, self.builder)
+        fn finish(self) -> (Self::Parent, Option<Self::Value>) {
+            (
+                self.parent,
+                if self.builder.0.is_empty() {
+                    None
+                } else {
+                    Some(self.builder)
+                },
+            )
         }
     }
 
@@ -778,7 +792,7 @@ mod tests {
             let mut builder = builder.build_const();
             builder.push_op(LocationCounter, ());
             let (mut builder, expr) = builder.finish();
-            builder.define_symbol(symbol_id, (), expr);
+            builder.define_symbol(symbol_id, (), expr.unwrap());
             let mut value: Expr<_> = Default::default();
             value.push_op(symbol_id, ());
             builder.emit_item(word_item(value));
@@ -797,7 +811,7 @@ mod tests {
             let mut builder = builder.build_const();
             builder.push_op(LocationCounter, ());
             let (mut builder, expr) = builder.finish();
-            builder.define_symbol(symbol_id, (), expr);
+            builder.define_symbol(symbol_id, (), expr.unwrap());
         });
         assert_eq!(*diagnostics, []);
         assert_eq!(object.sections.last().unwrap().data, [0x02, 0x00])
@@ -821,7 +835,7 @@ mod tests {
             let (mut object_builder, zero) = const_builder.finish();
             assert_eq!(
                 object_builder.is_non_zero(
-                    zero,
+                    zero.unwrap(),
                     &mut MockDiagnostics::<DiagnosticsEvent<_>, _>::new(Log::new())
                 ),
                 Some(false)
@@ -837,7 +851,7 @@ mod tests {
             let (mut object_builder, forty_two) = const_builder.finish();
             assert_eq!(
                 object_builder.is_non_zero(
-                    forty_two,
+                    forty_two.unwrap(),
                     &mut MockDiagnostics::<DiagnosticsEvent<_>, _>::new(Log::new())
                 ),
                 Some(true)

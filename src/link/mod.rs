@@ -200,7 +200,7 @@ mod tests {
         let mut const_builder = object_builder.build_const();
         const_builder.push_op(origin1, ());
         let (mut object_builder, origin1_const) = const_builder.finish();
-        object_builder.set_origin(origin1_const);
+        object_builder.set_origin(origin1_const.unwrap());
 
         // nop
         object_builder.emit_item(Item::CpuInstr(CpuInstr::Nullary(Nullary::Nop)));
@@ -211,7 +211,7 @@ mod tests {
         const_builder.push_op(skipped_bytes, ());
         const_builder.push_op(BinOp::Plus, ());
         let (mut object_builder, origin2_const) = const_builder.finish();
-        object_builder.set_origin(origin2_const);
+        object_builder.set_origin(origin2_const.unwrap());
 
         // halt
         object_builder.emit_item(Item::CpuInstr(CpuInstr::Nullary(Nullary::Halt)));
@@ -233,7 +233,7 @@ mod tests {
         let mut builder = builder.build_const();
         builder.push_op(LocationCounter, ());
         let (mut builder, expr) = builder.finish();
-        builder.define_symbol(symbol_id, (), expr);
+        builder.define_symbol(symbol_id, (), expr.unwrap());
         linkable.vars.resolve(&linkable.content);
         assert_eq!(linkable.vars[VarId(0)].value, addr.into());
     }
@@ -280,7 +280,7 @@ mod tests {
             let mut symbol_builder = builder.build_const();
             symbol_builder.push_op(LocationCounter, ());
             let (mut builder, expr) = symbol_builder.finish();
-            builder.define_symbol(name, (), expr);
+            builder.define_symbol(name, (), expr.unwrap());
         })
     }
 
@@ -297,13 +297,13 @@ mod tests {
         let mut const_builder = object_builder.build_const();
         const_builder.push_op(0x1337, ());
         let (mut object_builder, origin) = const_builder.finish();
-        object_builder.set_origin(origin);
+        object_builder.set_origin(origin.unwrap());
 
         // dw my_section
         let mut const_builder = object_builder.build_const();
         const_builder.push_op(Name(name), ());
         let (mut object_builder, my_section) = const_builder.finish();
-        object_builder.emit_item(Item::Data(my_section, Width::Word));
+        object_builder.emit_item(Item::Data(my_section.unwrap(), Width::Word));
 
         let binary = Program::link(object, &mut IgnoreDiagnostics);
         assert_eq!(binary.sections[0].data, [0x37, 0x13])
@@ -322,24 +322,24 @@ mod tests {
         let mut const_builder = object_builder.build_const();
         const_builder.push_op(addr, ());
         let (mut object_builder, origin) = const_builder.finish();
-        object_builder.set_origin(origin);
+        object_builder.set_origin(origin.unwrap());
 
         // ds 10
         let mut const_builder = object_builder.build_const();
         const_builder.push_op(bytes, ());
         let (mut object_builder, bytes_const) = const_builder.finish();
-        object_builder.reserve(bytes_const);
+        object_builder.reserve(bytes_const.unwrap());
 
         // label dw label
         let label = object_builder.alloc_symbol(());
         let mut symbol_builder = object_builder.build_const();
         symbol_builder.push_op(LocationCounter, ());
         let (mut object_builder, expr) = symbol_builder.finish();
-        object_builder.define_symbol(label, (), expr);
+        object_builder.define_symbol(label, (), expr.unwrap());
         let mut const_builder = object_builder.build_const();
         const_builder.push_op(Name(label), ());
         let (mut object_builder, label_const) = const_builder.finish();
-        object_builder.emit_item(Item::Data(label_const, Width::Word));
+        object_builder.emit_item(Item::Data(label_const.unwrap(), Width::Word));
 
         object.vars.resolve(&object.content);
         assert_eq!(object.vars[symbol].value, (addr + bytes).into())

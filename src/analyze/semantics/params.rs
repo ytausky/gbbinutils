@@ -156,7 +156,7 @@ impl<B: Finish, H> Finish for BuilderAdapter<B, H> {
     type Parent = B::Parent;
     type Value = B::Value;
 
-    fn finish(self) -> (Self::Parent, Self::Value) {
+    fn finish(self) -> (Self::Parent, Option<Self::Value>) {
         self.builder.finish()
     }
 }
@@ -260,7 +260,10 @@ mod tests {
         )
         .resolve_names();
         builder.push_op(Name(ident), ());
-        assert_eq!(builder.finish().1, Expr::from_atom(Atom::Name(reloc), ()))
+        assert_eq!(
+            builder.finish().1,
+            Some(Expr::from_atom(Atom::Name(reloc), ()))
+        )
     }
 
     #[test]
@@ -271,7 +274,10 @@ mod tests {
         {
             let mut builder = MockExprBuilder::with_log(log.clone()).resolve_names();
             builder.push_op(Name(ident.clone()), ());
-            assert_eq!(builder.finish().1, Expr::from_atom(Atom::Name(id), ()));
+            assert_eq!(
+                builder.finish().1,
+                Some(Expr::from_atom(Atom::Name(id), ()))
+            );
         }
         assert_eq!(
             log.into_inner(),
@@ -293,7 +299,7 @@ mod tests {
             builder.push_op(Name(ident), span.clone());
             assert_eq!(
                 builder.finish().1,
-                Expr::from_atom(Atom::Name(MockSymbolId(0)), span.clone())
+                Some(Expr::from_atom(Atom::Name(MockSymbolId(0)), span.clone()))
             );
         }
         assert_eq!(

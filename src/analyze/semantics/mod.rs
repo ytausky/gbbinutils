@@ -148,7 +148,7 @@ impl<I, R, N, B: Finish, S> Finish for Session<I, R, N, B, S> {
     type Value = B::Value;
     type Parent = Session<I, R, N, B::Parent, S>;
 
-    fn finish(self) -> (Self::Parent, Self::Value) {
+    fn finish(self) -> (Self::Parent, Option<Self::Value>) {
         let (builder, value) = self.builder.finish();
         (
             Session {

@@ -230,7 +230,7 @@ mod tests {
         let mut const_builder = object_builder.build_const();
         const_builder.push_op(addr, ());
         let (mut object_builder, origin) = const_builder.finish();
-        object_builder.set_origin(origin);
+        object_builder.set_origin(origin.unwrap());
 
         // nop
         object_builder.emit_item(Item::CpuInstr(CpuInstr::Nullary(Nullary::Nop)));
@@ -262,7 +262,7 @@ mod tests {
         let mut const_builder = object_builder.build_const();
         const_builder.push_op(LocationCounter, ());
         let (mut object_builder, location) = const_builder.finish();
-        object_builder.emit_item(Item::Data(location, Width::Byte));
+        object_builder.emit_item(Item::Data(location.unwrap(), Width::Byte));
 
         object.vars.resolve(&object.content);
         let context = &mut LinkageContext {
@@ -290,13 +290,13 @@ mod tests {
         let mut const_builder = object_builder.build_const();
         const_builder.push_op(addr, ());
         let (mut object_builder, origin) = const_builder.finish();
-        object_builder.set_origin(origin);
+        object_builder.set_origin(origin.unwrap());
 
         // dw .
         let mut const_builder = object_builder.build_const();
         const_builder.push_op(LocationCounter, ());
         let (mut object_builder, location) = const_builder.finish();
-        object_builder.emit_item(Item::Data(location, Width::Word));
+        object_builder.emit_item(Item::Data(location.unwrap(), Width::Word));
 
         object.vars.resolve(&object.content);
         let context = &mut LinkageContext {

@@ -88,7 +88,7 @@ where
         let mut builder = self.map_builder(Backend::build_const).resolve_names();
         let result = builder.eval_arg(expr);
         let (session, value) = builder.finish();
-        (result.map(|()| value), session)
+        (result.map(|()| value.unwrap()), session)
     }
 
     pub(in crate::analyze::semantics) fn define_symbol_with_params(
@@ -104,7 +104,7 @@ where
             .with_params(params);
         let result = builder.eval_arg(expr);
         let (mut session, expr) = builder.finish();
-        session.builder.define_symbol(id, span, expr);
+        session.builder.define_symbol(id, span, expr.unwrap());
         (result, session)
     }
 }

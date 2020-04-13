@@ -129,7 +129,7 @@ where
             let mut builder = self.builder.build_const();
             PushOp::<LocationCounter, _>::push_op(&mut builder, LocationCounter, span.clone());
             let (mut builder, expr) = builder.finish();
-            builder.define_symbol(id, span, expr);
+            builder.define_symbol(id, span, expr.unwrap());
             self.builder = builder;
         }
         self

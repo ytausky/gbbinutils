@@ -66,7 +66,7 @@ where
         _ => match value_context.eval_arg(expr) {
             Ok(()) => {
                 let (session, expr) = value_context.finish();
-                (Ok(Operand::Const(expr)), session)
+                (Ok(Operand::Const(expr.unwrap())), session)
             }
             Err(()) => (Err(()), value_context.finish().0),
         },
@@ -92,7 +92,7 @@ where
         _ => match value_context.eval_arg(expr) {
             Ok(()) => {
                 let (session, expr) = value_context.finish();
-                (Ok(Operand::Deref(expr)), session)
+                (Ok(Operand::Deref(expr.unwrap())), session)
             }
             Err(()) => (Err(()), value_context.finish().0),
         },
