@@ -46,7 +46,7 @@ type OperandResult<C, S> = (
 );
 
 pub(in crate::analyze::semantics) fn analyze_operand<C, I, R, S>(
-    expr: Arg<I, R, S>,
+    expr: TreeArg<I, R, S>,
     context: Context,
     mut value_context: C,
 ) -> OperandResult<C, S>
@@ -56,11 +56,11 @@ where
     S: Clone,
 {
     match expr.variant {
-        ArgVariant::Atom(ArgAtom::OperandSymbol(symbol)) => {
+        TreeArgVariant::Atom(TreeArgAtom::OperandSymbol(symbol)) => {
             let result = analyze_keyword_operand((symbol, expr.span), context, &mut value_context);
             (result, value_context.finish().0)
         }
-        ArgVariant::Unary(ArgUnaryOp::Parentheses, inner) => {
+        TreeArgVariant::Unary(ArgUnaryOp::Parentheses, inner) => {
             analyze_deref_operand(*inner, expr.span, value_context)
         }
         _ => match value_context.eval_arg(expr) {
@@ -74,7 +74,7 @@ where
 }
 
 fn analyze_deref_operand<C, I, R, S>(
-    expr: Arg<I, R, S>,
+    expr: TreeArg<I, R, S>,
     deref_span: S,
     mut value_context: C,
 ) -> OperandResult<C, S>
@@ -84,7 +84,7 @@ where
     S: Clone,
 {
     match expr.variant {
-        ArgVariant::Atom(ArgAtom::OperandSymbol(symbol)) => {
+        TreeArgVariant::Atom(TreeArgAtom::OperandSymbol(symbol)) => {
             let result =
                 analyze_deref_operand_keyword((symbol, &expr.span), deref_span, &mut value_context);
             (result, value_context.finish().0)
@@ -249,11 +249,11 @@ pub mod tests {
     }
 
     fn analyze_deref_ptr_reg(ptr_reg: PtrReg) {
-        let expr = Arg::<_, String, _> {
-            variant: ArgVariant::Unary(
+        let expr = TreeArg::<_, String, _> {
+            variant: TreeArgVariant::Unary(
                 ArgUnaryOp::Parentheses,
-                Box::new(Arg::from_atom(
-                    ArgAtom::OperandSymbol(ptr_reg.into()),
+                Box::new(TreeArg::from_atom(
+                    TreeArgAtom::OperandSymbol(ptr_reg.into()),
                     0.into(),
                 )),
             ),
@@ -286,7 +286,7 @@ pub mod tests {
     }
 
     fn analyze_operand<S: Clone + Debug>(
-        expr: Arg<MockSymbolId, String, MockSpan<S>>,
+        expr: TreeArg<MockSymbolId, String, MockSpan<S>>,
         context: Context,
     ) -> OperandResult<MockSpan<S>> {
         let mut result = None;
@@ -298,11 +298,11 @@ pub mod tests {
 
     #[test]
     fn analyze_deref_af() {
-        let parsed_expr = Arg::<_, String, _> {
-            variant: ArgVariant::Unary(
+        let parsed_expr = TreeArg::<_, String, _> {
+            variant: TreeArgVariant::Unary(
                 ArgUnaryOp::Parentheses,
-                Box::new(Arg::from_atom(
-                    ArgAtom::OperandSymbol(OperandSymbol::Af),
+                Box::new(TreeArg::from_atom(
+                    TreeArgAtom::OperandSymbol(OperandSymbol::Af),
                     0.into(),
                 )),
             ),
@@ -327,14 +327,14 @@ pub mod tests {
     fn analyze_repeated_parentheses() {
         let n = 0x42;
         let span = 0;
-        let parsed_expr = Arg::<_, String, _> {
-            variant: ArgVariant::Unary(
+        let parsed_expr = TreeArg::<_, String, _> {
+            variant: TreeArgVariant::Unary(
                 ArgUnaryOp::Parentheses,
-                Box::new(Arg {
-                    variant: ArgVariant::Unary(
+                Box::new(TreeArg {
+                    variant: TreeArgVariant::Unary(
                         ArgUnaryOp::Parentheses,
-                        Box::new(Arg::from_atom(
-                            ArgAtom::Literal(Literal::Number(n)),
+                        Box::new(TreeArg::from_atom(
+                            TreeArgAtom::Literal(Literal::Number(n)),
                             span.into(),
                         )),
                     ),
@@ -352,14 +352,14 @@ pub mod tests {
     #[test]
     fn analyze_reg_in_expr() {
         let span = 0;
-        let parsed_expr = Arg::<_, String, _> {
-            variant: ArgVariant::Unary(
+        let parsed_expr = TreeArg::<_, String, _> {
+            variant: TreeArgVariant::Unary(
                 ArgUnaryOp::Parentheses,
-                Box::new(Arg {
-                    variant: ArgVariant::Unary(
+                Box::new(TreeArg {
+                    variant: TreeArgVariant::Unary(
                         ArgUnaryOp::Parentheses,
-                        Box::new(Arg::from_atom(
-                            ArgAtom::OperandSymbol(OperandSymbol::Z),
+                        Box::new(TreeArg::from_atom(
+                            TreeArgAtom::OperandSymbol(OperandSymbol::Z),
                             span.into(),
                         )),
                     ),
@@ -385,8 +385,8 @@ pub mod tests {
     #[test]
     fn analyze_string_in_instruction() {
         let span = 0;
-        let parsed_expr = Arg::<_, String, _>::from_atom(
-            ArgAtom::Literal(Literal::String("some_string".into())),
+        let parsed_expr = TreeArg::<_, String, _>::from_atom(
+            TreeArgAtom::Literal(Literal::String("some_string".into())),
             span.into(),
         );
         assert_eq!(
@@ -409,7 +409,7 @@ pub mod tests {
 
     fn test_bare_ptr_reg(symbol: OperandSymbol) {
         let span = MockSpan::from(0);
-        let expr = Arg::from_atom(ArgAtom::OperandSymbol(symbol), span.clone());
+        let expr = TreeArg::from_atom(TreeArgAtom::OperandSymbol(symbol), span.clone());
         assert_eq!(
             analyze_operand(expr, Context::Other),
             Err(vec![Event::Diagnostics(

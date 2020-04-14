@@ -227,7 +227,7 @@ where
 
 fn reduce_include<I: PartialEq, R, D: Diagnostics<S>, S>(
     span: S,
-    args: Vec<Arg<I, R, S>>,
+    args: Vec<TreeArg<I, R, S>>,
     diagnostics: &mut D,
 ) -> Option<(R, S)> {
     let arg = match single_arg(span, args, diagnostics) {
@@ -235,7 +235,7 @@ fn reduce_include<I: PartialEq, R, D: Diagnostics<S>, S>(
         None => return None,
     };
     match arg.variant {
-        ArgVariant::Atom(ArgAtom::Literal(Literal::String(path))) => Some((path, arg.span)),
+        TreeArgVariant::Atom(TreeArgAtom::Literal(Literal::String(path))) => Some((path, arg.span)),
         _ => {
             diagnostics.emit_diag(Message::ExpectedString.at(arg.span));
             None
@@ -537,8 +537,8 @@ mod tests {
             let session = analyze_directive(
                 (Directive::Free(FreeDirective::If), ()),
                 None,
-                vec![Arg {
-                    variant: ArgVariant::Atom(ArgAtom::Literal(Literal::Number(1))),
+                vec![TreeArg {
+                    variant: TreeArgVariant::Atom(TreeArgAtom::Literal(Literal::Number(1))),
                     span: (),
                 }],
                 session,
@@ -559,8 +559,8 @@ mod tests {
             let session = analyze_directive(
                 (Directive::Free(FreeDirective::If), ()),
                 None,
-                vec![Arg {
-                    variant: ArgVariant::Atom(ArgAtom::Literal(Literal::Number(0))),
+                vec![TreeArg {
+                    variant: TreeArgVariant::Atom(TreeArgAtom::Literal(Literal::Number(0))),
                     span: (),
                 }],
                 session,

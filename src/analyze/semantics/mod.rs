@@ -1,4 +1,4 @@
-use self::arg::{Arg, OperandSymbol};
+use self::arg::{OperandSymbol, TreeArg};
 use self::builtin_instr::{BuiltinInstr, BuiltinInstrSet, BuiltinMnemonic};
 use self::params::*;
 use self::resolve::{NameTable, ResolvedName};
@@ -311,7 +311,7 @@ where
     }
 }
 
-type BuiltinInstrArgs<I, R, S> = Vec<Arg<I, R, S>>;
+type BuiltinInstrArgs<I, R, S> = Vec<TreeArg<I, R, S>>;
 
 pub(in crate::analyze::semantics) type ArgSemantics<I, R, N, B> = Session<
     I,
@@ -327,7 +327,7 @@ pub(in crate::analyze::semantics) type ArgSemantics<I, R, N, B> = Session<
 >;
 
 pub(crate) struct ExprBuilder<I, R, S, P> {
-    stack: Vec<Arg<I, R, S>>,
+    stack: Vec<TreeArg<I, R, S>>,
     parent: P,
 }
 
@@ -339,7 +339,7 @@ impl<I, R, S, P> ExprBuilder<I, R, S, P> {
         }
     }
 
-    fn pop(&mut self) -> Arg<I, R, S> {
+    fn pop(&mut self) -> TreeArg<I, R, S> {
         self.stack.pop().unwrap_or_else(|| unreachable!())
     }
 }

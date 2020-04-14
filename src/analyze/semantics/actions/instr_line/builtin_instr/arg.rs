@@ -49,23 +49,23 @@ where
         NameTable<R::Ident, Keyword = &'static Keyword<I::Binding, I::Free>, MacroId = R::MacroId>,
 {
     fn act_on_atom(&mut self, atom: ExprAtom<R::Ident, Literal<R::StringRef>>, span: R::Span) {
-        self.state.stack.push(Arg {
-            variant: ArgVariant::Atom(match atom {
-                ExprAtom::Error => ArgAtom::Error,
+        self.state.stack.push(TreeArg {
+            variant: TreeArgVariant::Atom(match atom {
+                ExprAtom::Error => TreeArgAtom::Error,
                 ExprAtom::Ident(ident) => match self.names.resolve_name(&ident) {
                     Some(ResolvedName::Keyword(Keyword::Operand(operand))) => {
-                        ArgAtom::OperandSymbol(*operand)
+                        TreeArgAtom::OperandSymbol(*operand)
                     }
                     Some(ResolvedName::Keyword(_)) => {
                         let keyword = self.reentrancy.strip_span(&span);
                         self.reentrancy
                             .emit_diag(Message::KeywordInExpr { keyword }.at(span.clone()));
-                        ArgAtom::Error
+                        TreeArgAtom::Error
                     }
-                    _ => ArgAtom::Ident(ident),
+                    _ => TreeArgAtom::Ident(ident),
                 },
-                ExprAtom::Literal(literal) => ArgAtom::Literal(literal),
-                ExprAtom::LocationCounter => ArgAtom::LocationCounter,
+                ExprAtom::Literal(literal) => TreeArgAtom::Literal(literal),
+                ExprAtom::LocationCounter => TreeArgAtom::LocationCounter,
             }),
             span,
         })
@@ -75,19 +75,19 @@ where
         let variant = match op {
             Operator::Unary(UnaryOperator::Parentheses) => {
                 let inner = self.state.pop();
-                ArgVariant::Unary(ArgUnaryOp::Parentheses, Box::new(inner))
+                TreeArgVariant::Unary(ArgUnaryOp::Parentheses, Box::new(inner))
             }
             Operator::Binary(binary) => {
                 let rhs = self.state.pop();
                 let lhs = self.state.pop();
-                ArgVariant::Binary(binary, Box::new(lhs), Box::new(rhs))
+                TreeArgVariant::Binary(binary, Box::new(lhs), Box::new(rhs))
             }
             Operator::FnCall(n) => {
                 let args = self.state.stack.split_off(self.state.stack.len() - n);
                 let name = self.state.pop();
                 let name = (
                     match name.variant {
-                        ArgVariant::Atom(ArgAtom::Ident(ident)) => Some(ident),
+                        TreeArgVariant::Atom(TreeArgAtom::Ident(ident)) => Some(ident),
                         _ => {
                             self.emit_diag(Message::OnlyIdentsCanBeCalled.at(name.span.clone()));
                             None
@@ -95,10 +95,10 @@ where
                     },
                     name.span,
                 );
-                ArgVariant::FnCall(name, args)
+                TreeArgVariant::FnCall(name, args)
             }
         };
-        self.state.stack.push(Arg { variant, span })
+        self.state.stack.push(TreeArg { variant, span })
     }
 }
 

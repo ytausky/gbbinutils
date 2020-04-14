@@ -83,7 +83,7 @@ where
 {
     pub(in crate::analyze::semantics) fn analyze_expr(
         self,
-        expr: Arg<R::Ident, R::StringRef, R::Span>,
+        expr: TreeArg<R::Ident, R::StringRef, R::Span>,
     ) -> (Result<B::Value, ()>, Self) {
         let mut builder = self.map_builder(Backend::build_const).resolve_names();
         let result = builder.eval_arg(expr);
@@ -95,7 +95,7 @@ where
         mut self,
         (name, span): (R::Ident, R::Span),
         params: &Params<R::Ident, R::Span>,
-        expr: Arg<R::Ident, R::StringRef, R::Span>,
+        expr: TreeArg<R::Ident, R::StringRef, R::Span>,
     ) -> (Result<(), ()>, Self) {
         let id = self.reloc_lookup(name, span.clone());
         let mut builder = self

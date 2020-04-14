@@ -349,22 +349,22 @@ mod tests {
     pub(super) type TokenSpan = MockSpan<TokenId>;
 
     type Expr = crate::expr::Expr<MockSymbolId, TokenSpan>;
-    type Input = Arg<MockSymbolId, String, ()>;
+    type Input = TreeArg<MockSymbolId, String, ()>;
 
-    impl From<ArgVariant<MockSymbolId, String, ()>> for Input {
-        fn from(variant: ArgVariant<MockSymbolId, String, ()>) -> Self {
-            Arg { variant, span: () }
+    impl From<TreeArgVariant<MockSymbolId, String, ()>> for Input {
+        fn from(variant: TreeArgVariant<MockSymbolId, String, ()>) -> Self {
+            TreeArg { variant, span: () }
         }
     }
 
     impl From<Literal<String>> for Input {
         fn from(literal: Literal<String>) -> Input {
-            ArgVariant::Atom(ArgAtom::Literal(literal)).into()
+            TreeArgVariant::Atom(TreeArgAtom::Literal(literal)).into()
         }
     }
 
     pub(super) fn literal(symbol: OperandSymbol) -> Input {
-        Arg::from_atom(ArgAtom::OperandSymbol(symbol), ())
+        TreeArg::from_atom(TreeArgAtom::OperandSymbol(symbol), ())
     }
 
     pub(super) fn number(n: i32, span: impl Into<TokenSpan>) -> Expr {
@@ -376,8 +376,8 @@ mod tests {
     }
 
     pub(super) fn deref(expr: impl Into<Input>) -> Input {
-        Arg {
-            variant: ArgVariant::Unary(ArgUnaryOp::Parentheses, Box::new(expr.into())),
+        TreeArg {
+            variant: TreeArgVariant::Unary(ArgUnaryOp::Parentheses, Box::new(expr.into())),
             span: (),
         }
     }
@@ -501,7 +501,7 @@ mod tests {
 
     impl From<MockSymbolId> for Input {
         fn from(ident: MockSymbolId) -> Self {
-            Arg::from_atom(ArgAtom::Ident(ident), ())
+            TreeArg::from_atom(TreeArgAtom::Ident(ident), ())
         }
     }
 
@@ -795,28 +795,28 @@ mod tests {
         AnalysisResult(result.unwrap().map_err(|_| log))
     }
 
-    fn add_token_spans((i, operand): (usize, Input)) -> Arg<MockSymbolId, String, TokenSpan> {
+    fn add_token_spans((i, operand): (usize, Input)) -> TreeArg<MockSymbolId, String, TokenSpan> {
         add_token_spans_recursive(i, 0, operand).1
     }
 
     fn add_token_spans_recursive(
         i: usize,
         mut j: usize,
-        expr: Arg<MockSymbolId, String, ()>,
-    ) -> (usize, Arg<MockSymbolId, String, TokenSpan>) {
+        expr: TreeArg<MockSymbolId, String, ()>,
+    ) -> (usize, TreeArg<MockSymbolId, String, TokenSpan>) {
         let mut span: TokenSpan = TokenId::Operand(i, j).into();
         let variant = match expr.variant {
-            ArgVariant::Unary(ArgUnaryOp::Parentheses, expr) => {
+            TreeArgVariant::Unary(ArgUnaryOp::Parentheses, expr) => {
                 let (new_j, inner) = add_token_spans_recursive(i, j + 1, *expr);
                 j = new_j;
                 span = TokenSpan::merge(span.clone(), TokenId::Operand(i, j));
-                ArgVariant::Unary(ArgUnaryOp::Parentheses, Box::new(inner))
+                TreeArgVariant::Unary(ArgUnaryOp::Parentheses, Box::new(inner))
             }
-            ArgVariant::Binary(_, _, _) => panic!(),
-            ArgVariant::Atom(atom) => ArgVariant::Atom(atom),
-            ArgVariant::FnCall(..) => panic!(),
+            TreeArgVariant::Binary(_, _, _) => panic!(),
+            TreeArgVariant::Atom(atom) => TreeArgVariant::Atom(atom),
+            TreeArgVariant::FnCall(..) => panic!(),
         };
-        (j + 1, Arg { variant, span })
+        (j + 1, TreeArg { variant, span })
     }
 
     pub(super) struct ExpectedDiag {
