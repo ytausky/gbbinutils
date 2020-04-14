@@ -36,7 +36,6 @@ where
             names: self.names,
             builder,
             state: self.state.parent,
-            stack: self.stack,
         }
     }
 }

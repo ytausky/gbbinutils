@@ -88,7 +88,6 @@ where
                 names: self.names,
                 builder: self.builder,
                 state: TokenStreamState::from(self.state.parent),
-                stack: self.stack,
             },
         )
     }

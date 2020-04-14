@@ -59,7 +59,6 @@ where
                 names: self.names,
                 builder: self.builder,
                 state: self.state,
-                stack: self.stack,
             },
         )
     }
@@ -81,7 +80,6 @@ impl<I, R: ReentrancyActions, N, B>
             names: session.names,
             builder: session.builder,
             state: session.state,
-            stack: session.stack,
         }
     }
 }

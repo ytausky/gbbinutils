@@ -191,7 +191,6 @@ where
                     names: self.session.names,
                     builder: self.session.builder,
                     state: self.session.state,
-                    stack: self.session.stack,
                 },
             );
         if let Err(err) = result {
