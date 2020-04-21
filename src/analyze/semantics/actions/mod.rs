@@ -342,8 +342,8 @@ pub mod tests {
             [
                 NameTableEvent::Insert(ident, ResolvedName::Symbol(MockSymbolId(0))).into(),
                 BackendEvent::EmitItem(Item::CpuInstr(CpuInstr::Rst(Expr::from_items(&[
-                    1.into(),
                     Name(MockSymbolId(0)).into(),
+                    1.into(),
                     ExprOp::FnCall(1).into()
                 ]))))
                 .into()

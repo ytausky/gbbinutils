@@ -6,7 +6,7 @@ use crate::analyze::semantics::params::RelocLookup;
 use crate::analyze::semantics::resolve::{NameTable, StartScope};
 use crate::analyze::semantics::*;
 use crate::analyze::semantics::{Keyword, Session};
-use crate::analyze::Literal;
+use crate::diag::span::Source;
 use crate::diag::*;
 use crate::object::builder::{Backend, Item, Width};
 
@@ -40,7 +40,7 @@ pub(in crate::analyze) enum FreeDirective {
 pub(in crate::analyze::semantics) fn analyze_directive<R, N, B>(
     directive: (Directive, R::Span),
     label: Option<Label<R::Ident, R::Span>>,
-    args: BuiltinInstrArgs<R::Ident, R::StringRef, R::Span>,
+    args: BuiltinInstrArgs<B::Value, R::StringRef, R::Span>,
     session: TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B>,
 ) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B>
 where
@@ -64,10 +64,10 @@ where
     context.analyze(directive.0)
 }
 
-struct DirectiveContext<R: ReentrancyActions, N, B> {
+struct DirectiveContext<R: ReentrancyActions, N, B: PartialBackend<R::Span>> {
     span: R::Span,
     label: Option<Label<R::Ident, R::Span>>,
-    args: BuiltinInstrArgs<R::Ident, R::StringRef, R::Span>,
+    args: BuiltinInstrArgs<B::Value, R::StringRef, R::Span>,
     session: TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B>,
 }
 
@@ -110,12 +110,9 @@ where
         width: Width,
     ) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
         for arg in self.args {
-            let expr = match self.session.analyze_expr(arg) {
-                (Ok(expr), session) => {
-                    self.session = session;
-                    expr
-                }
-                (Err(()), session) => return session,
+            let expr = match self.session.expect_const(arg) {
+                Ok(expr) => expr,
+                Err(()) => return self.session,
             };
             self.session.builder.emit_item(Item::Data(expr, width))
         }
@@ -124,8 +121,7 @@ where
 
     fn analyze_ds(mut self) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
         if let Some(arg) = single_arg(self.span, self.args, &mut self.session) {
-            let (result, session) = self.session.analyze_expr(arg);
-            self.session = session;
+            let result = self.session.expect_const(arg);
             if let Ok(bytes) = result {
                 self.session.builder.reserve(bytes)
             }
@@ -134,10 +130,9 @@ where
     }
 
     fn analyze_equ(mut self) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
-        let (symbol, params) = self.label.take().unwrap();
+        let (symbol, _) = self.label.take().unwrap();
         if let Some(arg) = single_arg(self.span, self.args, &mut self.session) {
-            let (_, session) = self.session.define_symbol_with_params(symbol, &params, arg);
-            self.session = session
+            self.session.define_symbol_with_params(symbol, arg);
         }
         self.session
     }
@@ -156,8 +151,7 @@ where
     fn analyze_if(mut self) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
         match single_arg(self.span, self.args, &mut self.session) {
             Some(arg) => {
-                let (value, session) = self.session.analyze_expr(arg);
-                self.session = session;
+                let value = self.session.expect_const(arg);
                 match self
                     .session
                     .builder
@@ -215,8 +209,7 @@ where
 
     fn analyze_org(mut self) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
         if let Some(arg) = single_arg(self.span, self.args, &mut self.session) {
-            let (result, session) = self.session.analyze_expr(arg);
-            self.session = session;
+            let result = self.session.expect_const(arg);
             if let Ok(value) = result {
                 self.session.builder.set_origin(value)
             }
@@ -225,21 +218,29 @@ where
     }
 }
 
-fn reduce_include<I: PartialEq, R, D: Diagnostics<S>, S>(
+fn reduce_include<V: Source<Span = S>, R, D: Diagnostics<S>, S: Clone>(
     span: S,
-    args: Vec<TreeArg<I, R, S>>,
+    args: Vec<Arg<V, R, S>>,
     diagnostics: &mut D,
 ) -> Option<(R, S)> {
     let arg = match single_arg(span, args, diagnostics) {
         Some(arg) => arg,
         None => return None,
     };
-    match arg.variant {
-        TreeArgVariant::Atom(TreeArgAtom::Literal(Literal::String(path))) => Some((path, arg.span)),
-        _ => {
-            diagnostics.emit_diag(Message::ExpectedString.at(arg.span));
+    let result = match arg {
+        Arg::String(path, span) => Ok((path, span)),
+        Arg::Bare(DerefableArg::Const(value)) => Err(Some(value.span())),
+        Arg::Bare(DerefableArg::Symbol(_, span)) => Err(Some(span)),
+        Arg::Deref(_, span) => Err(Some(span)),
+        Arg::Error => Err(None),
+    };
+    match result {
+        Ok(result) => Some(result),
+        Err(Some(span)) => {
+            diagnostics.emit_diag(Message::ExpectedString.at(span));
             None
         }
+        Err(None) => None,
     }
 }
 
@@ -273,6 +274,7 @@ mod tests {
     use crate::analyze::semantics::actions::tests::*;
     use crate::analyze::semantics::resolve::{MockNameTable, NameTableEvent, ResolvedName};
     use crate::analyze::syntax::actions::*;
+    use crate::analyze::Literal;
     use crate::codebase::CodebaseError;
     use crate::expr::{Atom, ParamId};
     use crate::object::builder::mock::*;
@@ -537,10 +539,10 @@ mod tests {
             let session = analyze_directive(
                 (Directive::Free(FreeDirective::If), ()),
                 None,
-                vec![TreeArg {
-                    variant: TreeArgVariant::Atom(TreeArgAtom::Literal(Literal::Number(1))),
-                    span: (),
-                }],
+                vec![Arg::Bare(DerefableArg::Const(Expr::from_atom(
+                    1.into(),
+                    (),
+                )))],
                 session,
             );
             assert_eq!(
@@ -559,10 +561,10 @@ mod tests {
             let session = analyze_directive(
                 (Directive::Free(FreeDirective::If), ()),
                 None,
-                vec![TreeArg {
-                    variant: TreeArgVariant::Atom(TreeArgAtom::Literal(Literal::Number(0))),
-                    span: (),
-                }],
+                vec![Arg::Bare(DerefableArg::Const(Expr::from_atom(
+                    0.into(),
+                    (),
+                )))],
                 session,
             );
             assert_eq!(
@@ -594,10 +596,7 @@ mod tests {
                 TestOperation<S>,
             >,
         >,
-        BuilderAdapter<
-            RelocContext<MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>, Expr<S>>,
-            NameResolver,
-        >,
+        RelocContext<MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>, Expr<S>>,
     >;
 
     fn unary_directive<F>(directive: &str, f: F) -> Vec<TestOperation<()>>

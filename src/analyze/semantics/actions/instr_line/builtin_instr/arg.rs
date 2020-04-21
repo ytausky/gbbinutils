@@ -2,19 +2,21 @@ use super::BuiltinInstrSemantics;
 
 use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::actions::Keyword;
-use crate::analyze::semantics::arg::*;
-use crate::analyze::semantics::builtin_instr::BuiltinInstrSet;
+use crate::analyze::semantics::arg::{Arg, DerefableArg};
+use crate::analyze::semantics::builtin_instr::{BuiltinInstr, BuiltinInstrSet};
 use crate::analyze::semantics::resolve::{NameTable, ResolvedName};
 use crate::analyze::semantics::{ArgSemantics, ExprBuilder, Session};
 use crate::analyze::syntax::actions::*;
 use crate::analyze::Literal;
+use crate::diag::span::{Source, StripSpan};
 use crate::diag::{Diagnostics, EmitDiag, Message};
-use crate::object::builder::Finish;
+use crate::expr::{FnCall, LocationCounter, ParamId};
+use crate::object::builder::{Finish, Name, PartialBackend, SymbolSource, ValueBuilder};
 
 use std::ops::DerefMut;
 
 delegate_diagnostics! {
-    {I, R, S, P: Diagnostics<S>}, ExprBuilder<I, R, S, P>, {parent}, P, S
+    {R, S, P: Diagnostics<S>}, ExprBuilder<R, S, P>, {parent}, P, S
 }
 
 impl<I, R, N, B> ArgFinalizer for ArgSemantics<I, R, N, B>
@@ -22,14 +24,30 @@ where
     I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
     B: Finish,
+    B::Value: Source<Span = R::Span>,
+    B::Parent: PartialBackend<R::Span, Value = B::Value>,
 {
     type Next = BuiltinInstrSemantics<I, R, N, B::Parent>;
 
     fn did_parse_arg(mut self) -> Self::Next {
-        let arg = self.state.pop();
+        let (builder, value) = self.builder.finish();
+        let arg = match self.state.arg {
+            Some(Arg::Bare(DerefableArg::Const(()))) => {
+                Arg::Bare(DerefableArg::Const(value.unwrap()))
+            }
+            Some(Arg::Bare(DerefableArg::Symbol(symbol, span))) => {
+                Arg::Bare(DerefableArg::Symbol(symbol, span))
+            }
+            Some(Arg::Deref(DerefableArg::Const(()), span)) => {
+                Arg::Deref(DerefableArg::Const(value.unwrap()), span)
+            }
+            Some(Arg::Deref(DerefableArg::Symbol(symbol, inner_span), outer_span)) => {
+                Arg::Deref(DerefableArg::Symbol(symbol, inner_span), outer_span)
+            }
+            Some(Arg::String(string, span)) => Arg::String(string, span),
+            Some(Arg::Error) | None => Arg::Error,
+        };
         self.state.parent.args.push(arg);
-        let (builder, _expr) = self.builder.finish();
-        assert_eq!(self.state.stack.len(), 0);
         Session {
             instr_set: self.instr_set,
             reentrancy: self.reentrancy,
@@ -45,68 +63,109 @@ where
     I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
     N: DerefMut,
-    N::Target:
-        NameTable<R::Ident, Keyword = &'static Keyword<I::Binding, I::Free>, MacroId = R::MacroId>,
+    N::Target: NameTable<
+        R::Ident,
+        Keyword = &'static Keyword<I::Binding, I::Free>,
+        MacroId = R::MacroId,
+        SymbolId = <<B as Finish>::Parent as SymbolSource>::SymbolId,
+    >,
+    B: ValueBuilder<<<B as Finish>::Parent as SymbolSource>::SymbolId, R::Span> + Finish,
+    B::Parent: PartialBackend<R::Span>,
 {
     fn act_on_atom(&mut self, atom: ExprAtom<R::Ident, Literal<R::StringRef>>, span: R::Span) {
-        self.state.stack.push(TreeArg {
-            variant: TreeArgVariant::Atom(match atom {
-                ExprAtom::Error => TreeArgAtom::Error,
-                ExprAtom::Ident(ident) => match self.names.resolve_name(&ident) {
-                    Some(ResolvedName::Keyword(Keyword::Operand(operand))) => {
-                        TreeArgAtom::OperandSymbol(*operand)
-                    }
-                    Some(ResolvedName::Keyword(_)) => {
-                        let keyword = self.reentrancy.strip_span(&span);
-                        self.reentrancy
-                            .emit_diag(Message::KeywordInExpr { keyword }.at(span.clone()));
-                        TreeArgAtom::Error
-                    }
-                    _ => TreeArgAtom::Ident(ident),
-                },
-                ExprAtom::Literal(literal) => TreeArgAtom::Literal(literal),
-                ExprAtom::LocationCounter => TreeArgAtom::LocationCounter,
-            }),
-            span,
-        })
+        match atom {
+            ExprAtom::Ident(ident) => self.act_on_ident(ident, span),
+            ExprAtom::Literal(Literal::Number(n)) => {
+                self.builder.push_op(n, span);
+                self.state.arg = Some(Arg::Bare(DerefableArg::Const(())));
+            }
+            ExprAtom::Literal(Literal::String(string)) => {
+                self.state.arg = Some(Arg::String(string, span))
+            }
+            ExprAtom::LocationCounter => {
+                self.builder.push_op(LocationCounter, span);
+                self.state.arg = Some(Arg::Bare(DerefableArg::Const(())));
+            }
+            ExprAtom::Error => self.state.arg = Some(Arg::Error),
+        }
     }
 
     fn act_on_operator(&mut self, op: Operator, span: R::Span) {
-        let variant = match op {
-            Operator::Unary(UnaryOperator::Parentheses) => {
-                let inner = self.state.pop();
-                TreeArgVariant::Unary(ArgUnaryOp::Parentheses, Box::new(inner))
-            }
-            Operator::Binary(binary) => {
-                let rhs = self.state.pop();
-                let lhs = self.state.pop();
-                TreeArgVariant::Binary(binary, Box::new(lhs), Box::new(rhs))
-            }
-            Operator::FnCall(n) => {
-                let args = self.state.stack.split_off(self.state.stack.len() - n);
-                let name = self.state.pop();
-                let name = (
-                    match name.variant {
-                        TreeArgVariant::Atom(TreeArgAtom::Ident(ident)) => Some(ident),
-                        _ => {
-                            self.emit_diag(Message::OnlyIdentsCanBeCalled.at(name.span.clone()));
-                            None
-                        }
-                    },
-                    name.span,
-                );
-                TreeArgVariant::FnCall(name, args)
-            }
+        match op {
+            Operator::Binary(op) => self.builder.push_op(op, span),
+            Operator::FnCall(arity) => self.builder.push_op(FnCall(arity), span),
+            Operator::Unary(UnaryOperator::Parentheses) => match &self.state.arg {
+                Some(Arg::Bare(arg)) => self.state.arg = Some(Arg::Deref((*arg).clone(), span)),
+                _ => unimplemented!(),
+            },
+        }
+    }
+}
+
+impl<I, R, N, B> ArgSemantics<I, R, N, B>
+where
+    I: BuiltinInstrSet<R>,
+    R: ReentrancyActions,
+    N: DerefMut,
+    N::Target: NameTable<
+        R::Ident,
+        Keyword = &'static Keyword<I::Binding, I::Free>,
+        MacroId = R::MacroId,
+        SymbolId = <<B as Finish>::Parent as SymbolSource>::SymbolId,
+    >,
+    B: ValueBuilder<<<B as Finish>::Parent as SymbolSource>::SymbolId, R::Span> + Finish,
+    B::Parent: PartialBackend<R::Span>,
+{
+    fn act_on_ident(&mut self, ident: R::Ident, span: R::Span) {
+        let no_params = (vec![], vec![]);
+        let params = match &self.state.parent.builtin_instr {
+            BuiltinInstr::Binding(Some((_, params)), _) => &params,
+            _ => &no_params,
         };
-        self.state.stack.push(TreeArg { variant, span })
+        let param = params
+            .0
+            .iter()
+            .position(|param| *param == ident)
+            .map(ParamId);
+        if let Some(id) = param {
+            self.builder.push_op(id, span);
+            self.state.arg = Some(Arg::Bare(DerefableArg::Const(())));
+            return;
+        }
+        match self.names.resolve_name(&ident) {
+            Some(ResolvedName::Keyword(Keyword::Operand(symbol))) => match self.state.arg {
+                None => self.state.arg = Some(Arg::Bare(DerefableArg::Symbol(*symbol, span))),
+                _ => unimplemented!(),
+            },
+            Some(ResolvedName::Keyword(_)) => {
+                let keyword = self.strip_span(&span);
+                self.emit_diag(Message::KeywordInExpr { keyword }.at(span))
+            }
+            Some(ResolvedName::Symbol(id)) => {
+                self.builder.push_op(Name(id), span);
+                self.state.arg = Some(Arg::Bare(DerefableArg::Const(())))
+            }
+            None => {
+                let id = self.builder.alloc_symbol(span.clone());
+                self.define_name(ident, ResolvedName::Symbol(id.clone()));
+                self.builder.push_op(Name(id), span);
+                self.state.arg = Some(Arg::Bare(DerefableArg::Const(())))
+            }
+            _ => unimplemented!(),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::analyze::semantics::actions::tests::collect_semantic_actions;
+    use crate::analyze::semantics::resolve::{NameTableEvent, ResolvedName};
     use crate::analyze::syntax::actions::*;
+    use crate::diag::span::WithSpan;
     use crate::diag::{DiagnosticsEvent, Message, MockSpan};
+    use crate::expr::{Atom, BinOp, Expr, ExprOp};
+    use crate::object::builder::mock::{BackendEvent, MockSymbolId};
+    use crate::object::builder::{CpuInstr, Direction, Item, Ld, SpecialLd, Width};
 
     #[test]
     fn diagnose_keyword_in_expr() {
@@ -134,5 +193,68 @@ mod tests {
             )
             .into()]
         )
+    }
+
+    #[test]
+    fn act_on_known_symbol_name() {
+        let actual = collect_semantic_actions::<_, MockSpan<_>>(|actions| {
+            let mut actions = actions
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("DB".into(), "db".into())
+                .into_builtin_instr()
+                .will_parse_arg();
+            actions.act_on_atom(ExprAtom::Ident("f".into()), "f1".into());
+            actions.act_on_atom(ExprAtom::Ident("f".into()), "f2".into());
+            actions.act_on_operator(Operator::Binary(BinOp::Plus), "plus".into());
+            actions
+                .did_parse_arg()
+                .did_parse_instr()
+                .did_parse_line("eol".into())
+                .act_on_eos("eos".into())
+        });
+        let expected = [
+            NameTableEvent::Insert("f".into(), ResolvedName::Symbol(MockSymbolId(0))).into(),
+            BackendEvent::EmitItem(Item::Data(
+                Expr(vec![
+                    ExprOp::Atom(Atom::Name(MockSymbolId(0))).with_span("f1".into()),
+                    ExprOp::Atom(Atom::Name(MockSymbolId(0))).with_span("f2".into()),
+                    ExprOp::Binary(BinOp::Plus).with_span("plus".into()),
+                ]),
+                Width::Byte,
+            ))
+            .into(),
+        ];
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn handle_deref_const() {
+        let actual = collect_semantic_actions::<_, MockSpan<_>>(|actions| {
+            let mut actions = actions
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("LD".into(), "ld".into())
+                .into_builtin_instr()
+                .will_parse_arg();
+            actions.act_on_atom(ExprAtom::Ident("A".into()), "a".into());
+            let mut actions = actions.did_parse_arg().will_parse_arg();
+            actions.act_on_atom(ExprAtom::Ident("const".into()), "const".into());
+            actions.act_on_operator(Operator::Unary(UnaryOperator::Parentheses), "deref".into());
+            actions
+                .did_parse_arg()
+                .did_parse_instr()
+                .did_parse_line("eol".into())
+                .act_on_eos("eos".into())
+        });
+        let expected = [
+            NameTableEvent::Insert("const".into(), ResolvedName::Symbol(MockSymbolId(0))).into(),
+            BackendEvent::EmitItem(Item::CpuInstr(CpuInstr::Ld(Ld::Special(
+                SpecialLd::InlineAddr(Expr::from_atom(Atom::Name(MockSymbolId(0)), "const".into())),
+                Direction::IntoA,
+            ))))
+            .into(),
+        ];
+        assert_eq!(actual, expected)
     }
 }

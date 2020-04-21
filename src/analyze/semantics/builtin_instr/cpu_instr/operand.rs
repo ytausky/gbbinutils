@@ -1,6 +1,6 @@
 use crate::analyze::semantics::arg::*;
 use crate::diag::*;
-use crate::object::builder::{Condition, Finish, PtrReg, Reg16, RegPair, SimpleOperand};
+use crate::object::builder::{Condition, PtrReg, Reg16, RegPair, SimpleOperand};
 use crate::span::{Source, SpanSource};
 
 #[derive(Debug, PartialEq)]
@@ -40,62 +40,30 @@ pub enum Context {
     Other,
 }
 
-type OperandResult<C, S> = (
-    Result<Operand<<C as Finish>::Value, S>, ()>,
-    <C as Finish>::Parent,
-);
-
-pub(in crate::analyze::semantics) fn analyze_operand<C, I, R, S>(
-    expr: TreeArg<I, R, S>,
+pub(in crate::analyze::semantics) fn analyze_operand<D, V, R, S>(
+    expr: Arg<V, R, S>,
     context: Context,
-    mut value_context: C,
-) -> OperandResult<C, S>
+    diagnostics: &mut D,
+) -> Result<Operand<V, S>, ()>
 where
-    C: EvalArg<I, R, S> + Diagnostics<S> + Finish,
+    D: Diagnostics<S>,
     R: Eq,
     S: Clone,
 {
-    match expr.variant {
-        TreeArgVariant::Atom(TreeArgAtom::OperandSymbol(symbol)) => {
-            let result = analyze_keyword_operand((symbol, expr.span), context, &mut value_context);
-            (result, value_context.finish().0)
+    match expr {
+        Arg::Bare(DerefableArg::Const(value)) => Ok(Operand::Const(value)),
+        Arg::Bare(DerefableArg::Symbol(symbol, span)) => {
+            analyze_keyword_operand((symbol, span), context, diagnostics)
         }
-        TreeArgVariant::Unary(ArgUnaryOp::Parentheses, inner) => {
-            analyze_deref_operand(*inner, expr.span, value_context)
+        Arg::Deref(DerefableArg::Const(value), _) => Ok(Operand::Deref(value)),
+        Arg::Deref(DerefableArg::Symbol(symbol, inner_span), outer_span) => {
+            analyze_deref_operand_keyword((symbol, &inner_span), outer_span, diagnostics)
         }
-        _ => match value_context.eval_arg(expr) {
-            Ok(()) => {
-                let (session, expr) = value_context.finish();
-                (Ok(Operand::Const(expr.unwrap())), session)
-            }
-            Err(()) => (Err(()), value_context.finish().0),
-        },
-    }
-}
-
-fn analyze_deref_operand<C, I, R, S>(
-    expr: TreeArg<I, R, S>,
-    deref_span: S,
-    mut value_context: C,
-) -> OperandResult<C, S>
-where
-    C: EvalArg<I, R, S> + Diagnostics<S> + Finish,
-    R: Eq,
-    S: Clone,
-{
-    match expr.variant {
-        TreeArgVariant::Atom(TreeArgAtom::OperandSymbol(symbol)) => {
-            let result =
-                analyze_deref_operand_keyword((symbol, &expr.span), deref_span, &mut value_context);
-            (result, value_context.finish().0)
+        Arg::String(_, span) => {
+            diagnostics.emit_diag(Message::StringInInstruction.at(span));
+            Err(())
         }
-        _ => match value_context.eval_arg(expr) {
-            Ok(()) => {
-                let (session, expr) = value_context.finish();
-                (Ok(Operand::Deref(expr.unwrap())), session)
-            }
-            Err(()) => (Err(()), value_context.finish().0),
-        },
+        Arg::Error => Err(()),
     }
 }
 
@@ -220,8 +188,6 @@ pub mod tests {
     use super::*;
 
     use crate::analyze::semantics::mock::MockExprBuilder;
-    use crate::analyze::Literal;
-    use crate::expr::Atom;
     use crate::object::builder::mock::{BackendEvent, MockSymbolId};
 
     use std::fmt::Debug;
@@ -249,16 +215,7 @@ pub mod tests {
     }
 
     fn analyze_deref_ptr_reg(ptr_reg: PtrReg) {
-        let expr = TreeArg::<_, String, _> {
-            variant: TreeArgVariant::Unary(
-                ArgUnaryOp::Parentheses,
-                Box::new(TreeArg::from_atom(
-                    TreeArgAtom::OperandSymbol(ptr_reg.into()),
-                    0.into(),
-                )),
-            ),
-            span: 1.into(),
-        };
+        let expr = Arg::Deref(DerefableArg::Symbol(ptr_reg.into(), 0.into()), 1.into());
         assert_eq!(
             analyze_operand(expr, Context::Other),
             Ok(Operand::Atom(AtomKind::DerefPtrReg(ptr_reg), 1.into()))
@@ -286,28 +243,23 @@ pub mod tests {
     }
 
     fn analyze_operand<S: Clone + Debug>(
-        expr: TreeArg<MockSymbolId, String, MockSpan<S>>,
+        expr: Arg<Expr<MockSpan<S>>, String, MockSpan<S>>,
         context: Context,
     ) -> OperandResult<MockSpan<S>> {
         let mut result = None;
         let log = crate::log::with_log(|log| {
-            result = Some(super::analyze_operand(expr, context, MockExprBuilder::with_log(log)).0)
+            result = Some(super::analyze_operand(
+                expr,
+                context,
+                &mut MockExprBuilder::with_log(log),
+            ))
         });
         result.unwrap().map_err(|_| log)
     }
 
     #[test]
     fn analyze_deref_af() {
-        let parsed_expr = TreeArg::<_, String, _> {
-            variant: TreeArgVariant::Unary(
-                ArgUnaryOp::Parentheses,
-                Box::new(TreeArg::from_atom(
-                    TreeArgAtom::OperandSymbol(OperandSymbol::Af),
-                    0.into(),
-                )),
-            ),
-            span: 1.into(),
-        };
+        let parsed_expr = Arg::Deref(DerefableArg::Symbol(OperandSymbol::Af, 0.into()), 1.into());
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
             Err(vec![Event::Diagnostics(
@@ -324,71 +276,9 @@ pub mod tests {
     }
 
     #[test]
-    fn analyze_repeated_parentheses() {
-        let n = 0x42;
-        let span = 0;
-        let parsed_expr = TreeArg::<_, String, _> {
-            variant: TreeArgVariant::Unary(
-                ArgUnaryOp::Parentheses,
-                Box::new(TreeArg {
-                    variant: TreeArgVariant::Unary(
-                        ArgUnaryOp::Parentheses,
-                        Box::new(TreeArg::from_atom(
-                            TreeArgAtom::Literal(Literal::Number(n)),
-                            span.into(),
-                        )),
-                    ),
-                    span: 1.into(),
-                }),
-            ),
-            span: 2.into(),
-        };
-        assert_eq!(
-            analyze_operand(parsed_expr, Context::Other),
-            Ok(Operand::Deref(Expr::from_atom(Atom::Const(n), span.into())))
-        )
-    }
-
-    #[test]
-    fn analyze_reg_in_expr() {
-        let span = 0;
-        let parsed_expr = TreeArg::<_, String, _> {
-            variant: TreeArgVariant::Unary(
-                ArgUnaryOp::Parentheses,
-                Box::new(TreeArg {
-                    variant: TreeArgVariant::Unary(
-                        ArgUnaryOp::Parentheses,
-                        Box::new(TreeArg::from_atom(
-                            TreeArgAtom::OperandSymbol(OperandSymbol::Z),
-                            span.into(),
-                        )),
-                    ),
-                    span: 1.into(),
-                }),
-            ),
-            span: 2.into(),
-        };
-        assert_eq!(
-            analyze_operand(parsed_expr, Context::Other),
-            Err(vec![Event::Diagnostics(
-                CompactDiag::from(
-                    Message::KeywordInExpr {
-                        keyword: span.into()
-                    }
-                    .at(span.into())
-                )
-                .into()
-            )])
-        )
-    }
-
-    #[test]
     fn analyze_string_in_instruction() {
         let span = 0;
-        let parsed_expr = TreeArg::<_, String, _>::from_atom(
-            TreeArgAtom::Literal(Literal::String("some_string".into())),
-            span.into(),
-        );
+        let parsed_expr = Arg::String("some_string".into(), span.into());
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
             Err(vec![Event::Diagnostics(
@@ -409,7 +299,7 @@ pub mod tests {
 
     fn test_bare_ptr_reg(symbol: OperandSymbol) {
         let span = MockSpan::from(0);
-        let expr = TreeArg::from_atom(TreeArgAtom::OperandSymbol(symbol), span.clone());
+        let expr = Arg::Bare(DerefableArg::Symbol(symbol, span.clone()));
         assert_eq!(
             analyze_operand(expr, Context::Other),
             Err(vec![Event::Diagnostics(

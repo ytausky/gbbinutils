@@ -1,4 +1,4 @@
-use self::arg::{OperandSymbol, TreeArg};
+use self::arg::{Arg, OperandSymbol};
 use self::builtin_instr::{BuiltinInstr, BuiltinInstrSet, BuiltinMnemonic};
 use self::params::*;
 use self::resolve::{NameTable, ResolvedName};
@@ -11,7 +11,7 @@ use super::{IdentSource, StringSource, TokenSeq};
 use crate::diag::span::SpanSource;
 use crate::diag::Diagnostics;
 use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
-use crate::object::builder::{AllocSymbol, Finish, Name, PushOp, SymbolSource};
+use crate::object::builder::{AllocSymbol, Finish, Name, PartialBackend, PushOp, SymbolSource};
 
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
@@ -287,18 +287,24 @@ impl<I, R, S> MacroDefState<I, R, S> {
     }
 }
 
-type BuiltinInstrSemantics<I, R, N, B> = Session<I, R, N, B, BuiltinInstrState<I, R>>;
+type BuiltinInstrSemantics<I, R, N, B> = Session<
+    I,
+    R,
+    N,
+    B,
+    BuiltinInstrState<I, R, <B as PartialBackend<<R as SpanSource>::Span>>::Value>,
+>;
 
-pub(in crate::analyze) struct BuiltinInstrState<I, R>
+pub(in crate::analyze) struct BuiltinInstrState<I, R, V>
 where
     I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
 {
     builtin_instr: BuiltinInstr<&'static I::Binding, &'static I::Free, R>,
-    args: BuiltinInstrArgs<R::Ident, R::StringRef, R::Span>,
+    args: BuiltinInstrArgs<V, R::StringRef, R::Span>,
 }
 
-impl<I, R> BuiltinInstrState<I, R>
+impl<I, R, V> BuiltinInstrState<I, R, V>
 where
     I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
@@ -311,7 +317,7 @@ where
     }
 }
 
-type BuiltinInstrArgs<I, R, S> = Vec<TreeArg<I, R, S>>;
+type BuiltinInstrArgs<V, R, S> = Vec<Arg<V, R, S>>;
 
 pub(in crate::analyze::semantics) type ArgSemantics<I, R, N, B> = Session<
     I,
@@ -319,28 +325,24 @@ pub(in crate::analyze::semantics) type ArgSemantics<I, R, N, B> = Session<
     N,
     B,
     ExprBuilder<
-        <R as IdentSource>::Ident,
         <R as StringSource>::StringRef,
         <R as SpanSource>::Span,
-        BuiltinInstrState<I, R>,
+        BuiltinInstrState<
+            I,
+            R,
+            <<B as Finish>::Parent as PartialBackend<<R as SpanSource>::Span>>::Value,
+        >,
     >,
 >;
 
-pub(crate) struct ExprBuilder<I, R, S, P> {
-    stack: Vec<TreeArg<I, R, S>>,
+pub(crate) struct ExprBuilder<R, S, P> {
+    arg: Option<Arg<(), R, S>>,
     parent: P,
 }
 
-impl<I, R, S, P> ExprBuilder<I, R, S, P> {
+impl<R, S, P> ExprBuilder<R, S, P> {
     pub fn new(parent: P) -> Self {
-        Self {
-            stack: Vec::new(),
-            parent,
-        }
-    }
-
-    fn pop(&mut self) -> TreeArg<I, R, S> {
-        self.stack.pop().unwrap_or_else(|| unreachable!())
+        Self { arg: None, parent }
     }
 }
 

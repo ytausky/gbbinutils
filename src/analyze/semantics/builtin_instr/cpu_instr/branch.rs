@@ -212,7 +212,7 @@ mod tests {
     fn describe_branch_instuctions() -> Vec<InstructionDescriptor> {
         use self::{ExplicitBranch::*, PotentiallyConditionalBranch::*};
         let mut descriptors = vec![
-            ((JP, vec![deref(literal(Hl))]), CpuInstr::JpDerefHl),
+            ((JP, vec![deref_symbol(Hl)]), CpuInstr::JpDerefHl),
             ((RETI, vec![]), CpuInstr::Nullary(Nullary::Reti)),
         ];
         for &kind in [Explicit(Call), Explicit(Jp), Explicit(Jr), Ret].iter() {
@@ -294,7 +294,7 @@ mod tests {
 
     #[test]
     fn analyze_call_deref_hl() {
-        analyze(CALL, vec![deref(literal(Hl))]).expect_diag(
+        analyze(CALL, vec![deref_symbol(Hl)]).expect_diag(
             ExpectedDiag::new(Message::RequiresConstantTarget {
                 mnemonic: TokenId::Mnemonic.into(),
             })

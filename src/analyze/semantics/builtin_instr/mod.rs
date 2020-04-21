@@ -1,7 +1,6 @@
 use self::cpu_instr::mnemonic::Mnemonic;
 use self::directive::{BindingDirective, Directive, FreeDirective};
 
-use super::params::ResolveNames;
 use super::resolve::{NameTable, StartScope};
 use super::{
     BuiltinInstrArgs, BuiltinInstrSemantics, InstrLineState, Keyword, Label, TokenStreamSemantics,
@@ -120,7 +119,7 @@ where
 
 fn analyze_mnemonic<R: ReentrancyActions, N, B>(
     name: (&Mnemonic, R::Span),
-    args: BuiltinInstrArgs<R::Ident, R::StringRef, R::Span>,
+    args: BuiltinInstrArgs<B::Value, R::StringRef, R::Span>,
     mut session: TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B>,
 ) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B>
 where
@@ -136,10 +135,7 @@ where
 {
     let mut operands = Vec::new();
     for arg in args {
-        let builder = session.map_builder(Backend::build_const).resolve_names();
-        let (operand, returned_session) =
-            cpu_instr::operand::analyze_operand(arg, name.0.context(), builder);
-        session = returned_session;
+        let operand = cpu_instr::operand::analyze_operand(arg, name.0.context(), &mut session);
         operands.push(operand)
     }
     if let Ok(instruction) = cpu_instr::analyze_instruction(name, operands, &mut session) {

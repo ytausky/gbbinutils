@@ -328,7 +328,7 @@ mod tests {
     pub use crate::analyze::semantics::arg::OperandSymbol::*;
     pub(crate) use crate::diag::Message;
     pub(crate) use crate::object::builder::mock::MockSymbolId;
-    pub use crate::span::{MergeSpans, SpanSource};
+    pub use crate::span::{MergeSpans, SpanSource, Spanned, WithSpan};
 
     use self::operand::tests::Event;
 
@@ -348,38 +348,39 @@ mod tests {
 
     pub(super) type TokenSpan = MockSpan<TokenId>;
 
-    type Expr = crate::expr::Expr<MockSymbolId, TokenSpan>;
-    type Input = TreeArg<MockSymbolId, String, ()>;
-
-    impl From<TreeArgVariant<MockSymbolId, String, ()>> for Input {
-        fn from(variant: TreeArgVariant<MockSymbolId, String, ()>) -> Self {
-            TreeArg { variant, span: () }
-        }
-    }
+    type Expr<S> = crate::expr::Expr<MockSymbolId, S>;
+    type Input = Arg<Expr<()>, String, ()>;
 
     impl From<Literal<String>> for Input {
         fn from(literal: Literal<String>) -> Input {
-            TreeArgVariant::Atom(TreeArgAtom::Literal(literal)).into()
+            match literal {
+                Literal::Number(n) => Arg::Bare(DerefableArg::Const(Expr::from_atom(n.into(), ()))),
+                Literal::String(_string) => unimplemented!(),
+            }
         }
     }
 
     pub(super) fn literal(symbol: OperandSymbol) -> Input {
-        TreeArg::from_atom(TreeArgAtom::OperandSymbol(symbol), ())
+        Arg::Bare(DerefableArg::Symbol(symbol, ()))
     }
 
-    pub(super) fn number(n: i32, span: impl Into<TokenSpan>) -> Expr {
+    pub(super) fn number(n: i32, span: impl Into<TokenSpan>) -> Expr<TokenSpan> {
         Expr::from_atom(n.into(), span.into())
     }
 
-    pub(super) fn name(symbol: MockSymbolId, span: impl Into<TokenSpan>) -> Expr {
+    pub(super) fn name(symbol: MockSymbolId, span: impl Into<TokenSpan>) -> Expr<TokenSpan> {
         Expr::from_atom(Atom::Name(symbol), span.into())
     }
 
-    pub(super) fn deref(expr: impl Into<Input>) -> Input {
-        TreeArg {
-            variant: TreeArgVariant::Unary(ArgUnaryOp::Parentheses, Box::new(expr.into())),
-            span: (),
-        }
+    pub(super) fn deref_symbol(symbol: impl Into<OperandSymbol>) -> Input {
+        Arg::Deref(DerefableArg::Symbol(symbol.into(), ()), ())
+    }
+
+    pub(super) fn deref_ident(ident: MockSymbolId) -> Input {
+        Arg::Deref(
+            DerefableArg::Const(Expr::from_atom(Atom::Name(ident), ())),
+            (),
+        )
     }
 
     impl From<AluOperation> for Mnemonic {
@@ -441,7 +442,7 @@ mod tests {
                 SimpleOperand::E => literal(E),
                 SimpleOperand::H => literal(H),
                 SimpleOperand::L => literal(L),
-                SimpleOperand::DerefHl => deref(literal(Hl)),
+                SimpleOperand::DerefHl => deref_symbol(Hl),
             }
         }
     }
@@ -501,7 +502,7 @@ mod tests {
 
     impl From<MockSymbolId> for Input {
         fn from(ident: MockSymbolId) -> Self {
-            TreeArg::from_atom(TreeArgAtom::Ident(ident), ())
+            Arg::Bare(DerefableArg::Const(Expr::from_atom(Atom::Name(ident), ())))
         }
     }
 
@@ -523,7 +524,7 @@ mod tests {
         test_cp_const_analysis(n.into(), number(n, TokenId::Operand(0, 0)))
     }
 
-    fn test_cp_const_analysis(parsed: Input, expr: Expr) {
+    fn test_cp_const_analysis(parsed: Input, expr: Expr<TokenSpan>) {
         analyze(CP, Some(parsed))
             .expect_instruction(CpuInstr::Alu(AluOperation::Cp, AluSource::Immediate(expr)))
     }
@@ -540,7 +541,7 @@ mod tests {
         test_instruction_analysis(describe_legal_instructions());
     }
 
-    pub(super) type InstructionDescriptor = ((Mnemonic, Vec<Input>), CpuInstr<Expr>);
+    pub(super) type InstructionDescriptor = ((Mnemonic, Vec<Input>), CpuInstr<Expr<TokenSpan>>);
 
     fn describe_legal_instructions() -> Vec<InstructionDescriptor> {
         let mut descriptors: Vec<InstructionDescriptor> = Vec::new();
@@ -744,10 +745,10 @@ mod tests {
 
     pub(super) struct AnalysisResult(InnerAnalysisResult);
 
-    type InnerAnalysisResult = Result<CpuInstr<Expr>, Vec<Event<TokenSpan>>>;
+    type InnerAnalysisResult = Result<CpuInstr<Expr<TokenSpan>>, Vec<Event<TokenSpan>>>;
 
     impl AnalysisResult {
-        pub fn expect_instruction(self, expected: CpuInstr<Expr>) {
+        pub fn expect_instruction(self, expected: CpuInstr<Expr<TokenSpan>>) {
             assert_eq!(self.0, Ok(expected))
         }
 
@@ -780,9 +781,8 @@ mod tests {
                     analyze_operand(
                         op,
                         mnemonic.context(),
-                        MockExprBuilder::with_log(log.clone()),
+                        &mut MockExprBuilder::with_log(log.clone()),
                     )
-                    .0
                 })
                 .collect();
             let mut session = MockSourceComponents::with_log(log);
@@ -795,28 +795,36 @@ mod tests {
         AnalysisResult(result.unwrap().map_err(|_| log))
     }
 
-    fn add_token_spans((i, operand): (usize, Input)) -> TreeArg<MockSymbolId, String, TokenSpan> {
-        add_token_spans_recursive(i, 0, operand).1
-    }
-
-    fn add_token_spans_recursive(
-        i: usize,
-        mut j: usize,
-        expr: TreeArg<MockSymbolId, String, ()>,
-    ) -> (usize, TreeArg<MockSymbolId, String, TokenSpan>) {
-        let mut span: TokenSpan = TokenId::Operand(i, j).into();
-        let variant = match expr.variant {
-            TreeArgVariant::Unary(ArgUnaryOp::Parentheses, expr) => {
-                let (new_j, inner) = add_token_spans_recursive(i, j + 1, *expr);
-                j = new_j;
-                span = TokenSpan::merge(span.clone(), TokenId::Operand(i, j));
-                TreeArgVariant::Unary(ArgUnaryOp::Parentheses, Box::new(inner))
+    fn add_token_spans((i, operand): (usize, Input)) -> Arg<Expr<TokenSpan>, String, TokenSpan> {
+        match operand {
+            Arg::Bare(DerefableArg::Const(value)) => {
+                Arg::Bare(DerefableArg::Const(crate::expr::Expr(
+                    value
+                        .0
+                        .into_iter()
+                        .map(|Spanned { item, .. }| item.with_span(TokenId::Operand(i, 0).into()))
+                        .collect(),
+                )))
             }
-            TreeArgVariant::Binary(_, _, _) => panic!(),
-            TreeArgVariant::Atom(atom) => TreeArgVariant::Atom(atom),
-            TreeArgVariant::FnCall(..) => panic!(),
-        };
-        (j + 1, TreeArg { variant, span })
+            Arg::Bare(DerefableArg::Symbol(symbol, ())) => {
+                Arg::Bare(DerefableArg::Symbol(symbol, TokenId::Operand(i, 0).into()))
+            }
+            Arg::Deref(DerefableArg::Const(value), ()) => Arg::Deref(
+                DerefableArg::Const(crate::expr::Expr(
+                    value
+                        .0
+                        .into_iter()
+                        .map(|Spanned { item, .. }| item.with_span(TokenId::Operand(i, 1).into()))
+                        .collect(),
+                )),
+                TokenSpan::merge(TokenId::Operand(i, 0), TokenId::Operand(i, 2)),
+            ),
+            Arg::Deref(DerefableArg::Symbol(symbol, ()), ()) => Arg::Deref(
+                DerefableArg::Symbol(symbol, TokenId::Operand(i, 1).into()),
+                TokenSpan::merge(TokenId::Operand(i, 0), TokenId::Operand(i, 2)),
+            ),
+            _ => unimplemented!(),
+        }
     }
 
     pub(super) struct ExpectedDiag {
@@ -951,7 +959,7 @@ mod tests {
 
     #[test]
     fn analyze_add_a_bc_deref() {
-        analyze(ADD, vec![literal(A), deref(literal(Bc))]).expect_diag(
+        analyze(ADD, vec![literal(A), deref_symbol(Bc)]).expect_diag(
             ExpectedDiag::new(Message::IncompatibleOperand).with_highlight(TokenSpan::merge(
                 TokenId::Operand(1, 0),
                 TokenId::Operand(1, 2),

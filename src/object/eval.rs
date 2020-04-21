@@ -78,8 +78,8 @@ impl<'a, S: Clone> EvalSubst<'a, S> for &'a Expr<S> {
                     Value::Num(operator.apply(&lhs, &rhs))
                 }
                 ExprOp::FnCall(n) => {
-                    let name = stack.pop().unwrap();
                     let arg_index = stack.len() - n;
+                    let name = stack[arg_index - 1].clone();
                     let value = Value::Num(name.eval_subst(
                         &EvalContext {
                             linkage: context.linkage,
@@ -88,7 +88,7 @@ impl<'a, S: Clone> EvalSubst<'a, S> for &'a Expr<S> {
                         },
                         diagnostics,
                     ));
-                    stack.truncate(arg_index);
+                    stack.truncate(arg_index - 1);
                     value
                 }
             };
@@ -313,8 +313,8 @@ mod tests {
         };
         assert_eq!(
             Expr::from_items(&[
-                ContentId(0).into(),
                 BuiltinId::Sizeof.into(),
+                ContentId(0).into(),
                 ExprOp::FnCall(1).into()
             ])
             .to_num(context, &mut IgnoreDiagnostics),
@@ -325,7 +325,32 @@ mod tests {
     #[test]
     fn eval_fn_call_in_immediate() {
         let immediate =
-            Expr::from_items(&[42.into(), ContentId(0).into(), ExprOp::FnCall(1).into()]);
+            Expr::from_items(&[ContentId(0).into(), 42.into(), ExprOp::FnCall(1).into()]);
+        let content = &Content::<()> {
+            sections: vec![],
+            symbols: SymbolTable(vec![Some(ContentDef::Expr(ExprDef {
+                expr: Expr::from_items(&[ParamId(0).into(), 1.into(), BinOp::Plus.into()]),
+                location: VarId(0),
+            }))]),
+        };
+        let vars = &VarTable(Vec::new());
+        let context = &LinkageContext {
+            content,
+            vars,
+            location: Num::Unknown,
+        };
+        assert_eq!(immediate.to_num(context, &mut IgnoreDiagnostics), 43.into())
+    }
+
+    #[test]
+    fn eval_complex_expression() {
+        let immediate = Expr::from_items(&[
+            0.into(),
+            ContentId(0).into(),
+            42.into(),
+            ExprOp::FnCall(1).into(),
+            BinOp::Plus.into(),
+        ]);
         let content = &Content::<()> {
             sections: vec![],
             symbols: SymbolTable(vec![Some(ContentDef::Expr(ExprDef {
@@ -499,9 +524,9 @@ mod tests {
         let inner_span = MockSpan::from("inner");
         let sizeof_span = MockSpan::from("sizeof");
         let immediate = crate::expr::Expr(vec![
-            ExprOp::Atom(inner).with_span(inner_span.clone()),
             ExprOp::Atom(Atom::Name(Symbol::Builtin(BuiltinId::Sizeof)))
                 .with_span(sizeof_span.clone()),
+            ExprOp::Atom(inner).with_span(inner_span.clone()),
             ExprOp::FnCall(1).with_span(MockSpan::merge(sizeof_span, MockSpan::from("paren_r"))),
         ]);
         let num = immediate.to_num(&context, &mut diagnostics);

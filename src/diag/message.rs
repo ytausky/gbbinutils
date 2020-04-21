@@ -65,6 +65,7 @@ pub enum Message<S> {
     NotAMnemonic {
         name: S,
     },
+    #[cfg(test)]
     OnlyIdentsCanBeCalled,
     OnlySupportedByA,
     OperandCannotBeIncDec(IncDec),
@@ -203,6 +204,7 @@ impl Message<StrippedBufSpan<BufId, BufRange>> {
                 codebase.snippet(operand),
             ),
             NotAMnemonic { name } => format!("`{}` is not a mnemonic", codebase.snippet(name)),
+            #[cfg(test)]
             OnlyIdentsCanBeCalled => "only identifiers can be called".into(),
             OnlySupportedByA => "only `a` can be used for this operand".into(),
             OperandCannotBeIncDec(operation) => format!(
