@@ -8,7 +8,6 @@ use crate::analyze::semantics::*;
 use crate::analyze::syntax::actions::{LineFinalizer, TokenLineActions, TokenLineRule};
 use crate::analyze::syntax::{Sigil, Token};
 use crate::analyze::{Literal, SemanticToken};
-use crate::object::builder::SymbolSource;
 
 use std::ops::DerefMut;
 
@@ -19,13 +18,7 @@ where
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
-        + NameTable<
-            R::Ident,
-            Keyword = &'static Keyword<I::Binding, I::Free>,
-            MacroId = R::MacroId,
-            SymbolId = B::SymbolId,
-        >,
-    B: SymbolSource,
+        + NameTable<R::Ident, Keyword = &'static Keyword<I::Binding, I::Free>, MacroId = R::MacroId>,
     TokenLineContext<R::Ident, R::StringRef, R::Span>: TokenContext<I, R>,
 {
     type ContextFinalizer = TokenContextFinalizationSemantics<I, R, N, B>;
@@ -128,13 +121,7 @@ where
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
-        + NameTable<
-            R::Ident,
-            Keyword = &'static Keyword<I::Binding, I::Free>,
-            MacroId = R::MacroId,
-            SymbolId = B::SymbolId,
-        >,
-    B: SymbolSource,
+        + NameTable<R::Ident, Keyword = &'static Keyword<I::Binding, I::Free>, MacroId = R::MacroId>,
     TokenLineContext<R::Ident, R::StringRef, R::Span>: TokenContext<I, R>,
 {
     type Next = TokenStreamSemantics<I, R, N, B>;
@@ -161,8 +148,7 @@ impl<I, R, N, B> LineFinalizer<R::Span> for TokenContextFinalizationSemantics<I,
 where
     R: ReentrancyActions,
     N: DerefMut,
-    N::Target: NameTable<R::Ident, MacroId = R::MacroId, SymbolId = B::SymbolId>,
-    B: SymbolSource,
+    N::Target: NameTable<R::Ident, MacroId = R::MacroId>,
 {
     type Next = TokenStreamSemantics<I, R, N, B>;
 
