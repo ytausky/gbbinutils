@@ -1,11 +1,9 @@
-use self::directive::Directive;
-
 use super::*;
 
 use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::actions::TokenStreamState;
 use crate::analyze::semantics::arg::*;
-use crate::analyze::semantics::keywords::Mnemonic;
+use crate::analyze::semantics::keywords::{Directive, Mnemonic};
 use crate::analyze::semantics::resolve::NameTable;
 use crate::analyze::semantics::RelocLookup;
 use crate::analyze::syntax::actions::{BuiltinInstrActions, InstrFinalizer};
@@ -69,28 +67,19 @@ where
     type Next = TokenStreamSemantics<R, N, B>;
 
     fn did_parse_instr(self) -> Self::Next {
-        let instr = self.state.builtin_instr;
         let args = self.state.args;
         let session = set_state!(self, InstrLineState::new().into());
-        match instr {
-            BuiltinInstr::Binding(label, mnemonic) => directive::analyze_directive(
-                (Directive::Binding(*mnemonic.item), mnemonic.span),
-                label,
+        match self.state.mnemonic.item {
+            BuiltinMnemonic::CpuInstr(cpu_instr) => {
+                analyze_mnemonic((&cpu_instr, self.state.mnemonic.span), args, session)
+                    .map_state(Into::into)
+            }
+            BuiltinMnemonic::Directive(directive) => directive::analyze_directive(
+                (directive, self.state.mnemonic.span),
+                self.state.label,
                 args,
                 session,
             ),
-            BuiltinInstr::Free(mnemonic) => match mnemonic.item {
-                FreeBuiltinMnemonic::CpuInstr(cpu_instr) => {
-                    analyze_mnemonic((cpu_instr, mnemonic.span), args, session)
-                        .map_state(Into::into)
-                }
-                FreeBuiltinMnemonic::Directive(directive) => directive::analyze_directive(
-                    (Directive::Free(*directive), mnemonic.span),
-                    None,
-                    args,
-                    session,
-                ),
-            },
         }
     }
 }
@@ -132,18 +121,13 @@ where
 
 impl From<Directive> for BuiltinMnemonic {
     fn from(directive: Directive) -> Self {
-        match directive {
-            Directive::Binding(directive) => BuiltinMnemonic::Binding(directive),
-            Directive::Free(directive) => {
-                BuiltinMnemonic::Free(FreeBuiltinMnemonic::Directive(directive))
-            }
-        }
+        BuiltinMnemonic::Directive(directive)
     }
 }
 
 impl From<Mnemonic> for BuiltinMnemonic {
     fn from(mnemonic: Mnemonic) -> Self {
-        BuiltinMnemonic::Free(FreeBuiltinMnemonic::CpuInstr(mnemonic))
+        BuiltinMnemonic::CpuInstr(mnemonic)
     }
 }
 

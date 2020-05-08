@@ -1,7 +1,7 @@
 use super::{Keyword, TokenStreamSemantics};
 
 use crate::analyze::reentrancy::ReentrancyActions;
-use crate::analyze::semantics::keywords::{FreeBuiltinMnemonic, FreeDirective};
+use crate::analyze::semantics::keywords::Directive;
 use crate::analyze::semantics::resolve::{NameTable, ResolvedName, StartScope};
 use crate::analyze::semantics::*;
 use crate::analyze::syntax::actions::{LineFinalizer, TokenLineActions, TokenLineRule};
@@ -74,14 +74,10 @@ where
         span: S,
     ) -> TokenLineRule<(), ()> {
         match (&*self, mnemonic) {
-            (
-                TokenLineContext::FalseIf,
-                BuiltinMnemonic::Free(FreeBuiltinMnemonic::Directive(FreeDirective::Endc)),
-            ) => TokenLineRule::LineEnd(()),
-            (
-                TokenLineContext::MacroDef(_),
-                BuiltinMnemonic::Free(FreeBuiltinMnemonic::Directive(FreeDirective::Endm)),
-            ) => {
+            (TokenLineContext::FalseIf, BuiltinMnemonic::Directive(Directive::Endc)) => {
+                TokenLineRule::LineEnd(())
+            }
+            (TokenLineContext::MacroDef(_), BuiltinMnemonic::Directive(Directive::Endm)) => {
                 self.act_on_token(Sigil::Eos.into(), span);
                 TokenLineRule::LineEnd(())
             }

@@ -1,5 +1,5 @@
 use self::arg::{Arg, OperandSymbol};
-use self::keywords::{BindingDirective, BuiltinMnemonic, FreeBuiltinMnemonic};
+use self::keywords::BuiltinMnemonic;
 use self::params::*;
 use self::resolve::{NameTable, ResolvedName};
 
@@ -282,7 +282,8 @@ pub(in crate::analyze) struct BuiltinInstrState<R, V>
 where
     R: ReentrancyActions,
 {
-    builtin_instr: BuiltinInstr<&'static BindingDirective, &'static FreeBuiltinMnemonic, R>,
+    label: Option<Label<R::Ident, R::Span>>,
+    mnemonic: Spanned<BuiltinMnemonic, R::Span>,
     args: BuiltinInstrArgs<V, R::StringRef, R::Span>,
 }
 
@@ -291,10 +292,12 @@ where
     R: ReentrancyActions,
 {
     fn new(
-        builtin_instr: BuiltinInstr<&'static BindingDirective, &'static FreeBuiltinMnemonic, R>,
+        label: Option<Label<R::Ident, R::Span>>,
+        mnemonic: Spanned<BuiltinMnemonic, R::Span>,
     ) -> Self {
         Self {
-            builtin_instr,
+            label,
+            mnemonic,
             args: Vec::new(),
         }
     }
@@ -325,11 +328,6 @@ impl<R, S, P> ExprBuilder<R, S, P> {
     pub fn new(parent: P) -> Self {
         Self { arg: None, parent }
     }
-}
-
-pub(in crate::analyze) enum BuiltinInstr<B, F, R: ReentrancyActions> {
-    Binding(Option<Label<R::Ident, R::Span>>, Spanned<B, R::Span>),
-    Free(Spanned<F, R::Span>),
 }
 
 #[cfg(test)]

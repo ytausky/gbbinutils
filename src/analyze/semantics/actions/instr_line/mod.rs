@@ -67,16 +67,13 @@ where
     ) -> InstrRule<Self::BuiltinInstrActions, Self::MacroInstrActions, Self> {
         match self.names.resolve_name(&ident) {
             Some(ResolvedName::Keyword(Keyword::BuiltinMnemonic(mnemonic))) => {
-                let builtin_instr = match mnemonic {
-                    BuiltinMnemonic::Binding(directive) => {
-                        BuiltinInstr::Binding(self.state.label, directive.with_span(span))
-                    }
-                    BuiltinMnemonic::Free(unbound) => {
-                        self = self.flush_label();
-                        BuiltinInstr::Free(unbound.with_span(span))
-                    }
-                };
-                InstrRule::BuiltinInstr(set_state!(self, BuiltinInstrState::new(builtin_instr)))
+                if !mnemonic.binds_to_label() {
+                    self = self.flush_label();
+                }
+                InstrRule::BuiltinInstr(set_state!(
+                    self,
+                    BuiltinInstrState::new(self.state.label, mnemonic.clone().with_span(span))
+                ))
             }
             Some(ResolvedName::Macro(id)) => {
                 self = self.flush_label();

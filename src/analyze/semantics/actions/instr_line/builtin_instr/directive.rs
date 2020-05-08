@@ -1,6 +1,6 @@
 use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::arg::*;
-use crate::analyze::semantics::keywords::{BindingDirective, FreeDirective};
+use crate::analyze::semantics::keywords::Directive;
 use crate::analyze::semantics::params::RelocLookup;
 use crate::analyze::semantics::resolve::{NameTable, StartScope};
 use crate::analyze::semantics::*;
@@ -10,12 +10,6 @@ use crate::diag::*;
 use crate::object::builder::{Backend, Item, Width};
 
 use std::ops::DerefMut;
-
-#[derive(Clone, Debug, PartialEq)]
-pub(in crate::analyze) enum Directive {
-    Binding(BindingDirective),
-    Free(FreeDirective),
-}
 
 pub(in crate::analyze::semantics) fn analyze_directive<R, N, B>(
     directive: (Directive, R::Span),
@@ -65,20 +59,18 @@ where
     B: Backend<R::Span>,
 {
     fn analyze(self, directive: Directive) -> TokenStreamSemantics<R, N, B> {
-        use self::BindingDirective::*;
-        use self::FreeDirective::*;
         match directive {
-            Directive::Binding(Equ) => self.analyze_equ(),
-            Directive::Binding(Macro) => self.analyze_macro(),
-            Directive::Binding(Section) => self.analyze_section(),
-            Directive::Free(Db) => self.analyze_data(Width::Byte),
-            Directive::Free(Ds) => self.analyze_ds(),
-            Directive::Free(Dw) => self.analyze_data(Width::Word),
-            Directive::Free(Endc) => self.analyze_endc(),
-            Directive::Free(Endm) => unimplemented!(),
-            Directive::Free(If) => self.analyze_if(),
-            Directive::Free(Include) => self.analyze_include(),
-            Directive::Free(Org) => self.analyze_org(),
+            Directive::Equ => self.analyze_equ(),
+            Directive::Macro => self.analyze_macro(),
+            Directive::Section => self.analyze_section(),
+            Directive::Db => self.analyze_data(Width::Byte),
+            Directive::Ds => self.analyze_ds(),
+            Directive::Dw => self.analyze_data(Width::Word),
+            Directive::Endc => self.analyze_endc(),
+            Directive::Endm => unimplemented!(),
+            Directive::If => self.analyze_if(),
+            Directive::Include => self.analyze_include(),
+            Directive::Org => self.analyze_org(),
         }
     }
 
@@ -510,7 +502,7 @@ mod tests {
     fn taken_if_remains_in_instr_mode() {
         collect_semantic_actions(|session| {
             let session = analyze_directive(
-                (Directive::Free(FreeDirective::If), ()),
+                (Directive::If, ()),
                 None,
                 vec![Arg::Bare(DerefableArg::Const(Expr::from_atom(
                     1.into(),
@@ -532,7 +524,7 @@ mod tests {
     fn ignore_instrs_in_untaken_if() {
         collect_semantic_actions(|session| {
             let session = analyze_directive(
-                (Directive::Free(FreeDirective::If), ()),
+                (Directive::If, ()),
                 None,
                 vec![Arg::Bare(DerefableArg::Const(Expr::from_atom(
                     0.into(),

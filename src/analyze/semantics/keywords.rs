@@ -1,7 +1,5 @@
-use self::BindingDirective::*;
 use self::BuiltinMnemonic::*;
-use self::FreeBuiltinMnemonic::*;
-use self::FreeDirective::*;
+use self::Directive::*;
 
 use super::arg::OperandSymbol::*;
 use super::Keyword;
@@ -11,106 +9,108 @@ use crate::object::builder::*;
 
 pub(super) const KEYWORDS: &[(&str, Keyword)] = &[
     ("A", Operand(A)),
-    ("ADC", BuiltinMnemonic(Free(CpuInstr(ADC)))),
-    ("ADD", BuiltinMnemonic(Free(CpuInstr(ADD)))),
+    ("ADC", BuiltinMnemonic(CpuInstr(ADC))),
+    ("ADD", BuiltinMnemonic(CpuInstr(ADD))),
     ("AF", Operand(Af)),
-    ("AND", BuiltinMnemonic(Free(CpuInstr(AND)))),
+    ("AND", BuiltinMnemonic(CpuInstr(AND))),
     ("B", Operand(B)),
     ("BC", Operand(Bc)),
-    ("BIT", BuiltinMnemonic(Free(CpuInstr(BIT)))),
+    ("BIT", BuiltinMnemonic(CpuInstr(BIT))),
     ("C", Operand(C)),
-    ("CALL", BuiltinMnemonic(Free(CpuInstr(CALL)))),
-    ("CP", BuiltinMnemonic(Free(CpuInstr(CP)))),
-    ("CPL", BuiltinMnemonic(Free(CpuInstr(CPL)))),
+    ("CALL", BuiltinMnemonic(CpuInstr(CALL))),
+    ("CP", BuiltinMnemonic(CpuInstr(CP))),
+    ("CPL", BuiltinMnemonic(CpuInstr(CPL))),
     ("D", Operand(D)),
-    ("DAA", BuiltinMnemonic(Free(CpuInstr(DAA)))),
-    ("DB", BuiltinMnemonic(Free(Directive(Db)))),
+    ("DAA", BuiltinMnemonic(CpuInstr(DAA))),
+    ("DB", BuiltinMnemonic(Directive(Db))),
     ("DE", Operand(De)),
-    ("DEC", BuiltinMnemonic(Free(CpuInstr(DEC)))),
-    ("DI", BuiltinMnemonic(Free(CpuInstr(DI)))),
-    ("DS", BuiltinMnemonic(Free(Directive(Ds)))),
-    ("DW", BuiltinMnemonic(Free(Directive(Dw)))),
+    ("DEC", BuiltinMnemonic(CpuInstr(DEC))),
+    ("DI", BuiltinMnemonic(CpuInstr(DI))),
+    ("DS", BuiltinMnemonic(Directive(Ds))),
+    ("DW", BuiltinMnemonic(Directive(Dw))),
     ("E", Operand(E)),
-    ("EI", BuiltinMnemonic(Free(CpuInstr(EI)))),
-    ("ENDC", BuiltinMnemonic(Free(Directive(Endc)))),
-    ("ENDM", BuiltinMnemonic(Free(Directive(Endm)))),
-    ("EQU", BuiltinMnemonic(Binding(Equ))),
+    ("EI", BuiltinMnemonic(CpuInstr(EI))),
+    ("ENDC", BuiltinMnemonic(Directive(Endc))),
+    ("ENDM", BuiltinMnemonic(Directive(Endm))),
+    ("EQU", BuiltinMnemonic(Directive(Equ))),
     ("H", Operand(H)),
-    ("HALT", BuiltinMnemonic(Free(CpuInstr(HALT)))),
+    ("HALT", BuiltinMnemonic(CpuInstr(HALT))),
     ("HL", Operand(Hl)),
     ("HLD", Operand(Hld)),
     ("HLI", Operand(Hli)),
-    ("IF", BuiltinMnemonic(Free(Directive(If)))),
-    ("INC", BuiltinMnemonic(Free(CpuInstr(INC)))),
-    ("INCLUDE", BuiltinMnemonic(Free(Directive(Include)))),
-    ("JP", BuiltinMnemonic(Free(CpuInstr(JP)))),
-    ("JR", BuiltinMnemonic(Free(CpuInstr(JR)))),
+    ("IF", BuiltinMnemonic(Directive(If))),
+    ("INC", BuiltinMnemonic(CpuInstr(INC))),
+    ("INCLUDE", BuiltinMnemonic(Directive(Include))),
+    ("JP", BuiltinMnemonic(CpuInstr(JP))),
+    ("JR", BuiltinMnemonic(CpuInstr(JR))),
     ("L", Operand(L)),
-    ("LD", BuiltinMnemonic(Free(CpuInstr(LD)))),
-    ("LDHL", BuiltinMnemonic(Free(CpuInstr(LDHL)))),
-    ("MACRO", BuiltinMnemonic(Binding(Macro))),
+    ("LD", BuiltinMnemonic(CpuInstr(LD))),
+    ("LDHL", BuiltinMnemonic(CpuInstr(LDHL))),
+    ("MACRO", BuiltinMnemonic(Directive(Macro))),
     ("NC", Operand(Nc)),
-    ("NOP", BuiltinMnemonic(Free(CpuInstr(NOP)))),
+    ("NOP", BuiltinMnemonic(CpuInstr(NOP))),
     ("NZ", Operand(Nz)),
-    ("OR", BuiltinMnemonic(Free(CpuInstr(OR)))),
-    ("ORG", BuiltinMnemonic(Free(Directive(Org)))),
-    ("POP", BuiltinMnemonic(Free(CpuInstr(POP)))),
-    ("PUSH", BuiltinMnemonic(Free(CpuInstr(PUSH)))),
-    ("RES", BuiltinMnemonic(Free(CpuInstr(RES)))),
-    ("RET", BuiltinMnemonic(Free(CpuInstr(RET)))),
-    ("RETI", BuiltinMnemonic(Free(CpuInstr(RETI)))),
-    ("RL", BuiltinMnemonic(Free(CpuInstr(RL)))),
-    ("RLA", BuiltinMnemonic(Free(CpuInstr(RLA)))),
-    ("RLC", BuiltinMnemonic(Free(CpuInstr(RLC)))),
-    ("RLCA", BuiltinMnemonic(Free(CpuInstr(RLCA)))),
-    ("RR", BuiltinMnemonic(Free(CpuInstr(RR)))),
-    ("RRA", BuiltinMnemonic(Free(CpuInstr(RRA)))),
-    ("RRC", BuiltinMnemonic(Free(CpuInstr(RRC)))),
-    ("RRCA", BuiltinMnemonic(Free(CpuInstr(RRCA)))),
-    ("RST", BuiltinMnemonic(Free(CpuInstr(RST)))),
-    ("SBC", BuiltinMnemonic(Free(CpuInstr(SBC)))),
-    ("SECTION", BuiltinMnemonic(Binding(Section))),
-    ("SET", BuiltinMnemonic(Free(CpuInstr(SET)))),
-    ("SLA", BuiltinMnemonic(Free(CpuInstr(SLA)))),
+    ("OR", BuiltinMnemonic(CpuInstr(OR))),
+    ("ORG", BuiltinMnemonic(Directive(Org))),
+    ("POP", BuiltinMnemonic(CpuInstr(POP))),
+    ("PUSH", BuiltinMnemonic(CpuInstr(PUSH))),
+    ("RES", BuiltinMnemonic(CpuInstr(RES))),
+    ("RET", BuiltinMnemonic(CpuInstr(RET))),
+    ("RETI", BuiltinMnemonic(CpuInstr(RETI))),
+    ("RL", BuiltinMnemonic(CpuInstr(RL))),
+    ("RLA", BuiltinMnemonic(CpuInstr(RLA))),
+    ("RLC", BuiltinMnemonic(CpuInstr(RLC))),
+    ("RLCA", BuiltinMnemonic(CpuInstr(RLCA))),
+    ("RR", BuiltinMnemonic(CpuInstr(RR))),
+    ("RRA", BuiltinMnemonic(CpuInstr(RRA))),
+    ("RRC", BuiltinMnemonic(CpuInstr(RRC))),
+    ("RRCA", BuiltinMnemonic(CpuInstr(RRCA))),
+    ("RST", BuiltinMnemonic(CpuInstr(RST))),
+    ("SBC", BuiltinMnemonic(CpuInstr(SBC))),
+    ("SECTION", BuiltinMnemonic(Directive(Section))),
+    ("SET", BuiltinMnemonic(CpuInstr(SET))),
+    ("SLA", BuiltinMnemonic(CpuInstr(SLA))),
     ("SP", Operand(Sp)),
-    ("SRA", BuiltinMnemonic(Free(CpuInstr(SRA)))),
-    ("SRL", BuiltinMnemonic(Free(CpuInstr(SRL)))),
-    ("STOP", BuiltinMnemonic(Free(CpuInstr(STOP)))),
-    ("SUB", BuiltinMnemonic(Free(CpuInstr(SUB)))),
-    ("SWAP", BuiltinMnemonic(Free(CpuInstr(SWAP)))),
-    ("XOR", BuiltinMnemonic(Free(CpuInstr(XOR)))),
+    ("SRA", BuiltinMnemonic(CpuInstr(SRA))),
+    ("SRL", BuiltinMnemonic(CpuInstr(SRL))),
+    ("STOP", BuiltinMnemonic(CpuInstr(STOP))),
+    ("SUB", BuiltinMnemonic(CpuInstr(SUB))),
+    ("SWAP", BuiltinMnemonic(CpuInstr(SWAP))),
+    ("XOR", BuiltinMnemonic(CpuInstr(XOR))),
     ("Z", Operand(Z)),
 ];
 
 #[derive(Clone, Debug, PartialEq)]
 pub(in crate::analyze) enum BuiltinMnemonic {
-    Binding(BindingDirective),
-    Free(FreeBuiltinMnemonic),
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(in crate::analyze) enum FreeBuiltinMnemonic {
     CpuInstr(Mnemonic),
-    Directive(FreeDirective),
+    Directive(Directive),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(in crate::analyze) enum BindingDirective {
-    Equ,
-    Macro,
-    Section,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(in crate::analyze) enum FreeDirective {
+pub(in crate::analyze) enum Directive {
     Db,
     Ds,
     Dw,
     Endc,
     Endm,
+    Equ,
     If,
     Include,
+    Macro,
     Org,
+    Section,
+}
+
+impl BuiltinMnemonic {
+    pub fn binds_to_label(&self) -> bool {
+        match self {
+            BuiltinMnemonic::Directive(directive) => match directive {
+                Directive::Equ | Directive::Macro | Directive::Section => true,
+                _ => false,
+            },
+            _ => false,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
