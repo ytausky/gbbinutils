@@ -1,27 +1,9 @@
 use super::{Analysis, AtomKind, Operand, SimpleOperand};
 
+use crate::analyze::semantics::keywords::{BranchKind, ExplicitBranch, ImplicitBranch};
 use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::object::builder::{Branch, Condition, CpuInstr, Nullary};
 use crate::span::{Source, SpanSource};
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum BranchKind {
-    Explicit(ExplicitBranch),
-    Implicit(ImplicitBranch),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum ExplicitBranch {
-    Call,
-    Jp,
-    Jr,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum ImplicitBranch {
-    Ret,
-    Reti,
-}
 
 impl<'a, 'b, I, V, D, S> Analysis<'a, 'b, I, D, S>
 where
@@ -180,10 +162,10 @@ fn mk_explicit_branch<V>(branch: ExplicitBranch, target: V) -> Branch<V> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::tests::*;
     use super::*;
 
-    use crate::analyze::semantics::builtin_instr::cpu_instr::mnemonic::*;
-    use crate::analyze::semantics::builtin_instr::cpu_instr::tests::*;
+    use crate::analyze::semantics::keywords::*;
     use crate::diag::Merge;
 
     #[test]

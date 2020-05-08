@@ -1,11 +1,10 @@
-use self::mnemonic::{Mnemonic, StackOperation};
 use self::operand::{AtomKind, Context, Operand, OperandCounter};
 
+use crate::analyze::semantics::keywords::{Mnemonic, StackOperation};
 use crate::diag::span::Source;
 use crate::diag::*;
 use crate::object::builder::*;
 
-pub(in crate::analyze::semantics) mod mnemonic;
 pub(in crate::analyze::semantics) mod operand;
 
 mod branch;
@@ -332,10 +331,10 @@ mod tests {
 
     use self::operand::tests::Event;
 
-    use super::mnemonic::*;
     use super::*;
 
     use crate::analyze::semantics::arg::*;
+    use crate::analyze::semantics::keywords::*;
     use crate::analyze::semantics::mock::MockExprBuilder;
     use crate::analyze::Literal;
     use crate::expr::Atom;

@@ -1,5 +1,4 @@
 use self::arg::{Arg, OperandSymbol};
-use self::builtin_instr::BuiltinInstr;
 use self::keywords::{BindingDirective, BuiltinMnemonic, FreeBuiltinMnemonic};
 use self::params::*;
 use self::resolve::{NameTable, ResolvedName};
@@ -9,7 +8,7 @@ use super::reentrancy::{Params, ReentrancyActions};
 use super::syntax::actions::LineRule;
 use super::{IdentSource, StringSource, TokenSeq};
 
-use crate::diag::span::SpanSource;
+use crate::diag::span::{SpanSource, Spanned};
 use crate::diag::Diagnostics;
 use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
 use crate::object::builder::{AllocSymbol, Finish, Name, PartialBackend, PushOp, SymbolSource};
@@ -29,7 +28,6 @@ macro_rules! set_state {
 
 mod actions;
 mod arg;
-mod builtin_instr;
 mod keywords;
 mod params;
 pub(super) mod resolve;
@@ -327,6 +325,11 @@ impl<R, S, P> ExprBuilder<R, S, P> {
     pub fn new(parent: P) -> Self {
         Self { arg: None, parent }
     }
+}
+
+pub(in crate::analyze) enum BuiltinInstr<B, F, R: ReentrancyActions> {
+    Binding(Option<Label<R::Ident, R::Span>>, Spanned<B, R::Span>),
+    Free(Spanned<F, R::Span>),
 }
 
 #[cfg(test)]
