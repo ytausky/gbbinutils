@@ -183,13 +183,7 @@ mod tests {
     enum Event<N, S: Clone> {
         Backend(BackendEvent<N, Expr<N, S>>),
         Diagnostics(DiagnosticsEvent<S>),
-        NameTable(
-            NameTableEvent<
-                &'static Keyword<MockBindingBuiltinInstr, MockNonBindingBuiltinInstr>,
-                MockMacroId,
-                MockSymbolId,
-            >,
-        ),
+        NameTable(NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>),
     }
 
     impl<N, S: Clone> From<BackendEvent<N, Expr<N, S>>> for Event<N, S> {
@@ -204,22 +198,10 @@ mod tests {
         }
     }
 
-    impl<N, S: Clone>
-        From<
-            NameTableEvent<
-                &'static Keyword<MockBindingBuiltinInstr, MockNonBindingBuiltinInstr>,
-                MockMacroId,
-                MockSymbolId,
-            >,
-        > for Event<N, S>
+    impl<N, S: Clone> From<NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>>
+        for Event<N, S>
     {
-        fn from(
-            event: NameTableEvent<
-                &'static Keyword<MockBindingBuiltinInstr, MockNonBindingBuiltinInstr>,
-                MockMacroId,
-                MockSymbolId,
-            >,
-        ) -> Self {
+        fn from(event: NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>) -> Self {
             Event::NameTable(event)
         }
     }

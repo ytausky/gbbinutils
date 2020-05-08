@@ -4,7 +4,6 @@ use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::actions::Keyword;
 use crate::analyze::semantics::arg::{Arg, DerefableArg};
 use crate::analyze::semantics::builtin_instr::BuiltinInstr;
-use crate::analyze::semantics::keywords::{BindingDirective, FreeBuiltinMnemonic};
 use crate::analyze::semantics::resolve::{NameTable, ResolvedName};
 use crate::analyze::semantics::{ArgSemantics, ExprBuilder, Session};
 use crate::analyze::syntax::actions::*;
@@ -63,7 +62,7 @@ where
     N: DerefMut,
     N::Target: NameTable<
         R::Ident,
-        Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
+        Keyword = &'static Keyword,
         MacroId = R::MacroId,
         SymbolId = <<B as Finish>::Parent as SymbolSource>::SymbolId,
     >,
@@ -106,7 +105,7 @@ where
     N: DerefMut,
     N::Target: NameTable<
         R::Ident,
-        Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
+        Keyword = &'static Keyword,
         MacroId = R::MacroId,
         SymbolId = <<B as Finish>::Parent as SymbolSource>::SymbolId,
     >,

@@ -34,7 +34,7 @@ where
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
+            Keyword = &'static Keyword,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
@@ -98,7 +98,7 @@ where
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
+            Keyword = &'static Keyword,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
@@ -166,7 +166,6 @@ pub mod tests {
 
     use crate::analyze::macros::mock::MockMacroId;
     use crate::analyze::reentrancy::ReentrancyEvent;
-    use crate::analyze::semantics::keywords::{BindingDirective, FreeBuiltinMnemonic};
     use crate::analyze::semantics::resolve::{MockNameTable, NameTableEvent, ResolvedName};
     use crate::analyze::syntax::{Sigil, Token};
     use crate::analyze::SemanticToken;
@@ -183,13 +182,7 @@ pub mod tests {
     pub(in crate::analyze) enum TestOperation<S: Clone> {
         Backend(BackendEvent<MockSymbolId, Expr<S>>),
         Diagnostics(DiagnosticsEvent<S>),
-        NameTable(
-            NameTableEvent<
-                &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
-                MockMacroId,
-                MockSymbolId,
-            >,
-        ),
+        NameTable(NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>),
         Reentrancy(ReentrancyEvent),
     }
 
@@ -207,22 +200,10 @@ pub mod tests {
         }
     }
 
-    impl<S: Clone>
-        From<
-            NameTableEvent<
-                &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
-                MockMacroId,
-                MockSymbolId,
-            >,
-        > for TestOperation<S>
+    impl<S: Clone> From<NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>>
+        for TestOperation<S>
     {
-        fn from(
-            event: NameTableEvent<
-                &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
-                MockMacroId,
-                MockSymbolId,
-            >,
-        ) -> Self {
+        fn from(event: NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>) -> Self {
             TestOperation::NameTable(event)
         }
     }
@@ -600,11 +581,7 @@ pub mod tests {
         I: IntoIterator<
             Item = (
                 String,
-                ResolvedName<
-                    &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
-                    MockMacroId,
-                    MockSymbolId,
-                >,
+                ResolvedName<&'static Keyword, MockMacroId, MockSymbolId>,
             ),
         >,
         F: FnOnce(TestTokenStreamSemantics<S>) -> TestTokenStreamSemantics<S>,
@@ -627,11 +604,7 @@ pub mod tests {
         MockSourceComponents<S>,
         Box<
             MockNameTable<
-                BasicNameTable<
-                    &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
-                    MockMacroId,
-                    MockSymbolId,
-                >,
+                BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
                 TestOperation<S>,
             >,
         >,

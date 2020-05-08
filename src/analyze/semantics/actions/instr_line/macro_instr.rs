@@ -2,7 +2,6 @@ use super::{InstrLineState, Keyword, Session, TokenStreamSemantics};
 
 use crate::analyze::reentrancy::{MacroArgs, ReentrancyActions};
 use crate::analyze::semantics::actions::TokenStreamState;
-use crate::analyze::semantics::keywords::{BindingDirective, FreeBuiltinMnemonic};
 use crate::analyze::semantics::resolve::{NameTable, StartScope};
 use crate::analyze::syntax::actions::{InstrFinalizer, MacroArgActions, MacroInstrActions};
 use crate::analyze::{SemanticToken, TokenSeq};
@@ -41,7 +40,7 @@ where
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
+            Keyword = &'static Keyword,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
@@ -62,7 +61,7 @@ where
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
+            Keyword = &'static Keyword,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,

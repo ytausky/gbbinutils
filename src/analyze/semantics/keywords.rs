@@ -8,7 +8,7 @@ use super::builtin_instr::cpu_instr::mnemonic::*;
 use super::Keyword;
 use super::Keyword::*;
 
-pub(super) const KEYWORDS: &[(&str, Keyword<BindingDirective, FreeBuiltinMnemonic>)] = &[
+pub(super) const KEYWORDS: &[(&str, Keyword)] = &[
     ("A", Operand(A)),
     ("ADC", BuiltinMnemonic(Free(CpuInstr(ADC)))),
     ("ADD", BuiltinMnemonic(Free(CpuInstr(ADD)))),
@@ -82,9 +82,9 @@ pub(super) const KEYWORDS: &[(&str, Keyword<BindingDirective, FreeBuiltinMnemoni
 ];
 
 #[derive(Clone, Debug, PartialEq)]
-pub(in crate::analyze) enum BuiltinMnemonic<B, F> {
-    Binding(B),
-    Free(F),
+pub(in crate::analyze) enum BuiltinMnemonic {
+    Binding(BindingDirective),
+    Free(FreeBuiltinMnemonic),
 }
 
 #[derive(Clone, Debug, PartialEq)]

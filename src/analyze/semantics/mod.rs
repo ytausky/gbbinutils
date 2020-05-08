@@ -35,8 +35,8 @@ mod params;
 pub(super) mod resolve;
 
 #[derive(Clone, Debug, PartialEq)]
-pub(in crate::analyze) enum Keyword<B, F> {
-    BuiltinMnemonic(BuiltinMnemonic<B, F>),
+pub(in crate::analyze) enum Keyword {
+    BuiltinMnemonic(BuiltinMnemonic),
     Operand(OperandSymbol),
 }
 
@@ -209,8 +209,7 @@ where
     R: ReentrancyActions,
     R::Ident: for<'r> From<&'r str>,
     N: DerefMut,
-    N::Target:
-        NameTable<R::Ident, Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>>,
+    N::Target: NameTable<R::Ident, Keyword = &'static Keyword>,
 {
     pub fn from_components(reentrancy: R, mut names: N, builder: B) -> Self {
         for (ident, keyword) in keywords::KEYWORDS {
@@ -353,16 +352,7 @@ mod mock {
 
     pub(super) type MockExprBuilder<T, S> = Session<
         MockDiagnostics<T, S>,
-        Box<
-            MockNameTable<
-                BasicNameTable<
-                    &'static Keyword<MockBindingBuiltinInstr, MockNonBindingBuiltinInstr>,
-                    MockMacroId,
-                    MockSymbolId,
-                >,
-                T,
-            >,
-        >,
+        Box<MockNameTable<BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>, T>>,
         RelocContext<MockBackend<SerialIdAllocator<MockSymbolId>, T>, Expr<MockSymbolId, S>>,
         (),
     >;
@@ -381,11 +371,7 @@ mod mock {
             I: IntoIterator<
                 Item = (
                     String,
-                    ResolvedName<
-                        &'static Keyword<MockBindingBuiltinInstr, MockNonBindingBuiltinInstr>,
-                        MockMacroId,
-                        MockSymbolId,
-                    >,
+                    ResolvedName<&'static Keyword, MockMacroId, MockSymbolId>,
                 ),
             >,
         {

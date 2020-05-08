@@ -1,5 +1,3 @@
-use super::FreeBuiltinMnemonic;
-
 use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::arg::*;
 use crate::analyze::semantics::keywords::{BindingDirective, FreeDirective};
@@ -31,7 +29,7 @@ where
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
+            Keyword = &'static Keyword,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
@@ -60,7 +58,7 @@ where
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
+            Keyword = &'static Keyword,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
@@ -562,11 +560,7 @@ mod tests {
         MockSourceComponents<S>,
         Box<
             MockNameTable<
-                BasicNameTable<
-                    &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
-                    MockMacroId,
-                    MockSymbolId,
-                >,
+                BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
                 TestOperation<S>,
             >,
         >,
@@ -604,11 +598,7 @@ mod tests {
         MockSourceComponents<S>,
         Box<
             MockNameTable<
-                BasicNameTable<
-                    &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
-                    MockMacroId,
-                    MockSymbolId,
-                >,
+                BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
                 TestOperation<S>,
             >,
         >,

@@ -1,7 +1,7 @@
 use self::cpu_instr::mnemonic::Mnemonic;
 use self::directive::Directive;
 
-use super::keywords::{BindingDirective, BuiltinMnemonic, FreeBuiltinMnemonic};
+use super::keywords::{BuiltinMnemonic, FreeBuiltinMnemonic};
 use super::resolve::{NameTable, StartScope};
 use super::{
     BuiltinInstrArgs, BuiltinInstrSemantics, InstrLineState, Keyword, Label, TokenStreamSemantics,
@@ -16,30 +16,7 @@ use std::ops::DerefMut;
 pub(super) mod cpu_instr;
 pub(super) mod directive;
 
-pub(in crate::analyze) trait BuiltinInstrSet<R: ReentrancyActions> {
-    type Binding: 'static;
-    type Free: 'static;
-    type Iter: Iterator<Item = &'static (&'static str, Keyword<Self::Binding, Self::Free>)>;
-
-    fn keywords() -> Self::Iter;
-}
-
-pub(in crate::analyze) struct DefaultBuiltinInstrSet;
-
-impl<R: ReentrancyActions> BuiltinInstrSet<R> for DefaultBuiltinInstrSet {
-    type Binding = BindingDirective;
-    type Free = FreeBuiltinMnemonic;
-    type Iter = DefaultBuiltinInstrSetIter;
-
-    fn keywords() -> Self::Iter {
-        super::keywords::KEYWORDS.iter()
-    }
-}
-
-type DefaultBuiltinInstrSetIter =
-    std::slice::Iter<'static, (&'static str, Keyword<BindingDirective, FreeBuiltinMnemonic>)>;
-
-impl From<Directive> for BuiltinMnemonic<BindingDirective, FreeBuiltinMnemonic> {
+impl From<Directive> for BuiltinMnemonic {
     fn from(directive: Directive) -> Self {
         match directive {
             Directive::Binding(directive) => BuiltinMnemonic::Binding(directive),
@@ -50,7 +27,7 @@ impl From<Directive> for BuiltinMnemonic<BindingDirective, FreeBuiltinMnemonic> 
     }
 }
 
-impl From<Mnemonic> for BuiltinMnemonic<BindingDirective, FreeBuiltinMnemonic> {
+impl From<Mnemonic> for BuiltinMnemonic {
     fn from(mnemonic: Mnemonic) -> Self {
         BuiltinMnemonic::Free(FreeBuiltinMnemonic::CpuInstr(mnemonic))
     }
@@ -72,7 +49,7 @@ where
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
+            Keyword = &'static Keyword,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
@@ -115,7 +92,7 @@ where
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
+            Keyword = &'static Keyword,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,

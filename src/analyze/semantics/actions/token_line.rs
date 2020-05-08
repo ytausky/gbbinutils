@@ -16,11 +16,7 @@ where
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
-        + NameTable<
-            R::Ident,
-            Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
-            MacroId = R::MacroId,
-        >,
+        + NameTable<R::Ident, Keyword = &'static Keyword, MacroId = R::MacroId>,
 {
     type ContextFinalizer = TokenContextFinalizationSemantics<R, N, B>;
 
@@ -51,14 +47,14 @@ where
 }
 
 pub(in crate::analyze) trait TokenContext<I, R: ReentrancyActions>:
-    ActOnMnemonic<&'static BuiltinMnemonic<BindingDirective, FreeBuiltinMnemonic>, R::Span>
+    ActOnMnemonic<&'static BuiltinMnemonic, R::Span>
     + ActOnToken<SemanticToken<R::Ident, R::StringRef>, R::Span>
 {
 }
 
 impl<T, I, R> TokenContext<I, R> for T
 where
-    T: ActOnMnemonic<&'static BuiltinMnemonic<BindingDirective, FreeBuiltinMnemonic>, R::Span>
+    T: ActOnMnemonic<&'static BuiltinMnemonic, R::Span>
         + ActOnToken<SemanticToken<R::Ident, R::StringRef>, R::Span>,
     R: ReentrancyActions,
 {
@@ -68,14 +64,13 @@ pub(in crate::analyze) trait ActOnMnemonic<M, S> {
     fn act_on_mnemonic(&mut self, mnemonic: M, span: S) -> TokenLineRule<(), ()>;
 }
 
-impl<B, I, R, S> ActOnMnemonic<&'static BuiltinMnemonic<B, FreeBuiltinMnemonic>, S>
-    for TokenLineContext<I, R, S>
+impl<I, R, S> ActOnMnemonic<&'static BuiltinMnemonic, S> for TokenLineContext<I, R, S>
 where
     Self: ActOnToken<SemanticToken<I, R>, S>,
 {
     fn act_on_mnemonic(
         &mut self,
-        mnemonic: &'static BuiltinMnemonic<B, FreeBuiltinMnemonic>,
+        mnemonic: &'static BuiltinMnemonic,
         span: S,
     ) -> TokenLineRule<(), ()> {
         match (&*self, mnemonic) {
@@ -120,11 +115,7 @@ where
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
-        + NameTable<
-            R::Ident,
-            Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
-            MacroId = R::MacroId,
-        >,
+        + NameTable<R::Ident, Keyword = &'static Keyword, MacroId = R::MacroId>,
 {
     type Next = TokenStreamSemantics<R, N, B>;
 

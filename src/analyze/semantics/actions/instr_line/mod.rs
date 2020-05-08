@@ -27,7 +27,7 @@ where
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
+            Keyword = &'static Keyword,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
@@ -49,7 +49,7 @@ where
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
+            Keyword = &'static Keyword,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
@@ -106,7 +106,7 @@ where
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
+            Keyword = &'static Keyword,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
