@@ -1,4 +1,4 @@
-use super::{DefaultBuiltinInstrSet, FreeBuiltinMnemonic};
+use super::FreeBuiltinMnemonic;
 
 use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::arg::*;
@@ -23,8 +23,8 @@ pub(in crate::analyze::semantics) fn analyze_directive<R, N, B>(
     directive: (Directive, R::Span),
     label: Option<Label<R::Ident, R::Span>>,
     args: BuiltinInstrArgs<B::Value, R::StringRef, R::Span>,
-    session: TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B>,
-) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B>
+    session: TokenStreamSemantics<R, N, B>,
+) -> TokenStreamSemantics<R, N, B>
 where
     R: ReentrancyActions,
     N: DerefMut,
@@ -50,7 +50,7 @@ struct DirectiveContext<R: ReentrancyActions, N, B: PartialBackend<R::Span>> {
     span: R::Span,
     label: Option<Label<R::Ident, R::Span>>,
     args: BuiltinInstrArgs<B::Value, R::StringRef, R::Span>,
-    session: TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B>,
+    session: TokenStreamSemantics<R, N, B>,
 }
 
 impl<R, N, B> DirectiveContext<R, N, B>
@@ -66,10 +66,7 @@ where
         >,
     B: Backend<R::Span>,
 {
-    fn analyze(
-        self,
-        directive: Directive,
-    ) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
+    fn analyze(self, directive: Directive) -> TokenStreamSemantics<R, N, B> {
         use self::BindingDirective::*;
         use self::FreeDirective::*;
         match directive {
@@ -87,10 +84,7 @@ where
         }
     }
 
-    fn analyze_data(
-        mut self,
-        width: Width,
-    ) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
+    fn analyze_data(mut self, width: Width) -> TokenStreamSemantics<R, N, B> {
         for arg in self.args {
             let expr = match self.session.expect_const(arg) {
                 Ok(expr) => expr,
@@ -101,7 +95,7 @@ where
         self.session
     }
 
-    fn analyze_ds(mut self) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
+    fn analyze_ds(mut self) -> TokenStreamSemantics<R, N, B> {
         if let Some(arg) = single_arg(self.span, self.args, &mut self.session) {
             let result = self.session.expect_const(arg);
             if let Ok(bytes) = result {
@@ -111,7 +105,7 @@ where
         self.session
     }
 
-    fn analyze_equ(mut self) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
+    fn analyze_equ(mut self) -> TokenStreamSemantics<R, N, B> {
         let (symbol, _) = self.label.take().unwrap();
         if let Some(arg) = single_arg(self.span, self.args, &mut self.session) {
             self.session.define_symbol_with_params(symbol, arg);
@@ -119,18 +113,18 @@ where
         self.session
     }
 
-    fn analyze_section(mut self) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
+    fn analyze_section(mut self) -> TokenStreamSemantics<R, N, B> {
         let (name, span) = self.label.take().unwrap().0;
         let id = self.session.reloc_lookup(name, span.clone());
         self.session.builder.start_section(id, span);
         self.session
     }
 
-    fn analyze_endc(self) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
+    fn analyze_endc(self) -> TokenStreamSemantics<R, N, B> {
         self.session
     }
 
-    fn analyze_if(mut self) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
+    fn analyze_if(mut self) -> TokenStreamSemantics<R, N, B> {
         match single_arg(self.span, self.args, &mut self.session) {
             Some(arg) => {
                 let value = self.session.expect_const(arg);
@@ -153,16 +147,15 @@ where
         self.session
     }
 
-    fn analyze_include(mut self) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
+    fn analyze_include(mut self) -> TokenStreamSemantics<R, N, B> {
         let (path, span) = match reduce_include(self.span, self.args, &mut self.session) {
             Some(result) => result,
             None => return self.session,
         };
-        let (result, mut semantics): (_, TokenStreamSemantics<_, _, _, _>) =
+        let (result, mut semantics): (_, TokenStreamSemantics<_, _, _>) =
             self.session.reentrancy.analyze_file(
                 path,
                 Session {
-                    instr_set: self.session.instr_set,
                     reentrancy: (),
                     names: self.session.names,
                     builder: self.session.builder,
@@ -175,7 +168,7 @@ where
         semantics
     }
 
-    fn analyze_macro(mut self) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
+    fn analyze_macro(mut self) -> TokenStreamSemantics<R, N, B> {
         if self.label.is_none() {
             let span = self.span;
             self.session.emit_diag(Message::MacroRequiresName.at(span))
@@ -189,7 +182,7 @@ where
         )
     }
 
-    fn analyze_org(mut self) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
+    fn analyze_org(mut self) -> TokenStreamSemantics<R, N, B> {
         if let Some(arg) = single_arg(self.span, self.args, &mut self.session) {
             let result = self.session.expect_const(arg);
             if let Ok(value) = result {
@@ -566,7 +559,6 @@ mod tests {
     }
 
     type TestExprContext<S> = ArgSemantics<
-        DefaultBuiltinInstrSet,
         MockSourceComponents<S>,
         Box<
             MockNameTable<
@@ -609,7 +601,6 @@ mod tests {
     }
 
     type TestBuiltinInstrSemantics<S> = BuiltinInstrSemantics<
-        DefaultBuiltinInstrSet,
         MockSourceComponents<S>,
         Box<
             MockNameTable<

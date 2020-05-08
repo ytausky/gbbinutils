@@ -3,7 +3,8 @@ use super::BuiltinInstrSemantics;
 use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::actions::Keyword;
 use crate::analyze::semantics::arg::{Arg, DerefableArg};
-use crate::analyze::semantics::builtin_instr::{BuiltinInstr, BuiltinInstrSet};
+use crate::analyze::semantics::builtin_instr::BuiltinInstr;
+use crate::analyze::semantics::keywords::{BindingDirective, FreeBuiltinMnemonic};
 use crate::analyze::semantics::resolve::{NameTable, ResolvedName};
 use crate::analyze::semantics::{ArgSemantics, ExprBuilder, Session};
 use crate::analyze::syntax::actions::*;
@@ -19,15 +20,14 @@ delegate_diagnostics! {
     {R, S, P: Diagnostics<S>}, ExprBuilder<R, S, P>, {parent}, P, S
 }
 
-impl<I, R, N, B> ArgFinalizer for ArgSemantics<I, R, N, B>
+impl<R, N, B> ArgFinalizer for ArgSemantics<R, N, B>
 where
-    I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
     B: Finish,
     B::Value: Source<Span = R::Span>,
     B::Parent: PartialBackend<R::Span, Value = B::Value>,
 {
-    type Next = BuiltinInstrSemantics<I, R, N, B::Parent>;
+    type Next = BuiltinInstrSemantics<R, N, B::Parent>;
 
     fn did_parse_arg(mut self) -> Self::Next {
         let (builder, value) = self.builder.finish();
@@ -49,7 +49,6 @@ where
         };
         self.state.parent.args.push(arg);
         Session {
-            instr_set: self.instr_set,
             reentrancy: self.reentrancy,
             names: self.names,
             builder,
@@ -58,14 +57,13 @@ where
     }
 }
 
-impl<I, R, N, B> ArgActions<R::Ident, Literal<R::StringRef>, R::Span> for ArgSemantics<I, R, N, B>
+impl<R, N, B> ArgActions<R::Ident, Literal<R::StringRef>, R::Span> for ArgSemantics<R, N, B>
 where
-    I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: NameTable<
         R::Ident,
-        Keyword = &'static Keyword<I::Binding, I::Free>,
+        Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
         MacroId = R::MacroId,
         SymbolId = <<B as Finish>::Parent as SymbolSource>::SymbolId,
     >,
@@ -102,14 +100,13 @@ where
     }
 }
 
-impl<I, R, N, B> ArgSemantics<I, R, N, B>
+impl<R, N, B> ArgSemantics<R, N, B>
 where
-    I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: NameTable<
         R::Ident,
-        Keyword = &'static Keyword<I::Binding, I::Free>,
+        Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
         MacroId = R::MacroId,
         SymbolId = <<B as Finish>::Parent as SymbolSource>::SymbolId,
     >,

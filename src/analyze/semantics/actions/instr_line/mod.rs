@@ -1,10 +1,8 @@
 use self::label::{LabelSemantics, LabelState};
 use self::macro_instr::{MacroInstrSemantics, MacroInstrState};
 
-use super::token_line::TokenContext;
 use super::{Keyword, ReentrancyActions, Session, TokenStreamSemantics};
 
-use crate::analyze::semantics::builtin_instr::DispatchBuiltinInstrLine;
 use crate::analyze::semantics::params::RelocLookup;
 use crate::analyze::semantics::resolve::{NameTable, ResolvedName, StartScope};
 use crate::analyze::semantics::*;
@@ -21,24 +19,21 @@ mod builtin_instr;
 mod label;
 mod macro_instr;
 
-impl<I, R, N, B> InstrLineActions<R::Ident, Literal<R::StringRef>, R::Span>
-    for InstrLineSemantics<I, R, N, B>
+impl<R, N, B> InstrLineActions<R::Ident, Literal<R::StringRef>, R::Span>
+    for InstrLineSemantics<R, N, B>
 where
-    I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<I::Binding, I::Free>,
+            Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
     B: Backend<R::Span>,
-    BuiltinInstrSemantics<I, R, N, B>: DispatchBuiltinInstrLine<I, R, N, B>,
-    TokenLineContext<R::Ident, R::StringRef, R::Span>: TokenContext<I, R>,
 {
-    type LabelActions = LabelSemantics<I, R, N, B>;
+    type LabelActions = LabelSemantics<R, N, B>;
     type InstrActions = Self;
 
     fn will_parse_label(mut self, label: (R::Ident, R::Span)) -> Self::LabelActions {
@@ -47,27 +42,23 @@ where
     }
 }
 
-impl<I, R, N, B> InstrActions<R::Ident, Literal<R::StringRef>, R::Span>
-    for InstrLineSemantics<I, R, N, B>
+impl<R, N, B> InstrActions<R::Ident, Literal<R::StringRef>, R::Span> for InstrLineSemantics<R, N, B>
 where
-    I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<I::Binding, I::Free>,
+            Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
     B: Backend<R::Span>,
-    BuiltinInstrSemantics<I, R, N, B>: DispatchBuiltinInstrLine<I, R, N, B>,
-    TokenLineContext<R::Ident, R::StringRef, R::Span>: TokenContext<I, R>,
 {
-    type BuiltinInstrActions = BuiltinInstrSemantics<I, R, N, B>;
-    type MacroInstrActions = MacroInstrSemantics<I, R, N, B>;
+    type BuiltinInstrActions = BuiltinInstrSemantics<R, N, B>;
+    type MacroInstrActions = MacroInstrSemantics<R, N, B>;
     type ErrorActions = Self;
-    type LineFinalizer = TokenStreamSemantics<I, R, N, B>;
+    type LineFinalizer = TokenStreamSemantics<R, N, B>;
 
     fn will_parse_instr(
         mut self,
@@ -108,15 +99,14 @@ where
     }
 }
 
-impl<I, R, N, B> InstrLineSemantics<I, R, N, B>
+impl<R, N, B> InstrLineSemantics<R, N, B>
 where
-    I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<I::Binding, I::Free>,
+            Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,

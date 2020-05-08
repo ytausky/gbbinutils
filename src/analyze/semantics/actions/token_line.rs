@@ -10,17 +10,19 @@ use crate::analyze::{Literal, SemanticToken};
 
 use std::ops::DerefMut;
 
-impl<I, R, N, B> TokenLineActions<R::Ident, Literal<R::StringRef>, R::Span>
-    for TokenLineSemantics<I, R, N, B>
+impl<R, N, B> TokenLineActions<R::Ident, Literal<R::StringRef>, R::Span>
+    for TokenLineSemantics<R, N, B>
 where
-    I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
-        + NameTable<R::Ident, Keyword = &'static Keyword<I::Binding, I::Free>, MacroId = R::MacroId>,
-    TokenLineContext<R::Ident, R::StringRef, R::Span>: TokenContext<I, R>,
+        + NameTable<
+            R::Ident,
+            Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
+            MacroId = R::MacroId,
+        >,
 {
-    type ContextFinalizer = TokenContextFinalizationSemantics<I, R, N, B>;
+    type ContextFinalizer = TokenContextFinalizationSemantics<R, N, B>;
 
     fn act_on_token(&mut self, token: SemanticToken<R::Ident, R::StringRef>, span: R::Span) {
         match &mut self.state.context {
@@ -48,17 +50,16 @@ where
     }
 }
 
-pub(in crate::analyze) trait TokenContext<I: BuiltinInstrSet<R>, R: ReentrancyActions>:
-    ActOnMnemonic<&'static BuiltinMnemonic<I::Binding, I::Free>, R::Span>
+pub(in crate::analyze) trait TokenContext<I, R: ReentrancyActions>:
+    ActOnMnemonic<&'static BuiltinMnemonic<BindingDirective, FreeBuiltinMnemonic>, R::Span>
     + ActOnToken<SemanticToken<R::Ident, R::StringRef>, R::Span>
 {
 }
 
 impl<T, I, R> TokenContext<I, R> for T
 where
-    T: ActOnMnemonic<&'static BuiltinMnemonic<I::Binding, I::Free>, R::Span>
+    T: ActOnMnemonic<&'static BuiltinMnemonic<BindingDirective, FreeBuiltinMnemonic>, R::Span>
         + ActOnToken<SemanticToken<R::Ident, R::StringRef>, R::Span>,
-    I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
 {
 }
@@ -114,16 +115,18 @@ impl<I, R, S> MacroDefState<I, R, S> {
     }
 }
 
-impl<I, R, N, B> LineFinalizer<R::Span> for TokenLineSemantics<I, R, N, B>
+impl<R, N, B> LineFinalizer<R::Span> for TokenLineSemantics<R, N, B>
 where
-    I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
-        + NameTable<R::Ident, Keyword = &'static Keyword<I::Binding, I::Free>, MacroId = R::MacroId>,
-    TokenLineContext<R::Ident, R::StringRef, R::Span>: TokenContext<I, R>,
+        + NameTable<
+            R::Ident,
+            Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
+            MacroId = R::MacroId,
+        >,
 {
-    type Next = TokenStreamSemantics<I, R, N, B>;
+    type Next = TokenStreamSemantics<R, N, B>;
 
     fn did_parse_line(mut self, span: R::Span) -> Self::Next {
         self.act_on_token(Sigil::Eol.into(), span);
@@ -131,25 +134,25 @@ where
     }
 }
 
-pub(in crate::analyze) struct TokenContextFinalizationSemantics<I, R: ReentrancyActions, N, B> {
-    parent: TokenLineSemantics<I, R, N, B>,
+pub(in crate::analyze) struct TokenContextFinalizationSemantics<R: ReentrancyActions, N, B> {
+    parent: TokenLineSemantics<R, N, B>,
 }
 
 delegate_diagnostics! {
-    {I, R: ReentrancyActions, N, B},
-    TokenContextFinalizationSemantics<I, R, N, B>,
+    {R: ReentrancyActions, N, B},
+    TokenContextFinalizationSemantics<R, N, B>,
     {parent},
     R,
     R::Span
 }
 
-impl<I, R, N, B> LineFinalizer<R::Span> for TokenContextFinalizationSemantics<I, R, N, B>
+impl<R, N, B> LineFinalizer<R::Span> for TokenContextFinalizationSemantics<R, N, B>
 where
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: NameTable<R::Ident, MacroId = R::MacroId>,
 {
-    type Next = TokenStreamSemantics<I, R, N, B>;
+    type Next = TokenStreamSemantics<R, N, B>;
 
     fn did_parse_line(mut self, _: R::Span) -> Self::Next {
         match self.parent.state.context {

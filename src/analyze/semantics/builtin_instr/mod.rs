@@ -61,12 +61,11 @@ pub(in crate::analyze) enum BuiltinInstr<B, F, R: ReentrancyActions> {
     Free(Spanned<F, R::Span>),
 }
 
-pub(in crate::analyze) trait DispatchBuiltinInstrLine<I, R: ReentrancyActions, N, B> {
-    fn dispatch_builtin_instr_line(self) -> TokenStreamSemantics<I, R, N, B>;
+pub(in crate::analyze) trait DispatchBuiltinInstrLine<R: ReentrancyActions, N, B> {
+    fn dispatch_builtin_instr_line(self) -> TokenStreamSemantics<R, N, B>;
 }
 
-impl<R, N, B> DispatchBuiltinInstrLine<DefaultBuiltinInstrSet, R, N, B>
-    for BuiltinInstrSemantics<DefaultBuiltinInstrSet, R, N, B>
+impl<R, N, B> DispatchBuiltinInstrLine<R, N, B> for BuiltinInstrSemantics<R, N, B>
 where
     R: ReentrancyActions,
     N: DerefMut,
@@ -79,7 +78,7 @@ where
         >,
     B: Backend<R::Span>,
 {
-    fn dispatch_builtin_instr_line(self) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B> {
+    fn dispatch_builtin_instr_line(self) -> TokenStreamSemantics<R, N, B> {
         let instr = self.state.builtin_instr;
         let args = self.state.args;
         let session = set_state!(self, InstrLineState::new().into());
@@ -109,8 +108,8 @@ where
 fn analyze_mnemonic<R: ReentrancyActions, N, B>(
     name: (&Mnemonic, R::Span),
     args: BuiltinInstrArgs<B::Value, R::StringRef, R::Span>,
-    mut session: TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B>,
-) -> TokenStreamSemantics<DefaultBuiltinInstrSet, R, N, B>
+    mut session: TokenStreamSemantics<R, N, B>,
+) -> TokenStreamSemantics<R, N, B>
 where
     N: DerefMut,
     N::Target: StartScope<R::Ident>

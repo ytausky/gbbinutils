@@ -12,38 +12,35 @@ use std::ops::DerefMut;
 
 mod arg;
 
-impl<I, R, V> From<BuiltinInstrState<I, R, V>>
+impl<R, V> From<BuiltinInstrState<R, V>>
     for TokenStreamState<
         <R as IdentSource>::Ident,
         <R as StringSource>::StringRef,
         <R as SpanSource>::Span,
     >
 where
-    I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
 {
-    fn from(_: BuiltinInstrState<I, R, V>) -> Self {
+    fn from(_: BuiltinInstrState<R, V>) -> Self {
         InstrLineState::new().into()
     }
 }
 
-impl<I, R, N, B> BuiltinInstrActions<R::Ident, Literal<R::StringRef>, R::Span>
-    for BuiltinInstrSemantics<I, R, N, B>
+impl<R, N, B> BuiltinInstrActions<R::Ident, Literal<R::StringRef>, R::Span>
+    for BuiltinInstrSemantics<R, N, B>
 where
-    I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<I::Binding, I::Free>,
+            Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
     B: Backend<R::Span>,
-    Self: DispatchBuiltinInstrLine<I, R, N, B>,
 {
-    type ArgActions = ArgSemantics<I, R, N, B::ExprBuilder>;
+    type ArgActions = ArgSemantics<R, N, B::ExprBuilder>;
 
     fn will_parse_arg(self) -> Self::ArgActions {
         self.map_builder(|builder| builder.build_const())
@@ -51,29 +48,27 @@ where
     }
 }
 
-impl<I, R, N, B> InstrFinalizer<R::Span> for BuiltinInstrSemantics<I, R, N, B>
+impl<R, N, B> InstrFinalizer<R::Span> for BuiltinInstrSemantics<R, N, B>
 where
-    I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<I::Binding, I::Free>,
+            Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
     B: Backend<R::Span>,
-    Self: DispatchBuiltinInstrLine<I, R, N, B>,
 {
-    type Next = TokenStreamSemantics<I, R, N, B>;
+    type Next = TokenStreamSemantics<R, N, B>;
 
     fn did_parse_instr(self) -> Self::Next {
         self.dispatch_builtin_instr_line()
     }
 }
 
-impl<I, R, N, B, S> Session<I, R, N, B, S>
+impl<R, N, B, S> Session<R, N, B, S>
 where
     R: ReentrancyActions,
     N: DerefMut,

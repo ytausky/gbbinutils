@@ -1,6 +1,5 @@
-use self::token_line::{TokenContext, TokenContextFinalizationSemantics};
+use self::token_line::TokenContextFinalizationSemantics;
 
-use super::builtin_instr::DispatchBuiltinInstrLine;
 use super::Session;
 use super::*;
 
@@ -17,8 +16,7 @@ use std::ops::DerefMut;
 mod instr_line;
 mod token_line;
 
-type WithoutReentrancy<I, R, N, B> = Session<
-    I,
+type WithoutReentrancy<R, N, B> = Session<
     (),
     N,
     B,
@@ -29,32 +27,28 @@ type WithoutReentrancy<I, R, N, B> = Session<
     >,
 >;
 
-impl<I, R, N, B> Session<I, R, N, B, TokenStreamState<R::Ident, R::StringRef, R::Span>>
+impl<R, N, B> Session<R, N, B, TokenStreamState<R::Ident, R::StringRef, R::Span>>
 where
-    I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<I::Binding, I::Free>,
+            Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
     B: Backend<R::Span>,
-    BuiltinInstrSemantics<I, R, N, B>: DispatchBuiltinInstrLine<I, R, N, B>,
-    TokenLineContext<R::Ident, R::StringRef, R::Span>: TokenContext<I, R>,
 {
     pub fn analyze_file(self, path: R::StringRef) -> Result<(), CodebaseError> {
         let (reentrancy, session) = self.split_reentrancy();
         reentrancy.analyze_file(path, session).0
     }
 
-    fn split_reentrancy(self) -> (R, WithoutReentrancy<I, R, N, B>) {
+    fn split_reentrancy(self) -> (R, WithoutReentrancy<R, N, B>) {
         (
             self.reentrancy,
             Session {
-                instr_set: self.instr_set,
                 reentrancy: (),
                 names: self.names,
                 builder: self.builder,
@@ -64,18 +58,14 @@ where
     }
 }
 
-impl<I, R: ReentrancyActions, N, B>
-    IntoSemanticActions<Session<I, (), N, B, TokenStreamState<R::Ident, R::StringRef, R::Span>>>
+impl<R: ReentrancyActions, N, B>
+    IntoSemanticActions<Session<(), N, B, TokenStreamState<R::Ident, R::StringRef, R::Span>>>
     for R
 {
-    type SemanticActions = TokenStreamSemantics<I, R, N, B>;
+    type SemanticActions = TokenStreamSemantics<R, N, B>;
 
-    fn into_semantic_actions(
-        self,
-        session: WithoutReentrancy<I, R, N, B>,
-    ) -> Self::SemanticActions {
+    fn into_semantic_actions(self, session: WithoutReentrancy<R, N, B>) -> Self::SemanticActions {
         Session {
-            instr_set: session.instr_set,
             reentrancy: self,
             names: session.names,
             builder: session.builder,
@@ -100,26 +90,23 @@ impl<I, R, S> From<TokenLineState<I, R, S>> for TokenStreamState<I, R, S> {
     }
 }
 
-impl<I, R, N, B> TokenStreamActions<R::Ident, Literal<R::StringRef>, R::Span>
-    for TokenStreamSemantics<I, R, N, B>
+impl<R, N, B> TokenStreamActions<R::Ident, Literal<R::StringRef>, R::Span>
+    for TokenStreamSemantics<R, N, B>
 where
-    I: BuiltinInstrSet<R>,
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
             R::Ident,
-            Keyword = &'static Keyword<I::Binding, I::Free>,
+            Keyword = &'static Keyword<BindingDirective, FreeBuiltinMnemonic>,
             MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
     B: Backend<R::Span>,
-    BuiltinInstrSemantics<I, R, N, B>: DispatchBuiltinInstrLine<I, R, N, B>,
-    TokenLineContext<R::Ident, R::StringRef, R::Span>: TokenContext<I, R>,
 {
-    type InstrLineActions = InstrLineSemantics<I, R, N, B>;
-    type TokenLineActions = TokenLineSemantics<I, R, N, B>;
-    type TokenLineFinalizer = TokenContextFinalizationSemantics<I, R, N, B>;
+    type InstrLineActions = InstrLineSemantics<R, N, B>;
+    type TokenLineActions = TokenLineSemantics<R, N, B>;
+    type TokenLineFinalizer = TokenContextFinalizationSemantics<R, N, B>;
 
     fn will_parse_line(self) -> LineRule<Self::InstrLineActions, Self::TokenLineActions> {
         match self.state.mode {
@@ -147,23 +134,23 @@ where
     }
 }
 
-impl<I, R: ReentrancyActions, N, B> InstrFinalizer<R::Span> for InstrLineSemantics<I, R, N, B> {
-    type Next = TokenStreamSemantics<I, R, N, B>;
+impl<R: ReentrancyActions, N, B> InstrFinalizer<R::Span> for InstrLineSemantics<R, N, B> {
+    type Next = TokenStreamSemantics<R, N, B>;
 
     fn did_parse_instr(self) -> Self::Next {
         set_state!(self, self.state.into())
     }
 }
 
-impl<I, R: ReentrancyActions, N, B> LineFinalizer<R::Span> for InstrLineSemantics<I, R, N, B> {
-    type Next = TokenStreamSemantics<I, R, N, B>;
+impl<R: ReentrancyActions, N, B> LineFinalizer<R::Span> for InstrLineSemantics<R, N, B> {
+    type Next = TokenStreamSemantics<R, N, B>;
 
     fn did_parse_line(self, _: R::Span) -> Self::Next {
         set_state!(self, self.state.into())
     }
 }
 
-impl<I, R: ReentrancyActions, N, B> LineFinalizer<R::Span> for TokenStreamSemantics<I, R, N, B> {
+impl<R: ReentrancyActions, N, B> LineFinalizer<R::Span> for TokenStreamSemantics<R, N, B> {
     type Next = Self;
 
     fn did_parse_line(self, _: R::Span) -> Self::Next {
@@ -179,7 +166,6 @@ pub mod tests {
 
     use crate::analyze::macros::mock::MockMacroId;
     use crate::analyze::reentrancy::ReentrancyEvent;
-    use crate::analyze::semantics::builtin_instr::*;
     use crate::analyze::semantics::keywords::{BindingDirective, FreeBuiltinMnemonic};
     use crate::analyze::semantics::resolve::{MockNameTable, NameTableEvent, ResolvedName};
     use crate::analyze::syntax::{Sigil, Token};
@@ -638,7 +624,6 @@ pub mod tests {
     }
 
     pub(super) type TestTokenStreamSemantics<S> = TokenStreamSemantics<
-        DefaultBuiltinInstrSet,
         MockSourceComponents<S>,
         Box<
             MockNameTable<
