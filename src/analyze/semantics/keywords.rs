@@ -1,9 +1,10 @@
+use self::BindingDirective::*;
+use self::BuiltinMnemonic::*;
+use self::FreeBuiltinMnemonic::*;
+use self::FreeDirective::*;
+
 use super::arg::OperandSymbol::*;
 use super::builtin_instr::cpu_instr::mnemonic::*;
-use super::builtin_instr::directive::BindingDirective;
-use super::builtin_instr::directive::{BindingDirective::*, FreeDirective::*};
-use super::builtin_instr::FreeBuiltinMnemonic;
-use super::builtin_instr::{BuiltinMnemonic::*, FreeBuiltinMnemonic::*};
 use super::Keyword;
 use super::Keyword::*;
 
@@ -79,3 +80,34 @@ pub(super) const KEYWORDS: &[(&str, Keyword<BindingDirective, FreeBuiltinMnemoni
     ("XOR", BuiltinMnemonic(Free(CpuInstr(XOR)))),
     ("Z", Operand(Z)),
 ];
+
+#[derive(Clone, Debug, PartialEq)]
+pub(in crate::analyze) enum BuiltinMnemonic<B, F> {
+    Binding(B),
+    Free(F),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(in crate::analyze) enum FreeBuiltinMnemonic {
+    CpuInstr(Mnemonic),
+    Directive(FreeDirective),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(in crate::analyze) enum BindingDirective {
+    Equ,
+    Macro,
+    Section,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(in crate::analyze) enum FreeDirective {
+    Db,
+    Ds,
+    Dw,
+    Endc,
+    Endm,
+    If,
+    Include,
+    Org,
+}

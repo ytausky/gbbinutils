@@ -1,5 +1,6 @@
 use self::arg::{Arg, OperandSymbol};
-use self::builtin_instr::{BuiltinInstr, BuiltinInstrSet, BuiltinMnemonic};
+use self::builtin_instr::{BuiltinInstr, BuiltinInstrSet};
+use self::keywords::BuiltinMnemonic;
 use self::params::*;
 use self::resolve::{NameTable, ResolvedName};
 

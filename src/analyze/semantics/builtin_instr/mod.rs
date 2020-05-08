@@ -1,6 +1,7 @@
 use self::cpu_instr::mnemonic::Mnemonic;
-use self::directive::{BindingDirective, Directive, FreeDirective};
+use self::directive::Directive;
 
+use super::keywords::{BindingDirective, BuiltinMnemonic, FreeBuiltinMnemonic};
 use super::resolve::{NameTable, StartScope};
 use super::{
     BuiltinInstrArgs, BuiltinInstrSemantics, InstrLineState, Keyword, Label, TokenStreamSemantics,
@@ -37,18 +38,6 @@ impl<R: ReentrancyActions> BuiltinInstrSet<R> for DefaultBuiltinInstrSet {
 
 type DefaultBuiltinInstrSetIter =
     std::slice::Iter<'static, (&'static str, Keyword<BindingDirective, FreeBuiltinMnemonic>)>;
-
-#[derive(Clone, Debug, PartialEq)]
-pub(in crate::analyze) enum BuiltinMnemonic<B, F> {
-    Binding(B),
-    Free(F),
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(in crate::analyze) enum FreeBuiltinMnemonic {
-    CpuInstr(Mnemonic),
-    Directive(FreeDirective),
-}
 
 impl From<Directive> for BuiltinMnemonic<BindingDirective, FreeBuiltinMnemonic> {
     fn from(directive: Directive) -> Self {

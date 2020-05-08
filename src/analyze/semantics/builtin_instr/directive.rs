@@ -2,6 +2,7 @@ use super::{DefaultBuiltinInstrSet, FreeBuiltinMnemonic};
 
 use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::arg::*;
+use crate::analyze::semantics::keywords::{BindingDirective, FreeDirective};
 use crate::analyze::semantics::params::RelocLookup;
 use crate::analyze::semantics::resolve::{NameTable, StartScope};
 use crate::analyze::semantics::*;
@@ -16,25 +17,6 @@ use std::ops::DerefMut;
 pub(in crate::analyze) enum Directive {
     Binding(BindingDirective),
     Free(FreeDirective),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(in crate::analyze) enum BindingDirective {
-    Equ,
-    Macro,
-    Section,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(in crate::analyze) enum FreeDirective {
-    Db,
-    Ds,
-    Dw,
-    Endc,
-    Endm,
-    If,
-    Include,
-    Org,
 }
 
 pub(in crate::analyze::semantics) fn analyze_directive<R, N, B>(

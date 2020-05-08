@@ -179,8 +179,8 @@ pub mod tests {
 
     use crate::analyze::macros::mock::MockMacroId;
     use crate::analyze::reentrancy::ReentrancyEvent;
-    use crate::analyze::semantics::builtin_instr::directive::BindingDirective;
     use crate::analyze::semantics::builtin_instr::*;
+    use crate::analyze::semantics::keywords::{BindingDirective, FreeBuiltinMnemonic};
     use crate::analyze::semantics::resolve::{MockNameTable, NameTableEvent, ResolvedName};
     use crate::analyze::syntax::{Sigil, Token};
     use crate::analyze::SemanticToken;
