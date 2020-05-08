@@ -1,5 +1,3 @@
-use gbas;
-
 use std::io;
 
 #[test]

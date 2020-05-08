@@ -77,6 +77,7 @@ impl StringSrcBuf {
         &self.name
     }
 
+    #[allow(clippy::match_wild_err_arm)]
     fn line_index(&self, buf_offset: usize) -> LineIndex {
         match self
             .line_ranges
