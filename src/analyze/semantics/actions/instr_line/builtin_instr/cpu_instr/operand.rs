@@ -187,6 +187,7 @@ impl<I: Iterator> Iterator for OperandCounter<I> {
 pub mod tests {
     use super::*;
 
+    use crate::analyze::reentrancy::ReentrancyEvent;
     use crate::analyze::semantics::mock::MockExprBuilder;
     use crate::object::builder::mock::{BackendEvent, MockSymbolId};
 
@@ -228,6 +229,7 @@ pub mod tests {
     pub(crate) enum Event<S: Clone> {
         Backend(BackendEvent<MockSymbolId, Expr<S>>),
         Diagnostics(DiagnosticsEvent<S>),
+        Reentrancy(ReentrancyEvent),
     }
 
     impl<S: Clone> From<BackendEvent<MockSymbolId, Expr<S>>> for Event<S> {
@@ -242,6 +244,12 @@ pub mod tests {
         }
     }
 
+    impl<S: Clone> From<ReentrancyEvent> for Event<S> {
+        fn from(event: ReentrancyEvent) -> Self {
+            Event::Reentrancy(event)
+        }
+    }
+
     fn analyze_operand<S: Clone + Debug>(
         expr: Arg<Expr<MockSpan<S>>, String, MockSpan<S>>,
         context: Context,
@@ -251,7 +259,7 @@ pub mod tests {
             result = Some(super::analyze_operand(
                 expr,
                 context,
-                &mut MockExprBuilder::with_log(log),
+                &mut MockExprBuilder::with_log(log, &mut std::iter::empty()),
             ))
         });
         result.unwrap().map_err(|_| log)

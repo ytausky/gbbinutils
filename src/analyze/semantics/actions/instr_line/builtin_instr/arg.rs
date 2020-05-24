@@ -1,4 +1,4 @@
-use super::BuiltinInstrSemantics;
+use super::{BuiltinInstrSemantics, Core};
 
 use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::actions::Keyword;
@@ -7,8 +7,8 @@ use crate::analyze::semantics::resolve::{NameTable, ResolvedName};
 use crate::analyze::semantics::{ArgSemantics, ExprBuilder, Session};
 use crate::analyze::syntax::actions::*;
 use crate::analyze::Literal;
-use crate::diag::span::{Source, StripSpan};
-use crate::diag::{Diagnostics, EmitDiag, Message};
+use crate::diag::span::Source;
+use crate::diag::{Diagnostics, Message};
 use crate::expr::{FnCall, LocationCounter, ParamId};
 use crate::object::builder::{Finish, Name, PartialBackend, SymbolSource, ValueBuilder};
 
@@ -18,18 +18,18 @@ delegate_diagnostics! {
     {R, S, P: Diagnostics<S>}, ExprBuilder<R, S, P>, {parent}, P, S
 }
 
-impl<R, N, B> ArgFinalizer for ArgSemantics<R, N, B>
+impl<'a, R, N, B> ArgFinalizer for ArgSemantics<'a, R, N, B>
 where
     R: ReentrancyActions,
     B: Finish,
     B::Value: Source<Span = R::Span>,
     B::Parent: PartialBackend<R::Span, Value = B::Value>,
 {
-    type Next = BuiltinInstrSemantics<R, N, B::Parent>;
+    type Next = BuiltinInstrSemantics<'a, R, N, B::Parent>;
 
     fn did_parse_arg(mut self) -> Self::Next {
-        let (builder, value) = self.builder.finish();
-        let arg = match self.state.arg {
+        let (builder, value) = self.core.builder.finish();
+        let arg = match self.core.state.arg {
             Some(Arg::Bare(DerefableArg::Const(()))) => {
                 Arg::Bare(DerefableArg::Const(value.unwrap()))
             }
@@ -45,17 +45,20 @@ where
             Some(Arg::String(string, span)) => Arg::String(string, span),
             Some(Arg::Error) | None => Arg::Error,
         };
-        self.state.parent.args.push(arg);
+        self.core.state.parent.args.push(arg);
         Session {
             reentrancy: self.reentrancy,
-            names: self.names,
-            builder,
-            state: self.state.parent,
+            core: Core {
+                names: self.core.names,
+                builder,
+                state: self.core.state.parent,
+            },
+            tokens: self.tokens,
         }
     }
 }
 
-impl<R, N, B> ArgActions<R::Ident, Literal<R::StringRef>, R::Span> for ArgSemantics<R, N, B>
+impl<'a, R, N, B> ArgActions for ArgSemantics<'a, R, N, B>
 where
     R: ReentrancyActions,
     N: DerefMut,
@@ -72,33 +75,35 @@ where
         match atom {
             ExprAtom::Ident(ident) => self.act_on_ident(ident, span),
             ExprAtom::Literal(Literal::Number(n)) => {
-                self.builder.push_op(n, span);
-                self.state.arg = Some(Arg::Bare(DerefableArg::Const(())));
+                self.core.builder.push_op(n, span);
+                self.core.state.arg = Some(Arg::Bare(DerefableArg::Const(())));
             }
             ExprAtom::Literal(Literal::String(string)) => {
-                self.state.arg = Some(Arg::String(string, span))
+                self.core.state.arg = Some(Arg::String(string, span))
             }
             ExprAtom::LocationCounter => {
-                self.builder.push_op(LocationCounter, span);
-                self.state.arg = Some(Arg::Bare(DerefableArg::Const(())));
+                self.core.builder.push_op(LocationCounter, span);
+                self.core.state.arg = Some(Arg::Bare(DerefableArg::Const(())));
             }
-            ExprAtom::Error => self.state.arg = Some(Arg::Error),
+            ExprAtom::Error => self.core.state.arg = Some(Arg::Error),
         }
     }
 
     fn act_on_operator(&mut self, op: Operator, span: R::Span) {
         match op {
-            Operator::Binary(op) => self.builder.push_op(op, span),
-            Operator::FnCall(arity) => self.builder.push_op(FnCall(arity), span),
-            Operator::Unary(UnaryOperator::Parentheses) => match &self.state.arg {
-                Some(Arg::Bare(arg)) => self.state.arg = Some(Arg::Deref((*arg).clone(), span)),
+            Operator::Binary(op) => self.core.builder.push_op(op, span),
+            Operator::FnCall(arity) => self.core.builder.push_op(FnCall(arity), span),
+            Operator::Unary(UnaryOperator::Parentheses) => match &self.core.state.arg {
+                Some(Arg::Bare(arg)) => {
+                    self.core.state.arg = Some(Arg::Deref((*arg).clone(), span))
+                }
                 _ => unimplemented!(),
             },
         }
     }
 }
 
-impl<R, N, B> ArgSemantics<R, N, B>
+impl<'a, R, N, B> ArgSemantics<'a, R, N, B>
 where
     R: ReentrancyActions,
     N: DerefMut,
@@ -113,7 +118,7 @@ where
 {
     fn act_on_ident(&mut self, ident: R::Ident, span: R::Span) {
         let no_params = (vec![], vec![]);
-        let params = match &self.state.parent.label {
+        let params = match &self.core.state.parent.label {
             Some((_, params)) => &params,
             _ => &no_params,
         };
@@ -123,13 +128,13 @@ where
             .position(|param| *param == ident)
             .map(ParamId);
         if let Some(id) = param {
-            self.builder.push_op(id, span);
-            self.state.arg = Some(Arg::Bare(DerefableArg::Const(())));
+            self.core.builder.push_op(id, span);
+            self.core.state.arg = Some(Arg::Bare(DerefableArg::Const(())));
             return;
         }
-        match self.names.resolve_name(&ident) {
-            Some(ResolvedName::Keyword(Keyword::Operand(symbol))) => match self.state.arg {
-                None => self.state.arg = Some(Arg::Bare(DerefableArg::Symbol(*symbol, span))),
+        match self.core.names.resolve_name(&ident) {
+            Some(ResolvedName::Keyword(Keyword::Operand(symbol))) => match self.core.state.arg {
+                None => self.core.state.arg = Some(Arg::Bare(DerefableArg::Symbol(*symbol, span))),
                 _ => unimplemented!(),
             },
             Some(ResolvedName::Keyword(_)) => {
@@ -137,14 +142,14 @@ where
                 self.emit_diag(Message::KeywordInExpr { keyword }.at(span))
             }
             Some(ResolvedName::Symbol(id)) => {
-                self.builder.push_op(Name(id), span);
-                self.state.arg = Some(Arg::Bare(DerefableArg::Const(())))
+                self.core.builder.push_op(Name(id), span);
+                self.core.state.arg = Some(Arg::Bare(DerefableArg::Const(())))
             }
             None => {
-                let id = self.builder.alloc_symbol(span.clone());
+                let id = self.core.builder.alloc_symbol(span.clone());
                 self.define_name(ident, ResolvedName::Symbol(id.clone()));
-                self.builder.push_op(Name(id), span);
-                self.state.arg = Some(Arg::Bare(DerefableArg::Const(())))
+                self.core.builder.push_op(Name(id), span);
+                self.core.state.arg = Some(Arg::Bare(DerefableArg::Const(())))
             }
             _ => unimplemented!(),
         }

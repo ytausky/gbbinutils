@@ -1,4 +1,4 @@
-use super::{InstrLineState, Keyword, Session, TokenStreamSemantics};
+use super::{Core, InstrLineState, Keyword, Session, TokenStreamSemantics};
 
 use crate::analyze::reentrancy::{MacroArgs, ReentrancyActions};
 use crate::analyze::semantics::actions::TokenStreamState;
@@ -9,7 +9,7 @@ use crate::object::builder::Backend;
 
 use std::ops::DerefMut;
 
-pub(super) type MacroInstrSemantics<R, N, B> = Session<R, N, B, MacroInstrState<R>>;
+pub(super) type MacroInstrSemantics<'a, R, N, B> = Session<'a, R, N, B, MacroInstrState<R>>;
 
 pub(in crate::analyze) struct MacroInstrState<R: ReentrancyActions> {
     parent: InstrLineState<R::Ident, R::Span>,
@@ -33,9 +33,12 @@ impl<R: ReentrancyActions> MacroInstrState<R> {
     }
 }
 
-impl<R, N, B> MacroInstrActions<R::Span> for MacroInstrSemantics<R, N, B>
+impl<'a, R, N, B> MacroInstrActions for MacroInstrSemantics<'a, R, N, B>
 where
     R: ReentrancyActions,
+    R::Ident: 'static,
+    R::StringRef: 'static,
+    R::Span: 'static,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
@@ -46,17 +49,19 @@ where
         >,
     B: Backend<R::Span>,
 {
-    type Token = SemanticToken<R::Ident, R::StringRef>;
-    type MacroArgActions = MacroArgSemantics<R, N, B>;
+    type MacroArgActions = MacroArgSemantics<'a, R, N, B>;
 
     fn will_parse_macro_arg(self) -> Self::MacroArgActions {
-        set_state!(self, MacroArgState::new(self.state))
+        set_state!(self, MacroArgState::new(self.core.state))
     }
 }
 
-impl<R, N, B> InstrFinalizer<R::Span> for MacroInstrSemantics<R, N, B>
+impl<'a, R, N, B> InstrFinalizer for MacroInstrSemantics<'a, R, N, B>
 where
     R: ReentrancyActions,
+    R::Ident: 'static,
+    R::StringRef: 'static,
+    R::Span: 'static,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
@@ -67,23 +72,27 @@ where
         >,
     B: Backend<R::Span>,
 {
-    type Next = TokenStreamSemantics<R, N, B>;
+    type Next = TokenStreamSemantics<'a, R, N, B>;
 
     fn did_parse_instr(self) -> Self::Next {
-        self.reentrancy.call_macro(
-            self.state.name,
-            self.state.args,
-            Session {
-                reentrancy: (),
-                names: self.names,
-                builder: self.builder,
-                state: TokenStreamState::from(self.state.parent),
+        let (reentrancy, core) = self.reentrancy.call_macro(
+            self.core.state.name,
+            self.core.state.args,
+            Core {
+                names: self.core.names,
+                builder: self.core.builder,
+                state: TokenStreamState::from(self.core.state.parent),
             },
-        )
+        );
+        Session {
+            reentrancy,
+            core,
+            tokens: self.tokens,
+        }
     }
 }
 
-type MacroArgSemantics<R, N, B> = Session<R, N, B, MacroArgState<R>>;
+type MacroArgSemantics<'a, R, N, B> = Session<'a, R, N, B, MacroArgState<R>>;
 
 pub(in crate::analyze) struct MacroArgState<R: ReentrancyActions> {
     tokens: TokenSeq<R::Ident, R::StringRef, R::Span>,
@@ -99,19 +108,18 @@ impl<R: ReentrancyActions> MacroArgState<R> {
     }
 }
 
-impl<R: ReentrancyActions, N, B> MacroArgActions<R::Span> for MacroArgSemantics<R, N, B> {
-    type Token = SemanticToken<R::Ident, R::StringRef>;
-    type Next = MacroInstrSemantics<R, N, B>;
+impl<'a, R: ReentrancyActions, N, B> MacroArgActions for MacroArgSemantics<'a, R, N, B> {
+    type Next = MacroInstrSemantics<'a, R, N, B>;
 
-    fn act_on_token(&mut self, token: (Self::Token, R::Span)) {
-        let tokens = &mut self.state.tokens;
+    fn act_on_token(&mut self, token: (SemanticToken<R::Ident, R::StringRef>, R::Span)) {
+        let tokens = &mut self.core.state.tokens;
         tokens.0.push(token.0);
         tokens.1.push(token.1);
     }
 
     fn did_parse_macro_arg(mut self) -> Self::Next {
-        self.state.parent.push_arg(self.state.tokens);
-        set_state!(self, self.state.parent)
+        self.core.state.parent.push_arg(self.core.state.tokens);
+        set_state!(self, self.core.state.parent)
     }
 }
 

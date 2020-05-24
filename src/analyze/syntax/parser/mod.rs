@@ -2,12 +2,11 @@ use super::actions::*;
 use super::Sigil::*;
 use super::{Sigil, Token};
 
-use crate::diag::span::StripSpan;
-use crate::diag::{Diagnostics, EmitDiag, Message};
+use crate::diag::Message;
 
 macro_rules! bump {
     ($parser:expr) => {
-        $parser.state.token = $parser.state.remaining.next().unwrap()
+        $parser.state.token = $parser.actions.next_token().unwrap()
     };
 }
 
@@ -73,10 +72,9 @@ pub(in crate::analyze) trait ParserFactory<I, L, E, S: Clone> {
 }
 
 pub(in crate::analyze) trait ParseTokenStream<I, L, E, S: Clone> {
-    fn parse_token_stream<T, A>(&mut self, tokens: T, actions: A) -> A
+    fn parse_token_stream<A>(&mut self, actions: A) -> A
     where
-        T: IntoIterator<Item = (Result<Token<I, L>, E>, S)>,
-        A: TokenStreamActions<I, L, S>;
+        A: TokenStreamActions<Ident = I, Literal = L, Error = E, Span = S>;
 }
 
 pub(in crate::analyze) struct DefaultParserFactory;
@@ -92,17 +90,16 @@ impl<I, L, E, S: Clone> ParserFactory<I, L, E, S> for DefaultParserFactory {
 pub(in crate::analyze) struct DefaultParser;
 
 impl<I, L, E, S: Clone> ParseTokenStream<I, L, E, S> for DefaultParser {
-    fn parse_token_stream<T, A>(&mut self, tokens: T, actions: A) -> A
+    fn parse_token_stream<A>(&mut self, actions: A) -> A
     where
-        T: IntoIterator<Item = (Result<Token<I, L>, E>, S)>,
-        A: TokenStreamActions<I, L, S>,
+        A: TokenStreamActions<Ident = I, Literal = L, Error = E, Span = S>,
         S: Clone,
     {
         let Parser {
             state: ParserState { token, .. },
             actions,
             ..
-        } = Parser::new(&mut tokens.into_iter(), actions).parse_token_stream();
+        } = Parser::new(actions).parse_token_stream();
         assert_eq!(
             token.0.ok().as_ref().map(Token::kind),
             Some(Token::Sigil(Sigil::Eos))
@@ -129,14 +126,13 @@ impl<I, L> Token<I, L> {
 
 const LINE_FOLLOW_SET: &[TokenKind] = &[Token::Sigil(Eol), Token::Sigil(Eos)];
 
-struct Parser<'a, T, R: 'a, A> {
-    state: ParserState<'a, T, R>,
+struct Parser<T, A> {
+    state: ParserState<T>,
     actions: A,
 }
 
-struct ParserState<'a, T, R> {
+struct ParserState<T> {
     token: T,
-    remaining: &'a mut R,
     parsed_eos: bool,
     recovery: Option<RecoveryState>,
 }
@@ -145,12 +141,11 @@ enum RecoveryState {
     DiagnosedEof,
 }
 
-impl<'a, T, R: Iterator<Item = T>, A> Parser<'a, T, R, A> {
-    fn new(tokens: &'a mut R, actions: A) -> Self {
+impl<A: ParsingContext> Parser<LexerOutput<A::Ident, A::Literal, A::Error, A::Span>, A> {
+    fn new(mut actions: A) -> Self {
         Self::from_state(
             ParserState {
-                token: tokens.next().unwrap(),
-                remaining: tokens,
+                token: actions.next_token().unwrap(),
                 parsed_eos: false,
                 recovery: None,
             },
@@ -159,17 +154,17 @@ impl<'a, T, R: Iterator<Item = T>, A> Parser<'a, T, R, A> {
     }
 }
 
-impl<'a, T, R, A> Parser<'a, T, R, A> {
-    fn from_state(state: ParserState<'a, T, R>, actions: A) -> Self {
+impl<T, A> Parser<T, A> {
+    fn from_state(state: ParserState<T>, actions: A) -> Self {
         Parser { state, actions }
     }
 
-    fn change_context<D, F: FnOnce(A) -> D>(self, f: F) -> Parser<'a, T, R, D> {
+    fn change_context<D, F: FnOnce(A) -> D>(self, f: F) -> Parser<T, D> {
         Parser::from_state(self.state, f(self.actions))
     }
 }
 
-impl<'a, I, L, E, S, R, A> Parser<'a, (Result<Token<I, L>, E>, S), R, A> {
+impl<I, L, E, S, A> Parser<(Result<Token<I, L>, E>, S), A> {
     fn token_kind(&self) -> Option<TokenKind> {
         self.state.token.0.as_ref().ok().map(Token::kind)
     }
@@ -182,10 +177,9 @@ impl<'a, I, L, E, S, R, A> Parser<'a, (Result<Token<I, L>, E>, S), R, A> {
     }
 }
 
-impl<'a, I, L, E, T, C, S> Parser<'a, (Result<Token<I, L>, E>, S), T, C>
+impl<I, L, E, C, S> Parser<(Result<Token<I, L>, E>, S), C>
 where
-    T: Iterator<Item = (Result<Token<I, L>, E>, S)>,
-    C: TokenStreamActions<I, L, S>,
+    C: TokenStreamActions<Ident = I, Literal = L, Error = E, Span = S>,
     S: Clone,
 {
     fn parse_token_stream(mut self) -> Self {
@@ -203,16 +197,14 @@ where
     }
 }
 
-type NextParser<'a, I, L, E, R, A, S> =
-    Parser<'a, (Result<Token<I, L>, E>, S), R, <A as LineFinalizer<S>>::Next>;
+type NextParser<I, L, E, A, S> = Parser<(Result<Token<I, L>, E>, S), <A as LineFinalizer>::Next>;
 
-impl<'a, I, L, E, R, A, S> Parser<'a, (Result<Token<I, L>, E>, S), R, A>
+impl<I, L, E, A, S> Parser<(Result<Token<I, L>, E>, S), A>
 where
-    R: Iterator<Item = (Result<Token<I, L>, E>, S)>,
-    A: InstrLineActions<I, L, S>,
+    A: InstrLineActions<Ident = I, Literal = L, Error = E, Span = S>,
     S: Clone,
 {
-    fn parse_instr_line(mut self) -> NextParser<'a, I, L, E, R, A, S> {
+    fn parse_instr_line(mut self) -> NextParser<I, L, E, A, S> {
         if let (Ok(Token::Label(label)), span) = self.state.token {
             bump!(self);
             let mut parser = self.change_context(|c| c.will_parse_label((label, span)));
@@ -241,13 +233,12 @@ where
     }
 }
 
-impl<'a, I, L, E, R, A, S> Parser<'a, (Result<Token<I, L>, E>, S), R, A>
+impl<I, L, E, A, S> Parser<(Result<Token<I, L>, E>, S), A>
 where
-    R: Iterator<Item = (Result<Token<I, L>, E>, S)>,
-    A: InstrActions<I, L, S>,
+    A: InstrActions<Ident = I, Literal = L, Error = E, Span = S>,
     S: Clone,
 {
-    fn parse_unlabeled_stmt(mut self) -> NextParser<'a, I, L, E, R, A, S> {
+    fn parse_unlabeled_stmt(mut self) -> NextParser<I, L, E, A, S> {
         match self.state.token {
             (Ok(Token::Sigil(Sigil::Eol)), _) | (Ok(Token::Sigil(Sigil::Eos)), _) => {
                 self.parse_line_terminator()
@@ -258,14 +249,15 @@ where
             }
             (_, span) => {
                 bump!(self);
-                let stripped = self.strip_span(&span);
-                self.emit_diag(Message::UnexpectedToken { token: stripped }.at(span));
+                let stripped = self.actions.strip_span(&span);
+                self.actions
+                    .emit_diag(Message::UnexpectedToken { token: stripped }.at(span));
                 self.parse_line_terminator()
             }
         }
     }
 
-    fn parse_key(self, key: I, span: S) -> NextParser<'a, I, L, E, R, A, S> {
+    fn parse_key(self, key: I, span: S) -> NextParser<I, L, E, A, S> {
         match self.actions.will_parse_instr(key, span) {
             InstrRule::BuiltinInstr(actions) => Parser::from_state(self.state, actions)
                 .parse_argument_list()
@@ -286,13 +278,12 @@ where
     }
 }
 
-impl<'a, I, L, E, R, A, S> Parser<'a, (Result<Token<I, L>, E>, S), R, A>
+impl<I, L, E, A, S> Parser<(Result<Token<I, L>, E>, S), A>
 where
-    R: Iterator<Item = (Result<Token<I, L>, E>, S)>,
-    A: LineFinalizer<S>,
+    A: LineFinalizer<Ident = I, Literal = L, Error = E, Span = S>,
     S: Clone,
 {
-    fn parse_line_terminator(mut self) -> NextParser<'a, I, L, E, R, A, S> {
+    fn parse_line_terminator(mut self) -> NextParser<I, L, E, A, S> {
         let span = match &self.state.token {
             (Ok(Token::Sigil(Sigil::Eol)), _) => {
                 let span = self.state.token.1;
@@ -310,10 +301,9 @@ where
     }
 }
 
-impl<'a, I, L, E, R, A, S> Parser<'a, (Result<Token<I, L>, E>, S), R, A>
+impl<I, L, E, A, S> Parser<(Result<Token<I, L>, E>, S), A>
 where
-    R: Iterator<Item = (Result<Token<I, L>, E>, S)>,
-    A: BuiltinInstrActions<I, L, S>,
+    A: BuiltinInstrActions<Ident = I, Literal = L, Error = E, Span = S>,
     S: Clone,
 {
     fn parse_argument_list(self) -> Self {
@@ -327,10 +317,9 @@ where
     }
 }
 
-impl<'a, I, L, E, R, A, S> Parser<'a, (Result<Token<I, L>, E>, S), R, A>
+impl<I, L, E, A, S> Parser<(Result<Token<I, L>, E>, S), A>
 where
-    R: Iterator<Item = (Result<Token<I, L>, E>, S)>,
-    A: LabelActions<I, S>,
+    A: LabelActions<Ident = I, Literal = L, Error = E, Span = S>,
     S: Clone,
 {
     fn parse_param(mut self) -> Self {
@@ -345,10 +334,9 @@ where
     }
 }
 
-impl<'a, I, L, E, R, A, S> Parser<'a, (Result<Token<I, L>, E>, S), R, A>
+impl<I, L, E, A, S> Parser<(Result<Token<I, L>, E>, S), A>
 where
-    R: Iterator<Item = (Result<Token<I, L>, E>, S)>,
-    A: MacroInstrActions<S, Token = Token<I, L>>,
+    A: MacroInstrActions<Ident = I, Literal = L, Error = E, Span = S>,
     S: Clone,
 {
     fn parse_macro_call(self) -> Self {
@@ -375,13 +363,12 @@ where
     }
 }
 
-impl<'a, I, L, E, R, A, S> Parser<'a, (Result<Token<I, L>, E>, S), R, A>
+impl<I, L, E, A, S> Parser<(Result<Token<I, L>, E>, S), A>
 where
-    R: Iterator<Item = (Result<Token<I, L>, E>, S)>,
-    A: TokenLineActions<I, L, S>,
+    A: TokenLineActions<Ident = I, Literal = L, Error = E, Span = S>,
     S: Clone,
 {
-    fn parse_token_line(mut self) -> NextParser<'a, I, L, E, R, A, S> {
+    fn parse_token_line(mut self) -> NextParser<I, L, E, A, S> {
         loop {
             match self.state.token {
                 (Ok(Token::Ident(ident)), span) => {
@@ -408,10 +395,9 @@ where
     }
 }
 
-impl<'a, I, L, E, R, A, S> Parser<'a, (Result<Token<I, L>, E>, S), R, A>
+impl<I, L, E, A, S> Parser<(Result<Token<I, L>, E>, S), A>
 where
-    R: Iterator<Item = (Result<Token<I, L>, E>, S)>,
-    A: Diagnostics<S>,
+    A: ParsingContext<Ident = I, Literal = L, Error = E, Span = S>,
     S: Clone,
 {
     fn parse_terminated_list<P>(
@@ -459,21 +445,19 @@ where
     fn diagnose_unexpected_token(mut self) -> Self {
         if self.token_kind() == Some(Token::Sigil(Eos)) {
             if self.state.recovery.is_none() {
-                self.emit_diag(Message::UnexpectedEof.at(self.state.token.1.clone()));
+                self.actions
+                    .emit_diag(Message::UnexpectedEof.at(self.state.token.1.clone()));
                 self.state.recovery = Some(RecoveryState::DiagnosedEof)
             }
         } else {
             let token = self.state.token.1;
             bump!(self);
-            let stripped = self.strip_span(&token);
-            self.emit_diag(Message::UnexpectedToken { token: stripped }.at(token))
+            let stripped = self.actions.strip_span(&token);
+            self.actions
+                .emit_diag(Message::UnexpectedToken { token: stripped }.at(token))
         }
         self
     }
-}
-
-delegate_diagnostics! {
-    {'a, T, R, A: Diagnostics<S>, S}, Parser<'a, T, R, A>, {actions}, A, S
 }
 
 #[cfg(test)]
@@ -513,13 +497,15 @@ pub mod mock {
     where
         T: From<ParserEvent<I, L, E, S>>,
     {
-        fn parse_token_stream<R, A>(&mut self, tokens: R, actions: A) -> A
+        fn parse_token_stream<A>(&mut self, mut actions: A) -> A
         where
-            R: IntoIterator<Item = (Result<Token<I, L>, E>, S)>,
-            A: TokenStreamActions<I, L, S>,
+            A: TokenStreamActions<Ident = I, Literal = L, Error = E, Span = S>,
         {
-            self.log
-                .push(ParserEvent::ParseTokenStream(tokens.into_iter().collect()));
+            let mut tokens = vec![];
+            while let Some(output) = actions.next_token() {
+                tokens.push(output)
+            }
+            self.log.push(ParserEvent::ParseTokenStream(tokens));
             actions
         }
     }
@@ -562,9 +548,9 @@ mod tests {
         input: InputTokens,
         expected: impl Borrow<[TokenStreamAction<MockIdent, MockLiteral, MockSpan>]>,
     ) {
-        let mut parsing_context = TokenStreamActionCollector::new((), MockIdent::annotate);
-        parsing_context =
-            DefaultParser.parse_token_stream(with_spans(&input.tokens), parsing_context);
+        let tokens = &mut with_spans(&input.tokens);
+        let mut parsing_context = TokenStreamActionCollector::new((), tokens, MockIdent::annotate);
+        parsing_context = DefaultParser.parse_token_stream(parsing_context);
         let mut expected = expected.borrow().to_vec();
         expected.push(input.eos());
         assert_eq!(parsing_context.into_actions(), expected)

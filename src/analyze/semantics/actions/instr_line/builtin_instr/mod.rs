@@ -29,10 +29,12 @@ where
     }
 }
 
-impl<R, N, B> BuiltinInstrActions<R::Ident, Literal<R::StringRef>, R::Span>
-    for BuiltinInstrSemantics<R, N, B>
+impl<'a, R, N, B> BuiltinInstrActions for BuiltinInstrSemantics<'a, R, N, B>
 where
     R: ReentrancyActions,
+    R::Ident: 'static,
+    R::StringRef: 'static,
+    R::Span: 'static,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
@@ -43,7 +45,7 @@ where
         >,
     B: Backend<R::Span>,
 {
-    type ArgActions = ArgSemantics<R, N, B::ExprBuilder>;
+    type ArgActions = ArgSemantics<'a, R, N, B::ExprBuilder>;
 
     fn will_parse_arg(self) -> Self::ArgActions {
         self.map_builder(|builder| builder.build_const())
@@ -51,9 +53,12 @@ where
     }
 }
 
-impl<R, N, B> InstrFinalizer<R::Span> for BuiltinInstrSemantics<R, N, B>
+impl<'a, R, N, B> InstrFinalizer for BuiltinInstrSemantics<'a, R, N, B>
 where
     R: ReentrancyActions,
+    R::Ident: 'static,
+    R::StringRef: 'static,
+    R::Span: 'static,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
@@ -64,19 +69,19 @@ where
         >,
     B: Backend<R::Span>,
 {
-    type Next = TokenStreamSemantics<R, N, B>;
+    type Next = TokenStreamSemantics<'a, R, N, B>;
 
     fn did_parse_instr(self) -> Self::Next {
-        let args = self.state.args;
+        let args = self.core.state.args;
         let session = set_state!(self, InstrLineState::new().into());
-        match self.state.mnemonic.item {
+        match self.core.state.mnemonic.item {
             BuiltinMnemonic::CpuInstr(cpu_instr) => {
-                analyze_mnemonic((&cpu_instr, self.state.mnemonic.span), args, session)
+                analyze_mnemonic((&cpu_instr, self.core.state.mnemonic.span), args, session)
                     .map_state(Into::into)
             }
             BuiltinMnemonic::Directive(directive) => directive::analyze_directive(
-                (directive, self.state.mnemonic.span),
-                self.state.label,
+                (directive, self.core.state.mnemonic.span),
+                self.core.state.label,
                 args,
                 session,
             ),
@@ -84,7 +89,7 @@ where
     }
 }
 
-impl<R, N, B, S> Session<R, N, B, S>
+impl<'a, R, N, B, S> Session<'a, R, N, B, S>
 where
     R: ReentrancyActions,
     N: DerefMut,
@@ -114,7 +119,7 @@ where
     ) {
         if let Ok(value) = self.expect_const(expr) {
             let id = self.reloc_lookup(name, span.clone());
-            self.builder.define_symbol(id, span, value);
+            self.core.builder.define_symbol(id, span, value);
         }
     }
 }
@@ -131,11 +136,11 @@ impl From<Mnemonic> for BuiltinMnemonic {
     }
 }
 
-fn analyze_mnemonic<R: ReentrancyActions, N, B>(
+fn analyze_mnemonic<'a, R: ReentrancyActions, N, B>(
     name: (&Mnemonic, R::Span),
     args: BuiltinInstrArgs<B::Value, R::StringRef, R::Span>,
-    mut session: TokenStreamSemantics<R, N, B>,
-) -> TokenStreamSemantics<R, N, B>
+    mut session: TokenStreamSemantics<'a, R, N, B>,
+) -> TokenStreamSemantics<'a, R, N, B>
 where
     N: DerefMut,
     N::Target: StartScope<R::Ident>
@@ -153,7 +158,7 @@ where
         operands.push(operand)
     }
     if let Ok(instruction) = cpu_instr::analyze_instruction(name, operands, &mut session) {
-        session.builder.emit_item(Item::CpuInstr(instruction))
+        session.core.builder.emit_item(Item::CpuInstr(instruction))
     }
     session
 }

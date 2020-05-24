@@ -26,6 +26,7 @@ mod syntax;
 pub(crate) trait Assemble<D>
 where
     D: DiagnosticsSystem,
+    D::Span: 'static,
     Self: Backend<D::Span> + BuiltinSymbols<Name = <Self as SymbolSource>::SymbolId> + Sized,
 {
     fn assemble<C: Codebase>(
@@ -53,13 +54,15 @@ where
             &mut interner,
             diagnostics,
         );
-        Session::from_components(session, &mut names, self).analyze_file(name.into())
+        Session::from_components(session, &mut names, self, &mut std::iter::empty())
+            .analyze_file(name.into())
     }
 }
 
 impl<B, D> Assemble<D> for B
 where
     D: DiagnosticsSystem,
+    D::Span: 'static,
     B: Backend<D::Span> + BuiltinSymbols<Name = <Self as SymbolSource>::SymbolId>,
 {
 }

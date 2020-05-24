@@ -1,16 +1,15 @@
-use self::syntax::actions::{ArgActions, ExprAtom, Operator, UnaryOperator};
+use self::syntax::actions::{ArgActions, ExprAtom, Operator, ParsingContext, UnaryOperator};
 use self::syntax::{Sigil, Token};
 use self::Sigil::*;
 
 use super::{Parser, LINE_FOLLOW_SET};
 
 use crate::analyze::syntax;
-use crate::diag::span::{MergeSpans, StripSpan};
-use crate::diag::{CompactDiag, EmitDiag, Message};
+use crate::diag::{CompactDiag, Message};
 use crate::expr::BinOp;
 
 type ParserResult<P, C, S> = Result<P, (P, ExpandedExprParsingError<C, S>)>;
-type ExpandedExprParsingError<D, S> = ExprParsingError<S, <D as StripSpan<S>>::Stripped>;
+type ExpandedExprParsingError<D, S> = ExprParsingError<S, <D as ParsingContext>::Stripped>;
 
 enum ExprParsingError<S, R> {
     NothingParsed,
@@ -61,10 +60,9 @@ impl SuffixOperator {
     }
 }
 
-impl<'a, I, L, E, R, A, S> Parser<'a, (Result<Token<I, L>, E>, S), R, A>
+impl<I, L, E, A, S> Parser<(Result<Token<I, L>, E>, S), A>
 where
-    R: Iterator<Item = (Result<Token<I, L>, E>, S)>,
-    A: ArgActions<I, L, S>,
+    A: ArgActions<Ident = I, Literal = L, Error = E, Span = S>,
     S: Clone,
 {
     pub(super) fn parse(self) -> Self {
@@ -72,7 +70,7 @@ where
             .unwrap_or_else(|(mut parser, error)| {
                 match error {
                     ExprParsingError::NothingParsed => parser = parser.diagnose_unexpected_token(),
-                    ExprParsingError::Other(diagnostic) => parser.emit_diag(diagnostic),
+                    ExprParsingError::Other(diagnostic) => parser.actions.emit_diag(diagnostic),
                 }
                 while !parser.token_is_in(LINE_FOLLOW_SET) {
                     bump!(parser);
@@ -104,7 +102,7 @@ where
         match self.state.token {
             (Ok(Token::Sigil(RParen)), right) => {
                 bump!(self);
-                let span = self.merge_spans(&left, &right);
+                let span = self.actions.merge_spans(&left, &right);
                 self.actions
                     .act_on_operator(Operator::Unary(UnaryOperator::Parentheses), span);
                 Ok(self)
@@ -520,10 +518,12 @@ mod tests {
     fn parse_sym_expr(
         input: &mut InputTokens,
     ) -> Vec<ExprAction<MockIdent, MockLiteral, MockSpan>> {
-        let tokens = &mut with_spans(&input.tokens);
-        Parser::new(tokens, ExprActionCollector::new(MockIdent::annotate))
-            .parse()
-            .change_context(ArgFinalizer::did_parse_arg)
-            .actions
+        Parser::new(ExprActionCollector::new(
+            &mut with_spans(&input.tokens),
+            MockIdent::annotate,
+        ))
+        .parse()
+        .change_context(ArgFinalizer::did_parse_arg)
+        .actions
     }
 }

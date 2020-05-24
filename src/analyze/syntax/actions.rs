@@ -1,7 +1,25 @@
 use super::Token;
 
-use crate::diag::Diagnostics;
+use crate::diag::CompactDiag;
 use crate::expr::BinOp;
+
+pub(in crate::analyze) trait ParsingContext: Sized {
+    type Ident;
+    type Literal;
+    type Error;
+    type Span;
+    type Stripped;
+
+    fn next_token(
+        &mut self,
+    ) -> Option<LexerOutput<Self::Ident, Self::Literal, Self::Error, Self::Span>>;
+
+    fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span;
+    fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped;
+    fn emit_diag(&mut self, diag: impl Into<CompactDiag<Self::Span, Self::Stripped>>);
+}
+
+pub(in crate::analyze) type LexerOutput<I, L, E, S> = (Result<Token<I, L>, E>, S);
 
 // A token stream represents either a tokenized source file or a macro expansion. It is logically
 // divided into lines (separated by <Eol> tokens) and ends with an <Eos> token. It has a single
@@ -18,19 +36,35 @@ use crate::expr::BinOp;
 // This parsing ambiguity is resolved according to the semantics of the program so far, thus the
 // rule used by the parser is determined by the value returned from
 // TokenStreamActions::will_parse_line.
-pub(in crate::analyze) trait TokenStreamActions<I, L, S: Clone>: Sized {
-    type InstrLineActions: InstrLineActions<I, L, S, Next = Self>;
+pub(in crate::analyze) trait TokenStreamActions: ParsingContext {
+    type InstrLineActions: InstrLineActions<
+        Ident = Self::Ident,
+        Literal = Self::Literal,
+        Error = Self::Error,
+        Span = Self::Span,
+        Stripped = Self::Stripped,
+        Next = Self,
+    >;
     type TokenLineActions: TokenLineActions<
-        I,
-        L,
-        S,
+        Ident = Self::Ident,
+        Literal = Self::Literal,
+        Error = Self::Error,
+        Span = Self::Span,
+        Stripped = Self::Stripped,
         ContextFinalizer = Self::TokenLineFinalizer,
         Next = Self,
     >;
-    type TokenLineFinalizer: LineFinalizer<S, Next = Self>;
+    type TokenLineFinalizer: LineFinalizer<
+        Ident = Self::Ident,
+        Literal = Self::Literal,
+        Error = Self::Error,
+        Span = Self::Span,
+        Stripped = Self::Stripped,
+        Next = Self,
+    >;
 
     fn will_parse_line(self) -> LineRule<Self::InstrLineActions, Self::TokenLineActions>;
-    fn act_on_eos(self, span: S) -> Self;
+    fn act_on_eos(self, span: Self::Span) -> Self;
 }
 
 #[derive(Debug, PartialEq)]
@@ -70,13 +104,25 @@ impl<I, T> LineRule<I, T> {
 // possible states after a label has been successfully parsed. Note that by using two distinct types
 // bound by InstrActions we can prevent the parser from calling InstrLineActions::will_parse_label
 // more than once on the same line.
-pub(in crate::analyze) trait InstrLineActions<I, L, S: Clone>:
-    InstrActions<I, L, S>
-{
-    type LabelActions: LabelActions<I, S, Next = Self::InstrActions>;
-    type InstrActions: InstrActions<I, L, S, Next = Self::Next>;
+pub(in crate::analyze) trait InstrLineActions: InstrActions {
+    type LabelActions: LabelActions<
+        Ident = Self::Ident,
+        Literal = Self::Literal,
+        Error = Self::Error,
+        Span = Self::Span,
+        Stripped = Self::Stripped,
+        Next = Self::InstrActions,
+    >;
+    type InstrActions: InstrActions<
+        Ident = Self::Ident,
+        Literal = Self::Literal,
+        Error = Self::Error,
+        Span = Self::Span,
+        Stripped = Self::Stripped,
+        Next = Self::Next,
+    >;
 
-    fn will_parse_label(self, label: (I, S)) -> Self::LabelActions;
+    fn will_parse_label(self, label: (Self::Ident, Self::Span)) -> Self::LabelActions;
 }
 
 // An instruction can be either a builtin instruction (i.e. a CPU instruction or an assembler
@@ -94,32 +140,54 @@ pub(in crate::analyze) trait InstrLineActions<I, L, S: Clone>:
 //
 // The parser uses this rule to recover from an invalid instruction name by throwing away all the
 // remaining tokens in the line.
-pub(in crate::analyze) trait InstrActions<I, L, S: Clone>:
-    LineFinalizer<S>
-{
-    type BuiltinInstrActions: BuiltinInstrActions<I, L, S, Next = Self::LineFinalizer>;
-    type MacroInstrActions: MacroInstrActions<S, Token = Token<I, L>, Next = Self::LineFinalizer>;
-    type ErrorActions: InstrFinalizer<S, Next = Self::LineFinalizer>;
-    type LineFinalizer: LineFinalizer<S, Next = Self::Next>;
+pub(in crate::analyze) trait InstrActions: LineFinalizer {
+    type BuiltinInstrActions: BuiltinInstrActions<
+        Ident = Self::Ident,
+        Literal = Self::Literal,
+        Error = Self::Error,
+        Span = Self::Span,
+        Stripped = Self::Stripped,
+        Next = Self::LineFinalizer,
+    >;
+    type MacroInstrActions: MacroInstrActions<
+        Ident = Self::Ident,
+        Literal = Self::Literal,
+        Error = Self::Error,
+        Span = Self::Span,
+        Stripped = Self::Stripped,
+        Next = Self::LineFinalizer,
+    >;
+    type ErrorActions: InstrFinalizer<
+        Ident = Self::Ident,
+        Literal = Self::Literal,
+        Error = Self::Error,
+        Span = Self::Span,
+        Stripped = Self::Stripped,
+        Next = Self::LineFinalizer,
+    >;
+    type LineFinalizer: LineFinalizer<
+        Ident = Self::Ident,
+        Literal = Self::Literal,
+        Error = Self::Error,
+        Span = Self::Span,
+        Stripped = Self::Stripped,
+        Next = Self::Next,
+    >;
 
     fn will_parse_instr(
         self,
-        ident: I,
-        span: S,
+        ident: Self::Ident,
+        span: Self::Span,
     ) -> InstrRule<Self::BuiltinInstrActions, Self::MacroInstrActions, Self::ErrorActions>;
 }
 
-pub(in crate::analyze) trait LineFinalizer<S: Clone>:
-    Diagnostics<S> + Sized
-{
+pub(in crate::analyze) trait LineFinalizer: ParsingContext {
     type Next;
 
-    fn did_parse_line(self, span: S) -> Self::Next;
+    fn did_parse_line(self, span: Self::Span) -> Self::Next;
 }
 
-pub(in crate::analyze) trait InstrFinalizer<S: Clone>:
-    Diagnostics<S> + Sized
-{
+pub(in crate::analyze) trait InstrFinalizer: ParsingContext {
     type Next;
 
     fn did_parse_instr(self) -> Self::Next;
@@ -161,10 +229,14 @@ impl<C, M, E> InstrRule<C, M, E> {
 //     1. builtin-instr → <Ident> (arg (<Comma> arg)*)?
 //
 // BuiltinInstrActions represents any position in this rule after the initial <Ident>.
-pub(in crate::analyze) trait BuiltinInstrActions<I, L, S: Clone>:
-    InstrFinalizer<S>
-{
-    type ArgActions: ArgActions<I, L, S> + ArgFinalizer<Next = Self>;
+pub(in crate::analyze) trait BuiltinInstrActions: InstrFinalizer {
+    type ArgActions: ArgActions<
+            Ident = Self::Ident,
+            Literal = Self::Literal,
+            Error = Self::Error,
+            Span = Self::Span,
+            Stripped = Self::Stripped,
+        > + ArgFinalizer<Next = Self>;
 
     fn will_parse_arg(self) -> Self::ArgActions;
 }
@@ -185,9 +257,9 @@ pub(in crate::analyze) trait ArgFinalizer {
 //     6. ...
 //
 // To handle precedence and associativity, the parser uses a reverse Polish notation protocol.
-pub(in crate::analyze) trait ArgActions<I, L, S: Clone>: Diagnostics<S> {
-    fn act_on_atom(&mut self, atom: ExprAtom<I, L>, span: S);
-    fn act_on_operator(&mut self, operator: Operator, span: S);
+pub(in crate::analyze) trait ArgActions: ParsingContext {
+    fn act_on_atom(&mut self, atom: ExprAtom<Self::Ident, Self::Literal>, span: Self::Span);
+    fn act_on_operator(&mut self, operator: Operator, span: Self::Span);
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -210,37 +282,49 @@ pub enum UnaryOperator {
     Parentheses,
 }
 
-pub(in crate::analyze) trait LabelActions<I, S: Clone>: Diagnostics<S> {
+pub(in crate::analyze) trait LabelActions: ParsingContext {
     type Next;
 
-    fn act_on_param(&mut self, param: I, span: S);
+    fn act_on_param(&mut self, param: Self::Ident, span: Self::Span);
     fn did_parse_label(self) -> Self::Next;
 }
 
-pub(in crate::analyze) trait MacroInstrActions<S: Clone>:
-    InstrFinalizer<S>
-{
-    type Token;
-    type MacroArgActions: MacroArgActions<S, Token = Self::Token, Next = Self>;
+pub(in crate::analyze) trait MacroInstrActions: InstrFinalizer {
+    type MacroArgActions: MacroArgActions<
+        Ident = Self::Ident,
+        Literal = Self::Literal,
+        Error = Self::Error,
+        Span = Self::Span,
+        Stripped = Self::Stripped,
+        Next = Self,
+    >;
 
     fn will_parse_macro_arg(self) -> Self::MacroArgActions;
 }
 
-pub(in crate::analyze) trait MacroArgActions<S: Clone>: Diagnostics<S> {
-    type Token;
+pub(in crate::analyze) trait MacroArgActions: ParsingContext {
     type Next;
 
-    fn act_on_token(&mut self, token: (Self::Token, S));
+    fn act_on_token(&mut self, token: (Token<Self::Ident, Self::Literal>, Self::Span));
     fn did_parse_macro_arg(self) -> Self::Next;
 }
 
-pub(in crate::analyze) trait TokenLineActions<I, L, S: Clone>:
-    LineFinalizer<S>
-{
-    type ContextFinalizer: LineFinalizer<S, Next = Self::Next>;
+pub(in crate::analyze) trait TokenLineActions: LineFinalizer {
+    type ContextFinalizer: LineFinalizer<
+        Ident = Self::Ident,
+        Literal = Self::Literal,
+        Error = Self::Error,
+        Span = Self::Span,
+        Stripped = Self::Stripped,
+        Next = Self::Next,
+    >;
 
-    fn act_on_token(&mut self, token: Token<I, L>, span: S);
-    fn act_on_mnemonic(self, ident: I, span: S) -> TokenLineRule<Self, Self::ContextFinalizer>;
+    fn act_on_token(&mut self, token: Token<Self::Ident, Self::Literal>, span: Self::Span);
+    fn act_on_mnemonic(
+        self,
+        ident: Self::Ident,
+        span: Self::Span,
+    ) -> TokenLineRule<Self, Self::ContextFinalizer>;
 }
 
 pub(in crate::analyze) enum TokenLineRule<T, E> {
@@ -263,7 +347,7 @@ pub mod mock {
     use super::*;
 
     use crate::diag::span::{MergeSpans, StripSpan};
-    use crate::diag::{CompactDiag, DiagnosticsEvent, EmitDiag, Merge};
+    use crate::diag::{CompactDiag, DiagnosticsEvent, Merge};
 
     #[derive(Clone, Copy, Debug, PartialEq)]
     pub enum IdentKind {
@@ -274,20 +358,25 @@ pub mod mock {
         Other,
     }
 
-    pub(in crate::analyze) type TokenStreamActionCollector<P, I, L, S> =
-        ActionCollector<CollectedTokenStreamData<P, I, L, S>, I>;
+    pub(in crate::analyze) type TokenStreamActionCollector<'a, P, I, L, E, S> =
+        ActionCollector<'a, CollectedTokenStreamData<P, I, L, S>, I, L, E, S>;
 
     pub(in crate::analyze) type CollectedTokenStreamData<P, I, L, S> =
         CollectedData<TokenStreamAction<I, L, S>, LineRule<(), ()>, P>;
 
-    impl<P, I, L, S> TokenStreamActionCollector<P, I, L, S> {
-        pub fn new(parent: P, annotate: fn(&I) -> IdentKind) -> Self {
+    impl<'a, P, I, L, E, S> TokenStreamActionCollector<'a, P, I, L, E, S> {
+        pub fn new(
+            parent: P,
+            tokens: &'a mut dyn Iterator<Item = LexerOutput<I, L, E, S>>,
+            annotate: fn(&I) -> IdentKind,
+        ) -> Self {
             ActionCollector {
                 data: CollectedData {
                     actions: Vec::new(),
                     state: LineRule::InstrLine(()),
                     parent,
                 },
+                tokens,
                 annotate,
             }
         }
@@ -297,12 +386,20 @@ pub mod mock {
         }
     }
 
-    impl<P, I, L, S: Clone + Merge> TokenStreamActions<I, L, S>
-        for TokenStreamActionCollector<P, I, L, S>
+    impl<I, L, S> From<DiagnosticsEvent<S>> for TokenStreamAction<I, L, S> {
+        fn from(event: DiagnosticsEvent<S>) -> Self {
+            match event {
+                DiagnosticsEvent::EmitDiag(diag) => TokenStreamAction::EmitDiag(diag),
+            }
+        }
+    }
+
+    impl<'a, P, I, L, E, S: Clone + Merge> TokenStreamActions
+        for TokenStreamActionCollector<'a, P, I, L, E, S>
     {
-        type InstrLineActions = InstrLineActionCollector<P, I, L, S>;
-        type TokenLineActions = TokenLineActionCollector<P, I, L, S>;
-        type TokenLineFinalizer = TokenLineActionCollector<P, I, L, S>;
+        type InstrLineActions = InstrLineActionCollector<'a, P, I, L, E, S>;
+        type TokenLineActions = TokenLineActionCollector<'a, P, I, L, E, S>;
+        type TokenLineFinalizer = TokenLineActionCollector<'a, P, I, L, E, S>;
 
         fn will_parse_line(self) -> LineRule<Self::InstrLineActions, Self::TokenLineActions> {
             match self.data.state {
@@ -317,8 +414,8 @@ pub mod mock {
         }
     }
 
-    type InstrLineActionCollector<P, I, L, S> =
-        ActionCollector<InstrLineActionCollectorData<P, I, L, S>, I>;
+    type InstrLineActionCollector<'a, P, I, L, E, S> =
+        ActionCollector<'a, InstrLineActionCollectorData<P, I, L, S>, I, L, E, S>;
 
     type InstrLineActionCollectorData<P, I, L, S> =
         CollectedData<InstrLineAction<I, L, S>, (), CollectedTokenStreamData<P, I, L, S>>;
@@ -331,20 +428,24 @@ pub mod mock {
         }
     }
 
-    impl<P, I, L, S: Clone + Merge> InstrLineActions<I, L, S> for InstrLineActionCollector<P, I, L, S> {
-        type InstrActions = InstrActionCollector<P, I, L, S>;
-        type LabelActions = LabelActionCollector<P, I, L, S>;
+    impl<'a, P, I, L, E, S: Clone + Merge> InstrLineActions
+        for InstrLineActionCollector<'a, P, I, L, E, S>
+    {
+        type InstrActions = InstrActionCollector<'a, P, I, L, E, S>;
+        type LabelActions = LabelActionCollector<'a, P, I, L, E, S>;
 
         fn will_parse_label(self, label: (I, S)) -> Self::LabelActions {
             self.push_layer(label)
         }
     }
 
-    impl<P, I, L, S: Clone + Merge> InstrActions<I, L, S> for InstrLineActionCollector<P, I, L, S> {
-        type BuiltinInstrActions = BuiltinInstrActionCollector<P, I, L, S>;
-        type MacroInstrActions = MacroInstrActionCollector<P, I, L, S>;
-        type ErrorActions = ErrorActionCollector<P, I, L, S>;
-        type LineFinalizer = InstrActionCollector<P, I, L, S>;
+    impl<'a, P, I, L, E, S: Clone + Merge> InstrActions
+        for InstrLineActionCollector<'a, P, I, L, E, S>
+    {
+        type BuiltinInstrActions = BuiltinInstrActionCollector<'a, P, I, L, E, S>;
+        type MacroInstrActions = MacroInstrActionCollector<'a, P, I, L, E, S>;
+        type ErrorActions = ErrorActionCollector<'a, P, I, L, E, S>;
+        type LineFinalizer = InstrActionCollector<'a, P, I, L, E, S>;
 
         fn will_parse_instr(
             self,
@@ -360,13 +461,16 @@ pub mod mock {
         ($collector:expr) => {
             ActionCollector {
                 data: $collector.data.parent,
+                tokens: $collector.tokens,
                 annotate: $collector.annotate,
             }
         };
     }
 
-    impl<P, I, L, S: Clone + Merge> LineFinalizer<S> for InstrLineActionCollector<P, I, L, S> {
-        type Next = TokenStreamActionCollector<P, I, L, S>;
+    impl<'a, P, I, L, E, S: Clone + Merge> LineFinalizer
+        for InstrLineActionCollector<'a, P, I, L, E, S>
+    {
+        type Next = TokenStreamActionCollector<'a, P, I, L, E, S>;
 
         fn did_parse_line(mut self, span: S) -> Self::Next {
             self.data.parent.actions.push(TokenStreamAction::InstrLine(
@@ -377,8 +481,8 @@ pub mod mock {
         }
     }
 
-    type LabelActionCollector<P, I, L, S> =
-        ActionCollector<CollectedLabelActionData<P, I, L, S>, I>;
+    type LabelActionCollector<'a, P, I, L, E, S> =
+        ActionCollector<'a, CollectedLabelActionData<P, I, L, S>, I, L, E, S>;
 
     type CollectedLabelActionData<P, I, L, S> =
         CollectedData<ParamsAction<I, S>, (I, S), InstrLineActionCollectorData<P, I, L, S>>;
@@ -391,8 +495,8 @@ pub mod mock {
         }
     }
 
-    impl<P, I, L, S: Clone + Merge> LabelActions<I, S> for LabelActionCollector<P, I, L, S> {
-        type Next = InstrActionCollector<P, I, L, S>;
+    impl<'a, P, I, L, E, S: Clone + Merge> LabelActions for LabelActionCollector<'a, P, I, L, E, S> {
+        type Next = InstrActionCollector<'a, P, I, L, E, S>;
 
         fn act_on_param(&mut self, param: I, span: S) {
             self.data
@@ -409,8 +513,8 @@ pub mod mock {
         }
     }
 
-    type InstrActionCollector<P, I, L, S> =
-        ActionCollector<CollectedInstrActionData<P, I, L, S>, I>;
+    type InstrActionCollector<'a, P, I, L, E, S> =
+        ActionCollector<'a, CollectedInstrActionData<P, I, L, S>, I, L, E, S>;
 
     type CollectedInstrActionData<P, I, L, S> =
         CollectedData<InstrAction<I, L, S>, (), InstrLineActionCollectorData<P, I, L, S>>;
@@ -423,10 +527,10 @@ pub mod mock {
         }
     }
 
-    impl<P, I, L, S: Clone + Merge> InstrActions<I, L, S> for InstrActionCollector<P, I, L, S> {
-        type BuiltinInstrActions = BuiltinInstrActionCollector<P, I, L, S>;
-        type MacroInstrActions = MacroInstrActionCollector<P, I, L, S>;
-        type ErrorActions = ErrorActionCollector<P, I, L, S>;
+    impl<'a, P, I, L, E, S: Clone + Merge> InstrActions for InstrActionCollector<'a, P, I, L, E, S> {
+        type BuiltinInstrActions = BuiltinInstrActionCollector<'a, P, I, L, E, S>;
+        type MacroInstrActions = MacroInstrActionCollector<'a, P, I, L, E, S>;
+        type ErrorActions = ErrorActionCollector<'a, P, I, L, E, S>;
         type LineFinalizer = Self;
 
         fn will_parse_instr(
@@ -445,8 +549,8 @@ pub mod mock {
         }
     }
 
-    impl<P, I, L, S: Clone + Merge> LineFinalizer<S> for InstrActionCollector<P, I, L, S> {
-        type Next = TokenStreamActionCollector<P, I, L, S>;
+    impl<'a, P, I, L, E, S: Clone + Merge> LineFinalizer for InstrActionCollector<'a, P, I, L, E, S> {
+        type Next = TokenStreamActionCollector<'a, P, I, L, E, S>;
 
         fn did_parse_line(mut self, span: S) -> Self::Next {
             if !self.data.actions.is_empty() {
@@ -459,7 +563,8 @@ pub mod mock {
         }
     }
 
-    type ErrorActionCollector<P, I, L, S> = ActionCollector<CollectedErrorData<P, I, L, S>, I>;
+    type ErrorActionCollector<'a, P, I, L, E, S> =
+        ActionCollector<'a, CollectedErrorData<P, I, L, S>, I, L, E, S>;
 
     type CollectedErrorData<P, I, L, S> =
         CollectedData<ErrorAction<S>, (), CollectedInstrActionData<P, I, L, S>>;
@@ -472,8 +577,8 @@ pub mod mock {
         }
     }
 
-    impl<P, I, L, S: Clone + Merge> InstrFinalizer<S> for ErrorActionCollector<P, I, L, S> {
-        type Next = InstrActionCollector<P, I, L, S>;
+    impl<'a, P, I, L, E, S: Clone + Merge> InstrFinalizer for ErrorActionCollector<'a, P, I, L, E, S> {
+        type Next = InstrActionCollector<'a, P, I, L, E, S>;
 
         fn did_parse_instr(mut self) -> Self::Next {
             self.data
@@ -484,8 +589,8 @@ pub mod mock {
         }
     }
 
-    type BuiltinInstrActionCollector<P, I, L, S> =
-        ActionCollector<CollectedBuiltinInstrActionData<P, I, L, S>, I>;
+    type BuiltinInstrActionCollector<'a, P, I, L, E, S> =
+        ActionCollector<'a, CollectedBuiltinInstrActionData<P, I, L, S>, I, L, E, S>;
 
     type CollectedBuiltinInstrActionData<P, I, L, S> =
         CollectedData<BuiltinInstrAction<I, L, S>, (I, S), CollectedInstrActionData<P, I, L, S>>;
@@ -498,18 +603,21 @@ pub mod mock {
         }
     }
 
-    impl<P, I, L, S: Clone + Merge> BuiltinInstrActions<I, L, S>
-        for BuiltinInstrActionCollector<P, I, L, S>
+    impl<'a, P, I, L, E, S: Clone + Merge> BuiltinInstrActions
+        for BuiltinInstrActionCollector<'a, P, I, L, E, S>
     {
-        type ArgActions = ExprActionCollector<CollectedBuiltinInstrActionData<P, I, L, S>, I, L, S>;
+        type ArgActions =
+            ExprActionCollector<'a, CollectedBuiltinInstrActionData<P, I, L, S>, I, L, E, S>;
 
         fn will_parse_arg(self) -> Self::ArgActions {
             self.push_layer(())
         }
     }
 
-    impl<P, I, L, S: Clone + Merge> InstrFinalizer<S> for BuiltinInstrActionCollector<P, I, L, S> {
-        type Next = InstrActionCollector<P, I, L, S>;
+    impl<'a, P, I, L, E, S: Clone + Merge> InstrFinalizer
+        for BuiltinInstrActionCollector<'a, P, I, L, E, S>
+    {
+        type Next = InstrActionCollector<'a, P, I, L, E, S>;
 
         fn did_parse_instr(mut self) -> Self::Next {
             if (self.annotate)(&self.data.state.0) == IdentKind::MacroKeyword {
@@ -523,19 +631,23 @@ pub mod mock {
         }
     }
 
-    pub(in crate::analyze) type ExprActionCollector<P, I, L, S> =
-        ActionCollector<CollectedExprData<P, I, L, S>, I>;
+    pub(in crate::analyze) type ExprActionCollector<'a, P, I, L, E, S> =
+        ActionCollector<'a, CollectedExprData<P, I, L, S>, I, L, E, S>;
 
     type CollectedExprData<P, I, L, S> = CollectedData<ExprAction<I, L, S>, (), P>;
 
-    impl<I, L, S> ExprActionCollector<(), I, L, S> {
-        pub fn new(annotate: fn(&I) -> IdentKind) -> Self {
+    impl<'a, I, L, E, S> ExprActionCollector<'a, (), I, L, E, S> {
+        pub fn new(
+            tokens: &'a mut dyn Iterator<Item = LexerOutput<I, L, E, S>>,
+            annotate: fn(&I) -> IdentKind,
+        ) -> Self {
             Self {
                 data: CollectedData {
                     actions: Vec::new(),
                     state: (),
                     parent: (),
                 },
+                tokens,
                 annotate,
             }
         }
@@ -549,10 +661,10 @@ pub mod mock {
         }
     }
 
-    impl<P, I, L, S> ArgFinalizer
-        for ExprActionCollector<CollectedBuiltinInstrActionData<P, I, L, S>, I, L, S>
+    impl<'a, P, I, L, E, S> ArgFinalizer
+        for ExprActionCollector<'a, CollectedBuiltinInstrActionData<P, I, L, S>, I, L, E, S>
     {
-        type Next = BuiltinInstrActionCollector<P, I, L, S>;
+        type Next = BuiltinInstrActionCollector<'a, P, I, L, E, S>;
 
         fn did_parse_arg(mut self) -> Self::Next {
             self.data
@@ -565,7 +677,7 @@ pub mod mock {
         }
     }
 
-    impl<I, L, S> ArgFinalizer for ExprActionCollector<(), I, L, S> {
+    impl<'a, I, L, E, S> ArgFinalizer for ExprActionCollector<'a, (), I, L, E, S> {
         type Next = Vec<ExprAction<I, L, S>>;
 
         fn did_parse_arg(self) -> Self::Next {
@@ -573,10 +685,7 @@ pub mod mock {
         }
     }
 
-    impl<P, I, L, S: Clone> ArgActions<I, L, S> for ExprActionCollector<P, I, L, S>
-    where
-        Self: Diagnostics<S>,
-    {
+    impl<'a, P, I, L, E, S: Clone + Merge> ArgActions for ExprActionCollector<'a, P, I, L, E, S> {
         fn act_on_atom(&mut self, atom: ExprAtom<I, L>, span: S) {
             self.data.actions.push(ExprAction::PushAtom(atom, span))
         }
@@ -588,8 +697,8 @@ pub mod mock {
         }
     }
 
-    type TokenLineActionCollector<P, I, L, S> =
-        ActionCollector<CollectedTokenLineActionData<P, I, L, S>, I>;
+    type TokenLineActionCollector<'a, P, I, L, E, S> =
+        ActionCollector<'a, CollectedTokenLineActionData<P, I, L, S>, I, L, E, S>;
 
     type CollectedTokenLineActionData<P, I, L, S> =
         CollectedData<TokenLineAction<I, L, S>, (), CollectedTokenStreamData<P, I, L, S>>;
@@ -602,7 +711,9 @@ pub mod mock {
         }
     }
 
-    impl<P, I, L, S: Clone + Merge> TokenLineActions<I, L, S> for TokenLineActionCollector<P, I, L, S> {
+    impl<'a, P, I, L, E, S: Clone + Merge> TokenLineActions
+        for TokenLineActionCollector<'a, P, I, L, E, S>
+    {
         type ContextFinalizer = Self;
 
         fn act_on_token(&mut self, token: Token<I, L>, span: S) {
@@ -630,8 +741,10 @@ pub mod mock {
         }
     }
 
-    impl<P, I, L, S: Clone + Merge> LineFinalizer<S> for TokenLineActionCollector<P, I, L, S> {
-        type Next = TokenStreamActionCollector<P, I, L, S>;
+    impl<'a, P, I, L, E, S: Clone + Merge> LineFinalizer
+        for TokenLineActionCollector<'a, P, I, L, E, S>
+    {
+        type Next = TokenStreamActionCollector<'a, P, I, L, E, S>;
 
         fn did_parse_line(mut self, span: S) -> Self::Next {
             self.data
@@ -642,8 +755,8 @@ pub mod mock {
         }
     }
 
-    type MacroInstrActionCollector<P, I, L, S> =
-        ActionCollector<CollectedMacroInstrData<P, I, L, S>, I>;
+    type MacroInstrActionCollector<'a, P, I, L, E, S> =
+        ActionCollector<'a, CollectedMacroInstrData<P, I, L, S>, I, L, E, S>;
 
     type CollectedMacroInstrData<P, I, L, S> =
         CollectedData<MacroInstrAction<I, L, S>, (I, S), CollectedInstrActionData<P, I, L, S>>;
@@ -656,17 +769,20 @@ pub mod mock {
         }
     }
 
-    impl<P, I, L, S: Clone + Merge> MacroInstrActions<S> for MacroInstrActionCollector<P, I, L, S> {
-        type Token = Token<I, L>;
-        type MacroArgActions = MacroArgActionCollector<P, I, L, S>;
+    impl<'a, P, I, L, E, S: Clone + Merge> MacroInstrActions
+        for MacroInstrActionCollector<'a, P, I, L, E, S>
+    {
+        type MacroArgActions = MacroArgActionCollector<'a, P, I, L, E, S>;
 
         fn will_parse_macro_arg(self) -> Self::MacroArgActions {
             self.push_layer(())
         }
     }
 
-    impl<P, I, L, S: Clone + Merge> InstrFinalizer<S> for MacroInstrActionCollector<P, I, L, S> {
-        type Next = InstrActionCollector<P, I, L, S>;
+    impl<'a, P, I, L, E, S: Clone + Merge> InstrFinalizer
+        for MacroInstrActionCollector<'a, P, I, L, E, S>
+    {
+        type Next = InstrActionCollector<'a, P, I, L, E, S>;
 
         fn did_parse_instr(mut self) -> Self::Next {
             self.data.parent.actions.push(InstrAction::MacroInstr {
@@ -677,8 +793,8 @@ pub mod mock {
         }
     }
 
-    type MacroArgActionCollector<P, I, L, S> =
-        ActionCollector<CollectedMacroArgData<P, I, L, S>, I>;
+    type MacroArgActionCollector<'a, P, I, L, E, S> =
+        ActionCollector<'a, CollectedMacroArgData<P, I, L, S>, I, L, E, S>;
 
     type CollectedMacroArgData<P, I, L, S> =
         CollectedData<TokenSeqAction<I, L, S>, (), CollectedMacroInstrData<P, I, L, S>>;
@@ -691,11 +807,12 @@ pub mod mock {
         }
     }
 
-    impl<P, I, L, S: Clone + Merge> MacroArgActions<S> for MacroArgActionCollector<P, I, L, S> {
-        type Token = Token<I, L>;
-        type Next = MacroInstrActionCollector<P, I, L, S>;
+    impl<'a, P, I, L, E, S: Clone + Merge> MacroArgActions
+        for MacroArgActionCollector<'a, P, I, L, E, S>
+    {
+        type Next = MacroInstrActionCollector<'a, P, I, L, E, S>;
 
-        fn act_on_token(&mut self, token: (Self::Token, S)) {
+        fn act_on_token(&mut self, token: (Token<I, L>, S)) {
             self.data.actions.push(TokenSeqAction::PushToken(token))
         }
 
@@ -708,28 +825,30 @@ pub mod mock {
         }
     }
 
-    pub(in crate::analyze) struct ActionCollector<D, I> {
-        data: D,
+    pub(in crate::analyze) struct ActionCollector<'a, D, I, L, E, S> {
+        pub data: D,
+        tokens: &'a mut dyn Iterator<Item = LexerOutput<I, L, E, S>>,
         annotate: fn(&I) -> IdentKind,
     }
 
     pub(in crate::analyze) struct CollectedData<A, T, P> {
         actions: Vec<A>,
         state: T,
-        parent: P,
+        pub parent: P,
     }
 
-    impl<A1, T1, P, I> ActionCollector<CollectedData<A1, T1, P>, I> {
+    impl<'a, A1, T1, P, I, L, E, S> ActionCollector<'a, CollectedData<A1, T1, P>, I, L, E, S> {
         fn push_layer<A2, T2>(
             self,
             state: T2,
-        ) -> ActionCollector<NestedCollectedData<A1, A2, T1, T2, P>, I> {
+        ) -> ActionCollector<'a, NestedCollectedData<A1, A2, T1, T2, P>, I, L, E, S> {
             ActionCollector {
                 data: CollectedData {
                     actions: Vec::new(),
                     state,
                     parent: self.data,
                 },
+                tokens: self.tokens,
                 annotate: self.annotate,
             }
         }
@@ -737,13 +856,13 @@ pub mod mock {
 
     type NestedCollectedData<A1, A2, T1, T2, P> = CollectedData<A2, T2, CollectedData<A1, T1, P>>;
 
-    impl<D, I, S: Clone + Merge> MergeSpans<S> for ActionCollector<D, I> {
+    impl<'a, D, I, L, E, S: Clone + Merge> MergeSpans<S> for ActionCollector<'a, D, I, L, E, S> {
         fn merge_spans(&mut self, left: &S, right: &S) -> S {
             S::merge(left.clone(), right.clone())
         }
     }
 
-    impl<D, I, S: Clone> StripSpan<S> for ActionCollector<D, I> {
+    impl<'a, D, I, L, E, S: Clone> StripSpan<S> for ActionCollector<'a, D, I, L, E, S> {
         type Stripped = S;
 
         fn strip_span(&mut self, span: &S) -> Self::Stripped {
@@ -751,12 +870,31 @@ pub mod mock {
         }
     }
 
-    impl<A, T, P, I, S> EmitDiag<S, S> for ActionCollector<CollectedData<A, T, P>, I>
+    impl<'a, A, T, P, I, L, E, S> ParsingContext
+        for ActionCollector<'a, CollectedData<A, T, P>, I, L, E, S>
     where
         A: From<DiagnosticsEvent<S>>,
-        S: Clone,
+        S: Clone + Merge,
     {
-        fn emit_diag(&mut self, diag: impl Into<CompactDiag<S, S>>) {
+        type Ident = I;
+        type Literal = L;
+        type Error = E;
+        type Span = S;
+        type Stripped = S;
+
+        fn next_token(&mut self) -> Option<LexerOutput<I, L, E, S>> {
+            self.tokens.next()
+        }
+
+        fn merge_spans(&mut self, left: &S, right: &S) -> S {
+            S::merge(left.clone(), right.clone())
+        }
+
+        fn strip_span(&mut self, span: &S) -> Self::Stripped {
+            span.clone()
+        }
+
+        fn emit_diag(&mut self, diag: impl Into<CompactDiag<Self::Span, Self::Stripped>>) {
             self.data
                 .actions
                 .push(DiagnosticsEvent::EmitDiag(diag.into()).into())
@@ -768,6 +906,7 @@ pub mod mock {
         InstrLine(Vec<InstrLineAction<I, L, S>>, S),
         TokenLine(Vec<TokenLineAction<I, L, S>>, S),
         Eos(S),
+        EmitDiag(CompactDiag<S>),
     }
 
     #[derive(Clone, Debug, PartialEq)]

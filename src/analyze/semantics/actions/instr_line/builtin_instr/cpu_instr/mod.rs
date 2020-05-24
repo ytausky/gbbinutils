@@ -780,7 +780,7 @@ mod tests {
                     analyze_operand(
                         op,
                         mnemonic.context(),
-                        &mut MockExprBuilder::with_log(log.clone()),
+                        &mut MockExprBuilder::with_log(log.clone(), &mut std::iter::empty()),
                     )
                 })
                 .collect();

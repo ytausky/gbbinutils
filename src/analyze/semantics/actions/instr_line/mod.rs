@@ -7,7 +7,6 @@ use crate::analyze::semantics::params::RelocLookup;
 use crate::analyze::semantics::resolve::{NameTable, ResolvedName, StartScope};
 use crate::analyze::semantics::*;
 use crate::analyze::syntax::actions::{InstrActions, InstrLineActions, InstrRule};
-use crate::analyze::Literal;
 use crate::diag::span::{StripSpan, WithSpan};
 use crate::diag::{EmitDiag, Message};
 use crate::expr::LocationCounter;
@@ -19,10 +18,12 @@ mod builtin_instr;
 mod label;
 mod macro_instr;
 
-impl<R, N, B> InstrLineActions<R::Ident, Literal<R::StringRef>, R::Span>
-    for InstrLineSemantics<R, N, B>
+impl<'a, R, N, B> InstrLineActions for InstrLineSemantics<'a, R, N, B>
 where
     R: ReentrancyActions,
+    R::Ident: 'static,
+    R::StringRef: 'static,
+    R::Span: 'static,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
@@ -33,7 +34,7 @@ where
         >,
     B: Backend<R::Span>,
 {
-    type LabelActions = LabelSemantics<R, N, B>;
+    type LabelActions = LabelSemantics<'a, R, N, B>;
     type InstrActions = Self;
 
     fn will_parse_label(mut self, label: (R::Ident, R::Span)) -> Self::LabelActions {
@@ -42,9 +43,12 @@ where
     }
 }
 
-impl<R, N, B> InstrActions<R::Ident, Literal<R::StringRef>, R::Span> for InstrLineSemantics<R, N, B>
+impl<'a, R, N, B> InstrActions for InstrLineSemantics<'a, R, N, B>
 where
     R: ReentrancyActions,
+    R::Ident: 'static,
+    R::StringRef: 'static,
+    R::Span: 'static,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
@@ -55,31 +59,31 @@ where
         >,
     B: Backend<R::Span>,
 {
-    type BuiltinInstrActions = BuiltinInstrSemantics<R, N, B>;
-    type MacroInstrActions = MacroInstrSemantics<R, N, B>;
+    type BuiltinInstrActions = BuiltinInstrSemantics<'a, R, N, B>;
+    type MacroInstrActions = MacroInstrSemantics<'a, R, N, B>;
     type ErrorActions = Self;
-    type LineFinalizer = TokenStreamSemantics<R, N, B>;
+    type LineFinalizer = TokenStreamSemantics<'a, R, N, B>;
 
     fn will_parse_instr(
         mut self,
         ident: R::Ident,
         span: R::Span,
     ) -> InstrRule<Self::BuiltinInstrActions, Self::MacroInstrActions, Self> {
-        match self.names.resolve_name(&ident) {
+        match self.core.names.resolve_name(&ident) {
             Some(ResolvedName::Keyword(Keyword::BuiltinMnemonic(mnemonic))) => {
                 if !mnemonic.binds_to_label() {
                     self = self.flush_label();
                 }
                 InstrRule::BuiltinInstr(set_state!(
                     self,
-                    BuiltinInstrState::new(self.state.label, mnemonic.clone().with_span(span))
+                    BuiltinInstrState::new(self.core.state.label, mnemonic.clone().with_span(span))
                 ))
             }
             Some(ResolvedName::Macro(id)) => {
                 self = self.flush_label();
                 InstrRule::MacroInstr(set_state!(
                     self,
-                    MacroInstrState::new(self.state, (id, span))
+                    MacroInstrState::new(self.core.state, (id, span))
                 ))
             }
             Some(ResolvedName::Symbol(_)) => {
@@ -96,7 +100,7 @@ where
     }
 }
 
-impl<R, N, B> InstrLineSemantics<R, N, B>
+impl<'a, R, N, B> InstrLineSemantics<'a, R, N, B>
 where
     R: ReentrancyActions,
     N: DerefMut,
@@ -110,14 +114,14 @@ where
     B: Backend<R::Span>,
 {
     pub fn flush_label(mut self) -> Self {
-        if let Some(((label, span), _params)) = self.state.label.take() {
-            self.names.start_scope(&label);
+        if let Some(((label, span), _params)) = self.core.state.label.take() {
+            self.core.names.start_scope(&label);
             let id = self.reloc_lookup(label, span.clone());
-            let mut builder = self.builder.build_const();
+            let mut builder = self.core.builder.build_const();
             PushOp::<LocationCounter, _>::push_op(&mut builder, LocationCounter, span.clone());
             let (mut builder, expr) = builder.finish();
             builder.define_symbol(id, span, expr.unwrap());
-            self.builder = builder;
+            self.core.builder = builder;
         }
         self
     }

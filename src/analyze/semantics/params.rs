@@ -170,6 +170,7 @@ mod tests {
     use super::*;
 
     use crate::analyze::macros::mock::MockMacroId;
+    use crate::analyze::reentrancy::ReentrancyEvent;
     use crate::analyze::semantics::mock::*;
     use crate::analyze::semantics::resolve::NameTableEvent;
     use crate::analyze::semantics::Keyword;
@@ -184,6 +185,7 @@ mod tests {
         Backend(BackendEvent<N, Expr<N, S>>),
         Diagnostics(DiagnosticsEvent<S>),
         NameTable(NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>),
+        Reentrancy(ReentrancyEvent),
     }
 
     impl<N, S: Clone> From<BackendEvent<N, Expr<N, S>>> for Event<N, S> {
@@ -203,6 +205,12 @@ mod tests {
     {
         fn from(event: NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>) -> Self {
             Event::NameTable(event)
+        }
+    }
+
+    impl<N, S: Clone> From<ReentrancyEvent> for Event<N, S> {
+        fn from(event: ReentrancyEvent) -> Self {
+            Event::Reentrancy(event)
         }
     }
 
@@ -236,9 +244,11 @@ mod tests {
         let ident = String::from("ident");
         let reloc = MockSymbolId(7);
         let log = Log::<Event<MockSymbolId, ()>>::new();
+        let tokens = &mut std::iter::empty();
         let mut builder = MockExprBuilder::with_name_table_entries(
             log,
             vec![(ident.clone(), ResolvedName::Symbol(reloc))],
+            tokens,
         )
         .resolve_names();
         builder.push_op(Name(ident), ());
@@ -254,7 +264,8 @@ mod tests {
         let id = MockSymbolId(0);
         let log = Log::<Event<MockSymbolId, ()>>::new();
         {
-            let mut builder = MockExprBuilder::with_log(log.clone()).resolve_names();
+            let tokens = &mut std::iter::empty();
+            let mut builder = MockExprBuilder::with_log(log.clone(), tokens).resolve_names();
             builder.push_op(Name(ident.clone()), ());
             assert_eq!(
                 builder.finish().1,
@@ -273,9 +284,11 @@ mod tests {
         let span = MockSpan::from("ident");
         let log = Log::<Event<MockSymbolId, MockSpan<_>>>::new();
         {
+            let tokens = &mut std::iter::empty();
             let mut builder = MockExprBuilder::with_name_table_entries(
                 log.clone(),
                 vec![(ident.clone(), ResolvedName::Macro(MockMacroId(0)))],
+                tokens,
             )
             .resolve_names();
             builder.push_op(Name(ident), span.clone());

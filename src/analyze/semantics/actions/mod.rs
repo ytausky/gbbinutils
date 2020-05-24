@@ -3,12 +3,14 @@ use self::token_line::TokenContextFinalizationSemantics;
 use super::Session;
 use super::*;
 
-use crate::analyze::reentrancy::{IntoSemanticActions, ReentrancyActions};
+use crate::analyze::reentrancy::{IntoSemanticActions, ReentrancyActions, Split};
 use crate::analyze::semantics::resolve::{NameTable, StartScope};
 use crate::analyze::syntax::actions::*;
+use crate::analyze::syntax::LexError;
 use crate::analyze::Literal;
 use crate::codebase::CodebaseError;
-use crate::diag::Message;
+use crate::diag::span::StripSpan;
+use crate::diag::{CompactDiag, Message};
 use crate::object::builder::Backend;
 
 use std::ops::DerefMut;
@@ -16,20 +18,12 @@ use std::ops::DerefMut;
 mod instr_line;
 mod token_line;
 
-type WithoutReentrancy<R, N, B> = Session<
-    (),
-    N,
-    B,
-    TokenStreamState<
-        <R as IdentSource>::Ident,
-        <R as StringSource>::StringRef,
-        <R as SpanSource>::Span,
-    >,
->;
-
-impl<R, N, B> Session<R, N, B, TokenStreamState<R::Ident, R::StringRef, R::Span>>
+impl<'a, R, N, B> Session<'a, R, N, B, TokenStreamState<R::Ident, R::StringRef, R::Span>>
 where
     R: ReentrancyActions,
+    R::Ident: 'static,
+    R::StringRef: 'static,
+    R::Span: 'static,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
@@ -41,36 +35,60 @@ where
     B: Backend<R::Span>,
 {
     pub fn analyze_file(self, path: R::StringRef) -> Result<(), CodebaseError> {
-        let (reentrancy, session) = self.split_reentrancy();
-        reentrancy.analyze_file(path, session).0
-    }
-
-    fn split_reentrancy(self) -> (R, WithoutReentrancy<R, N, B>) {
-        (
-            self.reentrancy,
-            Session {
-                reentrancy: (),
-                names: self.names,
-                builder: self.builder,
-                state: self.state,
-            },
-        )
+        self.reentrancy.analyze_file(path, self.core).0
     }
 }
 
-impl<R: ReentrancyActions, N, B>
-    IntoSemanticActions<Session<(), N, B, TokenStreamState<R::Ident, R::StringRef, R::Span>>>
-    for R
+impl<'a, R, N, B>
+    IntoSemanticActions<
+        'a,
+        R::Ident,
+        Literal<R::StringRef>,
+        LexError,
+        R::Span,
+        Core<N, B, TokenStreamState<R::Ident, R::StringRef, R::Span>>,
+    > for R
+where
+    R: ReentrancyActions,
+    R::Ident: 'static,
+    R::StringRef: 'static,
+    R::Span: 'static,
+    N: DerefMut,
+    N::Target: StartScope<R::Ident>
+        + NameTable<
+            R::Ident,
+            Keyword = &'static Keyword,
+            MacroId = R::MacroId,
+            SymbolId = B::SymbolId,
+        >,
+    B: Backend<R::Span>,
 {
-    type SemanticActions = TokenStreamSemantics<R, N, B>;
+    type SemanticActions = TokenStreamSemantics<'a, R, N, B>;
 
-    fn into_semantic_actions(self, session: WithoutReentrancy<R, N, B>) -> Self::SemanticActions {
+    fn into_semantic_actions(
+        self,
+        tokens: TokenIterRef<'a, R>,
+        core: Core<N, B, TokenStreamState<R::Ident, R::StringRef, R::Span>>,
+    ) -> Self::SemanticActions {
         Session {
             reentrancy: self,
-            names: session.names,
-            builder: session.builder,
-            state: session.state,
+            core,
+            tokens,
         }
+    }
+}
+
+impl<'a, R: ReentrancyActions, N, B>
+    Split<R, Core<N, B, TokenStreamState<R::Ident, R::StringRef, R::Span>>>
+    for TokenStreamSemantics<'a, R, N, B>
+{
+    fn split(
+        self,
+    ) -> (
+        R,
+        Core<N, B, TokenStreamState<R::Ident, R::StringRef, R::Span>>,
+    ) {
+        (self.reentrancy, self.core)
     }
 }
 
@@ -90,10 +108,38 @@ impl<I, R, S> From<TokenLineState<I, R, S>> for TokenStreamState<I, R, S> {
     }
 }
 
-impl<R, N, B> TokenStreamActions<R::Ident, Literal<R::StringRef>, R::Span>
-    for TokenStreamSemantics<R, N, B>
+impl<'a, R: ReentrancyActions, N, B, S> ParsingContext for Session<'a, R, N, B, S> {
+    type Ident = R::Ident;
+    type Literal = Literal<R::StringRef>;
+    type Error = LexError;
+    type Span = R::Span;
+    type Stripped = <R as StripSpan<R::Span>>::Stripped;
+
+    fn next_token(
+        &mut self,
+    ) -> Option<LexerOutput<Self::Ident, Self::Literal, Self::Error, Self::Span>> {
+        self.tokens.next()
+    }
+
+    fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
+        self.reentrancy.merge_spans(left, right)
+    }
+
+    fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped {
+        self.reentrancy.strip_span(span)
+    }
+
+    fn emit_diag(&mut self, diag: impl Into<CompactDiag<Self::Span, Self::Stripped>>) {
+        self.reentrancy.emit_diag(diag)
+    }
+}
+
+impl<'a, R, N, B> TokenStreamActions for TokenStreamSemantics<'a, R, N, B>
 where
     R: ReentrancyActions,
+    R::Ident: 'static,
+    R::StringRef: 'static,
+    R::Span: 'static,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
@@ -104,22 +150,22 @@ where
         >,
     B: Backend<R::Span>,
 {
-    type InstrLineActions = InstrLineSemantics<R, N, B>;
-    type TokenLineActions = TokenLineSemantics<R, N, B>;
-    type TokenLineFinalizer = TokenContextFinalizationSemantics<R, N, B>;
+    type InstrLineActions = InstrLineSemantics<'a, R, N, B>;
+    type TokenLineActions = TokenLineSemantics<'a, R, N, B>;
+    type TokenLineFinalizer = TokenContextFinalizationSemantics<'a, R, N, B>;
 
     fn will_parse_line(self) -> LineRule<Self::InstrLineActions, Self::TokenLineActions> {
-        match self.state.mode {
+        match self.core.state.mode {
             LineRule::InstrLine(state) => LineRule::InstrLine(set_state!(self, state)),
             LineRule::TokenLine(state) => LineRule::TokenLine(set_state!(self, state)),
         }
     }
 
     fn act_on_eos(mut self, span: R::Span) -> Self {
-        match self.state.mode {
+        match self.core.state.mode {
             LineRule::InstrLine(state) => {
                 let semantics = set_state!(self, state).flush_label();
-                set_state!(semantics, semantics.state.into())
+                set_state!(semantics, semantics.core.state.into())
             }
             LineRule::TokenLine(ref state) => {
                 match state.context {
@@ -134,23 +180,23 @@ where
     }
 }
 
-impl<R: ReentrancyActions, N, B> InstrFinalizer<R::Span> for InstrLineSemantics<R, N, B> {
-    type Next = TokenStreamSemantics<R, N, B>;
+impl<'a, R: ReentrancyActions, N, B> InstrFinalizer for InstrLineSemantics<'a, R, N, B> {
+    type Next = TokenStreamSemantics<'a, R, N, B>;
 
     fn did_parse_instr(self) -> Self::Next {
-        set_state!(self, self.state.into())
+        set_state!(self, self.core.state.into())
     }
 }
 
-impl<R: ReentrancyActions, N, B> LineFinalizer<R::Span> for InstrLineSemantics<R, N, B> {
-    type Next = TokenStreamSemantics<R, N, B>;
+impl<'a, R: ReentrancyActions, N, B> LineFinalizer for InstrLineSemantics<'a, R, N, B> {
+    type Next = TokenStreamSemantics<'a, R, N, B>;
 
     fn did_parse_line(self, _: R::Span) -> Self::Next {
-        set_state!(self, self.state.into())
+        set_state!(self, self.core.state.into())
     }
 }
 
-impl<R: ReentrancyActions, N, B> LineFinalizer<R::Span> for TokenStreamSemantics<R, N, B> {
+impl<'a, R: ReentrancyActions, N, B> LineFinalizer for TokenStreamSemantics<'a, R, N, B> {
     type Next = Self;
 
     fn did_parse_line(self, _: R::Span) -> Self::Next {
@@ -169,7 +215,7 @@ pub mod tests {
     use crate::analyze::semantics::resolve::{MockNameTable, NameTableEvent, ResolvedName};
     use crate::analyze::syntax::{Sigil, Token};
     use crate::analyze::SemanticToken;
-    use crate::diag::{DiagnosticsEvent, EmitDiag, Merge, Message, MockSpan};
+    use crate::diag::{DiagnosticsEvent, Merge, Message, MockSpan};
     use crate::expr::{Atom, BinOp, ExprOp, LocationCounter};
     use crate::log::with_log;
     use crate::object::builder::mock::*;
@@ -588,19 +634,22 @@ pub mod tests {
         S: Clone + Debug + Merge,
     {
         with_log(|log| {
+            let tokens = &mut std::iter::empty();
             let mut session = Session::from_components(
                 MockSourceComponents::with_log(log.clone()),
                 Box::new(BasicNameTable::default()),
                 MockBackend::new(SerialIdAllocator::new(MockSymbolId), log.clone()),
+                tokens,
             );
             for (ident, resolution) in entries {
-                session.names.define_name(ident, resolution)
+                session.core.names.define_name(ident, resolution)
             }
             f(session.map_names(|names| Box::new(MockNameTable::new(*names, log))));
         })
     }
 
-    pub(super) type TestTokenStreamSemantics<S> = TokenStreamSemantics<
+    pub(super) type TestTokenStreamSemantics<'a, S> = TokenStreamSemantics<
+        'a,
         MockSourceComponents<S>,
         Box<
             MockNameTable<

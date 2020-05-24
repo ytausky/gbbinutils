@@ -4,24 +4,25 @@ use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::keywords::Directive;
 use crate::analyze::semantics::resolve::{NameTable, ResolvedName, StartScope};
 use crate::analyze::semantics::*;
-use crate::analyze::syntax::actions::{LineFinalizer, TokenLineActions, TokenLineRule};
-use crate::analyze::syntax::{Sigil, Token};
+use crate::analyze::syntax::actions::*;
+use crate::analyze::syntax::{LexError, Sigil, Token};
 use crate::analyze::{Literal, SemanticToken};
+use crate::diag::span::StripSpan;
+use crate::diag::CompactDiag;
 
 use std::ops::DerefMut;
 
-impl<R, N, B> TokenLineActions<R::Ident, Literal<R::StringRef>, R::Span>
-    for TokenLineSemantics<R, N, B>
+impl<'a, R, N, B> TokenLineActions for TokenLineSemantics<'a, R, N, B>
 where
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<R::Ident, Keyword = &'static Keyword, MacroId = R::MacroId>,
 {
-    type ContextFinalizer = TokenContextFinalizationSemantics<R, N, B>;
+    type ContextFinalizer = TokenContextFinalizationSemantics<'a, R, N, B>;
 
     fn act_on_token(&mut self, token: SemanticToken<R::Ident, R::StringRef>, span: R::Span) {
-        match &mut self.state.context {
+        match &mut self.core.state.context {
             TokenLineContext::FalseIf => (),
             TokenLineContext::MacroDef(state) => state.act_on_token(token, span),
         }
@@ -35,8 +36,11 @@ where
         if let Some(ResolvedName::Keyword(Keyword::BuiltinMnemonic(mnemonic))) =
             self.resolve_name(&ident)
         {
-            if let TokenLineRule::LineEnd(()) =
-                self.state.context.act_on_mnemonic(mnemonic, span.clone())
+            if let TokenLineRule::LineEnd(()) = self
+                .core
+                .state
+                .context
+                .act_on_mnemonic(mnemonic, span.clone())
             {
                 return TokenLineRule::LineEnd(TokenContextFinalizationSemantics { parent: self });
             }
@@ -106,49 +110,70 @@ impl<I, R, S> MacroDefState<I, R, S> {
     }
 }
 
-impl<R, N, B> LineFinalizer<R::Span> for TokenLineSemantics<R, N, B>
+impl<'a, R, N, B> LineFinalizer for TokenLineSemantics<'a, R, N, B>
 where
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<R::Ident, Keyword = &'static Keyword, MacroId = R::MacroId>,
 {
-    type Next = TokenStreamSemantics<R, N, B>;
+    type Next = TokenStreamSemantics<'a, R, N, B>;
 
     fn did_parse_line(mut self, span: R::Span) -> Self::Next {
         self.act_on_token(Sigil::Eol.into(), span);
-        set_state!(self, self.state.into())
+        set_state!(self, self.core.state.into())
     }
 }
 
-pub(in crate::analyze) struct TokenContextFinalizationSemantics<R: ReentrancyActions, N, B> {
-    parent: TokenLineSemantics<R, N, B>,
+pub(in crate::analyze) struct TokenContextFinalizationSemantics<'a, R: ReentrancyActions, N, B> {
+    parent: TokenLineSemantics<'a, R, N, B>,
 }
 
-delegate_diagnostics! {
-    {R: ReentrancyActions, N, B},
-    TokenContextFinalizationSemantics<R, N, B>,
-    {parent},
-    R,
-    R::Span
+impl<'a, R: ReentrancyActions, N, B> ParsingContext
+    for TokenContextFinalizationSemantics<'a, R, N, B>
+{
+    type Ident = R::Ident;
+    type Literal = Literal<R::StringRef>;
+    type Error = LexError;
+    type Span = R::Span;
+    type Stripped = <R as StripSpan<R::Span>>::Stripped;
+
+    fn next_token(
+        &mut self,
+    ) -> Option<LexerOutput<Self::Ident, Self::Literal, Self::Error, Self::Span>> {
+        self.parent.tokens.next()
+    }
+
+    fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
+        self.parent.reentrancy.merge_spans(left, right)
+    }
+
+    fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped {
+        self.parent.reentrancy.strip_span(span)
+    }
+
+    fn emit_diag(&mut self, diag: impl Into<CompactDiag<Self::Span, Self::Stripped>>) {
+        self.parent.reentrancy.emit_diag(diag)
+    }
 }
 
-impl<R, N, B> LineFinalizer<R::Span> for TokenContextFinalizationSemantics<R, N, B>
+impl<'a, R, N, B> LineFinalizer for TokenContextFinalizationSemantics<'a, R, N, B>
 where
     R: ReentrancyActions,
     N: DerefMut,
     N::Target: NameTable<R::Ident, MacroId = R::MacroId>,
 {
-    type Next = TokenStreamSemantics<R, N, B>;
+    type Next = TokenStreamSemantics<'a, R, N, B>;
 
     fn did_parse_line(mut self, _: R::Span) -> Self::Next {
-        match self.parent.state.context {
+        match self.parent.core.state.context {
             TokenLineContext::FalseIf => (),
             TokenLineContext::MacroDef(state) => {
                 if let Some((name, params)) = state.label {
                     let tokens = state.tokens;
                     let id = self.parent.reentrancy.define_macro(name.1, params, tokens);
                     self.parent
+                        .core
                         .names
                         .define_name(name.0, ResolvedName::Macro(id));
                 }
