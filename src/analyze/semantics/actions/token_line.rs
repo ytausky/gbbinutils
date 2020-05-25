@@ -12,7 +12,7 @@ use crate::diag::CompactDiag;
 
 use std::ops::DerefMut;
 
-impl<'a, R, N, B> TokenLineActions for TokenLineSemantics<'a, R, N, B>
+impl<'a, R, N, B> TokenLineContext for TokenLineSemantics<'a, R, N, B>
 where
     R: ReentrancyActions,
     N: DerefMut,
@@ -23,8 +23,8 @@ where
 
     fn act_on_token(&mut self, token: SemanticToken<R::Ident, R::StringRef>, span: R::Span) {
         match &mut self.core.state.context {
-            TokenLineContext::FalseIf => (),
-            TokenLineContext::MacroDef(state) => state.act_on_token(token, span),
+            TokenContext::FalseIf => (),
+            TokenContext::MacroDef(state) => state.act_on_token(token, span),
         }
     }
 
@@ -50,25 +50,11 @@ where
     }
 }
 
-pub(in crate::analyze) trait TokenContext<I, R: ReentrancyActions>:
-    ActOnMnemonic<&'static BuiltinMnemonic, R::Span>
-    + ActOnToken<SemanticToken<R::Ident, R::StringRef>, R::Span>
-{
-}
-
-impl<T, I, R> TokenContext<I, R> for T
-where
-    T: ActOnMnemonic<&'static BuiltinMnemonic, R::Span>
-        + ActOnToken<SemanticToken<R::Ident, R::StringRef>, R::Span>,
-    R: ReentrancyActions,
-{
-}
-
 pub(in crate::analyze) trait ActOnMnemonic<M, S> {
     fn act_on_mnemonic(&mut self, mnemonic: M, span: S) -> TokenLineRule<(), ()>;
 }
 
-impl<I, R, S> ActOnMnemonic<&'static BuiltinMnemonic, S> for TokenLineContext<I, R, S>
+impl<I, R, S> ActOnMnemonic<&'static BuiltinMnemonic, S> for TokenContext<I, R, S>
 where
     Self: ActOnToken<SemanticToken<I, R>, S>,
 {
@@ -78,10 +64,10 @@ where
         span: S,
     ) -> TokenLineRule<(), ()> {
         match (&*self, mnemonic) {
-            (TokenLineContext::FalseIf, BuiltinMnemonic::Directive(Directive::Endc)) => {
+            (TokenContext::FalseIf, BuiltinMnemonic::Directive(Directive::Endc)) => {
                 TokenLineRule::LineEnd(())
             }
-            (TokenLineContext::MacroDef(_), BuiltinMnemonic::Directive(Directive::Endm)) => {
+            (TokenContext::MacroDef(_), BuiltinMnemonic::Directive(Directive::Endm)) => {
                 self.act_on_token(Sigil::Eos.into(), span);
                 TokenLineRule::LineEnd(())
             }
@@ -94,11 +80,11 @@ pub(in crate::analyze) trait ActOnToken<T, S> {
     fn act_on_token(&mut self, token: T, span: S);
 }
 
-impl<I, R, S> ActOnToken<SemanticToken<I, R>, S> for TokenLineContext<I, R, S> {
+impl<I, R, S> ActOnToken<SemanticToken<I, R>, S> for TokenContext<I, R, S> {
     fn act_on_token(&mut self, token: SemanticToken<I, R>, span: S) {
         match self {
-            TokenLineContext::FalseIf => drop((token, span)),
-            TokenLineContext::MacroDef(state) => state.act_on_token(token, span),
+            TokenContext::FalseIf => drop((token, span)),
+            TokenContext::MacroDef(state) => state.act_on_token(token, span),
         }
     }
 }
@@ -167,8 +153,8 @@ where
 
     fn did_parse_line(mut self, _: R::Span) -> Self::Next {
         match self.parent.core.state.context {
-            TokenLineContext::FalseIf => (),
-            TokenLineContext::MacroDef(state) => {
+            TokenContext::FalseIf => (),
+            TokenContext::MacroDef(state) => {
                 if let Some((name, params)) = state.label {
                     let tokens = state.tokens;
                     let id = self.parent.reentrancy.define_macro(name.1, params, tokens);

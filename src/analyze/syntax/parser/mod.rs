@@ -74,7 +74,7 @@ pub(in crate::analyze) trait ParserFactory<I, L, E, S: Clone> {
 pub(in crate::analyze) trait ParseTokenStream<I, L, E, S: Clone> {
     fn parse_token_stream<A>(&mut self, actions: A) -> A
     where
-        A: TokenStreamActions<Ident = I, Literal = L, Error = E, Span = S>;
+        A: TokenStreamContext<Ident = I, Literal = L, Error = E, Span = S>;
 }
 
 pub(in crate::analyze) struct DefaultParserFactory;
@@ -92,7 +92,7 @@ pub(in crate::analyze) struct DefaultParser;
 impl<I, L, E, S: Clone> ParseTokenStream<I, L, E, S> for DefaultParser {
     fn parse_token_stream<A>(&mut self, actions: A) -> A
     where
-        A: TokenStreamActions<Ident = I, Literal = L, Error = E, Span = S>,
+        A: TokenStreamContext<Ident = I, Literal = L, Error = E, Span = S>,
         S: Clone,
     {
         let Parser {
@@ -179,7 +179,7 @@ impl<I, L, E, S, A> Parser<(Result<Token<I, L>, E>, S), A> {
 
 impl<I, L, E, C, S> Parser<(Result<Token<I, L>, E>, S), C>
 where
-    C: TokenStreamActions<Ident = I, Literal = L, Error = E, Span = S>,
+    C: TokenStreamContext<Ident = I, Literal = L, Error = E, Span = S>,
     S: Clone,
 {
     fn parse_token_stream(mut self) -> Self {
@@ -201,7 +201,7 @@ type NextParser<I, L, E, A, S> = Parser<(Result<Token<I, L>, E>, S), <A as LineF
 
 impl<I, L, E, A, S> Parser<(Result<Token<I, L>, E>, S), A>
 where
-    A: InstrLineActions<Ident = I, Literal = L, Error = E, Span = S>,
+    A: InstrLineContext<Ident = I, Literal = L, Error = E, Span = S>,
     S: Clone,
 {
     fn parse_instr_line(mut self) -> NextParser<I, L, E, A, S> {
@@ -220,12 +220,12 @@ where
                 } else {
                     parser = parser.diagnose_unexpected_token();
                     return parser
-                        .change_context(LabelActions::did_parse_label)
+                        .change_context(LabelContext::did_parse_label)
                         .parse_line_terminator();
                 }
             }
             parser
-                .change_context(LabelActions::did_parse_label)
+                .change_context(LabelContext::did_parse_label)
                 .parse_unlabeled_stmt()
         } else {
             self.parse_unlabeled_stmt()
@@ -235,7 +235,7 @@ where
 
 impl<I, L, E, A, S> Parser<(Result<Token<I, L>, E>, S), A>
 where
-    A: InstrActions<Ident = I, Literal = L, Error = E, Span = S>,
+    A: InstrContext<Ident = I, Literal = L, Error = E, Span = S>,
     S: Clone,
 {
     fn parse_unlabeled_stmt(mut self) -> NextParser<I, L, E, A, S> {
@@ -303,7 +303,7 @@ where
 
 impl<I, L, E, A, S> Parser<(Result<Token<I, L>, E>, S), A>
 where
-    A: BuiltinInstrActions<Ident = I, Literal = L, Error = E, Span = S>,
+    A: BuiltinInstrContext<Ident = I, Literal = L, Error = E, Span = S>,
     S: Clone,
 {
     fn parse_argument_list(self) -> Self {
@@ -311,7 +311,7 @@ where
     }
 
     fn parse_argument(self) -> Self {
-        self.change_context(BuiltinInstrActions::will_parse_arg)
+        self.change_context(BuiltinInstrContext::will_parse_arg)
             .parse()
             .change_context(ArgFinalizer::did_parse_arg)
     }
@@ -319,7 +319,7 @@ where
 
 impl<I, L, E, A, S> Parser<(Result<Token<I, L>, E>, S), A>
 where
-    A: LabelActions<Ident = I, Literal = L, Error = E, Span = S>,
+    A: LabelContext<Ident = I, Literal = L, Error = E, Span = S>,
     S: Clone,
 {
     fn parse_param(mut self) -> Self {
@@ -336,7 +336,7 @@ where
 
 impl<I, L, E, A, S> Parser<(Result<Token<I, L>, E>, S), A>
 where
-    A: MacroInstrActions<Ident = I, Literal = L, Error = E, Span = S>,
+    A: MacroInstrContext<Ident = I, Literal = L, Error = E, Span = S>,
     S: Clone,
 {
     fn parse_macro_call(self) -> Self {
@@ -345,7 +345,7 @@ where
 
     fn parse_macro_arg_list(self) -> Self {
         self.parse_terminated_list(Comma.into(), LINE_FOLLOW_SET, |p| {
-            let mut parser = p.change_context(MacroInstrActions::will_parse_macro_arg);
+            let mut parser = p.change_context(MacroInstrContext::will_parse_macro_arg);
             loop {
                 match parser.state.token {
                     (Ok(Token::Sigil(Comma)), _)
@@ -358,14 +358,14 @@ where
                     (Err(_), _) => unimplemented!(),
                 }
             }
-            parser.change_context(MacroArgActions::did_parse_macro_arg)
+            parser.change_context(MacroArgContext::did_parse_macro_arg)
         })
     }
 }
 
 impl<I, L, E, A, S> Parser<(Result<Token<I, L>, E>, S), A>
 where
-    A: TokenLineActions<Ident = I, Literal = L, Error = E, Span = S>,
+    A: TokenLineContext<Ident = I, Literal = L, Error = E, Span = S>,
     S: Clone,
 {
     fn parse_token_line(mut self) -> NextParser<I, L, E, A, S> {
@@ -499,7 +499,7 @@ pub mod mock {
     {
         fn parse_token_stream<A>(&mut self, mut actions: A) -> A
         where
-            A: TokenStreamActions<Ident = I, Literal = L, Error = E, Span = S>,
+            A: TokenStreamContext<Ident = I, Literal = L, Error = E, Span = S>,
         {
             let mut tokens = vec![];
             while let Some(output) = actions.next_token() {

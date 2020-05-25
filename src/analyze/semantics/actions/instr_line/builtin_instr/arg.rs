@@ -58,7 +58,7 @@ where
     }
 }
 
-impl<'a, R, N, B> ArgActions for ArgSemantics<'a, R, N, B>
+impl<'a, R, N, B> ArgContext for ArgSemantics<'a, R, N, B>
 where
     R: ReentrancyActions,
     N: DerefMut,

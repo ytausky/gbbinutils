@@ -1,6 +1,6 @@
 use super::macros::{MacroSource, MacroTable};
 use super::strings::GetString;
-use super::syntax::actions::{LexerOutput, TokenStreamActions};
+use super::syntax::actions::{LexerOutput, TokenStreamContext};
 use super::syntax::parser::ParserFactory;
 use super::syntax::{LexError, ParseTokenStream};
 use super::{IdentSource, Lex, Literal, SemanticToken, StringSource, TokenSeq};
@@ -64,7 +64,7 @@ where
 }
 
 pub(super) trait IntoSemanticActions<'a, I, L, E, Sp: Clone, S>: Sized {
-    type SemanticActions: TokenStreamActions<Ident = I, Literal = L, Error = E, Span = Sp>
+    type SemanticActions: TokenStreamContext<Ident = I, Literal = L, Error = E, Span = Sp>
         + Split<Self, S>;
 
     fn into_semantic_actions(

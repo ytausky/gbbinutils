@@ -2,7 +2,7 @@ use super::{InstrLineSemantics, InstrLineState, Session};
 
 use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::Params;
-use crate::analyze::syntax::actions::LabelActions;
+use crate::analyze::syntax::actions::LabelContext;
 
 pub(super) type LabelSemantics<'a, R, N, B> = Session<'a, R, N, B, LabelState<R>>;
 
@@ -22,7 +22,7 @@ impl<R: ReentrancyActions> LabelState<R> {
     }
 }
 
-impl<'a, R: ReentrancyActions, N, B> LabelActions for LabelSemantics<'a, R, N, B> {
+impl<'a, R: ReentrancyActions, N, B> LabelContext for LabelSemantics<'a, R, N, B> {
     type Next = InstrLineSemantics<'a, R, N, B>;
 
     fn act_on_param(&mut self, ident: R::Ident, span: R::Span) {

@@ -35,9 +35,9 @@ pub(in crate::analyze) type LexerOutput<I, L, E, S> = (Result<Token<I, L>, E>, S
 //
 // This parsing ambiguity is resolved according to the semantics of the program so far, thus the
 // rule used by the parser is determined by the value returned from
-// TokenStreamActions::will_parse_line.
-pub(in crate::analyze) trait TokenStreamActions: ParsingContext {
-    type InstrLineActions: InstrLineActions<
+// TokenStreamContext::will_parse_line.
+pub(in crate::analyze) trait TokenStreamContext: ParsingContext {
+    type InstrLineContext: InstrLineContext<
         Ident = Self::Ident,
         Literal = Self::Literal,
         Error = Self::Error,
@@ -45,7 +45,7 @@ pub(in crate::analyze) trait TokenStreamActions: ParsingContext {
         Stripped = Self::Stripped,
         Next = Self,
     >;
-    type TokenLineActions: TokenLineActions<
+    type TokenLineContext: TokenLineContext<
         Ident = Self::Ident,
         Literal = Self::Literal,
         Error = Self::Error,
@@ -63,7 +63,7 @@ pub(in crate::analyze) trait TokenStreamActions: ParsingContext {
         Next = Self,
     >;
 
-    fn will_parse_line(self) -> LineRule<Self::InstrLineActions, Self::TokenLineActions>;
+    fn will_parse_line(self) -> LineRule<Self::InstrLineContext, Self::TokenLineContext>;
     fn act_on_eos(self, span: Self::Span) -> Self;
 }
 
@@ -95,25 +95,25 @@ impl<I, T> LineRule<I, T> {
 //
 //     1. instr-line → label? instr?
 //
-// InstrLineActions::will_parse_label is called by the parser in the following state:
+// InstrLineContext::will_parse_label is called by the parser in the following state:
 //
 //     instr-line → . label? instr?, <Label>
 //
-// InstrActions as a supertrait handles the states where the label is missing (either parsing an
-// instruction or terminating the empty line) whereas InstrLineActions::InstrActions handles the two
+// InstrContext as a supertrait handles the states where the label is missing (either parsing an
+// instruction or terminating the empty line) whereas InstrLineContext::InstrContext handles the two
 // possible states after a label has been successfully parsed. Note that by using two distinct types
-// bound by InstrActions we can prevent the parser from calling InstrLineActions::will_parse_label
+// bound by InstrContext we can prevent the parser from calling InstrLineContext::will_parse_label
 // more than once on the same line.
-pub(in crate::analyze) trait InstrLineActions: InstrActions {
-    type LabelActions: LabelActions<
+pub(in crate::analyze) trait InstrLineContext: InstrContext {
+    type LabelContext: LabelContext<
         Ident = Self::Ident,
         Literal = Self::Literal,
         Error = Self::Error,
         Span = Self::Span,
         Stripped = Self::Stripped,
-        Next = Self::InstrActions,
+        Next = Self::InstrContext,
     >;
-    type InstrActions: InstrActions<
+    type InstrContext: InstrContext<
         Ident = Self::Ident,
         Literal = Self::Literal,
         Error = Self::Error,
@@ -122,7 +122,7 @@ pub(in crate::analyze) trait InstrLineActions: InstrActions {
         Next = Self::Next,
     >;
 
-    fn will_parse_label(self, label: (Self::Ident, Self::Span)) -> Self::LabelActions;
+    fn will_parse_label(self, label: (Self::Ident, Self::Span)) -> Self::LabelContext;
 }
 
 // An instruction can be either a builtin instruction (i.e. a CPU instruction or an assembler
@@ -132,7 +132,7 @@ pub(in crate::analyze) trait InstrLineActions: InstrActions {
 //     1. instr → builtin-instr
 //     2. instr → macro-instr
 //
-// The ambiguity between these rules gets resolved by InstrActions::will_parse_instr, which performs
+// The ambiguity between these rules gets resolved by InstrContext::will_parse_instr, which performs
 // a name lookup to determine whether the identifier is a builtin instruction or a previously
 // defined macro. If neither of these cases applies, a third production rule is used:
 //
@@ -140,8 +140,8 @@ pub(in crate::analyze) trait InstrLineActions: InstrActions {
 //
 // The parser uses this rule to recover from an invalid instruction name by throwing away all the
 // remaining tokens in the line.
-pub(in crate::analyze) trait InstrActions: LineFinalizer {
-    type BuiltinInstrActions: BuiltinInstrActions<
+pub(in crate::analyze) trait InstrContext: LineFinalizer {
+    type BuiltinInstrContext: BuiltinInstrContext<
         Ident = Self::Ident,
         Literal = Self::Literal,
         Error = Self::Error,
@@ -149,7 +149,7 @@ pub(in crate::analyze) trait InstrActions: LineFinalizer {
         Stripped = Self::Stripped,
         Next = Self::LineFinalizer,
     >;
-    type MacroInstrActions: MacroInstrActions<
+    type MacroInstrContext: MacroInstrContext<
         Ident = Self::Ident,
         Literal = Self::Literal,
         Error = Self::Error,
@@ -157,7 +157,7 @@ pub(in crate::analyze) trait InstrActions: LineFinalizer {
         Stripped = Self::Stripped,
         Next = Self::LineFinalizer,
     >;
-    type ErrorActions: InstrFinalizer<
+    type ErrorContext: InstrFinalizer<
         Ident = Self::Ident,
         Literal = Self::Literal,
         Error = Self::Error,
@@ -178,7 +178,7 @@ pub(in crate::analyze) trait InstrActions: LineFinalizer {
         self,
         ident: Self::Ident,
         span: Self::Span,
-    ) -> InstrRule<Self::BuiltinInstrActions, Self::MacroInstrActions, Self::ErrorActions>;
+    ) -> InstrRule<Self::BuiltinInstrContext, Self::MacroInstrContext, Self::ErrorContext>;
 }
 
 pub(in crate::analyze) trait LineFinalizer: ParsingContext {
@@ -228,9 +228,9 @@ impl<C, M, E> InstrRule<C, M, E> {
 //
 //     1. builtin-instr → <Ident> (arg (<Comma> arg)*)?
 //
-// BuiltinInstrActions represents any position in this rule after the initial <Ident>.
-pub(in crate::analyze) trait BuiltinInstrActions: InstrFinalizer {
-    type ArgActions: ArgActions<
+// BuiltinInstrContext represents any position in this rule after the initial <Ident>.
+pub(in crate::analyze) trait BuiltinInstrContext: InstrFinalizer {
+    type ArgContext: ArgContext<
             Ident = Self::Ident,
             Literal = Self::Literal,
             Error = Self::Error,
@@ -238,7 +238,7 @@ pub(in crate::analyze) trait BuiltinInstrActions: InstrFinalizer {
             Stripped = Self::Stripped,
         > + ArgFinalizer<Next = Self>;
 
-    fn will_parse_arg(self) -> Self::ArgActions;
+    fn will_parse_arg(self) -> Self::ArgContext;
 }
 
 pub(in crate::analyze) trait ArgFinalizer {
@@ -257,7 +257,7 @@ pub(in crate::analyze) trait ArgFinalizer {
 //     6. ...
 //
 // To handle precedence and associativity, the parser uses a reverse Polish notation protocol.
-pub(in crate::analyze) trait ArgActions: ParsingContext {
+pub(in crate::analyze) trait ArgContext: ParsingContext {
     fn act_on_atom(&mut self, atom: ExprAtom<Self::Ident, Self::Literal>, span: Self::Span);
     fn act_on_operator(&mut self, operator: Operator, span: Self::Span);
 }
@@ -282,15 +282,15 @@ pub enum UnaryOperator {
     Parentheses,
 }
 
-pub(in crate::analyze) trait LabelActions: ParsingContext {
+pub(in crate::analyze) trait LabelContext: ParsingContext {
     type Next;
 
     fn act_on_param(&mut self, param: Self::Ident, span: Self::Span);
     fn did_parse_label(self) -> Self::Next;
 }
 
-pub(in crate::analyze) trait MacroInstrActions: InstrFinalizer {
-    type MacroArgActions: MacroArgActions<
+pub(in crate::analyze) trait MacroInstrContext: InstrFinalizer {
+    type MacroArgContext: MacroArgContext<
         Ident = Self::Ident,
         Literal = Self::Literal,
         Error = Self::Error,
@@ -299,17 +299,17 @@ pub(in crate::analyze) trait MacroInstrActions: InstrFinalizer {
         Next = Self,
     >;
 
-    fn will_parse_macro_arg(self) -> Self::MacroArgActions;
+    fn will_parse_macro_arg(self) -> Self::MacroArgContext;
 }
 
-pub(in crate::analyze) trait MacroArgActions: ParsingContext {
+pub(in crate::analyze) trait MacroArgContext: ParsingContext {
     type Next;
 
     fn act_on_token(&mut self, token: (Token<Self::Ident, Self::Literal>, Self::Span));
     fn did_parse_macro_arg(self) -> Self::Next;
 }
 
-pub(in crate::analyze) trait TokenLineActions: LineFinalizer {
+pub(in crate::analyze) trait TokenLineContext: LineFinalizer {
     type ContextFinalizer: LineFinalizer<
         Ident = Self::Ident,
         Literal = Self::Literal,
@@ -394,14 +394,14 @@ pub mod mock {
         }
     }
 
-    impl<'a, P, I, L, E, S: Clone + Merge> TokenStreamActions
+    impl<'a, P, I, L, E, S: Clone + Merge> TokenStreamContext
         for TokenStreamActionCollector<'a, P, I, L, E, S>
     {
-        type InstrLineActions = InstrLineActionCollector<'a, P, I, L, E, S>;
-        type TokenLineActions = TokenLineActionCollector<'a, P, I, L, E, S>;
+        type InstrLineContext = InstrLineActionCollector<'a, P, I, L, E, S>;
+        type TokenLineContext = TokenLineActionCollector<'a, P, I, L, E, S>;
         type TokenLineFinalizer = TokenLineActionCollector<'a, P, I, L, E, S>;
 
-        fn will_parse_line(self) -> LineRule<Self::InstrLineActions, Self::TokenLineActions> {
+        fn will_parse_line(self) -> LineRule<Self::InstrLineContext, Self::TokenLineContext> {
             match self.data.state {
                 LineRule::InstrLine(()) => LineRule::InstrLine(self.push_layer(())),
                 LineRule::TokenLine(()) => LineRule::TokenLine(self.push_layer(())),
@@ -428,30 +428,30 @@ pub mod mock {
         }
     }
 
-    impl<'a, P, I, L, E, S: Clone + Merge> InstrLineActions
+    impl<'a, P, I, L, E, S: Clone + Merge> InstrLineContext
         for InstrLineActionCollector<'a, P, I, L, E, S>
     {
-        type InstrActions = InstrActionCollector<'a, P, I, L, E, S>;
-        type LabelActions = LabelActionCollector<'a, P, I, L, E, S>;
+        type InstrContext = InstrActionCollector<'a, P, I, L, E, S>;
+        type LabelContext = LabelActionCollector<'a, P, I, L, E, S>;
 
-        fn will_parse_label(self, label: (I, S)) -> Self::LabelActions {
+        fn will_parse_label(self, label: (I, S)) -> Self::LabelContext {
             self.push_layer(label)
         }
     }
 
-    impl<'a, P, I, L, E, S: Clone + Merge> InstrActions
+    impl<'a, P, I, L, E, S: Clone + Merge> InstrContext
         for InstrLineActionCollector<'a, P, I, L, E, S>
     {
-        type BuiltinInstrActions = BuiltinInstrActionCollector<'a, P, I, L, E, S>;
-        type MacroInstrActions = MacroInstrActionCollector<'a, P, I, L, E, S>;
-        type ErrorActions = ErrorActionCollector<'a, P, I, L, E, S>;
+        type BuiltinInstrContext = BuiltinInstrActionCollector<'a, P, I, L, E, S>;
+        type MacroInstrContext = MacroInstrActionCollector<'a, P, I, L, E, S>;
+        type ErrorContext = ErrorActionCollector<'a, P, I, L, E, S>;
         type LineFinalizer = InstrActionCollector<'a, P, I, L, E, S>;
 
         fn will_parse_instr(
             self,
             ident: I,
             span: S,
-        ) -> InstrRule<Self::BuiltinInstrActions, Self::MacroInstrActions, Self::ErrorActions>
+        ) -> InstrRule<Self::BuiltinInstrContext, Self::MacroInstrContext, Self::ErrorContext>
         {
             self.push_layer(()).will_parse_instr(ident, span)
         }
@@ -495,7 +495,7 @@ pub mod mock {
         }
     }
 
-    impl<'a, P, I, L, E, S: Clone + Merge> LabelActions for LabelActionCollector<'a, P, I, L, E, S> {
+    impl<'a, P, I, L, E, S: Clone + Merge> LabelContext for LabelActionCollector<'a, P, I, L, E, S> {
         type Next = InstrActionCollector<'a, P, I, L, E, S>;
 
         fn act_on_param(&mut self, param: I, span: S) {
@@ -527,17 +527,17 @@ pub mod mock {
         }
     }
 
-    impl<'a, P, I, L, E, S: Clone + Merge> InstrActions for InstrActionCollector<'a, P, I, L, E, S> {
-        type BuiltinInstrActions = BuiltinInstrActionCollector<'a, P, I, L, E, S>;
-        type MacroInstrActions = MacroInstrActionCollector<'a, P, I, L, E, S>;
-        type ErrorActions = ErrorActionCollector<'a, P, I, L, E, S>;
+    impl<'a, P, I, L, E, S: Clone + Merge> InstrContext for InstrActionCollector<'a, P, I, L, E, S> {
+        type BuiltinInstrContext = BuiltinInstrActionCollector<'a, P, I, L, E, S>;
+        type MacroInstrContext = MacroInstrActionCollector<'a, P, I, L, E, S>;
+        type ErrorContext = ErrorActionCollector<'a, P, I, L, E, S>;
         type LineFinalizer = Self;
 
         fn will_parse_instr(
             self,
             ident: I,
             span: S,
-        ) -> InstrRule<Self::BuiltinInstrActions, Self::MacroInstrActions, Self::ErrorActions>
+        ) -> InstrRule<Self::BuiltinInstrContext, Self::MacroInstrContext, Self::ErrorContext>
         {
             match (self.annotate)(&ident) {
                 IdentKind::BuiltinInstr | IdentKind::MacroKeyword | IdentKind::Endm => {
@@ -603,13 +603,13 @@ pub mod mock {
         }
     }
 
-    impl<'a, P, I, L, E, S: Clone + Merge> BuiltinInstrActions
+    impl<'a, P, I, L, E, S: Clone + Merge> BuiltinInstrContext
         for BuiltinInstrActionCollector<'a, P, I, L, E, S>
     {
-        type ArgActions =
+        type ArgContext =
             ExprActionCollector<'a, CollectedBuiltinInstrActionData<P, I, L, S>, I, L, E, S>;
 
-        fn will_parse_arg(self) -> Self::ArgActions {
+        fn will_parse_arg(self) -> Self::ArgContext {
             self.push_layer(())
         }
     }
@@ -685,7 +685,7 @@ pub mod mock {
         }
     }
 
-    impl<'a, P, I, L, E, S: Clone + Merge> ArgActions for ExprActionCollector<'a, P, I, L, E, S> {
+    impl<'a, P, I, L, E, S: Clone + Merge> ArgContext for ExprActionCollector<'a, P, I, L, E, S> {
         fn act_on_atom(&mut self, atom: ExprAtom<I, L>, span: S) {
             self.data.actions.push(ExprAction::PushAtom(atom, span))
         }
@@ -711,7 +711,7 @@ pub mod mock {
         }
     }
 
-    impl<'a, P, I, L, E, S: Clone + Merge> TokenLineActions
+    impl<'a, P, I, L, E, S: Clone + Merge> TokenLineContext
         for TokenLineActionCollector<'a, P, I, L, E, S>
     {
         type ContextFinalizer = Self;
@@ -769,12 +769,12 @@ pub mod mock {
         }
     }
 
-    impl<'a, P, I, L, E, S: Clone + Merge> MacroInstrActions
+    impl<'a, P, I, L, E, S: Clone + Merge> MacroInstrContext
         for MacroInstrActionCollector<'a, P, I, L, E, S>
     {
-        type MacroArgActions = MacroArgActionCollector<'a, P, I, L, E, S>;
+        type MacroArgContext = MacroArgActionCollector<'a, P, I, L, E, S>;
 
-        fn will_parse_macro_arg(self) -> Self::MacroArgActions {
+        fn will_parse_macro_arg(self) -> Self::MacroArgContext {
             self.push_layer(())
         }
     }
@@ -807,7 +807,7 @@ pub mod mock {
         }
     }
 
-    impl<'a, P, I, L, E, S: Clone + Merge> MacroArgActions
+    impl<'a, P, I, L, E, S: Clone + Merge> MacroArgContext
         for MacroArgActionCollector<'a, P, I, L, E, S>
     {
         type Next = MacroInstrActionCollector<'a, P, I, L, E, S>;

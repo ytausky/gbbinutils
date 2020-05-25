@@ -6,7 +6,7 @@ use super::{Keyword, ReentrancyActions, Session, TokenStreamSemantics};
 use crate::analyze::semantics::params::RelocLookup;
 use crate::analyze::semantics::resolve::{NameTable, ResolvedName, StartScope};
 use crate::analyze::semantics::*;
-use crate::analyze::syntax::actions::{InstrActions, InstrLineActions, InstrRule};
+use crate::analyze::syntax::actions::{InstrContext, InstrLineContext, InstrRule};
 use crate::diag::span::{StripSpan, WithSpan};
 use crate::diag::{EmitDiag, Message};
 use crate::expr::LocationCounter;
@@ -18,7 +18,7 @@ mod builtin_instr;
 mod label;
 mod macro_instr;
 
-impl<'a, R, N, B> InstrLineActions for InstrLineSemantics<'a, R, N, B>
+impl<'a, R, N, B> InstrLineContext for InstrLineSemantics<'a, R, N, B>
 where
     R: ReentrancyActions,
     R::Ident: 'static,
@@ -34,16 +34,16 @@ where
         >,
     B: Backend<R::Span>,
 {
-    type LabelActions = LabelSemantics<'a, R, N, B>;
-    type InstrActions = Self;
+    type LabelContext = LabelSemantics<'a, R, N, B>;
+    type InstrContext = Self;
 
-    fn will_parse_label(mut self, label: (R::Ident, R::Span)) -> Self::LabelActions {
+    fn will_parse_label(mut self, label: (R::Ident, R::Span)) -> Self::LabelContext {
         self = self.flush_label();
         self.map_state(|line| LabelState::new(line, label))
     }
 }
 
-impl<'a, R, N, B> InstrActions for InstrLineSemantics<'a, R, N, B>
+impl<'a, R, N, B> InstrContext for InstrLineSemantics<'a, R, N, B>
 where
     R: ReentrancyActions,
     R::Ident: 'static,
@@ -59,16 +59,16 @@ where
         >,
     B: Backend<R::Span>,
 {
-    type BuiltinInstrActions = BuiltinInstrSemantics<'a, R, N, B>;
-    type MacroInstrActions = MacroInstrSemantics<'a, R, N, B>;
-    type ErrorActions = Self;
+    type BuiltinInstrContext = BuiltinInstrSemantics<'a, R, N, B>;
+    type MacroInstrContext = MacroInstrSemantics<'a, R, N, B>;
+    type ErrorContext = Self;
     type LineFinalizer = TokenStreamSemantics<'a, R, N, B>;
 
     fn will_parse_instr(
         mut self,
         ident: R::Ident,
         span: R::Span,
-    ) -> InstrRule<Self::BuiltinInstrActions, Self::MacroInstrActions, Self> {
+    ) -> InstrRule<Self::BuiltinInstrContext, Self::MacroInstrContext, Self> {
         match self.core.names.resolve_name(&ident) {
             Some(ResolvedName::Keyword(Keyword::BuiltinMnemonic(mnemonic))) => {
                 if !mnemonic.binds_to_label() {

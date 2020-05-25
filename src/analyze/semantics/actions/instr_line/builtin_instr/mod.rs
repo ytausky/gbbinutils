@@ -6,7 +6,7 @@ use crate::analyze::semantics::arg::*;
 use crate::analyze::semantics::keywords::{Directive, Mnemonic};
 use crate::analyze::semantics::resolve::NameTable;
 use crate::analyze::semantics::RelocLookup;
-use crate::analyze::syntax::actions::{BuiltinInstrActions, InstrFinalizer};
+use crate::analyze::syntax::actions::{BuiltinInstrContext, InstrFinalizer};
 use crate::object::builder::Item;
 
 use std::ops::DerefMut;
@@ -29,7 +29,7 @@ where
     }
 }
 
-impl<'a, R, N, B> BuiltinInstrActions for BuiltinInstrSemantics<'a, R, N, B>
+impl<'a, R, N, B> BuiltinInstrContext for BuiltinInstrSemantics<'a, R, N, B>
 where
     R: ReentrancyActions,
     R::Ident: 'static,
@@ -45,9 +45,9 @@ where
         >,
     B: Backend<R::Span>,
 {
-    type ArgActions = ArgSemantics<'a, R, N, B::ExprBuilder>;
+    type ArgContext = ArgSemantics<'a, R, N, B::ExprBuilder>;
 
-    fn will_parse_arg(self) -> Self::ArgActions {
+    fn will_parse_arg(self) -> Self::ArgContext {
         self.map_builder(|builder| builder.build_const())
             .map_state(ExprBuilder::new)
     }

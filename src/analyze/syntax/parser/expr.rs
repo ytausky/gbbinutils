@@ -1,4 +1,4 @@
-use self::syntax::actions::{ArgActions, ExprAtom, Operator, ParsingContext, UnaryOperator};
+use self::syntax::actions::{ArgContext, ExprAtom, Operator, ParsingContext, UnaryOperator};
 use self::syntax::{Sigil, Token};
 use self::Sigil::*;
 
@@ -62,7 +62,7 @@ impl SuffixOperator {
 
 impl<I, L, E, A, S> Parser<(Result<Token<I, L>, E>, S), A>
 where
-    A: ArgActions<Ident = I, Literal = L, Error = E, Span = S>,
+    A: ArgContext<Ident = I, Literal = L, Error = E, Span = S>,
     S: Clone,
 {
     pub(super) fn parse(self) -> Self {

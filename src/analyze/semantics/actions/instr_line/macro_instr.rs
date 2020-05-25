@@ -3,7 +3,7 @@ use super::{Core, InstrLineState, Keyword, Session, TokenStreamSemantics};
 use crate::analyze::reentrancy::{MacroArgs, ReentrancyActions};
 use crate::analyze::semantics::actions::TokenStreamState;
 use crate::analyze::semantics::resolve::{NameTable, StartScope};
-use crate::analyze::syntax::actions::{InstrFinalizer, MacroArgActions, MacroInstrActions};
+use crate::analyze::syntax::actions::{InstrFinalizer, MacroArgContext, MacroInstrContext};
 use crate::analyze::{SemanticToken, TokenSeq};
 use crate::object::builder::Backend;
 
@@ -33,7 +33,7 @@ impl<R: ReentrancyActions> MacroInstrState<R> {
     }
 }
 
-impl<'a, R, N, B> MacroInstrActions for MacroInstrSemantics<'a, R, N, B>
+impl<'a, R, N, B> MacroInstrContext for MacroInstrSemantics<'a, R, N, B>
 where
     R: ReentrancyActions,
     R::Ident: 'static,
@@ -49,9 +49,9 @@ where
         >,
     B: Backend<R::Span>,
 {
-    type MacroArgActions = MacroArgSemantics<'a, R, N, B>;
+    type MacroArgContext = MacroArgSemantics<'a, R, N, B>;
 
-    fn will_parse_macro_arg(self) -> Self::MacroArgActions {
+    fn will_parse_macro_arg(self) -> Self::MacroArgContext {
         set_state!(self, MacroArgState::new(self.core.state))
     }
 }
@@ -108,7 +108,7 @@ impl<R: ReentrancyActions> MacroArgState<R> {
     }
 }
 
-impl<'a, R: ReentrancyActions, N, B> MacroArgActions for MacroArgSemantics<'a, R, N, B> {
+impl<'a, R: ReentrancyActions, N, B> MacroArgContext for MacroArgSemantics<'a, R, N, B> {
     type Next = MacroInstrSemantics<'a, R, N, B>;
 
     fn act_on_token(&mut self, token: (SemanticToken<R::Ident, R::StringRef>, R::Span)) {
@@ -131,7 +131,7 @@ mod tests {
     use crate::analyze::reentrancy::ReentrancyEvent;
     use crate::analyze::semantics::actions::tests::*;
     use crate::analyze::semantics::resolve::ResolvedName;
-    use crate::analyze::syntax::actions::{InstrActions, LineFinalizer, TokenStreamActions};
+    use crate::analyze::syntax::actions::{InstrContext, LineFinalizer, TokenStreamContext};
     use crate::analyze::syntax::Token;
 
     #[test]

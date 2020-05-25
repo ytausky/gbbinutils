@@ -134,7 +134,7 @@ impl<'a, R: ReentrancyActions, N, B, S> ParsingContext for Session<'a, R, N, B, 
     }
 }
 
-impl<'a, R, N, B> TokenStreamActions for TokenStreamSemantics<'a, R, N, B>
+impl<'a, R, N, B> TokenStreamContext for TokenStreamSemantics<'a, R, N, B>
 where
     R: ReentrancyActions,
     R::Ident: 'static,
@@ -150,11 +150,11 @@ where
         >,
     B: Backend<R::Span>,
 {
-    type InstrLineActions = InstrLineSemantics<'a, R, N, B>;
-    type TokenLineActions = TokenLineSemantics<'a, R, N, B>;
+    type InstrLineContext = InstrLineSemantics<'a, R, N, B>;
+    type TokenLineContext = TokenLineSemantics<'a, R, N, B>;
     type TokenLineFinalizer = TokenContextFinalizationSemantics<'a, R, N, B>;
 
-    fn will_parse_line(self) -> LineRule<Self::InstrLineActions, Self::TokenLineActions> {
+    fn will_parse_line(self) -> LineRule<Self::InstrLineContext, Self::TokenLineContext> {
         match self.core.state.mode {
             LineRule::InstrLine(state) => LineRule::InstrLine(set_state!(self, state)),
             LineRule::TokenLine(state) => LineRule::TokenLine(set_state!(self, state)),
@@ -169,8 +169,8 @@ where
             }
             LineRule::TokenLine(ref state) => {
                 match state.context {
-                    TokenLineContext::FalseIf => unimplemented!(),
-                    TokenLineContext::MacroDef(_) => {
+                    TokenContext::FalseIf => unimplemented!(),
+                    TokenContext::MacroDef(_) => {
                         self.reentrancy.emit_diag(Message::UnexpectedEof.at(span))
                     }
                 }
