@@ -1,4 +1,4 @@
-use super::{Core, InstrLineState, Keyword, Semantics, TokenStreamSemantics};
+use super::{InstrLineState, Keyword, Semantics, TokenStreamSemantics};
 
 use crate::analyze::semantics::actions::TokenStreamState;
 use crate::analyze::semantics::reentrancy::{MacroArgs, ReentrancyActions};
@@ -52,7 +52,7 @@ where
     type MacroArgContext = MacroArgSemantics<'a, R, N, B>;
 
     fn will_parse_macro_arg(self) -> Self::MacroArgContext {
-        set_state!(self, MacroArgState::new(self.core.state))
+        set_state!(self, MacroArgState::new(self.state))
     }
 }
 
@@ -75,18 +75,13 @@ where
     type Next = TokenStreamSemantics<'a, R, N, B>;
 
     fn did_parse_instr(self) -> Self::Next {
-        let (reentrancy, core) = self.reentrancy.call_macro(
-            self.core.state.name,
-            self.core.state.args,
-            Core {
-                names: self.core.names,
-                builder: self.core.builder,
-                state: TokenStreamState::from(self.core.state.parent),
-            },
-        );
+        let (reentrancy, core) =
+            self.reentrancy
+                .call_macro(self.state.name, self.state.args, self.core);
         Semantics {
             reentrancy,
             core,
+            state: TokenStreamState::from(self.state.parent),
             tokens: self.tokens,
         }
     }
@@ -112,14 +107,14 @@ impl<'a, R: ReentrancyActions, N, B> MacroArgContext for MacroArgSemantics<'a, R
     type Next = MacroInstrSemantics<'a, R, N, B>;
 
     fn act_on_token(&mut self, token: (SemanticToken<R::Ident, R::StringRef>, R::Span)) {
-        let tokens = &mut self.core.state.tokens;
+        let tokens = &mut self.state.tokens;
         tokens.0.push(token.0);
         tokens.1.push(token.1);
     }
 
     fn did_parse_macro_arg(mut self) -> Self::Next {
-        self.core.state.parent.push_arg(self.core.state.tokens);
-        set_state!(self, self.core.state.parent)
+        self.state.parent.push_arg(self.state.tokens);
+        set_state!(self, self.state.parent)
     }
 }
 

@@ -72,16 +72,16 @@ where
     type Next = TokenStreamSemantics<'a, R, N, B>;
 
     fn did_parse_instr(self) -> Self::Next {
-        let args = self.core.state.args;
+        let args = self.state.args;
         let session = set_state!(self, InstrLineState::new().into());
-        match self.core.state.mnemonic.item {
+        match self.state.mnemonic.item {
             BuiltinMnemonic::CpuInstr(cpu_instr) => {
-                analyze_mnemonic((&cpu_instr, self.core.state.mnemonic.span), args, session)
+                analyze_mnemonic((&cpu_instr, self.state.mnemonic.span), args, session)
                     .map_state(Into::into)
             }
             BuiltinMnemonic::Directive(directive) => directive::analyze_directive(
-                (directive, self.core.state.mnemonic.span),
-                self.core.state.label,
+                (directive, self.state.mnemonic.span),
+                self.state.label,
                 args,
                 session,
             ),

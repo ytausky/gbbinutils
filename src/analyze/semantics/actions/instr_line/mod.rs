@@ -76,14 +76,14 @@ where
                 }
                 InstrRule::BuiltinInstr(set_state!(
                     self,
-                    BuiltinInstrState::new(self.core.state.label, mnemonic.clone().with_span(span))
+                    BuiltinInstrState::new(self.state.label, mnemonic.clone().with_span(span))
                 ))
             }
             Some(ResolvedName::Macro(id)) => {
                 self = self.flush_label();
                 InstrRule::MacroInstr(set_state!(
                     self,
-                    MacroInstrState::new(self.core.state, (id, span))
+                    MacroInstrState::new(self.state, (id, span))
                 ))
             }
             Some(ResolvedName::Symbol(_)) => {
@@ -114,7 +114,7 @@ where
     B: Backend<R::Span>,
 {
     pub fn flush_label(mut self) -> Self {
-        if let Some(((label, span), _params)) = self.core.state.label.take() {
+        if let Some(((label, span), _params)) = self.state.label.take() {
             self.core.names.start_scope(&label);
             let id = self.reloc_lookup(label, span.clone());
             let mut builder = self.core.builder.build_const();

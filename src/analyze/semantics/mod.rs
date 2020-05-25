@@ -20,11 +20,8 @@ macro_rules! set_state {
     ($session:expr, $state:expr) => {
         $crate::analyze::semantics::Semantics {
             reentrancy: $session.reentrancy,
-            core: $crate::analyze::semantics::Core {
-                names: $session.core.names,
-                builder: $session.core.builder,
-                state: $state,
-            },
+            core: $session.core,
+            state: $state,
             tokens: $session.tokens,
         }
     };
@@ -45,14 +42,14 @@ pub(in crate::analyze) enum Keyword {
 
 pub(super) struct Semantics<'a, R: ReentrancyActions, N, B, T> {
     reentrancy: R,
-    core: Core<N, B, T>,
+    core: Core<N, B>,
+    state: T,
     tokens: TokenIterRef<'a, R>,
 }
 
-struct Core<N, B, T> {
+struct Core<N, B> {
     names: N,
     builder: B,
-    state: T,
 }
 
 type TokenIterRef<'a, R> = &'a mut dyn Iterator<
@@ -72,8 +69,8 @@ impl<'a, R: ReentrancyActions, N, B, T> Semantics<'a, R, N, B, T> {
             core: Core {
                 names: f(self.core.names),
                 builder: self.core.builder,
-                state: self.core.state,
             },
+            state: self.state,
             tokens: self.tokens,
         }
     }
@@ -84,8 +81,8 @@ impl<'a, R: ReentrancyActions, N, B, T> Semantics<'a, R, N, B, T> {
             core: Core {
                 names: self.core.names,
                 builder: f(self.core.builder),
-                state: self.core.state,
             },
+            state: self.state,
             tokens: self.tokens,
         }
     }
@@ -96,8 +93,8 @@ impl<'a, R: ReentrancyActions, N, B, T> Semantics<'a, R, N, B, T> {
             core: Core {
                 names: self.core.names,
                 builder: self.core.builder,
-                state: f(self.core.state),
             },
+            state: f(self.state),
             tokens: self.tokens,
         }
     }
@@ -174,8 +171,8 @@ impl<'a, R: ReentrancyActions, N, B: Finish, T> Finish for Semantics<'a, R, N, B
                 core: Core {
                     names: self.core.names,
                     builder,
-                    state: self.core.state,
                 },
+                state: self.state,
                 tokens: self.tokens,
             },
             value,
@@ -258,11 +255,8 @@ where
         }
         Self {
             reentrancy,
-            core: Core {
-                names,
-                builder,
-                state: TokenStreamState::new(),
-            },
+            core: Core { names, builder },
+            state: TokenStreamState::new(),
             tokens,
         }
     }
@@ -447,8 +441,8 @@ mod mock {
                     names: Box::new(MockNameTable::new(names, log.clone())),
                     builder: MockBackend::new(SerialIdAllocator::new(MockSymbolId), log)
                         .build_const(),
-                    state: (),
                 },
+                state: (),
                 tokens,
             }
         }

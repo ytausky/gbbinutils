@@ -62,7 +62,9 @@ where
         >;
 }
 
-pub(in crate::analyze) trait IntoSemanticActions<'a, I, L, E, Sp: Clone, S>: Sized {
+pub(in crate::analyze) trait IntoSemanticActions<'a, I, L, E, Sp: Clone, S>:
+    Sized
+{
     type SemanticActions: TokenStreamContext<Ident = I, Literal = L, Error = E, Span = Sp>
         + Split<Self, S>;
 

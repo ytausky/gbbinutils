@@ -22,7 +22,7 @@ where
     type ContextFinalizer = TokenContextFinalizationSemantics<'a, R, N, B>;
 
     fn act_on_token(&mut self, token: SemanticToken<R::Ident, R::StringRef>, span: R::Span) {
-        match &mut self.core.state.context {
+        match &mut self.state.context {
             TokenContext::FalseIf => (),
             TokenContext::MacroDef(state) => state.act_on_token(token, span),
         }
@@ -36,11 +36,8 @@ where
         if let Some(ResolvedName::Keyword(Keyword::BuiltinMnemonic(mnemonic))) =
             self.resolve_name(&ident)
         {
-            if let TokenLineRule::LineEnd(()) = self
-                .core
-                .state
-                .context
-                .act_on_mnemonic(mnemonic, span.clone())
+            if let TokenLineRule::LineEnd(()) =
+                self.state.context.act_on_mnemonic(mnemonic, span.clone())
             {
                 return TokenLineRule::LineEnd(TokenContextFinalizationSemantics { parent: self });
             }
@@ -107,7 +104,7 @@ where
 
     fn did_parse_line(mut self, span: R::Span) -> Self::Next {
         self.act_on_token(Sigil::Eol.into(), span);
-        set_state!(self, self.core.state.into())
+        set_state!(self, self.state.into())
     }
 }
 
@@ -152,7 +149,7 @@ where
     type Next = TokenStreamSemantics<'a, R, N, B>;
 
     fn did_parse_line(mut self, _: R::Span) -> Self::Next {
-        match self.parent.core.state.context {
+        match self.parent.state.context {
             TokenContext::FalseIf => (),
             TokenContext::MacroDef(state) => {
                 if let Some((name, params)) = state.label {

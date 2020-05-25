@@ -40,14 +40,7 @@ where
 }
 
 impl<'a, R, N, B>
-    IntoSemanticActions<
-        'a,
-        R::Ident,
-        Literal<R::StringRef>,
-        LexError,
-        R::Span,
-        Core<N, B, TokenStreamState<R::Ident, R::StringRef, R::Span>>,
-    > for R
+    IntoSemanticActions<'a, R::Ident, Literal<R::StringRef>, LexError, R::Span, Core<N, B>> for R
 where
     R: ReentrancyActions,
     R::Ident: 'static,
@@ -68,26 +61,19 @@ where
     fn into_semantic_actions(
         self,
         tokens: TokenIterRef<'a, R>,
-        core: Core<N, B, TokenStreamState<R::Ident, R::StringRef, R::Span>>,
+        core: Core<N, B>,
     ) -> Self::SemanticActions {
         Semantics {
             reentrancy: self,
             core,
+            state: TokenStreamState::new(),
             tokens,
         }
     }
 }
 
-impl<'a, R: ReentrancyActions, N, B>
-    Split<R, Core<N, B, TokenStreamState<R::Ident, R::StringRef, R::Span>>>
-    for TokenStreamSemantics<'a, R, N, B>
-{
-    fn split(
-        self,
-    ) -> (
-        R,
-        Core<N, B, TokenStreamState<R::Ident, R::StringRef, R::Span>>,
-    ) {
+impl<'a, R: ReentrancyActions, N, B> Split<R, Core<N, B>> for TokenStreamSemantics<'a, R, N, B> {
+    fn split(self) -> (R, Core<N, B>) {
         (self.reentrancy, self.core)
     }
 }
@@ -155,17 +141,17 @@ where
     type TokenLineFinalizer = TokenContextFinalizationSemantics<'a, R, N, B>;
 
     fn will_parse_line(self) -> LineRule<Self::InstrLineContext, Self::TokenLineContext> {
-        match self.core.state.mode {
+        match self.state.mode {
             LineRule::InstrLine(state) => LineRule::InstrLine(set_state!(self, state)),
             LineRule::TokenLine(state) => LineRule::TokenLine(set_state!(self, state)),
         }
     }
 
     fn act_on_eos(mut self, span: R::Span) -> Self {
-        match self.core.state.mode {
+        match self.state.mode {
             LineRule::InstrLine(state) => {
                 let semantics = set_state!(self, state).flush_label();
-                set_state!(semantics, semantics.core.state.into())
+                set_state!(semantics, semantics.state.into())
             }
             LineRule::TokenLine(ref state) => {
                 match state.context {
@@ -184,7 +170,7 @@ impl<'a, R: ReentrancyActions, N, B> InstrFinalizer for InstrLineSemantics<'a, R
     type Next = TokenStreamSemantics<'a, R, N, B>;
 
     fn did_parse_instr(self) -> Self::Next {
-        set_state!(self, self.core.state.into())
+        set_state!(self, self.state.into())
     }
 }
 
@@ -192,7 +178,7 @@ impl<'a, R: ReentrancyActions, N, B> LineFinalizer for InstrLineSemantics<'a, R,
     type Next = TokenStreamSemantics<'a, R, N, B>;
 
     fn did_parse_line(self, _: R::Span) -> Self::Next {
-        set_state!(self, self.core.state.into())
+        set_state!(self, self.state.into())
     }
 }
 

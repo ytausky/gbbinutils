@@ -26,13 +26,13 @@ impl<'a, R: ReentrancyActions, N, B> LabelContext for LabelSemantics<'a, R, N, B
     type Next = InstrLineSemantics<'a, R, N, B>;
 
     fn act_on_param(&mut self, ident: R::Ident, span: R::Span) {
-        let params = &mut self.core.state.params;
+        let params = &mut self.state.params;
         params.0.push(ident);
         params.1.push(span)
     }
 
     fn did_parse_label(mut self) -> Self::Next {
-        self.core.state.parent.label = Some((self.core.state.label, self.core.state.params));
-        set_state!(self, self.core.state.parent)
+        self.state.parent.label = Some((self.state.label, self.state.params));
+        set_state!(self, self.state.parent)
     }
 }

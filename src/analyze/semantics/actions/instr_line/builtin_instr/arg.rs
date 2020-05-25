@@ -29,7 +29,7 @@ where
 
     fn did_parse_arg(mut self) -> Self::Next {
         let (builder, value) = self.core.builder.finish();
-        let arg = match self.core.state.arg {
+        let arg = match self.state.arg {
             Some(Arg::Bare(DerefableArg::Const(()))) => {
                 Arg::Bare(DerefableArg::Const(value.unwrap()))
             }
@@ -45,14 +45,14 @@ where
             Some(Arg::String(string, span)) => Arg::String(string, span),
             Some(Arg::Error) | None => Arg::Error,
         };
-        self.core.state.parent.args.push(arg);
+        self.state.parent.args.push(arg);
         Semantics {
             reentrancy: self.reentrancy,
             core: Core {
                 names: self.core.names,
                 builder,
-                state: self.core.state.parent,
             },
+            state: self.state.parent,
             tokens: self.tokens,
         }
     }
@@ -76,16 +76,16 @@ where
             ExprAtom::Ident(ident) => self.act_on_ident(ident, span),
             ExprAtom::Literal(Literal::Number(n)) => {
                 self.core.builder.push_op(n, span);
-                self.core.state.arg = Some(Arg::Bare(DerefableArg::Const(())));
+                self.state.arg = Some(Arg::Bare(DerefableArg::Const(())));
             }
             ExprAtom::Literal(Literal::String(string)) => {
-                self.core.state.arg = Some(Arg::String(string, span))
+                self.state.arg = Some(Arg::String(string, span))
             }
             ExprAtom::LocationCounter => {
                 self.core.builder.push_op(LocationCounter, span);
-                self.core.state.arg = Some(Arg::Bare(DerefableArg::Const(())));
+                self.state.arg = Some(Arg::Bare(DerefableArg::Const(())));
             }
-            ExprAtom::Error => self.core.state.arg = Some(Arg::Error),
+            ExprAtom::Error => self.state.arg = Some(Arg::Error),
         }
     }
 
@@ -93,10 +93,8 @@ where
         match op {
             Operator::Binary(op) => self.core.builder.push_op(op, span),
             Operator::FnCall(arity) => self.core.builder.push_op(FnCall(arity), span),
-            Operator::Unary(UnaryOperator::Parentheses) => match &self.core.state.arg {
-                Some(Arg::Bare(arg)) => {
-                    self.core.state.arg = Some(Arg::Deref((*arg).clone(), span))
-                }
+            Operator::Unary(UnaryOperator::Parentheses) => match &self.state.arg {
+                Some(Arg::Bare(arg)) => self.state.arg = Some(Arg::Deref((*arg).clone(), span)),
                 _ => unimplemented!(),
             },
         }
@@ -118,7 +116,7 @@ where
 {
     fn act_on_ident(&mut self, ident: R::Ident, span: R::Span) {
         let no_params = (vec![], vec![]);
-        let params = match &self.core.state.parent.label {
+        let params = match &self.state.parent.label {
             Some((_, params)) => &params,
             _ => &no_params,
         };
@@ -129,12 +127,12 @@ where
             .map(ParamId);
         if let Some(id) = param {
             self.core.builder.push_op(id, span);
-            self.core.state.arg = Some(Arg::Bare(DerefableArg::Const(())));
+            self.state.arg = Some(Arg::Bare(DerefableArg::Const(())));
             return;
         }
         match self.core.names.resolve_name(&ident) {
-            Some(ResolvedName::Keyword(Keyword::Operand(symbol))) => match self.core.state.arg {
-                None => self.core.state.arg = Some(Arg::Bare(DerefableArg::Symbol(*symbol, span))),
+            Some(ResolvedName::Keyword(Keyword::Operand(symbol))) => match self.state.arg {
+                None => self.state.arg = Some(Arg::Bare(DerefableArg::Symbol(*symbol, span))),
                 _ => unimplemented!(),
             },
             Some(ResolvedName::Keyword(_)) => {
@@ -143,13 +141,13 @@ where
             }
             Some(ResolvedName::Symbol(id)) => {
                 self.core.builder.push_op(Name(id), span);
-                self.core.state.arg = Some(Arg::Bare(DerefableArg::Const(())))
+                self.state.arg = Some(Arg::Bare(DerefableArg::Const(())))
             }
             None => {
                 let id = self.core.builder.alloc_symbol(span.clone());
                 self.define_name(ident, ResolvedName::Symbol(id.clone()));
                 self.core.builder.push_op(Name(id), span);
-                self.core.state.arg = Some(Arg::Bare(DerefableArg::Const(())))
+                self.state.arg = Some(Arg::Bare(DerefableArg::Const(())))
             }
             _ => unimplemented!(),
         }

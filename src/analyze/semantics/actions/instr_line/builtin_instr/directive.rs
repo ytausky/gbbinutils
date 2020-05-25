@@ -132,7 +132,7 @@ where
                 {
                     Some(true) => (),
                     Some(false) => {
-                        self.session.core.state.mode = LineRule::TokenLine(TokenLineState {
+                        self.session.state.mode = LineRule::TokenLine(TokenLineState {
                             context: TokenContext::FalseIf,
                         })
                     }
@@ -159,6 +159,7 @@ where
         Semantics {
             reentrancy,
             core,
+            state: TokenStreamState::new(),
             tokens: self.session.tokens,
         }
     }
@@ -516,7 +517,7 @@ mod tests {
                 session,
             );
             assert_eq!(
-                session.core.state,
+                session.state,
                 TokenStreamState {
                     mode: LineRule::InstrLine(InstrLineState { label: None })
                 }
@@ -538,7 +539,7 @@ mod tests {
                 session,
             );
             assert_eq!(
-                session.core.state,
+                session.state,
                 TokenStreamState {
                     mode: LineRule::TokenLine(TokenLineState {
                         context: TokenContext::FalseIf
