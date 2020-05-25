@@ -4,7 +4,7 @@ use crate::analyze::semantics::keywords::Directive;
 use crate::analyze::semantics::params::RelocLookup;
 use crate::analyze::semantics::resolve::{NameTable, StartScope};
 use crate::analyze::semantics::*;
-use crate::analyze::semantics::{Keyword, Session};
+use crate::analyze::semantics::{Keyword, Semantics};
 use crate::diag::span::Source;
 use crate::diag::*;
 use crate::object::builder::{Backend, Item, Width};
@@ -156,7 +156,7 @@ where
         if let Err(err) = result {
             reentrancy.emit_diag(Message::from(err).at(span))
         }
-        Session {
+        Semantics {
             reentrancy,
             core,
             tokens: self.session.tokens,

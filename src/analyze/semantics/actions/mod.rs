@@ -1,6 +1,6 @@
 use self::token_line::TokenContextFinalizationSemantics;
 
-use super::Session;
+use super::Semantics;
 use super::*;
 
 use crate::analyze::reentrancy::{IntoSemanticActions, ReentrancyActions, Split};
@@ -18,7 +18,7 @@ use std::ops::DerefMut;
 mod instr_line;
 mod token_line;
 
-impl<'a, R, N, B> Session<'a, R, N, B, TokenStreamState<R::Ident, R::StringRef, R::Span>>
+impl<'a, R, N, B> Semantics<'a, R, N, B, TokenStreamState<R::Ident, R::StringRef, R::Span>>
 where
     R: ReentrancyActions,
     R::Ident: 'static,
@@ -70,7 +70,7 @@ where
         tokens: TokenIterRef<'a, R>,
         core: Core<N, B, TokenStreamState<R::Ident, R::StringRef, R::Span>>,
     ) -> Self::SemanticActions {
-        Session {
+        Semantics {
             reentrancy: self,
             core,
             tokens,
@@ -108,7 +108,7 @@ impl<I, R, S> From<TokenLineState<I, R, S>> for TokenStreamState<I, R, S> {
     }
 }
 
-impl<'a, R: ReentrancyActions, N, B, S> ParsingContext for Session<'a, R, N, B, S> {
+impl<'a, R: ReentrancyActions, N, B, S> ParsingContext for Semantics<'a, R, N, B, S> {
     type Ident = R::Ident;
     type Literal = Literal<R::StringRef>;
     type Error = LexError;
@@ -635,7 +635,7 @@ pub mod tests {
     {
         with_log(|log| {
             let tokens = &mut std::iter::empty();
-            let mut session = Session::from_components(
+            let mut session = Semantics::from_components(
                 MockSourceComponents::with_log(log.clone()),
                 Box::new(BasicNameTable::default()),
                 MockBackend::new(SerialIdAllocator::new(MockSymbolId), log.clone()),

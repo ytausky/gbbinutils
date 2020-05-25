@@ -89,7 +89,7 @@ where
     }
 }
 
-impl<'a, R, N, B, S> Session<'a, R, N, B, S>
+impl<'a, R, N, B, S> Semantics<'a, R, N, B, S>
 where
     R: ReentrancyActions,
     N: DerefMut,

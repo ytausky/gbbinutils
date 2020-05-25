@@ -1,4 +1,4 @@
-use super::{Core, InstrLineState, Keyword, Session, TokenStreamSemantics};
+use super::{Core, InstrLineState, Keyword, Semantics, TokenStreamSemantics};
 
 use crate::analyze::reentrancy::{MacroArgs, ReentrancyActions};
 use crate::analyze::semantics::actions::TokenStreamState;
@@ -9,7 +9,7 @@ use crate::object::builder::Backend;
 
 use std::ops::DerefMut;
 
-pub(super) type MacroInstrSemantics<'a, R, N, B> = Session<'a, R, N, B, MacroInstrState<R>>;
+pub(super) type MacroInstrSemantics<'a, R, N, B> = Semantics<'a, R, N, B, MacroInstrState<R>>;
 
 pub(in crate::analyze) struct MacroInstrState<R: ReentrancyActions> {
     parent: InstrLineState<R::Ident, R::Span>,
@@ -84,7 +84,7 @@ where
                 state: TokenStreamState::from(self.core.state.parent),
             },
         );
-        Session {
+        Semantics {
             reentrancy,
             core,
             tokens: self.tokens,
@@ -92,7 +92,7 @@ where
     }
 }
 
-type MacroArgSemantics<'a, R, N, B> = Session<'a, R, N, B, MacroArgState<R>>;
+type MacroArgSemantics<'a, R, N, B> = Semantics<'a, R, N, B, MacroArgState<R>>;
 
 pub(in crate::analyze) struct MacroArgState<R: ReentrancyActions> {
     tokens: TokenSeq<R::Ident, R::StringRef, R::Span>,

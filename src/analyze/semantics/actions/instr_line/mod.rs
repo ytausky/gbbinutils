@@ -1,7 +1,7 @@
 use self::label::{LabelSemantics, LabelState};
 use self::macro_instr::{MacroInstrSemantics, MacroInstrState};
 
-use super::{Keyword, ReentrancyActions, Session, TokenStreamSemantics};
+use super::{Keyword, ReentrancyActions, Semantics, TokenStreamSemantics};
 
 use crate::analyze::semantics::params::RelocLookup;
 use crate::analyze::semantics::resolve::{NameTable, ResolvedName, StartScope};

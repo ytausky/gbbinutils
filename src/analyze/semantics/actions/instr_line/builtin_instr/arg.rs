@@ -4,7 +4,7 @@ use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::actions::Keyword;
 use crate::analyze::semantics::arg::{Arg, DerefableArg};
 use crate::analyze::semantics::resolve::{NameTable, ResolvedName};
-use crate::analyze::semantics::{ArgSemantics, ExprBuilder, Session};
+use crate::analyze::semantics::{ArgSemantics, ExprBuilder, Semantics};
 use crate::analyze::syntax::actions::*;
 use crate::analyze::Literal;
 use crate::diag::span::Source;
@@ -46,7 +46,7 @@ where
             Some(Arg::Error) | None => Arg::Error,
         };
         self.core.state.parent.args.push(arg);
-        Session {
+        Semantics {
             reentrancy: self.reentrancy,
             core: Core {
                 names: self.core.names,

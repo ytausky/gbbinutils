@@ -1,7 +1,7 @@
 use self::macros::VecMacroTable;
 use self::reentrancy::SourceComponents;
 use self::semantics::resolve::*;
-use self::semantics::Session;
+use self::semantics::Semantics;
 use self::strings::FakeStringInterner;
 use self::syntax::parser::DefaultParserFactory;
 use self::syntax::*;
@@ -54,7 +54,7 @@ where
             &mut interner,
             diagnostics,
         );
-        Session::from_components(session, &mut names, self, &mut std::iter::empty())
+        Semantics::from_components(session, &mut names, self, &mut std::iter::empty())
             .analyze_file(name.into())
     }
 }
