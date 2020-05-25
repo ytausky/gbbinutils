@@ -1,8 +1,8 @@
 use super::{BuiltinInstrSemantics, Core};
 
-use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::actions::Keyword;
 use crate::analyze::semantics::arg::{Arg, DerefableArg};
+use crate::analyze::semantics::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::resolve::{NameTable, ResolvedName};
 use crate::analyze::semantics::{ArgSemantics, ExprBuilder, Semantics};
 use crate::analyze::syntax::actions::*;

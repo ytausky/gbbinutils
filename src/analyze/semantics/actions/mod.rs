@@ -3,7 +3,7 @@ use self::token_line::TokenContextFinalizationSemantics;
 use super::Semantics;
 use super::*;
 
-use crate::analyze::reentrancy::{IntoSemanticActions, ReentrancyActions, Split};
+use crate::analyze::semantics::reentrancy::{IntoSemanticActions, ReentrancyActions, Split};
 use crate::analyze::semantics::resolve::{NameTable, StartScope};
 use crate::analyze::syntax::actions::*;
 use crate::analyze::syntax::LexError;
@@ -211,7 +211,7 @@ pub mod tests {
     pub use crate::analyze::semantics::resolve::BasicNameTable;
 
     use crate::analyze::macros::mock::MockMacroId;
-    use crate::analyze::reentrancy::ReentrancyEvent;
+    use crate::analyze::semantics::reentrancy::ReentrancyEvent;
     use crate::analyze::semantics::resolve::{MockNameTable, NameTableEvent, ResolvedName};
     use crate::analyze::syntax::{Sigil, Token};
     use crate::analyze::SemanticToken;
@@ -610,7 +610,7 @@ pub mod tests {
     }
 
     pub(in crate::analyze::semantics) type MockSourceComponents<S> =
-        crate::analyze::reentrancy::MockSourceComponents<TestOperation<S>, S>;
+        crate::analyze::semantics::reentrancy::MockSourceComponents<TestOperation<S>, S>;
 
     pub(in crate::analyze::semantics) fn collect_semantic_actions<F, S>(
         f: F,

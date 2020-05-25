@@ -1,9 +1,9 @@
 use super::*;
 
-use crate::analyze::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::actions::TokenStreamState;
 use crate::analyze::semantics::arg::*;
 use crate::analyze::semantics::keywords::{Directive, Mnemonic};
+use crate::analyze::semantics::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::resolve::NameTable;
 use crate::analyze::semantics::RelocLookup;
 use crate::analyze::syntax::actions::{BuiltinInstrContext, InstrFinalizer};

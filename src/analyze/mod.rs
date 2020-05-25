@@ -1,5 +1,5 @@
 use self::macros::VecMacroTable;
-use self::reentrancy::SourceComponents;
+use self::semantics::reentrancy::SourceComponents;
 use self::semantics::resolve::*;
 use self::semantics::Semantics;
 use self::strings::FakeStringInterner;
@@ -18,7 +18,6 @@ use std::rc::Rc;
 pub use self::mock::*;
 
 mod macros;
-mod reentrancy;
 mod semantics;
 mod strings;
 mod syntax;

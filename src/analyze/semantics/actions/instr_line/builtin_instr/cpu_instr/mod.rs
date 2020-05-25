@@ -768,7 +768,7 @@ mod tests {
         I: IntoIterator<Item = Input>,
     {
         use super::operand::analyze_operand;
-        use crate::analyze::reentrancy::MockSourceComponents;
+        use crate::analyze::semantics::reentrancy::MockSourceComponents;
 
         let mut result = None;
         let log = crate::log::with_log(|log| {

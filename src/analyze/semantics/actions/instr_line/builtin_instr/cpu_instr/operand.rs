@@ -187,8 +187,8 @@ impl<I: Iterator> Iterator for OperandCounter<I> {
 pub mod tests {
     use super::*;
 
-    use crate::analyze::reentrancy::ReentrancyEvent;
     use crate::analyze::semantics::mock::MockExprBuilder;
+    use crate::analyze::semantics::reentrancy::ReentrancyEvent;
     use crate::object::builder::mock::{BackendEvent, MockSymbolId};
 
     use std::fmt::Debug;

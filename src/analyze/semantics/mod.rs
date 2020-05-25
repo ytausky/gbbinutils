@@ -1,10 +1,10 @@
 use self::arg::{Arg, OperandSymbol};
 use self::keywords::BuiltinMnemonic;
 use self::params::*;
+use self::reentrancy::{Params, ReentrancyActions};
 use self::resolve::{NameTable, ResolvedName};
 
 use super::macros::MacroSource;
-use super::reentrancy::{Params, ReentrancyActions};
 use super::syntax::actions::{LexerOutput, LineRule};
 use super::syntax::LexError;
 use super::{IdentSource, Literal, StringSource, TokenSeq};
@@ -34,6 +34,7 @@ mod actions;
 mod arg;
 mod keywords;
 mod params;
+pub(super) mod reentrancy;
 pub(super) mod resolve;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -384,12 +385,12 @@ impl<R, S, P> ExprBuilder<R, S, P> {
 
 #[cfg(test)]
 mod mock {
+    use super::reentrancy::{MockSourceComponents, ReentrancyEvent};
     use super::resolve::{BasicNameTable, MockNameTable};
     use super::Keyword;
     use super::*;
 
     use crate::analyze::macros::mock::MockMacroId;
-    use crate::analyze::reentrancy::{MockSourceComponents, ReentrancyEvent};
     use crate::diag::{DiagnosticsEvent, Merge};
     use crate::expr::Expr;
     use crate::log::Log;

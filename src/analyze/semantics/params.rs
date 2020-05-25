@@ -170,8 +170,8 @@ mod tests {
     use super::*;
 
     use crate::analyze::macros::mock::MockMacroId;
-    use crate::analyze::reentrancy::ReentrancyEvent;
     use crate::analyze::semantics::mock::*;
+    use crate::analyze::semantics::reentrancy::ReentrancyEvent;
     use crate::analyze::semantics::resolve::NameTableEvent;
     use crate::analyze::semantics::Keyword;
     use crate::diag::{DiagnosticsEvent, MockSpan};

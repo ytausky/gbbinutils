@@ -1,7 +1,7 @@
 use super::{Core, InstrLineState, Keyword, Semantics, TokenStreamSemantics};
 
-use crate::analyze::reentrancy::{MacroArgs, ReentrancyActions};
 use crate::analyze::semantics::actions::TokenStreamState;
+use crate::analyze::semantics::reentrancy::{MacroArgs, ReentrancyActions};
 use crate::analyze::semantics::resolve::{NameTable, StartScope};
 use crate::analyze::syntax::actions::{InstrFinalizer, MacroArgContext, MacroInstrContext};
 use crate::analyze::{SemanticToken, TokenSeq};
@@ -128,8 +128,8 @@ mod tests {
     use super::*;
 
     use crate::analyze::macros::mock::MockMacroId;
-    use crate::analyze::reentrancy::ReentrancyEvent;
     use crate::analyze::semantics::actions::tests::*;
+    use crate::analyze::semantics::reentrancy::ReentrancyEvent;
     use crate::analyze::semantics::resolve::ResolvedName;
     use crate::analyze::syntax::actions::{InstrContext, LineFinalizer, TokenStreamContext};
     use crate::analyze::syntax::Token;

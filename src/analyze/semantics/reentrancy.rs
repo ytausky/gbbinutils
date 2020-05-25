@@ -1,10 +1,9 @@
-use super::macros::{MacroSource, MacroTable};
-use super::strings::GetString;
-use super::syntax::actions::{LexerOutput, TokenStreamContext};
-use super::syntax::parser::ParserFactory;
-use super::syntax::{LexError, ParseTokenStream};
-use super::{IdentSource, Lex, Literal, SemanticToken, StringSource, TokenSeq};
-
+use crate::analyze::macros::{MacroSource, MacroTable};
+use crate::analyze::strings::GetString;
+use crate::analyze::syntax::actions::{LexerOutput, TokenStreamContext};
+use crate::analyze::syntax::parser::ParserFactory;
+use crate::analyze::syntax::{LexError, ParseTokenStream};
+use crate::analyze::{IdentSource, Lex, Literal, SemanticToken, StringSource, TokenSeq};
 use crate::codebase::CodebaseError;
 use crate::diag::span::SpanSource;
 use crate::diag::*;
@@ -14,7 +13,7 @@ use std::ops::{Deref, DerefMut};
 #[cfg(test)]
 pub(crate) use self::mock::*;
 
-pub(super) trait ReentrancyActions
+pub(in crate::analyze) trait ReentrancyActions
 where
     Self: IdentSource
         + MacroSource
@@ -63,7 +62,7 @@ where
         >;
 }
 
-pub(super) trait IntoSemanticActions<'a, I, L, E, Sp: Clone, S>: Sized {
+pub(in crate::analyze) trait IntoSemanticActions<'a, I, L, E, Sp: Clone, S>: Sized {
     type SemanticActions: TokenStreamContext<Ident = I, Literal = L, Error = E, Span = Sp>
         + Split<Self, S>;
 
@@ -74,14 +73,14 @@ pub(super) trait IntoSemanticActions<'a, I, L, E, Sp: Clone, S>: Sized {
     ) -> Self::SemanticActions;
 }
 
-pub(super) trait Split<T, S> {
+pub(in crate::analyze) trait Split<T, S> {
     fn split(self) -> (T, S);
 }
 
-pub(super) type MacroArgs<I, R, S> = super::macros::MacroArgs<SemanticToken<I, R>, S>;
+pub(super) type MacroArgs<I, R, S> = crate::analyze::macros::MacroArgs<SemanticToken<I, R>, S>;
 pub(super) type Params<I, S> = (Vec<I>, Vec<S>);
 
-pub(super) struct SourceComponents<C, P, M, I, D> {
+pub(in crate::analyze) struct SourceComponents<C, P, M, I, D> {
     codebase: C,
     parser_factory: P,
     macros: M,
