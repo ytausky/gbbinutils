@@ -1,8 +1,8 @@
 use self::arg::{Arg, OperandSymbol};
 use self::keywords::BuiltinMnemonic;
 use self::params::*;
-use self::reentrancy::{Meta, Params};
-use self::resolve::{NameTable, ResolvedName};
+use self::session::reentrancy::{Meta, Params};
+use self::session::resolve::{NameTable, ResolvedName};
 
 use super::macros::MacroSource;
 use super::syntax::actions::{LexerOutput, LineRule};
@@ -30,8 +30,7 @@ mod actions;
 mod arg;
 mod keywords;
 mod params;
-pub(super) mod reentrancy;
-pub(super) mod resolve;
+pub(super) mod session;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(in crate::analyze) enum Keyword {
@@ -397,8 +396,8 @@ impl<R, S, P> ExprBuilder<R, S, P> {
 
 #[cfg(test)]
 mod mock {
-    use super::reentrancy::{MockSourceComponents, ReentrancyEvent};
-    use super::resolve::{BasicNameTable, MockNameTable};
+    use super::session::reentrancy::{MockSourceComponents, ReentrancyEvent};
+    use super::session::resolve::{BasicNameTable, MockNameTable};
     use super::Keyword;
     use super::*;
 

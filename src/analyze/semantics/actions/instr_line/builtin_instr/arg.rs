@@ -2,8 +2,8 @@ use super::{BuiltinInstrSemantics, CompositeSession};
 
 use crate::analyze::semantics::actions::Keyword;
 use crate::analyze::semantics::arg::{Arg, DerefableArg};
-use crate::analyze::semantics::reentrancy::Meta;
-use crate::analyze::semantics::resolve::{NameTable, ResolvedName};
+use crate::analyze::semantics::session::reentrancy::Meta;
+use crate::analyze::semantics::session::resolve::{NameTable, ResolvedName};
 use crate::analyze::semantics::{ArgSemantics, ExprBuilder, Semantics};
 use crate::analyze::syntax::actions::*;
 use crate::analyze::Literal;
@@ -157,7 +157,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::analyze::semantics::actions::tests::collect_semantic_actions;
-    use crate::analyze::semantics::resolve::{NameTableEvent, ResolvedName};
+    use crate::analyze::semantics::session::resolve::{NameTableEvent, ResolvedName};
     use crate::analyze::syntax::actions::*;
     use crate::diag::span::WithSpan;
     use crate::diag::{DiagnosticsEvent, Message, MockSpan};

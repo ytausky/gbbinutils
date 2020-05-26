@@ -1,8 +1,8 @@
 use super::{Keyword, TokenStreamSemantics};
 
 use crate::analyze::semantics::keywords::Directive;
-use crate::analyze::semantics::reentrancy::ReentrancyActions;
-use crate::analyze::semantics::resolve::{NameTable, ResolvedName, StartScope};
+use crate::analyze::semantics::session::reentrancy::ReentrancyActions;
+use crate::analyze::semantics::session::resolve::{NameTable, ResolvedName, StartScope};
 use crate::analyze::semantics::*;
 use crate::analyze::syntax::actions::*;
 use crate::analyze::syntax::{LexError, Sigil, Token};

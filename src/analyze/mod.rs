@@ -1,6 +1,6 @@
 use self::macros::VecMacroTable;
-use self::semantics::reentrancy::SourceComponents;
-use self::semantics::resolve::*;
+use self::semantics::session::reentrancy::SourceComponents;
+use self::semantics::session::resolve::*;
 use self::semantics::Semantics;
 use self::strings::FakeStringInterner;
 use self::syntax::parser::DefaultParserFactory;

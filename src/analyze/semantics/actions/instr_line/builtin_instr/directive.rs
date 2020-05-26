@@ -1,8 +1,8 @@
 use crate::analyze::semantics::arg::*;
 use crate::analyze::semantics::keywords::Directive;
 use crate::analyze::semantics::params::RelocLookup;
-use crate::analyze::semantics::reentrancy::ReentrancyActions;
-use crate::analyze::semantics::resolve::{NameTable, StartScope};
+use crate::analyze::semantics::session::reentrancy::ReentrancyActions;
+use crate::analyze::semantics::session::resolve::{NameTable, StartScope};
 use crate::analyze::semantics::*;
 use crate::analyze::semantics::{Keyword, Semantics};
 use crate::diag::span::Source;
@@ -243,8 +243,10 @@ mod tests {
 
     use crate::analyze::macros::mock::MockMacroId;
     use crate::analyze::semantics::actions::tests::*;
-    use crate::analyze::semantics::reentrancy::ReentrancyEvent;
-    use crate::analyze::semantics::resolve::{MockNameTable, NameTableEvent, ResolvedName};
+    use crate::analyze::semantics::session::reentrancy::ReentrancyEvent;
+    use crate::analyze::semantics::session::resolve::{
+        MockNameTable, NameTableEvent, ResolvedName,
+    };
     use crate::analyze::syntax::actions::*;
     use crate::analyze::Literal;
     use crate::codebase::CodebaseError;

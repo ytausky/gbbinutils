@@ -1,7 +1,7 @@
 use super::resolve::{NameTable, StartScope};
-use super::{CompositeSession, Keyword, Semantics, TokenStreamState};
 
 use crate::analyze::macros::{MacroSource, MacroTable};
+use crate::analyze::semantics::{CompositeSession, Keyword, Semantics, TokenStreamState};
 use crate::analyze::strings::GetString;
 use crate::analyze::syntax::parser::ParserFactory;
 use crate::analyze::syntax::{LexError, ParseTokenStream};
@@ -50,8 +50,9 @@ where
     ) -> Self;
 }
 
-pub(super) type MacroArgs<I, R, S> = crate::analyze::macros::MacroArgs<SemanticToken<I, R>, S>;
-pub(super) type Params<I, S> = (Vec<I>, Vec<S>);
+pub(in crate::analyze::semantics) type MacroArgs<I, R, S> =
+    crate::analyze::macros::MacroArgs<SemanticToken<I, R>, S>;
+pub(in crate::analyze::semantics) type Params<I, S> = (Vec<I>, Vec<S>);
 
 pub(in crate::analyze) struct SourceComponents<C, P, M, I, D> {
     codebase: C,
@@ -340,7 +341,7 @@ mod tests {
     use super::*;
 
     use crate::analyze::macros::mock::{MacroTableEvent, MockMacroId};
-    use crate::analyze::semantics::resolve::{BasicNameTable, NameTableEvent};
+    use crate::analyze::semantics::session::resolve::{BasicNameTable, NameTableEvent};
     use crate::analyze::strings::FakeStringInterner;
     use crate::analyze::syntax::parser::mock::*;
     use crate::analyze::syntax::*;
@@ -454,7 +455,7 @@ mod tests {
     type MockParserFactory<S> = crate::analyze::syntax::parser::mock::MockParserFactory<Event<S>>;
     type MockMacroTable<S> = crate::analyze::macros::mock::MockMacroTable<usize, Event<S>>;
     type MockDiagnosticsSystem<S> = crate::diag::MockDiagnosticsSystem<Event<S>, S>;
-    type MockNameTable<S> = crate::analyze::semantics::resolve::MockNameTable<
+    type MockNameTable<S> = crate::analyze::semantics::session::resolve::MockNameTable<
         BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
         Event<S>,
     >;

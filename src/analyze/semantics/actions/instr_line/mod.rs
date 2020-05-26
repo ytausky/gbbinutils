@@ -4,7 +4,7 @@ use self::macro_instr::{MacroInstrSemantics, MacroInstrState};
 use super::{Keyword, ReentrancyActions, Semantics, TokenStreamSemantics};
 
 use crate::analyze::semantics::params::RelocLookup;
-use crate::analyze::semantics::resolve::{NameTable, ResolvedName, StartScope};
+use crate::analyze::semantics::session::resolve::{NameTable, ResolvedName, StartScope};
 use crate::analyze::semantics::*;
 use crate::analyze::syntax::actions::{InstrContext, InstrLineContext, InstrRule};
 use crate::diag::span::{StripSpan, WithSpan};

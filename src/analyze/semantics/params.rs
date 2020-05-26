@@ -1,4 +1,4 @@
-use super::resolve::{NameTable, ResolvedName};
+use super::session::resolve::{NameTable, ResolvedName};
 use super::{Params, PushOp};
 
 use crate::diag::{Diagnostics, Message};
@@ -171,8 +171,8 @@ mod tests {
 
     use crate::analyze::macros::mock::MockMacroId;
     use crate::analyze::semantics::mock::*;
-    use crate::analyze::semantics::reentrancy::ReentrancyEvent;
-    use crate::analyze::semantics::resolve::NameTableEvent;
+    use crate::analyze::semantics::session::reentrancy::ReentrancyEvent;
+    use crate::analyze::semantics::session::resolve::NameTableEvent;
     use crate::analyze::semantics::Keyword;
     use crate::diag::{DiagnosticsEvent, MockSpan};
     use crate::expr::{Atom, Expr, ParamId};

@@ -1,6 +1,6 @@
 use super::{InstrLineSemantics, InstrLineState, Semantics};
 
-use crate::analyze::semantics::reentrancy::Meta;
+use crate::analyze::semantics::session::reentrancy::Meta;
 use crate::analyze::semantics::Params;
 use crate::analyze::syntax::actions::LabelContext;
 
