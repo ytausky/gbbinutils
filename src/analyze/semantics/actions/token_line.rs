@@ -15,7 +15,7 @@ use std::ops::DerefMut;
 impl<'a, R, N, B> TokenLineContext for TokenLineSemantics<'a, R, N, B>
 where
     R: Meta,
-    Core<R, N, B>: ReentrancyActions<
+    CompositeSession<R, N, B>: ReentrancyActions<
         Ident = R::Ident,
         StringRef = R::StringRef,
         Span = R::Span,
@@ -102,7 +102,7 @@ impl<I, R, S> MacroDefState<I, R, S> {
 impl<'a, R, N, B> LineFinalizer for TokenLineSemantics<'a, R, N, B>
 where
     R: Meta,
-    Core<R, N, B>: ReentrancyActions<
+    CompositeSession<R, N, B>: ReentrancyActions<
         Ident = R::Ident,
         StringRef = R::StringRef,
         Span = R::Span,
@@ -138,22 +138,22 @@ impl<'a, R: Meta, N, B> ParsingContext for TokenContextFinalizationSemantics<'a,
     }
 
     fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
-        self.parent.core.reentrancy.merge_spans(left, right)
+        self.parent.session.reentrancy.merge_spans(left, right)
     }
 
     fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped {
-        self.parent.core.reentrancy.strip_span(span)
+        self.parent.session.reentrancy.strip_span(span)
     }
 
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<Self::Span, Self::Stripped>>) {
-        self.parent.core.reentrancy.emit_diag(diag)
+        self.parent.session.reentrancy.emit_diag(diag)
     }
 }
 
 impl<'a, R, N, B> LineFinalizer for TokenContextFinalizationSemantics<'a, R, N, B>
 where
     R: Meta,
-    Core<R, N, B>: ReentrancyActions<
+    CompositeSession<R, N, B>: ReentrancyActions<
         Ident = R::Ident,
         StringRef = R::StringRef,
         Span = R::Span,
@@ -170,9 +170,9 @@ where
             TokenContext::MacroDef(state) => {
                 if let Some((name, params)) = state.label {
                     let tokens = state.tokens;
-                    let id = self.parent.core.define_macro(name.1, params, tokens);
+                    let id = self.parent.session.define_macro(name.1, params, tokens);
                     self.parent
-                        .core
+                        .session
                         .names
                         .define_name(name.0, ResolvedName::Macro(id));
                 }

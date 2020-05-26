@@ -19,7 +19,7 @@ use std::ops::{Deref, DerefMut};
 macro_rules! set_state {
     ($session:expr, $state:expr) => {
         $crate::analyze::semantics::Semantics {
-            core: $session.core,
+            session: $session.session,
             state: $state,
             tokens: $session.tokens,
         }
@@ -40,12 +40,12 @@ pub(in crate::analyze) enum Keyword {
 }
 
 pub(super) struct Semantics<'a, R: Meta, N, B, T> {
-    core: Core<R, N, B>,
+    session: CompositeSession<R, N, B>,
     state: T,
     tokens: TokenIterRef<'a, R>,
 }
 
-pub(super) struct Core<R, N, B> {
+pub(super) struct CompositeSession<R, N, B> {
     reentrancy: R,
     names: N,
     builder: B,
@@ -60,19 +60,19 @@ type TokenIterRef<'a, R> = &'a mut dyn Iterator<
     >,
 >;
 
-impl<R: Meta, N, B> SpanSource for Core<R, N, B> {
+impl<R: Meta, N, B> SpanSource for CompositeSession<R, N, B> {
     type Span = R::Span;
 }
 
-impl<R: Meta, N, B> IdentSource for Core<R, N, B> {
+impl<R: Meta, N, B> IdentSource for CompositeSession<R, N, B> {
     type Ident = R::Ident;
 }
 
-impl<R: Meta, N, B> MacroSource for Core<R, N, B> {
+impl<R: Meta, N, B> MacroSource for CompositeSession<R, N, B> {
     type MacroId = R::MacroId;
 }
 
-impl<R: Meta, N, B> StringSource for Core<R, N, B> {
+impl<R: Meta, N, B> StringSource for CompositeSession<R, N, B> {
     type StringRef = R::StringRef;
 }
 
@@ -80,10 +80,10 @@ impl<'a, R: Meta, N, B, T> Semantics<'a, R, N, B, T> {
     #[cfg(test)]
     fn map_names<F: FnOnce(N) -> M, M>(self, f: F) -> Semantics<'a, R, M, B, T> {
         Semantics {
-            core: Core {
-                reentrancy: self.core.reentrancy,
-                names: f(self.core.names),
-                builder: self.core.builder,
+            session: CompositeSession {
+                reentrancy: self.session.reentrancy,
+                names: f(self.session.names),
+                builder: self.session.builder,
             },
             state: self.state,
             tokens: self.tokens,
@@ -92,10 +92,10 @@ impl<'a, R: Meta, N, B, T> Semantics<'a, R, N, B, T> {
 
     fn map_builder<F: FnOnce(B) -> C, C>(self, f: F) -> Semantics<'a, R, N, C, T> {
         Semantics {
-            core: Core {
-                reentrancy: self.core.reentrancy,
-                names: self.core.names,
-                builder: f(self.core.builder),
+            session: CompositeSession {
+                reentrancy: self.session.reentrancy,
+                names: self.session.names,
+                builder: f(self.session.builder),
             },
             state: self.state,
             tokens: self.tokens,
@@ -104,7 +104,7 @@ impl<'a, R: Meta, N, B, T> Semantics<'a, R, N, B, T> {
 
     fn map_state<F: FnOnce(T) -> U, U>(self, f: F) -> Semantics<'a, R, N, B, U> {
         Semantics {
-            core: self.core,
+            session: self.session,
             state: f(self.state),
             tokens: self.tokens,
         }
@@ -112,11 +112,11 @@ impl<'a, R: Meta, N, B, T> Semantics<'a, R, N, B, T> {
 }
 
 delegate_diagnostics! {
-    {'a, R: Meta, N, B, T}, Semantics<'a, R, N, B, T>, {core.reentrancy}, R, R::Span
+    {'a, R: Meta, N, B, T}, Semantics<'a, R, N, B, T>, {session.reentrancy}, R, R::Span
 }
 
 delegate_diagnostics! {
-    {R: Meta, N, B}, Core<R, N, B>, {reentrancy}, R, R::Span
+    {R: Meta, N, B}, CompositeSession<R, N, B>, {reentrancy}, R, R::Span
 }
 
 impl<'a, R, N, B, S> MacroSource for Semantics<'a, R, N, B, S>
@@ -146,7 +146,7 @@ where
     Span: Clone,
 {
     fn alloc_symbol(&mut self, span: Span) -> Self::SymbolId {
-        self.core.builder.alloc_symbol(span)
+        self.session.builder.alloc_symbol(span)
     }
 }
 
@@ -162,7 +162,7 @@ where
         &mut self,
         ident: &Ident,
     ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
-        self.core.names.resolve_name(ident)
+        self.session.names.resolve_name(ident)
     }
 
     fn define_name(
@@ -170,7 +170,7 @@ where
         ident: Ident,
         entry: ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>,
     ) {
-        self.core.names.define_name(ident, entry)
+        self.session.names.define_name(ident, entry)
     }
 }
 
@@ -179,12 +179,12 @@ impl<'a, R: Meta, N, B: Finish, T> Finish for Semantics<'a, R, N, B, T> {
     type Parent = Semantics<'a, R, N, B::Parent, T>;
 
     fn finish(self) -> (Self::Parent, Option<Self::Value>) {
-        let (builder, value) = self.core.builder.finish();
+        let (builder, value) = self.session.builder.finish();
         (
             Semantics {
-                core: Core {
-                    reentrancy: self.core.reentrancy,
-                    names: self.core.names,
+                session: CompositeSession {
+                    reentrancy: self.session.reentrancy,
+                    names: self.session.names,
                     builder,
                 },
                 state: self.state,
@@ -202,7 +202,7 @@ where
     S: Clone,
 {
     fn push_op(&mut self, op: Name<SymbolId>, span: S) {
-        self.core.builder.push_op(op, span)
+        self.session.builder.push_op(op, span)
     }
 }
 
@@ -215,7 +215,7 @@ macro_rules! impl_push_op_for_session {
             S: Clone,
         {
             fn push_op(&mut self, op: $t, span: S) {
-                self.core.builder.push_op(op, span)
+                self.session.builder.push_op(op, span)
             }
         }
     };
@@ -269,7 +269,7 @@ where
             names.define_name((*ident).into(), ResolvedName::Keyword(keyword))
         }
         Self {
-            core: Core {
+            session: CompositeSession {
                 reentrancy,
                 names,
                 builder,
@@ -454,7 +454,7 @@ mod mock {
                 names.define_name(ident, resolution)
             }
             Semantics {
-                core: Core {
+                session: CompositeSession {
                     reentrancy: MockSourceComponents::with_log(log.clone()),
                     names: Box::new(MockNameTable::new(names, log.clone())),
                     builder: MockBackend::new(SerialIdAllocator::new(MockSymbolId), log)

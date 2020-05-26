@@ -24,7 +24,7 @@ where
     R::Ident: 'static,
     R::StringRef: 'static,
     R::Span: 'static,
-    Core<R, N, B>: ReentrancyActions<
+    CompositeSession<R, N, B>: ReentrancyActions<
         Ident = R::Ident,
         StringRef = R::StringRef,
         Span = R::Span,
@@ -55,7 +55,7 @@ where
     R::Ident: 'static,
     R::StringRef: 'static,
     R::Span: 'static,
-    Core<R, N, B>: ReentrancyActions<
+    CompositeSession<R, N, B>: ReentrancyActions<
         Ident = R::Ident,
         StringRef = R::StringRef,
         Span = R::Span,
@@ -81,7 +81,7 @@ where
         ident: R::Ident,
         span: R::Span,
     ) -> InstrRule<Self::BuiltinInstrContext, Self::MacroInstrContext, Self> {
-        match self.core.names.resolve_name(&ident) {
+        match self.session.names.resolve_name(&ident) {
             Some(ResolvedName::Keyword(Keyword::BuiltinMnemonic(mnemonic))) => {
                 if !mnemonic.binds_to_label() {
                     self = self.flush_label();
@@ -127,13 +127,13 @@ where
 {
     pub fn flush_label(mut self) -> Self {
         if let Some(((label, span), _params)) = self.state.label.take() {
-            self.core.names.start_scope(&label);
+            self.session.names.start_scope(&label);
             let id = self.reloc_lookup(label, span.clone());
-            let mut builder = self.core.builder.build_const();
+            let mut builder = self.session.builder.build_const();
             PushOp::<LocationCounter, _>::push_op(&mut builder, LocationCounter, span.clone());
             let (mut builder, expr) = builder.finish();
             builder.define_symbol(id, span, expr.unwrap());
-            self.core.builder = builder;
+            self.session.builder = builder;
         }
         self
     }

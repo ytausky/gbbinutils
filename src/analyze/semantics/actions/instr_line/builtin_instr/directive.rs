@@ -22,7 +22,7 @@ where
     R::Ident: 'static,
     R::StringRef: 'static,
     R::Span: 'static,
-    Core<R, N, B>: ReentrancyActions<StringRef = R::StringRef>,
+    CompositeSession<R, N, B>: ReentrancyActions<StringRef = R::StringRef>,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
@@ -55,7 +55,7 @@ where
     R::Ident: 'static,
     R::StringRef: 'static,
     R::Span: 'static,
-    Core<R, N, B>: ReentrancyActions<StringRef = R::StringRef>,
+    CompositeSession<R, N, B>: ReentrancyActions<StringRef = R::StringRef>,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
@@ -88,7 +88,10 @@ where
                 Ok(expr) => expr,
                 Err(()) => return self.session,
             };
-            self.session.core.builder.emit_item(Item::Data(expr, width))
+            self.session
+                .session
+                .builder
+                .emit_item(Item::Data(expr, width))
         }
         self.session
     }
@@ -97,7 +100,7 @@ where
         if let Some(arg) = single_arg(self.span, self.args, &mut self.session) {
             let result = self.session.expect_const(arg);
             if let Ok(bytes) = result {
-                self.session.core.builder.reserve(bytes)
+                self.session.session.builder.reserve(bytes)
             }
         }
         self.session
@@ -114,7 +117,7 @@ where
     fn analyze_section(mut self) -> TokenStreamSemantics<'a, R, N, B> {
         let (name, span) = self.label.take().unwrap().0;
         let id = self.session.reloc_lookup(name, span.clone());
-        self.session.core.builder.start_section(id, span);
+        self.session.session.builder.start_section(id, span);
         self.session
     }
 
@@ -128,9 +131,9 @@ where
                 let value = self.session.expect_const(arg);
                 match self
                     .session
-                    .core
+                    .session
                     .builder
-                    .is_non_zero(value.unwrap(), &mut self.session.core.reentrancy)
+                    .is_non_zero(value.unwrap(), &mut self.session.session.reentrancy)
                 {
                     Some(true) => (),
                     Some(false) => {
@@ -151,12 +154,12 @@ where
             Some(result) => result,
             None => return self.session,
         };
-        let (result, mut core) = self.session.core.analyze_file(path);
+        let (result, mut session) = self.session.session.analyze_file(path);
         if let Err(err) = result {
-            core.reentrancy.emit_diag(Message::from(err).at(span))
+            session.reentrancy.emit_diag(Message::from(err).at(span))
         }
         Semantics {
-            core,
+            session,
             state: TokenStreamState::new(),
             tokens: self.session.tokens,
         }
@@ -180,7 +183,7 @@ where
         if let Some(arg) = single_arg(self.span, self.args, &mut self.session) {
             let result = self.session.expect_const(arg);
             if let Ok(value) = result {
-                self.session.core.builder.set_origin(value)
+                self.session.session.builder.set_origin(value)
             }
         }
         self.session
@@ -375,7 +378,7 @@ mod tests {
     fn include_file_with_invalid_utf8() {
         let name = "invalid_utf8.s";
         let log = collect_semantic_actions(|mut actions| {
-            actions.core.reentrancy.fail(CodebaseError::Utf8Error);
+            actions.session.reentrancy.fail(CodebaseError::Utf8Error);
             let mut context = actions
                 .will_parse_line()
                 .into_instr_line()
@@ -400,7 +403,7 @@ mod tests {
         let message = "some message";
         let log = collect_semantic_actions(|mut actions| {
             actions
-                .core
+                .session
                 .reentrancy
                 .fail(CodebaseError::IoError(io::Error::new(
                     io::ErrorKind::NotFound,

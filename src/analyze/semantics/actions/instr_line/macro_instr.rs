@@ -3,7 +3,7 @@ use super::{InstrLineState, Keyword, Semantics, TokenStreamSemantics};
 use crate::analyze::semantics::actions::TokenStreamState;
 use crate::analyze::semantics::reentrancy::{MacroArgs, Meta, ReentrancyActions};
 use crate::analyze::semantics::resolve::{NameTable, StartScope};
-use crate::analyze::semantics::Core;
+use crate::analyze::semantics::CompositeSession;
 use crate::analyze::syntax::actions::{InstrFinalizer, MacroArgContext, MacroInstrContext};
 use crate::analyze::{SemanticToken, TokenSeq};
 use crate::object::builder::Backend;
@@ -40,7 +40,7 @@ where
     R::Ident: 'static,
     R::StringRef: 'static,
     R::Span: 'static,
-    Core<R, N, B>: ReentrancyActions<
+    CompositeSession<R, N, B>: ReentrancyActions<
         Ident = R::Ident,
         StringRef = R::StringRef,
         Span = R::Span,
@@ -69,7 +69,7 @@ where
     R::Ident: 'static,
     R::StringRef: 'static,
     R::Span: 'static,
-    Core<R, N, B>: ReentrancyActions<
+    CompositeSession<R, N, B>: ReentrancyActions<
         Ident = R::Ident,
         StringRef = R::StringRef,
         Span = R::Span,
@@ -88,9 +88,9 @@ where
     type Next = TokenStreamSemantics<'a, R, N, B>;
 
     fn did_parse_instr(self) -> Self::Next {
-        let core = self.core.call_macro(self.state.name, self.state.args);
+        let session = self.session.call_macro(self.state.name, self.state.args);
         Semantics {
-            core,
+            session,
             state: TokenStreamState::from(self.state.parent),
             tokens: self.tokens,
         }

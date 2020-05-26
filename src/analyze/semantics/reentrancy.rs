@@ -1,5 +1,5 @@
 use super::resolve::{NameTable, StartScope};
-use super::{Core, Keyword, Semantics, TokenStreamState};
+use super::{CompositeSession, Keyword, Semantics, TokenStreamState};
 
 use crate::analyze::macros::{MacroSource, MacroTable};
 use crate::analyze::strings::GetString;
@@ -124,7 +124,8 @@ where
     type StringRef = <C::Target as StringSource>::StringRef;
 }
 
-impl<C, P, M, I, D, N, B> ReentrancyActions for Core<SourceComponents<C, P, M, I, D>, N, B>
+impl<C, P, M, I, D, N, B> ReentrancyActions
+    for CompositeSession<SourceComponents<C, P, M, I, D>, N, B>
 where
     C: DerefMut,
     C::Target: Lex<D::Target>,
@@ -170,11 +171,11 @@ where
         };
         let mut parser = self.reentrancy.parser_factory.mk_parser();
         let semantics = Semantics {
-            core: self,
+            session: self,
             state: TokenStreamState::new(),
             tokens: &mut tokens,
         };
-        (Ok(()), parser.parse_token_stream(semantics).core)
+        (Ok(()), parser.parse_token_stream(semantics).session)
     }
 
     fn define_macro(
@@ -203,11 +204,11 @@ where
         let mut parser = self.reentrancy.parser_factory.mk_parser();
         let mut tokens = expansion.map(|(t, s)| (Ok(t), s));
         let semantics = Semantics {
-            core: self,
+            session: self,
             state: TokenStreamState::new(),
             tokens: &mut tokens,
         };
-        parser.parse_token_stream(semantics).core
+        parser.parse_token_stream(semantics).session
     }
 }
 
@@ -299,7 +300,7 @@ mod mock {
         }
     }
 
-    impl<T, S, N, B> ReentrancyActions for Core<MockSourceComponents<T, S>, N, B>
+    impl<T, S, N, B> ReentrancyActions for CompositeSession<MockSourceComponents<T, S>, N, B>
     where
         T: From<ReentrancyEvent> + From<DiagnosticsEvent<S>>,
         S: Clone + Merge,
@@ -459,7 +460,7 @@ mod tests {
     >;
     type MockBuilder<S> =
         crate::object::builder::mock::MockBackend<SerialIdAllocator<MockSymbolId>, Event<S>>;
-    type TestSession<'a, S> = Core<
+    type TestCompositeSession<'a, S> = CompositeSession<
         SourceComponents<
             &'a mut MockCodebase<S>,
             &'a mut MockParserFactory<S>,
@@ -540,11 +541,11 @@ mod tests {
             fixture
         }
 
-        fn log_session(mut self, f: impl FnOnce(TestSession<S>)) -> Vec<Event<S>>
+        fn log_session(mut self, f: impl FnOnce(TestCompositeSession<S>)) -> Vec<Event<S>>
         where
             Event<S>: Debug,
         {
-            f(Core {
+            f(CompositeSession {
                 reentrancy: SourceComponents::new(
                     &mut self.inner.codebase,
                     &mut self.inner.analyzer,

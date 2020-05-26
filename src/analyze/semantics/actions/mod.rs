@@ -24,7 +24,7 @@ where
     R::Ident: 'static,
     R::StringRef: 'static,
     R::Span: 'static,
-    Core<R, N, B>: ReentrancyActions<StringRef = R::StringRef>,
+    CompositeSession<R, N, B>: ReentrancyActions<StringRef = R::StringRef>,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
@@ -37,9 +37,9 @@ where
 {
     pub fn analyze_file(
         self,
-        path: <Core<R, N, B> as StringSource>::StringRef,
+        path: <CompositeSession<R, N, B> as StringSource>::StringRef,
     ) -> Result<(), CodebaseError> {
-        self.core.analyze_file(path).0
+        self.session.analyze_file(path).0
     }
 }
 
@@ -73,15 +73,15 @@ impl<'a, R: Meta, N, B, S> ParsingContext for Semantics<'a, R, N, B, S> {
     }
 
     fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
-        self.core.reentrancy.merge_spans(left, right)
+        self.session.reentrancy.merge_spans(left, right)
     }
 
     fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped {
-        self.core.reentrancy.strip_span(span)
+        self.session.reentrancy.strip_span(span)
     }
 
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<Self::Span, Self::Stripped>>) {
-        self.core.reentrancy.emit_diag(diag)
+        self.session.reentrancy.emit_diag(diag)
     }
 }
 
@@ -91,7 +91,7 @@ where
     R::Ident: 'static,
     R::StringRef: 'static,
     R::Span: 'static,
-    Core<R, N, B>: ReentrancyActions<
+    CompositeSession<R, N, B>: ReentrancyActions<
         Ident = R::Ident,
         StringRef = R::StringRef,
         Span = R::Span,
@@ -128,7 +128,7 @@ where
                 match state.context {
                     TokenContext::FalseIf => unimplemented!(),
                     TokenContext::MacroDef(_) => self
-                        .core
+                        .session
                         .reentrancy
                         .emit_diag(Message::UnexpectedEof.at(span)),
                 }
@@ -600,7 +600,7 @@ pub mod tests {
                 tokens,
             );
             for (ident, resolution) in entries {
-                session.core.names.define_name(ident, resolution)
+                session.session.names.define_name(ident, resolution)
             }
             f(session.map_names(|names| Box::new(MockNameTable::new(*names, log))));
         })

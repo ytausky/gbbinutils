@@ -35,7 +35,7 @@ where
     R::Ident: 'static,
     R::StringRef: 'static,
     R::Span: 'static,
-    Core<R, N, B>: ReentrancyActions<StringRef = R::StringRef>,
+    CompositeSession<R, N, B>: ReentrancyActions<StringRef = R::StringRef>,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
@@ -60,7 +60,7 @@ where
     R::Ident: 'static,
     R::StringRef: 'static,
     R::Span: 'static,
-    Core<R, N, B>: ReentrancyActions<StringRef = R::StringRef>,
+    CompositeSession<R, N, B>: ReentrancyActions<StringRef = R::StringRef>,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
@@ -121,7 +121,7 @@ where
     ) {
         if let Ok(value) = self.expect_const(expr) {
             let id = self.reloc_lookup(name, span.clone());
-            self.core.builder.define_symbol(id, span, value);
+            self.session.builder.define_symbol(id, span, value);
         }
     }
 }
@@ -160,7 +160,10 @@ where
         operands.push(operand)
     }
     if let Ok(instruction) = cpu_instr::analyze_instruction(name, operands, &mut session) {
-        session.core.builder.emit_item(Item::CpuInstr(instruction))
+        session
+            .session
+            .builder
+            .emit_item(Item::CpuInstr(instruction))
     }
     session
 }

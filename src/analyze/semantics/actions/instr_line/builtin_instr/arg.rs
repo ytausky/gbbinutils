@@ -1,4 +1,4 @@
-use super::{BuiltinInstrSemantics, Core};
+use super::{BuiltinInstrSemantics, CompositeSession};
 
 use crate::analyze::semantics::actions::Keyword;
 use crate::analyze::semantics::arg::{Arg, DerefableArg};
@@ -28,7 +28,7 @@ where
     type Next = BuiltinInstrSemantics<'a, R, N, B::Parent>;
 
     fn did_parse_arg(mut self) -> Self::Next {
-        let (builder, value) = self.core.builder.finish();
+        let (builder, value) = self.session.builder.finish();
         let arg = match self.state.arg {
             Some(Arg::Bare(DerefableArg::Const(()))) => {
                 Arg::Bare(DerefableArg::Const(value.unwrap()))
@@ -47,9 +47,9 @@ where
         };
         self.state.parent.args.push(arg);
         Semantics {
-            core: Core {
-                reentrancy: self.core.reentrancy,
-                names: self.core.names,
+            session: CompositeSession {
+                reentrancy: self.session.reentrancy,
+                names: self.session.names,
                 builder,
             },
             state: self.state.parent,
@@ -75,14 +75,14 @@ where
         match atom {
             ExprAtom::Ident(ident) => self.act_on_ident(ident, span),
             ExprAtom::Literal(Literal::Number(n)) => {
-                self.core.builder.push_op(n, span);
+                self.session.builder.push_op(n, span);
                 self.state.arg = Some(Arg::Bare(DerefableArg::Const(())));
             }
             ExprAtom::Literal(Literal::String(string)) => {
                 self.state.arg = Some(Arg::String(string, span))
             }
             ExprAtom::LocationCounter => {
-                self.core.builder.push_op(LocationCounter, span);
+                self.session.builder.push_op(LocationCounter, span);
                 self.state.arg = Some(Arg::Bare(DerefableArg::Const(())));
             }
             ExprAtom::Error => self.state.arg = Some(Arg::Error),
@@ -91,8 +91,8 @@ where
 
     fn act_on_operator(&mut self, op: Operator, span: R::Span) {
         match op {
-            Operator::Binary(op) => self.core.builder.push_op(op, span),
-            Operator::FnCall(arity) => self.core.builder.push_op(FnCall(arity), span),
+            Operator::Binary(op) => self.session.builder.push_op(op, span),
+            Operator::FnCall(arity) => self.session.builder.push_op(FnCall(arity), span),
             Operator::Unary(UnaryOperator::Parentheses) => match &self.state.arg {
                 Some(Arg::Bare(arg)) => self.state.arg = Some(Arg::Deref((*arg).clone(), span)),
                 _ => unimplemented!(),
@@ -126,11 +126,11 @@ where
             .position(|param| *param == ident)
             .map(ParamId);
         if let Some(id) = param {
-            self.core.builder.push_op(id, span);
+            self.session.builder.push_op(id, span);
             self.state.arg = Some(Arg::Bare(DerefableArg::Const(())));
             return;
         }
-        match self.core.names.resolve_name(&ident) {
+        match self.session.names.resolve_name(&ident) {
             Some(ResolvedName::Keyword(Keyword::Operand(symbol))) => match self.state.arg {
                 None => self.state.arg = Some(Arg::Bare(DerefableArg::Symbol(*symbol, span))),
                 _ => unimplemented!(),
@@ -140,13 +140,13 @@ where
                 self.emit_diag(Message::KeywordInExpr { keyword }.at(span))
             }
             Some(ResolvedName::Symbol(id)) => {
-                self.core.builder.push_op(Name(id), span);
+                self.session.builder.push_op(Name(id), span);
                 self.state.arg = Some(Arg::Bare(DerefableArg::Const(())))
             }
             None => {
-                let id = self.core.builder.alloc_symbol(span.clone());
+                let id = self.session.builder.alloc_symbol(span.clone());
                 self.define_name(ident, ResolvedName::Symbol(id.clone()));
-                self.core.builder.push_op(Name(id), span);
+                self.session.builder.push_op(Name(id), span);
                 self.state.arg = Some(Arg::Bare(DerefableArg::Const(())))
             }
             _ => unimplemented!(),
