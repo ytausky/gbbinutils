@@ -10,7 +10,7 @@ use crate::BuiltinSymbols;
 mod lowering;
 
 pub(crate) trait Backend<S: Clone>: PartialBackend<S> + Sized {
-    type ExprBuilder: ValueBuilder<Self::SymbolId, S, Parent = Self, Value = Self::Value>;
+    type ExprBuilder: ValueBuilder<S, SymbolId = Self::SymbolId, Parent = Self, Value = Self::Value>;
 
     fn build_const(self) -> Self::ExprBuilder;
     fn define_symbol(&mut self, name: Self::SymbolId, span: S, expr: Self::Value);
@@ -38,11 +38,11 @@ pub trait SymbolSource {
     type SymbolId: Clone;
 }
 
-pub trait ValueBuilder<N: Clone, S: Clone>:
-    AllocSymbol<S, SymbolId = N>
+pub trait ValueBuilder<S: Clone>:
+    AllocSymbol<S>
     + PushOp<LocationCounter, S>
     + PushOp<i32, S>
-    + PushOp<Name<N>, S>
+    + PushOp<Name<<Self as SymbolSource>::SymbolId>, S>
     + PushOp<BinOp, S>
     + PushOp<ParamId, S>
     + PushOp<FnCall, S>
@@ -50,11 +50,11 @@ pub trait ValueBuilder<N: Clone, S: Clone>:
 {
 }
 
-impl<T, N: Clone, S: Clone> ValueBuilder<N, S> for T where
-    Self: AllocSymbol<S, SymbolId = N>
+impl<T, S: Clone> ValueBuilder<S> for T where
+    Self: AllocSymbol<S>
         + PushOp<LocationCounter, S>
         + PushOp<i32, S>
-        + PushOp<Name<N>, S>
+        + PushOp<Name<<Self as SymbolSource>::SymbolId>, S>
         + PushOp<BinOp, S>
         + PushOp<ParamId, S>
         + PushOp<FnCall, S>

@@ -68,7 +68,7 @@ where
         MacroId = R::MacroId,
         SymbolId = <<B as Finish>::Parent as SymbolSource>::SymbolId,
     >,
-    B: ValueBuilder<<<B as Finish>::Parent as SymbolSource>::SymbolId, R::Span> + Finish,
+    B: ValueBuilder<R::Span, SymbolId = <<B as Finish>::Parent as SymbolSource>::SymbolId> + Finish,
     B::Parent: PartialBackend<R::Span>,
 {
     fn act_on_atom(&mut self, atom: ExprAtom<R::Ident, Literal<R::StringRef>>, span: R::Span) {
@@ -111,7 +111,7 @@ where
         MacroId = R::MacroId,
         SymbolId = <<B as Finish>::Parent as SymbolSource>::SymbolId,
     >,
-    B: ValueBuilder<<<B as Finish>::Parent as SymbolSource>::SymbolId, R::Span> + Finish,
+    B: ValueBuilder<R::Span, SymbolId = <<B as Finish>::Parent as SymbolSource>::SymbolId> + Finish,
     B::Parent: PartialBackend<R::Span>,
 {
     fn act_on_ident(&mut self, ident: R::Ident, span: R::Span) {
