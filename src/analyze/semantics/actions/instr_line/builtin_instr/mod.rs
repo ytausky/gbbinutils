@@ -22,7 +22,7 @@ impl<R, V> From<BuiltinInstrState<R, V>>
         <R as SpanSource>::Span,
     >
 where
-    R: ReentrancyActions,
+    R: Meta,
 {
     fn from(_: BuiltinInstrState<R, V>) -> Self {
         InstrLineState::new().into()
@@ -31,10 +31,11 @@ where
 
 impl<'a, R, N, B> BuiltinInstrContext for BuiltinInstrSemantics<'a, R, N, B>
 where
-    R: ReentrancyActions,
+    R: Meta,
     R::Ident: 'static,
     R::StringRef: 'static,
     R::Span: 'static,
+    Core<R, N, B>: ReentrancyActions<StringRef = R::StringRef>,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
@@ -55,10 +56,11 @@ where
 
 impl<'a, R, N, B> InstrFinalizer for BuiltinInstrSemantics<'a, R, N, B>
 where
-    R: ReentrancyActions,
+    R: Meta,
     R::Ident: 'static,
     R::StringRef: 'static,
     R::Span: 'static,
+    Core<R, N, B>: ReentrancyActions<StringRef = R::StringRef>,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
@@ -91,7 +93,7 @@ where
 
 impl<'a, R, N, B, S> Semantics<'a, R, N, B, S>
 where
-    R: ReentrancyActions,
+    R: Meta,
     N: DerefMut,
     N::Target: NameTable<R::Ident, MacroId = R::MacroId, SymbolId = B::SymbolId>,
     B: Backend<R::Span>,
@@ -136,7 +138,7 @@ impl From<Mnemonic> for BuiltinMnemonic {
     }
 }
 
-fn analyze_mnemonic<'a, R: ReentrancyActions, N, B>(
+fn analyze_mnemonic<'a, R: Meta, N, B>(
     name: (&Mnemonic, R::Span),
     args: BuiltinInstrArgs<B::Value, R::StringRef, R::Span>,
     mut session: TokenStreamSemantics<'a, R, N, B>,

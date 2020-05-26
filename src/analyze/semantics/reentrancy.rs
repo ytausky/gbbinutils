@@ -1,42 +1,40 @@
+use super::resolve::{NameTable, StartScope};
+use super::{Core, Keyword, Semantics, TokenStreamState};
+
 use crate::analyze::macros::{MacroSource, MacroTable};
 use crate::analyze::strings::GetString;
-use crate::analyze::syntax::actions::{LexerOutput, TokenStreamContext};
 use crate::analyze::syntax::parser::ParserFactory;
 use crate::analyze::syntax::{LexError, ParseTokenStream};
 use crate::analyze::{IdentSource, Lex, Literal, SemanticToken, StringSource, TokenSeq};
 use crate::codebase::CodebaseError;
 use crate::diag::span::SpanSource;
 use crate::diag::*;
+use crate::object::builder::Backend;
 
 use std::ops::{Deref, DerefMut};
 
 #[cfg(test)]
 pub(crate) use self::mock::*;
 
-pub(in crate::analyze) trait ReentrancyActions
-where
-    Self: IdentSource
+pub(in crate::analyze) trait Meta:
+    IdentSource + MacroSource + SpanSource + StringSource + Diagnostics<<Self as SpanSource>::Span>
+{
+}
+
+impl<T> Meta for T where
+    T: IdentSource
         + MacroSource
         + SpanSource
         + StringSource
-        + GetString<<Self as StringSource>::StringRef>
         + Diagnostics<<Self as SpanSource>::Span>
-        + Sized,
 {
-    fn analyze_file<A>(
-        self,
-        path: Self::StringRef,
-        actions: A,
-    ) -> (Result<(), CodebaseError>, (Self, A))
-    where
-        Self: for<'a> IntoSemanticActions<
-            'a,
-            <Self as IdentSource>::Ident,
-            Literal<<Self as StringSource>::StringRef>,
-            LexError,
-            <Self as SpanSource>::Span,
-            A,
-        >;
+}
+
+pub(in crate::analyze) trait ReentrancyActions
+where
+    Self: Meta + Sized,
+{
+    fn analyze_file(self, path: Self::StringRef) -> (Result<(), CodebaseError>, Self);
 
     fn define_macro(
         &mut self,
@@ -45,38 +43,11 @@ where
         body: TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
     ) -> Self::MacroId;
 
-    fn call_macro<A>(
+    fn call_macro(
         self,
         name: (Self::MacroId, Self::Span),
         args: MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
-        actions: A,
-    ) -> (Self, A)
-    where
-        Self: for<'a> IntoSemanticActions<
-            'a,
-            <Self as IdentSource>::Ident,
-            Literal<<Self as StringSource>::StringRef>,
-            LexError,
-            <Self as SpanSource>::Span,
-            A,
-        >;
-}
-
-pub(in crate::analyze) trait IntoSemanticActions<'a, I, L, E, Sp: Clone, S>:
-    Sized
-{
-    type SemanticActions: TokenStreamContext<Ident = I, Literal = L, Error = E, Span = Sp>
-        + Split<Self, S>;
-
-    fn into_semantic_actions(
-        self,
-        tokens: &'a mut dyn Iterator<Item = LexerOutput<I, L, E, Sp>>,
-        semantics: S,
-    ) -> Self::SemanticActions;
-}
-
-pub(in crate::analyze) trait Split<T, S> {
-    fn split(self) -> (T, S);
+    ) -> Self;
 }
 
 pub(super) type MacroArgs<I, R, S> = crate::analyze::macros::MacroArgs<SemanticToken<I, R>, S>;
@@ -153,7 +124,7 @@ where
     type StringRef = <C::Target as StringSource>::StringRef;
 }
 
-impl<C, P, M, I, D> ReentrancyActions for SourceComponents<C, P, M, I, D>
+impl<C, P, M, I, D, N, B> ReentrancyActions for Core<SourceComponents<C, P, M, I, D>, N, B>
 where
     C: DerefMut,
     C::Target: Lex<D::Target>,
@@ -175,29 +146,35 @@ where
     I::Target: GetString<<Self as StringSource>::StringRef>,
     D: DerefMut,
     D::Target: DiagnosticsSystem,
-{
-    fn analyze_file<A>(
-        mut self,
-        path: Self::StringRef,
-        actions: A,
-    ) -> (Result<(), CodebaseError>, (Self, A))
-    where
-        Self: for<'a> IntoSemanticActions<
-            'a,
+    N: DerefMut,
+    N::Target: StartScope<<Self as IdentSource>::Ident>
+        + NameTable<
             <Self as IdentSource>::Ident,
-            Literal<<Self as StringSource>::StringRef>,
-            LexError,
-            <Self as SpanSource>::Span,
-            A,
+            Keyword = &'static Keyword,
+            MacroId = <Self as MacroSource>::MacroId,
+            SymbolId = B::SymbolId,
         >,
-    {
-        let mut tokens = match self.codebase.lex_file(path, &mut *self.diagnostics) {
+    B: Backend<<Self as SpanSource>::Span>,
+    <Self as IdentSource>::Ident: 'static,
+    <Self as StringSource>::StringRef: 'static,
+    <Self as SpanSource>::Span: 'static,
+{
+    fn analyze_file(mut self, path: Self::StringRef) -> (Result<(), CodebaseError>, Self) {
+        let mut tokens = match self
+            .reentrancy
+            .codebase
+            .lex_file(path, &mut *self.reentrancy.diagnostics)
+        {
             Ok(tokens) => tokens,
-            Err(error) => return (Err(error), (self, actions)),
+            Err(error) => return (Err(error), self),
         };
-        let mut parser = self.parser_factory.mk_parser();
-        let actions = self.into_semantic_actions(&mut tokens, actions);
-        (Ok(()), parser.parse_token_stream(actions).split())
+        let mut parser = self.reentrancy.parser_factory.mk_parser();
+        let semantics = Semantics {
+            core: self,
+            state: TokenStreamState::new(),
+            tokens: &mut tokens,
+        };
+        (Ok(()), parser.parse_token_stream(semantics).core)
     }
 
     fn define_macro(
@@ -206,31 +183,31 @@ where
         params: Params<Self::Ident, Self::Span>,
         body: TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
     ) -> Self::MacroId {
-        self.macros
-            .define_macro(name_span, params, body, &mut *self.diagnostics)
+        self.reentrancy.macros.define_macro(
+            name_span,
+            params,
+            body,
+            &mut *self.reentrancy.diagnostics,
+        )
     }
 
-    fn call_macro<A>(
+    fn call_macro(
         mut self,
         id: (Self::MacroId, Self::Span),
         args: MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
-        actions: A,
-    ) -> (Self, A)
-    where
-        Self: for<'a> IntoSemanticActions<
-            'a,
-            <Self as IdentSource>::Ident,
-            Literal<<Self as StringSource>::StringRef>,
-            LexError,
-            <Self as SpanSource>::Span,
-            A,
-        >,
-    {
-        let expansion = self.macros.expand_macro(id, args, &mut *self.diagnostics);
-        let mut parser = self.parser_factory.mk_parser();
+    ) -> Self {
+        let expansion =
+            self.reentrancy
+                .macros
+                .expand_macro(id, args, &mut *self.reentrancy.diagnostics);
+        let mut parser = self.reentrancy.parser_factory.mk_parser();
         let mut tokens = expansion.map(|(t, s)| (Ok(t), s));
-        let actions = self.into_semantic_actions(&mut tokens, actions);
-        parser.parse_token_stream(actions).split()
+        let semantics = Semantics {
+            core: self,
+            state: TokenStreamState::new(),
+            tokens: &mut tokens,
+        };
+        parser.parse_token_stream(semantics).core
     }
 }
 
@@ -322,28 +299,14 @@ mod mock {
         }
     }
 
-    impl<T, S> ReentrancyActions for MockSourceComponents<T, S>
+    impl<T, S, N, B> ReentrancyActions for Core<MockSourceComponents<T, S>, N, B>
     where
         T: From<ReentrancyEvent> + From<DiagnosticsEvent<S>>,
         S: Clone + Merge,
     {
-        fn analyze_file<A>(
-            mut self,
-            path: String,
-            actions: A,
-        ) -> (Result<(), CodebaseError>, (Self, A))
-        where
-            Self: for<'a> IntoSemanticActions<
-                'a,
-                <Self as IdentSource>::Ident,
-                Literal<<Self as StringSource>::StringRef>,
-                LexError,
-                <Self as SpanSource>::Span,
-                A,
-            >,
-        {
-            self.log.push(ReentrancyEvent::AnalyzeFile(path));
-            (self.error.take().map_or(Ok(()), Err), (self, actions))
+        fn analyze_file(mut self, path: String) -> (Result<(), CodebaseError>, Self) {
+            self.reentrancy.log.push(ReentrancyEvent::AnalyzeFile(path));
+            (self.reentrancy.error.take().map_or(Ok(()), Err), self)
         }
 
         fn define_macro(
@@ -352,28 +315,21 @@ mod mock {
             (params, _): (Vec<Self::Ident>, Vec<Self::Span>),
             (body, _): TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
         ) -> Self::MacroId {
-            self.log.push(ReentrancyEvent::DefineMacro(params, body));
-            self.macro_alloc.gen()
+            self.reentrancy
+                .log
+                .push(ReentrancyEvent::DefineMacro(params, body));
+            self.reentrancy.macro_alloc.gen()
         }
 
-        fn call_macro<A>(
+        fn call_macro(
             self,
             (id, _): (Self::MacroId, Self::Span),
             (args, _): MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
-            actions: A,
-        ) -> (Self, A)
-        where
-            Self: for<'a> IntoSemanticActions<
-                'a,
-                <Self as IdentSource>::Ident,
-                Literal<<Self as StringSource>::StringRef>,
-                LexError,
-                <Self as SpanSource>::Span,
-                A,
-            >,
-        {
-            self.log.push(ReentrancyEvent::InvokeMacro(id, args));
-            (self, actions)
+        ) -> Self {
+            self.reentrancy
+                .log
+                .push(ReentrancyEvent::InvokeMacro(id, args));
+            self
         }
     }
 }
@@ -382,59 +338,26 @@ mod mock {
 mod tests {
     use super::*;
 
-    use crate::analyze::macros::mock::MacroTableEvent;
+    use crate::analyze::macros::mock::{MacroTableEvent, MockMacroId};
+    use crate::analyze::semantics::resolve::{BasicNameTable, NameTableEvent};
     use crate::analyze::strings::FakeStringInterner;
-    use crate::analyze::syntax::actions::mock::{IdentKind, TokenStreamActionCollector};
     use crate::analyze::syntax::parser::mock::*;
     use crate::analyze::syntax::*;
     use crate::analyze::{Literal, MockCodebase};
     use crate::diag::DiagnosticsEvent;
+    use crate::expr::Expr;
     use crate::log::*;
+    use crate::object::builder::mock::{BackendEvent, MockSymbolId, SerialIdAllocator};
 
     use std::fmt::Debug;
     use std::iter;
-
-    impl<'a, S> IntoSemanticActions<'a, S::Ident, Literal<S::StringRef>, LexError, S::Span, ()> for S
-    where
-        S: ReentrancyActions,
-        S::Ident: 'a,
-        S::StringRef: 'a,
-        S::Span: 'a + Merge,
-    {
-        type SemanticActions =
-            TokenStreamActionCollector<'a, S, S::Ident, Literal<S::StringRef>, LexError, S::Span>;
-
-        fn into_semantic_actions(
-            self,
-            tokens: &'a mut dyn Iterator<
-                Item = LexerOutput<S::Ident, Literal<S::StringRef>, LexError, S::Span>,
-            >,
-            _: (),
-        ) -> Self::SemanticActions {
-            TokenStreamActionCollector::new(self, tokens, panic)
-        }
-    }
-
-    impl<'a, S> Split<S, ()>
-        for TokenStreamActionCollector<'a, S, S::Ident, Literal<S::StringRef>, LexError, S::Span>
-    where
-        S: ReentrancyActions,
-    {
-        fn split(self) -> (S, ()) {
-            (self.data.parent, ())
-        }
-    }
-
-    fn panic<I>(_: &I) -> IdentKind {
-        panic!("tried annotating an identifier instead of skipping parsing")
-    }
 
     #[test]
     fn include_source_file() {
         let path = "my_file.s";
         let tokens = vec![(Ok(Token::Ident("NOP".into())), ())];
         let log = Fixture::new(|fixture| fixture.codebase.set_file(path, tokens.clone()))
-            .log_session(|session| session.analyze_file(path.into(), ()).0.unwrap());
+            .log_session(|session| session.analyze_file(path.into()).0.unwrap());
         assert_eq!(log, [ParserEvent::ParseTokenStream(tokens).into()]);
     }
 
@@ -444,7 +367,7 @@ mod tests {
         let spans: Vec<_> = iter::repeat(()).take(tokens.len()).collect();
         let log = Fixture::default().log_session(|mut session| {
             let id = session.define_macro((), (vec![], vec![]), (tokens.clone(), spans.clone()));
-            session.call_macro((id, ()), (vec![], vec![]), ());
+            session.call_macro((id, ()), (vec![], vec![]));
         });
         assert_eq!(
             log,
@@ -471,7 +394,7 @@ mod tests {
                 (vec![param.into()], vec![()]),
                 (tokens.clone(), vec![(), (), ()]),
             );
-            session.call_macro((id, ()), (vec![vec![arg.clone()]], vec![vec![()]]), ());
+            session.call_macro((id, ()), (vec![vec![arg.clone()]], vec![vec![()]]));
         });
         assert_eq!(
             log,
@@ -504,7 +427,6 @@ mod tests {
             session.call_macro(
                 (id, ()),
                 (vec![vec![Token::Ident(label.into())]], vec![vec![()]]),
-                (),
             );
         });
         assert_eq!(
@@ -531,12 +453,22 @@ mod tests {
     type MockParserFactory<S> = crate::analyze::syntax::parser::mock::MockParserFactory<Event<S>>;
     type MockMacroTable<S> = crate::analyze::macros::mock::MockMacroTable<usize, Event<S>>;
     type MockDiagnosticsSystem<S> = crate::diag::MockDiagnosticsSystem<Event<S>, S>;
-    type TestSession<'a, S> = SourceComponents<
-        &'a mut MockCodebase<S>,
-        &'a mut MockParserFactory<S>,
-        &'a mut MockMacroTable<S>,
-        &'a mut FakeStringInterner,
-        &'a mut MockDiagnosticsSystem<S>,
+    type MockNameTable<S> = crate::analyze::semantics::resolve::MockNameTable<
+        BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
+        Event<S>,
+    >;
+    type MockBuilder<S> =
+        crate::object::builder::mock::MockBackend<SerialIdAllocator<MockSymbolId>, Event<S>>;
+    type TestSession<'a, S> = Core<
+        SourceComponents<
+            &'a mut MockCodebase<S>,
+            &'a mut MockParserFactory<S>,
+            &'a mut MockMacroTable<S>,
+            &'a mut FakeStringInterner,
+            &'a mut MockDiagnosticsSystem<S>,
+        >,
+        &'a mut MockNameTable<S>,
+        MockBuilder<S>,
     >;
 
     #[derive(Debug, PartialEq)]
@@ -544,6 +476,8 @@ mod tests {
         Parser(ParserEvent<String, Literal<String>, LexError, S>),
         MacroTable(MacroTableEvent),
         Diagnostics(DiagnosticsEvent<S>),
+        NameTable(NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>),
+        Backend(BackendEvent<MockSymbolId, Expr<MockSymbolId, S>>),
     }
 
     impl<S: Clone> From<ParserEvent<String, Literal<String>, LexError, S>> for Event<S> {
@@ -561,6 +495,18 @@ mod tests {
     impl<S: Clone> From<DiagnosticsEvent<S>> for Event<S> {
         fn from(event: DiagnosticsEvent<S>) -> Self {
             Event::Diagnostics(event)
+        }
+    }
+
+    impl<S: Clone> From<NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>> for Event<S> {
+        fn from(event: NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>) -> Self {
+            Event::NameTable(event)
+        }
+    }
+
+    impl<S: Clone> From<BackendEvent<MockSymbolId, Expr<MockSymbolId, S>>> for Event<S> {
+        fn from(event: BackendEvent<MockSymbolId, Expr<MockSymbolId, S>>) -> Self {
+            Event::Backend(event)
         }
     }
 
@@ -598,13 +544,17 @@ mod tests {
         where
             Event<S>: Debug,
         {
-            f(SourceComponents::new(
-                &mut self.inner.codebase,
-                &mut self.inner.analyzer,
-                &mut self.inner.macros,
-                &mut self.inner.interner,
-                &mut self.inner.diagnostics,
-            ));
+            f(Core {
+                reentrancy: SourceComponents::new(
+                    &mut self.inner.codebase,
+                    &mut self.inner.analyzer,
+                    &mut self.inner.macros,
+                    &mut self.inner.interner,
+                    &mut self.inner.diagnostics,
+                ),
+                names: &mut MockNameTable::new(BasicNameTable::default(), self.log.clone()),
+                builder: MockBuilder::new(SerialIdAllocator::new(MockSymbolId), self.log.clone()),
+            });
             drop(self.inner);
             self.log.into_inner()
         }

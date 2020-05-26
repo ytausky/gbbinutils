@@ -3,7 +3,7 @@ use self::token_line::TokenContextFinalizationSemantics;
 use super::Semantics;
 use super::*;
 
-use crate::analyze::semantics::reentrancy::{IntoSemanticActions, ReentrancyActions, Split};
+use crate::analyze::semantics::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::resolve::{NameTable, StartScope};
 use crate::analyze::syntax::actions::*;
 use crate::analyze::syntax::LexError;
@@ -20,10 +20,11 @@ mod token_line;
 
 impl<'a, R, N, B> Semantics<'a, R, N, B, TokenStreamState<R::Ident, R::StringRef, R::Span>>
 where
-    R: ReentrancyActions,
+    R: Meta,
     R::Ident: 'static,
     R::StringRef: 'static,
     R::Span: 'static,
+    Core<R, N, B>: ReentrancyActions<StringRef = R::StringRef>,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
@@ -34,47 +35,11 @@ where
         >,
     B: Backend<R::Span>,
 {
-    pub fn analyze_file(self, path: R::StringRef) -> Result<(), CodebaseError> {
-        self.reentrancy.analyze_file(path, self.core).0
-    }
-}
-
-impl<'a, R, N, B>
-    IntoSemanticActions<'a, R::Ident, Literal<R::StringRef>, LexError, R::Span, Core<N, B>> for R
-where
-    R: ReentrancyActions,
-    R::Ident: 'static,
-    R::StringRef: 'static,
-    R::Span: 'static,
-    N: DerefMut,
-    N::Target: StartScope<R::Ident>
-        + NameTable<
-            R::Ident,
-            Keyword = &'static Keyword,
-            MacroId = R::MacroId,
-            SymbolId = B::SymbolId,
-        >,
-    B: Backend<R::Span>,
-{
-    type SemanticActions = TokenStreamSemantics<'a, R, N, B>;
-
-    fn into_semantic_actions(
+    pub fn analyze_file(
         self,
-        tokens: TokenIterRef<'a, R>,
-        core: Core<N, B>,
-    ) -> Self::SemanticActions {
-        Semantics {
-            reentrancy: self,
-            core,
-            state: TokenStreamState::new(),
-            tokens,
-        }
-    }
-}
-
-impl<'a, R: ReentrancyActions, N, B> Split<R, Core<N, B>> for TokenStreamSemantics<'a, R, N, B> {
-    fn split(self) -> (R, Core<N, B>) {
-        (self.reentrancy, self.core)
+        path: <Core<R, N, B> as StringSource>::StringRef,
+    ) -> Result<(), CodebaseError> {
+        self.core.analyze_file(path).0
     }
 }
 
@@ -94,7 +59,7 @@ impl<I, R, S> From<TokenLineState<I, R, S>> for TokenStreamState<I, R, S> {
     }
 }
 
-impl<'a, R: ReentrancyActions, N, B, S> ParsingContext for Semantics<'a, R, N, B, S> {
+impl<'a, R: Meta, N, B, S> ParsingContext for Semantics<'a, R, N, B, S> {
     type Ident = R::Ident;
     type Literal = Literal<R::StringRef>;
     type Error = LexError;
@@ -108,24 +73,30 @@ impl<'a, R: ReentrancyActions, N, B, S> ParsingContext for Semantics<'a, R, N, B
     }
 
     fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
-        self.reentrancy.merge_spans(left, right)
+        self.core.reentrancy.merge_spans(left, right)
     }
 
     fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped {
-        self.reentrancy.strip_span(span)
+        self.core.reentrancy.strip_span(span)
     }
 
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<Self::Span, Self::Stripped>>) {
-        self.reentrancy.emit_diag(diag)
+        self.core.reentrancy.emit_diag(diag)
     }
 }
 
 impl<'a, R, N, B> TokenStreamContext for TokenStreamSemantics<'a, R, N, B>
 where
-    R: ReentrancyActions,
+    R: Meta,
     R::Ident: 'static,
     R::StringRef: 'static,
     R::Span: 'static,
+    Core<R, N, B>: ReentrancyActions<
+        Ident = R::Ident,
+        StringRef = R::StringRef,
+        Span = R::Span,
+        MacroId = R::MacroId,
+    >,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
@@ -156,9 +127,10 @@ where
             LineRule::TokenLine(ref state) => {
                 match state.context {
                     TokenContext::FalseIf => unimplemented!(),
-                    TokenContext::MacroDef(_) => {
-                        self.reentrancy.emit_diag(Message::UnexpectedEof.at(span))
-                    }
+                    TokenContext::MacroDef(_) => self
+                        .core
+                        .reentrancy
+                        .emit_diag(Message::UnexpectedEof.at(span)),
                 }
                 self
             }
@@ -166,7 +138,7 @@ where
     }
 }
 
-impl<'a, R: ReentrancyActions, N, B> InstrFinalizer for InstrLineSemantics<'a, R, N, B> {
+impl<'a, R: Meta, N, B> InstrFinalizer for InstrLineSemantics<'a, R, N, B> {
     type Next = TokenStreamSemantics<'a, R, N, B>;
 
     fn did_parse_instr(self) -> Self::Next {
@@ -174,7 +146,7 @@ impl<'a, R: ReentrancyActions, N, B> InstrFinalizer for InstrLineSemantics<'a, R
     }
 }
 
-impl<'a, R: ReentrancyActions, N, B> LineFinalizer for InstrLineSemantics<'a, R, N, B> {
+impl<'a, R: Meta, N, B> LineFinalizer for InstrLineSemantics<'a, R, N, B> {
     type Next = TokenStreamSemantics<'a, R, N, B>;
 
     fn did_parse_line(self, _: R::Span) -> Self::Next {
@@ -182,7 +154,7 @@ impl<'a, R: ReentrancyActions, N, B> LineFinalizer for InstrLineSemantics<'a, R,
     }
 }
 
-impl<'a, R: ReentrancyActions, N, B> LineFinalizer for TokenStreamSemantics<'a, R, N, B> {
+impl<'a, R: Meta, N, B> LineFinalizer for TokenStreamSemantics<'a, R, N, B> {
     type Next = Self;
 
     fn did_parse_line(self, _: R::Span) -> Self::Next {

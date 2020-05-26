@@ -14,7 +14,13 @@ use std::ops::DerefMut;
 
 impl<'a, R, N, B> TokenLineContext for TokenLineSemantics<'a, R, N, B>
 where
-    R: ReentrancyActions,
+    R: Meta,
+    Core<R, N, B>: ReentrancyActions<
+        Ident = R::Ident,
+        StringRef = R::StringRef,
+        Span = R::Span,
+        MacroId = R::MacroId,
+    >,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<R::Ident, Keyword = &'static Keyword, MacroId = R::MacroId>,
@@ -95,7 +101,13 @@ impl<I, R, S> MacroDefState<I, R, S> {
 
 impl<'a, R, N, B> LineFinalizer for TokenLineSemantics<'a, R, N, B>
 where
-    R: ReentrancyActions,
+    R: Meta,
+    Core<R, N, B>: ReentrancyActions<
+        Ident = R::Ident,
+        StringRef = R::StringRef,
+        Span = R::Span,
+        MacroId = R::MacroId,
+    >,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<R::Ident, Keyword = &'static Keyword, MacroId = R::MacroId>,
@@ -108,13 +120,11 @@ where
     }
 }
 
-pub(in crate::analyze) struct TokenContextFinalizationSemantics<'a, R: ReentrancyActions, N, B> {
+pub(in crate::analyze) struct TokenContextFinalizationSemantics<'a, R: Meta, N, B> {
     parent: TokenLineSemantics<'a, R, N, B>,
 }
 
-impl<'a, R: ReentrancyActions, N, B> ParsingContext
-    for TokenContextFinalizationSemantics<'a, R, N, B>
-{
+impl<'a, R: Meta, N, B> ParsingContext for TokenContextFinalizationSemantics<'a, R, N, B> {
     type Ident = R::Ident;
     type Literal = Literal<R::StringRef>;
     type Error = LexError;
@@ -128,21 +138,27 @@ impl<'a, R: ReentrancyActions, N, B> ParsingContext
     }
 
     fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
-        self.parent.reentrancy.merge_spans(left, right)
+        self.parent.core.reentrancy.merge_spans(left, right)
     }
 
     fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped {
-        self.parent.reentrancy.strip_span(span)
+        self.parent.core.reentrancy.strip_span(span)
     }
 
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<Self::Span, Self::Stripped>>) {
-        self.parent.reentrancy.emit_diag(diag)
+        self.parent.core.reentrancy.emit_diag(diag)
     }
 }
 
 impl<'a, R, N, B> LineFinalizer for TokenContextFinalizationSemantics<'a, R, N, B>
 where
-    R: ReentrancyActions,
+    R: Meta,
+    Core<R, N, B>: ReentrancyActions<
+        Ident = R::Ident,
+        StringRef = R::StringRef,
+        Span = R::Span,
+        MacroId = R::MacroId,
+    >,
     N: DerefMut,
     N::Target: NameTable<R::Ident, MacroId = R::MacroId>,
 {
@@ -154,7 +170,7 @@ where
             TokenContext::MacroDef(state) => {
                 if let Some((name, params)) = state.label {
                     let tokens = state.tokens;
-                    let id = self.parent.reentrancy.define_macro(name.1, params, tokens);
+                    let id = self.parent.core.define_macro(name.1, params, tokens);
                     self.parent
                         .core
                         .names

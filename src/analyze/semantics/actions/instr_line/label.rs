@@ -1,18 +1,18 @@
 use super::{InstrLineSemantics, InstrLineState, Semantics};
 
-use crate::analyze::semantics::reentrancy::ReentrancyActions;
+use crate::analyze::semantics::reentrancy::Meta;
 use crate::analyze::semantics::Params;
 use crate::analyze::syntax::actions::LabelContext;
 
 pub(super) type LabelSemantics<'a, R, N, B> = Semantics<'a, R, N, B, LabelState<R>>;
 
-pub(in crate::analyze) struct LabelState<R: ReentrancyActions> {
+pub(in crate::analyze) struct LabelState<R: Meta> {
     parent: InstrLineState<R::Ident, R::Span>,
     label: (R::Ident, R::Span),
     params: Params<R::Ident, R::Span>,
 }
 
-impl<R: ReentrancyActions> LabelState<R> {
+impl<R: Meta> LabelState<R> {
     pub fn new(parent: InstrLineState<R::Ident, R::Span>, label: (R::Ident, R::Span)) -> Self {
         Self {
             parent,
@@ -22,7 +22,7 @@ impl<R: ReentrancyActions> LabelState<R> {
     }
 }
 
-impl<'a, R: ReentrancyActions, N, B> LabelContext for LabelSemantics<'a, R, N, B> {
+impl<'a, R: Meta, N, B> LabelContext for LabelSemantics<'a, R, N, B> {
     type Next = InstrLineSemantics<'a, R, N, B>;
 
     fn act_on_param(&mut self, ident: R::Ident, span: R::Span) {

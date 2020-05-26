@@ -1,8 +1,9 @@
 use super::{InstrLineState, Keyword, Semantics, TokenStreamSemantics};
 
 use crate::analyze::semantics::actions::TokenStreamState;
-use crate::analyze::semantics::reentrancy::{MacroArgs, ReentrancyActions};
+use crate::analyze::semantics::reentrancy::{MacroArgs, Meta, ReentrancyActions};
 use crate::analyze::semantics::resolve::{NameTable, StartScope};
+use crate::analyze::semantics::Core;
 use crate::analyze::syntax::actions::{InstrFinalizer, MacroArgContext, MacroInstrContext};
 use crate::analyze::{SemanticToken, TokenSeq};
 use crate::object::builder::Backend;
@@ -11,13 +12,13 @@ use std::ops::DerefMut;
 
 pub(super) type MacroInstrSemantics<'a, R, N, B> = Semantics<'a, R, N, B, MacroInstrState<R>>;
 
-pub(in crate::analyze) struct MacroInstrState<R: ReentrancyActions> {
+pub(in crate::analyze) struct MacroInstrState<R: Meta> {
     parent: InstrLineState<R::Ident, R::Span>,
     name: (R::MacroId, R::Span),
     args: MacroArgs<R::Ident, R::StringRef, R::Span>,
 }
 
-impl<R: ReentrancyActions> MacroInstrState<R> {
+impl<R: Meta> MacroInstrState<R> {
     pub fn new(parent: InstrLineState<R::Ident, R::Span>, name: (R::MacroId, R::Span)) -> Self {
         Self {
             parent,
@@ -35,10 +36,16 @@ impl<R: ReentrancyActions> MacroInstrState<R> {
 
 impl<'a, R, N, B> MacroInstrContext for MacroInstrSemantics<'a, R, N, B>
 where
-    R: ReentrancyActions,
+    R: Meta,
     R::Ident: 'static,
     R::StringRef: 'static,
     R::Span: 'static,
+    Core<R, N, B>: ReentrancyActions<
+        Ident = R::Ident,
+        StringRef = R::StringRef,
+        Span = R::Span,
+        MacroId = R::MacroId,
+    >,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
@@ -58,10 +65,16 @@ where
 
 impl<'a, R, N, B> InstrFinalizer for MacroInstrSemantics<'a, R, N, B>
 where
-    R: ReentrancyActions,
+    R: Meta,
     R::Ident: 'static,
     R::StringRef: 'static,
     R::Span: 'static,
+    Core<R, N, B>: ReentrancyActions<
+        Ident = R::Ident,
+        StringRef = R::StringRef,
+        Span = R::Span,
+        MacroId = R::MacroId,
+    >,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
@@ -75,11 +88,8 @@ where
     type Next = TokenStreamSemantics<'a, R, N, B>;
 
     fn did_parse_instr(self) -> Self::Next {
-        let (reentrancy, core) =
-            self.reentrancy
-                .call_macro(self.state.name, self.state.args, self.core);
+        let core = self.core.call_macro(self.state.name, self.state.args);
         Semantics {
-            reentrancy,
             core,
             state: TokenStreamState::from(self.state.parent),
             tokens: self.tokens,
@@ -89,12 +99,12 @@ where
 
 type MacroArgSemantics<'a, R, N, B> = Semantics<'a, R, N, B, MacroArgState<R>>;
 
-pub(in crate::analyze) struct MacroArgState<R: ReentrancyActions> {
+pub(in crate::analyze) struct MacroArgState<R: Meta> {
     tokens: TokenSeq<R::Ident, R::StringRef, R::Span>,
     parent: MacroInstrState<R>,
 }
 
-impl<R: ReentrancyActions> MacroArgState<R> {
+impl<R: Meta> MacroArgState<R> {
     fn new(parent: MacroInstrState<R>) -> Self {
         Self {
             tokens: (Vec::new(), Vec::new()),
@@ -103,7 +113,7 @@ impl<R: ReentrancyActions> MacroArgState<R> {
     }
 }
 
-impl<'a, R: ReentrancyActions, N, B> MacroArgContext for MacroArgSemantics<'a, R, N, B> {
+impl<'a, R: Meta, N, B> MacroArgContext for MacroArgSemantics<'a, R, N, B> {
     type Next = MacroInstrSemantics<'a, R, N, B>;
 
     fn act_on_token(&mut self, token: (SemanticToken<R::Ident, R::StringRef>, R::Span)) {

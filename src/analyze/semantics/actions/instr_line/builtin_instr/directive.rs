@@ -18,10 +18,11 @@ pub(in crate::analyze::semantics) fn analyze_directive<R, N, B>(
     session: TokenStreamSemantics<R, N, B>,
 ) -> TokenStreamSemantics<R, N, B>
 where
-    R: ReentrancyActions,
+    R: Meta,
     R::Ident: 'static,
     R::StringRef: 'static,
     R::Span: 'static,
+    Core<R, N, B>: ReentrancyActions<StringRef = R::StringRef>,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
@@ -41,7 +42,7 @@ where
     context.analyze(directive.0)
 }
 
-struct DirectiveContext<'a, R: ReentrancyActions, N, B: PartialBackend<R::Span>> {
+struct DirectiveContext<'a, R: Meta, N, B: PartialBackend<R::Span>> {
     span: R::Span,
     label: Option<Label<R::Ident, R::Span>>,
     args: BuiltinInstrArgs<B::Value, R::StringRef, R::Span>,
@@ -50,10 +51,11 @@ struct DirectiveContext<'a, R: ReentrancyActions, N, B: PartialBackend<R::Span>>
 
 impl<'a, R, N, B> DirectiveContext<'a, R, N, B>
 where
-    R: ReentrancyActions,
+    R: Meta,
     R::Ident: 'static,
     R::StringRef: 'static,
     R::Span: 'static,
+    Core<R, N, B>: ReentrancyActions<StringRef = R::StringRef>,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
@@ -128,7 +130,7 @@ where
                     .session
                     .core
                     .builder
-                    .is_non_zero(value.unwrap(), &mut self.session.reentrancy)
+                    .is_non_zero(value.unwrap(), &mut self.session.core.reentrancy)
                 {
                     Some(true) => (),
                     Some(false) => {
@@ -149,15 +151,11 @@ where
             Some(result) => result,
             None => return self.session,
         };
-        let (result, (mut reentrancy, core)) = self
-            .session
-            .reentrancy
-            .analyze_file(path, self.session.core);
+        let (result, mut core) = self.session.core.analyze_file(path);
         if let Err(err) = result {
-            reentrancy.emit_diag(Message::from(err).at(span))
+            core.reentrancy.emit_diag(Message::from(err).at(span))
         }
         Semantics {
-            reentrancy,
             core,
             state: TokenStreamState::new(),
             tokens: self.session.tokens,
@@ -377,7 +375,7 @@ mod tests {
     fn include_file_with_invalid_utf8() {
         let name = "invalid_utf8.s";
         let log = collect_semantic_actions(|mut actions| {
-            actions.reentrancy.fail(CodebaseError::Utf8Error);
+            actions.core.reentrancy.fail(CodebaseError::Utf8Error);
             let mut context = actions
                 .will_parse_line()
                 .into_instr_line()
@@ -402,6 +400,7 @@ mod tests {
         let message = "some message";
         let log = collect_semantic_actions(|mut actions| {
             actions
+                .core
                 .reentrancy
                 .fail(CodebaseError::IoError(io::Error::new(
                     io::ErrorKind::NotFound,

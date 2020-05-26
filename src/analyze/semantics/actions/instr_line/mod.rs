@@ -20,10 +20,16 @@ mod macro_instr;
 
 impl<'a, R, N, B> InstrLineContext for InstrLineSemantics<'a, R, N, B>
 where
-    R: ReentrancyActions,
+    R: Meta,
     R::Ident: 'static,
     R::StringRef: 'static,
     R::Span: 'static,
+    Core<R, N, B>: ReentrancyActions<
+        Ident = R::Ident,
+        StringRef = R::StringRef,
+        Span = R::Span,
+        MacroId = R::MacroId,
+    >,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
@@ -45,10 +51,16 @@ where
 
 impl<'a, R, N, B> InstrContext for InstrLineSemantics<'a, R, N, B>
 where
-    R: ReentrancyActions,
+    R: Meta,
     R::Ident: 'static,
     R::StringRef: 'static,
     R::Span: 'static,
+    Core<R, N, B>: ReentrancyActions<
+        Ident = R::Ident,
+        StringRef = R::StringRef,
+        Span = R::Span,
+        MacroId = R::MacroId,
+    >,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
@@ -102,7 +114,7 @@ where
 
 impl<'a, R, N, B> InstrLineSemantics<'a, R, N, B>
 where
-    R: ReentrancyActions,
+    R: Meta,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<

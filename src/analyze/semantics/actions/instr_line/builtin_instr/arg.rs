@@ -2,7 +2,7 @@ use super::{BuiltinInstrSemantics, Core};
 
 use crate::analyze::semantics::actions::Keyword;
 use crate::analyze::semantics::arg::{Arg, DerefableArg};
-use crate::analyze::semantics::reentrancy::ReentrancyActions;
+use crate::analyze::semantics::reentrancy::Meta;
 use crate::analyze::semantics::resolve::{NameTable, ResolvedName};
 use crate::analyze::semantics::{ArgSemantics, ExprBuilder, Semantics};
 use crate::analyze::syntax::actions::*;
@@ -20,7 +20,7 @@ delegate_diagnostics! {
 
 impl<'a, R, N, B> ArgFinalizer for ArgSemantics<'a, R, N, B>
 where
-    R: ReentrancyActions,
+    R: Meta,
     B: Finish,
     B::Value: Source<Span = R::Span>,
     B::Parent: PartialBackend<R::Span, Value = B::Value>,
@@ -47,8 +47,8 @@ where
         };
         self.state.parent.args.push(arg);
         Semantics {
-            reentrancy: self.reentrancy,
             core: Core {
+                reentrancy: self.core.reentrancy,
                 names: self.core.names,
                 builder,
             },
@@ -60,7 +60,7 @@ where
 
 impl<'a, R, N, B> ArgContext for ArgSemantics<'a, R, N, B>
 where
-    R: ReentrancyActions,
+    R: Meta,
     N: DerefMut,
     N::Target: NameTable<
         R::Ident,
@@ -103,7 +103,7 @@ where
 
 impl<'a, R, N, B> ArgSemantics<'a, R, N, B>
 where
-    R: ReentrancyActions,
+    R: Meta,
     N: DerefMut,
     N::Target: NameTable<
         R::Ident,

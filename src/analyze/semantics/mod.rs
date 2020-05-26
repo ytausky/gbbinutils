@@ -1,7 +1,7 @@
 use self::arg::{Arg, OperandSymbol};
 use self::keywords::BuiltinMnemonic;
 use self::params::*;
-use self::reentrancy::{Params, ReentrancyActions};
+use self::reentrancy::{Meta, Params};
 use self::resolve::{NameTable, ResolvedName};
 
 use super::macros::MacroSource;
@@ -19,7 +19,6 @@ use std::ops::{Deref, DerefMut};
 macro_rules! set_state {
     ($session:expr, $state:expr) => {
         $crate::analyze::semantics::Semantics {
-            reentrancy: $session.reentrancy,
             core: $session.core,
             state: $state,
             tokens: $session.tokens,
@@ -40,14 +39,14 @@ pub(in crate::analyze) enum Keyword {
     Operand(OperandSymbol),
 }
 
-pub(super) struct Semantics<'a, R: ReentrancyActions, N, B, T> {
-    reentrancy: R,
-    core: Core<N, B>,
+pub(super) struct Semantics<'a, R: Meta, N, B, T> {
+    core: Core<R, N, B>,
     state: T,
     tokens: TokenIterRef<'a, R>,
 }
 
-struct Core<N, B> {
+pub(super) struct Core<R, N, B> {
+    reentrancy: R,
     names: N,
     builder: B,
 }
@@ -61,12 +60,28 @@ type TokenIterRef<'a, R> = &'a mut dyn Iterator<
     >,
 >;
 
-impl<'a, R: ReentrancyActions, N, B, T> Semantics<'a, R, N, B, T> {
+impl<R: Meta, N, B> SpanSource for Core<R, N, B> {
+    type Span = R::Span;
+}
+
+impl<R: Meta, N, B> IdentSource for Core<R, N, B> {
+    type Ident = R::Ident;
+}
+
+impl<R: Meta, N, B> MacroSource for Core<R, N, B> {
+    type MacroId = R::MacroId;
+}
+
+impl<R: Meta, N, B> StringSource for Core<R, N, B> {
+    type StringRef = R::StringRef;
+}
+
+impl<'a, R: Meta, N, B, T> Semantics<'a, R, N, B, T> {
     #[cfg(test)]
     fn map_names<F: FnOnce(N) -> M, M>(self, f: F) -> Semantics<'a, R, M, B, T> {
         Semantics {
-            reentrancy: self.reentrancy,
             core: Core {
+                reentrancy: self.core.reentrancy,
                 names: f(self.core.names),
                 builder: self.core.builder,
             },
@@ -77,8 +92,8 @@ impl<'a, R: ReentrancyActions, N, B, T> Semantics<'a, R, N, B, T> {
 
     fn map_builder<F: FnOnce(B) -> C, C>(self, f: F) -> Semantics<'a, R, N, C, T> {
         Semantics {
-            reentrancy: self.reentrancy,
             core: Core {
+                reentrancy: self.core.reentrancy,
                 names: self.core.names,
                 builder: f(self.core.builder),
             },
@@ -89,11 +104,7 @@ impl<'a, R: ReentrancyActions, N, B, T> Semantics<'a, R, N, B, T> {
 
     fn map_state<F: FnOnce(T) -> U, U>(self, f: F) -> Semantics<'a, R, N, B, U> {
         Semantics {
-            reentrancy: self.reentrancy,
-            core: Core {
-                names: self.core.names,
-                builder: self.core.builder,
-            },
+            core: self.core,
             state: f(self.state),
             tokens: self.tokens,
         }
@@ -101,12 +112,16 @@ impl<'a, R: ReentrancyActions, N, B, T> Semantics<'a, R, N, B, T> {
 }
 
 delegate_diagnostics! {
-    {'a, R: ReentrancyActions, N, B, T}, Semantics<'a, R, N, B, T>, {reentrancy}, R, R::Span
+    {'a, R: Meta, N, B, T}, Semantics<'a, R, N, B, T>, {core.reentrancy}, R, R::Span
+}
+
+delegate_diagnostics! {
+    {R: Meta, N, B}, Core<R, N, B>, {reentrancy}, R, R::Span
 }
 
 impl<'a, R, N, B, S> MacroSource for Semantics<'a, R, N, B, S>
 where
-    R: ReentrancyActions,
+    R: Meta,
     N: Deref,
     N::Target: MacroSource,
 {
@@ -115,7 +130,7 @@ where
 
 impl<'a, R, N, B, S> SymbolSource for Semantics<'a, R, N, B, S>
 where
-    R: ReentrancyActions,
+    R: Meta,
     N: Deref,
     N::Target: SymbolSource,
 {
@@ -124,7 +139,7 @@ where
 
 impl<'a, R, N, B, S, Span> AllocSymbol<Span> for Semantics<'a, R, N, B, S>
 where
-    R: ReentrancyActions,
+    R: Meta,
     N: Deref,
     N::Target: SymbolSource<SymbolId = B::SymbolId>,
     B: AllocSymbol<Span>,
@@ -137,7 +152,7 @@ where
 
 impl<'a, R, N, B, T, Ident> NameTable<Ident> for Semantics<'a, R, N, B, T>
 where
-    R: ReentrancyActions,
+    R: Meta,
     N: DerefMut,
     N::Target: NameTable<Ident>,
 {
@@ -159,7 +174,7 @@ where
     }
 }
 
-impl<'a, R: ReentrancyActions, N, B: Finish, T> Finish for Semantics<'a, R, N, B, T> {
+impl<'a, R: Meta, N, B: Finish, T> Finish for Semantics<'a, R, N, B, T> {
     type Value = B::Value;
     type Parent = Semantics<'a, R, N, B::Parent, T>;
 
@@ -167,8 +182,8 @@ impl<'a, R: ReentrancyActions, N, B: Finish, T> Finish for Semantics<'a, R, N, B
         let (builder, value) = self.core.builder.finish();
         (
             Semantics {
-                reentrancy: self.reentrancy,
                 core: Core {
+                    reentrancy: self.core.reentrancy,
                     names: self.core.names,
                     builder,
                 },
@@ -182,7 +197,7 @@ impl<'a, R: ReentrancyActions, N, B: Finish, T> Finish for Semantics<'a, R, N, B
 
 impl<'a, R, N, B, T, S, SymbolId> PushOp<Name<SymbolId>, S> for Semantics<'a, R, N, B, T>
 where
-    R: ReentrancyActions,
+    R: Meta,
     B: PushOp<Name<SymbolId>, S>,
     S: Clone,
 {
@@ -195,7 +210,7 @@ macro_rules! impl_push_op_for_session {
     ($t:ty) => {
         impl<'a, R, N, B, T, S> PushOp<$t, S> for Semantics<'a, R, N, B, T>
         where
-            R: ReentrancyActions,
+            R: Meta,
             B: PushOp<$t, S>,
             S: Clone,
         {
@@ -239,7 +254,7 @@ impl<I, R, S> TokenStreamState<I, R, S> {
 
 impl<'a, R, N, B> TokenStreamSemantics<'a, R, N, B>
 where
-    R: ReentrancyActions,
+    R: Meta,
     R::Ident: for<'r> From<&'r str>,
     N: DerefMut,
     N::Target: NameTable<R::Ident, Keyword = &'static Keyword>,
@@ -254,8 +269,11 @@ where
             names.define_name((*ident).into(), ResolvedName::Keyword(keyword))
         }
         Self {
-            reentrancy,
-            core: Core { names, builder },
+            core: Core {
+                reentrancy,
+                names,
+                builder,
+            },
             state: TokenStreamState::new(),
             tokens,
         }
@@ -326,7 +344,7 @@ type BuiltinInstrSemantics<'a, R, N, B> = Semantics<
 
 pub(in crate::analyze) struct BuiltinInstrState<R, V>
 where
-    R: ReentrancyActions,
+    R: Meta,
 {
     label: Option<Label<R::Ident, R::Span>>,
     mnemonic: Spanned<BuiltinMnemonic, R::Span>,
@@ -335,7 +353,7 @@ where
 
 impl<R, V> BuiltinInstrState<R, V>
 where
-    R: ReentrancyActions,
+    R: Meta,
 {
     fn new(
         label: Option<Label<R::Ident, R::Span>>,
@@ -436,8 +454,8 @@ mod mock {
                 names.define_name(ident, resolution)
             }
             Semantics {
-                reentrancy: MockSourceComponents::with_log(log.clone()),
                 core: Core {
+                    reentrancy: MockSourceComponents::with_log(log.clone()),
                     names: Box::new(MockNameTable::new(names, log.clone())),
                     builder: MockBackend::new(SerialIdAllocator::new(MockSymbolId), log)
                         .build_const(),
