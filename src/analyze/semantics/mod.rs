@@ -38,10 +38,10 @@ pub(in crate::analyze) enum Keyword {
     Operand(OperandSymbol),
 }
 
-pub(super) struct Semantics<'a, R: Meta, N, B, T> {
-    session: CompositeSession<R, N, B>,
+pub(super) struct Semantics<'a, S: Meta, T> {
+    session: S,
     state: T,
-    tokens: TokenIterRef<'a, R>,
+    tokens: TokenIterRef<'a, S>,
 }
 
 pub(super) struct CompositeSession<R, N, B> {
@@ -75,9 +75,9 @@ impl<R: Meta, N, B> StringSource for CompositeSession<R, N, B> {
     type StringRef = R::StringRef;
 }
 
-impl<'a, R: Meta, N, B, T> Semantics<'a, R, N, B, T> {
+impl<'a, R: Meta, N, B, T> Semantics<'a, CompositeSession<R, N, B>, T> {
     #[cfg(test)]
-    fn map_names<F: FnOnce(N) -> M, M>(self, f: F) -> Semantics<'a, R, M, B, T> {
+    fn map_names<F: FnOnce(N) -> M, M>(self, f: F) -> Semantics<'a, CompositeSession<R, M, B>, T> {
         Semantics {
             session: CompositeSession {
                 reentrancy: self.session.reentrancy,
@@ -89,7 +89,10 @@ impl<'a, R: Meta, N, B, T> Semantics<'a, R, N, B, T> {
         }
     }
 
-    fn map_builder<F: FnOnce(B) -> C, C>(self, f: F) -> Semantics<'a, R, N, C, T> {
+    fn map_builder<F: FnOnce(B) -> C, C>(
+        self,
+        f: F,
+    ) -> Semantics<'a, CompositeSession<R, N, C>, T> {
         Semantics {
             session: CompositeSession {
                 reentrancy: self.session.reentrancy,
@@ -101,7 +104,7 @@ impl<'a, R: Meta, N, B, T> Semantics<'a, R, N, B, T> {
         }
     }
 
-    fn map_state<F: FnOnce(T) -> U, U>(self, f: F) -> Semantics<'a, R, N, B, U> {
+    fn map_state<F: FnOnce(T) -> U, U>(self, f: F) -> Semantics<'a, CompositeSession<R, N, B>, U> {
         Semantics {
             session: self.session,
             state: f(self.state),
@@ -111,14 +114,14 @@ impl<'a, R: Meta, N, B, T> Semantics<'a, R, N, B, T> {
 }
 
 delegate_diagnostics! {
-    {'a, R: Meta, N, B, T}, Semantics<'a, R, N, B, T>, {session.reentrancy}, R, R::Span
+    {'a, S: Meta, T}, Semantics<'a, S, T>, {session}, S, S::Span
 }
 
 delegate_diagnostics! {
     {R: Meta, N, B}, CompositeSession<R, N, B>, {reentrancy}, R, R::Span
 }
 
-impl<'a, R, N, B, S> MacroSource for Semantics<'a, R, N, B, S>
+impl<'a, R, N, B, S> MacroSource for Semantics<'a, CompositeSession<R, N, B>, S>
 where
     R: Meta,
     N: Deref,
@@ -127,7 +130,7 @@ where
     type MacroId = <N::Target as MacroSource>::MacroId;
 }
 
-impl<'a, R, N, B, S> SymbolSource for Semantics<'a, R, N, B, S>
+impl<'a, R, N, B, S> SymbolSource for Semantics<'a, CompositeSession<R, N, B>, S>
 where
     R: Meta,
     N: Deref,
@@ -136,7 +139,7 @@ where
     type SymbolId = <N::Target as SymbolSource>::SymbolId;
 }
 
-impl<'a, R, N, B, S, Span> AllocSymbol<Span> for Semantics<'a, R, N, B, S>
+impl<'a, R, N, B, S, Span> AllocSymbol<Span> for Semantics<'a, CompositeSession<R, N, B>, S>
 where
     R: Meta,
     N: Deref,
@@ -149,7 +152,7 @@ where
     }
 }
 
-impl<'a, R, N, B, T, Ident> NameTable<Ident> for Semantics<'a, R, N, B, T>
+impl<'a, R, N, B, T, Ident> NameTable<Ident> for Semantics<'a, CompositeSession<R, N, B>, T>
 where
     R: Meta,
     N: DerefMut,
@@ -173,9 +176,9 @@ where
     }
 }
 
-impl<'a, R: Meta, N, B: Finish, T> Finish for Semantics<'a, R, N, B, T> {
+impl<'a, R: Meta, N, B: Finish, T> Finish for Semantics<'a, CompositeSession<R, N, B>, T> {
     type Value = B::Value;
-    type Parent = Semantics<'a, R, N, B::Parent, T>;
+    type Parent = Semantics<'a, CompositeSession<R, N, B::Parent>, T>;
 
     fn finish(self) -> (Self::Parent, Option<Self::Value>) {
         let (builder, value) = self.session.builder.finish();
@@ -194,7 +197,8 @@ impl<'a, R: Meta, N, B: Finish, T> Finish for Semantics<'a, R, N, B, T> {
     }
 }
 
-impl<'a, R, N, B, T, S, SymbolId> PushOp<Name<SymbolId>, S> for Semantics<'a, R, N, B, T>
+impl<'a, R, N, B, T, S, SymbolId> PushOp<Name<SymbolId>, S>
+    for Semantics<'a, CompositeSession<R, N, B>, T>
 where
     R: Meta,
     B: PushOp<Name<SymbolId>, S>,
@@ -207,7 +211,7 @@ where
 
 macro_rules! impl_push_op_for_session {
     ($t:ty) => {
-        impl<'a, R, N, B, T, S> PushOp<$t, S> for Semantics<'a, R, N, B, T>
+        impl<'a, R, N, B, T, S> PushOp<$t, S> for Semantics<'a, CompositeSession<R, N, B>, T>
         where
             R: Meta,
             B: PushOp<$t, S>,
@@ -228,9 +232,7 @@ impl_push_op_for_session! {FnCall}
 
 type TokenStreamSemantics<'a, R, N, B> = Semantics<
     'a,
-    R,
-    N,
-    B,
+    CompositeSession<R, N, B>,
     TokenStreamState<
         <R as IdentSource>::Ident,
         <R as StringSource>::StringRef,
@@ -279,8 +281,11 @@ where
     }
 }
 
-type InstrLineSemantics<'a, R, N, B> =
-    Semantics<'a, R, N, B, InstrLineState<<R as IdentSource>::Ident, <R as SpanSource>::Span>>;
+type InstrLineSemantics<'a, R, N, B> = Semantics<
+    'a,
+    CompositeSession<R, N, B>,
+    InstrLineState<<R as IdentSource>::Ident, <R as SpanSource>::Span>,
+>;
 
 #[derive(Debug, PartialEq)]
 pub(super) struct InstrLineState<I, S> {
@@ -297,9 +302,7 @@ type Label<I, S> = ((I, S), Params<I, S>);
 
 type TokenLineSemantics<'a, R, N, B> = Semantics<
     'a,
-    R,
-    N,
-    B,
+    CompositeSession<R, N, B>,
     TokenLineState<
         <R as IdentSource>::Ident,
         <R as StringSource>::StringRef,
@@ -335,9 +338,7 @@ impl<I, R, S> MacroDefState<I, R, S> {
 
 type BuiltinInstrSemantics<'a, R, N, B> = Semantics<
     'a,
-    R,
-    N,
-    B,
+    CompositeSession<R, N, B>,
     BuiltinInstrState<R, <B as PartialBackend<<R as SpanSource>::Span>>::Value>,
 >;
 
@@ -370,9 +371,7 @@ type BuiltinInstrArgs<V, R, S> = Vec<Arg<V, R, S>>;
 
 pub(in crate::analyze::semantics) type ArgSemantics<'a, R, N, B> = Semantics<
     'a,
-    R,
-    N,
-    B,
+    CompositeSession<R, N, B>,
     ExprBuilder<
         <R as StringSource>::StringRef,
         <R as SpanSource>::Span,
@@ -418,9 +417,11 @@ mod mock {
 
     pub(super) type MockExprBuilder<'a, T, S> = Semantics<
         'a,
-        MockSourceComponents<T, S>,
-        Box<MockNameTable<BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>, T>>,
-        RelocContext<MockBackend<SerialIdAllocator<MockSymbolId>, T>, Expr<MockSymbolId, S>>,
+        CompositeSession<
+            MockSourceComponents<T, S>,
+            Box<MockNameTable<BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>, T>>,
+            RelocContext<MockBackend<SerialIdAllocator<MockSymbolId>, T>, Expr<MockSymbolId, S>>,
+        >,
         (),
     >;
 

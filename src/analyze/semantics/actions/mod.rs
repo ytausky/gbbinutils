@@ -18,7 +18,8 @@ use std::ops::DerefMut;
 mod instr_line;
 mod token_line;
 
-impl<'a, R, N, B> Semantics<'a, R, N, B, TokenStreamState<R::Ident, R::StringRef, R::Span>>
+impl<'a, R, N, B>
+    Semantics<'a, CompositeSession<R, N, B>, TokenStreamState<R::Ident, R::StringRef, R::Span>>
 where
     R: Meta,
     R::Ident: 'static,
@@ -59,7 +60,7 @@ impl<I, R, S> From<TokenLineState<I, R, S>> for TokenStreamState<I, R, S> {
     }
 }
 
-impl<'a, R: Meta, N, B, S> ParsingContext for Semantics<'a, R, N, B, S> {
+impl<'a, R: Meta, N, B, S> ParsingContext for Semantics<'a, CompositeSession<R, N, B>, S> {
     type Ident = R::Ident;
     type Literal = Literal<R::StringRef>;
     type Error = LexError;

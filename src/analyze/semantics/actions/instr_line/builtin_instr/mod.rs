@@ -35,7 +35,7 @@ where
     R::Ident: 'static,
     R::StringRef: 'static,
     R::Span: 'static,
-    CompositeSession<R, N, B>: ReentrancyActions<StringRef = R::StringRef>,
+    CompositeSession<R, N, B>: ReentrancyActions<Span = R::Span, StringRef = R::StringRef>,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
@@ -49,7 +49,7 @@ where
     type ArgContext = ArgSemantics<'a, R, N, B::ExprBuilder>;
 
     fn will_parse_arg(self) -> Self::ArgContext {
-        self.map_builder(|builder| builder.build_const())
+        self.map_builder::<_, B::ExprBuilder>(|builder| builder.build_const())
             .map_state(ExprBuilder::new)
     }
 }
@@ -60,7 +60,7 @@ where
     R::Ident: 'static,
     R::StringRef: 'static,
     R::Span: 'static,
-    CompositeSession<R, N, B>: ReentrancyActions<StringRef = R::StringRef>,
+    CompositeSession<R, N, B>: ReentrancyActions<Span = R::Span, StringRef = R::StringRef>,
     N: DerefMut,
     N::Target: StartScope<R::Ident>
         + NameTable<
@@ -91,7 +91,7 @@ where
     }
 }
 
-impl<'a, R, N, B, S> Semantics<'a, R, N, B, S>
+impl<'a, R, N, B, S> Semantics<'a, CompositeSession<R, N, B>, S>
 where
     R: Meta,
     N: DerefMut,

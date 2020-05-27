@@ -1,10 +1,11 @@
-use super::{InstrLineSemantics, InstrLineState, Semantics};
+use super::{CompositeSession, InstrLineSemantics, InstrLineState, Semantics};
 
 use crate::analyze::semantics::session::reentrancy::Meta;
 use crate::analyze::semantics::Params;
 use crate::analyze::syntax::actions::LabelContext;
 
-pub(super) type LabelSemantics<'a, R, N, B> = Semantics<'a, R, N, B, LabelState<R>>;
+pub(super) type LabelSemantics<'a, R, N, B> =
+    Semantics<'a, CompositeSession<R, N, B>, LabelState<R>>;
 
 pub(in crate::analyze) struct LabelState<R: Meta> {
     parent: InstrLineState<R::Ident, R::Span>,

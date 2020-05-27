@@ -10,7 +10,8 @@ use crate::object::builder::Backend;
 
 use std::ops::DerefMut;
 
-pub(super) type MacroInstrSemantics<'a, R, N, B> = Semantics<'a, R, N, B, MacroInstrState<R>>;
+pub(super) type MacroInstrSemantics<'a, R, N, B> =
+    Semantics<'a, CompositeSession<R, N, B>, MacroInstrState<R>>;
 
 pub(in crate::analyze) struct MacroInstrState<R: Meta> {
     parent: InstrLineState<R::Ident, R::Span>,
@@ -97,7 +98,7 @@ where
     }
 }
 
-type MacroArgSemantics<'a, R, N, B> = Semantics<'a, R, N, B, MacroArgState<R>>;
+type MacroArgSemantics<'a, R, N, B> = Semantics<'a, CompositeSession<R, N, B>, MacroArgState<R>>;
 
 pub(in crate::analyze) struct MacroArgState<R: Meta> {
     tokens: TokenSeq<R::Ident, R::StringRef, R::Span>,
