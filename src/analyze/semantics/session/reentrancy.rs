@@ -55,11 +55,11 @@ pub(in crate::analyze::semantics) type MacroArgs<I, R, S> =
 pub(in crate::analyze::semantics) type Params<I, S> = (Vec<I>, Vec<S>);
 
 pub(in crate::analyze) struct SourceComponents<C, P, M, I, D> {
-    codebase: C,
+    pub codebase: C,
     parser_factory: P,
     macros: M,
     interner: I,
-    diagnostics: D,
+    pub diagnostics: D,
 }
 
 impl<C, P, M, I, D> SpanSource for SourceComponents<C, P, M, I, D>
@@ -79,11 +79,7 @@ delegate_diagnostics! {
     S
 }
 
-impl<'a, C, P, M, I, D> SourceComponents<&'a mut C, &'a mut P, &'a mut M, &'a mut I, &'a mut D>
-where
-    C: IdentSource + StringSource,
-    D: DiagnosticsSystem,
-{
+impl<'a, C, P, M, I, D> SourceComponents<&'a mut C, &'a mut P, &'a mut M, &'a mut I, &'a mut D> {
     pub fn new(
         codebase: &'a mut C,
         parser_factory: &'a mut P,
@@ -109,27 +105,10 @@ where
     type MacroId = <M::Target as MacroSource>::MacroId;
 }
 
-impl<C, P, M, I, D> IdentSource for SourceComponents<C, P, M, I, D>
-where
-    C: DerefMut,
-    C::Target: IdentSource + StringSource,
-{
-    type Ident = <C::Target as IdentSource>::Ident;
-}
-
-impl<C, P, M, I, D> StringSource for SourceComponents<C, P, M, I, D>
-where
-    C: DerefMut,
-    C::Target: IdentSource + StringSource,
-{
-    type StringRef = <C::Target as StringSource>::StringRef;
-}
-
 impl<C, P, M, I, D, N, B> ReentrancyActions
     for CompositeSession<SourceComponents<C, P, M, I, D>, N, B>
 where
-    C: DerefMut,
-    C::Target: Lex<D::Target>,
+    SourceComponents<C, P, M, I, D>: Lex<Span = <D::Target as SpanSource>::Span>,
     P: DerefMut,
     P::Target: ParserFactory<
         <Self as IdentSource>::Ident,
@@ -162,11 +141,7 @@ where
     <Self as SpanSource>::Span: 'static,
 {
     fn analyze_file(mut self, path: Self::StringRef) -> (Result<(), CodebaseError>, Self) {
-        let mut tokens = match self
-            .reentrancy
-            .codebase
-            .lex_file(path, &mut *self.reentrancy.diagnostics)
-        {
+        let mut tokens = match self.reentrancy.lex_file(path) {
             Ok(tokens) => tokens,
             Err(error) => return (Err(error), self),
         };
