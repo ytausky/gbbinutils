@@ -13,6 +13,7 @@ use crate::diag::span::{SpanSource, Spanned};
 use crate::diag::Diagnostics;
 use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
 use crate::object::builder::{AllocSymbol, Finish, Name, PartialBackend, PushOp, SymbolSource};
+use crate::CompositeSession;
 
 use std::ops::{Deref, DerefMut};
 
@@ -42,12 +43,6 @@ pub(super) struct Semantics<'a, S: Meta, T> {
     session: S,
     state: T,
     tokens: TokenIterRef<'a, S>,
-}
-
-pub(super) struct CompositeSession<R, N, B> {
-    reentrancy: R,
-    names: N,
-    builder: B,
 }
 
 type TokenIterRef<'a, R> = &'a mut dyn Iterator<

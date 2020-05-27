@@ -35,7 +35,7 @@ impl<I, L> From<Sigil> for Token<I, L> {
     }
 }
 
-pub(super) trait IdentSource {
+pub trait IdentSource {
     type Ident: Clone + PartialEq + AsRef<str>;
 }
 

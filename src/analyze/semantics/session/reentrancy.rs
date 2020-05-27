@@ -16,7 +16,7 @@ use std::ops::{Deref, DerefMut};
 #[cfg(test)]
 pub(crate) use self::mock::*;
 
-pub(in crate::analyze) trait Meta:
+pub(crate) trait Meta:
     IdentSource + MacroSource + SpanSource + StringSource + Diagnostics<<Self as SpanSource>::Span>
 {
 }

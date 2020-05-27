@@ -91,6 +91,12 @@ trait BuiltinSymbols {
     fn builtin_symbols(&self) -> &[(&str, Self::Name)];
 }
 
+struct CompositeSession<R, N, B> {
+    reentrancy: R,
+    names: N,
+    builder: B,
+}
+
 #[cfg(test)]
 mod log {
     use std::cell::RefCell;

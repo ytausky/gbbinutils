@@ -3,7 +3,7 @@ use crate::diag::span::*;
 
 use std::rc::Rc;
 
-pub(super) trait MacroSource {
+pub trait MacroSource {
     type MacroId: Clone;
 }
 
