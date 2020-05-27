@@ -56,9 +56,9 @@ pub(in crate::analyze::semantics) type Params<I, S> = (Vec<I>, Vec<S>);
 
 pub(in crate::analyze) struct SourceComponents<C, P, M, I, D> {
     pub codebase: C,
-    parser_factory: P,
-    macros: M,
-    interner: I,
+    pub parser_factory: P,
+    pub macros: M,
+    pub interner: I,
     pub diagnostics: D,
 }
 
@@ -97,14 +97,6 @@ impl<'a, C, P, M, I, D> SourceComponents<&'a mut C, &'a mut P, &'a mut M, &'a mu
     }
 }
 
-impl<C, P, M, I, D> MacroSource for SourceComponents<C, P, M, I, D>
-where
-    M: Deref,
-    M::Target: MacroSource,
-{
-    type MacroId = <M::Target as MacroSource>::MacroId;
-}
-
 impl<C, P, M, I, D, N, B> ReentrancyActions
     for CompositeSession<SourceComponents<C, P, M, I, D>, N, B>
 where
@@ -116,9 +108,7 @@ where
         LexError,
         <Self as SpanSource>::Span,
     >,
-    M: DerefMut,
-    M::Target: MacroTable<
-        D::Target,
+    SourceComponents<C, P, M, I, D>: MacroTable<
         <Self as IdentSource>::Ident,
         Literal<<Self as StringSource>::StringRef>,
         <Self as SpanSource>::Span,
@@ -160,12 +150,7 @@ where
         params: Params<Self::Ident, Self::Span>,
         body: TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
     ) -> Self::MacroId {
-        self.reentrancy.macros.define_macro(
-            name_span,
-            params,
-            body,
-            &mut *self.reentrancy.diagnostics,
-        )
+        self.reentrancy.define_macro(name_span, params, body)
     }
 
     fn call_macro(
@@ -173,10 +158,7 @@ where
         id: (Self::MacroId, Self::Span),
         args: MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
     ) -> Self {
-        let expansion =
-            self.reentrancy
-                .macros
-                .expand_macro(id, args, &mut *self.reentrancy.diagnostics);
+        let expansion = self.reentrancy.expand_macro(id, args);
         let mut parser = self.reentrancy.parser_factory.mk_parser();
         let mut tokens = expansion.map(|(t, s)| (Ok(t), s));
         let semantics = Semantics {
