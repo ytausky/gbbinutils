@@ -54,19 +54,19 @@ type TokenIterRef<'a, R> = &'a mut dyn Iterator<
     >,
 >;
 
-impl<R: Meta, N, B> SpanSource for CompositeSession<R, N, B> {
+impl<R: SpanSource, N, B> SpanSource for CompositeSession<R, N, B> {
     type Span = R::Span;
 }
 
-impl<R: Meta, N, B> IdentSource for CompositeSession<R, N, B> {
+impl<R: IdentSource, N, B> IdentSource for CompositeSession<R, N, B> {
     type Ident = R::Ident;
 }
 
-impl<R: Meta, N, B> MacroSource for CompositeSession<R, N, B> {
+impl<R: MacroSource, N, B> MacroSource for CompositeSession<R, N, B> {
     type MacroId = R::MacroId;
 }
 
-impl<R: Meta, N, B> StringSource for CompositeSession<R, N, B> {
+impl<R: StringSource, N, B> StringSource for CompositeSession<R, N, B> {
     type StringRef = R::StringRef;
 }
 

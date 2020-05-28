@@ -100,7 +100,9 @@ impl<'a, C, P, M, I, D> SourceComponents<&'a mut C, &'a mut P, &'a mut M, &'a mu
 impl<C, P, M, I, D, N, B> ReentrancyActions
     for CompositeSession<SourceComponents<C, P, M, I, D>, N, B>
 where
-    SourceComponents<C, P, M, I, D>: Lex<Span = <D::Target as SpanSource>::Span>,
+    Self: Lex<Span = <D::Target as SpanSource>::Span>,
+    SourceComponents<C, P, M, I, D>: IdentSource<Ident = <Self as IdentSource>::Ident>
+        + StringSource<StringRef = <Self as StringSource>::StringRef>,
     P: DerefMut,
     P::Target: ParserFactory<
         <Self as IdentSource>::Ident,
@@ -131,7 +133,7 @@ where
     <Self as SpanSource>::Span: 'static,
 {
     fn analyze_file(mut self, path: Self::StringRef) -> (Result<(), CodebaseError>, Self) {
-        let mut tokens = match self.reentrancy.lex_file(path) {
+        let mut tokens = match self.lex_file(path) {
             Ok(tokens) => tokens,
             Err(error) => return (Err(error), self),
         };

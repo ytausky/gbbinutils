@@ -10,7 +10,7 @@ use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diag::*;
 use crate::object::builder::{Backend, SymbolSource};
 use crate::span::{BufContext, BufContextFactory, SpanSource};
-use crate::BuiltinSymbols;
+use crate::{BuiltinSymbols, CompositeSession};
 
 use std::ops::DerefMut;
 use std::rc::Rc;
@@ -94,7 +94,8 @@ impl<'a, T: StringSource + 'a> CodebaseAnalyzer<'a, T> {
 
 type TokenSeq<I, R, S> = (Vec<SemanticToken<I, R>>, Vec<S>);
 
-impl<'a, T, P, M, I, D> Lex for SourceComponents<&'a mut CodebaseAnalyzer<'a, T>, P, M, I, D>
+impl<'a, T, P, M, I, D, N, B> Lex
+    for CompositeSession<SourceComponents<&'a mut CodebaseAnalyzer<'a, T>, P, M, I, D>, N, B>
 where
     T: Tokenize<<D::Target as BufContextFactory>::BufContext> + 'a,
     T::StringRef: AsRef<str>,
@@ -104,10 +105,11 @@ where
     type TokenIter = T::Tokenized;
 
     fn lex_file(&mut self, path: Self::StringRef) -> Result<Self::TokenIter, CodebaseError> {
-        self.codebase
+        self.reentrancy
+            .codebase
             .codebase
             .tokenize_file(path.as_ref(), |buf_id| {
-                self.diagnostics.mk_buf_context(buf_id, None)
+                self.reentrancy.diagnostics.mk_buf_context(buf_id, None)
             })
     }
 }
@@ -213,8 +215,12 @@ mod mock {
         }
     }
 
-    impl<'a, P, M, I, D> Lex
-        for SourceComponents<&'a mut MockCodebase<<D::Target as SpanSource>::Span>, P, M, I, D>
+    impl<'a, P, M, I, D, N, B> Lex
+        for CompositeSession<
+            SourceComponents<&'a mut MockCodebase<<D::Target as SpanSource>::Span>, P, M, I, D>,
+            N,
+            B,
+        >
     where
         D: Deref,
         D::Target: SpanSource,
@@ -223,7 +229,7 @@ mod mock {
             IntoIter<LexItem<Self::Ident, Self::StringRef, <D::Target as SpanSource>::Span>>;
 
         fn lex_file(&mut self, path: Self::StringRef) -> Result<Self::TokenIter, CodebaseError> {
-            Ok(self.codebase.files[&path].clone().into_iter())
+            Ok(self.reentrancy.codebase.files[&path].clone().into_iter())
         }
     }
 
