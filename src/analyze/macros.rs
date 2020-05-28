@@ -1,6 +1,7 @@
 use crate::analyze::semantics::session::reentrancy::SourceComponents;
 use crate::analyze::Token;
 use crate::diag::span::*;
+use crate::CompositeSession;
 
 use std::ops::DerefMut;
 use std::rc::Rc;
@@ -57,17 +58,21 @@ where
     type MacroId = MacroId;
 }
 
-impl<'a, C, P, J, D, I, L> MacroTable<I, L, <D::Target as SpanSource>::Span>
-    for SourceComponents<
-        C,
-        P,
-        &'a mut VecMacroTable<
-            I,
-            L,
-            <D::Target as AddMacroDef<<D::Target as SpanSource>::Span>>::MacroDefHandle,
+impl<'a, C, P, J, D, N, B, I, L> MacroTable<I, L, <D::Target as SpanSource>::Span>
+    for CompositeSession<
+        SourceComponents<
+            C,
+            P,
+            &'a mut VecMacroTable<
+                I,
+                L,
+                <D::Target as AddMacroDef<<D::Target as SpanSource>::Span>>::MacroDefHandle,
+            >,
+            J,
+            D,
         >,
-        J,
-        D,
+        N,
+        B,
     >
 where
     D: DerefMut,
@@ -95,9 +100,12 @@ where
         params: (Vec<I>, Vec<<D::Target as SpanSource>::Span>),
         body: (Vec<Token<I, L>>, Vec<<D::Target as SpanSource>::Span>),
     ) -> Self::MacroId {
-        let context = self.diagnostics.add_macro_def(name_span, params.1, body.1);
-        let id = MacroId(self.macros.len());
-        self.macros.push(MacroDef {
+        let context = self
+            .reentrancy
+            .diagnostics
+            .add_macro_def(name_span, params.1, body.1);
+        let id = MacroId(self.reentrancy.macros.len());
+        self.reentrancy.macros.push(MacroDef {
             tokens: Rc::new(MacroDefTokens {
                 params: params.0,
                 body: body.0,
@@ -112,8 +120,9 @@ where
         (MacroId(id), name_span): (Self::MacroId, <D::Target as SpanSource>::Span),
         (args, arg_spans): MacroArgs<Token<I, L>, <D::Target as SpanSource>::Span>,
     ) -> Self::Iter {
-        let def = &self.macros[id];
+        let def = &self.reentrancy.macros[id];
         let context = self
+            .reentrancy
             .diagnostics
             .mk_macro_call_ctx(name_span, arg_spans, &def.spans);
         MacroExpansionIter::new(def.tokens.clone(), args, context)
@@ -314,16 +323,21 @@ pub mod mock {
         type MacroId = MockMacroId;
     }
 
-    impl<'a, C, P, I, D, T> MacroTable<String, Literal<String>, <D::Target as SpanSource>::Span>
-        for SourceComponents<
-            C,
-            P,
-            &'a mut MockMacroTable<
-                <D::Target as AddMacroDef<<D::Target as SpanSource>::Span>>::MacroDefHandle,
-                T,
+    impl<'a, C, P, I, D, N, B, T>
+        MacroTable<String, Literal<String>, <D::Target as SpanSource>::Span>
+        for CompositeSession<
+            SourceComponents<
+                C,
+                P,
+                &'a mut MockMacroTable<
+                    <D::Target as AddMacroDef<<D::Target as SpanSource>::Span>>::MacroDefHandle,
+                    T,
+                >,
+                I,
+                D,
             >,
-            I,
-            D,
+            N,
+            B,
         >
     where
         C: DerefMut,
@@ -331,6 +345,7 @@ pub mod mock {
         I: DerefMut,
         D: DerefMut,
         D::Target: DiagnosticsSystem,
+        N: DerefMut,
         T: From<MacroTableEvent>,
     {
         type Iter = MacroExpansionIter<
@@ -351,17 +366,24 @@ pub mod mock {
                 Vec<<D::Target as SpanSource>::Span>,
             ),
         ) -> Self::MacroId {
-            self.macros.log.push(MacroTableEvent::DefineMacro(
-                params.0.clone(),
-                body.0.clone(),
-            ));
+            self.reentrancy
+                .macros
+                .log
+                .push(MacroTableEvent::DefineMacro(
+                    params.0.clone(),
+                    body.0.clone(),
+                ));
             MockMacroId(
-                SourceComponents {
-                    codebase: &mut *self.codebase,
-                    parser_factory: &mut *self.parser_factory,
-                    macros: &mut self.macros.macros,
-                    interner: &mut *self.interner,
-                    diagnostics: &mut *self.diagnostics,
+                CompositeSession {
+                    reentrancy: SourceComponents {
+                        codebase: &mut *self.reentrancy.codebase,
+                        parser_factory: &mut *self.reentrancy.parser_factory,
+                        macros: &mut self.reentrancy.macros.macros,
+                        interner: &mut *self.reentrancy.interner,
+                        diagnostics: &mut *self.reentrancy.diagnostics,
+                    },
+                    names: &mut *self.names,
+                    builder: (),
                 }
                 .define_macro(name_span, params, body)
                 .0,
@@ -373,12 +395,16 @@ pub mod mock {
             name: (Self::MacroId, <D::Target as SpanSource>::Span),
             args: MacroArgs<Token<String, Literal<String>>, <D::Target as SpanSource>::Span>,
         ) -> Self::Iter {
-            SourceComponents {
-                codebase: &mut *self.codebase,
-                parser_factory: &mut *self.parser_factory,
-                macros: &mut self.macros.macros,
-                interner: &mut *self.interner,
-                diagnostics: &mut *self.diagnostics,
+            CompositeSession {
+                reentrancy: SourceComponents {
+                    codebase: &mut *self.reentrancy.codebase,
+                    parser_factory: &mut *self.reentrancy.parser_factory,
+                    macros: &mut self.reentrancy.macros.macros,
+                    interner: &mut *self.reentrancy.interner,
+                    diagnostics: &mut *self.reentrancy.diagnostics,
+                },
+                names: &mut *self.names,
+                builder: (),
             }
             .expand_macro((MacroId((name.0).0), name.1), args)
         }
@@ -399,20 +425,21 @@ mod tests {
             }),
             spans: (),
         }];
-        let mut components = SourceComponents {
-            codebase: &mut (),
-            parser_factory: &mut (),
-            macros,
-            interner: &mut (),
-            diagnostics: &mut Factory,
+        let mut session = CompositeSession {
+            reentrancy: SourceComponents {
+                codebase: &mut (),
+                parser_factory: &mut (),
+                macros,
+                interner: &mut (),
+                diagnostics: &mut Factory,
+            },
+            names: &mut (),
+            builder: (),
         };
         let name = ModularSpan::Buf(());
-        let expanded: Vec<_> = MacroTable::expand_macro(
-            &mut components,
-            (MacroId(0), name.clone()),
-            (vec![], vec![]),
-        )
-        .collect();
+        let expanded: Vec<_> =
+            MacroTable::expand_macro(&mut session, (MacroId(0), name.clone()), (vec![], vec![]))
+                .collect();
         let data = MacroCall(Rc::new(ModularMacroCall {
             name,
             args: vec![],

@@ -102,7 +102,8 @@ impl<C, P, M, I, D, N, B> ReentrancyActions
 where
     Self: Lex<Span = <D::Target as SpanSource>::Span>,
     SourceComponents<C, P, M, I, D>: IdentSource<Ident = <Self as IdentSource>::Ident>
-        + StringSource<StringRef = <Self as StringSource>::StringRef>,
+        + StringSource<StringRef = <Self as StringSource>::StringRef>
+        + MacroSource<MacroId = <Self as MacroSource>::MacroId>,
     P: DerefMut,
     P::Target: ParserFactory<
         <Self as IdentSource>::Ident,
@@ -110,7 +111,7 @@ where
         LexError,
         <Self as SpanSource>::Span,
     >,
-    SourceComponents<C, P, M, I, D>: MacroTable<
+    Self: MacroTable<
         <Self as IdentSource>::Ident,
         Literal<<Self as StringSource>::StringRef>,
         <Self as SpanSource>::Span,
@@ -152,7 +153,7 @@ where
         params: Params<Self::Ident, Self::Span>,
         body: TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
     ) -> Self::MacroId {
-        self.reentrancy.define_macro(name_span, params, body)
+        MacroTable::define_macro(self, name_span, params, body)
     }
 
     fn call_macro(
@@ -160,7 +161,7 @@ where
         id: (Self::MacroId, Self::Span),
         args: MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
     ) -> Self {
-        let expansion = self.reentrancy.expand_macro(id, args);
+        let expansion = self.expand_macro(id, args);
         let mut parser = self.reentrancy.parser_factory.mk_parser();
         let mut tokens = expansion.map(|(t, s)| (Ok(t), s));
         let semantics = Semantics {
@@ -327,7 +328,12 @@ mod tests {
         let tokens = vec![Token::Ident("NOP".into())];
         let spans: Vec<_> = iter::repeat(()).take(tokens.len()).collect();
         let log = Fixture::default().log_session(|mut session| {
-            let id = session.define_macro((), (vec![], vec![]), (tokens.clone(), spans.clone()));
+            let id = ReentrancyActions::define_macro(
+                &mut session,
+                (),
+                (vec![], vec![]),
+                (tokens.clone(), spans.clone()),
+            );
             session.call_macro((id, ()), (vec![], vec![]));
         });
         assert_eq!(
@@ -350,7 +356,8 @@ mod tests {
         let param = "x";
         let tokens = vec![db.clone(), Token::Ident(param.into()), literal0.clone()];
         let log = Fixture::default().log_session(|mut session| {
-            let id = session.define_macro(
+            let id = ReentrancyActions::define_macro(
+                &mut session,
                 (),
                 (vec![param.into()], vec![()]),
                 (tokens.clone(), vec![(), (), ()]),
