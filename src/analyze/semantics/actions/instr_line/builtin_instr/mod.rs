@@ -9,8 +9,6 @@ use crate::analyze::semantics::RelocLookup;
 use crate::analyze::syntax::actions::{BuiltinInstrContext, InstrFinalizer};
 use crate::object::builder::Item;
 
-use std::ops::DerefMut;
-
 mod arg;
 mod cpu_instr;
 mod directive;
@@ -36,8 +34,14 @@ where
     R::StringRef: 'static,
     R::Span: 'static,
     CompositeSession<R, N, B>: ReentrancyActions<Span = R::Span, StringRef = R::StringRef>,
-    N: DerefMut,
-    N::Target: StartScope<R::Ident>
+    CompositeSession<R, N, B>: StartScope<R::Ident>
+        + NameTable<
+            R::Ident,
+            Keyword = &'static Keyword,
+            MacroId = R::MacroId,
+            SymbolId = B::SymbolId,
+        >,
+    CompositeSession<R, N, B::ExprBuilder>: StartScope<R::Ident>
         + NameTable<
             R::Ident,
             Keyword = &'static Keyword,
@@ -61,8 +65,7 @@ where
     R::StringRef: 'static,
     R::Span: 'static,
     CompositeSession<R, N, B>: ReentrancyActions<Span = R::Span, StringRef = R::StringRef>,
-    N: DerefMut,
-    N::Target: StartScope<R::Ident>
+    CompositeSession<R, N, B>: StartScope<R::Ident>
         + NameTable<
             R::Ident,
             Keyword = &'static Keyword,
@@ -94,8 +97,7 @@ where
 impl<'a, R, N, B, S> Semantics<'a, CompositeSession<R, N, B>, S>
 where
     R: Meta,
-    N: DerefMut,
-    N::Target: NameTable<R::Ident, MacroId = R::MacroId, SymbolId = B::SymbolId>,
+    CompositeSession<R, N, B>: NameTable<R::Ident, MacroId = R::MacroId, SymbolId = B::SymbolId>,
     B: Backend<R::Span>,
 {
     pub(in crate::analyze::semantics) fn expect_const(
@@ -120,7 +122,7 @@ where
         expr: Arg<B::Value, R::StringRef, R::Span>,
     ) {
         if let Ok(value) = self.expect_const(expr) {
-            let id = self.reloc_lookup(name, span.clone());
+            let id = self.session.reloc_lookup(name, span.clone());
             self.session.builder.define_symbol(id, span, value);
         }
     }
@@ -144,8 +146,7 @@ fn analyze_mnemonic<'a, R: Meta, N, B>(
     mut session: TokenStreamSemantics<'a, R, N, B>,
 ) -> TokenStreamSemantics<'a, R, N, B>
 where
-    N: DerefMut,
-    N::Target: StartScope<R::Ident>
+    CompositeSession<R, N, B>: StartScope<R::Ident>
         + NameTable<
             R::Ident,
             Keyword = &'static Keyword,

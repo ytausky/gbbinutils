@@ -8,8 +8,6 @@ use crate::analyze::syntax::actions::{InstrFinalizer, MacroArgContext, MacroInst
 use crate::analyze::{SemanticToken, TokenSeq};
 use crate::object::builder::Backend;
 
-use std::ops::DerefMut;
-
 pub(super) type MacroInstrSemantics<'a, R, N, B> =
     Semantics<'a, CompositeSession<R, N, B>, MacroInstrState<R>>;
 
@@ -47,8 +45,7 @@ where
         Span = R::Span,
         MacroId = R::MacroId,
     >,
-    N: DerefMut,
-    N::Target: StartScope<R::Ident>
+    CompositeSession<R, N, B>: StartScope<R::Ident>
         + NameTable<
             R::Ident,
             Keyword = &'static Keyword,
@@ -76,8 +73,7 @@ where
         Span = R::Span,
         MacroId = R::MacroId,
     >,
-    N: DerefMut,
-    N::Target: StartScope<R::Ident>
+    CompositeSession<R, N, B>: StartScope<R::Ident>
         + NameTable<
             R::Ident,
             Keyword = &'static Keyword,

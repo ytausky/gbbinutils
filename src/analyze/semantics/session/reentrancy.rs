@@ -120,15 +120,16 @@ where
     I::Target: GetString<<Self as StringSource>::StringRef>,
     D: DerefMut,
     D::Target: DiagnosticsSystem,
-    N: DerefMut,
-    N::Target: StartScope<<Self as IdentSource>::Ident>
+    Self: StartScope<<Self as IdentSource>::Ident>
+        + NameTable<<Self as IdentSource>::Ident, Keyword = &'static Keyword, SymbolId = B::SymbolId>,
+    CompositeSession<SourceComponents<C, P, M, I, D>, N, B::ExprBuilder>: StartScope<<Self as IdentSource>::Ident>
         + NameTable<
             <Self as IdentSource>::Ident,
             Keyword = &'static Keyword,
             MacroId = <Self as MacroSource>::MacroId,
             SymbolId = B::SymbolId,
         >,
-    B: Backend<<Self as SpanSource>::Span>,
+    B: Backend<<D::Target as SpanSource>::Span>,
     <Self as IdentSource>::Ident: 'static,
     <Self as StringSource>::StringRef: 'static,
     <Self as SpanSource>::Span: 'static,

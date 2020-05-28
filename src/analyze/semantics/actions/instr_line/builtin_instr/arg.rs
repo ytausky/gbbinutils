@@ -12,8 +12,6 @@ use crate::diag::{Diagnostics, Message};
 use crate::expr::{FnCall, LocationCounter, ParamId};
 use crate::object::builder::{Finish, Name, PartialBackend, SymbolSource, ValueBuilder};
 
-use std::ops::DerefMut;
-
 delegate_diagnostics! {
     {R, S, P: Diagnostics<S>}, ExprBuilder<R, S, P>, {parent}, P, S
 }
@@ -61,8 +59,7 @@ where
 impl<'a, R, N, B> ArgContext for ArgSemantics<'a, R, N, B>
 where
     R: Meta,
-    N: DerefMut,
-    N::Target: NameTable<
+    CompositeSession<R, N, B>: NameTable<
         R::Ident,
         Keyword = &'static Keyword,
         MacroId = R::MacroId,
@@ -104,8 +101,7 @@ where
 impl<'a, R, N, B> ArgSemantics<'a, R, N, B>
 where
     R: Meta,
-    N: DerefMut,
-    N::Target: NameTable<
+    CompositeSession<R, N, B>: NameTable<
         R::Ident,
         Keyword = &'static Keyword,
         MacroId = R::MacroId,
@@ -130,7 +126,7 @@ where
             self.state.arg = Some(Arg::Bare(DerefableArg::Const(())));
             return;
         }
-        match self.session.names.resolve_name(&ident) {
+        match self.session.resolve_name(&ident) {
             Some(ResolvedName::Keyword(Keyword::Operand(symbol))) => match self.state.arg {
                 None => self.state.arg = Some(Arg::Bare(DerefableArg::Symbol(*symbol, span))),
                 _ => unimplemented!(),
@@ -145,7 +141,8 @@ where
             }
             None => {
                 let id = self.session.builder.alloc_symbol(span.clone());
-                self.define_name(ident, ResolvedName::Symbol(id.clone()));
+                self.session
+                    .define_name(ident, ResolvedName::Symbol(id.clone()));
                 self.session.builder.push_op(Name(id), span);
                 self.state.arg = Some(Arg::Bare(DerefableArg::Const(())))
             }

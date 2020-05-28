@@ -15,7 +15,7 @@ use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
 use crate::object::builder::{AllocSymbol, Finish, Name, PartialBackend, PushOp, SymbolSource};
 use crate::CompositeSession;
 
-use std::ops::{Deref, DerefMut};
+use std::ops::DerefMut;
 
 macro_rules! set_state {
     ($session:expr, $state:expr) => {
@@ -70,6 +70,10 @@ impl<R: StringSource, N, B> StringSource for CompositeSession<R, N, B> {
     type StringRef = R::StringRef;
 }
 
+impl<R, N, B: SymbolSource> SymbolSource for CompositeSession<R, N, B> {
+    type SymbolId = B::SymbolId;
+}
+
 impl<'a, R: Meta, N, B, T> Semantics<'a, CompositeSession<R, N, B>, T> {
     #[cfg(test)]
     fn map_names<F: FnOnce(N) -> M, M>(self, f: F) -> Semantics<'a, CompositeSession<R, M, B>, T> {
@@ -119,47 +123,55 @@ delegate_diagnostics! {
 impl<'a, R, N, B, S> MacroSource for Semantics<'a, CompositeSession<R, N, B>, S>
 where
     R: Meta,
-    N: Deref,
-    N::Target: MacroSource,
+    CompositeSession<R, N, B>: MacroSource,
 {
-    type MacroId = <N::Target as MacroSource>::MacroId;
+    type MacroId = <CompositeSession<R, N, B> as MacroSource>::MacroId;
 }
 
 impl<'a, R, N, B, S> SymbolSource for Semantics<'a, CompositeSession<R, N, B>, S>
 where
     R: Meta,
-    N: Deref,
-    N::Target: SymbolSource,
+    CompositeSession<R, N, B>: SymbolSource,
 {
-    type SymbolId = <N::Target as SymbolSource>::SymbolId;
+    type SymbolId = <CompositeSession<R, N, B> as SymbolSource>::SymbolId;
+}
+
+impl<'a, R, N, B, Span> AllocSymbol<Span> for CompositeSession<R, N, B>
+where
+    R: Meta,
+    Self: SymbolSource<SymbolId = B::SymbolId>,
+    B: AllocSymbol<Span>,
+    Span: Clone,
+{
+    fn alloc_symbol(&mut self, span: Span) -> Self::SymbolId {
+        self.builder.alloc_symbol(span)
+    }
 }
 
 impl<'a, R, N, B, S, Span> AllocSymbol<Span> for Semantics<'a, CompositeSession<R, N, B>, S>
 where
     R: Meta,
-    N: Deref,
-    N::Target: SymbolSource<SymbolId = B::SymbolId>,
+    CompositeSession<R, N, B>: SymbolSource<SymbolId = B::SymbolId>,
     B: AllocSymbol<Span>,
     Span: Clone,
 {
     fn alloc_symbol(&mut self, span: Span) -> Self::SymbolId {
-        self.session.builder.alloc_symbol(span)
+        self.session.alloc_symbol(span)
     }
 }
 
 impl<'a, R, N, B, T, Ident> NameTable<Ident> for Semantics<'a, CompositeSession<R, N, B>, T>
 where
     R: Meta,
-    N: DerefMut,
-    N::Target: NameTable<Ident>,
+    CompositeSession<R, N, B>: NameTable<Ident>,
 {
-    type Keyword = <N::Target as NameTable<Ident>>::Keyword;
+    type Keyword = <CompositeSession<R, N, B> as NameTable<Ident>>::Keyword;
 
     fn resolve_name(
         &mut self,
         ident: &Ident,
     ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
-        self.session.names.resolve_name(ident)
+        self.session.resolve_name(ident)
     }
 
     fn define_name(
@@ -167,7 +179,7 @@ where
         ident: Ident,
         entry: ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>,
     ) {
-        self.session.names.define_name(ident, entry)
+        self.session.define_name(ident, entry)
     }
 }
 

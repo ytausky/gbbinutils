@@ -9,8 +9,6 @@ use crate::diag::span::Source;
 use crate::diag::*;
 use crate::object::builder::{Backend, Item, Width};
 
-use std::ops::DerefMut;
-
 pub(in crate::analyze::semantics) fn analyze_directive<R, N, B>(
     directive: (Directive, R::Span),
     label: Option<Label<R::Ident, R::Span>>,
@@ -23,8 +21,7 @@ where
     R::StringRef: 'static,
     R::Span: 'static,
     CompositeSession<R, N, B>: ReentrancyActions<Span = R::Span, StringRef = R::StringRef>,
-    N: DerefMut,
-    N::Target: StartScope<R::Ident>
+    CompositeSession<R, N, B>: StartScope<R::Ident>
         + NameTable<
             R::Ident,
             Keyword = &'static Keyword,
@@ -56,8 +53,7 @@ where
     R::StringRef: 'static,
     R::Span: 'static,
     CompositeSession<R, N, B>: ReentrancyActions<Span = R::Span, StringRef = R::StringRef>,
-    N: DerefMut,
-    N::Target: StartScope<R::Ident>
+    CompositeSession<R, N, B>: StartScope<R::Ident>
         + NameTable<
             R::Ident,
             Keyword = &'static Keyword,
@@ -116,7 +112,7 @@ where
 
     fn analyze_section(mut self) -> TokenStreamSemantics<'a, R, N, B> {
         let (name, span) = self.label.take().unwrap().0;
-        let id = self.session.reloc_lookup(name, span.clone());
+        let id = self.session.session.reloc_lookup(name, span.clone());
         self.session.session.builder.start_section(id, span);
         self.session
     }

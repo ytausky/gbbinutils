@@ -10,8 +10,6 @@ use crate::analyze::{Literal, SemanticToken};
 use crate::diag::span::StripSpan;
 use crate::diag::CompactDiag;
 
-use std::ops::DerefMut;
-
 impl<'a, R, N, B> TokenLineContext for TokenLineSemantics<'a, R, N, B>
 where
     R: Meta,
@@ -21,8 +19,7 @@ where
         Span = R::Span,
         MacroId = R::MacroId,
     >,
-    N: DerefMut,
-    N::Target: StartScope<R::Ident>
+    CompositeSession<R, N, B>: StartScope<R::Ident>
         + NameTable<R::Ident, Keyword = &'static Keyword, MacroId = R::MacroId>,
 {
     type ContextFinalizer = TokenContextFinalizationSemantics<'a, R, N, B>;
@@ -40,7 +37,7 @@ where
         span: R::Span,
     ) -> TokenLineRule<Self, Self::ContextFinalizer> {
         if let Some(ResolvedName::Keyword(Keyword::BuiltinMnemonic(mnemonic))) =
-            self.resolve_name(&ident)
+            self.session.resolve_name(&ident)
         {
             if let TokenLineRule::LineEnd(()) =
                 self.state.context.act_on_mnemonic(mnemonic, span.clone())
@@ -108,8 +105,7 @@ where
         Span = R::Span,
         MacroId = R::MacroId,
     >,
-    N: DerefMut,
-    N::Target: StartScope<R::Ident>
+    CompositeSession<R, N, B>: StartScope<R::Ident>
         + NameTable<R::Ident, Keyword = &'static Keyword, MacroId = R::MacroId>,
 {
     type Next = TokenStreamSemantics<'a, R, N, B>;
@@ -159,8 +155,7 @@ where
         Span = R::Span,
         MacroId = R::MacroId,
     >,
-    N: DerefMut,
-    N::Target: NameTable<R::Ident, MacroId = R::MacroId>,
+    CompositeSession<R, N, B>: NameTable<R::Ident, MacroId = R::MacroId>,
 {
     type Next = TokenStreamSemantics<'a, R, N, B>;
 
@@ -173,7 +168,6 @@ where
                     let id = self.parent.session.define_macro(name.1, params, tokens);
                     self.parent
                         .session
-                        .names
                         .define_name(name.0, ResolvedName::Macro(id));
                 }
             }

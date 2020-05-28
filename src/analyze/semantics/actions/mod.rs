@@ -98,8 +98,14 @@ where
         Span = R::Span,
         MacroId = R::MacroId,
     >,
-    N: DerefMut,
-    N::Target: StartScope<R::Ident>
+    CompositeSession<R, N, B>: StartScope<R::Ident>
+        + NameTable<
+            R::Ident,
+            Keyword = &'static Keyword,
+            MacroId = R::MacroId,
+            SymbolId = B::SymbolId,
+        >,
+    CompositeSession<R, N, B::ExprBuilder>: StartScope<R::Ident>
         + NameTable<
             R::Ident,
             Keyword = &'static Keyword,

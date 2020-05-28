@@ -12,8 +12,6 @@ use crate::diag::{EmitDiag, Message};
 use crate::expr::LocationCounter;
 use crate::object::builder::{Backend, Finish, PushOp};
 
-use std::ops::DerefMut;
-
 mod builtin_instr;
 mod label;
 mod macro_instr;
@@ -30,8 +28,14 @@ where
         Span = R::Span,
         MacroId = R::MacroId,
     >,
-    N: DerefMut,
-    N::Target: StartScope<R::Ident>
+    CompositeSession<R, N, B>: StartScope<R::Ident>
+        + NameTable<
+            R::Ident,
+            Keyword = &'static Keyword,
+            MacroId = R::MacroId,
+            SymbolId = B::SymbolId,
+        >,
+    CompositeSession<R, N, B::ExprBuilder>: StartScope<R::Ident>
         + NameTable<
             R::Ident,
             Keyword = &'static Keyword,
@@ -61,8 +65,14 @@ where
         Span = R::Span,
         MacroId = R::MacroId,
     >,
-    N: DerefMut,
-    N::Target: StartScope<R::Ident>
+    CompositeSession<R, N, B>: StartScope<R::Ident>
+        + NameTable<
+            R::Ident,
+            Keyword = &'static Keyword,
+            MacroId = R::MacroId,
+            SymbolId = B::SymbolId,
+        >,
+    CompositeSession<R, N, B::ExprBuilder>: StartScope<R::Ident>
         + NameTable<
             R::Ident,
             Keyword = &'static Keyword,
@@ -81,7 +91,7 @@ where
         ident: R::Ident,
         span: R::Span,
     ) -> InstrRule<Self::BuiltinInstrContext, Self::MacroInstrContext, Self> {
-        match self.session.names.resolve_name(&ident) {
+        match self.session.resolve_name(&ident) {
             Some(ResolvedName::Keyword(Keyword::BuiltinMnemonic(mnemonic))) => {
                 if !mnemonic.binds_to_label() {
                     self = self.flush_label();
@@ -115,8 +125,7 @@ where
 impl<'a, R, N, B> InstrLineSemantics<'a, R, N, B>
 where
     R: Meta,
-    N: DerefMut,
-    N::Target: StartScope<R::Ident>
+    CompositeSession<R, N, B>: StartScope<R::Ident>
         + NameTable<
             R::Ident,
             Keyword = &'static Keyword,
@@ -127,8 +136,8 @@ where
 {
     pub fn flush_label(mut self) -> Self {
         if let Some(((label, span), _params)) = self.state.label.take() {
-            self.session.names.start_scope(&label);
-            let id = self.reloc_lookup(label, span.clone());
+            self.session.start_scope(&label);
+            let id = self.session.reloc_lookup(label, span.clone());
             let mut builder = self.session.builder.build_const();
             PushOp::<LocationCounter, _>::push_op(&mut builder, LocationCounter, span.clone());
             let (mut builder, expr) = builder.finish();

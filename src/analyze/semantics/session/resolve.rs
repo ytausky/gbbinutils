@@ -1,8 +1,10 @@
 use crate::analyze::macros::MacroSource;
 use crate::analyze::syntax::{IdentFactory, IdentSource};
 use crate::object::builder::SymbolSource;
+use crate::CompositeSession;
 
 use std::collections::HashMap;
+use std::ops::DerefMut;
 
 #[cfg(test)]
 pub use self::mock::*;
@@ -211,6 +213,40 @@ impl<T: Default> StartScope<Ident<String>> for BiLevelNameTable<T> {
         if ident.visibility == Visibility::Global {
             self.local.replace(Default::default());
         }
+    }
+}
+
+impl<R, N, B, I> NameTable<I> for CompositeSession<R, N, B>
+where
+    N: DerefMut,
+    N::Target: NameTable<I, MacroId = Self::MacroId, SymbolId = Self::SymbolId>,
+    Self: MacroSource + SymbolSource,
+{
+    type Keyword = <N::Target as NameTable<I>>::Keyword;
+
+    fn resolve_name(
+        &mut self,
+        ident: &I,
+    ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
+        self.names.resolve_name(ident)
+    }
+
+    fn define_name(
+        &mut self,
+        ident: I,
+        entry: ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>,
+    ) {
+        self.names.define_name(ident, entry)
+    }
+}
+
+impl<R, N, B, I> StartScope<I> for CompositeSession<R, N, B>
+where
+    N: DerefMut,
+    N::Target: StartScope<I>,
+{
+    fn start_scope(&mut self, ident: &I) {
+        self.names.start_scope(ident)
     }
 }
 
