@@ -1,8 +1,8 @@
-pub(super) trait GetString<StringId> {
+pub trait GetString<StringId> {
     fn get_string<'a>(&'a self, id: &'a StringId) -> &str;
 }
 
-pub(super) struct FakeStringInterner;
+pub struct FakeStringInterner;
 
 impl GetString<String> for FakeStringInterner {
     fn get_string<'a>(&'a self, id: &'a String) -> &str {

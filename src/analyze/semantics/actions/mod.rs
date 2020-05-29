@@ -3,42 +3,16 @@ use self::token_line::TokenContextFinalizationSemantics;
 use super::Semantics;
 use super::*;
 
-use crate::analyze::semantics::session::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::session::resolve::{NameTable, StartScope};
 use crate::analyze::syntax::actions::*;
 use crate::analyze::syntax::LexError;
 use crate::analyze::Literal;
-use crate::codebase::CodebaseError;
 use crate::diag::span::StripSpan;
 use crate::diag::{CompactDiag, Message};
-use crate::object::builder::Backend;
+use crate::Session;
 
 mod instr_line;
 mod token_line;
-
-impl<'a, R, N, B> TokenStreamSemantics<'a, R, N, B>
-where
-    R: Meta,
-    R::Ident: 'static,
-    R::StringRef: 'static,
-    R::Span: 'static,
-    CompositeSession<R, N, B>: ReentrancyActions<StringRef = R::StringRef>,
-    CompositeSession<R, N, B>: StartScope<R::Ident>
-        + NameTable<
-            R::Ident,
-            Keyword = &'static Keyword,
-            MacroId = R::MacroId,
-            SymbolId = B::SymbolId,
-        >,
-    B: Backend<R::Span>,
-{
-    pub fn analyze_file(
-        self,
-        path: <CompositeSession<R, N, B> as StringSource>::StringRef,
-    ) -> Result<(), CodebaseError> {
-        self.session.analyze_file(path).0
-    }
-}
 
 impl<I, R, S> From<InstrLineState<I, S>> for TokenStreamState<I, R, S> {
     fn from(actions: InstrLineState<I, S>) -> Self {
@@ -56,14 +30,16 @@ impl<I, R, S> From<TokenLineState<I, R, S>> for TokenStreamState<I, R, S> {
     }
 }
 
-impl<'a, R: Meta, N, B, S> ParsingContext
-    for Semantics<'a, CompositeSession<R, N, B>, S, R::Ident, R::StringRef, R::Span>
+impl<'a, S, T, I, R, Z> ParsingContext for Semantics<'a, S, T, I, R, Z>
+where
+    S: Diagnostics<Z>,
+    Z: Clone,
 {
-    type Ident = R::Ident;
-    type Literal = Literal<R::StringRef>;
+    type Ident = I;
+    type Literal = Literal<R>;
     type Error = LexError;
-    type Span = R::Span;
-    type Stripped = <R as StripSpan<R::Span>>::Stripped;
+    type Span = Z;
+    type Stripped = <S as StripSpan<Z>>::Stripped;
 
     fn next_token(
         &mut self,
@@ -72,49 +48,30 @@ impl<'a, R: Meta, N, B, S> ParsingContext
     }
 
     fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
-        self.session.reentrancy.merge_spans(left, right)
+        self.session.merge_spans(left, right)
     }
 
     fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped {
-        self.session.reentrancy.strip_span(span)
+        self.session.strip_span(span)
     }
 
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<Self::Span, Self::Stripped>>) {
-        self.session.reentrancy.emit_diag(diag)
+        self.session.emit_diag(diag)
     }
 }
 
-impl<'a, R, N, B> TokenStreamContext for TokenStreamSemantics<'a, R, N, B>
+impl<'a, S: Session> TokenStreamContext for TokenStreamSemantics<'a, S>
 where
-    R: Meta,
-    R::Ident: 'static,
-    R::StringRef: 'static,
-    R::Span: 'static,
-    CompositeSession<R, N, B>: ReentrancyActions<
-        Ident = R::Ident,
-        StringRef = R::StringRef,
-        Span = R::Span,
-        MacroId = R::MacroId,
-    >,
-    CompositeSession<R, N, B>: StartScope<R::Ident>
-        + NameTable<
-            R::Ident,
-            Keyword = &'static Keyword,
-            MacroId = R::MacroId,
-            SymbolId = B::SymbolId,
-        >,
-    CompositeSession<R, N, B::ExprBuilder>: StartScope<R::Ident>
-        + NameTable<
-            R::Ident,
-            Keyword = &'static Keyword,
-            MacroId = R::MacroId,
-            SymbolId = B::SymbolId,
-        >,
-    B: Backend<R::Span>,
+    S::Ident: 'static,
+    S::StringRef: 'static,
+    S::Span: 'static,
+    S::ExprBuilder: StartScope<<S as IdentSource>::Ident>
+        + NameTable<<S as IdentSource>::Ident, Keyword = &'static Keyword, MacroId = S::MacroId>
+        + Diagnostics<S::Span, Stripped = S::Stripped>,
 {
-    type InstrLineContext = InstrLineSemantics<'a, R, N, B>;
-    type TokenLineContext = TokenLineSemantics<'a, R, N, B>;
-    type TokenLineFinalizer = TokenContextFinalizationSemantics<'a, R, N, B>;
+    type InstrLineContext = InstrLineSemantics<'a, S>;
+    type TokenLineContext = TokenLineSemantics<'a, S>;
+    type TokenLineFinalizer = TokenContextFinalizationSemantics<'a, S>;
 
     fn will_parse_line(self) -> LineRule<Self::InstrLineContext, Self::TokenLineContext> {
         match self.state.mode {
@@ -123,7 +80,7 @@ where
         }
     }
 
-    fn act_on_eos(mut self, span: R::Span) -> Self {
+    fn act_on_eos(mut self, span: S::Span) -> Self {
         match self.state.mode {
             LineRule::InstrLine(state) => {
                 let semantics = set_state!(self, state).flush_label();
@@ -132,10 +89,9 @@ where
             LineRule::TokenLine(ref state) => {
                 match state.context {
                     TokenContext::FalseIf => unimplemented!(),
-                    TokenContext::MacroDef(_) => self
-                        .session
-                        .reentrancy
-                        .emit_diag(Message::UnexpectedEof.at(span)),
+                    TokenContext::MacroDef(_) => {
+                        self.session.emit_diag(Message::UnexpectedEof.at(span))
+                    }
                 }
                 self
             }
@@ -143,26 +99,26 @@ where
     }
 }
 
-impl<'a, R: Meta, N, B> InstrFinalizer for InstrLineSemantics<'a, R, N, B> {
-    type Next = TokenStreamSemantics<'a, R, N, B>;
+impl<'a, S: Session> InstrFinalizer for InstrLineSemantics<'a, S> {
+    type Next = TokenStreamSemantics<'a, S>;
 
     fn did_parse_instr(self) -> Self::Next {
         set_state!(self, self.state.into())
     }
 }
 
-impl<'a, R: Meta, N, B> LineFinalizer for InstrLineSemantics<'a, R, N, B> {
-    type Next = TokenStreamSemantics<'a, R, N, B>;
+impl<'a, S: Session> LineFinalizer for InstrLineSemantics<'a, S> {
+    type Next = TokenStreamSemantics<'a, S>;
 
-    fn did_parse_line(self, _: R::Span) -> Self::Next {
+    fn did_parse_line(self, _: S::Span) -> Self::Next {
         set_state!(self, self.state.into())
     }
 }
 
-impl<'a, R: Meta, N, B> LineFinalizer for TokenStreamSemantics<'a, R, N, B> {
+impl<'a, S: Session> LineFinalizer for TokenStreamSemantics<'a, S> {
     type Next = Self;
 
-    fn did_parse_line(self, _: R::Span) -> Self::Next {
+    fn did_parse_line(self, _: S::Span) -> Self::Next {
         self
     }
 }
@@ -597,29 +553,37 @@ pub mod tests {
         S: Clone + Debug + Merge,
     {
         with_log(|log| {
-            let tokens = &mut std::iter::empty();
-            let mut session = Semantics::from_components(
+            let mut session = CompositeSession::from_components(
                 MockSourceComponents::with_log(log.clone()),
                 Box::new(BasicNameTable::default()),
                 MockBackend::new(SerialIdAllocator::new(MockSymbolId), log.clone()),
-                tokens,
             );
             for (ident, resolution) in entries {
-                session.session.names.define_name(ident, resolution)
+                session.define_name(ident, resolution)
             }
-            f(session.map_names(|names| Box::new(MockNameTable::new(*names, log))));
+            f(Semantics {
+                session: CompositeSession {
+                    reentrancy: session.reentrancy,
+                    names: Box::new(MockNameTable::new(*session.names, log)),
+                    builder: session.builder,
+                },
+                state: TokenStreamState::new(),
+                tokens: &mut std::iter::empty(),
+            });
         })
     }
 
     pub(super) type TestTokenStreamSemantics<'a, S> = TokenStreamSemantics<
         'a,
-        MockSourceComponents<S>,
-        Box<
-            MockNameTable<
-                BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
-                TestOperation<S>,
+        CompositeSession<
+            MockSourceComponents<S>,
+            Box<
+                MockNameTable<
+                    BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
+                    TestOperation<S>,
+                >,
             >,
+            MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>,
         >,
-        MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>,
     >;
 }

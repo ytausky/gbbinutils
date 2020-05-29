@@ -1,35 +1,22 @@
 use crate::analyze::semantics::arg::*;
 use crate::analyze::semantics::keywords::Directive;
 use crate::analyze::semantics::params::RelocLookup;
-use crate::analyze::semantics::session::reentrancy::ReentrancyActions;
-use crate::analyze::semantics::session::resolve::{NameTable, StartScope};
+use crate::analyze::semantics::Semantics;
 use crate::analyze::semantics::*;
-use crate::analyze::semantics::{Keyword, Semantics};
 use crate::diag::span::Source;
 use crate::diag::*;
-use crate::object::builder::{Backend, Item, Width};
+use crate::object::builder::{Item, Width};
 
-pub(in crate::analyze::semantics) fn analyze_directive<R, N, B>(
-    directive: (Directive, R::Span),
-    label: Option<Label<R::Ident, R::Span>>,
-    args: BuiltinInstrArgs<B::Value, R::StringRef, R::Span>,
-    session: TokenStreamSemantics<R, N, B>,
-) -> TokenStreamSemantics<R, N, B>
+pub(in crate::analyze::semantics) fn analyze_directive<S: Session>(
+    directive: (Directive, S::Span),
+    label: Option<Label<S::Ident, S::Span>>,
+    args: BuiltinInstrArgs<S::Value, S::StringRef, S::Span>,
+    session: TokenStreamSemantics<S>,
+) -> TokenStreamSemantics<S>
 where
-    R: Meta,
-    R::Ident: 'static,
-    R::StringRef: 'static,
-    R::Span: 'static,
-    CompositeSession<R, N, B>:
-        ReentrancyActions<Ident = R::Ident, Span = R::Span, StringRef = R::StringRef>,
-    CompositeSession<R, N, B>: StartScope<R::Ident>
-        + NameTable<
-            R::Ident,
-            Keyword = &'static Keyword,
-            MacroId = R::MacroId,
-            SymbolId = B::SymbolId,
-        >,
-    B: Backend<R::Span>,
+    S::Ident: 'static,
+    S::StringRef: 'static,
+    S::Span: 'static,
 {
     let context = DirectiveContext {
         span: directive.1,
@@ -40,45 +27,20 @@ where
     context.analyze(directive.0)
 }
 
-struct DirectiveContext<
-    'a,
-    R,
-    N,
-    B: PartialBackend<<CompositeSession<R, N, B> as SpanSource>::Span>,
-> where
-    CompositeSession<R, N, B>: IdentSource + StringSource + SpanSource,
-{
-    span: <CompositeSession<R, N, B> as SpanSource>::Span,
-    label: Option<
-        Label<
-            <CompositeSession<R, N, B> as IdentSource>::Ident,
-            <CompositeSession<R, N, B> as SpanSource>::Span,
-        >,
-    >,
-    args: BuiltinInstrArgs<
-        B::Value,
-        <CompositeSession<R, N, B> as StringSource>::StringRef,
-        <CompositeSession<R, N, B> as SpanSource>::Span,
-    >,
-    session: TokenStreamSemantics<'a, R, N, B>,
+struct DirectiveContext<'a, S: Session> {
+    span: S::Span,
+    label: Option<Label<S::Ident, S::Span>>,
+    args: BuiltinInstrArgs<S::Value, S::StringRef, S::Span>,
+    session: TokenStreamSemantics<'a, S>,
 }
 
-impl<'a, R, N, B> DirectiveContext<'a, R, N, B>
+impl<'a, S: Session> DirectiveContext<'a, S>
 where
-    R: Diagnostics<<CompositeSession<R, N, B> as SpanSource>::Span>,
-    <CompositeSession<R, N, B> as IdentSource>::Ident: 'static,
-    <CompositeSession<R, N, B> as StringSource>::StringRef: 'static,
-    <CompositeSession<R, N, B> as SpanSource>::Span: 'static,
-    CompositeSession<R, N, B>: ReentrancyActions,
-    CompositeSession<R, N, B>: StartScope<<CompositeSession<R, N, B> as IdentSource>::Ident>
-        + NameTable<
-            <CompositeSession<R, N, B> as IdentSource>::Ident,
-            Keyword = &'static Keyword,
-            SymbolId = B::SymbolId,
-        >,
-    B: Backend<<CompositeSession<R, N, B> as SpanSource>::Span>,
+    S::Ident: 'static,
+    S::StringRef: 'static,
+    S::Span: 'static,
 {
-    fn analyze(self, directive: Directive) -> TokenStreamSemantics<'a, R, N, B> {
+    fn analyze(self, directive: Directive) -> TokenStreamSemantics<'a, S> {
         match directive {
             Directive::Equ => self.analyze_equ(),
             Directive::Macro => self.analyze_macro(),
@@ -94,31 +56,28 @@ where
         }
     }
 
-    fn analyze_data(mut self, width: Width) -> TokenStreamSemantics<'a, R, N, B> {
+    fn analyze_data(mut self, width: Width) -> TokenStreamSemantics<'a, S> {
         for arg in self.args {
             let expr = match self.session.expect_const(arg) {
                 Ok(expr) => expr,
                 Err(()) => return self.session,
             };
-            self.session
-                .session
-                .builder
-                .emit_item(Item::Data(expr, width))
+            self.session.session.emit_item(Item::Data(expr, width))
         }
         self.session
     }
 
-    fn analyze_ds(mut self) -> TokenStreamSemantics<'a, R, N, B> {
+    fn analyze_ds(mut self) -> TokenStreamSemantics<'a, S> {
         if let Some(arg) = single_arg(self.span, self.args, &mut self.session) {
             let result = self.session.expect_const(arg);
             if let Ok(bytes) = result {
-                self.session.session.builder.reserve(bytes)
+                self.session.session.reserve(bytes)
             }
         }
         self.session
     }
 
-    fn analyze_equ(mut self) -> TokenStreamSemantics<'a, R, N, B> {
+    fn analyze_equ(mut self) -> TokenStreamSemantics<'a, S> {
         let (symbol, _) = self.label.take().unwrap();
         if let Some(arg) = single_arg(self.span, self.args, &mut self.session) {
             self.session.define_symbol_with_params(symbol, arg);
@@ -126,27 +85,22 @@ where
         self.session
     }
 
-    fn analyze_section(mut self) -> TokenStreamSemantics<'a, R, N, B> {
+    fn analyze_section(mut self) -> TokenStreamSemantics<'a, S> {
         let (name, span) = self.label.take().unwrap().0;
         let id = self.session.session.reloc_lookup(name, span.clone());
-        self.session.session.builder.start_section(id, span);
+        self.session.session.start_section(id, span);
         self.session
     }
 
-    fn analyze_endc(self) -> TokenStreamSemantics<'a, R, N, B> {
+    fn analyze_endc(self) -> TokenStreamSemantics<'a, S> {
         self.session
     }
 
-    fn analyze_if(mut self) -> TokenStreamSemantics<'a, R, N, B> {
+    fn analyze_if(mut self) -> TokenStreamSemantics<'a, S> {
         match single_arg(self.span, self.args, &mut self.session) {
             Some(arg) => {
                 let value = self.session.expect_const(arg);
-                match self
-                    .session
-                    .session
-                    .builder
-                    .is_non_zero(value.unwrap(), &mut self.session.session.reentrancy)
-                {
+                match self.session.session.is_non_zero(value.unwrap()) {
                     Some(true) => (),
                     Some(false) => {
                         self.session.state.mode = LineRule::TokenLine(TokenLineState {
@@ -161,14 +115,14 @@ where
         self.session
     }
 
-    fn analyze_include(mut self) -> TokenStreamSemantics<'a, R, N, B> {
+    fn analyze_include(mut self) -> TokenStreamSemantics<'a, S> {
         let (path, span) = match reduce_include(self.span, self.args, &mut self.session) {
             Some(result) => result,
             None => return self.session,
         };
         let (result, mut session) = self.session.session.analyze_file(path);
         if let Err(err) = result {
-            session.reentrancy.emit_diag(Message::from(err).at(span))
+            session.emit_diag(Message::from(err).at(span))
         }
         Semantics {
             session,
@@ -177,7 +131,7 @@ where
         }
     }
 
-    fn analyze_macro(mut self) -> TokenStreamSemantics<'a, R, N, B> {
+    fn analyze_macro(mut self) -> TokenStreamSemantics<'a, S> {
         if self.label.is_none() {
             let span = self.span;
             self.session.emit_diag(Message::MacroRequiresName.at(span))
@@ -191,11 +145,11 @@ where
         )
     }
 
-    fn analyze_org(mut self) -> TokenStreamSemantics<'a, R, N, B> {
+    fn analyze_org(mut self) -> TokenStreamSemantics<'a, S> {
         if let Some(arg) = single_arg(self.span, self.args, &mut self.session) {
             let result = self.session.expect_const(arg);
             if let Ok(value) = result {
-                self.session.session.builder.set_origin(value)
+                self.session.session.set_origin(value)
             }
         }
         self.session
@@ -572,14 +526,16 @@ mod tests {
 
     type TestExprContext<'a, S> = ArgSemantics<
         'a,
-        MockSourceComponents<S>,
-        Box<
-            MockNameTable<
-                BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
-                TestOperation<S>,
+        CompositeSession<
+            MockSourceComponents<S>,
+            Box<
+                MockNameTable<
+                    BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
+                    TestOperation<S>,
+                >,
             >,
+            RelocContext<MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>, Expr<S>>,
         >,
-        RelocContext<MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>, Expr<S>>,
     >;
 
     fn unary_directive<F>(directive: &str, f: F) -> Vec<TestOperation<()>>
@@ -611,14 +567,16 @@ mod tests {
 
     type TestBuiltinInstrSemantics<'a, S> = BuiltinInstrSemantics<
         'a,
-        MockSourceComponents<S>,
-        Box<
-            MockNameTable<
-                BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
-                TestOperation<S>,
+        CompositeSession<
+            MockSourceComponents<S>,
+            Box<
+                MockNameTable<
+                    BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
+                    TestOperation<S>,
+                >,
             >,
+            MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>,
         >,
-        MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>,
     >;
 
     fn with_directive<F>(directive: &str, f: F) -> Vec<TestOperation<()>>

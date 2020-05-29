@@ -147,9 +147,10 @@ impl Width {
 mod tests {
     use super::*;
 
-    use crate::diag::IgnoreDiagnostics;
+    use crate::diag::{IgnoreDiagnostics, TestDiagnosticsListener};
     use crate::expr::*;
     use crate::object::builder::*;
+    use crate::CompositeSession;
 
     #[test]
     fn empty_object_converted_to_all_0xff_rom() {
@@ -194,7 +195,11 @@ mod tests {
         let origin1 = 0x150;
         let skipped_bytes = 0x10;
         let mut object = Object::new();
-        let object_builder = ObjectBuilder::new(&mut object);
+        let object_builder = CompositeSession {
+            reentrancy: TestDiagnosticsListener::new(),
+            names: (),
+            builder: ObjectBuilder::new(&mut object),
+        };
 
         // org $0150
         let mut const_builder = object_builder.build_const();
@@ -227,7 +232,11 @@ mod tests {
     fn label_defined_as_section_origin_plus_offset() {
         let addr = 0xffe1;
         let mut linkable = Object::new();
-        let mut builder = ObjectBuilder::new(&mut linkable);
+        let mut builder = CompositeSession {
+            reentrancy: TestDiagnosticsListener::new(),
+            names: (),
+            builder: ObjectBuilder::new(&mut linkable),
+        };
         builder.set_origin(addr.into());
         let symbol_id = builder.alloc_symbol(());
         let mut builder = builder.build_const();
@@ -287,7 +296,11 @@ mod tests {
     #[test]
     fn resolve_expr_with_section_addr() {
         let mut object = Object::new();
-        let mut object_builder = ObjectBuilder::new(&mut object);
+        let mut object_builder = CompositeSession {
+            reentrancy: TestDiagnosticsListener::new(),
+            names: (),
+            builder: ObjectBuilder::new(&mut object),
+        };
 
         // section my_section
         let name = object_builder.alloc_symbol(());
@@ -316,7 +329,11 @@ mod tests {
         let symbol = VarId(2);
 
         let mut object = Object::new();
-        let object_builder = ObjectBuilder::new(&mut object);
+        let object_builder = CompositeSession {
+            reentrancy: TestDiagnosticsListener::new(),
+            names: (),
+            builder: ObjectBuilder::new(&mut object),
+        };
 
         // org $0100
         let mut const_builder = object_builder.build_const();
@@ -345,9 +362,13 @@ mod tests {
         assert_eq!(object.vars[symbol].value, (addr + bytes).into())
     }
 
-    fn assert_section_size(expected: impl Into<Num>, f: impl FnOnce(ObjectBuilder<()>)) {
+    fn assert_section_size(expected: impl Into<Num>, f: impl FnOnce(Session<()>)) {
         let mut object = Object::new();
-        let mut builder = ObjectBuilder::new(&mut object);
+        let mut builder = CompositeSession {
+            reentrancy: TestDiagnosticsListener::new(),
+            names: (),
+            builder: ObjectBuilder::new(&mut object),
+        };
         let name = builder.alloc_symbol(());
         builder.start_section(name, ());
         f(builder);
@@ -357,4 +378,6 @@ mod tests {
             expected.into()
         );
     }
+
+    type Session<'a, S> = CompositeSession<TestDiagnosticsListener<S>, (), ObjectBuilder<'a, S>>;
 }

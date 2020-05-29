@@ -12,7 +12,7 @@ pub use self::mock::*;
 #[cfg(test)]
 use crate::expr::{Atom, ExprOp};
 
-pub(in crate::analyze) trait NameTable<I>: MacroSource + SymbolSource {
+pub trait NameTable<I>: MacroSource + SymbolSource {
     type Keyword: Clone;
 
     fn resolve_name(

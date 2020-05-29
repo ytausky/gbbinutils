@@ -81,13 +81,13 @@ pub(super) const KEYWORDS: &[(&str, Keyword)] = &[
 ];
 
 #[derive(Clone, Debug, PartialEq)]
-pub(in crate::analyze) enum BuiltinMnemonic {
+pub enum BuiltinMnemonic {
     CpuInstr(Mnemonic),
     Directive(Directive),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(in crate::analyze) enum Directive {
+pub enum Directive {
     Db,
     Ds,
     Dw,
@@ -114,7 +114,7 @@ impl BuiltinMnemonic {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(in crate::analyze) enum Mnemonic {
+pub enum Mnemonic {
     Alu(AluOperation),
     Bit(BitOperation),
     Branch(BranchKind),
@@ -128,7 +128,7 @@ pub(in crate::analyze) enum Mnemonic {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(in crate::analyze) enum StackOperation {
+pub enum StackOperation {
     Push,
     Pop,
 }

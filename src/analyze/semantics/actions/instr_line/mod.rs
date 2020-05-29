@@ -1,95 +1,65 @@
 use self::label::{LabelSemantics, LabelState};
 use self::macro_instr::{MacroInstrSemantics, MacroInstrState};
 
-use super::{Keyword, ReentrancyActions, Semantics, TokenStreamSemantics};
+use super::{Keyword, Semantics, TokenStreamSemantics};
 
 use crate::analyze::semantics::params::RelocLookup;
 use crate::analyze::semantics::session::resolve::{NameTable, ResolvedName, StartScope};
 use crate::analyze::semantics::*;
 use crate::analyze::syntax::actions::{InstrContext, InstrLineContext, InstrRule};
-use crate::diag::span::{StripSpan, WithSpan};
-use crate::diag::{EmitDiag, Message};
+use crate::diag::span::WithSpan;
+use crate::diag::Message;
 use crate::expr::LocationCounter;
-use crate::object::builder::{Backend, Finish, PushOp};
+use crate::object::builder::{Finish, PushOp};
 
 mod builtin_instr;
 mod label;
 mod macro_instr;
 
-impl<'a, R, N, B> InstrLineContext for InstrLineSemantics<'a, R, N, B>
+impl<'a, S: Session> InstrLineContext for InstrLineSemantics<'a, S>
 where
-    R: Meta,
-    R::Ident: 'static,
-    R::StringRef: 'static,
-    R::Span: 'static,
-    CompositeSession<R, N, B>: ReentrancyActions<
-        Ident = R::Ident,
-        StringRef = R::StringRef,
-        Span = R::Span,
-        MacroId = R::MacroId,
-    >,
-    CompositeSession<R, N, B>: StartScope<R::Ident>
+    S::Ident: 'static,
+    S::StringRef: 'static,
+    S::Span: 'static,
+    S::ExprBuilder: StartScope<S::Ident>
         + NameTable<
-            R::Ident,
+            S::Ident,
             Keyword = &'static Keyword,
-            MacroId = R::MacroId,
-            SymbolId = B::SymbolId,
-        >,
-    CompositeSession<R, N, B::ExprBuilder>: StartScope<R::Ident>
-        + NameTable<
-            R::Ident,
-            Keyword = &'static Keyword,
-            MacroId = R::MacroId,
-            SymbolId = B::SymbolId,
-        >,
-    B: Backend<R::Span>,
+            MacroId = S::MacroId,
+            SymbolId = S::SymbolId,
+        > + Diagnostics<S::Span, Stripped = S::Stripped>,
 {
-    type LabelContext = LabelSemantics<'a, R, N, B>;
+    type LabelContext = LabelSemantics<'a, S>;
     type InstrContext = Self;
 
-    fn will_parse_label(mut self, label: (R::Ident, R::Span)) -> Self::LabelContext {
+    fn will_parse_label(mut self, label: (S::Ident, S::Span)) -> Self::LabelContext {
         self = self.flush_label();
         self.map_state(|line| LabelState::new(line, label))
     }
 }
 
-impl<'a, R, N, B> InstrContext for InstrLineSemantics<'a, R, N, B>
+impl<'a, S: Session> InstrContext for InstrLineSemantics<'a, S>
 where
-    R: Meta,
-    R::Ident: 'static,
-    R::StringRef: 'static,
-    R::Span: 'static,
-    CompositeSession<R, N, B>: ReentrancyActions<
-        Ident = R::Ident,
-        StringRef = R::StringRef,
-        Span = R::Span,
-        MacroId = R::MacroId,
-    >,
-    CompositeSession<R, N, B>: StartScope<R::Ident>
+    S::Ident: 'static,
+    S::StringRef: 'static,
+    S::Span: 'static,
+    S::ExprBuilder: StartScope<S::Ident>
         + NameTable<
-            R::Ident,
+            S::Ident,
             Keyword = &'static Keyword,
-            MacroId = R::MacroId,
-            SymbolId = B::SymbolId,
-        >,
-    CompositeSession<R, N, B::ExprBuilder>: StartScope<R::Ident>
-        + NameTable<
-            R::Ident,
-            Keyword = &'static Keyword,
-            MacroId = R::MacroId,
-            SymbolId = B::SymbolId,
-        >,
-    B: Backend<R::Span>,
+            MacroId = S::MacroId,
+            SymbolId = S::SymbolId,
+        > + Diagnostics<S::Span, Stripped = S::Stripped>,
 {
-    type BuiltinInstrContext = BuiltinInstrSemantics<'a, R, N, B>;
-    type MacroInstrContext = MacroInstrSemantics<'a, R, N, B>;
+    type BuiltinInstrContext = BuiltinInstrSemantics<'a, S>;
+    type MacroInstrContext = MacroInstrSemantics<'a, S>;
     type ErrorContext = Self;
-    type LineFinalizer = TokenStreamSemantics<'a, R, N, B>;
+    type LineFinalizer = TokenStreamSemantics<'a, S>;
 
     fn will_parse_instr(
         mut self,
-        ident: R::Ident,
-        span: R::Span,
+        ident: S::Ident,
+        span: S::Span,
     ) -> InstrRule<Self::BuiltinInstrContext, Self::MacroInstrContext, Self> {
         match self.session.resolve_name(&ident) {
             Some(ResolvedName::Keyword(Keyword::BuiltinMnemonic(mnemonic))) => {
@@ -109,40 +79,31 @@ where
                 ))
             }
             Some(ResolvedName::Symbol(_)) => {
-                let name = self.strip_span(&span);
-                self.emit_diag(Message::CannotUseSymbolNameAsMacroName { name }.at(span));
+                let name = self.session.strip_span(&span);
+                self.session
+                    .emit_diag(Message::CannotUseSymbolNameAsMacroName { name }.at(span));
                 InstrRule::Error(self)
             }
             Some(ResolvedName::Keyword(Keyword::Operand(_))) | None => {
-                let name = self.strip_span(&span);
-                self.emit_diag(Message::NotAMnemonic { name }.at(span));
+                let name = self.session.strip_span(&span);
+                self.session
+                    .emit_diag(Message::NotAMnemonic { name }.at(span));
                 InstrRule::Error(self)
             }
         }
     }
 }
 
-impl<'a, R, N, B> InstrLineSemantics<'a, R, N, B>
-where
-    R: Meta,
-    CompositeSession<R, N, B>: StartScope<R::Ident>
-        + NameTable<
-            R::Ident,
-            Keyword = &'static Keyword,
-            MacroId = R::MacroId,
-            SymbolId = B::SymbolId,
-        >,
-    B: Backend<R::Span>,
-{
+impl<'a, S: Session> InstrLineSemantics<'a, S> {
     pub fn flush_label(mut self) -> Self {
         if let Some(((label, span), _params)) = self.state.label.take() {
             self.session.start_scope(&label);
             let id = self.session.reloc_lookup(label, span.clone());
-            let mut builder = self.session.builder.build_const();
+            let mut builder = self.session.build_const();
             PushOp::<LocationCounter, _>::push_op(&mut builder, LocationCounter, span.clone());
-            let (mut builder, expr) = builder.finish();
-            builder.define_symbol(id, span, expr.unwrap());
-            self.session.builder = builder;
+            let (mut session, expr) = builder.finish();
+            session.define_symbol(id, span, expr.unwrap());
+            self.session = session;
         }
         self
     }

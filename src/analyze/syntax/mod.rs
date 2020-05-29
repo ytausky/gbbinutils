@@ -39,7 +39,7 @@ pub trait IdentSource {
     type Ident: Clone + PartialEq + AsRef<str>;
 }
 
-pub(super) trait IdentFactory: IdentSource {
+pub trait IdentFactory: IdentSource {
     fn mk_ident(&mut self, spelling: &str) -> Self::Ident;
 }
 

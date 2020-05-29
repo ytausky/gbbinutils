@@ -10,7 +10,7 @@ pub trait MacroSource {
     type MacroId: Clone;
 }
 
-pub(super) trait MacroTable<I, L, S: Clone>: MacroSource {
+pub trait MacroTable<I, L, S: Clone>: MacroSource {
     type Iter: Iterator<Item = (Token<I, L>, S)>;
 
     fn define_macro(
@@ -27,9 +27,9 @@ pub(super) trait MacroTable<I, L, S: Clone>: MacroSource {
     ) -> Self::Iter;
 }
 
-pub(super) type VecMacroTable<I, L, H> = Vec<MacroDef<I, Token<I, L>, H>>;
+pub type VecMacroTable<I, L, H> = Vec<MacroDef<I, Token<I, L>, H>>;
 
-pub(super) type MacroArgs<T, S> = (Vec<Vec<T>>, Vec<Vec<S>>);
+pub type MacroArgs<T, S> = (Vec<Vec<T>>, Vec<Vec<S>>);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MacroId(usize);
@@ -129,7 +129,7 @@ where
     }
 }
 
-pub(in crate::analyze) struct MacroDef<I, T, S> {
+pub struct MacroDef<I, T, S> {
     tokens: Rc<MacroDefTokens<I, T>>,
     spans: S,
 }
@@ -139,7 +139,7 @@ struct MacroDefTokens<I, T> {
     body: Vec<T>,
 }
 
-pub(super) struct MacroExpansionIter<I, T, C> {
+pub struct MacroExpansionIter<I, T, C> {
     expansion: MacroExpansion<I, T, C>,
     pos: Option<MacroExpansionPos>,
 }
@@ -280,7 +280,7 @@ pub mod mock {
     use crate::log::Log;
 
     #[derive(Debug, PartialEq)]
-    pub(in crate::analyze) enum MacroTableEvent {
+    pub enum MacroTableEvent {
         DefineMacro(Vec<String>, Vec<Token<String, Literal<String>>>),
     }
 

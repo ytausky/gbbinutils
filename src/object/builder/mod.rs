@@ -5,12 +5,13 @@ use super::*;
 use crate::diag::span::{Source, WithSpan};
 use crate::diag::Diagnostics;
 use crate::expr::{BinOp, ExprOp, FnCall, LocationCounter, ParamId};
-use crate::BuiltinSymbols;
+use crate::{BuiltinSymbols, CompositeSession};
 
 mod lowering;
 
 pub(crate) trait Backend<S: Clone>: PartialBackend<S> + Sized {
-    type ExprBuilder: ValueBuilder<S, SymbolId = Self::SymbolId, Parent = Self, Value = Self::Value>;
+    type ExprBuilder: ValueBuilder<S, SymbolId = Self::SymbolId, Parent = Self, Value = Self::Value>
+        + Diagnostics<S>;
 
     fn build_const(self) -> Self::ExprBuilder;
     fn define_symbol(&mut self, name: Self::SymbolId, span: S, expr: Self::Value);
@@ -20,11 +21,7 @@ pub(crate) trait PartialBackend<S: Clone>: AllocSymbol<S> {
     type Value: Source<Span = S>;
 
     fn emit_item(&mut self, item: Item<Self::Value>);
-    fn is_non_zero(
-        &mut self,
-        value: Self::Value,
-        diagnostics: &mut impl Diagnostics<S>,
-    ) -> Option<bool>;
+    fn is_non_zero(&mut self, value: Self::Value) -> Option<bool>;
     fn reserve(&mut self, bytes: Self::Value);
     fn set_origin(&mut self, origin: Self::Value);
     fn start_section(&mut self, name: Self::SymbolId, span: S);
@@ -292,59 +289,73 @@ impl<'a, S> ObjectBuilder<'a, S> {
     }
 }
 
-impl<'a, S: Clone> Backend<S> for ObjectBuilder<'a, S> {
-    type ExprBuilder = RelocContext<Self, Expr<S>>;
+impl<'a, R, N, S> Backend<S> for CompositeSession<R, N, ObjectBuilder<'a, S>>
+where
+    R: Diagnostics<S>,
+    S: Clone,
+{
+    type ExprBuilder = CompositeSession<R, N, RelocContext<ObjectBuilder<'a, S>, Expr<S>>>;
 
     fn build_const(self) -> Self::ExprBuilder {
-        RelocContext::new(self)
+        CompositeSession {
+            reentrancy: self.reentrancy,
+            names: self.names,
+            builder: RelocContext::new(self.builder),
+        }
     }
 
     fn define_symbol(&mut self, name: Self::SymbolId, _span: S, expr: Self::Value) {
-        let location = self.context.vars.alloc();
-        self.push(Node::Reloc(location));
-        self.context.content.symbols.define(
+        let location = self.builder.context.vars.alloc();
+        self.builder.push(Node::Reloc(location));
+        self.builder.context.content.symbols.define(
             name.content().unwrap(),
             ContentDef::Expr(ExprDef { expr, location }),
         );
     }
 }
 
-impl<'a, S: Clone> PartialBackend<S> for ObjectBuilder<'a, S> {
+impl<'a, R, N, S> PartialBackend<S> for CompositeSession<R, N, ObjectBuilder<'a, S>>
+where
+    R: Diagnostics<S>,
+    S: Clone,
+{
     type Value = Expr<S>;
 
     fn emit_item(&mut self, item: Item<Self::Value>) {
-        item.lower().for_each(|data_item| self.push(data_item))
+        item.lower()
+            .for_each(|data_item| self.builder.push(data_item))
     }
 
-    fn is_non_zero(
-        &mut self,
-        value: Self::Value,
-        diagnostics: &mut impl Diagnostics<S>,
-    ) -> Option<bool> {
+    fn is_non_zero(&mut self, value: Self::Value) -> Option<bool> {
         value
-            .to_num(&self.context, diagnostics)
+            .to_num(&self.builder.context, &mut self.reentrancy)
             .exact()
             .map(|n| n != 0)
     }
 
     fn reserve(&mut self, bytes: Self::Value) {
-        self.current_section().items.push(Node::Reserved(bytes))
+        self.builder
+            .current_section()
+            .items
+            .push(Node::Reserved(bytes))
     }
 
     fn set_origin(&mut self, addr: Self::Value) {
-        match self.state.take().unwrap() {
+        match self.builder.state.take().unwrap() {
             BuilderState::SectionPrelude(index) => {
-                self.context.content.sections[index].constraints.addr = Some(addr);
-                self.state = Some(BuilderState::SectionPrelude(index))
+                self.builder.context.content.sections[index]
+                    .constraints
+                    .addr = Some(addr);
+                self.builder.state = Some(BuilderState::SectionPrelude(index))
             }
-            _ => self.state = Some(BuilderState::AnonSectionPrelude { addr: Some(addr) }),
+            _ => self.builder.state = Some(BuilderState::AnonSectionPrelude { addr: Some(addr) }),
         }
     }
 
     fn start_section(&mut self, name: SymbolId, _: S) {
-        let index = self.context.content.sections.len();
-        self.state = Some(BuilderState::SectionPrelude(index));
-        self.add_section(Some(name.content().unwrap()))
+        let index = self.builder.context.content.sections.len();
+        self.builder.state = Some(BuilderState::SectionPrelude(index));
+        self.builder.add_section(Some(name.content().unwrap()))
     }
 }
 
@@ -388,6 +399,12 @@ impl<P, N, S: Clone> PushOp<Name<N>, S> for RelocContext<P, crate::expr::Expr<N,
     }
 }
 
+impl<R, N, B: PushOp<T, S>, T, S: Clone> PushOp<T, S> for CompositeSession<R, N, B> {
+    fn push_op(&mut self, op: T, span: S) {
+        self.builder.push_op(op, span)
+    }
+}
+
 impl<'a, S: Clone> SymbolSource for RelocContext<ObjectBuilder<'a, S>, Expr<S>> {
     type SymbolId = SymbolId;
 }
@@ -395,6 +412,23 @@ impl<'a, S: Clone> SymbolSource for RelocContext<ObjectBuilder<'a, S>, Expr<S>> 
 impl<'a, S: Clone> AllocSymbol<S> for RelocContext<ObjectBuilder<'a, S>, Expr<S>> {
     fn alloc_symbol(&mut self, span: S) -> Self::SymbolId {
         self.parent.alloc_symbol(span)
+    }
+}
+
+impl<R, N, B: Finish> Finish for CompositeSession<R, N, B> {
+    type Parent = CompositeSession<R, N, B::Parent>;
+    type Value = B::Value;
+
+    fn finish(self) -> (Self::Parent, Option<Self::Value>) {
+        let (builder, value) = self.builder.finish();
+        (
+            CompositeSession {
+                reentrancy: self.reentrancy,
+                names: self.names,
+                builder,
+            },
+            value,
+        )
     }
 }
 
@@ -483,20 +517,27 @@ pub mod mock {
         }
     }
 
-    impl<A, T, S> Backend<S> for MockBackend<A, T>
+    impl<R, N, A, T, S> Backend<S> for CompositeSession<R, N, MockBackend<A, T>>
     where
+        R: Diagnostics<S>,
         A: AllocSymbol<S>,
         T: From<BackendEvent<A::SymbolId, Expr<A::SymbolId, S>>>,
         S: Clone,
     {
-        type ExprBuilder = RelocContext<Self, Expr<A::SymbolId, S>>;
+        type ExprBuilder =
+            CompositeSession<R, N, RelocContext<MockBackend<A, T>, Expr<A::SymbolId, S>>>;
 
         fn build_const(self) -> Self::ExprBuilder {
-            RelocContext::new(self)
+            CompositeSession {
+                reentrancy: self.reentrancy,
+                names: self.names,
+                builder: RelocContext::new(self.builder),
+            }
         }
 
         fn define_symbol(&mut self, name: Self::SymbolId, span: S, expr: Self::Value) {
-            self.log
+            self.builder
+                .log
                 .push(BackendEvent::DefineSymbol((name, span), expr));
         }
     }
@@ -555,7 +596,7 @@ pub mod mock {
         }
     }
 
-    impl<A, T, S> PartialBackend<S> for MockBackend<A, T>
+    impl<R, N, A, T, S> PartialBackend<S> for CompositeSession<R, N, MockBackend<A, T>>
     where
         A: AllocSymbol<S>,
         T: From<BackendEvent<A::SymbolId, Expr<A::SymbolId, S>>>,
@@ -564,14 +605,10 @@ pub mod mock {
         type Value = Expr<A::SymbolId, S>;
 
         fn emit_item(&mut self, item: Item<Self::Value>) {
-            self.log.push(BackendEvent::EmitItem(item))
+            self.builder.log.push(BackendEvent::EmitItem(item))
         }
 
-        fn is_non_zero(
-            &mut self,
-            value: Self::Value,
-            _diagnostics: &mut impl Diagnostics<S>,
-        ) -> Option<bool> {
+        fn is_non_zero(&mut self, value: Self::Value) -> Option<bool> {
             match value.0.as_slice() {
                 [Spanned {
                     item: ExprOp::Atom(Atom::Const(n)),
@@ -582,15 +619,17 @@ pub mod mock {
         }
 
         fn reserve(&mut self, bytes: Self::Value) {
-            self.log.push(BackendEvent::Reserve(bytes))
+            self.builder.log.push(BackendEvent::Reserve(bytes))
         }
 
         fn set_origin(&mut self, origin: Self::Value) {
-            self.log.push(BackendEvent::SetOrigin(origin))
+            self.builder.log.push(BackendEvent::SetOrigin(origin))
         }
 
         fn start_section(&mut self, name: A::SymbolId, span: S) {
-            self.log.push(BackendEvent::StartSection(name, span))
+            self.builder
+                .log
+                .push(BackendEvent::StartSection(name, span))
         }
     }
 
@@ -626,7 +665,6 @@ mod tests {
     use crate::diag::*;
     use crate::expr::BinOp;
     use crate::link::Program;
-    use crate::log::Log;
     use crate::object::SectionId;
 
     use std::borrow::Borrow;
@@ -639,16 +677,18 @@ mod tests {
 
     #[test]
     fn no_origin_by_default() {
-        let object = build_object::<_, ()>(|mut builder| builder.push(Node::Byte(0xcd)));
+        let object = build_object::<_, ()>(|mut session| {
+            session.emit_item(Item::CpuInstr(CpuInstr::Nullary(Nullary::Nop)))
+        });
         assert_eq!(object.content.sections[0].constraints.addr, None)
     }
 
     #[test]
     fn constrain_origin_determines_origin_of_new_section() {
         let origin: Expr<_> = 0x3000.into();
-        let object = build_object(|mut builder| {
-            builder.set_origin(origin.clone());
-            builder.push(Node::Byte(0xcd))
+        let object = build_object(|mut session| {
+            session.set_origin(origin.clone());
+            session.emit_item(Item::CpuInstr(CpuInstr::Nullary(Nullary::Nop)))
         });
         assert_eq!(object.content.sections[0].constraints.addr, Some(origin))
     }
@@ -656,9 +696,9 @@ mod tests {
     #[test]
     fn start_section_adds_named_section() {
         let mut wrapped_name = None;
-        let object = build_object(|mut builder| {
-            let name = builder.alloc_symbol(());
-            builder.start_section(name, ());
+        let object = build_object(|mut session| {
+            let name = session.alloc_symbol(());
+            session.start_section(name, ());
             wrapped_name = Some(name);
         });
         assert_eq!(
@@ -673,31 +713,36 @@ mod tests {
     #[test]
     fn set_origin_in_section_prelude_sets_origin() {
         let origin: Expr<_> = 0x0150.into();
-        let object = build_object(|mut builder| {
-            let name = builder.alloc_symbol(());
-            builder.start_section(name, ());
-            builder.set_origin(origin.clone())
+        let object = build_object(|mut session| {
+            let name = session.alloc_symbol(());
+            session.start_section(name, ());
+            session.set_origin(origin.clone())
         });
         assert_eq!(object.content.sections[0].constraints.addr, Some(origin))
     }
 
     #[test]
-    fn push_node_into_named_section() {
-        let node = Node::Byte(0x42);
-        let object = build_object(|mut builder| {
-            let name = builder.alloc_symbol(());
-            builder.start_section(name, ());
-            builder.push(node.clone())
+    fn emit_item_into_named_section() {
+        let object = build_object(|mut session| {
+            let name = session.alloc_symbol(());
+            session.start_section(name, ());
+            session.emit_item(Item::CpuInstr(CpuInstr::Nullary(Nullary::Nop)))
         });
-        assert_eq!(object.content.sections[0].items, [node])
+        assert_eq!(object.content.sections[0].items, [Node::Byte(0x00)])
     }
 
-    fn build_object<F: FnOnce(ObjectBuilder<S>), S>(f: F) -> Object<S> {
+    fn build_object<F: FnOnce(Session<S>), S>(f: F) -> Object<S> {
         let mut linkable = Object::new();
-        let builder = ObjectBuilder::new(&mut linkable);
-        f(builder);
+        let session = CompositeSession {
+            reentrancy: TestDiagnosticsListener::new(),
+            names: (),
+            builder: ObjectBuilder::new(&mut linkable),
+        };
+        f(session);
         linkable
     }
+
+    type Session<'a, S> = CompositeSession<TestDiagnosticsListener<S>, (), ObjectBuilder<'a, S>>;
 
     #[test]
     fn emit_stop() {
@@ -833,13 +878,7 @@ mod tests {
             let mut const_builder = object_builder.build_const();
             const_builder.push_op(0, ());
             let (mut object_builder, zero) = const_builder.finish();
-            assert_eq!(
-                object_builder.is_non_zero(
-                    zero.unwrap(),
-                    &mut MockDiagnostics::<DiagnosticsEvent<_>, _>::new(Log::new())
-                ),
-                Some(false)
-            )
+            assert_eq!(object_builder.is_non_zero(zero.unwrap(),), Some(false))
         });
     }
 
@@ -849,20 +888,14 @@ mod tests {
             let mut const_builder = object_builder.build_const();
             const_builder.push_op(42, ());
             let (mut object_builder, forty_two) = const_builder.finish();
-            assert_eq!(
-                object_builder.is_non_zero(
-                    forty_two.unwrap(),
-                    &mut MockDiagnostics::<DiagnosticsEvent<_>, _>::new(Log::new())
-                ),
-                Some(true)
-            )
+            assert_eq!(object_builder.is_non_zero(forty_two.unwrap(),), Some(true))
         });
     }
 
     fn with_object_builder<S, F>(f: F) -> (Program, Box<[CompactDiag<S, S>]>)
     where
         S: Clone + 'static,
-        F: FnOnce(ObjectBuilder<S>),
+        F: FnOnce(Session<S>),
     {
         let mut diagnostics = TestDiagnosticsListener::new();
         let object = Program::link(build_object(f), &mut diagnostics);

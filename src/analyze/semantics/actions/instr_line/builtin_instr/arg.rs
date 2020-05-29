@@ -1,32 +1,33 @@
-use super::{BuiltinInstrSemantics, CompositeSession};
+use super::BuiltinInstrSemantics;
 
+use crate::analyze::macros::MacroSource;
 use crate::analyze::semantics::actions::Keyword;
 use crate::analyze::semantics::arg::{Arg, DerefableArg};
-use crate::analyze::semantics::session::reentrancy::Meta;
 use crate::analyze::semantics::session::resolve::{NameTable, ResolvedName};
 use crate::analyze::semantics::{ArgSemantics, ExprBuilder, Semantics};
 use crate::analyze::syntax::actions::*;
-use crate::analyze::Literal;
-use crate::diag::span::Source;
+use crate::analyze::syntax::IdentSource;
+use crate::analyze::{Literal, StringSource};
+use crate::diag::span::{Source, SpanSource};
 use crate::diag::{Diagnostics, Message};
 use crate::expr::{FnCall, LocationCounter, ParamId};
-use crate::object::builder::{Finish, Name, PartialBackend, SymbolSource, ValueBuilder};
+use crate::object::builder::{Finish, Name, SymbolSource, ValueBuilder};
+use crate::Session;
 
 delegate_diagnostics! {
     {R, S, P: Diagnostics<S>}, ExprBuilder<R, S, P>, {parent}, P, S
 }
 
-impl<'a, R, N, B> ArgFinalizer for ArgSemantics<'a, R, N, B>
+impl<'a, S> ArgFinalizer for ArgSemantics<'a, S>
 where
-    R: Meta,
-    B: Finish,
-    B::Value: Source<Span = R::Span>,
-    B::Parent: PartialBackend<R::Span, Value = B::Value>,
+    S: Finish,
+    S::Value: Source<Span = <S::Parent as SpanSource>::Span>,
+    S::Parent: Session<Value = S::Value>,
 {
-    type Next = BuiltinInstrSemantics<'a, R, N, B::Parent>;
+    type Next = BuiltinInstrSemantics<'a, S::Parent>;
 
     fn did_parse_arg(mut self) -> Self::Next {
-        let (builder, value) = self.session.builder.finish();
+        let (session, value) = self.session.finish();
         let arg = match self.state.arg {
             Some(Arg::Bare(DerefableArg::Const(()))) => {
                 Arg::Bare(DerefableArg::Const(value.unwrap()))
@@ -45,51 +46,57 @@ where
         };
         self.state.parent.args.push(arg);
         Semantics {
-            session: CompositeSession {
-                reentrancy: self.session.reentrancy,
-                names: self.session.names,
-                builder,
-            },
+            session,
             state: self.state.parent,
             tokens: self.tokens,
         }
     }
 }
 
-impl<'a, R, N, B> ArgContext for ArgSemantics<'a, R, N, B>
+impl<'a, S> ArgContext for ArgSemantics<'a, S>
 where
-    R: Meta,
-    CompositeSession<R, N, B>: NameTable<
-        R::Ident,
+    S: NameTable<
+        <<S as Finish>::Parent as IdentSource>::Ident,
         Keyword = &'static Keyword,
-        MacroId = R::MacroId,
-        SymbolId = <<B as Finish>::Parent as SymbolSource>::SymbolId,
+        MacroId = <<S as Finish>::Parent as MacroSource>::MacroId,
+        SymbolId = <<S as Finish>::Parent as SymbolSource>::SymbolId,
     >,
-    B: ValueBuilder<R::Span, SymbolId = <<B as Finish>::Parent as SymbolSource>::SymbolId> + Finish,
-    B::Parent: PartialBackend<R::Span>,
+    S: ValueBuilder<
+            <<S as Finish>::Parent as SpanSource>::Span,
+            SymbolId = <<S as Finish>::Parent as SymbolSource>::SymbolId,
+        > + Finish,
+    S: Diagnostics<<<S as Finish>::Parent as SpanSource>::Span>,
+    S::Parent: Session,
 {
-    fn act_on_atom(&mut self, atom: ExprAtom<R::Ident, Literal<R::StringRef>>, span: R::Span) {
+    fn act_on_atom(
+        &mut self,
+        atom: ExprAtom<
+            <<S as Finish>::Parent as IdentSource>::Ident,
+            Literal<<<S as Finish>::Parent as StringSource>::StringRef>,
+        >,
+        span: <<S as Finish>::Parent as SpanSource>::Span,
+    ) {
         match atom {
             ExprAtom::Ident(ident) => self.act_on_ident(ident, span),
             ExprAtom::Literal(Literal::Number(n)) => {
-                self.session.builder.push_op(n, span);
+                self.session.push_op(n, span);
                 self.state.arg = Some(Arg::Bare(DerefableArg::Const(())));
             }
             ExprAtom::Literal(Literal::String(string)) => {
                 self.state.arg = Some(Arg::String(string, span))
             }
             ExprAtom::LocationCounter => {
-                self.session.builder.push_op(LocationCounter, span);
+                self.session.push_op(LocationCounter, span);
                 self.state.arg = Some(Arg::Bare(DerefableArg::Const(())));
             }
             ExprAtom::Error => self.state.arg = Some(Arg::Error),
         }
     }
 
-    fn act_on_operator(&mut self, op: Operator, span: R::Span) {
+    fn act_on_operator(&mut self, op: Operator, span: <<S as Finish>::Parent as SpanSource>::Span) {
         match op {
-            Operator::Binary(op) => self.session.builder.push_op(op, span),
-            Operator::FnCall(arity) => self.session.builder.push_op(FnCall(arity), span),
+            Operator::Binary(op) => self.session.push_op(op, span),
+            Operator::FnCall(arity) => self.session.push_op(FnCall(arity), span),
             Operator::Unary(UnaryOperator::Parentheses) => match &self.state.arg {
                 Some(Arg::Bare(arg)) => self.state.arg = Some(Arg::Deref((*arg).clone(), span)),
                 _ => unimplemented!(),
@@ -98,19 +105,26 @@ where
     }
 }
 
-impl<'a, R, N, B> ArgSemantics<'a, R, N, B>
+impl<'a, S> ArgSemantics<'a, S>
 where
-    R: Meta,
-    CompositeSession<R, N, B>: NameTable<
-        R::Ident,
+    S: NameTable<
+        <<S as Finish>::Parent as IdentSource>::Ident,
         Keyword = &'static Keyword,
-        MacroId = R::MacroId,
-        SymbolId = <<B as Finish>::Parent as SymbolSource>::SymbolId,
+        MacroId = <<S as Finish>::Parent as MacroSource>::MacroId,
+        SymbolId = <<S as Finish>::Parent as SymbolSource>::SymbolId,
     >,
-    B: ValueBuilder<R::Span, SymbolId = <<B as Finish>::Parent as SymbolSource>::SymbolId> + Finish,
-    B::Parent: PartialBackend<R::Span>,
+    S: ValueBuilder<
+            <<S as Finish>::Parent as SpanSource>::Span,
+            SymbolId = <<S as Finish>::Parent as SymbolSource>::SymbolId,
+        > + Finish,
+    S: Diagnostics<<<S as Finish>::Parent as SpanSource>::Span>,
+    S::Parent: Session,
 {
-    fn act_on_ident(&mut self, ident: R::Ident, span: R::Span) {
+    fn act_on_ident(
+        &mut self,
+        ident: <<S as Finish>::Parent as IdentSource>::Ident,
+        span: <<S as Finish>::Parent as SpanSource>::Span,
+    ) {
         let no_params = (vec![], vec![]);
         let params = match &self.state.parent.label {
             Some((_, params)) => &params,
@@ -122,7 +136,7 @@ where
             .position(|param| *param == ident)
             .map(ParamId);
         if let Some(id) = param {
-            self.session.builder.push_op(id, span);
+            self.session.push_op(id, span);
             self.state.arg = Some(Arg::Bare(DerefableArg::Const(())));
             return;
         }
@@ -132,18 +146,19 @@ where
                 _ => unimplemented!(),
             },
             Some(ResolvedName::Keyword(_)) => {
-                let keyword = self.strip_span(&span);
-                self.emit_diag(Message::KeywordInExpr { keyword }.at(span))
+                let keyword = self.session.strip_span(&span);
+                self.session
+                    .emit_diag(Message::KeywordInExpr { keyword }.at(span))
             }
             Some(ResolvedName::Symbol(id)) => {
-                self.session.builder.push_op(Name(id), span);
+                self.session.push_op(Name(id), span);
                 self.state.arg = Some(Arg::Bare(DerefableArg::Const(())))
             }
             None => {
-                let id = self.session.builder.alloc_symbol(span.clone());
+                let id = self.session.alloc_symbol(span.clone());
                 self.session
                     .define_name(ident, ResolvedName::Symbol(id.clone()));
-                self.session.builder.push_op(Name(id), span);
+                self.session.push_op(Name(id), span);
                 self.state.arg = Some(Arg::Bare(DerefableArg::Const(())))
             }
             _ => unimplemented!(),

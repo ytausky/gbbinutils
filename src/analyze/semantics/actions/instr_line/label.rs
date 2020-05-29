@@ -1,26 +1,25 @@
 use super::*;
 
-use crate::analyze::semantics::session::reentrancy::Meta;
 use crate::analyze::semantics::Params;
 use crate::analyze::syntax::actions::LabelContext;
 
-pub(super) type LabelSemantics<'a, R, N, B> = Semantics<
+pub(super) type LabelSemantics<'a, S> = Semantics<
     'a,
-    CompositeSession<R, N, B>,
-    LabelState<R>,
-    <R as IdentSource>::Ident,
-    <R as StringSource>::StringRef,
-    <R as SpanSource>::Span,
+    S,
+    LabelState<S>,
+    <S as IdentSource>::Ident,
+    <S as StringSource>::StringRef,
+    <S as SpanSource>::Span,
 >;
 
-pub(in crate::analyze) struct LabelState<R: Meta> {
-    parent: InstrLineState<R::Ident, R::Span>,
-    label: (R::Ident, R::Span),
-    params: Params<R::Ident, R::Span>,
+pub(in crate::analyze) struct LabelState<S: Session> {
+    parent: InstrLineState<S::Ident, S::Span>,
+    label: (S::Ident, S::Span),
+    params: Params<S::Ident, S::Span>,
 }
 
-impl<R: Meta> LabelState<R> {
-    pub fn new(parent: InstrLineState<R::Ident, R::Span>, label: (R::Ident, R::Span)) -> Self {
+impl<S: Session> LabelState<S> {
+    pub fn new(parent: InstrLineState<S::Ident, S::Span>, label: (S::Ident, S::Span)) -> Self {
         Self {
             parent,
             label,
@@ -29,10 +28,10 @@ impl<R: Meta> LabelState<R> {
     }
 }
 
-impl<'a, R: Meta, N, B> LabelContext for LabelSemantics<'a, R, N, B> {
-    type Next = InstrLineSemantics<'a, R, N, B>;
+impl<'a, S: Session> LabelContext for LabelSemantics<'a, S> {
+    type Next = InstrLineSemantics<'a, S>;
 
-    fn act_on_param(&mut self, ident: R::Ident, span: R::Span) {
+    fn act_on_param(&mut self, ident: S::Ident, span: S::Span) {
         let params = &mut self.state.params;
         params.0.push(ident);
         params.1.push(span)

@@ -3,7 +3,7 @@ use super::Token;
 use crate::diag::CompactDiag;
 use crate::expr::BinOp;
 
-pub(in crate::analyze) trait ParsingContext: Sized {
+pub trait ParsingContext: Sized {
     type Ident;
     type Literal;
     type Error;
@@ -36,7 +36,7 @@ pub(in crate::analyze) type LexerOutput<I, L, E, S> = (Result<Token<I, L>, E>, S
 // This parsing ambiguity is resolved according to the semantics of the program so far, thus the
 // rule used by the parser is determined by the value returned from
 // TokenStreamContext::will_parse_line.
-pub(in crate::analyze) trait TokenStreamContext: ParsingContext {
+pub trait TokenStreamContext: ParsingContext {
     type InstrLineContext: InstrLineContext<
         Ident = Self::Ident,
         Literal = Self::Literal,
@@ -68,7 +68,7 @@ pub(in crate::analyze) trait TokenStreamContext: ParsingContext {
 }
 
 #[derive(Debug, PartialEq)]
-pub(in crate::analyze) enum LineRule<I, T> {
+pub enum LineRule<I, T> {
     InstrLine(I),
     TokenLine(T),
 }
@@ -104,7 +104,7 @@ impl<I, T> LineRule<I, T> {
 // possible states after a label has been successfully parsed. Note that by using two distinct types
 // bound by InstrContext we can prevent the parser from calling InstrLineContext::will_parse_label
 // more than once on the same line.
-pub(in crate::analyze) trait InstrLineContext: InstrContext {
+pub trait InstrLineContext: InstrContext {
     type LabelContext: LabelContext<
         Ident = Self::Ident,
         Literal = Self::Literal,
@@ -140,7 +140,7 @@ pub(in crate::analyze) trait InstrLineContext: InstrContext {
 //
 // The parser uses this rule to recover from an invalid instruction name by throwing away all the
 // remaining tokens in the line.
-pub(in crate::analyze) trait InstrContext: LineFinalizer {
+pub trait InstrContext: LineFinalizer {
     type BuiltinInstrContext: BuiltinInstrContext<
         Ident = Self::Ident,
         Literal = Self::Literal,
@@ -181,20 +181,20 @@ pub(in crate::analyze) trait InstrContext: LineFinalizer {
     ) -> InstrRule<Self::BuiltinInstrContext, Self::MacroInstrContext, Self::ErrorContext>;
 }
 
-pub(in crate::analyze) trait LineFinalizer: ParsingContext {
+pub trait LineFinalizer: ParsingContext {
     type Next;
 
     fn did_parse_line(self, span: Self::Span) -> Self::Next;
 }
 
-pub(in crate::analyze) trait InstrFinalizer: ParsingContext {
+pub trait InstrFinalizer: ParsingContext {
     type Next;
 
     fn did_parse_instr(self) -> Self::Next;
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(in crate::analyze) enum InstrRule<C, M, E> {
+pub enum InstrRule<C, M, E> {
     BuiltinInstr(C),
     MacroInstr(M),
     Error(E),
@@ -229,7 +229,7 @@ impl<C, M, E> InstrRule<C, M, E> {
 //     1. builtin-instr → <Ident> (arg (<Comma> arg)*)?
 //
 // BuiltinInstrContext represents any position in this rule after the initial <Ident>.
-pub(in crate::analyze) trait BuiltinInstrContext: InstrFinalizer {
+pub trait BuiltinInstrContext: InstrFinalizer {
     type ArgContext: ArgContext<
             Ident = Self::Ident,
             Literal = Self::Literal,
@@ -241,7 +241,7 @@ pub(in crate::analyze) trait BuiltinInstrContext: InstrFinalizer {
     fn will_parse_arg(self) -> Self::ArgContext;
 }
 
-pub(in crate::analyze) trait ArgFinalizer {
+pub trait ArgFinalizer {
     type Next;
 
     fn did_parse_arg(self) -> Self::Next;
@@ -257,7 +257,7 @@ pub(in crate::analyze) trait ArgFinalizer {
 //     6. ...
 //
 // To handle precedence and associativity, the parser uses a reverse Polish notation protocol.
-pub(in crate::analyze) trait ArgContext: ParsingContext {
+pub trait ArgContext: ParsingContext {
     fn act_on_atom(&mut self, atom: ExprAtom<Self::Ident, Self::Literal>, span: Self::Span);
     fn act_on_operator(&mut self, operator: Operator, span: Self::Span);
 }
@@ -282,14 +282,14 @@ pub enum UnaryOperator {
     Parentheses,
 }
 
-pub(in crate::analyze) trait LabelContext: ParsingContext {
+pub trait LabelContext: ParsingContext {
     type Next;
 
     fn act_on_param(&mut self, param: Self::Ident, span: Self::Span);
     fn did_parse_label(self) -> Self::Next;
 }
 
-pub(in crate::analyze) trait MacroInstrContext: InstrFinalizer {
+pub trait MacroInstrContext: InstrFinalizer {
     type MacroArgContext: MacroArgContext<
         Ident = Self::Ident,
         Literal = Self::Literal,
@@ -302,14 +302,14 @@ pub(in crate::analyze) trait MacroInstrContext: InstrFinalizer {
     fn will_parse_macro_arg(self) -> Self::MacroArgContext;
 }
 
-pub(in crate::analyze) trait MacroArgContext: ParsingContext {
+pub trait MacroArgContext: ParsingContext {
     type Next;
 
     fn act_on_token(&mut self, token: (Token<Self::Ident, Self::Literal>, Self::Span));
     fn did_parse_macro_arg(self) -> Self::Next;
 }
 
-pub(in crate::analyze) trait TokenLineContext: LineFinalizer {
+pub trait TokenLineContext: LineFinalizer {
     type ContextFinalizer: LineFinalizer<
         Ident = Self::Ident,
         Literal = Self::Literal,
@@ -327,7 +327,7 @@ pub(in crate::analyze) trait TokenLineContext: LineFinalizer {
     ) -> TokenLineRule<Self, Self::ContextFinalizer>;
 }
 
-pub(in crate::analyze) enum TokenLineRule<T, E> {
+pub enum TokenLineRule<T, E> {
     TokenSeq(T),
     LineEnd(E),
 }

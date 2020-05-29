@@ -159,10 +159,12 @@ mod tests {
     use super::*;
 
     use crate::diag::IgnoreDiagnostics;
+    use crate::diag::TestDiagnosticsListener;
     use crate::expr::{Atom, BinOp, LocationCounter};
     use crate::object::builder::*;
     use crate::object::num::Num;
     use crate::object::{Content, Object};
+    use crate::CompositeSession;
 
     use std::borrow::Borrow;
 
@@ -224,7 +226,11 @@ mod tests {
         let addr = 0x7ff0;
 
         let mut object = Object::new();
-        let object_builder = ObjectBuilder::new(&mut object);
+        let object_builder = CompositeSession {
+            reentrancy: TestDiagnosticsListener::new(),
+            names: (),
+            builder: ObjectBuilder::new(&mut object),
+        };
 
         // org $7ff0
         let mut const_builder = object_builder.build_const();
@@ -253,7 +259,11 @@ mod tests {
     #[test]
     fn translate_expr_with_location_counter() {
         let mut object = Object::new();
-        let mut object_builder = ObjectBuilder::new(&mut object);
+        let mut object_builder = CompositeSession {
+            reentrancy: TestDiagnosticsListener::new(),
+            names: (),
+            builder: ObjectBuilder::new(&mut object),
+        };
 
         // nop
         object_builder.emit_item(Item::CpuInstr(CpuInstr::Nullary(Nullary::Nop)));
@@ -284,7 +294,11 @@ mod tests {
         let addr = 0xffe1;
 
         let mut object = Object::new();
-        let object_builder = ObjectBuilder::new(&mut object);
+        let object_builder = CompositeSession {
+            reentrancy: TestDiagnosticsListener::new(),
+            names: (),
+            builder: ObjectBuilder::new(&mut object),
+        };
 
         // org $ffe1
         let mut const_builder = object_builder.build_const();

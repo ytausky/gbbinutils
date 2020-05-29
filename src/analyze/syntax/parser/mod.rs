@@ -65,19 +65,19 @@ macro_rules! input_tokens_impl {
 
 mod expr;
 
-pub(in crate::analyze) trait ParserFactory<I, L, E, S: Clone> {
+pub trait ParserFactory<I, L, E, S: Clone> {
     type Parser: ParseTokenStream<I, L, E, S>;
 
     fn mk_parser(&mut self) -> Self::Parser;
 }
 
-pub(in crate::analyze) trait ParseTokenStream<I, L, E, S: Clone> {
+pub trait ParseTokenStream<I, L, E, S: Clone> {
     fn parse_token_stream<A>(&mut self, actions: A) -> A
     where
         A: TokenStreamContext<Ident = I, Literal = L, Error = E, Span = S>;
 }
 
-pub(in crate::analyze) struct DefaultParserFactory;
+pub struct DefaultParserFactory;
 
 impl<I, L, E, S: Clone> ParserFactory<I, L, E, S> for DefaultParserFactory {
     type Parser = DefaultParser;
@@ -87,7 +87,7 @@ impl<I, L, E, S: Clone> ParserFactory<I, L, E, S> for DefaultParserFactory {
     }
 }
 
-pub(in crate::analyze) struct DefaultParser;
+pub struct DefaultParser;
 
 impl<I, L, E, S: Clone> ParseTokenStream<I, L, E, S> for DefaultParser {
     fn parse_token_stream<A>(&mut self, actions: A) -> A

@@ -3,7 +3,6 @@ use super::*;
 use crate::analyze::semantics::actions::TokenStreamState;
 use crate::analyze::semantics::arg::*;
 use crate::analyze::semantics::keywords::{Directive, Mnemonic};
-use crate::analyze::semantics::session::reentrancy::ReentrancyActions;
 use crate::analyze::semantics::session::resolve::NameTable;
 use crate::analyze::semantics::RelocLookup;
 use crate::analyze::syntax::actions::{BuiltinInstrContext, InstrFinalizer};
@@ -13,70 +12,49 @@ mod arg;
 mod cpu_instr;
 mod directive;
 
-impl<R, V> From<BuiltinInstrState<R, V>>
+impl<S: Session> From<BuiltinInstrState<S>>
     for TokenStreamState<
-        <R as IdentSource>::Ident,
-        <R as StringSource>::StringRef,
-        <R as SpanSource>::Span,
+        <S as IdentSource>::Ident,
+        <S as StringSource>::StringRef,
+        <S as SpanSource>::Span,
     >
-where
-    R: Meta,
 {
-    fn from(_: BuiltinInstrState<R, V>) -> Self {
+    fn from(_: BuiltinInstrState<S>) -> Self {
         InstrLineState::new().into()
     }
 }
 
-impl<'a, R, N, B> BuiltinInstrContext for BuiltinInstrSemantics<'a, R, N, B>
+impl<'a, S: Session> BuiltinInstrContext for BuiltinInstrSemantics<'a, S>
 where
-    R: Meta,
-    R::Ident: 'static,
-    R::StringRef: 'static,
-    R::Span: 'static,
-    CompositeSession<R, N, B>:
-        ReentrancyActions<Ident = R::Ident, Span = R::Span, StringRef = R::StringRef>,
-    CompositeSession<R, N, B>: StartScope<R::Ident>
+    S::Ident: 'static,
+    S::StringRef: 'static,
+    S::Span: 'static,
+    S::ExprBuilder: StartScope<S::Ident>
         + NameTable<
-            R::Ident,
+            S::Ident,
             Keyword = &'static Keyword,
-            MacroId = R::MacroId,
-            SymbolId = B::SymbolId,
-        >,
-    CompositeSession<R, N, B::ExprBuilder>: StartScope<R::Ident>
-        + NameTable<
-            R::Ident,
-            Keyword = &'static Keyword,
-            MacroId = R::MacroId,
-            SymbolId = B::SymbolId,
-        >,
-    B: Backend<R::Span>,
+            MacroId = S::MacroId,
+            SymbolId = S::SymbolId,
+        > + Diagnostics<S::Span, Stripped = S::Stripped>,
 {
-    type ArgContext = ArgSemantics<'a, R, N, B::ExprBuilder>;
+    type ArgContext = ArgSemantics<'a, S::ExprBuilder>;
 
     fn will_parse_arg(self) -> Self::ArgContext {
-        self.map_state(ExprBuilder::new)
-            .map_builder::<_, B::ExprBuilder>(|builder| builder.build_const())
+        Semantics {
+            session: self.session.build_const(),
+            state: ExprBuilder::new(self.state),
+            tokens: self.tokens,
+        }
     }
 }
 
-impl<'a, R, N, B> InstrFinalizer for BuiltinInstrSemantics<'a, R, N, B>
+impl<'a, S: Session> InstrFinalizer for BuiltinInstrSemantics<'a, S>
 where
-    R: Meta,
-    R::Ident: 'static,
-    R::StringRef: 'static,
-    R::Span: 'static,
-    CompositeSession<R, N, B>:
-        ReentrancyActions<Ident = R::Ident, Span = R::Span, StringRef = R::StringRef>,
-    CompositeSession<R, N, B>: StartScope<R::Ident>
-        + NameTable<
-            R::Ident,
-            Keyword = &'static Keyword,
-            MacroId = R::MacroId,
-            SymbolId = B::SymbolId,
-        >,
-    B: Backend<R::Span>,
+    S::Ident: 'static,
+    S::StringRef: 'static,
+    S::Span: 'static,
 {
-    type Next = TokenStreamSemantics<'a, R, N, B>;
+    type Next = TokenStreamSemantics<'a, S>;
 
     fn did_parse_instr(self) -> Self::Next {
         let args = self.state.args;
@@ -96,37 +74,17 @@ where
     }
 }
 
-impl<'a, R, N, B, S>
-    Semantics<
-        'a,
-        CompositeSession<R, N, B>,
-        S,
-        <CompositeSession<R, N, B> as IdentSource>::Ident,
-        <CompositeSession<R, N, B> as StringSource>::StringRef,
-        <CompositeSession<R, N, B> as SpanSource>::Span,
-    >
-where
-    CompositeSession<R, N, B>: IdentSource
-        + StringSource
-        + SpanSource
-        + Diagnostics<<CompositeSession<R, N, B> as SpanSource>::Span>,
-    CompositeSession<R, N, B>:
-        NameTable<<CompositeSession<R, N, B> as IdentSource>::Ident, SymbolId = B::SymbolId>,
-    B: Backend<<CompositeSession<R, N, B> as SpanSource>::Span>,
-{
+impl<'a, S: Session, T> Semantics<'a, S, T, S::Ident, S::StringRef, S::Span> {
     pub(in crate::analyze::semantics) fn expect_const(
         &mut self,
-        arg: Arg<
-            B::Value,
-            <CompositeSession<R, N, B> as StringSource>::StringRef,
-            <CompositeSession<R, N, B> as SpanSource>::Span,
-        >,
-    ) -> Result<B::Value, ()> {
+        arg: Arg<S::Value, S::StringRef, S::Span>,
+    ) -> Result<S::Value, ()> {
         match arg {
             Arg::Bare(DerefableArg::Const(value)) => Ok(value),
             Arg::Bare(DerefableArg::Symbol(_, span)) => {
-                let keyword = self.strip_span(&span);
-                self.emit_diag(Message::KeywordInExpr { keyword }.at(span));
+                let keyword = self.session.strip_span(&span);
+                self.session
+                    .emit_diag(Message::KeywordInExpr { keyword }.at(span));
                 Err(())
             }
             Arg::Error => Err(()),
@@ -136,19 +94,12 @@ where
 
     pub(in crate::analyze::semantics) fn define_symbol_with_params(
         &mut self,
-        (name, span): (
-            <CompositeSession<R, N, B> as IdentSource>::Ident,
-            <CompositeSession<R, N, B> as SpanSource>::Span,
-        ),
-        expr: Arg<
-            B::Value,
-            <CompositeSession<R, N, B> as StringSource>::StringRef,
-            <CompositeSession<R, N, B> as SpanSource>::Span,
-        >,
+        (name, span): (S::Ident, S::Span),
+        expr: Arg<S::Value, S::StringRef, S::Span>,
     ) {
         if let Ok(value) = self.expect_const(expr) {
             let id = self.session.reloc_lookup(name, span.clone());
-            self.session.builder.define_symbol(id, span, value);
+            self.session.define_symbol(id, span, value);
         }
     }
 }
@@ -165,31 +116,18 @@ impl From<Mnemonic> for BuiltinMnemonic {
     }
 }
 
-fn analyze_mnemonic<'a, R: Meta, N, B>(
-    name: (&Mnemonic, R::Span),
-    args: BuiltinInstrArgs<B::Value, R::StringRef, R::Span>,
-    mut session: TokenStreamSemantics<'a, R, N, B>,
-) -> TokenStreamSemantics<'a, R, N, B>
-where
-    CompositeSession<R, N, B>: StartScope<R::Ident>
-        + NameTable<
-            R::Ident,
-            Keyword = &'static Keyword,
-            MacroId = R::MacroId,
-            SymbolId = B::SymbolId,
-        >,
-    B: Backend<R::Span>,
-{
+fn analyze_mnemonic<'a, S: Session>(
+    name: (&Mnemonic, S::Span),
+    args: BuiltinInstrArgs<S::Value, S::StringRef, S::Span>,
+    mut session: TokenStreamSemantics<'a, S>,
+) -> TokenStreamSemantics<'a, S> {
     let mut operands = Vec::new();
     for arg in args {
         let operand = cpu_instr::operand::analyze_operand(arg, name.0.context(), &mut session);
         operands.push(operand)
     }
     if let Ok(instruction) = cpu_instr::analyze_instruction(name, operands, &mut session) {
-        session
-            .session
-            .builder
-            .emit_item(Item::CpuInstr(instruction))
+        session.session.emit_item(Item::CpuInstr(instruction))
     }
     session
 }

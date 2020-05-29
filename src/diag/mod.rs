@@ -19,19 +19,19 @@ pub(crate) mod span;
 #[cfg(test)]
 pub(crate) use self::mock::*;
 
-pub(crate) trait DiagnosticsSystem
+pub trait DiagnosticsSystem
 where
     Self: SpanSystem + Diagnostics<<Self as SpanSource>::Span>,
 {
 }
 
-pub(crate) trait Diagnostics<S>
+pub trait Diagnostics<S>
 where
     Self: MergeSpans<S> + BackendDiagnostics<S>,
 {
 }
 
-pub(crate) trait BackendDiagnostics<S>
+pub trait BackendDiagnostics<S>
 where
     Self: StripSpan<S> + EmitDiag<S, <Self as StripSpan<S>>::Stripped>,
 {
@@ -209,7 +209,7 @@ pub trait DiagnosticsOutput {
     fn emit(&mut self, diagnostic: Diagnostic);
 }
 
-pub(crate) trait EmitDiag<S, T> {
+pub trait EmitDiag<S, T> {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<S, T>>);
 }
 
@@ -264,6 +264,13 @@ impl<S: Clone> SpanSource for TestDiagnosticsListener<S> {
 }
 
 #[cfg(test)]
+impl<S: Clone> MergeSpans<S> for TestDiagnosticsListener<S> {
+    fn merge_spans(&mut self, _left: &S, _right: &S) -> S {
+        unimplemented!()
+    }
+}
+
+#[cfg(test)]
 impl<S: Clone> StripSpan<S> for TestDiagnosticsListener<S> {
     type Stripped = S;
 
@@ -280,7 +287,7 @@ impl<S> EmitDiag<S, S> for TestDiagnosticsListener<S> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct CompactDiag<S, R = S> {
+pub struct CompactDiag<S, R = S> {
     main: CompactClause<S, R>,
 }
 

@@ -6,10 +6,18 @@
 pub use crate::codebase::FileSystem;
 pub use crate::link::{Program, Rom};
 
-use crate::analyze::Assemble;
+use crate::analyze::macros::VecMacroTable;
+use crate::analyze::semantics::session::reentrancy::{ReentrancyActions, SourceComponents};
+use crate::analyze::semantics::session::resolve::*;
+use crate::analyze::semantics::Keyword;
+use crate::analyze::strings::FakeStringInterner;
+use crate::analyze::syntax::parser::DefaultParserFactory;
+use crate::analyze::syntax::{IdentFactory, IdentSource};
+use crate::analyze::{CodebaseAnalyzer, Tokenizer};
 use crate::codebase::{CodebaseError, StdFileSystem};
+use crate::diag::span::SpanSource;
 use crate::diag::*;
-use crate::object::builder::ObjectBuilder;
+use crate::object::builder::{Backend, ObjectBuilder};
 
 #[macro_use]
 pub mod diag;
@@ -81,7 +89,29 @@ fn try_assemble(
     let diagnostics = &mut CompositeDiagnosticsSystem::new(&codebase.cache, output);
     let mut linkable = object::Object::new();
     let builder = ObjectBuilder::new(&mut linkable);
-    builder.assemble(name, &codebase, diagnostics)?;
+
+    let tokenizer = Tokenizer(&codebase);
+    let mut file_parser = CodebaseAnalyzer::new(&tokenizer);
+    let mut parser_factory = DefaultParserFactory;
+    let mut macros = VecMacroTable::new();
+    let mut interner = FakeStringInterner;
+    let mut names = BiLevelNameTable::<BasicNameTable<_, _, _>>::new();
+    for (string, name) in builder.builtin_symbols() {
+        names.define_name(
+            DefaultIdentFactory.mk_ident(string),
+            ResolvedName::Symbol((*name).clone()),
+        )
+    }
+    let reentrancy = SourceComponents::new(
+        &mut file_parser,
+        &mut parser_factory,
+        &mut macros,
+        &mut interner,
+        diagnostics,
+    );
+    let session = CompositeSession::from_components(reentrancy, &mut names, builder);
+    session.analyze_file(name.into()).0?;
+
     Ok(Program::link(linkable, diagnostics))
 }
 
@@ -95,6 +125,26 @@ struct CompositeSession<R, N, B> {
     reentrancy: R,
     names: N,
     builder: B,
+}
+
+trait Session:
+    SpanSource
+    + ReentrancyActions
+    + Backend<<Self as SpanSource>::Span>
+    + Diagnostics<<Self as SpanSource>::Span>
+    + StartScope<<Self as IdentSource>::Ident>
+    + NameTable<<Self as IdentSource>::Ident, Keyword = &'static Keyword>
+{
+}
+
+impl<T> Session for T where
+    Self: SpanSource
+        + ReentrancyActions
+        + Backend<<Self as SpanSource>::Span>
+        + Diagnostics<<Self as SpanSource>::Span>
+        + StartScope<<Self as IdentSource>::Ident>
+        + NameTable<<Self as IdentSource>::Ident, Keyword = &'static Keyword>
+{
 }
 
 #[cfg(test)]

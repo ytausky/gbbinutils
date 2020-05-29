@@ -9,14 +9,14 @@ use crate::analyze::{IdentSource, Lex, Literal, SemanticToken, StringSource, Tok
 use crate::codebase::CodebaseError;
 use crate::diag::span::SpanSource;
 use crate::diag::*;
-use crate::object::builder::Backend;
+use crate::object::builder::{Backend, SymbolSource};
 
 use std::ops::{Deref, DerefMut};
 
 #[cfg(test)]
 pub(crate) use self::mock::*;
 
-pub(crate) trait Meta:
+pub trait Meta:
     IdentSource + MacroSource + SpanSource + StringSource + Diagnostics<<Self as SpanSource>::Span>
 {
 }
@@ -30,7 +30,7 @@ impl<T> Meta for T where
 {
 }
 
-pub(in crate::analyze) trait ReentrancyActions
+pub trait ReentrancyActions
 where
     Self: Meta + Sized,
 {
@@ -54,7 +54,7 @@ pub(in crate::analyze::semantics) type MacroArgs<I, R, S> =
     crate::analyze::macros::MacroArgs<SemanticToken<I, R>, S>;
 pub(in crate::analyze::semantics) type Params<I, S> = (Vec<I>, Vec<S>);
 
-pub(in crate::analyze) struct SourceComponents<C, P, M, I, D> {
+pub struct SourceComponents<C, P, M, I, D> {
     pub codebase: C,
     pub parser_factory: P,
     pub macros: M,
@@ -121,15 +121,15 @@ where
     D: DerefMut,
     D::Target: DiagnosticsSystem,
     Self: StartScope<<Self as IdentSource>::Ident>
-        + NameTable<<Self as IdentSource>::Ident, Keyword = &'static Keyword, SymbolId = B::SymbolId>,
-    CompositeSession<SourceComponents<C, P, M, I, D>, N, B::ExprBuilder>: StartScope<<Self as IdentSource>::Ident>
+        + NameTable<<Self as IdentSource>::Ident, Keyword = &'static Keyword>,
+    <Self as Backend<<D::Target as SpanSource>::Span>>::ExprBuilder: StartScope<<Self as IdentSource>::Ident>
         + NameTable<
             <Self as IdentSource>::Ident,
             Keyword = &'static Keyword,
             MacroId = <Self as MacroSource>::MacroId,
-            SymbolId = B::SymbolId,
-        >,
-    B: Backend<<D::Target as SpanSource>::Span>,
+            SymbolId = <Self as SymbolSource>::SymbolId,
+        > + Diagnostics<<D::Target as SpanSource>::Span, Stripped = Self::Stripped>,
+    Self: Backend<<D::Target as SpanSource>::Span>,
     <Self as IdentSource>::Ident: 'static,
     <Self as StringSource>::StringRef: 'static,
     <Self as SpanSource>::Span: 'static,

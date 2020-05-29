@@ -1,8 +1,7 @@
 use super::{Keyword, TokenStreamSemantics};
 
 use crate::analyze::semantics::keywords::Directive;
-use crate::analyze::semantics::session::reentrancy::ReentrancyActions;
-use crate::analyze::semantics::session::resolve::{NameTable, ResolvedName, StartScope};
+use crate::analyze::semantics::session::resolve::ResolvedName;
 use crate::analyze::semantics::*;
 use crate::analyze::syntax::actions::*;
 use crate::analyze::syntax::{LexError, Sigil, Token};
@@ -10,21 +9,10 @@ use crate::analyze::{Literal, SemanticToken};
 use crate::diag::span::StripSpan;
 use crate::diag::CompactDiag;
 
-impl<'a, R, N, B> TokenLineContext for TokenLineSemantics<'a, R, N, B>
-where
-    R: Meta,
-    CompositeSession<R, N, B>: ReentrancyActions<
-        Ident = R::Ident,
-        StringRef = R::StringRef,
-        Span = R::Span,
-        MacroId = R::MacroId,
-    >,
-    CompositeSession<R, N, B>: StartScope<R::Ident>
-        + NameTable<R::Ident, Keyword = &'static Keyword, MacroId = R::MacroId>,
-{
-    type ContextFinalizer = TokenContextFinalizationSemantics<'a, R, N, B>;
+impl<'a, S: Session> TokenLineContext for TokenLineSemantics<'a, S> {
+    type ContextFinalizer = TokenContextFinalizationSemantics<'a, S>;
 
-    fn act_on_token(&mut self, token: SemanticToken<R::Ident, R::StringRef>, span: R::Span) {
+    fn act_on_token(&mut self, token: SemanticToken<S::Ident, S::StringRef>, span: S::Span) {
         match &mut self.state.context {
             TokenContext::FalseIf => (),
             TokenContext::MacroDef(state) => state.act_on_token(token, span),
@@ -33,14 +21,14 @@ where
 
     fn act_on_mnemonic(
         mut self,
-        ident: R::Ident,
-        span: R::Span,
+        ident: S::Ident,
+        span: S::Span,
     ) -> TokenLineRule<Self, Self::ContextFinalizer> {
         if let Some(ResolvedName::Keyword(Keyword::BuiltinMnemonic(mnemonic))) =
             self.session.resolve_name(&ident)
         {
             if let TokenLineRule::LineEnd(()) =
-                self.state.context.act_on_mnemonic(mnemonic, span.clone())
+                self.state.context.act_on_mnemonic(&mnemonic, span.clone())
             {
                 return TokenLineRule::LineEnd(TokenContextFinalizationSemantics { parent: self });
             }
@@ -96,36 +84,25 @@ impl<I, R, S> MacroDefState<I, R, S> {
     }
 }
 
-impl<'a, R, N, B> LineFinalizer for TokenLineSemantics<'a, R, N, B>
-where
-    R: Meta,
-    CompositeSession<R, N, B>: ReentrancyActions<
-        Ident = R::Ident,
-        StringRef = R::StringRef,
-        Span = R::Span,
-        MacroId = R::MacroId,
-    >,
-    CompositeSession<R, N, B>: StartScope<R::Ident>
-        + NameTable<R::Ident, Keyword = &'static Keyword, MacroId = R::MacroId>,
-{
-    type Next = TokenStreamSemantics<'a, R, N, B>;
+impl<'a, S: Session> LineFinalizer for TokenLineSemantics<'a, S> {
+    type Next = TokenStreamSemantics<'a, S>;
 
-    fn did_parse_line(mut self, span: R::Span) -> Self::Next {
+    fn did_parse_line(mut self, span: S::Span) -> Self::Next {
         self.act_on_token(Sigil::Eol.into(), span);
         set_state!(self, self.state.into())
     }
 }
 
-pub(in crate::analyze) struct TokenContextFinalizationSemantics<'a, R: Meta, N, B> {
-    parent: TokenLineSemantics<'a, R, N, B>,
+pub(in crate::analyze) struct TokenContextFinalizationSemantics<'a, S: Session> {
+    parent: TokenLineSemantics<'a, S>,
 }
 
-impl<'a, R: Meta, N, B> ParsingContext for TokenContextFinalizationSemantics<'a, R, N, B> {
-    type Ident = R::Ident;
-    type Literal = Literal<R::StringRef>;
+impl<'a, S: Session> ParsingContext for TokenContextFinalizationSemantics<'a, S> {
+    type Ident = S::Ident;
+    type Literal = Literal<S::StringRef>;
     type Error = LexError;
-    type Span = R::Span;
-    type Stripped = <R as StripSpan<R::Span>>::Stripped;
+    type Span = S::Span;
+    type Stripped = <S as StripSpan<S::Span>>::Stripped;
 
     fn next_token(
         &mut self,
@@ -134,32 +111,22 @@ impl<'a, R: Meta, N, B> ParsingContext for TokenContextFinalizationSemantics<'a,
     }
 
     fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
-        self.parent.session.reentrancy.merge_spans(left, right)
+        self.parent.session.merge_spans(left, right)
     }
 
     fn strip_span(&mut self, span: &Self::Span) -> Self::Stripped {
-        self.parent.session.reentrancy.strip_span(span)
+        self.parent.session.strip_span(span)
     }
 
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<Self::Span, Self::Stripped>>) {
-        self.parent.session.reentrancy.emit_diag(diag)
+        self.parent.session.emit_diag(diag)
     }
 }
 
-impl<'a, R, N, B> LineFinalizer for TokenContextFinalizationSemantics<'a, R, N, B>
-where
-    R: Meta,
-    CompositeSession<R, N, B>: ReentrancyActions<
-        Ident = R::Ident,
-        StringRef = R::StringRef,
-        Span = R::Span,
-        MacroId = R::MacroId,
-    >,
-    CompositeSession<R, N, B>: NameTable<R::Ident, MacroId = R::MacroId>,
-{
-    type Next = TokenStreamSemantics<'a, R, N, B>;
+impl<'a, S: Session> LineFinalizer for TokenContextFinalizationSemantics<'a, S> {
+    type Next = TokenStreamSemantics<'a, S>;
 
-    fn did_parse_line(mut self, _: R::Span) -> Self::Next {
+    fn did_parse_line(mut self, _: S::Span) -> Self::Next {
         match self.parent.state.context {
             TokenContext::FalseIf => (),
             TokenContext::MacroDef(state) => {

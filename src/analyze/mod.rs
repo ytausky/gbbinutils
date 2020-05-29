@@ -1,16 +1,10 @@
-use self::macros::VecMacroTable;
 use self::semantics::session::reentrancy::SourceComponents;
 use self::semantics::session::resolve::*;
-use self::semantics::Semantics;
-use self::strings::FakeStringInterner;
-use self::syntax::parser::DefaultParserFactory;
 use self::syntax::*;
 
 use crate::codebase::{BufId, Codebase, CodebaseError};
-use crate::diag::*;
-use crate::object::builder::{Backend, SymbolSource};
 use crate::span::{BufContext, BufContextFactory, SpanSource};
-use crate::{BuiltinSymbols, CompositeSession};
+use crate::CompositeSession;
 
 use std::ops::DerefMut;
 use std::rc::Rc;
@@ -18,76 +12,32 @@ use std::rc::Rc;
 #[cfg(test)]
 pub use self::mock::*;
 
-mod macros;
-mod semantics;
-mod strings;
-mod syntax;
-
-pub(crate) trait Assemble<D>
-where
-    D: DiagnosticsSystem,
-    D::Span: 'static,
-    Self: Backend<D::Span> + BuiltinSymbols<Name = <Self as SymbolSource>::SymbolId> + Sized,
-{
-    fn assemble<C: Codebase>(
-        self,
-        name: &str,
-        codebase: &C,
-        diagnostics: &mut D,
-    ) -> Result<(), CodebaseError> {
-        let tokenizer = Tokenizer(codebase);
-        let mut file_parser = CodebaseAnalyzer::new(&tokenizer);
-        let mut parser_factory = DefaultParserFactory;
-        let mut macros = VecMacroTable::new();
-        let mut interner = FakeStringInterner;
-        let mut names = BiLevelNameTable::<BasicNameTable<_, _, _>>::new();
-        for (string, name) in self.builtin_symbols() {
-            names.define_name(
-                DefaultIdentFactory.mk_ident(string),
-                ResolvedName::Symbol((*name).clone()),
-            )
-        }
-        let session = SourceComponents::new(
-            &mut file_parser,
-            &mut parser_factory,
-            &mut macros,
-            &mut interner,
-            diagnostics,
-        );
-        Semantics::from_components(session, &mut names, self, &mut std::iter::empty())
-            .analyze_file(name.into())
-    }
-}
-
-impl<B, D> Assemble<D> for B
-where
-    D: DiagnosticsSystem,
-    D::Span: 'static,
-    B: Backend<D::Span> + BuiltinSymbols<Name = <Self as SymbolSource>::SymbolId>,
-{
-}
+pub mod macros;
+pub mod semantics;
+pub mod strings;
+pub mod syntax;
 
 type LexItem<I, R, S> = (Result<SemanticToken<I, R>, LexError>, S);
 type SemanticToken<I, R> = syntax::Token<I, Literal<R>>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub(super) enum Literal<R> {
+pub enum Literal<R> {
     Number(i32),
     String(R),
 }
 
-trait Lex: IdentSource + StringSource + SpanSource {
+pub trait Lex: IdentSource + StringSource + SpanSource {
     type TokenIter: Iterator<Item = LexItem<Self::Ident, Self::StringRef, Self::Span>>;
 
     fn lex_file(&mut self, path: Self::StringRef) -> Result<Self::TokenIter, CodebaseError>;
 }
 
-struct CodebaseAnalyzer<'a, T: 'a> {
+pub struct CodebaseAnalyzer<'a, T: 'a> {
     codebase: &'a T,
 }
 
 impl<'a, T: StringSource + 'a> CodebaseAnalyzer<'a, T> {
-    fn new(codebase: &T) -> CodebaseAnalyzer<T> {
+    pub fn new(codebase: &T) -> CodebaseAnalyzer<T> {
         CodebaseAnalyzer { codebase }
     }
 }
@@ -126,11 +76,11 @@ impl<'a, T: StringSource, P, M, I, D> StringSource
     type StringRef = T::StringRef;
 }
 
-pub(crate) trait StringSource {
+pub trait StringSource {
     type StringRef: Clone + Eq;
 }
 
-trait Tokenize<C: BufContext>: IdentSource + StringSource {
+pub trait Tokenize<C: BufContext>: IdentSource + StringSource {
     type Tokenized: Iterator<Item = LexItem<Self::Ident, Self::StringRef, C::Span>>;
 
     fn tokenize_file<F: FnOnce(BufId) -> C>(
@@ -140,7 +90,7 @@ trait Tokenize<C: BufContext>: IdentSource + StringSource {
     ) -> Result<Self::Tokenized, CodebaseError>;
 }
 
-struct Tokenizer<T>(T);
+pub struct Tokenizer<T>(pub T);
 
 impl<T> IdentSource for Tokenizer<T> {
     type Ident = <DefaultIdentFactory as IdentSource>::Ident;
@@ -164,7 +114,7 @@ impl<C: Codebase, B: BufContext> Tokenize<B> for Tokenizer<&C> {
     }
 }
 
-struct TokenizedSrc<F, C> {
+pub struct TokenizedSrc<F, C> {
     tokens: Lexer<Rc<str>, F>,
     context: C,
 }
