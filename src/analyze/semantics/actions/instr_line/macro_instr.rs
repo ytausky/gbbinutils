@@ -1,4 +1,4 @@
-use super::{InstrLineState, Keyword, Semantics, TokenStreamSemantics};
+use super::*;
 
 use crate::analyze::semantics::actions::TokenStreamState;
 use crate::analyze::semantics::session::reentrancy::{MacroArgs, Meta, ReentrancyActions};
@@ -8,8 +8,14 @@ use crate::analyze::syntax::actions::{InstrFinalizer, MacroArgContext, MacroInst
 use crate::analyze::{SemanticToken, TokenSeq};
 use crate::object::builder::Backend;
 
-pub(super) type MacroInstrSemantics<'a, R, N, B> =
-    Semantics<'a, CompositeSession<R, N, B>, MacroInstrState<R>>;
+pub(super) type MacroInstrSemantics<'a, R, N, B> = Semantics<
+    'a,
+    CompositeSession<R, N, B>,
+    MacroInstrState<R>,
+    <R as IdentSource>::Ident,
+    <R as StringSource>::StringRef,
+    <R as SpanSource>::Span,
+>;
 
 pub(in crate::analyze) struct MacroInstrState<R: Meta> {
     parent: InstrLineState<R::Ident, R::Span>,
@@ -94,7 +100,14 @@ where
     }
 }
 
-type MacroArgSemantics<'a, R, N, B> = Semantics<'a, CompositeSession<R, N, B>, MacroArgState<R>>;
+type MacroArgSemantics<'a, R, N, B> = Semantics<
+    'a,
+    CompositeSession<R, N, B>,
+    MacroArgState<R>,
+    <R as IdentSource>::Ident,
+    <R as StringSource>::StringRef,
+    <R as SpanSource>::Span,
+>;
 
 pub(in crate::analyze) struct MacroArgState<R: Meta> {
     tokens: TokenSeq<R::Ident, R::StringRef, R::Span>,

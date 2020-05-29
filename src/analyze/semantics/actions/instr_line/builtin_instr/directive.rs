@@ -20,7 +20,8 @@ where
     R::Ident: 'static,
     R::StringRef: 'static,
     R::Span: 'static,
-    CompositeSession<R, N, B>: ReentrancyActions<Span = R::Span, StringRef = R::StringRef>,
+    CompositeSession<R, N, B>:
+        ReentrancyActions<Ident = R::Ident, Span = R::Span, StringRef = R::StringRef>,
     CompositeSession<R, N, B>: StartScope<R::Ident>
         + NameTable<
             R::Ident,
@@ -52,7 +53,8 @@ where
     R::Ident: 'static,
     R::StringRef: 'static,
     R::Span: 'static,
-    CompositeSession<R, N, B>: ReentrancyActions<Span = R::Span, StringRef = R::StringRef>,
+    CompositeSession<R, N, B>:
+        ReentrancyActions<Ident = R::Ident, Span = R::Span, StringRef = R::StringRef>,
     CompositeSession<R, N, B>: StartScope<R::Ident>
         + NameTable<
             R::Ident,

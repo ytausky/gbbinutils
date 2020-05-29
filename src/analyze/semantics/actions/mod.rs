@@ -56,7 +56,9 @@ impl<I, R, S> From<TokenLineState<I, R, S>> for TokenStreamState<I, R, S> {
     }
 }
 
-impl<'a, R: Meta, N, B, S> ParsingContext for Semantics<'a, CompositeSession<R, N, B>, S> {
+impl<'a, R: Meta, N, B, S> ParsingContext
+    for Semantics<'a, CompositeSession<R, N, B>, S, R::Ident, R::StringRef, R::Span>
+{
     type Ident = R::Ident;
     type Literal = Literal<R::StringRef>;
     type Error = LexError;
