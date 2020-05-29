@@ -13,21 +13,17 @@ use crate::diag::span::StripSpan;
 use crate::diag::{CompactDiag, Message};
 use crate::object::builder::Backend;
 
-use std::ops::DerefMut;
-
 mod instr_line;
 mod token_line;
 
-impl<'a, R, N, B>
-    Semantics<'a, CompositeSession<R, N, B>, TokenStreamState<R::Ident, R::StringRef, R::Span>>
+impl<'a, R, N, B> TokenStreamSemantics<'a, R, N, B>
 where
     R: Meta,
     R::Ident: 'static,
     R::StringRef: 'static,
     R::Span: 'static,
     CompositeSession<R, N, B>: ReentrancyActions<StringRef = R::StringRef>,
-    N: DerefMut,
-    N::Target: StartScope<R::Ident>
+    CompositeSession<R, N, B>: StartScope<R::Ident>
         + NameTable<
             R::Ident,
             Keyword = &'static Keyword,
