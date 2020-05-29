@@ -40,29 +40,43 @@ where
     context.analyze(directive.0)
 }
 
-struct DirectiveContext<'a, R: Meta, N, B: PartialBackend<R::Span>> {
-    span: R::Span,
-    label: Option<Label<R::Ident, R::Span>>,
-    args: BuiltinInstrArgs<B::Value, R::StringRef, R::Span>,
+struct DirectiveContext<
+    'a,
+    R,
+    N,
+    B: PartialBackend<<CompositeSession<R, N, B> as SpanSource>::Span>,
+> where
+    CompositeSession<R, N, B>: IdentSource + StringSource + SpanSource,
+{
+    span: <CompositeSession<R, N, B> as SpanSource>::Span,
+    label: Option<
+        Label<
+            <CompositeSession<R, N, B> as IdentSource>::Ident,
+            <CompositeSession<R, N, B> as SpanSource>::Span,
+        >,
+    >,
+    args: BuiltinInstrArgs<
+        B::Value,
+        <CompositeSession<R, N, B> as StringSource>::StringRef,
+        <CompositeSession<R, N, B> as SpanSource>::Span,
+    >,
     session: TokenStreamSemantics<'a, R, N, B>,
 }
 
 impl<'a, R, N, B> DirectiveContext<'a, R, N, B>
 where
-    R: Meta,
-    R::Ident: 'static,
-    R::StringRef: 'static,
-    R::Span: 'static,
-    CompositeSession<R, N, B>:
-        ReentrancyActions<Ident = R::Ident, Span = R::Span, StringRef = R::StringRef>,
-    CompositeSession<R, N, B>: StartScope<R::Ident>
+    R: Diagnostics<<CompositeSession<R, N, B> as SpanSource>::Span>,
+    <CompositeSession<R, N, B> as IdentSource>::Ident: 'static,
+    <CompositeSession<R, N, B> as StringSource>::StringRef: 'static,
+    <CompositeSession<R, N, B> as SpanSource>::Span: 'static,
+    CompositeSession<R, N, B>: ReentrancyActions,
+    CompositeSession<R, N, B>: StartScope<<CompositeSession<R, N, B> as IdentSource>::Ident>
         + NameTable<
-            R::Ident,
+            <CompositeSession<R, N, B> as IdentSource>::Ident,
             Keyword = &'static Keyword,
-            MacroId = R::MacroId,
             SymbolId = B::SymbolId,
         >,
-    B: Backend<R::Span>,
+    B: Backend<<CompositeSession<R, N, B> as SpanSource>::Span>,
 {
     fn analyze(self, directive: Directive) -> TokenStreamSemantics<'a, R, N, B> {
         match directive {

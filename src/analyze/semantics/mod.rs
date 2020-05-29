@@ -68,14 +68,30 @@ impl<R, N, B: SymbolSource> SymbolSource for CompositeSession<R, N, B> {
     type SymbolId = B::SymbolId;
 }
 
-impl<'a, R: Meta, N, B, T>
-    Semantics<'a, CompositeSession<R, N, B>, T, R::Ident, R::StringRef, R::Span>
+impl<'a, R, N, B, T>
+    Semantics<
+        'a,
+        CompositeSession<R, N, B>,
+        T,
+        <CompositeSession<R, N, B> as IdentSource>::Ident,
+        <CompositeSession<R, N, B> as StringSource>::StringRef,
+        <CompositeSession<R, N, B> as SpanSource>::Span,
+    >
+where
+    CompositeSession<R, N, B>: IdentSource + StringSource + SpanSource,
 {
     #[cfg(test)]
     fn map_names<F: FnOnce(N) -> M, M>(
         self,
         f: F,
-    ) -> Semantics<'a, CompositeSession<R, M, B>, T, R::Ident, R::StringRef, R::Span> {
+    ) -> Semantics<
+        'a,
+        CompositeSession<R, M, B>,
+        T,
+        <CompositeSession<R, N, B> as IdentSource>::Ident,
+        <CompositeSession<R, N, B> as StringSource>::StringRef,
+        <CompositeSession<R, N, B> as SpanSource>::Span,
+    > {
         Semantics {
             session: CompositeSession {
                 reentrancy: self.session.reentrancy,
@@ -90,7 +106,14 @@ impl<'a, R: Meta, N, B, T>
     fn map_builder<F: FnOnce(B) -> C, C>(
         self,
         f: F,
-    ) -> Semantics<'a, CompositeSession<R, N, C>, T, R::Ident, R::StringRef, R::Span> {
+    ) -> Semantics<
+        'a,
+        CompositeSession<R, N, C>,
+        T,
+        <CompositeSession<R, N, B> as IdentSource>::Ident,
+        <CompositeSession<R, N, B> as StringSource>::StringRef,
+        <CompositeSession<R, N, B> as SpanSource>::Span,
+    > {
         Semantics {
             session: CompositeSession {
                 reentrancy: self.session.reentrancy,
@@ -105,7 +128,14 @@ impl<'a, R: Meta, N, B, T>
     fn map_state<F: FnOnce(T) -> U, U>(
         self,
         f: F,
-    ) -> Semantics<'a, CompositeSession<R, N, B>, U, R::Ident, R::StringRef, R::Span> {
+    ) -> Semantics<
+        'a,
+        CompositeSession<R, N, B>,
+        U,
+        <CompositeSession<R, N, B> as IdentSource>::Ident,
+        <CompositeSession<R, N, B> as StringSource>::StringRef,
+        <CompositeSession<R, N, B> as SpanSource>::Span,
+    > {
         Semantics {
             session: self.session,
             state: f(self.state),
@@ -142,7 +172,6 @@ where
 
 impl<'a, R, N, B, Span> AllocSymbol<Span> for CompositeSession<R, N, B>
 where
-    R: Meta,
     Self: SymbolSource<SymbolId = B::SymbolId>,
     B: AllocSymbol<Span>,
     Span: Clone,
@@ -251,13 +280,13 @@ type TokenStreamSemantics<'a, R, N, B> = Semantics<
     'a,
     CompositeSession<R, N, B>,
     TokenStreamState<
-        <R as IdentSource>::Ident,
-        <R as StringSource>::StringRef,
-        <R as SpanSource>::Span,
+        <CompositeSession<R, N, B> as IdentSource>::Ident,
+        <CompositeSession<R, N, B> as StringSource>::StringRef,
+        <CompositeSession<R, N, B> as SpanSource>::Span,
     >,
-    <R as IdentSource>::Ident,
-    <R as StringSource>::StringRef,
-    <R as SpanSource>::Span,
+    <CompositeSession<R, N, B> as IdentSource>::Ident,
+    <CompositeSession<R, N, B> as StringSource>::StringRef,
+    <CompositeSession<R, N, B> as SpanSource>::Span,
 >;
 
 #[derive(Debug, PartialEq)]

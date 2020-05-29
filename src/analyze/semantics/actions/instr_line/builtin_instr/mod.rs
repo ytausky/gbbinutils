@@ -54,8 +54,8 @@ where
     type ArgContext = ArgSemantics<'a, R, N, B::ExprBuilder>;
 
     fn will_parse_arg(self) -> Self::ArgContext {
-        self.map_builder::<_, B::ExprBuilder>(|builder| builder.build_const())
-            .map_state(ExprBuilder::new)
+        self.map_state(ExprBuilder::new)
+            .map_builder::<_, B::ExprBuilder>(|builder| builder.build_const())
     }
 }
 
@@ -96,15 +96,31 @@ where
     }
 }
 
-impl<'a, R, N, B, S> Semantics<'a, CompositeSession<R, N, B>, S, R::Ident, R::StringRef, R::Span>
+impl<'a, R, N, B, S>
+    Semantics<
+        'a,
+        CompositeSession<R, N, B>,
+        S,
+        <CompositeSession<R, N, B> as IdentSource>::Ident,
+        <CompositeSession<R, N, B> as StringSource>::StringRef,
+        <CompositeSession<R, N, B> as SpanSource>::Span,
+    >
 where
-    R: Meta,
-    CompositeSession<R, N, B>: NameTable<R::Ident, MacroId = R::MacroId, SymbolId = B::SymbolId>,
-    B: Backend<R::Span>,
+    CompositeSession<R, N, B>: IdentSource
+        + StringSource
+        + SpanSource
+        + Diagnostics<<CompositeSession<R, N, B> as SpanSource>::Span>,
+    CompositeSession<R, N, B>:
+        NameTable<<CompositeSession<R, N, B> as IdentSource>::Ident, SymbolId = B::SymbolId>,
+    B: Backend<<CompositeSession<R, N, B> as SpanSource>::Span>,
 {
     pub(in crate::analyze::semantics) fn expect_const(
         &mut self,
-        arg: Arg<B::Value, R::StringRef, R::Span>,
+        arg: Arg<
+            B::Value,
+            <CompositeSession<R, N, B> as StringSource>::StringRef,
+            <CompositeSession<R, N, B> as SpanSource>::Span,
+        >,
     ) -> Result<B::Value, ()> {
         match arg {
             Arg::Bare(DerefableArg::Const(value)) => Ok(value),
@@ -120,8 +136,15 @@ where
 
     pub(in crate::analyze::semantics) fn define_symbol_with_params(
         &mut self,
-        (name, span): (R::Ident, R::Span),
-        expr: Arg<B::Value, R::StringRef, R::Span>,
+        (name, span): (
+            <CompositeSession<R, N, B> as IdentSource>::Ident,
+            <CompositeSession<R, N, B> as SpanSource>::Span,
+        ),
+        expr: Arg<
+            B::Value,
+            <CompositeSession<R, N, B> as StringSource>::StringRef,
+            <CompositeSession<R, N, B> as SpanSource>::Span,
+        >,
     ) {
         if let Ok(value) = self.expect_const(expr) {
             let id = self.session.reloc_lookup(name, span.clone());
