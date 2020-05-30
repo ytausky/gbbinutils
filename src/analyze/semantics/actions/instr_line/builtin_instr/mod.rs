@@ -4,9 +4,9 @@ use crate::analyze::semantics::actions::TokenStreamState;
 use crate::analyze::semantics::arg::*;
 use crate::analyze::semantics::keywords::{Directive, Mnemonic};
 use crate::analyze::semantics::RelocLookup;
-use crate::analyze::syntax::actions::{BuiltinInstrContext, InstrFinalizer};
 use crate::object::builder::Item;
 use crate::session::resolve::NameTable;
+use crate::syntax::actions::{BuiltinInstrContext, InstrFinalizer};
 
 mod arg;
 mod cpu_instr;
@@ -135,10 +135,10 @@ fn analyze_mnemonic<'a, S: Session>(
 #[cfg(test)]
 mod tests {
     use crate::analyze::semantics::actions::tests::collect_semantic_actions;
-    use crate::analyze::syntax::actions::*;
-    use crate::analyze::syntax::actions::{ExprAtom::*, Operator::*};
     use crate::analyze::Literal::*;
     use crate::diag::{DiagnosticsEvent, Message, MockSpan};
+    use crate::syntax::actions::*;
+    use crate::syntax::actions::{ExprAtom::*, Operator::*};
 
     #[ignore]
     #[test]

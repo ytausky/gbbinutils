@@ -4,9 +4,9 @@ use self::Sigil::*;
 
 use super::{Parser, LINE_FOLLOW_SET};
 
-use crate::analyze::syntax;
 use crate::diag::{CompactDiag, Message};
 use crate::expr::BinOp;
+use crate::syntax;
 
 type ParserResult<P, C, S> = Result<P, (P, ExpandedExprParsingError<C, S>)>;
 type ExpandedExprParsingError<D, S> = ExprParsingError<S, <D as ParsingContext>::Stripped>;
@@ -240,8 +240,8 @@ mod tests {
     use super::Token::*;
     use super::*;
 
-    use crate::analyze::syntax::actions::mock::{ExprAction, ExprActionCollector, IdentKind};
     use crate::diag::Merge;
+    use crate::syntax::actions::mock::{ExprAction, ExprActionCollector, IdentKind};
 
     #[test]
     fn parse_long_sum_arg() {

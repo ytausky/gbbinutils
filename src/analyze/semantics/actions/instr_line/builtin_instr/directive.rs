@@ -209,13 +209,13 @@ mod tests {
 
     use crate::analyze::macros::mock::MockMacroId;
     use crate::analyze::semantics::actions::tests::*;
-    use crate::analyze::syntax::actions::*;
     use crate::analyze::Literal;
     use crate::codebase::CodebaseError;
     use crate::expr::{Atom, ParamId};
     use crate::object::builder::mock::*;
     use crate::session::reentrancy::ReentrancyEvent;
     use crate::session::resolve::{MockNameTable, NameTableEvent, ResolvedName};
+    use crate::syntax::actions::*;
 
     use std::borrow::Borrow;
     use std::io;

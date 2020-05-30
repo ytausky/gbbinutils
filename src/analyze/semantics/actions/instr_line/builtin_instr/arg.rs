@@ -4,8 +4,6 @@ use crate::analyze::macros::MacroSource;
 use crate::analyze::semantics::actions::Keyword;
 use crate::analyze::semantics::arg::{Arg, DerefableArg};
 use crate::analyze::semantics::{ArgSemantics, ExprBuilder, Semantics};
-use crate::analyze::syntax::actions::*;
-use crate::analyze::syntax::IdentSource;
 use crate::analyze::{Literal, StringSource};
 use crate::diag::span::{Source, SpanSource};
 use crate::diag::{Diagnostics, Message};
@@ -13,6 +11,8 @@ use crate::expr::{FnCall, LocationCounter, ParamId};
 use crate::object::builder::{Finish, Name, SymbolSource, ValueBuilder};
 use crate::session::resolve::{NameTable, ResolvedName};
 use crate::session::Session;
+use crate::syntax::actions::*;
+use crate::syntax::IdentSource;
 
 delegate_diagnostics! {
     {R, S, P: Diagnostics<S>}, ExprBuilder<R, S, P>, {parent}, P, S
@@ -169,13 +169,13 @@ where
 #[cfg(test)]
 mod tests {
     use crate::analyze::semantics::actions::tests::collect_semantic_actions;
-    use crate::analyze::syntax::actions::*;
     use crate::diag::span::WithSpan;
     use crate::diag::{DiagnosticsEvent, Message, MockSpan};
     use crate::expr::{Atom, BinOp, Expr, ExprOp};
     use crate::object::builder::mock::{BackendEvent, MockSymbolId};
     use crate::object::builder::{CpuInstr, Direction, Item, Ld, SpecialLd, Width};
     use crate::session::resolve::{NameTableEvent, ResolvedName};
+    use crate::syntax::actions::*;
 
     #[test]
     fn diagnose_keyword_in_expr() {

@@ -1,7 +1,7 @@
 use super::*;
 
 use crate::analyze::semantics::Params;
-use crate::analyze::syntax::actions::LabelContext;
+use crate::syntax::actions::LabelContext;
 
 pub(crate) type LabelSemantics<'a, S> = Semantics<
     'a,

@@ -1,9 +1,9 @@
 use super::*;
 
 use crate::analyze::semantics::actions::TokenStreamState;
-use crate::analyze::syntax::actions::{InstrFinalizer, MacroArgContext, MacroInstrContext};
 use crate::analyze::{SemanticToken, TokenSeq};
 use crate::session::reentrancy::MacroArgs;
+use crate::syntax::actions::{InstrFinalizer, MacroArgContext, MacroInstrContext};
 
 pub(super) type MacroInstrSemantics<'a, S> = Semantics<
     'a,
@@ -111,10 +111,10 @@ mod tests {
 
     use crate::analyze::macros::mock::MockMacroId;
     use crate::analyze::semantics::actions::tests::*;
-    use crate::analyze::syntax::actions::{InstrContext, LineFinalizer, TokenStreamContext};
-    use crate::analyze::syntax::Token;
     use crate::session::reentrancy::ReentrancyEvent;
     use crate::session::resolve::ResolvedName;
+    use crate::syntax::actions::{InstrContext, LineFinalizer, TokenStreamContext};
+    use crate::syntax::Token;
 
     #[test]
     fn call_nullary_macro() {

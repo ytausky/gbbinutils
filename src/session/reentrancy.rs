@@ -4,13 +4,13 @@ use super::CompositeSession;
 use crate::analyze::macros::{MacroSource, MacroTable};
 use crate::analyze::semantics::{Keyword, Semantics, TokenStreamState};
 use crate::analyze::strings::GetString;
-use crate::analyze::syntax::parser::ParserFactory;
-use crate::analyze::syntax::{IdentSource, LexError, ParseTokenStream};
 use crate::analyze::{Lex, Literal, SemanticToken, StringSource, TokenSeq};
 use crate::codebase::CodebaseError;
 use crate::diag::span::SpanSource;
 use crate::diag::*;
 use crate::object::builder::{Backend, SymbolSource};
+use crate::syntax::parser::ParserFactory;
+use crate::syntax::{IdentSource, LexError, ParseTokenStream};
 
 use std::ops::{Deref, DerefMut};
 
@@ -303,14 +303,14 @@ mod tests {
 
     use crate::analyze::macros::mock::{MacroTableEvent, MockMacroId};
     use crate::analyze::strings::FakeStringInterner;
-    use crate::analyze::syntax::parser::mock::*;
-    use crate::analyze::syntax::*;
     use crate::analyze::{Literal, MockCodebase};
     use crate::diag::DiagnosticsEvent;
     use crate::expr::Expr;
     use crate::log::*;
     use crate::object::builder::mock::{BackendEvent, MockSymbolId, SerialIdAllocator};
     use crate::session::resolve::{BasicNameTable, NameTableEvent};
+    use crate::syntax::parser::mock::*;
+    use crate::syntax::*;
 
     use std::fmt::Debug;
     use std::iter;
@@ -419,7 +419,7 @@ mod tests {
         }
     }
 
-    type MockParserFactory<S> = crate::analyze::syntax::parser::mock::MockParserFactory<Event<S>>;
+    type MockParserFactory<S> = crate::syntax::parser::mock::MockParserFactory<Event<S>>;
     type MockMacroTable<S> = crate::analyze::macros::mock::MockMacroTable<usize, Event<S>>;
     type MockDiagnosticsSystem<S> = crate::diag::MockDiagnosticsSystem<Event<S>, S>;
     type MockNameTable<S> = crate::session::resolve::MockNameTable<

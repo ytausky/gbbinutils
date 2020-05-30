@@ -5,12 +5,12 @@ use super::{Keyword, Semantics, TokenStreamSemantics};
 
 use crate::analyze::semantics::params::RelocLookup;
 use crate::analyze::semantics::*;
-use crate::analyze::syntax::actions::{InstrContext, InstrLineContext, InstrRule};
 use crate::diag::span::WithSpan;
 use crate::diag::Message;
 use crate::expr::LocationCounter;
 use crate::object::builder::{Finish, PushOp};
 use crate::session::resolve::{NameTable, ResolvedName, StartScope};
+use crate::syntax::actions::{InstrContext, InstrLineContext, InstrRule};
 
 mod builtin_instr;
 mod label;
@@ -114,9 +114,9 @@ mod tests {
     use super::*;
 
     use crate::analyze::semantics::actions::tests::*;
-    use crate::analyze::syntax::actions::*;
     use crate::diag::{DiagnosticsEvent, Message, MockSpan};
     use crate::object::builder::mock::MockSymbolId;
+    use crate::syntax::actions::*;
 
     #[test]
     fn diagnose_unknown_mnemonic() {

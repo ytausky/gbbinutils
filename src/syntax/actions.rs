@@ -3,7 +3,7 @@ use super::Token;
 use crate::diag::CompactDiag;
 use crate::expr::BinOp;
 
-pub trait ParsingContext: Sized {
+pub(crate) trait ParsingContext: Sized {
     type Ident;
     type Literal;
     type Error;
@@ -19,7 +19,7 @@ pub trait ParsingContext: Sized {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<Self::Span, Self::Stripped>>);
 }
 
-pub(in crate::analyze) type LexerOutput<I, L, E, S> = (Result<Token<I, L>, E>, S);
+pub type LexerOutput<I, L, E, S> = (Result<Token<I, L>, E>, S);
 
 // A token stream represents either a tokenized source file or a macro expansion. It is logically
 // divided into lines (separated by <Eol> tokens) and ends with an <Eos> token. It has a single
@@ -36,7 +36,7 @@ pub(in crate::analyze) type LexerOutput<I, L, E, S> = (Result<Token<I, L>, E>, S
 // This parsing ambiguity is resolved according to the semantics of the program so far, thus the
 // rule used by the parser is determined by the value returned from
 // TokenStreamContext::will_parse_line.
-pub trait TokenStreamContext: ParsingContext {
+pub(crate) trait TokenStreamContext: ParsingContext {
     type InstrLineContext: InstrLineContext<
         Ident = Self::Ident,
         Literal = Self::Literal,
@@ -68,7 +68,7 @@ pub trait TokenStreamContext: ParsingContext {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum LineRule<I, T> {
+pub(crate) enum LineRule<I, T> {
     InstrLine(I),
     TokenLine(T),
 }
@@ -104,7 +104,7 @@ impl<I, T> LineRule<I, T> {
 // possible states after a label has been successfully parsed. Note that by using two distinct types
 // bound by InstrContext we can prevent the parser from calling InstrLineContext::will_parse_label
 // more than once on the same line.
-pub trait InstrLineContext: InstrContext {
+pub(crate) trait InstrLineContext: InstrContext {
     type LabelContext: LabelContext<
         Ident = Self::Ident,
         Literal = Self::Literal,
@@ -140,7 +140,7 @@ pub trait InstrLineContext: InstrContext {
 //
 // The parser uses this rule to recover from an invalid instruction name by throwing away all the
 // remaining tokens in the line.
-pub trait InstrContext: LineFinalizer {
+pub(crate) trait InstrContext: LineFinalizer {
     type BuiltinInstrContext: BuiltinInstrContext<
         Ident = Self::Ident,
         Literal = Self::Literal,
@@ -181,20 +181,20 @@ pub trait InstrContext: LineFinalizer {
     ) -> InstrRule<Self::BuiltinInstrContext, Self::MacroInstrContext, Self::ErrorContext>;
 }
 
-pub trait LineFinalizer: ParsingContext {
+pub(crate) trait LineFinalizer: ParsingContext {
     type Next;
 
     fn did_parse_line(self, span: Self::Span) -> Self::Next;
 }
 
-pub trait InstrFinalizer: ParsingContext {
+pub(crate) trait InstrFinalizer: ParsingContext {
     type Next;
 
     fn did_parse_instr(self) -> Self::Next;
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum InstrRule<C, M, E> {
+pub(crate) enum InstrRule<C, M, E> {
     BuiltinInstr(C),
     MacroInstr(M),
     Error(E),
@@ -229,7 +229,7 @@ impl<C, M, E> InstrRule<C, M, E> {
 //     1. builtin-instr → <Ident> (arg (<Comma> arg)*)?
 //
 // BuiltinInstrContext represents any position in this rule after the initial <Ident>.
-pub trait BuiltinInstrContext: InstrFinalizer {
+pub(crate) trait BuiltinInstrContext: InstrFinalizer {
     type ArgContext: ArgContext<
             Ident = Self::Ident,
             Literal = Self::Literal,
@@ -241,7 +241,7 @@ pub trait BuiltinInstrContext: InstrFinalizer {
     fn will_parse_arg(self) -> Self::ArgContext;
 }
 
-pub trait ArgFinalizer {
+pub(crate) trait ArgFinalizer {
     type Next;
 
     fn did_parse_arg(self) -> Self::Next;
@@ -257,13 +257,13 @@ pub trait ArgFinalizer {
 //     6. ...
 //
 // To handle precedence and associativity, the parser uses a reverse Polish notation protocol.
-pub trait ArgContext: ParsingContext {
+pub(crate) trait ArgContext: ParsingContext {
     fn act_on_atom(&mut self, atom: ExprAtom<Self::Ident, Self::Literal>, span: Self::Span);
     fn act_on_operator(&mut self, operator: Operator, span: Self::Span);
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ExprAtom<I, L> {
+pub(crate) enum ExprAtom<I, L> {
     Error,
     Ident(I),
     Literal(L),
@@ -271,25 +271,25 @@ pub enum ExprAtom<I, L> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Operator {
+pub(crate) enum Operator {
     Unary(UnaryOperator),
     Binary(BinOp),
     FnCall(usize),
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum UnaryOperator {
+pub(crate) enum UnaryOperator {
     Parentheses,
 }
 
-pub trait LabelContext: ParsingContext {
+pub(crate) trait LabelContext: ParsingContext {
     type Next;
 
     fn act_on_param(&mut self, param: Self::Ident, span: Self::Span);
     fn did_parse_label(self) -> Self::Next;
 }
 
-pub trait MacroInstrContext: InstrFinalizer {
+pub(crate) trait MacroInstrContext: InstrFinalizer {
     type MacroArgContext: MacroArgContext<
         Ident = Self::Ident,
         Literal = Self::Literal,
@@ -302,14 +302,14 @@ pub trait MacroInstrContext: InstrFinalizer {
     fn will_parse_macro_arg(self) -> Self::MacroArgContext;
 }
 
-pub trait MacroArgContext: ParsingContext {
+pub(crate) trait MacroArgContext: ParsingContext {
     type Next;
 
     fn act_on_token(&mut self, token: (Token<Self::Ident, Self::Literal>, Self::Span));
     fn did_parse_macro_arg(self) -> Self::Next;
 }
 
-pub trait TokenLineContext: LineFinalizer {
+pub(crate) trait TokenLineContext: LineFinalizer {
     type ContextFinalizer: LineFinalizer<
         Ident = Self::Ident,
         Literal = Self::Literal,
@@ -327,7 +327,7 @@ pub trait TokenLineContext: LineFinalizer {
     ) -> TokenLineRule<Self, Self::ContextFinalizer>;
 }
 
-pub enum TokenLineRule<T, E> {
+pub(crate) enum TokenLineRule<T, E> {
     TokenSeq(T),
     LineEnd(E),
 }
@@ -358,10 +358,10 @@ pub mod mock {
         Other,
     }
 
-    pub(in crate::analyze) type TokenStreamActionCollector<'a, P, I, L, E, S> =
+    pub(crate) type TokenStreamActionCollector<'a, P, I, L, E, S> =
         ActionCollector<'a, CollectedTokenStreamData<P, I, L, S>, I, L, E, S>;
 
-    pub(in crate::analyze) type CollectedTokenStreamData<P, I, L, S> =
+    pub(crate) type CollectedTokenStreamData<P, I, L, S> =
         CollectedData<TokenStreamAction<I, L, S>, LineRule<(), ()>, P>;
 
     impl<'a, P, I, L, E, S> TokenStreamActionCollector<'a, P, I, L, E, S> {
@@ -631,7 +631,7 @@ pub mod mock {
         }
     }
 
-    pub(in crate::analyze) type ExprActionCollector<'a, P, I, L, E, S> =
+    pub(crate) type ExprActionCollector<'a, P, I, L, E, S> =
         ActionCollector<'a, CollectedExprData<P, I, L, S>, I, L, E, S>;
 
     type CollectedExprData<P, I, L, S> = CollectedData<ExprAction<I, L, S>, (), P>;
@@ -825,13 +825,13 @@ pub mod mock {
         }
     }
 
-    pub(in crate::analyze) struct ActionCollector<'a, D, I, L, E, S> {
+    pub struct ActionCollector<'a, D, I, L, E, S> {
         pub data: D,
         tokens: &'a mut dyn Iterator<Item = LexerOutput<I, L, E, S>>,
         annotate: fn(&I) -> IdentKind,
     }
 
-    pub(in crate::analyze) struct CollectedData<A, T, P> {
+    pub struct CollectedData<A, T, P> {
         actions: Vec<A>,
         state: T,
         pub parent: P,
@@ -902,7 +902,7 @@ pub mod mock {
     }
 
     #[derive(Clone, Debug, PartialEq)]
-    pub(in crate::analyze) enum TokenStreamAction<I, L, S> {
+    pub(crate) enum TokenStreamAction<I, L, S> {
         InstrLine(Vec<InstrLineAction<I, L, S>>, S),
         TokenLine(Vec<TokenLineAction<I, L, S>>, S),
         Eos(S),
@@ -910,16 +910,16 @@ pub mod mock {
     }
 
     #[derive(Clone, Debug, PartialEq)]
-    pub(in crate::analyze) enum InstrLineAction<I, L, S> {
+    pub(crate) enum InstrLineAction<I, L, S> {
         Label(Label<I, S>),
         Instr(Vec<InstrAction<I, L, S>>),
         EmitDiag(CompactDiag<S>),
     }
 
-    pub(in crate::analyze) type Label<I, S> = ((I, S), Vec<ParamsAction<I, S>>);
+    pub type Label<I, S> = ((I, S), Vec<ParamsAction<I, S>>);
 
     #[derive(Clone, Debug, PartialEq)]
-    pub(in crate::analyze) enum InstrAction<I, L, S> {
+    pub(crate) enum InstrAction<I, L, S> {
         BuiltinInstr {
             builtin_instr: (I, S),
             actions: Vec<BuiltinInstrAction<I, L, S>>,
@@ -933,44 +933,44 @@ pub mod mock {
     }
 
     #[derive(Clone, Debug, PartialEq)]
-    pub(in crate::analyze) enum BuiltinInstrAction<I, L, S> {
+    pub(crate) enum BuiltinInstrAction<I, L, S> {
         AddArgument { actions: Vec<ExprAction<I, L, S>> },
         EmitDiag(CompactDiag<S>),
     }
 
     #[derive(Clone, Debug, PartialEq)]
-    pub(in crate::analyze) enum ExprAction<I, L, S> {
+    pub(crate) enum ExprAction<I, L, S> {
         PushAtom(ExprAtom<I, L>, S),
         ApplyOperator(Operator, S),
         EmitDiag(CompactDiag<S>),
     }
 
     #[derive(Clone, Debug, PartialEq)]
-    pub(in crate::analyze) enum ParamsAction<I, S> {
+    pub enum ParamsAction<I, S> {
         AddParameter(I, S),
         EmitDiag(CompactDiag<S>),
     }
 
     #[derive(Clone, Debug, PartialEq)]
-    pub(in crate::analyze) enum TokenLineAction<I, L, S> {
+    pub enum TokenLineAction<I, L, S> {
         Token((Token<I, L>, S)),
         Ident((I, S)),
         EmitDiag(CompactDiag<S>),
     }
 
     #[derive(Clone, Debug, PartialEq)]
-    pub(in crate::analyze) enum TokenSeqAction<I, L, S> {
+    pub enum TokenSeqAction<I, L, S> {
         PushToken((Token<I, L>, S)),
         EmitDiag(CompactDiag<S>),
     }
 
     #[derive(Clone, Debug, PartialEq)]
-    pub(in crate::analyze) enum ErrorAction<S> {
+    pub enum ErrorAction<S> {
         EmitDiag(CompactDiag<S>),
     }
 
     #[derive(Clone, Debug, PartialEq)]
-    pub(in crate::analyze) enum MacroInstrAction<I, L, S> {
+    pub enum MacroInstrAction<I, L, S> {
         MacroArg(Vec<TokenSeqAction<I, L, S>>),
         EmitDiag(CompactDiag<S>),
     }

@@ -3,8 +3,6 @@ use self::keywords::BuiltinMnemonic;
 use self::params::*;
 
 use super::macros::MacroSource;
-use super::syntax::actions::{LexerOutput, LineRule};
-use super::syntax::LexError;
 use super::{IdentSource, Literal, StringSource, TokenSeq};
 
 use crate::diag::span::{SpanSource, Spanned};
@@ -14,6 +12,8 @@ use crate::object::builder::*;
 use crate::session::reentrancy::{Meta, Params};
 use crate::session::resolve::{NameTable, ResolvedName};
 use crate::session::{CompositeSession, Session};
+use crate::syntax::actions::{LexerOutput, LineRule};
+use crate::syntax::LexError;
 
 macro_rules! set_state {
     ($session:expr, $state:expr) => {

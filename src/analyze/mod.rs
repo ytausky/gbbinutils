@@ -1,10 +1,9 @@
-use self::syntax::*;
-
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::session::reentrancy::SourceComponents;
 use crate::session::resolve::*;
+use crate::session::CompositeSession;
 use crate::span::{BufContext, BufContextFactory, SpanSource};
-use crate::CompositeSession;
+use crate::syntax::*;
 
 use std::ops::DerefMut;
 use std::rc::Rc;
@@ -15,10 +14,9 @@ pub use self::mock::*;
 pub mod macros;
 pub mod semantics;
 pub mod strings;
-pub mod syntax;
 
 type LexItem<I, R, S> = (Result<SemanticToken<I, R>, LexError>, S);
-pub type SemanticToken<I, R> = syntax::Token<I, Literal<R>>;
+pub type SemanticToken<I, R> = crate::syntax::Token<I, Literal<R>>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Literal<R> {

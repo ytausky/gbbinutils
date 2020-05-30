@@ -3,13 +3,13 @@ use self::token_line::TokenContextFinalizationSemantics;
 use super::Semantics;
 use super::*;
 
-use crate::analyze::syntax::actions::*;
-use crate::analyze::syntax::LexError;
 use crate::analyze::Literal;
 use crate::diag::span::StripSpan;
 use crate::diag::{CompactDiag, Message};
 use crate::session::resolve::{NameTable, StartScope};
 use crate::session::Session;
+use crate::syntax::actions::*;
+use crate::syntax::LexError;
 
 mod instr_line;
 mod token_line;
@@ -130,7 +130,6 @@ pub mod tests {
     pub use crate::session::resolve::BasicNameTable;
 
     use crate::analyze::macros::mock::MockMacroId;
-    use crate::analyze::syntax::{Sigil, Token};
     use crate::analyze::SemanticToken;
     use crate::diag::{DiagnosticsEvent, Merge, Message, MockSpan};
     use crate::expr::{Atom, BinOp, ExprOp, LocationCounter};
@@ -139,6 +138,7 @@ pub mod tests {
     use crate::object::builder::{CpuInstr, Item, Ld, Name, SimpleOperand, Width};
     use crate::session::reentrancy::ReentrancyEvent;
     use crate::session::resolve::*;
+    use crate::syntax::{Sigil, Token};
 
     use std::borrow::Borrow;
     use std::fmt::Debug;

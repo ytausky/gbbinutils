@@ -1,5 +1,5 @@
 pub use self::lexer::{LexError, Lexer};
-pub use self::parser::ParseTokenStream;
+pub(crate) use self::parser::ParseTokenStream;
 
 pub mod actions;
 mod lexer;

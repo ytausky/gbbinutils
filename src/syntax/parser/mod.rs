@@ -65,13 +65,13 @@ macro_rules! input_tokens_impl {
 
 mod expr;
 
-pub trait ParserFactory<I, L, E, S: Clone> {
+pub(crate) trait ParserFactory<I, L, E, S: Clone> {
     type Parser: ParseTokenStream<I, L, E, S>;
 
     fn mk_parser(&mut self) -> Self::Parser;
 }
 
-pub trait ParseTokenStream<I, L, E, S: Clone> {
+pub(crate) trait ParseTokenStream<I, L, E, S: Clone> {
     fn parse_token_stream<A>(&mut self, actions: A) -> A
     where
         A: TokenStreamContext<Ident = I, Literal = L, Error = E, Span = S>;
@@ -523,10 +523,10 @@ mod tests {
     use super::Token::*;
     use super::*;
 
-    use crate::analyze::syntax::actions::mock::IdentKind::*;
-    use crate::analyze::syntax::actions::mock::*;
     use crate::diag::{CompactDiag, Merge, Message};
     use crate::expr::BinOp;
+    use crate::syntax::actions::mock::IdentKind::*;
+    use crate::syntax::actions::mock::*;
 
     use std::borrow::Borrow;
     use std::collections::HashMap;
