@@ -35,12 +35,12 @@ where
     }
 }
 
-pub(in crate::analyze) struct BuilderAdapter<B, H> {
+pub struct BuilderAdapter<B, H> {
     builder: B,
     handler: H,
 }
 
-pub(in crate::analyze) trait NameHandler<B, T, S> {
+pub trait NameHandler<B, T, S> {
     fn handle(&mut self, name: T, span: S, builder: &mut B);
 }
 
@@ -116,7 +116,7 @@ impl<B> ResolveNames for B {
     }
 }
 
-pub(in crate::analyze) struct NameResolver;
+pub(crate) struct NameResolver;
 
 impl<B, I, S> NameHandler<B, I, S> for NameResolver
 where
@@ -170,13 +170,13 @@ mod tests {
     use super::*;
 
     use crate::analyze::macros::mock::MockMacroId;
-    use crate::analyze::semantics::mock::*;
-    use crate::analyze::semantics::Keyword;
     use crate::diag::{DiagnosticsEvent, MockSpan};
     use crate::expr::{Atom, Expr, ParamId};
     use crate::log::Log;
     use crate::object::builder::mock::{BackendEvent, MockSymbolId};
     use crate::object::builder::PushOp;
+    use crate::semantics::mock::*;
+    use crate::semantics::Keyword;
     use crate::session::reentrancy::ReentrancyEvent;
     use crate::session::resolve::NameTableEvent;
 

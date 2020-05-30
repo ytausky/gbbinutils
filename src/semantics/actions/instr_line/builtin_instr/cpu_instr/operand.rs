@@ -1,6 +1,6 @@
-use crate::analyze::semantics::arg::*;
 use crate::diag::*;
 use crate::object::builder::{Condition, PtrReg, Reg16, RegPair, SimpleOperand};
+use crate::semantics::arg::*;
 use crate::span::{Source, SpanSource};
 
 #[derive(Debug, PartialEq)]
@@ -40,7 +40,7 @@ pub enum Context {
     Other,
 }
 
-pub(in crate::analyze::semantics) fn analyze_operand<D, V, R, S>(
+pub(crate) fn analyze_operand<D, V, R, S>(
     expr: Arg<V, R, S>,
     context: Context,
     diagnostics: &mut D,
@@ -187,8 +187,8 @@ impl<I: Iterator> Iterator for OperandCounter<I> {
 pub mod tests {
     use super::*;
 
-    use crate::analyze::semantics::mock::MockExprBuilder;
     use crate::object::builder::mock::{BackendEvent, MockSymbolId};
+    use crate::semantics::mock::MockExprBuilder;
     use crate::session::reentrancy::ReentrancyEvent;
 
     use std::fmt::Debug;

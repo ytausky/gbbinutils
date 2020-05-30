@@ -1,4 +1,4 @@
-pub(super) enum Arg<V, R, S> {
+pub(crate) enum Arg<V, R, S> {
     Bare(DerefableArg<V, S>),
     Deref(DerefableArg<V, S>, S),
     Error,
@@ -6,7 +6,7 @@ pub(super) enum Arg<V, R, S> {
 }
 
 #[derive(Clone)]
-pub(super) enum DerefableArg<V, S> {
+pub(crate) enum DerefableArg<V, S> {
     Const(V),
     Symbol(OperandSymbol, S),
 }

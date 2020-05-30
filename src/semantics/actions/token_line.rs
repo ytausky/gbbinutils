@@ -1,10 +1,10 @@
 use super::{Keyword, TokenStreamSemantics};
 
-use crate::analyze::semantics::keywords::Directive;
-use crate::analyze::semantics::*;
 use crate::analyze::{Literal, SemanticToken};
 use crate::diag::span::StripSpan;
 use crate::diag::CompactDiag;
+use crate::semantics::keywords::Directive;
+use crate::semantics::*;
 use crate::session::resolve::ResolvedName;
 use crate::syntax::actions::*;
 use crate::syntax::{LexError, Sigil, Token};
@@ -38,7 +38,7 @@ impl<'a, S: Session> TokenLineContext for TokenLineSemantics<'a, S> {
     }
 }
 
-pub(in crate::analyze) trait ActOnMnemonic<M, S> {
+pub(crate) trait ActOnMnemonic<M, S> {
     fn act_on_mnemonic(&mut self, mnemonic: M, span: S) -> TokenLineRule<(), ()>;
 }
 
@@ -64,7 +64,7 @@ where
     }
 }
 
-pub(in crate::analyze) trait ActOnToken<T, S> {
+pub trait ActOnToken<T, S> {
     fn act_on_token(&mut self, token: T, span: S);
 }
 

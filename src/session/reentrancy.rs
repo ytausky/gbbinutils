@@ -2,13 +2,13 @@ use super::resolve::{NameTable, StartScope};
 use super::CompositeSession;
 
 use crate::analyze::macros::{MacroSource, MacroTable};
-use crate::analyze::semantics::{Keyword, Semantics, TokenStreamState};
 use crate::analyze::strings::GetString;
 use crate::analyze::{Lex, Literal, SemanticToken, StringSource, TokenSeq};
 use crate::codebase::CodebaseError;
 use crate::diag::span::SpanSource;
 use crate::diag::*;
 use crate::object::builder::{Backend, SymbolSource};
+use crate::semantics::{Keyword, Semantics, TokenStreamState};
 use crate::syntax::parser::ParserFactory;
 use crate::syntax::{IdentSource, LexError, ParseTokenStream};
 

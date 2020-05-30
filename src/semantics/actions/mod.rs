@@ -144,14 +144,14 @@ pub mod tests {
     use std::fmt::Debug;
 
     #[derive(Debug, PartialEq)]
-    pub(in crate::analyze) enum TestOperation<S: Clone> {
+    pub(crate) enum TestOperation<S: Clone> {
         Backend(BackendEvent<MockSymbolId, Expr<S>>),
         Diagnostics(DiagnosticsEvent<S>),
         NameTable(NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>),
         Reentrancy(ReentrancyEvent),
     }
 
-    pub(in crate::analyze::semantics) type Expr<S> = crate::expr::Expr<MockSymbolId, S>;
+    pub(crate) type Expr<S> = crate::expr::Expr<MockSymbolId, S>;
 
     impl<S: Clone> From<BackendEvent<MockSymbolId, Expr<S>>> for TestOperation<S> {
         fn from(event: BackendEvent<MockSymbolId, Expr<S>>) -> Self {
@@ -528,12 +528,10 @@ pub mod tests {
         )
     }
 
-    pub(in crate::analyze::semantics) type MockSourceComponents<S> =
+    pub(crate) type MockSourceComponents<S> =
         crate::session::reentrancy::MockSourceComponents<TestOperation<S>, S>;
 
-    pub(in crate::analyze::semantics) fn collect_semantic_actions<F, S>(
-        f: F,
-    ) -> Vec<TestOperation<S>>
+    pub(crate) fn collect_semantic_actions<F, S>(f: F) -> Vec<TestOperation<S>>
     where
         F: FnOnce(TestTokenStreamSemantics<S>) -> TestTokenStreamSemantics<S>,
         S: Clone + Debug + Merge,

@@ -1,13 +1,13 @@
-use crate::analyze::semantics::arg::*;
-use crate::analyze::semantics::keywords::Directive;
-use crate::analyze::semantics::params::RelocLookup;
-use crate::analyze::semantics::Semantics;
-use crate::analyze::semantics::*;
 use crate::diag::span::Source;
 use crate::diag::*;
 use crate::object::builder::{Item, Width};
+use crate::semantics::arg::*;
+use crate::semantics::keywords::Directive;
+use crate::semantics::params::RelocLookup;
+use crate::semantics::Semantics;
+use crate::semantics::*;
 
-pub(in crate::analyze::semantics) fn analyze_directive<S: Session>(
+pub(crate) fn analyze_directive<S: Session>(
     directive: (Directive, S::Span),
     label: Option<Label<S::Ident, S::Span>>,
     args: BuiltinInstrArgs<S::Value, S::StringRef, S::Span>,
@@ -208,11 +208,11 @@ mod tests {
     use super::*;
 
     use crate::analyze::macros::mock::MockMacroId;
-    use crate::analyze::semantics::actions::tests::*;
     use crate::analyze::Literal;
     use crate::codebase::CodebaseError;
     use crate::expr::{Atom, ParamId};
     use crate::object::builder::mock::*;
+    use crate::semantics::actions::tests::*;
     use crate::session::reentrancy::ReentrancyEvent;
     use crate::session::resolve::{MockNameTable, NameTableEvent, ResolvedName};
     use crate::syntax::actions::*;

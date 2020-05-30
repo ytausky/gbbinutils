@@ -2,9 +2,8 @@ use self::arg::{Arg, OperandSymbol};
 use self::keywords::BuiltinMnemonic;
 use self::params::*;
 
-use super::macros::MacroSource;
-use super::{IdentSource, Literal, StringSource, TokenSeq};
-
+use crate::analyze::macros::MacroSource;
+use crate::analyze::{Literal, StringSource, TokenSeq};
 use crate::diag::span::{SpanSource, Spanned};
 use crate::diag::Diagnostics;
 use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
@@ -13,11 +12,11 @@ use crate::session::reentrancy::{Meta, Params};
 use crate::session::resolve::{NameTable, ResolvedName};
 use crate::session::{CompositeSession, Session};
 use crate::syntax::actions::{LexerOutput, LineRule};
-use crate::syntax::LexError;
+use crate::syntax::{IdentSource, LexError};
 
 macro_rules! set_state {
     ($session:expr, $state:expr) => {
-        $crate::analyze::semantics::Semantics {
+        $crate::semantics::Semantics {
             session: $session.session,
             state: $state,
             tokens: $session.tokens,
@@ -257,13 +256,13 @@ pub struct TokenLineState<I, R, S> {
 }
 
 #[derive(Debug, PartialEq)]
-pub(in crate::analyze) enum TokenContext<I, R, S> {
+pub enum TokenContext<I, R, S> {
     FalseIf,
     MacroDef(MacroDefState<I, R, S>),
 }
 
 #[derive(Debug, PartialEq)]
-pub(in crate::analyze) struct MacroDefState<I, R, S> {
+pub struct MacroDefState<I, R, S> {
     label: Option<Label<I, S>>,
     tokens: TokenSeq<I, R, S>,
 }
@@ -307,7 +306,7 @@ impl<S: Session> BuiltinInstrState<S> {
 
 type BuiltinInstrArgs<V, R, S> = Vec<Arg<V, R, S>>;
 
-pub(in crate::analyze::semantics) type ArgSemantics<'a, S> = Semantics<
+pub(crate) type ArgSemantics<'a, S> = Semantics<
     'a,
     S,
     ExprBuilder<

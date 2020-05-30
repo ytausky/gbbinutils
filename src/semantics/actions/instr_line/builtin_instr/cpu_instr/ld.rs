@@ -307,8 +307,8 @@ mod tests {
     use super::super::tests::*;
     use super::*;
 
-    use crate::analyze::semantics::keywords::LD;
     use crate::diag::Merge;
+    use crate::semantics::keywords::LD;
 
     #[test]
     fn analyze_ld_deref_symbol_a() {

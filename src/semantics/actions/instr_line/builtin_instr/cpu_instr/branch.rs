@@ -1,8 +1,8 @@
 use super::{Analysis, AtomKind, Operand, SimpleOperand};
 
-use crate::analyze::semantics::keywords::{BranchKind, ExplicitBranch, ImplicitBranch};
 use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::object::builder::{Branch, Condition, CpuInstr, Nullary};
+use crate::semantics::keywords::{BranchKind, ExplicitBranch, ImplicitBranch};
 use crate::span::{Source, SpanSource};
 
 impl<'a, 'b, I, V, D, S> Analysis<'a, 'b, I, D, S>
@@ -165,8 +165,8 @@ mod tests {
     use super::super::tests::*;
     use super::*;
 
-    use crate::analyze::semantics::keywords::*;
     use crate::diag::Merge;
+    use crate::semantics::keywords::*;
 
     #[test]
     fn analyze_legal_branch_instructions() {

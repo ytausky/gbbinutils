@@ -1,14 +1,14 @@
 use super::BuiltinInstrSemantics;
 
 use crate::analyze::macros::MacroSource;
-use crate::analyze::semantics::actions::Keyword;
-use crate::analyze::semantics::arg::{Arg, DerefableArg};
-use crate::analyze::semantics::{ArgSemantics, ExprBuilder, Semantics};
 use crate::analyze::{Literal, StringSource};
 use crate::diag::span::{Source, SpanSource};
 use crate::diag::{Diagnostics, Message};
 use crate::expr::{FnCall, LocationCounter, ParamId};
 use crate::object::builder::{Finish, Name, SymbolSource, ValueBuilder};
+use crate::semantics::actions::Keyword;
+use crate::semantics::arg::{Arg, DerefableArg};
+use crate::semantics::{ArgSemantics, ExprBuilder, Semantics};
 use crate::session::resolve::{NameTable, ResolvedName};
 use crate::session::Session;
 use crate::syntax::actions::*;
@@ -168,12 +168,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::analyze::semantics::actions::tests::collect_semantic_actions;
     use crate::diag::span::WithSpan;
     use crate::diag::{DiagnosticsEvent, Message, MockSpan};
     use crate::expr::{Atom, BinOp, Expr, ExprOp};
     use crate::object::builder::mock::{BackendEvent, MockSymbolId};
     use crate::object::builder::{CpuInstr, Direction, Item, Ld, SpecialLd, Width};
+    use crate::semantics::actions::tests::collect_semantic_actions;
     use crate::session::resolve::{NameTableEvent, ResolvedName};
     use crate::syntax::actions::*;
 

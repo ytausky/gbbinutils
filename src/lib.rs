@@ -26,6 +26,7 @@ mod codebase;
 mod expr;
 mod link;
 mod object;
+mod semantics;
 mod session;
 mod syntax;
 

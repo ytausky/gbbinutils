@@ -1,16 +1,16 @@
 use self::operand::{AtomKind, Context, Operand, OperandCounter};
 
-use crate::analyze::semantics::keywords::{Mnemonic, StackOperation};
 use crate::diag::span::Source;
 use crate::diag::*;
 use crate::object::builder::*;
+use crate::semantics::keywords::{Mnemonic, StackOperation};
 
-pub(in crate::analyze::semantics) mod operand;
+pub mod operand;
 
 mod branch;
 mod ld;
 
-pub(in crate::analyze::semantics) fn analyze_instruction<I, V, D, S>(
+pub(crate) fn analyze_instruction<I, V, D, S>(
     mnemonic: (&Mnemonic, S),
     operands: I,
     diagnostics: &mut D,
@@ -324,20 +324,20 @@ impl<V: Source> From<Nullary> for CpuInstr<V> {
 
 #[cfg(test)]
 mod tests {
-    pub use crate::analyze::semantics::arg::OperandSymbol::*;
     pub(crate) use crate::diag::Message;
     pub(crate) use crate::object::builder::mock::MockSymbolId;
+    pub use crate::semantics::arg::OperandSymbol::*;
     pub(crate) use crate::span::{Spanned, WithSpan};
 
     use self::operand::tests::Event;
 
     use super::*;
 
-    use crate::analyze::semantics::arg::*;
-    use crate::analyze::semantics::keywords::*;
-    use crate::analyze::semantics::mock::MockExprBuilder;
     use crate::analyze::Literal;
     use crate::expr::Atom;
+    use crate::semantics::arg::*;
+    use crate::semantics::keywords::*;
+    use crate::semantics::mock::MockExprBuilder;
 
     #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
     pub(super) enum TokenId {

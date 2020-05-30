@@ -12,7 +12,6 @@ use std::rc::Rc;
 pub use self::mock::*;
 
 pub mod macros;
-pub mod semantics;
 pub mod strings;
 
 type LexItem<I, R, S> = (Result<SemanticToken<I, R>, LexError>, S);

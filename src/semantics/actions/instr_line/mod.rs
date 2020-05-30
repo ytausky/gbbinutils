@@ -3,12 +3,12 @@ use self::macro_instr::{MacroInstrSemantics, MacroInstrState};
 
 use super::{Keyword, Semantics, TokenStreamSemantics};
 
-use crate::analyze::semantics::params::RelocLookup;
-use crate::analyze::semantics::*;
 use crate::diag::span::WithSpan;
 use crate::diag::Message;
 use crate::expr::LocationCounter;
 use crate::object::builder::{Finish, PushOp};
+use crate::semantics::params::RelocLookup;
+use crate::semantics::*;
 use crate::session::resolve::{NameTable, ResolvedName, StartScope};
 use crate::syntax::actions::{InstrContext, InstrLineContext, InstrRule};
 
@@ -113,9 +113,9 @@ impl<'a, S: Session> InstrLineSemantics<'a, S> {
 mod tests {
     use super::*;
 
-    use crate::analyze::semantics::actions::tests::*;
     use crate::diag::{DiagnosticsEvent, Message, MockSpan};
     use crate::object::builder::mock::MockSymbolId;
+    use crate::semantics::actions::tests::*;
     use crate::syntax::actions::*;
 
     #[test]

@@ -1,10 +1,10 @@
 use super::*;
 
-use crate::analyze::semantics::actions::TokenStreamState;
-use crate::analyze::semantics::arg::*;
-use crate::analyze::semantics::keywords::{Directive, Mnemonic};
-use crate::analyze::semantics::RelocLookup;
 use crate::object::builder::Item;
+use crate::semantics::actions::TokenStreamState;
+use crate::semantics::arg::*;
+use crate::semantics::keywords::{Directive, Mnemonic};
+use crate::semantics::RelocLookup;
 use crate::session::resolve::NameTable;
 use crate::syntax::actions::{BuiltinInstrContext, InstrFinalizer};
 
@@ -75,7 +75,7 @@ where
 }
 
 impl<'a, S: Session, T> Semantics<'a, S, T, S::Ident, S::StringRef, S::Span> {
-    pub(in crate::analyze::semantics) fn expect_const(
+    pub fn expect_const(
         &mut self,
         arg: Arg<S::Value, S::StringRef, S::Span>,
     ) -> Result<S::Value, ()> {
@@ -92,7 +92,7 @@ impl<'a, S: Session, T> Semantics<'a, S, T, S::Ident, S::StringRef, S::Span> {
         }
     }
 
-    pub(in crate::analyze::semantics) fn define_symbol_with_params(
+    pub fn define_symbol_with_params(
         &mut self,
         (name, span): (S::Ident, S::Span),
         expr: Arg<S::Value, S::StringRef, S::Span>,
@@ -134,9 +134,9 @@ fn analyze_mnemonic<'a, S: Session>(
 
 #[cfg(test)]
 mod tests {
-    use crate::analyze::semantics::actions::tests::collect_semantic_actions;
     use crate::analyze::Literal::*;
     use crate::diag::{DiagnosticsEvent, Message, MockSpan};
+    use crate::semantics::actions::tests::collect_semantic_actions;
     use crate::syntax::actions::*;
     use crate::syntax::actions::{ExprAtom::*, Operator::*};
 
