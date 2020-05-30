@@ -7,16 +7,12 @@ use crate::diag::{Diagnostics, Message};
 use crate::expr::{FnCall, LocationCounter, ParamId};
 use crate::semantics::actions::Keyword;
 use crate::semantics::arg::{Arg, DerefableArg};
-use crate::semantics::{ArgSemantics, ExprBuilder, Semantics};
+use crate::semantics::{ArgSemantics, Semantics};
 use crate::session::builder::{Finish, Name, SymbolSource, ValueBuilder};
 use crate::session::resolve::{NameTable, ResolvedName};
 use crate::session::Session;
 use crate::syntax::actions::*;
 use crate::syntax::IdentSource;
-
-delegate_diagnostics! {
-    {R, S, P: Diagnostics<S>}, ExprBuilder<R, S, P>, {parent}, P, S
-}
 
 impl<'a, S> ArgFinalizer for ArgSemantics<'a, S>
 where
