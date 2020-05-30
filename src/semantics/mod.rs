@@ -10,7 +10,7 @@ use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
 use crate::session::builder::*;
 use crate::session::reentrancy::{Meta, Params};
 use crate::session::resolve::{NameTable, ResolvedName};
-use crate::session::{CompositeSession, Session};
+use crate::session::Session;
 use crate::syntax::actions::{LexerOutput, LineRule};
 use crate::syntax::{IdentSource, LexError};
 
@@ -61,92 +61,52 @@ delegate_diagnostics! {
     {'a, S: Meta, T}, Semantics<'a, S, T, S::Ident, S::StringRef, S::Span>, {session}, S, S::Span
 }
 
-delegate_diagnostics! {
-    {R: Diagnostics<S>, N, B, S}, CompositeSession<R, N, B>, {reentrancy}, R, S
+impl<'a, S: MacroSource, T, I, R, Z> MacroSource for Semantics<'a, S, T, I, R, Z> {
+    type MacroId = S::MacroId;
 }
 
-impl<'a, R, N, B, S> MacroSource
-    for Semantics<'a, CompositeSession<R, N, B>, S, R::Ident, R::StringRef, R::Span>
-where
-    R: Meta,
-    CompositeSession<R, N, B>: MacroSource,
-{
-    type MacroId = <CompositeSession<R, N, B> as MacroSource>::MacroId;
+impl<'a, S: SymbolSource, T, I, R, Z> SymbolSource for Semantics<'a, S, T, I, R, Z> {
+    type SymbolId = S::SymbolId;
 }
 
-impl<'a, R, N, B, S> SymbolSource
-    for Semantics<'a, CompositeSession<R, N, B>, S, R::Ident, R::StringRef, R::Span>
+impl<'a, S, T, I, R, Z> AllocSymbol<Z> for Semantics<'a, S, T, I, R, Z>
 where
-    R: Meta,
-    CompositeSession<R, N, B>: SymbolSource,
+    S: AllocSymbol<Z>,
+    Z: Clone,
 {
-    type SymbolId = <CompositeSession<R, N, B> as SymbolSource>::SymbolId;
-}
-
-impl<'a, R, N, B, Span> AllocSymbol<Span> for CompositeSession<R, N, B>
-where
-    Self: SymbolSource<SymbolId = B::SymbolId>,
-    B: AllocSymbol<Span>,
-    Span: Clone,
-{
-    fn alloc_symbol(&mut self, span: Span) -> Self::SymbolId {
-        self.builder.alloc_symbol(span)
-    }
-}
-
-impl<'a, R, N, B, S, Span> AllocSymbol<Span>
-    for Semantics<'a, CompositeSession<R, N, B>, S, R::Ident, R::StringRef, R::Span>
-where
-    R: Meta,
-    CompositeSession<R, N, B>: SymbolSource<SymbolId = B::SymbolId>,
-    B: AllocSymbol<Span>,
-    Span: Clone,
-{
-    fn alloc_symbol(&mut self, span: Span) -> Self::SymbolId {
+    fn alloc_symbol(&mut self, span: Z) -> Self::SymbolId {
         self.session.alloc_symbol(span)
     }
 }
 
-impl<'a, R, N, B, T> NameTable<R::Ident>
-    for Semantics<'a, CompositeSession<R, N, B>, T, R::Ident, R::StringRef, R::Span>
-where
-    R: Meta,
-    CompositeSession<R, N, B>: NameTable<R::Ident>,
-{
-    type Keyword = <CompositeSession<R, N, B> as NameTable<R::Ident>>::Keyword;
+impl<'a, S: NameTable<I>, T, I, R, Z> NameTable<I> for Semantics<'a, S, T, I, R, Z> {
+    type Keyword = S::Keyword;
 
     fn resolve_name(
         &mut self,
-        ident: &R::Ident,
+        ident: &I,
     ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
         self.session.resolve_name(ident)
     }
 
     fn define_name(
         &mut self,
-        ident: R::Ident,
+        ident: I,
         entry: ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>,
     ) {
         self.session.define_name(ident, entry)
     }
 }
 
-impl<'a, R: Meta, N, B: Finish, T> Finish
-    for Semantics<'a, CompositeSession<R, N, B>, T, R::Ident, R::StringRef, R::Span>
-{
-    type Value = B::Value;
-    type Parent =
-        Semantics<'a, CompositeSession<R, N, B::Parent>, T, R::Ident, R::StringRef, R::Span>;
+impl<'a, S: Finish, T, I, R, Z> Finish for Semantics<'a, S, T, I, R, Z> {
+    type Value = S::Value;
+    type Parent = Semantics<'a, S::Parent, T, I, R, Z>;
 
     fn finish(self) -> (Self::Parent, Option<Self::Value>) {
-        let (builder, value) = self.session.builder.finish();
+        let (session, value) = self.session.finish();
         (
             Semantics {
-                session: CompositeSession {
-                    reentrancy: self.session.reentrancy,
-                    names: self.session.names,
-                    builder,
-                },
+                session,
                 state: self.state,
                 tokens: self.tokens,
             },
@@ -155,29 +115,25 @@ impl<'a, R: Meta, N, B: Finish, T> Finish
     }
 }
 
-impl<'a, R, N, B, T, S, SymbolId> PushOp<Name<SymbolId>, S>
-    for Semantics<'a, CompositeSession<R, N, B>, T, R::Ident, R::StringRef, R::Span>
+impl<'a, S, T, I, R, Z, Q> PushOp<Name<Q>, Z> for Semantics<'a, S, T, I, R, Z>
 where
-    R: Meta,
-    B: PushOp<Name<SymbolId>, S>,
-    S: Clone,
+    S: PushOp<Name<Q>, Z>,
+    Z: Clone,
 {
-    fn push_op(&mut self, op: Name<SymbolId>, span: S) {
-        self.session.builder.push_op(op, span)
+    fn push_op(&mut self, op: Name<Q>, span: Z) {
+        self.session.push_op(op, span)
     }
 }
 
 macro_rules! impl_push_op_for_session {
     ($t:ty) => {
-        impl<'a, R, N, B, T, S> PushOp<$t, S>
-            for Semantics<'a, CompositeSession<R, N, B>, T, R::Ident, R::StringRef, R::Span>
+        impl<'a, S, T, I, R, Z> PushOp<$t, Z> for Semantics<'a, S, T, I, R, Z>
         where
-            R: Meta,
-            B: PushOp<$t, S>,
-            S: Clone,
+            S: PushOp<$t, Z>,
+            Z: Clone,
         {
-            fn push_op(&mut self, op: $t, span: S) {
-                self.session.builder.push_op(op, span)
+            fn push_op(&mut self, op: $t, span: Z) {
+                self.session.push_op(op, span)
             }
         }
     };
@@ -343,6 +299,7 @@ mod mock {
     use crate::session::builder::{Backend, RelocContext};
     use crate::session::reentrancy::{MockSourceComponents, ReentrancyEvent};
     use crate::session::resolve::{BasicNameTable, MockNameTable};
+    use crate::session::CompositeSession;
 
     #[derive(Debug, PartialEq)]
     pub(super) struct MockBindingBuiltinInstr;

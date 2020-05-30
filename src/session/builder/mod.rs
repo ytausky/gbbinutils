@@ -358,6 +358,17 @@ where
     }
 }
 
+impl<'a, R, N, B, Span> AllocSymbol<Span> for CompositeSession<R, N, B>
+where
+    Self: SymbolSource<SymbolId = B::SymbolId>,
+    B: AllocSymbol<Span>,
+    Span: Clone,
+{
+    fn alloc_symbol(&mut self, span: Span) -> Self::SymbolId {
+        self.builder.alloc_symbol(span)
+    }
+}
+
 pub(crate) struct RelocContext<P, B> {
     parent: P,
     builder: B,

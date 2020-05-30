@@ -79,3 +79,7 @@ impl<R: StringSource, N, B> StringSource for CompositeSession<R, N, B> {
 impl<R, N, B: SymbolSource> SymbolSource for CompositeSession<R, N, B> {
     type SymbolId = B::SymbolId;
 }
+
+delegate_diagnostics! {
+    {R: Diagnostics<S>, N, B, S}, CompositeSession<R, N, B>, {reentrancy}, R, S
+}

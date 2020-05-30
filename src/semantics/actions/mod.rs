@@ -138,6 +138,7 @@ pub mod tests {
     use crate::session::builder::{CpuInstr, Item, Ld, Name, SimpleOperand, Width};
     use crate::session::reentrancy::ReentrancyEvent;
     use crate::session::resolve::*;
+    use crate::session::CompositeSession;
     use crate::syntax::{Sigil, Token};
 
     use std::borrow::Borrow;

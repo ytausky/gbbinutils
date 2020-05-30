@@ -215,6 +215,7 @@ mod tests {
     use crate::session::builder::mock::*;
     use crate::session::reentrancy::ReentrancyEvent;
     use crate::session::resolve::{MockNameTable, NameTableEvent, ResolvedName};
+    use crate::session::CompositeSession;
     use crate::syntax::actions::*;
 
     use std::borrow::Borrow;
