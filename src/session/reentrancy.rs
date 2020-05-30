@@ -1,4 +1,5 @@
 use super::resolve::{NameTable, StartScope};
+use super::CompositeSession;
 
 use crate::analyze::macros::{MacroSource, MacroTable};
 use crate::analyze::semantics::{Keyword, Semantics, TokenStreamState};
@@ -10,7 +11,6 @@ use crate::codebase::CodebaseError;
 use crate::diag::span::SpanSource;
 use crate::diag::*;
 use crate::object::builder::{Backend, SymbolSource};
-use crate::CompositeSession;
 
 use std::ops::{Deref, DerefMut};
 

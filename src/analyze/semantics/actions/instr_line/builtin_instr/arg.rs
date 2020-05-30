@@ -12,7 +12,7 @@ use crate::diag::{Diagnostics, Message};
 use crate::expr::{FnCall, LocationCounter, ParamId};
 use crate::object::builder::{Finish, Name, SymbolSource, ValueBuilder};
 use crate::session::resolve::{NameTable, ResolvedName};
-use crate::Session;
+use crate::session::Session;
 
 delegate_diagnostics! {
     {R, S, P: Diagnostics<S>}, ExprBuilder<R, S, P>, {parent}, P, S

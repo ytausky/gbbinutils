@@ -9,7 +9,7 @@ use crate::analyze::Literal;
 use crate::diag::span::StripSpan;
 use crate::diag::{CompactDiag, Message};
 use crate::session::resolve::{NameTable, StartScope};
-use crate::Session;
+use crate::session::Session;
 
 mod instr_line;
 mod token_line;

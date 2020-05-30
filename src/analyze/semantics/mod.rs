@@ -11,9 +11,9 @@ use crate::diag::span::{SpanSource, Spanned};
 use crate::diag::Diagnostics;
 use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
 use crate::object::builder::*;
-use crate::session::reentrancy::{Meta, Params, ReentrancyActions};
+use crate::session::reentrancy::{Meta, Params};
 use crate::session::resolve::{NameTable, ResolvedName};
-use crate::{CompositeSession, Session};
+use crate::session::{CompositeSession, Session};
 
 macro_rules! set_state {
     ($session:expr, $state:expr) => {
@@ -27,7 +27,7 @@ macro_rules! set_state {
 
 mod actions;
 mod arg;
-mod keywords;
+pub mod keywords;
 mod params;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -44,26 +44,6 @@ pub(crate) struct Semantics<'a, S, T, I, R, Z> {
 
 type TokenIterRef<'a, I, R, S> =
     &'a mut dyn Iterator<Item = LexerOutput<I, Literal<R>, LexError, S>>;
-
-impl<R: SpanSource, N, B> SpanSource for CompositeSession<R, N, B> {
-    type Span = R::Span;
-}
-
-impl<R: IdentSource, N, B> IdentSource for CompositeSession<R, N, B> {
-    type Ident = R::Ident;
-}
-
-impl<R: MacroSource, N, B> MacroSource for CompositeSession<R, N, B> {
-    type MacroId = R::MacroId;
-}
-
-impl<R: StringSource, N, B> StringSource for CompositeSession<R, N, B> {
-    type StringRef = R::StringRef;
-}
-
-impl<R, N, B: SymbolSource> SymbolSource for CompositeSession<R, N, B> {
-    type SymbolId = B::SymbolId;
-}
 
 impl<'a, S: Session, T> Semantics<'a, S, T, S::Ident, S::StringRef, S::Span> {
     fn map_state<F: FnOnce(T) -> U, U>(
@@ -233,26 +213,6 @@ impl<I, R, S> TokenStreamState<I, R, S> {
         Self {
             mode: LineRule::InstrLine(InstrLineState::new()),
         }
-    }
-}
-
-impl<R, N, B> CompositeSession<R, N, B>
-where
-    Self: ReentrancyActions,
-    <Self as IdentSource>::Ident: for<'r> From<&'r str>,
-    Self: NameTable<<Self as IdentSource>::Ident, Keyword = &'static Keyword>,
-    Self: Backend<<Self as SpanSource>::Span>,
-{
-    pub fn from_components(reentrancy: R, names: N, builder: B) -> Self {
-        let mut session = Self {
-            reentrancy,
-            names,
-            builder,
-        };
-        for (ident, keyword) in keywords::KEYWORDS {
-            session.define_name((*ident).into(), ResolvedName::Keyword(keyword))
-        }
-        session
     }
 }
 

@@ -1,7 +1,8 @@
+use super::CompositeSession;
+
 use crate::analyze::macros::MacroSource;
 use crate::analyze::syntax::{IdentFactory, IdentSource};
 use crate::object::builder::SymbolSource;
-use crate::CompositeSession;
 
 use std::collections::HashMap;
 use std::ops::DerefMut;

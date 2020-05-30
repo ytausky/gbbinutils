@@ -7,7 +7,7 @@ use super::Keyword::*;
 
 use crate::object::builder::*;
 
-pub(super) const KEYWORDS: &[(&str, Keyword)] = &[
+pub const KEYWORDS: &[(&str, Keyword)] = &[
     ("A", Operand(A)),
     ("ADC", BuiltinMnemonic(CpuInstr(ADC))),
     ("ADD", BuiltinMnemonic(CpuInstr(ADD))),

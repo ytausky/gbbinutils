@@ -7,17 +7,16 @@ pub use crate::codebase::FileSystem;
 pub use crate::link::{Program, Rom};
 
 use crate::analyze::macros::VecMacroTable;
-use crate::analyze::semantics::Keyword;
 use crate::analyze::strings::FakeStringInterner;
 use crate::analyze::syntax::parser::DefaultParserFactory;
-use crate::analyze::syntax::{IdentFactory, IdentSource};
+use crate::analyze::syntax::IdentFactory;
 use crate::analyze::{CodebaseAnalyzer, Tokenizer};
 use crate::codebase::{CodebaseError, StdFileSystem};
-use crate::diag::span::SpanSource;
 use crate::diag::*;
-use crate::object::builder::{Backend, ObjectBuilder};
+use crate::object::builder::ObjectBuilder;
 use crate::session::reentrancy::{ReentrancyActions, SourceComponents};
 use crate::session::resolve::*;
+use crate::session::CompositeSession;
 
 #[macro_use]
 pub mod diag;
@@ -120,32 +119,6 @@ trait BuiltinSymbols {
     type Name;
 
     fn builtin_symbols(&self) -> &[(&str, Self::Name)];
-}
-
-struct CompositeSession<R, N, B> {
-    reentrancy: R,
-    names: N,
-    builder: B,
-}
-
-trait Session:
-    SpanSource
-    + ReentrancyActions
-    + Backend<<Self as SpanSource>::Span>
-    + Diagnostics<<Self as SpanSource>::Span>
-    + StartScope<<Self as IdentSource>::Ident>
-    + NameTable<<Self as IdentSource>::Ident, Keyword = &'static Keyword>
-{
-}
-
-impl<T> Session for T where
-    Self: SpanSource
-        + ReentrancyActions
-        + Backend<<Self as SpanSource>::Span>
-        + Diagnostics<<Self as SpanSource>::Span>
-        + StartScope<<Self as IdentSource>::Ident>
-        + NameTable<<Self as IdentSource>::Ident, Keyword = &'static Keyword>
-{
 }
 
 #[cfg(test)]
