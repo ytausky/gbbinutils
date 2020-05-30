@@ -3,10 +3,10 @@ use super::*;
 use crate::analyze::semantics::actions::TokenStreamState;
 use crate::analyze::semantics::arg::*;
 use crate::analyze::semantics::keywords::{Directive, Mnemonic};
-use crate::analyze::semantics::session::resolve::NameTable;
 use crate::analyze::semantics::RelocLookup;
 use crate::analyze::syntax::actions::{BuiltinInstrContext, InstrFinalizer};
 use crate::object::builder::Item;
+use crate::session::resolve::NameTable;
 
 mod arg;
 mod cpu_instr;

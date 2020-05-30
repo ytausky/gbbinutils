@@ -1,9 +1,9 @@
 use super::*;
 
 use crate::analyze::semantics::actions::TokenStreamState;
-use crate::analyze::semantics::session::reentrancy::MacroArgs;
 use crate::analyze::syntax::actions::{InstrFinalizer, MacroArgContext, MacroInstrContext};
 use crate::analyze::{SemanticToken, TokenSeq};
+use crate::session::reentrancy::MacroArgs;
 
 pub(super) type MacroInstrSemantics<'a, S> = Semantics<
     'a,
@@ -14,7 +14,7 @@ pub(super) type MacroInstrSemantics<'a, S> = Semantics<
     <S as SpanSource>::Span,
 >;
 
-pub(in crate::analyze) struct MacroInstrState<S: Session> {
+pub(crate) struct MacroInstrState<S: Session> {
     parent: InstrLineState<S::Ident, S::Span>,
     name: (S::MacroId, S::Span),
     args: MacroArgs<S::Ident, S::StringRef, S::Span>,
@@ -76,7 +76,7 @@ type MacroArgSemantics<'a, S> = Semantics<
     <S as SpanSource>::Span,
 >;
 
-pub(in crate::analyze) struct MacroArgState<S: Session> {
+pub(crate) struct MacroArgState<S: Session> {
     tokens: TokenSeq<S::Ident, S::StringRef, S::Span>,
     parent: MacroInstrState<S>,
 }
@@ -111,10 +111,10 @@ mod tests {
 
     use crate::analyze::macros::mock::MockMacroId;
     use crate::analyze::semantics::actions::tests::*;
-    use crate::analyze::semantics::session::reentrancy::ReentrancyEvent;
-    use crate::analyze::semantics::session::resolve::ResolvedName;
     use crate::analyze::syntax::actions::{InstrContext, LineFinalizer, TokenStreamContext};
     use crate::analyze::syntax::Token;
+    use crate::session::reentrancy::ReentrancyEvent;
+    use crate::session::resolve::ResolvedName;
 
     #[test]
     fn call_nullary_macro() {

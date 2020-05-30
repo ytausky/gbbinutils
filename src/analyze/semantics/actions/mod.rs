@@ -3,12 +3,12 @@ use self::token_line::TokenContextFinalizationSemantics;
 use super::Semantics;
 use super::*;
 
-use crate::analyze::semantics::session::resolve::{NameTable, StartScope};
 use crate::analyze::syntax::actions::*;
 use crate::analyze::syntax::LexError;
 use crate::analyze::Literal;
 use crate::diag::span::StripSpan;
 use crate::diag::{CompactDiag, Message};
+use crate::session::resolve::{NameTable, StartScope};
 use crate::Session;
 
 mod instr_line;
@@ -127,11 +127,9 @@ impl<'a, S: Session> LineFinalizer for TokenStreamSemantics<'a, S> {
 pub mod tests {
     use super::*;
 
-    pub use crate::analyze::semantics::session::resolve::BasicNameTable;
+    pub use crate::session::resolve::BasicNameTable;
 
     use crate::analyze::macros::mock::MockMacroId;
-    use crate::analyze::semantics::session::reentrancy::ReentrancyEvent;
-    use crate::analyze::semantics::session::resolve::*;
     use crate::analyze::syntax::{Sigil, Token};
     use crate::analyze::SemanticToken;
     use crate::diag::{DiagnosticsEvent, Merge, Message, MockSpan};
@@ -139,6 +137,8 @@ pub mod tests {
     use crate::log::with_log;
     use crate::object::builder::mock::*;
     use crate::object::builder::{CpuInstr, Item, Ld, Name, SimpleOperand, Width};
+    use crate::session::reentrancy::ReentrancyEvent;
+    use crate::session::resolve::*;
 
     use std::borrow::Borrow;
     use std::fmt::Debug;
@@ -529,7 +529,7 @@ pub mod tests {
     }
 
     pub(in crate::analyze::semantics) type MockSourceComponents<S> =
-        crate::analyze::semantics::session::reentrancy::MockSourceComponents<TestOperation<S>, S>;
+        crate::session::reentrancy::MockSourceComponents<TestOperation<S>, S>;
 
     pub(in crate::analyze::semantics) fn collect_semantic_actions<F, S>(
         f: F,

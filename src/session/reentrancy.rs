@@ -1,22 +1,23 @@
 use super::resolve::{NameTable, StartScope};
 
 use crate::analyze::macros::{MacroSource, MacroTable};
-use crate::analyze::semantics::{CompositeSession, Keyword, Semantics, TokenStreamState};
+use crate::analyze::semantics::{Keyword, Semantics, TokenStreamState};
 use crate::analyze::strings::GetString;
 use crate::analyze::syntax::parser::ParserFactory;
-use crate::analyze::syntax::{LexError, ParseTokenStream};
-use crate::analyze::{IdentSource, Lex, Literal, SemanticToken, StringSource, TokenSeq};
+use crate::analyze::syntax::{IdentSource, LexError, ParseTokenStream};
+use crate::analyze::{Lex, Literal, SemanticToken, StringSource, TokenSeq};
 use crate::codebase::CodebaseError;
 use crate::diag::span::SpanSource;
 use crate::diag::*;
 use crate::object::builder::{Backend, SymbolSource};
+use crate::CompositeSession;
 
 use std::ops::{Deref, DerefMut};
 
 #[cfg(test)]
 pub(crate) use self::mock::*;
 
-pub trait Meta:
+pub(crate) trait Meta:
     IdentSource + MacroSource + SpanSource + StringSource + Diagnostics<<Self as SpanSource>::Span>
 {
 }
@@ -30,7 +31,7 @@ impl<T> Meta for T where
 {
 }
 
-pub trait ReentrancyActions
+pub(crate) trait ReentrancyActions
 where
     Self: Meta + Sized,
 {
@@ -50,11 +51,10 @@ where
     ) -> Self;
 }
 
-pub(in crate::analyze::semantics) type MacroArgs<I, R, S> =
-    crate::analyze::macros::MacroArgs<SemanticToken<I, R>, S>;
-pub(in crate::analyze::semantics) type Params<I, S> = (Vec<I>, Vec<S>);
+pub type MacroArgs<I, R, S> = crate::analyze::macros::MacroArgs<SemanticToken<I, R>, S>;
+pub type Params<I, S> = (Vec<I>, Vec<S>);
 
-pub struct SourceComponents<C, P, M, I, D> {
+pub(crate) struct SourceComponents<C, P, M, I, D> {
     pub codebase: C,
     pub parser_factory: P,
     pub macros: M,
@@ -202,7 +202,7 @@ mod mock {
         InvokeMacro(MockMacroId, Vec<Vec<SemanticToken<String, String>>>),
     }
 
-    pub(in crate::analyze) struct MockSourceComponents<T, S> {
+    pub struct MockSourceComponents<T, S> {
         diagnostics: Box<MockDiagnostics<T, S>>,
         macro_alloc: SerialIdAllocator<MockMacroId>,
         log: Log<T>,
@@ -302,7 +302,6 @@ mod tests {
     use super::*;
 
     use crate::analyze::macros::mock::{MacroTableEvent, MockMacroId};
-    use crate::analyze::semantics::session::resolve::{BasicNameTable, NameTableEvent};
     use crate::analyze::strings::FakeStringInterner;
     use crate::analyze::syntax::parser::mock::*;
     use crate::analyze::syntax::*;
@@ -311,6 +310,7 @@ mod tests {
     use crate::expr::Expr;
     use crate::log::*;
     use crate::object::builder::mock::{BackendEvent, MockSymbolId, SerialIdAllocator};
+    use crate::session::resolve::{BasicNameTable, NameTableEvent};
 
     use std::fmt::Debug;
     use std::iter;
@@ -422,7 +422,7 @@ mod tests {
     type MockParserFactory<S> = crate::analyze::syntax::parser::mock::MockParserFactory<Event<S>>;
     type MockMacroTable<S> = crate::analyze::macros::mock::MockMacroTable<usize, Event<S>>;
     type MockDiagnosticsSystem<S> = crate::diag::MockDiagnosticsSystem<Event<S>, S>;
-    type MockNameTable<S> = crate::analyze::semantics::session::resolve::MockNameTable<
+    type MockNameTable<S> = crate::session::resolve::MockNameTable<
         BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
         Event<S>,
     >;

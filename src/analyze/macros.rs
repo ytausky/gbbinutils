@@ -1,16 +1,16 @@
-use crate::analyze::semantics::session::reentrancy::SourceComponents;
 use crate::analyze::Token;
 use crate::diag::span::*;
+use crate::session::reentrancy::SourceComponents;
 use crate::CompositeSession;
 
 use std::ops::DerefMut;
 use std::rc::Rc;
 
-pub trait MacroSource {
+pub(crate) trait MacroSource {
     type MacroId: Clone;
 }
 
-pub trait MacroTable<I, L, S: Clone>: MacroSource {
+pub(crate) trait MacroTable<I, L, S: Clone>: MacroSource {
     type Iter: Iterator<Item = (Token<I, L>, S)>;
 
     fn define_macro(

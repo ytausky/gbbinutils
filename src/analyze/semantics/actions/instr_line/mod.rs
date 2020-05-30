@@ -4,13 +4,13 @@ use self::macro_instr::{MacroInstrSemantics, MacroInstrState};
 use super::{Keyword, Semantics, TokenStreamSemantics};
 
 use crate::analyze::semantics::params::RelocLookup;
-use crate::analyze::semantics::session::resolve::{NameTable, ResolvedName, StartScope};
 use crate::analyze::semantics::*;
 use crate::analyze::syntax::actions::{InstrContext, InstrLineContext, InstrRule};
 use crate::diag::span::WithSpan;
 use crate::diag::Message;
 use crate::expr::LocationCounter;
 use crate::object::builder::{Finish, PushOp};
+use crate::session::resolve::{NameTable, ResolvedName, StartScope};
 
 mod builtin_instr;
 mod label;

@@ -327,7 +327,7 @@ mod tests {
     pub use crate::analyze::semantics::arg::OperandSymbol::*;
     pub(crate) use crate::diag::Message;
     pub(crate) use crate::object::builder::mock::MockSymbolId;
-    pub use crate::span::{MergeSpans, SpanSource, Spanned, WithSpan};
+    pub(crate) use crate::span::{Spanned, WithSpan};
 
     use self::operand::tests::Event;
 
@@ -768,7 +768,7 @@ mod tests {
         I: IntoIterator<Item = Input>,
     {
         use super::operand::analyze_operand;
-        use crate::analyze::semantics::session::reentrancy::MockSourceComponents;
+        use crate::session::reentrancy::MockSourceComponents;
 
         let mut result = None;
         let log = crate::log::with_log(|log| {

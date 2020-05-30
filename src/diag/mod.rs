@@ -19,19 +19,19 @@ pub(crate) mod span;
 #[cfg(test)]
 pub(crate) use self::mock::*;
 
-pub trait DiagnosticsSystem
+pub(crate) trait DiagnosticsSystem
 where
     Self: SpanSystem + Diagnostics<<Self as SpanSource>::Span>,
 {
 }
 
-pub trait Diagnostics<S>
+pub(crate) trait Diagnostics<S>
 where
     Self: MergeSpans<S> + BackendDiagnostics<S>,
 {
 }
 
-pub trait BackendDiagnostics<S>
+pub(crate) trait BackendDiagnostics<S>
 where
     Self: StripSpan<S> + EmitDiag<S, <Self as StripSpan<S>>::Stripped>,
 {
@@ -209,7 +209,7 @@ pub trait DiagnosticsOutput {
     fn emit(&mut self, diagnostic: Diagnostic);
 }
 
-pub trait EmitDiag<S, T> {
+pub(crate) trait EmitDiag<S, T> {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<S, T>>);
 }
 

@@ -12,7 +12,7 @@ pub use self::mock::*;
 #[cfg(test)]
 use crate::expr::{Atom, ExprOp};
 
-pub trait NameTable<I>: MacroSource + SymbolSource {
+pub(crate) trait NameTable<I>: MacroSource + SymbolSource {
     type Keyword: Clone;
 
     fn resolve_name(
@@ -256,7 +256,7 @@ mod mock {
 
     use crate::log::Log;
 
-    pub(in crate::analyze) struct MockNameTable<N, T> {
+    pub(crate) struct MockNameTable<N, T> {
         names: N,
         log: Log<T>,
     }

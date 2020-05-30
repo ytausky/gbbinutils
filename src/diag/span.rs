@@ -27,11 +27,11 @@ pub trait Source: SpanSource {
     fn span(&self) -> Self::Span;
 }
 
-pub trait MergeSpans<S> {
+pub(crate) trait MergeSpans<S> {
     fn merge_spans(&mut self, left: &S, right: &S) -> S;
 }
 
-pub trait StripSpan<S> {
+pub(crate) trait StripSpan<S> {
     type Stripped;
 
     fn strip_span(&mut self, span: &S) -> Self::Stripped;
@@ -55,7 +55,7 @@ pub trait MacroContextFactory<H, S: Clone> {
         J: IntoIterator<Item = S>;
 }
 
-pub trait SpanSystem
+pub(crate) trait SpanSystem
 where
     Self: BufContextFactory
         + AddMacroDef<<Self as SpanSource>::Span>

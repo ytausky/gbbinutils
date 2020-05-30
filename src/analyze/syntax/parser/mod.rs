@@ -466,7 +466,7 @@ pub mod mock {
 
     use crate::log::Log;
 
-    pub(in crate::analyze) struct MockParserFactory<T> {
+    pub struct MockParserFactory<T> {
         log: Log<T>,
     }
 
@@ -489,7 +489,7 @@ pub mod mock {
         }
     }
 
-    pub(in crate::analyze) struct MockParser<T> {
+    pub struct MockParser<T> {
         log: Log<T>,
     }
 
@@ -511,7 +511,7 @@ pub mod mock {
     }
 
     #[derive(Debug, PartialEq)]
-    pub(in crate::analyze) enum ParserEvent<I, L, E, S> {
+    pub enum ParserEvent<I, L, E, S> {
         ParseTokenStream(Vec<TokenStreamItem<I, L, E, S>>),
     }
 

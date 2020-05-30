@@ -1,8 +1,6 @@
 use self::arg::{Arg, OperandSymbol};
 use self::keywords::BuiltinMnemonic;
 use self::params::*;
-use self::session::reentrancy::{Meta, Params, ReentrancyActions};
-use self::session::resolve::{NameTable, ResolvedName};
 
 use super::macros::MacroSource;
 use super::syntax::actions::{LexerOutput, LineRule};
@@ -13,6 +11,8 @@ use crate::diag::span::{SpanSource, Spanned};
 use crate::diag::Diagnostics;
 use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
 use crate::object::builder::*;
+use crate::session::reentrancy::{Meta, Params, ReentrancyActions};
+use crate::session::resolve::{NameTable, ResolvedName};
 use crate::{CompositeSession, Session};
 
 macro_rules! set_state {
@@ -29,7 +29,6 @@ mod actions;
 mod arg;
 mod keywords;
 mod params;
-pub mod session;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Keyword {
@@ -37,10 +36,10 @@ pub enum Keyword {
     Operand(OperandSymbol),
 }
 
-pub(super) struct Semantics<'a, S, T, I, R, Z> {
-    session: S,
-    state: T,
-    tokens: TokenIterRef<'a, I, R, Z>,
+pub(crate) struct Semantics<'a, S, T, I, R, Z> {
+    pub session: S,
+    pub state: T,
+    pub tokens: TokenIterRef<'a, I, R, Z>,
 }
 
 type TokenIterRef<'a, I, R, S> =
@@ -225,12 +224,12 @@ type TokenStreamSemantics<'a, S> = Semantics<
 >;
 
 #[derive(Debug, PartialEq)]
-pub(super) struct TokenStreamState<I, R, S> {
+pub struct TokenStreamState<I, R, S> {
     mode: LineRule<InstrLineState<I, S>, TokenLineState<I, R, S>>,
 }
 
 impl<I, R, S> TokenStreamState<I, R, S> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             mode: LineRule::InstrLine(InstrLineState::new()),
         }
@@ -267,7 +266,7 @@ type InstrLineSemantics<'a, S> = Semantics<
 >;
 
 #[derive(Debug, PartialEq)]
-pub(super) struct InstrLineState<I, S> {
+pub struct InstrLineState<I, S> {
     label: Option<Label<I, S>>,
 }
 
@@ -293,7 +292,7 @@ type TokenLineSemantics<'a, S> = Semantics<
 >;
 
 #[derive(Debug, PartialEq)]
-pub(super) struct TokenLineState<I, R, S> {
+pub struct TokenLineState<I, R, S> {
     context: TokenContext<I, R, S>,
 }
 
@@ -327,7 +326,7 @@ type BuiltinInstrSemantics<'a, S> = Semantics<
     <S as SpanSource>::Span,
 >;
 
-pub(in crate::analyze) struct BuiltinInstrState<S: Session> {
+pub(crate) struct BuiltinInstrState<S: Session> {
     label: Option<Label<S::Ident, S::Span>>,
     mnemonic: Spanned<BuiltinMnemonic, S::Span>,
     args: BuiltinInstrArgs<S::Value, S::StringRef, S::Span>,
@@ -374,8 +373,6 @@ impl<R, S, P> ExprBuilder<R, S, P> {
 
 #[cfg(test)]
 mod mock {
-    use super::session::reentrancy::{MockSourceComponents, ReentrancyEvent};
-    use super::session::resolve::{BasicNameTable, MockNameTable};
     use super::Keyword;
     use super::*;
 
@@ -383,10 +380,10 @@ mod mock {
     use crate::diag::{DiagnosticsEvent, Merge};
     use crate::expr::Expr;
     use crate::log::Log;
-    use crate::object::builder::mock::{
-        BackendEvent, MockBackend, MockSymbolId, SerialIdAllocator,
-    };
+    use crate::object::builder::mock::*;
     use crate::object::builder::{Backend, RelocContext};
+    use crate::session::reentrancy::{MockSourceComponents, ReentrancyEvent};
+    use crate::session::resolve::{BasicNameTable, MockNameTable};
 
     #[derive(Debug, PartialEq)]
     pub(super) struct MockBindingBuiltinInstr;

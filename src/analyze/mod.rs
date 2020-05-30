@@ -1,8 +1,8 @@
-use self::semantics::session::reentrancy::SourceComponents;
-use self::semantics::session::resolve::*;
 use self::syntax::*;
 
 use crate::codebase::{BufId, Codebase, CodebaseError};
+use crate::session::reentrancy::SourceComponents;
+use crate::session::resolve::*;
 use crate::span::{BufContext, BufContextFactory, SpanSource};
 use crate::CompositeSession;
 
@@ -18,7 +18,7 @@ pub mod strings;
 pub mod syntax;
 
 type LexItem<I, R, S> = (Result<SemanticToken<I, R>, LexError>, S);
-type SemanticToken<I, R> = syntax::Token<I, Literal<R>>;
+pub type SemanticToken<I, R> = syntax::Token<I, Literal<R>>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Literal<R> {
@@ -42,7 +42,7 @@ impl<'a, T: StringSource + 'a> CodebaseAnalyzer<'a, T> {
     }
 }
 
-type TokenSeq<I, R, S> = (Vec<SemanticToken<I, R>>, Vec<S>);
+pub type TokenSeq<I, R, S> = (Vec<SemanticToken<I, R>>, Vec<S>);
 
 impl<'a, T, P, M, I, D, N, B> Lex
     for CompositeSession<SourceComponents<&'a mut CodebaseAnalyzer<'a, T>, P, M, I, D>, N, B>

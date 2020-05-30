@@ -7,8 +7,6 @@ pub use crate::codebase::FileSystem;
 pub use crate::link::{Program, Rom};
 
 use crate::analyze::macros::VecMacroTable;
-use crate::analyze::semantics::session::reentrancy::{ReentrancyActions, SourceComponents};
-use crate::analyze::semantics::session::resolve::*;
 use crate::analyze::semantics::Keyword;
 use crate::analyze::strings::FakeStringInterner;
 use crate::analyze::syntax::parser::DefaultParserFactory;
@@ -18,6 +16,8 @@ use crate::codebase::{CodebaseError, StdFileSystem};
 use crate::diag::span::SpanSource;
 use crate::diag::*;
 use crate::object::builder::{Backend, ObjectBuilder};
+use crate::session::reentrancy::{ReentrancyActions, SourceComponents};
+use crate::session::resolve::*;
 
 #[macro_use]
 pub mod diag;
@@ -27,6 +27,7 @@ mod codebase;
 mod expr;
 mod link;
 mod object;
+mod session;
 
 #[derive(Default)]
 pub struct Config<'a> {

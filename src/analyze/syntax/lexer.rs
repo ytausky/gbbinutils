@@ -181,7 +181,7 @@ fn is_hex_digit(character: char) -> bool {
     character.is_digit(16)
 }
 
-pub(in crate::analyze) struct Lexer<B, F> {
+pub struct Lexer<B, F> {
     scanner: Scanner<B>,
     factory: TokenFactory<F>,
 }

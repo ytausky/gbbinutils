@@ -188,8 +188,8 @@ pub mod tests {
     use super::*;
 
     use crate::analyze::semantics::mock::MockExprBuilder;
-    use crate::analyze::semantics::session::reentrancy::ReentrancyEvent;
     use crate::object::builder::mock::{BackendEvent, MockSymbolId};
+    use crate::session::reentrancy::ReentrancyEvent;
 
     use std::fmt::Debug;
 

@@ -3,7 +3,7 @@ use super::*;
 use crate::analyze::semantics::Params;
 use crate::analyze::syntax::actions::LabelContext;
 
-pub(super) type LabelSemantics<'a, S> = Semantics<
+pub(crate) type LabelSemantics<'a, S> = Semantics<
     'a,
     S,
     LabelState<S>,
@@ -12,7 +12,7 @@ pub(super) type LabelSemantics<'a, S> = Semantics<
     <S as SpanSource>::Span,
 >;
 
-pub(in crate::analyze) struct LabelState<S: Session> {
+pub(crate) struct LabelState<S: Session> {
     parent: InstrLineState<S::Ident, S::Span>,
     label: (S::Ident, S::Span),
     params: Params<S::Ident, S::Span>,

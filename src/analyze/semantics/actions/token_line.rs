@@ -1,13 +1,13 @@
 use super::{Keyword, TokenStreamSemantics};
 
 use crate::analyze::semantics::keywords::Directive;
-use crate::analyze::semantics::session::resolve::ResolvedName;
 use crate::analyze::semantics::*;
 use crate::analyze::syntax::actions::*;
 use crate::analyze::syntax::{LexError, Sigil, Token};
 use crate::analyze::{Literal, SemanticToken};
 use crate::diag::span::StripSpan;
 use crate::diag::CompactDiag;
+use crate::session::resolve::ResolvedName;
 
 impl<'a, S: Session> TokenLineContext for TokenLineSemantics<'a, S> {
     type ContextFinalizer = TokenContextFinalizationSemantics<'a, S>;
@@ -93,7 +93,7 @@ impl<'a, S: Session> LineFinalizer for TokenLineSemantics<'a, S> {
     }
 }
 
-pub(in crate::analyze) struct TokenContextFinalizationSemantics<'a, S: Session> {
+pub(crate) struct TokenContextFinalizationSemantics<'a, S: Session> {
     parent: TokenLineSemantics<'a, S>,
 }
 
