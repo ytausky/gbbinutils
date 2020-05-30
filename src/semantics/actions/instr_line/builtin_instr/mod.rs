@@ -3,7 +3,6 @@ use super::*;
 use crate::semantics::actions::TokenStreamState;
 use crate::semantics::arg::*;
 use crate::semantics::keywords::{Directive, Mnemonic};
-use crate::semantics::RelocLookup;
 use crate::session::builder::Item;
 use crate::session::resolve::NameTable;
 use crate::syntax::actions::{BuiltinInstrContext, InstrFinalizer};
@@ -58,11 +57,15 @@ where
 
     fn did_parse_instr(self) -> Self::Next {
         let args = self.state.args;
-        let session = set_state!(self, InstrLineState::new().into());
+        let mut session = set_state!(self, InstrLineState::new().into());
         match self.state.mnemonic.item {
             BuiltinMnemonic::CpuInstr(cpu_instr) => {
-                analyze_mnemonic((&cpu_instr, self.state.mnemonic.span), args, session)
-                    .map_state(Into::into)
+                analyze_mnemonic(
+                    (&cpu_instr, self.state.mnemonic.span),
+                    args,
+                    &mut session.session,
+                );
+                session.map_state(Into::into)
             }
             BuiltinMnemonic::Directive(directive) => directive::analyze_directive(
                 (directive, self.state.mnemonic.span),
@@ -98,7 +101,7 @@ impl<'a, S: Session, T> Semantics<'a, S, T, S::Ident, S::StringRef, S::Span> {
         expr: Arg<S::Value, S::StringRef, S::Span>,
     ) {
         if let Ok(value) = self.expect_const(expr) {
-            let id = self.session.reloc_lookup(name, span.clone());
+            let id = self.reloc_lookup(name, span.clone());
             self.session.define_symbol(id, span, value);
         }
     }
@@ -116,20 +119,19 @@ impl From<Mnemonic> for BuiltinMnemonic {
     }
 }
 
-fn analyze_mnemonic<'a, S: Session>(
+fn analyze_mnemonic<S: Session>(
     name: (&Mnemonic, S::Span),
     args: BuiltinInstrArgs<S::Value, S::StringRef, S::Span>,
-    mut session: TokenStreamSemantics<'a, S>,
-) -> TokenStreamSemantics<'a, S> {
+    session: &mut S,
+) {
     let mut operands = Vec::new();
     for arg in args {
-        let operand = cpu_instr::operand::analyze_operand(arg, name.0.context(), &mut session);
+        let operand = cpu_instr::operand::analyze_operand(arg, name.0.context(), session);
         operands.push(operand)
     }
-    if let Ok(instruction) = cpu_instr::analyze_instruction(name, operands, &mut session) {
-        session.session.emit_item(Item::CpuInstr(instruction))
+    if let Ok(instruction) = cpu_instr::analyze_instruction(name, operands, session) {
+        session.emit_item(Item::CpuInstr(instruction))
     }
-    session
 }
 
 #[cfg(test)]

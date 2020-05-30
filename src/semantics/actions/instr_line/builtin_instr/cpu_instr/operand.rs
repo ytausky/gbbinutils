@@ -187,7 +187,6 @@ impl<I: Iterator> Iterator for OperandCounter<I> {
 pub mod tests {
     use super::*;
 
-    use crate::semantics::mock::MockExprBuilder;
     use crate::session::builder::mock::{BackendEvent, MockSymbolId};
     use crate::session::reentrancy::ReentrancyEvent;
 
@@ -259,7 +258,7 @@ pub mod tests {
             result = Some(super::analyze_operand(
                 expr,
                 context,
-                &mut MockExprBuilder::with_log(log, &mut std::iter::empty()),
+                &mut MockDiagnostics::new(log),
             ))
         });
         result.unwrap().map_err(|_| log)

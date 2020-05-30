@@ -166,7 +166,7 @@ where
 mod tests {
     use crate::diag::span::WithSpan;
     use crate::diag::{DiagnosticsEvent, Message, MockSpan};
-    use crate::expr::{Atom, BinOp, Expr, ExprOp};
+    use crate::expr::{Atom, BinOp, Expr, ExprOp, ParamId};
     use crate::semantics::actions::tests::collect_semantic_actions;
     use crate::session::builder::mock::{BackendEvent, MockSymbolId};
     use crate::session::builder::{CpuInstr, Direction, Item, Ld, SpecialLd, Width};
@@ -199,6 +199,33 @@ mod tests {
             )
             .into()]
         )
+    }
+
+    #[test]
+    fn handle_unknown_name() {
+        let actual = collect_semantic_actions::<_, MockSpan<_>>(|actions| {
+            let mut actions = actions
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("DB".into(), "db".into())
+                .into_builtin_instr()
+                .will_parse_arg();
+            actions.act_on_atom(ExprAtom::Ident("f".into()), "f".into());
+            actions
+                .did_parse_arg()
+                .did_parse_instr()
+                .did_parse_line("eol".into())
+                .act_on_eos("eos".into())
+        });
+        let expected = [
+            NameTableEvent::Insert("f".into(), ResolvedName::Symbol(MockSymbolId(0))).into(),
+            BackendEvent::EmitItem(Item::Data(
+                Expr::from_atom(Atom::Name(MockSymbolId(0)), "f".into()),
+                Width::Byte,
+            ))
+            .into(),
+        ];
+        assert_eq!(actual, expected)
     }
 
     #[test]
@@ -259,6 +286,36 @@ mod tests {
                 SpecialLd::InlineAddr(Expr::from_atom(Atom::Name(MockSymbolId(0)), "const".into())),
                 Direction::IntoA,
             ))))
+            .into(),
+        ];
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn handle_param() {
+        let actual = collect_semantic_actions::<_, MockSpan<_>>(|context| {
+            let mut context = context
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_label(("label".into(), "label".into()));
+            context.act_on_param("param".into(), "param1".into());
+            let mut context = context
+                .did_parse_label()
+                .will_parse_instr("EQU".into(), "equ".into())
+                .into_builtin_instr()
+                .will_parse_arg();
+            context.act_on_atom(ExprAtom::Ident("param".into()), "param2".into());
+            context
+                .did_parse_arg()
+                .did_parse_instr()
+                .did_parse_line("eol".into())
+        });
+        let expected = [
+            NameTableEvent::Insert("label".into(), ResolvedName::Symbol(MockSymbolId(0))).into(),
+            BackendEvent::DefineSymbol(
+                (MockSymbolId(0), "label".into()),
+                Expr::from_atom(Atom::Param(ParamId(0)), "param2".into()),
+            )
             .into(),
         ];
         assert_eq!(actual, expected)

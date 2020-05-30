@@ -337,7 +337,6 @@ mod tests {
     use crate::expr::Atom;
     use crate::semantics::arg::*;
     use crate::semantics::keywords::*;
-    use crate::semantics::mock::MockExprBuilder;
 
     #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
     pub(super) enum TokenId {
@@ -780,7 +779,7 @@ mod tests {
                     analyze_operand(
                         op,
                         mnemonic.context(),
-                        &mut MockExprBuilder::with_log(log.clone(), &mut std::iter::empty()),
+                        &mut MockDiagnostics::new(log.clone()),
                     )
                 })
                 .collect();

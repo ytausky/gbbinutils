@@ -6,7 +6,6 @@ use super::{Keyword, Semantics, TokenStreamSemantics};
 use crate::diag::span::WithSpan;
 use crate::diag::Message;
 use crate::expr::LocationCounter;
-use crate::semantics::params::RelocLookup;
 use crate::semantics::*;
 use crate::session::builder::{Finish, PushOp};
 use crate::session::resolve::{NameTable, ResolvedName, StartScope};
@@ -98,7 +97,7 @@ impl<'a, S: Session> InstrLineSemantics<'a, S> {
     pub fn flush_label(mut self) -> Self {
         if let Some(((label, span), _params)) = self.state.label.take() {
             self.session.start_scope(&label);
-            let id = self.session.reloc_lookup(label, span.clone());
+            let id = self.reloc_lookup(label, span.clone());
             let mut builder = self.session.build_const();
             PushOp::<LocationCounter, _>::push_op(&mut builder, LocationCounter, span.clone());
             let (mut session, expr) = builder.finish();
@@ -106,6 +105,30 @@ impl<'a, S: Session> InstrLineSemantics<'a, S> {
             self.session = session;
         }
         self
+    }
+}
+
+impl<'a, S, T, I, R, Z> Semantics<'a, S, T, I, R, Z>
+where
+    S: AllocSymbol<Z> + NameTable<I> + Diagnostics<Z>,
+    Z: Clone,
+{
+    fn reloc_lookup(&mut self, name: I, span: Z) -> S::SymbolId {
+        match self.session.resolve_name(&name) {
+            Some(ResolvedName::Keyword(_)) => unimplemented!(),
+            Some(ResolvedName::Symbol(id)) => id,
+            None => {
+                let id = self.session.alloc_symbol(span);
+                self.session
+                    .define_name(name, ResolvedName::Symbol(id.clone()));
+                id
+            }
+            Some(ResolvedName::Macro(_)) => {
+                self.session
+                    .emit_diag(Message::MacroNameInExpr.at(span.clone()));
+                self.session.alloc_symbol(span)
+            }
+        }
     }
 }
 

@@ -2,7 +2,6 @@ use crate::diag::span::Source;
 use crate::diag::*;
 use crate::semantics::arg::*;
 use crate::semantics::keywords::Directive;
-use crate::semantics::params::RelocLookup;
 use crate::semantics::Semantics;
 use crate::semantics::*;
 use crate::session::builder::{Item, Width};
@@ -68,7 +67,7 @@ where
     }
 
     fn analyze_ds(mut self) -> TokenStreamSemantics<'a, S> {
-        if let Some(arg) = single_arg(self.span, self.args, &mut self.session) {
+        if let Some(arg) = single_arg(self.span, self.args, &mut self.session.session) {
             let result = self.session.expect_const(arg);
             if let Ok(bytes) = result {
                 self.session.session.reserve(bytes)
@@ -79,7 +78,7 @@ where
 
     fn analyze_equ(mut self) -> TokenStreamSemantics<'a, S> {
         let (symbol, _) = self.label.take().unwrap();
-        if let Some(arg) = single_arg(self.span, self.args, &mut self.session) {
+        if let Some(arg) = single_arg(self.span, self.args, &mut self.session.session) {
             self.session.define_symbol_with_params(symbol, arg);
         }
         self.session
@@ -87,7 +86,7 @@ where
 
     fn analyze_section(mut self) -> TokenStreamSemantics<'a, S> {
         let (name, span) = self.label.take().unwrap().0;
-        let id = self.session.session.reloc_lookup(name, span.clone());
+        let id = self.session.reloc_lookup(name, span.clone());
         self.session.session.start_section(id, span);
         self.session
     }
@@ -97,7 +96,7 @@ where
     }
 
     fn analyze_if(mut self) -> TokenStreamSemantics<'a, S> {
-        match single_arg(self.span, self.args, &mut self.session) {
+        match single_arg(self.span, self.args, &mut self.session.session) {
             Some(arg) => {
                 let value = self.session.expect_const(arg);
                 match self.session.session.is_non_zero(value.unwrap()) {
@@ -116,7 +115,7 @@ where
     }
 
     fn analyze_include(mut self) -> TokenStreamSemantics<'a, S> {
-        let (path, span) = match reduce_include(self.span, self.args, &mut self.session) {
+        let (path, span) = match reduce_include(self.span, self.args, &mut self.session.session) {
             Some(result) => result,
             None => return self.session,
         };
@@ -134,7 +133,9 @@ where
     fn analyze_macro(mut self) -> TokenStreamSemantics<'a, S> {
         if self.label.is_none() {
             let span = self.span;
-            self.session.emit_diag(Message::MacroRequiresName.at(span))
+            self.session
+                .session
+                .emit_diag(Message::MacroRequiresName.at(span))
         }
         set_state!(
             self.session,
@@ -146,7 +147,7 @@ where
     }
 
     fn analyze_org(mut self) -> TokenStreamSemantics<'a, S> {
-        if let Some(arg) = single_arg(self.span, self.args, &mut self.session) {
+        if let Some(arg) = single_arg(self.span, self.args, &mut self.session.session) {
             let result = self.session.expect_const(arg);
             if let Ok(value) = result {
                 self.session.session.set_origin(value)

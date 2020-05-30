@@ -1,15 +1,11 @@
 use self::arg::{Arg, OperandSymbol};
 use self::keywords::BuiltinMnemonic;
-use self::params::*;
 
-use crate::analyze::macros::MacroSource;
 use crate::analyze::{Literal, StringSource, TokenSeq};
 use crate::diag::span::{SpanSource, Spanned};
 use crate::diag::Diagnostics;
-use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
 use crate::session::builder::*;
-use crate::session::reentrancy::{Meta, Params};
-use crate::session::resolve::{NameTable, ResolvedName};
+use crate::session::reentrancy::Params;
 use crate::session::Session;
 use crate::syntax::actions::{LexerOutput, LineRule};
 use crate::syntax::{IdentSource, LexError};
@@ -27,7 +23,6 @@ macro_rules! set_state {
 mod actions;
 mod arg;
 pub mod keywords;
-mod params;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Keyword {
@@ -56,94 +51,6 @@ impl<'a, S: Session, T> Semantics<'a, S, T, S::Ident, S::StringRef, S::Span> {
         }
     }
 }
-
-delegate_diagnostics! {
-    {'a, S: Meta, T}, Semantics<'a, S, T, S::Ident, S::StringRef, S::Span>, {session}, S, S::Span
-}
-
-impl<'a, S: MacroSource, T, I, R, Z> MacroSource for Semantics<'a, S, T, I, R, Z> {
-    type MacroId = S::MacroId;
-}
-
-impl<'a, S: SymbolSource, T, I, R, Z> SymbolSource for Semantics<'a, S, T, I, R, Z> {
-    type SymbolId = S::SymbolId;
-}
-
-impl<'a, S, T, I, R, Z> AllocSymbol<Z> for Semantics<'a, S, T, I, R, Z>
-where
-    S: AllocSymbol<Z>,
-    Z: Clone,
-{
-    fn alloc_symbol(&mut self, span: Z) -> Self::SymbolId {
-        self.session.alloc_symbol(span)
-    }
-}
-
-impl<'a, S: NameTable<I>, T, I, R, Z> NameTable<I> for Semantics<'a, S, T, I, R, Z> {
-    type Keyword = S::Keyword;
-
-    fn resolve_name(
-        &mut self,
-        ident: &I,
-    ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
-        self.session.resolve_name(ident)
-    }
-
-    fn define_name(
-        &mut self,
-        ident: I,
-        entry: ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>,
-    ) {
-        self.session.define_name(ident, entry)
-    }
-}
-
-impl<'a, S: Finish, T, I, R, Z> Finish for Semantics<'a, S, T, I, R, Z> {
-    type Value = S::Value;
-    type Parent = Semantics<'a, S::Parent, T, I, R, Z>;
-
-    fn finish(self) -> (Self::Parent, Option<Self::Value>) {
-        let (session, value) = self.session.finish();
-        (
-            Semantics {
-                session,
-                state: self.state,
-                tokens: self.tokens,
-            },
-            value,
-        )
-    }
-}
-
-impl<'a, S, T, I, R, Z, Q> PushOp<Name<Q>, Z> for Semantics<'a, S, T, I, R, Z>
-where
-    S: PushOp<Name<Q>, Z>,
-    Z: Clone,
-{
-    fn push_op(&mut self, op: Name<Q>, span: Z) {
-        self.session.push_op(op, span)
-    }
-}
-
-macro_rules! impl_push_op_for_session {
-    ($t:ty) => {
-        impl<'a, S, T, I, R, Z> PushOp<$t, Z> for Semantics<'a, S, T, I, R, Z>
-        where
-            S: PushOp<$t, Z>,
-            Z: Clone,
-        {
-            fn push_op(&mut self, op: $t, span: Z) {
-                self.session.push_op(op, span)
-            }
-        }
-    };
-}
-
-impl_push_op_for_session! {LocationCounter}
-impl_push_op_for_session! {i32}
-impl_push_op_for_session! {BinOp}
-impl_push_op_for_session! {ParamId}
-impl_push_op_for_session! {FnCall}
 
 type TokenStreamSemantics<'a, S> = Semantics<
     'a,
@@ -283,81 +190,5 @@ pub(crate) struct ExprBuilder<R, S, P> {
 impl<R, S, P> ExprBuilder<R, S, P> {
     pub fn new(parent: P) -> Self {
         Self { arg: None, parent }
-    }
-}
-
-#[cfg(test)]
-mod mock {
-    use super::Keyword;
-    use super::*;
-
-    use crate::analyze::macros::mock::MockMacroId;
-    use crate::diag::{DiagnosticsEvent, Merge};
-    use crate::expr::Expr;
-    use crate::log::Log;
-    use crate::session::builder::mock::*;
-    use crate::session::builder::{Backend, RelocContext};
-    use crate::session::reentrancy::{MockSourceComponents, ReentrancyEvent};
-    use crate::session::resolve::{BasicNameTable, MockNameTable};
-    use crate::session::CompositeSession;
-
-    #[derive(Debug, PartialEq)]
-    pub(super) struct MockBindingBuiltinInstr;
-
-    #[derive(Debug, PartialEq)]
-    pub(super) struct MockNonBindingBuiltinInstr;
-
-    pub(super) type MockExprBuilder<'a, T, S> = Semantics<
-        'a,
-        CompositeSession<
-            MockSourceComponents<T, S>,
-            Box<MockNameTable<BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>, T>>,
-            RelocContext<MockBackend<SerialIdAllocator<MockSymbolId>, T>, Expr<MockSymbolId, S>>,
-        >,
-        (),
-        String,
-        String,
-        S,
-    >;
-
-    impl<'a, T, S> MockExprBuilder<'a, T, S>
-    where
-        T: From<BackendEvent<MockSymbolId, Expr<MockSymbolId, S>>>
-            + From<DiagnosticsEvent<S>>
-            + From<ReentrancyEvent>,
-        S: Clone + Merge,
-    {
-        pub fn with_log(log: Log<T>, tokens: TokenIterRef<'a, String, String, S>) -> Self {
-            Self::with_name_table_entries(log, std::iter::empty(), tokens)
-        }
-
-        pub fn with_name_table_entries<I>(
-            log: Log<T>,
-            entries: I,
-            tokens: TokenIterRef<'a, String, String, S>,
-        ) -> Self
-        where
-            I: IntoIterator<
-                Item = (
-                    String,
-                    ResolvedName<&'static Keyword, MockMacroId, MockSymbolId>,
-                ),
-            >,
-        {
-            let mut names = BasicNameTable::default();
-            for (ident, resolution) in entries {
-                names.define_name(ident, resolution)
-            }
-            Semantics {
-                session: CompositeSession {
-                    reentrancy: MockSourceComponents::with_log(log.clone()),
-                    names: Box::new(MockNameTable::new(names, log.clone())),
-                    builder: MockBackend::new(SerialIdAllocator::new(MockSymbolId), log),
-                }
-                .build_const(),
-                state: (),
-                tokens,
-            }
-        }
     }
 }
