@@ -1,10 +1,9 @@
 use self::lowering::Lower;
 
-use super::*;
-
 use crate::diag::span::{Source, WithSpan};
 use crate::diag::Diagnostics;
-use crate::expr::{BinOp, ExprOp, FnCall, LocationCounter, ParamId};
+use crate::expr::{Atom, BinOp, ExprOp, FnCall, LocationCounter, ParamId};
+use crate::object::*;
 use crate::{BuiltinSymbols, CompositeSession};
 
 mod lowering;
@@ -462,7 +461,7 @@ impl<'a, S: Clone> BuiltinSymbols for ObjectBuilder<'a, S> {
     type Name = SymbolId;
 
     fn builtin_symbols(&self) -> &[(&str, Self::Name)] {
-        super::eval::BUILTIN_SYMBOLS
+        crate::object::eval::BUILTIN_SYMBOLS
     }
 }
 

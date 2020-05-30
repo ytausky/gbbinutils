@@ -2,7 +2,7 @@ use super::{Params, PushOp};
 
 use crate::diag::{Diagnostics, Message};
 use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
-use crate::object::builder::{AllocSymbol, Finish, Name, SymbolSource};
+use crate::session::builder::{AllocSymbol, Finish, Name, SymbolSource};
 use crate::session::resolve::{NameTable, ResolvedName};
 
 pub(super) trait RelocLookup<I, S> {
@@ -173,10 +173,10 @@ mod tests {
     use crate::diag::{DiagnosticsEvent, MockSpan};
     use crate::expr::{Atom, Expr, ParamId};
     use crate::log::Log;
-    use crate::object::builder::mock::{BackendEvent, MockSymbolId};
-    use crate::object::builder::PushOp;
     use crate::semantics::mock::*;
     use crate::semantics::Keyword;
+    use crate::session::builder::mock::{BackendEvent, MockSymbolId};
+    use crate::session::builder::PushOp;
     use crate::session::reentrancy::ReentrancyEvent;
     use crate::session::resolve::NameTableEvent;
 

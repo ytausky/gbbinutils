@@ -134,8 +134,8 @@ pub mod tests {
     use crate::diag::{DiagnosticsEvent, Merge, Message, MockSpan};
     use crate::expr::{Atom, BinOp, ExprOp, LocationCounter};
     use crate::log::with_log;
-    use crate::object::builder::mock::*;
-    use crate::object::builder::{CpuInstr, Item, Ld, Name, SimpleOperand, Width};
+    use crate::session::builder::mock::*;
+    use crate::session::builder::{CpuInstr, Item, Ld, Name, SimpleOperand, Width};
     use crate::session::reentrancy::ReentrancyEvent;
     use crate::session::resolve::*;
     use crate::syntax::{Sigil, Token};

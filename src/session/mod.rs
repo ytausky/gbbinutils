@@ -1,3 +1,4 @@
+use self::builder::{Backend, SymbolSource};
 use self::reentrancy::ReentrancyActions;
 use self::resolve::{NameTable, ResolvedName, StartScope};
 
@@ -5,11 +6,11 @@ use crate::analyze::macros::MacroSource;
 use crate::analyze::StringSource;
 use crate::diag::span::SpanSource;
 use crate::diag::Diagnostics;
-use crate::object::builder::{Backend, SymbolSource};
 use crate::semantics::keywords::KEYWORDS;
 use crate::semantics::Keyword;
 use crate::syntax::IdentSource;
 
+pub mod builder;
 pub mod reentrancy;
 pub mod resolve;
 

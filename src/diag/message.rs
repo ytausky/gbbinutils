@@ -1,7 +1,7 @@
 use super::span::StrippedBufSpan;
 
 use crate::codebase::{BufId, BufRange, CodebaseError, TextCache};
-use crate::object::builder::{IncDec, Width};
+use crate::session::builder::{IncDec, Width};
 
 use std::fmt;
 

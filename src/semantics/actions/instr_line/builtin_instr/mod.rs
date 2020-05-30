@@ -1,10 +1,10 @@
 use super::*;
 
-use crate::object::builder::Item;
 use crate::semantics::actions::TokenStreamState;
 use crate::semantics::arg::*;
 use crate::semantics::keywords::{Directive, Mnemonic};
 use crate::semantics::RelocLookup;
+use crate::session::builder::Item;
 use crate::session::resolve::NameTable;
 use crate::syntax::actions::{BuiltinInstrContext, InstrFinalizer};
 

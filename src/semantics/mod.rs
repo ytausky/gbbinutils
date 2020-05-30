@@ -7,7 +7,7 @@ use crate::analyze::{Literal, StringSource, TokenSeq};
 use crate::diag::span::{SpanSource, Spanned};
 use crate::diag::Diagnostics;
 use crate::expr::{BinOp, FnCall, LocationCounter, ParamId};
-use crate::object::builder::*;
+use crate::session::builder::*;
 use crate::session::reentrancy::{Meta, Params};
 use crate::session::resolve::{NameTable, ResolvedName};
 use crate::session::{CompositeSession, Session};
@@ -339,8 +339,8 @@ mod mock {
     use crate::diag::{DiagnosticsEvent, Merge};
     use crate::expr::Expr;
     use crate::log::Log;
-    use crate::object::builder::mock::*;
-    use crate::object::builder::{Backend, RelocContext};
+    use crate::session::builder::mock::*;
+    use crate::session::builder::{Backend, RelocContext};
     use crate::session::reentrancy::{MockSourceComponents, ReentrancyEvent};
     use crate::session::resolve::{BasicNameTable, MockNameTable};
 

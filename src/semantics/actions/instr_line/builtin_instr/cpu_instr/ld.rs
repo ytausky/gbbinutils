@@ -3,7 +3,7 @@ use super::{Analysis, Operand};
 
 use crate::diag::span::{Source, SpanSource};
 use crate::diag::{Diagnostics, EmitDiag, Message};
-use crate::object::builder::*;
+use crate::session::builder::*;
 
 impl<'a, 'b, I, V, D, S> Analysis<'a, 'b, I, D, S>
 where

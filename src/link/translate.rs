@@ -1,8 +1,8 @@
 use super::{BinarySection, LinkageContext, VarTable};
 
 use crate::diag::{BackendDiagnostics, Message};
-use crate::object::builder::Width;
 use crate::object::{Content, Expr, Node, Section};
+use crate::session::builder::Width;
 use crate::span::Source;
 
 use std::mem::replace;
@@ -161,9 +161,9 @@ mod tests {
     use crate::diag::IgnoreDiagnostics;
     use crate::diag::TestDiagnosticsListener;
     use crate::expr::{Atom, BinOp, LocationCounter};
-    use crate::object::builder::*;
     use crate::object::num::Num;
     use crate::object::{Content, Object};
+    use crate::session::builder::*;
     use crate::CompositeSession;
 
     use std::borrow::Borrow;

@@ -6,9 +6,9 @@ use super::{Keyword, Semantics, TokenStreamSemantics};
 use crate::diag::span::WithSpan;
 use crate::diag::Message;
 use crate::expr::LocationCounter;
-use crate::object::builder::{Finish, PushOp};
 use crate::semantics::params::RelocLookup;
 use crate::semantics::*;
+use crate::session::builder::{Finish, PushOp};
 use crate::session::resolve::{NameTable, ResolvedName, StartScope};
 use crate::syntax::actions::{InstrContext, InstrLineContext, InstrRule};
 
@@ -114,8 +114,8 @@ mod tests {
     use super::*;
 
     use crate::diag::{DiagnosticsEvent, Message, MockSpan};
-    use crate::object::builder::mock::MockSymbolId;
     use crate::semantics::actions::tests::*;
+    use crate::session::builder::mock::MockSymbolId;
     use crate::syntax::actions::*;
 
     #[test]

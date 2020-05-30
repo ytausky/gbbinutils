@@ -7,8 +7,8 @@ use crate::analyze::{Lex, Literal, SemanticToken, StringSource, TokenSeq};
 use crate::codebase::CodebaseError;
 use crate::diag::span::SpanSource;
 use crate::diag::*;
-use crate::object::builder::{Backend, SymbolSource};
 use crate::semantics::{Keyword, Semantics, TokenStreamState};
+use crate::session::builder::{Backend, SymbolSource};
 use crate::syntax::parser::ParserFactory;
 use crate::syntax::{IdentSource, LexError, ParseTokenStream};
 
@@ -191,7 +191,7 @@ mod mock {
     use crate::analyze::macros::mock::MockMacroId;
     use crate::diag::{DiagnosticsEvent, MockDiagnostics};
     use crate::log::Log;
-    use crate::object::builder::mock::*;
+    use crate::session::builder::mock::*;
 
     use std::marker::PhantomData;
 
@@ -307,7 +307,7 @@ mod tests {
     use crate::diag::DiagnosticsEvent;
     use crate::expr::Expr;
     use crate::log::*;
-    use crate::object::builder::mock::{BackendEvent, MockSymbolId, SerialIdAllocator};
+    use crate::session::builder::mock::{BackendEvent, MockSymbolId, SerialIdAllocator};
     use crate::session::resolve::{BasicNameTable, NameTableEvent};
     use crate::syntax::parser::mock::*;
     use crate::syntax::*;
@@ -427,7 +427,7 @@ mod tests {
         Event<S>,
     >;
     type MockBuilder<S> =
-        crate::object::builder::mock::MockBackend<SerialIdAllocator<MockSymbolId>, Event<S>>;
+        crate::session::builder::mock::MockBackend<SerialIdAllocator<MockSymbolId>, Event<S>>;
     type TestCompositeSession<'a, S> = CompositeSession<
         SourceComponents<
             &'a mut MockCodebase<S>,

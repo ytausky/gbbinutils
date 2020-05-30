@@ -5,7 +5,7 @@ use super::arg::OperandSymbol::*;
 use super::Keyword;
 use super::Keyword::*;
 
-use crate::object::builder::*;
+use crate::session::builder::*;
 
 pub const KEYWORDS: &[(&str, Keyword)] = &[
     ("A", Operand(A)),

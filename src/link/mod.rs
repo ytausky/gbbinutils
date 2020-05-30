@@ -1,7 +1,7 @@
 use crate::diag::{BackendDiagnostics, IgnoreDiagnostics};
-use crate::object::builder::Width;
 use crate::object::num::Num;
 use crate::object::*;
+use crate::session::builder::Width;
 
 use std::borrow::Borrow;
 
@@ -149,7 +149,7 @@ mod tests {
 
     use crate::diag::{IgnoreDiagnostics, TestDiagnosticsListener};
     use crate::expr::*;
-    use crate::object::builder::*;
+    use crate::session::builder::*;
     use crate::CompositeSession;
 
     #[test]

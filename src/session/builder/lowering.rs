@@ -1,5 +1,4 @@
-use super::builder::*;
-use super::{Expr, Node};
+use super::*;
 
 use crate::span::{Source, WithSpan};
 
@@ -330,7 +329,7 @@ fn encode_inc_dec(mode: IncDec) -> u8 {
 mod tests {
     use super::*;
 
-    use crate::object::builder::{Branch::*, CpuInstr::*, Ld::*, Nullary::*};
+    use crate::session::builder::{Branch::*, CpuInstr::*, Ld::*, Nullary::*};
 
     use std::borrow::Borrow;
 
@@ -394,7 +393,7 @@ mod tests {
         test_nullary(Cpl, bytes([0x2f]))
     }
 
-    fn test_nullary(nullary: crate::object::builder::Nullary, items: impl Borrow<[Node<()>]>) {
+    fn test_nullary(nullary: crate::session::builder::Nullary, items: impl Borrow<[Node<()>]>) {
         test_instruction(Nullary(nullary), items)
     }
 

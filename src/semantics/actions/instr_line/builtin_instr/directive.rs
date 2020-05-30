@@ -1,11 +1,11 @@
 use crate::diag::span::Source;
 use crate::diag::*;
-use crate::object::builder::{Item, Width};
 use crate::semantics::arg::*;
 use crate::semantics::keywords::Directive;
 use crate::semantics::params::RelocLookup;
 use crate::semantics::Semantics;
 use crate::semantics::*;
+use crate::session::builder::{Item, Width};
 
 pub(crate) fn analyze_directive<S: Session>(
     directive: (Directive, S::Span),
@@ -211,8 +211,8 @@ mod tests {
     use crate::analyze::Literal;
     use crate::codebase::CodebaseError;
     use crate::expr::{Atom, ParamId};
-    use crate::object::builder::mock::*;
     use crate::semantics::actions::tests::*;
+    use crate::session::builder::mock::*;
     use crate::session::reentrancy::ReentrancyEvent;
     use crate::session::resolve::{MockNameTable, NameTableEvent, ResolvedName};
     use crate::syntax::actions::*;

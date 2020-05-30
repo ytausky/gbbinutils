@@ -1,7 +1,7 @@
 use super::CompositeSession;
 
 use crate::analyze::macros::MacroSource;
-use crate::object::builder::SymbolSource;
+use crate::session::builder::SymbolSource;
 use crate::syntax::{IdentFactory, IdentSource};
 
 use std::collections::HashMap;

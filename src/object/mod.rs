@@ -1,14 +1,12 @@
-use self::builder::Width;
 use self::num::Num;
 
 use crate::expr::{Atom, ExprOp};
+use crate::session::builder::Width;
 
 use std::ops::{Index, IndexMut};
 
-pub mod builder;
+pub mod eval;
 pub mod num;
-
-mod eval;
 
 pub struct Object<S> {
     pub content: Content<S>,
@@ -16,8 +14,8 @@ pub struct Object<S> {
 }
 
 pub struct Content<S> {
-    sections: Vec<Section<S>>,
-    symbols: SymbolTable<S>,
+    pub sections: Vec<Section<S>>,
+    pub symbols: SymbolTable<S>,
 }
 
 pub struct Section<S> {
@@ -33,7 +31,7 @@ pub struct Constraints<S> {
 
 pub type Expr<S> = crate::expr::Expr<SymbolId, S>;
 
-type SymbolId = Symbol<BuiltinId, ContentId>;
+pub type SymbolId = Symbol<BuiltinId, ContentId>;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Symbol<B, C> {
@@ -62,22 +60,22 @@ pub enum Node<S> {
     Reserved(Expr<S>),
 }
 
-struct SymbolTable<S>(Vec<Option<ContentDef<ExprDef<S>, SectionId>>>);
+pub struct SymbolTable<S>(Vec<Option<ContentDef<ExprDef<S>, SectionId>>>);
 
 #[derive(Clone, Debug, PartialEq)]
-enum ContentDef<F, S> {
+pub enum ContentDef<F, S> {
     Expr(F),
     Section(S),
 }
 
 #[derive(Clone, Debug, PartialEq)]
-struct ExprDef<S> {
-    expr: Expr<S>,
-    location: VarId,
+pub struct ExprDef<S> {
+    pub expr: Expr<S>,
+    pub location: VarId,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct SectionId(usize);
+pub struct SectionId(pub usize);
 
 pub struct VarTable(Vec<Var>);
 
@@ -143,7 +141,7 @@ impl<S> SymbolTable<S> {
         self.0[id] = Some(def);
     }
 
-    fn get(&self, ContentId(id): ContentId) -> Option<&ContentDef<ExprDef<S>, SectionId>> {
+    pub fn get(&self, ContentId(id): ContentId) -> Option<&ContentDef<ExprDef<S>, SectionId>> {
         self.0[id].as_ref()
     }
 }
@@ -242,7 +240,7 @@ impl From<ContentId> for ExprOp<SymbolId> {
 }
 
 impl<B, C> Symbol<B, C> {
-    fn content(self) -> Option<C> {
+    pub fn content(self) -> Option<C> {
         match self {
             Symbol::Builtin(_) => None,
             Symbol::Content(id) => Some(id),

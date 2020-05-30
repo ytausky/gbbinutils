@@ -1,6 +1,6 @@
 use crate::diag::*;
-use crate::object::builder::{Condition, PtrReg, Reg16, RegPair, SimpleOperand};
 use crate::semantics::arg::*;
+use crate::session::builder::{Condition, PtrReg, Reg16, RegPair, SimpleOperand};
 use crate::span::{Source, SpanSource};
 
 #[derive(Debug, PartialEq)]
@@ -187,8 +187,8 @@ impl<I: Iterator> Iterator for OperandCounter<I> {
 pub mod tests {
     use super::*;
 
-    use crate::object::builder::mock::{BackendEvent, MockSymbolId};
     use crate::semantics::mock::MockExprBuilder;
+    use crate::session::builder::mock::{BackendEvent, MockSymbolId};
     use crate::session::reentrancy::ReentrancyEvent;
 
     use std::fmt::Debug;

@@ -1,8 +1,8 @@
 use super::{Analysis, AtomKind, Operand, SimpleOperand};
 
 use crate::diag::{Diagnostics, EmitDiag, Message};
-use crate::object::builder::{Branch, Condition, CpuInstr, Nullary};
 use crate::semantics::keywords::{BranchKind, ExplicitBranch, ImplicitBranch};
+use crate::session::builder::{Branch, Condition, CpuInstr, Nullary};
 use crate::span::{Source, SpanSource};
 
 impl<'a, 'b, I, V, D, S> Analysis<'a, 'b, I, D, S>

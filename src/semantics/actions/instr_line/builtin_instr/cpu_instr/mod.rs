@@ -2,8 +2,8 @@ use self::operand::{AtomKind, Context, Operand, OperandCounter};
 
 use crate::diag::span::Source;
 use crate::diag::*;
-use crate::object::builder::*;
 use crate::semantics::keywords::{Mnemonic, StackOperation};
+use crate::session::builder::*;
 
 pub mod operand;
 
@@ -325,8 +325,8 @@ impl<V: Source> From<Nullary> for CpuInstr<V> {
 #[cfg(test)]
 mod tests {
     pub(crate) use crate::diag::Message;
-    pub(crate) use crate::object::builder::mock::MockSymbolId;
     pub use crate::semantics::arg::OperandSymbol::*;
+    pub(crate) use crate::session::builder::mock::MockSymbolId;
     pub(crate) use crate::span::{Spanned, WithSpan};
 
     use self::operand::tests::Event;

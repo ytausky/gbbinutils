@@ -11,7 +11,7 @@ use crate::analyze::strings::FakeStringInterner;
 use crate::analyze::{CodebaseAnalyzer, Tokenizer};
 use crate::codebase::{CodebaseError, StdFileSystem};
 use crate::diag::*;
-use crate::object::builder::ObjectBuilder;
+use crate::session::builder::ObjectBuilder;
 use crate::session::reentrancy::{ReentrancyActions, SourceComponents};
 use crate::session::resolve::*;
 use crate::session::CompositeSession;
