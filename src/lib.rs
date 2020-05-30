@@ -3,6 +3,8 @@
 //! `gbas` is an assembler targeting Game Boy, Game Boy Pocket, Game Boy Light, and Game Boy Color.
 //! Its customizable IO functions make it suitable for embedding in other tools, in unit tests, etc.
 
+#![allow(clippy::type_complexity)]
+
 pub use crate::codebase::FileSystem;
 pub use crate::link::{Program, Rom};
 
@@ -101,7 +103,7 @@ fn try_assemble(
     for (string, name) in builder.builtin_symbols() {
         names.define_name(
             DefaultIdentFactory.mk_ident(string),
-            ResolvedName::Symbol((*name).clone()),
+            ResolvedName::Symbol(*name),
         )
     }
     let reentrancy = SourceComponents::new(
