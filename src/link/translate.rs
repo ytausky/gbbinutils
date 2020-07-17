@@ -8,10 +8,10 @@ use crate::span::Source;
 use std::mem::replace;
 use std::vec::IntoIter;
 
-impl<S: Clone> Section<S> {
+impl<'a, S: Clone + 'a> Section<S> {
     pub(super) fn translate(
-        &self,
-        context: &mut LinkageContext<&Content<S>, &VarTable>,
+        &'a self,
+        context: &mut LinkageContext<&'a Content<S>, &VarTable>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> Vec<BinarySection> {
         let mut chunks = Vec::new();
