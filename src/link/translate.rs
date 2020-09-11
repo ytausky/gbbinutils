@@ -43,7 +43,7 @@ impl<'a, S: Clone + 'a> Section<S> {
     }
 }
 
-impl<S: Clone> Fragment<S> {
+impl<S: Clone> Fragment<Expr<S>> {
     fn translate(
         &self,
         context: &LinkageContext<&Content<S>, &VarTable>,
@@ -211,7 +211,7 @@ mod tests {
         assert_eq!(actual, [0x01])
     }
 
-    fn translate_section_item<S: Clone + PartialEq>(fragment: Fragment<S>) -> Vec<u8> {
+    fn translate_section_item<S: Clone + PartialEq>(fragment: Fragment<Expr<S>>) -> Vec<u8> {
         fragment
             .translate(
                 &LinkageContext {

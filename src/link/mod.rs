@@ -94,7 +94,7 @@ impl<S: Clone> Section<S> {
     fn traverse<V, F>(&self, context: &mut LinkageContext<&Content<S>, V>, mut f: F) -> Num
     where
         V: Borrow<VarTable>,
-        F: FnMut(&Fragment<S>, &mut LinkageContext<&Content<S>, V>),
+        F: FnMut(&Fragment<Expr<S>>, &mut LinkageContext<&Content<S>, V>),
     {
         let addr = context.location.clone();
         let mut offset = Num::from(0);
@@ -118,7 +118,7 @@ impl<S: Clone> Section<S> {
     }
 }
 
-impl<S: Clone> Fragment<S> {
+impl<S: Clone> Fragment<Expr<S>> {
     fn size<'a, V: Borrow<VarTable>>(&self, context: &LinkageContext<&'a Content<S>, V>) -> Num {
         match self {
             Fragment::Byte(_) | Fragment::Embedded(..) => 1.into(),

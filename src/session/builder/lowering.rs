@@ -10,12 +10,12 @@ pub(super) trait Lower<S> {
 
 pub(super) enum LoweredItem<S> {
     None,
-    One(Fragment<S>),
-    Two(Fragment<S>, Fragment<S>),
+    One(Fragment<Expr<S>>),
+    Two(Fragment<Expr<S>>, Fragment<Expr<S>>),
 }
 
 impl<S> Iterator for LoweredItem<S> {
-    type Item = Fragment<S>;
+    type Item = Fragment<Expr<S>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match mem::replace(self, LoweredItem::None) {
@@ -34,7 +34,7 @@ impl<S> LoweredItem<S> {
         LoweredItem::One(Fragment::Byte(opcode))
     }
 
-    fn extended(opcode: impl Into<Fragment<S>>) -> LoweredItem<S> {
+    fn extended(opcode: impl Into<Fragment<Expr<S>>>) -> LoweredItem<S> {
         LoweredItem::Two(Fragment::Byte(0xcb), opcode.into())
     }
 
@@ -54,7 +54,7 @@ impl<S> LoweredItem<S> {
     }
 }
 
-impl<S> From<u8> for Fragment<S> {
+impl<S> From<u8> for Fragment<Expr<S>> {
     fn from(byte: u8) -> Self {
         Fragment::Byte(byte)
     }
@@ -333,7 +333,10 @@ mod tests {
 
     use std::borrow::Borrow;
 
-    fn test_instruction(instruction: CpuInstr<Expr<()>>, fragments: impl Borrow<[Fragment<()>]>) {
+    fn test_instruction(
+        instruction: CpuInstr<Expr<()>>,
+        fragments: impl Borrow<[Fragment<Expr<()>>]>,
+    ) {
         let code: Vec<_> = instruction.lower().collect();
         assert_eq!(code, fragments.borrow())
     }
@@ -395,7 +398,7 @@ mod tests {
 
     fn test_nullary(
         nullary: crate::session::builder::Nullary,
-        fragments: impl Borrow<[Fragment<()>]>,
+        fragments: impl Borrow<[Fragment<Expr<()>>]>,
     ) {
         test_instruction(Nullary(nullary), fragments)
     }
@@ -952,11 +955,11 @@ mod tests {
         }
     }
 
-    fn extended(suffix: impl Into<Fragment<()>>) -> Vec<Fragment<()>> {
+    fn extended(suffix: impl Into<Fragment<Expr<()>>>) -> Vec<Fragment<Expr<()>>> {
         vec![Fragment::Byte(0xcb), suffix.into()]
     }
 
-    fn bytes(data: impl Borrow<[u8]>) -> Vec<Fragment<()>> {
+    fn bytes(data: impl Borrow<[u8]>) -> Vec<Fragment<Expr<()>>> {
         data.borrow().iter().map(|&b| Fragment::Byte(b)).collect()
     }
 }

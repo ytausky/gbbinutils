@@ -19,6 +19,7 @@ pub(crate) trait Backend<S: Clone>: PartialBackend<S> + Sized {
 pub(crate) trait PartialBackend<S: Clone>: AllocSymbol<S> {
     type Value: Source<Span = S>;
 
+    fn emit_fragment(&mut self, fragment: Fragment<Self::Value>);
     fn emit_item(&mut self, item: Item<Self::Value>);
     fn is_non_zero(&mut self, value: Self::Value) -> Option<bool>;
     fn reserve(&mut self, bytes: Self::Value);
@@ -258,7 +259,7 @@ impl<'a, S> ObjectBuilder<'a, S> {
         }
     }
 
-    fn push(&mut self, fragment: Fragment<S>) {
+    fn push(&mut self, fragment: Fragment<Expr<S>>) {
         self.current_section().fragments.push(fragment)
     }
 
@@ -320,9 +321,13 @@ where
 {
     type Value = Expr<S>;
 
+    fn emit_fragment(&mut self, fragment: Fragment<Self::Value>) {
+        self.builder.push(fragment)
+    }
+
     fn emit_item(&mut self, item: Item<Self::Value>) {
         item.lower()
-            .for_each(|data_item| self.builder.push(data_item))
+            .for_each(|fragment| self.emit_fragment(fragment))
     }
 
     fn is_non_zero(&mut self, value: Self::Value) -> Option<bool> {
@@ -514,6 +519,7 @@ pub mod mock {
 
     #[derive(Debug, PartialEq)]
     pub enum BackendEvent<N, V: Source> {
+        EmitFragment(Fragment<V>),
         EmitItem(Item<V>),
         Reserve(V),
         SetOrigin(V),
@@ -613,6 +619,10 @@ pub mod mock {
         S: Clone,
     {
         type Value = Expr<A::SymbolId, S>;
+
+        fn emit_fragment(&mut self, fragment: Fragment<Self::Value>) {
+            self.builder.log.push(BackendEvent::EmitFragment(fragment))
+        }
 
         fn emit_item(&mut self, item: Item<Self::Value>) {
             self.builder.log.push(BackendEvent::EmitItem(item))

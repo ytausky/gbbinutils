@@ -22,7 +22,7 @@ pub struct Section<S> {
     pub constraints: Constraints<S>,
     pub addr: VarId,
     pub size: VarId,
-    pub fragments: Vec<Fragment<S>>,
+    pub fragments: Vec<Fragment<Expr<S>>>,
 }
 
 pub struct Constraints<S> {
@@ -51,13 +51,13 @@ pub struct ContentId(usize);
 pub struct VarId(pub usize);
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Fragment<S> {
+pub enum Fragment<E> {
     Byte(u8),
-    Immediate(Expr<S>, Width),
-    LdInlineAddr(u8, Expr<S>),
-    Embedded(u8, Expr<S>),
+    Immediate(E, Width),
+    LdInlineAddr(u8, E),
+    Embedded(u8, E),
     Reloc(VarId),
-    Reserved(Expr<S>),
+    Reserved(E),
 }
 
 pub struct SymbolTable<S>(Vec<Option<ContentDef<ExprDef<S>, SectionId>>>);
