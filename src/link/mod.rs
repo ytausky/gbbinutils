@@ -345,7 +345,7 @@ mod tests {
         let mut const_builder = object_builder.build_const();
         const_builder.push_op(bytes, ());
         let (mut object_builder, bytes_const) = const_builder.finish();
-        object_builder.reserve(bytes_const.unwrap());
+        object_builder.emit_fragment(Fragment::Reserved(bytes_const.unwrap()));
 
         // label dw label
         let label = object_builder.alloc_symbol(());

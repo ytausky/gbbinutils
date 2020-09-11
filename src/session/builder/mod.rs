@@ -22,7 +22,6 @@ pub(crate) trait PartialBackend<S: Clone>: AllocSymbol<S> {
     fn emit_fragment(&mut self, fragment: Fragment<Self::Value>);
     fn emit_item(&mut self, item: Item<Self::Value>);
     fn is_non_zero(&mut self, value: Self::Value) -> Option<bool>;
-    fn reserve(&mut self, bytes: Self::Value);
     fn set_origin(&mut self, origin: Self::Value);
     fn start_section(&mut self, name: Self::SymbolId, span: S);
 }
@@ -337,13 +336,6 @@ where
             .map(|n| n != 0)
     }
 
-    fn reserve(&mut self, bytes: Self::Value) {
-        self.builder
-            .current_section()
-            .fragments
-            .push(Fragment::Reserved(bytes))
-    }
-
     fn set_origin(&mut self, addr: Self::Value) {
         match self.builder.state.take().unwrap() {
             BuilderState::SectionPrelude(index) => {
@@ -521,7 +513,6 @@ pub mod mock {
     pub enum BackendEvent<N, V: Source> {
         EmitFragment(Fragment<V>),
         EmitItem(Item<V>),
-        Reserve(V),
         SetOrigin(V),
         DefineSymbol((N, V::Span), V),
         StartSection(N, V::Span),
@@ -636,10 +627,6 @@ pub mod mock {
                 }] => Some(*n != 0),
                 _ => None,
             }
-        }
-
-        fn reserve(&mut self, bytes: Self::Value) {
-            self.builder.log.push(BackendEvent::Reserve(bytes))
         }
 
         fn set_origin(&mut self, origin: Self::Value) {
@@ -885,7 +872,8 @@ mod tests {
     #[test]
     fn reserve_bytes_in_section() {
         let bytes = 3;
-        let program = build_object(|mut builder| builder.reserve(bytes.into()));
+        let program =
+            build_object(|mut builder| builder.emit_fragment(Fragment::Reserved(bytes.into())));
         assert_eq!(
             program.content.sections[0].fragments,
             [Fragment::Reserved(bytes.into())]

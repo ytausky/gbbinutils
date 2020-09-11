@@ -1,5 +1,6 @@
 use crate::diag::span::Source;
 use crate::diag::*;
+use crate::object::Fragment;
 use crate::semantics::arg::*;
 use crate::semantics::keywords::Directive;
 use crate::semantics::Semantics;
@@ -70,7 +71,9 @@ where
         if let Some(arg) = single_arg(self.span, self.args, &mut self.session.session) {
             let result = self.session.expect_const(arg);
             if let Ok(bytes) = result {
-                self.session.session.reserve(bytes)
+                self.session
+                    .session
+                    .emit_fragment(Fragment::Reserved(bytes))
             }
         }
         self.session
@@ -287,7 +290,10 @@ mod tests {
     #[test]
     fn reserve_3_bytes() {
         let actions = ds(|arg| arg.act_on_atom(mk_literal(3), ()));
-        assert_eq!(actions, [BackendEvent::Reserve(3.into()).into()])
+        assert_eq!(
+            actions,
+            [BackendEvent::EmitFragment(Fragment::Reserved(3.into())).into()]
+        )
     }
 
     fn mk_literal(n: i32) -> ExprAtom<String, Literal<String>> {
