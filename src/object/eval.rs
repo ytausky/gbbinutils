@@ -550,7 +550,7 @@ mod tests {
                 constraints: Constraints { addr: None },
                 addr: VarId(0),
                 size: VarId(1),
-                items: vec![],
+                fragments: vec![],
             }],
             symbols: SymbolTable(vec![Some(ContentDef::Section(SectionId(0)))]),
         }

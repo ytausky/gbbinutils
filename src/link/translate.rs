@@ -1,7 +1,7 @@
 use super::{BinarySection, LinkageContext, VarTable};
 
 use crate::diag::{BackendDiagnostics, Message};
-use crate::object::{Content, Expr, Node, Section};
+use crate::object::{Content, Expr, Fragment, Section};
 use crate::session::builder::Width;
 use crate::span::Source;
 
@@ -18,8 +18,8 @@ impl<'a, S: Clone + 'a> Section<S> {
         let mut data = Vec::new();
         let mut addr = context.vars[self.addr].value.clone();
         context.location = addr.clone();
-        self.traverse(context, |item, context| {
-            if let Node::Reserved(expr) = item {
+        self.traverse(context, |fragment, context| {
+            if let Fragment::Reserved(expr) = fragment {
                 let bytes = expr.to_num(context, diagnostics);
                 if !data.is_empty() {
                     chunks.push(BinarySection {
@@ -30,7 +30,7 @@ impl<'a, S: Clone + 'a> Section<S> {
                 context.location += &bytes;
                 addr = context.location.clone();
             } else {
-                data.extend(item.translate(context, diagnostics))
+                data.extend(fragment.translate(context, diagnostics))
             }
         });
         if !data.is_empty() {
@@ -43,22 +43,22 @@ impl<'a, S: Clone + 'a> Section<S> {
     }
 }
 
-impl<S: Clone> Node<S> {
+impl<S: Clone> Fragment<S> {
     fn translate(
         &self,
         context: &LinkageContext<&Content<S>, &VarTable>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> IntoIter<u8> {
         match self {
-            Node::Byte(value) => vec![*value],
-            Node::Embedded(opcode, expr) => {
+            Fragment::Byte(value) => vec![*value],
+            Fragment::Embedded(opcode, expr) => {
                 let n = expr.to_num(context, diagnostics).exact().unwrap();
                 vec![opcode | ((n as u8) << 3)]
             }
-            Node::Immediate(expr, width) => {
+            Fragment::Immediate(expr, width) => {
                 resolve_expr_item(&expr, *width, context, diagnostics).into_bytes()
             }
-            Node::LdInlineAddr(opcode, expr) => {
+            Fragment::LdInlineAddr(opcode, expr) => {
                 let addr = expr.to_num(context, diagnostics).exact().unwrap();
                 let kind = if addr < 0xff00 {
                     AddrKind::Low
@@ -78,8 +78,8 @@ impl<S: Clone> Node<S> {
                 bytes.extend(addr_repr.into_bytes());
                 bytes
             }
-            Node::Reloc(_) => vec![],
-            Node::Reserved(_) => unimplemented!(),
+            Fragment::Reloc(_) => vec![],
+            Fragment::Reserved(_) => unimplemented!(),
         }
         .into_iter()
     }
@@ -189,36 +189,39 @@ mod tests {
     }
 
     fn test_translation_of_ld_inline_addr(opcode: u8, addr: u16, expected: impl Borrow<[u8]>) {
-        let actual =
-            translate_section_item(Node::LdInlineAddr(opcode, Atom::Const(addr.into()).into()));
+        let actual = translate_section_item(Fragment::LdInlineAddr(
+            opcode,
+            Atom::Const(addr.into()).into(),
+        ));
         assert_eq!(actual, expected.borrow())
     }
 
     #[test]
     fn translate_embedded() {
-        let actual = translate_section_item(Node::Embedded(0b01_000_110, 4.into()));
+        let actual = translate_section_item(Fragment::Embedded(0b01_000_110, 4.into()));
         assert_eq!(actual, [0x66])
     }
 
     #[test]
     fn translate_expr_with_subtraction() {
-        let actual = translate_section_item(Node::Immediate(
+        let actual = translate_section_item(Fragment::Immediate(
             Expr::from_items(&[4.into(), 3.into(), BinOp::Minus.into()]),
             Width::Byte,
         ));
         assert_eq!(actual, [0x01])
     }
 
-    fn translate_section_item<S: Clone + PartialEq>(item: Node<S>) -> Vec<u8> {
-        item.translate(
-            &LinkageContext {
-                content: &Content::new(),
-                vars: &VarTable::new(),
-                location: Num::Unknown,
-            },
-            &mut IgnoreDiagnostics,
-        )
-        .collect()
+    fn translate_section_item<S: Clone + PartialEq>(fragment: Fragment<S>) -> Vec<u8> {
+        fragment
+            .translate(
+                &LinkageContext {
+                    content: &Content::new(),
+                    vars: &VarTable::new(),
+                    location: Num::Unknown,
+                },
+                &mut IgnoreDiagnostics,
+            )
+            .collect()
     }
 
     #[test]

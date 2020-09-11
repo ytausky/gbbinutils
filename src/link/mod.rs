@@ -80,7 +80,7 @@ impl VarTable {
             context.location = section.eval_addr(context);
             context.vars[section.addr].refine(context.location.clone());
             let size = section.traverse(context, |item, context| {
-                if let Node::Reloc(id) = item {
+                if let Fragment::Reloc(id) = item {
                     refinements += context.vars[*id].refine(context.location.clone()) as i32
                 }
             });
@@ -94,11 +94,11 @@ impl<S: Clone> Section<S> {
     fn traverse<V, F>(&self, context: &mut LinkageContext<&Content<S>, V>, mut f: F) -> Num
     where
         V: Borrow<VarTable>,
-        F: FnMut(&Node<S>, &mut LinkageContext<&Content<S>, V>),
+        F: FnMut(&Fragment<S>, &mut LinkageContext<&Content<S>, V>),
     {
         let addr = context.location.clone();
         let mut offset = Num::from(0);
-        for item in &self.items {
+        for item in &self.fragments {
             offset += &item.size(&context);
             context.location = &addr + &offset;
             f(item, context)
@@ -118,18 +118,18 @@ impl<S: Clone> Section<S> {
     }
 }
 
-impl<S: Clone> Node<S> {
+impl<S: Clone> Fragment<S> {
     fn size<'a, V: Borrow<VarTable>>(&self, context: &LinkageContext<&'a Content<S>, V>) -> Num {
         match self {
-            Node::Byte(_) | Node::Embedded(..) => 1.into(),
-            Node::Immediate(_, width) => width.len().into(),
-            Node::LdInlineAddr(_, expr) => match expr.to_num(context, &mut IgnoreDiagnostics) {
+            Fragment::Byte(_) | Fragment::Embedded(..) => 1.into(),
+            Fragment::Immediate(_, width) => width.len().into(),
+            Fragment::LdInlineAddr(_, expr) => match expr.to_num(context, &mut IgnoreDiagnostics) {
                 Num::Range { min, .. } if min >= 0xff00 => 2.into(),
                 Num::Range { max, .. } if max < 0xff00 => 3.into(),
                 _ => Num::Range { min: 2, max: 3 },
             },
-            Node::Reloc(_) => 0.into(),
-            Node::Reserved(bytes) => bytes.to_num(context, &mut IgnoreDiagnostics),
+            Fragment::Reloc(_) => 0.into(),
+            Fragment::Reserved(bytes) => bytes.to_num(context, &mut IgnoreDiagnostics),
         }
     }
 }

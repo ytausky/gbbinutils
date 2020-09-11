@@ -258,8 +258,8 @@ impl<'a, S> ObjectBuilder<'a, S> {
         }
     }
 
-    fn push(&mut self, node: Node<S>) {
-        self.current_section().items.push(node)
+    fn push(&mut self, fragment: Fragment<S>) {
+        self.current_section().fragments.push(fragment)
     }
 
     fn current_section(&mut self) -> &mut Section<S> {
@@ -305,7 +305,7 @@ where
 
     fn define_symbol(&mut self, name: Self::SymbolId, _span: S, expr: Self::Value) {
         let location = self.builder.context.vars.alloc();
-        self.builder.push(Node::Reloc(location));
+        self.builder.push(Fragment::Reloc(location));
         self.builder.context.content.symbols.define(
             name.content().unwrap(),
             ContentDef::Expr(ExprDef { expr, location }),
@@ -335,8 +335,8 @@ where
     fn reserve(&mut self, bytes: Self::Value) {
         self.builder
             .current_section()
-            .items
-            .push(Node::Reserved(bytes))
+            .fragments
+            .push(Fragment::Reserved(bytes))
     }
 
     fn set_origin(&mut self, addr: Self::Value) {
@@ -738,7 +738,7 @@ mod tests {
             session.start_section(name, ());
             session.emit_item(Item::CpuInstr(CpuInstr::Nullary(Nullary::Nop)))
         });
-        assert_eq!(object.content.sections[0].items, [Node::Byte(0x00)])
+        assert_eq!(object.content.sections[0].fragments, [Fragment::Byte(0x00)])
     }
 
     fn build_object<F: FnOnce(Session<S>), S>(f: F) -> Object<S> {
@@ -877,8 +877,8 @@ mod tests {
         let bytes = 3;
         let program = build_object(|mut builder| builder.reserve(bytes.into()));
         assert_eq!(
-            program.content.sections[0].items,
-            [Node::Reserved(bytes.into())]
+            program.content.sections[0].fragments,
+            [Fragment::Reserved(bytes.into())]
         )
     }
 

@@ -10,12 +10,12 @@ pub(super) trait Lower<S> {
 
 pub(super) enum LoweredItem<S> {
     None,
-    One(Node<S>),
-    Two(Node<S>, Node<S>),
+    One(Fragment<S>),
+    Two(Fragment<S>, Fragment<S>),
 }
 
 impl<S> Iterator for LoweredItem<S> {
-    type Item = Node<S>;
+    type Item = Fragment<S>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match mem::replace(self, LoweredItem::None) {
@@ -31,11 +31,11 @@ impl<S> Iterator for LoweredItem<S> {
 
 impl<S> LoweredItem<S> {
     fn with_opcode(opcode: u8) -> LoweredItem<S> {
-        LoweredItem::One(Node::Byte(opcode))
+        LoweredItem::One(Fragment::Byte(opcode))
     }
 
-    fn extended(opcode: impl Into<Node<S>>) -> LoweredItem<S> {
-        LoweredItem::Two(Node::Byte(0xcb), opcode.into())
+    fn extended(opcode: impl Into<Fragment<S>>) -> LoweredItem<S> {
+        LoweredItem::Two(Fragment::Byte(0xcb), opcode.into())
     }
 
     fn and_byte(self, expr: Expr<S>) -> Self {
@@ -48,22 +48,22 @@ impl<S> LoweredItem<S> {
 
     fn and_expr(self, expr: Expr<S>, width: Width) -> Self {
         match self {
-            LoweredItem::One(item) => LoweredItem::Two(item, Node::Immediate(expr, width)),
+            LoweredItem::One(item) => LoweredItem::Two(item, Fragment::Immediate(expr, width)),
             LoweredItem::None | LoweredItem::Two(..) => panic!(),
         }
     }
 }
 
-impl<S> From<u8> for Node<S> {
+impl<S> From<u8> for Fragment<S> {
     fn from(byte: u8) -> Self {
-        Node::Byte(byte)
+        Fragment::Byte(byte)
     }
 }
 
 impl<S: Clone> Lower<S> for Item<Expr<S>> {
     fn lower(self) -> LoweredItem<S> {
         match self {
-            Item::Data(expr, width) => LoweredItem::One(Node::Immediate(expr, width)),
+            Item::Data(expr, width) => LoweredItem::One(Fragment::Immediate(expr, width)),
             Item::CpuInstr(instr) => instr.lower(),
         }
     }
@@ -79,7 +79,7 @@ impl<S: Clone> Lower<S> for CpuInstr<Expr<S>> {
             Alu(operation, AluSource::Immediate(expr)) => {
                 encode_immediate_alu_operation(operation, expr)
             }
-            Bit(operation, expr, operand) => LoweredItem::extended(Node::Embedded(
+            Bit(operation, expr, operand) => LoweredItem::extended(Fragment::Embedded(
                 encode_bit_operation(operation) | encode_simple_operand(operand),
                 expr,
             )),
@@ -99,7 +99,7 @@ impl<S: Clone> Lower<S> for CpuInstr<Expr<S>> {
             Nullary(nullary) => nullary.lower(),
             Pop(reg_pair) => LoweredItem::with_opcode(0xc1 | (encode_reg_pair(reg_pair) << 4)),
             Push(reg_pair) => LoweredItem::with_opcode(0xc5 | (encode_reg_pair(reg_pair) << 4)),
-            Rst(expr) => LoweredItem::One(Node::Embedded(0b11_000_111, expr)),
+            Rst(expr) => LoweredItem::One(Fragment::Embedded(0b11_000_111, expr)),
         }
     }
 }
@@ -122,7 +122,7 @@ impl<S> Lower<S> for Nullary {
             Reti => 0xd9,
         };
         if self == Stop {
-            LoweredItem::Two(Node::Byte(opcode), Node::Byte(0x00))
+            LoweredItem::Two(Fragment::Byte(opcode), Fragment::Byte(0x00))
         } else {
             LoweredItem::with_opcode(opcode)
         }
@@ -153,7 +153,7 @@ fn encode_special_ld<S>(ld: SpecialLd<Expr<S>>, direction: Direction) -> Lowered
             LoweredItem::with_opcode(0x02 | encode_ptr_reg(ptr_reg) | (direction_bit >> 1))
         }
         SpecialLd::InlineAddr(addr) => {
-            LoweredItem::One(Node::LdInlineAddr(0xe0 | direction_bit, addr))
+            LoweredItem::One(Fragment::LdInlineAddr(0xe0 | direction_bit, addr))
         }
         SpecialLd::RegIndex => LoweredItem::with_opcode(0xe2 | direction_bit),
     }
@@ -333,9 +333,9 @@ mod tests {
 
     use std::borrow::Borrow;
 
-    fn test_instruction(instruction: CpuInstr<Expr<()>>, data_items: impl Borrow<[Node<()>]>) {
+    fn test_instruction(instruction: CpuInstr<Expr<()>>, fragments: impl Borrow<[Fragment<()>]>) {
         let code: Vec<_> = instruction.lower().collect();
-        assert_eq!(code, data_items.borrow())
+        assert_eq!(code, fragments.borrow())
     }
 
     #[test]
@@ -393,8 +393,11 @@ mod tests {
         test_nullary(Cpl, bytes([0x2f]))
     }
 
-    fn test_nullary(nullary: crate::session::builder::Nullary, items: impl Borrow<[Node<()>]>) {
-        test_instruction(Nullary(nullary), items)
+    fn test_nullary(
+        nullary: crate::session::builder::Nullary,
+        fragments: impl Borrow<[Fragment<()>]>,
+    ) {
+        test_instruction(Nullary(nullary), fragments)
     }
 
     #[test]
@@ -475,8 +478,8 @@ mod tests {
             test_instruction(
                 Ld(Immediate8(dest, immediate.clone())),
                 [
-                    Node::Byte(opcode),
-                    Node::Immediate(immediate.clone(), Width::Byte),
+                    Fragment::Byte(opcode),
+                    Fragment::Immediate(immediate.clone(), Width::Byte),
                 ],
             )
         })
@@ -491,8 +494,8 @@ mod tests {
             test_instruction(
                 Ld(Immediate16(reg16, immediate.clone())),
                 [
-                    Node::Byte(opcode),
-                    Node::Immediate(immediate.clone(), Width::Word),
+                    Fragment::Byte(opcode),
+                    Fragment::Immediate(immediate.clone(), Width::Word),
                 ],
             )
         }
@@ -505,7 +508,7 @@ mod tests {
         for &(direction, opcode) in test_cases {
             test_instruction(
                 Ld(Special(SpecialLd::InlineAddr(addr.clone()), direction)),
-                [Node::LdInlineAddr(opcode & 0xf0, addr.clone())],
+                [Fragment::LdInlineAddr(opcode & 0xf0, addr.clone())],
             )
         }
     }
@@ -557,7 +560,7 @@ mod tests {
         let expr: Expr<_> = 0x42.into();
         test_instruction(
             Ldhl(expr.clone()),
-            [Node::Byte(0xf8), Node::Immediate(expr, Width::Byte)],
+            [Fragment::Byte(0xf8), Fragment::Immediate(expr, Width::Byte)],
         )
     }
 
@@ -580,8 +583,8 @@ mod tests {
             test_instruction(
                 CpuInstr::Alu(*alu_operation, AluSource::Immediate(expr.clone())),
                 [
-                    Node::Byte(*opcode),
-                    Node::Immediate(expr.clone(), Width::Byte),
+                    Fragment::Byte(*opcode),
+                    Fragment::Immediate(expr.clone(), Width::Byte),
                 ],
             )
         })
@@ -736,8 +739,8 @@ mod tests {
             test_instruction(
                 Branch(Call(target_expr.clone()), condition),
                 [
-                    Node::Byte(opcode),
-                    Node::Immediate(target_expr.clone(), Width::Word),
+                    Fragment::Byte(opcode),
+                    Fragment::Immediate(target_expr.clone(), Width::Word),
                 ],
             )
         }
@@ -758,8 +761,8 @@ mod tests {
             test_instruction(
                 Branch(Jp(target_expr.clone()), condition),
                 [
-                    Node::Byte(opcode),
-                    Node::Immediate(target_expr.clone(), Width::Word),
+                    Fragment::Byte(opcode),
+                    Fragment::Immediate(target_expr.clone(), Width::Word),
                 ],
             )
         }
@@ -785,8 +788,8 @@ mod tests {
             test_instruction(
                 Branch(Jr(target_expr.clone()), condition),
                 [
-                    Node::Byte(opcode),
-                    Node::Immediate(mk_relative_expr(target_expr.clone()), Width::Byte),
+                    Fragment::Byte(opcode),
+                    Fragment::Immediate(mk_relative_expr(target_expr.clone()), Width::Byte),
                 ],
             )
         }
@@ -887,7 +890,10 @@ mod tests {
     #[test]
     fn lower_rst() {
         let n: Expr<_> = 3.into();
-        test_instruction(CpuInstr::Rst(n.clone()), [Node::Embedded(0b11_000_111, n)])
+        test_instruction(
+            CpuInstr::Rst(n.clone()),
+            [Fragment::Embedded(0b11_000_111, n)],
+        )
     }
 
     #[test]
@@ -923,7 +929,7 @@ mod tests {
         for &(operation, operand, opcode) in test_cases {
             test_instruction(
                 CpuInstr::Bit(operation, n.clone(), operand),
-                extended(Node::Embedded(opcode, n.clone())),
+                extended(Fragment::Embedded(opcode, n.clone())),
             )
         }
     }
@@ -946,11 +952,11 @@ mod tests {
         }
     }
 
-    fn extended(suffix: impl Into<Node<()>>) -> Vec<Node<()>> {
-        vec![Node::Byte(0xcb), suffix.into()]
+    fn extended(suffix: impl Into<Fragment<()>>) -> Vec<Fragment<()>> {
+        vec![Fragment::Byte(0xcb), suffix.into()]
     }
 
-    fn bytes(data: impl Borrow<[u8]>) -> Vec<Node<()>> {
-        data.borrow().iter().map(|&b| Node::Byte(b)).collect()
+    fn bytes(data: impl Borrow<[u8]>) -> Vec<Fragment<()>> {
+        data.borrow().iter().map(|&b| Fragment::Byte(b)).collect()
     }
 }

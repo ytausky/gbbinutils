@@ -22,7 +22,7 @@ pub struct Section<S> {
     pub constraints: Constraints<S>,
     pub addr: VarId,
     pub size: VarId,
-    pub items: Vec<Node<S>>,
+    pub fragments: Vec<Fragment<S>>,
 }
 
 pub struct Constraints<S> {
@@ -51,7 +51,7 @@ pub struct ContentId(usize);
 pub struct VarId(pub usize);
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Node<S> {
+pub enum Fragment<S> {
     Byte(u8),
     Immediate(Expr<S>, Width),
     LdInlineAddr(u8, Expr<S>),
@@ -120,7 +120,7 @@ impl<S> Section<S> {
             constraints: Constraints { addr: None },
             addr,
             size,
-            items: Vec::new(),
+            fragments: Vec::new(),
         }
     }
 }
