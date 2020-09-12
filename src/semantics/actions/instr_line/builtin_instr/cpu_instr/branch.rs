@@ -1,51 +1,99 @@
-use super::{Analysis, AtomKind, Operand, SimpleOperand};
+use super::{Analysis, AtomKind, Expr, Fragment, Operand, Width, M};
 
+use crate::diag::span::WithSpan;
 use crate::diag::{Diagnostics, EmitDiag, Message};
+use crate::expr::{Atom, BinOp, ExprOp};
 use crate::semantics::keywords::{BranchKind, ExplicitBranch, ImplicitBranch};
-use crate::session::builder::{Branch, Condition, CpuInstr, Nullary};
+use crate::session::builder::{Backend, Branch, Condition};
 use crate::span::{Source, SpanSource};
 
-impl<'a, 'b, I, V, D, S> Analysis<'a, 'b, I, D, S>
+impl<'a, 'b, I, D, S> Analysis<'a, 'b, I, D, S>
 where
-    I: Iterator<Item = Result<Operand<V, S>, ()>>,
-    V: Source<Span = S>,
-    D: Diagnostics<S>,
+    I: Iterator<Item = Result<Operand<Expr<D::SymbolId, S>, S>, ()>>,
+    D: Backend<S> + Diagnostics<S>,
     S: Clone,
 {
-    pub fn analyze_branch(&mut self, branch: BranchKind) -> Result<CpuInstr<V>, ()> {
+    pub fn analyze_branch(&mut self, branch: BranchKind) -> Result<(), ()> {
         let (condition, target) = self.collect_branch_operands()?;
-        let variant = analyze_branch_variant((branch, &self.mnemonic.1), target, self.diagnostics)?;
+        let variant = analyze_branch_variant((branch, &self.mnemonic.1), target, self.session)?;
         match variant {
             BranchVariant::Unconditional(branch) => match condition {
-                None => Ok(branch.into()),
+                None => {
+                    self.session.emit_fragment(Fragment::Byte(match branch {
+                        UnconditionalBranch::JpDerefHl => 0xe9,
+                        UnconditionalBranch::Reti => 0xd9,
+                    }));
+                    Ok(())
+                }
                 Some((_, condition_span)) => {
                     self.emit_diag(Message::AlwaysUnconditional.at(condition_span));
                     Err(())
                 }
             },
-            BranchVariant::PotentiallyConditional(branch) => Ok(CpuInstr::Branch(
-                branch,
-                condition.map(|(condition, _)| condition),
-            )),
+            BranchVariant::PotentiallyConditional(branch) => {
+                match branch {
+                    Branch::Jp(target) => {
+                        self.session.emit_fragment(Fragment::Byte(match condition {
+                            None => 0xc3,
+                            Some((condition, _)) => 0xc2 | encode_condition(condition),
+                        }));
+                        self.session
+                            .emit_fragment(Fragment::Immediate(target, Width::Word))
+                    }
+                    Branch::Jr(mut target) => {
+                        self.session.emit_fragment(Fragment::Byte(match condition {
+                            None => 0x18,
+                            Some((condition, _)) => 0x20 | encode_condition(condition),
+                        }));
+                        let span = target.span();
+                        target
+                            .0
+                            .push(ExprOp::Atom(Atom::Location).with_span(span.clone()));
+                        target.0.push(ExprOp::Binary(BinOp::Minus).with_span(span));
+                        self.session
+                            .emit_fragment(Fragment::Immediate(target, Width::Byte))
+                    }
+                    Branch::Call(target) => {
+                        self.session.emit_fragment(Fragment::Byte(match condition {
+                            None => 0xcd,
+                            Some((condition, _)) => 0xc4 | encode_condition(condition),
+                        }));
+                        self.session
+                            .emit_fragment(Fragment::Immediate(target, Width::Word))
+                    }
+                    Branch::Ret => self.session.emit_fragment(Fragment::Byte(match condition {
+                        None => 0xc9,
+                        Some((condition, _)) => 0xc0 | encode_condition(condition),
+                    })),
+                }
+                Ok(())
+            }
         }
     }
 
-    fn collect_branch_operands(&mut self) -> Result<BranchOperands<V>, ()> {
+    fn collect_branch_operands(&mut self) -> Result<BranchOperands<Expr<D::SymbolId, S>>, ()> {
         let first_operand = self.next_operand()?;
         Ok(
             if let Some(Operand::Atom(AtomKind::Condition(condition), range)) = first_operand {
                 (
                     Some((condition, range)),
-                    analyze_branch_target(self.next_operand()?, self.diagnostics)?,
+                    analyze_branch_target(self.next_operand()?, self.session)?,
                 )
             } else {
-                (
-                    None,
-                    analyze_branch_target(first_operand, self.diagnostics)?,
-                )
+                (None, analyze_branch_target(first_operand, self.session)?)
             },
         )
     }
+}
+
+fn encode_condition(condition: Condition) -> u8 {
+    use self::Condition::*;
+    (match condition {
+        Nz => 0b00,
+        Z => 0b01,
+        Nc => 0b10,
+        C => 0b11,
+    }) << 3
 }
 
 type BranchOperands<V> = (
@@ -85,9 +133,7 @@ where
     };
     match target {
         Operand::Const(expr) => Ok(Some(BranchTarget::Expr(expr))),
-        Operand::Atom(AtomKind::Simple(SimpleOperand::DerefHl), span) => {
-            Ok(Some(BranchTarget::DerefHl(span)))
-        }
+        Operand::Atom(AtomKind::Simple(M::DerefHl), span) => Ok(Some(BranchTarget::DerefHl(span))),
         operand => {
             diagnostics.emit_diag(Message::CannotBeUsedAsTarget.at(operand.span()));
             Err(())
@@ -103,15 +149,6 @@ enum BranchVariant<V> {
 enum UnconditionalBranch {
     JpDerefHl,
     Reti,
-}
-
-impl<V: Source> From<UnconditionalBranch> for CpuInstr<V> {
-    fn from(branch: UnconditionalBranch) -> Self {
-        match branch {
-            UnconditionalBranch::JpDerefHl => CpuInstr::JpDerefHl,
-            UnconditionalBranch::Reti => CpuInstr::Nullary(Nullary::Reti),
-        }
-    }
 }
 
 fn analyze_branch_variant<V, D>(
@@ -166,82 +203,243 @@ mod tests {
     use super::*;
 
     use crate::diag::Merge;
+    use crate::expr::{Atom, BinOp, Expr, ExprOp};
     use crate::semantics::keywords::*;
+    use crate::session::builder::Width;
 
     #[test]
-    fn analyze_legal_branch_instructions() {
-        test_instruction_analysis(describe_branch_instuctions())
+    fn jp_nn() {
+        let nn = MockSymbolId(7);
+        analyze(JP, vec![nn.into()]).expect_fragments(vec![
+            Fragment::Byte(0xc3),
+            Fragment::Immediate(name(nn, TokenId::Operand(0, 0)), Width::Word),
+        ])
     }
 
-    #[derive(Clone, Copy, PartialEq)]
-    enum PotentiallyConditionalBranch {
-        Explicit(ExplicitBranch),
-        Ret,
+    #[test]
+    fn jp_nz_nn() {
+        let nn = MockSymbolId(7);
+        analyze(JP, vec![Condition::Nz.into(), nn.into()]).expect_fragments(vec![
+            Fragment::Byte(0xc2),
+            Fragment::Immediate(name(nn, TokenId::Operand(1, 0)), Width::Word),
+        ])
     }
 
-    impl From<PotentiallyConditionalBranch> for Mnemonic {
-        fn from(branch: PotentiallyConditionalBranch) -> Self {
-            use self::{ExplicitBranch::*, PotentiallyConditionalBranch::*};
-            match branch {
-                Explicit(Call) => CALL,
-                Explicit(Jp) => JP,
-                Explicit(Jr) => JR,
-                Ret => RET,
-            }
-        }
+    #[test]
+    fn jp_z_nn() {
+        let nn = MockSymbolId(7);
+        analyze(JP, vec![Condition::Z.into(), nn.into()]).expect_fragments(vec![
+            Fragment::Byte(0xca),
+            Fragment::Immediate(name(nn, TokenId::Operand(1, 0)), Width::Word),
+        ])
     }
 
-    fn describe_branch_instuctions() -> Vec<InstructionDescriptor> {
-        use self::{ExplicitBranch::*, PotentiallyConditionalBranch::*};
-        let mut descriptors = vec![
-            ((JP, vec![deref_symbol(Hl)]), CpuInstr::JpDerefHl),
-            ((RETI, vec![]), CpuInstr::Nullary(Nullary::Reti)),
-        ];
-        for &kind in [Explicit(Call), Explicit(Jp), Explicit(Jr), Ret].iter() {
-            descriptors.push(describe_branch(kind, None));
-            for &condition in &[Condition::C, Condition::Nc, Condition::Nz, Condition::Z] {
-                descriptors.push(describe_branch(kind, Some(condition)))
-            }
-        }
-        descriptors
+    #[test]
+    fn jp_nc_nn() {
+        let nn = MockSymbolId(7);
+        analyze(JP, vec![Condition::Nc.into(), nn.into()]).expect_fragments(vec![
+            Fragment::Byte(0xd2),
+            Fragment::Immediate(name(nn, TokenId::Operand(1, 0)), Width::Word),
+        ])
     }
 
-    fn describe_branch(
-        branch: PotentiallyConditionalBranch,
-        condition: Option<Condition>,
-    ) -> InstructionDescriptor {
-        use self::PotentiallyConditionalBranch::*;
-        let ident = MockSymbolId(7);
-        let mut operands = Vec::new();
-        let mut has_condition = false;
-        if let Some(condition) = condition {
-            operands.push(condition.into());
-            has_condition = true;
-        };
-        if branch != Ret {
-            operands.push(ident.into());
-        };
-        (
-            (branch.into(), operands),
-            CpuInstr::Branch(
-                match branch {
-                    Ret => Branch::Ret,
-                    Explicit(explicit) => mk_explicit_branch(
-                        explicit,
-                        name(
-                            ident,
-                            TokenId::Operand(if has_condition { 1 } else { 0 }, 0),
-                        ),
-                    ),
-                },
-                condition,
+    #[test]
+    fn jp_c_nn() {
+        let nn = MockSymbolId(7);
+        analyze(JP, vec![Condition::C.into(), nn.into()]).expect_fragments(vec![
+            Fragment::Byte(0xda),
+            Fragment::Immediate(name(nn, TokenId::Operand(1, 0)), Width::Word),
+        ])
+    }
+
+    #[test]
+    fn jr_e() {
+        let nn = MockSymbolId(7);
+        analyze(JR, vec![nn.into()]).expect_fragments(vec![
+            Fragment::Byte(0x18),
+            Fragment::Immediate(
+                Expr(vec![
+                    ExprOp::Atom(Atom::Name(nn)).with_span(TokenId::Operand(0, 0).into()),
+                    ExprOp::Atom(Atom::Location).with_span(TokenId::Operand(0, 0).into()),
+                    ExprOp::Binary(BinOp::Minus).with_span(TokenId::Operand(0, 0).into()),
+                ]),
+                Width::Byte,
             ),
-        )
+        ])
+    }
+
+    #[test]
+    fn jr_nz_e() {
+        let nn = MockSymbolId(7);
+        analyze(JR, vec![Condition::Nz.into(), nn.into()]).expect_fragments(vec![
+            Fragment::Byte(0x20),
+            Fragment::Immediate(
+                Expr(vec![
+                    ExprOp::Atom(Atom::Name(nn)).with_span(TokenId::Operand(1, 0).into()),
+                    ExprOp::Atom(Atom::Location).with_span(TokenId::Operand(1, 0).into()),
+                    ExprOp::Binary(BinOp::Minus).with_span(TokenId::Operand(1, 0).into()),
+                ]),
+                Width::Byte,
+            ),
+        ])
+    }
+
+    #[test]
+    fn jr_z_e() {
+        let nn = MockSymbolId(7);
+        analyze(JR, vec![Condition::Z.into(), nn.into()]).expect_fragments(vec![
+            Fragment::Byte(0x28),
+            Fragment::Immediate(
+                Expr(vec![
+                    ExprOp::Atom(Atom::Name(nn)).with_span(TokenId::Operand(1, 0).into()),
+                    ExprOp::Atom(Atom::Location).with_span(TokenId::Operand(1, 0).into()),
+                    ExprOp::Binary(BinOp::Minus).with_span(TokenId::Operand(1, 0).into()),
+                ]),
+                Width::Byte,
+            ),
+        ])
+    }
+
+    #[test]
+    fn jr_nc_e() {
+        let nn = MockSymbolId(7);
+        analyze(JR, vec![Condition::Nc.into(), nn.into()]).expect_fragments(vec![
+            Fragment::Byte(0x30),
+            Fragment::Immediate(
+                Expr(vec![
+                    ExprOp::Atom(Atom::Name(nn)).with_span(TokenId::Operand(1, 0).into()),
+                    ExprOp::Atom(Atom::Location).with_span(TokenId::Operand(1, 0).into()),
+                    ExprOp::Binary(BinOp::Minus).with_span(TokenId::Operand(1, 0).into()),
+                ]),
+                Width::Byte,
+            ),
+        ])
+    }
+
+    #[test]
+    fn jr_c_e() {
+        let nn = MockSymbolId(7);
+        analyze(JR, vec![Condition::C.into(), nn.into()]).expect_fragments(vec![
+            Fragment::Byte(0x38),
+            Fragment::Immediate(
+                Expr(vec![
+                    ExprOp::Atom(Atom::Name(nn)).with_span(TokenId::Operand(1, 0).into()),
+                    ExprOp::Atom(Atom::Location).with_span(TokenId::Operand(1, 0).into()),
+                    ExprOp::Binary(BinOp::Minus).with_span(TokenId::Operand(1, 0).into()),
+                ]),
+                Width::Byte,
+            ),
+        ])
+    }
+
+    #[test]
+    fn jp_deref_hl() {
+        analyze(JP, vec![M::DerefHl.into()]).expect_fragments(vec![Fragment::Byte(0xe9)])
+    }
+
+    #[test]
+    fn call_nn() {
+        let nn = MockSymbolId(7);
+        analyze(CALL, vec![nn.into()]).expect_fragments(vec![
+            Fragment::Byte(0xcd),
+            Fragment::Immediate(
+                Expr(vec![
+                    ExprOp::Atom(Atom::Name(nn)).with_span(TokenId::Operand(0, 0).into())
+                ]),
+                Width::Word,
+            ),
+        ])
+    }
+
+    #[test]
+    fn call_nz_nn() {
+        let nn = MockSymbolId(7);
+        analyze(CALL, vec![Condition::Nz.into(), nn.into()]).expect_fragments(vec![
+            Fragment::Byte(0xc4),
+            Fragment::Immediate(
+                Expr(vec![
+                    ExprOp::Atom(Atom::Name(nn)).with_span(TokenId::Operand(1, 0).into())
+                ]),
+                Width::Word,
+            ),
+        ])
+    }
+
+    #[test]
+    fn call_z_nn() {
+        let nn = MockSymbolId(7);
+        analyze(CALL, vec![Condition::Z.into(), nn.into()]).expect_fragments(vec![
+            Fragment::Byte(0xcc),
+            Fragment::Immediate(
+                Expr(vec![
+                    ExprOp::Atom(Atom::Name(nn)).with_span(TokenId::Operand(1, 0).into())
+                ]),
+                Width::Word,
+            ),
+        ])
+    }
+
+    #[test]
+    fn call_nc_nn() {
+        let nn = MockSymbolId(7);
+        analyze(CALL, vec![Condition::Nc.into(), nn.into()]).expect_fragments(vec![
+            Fragment::Byte(0xd4),
+            Fragment::Immediate(
+                Expr(vec![
+                    ExprOp::Atom(Atom::Name(nn)).with_span(TokenId::Operand(1, 0).into())
+                ]),
+                Width::Word,
+            ),
+        ])
+    }
+
+    #[test]
+    fn call_c_nn() {
+        let nn = MockSymbolId(7);
+        analyze(CALL, vec![Condition::C.into(), nn.into()]).expect_fragments(vec![
+            Fragment::Byte(0xdc),
+            Fragment::Immediate(
+                Expr(vec![
+                    ExprOp::Atom(Atom::Name(nn)).with_span(TokenId::Operand(1, 0).into())
+                ]),
+                Width::Word,
+            ),
+        ])
+    }
+
+    #[test]
+    fn ret() {
+        analyze(RET, vec![]).expect_fragments(vec![Fragment::Byte(0xc9)])
+    }
+
+    #[test]
+    fn reti() {
+        analyze(RETI, vec![]).expect_fragments(vec![Fragment::Byte(0xd9)])
+    }
+
+    #[test]
+    fn ret_nz() {
+        analyze(RET, vec![Condition::Nz.into()]).expect_fragments(vec![Fragment::Byte(0xc0)])
+    }
+
+    #[test]
+    fn ret_z() {
+        analyze(RET, vec![Condition::Z.into()]).expect_fragments(vec![Fragment::Byte(0xc8)])
+    }
+
+    #[test]
+    fn ret_nc() {
+        analyze(RET, vec![Condition::Nc.into()]).expect_fragments(vec![Fragment::Byte(0xd0)])
+    }
+
+    #[test]
+    fn ret_c() {
+        analyze(RET, vec![Condition::C.into()]).expect_fragments(vec![Fragment::Byte(0xd8)])
     }
 
     #[test]
     fn analyze_jp_c_deref_hl() {
-        analyze(JP, vec![literal(C), SimpleOperand::DerefHl.into()]).expect_diag(
+        analyze(JP, vec![literal(C), M::DerefHl.into()]).expect_diag(
             ExpectedDiag::new(Message::AlwaysUnconditional).with_highlight(TokenId::Operand(0, 0)),
         )
     }
@@ -264,6 +462,13 @@ mod tests {
     fn analyze_reti_z() {
         analyze(RETI, vec![literal(Z)]).expect_diag(
             ExpectedDiag::new(Message::AlwaysUnconditional).with_highlight(TokenId::Operand(0, 0)),
+        )
+    }
+
+    #[test]
+    fn reti_ident() {
+        analyze(RETI, vec![MockSymbolId(7).into()]).expect_diag(
+            ExpectedDiag::new(Message::CannotSpecifyTarget).with_highlight(TokenId::Operand(0, 0)),
         )
     }
 

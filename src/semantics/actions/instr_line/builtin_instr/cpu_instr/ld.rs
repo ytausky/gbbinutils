@@ -1,23 +1,22 @@
 use super::operand::AtomKind;
-use super::{Analysis, Operand};
+use super::{Analysis, Expr, Fragment, Operand};
 
 use crate::diag::span::{Source, SpanSource};
 use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::session::builder::*;
 
-impl<'a, 'b, I, V, D, S> Analysis<'a, 'b, I, D, S>
+impl<'a, 'b, I, D, S> Analysis<'a, 'b, I, D, S>
 where
-    I: Iterator<Item = Result<Operand<V, S>, ()>>,
-    V: Source<Span = S>,
-    D: Diagnostics<S>,
+    I: Iterator<Item = Result<Operand<Expr<D::SymbolId, S>, S>, ()>>,
+    D: Backend<S> + Diagnostics<S>,
     S: Clone,
 {
-    pub fn analyze_ld(&mut self) -> Result<CpuInstr<V>, ()> {
+    pub fn analyze_ld(&mut self) -> Result<(), ()> {
         let dest = self.next_operand_of(2)?;
         let src = self.next_operand_of(2)?;
         match (
-            dest.into_ld_dest(self.diagnostics)?,
-            src.into_ld_src(self.diagnostics)?,
+            dest.into_ld_dest(self.session)?,
+            src.into_ld_src(self.session)?,
         ) {
             (LdDest::Byte(dest), LdOperand::Other(LdDest::Byte(src))) => {
                 self.analyze_8_bit_ld(dest, src)
@@ -37,6 +36,18 @@ where
             (LdDest::Word(dest), LdOperand::Other(LdDest::Byte(src))) => {
                 self.diagnose_ld_width_mismatch(&dest, &src)
             }
+            (LdDest::DerefExpr(expr), LdOperand::Other(LdDest::Word(src))) => {
+                self.analyze_16_bit_ld(LdDest16::DerefNn(expr), src)
+            }
+            (LdDest::DerefExpr(expr), LdOperand::Other(LdDest::Byte(src))) => {
+                self.analyze_8_bit_ld(LdDest8::Special(LdSpecial::Deref(expr)), src)
+            }
+            (LdDest::Byte(dest), LdOperand::Other(LdDest::DerefExpr(expr))) => self
+                .analyze_8_bit_ld(
+                    dest,
+                    LdOperand::Other(LdDest8::Special(LdSpecial::Deref(expr))),
+                ),
+            _ => todo!(),
         }
     }
 
@@ -44,89 +55,114 @@ where
         &mut self,
         dest: &impl Source<Span = S>,
         src: &(impl Source<Span = S> + DataWidth),
-    ) -> Result<CpuInstr<V>, ()> {
-        let diagnostics = &mut self.diagnostics;
+    ) -> Result<(), ()> {
+        let session = &mut self.session;
         let diagnostic = Message::LdWidthMismatch {
             src_width: src.width(),
-            src: diagnostics.strip_span(&src.span()),
-            dest: diagnostics.strip_span(&dest.span()),
+            src: session.strip_span(&src.span()),
+            dest: session.strip_span(&dest.span()),
         }
-        .at(diagnostics.merge_spans(&dest.span(), &src.span()));
-        diagnostics.emit_diag(diagnostic);
+        .at(session.merge_spans(&dest.span(), &src.span()));
+        session.emit_diag(diagnostic);
         Err(())
     }
 
     fn analyze_8_bit_ld(
         &mut self,
-        dest: LdDest8<V>,
-        src: impl Into<LdOperand<V, LdDest8<V>>>,
-    ) -> Result<CpuInstr<V>, ()> {
+        dest: LdDest8<Expr<D::SymbolId, S>>,
+        src: impl Into<LdOperand<Expr<D::SymbolId, S>, LdDest8<Expr<D::SymbolId, S>>>>,
+    ) -> Result<(), ()> {
         match (dest, src.into()) {
             (
-                LdDest8::Simple(SimpleOperand::DerefHl, dest),
-                LdOperand::Other(LdDest8::Simple(SimpleOperand::DerefHl, src)),
+                LdDest8::Simple(M::DerefHl, dest),
+                LdOperand::Other(LdDest8::Simple(M::DerefHl, src)),
             ) => {
-                let diagnostics = &mut self.diagnostics;
+                let session = &mut self.session;
                 let diagnostic = Message::LdDerefHlDerefHl {
-                    mnemonic: diagnostics.strip_span(&self.mnemonic.1),
-                    dest: diagnostics.strip_span(&dest),
-                    src: diagnostics.strip_span(&src),
+                    mnemonic: session.strip_span(&self.mnemonic.1),
+                    dest: session.strip_span(&dest),
+                    src: session.strip_span(&src),
                 }
-                .at(diagnostics.merge_spans(&self.mnemonic.1, &src));
+                .at(session.merge_spans(&self.mnemonic.1, &src));
                 self.emit_diag(diagnostic);
                 Err(())
             }
             (LdDest8::Simple(dest, _), LdOperand::Other(LdDest8::Simple(src, _))) => {
-                Ok(CpuInstr::Ld(Ld::Simple(dest, src)))
+                self.session.emit_fragment(Fragment::Byte(
+                    0b01_000_000 | (dest.encode() << 3) | src.encode(),
+                ));
+                Ok(())
             }
             (LdDest8::Simple(dest, _), LdOperand::Const(expr)) => {
-                Ok(CpuInstr::Ld(Ld::Immediate8(dest, expr)))
+                self.session
+                    .emit_fragment(Fragment::Byte(0x06 | (dest.encode() << 3)));
+                self.session
+                    .emit_fragment(Fragment::Immediate(expr, Width::Byte));
+                Ok(())
             }
             (LdDest8::Special(dest), src) => {
-                src.expect_a(self.diagnostics)?;
-                analyze_special_ld(dest, Direction::FromA)
+                src.expect_a(self.session)?;
+                self.analyze_special_ld(dest, Direction::FromA)
             }
             (dest, LdOperand::Other(LdDest8::Special(src))) => {
-                dest.expect_a(self.diagnostics)?;
-                analyze_special_ld(src, Direction::IntoA)
+                dest.expect_a(self.session)?;
+                self.analyze_special_ld(src, Direction::IntoA)
             }
         }
     }
 
     fn analyze_16_bit_ld(
         &mut self,
-        dest: LdDest16<S>,
-        src: impl Into<LdOperand<V, LdDest16<S>>>,
-    ) -> Result<CpuInstr<V>, ()> {
+        dest: LdDest16<Expr<D::SymbolId, S>>,
+        src: impl Into<LdOperand<Expr<D::SymbolId, S>, LdDest16<Expr<D::SymbolId, S>>>>,
+    ) -> Result<(), ()> {
         match (dest, src.into()) {
             (LdDest16::Reg16(Reg16::Sp, _), LdOperand::Other(LdDest16::Reg16(Reg16::Hl, _))) => {
-                Ok(CpuInstr::Ld(Ld::SpHl))
+                self.session.emit_fragment(Fragment::Byte(0xf9));
+                Ok(())
             }
             (LdDest16::Reg16(_, dest_span), LdOperand::Other(LdDest16::Reg16(_, src_span))) => {
-                let diagnostics = &mut self.diagnostics;
-                let merged_span = diagnostics.merge_spans(&dest_span, &src_span);
-                diagnostics.emit_diag(Message::LdSpHlOperands.at(merged_span));
+                let session = &mut self.session;
+                let merged_span = session.merge_spans(&dest_span, &src_span);
+                session.emit_diag(Message::LdSpHlOperands.at(merged_span));
                 Err(())
             }
             (LdDest16::Reg16(dest, _), LdOperand::Const(expr)) => {
-                Ok(CpuInstr::Ld(Ld::Immediate16(dest, expr)))
+                self.session
+                    .emit_fragment(Fragment::Byte(0x01 | encode_reg16(dest)));
+                self.session
+                    .emit_fragment(Fragment::Immediate(expr, Width::Word));
+                Ok(())
             }
+            (LdDest16::DerefNn(nn), LdOperand::Other(LdDest16::Reg16(Reg16::Sp, _))) => {
+                self.session.emit_fragment(Fragment::Byte(0x8));
+                self.session
+                    .emit_fragment(Fragment::Immediate(nn, Width::Word));
+                Ok(())
+            }
+            _ => todo!(),
         }
     }
-}
 
-fn analyze_special_ld<V: Source>(
-    other: LdSpecial<V>,
-    direction: Direction,
-) -> Result<CpuInstr<V>, ()> {
-    Ok(CpuInstr::Ld(Ld::Special(
+    fn analyze_special_ld(
+        &mut self,
+        other: LdSpecial<Expr<D::SymbolId, S>>,
+        direction: Direction,
+    ) -> Result<(), ()> {
         match other {
-            LdSpecial::Deref(expr) => SpecialLd::InlineAddr(expr),
-            LdSpecial::DerefC(_) => SpecialLd::RegIndex,
-            LdSpecial::DerefPtrReg(ptr_reg, _) => SpecialLd::DerefPtrReg(ptr_reg),
-        },
-        direction,
-    )))
+            LdSpecial::DerefPtrReg(ptr_reg, _) => self.session.emit_fragment(Fragment::Byte(
+                0x02 | encode_ptr_reg(ptr_reg) | (encode_direction(direction) >> 1),
+            )),
+            LdSpecial::DerefC(_) => self
+                .session
+                .emit_fragment(Fragment::Byte(0xe2 | encode_direction(direction))),
+            LdSpecial::Deref(expr) => self.session.emit_fragment(Fragment::LdInlineAddr(
+                0xe0 | encode_direction(direction),
+                expr,
+            )),
+        };
+        Ok(())
+    }
 }
 
 impl<V: Source> Operand<V, V::Span> {
@@ -135,7 +171,7 @@ impl<V: Source> Operand<V, V::Span> {
         D: Diagnostics<V::Span>,
     {
         match self {
-            Operand::Deref(expr) => Ok(LdDest::Byte(LdDest8::Special(LdSpecial::Deref(expr)))),
+            Operand::Deref(expr) => Ok(LdDest::DerefExpr(expr)),
             Operand::Atom(kind, span) => match kind {
                 AtomKind::Condition(_) => Err(Message::ConditionOutsideBranch.at(span)),
                 AtomKind::Simple(simple) => Ok(LdDest::Byte(LdDest8::Simple(simple, span))),
@@ -178,19 +214,20 @@ impl<V: Source> From<LdDest8<V>> for LdOperand<V, LdDest8<V>> {
     }
 }
 
-impl<V, S> From<LdDest16<S>> for LdOperand<V, LdDest16<S>> {
-    fn from(dest: LdDest16<S>) -> Self {
+impl<V: SpanSource> From<LdDest16<V>> for LdOperand<V, LdDest16<V>> {
+    fn from(dest: LdDest16<V>) -> Self {
         LdOperand::Other(dest)
     }
 }
 
 enum LdDest<V: SpanSource> {
     Byte(LdDest8<V>),
-    Word(LdDest16<V::Span>),
+    Word(LdDest16<V>),
+    DerefExpr(V),
 }
 
 enum LdDest8<V: SpanSource> {
-    Simple(SimpleOperand, V::Span),
+    Simple(M, V::Span),
     Special(LdSpecial<V>),
 }
 
@@ -200,8 +237,9 @@ enum LdSpecial<V: SpanSource> {
     DerefPtrReg(PtrReg, V::Span),
 }
 
-enum LdDest16<S> {
-    Reg16(Reg16, S),
+enum LdDest16<V: SpanSource> {
+    Reg16(Reg16, V::Span),
+    DerefNn(V),
 }
 
 trait DataWidth {
@@ -214,7 +252,7 @@ impl<V: Source> DataWidth for LdDest8<V> {
     }
 }
 
-impl<S> DataWidth for LdDest16<S> {
+impl<V: SpanSource> DataWidth for LdDest16<V> {
     fn width(&self) -> Width {
         Width::Word
     }
@@ -238,7 +276,7 @@ impl<V: Source> LdDest8<V> {
         D: Diagnostics<V::Span>,
     {
         match self {
-            LdDest8::Simple(SimpleOperand::A, _) => Ok(()),
+            LdDest8::Simple(M::A, _) => Ok(()),
             operand => diagnose_not_a(operand.span(), diagnostics),
         }
     }
@@ -290,16 +328,44 @@ impl<V: Source> Source for LdSpecial<V> {
     }
 }
 
-impl<S: Clone> SpanSource for LdDest16<S> {
-    type Span = S;
+impl<V: SpanSource> SpanSource for LdDest16<V> {
+    type Span = V::Span;
 }
 
-impl<S: Clone> Source for LdDest16<S> {
+impl<V: Source> Source for LdDest16<V> {
     fn span(&self) -> Self::Span {
         match self {
             LdDest16::Reg16(_, span) => span.clone(),
+            LdDest16::DerefNn(nn) => nn.span(),
         }
     }
+}
+
+fn encode_direction(direction: Direction) -> u8 {
+    match direction {
+        Direction::FromA => 0x00,
+        Direction::IntoA => 0x10,
+    }
+}
+
+fn encode_ptr_reg(ptr_reg: PtrReg) -> u8 {
+    use self::PtrReg::*;
+    (match ptr_reg {
+        Bc => 0b00,
+        De => 0b01,
+        Hli => 0b10,
+        Hld => 0b11,
+    }) << 4
+}
+
+fn encode_reg16(reg16: Reg16) -> u8 {
+    use self::Reg16::*;
+    (match reg16 {
+        Bc => 0b00,
+        De => 0b01,
+        Hl => 0b10,
+        Sp => 0b11,
+    }) << 4
 }
 
 #[cfg(test)]
@@ -311,133 +377,512 @@ mod tests {
     use crate::semantics::keywords::LD;
 
     #[test]
-    fn analyze_ld_deref_symbol_a() {
-        let ident = MockSymbolId(5);
-        analyze(LD, vec![deref_ident(ident), literal(A)]).expect_instruction(CpuInstr::Ld(
-            Ld::Special(
-                SpecialLd::InlineAddr(name(ident, TokenId::Operand(0, 1))),
-                Direction::FromA,
-            ),
-        ))
+    fn ld_a_a() {
+        analyze(LD, vec![M::A.into(), M::A.into()]).expect_fragments(vec![Fragment::Byte(0x7f)])
     }
 
     #[test]
-    fn analyze_ld_a_deref_symbol() {
-        let ident = MockSymbolId(43);
-        analyze(LD, vec![literal(A), deref_ident(ident)]).expect_instruction(CpuInstr::Ld(
-            Ld::Special(
-                SpecialLd::InlineAddr(name(ident, TokenId::Operand(1, 1))),
-                Direction::IntoA,
-            ),
-        ))
+    fn ld_a_b() {
+        analyze(LD, vec![M::A.into(), M::B.into()]).expect_fragments(vec![Fragment::Byte(0x78)])
     }
 
     #[test]
-    fn analyze_ld_deref_c_a() {
-        analyze(LD, vec![deref_symbol(C), literal(A)]).expect_instruction(CpuInstr::Ld(
-            Ld::Special(SpecialLd::RegIndex, Direction::FromA),
-        ))
+    fn ld_a_c() {
+        analyze(LD, vec![M::A.into(), M::C.into()]).expect_fragments(vec![Fragment::Byte(0x79)])
     }
 
     #[test]
-    fn analyze_ld_a_deref_c() {
-        analyze(LD, vec![literal(A), deref_symbol(C)]).expect_instruction(CpuInstr::Ld(
-            Ld::Special(SpecialLd::RegIndex, Direction::IntoA),
-        ))
+    fn ld_a_d() {
+        analyze(LD, vec![M::A.into(), M::D.into()]).expect_fragments(vec![Fragment::Byte(0x7a)])
     }
 
     #[test]
-    fn analyze_legal_ld_instructions() {
-        test_instruction_analysis(describe_legal_ld_instructions());
+    fn ld_a_e() {
+        analyze(LD, vec![M::A.into(), M::E.into()]).expect_fragments(vec![Fragment::Byte(0x7b)])
     }
 
-    fn describe_legal_ld_instructions() -> Vec<InstructionDescriptor> {
-        let mut descriptors: Vec<InstructionDescriptor> = Vec::new();
-        descriptors.extend(describe_ld_simple_simple_instructions());
-        descriptors.extend(describe_ld_simple_immediate_instructions());
-        descriptors.extend(describe_ld_reg16_immediate_instructions());
-        descriptors.extend(describe_ld_deref_reg16_instructions());
-        descriptors.push((
-            (LD, vec![Reg16::Sp.into(), Reg16::Hl.into()]),
-            CpuInstr::Ld(Ld::SpHl),
-        ));
-        descriptors
+    #[test]
+    fn ld_a_h() {
+        analyze(LD, vec![M::A.into(), M::H.into()]).expect_fragments(vec![Fragment::Byte(0x7c)])
     }
 
-    fn describe_ld_simple_simple_instructions() -> impl Iterator<Item = InstructionDescriptor> {
-        SIMPLE_OPERANDS.iter().flat_map(|&dest| {
-            SIMPLE_OPERANDS
-                .iter()
-                .flat_map(move |&src| describe_ld_simple_simple(dest, src))
-        })
+    #[test]
+    fn ld_a_l() {
+        analyze(LD, vec![M::A.into(), M::L.into()]).expect_fragments(vec![Fragment::Byte(0x7d)])
     }
 
-    fn describe_ld_simple_simple(
-        dest: SimpleOperand,
-        src: SimpleOperand,
-    ) -> Option<InstructionDescriptor> {
-        match (dest, src) {
-            (SimpleOperand::DerefHl, SimpleOperand::DerefHl) => None,
-            _ => Some((
-                (LD, vec![dest.into(), src.into()]),
-                CpuInstr::Ld(Ld::Simple(dest, src)),
-            )),
-        }
+    #[test]
+    fn ld_b_a() {
+        analyze(LD, vec![M::B.into(), M::A.into()]).expect_fragments(vec![Fragment::Byte(0x47)])
     }
 
-    fn describe_ld_simple_immediate_instructions() -> impl Iterator<Item = InstructionDescriptor> {
-        SIMPLE_OPERANDS
-            .iter()
-            .map(|&dest| describe_ld_simple_immediate(dest))
+    #[test]
+    fn ld_b_b() {
+        analyze(LD, vec![M::B.into(), M::B.into()]).expect_fragments(vec![Fragment::Byte(0x40)])
     }
 
-    fn describe_ld_simple_immediate(dest: SimpleOperand) -> InstructionDescriptor {
-        let n = 0x12;
-        (
-            (LD, vec![dest.into(), n.into()]),
-            CpuInstr::Ld(Ld::Immediate8(dest, number(n, TokenId::Operand(1, 0)))),
-        )
+    #[test]
+    fn ld_b_c() {
+        analyze(LD, vec![M::B.into(), M::C.into()]).expect_fragments(vec![Fragment::Byte(0x41)])
     }
 
-    fn describe_ld_reg16_immediate_instructions() -> impl Iterator<Item = InstructionDescriptor> {
-        REG16.iter().map(|&dest| describe_ld_reg16_immediate(dest))
+    #[test]
+    fn ld_b_d() {
+        analyze(LD, vec![M::B.into(), M::D.into()]).expect_fragments(vec![Fragment::Byte(0x42)])
     }
 
-    fn describe_ld_reg16_immediate(dest: Reg16) -> InstructionDescriptor {
-        let value = MockSymbolId(9);
-        (
-            (LD, vec![dest.into(), value.into()]),
-            CpuInstr::Ld(Ld::Immediate16(dest, name(value, TokenId::Operand(1, 0)))),
-        )
+    #[test]
+    fn ld_b_e() {
+        analyze(LD, vec![M::B.into(), M::E.into()]).expect_fragments(vec![Fragment::Byte(0x43)])
     }
 
-    fn describe_ld_deref_reg16_instructions() -> impl Iterator<Item = InstructionDescriptor> {
-        PTR_REGS
-            .iter()
-            .flat_map(|&addr| describe_ld_deref_ptr_reg(addr))
+    #[test]
+    fn ld_b_h() {
+        analyze(LD, vec![M::B.into(), M::H.into()]).expect_fragments(vec![Fragment::Byte(0x44)])
     }
 
-    fn describe_ld_deref_ptr_reg(ptr_reg: PtrReg) -> impl Iterator<Item = InstructionDescriptor> {
-        vec![
-            (
-                (LD, vec![deref_symbol(ptr_reg), literal(A)]),
-                CpuInstr::Ld(Ld::Special(
-                    SpecialLd::DerefPtrReg(ptr_reg),
-                    Direction::FromA,
-                )),
-            ),
-            (
-                (LD, vec![literal(A), deref_symbol(ptr_reg)]),
-                CpuInstr::Ld(Ld::Special(
-                    SpecialLd::DerefPtrReg(ptr_reg),
-                    Direction::IntoA,
-                )),
-            ),
-        ]
-        .into_iter()
+    #[test]
+    fn ld_b_l() {
+        analyze(LD, vec![M::B.into(), M::L.into()]).expect_fragments(vec![Fragment::Byte(0x45)])
     }
 
-    const PTR_REGS: &[PtrReg] = &[PtrReg::Bc, PtrReg::De, PtrReg::Hli, PtrReg::Hld];
+    #[test]
+    fn ld_c_a() {
+        analyze(LD, vec![M::C.into(), M::A.into()]).expect_fragments(vec![Fragment::Byte(0x4f)])
+    }
+
+    #[test]
+    fn ld_c_b() {
+        analyze(LD, vec![M::C.into(), M::B.into()]).expect_fragments(vec![Fragment::Byte(0x48)])
+    }
+
+    #[test]
+    fn ld_c_c() {
+        analyze(LD, vec![M::C.into(), M::C.into()]).expect_fragments(vec![Fragment::Byte(0x49)])
+    }
+
+    #[test]
+    fn ld_c_d() {
+        analyze(LD, vec![M::C.into(), M::D.into()]).expect_fragments(vec![Fragment::Byte(0x4a)])
+    }
+
+    #[test]
+    fn ld_c_e() {
+        analyze(LD, vec![M::C.into(), M::E.into()]).expect_fragments(vec![Fragment::Byte(0x4b)])
+    }
+
+    #[test]
+    fn ld_c_h() {
+        analyze(LD, vec![M::C.into(), M::H.into()]).expect_fragments(vec![Fragment::Byte(0x4c)])
+    }
+
+    #[test]
+    fn ld_c_l() {
+        analyze(LD, vec![M::C.into(), M::L.into()]).expect_fragments(vec![Fragment::Byte(0x4d)])
+    }
+
+    #[test]
+    fn ld_d_a() {
+        analyze(LD, vec![M::D.into(), M::A.into()]).expect_fragments(vec![Fragment::Byte(0x57)])
+    }
+
+    #[test]
+    fn ld_d_b() {
+        analyze(LD, vec![M::D.into(), M::B.into()]).expect_fragments(vec![Fragment::Byte(0x50)])
+    }
+
+    #[test]
+    fn ld_d_c() {
+        analyze(LD, vec![M::D.into(), M::C.into()]).expect_fragments(vec![Fragment::Byte(0x51)])
+    }
+
+    #[test]
+    fn ld_d_d() {
+        analyze(LD, vec![M::D.into(), M::D.into()]).expect_fragments(vec![Fragment::Byte(0x52)])
+    }
+
+    #[test]
+    fn ld_d_e() {
+        analyze(LD, vec![M::D.into(), M::E.into()]).expect_fragments(vec![Fragment::Byte(0x53)])
+    }
+
+    #[test]
+    fn ld_d_h() {
+        analyze(LD, vec![M::D.into(), M::H.into()]).expect_fragments(vec![Fragment::Byte(0x54)])
+    }
+
+    #[test]
+    fn ld_d_l() {
+        analyze(LD, vec![M::D.into(), M::L.into()]).expect_fragments(vec![Fragment::Byte(0x55)])
+    }
+
+    #[test]
+    fn ld_e_a() {
+        analyze(LD, vec![M::E.into(), M::A.into()]).expect_fragments(vec![Fragment::Byte(0x5f)])
+    }
+
+    #[test]
+    fn ld_e_b() {
+        analyze(LD, vec![M::E.into(), M::B.into()]).expect_fragments(vec![Fragment::Byte(0x58)])
+    }
+
+    #[test]
+    fn ld_e_c() {
+        analyze(LD, vec![M::E.into(), M::C.into()]).expect_fragments(vec![Fragment::Byte(0x59)])
+    }
+
+    #[test]
+    fn ld_e_d() {
+        analyze(LD, vec![M::E.into(), M::D.into()]).expect_fragments(vec![Fragment::Byte(0x5a)])
+    }
+
+    #[test]
+    fn ld_e_e() {
+        analyze(LD, vec![M::E.into(), M::E.into()]).expect_fragments(vec![Fragment::Byte(0x5b)])
+    }
+
+    #[test]
+    fn ld_e_h() {
+        analyze(LD, vec![M::E.into(), M::H.into()]).expect_fragments(vec![Fragment::Byte(0x5c)])
+    }
+
+    #[test]
+    fn ld_e_l() {
+        analyze(LD, vec![M::E.into(), M::L.into()]).expect_fragments(vec![Fragment::Byte(0x5d)])
+    }
+
+    #[test]
+    fn ld_h_a() {
+        analyze(LD, vec![M::H.into(), M::A.into()]).expect_fragments(vec![Fragment::Byte(0x67)])
+    }
+
+    #[test]
+    fn ld_h_b() {
+        analyze(LD, vec![M::H.into(), M::B.into()]).expect_fragments(vec![Fragment::Byte(0x60)])
+    }
+
+    #[test]
+    fn ld_h_c() {
+        analyze(LD, vec![M::H.into(), M::C.into()]).expect_fragments(vec![Fragment::Byte(0x61)])
+    }
+
+    #[test]
+    fn ld_h_d() {
+        analyze(LD, vec![M::H.into(), M::D.into()]).expect_fragments(vec![Fragment::Byte(0x62)])
+    }
+
+    #[test]
+    fn ld_h_e() {
+        analyze(LD, vec![M::H.into(), M::E.into()]).expect_fragments(vec![Fragment::Byte(0x63)])
+    }
+
+    #[test]
+    fn ld_h_h() {
+        analyze(LD, vec![M::H.into(), M::H.into()]).expect_fragments(vec![Fragment::Byte(0x64)])
+    }
+
+    #[test]
+    fn ld_h_l() {
+        analyze(LD, vec![M::H.into(), M::L.into()]).expect_fragments(vec![Fragment::Byte(0x65)])
+    }
+
+    #[test]
+    fn ld_l_a() {
+        analyze(LD, vec![M::L.into(), M::A.into()]).expect_fragments(vec![Fragment::Byte(0x6f)])
+    }
+
+    #[test]
+    fn ld_l_b() {
+        analyze(LD, vec![M::L.into(), M::B.into()]).expect_fragments(vec![Fragment::Byte(0x68)])
+    }
+
+    #[test]
+    fn ld_l_c() {
+        analyze(LD, vec![M::L.into(), M::C.into()]).expect_fragments(vec![Fragment::Byte(0x69)])
+    }
+
+    #[test]
+    fn ld_l_d() {
+        analyze(LD, vec![M::L.into(), M::D.into()]).expect_fragments(vec![Fragment::Byte(0x6a)])
+    }
+
+    #[test]
+    fn ld_l_e() {
+        analyze(LD, vec![M::L.into(), M::E.into()]).expect_fragments(vec![Fragment::Byte(0x6b)])
+    }
+
+    #[test]
+    fn ld_l_h() {
+        analyze(LD, vec![M::L.into(), M::H.into()]).expect_fragments(vec![Fragment::Byte(0x6c)])
+    }
+
+    #[test]
+    fn ld_l_l() {
+        analyze(LD, vec![M::L.into(), M::L.into()]).expect_fragments(vec![Fragment::Byte(0x6d)])
+    }
+
+    #[test]
+    fn ld_a_n() {
+        analyze(LD, vec![M::A.into(), 0x42.into()]).expect_fragments(vec![
+            Fragment::Byte(0x3e),
+            Fragment::Immediate(number(0x42, TokenId::Operand(1, 0)), Width::Byte),
+        ])
+    }
+
+    #[test]
+    fn ld_b_n() {
+        analyze(LD, vec![M::B.into(), 0x42.into()]).expect_fragments(vec![
+            Fragment::Byte(0x06),
+            Fragment::Immediate(number(0x42, TokenId::Operand(1, 0)), Width::Byte),
+        ])
+    }
+
+    #[test]
+    fn ld_c_n() {
+        analyze(LD, vec![M::C.into(), 0x42.into()]).expect_fragments(vec![
+            Fragment::Byte(0x0e),
+            Fragment::Immediate(number(0x42, TokenId::Operand(1, 0)), Width::Byte),
+        ])
+    }
+
+    #[test]
+    fn ld_d_n() {
+        analyze(LD, vec![M::D.into(), 0x42.into()]).expect_fragments(vec![
+            Fragment::Byte(0x16),
+            Fragment::Immediate(number(0x42, TokenId::Operand(1, 0)), Width::Byte),
+        ])
+    }
+
+    #[test]
+    fn ld_e_n() {
+        analyze(LD, vec![M::E.into(), 0x42.into()]).expect_fragments(vec![
+            Fragment::Byte(0x1e),
+            Fragment::Immediate(number(0x42, TokenId::Operand(1, 0)), Width::Byte),
+        ])
+    }
+
+    #[test]
+    fn ld_h_n() {
+        analyze(LD, vec![M::H.into(), 0x42.into()]).expect_fragments(vec![
+            Fragment::Byte(0x26),
+            Fragment::Immediate(number(0x42, TokenId::Operand(1, 0)), Width::Byte),
+        ])
+    }
+
+    #[test]
+    fn ld_l_n() {
+        analyze(LD, vec![M::L.into(), 0x42.into()]).expect_fragments(vec![
+            Fragment::Byte(0x2e),
+            Fragment::Immediate(number(0x42, TokenId::Operand(1, 0)), Width::Byte),
+        ])
+    }
+
+    #[test]
+    fn ld_a_deref_hl() {
+        analyze(LD, vec![M::A.into(), M::DerefHl.into()])
+            .expect_fragments(vec![Fragment::Byte(0x7e)])
+    }
+
+    #[test]
+    fn ld_b_deref_hl() {
+        analyze(LD, vec![M::B.into(), M::DerefHl.into()])
+            .expect_fragments(vec![Fragment::Byte(0x46)])
+    }
+
+    #[test]
+    fn ld_c_deref_hl() {
+        analyze(LD, vec![M::C.into(), M::DerefHl.into()])
+            .expect_fragments(vec![Fragment::Byte(0x4e)])
+    }
+
+    #[test]
+    fn ld_d_deref_hl() {
+        analyze(LD, vec![M::D.into(), M::DerefHl.into()])
+            .expect_fragments(vec![Fragment::Byte(0x56)])
+    }
+
+    #[test]
+    fn ld_e_deref_hl() {
+        analyze(LD, vec![M::E.into(), M::DerefHl.into()])
+            .expect_fragments(vec![Fragment::Byte(0x5e)])
+    }
+
+    #[test]
+    fn ld_h_deref_hl() {
+        analyze(LD, vec![M::H.into(), M::DerefHl.into()])
+            .expect_fragments(vec![Fragment::Byte(0x66)])
+    }
+
+    #[test]
+    fn ld_l_deref_hl() {
+        analyze(LD, vec![M::L.into(), M::DerefHl.into()])
+            .expect_fragments(vec![Fragment::Byte(0x6e)])
+    }
+
+    #[test]
+    fn ld_deref_hl_a() {
+        analyze(LD, vec![M::DerefHl.into(), M::A.into()])
+            .expect_fragments(vec![Fragment::Byte(0x77)])
+    }
+
+    #[test]
+    fn ld_deref_hl_b() {
+        analyze(LD, vec![M::DerefHl.into(), M::B.into()])
+            .expect_fragments(vec![Fragment::Byte(0x70)])
+    }
+
+    #[test]
+    fn ld_deref_hl_c() {
+        analyze(LD, vec![M::DerefHl.into(), M::C.into()])
+            .expect_fragments(vec![Fragment::Byte(0x71)])
+    }
+
+    #[test]
+    fn ld_deref_hl_d() {
+        analyze(LD, vec![M::DerefHl.into(), M::D.into()])
+            .expect_fragments(vec![Fragment::Byte(0x72)])
+    }
+
+    #[test]
+    fn ld_deref_hl_e() {
+        analyze(LD, vec![M::DerefHl.into(), M::E.into()])
+            .expect_fragments(vec![Fragment::Byte(0x73)])
+    }
+
+    #[test]
+    fn ld_deref_hl_h() {
+        analyze(LD, vec![M::DerefHl.into(), M::H.into()])
+            .expect_fragments(vec![Fragment::Byte(0x74)])
+    }
+
+    #[test]
+    fn ld_deref_hl_l() {
+        analyze(LD, vec![M::DerefHl.into(), M::L.into()])
+            .expect_fragments(vec![Fragment::Byte(0x75)])
+    }
+
+    #[test]
+    fn ld_deref_hl_n() {
+        analyze(LD, vec![M::DerefHl.into(), 0x42.into()]).expect_fragments(vec![
+            Fragment::Byte(0x36),
+            Fragment::Immediate(number(0x42, TokenId::Operand(1, 0)), Width::Byte),
+        ])
+    }
+
+    #[test]
+    fn ld_a_deref_bc() {
+        analyze(LD, vec![M::A.into(), deref_symbol(Bc)])
+            .expect_fragments(vec![Fragment::Byte(0x0a)])
+    }
+
+    #[test]
+    fn ld_a_deref_de() {
+        analyze(LD, vec![M::A.into(), deref_symbol(De)])
+            .expect_fragments(vec![Fragment::Byte(0x1a)])
+    }
+
+    #[test]
+    fn ld_a_deref_c() {
+        analyze(LD, vec![literal(A), deref_symbol(C)]).expect_fragments(vec![Fragment::Byte(0xf2)])
+    }
+
+    #[test]
+    fn ld_deref_c_a() {
+        analyze(LD, vec![deref_symbol(C), literal(A)]).expect_fragments(vec![Fragment::Byte(0xe2)])
+    }
+
+    #[test]
+    fn ld_a_deref_expr() {
+        analyze(LD, vec![literal(A), deref_ident(MockSymbolId(7))]).expect_fragments(vec![
+            Fragment::LdInlineAddr(0xf0, name(MockSymbolId(7), TokenId::Operand(1, 1))),
+        ])
+    }
+
+    #[test]
+    fn ld_deref_expr_a() {
+        analyze(LD, vec![deref_ident(MockSymbolId(7)), literal(A)]).expect_fragments(vec![
+            Fragment::LdInlineAddr(0xe0, name(MockSymbolId(7), TokenId::Operand(0, 1))),
+        ])
+    }
+
+    #[test]
+    fn ld_a_deref_hli() {
+        analyze(LD, vec![literal(A), deref_symbol(Hli)])
+            .expect_fragments(vec![Fragment::Byte(0x2a)])
+    }
+
+    #[test]
+    fn ld_a_deref_hld() {
+        analyze(LD, vec![literal(A), deref_symbol(Hld)])
+            .expect_fragments(vec![Fragment::Byte(0x3a)])
+    }
+
+    #[test]
+    fn ld_deref_bc_a() {
+        analyze(LD, vec![deref_symbol(Bc), literal(A)]).expect_fragments(vec![Fragment::Byte(0x02)])
+    }
+
+    #[test]
+    fn ld_deref_de_a() {
+        analyze(LD, vec![deref_symbol(De), literal(A)]).expect_fragments(vec![Fragment::Byte(0x12)])
+    }
+
+    #[test]
+    fn ld_deref_hli_a() {
+        analyze(LD, vec![deref_symbol(Hli), literal(A)])
+            .expect_fragments(vec![Fragment::Byte(0x22)])
+    }
+
+    #[test]
+    fn ld_deref_hld_a() {
+        analyze(LD, vec![deref_symbol(Hld), literal(A)])
+            .expect_fragments(vec![Fragment::Byte(0x32)])
+    }
+
+    #[test]
+    fn ld_bc_nn() {
+        analyze(LD, vec![literal(Bc), 0x1234.into()]).expect_fragments(vec![
+            Fragment::Byte(0x01),
+            Fragment::Immediate(number(0x1234, TokenId::Operand(1, 0)), Width::Word),
+        ])
+    }
+
+    #[test]
+    fn ld_de_nn() {
+        analyze(LD, vec![literal(De), 0x1234.into()]).expect_fragments(vec![
+            Fragment::Byte(0x11),
+            Fragment::Immediate(number(0x1234, TokenId::Operand(1, 0)), Width::Word),
+        ])
+    }
+
+    #[test]
+    fn ld_hl_nn() {
+        analyze(LD, vec![literal(Hl), 0x1234.into()]).expect_fragments(vec![
+            Fragment::Byte(0x21),
+            Fragment::Immediate(number(0x1234, TokenId::Operand(1, 0)), Width::Word),
+        ])
+    }
+
+    #[test]
+    fn ld_sp_nn() {
+        analyze(LD, vec![literal(Sp), 0x1234.into()]).expect_fragments(vec![
+            Fragment::Byte(0x31),
+            Fragment::Immediate(number(0x1234, TokenId::Operand(1, 0)), Width::Word),
+        ])
+    }
+
+    #[test]
+    fn ld_sp_hl() {
+        analyze(LD, vec![literal(Sp), literal(Hl)]).expect_fragments(vec![Fragment::Byte(0xf9)])
+    }
+
+    #[test]
+    fn ld_deref_nn_sp() {
+        analyze(LD, vec![deref_ident(MockSymbolId(0)), literal(Sp)]).expect_fragments(vec![
+            Fragment::Byte(0x08),
+            Fragment::Immediate(name(MockSymbolId(0), TokenId::Operand(0, 1)), Width::Word),
+        ])
+    }
 
     // Test errors
 

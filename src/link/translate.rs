@@ -158,11 +158,11 @@ fn is_in_u8_range(n: i32) -> bool {
 mod tests {
     use super::*;
 
-    use crate::diag::IgnoreDiagnostics;
-    use crate::diag::TestDiagnosticsListener;
-    use crate::expr::{Atom, BinOp, LocationCounter};
+    use crate::diag::span::WithSpan;
+    use crate::diag::{IgnoreDiagnostics, TestDiagnosticsListener};
+    use crate::expr::{Atom, BinOp, Expr, ExprOp};
     use crate::object::num::Num;
-    use crate::object::{Content, Object};
+    use crate::object::{Content, Object, SymbolId};
     use crate::session::builder::*;
     use crate::CompositeSession;
 
@@ -211,7 +211,9 @@ mod tests {
         assert_eq!(actual, [0x01])
     }
 
-    fn translate_section_item<S: Clone + PartialEq>(fragment: Fragment<Expr<S>>) -> Vec<u8> {
+    fn translate_section_item<S: Clone + PartialEq>(
+        fragment: Fragment<Expr<SymbolId, S>>,
+    ) -> Vec<u8> {
         fragment
             .translate(
                 &LinkageContext {
@@ -229,20 +231,17 @@ mod tests {
         let addr = 0x7ff0;
 
         let mut object = Object::new();
-        let object_builder = CompositeSession {
+        let mut object_builder = CompositeSession {
             reentrancy: TestDiagnosticsListener::new(),
             names: (),
             builder: ObjectBuilder::new(&mut object),
         };
 
         // org $7ff0
-        let mut const_builder = object_builder.build_const();
-        const_builder.push_op(addr, ());
-        let (mut object_builder, origin) = const_builder.finish();
-        object_builder.set_origin(origin.unwrap());
+        object_builder.set_origin(Expr(vec![ExprOp::Atom(Atom::Const(addr)).with_span(())]));
 
         // nop
-        object_builder.emit_item(Item::CpuInstr(CpuInstr::Nullary(Nullary::Nop)));
+        object_builder.emit_fragment(Fragment::Byte(0x00));
 
         object.vars.resolve(&object.content);
         let context = &mut LinkageContext {
@@ -269,13 +268,13 @@ mod tests {
         };
 
         // nop
-        object_builder.emit_item(Item::CpuInstr(CpuInstr::Nullary(Nullary::Nop)));
+        object_builder.emit_fragment(Fragment::Byte(0x00));
 
         // db .
-        let mut const_builder = object_builder.build_const();
-        const_builder.push_op(LocationCounter, ());
-        let (mut object_builder, location) = const_builder.finish();
-        object_builder.emit_item(Item::Data(location.unwrap(), Width::Byte));
+        object_builder.emit_fragment(Fragment::Immediate(
+            Expr(vec![ExprOp::Atom(Atom::Location).with_span(())]),
+            Width::Byte,
+        ));
 
         object.vars.resolve(&object.content);
         let context = &mut LinkageContext {
@@ -297,23 +296,20 @@ mod tests {
         let addr = 0xffe1;
 
         let mut object = Object::new();
-        let object_builder = CompositeSession {
+        let mut object_builder = CompositeSession {
             reentrancy: TestDiagnosticsListener::new(),
             names: (),
             builder: ObjectBuilder::new(&mut object),
         };
 
         // org $ffe1
-        let mut const_builder = object_builder.build_const();
-        const_builder.push_op(addr, ());
-        let (mut object_builder, origin) = const_builder.finish();
-        object_builder.set_origin(origin.unwrap());
+        object_builder.set_origin(Expr(vec![ExprOp::Atom(Atom::Const(addr)).with_span(())]));
 
         // dw .
-        let mut const_builder = object_builder.build_const();
-        const_builder.push_op(LocationCounter, ());
-        let (mut object_builder, location) = const_builder.finish();
-        object_builder.emit_item(Item::Data(location.unwrap(), Width::Word));
+        object_builder.emit_fragment(Fragment::Immediate(
+            Expr(vec![ExprOp::Atom(Atom::Location).with_span(())]),
+            Width::Word,
+        ));
 
         object.vars.resolve(&object.content);
         let context = &mut LinkageContext {

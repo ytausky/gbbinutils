@@ -1,4 +1,4 @@
-use self::arg::{Arg, OperandSymbol};
+use self::arg::{Arg, OperandSymbol, ParsedArg};
 use self::keywords::BuiltinMnemonic;
 
 use crate::analyze::{Literal, StringSource, TokenSeq};
@@ -151,7 +151,7 @@ type BuiltinInstrSemantics<'a, S> = Semantics<
 pub(crate) struct BuiltinInstrState<S: Session> {
     label: Option<Label<S::Ident, S::Span>>,
     mnemonic: Spanned<BuiltinMnemonic, S::Span>,
-    args: BuiltinInstrArgs<S::Value, S::StringRef, S::Span>,
+    args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
 }
 
 impl<S: Session> BuiltinInstrState<S> {
@@ -167,27 +167,28 @@ impl<S: Session> BuiltinInstrState<S> {
     }
 }
 
-type BuiltinInstrArgs<V, R, S> = Vec<Arg<V, R, S>>;
+type BuiltinInstrArgs<N, R, S> = Vec<ParsedArg<N, R, S>>;
 
 pub(crate) type ArgSemantics<'a, S> = Semantics<
     'a,
     S,
     ExprBuilder<
-        <<S as Finish>::Parent as StringSource>::StringRef,
-        <<S as Finish>::Parent as SpanSource>::Span,
-        BuiltinInstrState<<S as Finish>::Parent>,
+        <S as IdentSource>::Ident,
+        <S as StringSource>::StringRef,
+        <S as SpanSource>::Span,
+        BuiltinInstrState<S>,
     >,
-    <<S as Finish>::Parent as IdentSource>::Ident,
-    <<S as Finish>::Parent as StringSource>::StringRef,
-    <<S as Finish>::Parent as SpanSource>::Span,
+    <S as IdentSource>::Ident,
+    <S as StringSource>::StringRef,
+    <S as SpanSource>::Span,
 >;
 
-pub(crate) struct ExprBuilder<R, S, P> {
-    arg: Option<Arg<(), R, S>>,
+pub(crate) struct ExprBuilder<I, R, S, P> {
+    arg: Option<ParsedArg<I, R, S>>,
     parent: P,
 }
 
-impl<R, S, P> ExprBuilder<R, S, P> {
+impl<I, R, S, P> ExprBuilder<I, R, S, P> {
     pub fn new(parent: P) -> Self {
         Self { arg: None, parent }
     }

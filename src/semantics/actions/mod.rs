@@ -6,7 +6,6 @@ use super::*;
 use crate::analyze::Literal;
 use crate::diag::span::StripSpan;
 use crate::diag::{CompactDiag, Message};
-use crate::session::resolve::{NameTable, StartScope};
 use crate::session::Session;
 use crate::syntax::actions::*;
 use crate::syntax::LexError;
@@ -65,9 +64,6 @@ where
     S::Ident: 'static,
     S::StringRef: 'static,
     S::Span: 'static,
-    S::ExprBuilder: StartScope<<S as IdentSource>::Ident>
-        + NameTable<<S as IdentSource>::Ident, Keyword = &'static Keyword, MacroId = S::MacroId>
-        + Diagnostics<S::Span, Stripped = S::Stripped>,
 {
     type InstrLineContext = InstrLineSemantics<'a, S>;
     type TokenLineContext = TokenLineSemantics<'a, S>;
@@ -134,8 +130,9 @@ pub mod tests {
     use crate::diag::{DiagnosticsEvent, Merge, Message, MockSpan};
     use crate::expr::{Atom, BinOp, ExprOp, LocationCounter};
     use crate::log::with_log;
+    use crate::object::Fragment;
     use crate::session::builder::mock::*;
-    use crate::session::builder::{CpuInstr, Item, Ld, Name, SimpleOperand, Width};
+    use crate::session::builder::Width;
     use crate::session::reentrancy::ReentrancyEvent;
     use crate::session::resolve::*;
     use crate::session::CompositeSession;
@@ -152,7 +149,7 @@ pub mod tests {
         Reentrancy(ReentrancyEvent),
     }
 
-    pub(crate) type Expr<S> = crate::expr::Expr<MockSymbolId, S>;
+    type Expr<S> = crate::expr::Expr<MockSymbolId, S>;
 
     impl<S: Clone> From<BackendEvent<MockSymbolId, Expr<S>>> for TestOperation<S> {
         fn from(event: BackendEvent<MockSymbolId, Expr<S>>) -> Self {
@@ -201,13 +198,7 @@ pub mod tests {
         });
         assert_eq!(
             actions,
-            [
-                BackendEvent::EmitItem(Item::CpuInstr(CpuInstr::Ld(Ld::Simple(
-                    SimpleOperand::B,
-                    SimpleOperand::DerefHl
-                ))))
-                .into()
-            ]
+            [BackendEvent::EmitFragment(Fragment::Byte(0x46)).into()]
         )
     }
 
@@ -241,14 +232,11 @@ pub mod tests {
         });
         assert_eq!(
             actions,
-            [
-                BackendEvent::EmitItem(Item::CpuInstr(CpuInstr::Rst(Expr::from_items(&[
-                    1.into(),
-                    1.into(),
-                    op.into()
-                ]))))
-                .into()
-            ]
+            [BackendEvent::EmitFragment(Fragment::Embedded(
+                0b11_000_111,
+                Expr::from_items(&[1.into(), 1.into(), op.into()])
+            ))
+            .into()]
         )
     }
 
@@ -274,11 +262,14 @@ pub mod tests {
             actions,
             [
                 NameTableEvent::Insert(ident, ResolvedName::Symbol(MockSymbolId(0))).into(),
-                BackendEvent::EmitItem(Item::CpuInstr(CpuInstr::Rst(Expr::from_items(&[
-                    Name(MockSymbolId(0)).into(),
-                    1.into(),
-                    ExprOp::FnCall(1).into()
-                ]))))
+                BackendEvent::EmitFragment(Fragment::Embedded(
+                    0b11_000_111,
+                    Expr::from_items(&[
+                        Atom::Name(MockSymbolId(0)).into(),
+                        1.into(),
+                        ExprOp::FnCall(1).into()
+                    ])
+                ))
                 .into()
             ]
         )
@@ -304,8 +295,11 @@ pub mod tests {
             actions,
             [
                 NameTableEvent::Insert(label.into(), ResolvedName::Symbol(MockSymbolId(0))).into(),
-                BackendEvent::EmitItem(Item::Data(Atom::Name(MockSymbolId(0)).into(), Width::Word))
-                    .into()
+                BackendEvent::EmitFragment(Fragment::Immediate(
+                    Atom::Name(MockSymbolId(0)).into(),
+                    Width::Word
+                ))
+                .into()
             ]
         );
     }
@@ -438,35 +432,6 @@ pub mod tests {
                 .into(),
                 NameTableEvent::Insert(name.into(), ResolvedName::Macro(MockMacroId(0))).into(),
             ]
-        )
-    }
-
-    #[test]
-    fn diagnose_wrong_operand_count() {
-        let actions = collect_semantic_actions(|actions| {
-            let mut arg = actions
-                .will_parse_line()
-                .into_instr_line()
-                .will_parse_instr("NOP".into(), ())
-                .into_builtin_instr()
-                .will_parse_arg();
-            arg.act_on_atom(ExprAtom::Ident("A".into()), ());
-            arg.did_parse_arg()
-                .did_parse_instr()
-                .did_parse_line(())
-                .act_on_eos(())
-        });
-        assert_eq!(
-            actions,
-            [DiagnosticsEvent::EmitDiag(
-                Message::OperandCount {
-                    actual: 1,
-                    expected: 0
-                }
-                .at(())
-                .into()
-            )
-            .into()]
         )
     }
 

@@ -1,6 +1,6 @@
 use crate::diag::*;
 use crate::semantics::arg::*;
-use crate::session::builder::{Condition, PtrReg, Reg16, RegPair, SimpleOperand};
+use crate::session::builder::{Condition, PtrReg, Reg16, RegPair, M};
 use crate::span::{Source, SpanSource};
 
 #[derive(Debug, PartialEq)]
@@ -25,7 +25,7 @@ impl<E: Source> Source for Operand<E, E::Span> {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum AtomKind {
-    Simple(SimpleOperand),
+    Simple(M),
     Condition(Condition),
     Reg16(Reg16),
     RegPair(RegPair),
@@ -98,7 +98,7 @@ fn try_deref_operand_keyword(symbol: OperandSymbol) -> Result<AtomKind, KeywordO
         Bc => Ok(AtomKind::DerefPtrReg(PtrReg::Bc)),
         C => Ok(AtomKind::DerefC),
         De => Ok(AtomKind::DerefPtrReg(PtrReg::De)),
-        Hl => Ok(AtomKind::Simple(SimpleOperand::DerefHl)),
+        Hl => Ok(AtomKind::Simple(M::DerefHl)),
         Hld => Ok(AtomKind::DerefPtrReg(PtrReg::Hld)),
         Hli => Ok(AtomKind::DerefPtrReg(PtrReg::Hli)),
         A | B | D | E | H | L | Sp => Err(KeywordOperandCategory::Reg),
@@ -120,24 +120,24 @@ where
     use self::OperandSymbol::*;
 
     let kind = match symbol {
-        A => AtomKind::Simple(SimpleOperand::A),
+        A => AtomKind::Simple(M::A),
         Af => AtomKind::RegPair(RegPair::Af),
-        B => AtomKind::Simple(SimpleOperand::B),
+        B => AtomKind::Simple(M::B),
         Bc => match context {
             Stack => AtomKind::RegPair(RegPair::Bc),
             _ => AtomKind::Reg16(Reg16::Bc),
         },
         C => match context {
             Branch => AtomKind::Condition(Condition::C),
-            _ => AtomKind::Simple(SimpleOperand::C),
+            _ => AtomKind::Simple(M::C),
         },
-        D => AtomKind::Simple(SimpleOperand::D),
+        D => AtomKind::Simple(M::D),
         De => match context {
             Stack => AtomKind::RegPair(RegPair::De),
             _ => AtomKind::Reg16(Reg16::De),
         },
-        E => AtomKind::Simple(SimpleOperand::E),
-        H => AtomKind::Simple(SimpleOperand::H),
+        E => AtomKind::Simple(M::E),
+        H => AtomKind::Simple(M::H),
         Hl => match context {
             Stack => AtomKind::RegPair(RegPair::Hl),
             _ => AtomKind::Reg16(Reg16::Hl),
@@ -147,7 +147,7 @@ where
             diagnostics.emit_diag(Message::MustBeDeref { operand: stripped }.at(span));
             return Err(());
         }
-        L => AtomKind::Simple(SimpleOperand::L),
+        L => AtomKind::Simple(M::L),
         Nc => AtomKind::Condition(Condition::Nc),
         Nz => AtomKind::Condition(Condition::Nz),
         Sp => AtomKind::Reg16(Reg16::Sp),

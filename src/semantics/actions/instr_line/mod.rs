@@ -5,10 +5,9 @@ use super::{Keyword, Semantics, TokenStreamSemantics};
 
 use crate::diag::span::WithSpan;
 use crate::diag::Message;
-use crate::expr::LocationCounter;
+use crate::expr::{Atom, Expr, ExprOp};
 use crate::semantics::*;
-use crate::session::builder::{Finish, PushOp};
-use crate::session::resolve::{NameTable, ResolvedName, StartScope};
+use crate::session::resolve::{NameTable, ResolvedName};
 use crate::syntax::actions::{InstrContext, InstrLineContext, InstrRule};
 
 mod builtin_instr;
@@ -20,13 +19,6 @@ where
     S::Ident: 'static,
     S::StringRef: 'static,
     S::Span: 'static,
-    S::ExprBuilder: StartScope<S::Ident>
-        + NameTable<
-            S::Ident,
-            Keyword = &'static Keyword,
-            MacroId = S::MacroId,
-            SymbolId = S::SymbolId,
-        > + Diagnostics<S::Span, Stripped = S::Stripped>,
 {
     type LabelContext = LabelSemantics<'a, S>;
     type InstrContext = Self;
@@ -42,13 +34,6 @@ where
     S::Ident: 'static,
     S::StringRef: 'static,
     S::Span: 'static,
-    S::ExprBuilder: StartScope<S::Ident>
-        + NameTable<
-            S::Ident,
-            Keyword = &'static Keyword,
-            MacroId = S::MacroId,
-            SymbolId = S::SymbolId,
-        > + Diagnostics<S::Span, Stripped = S::Stripped>,
 {
     type BuiltinInstrContext = BuiltinInstrSemantics<'a, S>;
     type MacroInstrContext = MacroInstrSemantics<'a, S>;
@@ -98,11 +83,11 @@ impl<'a, S: Session> InstrLineSemantics<'a, S> {
         if let Some(((label, span), _params)) = self.state.label.take() {
             self.session.start_scope(&label);
             let id = self.reloc_lookup(label, span.clone());
-            let mut builder = self.session.build_const();
-            PushOp::<LocationCounter, _>::push_op(&mut builder, LocationCounter, span.clone());
-            let (mut session, expr) = builder.finish();
-            session.define_symbol(id, span, expr.unwrap());
-            self.session = session;
+            self.session.define_symbol(
+                id,
+                span.clone(),
+                Expr(vec![ExprOp::Atom(Atom::Location).with_span(span)]),
+            );
         }
         self
     }

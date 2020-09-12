@@ -5,12 +5,12 @@ use crate::semantics::arg::*;
 use crate::semantics::keywords::Directive;
 use crate::semantics::Semantics;
 use crate::semantics::*;
-use crate::session::builder::{Item, Width};
+use crate::session::builder::Width;
 
-pub(crate) fn analyze_directive<S: Session>(
+pub(super) fn analyze_directive<S: Session>(
     directive: (Directive, S::Span),
     label: Option<Label<S::Ident, S::Span>>,
-    args: BuiltinInstrArgs<S::Value, S::StringRef, S::Span>,
+    args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
     session: TokenStreamSemantics<S>,
 ) -> TokenStreamSemantics<S>
 where
@@ -30,7 +30,7 @@ where
 struct DirectiveContext<'a, S: Session> {
     span: S::Span,
     label: Option<Label<S::Ident, S::Span>>,
-    args: BuiltinInstrArgs<S::Value, S::StringRef, S::Span>,
+    args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
     session: TokenStreamSemantics<'a, S>,
 }
 
@@ -62,7 +62,9 @@ where
                 Ok(expr) => expr,
                 Err(()) => return self.session,
             };
-            self.session.session.emit_item(Item::Data(expr, width))
+            self.session
+                .session
+                .emit_fragment(Fragment::Immediate(expr, width))
         }
         self.session
     }
@@ -160,9 +162,9 @@ where
     }
 }
 
-fn reduce_include<V: Source<Span = S>, R, D: Diagnostics<S>, S: Clone>(
+fn reduce_include<N, R, D: Diagnostics<S>, S: Clone>(
     span: S,
-    args: Vec<Arg<V, R, S>>,
+    args: Vec<ParsedArg<N, R, S>>,
     diagnostics: &mut D,
 ) -> Option<(R, S)> {
     let arg = match single_arg(span, args, diagnostics) {
@@ -170,11 +172,10 @@ fn reduce_include<V: Source<Span = S>, R, D: Diagnostics<S>, S: Clone>(
         None => return None,
     };
     let result = match arg {
-        Arg::String(path, span) => Ok((path, span)),
-        Arg::Bare(DerefableArg::Const(value)) => Err(Some(value.span())),
-        Arg::Bare(DerefableArg::Symbol(_, span)) => Err(Some(span)),
-        Arg::Deref(_, span) => Err(Some(span)),
-        Arg::Error => Err(None),
+        ParsedArg::String(path, span) => Ok((path, span)),
+        ParsedArg::Bare(expr) => Err(Some(expr.span())),
+        ParsedArg::Parenthesized(_, span) => Err(Some(span)),
+        ParsedArg::Error => Err(None),
     };
     match result {
         Ok(result) => Some(result),
@@ -214,7 +215,7 @@ mod tests {
     use crate::analyze::macros::mock::MockMacroId;
     use crate::analyze::Literal;
     use crate::codebase::CodebaseError;
-    use crate::expr::{Atom, ParamId};
+    use crate::expr::{Atom, Expr, ParamId};
     use crate::semantics::actions::tests::*;
     use crate::session::builder::mock::*;
     use crate::session::reentrancy::ReentrancyEvent;
@@ -254,17 +255,17 @@ mod tests {
         test_data_items_emission("DW", mk_word, [0x4332, 0x780f])
     }
 
-    fn mk_byte(byte: i32) -> Item<Expr<()>> {
-        Item::Data((byte).into(), Width::Byte)
+    fn mk_byte(byte: i32) -> Fragment<Expr<MockSymbolId, ()>> {
+        Fragment::Immediate((byte).into(), Width::Byte)
     }
 
-    fn mk_word(word: i32) -> Item<Expr<()>> {
-        Item::Data((word).into(), Width::Word)
+    fn mk_word(word: i32) -> Fragment<Expr<MockSymbolId, ()>> {
+        Fragment::Immediate((word).into(), Width::Word)
     }
 
     fn test_data_items_emission(
         directive: &str,
-        mk_item: impl Fn(i32) -> Item<Expr<()>>,
+        mk_item: impl Fn(i32) -> Fragment<Expr<MockSymbolId, ()>>,
         data: impl Borrow<[i32]>,
     ) {
         let actions = with_directive(directive, |mut command| {
@@ -281,7 +282,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .map(mk_item)
-                .map(BackendEvent::EmitItem)
+                .map(BackendEvent::EmitFragment)
                 .map(Into::into)
                 .collect::<Vec<_>>()
         )
@@ -486,10 +487,7 @@ mod tests {
             let session = analyze_directive(
                 (Directive::If, ()),
                 None,
-                vec![Arg::Bare(DerefableArg::Const(Expr::from_atom(
-                    1.into(),
-                    (),
-                )))],
+                vec![ParsedArg::Bare(Expr::from_atom(1.into(), ()))],
                 session,
             );
             assert_eq!(
@@ -508,10 +506,7 @@ mod tests {
             let session = analyze_directive(
                 (Directive::If, ()),
                 None,
-                vec![Arg::Bare(DerefableArg::Const(Expr::from_atom(
-                    0.into(),
-                    (),
-                )))],
+                vec![ParsedArg::Bare(Expr::from_atom(0.into(), ()))],
                 session,
             );
             assert_eq!(
@@ -540,7 +535,7 @@ mod tests {
                     TestOperation<S>,
                 >,
             >,
-            RelocContext<MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>, Expr<S>>,
+            MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>,
         >,
     >;
 

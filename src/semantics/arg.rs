@@ -1,3 +1,12 @@
+use crate::expr::Expr;
+
+pub(super) enum ParsedArg<N, R, S> {
+    Bare(Expr<N, S>),
+    Parenthesized(Expr<N, S>, S),
+    String(R, S),
+    Error,
+}
+
 pub(crate) enum Arg<V, R, S> {
     Bare(DerefableArg<V, S>),
     Deref(DerefableArg<V, S>, S),

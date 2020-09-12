@@ -147,6 +147,7 @@ impl Width {
 mod tests {
     use super::*;
 
+    use crate::diag::span::WithSpan;
     use crate::diag::{IgnoreDiagnostics, TestDiagnosticsListener};
     use crate::expr::*;
     use crate::session::builder::*;
@@ -195,31 +196,27 @@ mod tests {
         let origin1 = 0x150;
         let skipped_bytes = 0x10;
         let mut object = Object::new();
-        let object_builder = CompositeSession {
+        let mut object_builder = CompositeSession {
             reentrancy: TestDiagnosticsListener::new(),
             names: (),
             builder: ObjectBuilder::new(&mut object),
         };
 
         // org $0150
-        let mut const_builder = object_builder.build_const();
-        const_builder.push_op(origin1, ());
-        let (mut object_builder, origin1_const) = const_builder.finish();
-        object_builder.set_origin(origin1_const.unwrap());
+        object_builder.set_origin(Expr(vec![ExprOp::Atom(Atom::Const(origin1)).with_span(())]));
 
         // nop
-        object_builder.emit_item(Item::CpuInstr(CpuInstr::Nullary(Nullary::Nop)));
+        object_builder.emit_fragment(Fragment::Byte(0x00));
 
         // org . + $10
-        let mut const_builder = object_builder.build_const();
-        const_builder.push_op(LocationCounter, ());
-        const_builder.push_op(skipped_bytes, ());
-        const_builder.push_op(BinOp::Plus, ());
-        let (mut object_builder, origin2_const) = const_builder.finish();
-        object_builder.set_origin(origin2_const.unwrap());
+        object_builder.set_origin(Expr(vec![
+            ExprOp::Atom(Atom::Location).with_span(()),
+            ExprOp::Atom(Atom::Const(skipped_bytes)).with_span(()),
+            ExprOp::Binary(BinOp::Plus).with_span(()),
+        ]));
 
         // halt
-        object_builder.emit_item(Item::CpuInstr(CpuInstr::Nullary(Nullary::Halt)));
+        object_builder.emit_fragment(Fragment::Byte(0x76));
 
         let binary = Program::link(object, &mut IgnoreDiagnostics);
         assert_eq!(
@@ -239,10 +236,11 @@ mod tests {
         };
         builder.set_origin(addr.into());
         let symbol_id = builder.alloc_symbol(());
-        let mut builder = builder.build_const();
-        builder.push_op(LocationCounter, ());
-        let (mut builder, expr) = builder.finish();
-        builder.define_symbol(symbol_id, (), expr.unwrap());
+        builder.define_symbol(
+            symbol_id,
+            (),
+            Expr(vec![ExprOp::Atom(Atom::Location).with_span(())]),
+        );
         linkable.vars.resolve(&linkable.content);
         assert_eq!(linkable.vars[VarId(0)].value, addr.into());
     }
@@ -254,9 +252,7 @@ mod tests {
 
     #[test]
     fn section_with_one_byte_has_size_one() {
-        assert_section_size(1, |mut builder| {
-            builder.emit_item(Item::CpuInstr(CpuInstr::Nullary(Nullary::Nop)));
-        });
+        assert_section_size(1, |mut builder| builder.emit_fragment(Fragment::Byte(0x00)));
     }
 
     #[test]
@@ -271,10 +267,7 @@ mod tests {
 
     fn test_section_size_with_literal_ld_inline_addr(addr: i32, expected: i32) {
         assert_section_size(expected, |mut builder| {
-            builder.emit_item(Item::CpuInstr(CpuInstr::Ld(Ld::Special(
-                SpecialLd::InlineAddr(addr.into()),
-                Direction::IntoA,
-            ))))
+            builder.emit_fragment(Fragment::LdInlineAddr(0xf0, addr.into()))
         });
     }
 
@@ -282,14 +275,12 @@ mod tests {
     fn ld_inline_addr_with_symbol_after_instruction_has_size_three() {
         assert_section_size(3, |mut builder| {
             let name = builder.alloc_symbol(());
-            builder.emit_item(Item::CpuInstr(CpuInstr::Ld(Ld::Special(
-                SpecialLd::InlineAddr(Atom::Name(name).into()),
-                Direction::IntoA,
-            ))));
-            let mut symbol_builder = builder.build_const();
-            symbol_builder.push_op(LocationCounter, ());
-            let (mut builder, expr) = symbol_builder.finish();
-            builder.define_symbol(name, (), expr.unwrap());
+            builder.emit_fragment(Fragment::LdInlineAddr(0xf0, Atom::Name(name).into()));
+            builder.define_symbol(
+                name,
+                (),
+                Expr(vec![ExprOp::Atom(Atom::Location).with_span(())]),
+            );
         })
     }
 
@@ -307,16 +298,13 @@ mod tests {
         object_builder.start_section(name, ());
 
         // org $1337
-        let mut const_builder = object_builder.build_const();
-        const_builder.push_op(0x1337, ());
-        let (mut object_builder, origin) = const_builder.finish();
-        object_builder.set_origin(origin.unwrap());
+        object_builder.set_origin(Expr(vec![ExprOp::Atom(Atom::Const(0x1337)).with_span(())]));
 
         // dw my_section
-        let mut const_builder = object_builder.build_const();
-        const_builder.push_op(Name(name), ());
-        let (mut object_builder, my_section) = const_builder.finish();
-        object_builder.emit_item(Item::Data(my_section.unwrap(), Width::Word));
+        object_builder.emit_fragment(Fragment::Immediate(
+            Expr(vec![ExprOp::Atom(Atom::Name(name)).with_span(())]),
+            Width::Word,
+        ));
 
         let binary = Program::link(object, &mut IgnoreDiagnostics);
         assert_eq!(binary.sections[0].data, [0x37, 0x13])
@@ -329,34 +317,32 @@ mod tests {
         let symbol = VarId(2);
 
         let mut object = Object::new();
-        let object_builder = CompositeSession {
+        let mut object_builder = CompositeSession {
             reentrancy: TestDiagnosticsListener::new(),
             names: (),
             builder: ObjectBuilder::new(&mut object),
         };
 
         // org $0100
-        let mut const_builder = object_builder.build_const();
-        const_builder.push_op(addr, ());
-        let (mut object_builder, origin) = const_builder.finish();
-        object_builder.set_origin(origin.unwrap());
+        object_builder.set_origin(Expr(vec![ExprOp::Atom(Atom::Const(addr)).with_span(())]));
 
         // ds 10
-        let mut const_builder = object_builder.build_const();
-        const_builder.push_op(bytes, ());
-        let (mut object_builder, bytes_const) = const_builder.finish();
-        object_builder.emit_fragment(Fragment::Reserved(bytes_const.unwrap()));
+        object_builder.emit_fragment(Fragment::Reserved(Expr(vec![ExprOp::Atom(Atom::Const(
+            bytes,
+        ))
+        .with_span(())])));
 
         // label dw label
         let label = object_builder.alloc_symbol(());
-        let mut symbol_builder = object_builder.build_const();
-        symbol_builder.push_op(LocationCounter, ());
-        let (mut object_builder, expr) = symbol_builder.finish();
-        object_builder.define_symbol(label, (), expr.unwrap());
-        let mut const_builder = object_builder.build_const();
-        const_builder.push_op(Name(label), ());
-        let (mut object_builder, label_const) = const_builder.finish();
-        object_builder.emit_item(Item::Data(label_const.unwrap(), Width::Word));
+        object_builder.define_symbol(
+            label,
+            (),
+            Expr(vec![ExprOp::Atom(Atom::Location).with_span(())]),
+        );
+        object_builder.emit_fragment(Fragment::Immediate(
+            Expr(vec![ExprOp::Atom(Atom::Name(label)).with_span(())]),
+            Width::Word,
+        ));
 
         object.vars.resolve(&object.content);
         assert_eq!(object.vars[symbol].value, (addr + bytes).into())

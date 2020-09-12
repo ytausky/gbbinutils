@@ -2,6 +2,8 @@ use self::operand::{AtomKind, Context, Operand, OperandCounter};
 
 use crate::diag::span::Source;
 use crate::diag::*;
+use crate::expr::Expr;
+use crate::object::Fragment;
 use crate::semantics::keywords::{Mnemonic, StackOperation};
 use crate::session::builder::*;
 
@@ -10,25 +12,20 @@ pub mod operand;
 mod branch;
 mod ld;
 
-pub(crate) fn analyze_instruction<I, V, D, S>(
-    mnemonic: (&Mnemonic, S),
-    operands: I,
-    diagnostics: &mut D,
-) -> Result<CpuInstr<V>, ()>
+pub(crate) fn analyze_instruction<I, D, S>(mnemonic: (&Mnemonic, S), operands: I, session: &mut D)
 where
-    I: IntoIterator<Item = Result<Operand<V, S>, ()>>,
-    V: Source<Span = S>,
-    D: Diagnostics<S>,
+    I: IntoIterator<Item = Result<Operand<Expr<D::SymbolId, S>, S>, ()>>,
+    D: Backend<S> + Diagnostics<S>,
     S: Clone,
 {
     let mnemonic: (&Mnemonic, _) = (mnemonic.0, mnemonic.1);
-    Analysis::new(mnemonic, operands.into_iter(), diagnostics).run()
+    Analysis::new(mnemonic, operands.into_iter(), session).run()
 }
 
 struct Analysis<'a, 'b, I, D: 'b, S> {
     mnemonic: (&'a Mnemonic, S),
     operands: OperandCounter<I>,
-    diagnostics: &'b mut D,
+    session: &'b mut D,
 }
 
 impl<'a, 'b, I, D, S> EmitDiag<S, D::Stripped> for Analysis<'a, 'b, I, D, S>
@@ -36,32 +33,31 @@ where
     D: Diagnostics<S> + 'b,
 {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<S, D::Stripped>>) {
-        self.diagnostics.emit_diag(diag)
+        self.session.emit_diag(diag)
     }
 }
 
-impl<'a, 'b, I, V, D, S> Analysis<'a, 'b, I, D, S>
+impl<'a, 'b, I, D, S> Analysis<'a, 'b, I, D, S>
 where
-    I: Iterator<Item = Result<Operand<V, S>, ()>>,
-    V: Source<Span = S>,
-    D: Diagnostics<S>,
+    I: Iterator<Item = Result<Operand<Expr<D::SymbolId, S>, S>, ()>>,
+    D: Backend<S> + Diagnostics<S>,
     S: Clone,
 {
-    fn new(mnemonic: (&'a Mnemonic, S), operands: I, diagnostics: &'b mut D) -> Self {
+    fn new(mnemonic: (&'a Mnemonic, S), operands: I, session: &'b mut D) -> Self {
         Analysis {
             mnemonic,
             operands: OperandCounter::new(operands),
-            diagnostics,
+            session,
         }
     }
 
-    fn run(mut self) -> Result<CpuInstr<V>, ()> {
-        let instruction = self.analyze_mnemonic()?;
-        self.check_for_unexpected_operands()?;
-        Ok(instruction)
+    fn run(mut self) {
+        if self.analyze_mnemonic().is_ok() {
+            self.check_for_unexpected_operands()
+        }
     }
 
-    fn analyze_mnemonic(&mut self) -> Result<CpuInstr<V>, ()> {
+    fn analyze_mnemonic(&mut self) -> Result<(), ()> {
         use self::Mnemonic::*;
         match self.mnemonic.0 {
             Alu(AluOperation::Add) => self.analyze_add_instruction(),
@@ -75,13 +71,21 @@ where
             Ld => self.analyze_ld(),
             Ldhl => self.analyze_ldhl(),
             Misc(operation) => self.analyze_misc(*operation),
-            Nullary(instruction) => Ok((*instruction).into()),
+            Nullary(opcode) => {
+                self.session.emit_fragment(Fragment::Byte(*opcode));
+                Ok(())
+            }
             Rst => self.analyze_rst(),
             Stack(operation) => self.analyze_stack_operation(*operation),
+            Stop => {
+                self.session.emit_fragment(Fragment::Byte(0x10));
+                self.session.emit_fragment(Fragment::Byte(0x00));
+                Ok(())
+            }
         }
     }
 
-    fn analyze_add_instruction(&mut self) -> Result<CpuInstr<V>, ()> {
+    fn analyze_add_instruction(&mut self) -> Result<(), ()> {
         match self.next_operand_of(2)? {
             Operand::Atom(AtomKind::Reg16(reg16), range) => {
                 self.analyze_add_reg16_instruction((reg16, range))
@@ -90,7 +94,7 @@ where
         }
     }
 
-    fn analyze_add_reg16_instruction(&mut self, target: (Reg16, S)) -> Result<CpuInstr<V>, ()> {
+    fn analyze_add_reg16_instruction(&mut self, target: (Reg16, S)) -> Result<(), ()> {
         match target.0 {
             Reg16::Hl => self.analyze_add_hl_instruction(),
             _ => {
@@ -100,9 +104,13 @@ where
         }
     }
 
-    fn analyze_add_hl_instruction(&mut self) -> Result<CpuInstr<V>, ()> {
+    fn analyze_add_hl_instruction(&mut self) -> Result<(), ()> {
         match self.next_operand_of(2)? {
-            Operand::Atom(AtomKind::Reg16(src), _) => Ok(CpuInstr::AddHl(src)),
+            Operand::Atom(AtomKind::Reg16(src), _) => {
+                self.session
+                    .emit_fragment(Fragment::Byte(0x09 | encode_reg16(src)));
+                Ok(())
+            }
             operand => {
                 self.emit_diag(Message::IncompatibleOperand.at(operand.span()));
                 Err(())
@@ -113,24 +121,34 @@ where
     fn analyze_alu_instruction(
         &mut self,
         operation: AluOperation,
-        first_operand: Operand<V, S>,
-    ) -> Result<CpuInstr<V>, ()> {
+        first_operand: Operand<Expr<D::SymbolId, S>, S>,
+    ) -> Result<(), ()> {
         let src = if operation.implicit_dest() {
             first_operand
         } else {
             let second_operand = self.next_operand_of(2)?;
             first_operand.expect_specific_atom(
-                AtomKind::Simple(SimpleOperand::A),
+                AtomKind::Simple(M::A),
                 Message::DestMustBeA,
-                self.diagnostics,
+                self.session,
             )?;
             second_operand
         };
         match src {
             Operand::Atom(AtomKind::Simple(src), _) => {
-                Ok(CpuInstr::Alu(operation, AluSource::Simple(src)))
+                self.session.emit_fragment(Fragment::Byte(
+                    0b10_000_000 | encode_alu_operation(operation) | src.encode(),
+                ));
+                Ok(())
             }
-            Operand::Const(expr) => Ok(CpuInstr::Alu(operation, AluSource::Immediate(expr))),
+            Operand::Const(expr) => {
+                self.session.emit_fragment(Fragment::Byte(
+                    0b11_000_110 | encode_alu_operation(operation),
+                ));
+                self.session
+                    .emit_fragment(Fragment::Immediate(expr, Width::Byte));
+                Ok(())
+            }
             src => {
                 self.emit_diag(Message::IncompatibleOperand.at(src.span()));
                 Err(())
@@ -138,55 +156,71 @@ where
         }
     }
 
-    fn analyze_bit_operation(&mut self, operation: BitOperation) -> Result<CpuInstr<V>, ()> {
+    fn analyze_bit_operation(&mut self, operation: BitOperation) -> Result<(), ()> {
         let bit_number = self.next_operand_of(2)?;
         let operand = self.next_operand_of(2)?;
         let expr = if let Operand::Const(expr) = bit_number {
             expr
         } else {
-            let stripped = self.diagnostics.strip_span(&self.mnemonic.1);
+            let stripped = self.session.strip_span(&self.mnemonic.1);
             self.emit_diag(Message::MustBeBit { mnemonic: stripped }.at(bit_number.span()));
             return Err(());
         };
-        Ok(CpuInstr::Bit(
-            operation,
+        let operand = operand.expect_simple(self.session)?;
+        self.session.emit_fragment(Fragment::Byte(0xcb));
+        self.session.emit_fragment(Fragment::Embedded(
+            encode_bit_operation(operation) | operand.encode(),
             expr,
-            operand.expect_simple(self.diagnostics)?,
-        ))
+        ));
+        Ok(())
     }
 
-    fn analyze_ldhl(&mut self) -> Result<CpuInstr<V>, ()> {
+    fn analyze_ldhl(&mut self) -> Result<(), ()> {
         let src = self.next_operand_of(2)?;
-        let offset = self.next_operand_of(2)?;
+        let offset = self.next_operand_of(2)?.expect_const(self.session)?;
         src.expect_specific_atom(
             AtomKind::Reg16(Reg16::Sp),
             Message::SrcMustBeSp,
-            self.diagnostics,
+            self.session,
         )?;
-        Ok(CpuInstr::Ldhl(offset.expect_const(self.diagnostics)?))
+        self.session.emit_fragment(Fragment::Byte(0xf8));
+        self.session
+            .emit_fragment(Fragment::Immediate(offset, Width::Byte));
+        Ok(())
     }
 
-    fn analyze_misc(&mut self, operation: MiscOperation) -> Result<CpuInstr<V>, ()> {
-        let operand = self.next_operand_of(1)?;
-        Ok(CpuInstr::Misc(
-            operation,
-            operand.expect_simple(self.diagnostics)?,
-        ))
+    fn analyze_misc(&mut self, operation: MiscOperation) -> Result<(), ()> {
+        let operand = self.next_operand_of(1)?.expect_simple(self.session)?;
+        self.session.emit_fragment(Fragment::Byte(0xcb));
+        self.session
+            .emit_fragment(Fragment::Byte(operation.encode() | operand.encode()));
+        Ok(())
     }
 
-    fn analyze_stack_operation(&mut self, operation: StackOperation) -> Result<CpuInstr<V>, ()> {
-        let reg_pair = self.next_operand_of(1)?.expect_reg_pair(self.diagnostics)?;
-        let instruction_ctor = match operation {
-            StackOperation::Push => CpuInstr::Push,
-            StackOperation::Pop => CpuInstr::Pop,
-        };
-        Ok(instruction_ctor(reg_pair))
+    fn analyze_stack_operation(&mut self, operation: StackOperation) -> Result<(), ()> {
+        let reg_pair = self.next_operand_of(1)?.expect_reg_pair(self.session)?;
+        let opcode = match operation {
+            StackOperation::Push => 0xc5,
+            StackOperation::Pop => 0xc1,
+        } | (encode_reg_pair(reg_pair) << 4);
+        self.session.emit_fragment(Fragment::Byte(opcode));
+        Ok(())
     }
 
-    fn analyze_inc_dec(&mut self, mode: IncDec) -> Result<CpuInstr<V>, ()> {
+    fn analyze_inc_dec(&mut self, mode: IncDec) -> Result<(), ()> {
         match self.next_operand_of(1)? {
-            Operand::Atom(AtomKind::Simple(operand), _) => Ok(CpuInstr::IncDec8(mode, operand)),
-            Operand::Atom(AtomKind::Reg16(operand), _) => Ok(CpuInstr::IncDec16(mode, operand)),
+            Operand::Atom(AtomKind::Simple(operand), _) => {
+                self.session.emit_fragment(Fragment::Byte(
+                    0b00_000_100 | encode_inc_dec(mode) | (operand.encode() << 3),
+                ));
+                Ok(())
+            }
+            Operand::Atom(AtomKind::Reg16(operand), _) => {
+                self.session.emit_fragment(Fragment::Byte(
+                    0x03 | (encode_inc_dec(mode) << 3) | encode_reg16(operand),
+                ));
+                Ok(())
+            }
             operand => {
                 self.emit_diag(Message::OperandCannotBeIncDec(mode).at(operand.span()));
                 Err(())
@@ -194,13 +228,14 @@ where
         }
     }
 
-    fn analyze_rst(&mut self) -> Result<CpuInstr<V>, ()> {
-        Ok(CpuInstr::Rst(
-            self.next_operand_of(1)?.expect_const(self.diagnostics)?,
-        ))
+    fn analyze_rst(&mut self) -> Result<(), ()> {
+        let operand = self.next_operand_of(1)?.expect_const(self.session)?;
+        self.session
+            .emit_fragment(Fragment::Embedded(0b11_000_111, operand));
+        Ok(())
     }
 
-    fn next_operand_of(&mut self, out_of: usize) -> Result<Operand<V, S>, ()> {
+    fn next_operand_of(&mut self, out_of: usize) -> Result<Operand<Expr<D::SymbolId, S>, S>, ()> {
         let actual = self.operands.seen();
         self.next_operand()?.ok_or_else(|| {
             self.emit_diag(
@@ -213,23 +248,103 @@ where
         })
     }
 
-    fn next_operand(&mut self) -> Result<Option<Operand<V, S>>, ()> {
+    fn next_operand(&mut self) -> Result<Option<Operand<Expr<D::SymbolId, S>, S>>, ()> {
         self.operands
             .next()
             .map_or(Ok(None), |result| result.map(Some))
     }
 
-    fn check_for_unexpected_operands(self) -> Result<(), ()> {
+    fn check_for_unexpected_operands(self) {
         let expected = self.operands.seen();
         let extra = self.operands.count();
         let actual = expected + extra;
-        if actual == expected {
-            Ok(())
-        } else {
-            self.diagnostics
+        if actual != expected {
+            self.session
                 .emit_diag(Message::OperandCount { actual, expected }.at(self.mnemonic.1));
-            Err(())
         }
+    }
+}
+
+impl MiscOperation {
+    pub fn encode(self) -> u8 {
+        use self::MiscOperation::*;
+        (match self {
+            Rlc => 0b000,
+            Rrc => 0b001,
+            Rl => 0b010,
+            Rr => 0b011,
+            Sla => 0b100,
+            Sra => 0b101,
+            Swap => 0b110,
+            Srl => 0b111,
+        }) << 3
+    }
+}
+
+impl M {
+    pub fn encode(self) -> u8 {
+        use self::M::*;
+        match self {
+            B => 0b000,
+            C => 0b001,
+            D => 0b010,
+            E => 0b011,
+            H => 0b100,
+            L => 0b101,
+            DerefHl => 0b110,
+            A => 0b111,
+        }
+    }
+}
+
+fn encode_alu_operation(operation: AluOperation) -> u8 {
+    use self::AluOperation::*;
+    (match operation {
+        Add => 0b000,
+        Adc => 0b001,
+        Sub => 0b010,
+        Sbc => 0b011,
+        And => 0b100,
+        Xor => 0b101,
+        Or => 0b110,
+        Cp => 0b111,
+    }) << 3
+}
+
+fn encode_reg_pair(reg_pair: RegPair) -> u8 {
+    use self::RegPair::*;
+    match reg_pair {
+        Bc => 0b00,
+        De => 0b01,
+        Hl => 0b10,
+        Af => 0b11,
+    }
+}
+
+fn encode_reg16(reg16: Reg16) -> u8 {
+    use self::Reg16::*;
+    (match reg16 {
+        Bc => 0b00,
+        De => 0b01,
+        Hl => 0b10,
+        Sp => 0b11,
+    }) << 4
+}
+
+fn encode_bit_operation(operation: BitOperation) -> u8 {
+    use self::BitOperation::*;
+    (match operation {
+        Bit => 0b01,
+        Set => 0b11,
+        Res => 0b10,
+    }) << 6
+}
+
+fn encode_inc_dec(mode: IncDec) -> u8 {
+    use self::IncDec::*;
+    match mode {
+        Inc => 0,
+        Dec => 1,
     }
 }
 
@@ -249,7 +364,7 @@ impl<V: Source> Operand<V, V::Span> {
         }
     }
 
-    fn expect_simple<D>(self, diagnostics: &mut D) -> Result<SimpleOperand, ()>
+    fn expect_simple<D>(self, diagnostics: &mut D) -> Result<M, ()>
     where
         D: Diagnostics<V::Span>,
     {
@@ -316,15 +431,10 @@ impl AluOperation {
     }
 }
 
-impl<V: Source> From<Nullary> for CpuInstr<V> {
-    fn from(nullary: Nullary) -> CpuInstr<V> {
-        CpuInstr::Nullary(nullary)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     pub(crate) use crate::diag::Message;
+    pub(crate) use crate::object::Fragment;
     pub use crate::semantics::arg::OperandSymbol::*;
     pub(crate) use crate::session::builder::mock::MockSymbolId;
     pub(crate) use crate::span::{Spanned, WithSpan};
@@ -337,6 +447,7 @@ mod tests {
     use crate::expr::Atom;
     use crate::semantics::arg::*;
     use crate::semantics::keywords::*;
+    use crate::session::builder::mock::BackendEvent;
 
     #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
     pub(super) enum TokenId {
@@ -430,17 +541,17 @@ mod tests {
         }
     }
 
-    impl From<SimpleOperand> for Input {
-        fn from(alu_operand: SimpleOperand) -> Self {
+    impl From<M> for Input {
+        fn from(alu_operand: M) -> Self {
             match alu_operand {
-                SimpleOperand::A => literal(A),
-                SimpleOperand::B => literal(B),
-                SimpleOperand::C => literal(C),
-                SimpleOperand::D => literal(D),
-                SimpleOperand::E => literal(E),
-                SimpleOperand::H => literal(H),
-                SimpleOperand::L => literal(L),
-                SimpleOperand::DerefHl => deref_symbol(Hl),
+                M::A => literal(A),
+                M::B => literal(B),
+                M::C => literal(C),
+                M::D => literal(D),
+                M::E => literal(E),
+                M::H => literal(H),
+                M::L => literal(L),
+                M::DerefHl => deref_symbol(Hl),
             }
         }
     }
@@ -511,253 +622,1246 @@ mod tests {
     }
 
     #[test]
-    fn analyze_cp_symbol() {
-        let ident = MockSymbolId(42);
-        test_cp_const_analysis(ident.into(), name(ident, TokenId::Operand(0, 0)))
-    }
-
-    #[test]
-    fn analyze_cp_literal() {
-        let n = 0x50;
-        test_cp_const_analysis(n.into(), number(n, TokenId::Operand(0, 0)))
-    }
-
-    fn test_cp_const_analysis(parsed: Input, expr: Expr<TokenSpan>) {
-        analyze(CP, Some(parsed))
-            .expect_instruction(CpuInstr::Alu(AluOperation::Cp, AluSource::Immediate(expr)))
-    }
-
-    #[test]
     fn analyze_rst() {
         let n = 3;
-        analyze(RST, vec![n.into()])
-            .expect_instruction(CpuInstr::Rst(number(n, TokenId::Operand(0, 0))))
+        analyze(RST, vec![n.into()]).expect_fragments(vec![Fragment::Embedded(
+            0b11_000_111,
+            number(n, TokenId::Operand(0, 0)),
+        )])
     }
 
     #[test]
-    fn analyze_legal_instructions() {
-        test_instruction_analysis(describe_legal_instructions());
+    fn ldhl_sp_0x42() {
+        analyze(LDHL, vec![Reg16::Sp.into(), 0x42.into()]).expect_fragments(vec![
+            Fragment::Byte(0xf8),
+            Fragment::Immediate(number(0x42, TokenId::Operand(1, 0)), Width::Byte),
+        ])
     }
 
-    pub(super) type InstructionDescriptor = ((Mnemonic, Vec<Input>), CpuInstr<Expr<TokenSpan>>);
-
-    fn describe_legal_instructions() -> Vec<InstructionDescriptor> {
-        let mut descriptors: Vec<InstructionDescriptor> = Vec::new();
-        descriptors.extend(describe_nullary_instructions());
-        descriptors.extend(describe_alu_simple_instructions());
-        descriptors.extend(describe_add_hl_reg16_instructions());
-        descriptors.extend(describe_bit_operation_instructions());
-        descriptors.extend(describe_inc_dec8_instructions());
-        descriptors.extend(describe_inc_dec16_instructions());
-        descriptors.extend(describe_push_pop_instructions());
-        descriptors.extend(describe_misc_operation_instructions());
-        descriptors.push((
-            (LDHL, vec![Reg16::Sp.into(), 0x42.into()]),
-            CpuInstr::Ldhl(number(0x42, TokenId::Operand(1, 0))),
-        ));
-        descriptors
+    #[test]
+    fn push_bc() {
+        analyze(PUSH, vec![RegPair::Bc.into()]).expect_fragments(vec![Fragment::Byte(0xc5)])
     }
 
-    fn describe_push_pop_instructions() -> impl Iterator<Item = InstructionDescriptor> {
-        REG_PAIRS.iter().flat_map(|&reg_pair| {
-            vec![
-                ((PUSH, vec![reg_pair.into()]), CpuInstr::Push(reg_pair)),
-                ((POP, vec![reg_pair.into()]), CpuInstr::Pop(reg_pair)),
-            ]
-        })
+    #[test]
+    fn push_de() {
+        analyze(PUSH, vec![RegPair::De.into()]).expect_fragments(vec![Fragment::Byte(0xd5)])
     }
 
-    fn describe_nullary_instructions() -> impl Iterator<Item = InstructionDescriptor> {
-        [
-            Nullary::Cpl,
-            Nullary::Daa,
-            Nullary::Di,
-            Nullary::Ei,
-            Nullary::Halt,
-            Nullary::Nop,
-            Nullary::Rla,
-            Nullary::Rlca,
-            Nullary::Rra,
-            Nullary::Rrca,
-            Nullary::Stop,
-        ]
-        .iter()
-        .map(|&nullary| ((nullary.into(), vec![]), nullary.into()))
+    #[test]
+    fn push_hl() {
+        analyze(PUSH, vec![RegPair::Hl.into()]).expect_fragments(vec![Fragment::Byte(0xe5)])
     }
 
-    impl From<Nullary> for Mnemonic {
-        fn from(nullary: Nullary) -> Self {
-            Mnemonic::Nullary(nullary)
-        }
+    #[test]
+    fn push_af() {
+        analyze(PUSH, vec![RegPair::Af.into()]).expect_fragments(vec![Fragment::Byte(0xf5)])
     }
 
-    fn describe_alu_simple_instructions() -> impl Iterator<Item = InstructionDescriptor> {
-        SIMPLE_OPERANDS.iter().flat_map(|&operand| {
-            let with_a = ALU_OPERATIONS_WITH_A
-                .iter()
-                .map(move |&operation| describe_alu_simple_with_a(operation, operand));
-            let without_a = ALU_OPERATIONS_WITHOUT_A
-                .iter()
-                .map(move |&operation| describe_alu_simple_without_a(operation, operand));
-            with_a.chain(without_a)
-        })
+    #[test]
+    fn pop_bc() {
+        analyze(POP, vec![RegPair::Bc.into()]).expect_fragments(vec![Fragment::Byte(0xc1)])
     }
 
-    fn describe_alu_simple_with_a(
-        operation: AluOperation,
-        operand: SimpleOperand,
-    ) -> InstructionDescriptor {
-        (
-            (
-                operation.into(),
-                vec![SimpleOperand::A.into(), operand.into()],
-            ),
-            CpuInstr::Alu(operation, AluSource::Simple(operand)),
-        )
+    #[test]
+    fn pop_de() {
+        analyze(POP, vec![RegPair::De.into()]).expect_fragments(vec![Fragment::Byte(0xd1)])
     }
 
-    fn describe_alu_simple_without_a(
-        operation: AluOperation,
-        operand: SimpleOperand,
-    ) -> InstructionDescriptor {
-        (
-            (operation.into(), vec![operand.into()]),
-            CpuInstr::Alu(operation, AluSource::Simple(operand)),
-        )
+    #[test]
+    fn pop_hl() {
+        analyze(POP, vec![RegPair::Hl.into()]).expect_fragments(vec![Fragment::Byte(0xe1)])
     }
 
-    fn describe_add_hl_reg16_instructions() -> impl Iterator<Item = InstructionDescriptor> {
-        REG16.iter().map(|&reg16| describe_add_hl_reg16(reg16))
+    #[test]
+    fn pop_af() {
+        analyze(POP, vec![RegPair::Af.into()]).expect_fragments(vec![Fragment::Byte(0xf1)])
     }
 
-    fn describe_add_hl_reg16(reg16: Reg16) -> InstructionDescriptor {
-        (
-            (ADD, vec![Reg16::Hl.into(), reg16.into()]),
-            CpuInstr::AddHl(reg16),
-        )
+    #[test]
+    fn cpl() {
+        analyze(CPL, vec![]).expect_fragments(vec![Fragment::Byte(0x2f)])
     }
 
-    fn describe_bit_operation_instructions() -> impl Iterator<Item = InstructionDescriptor> {
-        BIT_OPERATIONS.iter().flat_map(|&operation| {
-            SIMPLE_OPERANDS
-                .iter()
-                .map(move |&operand| describe_bit_operation(operation, operand))
-        })
+    #[test]
+    fn daa() {
+        analyze(DAA, vec![]).expect_fragments(vec![Fragment::Byte(0x27)])
     }
 
-    fn describe_bit_operation(
-        operation: BitOperation,
-        operand: SimpleOperand,
-    ) -> InstructionDescriptor {
-        let bit_number = 4;
-        (
-            (operation.into(), vec![bit_number.into(), operand.into()]),
-            CpuInstr::Bit(
-                operation,
-                number(bit_number, TokenId::Operand(0, 0)),
-                operand,
-            ),
-        )
+    #[test]
+    fn di() {
+        analyze(DI, vec![]).expect_fragments(vec![Fragment::Byte(0xf3)])
     }
 
-    fn describe_inc_dec8_instructions() -> impl Iterator<Item = InstructionDescriptor> {
-        INC_DEC.iter().flat_map(|&mode| {
-            SIMPLE_OPERANDS.iter().map(move |&operand| {
-                (
-                    (mode.into(), vec![operand.into()]),
-                    CpuInstr::IncDec8(mode, operand),
-                )
-            })
-        })
+    #[test]
+    fn ei() {
+        analyze(EI, vec![]).expect_fragments(vec![Fragment::Byte(0xfb)])
     }
 
-    fn describe_inc_dec16_instructions() -> impl Iterator<Item = InstructionDescriptor> {
-        INC_DEC.iter().flat_map(|&mode| {
-            REG16.iter().map(move |&reg16| {
-                (
-                    (mode.into(), vec![reg16.into()]),
-                    CpuInstr::IncDec16(mode, reg16),
-                )
-            })
-        })
+    #[test]
+    fn halt() {
+        analyze(HALT, vec![]).expect_fragments(vec![Fragment::Byte(0x76)])
     }
 
-    fn describe_misc_operation_instructions() -> impl Iterator<Item = InstructionDescriptor> {
-        MISC_OPERATIONS.iter().flat_map(|&operation| {
-            SIMPLE_OPERANDS.iter().map(move |&operand| {
-                (
-                    (operation.into(), vec![operand.into()]),
-                    CpuInstr::Misc(operation, operand),
-                )
-            })
-        })
+    #[test]
+    fn nop() {
+        analyze(NOP, vec![]).expect_fragments(vec![Fragment::Byte(0x00)])
     }
 
-    const ALU_OPERATIONS_WITH_A: &[AluOperation] =
-        &[AluOperation::Add, AluOperation::Adc, AluOperation::Sbc];
-
-    const ALU_OPERATIONS_WITHOUT_A: &[AluOperation] = &[
-        AluOperation::Sub,
-        AluOperation::And,
-        AluOperation::Xor,
-        AluOperation::Or,
-        AluOperation::Cp,
-    ];
-
-    const BIT_OPERATIONS: &[BitOperation] =
-        &[BitOperation::Bit, BitOperation::Set, BitOperation::Res];
-
-    const MISC_OPERATIONS: &[MiscOperation] = &[
-        MiscOperation::Rlc,
-        MiscOperation::Rrc,
-        MiscOperation::Rl,
-        MiscOperation::Rr,
-        MiscOperation::Sla,
-        MiscOperation::Sra,
-        MiscOperation::Swap,
-        MiscOperation::Srl,
-    ];
-
-    pub const SIMPLE_OPERANDS: &[SimpleOperand] = &[
-        SimpleOperand::A,
-        SimpleOperand::B,
-        SimpleOperand::C,
-        SimpleOperand::D,
-        SimpleOperand::E,
-        SimpleOperand::H,
-        SimpleOperand::L,
-        SimpleOperand::DerefHl,
-    ];
-
-    pub const REG16: &[Reg16] = &[Reg16::Bc, Reg16::De, Reg16::Hl, Reg16::Sp];
-
-    const REG_PAIRS: &[RegPair] = &[RegPair::Bc, RegPair::De, RegPair::Hl, RegPair::Af];
-
-    const INC_DEC: &[IncDec] = &[IncDec::Inc, IncDec::Dec];
-
-    pub(super) fn test_instruction_analysis(descriptors: Vec<InstructionDescriptor>) {
-        for ((mnemonic, operands), expected) in descriptors {
-            analyze(mnemonic, operands).expect_instruction(expected)
-        }
+    #[test]
+    fn rla() {
+        analyze(RLA, vec![]).expect_fragments(vec![Fragment::Byte(0x17)])
     }
 
-    pub(super) struct AnalysisResult(InnerAnalysisResult);
+    #[test]
+    fn rlca() {
+        analyze(RLCA, vec![]).expect_fragments(vec![Fragment::Byte(0x07)])
+    }
 
-    type InnerAnalysisResult = Result<CpuInstr<Expr<TokenSpan>>, Vec<Event<TokenSpan>>>;
+    #[test]
+    fn rra() {
+        analyze(RRA, vec![]).expect_fragments(vec![Fragment::Byte(0x1f)])
+    }
+
+    #[test]
+    fn rrca() {
+        analyze(RRCA, vec![]).expect_fragments(vec![Fragment::Byte(0x0f)])
+    }
+
+    #[test]
+    fn stop() {
+        analyze(STOP, vec![]).expect_fragments(vec![Fragment::Byte(0x10), Fragment::Byte(0x00)])
+    }
+
+    #[test]
+    fn add_a_a() {
+        analyze(ADD, vec![M::A.into(), M::A.into()]).expect_fragments(vec![Fragment::Byte(0x87)])
+    }
+
+    #[test]
+    fn add_a_b() {
+        analyze(ADD, vec![M::A.into(), M::B.into()]).expect_fragments(vec![Fragment::Byte(0x80)])
+    }
+
+    #[test]
+    fn add_a_c() {
+        analyze(ADD, vec![M::A.into(), M::C.into()]).expect_fragments(vec![Fragment::Byte(0x81)])
+    }
+
+    #[test]
+    fn add_a_d() {
+        analyze(ADD, vec![M::A.into(), M::D.into()]).expect_fragments(vec![Fragment::Byte(0x82)])
+    }
+
+    #[test]
+    fn add_a_e() {
+        analyze(ADD, vec![M::A.into(), M::E.into()]).expect_fragments(vec![Fragment::Byte(0x83)])
+    }
+
+    #[test]
+    fn add_a_h() {
+        analyze(ADD, vec![M::A.into(), M::H.into()]).expect_fragments(vec![Fragment::Byte(0x84)])
+    }
+
+    #[test]
+    fn add_a_l() {
+        analyze(ADD, vec![M::A.into(), M::L.into()]).expect_fragments(vec![Fragment::Byte(0x85)])
+    }
+
+    #[test]
+    fn add_a_deref_hl() {
+        analyze(ADD, vec![M::A.into(), M::DerefHl.into()])
+            .expect_fragments(vec![Fragment::Byte(0x86)])
+    }
+
+    #[test]
+    fn add_a_5() {
+        analyze(ADD, vec![M::A.into(), 5.into()]).expect_fragments(vec![
+            Fragment::Byte(0xc6),
+            Fragment::Immediate(number(5, TokenId::Operand(1, 0)), Width::Byte),
+        ])
+    }
+
+    #[test]
+    fn adc_a_a() {
+        analyze(ADC, vec![M::A.into(), M::A.into()]).expect_fragments(vec![Fragment::Byte(0x8f)])
+    }
+
+    #[test]
+    fn adc_a_b() {
+        analyze(ADC, vec![M::A.into(), M::B.into()]).expect_fragments(vec![Fragment::Byte(0x88)])
+    }
+
+    #[test]
+    fn adc_a_c() {
+        analyze(ADC, vec![M::A.into(), M::C.into()]).expect_fragments(vec![Fragment::Byte(0x89)])
+    }
+
+    #[test]
+    fn adc_a_d() {
+        analyze(ADC, vec![M::A.into(), M::D.into()]).expect_fragments(vec![Fragment::Byte(0x8a)])
+    }
+
+    #[test]
+    fn adc_a_e() {
+        analyze(ADC, vec![M::A.into(), M::E.into()]).expect_fragments(vec![Fragment::Byte(0x8b)])
+    }
+
+    #[test]
+    fn adc_a_h() {
+        analyze(ADC, vec![M::A.into(), M::H.into()]).expect_fragments(vec![Fragment::Byte(0x8c)])
+    }
+
+    #[test]
+    fn adc_a_l() {
+        analyze(ADC, vec![M::A.into(), M::L.into()]).expect_fragments(vec![Fragment::Byte(0x8d)])
+    }
+
+    #[test]
+    fn adc_a_deref_hl() {
+        analyze(ADC, vec![M::A.into(), M::DerefHl.into()])
+            .expect_fragments(vec![Fragment::Byte(0x8e)])
+    }
+
+    #[test]
+    fn adc_a_5() {
+        analyze(ADC, vec![M::A.into(), 5.into()]).expect_fragments(vec![
+            Fragment::Byte(0xce),
+            Fragment::Immediate(number(5, TokenId::Operand(1, 0)), Width::Byte),
+        ])
+    }
+
+    #[test]
+    fn sub_a() {
+        analyze(SUB, vec![M::A.into()]).expect_fragments(vec![Fragment::Byte(0x97)])
+    }
+
+    #[test]
+    fn sub_b() {
+        analyze(SUB, vec![M::B.into()]).expect_fragments(vec![Fragment::Byte(0x90)])
+    }
+
+    #[test]
+    fn sub_c() {
+        analyze(SUB, vec![M::C.into()]).expect_fragments(vec![Fragment::Byte(0x91)])
+    }
+
+    #[test]
+    fn sub_d() {
+        analyze(SUB, vec![M::D.into()]).expect_fragments(vec![Fragment::Byte(0x92)])
+    }
+
+    #[test]
+    fn sub_e() {
+        analyze(SUB, vec![M::E.into()]).expect_fragments(vec![Fragment::Byte(0x93)])
+    }
+
+    #[test]
+    fn sub_h() {
+        analyze(SUB, vec![M::H.into()]).expect_fragments(vec![Fragment::Byte(0x94)])
+    }
+
+    #[test]
+    fn sub_l() {
+        analyze(SUB, vec![M::L.into()]).expect_fragments(vec![Fragment::Byte(0x95)])
+    }
+
+    #[test]
+    fn sub_deref_hl() {
+        analyze(SUB, vec![M::DerefHl.into()]).expect_fragments(vec![Fragment::Byte(0x96)])
+    }
+
+    #[test]
+    fn sub_5() {
+        analyze(SUB, vec![5.into()]).expect_fragments(vec![
+            Fragment::Byte(0xd6),
+            Fragment::Immediate(number(5, TokenId::Operand(0, 0)), Width::Byte),
+        ])
+    }
+
+    #[test]
+    fn sbc_a_a() {
+        analyze(SBC, vec![M::A.into(), M::A.into()]).expect_fragments(vec![Fragment::Byte(0x9f)])
+    }
+
+    #[test]
+    fn sbc_a_b() {
+        analyze(SBC, vec![M::A.into(), M::B.into()]).expect_fragments(vec![Fragment::Byte(0x98)])
+    }
+
+    #[test]
+    fn sbc_a_c() {
+        analyze(SBC, vec![M::A.into(), M::C.into()]).expect_fragments(vec![Fragment::Byte(0x99)])
+    }
+
+    #[test]
+    fn sbc_a_d() {
+        analyze(SBC, vec![M::A.into(), M::D.into()]).expect_fragments(vec![Fragment::Byte(0x9a)])
+    }
+
+    #[test]
+    fn sbc_a_e() {
+        analyze(SBC, vec![M::A.into(), M::E.into()]).expect_fragments(vec![Fragment::Byte(0x9b)])
+    }
+
+    #[test]
+    fn sbc_a_h() {
+        analyze(SBC, vec![M::A.into(), M::H.into()]).expect_fragments(vec![Fragment::Byte(0x9c)])
+    }
+
+    #[test]
+    fn sbc_a_l() {
+        analyze(SBC, vec![M::A.into(), M::L.into()]).expect_fragments(vec![Fragment::Byte(0x9d)])
+    }
+
+    #[test]
+    fn sbc_a_deref_hl() {
+        analyze(SBC, vec![M::A.into(), M::DerefHl.into()])
+            .expect_fragments(vec![Fragment::Byte(0x9e)])
+    }
+
+    #[test]
+    fn sbc_a_5() {
+        analyze(SBC, vec![M::A.into(), 5.into()]).expect_fragments(vec![
+            Fragment::Byte(0xde),
+            Fragment::Immediate(number(5, TokenId::Operand(1, 0)), Width::Byte),
+        ])
+    }
+
+    #[test]
+    fn and_a() {
+        analyze(AND, vec![M::A.into()]).expect_fragments(vec![Fragment::Byte(0xa7)])
+    }
+
+    #[test]
+    fn and_b() {
+        analyze(AND, vec![M::B.into()]).expect_fragments(vec![Fragment::Byte(0xa0)])
+    }
+
+    #[test]
+    fn and_c() {
+        analyze(AND, vec![M::C.into()]).expect_fragments(vec![Fragment::Byte(0xa1)])
+    }
+
+    #[test]
+    fn and_d() {
+        analyze(AND, vec![M::D.into()]).expect_fragments(vec![Fragment::Byte(0xa2)])
+    }
+
+    #[test]
+    fn and_e() {
+        analyze(AND, vec![M::E.into()]).expect_fragments(vec![Fragment::Byte(0xa3)])
+    }
+
+    #[test]
+    fn and_h() {
+        analyze(AND, vec![M::H.into()]).expect_fragments(vec![Fragment::Byte(0xa4)])
+    }
+
+    #[test]
+    fn and_l() {
+        analyze(AND, vec![M::L.into()]).expect_fragments(vec![Fragment::Byte(0xa5)])
+    }
+
+    #[test]
+    fn and_deref_hl() {
+        analyze(AND, vec![M::DerefHl.into()]).expect_fragments(vec![Fragment::Byte(0xa6)])
+    }
+
+    #[test]
+    fn and_5() {
+        analyze(AND, vec![5.into()]).expect_fragments(vec![
+            Fragment::Byte(0xe6),
+            Fragment::Immediate(number(5, TokenId::Operand(0, 0)), Width::Byte),
+        ])
+    }
+
+    #[test]
+    fn xor_a() {
+        analyze(XOR, vec![M::A.into()]).expect_fragments(vec![Fragment::Byte(0xaf)])
+    }
+
+    #[test]
+    fn xor_b() {
+        analyze(XOR, vec![M::B.into()]).expect_fragments(vec![Fragment::Byte(0xa8)])
+    }
+
+    #[test]
+    fn xor_c() {
+        analyze(XOR, vec![M::C.into()]).expect_fragments(vec![Fragment::Byte(0xa9)])
+    }
+
+    #[test]
+    fn xor_d() {
+        analyze(XOR, vec![M::D.into()]).expect_fragments(vec![Fragment::Byte(0xaa)])
+    }
+
+    #[test]
+    fn xor_e() {
+        analyze(XOR, vec![M::E.into()]).expect_fragments(vec![Fragment::Byte(0xab)])
+    }
+
+    #[test]
+    fn xor_h() {
+        analyze(XOR, vec![M::H.into()]).expect_fragments(vec![Fragment::Byte(0xac)])
+    }
+
+    #[test]
+    fn xor_l() {
+        analyze(XOR, vec![M::L.into()]).expect_fragments(vec![Fragment::Byte(0xad)])
+    }
+
+    #[test]
+    fn xor_deref_hl() {
+        analyze(XOR, vec![M::DerefHl.into()]).expect_fragments(vec![Fragment::Byte(0xae)])
+    }
+
+    #[test]
+    fn xor_5() {
+        analyze(XOR, vec![5.into()]).expect_fragments(vec![
+            Fragment::Byte(0xee),
+            Fragment::Immediate(number(5, TokenId::Operand(0, 0)), Width::Byte),
+        ])
+    }
+
+    #[test]
+    fn or_a() {
+        analyze(OR, vec![M::A.into()]).expect_fragments(vec![Fragment::Byte(0xb7)])
+    }
+
+    #[test]
+    fn or_b() {
+        analyze(OR, vec![M::B.into()]).expect_fragments(vec![Fragment::Byte(0xb0)])
+    }
+
+    #[test]
+    fn or_c() {
+        analyze(OR, vec![M::C.into()]).expect_fragments(vec![Fragment::Byte(0xb1)])
+    }
+
+    #[test]
+    fn or_d() {
+        analyze(OR, vec![M::D.into()]).expect_fragments(vec![Fragment::Byte(0xb2)])
+    }
+
+    #[test]
+    fn or_e() {
+        analyze(OR, vec![M::E.into()]).expect_fragments(vec![Fragment::Byte(0xb3)])
+    }
+
+    #[test]
+    fn or_h() {
+        analyze(OR, vec![M::H.into()]).expect_fragments(vec![Fragment::Byte(0xb4)])
+    }
+
+    #[test]
+    fn or_l() {
+        analyze(OR, vec![M::L.into()]).expect_fragments(vec![Fragment::Byte(0xb5)])
+    }
+
+    #[test]
+    fn or_deref_hl() {
+        analyze(OR, vec![M::DerefHl.into()]).expect_fragments(vec![Fragment::Byte(0xb6)])
+    }
+
+    #[test]
+    fn or_5() {
+        analyze(OR, vec![5.into()]).expect_fragments(vec![
+            Fragment::Byte(0xf6),
+            Fragment::Immediate(number(5, TokenId::Operand(0, 0)), Width::Byte),
+        ])
+    }
+
+    #[test]
+    fn cp_a() {
+        analyze(CP, vec![M::A.into()]).expect_fragments(vec![Fragment::Byte(0xbf)])
+    }
+
+    #[test]
+    fn cp_b() {
+        analyze(CP, vec![M::B.into()]).expect_fragments(vec![Fragment::Byte(0xb8)])
+    }
+
+    #[test]
+    fn cp_c() {
+        analyze(CP, vec![M::C.into()]).expect_fragments(vec![Fragment::Byte(0xb9)])
+    }
+
+    #[test]
+    fn cp_d() {
+        analyze(CP, vec![M::D.into()]).expect_fragments(vec![Fragment::Byte(0xba)])
+    }
+
+    #[test]
+    fn cp_e() {
+        analyze(CP, vec![M::E.into()]).expect_fragments(vec![Fragment::Byte(0xbb)])
+    }
+
+    #[test]
+    fn cp_h() {
+        analyze(CP, vec![M::H.into()]).expect_fragments(vec![Fragment::Byte(0xbc)])
+    }
+
+    #[test]
+    fn cp_l() {
+        analyze(CP, vec![M::L.into()]).expect_fragments(vec![Fragment::Byte(0xbd)])
+    }
+
+    #[test]
+    fn cp_deref_hl() {
+        analyze(CP, vec![M::DerefHl.into()]).expect_fragments(vec![Fragment::Byte(0xbe)])
+    }
+
+    #[test]
+    fn cp_5() {
+        analyze(CP, vec![5.into()]).expect_fragments(vec![
+            Fragment::Byte(0xfe),
+            Fragment::Immediate(number(5, TokenId::Operand(0, 0)), Width::Byte),
+        ])
+    }
+
+    #[test]
+    fn add_hl_bc() {
+        analyze(ADD, vec![Reg16::Hl.into(), Reg16::Bc.into()])
+            .expect_fragments(vec![Fragment::Byte(0x09)])
+    }
+
+    #[test]
+    fn add_hl_de() {
+        analyze(ADD, vec![Reg16::Hl.into(), Reg16::De.into()])
+            .expect_fragments(vec![Fragment::Byte(0x19)])
+    }
+
+    #[test]
+    fn add_hl_hl() {
+        analyze(ADD, vec![Reg16::Hl.into(), Reg16::Hl.into()])
+            .expect_fragments(vec![Fragment::Byte(0x29)])
+    }
+
+    #[test]
+    fn add_hl_sp() {
+        analyze(ADD, vec![Reg16::Hl.into(), Reg16::Sp.into()])
+            .expect_fragments(vec![Fragment::Byte(0x39)])
+    }
+
+    #[test]
+    fn bit_4_a() {
+        analyze(BIT, vec![4.into(), M::A.into()]).expect_fragments(vec![
+            Fragment::Byte(0xcb),
+            Fragment::Embedded(0b01_000_111, number(4, TokenId::Operand(0, 0))),
+        ])
+    }
+
+    #[test]
+    fn bit_4_b() {
+        analyze(BIT, vec![4.into(), M::B.into()]).expect_fragments(vec![
+            Fragment::Byte(0xcb),
+            Fragment::Embedded(0b01_000_000, number(4, TokenId::Operand(0, 0))),
+        ])
+    }
+
+    #[test]
+    fn bit_4_c() {
+        analyze(BIT, vec![4.into(), M::C.into()]).expect_fragments(vec![
+            Fragment::Byte(0xcb),
+            Fragment::Embedded(0b01_000_001, number(4, TokenId::Operand(0, 0))),
+        ])
+    }
+
+    #[test]
+    fn bit_4_d() {
+        analyze(BIT, vec![4.into(), M::D.into()]).expect_fragments(vec![
+            Fragment::Byte(0xcb),
+            Fragment::Embedded(0b01_000_010, number(4, TokenId::Operand(0, 0))),
+        ])
+    }
+
+    #[test]
+    fn bit_4_e() {
+        analyze(BIT, vec![4.into(), M::E.into()]).expect_fragments(vec![
+            Fragment::Byte(0xcb),
+            Fragment::Embedded(0b01_000_011, number(4, TokenId::Operand(0, 0))),
+        ])
+    }
+
+    #[test]
+    fn bit_4_h() {
+        analyze(BIT, vec![4.into(), M::H.into()]).expect_fragments(vec![
+            Fragment::Byte(0xcb),
+            Fragment::Embedded(0b01_000_100, number(4, TokenId::Operand(0, 0))),
+        ])
+    }
+
+    #[test]
+    fn bit_4_l() {
+        analyze(BIT, vec![4.into(), M::L.into()]).expect_fragments(vec![
+            Fragment::Byte(0xcb),
+            Fragment::Embedded(0b01_000_101, number(4, TokenId::Operand(0, 0))),
+        ])
+    }
+
+    #[test]
+    fn bit_4_deref_hl() {
+        analyze(BIT, vec![4.into(), M::DerefHl.into()]).expect_fragments(vec![
+            Fragment::Byte(0xcb),
+            Fragment::Embedded(0b01_000_110, number(4, TokenId::Operand(0, 0))),
+        ])
+    }
+
+    #[test]
+    fn set_4_a() {
+        analyze(SET, vec![4.into(), M::A.into()]).expect_fragments(vec![
+            Fragment::Byte(0xcb),
+            Fragment::Embedded(0b11_000_111, number(4, TokenId::Operand(0, 0))),
+        ])
+    }
+
+    #[test]
+    fn set_4_b() {
+        analyze(SET, vec![4.into(), M::B.into()]).expect_fragments(vec![
+            Fragment::Byte(0xcb),
+            Fragment::Embedded(0b11_000_000, number(4, TokenId::Operand(0, 0))),
+        ])
+    }
+
+    #[test]
+    fn set_4_c() {
+        analyze(SET, vec![4.into(), M::C.into()]).expect_fragments(vec![
+            Fragment::Byte(0xcb),
+            Fragment::Embedded(0b11_000_001, number(4, TokenId::Operand(0, 0))),
+        ])
+    }
+
+    #[test]
+    fn set_4_d() {
+        analyze(SET, vec![4.into(), M::D.into()]).expect_fragments(vec![
+            Fragment::Byte(0xcb),
+            Fragment::Embedded(0b11_000_010, number(4, TokenId::Operand(0, 0))),
+        ])
+    }
+
+    #[test]
+    fn set_4_e() {
+        analyze(SET, vec![4.into(), M::E.into()]).expect_fragments(vec![
+            Fragment::Byte(0xcb),
+            Fragment::Embedded(0b11_000_011, number(4, TokenId::Operand(0, 0))),
+        ])
+    }
+
+    #[test]
+    fn set_4_h() {
+        analyze(SET, vec![4.into(), M::H.into()]).expect_fragments(vec![
+            Fragment::Byte(0xcb),
+            Fragment::Embedded(0b11_000_100, number(4, TokenId::Operand(0, 0))),
+        ])
+    }
+
+    #[test]
+    fn set_4_l() {
+        analyze(SET, vec![4.into(), M::L.into()]).expect_fragments(vec![
+            Fragment::Byte(0xcb),
+            Fragment::Embedded(0b11_000_101, number(4, TokenId::Operand(0, 0))),
+        ])
+    }
+
+    #[test]
+    fn set_4_deref_hl() {
+        analyze(SET, vec![4.into(), M::DerefHl.into()]).expect_fragments(vec![
+            Fragment::Byte(0xcb),
+            Fragment::Embedded(0b11_000_110, number(4, TokenId::Operand(0, 0))),
+        ])
+    }
+
+    #[test]
+    fn res_4_a() {
+        analyze(RES, vec![4.into(), M::A.into()]).expect_fragments(vec![
+            Fragment::Byte(0xcb),
+            Fragment::Embedded(0b10_000_111, number(4, TokenId::Operand(0, 0))),
+        ])
+    }
+
+    #[test]
+    fn res_4_b() {
+        analyze(RES, vec![4.into(), M::B.into()]).expect_fragments(vec![
+            Fragment::Byte(0xcb),
+            Fragment::Embedded(0b10_000_000, number(4, TokenId::Operand(0, 0))),
+        ])
+    }
+
+    #[test]
+    fn res_4_c() {
+        analyze(RES, vec![4.into(), M::C.into()]).expect_fragments(vec![
+            Fragment::Byte(0xcb),
+            Fragment::Embedded(0b10_000_001, number(4, TokenId::Operand(0, 0))),
+        ])
+    }
+
+    #[test]
+    fn res_4_d() {
+        analyze(RES, vec![4.into(), M::D.into()]).expect_fragments(vec![
+            Fragment::Byte(0xcb),
+            Fragment::Embedded(0b10_000_010, number(4, TokenId::Operand(0, 0))),
+        ])
+    }
+
+    #[test]
+    fn res_4_e() {
+        analyze(RES, vec![4.into(), M::E.into()]).expect_fragments(vec![
+            Fragment::Byte(0xcb),
+            Fragment::Embedded(0b10_000_011, number(4, TokenId::Operand(0, 0))),
+        ])
+    }
+
+    #[test]
+    fn res_4_h() {
+        analyze(RES, vec![4.into(), M::H.into()]).expect_fragments(vec![
+            Fragment::Byte(0xcb),
+            Fragment::Embedded(0b10_000_100, number(4, TokenId::Operand(0, 0))),
+        ])
+    }
+
+    #[test]
+    fn res_4_l() {
+        analyze(RES, vec![4.into(), M::L.into()]).expect_fragments(vec![
+            Fragment::Byte(0xcb),
+            Fragment::Embedded(0b10_000_101, number(4, TokenId::Operand(0, 0))),
+        ])
+    }
+
+    #[test]
+    fn res_4_deref_hl() {
+        analyze(RES, vec![4.into(), M::DerefHl.into()]).expect_fragments(vec![
+            Fragment::Byte(0xcb),
+            Fragment::Embedded(0b10_000_110, number(4, TokenId::Operand(0, 0))),
+        ])
+    }
+
+    #[test]
+    fn inc_a() {
+        analyze(INC, vec![M::A.into()]).expect_fragments(vec![Fragment::Byte(0x3c)])
+    }
+
+    #[test]
+    fn inc_b() {
+        analyze(INC, vec![M::B.into()]).expect_fragments(vec![Fragment::Byte(0x04)])
+    }
+
+    #[test]
+    fn inc_c() {
+        analyze(INC, vec![M::C.into()]).expect_fragments(vec![Fragment::Byte(0x0c)])
+    }
+
+    #[test]
+    fn inc_d() {
+        analyze(INC, vec![M::D.into()]).expect_fragments(vec![Fragment::Byte(0x14)])
+    }
+
+    #[test]
+    fn inc_e() {
+        analyze(INC, vec![M::E.into()]).expect_fragments(vec![Fragment::Byte(0x1c)])
+    }
+
+    #[test]
+    fn inc_h() {
+        analyze(INC, vec![M::H.into()]).expect_fragments(vec![Fragment::Byte(0x24)])
+    }
+
+    #[test]
+    fn inc_l() {
+        analyze(INC, vec![M::L.into()]).expect_fragments(vec![Fragment::Byte(0x2c)])
+    }
+
+    #[test]
+    fn inc_deref_hl() {
+        analyze(INC, vec![M::DerefHl.into()]).expect_fragments(vec![Fragment::Byte(0x34)])
+    }
+
+    #[test]
+    fn dec_a() {
+        analyze(DEC, vec![M::A.into()]).expect_fragments(vec![Fragment::Byte(0x3d)])
+    }
+
+    #[test]
+    fn dec_b() {
+        analyze(DEC, vec![M::B.into()]).expect_fragments(vec![Fragment::Byte(0x05)])
+    }
+
+    #[test]
+    fn dec_c() {
+        analyze(DEC, vec![M::C.into()]).expect_fragments(vec![Fragment::Byte(0x0d)])
+    }
+
+    #[test]
+    fn dec_d() {
+        analyze(DEC, vec![M::D.into()]).expect_fragments(vec![Fragment::Byte(0x15)])
+    }
+
+    #[test]
+    fn dec_e() {
+        analyze(DEC, vec![M::E.into()]).expect_fragments(vec![Fragment::Byte(0x1d)])
+    }
+
+    #[test]
+    fn dec_h() {
+        analyze(DEC, vec![M::H.into()]).expect_fragments(vec![Fragment::Byte(0x25)])
+    }
+
+    #[test]
+    fn dec_l() {
+        analyze(DEC, vec![M::L.into()]).expect_fragments(vec![Fragment::Byte(0x2d)])
+    }
+
+    #[test]
+    fn dec_deref_hl() {
+        analyze(DEC, vec![M::DerefHl.into()]).expect_fragments(vec![Fragment::Byte(0x35)])
+    }
+
+    #[test]
+    fn inc_bc() {
+        analyze(INC, vec![Reg16::Bc.into()]).expect_fragments(vec![Fragment::Byte(0x03)])
+    }
+
+    #[test]
+    fn inc_de() {
+        analyze(INC, vec![Reg16::De.into()]).expect_fragments(vec![Fragment::Byte(0x13)])
+    }
+
+    #[test]
+    fn inc_hl() {
+        analyze(INC, vec![Reg16::Hl.into()]).expect_fragments(vec![Fragment::Byte(0x23)])
+    }
+
+    #[test]
+    fn inc_sp() {
+        analyze(INC, vec![Reg16::Sp.into()]).expect_fragments(vec![Fragment::Byte(0x33)])
+    }
+
+    #[test]
+    fn dec_bc() {
+        analyze(DEC, vec![Reg16::Bc.into()]).expect_fragments(vec![Fragment::Byte(0x0b)])
+    }
+
+    #[test]
+    fn dec_de() {
+        analyze(DEC, vec![Reg16::De.into()]).expect_fragments(vec![Fragment::Byte(0x1b)])
+    }
+
+    #[test]
+    fn dec_hl() {
+        analyze(DEC, vec![Reg16::Hl.into()]).expect_fragments(vec![Fragment::Byte(0x2b)])
+    }
+
+    #[test]
+    fn dec_sp() {
+        analyze(DEC, vec![Reg16::Sp.into()]).expect_fragments(vec![Fragment::Byte(0x3b)])
+    }
+
+    #[test]
+    fn rlc_a() {
+        analyze(RLC, vec![M::A.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x07)])
+    }
+
+    #[test]
+    fn rlc_b() {
+        analyze(RLC, vec![M::B.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x00)])
+    }
+
+    #[test]
+    fn rlc_c() {
+        analyze(RLC, vec![M::C.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x01)])
+    }
+
+    #[test]
+    fn rlc_d() {
+        analyze(RLC, vec![M::D.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x02)])
+    }
+
+    #[test]
+    fn rlc_e() {
+        analyze(RLC, vec![M::E.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x03)])
+    }
+
+    #[test]
+    fn rlc_h() {
+        analyze(RLC, vec![M::H.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x04)])
+    }
+
+    #[test]
+    fn rlc_l() {
+        analyze(RLC, vec![M::L.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x05)])
+    }
+
+    #[test]
+    fn rlc_deref_hl() {
+        analyze(RLC, vec![M::DerefHl.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x06)])
+    }
+
+    #[test]
+    fn rrc_a() {
+        analyze(RRC, vec![M::A.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x0f)])
+    }
+
+    #[test]
+    fn rrc_b() {
+        analyze(RRC, vec![M::B.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x08)])
+    }
+
+    #[test]
+    fn rrc_c() {
+        analyze(RRC, vec![M::C.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x09)])
+    }
+
+    #[test]
+    fn rrc_d() {
+        analyze(RRC, vec![M::D.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x0a)])
+    }
+
+    #[test]
+    fn rrc_e() {
+        analyze(RRC, vec![M::E.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x0b)])
+    }
+
+    #[test]
+    fn rrc_h() {
+        analyze(RRC, vec![M::H.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x0c)])
+    }
+
+    #[test]
+    fn rrc_l() {
+        analyze(RRC, vec![M::L.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x0d)])
+    }
+
+    #[test]
+    fn rrc_deref_hl() {
+        analyze(RRC, vec![M::DerefHl.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x0e)])
+    }
+
+    #[test]
+    fn rl_a() {
+        analyze(RL, vec![M::A.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x17)])
+    }
+
+    #[test]
+    fn rl_b() {
+        analyze(RL, vec![M::B.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x10)])
+    }
+
+    #[test]
+    fn rl_c() {
+        analyze(RL, vec![M::C.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x11)])
+    }
+
+    #[test]
+    fn rl_d() {
+        analyze(RL, vec![M::D.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x12)])
+    }
+
+    #[test]
+    fn rl_e() {
+        analyze(RL, vec![M::E.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x13)])
+    }
+
+    #[test]
+    fn rl_h() {
+        analyze(RL, vec![M::H.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x14)])
+    }
+
+    #[test]
+    fn rl_l() {
+        analyze(RL, vec![M::L.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x15)])
+    }
+
+    #[test]
+    fn rl_deref_hl() {
+        analyze(RL, vec![M::DerefHl.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x16)])
+    }
+
+    #[test]
+    fn rr_a() {
+        analyze(RR, vec![M::A.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x1f)])
+    }
+
+    #[test]
+    fn rr_b() {
+        analyze(RR, vec![M::B.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x18)])
+    }
+
+    #[test]
+    fn rr_c() {
+        analyze(RR, vec![M::C.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x19)])
+    }
+
+    #[test]
+    fn rr_d() {
+        analyze(RR, vec![M::D.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x1a)])
+    }
+
+    #[test]
+    fn rr_e() {
+        analyze(RR, vec![M::E.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x1b)])
+    }
+
+    #[test]
+    fn rr_h() {
+        analyze(RR, vec![M::H.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x1c)])
+    }
+
+    #[test]
+    fn rr_l() {
+        analyze(RR, vec![M::L.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x1d)])
+    }
+
+    #[test]
+    fn rr_deref_hl() {
+        analyze(RR, vec![M::DerefHl.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x1e)])
+    }
+
+    #[test]
+    fn sla_a() {
+        analyze(SLA, vec![M::A.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x27)])
+    }
+
+    #[test]
+    fn sla_b() {
+        analyze(SLA, vec![M::B.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x20)])
+    }
+
+    #[test]
+    fn sla_c() {
+        analyze(SLA, vec![M::C.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x21)])
+    }
+
+    #[test]
+    fn sla_d() {
+        analyze(SLA, vec![M::D.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x22)])
+    }
+
+    #[test]
+    fn sla_e() {
+        analyze(SLA, vec![M::E.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x23)])
+    }
+
+    #[test]
+    fn sla_h() {
+        analyze(SLA, vec![M::H.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x24)])
+    }
+
+    #[test]
+    fn sla_l() {
+        analyze(SLA, vec![M::L.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x25)])
+    }
+
+    #[test]
+    fn sla_deref_hl() {
+        analyze(SLA, vec![M::DerefHl.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x26)])
+    }
+
+    #[test]
+    fn sra_a() {
+        analyze(SRA, vec![M::A.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x2f)])
+    }
+
+    #[test]
+    fn sra_b() {
+        analyze(SRA, vec![M::B.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x28)])
+    }
+
+    #[test]
+    fn sra_c() {
+        analyze(SRA, vec![M::C.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x29)])
+    }
+
+    #[test]
+    fn sra_d() {
+        analyze(SRA, vec![M::D.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x2a)])
+    }
+
+    #[test]
+    fn sra_e() {
+        analyze(SRA, vec![M::E.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x2b)])
+    }
+
+    #[test]
+    fn sra_h() {
+        analyze(SRA, vec![M::H.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x2c)])
+    }
+
+    #[test]
+    fn sra_l() {
+        analyze(SRA, vec![M::L.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x2d)])
+    }
+
+    #[test]
+    fn sra_deref_hl() {
+        analyze(SRA, vec![M::DerefHl.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x2e)])
+    }
+
+    #[test]
+    fn swap_a() {
+        analyze(SWAP, vec![M::A.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x37)])
+    }
+
+    #[test]
+    fn swap_b() {
+        analyze(SWAP, vec![M::B.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x30)])
+    }
+
+    #[test]
+    fn swap_c() {
+        analyze(SWAP, vec![M::C.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x31)])
+    }
+
+    #[test]
+    fn swap_d() {
+        analyze(SWAP, vec![M::D.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x32)])
+    }
+
+    #[test]
+    fn swap_e() {
+        analyze(SWAP, vec![M::E.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x33)])
+    }
+
+    #[test]
+    fn swap_h() {
+        analyze(SWAP, vec![M::H.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x34)])
+    }
+
+    #[test]
+    fn swap_l() {
+        analyze(SWAP, vec![M::L.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x35)])
+    }
+
+    #[test]
+    fn swap_deref_hl() {
+        analyze(SWAP, vec![M::DerefHl.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x36)])
+    }
+
+    #[test]
+    fn srl_a() {
+        analyze(SRL, vec![M::A.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x3f)])
+    }
+
+    #[test]
+    fn srl_b() {
+        analyze(SRL, vec![M::B.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x38)])
+    }
+
+    #[test]
+    fn srl_c() {
+        analyze(SRL, vec![M::C.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x39)])
+    }
+
+    #[test]
+    fn srl_d() {
+        analyze(SRL, vec![M::D.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x3a)])
+    }
+
+    #[test]
+    fn srl_e() {
+        analyze(SRL, vec![M::E.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x3b)])
+    }
+
+    #[test]
+    fn srl_h() {
+        analyze(SRL, vec![M::H.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x3c)])
+    }
+
+    #[test]
+    fn srl_l() {
+        analyze(SRL, vec![M::L.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x3d)])
+    }
+
+    #[test]
+    fn srl_deref_hl() {
+        analyze(SRL, vec![M::DerefHl.into()])
+            .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x3e)])
+    }
+
+    pub(super) struct AnalysisResult(Vec<Event<TokenSpan>>);
 
     impl AnalysisResult {
-        pub fn expect_instruction(self, expected: CpuInstr<Expr<TokenSpan>>) {
-            assert_eq!(self.0, Ok(expected))
+        pub fn expect_fragments(self, expected: Vec<Fragment<Expr<TokenSpan>>>) {
+            assert_eq!(
+                self.0,
+                expected
+                    .into_iter()
+                    .map(BackendEvent::EmitFragment)
+                    .map(Event::Backend)
+                    .collect::<Vec<_>>()
+            )
         }
 
         pub fn expect_diag(self, diag: impl Into<ExpectedDiag>) {
             let expected = diag.into();
             assert_eq!(
                 self.0,
-                Err(vec![DiagnosticsEvent::EmitDiag(
+                vec![DiagnosticsEvent::EmitDiag(
                     expected.message.at(expected.highlight.unwrap()).into()
                 )
-                .into()])
+                .into()]
             )
         }
     }
@@ -767,9 +1871,10 @@ mod tests {
         I: IntoIterator<Item = Input>,
     {
         use super::operand::analyze_operand;
+        use crate::session::builder::mock::{MockBackend, SerialIdAllocator};
         use crate::session::reentrancy::MockSourceComponents;
+        use crate::session::CompositeSession;
 
-        let mut result = None;
         let log = crate::log::with_log(|log| {
             let operands: Vec<_> = operands
                 .into_iter()
@@ -783,14 +1888,18 @@ mod tests {
                     )
                 })
                 .collect();
-            let mut session = MockSourceComponents::with_log(log);
-            result = Some(analyze_instruction(
+            let mut session = CompositeSession {
+                reentrancy: MockSourceComponents::with_log(log.clone()),
+                names: (),
+                builder: MockBackend::new(SerialIdAllocator::new(MockSymbolId), log.clone()),
+            };
+            analyze_instruction(
                 (&mnemonic, TokenId::Mnemonic.into()),
                 operands,
                 &mut session,
-            ));
+            );
         });
-        AnalysisResult(result.unwrap().map_err(|_| log))
+        AnalysisResult(log)
     }
 
     fn add_token_spans((i, operand): (usize, Input)) -> Arg<Expr<TokenSpan>, String, TokenSpan> {
@@ -851,24 +1960,20 @@ mod tests {
     }
 
     #[test]
-    fn analyze_nop_a() {
-        analyze(NOP, vec![literal(A)]).expect_diag(
-            ExpectedDiag::new(Message::OperandCount {
-                actual: 1,
-                expected: 0,
-            })
-            .with_highlight(TokenId::Mnemonic),
-        )
-    }
-
-    #[test]
     fn analyze_add_a_a_a() {
-        analyze(ADD, vec![A, A, A].into_iter().map(literal)).expect_diag(
-            ExpectedDiag::new(Message::OperandCount {
-                actual: 3,
-                expected: 2,
-            })
-            .with_highlight(TokenId::Mnemonic),
+        assert_eq!(
+            analyze(ADD, vec![A, A, A].into_iter().map(literal)).0,
+            vec![
+                BackendEvent::EmitFragment(Fragment::Byte(0x87)).into(),
+                Event::Diagnostics(DiagnosticsEvent::EmitDiag(
+                    Message::OperandCount {
+                        actual: 3,
+                        expected: 2,
+                    }
+                    .at(TokenId::Mnemonic.into())
+                    .into()
+                ))
+            ]
         )
     }
 

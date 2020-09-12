@@ -1,28 +1,13 @@
-use self::lowering::Lower;
-
-use crate::diag::span::{Source, WithSpan};
 use crate::diag::Diagnostics;
-use crate::expr::{Atom, BinOp, ExprOp, FnCall, LocationCounter, ParamId};
+use crate::expr::Expr;
 use crate::object::*;
 use crate::{BuiltinSymbols, CompositeSession};
 
-mod lowering;
-
-pub(crate) trait Backend<S: Clone>: PartialBackend<S> + Sized {
-    type ExprBuilder: ValueBuilder<S, SymbolId = Self::SymbolId, Parent = Self, Value = Self::Value>
-        + Diagnostics<S>;
-
-    fn build_const(self) -> Self::ExprBuilder;
-    fn define_symbol(&mut self, name: Self::SymbolId, span: S, expr: Self::Value);
-}
-
-pub(crate) trait PartialBackend<S: Clone>: AllocSymbol<S> {
-    type Value: Source<Span = S>;
-
-    fn emit_fragment(&mut self, fragment: Fragment<Self::Value>);
-    fn emit_item(&mut self, item: Item<Self::Value>);
-    fn is_non_zero(&mut self, value: Self::Value) -> Option<bool>;
-    fn set_origin(&mut self, origin: Self::Value);
+pub(crate) trait Backend<S: Clone>: AllocSymbol<S> {
+    fn define_symbol(&mut self, name: Self::SymbolId, span: S, expr: Expr<Self::SymbolId, S>);
+    fn emit_fragment(&mut self, fragment: Fragment<Expr<Self::SymbolId, S>>);
+    fn is_non_zero(&mut self, value: Expr<Self::SymbolId, S>) -> Option<bool>;
+    fn set_origin(&mut self, origin: Expr<Self::SymbolId, S>);
     fn start_section(&mut self, name: Self::SymbolId, span: S);
 }
 
@@ -34,88 +19,10 @@ pub trait SymbolSource {
     type SymbolId: Clone;
 }
 
-pub trait ValueBuilder<S: Clone>:
-    AllocSymbol<S>
-    + PushOp<LocationCounter, S>
-    + PushOp<i32, S>
-    + PushOp<Name<<Self as SymbolSource>::SymbolId>, S>
-    + PushOp<BinOp, S>
-    + PushOp<ParamId, S>
-    + PushOp<FnCall, S>
-    + Finish
-{
-}
-
-impl<T, S: Clone> ValueBuilder<S> for T where
-    Self: AllocSymbol<S>
-        + PushOp<LocationCounter, S>
-        + PushOp<i32, S>
-        + PushOp<Name<<Self as SymbolSource>::SymbolId>, S>
-        + PushOp<BinOp, S>
-        + PushOp<ParamId, S>
-        + PushOp<FnCall, S>
-        + Finish
-{
-}
-
-pub trait PushOp<T, S: Clone> {
-    fn push_op(&mut self, op: T, span: S);
-}
-
-#[derive(Clone)]
-pub struct Name<T>(pub T);
-
-pub trait Finish {
-    type Parent;
-    type Value;
-
-    fn finish(self) -> (Self::Parent, Option<Self::Value>);
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum Item<V: Source> {
-    CpuInstr(CpuInstr<V>),
-    Data(V, Width),
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Width {
     Byte,
     Word,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum CpuInstr<V: Source> {
-    AddHl(Reg16),
-    Alu(AluOperation, AluSource<V>),
-    Bit(BitOperation, V, SimpleOperand),
-    IncDec8(IncDec, SimpleOperand),
-    IncDec16(IncDec, Reg16),
-    JpDerefHl,
-    Branch(Branch<V>, Option<Condition>),
-    Ld(Ld<V>),
-    Ldhl(V),
-    Misc(MiscOperation, SimpleOperand),
-    Nullary(Nullary),
-    Pop(RegPair),
-    Push(RegPair),
-    Rst(V),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Nullary {
-    Cpl,
-    Daa,
-    Di,
-    Ei,
-    Halt,
-    Nop,
-    Reti,
-    Rla,
-    Rlca,
-    Rra,
-    Rrca,
-    Stop,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -128,12 +35,6 @@ pub enum AluOperation {
     Xor,
     Or,
     Cp,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum AluSource<V> {
-    Simple(SimpleOperand),
-    Immediate(V),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -156,7 +57,7 @@ pub enum MiscOperation {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum SimpleOperand {
+pub enum M {
     A,
     B,
     C,
@@ -165,22 +66,6 @@ pub enum SimpleOperand {
     H,
     L,
     DerefHl,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum Ld<V> {
-    Simple(SimpleOperand, SimpleOperand),
-    Special(SpecialLd<V>, Direction),
-    SpHl,
-    Immediate8(SimpleOperand, V),
-    Immediate16(Reg16, V),
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum SpecialLd<V> {
-    DerefPtrReg(PtrReg),
-    InlineAddr(V),
-    RegIndex,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -241,7 +126,7 @@ pub(crate) struct ObjectBuilder<'a, S> {
 }
 
 enum BuilderState<S> {
-    AnonSectionPrelude { addr: Option<Expr<S>> },
+    AnonSectionPrelude { addr: Option<Expr<SymbolId, S>> },
     Section(usize),
     SectionPrelude(usize),
 }
@@ -258,7 +143,7 @@ impl<'a, S> ObjectBuilder<'a, S> {
         }
     }
 
-    fn push(&mut self, fragment: Fragment<Expr<S>>) {
+    fn push(&mut self, fragment: Fragment<Expr<SymbolId, S>>) {
         self.current_section().fragments.push(fragment)
     }
 
@@ -293,17 +178,7 @@ where
     R: Diagnostics<S>,
     S: Clone,
 {
-    type ExprBuilder = CompositeSession<R, N, RelocContext<ObjectBuilder<'a, S>, Expr<S>>>;
-
-    fn build_const(self) -> Self::ExprBuilder {
-        CompositeSession {
-            reentrancy: self.reentrancy,
-            names: self.names,
-            builder: RelocContext::new(self.builder),
-        }
-    }
-
-    fn define_symbol(&mut self, name: Self::SymbolId, _span: S, expr: Self::Value) {
+    fn define_symbol(&mut self, name: Self::SymbolId, _span: S, expr: Expr<Self::SymbolId, S>) {
         let location = self.builder.context.vars.alloc();
         self.builder.push(Fragment::Reloc(location));
         self.builder.context.content.symbols.define(
@@ -311,32 +186,19 @@ where
             ContentDef::Expr(ExprDef { expr, location }),
         );
     }
-}
 
-impl<'a, R, N, S> PartialBackend<S> for CompositeSession<R, N, ObjectBuilder<'a, S>>
-where
-    R: Diagnostics<S>,
-    S: Clone,
-{
-    type Value = Expr<S>;
-
-    fn emit_fragment(&mut self, fragment: Fragment<Self::Value>) {
+    fn emit_fragment(&mut self, fragment: Fragment<Expr<Self::SymbolId, S>>) {
         self.builder.push(fragment)
     }
 
-    fn emit_item(&mut self, item: Item<Self::Value>) {
-        item.lower()
-            .for_each(|fragment| self.emit_fragment(fragment))
-    }
-
-    fn is_non_zero(&mut self, value: Self::Value) -> Option<bool> {
+    fn is_non_zero(&mut self, value: Expr<Self::SymbolId, S>) -> Option<bool> {
         value
             .to_num(&self.builder.context, &mut self.reentrancy)
             .exact()
             .map(|n| n != 0)
     }
 
-    fn set_origin(&mut self, addr: Self::Value) {
+    fn set_origin(&mut self, addr: Expr<Self::SymbolId, S>) {
         match self.builder.state.take().unwrap() {
             BuilderState::SectionPrelude(index) => {
                 self.builder.context.content.sections[index]
@@ -366,95 +228,6 @@ where
     }
 }
 
-pub(crate) struct RelocContext<P, B> {
-    parent: P,
-    builder: B,
-}
-
-impl<P, B: Default> RelocContext<P, B> {
-    fn new(parent: P) -> Self {
-        Self {
-            parent,
-            builder: Default::default(),
-        }
-    }
-}
-
-macro_rules! impl_push_op_for_reloc_context {
-    ($t:ty) => {
-        impl<P, B, S> PushOp<$t, S> for RelocContext<P, B>
-        where
-            B: PushOp<$t, S>,
-            S: Clone,
-        {
-            fn push_op(&mut self, op: $t, span: S) {
-                self.builder.push_op(op, span)
-            }
-        }
-    };
-}
-
-impl_push_op_for_reloc_context! {LocationCounter}
-impl_push_op_for_reloc_context! {i32}
-impl_push_op_for_reloc_context! {BinOp}
-impl_push_op_for_reloc_context! {ParamId}
-impl_push_op_for_reloc_context! {FnCall}
-
-impl<P, N, S: Clone> PushOp<Name<N>, S> for RelocContext<P, crate::expr::Expr<N, S>> {
-    fn push_op(&mut self, name: Name<N>, span: S) {
-        self.builder.push_op(name, span)
-    }
-}
-
-impl<R, N, B: PushOp<T, S>, T, S: Clone> PushOp<T, S> for CompositeSession<R, N, B> {
-    fn push_op(&mut self, op: T, span: S) {
-        self.builder.push_op(op, span)
-    }
-}
-
-impl<'a, S: Clone> SymbolSource for RelocContext<ObjectBuilder<'a, S>, Expr<S>> {
-    type SymbolId = SymbolId;
-}
-
-impl<'a, S: Clone> AllocSymbol<S> for RelocContext<ObjectBuilder<'a, S>, Expr<S>> {
-    fn alloc_symbol(&mut self, span: S) -> Self::SymbolId {
-        self.parent.alloc_symbol(span)
-    }
-}
-
-impl<R, N, B: Finish> Finish for CompositeSession<R, N, B> {
-    type Parent = CompositeSession<R, N, B::Parent>;
-    type Value = B::Value;
-
-    fn finish(self) -> (Self::Parent, Option<Self::Value>) {
-        let (builder, value) = self.builder.finish();
-        (
-            CompositeSession {
-                reentrancy: self.reentrancy,
-                names: self.names,
-                builder,
-            },
-            value,
-        )
-    }
-}
-
-impl<'a, S: Clone> Finish for RelocContext<ObjectBuilder<'a, S>, Expr<S>> {
-    type Parent = ObjectBuilder<'a, S>;
-    type Value = Expr<S>;
-
-    fn finish(self) -> (Self::Parent, Option<Self::Value>) {
-        (
-            self.parent,
-            if self.builder.0.is_empty() {
-                None
-            } else {
-                Some(self.builder)
-            },
-        )
-    }
-}
-
 impl<'a, S: Clone> SymbolSource for ObjectBuilder<'a, S> {
     type SymbolId = SymbolId;
 }
@@ -473,32 +246,12 @@ impl<'a, S: Clone> BuiltinSymbols for ObjectBuilder<'a, S> {
     }
 }
 
-impl<N> From<Name<N>> for Atom<N> {
-    fn from(Name(name): Name<N>) -> Self {
-        Atom::Name(name)
-    }
-}
-
-impl<T: Into<ExprOp<A>>, A, S: Clone> PushOp<T, S> for crate::expr::Expr<A, S> {
-    fn push_op(&mut self, op: T, span: S) {
-        self.0.push(op.into().with_span(span))
-    }
-}
-
-impl<N> From<Name<N>> for ExprOp<N> {
-    fn from(name: Name<N>) -> Self {
-        ExprOp::Atom(name.into())
-    }
-}
-
 #[cfg(test)]
 pub mod mock {
-    pub(crate) use super::RelocContext;
-
     use super::*;
 
-    use crate::diag::span::Spanned;
-    use crate::expr::{Atom, Expr};
+    use crate::diag::span::{Source, Spanned};
+    use crate::expr::{Atom, Expr, ExprOp};
     use crate::log::Log;
 
     #[derive(Clone, Copy, Debug, PartialEq)]
@@ -512,7 +265,6 @@ pub mod mock {
     #[derive(Debug, PartialEq)]
     pub enum BackendEvent<N, V: Source> {
         EmitFragment(Fragment<V>),
-        EmitItem(Item<V>),
         SetOrigin(V),
         DefineSymbol((N, V::Span), V),
         StartSection(N, V::Span),
@@ -521,69 +273,6 @@ pub mod mock {
     impl<A, T> MockBackend<A, T> {
         pub fn new(alloc: A, log: Log<T>) -> Self {
             MockBackend { alloc, log }
-        }
-    }
-
-    impl<R, N, A, T, S> Backend<S> for CompositeSession<R, N, MockBackend<A, T>>
-    where
-        R: Diagnostics<S>,
-        A: AllocSymbol<S>,
-        T: From<BackendEvent<A::SymbolId, Expr<A::SymbolId, S>>>,
-        S: Clone,
-    {
-        type ExprBuilder =
-            CompositeSession<R, N, RelocContext<MockBackend<A, T>, Expr<A::SymbolId, S>>>;
-
-        fn build_const(self) -> Self::ExprBuilder {
-            CompositeSession {
-                reentrancy: self.reentrancy,
-                names: self.names,
-                builder: RelocContext::new(self.builder),
-            }
-        }
-
-        fn define_symbol(&mut self, name: Self::SymbolId, span: S, expr: Self::Value) {
-            self.builder
-                .log
-                .push(BackendEvent::DefineSymbol((name, span), expr));
-        }
-    }
-
-    impl<A, T, S> SymbolSource for RelocContext<MockBackend<A, T>, Expr<A::SymbolId, S>>
-    where
-        A: SymbolSource,
-        S: Clone,
-    {
-        type SymbolId = A::SymbolId;
-    }
-
-    impl<A, T, S> AllocSymbol<S> for RelocContext<MockBackend<A, T>, Expr<A::SymbolId, S>>
-    where
-        A: AllocSymbol<S>,
-        S: Clone,
-    {
-        fn alloc_symbol(&mut self, span: S) -> Self::SymbolId {
-            self.parent.alloc_symbol(span)
-        }
-    }
-
-    impl<A, T, S> Finish for RelocContext<MockBackend<A, T>, Expr<A::SymbolId, S>>
-    where
-        A: AllocSymbol<S>,
-        S: Clone,
-    {
-        type Parent = MockBackend<A, T>;
-        type Value = Expr<A::SymbolId, S>;
-
-        fn finish(self) -> (Self::Parent, Option<Self::Value>) {
-            (
-                self.parent,
-                if self.builder.0.is_empty() {
-                    None
-                } else {
-                    Some(self.builder)
-                },
-            )
         }
     }
 
@@ -603,23 +292,23 @@ pub mod mock {
         }
     }
 
-    impl<R, N, A, T, S> PartialBackend<S> for CompositeSession<R, N, MockBackend<A, T>>
+    impl<R, N, A, T, S> Backend<S> for CompositeSession<R, N, MockBackend<A, T>>
     where
         A: AllocSymbol<S>,
         T: From<BackendEvent<A::SymbolId, Expr<A::SymbolId, S>>>,
         S: Clone,
     {
-        type Value = Expr<A::SymbolId, S>;
+        fn define_symbol(&mut self, name: Self::SymbolId, span: S, expr: Expr<Self::SymbolId, S>) {
+            self.builder
+                .log
+                .push(BackendEvent::DefineSymbol((name, span), expr));
+        }
 
-        fn emit_fragment(&mut self, fragment: Fragment<Self::Value>) {
+        fn emit_fragment(&mut self, fragment: Fragment<Expr<Self::SymbolId, S>>) {
             self.builder.log.push(BackendEvent::EmitFragment(fragment))
         }
 
-        fn emit_item(&mut self, item: Item<Self::Value>) {
-            self.builder.log.push(BackendEvent::EmitItem(item))
-        }
-
-        fn is_non_zero(&mut self, value: Self::Value) -> Option<bool> {
+        fn is_non_zero(&mut self, value: Expr<Self::SymbolId, S>) -> Option<bool> {
             match value.0.as_slice() {
                 [Spanned {
                     item: ExprOp::Atom(Atom::Const(n)),
@@ -629,7 +318,7 @@ pub mod mock {
             }
         }
 
-        fn set_origin(&mut self, origin: Self::Value) {
+        fn set_origin(&mut self, origin: Expr<Self::SymbolId, S>) {
             self.builder.log.push(BackendEvent::SetOrigin(origin))
         }
 
@@ -669,8 +358,9 @@ pub mod mock {
 mod tests {
     use super::*;
 
+    use crate::diag::span::WithSpan;
     use crate::diag::*;
-    use crate::expr::BinOp;
+    use crate::expr::{Atom, BinOp, ExprOp};
     use crate::link::Program;
     use crate::object::SectionId;
 
@@ -684,18 +374,17 @@ mod tests {
 
     #[test]
     fn no_origin_by_default() {
-        let object = build_object::<_, ()>(|mut session| {
-            session.emit_item(Item::CpuInstr(CpuInstr::Nullary(Nullary::Nop)))
-        });
+        let object =
+            build_object::<_, ()>(|mut session| session.emit_fragment(Fragment::Byte(0x00)));
         assert_eq!(object.content.sections[0].constraints.addr, None)
     }
 
     #[test]
     fn constrain_origin_determines_origin_of_new_section() {
-        let origin: Expr<_> = 0x3000.into();
+        let origin: Expr<_, _> = 0x3000.into();
         let object = build_object(|mut session| {
             session.set_origin(origin.clone());
-            session.emit_item(Item::CpuInstr(CpuInstr::Nullary(Nullary::Nop)))
+            session.emit_fragment(Fragment::Byte(0x00))
         });
         assert_eq!(object.content.sections[0].constraints.addr, Some(origin))
     }
@@ -719,7 +408,7 @@ mod tests {
 
     #[test]
     fn set_origin_in_section_prelude_sets_origin() {
-        let origin: Expr<_> = 0x0150.into();
+        let origin: Expr<_, _> = 0x0150.into();
         let object = build_object(|mut session| {
             let name = session.alloc_symbol(());
             session.start_section(name, ());
@@ -729,11 +418,11 @@ mod tests {
     }
 
     #[test]
-    fn emit_item_into_named_section() {
+    fn emit_fragment_into_named_section() {
         let object = build_object(|mut session| {
             let name = session.alloc_symbol(());
             session.start_section(name, ());
-            session.emit_item(Item::CpuInstr(CpuInstr::Nullary(Nullary::Nop)))
+            session.emit_fragment(Fragment::Byte(0x00))
         });
         assert_eq!(object.content.sections[0].fragments, [Fragment::Byte(0x00)])
     }
@@ -751,22 +440,14 @@ mod tests {
 
     type Session<'a, S> = CompositeSession<TestDiagnosticsListener<S>, (), ObjectBuilder<'a, S>>;
 
-    #[test]
-    fn emit_stop() {
-        emit_items_and_compare(
-            [Item::CpuInstr(CpuInstr::Nullary(Nullary::Stop))],
-            [0x10, 0x00],
-        )
-    }
-
     fn emit_items_and_compare<I, B>(items: I, bytes: B)
     where
-        I: Borrow<[Item<Expr<()>>]>,
+        I: Borrow<[Fragment<Expr<SymbolId, ()>>]>,
         B: Borrow<[u8]>,
     {
         let (object, _) = with_object_builder(|mut builder| {
             for item in items.borrow() {
-                builder.emit_item(item.clone())
+                builder.emit_fragment(item.clone())
             }
         });
         assert_eq!(object.sections.last().unwrap().data, bytes.borrow())
@@ -782,8 +463,8 @@ mod tests {
         emit_items_and_compare([byte_literal(0x12), byte_literal(0x34)], [0x12, 0x34])
     }
 
-    fn byte_literal(value: i32) -> Item<Expr<()>> {
-        Item::Data(value.into(), Width::Byte)
+    fn byte_literal(value: i32) -> Fragment<Expr<SymbolId, ()>> {
+        Fragment::Immediate(value.into(), Width::Byte)
     }
 
     #[test]
@@ -794,7 +475,7 @@ mod tests {
 
     fn test_diagnostic_for_out_of_range_byte(value: i32) {
         let (_, diagnostics) =
-            with_object_builder(|mut builder| builder.emit_item(byte_literal(value)));
+            with_object_builder(|mut builder| builder.emit_fragment(byte_literal(value)));
         assert_eq!(
             *diagnostics,
             [Message::ValueOutOfRange {
@@ -811,9 +492,9 @@ mod tests {
         let name = "ident";
         let (_, diagnostics) = with_object_builder(|mut builder| {
             let symbol_id = builder.alloc_symbol(name.into());
-            let mut value: Expr<_> = Default::default();
-            value.push_op(symbol_id, name.into());
-            builder.emit_item(word_item(value))
+            builder.emit_fragment(word_item(Expr(vec![
+                ExprOp::Atom(Atom::Name(symbol_id)).with_span(name.into())
+            ])))
         });
         assert_eq!(*diagnostics, [unresolved(name)]);
     }
@@ -823,16 +504,13 @@ mod tests {
         let name1 = "ident1";
         let name2 = "ident2";
         let (_, diagnostics) = with_object_builder(|mut builder| {
-            let value = {
-                let id1 = builder.alloc_symbol(name1.into());
-                let mut value: Expr<_> = Default::default();
-                value.push_op(id1, name1.into());
-                let id2 = builder.alloc_symbol(name2.into());
-                value.push_op(id2, name2.into());
-                value.push_op(BinOp::Minus, "diff".into());
-                value
-            };
-            builder.emit_item(word_item(value))
+            let id1 = builder.alloc_symbol(name1.into());
+            let id2 = builder.alloc_symbol(name2.into());
+            builder.emit_fragment(word_item(Expr(vec![
+                ExprOp::Atom(Atom::Name(id1)).with_span(name1.into()),
+                ExprOp::Atom(Atom::Name(id2)).with_span(name2.into()),
+                ExprOp::Binary(BinOp::Minus).with_span("diff".into()),
+            ])))
         });
         assert_eq!(*diagnostics, [unresolved(name1), unresolved(name2)]);
     }
@@ -841,13 +519,14 @@ mod tests {
     fn emit_defined_symbol() {
         let (object, diagnostics) = with_object_builder(|mut builder| {
             let symbol_id = builder.alloc_symbol(());
-            let mut builder = builder.build_const();
-            builder.push_op(LocationCounter, ());
-            let (mut builder, expr) = builder.finish();
-            builder.define_symbol(symbol_id, (), expr.unwrap());
-            let mut value: Expr<_> = Default::default();
-            value.push_op(symbol_id, ());
-            builder.emit_item(word_item(value));
+            builder.define_symbol(
+                symbol_id,
+                (),
+                Expr(vec![ExprOp::Atom(Atom::Location).with_span(())]),
+            );
+            builder.emit_fragment(word_item(Expr(vec![
+                ExprOp::Atom(Atom::Name(symbol_id)).with_span(())
+            ])));
         });
         assert_eq!(*diagnostics, []);
         assert_eq!(object.sections.last().unwrap().data, [0x00, 0x00])
@@ -857,13 +536,14 @@ mod tests {
     fn emit_symbol_defined_after_use() {
         let (object, diagnostics) = with_object_builder(|mut builder| {
             let symbol_id = builder.alloc_symbol(());
-            let mut value: Expr<_> = Default::default();
-            value.push_op(symbol_id, ());
-            builder.emit_item(word_item(value));
-            let mut builder = builder.build_const();
-            builder.push_op(LocationCounter, ());
-            let (mut builder, expr) = builder.finish();
-            builder.define_symbol(symbol_id, (), expr.unwrap());
+            builder.emit_fragment(word_item(Expr(vec![
+                ExprOp::Atom(Atom::Name(symbol_id)).with_span(())
+            ])));
+            builder.define_symbol(
+                symbol_id,
+                (),
+                Expr(vec![ExprOp::Atom(Atom::Location).with_span(())]),
+            );
         });
         assert_eq!(*diagnostics, []);
         assert_eq!(object.sections.last().unwrap().data, [0x02, 0x00])
@@ -882,21 +562,21 @@ mod tests {
 
     #[test]
     fn eval_zero() {
-        build_object(|object_builder| {
-            let mut const_builder = object_builder.build_const();
-            const_builder.push_op(0, ());
-            let (mut object_builder, zero) = const_builder.finish();
-            assert_eq!(object_builder.is_non_zero(zero.unwrap(),), Some(false))
+        build_object(|mut object_builder| {
+            assert_eq!(
+                object_builder.is_non_zero(Expr(vec![ExprOp::Atom(Atom::Const(0)).with_span(())])),
+                Some(false)
+            )
         });
     }
 
     #[test]
     fn eval_42() {
-        build_object(|object_builder| {
-            let mut const_builder = object_builder.build_const();
-            const_builder.push_op(42, ());
-            let (mut object_builder, forty_two) = const_builder.finish();
-            assert_eq!(object_builder.is_non_zero(forty_two.unwrap(),), Some(true))
+        build_object(|mut object_builder| {
+            assert_eq!(
+                object_builder.is_non_zero(Expr(vec![ExprOp::Atom(Atom::Const(42)).with_span(())])),
+                Some(true)
+            )
         });
     }
 
@@ -911,8 +591,8 @@ mod tests {
         (object, diagnostics)
     }
 
-    fn word_item<S: Clone>(value: Expr<S>) -> Item<Expr<S>> {
-        Item::Data(value, Width::Word)
+    fn word_item<S: Clone>(value: Expr<SymbolId, S>) -> Fragment<Expr<SymbolId, S>> {
+        Fragment::Immediate(value, Width::Word)
     }
 
     fn unresolved(symbol: impl Into<String>) -> CompactDiag<String, String> {

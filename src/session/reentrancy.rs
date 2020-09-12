@@ -8,7 +8,7 @@ use crate::codebase::CodebaseError;
 use crate::diag::span::SpanSource;
 use crate::diag::*;
 use crate::semantics::{Keyword, Semantics, TokenStreamState};
-use crate::session::builder::{Backend, SymbolSource};
+use crate::session::builder::Backend;
 use crate::syntax::parser::ParserFactory;
 use crate::syntax::{IdentSource, LexError, ParseTokenStream};
 
@@ -122,13 +122,6 @@ where
     D::Target: DiagnosticsSystem,
     Self: StartScope<<Self as IdentSource>::Ident>
         + NameTable<<Self as IdentSource>::Ident, Keyword = &'static Keyword>,
-    <Self as Backend<<D::Target as SpanSource>::Span>>::ExprBuilder: StartScope<<Self as IdentSource>::Ident>
-        + NameTable<
-            <Self as IdentSource>::Ident,
-            Keyword = &'static Keyword,
-            MacroId = <Self as MacroSource>::MacroId,
-            SymbolId = <Self as SymbolSource>::SymbolId,
-        > + Diagnostics<<D::Target as SpanSource>::Span, Stripped = Self::Stripped>,
     Self: Backend<<D::Target as SpanSource>::Span>,
     <Self as IdentSource>::Ident: 'static,
     <Self as StringSource>::StringRef: 'static,
