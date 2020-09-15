@@ -1877,7 +1877,6 @@ mod tests {
     {
         use super::operand::analyze_operand;
         use crate::session::builder::mock::{MockBackend, SerialIdAllocator};
-        use crate::session::reentrancy::MockSourceComponents;
         use crate::session::CompositeSession;
 
         let log = crate::log::with_log(|log| {
@@ -1894,9 +1893,10 @@ mod tests {
                 })
                 .collect();
             let mut session = CompositeSession {
-                reentrancy: MockSourceComponents::with_log(log.clone()),
+                reentrancy: (),
                 names: (),
                 builder: MockBackend::new(SerialIdAllocator::new(MockSymbolId), log.clone()),
+                diagnostics: MockDiagnostics::new(log.clone()),
             };
             analyze_instruction(
                 (&mnemonic, TokenId::Mnemonic.into()),

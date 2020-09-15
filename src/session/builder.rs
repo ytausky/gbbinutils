@@ -157,9 +157,9 @@ impl<'a, S> ObjectBuilder<'a, S> {
     }
 }
 
-impl<'a, R, N, S> Backend<S> for CompositeSession<R, N, ObjectBuilder<'a, S>>
+impl<'a, R, N, D, S> Backend<S> for CompositeSession<R, N, ObjectBuilder<'a, S>, D>
 where
-    R: Diagnostics<S>,
+    D: Diagnostics<S>,
     S: Clone,
 {
     fn define_symbol(&mut self, name: Self::SymbolId, _span: S, expr: Expr<Self::SymbolId, S>) {
@@ -177,7 +177,7 @@ where
 
     fn is_non_zero(&mut self, value: Expr<Self::SymbolId, S>) -> Option<bool> {
         value
-            .to_num(&self.builder.context, &mut self.reentrancy)
+            .to_num(&self.builder.context, &mut self.diagnostics)
             .exact()
             .map(|n| n != 0)
     }
@@ -201,7 +201,7 @@ where
     }
 }
 
-impl<'a, R, N, B, Span> AllocSymbol<Span> for CompositeSession<R, N, B>
+impl<'a, R, N, B, D, Span> AllocSymbol<Span> for CompositeSession<R, N, B, D>
 where
     Self: SymbolSource<SymbolId = B::SymbolId>,
     B: AllocSymbol<Span>,
@@ -276,7 +276,7 @@ pub mod mock {
         }
     }
 
-    impl<R, N, A, T, S> Backend<S> for CompositeSession<R, N, MockBackend<A, T>>
+    impl<R, N, D, A, T, S> Backend<S> for CompositeSession<R, N, MockBackend<A, T>, D>
     where
         A: AllocSymbol<S>,
         T: From<BackendEvent<A::SymbolId, Expr<A::SymbolId, S>>>,
@@ -414,15 +414,17 @@ mod tests {
     fn build_object<F: FnOnce(Session<S>), S>(f: F) -> Object<S> {
         let mut linkable = Object::new();
         let session = CompositeSession {
-            reentrancy: TestDiagnosticsListener::new(),
+            reentrancy: (),
             names: (),
             builder: ObjectBuilder::new(&mut linkable),
+            diagnostics: TestDiagnosticsListener::new(),
         };
         f(session);
         linkable
     }
 
-    type Session<'a, S> = CompositeSession<TestDiagnosticsListener<S>, (), ObjectBuilder<'a, S>>;
+    type Session<'a, S> =
+        CompositeSession<(), (), ObjectBuilder<'a, S>, TestDiagnosticsListener<S>>;
 
     fn emit_items_and_compare<I, B>(items: I, bytes: B)
     where

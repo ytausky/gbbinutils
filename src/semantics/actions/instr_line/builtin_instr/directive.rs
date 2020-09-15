@@ -535,6 +535,7 @@ mod tests {
                 TestOperation<S>,
             >,
             MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>,
+            MockDiagnostics<TestOperation<S>, S>,
         >,
     >;
 
@@ -575,6 +576,7 @@ mod tests {
                 TestOperation<S>,
             >,
             MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>,
+            MockDiagnostics<TestOperation<S>, S>,
         >,
     >;
 

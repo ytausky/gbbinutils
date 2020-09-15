@@ -33,12 +33,11 @@ pub type MacroArgs<T, S> = (Vec<Vec<T>>, Vec<Vec<S>>);
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MacroId(usize);
 
-impl<'a, C, P, J, D, I, L> MacroSource
-    for SourceComponents<
-        C,
-        P,
-        VecMacroTable<I, L, <D as AddMacroDef<D::Span>>::MacroDefHandle>,
-        J,
+impl<'a, C, P, J, N, B, D, I, L> MacroSource
+    for CompositeSession<
+        SourceComponents<C, P, VecMacroTable<I, L, <D as AddMacroDef<D::Span>>::MacroDefHandle>, J>,
+        N,
+        B,
         D,
     >
 where
@@ -52,17 +51,12 @@ where
     type MacroId = MacroId;
 }
 
-impl<'a, C, P, J, D, N, B, I, L> MacroTable<I, L, D::Span>
+impl<'a, C, P, J, N, B, D, I, L> MacroTable<I, L, D::Span>
     for CompositeSession<
-        SourceComponents<
-            C,
-            P,
-            VecMacroTable<I, L, <D as AddMacroDef<D::Span>>::MacroDefHandle>,
-            J,
-            D,
-        >,
+        SourceComponents<C, P, VecMacroTable<I, L, <D as AddMacroDef<D::Span>>::MacroDefHandle>, J>,
         N,
         B,
+        D,
     >
 where
     D: SpanSource
@@ -89,10 +83,7 @@ where
         params: (Vec<I>, Vec<D::Span>),
         body: (Vec<Token<I, L>>, Vec<D::Span>),
     ) -> Self::MacroId {
-        let context = self
-            .reentrancy
-            .diagnostics
-            .add_macro_def(name_span, params.1, body.1);
+        let context = self.diagnostics.add_macro_def(name_span, params.1, body.1);
         let id = MacroId(self.reentrancy.macros.len());
         self.reentrancy.macros.push(MacroDef {
             tokens: Rc::new(MacroDefTokens {
@@ -111,7 +102,6 @@ where
     ) -> Self::Iter {
         let def = &self.reentrancy.macros[id];
         let context = self
-            .reentrancy
             .diagnostics
             .mk_macro_call_ctx(name_span, arg_spans, &def.spans);
         MacroExpansionIter::new(def.tokens.clone(), args, context)
@@ -290,15 +280,16 @@ pub mod mock {
         type MacroId = MockMacroId;
     }
 
-    impl<'a, C, P, I, D, T> MacroSource for SourceComponents<C, P, MockMacroTable<T>, I, D>
+    impl<'a, C, P, I, N, B, D, T> MacroSource
+        for CompositeSession<SourceComponents<C, P, MockMacroTable<T>, I>, N, B, D>
     where
         D: DiagnosticsSystem,
     {
         type MacroId = MockMacroId;
     }
 
-    impl<'a, C, P, I, D, N, B, T> MacroTable<String, Literal<String>, D::Span>
-        for CompositeSession<SourceComponents<C, P, MockMacroTable<T>, I, D>, N, B>
+    impl<'a, C, P, I, N, B, D, T> MacroTable<String, Literal<String>, D::Span>
+        for CompositeSession<SourceComponents<C, P, MockMacroTable<T>, I>, N, B, D>
     where
         D: DiagnosticsSystem,
         T: From<MacroTableEvent>,
@@ -358,10 +349,10 @@ mod tests {
                 parser_factory: (),
                 macros,
                 interner: (),
-                diagnostics: Factory,
             },
             names: (),
             builder: (),
+            diagnostics: Factory,
         };
         let name = ModularSpan::Buf(());
         let expanded: Vec<_> =

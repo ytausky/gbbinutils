@@ -40,8 +40,8 @@ impl<'a, T: StringSource + 'a> CodebaseAnalyzer<'a, T> {
 
 pub type TokenSeq<I, R, S> = (Vec<SemanticToken<I, R>>, Vec<S>);
 
-impl<'a, T, P, M, I, D, N, B> Lex
-    for CompositeSession<SourceComponents<CodebaseAnalyzer<'a, T>, P, M, I, D>, N, B>
+impl<'a, T, P, M, I, N, B, D> Lex
+    for CompositeSession<SourceComponents<CodebaseAnalyzer<'a, T>, P, M, I>, N, B, D>
 where
     T: Tokenize<D::BufContext> + 'a,
     T::StringRef: AsRef<str>,
@@ -54,19 +54,19 @@ where
             .codebase
             .codebase
             .tokenize_file(path.as_ref(), |buf_id| {
-                self.reentrancy.diagnostics.mk_buf_context(buf_id, None)
+                self.diagnostics.mk_buf_context(buf_id, None)
             })
     }
 }
 
-impl<'a, T: IdentSource, P, M, I, D> IdentSource
-    for SourceComponents<CodebaseAnalyzer<'a, T>, P, M, I, D>
+impl<'a, T: IdentSource, P, M, I> IdentSource
+    for SourceComponents<CodebaseAnalyzer<'a, T>, P, M, I>
 {
     type Ident = T::Ident;
 }
 
-impl<'a, T: StringSource, P, M, I, D> StringSource
-    for SourceComponents<CodebaseAnalyzer<'a, T>, P, M, I, D>
+impl<'a, T: StringSource, P, M, I> StringSource
+    for SourceComponents<CodebaseAnalyzer<'a, T>, P, M, I>
 {
     type StringRef = T::StringRef;
 }
@@ -159,8 +159,8 @@ mod mock {
         }
     }
 
-    impl<'a, P, M, I, D, N, B> Lex
-        for CompositeSession<SourceComponents<MockCodebase<D::Span>, P, M, I, D>, N, B>
+    impl<'a, P, M, I, N, B, D> Lex
+        for CompositeSession<SourceComponents<MockCodebase<D::Span>, P, M, I>, N, B, D>
     where
         D: SpanSource,
     {
@@ -171,11 +171,11 @@ mod mock {
         }
     }
 
-    impl<'a, P, M, I, D, S> IdentSource for SourceComponents<MockCodebase<S>, P, M, I, D> {
+    impl<'a, P, M, I, S> IdentSource for SourceComponents<MockCodebase<S>, P, M, I> {
         type Ident = String;
     }
 
-    impl<'a, P, M, I, D, S> StringSource for SourceComponents<MockCodebase<S>, P, M, I, D> {
+    impl<'a, P, M, I, S> StringSource for SourceComponents<MockCodebase<S>, P, M, I> {
         type StringRef = String;
     }
 }

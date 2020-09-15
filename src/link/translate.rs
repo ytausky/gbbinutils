@@ -232,9 +232,10 @@ mod tests {
 
         let mut object = Object::new();
         let mut object_builder = CompositeSession {
-            reentrancy: TestDiagnosticsListener::new(),
+            reentrancy: (),
             names: (),
             builder: ObjectBuilder::new(&mut object),
+            diagnostics: TestDiagnosticsListener::new(),
         };
 
         // org $7ff0
@@ -262,9 +263,10 @@ mod tests {
     fn translate_expr_with_location_counter() {
         let mut object = Object::new();
         let mut object_builder = CompositeSession {
-            reentrancy: TestDiagnosticsListener::new(),
+            reentrancy: (),
             names: (),
             builder: ObjectBuilder::new(&mut object),
+            diagnostics: TestDiagnosticsListener::new(),
         };
 
         // nop
@@ -297,9 +299,10 @@ mod tests {
 
         let mut object = Object::new();
         let mut object_builder = CompositeSession {
-            reentrancy: TestDiagnosticsListener::new(),
+            reentrancy: (),
             names: (),
             builder: ObjectBuilder::new(&mut object),
+            diagnostics: TestDiagnosticsListener::new(),
         };
 
         // org $ffe1

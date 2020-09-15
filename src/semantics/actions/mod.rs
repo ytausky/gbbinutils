@@ -127,7 +127,7 @@ pub mod tests {
 
     use crate::analyze::macros::mock::MockMacroId;
     use crate::analyze::SemanticToken;
-    use crate::diag::{DiagnosticsEvent, Merge, Message, MockSpan};
+    use crate::diag::{DiagnosticsEvent, Merge, Message, MockDiagnostics, MockSpan};
     use crate::expr::{Atom, BinOp, ExprOp, LocationCounter};
     use crate::log::with_log;
     use crate::object::Fragment;
@@ -525,6 +525,7 @@ pub mod tests {
                 MockSourceComponents::with_log(log.clone()),
                 BasicNameTable::default(),
                 MockBackend::new(SerialIdAllocator::new(MockSymbolId), log.clone()),
+                MockDiagnostics::new(log.clone()),
             );
             for (ident, resolution) in entries {
                 session.define_name(ident, resolution)
@@ -533,6 +534,7 @@ pub mod tests {
                 reentrancy: session.reentrancy,
                 names: MockNameTable::new(session.names, log),
                 builder: session.builder,
+                diagnostics: session.diagnostics,
             };
             let mut tokens = std::iter::empty();
             f(Semantics {
@@ -553,6 +555,7 @@ pub mod tests {
                 TestOperation<S>,
             >,
             MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>,
+            MockDiagnostics<TestOperation<S>, S>,
         >,
     >;
 }

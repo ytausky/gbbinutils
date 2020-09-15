@@ -197,9 +197,10 @@ mod tests {
         let skipped_bytes = 0x10;
         let mut object = Object::new();
         let mut object_builder = CompositeSession {
-            reentrancy: TestDiagnosticsListener::new(),
+            reentrancy: (),
             names: (),
             builder: ObjectBuilder::new(&mut object),
+            diagnostics: TestDiagnosticsListener::new(),
         };
 
         // org $0150
@@ -230,9 +231,10 @@ mod tests {
         let addr = 0xffe1;
         let mut linkable = Object::new();
         let mut builder = CompositeSession {
-            reentrancy: TestDiagnosticsListener::new(),
+            reentrancy: (),
             names: (),
             builder: ObjectBuilder::new(&mut linkable),
+            diagnostics: TestDiagnosticsListener::new(),
         };
         builder.set_origin(addr.into());
         let symbol_id = builder.alloc_symbol(());
@@ -288,9 +290,10 @@ mod tests {
     fn resolve_expr_with_section_addr() {
         let mut object = Object::new();
         let mut object_builder = CompositeSession {
-            reentrancy: TestDiagnosticsListener::new(),
+            reentrancy: (),
             names: (),
             builder: ObjectBuilder::new(&mut object),
+            diagnostics: TestDiagnosticsListener::new(),
         };
 
         // section my_section
@@ -318,9 +321,10 @@ mod tests {
 
         let mut object = Object::new();
         let mut object_builder = CompositeSession {
-            reentrancy: TestDiagnosticsListener::new(),
+            reentrancy: (),
             names: (),
             builder: ObjectBuilder::new(&mut object),
+            diagnostics: TestDiagnosticsListener::new(),
         };
 
         // org $0100
@@ -351,9 +355,10 @@ mod tests {
     fn assert_section_size(expected: impl Into<Num>, f: impl FnOnce(Session<()>)) {
         let mut object = Object::new();
         let mut builder = CompositeSession {
-            reentrancy: TestDiagnosticsListener::new(),
+            reentrancy: (),
             names: (),
             builder: ObjectBuilder::new(&mut object),
+            diagnostics: TestDiagnosticsListener::new(),
         };
         let name = builder.alloc_symbol(());
         builder.start_section(name, ());
@@ -365,5 +370,6 @@ mod tests {
         );
     }
 
-    type Session<'a, S> = CompositeSession<TestDiagnosticsListener<S>, (), ObjectBuilder<'a, S>>;
+    type Session<'a, S> =
+        CompositeSession<(), (), ObjectBuilder<'a, S>, TestDiagnosticsListener<S>>;
 }

@@ -17,19 +17,9 @@ use std::ops::Deref;
 #[cfg(test)]
 pub(crate) use self::mock::*;
 
-pub(crate) trait Meta:
-    IdentSource + MacroSource + SpanSource + StringSource + Diagnostics<<Self as SpanSource>::Span>
-{
-}
+pub(crate) trait Meta: IdentSource + MacroSource + SpanSource + StringSource {}
 
-impl<T> Meta for T where
-    T: IdentSource
-        + MacroSource
-        + SpanSource
-        + StringSource
-        + Diagnostics<<Self as SpanSource>::Span>
-{
-}
+impl<T> Meta for T where T: IdentSource + MacroSource + SpanSource + StringSource {}
 
 pub(crate) trait ReentrancyActions
 where
@@ -54,49 +44,35 @@ where
 pub type MacroArgs<I, R, S> = crate::analyze::macros::MacroArgs<SemanticToken<I, R>, S>;
 pub type Params<I, S> = (Vec<I>, Vec<S>);
 
-pub(crate) struct SourceComponents<C, P, M, I, D> {
+pub(crate) struct SourceComponents<C, P, M, I> {
     pub codebase: C,
     pub parser_factory: P,
     pub macros: M,
     pub interner: I,
-    pub diagnostics: D,
 }
 
-impl<C, P, M, I, D> SpanSource for SourceComponents<C, P, M, I, D>
+impl<C, P, M, I, N, B, D> SpanSource for CompositeSession<SourceComponents<C, P, M, I>, N, B, D>
 where
     D: SpanSource,
 {
     type Span = D::Span;
 }
 
-delegate_diagnostics! {
-    {C, P, M, I, D, S: Clone},
-    {D: Diagnostics<S>},
-    SourceComponents<C, P, M, I, D>,
-    {diagnostics},
-    D,
-    S
-}
-
-impl<C, P, M, I, D> SourceComponents<C, P, M, I, D> {
-    pub fn new(codebase: C, parser_factory: P, macros: M, interner: I, diagnostics: D) -> Self {
+impl<C, P, M, I> SourceComponents<C, P, M, I> {
+    pub fn new(codebase: C, parser_factory: P, macros: M, interner: I) -> Self {
         SourceComponents {
             codebase,
             parser_factory,
             macros,
             interner,
-            diagnostics,
         }
     }
 }
 
-impl<C, P, M, I, D, N, B> ReentrancyActions
-    for CompositeSession<SourceComponents<C, P, M, I, D>, N, B>
+impl<C, P, M, I, N, B, D> ReentrancyActions
+    for CompositeSession<SourceComponents<C, P, M, I>, N, B, D>
 where
     Self: Lex<Span = D::Span>,
-    SourceComponents<C, P, M, I, D>: IdentSource<Ident = <Self as IdentSource>::Ident>
-        + StringSource<StringRef = <Self as StringSource>::StringRef>
-        + MacroSource<MacroId = <Self as MacroSource>::MacroId>,
     P: ParserFactory<
         <Self as IdentSource>::Ident,
         Literal<<Self as StringSource>::StringRef>,
@@ -155,7 +131,7 @@ where
     }
 }
 
-impl<C, P, M, I, D, R> GetString<R> for SourceComponents<C, P, M, I, D>
+impl<C, P, M, I, R> GetString<R> for SourceComponents<C, P, M, I>
 where
     I: Deref,
     I::Target: GetString<R>,
@@ -170,7 +146,7 @@ mod mock {
     use super::*;
 
     use crate::analyze::macros::mock::MockMacroId;
-    use crate::diag::{DiagnosticsEvent, MockDiagnostics};
+    use crate::diag::DiagnosticsEvent;
     use crate::log::Log;
     use crate::session::builder::mock::*;
 
@@ -184,7 +160,6 @@ mod mock {
     }
 
     pub struct MockSourceComponents<T, S> {
-        diagnostics: Box<MockDiagnostics<T, S>>,
         macro_alloc: SerialIdAllocator<MockMacroId>,
         log: Log<T>,
         error: Option<CodebaseError>,
@@ -199,18 +174,9 @@ mod mock {
         type Span = S;
     }
 
-    delegate_diagnostics! {
-        {T: From<DiagnosticsEvent<S>>, S: Clone + Merge},
-        MockSourceComponents<T, S>,
-        {diagnostics},
-        MockDiagnostics<T, S>,
-        S
-    }
-
     impl<T, S> MockSourceComponents<T, S> {
         fn with_name_table(log: Log<T>) -> Self {
             MockSourceComponents {
-                diagnostics: Box::new(MockDiagnostics::new(log.clone())),
                 macro_alloc: SerialIdAllocator::new(MockMacroId),
                 log,
                 error: None,
@@ -243,10 +209,11 @@ mod mock {
         }
     }
 
-    impl<T, S, N, B> ReentrancyActions for CompositeSession<MockSourceComponents<T, S>, N, B>
+    impl<T, S, N, B, D> ReentrancyActions for CompositeSession<MockSourceComponents<T, S>, N, B, D>
     where
         T: From<ReentrancyEvent> + From<DiagnosticsEvent<S>>,
         S: Clone + Merge,
+        D: Diagnostics<S>,
     {
         fn analyze_file(&mut self, path: String) -> Result<(), CodebaseError> {
             self.reentrancy.log.push(ReentrancyEvent::AnalyzeFile(path));
@@ -324,10 +291,10 @@ mod tests {
             MockParserFactory<S>,
             MockMacroTable<S>,
             FakeStringInterner,
-            MockDiagnosticsSystem<S>,
         >,
         MockNameTable<S>,
         MockBuilder<S>,
+        MockDiagnosticsSystem<S>,
     >;
 
     #[derive(Debug, PartialEq)]
@@ -409,10 +376,10 @@ mod tests {
                     self.inner.analyzer,
                     self.inner.macros,
                     self.inner.interner,
-                    self.inner.diagnostics,
                 ),
                 names: MockNameTable::new(BasicNameTable::default(), self.log.clone()),
                 builder: MockBuilder::new(SerialIdAllocator::new(MockSymbolId), self.log.clone()),
+                diagnostics: self.inner.diagnostics,
             });
             self.log.into_inner()
         }

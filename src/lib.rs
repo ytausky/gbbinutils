@@ -106,12 +106,11 @@ fn try_assemble(
             ResolvedName::Symbol(*name),
         )
     }
-    let reentrancy =
-        SourceComponents::new(file_parser, parser_factory, macros, interner, diagnostics);
-    let mut session = CompositeSession::from_components(reentrancy, names, builder);
+    let reentrancy = SourceComponents::new(file_parser, parser_factory, macros, interner);
+    let mut session = CompositeSession::from_components(reentrancy, names, builder, diagnostics);
     session.analyze_file(name.into())?;
 
-    let mut diagnostics = session.reentrancy.diagnostics;
+    let mut diagnostics = session.diagnostics;
     Ok(Program::link(linkable, &mut diagnostics))
 }
 

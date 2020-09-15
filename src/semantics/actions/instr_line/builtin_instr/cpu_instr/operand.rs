@@ -191,7 +191,6 @@ pub mod tests {
     use super::*;
 
     use crate::session::builder::mock::{BackendEvent, MockSymbolId};
-    use crate::session::reentrancy::ReentrancyEvent;
 
     use std::fmt::Debug;
 
@@ -231,7 +230,6 @@ pub mod tests {
     pub(crate) enum Event<S: Clone> {
         Backend(BackendEvent<MockSymbolId, Expr<S>>),
         Diagnostics(DiagnosticsEvent<S>),
-        Reentrancy(ReentrancyEvent),
     }
 
     impl<S: Clone> From<BackendEvent<MockSymbolId, Expr<S>>> for Event<S> {
@@ -243,12 +241,6 @@ pub mod tests {
     impl<S: Clone> From<DiagnosticsEvent<S>> for Event<S> {
         fn from(event: DiagnosticsEvent<S>) -> Self {
             Event::Diagnostics(event)
-        }
-    }
-
-    impl<S: Clone> From<ReentrancyEvent> for Event<S> {
-        fn from(event: ReentrancyEvent) -> Self {
-            Event::Reentrancy(event)
         }
     }
 
