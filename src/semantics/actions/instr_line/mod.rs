@@ -14,13 +14,13 @@ mod builtin_instr;
 mod label;
 mod macro_instr;
 
-impl<'a, S: Session> InstrLineContext for InstrLineSemantics<'a, S>
+impl<'a, 'b, S: Session> InstrLineContext for InstrLineSemantics<'a, 'b, S>
 where
     S::Ident: 'static,
     S::StringRef: 'static,
     S::Span: 'static,
 {
-    type LabelContext = LabelSemantics<'a, S>;
+    type LabelContext = LabelSemantics<'a, 'b, S>;
     type InstrContext = Self;
 
     fn will_parse_label(mut self, label: (S::Ident, S::Span)) -> Self::LabelContext {
@@ -29,16 +29,16 @@ where
     }
 }
 
-impl<'a, S: Session> InstrContext for InstrLineSemantics<'a, S>
+impl<'a, 'b, S: Session> InstrContext for InstrLineSemantics<'a, 'b, S>
 where
     S::Ident: 'static,
     S::StringRef: 'static,
     S::Span: 'static,
 {
-    type BuiltinInstrContext = BuiltinInstrSemantics<'a, S>;
-    type MacroInstrContext = MacroInstrSemantics<'a, S>;
+    type BuiltinInstrContext = BuiltinInstrSemantics<'a, 'b, S>;
+    type MacroInstrContext = MacroInstrSemantics<'a, 'b, S>;
     type ErrorContext = Self;
-    type LineFinalizer = TokenStreamSemantics<'a, S>;
+    type LineFinalizer = TokenStreamSemantics<'a, 'b, S>;
 
     fn will_parse_instr(
         mut self,
@@ -78,7 +78,7 @@ where
     }
 }
 
-impl<'a, S: Session> InstrLineSemantics<'a, S> {
+impl<'a, 'b, S: Session> InstrLineSemantics<'a, 'b, S> {
     pub fn flush_label(mut self) -> Self {
         if let Some(((label, span), _params)) = self.state.label.take() {
             self.session.start_scope(&label);
@@ -93,7 +93,7 @@ impl<'a, S: Session> InstrLineSemantics<'a, S> {
     }
 }
 
-impl<'a, S, T, I, R, Z> Semantics<'a, S, T, I, R, Z>
+impl<'a, 'b, S, T, I, R, Z> Semantics<'a, 'b, S, T, I, R, Z>
 where
     S: AllocSymbol<Z> + NameTable<I> + Diagnostics<Z>,
     Z: Clone,

@@ -7,12 +7,12 @@ use crate::semantics::Semantics;
 use crate::semantics::*;
 use crate::session::builder::Width;
 
-pub(super) fn analyze_directive<S: Session>(
+pub(super) fn analyze_directive<'a, 'b, S: Session>(
     directive: (Directive, S::Span),
     label: Option<Label<S::Ident, S::Span>>,
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
-    session: TokenStreamSemantics<S>,
-) -> TokenStreamSemantics<S>
+    session: TokenStreamSemantics<'a, 'b, S>,
+) -> TokenStreamSemantics<'a, 'b, S>
 where
     S::Ident: 'static,
     S::StringRef: 'static,
@@ -27,20 +27,20 @@ where
     context.analyze(directive.0)
 }
 
-struct DirectiveContext<'a, S: Session> {
+struct DirectiveContext<'a, 'b, S: Session> {
     span: S::Span,
     label: Option<Label<S::Ident, S::Span>>,
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
-    session: TokenStreamSemantics<'a, S>,
+    session: TokenStreamSemantics<'a, 'b, S>,
 }
 
-impl<'a, S: Session> DirectiveContext<'a, S>
+impl<'a, 'b, S: Session> DirectiveContext<'a, 'b, S>
 where
     S::Ident: 'static,
     S::StringRef: 'static,
     S::Span: 'static,
 {
-    fn analyze(self, directive: Directive) -> TokenStreamSemantics<'a, S> {
+    fn analyze(self, directive: Directive) -> TokenStreamSemantics<'a, 'b, S> {
         match directive {
             Directive::Equ => self.analyze_equ(),
             Directive::Macro => self.analyze_macro(),
@@ -56,7 +56,7 @@ where
         }
     }
 
-    fn analyze_data(mut self, width: Width) -> TokenStreamSemantics<'a, S> {
+    fn analyze_data(mut self, width: Width) -> TokenStreamSemantics<'a, 'b, S> {
         for arg in self.args {
             let expr = match self.session.expect_const(arg) {
                 Ok(expr) => expr,
@@ -69,8 +69,8 @@ where
         self.session
     }
 
-    fn analyze_ds(mut self) -> TokenStreamSemantics<'a, S> {
-        if let Some(arg) = single_arg(self.span, self.args, &mut self.session.session) {
+    fn analyze_ds(mut self) -> TokenStreamSemantics<'a, 'b, S> {
+        if let Some(arg) = single_arg(self.span, self.args, self.session.session) {
             let result = self.session.expect_const(arg);
             if let Ok(bytes) = result {
                 self.session
@@ -81,27 +81,27 @@ where
         self.session
     }
 
-    fn analyze_equ(mut self) -> TokenStreamSemantics<'a, S> {
+    fn analyze_equ(mut self) -> TokenStreamSemantics<'a, 'b, S> {
         let (symbol, _) = self.label.take().unwrap();
-        if let Some(arg) = single_arg(self.span, self.args, &mut self.session.session) {
+        if let Some(arg) = single_arg(self.span, self.args, self.session.session) {
             self.session.define_symbol_with_params(symbol, arg);
         }
         self.session
     }
 
-    fn analyze_section(mut self) -> TokenStreamSemantics<'a, S> {
+    fn analyze_section(mut self) -> TokenStreamSemantics<'a, 'b, S> {
         let (name, span) = self.label.take().unwrap().0;
         let id = self.session.reloc_lookup(name, span.clone());
         self.session.session.start_section(id, span);
         self.session
     }
 
-    fn analyze_endc(self) -> TokenStreamSemantics<'a, S> {
+    fn analyze_endc(self) -> TokenStreamSemantics<'a, 'b, S> {
         self.session
     }
 
-    fn analyze_if(mut self) -> TokenStreamSemantics<'a, S> {
-        match single_arg(self.span, self.args, &mut self.session.session) {
+    fn analyze_if(mut self) -> TokenStreamSemantics<'a, 'b, S> {
+        match single_arg(self.span, self.args, self.session.session) {
             Some(arg) => {
                 let value = self.session.expect_const(arg);
                 match self.session.session.is_non_zero(value.unwrap()) {
@@ -119,23 +119,23 @@ where
         self.session
     }
 
-    fn analyze_include(mut self) -> TokenStreamSemantics<'a, S> {
-        let (path, span) = match reduce_include(self.span, self.args, &mut self.session.session) {
+    fn analyze_include(self) -> TokenStreamSemantics<'a, 'b, S> {
+        let (path, span) = match reduce_include(self.span, self.args, self.session.session) {
             Some(result) => result,
             None => return self.session,
         };
-        let (result, mut session) = self.session.session.analyze_file(path);
+        let result = self.session.session.analyze_file(path);
         if let Err(err) = result {
-            session.emit_diag(Message::from(err).at(span))
+            self.session.session.emit_diag(Message::from(err).at(span))
         }
         Semantics {
-            session,
+            session: self.session.session,
             state: TokenStreamState::new(),
             tokens: self.session.tokens,
         }
     }
 
-    fn analyze_macro(mut self) -> TokenStreamSemantics<'a, S> {
+    fn analyze_macro(self) -> TokenStreamSemantics<'a, 'b, S> {
         if self.label.is_none() {
             let span = self.span;
             self.session
@@ -151,8 +151,8 @@ where
         )
     }
 
-    fn analyze_org(mut self) -> TokenStreamSemantics<'a, S> {
-        if let Some(arg) = single_arg(self.span, self.args, &mut self.session.session) {
+    fn analyze_org(mut self) -> TokenStreamSemantics<'a, 'b, S> {
+        if let Some(arg) = single_arg(self.span, self.args, self.session.session) {
             let result = self.session.expect_const(arg);
             if let Ok(value) = result {
                 self.session.session.set_origin(value)
@@ -352,7 +352,7 @@ mod tests {
     #[test]
     fn include_file_with_invalid_utf8() {
         let name = "invalid_utf8.s";
-        let log = collect_semantic_actions(|mut actions| {
+        let log = collect_semantic_actions(|actions| {
             actions.session.reentrancy.fail(CodebaseError::Utf8Error);
             let mut context = actions
                 .will_parse_line()
@@ -376,7 +376,7 @@ mod tests {
     fn include_nonexistent_file() {
         let name = "nonexistent.s";
         let message = "some message";
-        let log = collect_semantic_actions(|mut actions| {
+        let log = collect_semantic_actions(|actions| {
             actions
                 .session
                 .reentrancy
@@ -525,15 +525,14 @@ mod tests {
         unary_directive("DS", f)
     }
 
-    type TestExprContext<'a, S> = ArgSemantics<
+    type TestExprContext<'a, 'b, S> = ArgSemantics<
         'a,
+        'b,
         CompositeSession<
             MockSourceComponents<S>,
-            Box<
-                MockNameTable<
-                    BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
-                    TestOperation<S>,
-                >,
+            MockNameTable<
+                BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
+                TestOperation<S>,
             >,
             MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>,
         >,
@@ -566,15 +565,14 @@ mod tests {
         )
     }
 
-    type TestBuiltinInstrSemantics<'a, S> = BuiltinInstrSemantics<
+    type TestBuiltinInstrSemantics<'a, 'b, S> = BuiltinInstrSemantics<
         'a,
+        'b,
         CompositeSession<
             MockSourceComponents<S>,
-            Box<
-                MockNameTable<
-                    BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
-                    TestOperation<S>,
-                >,
+            MockNameTable<
+                BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
+                TestOperation<S>,
             >,
             MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>,
         >,
@@ -582,7 +580,9 @@ mod tests {
 
     fn with_directive<F>(directive: &str, f: F) -> Vec<TestOperation<()>>
     where
-        F: FnOnce(TestBuiltinInstrSemantics<()>) -> TestBuiltinInstrSemantics<()>,
+        F: for<'a, 'b> FnOnce(
+            TestBuiltinInstrSemantics<'a, 'b, ()>,
+        ) -> TestBuiltinInstrSemantics<'a, 'b, ()>,
     {
         collect_semantic_actions(|actions| {
             let command = actions

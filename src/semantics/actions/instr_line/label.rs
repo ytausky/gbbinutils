@@ -3,8 +3,9 @@ use super::*;
 use crate::semantics::Params;
 use crate::syntax::actions::LabelContext;
 
-pub(crate) type LabelSemantics<'a, S> = Semantics<
+pub(crate) type LabelSemantics<'a, 'b, S> = Semantics<
     'a,
+    'b,
     S,
     LabelState<S>,
     <S as IdentSource>::Ident,
@@ -28,8 +29,8 @@ impl<S: Session> LabelState<S> {
     }
 }
 
-impl<'a, S: Session> LabelContext for LabelSemantics<'a, S> {
-    type Next = InstrLineSemantics<'a, S>;
+impl<'a, 'b, S: Session> LabelContext for LabelSemantics<'a, 'b, S> {
+    type Next = InstrLineSemantics<'a, 'b, S>;
 
     fn act_on_param(&mut self, ident: S::Ident, span: S::Span) {
         let params = &mut self.state.params;

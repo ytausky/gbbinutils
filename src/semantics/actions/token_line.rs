@@ -9,8 +9,8 @@ use crate::session::resolve::ResolvedName;
 use crate::syntax::actions::*;
 use crate::syntax::{LexError, Sigil, Token};
 
-impl<'a, S: Session> TokenLineContext for TokenLineSemantics<'a, S> {
-    type ContextFinalizer = TokenContextFinalizationSemantics<'a, S>;
+impl<'a, 'b, S: Session> TokenLineContext for TokenLineSemantics<'a, 'b, S> {
+    type ContextFinalizer = TokenContextFinalizationSemantics<'a, 'b, S>;
 
     fn act_on_token(&mut self, token: SemanticToken<S::Ident, S::StringRef>, span: S::Span) {
         match &mut self.state.context {
@@ -84,8 +84,8 @@ impl<I, R, S> MacroDefState<I, R, S> {
     }
 }
 
-impl<'a, S: Session> LineFinalizer for TokenLineSemantics<'a, S> {
-    type Next = TokenStreamSemantics<'a, S>;
+impl<'a, 'b, S: Session> LineFinalizer for TokenLineSemantics<'a, 'b, S> {
+    type Next = TokenStreamSemantics<'a, 'b, S>;
 
     fn did_parse_line(mut self, span: S::Span) -> Self::Next {
         self.act_on_token(Sigil::Eol.into(), span);
@@ -93,11 +93,11 @@ impl<'a, S: Session> LineFinalizer for TokenLineSemantics<'a, S> {
     }
 }
 
-pub(crate) struct TokenContextFinalizationSemantics<'a, S: Session> {
-    parent: TokenLineSemantics<'a, S>,
+pub(crate) struct TokenContextFinalizationSemantics<'a, 'b, S: Session> {
+    parent: TokenLineSemantics<'a, 'b, S>,
 }
 
-impl<'a, S: Session> ParsingContext for TokenContextFinalizationSemantics<'a, S> {
+impl<'a, 'b, S: Session> ParsingContext for TokenContextFinalizationSemantics<'a, 'b, S> {
     type Ident = S::Ident;
     type Literal = Literal<S::StringRef>;
     type Error = LexError;
@@ -123,10 +123,10 @@ impl<'a, S: Session> ParsingContext for TokenContextFinalizationSemantics<'a, S>
     }
 }
 
-impl<'a, S: Session> LineFinalizer for TokenContextFinalizationSemantics<'a, S> {
-    type Next = TokenStreamSemantics<'a, S>;
+impl<'a, 'b, S: Session> LineFinalizer for TokenContextFinalizationSemantics<'a, 'b, S> {
+    type Next = TokenStreamSemantics<'a, 'b, S>;
 
-    fn did_parse_line(mut self, _: S::Span) -> Self::Next {
+    fn did_parse_line(self, _: S::Span) -> Self::Next {
         match self.parent.state.context {
             TokenContext::FalseIf => (),
             TokenContext::MacroDef(state) => {

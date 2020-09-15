@@ -8,8 +8,8 @@ use crate::semantics::{ArgSemantics, Semantics};
 use crate::session::Session;
 use crate::syntax::actions::*;
 
-impl<'a, S: Session> ArgFinalizer for ArgSemantics<'a, S> {
-    type Next = BuiltinInstrSemantics<'a, S>;
+impl<'a, 'b, S: Session> ArgFinalizer for ArgSemantics<'a, 'b, S> {
+    type Next = BuiltinInstrSemantics<'a, 'b, S>;
 
     fn did_parse_arg(mut self) -> Self::Next {
         let arg = self.state.arg.unwrap_or(ParsedArg::Error);
@@ -22,7 +22,7 @@ impl<'a, S: Session> ArgFinalizer for ArgSemantics<'a, S> {
     }
 }
 
-impl<'a, S: Session> ArgContext for ArgSemantics<'a, S> {
+impl<'a, 'b, S: Session> ArgContext for ArgSemantics<'a, 'b, S> {
     fn act_on_atom(&mut self, atom: ExprAtom<S::Ident, Literal<S::StringRef>>, span: S::Span) {
         match atom {
             ExprAtom::Ident(ident) => self.act_on_ident(ident, span),
@@ -51,7 +51,7 @@ impl<'a, S: Session> ArgContext for ArgSemantics<'a, S> {
     }
 }
 
-impl<'a, S: Session> ArgSemantics<'a, S> {
+impl<'a, 'b, S: Session> ArgSemantics<'a, 'b, S> {
     fn act_on_expr_node(&mut self, node: ExprOp<S::Ident>, span: S::Span) {
         self.state.arg = match self.state.arg.take() {
             None => Some(ParsedArg::Bare(Expr(vec![node.with_span(span)]))),

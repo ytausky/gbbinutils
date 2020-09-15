@@ -23,13 +23,13 @@ impl<S: Session> From<BuiltinInstrState<S>>
     }
 }
 
-impl<'a, S: Session> BuiltinInstrContext for BuiltinInstrSemantics<'a, S>
+impl<'a, 'b, S: Session> BuiltinInstrContext for BuiltinInstrSemantics<'a, 'b, S>
 where
     S::Ident: 'static,
     S::StringRef: 'static,
     S::Span: 'static,
 {
-    type ArgContext = ArgSemantics<'a, S>;
+    type ArgContext = ArgSemantics<'a, 'b, S>;
 
     fn will_parse_arg(self) -> Self::ArgContext {
         Semantics {
@@ -40,23 +40,23 @@ where
     }
 }
 
-impl<'a, S: Session> InstrFinalizer for BuiltinInstrSemantics<'a, S>
+impl<'a, 'b, S: Session> InstrFinalizer for BuiltinInstrSemantics<'a, 'b, S>
 where
     S::Ident: 'static,
     S::StringRef: 'static,
     S::Span: 'static,
 {
-    type Next = TokenStreamSemantics<'a, S>;
+    type Next = TokenStreamSemantics<'a, 'b, S>;
 
     fn did_parse_instr(self) -> Self::Next {
         let args = self.state.args;
-        let mut session = set_state!(self, InstrLineState::new().into());
+        let session = set_state!(self, InstrLineState::new().into());
         match self.state.mnemonic.item {
             BuiltinMnemonic::CpuInstr(cpu_instr) => {
                 analyze_mnemonic(
                     (&cpu_instr, self.state.mnemonic.span),
                     args,
-                    &mut session.session,
+                    session.session,
                 );
                 session.map_state(Into::into)
             }
@@ -70,7 +70,7 @@ where
     }
 }
 
-impl<'a, S: Session, T> Semantics<'a, S, T, S::Ident, S::StringRef, S::Span> {
+impl<'a, 'b, S: Session, T> Semantics<'a, 'b, S, T, S::Ident, S::StringRef, S::Span> {
     fn expect_const(
         &mut self,
         arg: ParsedArg<S::Ident, S::StringRef, S::Span>,

@@ -5,8 +5,9 @@ use crate::semantics::actions::TokenStreamState;
 use crate::session::reentrancy::MacroArgs;
 use crate::syntax::actions::{InstrFinalizer, MacroArgContext, MacroInstrContext};
 
-pub(super) type MacroInstrSemantics<'a, S> = Semantics<
+pub(super) type MacroInstrSemantics<'a, 'b, S> = Semantics<
     'a,
+    'b,
     S,
     MacroInstrState<S>,
     <S as IdentSource>::Ident,
@@ -36,39 +37,40 @@ impl<S: Session> MacroInstrState<S> {
     }
 }
 
-impl<'a, S: Session> MacroInstrContext for MacroInstrSemantics<'a, S>
+impl<'a, 'b, S: Session> MacroInstrContext for MacroInstrSemantics<'a, 'b, S>
 where
     S::Ident: 'static,
     S::StringRef: 'static,
     S::Span: 'static,
 {
-    type MacroArgContext = MacroArgSemantics<'a, S>;
+    type MacroArgContext = MacroArgSemantics<'a, 'b, S>;
 
     fn will_parse_macro_arg(self) -> Self::MacroArgContext {
         set_state!(self, MacroArgState::new(self.state))
     }
 }
 
-impl<'a, S: Session> InstrFinalizer for MacroInstrSemantics<'a, S>
+impl<'a, 'b, S: Session> InstrFinalizer for MacroInstrSemantics<'a, 'b, S>
 where
     S::Ident: 'static,
     S::StringRef: 'static,
     S::Span: 'static,
 {
-    type Next = TokenStreamSemantics<'a, S>;
+    type Next = TokenStreamSemantics<'a, 'b, S>;
 
     fn did_parse_instr(self) -> Self::Next {
-        let session = self.session.call_macro(self.state.name, self.state.args);
+        self.session.call_macro(self.state.name, self.state.args);
         Semantics {
-            session,
+            session: self.session,
             state: TokenStreamState::from(self.state.parent),
             tokens: self.tokens,
         }
     }
 }
 
-type MacroArgSemantics<'a, S> = Semantics<
+type MacroArgSemantics<'a, 'b, S> = Semantics<
     'a,
+    'b,
     S,
     MacroArgState<S>,
     <S as IdentSource>::Ident,
@@ -90,8 +92,8 @@ impl<S: Session> MacroArgState<S> {
     }
 }
 
-impl<'a, S: Session> MacroArgContext for MacroArgSemantics<'a, S> {
-    type Next = MacroInstrSemantics<'a, S>;
+impl<'a, 'b, S: Session> MacroArgContext for MacroArgSemantics<'a, 'b, S> {
+    type Next = MacroInstrSemantics<'a, 'b, S>;
 
     fn act_on_token(&mut self, token: (SemanticToken<S::Ident, S::StringRef>, S::Span)) {
         let tokens = &mut self.state.tokens;

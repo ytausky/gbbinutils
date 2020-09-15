@@ -5,7 +5,6 @@ use crate::session::CompositeSession;
 use crate::span::{BufContext, BufContextFactory, SpanSource};
 use crate::syntax::*;
 
-use std::ops::DerefMut;
 use std::rc::Rc;
 
 #[cfg(test)]
@@ -42,12 +41,11 @@ impl<'a, T: StringSource + 'a> CodebaseAnalyzer<'a, T> {
 pub type TokenSeq<I, R, S> = (Vec<SemanticToken<I, R>>, Vec<S>);
 
 impl<'a, T, P, M, I, D, N, B> Lex
-    for CompositeSession<SourceComponents<&'a mut CodebaseAnalyzer<'a, T>, P, M, I, D>, N, B>
+    for CompositeSession<SourceComponents<CodebaseAnalyzer<'a, T>, P, M, I, D>, N, B>
 where
-    T: Tokenize<<D::Target as BufContextFactory>::BufContext> + 'a,
+    T: Tokenize<D::BufContext> + 'a,
     T::StringRef: AsRef<str>,
-    D: DerefMut,
-    D::Target: BufContextFactory,
+    D: BufContextFactory,
 {
     type TokenIter = T::Tokenized;
 
@@ -62,13 +60,13 @@ where
 }
 
 impl<'a, T: IdentSource, P, M, I, D> IdentSource
-    for SourceComponents<&'a mut CodebaseAnalyzer<'a, T>, P, M, I, D>
+    for SourceComponents<CodebaseAnalyzer<'a, T>, P, M, I, D>
 {
     type Ident = T::Ident;
 }
 
 impl<'a, T: StringSource, P, M, I, D> StringSource
-    for SourceComponents<&'a mut CodebaseAnalyzer<'a, T>, P, M, I, D>
+    for SourceComponents<CodebaseAnalyzer<'a, T>, P, M, I, D>
 {
     type StringRef = T::StringRef;
 }
@@ -140,7 +138,6 @@ mod mock {
     use super::*;
 
     use std::collections::HashMap;
-    use std::ops::Deref;
     use std::vec::IntoIter;
 
     pub struct MockCodebase<S> {
@@ -163,28 +160,22 @@ mod mock {
     }
 
     impl<'a, P, M, I, D, N, B> Lex
-        for CompositeSession<
-            SourceComponents<&'a mut MockCodebase<<D::Target as SpanSource>::Span>, P, M, I, D>,
-            N,
-            B,
-        >
+        for CompositeSession<SourceComponents<MockCodebase<D::Span>, P, M, I, D>, N, B>
     where
-        D: Deref,
-        D::Target: SpanSource,
+        D: SpanSource,
     {
-        type TokenIter =
-            IntoIter<LexItem<Self::Ident, Self::StringRef, <D::Target as SpanSource>::Span>>;
+        type TokenIter = IntoIter<LexItem<Self::Ident, Self::StringRef, D::Span>>;
 
         fn lex_file(&mut self, path: Self::StringRef) -> Result<Self::TokenIter, CodebaseError> {
             Ok(self.reentrancy.codebase.files[&path].clone().into_iter())
         }
     }
 
-    impl<'a, P, M, I, D, S> IdentSource for SourceComponents<&'a mut MockCodebase<S>, P, M, I, D> {
+    impl<'a, P, M, I, D, S> IdentSource for SourceComponents<MockCodebase<S>, P, M, I, D> {
         type Ident = String;
     }
 
-    impl<'a, P, M, I, D, S> StringSource for SourceComponents<&'a mut MockCodebase<S>, P, M, I, D> {
+    impl<'a, P, M, I, D, S> StringSource for SourceComponents<MockCodebase<S>, P, M, I, D> {
         type StringRef = String;
     }
 }

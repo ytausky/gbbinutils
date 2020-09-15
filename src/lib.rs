@@ -90,15 +90,15 @@ fn try_assemble(
     output: &mut dyn FnMut(diag::Diagnostic),
 ) -> Result<Program, CodebaseError> {
     let codebase = codebase::FileCodebase::new(input);
-    let diagnostics = &mut CompositeDiagnosticsSystem::new(&codebase.cache, output);
+    let diagnostics = CompositeDiagnosticsSystem::new(&codebase.cache, output);
     let mut linkable = object::Object::new();
     let builder = ObjectBuilder::new(&mut linkable);
 
     let tokenizer = Tokenizer(&codebase);
-    let mut file_parser = CodebaseAnalyzer::new(&tokenizer);
-    let mut parser_factory = DefaultParserFactory;
-    let mut macros = VecMacroTable::new();
-    let mut interner = FakeStringInterner;
+    let file_parser = CodebaseAnalyzer::new(&tokenizer);
+    let parser_factory = DefaultParserFactory;
+    let macros = VecMacroTable::new();
+    let interner = FakeStringInterner;
     let mut names = BiLevelNameTable::<BasicNameTable<_, _, _>>::new();
     for (string, name) in builder.builtin_symbols() {
         names.define_name(
@@ -106,17 +106,13 @@ fn try_assemble(
             ResolvedName::Symbol(*name),
         )
     }
-    let reentrancy = SourceComponents::new(
-        &mut file_parser,
-        &mut parser_factory,
-        &mut macros,
-        &mut interner,
-        diagnostics,
-    );
-    let session = CompositeSession::from_components(reentrancy, &mut names, builder);
-    session.analyze_file(name.into()).0?;
+    let reentrancy =
+        SourceComponents::new(file_parser, parser_factory, macros, interner, diagnostics);
+    let mut session = CompositeSession::from_components(reentrancy, names, builder);
+    session.analyze_file(name.into())?;
 
-    Ok(Program::link(linkable, diagnostics))
+    let mut diagnostics = session.reentrancy.diagnostics;
+    Ok(Program::link(linkable, &mut diagnostics))
 }
 
 trait BuiltinSymbols {

@@ -29,7 +29,7 @@ impl<I, R, S> From<TokenLineState<I, R, S>> for TokenStreamState<I, R, S> {
     }
 }
 
-impl<'a, S, T, I, R, Z> ParsingContext for Semantics<'a, S, T, I, R, Z>
+impl<'a, 'b, S, T, I, R, Z> ParsingContext for Semantics<'a, 'b, S, T, I, R, Z>
 where
     S: Diagnostics<Z>,
     Z: Clone,
@@ -59,15 +59,15 @@ where
     }
 }
 
-impl<'a, S: Session> TokenStreamContext for TokenStreamSemantics<'a, S>
+impl<'a, 'b, S: Session> TokenStreamContext for TokenStreamSemantics<'a, 'b, S>
 where
     S::Ident: 'static,
     S::StringRef: 'static,
     S::Span: 'static,
 {
-    type InstrLineContext = InstrLineSemantics<'a, S>;
-    type TokenLineContext = TokenLineSemantics<'a, S>;
-    type TokenLineFinalizer = TokenContextFinalizationSemantics<'a, S>;
+    type InstrLineContext = InstrLineSemantics<'a, 'b, S>;
+    type TokenLineContext = TokenLineSemantics<'a, 'b, S>;
+    type TokenLineFinalizer = TokenContextFinalizationSemantics<'a, 'b, S>;
 
     fn will_parse_line(self) -> LineRule<Self::InstrLineContext, Self::TokenLineContext> {
         match self.state.mode {
@@ -76,7 +76,7 @@ where
         }
     }
 
-    fn act_on_eos(mut self, span: S::Span) -> Self {
+    fn act_on_eos(self, span: S::Span) -> Self {
         match self.state.mode {
             LineRule::InstrLine(state) => {
                 let semantics = set_state!(self, state).flush_label();
@@ -95,23 +95,23 @@ where
     }
 }
 
-impl<'a, S: Session> InstrFinalizer for InstrLineSemantics<'a, S> {
-    type Next = TokenStreamSemantics<'a, S>;
+impl<'a, 'b, S: Session> InstrFinalizer for InstrLineSemantics<'a, 'b, S> {
+    type Next = TokenStreamSemantics<'a, 'b, S>;
 
     fn did_parse_instr(self) -> Self::Next {
         set_state!(self, self.state.into())
     }
 }
 
-impl<'a, S: Session> LineFinalizer for InstrLineSemantics<'a, S> {
-    type Next = TokenStreamSemantics<'a, S>;
+impl<'a, 'b, S: Session> LineFinalizer for InstrLineSemantics<'a, 'b, S> {
+    type Next = TokenStreamSemantics<'a, 'b, S>;
 
     fn did_parse_line(self, _: S::Span) -> Self::Next {
         set_state!(self, self.state.into())
     }
 }
 
-impl<'a, S: Session> LineFinalizer for TokenStreamSemantics<'a, S> {
+impl<'a, 'b, S: Session> LineFinalizer for TokenStreamSemantics<'a, 'b, S> {
     type Next = Self;
 
     fn did_parse_line(self, _: S::Span) -> Self::Next {
@@ -499,7 +499,9 @@ pub mod tests {
 
     pub(crate) fn collect_semantic_actions<F, S>(f: F) -> Vec<TestOperation<S>>
     where
-        F: FnOnce(TestTokenStreamSemantics<S>) -> TestTokenStreamSemantics<S>,
+        F: for<'a, 'b> FnOnce(
+            TestTokenStreamSemantics<'a, 'b, S>,
+        ) -> TestTokenStreamSemantics<'a, 'b, S>,
         S: Clone + Debug + Merge,
     {
         log_with_predefined_names(std::iter::empty(), f)
@@ -513,39 +515,42 @@ pub mod tests {
                 ResolvedName<&'static Keyword, MockMacroId, MockSymbolId>,
             ),
         >,
-        F: FnOnce(TestTokenStreamSemantics<S>) -> TestTokenStreamSemantics<S>,
+        F: for<'a, 'b> FnOnce(
+            TestTokenStreamSemantics<'a, 'b, S>,
+        ) -> TestTokenStreamSemantics<'a, 'b, S>,
         S: Clone + Debug + Merge,
     {
         with_log(|log| {
             let mut session = CompositeSession::from_components(
                 MockSourceComponents::with_log(log.clone()),
-                Box::new(BasicNameTable::default()),
+                BasicNameTable::default(),
                 MockBackend::new(SerialIdAllocator::new(MockSymbolId), log.clone()),
             );
             for (ident, resolution) in entries {
                 session.define_name(ident, resolution)
             }
+            let mut session = CompositeSession {
+                reentrancy: session.reentrancy,
+                names: MockNameTable::new(session.names, log),
+                builder: session.builder,
+            };
+            let mut tokens = std::iter::empty();
             f(Semantics {
-                session: CompositeSession {
-                    reentrancy: session.reentrancy,
-                    names: Box::new(MockNameTable::new(*session.names, log)),
-                    builder: session.builder,
-                },
+                session: &mut session,
                 state: TokenStreamState::new(),
-                tokens: &mut std::iter::empty(),
+                tokens: &mut tokens,
             });
         })
     }
 
-    pub(super) type TestTokenStreamSemantics<'a, S> = TokenStreamSemantics<
+    pub(super) type TestTokenStreamSemantics<'a, 'b, S> = TokenStreamSemantics<
         'a,
+        'b,
         CompositeSession<
             MockSourceComponents<S>,
-            Box<
-                MockNameTable<
-                    BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
-                    TestOperation<S>,
-                >,
+            MockNameTable<
+                BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
+                TestOperation<S>,
             >,
             MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>,
         >,

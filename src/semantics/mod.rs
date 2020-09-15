@@ -30,20 +30,20 @@ pub enum Keyword {
     Operand(OperandSymbol),
 }
 
-pub(crate) struct Semantics<'a, S, T, I, R, Z> {
-    pub session: S,
+pub(crate) struct Semantics<'a, 'b, S, T, I, R, Z> {
+    pub session: &'a mut S,
     pub state: T,
-    pub tokens: TokenIterRef<'a, I, R, Z>,
+    pub tokens: TokenIterRef<'b, I, R, Z>,
 }
 
 type TokenIterRef<'a, I, R, S> =
     &'a mut dyn Iterator<Item = LexerOutput<I, Literal<R>, LexError, S>>;
 
-impl<'a, S: Session, T> Semantics<'a, S, T, S::Ident, S::StringRef, S::Span> {
+impl<'a, 'b, S: Session, T> Semantics<'a, 'b, S, T, S::Ident, S::StringRef, S::Span> {
     fn map_state<F: FnOnce(T) -> U, U>(
         self,
         f: F,
-    ) -> Semantics<'a, S, U, S::Ident, S::StringRef, S::Span> {
+    ) -> Semantics<'a, 'b, S, U, S::Ident, S::StringRef, S::Span> {
         Semantics {
             session: self.session,
             state: f(self.state),
@@ -52,8 +52,9 @@ impl<'a, S: Session, T> Semantics<'a, S, T, S::Ident, S::StringRef, S::Span> {
     }
 }
 
-type TokenStreamSemantics<'a, S> = Semantics<
+type TokenStreamSemantics<'a, 'b, S> = Semantics<
     'a,
+    'b,
     S,
     TokenStreamState<
         <S as IdentSource>::Ident,
@@ -78,8 +79,9 @@ impl<I, R, S> TokenStreamState<I, R, S> {
     }
 }
 
-type InstrLineSemantics<'a, S> = Semantics<
+type InstrLineSemantics<'a, 'b, S> = Semantics<
     'a,
+    'b,
     S,
     InstrLineState<<S as IdentSource>::Ident, <S as SpanSource>::Span>,
     <S as IdentSource>::Ident,
@@ -100,8 +102,9 @@ impl<I, S> InstrLineState<I, S> {
 
 type Label<I, S> = ((I, S), Params<I, S>);
 
-type TokenLineSemantics<'a, S> = Semantics<
+type TokenLineSemantics<'a, 'b, S> = Semantics<
     'a,
+    'b,
     S,
     TokenLineState<
         <S as IdentSource>::Ident,
@@ -139,8 +142,9 @@ impl<I, R, S> MacroDefState<I, R, S> {
     }
 }
 
-type BuiltinInstrSemantics<'a, S> = Semantics<
+type BuiltinInstrSemantics<'a, 'b, S> = Semantics<
     'a,
+    'b,
     S,
     BuiltinInstrState<S>,
     <S as IdentSource>::Ident,
@@ -169,8 +173,9 @@ impl<S: Session> BuiltinInstrState<S> {
 
 type BuiltinInstrArgs<N, R, S> = Vec<ParsedArg<N, R, S>>;
 
-pub(crate) type ArgSemantics<'a, S> = Semantics<
+pub(crate) type ArgSemantics<'a, 'b, S> = Semantics<
     'a,
+    'b,
     S,
     ExprBuilder<
         <S as IdentSource>::Ident,

@@ -5,7 +5,6 @@ use crate::session::builder::SymbolSource;
 use crate::syntax::{IdentFactory, IdentSource};
 
 use std::collections::HashMap;
-use std::ops::DerefMut;
 
 #[cfg(test)]
 pub use self::mock::*;
@@ -219,11 +218,10 @@ impl<T: Default> StartScope<Ident<String>> for BiLevelNameTable<T> {
 
 impl<R, N, B, I> NameTable<I> for CompositeSession<R, N, B>
 where
-    N: DerefMut,
-    N::Target: NameTable<I, MacroId = Self::MacroId, SymbolId = Self::SymbolId>,
+    N: NameTable<I, MacroId = Self::MacroId, SymbolId = Self::SymbolId>,
     Self: MacroSource + SymbolSource,
 {
-    type Keyword = <N::Target as NameTable<I>>::Keyword;
+    type Keyword = N::Keyword;
 
     fn resolve_name(
         &mut self,
@@ -243,8 +241,7 @@ where
 
 impl<R, N, B, I> StartScope<I> for CompositeSession<R, N, B>
 where
-    N: DerefMut,
-    N::Target: StartScope<I>,
+    N: StartScope<I>,
 {
     fn start_scope(&mut self, ident: &I) {
         self.names.start_scope(ident)
