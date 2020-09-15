@@ -1,20 +1,23 @@
+use super::Condition;
+
 use crate::diag::*;
+use crate::expr::Expr;
 use crate::semantics::arg::*;
-use crate::session::builder::{Condition, PtrReg, Reg16, RegPair, M};
+use crate::session::builder::{PtrReg, Reg16, RegPair, M};
 use crate::span::{Source, SpanSource};
 
 #[derive(Debug, PartialEq)]
-pub enum Operand<E, S> {
+pub(in super::super) enum Operand<N, S> {
     Atom(AtomKind, S),
-    Const(E),
-    Deref(E),
+    Const(Expr<N, S>),
+    Deref(Expr<N, S>),
 }
 
-impl<E, S: Clone> SpanSource for Operand<E, S> {
+impl<N, S: Clone> SpanSource for Operand<N, S> {
     type Span = S;
 }
 
-impl<E: Source> Source for Operand<E, E::Span> {
+impl<N, S: Clone> Source for Operand<N, S> {
     fn span(&self) -> Self::Span {
         match self {
             Operand::Atom(_, span) => (*span).clone(),
@@ -24,7 +27,7 @@ impl<E: Source> Source for Operand<E, E::Span> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum AtomKind {
+pub(in super::super) enum AtomKind {
     Simple(M),
     Condition(Condition),
     Reg16(Reg16),
@@ -40,7 +43,7 @@ pub enum Context {
     Other,
 }
 
-pub(crate) fn analyze_operand<D, V, R, S>(
+pub(in super::super) fn analyze_operand<D, V, R, S>(
     expr: Arg<V, R, S>,
     context: Context,
     diagnostics: &mut D,
@@ -51,12 +54,12 @@ where
     S: Clone,
 {
     match expr {
-        Arg::Bare(DerefableArg::Const(value)) => Ok(Operand::Const(value)),
-        Arg::Bare(DerefableArg::Symbol(symbol, span)) => {
+        Arg::Bare(BareArg::Const(value)) => Ok(Operand::Const(value)),
+        Arg::Bare(BareArg::Symbol(symbol, span)) => {
             analyze_keyword_operand((symbol, span), context, diagnostics)
         }
-        Arg::Deref(DerefableArg::Const(value), _) => Ok(Operand::Deref(value)),
-        Arg::Deref(DerefableArg::Symbol(symbol, inner_span), outer_span) => {
+        Arg::Deref(BareArg::Const(value), _) => Ok(Operand::Deref(value)),
+        Arg::Deref(BareArg::Symbol(symbol, inner_span), outer_span) => {
             analyze_deref_operand_keyword((symbol, &inner_span), outer_span, diagnostics)
         }
         Arg::String(_, span) => {
@@ -215,7 +218,7 @@ pub mod tests {
     }
 
     fn analyze_deref_ptr_reg(ptr_reg: PtrReg) {
-        let expr = Arg::Deref(DerefableArg::Symbol(ptr_reg.into(), 0.into()), 1.into());
+        let expr = Arg::Deref(BareArg::Symbol(ptr_reg.into(), 0.into()), 1.into());
         assert_eq!(
             analyze_operand(expr, Context::Other),
             Ok(Operand::Atom(AtomKind::DerefPtrReg(ptr_reg), 1.into()))
@@ -266,7 +269,7 @@ pub mod tests {
 
     #[test]
     fn analyze_deref_af() {
-        let parsed_expr = Arg::Deref(DerefableArg::Symbol(OperandSymbol::Af, 0.into()), 1.into());
+        let parsed_expr = Arg::Deref(BareArg::Symbol(OperandSymbol::Af, 0.into()), 1.into());
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
             Err(vec![Event::Diagnostics(
@@ -306,7 +309,7 @@ pub mod tests {
 
     fn test_bare_ptr_reg(symbol: OperandSymbol) {
         let span = MockSpan::from(0);
-        let expr = Arg::Bare(DerefableArg::Symbol(symbol, span.clone()));
+        let expr = Arg::Bare(BareArg::Symbol(symbol, span.clone()));
         assert_eq!(
             analyze_operand(expr, Context::Other),
             Err(vec![Event::Diagnostics(

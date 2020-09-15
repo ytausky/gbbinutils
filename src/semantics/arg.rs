@@ -7,16 +7,16 @@ pub(super) enum ParsedArg<N, R, S> {
     Error,
 }
 
-pub(crate) enum Arg<V, R, S> {
-    Bare(DerefableArg<V, S>),
-    Deref(DerefableArg<V, S>, S),
-    Error,
+pub(crate) enum Arg<N, R, S> {
+    Bare(BareArg<N, S>),
+    Deref(BareArg<N, S>, S),
     String(R, S),
+    Error,
 }
 
 #[derive(Clone)]
-pub(crate) enum DerefableArg<V, S> {
-    Const(V),
+pub(crate) enum BareArg<N, S> {
+    Const(Expr<N, S>),
     Symbol(OperandSymbol, S),
 }
 

@@ -1,15 +1,15 @@
-use super::{Analysis, AtomKind, Expr, Fragment, Operand, Width, M};
+use super::{Analysis, AtomKind, Condition, Expr, Fragment, Operand, Width, M};
 
 use crate::diag::span::WithSpan;
 use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::expr::{Atom, BinOp, ExprOp};
 use crate::semantics::keywords::{BranchKind, ExplicitBranch, ImplicitBranch};
-use crate::session::builder::{Backend, Branch, Condition};
+use crate::session::builder::Backend;
 use crate::span::{Source, SpanSource};
 
 impl<'a, 'b, I, D, S> Analysis<'a, 'b, I, D, S>
 where
-    I: Iterator<Item = Result<Operand<Expr<D::SymbolId, S>, S>, ()>>,
+    I: Iterator<Item = Result<Operand<D::SymbolId, S>, ()>>,
     D: Backend<S> + Diagnostics<S>,
     S: Clone,
 {
@@ -32,7 +32,7 @@ where
             },
             BranchVariant::PotentiallyConditional(branch) => {
                 match branch {
-                    Branch::Jp(target) => {
+                    Branch::Explicit(ExplicitBranch::Jp, target) => {
                         self.session.emit_fragment(Fragment::Byte(match condition {
                             None => 0xc3,
                             Some((condition, _)) => 0xc2 | encode_condition(condition),
@@ -40,7 +40,7 @@ where
                         self.session
                             .emit_fragment(Fragment::Immediate(target, Width::Word))
                     }
-                    Branch::Jr(mut target) => {
+                    Branch::Explicit(ExplicitBranch::Jr, mut target) => {
                         self.session.emit_fragment(Fragment::Byte(match condition {
                             None => 0x18,
                             Some((condition, _)) => 0x20 | encode_condition(condition),
@@ -53,7 +53,7 @@ where
                         self.session
                             .emit_fragment(Fragment::Immediate(target, Width::Byte))
                     }
-                    Branch::Call(target) => {
+                    Branch::Explicit(ExplicitBranch::Call, target) => {
                         self.session.emit_fragment(Fragment::Byte(match condition {
                             None => 0xcd,
                             Some((condition, _)) => 0xc4 | encode_condition(condition),
@@ -71,7 +71,7 @@ where
         }
     }
 
-    fn collect_branch_operands(&mut self) -> Result<BranchOperands<Expr<D::SymbolId, S>>, ()> {
+    fn collect_branch_operands(&mut self) -> Result<BranchOperands<D::SymbolId, S>, ()> {
         let first_operand = self.next_operand()?;
         Ok(
             if let Some(Operand::Atom(AtomKind::Condition(condition), range)) = first_operand {
@@ -96,21 +96,18 @@ fn encode_condition(condition: Condition) -> u8 {
     }) << 3
 }
 
-type BranchOperands<V> = (
-    Option<(Condition, <V as SpanSource>::Span)>,
-    Option<BranchTarget<V>>,
-);
+type BranchOperands<N, S> = (Option<(Condition, S)>, Option<BranchTarget<N, S>>);
 
-enum BranchTarget<V: SpanSource> {
-    DerefHl(V::Span),
-    Expr(V),
+enum BranchTarget<N, S> {
+    DerefHl(S),
+    Expr(Expr<N, S>),
 }
 
-impl<V: SpanSource> SpanSource for BranchTarget<V> {
-    type Span = V::Span;
+impl<N, S: Clone> SpanSource for BranchTarget<N, S> {
+    type Span = S;
 }
 
-impl<V: Source> Source for BranchTarget<V> {
+impl<N, S: Clone> Source for BranchTarget<N, S> {
     fn span(&self) -> Self::Span {
         match self {
             BranchTarget::DerefHl(span) => span.clone(),
@@ -119,13 +116,13 @@ impl<V: Source> Source for BranchTarget<V> {
     }
 }
 
-fn analyze_branch_target<V, D>(
-    target: Option<Operand<V, V::Span>>,
+fn analyze_branch_target<N, D, S>(
+    target: Option<Operand<N, S>>,
     diagnostics: &mut D,
-) -> Result<Option<BranchTarget<V>>, ()>
+) -> Result<Option<BranchTarget<N, S>>, ()>
 where
-    V: Source,
-    D: Diagnostics<V::Span>,
+    D: Diagnostics<S>,
+    S: Clone,
 {
     let target = match target {
         Some(target) => target,
@@ -141,9 +138,15 @@ where
     }
 }
 
-enum BranchVariant<V> {
-    PotentiallyConditional(Branch<V>),
+enum BranchVariant<N, S> {
+    PotentiallyConditional(Branch<N, S>),
     Unconditional(UnconditionalBranch),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum Branch<N, S> {
+    Explicit(ExplicitBranch, Expr<N, S>),
+    Ret,
 }
 
 enum UnconditionalBranch {
@@ -151,14 +154,14 @@ enum UnconditionalBranch {
     Reti,
 }
 
-fn analyze_branch_variant<V, D>(
-    kind: (BranchKind, &V::Span),
-    target: Option<BranchTarget<V>>,
+fn analyze_branch_variant<N, D, S>(
+    kind: (BranchKind, &S),
+    target: Option<BranchTarget<N, S>>,
     diagnostics: &mut D,
-) -> Result<BranchVariant<V>, ()>
+) -> Result<BranchVariant<N, S>, ()>
 where
-    V: Source,
-    D: Diagnostics<V::Span>,
+    D: Diagnostics<S>,
+    S: Clone,
 {
     match (kind.0, target) {
         (BranchKind::Explicit(ExplicitBranch::Jp), Some(BranchTarget::DerefHl(_))) => {
@@ -171,7 +174,7 @@ where
             .at(span))
         }
         (BranchKind::Explicit(branch), Some(BranchTarget::Expr(expr))) => Ok(
-            BranchVariant::PotentiallyConditional(mk_explicit_branch(branch, expr)),
+            BranchVariant::PotentiallyConditional(Branch::Explicit(branch, expr)),
         ),
         (BranchKind::Implicit(ImplicitBranch::Ret), None) => {
             Ok(BranchVariant::PotentiallyConditional(Branch::Ret))
@@ -187,14 +190,6 @@ where
     .map_err(|diagnostic| {
         diagnostics.emit_diag(diagnostic);
     })
-}
-
-fn mk_explicit_branch<V>(branch: ExplicitBranch, target: V) -> Branch<V> {
-    match branch {
-        ExplicitBranch::Call => Branch::Call(target),
-        ExplicitBranch::Jp => Branch::Jp(target),
-        ExplicitBranch::Jr => Branch::Jr(target),
-    }
 }
 
 #[cfg(test)]

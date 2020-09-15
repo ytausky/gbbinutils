@@ -76,8 +76,8 @@ impl<'a, S: Session, T> Semantics<'a, S, T, S::Ident, S::StringRef, S::Span> {
         arg: ParsedArg<S::Ident, S::StringRef, S::Span>,
     ) -> Result<Expr<S::SymbolId, S::Span>, ()> {
         match self.session.resolve_names(arg)? {
-            Arg::Bare(DerefableArg::Const(value)) => Ok(value),
-            Arg::Bare(DerefableArg::Symbol(_, span)) => {
+            Arg::Bare(BareArg::Const(value)) => Ok(value),
+            Arg::Bare(BareArg::Symbol(_, span)) => {
                 let keyword = self.session.strip_span(&span);
                 self.session
                     .emit_diag(Message::KeywordInExpr { keyword }.at(span));
@@ -133,22 +133,11 @@ fn analyze_mnemonic<S: Session>(
 }
 
 trait Resolve<I, R, S>: SymbolSource {
-    fn resolve_names(
-        &mut self,
-        arg: ParsedArg<I, R, S>,
-    ) -> Result<Arg<Expr<Self::SymbolId, S>, R, S>, ()>;
+    fn resolve_names(&mut self, arg: ParsedArg<I, R, S>) -> Result<Arg<Self::SymbolId, R, S>, ()>;
 }
 
 trait ClassifyExpr<I, S>: SymbolSource {
-    fn classify_expr(
-        &mut self,
-        expr: Expr<I, S>,
-    ) -> Result<SymbolOrResolvedExpr<Self::SymbolId, S>, ()>;
-}
-
-enum SymbolOrResolvedExpr<Sym, S> {
-    Symbol(OperandSymbol, S),
-    Expr(Expr<Sym, S>),
+    fn classify_expr(&mut self, expr: Expr<I, S>) -> Result<BareArg<Self::SymbolId, S>, ()>;
 }
 
 impl<T, I, R, S> Resolve<I, R, S> for T
@@ -156,22 +145,17 @@ where
     T: NameTable<I, Keyword = &'static Keyword> + Diagnostics<S> + AllocSymbol<S>,
     S: Clone,
 {
-    fn resolve_names(
-        &mut self,
-        arg: ParsedArg<I, R, S>,
-    ) -> Result<Arg<Expr<Self::SymbolId, S>, R, S>, ()> {
+    fn resolve_names(&mut self, arg: ParsedArg<I, R, S>) -> Result<Arg<Self::SymbolId, R, S>, ()> {
         match arg {
             ParsedArg::Bare(expr) => match self.classify_expr(expr)? {
-                SymbolOrResolvedExpr::Symbol(symbol, span) => {
-                    Ok(Arg::Bare(DerefableArg::Symbol(symbol, span)))
-                }
-                SymbolOrResolvedExpr::Expr(expr) => Ok(Arg::Bare(DerefableArg::Const(expr))),
+                BareArg::Symbol(symbol, span) => Ok(Arg::Bare(BareArg::Symbol(symbol, span))),
+                BareArg::Const(expr) => Ok(Arg::Bare(BareArg::Const(expr))),
             },
             ParsedArg::Parenthesized(expr, span) => match self.classify_expr(expr)? {
-                SymbolOrResolvedExpr::Symbol(symbol, inner_span) => {
-                    Ok(Arg::Deref(DerefableArg::Symbol(symbol, inner_span), span))
+                BareArg::Symbol(symbol, inner_span) => {
+                    Ok(Arg::Deref(BareArg::Symbol(symbol, inner_span), span))
                 }
-                SymbolOrResolvedExpr::Expr(expr) => Ok(Arg::Deref(DerefableArg::Const(expr), span)),
+                BareArg::Const(expr) => Ok(Arg::Deref(BareArg::Const(expr), span)),
             },
             ParsedArg::String(string, span) => Ok(Arg::String(string, span)),
             ParsedArg::Error => Ok(Arg::Error),
@@ -184,54 +168,47 @@ where
     T: NameTable<I, Keyword = &'static Keyword> + Diagnostics<S> + AllocSymbol<S>,
     S: Clone,
 {
-    fn classify_expr(
-        &mut self,
-        mut expr: Expr<I, S>,
-    ) -> Result<SymbolOrResolvedExpr<Self::SymbolId, S>, ()> {
+    fn classify_expr(&mut self, mut expr: Expr<I, S>) -> Result<BareArg<Self::SymbolId, S>, ()> {
         if expr.0.len() == 1 {
             let node = expr.0.pop().unwrap();
             match node.item {
                 ExprOp::Atom(Atom::Name(name)) => {
                     match self.resolve_name(&name) {
                         Some(ResolvedName::Keyword(Keyword::Operand(operand))) => {
-                            Ok(SymbolOrResolvedExpr::Symbol(*operand, node.span))
+                            Ok(BareArg::Symbol(*operand, node.span))
                         }
                         Some(ResolvedName::Keyword(_)) => {
                             let keyword = self.strip_span(&node.span);
                             self.emit_diag(Message::KeywordInExpr { keyword }.at(node.span));
                             Err(())
                         }
-                        Some(ResolvedName::Symbol(id)) => Ok(SymbolOrResolvedExpr::Expr(Expr(
-                            vec![ExprOp::Atom(Atom::Name(id)).with_span(node.span)],
-                        ))),
+                        Some(ResolvedName::Symbol(id)) => Ok(BareArg::Const(Expr(vec![
+                            ExprOp::Atom(Atom::Name(id)).with_span(node.span),
+                        ]))),
                         None => {
                             let id = self.alloc_symbol(node.span.clone());
                             self.define_name(name, ResolvedName::Symbol(id.clone()));
-                            Ok(SymbolOrResolvedExpr::Expr(Expr(vec![ExprOp::Atom(
-                                Atom::Name(id),
-                            )
-                            .with_span(node.span)])))
+                            Ok(BareArg::Const(Expr(vec![
+                                ExprOp::Atom(Atom::Name(id)).with_span(node.span)
+                            ])))
                         }
                         Some(ResolvedName::Macro(_)) => todo!(),
                     }
                 }
                 ExprOp::Atom(Atom::Const(n)) => {
-                    Ok(SymbolOrResolvedExpr::Expr(Expr(vec![ExprOp::Atom(
-                        Atom::Const(n),
-                    )
-                    .with_span(node.span)])))
+                    Ok(BareArg::Const(Expr(vec![
+                        ExprOp::Atom(Atom::Const(n)).with_span(node.span)
+                    ])))
                 }
                 ExprOp::Atom(Atom::Location) => {
-                    Ok(SymbolOrResolvedExpr::Expr(Expr(vec![ExprOp::Atom(
-                        Atom::Location,
-                    )
-                    .with_span(node.span)])))
+                    Ok(BareArg::Const(Expr(vec![
+                        ExprOp::Atom(Atom::Location).with_span(node.span)
+                    ])))
                 }
                 ExprOp::Atom(Atom::Param(id)) => {
-                    Ok(SymbolOrResolvedExpr::Expr(Expr(vec![ExprOp::Atom(
-                        Atom::Param(id),
-                    )
-                    .with_span(node.span)])))
+                    Ok(BareArg::Const(Expr(vec![
+                        ExprOp::Atom(Atom::Param(id)).with_span(node.span)
+                    ])))
                 }
                 _ => panic!("first node in expression must be an atom"),
             }
@@ -270,7 +247,7 @@ where
                 }
             }
             if !error {
-                Ok(SymbolOrResolvedExpr::Expr(Expr(nodes)))
+                Ok(BareArg::Const(Expr(nodes)))
             } else {
                 Err(())
             }

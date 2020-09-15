@@ -98,22 +98,6 @@ pub enum PtrReg {
     Hld,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum Branch<V> {
-    Call(V),
-    Jp(V),
-    Jr(V),
-    Ret,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Condition {
-    C,
-    Nc,
-    Nz,
-    Z,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum IncDec {
     Inc,

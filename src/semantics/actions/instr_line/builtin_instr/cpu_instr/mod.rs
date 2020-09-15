@@ -12,9 +12,9 @@ pub mod operand;
 mod branch;
 mod ld;
 
-pub(crate) fn analyze_instruction<I, D, S>(mnemonic: (&Mnemonic, S), operands: I, session: &mut D)
+pub(super) fn analyze_instruction<I, D, S>(mnemonic: (&Mnemonic, S), operands: I, session: &mut D)
 where
-    I: IntoIterator<Item = Result<Operand<Expr<D::SymbolId, S>, S>, ()>>,
+    I: IntoIterator<Item = Result<Operand<D::SymbolId, S>, ()>>,
     D: Backend<S> + Diagnostics<S>,
     S: Clone,
 {
@@ -39,7 +39,7 @@ where
 
 impl<'a, 'b, I, D, S> Analysis<'a, 'b, I, D, S>
 where
-    I: Iterator<Item = Result<Operand<Expr<D::SymbolId, S>, S>, ()>>,
+    I: Iterator<Item = Result<Operand<D::SymbolId, S>, ()>>,
     D: Backend<S> + Diagnostics<S>,
     S: Clone,
 {
@@ -121,7 +121,7 @@ where
     fn analyze_alu_instruction(
         &mut self,
         operation: AluOperation,
-        first_operand: Operand<Expr<D::SymbolId, S>, S>,
+        first_operand: Operand<D::SymbolId, S>,
     ) -> Result<(), ()> {
         let src = if operation.implicit_dest() {
             first_operand
@@ -235,7 +235,7 @@ where
         Ok(())
     }
 
-    fn next_operand_of(&mut self, out_of: usize) -> Result<Operand<Expr<D::SymbolId, S>, S>, ()> {
+    fn next_operand_of(&mut self, out_of: usize) -> Result<Operand<D::SymbolId, S>, ()> {
         let actual = self.operands.seen();
         self.next_operand()?.ok_or_else(|| {
             self.emit_diag(
@@ -248,7 +248,7 @@ where
         })
     }
 
-    fn next_operand(&mut self) -> Result<Option<Operand<Expr<D::SymbolId, S>, S>>, ()> {
+    fn next_operand(&mut self) -> Result<Option<Operand<D::SymbolId, S>>, ()> {
         self.operands
             .next()
             .map_or(Ok(None), |result| result.map(Some))
@@ -348,7 +348,7 @@ fn encode_inc_dec(mode: IncDec) -> u8 {
     }
 }
 
-impl<V: Source> Operand<V, V::Span> {
+impl<N, S: Clone> Operand<N, S> {
     fn expect_specific_atom<D>(
         self,
         expected: AtomKind,
@@ -356,7 +356,7 @@ impl<V: Source> Operand<V, V::Span> {
         diagnostics: &mut D,
     ) -> Result<(), ()>
     where
-        D: Diagnostics<V::Span>,
+        D: Diagnostics<S>,
     {
         match self {
             Operand::Atom(ref actual, _) if *actual == expected => Ok(()),
@@ -366,7 +366,7 @@ impl<V: Source> Operand<V, V::Span> {
 
     fn expect_simple<D>(self, diagnostics: &mut D) -> Result<M, ()>
     where
-        D: Diagnostics<V::Span>,
+        D: Diagnostics<S>,
     {
         match self {
             Operand::Atom(AtomKind::Simple(simple), _) => Ok(simple),
@@ -374,9 +374,9 @@ impl<V: Source> Operand<V, V::Span> {
         }
     }
 
-    fn expect_const<D>(self, diagnostics: &mut D) -> Result<V, ()>
+    fn expect_const<D>(self, diagnostics: &mut D) -> Result<Expr<N, S>, ()>
     where
-        D: Diagnostics<V::Span>,
+        D: Diagnostics<S>,
     {
         match self {
             Operand::Const(expr) => Ok(expr),
@@ -386,7 +386,7 @@ impl<V: Source> Operand<V, V::Span> {
 
     fn expect_reg_pair<D>(self, diagnostics: &mut D) -> Result<RegPair, ()>
     where
-        D: Diagnostics<V::Span>,
+        D: Diagnostics<S>,
     {
         match self {
             Operand::Atom(AtomKind::RegPair(reg_pair), _) => Ok(reg_pair),
@@ -396,7 +396,7 @@ impl<V: Source> Operand<V, V::Span> {
 
     fn error<T, D>(self, message: Message<D::Stripped>, diagnostics: &mut D) -> Result<T, ()>
     where
-        D: Diagnostics<V::Span>,
+        D: Diagnostics<S>,
     {
         diagnostics.emit_diag(message.at(self.span()));
         Err(())
@@ -431,6 +431,14 @@ impl AluOperation {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) enum Condition {
+    C,
+    Nc,
+    Nz,
+    Z,
+}
+
 #[cfg(test)]
 mod tests {
     pub(crate) use crate::diag::Message;
@@ -458,19 +466,19 @@ mod tests {
     pub(super) type TokenSpan = MockSpan<TokenId>;
 
     type Expr<S> = crate::expr::Expr<MockSymbolId, S>;
-    type Input = Arg<Expr<()>, String, ()>;
+    type Input = Arg<MockSymbolId, String, ()>;
 
     impl From<Literal<String>> for Input {
         fn from(literal: Literal<String>) -> Input {
             match literal {
-                Literal::Number(n) => Arg::Bare(DerefableArg::Const(Expr::from_atom(n.into(), ()))),
+                Literal::Number(n) => Arg::Bare(BareArg::Const(Expr::from_atom(n.into(), ()))),
                 Literal::String(_string) => unimplemented!(),
             }
         }
     }
 
     pub(super) fn literal(symbol: OperandSymbol) -> Input {
-        Arg::Bare(DerefableArg::Symbol(symbol, ()))
+        Arg::Bare(BareArg::Symbol(symbol, ()))
     }
 
     pub(super) fn number(n: i32, span: impl Into<TokenSpan>) -> Expr<TokenSpan> {
@@ -482,14 +490,11 @@ mod tests {
     }
 
     pub(super) fn deref_symbol(symbol: impl Into<OperandSymbol>) -> Input {
-        Arg::Deref(DerefableArg::Symbol(symbol.into(), ()), ())
+        Arg::Deref(BareArg::Symbol(symbol.into(), ()), ())
     }
 
     pub(super) fn deref_ident(ident: MockSymbolId) -> Input {
-        Arg::Deref(
-            DerefableArg::Const(Expr::from_atom(Atom::Name(ident), ())),
-            (),
-        )
+        Arg::Deref(BareArg::Const(Expr::from_atom(Atom::Name(ident), ())), ())
     }
 
     impl From<AluOperation> for Mnemonic {
@@ -611,7 +616,7 @@ mod tests {
 
     impl From<MockSymbolId> for Input {
         fn from(ident: MockSymbolId) -> Self {
-            Arg::Bare(DerefableArg::Const(Expr::from_atom(Atom::Name(ident), ())))
+            Arg::Bare(BareArg::Const(Expr::from_atom(Atom::Name(ident), ())))
         }
     }
 
@@ -1902,22 +1907,20 @@ mod tests {
         AnalysisResult(log)
     }
 
-    fn add_token_spans((i, operand): (usize, Input)) -> Arg<Expr<TokenSpan>, String, TokenSpan> {
+    fn add_token_spans((i, operand): (usize, Input)) -> Arg<MockSymbolId, String, TokenSpan> {
         match operand {
-            Arg::Bare(DerefableArg::Const(value)) => {
-                Arg::Bare(DerefableArg::Const(crate::expr::Expr(
-                    value
-                        .0
-                        .into_iter()
-                        .map(|Spanned { item, .. }| item.with_span(TokenId::Operand(i, 0).into()))
-                        .collect(),
-                )))
+            Arg::Bare(BareArg::Const(value)) => Arg::Bare(BareArg::Const(crate::expr::Expr(
+                value
+                    .0
+                    .into_iter()
+                    .map(|Spanned { item, .. }| item.with_span(TokenId::Operand(i, 0).into()))
+                    .collect(),
+            ))),
+            Arg::Bare(BareArg::Symbol(symbol, ())) => {
+                Arg::Bare(BareArg::Symbol(symbol, TokenId::Operand(i, 0).into()))
             }
-            Arg::Bare(DerefableArg::Symbol(symbol, ())) => {
-                Arg::Bare(DerefableArg::Symbol(symbol, TokenId::Operand(i, 0).into()))
-            }
-            Arg::Deref(DerefableArg::Const(value), ()) => Arg::Deref(
-                DerefableArg::Const(crate::expr::Expr(
+            Arg::Deref(BareArg::Const(value), ()) => Arg::Deref(
+                BareArg::Const(crate::expr::Expr(
                     value
                         .0
                         .into_iter()
@@ -1926,8 +1929,8 @@ mod tests {
                 )),
                 TokenSpan::merge(TokenId::Operand(i, 0), TokenId::Operand(i, 2)),
             ),
-            Arg::Deref(DerefableArg::Symbol(symbol, ()), ()) => Arg::Deref(
-                DerefableArg::Symbol(symbol, TokenId::Operand(i, 1).into()),
+            Arg::Deref(BareArg::Symbol(symbol, ()), ()) => Arg::Deref(
+                BareArg::Symbol(symbol, TokenId::Operand(i, 1).into()),
                 TokenSpan::merge(TokenId::Operand(i, 0), TokenId::Operand(i, 2)),
             ),
             _ => unimplemented!(),
