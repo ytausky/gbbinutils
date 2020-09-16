@@ -1,9 +1,9 @@
 use super::resolve::{Ident, NameTable, StartScope};
 use super::{CompositeSession, SessionImpl};
 
-use crate::analyze::macros::{MacroSource, MacroTable};
+use crate::analyze::macros::MacroTable;
 use crate::analyze::strings::GetString;
-use crate::analyze::{Lex, Literal, SemanticToken, StringSource, TokenSeq};
+use crate::analyze::{Lex, Literal, SemanticToken, StringSource};
 use crate::codebase::{BufId, BufRange, CodebaseError};
 use crate::diag::*;
 use crate::semantics::{Semantics, TokenStreamState};
@@ -17,36 +17,20 @@ use std::ops::Deref;
 #[cfg(test)]
 pub(crate) use self::mock::*;
 
-pub(crate) trait ReentrancyActions:
-    IdentSource + MacroSource + SpanSource + StringSource
-{
+pub(crate) trait ReentrancyActions: IdentSource + SpanSource + StringSource {
     fn analyze_file(&mut self, path: Self::StringRef) -> Result<(), CodebaseError>;
-
-    fn define_macro(
-        &mut self,
-        name_span: Self::Span,
-        params: Params<Self::Ident, Self::Span>,
-        body: TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
-    ) -> Self::MacroId;
-
-    fn call_macro(
-        &mut self,
-        name: (Self::MacroId, Self::Span),
-        args: MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
-    );
 }
 
 pub type MacroArgs<I, R, S> = crate::analyze::macros::MacroArgs<SemanticToken<I, R>, S>;
 pub type Params<I, S> = (Vec<I>, Vec<S>);
 
-pub(crate) struct SourceComponents<C, P, M, I> {
+pub(crate) struct SourceComponents<C, P, I> {
     pub codebase: C,
     pub parser_factory: P,
-    pub macros: M,
     pub interner: I,
 }
 
-impl<C, P, M, I, N, B, D> SpanSource for CompositeSession<SourceComponents<C, P, M, I>, N, B, D>
+impl<C, P, M, I, N, B, D> SpanSource for CompositeSession<SourceComponents<C, P, I>, M, N, B, D>
 where
     D: SpanSource,
 {
@@ -54,12 +38,11 @@ where
 }
 
 #[cfg(test)]
-impl<C, P, M, I> SourceComponents<C, P, M, I> {
-    pub fn new(codebase: C, parser_factory: P, macros: M, interner: I) -> Self {
+impl<C, P, I> SourceComponents<C, P, I> {
+    pub fn new(codebase: C, parser_factory: P, interner: I) -> Self {
         SourceComponents {
             codebase,
             parser_factory,
-            macros,
             interner,
         }
     }
@@ -82,40 +65,10 @@ impl<'a, 'b> ReentrancyActions for SessionImpl<'a, 'b> {
         parser.parse_token_stream(semantics);
         Ok(())
     }
-
-    fn define_macro(
-        &mut self,
-        name_span: Self::Span,
-        params: Params<Self::Ident, Self::Span>,
-        body: TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
-    ) -> Self::MacroId {
-        MacroTable::define_macro(self, name_span, params, body)
-    }
-
-    fn call_macro(
-        &mut self,
-        id: (Self::MacroId, Self::Span),
-        args: MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
-    ) {
-        let expansion = self.expand_macro(id, args);
-        let mut parser = <DefaultParserFactory as ParserFactory<
-            Ident<String>,
-            Literal<String>,
-            LexError,
-            RcSpan<BufId, BufRange>,
-        >>::mk_parser(&mut DefaultParserFactory);
-        let mut tokens = expansion.map(|(t, s)| (Ok(t), s));
-        let semantics = Semantics {
-            session: self,
-            state: TokenStreamState::new(),
-            tokens: &mut tokens,
-        };
-        parser.parse_token_stream(semantics);
-    }
 }
 
 impl<C, P, M, I, N, B, D> ReentrancyActions
-    for CompositeSession<SourceComponents<C, P, M, I>, N, B, D>
+    for CompositeSession<SourceComponents<C, P, I>, M, N, B, D>
 where
     Self: Lex<Span = D::Span>,
     P: ParserFactory<
@@ -148,34 +101,9 @@ where
         parser.parse_token_stream(semantics);
         Ok(())
     }
-
-    fn define_macro(
-        &mut self,
-        name_span: Self::Span,
-        params: Params<Self::Ident, Self::Span>,
-        body: TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
-    ) -> Self::MacroId {
-        MacroTable::define_macro(self, name_span, params, body)
-    }
-
-    fn call_macro(
-        &mut self,
-        id: (Self::MacroId, Self::Span),
-        args: MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
-    ) {
-        let expansion = self.expand_macro(id, args);
-        let mut parser = self.reentrancy.parser_factory.mk_parser();
-        let mut tokens = expansion.map(|(t, s)| (Ok(t), s));
-        let semantics = Semantics {
-            session: self,
-            state: TokenStreamState::new(),
-            tokens: &mut tokens,
-        };
-        parser.parse_token_stream(semantics);
-    }
 }
 
-impl<C, P, M, I, R> GetString<R> for SourceComponents<C, P, M, I>
+impl<C, P, I, R> GetString<R> for SourceComponents<C, P, I>
 where
     I: Deref,
     I::Target: GetString<R>,
@@ -190,21 +118,18 @@ mod mock {
     use super::*;
 
     use crate::analyze::macros::mock::MockMacroId;
+    use crate::analyze::macros::MacroSource;
     use crate::diag::DiagnosticsEvent;
     use crate::log::Log;
-    use crate::session::builder::mock::*;
 
     use std::marker::PhantomData;
 
     #[derive(Debug, PartialEq)]
     pub(crate) enum ReentrancyEvent {
         AnalyzeFile(String),
-        DefineMacro(Vec<String>, Vec<SemanticToken<String, String>>),
-        InvokeMacro(MockMacroId, Vec<Vec<SemanticToken<String, String>>>),
     }
 
     pub struct MockSourceComponents<T, S> {
-        macro_alloc: SerialIdAllocator<MockMacroId>,
         log: Log<T>,
         error: Option<CodebaseError>,
         _span: PhantomData<S>,
@@ -221,7 +146,6 @@ mod mock {
     impl<T, S> MockSourceComponents<T, S> {
         fn with_name_table(log: Log<T>) -> Self {
             MockSourceComponents {
-                macro_alloc: SerialIdAllocator::new(MockMacroId),
                 log,
                 error: None,
                 _span: PhantomData,
@@ -253,7 +177,8 @@ mod mock {
         }
     }
 
-    impl<T, S, N, B, D> ReentrancyActions for CompositeSession<MockSourceComponents<T, S>, N, B, D>
+    impl<T, S, M, N, B, D> ReentrancyActions
+        for CompositeSession<MockSourceComponents<T, S>, M, N, B, D>
     where
         T: From<ReentrancyEvent> + From<DiagnosticsEvent<S>>,
         S: Clone + Merge,
@@ -262,28 +187,6 @@ mod mock {
         fn analyze_file(&mut self, path: String) -> Result<(), CodebaseError> {
             self.reentrancy.log.push(ReentrancyEvent::AnalyzeFile(path));
             self.reentrancy.error.take().map_or(Ok(()), Err)
-        }
-
-        fn define_macro(
-            &mut self,
-            _: Self::Span,
-            (params, _): (Vec<Self::Ident>, Vec<Self::Span>),
-            (body, _): TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
-        ) -> Self::MacroId {
-            self.reentrancy
-                .log
-                .push(ReentrancyEvent::DefineMacro(params, body));
-            self.reentrancy.macro_alloc.gen()
-        }
-
-        fn call_macro(
-            &mut self,
-            (id, _): (Self::MacroId, Self::Span),
-            (args, _): MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
-        ) {
-            self.reentrancy
-                .log
-                .push(ReentrancyEvent::InvokeMacro(id, args))
         }
     }
 }
@@ -328,12 +231,8 @@ mod tests {
     type MockBuilder<S> =
         crate::session::builder::mock::MockBackend<SerialIdAllocator<MockSymbolId>, Event<S>>;
     type TestCompositeSession<S> = CompositeSession<
-        SourceComponents<
-            MockCodebase<S>,
-            MockParserFactory<S>,
-            MockMacroTable<S>,
-            FakeStringInterner,
-        >,
+        SourceComponents<MockCodebase<S>, MockParserFactory<S>, FakeStringInterner>,
+        MockMacroTable<S>,
         MockNameTable<S>,
         MockBuilder<S>,
         MockDiagnosticsSystem<S>,
@@ -416,9 +315,9 @@ mod tests {
                 reentrancy: SourceComponents::new(
                     self.inner.codebase,
                     self.inner.analyzer,
-                    self.inner.macros,
                     self.inner.interner,
                 ),
+                macros: self.inner.macros,
                 names: MockNameTable::new(BasicNameTable::default(), self.log.clone()),
                 builder: MockBuilder::new(SerialIdAllocator::new(MockSymbolId), self.log.clone()),
                 diagnostics: self.inner.diagnostics,

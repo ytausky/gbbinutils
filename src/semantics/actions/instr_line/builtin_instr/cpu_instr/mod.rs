@@ -1894,6 +1894,7 @@ mod tests {
                 .collect();
             let mut session = CompositeSession {
                 reentrancy: (),
+                macros: (),
                 names: (),
                 builder: MockBackend::new(SerialIdAllocator::new(MockSymbolId), log.clone()),
                 diagnostics: MockDiagnostics::new(log.clone()),

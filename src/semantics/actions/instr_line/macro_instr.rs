@@ -59,7 +59,7 @@ where
     type Next = TokenStreamSemantics<'a, 'b, S>;
 
     fn did_parse_instr(self) -> Self::Next {
-        self.session.call_macro(self.state.name, self.state.args);
+        self.session.expand_macro(self.state.name, self.state.args);
         Semantics {
             session: self.session,
             state: TokenStreamState::from(self.state.parent),
@@ -111,9 +111,8 @@ impl<'a, 'b, S: Session> MacroArgContext for MacroArgSemantics<'a, 'b, S> {
 mod tests {
     use super::*;
 
-    use crate::analyze::macros::mock::MockMacroId;
+    use crate::analyze::macros::mock::{MacroTableEvent, MockMacroId};
     use crate::semantics::actions::tests::*;
-    use crate::session::reentrancy::ReentrancyEvent;
     use crate::session::resolve::ResolvedName;
     use crate::syntax::actions::{InstrContext, LineFinalizer, TokenStreamContext};
     use crate::syntax::Token;
@@ -137,7 +136,7 @@ mod tests {
         );
         assert_eq!(
             log,
-            [ReentrancyEvent::InvokeMacro(macro_id, Vec::new()).into()]
+            [MacroTableEvent::ExpandMacro(macro_id, Vec::new()).into()]
         )
     }
 
@@ -164,7 +163,7 @@ mod tests {
         );
         assert_eq!(
             log,
-            [ReentrancyEvent::InvokeMacro(macro_id, vec![vec![arg_token]]).into()]
+            [MacroTableEvent::ExpandMacro(macro_id, vec![vec![arg_token]]).into()]
         )
     }
 }

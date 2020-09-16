@@ -219,7 +219,7 @@ impl<'a, 'b> StartScope<Ident<String>> for SessionImpl<'a, 'b> {
     }
 }
 
-impl<R, N, B, D, I> NameTable<I> for CompositeSession<R, N, B, D>
+impl<R, M, N, B, D, I> NameTable<I> for CompositeSession<R, M, N, B, D>
 where
     N: NameTable<I, MacroId = Self::MacroId, SymbolId = Self::SymbolId>,
     Self: MacroSource + SymbolSource,
@@ -233,7 +233,7 @@ where
     }
 }
 
-impl<R, N, B, D, I> StartScope<I> for CompositeSession<R, N, B, D>
+impl<R, M, N, B, D, I> StartScope<I> for CompositeSession<R, M, N, B, D>
 where
     N: StartScope<I>,
 {

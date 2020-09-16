@@ -125,7 +125,7 @@ pub mod tests {
 
     pub use crate::session::resolve::BasicNameTable;
 
-    use crate::analyze::macros::mock::MockMacroId;
+    use crate::analyze::macros::mock::{MacroTableEvent, MockMacroId, MockMacroTable};
     use crate::analyze::SemanticToken;
     use crate::diag::{DiagnosticsEvent, Merge, Message, MockDiagnostics, MockSpan};
     use crate::expr::{Atom, BinOp, ExprOp, LocationCounter};
@@ -145,6 +145,7 @@ pub mod tests {
     pub(crate) enum TestOperation<S: Clone> {
         Backend(BackendEvent<MockSymbolId, Expr<S>>),
         Diagnostics(DiagnosticsEvent<S>),
+        MacroTable(MacroTableEvent),
         NameTable(NameTableEvent<MockMacroId, MockSymbolId>),
         Reentrancy(ReentrancyEvent),
     }
@@ -160,6 +161,12 @@ pub mod tests {
     impl<S: Clone> From<DiagnosticsEvent<S>> for TestOperation<S> {
         fn from(event: DiagnosticsEvent<S>) -> Self {
             TestOperation::Diagnostics(event)
+        }
+    }
+
+    impl<S: Clone> From<MacroTableEvent> for TestOperation<S> {
+        fn from(event: MacroTableEvent) -> Self {
+            TestOperation::MacroTable(event)
         }
     }
 
@@ -423,7 +430,7 @@ pub mod tests {
         assert_eq!(
             actions,
             [
-                ReentrancyEvent::DefineMacro(
+                MacroTableEvent::DefineMacro(
                     params.borrow().iter().cloned().map(Into::into).collect(),
                     body
                 )
@@ -516,6 +523,7 @@ pub mod tests {
         with_log(|log| {
             let mut session = CompositeSession::from_components(
                 MockSourceComponents::with_log(log.clone()),
+                MockMacroTable::new(log.clone()),
                 BasicNameTable::default(),
                 MockBackend::new(SerialIdAllocator::new(MockSymbolId), log.clone()),
                 MockDiagnostics::new(log.clone()),
@@ -525,6 +533,7 @@ pub mod tests {
             }
             let mut session = CompositeSession {
                 reentrancy: session.reentrancy,
+                macros: session.macros,
                 names: MockNameTable::new(session.names, log),
                 builder: session.builder,
                 diagnostics: session.diagnostics,
@@ -543,6 +552,7 @@ pub mod tests {
         'b,
         CompositeSession<
             MockSourceComponents<S>,
+            MockMacroTable<TestOperation<S>>,
             MockNameTable<BasicNameTable<MockMacroId, MockSymbolId>, TestOperation<S>>,
             MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>,
             MockDiagnostics<TestOperation<S>, S>,

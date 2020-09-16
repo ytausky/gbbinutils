@@ -212,7 +212,7 @@ fn single_arg<T, D: Diagnostics<S>, S>(
 mod tests {
     use super::*;
 
-    use crate::analyze::macros::mock::MockMacroId;
+    use crate::analyze::macros::mock::{MockMacroId, MockMacroTable};
     use crate::analyze::Literal;
     use crate::codebase::CodebaseError;
     use crate::expr::{Atom, Expr, ParamId};
@@ -530,6 +530,7 @@ mod tests {
         'b,
         CompositeSession<
             MockSourceComponents<S>,
+            MockMacroTable<TestOperation<S>>,
             MockNameTable<BasicNameTable<MockMacroId, MockSymbolId>, TestOperation<S>>,
             MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>,
             MockDiagnostics<TestOperation<S>, S>,
@@ -568,6 +569,7 @@ mod tests {
         'b,
         CompositeSession<
             MockSourceComponents<S>,
+            MockMacroTable<TestOperation<S>>,
             MockNameTable<BasicNameTable<MockMacroId, MockSymbolId>, TestOperation<S>>,
             MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>,
             MockDiagnostics<TestOperation<S>, S>,

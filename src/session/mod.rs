@@ -2,7 +2,7 @@ use self::builder::{Backend, ObjectBuilder, SymbolSource};
 use self::reentrancy::ReentrancyActions;
 use self::resolve::*;
 
-use crate::analyze::macros::{MacroId, MacroSource, VecMacroTable};
+use crate::analyze::macros::{MacroId, MacroTable, VecMacroTable};
 use crate::analyze::{CodebaseAnalyzer, Literal, StringSource, Tokenizer};
 use crate::codebase::{BufId, BufRange, FileCodebase, FileSystem};
 use crate::diag::{CompositeDiagnosticsSystem, Diagnostics, OutputForwarder};
@@ -25,6 +25,11 @@ pub(crate) trait Session:
     + Diagnostics<<Self as SpanSource>::Span>
     + StartScope<<Self as IdentSource>::Ident>
     + NameTable<<Self as IdentSource>::Ident>
+    + MacroTable<
+        <Self as IdentSource>::Ident,
+        Literal<<Self as StringSource>::StringRef>,
+        <Self as SpanSource>::Span,
+    >
 {
 }
 
@@ -35,6 +40,11 @@ impl<T> Session for T where
         + Diagnostics<<Self as SpanSource>::Span>
         + StartScope<<Self as IdentSource>::Ident>
         + NameTable<<Self as IdentSource>::Ident>
+        + MacroTable<
+            <Self as IdentSource>::Ident,
+            Literal<<Self as StringSource>::StringRef>,
+            <Self as SpanSource>::Span,
+        >
 {
 }
 
@@ -84,24 +94,26 @@ impl<'a, 'b> StringSource for SessionImpl<'a, 'b> {
     type StringRef = String;
 }
 
-pub(crate) struct CompositeSession<R, N, B, D> {
+pub(crate) struct CompositeSession<R, M, N, B, D> {
     pub reentrancy: R,
+    pub macros: M,
     pub names: N,
     pub builder: B,
     pub diagnostics: D,
 }
 
 #[cfg(test)]
-impl<R, N, B, D> CompositeSession<R, N, B, D>
+impl<R, M, N, B, D> CompositeSession<R, M, N, B, D>
 where
     Self: ReentrancyActions,
     <Self as IdentSource>::Ident: for<'r> From<&'r str>,
     Self: NameTable<<Self as IdentSource>::Ident>,
     Self: Backend<<Self as SpanSource>::Span>,
 {
-    pub fn from_components(reentrancy: R, names: N, builder: B, diagnostics: D) -> Self {
+    pub fn from_components(reentrancy: R, macros: M, names: N, builder: B, diagnostics: D) -> Self {
         let mut session = Self {
             reentrancy,
+            macros,
             names,
             builder,
             diagnostics,
@@ -113,28 +125,24 @@ where
     }
 }
 
-impl<R: SpanSource, N, B, D> SpanSource for CompositeSession<R, N, B, D> {
+impl<R: SpanSource, M, N, B, D> SpanSource for CompositeSession<R, M, N, B, D> {
     type Span = R::Span;
 }
 
-impl<R: IdentSource, N, B, D> IdentSource for CompositeSession<R, N, B, D> {
+impl<R: IdentSource, M, N, B, D> IdentSource for CompositeSession<R, M, N, B, D> {
     type Ident = R::Ident;
 }
 
-impl<R: MacroSource, N, B, D> MacroSource for CompositeSession<R, N, B, D> {
-    type MacroId = R::MacroId;
-}
-
-impl<R: StringSource, N, B, D> StringSource for CompositeSession<R, N, B, D> {
+impl<R: StringSource, M, N, B, D> StringSource for CompositeSession<R, M, N, B, D> {
     type StringRef = R::StringRef;
 }
 
-impl<R, N, B: SymbolSource, D> SymbolSource for CompositeSession<R, N, B, D> {
+impl<R, M, N, B: SymbolSource, D> SymbolSource for CompositeSession<R, M, N, B, D> {
     type SymbolId = B::SymbolId;
 }
 
 delegate_diagnostics! {
-    {R, N, B, D: Diagnostics<S>, S}, CompositeSession<R, N, B, D>, {diagnostics}, D, S
+    {R, M, N, B, D: Diagnostics<S>, S}, CompositeSession<R, M, N, B, D>, {diagnostics}, D, S
 }
 
 delegate_diagnostics! {

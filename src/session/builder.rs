@@ -216,7 +216,7 @@ impl<'a, 'b> Backend<RcSpan<BufId, BufRange>> for SessionImpl<'a, 'b> {
     }
 }
 
-impl<R, N, D, S> Backend<S> for CompositeSession<R, N, ObjectBuilder<S>, D>
+impl<R, M, N, D, S> Backend<S> for CompositeSession<R, M, N, ObjectBuilder<S>, D>
 where
     D: Diagnostics<S>,
     S: Clone,
@@ -263,7 +263,7 @@ where
     }
 }
 
-impl<'a, R, N, B, D, Span> AllocSymbol<Span> for CompositeSession<R, N, B, D>
+impl<'a, R, M, N, B, D, Span> AllocSymbol<Span> for CompositeSession<R, M, N, B, D>
 where
     Self: SymbolSource<SymbolId = B::SymbolId>,
     B: AllocSymbol<Span>,
@@ -338,7 +338,7 @@ pub mod mock {
         }
     }
 
-    impl<R, N, D, A, T, S> Backend<S> for CompositeSession<R, N, MockBackend<A, T>, D>
+    impl<R, M, N, D, A, T, S> Backend<S> for CompositeSession<R, M, N, MockBackend<A, T>, D>
     where
         A: AllocSymbol<S>,
         T: From<BackendEvent<A::SymbolId, Expr<A::SymbolId, S>>>,
@@ -475,6 +475,7 @@ mod tests {
     fn build_object<F: FnOnce(&mut Session<S>), S>(f: F) -> Object<S> {
         let mut session = CompositeSession {
             reentrancy: (),
+            macros: (),
             names: (),
             builder: ObjectBuilder::new(),
             diagnostics: TestDiagnosticsListener::new(),
@@ -483,7 +484,7 @@ mod tests {
         session.builder.object
     }
 
-    type Session<S> = CompositeSession<(), (), ObjectBuilder<S>, TestDiagnosticsListener<S>>;
+    type Session<S> = CompositeSession<(), (), (), ObjectBuilder<S>, TestDiagnosticsListener<S>>;
 
     fn emit_items_and_compare<I, B>(items: I, bytes: B)
     where

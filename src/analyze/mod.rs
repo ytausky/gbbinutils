@@ -53,7 +53,7 @@ impl<'a, 'b> Lex for SessionImpl<'a, 'b> {
 }
 
 impl<'a, T, P, M, I, N, B, D> Lex
-    for CompositeSession<SourceComponents<CodebaseAnalyzer<'a, T>, P, M, I>, N, B, D>
+    for CompositeSession<SourceComponents<CodebaseAnalyzer<'a, T>, P, I>, M, N, B, D>
 where
     T: Tokenize<D::BufContext> + 'a,
     T::StringRef: AsRef<str>,
@@ -71,15 +71,11 @@ where
     }
 }
 
-impl<'a, T: IdentSource, P, M, I> IdentSource
-    for SourceComponents<CodebaseAnalyzer<'a, T>, P, M, I>
-{
+impl<'a, T: IdentSource, P, I> IdentSource for SourceComponents<CodebaseAnalyzer<'a, T>, P, I> {
     type Ident = T::Ident;
 }
 
-impl<'a, T: StringSource, P, M, I> StringSource
-    for SourceComponents<CodebaseAnalyzer<'a, T>, P, M, I>
-{
+impl<'a, T: StringSource, P, I> StringSource for SourceComponents<CodebaseAnalyzer<'a, T>, P, I> {
     type StringRef = T::StringRef;
 }
 
@@ -172,7 +168,7 @@ mod mock {
     }
 
     impl<'a, P, M, I, N, B, D> Lex
-        for CompositeSession<SourceComponents<MockCodebase<D::Span>, P, M, I>, N, B, D>
+        for CompositeSession<SourceComponents<MockCodebase<D::Span>, P, I>, M, N, B, D>
     where
         D: SpanSource,
     {
@@ -183,11 +179,11 @@ mod mock {
         }
     }
 
-    impl<'a, P, M, I, S> IdentSource for SourceComponents<MockCodebase<S>, P, M, I> {
+    impl<'a, P, I, S> IdentSource for SourceComponents<MockCodebase<S>, P, I> {
         type Ident = String;
     }
 
-    impl<'a, P, M, I, S> StringSource for SourceComponents<MockCodebase<S>, P, M, I> {
+    impl<'a, P, I, S> StringSource for SourceComponents<MockCodebase<S>, P, I> {
         type StringRef = String;
     }
 }

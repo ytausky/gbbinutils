@@ -197,6 +197,7 @@ mod tests {
         let skipped_bytes = 0x10;
         let mut object_builder = CompositeSession {
             reentrancy: (),
+            macros: (),
             names: (),
             builder: ObjectBuilder::new(),
             diagnostics: TestDiagnosticsListener::new(),
@@ -231,6 +232,7 @@ mod tests {
         let addr = 0xffe1;
         let mut builder = CompositeSession {
             reentrancy: (),
+            macros: (),
             names: (),
             builder: ObjectBuilder::new(),
             diagnostics: TestDiagnosticsListener::new(),
@@ -290,6 +292,7 @@ mod tests {
     fn resolve_expr_with_section_addr() {
         let mut object_builder = CompositeSession {
             reentrancy: (),
+            macros: (),
             names: (),
             builder: ObjectBuilder::new(),
             diagnostics: TestDiagnosticsListener::new(),
@@ -321,6 +324,7 @@ mod tests {
 
         let mut object_builder = CompositeSession {
             reentrancy: (),
+            macros: (),
             names: (),
             builder: ObjectBuilder::new(),
             diagnostics: TestDiagnosticsListener::new(),
@@ -355,6 +359,7 @@ mod tests {
     fn assert_section_size(expected: impl Into<Num>, f: impl FnOnce(&mut Session<()>)) {
         let mut builder = CompositeSession {
             reentrancy: (),
+            macros: (),
             names: (),
             builder: ObjectBuilder::new(),
             diagnostics: TestDiagnosticsListener::new(),
@@ -370,5 +375,5 @@ mod tests {
         );
     }
 
-    type Session<S> = CompositeSession<(), (), ObjectBuilder<S>, TestDiagnosticsListener<S>>;
+    type Session<S> = CompositeSession<(), (), (), ObjectBuilder<S>, TestDiagnosticsListener<S>>;
 }

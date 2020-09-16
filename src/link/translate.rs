@@ -232,6 +232,7 @@ mod tests {
 
         let mut object_builder = CompositeSession {
             reentrancy: (),
+            macros: (),
             names: (),
             builder: ObjectBuilder::new(),
             diagnostics: TestDiagnosticsListener::new(),
@@ -263,6 +264,7 @@ mod tests {
     fn translate_expr_with_location_counter() {
         let mut object_builder = CompositeSession {
             reentrancy: (),
+            macros: (),
             names: (),
             builder: ObjectBuilder::new(),
             diagnostics: TestDiagnosticsListener::new(),
@@ -299,6 +301,7 @@ mod tests {
 
         let mut object_builder = CompositeSession {
             reentrancy: (),
+            macros: (),
             names: (),
             builder: ObjectBuilder::new(),
             diagnostics: TestDiagnosticsListener::new(),
