@@ -1,15 +1,15 @@
-use super::resolve::{NameTable, StartScope};
-use super::CompositeSession;
+use super::resolve::{Ident, NameTable, StartScope};
+use super::{CompositeSession, SessionImpl};
 
 use crate::analyze::macros::{MacroSource, MacroTable};
 use crate::analyze::strings::GetString;
 use crate::analyze::{Lex, Literal, SemanticToken, StringSource, TokenSeq};
-use crate::codebase::CodebaseError;
-use crate::diag::span::SpanSource;
+use crate::codebase::{BufId, BufRange, CodebaseError};
+use crate::diag::span::{RcSpan, SpanSource};
 use crate::diag::*;
 use crate::semantics::{Semantics, TokenStreamState};
 use crate::session::builder::Backend;
-use crate::syntax::parser::ParserFactory;
+use crate::syntax::parser::{DefaultParserFactory, ParserFactory};
 use crate::syntax::{IdentSource, LexError, ParseTokenStream};
 
 use std::ops::Deref;
@@ -17,13 +17,8 @@ use std::ops::Deref;
 #[cfg(test)]
 pub(crate) use self::mock::*;
 
-pub(crate) trait Meta: IdentSource + MacroSource + SpanSource + StringSource {}
-
-impl<T> Meta for T where T: IdentSource + MacroSource + SpanSource + StringSource {}
-
-pub(crate) trait ReentrancyActions
-where
-    Self: Meta + Sized,
+pub(crate) trait ReentrancyActions:
+    IdentSource + MacroSource + SpanSource + StringSource
 {
     fn analyze_file(&mut self, path: Self::StringRef) -> Result<(), CodebaseError>;
 
@@ -58,6 +53,7 @@ where
     type Span = D::Span;
 }
 
+#[cfg(test)]
 impl<C, P, M, I> SourceComponents<C, P, M, I> {
     pub fn new(codebase: C, parser_factory: P, macros: M, interner: I) -> Self {
         SourceComponents {
@@ -66,6 +62,55 @@ impl<C, P, M, I> SourceComponents<C, P, M, I> {
             macros,
             interner,
         }
+    }
+}
+
+impl<'a, 'b, 'c> ReentrancyActions for SessionImpl<'a, 'b, 'c> {
+    fn analyze_file(&mut self, path: Self::StringRef) -> Result<(), CodebaseError> {
+        let mut tokens = self.lex_file(path)?;
+        let mut parser = <DefaultParserFactory as ParserFactory<
+            Ident<String>,
+            Literal<String>,
+            LexError,
+            RcSpan<BufId, BufRange>,
+        >>::mk_parser(&mut DefaultParserFactory);
+        let semantics = Semantics {
+            session: self,
+            state: TokenStreamState::new(),
+            tokens: &mut tokens,
+        };
+        parser.parse_token_stream(semantics);
+        Ok(())
+    }
+
+    fn define_macro(
+        &mut self,
+        name_span: Self::Span,
+        params: Params<Self::Ident, Self::Span>,
+        body: TokenSeq<Self::Ident, Self::StringRef, Self::Span>,
+    ) -> Self::MacroId {
+        MacroTable::define_macro(self, name_span, params, body)
+    }
+
+    fn call_macro(
+        &mut self,
+        id: (Self::MacroId, Self::Span),
+        args: MacroArgs<Self::Ident, Self::StringRef, Self::Span>,
+    ) {
+        let expansion = self.expand_macro(id, args);
+        let mut parser = <DefaultParserFactory as ParserFactory<
+            Ident<String>,
+            Literal<String>,
+            LexError,
+            RcSpan<BufId, BufRange>,
+        >>::mk_parser(&mut DefaultParserFactory);
+        let mut tokens = expansion.map(|(t, s)| (Ok(t), s));
+        let semantics = Semantics {
+            session: self,
+            state: TokenStreamState::new(),
+            tokens: &mut tokens,
+        };
+        parser.parse_token_stream(semantics);
     }
 }
 

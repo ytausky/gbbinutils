@@ -1,13 +1,18 @@
-use self::builder::{Backend, SymbolSource};
+use self::builder::{Backend, ObjectBuilder, SymbolSource};
 use self::reentrancy::ReentrancyActions;
-use self::resolve::{NameTable, ResolvedName, StartScope};
+use self::resolve::*;
 
-use crate::analyze::macros::MacroSource;
-use crate::analyze::StringSource;
-use crate::diag::span::SpanSource;
-use crate::diag::Diagnostics;
+use crate::analyze::macros::{MacroId, MacroSource, VecMacroTable};
+use crate::analyze::{CodebaseAnalyzer, Literal, StringSource, Tokenizer};
+use crate::codebase::{BufId, BufRange, FileCodebase, FileSystem};
+use crate::diag::span::{MacroDefSpans, RcContextFactory, RcSpan, SpanSource};
+use crate::diag::{CompositeDiagnosticsSystem, Diagnostics, OutputForwarder};
+use crate::object::{Object, SymbolId};
 use crate::semantics::keywords::KEYWORDS;
-use crate::syntax::IdentSource;
+use crate::syntax::{IdentFactory, IdentSource};
+use crate::BuiltinSymbols;
+
+use std::rc::Rc;
 
 pub mod builder;
 pub mod reentrancy;
@@ -33,6 +38,53 @@ impl<T> Session for T where
 {
 }
 
+pub(crate) struct SessionImpl<'a, 'b, 'c> {
+    pub codebase: CodebaseAnalyzer<'b, Tokenizer<&'b FileCodebase<'a, dyn FileSystem>>>,
+    pub macros:
+        VecMacroTable<Ident<String>, Literal<String>, Rc<MacroDefSpans<RcSpan<BufId, BufRange>>>>,
+    names: BiLevelNameTable<BasicNameTable<MacroId, SymbolId>>,
+    pub builder: ObjectBuilder<'c, RcSpan<BufId, BufRange>>,
+    pub diagnostics: CompositeDiagnosticsSystem<RcContextFactory, OutputForwarder<'a, 'b>>,
+}
+
+impl<'a, 'b, 'c> SessionImpl<'a, 'b, 'c> {
+    pub fn new(
+        codebase: CodebaseAnalyzer<'b, Tokenizer<&'b FileCodebase<'a, dyn FileSystem>>>,
+        object: &'c mut Object<RcSpan<BufId, BufRange>>,
+        diagnostics: CompositeDiagnosticsSystem<RcContextFactory, OutputForwarder<'a, 'b>>,
+    ) -> Self {
+        let mut session = Self {
+            codebase,
+            macros: VecMacroTable::new(),
+            names: BiLevelNameTable::new(),
+            builder: ObjectBuilder::new(object),
+            diagnostics,
+        };
+        for (string, name) in session.builder.builtin_symbols() {
+            session.names.define_name(
+                DefaultIdentFactory.mk_ident(string),
+                ResolvedName::Symbol(*name),
+            )
+        }
+        for (ident, keyword) in KEYWORDS {
+            session.define_name((*ident).into(), ResolvedName::Keyword(keyword))
+        }
+        session
+    }
+}
+
+impl<'a, 'b, 'c> SpanSource for SessionImpl<'a, 'b, 'c> {
+    type Span = RcSpan<BufId, BufRange>;
+}
+
+impl<'a, 'b, 'c> IdentSource for SessionImpl<'a, 'b, 'c> {
+    type Ident = Ident<String>;
+}
+
+impl<'a, 'b, 'c> StringSource for SessionImpl<'a, 'b, 'c> {
+    type StringRef = String;
+}
+
 pub(crate) struct CompositeSession<R, N, B, D> {
     pub reentrancy: R,
     pub names: N,
@@ -40,6 +92,7 @@ pub(crate) struct CompositeSession<R, N, B, D> {
     pub diagnostics: D,
 }
 
+#[cfg(test)]
 impl<R, N, B, D> CompositeSession<R, N, B, D>
 where
     Self: ReentrancyActions,
@@ -83,4 +136,12 @@ impl<R, N, B: SymbolSource, D> SymbolSource for CompositeSession<R, N, B, D> {
 
 delegate_diagnostics! {
     {R, N, B, D: Diagnostics<S>, S}, CompositeSession<R, N, B, D>, {diagnostics}, D, S
+}
+
+delegate_diagnostics! {
+    {'a, 'b, 'c},
+    SessionImpl<'a, 'b, 'c>,
+    {diagnostics},
+    CompositeDiagnosticsSystem<RcContextFactory, OutputForwarder<'a, 'b>>,
+    RcSpan<BufId, BufRange>
 }

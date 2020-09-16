@@ -1,3 +1,7 @@
+use super::SessionImpl;
+
+use crate::codebase::{BufId, BufRange};
+use crate::diag::span::RcSpan;
 use crate::diag::Diagnostics;
 use crate::expr::Expr;
 use crate::object::*;
@@ -154,6 +158,64 @@ impl<'a, S> ObjectBuilder<'a, S> {
             self.context.vars.alloc(),
             self.context.vars.alloc(),
         )
+    }
+}
+
+impl<'a, 'b, 'c> SymbolSource for SessionImpl<'a, 'b, 'c> {
+    type SymbolId = SymbolId;
+}
+
+impl<'a, 'b, 'c> AllocSymbol<RcSpan<BufId, BufRange>> for SessionImpl<'a, 'b, 'c> {
+    fn alloc_symbol(&mut self, span: RcSpan<BufId, BufRange>) -> Self::SymbolId {
+        self.builder.alloc_symbol(span)
+    }
+}
+
+impl<'a, 'b, 'c> Backend<RcSpan<BufId, BufRange>> for SessionImpl<'a, 'b, 'c> {
+    fn define_symbol(
+        &mut self,
+        name: Self::SymbolId,
+        _span: RcSpan<BufId, BufRange>,
+        expr: Expr<Self::SymbolId, RcSpan<BufId, BufRange>>,
+    ) {
+        let location = self.builder.context.vars.alloc();
+        self.builder.push(Fragment::Reloc(location));
+        self.builder.context.content.symbols.define(
+            name.content().unwrap(),
+            ContentDef::Expr(ExprDef { expr, location }),
+        );
+    }
+
+    fn emit_fragment(&mut self, fragment: Fragment<Expr<Self::SymbolId, RcSpan<BufId, BufRange>>>) {
+        self.builder.push(fragment)
+    }
+
+    fn is_non_zero(
+        &mut self,
+        value: Expr<Self::SymbolId, RcSpan<BufId, BufRange>>,
+    ) -> Option<bool> {
+        value
+            .to_num(&self.builder.context, &mut self.diagnostics)
+            .exact()
+            .map(|n| n != 0)
+    }
+
+    fn set_origin(&mut self, addr: Expr<Self::SymbolId, RcSpan<BufId, BufRange>>) {
+        match self.builder.state.take().unwrap() {
+            BuilderState::SectionPrelude(index) => {
+                self.builder.context.content.sections[index]
+                    .constraints
+                    .addr = Some(addr);
+                self.builder.state = Some(BuilderState::SectionPrelude(index))
+            }
+            _ => self.builder.state = Some(BuilderState::AnonSectionPrelude { addr: Some(addr) }),
+        }
+    }
+
+    fn start_section(&mut self, name: SymbolId, _: RcSpan<BufId, BufRange>) {
+        let index = self.builder.context.content.sections.len();
+        self.builder.state = Some(BuilderState::SectionPrelude(index));
+        self.builder.add_section(Some(name.content().unwrap()))
     }
 }
 

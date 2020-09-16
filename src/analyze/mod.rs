@@ -1,8 +1,8 @@
-use crate::codebase::{BufId, Codebase, CodebaseError};
+use crate::codebase::{BufId, BufRange, Codebase, CodebaseError};
 use crate::session::reentrancy::SourceComponents;
 use crate::session::resolve::*;
-use crate::session::CompositeSession;
-use crate::span::{BufContext, BufContextFactory, SpanSource};
+use crate::session::{CompositeSession, SessionImpl};
+use crate::span::{BufContext, BufContextFactory, RcBufContext, SpanSource};
 use crate::syntax::*;
 
 use std::rc::Rc;
@@ -39,6 +39,18 @@ impl<'a, T: StringSource + 'a> CodebaseAnalyzer<'a, T> {
 }
 
 pub type TokenSeq<I, R, S> = (Vec<SemanticToken<I, R>>, Vec<S>);
+
+impl<'a, 'b, 'c> Lex for SessionImpl<'a, 'b, 'c> {
+    type TokenIter = TokenizedSrc<DefaultIdentFactory, RcBufContext<BufId, BufRange>>;
+
+    fn lex_file(&mut self, path: Self::StringRef) -> Result<Self::TokenIter, CodebaseError> {
+        self.codebase
+            .codebase
+            .tokenize_file(path.as_ref(), |buf_id| {
+                self.diagnostics.mk_buf_context(buf_id, None)
+            })
+    }
+}
 
 impl<'a, T, P, M, I, N, B, D> Lex
     for CompositeSession<SourceComponents<CodebaseAnalyzer<'a, T>, P, M, I>, N, B, D>

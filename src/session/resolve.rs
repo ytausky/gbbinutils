@@ -1,4 +1,4 @@
-use super::CompositeSession;
+use super::{CompositeSession, SessionImpl};
 
 use crate::analyze::macros::MacroSource;
 use crate::semantics::Keyword;
@@ -193,6 +193,29 @@ impl<T: Default> StartScope<Ident<String>> for BiLevelNameTable<T> {
         if ident.visibility == Visibility::Global {
             self.local.replace(Default::default());
         }
+    }
+}
+
+impl<'a, 'b, 'c> NameTable<Ident<String>> for SessionImpl<'a, 'b, 'c> {
+    fn resolve_name(
+        &mut self,
+        ident: &Ident<String>,
+    ) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
+        self.names.resolve_name(ident)
+    }
+
+    fn define_name(
+        &mut self,
+        ident: Ident<String>,
+        entry: ResolvedName<Self::MacroId, Self::SymbolId>,
+    ) {
+        self.names.define_name(ident, entry)
+    }
+}
+
+impl<'a, 'b, 'c> StartScope<Ident<String>> for SessionImpl<'a, 'b, 'c> {
+    fn start_scope(&mut self, ident: &Ident<String>) {
+        self.names.start_scope(ident)
     }
 }
 

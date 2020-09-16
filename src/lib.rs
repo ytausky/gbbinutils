@@ -8,17 +8,11 @@
 pub use crate::codebase::FileSystem;
 pub use crate::link::{Program, Rom};
 
-use crate::analyze::macros::VecMacroTable;
-use crate::analyze::strings::FakeStringInterner;
 use crate::analyze::{CodebaseAnalyzer, Tokenizer};
 use crate::codebase::{CodebaseError, StdFileSystem};
 use crate::diag::*;
-use crate::session::builder::ObjectBuilder;
-use crate::session::reentrancy::{ReentrancyActions, SourceComponents};
-use crate::session::resolve::*;
-use crate::session::CompositeSession;
-use crate::syntax::parser::DefaultParserFactory;
-use crate::syntax::IdentFactory;
+use crate::session::reentrancy::ReentrancyActions;
+use crate::session::{CompositeSession, SessionImpl};
 
 #[macro_use]
 pub mod diag;
@@ -84,34 +78,25 @@ pub fn assemble(name: &str, config: &mut Config) -> Option<Program> {
         .ok()
 }
 
-fn try_assemble(
+fn try_assemble<'a>(
     name: &str,
-    input: &mut dyn codebase::FileSystem,
-    output: &mut dyn FnMut(diag::Diagnostic),
+    input: &'a mut dyn codebase::FileSystem,
+    output: &'a mut dyn FnMut(diag::Diagnostic),
 ) -> Result<Program, CodebaseError> {
     let codebase = codebase::FileCodebase::new(input);
     let diagnostics = CompositeDiagnosticsSystem::new(&codebase.cache, output);
     let mut linkable = object::Object::new();
-    let builder = ObjectBuilder::new(&mut linkable);
 
     let tokenizer = Tokenizer(&codebase);
     let file_parser = CodebaseAnalyzer::new(&tokenizer);
-    let parser_factory = DefaultParserFactory;
-    let macros = VecMacroTable::new();
-    let interner = FakeStringInterner;
-    let mut names = BiLevelNameTable::<BasicNameTable<_, _>>::new();
-    for (string, name) in builder.builtin_symbols() {
-        names.define_name(
-            DefaultIdentFactory.mk_ident(string),
-            ResolvedName::Symbol(*name),
-        )
-    }
-    let reentrancy = SourceComponents::new(file_parser, parser_factory, macros, interner);
-    let mut session = CompositeSession::from_components(reentrancy, names, builder, diagnostics);
+    let mut session = SessionImpl::new(file_parser, &mut linkable, diagnostics);
     session.analyze_file(name.into())?;
 
-    let mut diagnostics = session.diagnostics;
-    Ok(Program::link(linkable, &mut diagnostics))
+    let SessionImpl {
+        mut diagnostics, ..
+    } = session;
+    let result = Program::link(linkable, &mut diagnostics);
+    Ok(result)
 }
 
 trait BuiltinSymbols {

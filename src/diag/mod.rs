@@ -94,8 +94,8 @@ pub(crate) struct CompositeDiagnosticsSystem<C, O> {
     pub output: O,
 }
 
-impl<'a> CompositeDiagnosticsSystem<RcContextFactory, OutputForwarder<'a>> {
-    pub fn new(codebase: &'a RefCell<TextCache>, output: &'a mut dyn FnMut(Diagnostic)) -> Self {
+impl<'a, 'b> CompositeDiagnosticsSystem<RcContextFactory, OutputForwarder<'a, 'b>> {
+    pub fn new(codebase: &'b RefCell<TextCache>, output: &'a mut dyn FnMut(Diagnostic)) -> Self {
         CompositeDiagnosticsSystem {
             context: RcContextFactory::new(),
             output: OutputForwarder { output, codebase },
@@ -213,18 +213,18 @@ pub(crate) trait EmitDiag<S, T> {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<S, T>>);
 }
 
-pub(crate) struct OutputForwarder<'a> {
+pub(crate) struct OutputForwarder<'a, 'b> {
     pub output: &'a mut dyn FnMut(Diagnostic),
-    pub codebase: &'a RefCell<TextCache>,
+    pub codebase: &'b RefCell<TextCache>,
 }
 
 type Span = RcSpan<BufId, BufRange>;
 
-impl<'a> SpanSource for OutputForwarder<'a> {
+impl<'a, 'b> SpanSource for OutputForwarder<'a, 'b> {
     type Span = Span;
 }
 
-impl<'a> EmitDiag<Span, StrippedBufSpan<BufId, BufRange>> for OutputForwarder<'a> {
+impl<'a, 'b> EmitDiag<Span, StrippedBufSpan<BufId, BufRange>> for OutputForwarder<'a, 'b> {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<Span, StrippedBufSpan<BufId, BufRange>>>) {
         (self.output)(diag.into().expand().render(&self.codebase.borrow()))
     }

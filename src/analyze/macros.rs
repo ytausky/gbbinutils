@@ -1,6 +1,9 @@
-use crate::analyze::Token;
+use crate::analyze::{Literal, Token};
+use crate::codebase::{BufId, BufRange};
 use crate::diag::span::*;
 use crate::session::reentrancy::SourceComponents;
+use crate::session::resolve::Ident;
+use crate::session::SessionImpl;
 use crate::CompositeSession;
 
 use std::rc::Rc;
@@ -32,6 +35,56 @@ pub type MacroArgs<T, S> = (Vec<Vec<T>>, Vec<Vec<S>>);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MacroId(usize);
+
+impl<'a, 'b, 'c> MacroSource for SessionImpl<'a, 'b, 'c> {
+    type MacroId = MacroId;
+}
+
+impl<'a, 'b, 'c> MacroTable<Ident<String>, Literal<String>, RcSpan<BufId, BufRange>>
+    for SessionImpl<'a, 'b, 'c>
+{
+    type Iter = MacroExpansionIter<
+        Ident<String>,
+        Token<Ident<String>, Literal<String>>,
+        RcMacroCall<BufSpan<BufId, BufRange>>,
+    >;
+
+    fn define_macro(
+        &mut self,
+        name_span: RcSpan<BufId, BufRange>,
+        params: (Vec<Ident<String>>, Vec<RcSpan<BufId, BufRange>>),
+        body: (
+            Vec<Token<Ident<String>, Literal<String>>>,
+            Vec<RcSpan<BufId, BufRange>>,
+        ),
+    ) -> Self::MacroId {
+        let context = self.diagnostics.add_macro_def(name_span, params.1, body.1);
+        let id = MacroId(self.macros.len());
+        self.macros.push(MacroDef {
+            tokens: Rc::new(MacroDefTokens {
+                params: params.0,
+                body: body.0,
+            }),
+            spans: context,
+        });
+        id
+    }
+
+    fn expand_macro(
+        &mut self,
+        (MacroId(id), name_span): (Self::MacroId, RcSpan<BufId, BufRange>),
+        (args, arg_spans): MacroArgs<
+            Token<Ident<String>, Literal<String>>,
+            RcSpan<BufId, BufRange>,
+        >,
+    ) -> Self::Iter {
+        let def = &self.macros[id];
+        let context = self
+            .diagnostics
+            .mk_macro_call_ctx(name_span, arg_spans, &def.spans);
+        MacroExpansionIter::new(def.tokens.clone(), args, context)
+    }
+}
 
 impl<'a, C, P, J, N, B, D, I, L> MacroSource
     for CompositeSession<
