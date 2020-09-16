@@ -1,10 +1,10 @@
 use super::{Expr, LinkageContext, VarTable};
 
-use crate::diag::span::{Spanned, WithSpan};
 use crate::diag::{BackendDiagnostics, Message, ValueKind};
 use crate::expr::{Atom, BinOp, ExprOp, ParamId};
 use crate::object::num::Num;
 use crate::object::*;
+use crate::span::{Spanned, WithSpan};
 
 use std::borrow::Borrow;
 

@@ -4,9 +4,9 @@ use super::Semantics;
 use super::*;
 
 use crate::analyze::Literal;
-use crate::diag::span::StripSpan;
 use crate::diag::{CompactDiag, Message};
 use crate::session::Session;
+use crate::span::StripSpan;
 use crate::syntax::actions::*;
 use crate::syntax::LexError;
 

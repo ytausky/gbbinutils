@@ -1,10 +1,10 @@
 use super::{Analysis, AtomKind, Condition, Expr, Fragment, Operand, Width, M};
 
-use crate::diag::span::WithSpan;
 use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::expr::{Atom, BinOp, ExprOp};
 use crate::semantics::keywords::{BranchKind, ExplicitBranch, ImplicitBranch};
 use crate::session::builder::Backend;
+use crate::span::WithSpan;
 use crate::span::{Source, SpanSource};
 
 impl<'a, 'b, I, D, S> Analysis<'a, 'b, I, D, S>

@@ -1,11 +1,11 @@
 use self::operand::{AtomKind, Context, Operand, OperandCounter};
 
-use crate::diag::span::Source;
 use crate::diag::*;
 use crate::expr::Expr;
 use crate::object::Fragment;
 use crate::semantics::keywords::{Mnemonic, StackOperation};
 use crate::session::builder::*;
+use crate::span::Source;
 
 pub mod operand;
 

@@ -1,11 +1,11 @@
 use super::BuiltinInstrSemantics;
 
 use crate::analyze::Literal;
-use crate::diag::span::WithSpan;
 use crate::expr::{Atom, Expr, ExprOp, ParamId};
 use crate::semantics::arg::ParsedArg;
 use crate::semantics::{ArgSemantics, Semantics};
 use crate::session::Session;
+use crate::span::WithSpan;
 use crate::syntax::actions::*;
 
 impl<'a, 'b, S: Session> ArgFinalizer for ArgSemantics<'a, 'b, S> {
@@ -84,7 +84,6 @@ impl<'a, 'b, S: Session> ArgSemantics<'a, 'b, S> {
 
 #[cfg(test)]
 mod tests {
-    use crate::diag::span::WithSpan;
     use crate::diag::{DiagnosticsEvent, Message, MockSpan};
     use crate::expr::{Atom, BinOp, Expr, ExprOp, ParamId};
     use crate::object::Fragment;
@@ -92,6 +91,7 @@ mod tests {
     use crate::session::builder::mock::{BackendEvent, MockSymbolId};
     use crate::session::builder::Width;
     use crate::session::resolve::{NameTableEvent, ResolvedName};
+    use crate::span::WithSpan;
     use crate::syntax::actions::*;
 
     #[test]

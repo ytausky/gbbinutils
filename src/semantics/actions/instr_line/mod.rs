@@ -3,11 +3,11 @@ use self::macro_instr::{MacroInstrSemantics, MacroInstrState};
 
 use super::{Keyword, Semantics, TokenStreamSemantics};
 
-use crate::diag::span::WithSpan;
 use crate::diag::Message;
 use crate::expr::{Atom, Expr, ExprOp};
 use crate::semantics::*;
 use crate::session::resolve::{NameTable, ResolvedName};
+use crate::span::WithSpan;
 use crate::syntax::actions::{InstrContext, InstrLineContext, InstrRule};
 
 mod builtin_instr;

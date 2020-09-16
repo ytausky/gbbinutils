@@ -1,9 +1,9 @@
 use crate::analyze::{Literal, Token};
 use crate::codebase::{BufId, BufRange};
-use crate::diag::span::*;
 use crate::session::reentrancy::SourceComponents;
 use crate::session::resolve::Ident;
 use crate::session::SessionImpl;
+use crate::span::*;
 use crate::CompositeSession;
 
 use std::rc::Rc;

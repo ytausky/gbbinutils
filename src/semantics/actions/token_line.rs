@@ -1,11 +1,11 @@
 use super::{Keyword, TokenStreamSemantics};
 
 use crate::analyze::{Literal, SemanticToken};
-use crate::diag::span::StripSpan;
 use crate::diag::CompactDiag;
 use crate::semantics::keywords::Directive;
 use crate::semantics::*;
 use crate::session::resolve::ResolvedName;
+use crate::span::StripSpan;
 use crate::syntax::actions::*;
 use crate::syntax::{LexError, Sigil, Token};
 

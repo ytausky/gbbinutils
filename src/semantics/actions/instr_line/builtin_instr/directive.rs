@@ -1,4 +1,3 @@
-use crate::diag::span::Source;
 use crate::diag::*;
 use crate::object::Fragment;
 use crate::semantics::arg::*;
@@ -6,6 +5,7 @@ use crate::semantics::keywords::Directive;
 use crate::semantics::Semantics;
 use crate::semantics::*;
 use crate::session::builder::Width;
+use crate::span::Source;
 
 pub(super) fn analyze_directive<'a, 'b, S: Session>(
     directive: (Directive, S::Span),

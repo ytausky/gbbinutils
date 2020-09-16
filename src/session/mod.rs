@@ -5,10 +5,10 @@ use self::resolve::*;
 use crate::analyze::macros::{MacroId, MacroSource, VecMacroTable};
 use crate::analyze::{CodebaseAnalyzer, Literal, StringSource, Tokenizer};
 use crate::codebase::{BufId, BufRange, FileCodebase, FileSystem};
-use crate::diag::span::{MacroDefSpans, RcContextFactory, RcSpan, SpanSource};
 use crate::diag::{CompositeDiagnosticsSystem, Diagnostics, OutputForwarder};
 use crate::object::SymbolId;
 use crate::semantics::keywords::KEYWORDS;
+use crate::span::{MacroDefSpans, RcContextFactory, RcSpan, SpanSource};
 use crate::syntax::{IdentFactory, IdentSource};
 use crate::BuiltinSymbols;
 

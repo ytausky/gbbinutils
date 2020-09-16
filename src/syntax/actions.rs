@@ -346,8 +346,8 @@ impl<T, E> TokenLineRule<T, E> {
 pub mod mock {
     use super::*;
 
-    use crate::diag::span::{MergeSpans, StripSpan};
     use crate::diag::{CompactDiag, DiagnosticsEvent, Merge};
+    use crate::span::{MergeSpans, StripSpan};
 
     #[derive(Clone, Copy, Debug, PartialEq)]
     pub enum IdentKind {

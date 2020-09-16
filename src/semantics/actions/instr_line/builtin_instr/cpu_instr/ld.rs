@@ -1,9 +1,9 @@
 use super::operand::AtomKind;
 use super::{Analysis, Expr, Fragment, Operand};
 
-use crate::diag::span::{Source, SpanSource};
 use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::session::builder::*;
+use crate::span::{Source, SpanSource};
 
 impl<'a, 'b, I, D, S> Analysis<'a, 'b, I, D, S>
 where

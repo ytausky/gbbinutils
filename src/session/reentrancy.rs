@@ -5,10 +5,10 @@ use crate::analyze::macros::{MacroSource, MacroTable};
 use crate::analyze::strings::GetString;
 use crate::analyze::{Lex, Literal, SemanticToken, StringSource, TokenSeq};
 use crate::codebase::{BufId, BufRange, CodebaseError};
-use crate::diag::span::{RcSpan, SpanSource};
 use crate::diag::*;
 use crate::semantics::{Semantics, TokenStreamState};
 use crate::session::builder::Backend;
+use crate::span::{RcSpan, SpanSource};
 use crate::syntax::parser::{DefaultParserFactory, ParserFactory};
 use crate::syntax::{IdentSource, LexError, ParseTokenStream};
 

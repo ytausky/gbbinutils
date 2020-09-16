@@ -2,11 +2,11 @@ use self::arg::{Arg, OperandSymbol, ParsedArg};
 use self::keywords::BuiltinMnemonic;
 
 use crate::analyze::{Literal, StringSource, TokenSeq};
-use crate::diag::span::{SpanSource, Spanned};
 use crate::diag::Diagnostics;
 use crate::session::builder::*;
 use crate::session::reentrancy::Params;
 use crate::session::Session;
+use crate::span::{SpanSource, Spanned};
 use crate::syntax::actions::{LexerOutput, LineRule};
 use crate::syntax::{IdentSource, LexError};
 

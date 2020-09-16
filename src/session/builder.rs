@@ -1,10 +1,10 @@
 use super::SessionImpl;
 
 use crate::codebase::{BufId, BufRange};
-use crate::diag::span::RcSpan;
 use crate::diag::Diagnostics;
 use crate::expr::Expr;
 use crate::object::*;
+use crate::span::RcSpan;
 use crate::{BuiltinSymbols, CompositeSession};
 
 pub(crate) trait Backend<S: Clone>: AllocSymbol<S> {
@@ -296,9 +296,9 @@ impl<S: Clone> BuiltinSymbols for ObjectBuilder<S> {
 pub mod mock {
     use super::*;
 
-    use crate::diag::span::{Source, Spanned};
     use crate::expr::{Atom, Expr, ExprOp};
     use crate::log::Log;
+    use crate::span::{Source, Spanned};
 
     #[derive(Clone, Copy, Debug, PartialEq)]
     pub(crate) struct MockSymbolId(pub usize);
@@ -404,11 +404,11 @@ pub mod mock {
 mod tests {
     use super::*;
 
-    use crate::diag::span::WithSpan;
     use crate::diag::*;
     use crate::expr::{Atom, BinOp, ExprOp};
     use crate::link::Program;
     use crate::object::SectionId;
+    use crate::span::WithSpan;
 
     use std::borrow::Borrow;
 

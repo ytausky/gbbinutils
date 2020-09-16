@@ -158,12 +158,12 @@ fn is_in_u8_range(n: i32) -> bool {
 mod tests {
     use super::*;
 
-    use crate::diag::span::WithSpan;
     use crate::diag::{IgnoreDiagnostics, TestDiagnosticsListener};
     use crate::expr::{Atom, BinOp, Expr, ExprOp};
     use crate::object::num::Num;
     use crate::object::{Content, SymbolId};
     use crate::session::builder::*;
+    use crate::span::WithSpan;
     use crate::CompositeSession;
 
     use std::borrow::Borrow;

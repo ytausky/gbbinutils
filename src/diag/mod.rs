@@ -14,7 +14,6 @@ use std::cell::RefCell;
 use std::ops::Range;
 
 mod message;
-pub(crate) mod span;
 
 #[cfg(test)]
 pub(crate) use self::mock::*;
@@ -46,7 +45,7 @@ impl<T, S> Diagnostics<S> for T where T: MergeSpans<S> + BackendDiagnostics<S> {
 
 macro_rules! delegate_diagnostics {
     ({$($params:tt)*}, $({$($preds:tt)*},)? $t:ty, {$($delegate:tt)*}, $dt:ty, $span:ty) => {
-        impl<$($params)*> $crate::diag::span::MergeSpans<$span> for $t
+        impl<$($params)*> $crate::span::MergeSpans<$span> for $t
         where
             $span: Clone,
             $($($preds)*)?
@@ -56,12 +55,12 @@ macro_rules! delegate_diagnostics {
             }
         }
 
-        impl<$($params)*> $crate::diag::span::StripSpan<$span> for $t
+        impl<$($params)*> $crate::span::StripSpan<$span> for $t
         where
             $span: Clone,
             $($($preds)*)?
         {
-            type Stripped = <$dt as $crate::diag::span::StripSpan<$span>>::Stripped;
+            type Stripped = <$dt as $crate::span::StripSpan<$span>>::Stripped;
 
             fn strip_span(&mut self, span: &$span) -> Self::Stripped {
                 self.$($delegate)*.strip_span(span)
@@ -70,7 +69,7 @@ macro_rules! delegate_diagnostics {
 
         impl<$($params)*> $crate::diag::EmitDiag<
             $span,
-            <$dt as $crate::diag::span::StripSpan<$span>>::Stripped
+            <$dt as $crate::span::StripSpan<$span>>::Stripped
         > for $t
         where
             $span: Clone,
@@ -80,7 +79,7 @@ macro_rules! delegate_diagnostics {
                 &mut self,
                 diag: impl Into<$crate::diag::CompactDiag<
                     $span,
-                    <$dt as $crate::diag::span::StripSpan<$span>>::Stripped
+                    <$dt as $crate::span::StripSpan<$span>>::Stripped
                 >>
             ) {
                 self.$($delegate)*.emit_diag(diag)

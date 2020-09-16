@@ -147,10 +147,10 @@ impl Width {
 mod tests {
     use super::*;
 
-    use crate::diag::span::WithSpan;
     use crate::diag::{IgnoreDiagnostics, TestDiagnosticsListener};
     use crate::expr::*;
     use crate::session::builder::*;
+    use crate::span::WithSpan;
     use crate::CompositeSession;
 
     #[test]

@@ -24,6 +24,7 @@ mod link;
 mod object;
 mod semantics;
 mod session;
+mod span;
 mod syntax;
 
 #[derive(Default)]
