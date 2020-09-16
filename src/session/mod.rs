@@ -7,7 +7,7 @@ use crate::analyze::{CodebaseAnalyzer, Literal, StringSource, Tokenizer};
 use crate::codebase::{BufId, BufRange, FileCodebase, FileSystem};
 use crate::diag::span::{MacroDefSpans, RcContextFactory, RcSpan, SpanSource};
 use crate::diag::{CompositeDiagnosticsSystem, Diagnostics, OutputForwarder};
-use crate::object::{Object, SymbolId};
+use crate::object::SymbolId;
 use crate::semantics::keywords::KEYWORDS;
 use crate::syntax::{IdentFactory, IdentSource};
 use crate::BuiltinSymbols;
@@ -38,26 +38,25 @@ impl<T> Session for T where
 {
 }
 
-pub(crate) struct SessionImpl<'a, 'b, 'c> {
+pub(crate) struct SessionImpl<'a, 'b> {
     pub codebase: CodebaseAnalyzer<'b, Tokenizer<&'b FileCodebase<'a, dyn FileSystem>>>,
     pub macros:
         VecMacroTable<Ident<String>, Literal<String>, Rc<MacroDefSpans<RcSpan<BufId, BufRange>>>>,
     names: BiLevelNameTable<BasicNameTable<MacroId, SymbolId>>,
-    pub builder: ObjectBuilder<'c, RcSpan<BufId, BufRange>>,
+    pub builder: ObjectBuilder<RcSpan<BufId, BufRange>>,
     pub diagnostics: CompositeDiagnosticsSystem<RcContextFactory, OutputForwarder<'a, 'b>>,
 }
 
-impl<'a, 'b, 'c> SessionImpl<'a, 'b, 'c> {
+impl<'a, 'b> SessionImpl<'a, 'b> {
     pub fn new(
         codebase: CodebaseAnalyzer<'b, Tokenizer<&'b FileCodebase<'a, dyn FileSystem>>>,
-        object: &'c mut Object<RcSpan<BufId, BufRange>>,
         diagnostics: CompositeDiagnosticsSystem<RcContextFactory, OutputForwarder<'a, 'b>>,
     ) -> Self {
         let mut session = Self {
             codebase,
             macros: VecMacroTable::new(),
             names: BiLevelNameTable::new(),
-            builder: ObjectBuilder::new(object),
+            builder: ObjectBuilder::new(),
             diagnostics,
         };
         for (string, name) in session.builder.builtin_symbols() {
@@ -73,15 +72,15 @@ impl<'a, 'b, 'c> SessionImpl<'a, 'b, 'c> {
     }
 }
 
-impl<'a, 'b, 'c> SpanSource for SessionImpl<'a, 'b, 'c> {
+impl<'a, 'b> SpanSource for SessionImpl<'a, 'b> {
     type Span = RcSpan<BufId, BufRange>;
 }
 
-impl<'a, 'b, 'c> IdentSource for SessionImpl<'a, 'b, 'c> {
+impl<'a, 'b> IdentSource for SessionImpl<'a, 'b> {
     type Ident = Ident<String>;
 }
 
-impl<'a, 'b, 'c> StringSource for SessionImpl<'a, 'b, 'c> {
+impl<'a, 'b> StringSource for SessionImpl<'a, 'b> {
     type StringRef = String;
 }
 
@@ -139,8 +138,8 @@ delegate_diagnostics! {
 }
 
 delegate_diagnostics! {
-    {'a, 'b, 'c},
-    SessionImpl<'a, 'b, 'c>,
+    {'a, 'b},
+    SessionImpl<'a, 'b>,
     {diagnostics},
     CompositeDiagnosticsSystem<RcContextFactory, OutputForwarder<'a, 'b>>,
     RcSpan<BufId, BufRange>

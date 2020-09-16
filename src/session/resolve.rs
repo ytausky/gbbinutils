@@ -196,7 +196,7 @@ impl<T: Default> StartScope<Ident<String>> for BiLevelNameTable<T> {
     }
 }
 
-impl<'a, 'b, 'c> NameTable<Ident<String>> for SessionImpl<'a, 'b, 'c> {
+impl<'a, 'b> NameTable<Ident<String>> for SessionImpl<'a, 'b> {
     fn resolve_name(
         &mut self,
         ident: &Ident<String>,
@@ -213,7 +213,7 @@ impl<'a, 'b, 'c> NameTable<Ident<String>> for SessionImpl<'a, 'b, 'c> {
     }
 }
 
-impl<'a, 'b, 'c> StartScope<Ident<String>> for SessionImpl<'a, 'b, 'c> {
+impl<'a, 'b> StartScope<Ident<String>> for SessionImpl<'a, 'b> {
     fn start_scope(&mut self, ident: &Ident<String>) {
         self.names.start_scope(ident)
     }

@@ -195,11 +195,10 @@ mod tests {
     fn resolve_origin_relative_to_previous_section() {
         let origin1 = 0x150;
         let skipped_bytes = 0x10;
-        let mut object = Object::new();
         let mut object_builder = CompositeSession {
             reentrancy: (),
             names: (),
-            builder: ObjectBuilder::new(&mut object),
+            builder: ObjectBuilder::new(),
             diagnostics: TestDiagnosticsListener::new(),
         };
 
@@ -219,6 +218,7 @@ mod tests {
         // halt
         object_builder.emit_fragment(Fragment::Byte(0x76));
 
+        let object = object_builder.builder.object;
         let binary = Program::link(object, &mut IgnoreDiagnostics);
         assert_eq!(
             binary.sections[1].addr,
@@ -229,11 +229,10 @@ mod tests {
     #[test]
     fn label_defined_as_section_origin_plus_offset() {
         let addr = 0xffe1;
-        let mut linkable = Object::new();
         let mut builder = CompositeSession {
             reentrancy: (),
             names: (),
-            builder: ObjectBuilder::new(&mut linkable),
+            builder: ObjectBuilder::new(),
             diagnostics: TestDiagnosticsListener::new(),
         };
         builder.set_origin(addr.into());
@@ -243,6 +242,7 @@ mod tests {
             (),
             Expr(vec![ExprOp::Atom(Atom::Location).with_span(())]),
         );
+        let mut linkable = builder.builder.object;
         linkable.vars.resolve(&linkable.content);
         assert_eq!(linkable.vars[VarId(0)].value, addr.into());
     }
@@ -254,7 +254,7 @@ mod tests {
 
     #[test]
     fn section_with_one_byte_has_size_one() {
-        assert_section_size(1, |mut builder| builder.emit_fragment(Fragment::Byte(0x00)));
+        assert_section_size(1, |builder| builder.emit_fragment(Fragment::Byte(0x00)));
     }
 
     #[test]
@@ -268,14 +268,14 @@ mod tests {
     }
 
     fn test_section_size_with_literal_ld_inline_addr(addr: i32, expected: i32) {
-        assert_section_size(expected, |mut builder| {
+        assert_section_size(expected, |builder| {
             builder.emit_fragment(Fragment::LdInlineAddr(0xf0, addr.into()))
         });
     }
 
     #[test]
     fn ld_inline_addr_with_symbol_after_instruction_has_size_three() {
-        assert_section_size(3, |mut builder| {
+        assert_section_size(3, |builder| {
             let name = builder.alloc_symbol(());
             builder.emit_fragment(Fragment::LdInlineAddr(0xf0, Atom::Name(name).into()));
             builder.define_symbol(
@@ -288,11 +288,10 @@ mod tests {
 
     #[test]
     fn resolve_expr_with_section_addr() {
-        let mut object = Object::new();
         let mut object_builder = CompositeSession {
             reentrancy: (),
             names: (),
-            builder: ObjectBuilder::new(&mut object),
+            builder: ObjectBuilder::new(),
             diagnostics: TestDiagnosticsListener::new(),
         };
 
@@ -309,6 +308,7 @@ mod tests {
             Width::Word,
         ));
 
+        let object = object_builder.builder.object;
         let binary = Program::link(object, &mut IgnoreDiagnostics);
         assert_eq!(binary.sections[0].data, [0x37, 0x13])
     }
@@ -319,11 +319,10 @@ mod tests {
         let bytes = 10;
         let symbol = VarId(2);
 
-        let mut object = Object::new();
         let mut object_builder = CompositeSession {
             reentrancy: (),
             names: (),
-            builder: ObjectBuilder::new(&mut object),
+            builder: ObjectBuilder::new(),
             diagnostics: TestDiagnosticsListener::new(),
         };
 
@@ -348,21 +347,22 @@ mod tests {
             Width::Word,
         ));
 
+        let mut object = object_builder.builder.object;
         object.vars.resolve(&object.content);
         assert_eq!(object.vars[symbol].value, (addr + bytes).into())
     }
 
-    fn assert_section_size(expected: impl Into<Num>, f: impl FnOnce(Session<()>)) {
-        let mut object = Object::new();
+    fn assert_section_size(expected: impl Into<Num>, f: impl FnOnce(&mut Session<()>)) {
         let mut builder = CompositeSession {
             reentrancy: (),
             names: (),
-            builder: ObjectBuilder::new(&mut object),
+            builder: ObjectBuilder::new(),
             diagnostics: TestDiagnosticsListener::new(),
         };
         let name = builder.alloc_symbol(());
         builder.start_section(name, ());
-        f(builder);
+        f(&mut builder);
+        let mut object = builder.builder.object;
         object.vars.resolve(&object.content);
         assert_eq!(
             object.vars[object.content.sections().next().unwrap().size].value,
@@ -370,6 +370,5 @@ mod tests {
         );
     }
 
-    type Session<'a, S> =
-        CompositeSession<(), (), ObjectBuilder<'a, S>, TestDiagnosticsListener<S>>;
+    type Session<S> = CompositeSession<(), (), ObjectBuilder<S>, TestDiagnosticsListener<S>>;
 }

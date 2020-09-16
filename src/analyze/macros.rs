@@ -36,12 +36,12 @@ pub type MacroArgs<T, S> = (Vec<Vec<T>>, Vec<Vec<S>>);
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MacroId(usize);
 
-impl<'a, 'b, 'c> MacroSource for SessionImpl<'a, 'b, 'c> {
+impl<'a, 'b> MacroSource for SessionImpl<'a, 'b> {
     type MacroId = MacroId;
 }
 
-impl<'a, 'b, 'c> MacroTable<Ident<String>, Literal<String>, RcSpan<BufId, BufRange>>
-    for SessionImpl<'a, 'b, 'c>
+impl<'a, 'b> MacroTable<Ident<String>, Literal<String>, RcSpan<BufId, BufRange>>
+    for SessionImpl<'a, 'b>
 {
     type Iter = MacroExpansionIter<
         Ident<String>,

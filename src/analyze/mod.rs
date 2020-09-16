@@ -40,7 +40,7 @@ impl<'a, T: StringSource + 'a> CodebaseAnalyzer<'a, T> {
 
 pub type TokenSeq<I, R, S> = (Vec<SemanticToken<I, R>>, Vec<S>);
 
-impl<'a, 'b, 'c> Lex for SessionImpl<'a, 'b, 'c> {
+impl<'a, 'b> Lex for SessionImpl<'a, 'b> {
     type TokenIter = TokenizedSrc<DefaultIdentFactory, RcBufContext<BufId, BufRange>>;
 
     fn lex_file(&mut self, path: Self::StringRef) -> Result<Self::TokenIter, CodebaseError> {

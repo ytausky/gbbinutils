@@ -85,17 +85,13 @@ fn try_assemble<'a>(
 ) -> Result<Program, CodebaseError> {
     let codebase = codebase::FileCodebase::new(input);
     let diagnostics = CompositeDiagnosticsSystem::new(&codebase.cache, output);
-    let mut linkable = object::Object::new();
 
     let tokenizer = Tokenizer(&codebase);
     let file_parser = CodebaseAnalyzer::new(&tokenizer);
-    let mut session = SessionImpl::new(file_parser, &mut linkable, diagnostics);
+    let mut session = SessionImpl::new(file_parser, diagnostics);
     session.analyze_file(name.into())?;
 
-    let SessionImpl {
-        mut diagnostics, ..
-    } = session;
-    let result = Program::link(linkable, &mut diagnostics);
+    let result = Program::link(session.builder.object, &mut session.diagnostics);
     Ok(result)
 }
 

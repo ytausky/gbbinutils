@@ -65,7 +65,7 @@ impl<C, P, M, I> SourceComponents<C, P, M, I> {
     }
 }
 
-impl<'a, 'b, 'c> ReentrancyActions for SessionImpl<'a, 'b, 'c> {
+impl<'a, 'b> ReentrancyActions for SessionImpl<'a, 'b> {
     fn analyze_file(&mut self, path: Self::StringRef) -> Result<(), CodebaseError> {
         let mut tokens = self.lex_file(path)?;
         let mut parser = <DefaultParserFactory as ParserFactory<

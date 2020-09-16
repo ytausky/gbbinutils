@@ -162,7 +162,7 @@ mod tests {
     use crate::diag::{IgnoreDiagnostics, TestDiagnosticsListener};
     use crate::expr::{Atom, BinOp, Expr, ExprOp};
     use crate::object::num::Num;
-    use crate::object::{Content, Object, SymbolId};
+    use crate::object::{Content, SymbolId};
     use crate::session::builder::*;
     use crate::CompositeSession;
 
@@ -230,11 +230,10 @@ mod tests {
     fn set_addr_of_translated_section() {
         let addr = 0x7ff0;
 
-        let mut object = Object::new();
         let mut object_builder = CompositeSession {
             reentrancy: (),
             names: (),
-            builder: ObjectBuilder::new(&mut object),
+            builder: ObjectBuilder::new(),
             diagnostics: TestDiagnosticsListener::new(),
         };
 
@@ -244,6 +243,7 @@ mod tests {
         // nop
         object_builder.emit_fragment(Fragment::Byte(0x00));
 
+        let mut object = object_builder.builder.object;
         object.vars.resolve(&object.content);
         let context = &mut LinkageContext {
             content: &object.content,
@@ -261,11 +261,10 @@ mod tests {
 
     #[test]
     fn translate_expr_with_location_counter() {
-        let mut object = Object::new();
         let mut object_builder = CompositeSession {
             reentrancy: (),
             names: (),
-            builder: ObjectBuilder::new(&mut object),
+            builder: ObjectBuilder::new(),
             diagnostics: TestDiagnosticsListener::new(),
         };
 
@@ -278,6 +277,7 @@ mod tests {
             Width::Byte,
         ));
 
+        let mut object = object_builder.builder.object;
         object.vars.resolve(&object.content);
         let context = &mut LinkageContext {
             content: &object.content,
@@ -297,11 +297,10 @@ mod tests {
     fn location_counter_starts_from_section_origin() {
         let addr = 0xffe1;
 
-        let mut object = Object::new();
         let mut object_builder = CompositeSession {
             reentrancy: (),
             names: (),
-            builder: ObjectBuilder::new(&mut object),
+            builder: ObjectBuilder::new(),
             diagnostics: TestDiagnosticsListener::new(),
         };
 
@@ -314,6 +313,7 @@ mod tests {
             Width::Word,
         ));
 
+        let mut object = object_builder.builder.object;
         object.vars.resolve(&object.content);
         let context = &mut LinkageContext {
             content: &object.content,
