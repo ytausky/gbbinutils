@@ -7,7 +7,7 @@ use crate::analyze::{Lex, Literal, SemanticToken, StringSource, TokenSeq};
 use crate::codebase::CodebaseError;
 use crate::diag::span::SpanSource;
 use crate::diag::*;
-use crate::semantics::{Keyword, Semantics, TokenStreamState};
+use crate::semantics::{Semantics, TokenStreamState};
 use crate::session::builder::Backend;
 use crate::syntax::parser::ParserFactory;
 use crate::syntax::{IdentSource, LexError, ParseTokenStream};
@@ -86,8 +86,7 @@ where
     >,
     I: GetString<<Self as StringSource>::StringRef>,
     D: DiagnosticsSystem,
-    Self: StartScope<<Self as IdentSource>::Ident>
-        + NameTable<<Self as IdentSource>::Ident, Keyword = &'static Keyword>,
+    Self: StartScope<<Self as IdentSource>::Ident> + NameTable<<Self as IdentSource>::Ident>,
     Self: Backend<D::Span>,
     <Self as IdentSource>::Ident: 'static,
     <Self as StringSource>::StringRef: 'static,
@@ -279,10 +278,8 @@ mod tests {
     type MockParserFactory<S> = crate::syntax::parser::mock::MockParserFactory<Event<S>>;
     type MockMacroTable<S> = crate::analyze::macros::mock::MockMacroTable<Event<S>>;
     type MockDiagnosticsSystem<S> = crate::diag::MockDiagnosticsSystem<Event<S>, S>;
-    type MockNameTable<S> = crate::session::resolve::MockNameTable<
-        BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
-        Event<S>,
-    >;
+    type MockNameTable<S> =
+        crate::session::resolve::MockNameTable<BasicNameTable<MockMacroId, MockSymbolId>, Event<S>>;
     type MockBuilder<S> =
         crate::session::builder::mock::MockBackend<SerialIdAllocator<MockSymbolId>, Event<S>>;
     type TestCompositeSession<S> = CompositeSession<
@@ -302,7 +299,7 @@ mod tests {
         Parser(ParserEvent<String, Literal<String>, LexError, S>),
         MacroTable(MacroTableEvent),
         Diagnostics(DiagnosticsEvent<S>),
-        NameTable(NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>),
+        NameTable(NameTableEvent<MockMacroId, MockSymbolId>),
         Backend(BackendEvent<MockSymbolId, Expr<MockSymbolId, S>>),
     }
 
@@ -324,8 +321,8 @@ mod tests {
         }
     }
 
-    impl<S: Clone> From<NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>> for Event<S> {
-        fn from(event: NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>) -> Self {
+    impl<S: Clone> From<NameTableEvent<MockMacroId, MockSymbolId>> for Event<S> {
+        fn from(event: NameTableEvent<MockMacroId, MockSymbolId>) -> Self {
             Event::NameTable(event)
         }
     }

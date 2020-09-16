@@ -99,7 +99,7 @@ fn try_assemble(
     let parser_factory = DefaultParserFactory;
     let macros = VecMacroTable::new();
     let interner = FakeStringInterner;
-    let mut names = BiLevelNameTable::<BasicNameTable<_, _, _>>::new();
+    let mut names = BiLevelNameTable::<BasicNameTable<_, _>>::new();
     for (string, name) in builder.builtin_symbols() {
         names.define_name(
             DefaultIdentFactory.mk_ident(string),

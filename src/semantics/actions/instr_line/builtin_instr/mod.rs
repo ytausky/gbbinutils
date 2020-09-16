@@ -142,7 +142,7 @@ trait ClassifyExpr<I, S>: SymbolSource {
 
 impl<T, I, R, S> Resolve<I, R, S> for T
 where
-    T: NameTable<I, Keyword = &'static Keyword> + Diagnostics<S> + AllocSymbol<S>,
+    T: NameTable<I> + Diagnostics<S> + AllocSymbol<S>,
     S: Clone,
 {
     fn resolve_names(&mut self, arg: ParsedArg<I, R, S>) -> Result<Arg<Self::SymbolId, R, S>, ()> {
@@ -165,7 +165,7 @@ where
 
 impl<T, I, S> ClassifyExpr<I, S> for T
 where
-    T: NameTable<I, Keyword = &'static Keyword> + Diagnostics<S> + AllocSymbol<S>,
+    T: NameTable<I> + Diagnostics<S> + AllocSymbol<S>,
     S: Clone,
 {
     fn classify_expr(&mut self, mut expr: Expr<I, S>) -> Result<BareArg<Self::SymbolId, S>, ()> {

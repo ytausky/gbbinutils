@@ -530,10 +530,7 @@ mod tests {
         'b,
         CompositeSession<
             MockSourceComponents<S>,
-            MockNameTable<
-                BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
-                TestOperation<S>,
-            >,
+            MockNameTable<BasicNameTable<MockMacroId, MockSymbolId>, TestOperation<S>>,
             MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>,
             MockDiagnostics<TestOperation<S>, S>,
         >,
@@ -571,10 +568,7 @@ mod tests {
         'b,
         CompositeSession<
             MockSourceComponents<S>,
-            MockNameTable<
-                BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
-                TestOperation<S>,
-            >,
+            MockNameTable<BasicNameTable<MockMacroId, MockSymbolId>, TestOperation<S>>,
             MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>,
             MockDiagnostics<TestOperation<S>, S>,
         >,

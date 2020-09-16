@@ -145,7 +145,7 @@ pub mod tests {
     pub(crate) enum TestOperation<S: Clone> {
         Backend(BackendEvent<MockSymbolId, Expr<S>>),
         Diagnostics(DiagnosticsEvent<S>),
-        NameTable(NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>),
+        NameTable(NameTableEvent<MockMacroId, MockSymbolId>),
         Reentrancy(ReentrancyEvent),
     }
 
@@ -163,10 +163,8 @@ pub mod tests {
         }
     }
 
-    impl<S: Clone> From<NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>>
-        for TestOperation<S>
-    {
-        fn from(event: NameTableEvent<&'static Keyword, MockMacroId, MockSymbolId>) -> Self {
+    impl<S: Clone> From<NameTableEvent<MockMacroId, MockSymbolId>> for TestOperation<S> {
+        fn from(event: NameTableEvent<MockMacroId, MockSymbolId>) -> Self {
             TestOperation::NameTable(event)
         }
     }
@@ -509,12 +507,7 @@ pub mod tests {
 
     pub(super) fn log_with_predefined_names<I, F, S>(entries: I, f: F) -> Vec<TestOperation<S>>
     where
-        I: IntoIterator<
-            Item = (
-                String,
-                ResolvedName<&'static Keyword, MockMacroId, MockSymbolId>,
-            ),
-        >,
+        I: IntoIterator<Item = (String, ResolvedName<MockMacroId, MockSymbolId>)>,
         F: for<'a, 'b> FnOnce(
             TestTokenStreamSemantics<'a, 'b, S>,
         ) -> TestTokenStreamSemantics<'a, 'b, S>,
@@ -550,10 +543,7 @@ pub mod tests {
         'b,
         CompositeSession<
             MockSourceComponents<S>,
-            MockNameTable<
-                BasicNameTable<&'static Keyword, MockMacroId, MockSymbolId>,
-                TestOperation<S>,
-            >,
+            MockNameTable<BasicNameTable<MockMacroId, MockSymbolId>, TestOperation<S>>,
             MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>,
             MockDiagnostics<TestOperation<S>, S>,
         >,

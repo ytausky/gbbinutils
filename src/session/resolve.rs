@@ -1,6 +1,7 @@
 use super::CompositeSession;
 
 use crate::analyze::macros::MacroSource;
+use crate::semantics::Keyword;
 use crate::session::builder::SymbolSource;
 use crate::syntax::{IdentFactory, IdentSource};
 
@@ -13,23 +14,13 @@ pub use self::mock::*;
 use crate::expr::{Atom, ExprOp};
 
 pub(crate) trait NameTable<I>: MacroSource + SymbolSource {
-    type Keyword: Clone;
-
-    fn resolve_name(
-        &mut self,
-        ident: &I,
-    ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>>;
-
-    fn define_name(
-        &mut self,
-        ident: I,
-        entry: ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>,
-    );
+    fn resolve_name(&mut self, ident: &I) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>>;
+    fn define_name(&mut self, ident: I, entry: ResolvedName<Self::MacroId, Self::SymbolId>);
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ResolvedName<Keyword, MacroId, SymbolId> {
-    Keyword(Keyword),
+pub enum ResolvedName<MacroId, SymbolId> {
+    Keyword(&'static Keyword),
     Macro(MacroId),
     Symbol(SymbolId),
 }
@@ -95,11 +86,11 @@ impl From<&str> for Ident<String> {
     }
 }
 
-pub struct BasicNameTable<Keyword, MacroId, SymbolId> {
-    table: HashMap<String, ResolvedName<Keyword, MacroId, SymbolId>>,
+pub struct BasicNameTable<MacroId, SymbolId> {
+    table: HashMap<String, ResolvedName<MacroId, SymbolId>>,
 }
 
-impl<Keyword, MacroId, SymbolId> Default for BasicNameTable<Keyword, MacroId, SymbolId> {
+impl<MacroId, SymbolId> Default for BasicNameTable<MacroId, SymbolId> {
     fn default() -> Self {
         Self {
             table: HashMap::default(),
@@ -107,36 +98,31 @@ impl<Keyword, MacroId, SymbolId> Default for BasicNameTable<Keyword, MacroId, Sy
     }
 }
 
-impl<Keyword, MacroId, SymbolId> MacroSource for BasicNameTable<Keyword, MacroId, SymbolId>
+impl<MacroId, SymbolId> MacroSource for BasicNameTable<MacroId, SymbolId>
 where
-    Keyword: Clone,
     MacroId: Clone,
     SymbolId: Clone,
 {
     type MacroId = MacroId;
 }
 
-impl<Keyword, MacroId, SymbolId> SymbolSource for BasicNameTable<Keyword, MacroId, SymbolId>
+impl<MacroId, SymbolId> SymbolSource for BasicNameTable<MacroId, SymbolId>
 where
-    Keyword: Clone,
     MacroId: Clone,
     SymbolId: Clone,
 {
     type SymbolId = SymbolId;
 }
 
-impl<Keyword, MacroId, SymbolId> NameTable<String> for BasicNameTable<Keyword, MacroId, SymbolId>
+impl<MacroId, SymbolId> NameTable<String> for BasicNameTable<MacroId, SymbolId>
 where
-    Keyword: Clone,
     MacroId: Clone,
     SymbolId: Clone,
 {
-    type Keyword = Keyword;
-
     fn resolve_name(
         &mut self,
         ident: &String,
-    ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
+    ) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
         self.table.get(ident).cloned().map_or_else(
             || {
                 let repr = ident.to_ascii_uppercase();
@@ -151,11 +137,7 @@ where
         )
     }
 
-    fn define_name(
-        &mut self,
-        ident: String,
-        entry: ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>,
-    ) {
+    fn define_name(&mut self, ident: String, entry: ResolvedName<Self::MacroId, Self::SymbolId>) {
         self.table.insert(ident, entry);
     }
 }
@@ -190,19 +172,17 @@ impl<T: SymbolSource> SymbolSource for BiLevelNameTable<T> {
 }
 
 impl<T: Default + NameTable<String>> NameTable<Ident<String>> for BiLevelNameTable<T> {
-    type Keyword = T::Keyword;
-
     fn resolve_name(
         &mut self,
         ident: &Ident<String>,
-    ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
+    ) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
         self.select_table_mut(ident).resolve_name(&ident.name)
     }
 
     fn define_name(
         &mut self,
         ident: Ident<String>,
-        entry: ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>,
+        entry: ResolvedName<Self::MacroId, Self::SymbolId>,
     ) {
         self.select_table_mut(&ident).define_name(ident.name, entry)
     }
@@ -221,20 +201,11 @@ where
     N: NameTable<I, MacroId = Self::MacroId, SymbolId = Self::SymbolId>,
     Self: MacroSource + SymbolSource,
 {
-    type Keyword = N::Keyword;
-
-    fn resolve_name(
-        &mut self,
-        ident: &I,
-    ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
+    fn resolve_name(&mut self, ident: &I) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
         self.names.resolve_name(ident)
     }
 
-    fn define_name(
-        &mut self,
-        ident: I,
-        entry: ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>,
-    ) {
+    fn define_name(&mut self, ident: I, entry: ResolvedName<Self::MacroId, Self::SymbolId>) {
         self.names.define_name(ident, entry)
     }
 }
@@ -276,21 +247,19 @@ mod mock {
     impl<N, T> NameTable<String> for MockNameTable<N, T>
     where
         N: NameTable<String>,
-        T: From<NameTableEvent<N::Keyword, N::MacroId, N::SymbolId>>,
+        T: From<NameTableEvent<N::MacroId, N::SymbolId>>,
     {
-        type Keyword = N::Keyword;
-
         fn resolve_name(
             &mut self,
             ident: &String,
-        ) -> Option<ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>> {
+        ) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
             self.names.resolve_name(ident)
         }
 
         fn define_name(
             &mut self,
             ident: String,
-            entry: ResolvedName<Self::Keyword, Self::MacroId, Self::SymbolId>,
+            entry: ResolvedName<Self::MacroId, Self::SymbolId>,
         ) {
             self.names.define_name(ident.clone(), entry.clone());
             self.log.push(NameTableEvent::Insert(ident, entry))
@@ -300,7 +269,7 @@ mod mock {
     impl<N, T> StartScope<String> for MockNameTable<N, T>
     where
         N: NameTable<String>,
-        T: From<NameTableEvent<N::Keyword, N::MacroId, N::SymbolId>>,
+        T: From<NameTableEvent<N::MacroId, N::SymbolId>>,
     {
         fn start_scope(&mut self, ident: &String) {
             self.log.push(NameTableEvent::StartScope(ident.clone()))
@@ -308,8 +277,8 @@ mod mock {
     }
 
     #[derive(Debug, PartialEq)]
-    pub enum NameTableEvent<Keyword, MacroId, SymbolId> {
-        Insert(String, ResolvedName<Keyword, MacroId, SymbolId>),
+    pub enum NameTableEvent<MacroId, SymbolId> {
+        Insert(String, ResolvedName<MacroId, SymbolId>),
         StartScope(String),
     }
 }
@@ -337,14 +306,14 @@ mod tests {
     #[test]
     #[should_panic]
     fn panic_when_first_definition_is_local() {
-        let mut table = BiLevelNameTable::<BasicNameTable<(), (), _>>::new();
+        let mut table = BiLevelNameTable::<BasicNameTable<(), _>>::new();
         table.define_name("_loop".into(), ResolvedName::Symbol(()));
     }
 
     #[test]
     fn retrieve_global_name() {
         let name = "start";
-        let mut table = BiLevelNameTable::<BasicNameTable<(), (), _>>::new();
+        let mut table = BiLevelNameTable::<BasicNameTable<(), _>>::new();
         table.define_name(name.into(), ResolvedName::Symbol(42));
         assert_eq!(
             table.resolve_name(&name.into()),
@@ -354,7 +323,7 @@ mod tests {
 
     #[test]
     fn retrieve_local_name() {
-        let mut table = BiLevelNameTable::<BasicNameTable<(), (), _>>::new();
+        let mut table = BiLevelNameTable::<BasicNameTable<(), _>>::new();
         table.start_scope(&"global".into());
         table.define_name("_local".into(), ResolvedName::Symbol(42));
         assert_eq!(
@@ -365,7 +334,7 @@ mod tests {
 
     #[test]
     fn local_name_not_accessible_after_new_global_name() {
-        let mut table = BiLevelNameTable::<BasicNameTable<(), (), _>>::new();
+        let mut table = BiLevelNameTable::<BasicNameTable<(), _>>::new();
         table.start_scope(&"global1".into());
         table.define_name("_local".into(), ResolvedName::Symbol(42));
         table.start_scope(&"global2".into());

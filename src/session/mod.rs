@@ -7,7 +7,6 @@ use crate::analyze::StringSource;
 use crate::diag::span::SpanSource;
 use crate::diag::Diagnostics;
 use crate::semantics::keywords::KEYWORDS;
-use crate::semantics::Keyword;
 use crate::syntax::IdentSource;
 
 pub mod builder;
@@ -20,7 +19,7 @@ pub(crate) trait Session:
     + Backend<<Self as SpanSource>::Span>
     + Diagnostics<<Self as SpanSource>::Span>
     + StartScope<<Self as IdentSource>::Ident>
-    + NameTable<<Self as IdentSource>::Ident, Keyword = &'static Keyword>
+    + NameTable<<Self as IdentSource>::Ident>
 {
 }
 
@@ -30,7 +29,7 @@ impl<T> Session for T where
         + Backend<<Self as SpanSource>::Span>
         + Diagnostics<<Self as SpanSource>::Span>
         + StartScope<<Self as IdentSource>::Ident>
-        + NameTable<<Self as IdentSource>::Ident, Keyword = &'static Keyword>
+        + NameTable<<Self as IdentSource>::Ident>
 {
 }
 
@@ -45,7 +44,7 @@ impl<R, N, B, D> CompositeSession<R, N, B, D>
 where
     Self: ReentrancyActions,
     <Self as IdentSource>::Ident: for<'r> From<&'r str>,
-    Self: NameTable<<Self as IdentSource>::Ident, Keyword = &'static Keyword>,
+    Self: NameTable<<Self as IdentSource>::Ident>,
     Self: Backend<<Self as SpanSource>::Span>,
 {
     pub fn from_components(reentrancy: R, names: N, builder: B, diagnostics: D) -> Self {
