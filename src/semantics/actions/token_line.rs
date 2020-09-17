@@ -9,7 +9,7 @@ use crate::span::StripSpan;
 use crate::syntax::actions::*;
 use crate::syntax::{LexError, Sigil, Token};
 
-impl<'a, 'b, S: Session> TokenLineContext for TokenLineSemantics<'a, 'b, S> {
+impl<'a, 'b, S: Analysis> TokenLineContext for TokenLineSemantics<'a, 'b, S> {
     type ContextFinalizer = TokenContextFinalizationSemantics<'a, 'b, S>;
 
     fn act_on_token(&mut self, token: SemanticToken<S::Ident, S::StringRef>, span: S::Span) {
@@ -84,7 +84,7 @@ impl<I, R, S> MacroDefState<I, R, S> {
     }
 }
 
-impl<'a, 'b, S: Session> LineFinalizer for TokenLineSemantics<'a, 'b, S> {
+impl<'a, 'b, S: Analysis> LineFinalizer for TokenLineSemantics<'a, 'b, S> {
     type Next = TokenStreamSemantics<'a, 'b, S>;
 
     fn did_parse_line(mut self, span: S::Span) -> Self::Next {
@@ -93,11 +93,11 @@ impl<'a, 'b, S: Session> LineFinalizer for TokenLineSemantics<'a, 'b, S> {
     }
 }
 
-pub(crate) struct TokenContextFinalizationSemantics<'a, 'b, S: Session> {
+pub(crate) struct TokenContextFinalizationSemantics<'a, 'b, S: Analysis> {
     parent: TokenLineSemantics<'a, 'b, S>,
 }
 
-impl<'a, 'b, S: Session> ParsingContext for TokenContextFinalizationSemantics<'a, 'b, S> {
+impl<'a, 'b, S: Analysis> ParsingContext for TokenContextFinalizationSemantics<'a, 'b, S> {
     type Ident = S::Ident;
     type Literal = Literal<S::StringRef>;
     type Error = LexError;
@@ -123,7 +123,7 @@ impl<'a, 'b, S: Session> ParsingContext for TokenContextFinalizationSemantics<'a
     }
 }
 
-impl<'a, 'b, S: Session> LineFinalizer for TokenContextFinalizationSemantics<'a, 'b, S> {
+impl<'a, 'b, S: Analysis> LineFinalizer for TokenContextFinalizationSemantics<'a, 'b, S> {
     type Next = TokenStreamSemantics<'a, 'b, S>;
 
     fn did_parse_line(self, _: S::Span) -> Self::Next {

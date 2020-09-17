@@ -4,11 +4,11 @@ use crate::analyze::Literal;
 use crate::expr::{Atom, Expr, ExprOp, ParamId};
 use crate::semantics::arg::ParsedArg;
 use crate::semantics::{ArgSemantics, Semantics};
-use crate::session::Session;
+use crate::session::Analysis;
 use crate::span::WithSpan;
 use crate::syntax::actions::*;
 
-impl<'a, 'b, S: Session> ArgFinalizer for ArgSemantics<'a, 'b, S> {
+impl<'a, 'b, S: Analysis> ArgFinalizer for ArgSemantics<'a, 'b, S> {
     type Next = BuiltinInstrSemantics<'a, 'b, S>;
 
     fn did_parse_arg(mut self) -> Self::Next {
@@ -22,7 +22,7 @@ impl<'a, 'b, S: Session> ArgFinalizer for ArgSemantics<'a, 'b, S> {
     }
 }
 
-impl<'a, 'b, S: Session> ArgContext for ArgSemantics<'a, 'b, S> {
+impl<'a, 'b, S: Analysis> ArgContext for ArgSemantics<'a, 'b, S> {
     fn act_on_atom(&mut self, atom: ExprAtom<S::Ident, Literal<S::StringRef>>, span: S::Span) {
         match atom {
             ExprAtom::Ident(ident) => self.act_on_ident(ident, span),
@@ -51,7 +51,7 @@ impl<'a, 'b, S: Session> ArgContext for ArgSemantics<'a, 'b, S> {
     }
 }
 
-impl<'a, 'b, S: Session> ArgSemantics<'a, 'b, S> {
+impl<'a, 'b, S: Analysis> ArgSemantics<'a, 'b, S> {
     fn act_on_expr_node(&mut self, node: ExprOp<S::Ident>, span: S::Span) {
         self.state.arg = match self.state.arg.take() {
             None => Some(ParsedArg::Bare(Expr(vec![node.with_span(span)]))),

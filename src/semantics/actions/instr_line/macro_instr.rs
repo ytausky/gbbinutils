@@ -15,13 +15,13 @@ pub(super) type MacroInstrSemantics<'a, 'b, S> = Semantics<
     <S as SpanSource>::Span,
 >;
 
-pub(crate) struct MacroInstrState<S: Session> {
+pub(crate) struct MacroInstrState<S: Analysis> {
     parent: InstrLineState<S::Ident, S::Span>,
     name: (S::MacroId, S::Span),
     args: MacroArgs<S::Ident, S::StringRef, S::Span>,
 }
 
-impl<S: Session> MacroInstrState<S> {
+impl<S: Analysis> MacroInstrState<S> {
     pub fn new(parent: InstrLineState<S::Ident, S::Span>, name: (S::MacroId, S::Span)) -> Self {
         Self {
             parent,
@@ -37,7 +37,7 @@ impl<S: Session> MacroInstrState<S> {
     }
 }
 
-impl<'a, 'b, S: Session> MacroInstrContext for MacroInstrSemantics<'a, 'b, S>
+impl<'a, 'b, S: Analysis> MacroInstrContext for MacroInstrSemantics<'a, 'b, S>
 where
     S::Ident: 'static,
     S::StringRef: 'static,
@@ -50,7 +50,7 @@ where
     }
 }
 
-impl<'a, 'b, S: Session> InstrFinalizer for MacroInstrSemantics<'a, 'b, S>
+impl<'a, 'b, S: Analysis> InstrFinalizer for MacroInstrSemantics<'a, 'b, S>
 where
     S::Ident: 'static,
     S::StringRef: 'static,
@@ -78,12 +78,12 @@ type MacroArgSemantics<'a, 'b, S> = Semantics<
     <S as SpanSource>::Span,
 >;
 
-pub(crate) struct MacroArgState<S: Session> {
+pub(crate) struct MacroArgState<S: Analysis> {
     tokens: TokenSeq<S::Ident, S::StringRef, S::Span>,
     parent: MacroInstrState<S>,
 }
 
-impl<S: Session> MacroArgState<S> {
+impl<S: Analysis> MacroArgState<S> {
     fn new(parent: MacroInstrState<S>) -> Self {
         Self {
             tokens: (Vec::new(), Vec::new()),
@@ -92,7 +92,7 @@ impl<S: Session> MacroArgState<S> {
     }
 }
 
-impl<'a, 'b, S: Session> MacroArgContext for MacroArgSemantics<'a, 'b, S> {
+impl<'a, 'b, S: Analysis> MacroArgContext for MacroArgSemantics<'a, 'b, S> {
     type Next = MacroInstrSemantics<'a, 'b, S>;
 
     fn act_on_token(&mut self, token: (SemanticToken<S::Ident, S::StringRef>, S::Span)) {

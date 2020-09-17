@@ -5,7 +5,7 @@ use crate::analyze::{Literal, StringSource, TokenSeq};
 use crate::diag::Diagnostics;
 use crate::session::builder::*;
 use crate::session::reentrancy::Params;
-use crate::session::Session;
+use crate::session::Analysis;
 use crate::span::{SpanSource, Spanned};
 use crate::syntax::actions::{LexerOutput, LineRule};
 use crate::syntax::{IdentSource, LexError};
@@ -39,7 +39,7 @@ pub(crate) struct Semantics<'a, 'b, S, T, I, R, Z> {
 type TokenIterRef<'a, I, R, S> =
     &'a mut dyn Iterator<Item = LexerOutput<I, Literal<R>, LexError, S>>;
 
-impl<'a, 'b, S: Session, T> Semantics<'a, 'b, S, T, S::Ident, S::StringRef, S::Span> {
+impl<'a, 'b, S: Analysis, T> Semantics<'a, 'b, S, T, S::Ident, S::StringRef, S::Span> {
     fn map_state<F: FnOnce(T) -> U, U>(
         self,
         f: F,
@@ -152,13 +152,13 @@ type BuiltinInstrSemantics<'a, 'b, S> = Semantics<
     <S as SpanSource>::Span,
 >;
 
-pub(crate) struct BuiltinInstrState<S: Session> {
+pub(crate) struct BuiltinInstrState<S: Analysis> {
     label: Option<Label<S::Ident, S::Span>>,
     mnemonic: Spanned<BuiltinMnemonic, S::Span>,
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
 }
 
-impl<S: Session> BuiltinInstrState<S> {
+impl<S: Analysis> BuiltinInstrState<S> {
     fn new(
         label: Option<Label<S::Ident, S::Span>>,
         mnemonic: Spanned<BuiltinMnemonic, S::Span>,

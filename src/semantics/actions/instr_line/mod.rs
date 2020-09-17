@@ -14,7 +14,7 @@ mod builtin_instr;
 mod label;
 mod macro_instr;
 
-impl<'a, 'b, S: Session> InstrLineContext for InstrLineSemantics<'a, 'b, S>
+impl<'a, 'b, S: Analysis> InstrLineContext for InstrLineSemantics<'a, 'b, S>
 where
     S::Ident: 'static,
     S::StringRef: 'static,
@@ -29,7 +29,7 @@ where
     }
 }
 
-impl<'a, 'b, S: Session> InstrContext for InstrLineSemantics<'a, 'b, S>
+impl<'a, 'b, S: Analysis> InstrContext for InstrLineSemantics<'a, 'b, S>
 where
     S::Ident: 'static,
     S::StringRef: 'static,
@@ -78,7 +78,7 @@ where
     }
 }
 
-impl<'a, 'b, S: Session> InstrLineSemantics<'a, 'b, S> {
+impl<'a, 'b, S: Analysis> InstrLineSemantics<'a, 'b, S> {
     pub fn flush_label(mut self) -> Self {
         if let Some(((label, span), _params)) = self.state.label.take() {
             self.session.start_scope(&label);

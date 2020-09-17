@@ -5,7 +5,7 @@ use super::*;
 
 use crate::analyze::Literal;
 use crate::diag::{CompactDiag, Message};
-use crate::session::Session;
+use crate::session::Analysis;
 use crate::span::StripSpan;
 use crate::syntax::actions::*;
 use crate::syntax::LexError;
@@ -59,7 +59,7 @@ where
     }
 }
 
-impl<'a, 'b, S: Session> TokenStreamContext for TokenStreamSemantics<'a, 'b, S>
+impl<'a, 'b, S: Analysis> TokenStreamContext for TokenStreamSemantics<'a, 'b, S>
 where
     S::Ident: 'static,
     S::StringRef: 'static,
@@ -95,7 +95,7 @@ where
     }
 }
 
-impl<'a, 'b, S: Session> InstrFinalizer for InstrLineSemantics<'a, 'b, S> {
+impl<'a, 'b, S: Analysis> InstrFinalizer for InstrLineSemantics<'a, 'b, S> {
     type Next = TokenStreamSemantics<'a, 'b, S>;
 
     fn did_parse_instr(self) -> Self::Next {
@@ -103,7 +103,7 @@ impl<'a, 'b, S: Session> InstrFinalizer for InstrLineSemantics<'a, 'b, S> {
     }
 }
 
-impl<'a, 'b, S: Session> LineFinalizer for InstrLineSemantics<'a, 'b, S> {
+impl<'a, 'b, S: Analysis> LineFinalizer for InstrLineSemantics<'a, 'b, S> {
     type Next = TokenStreamSemantics<'a, 'b, S>;
 
     fn did_parse_line(self, _: S::Span) -> Self::Next {
@@ -111,7 +111,7 @@ impl<'a, 'b, S: Session> LineFinalizer for InstrLineSemantics<'a, 'b, S> {
     }
 }
 
-impl<'a, 'b, S: Session> LineFinalizer for TokenStreamSemantics<'a, 'b, S> {
+impl<'a, 'b, S: Analysis> LineFinalizer for TokenStreamSemantics<'a, 'b, S> {
     type Next = Self;
 
     fn did_parse_line(self, _: S::Span) -> Self::Next {

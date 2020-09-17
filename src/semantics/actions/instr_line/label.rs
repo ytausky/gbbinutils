@@ -13,13 +13,13 @@ pub(crate) type LabelSemantics<'a, 'b, S> = Semantics<
     <S as SpanSource>::Span,
 >;
 
-pub(crate) struct LabelState<S: Session> {
+pub(crate) struct LabelState<S: Analysis> {
     parent: InstrLineState<S::Ident, S::Span>,
     label: (S::Ident, S::Span),
     params: Params<S::Ident, S::Span>,
 }
 
-impl<S: Session> LabelState<S> {
+impl<S: Analysis> LabelState<S> {
     pub fn new(parent: InstrLineState<S::Ident, S::Span>, label: (S::Ident, S::Span)) -> Self {
         Self {
             parent,
@@ -29,7 +29,7 @@ impl<S: Session> LabelState<S> {
     }
 }
 
-impl<'a, 'b, S: Session> LabelContext for LabelSemantics<'a, 'b, S> {
+impl<'a, 'b, S: Analysis> LabelContext for LabelSemantics<'a, 'b, S> {
     type Next = InstrLineSemantics<'a, 'b, S>;
 
     fn act_on_param(&mut self, ident: S::Ident, span: S::Span) {

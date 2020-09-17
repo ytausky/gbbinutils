@@ -18,7 +18,7 @@ pub mod builder;
 pub mod reentrancy;
 pub mod resolve;
 
-pub(crate) trait Session:
+pub(crate) trait Analysis:
     SpanSource
     + ReentrancyActions
     + Backend<<Self as SpanSource>::Span>
@@ -33,7 +33,7 @@ pub(crate) trait Session:
 {
 }
 
-impl<T> Session for T where
+impl<T> Analysis for T where
     Self: SpanSource
         + ReentrancyActions
         + Backend<<Self as SpanSource>::Span>

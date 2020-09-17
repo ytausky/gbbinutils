@@ -11,7 +11,7 @@ mod arg;
 mod cpu_instr;
 mod directive;
 
-impl<S: Session> From<BuiltinInstrState<S>>
+impl<S: Analysis> From<BuiltinInstrState<S>>
     for TokenStreamState<
         <S as IdentSource>::Ident,
         <S as StringSource>::StringRef,
@@ -23,7 +23,7 @@ impl<S: Session> From<BuiltinInstrState<S>>
     }
 }
 
-impl<'a, 'b, S: Session> BuiltinInstrContext for BuiltinInstrSemantics<'a, 'b, S>
+impl<'a, 'b, S: Analysis> BuiltinInstrContext for BuiltinInstrSemantics<'a, 'b, S>
 where
     S::Ident: 'static,
     S::StringRef: 'static,
@@ -40,7 +40,7 @@ where
     }
 }
 
-impl<'a, 'b, S: Session> InstrFinalizer for BuiltinInstrSemantics<'a, 'b, S>
+impl<'a, 'b, S: Analysis> InstrFinalizer for BuiltinInstrSemantics<'a, 'b, S>
 where
     S::Ident: 'static,
     S::StringRef: 'static,
@@ -70,7 +70,7 @@ where
     }
 }
 
-impl<'a, 'b, S: Session, T> Semantics<'a, 'b, S, T, S::Ident, S::StringRef, S::Span> {
+impl<'a, 'b, S: Analysis, T> Semantics<'a, 'b, S, T, S::Ident, S::StringRef, S::Span> {
     fn expect_const(
         &mut self,
         arg: ParsedArg<S::Ident, S::StringRef, S::Span>,
@@ -112,7 +112,7 @@ impl From<Mnemonic> for BuiltinMnemonic {
     }
 }
 
-fn analyze_mnemonic<S: Session>(
+fn analyze_mnemonic<S: Analysis>(
     name: (&Mnemonic, S::Span),
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
     session: &mut S,

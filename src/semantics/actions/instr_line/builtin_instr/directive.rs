@@ -7,7 +7,7 @@ use crate::semantics::*;
 use crate::session::builder::Width;
 use crate::span::Source;
 
-pub(super) fn analyze_directive<'a, 'b, S: Session>(
+pub(super) fn analyze_directive<'a, 'b, S: Analysis>(
     directive: (Directive, S::Span),
     label: Option<Label<S::Ident, S::Span>>,
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
@@ -27,14 +27,14 @@ where
     context.analyze(directive.0)
 }
 
-struct DirectiveContext<'a, 'b, S: Session> {
+struct DirectiveContext<'a, 'b, S: Analysis> {
     span: S::Span,
     label: Option<Label<S::Ident, S::Span>>,
     args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
     session: TokenStreamSemantics<'a, 'b, S>,
 }
 
-impl<'a, 'b, S: Session> DirectiveContext<'a, 'b, S>
+impl<'a, 'b, S: Analysis> DirectiveContext<'a, 'b, S>
 where
     S::Ident: 'static,
     S::StringRef: 'static,
