@@ -158,13 +158,13 @@ fn is_in_u8_range(n: i32) -> bool {
 mod tests {
     use super::*;
 
-    use crate::diag::{IgnoreDiagnostics, TestDiagnosticsListener};
+    use crate::diag::IgnoreDiagnostics;
     use crate::expr::{Atom, BinOp, Expr, ExprOp};
     use crate::object::num::Num;
     use crate::object::{Content, SymbolId};
     use crate::session::builder::*;
+    use crate::session::mock::StandaloneBackend;
     use crate::span::WithSpan;
-    use crate::CompositeSession;
 
     use std::borrow::Borrow;
 
@@ -230,13 +230,7 @@ mod tests {
     fn set_addr_of_translated_section() {
         let addr = 0x7ff0;
 
-        let mut object_builder = CompositeSession {
-            reentrancy: (),
-            macros: (),
-            names: (),
-            builder: ObjectBuilder::new(),
-            diagnostics: TestDiagnosticsListener::new(),
-        };
+        let mut object_builder = StandaloneBackend::new();
 
         // org $7ff0
         object_builder.set_origin(Expr(vec![ExprOp::Atom(Atom::Const(addr)).with_span(())]));
@@ -262,13 +256,7 @@ mod tests {
 
     #[test]
     fn translate_expr_with_location_counter() {
-        let mut object_builder = CompositeSession {
-            reentrancy: (),
-            macros: (),
-            names: (),
-            builder: ObjectBuilder::new(),
-            diagnostics: TestDiagnosticsListener::new(),
-        };
+        let mut object_builder = StandaloneBackend::new();
 
         // nop
         object_builder.emit_fragment(Fragment::Byte(0x00));
@@ -299,13 +287,7 @@ mod tests {
     fn location_counter_starts_from_section_origin() {
         let addr = 0xffe1;
 
-        let mut object_builder = CompositeSession {
-            reentrancy: (),
-            macros: (),
-            names: (),
-            builder: ObjectBuilder::new(),
-            diagnostics: TestDiagnosticsListener::new(),
-        };
+        let mut object_builder = StandaloneBackend::new();
 
         // org $ffe1
         object_builder.set_origin(Expr(vec![ExprOp::Atom(Atom::Const(addr)).with_span(())]));

@@ -1,5 +1,5 @@
-use super::strings::GetString;
 use super::lex::{Lex, Literal, StringSource};
+use super::strings::GetString;
 
 use crate::codebase::{BufId, BufRange};
 use crate::diag::DiagnosticsSystem;
@@ -269,8 +269,8 @@ where
 pub mod mock {
     use super::*;
 
-    use crate::session::lex::Literal;
     use crate::log::Log;
+    use crate::session::lex::Literal;
     use crate::syntax::Token;
 
     #[derive(Debug, PartialEq)]

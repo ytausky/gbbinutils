@@ -8,9 +8,9 @@
 pub use crate::codebase::FileSystem;
 pub use crate::link::{Program, Rom};
 
-use crate::session::lex::{CodebaseAnalyzer, Tokenizer};
 use crate::codebase::{CodebaseError, StdFileSystem};
 use crate::diag::*;
+use crate::session::lex::{CodebaseAnalyzer, Tokenizer};
 use crate::session::reentrancy::ReentrancyActions;
 use crate::session::{CompositeSession, Session};
 
@@ -124,6 +124,10 @@ mod log {
 
         pub fn push(&self, datum: impl Into<T>) {
             self.0.borrow_mut().push(datum.into())
+        }
+
+        pub fn clear(&self) {
+            self.0.borrow_mut().clear()
         }
     }
 

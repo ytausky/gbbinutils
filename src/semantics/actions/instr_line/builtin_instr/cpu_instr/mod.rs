@@ -451,11 +451,11 @@ mod tests {
 
     use super::*;
 
-    use crate::session::lex::Literal;
     use crate::expr::Atom;
     use crate::semantics::arg::*;
     use crate::semantics::keywords::*;
     use crate::session::builder::mock::BackendEvent;
+    use crate::session::lex::Literal;
 
     #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
     pub(super) enum TokenId {
@@ -1876,8 +1876,7 @@ mod tests {
         I: IntoIterator<Item = Input>,
     {
         use super::operand::analyze_operand;
-        use crate::session::builder::mock::{MockBackend, SerialIdAllocator};
-        use crate::session::CompositeSession;
+        use crate::session::mock::MockSession;
 
         let log = crate::log::with_log(|log| {
             let operands: Vec<_> = operands
@@ -1892,13 +1891,7 @@ mod tests {
                     )
                 })
                 .collect();
-            let mut session = CompositeSession {
-                reentrancy: (),
-                macros: (),
-                names: (),
-                builder: MockBackend::new(SerialIdAllocator::new(MockSymbolId), log.clone()),
-                diagnostics: MockDiagnostics::new(log.clone()),
-            };
+            let mut session = MockSession::new(log.clone());
             analyze_instruction(
                 (&mnemonic, TokenId::Mnemonic.into()),
                 operands,

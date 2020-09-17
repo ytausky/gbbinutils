@@ -150,6 +150,7 @@ mod tests {
     use crate::diag::{IgnoreDiagnostics, TestDiagnosticsListener};
     use crate::expr::*;
     use crate::session::builder::*;
+    use crate::session::mock::StandaloneBackend;
     use crate::span::WithSpan;
     use crate::CompositeSession;
 
@@ -195,13 +196,7 @@ mod tests {
     fn resolve_origin_relative_to_previous_section() {
         let origin1 = 0x150;
         let skipped_bytes = 0x10;
-        let mut object_builder = CompositeSession {
-            reentrancy: (),
-            macros: (),
-            names: (),
-            builder: ObjectBuilder::new(),
-            diagnostics: TestDiagnosticsListener::new(),
-        };
+        let mut object_builder = StandaloneBackend::new();
 
         // org $0150
         object_builder.set_origin(Expr(vec![ExprOp::Atom(Atom::Const(origin1)).with_span(())]));
@@ -230,13 +225,7 @@ mod tests {
     #[test]
     fn label_defined_as_section_origin_plus_offset() {
         let addr = 0xffe1;
-        let mut builder = CompositeSession {
-            reentrancy: (),
-            macros: (),
-            names: (),
-            builder: ObjectBuilder::new(),
-            diagnostics: TestDiagnosticsListener::new(),
-        };
+        let mut builder = StandaloneBackend::new();
         builder.set_origin(addr.into());
         let symbol_id = builder.alloc_symbol(());
         builder.define_symbol(
@@ -290,13 +279,7 @@ mod tests {
 
     #[test]
     fn resolve_expr_with_section_addr() {
-        let mut object_builder = CompositeSession {
-            reentrancy: (),
-            macros: (),
-            names: (),
-            builder: ObjectBuilder::new(),
-            diagnostics: TestDiagnosticsListener::new(),
-        };
+        let mut object_builder = StandaloneBackend::new();
 
         // section my_section
         let name = object_builder.alloc_symbol(());
@@ -322,13 +305,7 @@ mod tests {
         let bytes = 10;
         let symbol = VarId(2);
 
-        let mut object_builder = CompositeSession {
-            reentrancy: (),
-            macros: (),
-            names: (),
-            builder: ObjectBuilder::new(),
-            diagnostics: TestDiagnosticsListener::new(),
-        };
+        let mut object_builder = StandaloneBackend::new();
 
         // org $0100
         object_builder.set_origin(Expr(vec![ExprOp::Atom(Atom::Const(addr)).with_span(())]));
@@ -357,13 +334,7 @@ mod tests {
     }
 
     fn assert_section_size(expected: impl Into<Num>, f: impl FnOnce(&mut Session<()>)) {
-        let mut builder = CompositeSession {
-            reentrancy: (),
-            macros: (),
-            names: (),
-            builder: ObjectBuilder::new(),
-            diagnostics: TestDiagnosticsListener::new(),
-        };
+        let mut builder = StandaloneBackend::new();
         let name = builder.alloc_symbol(());
         builder.start_section(name, ());
         f(&mut builder);

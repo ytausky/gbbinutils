@@ -3,8 +3,8 @@ use self::token_line::TokenContextFinalizationSemantics;
 use super::Semantics;
 use super::*;
 
-use crate::session::lex::Literal;
 use crate::diag::{CompactDiag, Message};
+use crate::session::lex::Literal;
 use crate::session::Analysis;
 use crate::span::StripSpan;
 use crate::syntax::actions::*;
@@ -125,14 +125,15 @@ pub mod tests {
 
     pub use crate::session::resolve::BasicNameTable;
 
-    use crate::session::lex::SemanticToken;
     use crate::diag::{DiagnosticsEvent, Merge, Message, MockDiagnostics, MockSpan};
     use crate::expr::{Atom, BinOp, ExprOp, LocationCounter};
     use crate::log::with_log;
     use crate::object::Fragment;
     use crate::session::builder::mock::*;
     use crate::session::builder::Width;
+    use crate::session::lex::SemanticToken;
     use crate::session::macros::mock::{MacroTableEvent, MockMacroId, MockMacroTable};
+    use crate::session::mock::MockSession;
     use crate::session::reentrancy::ReentrancyEvent;
     use crate::session::resolve::*;
     use crate::session::CompositeSession;
@@ -524,20 +525,14 @@ pub mod tests {
             let mut session = CompositeSession::from_components(
                 MockSourceComponents::with_log(log.clone()),
                 MockMacroTable::new(log.clone()),
-                BasicNameTable::default(),
+                MockNameTable::new(BasicNameTable::default(), log.clone()),
                 MockBackend::new(SerialIdAllocator::new(MockSymbolId), log.clone()),
                 MockDiagnostics::new(log.clone()),
             );
             for (ident, resolution) in entries {
                 session.define_name(ident, resolution)
             }
-            let mut session = CompositeSession {
-                reentrancy: session.reentrancy,
-                macros: session.macros,
-                names: MockNameTable::new(session.names, log),
-                builder: session.builder,
-                diagnostics: session.diagnostics,
-            };
+            log.clear();
             let mut tokens = std::iter::empty();
             f(Semantics {
                 session: &mut session,
@@ -547,15 +542,6 @@ pub mod tests {
         })
     }
 
-    pub(super) type TestTokenStreamSemantics<'a, 'b, S> = TokenStreamSemantics<
-        'a,
-        'b,
-        CompositeSession<
-            MockSourceComponents<S>,
-            MockMacroTable<TestOperation<S>>,
-            MockNameTable<BasicNameTable<MockMacroId, MockSymbolId>, TestOperation<S>>,
-            MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>,
-            MockDiagnostics<TestOperation<S>, S>,
-        >,
-    >;
+    pub(super) type TestTokenStreamSemantics<'a, 'b, S> =
+        TokenStreamSemantics<'a, 'b, MockSession<TestOperation<S>, S>>;
 }

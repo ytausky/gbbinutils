@@ -1,9 +1,9 @@
 use self::arg::{Arg, OperandSymbol, ParsedArg};
 use self::keywords::BuiltinMnemonic;
 
-use crate::session::lex::{Literal, StringSource, TokenSeq};
 use crate::diag::Diagnostics;
 use crate::session::builder::*;
+use crate::session::lex::{Literal, StringSource, TokenSeq};
 use crate::session::reentrancy::Params;
 use crate::session::Analysis;
 use crate::span::{SpanSource, Spanned};

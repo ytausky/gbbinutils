@@ -212,15 +212,14 @@ fn single_arg<T, D: Diagnostics<S>, S>(
 mod tests {
     use super::*;
 
-    use crate::session::lex::Literal;
     use crate::codebase::CodebaseError;
     use crate::expr::{Atom, Expr, ParamId};
     use crate::semantics::actions::tests::*;
     use crate::session::builder::mock::*;
-    use crate::session::macros::mock::{MockMacroId, MockMacroTable};
+    use crate::session::lex::Literal;
+    use crate::session::mock::MockSession;
     use crate::session::reentrancy::ReentrancyEvent;
-    use crate::session::resolve::{MockNameTable, NameTableEvent, ResolvedName};
-    use crate::session::CompositeSession;
+    use crate::session::resolve::{NameTableEvent, ResolvedName};
     use crate::syntax::actions::*;
 
     use std::borrow::Borrow;
@@ -353,7 +352,7 @@ mod tests {
     fn include_file_with_invalid_utf8() {
         let name = "invalid_utf8.s";
         let log = collect_semantic_actions(|actions| {
-            actions.session.reentrancy.fail(CodebaseError::Utf8Error);
+            actions.session.fail(CodebaseError::Utf8Error);
             let mut context = actions
                 .will_parse_line()
                 .into_instr_line()
@@ -377,13 +376,10 @@ mod tests {
         let name = "nonexistent.s";
         let message = "some message";
         let log = collect_semantic_actions(|actions| {
-            actions
-                .session
-                .reentrancy
-                .fail(CodebaseError::IoError(io::Error::new(
-                    io::ErrorKind::NotFound,
-                    message,
-                )));
+            actions.session.fail(CodebaseError::IoError(io::Error::new(
+                io::ErrorKind::NotFound,
+                message,
+            )));
             let mut context = actions
                 .will_parse_line()
                 .into_instr_line()
@@ -525,17 +521,7 @@ mod tests {
         unary_directive("DS", f)
     }
 
-    type TestExprContext<'a, 'b, S> = ArgSemantics<
-        'a,
-        'b,
-        CompositeSession<
-            MockSourceComponents<S>,
-            MockMacroTable<TestOperation<S>>,
-            MockNameTable<BasicNameTable<MockMacroId, MockSymbolId>, TestOperation<S>>,
-            MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>,
-            MockDiagnostics<TestOperation<S>, S>,
-        >,
-    >;
+    type TestExprContext<'a, 'b, S> = ArgSemantics<'a, 'b, MockSession<TestOperation<S>, S>>;
 
     fn unary_directive<F>(directive: &str, f: F) -> Vec<TestOperation<()>>
     where
@@ -564,17 +550,8 @@ mod tests {
         )
     }
 
-    type TestBuiltinInstrSemantics<'a, 'b, S> = BuiltinInstrSemantics<
-        'a,
-        'b,
-        CompositeSession<
-            MockSourceComponents<S>,
-            MockMacroTable<TestOperation<S>>,
-            MockNameTable<BasicNameTable<MockMacroId, MockSymbolId>, TestOperation<S>>,
-            MockBackend<SerialIdAllocator<MockSymbolId>, TestOperation<S>>,
-            MockDiagnostics<TestOperation<S>, S>,
-        >,
-    >;
+    type TestBuiltinInstrSemantics<'a, 'b, S> =
+        BuiltinInstrSemantics<'a, 'b, MockSession<TestOperation<S>, S>>;
 
     fn with_directive<F>(directive: &str, f: F) -> Vec<TestOperation<()>>
     where

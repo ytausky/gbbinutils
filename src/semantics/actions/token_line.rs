@@ -1,9 +1,9 @@
 use super::{Keyword, TokenStreamSemantics};
 
-use crate::session::lex::{Literal, SemanticToken};
 use crate::diag::CompactDiag;
 use crate::semantics::keywords::Directive;
 use crate::semantics::*;
+use crate::session::lex::{Literal, SemanticToken};
 use crate::session::resolve::ResolvedName;
 use crate::span::StripSpan;
 use crate::syntax::actions::*;

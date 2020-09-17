@@ -1,8 +1,8 @@
+use super::lex::{Lex, Literal, SemanticToken, StringSource};
 use super::macros::MacroTable;
 use super::resolve::{NameTable, StartScope};
 use super::strings::GetString;
 use super::CompositeSession;
-use super::lex::{Lex, Literal, SemanticToken, StringSource};
 
 use crate::codebase::CodebaseError;
 use crate::diag::*;
@@ -176,11 +176,11 @@ mod mock {
 mod tests {
     use super::*;
 
-    use crate::session::lex::{Literal, MockCodebase};
     use crate::diag::DiagnosticsEvent;
     use crate::expr::Expr;
     use crate::log::*;
     use crate::session::builder::mock::{BackendEvent, MockSymbolId, SerialIdAllocator};
+    use crate::session::lex::{Literal, MockCodebase};
     use crate::session::macros::mock::{MacroTableEvent, MockMacroId};
     use crate::session::resolve::{BasicNameTable, NameTableEvent};
     use crate::session::strings::FakeStringInterner;

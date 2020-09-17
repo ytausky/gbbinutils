@@ -1,9 +1,9 @@
 use self::builder::{Backend, ObjectBuilder, SymbolSource};
+use self::lex::{CodebaseAnalyzer, Literal, StringSource, Tokenizer};
 use self::macros::{MacroId, MacroTable, VecMacroTable};
 use self::reentrancy::{ReentrancyActions, SourceComponents};
 use self::resolve::*;
 use self::strings::FakeStringInterner;
-use self::lex::{CodebaseAnalyzer, Literal, StringSource, Tokenizer};
 
 use crate::codebase::{BufId, BufRange, FileCodebase, FileSystem};
 use crate::diag::{CompositeDiagnosticsSystem, Diagnostics, OutputForwarder};
@@ -95,9 +95,9 @@ impl<'a, 'b> Session<'a, 'b> {
 }
 
 pub(crate) struct CompositeSession<R, M, N, B, D> {
-    pub reentrancy: R,
-    pub macros: M,
-    pub names: N,
+    reentrancy: R,
+    macros: M,
+    names: N,
     pub builder: B,
     pub diagnostics: D,
 }
@@ -143,4 +143,56 @@ impl<R, M, N, B: SymbolSource, D> SymbolSource for CompositeSession<R, M, N, B, 
 
 delegate_diagnostics! {
     {R, M, N, B, D: Diagnostics<S>, S}, CompositeSession<R, M, N, B, D>, {diagnostics}, D, S
+}
+
+#[cfg(test)]
+pub mod mock {
+    use super::*;
+
+    use super::builder::mock::{MockBackend, MockSymbolId, SerialIdAllocator};
+    use super::macros::mock::{MockMacroId, MockMacroTable};
+    use super::reentrancy::MockSourceComponents;
+
+    use crate::codebase::CodebaseError;
+    use crate::diag::{MockDiagnostics, TestDiagnosticsListener};
+    use crate::log::Log;
+
+    pub(crate) type MockSession<T, S> = CompositeSession<
+        MockSourceComponents<T, S>,
+        MockMacroTable<T>,
+        MockNameTable<BasicNameTable<MockMacroId, MockSymbolId>, T>,
+        MockBackend<SerialIdAllocator<MockSymbolId>, T>,
+        MockDiagnostics<T, S>,
+    >;
+
+    impl<T, S> MockSession<T, S> {
+        pub fn new(log: Log<T>) -> Self {
+            CompositeSession {
+                reentrancy: MockSourceComponents::with_log(log.clone()),
+                macros: MockMacroTable::new(log.clone()),
+                names: MockNameTable::new(BasicNameTable::default(), log.clone()),
+                builder: MockBackend::new(SerialIdAllocator::new(MockSymbolId), log.clone()),
+                diagnostics: MockDiagnostics::new(log),
+            }
+        }
+
+        pub fn fail(&mut self, error: CodebaseError) {
+            self.reentrancy.fail(error)
+        }
+    }
+
+    pub(crate) type StandaloneBackend<S> =
+        CompositeSession<(), (), (), ObjectBuilder<S>, TestDiagnosticsListener<S>>;
+
+    impl<S> StandaloneBackend<S> {
+        pub fn new() -> Self {
+            CompositeSession {
+                reentrancy: (),
+                macros: (),
+                names: (),
+                builder: ObjectBuilder::new(),
+                diagnostics: TestDiagnosticsListener::new(),
+            }
+        }
+    }
 }

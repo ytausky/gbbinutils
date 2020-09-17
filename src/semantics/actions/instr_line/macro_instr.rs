@@ -1,7 +1,7 @@
 use super::*;
 
-use crate::session::lex::{SemanticToken, TokenSeq};
 use crate::semantics::actions::TokenStreamState;
+use crate::session::lex::{SemanticToken, TokenSeq};
 use crate::session::reentrancy::MacroArgs;
 use crate::syntax::actions::{InstrFinalizer, MacroArgContext, MacroInstrContext};
 
