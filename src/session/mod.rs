@@ -1,14 +1,16 @@
 use self::builder::{Backend, ObjectBuilder, SymbolSource};
-use self::reentrancy::ReentrancyActions;
+use self::reentrancy::{ReentrancyActions, SourceComponents};
 use self::resolve::*;
 
 use crate::analyze::macros::{MacroId, MacroTable, VecMacroTable};
+use crate::analyze::strings::FakeStringInterner;
 use crate::analyze::{CodebaseAnalyzer, Literal, StringSource, Tokenizer};
 use crate::codebase::{BufId, BufRange, FileCodebase, FileSystem};
 use crate::diag::{CompositeDiagnosticsSystem, Diagnostics, OutputForwarder};
 use crate::object::SymbolId;
 use crate::semantics::keywords::KEYWORDS;
 use crate::span::{MacroDefSpans, RcContextFactory, RcSpan, SpanSource};
+use crate::syntax::parser::DefaultParserFactory;
 use crate::syntax::{IdentFactory, IdentSource};
 use crate::BuiltinSymbols;
 
@@ -48,22 +50,29 @@ impl<T> Analysis for T where
 {
 }
 
-pub(crate) struct SessionImpl<'a, 'b> {
-    pub codebase: CodebaseAnalyzer<'b, Tokenizer<&'b FileCodebase<'a, dyn FileSystem>>>,
-    pub macros:
-        VecMacroTable<Ident<String>, Literal<String>, Rc<MacroDefSpans<RcSpan<BufId, BufRange>>>>,
-    names: BiLevelNameTable<BasicNameTable<MacroId, SymbolId>>,
-    pub builder: ObjectBuilder<RcSpan<BufId, BufRange>>,
-    pub diagnostics: CompositeDiagnosticsSystem<RcContextFactory, OutputForwarder<'a, 'b>>,
-}
+pub(crate) type Session<'a, 'b> = CompositeSession<
+    SourceComponents<
+        CodebaseAnalyzer<'b, Tokenizer<&'b FileCodebase<'a, dyn FileSystem>>>,
+        DefaultParserFactory,
+        FakeStringInterner,
+    >,
+    VecMacroTable<Ident<String>, Literal<String>, Rc<MacroDefSpans<RcSpan<BufId, BufRange>>>>,
+    BiLevelNameTable<BasicNameTable<MacroId, SymbolId>>,
+    ObjectBuilder<RcSpan<BufId, BufRange>>,
+    CompositeDiagnosticsSystem<RcContextFactory, OutputForwarder<'a, 'b>>,
+>;
 
-impl<'a, 'b> SessionImpl<'a, 'b> {
+impl<'a, 'b> Session<'a, 'b> {
     pub fn new(
         codebase: CodebaseAnalyzer<'b, Tokenizer<&'b FileCodebase<'a, dyn FileSystem>>>,
         diagnostics: CompositeDiagnosticsSystem<RcContextFactory, OutputForwarder<'a, 'b>>,
     ) -> Self {
         let mut session = Self {
-            codebase,
+            reentrancy: SourceComponents {
+                codebase,
+                parser_factory: DefaultParserFactory,
+                interner: FakeStringInterner,
+            },
             macros: VecMacroTable::new(),
             names: BiLevelNameTable::new(),
             builder: ObjectBuilder::new(),
@@ -80,18 +89,6 @@ impl<'a, 'b> SessionImpl<'a, 'b> {
         }
         session
     }
-}
-
-impl<'a, 'b> SpanSource for SessionImpl<'a, 'b> {
-    type Span = RcSpan<BufId, BufRange>;
-}
-
-impl<'a, 'b> IdentSource for SessionImpl<'a, 'b> {
-    type Ident = Ident<String>;
-}
-
-impl<'a, 'b> StringSource for SessionImpl<'a, 'b> {
-    type StringRef = String;
 }
 
 pub(crate) struct CompositeSession<R, M, N, B, D> {
@@ -143,12 +140,4 @@ impl<R, M, N, B: SymbolSource, D> SymbolSource for CompositeSession<R, M, N, B, 
 
 delegate_diagnostics! {
     {R, M, N, B, D: Diagnostics<S>, S}, CompositeSession<R, M, N, B, D>, {diagnostics}, D, S
-}
-
-delegate_diagnostics! {
-    {'a, 'b},
-    SessionImpl<'a, 'b>,
-    {diagnostics},
-    CompositeDiagnosticsSystem<RcContextFactory, OutputForwarder<'a, 'b>>,
-    RcSpan<BufId, BufRange>
 }

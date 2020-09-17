@@ -1,15 +1,15 @@
-use super::resolve::{Ident, NameTable, StartScope};
-use super::{CompositeSession, SessionImpl};
+use super::resolve::{NameTable, StartScope};
+use super::CompositeSession;
 
 use crate::analyze::macros::MacroTable;
 use crate::analyze::strings::GetString;
 use crate::analyze::{Lex, Literal, SemanticToken, StringSource};
-use crate::codebase::{BufId, BufRange, CodebaseError};
+use crate::codebase::CodebaseError;
 use crate::diag::*;
 use crate::semantics::{Semantics, TokenStreamState};
 use crate::session::builder::Backend;
-use crate::span::{RcSpan, SpanSource};
-use crate::syntax::parser::{DefaultParserFactory, ParserFactory};
+use crate::span::SpanSource;
+use crate::syntax::parser::ParserFactory;
 use crate::syntax::{IdentSource, LexError, ParseTokenStream};
 
 use std::ops::Deref;
@@ -45,25 +45,6 @@ impl<C, P, I> SourceComponents<C, P, I> {
             parser_factory,
             interner,
         }
-    }
-}
-
-impl<'a, 'b> ReentrancyActions for SessionImpl<'a, 'b> {
-    fn analyze_file(&mut self, path: Self::StringRef) -> Result<(), CodebaseError> {
-        let mut tokens = self.lex_file(path)?;
-        let mut parser = <DefaultParserFactory as ParserFactory<
-            Ident<String>,
-            Literal<String>,
-            LexError,
-            RcSpan<BufId, BufRange>,
-        >>::mk_parser(&mut DefaultParserFactory);
-        let semantics = Semantics {
-            session: self,
-            state: TokenStreamState::new(),
-            tokens: &mut tokens,
-        };
-        parser.parse_token_stream(semantics);
-        Ok(())
     }
 }
 

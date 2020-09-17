@@ -12,7 +12,7 @@ use crate::analyze::{CodebaseAnalyzer, Tokenizer};
 use crate::codebase::{CodebaseError, StdFileSystem};
 use crate::diag::*;
 use crate::session::reentrancy::ReentrancyActions;
-use crate::session::{CompositeSession, SessionImpl};
+use crate::session::{CompositeSession, Session};
 
 #[macro_use]
 pub mod diag;
@@ -89,8 +89,9 @@ fn try_assemble<'a>(
 
     let tokenizer = Tokenizer(&codebase);
     let file_parser = CodebaseAnalyzer::new(&tokenizer);
-    let mut session = SessionImpl::new(file_parser, diagnostics);
-    session.analyze_file(name.into())?;
+    let mut session = Session::new(file_parser, diagnostics);
+    // session.analyze_file(name.into())?;
+    ReentrancyActions::analyze_file(&mut session, name.into())?;
 
     let result = Program::link(session.builder.object, &mut session.diagnostics);
     Ok(result)

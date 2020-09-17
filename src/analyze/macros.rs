@@ -8,7 +8,6 @@ use crate::session::builder::Backend;
 use crate::session::reentrancy::SourceComponents;
 use crate::session::resolve::Ident;
 use crate::session::resolve::{NameTable, StartScope};
-use crate::session::SessionImpl;
 use crate::span::*;
 use crate::syntax::parser::{DefaultParserFactory, ParseTokenStream, ParserFactory};
 use crate::syntax::IdentSource;
@@ -38,63 +37,6 @@ pub type MacroArgs<T, S> = (Vec<Vec<T>>, Vec<Vec<S>>);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MacroId(usize);
-
-impl<'a, 'b> MacroSource for SessionImpl<'a, 'b> {
-    type MacroId = MacroId;
-}
-
-impl<'a, 'b> MacroTable<Ident<String>, Literal<String>, RcSpan<BufId, BufRange>>
-    for SessionImpl<'a, 'b>
-{
-    fn define_macro(
-        &mut self,
-        name_span: RcSpan<BufId, BufRange>,
-        params: (Vec<Ident<String>>, Vec<RcSpan<BufId, BufRange>>),
-        body: (
-            Vec<Token<Ident<String>, Literal<String>>>,
-            Vec<RcSpan<BufId, BufRange>>,
-        ),
-    ) -> Self::MacroId {
-        let context = self.diagnostics.add_macro_def(name_span, params.1, body.1);
-        let id = MacroId(self.macros.len());
-        self.macros.push(MacroDef {
-            tokens: Rc::new(MacroDefTokens {
-                params: params.0,
-                body: body.0,
-            }),
-            spans: context,
-        });
-        id
-    }
-
-    fn expand_macro(
-        &mut self,
-        (MacroId(id), name_span): (Self::MacroId, RcSpan<BufId, BufRange>),
-        (args, arg_spans): MacroArgs<
-            Token<Ident<String>, Literal<String>>,
-            RcSpan<BufId, BufRange>,
-        >,
-    ) {
-        let def = &self.macros[id];
-        let context = self
-            .diagnostics
-            .mk_macro_call_ctx(name_span, arg_spans, &def.spans);
-        let expansion = MacroExpansionIter::new(def.tokens.clone(), args, context);
-        let mut parser = <DefaultParserFactory as ParserFactory<
-            Ident<String>,
-            Literal<String>,
-            LexError,
-            RcSpan<BufId, BufRange>,
-        >>::mk_parser(&mut DefaultParserFactory);
-        let mut tokens = expansion.map(|(t, s)| (Ok(t), s));
-        let semantics = Semantics {
-            session: self,
-            state: TokenStreamState::new(),
-            tokens: &mut tokens,
-        };
-        parser.parse_token_stream(semantics);
-    }
-}
 
 impl<'a, R, N, B, D, I, L, H> MacroSource for CompositeSession<R, VecMacroTable<I, L, H>, N, B, D> {
     type MacroId = MacroId;
