@@ -1,14 +1,10 @@
 use crate::codebase::{BufId, Codebase, CodebaseError};
-use crate::session::reentrancy::SourceComponents;
 use crate::session::resolve::*;
 use crate::session::CompositeSession;
 use crate::span::{BufContext, BufContextFactory, SpanSource};
 use crate::syntax::*;
 
 use std::rc::Rc;
-
-#[cfg(test)]
-pub use self::mock::*;
 
 type LexItem<I, R, S> = (Result<SemanticToken<I, R>, LexError>, S);
 pub type SemanticToken<I, R> = crate::syntax::Token<I, Literal<R>>;
@@ -37,8 +33,7 @@ impl<'a, T: StringSource + 'a> CodebaseAnalyzer<'a, T> {
 
 pub type TokenSeq<I, R, S> = (Vec<SemanticToken<I, R>>, Vec<S>);
 
-impl<'a, T, P, M, I, N, B, D> Lex
-    for CompositeSession<SourceComponents<CodebaseAnalyzer<'a, T>, P, I>, M, N, B, D>
+impl<'a, T, M, N, B, D> Lex for CompositeSession<CodebaseAnalyzer<'a, T>, M, N, B, D>
 where
     T: Tokenize<D::BufContext> + 'a,
     T::StringRef: AsRef<str>,
@@ -47,8 +42,7 @@ where
     type TokenIter = T::Tokenized;
 
     fn lex_file(&mut self, path: Self::StringRef) -> Result<Self::TokenIter, CodebaseError> {
-        self.reentrancy
-            .codebase
+        self.codebase
             .codebase
             .tokenize_file(path.as_ref(), |buf_id| {
                 self.diagnostics.mk_buf_context(buf_id, None)
@@ -61,14 +55,6 @@ impl<'a, T: IdentSource> IdentSource for CodebaseAnalyzer<'a, T> {
 }
 
 impl<'a, T: StringSource> StringSource for CodebaseAnalyzer<'a, T> {
-    type StringRef = T::StringRef;
-}
-
-impl<'a, T: IdentSource, P, I> IdentSource for SourceComponents<CodebaseAnalyzer<'a, T>, P, I> {
-    type Ident = T::Ident;
-}
-
-impl<'a, T: StringSource, P, I> StringSource for SourceComponents<CodebaseAnalyzer<'a, T>, P, I> {
     type StringRef = T::StringRef;
 }
 
@@ -131,52 +117,5 @@ impl<'a, F: IdentFactory, C: BufContext> Iterator for TokenizedSrc<F, C> {
         self.tokens
             .next()
             .map(|(t, r)| (t, self.context.mk_span(r)))
-    }
-}
-
-#[cfg(test)]
-mod mock {
-    use super::*;
-
-    use std::collections::HashMap;
-    use std::vec::IntoIter;
-
-    pub struct MockCodebase<S> {
-        files: HashMap<String, Vec<LexItem<String, String, S>>>,
-    }
-
-    impl<S> MockCodebase<S> {
-        pub fn new() -> Self {
-            MockCodebase {
-                files: HashMap::new(),
-            }
-        }
-
-        pub(crate) fn set_file<I>(&mut self, path: &str, tokens: I)
-        where
-            I: IntoIterator<Item = LexItem<String, String, S>>,
-        {
-            self.files.insert(path.into(), tokens.into_iter().collect());
-        }
-    }
-
-    impl<'a, P, M, I, N, B, D> Lex
-        for CompositeSession<SourceComponents<MockCodebase<D::Span>, P, I>, M, N, B, D>
-    where
-        D: SpanSource,
-    {
-        type TokenIter = IntoIter<LexItem<Self::Ident, Self::StringRef, D::Span>>;
-
-        fn lex_file(&mut self, path: Self::StringRef) -> Result<Self::TokenIter, CodebaseError> {
-            Ok(self.reentrancy.codebase.files[&path].clone().into_iter())
-        }
-    }
-
-    impl<'a, P, I, S> IdentSource for SourceComponents<MockCodebase<S>, P, I> {
-        type Ident = String;
-    }
-
-    impl<'a, P, I, S> StringSource for SourceComponents<MockCodebase<S>, P, I> {
-        type StringRef = String;
     }
 }

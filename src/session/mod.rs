@@ -1,16 +1,14 @@
 use self::builder::{Backend, ObjectBuilder, SymbolSource};
 use self::lex::{CodebaseAnalyzer, Literal, StringSource, Tokenizer};
 use self::macros::{MacroId, MacroSource, MacroTable, VecMacroTable};
-use self::reentrancy::{ReentrancyActions, SourceComponents};
+use self::reentrancy::ReentrancyActions;
 use self::resolve::*;
-use self::strings::FakeStringInterner;
 
 use crate::codebase::{BufId, BufRange, FileCodebase, FileSystem};
 use crate::diag::{CompositeDiagnosticsSystem, Diagnostics, OutputForwarder};
 use crate::object::SymbolId;
 use crate::semantics::keywords::KEYWORDS;
 use crate::span::{MacroDefSpans, RcContextFactory, RcSpan, SpanSource};
-use crate::syntax::parser::DefaultParserFactory;
 use crate::syntax::{IdentFactory, IdentSource};
 use crate::BuiltinSymbols;
 
@@ -21,7 +19,6 @@ pub mod lex;
 pub mod macros;
 pub mod reentrancy;
 pub mod resolve;
-pub mod strings;
 
 pub(crate) trait Analysis:
     SpanSource
@@ -60,11 +57,7 @@ impl<T> Analysis for T where
 }
 
 pub(crate) type Session<'a, 'b> = CompositeSession<
-    SourceComponents<
-        CodebaseAnalyzer<'b, Tokenizer<&'b FileCodebase<'a, dyn FileSystem>>>,
-        DefaultParserFactory,
-        FakeStringInterner,
-    >,
+    CodebaseAnalyzer<'b, Tokenizer<&'b FileCodebase<'a, dyn FileSystem>>>,
     VecMacroTable<Ident<String>, Literal<String>, Rc<MacroDefSpans<RcSpan<BufId, BufRange>>>>,
     BiLevelNameTable<BasicNameTable<MacroId, SymbolId>>,
     ObjectBuilder<RcSpan<BufId, BufRange>>,
@@ -77,11 +70,7 @@ impl<'a, 'b> Session<'a, 'b> {
         diagnostics: CompositeDiagnosticsSystem<RcContextFactory, OutputForwarder<'a, 'b>>,
     ) -> Self {
         let mut session = Self {
-            reentrancy: SourceComponents {
-                codebase,
-                parser_factory: DefaultParserFactory,
-                interner: FakeStringInterner,
-            },
+            codebase,
             macros: VecMacroTable::new(),
             names: BiLevelNameTable::new(),
             builder: ObjectBuilder::new(),
@@ -100,39 +89,16 @@ impl<'a, 'b> Session<'a, 'b> {
     }
 }
 
-pub(crate) struct CompositeSession<R, M, N, B, D> {
-    reentrancy: R,
+pub(crate) struct CompositeSession<C, M, N, B, D> {
+    codebase: C,
     macros: M,
     names: N,
     pub builder: B,
     pub diagnostics: D,
 }
 
-#[cfg(test)]
-impl<R, M, N, B, D> CompositeSession<R, M, N, B, D>
-where
-    Self: IdentSource + SpanSource,
-    <Self as IdentSource>::Ident: for<'r> From<&'r str>,
-    Self: NameTable<<Self as IdentSource>::Ident>,
-    Self: Backend<<Self as SpanSource>::Span>,
-{
-    pub fn from_components(reentrancy: R, macros: M, names: N, builder: B, diagnostics: D) -> Self {
-        let mut session = Self {
-            reentrancy,
-            macros,
-            names,
-            builder,
-            diagnostics,
-        };
-        for (ident, keyword) in KEYWORDS {
-            session.define_name((*ident).into(), ResolvedName::Keyword(keyword))
-        }
-        session
-    }
-}
-
-impl<R: SpanSource, M, N, B, D> SpanSource for CompositeSession<R, M, N, B, D> {
-    type Span = R::Span;
+impl<R, M, N, B, D: SpanSource> SpanSource for CompositeSession<R, M, N, B, D> {
+    type Span = D::Span;
 }
 
 impl<R: IdentSource, M, N, B, D> IdentSource for CompositeSession<R, M, N, B, D> {
@@ -157,14 +123,14 @@ pub mod mock {
 
     use super::builder::mock::{MockBackend, MockSymbolId, SerialIdAllocator};
     use super::macros::mock::{MockMacroId, MockMacroTable};
-    use super::reentrancy::MockSourceComponents;
+    use super::reentrancy::MockCodebase;
 
     use crate::codebase::CodebaseError;
     use crate::diag::{MockDiagnostics, TestDiagnosticsListener};
     use crate::log::Log;
 
     pub(crate) type MockSession<T, S> = CompositeSession<
-        MockSourceComponents<T, S>,
+        MockCodebase<T, S>,
         MockMacroTable<T>,
         MockNameTable<BasicNameTable<MockMacroId, MockSymbolId>, T>,
         MockBackend<SerialIdAllocator<MockSymbolId>, T>,
@@ -173,17 +139,21 @@ pub mod mock {
 
     impl<T, S> MockSession<T, S> {
         pub fn new(log: Log<T>) -> Self {
+            let mut names = BasicNameTable::default();
+            for (ident, keyword) in KEYWORDS {
+                names.define_name((*ident).into(), ResolvedName::Keyword(keyword))
+            }
             CompositeSession {
-                reentrancy: MockSourceComponents::with_log(log.clone()),
+                codebase: MockCodebase::with_log(log.clone()),
                 macros: MockMacroTable::new(log.clone()),
-                names: MockNameTable::new(BasicNameTable::default(), log.clone()),
+                names: MockNameTable::new(names, log.clone()),
                 builder: MockBackend::new(SerialIdAllocator::new(MockSymbolId), log.clone()),
                 diagnostics: MockDiagnostics::new(log),
             }
         }
 
         pub fn fail(&mut self, error: CodebaseError) {
-            self.reentrancy.fail(error)
+            self.codebase.fail(error)
         }
     }
 
@@ -193,7 +163,7 @@ pub mod mock {
     impl<S> StandaloneBackend<S> {
         pub fn new() -> Self {
             CompositeSession {
-                reentrancy: (),
+                codebase: (),
                 macros: (),
                 names: (),
                 builder: ObjectBuilder::new(),

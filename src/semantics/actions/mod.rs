@@ -125,18 +125,17 @@ pub mod tests {
 
     pub use crate::session::resolve::BasicNameTable;
 
-    use crate::diag::{DiagnosticsEvent, Merge, Message, MockDiagnostics, MockSpan};
+    use crate::diag::{DiagnosticsEvent, Merge, Message, MockSpan};
     use crate::expr::{Atom, BinOp, ExprOp, LocationCounter};
     use crate::log::with_log;
     use crate::object::Fragment;
     use crate::session::builder::mock::*;
     use crate::session::builder::Width;
     use crate::session::lex::SemanticToken;
-    use crate::session::macros::mock::{MacroTableEvent, MockMacroId, MockMacroTable};
+    use crate::session::macros::mock::{MacroTableEvent, MockMacroId};
     use crate::session::mock::MockSession;
     use crate::session::reentrancy::ReentrancyEvent;
     use crate::session::resolve::*;
-    use crate::session::CompositeSession;
     use crate::syntax::{Sigil, Token};
 
     use std::borrow::Borrow;
@@ -500,9 +499,6 @@ pub mod tests {
         )
     }
 
-    pub(crate) type MockSourceComponents<S> =
-        crate::session::reentrancy::MockSourceComponents<TestOperation<S>, S>;
-
     pub(crate) fn collect_semantic_actions<F, S>(f: F) -> Vec<TestOperation<S>>
     where
         F: for<'a, 'b> FnOnce(
@@ -522,13 +518,7 @@ pub mod tests {
         S: Clone + Debug + Merge,
     {
         with_log(|log| {
-            let mut session = CompositeSession::from_components(
-                MockSourceComponents::with_log(log.clone()),
-                MockMacroTable::new(log.clone()),
-                MockNameTable::new(BasicNameTable::default(), log.clone()),
-                MockBackend::new(SerialIdAllocator::new(MockSymbolId), log.clone()),
-                MockDiagnostics::new(log.clone()),
-            );
+            let mut session = MockSession::new(log.clone());
             for (ident, resolution) in entries {
                 session.define_name(ident, resolution)
             }

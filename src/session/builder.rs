@@ -343,6 +343,7 @@ mod tests {
     use crate::expr::{Atom, BinOp, ExprOp};
     use crate::link::Program;
     use crate::object::SectionId;
+    use crate::session::mock::StandaloneBackend;
     use crate::span::WithSpan;
 
     use std::borrow::Borrow;
@@ -408,13 +409,7 @@ mod tests {
     }
 
     fn build_object<F: FnOnce(&mut Session<S>), S>(f: F) -> Object<S> {
-        let mut session = CompositeSession {
-            reentrancy: (),
-            macros: (),
-            names: (),
-            builder: ObjectBuilder::new(),
-            diagnostics: TestDiagnosticsListener::new(),
-        };
+        let mut session = StandaloneBackend::new();
         f(&mut session);
         session.builder.object
     }

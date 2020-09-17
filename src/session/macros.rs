@@ -1,11 +1,9 @@
 use super::lex::{Lex, Literal, StringSource};
-use super::strings::GetString;
 
 use crate::codebase::{BufId, BufRange};
 use crate::diag::DiagnosticsSystem;
 use crate::semantics::{Semantics, TokenStreamState};
 use crate::session::builder::Backend;
-use crate::session::reentrancy::SourceComponents;
 use crate::session::resolve::Ident;
 use crate::session::resolve::{NameTable, StartScope};
 use crate::span::*;
@@ -43,14 +41,14 @@ impl<'a, R, N, B, D, I, L, H> MacroSource for CompositeSession<R, VecMacroTable<
     type MacroId = MacroId;
 }
 
-impl<'a, C, P, J, N, B, D>
+impl<'a, C, N, B, D>
     MacroTable<
         <Self as IdentSource>::Ident,
         Literal<<Self as StringSource>::StringRef>,
         <Self as SpanSource>::Span,
     >
     for CompositeSession<
-        SourceComponents<C, P, J>,
+        C,
         VecMacroTable<C::Ident, Literal<C::StringRef>, <D as AddMacroDef<D::Span>>::MacroDefHandle>,
         N,
         B,
@@ -59,13 +57,6 @@ impl<'a, C, P, J, N, B, D>
 where
     C: IdentSource + StringSource,
     Self: Lex<Span = D::Span, Ident = C::Ident, StringRef = C::StringRef>,
-    P: ParserFactory<
-        <Self as IdentSource>::Ident,
-        Literal<<Self as StringSource>::StringRef>,
-        LexError,
-        <Self as SpanSource>::Span,
-    >,
-    J: GetString<<Self as StringSource>::StringRef>,
     D: DiagnosticsSystem,
     Self: StartScope<<Self as IdentSource>::Ident> + NameTable<<Self as IdentSource>::Ident>,
     Self: Backend<D::Span>,

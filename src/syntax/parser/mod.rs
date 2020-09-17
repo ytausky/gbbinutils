@@ -461,64 +461,6 @@ where
 }
 
 #[cfg(test)]
-pub mod mock {
-    use super::*;
-
-    use crate::log::Log;
-
-    pub struct MockParserFactory<T> {
-        log: Log<T>,
-    }
-
-    impl<T> MockParserFactory<T> {
-        pub fn new(log: Log<T>) -> Self {
-            Self { log }
-        }
-    }
-
-    impl<I, L, E, T, S: Clone> ParserFactory<I, L, E, S> for MockParserFactory<T>
-    where
-        T: From<ParserEvent<I, L, E, S>>,
-    {
-        type Parser = MockParser<T>;
-
-        fn mk_parser(&mut self) -> Self::Parser {
-            MockParser {
-                log: self.log.clone(),
-            }
-        }
-    }
-
-    pub struct MockParser<T> {
-        log: Log<T>,
-    }
-
-    impl<I, L, E, T, S: Clone> ParseTokenStream<I, L, E, S> for MockParser<T>
-    where
-        T: From<ParserEvent<I, L, E, S>>,
-    {
-        fn parse_token_stream<A>(&mut self, mut actions: A) -> A
-        where
-            A: TokenStreamContext<Ident = I, Literal = L, Error = E, Span = S>,
-        {
-            let mut tokens = vec![];
-            while let Some(output) = actions.next_token() {
-                tokens.push(output)
-            }
-            self.log.push(ParserEvent::ParseTokenStream(tokens));
-            actions
-        }
-    }
-
-    #[derive(Debug, PartialEq)]
-    pub enum ParserEvent<I, L, E, S> {
-        ParseTokenStream(Vec<TokenStreamItem<I, L, E, S>>),
-    }
-
-    type TokenStreamItem<I, L, E, S> = (Result<Token<I, L>, E>, S);
-}
-
-#[cfg(test)]
 mod tests {
     use super::Token::*;
     use super::*;
