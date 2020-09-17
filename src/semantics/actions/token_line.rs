@@ -1,6 +1,6 @@
 use super::{Keyword, TokenStreamSemantics};
 
-use crate::analyze::{Literal, SemanticToken};
+use crate::session::lex::{Literal, SemanticToken};
 use crate::diag::CompactDiag;
 use crate::semantics::keywords::Directive;
 use crate::semantics::*;

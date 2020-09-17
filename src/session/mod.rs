@@ -1,10 +1,10 @@
 use self::builder::{Backend, ObjectBuilder, SymbolSource};
+use self::macros::{MacroId, MacroTable, VecMacroTable};
 use self::reentrancy::{ReentrancyActions, SourceComponents};
 use self::resolve::*;
+use self::strings::FakeStringInterner;
+use self::lex::{CodebaseAnalyzer, Literal, StringSource, Tokenizer};
 
-use crate::analyze::macros::{MacroId, MacroTable, VecMacroTable};
-use crate::analyze::strings::FakeStringInterner;
-use crate::analyze::{CodebaseAnalyzer, Literal, StringSource, Tokenizer};
 use crate::codebase::{BufId, BufRange, FileCodebase, FileSystem};
 use crate::diag::{CompositeDiagnosticsSystem, Diagnostics, OutputForwarder};
 use crate::object::SymbolId;
@@ -17,8 +17,11 @@ use crate::BuiltinSymbols;
 use std::rc::Rc;
 
 pub mod builder;
+pub mod lex;
+pub mod macros;
 pub mod reentrancy;
 pub mod resolve;
+pub mod strings;
 
 pub(crate) trait Analysis:
     SpanSource

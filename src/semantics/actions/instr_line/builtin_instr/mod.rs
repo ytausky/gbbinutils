@@ -257,7 +257,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::analyze::Literal::*;
+    use crate::session::lex::Literal::*;
     use crate::diag::{DiagnosticsEvent, Message, MockSpan};
     use crate::semantics::actions::tests::collect_semantic_actions;
     use crate::syntax::actions::*;

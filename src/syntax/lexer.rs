@@ -1,6 +1,7 @@
 use super::Sigil::*;
 use super::{IdentFactory, Sigil, Token};
-use crate::analyze::Literal;
+
+use crate::session::lex::Literal;
 
 use std::borrow::Borrow;
 use std::ops::Range;
@@ -305,7 +306,7 @@ mod tests {
         )
     }
 
-    type TestToken = Token<String, crate::analyze::Literal<String>>;
+    type TestToken = Token<String, crate::session::lex::Literal<String>>;
 
     #[test]
     fn lex_empty_str() {

@@ -1,6 +1,6 @@
 use super::BuiltinInstrSemantics;
 
-use crate::analyze::Literal;
+use crate::session::lex::Literal;
 use crate::expr::{Atom, Expr, ExprOp, ParamId};
 use crate::semantics::arg::ParsedArg;
 use crate::semantics::{ArgSemantics, Semantics};

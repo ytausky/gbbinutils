@@ -3,7 +3,7 @@ use self::token_line::TokenContextFinalizationSemantics;
 use super::Semantics;
 use super::*;
 
-use crate::analyze::Literal;
+use crate::session::lex::Literal;
 use crate::diag::{CompactDiag, Message};
 use crate::session::Analysis;
 use crate::span::StripSpan;
@@ -125,14 +125,14 @@ pub mod tests {
 
     pub use crate::session::resolve::BasicNameTable;
 
-    use crate::analyze::macros::mock::{MacroTableEvent, MockMacroId, MockMacroTable};
-    use crate::analyze::SemanticToken;
+    use crate::session::lex::SemanticToken;
     use crate::diag::{DiagnosticsEvent, Merge, Message, MockDiagnostics, MockSpan};
     use crate::expr::{Atom, BinOp, ExprOp, LocationCounter};
     use crate::log::with_log;
     use crate::object::Fragment;
     use crate::session::builder::mock::*;
     use crate::session::builder::Width;
+    use crate::session::macros::mock::{MacroTableEvent, MockMacroId, MockMacroTable};
     use crate::session::reentrancy::ReentrancyEvent;
     use crate::session::resolve::*;
     use crate::session::CompositeSession;

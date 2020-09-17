@@ -1,7 +1,7 @@
 use self::arg::{Arg, OperandSymbol, ParsedArg};
 use self::keywords::BuiltinMnemonic;
 
-use crate::analyze::{Literal, StringSource, TokenSeq};
+use crate::session::lex::{Literal, StringSource, TokenSeq};
 use crate::diag::Diagnostics;
 use crate::session::builder::*;
 use crate::session::reentrancy::Params;

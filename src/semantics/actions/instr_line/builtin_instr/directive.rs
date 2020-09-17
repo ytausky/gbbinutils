@@ -212,12 +212,12 @@ fn single_arg<T, D: Diagnostics<S>, S>(
 mod tests {
     use super::*;
 
-    use crate::analyze::macros::mock::{MockMacroId, MockMacroTable};
-    use crate::analyze::Literal;
+    use crate::session::lex::Literal;
     use crate::codebase::CodebaseError;
     use crate::expr::{Atom, Expr, ParamId};
     use crate::semantics::actions::tests::*;
     use crate::session::builder::mock::*;
+    use crate::session::macros::mock::{MockMacroId, MockMacroTable};
     use crate::session::reentrancy::ReentrancyEvent;
     use crate::session::resolve::{MockNameTable, NameTableEvent, ResolvedName};
     use crate::session::CompositeSession;

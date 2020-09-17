@@ -451,7 +451,7 @@ mod tests {
 
     use super::*;
 
-    use crate::analyze::Literal;
+    use crate::session::lex::Literal;
     use crate::expr::Atom;
     use crate::semantics::arg::*;
     use crate::semantics::keywords::*;

@@ -1,6 +1,6 @@
-use crate::analyze::strings::GetString;
-use crate::analyze::{Lex, StringSource};
-use crate::analyze::{Literal, Token};
+use super::strings::GetString;
+use super::lex::{Lex, Literal, StringSource};
+
 use crate::codebase::{BufId, BufRange};
 use crate::diag::DiagnosticsSystem;
 use crate::semantics::{Semantics, TokenStreamState};
@@ -12,6 +12,7 @@ use crate::span::*;
 use crate::syntax::parser::{DefaultParserFactory, ParseTokenStream, ParserFactory};
 use crate::syntax::IdentSource;
 use crate::syntax::LexError;
+use crate::syntax::Token;
 use crate::CompositeSession;
 
 use std::rc::Rc;
@@ -268,7 +269,7 @@ where
 pub mod mock {
     use super::*;
 
-    use crate::analyze::Literal;
+    use crate::session::lex::Literal;
     use crate::log::Log;
     use crate::syntax::Token;
 

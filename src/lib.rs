@@ -8,7 +8,7 @@
 pub use crate::codebase::FileSystem;
 pub use crate::link::{Program, Rom};
 
-use crate::analyze::{CodebaseAnalyzer, Tokenizer};
+use crate::session::lex::{CodebaseAnalyzer, Tokenizer};
 use crate::codebase::{CodebaseError, StdFileSystem};
 use crate::diag::*;
 use crate::session::reentrancy::ReentrancyActions;
@@ -17,7 +17,6 @@ use crate::session::{CompositeSession, Session};
 #[macro_use]
 pub mod diag;
 
-mod analyze;
 mod codebase;
 mod expr;
 mod link;

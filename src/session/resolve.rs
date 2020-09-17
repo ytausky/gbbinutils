@@ -1,6 +1,6 @@
+use super::macros::MacroSource;
 use super::CompositeSession;
 
-use crate::analyze::macros::MacroSource;
 use crate::semantics::Keyword;
 use crate::session::builder::SymbolSource;
 use crate::syntax::{IdentFactory, IdentSource};

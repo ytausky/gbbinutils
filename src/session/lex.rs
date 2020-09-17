@@ -10,9 +10,6 @@ use std::rc::Rc;
 #[cfg(test)]
 pub use self::mock::*;
 
-pub mod macros;
-pub mod strings;
-
 type LexItem<I, R, S> = (Result<SemanticToken<I, R>, LexError>, S);
 pub type SemanticToken<I, R> = crate::syntax::Token<I, Literal<R>>;
 

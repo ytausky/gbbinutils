@@ -1,6 +1,6 @@
 use super::*;
 
-use crate::analyze::{SemanticToken, TokenSeq};
+use crate::session::lex::{SemanticToken, TokenSeq};
 use crate::semantics::actions::TokenStreamState;
 use crate::session::reentrancy::MacroArgs;
 use crate::syntax::actions::{InstrFinalizer, MacroArgContext, MacroInstrContext};
@@ -111,8 +111,8 @@ impl<'a, 'b, S: Analysis> MacroArgContext for MacroArgSemantics<'a, 'b, S> {
 mod tests {
     use super::*;
 
-    use crate::analyze::macros::mock::{MacroTableEvent, MockMacroId};
     use crate::semantics::actions::tests::*;
+    use crate::session::macros::mock::{MacroTableEvent, MockMacroId};
     use crate::session::resolve::ResolvedName;
     use crate::syntax::actions::{InstrContext, LineFinalizer, TokenStreamContext};
     use crate::syntax::Token;

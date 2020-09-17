@@ -1,9 +1,9 @@
+use super::macros::MacroTable;
 use super::resolve::{NameTable, StartScope};
+use super::strings::GetString;
 use super::CompositeSession;
+use super::lex::{Lex, Literal, SemanticToken, StringSource};
 
-use crate::analyze::macros::MacroTable;
-use crate::analyze::strings::GetString;
-use crate::analyze::{Lex, Literal, SemanticToken, StringSource};
 use crate::codebase::CodebaseError;
 use crate::diag::*;
 use crate::semantics::{Semantics, TokenStreamState};
@@ -21,7 +21,7 @@ pub(crate) trait ReentrancyActions: IdentSource + SpanSource + StringSource {
     fn analyze_file(&mut self, path: Self::StringRef) -> Result<(), CodebaseError>;
 }
 
-pub type MacroArgs<I, R, S> = crate::analyze::macros::MacroArgs<SemanticToken<I, R>, S>;
+pub type MacroArgs<I, R, S> = super::macros::MacroArgs<SemanticToken<I, R>, S>;
 pub type Params<I, S> = (Vec<I>, Vec<S>);
 
 pub(crate) struct SourceComponents<C, P, I> {
@@ -98,10 +98,10 @@ where
 mod mock {
     use super::*;
 
-    use crate::analyze::macros::mock::MockMacroId;
-    use crate::analyze::macros::MacroSource;
     use crate::diag::DiagnosticsEvent;
     use crate::log::Log;
+    use crate::session::macros::mock::MockMacroId;
+    use crate::session::macros::MacroSource;
 
     use std::marker::PhantomData;
 
@@ -176,14 +176,14 @@ mod mock {
 mod tests {
     use super::*;
 
-    use crate::analyze::macros::mock::{MacroTableEvent, MockMacroId};
-    use crate::analyze::strings::FakeStringInterner;
-    use crate::analyze::{Literal, MockCodebase};
+    use crate::session::lex::{Literal, MockCodebase};
     use crate::diag::DiagnosticsEvent;
     use crate::expr::Expr;
     use crate::log::*;
     use crate::session::builder::mock::{BackendEvent, MockSymbolId, SerialIdAllocator};
+    use crate::session::macros::mock::{MacroTableEvent, MockMacroId};
     use crate::session::resolve::{BasicNameTable, NameTableEvent};
+    use crate::session::strings::FakeStringInterner;
     use crate::syntax::parser::mock::*;
     use crate::syntax::*;
 
@@ -205,7 +205,7 @@ mod tests {
     }
 
     type MockParserFactory<S> = crate::syntax::parser::mock::MockParserFactory<Event<S>>;
-    type MockMacroTable<S> = crate::analyze::macros::mock::MockMacroTable<Event<S>>;
+    type MockMacroTable<S> = crate::session::macros::mock::MockMacroTable<Event<S>>;
     type MockDiagnosticsSystem<S> = crate::diag::MockDiagnosticsSystem<Event<S>, S>;
     type MockNameTable<S> =
         crate::session::resolve::MockNameTable<BasicNameTable<MockMacroId, MockSymbolId>, Event<S>>;
