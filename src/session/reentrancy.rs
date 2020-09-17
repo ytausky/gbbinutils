@@ -4,10 +4,10 @@ use super::resolve::{NameTable, StartScope};
 use super::CompositeSession;
 
 use crate::codebase::CodebaseError;
-use crate::diag::*;
 use crate::semantics::{Semantics, TokenStreamState};
 use crate::session::builder::Backend;
-use crate::span::SpanSource;
+use crate::session::diagnostics::*;
+use crate::span::{SpanSource, SpanSystem};
 use crate::syntax::parser::{DefaultParserFactory, ParserFactory};
 use crate::syntax::{IdentSource, LexError, ParseTokenStream};
 
@@ -21,18 +21,19 @@ pub(crate) trait ReentrancyActions<R> {
 pub type MacroArgs<I, R, S> = super::macros::MacroArgs<SemanticToken<I, R>, S>;
 pub type Params<I, S> = (Vec<I>, Vec<S>);
 
-impl<C, M, N, B, D> ReentrancyActions<<Self as StringSource>::StringRef>
-    for CompositeSession<C, M, N, B, D>
+impl<C, R, M, N, B, D> ReentrancyActions<<Self as StringSource>::StringRef>
+    for CompositeSession<C, R, M, N, B, D>
 where
-    Self: Lex<Span = D::Span>,
+    Self: Lex<Span = R::Span>,
     Self: MacroTable<
         <Self as IdentSource>::Ident,
         Literal<<Self as StringSource>::StringRef>,
         <Self as SpanSource>::Span,
     >,
-    D: DiagnosticsSystem,
+    R: SpanSystem,
+    Self: EmitDiag<R::Span, R::Stripped>,
     Self: StartScope<<Self as IdentSource>::Ident> + NameTable<<Self as IdentSource>::Ident>,
-    Self: Backend<D::Span>,
+    Self: Backend<R::Span>,
     <Self as IdentSource>::Ident: 'static,
     <Self as StringSource>::StringRef: 'static,
     <Self as SpanSource>::Span: 'static,
@@ -62,7 +63,6 @@ where
 mod mock {
     use super::*;
 
-    use crate::diag::DiagnosticsEvent;
     use crate::log::Log;
     use crate::session::macros::mock::MockMacroId;
     use crate::session::macros::MacroSource;
@@ -116,12 +116,10 @@ mod mock {
         type StringRef = String;
     }
 
-    impl<T, S, M, N, B, D> ReentrancyActions<String>
-        for CompositeSession<MockCodebase<T, S>, M, N, B, D>
+    impl<T, S, R, M, N, B, D> ReentrancyActions<String>
+        for CompositeSession<MockCodebase<T, S>, R, M, N, B, D>
     where
-        T: From<ReentrancyEvent> + From<DiagnosticsEvent<S>>,
-        S: Clone + Merge,
-        D: Diagnostics<S>,
+        T: From<ReentrancyEvent>,
     {
         fn analyze_file(&mut self, path: String) -> Result<(), CodebaseError> {
             self.codebase.log.push(ReentrancyEvent::AnalyzeFile(path));

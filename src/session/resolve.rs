@@ -196,7 +196,7 @@ impl<T: Default> StartScope<Ident<String>> for BiLevelNameTable<T> {
     }
 }
 
-impl<R, M, N, B, D, I> NameTable<I> for CompositeSession<R, M, N, B, D>
+impl<C, R, M, N, B, D, I> NameTable<I> for CompositeSession<C, R, M, N, B, D>
 where
     N: NameTable<I, MacroId = Self::MacroId, SymbolId = Self::SymbolId>,
     Self: MacroSource + SymbolSource,
@@ -210,7 +210,7 @@ where
     }
 }
 
-impl<R, M, N, B, D, I> StartScope<I> for CompositeSession<R, M, N, B, D>
+impl<C, R, M, N, B, D, I> StartScope<I> for CompositeSession<C, R, M, N, B, D>
 where
     N: StartScope<I>,
 {
@@ -244,21 +244,21 @@ mod mock {
         type SymbolId = N::SymbolId;
     }
 
-    impl<N, T> NameTable<String> for MockNameTable<N, T>
+    impl<N, T> NameTable<Ident<String>> for MockNameTable<N, T>
     where
-        N: NameTable<String>,
+        N: NameTable<Ident<String>>,
         T: From<NameTableEvent<N::MacroId, N::SymbolId>>,
     {
         fn resolve_name(
             &mut self,
-            ident: &String,
+            ident: &Ident<String>,
         ) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
             self.names.resolve_name(ident)
         }
 
         fn define_name(
             &mut self,
-            ident: String,
+            ident: Ident<String>,
             entry: ResolvedName<Self::MacroId, Self::SymbolId>,
         ) {
             self.names.define_name(ident.clone(), entry.clone());
@@ -266,20 +266,20 @@ mod mock {
         }
     }
 
-    impl<N, T> StartScope<String> for MockNameTable<N, T>
+    impl<N, T> StartScope<Ident<String>> for MockNameTable<N, T>
     where
-        N: NameTable<String>,
+        N: NameTable<Ident<String>>,
         T: From<NameTableEvent<N::MacroId, N::SymbolId>>,
     {
-        fn start_scope(&mut self, ident: &String) {
+        fn start_scope(&mut self, ident: &Ident<String>) {
             self.log.push(NameTableEvent::StartScope(ident.clone()))
         }
     }
 
     #[derive(Debug, PartialEq)]
     pub enum NameTableEvent<MacroId, SymbolId> {
-        Insert(String, ResolvedName<MacroId, SymbolId>),
-        StartScope(String),
+        Insert(Ident<String>, ResolvedName<MacroId, SymbolId>),
+        StartScope(Ident<String>),
     }
 }
 

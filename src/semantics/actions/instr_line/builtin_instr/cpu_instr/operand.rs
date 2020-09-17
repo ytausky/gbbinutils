@@ -1,9 +1,9 @@
 use super::Condition;
 
-use crate::diag::*;
 use crate::expr::Expr;
 use crate::semantics::arg::*;
 use crate::session::builder::{PtrReg, Reg16, RegPair, M};
+use crate::session::diagnostics::*;
 use crate::span::{Source, SpanSource};
 
 #[derive(Debug, PartialEq)]
@@ -191,6 +191,7 @@ pub mod tests {
     use super::*;
 
     use crate::session::builder::mock::{BackendEvent, MockSymbolId};
+    use crate::session::mock::MockSession;
 
     use std::fmt::Debug;
 
@@ -253,7 +254,7 @@ pub mod tests {
             result = Some(super::analyze_operand(
                 expr,
                 context,
-                &mut MockDiagnostics::new(log),
+                &mut MockSession::new(log),
             ))
         });
         result.unwrap().map_err(|_| log)

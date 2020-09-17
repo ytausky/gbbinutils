@@ -1,9 +1,9 @@
 use super::{Expr, LinkageContext, VarTable};
 
-use crate::diag::{BackendDiagnostics, Message, ValueKind};
 use crate::expr::{Atom, BinOp, ExprOp, ParamId};
 use crate::object::num::Num;
 use crate::object::*;
+use crate::session::diagnostics::{BackendDiagnostics, Message, ValueKind};
 use crate::span::{Spanned, WithSpan};
 
 use std::borrow::Borrow;
@@ -279,11 +279,11 @@ pub const BUILTIN_SYMBOLS: &[(&str, SymbolId)] = &[("sizeof", Symbol::Builtin(Bu
 mod tests {
     use super::*;
 
-    use crate::diag::*;
     use crate::log::Log;
     use crate::object::Var;
+    use crate::session::diagnostics::*;
 
-    type MockDiagnostics<S> = crate::diag::MockDiagnostics<DiagnosticsEvent<S>, S>;
+    type MockDiagnostics<S> = crate::session::diagnostics::MockDiagnostics<DiagnosticsEvent<S>, S>;
 
     #[test]
     fn eval_section_addr() {
@@ -434,16 +434,23 @@ mod tests {
 
     #[test]
     fn diagnose_using_sizeof_as_immediate() {
-        let mut diagnostics = MockDiagnostics::new(Log::new());
+        let log = Log::new();
+        let registry = &mut TestDiagnosticsListener::new();
+        let mut diagnostics = MockDiagnostics::new(log.clone());
+        let mut view = DiagnosticsView {
+            codebase: &mut (),
+            registry,
+            diagnostics: &mut diagnostics,
+        };
         let immediate = Expr::from_atom(
             Atom::Name(Symbol::Builtin(BuiltinId::Sizeof)),
             MockSpan::from(0),
         );
-        let value = eval_in_empty_program(immediate, &mut diagnostics);
-        let log = diagnostics.into_log();
+        let value = eval_in_empty_program(immediate, &mut view);
+        drop(diagnostics);
         assert_eq!(value, Num::Unknown);
         assert_eq!(
-            log,
+            log.into_inner(),
             [DiagnosticsEvent::EmitDiag(
                 Message::CannotCoerceBuiltinNameIntoNum { name: 0.into() }
                     .at(0.into())
@@ -464,17 +471,25 @@ mod tests {
             vars,
             location: Num::Unknown,
         };
-        let mut diagnostics = MockDiagnostics::new(Log::new());
+        let log = Log::new();
+        let registry = &mut TestDiagnosticsListener::new();
+        let mut diagnostics = MockDiagnostics::new(log.clone());
+        let mut view = DiagnosticsView {
+            codebase: &mut (),
+            registry,
+            diagnostics: &mut diagnostics,
+        };
         let name_span = MockSpan::from("name");
         let call_span = MockSpan::from("call");
         let immediate = crate::expr::Expr(vec![
             ExprOp::Atom(Atom::Name(Symbol::Content(ContentId(0)))).with_span(name_span.clone()),
             ExprOp::FnCall(0).with_span(MockSpan::merge(name_span.clone(), call_span)),
         ]);
-        let value = immediate.to_num(&context, &mut diagnostics);
+        let value = immediate.to_num(&context, &mut view);
+        drop(diagnostics);
         assert_eq!(value, Num::Unknown);
         assert_eq!(
-            diagnostics.into_log(),
+            log.into_inner(),
             [DiagnosticsEvent::EmitDiag(
                 Message::UnresolvedSymbol {
                     symbol: name_span.clone()
@@ -520,7 +535,14 @@ mod tests {
             vars,
             location: Num::Unknown,
         };
-        let mut diagnostics = MockDiagnostics::new(Log::new());
+        let log = Log::new();
+        let registry = &mut TestDiagnosticsListener::new();
+        let mut diagnostics = MockDiagnostics::new(log.clone());
+        let mut view = DiagnosticsView {
+            codebase: &mut (),
+            registry,
+            diagnostics: &mut diagnostics,
+        };
         let inner_span = MockSpan::from("inner");
         let sizeof_span = MockSpan::from("sizeof");
         let immediate = crate::expr::Expr(vec![
@@ -529,10 +551,11 @@ mod tests {
             ExprOp::Atom(inner).with_span(inner_span.clone()),
             ExprOp::FnCall(1).with_span(MockSpan::merge(sizeof_span, MockSpan::from("paren_r"))),
         ]);
-        let num = immediate.to_num(&context, &mut diagnostics);
+        let num = immediate.to_num(&context, &mut view);
+        drop(diagnostics);
         assert_eq!(num, Num::Unknown);
         assert_eq!(
-            diagnostics.into_log(),
+            log.into_inner(),
             [DiagnosticsEvent::EmitDiag(
                 Message::ExpectedFound {
                     expected: ValueKind::Section,

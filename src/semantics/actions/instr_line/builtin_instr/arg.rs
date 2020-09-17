@@ -84,12 +84,12 @@ impl<'a, 'b, S: Analysis> ArgSemantics<'a, 'b, S> {
 
 #[cfg(test)]
 mod tests {
-    use crate::diag::{DiagnosticsEvent, Message, MockSpan};
     use crate::expr::{Atom, BinOp, Expr, ExprOp, ParamId};
     use crate::object::Fragment;
     use crate::semantics::actions::tests::collect_semantic_actions;
     use crate::session::builder::mock::{BackendEvent, MockSymbolId};
     use crate::session::builder::Width;
+    use crate::session::diagnostics::{DiagnosticsEvent, Message, MockSpan};
     use crate::session::resolve::{NameTableEvent, ResolvedName};
     use crate::span::WithSpan;
     use crate::syntax::actions::*;

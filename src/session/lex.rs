@@ -21,41 +21,23 @@ pub trait Lex: IdentSource + StringSource + SpanSource {
     fn lex_file(&mut self, path: Self::StringRef) -> Result<Self::TokenIter, CodebaseError>;
 }
 
-pub struct CodebaseAnalyzer<'a, T: 'a> {
-    codebase: &'a T,
-}
-
-impl<'a, T: StringSource + 'a> CodebaseAnalyzer<'a, T> {
-    pub fn new(codebase: &T) -> CodebaseAnalyzer<T> {
-        CodebaseAnalyzer { codebase }
-    }
-}
-
 pub type TokenSeq<I, R, S> = (Vec<SemanticToken<I, R>>, Vec<S>);
 
-impl<'a, T, M, N, B, D> Lex for CompositeSession<CodebaseAnalyzer<'a, T>, M, N, B, D>
+impl<'a, C, R, M, N, B, D> Lex for CompositeSession<C, R, M, N, B, D>
 where
-    T: Tokenize<D::BufContext> + 'a,
-    T::StringRef: AsRef<str>,
-    D: BufContextFactory,
+    C: Codebase,
+    R: BufContextFactory,
 {
-    type TokenIter = T::Tokenized;
+    type TokenIter = TokenizedSrc<DefaultIdentFactory, R::BufContext>;
 
     fn lex_file(&mut self, path: Self::StringRef) -> Result<Self::TokenIter, CodebaseError> {
-        self.codebase
-            .codebase
-            .tokenize_file(path.as_ref(), |buf_id| {
-                self.diagnostics.mk_buf_context(buf_id, None)
-            })
+        let buf_id = self.codebase.open(&path)?;
+        let rc_src = self.codebase.buf(buf_id);
+        Ok(TokenizedSrc::new(
+            rc_src,
+            self.registry.mk_buf_context(buf_id, None),
+        ))
     }
-}
-
-impl<'a, T: IdentSource> IdentSource for CodebaseAnalyzer<'a, T> {
-    type Ident = T::Ident;
-}
-
-impl<'a, T: StringSource> StringSource for CodebaseAnalyzer<'a, T> {
-    type StringRef = T::StringRef;
 }
 
 pub trait StringSource {

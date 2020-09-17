@@ -3,7 +3,7 @@ use self::token_line::TokenContextFinalizationSemantics;
 use super::Semantics;
 use super::*;
 
-use crate::diag::{CompactDiag, Message};
+use crate::session::diagnostics::{CompactDiag, Message};
 use crate::session::lex::Literal;
 use crate::session::Analysis;
 use crate::span::StripSpan;
@@ -125,12 +125,12 @@ pub mod tests {
 
     pub use crate::session::resolve::BasicNameTable;
 
-    use crate::diag::{DiagnosticsEvent, Merge, Message, MockSpan};
     use crate::expr::{Atom, BinOp, ExprOp, LocationCounter};
     use crate::log::with_log;
     use crate::object::Fragment;
     use crate::session::builder::mock::*;
     use crate::session::builder::Width;
+    use crate::session::diagnostics::{DiagnosticsEvent, Merge, Message, MockSpan};
     use crate::session::lex::SemanticToken;
     use crate::session::macros::mock::{MacroTableEvent, MockMacroId};
     use crate::session::mock::MockSession;
@@ -247,7 +247,7 @@ pub mod tests {
 
     #[test]
     fn emit_rst_f_of_1() {
-        let ident = String::from("f");
+        let ident = Ident::from("f");
         let actions = collect_semantic_actions(|actions| {
             let command = actions
                 .will_parse_line()
@@ -398,7 +398,7 @@ pub mod tests {
     fn test_macro_definition(
         name: &str,
         params: impl Borrow<[&'static str]>,
-        body: impl Borrow<[SemanticToken<String, String>]>,
+        body: impl Borrow<[SemanticToken<Ident<String>, String>]>,
     ) {
         let actions = collect_semantic_actions(|actions| {
             let mut params_actions = actions
@@ -520,7 +520,7 @@ pub mod tests {
         with_log(|log| {
             let mut session = MockSession::new(log.clone());
             for (ident, resolution) in entries {
-                session.define_name(ident, resolution)
+                session.define_name(ident.as_str().into(), resolution)
             }
             log.clear();
             let mut tokens = std::iter::empty();

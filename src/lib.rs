@@ -9,13 +9,11 @@ pub use crate::codebase::FileSystem;
 pub use crate::link::{Program, Rom};
 
 use crate::codebase::{CodebaseError, StdFileSystem};
-use crate::diag::*;
-use crate::session::lex::{CodebaseAnalyzer, Tokenizer};
+use crate::session::diagnostics::*;
 use crate::session::reentrancy::ReentrancyActions;
 use crate::session::{CompositeSession, Session};
 
-#[macro_use]
-pub mod diag;
+pub use crate::session::diagnostics;
 
 mod codebase;
 mod expr;
@@ -45,7 +43,7 @@ impl<'a> Default for InputConfig<'a> {
 
 pub enum DiagnosticsConfig<'a> {
     Ignore,
-    Output(&'a mut dyn FnMut(diag::Diagnostic)),
+    Output(&'a mut dyn FnMut(session::diagnostics::Diagnostic)),
 }
 
 impl<'a> Default for DiagnosticsConfig<'a> {
@@ -69,7 +67,7 @@ pub fn assemble(name: &str, config: &mut Config) -> Option<Program> {
         InputConfig::Default => input_holder.get_or_insert_with(StdFileSystem::new),
         InputConfig::Custom(ref mut input) => *input,
     };
-    let diagnostics: &mut dyn FnMut(diag::Diagnostic) = match config.diagnostics {
+    let diagnostics: &mut dyn FnMut(session::diagnostics::Diagnostic) = match config.diagnostics {
         DiagnosticsConfig::Ignore => diagnostics_holder.get_or_insert(|_| {}),
         DiagnosticsConfig::Output(ref mut diagnostics) => *diagnostics,
     };
@@ -81,18 +79,20 @@ pub fn assemble(name: &str, config: &mut Config) -> Option<Program> {
 fn try_assemble<'a>(
     name: &str,
     input: &'a mut dyn codebase::FileSystem,
-    output: &'a mut dyn FnMut(diag::Diagnostic),
+    output: &'a mut dyn FnMut(session::diagnostics::Diagnostic),
 ) -> Result<Program, CodebaseError> {
     let codebase = codebase::FileCodebase::new(input);
-    let diagnostics = CompositeDiagnosticsSystem::new(&codebase.cache, output);
-
-    let tokenizer = Tokenizer(&codebase);
-    let file_parser = CodebaseAnalyzer::new(&tokenizer);
-    let mut session = Session::new(file_parser, diagnostics);
+    let diagnostics = session::diagnostics::OutputForwarder { output };
+    let mut session = Session::new(codebase, diagnostics);
     // session.analyze_file(name.into())?;
     ReentrancyActions::analyze_file(&mut session, name.into())?;
 
-    let result = Program::link(session.builder.object, &mut session.diagnostics);
+    let mut diagnostics = DiagnosticsView {
+        codebase: &mut session.codebase,
+        registry: &mut session.registry,
+        diagnostics: &mut session.diagnostics,
+    };
+    let result = Program::link(session.builder.object, &mut diagnostics);
     Ok(result)
 }
 
@@ -147,7 +147,7 @@ mod log {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::diag::Diagnostic;
+    use crate::session::diagnostics::Diagnostic;
     use std::collections::HashMap;
     use std::io;
 

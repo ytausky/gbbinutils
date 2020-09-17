@@ -1,8 +1,8 @@
 use super::{BinarySection, LinkageContext, VarTable};
 
-use crate::diag::{BackendDiagnostics, Message};
 use crate::object::{Content, Expr, Fragment, Section};
 use crate::session::builder::Width;
+use crate::session::diagnostics::{BackendDiagnostics, Message};
 use crate::span::Source;
 
 use std::mem::replace;
@@ -158,11 +158,11 @@ fn is_in_u8_range(n: i32) -> bool {
 mod tests {
     use super::*;
 
-    use crate::diag::IgnoreDiagnostics;
     use crate::expr::{Atom, BinOp, Expr, ExprOp};
     use crate::object::num::Num;
     use crate::object::{Content, SymbolId};
     use crate::session::builder::*;
+    use crate::session::diagnostics::IgnoreDiagnostics;
     use crate::session::mock::StandaloneBackend;
     use crate::span::WithSpan;
 

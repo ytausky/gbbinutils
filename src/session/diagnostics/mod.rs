@@ -7,9 +7,12 @@
 pub(crate) use self::message::{KeywordOperandCategory, Message, ValueKind};
 pub use crate::codebase::{LineNumber, TextPosition, TextRange};
 
-use crate::codebase::{BufId, BufRange, TextBuf, TextCache};
+use super::CompositeSession;
+
+use crate::codebase::{BufId, BufRange, FileCodebase, FileSystem, TextBuf, TextCache};
 use crate::span::*;
 
+#[cfg(test)]
 use std::cell::RefCell;
 use std::ops::Range;
 
@@ -43,167 +46,6 @@ impl<T, S> BackendDiagnostics<S> for T where
 
 impl<T, S> Diagnostics<S> for T where T: MergeSpans<S> + BackendDiagnostics<S> {}
 
-macro_rules! delegate_diagnostics {
-    ({$($params:tt)*}, $({$($preds:tt)*},)? $t:ty, {$($delegate:tt)*}, $dt:ty, $span:ty) => {
-        impl<$($params)*> $crate::span::MergeSpans<$span> for $t
-        where
-            $span: Clone,
-            $($($preds)*)?
-        {
-            fn merge_spans(&mut self, left: &$span, right: &$span) -> $span {
-                self.$($delegate)*.merge_spans(left, right)
-            }
-        }
-
-        impl<$($params)*> $crate::span::StripSpan<$span> for $t
-        where
-            $span: Clone,
-            $($($preds)*)?
-        {
-            type Stripped = <$dt as $crate::span::StripSpan<$span>>::Stripped;
-
-            fn strip_span(&mut self, span: &$span) -> Self::Stripped {
-                self.$($delegate)*.strip_span(span)
-            }
-        }
-
-        impl<$($params)*> $crate::diag::EmitDiag<
-            $span,
-            <$dt as $crate::span::StripSpan<$span>>::Stripped
-        > for $t
-        where
-            $span: Clone,
-            $($($preds)*)?
-        {
-            fn emit_diag(
-                &mut self,
-                diag: impl Into<$crate::diag::CompactDiag<
-                    $span,
-                    <$dt as $crate::span::StripSpan<$span>>::Stripped
-                >>
-            ) {
-                self.$($delegate)*.emit_diag(diag)
-            }
-        }
-    };
-}
-
-pub(crate) struct CompositeDiagnosticsSystem<C, O> {
-    pub context: C,
-    pub output: O,
-}
-
-impl<'a, 'b> CompositeDiagnosticsSystem<RcContextFactory, OutputForwarder<'a, 'b>> {
-    pub fn new(codebase: &'b RefCell<TextCache>, output: &'a mut dyn FnMut(Diagnostic)) -> Self {
-        CompositeDiagnosticsSystem {
-            context: RcContextFactory::new(),
-            output: OutputForwarder { output, codebase },
-        }
-    }
-}
-
-impl<C, O> SpanSource for CompositeDiagnosticsSystem<C, O>
-where
-    C: SpanSystem,
-{
-    type Span = C::Span;
-}
-
-impl<C, O> MergeSpans<C::Span> for CompositeDiagnosticsSystem<C, O>
-where
-    C: SpanSystem,
-{
-    fn merge_spans(&mut self, left: &C::Span, right: &C::Span) -> C::Span {
-        self.context.merge_spans(left, right)
-    }
-}
-
-impl<C, O> StripSpan<C::Span> for CompositeDiagnosticsSystem<C, O>
-where
-    C: SpanSystem,
-{
-    type Stripped = C::Stripped;
-
-    fn strip_span(&mut self, span: &C::Span) -> Self::Stripped {
-        self.context.strip_span(span)
-    }
-}
-
-impl<C, O> EmitDiag<C::Span, C::Stripped> for CompositeDiagnosticsSystem<C, O>
-where
-    C: SpanSystem,
-    O: EmitDiag<C::Span, C::Stripped>,
-{
-    fn emit_diag(&mut self, diag: impl Into<CompactDiag<C::Span, C::Stripped>>) {
-        self.output.emit_diag(diag)
-    }
-}
-
-impl<C, O> AddMacroDef<C::Span> for CompositeDiagnosticsSystem<C, O>
-where
-    C: SpanSystem,
-{
-    type MacroDefHandle = C::MacroDefHandle;
-
-    fn add_macro_def<P, B>(&mut self, name: C::Span, params: P, body: B) -> Self::MacroDefHandle
-    where
-        P: IntoIterator<Item = C::Span>,
-        B: IntoIterator<Item = C::Span>,
-    {
-        self.context.add_macro_def(name, params, body)
-    }
-}
-
-impl<C, O> MacroContextFactory<C::MacroDefHandle, C::Span> for CompositeDiagnosticsSystem<C, O>
-where
-    C: SpanSystem,
-{
-    type MacroCallCtx = C::MacroCallCtx;
-
-    fn mk_macro_call_ctx<A, J>(
-        &mut self,
-        name: C::Span,
-        args: A,
-        def: &C::MacroDefHandle,
-    ) -> Self::MacroCallCtx
-    where
-        A: IntoIterator<Item = J>,
-        J: IntoIterator<Item = C::Span>,
-    {
-        self.context.mk_macro_call_ctx(name, args, def)
-    }
-}
-
-impl<C, O> SpanSystem for CompositeDiagnosticsSystem<C, O>
-where
-    C: SpanSystem,
-    O: EmitDiag<C::Span, C::Stripped>,
-{
-}
-
-impl<C, O> BufContextFactory for CompositeDiagnosticsSystem<C, O>
-where
-    C: SpanSystem,
-    O: EmitDiag<C::Span, C::Stripped>,
-{
-    type BufContext = C::BufContext;
-
-    fn mk_buf_context(
-        &mut self,
-        buf_id: BufId,
-        included_from: Option<Self::Span>,
-    ) -> Self::BufContext {
-        self.context.mk_buf_context(buf_id, included_from)
-    }
-}
-
-impl<C, O> DiagnosticsSystem for CompositeDiagnosticsSystem<C, O>
-where
-    C: SpanSystem,
-    O: EmitDiag<C::Span, C::Stripped>,
-{
-}
-
 pub trait DiagnosticsOutput {
     fn emit(&mut self, diagnostic: Diagnostic);
 }
@@ -212,20 +54,55 @@ pub(crate) trait EmitDiag<S, T> {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<S, T>>);
 }
 
-pub(crate) struct OutputForwarder<'a, 'b> {
+pub(crate) struct OutputForwarder<'a> {
     pub output: &'a mut dyn FnMut(Diagnostic),
-    pub codebase: &'b RefCell<TextCache>,
 }
 
 type Span = RcSpan<BufId, BufRange>;
 
-impl<'a, 'b> SpanSource for OutputForwarder<'a, 'b> {
+impl<'a> SpanSource for OutputForwarder<'a> {
     type Span = Span;
 }
 
-impl<'a, 'b> EmitDiag<Span, StrippedBufSpan<BufId, BufRange>> for OutputForwarder<'a, 'b> {
+impl<'a, F: FileSystem + ?Sized, R, M, N, B> EmitDiag<Span, StrippedBufSpan<BufId, BufRange>>
+    for CompositeSession<FileCodebase<'a, F>, R, M, N, B, OutputForwarder<'a>>
+{
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<Span, StrippedBufSpan<BufId, BufRange>>>) {
-        (self.output)(diag.into().expand().render(&self.codebase.borrow()))
+        (self.diagnostics.output)(diag.into().expand().render(&self.codebase.cache.borrow()))
+    }
+}
+
+pub(crate) struct DiagnosticsView<'a, C, R, D> {
+    pub codebase: &'a mut C,
+    pub registry: &'a mut R,
+    pub diagnostics: &'a mut D,
+}
+
+impl<'a, C, R, D, S> MergeSpans<S> for DiagnosticsView<'a, C, R, D>
+where
+    R: MergeSpans<S>,
+{
+    fn merge_spans(&mut self, left: &S, right: &S) -> S {
+        self.registry.merge_spans(left, right)
+    }
+}
+
+impl<'a, C, R, D, S> StripSpan<S> for DiagnosticsView<'a, C, R, D>
+where
+    R: StripSpan<S>,
+{
+    type Stripped = R::Stripped;
+
+    fn strip_span(&mut self, span: &S) -> Self::Stripped {
+        self.registry.strip_span(span)
+    }
+}
+
+impl<'a, 'b, F: FileSystem + ?Sized, R> EmitDiag<Span, StrippedBufSpan<BufId, BufRange>>
+    for DiagnosticsView<'b, FileCodebase<'a, F>, R, OutputForwarder<'a>>
+{
+    fn emit_diag(&mut self, diag: impl Into<CompactDiag<Span, StrippedBufSpan<BufId, BufRange>>>) {
+        (self.diagnostics.output)(diag.into().expand().render(&self.codebase.cache.borrow()))
     }
 }
 
@@ -279,9 +156,18 @@ impl<S: Clone> StripSpan<S> for TestDiagnosticsListener<S> {
 }
 
 #[cfg(test)]
-impl<S> EmitDiag<S, S> for TestDiagnosticsListener<S> {
+impl<'a, C, R, S> EmitDiag<S, S> for DiagnosticsView<'a, C, R, TestDiagnosticsListener<S>> {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<S>>) {
-        self.diagnostics.borrow_mut().push(diag.into())
+        self.diagnostics.diagnostics.borrow_mut().push(diag.into())
+    }
+}
+
+#[cfg(test)]
+impl<C, R, M, N, B, S> EmitDiag<S, S>
+    for CompositeSession<C, R, M, N, B, TestDiagnosticsListener<S>>
+{
+    fn emit_diag(&mut self, diag: impl Into<CompactDiag<S>>) {
+        self.diagnostics.diagnostics.borrow_mut().push(diag.into())
     }
 }
 
@@ -500,13 +386,6 @@ mod mock {
                 _span: PhantomData,
             }
         }
-
-        pub fn into_log(self) -> Vec<T>
-        where
-            T: Debug,
-        {
-            self.log.into_inner()
-        }
     }
 
     impl<T, S> Clone for MockDiagnostics<T, S> {
@@ -544,13 +423,26 @@ mod mock {
         }
     }
 
-    impl<T, S> EmitDiag<S, S> for MockDiagnostics<T, S>
+    impl<C, R, M, N, B, T, S> EmitDiag<S, S> for CompositeSession<C, R, M, N, B, MockDiagnostics<T, S>>
     where
         T: From<DiagnosticsEvent<S>>,
         S: Clone,
     {
         fn emit_diag(&mut self, diag: impl Into<CompactDiag<S>>) {
-            self.log.push(DiagnosticsEvent::EmitDiag(diag.into()))
+            self.diagnostics
+                .log
+                .push(DiagnosticsEvent::EmitDiag(diag.into()))
+        }
+    }
+
+    impl<'a, C, R, T, S> EmitDiag<S, S> for DiagnosticsView<'a, C, R, MockDiagnostics<T, S>>
+    where
+        T: From<DiagnosticsEvent<S>>,
+    {
+        fn emit_diag(&mut self, diag: impl Into<CompactDiag<S>>) {
+            self.diagnostics
+                .log
+                .push(DiagnosticsEvent::EmitDiag(diag.into()))
         }
     }
 }

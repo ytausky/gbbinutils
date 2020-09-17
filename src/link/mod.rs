@@ -1,7 +1,7 @@
-use crate::diag::{BackendDiagnostics, IgnoreDiagnostics};
 use crate::object::num::Num;
 use crate::object::*;
 use crate::session::builder::Width;
+use crate::session::diagnostics::{BackendDiagnostics, IgnoreDiagnostics};
 
 use std::borrow::Borrow;
 
@@ -147,12 +147,11 @@ impl Width {
 mod tests {
     use super::*;
 
-    use crate::diag::{IgnoreDiagnostics, TestDiagnosticsListener};
     use crate::expr::*;
     use crate::session::builder::*;
+    use crate::session::diagnostics::IgnoreDiagnostics;
     use crate::session::mock::StandaloneBackend;
     use crate::span::WithSpan;
-    use crate::CompositeSession;
 
     #[test]
     fn empty_object_converted_to_all_0xff_rom() {
@@ -346,5 +345,5 @@ mod tests {
         );
     }
 
-    type Session<S> = CompositeSession<(), (), (), ObjectBuilder<S>, TestDiagnosticsListener<S>>;
+    type Session<S> = StandaloneBackend<S>;
 }

@@ -2,7 +2,7 @@ use super::actions::*;
 use super::Sigil::*;
 use super::{Sigil, Token};
 
-use crate::diag::Message;
+use crate::session::diagnostics::Message;
 
 macro_rules! bump {
     ($parser:expr) => {
@@ -465,8 +465,8 @@ mod tests {
     use super::Token::*;
     use super::*;
 
-    use crate::diag::{CompactDiag, Merge, Message};
     use crate::expr::BinOp;
+    use crate::session::diagnostics::{CompactDiag, Merge, Message};
     use crate::syntax::actions::mock::IdentKind::*;
     use crate::syntax::actions::mock::*;
 
@@ -956,7 +956,7 @@ mod tests {
         }
     }
 
-    pub(super) type MockSpan = crate::diag::MockSpan<TokenRef>;
+    pub(super) type MockSpan = crate::session::diagnostics::MockSpan<TokenRef>;
 
     pub(super) fn with_spans<'a>(
         tokens: impl IntoIterator<Item = &'a (MockToken, TokenRef)>,

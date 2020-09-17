@@ -1,9 +1,9 @@
 use super::lex::{Lex, Literal, StringSource};
 
 use crate::codebase::{BufId, BufRange};
-use crate::diag::DiagnosticsSystem;
 use crate::semantics::{Semantics, TokenStreamState};
 use crate::session::builder::Backend;
+use crate::session::diagnostics::EmitDiag;
 use crate::session::resolve::Ident;
 use crate::session::resolve::{NameTable, StartScope};
 use crate::span::*;
@@ -37,11 +37,13 @@ pub type MacroArgs<T, S> = (Vec<Vec<T>>, Vec<Vec<S>>);
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MacroId(usize);
 
-impl<'a, R, N, B, D, I, L, H> MacroSource for CompositeSession<R, VecMacroTable<I, L, H>, N, B, D> {
+impl<'a, C, R, N, B, D, I, L, H> MacroSource
+    for CompositeSession<C, R, VecMacroTable<I, L, H>, N, B, D>
+{
     type MacroId = MacroId;
 }
 
-impl<'a, C, N, B, D>
+impl<'a, C, RR, N, B, D, I, R>
     MacroTable<
         <Self as IdentSource>::Ident,
         Literal<<Self as StringSource>::StringRef>,
@@ -49,17 +51,20 @@ impl<'a, C, N, B, D>
     >
     for CompositeSession<
         C,
-        VecMacroTable<C::Ident, Literal<C::StringRef>, <D as AddMacroDef<D::Span>>::MacroDefHandle>,
+        RR,
+        VecMacroTable<I, Literal<R>, <RR as AddMacroDef<RR::Span>>::MacroDefHandle>,
         N,
         B,
         D,
     >
 where
-    C: IdentSource + StringSource,
-    Self: Lex<Span = D::Span, Ident = C::Ident, StringRef = C::StringRef>,
-    D: DiagnosticsSystem,
+    I: AsRef<str> + Clone + Eq,
+    R: Clone + Eq,
+    Self: Lex<Span = RR::Span, Ident = I, StringRef = R>,
+    RR: SpanSystem,
+    Self: EmitDiag<RR::Span, RR::Stripped>,
     Self: StartScope<<Self as IdentSource>::Ident> + NameTable<<Self as IdentSource>::Ident>,
-    Self: Backend<D::Span>,
+    Self: Backend<RR::Span>,
     Self: MacroSource<MacroId = MacroId>,
     <Self as IdentSource>::Ident: 'static,
     <Self as StringSource>::StringRef: 'static,
@@ -67,14 +72,14 @@ where
 {
     fn define_macro(
         &mut self,
-        name_span: D::Span,
-        params: (Vec<<Self as IdentSource>::Ident>, Vec<D::Span>),
+        name_span: RR::Span,
+        params: (Vec<<Self as IdentSource>::Ident>, Vec<RR::Span>),
         body: (
             Vec<Token<<Self as IdentSource>::Ident, Literal<<Self as StringSource>::StringRef>>>,
-            Vec<D::Span>,
+            Vec<RR::Span>,
         ),
     ) -> Self::MacroId {
-        let context = self.diagnostics.add_macro_def(name_span, params.1, body.1);
+        let context = self.registry.add_macro_def(name_span, params.1, body.1);
         let id = MacroId(self.macros.len());
         self.macros.push(MacroDef {
             tokens: Rc::new(MacroDefTokens {
@@ -88,15 +93,15 @@ where
 
     fn expand_macro(
         &mut self,
-        (MacroId(id), name_span): (Self::MacroId, D::Span),
+        (MacroId(id), name_span): (Self::MacroId, RR::Span),
         (args, arg_spans): MacroArgs<
             Token<<Self as IdentSource>::Ident, Literal<<Self as StringSource>::StringRef>>,
-            D::Span,
+            RR::Span,
         >,
     ) {
         let def = &self.macros[id];
         let context = self
-            .diagnostics
+            .registry
             .mk_macro_call_ctx(name_span, arg_spans, &def.spans);
         let expansion = MacroExpansionIter::new(def.tokens.clone(), args, context);
         let mut tokens = expansion.map(|(t, s)| (Ok(t), s));
@@ -266,8 +271,11 @@ pub mod mock {
 
     #[derive(Debug, PartialEq)]
     pub enum MacroTableEvent {
-        DefineMacro(Vec<String>, Vec<Token<String, Literal<String>>>),
-        ExpandMacro(MockMacroId, Vec<Vec<Token<String, Literal<String>>>>),
+        DefineMacro(
+            Vec<Ident<String>>,
+            Vec<Token<Ident<String>, Literal<String>>>,
+        ),
+        ExpandMacro(MockMacroId, Vec<Vec<Token<Ident<String>, Literal<String>>>>),
     }
 
     pub struct MockMacroTable<T> {
@@ -287,12 +295,12 @@ pub mod mock {
         type MacroId = MockMacroId;
     }
 
-    impl<'a, R, N, B, D, T> MacroSource for CompositeSession<R, MockMacroTable<T>, N, B, D> {
+    impl<'a, C, R, N, B, D, T> MacroSource for CompositeSession<C, R, MockMacroTable<T>, N, B, D> {
         type MacroId = MockMacroId;
     }
 
-    impl<R, N, B, D, T> MacroTable<String, Literal<String>, D::Span>
-        for CompositeSession<R, MockMacroTable<T>, N, B, D>
+    impl<C, R, N, B, D, T> MacroTable<Ident<String>, Literal<String>, D::Span>
+        for CompositeSession<C, R, MockMacroTable<T>, N, B, D>
     where
         D: SpanSource,
         T: From<MacroTableEvent>,
@@ -300,8 +308,8 @@ pub mod mock {
         fn define_macro(
             &mut self,
             _name_span: D::Span,
-            params: (Vec<String>, Vec<D::Span>),
-            body: (Vec<Token<String, Literal<String>>>, Vec<D::Span>),
+            params: (Vec<Ident<String>>, Vec<D::Span>),
+            body: (Vec<Token<Ident<String>, Literal<String>>>, Vec<D::Span>),
         ) -> Self::MacroId {
             self.macros
                 .log
@@ -312,7 +320,7 @@ pub mod mock {
         fn expand_macro(
             &mut self,
             name: (Self::MacroId, D::Span),
-            args: MacroArgs<Token<String, Literal<String>>, D::Span>,
+            args: MacroArgs<Token<Ident<String>, Literal<String>>, D::Span>,
         ) {
             self.macros
                 .log

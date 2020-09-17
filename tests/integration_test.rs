@@ -51,7 +51,7 @@ fn ignore_instrs_in_untaken_if() {
 
 const NOP: u8 = 0x00;
 
-fn assemble_snippet(src: &str) -> (Option<Box<[u8]>>, Vec<gbas::diag::Diagnostic>) {
+fn assemble_snippet(src: &str) -> (Option<Box<[u8]>>, Vec<gbas::diagnostics::Diagnostic>) {
     let name = "__buffer";
     let mut fs = SingleBuffer::new(name, src);
     let mut diagnostics = vec![];

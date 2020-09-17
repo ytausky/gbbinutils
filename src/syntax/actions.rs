@@ -1,7 +1,7 @@
 use super::Token;
 
-use crate::diag::CompactDiag;
 use crate::expr::BinOp;
+use crate::session::diagnostics::CompactDiag;
 
 pub(crate) trait ParsingContext: Sized {
     type Ident;
@@ -346,7 +346,7 @@ impl<T, E> TokenLineRule<T, E> {
 pub mod mock {
     use super::*;
 
-    use crate::diag::{CompactDiag, DiagnosticsEvent, Merge};
+    use crate::session::diagnostics::{CompactDiag, DiagnosticsEvent, Merge};
     use crate::span::{MergeSpans, StripSpan};
 
     #[derive(Clone, Copy, Debug, PartialEq)]

@@ -1,20 +1,22 @@
 use self::builder::{Backend, ObjectBuilder, SymbolSource};
-use self::lex::{CodebaseAnalyzer, Literal, StringSource, Tokenizer};
+use self::lex::{Literal, StringSource};
 use self::macros::{MacroId, MacroSource, MacroTable, VecMacroTable};
 use self::reentrancy::ReentrancyActions;
 use self::resolve::*;
 
 use crate::codebase::{BufId, BufRange, FileCodebase, FileSystem};
-use crate::diag::{CompositeDiagnosticsSystem, Diagnostics, OutputForwarder};
 use crate::object::SymbolId;
 use crate::semantics::keywords::KEYWORDS;
-use crate::span::{MacroDefSpans, RcContextFactory, RcSpan, SpanSource};
+use crate::session::diagnostics::{Diagnostics, OutputForwarder};
+use crate::span::{MacroDefSpans, MergeSpans, RcContextFactory, RcSpan, SpanSource, StripSpan};
 use crate::syntax::{IdentFactory, IdentSource};
 use crate::BuiltinSymbols;
 
 use std::rc::Rc;
 
 pub mod builder;
+#[macro_use]
+pub mod diagnostics;
 pub mod lex;
 pub mod macros;
 pub mod reentrancy;
@@ -56,21 +58,23 @@ impl<T> Analysis for T where
 {
 }
 
-pub(crate) type Session<'a, 'b> = CompositeSession<
-    CodebaseAnalyzer<'b, Tokenizer<&'b FileCodebase<'a, dyn FileSystem>>>,
+pub(crate) type Session<'a> = CompositeSession<
+    FileCodebase<'a, dyn FileSystem>,
+    RcContextFactory,
     VecMacroTable<Ident<String>, Literal<String>, Rc<MacroDefSpans<RcSpan<BufId, BufRange>>>>,
     BiLevelNameTable<BasicNameTable<MacroId, SymbolId>>,
     ObjectBuilder<RcSpan<BufId, BufRange>>,
-    CompositeDiagnosticsSystem<RcContextFactory, OutputForwarder<'a, 'b>>,
+    OutputForwarder<'a>,
 >;
 
-impl<'a, 'b> Session<'a, 'b> {
+impl<'a> Session<'a> {
     pub fn new(
-        codebase: CodebaseAnalyzer<'b, Tokenizer<&'b FileCodebase<'a, dyn FileSystem>>>,
-        diagnostics: CompositeDiagnosticsSystem<RcContextFactory, OutputForwarder<'a, 'b>>,
+        codebase: FileCodebase<'a, dyn FileSystem>,
+        diagnostics: OutputForwarder<'a>,
     ) -> Self {
         let mut session = Self {
             codebase,
+            registry: RcContextFactory::new(),
             macros: VecMacroTable::new(),
             names: BiLevelNameTable::new(),
             builder: ObjectBuilder::new(),
@@ -89,32 +93,51 @@ impl<'a, 'b> Session<'a, 'b> {
     }
 }
 
-pub(crate) struct CompositeSession<C, M, N, B, D> {
-    codebase: C,
+pub(crate) struct CompositeSession<C, R, M, N, B, D> {
+    pub codebase: C,
+    pub registry: R,
     macros: M,
     names: N,
     pub builder: B,
     pub diagnostics: D,
 }
 
-impl<R, M, N, B, D: SpanSource> SpanSource for CompositeSession<R, M, N, B, D> {
-    type Span = D::Span;
+impl<C, R: SpanSource, M, N, B, D> SpanSource for CompositeSession<C, R, M, N, B, D> {
+    type Span = R::Span;
 }
 
-impl<R: IdentSource, M, N, B, D> IdentSource for CompositeSession<R, M, N, B, D> {
-    type Ident = R::Ident;
+impl<C, R, M, N, B, D> IdentSource for CompositeSession<C, R, M, N, B, D> {
+    type Ident = Ident<String>;
 }
 
-impl<R: StringSource, M, N, B, D> StringSource for CompositeSession<R, M, N, B, D> {
-    type StringRef = R::StringRef;
+impl<C, R, M, N, B, D> StringSource for CompositeSession<C, R, M, N, B, D> {
+    type StringRef = String;
 }
 
-impl<R, M, N, B: SymbolSource, D> SymbolSource for CompositeSession<R, M, N, B, D> {
+impl<C, R, M, N, B: SymbolSource, D> SymbolSource for CompositeSession<C, R, M, N, B, D> {
     type SymbolId = B::SymbolId;
 }
 
-delegate_diagnostics! {
-    {R, M, N, B, D: Diagnostics<S>, S}, CompositeSession<R, M, N, B, D>, {diagnostics}, D, S
+impl<C, R, M, N, B, D, S> MergeSpans<S> for CompositeSession<C, R, M, N, B, D>
+where
+    R: MergeSpans<S>,
+    S: Clone,
+{
+    fn merge_spans(&mut self, left: &S, right: &S) -> S {
+        self.registry.merge_spans(left, right)
+    }
+}
+
+impl<C, R, M, N, B, D, S> StripSpan<S> for CompositeSession<C, R, M, N, B, D>
+where
+    R: StripSpan<S>,
+    S: Clone,
+{
+    type Stripped = R::Stripped;
+
+    fn strip_span(&mut self, span: &S) -> Self::Stripped {
+        self.registry.strip_span(span)
+    }
 }
 
 #[cfg(test)]
@@ -126,25 +149,27 @@ pub mod mock {
     use super::reentrancy::MockCodebase;
 
     use crate::codebase::CodebaseError;
-    use crate::diag::{MockDiagnostics, TestDiagnosticsListener};
     use crate::log::Log;
+    use crate::session::diagnostics::{MockDiagnostics, TestDiagnosticsListener};
 
     pub(crate) type MockSession<T, S> = CompositeSession<
         MockCodebase<T, S>,
+        MockDiagnostics<T, S>,
         MockMacroTable<T>,
-        MockNameTable<BasicNameTable<MockMacroId, MockSymbolId>, T>,
+        MockNameTable<BiLevelNameTable<BasicNameTable<MockMacroId, MockSymbolId>>, T>,
         MockBackend<SerialIdAllocator<MockSymbolId>, T>,
         MockDiagnostics<T, S>,
     >;
 
     impl<T, S> MockSession<T, S> {
         pub fn new(log: Log<T>) -> Self {
-            let mut names = BasicNameTable::default();
+            let mut names = BiLevelNameTable::new();
             for (ident, keyword) in KEYWORDS {
                 names.define_name((*ident).into(), ResolvedName::Keyword(keyword))
             }
             CompositeSession {
                 codebase: MockCodebase::with_log(log.clone()),
+                registry: MockDiagnostics::new(log.clone()),
                 macros: MockMacroTable::new(log.clone()),
                 names: MockNameTable::new(names, log.clone()),
                 builder: MockBackend::new(SerialIdAllocator::new(MockSymbolId), log.clone()),
@@ -157,13 +182,20 @@ pub mod mock {
         }
     }
 
-    pub(crate) type StandaloneBackend<S> =
-        CompositeSession<(), (), (), ObjectBuilder<S>, TestDiagnosticsListener<S>>;
+    pub(crate) type StandaloneBackend<S> = CompositeSession<
+        (),
+        TestDiagnosticsListener<S>,
+        (),
+        (),
+        ObjectBuilder<S>,
+        TestDiagnosticsListener<S>,
+    >;
 
     impl<S> StandaloneBackend<S> {
         pub fn new() -> Self {
             CompositeSession {
                 codebase: (),
+                registry: TestDiagnosticsListener::new(),
                 macros: (),
                 names: (),
                 builder: ObjectBuilder::new(),

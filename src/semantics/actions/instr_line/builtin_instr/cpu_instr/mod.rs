@@ -1,10 +1,10 @@
 use self::operand::{AtomKind, Context, Operand, OperandCounter};
 
-use crate::diag::*;
 use crate::expr::Expr;
 use crate::object::Fragment;
 use crate::semantics::keywords::{Mnemonic, StackOperation};
 use crate::session::builder::*;
+use crate::session::diagnostics::*;
 use crate::span::Source;
 
 pub mod operand;
@@ -441,10 +441,10 @@ pub(super) enum Condition {
 
 #[cfg(test)]
 mod tests {
-    pub(crate) use crate::diag::Message;
     pub(crate) use crate::object::Fragment;
     pub use crate::semantics::arg::OperandSymbol::*;
     pub(crate) use crate::session::builder::mock::MockSymbolId;
+    pub(crate) use crate::session::diagnostics::Message;
     pub(crate) use crate::span::{Spanned, WithSpan};
 
     use self::operand::tests::Event;
@@ -1879,19 +1879,13 @@ mod tests {
         use crate::session::mock::MockSession;
 
         let log = crate::log::with_log(|log| {
+            let mut session = MockSession::new(log);
             let operands: Vec<_> = operands
                 .into_iter()
                 .enumerate()
                 .map(add_token_spans)
-                .map(|op| {
-                    analyze_operand(
-                        op,
-                        mnemonic.context(),
-                        &mut MockDiagnostics::new(log.clone()),
-                    )
-                })
+                .map(|op| analyze_operand(op, mnemonic.context(), &mut session))
                 .collect();
-            let mut session = MockSession::new(log);
             analyze_instruction(
                 (&mnemonic, TokenId::Mnemonic.into()),
                 operands,

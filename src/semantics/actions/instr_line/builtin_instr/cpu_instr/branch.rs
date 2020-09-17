@@ -1,9 +1,9 @@
 use super::{Analysis, AtomKind, Condition, Expr, Fragment, Operand, Width, M};
 
-use crate::diag::{Diagnostics, EmitDiag, Message};
 use crate::expr::{Atom, BinOp, ExprOp};
 use crate::semantics::keywords::{BranchKind, ExplicitBranch, ImplicitBranch};
 use crate::session::builder::Backend;
+use crate::session::diagnostics::{Diagnostics, EmitDiag, Message};
 use crate::span::WithSpan;
 use crate::span::{Source, SpanSource};
 
@@ -197,10 +197,10 @@ mod tests {
     use super::super::tests::*;
     use super::*;
 
-    use crate::diag::Merge;
     use crate::expr::{Atom, BinOp, Expr, ExprOp};
     use crate::semantics::keywords::*;
     use crate::session::builder::Width;
+    use crate::session::diagnostics::Merge;
 
     #[test]
     fn jp_nn() {

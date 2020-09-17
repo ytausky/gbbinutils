@@ -1,10 +1,10 @@
-use crate::diag::*;
 use crate::object::Fragment;
 use crate::semantics::arg::*;
 use crate::semantics::keywords::Directive;
 use crate::semantics::Semantics;
 use crate::semantics::*;
 use crate::session::builder::Width;
+use crate::session::diagnostics::*;
 use crate::span::Source;
 
 pub(super) fn analyze_directive<'a, 'b, S: Analysis>(
@@ -219,7 +219,7 @@ mod tests {
     use crate::session::lex::Literal;
     use crate::session::mock::MockSession;
     use crate::session::reentrancy::ReentrancyEvent;
-    use crate::session::resolve::{NameTableEvent, ResolvedName};
+    use crate::session::resolve::{Ident, NameTableEvent, ResolvedName};
     use crate::syntax::actions::*;
 
     use std::borrow::Borrow;
@@ -296,7 +296,7 @@ mod tests {
         )
     }
 
-    fn mk_literal(n: i32) -> ExprAtom<String, Literal<String>> {
+    fn mk_literal(n: i32) -> ExprAtom<Ident<String>, Literal<String>> {
         ExprAtom::Literal(Literal::Number(n))
     }
 

@@ -1,6 +1,7 @@
-use crate::diag::Diagnostics;
 use crate::expr::Expr;
 use crate::object::*;
+use crate::session::diagnostics::{Diagnostics, DiagnosticsView};
+use crate::span::{MergeSpans, StripSpan};
 use crate::{BuiltinSymbols, CompositeSession};
 
 pub(crate) trait Backend<S: Clone>: AllocSymbol<S> {
@@ -151,10 +152,12 @@ impl<S> ObjectBuilder<S> {
     }
 }
 
-impl<R, M, N, D, S> Backend<S> for CompositeSession<R, M, N, ObjectBuilder<S>, D>
+impl<C, R, M, N, D, S> Backend<S> for CompositeSession<C, R, M, N, ObjectBuilder<S>, D>
 where
-    D: Diagnostics<S>,
+    R: MergeSpans<S> + StripSpan<S>,
+    Self: Diagnostics<S>,
     S: Clone,
+    for<'a> DiagnosticsView<'a, C, R, D>: Diagnostics<S>,
 {
     fn define_symbol(&mut self, name: Self::SymbolId, _span: S, expr: Expr<Self::SymbolId, S>) {
         let location = self.builder.object.vars.alloc();
@@ -175,8 +178,13 @@ where
             vars: &self.builder.object.vars,
             location: 0.into(),
         };
+        let mut diagnostics = DiagnosticsView {
+            codebase: &mut self.codebase,
+            registry: &mut self.registry,
+            diagnostics: &mut self.diagnostics,
+        };
         value
-            .to_num(&context, &mut self.diagnostics)
+            .to_num(&context, &mut diagnostics)
             .exact()
             .map(|n| n != 0)
     }
@@ -198,7 +206,7 @@ where
     }
 }
 
-impl<'a, R, M, N, B, D, Span> AllocSymbol<Span> for CompositeSession<R, M, N, B, D>
+impl<C, R, M, N, B, D, Span> AllocSymbol<Span> for CompositeSession<C, R, M, N, B, D>
 where
     Self: SymbolSource<SymbolId = B::SymbolId>,
     B: AllocSymbol<Span>,
@@ -273,7 +281,7 @@ pub mod mock {
         }
     }
 
-    impl<R, M, N, D, A, T, S> Backend<S> for CompositeSession<R, M, N, MockBackend<A, T>, D>
+    impl<C, R, M, N, D, A, T, S> Backend<S> for CompositeSession<C, R, M, N, MockBackend<A, T>, D>
     where
         A: AllocSymbol<S>,
         T: From<BackendEvent<A::SymbolId, Expr<A::SymbolId, S>>>,
@@ -339,10 +347,10 @@ pub mod mock {
 mod tests {
     use super::*;
 
-    use crate::diag::*;
     use crate::expr::{Atom, BinOp, ExprOp};
     use crate::link::Program;
     use crate::object::SectionId;
+    use crate::session::diagnostics::*;
     use crate::session::mock::StandaloneBackend;
     use crate::span::WithSpan;
 
@@ -414,7 +422,7 @@ mod tests {
         session.builder.object
     }
 
-    type Session<S> = CompositeSession<(), (), (), ObjectBuilder<S>, TestDiagnosticsListener<S>>;
+    type Session<S> = StandaloneBackend<S>;
 
     fn emit_items_and_compare<I, B>(items: I, bytes: B)
     where
@@ -561,8 +569,14 @@ mod tests {
         S: Clone + 'static,
         F: FnOnce(&mut Session<S>),
     {
+        let registry = &mut TestDiagnosticsListener::new();
         let mut diagnostics = TestDiagnosticsListener::new();
-        let object = Program::link(build_object(f), &mut diagnostics);
+        let mut view = DiagnosticsView {
+            codebase: &mut (),
+            registry,
+            diagnostics: &mut diagnostics,
+        };
+        let object = Program::link(build_object(f), &mut view);
         let diagnostics = diagnostics.diagnostics.into_inner().into_boxed_slice();
         (object, diagnostics)
     }
