@@ -17,8 +17,8 @@ use std::ops::Deref;
 #[cfg(test)]
 pub(crate) use self::mock::*;
 
-pub(crate) trait ReentrancyActions: IdentSource + SpanSource + StringSource {
-    fn analyze_file(&mut self, path: Self::StringRef) -> Result<(), CodebaseError>;
+pub(crate) trait ReentrancyActions<R> {
+    fn analyze_file(&mut self, path: R) -> Result<(), CodebaseError>;
 }
 
 pub type MacroArgs<I, R, S> = super::macros::MacroArgs<SemanticToken<I, R>, S>;
@@ -48,7 +48,7 @@ impl<C, P, I> SourceComponents<C, P, I> {
     }
 }
 
-impl<C, P, M, I, N, B, D> ReentrancyActions
+impl<C, P, M, I, N, B, D> ReentrancyActions<<Self as StringSource>::StringRef>
     for CompositeSession<SourceComponents<C, P, I>, M, N, B, D>
 where
     Self: Lex<Span = D::Span>,
@@ -71,7 +71,10 @@ where
     <Self as StringSource>::StringRef: 'static,
     <Self as SpanSource>::Span: 'static,
 {
-    fn analyze_file(&mut self, path: Self::StringRef) -> Result<(), CodebaseError> {
+    fn analyze_file(
+        &mut self,
+        path: <Self as StringSource>::StringRef,
+    ) -> Result<(), CodebaseError> {
         let mut tokens = self.lex_file(path)?;
         let mut parser = self.reentrancy.parser_factory.mk_parser();
         let semantics = Semantics {
@@ -158,7 +161,7 @@ mod mock {
         }
     }
 
-    impl<T, S, M, N, B, D> ReentrancyActions
+    impl<T, S, M, N, B, D> ReentrancyActions<String>
         for CompositeSession<MockSourceComponents<T, S>, M, N, B, D>
     where
         T: From<ReentrancyEvent> + From<DiagnosticsEvent<S>>,

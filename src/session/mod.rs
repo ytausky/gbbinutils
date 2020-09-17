@@ -1,6 +1,6 @@
 use self::builder::{Backend, ObjectBuilder, SymbolSource};
 use self::lex::{CodebaseAnalyzer, Literal, StringSource, Tokenizer};
-use self::macros::{MacroId, MacroTable, VecMacroTable};
+use self::macros::{MacroId, MacroSource, MacroTable, VecMacroTable};
 use self::reentrancy::{ReentrancyActions, SourceComponents};
 use self::resolve::*;
 use self::strings::FakeStringInterner;
@@ -25,7 +25,10 @@ pub mod strings;
 
 pub(crate) trait Analysis:
     SpanSource
-    + ReentrancyActions
+    + IdentSource
+    + StringSource
+    + MacroSource
+    + ReentrancyActions<<Self as StringSource>::StringRef>
     + Backend<<Self as SpanSource>::Span>
     + Diagnostics<<Self as SpanSource>::Span>
     + StartScope<<Self as IdentSource>::Ident>
@@ -40,7 +43,10 @@ pub(crate) trait Analysis:
 
 impl<T> Analysis for T where
     Self: SpanSource
-        + ReentrancyActions
+        + IdentSource
+        + StringSource
+        + MacroSource
+        + ReentrancyActions<<Self as StringSource>::StringRef>
         + Backend<<Self as SpanSource>::Span>
         + Diagnostics<<Self as SpanSource>::Span>
         + StartScope<<Self as IdentSource>::Ident>
@@ -105,7 +111,7 @@ pub(crate) struct CompositeSession<R, M, N, B, D> {
 #[cfg(test)]
 impl<R, M, N, B, D> CompositeSession<R, M, N, B, D>
 where
-    Self: ReentrancyActions,
+    Self: IdentSource + SpanSource,
     <Self as IdentSource>::Ident: for<'r> From<&'r str>,
     Self: NameTable<<Self as IdentSource>::Ident>,
     Self: Backend<<Self as SpanSource>::Span>,
