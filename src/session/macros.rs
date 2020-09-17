@@ -312,10 +312,9 @@ pub mod mock {
             params: (Vec<String>, Vec<D::Span>),
             body: (Vec<Token<String, Literal<String>>>, Vec<D::Span>),
         ) -> Self::MacroId {
-            self.macros.log.push(MacroTableEvent::DefineMacro(
-                params.0.clone(),
-                body.0.clone(),
-            ));
+            self.macros
+                .log
+                .push(MacroTableEvent::DefineMacro(params.0, body.0));
             MockMacroId(0)
         }
 

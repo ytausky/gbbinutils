@@ -1891,7 +1891,7 @@ mod tests {
                     )
                 })
                 .collect();
-            let mut session = MockSession::new(log.clone());
+            let mut session = MockSession::new(log);
             analyze_instruction(
                 (&mnemonic, TokenId::Mnemonic.into()),
                 operands,
