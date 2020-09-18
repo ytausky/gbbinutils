@@ -1,6 +1,7 @@
 use crate::expr::Expr;
 use crate::object::*;
 use crate::session::diagnostics::{Diagnostics, DiagnosticsView};
+use crate::session::lex::StringSource;
 use crate::span::{MergeSpans, SpanSource, StripSpan};
 use crate::{BuiltinSymbols, CompositeSession};
 
@@ -152,9 +153,10 @@ impl<S> ObjectBuilder<S> {
     }
 }
 
-impl<C, R, M, N, D, S> Backend<S> for CompositeSession<C, R, M, N, ObjectBuilder<S>, D>
+impl<C, R, I, M, N, D, S> Backend<S> for CompositeSession<C, R, I, M, N, ObjectBuilder<S>, D>
 where
     R: SpanSource + MergeSpans<S> + StripSpan<S>,
+    I: StringSource,
     Self: Diagnostics<S>,
     S: Clone,
     for<'a> DiagnosticsView<'a, C, R, D>: Diagnostics<S>,
@@ -206,10 +208,11 @@ where
     }
 }
 
-impl<C, R, M, N, B, D, Span> AllocSymbol<Span> for CompositeSession<C, R, M, N, B, D>
+impl<C, R, I, M, N, B, D, Span> AllocSymbol<Span> for CompositeSession<C, R, I, M, N, B, D>
 where
     Self: SymbolSource<SymbolId = B::SymbolId>,
     R: SpanSource,
+    I: StringSource,
     B: AllocSymbol<Span>,
     Span: Clone,
 {
@@ -282,9 +285,10 @@ pub mod mock {
         }
     }
 
-    impl<C, R, M, N, D, A, T, S> Backend<S> for CompositeSession<C, R, M, N, MockBackend<A, T>, D>
+    impl<C, R, I, M, N, D, A, T, S> Backend<S> for CompositeSession<C, R, I, M, N, MockBackend<A, T>, D>
     where
         R: SpanSource,
+        I: StringSource,
         A: AllocSymbol<S>,
         T: From<BackendEvent<A::SymbolId, Expr<A::SymbolId, S>>>,
         S: Clone,

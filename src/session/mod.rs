@@ -67,6 +67,7 @@ pub(crate) trait NextToken: IdentSource + StringSource + SpanSource {
 pub(crate) type Session<'a> = CompositeSession<
     FileCodebase<'a, dyn FileSystem>,
     RcContextFactory,
+    MockInterner,
     VecMacroTable<Ident<String>, Literal<String>, Rc<MacroDefSpans<RcSpan<BufId, BufRange>>>>,
     BiLevelNameTable<BasicNameTable<MacroId, SymbolId>>,
     ObjectBuilder<RcSpan<BufId, BufRange>>,
@@ -81,6 +82,7 @@ impl<'a> Session<'a> {
         let mut session = Self {
             codebase,
             registry: RcContextFactory::new(),
+            interner: MockInterner,
             tokens: Vec::new(),
             macros: VecMacroTable::new(),
             names: BiLevelNameTable::new(),
@@ -100,17 +102,26 @@ impl<'a> Session<'a> {
     }
 }
 
-pub(crate) struct CompositeSession<C, R: SpanSource, M, N, B, D> {
+pub(crate) trait TokenStream<R, I>: IdentSource + StringSource + SpanSource {
+    fn next_token(
+        &mut self,
+        registry: &mut R,
+        interner: &mut I,
+    ) -> Option<LexItem<Self::Ident, Self::StringRef, Self::Span>>;
+}
+
+pub(crate) struct CompositeSession<C, R: SpanSource, I: StringSource, M, N, B, D> {
     pub codebase: C,
     pub registry: R,
+    interner: I,
     tokens: Vec<
         Box<
-            dyn Iterator<
-                Item = LexItem<
-                    <Self as IdentSource>::Ident,
-                    <Self as StringSource>::StringRef,
-                    R::Span,
-                >,
+            dyn TokenStream<
+                R,
+                I,
+                Ident = <Self as IdentSource>::Ident,
+                StringRef = <Self as StringSource>::StringRef,
+                Span = R::Span,
             >,
         >,
     >,
@@ -120,27 +131,40 @@ pub(crate) struct CompositeSession<C, R: SpanSource, M, N, B, D> {
     pub diagnostics: D,
 }
 
-impl<C, R: SpanSource, M, N, B, D> SpanSource for CompositeSession<C, R, M, N, B, D> {
+impl<C, R: SpanSource, I: StringSource, M, N, B, D> SpanSource
+    for CompositeSession<C, R, I, M, N, B, D>
+{
     type Span = R::Span;
 }
 
-impl<C, R: SpanSource, M, N, B, D> IdentSource for CompositeSession<C, R, M, N, B, D> {
+impl<C, R: SpanSource, I: StringSource, M, N, B, D> IdentSource
+    for CompositeSession<C, R, I, M, N, B, D>
+{
     type Ident = Ident<String>;
 }
 
-impl<C, R: SpanSource, M, N, B, D> StringSource for CompositeSession<C, R, M, N, B, D> {
-    type StringRef = String;
+impl<C, R: SpanSource, I: StringSource, M, N, B, D> StringSource
+    for CompositeSession<C, R, I, M, N, B, D>
+{
+    type StringRef = I::StringRef;
 }
 
-impl<C, R: SpanSource, M, N, B: SymbolSource, D> SymbolSource
-    for CompositeSession<C, R, M, N, B, D>
+impl<C, R: SpanSource, I: StringSource, M, N, B: SymbolSource, D> SymbolSource
+    for CompositeSession<C, R, I, M, N, B, D>
 {
     type SymbolId = B::SymbolId;
 }
 
-impl<C, R: SpanSource, M, N, B, D> NextToken for CompositeSession<C, R, M, N, B, D> {
+impl<C, R: SpanSource, I: StringSource, M, N, B, D> NextToken
+    for CompositeSession<C, R, I, M, N, B, D>
+{
     fn next_token(&mut self) -> Option<LexItem<Self::Ident, Self::StringRef, Self::Span>> {
-        let token = self.tokens.last_mut().unwrap().next().unwrap();
+        let token = self
+            .tokens
+            .last_mut()
+            .unwrap()
+            .next_token(&mut self.registry, &mut self.interner)
+            .unwrap();
         if let Ok(Token::Sigil(Sigil::Eos)) = token.0 {
             self.tokens.pop();
         }
@@ -148,7 +172,8 @@ impl<C, R: SpanSource, M, N, B, D> NextToken for CompositeSession<C, R, M, N, B,
     }
 }
 
-impl<C, R: SpanSource, M, N, B, D, S> MergeSpans<S> for CompositeSession<C, R, M, N, B, D>
+impl<C, R: SpanSource, I: StringSource, M, N, B, D, S> MergeSpans<S>
+    for CompositeSession<C, R, I, M, N, B, D>
 where
     R: MergeSpans<S>,
     S: Clone,
@@ -158,7 +183,8 @@ where
     }
 }
 
-impl<C, R: SpanSource, M, N, B, D, S> StripSpan<S> for CompositeSession<C, R, M, N, B, D>
+impl<C, R: SpanSource, I: StringSource, M, N, B, D, S> StripSpan<S>
+    for CompositeSession<C, R, I, M, N, B, D>
 where
     R: StripSpan<S>,
     S: Clone,
@@ -168,6 +194,12 @@ where
     fn strip_span(&mut self, span: &S) -> Self::Stripped {
         self.registry.strip_span(span)
     }
+}
+
+pub struct MockInterner;
+
+impl StringSource for MockInterner {
+    type StringRef = String;
 }
 
 #[cfg(test)]
@@ -185,6 +217,7 @@ pub mod mock {
     pub(crate) type MockSession<T, S> = CompositeSession<
         MockCodebase<T, S>,
         MockDiagnostics<T, S>,
+        MockInterner,
         MockMacroTable<T>,
         MockNameTable<BiLevelNameTable<BasicNameTable<MockMacroId, MockSymbolId>>, T>,
         MockBackend<SerialIdAllocator<MockSymbolId>, T>,
@@ -200,6 +233,7 @@ pub mod mock {
             CompositeSession {
                 codebase: MockCodebase::with_log(log.clone()),
                 registry: MockDiagnostics::new(log.clone()),
+                interner: MockInterner,
                 tokens: Vec::new(),
                 macros: MockMacroTable::new(log.clone()),
                 names: MockNameTable::new(names, log.clone()),
@@ -216,6 +250,7 @@ pub mod mock {
     pub(crate) type StandaloneBackend<S> = CompositeSession<
         (),
         TestDiagnosticsListener<S>,
+        MockInterner,
         (),
         (),
         ObjectBuilder<S>,
@@ -227,6 +262,7 @@ pub mod mock {
             CompositeSession {
                 codebase: (),
                 registry: TestDiagnosticsListener::new(),
+                interner: MockInterner,
                 tokens: Vec::new(),
                 macros: (),
                 names: (),

@@ -1,11 +1,11 @@
-use crate::codebase::{BufId, Codebase, CodebaseError};
+use crate::codebase::{Codebase, CodebaseError};
 use crate::session::resolve::*;
-use crate::session::CompositeSession;
+use crate::session::{CompositeSession, TokenStream};
 use crate::span::{BufContext, BufContextFactory, SpanSource};
 use crate::syntax::*;
 
-use std::rc::Rc;
 use std::fmt::Debug;
+use std::rc::Rc;
 
 pub type LexItem<I, R, S> = (Result<SemanticToken<I, R>, LexError>, S);
 pub type SemanticToken<I, R> = crate::syntax::Token<I, Literal<R>>;
@@ -16,17 +16,24 @@ pub enum Literal<R> {
     String(R),
 }
 
-pub trait Lex: IdentSource + StringSource + SpanSource {
-    type TokenIter: Iterator<Item = LexItem<Self::Ident, Self::StringRef, Self::Span>>;
+pub(crate) trait Lex<R, I>: IdentSource + StringSource + SpanSource {
+    type TokenIter: TokenStream<
+        R,
+        I,
+        Ident = Self::Ident,
+        StringRef = Self::StringRef,
+        Span = Self::Span,
+    >;
 
     fn lex_file(&mut self, path: Self::StringRef) -> Result<Self::TokenIter, CodebaseError>;
 }
 
 pub type TokenSeq<I, R, S> = (Vec<SemanticToken<I, R>>, Vec<S>);
 
-impl<'a, C, R, M, N, B, D> Lex for CompositeSession<C, R, M, N, B, D>
+impl<'a, C, R, I, M, N, B, D> Lex<R, I> for CompositeSession<C, R, I, M, N, B, D>
 where
     C: Codebase,
+    I: StringSource<StringRef = String>,
     R: BufContextFactory,
 {
     type TokenIter = TokenizedSrc<DefaultIdentFactory, R::BufContext>;
@@ -45,40 +52,6 @@ pub trait StringSource {
     type StringRef: Clone + Debug + Eq;
 }
 
-pub trait Tokenize<C: BufContext>: IdentSource + StringSource {
-    type Tokenized: Iterator<Item = LexItem<Self::Ident, Self::StringRef, C::Span>>;
-
-    fn tokenize_file<F: FnOnce(BufId) -> C>(
-        &self,
-        filename: &str,
-        mk_context: F,
-    ) -> Result<Self::Tokenized, CodebaseError>;
-}
-
-pub struct Tokenizer<T>(pub T);
-
-impl<T> IdentSource for Tokenizer<T> {
-    type Ident = <DefaultIdentFactory as IdentSource>::Ident;
-}
-
-impl<T> StringSource for Tokenizer<T> {
-    type StringRef = String;
-}
-
-impl<C: Codebase, B: BufContext> Tokenize<B> for Tokenizer<&C> {
-    type Tokenized = TokenizedSrc<DefaultIdentFactory, B>;
-
-    fn tokenize_file<F: FnOnce(BufId) -> B>(
-        &self,
-        filename: &str,
-        mk_context: F,
-    ) -> Result<Self::Tokenized, CodebaseError> {
-        let buf_id = self.0.open(filename)?;
-        let rc_src = self.0.buf(buf_id);
-        Ok(TokenizedSrc::new(rc_src, mk_context(buf_id)))
-    }
-}
-
 pub struct TokenizedSrc<F, C> {
     tokens: Lexer<Rc<str>, F>,
     context: C,
@@ -93,10 +66,24 @@ impl<C: BufContext> TokenizedSrc<DefaultIdentFactory, C> {
     }
 }
 
-impl<'a, F: IdentFactory, C: BufContext> Iterator for TokenizedSrc<F, C> {
-    type Item = LexItem<F::Ident, String, C::Span>;
+impl<F: IdentFactory, C> IdentSource for TokenizedSrc<F, C> {
+    type Ident = F::Ident;
+}
 
-    fn next(&mut self) -> Option<Self::Item> {
+impl<F, C> StringSource for TokenizedSrc<F, C> {
+    type StringRef = String;
+}
+
+impl<F, C: BufContext> SpanSource for TokenizedSrc<F, C> {
+    type Span = C::Span;
+}
+
+impl<R, I, F: IdentFactory, C: BufContext> TokenStream<R, I> for TokenizedSrc<F, C> {
+    fn next_token(
+        &mut self,
+        _registry: &mut R,
+        _interner: &mut I,
+    ) -> Option<LexItem<Self::Ident, Self::StringRef, Self::Span>> {
         self.tokens
             .next()
             .map(|(t, r)| (t, self.context.mk_span(r)))

@@ -10,6 +10,7 @@ pub use crate::codebase::{LineNumber, TextPosition, TextRange};
 use super::CompositeSession;
 
 use crate::codebase::{BufId, BufRange, FileCodebase, FileSystem, TextBuf, TextCache};
+use crate::session::lex::StringSource;
 use crate::span::*;
 
 #[cfg(test)]
@@ -64,11 +65,12 @@ impl<'a> SpanSource for OutputForwarder<'a> {
     type Span = Span;
 }
 
-impl<'a, F, R, M, N, B> EmitDiag<Span, StrippedBufSpan<BufId, BufRange>>
-    for CompositeSession<FileCodebase<'a, F>, R, M, N, B, OutputForwarder<'a>>
+impl<'a, F, R, I, M, N, B> EmitDiag<Span, StrippedBufSpan<BufId, BufRange>>
+    for CompositeSession<FileCodebase<'a, F>, R, I, M, N, B, OutputForwarder<'a>>
 where
     F: FileSystem + ?Sized,
     R: SpanSource,
+    I: StringSource,
 {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<Span, StrippedBufSpan<BufId, BufRange>>>) {
         (self.diagnostics.output)(diag.into().expand().render(&self.codebase.cache.borrow()))
@@ -166,8 +168,8 @@ impl<'a, C, R, S> EmitDiag<S, S> for DiagnosticsView<'a, C, R, TestDiagnosticsLi
 }
 
 #[cfg(test)]
-impl<C, R: SpanSource, M, N, B, S> EmitDiag<S, S>
-    for CompositeSession<C, R, M, N, B, TestDiagnosticsListener<S>>
+impl<C, R: SpanSource, I: StringSource, M, N, B, S> EmitDiag<S, S>
+    for CompositeSession<C, R, I, M, N, B, TestDiagnosticsListener<S>>
 {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<S>>) {
         self.diagnostics.diagnostics.borrow_mut().push(diag.into())
@@ -426,9 +428,11 @@ mod mock {
         }
     }
 
-    impl<C, R, M, N, B, T, S> EmitDiag<S, S> for CompositeSession<C, R, M, N, B, MockDiagnostics<T, S>>
+    impl<C, R, I, M, N, B, T, S> EmitDiag<S, S>
+        for CompositeSession<C, R, I, M, N, B, MockDiagnostics<T, S>>
     where
         R: SpanSource,
+        I: StringSource,
         T: From<DiagnosticsEvent<S>>,
         S: Clone,
     {

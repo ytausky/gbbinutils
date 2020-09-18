@@ -3,6 +3,7 @@ use super::CompositeSession;
 
 use crate::semantics::Keyword;
 use crate::session::builder::SymbolSource;
+use crate::session::lex::StringSource;
 use crate::span::SpanSource;
 use crate::syntax::{IdentFactory, IdentSource};
 
@@ -197,8 +198,9 @@ impl<T: Default> StartScope<Ident<String>> for BiLevelNameTable<T> {
     }
 }
 
-impl<C, R: SpanSource, M, N, B, D, I> NameTable<I> for CompositeSession<C, R, M, N, B, D>
+impl<C, R: SpanSource, II, M, N, B, D, I> NameTable<I> for CompositeSession<C, R, II, M, N, B, D>
 where
+    II: StringSource,
     N: NameTable<I, MacroId = Self::MacroId, SymbolId = Self::SymbolId>,
     Self: MacroSource + SymbolSource,
 {
@@ -211,8 +213,9 @@ where
     }
 }
 
-impl<C, R: SpanSource, M, N, B, D, I> StartScope<I> for CompositeSession<C, R, M, N, B, D>
+impl<C, R: SpanSource, II, M, N, B, D, I> StartScope<I> for CompositeSession<C, R, II, M, N, B, D>
 where
+    II: StringSource,
     N: StartScope<I>,
 {
     fn start_scope(&mut self, ident: &I) {

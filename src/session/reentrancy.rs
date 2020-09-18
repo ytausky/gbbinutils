@@ -3,7 +3,7 @@ use super::macros::MacroTable;
 use super::resolve::{NameTable, StartScope};
 use super::{CompositeSession, NextToken};
 
-use crate::codebase::CodebaseError;
+use crate::codebase::{Codebase, CodebaseError};
 use crate::semantics::{Semantics, TokenStreamState};
 use crate::session::builder::Backend;
 use crate::session::diagnostics::*;
@@ -21,10 +21,11 @@ pub(crate) trait ReentrancyActions<R> {
 pub type MacroArgs<I, R, S> = super::macros::MacroArgs<SemanticToken<I, R>, S>;
 pub type Params<I, S> = (Vec<I>, Vec<S>);
 
-impl<C, R, M, N, B, D> ReentrancyActions<<Self as StringSource>::StringRef>
-    for CompositeSession<C, R, M, N, B, D>
+impl<C, R, I, M, N, B, D> ReentrancyActions<<Self as StringSource>::StringRef>
+    for CompositeSession<C, R, I, M, N, B, D>
 where
-    Self: Lex<Span = R::Span>,
+    C: Codebase,
+    Self: Lex<R, I, Span = R::Span>,
     Self: NextToken,
     Self: MacroTable<
         <Self as IdentSource>::Ident,
@@ -32,13 +33,14 @@ where
         <Self as SpanSource>::Span,
     >,
     R: SpanSystem,
+    I: StringSource,
     Self: EmitDiag<R::Span, R::Stripped>,
     Self: StartScope<<Self as IdentSource>::Ident> + NameTable<<Self as IdentSource>::Ident>,
     Self: Backend<R::Span>,
     <Self as IdentSource>::Ident: 'static,
     <Self as StringSource>::StringRef: 'static,
     <Self as SpanSource>::Span: 'static,
-    <Self as Lex>::TokenIter: 'static,
+    <Self as Lex<R, I>>::TokenIter: 'static,
 {
     fn analyze_file(
         &mut self,
@@ -118,10 +120,11 @@ mod mock {
         type StringRef = String;
     }
 
-    impl<T, S, R: SpanSource, M, N, B, D> ReentrancyActions<String>
-        for CompositeSession<MockCodebase<T, S>, R, M, N, B, D>
+    impl<T, S, R: SpanSource, I, M, N, B, D> ReentrancyActions<String>
+        for CompositeSession<MockCodebase<T, S>, R, I, M, N, B, D>
     where
         T: From<ReentrancyEvent>,
+        I: StringSource,
     {
         fn analyze_file(&mut self, path: String) -> Result<(), CodebaseError> {
             self.codebase.log.push(ReentrancyEvent::AnalyzeFile(path));
