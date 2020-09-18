@@ -23,30 +23,29 @@ impl<S: Analysis> From<BuiltinInstrState<S>>
     }
 }
 
-impl<'a, 'b, S: Analysis> BuiltinInstrContext for BuiltinInstrSemantics<'a, 'b, S>
+impl<'a, S: Analysis> BuiltinInstrContext for BuiltinInstrSemantics<'a, S>
 where
     S::Ident: 'static,
     S::StringRef: 'static,
     S::Span: 'static,
 {
-    type ArgContext = ArgSemantics<'a, 'b, S>;
+    type ArgContext = ArgSemantics<'a, S>;
 
     fn will_parse_arg(self) -> Self::ArgContext {
         Semantics {
             session: self.session,
             state: ExprBuilder::new(self.state),
-            tokens: self.tokens,
         }
     }
 }
 
-impl<'a, 'b, S: Analysis> InstrFinalizer for BuiltinInstrSemantics<'a, 'b, S>
+impl<'a, S: Analysis> InstrFinalizer for BuiltinInstrSemantics<'a, S>
 where
     S::Ident: 'static,
     S::StringRef: 'static,
     S::Span: 'static,
 {
-    type Next = TokenStreamSemantics<'a, 'b, S>;
+    type Next = TokenStreamSemantics<'a, S>;
 
     fn did_parse_instr(self) -> Self::Next {
         let args = self.state.args;
@@ -70,7 +69,7 @@ where
     }
 }
 
-impl<'a, 'b, S: Analysis, T> Semantics<'a, 'b, S, T, S::Ident, S::StringRef, S::Span> {
+impl<'a, S: Analysis, T> Semantics<'a, S, T> {
     fn expect_const(
         &mut self,
         arg: ParsedArg<S::Ident, S::StringRef, S::Span>,

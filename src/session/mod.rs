@@ -1,5 +1,5 @@
 use self::builder::{Backend, ObjectBuilder, SymbolSource};
-use self::lex::{Literal, StringSource};
+use self::lex::{LexItem, Literal, StringSource};
 use self::macros::{MacroId, MacroSource, MacroTable, VecMacroTable};
 use self::reentrancy::ReentrancyActions;
 use self::resolve::*;
@@ -9,7 +9,7 @@ use crate::object::SymbolId;
 use crate::semantics::keywords::KEYWORDS;
 use crate::session::diagnostics::{Diagnostics, OutputForwarder};
 use crate::span::{MacroDefSpans, MergeSpans, RcContextFactory, RcSpan, SpanSource, StripSpan};
-use crate::syntax::{IdentFactory, IdentSource};
+use crate::syntax::{IdentFactory, IdentSource, Sigil, Token};
 use crate::BuiltinSymbols;
 
 use std::rc::Rc;
@@ -27,6 +27,7 @@ pub(crate) trait Analysis:
     + IdentSource
     + StringSource
     + MacroSource
+    + NextToken
     + ReentrancyActions<<Self as StringSource>::StringRef>
     + Backend<<Self as SpanSource>::Span>
     + Diagnostics<<Self as SpanSource>::Span>
@@ -45,6 +46,7 @@ impl<T> Analysis for T where
         + IdentSource
         + StringSource
         + MacroSource
+        + NextToken
         + ReentrancyActions<<Self as StringSource>::StringRef>
         + Backend<<Self as SpanSource>::Span>
         + Diagnostics<<Self as SpanSource>::Span>
@@ -56,6 +58,10 @@ impl<T> Analysis for T where
             <Self as SpanSource>::Span,
         >
 {
+}
+
+pub(crate) trait NextToken: IdentSource + StringSource + SpanSource {
+    fn next_token(&mut self) -> Option<LexItem<Self::Ident, Self::StringRef, Self::Span>>;
 }
 
 pub(crate) type Session<'a> = CompositeSession<
@@ -75,6 +81,7 @@ impl<'a> Session<'a> {
         let mut session = Self {
             codebase,
             registry: RcContextFactory::new(),
+            tokens: Vec::new(),
             macros: VecMacroTable::new(),
             names: BiLevelNameTable::new(),
             builder: ObjectBuilder::new(),
@@ -93,9 +100,20 @@ impl<'a> Session<'a> {
     }
 }
 
-pub(crate) struct CompositeSession<C, R, M, N, B, D> {
+pub(crate) struct CompositeSession<C, R: SpanSource, M, N, B, D> {
     pub codebase: C,
     pub registry: R,
+    tokens: Vec<
+        Box<
+            dyn Iterator<
+                Item = LexItem<
+                    <Self as IdentSource>::Ident,
+                    <Self as StringSource>::StringRef,
+                    R::Span,
+                >,
+            >,
+        >,
+    >,
     macros: M,
     names: N,
     pub builder: B,
@@ -106,19 +124,31 @@ impl<C, R: SpanSource, M, N, B, D> SpanSource for CompositeSession<C, R, M, N, B
     type Span = R::Span;
 }
 
-impl<C, R, M, N, B, D> IdentSource for CompositeSession<C, R, M, N, B, D> {
+impl<C, R: SpanSource, M, N, B, D> IdentSource for CompositeSession<C, R, M, N, B, D> {
     type Ident = Ident<String>;
 }
 
-impl<C, R, M, N, B, D> StringSource for CompositeSession<C, R, M, N, B, D> {
+impl<C, R: SpanSource, M, N, B, D> StringSource for CompositeSession<C, R, M, N, B, D> {
     type StringRef = String;
 }
 
-impl<C, R, M, N, B: SymbolSource, D> SymbolSource for CompositeSession<C, R, M, N, B, D> {
+impl<C, R: SpanSource, M, N, B: SymbolSource, D> SymbolSource
+    for CompositeSession<C, R, M, N, B, D>
+{
     type SymbolId = B::SymbolId;
 }
 
-impl<C, R, M, N, B, D, S> MergeSpans<S> for CompositeSession<C, R, M, N, B, D>
+impl<C, R: SpanSource, M, N, B, D> NextToken for CompositeSession<C, R, M, N, B, D> {
+    fn next_token(&mut self) -> Option<LexItem<Self::Ident, Self::StringRef, Self::Span>> {
+        let token = self.tokens.last_mut().unwrap().next().unwrap();
+        if let Ok(Token::Sigil(Sigil::Eos)) = token.0 {
+            self.tokens.pop();
+        }
+        Some(token)
+    }
+}
+
+impl<C, R: SpanSource, M, N, B, D, S> MergeSpans<S> for CompositeSession<C, R, M, N, B, D>
 where
     R: MergeSpans<S>,
     S: Clone,
@@ -128,7 +158,7 @@ where
     }
 }
 
-impl<C, R, M, N, B, D, S> StripSpan<S> for CompositeSession<C, R, M, N, B, D>
+impl<C, R: SpanSource, M, N, B, D, S> StripSpan<S> for CompositeSession<C, R, M, N, B, D>
 where
     R: StripSpan<S>,
     S: Clone,
@@ -161,7 +191,7 @@ pub mod mock {
         MockDiagnostics<T, S>,
     >;
 
-    impl<T, S> MockSession<T, S> {
+    impl<T, S: Clone> MockSession<T, S> {
         pub fn new(log: Log<T>) -> Self {
             let mut names = BiLevelNameTable::new();
             for (ident, keyword) in KEYWORDS {
@@ -170,6 +200,7 @@ pub mod mock {
             CompositeSession {
                 codebase: MockCodebase::with_log(log.clone()),
                 registry: MockDiagnostics::new(log.clone()),
+                tokens: Vec::new(),
                 macros: MockMacroTable::new(log.clone()),
                 names: MockNameTable::new(names, log.clone()),
                 builder: MockBackend::new(SerialIdAllocator::new(MockSymbolId), log.clone()),
@@ -191,11 +222,12 @@ pub mod mock {
         TestDiagnosticsListener<S>,
     >;
 
-    impl<S> StandaloneBackend<S> {
+    impl<S: Clone> StandaloneBackend<S> {
         pub fn new() -> Self {
             CompositeSession {
                 codebase: (),
                 registry: TestDiagnosticsListener::new(),
+                tokens: Vec::new(),
                 macros: (),
                 names: (),
                 builder: ObjectBuilder::new(),

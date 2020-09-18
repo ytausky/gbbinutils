@@ -3,6 +3,7 @@ use super::CompositeSession;
 
 use crate::semantics::Keyword;
 use crate::session::builder::SymbolSource;
+use crate::span::SpanSource;
 use crate::syntax::{IdentFactory, IdentSource};
 
 use std::collections::HashMap;
@@ -196,7 +197,7 @@ impl<T: Default> StartScope<Ident<String>> for BiLevelNameTable<T> {
     }
 }
 
-impl<C, R, M, N, B, D, I> NameTable<I> for CompositeSession<C, R, M, N, B, D>
+impl<C, R: SpanSource, M, N, B, D, I> NameTable<I> for CompositeSession<C, R, M, N, B, D>
 where
     N: NameTable<I, MacroId = Self::MacroId, SymbolId = Self::SymbolId>,
     Self: MacroSource + SymbolSource,
@@ -210,7 +211,7 @@ where
     }
 }
 
-impl<C, R, M, N, B, D, I> StartScope<I> for CompositeSession<C, R, M, N, B, D>
+impl<C, R: SpanSource, M, N, B, D, I> StartScope<I> for CompositeSession<C, R, M, N, B, D>
 where
     N: StartScope<I>,
 {

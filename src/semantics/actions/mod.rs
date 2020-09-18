@@ -5,7 +5,7 @@ use super::*;
 
 use crate::session::diagnostics::{CompactDiag, Message};
 use crate::session::lex::Literal;
-use crate::session::Analysis;
+use crate::session::{Analysis, NextToken};
 use crate::span::StripSpan;
 use crate::syntax::actions::*;
 use crate::syntax::LexError;
@@ -29,21 +29,20 @@ impl<I, R, S> From<TokenLineState<I, R, S>> for TokenStreamState<I, R, S> {
     }
 }
 
-impl<'a, 'b, S, T, I, R, Z> ParsingContext for Semantics<'a, 'b, S, T, I, R, Z>
+impl<'a, S, T> ParsingContext for Semantics<'a, S, T>
 where
-    S: Diagnostics<Z>,
-    Z: Clone,
+    S: NextToken + Diagnostics<<S as SpanSource>::Span>,
 {
-    type Ident = I;
-    type Literal = Literal<R>;
+    type Ident = S::Ident;
+    type Literal = Literal<S::StringRef>;
     type Error = LexError;
-    type Span = Z;
-    type Stripped = <S as StripSpan<Z>>::Stripped;
+    type Span = S::Span;
+    type Stripped = <S as StripSpan<<S as SpanSource>::Span>>::Stripped;
 
     fn next_token(
         &mut self,
     ) -> Option<LexerOutput<Self::Ident, Self::Literal, Self::Error, Self::Span>> {
-        self.tokens.next()
+        self.session.next_token()
     }
 
     fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
@@ -59,15 +58,15 @@ where
     }
 }
 
-impl<'a, 'b, S: Analysis> TokenStreamContext for TokenStreamSemantics<'a, 'b, S>
+impl<'a, S: Analysis> TokenStreamContext for TokenStreamSemantics<'a, S>
 where
     S::Ident: 'static,
     S::StringRef: 'static,
     S::Span: 'static,
 {
-    type InstrLineContext = InstrLineSemantics<'a, 'b, S>;
-    type TokenLineContext = TokenLineSemantics<'a, 'b, S>;
-    type TokenLineFinalizer = TokenContextFinalizationSemantics<'a, 'b, S>;
+    type InstrLineContext = InstrLineSemantics<'a, S>;
+    type TokenLineContext = TokenLineSemantics<'a, S>;
+    type TokenLineFinalizer = TokenContextFinalizationSemantics<'a, S>;
 
     fn will_parse_line(self) -> LineRule<Self::InstrLineContext, Self::TokenLineContext> {
         match self.state.mode {
@@ -95,23 +94,23 @@ where
     }
 }
 
-impl<'a, 'b, S: Analysis> InstrFinalizer for InstrLineSemantics<'a, 'b, S> {
-    type Next = TokenStreamSemantics<'a, 'b, S>;
+impl<'a, S: Analysis> InstrFinalizer for InstrLineSemantics<'a, S> {
+    type Next = TokenStreamSemantics<'a, S>;
 
     fn did_parse_instr(self) -> Self::Next {
         set_state!(self, self.state.into())
     }
 }
 
-impl<'a, 'b, S: Analysis> LineFinalizer for InstrLineSemantics<'a, 'b, S> {
-    type Next = TokenStreamSemantics<'a, 'b, S>;
+impl<'a, S: Analysis> LineFinalizer for InstrLineSemantics<'a, S> {
+    type Next = TokenStreamSemantics<'a, S>;
 
     fn did_parse_line(self, _: S::Span) -> Self::Next {
         set_state!(self, self.state.into())
     }
 }
 
-impl<'a, 'b, S: Analysis> LineFinalizer for TokenStreamSemantics<'a, 'b, S> {
+impl<'a, S: Analysis> LineFinalizer for TokenStreamSemantics<'a, S> {
     type Next = Self;
 
     fn did_parse_line(self, _: S::Span) -> Self::Next {
@@ -501,9 +500,7 @@ pub mod tests {
 
     pub(crate) fn collect_semantic_actions<F, S>(f: F) -> Vec<TestOperation<S>>
     where
-        F: for<'a, 'b> FnOnce(
-            TestTokenStreamSemantics<'a, 'b, S>,
-        ) -> TestTokenStreamSemantics<'a, 'b, S>,
+        F: for<'a, 'b> FnOnce(TestTokenStreamSemantics<'a, S>) -> TestTokenStreamSemantics<'a, S>,
         S: Clone + Debug + Merge,
     {
         log_with_predefined_names(std::iter::empty(), f)
@@ -512,9 +509,7 @@ pub mod tests {
     pub(super) fn log_with_predefined_names<I, F, S>(entries: I, f: F) -> Vec<TestOperation<S>>
     where
         I: IntoIterator<Item = (String, ResolvedName<MockMacroId, MockSymbolId>)>,
-        F: for<'a, 'b> FnOnce(
-            TestTokenStreamSemantics<'a, 'b, S>,
-        ) -> TestTokenStreamSemantics<'a, 'b, S>,
+        F: for<'a, 'b> FnOnce(TestTokenStreamSemantics<'a, S>) -> TestTokenStreamSemantics<'a, S>,
         S: Clone + Debug + Merge,
     {
         with_log(|log| {
@@ -523,15 +518,13 @@ pub mod tests {
                 session.define_name(ident.as_str().into(), resolution)
             }
             log.clear();
-            let mut tokens = std::iter::empty();
             f(Semantics {
                 session: &mut session,
                 state: TokenStreamState::new(),
-                tokens: &mut tokens,
             });
         })
     }
 
-    pub(super) type TestTokenStreamSemantics<'a, 'b, S> =
-        TokenStreamSemantics<'a, 'b, MockSession<TestOperation<S>, S>>;
+    pub(super) type TestTokenStreamSemantics<'a, S> =
+        TokenStreamSemantics<'a, MockSession<TestOperation<S>, S>>;
 }

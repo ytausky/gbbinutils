@@ -47,7 +47,7 @@ pub trait AddMacroDef<S: Clone> {
 }
 
 pub trait MacroContextFactory<H, S: Clone> {
-    type MacroCallCtx: MacroCallCtx<Span = S>;
+    type MacroCallCtx: MacroCallCtx<Span = S> + 'static;
 
     fn mk_macro_call_ctx<A, J>(&mut self, name: S, args: A, def: &H) -> Self::MacroCallCtx
     where
@@ -274,7 +274,7 @@ where
     }
 }
 
-impl<B, R> MacroContextFactory<Rc<MacroDefSpans<RcSpan<B, R>>>, RcSpan<B, R>>
+impl<B: 'static, R: 'static> MacroContextFactory<Rc<MacroDefSpans<RcSpan<B, R>>>, RcSpan<B, R>>
     for RcContextFactory<B, R>
 where
     RcSpan<B, R>: Clone,

@@ -3,19 +3,18 @@ use self::keywords::BuiltinMnemonic;
 
 use crate::session::builder::*;
 use crate::session::diagnostics::Diagnostics;
-use crate::session::lex::{Literal, StringSource, TokenSeq};
+use crate::session::lex::{StringSource, TokenSeq};
 use crate::session::reentrancy::Params;
 use crate::session::Analysis;
 use crate::span::{SpanSource, Spanned};
 use crate::syntax::actions::{LexerOutput, LineRule};
-use crate::syntax::{IdentSource, LexError};
+use crate::syntax::IdentSource;
 
 macro_rules! set_state {
     ($session:expr, $state:expr) => {
         $crate::semantics::Semantics {
             session: $session.session,
             state: $state,
-            tokens: $session.tokens,
         }
     };
 }
@@ -30,40 +29,28 @@ pub enum Keyword {
     Operand(OperandSymbol),
 }
 
-pub(crate) struct Semantics<'a, 'b, S, T, I, R, Z> {
+pub(crate) struct Semantics<'a, S, T> {
     pub session: &'a mut S,
     pub state: T,
-    pub tokens: TokenIterRef<'b, I, R, Z>,
 }
 
-type TokenIterRef<'a, I, R, S> =
-    &'a mut dyn Iterator<Item = LexerOutput<I, Literal<R>, LexError, S>>;
-
-impl<'a, 'b, S: Analysis, T> Semantics<'a, 'b, S, T, S::Ident, S::StringRef, S::Span> {
-    fn map_state<F: FnOnce(T) -> U, U>(
-        self,
-        f: F,
-    ) -> Semantics<'a, 'b, S, U, S::Ident, S::StringRef, S::Span> {
+impl<'a, 'b, S: Analysis, T> Semantics<'a, S, T> {
+    fn map_state<F: FnOnce(T) -> U, U>(self, f: F) -> Semantics<'a, S, U> {
         Semantics {
             session: self.session,
             state: f(self.state),
-            tokens: self.tokens,
         }
     }
 }
 
-type TokenStreamSemantics<'a, 'b, S> = Semantics<
+type TokenStreamSemantics<'a, S> = Semantics<
     'a,
-    'b,
     S,
     TokenStreamState<
         <S as IdentSource>::Ident,
         <S as StringSource>::StringRef,
         <S as SpanSource>::Span,
     >,
-    <S as IdentSource>::Ident,
-    <S as StringSource>::StringRef,
-    <S as SpanSource>::Span,
 >;
 
 #[derive(Debug, PartialEq)]
@@ -79,15 +66,8 @@ impl<I, R, S> TokenStreamState<I, R, S> {
     }
 }
 
-type InstrLineSemantics<'a, 'b, S> = Semantics<
-    'a,
-    'b,
-    S,
-    InstrLineState<<S as IdentSource>::Ident, <S as SpanSource>::Span>,
-    <S as IdentSource>::Ident,
-    <S as StringSource>::StringRef,
-    <S as SpanSource>::Span,
->;
+type InstrLineSemantics<'a, S> =
+    Semantics<'a, S, InstrLineState<<S as IdentSource>::Ident, <S as SpanSource>::Span>>;
 
 #[derive(Debug, PartialEq)]
 pub struct InstrLineState<I, S> {
@@ -102,18 +82,14 @@ impl<I, S> InstrLineState<I, S> {
 
 type Label<I, S> = ((I, S), Params<I, S>);
 
-type TokenLineSemantics<'a, 'b, S> = Semantics<
+type TokenLineSemantics<'a, S> = Semantics<
     'a,
-    'b,
     S,
     TokenLineState<
         <S as IdentSource>::Ident,
         <S as StringSource>::StringRef,
         <S as SpanSource>::Span,
     >,
-    <S as IdentSource>::Ident,
-    <S as StringSource>::StringRef,
-    <S as SpanSource>::Span,
 >;
 
 #[derive(Debug, PartialEq)]
@@ -142,15 +118,7 @@ impl<I, R, S> MacroDefState<I, R, S> {
     }
 }
 
-type BuiltinInstrSemantics<'a, 'b, S> = Semantics<
-    'a,
-    'b,
-    S,
-    BuiltinInstrState<S>,
-    <S as IdentSource>::Ident,
-    <S as StringSource>::StringRef,
-    <S as SpanSource>::Span,
->;
+type BuiltinInstrSemantics<'a, S> = Semantics<'a, S, BuiltinInstrState<S>>;
 
 pub(crate) struct BuiltinInstrState<S: Analysis> {
     label: Option<Label<S::Ident, S::Span>>,
@@ -173,9 +141,8 @@ impl<S: Analysis> BuiltinInstrState<S> {
 
 type BuiltinInstrArgs<N, R, S> = Vec<ParsedArg<N, R, S>>;
 
-pub(crate) type ArgSemantics<'a, 'b, S> = Semantics<
+pub(crate) type ArgSemantics<'a, S> = Semantics<
     'a,
-    'b,
     S,
     ExprBuilder<
         <S as IdentSource>::Ident,
@@ -183,9 +150,6 @@ pub(crate) type ArgSemantics<'a, 'b, S> = Semantics<
         <S as SpanSource>::Span,
         BuiltinInstrState<S>,
     >,
-    <S as IdentSource>::Ident,
-    <S as StringSource>::StringRef,
-    <S as SpanSource>::Span,
 >;
 
 pub(crate) struct ExprBuilder<I, R, S, P> {

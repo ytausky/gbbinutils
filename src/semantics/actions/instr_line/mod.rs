@@ -6,7 +6,7 @@ use super::{Keyword, Semantics, TokenStreamSemantics};
 use crate::expr::{Atom, Expr, ExprOp};
 use crate::semantics::*;
 use crate::session::diagnostics::Message;
-use crate::session::resolve::{NameTable, ResolvedName};
+use crate::session::resolve::ResolvedName;
 use crate::span::WithSpan;
 use crate::syntax::actions::{InstrContext, InstrLineContext, InstrRule};
 
@@ -14,13 +14,13 @@ mod builtin_instr;
 mod label;
 mod macro_instr;
 
-impl<'a, 'b, S: Analysis> InstrLineContext for InstrLineSemantics<'a, 'b, S>
+impl<'a, S: Analysis> InstrLineContext for InstrLineSemantics<'a, S>
 where
     S::Ident: 'static,
     S::StringRef: 'static,
     S::Span: 'static,
 {
-    type LabelContext = LabelSemantics<'a, 'b, S>;
+    type LabelContext = LabelSemantics<'a, S>;
     type InstrContext = Self;
 
     fn will_parse_label(mut self, label: (S::Ident, S::Span)) -> Self::LabelContext {
@@ -29,16 +29,16 @@ where
     }
 }
 
-impl<'a, 'b, S: Analysis> InstrContext for InstrLineSemantics<'a, 'b, S>
+impl<'a, S: Analysis> InstrContext for InstrLineSemantics<'a, S>
 where
     S::Ident: 'static,
     S::StringRef: 'static,
     S::Span: 'static,
 {
-    type BuiltinInstrContext = BuiltinInstrSemantics<'a, 'b, S>;
-    type MacroInstrContext = MacroInstrSemantics<'a, 'b, S>;
+    type BuiltinInstrContext = BuiltinInstrSemantics<'a, S>;
+    type MacroInstrContext = MacroInstrSemantics<'a, S>;
     type ErrorContext = Self;
-    type LineFinalizer = TokenStreamSemantics<'a, 'b, S>;
+    type LineFinalizer = TokenStreamSemantics<'a, S>;
 
     fn will_parse_instr(
         mut self,
@@ -78,7 +78,7 @@ where
     }
 }
 
-impl<'a, 'b, S: Analysis> InstrLineSemantics<'a, 'b, S> {
+impl<'a, S: Analysis> InstrLineSemantics<'a, S> {
     pub fn flush_label(mut self) -> Self {
         if let Some(((label, span), _params)) = self.state.label.take() {
             self.session.start_scope(&label);
@@ -93,12 +93,11 @@ impl<'a, 'b, S: Analysis> InstrLineSemantics<'a, 'b, S> {
     }
 }
 
-impl<'a, 'b, S, T, I, R, Z> Semantics<'a, 'b, S, T, I, R, Z>
+impl<'a, S, T> Semantics<'a, S, T>
 where
-    S: AllocSymbol<Z> + NameTable<I> + Diagnostics<Z>,
-    Z: Clone,
+    S: Analysis,
 {
-    fn reloc_lookup(&mut self, name: I, span: Z) -> S::SymbolId {
+    fn reloc_lookup(&mut self, name: S::Ident, span: S::Span) -> S::SymbolId {
         match self.session.resolve_name(&name) {
             Some(ResolvedName::Keyword(_)) => unimplemented!(),
             Some(ResolvedName::Symbol(id)) => id,

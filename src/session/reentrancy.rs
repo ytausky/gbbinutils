@@ -1,7 +1,7 @@
 use super::lex::{Lex, Literal, SemanticToken, StringSource};
 use super::macros::MacroTable;
 use super::resolve::{NameTable, StartScope};
-use super::CompositeSession;
+use super::{CompositeSession, NextToken};
 
 use crate::codebase::CodebaseError;
 use crate::semantics::{Semantics, TokenStreamState};
@@ -25,6 +25,7 @@ impl<C, R, M, N, B, D> ReentrancyActions<<Self as StringSource>::StringRef>
     for CompositeSession<C, R, M, N, B, D>
 where
     Self: Lex<Span = R::Span>,
+    Self: NextToken,
     Self: MacroTable<
         <Self as IdentSource>::Ident,
         Literal<<Self as StringSource>::StringRef>,
@@ -37,12 +38,14 @@ where
     <Self as IdentSource>::Ident: 'static,
     <Self as StringSource>::StringRef: 'static,
     <Self as SpanSource>::Span: 'static,
+    <Self as Lex>::TokenIter: 'static,
 {
     fn analyze_file(
         &mut self,
         path: <Self as StringSource>::StringRef,
     ) -> Result<(), CodebaseError> {
-        let mut tokens = self.lex_file(path)?;
+        let tokens = self.lex_file(path)?;
+        self.tokens.push(Box::new(tokens));
         let mut parser = <DefaultParserFactory as ParserFactory<
             <Self as IdentSource>::Ident,
             Literal<<Self as StringSource>::StringRef>,
@@ -52,7 +55,6 @@ where
         let semantics = Semantics {
             session: self,
             state: TokenStreamState::new(),
-            tokens: &mut tokens,
         };
         parser.parse_token_stream(semantics);
         Ok(())
@@ -116,7 +118,7 @@ mod mock {
         type StringRef = String;
     }
 
-    impl<T, S, R, M, N, B, D> ReentrancyActions<String>
+    impl<T, S, R: SpanSource, M, N, B, D> ReentrancyActions<String>
         for CompositeSession<MockCodebase<T, S>, R, M, N, B, D>
     where
         T: From<ReentrancyEvent>,

@@ -9,8 +9,8 @@ use crate::span::StripSpan;
 use crate::syntax::actions::*;
 use crate::syntax::{LexError, Sigil, Token};
 
-impl<'a, 'b, S: Analysis> TokenLineContext for TokenLineSemantics<'a, 'b, S> {
-    type ContextFinalizer = TokenContextFinalizationSemantics<'a, 'b, S>;
+impl<'a, S: Analysis> TokenLineContext for TokenLineSemantics<'a, S> {
+    type ContextFinalizer = TokenContextFinalizationSemantics<'a, S>;
 
     fn act_on_token(&mut self, token: SemanticToken<S::Ident, S::StringRef>, span: S::Span) {
         match &mut self.state.context {
@@ -84,8 +84,8 @@ impl<I, R, S> MacroDefState<I, R, S> {
     }
 }
 
-impl<'a, 'b, S: Analysis> LineFinalizer for TokenLineSemantics<'a, 'b, S> {
-    type Next = TokenStreamSemantics<'a, 'b, S>;
+impl<'a, S: Analysis> LineFinalizer for TokenLineSemantics<'a, S> {
+    type Next = TokenStreamSemantics<'a, S>;
 
     fn did_parse_line(mut self, span: S::Span) -> Self::Next {
         self.act_on_token(Sigil::Eol.into(), span);
@@ -93,11 +93,11 @@ impl<'a, 'b, S: Analysis> LineFinalizer for TokenLineSemantics<'a, 'b, S> {
     }
 }
 
-pub(crate) struct TokenContextFinalizationSemantics<'a, 'b, S: Analysis> {
-    parent: TokenLineSemantics<'a, 'b, S>,
+pub(crate) struct TokenContextFinalizationSemantics<'a, S: Analysis> {
+    parent: TokenLineSemantics<'a, S>,
 }
 
-impl<'a, 'b, S: Analysis> ParsingContext for TokenContextFinalizationSemantics<'a, 'b, S> {
+impl<'a, S: Analysis> ParsingContext for TokenContextFinalizationSemantics<'a, S> {
     type Ident = S::Ident;
     type Literal = Literal<S::StringRef>;
     type Error = LexError;
@@ -107,7 +107,7 @@ impl<'a, 'b, S: Analysis> ParsingContext for TokenContextFinalizationSemantics<'
     fn next_token(
         &mut self,
     ) -> Option<LexerOutput<Self::Ident, Self::Literal, Self::Error, Self::Span>> {
-        self.parent.tokens.next()
+        self.parent.session.next_token()
     }
 
     fn merge_spans(&mut self, left: &Self::Span, right: &Self::Span) -> Self::Span {
@@ -123,8 +123,8 @@ impl<'a, 'b, S: Analysis> ParsingContext for TokenContextFinalizationSemantics<'
     }
 }
 
-impl<'a, 'b, S: Analysis> LineFinalizer for TokenContextFinalizationSemantics<'a, 'b, S> {
-    type Next = TokenStreamSemantics<'a, 'b, S>;
+impl<'a, S: Analysis> LineFinalizer for TokenContextFinalizationSemantics<'a, S> {
+    type Next = TokenStreamSemantics<'a, S>;
 
     fn did_parse_line(self, _: S::Span) -> Self::Next {
         match self.parent.state.context {

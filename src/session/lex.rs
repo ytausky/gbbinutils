@@ -5,8 +5,9 @@ use crate::span::{BufContext, BufContextFactory, SpanSource};
 use crate::syntax::*;
 
 use std::rc::Rc;
+use std::fmt::Debug;
 
-type LexItem<I, R, S> = (Result<SemanticToken<I, R>, LexError>, S);
+pub type LexItem<I, R, S> = (Result<SemanticToken<I, R>, LexError>, S);
 pub type SemanticToken<I, R> = crate::syntax::Token<I, Literal<R>>;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -41,7 +42,7 @@ where
 }
 
 pub trait StringSource {
-    type StringRef: Clone + Eq;
+    type StringRef: Clone + Debug + Eq;
 }
 
 pub trait Tokenize<C: BufContext>: IdentSource + StringSource {

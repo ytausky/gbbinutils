@@ -1,7 +1,7 @@
 use crate::expr::Expr;
 use crate::object::*;
 use crate::session::diagnostics::{Diagnostics, DiagnosticsView};
-use crate::span::{MergeSpans, StripSpan};
+use crate::span::{MergeSpans, SpanSource, StripSpan};
 use crate::{BuiltinSymbols, CompositeSession};
 
 pub(crate) trait Backend<S: Clone>: AllocSymbol<S> {
@@ -154,7 +154,7 @@ impl<S> ObjectBuilder<S> {
 
 impl<C, R, M, N, D, S> Backend<S> for CompositeSession<C, R, M, N, ObjectBuilder<S>, D>
 where
-    R: MergeSpans<S> + StripSpan<S>,
+    R: SpanSource + MergeSpans<S> + StripSpan<S>,
     Self: Diagnostics<S>,
     S: Clone,
     for<'a> DiagnosticsView<'a, C, R, D>: Diagnostics<S>,
@@ -209,6 +209,7 @@ where
 impl<C, R, M, N, B, D, Span> AllocSymbol<Span> for CompositeSession<C, R, M, N, B, D>
 where
     Self: SymbolSource<SymbolId = B::SymbolId>,
+    R: SpanSource,
     B: AllocSymbol<Span>,
     Span: Clone,
 {
@@ -283,6 +284,7 @@ pub mod mock {
 
     impl<C, R, M, N, D, A, T, S> Backend<S> for CompositeSession<C, R, M, N, MockBackend<A, T>, D>
     where
+        R: SpanSource,
         A: AllocSymbol<S>,
         T: From<BackendEvent<A::SymbolId, Expr<A::SymbolId, S>>>,
         S: Clone,
@@ -416,7 +418,7 @@ mod tests {
         assert_eq!(object.content.sections[0].fragments, [Fragment::Byte(0x00)])
     }
 
-    fn build_object<F: FnOnce(&mut Session<S>), S>(f: F) -> Object<S> {
+    fn build_object<F: FnOnce(&mut Session<S>), S: Clone>(f: F) -> Object<S> {
         let mut session = StandaloneBackend::new();
         f(&mut session);
         session.builder.object

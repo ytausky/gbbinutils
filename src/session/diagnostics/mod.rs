@@ -64,8 +64,11 @@ impl<'a> SpanSource for OutputForwarder<'a> {
     type Span = Span;
 }
 
-impl<'a, F: FileSystem + ?Sized, R, M, N, B> EmitDiag<Span, StrippedBufSpan<BufId, BufRange>>
+impl<'a, F, R, M, N, B> EmitDiag<Span, StrippedBufSpan<BufId, BufRange>>
     for CompositeSession<FileCodebase<'a, F>, R, M, N, B, OutputForwarder<'a>>
+where
+    F: FileSystem + ?Sized,
+    R: SpanSource,
 {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<Span, StrippedBufSpan<BufId, BufRange>>>) {
         (self.diagnostics.output)(diag.into().expand().render(&self.codebase.cache.borrow()))
@@ -163,7 +166,7 @@ impl<'a, C, R, S> EmitDiag<S, S> for DiagnosticsView<'a, C, R, TestDiagnosticsLi
 }
 
 #[cfg(test)]
-impl<C, R, M, N, B, S> EmitDiag<S, S>
+impl<C, R: SpanSource, M, N, B, S> EmitDiag<S, S>
     for CompositeSession<C, R, M, N, B, TestDiagnosticsListener<S>>
 {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<S>>) {
@@ -425,6 +428,7 @@ mod mock {
 
     impl<C, R, M, N, B, T, S> EmitDiag<S, S> for CompositeSession<C, R, M, N, B, MockDiagnostics<T, S>>
     where
+        R: SpanSource,
         T: From<DiagnosticsEvent<S>>,
         S: Clone,
     {

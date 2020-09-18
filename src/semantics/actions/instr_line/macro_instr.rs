@@ -5,15 +5,7 @@ use crate::session::lex::{SemanticToken, TokenSeq};
 use crate::session::reentrancy::MacroArgs;
 use crate::syntax::actions::{InstrFinalizer, MacroArgContext, MacroInstrContext};
 
-pub(super) type MacroInstrSemantics<'a, 'b, S> = Semantics<
-    'a,
-    'b,
-    S,
-    MacroInstrState<S>,
-    <S as IdentSource>::Ident,
-    <S as StringSource>::StringRef,
-    <S as SpanSource>::Span,
->;
+pub(super) type MacroInstrSemantics<'a, S> = Semantics<'a, S, MacroInstrState<S>>;
 
 pub(crate) struct MacroInstrState<S: Analysis> {
     parent: InstrLineState<S::Ident, S::Span>,
@@ -37,46 +29,37 @@ impl<S: Analysis> MacroInstrState<S> {
     }
 }
 
-impl<'a, 'b, S: Analysis> MacroInstrContext for MacroInstrSemantics<'a, 'b, S>
+impl<'a, S: Analysis> MacroInstrContext for MacroInstrSemantics<'a, S>
 where
     S::Ident: 'static,
     S::StringRef: 'static,
     S::Span: 'static,
 {
-    type MacroArgContext = MacroArgSemantics<'a, 'b, S>;
+    type MacroArgContext = MacroArgSemantics<'a, S>;
 
     fn will_parse_macro_arg(self) -> Self::MacroArgContext {
         set_state!(self, MacroArgState::new(self.state))
     }
 }
 
-impl<'a, 'b, S: Analysis> InstrFinalizer for MacroInstrSemantics<'a, 'b, S>
+impl<'a, S: Analysis> InstrFinalizer for MacroInstrSemantics<'a, S>
 where
     S::Ident: 'static,
     S::StringRef: 'static,
     S::Span: 'static,
 {
-    type Next = TokenStreamSemantics<'a, 'b, S>;
+    type Next = TokenStreamSemantics<'a, S>;
 
     fn did_parse_instr(self) -> Self::Next {
         self.session.expand_macro(self.state.name, self.state.args);
         Semantics {
             session: self.session,
             state: TokenStreamState::from(self.state.parent),
-            tokens: self.tokens,
         }
     }
 }
 
-type MacroArgSemantics<'a, 'b, S> = Semantics<
-    'a,
-    'b,
-    S,
-    MacroArgState<S>,
-    <S as IdentSource>::Ident,
-    <S as StringSource>::StringRef,
-    <S as SpanSource>::Span,
->;
+type MacroArgSemantics<'a, S> = Semantics<'a, S, MacroArgState<S>>;
 
 pub(crate) struct MacroArgState<S: Analysis> {
     tokens: TokenSeq<S::Ident, S::StringRef, S::Span>,
@@ -92,8 +75,8 @@ impl<S: Analysis> MacroArgState<S> {
     }
 }
 
-impl<'a, 'b, S: Analysis> MacroArgContext for MacroArgSemantics<'a, 'b, S> {
-    type Next = MacroInstrSemantics<'a, 'b, S>;
+impl<'a, S: Analysis> MacroArgContext for MacroArgSemantics<'a, S> {
+    type Next = MacroInstrSemantics<'a, S>;
 
     fn act_on_token(&mut self, token: (SemanticToken<S::Ident, S::StringRef>, S::Span)) {
         let tokens = &mut self.state.tokens;

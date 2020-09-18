@@ -1,6 +1,18 @@
 use std::io;
 
 #[test]
+fn assemble_empty_line_at_end() {
+    assert_eq!(
+        assemble_snippet(
+            r"
+        NOP
+"
+        ),
+        (Some(vec![NOP].into()), vec![])
+    )
+}
+
+#[test]
 fn undefined_global_names_do_not_interfere_with_local_names() {
     let src = r"
 GLOBAL  AND     A
@@ -44,6 +56,22 @@ fn ignore_instrs_in_untaken_if() {
         NOP
         ENDC
         NOP"
+        ),
+        (Some(vec![NOP].into()), vec![])
+    )
+}
+
+#[test]
+fn new_line_after_macro_args() {
+    assert_eq!(
+        assemble_snippet(
+            r"
+MY_MAC(OP)
+        MACRO
+        OP
+        ENDM
+        MY_MAC NOP
+"
         ),
         (Some(vec![NOP].into()), vec![])
     )
